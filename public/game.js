@@ -713,9 +713,9 @@ function isShielded() {
 // ── Game mode / bot system ─────────────────────────────────────────────────
 const GAME_MODE_CONFIGS = {
   // Elimination: no respawn, rounds, first to winsNeeded rounds wins
-  '1v1':   { type: 'elim', allies: 0, enemies: 1,  winsNeeded: 4 },
-  '2v2':   { type: 'elim', allies: 1, enemies: 2,  winsNeeded: 4 },
-  '3v3':   { type: 'elim', allies: 2, enemies: 3,  winsNeeded: 4 },
+  '1v1':   { type: 'elim', allies: 0, enemies: 1,  winsNeeded: 4, roundTimeLimit: 60 },
+  '2v2':   { type: 'elim', allies: 1, enemies: 2,  winsNeeded: 4, roundTimeLimit: 60 },
+  '3v3':   { type: 'elim', allies: 2, enemies: 3,  winsNeeded: 4, roundTimeLimit: 60 },
   // Race: respawn, first to killGoal wins or most kills when timer ends
   '5v5':   { type: 'race', allies: 4, enemies: 5,  killGoal: 100, timeLimit: 120 },
   '10v10': { type: 'race', allies: 9, enemies: 10, killGoal: 100, timeLimit: 180 },
@@ -899,6 +899,275 @@ function playerHasScaryCloseWeapon() {
     if (m && SCARY_CLOSE_WEAPONS.has(m.id)) return true;
   }
   return false;
+}
+
+// ── Player communication wheel (Z key) ───────────────────────────────────
+let commsMenuOpen = false;
+const COMMS_LINES = [
+  { txt: 'Run!',                         color: '#ff8866', emoji: '🏃' },
+  { txt: 'Charge!',                      color: '#ff4444', emoji: '⚔️' },
+  { txt: 'Cover me!',                    color: '#ffcc44', emoji: '🛡️' },
+  { txt: 'Enemy spotted!',               color: '#ff6666', emoji: '👁️' },
+  { txt: 'Push together!',               color: '#44ff66', emoji: '👊' },
+  { txt: "We need to break the deadlock!", color: '#ff44aa', emoji: '🤔' },
+  { txt: 'Fall back!',                   color: '#ff8866', emoji: '⬅️' },
+  { txt: 'Nice shot!',                   color: '#44ddff', emoji: '👍' },
+];
+function openCommsMenu() {
+  let menu = document.getElementById('comms-menu');
+  if (!menu) {
+    menu = document.createElement('div');
+    menu.id = 'comms-menu';
+    menu.style.cssText = 'position:fixed;left:50%;bottom:120px;transform:translateX(-50%);'
+      + 'z-index:9600;background:rgba(15,15,20,0.92);border:2px solid #888;border-radius:12px;'
+      + 'padding:12px 14px;font-family:Arial,sans-serif;color:#fff;display:flex;flex-direction:column;gap:6px;'
+      + 'box-shadow:0 4px 16px rgba(0,0,0,0.6);min-width:280px;';
+    document.body.appendChild(menu);
+  }
+  // Build the option list
+  menu.innerHTML = '<div style="font-size:11px;letter-spacing:3px;color:#888;margin-bottom:6px;text-align:center;">QUICK CHAT — press 1–8</div>'
+    + COMMS_LINES.map((l, i) =>
+        `<div data-idx="${i}" class="comms-opt" style="display:flex;align-items:center;gap:10px;padding:6px 10px;background:rgba(40,40,50,0.7);border-radius:6px;cursor:pointer;border-left:3px solid ${l.color};">
+          <span style="color:${l.color};font-weight:bold;font-size:13px;min-width:14px;">${i+1}</span>
+          <span style="font-size:14px;">${l.emoji}</span>
+          <span style="font-size:13px;flex:1;">${l.txt}</span>
+        </div>`
+      ).join('')
+    + '<div style="font-size:10px;color:#666;margin-top:4px;text-align:center;">Esc or Z to close</div>';
+  menu.style.display = 'flex';
+  // Click handlers
+  Array.from(menu.querySelectorAll('.comms-opt')).forEach(el => {
+    el.addEventListener('click', () => pickCommsLine(parseInt(el.dataset.idx)));
+  });
+  commsMenuOpen = true;
+}
+function closeCommsMenu() {
+  const menu = document.getElementById('comms-menu');
+  if (menu) menu.style.display = 'none';
+  commsMenuOpen = false;
+}
+function pickCommsLine(idx) {
+  const line = COMMS_LINES[idx];
+  if (!line) return;
+  closeCommsMenu();
+  // Show in chat feed
+  pushChatLine(`You: ${line.emoji} ${line.txt}`, line.color);
+  // Show speech bubble over the player's own mesh (other players will see this; locally we still get the feed)
+  socket.emit('chatLine', { text: line.txt, color: line.color, emoji: line.emoji });
+  // Have nearby ally bots react with a follow-up thought
+  reactAllyBotsToComms(line.txt);
+}
+// Map player command → (a) command override type + (b) gating function (returns "got it" or "nope" reason)
+const COMMAND_PHYSICAL = {
+  'Run!': {
+    type: 'run',
+    duration: 6000,
+    gate: (bot) => true, // always comply — running is free
+    okLines:   ['Got it!', 'Falling back!', 'Retreating!'],
+    nopeLines: [], // never refuses
+  },
+  'Charge!': {
+    type: 'charge',
+    duration: 6000,
+    gate: (bot) => bot.hp >= 120,
+    okLines:   ['Got it!', "Let's go!", 'On it!', 'Pushing!'],
+    nopeLines: ['Nope, too hurt!', 'No way, I\'m low!', 'Negative!'],
+  },
+  'Cover me!': {
+    type: 'cover_player',
+    duration: 7000,
+    gate: (bot) => bot.hp >= 90,
+    okLines:   ['Got it!', "I got you!", 'Covering!', 'On it!'],
+    nopeLines: ['Nope, can\'t!', 'I\'m dying!'],
+  },
+  'Enemy spotted!': {
+    type: 'spotted',
+    duration: 4000,
+    gate: (bot) => true, // intel is free
+    okLines:   ['Got it!', 'Engaging!', 'On the way!', 'I see them!'],
+    nopeLines: [],
+  },
+  'Push together!': {
+    type: 'group_push',
+    duration: 6000,
+    gate: (bot) => bot.hp >= 110,
+    okLines:   ['Got it!', "Let's go!", 'Pushing!', 'Together!'],
+    nopeLines: ['Nope, low HP!', 'Can\'t push!'],
+  },
+  'We need to break the deadlock!': {
+    type: 'flank',
+    duration: 8000,
+    gate: (bot) => bot.hp >= 80,
+    okLines:   ['Got it!', "I'll flank!", 'Going wide!', 'On it!'],
+    nopeLines: ['Nope, hurt!', 'Can\'t flank!'],
+  },
+  'Fall back!': {
+    type: 'fallback',
+    duration: 8000,
+    gate: (bot) => true,
+    okLines:   ['Got it!', 'Falling back!', 'Retreating!'],
+    nopeLines: [],
+  },
+  'Nice shot!': {
+    type: null, // no physical action
+    duration: 0,
+    gate: () => true,
+    okLines:   ['Thanks!', '👍', 'Appreciate it!'],
+    nopeLines: [],
+  },
+};
+
+function reactAllyBotsToComms(playerSaid) {
+  const cmd = COMMAND_PHYSICAL[playerSaid];
+  if (!cmd) return;
+  // All ally bots within 30m respond and physically react
+  const nearbyAllies = gameBots
+    .filter(b => !b.dead && b.team === 'ally')
+    .map(b => ({ b, d: Math.hypot(b.x - camera.position.x, b.z - camera.position.z) }))
+    .filter(x => x.d < 30)
+    .sort((a,b) => a.d - b.d);
+  nearbyAllies.forEach((x, i) => {
+    setTimeout(() => {
+      const willComply = cmd.gate(x.b);
+      // Verbal reaction
+      const pool = willComply ? cmd.okLines : (cmd.nopeLines.length ? cmd.nopeLines : cmd.okLines);
+      const reply = pool[Math.floor(Math.random() * pool.length)];
+      showBotSpeech(x.b, reply, 2000, willComply ? '#88ccff' : '#ffaa66');
+      pushChatLine(`${players[x.b.id]?.name || 'Ally'}: ${reply}`, willComply ? '#88ccff' : '#ffaa66');
+      // Physical reaction: set command override
+      if (willComply && cmd.type) {
+        x.b._commandOverride = {
+          type: cmd.type,
+          until: Date.now() + cmd.duration,
+          // For cover_player + fallback we need the target position
+          coverPos: { x: camera.position.x, z: camera.position.z },
+        };
+      }
+    }, 400 + i * 250);
+  });
+}
+
+// Chat feed in bottom-left corner — shows last 5 lines
+const chatLog = [];
+function pushChatLine(text, color) {
+  chatLog.push({ text, color: color || '#fff', t: Date.now() });
+  if (chatLog.length > 5) chatLog.shift();
+  renderChatFeed();
+}
+function renderChatFeed() {
+  let feed = document.getElementById('chat-feed');
+  if (!feed) {
+    feed = document.createElement('div');
+    feed.id = 'chat-feed';
+    feed.style.cssText = 'position:fixed;left:16px;bottom:120px;z-index:9400;'
+      + 'font-family:Arial,sans-serif;font-size:13px;display:flex;flex-direction:column;gap:3px;'
+      + 'pointer-events:none;max-width:380px;';
+    document.body.appendChild(feed);
+  }
+  feed.innerHTML = chatLog.map(line => {
+    const age = (Date.now() - line.t) / 1000;
+    const op = age > 6 ? Math.max(0, 1 - (age - 6) / 2) : 1;
+    return `<div style="background:rgba(0,0,0,0.6);padding:4px 9px;border-radius:5px;border-left:3px solid ${line.color};color:${line.color};opacity:${op};text-shadow:1px 1px 0 #000;">${line.text}</div>`;
+  }).join('');
+}
+function updateChatFeed() {
+  // Re-render every 0.5s to fade old lines
+  if (!window._lastChatRender || Date.now() - window._lastChatRender > 500) {
+    window._lastChatRender = Date.now();
+    // Trim fully-faded
+    const now = Date.now();
+    while (chatLog.length && now - chatLog[0].t > 9000) chatLog.shift();
+    renderChatFeed();
+  }
+}
+
+// ── Bot speech bubbles: bots say what they're thinking ───────────────────
+// Lines library per reason. Each picks a random variation.
+const BOT_THOUGHTS = {
+  // Flee reasons
+  low_hp:       ["I'm hurt!", "Need to retreat!", "Falling back!", "I'm dying!"],
+  reloading:    ["Reloading!", "Cover me!", "One sec!"],
+  frosted:      ["I'm freezing!", "Can't move!", "Cold!!"],
+  panic:        ["Where'd that come from?!", "Get me outta here!", "AAAAH!"],
+  outnumbered:  ["Too many of them!", "Need backup!", "Outnumbered!"],
+  last_one:     ["Need backup...", "Just me left...", "This is bad."],
+  player_buffed:["He's buffed up!", "Wait for it to wear off!", "Don't engage!"],
+  scary_close:  ["Stay back from that!", "Keep distance!", "That'll shred me!"],
+  losing_trade: ["He's better than me!", "Reset, reset!", "Bad trade!"],
+  outmatched:   ["He's full HP!", "Bad fight!", "Need to reset!"],
+  // Charge reasons
+  finisher:     ["GOING FOR THE KILL!", "He's almost dead!", "Finish him!"],
+  punish_reload:["He's reloading!", "ATTACK NOW!", "Free kill!"],
+  slowed_target:["He's frozen!", "Easy target!", "Get him while he's slow!"],
+  airborne:     ["He's in the air!", "Sitting duck!", "Catch him mid-air!"],
+  team_advantage:["Push together!", "Team push!", "We got him!"],
+  dps_lead:     ["I outgun him!", "Rush him!", "I got the better gun!"],
+  aggressor_push:["Push!", "Get close!", "In your face!"],
+  // States
+  melee_charge: ["MELEE!", "RAAAH!", "INCOMING!"],
+  cover:        ["Behind cover!", "Hiding!", "Wait..."],
+  spotted:      ["I see him!", "Target!", "There!"],
+  killed_enemy: ["GOT ONE!", "Down!", "Kill confirmed!"],
+  // Personality flavor
+  sniper_idle:  ["Holding position", "Long range", "Scoping in"],
+  camper_idle:  ["Holding here", "Defensive"],
+  aggressor_idle:["Where are you...", "Hunting", "Come out!"],
+};
+
+// Show a speech bubble over a bot for `duration` ms with the given text
+function showBotSpeech(bot, text, duration = 2200, color = '#fff') {
+  if (!bot || bot.dead) return;
+  // Throttle: don't replace if same text shown recently, and rate-limit per bot
+  const now = Date.now();
+  if (bot._lastSpeechAt && now - bot._lastSpeechAt < 1800) return;
+  bot._lastSpeechAt = now;
+  // Create or reuse the bubble div
+  if (!bot._bubble) {
+    const div = document.createElement('div');
+    div.style.cssText = 'position:fixed;pointer-events:none;user-select:none;z-index:9500;'
+      + 'background:rgba(20,20,20,0.85);color:#fff;font-family:Arial,sans-serif;font-size:13px;'
+      + 'padding:5px 10px;border-radius:10px;border:2px solid #fff;white-space:nowrap;'
+      + 'transform:translate(-50%,-100%);transition:opacity 0.25s;text-shadow:none;'
+      + 'box-shadow:0 2px 6px rgba(0,0,0,0.4);';
+    document.body.appendChild(div);
+    bot._bubble = div;
+  }
+  bot._bubble.textContent = text;
+  bot._bubble.style.color = color;
+  bot._bubble.style.opacity = '1';
+  bot._bubble.style.display = 'block';
+  bot._bubbleHideAt = now + duration;
+}
+
+// Pick a random thought line for a reason key
+function pickThought(key) {
+  const lines = BOT_THOUGHTS[key];
+  if (!lines || !lines.length) return null;
+  return lines[Math.floor(Math.random() * lines.length)];
+}
+
+// Update bubble positions + hide expired ones
+function updateBotSpeech(dt) {
+  const now = Date.now();
+  for (const bot of gameBots) {
+    if (!bot._bubble) continue;
+    if (bot.dead || (bot._bubbleHideAt && now >= bot._bubbleHideAt)) {
+      bot._bubble.style.opacity = '0';
+      bot._bubbleHideAt = 0;
+      // Fully hide after fade
+      setTimeout(() => { if (bot._bubble && (!bot._bubbleHideAt || Date.now() >= bot._bubbleHideAt - 1)) bot._bubble.style.display = 'none'; }, 250);
+      continue;
+    }
+    // Position over the bot's head
+    const mesh = remoteMeshes[bot.id];
+    if (!mesh) { bot._bubble.style.display = 'none'; continue; }
+    const headPos = mesh.position.clone(); headPos.y += 2.5;
+    const sc = worldToScreen(headPos);
+    if (!sc) { bot._bubble.style.display = 'none'; continue; }
+    bot._bubble.style.display = 'block';
+    bot._bubble.style.left = sc.x + 'px';
+    bot._bubble.style.top  = sc.y + 'px';
+  }
 }
 
 // Comprehensive "should this bot flee?" check — returns null OR a reason string.
@@ -3998,6 +4267,18 @@ document.addEventListener('keydown', e => {
       slamState = { vel: 9 }; // jump velocity → ~1.4m peak height with 28 m/s² gravity
     }
   }
+  // ── Z key: open communication wheel ──────────────────────────────────────
+  if (e.code === 'KeyZ' && !e.repeat) {
+    e.preventDefault();
+    if (commsMenuOpen) closeCommsMenu();
+    else openCommsMenu();
+  }
+  // Number keys 1-8 while comms menu is open: pick a phrase
+  if (commsMenuOpen) {
+    const num = ['Digit1','Digit2','Digit3','Digit4','Digit5','Digit6','Digit7','Digit8'].indexOf(e.code);
+    if (num >= 0) { e.preventDefault(); pickCommsLine(num); return; }
+    if (e.code === 'Escape') { e.preventDefault(); closeCommsMenu(); return; }
+  }
   if (e.code==='Tab') { e.preventDefault(); showScoreboard(true); }
   if (e.code==='KeyE') {
     // Switchblade Gun: in split state, E toggles pistol ↔ knife instead of ADS
@@ -6498,6 +6779,14 @@ function applyBotDamageToPlayer(weaponId, botId) {
     const ws = document.getElementById('waiting-screen');
     const killerName = (botId && players[botId]?.name) || 'Enemy';
     showAnnouncement('YOU DIED', `Killed by ${killerName}`, '#ff4444', 1800);
+    // Speech bubble: killer bot taunts
+    if (botId) {
+      const killerBot = gameBots.find(b => b.id === botId);
+      if (killerBot) {
+        const line = pickThought('killed_enemy');
+        if (line) showBotSpeech(killerBot, line, 2500, '#44ff44');
+      }
+    }
     // Notify match logic (round end / kill tracking)
     onEntityDied(myId, botId || null);
     if (match && match.type === 'elim' && !match.over) {
@@ -6575,6 +6864,12 @@ socket.on('connect_error', () => {
   const el = document.getElementById('err');
   el.style.display = 'block';
   el.textContent = 'Cannot reach the game server. Start it, then open http://localhost:3001';
+});
+socket.on('chatLine', data => {
+  // From another player
+  if (data.id === myId) return;
+  const name = players[data.id]?.name || 'Player';
+  pushChatLine(`${name}: ${data.emoji || '💬'} ${data.text}`, data.color || '#fff');
 });
 socket.on('playerJoined', p => {
   players[p.id] = p;
@@ -7588,6 +7883,8 @@ function startMatchRound() {
       match.aliveAllies  = new Set(gameBots.filter(b => b.team === 'ally'  && !b.dead).map(b => b.id));
       match.aliveEnemies = new Set(gameBots.filter(b => b.team === 'enemy' && !b.dead).map(b => b.id));
       match.playerAlive  = !isDead;
+      // Start the 60-second per-round timer
+      match.roundTimeLeft = match.cfg.roundTimeLimit || 0;
       const subTxt = `First to ${match.cfg.winsNeeded} round wins`;
       showAnnouncement(`ROUND ${match.round}`, subTxt, '#ffffff', 2800);
     } else if (match.type === 'race') {
@@ -7634,7 +7931,16 @@ function updateMatchHUD() {
   if (match.type === 'elim') {
     const w = match.cfg.winsNeeded;
     L.textContent = `YOUR TEAM  ${match.roundWins.ally}/${w}`;
-    C.textContent = `R${match.round}`;
+    // Show round number + round timer countdown (when active)
+    const t = match.roundTimeLeft;
+    if (match.roundActive && t != null && t > 0) {
+      C.textContent = `R${match.round}  ·  ${formatMatchTime(t)}`;
+      // Tint red in the last 10 seconds
+      C.style.color = t < 10 ? '#ff5555' : '';
+    } else {
+      C.textContent = `R${match.round}`;
+      C.style.color = '';
+    }
     R.textContent = `${match.roundWins.enemy}/${w}  ENEMY`;
   } else if (match.type === 'race') {
     const g = match.cfg.killGoal;
@@ -8106,12 +8412,63 @@ function checkRaceWin() {
 }
 
 function updateMatchTimer(dt) {
-  if (!match || !match.active || match.over || match.type === 'elim') return;
+  if (!match || !match.active || match.over) return;
+  // ── Elim mode: per-round 60-second timer ─────────────────────────────────
+  if (match.type === 'elim') {
+    if (!match.roundActive) return;
+    if (match.roundTimeLeft == null || match.roundTimeLeft <= 0) return;
+    match.roundTimeLeft -= dt;
+    if (match.roundTimeLeft <= 0) {
+      match.roundTimeLeft = 0;
+      resolveElimRoundByHP();
+    }
+    updateMatchHUD();
+    return;
+  }
   if (!match.cfg.timeLimit) return; // frontlines / dday / laststand have no timer
   match.timeLeft -= dt;
   if (match.timeLeft <= 0) { match.timeLeft = 0; onTimeUp(); }
   // Update HUD timer every second is enough — but we call it every frame for smooth display
   updateMatchHUD();
+}
+
+// When the elim round timer hits 0: team with highest combined HP wins.
+function resolveElimRoundByHP() {
+  if (!match || !match.roundActive) return;
+  // Sum HP per side (player counts as ally team if alive)
+  let allyHP = 0, enemyHP = 0;
+  if (!isDead) allyHP += (players[myId]?.hp ?? 0);
+  for (const bot of gameBots) {
+    if (bot.dead) continue;
+    if (bot.team === 'ally') allyHP += bot.hp;
+    else if (bot.team === 'enemy') enemyHP += bot.hp;
+  }
+  match.roundActive = false;
+  if (allyHP > enemyHP) {
+    match.roundWins.ally++;
+    updateMatchHUD(); updateRoundScoreDisplay();
+    if (match.roundWins.ally >= match.cfg.winsNeeded) {
+      showAnnouncement('YOUR TEAM WINS!', `TIMEOUT · HP ${Math.round(allyHP)} vs ${Math.round(enemyHP)}`, '#4cff4c', 3000);
+      setTimeout(() => endMatch('ally'), 3100);
+    } else {
+      showAnnouncement('ROUND WIN!', `TIMEOUT · HP ${Math.round(allyHP)} vs ${Math.round(enemyHP)}`, '#4cff4c', 2500);
+      setTimeout(() => restartElimRound('ally'), 2600);
+    }
+  } else if (enemyHP > allyHP) {
+    match.roundWins.enemy++;
+    updateMatchHUD(); updateRoundScoreDisplay();
+    if (match.roundWins.enemy >= match.cfg.winsNeeded) {
+      showAnnouncement('ENEMY WINS!', `TIMEOUT · HP ${Math.round(enemyHP)} vs ${Math.round(allyHP)}`, '#ff5555', 3000);
+      setTimeout(() => endMatch('enemy'), 3100);
+    } else {
+      showAnnouncement('ROUND LOST', `TIMEOUT · HP ${Math.round(enemyHP)} vs ${Math.round(allyHP)}`, '#ff5555', 2500);
+      setTimeout(() => restartElimRound('enemy'), 2600);
+    }
+  } else {
+    // Exact tie → replay
+    showAnnouncement('DRAW', `TIMEOUT · Both at ${Math.round(allyHP)} HP`, '#aaaaaa', 2500);
+    setTimeout(() => restartElimRound(null), 2600);
+  }
 }
 
 function onTimeUp() {
@@ -8212,9 +8569,10 @@ function botSideSpawn(idx, count, team) {
 function spawnGameBots() {
   if (!selectedModeConfig) return;
 
-  // ── Clean up bots/meshes from any previous mode session ───────────────────
+  // ── Clean up bots/meshes/bubbles from any previous mode session ──────────
   for (const bot of gameBots) {
     if (remoteMeshes[bot.id]) { scene.remove(remoteMeshes[bot.id]); delete remoteMeshes[bot.id]; }
+    if (bot._bubble) { bot._bubble.remove(); bot._bubble = null; }
     delete players[bot.id];
   }
   gameBots.length = 0;
@@ -8685,9 +9043,86 @@ function updateBotAI(dt) {
         bot.strafeFlipTimer = 1.5 + Math.random() * 2;
       }
 
+      // ── Player command override: react physically to quick-chat (Z key) ───
+      const cmdOv = bot._commandOverride;
+      const cmdActive = cmdOv && now < cmdOv.until && bot.team === 'ally';
+      if (cmdActive) {
+        switch (cmdOv.type) {
+          case 'run':
+          case 'fallback': {
+            // Go to nearest cover, regardless of personal flee logic
+            if (bot.state !== 'cover') {
+              const cp = findBotCover(bot, target) || { x: bot.team === 'ally' ? bot.x : 0, z: 35 }; // fallback toward ally side
+              bot.state = 'cover';
+              bot.coverPt = cp;
+              bot.tacTimer = (cmdOv.until - now) / 1000;
+            }
+            break;
+          }
+          case 'charge':
+          case 'group_push': {
+            // Force chase, cancel hit-and-run + cover
+            bot.state = 'chase';
+            bot.coverPt = null;
+            bot.hitAndRunUntil = 0; bot.hitAndRunTarget = null;
+            // If close enough, melee_charge
+            if (dist < 8 && bot.hp >= 100) {
+              bot.state = 'melee_charge';
+              bot.tacTimer = 4;
+            }
+            break;
+          }
+          case 'cover_player': {
+            // Move TOWARD the player position to defend them
+            const pdx = cmdOv.coverPos.x - bot.x, pdz = cmdOv.coverPos.z - bot.z;
+            const pdist = Math.hypot(pdx, pdz);
+            if (pdist > 4) {
+              // Head toward player as a chase target
+              bot.state = 'chase';
+              bot._coverPlayerActive = true;
+              // Override the move vector this frame
+              bot._coverMoveX = (pdx / pdist) * 9 * dt;
+              bot._coverMoveZ = (pdz / pdist) * 9 * dt;
+            } else {
+              bot._coverPlayerActive = true;
+              bot._coverMoveX = 0; bot._coverMoveZ = 0;
+              bot.state = 'flank';
+            }
+            break;
+          }
+          case 'spotted': {
+            // Add the player's current position to team sightings so all expert bots know
+            teamSightings[bot.team] = { x: camera.position.x, z: camera.position.z, t: now };
+            // Push toward player
+            bot.state = 'chase';
+            bot.hitAndRunUntil = 0;
+            break;
+          }
+          case 'flank': {
+            // Move wide perpendicular to the line bot→target
+            const dx = target.x - bot.x, dz = target.z - bot.z;
+            const len = Math.max(0.01, Math.hypot(dx, dz));
+            const perpX = -dz / len, perpZ = dx / len;
+            const side = (bot.id.charCodeAt(bot.id.length - 1) & 1) ? 1 : -1;
+            bot.hitAndRunTarget = {
+              x: Math.max(-46, Math.min(46, bot.x + perpX * side * 12 + dx / len * 4)),
+              z: Math.max(-46, Math.min(46, bot.z + perpZ * side * 12 + dz / len * 4)),
+            };
+            bot.hitAndRunUntil = Math.min(cmdOv.until, now + 2500);
+            bot.state = 'flank';
+            break;
+          }
+        }
+      } else if (bot._commandOverride && now >= bot._commandOverride.until) {
+        bot._commandOverride = null;
+        bot._coverPlayerActive = false;
+      }
+
       // HARD/EXPERT: comprehensive flee check — many situations make bots want to disengage
       const isExpert = bot.difficulty === 'expert';
-      const fleeReason = botShouldFlee(bot, dist);
+      // Suppress flee while complying with a charge/push order (committed to attack)
+      const fleeSuppressed = cmdActive && (cmdOv.type === 'charge' || cmdOv.type === 'group_push' || cmdOv.type === 'cover_player');
+      const fleeReason = fleeSuppressed ? null : botShouldFlee(bot, dist);
       const URGENT_FLEE = new Set(['low_hp','panic','frosted','scary_close','reloading']);
       if (fleeReason && bot.state !== 'cover' && bot.state !== 'melee_charge') {
         const cp = findBotCover(bot, target);
@@ -8697,6 +9132,11 @@ function updateBotAI(dt) {
           // Longer cover commit for more urgent reasons
           const urgentTime = (fleeReason === 'low_hp' || fleeReason === 'panic' || fleeReason === 'frosted') ? 5 : 3;
           bot.tacTimer = urgentTime + Math.random() * 1.5;
+          // Speech bubble: react to the flee trigger
+          if (bot._fleeReason !== fleeReason) {
+            const line = pickThought(fleeReason);
+            if (line) showBotSpeech(bot, line, 2400, '#ff8888');
+          }
           bot._fleeReason = fleeReason; // store for HUD/debug
         } else {
           // No cover available → at least force a flank away
@@ -8709,6 +9149,11 @@ function updateBotAI(dt) {
       // Charges have priority over non-urgent flee (e.g., outmatched, losing_trade) when bot has clear advantage.
       const chargeReason = (!fleeReason || !URGENT_FLEE.has(fleeReason)) ? botShouldCharge(bot, dist) : null;
       if (chargeReason && bot.state !== 'melee_charge') {
+        // Speech bubble on new charge reason
+        if (bot._chargeReason !== chargeReason) {
+          const line = pickThought(chargeReason);
+          if (line) showBotSpeech(bot, line, 2200, '#ffaa44');
+        }
         bot._chargeReason = chargeReason;
         // Override prior flee state set above (if non-urgent) → push close
         bot.state = 'chase';
@@ -8716,6 +9161,10 @@ function updateBotAI(dt) {
         bot.tacTimer = 0;
         // If close enough, escalate to melee_charge for the finish
         if (dist < 10 && (chargeReason === 'finisher' || chargeReason === 'airborne' || chargeReason === 'slowed_target')) {
+          if (bot.state !== 'melee_charge') {
+            const meleeline = pickThought('melee_charge');
+            if (meleeline) showBotSpeech(bot, meleeline, 1800, '#ff4444');
+          }
           bot.state = 'melee_charge';
           bot.tacTimer = 5;
         }
@@ -8913,8 +9362,11 @@ function updateBotAI(dt) {
           moveZ = (perpZ * bot.strafeDir * 0.75 + (dz / Math.max(dist,0.01)) * leanIn) * spd;
         }
       } else {
-        // chase / rush — direct approach
-        if ((bot.stuckTimer || 0) > 0) {
+        // chase / rush — direct approach (OR "cover me!" override: go toward player)
+        if (bot._coverPlayerActive && (bot._coverMoveX != null)) {
+          moveX = bot._coverMoveX;
+          moveZ = bot._coverMoveZ;
+        } else if ((bot.stuckTimer || 0) > 0) {
           bot.stuckTimer -= dt;
           moveX = Math.sin(bot.wanderAngle) * 7 * dt;
           moveZ = Math.cos(bot.wanderAngle) * 7 * dt;
@@ -8941,7 +9393,14 @@ function updateBotAI(dt) {
 
         // MEDIUM/HARD: reaction time — only "see" the target after a delay
         if (hasLOS) {
-          if (!bot.firstSeenAt) bot.firstSeenAt = now;
+          if (!bot.firstSeenAt) {
+            bot.firstSeenAt = now;
+            // Speech bubble: spotted the player (only ~25% chance to avoid spam)
+            if (target.isPlayer && bot.team === 'enemy' && Math.random() < 0.25) {
+              const line = pickThought('spotted');
+              if (line) showBotSpeech(bot, line, 1600, '#ffff88');
+            }
+          }
           // Track last-seen position for hard mode memory
           bot.lastSeenPos = { x: tx, z: tz };
           bot.lastSeenAt = now;
@@ -9125,6 +9584,8 @@ function loop() {
   updateTraps(dt); // tripwires, magnet mines, bounce pads, hologram decoys
   updateP2WSystems(dt); // orbital strikes, guardian drones, nano shield
   updateMapGimmicks(dt); // lava DOT, jump pads, low-grav zones, ice friction
+  updateBotSpeech(dt);  // bot speech bubbles follow their heads
+  updateChatFeed();     // fade old chat lines
   updateReloadAnim();   // weapon tilts/rotates during reload
   updateSwitchbladeHUD(); // shows only when switchblade is active
   updateSpectatorCamera(dt); // follow teammates while dead

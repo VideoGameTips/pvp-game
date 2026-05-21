@@ -135,6 +135,21 @@ io.on('connection', (socket) => {
     if (players[socket.id]) players[socket.id].name = String(name).slice(0, 16);
   });
 
+  // Quick-chat: relay to all other clients (rate-limited)
+  socket.on('chatLine', (data) => {
+    const p = players[socket.id];
+    if (!p) return;
+    const now = Date.now();
+    if (p._lastChatAt && now - p._lastChatAt < 800) return; // throttle to ~1/0.8s
+    p._lastChatAt = now;
+    socket.broadcast.emit('chatLine', {
+      id: socket.id,
+      text: String(data.text || '').slice(0, 60),
+      color: String(data.color || '#fff').slice(0, 12),
+      emoji: String(data.emoji || '').slice(0, 4),
+    });
+  });
+
   socket.on('move', (data) => {
     const p = players[socket.id];
     if (!p || p.dead) return;
