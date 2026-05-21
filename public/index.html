@@ -438,13 +438,22 @@
   <div id="overlay">
     <h1>PVP ARENA</h1>
     <p>AK20 · Blank Map · Multiplayer</p>
-    <input id="name-input" maxlength="16" placeholder="Enter your name" />
+    <input id="name-input" maxlength="16" placeholder="Username" />
+    <input id="pass-input" maxlength="32" type="password" placeholder="Password" style="margin-top:8px;" />
+    <div id="auth-status" style="color:#ccc;font-size:12px;margin:6px 0;min-height:14px;"></div>
     <button id="play-btn">PLAY</button>
+    <div id="welcome-back" style="color:#88ccff;font-size:11px;margin-top:8px;display:none;letter-spacing:1px;"></div>
   </div>
 
   <div id="mode-screen" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.93); z-index:101; color:#fff; font-family:'Courier New',monospace; flex-direction:column; align-items:center; justify-content:center; overflow-y:auto; padding:20px 0;">
     <h2 style="font-size:32px; letter-spacing:6px; color:#e74c3c; margin-bottom:6px;">SELECT MODE</h2>
-    <p style="color:#666; font-size:12px; letter-spacing:2px; margin-bottom:18px;">BOTS FILL EVERY SLOT · RANDOM LOADOUTS</p>
+    <p style="color:#666; font-size:12px; letter-spacing:2px; margin-bottom:10px;">BOTS FILL EVERY SLOT · RANDOM LOADOUTS</p>
+    <div id="user-info-bar" style="display:flex; gap:14px; align-items:center; margin-bottom:18px; font-size:11px;">
+      <span id="user-info-name" style="color:#88ccff; letter-spacing:2px;"></span>
+      <span id="user-info-unlocks" style="color:#ffcc44; letter-spacing:1px;"></span>
+      <button id="enter-code-btn" style="padding:6px 14px; background:#3a3a1a; color:#ffcc44; border:1px solid #ffcc44; cursor:pointer; font-family:'Courier New',monospace; font-size:11px; letter-spacing:2px; border-radius:4px;">🔑 ENTER UNLOCK CODE</button>
+      <button id="logout-btn" style="padding:6px 12px; background:#222; color:#888; border:1px solid #555; cursor:pointer; font-family:'Courier New',monospace; font-size:10px; letter-spacing:1px; border-radius:4px;">LOG OUT</button>
+    </div>
 
     <div style="margin-bottom:18px; text-align:center;">
       <div style="font-size:10px; letter-spacing:4px; color:#888; margin-bottom:10px;">MAP</div>

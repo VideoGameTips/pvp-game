@@ -4,3 +4,5 @@ node_modules/
 server.log
 .env
 .claude/
+# User passwords (plaintext) — must NEVER be committed
+users.json

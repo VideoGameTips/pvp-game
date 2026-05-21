@@ -574,6 +574,94 @@ const WEAPONS = [
     frostSlow: 3, // each shot subtracts 3 speed points from target
     ability: { name: 'Cryo Burst', cd: 12000, desc: 'Frost AOE · -25 speed all targets in 5 m', type: 'aoe', radius: 5, damage: 0, color: 0x99eeff, frostBurst: 25 },
   },
+  // ── 🪖 ADMIN PRIMARIES (locked behind unlock codes) ──────────────────────
+  {
+    id: 'gau19', name: 'GAU-19 Heavy', type: 'Admin · Mounted MG', slot: 'primary',
+    mag: 500, reserve: 1000, damage: 50, fireRate: 18, reloadTime: 4000,
+    auto: true, pellets: 1, spread: 0.01, adsZoom: 50, bulletSpeed: 180, noReload: false,
+    bulletColor: 0xffaa22, bulletSize: 0.06, adminItem: true,
+    ability: { name: 'Sustained Fire', cd: 18000, desc: '8 s · double fire rate', type: 'buff', duration: 8000, rateMult: 0.5 },
+  },
+  {
+    id: 'mk44', name: 'MK-44 Bushmaster', type: 'Admin · Chain Gun', slot: 'primary',
+    mag: 360, reserve: 720, damage: 25, fireRate: 40, reloadTime: 3500,
+    auto: true, pellets: 1, spread: 0.015, adsZoom: 48, bulletSpeed: 160, noReload: false,
+    bulletColor: 0xddcc44, bulletSize: 0.055, adminItem: true,
+    ability: { name: 'Saturation', cd: 14000, desc: '4 s · zero spread + fire rate', type: 'buff', duration: 4000, spreadMult: 0, rateMult: 0.6 },
+  },
+  {
+    id: 'xm7', name: 'XM7 Service Rifle', type: 'Admin · Battle AR', slot: 'primary',
+    mag: 40, reserve: 120, damage: 60, fireRate: 80, reloadTime: 1800,
+    auto: true, pellets: 1, spread: 0, adsZoom: 42, bulletSpeed: 180, noReload: false,
+    adminItem: true,
+    ability: { name: 'Precision Fire', cd: 10000, desc: '5 s · perfect accuracy · +30% dmg', type: 'buff', duration: 5000, spreadMult: 0, dmgMult: 1.3 },
+  },
+  {
+    id: 'barrett', name: 'Barrett M82', type: 'Admin · Anti-Material', slot: 'primary',
+    mag: 5, reserve: 15, damage: 250, fireRate: 1100, reloadTime: 3200,
+    auto: false, pellets: 1, spread: 0, adsZoom: 12, bulletSpeed: 320, noReload: false,
+    bulletColor: 0xffcc66, bulletSize: 0.08, adminItem: true,
+    ability: { name: '.50 BMG Overload', cd: 16000, desc: 'Next shot · 600 dmg · pierces walls', type: 'powershot', pellets: 1, spreadMult: 0, weaponAbId: 'barrett_ab' },
+  },
+  {
+    id: 'm134', name: 'M134 Minigun', type: 'Admin · Gatling', slot: 'primary',
+    mag: 800, reserve: 0, damage: 15, fireRate: 25, reloadTime: 99999,
+    auto: true, pellets: 1, spread: 0.018, adsZoom: 50, bulletSpeed: 170, noReload: true,
+    bulletColor: 0xffaa44, bulletSize: 0.05, adminItem: true,
+    ability: { name: 'Brrrrt!', cd: 15000, desc: '6 s · fire rate ×2', type: 'buff', duration: 6000, rateMult: 0.5 },
+  },
+  {
+    id: 'hkmp7', name: 'HK-MP7 Operator', type: 'Admin · PDW', slot: 'primary',
+    mag: 60, reserve: 240, damage: 30, fireRate: 50, reloadTime: 1400,
+    auto: true, pellets: 1, spread: 0, adsZoom: 50, bulletSpeed: 175, noReload: false,
+    adminItem: true,
+    ability: { name: 'Silenced Burst', cd: 9000, desc: '3 s · silent + ×0 spread', type: 'buff', duration: 3000, spreadMult: 0, stealth: true },
+  },
+  {
+    id: 'p90_spec', name: 'FN P-90 Special', type: 'Admin · Bullpup SMG', slot: 'primary',
+    mag: 80, reserve: 240, damage: 22, fireRate: 60, reloadTime: 1500,
+    auto: true, pellets: 1, spread: 0, adsZoom: 50, bulletSpeed: 165, noReload: false,
+    adminItem: true,
+    ability: { name: 'Spec Ops Drill', cd: 11000, desc: '4 s · piercing rounds', type: 'buff', duration: 4000, dmgMult: 1.5 },
+  },
+  // ── 🪖 ADMIN SECONDARIES ─────────────────────────────────────────────────
+  {
+    id: 'desert_eagle', name: 'Desert Eagle', type: 'Admin · Hand Cannon', slot: 'secondary',
+    mag: 7, reserve: 28, damage: 65, fireRate: 200, reloadTime: 1900,
+    auto: false, pellets: 1, spread: 0.003, adsZoom: 48, bulletSpeed: 180, noReload: false,
+    adminItem: true,
+    ability: { name: 'Hand Cannon', cd: 10000, desc: 'Next shot · 195 dmg', type: 'powershot', pellets: 1, spreadMult: 0, weaponAbId: 'desert_eagle_ab' },
+  },
+  {
+    id: 'm1911', name: 'M1911 Match', type: 'Admin · Match Pistol', slot: 'secondary',
+    mag: 8, reserve: 32, damage: 50, fireRate: 120, reloadTime: 1300,
+    auto: false, pellets: 1, spread: 0, adsZoom: 50, bulletSpeed: 175, noReload: false,
+    adminItem: true,
+    ability: { name: 'Mozambique', cd: 7000, desc: 'Triple-tap · 3 shots in 90ms', type: 'fanfire', count: 3, delay: 30 },
+  },
+  {
+    id: 'ppk', name: 'Walther PPK', type: 'Admin · Spy Pistol', slot: 'secondary',
+    mag: 8, reserve: 24, damage: 45, fireRate: 100, reloadTime: 1300,
+    auto: false, pellets: 1, spread: 0, adsZoom: 50, bulletSpeed: 165, noReload: false,
+    bulletColor: 0x666666, bulletSize: 0.035, adminItem: true,
+    silentShots: true,
+    ability: { name: 'Stealth Strike', cd: 9000, desc: 'Next shot · 135 dmg silent', type: 'powershot', pellets: 1, spreadMult: 0, weaponAbId: 'ppk_ab' },
+  },
+  {
+    id: 'glock18', name: 'Glock-18 Auto', type: 'Admin · Full-Auto Pistol', slot: 'secondary',
+    mag: 33, reserve: 99, damage: 30, fireRate: 70, reloadTime: 1500,
+    auto: true, pellets: 1, spread: 0.008, adsZoom: 50, bulletSpeed: 160, noReload: false,
+    adminItem: true,
+    ability: { name: 'Mag Dump', cd: 8000, desc: 'Empty 12 rounds instantly', type: 'fanfire', count: 12, delay: 30 },
+  },
+  {
+    id: 'five_seven', name: 'Five-seveN', type: 'Admin · Armor Piercer', slot: 'secondary',
+    mag: 20, reserve: 60, damage: 40, fireRate: 130, reloadTime: 1400,
+    auto: false, pellets: 1, spread: 0.003, adsZoom: 50, bulletSpeed: 200, noReload: false,
+    bulletColor: 0xddddff, bulletSize: 0.035, adminItem: true,
+    ignoreDefenses: true,
+    ability: { name: 'AP Burst', cd: 12000, desc: '3 s · all shots pierce defenses', type: 'buff', duration: 3000, dmgMult: 1.3 },
+  },
   {
     id: 'mg42', name: 'MG-42', type: 'MG', slot: 'primary',
     mag: 5000, reserve: 0, damage: 15, fireRate: 50, reloadTime: 99999,
@@ -635,6 +723,22 @@ const MELEE_ITEMS = [
   // ── The Classic ──────────────────────────────────────────────────────────
   { id: 'fists',      name: 'Fists',      type: 'Brass Knuckles', damage: 24, range: 1.4, cooldown: 220, speedMult: 1.6,
     ability: { name: 'Haymaker',     cd: 8000,  desc: 'Wind-up · next punch · 90 dmg + knockback', type: 'melee_heavy' } },
+  // ── 🪖 ADMIN MELEES (locked behind unlock codes) ─────────────────────────
+  { id: 'karambit',   name: 'Karambit',     type: 'Admin · Combat Knife', damage: 80, range: 1.6, cooldown: 200, speedMult: 1.8,
+    adminItem: true,
+    ability: { name: 'Stealth Stab', cd: 9000,  desc: 'Next hit · instakill from behind', type: 'melee_instakill' } },
+  { id: 'bayonet',    name: 'Trench Bayonet', type: 'Admin · Reach Knife', damage: 100, range: 3.0, cooldown: 320,
+    adminItem: true,
+    ability: { name: 'Charge!',      cd: 8000,  desc: 'Dash 7 m + 130 dmg ram', type: 'melee_charge', distance: 7, damage: 130 } },
+  { id: 'tomahawk',   name: 'Tactical Tomahawk', type: 'Admin · Throwable Axe', damage: 120, range: 2.0, cooldown: 700,
+    adminItem: true,
+    ability: { name: 'Throw Tomahawk', cd: 11000, desc: 'Hurl · 180 dmg · weapon gone until CD', type: 'melee_throw' } },
+  { id: 'ots04',      name: 'OTs-04 Bayonet', type: 'Admin · Spetsnaz Blade', damage: 90, range: 1.8, cooldown: 240, speedMult: 1.7,
+    adminItem: true,
+    ability: { name: 'Spetsnaz Combo', cd: 8000,  desc: '3 s · auto-stab combo', type: 'melee_revup', duration: 3000 } },
+  { id: 'garrote',    name: 'Spec-Ops Garrote', type: 'Admin · Silent Kill', damage: 9999, range: 1.5, cooldown: 1200,
+    adminItem: true,
+    ability: { name: 'Lights Out',   cd: 16000, desc: '5 s · all hits instakill', type: 'melee_revup', duration: 5000 } },
 ];
 
 const SUPPORT_ITEMS = [
@@ -667,6 +771,14 @@ const SUPPORT_ITEMS = [
   // ── 😈 Lazy weapons batch ─────────────────────────────────────────────────
   { id: 'air_grenade', name: 'Air Grenade', type: 'Launch', uses: 2, damage: 15, cooldown: 950, bulletSpeed: 50, bulletColor: 0xaaccff, bulletSize: 0.11, launchVel: 14, launchRadius: 4 },
   { id: 'land_mine', name: 'Land Mine', type: 'Trap', uses: 2, damage: 298, cooldown: 1100, mineRadius: 1.8, launchVel: 16 },
+  // ── 🪖 ADMIN UTILITIES (locked behind unlock codes) ──────────────────────
+  { id: 'c4', name: 'C4 Charge', type: 'Admin · Explosive', uses: 2, damage: 200, cooldown: 1200, bulletSpeed: 40, bulletColor: 0x664433, bulletSize: 0.11, c4Detonate: true, adminItem: true },
+  { id: 'claymore', name: 'Claymore Mine', type: 'Admin · Directional Mine', uses: 2, damage: 250, cooldown: 1100, claymoreRadius: 4, claymoreArc: 1.2, adminItem: true },
+  { id: 'stun_grenade', name: 'M84 Stun Grenade', type: 'Admin · Flashbang', uses: 3, damage: 10, cooldown: 800, bulletSpeed: 56, bulletColor: 0xffffff, bulletSize: 0.10, stunDur: 4000, stunRadius: 8, adminItem: true },
+  { id: 'thermite', name: 'Thermite Charge', type: 'Admin · Burn Zone', uses: 2, damage: 8, cooldown: 1000, bulletSpeed: 36, bulletColor: 0xff8822, bulletSize: 0.11, burnDps: 8, burnDur: 12000, burnRadius: 3.5, adminItem: true },
+  { id: 'predator_uav', name: 'Predator UAV', type: 'Admin · Recon', uses: 1, cooldown: 2000, uavDur: 10000, adminItem: true },
+  { id: 'care_package', name: 'Care Package', type: 'Admin · Random Drop', uses: 1, cooldown: 1500, adminItem: true },
+  { id: 'tac_nuke', name: 'Tactical Nuke', type: 'Admin · End the Match', uses: 1, damage: 500, cooldown: 3000, nukeRadius: 25, nukeDelay: 5000, adminItem: true },
 ];
 
 // ── State ──────────────────────────────────────────────────────────────────
@@ -3365,6 +3477,19 @@ function buildPulseDisc()        { return _genericGun({ bodyShape:'futuristic', 
 function buildGravityPaint()     { return _genericGun({ bodyShape:'futuristic', bodyColor:0x331144, accentColor:0xaa44ff, magType:'drum', emissive:true, scope:'holo', flashColor:0xaa44ff }); }
 function buildTrafficController(){ return _genericGun({ bodyShape:'compact', bodyColor:0x332211, accentColor:0xff2200, magType:'box', scope:'holo', emissive:true, flashColor:0xffaa00 }); }
 function buildPinballLauncher()  { return _genericGun({ bodyShape:'heavy', bodyColor:0x551111, accentColor:0xffaa44, magType:'pan', barrelR:0.024, emissive:true, foregrip:true, flashColor:0xffaa44, kickZ:0.030 }); }
+// 🪖 ADMIN weapon models — military theme, mostly olive/gunmetal + tactical accessories
+function buildGAU19()        { return _genericGun({ bodyShape:'heavy', bodyColor:0x2a3526, accentColor:0x6a6a6a, magType:'drum', barrelCount:3, barrelR:0.012, foregrip:true, topRail:true, kickZ:0.020 }); }
+function buildMK44()         { return _genericGun({ bodyShape:'heavy', bodyColor:0x3a3a2a, accentColor:0x666633, magType:'drum', barrelR:0.015, foregrip:true, scope:'acog' }); }
+function buildXM7()          { return _genericGun({ bodyShape:'classic', bodyColor:0x222222, accentColor:0x888888, magType:'banana', scope:'acog', foregrip:true, ejectionPort:true }); }
+function buildBarrett()      { return _genericGun({ bodyShape:'sniper', bodyColor:0x2a2a1a, accentColor:0xddaa44, magType:'box', scope:'sniper', suppressor:true, foregrip:true, barrelR:0.014 }); }
+function buildM134()         { return _genericGun({ bodyShape:'heavy', bodyColor:0x333333, accentColor:0x222222, magType:'pan', barrelCount:6, barrelR:0.009, foregrip:true, kickZ:0.020 }); }
+function buildHKMP7()        { return _genericGun({ bodyShape:'compact', bodyColor:0x1a1a1a, accentColor:0x555555, magType:'banana', scope:'holo', suppressor:true, foregrip:true }); }
+function buildP90Spec()      { return _genericGun({ bodyShape:'bullpup', bodyColor:0x1a1a1a, accentColor:0x444444, magType:'pan', scope:'red_dot', topRail:true }); }
+function buildDesertEagle()  { return _genericGun({ bodyShape:'pistol', bodyColor:0xa68b3a, accentColor:0xddc466, magType:'hidden', barrelR:0.014, scope:'red_dot' }); }
+function buildM1911()        { return _genericGun({ bodyShape:'pistol', bodyColor:0x222222, accentColor:0x888888, magType:'hidden', ejectionPort:true }); }
+function buildPPK()          { return _genericGun({ bodyShape:'pistol', bodyColor:0x1a1a1a, accentColor:0x444444, magType:'hidden', suppressor:true }); }
+function buildGlock18()      { return _genericGun({ bodyShape:'pistol', bodyColor:0x222222, accentColor:0x555555, magType:'banana' }); }
+function buildFiveSeven()    { return _genericGun({ bodyShape:'pistol', bodyColor:0x333333, accentColor:0xddddff, magType:'hidden', scope:'red_dot' }); }
 
 // Order must match WEAPONS array.
 const weaponModels = [
@@ -3395,6 +3520,10 @@ const weaponModels = [
   buildMachineRevolver(), buildEMPPistol(),
   // ── 😈 P2W secondaries ───────────────────────────────────────────────────
   buildPocketRocket(), buildAutoRevolver(), buildFrostBlaster(),
+  // ── 🪖 ADMIN primaries ───────────────────────────────────────────────────
+  buildGAU19(), buildMK44(), buildXM7(), buildBarrett(), buildM134(), buildHKMP7(), buildP90Spec(),
+  // ── 🪖 ADMIN secondaries ─────────────────────────────────────────────────
+  buildDesertEagle(), buildM1911(), buildPPK(), buildGlock18(), buildFiveSeven(),
   buildMG42(),
 ];
 weaponModels.forEach((m,i) => { m.visible = i === 0; camera.add(m); });
@@ -3773,6 +3902,22 @@ function buildVampireBlade() {
   edge.position.set(0.008, 0.01, -0.05); g.add(edge);
   g.position.set(0.14, -0.12, -0.30); return g;
 }
+// 🪖 ADMIN melee models
+function buildKarambit()   { return _genericMelee({ handleColor: 0x111111, headColor: 0xaaaaaa, length: 0.18, headShape: 'sphere', headSize: 0.025 }); }
+function buildBayonet()    { return _genericMelee({ handleColor: 0x333322, headColor: 0xcccccc, length: 0.42, headShape: 'box' }); }
+function buildTomahawk()   { return _genericMelee({ handleColor: 0x553322, headColor: 0x444444, length: 0.30, headShape: 'axe' }); }
+function buildOts04()      { return _genericMelee({ handleColor: 0x222244, headColor: 0xcccccc, length: 0.22, headShape: 'box' }); }
+function buildGarrote()    {
+  const g = new THREE.Group();
+  const wire = new THREE.MeshLambertMaterial({ color: 0x222222 });
+  const handle = new THREE.MeshLambertMaterial({ color: 0x553322 });
+  const h1 = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 0.08, 6), handle);
+  h1.rotation.x = Math.PI/2; h1.position.set(-0.06, 0, -0.04); g.add(h1);
+  const h2 = h1.clone(); h2.position.set(0.06, 0, -0.04); g.add(h2);
+  const w = new THREE.Mesh(new THREE.CylinderGeometry(0.003, 0.003, 0.14, 4), wire);
+  w.rotation.z = Math.PI/2; w.position.set(0, 0, -0.04); g.add(w);
+  g.position.set(0.14, -0.12, -0.30); return g;
+}
 function buildFists() {
   // A closed fist with brass knuckles. Forearm hidden by sleeve.
   const g = new THREE.Group();
@@ -3818,6 +3963,8 @@ const meleeModels = [
   buildTitanHammer(), buildVampireBlade(),
   // The classic
   buildFists(),
+  // 🪖 ADMIN melees
+  buildKarambit(), buildBayonet(), buildTomahawk(), buildOts04(), buildGarrote(),
 ];
 meleeModels.forEach(m => { m.visible = false; camera.add(m); });
 
@@ -4178,6 +4325,13 @@ function buildAirGrenade() {
   stripe.rotation.x = Math.PI/2; g.add(stripe);
   g.position.set(0.10, -0.12, -0.18); return g;
 }
+function buildC4()           { const g=new THREE.Group(); const m=new THREE.MeshLambertMaterial({color:0xbbaa66}); const led=new THREE.MeshBasicMaterial({color:0xff2222}); const body=new THREE.Mesh(new THREE.BoxGeometry(0.10,0.04,0.07),m); g.add(body); const l=new THREE.Mesh(new THREE.SphereGeometry(0.010,4,4),led); l.position.set(0.03,0.025,0); g.add(l); g.position.set(0.10,-0.12,-0.18); return g; }
+function buildClaymore()     { const g=new THREE.Group(); const m=new THREE.MeshLambertMaterial({color:0x2a3a26}); const body=new THREE.Mesh(new THREE.BoxGeometry(0.10,0.06,0.025),m); body.rotation.x=-0.2; g.add(body); const leg1=new THREE.Mesh(new THREE.CylinderGeometry(0.005,0.005,0.05,4),m); leg1.position.set(-0.04,-0.025,0.018); g.add(leg1); const leg2=leg1.clone(); leg2.position.set(0.04,-0.025,0.018); g.add(leg2); g.position.set(0.10,-0.12,-0.18); return g; }
+function buildStunGrenade()  { const g=new THREE.Group(); const m=new THREE.MeshLambertMaterial({color:0x666666}); const lid=new THREE.MeshLambertMaterial({color:0x222222}); const body=new THREE.Mesh(new THREE.CylinderGeometry(0.045,0.045,0.10,8),m); g.add(body); const cap=new THREE.Mesh(new THREE.CylinderGeometry(0.030,0.030,0.012,8),lid); cap.position.y=0.056; g.add(cap); g.position.set(0.10,-0.12,-0.18); return g; }
+function buildThermite()     { const g=new THREE.Group(); const m=new THREE.MeshLambertMaterial({color:0x884422}); const top=new THREE.MeshBasicMaterial({color:0xff6622}); const body=new THREE.Mesh(new THREE.CylinderGeometry(0.040,0.040,0.09,8),m); g.add(body); const stripe=new THREE.Mesh(new THREE.TorusGeometry(0.042,0.005,4,12),top); stripe.rotation.x=Math.PI/2; g.add(stripe); g.position.set(0.10,-0.12,-0.18); return g; }
+function buildPredatorUAV()  { const g=new THREE.Group(); const m=new THREE.MeshLambertMaterial({color:0x444444}); const screen=new THREE.MeshBasicMaterial({color:0x44ff44}); const body=new THREE.Mesh(new THREE.BoxGeometry(0.10,0.06,0.025),m); g.add(body); const sc=new THREE.Mesh(new THREE.PlaneGeometry(0.07,0.04),screen); sc.position.set(0,0.02,0.013); g.add(sc); g.position.set(0.10,-0.12,-0.18); return g; }
+function buildCarePackage()  { const g=new THREE.Group(); const m=new THREE.MeshLambertMaterial({color:0x336622}); const tag=new THREE.MeshBasicMaterial({color:0xff2222}); const body=new THREE.Mesh(new THREE.BoxGeometry(0.08,0.08,0.08),m); g.add(body); const t=new THREE.Mesh(new THREE.BoxGeometry(0.082,0.012,0.082),tag); t.position.y=0.025; g.add(t); g.position.set(0.10,-0.12,-0.18); return g; }
+function buildTacNuke()      { const g=new THREE.Group(); const m=new THREE.MeshLambertMaterial({color:0xdddddd}); const yellow=new THREE.MeshLambertMaterial({color:0xffcc22}); const body=new THREE.Mesh(new THREE.CylinderGeometry(0.04,0.06,0.14,12),m); g.add(body); const stripe=new THREE.Mesh(new THREE.TorusGeometry(0.045,0.007,4,14),yellow); stripe.rotation.x=Math.PI/2; stripe.position.y=0.03; g.add(stripe); g.position.set(0.10,-0.12,-0.18); return g; }
 function buildLandMine() {
   const g = new THREE.Group();
   const mat = new THREE.MeshLambertMaterial({ color: 0x664422 });
@@ -4198,7 +4352,10 @@ const supportModels = [buildFragGrenade(), buildMedkit(), buildStimShot(), build
   // 😈 P2W supports
   buildOrbitalStrike(), buildGuardianDrone(), buildNanoShield(),
   // Lazy weapons supports
-  buildAirGrenade(), buildLandMine()];
+  buildAirGrenade(), buildLandMine(),
+  // 🪖 ADMIN supports
+  buildC4(), buildClaymore(), buildStunGrenade(), buildThermite(),
+  buildPredatorUAV(), buildCarePackage(), buildTacNuke()];
 supportModels.forEach(m => { m.visible = false; camera.add(m); });
 
 // ── Roblox-style player mesh factory ──────────────────────────────────────
@@ -4372,6 +4529,22 @@ document.addEventListener('keydown', e => {
     e.preventDefault();
     if (!isDead && (camera.position.y <= 1.66 + 0.01) && (!slamState || slamState.vel <= 0)) {
       slamState = { vel: 9 }; // jump velocity → ~1.4m peak height with 28 m/s² gravity
+    }
+  }
+  // ── Admin cheat hotkeys (only when admin) ────────────────────────────────
+  if (currentUser?.isAdmin && !e.repeat && !commsMenuOpen) {
+    // Hotkeys use letters that don't conflict with WASD/QER/G/Z/X/1-4
+    const adminMap = { KeyH:'fly', KeyJ:'godMode', KeyL:'infiniteAmmo', KeyK:'killAura', KeyB:'aimbot', KeyN:'speed', KeyM:'freezeBots' };
+    // Only fire admin hotkeys when not typing in an input field
+    if (document.activeElement?.tagName !== 'INPUT') {
+      if (e.code === 'F2') { e.preventDefault(); toggleAdminPanel(); return; }
+      if (adminMap[e.code]) {
+        e.preventDefault();
+        adminCheats[adminMap[e.code]] = !adminCheats[adminMap[e.code]];
+        showAnnouncement(adminCheats[adminMap[e.code]] ? `⚡ ${adminMap[e.code]} ON` : `${adminMap[e.code]} OFF`,
+                         '', adminCheats[adminMap[e.code]] ? '#ff4444' : '#888888', 900);
+        if (adminPanelOpen) openAdminPanel(); // refresh checkbox states
+      }
     }
   }
   // ── Z key: primary comms wheel ───────────────────────────────────────────
@@ -4660,7 +4833,9 @@ function updateMovement(dt) {
   const adrenalineActive = Date.now() < adrenalineUntil;
   // Frost slow: 100 = normal, 0 = frozen. Linear scale.
   const frostMult = Math.max(0, playerFrostSlow) / 100;
-  const speedMult = baseSpeedMult * (adrenalineActive ? 1.6 : 1) * frostMult;
+  // ⚡ Admin speed boost: 3× speed
+  const adminSpeedMult = (adminCheats.speed && currentUser?.isAdmin) ? 3 : 1;
+  const speedMult = baseSpeedMult * (adrenalineActive ? 1.6 : 1) * frostMult * adminSpeedMult;
   // Ice: blend current input direction with last frame's direction for a slide feel
   if (typeof playerOnIce !== 'undefined' && playerOnIce()) {
     if (!window._iceDir) window._iceDir = new THREE.Vector3();
@@ -5245,10 +5420,11 @@ function tryShoot() {
   const activeRateMult = (abilityBuff?.weaponId === currentWeapon.id && abilityBuff.rateMult) ? abilityBuff.rateMult : 1;
   if (now - lastShot < currentWeapon.fireRate * activeRateMult) return;
   const pool = weaponAmmo[currentWeaponIdx];
-  if (pool.ammo <= 0) { if (pool.reserve > 0 && !currentWeapon.noReload) startReload(); return; }
+  const adminInfAmmo = adminCheats.infiniteAmmo && currentUser?.isAdmin;
+  if (pool.ammo <= 0 && !adminInfAmmo) { if (pool.reserve > 0 && !currentWeapon.noReload) startReload(); return; }
 
   lastShot = now;
-  pool.ammo--;
+  if (!adminInfAmmo) pool.ammo--; // ⚡ admin infinite ammo: don't decrement
   ammo = pool.ammo;
   updateAmmoHUD();
   expireSpawnShield(); // firing breaks the spawn shield
@@ -5262,7 +5438,21 @@ function tryShoot() {
 
   const muzzleWorld = new THREE.Vector3();
   model._flash.getWorldPosition(muzzleWorld);
-  const baseDir = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion).normalize();
+  let baseDir = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion).normalize();
+  // ⚡ Admin aimbot: snap aim direction to nearest enemy
+  if (adminCheats.aimbot && currentUser?.isAdmin) {
+    let best = null, bestDist = Infinity;
+    for (const bot of gameBots) {
+      if (bot.dead || bot.team === 'ally') continue;
+      const d = Math.hypot(bot.x - camera.position.x, bot.z - camera.position.z);
+      if (d < bestDist && d < 50) { bestDist = d; best = bot; }
+    }
+    if (best) {
+      const mesh = remoteMeshes[best.id];
+      const targetPos = mesh ? mesh.position.clone().setY(mesh.position.y + 1.0) : new THREE.Vector3(best.x, 1, best.z);
+      baseDir = targetPos.clone().sub(camera.position).normalize();
+    }
+  }
 
   // Apply ability buff for this shot
   const ab = (abilityBuff && abilityBuff.weaponId === currentWeapon.id) ? abilityBuff : null;
@@ -6848,10 +7038,21 @@ const CLIENT_WEAPON_DAMAGE = Object.fromEntries([
   ['lava', 4],
   // The classic
   ['fists', 24],
+  // 🪖 ADMIN weapons + ability shots
+  ['gau19', 50], ['mk44', 25], ['xm7', 60], ['barrett', 250], ['barrett_ab', 600],
+  ['m134', 15], ['hkmp7', 30], ['p90_spec', 22],
+  ['desert_eagle', 65], ['desert_eagle_ab', 195], ['m1911', 50], ['ppk', 45], ['ppk_ab', 135],
+  ['glock18', 30], ['five_seven', 40],
+  ['karambit', 80], ['bayonet', 100], ['tomahawk', 120], ['tomahawk_throw', 180],
+  ['ots04', 90], ['garrote', 9999],
+  ['c4', 200], ['claymore', 250], ['stun_grenade', 10], ['thermite', 8],
+  ['predator_uav', 0], ['care_package', 0], ['tac_nuke', 500],
   // New melees
   ['crowbar', 32], ['fire_axe', 85], ['nunchucks', 22], ['umbrella', 18], ['yoyo', 30],
 ]);
 function applyBotDamageToPlayer(weaponId, botId) {
+  // ⚡ Admin god mode: no damage taken
+  if (adminCheats.godMode && currentUser?.isAdmin) { flashHitIndicator(); return; }
   // Frost Blaster: doesn't deal HP damage, just reduces speed (lethal at 0)
   if (weaponId === 'frost_blaster') {
     if (isDead || match?.type === 'range') return;
@@ -9007,6 +9208,8 @@ function findBotCover(bot, target) {
 function updateBotAI(dt) {
   if (!gameBots.length) return;
   if (match?.type === 'range') return; // range targets are handled by updateRange()
+  // ⚡ Admin freeze: stop all bot AI entirely
+  if (adminCheats.freezeBots && currentUser?.isAdmin) return;
   const roundLive = !match || match.roundActive; // false only during countdown
   const now = Date.now();
   const playerHp = players[myId]?.hp ?? 300; // used for melee-charge trigger
@@ -9862,6 +10065,7 @@ function loop() {
   updateMapGimmicks(dt); // lava DOT, jump pads, low-grav zones, ice friction
   updateBotSpeech(dt);  // bot speech bubbles follow their heads
   updateChatFeed();     // fade old chat lines
+  updateAdminCheats(dt);// admin cheat tick (fly, kill aura, etc.)
   updateReloadAnim();   // weapon tilts/rotates during reload
   updateSwitchbladeHUD(); // shows only when switchblade is active
   updateSpectatorCamera(dt); // follow teammates while dead
@@ -9957,15 +10161,19 @@ function showLoadoutScreen(mode) {
   const cardEls = {};
   const meleeEls = {};
   const supportEls = {};
+  // Helper: is this admin item unlocked for the current user?
+  const isUnlocked = (id) => !!(currentUser && currentUser.unlocks && currentUser.unlocks.includes(id));
   WEAPONS.forEach((w, i) => {
     if (w.ddayOnly) return; // skip D-Day exclusive weapons
+    if (w.adminItem && !isUnlocked(w.id)) return; // hide locked admin weapons
     const isPrimary = w.slot !== 'secondary';
     const card = document.createElement('div');
     card.className = 'loadout-card';
     card.dataset.idx = i;
     const fireTag = w.auto ? 'AUTO' : 'SEMI';
     const rateTag = w.ammoRegen ? 'REGEN' : `${Math.round(1000/w.fireRate)}/s`;
-    card.innerHTML = `<div class="lc-name">${w.name}</div>
+    const adminTag = w.adminItem ? ' <span style="color:#ffcc44;font-size:9px;">🪖 ADMIN</span>' : '';
+    card.innerHTML = `<div class="lc-name">${w.name}${adminTag}</div>
       <div class="lc-type">${w.type}</div>
       <div class="lc-stats">DMG ${w.damage} · MAG ${w.mag} · ${fireTag} · ${rateTag}</div>`;
     card.addEventListener('click',      () => pickLoadoutWeapon(i, isPrimary, card));
@@ -9974,10 +10182,12 @@ function showLoadoutScreen(mode) {
     cardEls[i] = card;
   });
   MELEE_ITEMS.forEach((m, i) => {
+    if (m.adminItem && !isUnlocked(m.id)) return;
     const card = document.createElement('div');
     card.className = 'loadout-card';
     card.dataset.idx = i;
-    card.innerHTML = `<div class="lc-name">${m.name}</div>
+    const adminTag = m.adminItem ? ' <span style="color:#ffcc44;font-size:9px;">🪖 ADMIN</span>' : '';
+    card.innerHTML = `<div class="lc-name">${m.name}${adminTag}</div>
       <div class="lc-type">${m.type}</div>
       <div class="lc-stats">DMG ${m.damage} · RANGE ${m.range} · ${Math.round(1000/m.cooldown)}/s</div>`;
     card.addEventListener('click',      () => pickMelee(i, card));
@@ -9986,11 +10196,13 @@ function showLoadoutScreen(mode) {
     meleeEls[i] = card;
   });
   SUPPORT_ITEMS.forEach((s, i) => {
+    if (s.adminItem && !isUnlocked(s.id)) return;
     const card = document.createElement('div');
     card.className = 'loadout-card';
     card.dataset.idx = i;
-    const stat = s.heal ? `HEAL ${s.heal}` : s.blink ? `BLINK ${s.blink}` : s.refill ? 'REFILL AMMO' : `DMG ${s.damage}`;
-    card.innerHTML = `<div class="lc-name">${s.name}</div>
+    const stat = s.heal ? `HEAL ${s.heal}` : s.blink ? `BLINK ${s.blink}` : s.refill ? 'REFILL AMMO' : `DMG ${s.damage || 0}`;
+    const adminTag = s.adminItem ? ' <span style="color:#ffcc44;font-size:9px;">🪖 ADMIN</span>' : '';
+    card.innerHTML = `<div class="lc-name">${s.name}${adminTag}</div>
       <div class="lc-type">${s.type}</div>
       <div class="lc-stats">${stat} · USES ${s.uses}</div>`;
     card.addEventListener('click',      () => pickSupport(i, card));
@@ -10098,14 +10310,123 @@ function requestPointerLockSafe() {
 }
 
 // ── Start ──────────────────────────────────────────────────────────────────
-function startGame() {
+// ── User accounts + admin item unlocks ────────────────────────────────────
+let currentUser = null; // { username, password, unlocks: [], isAdmin: false }
+// Admin cheat toggles — only active when currentUser.isAdmin
+const adminCheats = {
+  fly: false,
+  killAura: false,
+  infiniteAmmo: false,
+  godMode: false,
+  aimbot: false,
+  speed: false,
+  freezeBots: false,
+};
+
+// On page load: try to auto-login with stored credentials
+(function tryAutoLogin() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('pvp_user') || 'null');
+    if (saved && saved.username && saved.password) {
+      const nameEl = document.getElementById('name-input');
+      const passEl = document.getElementById('pass-input');
+      if (nameEl) nameEl.value = saved.username;
+      if (passEl) passEl.value = saved.password;
+      // Silently try to log in — populate currentUser if successful
+      authRequest('/auth/login', saved).then(r => {
+        if (r && r.ok) {
+          currentUser = { username: r.username, password: saved.password, unlocks: r.unlocks || [], isAdmin: !!r.isAdmin };
+          const wb = document.getElementById('welcome-back');
+          if (wb) {
+            wb.textContent = r.isAdmin
+              ? `🔓 ADMIN · ${r.username}`
+              : `Welcome back, ${r.username} · ${(r.unlocks||[]).length} admin items unlocked`;
+            wb.style.color = r.isAdmin ? '#ff4444' : '#88ccff';
+            wb.style.display = 'block';
+          }
+        }
+      }).catch(()=>{});
+    }
+  } catch (e) {}
+})();
+
+// Resolve to localhost:3001 when running from file:// (so auth still works)
+const AUTH_BASE = window.location.protocol === 'file:' ? 'http://localhost:3001' : '';
+async function authRequest(url, body) {
+  try {
+    const r = await fetch(AUTH_BASE + url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    return await r.json();
+  } catch (e) {
+    console.warn('[auth] network error:', e?.message || e);
+    return { error: 'cannot reach server — is it running on port 3001?' };
+  }
+}
+
+function setAuthStatus(text, color) {
+  const el = document.getElementById('auth-status');
+  if (el) { el.textContent = text; el.style.color = color || '#ccc'; }
+}
+
+async function startGame() {
   if (gameStarted) return;
-  const name = document.getElementById('name-input').value.trim() || 'Player';
+  const name = document.getElementById('name-input').value.trim();
+  const pass = document.getElementById('pass-input').value;
+  if (!name) { setAuthStatus('Please enter a username', '#ff6666'); return; }
+  if (!pass) { setAuthStatus('Please enter a password', '#ff6666'); return; }
+
+  setAuthStatus('Signing in…', '#cccccc');
+
+  // Try login first; if user doesn't exist, fall through to register
+  let result = await authRequest('/auth/login', { username: name, password: pass });
+  if (result.error === 'user not found') {
+    setAuthStatus(`Creating new account "${name}"…`, '#88ccff');
+    result = await authRequest('/auth/register', { username: name, password: pass });
+  }
+  if (!result || result.error) {
+    setAuthStatus(result?.error || 'Login failed', '#ff6666');
+    return;
+  }
+
+  currentUser = { username: result.username, password: pass, unlocks: result.unlocks || [], isAdmin: !!result.isAdmin };
+  localStorage.setItem('pvp_user', JSON.stringify({ username: name, password: pass }));
+  setAuthStatus(result.isAdmin ? `🔓 ADMIN ACCESS GRANTED · ${result.username}` : `Logged in as ${result.username}`, result.isAdmin ? '#ff4444' : '#88ff88');
+
   players[myId] && (players[myId].name = name);
   socket.emit('setName', name);
   document.getElementById('overlay').style.display = 'none';
   const ms = document.getElementById('mode-screen');
   ms.style.display = 'flex';
+  updateUserInfoBar(); // populate user info on mode screen
+}
+
+// "Enter Code" button — opens prompt, redeems code on server (only shown after login)
+async function promptUnlockCode() {
+  if (!currentUser) {
+    alert('Please log in first.');
+    return;
+  }
+  const code = prompt('Enter unlock code:');
+  if (!code) return;
+  const result = await authRequest('/auth/redeem', {
+    username: currentUser.username,
+    password: currentUser.password,
+    code: code.trim(),
+  });
+  if (result.error) {
+    alert('❌ ' + result.error);
+    return;
+  }
+  if (result.already) {
+    alert(`⚠️ You already have "${result.item}" unlocked.`);
+    return;
+  }
+  currentUser.unlocks = result.unlocks || [];
+  alert(`✅ UNLOCKED: ${result.item}\n\nTotal admin items: ${currentUser.unlocks.length}`);
+  updateUserInfoBar(); // refresh the count display
 }
 
 function selectMode(modeId) {
@@ -10159,6 +10480,185 @@ function selectMode(modeId) {
 }
 document.getElementById('play-btn').addEventListener('click', startGame);
 document.getElementById('play-btn').addEventListener('touchstart', e => { e.preventDefault(); startGame(); }, { passive: false });
+const _ecBtn = document.getElementById('enter-code-btn');
+if (_ecBtn) {
+  _ecBtn.addEventListener('click', promptUnlockCode);
+  _ecBtn.addEventListener('touchstart', e => { e.preventDefault(); promptUnlockCode(); }, { passive: false });
+}
+const _logoutBtn = document.getElementById('logout-btn');
+if (_logoutBtn) {
+  _logoutBtn.addEventListener('click', () => {
+    if (!confirm('Log out? You\'ll have to sign in again.')) return;
+    localStorage.removeItem('pvp_user');
+    currentUser = null;
+    location.reload();
+  });
+}
+
+// Update the mode-screen user-info bar (called after login + after redeeming codes)
+function updateUserInfoBar() {
+  if (!currentUser) return;
+  const nameEl = document.getElementById('user-info-name');
+  const unlocksEl = document.getElementById('user-info-unlocks');
+  if (nameEl) nameEl.textContent = currentUser.isAdmin ? `🔓 ADMIN · ${currentUser.username}` : `👤 ${currentUser.username}`;
+  if (nameEl) nameEl.style.color = currentUser.isAdmin ? '#ff4444' : '#88ccff';
+  if (unlocksEl) {
+    const n = currentUser.unlocks?.length || 0;
+    unlocksEl.textContent = n === 0 ? 'No admin items unlocked' : `🪖 ${n}/24 admin items unlocked`;
+  }
+  // Show admin panel button if admin
+  let adminBtn = document.getElementById('admin-panel-btn');
+  if (currentUser.isAdmin && !adminBtn) {
+    adminBtn = document.createElement('button');
+    adminBtn.id = 'admin-panel-btn';
+    adminBtn.textContent = '⚡ ADMIN PANEL [F2]';
+    adminBtn.style.cssText = 'padding:6px 14px;background:#3a1a1a;color:#ff4444;border:1px solid #ff4444;cursor:pointer;font-family:"Courier New",monospace;font-size:11px;letter-spacing:2px;border-radius:4px;';
+    adminBtn.addEventListener('click', toggleAdminPanel);
+    const bar = document.getElementById('user-info-bar');
+    if (bar) bar.appendChild(adminBtn);
+  }
+}
+
+// ── 🔓 ADMIN CHEAT PANEL ──────────────────────────────────────────────────
+let adminPanelOpen = false;
+function toggleAdminPanel() {
+  if (!currentUser?.isAdmin) return;
+  if (adminPanelOpen) { closeAdminPanel(); return; }
+  openAdminPanel();
+}
+function openAdminPanel() {
+  let panel = document.getElementById('admin-panel');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'admin-panel';
+    panel.style.cssText = 'position:fixed;top:80px;right:20px;width:280px;z-index:9700;'
+      + 'background:rgba(15,0,0,0.94);border:2px solid #ff4444;border-radius:8px;padding:14px;'
+      + 'font-family:"Courier New",monospace;color:#fff;font-size:12px;'
+      + 'box-shadow:0 6px 20px rgba(255,0,0,0.4);';
+    document.body.appendChild(panel);
+  }
+  panel.innerHTML = `
+    <div style="font-size:13px;letter-spacing:3px;color:#ff4444;margin-bottom:10px;text-align:center;font-weight:bold;">⚡ ADMIN PANEL</div>
+    <div style="font-size:10px;color:#888;margin-bottom:8px;text-align:center;">[F2] toggle · [F] fly toggle</div>
+    <div style="border-bottom:1px solid #444;margin:6px 0;"></div>
+    <div style="font-size:10px;color:#888;letter-spacing:2px;margin-bottom:6px;">TOGGLE CHEATS</div>
+    ${[
+      ['fly',          '🪂 Fly mode',           'H'],
+      ['godMode',      '🛡️ God mode',           'J'],
+      ['infiniteAmmo', '♾️ Infinite ammo',      'L'],
+      ['killAura',     '☠️ Kill aura (8m)',     'K'],
+      ['aimbot',       '🎯 Aimbot',             'B'],
+      ['speed',        '⚡ Speed boost (3×)',   'N'],
+      ['freezeBots',   '🧊 Freeze all bots',    'M'],
+    ].map(([key, label, hotkey]) =>
+      `<label style="display:flex;align-items:center;gap:8px;padding:5px;cursor:pointer;background:rgba(50,20,20,0.5);border-radius:4px;margin-bottom:3px;">
+        <input type="checkbox" data-cheat="${key}" ${adminCheats[key] ? 'checked' : ''} style="cursor:pointer;">
+        <span style="flex:1;">${label}</span>
+        <span style="color:#888;font-size:10px;">[${hotkey}]</span>
+      </label>`
+    ).join('')}
+    <div style="border-bottom:1px solid #444;margin:10px 0 6px;"></div>
+    <div style="font-size:10px;color:#888;letter-spacing:2px;margin-bottom:6px;">INSTANT ACTIONS</div>
+    <button data-action="nuke"     style="width:100%;padding:8px;margin-bottom:4px;background:#661111;color:#fff;border:1px solid #ff4444;cursor:pointer;font-family:inherit;font-size:12px;border-radius:4px;">💀 NUKE EVERYBODY</button>
+    <button data-action="heal"     style="width:100%;padding:8px;margin-bottom:4px;background:#116611;color:#fff;border:1px solid #44ff44;cursor:pointer;font-family:inherit;font-size:12px;border-radius:4px;">❤️ FULL HEAL</button>
+    <button data-action="ammo"     style="width:100%;padding:8px;margin-bottom:4px;background:#222288;color:#fff;border:1px solid #88aaff;cursor:pointer;font-family:inherit;font-size:12px;border-radius:4px;">📦 REFILL AMMO</button>
+    <button data-action="endRound" style="width:100%;padding:8px;background:#444411;color:#ffcc44;border:1px solid #ffcc44;cursor:pointer;font-family:inherit;font-size:12px;border-radius:4px;">🏁 INSTANT WIN ROUND</button>
+  `;
+  panel.style.display = 'block';
+  // Bind checkboxes
+  panel.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+    cb.addEventListener('change', () => { adminCheats[cb.dataset.cheat] = cb.checked; });
+  });
+  // Bind action buttons
+  panel.querySelectorAll('button[data-action]').forEach(btn => {
+    btn.addEventListener('click', () => adminAction(btn.dataset.action));
+  });
+  adminPanelOpen = true;
+}
+function closeAdminPanel() {
+  const panel = document.getElementById('admin-panel');
+  if (panel) panel.style.display = 'none';
+  adminPanelOpen = false;
+}
+function adminAction(act) {
+  if (!currentUser?.isAdmin) return;
+  switch (act) {
+    case 'nuke': {
+      // Kill all bots instantly via emitHit with insane damage
+      for (const bot of gameBots) {
+        if (bot.dead) continue;
+        const mesh = remoteMeshes[bot.id];
+        const hp = mesh ? mesh.position.clone().setY(1.0) : new THREE.Vector3(bot.x, 1, bot.z);
+        emitHit(bot.id, `admin_nuke_${Date.now()}_${bot.id}`, 'tac_nuke', hp);
+      }
+      flashScreen('rgba(255,80,0,0.5)', 800);
+      showAnnouncement('💀 EVERYBODY DIES', 'Admin nuke deployed', '#ff2200', 2200);
+      break;
+    }
+    case 'heal': {
+      const me = players[myId];
+      if (me) { me.hp = 300; updateHealthHUD(300); }
+      isDead = false;
+      flashScreen('rgba(68,255,68,0.3)', 500);
+      showAnnouncement('❤️ FULL HEAL', '', '#44ff44', 1200);
+      break;
+    }
+    case 'ammo': {
+      weaponAmmo.forEach((_, idx) => {
+        const w = WEAPONS[idx];
+        if (w) weaponAmmo[idx] = { ammo: w.mag, reserve: w.reserve === 0 ? 99999 : w.reserve };
+      });
+      supportUses.forEach((_, i) => { supportUses[i] = SUPPORT_ITEMS[i]?.uses || 1; });
+      updateAmmoHUD();
+      showAnnouncement('📦 AMMO REFILLED', '', '#88aaff', 1000);
+      break;
+    }
+    case 'endRound': {
+      // Same as nuke but only kills enemies (preserves allies for round-win)
+      for (const bot of gameBots) {
+        if (bot.dead || bot.team !== 'enemy') continue;
+        const mesh = remoteMeshes[bot.id];
+        const hp = mesh ? mesh.position.clone().setY(1.0) : new THREE.Vector3(bot.x, 1, bot.z);
+        emitHit(bot.id, `admin_kill_${Date.now()}_${bot.id}`, 'tac_nuke', hp);
+      }
+      showAnnouncement('🏁 ROUND WON', 'All enemies eliminated', '#ffcc44', 1500);
+      break;
+    }
+  }
+}
+// Per-frame: apply active admin cheats
+function updateAdminCheats(dt) {
+  if (!currentUser?.isAdmin) return;
+  // Fly mode: spacebar = up, ctrl = down, no gravity
+  if (adminCheats.fly && !isDead) {
+    const flySpeed = 6 * dt;
+    if (keys['Space']) camera.position.y += flySpeed;
+    if (keys['ControlLeft'] || keys['ControlRight'] || keys['ShiftLeft']) camera.position.y -= flySpeed;
+    camera.position.y = Math.max(0.5, Math.min(40, camera.position.y));
+    // Override slamState gravity
+    if (slamState) slamState.vel = 0;
+  }
+  // Kill aura: every 200ms, damage all enemies within 8m
+  if (adminCheats.killAura && !isDead) {
+    if (!window._lastAuraTick || Date.now() - window._lastAuraTick > 200) {
+      window._lastAuraTick = Date.now();
+      for (const bot of gameBots) {
+        if (bot.dead || bot.team !== 'enemy') continue;
+        const d = Math.hypot(bot.x - camera.position.x, bot.z - camera.position.z);
+        if (d < 8) {
+          const mesh = remoteMeshes[bot.id];
+          const hp = mesh ? mesh.position.clone().setY(1.0) : new THREE.Vector3(bot.x, 1, bot.z);
+          emitHit(bot.id, `aura_${myId}_${Date.now()}_${bot.id}`, 'tac_nuke', hp); // tac_nuke = 500 dmg, one-shots
+        }
+      }
+    }
+  }
+  // Freeze bots: just stop their AI from running (handled via flag check in updateBotAI)
+  // Aimbot: handled in tryShoot
+  // Infinite ammo: handled in tryShoot
+  // Speed: handled in updateMovement
+  // God mode: handled in applyBotDamageToPlayer
+}
 document.querySelectorAll('.mode-card').forEach(card => {
   card.addEventListener('click', () => selectMode(card.dataset.mode));
   card.addEventListener('touchstart', e => { e.preventDefault(); selectMode(card.dataset.mode); }, { passive: false });
