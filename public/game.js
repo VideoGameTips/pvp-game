@@ -901,19 +901,36 @@ function playerHasScaryCloseWeapon() {
   return false;
 }
 
-// ── Player communication wheel (Z key) ───────────────────────────────────
+// ── Player communication wheels (Z = primary, X = secondary) ──────────────
 let commsMenuOpen = false;
-const COMMS_LINES = [
-  { txt: 'Run!',                         color: '#ff8866', emoji: '🏃' },
-  { txt: 'Charge!',                      color: '#ff4444', emoji: '⚔️' },
-  { txt: 'Cover me!',                    color: '#ffcc44', emoji: '🛡️' },
-  { txt: 'Enemy spotted!',               color: '#ff6666', emoji: '👁️' },
-  { txt: 'Push together!',               color: '#44ff66', emoji: '👊' },
-  { txt: "We need to break the deadlock!", color: '#ff44aa', emoji: '🤔' },
-  { txt: 'Fall back!',                   color: '#ff8866', emoji: '⬅️' },
-  { txt: 'Nice shot!',                   color: '#44ddff', emoji: '👍' },
+let commsMenuKind = 'z'; // 'z' = primary, 'x' = secondary
+const COMMS_LINES_PRIMARY = [
+  { txt: 'Run!',           color: '#ff8866', emoji: '🏃' },
+  { txt: 'Charge!',        color: '#ff4444', emoji: '⚔️' },
+  { txt: 'Cover me!',      color: '#ffcc44', emoji: '🛡️' },
+  { txt: 'Enemy spotted!', color: '#ff6666', emoji: '👁️' },
+  { txt: 'Push together!', color: '#44ff66', emoji: '👊' },
+  { txt: 'Fall back!',     color: '#ff8866', emoji: '⬅️' },
+  { txt: 'Sorry!',         color: '#aaaaff', emoji: '🙏' },
+  { txt: 'Nice shot!',     color: '#44ddff', emoji: '👍' },
+  { txt: 'Scatter!',       color: '#ffaa66', emoji: '💨' },
 ];
-function openCommsMenu() {
+const COMMS_LINES_SECONDARY = [
+  { txt: "We need to break the deadlock!", color: '#ff44aa', emoji: '🤔' },
+  { txt: 'Hold position!',                 color: '#ffaa44', emoji: '🛑' },
+  { txt: 'Regroup on me!',                 color: '#44aaff', emoji: '🎯' },
+  { txt: 'Sniper!',                        color: '#ff2222', emoji: '🔭' },
+  { txt: 'Watch your flank!',              color: '#ffcc22', emoji: '⚠️' },
+  { txt: 'Low HP!',                        color: '#ff4444', emoji: '❤️' },
+  { txt: 'Thanks!',                        color: '#88ff88', emoji: '🙌' },
+  { txt: 'GG!',                            color: '#cc88ff', emoji: '🏆' },
+  { txt: 'Distract them!',                 color: '#ff66cc', emoji: '🎭' },
+];
+function getActiveCommsLines() {
+  return commsMenuKind === 'x' ? COMMS_LINES_SECONDARY : COMMS_LINES_PRIMARY;
+}
+function openCommsMenu(kind = 'z') {
+  commsMenuKind = kind;
   let menu = document.getElementById('comms-menu');
   if (!menu) {
     menu = document.createElement('div');
@@ -921,19 +938,23 @@ function openCommsMenu() {
     menu.style.cssText = 'position:fixed;left:50%;bottom:120px;transform:translateX(-50%);'
       + 'z-index:9600;background:rgba(15,15,20,0.92);border:2px solid #888;border-radius:12px;'
       + 'padding:12px 14px;font-family:Arial,sans-serif;color:#fff;display:flex;flex-direction:column;gap:6px;'
-      + 'box-shadow:0 4px 16px rgba(0,0,0,0.6);min-width:280px;';
+      + 'box-shadow:0 4px 16px rgba(0,0,0,0.6);min-width:300px;';
     document.body.appendChild(menu);
   }
+  const lines = getActiveCommsLines();
+  const headerLabel = kind === 'x' ? 'SECONDARY CHAT [X]' : 'PRIMARY CHAT [Z]';
+  const headerColor = kind === 'x' ? '#ffaa66' : '#66ccff';
+  const altKey = kind === 'x' ? 'Z' : 'X';
   // Build the option list
-  menu.innerHTML = '<div style="font-size:11px;letter-spacing:3px;color:#888;margin-bottom:6px;text-align:center;">QUICK CHAT — press 1–8</div>'
-    + COMMS_LINES.map((l, i) =>
+  menu.innerHTML = `<div style="font-size:11px;letter-spacing:3px;color:${headerColor};margin-bottom:6px;text-align:center;">${headerLabel} — press 1–9</div>`
+    + lines.map((l, i) =>
         `<div data-idx="${i}" class="comms-opt" style="display:flex;align-items:center;gap:10px;padding:6px 10px;background:rgba(40,40,50,0.7);border-radius:6px;cursor:pointer;border-left:3px solid ${l.color};">
           <span style="color:${l.color};font-weight:bold;font-size:13px;min-width:14px;">${i+1}</span>
           <span style="font-size:14px;">${l.emoji}</span>
           <span style="font-size:13px;flex:1;">${l.txt}</span>
         </div>`
       ).join('')
-    + '<div style="font-size:10px;color:#666;margin-top:4px;text-align:center;">Esc or Z to close</div>';
+    + `<div style="font-size:10px;color:#666;margin-top:4px;text-align:center;">[${altKey}] for other wheel · [Esc] or [${kind.toUpperCase()}] to close</div>`;
   menu.style.display = 'flex';
   // Click handlers
   Array.from(menu.querySelectorAll('.comms-opt')).forEach(el => {
@@ -947,7 +968,8 @@ function closeCommsMenu() {
   commsMenuOpen = false;
 }
 function pickCommsLine(idx) {
-  const line = COMMS_LINES[idx];
+  const lines = getActiveCommsLines();
+  const line = lines[idx];
   if (!line) return;
   closeCommsMenu();
   // Show in chat feed
@@ -1014,6 +1036,77 @@ const COMMAND_PHYSICAL = {
     gate: () => true,
     okLines:   ['Thanks!', '👍', 'Appreciate it!'],
     nopeLines: [],
+  },
+  // ── Secondary wheel commands ──────────────────────────────────────────────
+  'Sorry!': {
+    type: null,
+    duration: 0,
+    gate: () => true,
+    okLines:   ['No worries!', "It's fine!", 'All good!'],
+    nopeLines: [],
+  },
+  'Hold position!': {
+    type: 'hold',
+    duration: 8000,
+    gate: (bot) => bot.hp >= 70,
+    okLines:   ['Holding!', 'Got it!', 'Locked in!'],
+    nopeLines: ['Can\'t hold, hurt!', 'Need cover!'],
+  },
+  'Regroup on me!': {
+    type: 'regroup',
+    duration: 6000,
+    gate: () => true,
+    okLines:   ['On my way!', 'Coming!', 'Got it!'],
+    nopeLines: [],
+  },
+  'Sniper!': {
+    type: 'cover_sniper',
+    duration: 5000,
+    gate: () => true,
+    okLines:   ['Cover!', 'Got it!', 'Heads down!'],
+    nopeLines: [],
+  },
+  'Watch your flank!': {
+    type: 'watch_flank',
+    duration: 4000,
+    gate: () => true,
+    okLines:   ['Checking!', 'Got it!', 'Eyes peeled!'],
+    nopeLines: [],
+  },
+  'Low HP!': {
+    type: 'cover_player',  // reuse: allies converge to defend the low-HP player
+    duration: 6000,
+    gate: (bot) => bot.hp >= 90,
+    okLines:   ['On the way!', 'Coming to help!', "I'll cover you!"],
+    nopeLines: ['Can\'t, I\'m low too!', 'Need help myself!'],
+  },
+  'Thanks!': {
+    type: null,
+    duration: 0,
+    gate: () => true,
+    okLines:   ['Anytime!', 'You got it!', '👍'],
+    nopeLines: [],
+  },
+  'GG!': {
+    type: null,
+    duration: 0,
+    gate: () => true,
+    okLines:   ['GG!', 'Good game!', 'GGWP!'],
+    nopeLines: [],
+  },
+  'Scatter!': {
+    type: 'scatter',
+    duration: 5000,
+    gate: () => true,
+    okLines:   ['Scattering!', 'Got it!', 'Spreading out!', 'Splitting up!'],
+    nopeLines: [],
+  },
+  'Distract them!': {
+    type: 'distract',
+    duration: 6000,
+    gate: (bot) => bot.hp >= 100, // need health to be a viable distraction
+    okLines:   ["I'll bait 'em!", 'Drawing fire!', 'Look at me!', 'Going loud!'],
+    nopeLines: ["I'm too low!", "Can't, hurt!"],
   },
 };
 
@@ -4281,15 +4374,21 @@ document.addEventListener('keydown', e => {
       slamState = { vel: 9 }; // jump velocity → ~1.4m peak height with 28 m/s² gravity
     }
   }
-  // ── Z key: open communication wheel ──────────────────────────────────────
+  // ── Z key: primary comms wheel ───────────────────────────────────────────
   if (e.code === 'KeyZ' && !e.repeat) {
     e.preventDefault();
-    if (commsMenuOpen) closeCommsMenu();
-    else openCommsMenu();
+    if (commsMenuOpen && commsMenuKind === 'z') closeCommsMenu();
+    else openCommsMenu('z');
   }
-  // Number keys 1-8 while comms menu is open: pick a phrase
+  // ── X key: secondary comms wheel ─────────────────────────────────────────
+  if (e.code === 'KeyX' && !e.repeat) {
+    e.preventDefault();
+    if (commsMenuOpen && commsMenuKind === 'x') closeCommsMenu();
+    else openCommsMenu('x');
+  }
+  // Number keys 1-9 while comms menu is open: pick a phrase
   if (commsMenuOpen) {
-    const num = ['Digit1','Digit2','Digit3','Digit4','Digit5','Digit6','Digit7','Digit8'].indexOf(e.code);
+    const num = ['Digit1','Digit2','Digit3','Digit4','Digit5','Digit6','Digit7','Digit8','Digit9'].indexOf(e.code);
     if (num >= 0) { e.preventDefault(); pickCommsLine(num); return; }
     if (e.code === 'Escape') { e.preventDefault(); closeCommsMenu(); return; }
   }
@@ -9132,10 +9231,93 @@ function updateBotAI(dt) {
             bot.state = 'flank';
             break;
           }
+          case 'hold': {
+            // Stay in place, just shoot. Cancel movement, hold current position.
+            bot.state = 'flank'; // flank still allows shooting; movement gets overridden
+            bot._holdPosActive = true;
+            bot.hitAndRunUntil = 0;
+            break;
+          }
+          case 'regroup': {
+            // Sprint toward the player's position (cmdOv.coverPos was set at command time)
+            const rdx = cmdOv.coverPos.x - bot.x, rdz = cmdOv.coverPos.z - bot.z;
+            const rdist = Math.hypot(rdx, rdz);
+            if (rdist > 3) {
+              bot.state = 'chase';
+              bot._regroupMoveX = (rdx / rdist) * 12 * dt;
+              bot._regroupMoveZ = (rdz / rdist) * 12 * dt;
+              bot._regroupActive = true;
+            } else {
+              bot._regroupActive = false;
+              bot.state = 'flank';
+            }
+            break;
+          }
+          case 'cover_sniper': {
+            // Heads down — go to nearest cover, low profile
+            if (bot.state !== 'cover') {
+              const cp = findBotCover(bot, target);
+              if (cp) {
+                bot.state = 'cover';
+                bot.coverPt = cp;
+                bot.tacTimer = (cmdOv.until - now) / 1000;
+              }
+            }
+            break;
+          }
+          case 'watch_flank': {
+            // Just look around — random direction jiggle this frame
+            bot.rotY = (bot.rotY || 0) + (Math.random() - 0.5) * 0.5;
+            // No movement override; bot still does normal behavior otherwise
+            break;
+          }
+          case 'scatter': {
+            // Pick a scatter direction once and stick to it (perpendicular to player + away)
+            if (!bot._scatterAngle) {
+              const px = cmdOv.coverPos.x, pz = cmdOv.coverPos.z;
+              const away = Math.atan2(bot.z - pz, bot.x - px);
+              // Random offset ±90° so each ally goes a different direction
+              bot._scatterAngle = away + (Math.random() - 0.5) * Math.PI;
+            }
+            const sa = bot._scatterAngle;
+            bot._scatterMoveX = Math.cos(sa) * 11 * dt;
+            bot._scatterMoveZ = Math.sin(sa) * 11 * dt;
+            bot.state = 'flank';
+            bot.hitAndRunUntil = 0;
+            bot._scatterActive = true;
+            break;
+          }
+          case 'distract': {
+            // Push out into LOS of nearest enemy and shoot loudly to draw aggro
+            // Find nearest enemy bot to "show off" to
+            let nearestEnemy = null, nDist = Infinity;
+            for (const ob of gameBots) {
+              if (ob.dead || ob.team === bot.team || ob.id === bot.id) continue;
+              const d = Math.hypot(ob.x - bot.x, ob.z - bot.z);
+              if (d < nDist) { nDist = d; nearestEnemy = ob; }
+            }
+            if (nearestEnemy) {
+              // Move toward an exposed spot — straight toward enemy minus a bit
+              bot.state = 'chase';
+              bot.coverPt = null;
+              bot.hitAndRunUntil = 0;
+              const edx = nearestEnemy.x - bot.x, edz = nearestEnemy.z - bot.z;
+              const ed = Math.max(0.01, Math.hypot(edx, edz));
+              bot._distractMoveX = (edx / ed) * 9 * dt;
+              bot._distractMoveZ = (edz / ed) * 9 * dt;
+              bot._distractActive = true;
+            }
+            break;
+          }
         }
       } else if (bot._commandOverride && now >= bot._commandOverride.until) {
         bot._commandOverride = null;
         bot._coverPlayerActive = false;
+        bot._holdPosActive = false;
+        bot._regroupActive = false;
+        bot._scatterActive = false;
+        bot._distractActive = false;
+        bot._scatterAngle = 0;
       }
 
       // HARD/EXPERT: comprehensive flee check — many situations make bots want to disengage
@@ -9359,6 +9541,15 @@ function updateBotAI(dt) {
           moveZ = perpZ * bot.strafeDir * 6 * dt;
         }
       } else if (bot.state === 'flank') {
+        // HOLD POSITION override: don't move, just shoot
+        if (bot._holdPosActive) {
+          moveX = 0; moveZ = 0;
+        } else
+        // SCATTER override: sprint in pre-chosen scatter direction
+        if (bot._scatterActive && bot._scatterMoveX != null) {
+          moveX = bot._scatterMoveX;
+          moveZ = bot._scatterMoveZ;
+        } else
         // EXPERT: hit-and-run takes priority — sprint to repositioning target
         if (isExpert && now < bot.hitAndRunUntil && bot.hitAndRunTarget) {
           const hdx = bot.hitAndRunTarget.x - bot.x, hdz = bot.hitAndRunTarget.z - bot.z;
@@ -9377,36 +9568,35 @@ function updateBotAI(dt) {
                           && typeof playerHasScaryCloseWeapon === 'function' && playerHasScaryCloseWeapon()
                           && dist < (preferDist || 16);
           if (scaryClose) {
-            const spd = 10 * dt; // faster than normal flank — actually getting out of dodge
-            const awayX = -dx / Math.max(dist, 0.01);
-            const awayZ = -dz / Math.max(dist, 0.01);
-            // Sample 5 candidate retreat angles (-60°, -30°, 0°, +30°, +60° from straight-back)
-            // and pick the one that gives us the clearest path AWAY from the player.
-            const angles = [-1.05, -0.52, 0, 0.52, 1.05];
-            let bestAngle = 0, bestScore = -Infinity;
-            for (const a of angles) {
-              const cos = Math.cos(a), sin = Math.sin(a);
-              const candX = awayX * cos - awayZ * sin;
-              const candZ = awayX * sin + awayZ * cos;
-              // Look 3m ahead in this direction — penalize hitting walls
-              const probeX = bot.x + candX * 3;
-              const probeZ = bot.z + candZ * 3;
-              // Penalize if the probe is near a wall (no LOS = wall present)
+            const spd = 12 * dt; // even faster — sprint to escape
+            // Sample 16 candidate angles around the FULL 360° (not just back-facing)
+            // so bots can escape sideways or even briefly toward the player if their back is to a wall.
+            let bestAngle = 0, bestScore = -Infinity, bestCandX = 0, bestCandZ = 0;
+            const playerAngle = Math.atan2(-dz, -dx); // points away from player
+            for (let i = 0; i < 16; i++) {
+              const a = (i / 16) * Math.PI * 2; // 0..360°
+              const candX = Math.cos(a), candZ = Math.sin(a);
+              // Probe 4m ahead — longer probe to find truly open paths
+              const probeX = bot.x + candX * 4;
+              const probeZ = bot.z + candZ * 4;
               const clearAhead = hasLineOfSight(bot.x, bot.z, probeX, probeZ);
-              // Bonus if the probe is FARTHER from the player than current position
+              // Distance from probe to player (higher = better — we want to be farther)
               const newDist = Math.hypot(probeX - tx, probeZ - tz);
-              const score = (clearAhead ? 10 : -10) + (newDist - dist);
-              if (score > bestScore) { bestScore = score; bestAngle = a; }
+              // Penalize directions that point TOWARD the player (cosine of angle vs away-vector)
+              const awayAlignment = Math.cos(a - playerAngle); // 1 = perfectly away, -1 = straight at player
+              // Score: huge bonus for clear path, bonus for distance gained, bonus for not facing player
+              const score = (clearAhead ? 20 : -10) + (newDist - dist) * 2 + awayAlignment * 3;
+              if (score > bestScore) {
+                bestScore = score;
+                bestAngle = a;
+                bestCandX = candX; bestCandZ = candZ;
+              }
             }
-            const cos = Math.cos(bestAngle), sin = Math.sin(bestAngle);
-            const runX = awayX * cos - awayZ * sin;
-            const runZ = awayX * sin + awayZ * cos;
-            // Mostly retreat (0.85) with a slight strafe component to keep them moving unpredictably
-            const strafeX = -dz / Math.max(dist, 0.01) * bot.strafeDir;
-            const strafeZ =  dx / Math.max(dist, 0.01) * bot.strafeDir;
-            moveX = (runX * 0.85 + strafeX * 0.3) * spd;
-            moveZ = (runZ * 0.85 + strafeZ * 0.3) * spd;
+            // Move primarily along the chosen escape vector
+            moveX = bestCandX * spd;
+            moveZ = bestCandZ * spd;
             bot._kiting = true; // flag for shooting block: prioritize firing while retreating
+            bot._lastKiteAngle = bestAngle;
           } else {
             // Normal flank — strafe around target while shooting
             const perpX = -dz / Math.max(dist, 0.01);
@@ -9420,8 +9610,14 @@ function updateBotAI(dt) {
           }
         }
       } else {
-        // chase / rush — direct approach (OR "cover me!" override: go toward player)
-        if (bot._coverPlayerActive && (bot._coverMoveX != null)) {
+        // chase / rush — direct approach (OR "cover me!" / "regroup" / "distract" override)
+        if (bot._distractActive && bot._distractMoveX != null) {
+          moveX = bot._distractMoveX;
+          moveZ = bot._distractMoveZ;
+        } else if (bot._regroupActive && bot._regroupMoveX != null) {
+          moveX = bot._regroupMoveX;
+          moveZ = bot._regroupMoveZ;
+        } else if (bot._coverPlayerActive && (bot._coverMoveX != null)) {
           moveX = bot._coverMoveX;
           moveZ = bot._coverMoveZ;
         } else if ((bot.stuckTimer || 0) > 0) {
@@ -9585,8 +9781,23 @@ function updateBotAI(dt) {
       }
     }
 
-    // ── Kite safety: if kiting and barely moving, flip strafe direction to break out ─
+    // ── Kite safety: if kiting and barely moving (pinned to a wall), force a sideways break ─
     if (bot._kiting && Math.hypot(bot.x - prevBotX, bot.z - prevBotZ) < 0.04) {
+      // Try BOTH perpendicular directions and pick whichever moves us more
+      const lastA = bot._lastKiteAngle || 0;
+      const sideA = lastA + Math.PI / 2;
+      const sideB = lastA - Math.PI / 2;
+      const probeDist = 3;
+      const aClear = hasLineOfSight(bot.x, bot.z, bot.x + Math.cos(sideA) * probeDist, bot.z + Math.sin(sideA) * probeDist);
+      const bClear = hasLineOfSight(bot.x, bot.z, bot.x + Math.cos(sideB) * probeDist, bot.z + Math.sin(sideB) * probeDist);
+      const chosen = aClear ? sideA : (bClear ? sideB : sideA);
+      // Apply an immediate forced step along the perpendicular
+      const stepX = Math.cos(chosen) * 0.30;
+      const stepZ = Math.sin(chosen) * 0.30;
+      let fx = Math.max(-47, Math.min(47, bot.x + stepX));
+      let fz = Math.max(-47, Math.min(47, bot.z + stepZ));
+      [fx, fz] = resolvePosCollisions(fx, fz);
+      bot.x = fx; bot.z = fz;
       bot.strafeDir = -bot.strafeDir;
       bot.strafeFlipTimer = 0.8;
     }
