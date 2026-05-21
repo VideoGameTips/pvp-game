@@ -1103,6 +1103,7 @@ const BOT_THOUGHTS = {
   team_advantage:["Push together!", "Team push!", "We got him!"],
   dps_lead:     ["I outgun him!", "Rush him!", "I got the better gun!"],
   aggressor_push:["Push!", "Get close!", "In your face!"],
+  opportunistic:["Got him on the ropes!", "Pressing the advantage!", "Now's the time!"],
   // States
   melee_charge: ["MELEE!", "RAAAH!", "INCOMING!"],
   cover:        ["Behind cover!", "Hiding!", "Wait..."],
@@ -1175,33 +1176,43 @@ function updateBotSpeech(dt) {
 function botShouldFlee(bot, dist) {
   if (!bot.difficulty || (bot.difficulty !== 'hard' && bot.difficulty !== 'expert')) return null;
   const playerHp = players[myId]?.hp ?? 300;
-  // 1. Critical HP — sub-25% always retreat
-  if (bot.hp < 75) return 'low_hp';
-  // 2. Bot is currently reloading → seek cover, don't expose self
+  const targetingPlayer = !isDead;
+  // EXPERT bots are confident — much stricter flee thresholds. They want to fight, not run.
+  const expert = bot.difficulty === 'expert';
+  const lowHpThresh    = expert ? 45  : 75;   // sub-15% expert / sub-25% hard
+  const panicDmg       = expert ? 100 : 40;   // huge burst required for expert panic
+  const outnumThresh   = expert ? 3   : 2;    // need 3 enemies close before expert flees
+  const outnumHp       = expert ? 110 : 180;
+  const lastOneHp      = expert ? 90  : 200;
+  const losingHits     = expert ? 5   : 3;
+  const outmatchedHp   = expert ? 80  : 130;
+  // 1. Critical HP
+  if (bot.hp < lowHpThresh) return 'low_hp';
+  // 2. Reloading → seek cover
   if (bot.reloadUntil && Date.now() < bot.reloadUntil) return 'reloading';
-  // 3. Bot is frost-slowed badly (< 60% speed) → easy target, hide
+  // 3. Frost-slowed badly
   if ((bot.frostSlow || 100) < 60) return 'frosted';
-  // 4. Recently took heavy damage (>40 HP in <1.5s) — surprise retreat
-  if (bot._recentDmg && (Date.now() - bot._lastBigHit < 1500) && bot._recentDmg > 40) return 'panic';
-  // 5. Outnumbered by enemies near the player — too many guns trained
+  // 4. Heavy damage spike
+  if (bot._recentDmg && (Date.now() - bot._lastBigHit < 1500) && bot._recentDmg > panicDmg) return 'panic';
+  // 5. Genuinely outnumbered (3+ for expert, 2+ for hard)
   let enemiesNearMe = 0;
   for (const ob of gameBots) {
     if (ob.dead || ob.team === bot.team || ob.id === bot.id) continue;
     const d = Math.hypot(ob.x - bot.x, ob.z - bot.z);
     if (d < 18) enemiesNearMe++;
   }
-  if (enemiesNearMe >= 2 && bot.hp < 180) return 'outnumbered';
-  // 6. Allies are all dead/dying — last bot standing, don't yolo
+  if (enemiesNearMe >= outnumThresh && bot.hp < outnumHp) return 'outnumbered';
+  // 6. Last one standing — expert only flees if also low HP
   const livingAllies = gameBots.filter(b => b.team === bot.team && !b.dead && b.id !== bot.id);
-  if (livingAllies.length === 0 && bot.hp < 200 && bot.team === 'enemy') return 'last_one';
-  // 7. Player has an active dangerous ability buff (focus fire, deadeye, etc.)
-  if (typeof abilityBuff !== 'undefined' && abilityBuff && (abilityBuff.dmgMult > 1.2 || abilityBuff.trackingBoost)) return 'player_buffed';
-  // 8. Player has scary close weapon AND we're at close range
-  if (dist < 10 && typeof playerHasScaryCloseWeapon === 'function' && playerHasScaryCloseWeapon()) return 'scary_close';
-  // 9. Player just landed several shots in quick succession (we lost burst trade)
-  if (bot._consecutiveHits >= 3) return 'losing_trade';
-  // 10. Player is full HP and our HP is below 150 — outmatched in trade
-  if (playerHp >= 280 && bot.hp < 130) return 'outmatched';
+  if (livingAllies.length === 0 && bot.hp < lastOneHp && bot.team === 'enemy') return 'last_one';
+  // 7. Player buffed — only HARD bots flee from this; EXPERT plays around it
+  if (!expert && targetingPlayer && typeof abilityBuff !== 'undefined' && abilityBuff && (abilityBuff.dmgMult > 1.2 || abilityBuff.trackingBoost)) return 'player_buffed';
+  // 8. Scary close weapon at close range — still applies to expert (chainsaw really would kill them)
+  if (targetingPlayer && dist < 10 && typeof playerHasScaryCloseWeapon === 'function' && playerHasScaryCloseWeapon()) return 'scary_close';
+  // 9. Losing trade — requires more consecutive hits for expert
+  if (targetingPlayer && bot._consecutiveHits >= losingHits) return 'losing_trade';
+  // 10. Outmatched — only matters at very low HP for expert
+  if (targetingPlayer && playerHp >= 280 && bot.hp < outmatchedHp) return 'outmatched';
   return null;
 }
 
@@ -1210,34 +1221,37 @@ function botShouldFlee(bot, dist) {
 function botShouldCharge(bot, dist) {
   if (!bot.difficulty || (bot.difficulty !== 'hard' && bot.difficulty !== 'expert')) return null;
   const playerHp = players[myId]?.hp ?? 300;
+  const expert = bot.difficulty === 'expert';
   // Hard veto: never charge into a scary close weapon (chainsaw, flamethrower, shotgun, etc.)
   if (typeof playerHasScaryCloseWeapon === 'function' && playerHasScaryCloseWeapon()) return null;
-  // Need to be relatively healthy ourselves
-  if (bot.hp < 130) return null;
-  // 1. Player critically low HP — go for the finish
-  if (playerHp < 60 && !isDead) return 'finisher';
-  // 2. Player is reloading — punish the reload
-  if (typeof reloading !== 'undefined' && reloading && bot.botAmmo > 3) return 'punish_reload';
-  // 3. Player is frost-slowed — easy target
-  if (playerFrostSlow < 70) return 'slowed_target';
-  // 4. Player got launched into the air (from air grenade) — sitting duck
-  // Player Y position lifted via slamState reuse
+  // Expert is willing to commit at lower HP (90 vs 130)
+  const minChargeHp = expert ? 90 : 130;
+  if (bot.hp < minChargeHp) return null;
+  // 1. Player critically low HP — expert pushes at 90, hard at 60
+  if ((expert ? playerHp < 90 : playerHp < 60) && !isDead) return 'finisher';
+  // 2. Player is reloading — punish (expert has slightly more lenient ammo check)
+  if (typeof reloading !== 'undefined' && reloading && bot.botAmmo > (expert ? 1 : 3)) return 'punish_reload';
+  // 3. Player is frost-slowed
+  if (playerFrostSlow < (expert ? 80 : 70)) return 'slowed_target';
+  // 4. Airborne
   if (typeof slamState !== 'undefined' && slamState && slamState.vel > 3) return 'airborne';
-  // 5. Numbers advantage — 2+ allies near bot vs lone player
+  // 5. Numbers advantage — for expert, 2+ allies near is enough even with player allies alive
   let alliesNearMe = 0;
   for (const ob of gameBots) {
     if (ob.dead || ob.team !== bot.team || ob.id === bot.id) continue;
     if (Math.hypot(ob.x - bot.x, ob.z - bot.z) < 20) alliesNearMe++;
   }
   const playerAlliesAlive = gameBots.filter(b => b.team !== bot.team && !b.dead).length;
-  if (alliesNearMe >= 2 && playerAlliesAlive === 0) return 'team_advantage';
-  // 6. Big DPS lead AND we're at healthy HP
-  if (typeof currentWeapon !== 'undefined' && currentWeapon && bot.hp >= 200) {
+  if (alliesNearMe >= 2 && (expert ? playerAlliesAlive <= alliesNearMe : playerAlliesAlive === 0)) return 'team_advantage';
+  // 6. DPS lead — expert pushes at 1.2x, hard at 1.5x
+  if (typeof currentWeapon !== 'undefined' && currentWeapon && bot.hp >= (expert ? 160 : 200)) {
     const playerDPS = WEAPON_DPS_CACHE[currentWeapon.id] || 150;
-    if (bot.dps > playerDPS * 1.5) return 'dps_lead';
+    if (bot.dps > playerDPS * (expert ? 1.2 : 1.5)) return 'dps_lead';
   }
-  // 7. Active aggressor personality with reasonable HP/range — always likes pushing
-  if (bot.personality === 'aggressor' && bot.hp >= 180 && dist < 18 && dist > 3) return 'aggressor_push';
+  // 7. Aggressor personality push — expert lowers HP requirement
+  if (bot.personality === 'aggressor' && bot.hp >= (expert ? 140 : 180) && dist < 18 && dist > 3) return 'aggressor_push';
+  // 8. EXPERT-ONLY: opportunistic push when player is at < 200 HP and we have >220 HP
+  if (expert && !isDead && playerHp < 200 && bot.hp > 220 && dist < 20 && dist > 4) return 'opportunistic';
   return null;
 }
 
@@ -6773,6 +6787,9 @@ function applyBotDamageToPlayer(weaponId, botId) {
   if (me.hp <= 0 && !isDead) {
     isDead = true;
     isADS = false; targetFOV = 75; shooting = false;
+    reloading = false;
+    // Clear any active buffs so bots stop reacting to a dead player's lingering effects
+    abilityBuff = null; meleeAbilityBuff = null; pendingFanFire = null;
     const scope = document.getElementById('scope-overlay');
     if (scope) scope.style.display = 'none';
     const ds = document.getElementById('death-screen');
@@ -7009,6 +7026,9 @@ socket.on('playerDied', data => {
   if (data.killerId===myId && !_alreadyDead) { myKills++; const kc=document.getElementById('kill-count'); if(kc) kc.textContent=`Kills: ${myKills}`; }
   if (data.targetId===myId) {
     isDead=true; isADS=false; targetFOV=75; shooting=false;
+    reloading=false;
+    // Clear lingering buffs so bots resume normal AI
+    abilityBuff=null; meleeAbilityBuff=null; pendingFanFire=null;
     document.getElementById('scope-overlay').style.display='none';
     const ds = document.getElementById('death-screen'); ds.style.display='flex';
     if (match && match.type === 'elim' && !match.over) {
@@ -9351,15 +9371,53 @@ function updateBotAI(dt) {
             bot.hitAndRunUntil = 0; // arrived
           }
         } else {
-          // Strafe around target while shooting; lean toward/away based on range
-          const perpX = -dz / Math.max(dist, 0.01);
-          const perpZ =  dx / Math.max(dist, 0.01);
-          const spd = 8 * dt;
-          // EXPERT: lean toward preferDist instead of fixed thresholds
-          const targetD = (isExpert && preferDist != null) ? preferDist : 10;
-          const leanIn  = dist > targetD + 3 ?  0.4 : (dist < targetD - 3 ? -0.35 : 0);
-          moveX = (perpX * bot.strafeDir * 0.75 + (dx / Math.max(dist,0.01)) * leanIn) * spd;
-          moveZ = (perpZ * bot.strafeDir * 0.75 + (dz / Math.max(dist,0.01)) * leanIn) * spd;
+          // ── KITE-RETREAT: if player has a scary close weapon and we're too close ──
+          // Run mostly AWAY from the player and pick the open path (no wall-hugging)
+          const scaryClose = target.isPlayer && bot.team === 'enemy' && !isDead
+                          && typeof playerHasScaryCloseWeapon === 'function' && playerHasScaryCloseWeapon()
+                          && dist < (preferDist || 16);
+          if (scaryClose) {
+            const spd = 10 * dt; // faster than normal flank — actually getting out of dodge
+            const awayX = -dx / Math.max(dist, 0.01);
+            const awayZ = -dz / Math.max(dist, 0.01);
+            // Sample 5 candidate retreat angles (-60°, -30°, 0°, +30°, +60° from straight-back)
+            // and pick the one that gives us the clearest path AWAY from the player.
+            const angles = [-1.05, -0.52, 0, 0.52, 1.05];
+            let bestAngle = 0, bestScore = -Infinity;
+            for (const a of angles) {
+              const cos = Math.cos(a), sin = Math.sin(a);
+              const candX = awayX * cos - awayZ * sin;
+              const candZ = awayX * sin + awayZ * cos;
+              // Look 3m ahead in this direction — penalize hitting walls
+              const probeX = bot.x + candX * 3;
+              const probeZ = bot.z + candZ * 3;
+              // Penalize if the probe is near a wall (no LOS = wall present)
+              const clearAhead = hasLineOfSight(bot.x, bot.z, probeX, probeZ);
+              // Bonus if the probe is FARTHER from the player than current position
+              const newDist = Math.hypot(probeX - tx, probeZ - tz);
+              const score = (clearAhead ? 10 : -10) + (newDist - dist);
+              if (score > bestScore) { bestScore = score; bestAngle = a; }
+            }
+            const cos = Math.cos(bestAngle), sin = Math.sin(bestAngle);
+            const runX = awayX * cos - awayZ * sin;
+            const runZ = awayX * sin + awayZ * cos;
+            // Mostly retreat (0.85) with a slight strafe component to keep them moving unpredictably
+            const strafeX = -dz / Math.max(dist, 0.01) * bot.strafeDir;
+            const strafeZ =  dx / Math.max(dist, 0.01) * bot.strafeDir;
+            moveX = (runX * 0.85 + strafeX * 0.3) * spd;
+            moveZ = (runZ * 0.85 + strafeZ * 0.3) * spd;
+            bot._kiting = true; // flag for shooting block: prioritize firing while retreating
+          } else {
+            // Normal flank — strafe around target while shooting
+            const perpX = -dz / Math.max(dist, 0.01);
+            const perpZ =  dx / Math.max(dist, 0.01);
+            const spd = 8 * dt;
+            const targetD = (isExpert && preferDist != null) ? preferDist : 10;
+            const leanIn  = dist > targetD + 3 ?  0.4 : (dist < targetD - 3 ? -0.35 : 0);
+            moveX = (perpX * bot.strafeDir * 0.75 + (dx / Math.max(dist,0.01)) * leanIn) * spd;
+            moveZ = (perpZ * bot.strafeDir * 0.75 + (dz / Math.max(dist,0.01)) * leanIn) * spd;
+            bot._kiting = false;
+          }
         }
       } else {
         // chase / rush — direct approach (OR "cover me!" override: go toward player)
@@ -9434,7 +9492,9 @@ function updateBotAI(dt) {
             spawnLocalBullet(origin, dir, `botab_${bot.id}_${now}`, false, (w.bulletSpeed||120)*1.5, 0xffaa00, 0.10, abId);
           }
         }
-        if (canShoot && reactionDone && roundLive && dist < 35 && now - bot.lastShot > fireInterval) {
+        // While kiting (retreating from scary close weapon), reduce fire interval so they shoot while running
+        const kiteFireInterval = bot._kiting ? Math.max(w.fireRate, 400) + Math.random() * 200 : fireInterval;
+        if (canShoot && reactionDone && roundLive && dist < 35 && now - bot.lastShot > kiteFireInterval) {
           if (hasLOS) {
             bot.lastShot = now;
             // MEDIUM/HARD: consume ammo, trigger reload when empty
@@ -9525,6 +9585,11 @@ function updateBotAI(dt) {
       }
     }
 
+    // ── Kite safety: if kiting and barely moving, flip strafe direction to break out ─
+    if (bot._kiting && Math.hypot(bot.x - prevBotX, bot.z - prevBotZ) < 0.04) {
+      bot.strafeDir = -bot.strafeDir;
+      bot.strafeFlipTimer = 0.8;
+    }
     // ── Anti-freeze safety net: if bot hasn't moved in 0.5s, force them to walk ─
     // This catches ANY freeze cause: stuck cover-camping, dead-state-machine paths, broken hit-and-run, etc.
     const movedThisFrame = Math.hypot(bot.x - prevBotX, bot.z - prevBotZ);
