@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PVP Arena</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { touch-action: none; overscroll-behavior: none; }
+    body { background: #000; overflow: hidden; font-family: 'Courier New', monospace; }
+    canvas { display: block; touch-action: none; }
+
+    #hud {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      pointer-events: none; color: #fff;
+    }
+
+    #crosshair {
+      position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 20px; height: 20px;
+    }
+    #crosshair::before, #crosshair::after {
+      content: ''; position: absolute; background: rgba(255,255,255,0.85);
+    }
+    #crosshair::before { width: 2px; height: 100%; left: 50%; transform: translateX(-50%); }
+    #crosshair::after  { width: 100%; height: 2px; top: 50%; transform: translateY(-50%); }
+
+    #health-bar {
+      position: absolute; bottom: 30px; left: 30px;
+    }
+    #health-label { font-size: 12px; color: #aaa; margin-bottom: 4px; }
+    #health-track {
+      width: 200px; height: 14px; background: #333; border-radius: 7px; overflow: hidden;
+    }
+    #health-fill {
+      height: 100%; width: 100%; background: linear-gradient(90deg, #e74c3c, #ff6b6b);
+      border-radius: 7px; transition: width 0.2s;
+    }
+    #health-num { font-size: 18px; font-weight: bold; margin-top: 4px; }
+
+    #ammo {
+      position: absolute; bottom: 30px; right: 30px; text-align: right;
+    }
+    #ammo-gun { font-size: 12px; color: #aaa; }
+    #ammo-count { font-size: 32px; font-weight: bold; letter-spacing: 2px; }
+    #ammo-reserve { font-size: 14px; color: #888; }
+
+    #kills {
+      position: absolute; top: 20px; right: 20px; text-align: right;
+    }
+    #kills span { font-size: 14px; color: #ffd700; }
+
+    #scoreboard {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+      background: rgba(0,0,0,0.85); border: 1px solid #444; border-radius: 8px;
+      padding: 24px 40px; min-width: 320px; display: none;
+    }
+    #scoreboard h2 { text-align: center; margin-bottom: 16px; color: #ffd700; font-size: 18px; }
+    #scoreboard table { width: 100%; border-collapse: collapse; }
+    #scoreboard th { color: #888; font-size: 12px; padding: 4px 8px; border-bottom: 1px solid #333; }
+    #scoreboard td { padding: 6px 8px; font-size: 14px; }
+    #scoreboard tr.me td { color: #4fc3f7; }
+
+    #hit-indicator {
+      position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 60px; height: 60px; border-radius: 50%;
+      border: 2px solid transparent; pointer-events: none;
+      transition: border-color 0.05s;
+    }
+    #hit-indicator.flash { border-color: rgba(231,76,60,0.9); }
+
+    #death-screen {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(180,0,0,0.4); display: none; align-items: center; justify-content: center;
+      flex-direction: column; font-size: 48px; font-weight: bold; color: #fff;
+      text-shadow: 0 0 20px #f00;
+    }
+    #death-screen p { font-size: 18px; margin-top: 12px; color: #ccc; font-weight: normal; }
+
+    #overlay {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.92); display: flex; align-items: center; justify-content: center;
+      flex-direction: column; z-index: 100; color: #fff;
+    }
+    #overlay h1 { font-size: 48px; letter-spacing: 4px; color: #e74c3c; margin-bottom: 8px; }
+    #overlay p  { color: #888; margin-bottom: 32px; font-size: 14px; }
+    #overlay input {
+      background: #111; border: 1px solid #444; color: #fff; padding: 10px 20px;
+      font-size: 16px; border-radius: 4px; margin-bottom: 16px; width: 240px; text-align: center;
+    }
+    #overlay button {
+      background: #e74c3c; color: #fff; border: none; padding: 12px 40px;
+      font-size: 18px; border-radius: 4px; cursor: pointer; letter-spacing: 2px;
+    }
+    #overlay button:hover { background: #c0392b; }
+
+    .mode-card {
+      background: rgba(255,255,255,0.05); border: 1px solid #444; border-radius: 8px;
+      padding: 16px 22px; cursor: pointer; text-align: center; min-width: 100px;
+      transition: all 0.12s; font-size: 20px; font-weight: bold; letter-spacing: 2px;
+      display: flex; flex-direction: column; gap: 4px;
+    }
+    .mode-card span { font-size: 10px; color: #888; font-weight: normal; letter-spacing: 1px; }
+    .mode-card:hover { background: rgba(231,76,60,0.2); border-color: #e74c3c; color: #e74c3c; }
+    .mode-card:hover span { color: #c0392b; }
+
+    /* ── Match HUD ── */
+    #match-hud {
+      display: none; position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.72); border: 1px solid #555; border-radius: 8px;
+      padding: 7px 22px; align-items: center; gap: 28px;
+      font-family: 'Courier New', monospace; color: #fff; z-index: 50;
+      pointer-events: none; min-width: 380px; justify-content: space-between;
+    }
+    #match-left  { color: #4cff4c; font-size: 13px; font-weight: bold; }
+    #match-center { font-size: 19px; font-weight: bold; letter-spacing: 3px; text-align: center; min-width: 72px; }
+    #match-right { color: #ff5555; font-size: 13px; font-weight: bold; text-align: right; }
+
+    /* ── Round/match announcement overlay ── */
+    #match-announce {
+      display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      align-items: center; justify-content: center; flex-direction: column;
+      pointer-events: none; z-index: 88; transition: opacity 0.4s;
+    }
+    #announce-text {
+      font-family: 'Courier New', monospace; font-size: 52px; font-weight: 900;
+      letter-spacing: 6px; text-shadow: 0 0 30px currentColor, 2px 2px 0 #000;
+      animation: announceIn 0.3s ease-out;
+    }
+    #announce-sub {
+      font-family: 'Courier New', monospace; font-size: 16px; color: #aaa;
+      letter-spacing: 3px; margin-top: 8px;
+    }
+    @keyframes announceIn { from { transform: scale(1.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+    /* ── Elimination waiting screen (dead, waiting for round end) ── */
+    #waiting-screen {
+      display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.75); align-items: center; justify-content: center;
+      flex-direction: column; z-index: 85; color: #fff;
+      font-family: 'Courier New', monospace;
+    }
+    #waiting-screen h2 { font-size: 40px; color: #e74c3c; letter-spacing: 6px; margin: 0 0 12px; }
+    #waiting-msg { color: #888; font-size: 15px; letter-spacing: 2px; }
+    #round-score-display { margin-top: 16px; font-size: 22px; letter-spacing: 4px; color: #fff; }
+
+    /* ── Match over screen ── */
+    #match-over-screen {
+      display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.88); align-items: center; justify-content: center;
+      flex-direction: column; z-index: 110; color: #fff;
+      font-family: 'Courier New', monospace; gap: 14px;
+    }
+    #match-over-title { font-size: 64px; font-weight: 900; letter-spacing: 8px; text-shadow: 0 0 40px currentColor; }
+    #match-over-sub   { font-size: 16px; color: #aaa; letter-spacing: 3px; }
+    #match-over-score { font-size: 18px; color: #ddd; letter-spacing: 2px; margin: 8px 0; }
+    #play-again-btn {
+      margin-top: 10px; background: #e74c3c; color: #fff; border: none;
+      padding: 14px 48px; font-size: 18px; border-radius: 4px; cursor: pointer;
+      letter-spacing: 3px; font-family: 'Courier New', monospace;
+    }
+    #play-again-btn:hover { background: #c0392b; }
+
+    /* ── Pre-match countdown overlay ── */
+    #countdown-overlay {
+      display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      align-items: center; justify-content: center; flex-direction: column;
+      pointer-events: none; z-index: 92;
+    }
+    #countdown-number {
+      font-family: 'Courier New', monospace; font-size: 140px; font-weight: 900;
+      color: #fff; text-shadow: 0 0 60px #fff, 2px 2px 0 #000;
+      line-height: 1; animation: cdPop 0.18s ease-out;
+    }
+    #countdown-label {
+      font-family: 'Courier New', monospace; font-size: 16px; color: #aaa;
+      letter-spacing: 4px; margin-top: 6px;
+    }
+    @keyframes cdPop { from { transform: scale(1.7); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+    /* ── Spawn-shield indicator ── */
+    #spawn-shield {
+      display: none; position: absolute; bottom: 90px; left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 140, 255, 0.22); border: 2px solid #44aaff;
+      border-radius: 6px; padding: 5px 18px;
+      font-family: 'Courier New', monospace; font-size: 13px; color: #88ccff;
+      letter-spacing: 3px; pointer-events: none; z-index: 60;
+      animation: shieldPulse 0.8s ease-in-out infinite alternate;
+    }
+    @keyframes shieldPulse { from { border-color: #44aaff; color: #88ccff; } to { border-color: #aaddff; color: #cceeff; } }
+
+    /* ── In-game 2-slot weapon bar ── */
+    #weapon-selector {
+      position: absolute; bottom: 90px; left: 50%; transform: translateX(-50%);
+      display: flex; gap: 8px;
+    }
+    .ws-slot {
+      background: rgba(0,0,0,0.6); border: 1px solid #444; border-radius: 6px;
+      padding: 6px 14px; text-align: center; min-width: 72px; transition: all 0.12s;
+      pointer-events: all; cursor: pointer;
+    }
+    .ws-slot.active { background: rgba(255,255,255,0.18); border-color: #fff; }
+    .ws-slot .ws-key  { font-size: 10px; color: #888; }
+    .ws-slot .ws-name { font-size: 14px; font-weight: bold; }
+    .ws-slot .ws-type { font-size: 10px; color: #aaa; }
+
+    /* ── Loadout screen ── */
+    #loadout-screen {
+      position: fixed; top:0; left:0; width:100%; height:100%;
+      background: rgba(0,0,0,0.92); display: none; flex-direction: column;
+      align-items: center; justify-content: flex-start; z-index: 95; color: #fff;
+      font-family: 'Courier New', monospace; padding: 28px 18px 22px; overflow: hidden;
+    }
+    #loadout-screen h2 { font-size: 28px; letter-spacing: 4px; color: #e74c3c; margin-bottom: 16px; flex: 0 0 auto; }
+    #loadout-cols { display: flex; gap: 18px; min-height: 0; flex: 1 1 auto; max-width: 1040px; width: 100%; }
+    .loadout-col { display: flex; flex-direction: column; min-width: 0; flex: 1 1 0; }
+    .loadout-col-title { font-size: 11px; letter-spacing: 3px; color: #888; margin-bottom: 8px; text-align: center; }
+    #loadout-primary-list, #loadout-secondary-list,
+    #loadout-melee-list, #loadout-support-list {
+      display: flex; flex-direction: column; gap: 6px;
+      overflow-y: auto; padding-right: 4px; min-height: 0; overscroll-behavior: contain;
+    }
+    .loadout-card {
+      background: rgba(255,255,255,0.05); border: 1px solid #333; border-radius: 6px;
+      padding: 8px 12px; cursor: pointer; transition: all 0.1s;
+    }
+    .loadout-card:hover  { background: rgba(255,255,255,0.1); border-color: #666; }
+    .loadout-card.selected { background: rgba(231,76,60,0.25); border-color: #e74c3c; }
+    .lc-name  { font-size: 15px; font-weight: bold; }
+    .lc-type  { font-size: 10px; color: #888; margin: 1px 0; }
+    .lc-stats { font-size: 10px; color: #aaa; }
+    #loadout-ready-btn {
+      margin-top: 16px; background: #e74c3c; color: #fff; border: none;
+      padding: 12px 48px; font-size: 18px; border-radius: 4px; cursor: pointer;
+      letter-spacing: 2px; transition: background 0.15s; flex: 0 0 auto;
+    }
+    #loadout-ready-btn:disabled { background: #555; cursor: default; }
+    #loadout-ready-btn:not(:disabled):hover { background: #c0392b; }
+
+    @media (max-width: 620px) {
+      #loadout-screen { padding: 18px 12px 16px; }
+      #loadout-screen h2 { font-size: 22px; margin-bottom: 12px; }
+      #loadout-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+      .lc-name { font-size: 13px; }
+      .lc-stats { font-size: 9px; }
+      .loadout-card { padding: 7px 8px; }
+      #loadout-ready-btn { width: min(280px, 100%); padding: 11px 24px; }
+    }
+
+    #scope-overlay {
+      position: absolute; top:0; left:0; width:100%; height:100%;
+      display: none; pointer-events: none;
+    }
+    #scope-canvas { width: 100%; height: 100%; }
+
+    #controls-hint {
+      position: absolute; bottom: 68px; left: 50%; transform: translateX(-50%);
+      font-size: 11px; color: #555; text-align: center; letter-spacing: 1px;
+    }
+
+    #ability-hud {
+      position: absolute; bottom: 130px; right: 30px;
+      background: rgba(0,0,0,0.6); border: 1px solid #444; border-radius: 8px;
+      padding: 6px 12px; min-width: 130px; text-align: center;
+      pointer-events: none;
+    }
+    #ability-key-hint { font-size: 10px; color: #ffd700; letter-spacing: 1px; margin-bottom: 2px; }
+    #ability-name { font-size: 13px; font-weight: bold; color: #fff; letter-spacing: 1px; margin-bottom: 4px; }
+    #ability-cd-track {
+      width: 100%; height: 4px; background: #333; border-radius: 2px; overflow: hidden;
+    }
+    #ability-cd-fill { height: 100%; width: 0%; background: #4caf50; transition: width 0.1s, background 0.3s; border-radius: 2px; }
+    #ability-activated {
+      position: absolute; top: 38%; left: 50%; transform: translateX(-50%) scale(1);
+      font-size: 22px; font-weight: bold; color: #ffd700; letter-spacing: 3px;
+      text-shadow: 0 0 12px rgba(255,215,0,0.8); pointer-events: none;
+      opacity: 0; transition: opacity 0.4s, transform 0.3s;
+    }
+
+    /* ── Mobile controls ── */
+    #mobile-controls {
+      display: none;
+      position: fixed; top:0; left:0; width:100%; height:100%;
+      z-index: 50; pointer-events: none;
+    }
+    #mobile-controls.active { display: block; }
+
+    #joystick-base {
+      position: absolute; width:110px; height:110px; border-radius:50%;
+      background: rgba(255,255,255,0.08); border: 2px solid rgba(255,255,255,0.3);
+      display: none; transform: translate(-50%,-50%); pointer-events: none;
+    }
+    #joystick-thumb {
+      position: absolute; width:48px; height:48px; border-radius:50%;
+      background: rgba(255,255,255,0.5); border: 2px solid rgba(255,255,255,0.8);
+      transform: translate(-50%,-50%); top:50%; left:50%;
+    }
+
+    /* All buttons sit above everything */
+    #btn-fire, #btn-ads, #btn-reload-mobile, #btn-prev-weapon, #btn-next-weapon {
+      position: absolute; pointer-events: all; z-index: 60;
+      display: flex; align-items: center; justify-content: center;
+      user-select: none; -webkit-user-select: none; touch-action: none;
+      font-weight: bold; color: #fff;
+    }
+
+    #btn-fire {
+      right:22px; bottom:60px; width:82px; height:82px; border-radius:50%;
+      background: rgba(220,50,50,0.8); border: 3px solid rgba(255,90,90,0.9);
+      font-size:12px; letter-spacing:1px;
+    }
+    #btn-fire.pressed { background: rgba(255,80,80,0.95); transform: scale(0.92); }
+
+    #btn-ads {
+      right:120px; bottom:75px; width:58px; height:58px; border-radius:50%;
+      background: rgba(255,200,0,0.7); border: 2px solid rgba(255,230,60,0.9);
+      font-size:11px;
+    }
+    #btn-ads.active-ads { background: rgba(255,220,0,0.95); }
+
+    #btn-reload-mobile {
+      right:28px; bottom:160px; width:52px; height:52px; border-radius:50%;
+      background: rgba(60,140,255,0.7); border: 2px solid rgba(100,180,255,0.9);
+      font-size:11px;
+    }
+
+    #btn-prev-weapon, #btn-next-weapon {
+      bottom:168px; width:46px; height:46px; border-radius:8px;
+      background: rgba(0,0,0,0.55); border: 1px solid #666; font-size:22px;
+    }
+    #btn-prev-weapon { right:188px; }
+    #btn-next-weapon { right:136px; }
+
+    #reload-flash {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      font-size: 14px; color: #ffd700; display: none; margin-top: 24px;
+    }
+
+    #interact-hint {
+      position: absolute; bottom: 130px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.72); border: 1px solid #4caf50; border-radius: 20px;
+      padding: 6px 18px; font-size: 13px; color: #4caf50; letter-spacing: 1px;
+      display: none; white-space: nowrap;
+      animation: hint-pulse 1s ease-in-out infinite alternate;
+    }
+    @keyframes hint-pulse {
+      from { opacity: 0.7; } to { opacity: 1; box-shadow: 0 0 8px rgba(76,175,80,0.6); }
+    }
+
+    #btn-interact {
+      position: absolute; pointer-events: all; z-index: 60;
+      display: none; align-items: center; justify-content: center;
+      user-select: none; -webkit-user-select: none; touch-action: none;
+      font-weight: bold; color: #fff; font-size: 11px; letter-spacing: 1px;
+      right: 200px; bottom: 60px; width: 60px; height: 60px; border-radius: 50%;
+      background: rgba(60,180,60,0.8); border: 2px solid rgba(100,220,100,0.9);
+    }
+
+    /* ── Frontlines HUD ── */
+    #frontline-hud {
+      display: none; position: absolute; top: 58px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.7); border: 1px solid #555; border-radius: 6px;
+      padding: 5px 10px; align-items: center; gap: 3px;
+      font-family: 'Courier New', monospace; z-index: 49;
+      pointer-events: none;
+    }
+    .frontline-sector {
+      width: 56px; height: 26px; border-radius: 4px; border: 1px solid #666;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 9px; letter-spacing: 1px; font-weight: bold; color: #fff;
+      transition: background 0.3s;
+    }
+    .frontline-sector.ally   { background: rgba(76,255,76,0.35); border-color: #4cff4c; color: #4cff4c; }
+    .frontline-sector.enemy  { background: rgba(255,85,85,0.35); border-color: #ff5555; color: #ff5555; }
+    .frontline-sector.contested { animation: frontPulse 0.7s ease-in-out infinite alternate; border-color: #ffd700; color: #ffd700; }
+    @keyframes frontPulse {
+      from { background: rgba(255,215,0,0.15); }
+      to   { background: rgba(255,215,0,0.40); }
+    }
+    #frontline-progress {
+      margin-left: 8px; font-size: 11px; color: #aaa; white-space: nowrap;
+    }
+
+    /* ── Last Stand HUD ── */
+    #ls-coins {
+      display: none; position: absolute; top: 20px; left: 20px;
+      background: rgba(0,0,0,0.7); border: 1px solid #f0c040; border-radius: 6px;
+      padding: 5px 14px; font-family: 'Courier New', monospace; font-size: 15px;
+      font-weight: bold; color: #ffd700; letter-spacing: 2px; z-index: 55;
+      pointer-events: none;
+    }
+
+    /* ── Last Stand Shop ── */
+    #laststand-shop {
+      display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.82); z-index: 120; align-items: center; justify-content: center;
+      flex-direction: column; font-family: 'Courier New', monospace; color: #fff;
+      gap: 16px;
+    }
+    #ls-shop-title { font-size: 32px; font-weight: 900; letter-spacing: 6px; color: #ffd700; }
+    #ls-shop-subtitle { font-size: 13px; color: #888; letter-spacing: 3px; margin-top: -8px; }
+    #ls-wave-timer {
+      font-size: 22px; font-weight: bold; color: #ff9944; letter-spacing: 3px;
+    }
+    #ls-shop-upgrades {
+      display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; max-width: 680px;
+    }
+    .ls-upgrade-btn {
+      background: rgba(255,255,255,0.07); border: 1px solid #555; border-radius: 8px;
+      padding: 12px 18px; cursor: pointer; text-align: center; min-width: 140px;
+      transition: all 0.12s; font-family: 'Courier New', monospace; color: #fff;
+      pointer-events: all;
+    }
+    .ls-upgrade-btn:hover:not(:disabled) { background: rgba(255,215,0,0.2); border-color: #ffd700; color: #ffd700; }
+    .ls-upgrade-btn:disabled { opacity: 0.4; cursor: default; }
+    .ls-upgrade-btn .ls-upg-name { font-size: 15px; font-weight: bold; letter-spacing: 1px; }
+    .ls-upgrade-btn .ls-upg-cost { font-size: 12px; color: #ffd700; margin-top: 4px; }
+    .ls-upgrade-btn .ls-upg-desc { font-size: 10px; color: #aaa; margin-top: 3px; }
+    #ls-skip-btn {
+      background: transparent; border: 1px solid #555; border-radius: 6px;
+      padding: 9px 32px; font-family: 'Courier New', monospace; font-size: 14px;
+      color: #888; cursor: pointer; letter-spacing: 2px; pointer-events: all;
+    }
+    #ls-skip-btn:hover { border-color: #aaa; color: #ccc; }
+    /* ── D-Day HUD ── */
+    #dday-hud { display: none; }
+    @keyframes waveFlash {
+      0% { color: #ff2222; text-shadow: 0 0 18px #ff2222; }
+      50% { color: #ff9944; text-shadow: none; }
+      100% { color: #ff2222; text-shadow: 0 0 18px #ff2222; }
+    }
+  </style>
+</head>
+<body>
+  <div id="overlay">
+    <h1>PVP ARENA</h1>
+    <p>AK20 · Blank Map · Multiplayer</p>
+    <input id="name-input" maxlength="16" placeholder="Enter your name" />
+    <button id="play-btn">PLAY</button>
+  </div>
+
+  <div id="mode-screen" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.93); z-index:101; color:#fff; font-family:'Courier New',monospace; flex-direction:column; align-items:center; justify-content:center; overflow-y:auto; padding:20px 0;">
+    <h2 style="font-size:32px; letter-spacing:6px; color:#e74c3c; margin-bottom:6px;">SELECT MODE</h2>
+    <p style="color:#666; font-size:12px; letter-spacing:2px; margin-bottom:18px;">BOTS FILL EVERY SLOT · RANDOM LOADOUTS</p>
+
+    <div style="margin-bottom:18px; text-align:center;">
+      <div style="font-size:10px; letter-spacing:4px; color:#888; margin-bottom:10px;">MAP</div>
+      <div id="map-row" style="display:flex; gap:6px; justify-content:center; flex-wrap:wrap; max-width:760px;">
+        <div class="map-card selected" data-map="auto"      style="padding:6px 14px; border:2px solid #aaa; color:#aaa; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px; background:rgba(170,170,170,0.18);">AUTO</div>
+        <div class="map-card" data-map="blank"      style="padding:6px 14px; border:2px solid #b9a877; color:#b9a877; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">CLASSIC</div>
+        <div class="map-card" data-map="urban"      style="padding:6px 14px; border:2px solid #9a9a9a; color:#9a9a9a; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">URBAN</div>
+        <div class="map-card" data-map="warehouse"  style="padding:6px 14px; border:2px solid #8a7050; color:#8a7050; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">WAREHOUSE</div>
+        <div class="map-card" data-map="forest"     style="padding:6px 14px; border:2px solid #4a8a3f; color:#4a8a3f; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">FOREST</div>
+        <div class="map-card" data-map="volcano"    style="padding:6px 14px; border:2px solid #ff5522; color:#ff5522; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">VOLCANO</div>
+        <div class="map-card" data-map="cyber"      style="padding:6px 14px; border:2px solid #ff00ff; color:#ff00ff; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">CYBER ALLEY</div>
+        <div class="map-card" data-map="desert"     style="padding:6px 14px; border:2px solid #c8a050; color:#c8a050; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">DESERT</div>
+        <div class="map-card" data-map="tundra"     style="padding:6px 14px; border:2px solid #88aacc; color:#88aacc; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">TUNDRA</div>
+        <div class="map-card" data-map="space"      style="padding:6px 14px; border:2px solid #aa44ff; color:#aa44ff; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">SPACE STATION</div>
+      </div>
+      <div id="map-desc" style="font-size:11px; color:#888; margin-top:6px; letter-spacing:1px; max-width:600px;">Random — game picks one for you each match</div>
+    </div>
+
+    <div style="margin-bottom:24px; text-align:center;">
+      <div style="font-size:10px; letter-spacing:4px; color:#888; margin-bottom:10px;">BOT DIFFICULTY</div>
+      <div id="difficulty-row" style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap;">
+        <div class="diff-card" data-diff="easy"  style="padding:8px 18px; border:2px solid #4cf; color:#4cf; cursor:pointer; font-size:13px; letter-spacing:3px; border-radius:4px;">EASY</div>
+        <div class="diff-card selected" data-diff="medium" style="padding:8px 18px; border:2px solid #fc4; color:#fc4; cursor:pointer; font-size:13px; letter-spacing:3px; border-radius:4px; background:rgba(255,204,68,0.2);">MEDIUM</div>
+        <div class="diff-card" data-diff="hard"  style="padding:8px 18px; border:2px solid #f44; color:#f44; cursor:pointer; font-size:13px; letter-spacing:3px; border-radius:4px;">HARD</div>
+        <div class="diff-card" data-diff="expert"  style="padding:8px 18px; border:2px solid #c0f; color:#c0f; cursor:pointer; font-size:13px; letter-spacing:3px; border-radius:4px;">EXPERT</div>
+      </div>
+      <div id="difficulty-desc" style="font-size:11px; color:#888; margin-top:8px; letter-spacing:1px; max-width:600px;">+ Reloading · Bullet leading · Reaction time · Skill variation · Smarter melee charges</div>
+    </div>
+
+    <div style="margin-bottom:24px; text-align:center;">
+      <div style="font-size:10px; letter-spacing:4px; color:#888; margin-bottom:12px;">TEAM DEATHMATCH</div>
+      <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:center;">
+        <div class="mode-card" data-mode="1v1">1v1<span>1 enemy</span></div>
+        <div class="mode-card" data-mode="2v2">2v2<span>1 ally · 2 enemies</span></div>
+        <div class="mode-card" data-mode="3v3">3v3<span>2 allies · 3 enemies</span></div>
+        <div class="mode-card" data-mode="5v5">5v5<span>4 allies · 5 enemies</span></div>
+        <div class="mode-card" data-mode="10v10">10v10<span>9 allies · 10 enemies</span></div>
+      </div>
+    </div>
+
+    <div style="text-align:center;">
+      <div style="font-size:10px; letter-spacing:4px; color:#888; margin-bottom:12px;">FREE FOR ALL</div>
+      <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:center;">
+        <div class="mode-card" data-mode="ffa5">FFA · 5 Bots<span>All vs All</span></div>
+        <div class="mode-card" data-mode="ffa15">FFA · 15 Bots<span>All vs All</span></div>
+      </div>
+    </div>
+
+    <div style="margin-top:24px; text-align:center;">
+      <div style="font-size:10px; letter-spacing:4px; color:#888; margin-bottom:12px;">SPECIAL MODES</div>
+      <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:center;">
+        <div class="mode-card" data-mode="frontlines">FRONTLINES<span>Push the battle line</span></div>
+        <div class="mode-card" data-mode="laststand">LAST STAND<span>Survive endless waves</span></div>
+        <div class="mode-card" data-mode="dday">D-DAY<span>Defend the hill · 3 waves</span></div>
+        <div class="mode-card" data-mode="range">SHOOTING RANGE<span>Practice · No enemies</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="hud">
+    <div id="crosshair"></div>
+    <div id="hit-indicator"></div>
+
+    <div id="health-bar">
+      <div id="health-label">HEALTH</div>
+      <div id="health-track"><div id="health-fill"></div></div>
+      <div id="health-num">100</div>
+    </div>
+
+    <div id="ammo">
+      <div id="ammo-gun">AK20</div>
+      <div id="ammo-count">30</div>
+      <div id="ammo-reserve">/ 90</div>
+    </div>
+
+    <div id="kills">
+      <span id="kill-count">Kills: 0</span>
+    </div>
+
+    <div id="weapon-selector">
+      <div class="ws-slot active" id="ws-primary">
+        <div class="ws-key">[1]</div>
+        <div class="ws-name">—</div>
+        <div class="ws-type">PRIMARY</div>
+      </div>
+      <div class="ws-slot" id="ws-secondary">
+        <div class="ws-key">[2] / Q</div>
+        <div class="ws-name">—</div>
+        <div class="ws-type">SECONDARY</div>
+      </div>
+      <div class="ws-slot" id="ws-melee">
+        <div class="ws-key">[3]</div>
+        <div class="ws-name">—</div>
+        <div class="ws-type">MELEE</div>
+      </div>
+      <div class="ws-slot" id="ws-support">
+        <div class="ws-key">[4]</div>
+        <div class="ws-name">—</div>
+        <div class="ws-type">SUPPORT</div>
+      </div>
+    </div>
+
+    <div id="scope-overlay">
+      <canvas id="scope-canvas"></canvas>
+    </div>
+
+    <div id="controls-hint">WASD · MOVE &nbsp;|&nbsp; MOUSE · AIM &nbsp;|&nbsp; LMB · USE &nbsp;|&nbsp; E · ADS &nbsp;|&nbsp; Q / 1 / 2 / 3 / 4 · SLOTS &nbsp;|&nbsp; R · RELOAD &nbsp;|&nbsp; TAB · SCORES &nbsp;|&nbsp; G · ABILITY</div>
+    <!-- Ability HUD -->
+    <div id="ability-hud">
+      <div id="ability-key-hint">[G]</div>
+      <div id="ability-name">—</div>
+      <div id="ability-cd-track"><div id="ability-cd-fill"></div></div>
+      <div id="ability-desc"></div>
+    </div>
+    <div id="ability-activated"></div>
+    <div id="reload-flash">RELOADING...</div>
+    <div id="interact-hint">🗑 F · SWAP WEAPONS</div>
+
+    <div id="scoreboard">
+      <h2>SCOREBOARD</h2>
+      <table>
+        <thead><tr><th>NAME</th><th>KILLS</th><th>DEATHS</th><th>HP</th></tr></thead>
+        <tbody id="score-body"></tbody>
+      </table>
+    </div>
+
+    <div id="death-screen">
+      YOU DIED
+      <p id="death-msg">Respawning in 3s...</p>
+    </div>
+
+    <!-- Match HUD top bar -->
+    <div id="match-hud">
+      <div id="match-left"></div>
+      <div id="match-center"></div>
+      <div id="match-right"></div>
+    </div>
+
+    <!-- Frontlines sector HUD (shown below match-hud) -->
+    <div id="frontline-hud">
+      <div class="frontline-sector" id="fl-sector-0">ENEMY<br>BASE</div>
+      <div class="frontline-sector" id="fl-sector-1">SECTOR 2</div>
+      <div class="frontline-sector" id="fl-sector-2">MID</div>
+      <div class="frontline-sector" id="fl-sector-3">SECTOR 4</div>
+      <div class="frontline-sector" id="fl-sector-4">ALLY<br>BASE</div>
+      <div id="frontline-progress">z=0</div>
+    </div>
+
+    <!-- D-Day wave HUD -->
+    <div id="dday-hud" style="display:none; position:absolute; top:58px; left:50%; transform:translateX(-50%);
+      background:rgba(0,0,0,0.72); border:1px solid #884422; border-radius:6px;
+      padding:5px 16px; align-items:center; gap:16px;
+      font-family:'Courier New',monospace; color:#ff9944; z-index:49; pointer-events:none;">
+      <span id="dday-wave-label" style="font-size:13px; font-weight:bold; letter-spacing:2px;">WAVE 0/3</span>
+      <span id="dday-enemies-label" style="font-size:12px; color:#ffcc88; letter-spacing:1px;">0 ENEMIES</span>
+      <span id="dday-phase-label" style="font-size:11px; color:#ff7722; letter-spacing:2px; text-transform:uppercase;">PREPARE</span>
+    </div>
+
+    <!-- Shooting Range HUD -->
+    <div id="range-hud" style="display:none; position:absolute; top:58px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.5); border:1px solid #44ddff; border-radius:6px; padding:6px 16px; flex-direction:row; gap:16px; align-items:center; pointer-events:none; z-index:49;">
+      <span id="range-stats" style="font-size:13px; font-weight:bold; letter-spacing:2px; color:#44ddff;">SHOTS 0  ·  HITS 0  ·  ACC 0%</span>
+    </div>
+
+    <!-- Last Stand coins display -->
+    <div id="ls-coins">COINS: 0</div>
+
+    <div id="spawn-shield">🛡 SPAWN SHIELD</div>
+  </div>
+
+  <!-- Last Stand shop overlay -->
+  <div id="laststand-shop">
+    <div id="ls-shop-title">WAVE COMPLETE</div>
+    <div id="ls-shop-subtitle">BUY UPGRADES</div>
+    <div id="ls-wave-timer">15s</div>
+    <div id="ls-shop-upgrades"></div>
+    <button id="ls-skip-btn" onclick="lsSkipShop()">SKIP</button>
+  </div>
+
+  <!-- Round/match announcement -->
+  <div id="match-announce">
+    <div id="announce-text"></div>
+    <div id="announce-sub"></div>
+  </div>
+
+  <!-- Pre-match 5-second countdown -->
+  <div id="countdown-overlay">
+    <div id="countdown-number">5</div>
+    <div id="countdown-label">GET READY</div>
+  </div>
+
+  <!-- Elimination: waiting for round end while dead -->
+  <div id="waiting-screen">
+    <h2>ELIMINATED</h2>
+    <p id="waiting-msg">Waiting for round to end...</p>
+    <div id="round-score-display"></div>
+    <button id="change-loadout-btn" style="margin-top:18px;padding:10px 22px;background:#222;color:#fff;border:2px solid #888;border-radius:6px;font-family:monospace;font-size:14px;letter-spacing:2px;cursor:pointer;">CHANGE LOADOUT</button>
+  </div>
+
+  <!-- Match over -->
+  <div id="match-over-screen">
+    <div id="match-over-title">VICTORY</div>
+    <div id="match-over-sub"></div>
+    <div id="match-over-score"></div>
+    <button id="play-again-btn" onclick="location.reload()">PLAY AGAIN</button>
+  </div>
+
+  <div id="mobile-controls">
+    <div id="joystick-base"><div id="joystick-thumb"></div></div>
+    <div id="btn-fire">FIRE</div>
+    <div id="btn-ads">ADS</div>
+    <div id="btn-reload-mobile">R</div>
+    <div id="btn-prev-weapon">&#8249;</div>
+    <div id="btn-next-weapon">&#8250;</div>
+    <div id="btn-interact">SWAP</div>
+  </div>
+
+  <!-- Loadout selection screen -->
+  <div id="loadout-screen">
+    <h2>SELECT LOADOUT</h2>
+    <div id="loadout-cols">
+      <div class="loadout-col">
+        <div class="loadout-col-title">PRIMARY</div>
+        <div id="loadout-primary-list"></div>
+      </div>
+      <div class="loadout-col">
+        <div class="loadout-col-title">SECONDARY</div>
+        <div id="loadout-secondary-list"></div>
+      </div>
+      <div class="loadout-col">
+        <div class="loadout-col-title">MELEE</div>
+        <div id="loadout-melee-list"></div>
+      </div>
+      <div class="loadout-col">
+        <div class="loadout-col-title">SUPPORT</div>
+        <div id="loadout-support-list"></div>
+      </div>
+    </div>
+    <button id="loadout-ready-btn" disabled>READY</button>
+  </div>
+
+  <div id="err" style="display:none;position:fixed;top:0;left:0;width:100%;background:#c00;color:#fff;padding:16px;font-size:14px;z-index:9999;word-break:break-all;white-space:pre-wrap;"></div>
+
+  <script>
+    window.onerror = function(msg, src, line, col, err) {
+      var el = document.getElementById('err');
+      el.style.display = 'block';
+      el.textContent = 'JS ERROR:\n' + msg + '\n' + src + ':' + line;
+      return false;
+    };
+    window.addEventListener('unhandledrejection', function(e) {
+      var msg = String(e.reason);
+      if (msg.indexOf('pointer lock') !== -1 || msg.indexOf('pointerlock') !== -1) return;
+      var el = document.getElementById('err');
+      el.style.display = 'block';
+      el.textContent += '\nPromise: ' + e.reason;
+    });
+  </script>
+
+  <script src="three.min.js"></script>
+  <script>
+    if (typeof THREE === 'undefined') {
+      document.getElementById('err').style.display='block';
+      document.getElementById('err').textContent='Failed to load three.min.js';
+    }
+  </script>
+  <script src="socket.io.min.js"></script>
+  <script>
+    if (typeof io === 'undefined') {
+      document.getElementById('err').style.display='block';
+      document.getElementById('err').textContent='Failed to load socket.io.min.js';
+    }
+  </script>
+  <script src="game.js"></script>
+</body>
+</html>
