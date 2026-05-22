@@ -9788,7 +9788,9 @@ function onFrontlinesKill(targetId, killerId) {
       if (!match || match.over || !targetBot.dead) return;
       const idx = gameBots.filter(b => b.team === targetBot.team).indexOf(targetBot);
       const total = gameBots.filter(b => b.team === targetBot.team).length;
-      const sp = botSideSpawn(idx, total, targetBot.team);
+      // Re-roll a fresh randomized spawn so respawning bots don't conga-line
+      // back onto the exact slot they died at.
+      const sp = botSideSpawn(idx, Math.max(total, 3), targetBot.team);
       targetBot.dead = false; targetBot.hp = 300; targetBot.prevHp = 300; targetBot.stuckTimer = 0;
       targetBot.weaponId = targetBot.spawnWeaponId || targetBot.weaponId;
       targetBot.x = sp.x; targetBot.z = sp.z;
@@ -10200,12 +10202,16 @@ function botSideSpawn(idx, count, team) {
     const r = 90 + Math.random() * 20;
     return { x: Math.cos(ang) * r, z: Math.sin(ang) * r };
   }
-  // Allies at z=+32 (behind player); enemies at z=-20 (close enough to navigate quickly)
+  // Allies at z≈+32 (behind player); enemies at z≈-20 (close enough to navigate quickly)
   const isAlly = team === 'ally';
-  const spread = Math.min(30, Math.max(6, count * 3.5));
-  const xPos   = count <= 1 ? 0 : ((idx / (count - 1)) - 0.5) * 2 * spread;
-  const jitter = (Math.random() - 0.5) * 2.5;
-  return { x: xPos + jitter, z: isAlly ? 32 : -20 };
+  // Use a wider spread floor so 1v1 / 1v2 don't stack everyone on x=0
+  const spread = Math.min(36, Math.max(14, count * 4));
+  const baseX  = count <= 1
+    ? (Math.random() - 0.5) * spread * 2          // lone bot: fully random across the spread
+    : ((idx / (count - 1)) - 0.5) * 2 * spread;
+  const xJit   = (Math.random() - 0.5) * 6;
+  const zJit   = (Math.random() - 0.5) * 6;
+  return { x: baseX + xJit, z: (isAlly ? 32 : -20) + zJit };
 }
 
 function spawnGameBots() {
@@ -10296,8 +10302,12 @@ function spawnGameBots() {
     camera.position.set(Math.cos(ang) * r, 1.65, Math.sin(ang) * r);
     euler.y = ang + Math.PI; // face toward center
   } else {
-    camera.position.set(0, 1.65, 42);
-    euler.y = Math.PI; // face toward center
+    // Randomize player spawn across the ally back-line so 1v1s / team matches
+    // don't always start from the exact same point.
+    const px = (Math.random() - 0.5) * 36;       // wide spread along x
+    const pz = 38 + Math.random() * 8;           // varied depth on ally side
+    camera.position.set(px, 1.65, pz);
+    euler.y = Math.PI + (Math.random() - 0.5) * 0.6; // face toward center, slight yaw
   }
 
   const makeBot = (idx, team) => {
