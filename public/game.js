@@ -839,6 +839,15 @@ const GAME_MODE_CONFIGS = {
   'laststand':  { type: 'laststand',  allies: 0, enemies: 0 },
   'dday':       { type: 'dday',       allies: 3, enemies: 0 },
   'range':      { type: 'range',      allies: 0, enemies: 0 },
+  // King of the Hill / Battle Royale: massive map, 10 players FFA, 3 lives each, last alive wins
+  'koth':       { type: 'br',         allies: 0, enemies: 9, livesPerPlayer: 3, mapSize: 250 },
+  // 🎮 ARCADE MODES — fast & gimmicky FFA variants
+  'gungame':    { type: 'arcade', subtype: 'gungame',  allies: 0, enemies: 7, timeLimit: 300, arcade: true },
+  'oitc':       { type: 'arcade', subtype: 'oitc',     allies: 0, enemies: 5, timeLimit: 240, arcade: true }, // One in the Chamber
+  'juggernaut': { type: 'arcade', subtype: 'jugg',     allies: 0, enemies: 5, timeLimit: 240, arcade: true },
+  'infection':  { type: 'arcade', subtype: 'infect',   allies: 0, enemies: 5, timeLimit: 180, arcade: true },
+  'sniper_only':{ type: 'arcade', subtype: 'sniper',   allies: 0, enemies: 5, timeLimit: 240, arcade: true },
+  'speedrun':   { type: 'arcade', subtype: 'speedrun', allies: 0, enemies: 20,timeLimit: 0,   arcade: true }, // solo
 };
 let selectedModeConfig = null;
 const gameBots = [];       // {id, team, weaponId, x, z, rotY, hp, dead, state, wanderAngle, wanderTimer, lastShot, lastBotMove}
@@ -2267,6 +2276,364 @@ function buildSpaceMap() {
   MAP_GROUPS[m]._skyColor = 0x000010;
 }
 buildSpaceMap();
+
+// ──────────────────────────────────────────────────────────────────────────
+// SPECIAL MAP MECHANIC STATE
+// ──────────────────────────────────────────────────────────────────────────
+const mapDestructibles = []; // [{ mesh, hp, maxHp, type, mapName, onDestroy }]
+const mapMortars       = []; // [{ mesh, ammo, maxAmmo, hp, x, z, pilotedBy: null|'player'|botId, side }]
+let airportLightLevel  = 1.0; // 1=full bright, 0=pitch black — controlled by airport map
+let chernobylGasActive = false; // when true, player takes 1 dmg/sec
+let lastChernobylTick  = 0;
+
+// ──────────────────────────────────────────────────────────────────────────
+// 9. AIRPORT — bright lights + breakable glass; gets darker as lights go out
+// ──────────────────────────────────────────────────────────────────────────
+registerMap('airport');
+function buildAirportMap() {
+  const m = 'airport';
+  addMapGround(m, 0xeeeeee, 0xaaaaaa); // pale terminal floor
+  addOuterWalls(m, 0xcccccc);
+  // Terminal walls — high glass panels mixed with structural columns
+  const wallMat = new THREE.MeshLambertMaterial({ color: 0xdddde2 });
+  // Outer terminal structure
+  [[-30,3,0,2,6,40],[30,3,0,2,6,40],[0,3,-30,40,6,2],[0,3,30,40,6,2]].forEach(([x,y,z,w,h,d]) => {
+    addMapBox(m, x, y, z, w, h, d, 0xcccccc);
+  });
+  // Structural support columns
+  for (let i = -25; i <= 25; i += 12.5) {
+    [[i, -25], [i, 25]].forEach(([cx, cz]) => {
+      const col = new THREE.Mesh(new THREE.BoxGeometry(1.2, 8, 1.2), wallMat);
+      col.position.set(cx, 4, cz);
+      MAP_GROUPS[m].add(col);
+      col.updateMatrixWorld(true);
+      MAP_COLLIDERS[m].push(new THREE.Box3().setFromObject(col));
+    });
+  }
+  // ── Breakable glass panels (between columns) ──
+  const glassMat = new THREE.MeshBasicMaterial({ color: 0x88ccee, transparent: true, opacity: 0.45 });
+  const glassPositions = [];
+  for (let i = -19; i <= 19; i += 12.5) {
+    glassPositions.push([i, 4, -25, 11, 7, 0.15]);
+    glassPositions.push([i, 4,  25, 11, 7, 0.15]);
+  }
+  glassPositions.forEach(([x, y, z, w, h, d]) => {
+    const g = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), glassMat);
+    g.position.set(x, y, z);
+    MAP_GROUPS[m].add(g);
+    g.updateMatrixWorld(true);
+    MAP_COLLIDERS[m].push(new THREE.Box3().setFromObject(g));
+    mapDestructibles.push({
+      mesh: g, hp: 30, maxHp: 30, type: 'glass', mapName: 'airport',
+      colliderRef: MAP_COLLIDERS[m][MAP_COLLIDERS[m].length - 1],
+    });
+  });
+  // ── Breakable overhead lights ──
+  const lightMat = new THREE.MeshBasicMaterial({ color: 0xffffcc });
+  const lightPositions = [];
+  for (let i = -22; i <= 22; i += 11) {
+    for (let j = -16; j <= 16; j += 8) {
+      lightPositions.push([i, 5.5, j]);
+    }
+  }
+  lightPositions.forEach(([x, y, z]) => {
+    const l = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.2, 0.5), lightMat);
+    l.position.set(x, y, z);
+    MAP_GROUPS[m].add(l);
+    mapDestructibles.push({
+      mesh: l, hp: 5, maxHp: 5, type: 'airport_light', mapName: 'airport',
+      onDestroy: () => {
+        // Each broken light darkens the map slightly
+        airportLightLevel = Math.max(0.1, airportLightLevel - 1 / lightPositions.length);
+      },
+    });
+  });
+  // Baggage carousels / luggage as low cover
+  const lugMat = new THREE.MeshLambertMaterial({ color: 0x222222 });
+  [[0,-5,4,1.4,5], [0,5,4,1.4,5], [-12,0,5,1.2,3], [12,0,5,1.2,3]].forEach(([x,z,w,h,d]) => {
+    addMapBox(m, x, h/2, z, w, h, d, 0x444444);
+    addMapBox(m, x, h+0.05, z, w*1.05, 0.10, d*1.05, 0x666666); // top trim
+  });
+  // Check-in counter rows
+  [-14, 14].forEach(x => {
+    addMapBox(m, x, 0.6, 0, 2, 1.2, 14, 0x884422);
+  });
+  MAP_GROUPS[m]._skyColor = 0xddeeff;
+}
+buildAirportMap();
+
+// ──────────────────────────────────────────────────────────────────────────
+// 10. MILITARY TRENCH FIELD — hills, barbed wire, trenches, crates, mortars
+// ──────────────────────────────────────────────────────────────────────────
+registerMap('trenches');
+function buildTrenchesMap() {
+  const m = 'trenches';
+  addMapGround(m, 0x6b5a3a, null); // muddy dirt
+  addOuterWalls(m, 0x3a2a18);
+  // Hills (raised mounds across the middle)
+  for (let i = 0; i < 8; i++) {
+    const hill = new THREE.Mesh(new THREE.SphereGeometry(4, 8, 5, 0, Math.PI*2, 0, Math.PI/2), new THREE.MeshLambertMaterial({ color: 0x7a6940 }));
+    hill.position.set((Math.random()-0.5)*35, 0, (Math.random()-0.5)*15);
+    hill.scale.y = 0.4 + Math.random() * 0.3;
+    MAP_GROUPS[m].add(hill);
+  }
+  // Barbed wire (decorative + low cover) — 3 horizontal lines down the middle (along X axis)
+  const wireMat = new THREE.MeshLambertMaterial({ color: 0x555555 });
+  for (let row = -1; row <= 1; row++) {
+    const x0 = row * 3;
+    for (let zi = -20; zi <= 20; zi += 4) {
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.2, 6), wireMat);
+      post.position.set(x0, 0.6, zi); MAP_GROUPS[m].add(post);
+    }
+    const wire = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 40, 4), wireMat);
+    wire.rotation.x = Math.PI/2; wire.position.set(x0, 0.9, 0); MAP_GROUPS[m].add(wire);
+  }
+  // Trenches (carved-out long strips on north and south — run East-West along X axis)
+  const trenchMat = new THREE.MeshLambertMaterial({ color: 0x3a2a18 });
+  [[0, -35], [0, 35]].forEach(([x, z]) => {
+    const trench = new THREE.Mesh(new THREE.BoxGeometry(40, 0.5, 8), trenchMat);
+    trench.position.set(x, -0.20, z); MAP_GROUPS[m].add(trench);
+    // Sandbag walls along the inside edge (facing no-man's-land)
+    const sandMat = new THREE.MeshLambertMaterial({ color: 0x8a7440 });
+    for (let xi = -18; xi <= 18; xi += 2.5) {
+      const bag = new THREE.Mesh(new THREE.SphereGeometry(0.6, 6, 5), sandMat);
+      bag.scale.y = 0.5;
+      bag.position.set(xi, 0.6, z + (z < 0 ? 4 : -4));
+      MAP_GROUPS[m].add(bag);
+      bag.updateMatrixWorld(true);
+      MAP_COLLIDERS[m].push(new THREE.Box3().setFromObject(bag));
+    }
+  });
+  // Wooden crates in the center for cover
+  const crateMat = new THREE.MeshLambertMaterial({ color: 0x8a5a2a });
+  [[-6, 0], [6, 0], [0, -6], [0, 6], [-3, 3], [3, -3]].forEach(([x, z]) => {
+    const c = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2), crateMat);
+    c.position.set(x, 1, z); MAP_GROUPS[m].add(c);
+    c.updateMatrixWorld(true);
+    MAP_COLLIDERS[m].push(new THREE.Box3().setFromObject(c));
+  });
+  // ── Mortar emplacements (2 per side) ──
+  const mortarBase = new THREE.MeshLambertMaterial({ color: 0x444444 });
+  const mortarTube = new THREE.MeshLambertMaterial({ color: 0x222222 });
+  // Mortars sit behind each trench (at z=±38, in line with the trench)
+  [
+    { x: -10, z:  38, side: 'ally'  }, // south trench (player side)
+    { x:  10, z:  38, side: 'ally'  },
+    { x: -10, z: -38, side: 'enemy' }, // north trench
+    { x:  10, z: -38, side: 'enemy' },
+  ].forEach(({ x, z, side }) => {
+    const g = new THREE.Group();
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 1.0, 0.3, 8), mortarBase);
+    base.position.y = 0.15; g.add(base);
+    const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.22, 1.2, 8), mortarTube);
+    tube.rotation.x = side === 'ally' ? -0.5 : -0.5; tube.position.set(0, 0.7, 0); g.add(tube);
+    g.position.set(x, 0, z);
+    MAP_GROUPS[m].add(g);
+    g.updateMatrixWorld(true);
+    MAP_COLLIDERS[m].push(new THREE.Box3().setFromObject(g));
+    mapMortars.push({ mesh: g, x, z, side, ammo: 5, maxAmmo: 5, hp: 20, maxHp: 20, pilotedBy: null, lastShot: 0, mapName: 'trenches' });
+  });
+  MAP_GROUPS[m]._skyColor = 0x6b6b4b;
+}
+buildTrenchesMap();
+
+// ──────────────────────────────────────────────────────────────────────────
+// 11. CHERNOBYL SITE — toxic green gas, 4 destroyable reactors
+// ──────────────────────────────────────────────────────────────────────────
+registerMap('chernobyl');
+function buildChernobylMap() {
+  const m = 'chernobyl';
+  addMapGround(m, 0x2a3a22, null); // contaminated soil
+  addOuterWalls(m, 0x1a2a18);
+  // Toxic green fog layer covering the whole map (ground level wisps)
+  const gasMat = new THREE.MeshBasicMaterial({ color: 0x44aa22, transparent: true, opacity: 0.18 });
+  for (let i = 0; i < 12; i++) {
+    const g = new THREE.Mesh(new THREE.SphereGeometry(8, 10, 6), gasMat);
+    g.position.set((Math.random()-0.5)*80, 1.5, (Math.random()-0.5)*80);
+    g.scale.y = 0.4;
+    MAP_GROUPS[m].add(g);
+  }
+  // Concrete blocks scattered as cover
+  const concMat = new THREE.MeshLambertMaterial({ color: 0x666666 });
+  for (let i = 0; i < 14; i++) {
+    const c = new THREE.Mesh(new THREE.BoxGeometry(2, 2.5, 2), concMat);
+    c.position.set((Math.random()-0.5)*60, 1.25, (Math.random()-0.5)*60);
+    c.rotation.y = Math.random() * Math.PI;
+    MAP_GROUPS[m].add(c);
+    c.updateMatrixWorld(true);
+    MAP_COLLIDERS[m].push(new THREE.Box3().setFromObject(c));
+  }
+  // ── 4 Reactors (one in each quadrant) — each is a destructible ──
+  const reactorPositions = [[-20, -20], [20, -20], [-20, 20], [20, 20]];
+  reactorPositions.forEach(([x, z], idx) => {
+    const reactor = new THREE.Group();
+    const towerMat = new THREE.MeshLambertMaterial({ color: 0x888888 });
+    const coreMat  = new THREE.MeshBasicMaterial({ color: 0xff8822 });
+    // Main cooling tower (hyperboloid-ish)
+    const tower = new THREE.Mesh(new THREE.CylinderGeometry(3, 4, 12, 12), towerMat);
+    tower.position.y = 6; reactor.add(tower);
+    // Glowing core at top
+    const core = new THREE.Mesh(new THREE.SphereGeometry(1.5, 10, 8), coreMat);
+    core.position.y = 10; reactor.add(core);
+    // Top vent ring
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(3, 0.3, 6, 16), towerMat);
+    ring.rotation.x = Math.PI/2; ring.position.y = 11.8; reactor.add(ring);
+    reactor.position.set(x, 0, z);
+    MAP_GROUPS[m].add(reactor);
+    reactor.updateMatrixWorld(true);
+    MAP_COLLIDERS[m].push(new THREE.Box3().setFromObject(reactor));
+    mapDestructibles.push({
+      mesh: reactor, core, hp: 500, maxHp: 500, type: 'reactor', mapName: 'chernobyl',
+      x, z, idx,
+      onDestroy: () => {
+        // Big explosion: 12m AOE, 250 dmg
+        spawnAbilityAOEFX(new THREE.Vector3(x, 1, z), 12, 0xffaa22);
+        flashScreen('rgba(255,170,34,0.5)', 800);
+        for (const bot of gameBots) {
+          if (bot.dead) continue;
+          const dx = bot.x - x, dz = bot.z - z;
+          if (dx*dx + dz*dz < 144) {
+            const mesh = remoteMeshes[bot.id];
+            const hp = mesh ? mesh.position.clone().setY(1.0) : new THREE.Vector3(bot.x, 1, bot.z);
+            emitHit(bot.id, `reactor_${idx}_${Date.now()}_${bot.id}`, 'tac_nuke', hp);
+          }
+        }
+        // Player damage if close
+        const pdx = camera.position.x - x, pdz = camera.position.z - z;
+        if (pdx*pdx + pdz*pdz < 144) applyBotDamageToPlayer('tac_nuke', null);
+      },
+    });
+  });
+  MAP_GROUPS[m]._skyColor = 0x2a3a18;
+}
+buildChernobylMap();
+
+// ──────────────────────────────────────────────────────────────────────────
+// 12. KING OF THE HILL / BR ARENA — massive map with vehicles + helicopters
+// ──────────────────────────────────────────────────────────────────────────
+registerMap('br_arena');
+function buildBrArenaMap() {
+  const m = 'br_arena';
+  const SIZE = 250; // 250x250 — 6x bigger than standard maps
+  // Ground
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(SIZE, SIZE), new THREE.MeshLambertMaterial({ color: 0x5a7440 }));
+  ground.rotation.x = -Math.PI / 2;
+  MAP_GROUPS[m].add(ground);
+  // Outer perimeter walls — thicker (3 units) + taller (8 units) so they're visible from far away
+  const half = SIZE / 2;
+  const wallT = 3; // thickness
+  const wallH = 8; // height
+  [
+    [SIZE+wallT, wallH, wallT, 0, wallH/2, -half - wallT/2 + 1.5], // north
+    [SIZE+wallT, wallH, wallT, 0, wallH/2,  half + wallT/2 - 1.5], // south
+    [wallT, wallH, SIZE+wallT, -half - wallT/2 + 1.5, wallH/2, 0], // west
+    [wallT, wallH, SIZE+wallT,  half + wallT/2 - 1.5, wallH/2, 0], // east
+  ].forEach(([w,h,d,x,y,z]) => addMapBox(m, x, y, z, w, h, d, 0x4a4a3a));
+  // ── Town zones: 5 cluster areas with buildings (scattered across map) ──
+  const buildingClusters = [
+    [-80, -80], [80, -80], [-80, 80], [80, 80], [0, 0],
+    [-40, 40], [40, -40], [-100, 0], [100, 0], [0, -100], [0, 100]
+  ];
+  const bMatA = 0x8b7355, bMatB = 0x6a5540;
+  buildingClusters.forEach(([cx, cz], idx) => {
+    // Each cluster has 3-5 buildings
+    const n = 3 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < n; i++) {
+      const bx = cx + (Math.random() - 0.5) * 22;
+      const bz = cz + (Math.random() - 0.5) * 22;
+      const bw = 6 + Math.random() * 6;
+      const bd = 6 + Math.random() * 6;
+      const bh = 4 + Math.random() * 6;
+      addMapBox(m, bx, bh / 2, bz, bw, bh, bd, (idx + i) % 2 ? bMatA : bMatB);
+    }
+  });
+  // Roads (visual stripes)
+  const roadMat = new THREE.MeshBasicMaterial({ color: 0x333333 });
+  for (let r = -100; r <= 100; r += 50) {
+    const road = new THREE.Mesh(new THREE.PlaneGeometry(SIZE, 4), roadMat);
+    road.rotation.x = -Math.PI / 2; road.position.set(0, 0.02, r);
+    MAP_GROUPS[m].add(road);
+    const road2 = new THREE.Mesh(new THREE.PlaneGeometry(4, SIZE), roadMat);
+    road2.rotation.x = -Math.PI / 2; road2.position.set(r, 0.02, 0);
+    MAP_GROUPS[m].add(road2);
+  }
+  // ── Mortar cannons (6 stationary ones, scattered) ──
+  const mortarPositions = [[-60, -60], [60, 60], [-60, 60], [60, -60], [0, -90], [0, 90]];
+  mortarPositions.forEach(([x, z]) => {
+    const g = new THREE.Group();
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.1, 0.4, 8), new THREE.MeshLambertMaterial({ color: 0x444444 }));
+    base.position.y = 0.2; g.add(base);
+    const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.20, 0.24, 1.4, 8), new THREE.MeshLambertMaterial({ color: 0x222222 }));
+    tube.rotation.x = -0.5; tube.position.set(0, 0.85, 0); g.add(tube);
+    g.position.set(x, 0, z); MAP_GROUPS[m].add(g);
+    g.updateMatrixWorld(true);
+    MAP_COLLIDERS[m].push(new THREE.Box3().setFromObject(g));
+    mapMortars.push({ mesh: g, x, z, side: 'neutral', ammo: 8, maxAmmo: 8, hp: 30, maxHp: 30, pilotedBy: null, lastShot: 0, mapName: 'br_arena' });
+  });
+  // ── Ground vehicles (4 jeeps) ──
+  const vehiclePositions = [[-30, -50, 0], [30, 50, Math.PI], [-50, 30, Math.PI / 2], [50, -30, -Math.PI / 2]];
+  vehiclePositions.forEach(([x, z, yaw]) => {
+    const g = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.BoxGeometry(2.0, 1.0, 3.5), new THREE.MeshLambertMaterial({ color: 0x4a5a3a }));
+    body.position.y = 0.8; g.add(body);
+    const cab = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.6, 1.4), new THREE.MeshLambertMaterial({ color: 0x2a3a2a }));
+    cab.position.set(0, 1.6, 0.4); g.add(cab);
+    for (const [wx, wz] of [[-1.0, 1.2], [1.0, 1.2], [-1.0, -1.2], [1.0, -1.2]]) {
+      const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.3, 10), new THREE.MeshLambertMaterial({ color: 0x111111 }));
+      wheel.rotation.z = Math.PI / 2; wheel.position.set(wx, 0.42, wz); g.add(wheel);
+    }
+    g.position.set(x, 0, z); g.rotation.y = yaw;
+    MAP_GROUPS[m].add(g);
+    g.updateMatrixWorld(true);
+    MAP_COLLIDERS[m].push(new THREE.Box3().setFromObject(g));
+    mapVehicles.push({
+      mesh: g, x, z, rotY: yaw, hp: 80, maxHp: 80, pilotedBy: null,
+      type: 'jeep', mapName: 'br_arena',
+      maxSpeed: 18, // m/s
+      gunDmg: 22, gunFireRate: 200, lastShot: 0,
+    });
+  });
+  // ── Helicopters (2) ──
+  const heliPositions = [[-90, 90], [90, -90]];
+  heliPositions.forEach(([x, z]) => {
+    const g = new THREE.Group();
+    const fuselage = new THREE.Mesh(new THREE.BoxGeometry(1.8, 1.4, 4.5), new THREE.MeshLambertMaterial({ color: 0x3a4a3a }));
+    fuselage.position.y = 1.4; g.add(fuselage);
+    const tail = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 2.5), new THREE.MeshLambertMaterial({ color: 0x3a4a3a }));
+    tail.position.set(0, 1.8, -3.0); g.add(tail);
+    const rotor = new THREE.Mesh(new THREE.BoxGeometry(7, 0.08, 0.4), new THREE.MeshLambertMaterial({ color: 0x111111 }));
+    rotor.position.set(0, 2.4, 0); g.add(rotor);
+    const tailRotor = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.06, 0.06), new THREE.MeshLambertMaterial({ color: 0x111111 }));
+    tailRotor.position.set(0, 1.8, -4.0); g.add(tailRotor);
+    for (let i = 0; i < 4; i++) {
+      const skid = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 2), new THREE.MeshLambertMaterial({ color: 0x222222 }));
+      skid.position.set(i < 2 ? -0.9 : 0.9, 0.4, i % 2 ? 0.6 : -0.6);
+      g.add(skid);
+    }
+    g.position.set(x, 0, z); MAP_GROUPS[m].add(g);
+    g.updateMatrixWorld(true);
+    MAP_COLLIDERS[m].push(new THREE.Box3().setFromObject(g));
+    mapVehicles.push({
+      mesh: g, x, z, y: 0, rotY: 0, hp: 100, maxHp: 100, pilotedBy: null,
+      type: 'heli', mapName: 'br_arena',
+      maxSpeed: 28, rotor, tailRotor,
+      gunDmg: 18, gunFireRate: 100, lastShot: 0,
+    });
+  });
+  // Scattered cover rocks
+  for (let i = 0; i < 30; i++) {
+    const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(1 + Math.random() * 1.5, 0), new THREE.MeshLambertMaterial({ color: 0x808080 }));
+    rock.position.set((Math.random() - 0.5) * 220, 0.5, (Math.random() - 0.5) * 220);
+    rock.rotation.set(Math.random(), Math.random(), Math.random());
+    MAP_GROUPS[m].add(rock);
+    rock.updateMatrixWorld(true);
+    MAP_COLLIDERS[m].push(new THREE.Box3().setFromObject(rock));
+  }
+  MAP_GROUPS[m]._skyColor = 0x88aacc;
+}
+// Vehicles array — populated by br_arena
+const mapVehicles = [];
+buildBrArenaMap();
 
 buildBlankMap();
 buildBattlefieldMap();
@@ -4577,7 +4944,32 @@ document.addEventListener('keydown', e => {
     }
   }
   if (e.code==='KeyF' && nearTrashcan && !isDead) { showLoadoutScreen('swap'); }
-  if (e.code === 'KeyG') activateAbility();
+  // F = enter/exit a mortar (trench map)
+  if (e.code==='KeyF' && !nearTrashcan && !isDead && activeMapName === 'trenches' && !e.repeat) {
+    e.preventDefault();
+    tryEnterMortar();
+  }
+  // F = enter/exit a vehicle (BR arena) or pilot a mortar
+  if (e.code==='KeyF' && !nearTrashcan && !isDead && activeMapName === 'br_arena' && !e.repeat) {
+    e.preventDefault();
+    if (pilotedVehicle) { exitVehicle(); }
+    else if (pilotedMortar) { exitMortar(); }
+    else {
+      // Prefer vehicle if both nearby
+      const nearV = mapVehicles.find(v => v.mapName === activeMapName && v.hp > 0 && !v.pilotedBy
+        && Math.hypot(v.x - camera.position.x, v.z - camera.position.z) < 4);
+      if (nearV) tryEnterVehicle();
+      else tryEnterMortar();
+    }
+  }
+  if (e.code === 'KeyG') {
+    // C4: if any are placed, G detonates them all instead of triggering ability
+    if (placedC4s.length > 0 && activeSlot === 'support' && SUPPORT_ITEMS[selectedSupportIdx]?.id === 'c4') {
+      detonateAllC4();
+    } else {
+      activateAbility();
+    }
+  }
   if (e.code==='KeyQ' || e.code==='Digit1' || e.code==='Digit2' || e.code==='Digit3' || e.code==='Digit4') {
     if (!loadoutReady()) return;
     if (e.code==='KeyQ') cycleActiveSlot();
@@ -4595,6 +4987,10 @@ document.addEventListener('keyup', e => {
 document.addEventListener('mousedown', e => {
   // Spectator: any click cycles to next ally
   if (spectatorState && e.button === 0) { spectatorCycle(1); return; }
+  // Mortar: LMB fires a grenade instead of the equipped weapon
+  if (pilotedMortar && e.button === 0) { fireMortar(); return; }
+  // Vehicle: LMB fires the vehicle's gun
+  if (pilotedVehicle && e.button === 0) { fireVehicleGun(); return; }
   if (spectatorState && e.button === 2) { spectatorCycle(-1); return; }
   if (e.button !== 0) return;
   shooting = true;
@@ -4806,10 +5202,13 @@ function setWeaponADSPos(ads) {
 const SPEED = 5;
 const dir = new THREE.Vector3();
 const BOUNDS = 48;
+// Map-aware boundary (BR arena is 6× larger). 123 lets player reach the actual wall surface (walls at ±125, 3 thick).
+function getMapBounds() { return activeMapName === 'br_arena' ? 123 : BOUNDS; }
 
 function updateMovement(dt) {
   if (isDead) return;
   if (match && !match.roundActive) return; // frozen during countdown
+  if (pilotedVehicle) return; // piloting handles its own movement
 
   // Arrow key look
   if (keys['ArrowLeft'])  { euler.y += ARROW_SENS; camera.quaternion.setFromEuler(euler); }
@@ -4863,8 +5262,9 @@ function updateMovement(dt) {
   if (playerPosHistory.length > 8) playerPosHistory.shift();
   lastPlayerPos.copy(camera.position);
   camera.position.addScaledVector(dir, SPEED * speedMult * joyMag * dt);
-  camera.position.x = Math.max(-BOUNDS, Math.min(BOUNDS, camera.position.x));
-  camera.position.z = Math.max(-BOUNDS, Math.min(BOUNDS, camera.position.z));
+  const _mb = getMapBounds();
+  camera.position.x = Math.max(-_mb, Math.min(_mb, camera.position.x));
+  camera.position.z = Math.max(-_mb, Math.min(_mb, camera.position.z));
   if (slamState) {
     // Low-grav zones reduce gravity to 1/3
     const gravMult = (typeof _playerInLowGrav !== 'undefined' && _playerInLowGrav) ? 0.33 : 1;
@@ -5695,6 +6095,14 @@ function trySupport() {
     placeLandMine(item);
     return;
   }
+  // ── 🪖 ADMIN utilities ────────────────────────────────────────────────────
+  if (item.id === 'c4')            { placeC4(item); return; }
+  if (item.id === 'claymore')      { placeClaymore(item); return; }
+  if (item.id === 'stun_grenade')  { throwStunGrenade(item); return; }
+  if (item.id === 'thermite')      { throwThermite(item); return; }
+  if (item.id === 'predator_uav')  { activateUAV(item); return; }
+  if (item.id === 'care_package')  { dropCarePackage(item); return; }
+  if (item.id === 'tac_nuke')      { dropTacNuke(item); return; }
 
   // ── Fallback: straight bullet (shouldn't reach here for defined items) ─────
   const origin = new THREE.Vector3();
@@ -6369,6 +6777,18 @@ function updateBullets(dt) {
 
       if (wallHitPt && (!bestHit || wallHitT <= bestHit.t)) {
         spawnHitParticle(wallHitPt);
+        // ── Check if a destructible (glass, light, reactor) was hit ──
+        const destDmg = getClientWeaponDamage(b.weaponId) || 25;
+        for (const dest of mapDestructibles) {
+          if (dest.mapName !== activeMapName) continue;
+          if (!dest.mesh) continue;
+          const dpos = new THREE.Vector3();
+          dest.mesh.getWorldPosition(dpos);
+          if (dpos.distanceTo(wallHitPt) < (dest.type === 'reactor' ? 4 : dest.type === 'glass' ? 6 : 1.5)) {
+            damageDestructible(dest, destDmg);
+            break;
+          }
+        }
         // Firework Launcher: leave a burn zone where it lands
         if (b.weaponId === 'firework_launcher') {
           spawnBurnZone(wallHitPt, 3, 3, 10000);
@@ -6566,6 +6986,359 @@ function placeLandMine(item) {
   });
   showAnnouncement('LAND MINE ARMED', `${item.damage} dmg + launch`, '#ff2200', 900);
 }
+// ── Destructible map objects (glass, lights, reactors) ───────────────────
+function damageDestructible(dest, dmg) {
+  if (dest.hp <= 0) return;
+  dest.hp = Math.max(0, dest.hp - dmg);
+  // Show damage number above the object
+  const dpos = new THREE.Vector3();
+  dest.mesh.getWorldPosition(dpos);
+  dpos.y += dest.type === 'reactor' ? 8 : 1;
+  showDamageNumber(dpos, dmg, false);
+  if (dest.hp <= 0) {
+    // Visual destruction: hide mesh, remove collider
+    dest.mesh.visible = false;
+    if (dest.colliderRef && wallColliders.includes(dest.colliderRef)) {
+      const idx = wallColliders.indexOf(dest.colliderRef);
+      if (idx >= 0) wallColliders.splice(idx, 1);
+    }
+    // Particle burst at the object's position
+    spawnHitParticle(dpos.clone().setY(dpos.y - 0.5));
+    if (dest.onDestroy) dest.onDestroy();
+    if (dest.type === 'glass') showAnnouncement('🔨 GLASS BROKEN', '', '#88ccee', 700);
+    if (dest.type === 'airport_light') showAnnouncement('💡 LIGHT OUT', `${Math.round(airportLightLevel * 100)}% brightness`, '#888888', 700);
+    if (dest.type === 'reactor') showAnnouncement('☢️ REACTOR DESTROYED', '12 m AOE explosion!', '#ffaa22', 2400);
+  }
+}
+
+// Per-frame map-effect tick (called from main loop)
+function updateMapEffects(dt) {
+  const now = Date.now();
+  // Airport darkness: lerp scene background toward black as lights break
+  if (activeMapName === 'airport' && scene.background?.setHex) {
+    // Original sky 0xddeeff → dark navy as lights die
+    const t = airportLightLevel;
+    const r = Math.round(0xdd * t + 0x05 * (1-t));
+    const g = Math.round(0xee * t + 0x05 * (1-t));
+    const b = Math.round(0xff * t + 0x10 * (1-t));
+    scene.background.setHex((r<<16) | (g<<8) | b);
+  }
+  // Chernobyl gas: 1 dmg/sec while alive on this map
+  if (activeMapName === 'chernobyl' && !isDead && match?.roundActive) {
+    if (now - lastChernobylTick >= 1000) {
+      lastChernobylTick = now;
+      const me = players[myId];
+      if (me && !isShielded() && !(adminCheats.godMode && currentUser?.isAdmin)) {
+        me.hp = Math.max(0, me.hp - 1);
+        updateHealthHUD(me.hp);
+        if (me.hp <= 0) applyBotDamageToPlayer('chernobyl_gas', null);
+      }
+    }
+  }
+  // Mortar interaction prompts
+  updateMortarPrompt();
+}
+
+// ── 🪖 ADMIN utility implementations ──────────────────────────────────────
+// ── Vehicle piloting (BR arena: jeeps + helicopters) ─────────────────────
+let pilotedVehicle = null; // { ref to mapVehicles entry }
+function updateVehiclePrompt() {
+  if (pilotedVehicle) return;
+  const near = mapVehicles.find(v => v.mapName === activeMapName && v.hp > 0 && !v.pilotedBy
+    && Math.hypot(v.x - camera.position.x, v.z - camera.position.z) < 4);
+  let prompt = document.getElementById('vehicle-prompt');
+  if (near) {
+    if (!prompt) {
+      prompt = document.createElement('div');
+      prompt.id = 'vehicle-prompt';
+      prompt.style.cssText = 'position:fixed;bottom:200px;left:50%;transform:translateX(-50%);'
+        + 'z-index:9000;color:#88ccff;font-family:"Courier New",monospace;font-size:14px;'
+        + 'background:rgba(0,0,0,0.7);padding:8px 18px;border:2px solid #88ccff;border-radius:6px;letter-spacing:2px;';
+      document.body.appendChild(prompt);
+    }
+    const icon = near.type === 'heli' ? '🚁' : '🚙';
+    prompt.innerHTML = `${icon} Press <b>F</b> to pilot ${near.type === 'heli' ? 'helicopter' : 'jeep'} · HP ${near.hp}/${near.maxHp}`;
+    prompt.style.display = 'block';
+  } else if (prompt) prompt.style.display = 'none';
+}
+function tryEnterVehicle() {
+  if (pilotedVehicle) { exitVehicle(); return; }
+  const near = mapVehicles.find(v => v.mapName === activeMapName && v.hp > 0 && !v.pilotedBy
+    && Math.hypot(v.x - camera.position.x, v.z - camera.position.z) < 4);
+  if (!near) return;
+  pilotedVehicle = near;
+  near.pilotedBy = 'player';
+  showAnnouncement(`${near.type === 'heli' ? '🚁' : '🚙'} ENTERED ${near.type.toUpperCase()}`,
+    near.type === 'heli' ? 'WASD move · Space up · Ctrl down · LMB fire · F exit' : 'WASD drive · LMB fire · F exit',
+    '#88ccff', 2400);
+}
+function exitVehicle() {
+  if (!pilotedVehicle) return;
+  pilotedVehicle.pilotedBy = null;
+  pilotedVehicle = null;
+}
+function updateVehiclePiloting(dt) {
+  if (!pilotedVehicle) return;
+  const v = pilotedVehicle;
+  if (v.hp <= 0) { exitVehicle(); return; }
+  // Steering — rotate via A/D
+  if (keys['KeyA']) v.rotY += 2.0 * dt;
+  if (keys['KeyD']) v.rotY -= 2.0 * dt;
+  // Forward/back via W/S
+  const speed = (keys['KeyW'] ? 1 : 0) - (keys['KeyS'] ? 1 : 0);
+  if (speed !== 0) {
+    const fwdX = -Math.sin(v.rotY), fwdZ = -Math.cos(v.rotY);
+    v.x += fwdX * speed * v.maxSpeed * dt;
+    v.z += fwdZ * speed * v.maxSpeed * dt;
+    const vBound = activeMapName === 'br_arena' ? 122 : 47;
+    v.x = Math.max(-vBound, Math.min(vBound, v.x));
+    v.z = Math.max(-vBound, Math.min(vBound, v.z));
+  }
+  // Helicopter vertical movement
+  if (v.type === 'heli') {
+    v.y = v.y || 0;
+    if (keys['Space']) v.y += 12 * dt;
+    if (keys['ControlLeft'] || keys['ControlRight'] || keys['ShiftLeft']) v.y -= 12 * dt;
+    v.y = Math.max(0, Math.min(28, v.y));
+    // Spin rotor (visual)
+    if (v.rotor) v.rotor.rotation.y += 25 * dt;
+    if (v.tailRotor) v.tailRotor.rotation.x += 25 * dt;
+  }
+  // Update mesh transform
+  v.mesh.position.set(v.x, v.y || 0, v.z);
+  v.mesh.rotation.y = v.rotY;
+  // Camera attaches to vehicle (third-person-ish for vehicles, first-person-ish for heli)
+  const camHeight = v.type === 'heli' ? 1.4 : 1.6;
+  camera.position.set(v.x, (v.y || 0) + camHeight, v.z);
+  // Allow free look — don't override euler from vehicle rotation
+}
+function fireVehicleGun() {
+  if (!pilotedVehicle) return;
+  const v = pilotedVehicle;
+  const now = Date.now();
+  if (now - (v.lastShot || 0) < (v.gunFireRate || 200)) return;
+  v.lastShot = now;
+  const origin = new THREE.Vector3(v.x, (v.y || 0) + 1.2, v.z);
+  const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+  spawnLocalBullet(origin, dir, `veh_${v.type}_${now}`, true, 180, 0xffaa44, 0.05, 'jeep_gun');
+}
+
+// ── Mortar piloting (trench map) ──────────────────────────────────────────
+let pilotedMortar = null; // { ref to mapMortars entry } when player is piloting
+function updateMortarPrompt() {
+  // Show "Press F to pilot" prompt when near a mortar
+  let prompt = document.getElementById('mortar-prompt');
+  if (pilotedMortar) {
+    if (prompt) prompt.style.display = 'none';
+    return;
+  }
+  const near = mapMortars.find(mor => mor.mapName === activeMapName && mor.hp > 0 && !mor.pilotedBy
+    && Math.hypot(mor.x - camera.position.x, mor.z - camera.position.z) < 3.5);
+  if (near) {
+    if (!prompt) {
+      prompt = document.createElement('div');
+      prompt.id = 'mortar-prompt';
+      prompt.style.cssText = 'position:fixed;bottom:200px;left:50%;transform:translateX(-50%);'
+        + 'z-index:9000;color:#ffcc44;font-family:"Courier New",monospace;font-size:14px;'
+        + 'background:rgba(0,0,0,0.7);padding:8px 18px;border:2px solid #ffcc44;border-radius:6px;letter-spacing:2px;';
+      document.body.appendChild(prompt);
+    }
+    prompt.innerHTML = `🎯 Press <b>F</b> to pilot mortar · ${near.ammo}/${near.maxAmmo} shells · HP ${near.hp}/${near.maxHp}`;
+    prompt.style.display = 'block';
+  } else if (prompt) {
+    prompt.style.display = 'none';
+  }
+}
+function tryEnterMortar() {
+  if (pilotedMortar) { exitMortar(); return; }
+  const near = mapMortars.find(mor => mor.mapName === activeMapName && mor.hp > 0 && !mor.pilotedBy
+    && Math.hypot(mor.x - camera.position.x, mor.z - camera.position.z) < 3.5);
+  if (!near) return;
+  pilotedMortar = near;
+  near.pilotedBy = 'player';
+  showAnnouncement('🎯 MORTAR ARMED', `${near.ammo}/${near.maxAmmo} shells · LMB to fire · F to exit`, '#ffcc44', 2200);
+}
+function exitMortar() {
+  if (!pilotedMortar) return;
+  pilotedMortar.pilotedBy = null;
+  pilotedMortar = null;
+  showAnnouncement('LEFT MORTAR', '', '#888', 600);
+}
+function fireMortar() {
+  if (!pilotedMortar || pilotedMortar.ammo <= 0) return;
+  const now = Date.now();
+  if (now - (pilotedMortar.lastShot || 0) < 800) return;
+  pilotedMortar.lastShot = now;
+  pilotedMortar.ammo--;
+  // Fire a grenade-like arcing shell in the direction the camera is facing
+  const origin = new THREE.Vector3(pilotedMortar.x, 1.5, pilotedMortar.z);
+  const aim = new THREE.Vector3(0, 0.55, -1).applyQuaternion(camera.quaternion).normalize();
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.15, 8, 6), new THREE.MeshLambertMaterial({ color: 0x666622 }));
+  mesh.position.copy(origin); scene.add(mesh);
+  const fragRef = SUPPORT_ITEMS.find(s => s.id === 'frag') || { damage: 80 };
+  activeGrenades.push({
+    mesh, id: `mortar_${now}`, isOwn: true, isSupport: true, itemRef: fragRef,
+    velX: aim.x * 38, velY: aim.y * 38, velZ: aim.z * 38,
+    gravMult: 1.0, explodeOnImpact: false, maxBounces: 0, bounceCount: 0,
+    explodeAt: now + 2000,
+  });
+  if (pilotedMortar.ammo <= 0) {
+    showAnnouncement('OUT OF SHELLS', '', '#ff6666', 1200);
+    setTimeout(() => exitMortar(), 600);
+  }
+}
+
+let placedC4s = []; // {mesh, x, z, damage, ownerId}
+function placeC4(item) {
+  const fwd = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion).normalize();
+  fwd.y = 0; fwd.normalize();
+  const pos = camera.position.clone().addScaledVector(fwd, 1.6); pos.y = 0;
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.12, 0.2), new THREE.MeshLambertMaterial({ color: 0xbbaa66 }));
+  body.position.y = 0.06; g.add(body);
+  const led = new THREE.Mesh(new THREE.SphereGeometry(0.04, 6, 5), new THREE.MeshBasicMaterial({ color: 0xff2222 }));
+  led.position.set(0.1, 0.14, 0); g.add(led);
+  g.position.set(pos.x, 0, pos.z); scene.add(g);
+  placedC4s.push({ mesh: g, led, x: pos.x, z: pos.z, damage: item.damage || 200, ownerId: myId });
+  showAnnouncement('💣 C4 PLACED', 'Press G to detonate', '#ff4444', 1400);
+}
+function detonateAllC4() {
+  if (placedC4s.length === 0) return false;
+  for (const c4 of placedC4s) {
+    spawnAbilityAOEFX(new THREE.Vector3(c4.x, 0.3, c4.z), 5, 0xff5500);
+    flashScreen('rgba(255,100,0,0.4)', 500);
+    for (const bot of gameBots) {
+      if (bot.dead) continue;
+      const dx = bot.x - c4.x, dz = bot.z - c4.z;
+      if (dx*dx + dz*dz < 25) {
+        const mesh = remoteMeshes[bot.id];
+        const hp = mesh ? mesh.position.clone().setY(1.0) : new THREE.Vector3(bot.x, 1, bot.z);
+        emitHit(bot.id, `c4_${myId}_${Date.now()}_${bot.id}`, 'c4', hp);
+      }
+    }
+    scene.remove(c4.mesh);
+  }
+  placedC4s = [];
+  return true;
+}
+function placeClaymore(item) {
+  // Place a directional mine; goes off when an enemy is in the arc
+  const fwd = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion).normalize();
+  fwd.y = 0; fwd.normalize();
+  const pos = camera.position.clone().addScaledVector(fwd, 1.2); pos.y = 0;
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.18, 0.07), new THREE.MeshLambertMaterial({ color: 0x2a3a26 }));
+  body.position.y = 0.10; g.add(body);
+  const yaw = Math.atan2(-fwd.x, -fwd.z);
+  g.rotation.y = yaw;
+  g.position.set(pos.x, 0, pos.z); scene.add(g);
+  traps.push({
+    type: 'claymore', x: pos.x, z: pos.z, fx: fwd.x, fz: fwd.z,
+    radius: item.claymoreRadius || 4, damage: item.damage || 250,
+    mesh: g, until: Date.now() + 120000, ownerId: myId,
+  });
+  showAnnouncement('💣 CLAYMORE ARMED', 'Front-facing trap', '#ff4444', 1200);
+}
+function throwStunGrenade(item) {
+  const origin = new THREE.Vector3();
+  camera.getWorldPosition(origin);
+  origin.add(new THREE.Vector3(0.12, -0.18, -0.30).applyQuaternion(camera.quaternion));
+  const aimDir = new THREE.Vector3(0, 0.20, -1).applyQuaternion(camera.quaternion).normalize();
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.10, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+  mesh.position.copy(origin); scene.add(mesh);
+  activeGrenades.push({
+    mesh, id: `stun_${Date.now()}`, isOwn: true, isSupport: true, itemRef: item,
+    velX: aimDir.x * 56, velY: aimDir.y * 56, velZ: aimDir.z * 56,
+    gravMult: 1.0, explodeOnImpact: false, maxBounces: 2, bounceCount: 0,
+    explodeAt: Date.now() + 1500, _isStun: true,
+  });
+}
+let stunUntil = 0; // bot stun timer
+function throwThermite(item) {
+  const origin = new THREE.Vector3();
+  camera.getWorldPosition(origin);
+  origin.add(new THREE.Vector3(0.12, -0.18, -0.30).applyQuaternion(camera.quaternion));
+  const aimDir = new THREE.Vector3(0, 0.15, -1).applyQuaternion(camera.quaternion).normalize();
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.10, 8, 6), new THREE.MeshBasicMaterial({ color: 0xff6622 }));
+  mesh.position.copy(origin); scene.add(mesh);
+  activeGrenades.push({
+    mesh, id: `therm_${Date.now()}`, isOwn: true, isSupport: true, itemRef: item,
+    velX: aimDir.x * 36, velY: aimDir.y * 36, velZ: aimDir.z * 36,
+    gravMult: 1.0, explodeOnImpact: true, maxBounces: 0, bounceCount: 0,
+    explodeAt: null, _isThermite: true,
+  });
+}
+let uavUntil = 0; // recon overlay timer
+function activateUAV(item) {
+  uavUntil = Date.now() + (item.uavDur || 10000);
+  showAnnouncement('🛰️ PREDATOR UAV', `${(item.uavDur || 10000)/1000}s · enemies revealed`, '#44ff66', 1800);
+  // Create or show the overhead minimap-style overlay
+  let mm = document.getElementById('uav-overlay');
+  if (!mm) {
+    mm = document.createElement('div');
+    mm.id = 'uav-overlay';
+    mm.style.cssText = 'position:fixed;top:80px;right:20px;width:200px;height:200px;'
+      + 'border:2px solid #44ff66;background:rgba(0,40,20,0.7);z-index:9700;'
+      + 'border-radius:8px;overflow:hidden;';
+    document.body.appendChild(mm);
+  }
+  mm.style.display = 'block';
+}
+function updateUAV(dt) {
+  const mm = document.getElementById('uav-overlay');
+  if (!mm) return;
+  if (Date.now() >= uavUntil) { mm.style.display = 'none'; return; }
+  if (mm.style.display === 'none') return;
+  // Render dots: player center, enemies red, allies green
+  const scale = 3.5; // px per meter (200px / ~56m visible)
+  let html = '<div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);'
+    + 'width:8px;height:8px;background:#44ff66;border-radius:50%;"></div>';
+  for (const bot of gameBots) {
+    if (bot.dead) continue;
+    const dx = (bot.x - camera.position.x) * scale + 100;
+    const dz = (bot.z - camera.position.z) * scale + 100;
+    if (dx < 0 || dx > 200 || dz < 0 || dz > 200) continue;
+    const color = bot.team === 'enemy' ? '#ff4444' : '#44aaff';
+    html += `<div style="position:absolute;left:${dx}px;top:${dz}px;width:6px;height:6px;background:${color};border-radius:50%;transform:translate(-50%,-50%);"></div>`;
+  }
+  mm.innerHTML = html;
+}
+function dropCarePackage(item) {
+  // Drop a crate that grants a random P2W item when player walks over it
+  const fwd = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion).normalize();
+  fwd.y = 0; fwd.normalize();
+  const pos = camera.position.clone().addScaledVector(fwd, 2); pos.y = 0;
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, 0.6), new THREE.MeshLambertMaterial({ color: 0x336622 }));
+  body.position.y = 0.3; g.add(body);
+  const tag = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.10, 0.62), new THREE.MeshBasicMaterial({ color: 0xff2222 }));
+  tag.position.y = 0.55; g.add(tag);
+  g.position.set(pos.x, 0, pos.z); scene.add(g);
+  traps.push({
+    type: 'care_package', x: pos.x, z: pos.z, mesh: g, until: Date.now() + 60000,
+  });
+  showAnnouncement('📦 CARE PACKAGE', 'Walk to the box for a random buff', '#88ff88', 1400);
+}
+function dropTacNuke(item) {
+  // Big delayed AOE wipes most of the arena
+  const fwd = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
+  const t = -camera.position.y / (fwd.y || -1);
+  const tx = camera.position.x + fwd.x * Math.max(2, Math.min(40, t));
+  const tz = camera.position.z + fwd.z * Math.max(2, Math.min(40, t));
+  // Big warning ring on the ground
+  const ringGeo = new THREE.RingGeometry((item.nukeRadius || 25) * 0.95, (item.nukeRadius || 25), 32);
+  const ringMat = new THREE.MeshBasicMaterial({ color: 0xff2200, side: THREE.DoubleSide, transparent: true, opacity: 0.7 });
+  const ring = new THREE.Mesh(ringGeo, ringMat);
+  ring.rotation.x = -Math.PI/2; ring.position.set(tx, 0.05, tz);
+  scene.add(ring);
+  orbitalMarkers.push({
+    mesh: ring, x: tx, z: tz, fireAt: Date.now() + (item.nukeDelay || 5000),
+    damage: item.damage || 500, radius: item.nukeRadius || 25,
+  });
+  showAnnouncement('☢️ TACTICAL NUKE INBOUND', `${(item.nukeDelay || 5000)/1000}s · ${item.nukeRadius || 25}m AOE`, '#ff2200', 2200);
+  flashScreen('rgba(255,30,0,0.25)', 600);
+}
+
 function activateNanoShield(item) {
   nanoShieldUntil = Date.now() + (item.shieldDur || 6000);
   showAnnouncement('NANO SHIELD', `+${item.healPerSec} HP/s · ${(item.shieldDur||6000)/1000}s`, '#66ddaa', 1400);
@@ -6755,6 +7528,59 @@ function updateTraps(dt) {
           flashScreen('rgba(255,80,0,0.30)', 350);
           scene.remove(t.mesh); traps.splice(i, 1); break;
         }
+      }
+    }
+    else if (t.type === 'claymore') {
+      // Detonate when an enemy bot is in front (within the forward arc)
+      for (const bot of gameBots) {
+        if (bot.dead) continue;
+        const dx = bot.x - t.x, dz = bot.z - t.z;
+        const dd = Math.hypot(dx, dz);
+        if (dd > t.radius || dd < 0.1) continue;
+        // Check the bot is in front (dot product with claymore forward)
+        const dot = (dx / dd) * t.fx + (dz / dd) * t.fz;
+        if (dot < 0.2) continue; // behind or to the side
+        // Detonate — damage all in front of the claymore
+        for (const bot2 of gameBots) {
+          if (bot2.dead) continue;
+          const ex = bot2.x - t.x, ez = bot2.z - t.z;
+          const ed = Math.hypot(ex, ez);
+          if (ed > t.radius + 1.5) continue;
+          if (((ex/ed) * t.fx + (ez/ed) * t.fz) < 0.0) continue;
+          const m2 = remoteMeshes[bot2.id];
+          const hp2 = m2 ? m2.position.clone().setY(1.0) : new THREE.Vector3(bot2.x, 1, bot2.z);
+          emitHit(bot2.id, `cmy_${myId}_${now}_${bot2.id}`, 'claymore', hp2);
+        }
+        spawnAbilityAOEFX(new THREE.Vector3(t.x, 0.2, t.z), t.radius, 0xff2200);
+        flashScreen('rgba(255,60,0,0.35)', 320);
+        scene.remove(t.mesh); traps.splice(i, 1); break;
+      }
+    }
+    else if (t.type === 'care_package') {
+      // Player walks over it → grants a random temporary buff
+      const pdx = camera.position.x - t.x, pdz = camera.position.z - t.z;
+      if (pdx*pdx + pdz*pdz < 1.2 * 1.2) {
+        // Pick a random buff
+        const buffs = [
+          { name: '💉 Full Heal',        apply: () => { const me = players[myId]; if (me) { me.hp = 300; updateHealthHUD(300); } } },
+          { name: '⚡ Adrenaline 10s',   apply: () => { adrenalineUntil = Date.now() + 10000; } },
+          { name: '🛡️ Nano Shield 8s',  apply: () => { nanoShieldUntil = Date.now() + 8000; } },
+          { name: '📦 Full Ammo',         apply: () => {
+              weaponAmmo.forEach((_, idx) => {
+                const w = WEAPONS[idx];
+                if (w) weaponAmmo[idx] = { ammo: w.mag, reserve: w.reserve === 0 ? 99999 : w.reserve };
+              });
+              supportUses.forEach((_, i2) => { supportUses[i2] = SUPPORT_ITEMS[i2]?.uses || 1; });
+              updateAmmoHUD();
+            } },
+          { name: '❄️ Mass Frost',       apply: () => {
+              for (const bot of gameBots) { if (!bot.dead) bot.frostSlow = 30; }
+            } },
+        ];
+        const pick = buffs[Math.floor(Math.random() * buffs.length)];
+        pick.apply();
+        showAnnouncement('📦 CARE PACKAGE', pick.name, '#88ff88', 2000);
+        scene.remove(t.mesh); traps.splice(i, 1);
       }
     }
     else if (t.type === 'bounce') {
@@ -7038,6 +7864,8 @@ const CLIENT_WEAPON_DAMAGE = Object.fromEntries([
   ['lava', 4],
   // The classic
   ['fists', 24],
+  // 👑 BR vehicle guns
+  ['jeep_gun', 22],
   // 🪖 ADMIN weapons + ability shots
   ['gau19', 50], ['mk44', 25], ['xm7', 60], ['barrett', 250], ['barrett_ab', 600],
   ['m134', 15], ['hkmp7', 30], ['p90_spec', 22],
@@ -7113,6 +7941,29 @@ function applyBotDamageToPlayer(weaponId, botId) {
       if (dmEl) dmEl.textContent = 'Waiting for round to end...';
       updateRoundScoreDisplay && updateRoundScoreDisplay();
       enterSpectator(); // watch live teammates while waiting
+    } else if (match && match.type === 'arcade') {
+      // Arcade: brief death screen, scheduleArcadeRespawn handles the actual respawn
+      if (ds) {
+        ds.style.display = 'flex';
+        const dm = document.getElementById('death-msg');
+        if (dm) dm.textContent = 'Respawning in 2.5s...';
+      }
+      setTimeout(() => { if (ds) ds.style.display = 'none'; }, 2400);
+    } else if (match && match.type === 'br') {
+      // BR: respawn handled by onEntityDied. Show brief death screen.
+      const livesLeft = Math.max(0, (match.lives[myId] || 0) - 1);
+      if (ds) {
+        ds.style.display = 'flex';
+        const dm = document.getElementById('death-msg');
+        if (dm) dm.textContent = livesLeft > 0 ? `Respawning in 4s · ${livesLeft} lives left` : 'You\'re out of lives — spectating';
+      }
+      if (livesLeft <= 0) {
+        // Out of lives — go into spectator mode for the rest of the match
+        setTimeout(() => { if (ds) ds.style.display = 'none'; enterSpectator(); }, 1500);
+      } else {
+        // Hide death screen when respawn fires (handled in onEntityDied)
+        setTimeout(() => { if (ds) ds.style.display = 'none'; }, 3800);
+      }
     } else if (match && match.type === 'dday') {
       if (ds) { ds.style.display = 'flex'; const dm = document.getElementById('death-msg'); if (dm) dm.textContent = 'Respawning in 3s...'; }
       setTimeout(() => {
@@ -7181,6 +8032,35 @@ socket.on('connect_error', () => {
   const el = document.getElementById('err');
   el.style.display = 'block';
   el.textContent = 'Cannot reach the game server. Start it, then open http://localhost:3001';
+});
+// Staging-lobby socket events
+socket.on('lobbyState', data => {
+  stagingLobbyState = data;
+  if (stagingLobbyMode === data.mode) renderStagingLobby();
+});
+socket.on('lobbyStart', data => {
+  // Server says: time to start the match. Set up pvpMatch + spawn flow.
+  hideStagingLobby();
+  stagingLobbyMode = null;
+  stagingLobbyState = null;
+  pvpMatch = {
+    mode: data.mode,
+    team: data.team,
+    opponents: data.opponents || [],
+    isHost: !!data.isHost,
+    allyBotsToSpawn: data.allyBots || 0,
+    enemyBotsToSpawn: data.enemyBots || 0,
+  };
+  showAnnouncement('MATCH FOUND',
+    `${data.opponents.length + 1} player(s) · You are ${data.team.toUpperCase()}${pvpMatch.isHost ? ' (HOST)' : ''}`,
+    '#44ff66', 2200);
+  // Now spawn the game (will use pvpMatch.isHost to decide bot spawning)
+  if (!gameStarted) {
+    gameStarted = true;
+    spawnGameBots();
+    requestPointerLockSafe();
+    loop();
+  }
 });
 socket.on('chatLine', data => {
   // From another player
@@ -7341,6 +8221,9 @@ socket.on('playerDied', data => {
     } else if (match && match.tiebreaker) {
       document.getElementById('death-msg').textContent = 'Tiebreaker — eliminated!';
       // endMatch called via onEntityDied
+    } else if (match && match.type === 'arcade') {
+      document.getElementById('death-msg').textContent = 'Respawning in 2.5s...';
+      setTimeout(() => { ds.style.display = 'none'; }, 2400);
     } else if (match && match.type === 'range') {
       // Range mode: instant respawn (player shouldn't die here, but just in case)
       ds.style.display = 'none';
@@ -7633,6 +8516,30 @@ function explodeSupport(g) {
   const item = g.itemRef;
   if (!item) return;
   const pos = g.mesh.position.clone();
+
+  // 🪖 Admin stun grenade — flash + temporarily stop bot AI in radius
+  if (item.id === 'stun_grenade') {
+    spawnAbilityAOEFX(pos, item.stunRadius || 8, 0xffffff);
+    flashScreen('rgba(255,255,255,0.75)', 600);
+    const r2 = (item.stunRadius || 8) * (item.stunRadius || 8);
+    for (const bot of gameBots) {
+      if (bot.dead) continue;
+      const dx = bot.x - pos.x, dz = bot.z - pos.z;
+      if (dx*dx + dz*dz < r2) {
+        bot._stunUntil = Date.now() + (item.stunDur || 4000);
+        const mesh = remoteMeshes[bot.id];
+        const hp = mesh ? mesh.position.clone().setY(1.0) : new THREE.Vector3(bot.x, 1, bot.z);
+        emitHit(bot.id, `stun_${myId}_${Date.now()}_${bot.id}`, 'stun_grenade', hp);
+      }
+    }
+    return;
+  }
+  // 🪖 Admin thermite — burning zone DOT (reuses firework burn-zone system)
+  if (item.id === 'thermite') {
+    spawnAbilityAOEFX(pos, item.burnRadius || 3.5, 0xff6622);
+    spawnBurnZone(pos, item.burnRadius || 3.5, item.burnDps || 8, item.burnDur || 12000);
+    return;
+  }
 
   // Visual effect
   if (item.id === 'smoke') {
@@ -8112,13 +9019,146 @@ function updateMeleeSwing(dt) {
 }
 
 // ── Match system ───────────────────────────────────────────────────────────
+// ── 🎮 Arcade mode helpers ──────────────────────────────────────────────
+// Gun Game tier ladder (weak → strong → knife at the top to "win"). Player advances on each kill.
+const GUN_GAME_TIERS = [
+  'pistol', 'cycler', 'machine_pistol', 'sg8', 'mp40',
+  'ak20', 'sg100', 'srx', 'rpd', 'paintball',
+  'burst', 'flamethrower', 'vector', 'crossbow', 'lever',
+  'minigun', 'railgun', 'boombow', 'auto_shotgun', 'hand_cannon',
+  'knife', // final tier — kill with knife to win
+];
+const SPEEDRUN_KILL_GOAL = 20;
+
+// Called from startMatchRound once bots exist — handles each mode's start state
+function setupArcadeStart(subtype) {
+  if (!match) return;
+  switch (subtype) {
+    case 'gungame': {
+      // Set all bot gun tiers to 0
+      for (const b of gameBots) match.gunTier[b.id] = 0;
+      // Start the player at tier 0
+      const startWeapon = GUN_GAME_TIERS[0];
+      forcePlayerWeapon(startWeapon);
+      showAnnouncement('🔫 GUN GAME', `Climb ${GUN_GAME_TIERS.length} weapon tiers · knife wins!`, '#ff44ff', 3000);
+      return;
+    }
+    case 'oitc': {
+      // One in the Chamber: force pistol with 1 bullet, 0 reserve. Each kill refills.
+      forcePlayerWeapon('pistol');
+      const idx = WEAPONS.findIndex(w => w.id === 'pistol');
+      if (idx >= 0) weaponAmmo[idx] = { ammo: 1, reserve: 0 };
+      updateAmmoHUD();
+      showAnnouncement('🎯 ONE IN THE CHAMBER', '1 bullet · 1-shot kill · refill on kill', '#ffcc22', 3000);
+      return;
+    }
+    case 'jugg': {
+      // Juggernaut: 50% chance player starts as juggernaut, else random bot
+      const candidates = [myId, ...gameBots.filter(b => !b.dead).map(b => b.id)];
+      const pick = candidates[Math.floor(Math.random() * candidates.length)];
+      match.juggernautId = pick;
+      if (pick === myId) {
+        // Player becomes the juggernaut: 1000 HP + admin gun
+        const me = players[myId]; if (me) { me.hp = 1000; updateHealthHUD(1000); }
+        forcePlayerWeapon('gau19'); // admin item — works even if not unlocked, for arcade
+        showAnnouncement('🛡️ YOU ARE JUGGERNAUT', '1000 HP · GAU-19 · kill them all', '#ff2222', 3000);
+      } else {
+        const bot = gameBots.find(b => b.id === pick);
+        if (bot) { bot.hp = 1000; bot.maxHp = 1000; bot.weaponId = 'gau19'; }
+        showAnnouncement('🛡️ JUGGERNAUT', `${players[pick]?.name || 'A bot'} is the juggernaut!`, '#ff2222', 3000);
+      }
+      return;
+    }
+    case 'infect': {
+      // 1 random bot starts as the zombie (uses knife) — others must survive
+      const startZombie = gameBots[Math.floor(Math.random() * gameBots.length)];
+      if (startZombie) {
+        match.infectedIds[startZombie.id] = true;
+        startZombie.weaponId = 'knife'; // melee-only zombie
+        startZombie.team = 'enemy';     // they hunt the player
+      }
+      showAnnouncement('🧟 INFECTION', 'Zombies infect on hit · last human wins!', '#44ff44', 3000);
+      return;
+    }
+    case 'sniper': {
+      forcePlayerWeapon('srx');
+      // Force bots to SR-X too
+      for (const b of gameBots) b.weaponId = 'srx';
+      showAnnouncement('🔭 SNIPER ONLY', 'SR-X only · long-range chess match', '#aaeeff', 3000);
+      return;
+    }
+    case 'speedrun': {
+      match.speedrunStart = 0;
+      match.speedrunKills = 0;
+      showAnnouncement('⏱️ SPEEDRUN', `Kill ${SPEEDRUN_KILL_GOAL} bots as fast as possible!`, '#ff8844', 3000);
+      // Personal best display
+      const pb = parseFloat(localStorage.getItem('pvp_speedrun_pb') || '0');
+      if (pb > 0) showAnnouncement('🏅 YOUR PB', `${pb.toFixed(1)}s`, '#ffcc44', 2200);
+      return;
+    }
+  }
+}
+
+function initArcadeMode(subtype) {
+  if (!match) return;
+  // Gun Game: everyone starts at tier 0
+  if (subtype === 'gungame') {
+    match.gunTier[myId] = 0;
+    // bots will get gun tiers after they spawn
+  }
+  // Juggernaut: random player starts as juggernaut (50% chance for player, else a bot — set after bots spawn)
+  // (handled in startMatchRound)
+  // Infection: 1 random infected (set in startMatchRound after bots spawn)
+}
+
+// Override a player's primary weapon (used by sniper-only, gun-game, etc.)
+function forcePlayerWeapon(weaponId, slot = 'primary') {
+  const idx = WEAPONS.findIndex(w => w.id === weaponId);
+  if (idx < 0) return;
+  if (slot === 'primary') selectedPrimaryIdx = idx;
+  else selectedSecondaryIdx = idx;
+  const w = WEAPONS[idx];
+  weaponAmmo[idx] = { ammo: w.mag, reserve: w.reserve };
+  activeSlot = slot;
+  currentWeaponIdx = idx; currentWeapon = w;
+  weaponModels.forEach(m => m.visible = false);
+  if (weaponModels[idx]) weaponModels[idx].visible = true;
+  updateAmmoHUD(); updateWeaponHUD(); updateWeaponSelector();
+}
+
+// Advance the player's gun tier (called on player kill in Gun Game)
+function gunGameAdvance(killerId) {
+  if (match?.arcade !== 'gungame') return;
+  const cur = match.gunTier[killerId] || 0;
+  const next = cur + 1;
+  match.gunTier[killerId] = next;
+  if (killerId === myId) {
+    if (next >= GUN_GAME_TIERS.length) {
+      // Won! Last tier (knife) kill → victory
+      endMatch('ally', `🏆 GUN GAME WIN · You climbed the ladder!`);
+      return;
+    }
+    const newWeapon = GUN_GAME_TIERS[next];
+    if (newWeapon === 'knife') {
+      // Final tier — give them the knife as melee
+      const knifeIdx = MELEE_ITEMS.findIndex(m => m.id === 'knife');
+      if (knifeIdx >= 0) selectedMeleeIdx = knifeIdx;
+      activeSlot = 'melee';
+      showAnnouncement('⚔️ FINAL TIER', 'Get a knife kill to win!', '#ff44ff', 2500);
+    } else {
+      forcePlayerWeapon(newWeapon);
+      showAnnouncement(`TIER ${next + 1}/${GUN_GAME_TIERS.length}`, newWeapon.toUpperCase(), '#ff44ff', 1800);
+    }
+  }
+}
+
 function initMatch() {
   const cfg = selectedModeConfig;
   if (!cfg) return;
   frontlineState = null;
   lastStandState = null;
   match = {
-    type: cfg.type,                        // 'elim' | 'race' | 'ffa' | 'frontlines' | 'laststand'
+    type: cfg.type,                        // 'elim' | 'race' | 'ffa' | 'frontlines' | 'laststand' | 'br'
     cfg,
     // Elimination
     round: 1,
@@ -8131,11 +9171,28 @@ function initMatch() {
     teamKills: { ally: 0, enemy: 0 },
     ffaKills: {},                          // entityId → kills
     timeLeft: cfg.timeLimit || 0,
+    // King-of-the-Hill / BR: per-entity lives
+    lives: {},                             // entityId → lives remaining
+    // 🎮 Arcade mode state
+    arcade: cfg.subtype || null,           // gungame | oitc | jugg | infect | sniper | speedrun
+    gunTier: {},                           // entityId → gun tier index (Gun Game)
+    juggernautId: null,                    // entityId of the juggernaut (Juggernaut)
+    infectedIds: {},                       // entityId → true (Infection: who's a zombie)
+    speedrunStart: 0,                      // timestamp first kill (Speedrun)
+    speedrunKills: 0,                      // (Speedrun)
     // Common
     active: false,
     over: false,
     tiebreaker: false,
   };
+  // Init lives for BR mode
+  if (cfg.type === 'br') {
+    const livesEach = cfg.livesPerPlayer || 3;
+    match.lives[myId] = livesEach;
+    // Bot lives initialized after they spawn (in startMatchRound)
+  }
+  // 🎮 Init for arcade modes
+  if (cfg.type === 'arcade') initArcadeMode(cfg.subtype);
   if (cfg.type === 'frontlines') initFrontlines();
   if (cfg.type === 'laststand')  initLastStand();
   if (cfg.type === 'dday')       initDDay();
@@ -8219,6 +9276,13 @@ function startMatchRound() {
     } else if (match.type === 'range') {
       showAnnouncement('SHOOTING RANGE', 'Hit the targets · No enemies!', '#44ddff', 2800);
       grantSpawnShield(0);
+    } else if (match.type === 'br') {
+      // Init bot lives now that bots exist
+      const livesEach = match.cfg.livesPerPlayer || 3;
+      for (const bot of gameBots) match.lives[bot.id] = livesEach;
+      showAnnouncement('👑 KING OF THE HILL', `${gameBots.length + 1} players · 3 lives each · last alive wins`, '#ffaa44', 3200);
+    } else if (match.type === 'arcade') {
+      setupArcadeStart(match.arcade);
     } else {
       showAnnouncement('MATCH START', `Most kills in ${formatMatchTime(match.cfg.timeLimit)}`, '#ffffff', 2800);
     }
@@ -8290,6 +9354,45 @@ function updateMatchHUD() {
     L.textContent = `SHOTS ${rangeStats.shots}`;
     C.textContent = 'RANGE';
     R.textContent = `ACC ${rangeStats.shots > 0 ? Math.round(rangeStats.hits / rangeStats.shots * 100) : 0}%`;
+  } else if (match.type === 'br') {
+    const myLives = match.lives[myId] ?? 0;
+    const alive = Object.values(match.lives).filter(v => v > 0).length;
+    L.textContent = `❤️ ${myLives}/${match.cfg.livesPerPlayer || 3} LIVES`;
+    C.textContent = `👑 KING OF THE HILL`;
+    R.textContent = `${alive} PLAYERS ALIVE`;
+  } else if (match.type === 'arcade') {
+    const sub = match.arcade;
+    if (sub === 'gungame') {
+      const t = match.gunTier[myId] || 0;
+      L.textContent = `TIER ${t + 1}/${GUN_GAME_TIERS.length}`;
+      C.textContent = `🔫 GUN GAME`;
+      R.textContent = GUN_GAME_TIERS[t]?.toUpperCase() || '';
+    } else if (sub === 'speedrun') {
+      const elapsed = match.speedrunStart ? (Date.now() - match.speedrunStart) / 1000 : 0;
+      L.textContent = `KILLS ${match.speedrunKills}/${SPEEDRUN_KILL_GOAL}`;
+      C.textContent = `⏱️ ${elapsed.toFixed(1)}s`;
+      R.textContent = `PB ${localStorage.getItem('pvp_speedrun_pb') || '—'}s`;
+    } else if (sub === 'jugg') {
+      const juggName = match.juggernautId === myId ? 'YOU' : (players[match.juggernautId]?.name || '???');
+      L.textContent = `🛡️ JUGG: ${juggName}`;
+      C.textContent = `JUGGERNAUT`;
+      R.textContent = `YOUR KILLS: ${match.ffaKills[myId] || 0}`;
+    } else if (sub === 'infect') {
+      const zCount = Object.keys(match.infectedIds).length;
+      L.textContent = `🧟 ${zCount} INFECTED`;
+      C.textContent = `INFECTION`;
+      R.textContent = match.infectedIds[myId] ? 'YOU ARE ZOMBIE' : 'YOU ARE HUMAN';
+    } else if (sub === 'oitc') {
+      const idx = WEAPONS.findIndex(w => w.id === 'pistol');
+      const ammo = idx >= 0 ? weaponAmmo[idx]?.ammo : 0;
+      L.textContent = `BULLETS: ${ammo}`;
+      C.textContent = `🎯 ONE IN THE CHAMBER`;
+      R.textContent = `KILLS: ${match.ffaKills[myId] || 0}`;
+    } else {
+      L.textContent = `KILLS: ${match.ffaKills[myId] || 0}`;
+      C.textContent = `🎮 ARCADE`;
+      R.textContent = formatMatchTime(match.timeLeft);
+    }
   } else {
     const pk = match.ffaKills[myId] || 0;
     const topBot = Object.entries(match.ffaKills).filter(([k]) => k !== myId).sort(([,a],[,b]) => b-a)[0];
@@ -8299,12 +9402,225 @@ function updateMatchHUD() {
   }
 }
 
+// 🎮 Handle a kill in an arcade mode
+function handleArcadeKill(targetId, killerId) {
+  if (!match) return;
+  const sub = match.arcade;
+  // Gun Game: each kill upgrades the killer's weapon tier
+  if (sub === 'gungame') {
+    if (killerId) gunGameAdvance(killerId);
+    // Also: auto-respawn the dead player/bot after 3s with their current tier
+    if (targetId === myId) scheduleArcadeRespawn();
+    else scheduleBotArcadeRespawn(targetId);
+    return;
+  }
+  // One in the Chamber: killer gets 1 bullet back, victim respawns
+  if (sub === 'oitc') {
+    if (killerId === myId) {
+      const idx = WEAPONS.findIndex(w => w.id === 'pistol');
+      if (idx >= 0) { weaponAmmo[idx] = { ammo: 1, reserve: 0 }; updateAmmoHUD(); }
+    }
+    // Score = ffaKills
+    match.ffaKills[killerId] = (match.ffaKills[killerId] || 0) + 1;
+    if (targetId === myId) scheduleArcadeRespawn();
+    else scheduleBotArcadeRespawn(targetId);
+    updateMatchHUD();
+    return;
+  }
+  // Juggernaut: if the juggernaut dies, killer becomes the new juggernaut
+  if (sub === 'jugg') {
+    if (targetId === match.juggernautId) {
+      // Transfer juggernaut to killer
+      const oldJugg = match.juggernautId;
+      match.juggernautId = killerId;
+      if (killerId === myId) {
+        const me = players[myId]; if (me) { me.hp = 1000; updateHealthHUD(1000); }
+        forcePlayerWeapon('gau19');
+        showAnnouncement('🛡️ YOU ARE JUGGERNAUT', '1000 HP · GAU-19 · kill them all', '#ff2222', 2500);
+      } else {
+        const bot = gameBots.find(b => b.id === killerId);
+        if (bot) { bot.hp = 1000; bot.maxHp = 1000; bot.weaponId = 'gau19'; }
+        showAnnouncement('🛡️ NEW JUGGERNAUT', `${players[killerId]?.name || 'A bot'} took the crown`, '#ff2222', 2200);
+      }
+    }
+    match.ffaKills[killerId] = (match.ffaKills[killerId] || 0) + 1;
+    if (targetId === myId) scheduleArcadeRespawn();
+    else scheduleBotArcadeRespawn(targetId);
+    updateMatchHUD();
+    return;
+  }
+  // Infection: if a zombie kills someone, that someone becomes a zombie
+  if (sub === 'infect') {
+    const killerIsZombie = match.infectedIds[killerId];
+    if (killerIsZombie && targetId !== myId) {
+      // Bot becomes zombie
+      match.infectedIds[targetId] = true;
+      const bot = gameBots.find(b => b.id === targetId);
+      if (bot) { bot.weaponId = 'knife'; bot.team = 'enemy'; }
+      showAnnouncement('🧟 INFECTED', `${players[targetId]?.name || 'Someone'} turned!`, '#44ff44', 1600);
+    } else if (killerIsZombie && targetId === myId) {
+      // Player turned — they lose
+      endMatch('enemy', '🧟 INFECTED — You\'re a zombie now');
+      return;
+    }
+    // Check win condition: all bots infected = humans lost; no zombies left = humans won
+    const livingBots = gameBots.filter(b => !b.dead);
+    const allInfected = livingBots.every(b => match.infectedIds[b.id]);
+    const noZombies = livingBots.every(b => !match.infectedIds[b.id]);
+    if (allInfected && !isDead) {
+      endMatch('enemy', '🧟 LAST HUMAN STANDING... not quite');
+    } else if (noZombies) {
+      endMatch('ally', '🏆 ZOMBIES ELIMINATED');
+    }
+    if (targetId === myId) scheduleArcadeRespawn();
+    else scheduleBotArcadeRespawn(targetId);
+    return;
+  }
+  // Sniper Only: standard FFA kill counting + respawn
+  if (sub === 'sniper') {
+    match.ffaKills[killerId] = (match.ffaKills[killerId] || 0) + 1;
+    if (targetId === myId) scheduleArcadeRespawn();
+    else scheduleBotArcadeRespawn(targetId);
+    updateMatchHUD();
+    return;
+  }
+  // Speedrun: count player kills, time tracked, end at goal
+  if (sub === 'speedrun') {
+    if (killerId === myId) {
+      if (!match.speedrunStart) match.speedrunStart = Date.now();
+      match.speedrunKills++;
+      if (match.speedrunKills >= SPEEDRUN_KILL_GOAL) {
+        const elapsedSec = (Date.now() - match.speedrunStart) / 1000;
+        const pb = parseFloat(localStorage.getItem('pvp_speedrun_pb') || '0');
+        let pbMsg = '';
+        if (pb === 0 || elapsedSec < pb) {
+          localStorage.setItem('pvp_speedrun_pb', elapsedSec.toFixed(2));
+          pbMsg = '🏅 NEW PERSONAL BEST!';
+        } else {
+          pbMsg = `PB: ${pb.toFixed(1)}s (this: ${elapsedSec.toFixed(1)}s)`;
+        }
+        endMatch('ally', `⏱️ SPEEDRUN COMPLETE · ${elapsedSec.toFixed(2)}s\n${pbMsg}`);
+        return;
+      }
+    }
+    if (targetId === myId) {
+      // Speedrun fail
+      endMatch('enemy', `💀 SPEEDRUN FAILED · ${match.speedrunKills}/${SPEEDRUN_KILL_GOAL}`);
+      return;
+    }
+    if (targetId !== myId) scheduleBotArcadeRespawn(targetId);
+    updateMatchHUD();
+    return;
+  }
+}
+
+// Respawn the player after a brief delay (arcade modes are usually instant-respawn)
+function scheduleArcadeRespawn() {
+  setTimeout(() => {
+    if (!match || match.over || !isDead) return;
+    isDead = false;
+    const me = players[myId];
+    if (me) { me.hp = (match.juggernautId === myId) ? 1000 : 300; updateHealthHUD(me.hp); }
+    const sx = (Math.random() - 0.5) * 24;
+    camera.position.set(sx, 1.65, 38 + Math.random() * 4);
+    euler.y = Math.PI; camera.quaternion.setFromEuler(euler);
+    grantSpawnShield(2000);
+    document.getElementById('death-screen').style.display = 'none';
+    document.getElementById('waiting-screen').style.display = 'none';
+    socket.emit('readyRespawn');
+    requestPointerLockSafe();
+  }, 2500);
+}
+function scheduleBotArcadeRespawn(botId) {
+  const bot = gameBots.find(b => b.id === botId);
+  if (!bot) return;
+  setTimeout(() => {
+    if (!bot || match?.over) return;
+    const ang = Math.random() * Math.PI * 2;
+    const r = 30 + Math.random() * 15;
+    bot.x = Math.cos(ang) * r; bot.z = Math.sin(ang) * r;
+    bot.hp = (match.juggernautId === botId) ? 1000 : 300;
+    bot.dead = false; bot.prevHp = bot.hp; bot.stuckTimer = 0;
+    if (players[bot.id]) { players[bot.id].hp = bot.hp; players[bot.id].dead = false; }
+    const mesh = remoteMeshes[bot.id];
+    if (mesh) { mesh.position.set(bot.x, 0, bot.z); mesh.visible = true; }
+    socket.emit('forceRespawnBot', { botId: bot.id, x: bot.x, z: bot.z });
+  }, 2500);
+}
+
+function checkBrWin() {
+  if (!match || match.type !== 'br' || match.over) return;
+  // Count entities with lives > 0
+  let alive = 0;
+  let lastAliveId = null;
+  for (const [id, lives] of Object.entries(match.lives)) {
+    if (lives > 0) { alive++; lastAliveId = id; }
+  }
+  if (alive <= 1) {
+    if (lastAliveId === myId) endMatch('ally', '👑 LAST ONE STANDING!');
+    else endMatch('enemy', '💀 BETTER LUCK NEXT TIME');
+  }
+}
+
 function onEntityDied(targetId, killerId) {
   if (!match || match.over) return;
   if (match.tiebreaker) {
     // Whoever dies first loses the match
     if (targetId === myId) endMatch('enemy', 'TIEBREAKER — You fell first');
     else endMatch('ally', 'TIEBREAKER — You survived!');
+    return;
+  }
+  // ── 🎮 ARCADE MODES ──────────────────────────────────────────────────
+  if (match.type === 'arcade') {
+    handleArcadeKill(targetId, killerId);
+    return;
+  }
+  // ── 👑 KING OF THE HILL / BR mode ──────────────────────────────────────
+  if (match.type === 'br') {
+    // Decrement lives
+    const remaining = Math.max(0, (match.lives[targetId] || 0) - 1);
+    match.lives[targetId] = remaining;
+    // Show life update for player
+    if (targetId === myId) {
+      if (remaining > 0) {
+        showAnnouncement('💔 LIFE LOST', `${remaining}/${match.cfg.livesPerPlayer || 3} lives remaining`, '#ffaa44', 2000);
+        // Auto-respawn after 4s at random map position
+        setTimeout(() => {
+          if (!match || match.over || !isDead) return;
+          const ang = Math.random() * Math.PI * 2;
+          const r = 80 + Math.random() * 30;
+          isDead = false;
+          const me = players[myId];
+          if (me) { me.hp = 300; updateHealthHUD(300); }
+          camera.position.set(Math.cos(ang) * r, 1.65, Math.sin(ang) * r);
+          euler.y = ang + Math.PI; camera.quaternion.setFromEuler(euler);
+          grantSpawnShield(3000);
+          document.getElementById('death-screen').style.display = 'none';
+          document.getElementById('waiting-screen').style.display = 'none';
+          socket.emit('readyRespawn');
+          requestPointerLockSafe();
+        }, 4000);
+      } else {
+        showAnnouncement('💀 ELIMINATED', 'You\'re out of lives', '#ff2222', 3000);
+      }
+    } else {
+      // Bot died — respawn if it has lives left
+      const bot = gameBots.find(b => b.id === targetId);
+      if (bot && remaining > 0) {
+        setTimeout(() => {
+          if (!bot || match?.over) return;
+          const ang = Math.random() * Math.PI * 2;
+          const r = 90 + Math.random() * 25;
+          bot.x = Math.cos(ang) * r; bot.z = Math.sin(ang) * r;
+          bot.hp = 300; bot.dead = false; bot.prevHp = 300; bot.stuckTimer = 0;
+          if (players[bot.id]) { players[bot.id].hp = 300; players[bot.id].dead = false; }
+          const mesh = remoteMeshes[bot.id];
+          if (mesh) { mesh.position.set(bot.x, 0, bot.z); mesh.visible = true; }
+          socket.emit('forceRespawnBot', { botId: bot.id, x: bot.x, z: bot.z });
+        }, 4000);
+      }
+    }
+    checkBrWin();
     return;
   }
   if (match.type === 'elim') {
@@ -8878,6 +10194,12 @@ function botSideSpawn(idx, count, team) {
     const bunkerXs = [-7, 7, 22]; // bunkers 1, 2, 3
     return { x: bunkerXs[idx] || 0, z: 22 }; // near slit, inside bunker
   }
+  // BR mode: scatter bots randomly around the perimeter of the big map
+  if (selectedModeConfig && selectedModeConfig.type === 'br') {
+    const ang = (idx / count) * Math.PI * 2 + Math.random() * 0.5;
+    const r = 90 + Math.random() * 20;
+    return { x: Math.cos(ang) * r, z: Math.sin(ang) * r };
+  }
   // Allies at z=+32 (behind player); enemies at z=-20 (close enough to navigate quickly)
   const isAlly = team === 'ally';
   const spread = Math.min(30, Math.max(6, count * 3.5));
@@ -8888,6 +10210,12 @@ function botSideSpawn(idx, count, team) {
 
 function spawnGameBots() {
   if (!selectedModeConfig) return;
+  // 🌐 Enter a private match BEFORE spawning bots — server will isolate this player's bots
+  // from other players who aren't in the same match.
+  const matchId = (pvpMatch && pvpMatch.mode)
+    ? `pvp-${[myId, ...(pvpMatch.opponents || []).map(o => o.socketId)].sort().join('-')}` // shared ID for PvP-paired players
+    : `match-${myId}-${Date.now()}`;
+  socket.emit('enterMatch', { matchId });
 
   // ── Clean up bots/meshes/bubbles from any previous mode session ──────────
   for (const bot of gameBots) {
@@ -8897,11 +10225,38 @@ function spawnGameBots() {
   }
   gameBots.length = 0;
   rangeTargets = [];
+  // Reset destructibles (heal back all glass/lights/reactors) and mortars
+  for (const d of mapDestructibles) {
+    d.hp = d.maxHp;
+    if (d.mesh) d.mesh.visible = true;
+    if (d.colliderRef && !wallColliders.includes(d.colliderRef) && d.mapName === activeMapName) {
+      // collider will be re-added when activateMap runs below
+    }
+  }
+  for (const mor of mapMortars) {
+    mor.hp = mor.maxHp;
+    mor.ammo = mor.maxAmmo;
+    mor.pilotedBy = null;
+    if (mor.mesh) mor.mesh.visible = true;
+  }
+  for (const v of mapVehicles) {
+    v.hp = v.maxHp;
+    v.pilotedBy = null;
+    // Reset to spawn positions (no easy way — would need to store originals; just clear pilot state)
+  }
+  airportLightLevel = 1.0;
+  if (pilotedMortar) { pilotedMortar.pilotedBy = null; pilotedMortar = null; }
+  if (pilotedVehicle) { pilotedVehicle.pilotedBy = null; pilotedVehicle = null; }
+  const mp = document.getElementById('mortar-prompt'); if (mp) mp.style.display = 'none';
+  const vp = document.getElementById('vehicle-prompt'); if (vp) vp.style.display = 'none';
   // ──────────────────────────────────────────────────────────────────────────
 
   // ── Pick & activate map (skip D-Day and Range — they use their own maps) ──
-  if (selectedModeConfig.type !== 'dday' && selectedModeConfig.type !== 'range') {
-    const pool = ['blank','urban','warehouse','forest','volcano','cyber','desert','tundra','space'];
+  if (selectedModeConfig.type === 'br') {
+    // King of the Hill: always use the giant BR arena
+    activateMap('br_arena');
+  } else if (selectedModeConfig.type !== 'dday' && selectedModeConfig.type !== 'range') {
+    const pool = ['blank','urban','warehouse','forest','volcano','cyber','desert','tundra','space','airport','trenches','chernobyl'];
     const chosen = (selectedMap === 'auto' || !MAP_GROUPS[selectedMap]) ? pool[Math.floor(Math.random()*pool.length)] : selectedMap;
     activateMap(chosen);
     // Update sky color if the map specifies one
@@ -8909,7 +10264,23 @@ function spawnGameBots() {
     if (sky != null && scene.background?.setHex) scene.background.setHex(sky);
   }
 
-  const { allies, enemies } = selectedModeConfig;
+  let { allies, enemies } = selectedModeConfig;
+  // ── 🏛️ Lobby-driven bot counts: server already computed how many bots to fill ─
+  if (pvpMatch && (pvpMatch.allyBotsToSpawn != null || pvpMatch.enemyBotsToSpawn != null)) {
+    if (!pvpMatch.isHost) {
+      // Guest: don't spawn any bots, host will broadcast them via networking
+      allies = 0; enemies = 0;
+    } else {
+      // Host spawns exactly what the server told us to
+      allies = pvpMatch.allyBotsToSpawn || 0;
+      enemies = pvpMatch.enemyBotsToSpawn || 0;
+      // If the player is on the enemy team, swap allies↔enemies in our local model
+      // (the existing code treats the player as 'ally' team by convention)
+      if (pvpMatch.team === 'enemy') {
+        const tmp = allies; allies = enemies; enemies = tmp;
+      }
+    }
+  }
   const now = Date.now();
   const botList = [];
 
@@ -8918,6 +10289,12 @@ function spawnGameBots() {
     camera.position.set(-22, 1.65, 22); euler.y = 0; // D-Day: inside bunker 0, facing enemies
   } else if (selectedModeConfig && selectedModeConfig.type === 'range') {
     camera.position.set(0, 1.65, 38); euler.y = Math.PI; // Shooting range: face -z toward targets
+  } else if (selectedModeConfig && selectedModeConfig.type === 'br') {
+    // BR: spawn at random spot in the big map
+    const ang = Math.random() * Math.PI * 2;
+    const r = 80 + Math.random() * 30;
+    camera.position.set(Math.cos(ang) * r, 1.65, Math.sin(ang) * r);
+    euler.y = ang + Math.PI; // face toward center
   } else {
     camera.position.set(0, 1.65, 42);
     euler.y = Math.PI; // face toward center
@@ -9129,7 +10506,37 @@ function getBotTarget(bot) {
   }
 
   const oppositeTeam = bot.team === 'enemy' ? 'ally' : 'enemy';
-  // Enemy bots always prioritise the player when alive
+  // ── FFA-style modes: bots treat the player as just another entity (no gang-up) ──
+  // Picks the nearest valid target by distance — could be the player or another bot.
+  const isFFAMode = match && (match.type === 'ffa' || match.type === 'arcade' || match.type === 'br');
+  if (isFFAMode) {
+    let best = null, bestDist = Infinity, bestIsPlayer = false;
+    // Consider the player as a candidate (just like a bot)
+    if (!isDead) {
+      const d = Math.hypot(camera.position.x - bot.x, camera.position.z - bot.z);
+      if (d < bestDist) { bestDist = d; bestIsPlayer = true; best = null; }
+    }
+    // Consider other bots
+    for (const ob of gameBots) {
+      if (ob.dead || ob.id === bot.id) continue;
+      // In Infection mode, zombies hunt humans (anyone not infected), humans avoid zombies
+      if (match.arcade === 'infect') {
+        const meIsZombie = match.infectedIds[bot.id];
+        const targetIsZombie = match.infectedIds[ob.id];
+        if (meIsZombie && targetIsZombie) continue; // zombies don't fight each other
+        if (!meIsZombie && targetIsZombie) continue; // humans don't preemptively attack zombies (treat them like obstacles)
+      }
+      const d = Math.hypot(ob.x - bot.x, ob.z - bot.z);
+      if (d < bestDist) { bestDist = d; bestIsPlayer = false; best = ob; }
+    }
+    if (bestIsPlayer) {
+      bot.currentTargetId = myId;
+      return { x: camera.position.x, z: camera.position.z, isPlayer: true };
+    }
+    if (best) { bot.currentTargetId = best.id; return { x: best.x, z: best.z, isPlayer: false, botRef: best }; }
+    return null;
+  }
+  // Enemy bots always prioritise the player when alive (team-based modes only)
   if (bot.team === 'enemy' && !isDead) {
     bot.currentTargetId = myId;
     // EXPERT: if no LOS but a recent team sighting exists, push toward last known spot
@@ -9142,7 +10549,8 @@ function getBotTarget(bot) {
     return { x: camera.position.x, z: camera.position.z, isPlayer: true };
   }
   // HARD: focus fire — prefer the target most allies are already shooting at
-  if (bot.difficulty === 'hard') {
+  // Skip in FFA-style modes (no "allies" — would just gang up on player)
+  if (bot.difficulty === 'hard' && !isFFAMode) {
     const focusCounts = new Map(); // botId → count of allies targeting it
     for (const ally of gameBots) {
       if (ally.dead || ally.team !== bot.team || ally.id === bot.id) continue;
@@ -9210,12 +10618,16 @@ function updateBotAI(dt) {
   if (match?.type === 'range') return; // range targets are handled by updateRange()
   // ⚡ Admin freeze: stop all bot AI entirely
   if (adminCheats.freezeBots && currentUser?.isAdmin) return;
+  // Stun grenade: per-bot AI freeze
+  const __nowS = Date.now();
+  for (const b of gameBots) { if (b._stunUntil && __nowS < b._stunUntil) b._stunActive = true; else b._stunActive = false; }
   const roundLive = !match || match.roundActive; // false only during countdown
   const now = Date.now();
   const playerHp = players[myId]?.hp ?? 300; // used for melee-charge trigger
   for (const bot of gameBots) {
     if (bot.dead) continue;
     if (bot.state === 'target') continue; // range targets don't move or shoot
+    if (bot._stunActive) continue; // 🪖 stunned by admin stun grenade — frozen this frame
 
     // ── Vertical physics: air grenades + land mines can launch bots upward ──
     if (bot.yVel != null && (bot.yVel !== 0 || (bot.y || 0) > 0)) {
@@ -9967,8 +11379,10 @@ function updateBotAI(dt) {
     // Apply movement + wall collision
     const prevBotX = bot.x, prevBotZ = bot.z;
     let nx = bot.x + moveX, nz = bot.z + moveZ;
-    nx = Math.max(-47, Math.min(47, nx));
-    nz = Math.max(-47, Math.min(47, nz));
+    // Map boundary varies — BR arena is 250×250, standard maps are 100×100
+    const mapHalf = activeMapName === 'br_arena' ? 123 : 47;
+    nx = Math.max(-mapHalf, Math.min(mapHalf, nx));
+    nz = Math.max(-mapHalf, Math.min(mapHalf, nz));
     [nx, nz] = resolvePosCollisions(nx, nz);
     bot.x = nx; bot.z = nz;
 
@@ -10066,6 +11480,10 @@ function loop() {
   updateBotSpeech(dt);  // bot speech bubbles follow their heads
   updateChatFeed();     // fade old chat lines
   updateAdminCheats(dt);// admin cheat tick (fly, kill aura, etc.)
+  updateUAV(dt);        // 🛰️ Predator UAV overlay tick
+  updateMapEffects(dt); // airport darkening, chernobyl gas, mortar prompt
+  updateVehiclePrompt();// 🚙 vehicle pickup prompt (BR arena)
+  updateVehiclePiloting(dt); // 🚙 move + sync vehicle while piloted
   updateReloadAnim();   // weapon tilts/rotates during reload
   updateSwitchbladeHUD(); // shows only when switchblade is active
   updateSpectatorCamera(dt); // follow teammates while dead
@@ -10272,6 +11690,124 @@ function pickSupport(idx, card) {
   ready.style.pointerEvents = loadoutReady() ? 'all' : 'none';
 }
 
+// PvP matchmaking searching overlay
+function showPvpSearching(mode) {
+  let el = document.getElementById('pvp-searching');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'pvp-searching';
+    el.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.92);'
+      + 'z-index:9900;display:flex;flex-direction:column;align-items:center;justify-content:center;'
+      + 'color:#fff;font-family:"Courier New",monospace;';
+    document.body.appendChild(el);
+  }
+  el.innerHTML = `
+    <div style="font-size:11px;letter-spacing:4px;color:#88ccff;margin-bottom:14px;">🌐 PVP MATCHMAKING</div>
+    <div style="font-size:36px;letter-spacing:8px;color:#fff;margin-bottom:10px;">SEARCHING…</div>
+    <div style="font-size:14px;color:#ccc;letter-spacing:2px;">Looking for other players in ${mode.toUpperCase()}</div>
+    <div style="font-size:11px;color:#888;margin-top:18px;">Will fall back to bots if no one joins in 3s</div>
+    <div style="margin-top:24px;width:200px;height:3px;background:#222;border-radius:2px;overflow:hidden;">
+      <div id="pvp-bar" style="height:100%;width:0%;background:#44ff66;transition:width 3s linear;"></div>
+    </div>`;
+  el.style.display = 'flex';
+  // Animate the progress bar
+  setTimeout(() => { const bar = document.getElementById('pvp-bar'); if (bar) bar.style.width = '100%'; }, 50);
+}
+function hidePvpSearching() {
+  const el = document.getElementById('pvp-searching');
+  if (el) el.style.display = 'none';
+}
+
+// ── 🌐 PvP match state (assigned by the server when matchmaking succeeds) ─
+// pvpMatch: null = solo with bots (current behavior)
+//           { mode, team, opponents: [{socketId, team}], isHost }
+let pvpMatch = null;
+
+// ── 🏛️ Staging-lobby state ───────────────────────────────────────────────
+let stagingLobbyMode = null; // mode ID we're currently waiting in, or null
+let stagingLobbyState = null; // last received state from server
+let pendingLobbyConfig = null; // saved selectedModeConfig when entering lobby
+
+function showStagingLobby(mode) {
+  let el = document.getElementById('staging-lobby');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'staging-lobby';
+    el.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;z-index:9800;'
+      + 'background:rgba(0,0,0,0.95);color:#fff;font-family:"Courier New",monospace;'
+      + 'display:flex;flex-direction:column;align-items:center;justify-content:center;padding:30px;';
+    document.body.appendChild(el);
+  }
+  el.style.display = 'flex';
+  renderStagingLobby();
+}
+function hideStagingLobby() {
+  const el = document.getElementById('staging-lobby');
+  if (el) el.style.display = 'none';
+}
+function renderStagingLobby() {
+  const el = document.getElementById('staging-lobby');
+  if (!el) return;
+  const s = stagingLobbyState;
+  const mode = stagingLobbyMode || (s && s.mode);
+  if (!mode) return;
+  const cfg = GAME_MODE_CONFIGS[mode] || {};
+  const teamSize = cfg.type === 'elim' ? (cfg.allies + 1) : Math.max(1, cfg.allies + 1);
+  const allyPlayers = s ? s.players.filter(p => p.team === 'ally') : [];
+  const enemyPlayers = s ? s.players.filter(p => p.team === 'enemy') : [];
+  const me = s ? s.players.find(p => p.socketId === myId) : null;
+  el.innerHTML = `
+    <div style="font-size:32px;letter-spacing:8px;color:#ffaa44;margin-bottom:6px;">🏛️ MATCH LOBBY</div>
+    <div style="font-size:14px;color:#888;letter-spacing:3px;margin-bottom:24px;">${mode.toUpperCase()} · WAITING FOR PLAYERS</div>
+    <div style="display:flex;gap:60px;margin-bottom:30px;">
+      <div style="text-align:center;min-width:200px;">
+        <div style="font-size:11px;color:#88ccff;letter-spacing:3px;margin-bottom:8px;">TEAM ALLY (${allyPlayers.length}/${cfg.allies != null ? cfg.allies + 1 : '?'})</div>
+        ${allyPlayers.length ? allyPlayers.map(p => `<div style="padding:6px 12px;background:rgba(68,170,255,0.15);border-left:3px solid #44aaff;margin-bottom:4px;text-align:left;">
+          ${p.ready ? '✅' : '⏳'} ${p.name}${p.socketId === myId ? ' (YOU)' : ''}
+        </div>`).join('') : '<div style="color:#666;font-style:italic;">empty</div>'}
+      </div>
+      <div style="font-size:36px;color:#666;align-self:center;">VS</div>
+      <div style="text-align:center;min-width:200px;">
+        <div style="font-size:11px;color:#ff6666;letter-spacing:3px;margin-bottom:8px;">TEAM ENEMY (${enemyPlayers.length}/${cfg.enemies != null ? cfg.enemies : '?'})</div>
+        ${enemyPlayers.length ? enemyPlayers.map(p => `<div style="padding:6px 12px;background:rgba(255,68,68,0.15);border-left:3px solid #ff4444;margin-bottom:4px;text-align:left;">
+          ${p.ready ? '✅' : '⏳'} ${p.name}${p.socketId === myId ? ' (YOU)' : ''}
+        </div>`).join('') : '<div style="color:#666;font-style:italic;">empty</div>'}
+      </div>
+    </div>
+    <label style="display:flex;align-items:center;gap:8px;margin-bottom:14px;color:#ccc;font-size:12px;cursor:pointer;">
+      <input type="checkbox" id="lobby-fillbots" ${me?.fillBots !== false ? 'checked' : ''}>
+      Fill missing slots with bots
+    </label>
+    <div style="display:flex;gap:10px;margin-top:6px;">
+      <button id="lobby-team-switch" style="padding:10px 18px;background:#222;color:#aaa;border:1px solid #555;cursor:pointer;font-family:inherit;font-size:13px;letter-spacing:2px;border-radius:4px;">SWITCH TEAM</button>
+      <button id="lobby-ready" style="padding:10px 30px;background:${me?.ready ? '#226622' : '#553311'};color:#fff;border:2px solid ${me?.ready ? '#44ff44' : '#ffaa44'};cursor:pointer;font-family:inherit;font-size:15px;font-weight:bold;letter-spacing:3px;border-radius:4px;">
+        ${me?.ready ? '✅ READY!' : '⏳ READY UP'}
+      </button>
+      <button id="lobby-leave" style="padding:10px 18px;background:#222;color:#aaa;border:1px solid #555;cursor:pointer;font-family:inherit;font-size:13px;letter-spacing:2px;border-radius:4px;">LEAVE LOBBY</button>
+    </div>
+    <div style="font-size:11px;color:#666;margin-top:18px;letter-spacing:1px;">Match starts when all players ready · ${me?.fillBots !== false ? 'Bots will fill empty slots' : 'No bots — playing as-is'}</div>
+  `;
+  // Wire buttons
+  const fbox = document.getElementById('lobby-fillbots');
+  const readyBtn = document.getElementById('lobby-ready');
+  const switchBtn = document.getElementById('lobby-team-switch');
+  const leaveBtn = document.getElementById('lobby-leave');
+  if (fbox) fbox.addEventListener('change', () => {
+    socket.emit('setLobbyReady', { ready: me?.ready || false, fillBots: fbox.checked });
+  });
+  if (readyBtn) readyBtn.addEventListener('click', () => {
+    socket.emit('setLobbyReady', { ready: !me?.ready, fillBots: fbox?.checked !== false });
+  });
+  if (switchBtn) switchBtn.addEventListener('click', () => socket.emit('switchLobbyTeam'));
+  if (leaveBtn) leaveBtn.addEventListener('click', () => {
+    socket.emit('leaveStagingLobby');
+    hideStagingLobby();
+    stagingLobbyMode = null;
+    stagingLobbyState = null;
+    document.getElementById('mode-screen').style.display = 'flex';
+  });
+}
+
 function confirmLoadout() {
   // Guard: both slots must be chosen (belt-and-suspenders against spurious mobile touch events)
   if (!loadoutReady()) return;
@@ -10280,6 +11816,20 @@ function confirmLoadout() {
   resetCombatResources();
 
   if (!gameStarted) {
+    // ── Find the mode ID and decide whether to route through the staging lobby ──
+    const modeIds = Object.entries(GAME_MODE_CONFIGS).find(([id, cfg]) => cfg === selectedModeConfig);
+    const modeId  = modeIds ? modeIds[0] : null;
+    // Lobby-eligible modes: 1v1/2v2/3v3 (elim) + 5v5/10v10 (race) + FFA + KOTH
+    const lobbyEligible = ['1v1','2v2','3v3','5v5','10v10','ffa5','ffa15','koth',
+                            'gungame','oitc','juggernaut','infection','sniper_only','speedrun'];
+    if (modeId && lobbyEligible.includes(modeId)) {
+      // Route through staging lobby — wait for others to ready up
+      stagingLobbyMode = modeId;
+      socket.emit('joinStagingLobby', { mode: modeId });
+      showStagingLobby(modeId);
+      return;
+    }
+    // Non-lobby modes (frontlines, dday, laststand, range, etc.): spawn bots immediately
     gameStarted = true;
     spawnGameBots();
     requestPointerLockSafe();
@@ -10704,6 +12254,9 @@ const MAP_DESCS = {
   desert:     'Desert Ruins — broken pillars + sand dunes, open sightlines',
   tundra:     '❄️ Tundra — ice patches make you slip and slide',
   space:      '🌌 Space Station — LOW GRAVITY zones · jump higher',
+  airport:    '🛬 Airport — break glass + lights · gets darker as lights die',
+  trenches:   '🪖 Trenches — barbed wire + 4 PILOTABLE mortar cannons (F to use)',
+  chernobyl:  '☢️ Chernobyl — toxic gas (1 dmg/s) + 4 destructible reactors (500 HP each)',
 };
 function selectMapPick(mapId) {
   selectedMap = mapId;

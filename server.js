@@ -109,6 +109,131 @@ const PLAYER_MAX_HP  = 300;
 const RESPAWN_DELAY  = 3000;
 const POS_BROADCAST_RATE = 50; // ms
 
+// ── 🌐 PVP MATCHMAKING — pair up humans when they pick the same elim mode ──
+// Each queue entry: { socketId, mode, joinedAt, timeoutId }
+const pvpQueues = { '1v1': [], '2v2': [], '3v3': [] };
+const PVP_WAIT_MS = 3000; // how long a player waits for a match before falling back to solo
+const TEAM_SIZES   = { '1v1': 1, '2v2': 2, '3v3': 3 };
+
+// ── 🏛️ MATCH STAGING LOBBIES — players gather, ready up, then start ─────
+// One lobby per mode. Players auto-assigned to balance teams.
+// lobbies[mode] = { players: [{socketId, team, ready, fillBots}], createdAt }
+const stagingLobbies = {};
+function getOrCreateLobby(mode) {
+  if (!stagingLobbies[mode]) stagingLobbies[mode] = { players: [], mode, createdAt: Date.now() };
+  return stagingLobbies[mode];
+}
+function broadcastLobbyState(mode) {
+  const L = stagingLobbies[mode];
+  if (!L) return;
+  // Send full lobby state to each player in it
+  const state = {
+    mode,
+    players: L.players.map(p => ({
+      socketId: p.socketId,
+      name: players[p.socketId]?.name || '?',
+      team: p.team,
+      ready: p.ready,
+      fillBots: p.fillBots,
+    })),
+  };
+  for (const p of L.players) io.to(p.socketId).emit('lobbyState', state);
+}
+function autoAssignTeam(mode) {
+  // Assign to whichever team has fewer
+  const L = getOrCreateLobby(mode);
+  const allies = L.players.filter(p => p.team === 'ally').length;
+  const enemies = L.players.filter(p => p.team === 'enemy').length;
+  return allies <= enemies ? 'ally' : 'enemy';
+}
+function checkLobbyStart(mode) {
+  const L = stagingLobbies[mode];
+  if (!L || L.players.length === 0) return;
+  const allReady = L.players.every(p => p.ready);
+  if (!allReady) return;
+  // Everyone is ready — start the match
+  const fillBots = L.players.every(p => p.fillBots);
+  const cfg = MODE_TEAM_SIZES[mode] || { ally: 1, enemy: 1 };
+  // Count humans per team
+  const allyHumans = L.players.filter(p => p.team === 'ally').length;
+  const enemyHumans = L.players.filter(p => p.team === 'enemy').length;
+  // Compute bot fill counts
+  const allyBots = fillBots ? Math.max(0, cfg.ally - allyHumans) : 0;
+  const enemyBots = fillBots ? Math.max(0, cfg.enemy - enemyHumans) : 0;
+  // Shared match ID for everyone
+  const matchId = `lobby-${mode}-${Date.now()}`;
+  // Designate the first player as host (they spawn the bots if any)
+  const host = L.players[0];
+  for (const p of L.players) {
+    io.to(p.socketId).emit('lobbyStart', {
+      mode, matchId, team: p.team, isHost: p.socketId === host?.socketId,
+      allyBots, enemyBots, opponents: L.players.filter(o => o.socketId !== p.socketId).map(o => ({ socketId: o.socketId, team: o.team })),
+    });
+  }
+  // Clear the lobby
+  stagingLobbies[mode] = { players: [], mode, createdAt: Date.now() };
+}
+// Team sizes per mode (used to determine how many bots to fill)
+const MODE_TEAM_SIZES = {
+  '1v1': { ally: 1, enemy: 1 },
+  '2v2': { ally: 2, enemy: 2 },
+  '3v3': { ally: 3, enemy: 3 },
+  '5v5': { ally: 5, enemy: 5 },
+  '10v10': { ally: 10, enemy: 10 },
+  'ffa5':  { ally: 1, enemy: 5 },
+  'ffa15': { ally: 1, enemy: 15 },
+  'koth':  { ally: 1, enemy: 9 },
+  // 🎮 Arcade
+  'gungame':     { ally: 1, enemy: 7 },
+  'oitc':        { ally: 1, enemy: 5 },
+  'juggernaut':  { ally: 1, enemy: 5 },
+  'infection':   { ally: 1, enemy: 5 },
+  'sniper_only': { ally: 1, enemy: 5 },
+  'speedrun':    { ally: 1, enemy: 20 },
+};
+
+function flushPvpSolo(socketId) {
+  // Player's timeout expired — start solo with bots
+  for (const mode of Object.keys(pvpQueues)) {
+    const idx = pvpQueues[mode].findIndex(e => e.socketId === socketId);
+    if (idx >= 0) {
+      const entry = pvpQueues[mode][idx];
+      pvpQueues[mode].splice(idx, 1);
+      io.to(socketId).emit('pvpResult', { mode, paired: false, team: 'ally', opponents: [] });
+      return;
+    }
+  }
+}
+
+function tryPairPvpQueue(mode) {
+  const q = pvpQueues[mode];
+  if (q.length < 2) return; // need at least 2 humans to pair
+  // Pair the oldest 2
+  const [a, b] = q.splice(0, 2);
+  if (a.timeoutId) clearTimeout(a.timeoutId);
+  if (b.timeoutId) clearTimeout(b.timeoutId);
+  // Team assignment
+  let teamA, teamB;
+  if (mode === '1v1') {
+    // 1v1: forced opposite teams (no other way to make a game)
+    teamA = 'ally'; teamB = 'enemy';
+  } else {
+    // 2v2/3v3: random — could be same team or opposite
+    if (Math.random() < 0.5) { teamA = 'ally'; teamB = 'enemy'; }
+    else { teamA = Math.random() < 0.5 ? 'ally' : 'enemy'; teamB = teamA; }
+  }
+  io.to(a.socketId).emit('pvpResult', {
+    mode, paired: true, team: teamA,
+    opponents: [{ socketId: b.socketId, team: teamB }],
+    isHost: true, // first player spawns the bots
+  });
+  io.to(b.socketId).emit('pvpResult', {
+    mode, paired: true, team: teamB,
+    opponents: [{ socketId: a.socketId, team: teamA }],
+    isHost: false,
+  });
+}
+
 // Weapon damage table (must match client WEAPONS array)
 const WEAPON_DAMAGE = {
   // Primaries
@@ -141,6 +266,7 @@ const WEAPON_DAMAGE = {
   gravity_launcher: 75, potato_cannon: 60, sticker_blaster: 8,
   harpoon_gun: 95, mortar_rifle: 85,
   arc_torrent: 5, firework_launcher: 50, switchblade_gun: 50, switchblade_charged: 100,
+  jeep_gun: 22, chernobyl_gas: 1,
   // 3rd-batch primaries
   flechette: 16, thermal_lmg: 11, burst_cannon: 40, incendiary_shotgun: 14,
   coilgun: 92, smart_smg: 9, amr: 180, air_rifle: 34, shockwave_launcher: 48, twin_ar: 20,
@@ -208,17 +334,40 @@ function createPlayer(id, name) {
     hp: PLAYER_MAX_HP, dead: false,
     kills: 0, deaths: 0,
     lastShot: 0, isBot: false,
+    matchId: 'lobby', // 🌐 lobby = idle / mode-select. Set to a unique match ID when in a real match.
   };
 }
 
+// Get all players (humans + bots) currently in the same match as `id`
+function playersInSameMatch(id) {
+  const p = players[id];
+  if (!p) return [];
+  return Object.values(players).filter(x => x.matchId === p.matchId);
+}
+// Get socket IDs (non-bot only) of humans in the same match as `id`
+function socketIdsInMatch(matchId) {
+  return Object.values(players)
+    .filter(p => !p.isBot && p.matchId === matchId)
+    .map(p => p.id);
+}
+// Helper: emit an event ONLY to humans in the same match
+function emitToMatch(matchId, event, data) {
+  for (const sid of socketIdsInMatch(matchId)) io.to(sid).emit(event, data);
+}
 
-// ── Position broadcast (fixes remote player movement sync) ─────────────────
+
+// ── Position broadcast — each client only sees players in their own match ─
 setInterval(() => {
-  const positions = {};
+  // Group players by matchId once, then send each human only what's in their match
+  const byMatch = {};
   for (const [id, p] of Object.entries(players)) {
-    positions[id] = { x: p.x, y: p.y, z: p.z, rotY: p.rotY, rotX: p.rotX };
+    if (!byMatch[p.matchId]) byMatch[p.matchId] = {};
+    byMatch[p.matchId][id] = { x: p.x, y: p.y, z: p.z, rotY: p.rotY, rotX: p.rotX };
   }
-  io.emit('posUpdate', positions);
+  for (const p of Object.values(players)) {
+    if (p.isBot) continue;
+    io.to(p.id).emit('posUpdate', byMatch[p.matchId] || {});
+  }
 }, POS_BROADCAST_RATE);
 
 function respawnBot(bot) {
@@ -231,11 +380,48 @@ io.on('connection', (socket) => {
   console.log('Player connected:', socket.id);
   players[socket.id] = createPlayer(socket.id);
 
-  socket.emit('init', { id: socket.id, players });
-  socket.broadcast.emit('playerJoined', players[socket.id]);
+  // Init: only send players in the SAME match (new player starts in 'lobby')
+  const sameMatchPlayers = {};
+  for (const [pid, p] of Object.entries(players)) {
+    if (p.matchId === players[socket.id].matchId) sameMatchPlayers[pid] = p;
+  }
+  socket.emit('init', { id: socket.id, players: sameMatchPlayers });
+  // Tell others in the lobby that a new player arrived
+  emitToMatch('lobby', 'playerJoined', players[socket.id]);
 
   socket.on('setName', (name) => {
     if (players[socket.id]) players[socket.id].name = String(name).slice(0, 16);
+  });
+
+  // ── 🌐 PvP matchmaking: player wants to find others playing the same elim mode ──
+  socket.on('joinPvpLobby', (data) => {
+    const mode = data && data.mode;
+    if (!mode || !pvpQueues[mode]) return;
+    // Remove from any existing queues first (in case they double-pressed)
+    for (const m of Object.keys(pvpQueues)) {
+      const i = pvpQueues[m].findIndex(e => e.socketId === socket.id);
+      if (i >= 0) {
+        if (pvpQueues[m][i].timeoutId) clearTimeout(pvpQueues[m][i].timeoutId);
+        pvpQueues[m].splice(i, 1);
+      }
+    }
+    const entry = { socketId: socket.id, mode, joinedAt: Date.now(), timeoutId: null };
+    pvpQueues[mode].push(entry);
+    // Try immediate pairing
+    tryPairPvpQueue(mode);
+    // If still in queue (no pairing yet), set timeout to fall back to solo
+    if (pvpQueues[mode].includes(entry)) {
+      entry.timeoutId = setTimeout(() => flushPvpSolo(socket.id), PVP_WAIT_MS);
+    }
+  });
+  socket.on('leavePvpLobby', () => {
+    for (const m of Object.keys(pvpQueues)) {
+      const i = pvpQueues[m].findIndex(e => e.socketId === socket.id);
+      if (i >= 0) {
+        if (pvpQueues[m][i].timeoutId) clearTimeout(pvpQueues[m][i].timeoutId);
+        pvpQueues[m].splice(i, 1);
+      }
+    }
   });
 
   // Quick-chat: relay to all other clients (rate-limited)
@@ -268,7 +454,7 @@ io.on('connection', (socket) => {
     const minInterval = 15; // generous server-side rate limit
     if (now - p.lastShot < minInterval) return;
     p.lastShot = now;
-    io.emit('bulletFired', {
+    emitToMatch(p.matchId, 'bulletFired', {
       id: `${socket.id}_${now}_${Math.random()}`,
       ownerId: socket.id,
       x: data.x, y: data.y, z: data.z,
@@ -284,10 +470,10 @@ io.on('connection', (socket) => {
     let dmg = WEAPON_DAMAGE[data.weapon] || 25;
     if (data.headshot) dmg = data.instakill ? target.hp : dmg * 2; // headshot: 2× (or instakill)
     target.hp = Math.max(0, target.hp - dmg);
-    io.emit('playerHit', { targetId: target.id, hp: target.hp, bulletId: data.bulletId });
+    emitToMatch(target.matchId, 'playerHit', { targetId: target.id, hp: target.hp, bulletId: data.bulletId });
     if (target.hp <= 0) {
       target.dead = true; target.deaths++; shooter.kills++;
-      io.emit('playerDied', { targetId: target.id, killerId: socket.id });
+      emitToMatch(target.matchId, 'playerDied', { targetId: target.id, killerId: socket.id });
       // Respawn is triggered by the client sending 'readyRespawn' after loadout selection
     }
   });
@@ -303,15 +489,15 @@ io.on('connection', (socket) => {
     let dmg = WEAPON_DAMAGE[data.weapon] || 25;
     if (data.headshot) dmg = data.instakill ? bot.hp : dmg * 2;
     bot.hp = Math.max(0, bot.hp - dmg);
-    io.emit('playerHit', { targetId: bot.id, hp: bot.hp, bulletId: data.bulletId });
+    emitToMatch(bot.matchId, 'playerHit', { targetId: bot.id, hp: bot.hp, bulletId: data.bulletId });
     if (bot.hp <= 0) {
       bot.dead = true; bot.deaths++; shooter.kills++;
-      io.emit('playerDied', { targetId: bot.id, killerId: shooter.id });
+      emitToMatch(bot.matchId, 'playerDied', { targetId: bot.id, killerId: shooter.id });
       setTimeout(() => {
         if (!bot.dead) return; // already respawned via forceRespawnBot (elim round restart)
         respawnBot(bot);
         // autoRespawn flag — client ignores this for elim modes
-        io.emit('playerRespawned', { ...bot, autoRespawn: true });
+        emitToMatch(bot.matchId, 'playerRespawned', { ...bot, autoRespawn: true });
       }, RESPAWN_DELAY);
     }
   });
@@ -321,7 +507,7 @@ io.on('connection', (socket) => {
     if (!p || p.dead) return;
     const amount = Math.max(0, Math.min(150, Number(data.amount) || 0));
     p.hp = Math.min(PLAYER_MAX_HP, p.hp + amount);
-    io.emit('playerHit', { targetId: p.id, hp: p.hp, bulletId: null });
+    emitToMatch(p.matchId, 'playerHit', { targetId: p.id, hp: p.hp, bulletId: null });
   });
 
   socket.on('readyRespawn', () => {
@@ -329,7 +515,7 @@ io.on('connection', (socket) => {
     if (!p || !p.dead) return;
     const s = nextSpawn();
     Object.assign(p, { x: s.x, y: s.y, z: s.z, hp: PLAYER_MAX_HP, dead: false });
-    io.emit('playerRespawned', p);
+    emitToMatch(p.matchId, 'playerRespawned', p);
   });
 
   socket.on('resetSelf', (data = {}) => {
@@ -338,10 +524,83 @@ io.on('connection', (socket) => {
     const x = data.x != null ? Number(data.x) : p.x;
     const z = data.z != null ? Number(data.z) : p.z;
     Object.assign(p, { x, y: 1, z, hp: PLAYER_MAX_HP, dead: false });
-    io.emit('playerRespawned', { ...p, forcedReset: true });
+    emitToMatch(p.matchId, 'playerRespawned', { ...p, forcedReset: true });
+  });
+
+  // ── 🏛️ Match staging lobby handlers ────────────────────────────────────
+  socket.on('joinStagingLobby', (data) => {
+    const mode = String(data?.mode || '');
+    if (!MODE_TEAM_SIZES[mode]) { socket.emit('lobbyError', { error: 'unknown mode' }); return; }
+    // Remove from any other staging lobby first
+    for (const m of Object.keys(stagingLobbies)) {
+      stagingLobbies[m].players = stagingLobbies[m].players.filter(p => p.socketId !== socket.id);
+    }
+    const L = getOrCreateLobby(mode);
+    // Already in this lobby?
+    if (L.players.some(p => p.socketId === socket.id)) return;
+    const team = autoAssignTeam(mode);
+    L.players.push({ socketId: socket.id, team, ready: false, fillBots: true });
+    broadcastLobbyState(mode);
+  });
+  socket.on('leaveStagingLobby', () => {
+    for (const m of Object.keys(stagingLobbies)) {
+      const before = stagingLobbies[m].players.length;
+      stagingLobbies[m].players = stagingLobbies[m].players.filter(p => p.socketId !== socket.id);
+      if (stagingLobbies[m].players.length !== before) broadcastLobbyState(m);
+    }
+  });
+  socket.on('setLobbyReady', (data) => {
+    const ready = !!data?.ready;
+    const fillBots = data?.fillBots !== false; // default true
+    for (const m of Object.keys(stagingLobbies)) {
+      const p = stagingLobbies[m].players.find(x => x.socketId === socket.id);
+      if (p) {
+        p.ready = ready;
+        p.fillBots = fillBots;
+        broadcastLobbyState(m);
+        checkLobbyStart(m);
+        return;
+      }
+    }
+  });
+  socket.on('switchLobbyTeam', () => {
+    for (const m of Object.keys(stagingLobbies)) {
+      const p = stagingLobbies[m].players.find(x => x.socketId === socket.id);
+      if (p) {
+        p.team = p.team === 'ally' ? 'enemy' : 'ally';
+        broadcastLobbyState(m);
+        return;
+      }
+    }
+  });
+
+  // ── 🌐 Match isolation: enter/leave a private match ─────────────────────
+  socket.on('enterMatch', (data) => {
+    const p = players[socket.id];
+    if (!p) return;
+    const matchId = String(data?.matchId || `match-${socket.id}`).slice(0, 64);
+    p.matchId = matchId;
+    // Move any bots owned by this player into the same match
+    for (const other of Object.values(players)) {
+      if (other.isBot && other.ownerId === socket.id) other.matchId = matchId;
+    }
+  });
+  socket.on('leaveMatch', () => {
+    const p = players[socket.id];
+    if (!p) return;
+    p.matchId = 'lobby';
+    // Remove this player's bots entirely when leaving (they're not needed in the lobby)
+    for (const [id, other] of Object.entries(players)) {
+      if (other.isBot && other.ownerId === socket.id) {
+        delete players[id];
+        emitToMatch(other.matchId, 'playerLeft', id);
+      }
+    }
   });
 
   socket.on('spawnBots', (botList) => {
+    const ownerPlayer = players[socket.id];
+    const ownerMatchId = ownerPlayer ? ownerPlayer.matchId : 'lobby';
     for (const b of botList) {
       // Use client-provided spawn position if given, otherwise fall back to nextSpawn
       const spawn = (b.spawnX != null) ? { x: b.spawnX, y: 1, z: b.spawnZ } : nextSpawn();
@@ -351,8 +610,9 @@ io.on('connection', (socket) => {
         x: spawn.x, y: spawn.y, z: spawn.z,
         rotY: 0, rotX: 0,
         hp: b.hp || PLAYER_MAX_HP, dead: false, kills: 0, deaths: 0, lastShot: 0,
+        matchId: ownerMatchId, // bots inherit their owner's match
       };
-      io.emit('playerJoined', players[b.id]);
+      emitToMatch(ownerMatchId, 'playerJoined', players[b.id]);
     }
   });
 
@@ -372,11 +632,11 @@ io.on('connection', (socket) => {
     if (!player || player.dead || !bot || !bot.isBot) return;
     let dmg = WEAPON_DAMAGE[data.weapon] || 25;
     player.hp = Math.max(0, player.hp - dmg);
-    io.emit('playerHit', { targetId: player.id, hp: player.hp, bulletId: null });
+    emitToMatch(player.matchId, 'playerHit', { targetId: player.id, hp: player.hp, bulletId: null });
     if (player.hp <= 0) {
       player.dead = true; player.deaths++;
       bot.kills++;
-      io.emit('playerDied', { targetId: player.id, killerId: bot.id });
+      emitToMatch(player.matchId, 'playerDied', { targetId: player.id, killerId: bot.id });
     }
   });
 
@@ -391,18 +651,35 @@ io.on('connection', (socket) => {
       bot.hp = hp;
     }
     if (data.weaponId) bot.weaponId = data.weaponId;
-    io.emit('playerRespawned', bot);
+    emitToMatch(bot.matchId, 'playerRespawned', bot);
   });
 
   socket.on('disconnect', () => {
     console.log('Player disconnected:', socket.id);
+    const leavingPlayer = players[socket.id];
+    const leavingMatch = leavingPlayer ? leavingPlayer.matchId : 'lobby';
+    // Clean up any PvP queue entries
+    for (const m of Object.keys(pvpQueues)) {
+      const i = pvpQueues[m].findIndex(e => e.socketId === socket.id);
+      if (i >= 0) {
+        if (pvpQueues[m][i].timeoutId) clearTimeout(pvpQueues[m][i].timeoutId);
+        pvpQueues[m].splice(i, 1);
+      }
+    }
+    // Clean up any staging lobby memberships
+    for (const m of Object.keys(stagingLobbies)) {
+      const before = stagingLobbies[m].players.length;
+      stagingLobbies[m].players = stagingLobbies[m].players.filter(p => p.socketId !== socket.id);
+      if (stagingLobbies[m].players.length !== before) broadcastLobbyState(m);
+    }
     delete players[socket.id];
-    io.emit('playerLeft', socket.id);
+    emitToMatch(leavingMatch, 'playerLeft', socket.id);
     // Remove bots owned by this client
     for (const [id, p] of Object.entries(players)) {
       if (p.isBot && p.ownerId === socket.id) {
+        const botMatch = p.matchId;
         delete players[id];
-        io.emit('playerLeft', id);
+        emitToMatch(botMatch, 'playerLeft', id);
       }
     }
   });
