@@ -41,10 +41,29 @@ const WEAPON_COSTS = {
   rpd: 450, paintball: 120, crossbow: 280,
   // Primaries — Heavy
   minigun: 600, grenade_launcher: 500, flamethrower: 420,
+  // Primaries — Sci-fi / energy
+  railgun: 600, freeze_gun: 350, plasma_carbine: 420, arc_rifle: 400,
+  arc_torrent: 460, prism_launcher: 420, lazy_laser: 420, storm_cannon: 540,
+  coilgun: 460, magnet_rifle: 380, painter_beam: 300, gravity_paint: 400,
+  portal_launcher: 460, pulse_disc: 380, traffic_controller: 320,
+  // Primaries — Explosive / projectile
+  boombow: 500, gravity_launcher: 480, harpoon_gun: 440, mortar_rifle: 480,
+  firework_launcher: 360, shockwave_launcher: 460, airburst_projector: 360,
+  pinball_launcher: 440, seismic_hammer: 480, glassmaker: 380,
+  // Primaries — Tactical / precision / battle rifle
+  an94: 380, spas12: 360, m1_garand: 380, flechette: 380, thermal_lmg: 520,
+  burst_cannon: 480, incendiary_shotgun: 400, amr: 600, air_rifle: 320,
+  twin_ar: 440, swarm_rifle: 460, smart_smg: 380, switchblade_gun: 420,
+  // Primaries — Joke / chaos
+  potato_cannon: 220, sticker_blaster: 280, foam_cannon: 280,
+  // Premium
+  royal_minigun: 800,
   // Secondaries
   revolver: 150, flare: 80, pistol: 60, shorty: 180, cycler: 140,
   hand_cannon: 260, throwing_knives: 120, taser: 200,
   machine_pistol: 220, sawed_off: 260, machine_revolver: 240, pocket_rocket: 320,
+  dart_gun: 160, laser_pointer: 120, coin_gun: 180, emp_pistol: 240,
+  auto_revolver: 220, frost_blaster: 240,
   // Melees
   bat: 80, sabre: 140, frying_pan: 60, sledge: 360, spear: 200,
   katana: 360, baguette: 50, knife: 280, chainsaw: 480, lightsabre: 520,
@@ -78,6 +97,22 @@ const BUNDLES = {
   run_n_gun:    { name: 'Run & Gun',    price: 430, items: ['p90','machine_pistol','knife','adrenaline'] },
   melee_master: { name: 'Melee Master', price: 400, items: ['auto_shotgun','revolver','fire_axe','smoke'] },
   shotgun_pack: { name: 'Shotgun Pack', price: 350, items: ['sg100','sawed_off','crowbar','frag'] },
+  scifi:        { name: 'Sci-Fi Arsenal',     price: 500, items: ['plasma_carbine','arc_rifle','dart_gun','emp_grenade'] },
+  demolition:   { name: 'Demolition',         price: 600, items: ['grenade_launcher','pocket_rocket','sledge','sticky_charge'] },
+  archery:      { name: "Archer's Kit",       price: 440, items: ['crossbow','boombow','throwing_knives','tripwire'] },
+  marksman:     { name: 'Marksman',           price: 430, items: ['lever','hand_cannon','knife','ammo_fountain'] },
+  pyro:         { name: 'Pyromaniac',         price: 620, items: ['flamethrower','incendiary_shotgun','fire_axe','sticky_charge'] },
+  chaos:        { name: 'Chaos Mode',         price: 150, items: ['paintball','confetti_cannon','baguette','rubber_duck'] },
+  stealth:      { name: 'Stealth Ops',        price: 320, items: ['air_rifle','throwing_knives','knife','smoke'] },
+  storm:        { name: 'Storm Pack',         price: 420, items: ['arc_rifle','taser','shock_baton','emp_grenade'] },
+  defensive:    { name: 'Defensive',          price: 450, items: ['sg100','taser','riot_shield','nano_shield'] },
+  royalty:      { name: 'Royalty',            price: 860, items: ['royal_minigun','vampire_blade','hand_cannon','orbital_strike'] },
+  kitchen:      { name: 'Kitchen Catastrophe',price: 130, items: ['paintball','baguette','frying_pan','rubber_duck'] },
+  knight:       { name: "Knight's Honor",     price: 320, items: ['sg8','sabre','katana','smoke'] },
+  frostbite:    { name: 'Frostbite',          price: 380, items: ['freeze_gun','frost_blaster','knife','smoke'] },
+  knockback:    { name: 'Knockback',          price: 500, items: ['shockwave_launcher','sawed_off','sledge','air_grenade'] },
+  smart_tech:   { name: 'Smart Tech',         price: 610, items: ['swarm_rifle','smart_smg','hunter_drone','magnet_mine'] },
+  mortar:       { name: 'Mortar Squad',       price: 550, items: ['mortar_rifle','grenade_launcher','hand_cannon','frag'] },
 };
 
 const STARTER_CREDITS = 500;
