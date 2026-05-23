@@ -12246,43 +12246,131 @@ function loop() {
 }
 
 // ── Loadout screen ─────────────────────────────────────────────────────────
-function renderBundleStrip(parent, rerender) {
-  // Remove any previous strip so re-renders don't stack
-  const old = document.getElementById('bundle-strip');
-  if (old) old.remove();
-  if (!parent || !currentUser) return;
+// ── 🛒 Standalone SHOP screen (separate from the loadout / ready flow) ──
+let shopTab = 'bundles'; // 'bundles' | 'primary' | 'secondary' | 'melee' | 'utility'
+function openShop() {
+  if (!currentUser) { alert('Log in first.'); return; }
+  let scr = document.getElementById('shop-screen');
+  if (!scr) {
+    scr = document.createElement('div');
+    scr.id = 'shop-screen';
+    scr.style.cssText = 'display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(5,5,15,0.97);z-index:200;color:#fff;font-family:"Courier New",monospace;overflow-y:auto;padding:24px;';
+    document.body.appendChild(scr);
+  }
+  scr.style.display = 'block';
+  renderShop();
+}
+function closeShop() {
+  const scr = document.getElementById('shop-screen');
+  if (scr) scr.style.display = 'none';
+}
 
-  const wrap = document.createElement('div');
-  wrap.id = 'bundle-strip';
-  wrap.style.cssText = 'width:100%;margin:0 0 14px;padding:10px 14px;background:rgba(20,16,28,0.85);border:1px solid #6644aa;border-radius:6px;';
-  wrap.innerHTML = `<div style="font-size:12px;color:#ccaaff;letter-spacing:3px;margin-bottom:8px;">💼 BUNDLES — 60% OFF · BUY MULTIPLE WEAPONS AT ONCE</div>`;
-  const row = document.createElement('div');
-  row.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;';
+function renderShop() {
+  const scr = document.getElementById('shop-screen');
+  if (!scr || !currentUser) return;
+  const credits = currentUser.isAdmin ? '∞' : (currentUser.credits ?? 0);
+  const tabs = [
+    ['bundles',   '💼 BUNDLES'],
+    ['primary',   '🔫 PRIMARY'],
+    ['secondary', '🔫 SECONDARY'],
+    ['melee',     '⚔️ MELEE'],
+    ['utility',   '🧰 UTILITY'],
+  ];
+  scr.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #444;padding-bottom:10px;margin-bottom:14px;">
+      <div style="font-size:22px;letter-spacing:6px;color:#aaccff;">🛒 WEAPON SHOP</div>
+      <div style="display:flex;gap:14px;align-items:center;">
+        <span style="font-size:14px;color:#ffdd55;">💰 ${credits} credits</span>
+        <button id="shop-close" style="padding:6px 14px;background:#3a1a1a;color:#ff8888;border:1px solid #ff4444;cursor:pointer;font-family:inherit;font-size:11px;letter-spacing:2px;border-radius:4px;">✕ CLOSE</button>
+      </div>
+    </div>
+    <div id="shop-tabs" style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;"></div>
+    <div id="shop-body" style="display:flex;gap:10px;flex-wrap:wrap;"></div>
+  `;
+  const tabsEl = scr.querySelector('#shop-tabs');
+  for (const [id, label] of tabs) {
+    const b = document.createElement('button');
+    const active = shopTab === id;
+    b.textContent = label;
+    b.style.cssText = `padding:7px 14px;background:${active ? '#2a2a4a' : '#1a1a1a'};color:${active ? '#aaccff' : '#888'};border:1px solid ${active ? '#6699ff' : '#444'};cursor:pointer;font-family:inherit;font-size:11px;letter-spacing:2px;border-radius:4px;`;
+    b.addEventListener('click', () => { shopTab = id; renderShop(); });
+    tabsEl.appendChild(b);
+  }
+  scr.querySelector('#shop-close').addEventListener('click', closeShop);
+  const body = scr.querySelector('#shop-body');
+  if (shopTab === 'bundles') renderShopBundles(body);
+  else renderShopItems(body, shopTab);
+}
 
+function renderShopBundles(body) {
   for (const b of BUNDLES) {
     const totalSum = b.items.reduce((s, id) => s + (shopCost(id) ?? 0), 0);
     const ownedCt = b.items.filter(id => isOwned(id)).length;
     const allOwned = ownedCt === b.items.length;
     const card = document.createElement('div');
-    card.style.cssText = `min-width:170px;max-width:200px;background:#1a1424;border:1px solid ${allOwned ? '#666' : '#aa66ff'};border-radius:5px;padding:8px 10px;color:#eee;font-family:inherit;cursor:${allOwned ? 'default':'pointer'};`;
+    card.style.cssText = `min-width:200px;max-width:240px;background:#1a1424;border:2px solid ${allOwned ? '#666' : '#aa66ff'};border-radius:6px;padding:12px 14px;`;
     card.innerHTML = `
-      <div style="font-size:13px;font-weight:bold;color:${allOwned ? '#88ff99' : '#ddccff'};">${b.icon} ${b.name}</div>
-      <div style="font-size:10px;color:#aaa;margin:3px 0 4px;">${b.desc}</div>
-      <div style="font-size:9px;color:#ccc;line-height:1.4;margin-bottom:6px;">${b.items.map(id => isOwned(id) ? `<s style="color:#666">${id}</s>` : id).join(' · ')}</div>
-      <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;">
-        <span style="color:${allOwned ? '#88ff99' : '#ffdd55'};">${allOwned ? '✓ OWNED' : `${b.price}💰`}</span>
-        <span style="color:#888;text-decoration:line-through;">${totalSum}</span>
-      </div>
-      <div style="font-size:9px;color:#aaccff;margin-top:3px;">${ownedCt}/${b.items.length} owned</div>
+      <div style="font-size:15px;font-weight:bold;color:${allOwned ? '#88ff99' : '#ddccff'};margin-bottom:4px;">${b.icon} ${b.name}</div>
+      <div style="font-size:10px;color:#aaa;margin-bottom:8px;">${b.desc}</div>
+      <div style="font-size:10px;color:#ccc;line-height:1.5;margin-bottom:10px;">${b.items.map(id => isOwned(id) ? `<s style="color:#666">${id}</s>` : id).join(' · ')}</div>
+      <div style="font-size:9px;color:#aaccff;margin-bottom:8px;">${ownedCt}/${b.items.length} owned · save ${totalSum - b.price} (was ${totalSum})</div>
+      ${allOwned
+        ? '<div style="text-align:center;color:#88ff99;font-size:12px;padding:6px 0;">✓ FULLY OWNED</div>'
+        : `<button class="shop-buy-bundle" style="width:100%;padding:8px;background:#1a2a1a;color:#88ff99;border:1px solid #88ff99;font-size:13px;cursor:pointer;border-radius:4px;font-family:inherit;letter-spacing:1px;">BUY · ${b.price}💰</button>`
+      }
     `;
-    if (!allOwned) {
-      card.addEventListener('click', async () => { if (await buyBundle(b.id)) rerender(); });
-    }
-    row.appendChild(card);
+    const btn = card.querySelector('.shop-buy-bundle');
+    if (btn) btn.addEventListener('click', async () => { if (await buyBundle(b.id)) renderShop(); });
+    body.appendChild(card);
   }
-  wrap.appendChild(row);
-  // Insert at top of loadout screen
-  parent.insertBefore(wrap, parent.firstChild);
+}
+
+function renderShopItems(body, slot) {
+  // Decide which source list + how each card describes itself
+  let source, descFn, pickIsAdmin;
+  if (slot === 'primary') {
+    source = WEAPONS.filter(w => w.slot !== 'secondary' && !w.ddayOnly);
+    descFn = w => `DMG ${w.damage} · MAG ${w.mag} · ${w.auto ? 'AUTO' : 'SEMI'}`;
+    pickIsAdmin = w => !!w.adminItem;
+  } else if (slot === 'secondary') {
+    source = WEAPONS.filter(w => w.slot === 'secondary' && !w.ddayOnly);
+    descFn = w => `DMG ${w.damage} · MAG ${w.mag}`;
+    pickIsAdmin = w => !!w.adminItem;
+  } else if (slot === 'melee') {
+    source = MELEE_ITEMS;
+    descFn = m => `DMG ${m.damage} · RANGE ${m.range}`;
+    pickIsAdmin = m => !!m.adminItem;
+  } else {
+    source = SUPPORT_ITEMS;
+    descFn = s => `${s.heal ? 'HEAL ' + s.heal : 'DMG ' + (s.damage || 0)} · USES ${s.uses}`;
+    pickIsAdmin = s => !!s.adminItem;
+  }
+  for (const item of source) {
+    if (pickIsAdmin(item)) continue; // admin items are promo-only — not in shop
+    const id = item.id;
+    const cost = shopCost(id);
+    if (cost == null) continue; // not priced → not yet in the shop catalogue
+    const owned = isOwned(id);
+    const card = document.createElement('div');
+    card.style.cssText = `min-width:170px;max-width:200px;background:#0f1018;border:1px solid ${owned ? '#88ff99' : '#444'};border-radius:5px;padding:10px 12px;`;
+    card.innerHTML = `
+      <div style="font-size:13px;font-weight:bold;color:${owned ? '#88ff99' : '#ddd'};">${item.name}</div>
+      <div style="font-size:9px;color:#888;margin:2px 0 4px;">${item.type}</div>
+      <div style="font-size:10px;color:#bbb;margin-bottom:8px;">${descFn(item)}</div>
+      ${owned
+        ? `<div style="text-align:center;color:#88ff99;font-size:11px;">${FREE_WEAPONS.has(id) ? 'FREE' : '✓ OWNED'}</div>`
+        : `<div style="display:flex;gap:4px;">
+             <button class="sbuy"   style="flex:1;padding:5px;background:#1a2a1a;color:#88ff99;border:1px solid #88ff99;font-size:10px;cursor:pointer;border-radius:3px;font-family:inherit;">BUY ${cost}💰</button>
+             <button class="strial" style="flex:1;padding:5px;background:#1a1a2a;color:#aabbff;border:1px solid #6688cc;font-size:10px;cursor:pointer;border-radius:3px;font-family:inherit;">TRIAL ${shopTrialCost(id)}💰</button>
+           </div>`
+      }
+    `;
+    const b = card.querySelector('.sbuy');
+    const t = card.querySelector('.strial');
+    if (b) b.addEventListener('click', async () => { if (await buyWeapon(id)) renderShop(); });
+    if (t) t.addEventListener('click', async () => { if (await trialWeapon(id)) renderShop(); });
+    body.appendChild(card);
+  }
 }
 
 function showLoadoutScreen(mode) {
@@ -12301,45 +12389,19 @@ function showLoadoutScreen(mode) {
   // Helper: is this admin item unlocked for the current user?
   const isUnlocked = (id) => !!(currentUser && currentUser.unlocks && currentUser.unlocks.includes(id));
 
-  // Decorate a card with cost/owned/buy-trial overlay. Returns true if the
-  // item is currently usable (owned/free/admin-unlocked/trial-active).
-  function decorateShopState(card, id, isAdminItem, rerender) {
+  // Loadout screen only shows items the player can equip RIGHT NOW.
+  // Buying / trialing happens in the dedicated shop (open from mode-select).
+  function decorateOwnedBadge(card, id, isAdminItem) {
     if (isAdminItem) return isUnlocked(id);
-    if (isOwned(id)) {
-      const badge = document.createElement('div');
-      badge.style.cssText = 'font-size:9px;color:#88ff99;letter-spacing:1px;margin-top:3px;';
-      badge.textContent = FREE_WEAPONS.has(id) ? 'FREE' : trialingThisMatch.has(id) ? '🧪 TRIAL' : '✓ OWNED';
-      card.appendChild(badge);
-      return true;
-    }
-    const cost = shopCost(id);
-    if (cost == null) return false; // not in shop and not owned → hidden
-    const buyCost = cost;
-    const tryCost = shopTrialCost(id);
-    const row = document.createElement('div');
-    row.style.cssText = 'display:flex;gap:4px;margin-top:4px;';
-    row.innerHTML = `
-      <button class="shop-buy" style="flex:1;padding:3px 6px;background:#1a2a1a;color:#88ff99;border:1px solid #88ff99;font-size:10px;cursor:pointer;border-radius:3px;font-family:inherit;">BUY ${buyCost}💰</button>
-      <button class="shop-trial" style="flex:1;padding:3px 6px;background:#1a1a2a;color:#aabbff;border:1px solid #6688cc;font-size:10px;cursor:pointer;border-radius:3px;font-family:inherit;">TRIAL ${tryCost}💰</button>
-    `;
-    row.querySelector('.shop-buy').addEventListener('click', async (e) => {
-      e.stopPropagation();
-      if (await buyWeapon(id)) rerender();
-    });
-    row.querySelector('.shop-trial').addEventListener('click', async (e) => {
-      e.stopPropagation();
-      if (await trialWeapon(id)) rerender();
-    });
-    card.appendChild(row);
-    card.style.opacity = '0.55';
-    card.dataset.locked = '1';
-    return false;
+    if (!isOwned(id)) return false; // caller will skip rendering
+    const badge = document.createElement('div');
+    badge.style.cssText = 'font-size:9px;color:#88ff99;letter-spacing:1px;margin-top:3px;';
+    badge.textContent = FREE_WEAPONS.has(id) ? 'FREE' : trialingThisMatch.has(id) ? '🧪 TRIAL' : '✓ OWNED';
+    card.appendChild(badge);
+    return true;
   }
 
   const rerenderLoadout = () => showLoadoutScreen(loadoutMode); // re-paint with fresh state
-
-  // ── 💼 Bundle strip at the top of the loadout screen ────────────────
-  renderBundleStrip(pList.parentElement?.parentElement || screen, rerenderLoadout);
 
   WEAPONS.forEach((w, i) => {
     if (w.ddayOnly) return; // skip D-Day exclusive weapons
@@ -12355,7 +12417,8 @@ function showLoadoutScreen(mode) {
     card.innerHTML = `<div class="lc-name">${w.name}${adminTag}</div>
       <div class="lc-type">${w.type}</div>
       <div class="lc-stats">DMG ${w.damage} · MAG ${w.mag} · ${fireTag} · ${rateTag}</div>`;
-    const usable = decorateShopState(card, w.id, !!w.adminItem, rerenderLoadout);
+    if (!w.adminItem && !isOwned(w.id)) return; // not yet bought — hidden from loadout
+    const usable = decorateOwnedBadge(card, w.id, !!w.adminItem);
     const handler = () => { if (usable) pickLoadoutWeapon(i, isPrimary, card); };
     card.addEventListener('click',      handler);
     card.addEventListener('touchstart', e => { e.stopPropagation(); e.preventDefault(); handler(); }, { passive: false });
@@ -12372,7 +12435,8 @@ function showLoadoutScreen(mode) {
     card.innerHTML = `<div class="lc-name">${m.name}${adminTag}</div>
       <div class="lc-type">${m.type}</div>
       <div class="lc-stats">DMG ${m.damage} · RANGE ${m.range} · ${Math.round(1000/m.cooldown)}/s</div>`;
-    const usable = decorateShopState(card, m.id, !!m.adminItem, rerenderLoadout);
+    if (!m.adminItem && !isOwned(m.id)) return;
+    const usable = decorateOwnedBadge(card, m.id, !!m.adminItem);
     const handler = () => { if (usable) pickMelee(i, card); };
     card.addEventListener('click',      handler);
     card.addEventListener('touchstart', e => { e.stopPropagation(); e.preventDefault(); handler(); }, { passive: false });
@@ -12390,7 +12454,8 @@ function showLoadoutScreen(mode) {
     card.innerHTML = `<div class="lc-name">${s.name}${adminTag}</div>
       <div class="lc-type">${s.type}</div>
       <div class="lc-stats">${stat} · USES ${s.uses}</div>`;
-    const usable = decorateShopState(card, s.id, !!s.adminItem, rerenderLoadout);
+    if (!s.adminItem && !isOwned(s.id)) return;
+    const usable = decorateOwnedBadge(card, s.id, !!s.adminItem);
     const handler = () => { if (usable) pickSupport(i, card); };
     card.addEventListener('click',      handler);
     card.addEventListener('touchstart', e => { e.stopPropagation(); e.preventDefault(); handler(); }, { passive: false });
@@ -12878,6 +12943,11 @@ const _ecBtn = document.getElementById('enter-code-btn');
 if (_ecBtn) {
   _ecBtn.addEventListener('click', promptUnlockCode);
   _ecBtn.addEventListener('touchstart', e => { e.preventDefault(); promptUnlockCode(); }, { passive: false });
+}
+const _shopBtn = document.getElementById('open-shop-btn');
+if (_shopBtn) {
+  _shopBtn.addEventListener('click', openShop);
+  _shopBtn.addEventListener('touchstart', e => { e.preventDefault(); openShop(); }, { passive: false });
 }
 const _logoutBtn = document.getElementById('logout-btn');
 if (_logoutBtn) {
