@@ -867,10 +867,12 @@ const WEAPON_COSTS = {
   srx: 500, lever: 360,
   // Primaries — Special
   rpd: 450, paintball: 120, crossbow: 280,
+  // Primaries — Heavy
+  minigun: 600, grenade_launcher: 500, flamethrower: 420,
   // Secondaries
   revolver: 150, flare: 80, pistol: 60, shorty: 180, cycler: 140,
   hand_cannon: 260, throwing_knives: 120, taser: 200,
-  machine_pistol: 220, sawed_off: 260,
+  machine_pistol: 220, sawed_off: 260, machine_revolver: 240, pocket_rocket: 320,
   // Melees
   bat: 80, sabre: 140, frying_pan: 60, sledge: 360, spear: 200,
   katana: 360, baguette: 50, knife: 280, chainsaw: 480, lightsabre: 520,
@@ -891,6 +893,29 @@ const FREE_WEAPONS = new Set([
 ]);
 const TRIAL_DIVISOR = 20;
 const trialingThisMatch = new Set(); // ids the player paid a trial for this match
+
+// ── 💼 Loadout BUNDLES — ~60% off the sum of individual prices ─────────
+// Mirrors server.js BUNDLES (server is authoritative on price/contents).
+const BUNDLES = [
+  { id: 'starter_pro', name: 'Starter Pro',  icon: '🎯', price: 240,
+    desc: 'Upgrade past the freebies',
+    items: ['ak30','revolver','bat','stim'] },
+  { id: 'heavy_duty',  name: 'Heavy Duty',   icon: '💥', price: 700,
+    desc: 'Bring the noise: minigun, GL, machine revolver',
+    items: ['minigun','grenade_launcher','machine_revolver','crowbar','sticky_charge'] },
+  { id: 'sniper_pack', name: 'Sniper Pack',  icon: '🎯', price: 400,
+    desc: 'Long-range duelist kit',
+    items: ['srx','revolver','knife','smoke'] },
+  { id: 'run_n_gun',   name: 'Run & Gun',    icon: '⚡', price: 430,
+    desc: 'Fast SMGs + speed boost',
+    items: ['p90','machine_pistol','knife','adrenaline'] },
+  { id: 'melee_master',name: 'Melee Master', icon: '⚔️', price: 400,
+    desc: 'Get up close and stay there',
+    items: ['auto_shotgun','revolver','fire_axe','smoke'] },
+  { id: 'shotgun_pack',name: 'Shotgun Pack', icon: '🔫', price: 350,
+    desc: 'Close-range chaos',
+    items: ['sg100','sawed_off','crowbar','frag'] },
+];
 
 function shopCost(id)      { return WEAPON_COSTS[id]; }
 function shopTrialCost(id) { const c = WEAPON_COSTS[id]; return c == null ? null : Math.max(1, Math.ceil(c / TRIAL_DIVISOR)); }
@@ -12221,6 +12246,45 @@ function loop() {
 }
 
 // ── Loadout screen ─────────────────────────────────────────────────────────
+function renderBundleStrip(parent, rerender) {
+  // Remove any previous strip so re-renders don't stack
+  const old = document.getElementById('bundle-strip');
+  if (old) old.remove();
+  if (!parent || !currentUser) return;
+
+  const wrap = document.createElement('div');
+  wrap.id = 'bundle-strip';
+  wrap.style.cssText = 'width:100%;margin:0 0 14px;padding:10px 14px;background:rgba(20,16,28,0.85);border:1px solid #6644aa;border-radius:6px;';
+  wrap.innerHTML = `<div style="font-size:12px;color:#ccaaff;letter-spacing:3px;margin-bottom:8px;">💼 BUNDLES — 60% OFF · BUY MULTIPLE WEAPONS AT ONCE</div>`;
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;';
+
+  for (const b of BUNDLES) {
+    const totalSum = b.items.reduce((s, id) => s + (shopCost(id) ?? 0), 0);
+    const ownedCt = b.items.filter(id => isOwned(id)).length;
+    const allOwned = ownedCt === b.items.length;
+    const card = document.createElement('div');
+    card.style.cssText = `min-width:170px;max-width:200px;background:#1a1424;border:1px solid ${allOwned ? '#666' : '#aa66ff'};border-radius:5px;padding:8px 10px;color:#eee;font-family:inherit;cursor:${allOwned ? 'default':'pointer'};`;
+    card.innerHTML = `
+      <div style="font-size:13px;font-weight:bold;color:${allOwned ? '#88ff99' : '#ddccff'};">${b.icon} ${b.name}</div>
+      <div style="font-size:10px;color:#aaa;margin:3px 0 4px;">${b.desc}</div>
+      <div style="font-size:9px;color:#ccc;line-height:1.4;margin-bottom:6px;">${b.items.map(id => isOwned(id) ? `<s style="color:#666">${id}</s>` : id).join(' · ')}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;">
+        <span style="color:${allOwned ? '#88ff99' : '#ffdd55'};">${allOwned ? '✓ OWNED' : `${b.price}💰`}</span>
+        <span style="color:#888;text-decoration:line-through;">${totalSum}</span>
+      </div>
+      <div style="font-size:9px;color:#aaccff;margin-top:3px;">${ownedCt}/${b.items.length} owned</div>
+    `;
+    if (!allOwned) {
+      card.addEventListener('click', async () => { if (await buyBundle(b.id)) rerender(); });
+    }
+    row.appendChild(card);
+  }
+  wrap.appendChild(row);
+  // Insert at top of loadout screen
+  parent.insertBefore(wrap, parent.firstChild);
+}
+
 function showLoadoutScreen(mode) {
   loadoutMode = mode || 'death';
   const screen = document.getElementById('loadout-screen');
@@ -12273,6 +12337,9 @@ function showLoadoutScreen(mode) {
   }
 
   const rerenderLoadout = () => showLoadoutScreen(loadoutMode); // re-paint with fresh state
+
+  // ── 💼 Bundle strip at the top of the loadout screen ────────────────
+  renderBundleStrip(pList.parentElement?.parentElement || screen, rerenderLoadout);
 
   WEAPONS.forEach((w, i) => {
     if (w.ddayOnly) return; // skip D-Day exclusive weapons
@@ -12699,6 +12766,25 @@ async function buyWeapon(weaponId) {
   currentUser.purchased = r.purchased || currentUser.purchased;
   currentUser.credits = r.credits ?? currentUser.credits;
   updateUserInfoBar();
+  return true;
+}
+
+async function buyBundle(bundleId) {
+  if (!currentUser) { alert('Log in first.'); return false; }
+  const b = BUNDLES.find(x => x.id === bundleId);
+  if (!b) return false;
+  if (currentUser.isAdmin) return true;
+  const remaining = b.items.filter(id => !isOwned(id));
+  if (remaining.length === 0) { alert('You already own every item in this bundle!'); return false; }
+  if ((currentUser.credits ?? 0) < b.price) { alert(`Not enough credits.\nBundle costs ${b.price} · You have ${currentUser.credits ?? 0}`); return false; }
+  const sumIndividual = b.items.reduce((s, id) => s + (shopCost(id) ?? 0), 0);
+  if (!confirm(`Buy "${b.name}" bundle for ${b.price} credits?\n\nIncludes: ${b.items.join(', ')}\nValue: ${sumIndividual} credits (saving ${sumIndividual - b.price})\nNew items: ${remaining.length}`)) return false;
+  const r = await authRequest('/shop/buy-bundle', { username: currentUser.username, password: currentUser.password, bundleId });
+  if (!r || r.error) { alert('❌ ' + (r?.error || 'shop error')); return false; }
+  currentUser.purchased = r.purchased || currentUser.purchased;
+  currentUser.credits = r.credits ?? currentUser.credits;
+  updateUserInfoBar();
+  alert(`✅ Unlocked ${r.added?.length || 0} new items! Balance: ${currentUser.credits}`);
   return true;
 }
 

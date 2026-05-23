@@ -39,10 +39,12 @@ const WEAPON_COSTS = {
   srx: 500, lever: 360,
   // Primaries — Special
   rpd: 450, paintball: 120, crossbow: 280,
+  // Primaries — Heavy
+  minigun: 600, grenade_launcher: 500, flamethrower: 420,
   // Secondaries
   revolver: 150, flare: 80, pistol: 60, shorty: 180, cycler: 140,
   hand_cannon: 260, throwing_knives: 120, taser: 200,
-  machine_pistol: 220, sawed_off: 260,
+  machine_pistol: 220, sawed_off: 260, machine_revolver: 240, pocket_rocket: 320,
   // Melees
   bat: 80, sabre: 140, frying_pan: 60, sledge: 360, spear: 200,
   katana: 360, baguette: 50, knife: 280, chainsaw: 480, lightsabre: 520,
@@ -66,6 +68,17 @@ const FREE_WEAPONS = new Set([
   'fists', 'frying_pan',  // melees (knife is 2× speed + 28 dmg = nasty, NOT free)
   'frag', 'medkit',       // utilities
 ]);
+
+// ── 💼 Bundles — ~60% off the sum of individual prices ─────────────
+// Keep in sync with public/game.js BUNDLES table.
+const BUNDLES = {
+  starter_pro:  { name: 'Starter Pro',  price: 240, items: ['ak30','revolver','bat','stim'] },
+  heavy_duty:   { name: 'Heavy Duty',   price: 700, items: ['minigun','grenade_launcher','machine_revolver','crowbar','sticky_charge'] },
+  sniper_pack:  { name: 'Sniper Pack',  price: 400, items: ['srx','revolver','knife','smoke'] },
+  run_n_gun:    { name: 'Run & Gun',    price: 430, items: ['p90','machine_pistol','knife','adrenaline'] },
+  melee_master: { name: 'Melee Master', price: 400, items: ['auto_shotgun','revolver','fire_axe','smoke'] },
+  shotgun_pack: { name: 'Shotgun Pack', price: 350, items: ['sg100','sawed_off','crowbar','frag'] },
+};
 
 const STARTER_CREDITS = 500;
 const TRIAL_DIVISOR = 20; // trial costs 1/20 of buy price (min 1)
@@ -137,6 +150,25 @@ app.post('/shop/award', (req, res) => {
   saveUsers();
   res.json({ ok: true, awarded: amount, credits: u.credits });
 });
+
+app.post('/shop/buy-bundle', (req, res) => {
+  const { bundleId } = req.body || {};
+  const u = authedUser(req);
+  if (!u) return res.status(401).json({ error: 'auth failed' });
+  const b = BUNDLES[bundleId];
+  if (!b) return res.status(404).json({ error: 'unknown bundle' });
+  // Skip any items already owned (free, unlocked, or previously purchased)
+  const owned = new Set([...FREE_WEAPONS, ...(u.purchased || []), ...(u.unlocks || [])]);
+  const toAdd = b.items.filter(id => !owned.has(id));
+  if (toAdd.length === 0) return res.json({ ok: true, already: true, credits: u.credits, purchased: u.purchased, added: [] });
+  if ((u.credits || 0) < b.price) return res.status(402).json({ error: 'not enough credits', credits: u.credits, cost: b.price });
+  u.credits -= b.price;
+  for (const id of toAdd) u.purchased.push(id);
+  saveUsers();
+  res.json({ ok: true, bundleId, price: b.price, added: toAdd, credits: u.credits, purchased: u.purchased });
+});
+
+app.get('/shop/bundles', (req, res) => res.json({ bundles: BUNDLES }));
 
 // ── Admin item unlock codes (one code per item) ────────────────────────────
 const UNLOCK_CODES = {
