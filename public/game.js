@@ -5620,7 +5620,7 @@ function switchWeapon(idx) {
   supportModels.forEach(m => m.visible = false);
   weaponModels[currentWeaponIdx].visible = false;
   currentWeaponIdx = idx;
-  currentWeapon = WEAPONS[idx];
+  currentWeapon = applyUpgrades(WEAPONS[idx]);
   weaponModels[idx].visible = true;
   ammo    = weaponAmmo[idx].ammo;
   reserve = weaponAmmo[idx].reserve;
@@ -5650,8 +5650,9 @@ function resetCombatResources() {
     weaponAmmo[selectedPrimaryIdx] = { ammo: 5000, reserve: 0 };
     weaponAmmo[selectedSecondaryIdx] = { ammo: 30, reserve: 999999 };
   } else {
-    const pw = WEAPONS[selectedPrimaryIdx], sw = WEAPONS[selectedSecondaryIdx];
-    weaponAmmo[selectedPrimaryIdx] = { ammo: pw.mag, reserve: pw.reserve };
+    const pw = applyUpgrades(WEAPONS[selectedPrimaryIdx]);
+    const sw = applyUpgrades(WEAPONS[selectedSecondaryIdx]);
+    weaponAmmo[selectedPrimaryIdx]   = { ammo: pw.mag, reserve: pw.reserve };
     weaponAmmo[selectedSecondaryIdx] = { ammo: sw.mag, reserve: sw.reserve };
   }
   supportUses[selectedSupportIdx] = SUPPORT_ITEMS[selectedSupportIdx].uses;
@@ -5728,13 +5729,13 @@ function equipActiveSlot() {
 
   if (activeSlot === 'primary') {
     currentWeaponIdx = selectedPrimaryIdx;
-    currentWeapon = WEAPONS[selectedPrimaryIdx];
+    currentWeapon = applyUpgrades(WEAPONS[selectedPrimaryIdx]);
     weaponModels[selectedPrimaryIdx].visible = true;
     ammo = weaponAmmo[selectedPrimaryIdx].ammo;
     reserve = weaponAmmo[selectedPrimaryIdx].reserve;
   } else if (activeSlot === 'secondary') {
     currentWeaponIdx = selectedSecondaryIdx;
-    currentWeapon = WEAPONS[selectedSecondaryIdx];
+    currentWeapon = applyUpgrades(WEAPONS[selectedSecondaryIdx]);
     weaponModels[selectedSecondaryIdx].visible = true;
     ammo = weaponAmmo[selectedSecondaryIdx].ammo;
     reserve = weaponAmmo[selectedSecondaryIdx].reserve;
@@ -12269,18 +12270,25 @@ function renderShop() {
   const scr = document.getElementById('shop-screen');
   if (!scr || !currentUser) return;
   const credits = currentUser.isAdmin ? '∞' : (currentUser.credits ?? 0);
+  const frags   = currentUser.isAdmin ? '∞' : (currentUser.fragments ?? 0);
+  const ch = currentUser.chests || { common: 0, rare: 0 };
   const tabs = [
     ['bundles',   '💼 BUNDLES'],
     ['primary',   '🔫 PRIMARY'],
     ['secondary', '🔫 SECONDARY'],
     ['melee',     '⚔️ MELEE'],
     ['utility',   '🧰 UTILITY'],
+    ['chests',    '📦 CHESTS'],
+    ['wheel',     '🎡 WHEEL'],
+    ['upgrade',   '✨ UPGRADES'],
   ];
   scr.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #444;padding-bottom:10px;margin-bottom:14px;">
       <div style="font-size:22px;letter-spacing:6px;color:#aaccff;">🛒 WEAPON SHOP</div>
       <div style="display:flex;gap:14px;align-items:center;">
-        <span style="font-size:14px;color:#ffdd55;">💰 ${credits} credits</span>
+        <span style="font-size:13px;color:#ffdd55;">💰 ${credits}</span>
+        <span style="font-size:13px;color:#aaccff;">🧩 ${frags}</span>
+        <span style="font-size:13px;color:#ddccff;">📦 ${ch.common}/${ch.rare}</span>
         <button id="shop-close" style="padding:6px 14px;background:#3a1a1a;color:#ff8888;border:1px solid #ff4444;cursor:pointer;font-family:inherit;font-size:11px;letter-spacing:2px;border-radius:4px;">✕ CLOSE</button>
       </div>
     </div>
@@ -12298,8 +12306,124 @@ function renderShop() {
   }
   scr.querySelector('#shop-close').addEventListener('click', closeShop);
   const body = scr.querySelector('#shop-body');
-  if (shopTab === 'bundles') renderShopBundles(body);
-  else renderShopItems(body, shopTab);
+  if (shopTab === 'bundles')      renderShopBundles(body);
+  else if (shopTab === 'chests')  renderShopChests(body);
+  else if (shopTab === 'wheel')   renderShopWheel(body);
+  else if (shopTab === 'upgrade') renderShopUpgrades(body);
+  else                            renderShopItems(body, shopTab);
+}
+
+function renderShopChests(body) {
+  const ch = currentUser.chests || { common: 0, rare: 0 };
+  body.innerHTML = `
+    <div style="width:100%;font-size:11px;color:#aaa;margin-bottom:14px;letter-spacing:1px;">
+      Open chests to get 🧩 weapon fragments + 💰 credits.
+      Use 100 fragments to unlock any weapon, or upgrade ones you own.
+      Earn chests by playing matches (chance per match), or buy them here.
+    </div>
+  `;
+  for (const type of ['common', 'rare']) {
+    const have = ch[type] || 0;
+    const cost = CHEST_PRICES_CLIENT[type];
+    const isRare = type === 'rare';
+    const card = document.createElement('div');
+    card.style.cssText = `min-width:240px;background:#0f1018;border:2px solid ${isRare ? '#aa66ff' : '#888'};border-radius:6px;padding:14px;margin-right:10px;`;
+    card.innerHTML = `
+      <div style="font-size:22px;font-weight:bold;color:${isRare ? '#cc99ff' : '#ccc'};">${isRare ? '🟣 RARE' : '📦 COMMON'} CHEST</div>
+      <div style="font-size:11px;color:#aaa;margin:6px 0 10px;line-height:1.5;">
+        ${isRare ? '35-80 frags · 30-100 credits · 5% chance of a free weapon' : '10-25 frags · 0-30 credits'}
+      </div>
+      <div style="font-size:13px;margin-bottom:10px;">You have: <b style="color:${isRare ? '#cc99ff' : '#ccc'};">${have}</b></div>
+      <div style="display:flex;gap:6px;">
+        <button class="open" ${have <= 0 ? 'disabled' : ''} style="flex:1;padding:8px;background:${have > 0 ? '#1a2a1a' : '#222'};color:${have > 0 ? '#88ff99' : '#555'};border:1px solid ${have > 0 ? '#88ff99' : '#444'};font-size:12px;cursor:${have > 0 ? 'pointer' : 'not-allowed'};border-radius:4px;font-family:inherit;">OPEN</button>
+        <button class="buy" style="flex:1;padding:8px;background:#1a1a2a;color:#aabbff;border:1px solid #6688cc;font-size:12px;cursor:pointer;border-radius:4px;font-family:inherit;">BUY ${cost}💰</button>
+      </div>
+    `;
+    const o = card.querySelector('.open');
+    const b = card.querySelector('.buy');
+    o.addEventListener('click', async () => { if (await openChest(type)) renderShop(); });
+    b.addEventListener('click', async () => { if (await buyChest(type)) renderShop(); });
+    body.appendChild(card);
+  }
+}
+
+function renderShopWheel(body) {
+  body.innerHTML = `
+    <div style="width:100%;font-size:11px;color:#aaa;margin-bottom:14px;letter-spacing:1px;">
+      🎡 Spin the wheel for credits, fragments, or — if you're VERY lucky (0.3%) — a free rare weapon.
+      1 free spin per day; extra spins cost 100 credits.
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:center;width:100%;">
+      <div id="wheel-visual" style="width:280px;height:280px;border-radius:50%;border:8px solid #ffdd55;background:conic-gradient(#ffdd55 0deg 162deg,#aaccff 162deg 288deg,#88ff99 288deg 338deg,#ff8866 338deg 358deg,#cc99ff 358deg 360deg);display:flex;align-items:center;justify-content:center;font-size:60px;transition:transform 4s cubic-bezier(0.2,0.85,0.2,1);">🎡</div>
+      <div id="wheel-result" style="margin-top:18px;font-size:18px;letter-spacing:2px;color:#ffdd55;min-height:30px;text-align:center;"></div>
+      <button id="wheel-spin" style="margin-top:16px;padding:12px 40px;background:#3a2a1a;color:#ffdd55;border:2px solid #ffdd55;font-size:16px;letter-spacing:3px;cursor:pointer;border-radius:6px;font-family:inherit;">
+        ${currentUser.freeSpinAvailable || currentUser.isAdmin ? '🎁 FREE SPIN' : 'SPIN · 100💰'}
+      </button>
+    </div>
+  `;
+  const wheel = body.querySelector('#wheel-visual');
+  const out = body.querySelector('#wheel-result');
+  let rot = 0;
+  body.querySelector('#wheel-spin').addEventListener('click', async () => {
+    out.textContent = 'Spinning…';
+    rot += 360 * 5 + Math.random() * 360;
+    wheel.style.transform = `rotate(${rot}deg)`;
+    const res = await spinWheel();
+    setTimeout(() => {
+      if (!res) { out.textContent = '— spin failed —'; return; }
+      const lines = [];
+      if (res.kind === 'jackpot' && res.weapon) lines.push(`✨ JACKPOT! Unlocked: ${res.weapon}`);
+      else if (res.kind === 'bigBundle')         lines.push(`💎 BIG BUNDLE: +${res.credits || 0}💰 · +${res.fragments || 0}🧩`);
+      else if (res.kind === 'smallRare')         lines.push(`✨ RARE: ${res.credits ? `+${res.credits}💰` : `+${res.fragments}🧩`}`);
+      else if (res.kind === 'bigFragments')      lines.push(`🧩 +${res.fragments} fragments!`);
+      else if (res.kind === 'fragments')         lines.push(`🧩 +${res.fragments} fragments`);
+      else if (res.kind === 'credits')           lines.push(`💰 +${res.credits} credits`);
+      out.innerHTML = lines.join('<br/>');
+      // Re-render so the spin button updates (free → paid)
+      setTimeout(renderShop, 2200);
+    }, 4000);
+  });
+}
+
+function renderShopUpgrades(body) {
+  body.innerHTML = `
+    <div style="width:100%;font-size:11px;color:#aaa;margin-bottom:14px;letter-spacing:1px;">
+      ✨ Spend fragments to upgrade weapons you own. 3 upgrade slots per weapon — pick a stat each level.
+      Costs: 30 / 60 / 120 fragments. Effects: +12% damage, +25% magazine, or -15% reload time.
+    </div>
+  `;
+  const owned = [...FREE_WEAPONS, ...(currentUser.purchased || [])];
+  const uniq  = [...new Set(owned)];
+  for (const id of uniq) {
+    const w = WEAPONS.find(x => x.id === id) || MELEE_ITEMS.find(x => x.id === id) || SUPPORT_ITEMS.find(x => x.id === id);
+    if (!w) continue;
+    // Only primary/secondary upgrades affect gameplay right now — filter to slot-bearing items
+    if (w.slot !== 'primary' && w.slot !== 'secondary') continue;
+    const up = getWeaponUpgrades(id);
+    const total = totalUpgradeLevels(id);
+    const nextCost = total < MAX_UPGRADE_LEVELS ? UPGRADE_COSTS_CLIENT[total] : null;
+    const card = document.createElement('div');
+    card.style.cssText = 'min-width:230px;max-width:260px;background:#0f1018;border:1px solid #444;border-radius:5px;padding:10px 12px;';
+    card.innerHTML = `
+      <div style="font-size:13px;font-weight:bold;color:#ddd;">${w.name}</div>
+      <div style="font-size:9px;color:#888;margin:2px 0 6px;">${w.type}</div>
+      <div style="font-size:10px;color:#aaccff;margin-bottom:6px;">
+        DMG +${up.damage}/3 · MAG +${up.mag}/3 · RLD +${up.reload}/3 · TOTAL ${total}/${MAX_UPGRADE_LEVELS}
+      </div>
+      ${total >= MAX_UPGRADE_LEVELS ? '<div style="text-align:center;color:#88ff99;font-size:11px;">✓ MAXED</div>' : `
+        <div style="font-size:10px;color:#bbb;margin-bottom:6px;">Next upgrade cost: ${nextCost}🧩</div>
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <button data-stat="damage" style="padding:5px;background:#2a1a1a;color:#ff8866;border:1px solid #cc6644;font-size:10px;cursor:pointer;border-radius:3px;font-family:inherit;">+12% DAMAGE</button>
+          <button data-stat="mag"    style="padding:5px;background:#1a2a1a;color:#88ff99;border:1px solid #44aa66;font-size:10px;cursor:pointer;border-radius:3px;font-family:inherit;">+25% MAGAZINE</button>
+          <button data-stat="reload" style="padding:5px;background:#1a1a2a;color:#aaccff;border:1px solid #6699cc;font-size:10px;cursor:pointer;border-radius:3px;font-family:inherit;">-15% RELOAD TIME</button>
+        </div>
+      `}
+    `;
+    card.querySelectorAll('[data-stat]').forEach(btn => {
+      btn.addEventListener('click', async () => { if (await upgradeWeapon(id, btn.dataset.stat)) renderShop(); });
+    });
+    body.appendChild(card);
+  }
 }
 
 function renderShopBundles(body) {
@@ -12359,16 +12483,21 @@ function renderShopItems(body, slot) {
       <div style="font-size:10px;color:#bbb;margin-bottom:8px;">${descFn(item)}</div>
       ${owned
         ? `<div style="text-align:center;color:#88ff99;font-size:11px;">${FREE_WEAPONS.has(id) ? 'FREE' : '✓ OWNED'}</div>`
-        : `<div style="display:flex;gap:4px;">
-             <button class="sbuy"   style="flex:1;padding:5px;background:#1a2a1a;color:#88ff99;border:1px solid #88ff99;font-size:10px;cursor:pointer;border-radius:3px;font-family:inherit;">BUY ${cost}💰</button>
-             <button class="strial" style="flex:1;padding:5px;background:#1a1a2a;color:#aabbff;border:1px solid #6688cc;font-size:10px;cursor:pointer;border-radius:3px;font-family:inherit;">TRIAL ${shopTrialCost(id)}💰</button>
+        : `<div style="display:flex;flex-direction:column;gap:4px;">
+             <div style="display:flex;gap:4px;">
+               <button class="sbuy"   style="flex:1;padding:5px;background:#1a2a1a;color:#88ff99;border:1px solid #88ff99;font-size:10px;cursor:pointer;border-radius:3px;font-family:inherit;">BUY ${cost}💰</button>
+               <button class="strial" style="flex:1;padding:5px;background:#1a1a2a;color:#aabbff;border:1px solid #6688cc;font-size:10px;cursor:pointer;border-radius:3px;font-family:inherit;">TRIAL ${shopTrialCost(id)}💰</button>
+             </div>
+             <button class="sfrag" style="padding:4px;background:#1a1a2a;color:#aaccff;border:1px solid #6677aa;font-size:9px;cursor:pointer;border-radius:3px;font-family:inherit;">UNLOCK · 100🧩</button>
            </div>`
       }
     `;
     const b = card.querySelector('.sbuy');
     const t = card.querySelector('.strial');
+    const f = card.querySelector('.sfrag');
     if (b) b.addEventListener('click', async () => { if (await buyWeapon(id)) renderShop(); });
     if (t) t.addEventListener('click', async () => { if (await trialWeapon(id)) renderShop(); });
+    if (f) f.addEventListener('click', async () => { if (await unlockWithFragments(id)) renderShop(); });
     body.appendChild(card);
   }
 }
@@ -12723,7 +12852,7 @@ const adminCheats = {
       // Silently try to log in — populate currentUser if successful
       authRequest('/auth/login', saved).then(r => {
         if (r && r.ok) {
-          currentUser = { username: r.username, password: saved.password, unlocks: r.unlocks || [], purchased: r.purchased || [], credits: r.credits ?? 0, isAdmin: !!r.isAdmin };
+          currentUser = { username: r.username, password: saved.password, unlocks: r.unlocks || [], purchased: r.purchased || [], credits: r.credits ?? 0, fragments: r.fragments ?? 0, chests: r.chests || { common: 0, rare: 0 }, upgrades: r.upgrades || {}, freeSpinAvailable: !!r.freeSpinAvailable, isAdmin: !!r.isAdmin };
           const wb = document.getElementById('welcome-back');
           if (wb) {
             wb.textContent = r.isAdmin
@@ -12779,7 +12908,7 @@ async function startGame() {
     return;
   }
 
-  currentUser = { username: result.username, password: pass, unlocks: result.unlocks || [], purchased: result.purchased || [], credits: result.credits ?? 0, isAdmin: !!result.isAdmin };
+  currentUser = { username: result.username, password: pass, unlocks: result.unlocks || [], purchased: result.purchased || [], credits: result.credits ?? 0, fragments: result.fragments ?? 0, chests: result.chests || { common: 0, rare: 0 }, upgrades: result.upgrades || {}, freeSpinAvailable: !!result.freeSpinAvailable, isAdmin: !!result.isAdmin };
   localStorage.setItem('pvp_user', JSON.stringify({ username: name, password: pass }));
   setAuthStatus(result.isAdmin ? `🔓 ADMIN ACCESS GRANTED · ${result.username}` : `Logged in as ${result.username}`, result.isAdmin ? '#ff4444' : '#88ff88');
 
@@ -12877,15 +13006,111 @@ async function awardMatchCredits(kills, won) {
     const r = await authRequest('/shop/award', { username: currentUser.username, password: currentUser.password, kills, won: !!won });
     if (r && r.ok) {
       currentUser.credits = r.credits ?? currentUser.credits;
+      if (r.chests) currentUser.chests = r.chests;
+      let msg = `💰 +${r.awarded} credits earned`;
+      if (r.chestDrops?.common) msg += ' · 📦 +1 Common';
+      if (r.chestDrops?.rare)   msg += ' · 🟣 +1 Rare';
       updateUserInfoBar();
-      // brief on-screen toast
       const t = document.createElement('div');
-      t.textContent = `💰 +${r.awarded} credits earned`;
+      t.textContent = msg;
       t.style.cssText = 'position:fixed;top:80px;right:20px;background:#1a1a0a;border:2px solid #ffdd55;color:#ffdd55;padding:10px 18px;font-family:"Courier New",monospace;font-size:14px;letter-spacing:2px;z-index:9999;border-radius:4px;';
       document.body.appendChild(t);
-      setTimeout(() => t.remove(), 3500);
+      setTimeout(() => t.remove(), 4500);
     }
   } catch (e) {}
+}
+
+// ── 📦 Chest, 🧩 fragment, ✨ upgrade, 🎡 wheel actions ────────────────
+const CHEST_PRICES_CLIENT = { common: 120, rare: 400 };
+const FRAGMENT_UNLOCK_COST = 100;
+const UPGRADE_COSTS_CLIENT = [30, 60, 120];
+const MAX_UPGRADE_LEVELS = 3;
+const UPGRADE_STAT_LABELS = { damage: '+12% Damage', mag: '+25% Magazine', reload: '-15% Reload Time' };
+
+async function buyChest(type) {
+  if (!currentUser) return false;
+  const cost = CHEST_PRICES_CLIENT[type];
+  if (!cost) return false;
+  if (!confirm(`Buy a ${type.toUpperCase()} chest for ${cost} credits?`)) return false;
+  const r = await authRequest('/shop/buy-chest', { username: currentUser.username, password: currentUser.password, type });
+  if (!r || r.error) { alert('❌ ' + (r?.error || 'shop error')); return false; }
+  currentUser.credits = r.credits;
+  currentUser.chests = r.chests;
+  updateUserInfoBar();
+  return true;
+}
+async function openChest(type) {
+  if (!currentUser) return false;
+  if ((currentUser.chests?.[type] || 0) <= 0) { alert(`You don't have any ${type} chests.`); return false; }
+  const r = await authRequest('/shop/open-chest', { username: currentUser.username, password: currentUser.password, type });
+  if (!r || r.error) { alert('❌ ' + (r?.error || 'shop error')); return false; }
+  currentUser.credits = r.credits;
+  currentUser.fragments = r.fragments;
+  currentUser.chests = r.chests;
+  currentUser.purchased = r.purchased || currentUser.purchased;
+  updateUserInfoBar();
+  const lines = [`📦 ${type.toUpperCase()} CHEST OPENED`];
+  if (r.drops.fragments) lines.push(`🧩 +${r.drops.fragments} fragments`);
+  if (r.drops.credits)   lines.push(`💰 +${r.drops.credits} credits`);
+  if (r.drops.weapon)    lines.push(`✨ NEW WEAPON: ${r.drops.weapon}!`);
+  alert(lines.join('\n'));
+  return true;
+}
+async function unlockWithFragments(weaponId) {
+  if (!currentUser) return false;
+  if ((currentUser.fragments || 0) < FRAGMENT_UNLOCK_COST) { alert(`Need ${FRAGMENT_UNLOCK_COST} fragments · You have ${currentUser.fragments || 0}`); return false; }
+  if (!confirm(`Unlock "${weaponId}" for ${FRAGMENT_UNLOCK_COST} fragments?`)) return false;
+  const r = await authRequest('/shop/unlock-fragments', { username: currentUser.username, password: currentUser.password, weaponId });
+  if (!r || r.error) { alert('❌ ' + (r?.error || 'shop error')); return false; }
+  currentUser.fragments = r.fragments;
+  currentUser.purchased = r.purchased || currentUser.purchased;
+  updateUserInfoBar();
+  return true;
+}
+function getWeaponUpgrades(weaponId) {
+  return currentUser?.upgrades?.[weaponId] || { damage: 0, mag: 0, reload: 0 };
+}
+function totalUpgradeLevels(weaponId) {
+  const u = getWeaponUpgrades(weaponId);
+  return (u.damage || 0) + (u.mag || 0) + (u.reload || 0);
+}
+async function upgradeWeapon(weaponId, stat) {
+  if (!currentUser) return false;
+  const total = totalUpgradeLevels(weaponId);
+  if (total >= MAX_UPGRADE_LEVELS) { alert('Max upgrades reached for this weapon.'); return false; }
+  const cost = UPGRADE_COSTS_CLIENT[total];
+  if ((currentUser.fragments || 0) < cost) { alert(`Need ${cost} fragments · You have ${currentUser.fragments || 0}`); return false; }
+  const r = await authRequest('/shop/upgrade-weapon', { username: currentUser.username, password: currentUser.password, weaponId, stat });
+  if (!r || r.error) { alert('❌ ' + (r?.error || 'shop error')); return false; }
+  currentUser.fragments = r.fragments;
+  currentUser.upgrades = r.upgrades || currentUser.upgrades;
+  updateUserInfoBar();
+  return true;
+}
+async function spinWheel() {
+  if (!currentUser) return null;
+  const r = await authRequest('/shop/spin-wheel', { username: currentUser.username, password: currentUser.password });
+  if (!r || r.error) { alert('❌ ' + (r?.error || 'wheel error')); return null; }
+  currentUser.credits = r.result.credits_balance ?? currentUser.credits;
+  currentUser.fragments = r.result.fragments_balance ?? currentUser.fragments;
+  currentUser.purchased = r.result.purchased || currentUser.purchased;
+  currentUser.freeSpinAvailable = false;
+  updateUserInfoBar();
+  return r.result;
+}
+
+// Apply weapon upgrades to a base weapon definition for the current user.
+// Returns a shallow-cloned object with scaled damage/mag/reloadTime.
+function applyUpgrades(w) {
+  if (!w || !currentUser || !currentUser.upgrades) return w;
+  const up = currentUser.upgrades[w.id];
+  if (!up) return w;
+  const clone = { ...w };
+  if (up.damage) clone.damage = Math.round((w.damage || 0) * (1 + 0.12 * up.damage));
+  if (up.mag)    clone.mag    = Math.round((w.mag    || 0) * (1 + 0.25 * up.mag));
+  if (up.reload) clone.reloadTime = Math.round((w.reloadTime || 0) * Math.pow(0.85, up.reload));
+  clone._upgraded = true;
+  return clone;
 }
 
 function selectMode(modeId) {
@@ -12968,9 +13193,10 @@ function updateUserInfoBar() {
   if (nameEl) nameEl.style.color = currentUser.isAdmin ? '#ff4444' : '#88ccff';
   if (unlocksEl) {
     const n = currentUser.unlocks?.length || 0;
-    const credits = currentUser.isAdmin ? '∞' : (currentUser.credits ?? 0);
-    const owned = (currentUser.purchased?.length || 0);
-    unlocksEl.innerHTML = `💰 <b style="color:#ffdd55">${credits}</b> credits · 🛒 ${owned} bought · 🪖 ${n}/24 admin`;
+    const credits  = currentUser.isAdmin ? '∞' : (currentUser.credits ?? 0);
+    const frags    = currentUser.isAdmin ? '∞' : (currentUser.fragments ?? 0);
+    const ch = currentUser.chests || { common: 0, rare: 0 };
+    unlocksEl.innerHTML = `💰 <b style="color:#ffdd55">${credits}</b> · 🧩 <b style="color:#aaccff">${frags}</b> frags · 📦 ${ch.common}c/${ch.rare}r · 🪖 ${n}/24`;
   }
   // Show admin panel button if admin
   let adminBtn = document.getElementById('admin-panel-btn');

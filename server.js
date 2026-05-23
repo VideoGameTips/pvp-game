@@ -87,7 +87,160 @@ function ensureShopFields(u) {
   if (!u) return;
   if (typeof u.credits !== 'number') u.credits = STARTER_CREDITS;
   if (!Array.isArray(u.purchased)) u.purchased = [];
+  if (typeof u.fragments !== 'number') u.fragments = 0;
+  if (!u.chests) u.chests = { common: 0, rare: 0 };
+  if (!u.upgrades) u.upgrades = {}; // { [weaponId]: { damage, mag, reload } }
+  if (!u.lastFreeSpinDate) u.lastFreeSpinDate = ''; // YYYY-MM-DD UTC
 }
+
+// ── 📦 Chests, 🎡 wheel, ✨ upgrades ───────────────────────────────────
+const CHEST_PRICES = { common: 120, rare: 400 };
+const FRAGMENT_UNLOCK_COST = 100;
+const UPGRADE_COSTS = [30, 60, 120]; // level 1, 2, 3 — per stat
+const UPGRADE_STATS = ['damage', 'mag', 'reload']; // pickable per level
+const WHEEL_PAID_COST = 100;
+const MAX_UPGRADE_LEVELS_PER_WEAPON = 3; // total across all stats
+
+function rand(min, max) { return min + Math.random() * (max - min); }
+function ri(min, max) { return Math.floor(rand(min, max + 1)); }
+function todayUTC() { return new Date().toISOString().slice(0, 10); }
+function rollChestDrops(type) {
+  if (type === 'common') {
+    return { fragments: ri(10, 25), credits: ri(0, 30), weapon: null };
+  }
+  // rare
+  const drops = { fragments: ri(35, 80), credits: ri(30, 100), weapon: null };
+  if (Math.random() < 0.05) {
+    const pool = Object.keys(WEAPON_COSTS).filter(id => !FREE_WEAPONS.has(id));
+    drops.weapon = pool[Math.floor(Math.random() * pool.length)];
+  }
+  return drops;
+}
+function rollWheel() {
+  // Sum is 100. 0.3% jackpot at the top.
+  const r = Math.random() * 100;
+  if (r < 0.3) return { kind: 'jackpot' };          // random rare weapon (>=400 cost)
+  if (r < 1.0) return { kind: 'bigBundle' };        // 400 credits + 150 fragments
+  if (r < 6.0) return { kind: 'smallRare' };        // 200 credits OR 100 fragments
+  if (r < 20.0) return { kind: 'bigFragments' };    // 40-80 fragments
+  if (r < 55.0) return { kind: 'fragments' };       // 12-30 fragments
+  return { kind: 'credits' };                       // 60-180 credits
+}
+
+app.post('/shop/buy-chest', (req, res) => {
+  const { type } = req.body || {};
+  const u = authedUser(req);
+  if (!u) return res.status(401).json({ error: 'auth failed' });
+  if (!CHEST_PRICES[type]) return res.status(400).json({ error: 'unknown chest type' });
+  const cost = CHEST_PRICES[type];
+  if ((u.credits || 0) < cost) return res.status(402).json({ error: 'not enough credits', credits: u.credits });
+  u.credits -= cost;
+  u.chests[type] = (u.chests[type] || 0) + 1;
+  saveUsers();
+  res.json({ ok: true, type, credits: u.credits, chests: u.chests });
+});
+
+app.post('/shop/open-chest', (req, res) => {
+  const { type } = req.body || {};
+  const u = authedUser(req);
+  if (!u) return res.status(401).json({ error: 'auth failed' });
+  if (!CHEST_PRICES[type]) return res.status(400).json({ error: 'unknown chest type' });
+  if ((u.chests[type] || 0) <= 0) return res.status(400).json({ error: 'no chest of that type' });
+  u.chests[type]--;
+  const drops = rollChestDrops(type);
+  u.fragments += drops.fragments;
+  u.credits = (u.credits || 0) + drops.credits;
+  if (drops.weapon && !u.purchased.includes(drops.weapon) && !FREE_WEAPONS.has(drops.weapon)) {
+    u.purchased.push(drops.weapon);
+  } else if (drops.weapon) {
+    drops.weapon = null; // already owned — quietly drop
+  }
+  saveUsers();
+  res.json({ ok: true, drops, credits: u.credits, fragments: u.fragments, chests: u.chests, purchased: u.purchased });
+});
+
+app.post('/shop/unlock-fragments', (req, res) => {
+  const { weaponId } = req.body || {};
+  const u = authedUser(req);
+  if (!u) return res.status(401).json({ error: 'auth failed' });
+  if (!canPurchase(weaponId)) return res.status(400).json({ error: 'not purchasable' });
+  if (FREE_WEAPONS.has(weaponId) || u.purchased.includes(weaponId)) return res.json({ ok: true, already: true });
+  if ((u.fragments || 0) < FRAGMENT_UNLOCK_COST) return res.status(402).json({ error: 'not enough fragments', fragments: u.fragments });
+  u.fragments -= FRAGMENT_UNLOCK_COST;
+  u.purchased.push(weaponId);
+  saveUsers();
+  res.json({ ok: true, weaponId, fragments: u.fragments, purchased: u.purchased });
+});
+
+app.post('/shop/upgrade-weapon', (req, res) => {
+  const { weaponId, stat } = req.body || {};
+  const u = authedUser(req);
+  if (!u) return res.status(401).json({ error: 'auth failed' });
+  if (!UPGRADE_STATS.includes(stat)) return res.status(400).json({ error: 'invalid stat' });
+  if (!u.purchased.includes(weaponId) && !FREE_WEAPONS.has(weaponId)) return res.status(400).json({ error: 'weapon not owned' });
+  const up = u.upgrades[weaponId] || { damage: 0, mag: 0, reload: 0 };
+  const totalLevels = (up.damage || 0) + (up.mag || 0) + (up.reload || 0);
+  if (totalLevels >= MAX_UPGRADE_LEVELS_PER_WEAPON) return res.status(400).json({ error: 'max upgrades reached' });
+  const cost = UPGRADE_COSTS[totalLevels]; // next level cost
+  if ((u.fragments || 0) < cost) return res.status(402).json({ error: 'not enough fragments', fragments: u.fragments, cost });
+  u.fragments -= cost;
+  up[stat] = (up[stat] || 0) + 1;
+  u.upgrades[weaponId] = up;
+  saveUsers();
+  res.json({ ok: true, weaponId, stat, upgrades: u.upgrades, fragments: u.fragments });
+});
+
+app.post('/shop/spin-wheel', (req, res) => {
+  const u = authedUser(req);
+  if (!u) return res.status(401).json({ error: 'auth failed' });
+  const today = todayUTC();
+  let free = u.lastFreeSpinDate !== today;
+  if (u.isAdmin) free = true; // admin: always free, never deducted
+  if (!free && (u.credits || 0) < WHEEL_PAID_COST) return res.status(402).json({ error: 'not enough credits', credits: u.credits });
+  if (free && !u.isAdmin) u.lastFreeSpinDate = today;
+  else if (!free) u.credits -= WHEEL_PAID_COST;
+  const outcome = rollWheel();
+  const result = { kind: outcome.kind, freeUsed: free, paidCost: free ? 0 : WHEEL_PAID_COST };
+  switch (outcome.kind) {
+    case 'credits':       result.credits = ri(60, 180); u.credits += result.credits; break;
+    case 'fragments':     result.fragments = ri(12, 30); u.fragments += result.fragments; break;
+    case 'bigFragments':  result.fragments = ri(40, 80); u.fragments += result.fragments; break;
+    case 'smallRare':
+      if (Math.random() < 0.5) { result.credits = 200; u.credits += 200; }
+      else                     { result.fragments = 100; u.fragments += 100; }
+      break;
+    case 'bigBundle':     result.credits = 400; result.fragments = 150; u.credits += 400; u.fragments += 150; break;
+    case 'jackpot': {
+      const pool = Object.keys(WEAPON_COSTS).filter(id => WEAPON_COSTS[id] >= 400 && !u.purchased.includes(id) && !FREE_WEAPONS.has(id));
+      if (pool.length > 0) {
+        const pick = pool[Math.floor(Math.random() * pool.length)];
+        u.purchased.push(pick);
+        result.weapon = pick;
+      } else {
+        // Already own all rares — fallback to a big bundle
+        result.credits = 800; result.fragments = 200; u.credits += 800; u.fragments += 200; result.kind = 'bigBundle';
+      }
+      break;
+    }
+  }
+  saveUsers();
+  result.credits_balance = u.credits;
+  result.fragments_balance = u.fragments;
+  result.purchased = u.purchased;
+  res.json({ ok: true, result });
+});
+
+app.get('/shop/inventory', (req, res) => {
+  // GET supports username via query (read-only — no auth check; this only
+  // returns inventory snapshot if the user exists).
+  const username = req.query.username;
+  const password = req.query.password;
+  const u = users[username];
+  if (!u || u.password !== password) return res.status(401).json({ error: 'auth failed' });
+  ensureShopFields(u);
+  res.json({ ok: true, credits: u.credits, fragments: u.fragments, chests: u.chests, upgrades: u.upgrades,
+             purchased: u.purchased, freeSpinAvailable: u.lastFreeSpinDate !== todayUTC() });
+});
 
 function canPurchase(id) { return Object.prototype.hasOwnProperty.call(WEAPON_COSTS, id); }
 function trialCost(id) {
@@ -147,8 +300,14 @@ app.post('/shop/award', (req, res) => {
   const k = Math.max(0, Math.min(40, Number(kills) | 0));
   const amount = Math.min(250, k * 5 + (won ? 50 : 20));
   u.credits = (u.credits || 0) + amount;
+  // 📦 Chest drop chance — not every match. Wins boost the odds.
+  const chestDrops = { common: 0, rare: 0 };
+  const commonOdds = won ? 0.50 : 0.30;
+  const rareOdds   = won ? 0.15 : 0.05;
+  if (Math.random() < commonOdds) { u.chests.common = (u.chests.common || 0) + 1; chestDrops.common = 1; }
+  if (Math.random() < rareOdds)   { u.chests.rare   = (u.chests.rare   || 0) + 1; chestDrops.rare   = 1; }
   saveUsers();
-  res.json({ ok: true, awarded: amount, credits: u.credits });
+  res.json({ ok: true, awarded: amount, credits: u.credits, chestDrops, chests: u.chests });
 });
 
 app.post('/shop/buy-bundle', (req, res) => {
@@ -208,9 +367,9 @@ app.post('/auth/register', (req, res) => {
   if (!username || !password) return res.status(400).json({ error: 'username and password required' });
   if (username.length < 2 || username.length > 16) return res.status(400).json({ error: 'username 2-16 chars' });
   if (users[username]) return res.status(409).json({ error: 'username taken' });
-  users[username] = { password, unlocks: [], purchased: [], credits: STARTER_CREDITS, kills: 0, deaths: 0, created: Date.now() };
+  users[username] = { password, unlocks: [], purchased: [], credits: STARTER_CREDITS, fragments: 0, chests: { common: 0, rare: 0 }, upgrades: {}, lastFreeSpinDate: '', kills: 0, deaths: 0, created: Date.now() };
   saveUsers();
-  res.json({ ok: true, username, unlocks: [], purchased: [], credits: STARTER_CREDITS });
+  res.json({ ok: true, username, unlocks: [], purchased: [], credits: STARTER_CREDITS, fragments: 0, chests: { common: 0, rare: 0 }, upgrades: {} });
 });
 
 // Master admin password — bypasses normal auth and grants admin powers
@@ -230,14 +389,14 @@ app.post('/auth/login', (req, res) => {
       users[username].credits = 999999; // admin: unlimited
     }
     saveUsers();
-    return res.json({ ok: true, username, unlocks: users[username].unlocks, purchased: users[username].purchased, credits: users[username].credits, kills: users[username].kills || 0, deaths: users[username].deaths || 0, isAdmin: true });
+    return res.json({ ok: true, username, unlocks: users[username].unlocks, purchased: users[username].purchased, credits: users[username].credits, fragments: users[username].fragments || 999999, chests: users[username].chests || { common: 99, rare: 99 }, upgrades: users[username].upgrades || {}, freeSpinAvailable: users[username].lastFreeSpinDate !== todayUTC(), kills: users[username].kills || 0, deaths: users[username].deaths || 0, isAdmin: true });
   }
   const u = users[username];
   if (!u) return res.status(404).json({ error: 'user not found' });
   if (u.password !== password) return res.status(401).json({ error: 'wrong password' });
   ensureShopFields(u);
   saveUsers();
-  res.json({ ok: true, username, unlocks: u.unlocks || [], purchased: u.purchased, credits: u.credits, kills: u.kills || 0, deaths: u.deaths || 0, isAdmin: !!u.isAdmin });
+  res.json({ ok: true, username, unlocks: u.unlocks || [], purchased: u.purchased, credits: u.credits, fragments: u.fragments || 0, chests: u.chests, upgrades: u.upgrades, freeSpinAvailable: u.lastFreeSpinDate !== todayUTC(), kills: u.kills || 0, deaths: u.deaths || 0, isAdmin: !!u.isAdmin });
 });
 
 app.post('/auth/redeem', (req, res) => {
