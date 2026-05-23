@@ -165,6 +165,7 @@ function checkLobbyStart(mode) {
   // Designate the first player as host (they spawn the bots if any)
   const host = L.players[0];
   for (const p of L.players) {
+    if (players[p.socketId]) players[p.socketId].team = p.team;
     io.to(p.socketId).emit('lobbyStart', {
       mode, matchId, team: p.team, isHost: p.socketId === host?.socketId,
       allyBots, enemyBots, opponents: L.players.filter(o => o.socketId !== p.socketId).map(o => ({ socketId: o.socketId, team: o.team })),
@@ -510,12 +511,14 @@ io.on('connection', (socket) => {
     emitToMatch(p.matchId, 'playerHit', { targetId: p.id, hp: p.hp, bulletId: null });
   });
 
-  socket.on('readyRespawn', () => {
+  socket.on('readyRespawn', (data = {}) => {
     const p = players[socket.id];
     if (!p || !p.dead) return;
     const s = nextSpawn();
-    Object.assign(p, { x: s.x, y: s.y, z: s.z, hp: PLAYER_MAX_HP, dead: false });
-    emitToMatch(p.matchId, 'playerRespawned', p);
+    const x = data.x != null ? Number(data.x) : s.x;
+    const z = data.z != null ? Number(data.z) : s.z;
+    Object.assign(p, { x, y: s.y, z, hp: PLAYER_MAX_HP, dead: false });
+    emitToMatch(p.matchId, 'playerRespawned', { ...p, clientSpawn: data.x != null && data.z != null });
   });
 
   socket.on('resetSelf', (data = {}) => {

@@ -1011,6 +1011,18 @@ const SCARY_CLOSE_WEAPONS = new Set([
   // The instakill threat
   'knife', // knife has Death Touch ability
 ]);
+
+const BOT_DIFFICULTY_TUNING = {
+  easy:   { aimMin: 0.75, aimRand: 0.25, reactMin: 320, reactRand: 260, fireMin: 1200, fireRand: 650, reloadMin: 2200, reloadRand: 800, hitRunChance: 0.00, initialShotDelay: 1800 },
+  medium: { aimMin: 0.70, aimRand: 0.35, reactMin: 260, reactRand: 280, fireMin: 1050, fireRand: 650, reloadMin: 1900, reloadRand: 700, hitRunChance: 0.00, initialShotDelay: 1400 },
+  hard:   { aimMin: 1.05, aimRand: 0.45, reactMin: 120, reactRand: 180, fireMin: 760,  fireRand: 380, reloadMin: 1300, reloadRand: 450, hitRunChance: 0.20, initialShotDelay: 900 },
+  expert: { aimMin: 1.85, aimRand: 0.45, reactMin: 20,  reactRand: 70,  fireMin: 420,  fireRand: 180, reloadMin: 700,  reloadRand: 250, hitRunChance: 0.18, initialShotDelay: 350 },
+};
+
+function botTuning(diff) {
+  return BOT_DIFFICULTY_TUNING[diff] || BOT_DIFFICULTY_TUNING.medium;
+}
+
 // Returns true if the player currently has a scary close-range weapon equipped/active OR a chainsaw-tier melee selected.
 function playerHasScaryCloseWeapon() {
   if (typeof currentWeapon !== 'undefined' && currentWeapon && SCARY_CLOSE_WEAPONS.has(currentWeapon.id)) return true;
@@ -1520,6 +1532,315 @@ scene.fog = new THREE.Fog(0x87ceeb, 40, 120);
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.05, 200);
 camera.position.set(0, 1.65, 0);
 
+// Procedural weapon audio: no asset files needed, unlocked by the first player gesture.
+let audioCtx = null;
+let weaponSoundLastAt = {};
+let soundEventLastAt = {};
+function getAudioCtx() {
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (!Ctx) return null;
+  if (!audioCtx) audioCtx = new Ctx();
+  return audioCtx;
+}
+function unlockAudio() {
+  const ctx = getAudioCtx();
+  if (ctx && ctx.state === 'suspended') {
+    const resume = ctx.resume();
+    if (resume && resume.catch) resume.catch(() => {});
+  }
+}
+['pointerdown', 'keydown', 'touchstart'].forEach(evt => {
+  window.addEventListener(evt, unlockAudio, { once: true, passive: true });
+});
+function soundDistanceGain(pos, remote) {
+  if (!remote) return 1;
+  if (!pos) return 0.45;
+  const d = camera.position.distanceTo(pos);
+  return Math.max(0.05, Math.min(0.55, 1 - d / 55));
+}
+function weaponAudioProfile(id, baseWeapon) {
+  const w = baseWeapon || WEAPONS.find(x => x.id === id) || {};
+  const type = (w.type || '').toLowerCase();
+  const lowerId = String(id || w.id || '').toLowerCase();
+  if (lowerId === 'p90' || lowerId === 'p90_spec') return { kind:'auto_blast', vol:0.20, dur:0.075, f1:760, f2:240, action:'water_smg' };
+  if (lowerId === 'firework_launcher') return { kind:'firework', vol:0.36, dur:0.26, f1:130, f2:55 };
+  if (lowerId === 'arc_torrent') return { kind:'arc', vol:0.26, dur:0.11, f1:980, f2:320 };
+  if (lowerId === 'freeze_gun' || lowerId === 'frost_blaster') return { kind:'freeze', vol:0.24, dur:0.16, f1:680, f2:420 };
+  if (lowerId === 'flamethrower') return { kind:'flamethrower', vol:0.24, dur:0.18, f1:95, f2:58 };
+  if (lowerId.includes('crossbow') || lowerId.includes('bow') || lowerId.includes('harpoon')) return { kind:'twang', vol:0.34, dur:0.18, f1:420, f2:130 };
+  if (lowerId.includes('rail') || lowerId.includes('coil') || lowerId.includes('cycler') || lowerId.includes('laser')) return { kind:'energy', vol:0.32, dur:0.20, f1:920, f2:170 };
+  if (lowerId.includes('freeze') || lowerId.includes('cryo')) return { kind:'energy', vol:0.26, dur:0.22, f1:740, f2:260 };
+  if (lowerId.includes('flame') || lowerId.includes('firework')) return { kind:'flame', vol:0.22, dur:0.16, f1:120, f2:70 };
+  if (lowerId.includes('grenade') || lowerId.includes('boombow') || lowerId.includes('rocket') || lowerId.includes('flare')) return { kind:'thump', vol:0.42, dur:0.28, f1:110, f2:45, action:'single' };
+  if (lowerId.includes('paint')) return { kind:'pop', vol:0.28, dur:0.13, f1:520, f2:190 };
+  if (lowerId.includes('knife') || lowerId.includes('throwing')) return { kind:'throw', vol:0.23, dur:0.12, f1:780, f2:260 };
+  if (type.includes('shotgun') || lowerId.includes('shotgun') || lowerId.includes('sg8') || lowerId.includes('sg100') || lowerId.includes('shorty')) return { kind:'boom', vol:0.48, dur:0.22, f1:150, f2:55, action:'shotgun' };
+  if (type.includes('sniper') || type.includes('marksman') || lowerId.includes('srx') || lowerId.includes('lever')) return { kind:'crack', vol:0.44, dur:0.18, f1:680, f2:95, action:'bolt' };
+  if (type.includes('smg') || lowerId.includes('vector') || lowerId.includes('mp40')) return { kind:'auto_blast', vol:0.20, dur:0.075, f1:430, f2:160, action:'water_smg' };
+  if (type.includes('lmg') || type.includes('heavy') || lowerId.includes('minigun') || lowerId.includes('rpd')) return { kind:'auto_blast_heavy', vol:0.27, dur:0.11, f1:230, f2:80, action:'water_belt' };
+  if (type.includes('secondary') || lowerId.includes('pistol') || lowerId.includes('revolver') || lowerId.includes('hand_cannon')) return { kind:'pistol', vol:0.34, dur:0.12, f1:540, f2:120, action: lowerId.includes('revolver') ? 'revolver' : 'slide' };
+  return w.auto ? { kind:'auto_blast', vol:0.23, dur:0.080, f1:145, f2:52, action:'water_rifle' }
+                : { kind:'rifle', vol:0.38, dur:0.10, f1:145, f2:52, action:'rifle' };
+}
+function playNoise(ctx, start, dur, outNode, volume, tone = 0.5) {
+  const len = Math.max(1, Math.floor(ctx.sampleRate * dur));
+  const buffer = ctx.createBuffer(1, len, ctx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / len) * tone;
+  const src = ctx.createBufferSource();
+  const filter = ctx.createBiquadFilter();
+  const gain = ctx.createGain();
+  src.buffer = buffer;
+  filter.type = 'bandpass';
+  filter.frequency.setValueAtTime(900 + tone * 2200, start);
+  filter.Q.value = 0.7;
+  src.connect(filter).connect(gain).connect(outNode);
+  gain.gain.setValueAtTime(Math.max(0.001, volume), start);
+  gain.gain.exponentialRampToValueAtTime(0.001, start + dur);
+  src.start(start);
+  src.stop(start + dur + 0.02);
+}
+function playFilteredNoise(ctx, start, dur, outNode, volume, filterType, freq, q = 0.7, attack = 0.001) {
+  const len = Math.max(1, Math.floor(ctx.sampleRate * dur));
+  const buffer = ctx.createBuffer(1, len, ctx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < len; i++) {
+    const t = i / len;
+    data[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, 1.8);
+  }
+  const src = ctx.createBufferSource();
+  const filter = ctx.createBiquadFilter();
+  const gain = ctx.createGain();
+  src.buffer = buffer;
+  filter.type = filterType;
+  filter.frequency.setValueAtTime(freq, start);
+  filter.Q.value = q;
+  src.connect(filter).connect(gain).connect(outNode);
+  gain.gain.setValueAtTime(0.001, start);
+  gain.gain.linearRampToValueAtTime(Math.max(0.001, volume), start + attack);
+  gain.gain.exponentialRampToValueAtTime(0.001, start + dur);
+  src.start(start);
+  src.stop(start + dur + 0.02);
+}
+function playTone(ctx, start, dur, outNode, freqA, freqB, volume, type = 'square') {
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(freqA, start);
+  osc.frequency.exponentialRampToValueAtTime(Math.max(20, freqB), start + dur);
+  osc.connect(gain).connect(outNode);
+  gain.gain.setValueAtTime(Math.max(0.001, volume), start);
+  gain.gain.exponentialRampToValueAtTime(0.001, start + dur);
+  osc.start(start);
+  osc.stop(start + dur + 0.02);
+}
+function playMuzzleBlast(ctx, start, outNode, kind, volume) {
+  if (kind === 'boom') {
+    playFilteredNoise(ctx, start, 0.13, outNode, volume * 1.3, 'lowpass', 1200, 0.7);
+    playFilteredNoise(ctx, start, 0.028, outNode, volume * 1.0, 'highpass', 1800, 0.5);
+    playTone(ctx, start, 0.07, outNode, 92, 46, volume * 0.32, 'sine');
+  } else if (kind === 'crack') {
+    playFilteredNoise(ctx, start, 0.030, outNode, volume * 0.72, 'highpass', 1900, 0.45);
+    playFilteredNoise(ctx, start, 0.075, outNode, volume * 0.95, 'bandpass', 760, 0.75);
+    playTone(ctx, start, 0.075, outNode, 118, 52, volume * 0.26, 'sine');
+  } else if (kind === 'pistol') {
+    playFilteredNoise(ctx, start, 0.04, outNode, volume * 1.2, 'bandpass', 1550, 0.7);
+    playFilteredNoise(ctx, start + 0.015, 0.055, outNode, volume * 0.55, 'lowpass', 820, 0.7);
+  } else if (kind === 'auto_blast') {
+    playFilteredNoise(ctx, start, 0.075, outNode, volume * 0.70, 'bandpass', 1180, 0.28);
+    playFilteredNoise(ctx, start + 0.010, 0.110, outNode, volume * 0.92, 'lowpass', 540, 0.55);
+    playFilteredNoise(ctx, start + 0.030, 0.070, outNode, volume * 0.42, 'bandpass', 260, 0.85);
+    playTone(ctx, start, 0.070, outNode, 66, 38, volume * 0.14, 'sine');
+    playTone(ctx, start + 0.014, 0.070, outNode, 170, 118, volume * 0.075, 'triangle');
+  } else if (kind === 'auto_blast_heavy') {
+    playFilteredNoise(ctx, start, 0.085, outNode, volume * 0.62, 'bandpass', 980, 0.35);
+    playFilteredNoise(ctx, start + 0.006, 0.130, outNode, volume * 1.05, 'lowpass', 460, 0.68);
+    playFilteredNoise(ctx, start + 0.035, 0.080, outNode, volume * 0.42, 'bandpass', 230, 0.9);
+    playTone(ctx, start, 0.085, outNode, 72, 34, volume * 0.18, 'sine');
+  } else if (kind === 'tick' || kind === 'p90') {
+    playFilteredNoise(ctx, start, 0.028, outNode, volume * 1.05, 'bandpass', kind === 'p90' ? 2100 : 1600, 0.55);
+    playFilteredNoise(ctx, start + 0.012, 0.032, outNode, volume * 0.35, 'highpass', 2400, 0.4);
+  } else if (kind === 'heavy') {
+    playFilteredNoise(ctx, start, 0.05, outNode, volume * 1.15, 'bandpass', 980, 0.65);
+    playTone(ctx, start, 0.05, outNode, 120, 64, volume * 0.18, 'sine');
+  } else if (kind === 'thump') {
+    playFilteredNoise(ctx, start, 0.11, outNode, volume * 0.95, 'lowpass', 900, 0.7);
+    playTone(ctx, start, 0.11, outNode, 88, 36, volume * 0.34, 'sine');
+  } else {
+    playFilteredNoise(ctx, start, 0.030, outNode, volume * 0.52, 'bandpass', 1550, 0.45);
+    playFilteredNoise(ctx, start, 0.085, outNode, volume * 1.22, 'lowpass', 980, 0.75);
+    playFilteredNoise(ctx, start + 0.018, 0.050, outNode, volume * 0.42, 'bandpass', 430, 0.8);
+    playTone(ctx, start, 0.070, outNode, 96, 48, volume * 0.24, 'sine');
+  }
+}
+function playGunAction(ctx, start, outNode, action, volume) {
+  if (!action) return;
+  const waterAction = action === 'water_smg' || action === 'water_rifle' || action === 'water_belt';
+  const clickVol = volume * (waterAction ? 0.18 : action === 'smg' || action === 'rifle' || action === 'belt' ? 0.24 : 0.42);
+  if (action === 'shotgun') {
+    playFilteredNoise(ctx, start + 0.11, 0.035, outNode, clickVol, 'bandpass', 950, 1.0);
+    playFilteredNoise(ctx, start + 0.19, 0.045, outNode, clickVol * 0.85, 'bandpass', 620, 1.0);
+  } else if (action === 'bolt') {
+    playFilteredNoise(ctx, start + 0.13, 0.030, outNode, clickVol, 'bandpass', 1250, 1.2);
+    playFilteredNoise(ctx, start + 0.23, 0.040, outNode, clickVol * 0.75, 'bandpass', 720, 1.1);
+  } else if (action === 'revolver') {
+    playFilteredNoise(ctx, start + 0.055, 0.024, outNode, clickVol * 0.8, 'bandpass', 1350, 1.2);
+  } else if (action === 'belt') {
+    playFilteredNoise(ctx, start + 0.035, 0.026, outNode, clickVol * 0.8, 'bandpass', 760, 1.0);
+  } else if (waterAction) {
+    const delay = action === 'water_smg' ? 0.030 : action === 'water_belt' ? 0.040 : 0.052;
+    playTone(ctx, start + 0.006, 0.070, outNode, 155, 190, clickVol * 0.75, 'triangle');
+    playFilteredNoise(ctx, start + delay, 0.026, outNode, clickVol, 'bandpass', 980, 0.75);
+    playFilteredNoise(ctx, start + delay + 0.030, 0.018, outNode, clickVol * 0.52, 'bandpass', 1450, 0.55);
+  } else {
+    playFilteredNoise(ctx, start + (action === 'smg' ? 0.026 : 0.045), 0.024, outNode, clickVol, 'bandpass', action === 'slide' ? 1650 : 1050, 1.0);
+    playFilteredNoise(ctx, start + (action === 'smg' ? 0.048 : 0.075), 0.018, outNode, clickVol * 0.55, 'highpass', 2200, 0.6);
+  }
+}
+function playWeaponSound(idOrWeapon, opts = {}) {
+  const ctx = getAudioCtx();
+  if (!ctx) return;
+  const base = opts.baseWeapon || (typeof idOrWeapon === 'object' ? idOrWeapon : null);
+  const id = typeof idOrWeapon === 'object' ? idOrWeapon.id : idOrWeapon;
+  const key = `${id || base?.id || 'weapon'}_${opts.remote ? 'r' : 'l'}`;
+  const nowMs = performance.now();
+  const minGap = opts.minGap ?? (opts.remote ? 55 : 18);
+  if (weaponSoundLastAt[key] && nowMs - weaponSoundLastAt[key] < minGap) return;
+  weaponSoundLastAt[key] = nowMs;
+  unlockAudio();
+
+  const p = weaponAudioProfile(id, base);
+  const distGain = soundDistanceGain(opts.position, opts.remote);
+  const mult = (opts.volume ?? 1) * distGain * (opts.remote ? 0.75 : 1);
+  const start = ctx.currentTime + 0.002;
+  const mainGain = ctx.createGain();
+  const comp = ctx.createDynamicsCompressor();
+  mainGain.connect(comp).connect(ctx.destination);
+
+  if (p.kind === 'auto_blast' || p.kind === 'auto_blast_heavy') {
+    playMuzzleBlast(ctx, start, mainGain, p.kind, p.vol * mult);
+    playGunAction(ctx, start, mainGain, p.action, p.vol * mult);
+  } else if (p.kind === 'firework') {
+    playTone(ctx, start, 0.10, mainGain, p.f1, p.f2, p.vol * mult, 'sine');
+    playTone(ctx, start + 0.055, 0.20, mainGain, 620, 1080, p.vol * 0.22 * mult, 'triangle');
+    playNoise(ctx, start + 0.09, 0.13, mainGain, p.vol * 0.42 * mult, 0.9);
+  } else if (p.kind === 'arc') {
+    playTone(ctx, start, p.dur, mainGain, p.f1, p.f2, p.vol * mult, 'sawtooth');
+    playNoise(ctx, start, p.dur, mainGain, p.vol * 0.85 * mult, 1.0);
+  } else if (p.kind === 'freeze') {
+    playNoise(ctx, start, p.dur, mainGain, p.vol * mult, 0.52);
+    playTone(ctx, start + 0.035, 0.08, mainGain, p.f1, p.f2, p.vol * 0.36 * mult, 'triangle');
+  } else if (p.kind === 'flamethrower') {
+    playNoise(ctx, start, p.dur, mainGain, p.vol * mult, 0.22);
+    playTone(ctx, start, p.dur * 0.8, mainGain, p.f1, p.f2, p.vol * 0.20 * mult, 'sawtooth');
+  } else if (p.kind === 'rifle') {
+    playMuzzleBlast(ctx, start, mainGain, p.kind, p.vol * mult);
+    playGunAction(ctx, start, mainGain, p.action, p.vol * mult);
+  } else if (p.kind === 'energy') {
+    playTone(ctx, start, p.dur, mainGain, p.f1, p.f2, p.vol * mult, 'sawtooth');
+    playTone(ctx, start + 0.01, p.dur * 0.65, mainGain, p.f1 * 1.7, p.f2 * 1.2, p.vol * 0.35 * mult, 'sine');
+  } else if (p.kind === 'twang') {
+    playTone(ctx, start, p.dur, mainGain, p.f1, p.f2, p.vol * mult, 'triangle');
+    playNoise(ctx, start + 0.015, 0.08, mainGain, p.vol * 0.25 * mult, 0.3);
+  } else if (p.kind === 'flame') {
+    playNoise(ctx, start, p.dur, mainGain, p.vol * mult, 0.25);
+    playTone(ctx, start, p.dur * 0.7, mainGain, p.f1, p.f2, p.vol * 0.25 * mult, 'sawtooth');
+  } else if (p.kind === 'pop' || p.kind === 'throw') {
+    playTone(ctx, start, p.dur, mainGain, p.f1, p.f2, p.vol * mult, 'triangle');
+    playNoise(ctx, start, p.dur * 0.55, mainGain, p.vol * 0.18 * mult, 0.35);
+  } else if (['boom', 'crack', 'tick', 'heavy', 'pistol', 'thump'].includes(p.kind)) {
+    playMuzzleBlast(ctx, start, mainGain, p.kind, p.vol * mult);
+    playGunAction(ctx, start, mainGain, p.action, p.vol * mult);
+  } else {
+    playMuzzleBlast(ctx, start, mainGain, 'rifle', p.vol * mult);
+    playGunAction(ctx, start, mainGain, p.action || 'rifle', p.vol * mult);
+  }
+}
+function playReloadSound(w) {
+  const ctx = getAudioCtx();
+  if (!ctx) return;
+  unlockAudio();
+  const start = ctx.currentTime + 0.002;
+  const gain = ctx.createGain();
+  gain.connect(ctx.destination);
+  const low = w?.noReload ? 120 : 210;
+  playTone(ctx, start, 0.055, gain, 360, low, 0.10, 'square');
+  playTone(ctx, start + 0.13, 0.07, gain, 180, 320, 0.08, 'triangle');
+}
+function playSoundEvent(name, opts = {}) {
+  const ctx = getAudioCtx();
+  if (!ctx) return;
+  const nowMs = performance.now();
+  const key = `${name}_${opts.remote ? 'r' : 'l'}`;
+  const minGap = opts.minGap ?? 80;
+  if (soundEventLastAt[key] && nowMs - soundEventLastAt[key] < minGap) return;
+  soundEventLastAt[key] = nowMs;
+  unlockAudio();
+
+  const posGain = soundDistanceGain(opts.position, opts.remote);
+  const mult = (opts.volume ?? 1) * posGain * (opts.remote ? 0.8 : 1);
+  const start = ctx.currentTime + 0.002;
+  const out = ctx.createGain();
+  const comp = ctx.createDynamicsCompressor();
+  out.connect(comp).connect(ctx.destination);
+
+  if (name === 'hitmarker') {
+    playTone(ctx, start, 0.045, out, 980, 680, 0.09 * mult, 'square');
+  } else if (name === 'headshot') {
+    playTone(ctx, start, 0.16, out, 1180, 1860, 0.14 * mult, 'triangle');
+    playNoise(ctx, start + 0.025, 0.07, out, 0.06 * mult, 0.75);
+  } else if (name === 'kill') {
+    playTone(ctx, start, 0.18, out, 125, 48, 0.22 * mult, 'sine');
+    playNoise(ctx, start, 0.07, out, 0.08 * mult, 0.45);
+  } else if (name === 'low_hp') {
+    playTone(ctx, start, 0.13, out, 82, 68, 0.16 * mult, 'sine');
+    playTone(ctx, start + 0.18, 0.10, out, 92, 74, 0.12 * mult, 'sine');
+    playTone(ctx, start + 0.03, 0.42, out, 1850, 1580, 0.035 * mult, 'triangle');
+  } else if (name === 'freeze_shatter') {
+    playNoise(ctx, start, 0.35, out, 0.32 * mult, 1.0);
+    playTone(ctx, start, 0.22, out, 240, 72, 0.24 * mult, 'sawtooth');
+    playTone(ctx, start + 0.04, 0.16, out, 1260, 420, 0.14 * mult, 'triangle');
+  } else if (name === 'chainsaw_idle') {
+    playTone(ctx, start, 0.34, out, 78, 86, 0.14 * mult, 'sawtooth');
+    playNoise(ctx, start, 0.32, out, 0.08 * mult, 0.18);
+  } else if (name === 'chainsaw_rev') {
+    playTone(ctx, start, 0.42, out, 110, 210, 0.22 * mult, 'sawtooth');
+    playNoise(ctx, start, 0.38, out, 0.16 * mult, 0.35);
+  } else if (name === 'chainsaw_hit') {
+    playTone(ctx, start, 0.16, out, 185, 72, 0.22 * mult, 'sawtooth');
+    playNoise(ctx, start, 0.22, out, 0.26 * mult, 0.85);
+  } else if (name === 'blink') {
+    playTone(ctx, start, 0.18, out, 180, 720, 0.18 * mult, 'triangle');
+    playNoise(ctx, start + 0.03, 0.20, out, 0.18 * mult, 0.7);
+    playTone(ctx, start + 0.18, 0.11, out, 90, 48, 0.16 * mult, 'sine');
+  } else if (name === 'drone_fly') {
+    playTone(ctx, start, 0.26, out, 390, 430, 0.10 * mult, 'sawtooth');
+    playNoise(ctx, start, 0.20, out, 0.04 * mult, 0.25);
+  } else if (name === 'drone_lock') {
+    playTone(ctx, start, 0.05, out, 980, 980, 0.11 * mult, 'square');
+    playTone(ctx, start + 0.12, 0.04, out, 1180, 1180, 0.13 * mult, 'square');
+  } else if (name === 'drone_dive') {
+    playTone(ctx, start, 0.55, out, 520, 1260, 0.18 * mult, 'sawtooth');
+    playTone(ctx, start + 0.45, 0.22, out, 110, 42, 0.22 * mult, 'sine');
+  } else if (name === 'air_burst') {
+    playTone(ctx, start, 0.35, out, 95, 38, 0.28 * mult, 'sine');
+    playNoise(ctx, start, 0.26, out, 0.16 * mult, 0.22);
+  } else if (name === 'air_launch') {
+    playTone(ctx, start, 0.38, out, 260, 920, 0.12 * mult, 'triangle');
+  } else if (name === 'blackhole_activate') {
+    playTone(ctx, start, 0.45, out, 62, 38, 0.30 * mult, 'sine');
+    playNoise(ctx, start, 0.30, out, 0.12 * mult, 0.18);
+  } else if (name === 'blackhole_collapse') {
+    playNoise(ctx, start, 0.24, out, 0.26 * mult, 0.9);
+    playTone(ctx, start + 0.08, 0.36, out, 72, 28, 0.34 * mult, 'sawtooth');
+  } else if (name === 'fire_sizzle') {
+    playNoise(ctx, start, 0.32, out, 0.10 * mult, 0.75);
+    playTone(ctx, start + 0.04, 0.08, out, 720, 980, 0.035 * mult, 'triangle');
+  } else {
+    playTone(ctx, start, 0.12, out, 300, 120, 0.12 * mult, 'triangle');
+  }
+}
+
 // ── Lighting ───────────────────────────────────────────────────────────────
 scene.add(new THREE.AmbientLight(0xffffff, 0.6));
 const sun = new THREE.DirectionalLight(0xffffff, 1.2);
@@ -1534,13 +1855,34 @@ scene.add(sun);
 // ── Wall collision boxes ────────────────────────────────────────────────────
 // Populated by buildMap(); used by resolveWallCollisions() each frame.
 const wallColliders = []; // Array of THREE.Box3
+const PLAYER_EYE_HEIGHT = 1.65;
+const PLAYER_RADIUS = 0.38;
+
+function getGroundEyeY(px = camera.position.x, pz = camera.position.z, eyeY = camera.position.y) {
+  let groundY = PLAYER_EYE_HEIGHT;
+  const feetY = eyeY - PLAYER_EYE_HEIGHT;
+  for (const box of wallColliders) {
+    if (box.max.y <= 0.05 || box.max.y > 14) continue;
+    if (feetY + 0.35 < box.max.y) continue;
+    if (px < box.min.x - PLAYER_RADIUS || px > box.max.x + PLAYER_RADIUS) continue;
+    if (pz < box.min.z - PLAYER_RADIUS || pz > box.max.z + PLAYER_RADIUS) continue;
+    groundY = Math.max(groundY, box.max.y + PLAYER_EYE_HEIGHT);
+  }
+  return groundY;
+}
+
+function isPlayerGrounded() {
+  return camera.position.y <= getGroundEyeY() + 0.04 && (!slamState || slamState.vel <= 0);
+}
 
 function resolveWallCollisions() {
-  const RADIUS = 0.38; // player footprint radius
+  const RADIUS = PLAYER_RADIUS; // player footprint radius
   let px = camera.position.x;
   let pz = camera.position.z;
-  const py = 1.65;
+  const py = camera.position.y;
+  let feetY = py - PLAYER_EYE_HEIGHT;
   for (const box of wallColliders) {
+    if (feetY >= box.max.y - 0.08) continue;
     // Quick vertical cull — player occupies y ∈ [0.65, 2.65]
     if (py + 1.0 < box.min.y || py - 1.0 > box.max.y) continue;
     // Expand box horizontally by player radius (Minkowski sum)
@@ -1549,6 +1891,11 @@ function resolveWallCollisions() {
     const exMinZ = box.min.z - RADIUS;
     const exMaxZ = box.max.z + RADIUS;
     if (px <= exMinX || px >= exMaxX || pz <= exMinZ || pz >= exMaxZ) continue;
+    if (box.max.y > feetY && box.max.y <= feetY + 0.65) {
+      camera.position.y = box.max.y + PLAYER_EYE_HEIGHT;
+      feetY = box.max.y;
+      continue;
+    }
     // Inside — find smallest push-out distance and eject on that axis
     const dLeft  = px - exMinX;
     const dRight = exMaxX - px;
@@ -1565,8 +1912,10 @@ function resolveWallCollisions() {
 }
 
 function resolvePosCollisions(px, pz) {
-  const RADIUS = 0.38;
+  const RADIUS = PLAYER_RADIUS;
   for (const box of wallColliders) {
+    const feetY = camera.position.y - PLAYER_EYE_HEIGHT;
+    if (feetY >= box.max.y - 0.08) continue;
     const exMinX = box.min.x - RADIUS, exMaxX = box.max.x + RADIUS;
     const exMinZ = box.min.z - RADIUS, exMaxZ = box.max.z + RADIUS;
     if (px <= exMinX || px >= exMaxX || pz <= exMinZ || pz >= exMaxZ) continue;
@@ -1581,10 +1930,10 @@ function resolvePosCollisions(px, pz) {
 // ── Map Groups ──────────────────────────────────────────────────────────────
 const MAP_GROUPS = {};
 const MAP_COLLIDERS = {};
-// Per-map gimmicks — { damageZones, jumpPads, iceZones, lowGravZones } (each is array of {x,z,r})
+// Per-map gimmicks — { damageZones, jumpPads, iceZones, oilZones, lowGravZones } (each is array of {x,z,r})
 const MAP_GIMMICKS = {};
 let activeMapName = 'blank';
-let activeMapGimmicks = { damageZones: [], jumpPads: [], iceZones: [], lowGravZones: [] };
+let activeMapGimmicks = { damageZones: [], jumpPads: [], iceZones: [], oilZones: [], lowGravZones: [] };
 
 function registerMap(name) {
   const group = new THREE.Group();
@@ -1592,7 +1941,7 @@ function registerMap(name) {
   group.visible = false;
   MAP_GROUPS[name] = group;
   MAP_COLLIDERS[name] = [];
-  MAP_GIMMICKS[name] = { damageZones: [], jumpPads: [], iceZones: [], lowGravZones: [] };
+  MAP_GIMMICKS[name] = { damageZones: [], jumpPads: [], iceZones: [], oilZones: [], lowGravZones: [] };
 }
 
 // Legacy refs for existing buildBlankMap/Battlefield/Range — bridge them to the registry
@@ -1611,7 +1960,7 @@ function activateMap(name) {
   wallColliders.length = 0;
   if (MAP_COLLIDERS[name]) wallColliders.push(...MAP_COLLIDERS[name]);
   activeMapName = name;
-  activeMapGimmicks = MAP_GIMMICKS[name] || { damageZones: [], jumpPads: [], iceZones: [], lowGravZones: [] };
+  activeMapGimmicks = MAP_GIMMICKS[name] || { damageZones: [], jumpPads: [], iceZones: [], oilZones: [], lowGravZones: [] };
 }
 
 function buildBlankMap() {
@@ -1951,6 +2300,61 @@ function addOuterWalls(mapName, color) {
     addMapBox(mapName, x, y, z, w, h, d, color);
   });
 }
+function addJumpPad(mapName, x, z, r = 1.5, vel = 14, color = 0xffcc22) {
+  const pad = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.9, r * 0.9, 0.15, 16), new THREE.MeshBasicMaterial({ color }));
+  pad.position.set(x, 0.08, z);
+  MAP_GROUPS[mapName].add(pad);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(r, 0.08, 4, 20), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+  ring.rotation.x = Math.PI / 2;
+  ring.position.set(x, 0.16, z);
+  MAP_GROUPS[mapName].add(ring);
+  MAP_GIMMICKS[mapName].jumpPads.push({ x, z, r, vel });
+}
+function addSlickZone(mapName, x, z, r, color = 0x111111) {
+  const slick = new THREE.Mesh(
+    new THREE.CylinderGeometry(r, r, 0.04, 22),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.62 })
+  );
+  slick.position.set(x, 0.035, z);
+  MAP_GROUPS[mapName].add(slick);
+  MAP_GIMMICKS[mapName].oilZones.push({ x, z, r });
+}
+function addExplosiveBarrel(mapName, x, z, color = 0xb52b20) {
+  const barrel = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.62, 1.25, 14), new THREE.MeshLambertMaterial({ color }));
+  body.position.y = 0.72;
+  barrel.add(body);
+  const bandMat = new THREE.MeshBasicMaterial({ color: 0xffcc33 });
+  [-0.34, 0.34].forEach(y => {
+    const band = new THREE.Mesh(new THREE.TorusGeometry(0.63, 0.035, 5, 14), bandMat);
+    band.rotation.x = Math.PI / 2;
+    band.position.y = 0.72 + y;
+    barrel.add(band);
+  });
+  barrel.position.set(x, 0, z);
+  MAP_GROUPS[mapName].add(barrel);
+  barrel.updateMatrixWorld(true);
+  MAP_COLLIDERS[mapName].push(new THREE.Box3().setFromObject(barrel));
+  mapDestructibles.push({
+    mesh: barrel, hp: 60, maxHp: 60, type: 'explosive_barrel', mapName,
+    colliderRef: MAP_COLLIDERS[mapName][MAP_COLLIDERS[mapName].length - 1],
+    onDestroy: () => {
+      spawnAbilityAOEFX(new THREE.Vector3(x, 0.5, z), 7, 0xff7722);
+      flashScreen('rgba(255,120,20,0.35)', 450);
+      for (const bot of gameBots) {
+        if (bot.dead) continue;
+        const dx = bot.x - x, dz = bot.z - z;
+        if (dx*dx + dz*dz < 49) {
+          const mesh = remoteMeshes[bot.id];
+          const hp = mesh ? mesh.position.clone().setY(1.0) : new THREE.Vector3(bot.x, 1, bot.z);
+          emitHit(bot.id, `barrel_${Date.now()}_${bot.id}`, 'explosive_barrel', hp);
+        }
+      }
+      const pdx = camera.position.x - x, pdz = camera.position.z - z;
+      if (pdx*pdx + pdz*pdz < 49) applyBotDamageToPlayer('explosive_barrel', null);
+    },
+  });
+}
 
 // ──────────────────────────────────────────────────────────────────────────
 // 1. URBAN PLAZA — buildings as corner cover, cars as low cover in plaza
@@ -1963,18 +2367,42 @@ function buildUrbanMap() {
   // Sidewalks
   addMapBox(m, 0, 0.05, -25, 50, 0.10, 6, 0x9a9a9a);
   addMapBox(m, 0, 0.05,  25, 50, 0.10, 6, 0x9a9a9a);
-  // 4 corner buildings (tall)
+  // 4 hollow corner skyscrapers with roof access
   const bldg = 0x8b6f4e;
+  const roofMat = 0x6d563a;
+  const stairMat = 0x7c6750;
   const wnd  = 0x44ddff;
-  [[-32,-32],[32,-32],[-32,32],[32,32]].forEach(([x,z]) => {
-    addMapBox(m, x, 5, z, 14, 10, 14, bldg);
+  const addUrbanSkyscraper = (x, z) => {
+    const size = 14, half = size / 2, wallT = 0.9, height = 10;
+    const innerZ = z < 0 ? z + half - wallT / 2 : z - half + wallT / 2;
+    const outerZ = z < 0 ? z - half + wallT / 2 : z + half - wallT / 2;
+    addMapBox(m, x, 5, outerZ, size, height, wallT, bldg);
+    addMapBox(m, x - 4.4, 5, innerZ, 3.4, height, wallT, bldg);
+    addMapBox(m, x + 4.4, 5, innerZ, 3.4, height, wallT, bldg);
+    addMapBox(m, x - half + wallT / 2, 5, z, wallT, height, size, bldg);
+    addMapBox(m, x + half - wallT / 2, 5, z, wallT, height, size, bldg);
+    addMapBox(m, x, height + 0.15, z, size, 0.3, size, roofMat);
     // Windows (purely visual)
     for (let i = -1; i <= 1; i++) {
       const w = new THREE.Mesh(new THREE.BoxGeometry(2, 1.4, 0.1), new THREE.MeshBasicMaterial({ color: wnd }));
       w.position.set(x + i * 4, 3, z + (z < 0 ? 7.05 : -7.05));
       MAP_GROUPS[m].add(w);
     }
-  });
+    const dirX = x < 0 ? 1 : -1;
+    const dirZ = z < 0 ? 1 : -1;
+    const steps = 24;
+    for (let i = 0; i < steps; i++) {
+      const t = i / (steps - 1);
+      const stepH = 0.35 + t * 9.9;
+      const sx = x;
+      const sz = z + dirZ * (half + 11.2 - i * 0.42);
+      addMapBox(m, sx, stepH / 2, sz, 3.2, stepH, 0.75, stairMat);
+    }
+    const landingX = x;
+    const landingZ = z + dirZ * (half + 0.7);
+    addMapBox(m, landingX, height + 0.05, landingZ, 3.2, 0.2, 3.2, stairMat);
+  };
+  [[-32,-32],[32,-32],[-32,32],[32,32]].forEach(([x,z]) => addUrbanSkyscraper(x,z));
   // Cars as low cover scattered in plaza
   const carMat = new THREE.MeshLambertMaterial({ color: 0x4a8aff });
   [[-10,-5,0],[10,5,0.5],[0,12,-0.3],[-12,15,1],[14,-10,0],[6,-15,0.5]].forEach(([x,z,rot]) => {
@@ -2509,7 +2937,128 @@ function buildChernobylMap() {
 buildChernobylMap();
 
 // ──────────────────────────────────────────────────────────────────────────
-// 12. KING OF THE HILL / BR ARENA — massive map with vehicles + helicopters
+// 12. OIL REFINERY — slick ground, pipe cover, explosive barrels
+// ──────────────────────────────────────────────────────────────────────────
+registerMap('refinery');
+function buildRefineryMap() {
+  const m = 'refinery';
+  addMapGround(m, 0x34312b, 0x4c4638);
+  addOuterWalls(m, 0x28241d);
+  [[-20,-18,8], [17,14,7], [0,0,5.5], [-24,19,4.5], [24,-20,4.5]].forEach(([x,z,r]) => addSlickZone(m, x, z, r));
+  [[-14,-6], [14,6], [-6,18], [8,-20], [0,28], [28,0], [-28,0], [20,22]].forEach(([x,z]) => addExplosiveBarrel(m, x, z));
+  const pipeMat = new THREE.MeshLambertMaterial({ color: 0x777064 });
+  [[0,-28,34,0], [0,28,34,0], [-28,0,34,Math.PI/2], [28,0,34,Math.PI/2]].forEach(([x,z,len,rot]) => {
+    const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, len, 12), pipeMat);
+    pipe.rotation.z = Math.PI / 2;
+    pipe.rotation.y = rot;
+    pipe.position.set(x, 1.0, z);
+    addMapMesh(m, pipe, true);
+  });
+  [[-12,12,10,3], [12,-12,10,3], [0,18,3,10], [0,-18,3,10]].forEach(([x,z,w,d]) => {
+    addMapBox(m, x, 1.0, z, w, 2, d, 0x5b5144);
+  });
+  MAP_GROUPS[m]._skyColor = 0x4b4741;
+}
+buildRefineryMap();
+
+// ──────────────────────────────────────────────────────────────────────────
+// 13. SKYDOCK LAUNCH — jump pads and raised gantry cover
+// ──────────────────────────────────────────────────────────────────────────
+registerMap('skydock');
+function buildSkydockMap() {
+  const m = 'skydock';
+  addMapGround(m, 0x263544, 0x5b7c93);
+  addOuterWalls(m, 0x1d2a36);
+  [[-22,-22], [22,-22], [-22,22], [22,22], [0,0], [0,-28], [0,28]].forEach(([x,z], i) => addJumpPad(m, x, z, i === 4 ? 2.1 : 1.55, i === 4 ? 18 : 15, 0x44ddff));
+  [[0,-18,28,1.2], [0,18,28,1.2], [-18,0,1.2,28], [18,0,1.2,28]].forEach(([x,z,w,d]) => {
+    addMapBox(m, x, 2.2, z, w, 0.35, d, 0x7a8a94);
+    addMapBox(m, x, 1.0, z, w, 2, d < 2 ? 0.45 : 0.45, 0x44515b, 0, 0.8);
+  });
+  [[-8,-8], [8,8], [-8,8], [8,-8]].forEach(([x,z]) => addMapBox(m, x, 1.2, z, 5, 2.4, 1.2, 0x334c62, Math.PI / 4));
+  MAP_GROUPS[m]._skyColor = 0x6aa2c8;
+}
+buildSkydockMap();
+
+// ──────────────────────────────────────────────────────────────────────────
+// 14. ACID SEWER — toxic channels force bridge fights
+// ──────────────────────────────────────────────────────────────────────────
+registerMap('sewer');
+function buildSewerMap() {
+  const m = 'sewer';
+  addMapGround(m, 0x263123, null);
+  addOuterWalls(m, 0x182015);
+  const acidMat = new THREE.MeshBasicMaterial({ color: 0x55ff22, transparent: true, opacity: 0.72 });
+  [[0,0,8], [-25,0,5], [25,0,5], [0,-25,5], [0,25,5]].forEach(([x,z,r]) => {
+    const acid = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.08, 20), acidMat);
+    acid.position.set(x, 0.05, z);
+    MAP_GROUPS[m].add(acid);
+    MAP_GIMMICKS[m].damageZones.push({ x, z, r, dps: 6, type: 'acid' });
+  });
+  [[0,-13,36,2], [0,13,36,2], [-13,0,2,36], [13,0,2,36]].forEach(([x,z,w,d]) => addMapBox(m, x, 0.25, z, w, 0.5, d, 0x5a5141));
+  [[-30,-30], [30,-30], [-30,30], [30,30], [-8,0], [8,0]].forEach(([x,z]) => addMapBox(m, x, 1.5, z, 5, 3, 5, 0x3b4234));
+  MAP_GROUPS[m]._skyColor = 0x182318;
+}
+buildSewerMap();
+
+// ──────────────────────────────────────────────────────────────────────────
+// 15. GRAVITY LAB — low-grav domes plus launch pads for aerial duels
+// ──────────────────────────────────────────────────────────────────────────
+registerMap('gravity_lab');
+function buildGravityLabMap() {
+  const m = 'gravity_lab';
+  addMapGround(m, 0x202232, 0x445577);
+  addOuterWalls(m, 0x181a28);
+  const zoneMat = new THREE.MeshBasicMaterial({ color: 0x66aaff, transparent: true, opacity: 0.16, side: THREE.DoubleSide });
+  [[-18,-18,7], [18,-18,7], [-18,18,7], [18,18,7], [0,0,8]].forEach(([x,z,r]) => {
+    const zone = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 6, 18), zoneMat);
+    zone.position.set(x, 3, z);
+    MAP_GROUPS[m].add(zone);
+    const ring = new THREE.Mesh(new THREE.RingGeometry(r * 0.93, r, 22), new THREE.MeshBasicMaterial({ color: 0x66aaff, side: THREE.DoubleSide }));
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(x, 0.04, z);
+    MAP_GROUPS[m].add(ring);
+    MAP_GIMMICKS[m].lowGravZones.push({ x, z, r });
+  });
+  [[0,-18], [0,18], [-18,0], [18,0]].forEach(([x,z]) => addJumpPad(m, x, z, 1.35, 13, 0x66aaff));
+  [[0,-30,18,1], [0,30,18,1], [-30,0,1,18], [30,0,1,18], [0,0,5,5]].forEach(([x,z,w,d]) => addMapBox(m, x, 1.4, z, w, 2.8, d, 0x3a4060));
+  MAP_GROUPS[m]._skyColor = 0x0b0d24;
+}
+buildGravityLabMap();
+
+// ──────────────────────────────────────────────────────────────────────────
+// 16. GLASSWORKS — breakable glass maze with a few barrel traps
+// ──────────────────────────────────────────────────────────────────────────
+registerMap('glassworks');
+function buildGlassworksMap() {
+  const m = 'glassworks';
+  addMapGround(m, 0xdce8ec, 0xaad0dd);
+  addOuterWalls(m, 0x9eb6bf);
+  const glassMat = new THREE.MeshBasicMaterial({ color: 0x8ee8ff, transparent: true, opacity: 0.38 });
+  const panels = [
+    [0,-24,32,5,0], [0,24,32,5,0], [-24,0,5,32,0], [24,0,5,32,0],
+    [-10,0,1,28,0], [10,0,1,28,0], [0,-10,28,1,0], [0,10,28,1,0],
+    [-28,-28,12,1,Math.PI/4], [28,28,12,1,Math.PI/4], [-28,28,12,1,-Math.PI/4], [28,-28,12,1,-Math.PI/4],
+  ];
+  panels.forEach(([x,z,w,d,rot]) => {
+    const panel = new THREE.Mesh(new THREE.BoxGeometry(w, 4.5, d), glassMat);
+    panel.position.set(x, 2.25, z);
+    panel.rotation.y = rot;
+    MAP_GROUPS[m].add(panel);
+    panel.updateMatrixWorld(true);
+    MAP_COLLIDERS[m].push(new THREE.Box3().setFromObject(panel));
+    mapDestructibles.push({
+      mesh: panel, hp: 45, maxHp: 45, type: 'glass', mapName: m,
+      colliderRef: MAP_COLLIDERS[m][MAP_COLLIDERS[m].length - 1],
+    });
+  });
+  [[-16,-16], [16,-16], [-16,16], [16,16]].forEach(([x,z]) => addExplosiveBarrel(m, x, z, 0x2b86b5));
+  [[0,0], [-33,0], [33,0], [0,-33], [0,33]].forEach(([x,z]) => addMapBox(m, x, 0.55, z, 5, 1.1, 5, 0xb8c7cc));
+  MAP_GROUPS[m]._skyColor = 0xcfefff;
+}
+buildGlassworksMap();
+
+// ──────────────────────────────────────────────────────────────────────────
+// 17. KING OF THE HILL / BR ARENA — massive map with vehicles + helicopters
 // ──────────────────────────────────────────────────────────────────────────
 registerMap('br_arena');
 function buildBrArenaMap() {
@@ -4894,8 +5443,8 @@ document.addEventListener('keydown', e => {
   // Spacebar — jump (only when on the ground)
   if (e.code === 'Space') {
     e.preventDefault();
-    if (!isDead && (camera.position.y <= 1.66 + 0.01) && (!slamState || slamState.vel <= 0)) {
-      slamState = { vel: 9 }; // jump velocity → ~1.4m peak height with 28 m/s² gravity
+    if (!isDead && isPlayerGrounded()) {
+      slamState = { vel: 13, type: 'jump' }; // ~2x the old jump height with 28 m/s² gravity
     }
   }
   // ── Admin cheat hotkeys (only when admin) ────────────────────────────────
@@ -5065,7 +5614,28 @@ function resetCombatResources() {
   equipActiveSlot();
 }
 
-function resetPlayerForRound(x = 0, z = 42) {
+function localPlayerTeam() {
+  return pvpMatch?.team === 'enemy' ? 'enemy' : 'ally';
+}
+
+function teamSideSpawn(team = 'ally', spread = 36, depth = 38) {
+  const side = team === 'enemy' ? -1 : 1;
+  return {
+    x: (Math.random() - 0.5) * spread,
+    z: side * (depth + Math.random() * 8),
+    yaw: team === 'enemy' ? 0 : Math.PI,
+  };
+}
+
+function placePlayerAtTeamSpawn(team = localPlayerTeam(), spread = 36, depth = 38) {
+  const sp = teamSideSpawn(team, spread, depth);
+  camera.position.set(sp.x, 1.65, sp.z);
+  euler.y = sp.yaw + (Math.random() - 0.5) * 0.6;
+  camera.quaternion.setFromEuler(euler);
+  return sp;
+}
+
+function resetPlayerForRound(x = null, z = null) {
   isDead = false;
   if (players[myId]) {
     players[myId].hp = 300;
@@ -5073,12 +5643,18 @@ function resetPlayerForRound(x = 0, z = 42) {
   }
   updateHealthHUD(300);
   resetCombatResources();
-  camera.position.set(x, 1.65, z);
-  euler.y = Math.PI;
-  camera.quaternion.setFromEuler(euler);
+  let sp;
+  if (x == null || z == null) {
+    sp = placePlayerAtTeamSpawn();
+  } else {
+    camera.position.set(x, 1.65, z);
+    euler.y = z < 0 ? 0 : Math.PI;
+    camera.quaternion.setFromEuler(euler);
+    sp = { x, z };
+  }
   document.getElementById('waiting-screen').style.display = 'none';
   document.getElementById('death-screen').style.display = 'none';
-  socket.emit('resetSelf', { x, z });
+  socket.emit('resetSelf', { x: sp.x, z: sp.z });
 }
 
 function cycleActiveSlot() {
@@ -5270,27 +5846,35 @@ function updateMovement(dt) {
     const gravMult = (typeof _playerInLowGrav !== 'undefined' && _playerInLowGrav) ? 0.33 : 1;
     slamState.vel -= 28 * dt * gravMult; // gravity
     camera.position.y += slamState.vel * dt;
-    if (camera.position.y <= 1.65) {
-      camera.position.y = 1.65;
-      // Slam AOE inline (can't use doAbilityAOE since it uses currentWeapon.id)
-      const slamOrigin = camera.position.clone();
-      const slamRadius = 4, slamColor = 0xff6600;
-      spawnAbilityAOEFX(slamOrigin.clone().setY(0.15), slamRadius, slamColor);
-      flashScreen('rgba(255,100,0,0.30)', 350);
-      for (const [pid, mesh] of Object.entries(remoteMeshes)) {
-        const d = slamOrigin.distanceTo(mesh.position.clone().setY(1.0));
-        if (d < slamRadius) {
-          const hp = mesh.position.clone().setY(1.0);
-          const dummy = TRAINING_DUMMIES.find(dd => dd.id === pid);
-          if (dummy) handleDummyHit(dummy, mesh, { damage: 80 }, hp);
-          else emitHit(pid, `slam_${myId}_${Date.now()}_${pid}`, 'sledge', hp);
-          spawnHitParticle(hp);
+    const groundEyeY = getGroundEyeY();
+    if (camera.position.y <= groundEyeY) {
+      camera.position.y = groundEyeY;
+      if (slamState.type === 'slam') {
+        // Slam AOE inline (can't use doAbilityAOE since it uses currentWeapon.id)
+        const slamOrigin = camera.position.clone();
+        const slamRadius = 4, slamColor = 0xff6600;
+        spawnAbilityAOEFX(slamOrigin.clone().setY(0.15), slamRadius, slamColor);
+        flashScreen('rgba(255,100,0,0.30)', 350);
+        for (const [pid, mesh] of Object.entries(remoteMeshes)) {
+          const d = slamOrigin.distanceTo(mesh.position.clone().setY(1.0));
+          if (d < slamRadius) {
+            const hp = mesh.position.clone().setY(1.0);
+            const dummy = TRAINING_DUMMIES.find(dd => dd.id === pid);
+            if (dummy) handleDummyHit(dummy, mesh, { damage: 80 }, hp);
+            else emitHit(pid, `slam_${myId}_${Date.now()}_${pid}`, 'sledge', hp);
+            spawnHitParticle(hp);
+          }
         }
       }
       slamState = null;
     }
   } else {
-    camera.position.y = 1.65;
+    const groundEyeY = getGroundEyeY();
+    if (camera.position.y > groundEyeY + 0.04) {
+      slamState = { vel: 0, type: 'fall' };
+    } else {
+      camera.position.y = groundEyeY;
+    }
   }
   resolveWallCollisions();
 
@@ -5364,7 +5948,7 @@ function activateMeleeAbility() {
     flashAbilityName(ab.name);
   }
   else if (ab.type === 'melee_slam') {
-    slamState = { vel: 9.5 };
+    slamState = { vel: 9.5, type: 'slam' };
     flashAbilityName(ab.name);
   }
   else if (ab.type === 'melee_throw') {
@@ -5547,6 +6131,7 @@ function doBulletWave(w) {
   const right = new THREE.Vector3(1, 0,  0).applyQuaternion(camera.quaternion).normalize();
   const up    = new THREE.Vector3(0, 1,  0).applyQuaternion(camera.quaternion).normalize();
   const now   = Date.now();
+  playWeaponSound('sg8_wave', { baseWeapon: w, volume: 1.1 });
   for (let row = 0; row < GRID; row++) {
     for (let col = 0; col < GRID; col++) {
       const oH = (col - (GRID - 1) / 2) * STEP;
@@ -5566,6 +6151,7 @@ function doThrowBomb(w, ab) {
   const dir = new THREE.Vector3(0, 0.08, -1).applyQuaternion(camera.quaternion).normalize();
   const id  = `paintbomb_${myId}_${Date.now()}`;
   const color = ab.color || 0xff44ff;
+  playWeaponSound(w.id, { baseWeapon: w, volume: 0.95 });
   spawnLocalBullet(origin, dir, id, true, 22, color, 0.13, w.id,
     { isPaintBomb: true, paintRadius: ab.radius || 4, paintColor: color });
 }
@@ -5598,6 +6184,7 @@ function fireCrossbowCharge() {
   const d = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
 
   socket.emit('shoot', { x: muzzleWorld.x, y: muzzleWorld.y, z: muzzleWorld.z, dx: d.x, dy: d.y, dz: d.z, weapon: weaponId });
+  playWeaponSound(weaponId, { baseWeapon: currentWeapon, volume: 1 + chargeMs / 3500 });
   // Speed also scales with charge
   const speedScale = chargeMs >= 1200 ? 2.5 : chargeMs >= 400 ? 1.6 : 1.0;
   spawnLocalBullet(muzzleWorld, d, `cb_${myId}_${now}`, true, currentWeapon.bulletSpeed * speedScale, currentWeapon.bulletColor, currentWeapon.bulletSize * (1 + chargeMs / 2000 * 0.6), weaponId);
@@ -5695,6 +6282,7 @@ function doMultishot(w, ab) {
   // Draw from mag first, then reserve — so low-mag weapons (GL: mag 1) still fire full count
   const totalAvail = pool.ammo + pool.reserve;
   const shots = Math.min(ab.count || 3, totalAvail);
+  if (shots > 0) playWeaponSound(ab.weaponAbId || w.id, { baseWeapon: w, volume: Math.min(1.25, 0.85 + shots * 0.02) });
   for (let i = 0; i < shots; i++) {
     const d = base.clone();
     d.x += (Math.random() - 0.5) * (ab.spread || 0.08);
@@ -5727,6 +6315,7 @@ function updatePendingFanFire(dt) {
     const now2 = Date.now();
     const bid = `fan_${myId}_${now2}_${pendingFanFire.count}`;
     socket.emit('shoot', { x: origin.x, y: origin.y, z: origin.z, dx: d.x, dy: d.y, dz: d.z, weapon: w.id });
+    playWeaponSound(w.id, { baseWeapon: w, minGap: 25 });
     spawnLocalBullet(origin, d, bid, true, w.bulletSpeed, w.bulletColor, w.bulletSize, w.id);
     const model = weaponModels[currentWeaponIdx];
     if (model) { model._flash.visible = true; setTimeout(() => { if (model) model._flash.visible = false; }, 50); }
@@ -5882,6 +6471,8 @@ function tryShoot() {
     }, 300);
   }
 
+  playWeaponSound(shotWeaponId, { baseWeapon: currentWeapon, volume: Math.min(1.2, 0.9 + shotPellets * 0.03) });
+
   for (let p = 0; p < shotPellets; p++) {
     const spreadDir = baseDir.clone();
     if (shotSpread > 0) {
@@ -5915,6 +6506,9 @@ function tryMelee() {
   const effectiveCooldown = meleeAbilityBuff?.type === 'revup' ? 15 : item.cooldown;
   if (now - lastMelee < effectiveCooldown) return;
   lastMelee = now;
+  if (item.id === 'chainsaw') {
+    playSoundEvent(meleeAbilityBuff?.type === 'revup' ? 'chainsaw_rev' : 'chainsaw_idle', { volume: 1.25, minGap: 120 });
+  }
 
   // Trigger swing animation — each swing type has its own characteristic duration
   meleeSwingType = MELEE_SWING_TYPES[selectedMeleeIdx] || 'slash';
@@ -5959,6 +6553,7 @@ function tryMelee() {
     }
 
     const dummy = TRAINING_DUMMIES.find(d => d.id === pid);
+    if (item.id === 'chainsaw') playSoundEvent('chainsaw_hit', { volume: 1.35, minGap: 80 });
     if (dummy) handleDummyHit(dummy, mesh, { weaponId: effectiveWeaponId }, hitPos.clone());
     else emitHit(pid, `melee_${myId}_${now}`, effectiveWeaponId, hitPos.clone());
     // Vampire Blade: heal on hit
@@ -6039,6 +6634,7 @@ function trySupport() {
   }
 
   if (item.blink) {
+    playSoundEvent('blink', { volume: 1.15 });
     const dir = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion).normalize();
     camera.position.addScaledVector(dir, item.blink);
     camera.position.x = Math.max(-48, Math.min(48, camera.position.x));
@@ -6127,6 +6723,7 @@ function throwSupportItem(item) {
   const origin = new THREE.Vector3();
   camera.getWorldPosition(origin);
   origin.add(new THREE.Vector3(0.12, -0.18, -0.30).applyQuaternion(camera.quaternion));
+  if (item.id === 'black_hole_seed') playSoundEvent('blackhole_activate', { volume: 1.05 });
 
   // Arc: slightly upward from aim direction
   const aimDir = new THREE.Vector3(0, 0.18, -1).applyQuaternion(camera.quaternion).normalize();
@@ -6168,6 +6765,7 @@ function startReload() {
   const pool = weaponAmmo[currentWeaponIdx];
   if (reloading || pool.ammo === currentWeapon.mag || pool.reserve === 0) return;
   reloading = true;
+  playReloadSound(currentWeapon);
   document.getElementById('reload-flash').style.display = 'block';
   const dur = currentWeapon.reloadTime * (Date.now() < adrenalineUntil ? 0.5 : 1);
   // Trigger reload animation on the current weapon model
@@ -6260,13 +6858,16 @@ function updateMapGimmicks(dt) {
       if (dx*dx + dz*dz < z.r * z.r) { _playerInLowGrav = true; break; }
     }
   }
-  // Ice is handled inline in updateMovement (friction reduction)
+  // Ice and oil slicks are handled inline in updateMovement (friction reduction)
 }
 
 function playerOnIce() {
   const g = activeMapGimmicks;
-  if (!g || !g.iceZones || !g.iceZones.length) return false;
-  for (const z of g.iceZones) {
+  if (!g) return false;
+  const slicks = [];
+  if (g.iceZones && g.iceZones.length) slicks.push(...g.iceZones);
+  if (g.oilZones && g.oilZones.length) slicks.push(...g.oilZones);
+  for (const z of slicks) {
     const dx = camera.position.x - z.x, dz = camera.position.z - z.z;
     if (dx*dx + dz*dz < z.r * z.r) return true;
   }
@@ -6421,6 +7022,7 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false) {
   const mesh    = remoteMeshes[pid];
   if (hitWorldPos) showDamageNumber(hitWorldPos, dmg, headshot);
   if (mesh)        trackTotalDamage(pid, dmg, mesh);
+  playSoundEvent(headshot ? 'headshot' : 'hitmarker', { volume: headshot ? 1.15 : 0.75, minGap: headshot ? 60 : 35 });
   if (headshot)    flashHeadshot(instakill);
   // Switchblade Gun: any successful hit re-charges to the 100-dmg shot
   if (weaponId === 'switchblade_gun' || weaponId === 'switchblade_charged') {
@@ -6460,6 +7062,7 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false) {
         const kc = document.getElementById('kill-count');
         if (kc) kc.textContent = `Kills: ${myKills}`;
         const botName = players[pid]?.name || 'Bot';
+        playSoundEvent('kill', { volume: 1.05, minGap: 80 });
         showAnnouncement('ELIMINATED', botName, '#ff4444', 1200);
         onEntityDied(pid, myId);
         // Schedule local respawn after 3s (in case server isn't responding)
@@ -6784,7 +7387,7 @@ function updateBullets(dt) {
           if (!dest.mesh) continue;
           const dpos = new THREE.Vector3();
           dest.mesh.getWorldPosition(dpos);
-          if (dpos.distanceTo(wallHitPt) < (dest.type === 'reactor' ? 4 : dest.type === 'glass' ? 6 : 1.5)) {
+          if (dpos.distanceTo(wallHitPt) < (dest.type === 'reactor' ? 4 : dest.type === 'glass' ? 6 : dest.type === 'explosive_barrel' ? 2.2 : 1.5)) {
             damageDestructible(dest, destDmg);
             break;
           }
@@ -6953,6 +7556,7 @@ function throwAirGrenade(item) {
   const origin = new THREE.Vector3();
   camera.getWorldPosition(origin);
   origin.add(new THREE.Vector3(0.12, -0.18, -0.30).applyQuaternion(camera.quaternion));
+  playSoundEvent('air_burst', { volume: 0.65 });
   const aimDir = new THREE.Vector3(0, 0.20, -1).applyQuaternion(camera.quaternion).normalize();
   const speed = item.bulletSpeed || 50;
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(item.bulletSize || 0.11, 8, 6),
@@ -7008,6 +7612,7 @@ function damageDestructible(dest, dmg) {
     if (dest.type === 'glass') showAnnouncement('🔨 GLASS BROKEN', '', '#88ccee', 700);
     if (dest.type === 'airport_light') showAnnouncement('💡 LIGHT OUT', `${Math.round(airportLightLevel * 100)}% brightness`, '#888888', 700);
     if (dest.type === 'reactor') showAnnouncement('☢️ REACTOR DESTROYED', '12 m AOE explosion!', '#ffaa22', 2400);
+    if (dest.type === 'explosive_barrel') showAnnouncement('BARREL BOOM', '7 m AOE explosion!', '#ff7722', 1400);
   }
 }
 
@@ -7654,6 +8259,7 @@ function spawnBurnZone(pos, radius, dps, durationMs) {
   ring.rotation.x = -Math.PI / 2;
   ring.position.set(pos.x, 0.04, pos.z);
   scene.add(ring);
+  playSoundEvent('fire_sizzle', { position: pos, volume: 0.85, minGap: 180 });
   burnZones.push({ x: pos.x, z: pos.z, radius, dps, until: Date.now() + durationMs, mesh: ring, lastTick: 0 });
 }
 function updateBurnZones(dt) {
@@ -7666,6 +8272,7 @@ function updateBurnZones(dt) {
     // Tick DOT every 1s
     if (now - z.lastTick >= 1000) {
       z.lastTick = now;
+      playSoundEvent('fire_sizzle', { position: new THREE.Vector3(z.x, 0, z.z), remote: true, volume: 0.55, minGap: 260 });
       // Damage player
       const pdx = camera.position.x - z.x, pdz = camera.position.z - z.z;
       if (pdx*pdx + pdz*pdz < z.radius * z.radius) {
@@ -7862,6 +8469,8 @@ const CLIENT_WEAPON_DAMAGE = Object.fromEntries([
   ['hyper_disc', 80],
   // Map hazards
   ['lava', 4],
+  ['acid', 6],
+  ['explosive_barrel', 100],
   // The classic
   ['fists', 24],
   // 👑 BR vehicle guns
@@ -7893,6 +8502,7 @@ function applyBotDamageToPlayer(weaponId, botId) {
     if (isDead) return;
     const me = players[myId];
     if (me) me.hp = 0;
+    playSoundEvent('freeze_shatter', { volume: 1.1 });
     updateHealthHUD(0);
     isDead = true;
     showAnnouncement('FROZEN', 'You turned to ice', '#99eeff', 1800);
@@ -7911,6 +8521,7 @@ function applyBotDamageToPlayer(weaponId, botId) {
   me.hp = Math.max(0, me.hp - dmg);
   console.log(`[damage] bot hit: ${weaponId}(${dmg}dmg) ${oldHp}→${me.hp}`);
   updateHealthHUD(me.hp);
+  if (oldHp > 75 && me.hp <= 75 && me.hp > 0) playSoundEvent('low_hp', { volume: 1.0, minGap: 2500 });
   flashHitIndicator();
   if (me.hp <= 0 && !isDead) {
     isDead = true;
@@ -8093,7 +8704,9 @@ socket.on('playerLeft',   id => {
 socket.on('bulletFired', b => {
   if (b.ownerId===myId) return;
   const w = WEAPONS.find(x=>x.id===b.weapon)||WEAPONS[0];
-  spawnLocalBullet(new THREE.Vector3(b.x,b.y,b.z), new THREE.Vector3(b.dx,b.dy,b.dz), b.id, false, w.bulletSpeed, w.bulletColor, w.bulletSize, w.id);
+  const origin = new THREE.Vector3(b.x,b.y,b.z);
+  playWeaponSound(b.weapon || w.id, { baseWeapon: w, remote: true, position: origin });
+  spawnLocalBullet(origin, new THREE.Vector3(b.dx,b.dy,b.dz), b.id, false, w.bulletSpeed, w.bulletColor, w.bulletSize, w.id);
 });
 socket.on('playerHit', data => {
   // Range mode: player is invincible — just ignore any damage (no healSelf to avoid server loop)
@@ -8231,7 +8844,7 @@ socket.on('playerDied', data => {
       camera.position.set(0, 1.65, 38);
       euler.y = Math.PI;
       camera.quaternion.setFromEuler(euler);
-      socket.emit('readyRespawn');
+      socket.emit('readyRespawn', { x: camera.position.x, z: camera.position.z });
       requestPointerLockSafe();
     } else if (match && match.type === 'dday') {
       // D-Day: auto-respawn at bunker 0 after 3 seconds, same weapons
@@ -8243,7 +8856,7 @@ socket.on('playerDied', data => {
         camera.position.set(-22, 1.65, 22); // back to bunker 0 slit
         euler.y = 0; // face toward enemies (-Z)
         camera.quaternion.setFromEuler(euler);
-        socket.emit('readyRespawn');
+        socket.emit('readyRespawn', { x: camera.position.x, z: camera.position.z });
         grantSpawnShield(3000);
         requestPointerLockSafe();
       }, 3000);
@@ -8275,14 +8888,13 @@ socket.on('playerRespawned', p => {
       // D-Day: position already set by the 3s respawn timer, just refresh HP
       if (p.forcedReset) camera.position.set(p.x, 1.65, p.z);
     } else {
-      // Always teleport to ally side — never trust server's spawn point (they're near centre)
-      if (p.forcedReset) {
+      // Always teleport to the player's team side — never trust server's center-ish spawn.
+      if (p.forcedReset || p.clientSpawn) {
         camera.position.set(p.x, 1.65, p.z);
+        euler.y = p.z < 0 ? 0 : Math.PI;
       } else {
-        const sx = (Math.random() - 0.5) * 24;
-        camera.position.set(sx, 1.65, 38 + Math.random() * 3);
+        placePlayerAtTeamSpawn(localPlayerTeam(), 24, 38);
       }
-      euler.y = Math.PI;
       camera.quaternion.setFromEuler(euler);
     }
   } else if (remoteMeshes[p.id]) {
@@ -8547,6 +9159,8 @@ function explodeSupport(g) {
   } else {
     const color = item.randomBulletColor ? 0xffaa00 : (item.bulletColor || 0xff7700);
     spawnAbilityAOEFX(pos, getSupportRadius(item), color);
+    if (item.id === 'black_hole_seed') playSoundEvent('blackhole_collapse', { position: pos, volume: 1.15 });
+    else if (item.id === 'air_grenade') playSoundEvent('air_burst', { position: pos, volume: 1.15 });
     spawnExplosion(pos);
   }
 
@@ -8582,6 +9196,7 @@ function explodeSupport(g) {
       if (item.id === 'air_grenade') {
         const bot = gameBots.find(b => b.id === pid);
         if (bot) { bot.yVel = item.launchVel || 14; bot.y = bot.y || 0; }
+        playSoundEvent('air_launch', { position: target, remote: true, volume: 0.9, minGap: 90 });
       }
       spawnHitParticle(target);
     }
@@ -8591,6 +9206,7 @@ function explodeSupport(g) {
     if (item.id === 'air_grenade') {
       // Launch self upward (reuse slam-state vertical physics)
       slamState = { vel: item.launchVel || 14 };
+      playSoundEvent('air_launch', { volume: 1.0, minGap: 90 });
       flashScreen('rgba(170,204,255,0.2)', 250);
       applyBotDamageToPlayer(item.id, null); // also do the small damage
     } else {
@@ -9249,7 +9865,8 @@ function startMatchRound() {
     // For elim rounds: respawn the player now (after countdown)
     if (isDead) {
       isDead = false;
-      socket.emit('readyRespawn');
+      placePlayerAtTeamSpawn(localPlayerTeam(), 24, 38);
+      socket.emit('readyRespawn', { x: camera.position.x, z: camera.position.z });
       requestPointerLockSafe();
     }
     match.roundActive = true;
@@ -9521,13 +10138,11 @@ function scheduleArcadeRespawn() {
     isDead = false;
     const me = players[myId];
     if (me) { me.hp = (match.juggernautId === myId) ? 1000 : 300; updateHealthHUD(me.hp); }
-    const sx = (Math.random() - 0.5) * 24;
-    camera.position.set(sx, 1.65, 38 + Math.random() * 4);
-    euler.y = Math.PI; camera.quaternion.setFromEuler(euler);
+    placePlayerAtTeamSpawn(localPlayerTeam(), 24, 38);
     grantSpawnShield(2000);
     document.getElementById('death-screen').style.display = 'none';
     document.getElementById('waiting-screen').style.display = 'none';
-    socket.emit('readyRespawn');
+    socket.emit('readyRespawn', { x: camera.position.x, z: camera.position.z });
     requestPointerLockSafe();
   }, 2500);
 }
@@ -9597,7 +10212,7 @@ function onEntityDied(targetId, killerId) {
           grantSpawnShield(3000);
           document.getElementById('death-screen').style.display = 'none';
           document.getElementById('waiting-screen').style.display = 'none';
-          socket.emit('readyRespawn');
+          socket.emit('readyRespawn', { x: camera.position.x, z: camera.position.z });
           requestPointerLockSafe();
         }, 4000);
       } else {
@@ -9810,10 +10425,8 @@ function onFrontlinesKill(targetId, killerId) {
     setTimeout(() => {
       if (!match || match.over || !isDead) return;
       isDead = false;
-      const sx = (Math.random() - 0.5) * 24;
-      camera.position.set(sx, 1.65, 38 + Math.random() * 3);
-      euler.y = Math.PI; camera.quaternion.setFromEuler(euler);
-      socket.emit('readyRespawn');
+      placePlayerAtTeamSpawn(localPlayerTeam(), 24, 38);
+      socket.emit('readyRespawn', { x: camera.position.x, z: camera.position.z });
       grantSpawnShield(3000);
       requestPointerLockSafe();
     }, 3000);
@@ -10013,7 +10626,7 @@ function updateRoundScoreDisplay() {
 function restartElimRound(lastWinner) {
   if (!match) return;
   if (lastWinner !== null) match.round++;
-  resetPlayerForRound(0, 42);
+  resetPlayerForRound();
   grantSpawnShield(3000);
   requestPointerLockSafe();
   // Respawn all bots back to their team edges with full health and fresh weapons
@@ -10153,7 +10766,8 @@ function startTiebreaker() {
       isDead = false;
       document.getElementById('waiting-screen').style.display = 'none';
       document.getElementById('death-screen').style.display   = 'none';
-      socket.emit('readyRespawn');
+      placePlayerAtTeamSpawn(localPlayerTeam(), 24, 38);
+      socket.emit('readyRespawn', { x: camera.position.x, z: camera.position.z });
       requestPointerLockSafe();
     }
     if (topEnemy) { topEnemy.dead = false; const m = remoteMeshes[topEnemy.id]; if (m) m.visible = true; }
@@ -10262,7 +10876,7 @@ function spawnGameBots() {
     // King of the Hill: always use the giant BR arena
     activateMap('br_arena');
   } else if (selectedModeConfig.type !== 'dday' && selectedModeConfig.type !== 'range') {
-    const pool = ['blank','urban','warehouse','forest','volcano','cyber','desert','tundra','space','airport','trenches','chernobyl'];
+    const pool = ['blank','urban','warehouse','forest','volcano','cyber','desert','tundra','space','airport','trenches','chernobyl','refinery','skydock','sewer','gravity_lab','glassworks'];
     const chosen = (selectedMap === 'auto' || !MAP_GROUPS[selectedMap]) ? pool[Math.floor(Math.random()*pool.length)] : selectedMap;
     activateMap(chosen);
     // Update sky color if the map specifies one
@@ -10290,7 +10904,7 @@ function spawnGameBots() {
   const now = Date.now();
   const botList = [];
 
-  // Move the player to the ally side before the round begins
+  // Move the player to their team side before the round begins
   if (selectedModeConfig && selectedModeConfig.type === 'dday') {
     camera.position.set(-22, 1.65, 22); euler.y = 0; // D-Day: inside bunker 0, facing enemies
   } else if (selectedModeConfig && selectedModeConfig.type === 'range') {
@@ -10302,13 +10916,9 @@ function spawnGameBots() {
     camera.position.set(Math.cos(ang) * r, 1.65, Math.sin(ang) * r);
     euler.y = ang + Math.PI; // face toward center
   } else {
-    // Randomize player spawn across the ally back-line so 1v1s / team matches
-    // don't always start from the exact same point.
-    const px = (Math.random() - 0.5) * 36;       // wide spread along x
-    const pz = 38 + Math.random() * 8;           // varied depth on ally side
-    camera.position.set(px, 1.65, pz);
-    euler.y = Math.PI + (Math.random() - 0.5) * 0.6; // face toward center, slight yaw
+    placePlayerAtTeamSpawn();
   }
+  socket.emit('resetSelf', { x: camera.position.x, z: camera.position.z });
 
   const makeBot = (idx, team) => {
     const isAlly   = team === 'ally';
@@ -10340,25 +10950,20 @@ function spawnGameBots() {
     // Per-bot difficulty rolls
     const w = WEAPONS.find(ww => ww.id === weaponId) || WEAPONS[0];
     const diff = selectedDifficulty;
-    const aimSkill   = diff === 'easy' ? 1.0
-                     : diff === 'medium' ? 0.7 + Math.random() * 0.6   // 0.7-1.3
-                     : diff === 'hard' ? 0.9 + Math.random() * 0.7     // 0.9-1.6
-                     : 1.4 + Math.random() * 0.6;                       // 1.4-2.0 (expert = surgical)
-    const reactionMs = diff === 'easy' ? 0
-                     : diff === 'medium' ? 150 + Math.random() * 250   // 150-400ms
-                     : diff === 'hard' ? 80 + Math.random() * 220      // 80-300ms
-                     : 40 + Math.random() * 100;                        // 40-140ms (expert = inhuman)
+    const tune = botTuning(diff);
+    const aimSkill   = tune.aimMin + Math.random() * tune.aimRand;
+    const reactionMs = tune.reactMin + Math.random() * tune.reactRand;
     // Personality: weapon-matched mostly (70% hard / 80% expert), with off-roll variance for unpredictability
     const personality = rollPersonality(weaponId, diff);
     const botDPS = WEAPON_DPS_CACHE[weaponId] || 150;
     gameBots.push({ id, team, weaponId, spawnWeaponId: weaponId, x: sx, z: sz, rotY: 0, hp: 300,
                     dead: false, state: 'chase',
                     wanderAngle: Math.random() * Math.PI * 2, wanderTimer: 0,
-                    lastShot: Date.now() + Math.random() * 2000, stuckTimer: 0,
+                    lastShot: Date.now() + Math.random() * tune.initialShotDelay, stuckTimer: 0,
                     strafeDir: Math.random() < 0.5 ? 1 : -1,
                     strafeFlipTimer: 0, tacTimer: 0, prevHp: 300, coverPt: null,
                     // Difficulty fields
-                    difficulty: diff, aimSkill, reactionMs, personality, dps: botDPS,
+                    difficulty: diff, aimSkill, reactionMs, personality, dps: botDPS, tune,
                     botAmmo: w.mag || 30, botMag: w.mag || 30, botReserve: (w.reserve === 0 ? 99999 : w.reserve) || 90,
                     reloadUntil: 0,
                     firstSeenAt: 0, lastSeenPos: null, lastSeenAt: 0,
@@ -10999,9 +11604,10 @@ function updateBotAI(dt) {
 
       // EXPERT: hit-and-run — after firing, periodically reposition to a new flanking spot
       if (isExpert && now >= bot.nextRunCheck) {
-        bot.nextRunCheck = now + 2500 + Math.random() * 1500;
-        // 35% chance to enter hit-and-run when not already repositioning and not in cover
-        if (now > bot.hitAndRunUntil && bot.state !== 'cover' && bot.state !== 'melee_charge' && Math.random() < 0.35) {
+        const tune = bot.tune || botTuning(bot.difficulty);
+        bot.nextRunCheck = now + 3200 + Math.random() * 1200;
+        // Reposition occasionally, but never so often that Expert stops applying pressure.
+        if (now > bot.hitAndRunUntil && bot.state !== 'cover' && bot.state !== 'melee_charge' && dist < 24 && Math.random() < tune.hitRunChance) {
           // Pick a perpendicular reposition point relative to target
           const dx = target.x - bot.x, dz = target.z - bot.z;
           const len = Math.max(0.01, Math.hypot(dx, dz));
@@ -11259,13 +11865,14 @@ function updateBotAI(dt) {
       // ── Shooting (all states except melee_charge which uses swings) ─────
       if (bot.state !== 'melee_charge') {
         const w = WEAPONS.find(w => w.id === bot.weaponId) || WEAPONS[0];
+        const tune = bot.tune || botTuning(bot.difficulty);
         const isDDayAttacker = bot.state === 'dday_attacker';
         // MEDIUM/HARD: bot is currently reloading? skip
         const isReloading = bot.reloadUntil && now < bot.reloadUntil;
         const canShoot = !isReloading;
         const fireInterval = isDDayAttacker
           ? Math.max(w.fireRate, 500) + Math.random() * 400
-          : Math.max(w.fireRate, 900) + Math.random() * 600;
+          : Math.max(w.fireRate, tune.fireMin) + Math.random() * tune.fireRand;
         const tx = target.isPlayer ? camera.position.x : target.x;
         const tz = target.isPlayer ? camera.position.z : target.z;
         const hasLOS = hasLineOfSight(bot.x, bot.z, tx, tz);
@@ -11310,19 +11917,21 @@ function updateBotAI(dt) {
             applyBotDamageToPlayer(abId, bot.id);
             const origin = new THREE.Vector3(bot.x, 1.5, bot.z);
             const dir = new THREE.Vector3((tx - bot.x), 0, (tz - bot.z)).normalize();
+            playWeaponSound(abId, { baseWeapon: w, remote: true, position: origin, volume: 1.05 });
             spawnLocalBullet(origin, dir, `botab_${bot.id}_${now}`, false, (w.bulletSpeed||120)*1.5, 0xffaa00, 0.10, abId);
           }
         }
         // While kiting (retreating from scary close weapon), reduce fire interval so they shoot while running
-        const kiteFireInterval = bot._kiting ? Math.max(w.fireRate, 400) + Math.random() * 200 : fireInterval;
-        if (canShoot && reactionDone && roundLive && dist < 35 && now - bot.lastShot > kiteFireInterval) {
+        const kiteFireInterval = bot._kiting ? Math.max(w.fireRate, Math.min(360, tune.fireMin)) + Math.random() * Math.min(180, tune.fireRand) : fireInterval;
+        const shootRange = bot.difficulty === 'expert' ? 46 : bot.difficulty === 'hard' ? 40 : 35;
+        if (canShoot && reactionDone && roundLive && dist < shootRange && now - bot.lastShot > kiteFireInterval) {
           if (hasLOS) {
             bot.lastShot = now;
             // MEDIUM/HARD: consume ammo, trigger reload when empty
             if (bot.difficulty && bot.difficulty !== 'easy') {
               bot.botAmmo--;
               if (bot.botAmmo <= 0) {
-                const reloadMs = 1500 + Math.random() * 500;
+                const reloadMs = tune.reloadMin + Math.random() * tune.reloadRand;
                 bot.reloadUntil = now + reloadMs;
                 bot.botAmmo = bot.botMag;
               }
@@ -11380,6 +11989,7 @@ function updateBotAI(dt) {
               (Math.random()-0.5)*0.03,
               aimDz / aimLen + (Math.random()-0.5)*spread
             ).normalize();
+            playWeaponSound(w.id, { baseWeapon: w, remote: true, position: origin });
             spawnLocalBullet(origin, dir, `bot_${bot.id}_${now}`, false, w.bulletSpeed || 120, w.bulletColor, w.bulletSize, w.id);
           }
         }
@@ -11853,9 +12463,8 @@ function confirmLoadout() {
     document.getElementById('waiting-screen').style.display = 'flex';
     showAnnouncement('LOADOUT UPDATED', 'Active next round', '#4cf', 1400);
   } else {
-    // Respawn after death — teleport to ally side immediately, don't rely on server position
-    const spawnX = (Math.random() - 0.5) * 24;
-    resetPlayerForRound(spawnX, 38 + Math.random() * 3);
+    // Respawn after death on this player's team side, don't rely on the server's center spawn.
+    resetPlayerForRound();
     grantSpawnShield(3000);
     requestPointerLockSafe();
   }
@@ -12228,7 +12837,7 @@ const DIFFICULTY_DESCS = {
   easy:   'Original AI · no reload · no leading · no reaction delay',
   medium: '+ Reloading · Bullet leading · Reaction time · Skill variation · Smarter melee charges',
   hard:   '+ Personalities · Weapon abilities · Focus fire · Low-HP retreat · Last-seen memory',
-  expert: '+ Hit-and-run · Weapon-aware positioning · Telepathic team comms · Punishes reloading · DPS-aware engagement · Trajectory prediction',
+  expert: '+ Faster aim/fire/reload · Weapon-aware pressure · Team comms · Punishes reloading · Trajectory prediction',
 };
 function selectDifficulty(diff) {
   selectedDifficulty = diff;
@@ -12267,6 +12876,11 @@ const MAP_DESCS = {
   airport:    '🛬 Airport — break glass + lights · gets darker as lights die',
   trenches:   '🪖 Trenches — barbed wire + 4 PILOTABLE mortar cannons (F to use)',
   chernobyl:  '☢️ Chernobyl — toxic gas (1 dmg/s) + 4 destructible reactors (500 HP each)',
+  refinery:   'Oil Refinery — oil slicks make you slide + explosive barrels',
+  skydock:    'Skydock Launch — many jump pads + raised gantry fights',
+  sewer:      'Acid Sewer — toxic pools force bridge fights',
+  gravity_lab:'Gravity Lab — low gravity domes + launch pads',
+  glassworks: 'Glassworks — breakable glass maze + barrel traps',
 };
 function selectMapPick(mapId) {
   selectedMap = mapId;
