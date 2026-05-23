@@ -856,6 +856,55 @@ let rangeTargets = []; // { id, baseX, z, moving, dir, speed, respawnAt }
 let rangeStats   = { shots: 0, hits: 0 };
 const BOT_MOVE_INTERVAL = 0.05; // send position updates every 50ms
 
+// ── 🛒 Shop: weapon cost table (mirrors server.js WEAPON_COSTS) ────────────
+// Admin items are NOT priced — they're claimed via promo codes only.
+const WEAPON_COSTS = {
+  // Primaries — ARs / SMGs
+  ak20: 250, ak30: 300, mp40: 200, p90: 350, vector: 300, burst: 280,
+  // Primaries — Shotguns
+  sg8: 220, sg100: 380, auto_shotgun: 340,
+  // Primaries — Snipers / Marksman
+  srx: 500, lever: 360,
+  // Primaries — Special
+  rpd: 450, paintball: 120, crossbow: 280,
+  // Secondaries
+  revolver: 150, flare: 80, pistol: 60, shorty: 180, cycler: 140,
+  hand_cannon: 260, throwing_knives: 120, taser: 200,
+  machine_pistol: 220, sawed_off: 260,
+  // Melees
+  bat: 80, sabre: 140, frying_pan: 60, sledge: 360, spear: 200,
+  katana: 360, baguette: 50, knife: 90, chainsaw: 480, lightsabre: 520,
+  riot_shield: 220, screwdriver: 60, crowbar: 110, fire_axe: 420,
+  nunchucks: 160, umbrella: 140, yoyo: 180, combat_axe: 380,
+  shock_baton: 220, titan_hammer: 560, vampire_blade: 480, fists: 0,
+  // Support / Utility
+  frag: 120, medkit: 80, stim: 60, smoke: 70, blink_pearl: 280,
+  ammo_fountain: 180, confetti_cannon: 100, moon_mine: 220, rubber_duck: 90,
+  black_hole_seed: 540, glitch_cube: 240, vampire_syringe: 200,
+  adrenaline: 220, tripwire: 200, hologram: 240, magnet_mine: 220,
+  bounce_pad: 140, hunter_drone: 460, emp_grenade: 240, sticky_charge: 320,
+  orbital_strike: 600, guardian_drone: 380, nano_shield: 320,
+  air_grenade: 160, land_mine: 380,
+};
+const FREE_WEAPONS = new Set([
+  'ak20','sg8','pistol','flare','fists','knife','frag','medkit',
+]);
+const TRIAL_DIVISOR = 20;
+const trialingThisMatch = new Set(); // ids the player paid a trial for this match
+
+function shopCost(id)      { return WEAPON_COSTS[id]; }
+function shopTrialCost(id) { const c = WEAPON_COSTS[id]; return c == null ? null : Math.max(1, Math.ceil(c / TRIAL_DIVISOR)); }
+function isOwned(id) {
+  if (!id) return true;
+  if (FREE_WEAPONS.has(id)) return true;
+  if (trialingThisMatch.has(id)) return true;
+  if (!currentUser) return false;
+  if (currentUser.isAdmin) return true;
+  if (currentUser.purchased && currentUser.purchased.includes(id)) return true;
+  if (currentUser.unlocks && currentUser.unlocks.includes(id)) return true; // admin items
+  return false;
+}
+
 const PRIMARY_WEAPON_IDS = WEAPONS.filter(w => w.slot === 'primary' && !w.ddayOnly).map(w => w.id);
 function randomPrimaryId() { return PRIMARY_WEAPON_IDS[Math.floor(Math.random() * PRIMARY_WEAPON_IDS.length)]; }
 
@@ -10801,6 +10850,14 @@ function endMatch(winner, reason) {
   document.getElementById('death-screen').style.display   = 'none';
   document.getElementById('waiting-screen').style.display = 'none';
   el.style.display = 'flex';
+
+  // ── 💰 Award shop credits ────────────────────────────────────────────
+  const playerKills = (match.ffaKills?.[myId])
+    ?? (players[myId]?.kills)
+    ?? 0;
+  awardMatchCredits(playerKills, isWin);
+  // Trials are one-match only — clear them so they re-cost next time.
+  trialingThisMatch.clear();
 }
 
 // ── Bot AI ─────────────────────────────────────────────────────────────────
@@ -12201,6 +12258,44 @@ function showLoadoutScreen(mode) {
   const supportEls = {};
   // Helper: is this admin item unlocked for the current user?
   const isUnlocked = (id) => !!(currentUser && currentUser.unlocks && currentUser.unlocks.includes(id));
+
+  // Decorate a card with cost/owned/buy-trial overlay. Returns true if the
+  // item is currently usable (owned/free/admin-unlocked/trial-active).
+  function decorateShopState(card, id, isAdminItem, rerender) {
+    if (isAdminItem) return isUnlocked(id);
+    if (isOwned(id)) {
+      const badge = document.createElement('div');
+      badge.style.cssText = 'font-size:9px;color:#88ff99;letter-spacing:1px;margin-top:3px;';
+      badge.textContent = FREE_WEAPONS.has(id) ? 'FREE' : trialingThisMatch.has(id) ? '🧪 TRIAL' : '✓ OWNED';
+      card.appendChild(badge);
+      return true;
+    }
+    const cost = shopCost(id);
+    if (cost == null) return false; // not in shop and not owned → hidden
+    const buyCost = cost;
+    const tryCost = shopTrialCost(id);
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:4px;margin-top:4px;';
+    row.innerHTML = `
+      <button class="shop-buy" style="flex:1;padding:3px 6px;background:#1a2a1a;color:#88ff99;border:1px solid #88ff99;font-size:10px;cursor:pointer;border-radius:3px;font-family:inherit;">BUY ${buyCost}💰</button>
+      <button class="shop-trial" style="flex:1;padding:3px 6px;background:#1a1a2a;color:#aabbff;border:1px solid #6688cc;font-size:10px;cursor:pointer;border-radius:3px;font-family:inherit;">TRIAL ${tryCost}💰</button>
+    `;
+    row.querySelector('.shop-buy').addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (await buyWeapon(id)) rerender();
+    });
+    row.querySelector('.shop-trial').addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (await trialWeapon(id)) rerender();
+    });
+    card.appendChild(row);
+    card.style.opacity = '0.55';
+    card.dataset.locked = '1';
+    return false;
+  }
+
+  const rerenderLoadout = () => showLoadoutScreen(loadoutMode); // re-paint with fresh state
+
   WEAPONS.forEach((w, i) => {
     if (w.ddayOnly) return; // skip D-Day exclusive weapons
     if (w.adminItem && !isUnlocked(w.id)) return; // hide locked admin weapons
@@ -12208,14 +12303,17 @@ function showLoadoutScreen(mode) {
     const card = document.createElement('div');
     card.className = 'loadout-card';
     card.dataset.idx = i;
+    card.dataset.itemId = w.id;
     const fireTag = w.auto ? 'AUTO' : 'SEMI';
     const rateTag = w.ammoRegen ? 'REGEN' : `${Math.round(1000/w.fireRate)}/s`;
     const adminTag = w.adminItem ? ' <span style="color:#ffcc44;font-size:9px;">🪖 ADMIN</span>' : '';
     card.innerHTML = `<div class="lc-name">${w.name}${adminTag}</div>
       <div class="lc-type">${w.type}</div>
       <div class="lc-stats">DMG ${w.damage} · MAG ${w.mag} · ${fireTag} · ${rateTag}</div>`;
-    card.addEventListener('click',      () => pickLoadoutWeapon(i, isPrimary, card));
-    card.addEventListener('touchstart', e  => { e.stopPropagation(); e.preventDefault(); pickLoadoutWeapon(i, isPrimary, card); }, { passive: false });
+    const usable = decorateShopState(card, w.id, !!w.adminItem, rerenderLoadout);
+    const handler = () => { if (usable) pickLoadoutWeapon(i, isPrimary, card); };
+    card.addEventListener('click',      handler);
+    card.addEventListener('touchstart', e => { e.stopPropagation(); e.preventDefault(); handler(); }, { passive: false });
     (isPrimary ? pList : sList).appendChild(card);
     cardEls[i] = card;
   });
@@ -12224,12 +12322,15 @@ function showLoadoutScreen(mode) {
     const card = document.createElement('div');
     card.className = 'loadout-card';
     card.dataset.idx = i;
+    card.dataset.itemId = m.id;
     const adminTag = m.adminItem ? ' <span style="color:#ffcc44;font-size:9px;">🪖 ADMIN</span>' : '';
     card.innerHTML = `<div class="lc-name">${m.name}${adminTag}</div>
       <div class="lc-type">${m.type}</div>
       <div class="lc-stats">DMG ${m.damage} · RANGE ${m.range} · ${Math.round(1000/m.cooldown)}/s</div>`;
-    card.addEventListener('click',      () => pickMelee(i, card));
-    card.addEventListener('touchstart', e  => { e.stopPropagation(); e.preventDefault(); pickMelee(i, card); }, { passive: false });
+    const usable = decorateShopState(card, m.id, !!m.adminItem, rerenderLoadout);
+    const handler = () => { if (usable) pickMelee(i, card); };
+    card.addEventListener('click',      handler);
+    card.addEventListener('touchstart', e => { e.stopPropagation(); e.preventDefault(); handler(); }, { passive: false });
     mList.appendChild(card);
     meleeEls[i] = card;
   });
@@ -12238,13 +12339,16 @@ function showLoadoutScreen(mode) {
     const card = document.createElement('div');
     card.className = 'loadout-card';
     card.dataset.idx = i;
+    card.dataset.itemId = s.id;
     const stat = s.heal ? `HEAL ${s.heal}` : s.blink ? `BLINK ${s.blink}` : s.refill ? 'REFILL AMMO' : `DMG ${s.damage || 0}`;
     const adminTag = s.adminItem ? ' <span style="color:#ffcc44;font-size:9px;">🪖 ADMIN</span>' : '';
     card.innerHTML = `<div class="lc-name">${s.name}${adminTag}</div>
       <div class="lc-type">${s.type}</div>
       <div class="lc-stats">${stat} · USES ${s.uses}</div>`;
-    card.addEventListener('click',      () => pickSupport(i, card));
-    card.addEventListener('touchstart', e  => { e.stopPropagation(); e.preventDefault(); pickSupport(i, card); }, { passive: false });
+    const usable = decorateShopState(card, s.id, !!s.adminItem, rerenderLoadout);
+    const handler = () => { if (usable) pickSupport(i, card); };
+    card.addEventListener('click',      handler);
+    card.addEventListener('touchstart', e => { e.stopPropagation(); e.preventDefault(); handler(); }, { passive: false });
     uList.appendChild(card);
     supportEls[i] = card;
   });
@@ -12260,11 +12364,16 @@ function showLoadoutScreen(mode) {
     readyBtn.disabled = false;
     readyBtn.style.pointerEvents = 'all';
   } else {
-    // First-time entry: apply defaults
-    selectedPrimaryIdx = WEAPONS.findIndex(w => w.slot !== 'secondary');
-    selectedSecondaryIdx = WEAPONS.findIndex(w => w.slot === 'secondary');
-    selectedMeleeIdx = 0;
-    selectedSupportIdx = 0;
+    // First-time entry: apply defaults — pick first OWNED item per slot so
+    // we don't auto-select something the user can't actually afford.
+    selectedPrimaryIdx   = WEAPONS.findIndex(w => w.slot !== 'secondary' && !w.ddayOnly && isOwned(w.id));
+    selectedSecondaryIdx = WEAPONS.findIndex(w => w.slot === 'secondary' && isOwned(w.id));
+    selectedMeleeIdx     = MELEE_ITEMS.findIndex(m => isOwned(m.id));
+    selectedSupportIdx   = SUPPORT_ITEMS.findIndex(s => isOwned(s.id));
+    if (selectedPrimaryIdx   < 0) selectedPrimaryIdx   = 0;
+    if (selectedSecondaryIdx < 0) selectedSecondaryIdx = WEAPONS.findIndex(w => w.slot === 'secondary');
+    if (selectedMeleeIdx     < 0) selectedMeleeIdx     = 0;
+    if (selectedSupportIdx   < 0) selectedSupportIdx   = 0;
     cardEls[selectedPrimaryIdx] && cardEls[selectedPrimaryIdx].classList.add('selected');
     cardEls[selectedSecondaryIdx] && cardEls[selectedSecondaryIdx].classList.add('selected');
     meleeEls[selectedMeleeIdx] && meleeEls[selectedMeleeIdx].classList.add('selected');
@@ -12504,7 +12613,7 @@ const adminCheats = {
       // Silently try to log in — populate currentUser if successful
       authRequest('/auth/login', saved).then(r => {
         if (r && r.ok) {
-          currentUser = { username: r.username, password: saved.password, unlocks: r.unlocks || [], isAdmin: !!r.isAdmin };
+          currentUser = { username: r.username, password: saved.password, unlocks: r.unlocks || [], purchased: r.purchased || [], credits: r.credits ?? 0, isAdmin: !!r.isAdmin };
           const wb = document.getElementById('welcome-back');
           if (wb) {
             wb.textContent = r.isAdmin
@@ -12560,7 +12669,7 @@ async function startGame() {
     return;
   }
 
-  currentUser = { username: result.username, password: pass, unlocks: result.unlocks || [], isAdmin: !!result.isAdmin };
+  currentUser = { username: result.username, password: pass, unlocks: result.unlocks || [], purchased: result.purchased || [], credits: result.credits ?? 0, isAdmin: !!result.isAdmin };
   localStorage.setItem('pvp_user', JSON.stringify({ username: name, password: pass }));
   setAuthStatus(result.isAdmin ? `🔓 ADMIN ACCESS GRANTED · ${result.username}` : `Logged in as ${result.username}`, result.isAdmin ? '#ff4444' : '#88ff88');
 
@@ -12596,6 +12705,58 @@ async function promptUnlockCode() {
   currentUser.unlocks = result.unlocks || [];
   alert(`✅ UNLOCKED: ${result.item}\n\nTotal admin items: ${currentUser.unlocks.length}`);
   updateUserInfoBar(); // refresh the count display
+}
+
+// ── 🛒 Shop actions: buy / trial / award ─────────────────────────────────
+async function buyWeapon(weaponId) {
+  if (!currentUser) { alert('Log in first.'); return false; }
+  if (currentUser.isAdmin) return true;
+  if (FREE_WEAPONS.has(weaponId) || (currentUser.purchased || []).includes(weaponId)) return true;
+  const cost = shopCost(weaponId);
+  if (cost == null) { alert('That item is not purchasable.'); return false; }
+  if ((currentUser.credits ?? 0) < cost) { alert(`Not enough credits.\nNeed ${cost} · You have ${currentUser.credits ?? 0}`); return false; }
+  if (!confirm(`Buy "${weaponId}" for ${cost} credits?\n\nYou have ${currentUser.credits} credits.`)) return false;
+  const r = await authRequest('/shop/buy', { username: currentUser.username, password: currentUser.password, weaponId });
+  if (!r || r.error) { alert('❌ ' + (r?.error || 'shop error')); return false; }
+  currentUser.purchased = r.purchased || currentUser.purchased;
+  currentUser.credits = r.credits ?? currentUser.credits;
+  updateUserInfoBar();
+  return true;
+}
+
+async function trialWeapon(weaponId) {
+  if (!currentUser) { alert('Log in first.'); return false; }
+  if (currentUser.isAdmin || FREE_WEAPONS.has(weaponId) || (currentUser.purchased || []).includes(weaponId)) {
+    trialingThisMatch.add(weaponId);
+    return true;
+  }
+  const cost = shopTrialCost(weaponId);
+  if (cost == null) { alert('That item is not purchasable.'); return false; }
+  if ((currentUser.credits ?? 0) < cost) { alert(`Not enough credits for trial.\nNeed ${cost} · You have ${currentUser.credits ?? 0}`); return false; }
+  if (!confirm(`Trial "${weaponId}" for ${cost} credits (one match only)?`)) return false;
+  const r = await authRequest('/shop/trial', { username: currentUser.username, password: currentUser.password, weaponId });
+  if (!r || r.error) { alert('❌ ' + (r?.error || 'shop error')); return false; }
+  currentUser.credits = r.credits ?? currentUser.credits;
+  trialingThisMatch.add(weaponId);
+  updateUserInfoBar();
+  return true;
+}
+
+async function awardMatchCredits(kills, won) {
+  if (!currentUser || currentUser.isAdmin) return;
+  try {
+    const r = await authRequest('/shop/award', { username: currentUser.username, password: currentUser.password, kills, won: !!won });
+    if (r && r.ok) {
+      currentUser.credits = r.credits ?? currentUser.credits;
+      updateUserInfoBar();
+      // brief on-screen toast
+      const t = document.createElement('div');
+      t.textContent = `💰 +${r.awarded} credits earned`;
+      t.style.cssText = 'position:fixed;top:80px;right:20px;background:#1a1a0a;border:2px solid #ffdd55;color:#ffdd55;padding:10px 18px;font-family:"Courier New",monospace;font-size:14px;letter-spacing:2px;z-index:9999;border-radius:4px;';
+      document.body.appendChild(t);
+      setTimeout(() => t.remove(), 3500);
+    }
+  } catch (e) {}
 }
 
 function selectMode(modeId) {
@@ -12673,7 +12834,9 @@ function updateUserInfoBar() {
   if (nameEl) nameEl.style.color = currentUser.isAdmin ? '#ff4444' : '#88ccff';
   if (unlocksEl) {
     const n = currentUser.unlocks?.length || 0;
-    unlocksEl.textContent = n === 0 ? 'No admin items unlocked' : `🪖 ${n}/24 admin items unlocked`;
+    const credits = currentUser.isAdmin ? '∞' : (currentUser.credits ?? 0);
+    const owned = (currentUser.purchased?.length || 0);
+    unlocksEl.innerHTML = `💰 <b style="color:#ffdd55">${credits}</b> credits · 🛒 ${owned} bought · 🪖 ${n}/24 admin`;
   }
   // Show admin panel button if admin
   let adminBtn = document.getElementById('admin-panel-btn');

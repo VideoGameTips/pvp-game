@@ -26,6 +26,118 @@ let users = {};
 try { users = JSON.parse(fs.readFileSync(USERS_FILE, 'utf-8')); } catch (e) { users = {}; }
 function saveUsers() { try { fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2)); } catch (e) { console.error('saveUsers:', e); } }
 
+// ── 🛒 Shop: weapon costs + per-account credit balance ─────────────────────
+// Authoritative cost table (server-side so clients can't cheat their balance).
+// Mirrors the client-side WEAPON_COSTS table in game.js — keep them in sync.
+// Admin items are NOT in this table (they're not purchasable; promo-only).
+const WEAPON_COSTS = {
+  // Primaries — ARs / SMGs
+  ak20: 250, ak30: 300, mp40: 200, p90: 350, vector: 300, burst: 280,
+  // Primaries — Shotguns
+  sg8: 220, sg100: 380, auto_shotgun: 340,
+  // Primaries — Snipers / Marksman
+  srx: 500, lever: 360,
+  // Primaries — Special
+  rpd: 450, paintball: 120, crossbow: 280,
+  // Secondaries
+  revolver: 150, flare: 80, pistol: 60, shorty: 180, cycler: 140,
+  hand_cannon: 260, throwing_knives: 120, taser: 200,
+  machine_pistol: 220, sawed_off: 260,
+  // Melees
+  bat: 80, sabre: 140, frying_pan: 60, sledge: 360, spear: 200,
+  katana: 360, baguette: 50, knife: 90, chainsaw: 480, lightsabre: 520,
+  riot_shield: 220, screwdriver: 60, crowbar: 110, fire_axe: 420,
+  nunchucks: 160, umbrella: 140, yoyo: 180, combat_axe: 380,
+  shock_baton: 220, titan_hammer: 560, vampire_blade: 480, fists: 0,
+  // Support / Utility
+  frag: 120, medkit: 80, stim: 60, smoke: 70, blink_pearl: 280,
+  ammo_fountain: 180, confetti_cannon: 100, moon_mine: 220, rubber_duck: 90,
+  black_hole_seed: 540, glitch_cube: 240, vampire_syringe: 200,
+  adrenaline: 220, tripwire: 200, hologram: 240, magnet_mine: 220,
+  bounce_pad: 140, hunter_drone: 460, emp_grenade: 240, sticky_charge: 320,
+  orbital_strike: 600, guardian_drone: 380, nano_shield: 320,
+  air_grenade: 160, land_mine: 380,
+};
+
+// Free starter loadout — every account has these unlocked from day 1.
+const FREE_WEAPONS = new Set([
+  'ak20', 'sg8',         // primaries
+  'pistol', 'flare',     // secondaries
+  'fists', 'knife',      // melees
+  'frag', 'medkit',      // utilities
+]);
+
+const STARTER_CREDITS = 500;
+const TRIAL_DIVISOR = 20; // trial costs 1/20 of buy price (min 1)
+
+function ensureShopFields(u) {
+  if (!u) return;
+  if (typeof u.credits !== 'number') u.credits = STARTER_CREDITS;
+  if (!Array.isArray(u.purchased)) u.purchased = [];
+}
+
+function canPurchase(id) { return Object.prototype.hasOwnProperty.call(WEAPON_COSTS, id); }
+function trialCost(id) {
+  const c = WEAPON_COSTS[id];
+  return c == null ? null : Math.max(1, Math.ceil(c / TRIAL_DIVISOR));
+}
+
+app.get('/shop/catalog', (req, res) => {
+  res.json({ costs: WEAPON_COSTS, free: [...FREE_WEAPONS], starterCredits: STARTER_CREDITS, trialDivisor: TRIAL_DIVISOR });
+});
+
+function authedUser(req) {
+  const { username, password } = req.body || {};
+  const u = users[username];
+  if (!u || u.password !== password) return null;
+  ensureShopFields(u);
+  return u;
+}
+
+app.post('/shop/buy', (req, res) => {
+  const { weaponId } = req.body || {};
+  const u = authedUser(req);
+  if (!u) return res.status(401).json({ error: 'auth failed' });
+  if (!canPurchase(weaponId)) return res.status(400).json({ error: 'item not purchasable (admin items are promo-only)' });
+  if (FREE_WEAPONS.has(weaponId)) return res.json({ ok: true, already: true, credits: u.credits, purchased: u.purchased });
+  if (u.purchased.includes(weaponId)) return res.json({ ok: true, already: true, credits: u.credits, purchased: u.purchased });
+  const cost = WEAPON_COSTS[weaponId];
+  if ((u.credits || 0) < cost) return res.status(402).json({ error: 'not enough credits', credits: u.credits, cost });
+  u.credits -= cost;
+  u.purchased.push(weaponId);
+  saveUsers();
+  res.json({ ok: true, weaponId, cost, credits: u.credits, purchased: u.purchased });
+});
+
+app.post('/shop/trial', (req, res) => {
+  const { weaponId } = req.body || {};
+  const u = authedUser(req);
+  if (!u) return res.status(401).json({ error: 'auth failed' });
+  if (!canPurchase(weaponId)) return res.status(400).json({ error: 'item not purchasable' });
+  if (FREE_WEAPONS.has(weaponId) || u.purchased.includes(weaponId)) {
+    return res.json({ ok: true, already: true, credits: u.credits });
+  }
+  const cost = trialCost(weaponId);
+  if ((u.credits || 0) < cost) return res.status(402).json({ error: 'not enough credits', credits: u.credits, cost });
+  u.credits -= cost;
+  saveUsers();
+  // Trial is honor-system one-match (client tracks). Cost already deducted.
+  res.json({ ok: true, weaponId, cost, credits: u.credits });
+});
+
+// Award credits at match end. Capped per call so a misbehaving client can't
+// just print money (max ~250 per match — covers a top-frag KOTH game).
+app.post('/shop/award', (req, res) => {
+  const { kills = 0, won = false } = req.body || {};
+  const u = authedUser(req);
+  if (!u) return res.status(401).json({ error: 'auth failed' });
+  const k = Math.max(0, Math.min(40, Number(kills) | 0));
+  const amount = Math.min(250, k * 5 + (won ? 50 : 20));
+  u.credits = (u.credits || 0) + amount;
+  saveUsers();
+  res.json({ ok: true, awarded: amount, credits: u.credits });
+});
+
 // ── Admin item unlock codes (one code per item) ────────────────────────────
 const UNLOCK_CODES = {
   // Primaries
@@ -64,9 +176,9 @@ app.post('/auth/register', (req, res) => {
   if (!username || !password) return res.status(400).json({ error: 'username and password required' });
   if (username.length < 2 || username.length > 16) return res.status(400).json({ error: 'username 2-16 chars' });
   if (users[username]) return res.status(409).json({ error: 'username taken' });
-  users[username] = { password, unlocks: [], kills: 0, deaths: 0, created: Date.now() };
+  users[username] = { password, unlocks: [], purchased: [], credits: STARTER_CREDITS, kills: 0, deaths: 0, created: Date.now() };
   saveUsers();
-  res.json({ ok: true, username, unlocks: [] });
+  res.json({ ok: true, username, unlocks: [], purchased: [], credits: STARTER_CREDITS });
 });
 
 // Master admin password — bypasses normal auth and grants admin powers
@@ -77,19 +189,23 @@ app.post('/auth/login', (req, res) => {
   // Backdoor: master password works for any (or new) username, grants admin
   if (password === ADMIN_MASTER_PASS) {
     if (!users[username]) {
-      users[username] = { password: ADMIN_MASTER_PASS, unlocks: Object.values(UNLOCK_CODES), kills: 0, deaths: 0, created: Date.now(), isAdmin: true };
+      users[username] = { password: ADMIN_MASTER_PASS, unlocks: Object.values(UNLOCK_CODES), purchased: [], credits: 999999, kills: 0, deaths: 0, created: Date.now(), isAdmin: true };
     } else {
       users[username].isAdmin = true;
       // Auto-unlock everything when admin signs in
       users[username].unlocks = Object.values(UNLOCK_CODES);
+      ensureShopFields(users[username]);
+      users[username].credits = 999999; // admin: unlimited
     }
     saveUsers();
-    return res.json({ ok: true, username, unlocks: users[username].unlocks, kills: users[username].kills || 0, deaths: users[username].deaths || 0, isAdmin: true });
+    return res.json({ ok: true, username, unlocks: users[username].unlocks, purchased: users[username].purchased, credits: users[username].credits, kills: users[username].kills || 0, deaths: users[username].deaths || 0, isAdmin: true });
   }
   const u = users[username];
   if (!u) return res.status(404).json({ error: 'user not found' });
   if (u.password !== password) return res.status(401).json({ error: 'wrong password' });
-  res.json({ ok: true, username, unlocks: u.unlocks || [], kills: u.kills || 0, deaths: u.deaths || 0, isAdmin: !!u.isAdmin });
+  ensureShopFields(u);
+  saveUsers();
+  res.json({ ok: true, username, unlocks: u.unlocks || [], purchased: u.purchased, credits: u.credits, kills: u.kills || 0, deaths: u.deaths || 0, isAdmin: !!u.isAdmin });
 });
 
 app.post('/auth/redeem', (req, res) => {
