@@ -916,6 +916,9 @@ const trialingThisMatch = new Set(); // ids the player paid a trial for this mat
 // ── 💼 Loadout BUNDLES — ~60% off the sum of individual prices ─────────
 // Mirrors server.js BUNDLES (server is authoritative on price/contents).
 const BUNDLES = [
+  { id: 'pitiful',     name: 'Pitiful Pack', icon: '🍂', price: 145,
+    desc: 'All the weak ones · 70% off',
+    items: ['paintball','laser_pointer','baguette','rubber_duck','confetti_cannon'] },
   { id: 'starter_pro', name: 'Starter Pro',  icon: '🎯', price: 240,
     desc: 'Upgrade past the freebies',
     items: ['ak30','revolver','bat','stim'] },
@@ -992,9 +995,19 @@ function isOwned(id) {
   if (trialingThisMatch.has(id)) return true;
   if (!currentUser) return false;
   if (currentUser.isAdmin) return true;
+  if (adminPassActive()) return true; // 10-min trial-everything pass
   if (currentUser.purchased && currentUser.purchased.includes(id)) return true;
   if (currentUser.unlocks && currentUser.unlocks.includes(id)) return true; // admin items
   return false;
+}
+function adminPassActive() {
+  if (!currentUser) return false;
+  if (currentUser.isAdmin) return true;
+  return (currentUser.adminPassExpiresAt || 0) > Date.now();
+}
+function adminPassMsLeft() {
+  if (!currentUser) return 0;
+  return Math.max(0, (currentUser.adminPassExpiresAt || 0) - Date.now());
 }
 
 const PRIMARY_WEAPON_IDS = WEAPONS.filter(w => w.slot === 'primary' && !w.ddayOnly).map(w => w.id);
@@ -12382,13 +12395,27 @@ function renderShop() {
 
 function renderShopChests(body) {
   const ch = currentUser.chests || { common: 0, rare: 0 };
+  const passActive = adminPassActive();
+  const minsLeft = Math.ceil(adminPassMsLeft() / 60000);
   body.innerHTML = `
     <div style="width:100%;font-size:11px;color:#aaa;margin-bottom:14px;letter-spacing:1px;">
       Open chests to get 🧩 weapon fragments + 💰 credits.
       Use 100 fragments to unlock any weapon, or upgrade ones you own.
       Earn chests by playing matches (chance per match), or buy them here.
     </div>
+    <div style="width:100%;background:linear-gradient(135deg,#3a1a1a,#2a1a3a);border:2px solid #ff8844;border-radius:6px;padding:14px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;">
+      <div>
+        <div style="font-size:17px;font-weight:bold;color:#ffcc88;letter-spacing:2px;">🪖 ADMIN PASS · 10 MINUTES</div>
+        <div style="font-size:11px;color:#ddc;margin-top:4px;">Unlocks EVERY weapon (admin items included) for one 10-minute window. Try anything.</div>
+        ${passActive ? `<div style="font-size:12px;color:#88ff99;margin-top:6px;">✓ ACTIVE — ${minsLeft} min left</div>` : ''}
+      </div>
+      <button id="buy-admin-pass" ${passActive ? 'disabled' : ''} style="padding:10px 22px;background:${passActive ? '#222' : '#3a1a1a'};color:${passActive ? '#666' : '#ffcc88'};border:1px solid ${passActive ? '#444' : '#ff8844'};font-size:13px;letter-spacing:2px;cursor:${passActive ? 'default' : 'pointer'};border-radius:4px;font-family:inherit;">
+        ${passActive ? 'ACTIVE' : `BUY · ${ADMIN_PASS_COST}💰`}
+      </button>
+    </div>
   `;
+  const ap = body.querySelector('#buy-admin-pass');
+  if (ap) ap.addEventListener('click', async () => { if (await buyAdminPass()) renderShop(); });
   for (const type of ['common', 'rare']) {
     const have = ch[type] || 0;
     const cost = CHEST_PRICES_CLIENT[type];
@@ -12583,7 +12610,7 @@ function showLoadoutScreen(mode) {
   const meleeEls = {};
   const supportEls = {};
   // Helper: is this admin item unlocked for the current user?
-  const isUnlocked = (id) => !!(currentUser && currentUser.unlocks && currentUser.unlocks.includes(id));
+  const isUnlocked = (id) => adminPassActive() || !!(currentUser && currentUser.unlocks && currentUser.unlocks.includes(id));
 
   // Loadout screen only shows items the player can equip RIGHT NOW.
   // Buying / trialing happens in the dedicated shop (open from mode-select).
@@ -12919,7 +12946,7 @@ const adminCheats = {
       // Silently try to log in — populate currentUser if successful
       authRequest('/auth/login', saved).then(r => {
         if (r && r.ok) {
-          currentUser = { username: r.username, password: saved.password, unlocks: r.unlocks || [], purchased: r.purchased || [], credits: r.credits ?? 0, fragments: r.fragments ?? 0, chests: r.chests || { common: 0, rare: 0 }, upgrades: r.upgrades || {}, freeSpinAvailable: !!r.freeSpinAvailable, isAdmin: !!r.isAdmin };
+          currentUser = { username: r.username, password: saved.password, unlocks: r.unlocks || [], purchased: r.purchased || [], credits: r.credits ?? 0, fragments: r.fragments ?? 0, chests: r.chests || { common: 0, rare: 0 }, upgrades: r.upgrades || {}, freeSpinAvailable: !!r.freeSpinAvailable, adminPassExpiresAt: r.adminPassExpiresAt || 0, isAdmin: !!r.isAdmin };
           const wb = document.getElementById('welcome-back');
           if (wb) {
             wb.textContent = r.isAdmin
@@ -12975,7 +13002,7 @@ async function startGame() {
     return;
   }
 
-  currentUser = { username: result.username, password: pass, unlocks: result.unlocks || [], purchased: result.purchased || [], credits: result.credits ?? 0, fragments: result.fragments ?? 0, chests: result.chests || { common: 0, rare: 0 }, upgrades: result.upgrades || {}, freeSpinAvailable: !!result.freeSpinAvailable, isAdmin: !!result.isAdmin };
+  currentUser = { username: result.username, password: pass, unlocks: result.unlocks || [], purchased: result.purchased || [], credits: result.credits ?? 0, fragments: result.fragments ?? 0, chests: result.chests || { common: 0, rare: 0 }, upgrades: result.upgrades || {}, freeSpinAvailable: !!result.freeSpinAvailable, adminPassExpiresAt: result.adminPassExpiresAt || 0, isAdmin: !!result.isAdmin };
   localStorage.setItem('pvp_user', JSON.stringify({ username: name, password: pass }));
   setAuthStatus(result.isAdmin ? `🔓 ADMIN ACCESS GRANTED · ${result.username}` : `Logged in as ${result.username}`, result.isAdmin ? '#ff4444' : '#88ff88');
 
@@ -13093,6 +13120,26 @@ const FRAGMENT_UNLOCK_COST = 100;
 const UPGRADE_COSTS_CLIENT = [30, 60, 120];
 const MAX_UPGRADE_LEVELS = 3;
 const UPGRADE_STAT_LABELS = { damage: '+12% Damage', mag: '+25% Magazine', reload: '-15% Reload Time' };
+
+const ADMIN_PASS_COST = 300;
+async function buyAdminPass() {
+  if (!currentUser) return false;
+  if (adminPassActive()) {
+    alert(`You already have an active Admin Pass — ${Math.ceil(adminPassMsLeft()/60000)} min left.`);
+    return false;
+  }
+  if (!currentUser.isAdmin && (currentUser.credits ?? 0) < ADMIN_PASS_COST) {
+    alert(`Need ${ADMIN_PASS_COST} credits · You have ${currentUser.credits ?? 0}`);
+    return false;
+  }
+  if (!confirm(`Buy Admin Pass for ${ADMIN_PASS_COST} credits?\n\nUnlocks EVERY weapon (including admin items) for 10 minutes.`)) return false;
+  const r = await authRequest('/shop/admin-pass', { username: currentUser.username, password: currentUser.password });
+  if (!r || r.error) { alert('❌ ' + (r?.error || 'shop error')); return false; }
+  currentUser.credits = r.credits ?? currentUser.credits;
+  currentUser.adminPassExpiresAt = r.adminPassExpiresAt;
+  updateUserInfoBar();
+  return true;
+}
 
 async function buyChest(type) {
   if (!currentUser) return false;
@@ -13236,6 +13283,9 @@ if (_ecBtn) {
   _ecBtn.addEventListener('click', promptUnlockCode);
   _ecBtn.addEventListener('touchstart', e => { e.preventDefault(); promptUnlockCode(); }, { passive: false });
 }
+// Tick the user-info bar each 15s so the Admin Pass timer counts down live
+setInterval(() => { if (adminPassActive() && !currentUser?.isAdmin) updateUserInfoBar(); }, 15000);
+
 const _shopBtn = document.getElementById('open-shop-btn');
 if (_shopBtn) {
   _shopBtn.addEventListener('click', openShop);
@@ -13263,7 +13313,10 @@ function updateUserInfoBar() {
     const credits  = currentUser.isAdmin ? '∞' : (currentUser.credits ?? 0);
     const frags    = currentUser.isAdmin ? '∞' : (currentUser.fragments ?? 0);
     const ch = currentUser.chests || { common: 0, rare: 0 };
-    unlocksEl.innerHTML = `💰 <b style="color:#ffdd55">${credits}</b> · 🧩 <b style="color:#aaccff">${frags}</b> frags · 📦 ${ch.common}c/${ch.rare}r · 🪖 ${n}/24`;
+    const passTag = adminPassActive() && !currentUser.isAdmin
+      ? ` · <b style="color:#ffcc88">🪖 PASS ${Math.ceil(adminPassMsLeft()/60000)}m</b>`
+      : '';
+    unlocksEl.innerHTML = `💰 <b style="color:#ffdd55">${credits}</b> · 🧩 <b style="color:#aaccff">${frags}</b> frags · 📦 ${ch.common}c/${ch.rare}r · 🪖 ${n}/24${passTag}`;
   }
   // Show admin panel button if admin
   let adminBtn = document.getElementById('admin-panel-btn');

@@ -91,6 +91,7 @@ const FREE_WEAPONS = new Set([
 // ── 💼 Bundles — ~60% off the sum of individual prices ─────────────
 // Keep in sync with public/game.js BUNDLES table.
 const BUNDLES = {
+  pitiful:      { name: 'Pitiful Pack', price: 145, items: ['paintball','laser_pointer','baguette','rubber_duck','confetti_cannon'] },
   starter_pro:  { name: 'Starter Pro',  price: 240, items: ['ak30','revolver','bat','stim'] },
   heavy_duty:   { name: 'Heavy Duty',   price: 700, items: ['minigun','grenade_launcher','machine_revolver','crowbar','sticky_charge'] },
   sniper_pack:  { name: 'Sniper Pack',  price: 400, items: ['srx','revolver','knife','smoke'] },
@@ -126,7 +127,11 @@ function ensureShopFields(u) {
   if (!u.chests) u.chests = { common: 0, rare: 0 };
   if (!u.upgrades) u.upgrades = {}; // { [weaponId]: { damage, mag, reload } }
   if (!u.lastFreeSpinDate) u.lastFreeSpinDate = ''; // YYYY-MM-DD UTC
+  if (typeof u.adminPassExpiresAt !== 'number') u.adminPassExpiresAt = 0; // 10-min trial of all admin items
 }
+
+const ADMIN_PASS_COST   = 300;
+const ADMIN_PASS_LENGTH_MS = 10 * 60 * 1000; // 10 minutes
 
 // ── 📦 Chests, 🎡 wheel, ✨ upgrades ───────────────────────────────────
 const CHEST_PRICES = { common: 120, rare: 400 };
@@ -263,6 +268,21 @@ app.post('/shop/spin-wheel', (req, res) => {
   result.fragments_balance = u.fragments;
   result.purchased = u.purchased;
   res.json({ ok: true, result });
+});
+
+app.post('/shop/admin-pass', (req, res) => {
+  const u = authedUser(req);
+  if (!u) return res.status(401).json({ error: 'auth failed' });
+  if ((u.adminPassExpiresAt || 0) > Date.now()) {
+    return res.json({ ok: true, already: true, adminPassExpiresAt: u.adminPassExpiresAt, credits: u.credits });
+  }
+  if (!u.isAdmin && (u.credits || 0) < ADMIN_PASS_COST) {
+    return res.status(402).json({ error: 'not enough credits', credits: u.credits, cost: ADMIN_PASS_COST });
+  }
+  if (!u.isAdmin) u.credits -= ADMIN_PASS_COST;
+  u.adminPassExpiresAt = Date.now() + ADMIN_PASS_LENGTH_MS;
+  saveUsers();
+  res.json({ ok: true, adminPassExpiresAt: u.adminPassExpiresAt, credits: u.credits });
 });
 
 app.get('/shop/inventory', (req, res) => {
@@ -431,7 +451,7 @@ app.post('/auth/login', (req, res) => {
   if (u.password !== password) return res.status(401).json({ error: 'wrong password' });
   ensureShopFields(u);
   saveUsers();
-  res.json({ ok: true, username, unlocks: u.unlocks || [], purchased: u.purchased, credits: u.credits, fragments: u.fragments || 0, chests: u.chests, upgrades: u.upgrades, freeSpinAvailable: u.lastFreeSpinDate !== todayUTC(), kills: u.kills || 0, deaths: u.deaths || 0, isAdmin: !!u.isAdmin });
+  res.json({ ok: true, username, unlocks: u.unlocks || [], purchased: u.purchased, credits: u.credits, fragments: u.fragments || 0, chests: u.chests, upgrades: u.upgrades, freeSpinAvailable: u.lastFreeSpinDate !== todayUTC(), adminPassExpiresAt: u.adminPassExpiresAt || 0, kills: u.kills || 0, deaths: u.deaths || 0, isAdmin: !!u.isAdmin });
 });
 
 app.post('/auth/redeem', (req, res) => {
