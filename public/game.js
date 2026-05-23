@@ -873,7 +873,7 @@ const WEAPON_COSTS = {
   machine_pistol: 220, sawed_off: 260,
   // Melees
   bat: 80, sabre: 140, frying_pan: 60, sledge: 360, spear: 200,
-  katana: 360, baguette: 50, knife: 90, chainsaw: 480, lightsabre: 520,
+  katana: 360, baguette: 50, knife: 280, chainsaw: 480, lightsabre: 520,
   riot_shield: 220, screwdriver: 60, crowbar: 110, fire_axe: 420,
   nunchucks: 160, umbrella: 140, yoyo: 180, combat_axe: 380,
   shock_baton: 220, titan_hammer: 560, vampire_blade: 480, fists: 0,
@@ -887,7 +887,7 @@ const WEAPON_COSTS = {
   air_grenade: 160, land_mine: 380,
 };
 const FREE_WEAPONS = new Set([
-  'ak20','sg8','pistol','flare','fists','knife','frag','medkit',
+  'ak20','sg8','pistol','flare','fists','frying_pan','frag','medkit',
 ]);
 const TRIAL_DIVISOR = 20;
 const trialingThisMatch = new Set(); // ids the player paid a trial for this match
