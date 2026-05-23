@@ -108,7 +108,7 @@ const BUNDLES = {
   stealth:      { name: 'Stealth Ops',        price: 320, items: ['air_rifle','throwing_knives','knife','smoke'] },
   storm:        { name: 'Storm Pack',         price: 420, items: ['arc_rifle','taser','shock_baton','emp_grenade'] },
   defensive:    { name: 'Defensive',          price: 450, items: ['sg100','taser','riot_shield','nano_shield'] },
-  royalty:      { name: 'Royalty',            price: 3200, items: ['royal_minigun','vampire_blade','hand_cannon','orbital_strike'] },
+  royalty:      { name: 'Royalty',            price: 4500, items: ['royal_minigun','vampire_blade','hand_cannon','orbital_strike'] },
   kitchen:      { name: 'Kitchen Catastrophe',price: 130, items: ['paintball','baguette','frying_pan','rubber_duck'] },
   knight:       { name: "Knight's Honor",     price: 320, items: ['sg8','sabre','katana','smoke'] },
   frostbite:    { name: 'Frostbite',          price: 380, items: ['freeze_gun','frost_blaster','knife','smoke'] },
