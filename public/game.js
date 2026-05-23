@@ -4884,34 +4884,12 @@ function buildGarrote()    {
   g.position.set(0.14, -0.12, -0.30); return g;
 }
 function buildFists() {
-  // A closed fist with brass knuckles. Forearm hidden by sleeve.
+  // Simple skin-tone block — no knuckles, no fingers, no brass.
   const g = new THREE.Group();
-  const skin   = new THREE.MeshLambertMaterial({ color: 0xeac39a });
-  const sleeve = new THREE.MeshLambertMaterial({ color: 0x1a2a3a });
-  const brass  = new THREE.MeshLambertMaterial({ color: 0xddaa22 });
-  // Forearm / sleeve (rear)
-  const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.040, 0.16, 8), sleeve);
-  arm.rotation.x = Math.PI / 2; arm.position.set(0, 0, 0.06); g.add(arm);
-  // Wrist (skin)
-  const wrist = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.040, 0.05, 8), skin);
-  wrist.rotation.x = Math.PI / 2; wrist.position.set(0, 0, -0.04); g.add(wrist);
-  // Knuckles cluster (4 small knuckles)
-  for (let i = 0; i < 4; i++) {
-    const k = new THREE.Mesh(new THREE.SphereGeometry(0.024, 6, 5), skin);
-    k.position.set(-0.022 + i * 0.015, 0.014, -0.10); g.add(k);
-  }
-  // Brass knuckles bar across the knuckles
-  const bar = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.020, 0.035), brass);
-  bar.position.set(-0.001, 0.014, -0.10); g.add(bar);
-  // 4 knuckle stud spikes on the brass
-  for (let i = 0; i < 4; i++) {
-    const stud = new THREE.Mesh(new THREE.ConeGeometry(0.008, 0.018, 4), brass);
-    stud.rotation.x = -Math.PI / 2;
-    stud.position.set(-0.024 + i * 0.016, 0.020, -0.118); g.add(stud);
-  }
-  // Thumb wrap (subtle, side of fist)
-  const thumb = new THREE.Mesh(new THREE.SphereGeometry(0.022, 6, 5), skin);
-  thumb.position.set(0.035, 0.000, -0.085); g.add(thumb);
+  const skin = new THREE.MeshLambertMaterial({ color: 0xeac39a });
+  const block = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.10, 0.14), skin);
+  block.position.set(0, 0, -0.05);
+  g.add(block);
   g.position.set(0.16, -0.10, -0.22);
   return g;
 }
