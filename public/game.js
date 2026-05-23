@@ -880,12 +880,12 @@ const WEAPON_COSTS = {
   pinball_launcher: 440, seismic_hammer: 480, glassmaker: 380,
   // Primaries — Tactical / precision / battle rifle
   an94: 380, spas12: 360, m1_garand: 380, flechette: 380, thermal_lmg: 520,
-  burst_cannon: 480, incendiary_shotgun: 400, amr: 600, air_rifle: 320,
+  burst_cannon: 480, incendiary_shotgun: 400, amr: 2000, air_rifle: 320,
   twin_ar: 440, swarm_rifle: 460, smart_smg: 380, switchblade_gun: 420,
   // Primaries — Joke / chaos
   potato_cannon: 220, sticker_blaster: 280, foam_cannon: 280,
-  // Premium
-  royal_minigun: 800,
+  // Premium / P2W — ridiculously expensive on purpose
+  royal_minigun: 3500,
   // Secondaries
   revolver: 150, flare: 80, pistol: 60, shorty: 180, cycler: 140,
   hand_cannon: 260, throwing_knives: 120, taser: 200,
@@ -894,17 +894,17 @@ const WEAPON_COSTS = {
   auto_revolver: 220, frost_blaster: 240,
   // Melees
   bat: 80, sabre: 140, frying_pan: 60, sledge: 360, spear: 200,
-  katana: 360, baguette: 50, knife: 280, chainsaw: 480, lightsabre: 520,
+  katana: 360, baguette: 50, knife: 280, chainsaw: 1400, lightsabre: 1800,
   riot_shield: 220, screwdriver: 60, crowbar: 110, fire_axe: 420,
   nunchucks: 160, umbrella: 140, yoyo: 180, combat_axe: 380,
-  shock_baton: 220, titan_hammer: 560, vampire_blade: 480, fists: 0,
+  shock_baton: 220, titan_hammer: 2400, vampire_blade: 2000, fists: 0,
   // Support / Utility
   frag: 120, medkit: 80, stim: 60, smoke: 70, blink_pearl: 280,
   ammo_fountain: 180, confetti_cannon: 100, moon_mine: 220, rubber_duck: 90,
-  black_hole_seed: 540, glitch_cube: 240, vampire_syringe: 200,
+  black_hole_seed: 2200, glitch_cube: 240, vampire_syringe: 200,
   adrenaline: 220, tripwire: 200, hologram: 240, magnet_mine: 220,
   bounce_pad: 140, hunter_drone: 460, emp_grenade: 240, sticky_charge: 320,
-  orbital_strike: 600, guardian_drone: 380, nano_shield: 320,
+  orbital_strike: 2500, guardian_drone: 380, nano_shield: 320,
   air_grenade: 160, land_mine: 380,
 };
 const FREE_WEAPONS = new Set([
@@ -916,8 +916,11 @@ const trialingThisMatch = new Set(); // ids the player paid a trial for this mat
 // ── 💼 Loadout BUNDLES — ~60% off the sum of individual prices ─────────
 // Mirrors server.js BUNDLES (server is authoritative on price/contents).
 const BUNDLES = [
-  { id: 'pitiful',     name: 'Pitiful Pack', icon: '🍂', price: 145,
-    desc: 'All the weak ones · 70% off',
+  { id: 'pitiful',     name: 'Pitiful Pack', icon: '🪖', price: 290,
+    desc: 'Classic loadout: AR · shotgun · pistol · melee · smoke',
+    items: ['ak30','sg100','revolver','bat','smoke'] },
+  { id: 'retro',       name: 'Retro Pack',   icon: '🕹️', price: 145,
+    desc: 'Quirky old-school weapons · 70% off',
     items: ['paintball','laser_pointer','baguette','rubber_duck','confetti_cannon'] },
   { id: 'starter_pro', name: 'Starter Pro',  icon: '🎯', price: 240,
     desc: 'Upgrade past the freebies',
@@ -964,8 +967,8 @@ const BUNDLES = [
   { id: 'defensive',   name: 'Defensive',    icon: '🛡️', price: 450,
     desc: 'Tank-style survival',
     items: ['sg100','taser','riot_shield','nano_shield'] },
-  { id: 'royalty',     name: 'Royalty',      icon: '💎', price: 860,
-    desc: 'High-end power fantasy',
+  { id: 'royalty',     name: 'Royalty',      icon: '💎', price: 3200,
+    desc: 'High-end P2W power fantasy',
     items: ['royal_minigun','vampire_blade','hand_cannon','orbital_strike'] },
   { id: 'kitchen',     name: 'Kitchen Catastrophe', icon: '🍳', price: 130,
     desc: 'Household weapons only',
