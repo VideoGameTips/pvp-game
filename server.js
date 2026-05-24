@@ -64,12 +64,20 @@ const WEAPON_COSTS = {
   machine_pistol: 220, sawed_off: 260, machine_revolver: 240, pocket_rocket: 320,
   dart_gun: 160, laser_pointer: 120, coin_gun: 180, emp_pistol: 240,
   auto_revolver: 220, frost_blaster: 240,
+  // Batch-4 secondaries
+  snub_revolver: 140, duelist_pistol: 280, mauser: 200, mini_uzi: 240,
+  nail_gun: 180, boomstick: 220, signal_pistol: 200, throwing_axes: 240,
+  shuriken: 160, boomerang: 180, slingshot: 100, blowgun: 200,
   // Melees
   bat: 80, sabre: 140, frying_pan: 60, sledge: 360, spear: 200,
   katana: 360, baguette: 50, knife: 280, chainsaw: 1400, lightsabre: 1800,
   riot_shield: 220, screwdriver: 60, crowbar: 110, fire_axe: 420,
   nunchucks: 160, umbrella: 140, yoyo: 180, combat_axe: 380,
   shock_baton: 220, titan_hammer: 2400, vampire_blade: 2000, fists: 0,
+  // Batch-4 melees
+  brass_knuckles: 200, hatchet: 220, machete: 260, cane: 140, cricket_bat: 200,
+  pipe: 160, wrench: 180, shovel: 280, golf_club: 200, tennis_racket: 100,
+  fire_poker: 200, meat_cleaver: 260,
   // Support / Utility
   frag: 120, medkit: 80, stim: 60, smoke: 70, blink_pearl: 280,
   ammo_fountain: 180, confetti_cannon: 100, moon_mine: 220, rubber_duck: 90,
@@ -78,6 +86,10 @@ const WEAPON_COSTS = {
   bounce_pad: 140, hunter_drone: 460, emp_grenade: 240, sticky_charge: 320,
   orbital_strike: 2500, guardian_drone: 380, nano_shield: 320,
   air_grenade: 160, land_mine: 380,
+  // Batch-4 utilities
+  flashbang_basic: 200, proximity_mine: 220, dynamite: 280, drone_strike: 340,
+  healing_pulse: 200, teleport_beacon: 260, cloak: 280, berserker_serum: 240,
+  taser_grenade: 220, ink_bomb: 140, siren: 200, caltrops: 180,
 };
 
 // Free starter loadout — every account has these unlocked from day 1.

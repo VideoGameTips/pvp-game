@@ -574,6 +574,57 @@ const WEAPONS = [
     frostSlow: 3, // each shot subtracts 3 speed points from target
     ability: { name: 'Cryo Burst', cd: 12000, desc: 'Frost AOE · -25 speed all targets in 5 m', type: 'aoe', radius: 5, damage: 0, color: 0x99eeff, frostBurst: 25 },
   },
+  // ── 🆕 More secondaries — batch 4 ────────────────────────────────────────
+  { id: 'snub_revolver', name: 'Snubnose', type: 'Secondary', slot: 'secondary',
+    mag: 6, reserve: 18, damage: 32, fireRate: 280, reloadTime: 1800,
+    auto: false, pellets: 1, spread: 0.008, adsZoom: 50, bulletSpeed: 160, noReload: false,
+    ability: { name: 'Fan', cd: 7000, desc: 'Empty cylinder fast', type: 'fanfire', count: 6, delay: 60 } },
+  { id: 'duelist_pistol', name: 'Duelist', type: 'Secondary', slot: 'secondary',
+    mag: 1, reserve: 8, damage: 90, fireRate: 350, reloadTime: 1600,
+    auto: false, pellets: 1, spread: 0.001, adsZoom: 44, bulletSpeed: 200, noReload: false,
+    bulletColor: 0xddccaa,
+    ability: { name: 'Honor Shot', cd: 12000, desc: 'Next shot 1-hit kill on under-50 HP', type: 'powershot', pellets: 1, spreadMult: 0, dmgMult: 2.0 } },
+  { id: 'mauser', name: 'Mauser C96', type: 'Secondary', slot: 'secondary',
+    mag: 10, reserve: 30, damage: 24, fireRate: 150, reloadTime: 1800,
+    auto: false, pellets: 1, spread: 0.006, adsZoom: 50, bulletSpeed: 150, noReload: false,
+    ability: { name: 'Rapid Strip', cd: 9000, desc: 'Empty mag at 2× rate', type: 'fanfire', count: 10, delay: 60 } },
+  { id: 'mini_uzi', name: 'Mini Uzi', type: 'Secondary', slot: 'secondary',
+    mag: 25, reserve: 75, damage: 12, fireRate: 70, reloadTime: 1500,
+    auto: true, pellets: 1, spread: 0.012, adsZoom: 52, bulletSpeed: 130, noReload: false,
+    ability: { name: 'Spray', cd: 8000, desc: '3s · spread halved', type: 'buff', duration: 3000, spreadMult: 0.5 } },
+  { id: 'nail_gun', name: 'Nail Gun', type: 'Secondary', slot: 'secondary',
+    mag: 20, reserve: 60, damage: 18, fireRate: 110, reloadTime: 1600,
+    auto: true, pellets: 1, spread: 0.005, adsZoom: 48, bulletSpeed: 140, noReload: false,
+    bulletColor: 0xccccaa, bulletSize: 0.03 },
+  { id: 'boomstick', name: 'Boomstick', type: 'Secondary', slot: 'secondary',
+    mag: 2, reserve: 12, damage: 35, fireRate: 600, reloadTime: 2000,
+    auto: false, pellets: 5, spread: 0.12, adsZoom: 56, bulletSpeed: 100, noReload: false,
+    ability: { name: 'Both Barrels', cd: 11000, desc: 'Empty both at once', type: 'fanfire', count: 2, delay: 40 } },
+  { id: 'signal_pistol', name: 'Signal Pistol', type: 'Secondary', slot: 'secondary',
+    mag: 1, reserve: 5, damage: 70, fireRate: 250, reloadTime: 2400,
+    auto: false, pellets: 1, spread: 0, adsZoom: 54, bulletSpeed: 60, noReload: false,
+    bulletColor: 0xffaa44 },
+  { id: 'throwing_axes', name: 'Throwing Axes', type: 'Thrown', slot: 'secondary',
+    mag: 1, reserve: 5, damage: 70, fireRate: 700, reloadTime: 1400,
+    auto: false, pellets: 1, spread: 0.01, adsZoom: 50, bulletSpeed: 70, noReload: false,
+    bulletColor: 0x8a5a2a, bulletSize: 0.10 },
+  { id: 'shuriken', name: 'Shuriken', type: 'Thrown', slot: 'secondary',
+    mag: 8, reserve: 24, damage: 22, fireRate: 180, reloadTime: 1400,
+    auto: false, pellets: 1, spread: 0.008, adsZoom: 52, bulletSpeed: 110, noReload: false,
+    bulletColor: 0xcccccc, bulletSize: 0.05 },
+  { id: 'boomerang', name: 'Boomerang', type: 'Thrown', slot: 'secondary',
+    mag: 1, reserve: 4, damage: 35, fireRate: 800, reloadTime: 1200,
+    auto: false, pellets: 1, spread: 0, adsZoom: 50, bulletSpeed: 80, noReload: false,
+    bulletColor: 0xcc8855 },
+  { id: 'slingshot', name: 'Slingshot', type: 'Secondary', slot: 'secondary',
+    mag: 1, reserve: 12, damage: 24, fireRate: 400, reloadTime: 700,
+    auto: false, pellets: 1, spread: 0.008, adsZoom: 48, bulletSpeed: 80, noReload: false,
+    bulletColor: 0x666666 },
+  { id: 'blowgun', name: 'Blowgun', type: 'Secondary', slot: 'secondary',
+    mag: 1, reserve: 10, damage: 32, fireRate: 600, reloadTime: 800,
+    auto: false, pellets: 1, spread: 0.002, adsZoom: 50, bulletSpeed: 120, noReload: false,
+    bulletColor: 0x33aa55, bulletSize: 0.025 },
+
   // ── 🪖 ADMIN PRIMARIES (locked behind unlock codes) ──────────────────────
   {
     id: 'gau19', name: 'GAU-19 Heavy', type: 'Admin · Mounted MG', slot: 'primary',
@@ -724,6 +775,20 @@ const MELEE_ITEMS = [
   { id: 'fists',      name: 'Fists',      type: 'Brass Knuckles', damage: 24, range: 1.4, cooldown: 220, speedMult: 1.6,
     ability: { name: 'Haymaker',     cd: 8000,  desc: 'Wind-up · next punch · 90 dmg + knockback', type: 'melee_heavy' } },
   // ── 🪖 ADMIN MELEES (locked behind unlock codes) ─────────────────────────
+  // ── 🆕 More melees — batch 4 ─────────────────────────────────────────────
+  { id: 'brass_knuckles', name: 'Brass Knuckles', type: 'Punch',     damage: 28, range: 1.5, cooldown: 200, speedMult: 1.6,
+    ability: { name: 'Haymaker', cd: 8000, desc: '2× damage on next hit', type: 'melee_heavy' } },
+  { id: 'hatchet',        name: 'Hatchet',        type: 'Melee',     damage: 50, range: 1.9, cooldown: 480 },
+  { id: 'machete',        name: 'Machete',        type: 'Melee',     damage: 56, range: 2.4, cooldown: 520 },
+  { id: 'cane',           name: 'Walking Cane',   type: 'Melee',     damage: 30, range: 2.2, cooldown: 440 },
+  { id: 'cricket_bat',    name: 'Cricket Bat',    type: 'Melee',     damage: 42, range: 2.3, cooldown: 540 },
+  { id: 'pipe',           name: 'Lead Pipe',      type: 'Melee',     damage: 44, range: 2.0, cooldown: 500 },
+  { id: 'wrench',         name: 'Wrench',         type: 'Utility Melee', damage: 36, range: 1.8, cooldown: 380 },
+  { id: 'shovel',         name: 'Shovel',         type: 'Heavy Melee',   damage: 55, range: 2.2, cooldown: 620 },
+  { id: 'golf_club',      name: 'Golf Club',      type: 'Melee',     damage: 40, range: 2.4, cooldown: 500 },
+  { id: 'tennis_racket',  name: 'Tennis Racket',  type: 'Melee',     damage: 26, range: 2.2, cooldown: 360 },
+  { id: 'fire_poker',     name: 'Fire Poker',     type: 'Reach Melee',   damage: 38, range: 2.6, cooldown: 460 },
+  { id: 'meat_cleaver',   name: 'Meat Cleaver',   type: 'Heavy Melee',   damage: 60, range: 1.7, cooldown: 540 },
   { id: 'karambit',   name: 'Karambit',     type: 'Admin · Combat Knife', damage: 80, range: 1.6, cooldown: 200, speedMult: 1.8,
     adminItem: true,
     ability: { name: 'Stealth Stab', cd: 9000,  desc: 'Next hit · instakill from behind', type: 'melee_instakill' } },
@@ -772,6 +837,20 @@ const SUPPORT_ITEMS = [
   { id: 'air_grenade', name: 'Air Grenade', type: 'Launch', uses: 2, damage: 15, cooldown: 950, bulletSpeed: 50, bulletColor: 0xaaccff, bulletSize: 0.11, launchVel: 14, launchRadius: 4 },
   { id: 'land_mine', name: 'Land Mine', type: 'Trap', uses: 2, damage: 298, cooldown: 1100, mineRadius: 1.8, launchVel: 16 },
   // ── 🪖 ADMIN UTILITIES (locked behind unlock codes) ──────────────────────
+  // ── 🆕 More utilities — batch 4 ──────────────────────────────────────────
+  { id: 'flashbang_basic', name: 'Flashbang',    type: 'Stun',       uses: 2, damage: 5,  cooldown: 900, bulletSpeed: 50, bulletColor: 0xffffff, bulletSize: 0.10, stunDur: 2500, stunRadius: 6 },
+  { id: 'proximity_mine',  name: 'Proximity Mine', type: 'Trap',     uses: 2, damage: 70, cooldown: 1100, bulletSpeed: 30, bulletColor: 0xff5555, bulletSize: 0.06, isTripwire: true },
+  { id: 'dynamite',        name: 'Dynamite Bundle', type: 'Explosive', uses: 2, damage: 120, cooldown: 1200, bulletSpeed: 48, bulletColor: 0xdd4422, bulletSize: 0.13 },
+  { id: 'drone_strike',    name: 'Mini Drone Strike', type: 'Doom',  uses: 1, damage: 140, radius: 5, cooldown: 1800, delay: 1500 },
+  { id: 'healing_pulse',   name: 'Healing Pulse', type: 'Heal',      uses: 1, heal: 60, cooldown: 1500 },
+  { id: 'teleport_beacon', name: 'Teleport Beacon', type: 'Teleport', uses: 1, blink: 12, cooldown: 1200 },
+  { id: 'cloak',           name: 'Cloak',         type: 'Buff',      uses: 1, cooldown: 1800, speedBuff: 1.3, buffDur: 4000 },
+  { id: 'berserker_serum', name: 'Berserker Serum', type: 'Buff',    uses: 1, cooldown: 1800, speedBuff: 1.4, reloadBuff: 0.6, buffDur: 4000 },
+  { id: 'taser_grenade',   name: 'Taser Grenade', type: 'Disable',   uses: 2, damage: 15, cooldown: 950, bulletSpeed: 50, bulletColor: 0x66ccff, bulletSize: 0.10, empRadius: 5, empDur: 3000 },
+  { id: 'ink_bomb',        name: 'Ink Bomb',      type: 'Utility',   uses: 2, damage: 0, cooldown: 800, bulletSpeed: 48, bulletColor: 0x111111, bulletSize: 0.18 },
+  { id: 'siren',           name: 'Distraction Siren', type: 'Decoy', uses: 1, cooldown: 2000, decoyDur: 6000 },
+  { id: 'caltrops',        name: 'Caltrops',      type: 'Trap',      uses: 3, damage: 30, cooldown: 700, bulletSpeed: 28, bulletColor: 0x888888, bulletSize: 0.05, isTripwire: true },
+
   { id: 'c4', name: 'C4 Charge', type: 'Admin · Explosive', uses: 2, damage: 200, cooldown: 1200, bulletSpeed: 40, bulletColor: 0x664433, bulletSize: 0.11, c4Detonate: true, adminItem: true },
   { id: 'claymore', name: 'Claymore Mine', type: 'Admin · Directional Mine', uses: 2, damage: 250, cooldown: 1100, claymoreRadius: 4, claymoreArc: 1.2, adminItem: true },
   { id: 'stun_grenade', name: 'M84 Stun Grenade', type: 'Admin · Flashbang', uses: 3, damage: 10, cooldown: 800, bulletSpeed: 56, bulletColor: 0xffffff, bulletSize: 0.10, stunDur: 4000, stunRadius: 8, adminItem: true },
@@ -892,12 +971,20 @@ const WEAPON_COSTS = {
   machine_pistol: 220, sawed_off: 260, machine_revolver: 240, pocket_rocket: 320,
   dart_gun: 160, laser_pointer: 120, coin_gun: 180, emp_pistol: 240,
   auto_revolver: 220, frost_blaster: 240,
+  // Batch-4 secondaries
+  snub_revolver: 140, duelist_pistol: 280, mauser: 200, mini_uzi: 240,
+  nail_gun: 180, boomstick: 220, signal_pistol: 200, throwing_axes: 240,
+  shuriken: 160, boomerang: 180, slingshot: 100, blowgun: 200,
   // Melees
   bat: 80, sabre: 140, frying_pan: 60, sledge: 360, spear: 200,
   katana: 360, baguette: 50, knife: 280, chainsaw: 1400, lightsabre: 1800,
   riot_shield: 220, screwdriver: 60, crowbar: 110, fire_axe: 420,
   nunchucks: 160, umbrella: 140, yoyo: 180, combat_axe: 380,
   shock_baton: 220, titan_hammer: 2400, vampire_blade: 2000, fists: 0,
+  // Batch-4 melees
+  brass_knuckles: 200, hatchet: 220, machete: 260, cane: 140, cricket_bat: 200,
+  pipe: 160, wrench: 180, shovel: 280, golf_club: 200, tennis_racket: 100,
+  fire_poker: 200, meat_cleaver: 260,
   // Support / Utility
   frag: 120, medkit: 80, stim: 60, smoke: 70, blink_pearl: 280,
   ammo_fountain: 180, confetti_cannon: 100, moon_mine: 220, rubber_duck: 90,
@@ -906,6 +993,10 @@ const WEAPON_COSTS = {
   bounce_pad: 140, hunter_drone: 460, emp_grenade: 240, sticky_charge: 320,
   orbital_strike: 2500, guardian_drone: 380, nano_shield: 320,
   air_grenade: 160, land_mine: 380,
+  // Batch-4 utilities
+  flashbang_basic: 200, proximity_mine: 220, dynamite: 280, drone_strike: 340,
+  healing_pulse: 200, teleport_beacon: 260, cloak: 280, berserker_serum: 240,
+  taser_grenade: 220, ink_bomb: 140, siren: 200, caltrops: 180,
 };
 const FREE_WEAPONS = new Set([
   'ak20','sg8','pistol','flare','fists','frying_pan','frag','medkit',
@@ -1076,6 +1167,19 @@ const MELEE_SWING_TYPES = [
   'slam',    // 19 titan_hammer → massive overhead slam
   'slash',   // 20 vampire_blade→ vampiric slash
   'punch',   // 21 fists        → alternating fast punches
+  // ── New melees (batch 4) ─────────────────────────────────────
+  'punch',   // 22 brass_knuckles
+  'chop',    // 23 hatchet
+  'slash',   // 24 machete
+  'bash',    // 25 cane
+  'slash',   // 26 cricket_bat
+  'bash',    // 27 pipe
+  'bash',    // 28 wrench
+  'slam',    // 29 shovel
+  'slash',   // 30 golf_club
+  'bash',    // 31 tennis_racket
+  'thrust',  // 32 fire_poker
+  'chop',    // 33 meat_cleaver
 ];
 
 // ── Weapon ability system ──────────────────────────────────────────────────
@@ -5002,6 +5106,25 @@ function buildFists() {
   return g;
 }
 
+// Generic placeholder melee model — used for the batch-4 melees so we don't
+// need 12 hand-modeled meshes. Each variant just adjusts shape + color.
+function buildSimpleMelee(shape, color) {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshLambertMaterial({ color });
+  const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.18, 6), new THREE.MeshLambertMaterial({ color: 0x553322 }));
+  grip.rotation.x = Math.PI / 2; grip.position.set(0, 0, 0.05); g.add(grip);
+  let head;
+  if (shape === 'blade')       head = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.32, 0.10), mat);
+  else if (shape === 'pipe')   head = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.36, 8), mat);
+  else if (shape === 'club')   head = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.025, 0.28, 8), mat);
+  else if (shape === 'axe')    head = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.12, 0.04), mat);
+  else if (shape === 'sphere') head = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 6), mat);
+  else                         head = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.20, 0.04), mat);
+  head.position.set(0, 0.14, -0.08);
+  g.add(head);
+  g.position.set(0.16, -0.10, -0.22);
+  return g;
+}
 const meleeModels = [
   buildBat(), buildSabre(), buildFryingPan(), buildSledge(), buildSpear(),
   buildKatana(), buildBaguette(), buildKnife(), buildChainsaw(), buildLightsabre(),
@@ -5014,6 +5137,19 @@ const meleeModels = [
   buildTitanHammer(), buildVampireBlade(),
   // The classic
   buildFists(),
+  // 🆕 Batch-4 melees (simple placeholder models)
+  buildSimpleMelee('sphere', 0xddaa22), // brass_knuckles
+  buildSimpleMelee('axe',    0x8a6a3a), // hatchet
+  buildSimpleMelee('blade',  0x9a9a9a), // machete
+  buildSimpleMelee('pipe',   0x6a4a2a), // cane
+  buildSimpleMelee('club',   0xaa6633), // cricket_bat
+  buildSimpleMelee('pipe',   0x888888), // pipe
+  buildSimpleMelee('axe',    0x5a5a5a), // wrench (chunky)
+  buildSimpleMelee('blade',  0x6a5a4a), // shovel
+  buildSimpleMelee('club',   0x8a8a4a), // golf_club
+  buildSimpleMelee('axe',    0xddaa88), // tennis_racket
+  buildSimpleMelee('pipe',   0xcc6622), // fire_poker
+  buildSimpleMelee('axe',    0xcccccc), // meat_cleaver
   // 🪖 ADMIN melees
   buildKarambit(), buildBayonet(), buildTomahawk(), buildOts04(), buildGarrote(),
 ];
@@ -5393,6 +5529,19 @@ function buildLandMine() {
   g.position.set(0.10, -0.12, -0.18); return g;
 }
 
+// Generic placeholder support model — used for the batch-4 utilities.
+function buildSimpleSupport(color, shape = 'sphere') {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshLambertMaterial({ color });
+  let body;
+  if (shape === 'cube')      body = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.10, 0.10), mat);
+  else if (shape === 'disc') body = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.03, 12), mat);
+  else if (shape === 'caps') body = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.12, 8), mat);
+  else                       body = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), mat);
+  g.add(body);
+  g.position.set(0.16, -0.10, -0.22);
+  return g;
+}
 const supportModels = [buildFragGrenade(), buildMedkit(), buildStimShot(), buildSmokeBomb(),
   buildBlinkPearl(), buildAmmoFountain(), buildConfettiCannon(), buildMoonMine(),
   buildRubberDuck(), buildBlackHoleSeed(), buildGlitchCube(), buildVampireSyringe(),
@@ -5404,6 +5553,19 @@ const supportModels = [buildFragGrenade(), buildMedkit(), buildStimShot(), build
   buildOrbitalStrike(), buildGuardianDrone(), buildNanoShield(),
   // Lazy weapons supports
   buildAirGrenade(), buildLandMine(),
+  // 🆕 Batch-4 utilities (placeholder models)
+  buildSimpleSupport(0xffffff, 'sphere'),  // flashbang_basic
+  buildSimpleSupport(0xff5555, 'disc'),    // proximity_mine
+  buildSimpleSupport(0xdd4422, 'caps'),    // dynamite
+  buildSimpleSupport(0x88aaff, 'cube'),    // drone_strike
+  buildSimpleSupport(0x66ff99, 'sphere'),  // healing_pulse
+  buildSimpleSupport(0xaa44ff, 'cube'),    // teleport_beacon
+  buildSimpleSupport(0x666688, 'sphere'),  // cloak
+  buildSimpleSupport(0xff6644, 'caps'),    // berserker_serum
+  buildSimpleSupport(0x66ccff, 'sphere'),  // taser_grenade
+  buildSimpleSupport(0x111111, 'sphere'),  // ink_bomb
+  buildSimpleSupport(0xffaa44, 'cube'),    // siren
+  buildSimpleSupport(0x888888, 'disc'),    // caltrops
   // 🪖 ADMIN supports
   buildC4(), buildClaymore(), buildStunGrenade(), buildThermite(),
   buildPredatorUAV(), buildCarePackage(), buildTacNuke()];
