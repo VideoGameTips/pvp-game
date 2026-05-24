@@ -10508,6 +10508,10 @@ function startMatchRound() {
       showAnnouncement('MATCH START', `Most kills in ${formatMatchTime(match.cfg.timeLimit)}`, '#ffffff', 2800);
     }
     updateMatchHUD();
+    // 💡 Show a fun fact ~3 s after the MATCH START banner clears
+    setTimeout(() => {
+      if (match && !match.over) showAnnouncement('💡 DID YOU KNOW?', pickFunFact(), '#ffcc66', 5500);
+    }, 3000);
   };
   runCountdown(5, doStart);
 }
@@ -13257,6 +13261,54 @@ function hidePvpSearching() {
 let pvpMatch = null;
 
 // ── 🏛️ Staging-lobby state ───────────────────────────────────────────────
+// ── 💡 Fun facts shown in lobby + at match start ─────────────────────
+const FUN_FACTS = [
+  // 🧠 Useful
+  '💡 The default loadout is more versatile than it looks.',
+  '💡 Aiming down sights tightens spread on every gun.',
+  '💡 Reloading early loses your reserve bullets — finish the mag.',
+  '💡 You can buy a Trial for 1/20 the price to test a weapon for one match.',
+  '💡 Match wins award more credits than losses — try to live.',
+  '💡 Upgrades cost fragments — open chests to stack them.',
+  '💡 Free spin resets daily at midnight UTC.',
+  '💡 The shop is open between matches from the mode-select screen.',
+  '💡 Tap G to use your weapon ability; cooldown shown bottom-right.',
+  '💡 Free starter loadout: AK20 + SG-8 + Pistol + Flare + Fists + Pan + Frag + Medkit.',
+  // 🎯 Strategic
+  '🎯 Cycler never reloads — perfect for finishing weak enemies.',
+  '🎯 SR-X one-shots headshots — aim for the dome.',
+  '🎯 SG100 hits like a truck up close, useless at range.',
+  '🎯 Stim Shot is faster than Medkit — use it mid-fight.',
+  '🎯 Smoke bombs break enemy line-of-sight even with wallhacks.',
+  '🎯 Vampire Blade heals you per hit — duel multiple enemies.',
+  '🎯 RPD has no reload — perfect for prolonged firefights.',
+  '🎯 Knife users move 2× as fast — close gaps fast.',
+  '🎯 Boombow charges up — a fully-drawn shot ignores armor.',
+  '🎯 Throwing a frag at your feet during a finisher kills you and them.',
+  '🎯 KOTH gives 3 lives — don\'t waste them rushing the center first.',
+  // 🤫 Secretive
+  '🤫 You can climb the skyscraper in URBAN.',
+  '🤫 Chernobyl\'s 4 reactors can be destroyed for an XP bonus.',
+  '🤫 Airport glass + lights are breakable.',
+  '🤫 Mortars in Trenches can be piloted by holding E.',
+  '🤫 Helicopters in KOTH can be hijacked mid-air.',
+  '🤫 The admin password is `(redacted)` — but it\'s patched now anyway.',
+  '🤫 Type the right unlock code and get free admin weapons.',
+  '🤫 0.3% wheel jackpot drops a random rare weapon ≥400 credits.',
+  // 😂 Funny
+  '😂 Chainsaw users are legally required to scream while charging.',
+  '😂 Frying Pan does NOT in fact deflect bullets. Stop trying.',
+  '😂 Confetti Cannon is everyone\'s favorite useless weapon.',
+  '😂 Trash123 has every admin item. Suspicious.',
+  '😂 Tennis Racket reflects bullets. We don\'t know how.',
+  '😂 Baguette ability "Eat" heals you. Carbs.',
+  '😂 Royal Minigun costs 3500. The "Royalty Bundle" includes 4 of those-tier items for 4500. Math.',
+  '😂 If you punch the wall, the wall punches back. Not really.',
+  '😂 Tac Nuke is balanced because it costs 250 of your fragile feelings.',
+  '😂 Fists are free. They have always been free. They will always be free.',
+];
+function pickFunFact() { return FUN_FACTS[Math.floor(Math.random() * FUN_FACTS.length)]; }
+
 let stagingLobbyMode = null; // mode ID we're currently waiting in, or null
 let stagingLobbyState = null; // last received state from server
 let pendingLobbyConfig = null; // saved selectedModeConfig when entering lobby
@@ -13319,6 +13371,9 @@ function renderStagingLobby() {
       <button id="lobby-leave" style="padding:10px 18px;background:#222;color:#aaa;border:1px solid #555;cursor:pointer;font-family:inherit;font-size:13px;letter-spacing:2px;border-radius:4px;">LEAVE LOBBY</button>
     </div>
     <div style="font-size:11px;color:#666;margin-top:18px;letter-spacing:1px;">Match starts when all players ready · ${me?.fillBots !== false ? 'Bots will fill empty slots' : 'No bots — playing as-is'}</div>
+    <div style="margin-top:28px;padding:10px 18px;background:rgba(255,200,80,0.10);border:1px solid #aa8844;border-radius:6px;max-width:580px;text-align:center;font-size:12px;color:#ffcc66;letter-spacing:1px;font-style:italic;">
+      ${pickFunFact()}
+    </div>
   `;
   // Wire buttons
   const fbox = document.getElementById('lobby-fillbots');
