@@ -58,6 +58,10 @@ const WEAPON_COSTS = {
   potato_cannon: 220, sticker_blaster: 280, foam_cannon: 280,
   // Premium / P2W — ridiculously expensive on purpose
   royal_minigun: 3500,
+  // 🌌 Sci-fi P2W primaries
+  event_horizon: 24000, storm_core: 20000, abs_zero: 22000, solar_lance: 26000,
+  phase_driver: 30000, quantum_repeater: 28000, magnetar: 25000,
+  nebula_mortar: 35000, prism_engine: 27000, void_harvester: 40000,
   // Secondaries
   revolver: 150, flare: 80, pistol: 60, shorty: 180, cycler: 140,
   hand_cannon: 260, throwing_knives: 120, taser: 200,
@@ -68,6 +72,8 @@ const WEAPON_COSTS = {
   snub_revolver: 140, duelist_pistol: 280, mauser: 200, mini_uzi: 240,
   nail_gun: 180, boomstick: 220, signal_pistol: 200, throwing_axes: 240,
   shuriken: 160, boomerang: 180, slingshot: 100, blowgun: 200,
+  // 🌌 Sci-fi P2W secondaries
+  pulse_needle: 12000, phase_pistol: 16000, ion_revolver: 14000,
   // Melees
   bat: 80, sabre: 140, frying_pan: 60, sledge: 360, spear: 200,
   katana: 360, baguette: 50, knife: 280, chainsaw: 1400, lightsabre: 1800,
@@ -78,6 +84,8 @@ const WEAPON_COSTS = {
   brass_knuckles: 200, hatchet: 220, machete: 260, cane: 140, cricket_bat: 200,
   pipe: 160, wrench: 180, shovel: 280, golf_club: 200, tennis_racket: 100,
   fire_poker: 200, meat_cleaver: 260,
+  // 🌌 Sci-fi P2W melees
+  phase_blade: 18000, gravity_hammer: 22000, volt_whip: 17000,
   // Support / Utility
   frag: 120, medkit: 80, stim: 60, smoke: 70, blink_pearl: 280,
   ammo_fountain: 180, confetti_cannon: 100, moon_mine: 220, rubber_duck: 90,
@@ -90,6 +98,9 @@ const WEAPON_COSTS = {
   flashbang_basic: 200, proximity_mine: 220, dynamite: 280, drone_strike: 340,
   healing_pulse: 200, teleport_beacon: 260, cloak: 280, berserker_serum: 240,
   taser_grenade: 220, ink_bomb: 140, siren: 200, caltrops: 180,
+  // 🌌 Sci-fi P2W utilities
+  nano_swarm: 20000, warp_beacon: 25000, stasis_mine: 18000,
+  specter_drone: 30000, quantum_barrier: 21000,
 };
 
 // Free starter loadout — every account has these unlocked from day 1.
@@ -127,6 +138,7 @@ const BUNDLES = {
   knockback:    { name: 'Knockback',          price: 500, items: ['shockwave_launcher','sawed_off','sledge','air_grenade'] },
   smart_tech:   { name: 'Smart Tech',         price: 610, items: ['swarm_rifle','smart_smg','hunter_drone','magnet_mine'] },
   mortar:       { name: 'Mortar Squad',       price: 550, items: ['mortar_rifle','grenade_launcher','hand_cannon','frag'] },
+  cosmic_p2w:   { name: 'Cosmic P2W',         price: 80000, items: ['event_horizon','storm_core','abs_zero','solar_lance','phase_driver','quantum_repeater','magnetar','nebula_mortar','prism_engine','void_harvester','pulse_needle','phase_pistol','ion_revolver','phase_blade','gravity_hammer','volt_whip','nano_swarm','warp_beacon','stasis_mine','specter_drone','quantum_barrier'] },
 };
 
 const STARTER_CREDITS = 500;

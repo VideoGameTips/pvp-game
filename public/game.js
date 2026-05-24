@@ -632,6 +632,75 @@ const WEAPONS = [
     bulletColor: 0x33aa55, bulletSize: 0.025,
     ability: { name: 'Toxic Dart', cd: 10000, desc: 'Next dart deals 3× damage', type: 'powershot', pellets: 1, spreadMult: 0, dmgMult: 3 } },
 
+  // ── 🌌 SCI-FI P2W PRIMARIES (very expensive, fantasy-tier mechanics) ────
+  { id: 'event_horizon', name: 'Event Horizon Rifle', type: 'Gravity AR', slot: 'primary',
+    mag: 18, reserve: 54, damage: 75, fireRate: 280, reloadTime: 2400,
+    auto: true, pellets: 1, spread: 0.005, adsZoom: 46, bulletSpeed: 140, noReload: false,
+    bulletColor: 0x6633ff, bulletSize: 0.07,
+    ability: { name: 'Collapse', cd: 14000, desc: 'Gravity field · 8 m AOE 80 dmg · slows', type: 'aoe', radius: 8, damage: 80, color: 0x6633ff, frostBurst: 30 } },
+  { id: 'storm_core', name: 'Storm Core', type: 'Plasma Heavy', slot: 'primary',
+    mag: 24, reserve: 72, damage: 55, fireRate: 220, reloadTime: 2300,
+    auto: true, pellets: 1, spread: 0.008, adsZoom: 50, bulletSpeed: 130, noReload: false,
+    bulletColor: 0x88ddff, bulletSize: 0.08, emissive: true,
+    ability: { name: 'Supercell', cd: 16000, desc: 'Lightning storm · 10 m AOE 100 dmg', type: 'aoe', radius: 10, damage: 100, color: 0xaaeeff, launchVel: 6 } },
+  { id: 'abs_zero', name: 'Absolute Zero Projector', type: 'Cryo', slot: 'primary',
+    mag: 30, reserve: 90, damage: 35, fireRate: 100, reloadTime: 2400,
+    auto: true, pellets: 1, spread: 0.010, adsZoom: 48, bulletSpeed: 120, noReload: false,
+    bulletColor: 0x99eeff, bulletSize: 0.06,
+    ability: { name: 'Cryostasis', cd: 18000, desc: 'Freeze 9 m AOE · slows all', type: 'aoe', radius: 9, damage: 30, color: 0x99eeff, frostBurst: 60 } },
+  { id: 'solar_lance', name: 'Solar Lance', type: 'Beam', slot: 'primary',
+    mag: 200, reserve: 0, damage: 12, fireRate: 40, reloadTime: 99999,
+    auto: true, pellets: 1, spread: 0.002, adsZoom: 44, bulletSpeed: 220, noReload: true, ammoRegen: 2,
+    bulletColor: 0xffee44, bulletSize: 0.05, emissive: true,
+    ability: { name: 'Solar Flare', cd: 14000, desc: 'Blinding beam burst · 7 m AOE 90 dmg', type: 'aoe', radius: 7, damage: 90, color: 0xffee44, reveal: true, revealDur: 3000 } },
+  { id: 'phase_driver', name: 'Phase Driver', type: 'Phasing AR', slot: 'primary',
+    mag: 20, reserve: 60, damage: 60, fireRate: 200, reloadTime: 2200,
+    auto: true, pellets: 1, spread: 0.004, adsZoom: 46, bulletSpeed: 180, noReload: false,
+    bulletColor: 0xaa66ff, bulletSize: 0.06, emissive: true,
+    ability: { name: 'Ghost Protocol', cd: 18000, desc: '4 s · +50% speed · shots ignore cover', type: 'buff', duration: 4000, speedMult: 1.5, dmgMult: 1.3 } },
+  { id: 'quantum_repeater', name: 'Quantum Repeater', type: 'Time-Shift AR', slot: 'primary',
+    mag: 22, reserve: 66, damage: 50, fireRate: 200, reloadTime: 2300,
+    auto: true, pellets: 1, spread: 0.005, adsZoom: 48, bulletSpeed: 150, noReload: false,
+    bulletColor: 0x66ffcc, bulletSize: 0.06,
+    ability: { name: 'Timeline Break', cd: 15000, desc: 'Replay last mag instantly · 12 shots fast', type: 'fanfire', count: 12, delay: 40 } },
+  { id: 'magnetar', name: 'Magnetar Cannon', type: 'Magnetic Heavy', slot: 'primary',
+    mag: 12, reserve: 36, damage: 90, fireRate: 500, reloadTime: 2600,
+    auto: false, pellets: 1, spread: 0.003, adsZoom: 44, bulletSpeed: 140, noReload: false,
+    bulletColor: 0xff77cc, bulletSize: 0.09,
+    ability: { name: 'Polar Collapse', cd: 16000, desc: 'Magnetic implosion · 8 m AOE 120 dmg', type: 'aoe', radius: 8, damage: 120, color: 0xff77cc, launchVel: 14 } },
+  { id: 'nebula_mortar', name: 'Nebula Mortar', type: 'Cosmic Indirect', slot: 'primary',
+    mag: 4, reserve: 16, damage: 110, fireRate: 800, reloadTime: 3000,
+    auto: false, pellets: 1, spread: 0.002, adsZoom: 38, bulletSpeed: 70, noReload: false,
+    bulletColor: 0x9966ff, bulletSize: 0.14,
+    ability: { name: 'Starfall', cd: 20000, desc: 'Meteor shower · 12 m AOE 180 dmg', type: 'aoe', radius: 12, damage: 180, color: 0xaa88ff, launchVel: 8 } },
+  { id: 'prism_engine', name: 'Prism Engine', type: 'Refractive Beam', slot: 'primary',
+    mag: 50, reserve: 150, damage: 22, fireRate: 70, reloadTime: 2200,
+    auto: true, pellets: 1, spread: 0.004, adsZoom: 48, bulletSpeed: 160, noReload: false,
+    bulletColor: 0xffaaff, bulletSize: 0.05, emissive: true,
+    ability: { name: 'Refraction Overload', cd: 14000, desc: 'Fire 14 split-beams', type: 'multishot', count: 14, spread: 0.20 } },
+  { id: 'void_harvester', name: 'Void Harvester', type: 'Void Heavy', slot: 'primary',
+    mag: 6, reserve: 24, damage: 130, fireRate: 700, reloadTime: 3000,
+    auto: false, pellets: 1, spread: 0.002, adsZoom: 42, bulletSpeed: 120, noReload: false,
+    bulletColor: 0x220033, bulletSize: 0.11, emissive: true,
+    ability: { name: 'Consume', cd: 22000, desc: 'Detonate all remnants · 15 m AOE 250 dmg', type: 'aoe', radius: 15, damage: 250, color: 0x440066, frostBurst: 40 } },
+
+  // ── 🌌 SCI-FI P2W SECONDARIES ────────────────────────────────────────────
+  { id: 'pulse_needle', name: 'Pulse Needle', type: 'Tracking Secondary', slot: 'secondary',
+    mag: 12, reserve: 36, damage: 14, fireRate: 110, reloadTime: 1500,
+    auto: true, pellets: 1, spread: 0.003, adsZoom: 50, bulletSpeed: 160, noReload: false,
+    bulletColor: 0xff66cc, bulletSize: 0.03,
+    ability: { name: 'Detonate', cd: 10000, desc: 'All pulse marks explode · 12-shot burst', type: 'fanfire', count: 12, delay: 30 } },
+  { id: 'phase_pistol', name: 'Phase Pistol', type: 'Phasing Secondary', slot: 'secondary',
+    mag: 8, reserve: 24, damage: 45, fireRate: 280, reloadTime: 1600,
+    auto: false, pellets: 1, spread: 0.002, adsZoom: 50, bulletSpeed: 200, noReload: false,
+    bulletColor: 0xaa66ff, bulletSize: 0.05, emissive: true,
+    ability: { name: 'Blink Shot', cd: 11000, desc: 'Next shot · 3× damage · pierce-feel', type: 'powershot', pellets: 1, spreadMult: 0, dmgMult: 3 } },
+  { id: 'ion_revolver', name: 'Ion Revolver', type: 'Electric Revolver', slot: 'secondary',
+    mag: 6, reserve: 18, damage: 50, fireRate: 320, reloadTime: 2000,
+    auto: false, pellets: 1, spread: 0.005, adsZoom: 48, bulletSpeed: 170, noReload: false,
+    bulletColor: 0x66ccff, bulletSize: 0.05, emissive: true,
+    ability: { name: 'Arc Burst', cd: 12000, desc: 'Empty cylinder · chain shots', type: 'fanfire', count: 6, delay: 60 } },
+
   // ── 🪖 ADMIN PRIMARIES (locked behind unlock codes) ──────────────────────
   {
     id: 'gau19', name: 'GAU-19 Heavy', type: 'Admin · Mounted MG', slot: 'primary',
@@ -813,6 +882,15 @@ const MELEE_ITEMS = [
   { id: 'meat_cleaver',   name: 'Meat Cleaver',   type: 'Vampiric Melee', damage: 60, range: 1.7, cooldown: 540,
     lifestealOnHit: 10,
     ability: { name: 'Butcher',    cd: 10000, desc: '3 s · auto-chop · double lifesteal', type: 'melee_revup', duration: 3000, lifestealMult: 2 } },
+  // ── 🌌 SCI-FI P2W MELEES ──────────────────────────────────────────────────
+  { id: 'phase_blade',   name: 'Phase Blade',     type: 'Phasing Melee',  damage: 90, range: 2.6, cooldown: 380, speedMult: 1.4,
+    ability: { name: 'Ghost Dash', cd: 9000,  desc: 'Dash 7 m through enemies · 110 dmg', type: 'melee_lunge', distance: 7, damage: 110 } },
+  { id: 'gravity_hammer',name: 'Gravity Hammer',  type: 'Heavy AOE',      damage: 110, range: 2.3, cooldown: 700,
+    aoeOnSwing: 3.5,
+    ability: { name: 'Singularity Slam', cd: 14000, desc: 'Slam · 6 m AOE knockback', type: 'melee_slam' } },
+  { id: 'volt_whip',     name: 'Volt Whip',       type: 'Long Electric',  damage: 50, range: 4.0, cooldown: 420,
+    chainOnHit: { radius: 3.0, mult: 0.6 },
+    ability: { name: 'Thunder Lash', cd: 11000, desc: '3 s spin · chain electric hits', type: 'melee_spin', duration: 3000 } },
   { id: 'karambit',   name: 'Karambit',     type: 'Admin · Combat Knife', damage: 80, range: 1.6, cooldown: 200, speedMult: 1.8,
     adminItem: true,
     ability: { name: 'Stealth Stab', cd: 9000,  desc: 'Next hit · instakill from behind', type: 'melee_instakill' } },
@@ -874,6 +952,14 @@ const SUPPORT_ITEMS = [
   { id: 'ink_bomb',        name: 'Ink Bomb',      type: 'Utility',   uses: 2, damage: 0, cooldown: 800, bulletSpeed: 48, bulletColor: 0x111111, bulletSize: 0.18 },
   { id: 'siren',           name: 'Distraction Siren', type: 'Decoy', uses: 1, cooldown: 2000, decoyDur: 6000 },
   { id: 'caltrops',        name: 'Caltrops',      type: 'Trap',      uses: 3, damage: 30, cooldown: 700, bulletSpeed: 28, bulletColor: 0x888888, bulletSize: 0.05, isTripwire: true },
+
+  // ── 🌌 SCI-FI P2W UTILITIES ─────────────────────────────────────────────
+  { id: 'nano_swarm',     name: 'Nano Swarm',     type: 'Heal Drone',   uses: 1, heal: 120, cooldown: 1800 },
+  { id: 'warp_beacon',    name: 'Warp Beacon',    type: 'Teleport',     uses: 2, blink: 20, cooldown: 1500 },
+  { id: 'stasis_mine',    name: 'Stasis Mine',    type: 'Time Trap',    uses: 2, damage: 20, cooldown: 1200, bulletSpeed: 30, bulletColor: 0x66ccff, bulletSize: 0.07, isTripwire: true, stunDur: 4000 },
+  { id: 'specter_drone',  name: 'Specter Drone',  type: 'Stealth Drone', uses: 1, damage: 160, cooldown: 1800, droneDur: 14000, droneRange: 32 },
+  { id: 'quantum_barrier',name: 'Quantum Barrier',type: 'Shield',       uses: 1, healPerSec: 12, shieldDur: 9000, cooldown: 2000 },
+
 
   { id: 'c4', name: 'C4 Charge', type: 'Admin · Explosive', uses: 2, damage: 200, cooldown: 1200, bulletSpeed: 40, bulletColor: 0x664433, bulletSize: 0.11, c4Detonate: true, adminItem: true },
   { id: 'claymore', name: 'Claymore Mine', type: 'Admin · Directional Mine', uses: 2, damage: 250, cooldown: 1100, claymoreRadius: 4, claymoreArc: 1.2, adminItem: true },
@@ -989,6 +1075,10 @@ const WEAPON_COSTS = {
   potato_cannon: 220, sticker_blaster: 280, foam_cannon: 280,
   // Premium / P2W — ridiculously expensive on purpose
   royal_minigun: 3500,
+  // 🌌 Sci-fi P2W primaries
+  event_horizon: 24000, storm_core: 20000, abs_zero: 22000, solar_lance: 26000,
+  phase_driver: 30000, quantum_repeater: 28000, magnetar: 25000,
+  nebula_mortar: 35000, prism_engine: 27000, void_harvester: 40000,
   // Secondaries
   revolver: 150, flare: 80, pistol: 60, shorty: 180, cycler: 140,
   hand_cannon: 260, throwing_knives: 120, taser: 200,
@@ -999,6 +1089,8 @@ const WEAPON_COSTS = {
   snub_revolver: 140, duelist_pistol: 280, mauser: 200, mini_uzi: 240,
   nail_gun: 180, boomstick: 220, signal_pistol: 200, throwing_axes: 240,
   shuriken: 160, boomerang: 180, slingshot: 100, blowgun: 200,
+  // 🌌 Sci-fi P2W secondaries
+  pulse_needle: 12000, phase_pistol: 16000, ion_revolver: 14000,
   // Melees
   bat: 80, sabre: 140, frying_pan: 60, sledge: 360, spear: 200,
   katana: 360, baguette: 50, knife: 280, chainsaw: 1400, lightsabre: 1800,
@@ -1009,6 +1101,8 @@ const WEAPON_COSTS = {
   brass_knuckles: 200, hatchet: 220, machete: 260, cane: 140, cricket_bat: 200,
   pipe: 160, wrench: 180, shovel: 280, golf_club: 200, tennis_racket: 100,
   fire_poker: 200, meat_cleaver: 260,
+  // 🌌 Sci-fi P2W melees
+  phase_blade: 18000, gravity_hammer: 22000, volt_whip: 17000,
   // Support / Utility
   frag: 120, medkit: 80, stim: 60, smoke: 70, blink_pearl: 280,
   ammo_fountain: 180, confetti_cannon: 100, moon_mine: 220, rubber_duck: 90,
@@ -1021,6 +1115,9 @@ const WEAPON_COSTS = {
   flashbang_basic: 200, proximity_mine: 220, dynamite: 280, drone_strike: 340,
   healing_pulse: 200, teleport_beacon: 260, cloak: 280, berserker_serum: 240,
   taser_grenade: 220, ink_bomb: 140, siren: 200, caltrops: 180,
+  // 🌌 Sci-fi P2W utilities
+  nano_swarm: 20000, warp_beacon: 25000, stasis_mine: 18000,
+  specter_drone: 30000, quantum_barrier: 21000,
 };
 const FREE_WEAPONS = new Set([
   'ak20','sg8','pistol','flare','fists','frying_pan','frag','medkit',
@@ -1103,6 +1200,13 @@ const BUNDLES = [
   { id: 'mortar',      name: 'Mortar Squad', icon: '🪂', price: 550,
     desc: 'Indirect fire specialists',
     items: ['mortar_rifle','grenade_launcher','hand_cannon','frag'] },
+  { id: 'cosmic_p2w',  name: 'Cosmic P2W',   icon: '🌌', price: 80000,
+    desc: 'Every sci-fi P2W item · 30% off',
+    items: ['event_horizon','storm_core','abs_zero','solar_lance','phase_driver',
+            'quantum_repeater','magnetar','nebula_mortar','prism_engine','void_harvester',
+            'pulse_needle','phase_pistol','ion_revolver',
+            'phase_blade','gravity_hammer','volt_whip',
+            'nano_swarm','warp_beacon','stasis_mine','specter_drone','quantum_barrier'] },
 ];
 
 function shopCost(id)      { return WEAPON_COSTS[id]; }
@@ -1204,6 +1308,10 @@ const MELEE_SWING_TYPES = [
   'bash',    // 31 tennis_racket
   'thrust',  // 32 fire_poker
   'chop',    // 33 meat_cleaver
+  // ── Sci-fi P2W melees ─────────────────────────────────────────────
+  'slash',   // 34 phase_blade
+  'slam',    // 35 gravity_hammer
+  'spin',    // 36 volt_whip
 ];
 
 // ── Weapon ability system ──────────────────────────────────────────────────
@@ -4730,6 +4838,21 @@ function buildSlingshot() {
     band.position.set(0, 0.12, -0.05); g.add(band);
   });
 }
+// 🌌 Sci-fi P2W models — emissive, futuristic chassis
+function buildEventHorizonRifle() { return _genericGun({ bodyShape:'futuristic', bodyColor:0x220033, accentColor:0x6633ff, magType:'box', emissive:true, scope:'holo', flashColor:0x9966ff, kickZ:0.025 }); }
+function buildStormCore()         { return _genericGun({ bodyShape:'heavy',      bodyColor:0x113355, accentColor:0x88ddff, magType:'drum', emissive:true, foregrip:true, flashColor:0xaaeeff }); }
+function buildAbsZero()           { return _genericGun({ bodyShape:'futuristic', bodyColor:0x113344, accentColor:0x99eeff, magType:'pan', emissive:true, scope:'holo', flashColor:0xaaffff, barrelR:0.020 }); }
+function buildSolarLance()        { return _genericGun({ bodyShape:'futuristic', bodyColor:0xaa6611, accentColor:0xffee44, magType:'hidden', emissive:true, scope:'sniper', flashColor:0xffee88, barrelR:0.014 }); }
+function buildPhaseDriver()       { return _genericGun({ bodyShape:'classic',    bodyColor:0x331144, accentColor:0xaa66ff, magType:'banana', emissive:true, scope:'holo', flashColor:0xcc99ff }); }
+function buildQuantumRepeater()   { return _genericGun({ bodyShape:'futuristic', bodyColor:0x224455, accentColor:0x66ffcc, magType:'box', emissive:true, scope:'holo', flashColor:0x88ffdd }); }
+function buildMagnetar()          { return _genericGun({ bodyShape:'heavy',      bodyColor:0x441133, accentColor:0xff77cc, magType:'drum', emissive:true, foregrip:true, flashColor:0xff99dd, barrelR:0.022, kickZ:0.030 }); }
+function buildNebulaMortar()      { return _genericGun({ bodyShape:'heavy',      bodyColor:0x331144, accentColor:0x9966ff, magType:'hidden', emissive:true, foregrip:true, flashColor:0xaa88ff, barrelR:0.028, kickZ:0.040 }); }
+function buildPrismEngine()       { return _genericGun({ bodyShape:'futuristic', bodyColor:0x442266, accentColor:0xffaaff, magType:'drum', emissive:true, scope:'holo', flashColor:0xffccff }); }
+function buildVoidHarvester()     { return _genericGun({ bodyShape:'heavy',      bodyColor:0x110011, accentColor:0x440066, magType:'box', emissive:true, foregrip:true, flashColor:0x6633aa, barrelR:0.024, kickZ:0.035 }); }
+function buildPulseNeedle()       { return _genericGun({ bodyShape:'compact',    bodyColor:0x331133, accentColor:0xff66cc, magType:'box', emissive:true, flashColor:0xff99dd }); }
+function buildPhasePistol()       { return _genericGun({ bodyShape:'pistol',     bodyColor:0x222244, accentColor:0xaa66ff, magType:'hidden', emissive:true, scope:'red_dot', flashColor:0xcc99ff }); }
+function buildIonRevolver()       { return _genericGun({ bodyShape:'pistol',     bodyColor:0x114455, accentColor:0x66ccff, magType:'hidden', emissive:true, flashColor:0x99ddff }); }
+
 function buildBlowgun() {
   return _throwableHolder(g => {
     const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.50, 10),
@@ -4800,6 +4923,12 @@ const weaponModels = [
   buildSnubRevolver(), buildDuelistPistol(), buildMauser(), buildMiniUzi(),
   buildNailGun(), buildBoomstick(), buildSignalPistol(), buildThrowingAxes(),
   buildShuriken(), buildBoomerang(), buildSlingshot(), buildBlowgun(),
+  // ── 🌌 SCI-FI P2W primaries ─────────────────────────────────────────────
+  buildEventHorizonRifle(), buildStormCore(), buildAbsZero(), buildSolarLance(),
+  buildPhaseDriver(), buildQuantumRepeater(), buildMagnetar(), buildNebulaMortar(),
+  buildPrismEngine(), buildVoidHarvester(),
+  // ── 🌌 SCI-FI P2W secondaries ───────────────────────────────────────────
+  buildPulseNeedle(), buildPhasePistol(), buildIonRevolver(),
   // ── 🪖 ADMIN primaries ───────────────────────────────────────────────────
   buildGAU19(), buildMK44(), buildXM7(), buildBarrett(), buildM134(), buildHKMP7(), buildP90Spec(),
   // ── 🪖 ADMIN secondaries ─────────────────────────────────────────────────
@@ -5253,6 +5382,10 @@ const meleeModels = [
   buildSimpleMelee('axe',    0xddaa88), // tennis_racket
   buildSimpleMelee('pipe',   0xcc6622), // fire_poker
   buildSimpleMelee('axe',    0xcccccc), // meat_cleaver
+  // 🌌 Sci-fi P2W melees (color-coded placeholders)
+  buildSimpleMelee('blade',  0xaa66ff), // phase_blade
+  buildSimpleMelee('club',   0x6633ff), // gravity_hammer
+  buildSimpleMelee('pipe',   0x66ccff), // volt_whip
   // 🪖 ADMIN melees
   buildKarambit(), buildBayonet(), buildTomahawk(), buildOts04(), buildGarrote(),
 ];
@@ -5669,6 +5802,12 @@ const supportModels = [buildFragGrenade(), buildMedkit(), buildStimShot(), build
   buildSimpleSupport(0x111111, 'sphere'),  // ink_bomb
   buildSimpleSupport(0xffaa44, 'cube'),    // siren
   buildSimpleSupport(0x888888, 'disc'),    // caltrops
+  // 🌌 Sci-fi P2W utilities
+  buildSimpleSupport(0x66ffcc, 'sphere'),   // nano_swarm
+  buildSimpleSupport(0xaa66ff, 'cube'),     // warp_beacon
+  buildSimpleSupport(0x66ccff, 'disc'),     // stasis_mine
+  buildSimpleSupport(0x444466, 'cube'),     // specter_drone
+  buildSimpleSupport(0xaaccff, 'sphere'),   // quantum_barrier
   // 🪖 ADMIN supports
   buildC4(), buildClaymore(), buildStunGrenade(), buildThermite(),
   buildPredatorUAV(), buildCarePackage(), buildTacNuke()];
