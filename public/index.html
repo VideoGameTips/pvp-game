@@ -451,6 +451,7 @@
     <div id="user-info-bar" style="display:flex; gap:14px; align-items:center; margin-bottom:18px; font-size:11px;">
       <span id="user-info-name" style="color:#88ccff; letter-spacing:2px;"></span>
       <span id="user-info-unlocks" style="color:#ffcc44; letter-spacing:1px;"></span>
+      <button id="open-shop-btn" style="padding:6px 14px; background:#1a1a3a; color:#aaccff; border:1px solid #6699ff; cursor:pointer; font-family:'Courier New',monospace; font-size:11px; letter-spacing:2px; border-radius:4px;">🛒 OPEN SHOP</button>
       <button id="enter-code-btn" style="padding:6px 14px; background:#3a3a1a; color:#ffcc44; border:1px solid #ffcc44; cursor:pointer; font-family:'Courier New',monospace; font-size:11px; letter-spacing:2px; border-radius:4px;">🔑 ENTER UNLOCK CODE</button>
       <button id="logout-btn" style="padding:6px 12px; background:#222; color:#888; border:1px solid #555; cursor:pointer; font-family:'Courier New',monospace; font-size:10px; letter-spacing:1px; border-radius:4px;">LOG OUT</button>
     </div>
@@ -468,6 +469,11 @@
         <div class="map-card" data-map="desert"     style="padding:6px 14px; border:2px solid #c8a050; color:#c8a050; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">DESERT</div>
         <div class="map-card" data-map="tundra"     style="padding:6px 14px; border:2px solid #88aacc; color:#88aacc; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">TUNDRA</div>
         <div class="map-card" data-map="space"      style="padding:6px 14px; border:2px solid #aa44ff; color:#aa44ff; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">SPACE STATION</div>
+        <div class="map-card" data-map="refinery"   style="padding:6px 14px; border:2px solid #d06a2d; color:#d06a2d; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">REFINERY</div>
+        <div class="map-card" data-map="skydock"    style="padding:6px 14px; border:2px solid #44ddff; color:#44ddff; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">SKYDOCK</div>
+        <div class="map-card" data-map="sewer"      style="padding:6px 14px; border:2px solid #55ff22; color:#55ff22; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">SEWER</div>
+        <div class="map-card" data-map="gravity_lab" style="padding:6px 14px; border:2px solid #66aaff; color:#66aaff; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">GRAVITY LAB</div>
+        <div class="map-card" data-map="glassworks" style="padding:6px 14px; border:2px solid #8ee8ff; color:#8ee8ff; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">GLASSWORKS</div>
       </div>
       <div id="map-desc" style="font-size:11px; color:#888; margin-top:6px; letter-spacing:1px; max-width:600px;">Random — game picks one for you each match</div>
     </div>
@@ -481,6 +487,31 @@
         <div class="diff-card" data-diff="expert"  style="padding:8px 18px; border:2px solid #c0f; color:#c0f; cursor:pointer; font-size:13px; letter-spacing:3px; border-radius:4px;">EXPERT</div>
       </div>
       <div id="difficulty-desc" style="font-size:11px; color:#888; margin-top:8px; letter-spacing:1px; max-width:600px;">+ Reloading · Bullet leading · Reaction time · Skill variation · Smarter melee charges</div>
+    </div>
+
+    <div style="margin-bottom:24px; text-align:center; max-width:780px;">
+      <div style="font-size:10px; letter-spacing:4px; color:#888; margin-bottom:10px;">MAP (auto = random)</div>
+      <div id="map-row" style="display:flex; gap:6px; justify-content:center; flex-wrap:wrap;">
+        <div class="map-card selected" data-map="auto"       style="padding:5px 10px; border:2px solid #888; color:#fff; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px; background:rgba(150,150,150,0.2);">🎲 AUTO</div>
+        <div class="map-card" data-map="blank"        style="padding:5px 10px; border:2px solid #8aaf6a; color:#8aaf6a; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">🟩 BLANK</div>
+        <div class="map-card" data-map="urban"        style="padding:5px 10px; border:2px solid #8b6f4e; color:#8b6f4e; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">🏙️ URBAN</div>
+        <div class="map-card" data-map="warehouse"    style="padding:5px 10px; border:2px solid #999; color:#999; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">🏭 WAREHOUSE</div>
+        <div class="map-card" data-map="forest"       style="padding:5px 10px; border:2px solid #4a9e3f; color:#4a9e3f; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">🌲 FOREST</div>
+        <div class="map-card" data-map="volcano"      style="padding:5px 10px; border:2px solid #ff4400; color:#ff4400; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">🌋 VOLCANO</div>
+        <div class="map-card" data-map="cyber"        style="padding:5px 10px; border:2px solid #ff00ff; color:#ff00ff; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">🌃 CYBER</div>
+        <div class="map-card" data-map="desert"       style="padding:5px 10px; border:2px solid #d4b078; color:#d4b078; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">🏜️ DESERT</div>
+        <div class="map-card" data-map="tundra"       style="padding:5px 10px; border:2px solid #a0d8ff; color:#a0d8ff; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">❄️ TUNDRA</div>
+        <div class="map-card" data-map="space"        style="padding:5px 10px; border:2px solid #aa44ff; color:#aa44ff; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">🚀 SPACE</div>
+        <div class="map-card" data-map="airport"      style="padding:5px 10px; border:2px solid #ddeeff; color:#ddeeff; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">🛬 AIRPORT</div>
+        <div class="map-card" data-map="trenches"     style="padding:5px 10px; border:2px solid #c0a060; color:#c0a060; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">🪖 TRENCHES</div>
+        <div class="map-card" data-map="chernobyl"    style="padding:5px 10px; border:2px solid #44aa22; color:#44aa22; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">☢️ CHERNOBYL</div>
+        <div class="map-card" data-map="refinery"     style="padding:5px 10px; border:2px solid #d06a2d; color:#d06a2d; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">🛢️ REFINERY</div>
+        <div class="map-card" data-map="skydock"      style="padding:5px 10px; border:2px solid #44ddff; color:#44ddff; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">🛫 SKYDOCK</div>
+        <div class="map-card" data-map="sewer"        style="padding:5px 10px; border:2px solid #55ff22; color:#55ff22; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">☣️ SEWER</div>
+        <div class="map-card" data-map="gravity_lab"  style="padding:5px 10px; border:2px solid #66aaff; color:#66aaff; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">🌀 GRAVITY</div>
+        <div class="map-card" data-map="glassworks"   style="padding:5px 10px; border:2px solid #8ee8ff; color:#8ee8ff; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">🔷 GLASSWORKS</div>
+      </div>
+      <div style="font-size:10px; color:#666; margin-top:6px;">Maps with built-in modes (D-Day, Range, KOTH) use their own map regardless of this choice.</div>
     </div>
 
     <div style="margin-bottom:24px; text-align:center;">
@@ -509,6 +540,19 @@
         <div class="mode-card" data-mode="laststand">LAST STAND<span>Survive endless waves</span></div>
         <div class="mode-card" data-mode="dday">D-DAY<span>Defend the hill · 3 waves</span></div>
         <div class="mode-card" data-mode="range">SHOOTING RANGE<span>Practice · No enemies</span></div>
+        <div class="mode-card" data-mode="koth" style="border-color:#ffaa44;color:#ffaa44;">👑 KING OF THE HILL<span>10 players · 3 lives · vehicles · last alive wins</span></div>
+      </div>
+    </div>
+
+    <div style="margin-top:24px; text-align:center;">
+      <div style="font-size:10px; letter-spacing:4px; color:#888; margin-bottom:12px;">🎮 ARCADE MODES</div>
+      <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:center;">
+        <div class="mode-card" data-mode="gungame"     style="border-color:#ff44ff;color:#ff44ff;">🔫 GUN GAME<span>Each kill upgrades weapon · knife wins</span></div>
+        <div class="mode-card" data-mode="oitc"        style="border-color:#ffcc22;color:#ffcc22;">🎯 ONE IN THE CHAMBER<span>1 bullet · 1 shot kill · melee fallback</span></div>
+        <div class="mode-card" data-mode="juggernaut"  style="border-color:#ff2222;color:#ff2222;">🛡️ JUGGERNAUT<span>1 OP super-soldier vs everyone</span></div>
+        <div class="mode-card" data-mode="infection"   style="border-color:#44ff44;color:#44ff44;">🧟 INFECTION<span>Zombies infect on melee · last human wins</span></div>
+        <div class="mode-card" data-mode="sniper_only" style="border-color:#aaeeff;color:#aaeeff;">🔭 SNIPER ONLY<span>SR-X only · long-range chess</span></div>
+        <div class="mode-card" data-mode="speedrun"    style="border-color:#ff8844;color:#ff8844;">⏱️ SPEEDRUN<span>Kill 20 bots as fast as possible · solo</span></div>
       </div>
     </div>
   </div>

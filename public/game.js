@@ -839,6 +839,15 @@ const GAME_MODE_CONFIGS = {
   'laststand':  { type: 'laststand',  allies: 0, enemies: 0 },
   'dday':       { type: 'dday',       allies: 3, enemies: 0 },
   'range':      { type: 'range',      allies: 0, enemies: 0 },
+  // King of the Hill / Battle Royale: massive map, 10 players FFA, 3 lives each, last alive wins
+  'koth':       { type: 'br',         allies: 0, enemies: 9, livesPerPlayer: 3, mapSize: 250 },
+  // 🎮 ARCADE MODES — fast & gimmicky FFA variants
+  'gungame':    { type: 'arcade', subtype: 'gungame',  allies: 0, enemies: 7, timeLimit: 300, arcade: true },
+  'oitc':       { type: 'arcade', subtype: 'oitc',     allies: 0, enemies: 5, timeLimit: 240, arcade: true }, // One in the Chamber
+  'juggernaut': { type: 'arcade', subtype: 'jugg',     allies: 0, enemies: 5, timeLimit: 240, arcade: true },
+  'infection':  { type: 'arcade', subtype: 'infect',   allies: 0, enemies: 5, timeLimit: 180, arcade: true },
+  'sniper_only':{ type: 'arcade', subtype: 'sniper',   allies: 0, enemies: 5, timeLimit: 240, arcade: true },
+  'speedrun':   { type: 'arcade', subtype: 'speedrun', allies: 0, enemies: 20,timeLimit: 0,   arcade: true }, // solo
 };
 let selectedModeConfig = null;
 const gameBots = [];       // {id, team, weaponId, x, z, rotY, hp, dead, state, wanderAngle, wanderTimer, lastShot, lastBotMove}
@@ -846,6 +855,163 @@ let botMoveTimer = 0;
 let rangeTargets = []; // { id, baseX, z, moving, dir, speed, respawnAt }
 let rangeStats   = { shots: 0, hits: 0 };
 const BOT_MOVE_INTERVAL = 0.05; // send position updates every 50ms
+
+// ── 🛒 Shop: weapon cost table (mirrors server.js WEAPON_COSTS) ────────────
+// Admin items are NOT priced — they're claimed via promo codes only.
+const WEAPON_COSTS = {
+  // Primaries — ARs / SMGs
+  ak20: 250, ak30: 300, mp40: 200, p90: 350, vector: 300, burst: 280,
+  // Primaries — Shotguns
+  sg8: 220, sg100: 380, auto_shotgun: 340,
+  // Primaries — Snipers / Marksman
+  srx: 500, lever: 360,
+  // Primaries — Special
+  rpd: 450, paintball: 120, crossbow: 280,
+  // Primaries — Heavy
+  minigun: 600, grenade_launcher: 500, flamethrower: 420,
+  // Primaries — Sci-fi / energy
+  railgun: 600, freeze_gun: 350, plasma_carbine: 420, arc_rifle: 400,
+  arc_torrent: 460, prism_launcher: 420, lazy_laser: 420, storm_cannon: 540,
+  coilgun: 460, magnet_rifle: 380, painter_beam: 300, gravity_paint: 400,
+  portal_launcher: 460, pulse_disc: 380, traffic_controller: 320,
+  // Primaries — Explosive / projectile
+  boombow: 500, gravity_launcher: 480, harpoon_gun: 440, mortar_rifle: 480,
+  firework_launcher: 360, shockwave_launcher: 460, airburst_projector: 360,
+  pinball_launcher: 440, seismic_hammer: 480, glassmaker: 380,
+  // Primaries — Tactical / precision / battle rifle
+  an94: 380, spas12: 360, m1_garand: 380, flechette: 380, thermal_lmg: 520,
+  burst_cannon: 480, incendiary_shotgun: 400, amr: 2000, air_rifle: 320,
+  twin_ar: 440, swarm_rifle: 460, smart_smg: 380, switchblade_gun: 420,
+  // Primaries — Joke / chaos
+  potato_cannon: 220, sticker_blaster: 280, foam_cannon: 280,
+  // Premium / P2W — ridiculously expensive on purpose
+  royal_minigun: 3500,
+  // Secondaries
+  revolver: 150, flare: 80, pistol: 60, shorty: 180, cycler: 140,
+  hand_cannon: 260, throwing_knives: 120, taser: 200,
+  machine_pistol: 220, sawed_off: 260, machine_revolver: 240, pocket_rocket: 320,
+  dart_gun: 160, laser_pointer: 120, coin_gun: 180, emp_pistol: 240,
+  auto_revolver: 220, frost_blaster: 240,
+  // Melees
+  bat: 80, sabre: 140, frying_pan: 60, sledge: 360, spear: 200,
+  katana: 360, baguette: 50, knife: 280, chainsaw: 1400, lightsabre: 1800,
+  riot_shield: 220, screwdriver: 60, crowbar: 110, fire_axe: 420,
+  nunchucks: 160, umbrella: 140, yoyo: 180, combat_axe: 380,
+  shock_baton: 220, titan_hammer: 2400, vampire_blade: 2000, fists: 0,
+  // Support / Utility
+  frag: 120, medkit: 80, stim: 60, smoke: 70, blink_pearl: 280,
+  ammo_fountain: 180, confetti_cannon: 100, moon_mine: 220, rubber_duck: 90,
+  black_hole_seed: 2200, glitch_cube: 240, vampire_syringe: 200,
+  adrenaline: 220, tripwire: 200, hologram: 240, magnet_mine: 220,
+  bounce_pad: 140, hunter_drone: 460, emp_grenade: 240, sticky_charge: 320,
+  orbital_strike: 2500, guardian_drone: 380, nano_shield: 320,
+  air_grenade: 160, land_mine: 380,
+};
+const FREE_WEAPONS = new Set([
+  'ak20','sg8','pistol','flare','fists','frying_pan','frag','medkit',
+]);
+const TRIAL_DIVISOR = 20;
+const trialingThisMatch = new Set(); // ids the player paid a trial for this match
+
+// ── 💼 Loadout BUNDLES — ~60% off the sum of individual prices ─────────
+// Mirrors server.js BUNDLES (server is authoritative on price/contents).
+const BUNDLES = [
+  { id: 'pitiful',     name: 'Pitiful Pack', icon: '🪖', price: 290,
+    desc: 'Classic loadout: AR · shotgun · pistol · melee · smoke',
+    items: ['ak30','sg100','revolver','bat','smoke'] },
+  { id: 'retro',       name: 'Retro Pack',   icon: '🕹️', price: 145,
+    desc: 'Quirky old-school weapons · 70% off',
+    items: ['paintball','laser_pointer','baguette','rubber_duck','confetti_cannon'] },
+  { id: 'starter_pro', name: 'Starter Pro',  icon: '🎯', price: 240,
+    desc: 'Upgrade past the freebies',
+    items: ['ak30','revolver','bat','stim'] },
+  { id: 'heavy_duty',  name: 'Heavy Duty',   icon: '💥', price: 700,
+    desc: 'Minigun · GL · machine revolver',
+    items: ['minigun','grenade_launcher','machine_revolver','crowbar','sticky_charge'] },
+  { id: 'sniper_pack', name: 'Sniper Pack',  icon: '🎯', price: 400,
+    desc: 'Long-range duelist kit',
+    items: ['srx','revolver','knife','smoke'] },
+  { id: 'run_n_gun',   name: 'Run & Gun',    icon: '⚡', price: 430,
+    desc: 'Fast SMGs + speed boost',
+    items: ['p90','machine_pistol','knife','adrenaline'] },
+  { id: 'melee_master',name: 'Melee Master', icon: '⚔️', price: 400,
+    desc: 'Get up close and stay there',
+    items: ['auto_shotgun','revolver','fire_axe','smoke'] },
+  { id: 'shotgun_pack',name: 'Shotgun Pack', icon: '🔫', price: 350,
+    desc: 'Close-range chaos',
+    items: ['sg100','sawed_off','crowbar','frag'] },
+  { id: 'scifi',       name: 'Sci-Fi Arsenal', icon: '🔬', price: 500,
+    desc: 'Energy weapons & EMP',
+    items: ['plasma_carbine','arc_rifle','dart_gun','emp_grenade'] },
+  { id: 'demolition',  name: 'Demolition',   icon: '💣', price: 600,
+    desc: 'Blow stuff up',
+    items: ['grenade_launcher','pocket_rocket','sledge','sticky_charge'] },
+  { id: 'archery',     name: "Archer's Kit", icon: '🏹', price: 440,
+    desc: 'Bows, knives, traps',
+    items: ['crossbow','boombow','throwing_knives','tripwire'] },
+  { id: 'marksman',    name: 'Marksman',     icon: '🎯', price: 430,
+    desc: 'Patient precision shooter',
+    items: ['lever','hand_cannon','knife','ammo_fountain'] },
+  { id: 'pyro',        name: 'Pyromaniac',   icon: '🔥', price: 620,
+    desc: 'Burn it all down',
+    items: ['flamethrower','incendiary_shotgun','fire_axe','sticky_charge'] },
+  { id: 'chaos',       name: 'Chaos Mode',   icon: '🤡', price: 150,
+    desc: 'Goofy weapons only',
+    items: ['paintball','confetti_cannon','baguette','rubber_duck'] },
+  { id: 'stealth',     name: 'Stealth Ops',  icon: '🥷', price: 320,
+    desc: 'Silent, deadly, hidden',
+    items: ['air_rifle','throwing_knives','knife','smoke'] },
+  { id: 'storm',       name: 'Storm Pack',   icon: '⚡', price: 420,
+    desc: 'Electricity and shocks',
+    items: ['arc_rifle','taser','shock_baton','emp_grenade'] },
+  { id: 'defensive',   name: 'Defensive',    icon: '🛡️', price: 450,
+    desc: 'Tank-style survival',
+    items: ['sg100','taser','riot_shield','nano_shield'] },
+  { id: 'royalty',     name: 'Royalty',      icon: '💎', price: 4500,
+    desc: 'High-end P2W power fantasy · ~45% off',
+    items: ['royal_minigun','vampire_blade','hand_cannon','orbital_strike'] },
+  { id: 'kitchen',     name: 'Kitchen Catastrophe', icon: '🍳', price: 130,
+    desc: 'Household weapons only',
+    items: ['paintball','baguette','frying_pan','rubber_duck'] },
+  { id: 'knight',      name: "Knight's Honor", icon: '🤺', price: 320,
+    desc: 'Swords and shotguns',
+    items: ['sg8','sabre','katana','smoke'] },
+  { id: 'frostbite',   name: 'Frostbite',    icon: '🧊', price: 380,
+    desc: 'Freeze, blast, finish',
+    items: ['freeze_gun','frost_blaster','knife','smoke'] },
+  { id: 'knockback',   name: 'Knockback',    icon: '🌪️', price: 500,
+    desc: 'Send them flying',
+    items: ['shockwave_launcher','sawed_off','sledge','air_grenade'] },
+  { id: 'smart_tech',  name: 'Smart Tech',   icon: '👁️', price: 610,
+    desc: 'Tracking, drones, mines',
+    items: ['swarm_rifle','smart_smg','hunter_drone','magnet_mine'] },
+  { id: 'mortar',      name: 'Mortar Squad', icon: '🪂', price: 550,
+    desc: 'Indirect fire specialists',
+    items: ['mortar_rifle','grenade_launcher','hand_cannon','frag'] },
+];
+
+function shopCost(id)      { return WEAPON_COSTS[id]; }
+function shopTrialCost(id) { const c = WEAPON_COSTS[id]; return c == null ? null : Math.max(1, Math.ceil(c / TRIAL_DIVISOR)); }
+function isOwned(id) {
+  if (!id) return true;
+  if (FREE_WEAPONS.has(id)) return true;
+  if (trialingThisMatch.has(id)) return true;
+  if (!currentUser) return false;
+  if (currentUser.isAdmin) return true;
+  if (adminPassActive()) return true; // 10-min trial-everything pass
+  if (currentUser.purchased && currentUser.purchased.includes(id)) return true;
+  if (currentUser.unlocks && currentUser.unlocks.includes(id)) return true; // admin items
+  return false;
+}
+function adminPassActive() {
+  if (!currentUser) return false;
+  if (currentUser.isAdmin) return true;
+  return (currentUser.adminPassExpiresAt || 0) > Date.now();
+}
+function adminPassMsLeft() {
+  if (!currentUser) return 0;
+  return Math.max(0, (currentUser.adminPassExpiresAt || 0) - Date.now());
+}
 
 const PRIMARY_WEAPON_IDS = WEAPONS.filter(w => w.slot === 'primary' && !w.ddayOnly).map(w => w.id);
 function randomPrimaryId() { return PRIMARY_WEAPON_IDS[Math.floor(Math.random() * PRIMARY_WEAPON_IDS.length)]; }
@@ -1002,6 +1168,18 @@ const SCARY_CLOSE_WEAPONS = new Set([
   // The instakill threat
   'knife', // knife has Death Touch ability
 ]);
+
+const BOT_DIFFICULTY_TUNING = {
+  easy:   { aimMin: 0.75, aimRand: 0.25, reactMin: 320, reactRand: 260, fireMin: 1200, fireRand: 650, reloadMin: 2200, reloadRand: 800, hitRunChance: 0.00, initialShotDelay: 1800 },
+  medium: { aimMin: 0.70, aimRand: 0.35, reactMin: 260, reactRand: 280, fireMin: 1050, fireRand: 650, reloadMin: 1900, reloadRand: 700, hitRunChance: 0.00, initialShotDelay: 1400 },
+  hard:   { aimMin: 1.05, aimRand: 0.45, reactMin: 120, reactRand: 180, fireMin: 760,  fireRand: 380, reloadMin: 1300, reloadRand: 450, hitRunChance: 0.20, initialShotDelay: 900 },
+  expert: { aimMin: 1.85, aimRand: 0.45, reactMin: 20,  reactRand: 70,  fireMin: 420,  fireRand: 180, reloadMin: 700,  reloadRand: 250, hitRunChance: 0.18, initialShotDelay: 350 },
+};
+
+function botTuning(diff) {
+  return BOT_DIFFICULTY_TUNING[diff] || BOT_DIFFICULTY_TUNING.medium;
+}
+
 // Returns true if the player currently has a scary close-range weapon equipped/active OR a chainsaw-tier melee selected.
 function playerHasScaryCloseWeapon() {
   if (typeof currentWeapon !== 'undefined' && currentWeapon && SCARY_CLOSE_WEAPONS.has(currentWeapon.id)) return true;
@@ -1511,6 +1689,315 @@ scene.fog = new THREE.Fog(0x87ceeb, 40, 120);
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.05, 200);
 camera.position.set(0, 1.65, 0);
 
+// Procedural weapon audio: no asset files needed, unlocked by the first player gesture.
+let audioCtx = null;
+let weaponSoundLastAt = {};
+let soundEventLastAt = {};
+function getAudioCtx() {
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (!Ctx) return null;
+  if (!audioCtx) audioCtx = new Ctx();
+  return audioCtx;
+}
+function unlockAudio() {
+  const ctx = getAudioCtx();
+  if (ctx && ctx.state === 'suspended') {
+    const resume = ctx.resume();
+    if (resume && resume.catch) resume.catch(() => {});
+  }
+}
+['pointerdown', 'keydown', 'touchstart'].forEach(evt => {
+  window.addEventListener(evt, unlockAudio, { once: true, passive: true });
+});
+function soundDistanceGain(pos, remote) {
+  if (!remote) return 1;
+  if (!pos) return 0.45;
+  const d = camera.position.distanceTo(pos);
+  return Math.max(0.05, Math.min(0.55, 1 - d / 55));
+}
+function weaponAudioProfile(id, baseWeapon) {
+  const w = baseWeapon || WEAPONS.find(x => x.id === id) || {};
+  const type = (w.type || '').toLowerCase();
+  const lowerId = String(id || w.id || '').toLowerCase();
+  if (lowerId === 'p90' || lowerId === 'p90_spec') return { kind:'auto_blast', vol:0.20, dur:0.075, f1:760, f2:240, action:'water_smg' };
+  if (lowerId === 'firework_launcher') return { kind:'firework', vol:0.36, dur:0.26, f1:130, f2:55 };
+  if (lowerId === 'arc_torrent') return { kind:'arc', vol:0.26, dur:0.11, f1:980, f2:320 };
+  if (lowerId === 'freeze_gun' || lowerId === 'frost_blaster') return { kind:'freeze', vol:0.24, dur:0.16, f1:680, f2:420 };
+  if (lowerId === 'flamethrower') return { kind:'flamethrower', vol:0.24, dur:0.18, f1:95, f2:58 };
+  if (lowerId.includes('crossbow') || lowerId.includes('bow') || lowerId.includes('harpoon')) return { kind:'twang', vol:0.34, dur:0.18, f1:420, f2:130 };
+  if (lowerId.includes('rail') || lowerId.includes('coil') || lowerId.includes('cycler') || lowerId.includes('laser')) return { kind:'energy', vol:0.32, dur:0.20, f1:920, f2:170 };
+  if (lowerId.includes('freeze') || lowerId.includes('cryo')) return { kind:'energy', vol:0.26, dur:0.22, f1:740, f2:260 };
+  if (lowerId.includes('flame') || lowerId.includes('firework')) return { kind:'flame', vol:0.22, dur:0.16, f1:120, f2:70 };
+  if (lowerId.includes('grenade') || lowerId.includes('boombow') || lowerId.includes('rocket') || lowerId.includes('flare')) return { kind:'thump', vol:0.42, dur:0.28, f1:110, f2:45, action:'single' };
+  if (lowerId.includes('paint')) return { kind:'pop', vol:0.28, dur:0.13, f1:520, f2:190 };
+  if (lowerId.includes('knife') || lowerId.includes('throwing')) return { kind:'throw', vol:0.23, dur:0.12, f1:780, f2:260 };
+  if (type.includes('shotgun') || lowerId.includes('shotgun') || lowerId.includes('sg8') || lowerId.includes('sg100') || lowerId.includes('shorty')) return { kind:'boom', vol:0.48, dur:0.22, f1:150, f2:55, action:'shotgun' };
+  if (type.includes('sniper') || type.includes('marksman') || lowerId.includes('srx') || lowerId.includes('lever')) return { kind:'crack', vol:0.44, dur:0.18, f1:680, f2:95, action:'bolt' };
+  if (type.includes('smg') || lowerId.includes('vector') || lowerId.includes('mp40')) return { kind:'auto_blast', vol:0.20, dur:0.075, f1:430, f2:160, action:'water_smg' };
+  if (type.includes('lmg') || type.includes('heavy') || lowerId.includes('minigun') || lowerId.includes('rpd')) return { kind:'auto_blast_heavy', vol:0.27, dur:0.11, f1:230, f2:80, action:'water_belt' };
+  if (type.includes('secondary') || lowerId.includes('pistol') || lowerId.includes('revolver') || lowerId.includes('hand_cannon')) return { kind:'pistol', vol:0.34, dur:0.12, f1:540, f2:120, action: lowerId.includes('revolver') ? 'revolver' : 'slide' };
+  return w.auto ? { kind:'auto_blast', vol:0.23, dur:0.080, f1:145, f2:52, action:'water_rifle' }
+                : { kind:'rifle', vol:0.38, dur:0.10, f1:145, f2:52, action:'rifle' };
+}
+function playNoise(ctx, start, dur, outNode, volume, tone = 0.5) {
+  const len = Math.max(1, Math.floor(ctx.sampleRate * dur));
+  const buffer = ctx.createBuffer(1, len, ctx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / len) * tone;
+  const src = ctx.createBufferSource();
+  const filter = ctx.createBiquadFilter();
+  const gain = ctx.createGain();
+  src.buffer = buffer;
+  filter.type = 'bandpass';
+  filter.frequency.setValueAtTime(900 + tone * 2200, start);
+  filter.Q.value = 0.7;
+  src.connect(filter).connect(gain).connect(outNode);
+  gain.gain.setValueAtTime(Math.max(0.001, volume), start);
+  gain.gain.exponentialRampToValueAtTime(0.001, start + dur);
+  src.start(start);
+  src.stop(start + dur + 0.02);
+}
+function playFilteredNoise(ctx, start, dur, outNode, volume, filterType, freq, q = 0.7, attack = 0.001) {
+  const len = Math.max(1, Math.floor(ctx.sampleRate * dur));
+  const buffer = ctx.createBuffer(1, len, ctx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < len; i++) {
+    const t = i / len;
+    data[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, 1.8);
+  }
+  const src = ctx.createBufferSource();
+  const filter = ctx.createBiquadFilter();
+  const gain = ctx.createGain();
+  src.buffer = buffer;
+  filter.type = filterType;
+  filter.frequency.setValueAtTime(freq, start);
+  filter.Q.value = q;
+  src.connect(filter).connect(gain).connect(outNode);
+  gain.gain.setValueAtTime(0.001, start);
+  gain.gain.linearRampToValueAtTime(Math.max(0.001, volume), start + attack);
+  gain.gain.exponentialRampToValueAtTime(0.001, start + dur);
+  src.start(start);
+  src.stop(start + dur + 0.02);
+}
+function playTone(ctx, start, dur, outNode, freqA, freqB, volume, type = 'square') {
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(freqA, start);
+  osc.frequency.exponentialRampToValueAtTime(Math.max(20, freqB), start + dur);
+  osc.connect(gain).connect(outNode);
+  gain.gain.setValueAtTime(Math.max(0.001, volume), start);
+  gain.gain.exponentialRampToValueAtTime(0.001, start + dur);
+  osc.start(start);
+  osc.stop(start + dur + 0.02);
+}
+function playMuzzleBlast(ctx, start, outNode, kind, volume) {
+  if (kind === 'boom') {
+    playFilteredNoise(ctx, start, 0.13, outNode, volume * 1.3, 'lowpass', 1200, 0.7);
+    playFilteredNoise(ctx, start, 0.028, outNode, volume * 1.0, 'highpass', 1800, 0.5);
+    playTone(ctx, start, 0.07, outNode, 92, 46, volume * 0.32, 'sine');
+  } else if (kind === 'crack') {
+    playFilteredNoise(ctx, start, 0.030, outNode, volume * 0.72, 'highpass', 1900, 0.45);
+    playFilteredNoise(ctx, start, 0.075, outNode, volume * 0.95, 'bandpass', 760, 0.75);
+    playTone(ctx, start, 0.075, outNode, 118, 52, volume * 0.26, 'sine');
+  } else if (kind === 'pistol') {
+    playFilteredNoise(ctx, start, 0.04, outNode, volume * 1.2, 'bandpass', 1550, 0.7);
+    playFilteredNoise(ctx, start + 0.015, 0.055, outNode, volume * 0.55, 'lowpass', 820, 0.7);
+  } else if (kind === 'auto_blast') {
+    playFilteredNoise(ctx, start, 0.075, outNode, volume * 0.70, 'bandpass', 1180, 0.28);
+    playFilteredNoise(ctx, start + 0.010, 0.110, outNode, volume * 0.92, 'lowpass', 540, 0.55);
+    playFilteredNoise(ctx, start + 0.030, 0.070, outNode, volume * 0.42, 'bandpass', 260, 0.85);
+    playTone(ctx, start, 0.070, outNode, 66, 38, volume * 0.14, 'sine');
+    playTone(ctx, start + 0.014, 0.070, outNode, 170, 118, volume * 0.075, 'triangle');
+  } else if (kind === 'auto_blast_heavy') {
+    playFilteredNoise(ctx, start, 0.085, outNode, volume * 0.62, 'bandpass', 980, 0.35);
+    playFilteredNoise(ctx, start + 0.006, 0.130, outNode, volume * 1.05, 'lowpass', 460, 0.68);
+    playFilteredNoise(ctx, start + 0.035, 0.080, outNode, volume * 0.42, 'bandpass', 230, 0.9);
+    playTone(ctx, start, 0.085, outNode, 72, 34, volume * 0.18, 'sine');
+  } else if (kind === 'tick' || kind === 'p90') {
+    playFilteredNoise(ctx, start, 0.028, outNode, volume * 1.05, 'bandpass', kind === 'p90' ? 2100 : 1600, 0.55);
+    playFilteredNoise(ctx, start + 0.012, 0.032, outNode, volume * 0.35, 'highpass', 2400, 0.4);
+  } else if (kind === 'heavy') {
+    playFilteredNoise(ctx, start, 0.05, outNode, volume * 1.15, 'bandpass', 980, 0.65);
+    playTone(ctx, start, 0.05, outNode, 120, 64, volume * 0.18, 'sine');
+  } else if (kind === 'thump') {
+    playFilteredNoise(ctx, start, 0.11, outNode, volume * 0.95, 'lowpass', 900, 0.7);
+    playTone(ctx, start, 0.11, outNode, 88, 36, volume * 0.34, 'sine');
+  } else {
+    playFilteredNoise(ctx, start, 0.030, outNode, volume * 0.52, 'bandpass', 1550, 0.45);
+    playFilteredNoise(ctx, start, 0.085, outNode, volume * 1.22, 'lowpass', 980, 0.75);
+    playFilteredNoise(ctx, start + 0.018, 0.050, outNode, volume * 0.42, 'bandpass', 430, 0.8);
+    playTone(ctx, start, 0.070, outNode, 96, 48, volume * 0.24, 'sine');
+  }
+}
+function playGunAction(ctx, start, outNode, action, volume) {
+  if (!action) return;
+  const waterAction = action === 'water_smg' || action === 'water_rifle' || action === 'water_belt';
+  const clickVol = volume * (waterAction ? 0.18 : action === 'smg' || action === 'rifle' || action === 'belt' ? 0.24 : 0.42);
+  if (action === 'shotgun') {
+    playFilteredNoise(ctx, start + 0.11, 0.035, outNode, clickVol, 'bandpass', 950, 1.0);
+    playFilteredNoise(ctx, start + 0.19, 0.045, outNode, clickVol * 0.85, 'bandpass', 620, 1.0);
+  } else if (action === 'bolt') {
+    playFilteredNoise(ctx, start + 0.13, 0.030, outNode, clickVol, 'bandpass', 1250, 1.2);
+    playFilteredNoise(ctx, start + 0.23, 0.040, outNode, clickVol * 0.75, 'bandpass', 720, 1.1);
+  } else if (action === 'revolver') {
+    playFilteredNoise(ctx, start + 0.055, 0.024, outNode, clickVol * 0.8, 'bandpass', 1350, 1.2);
+  } else if (action === 'belt') {
+    playFilteredNoise(ctx, start + 0.035, 0.026, outNode, clickVol * 0.8, 'bandpass', 760, 1.0);
+  } else if (waterAction) {
+    const delay = action === 'water_smg' ? 0.030 : action === 'water_belt' ? 0.040 : 0.052;
+    playTone(ctx, start + 0.006, 0.070, outNode, 155, 190, clickVol * 0.75, 'triangle');
+    playFilteredNoise(ctx, start + delay, 0.026, outNode, clickVol, 'bandpass', 980, 0.75);
+    playFilteredNoise(ctx, start + delay + 0.030, 0.018, outNode, clickVol * 0.52, 'bandpass', 1450, 0.55);
+  } else {
+    playFilteredNoise(ctx, start + (action === 'smg' ? 0.026 : 0.045), 0.024, outNode, clickVol, 'bandpass', action === 'slide' ? 1650 : 1050, 1.0);
+    playFilteredNoise(ctx, start + (action === 'smg' ? 0.048 : 0.075), 0.018, outNode, clickVol * 0.55, 'highpass', 2200, 0.6);
+  }
+}
+function playWeaponSound(idOrWeapon, opts = {}) {
+  const ctx = getAudioCtx();
+  if (!ctx) return;
+  const base = opts.baseWeapon || (typeof idOrWeapon === 'object' ? idOrWeapon : null);
+  const id = typeof idOrWeapon === 'object' ? idOrWeapon.id : idOrWeapon;
+  const key = `${id || base?.id || 'weapon'}_${opts.remote ? 'r' : 'l'}`;
+  const nowMs = performance.now();
+  const minGap = opts.minGap ?? (opts.remote ? 55 : 18);
+  if (weaponSoundLastAt[key] && nowMs - weaponSoundLastAt[key] < minGap) return;
+  weaponSoundLastAt[key] = nowMs;
+  unlockAudio();
+
+  const p = weaponAudioProfile(id, base);
+  const distGain = soundDistanceGain(opts.position, opts.remote);
+  const mult = (opts.volume ?? 1) * distGain * (opts.remote ? 0.75 : 1);
+  const start = ctx.currentTime + 0.002;
+  const mainGain = ctx.createGain();
+  const comp = ctx.createDynamicsCompressor();
+  mainGain.connect(comp).connect(ctx.destination);
+
+  if (p.kind === 'auto_blast' || p.kind === 'auto_blast_heavy') {
+    playMuzzleBlast(ctx, start, mainGain, p.kind, p.vol * mult);
+    playGunAction(ctx, start, mainGain, p.action, p.vol * mult);
+  } else if (p.kind === 'firework') {
+    playTone(ctx, start, 0.10, mainGain, p.f1, p.f2, p.vol * mult, 'sine');
+    playTone(ctx, start + 0.055, 0.20, mainGain, 620, 1080, p.vol * 0.22 * mult, 'triangle');
+    playNoise(ctx, start + 0.09, 0.13, mainGain, p.vol * 0.42 * mult, 0.9);
+  } else if (p.kind === 'arc') {
+    playTone(ctx, start, p.dur, mainGain, p.f1, p.f2, p.vol * mult, 'sawtooth');
+    playNoise(ctx, start, p.dur, mainGain, p.vol * 0.85 * mult, 1.0);
+  } else if (p.kind === 'freeze') {
+    playNoise(ctx, start, p.dur, mainGain, p.vol * mult, 0.52);
+    playTone(ctx, start + 0.035, 0.08, mainGain, p.f1, p.f2, p.vol * 0.36 * mult, 'triangle');
+  } else if (p.kind === 'flamethrower') {
+    playNoise(ctx, start, p.dur, mainGain, p.vol * mult, 0.22);
+    playTone(ctx, start, p.dur * 0.8, mainGain, p.f1, p.f2, p.vol * 0.20 * mult, 'sawtooth');
+  } else if (p.kind === 'rifle') {
+    playMuzzleBlast(ctx, start, mainGain, p.kind, p.vol * mult);
+    playGunAction(ctx, start, mainGain, p.action, p.vol * mult);
+  } else if (p.kind === 'energy') {
+    playTone(ctx, start, p.dur, mainGain, p.f1, p.f2, p.vol * mult, 'sawtooth');
+    playTone(ctx, start + 0.01, p.dur * 0.65, mainGain, p.f1 * 1.7, p.f2 * 1.2, p.vol * 0.35 * mult, 'sine');
+  } else if (p.kind === 'twang') {
+    playTone(ctx, start, p.dur, mainGain, p.f1, p.f2, p.vol * mult, 'triangle');
+    playNoise(ctx, start + 0.015, 0.08, mainGain, p.vol * 0.25 * mult, 0.3);
+  } else if (p.kind === 'flame') {
+    playNoise(ctx, start, p.dur, mainGain, p.vol * mult, 0.25);
+    playTone(ctx, start, p.dur * 0.7, mainGain, p.f1, p.f2, p.vol * 0.25 * mult, 'sawtooth');
+  } else if (p.kind === 'pop' || p.kind === 'throw') {
+    playTone(ctx, start, p.dur, mainGain, p.f1, p.f2, p.vol * mult, 'triangle');
+    playNoise(ctx, start, p.dur * 0.55, mainGain, p.vol * 0.18 * mult, 0.35);
+  } else if (['boom', 'crack', 'tick', 'heavy', 'pistol', 'thump'].includes(p.kind)) {
+    playMuzzleBlast(ctx, start, mainGain, p.kind, p.vol * mult);
+    playGunAction(ctx, start, mainGain, p.action, p.vol * mult);
+  } else {
+    playMuzzleBlast(ctx, start, mainGain, 'rifle', p.vol * mult);
+    playGunAction(ctx, start, mainGain, p.action || 'rifle', p.vol * mult);
+  }
+}
+function playReloadSound(w) {
+  const ctx = getAudioCtx();
+  if (!ctx) return;
+  unlockAudio();
+  const start = ctx.currentTime + 0.002;
+  const gain = ctx.createGain();
+  gain.connect(ctx.destination);
+  const low = w?.noReload ? 120 : 210;
+  playTone(ctx, start, 0.055, gain, 360, low, 0.10, 'square');
+  playTone(ctx, start + 0.13, 0.07, gain, 180, 320, 0.08, 'triangle');
+}
+function playSoundEvent(name, opts = {}) {
+  const ctx = getAudioCtx();
+  if (!ctx) return;
+  const nowMs = performance.now();
+  const key = `${name}_${opts.remote ? 'r' : 'l'}`;
+  const minGap = opts.minGap ?? 80;
+  if (soundEventLastAt[key] && nowMs - soundEventLastAt[key] < minGap) return;
+  soundEventLastAt[key] = nowMs;
+  unlockAudio();
+
+  const posGain = soundDistanceGain(opts.position, opts.remote);
+  const mult = (opts.volume ?? 1) * posGain * (opts.remote ? 0.8 : 1);
+  const start = ctx.currentTime + 0.002;
+  const out = ctx.createGain();
+  const comp = ctx.createDynamicsCompressor();
+  out.connect(comp).connect(ctx.destination);
+
+  if (name === 'hitmarker') {
+    playTone(ctx, start, 0.045, out, 980, 680, 0.09 * mult, 'square');
+  } else if (name === 'headshot') {
+    playTone(ctx, start, 0.16, out, 1180, 1860, 0.14 * mult, 'triangle');
+    playNoise(ctx, start + 0.025, 0.07, out, 0.06 * mult, 0.75);
+  } else if (name === 'kill') {
+    playTone(ctx, start, 0.18, out, 125, 48, 0.22 * mult, 'sine');
+    playNoise(ctx, start, 0.07, out, 0.08 * mult, 0.45);
+  } else if (name === 'low_hp') {
+    playTone(ctx, start, 0.13, out, 82, 68, 0.16 * mult, 'sine');
+    playTone(ctx, start + 0.18, 0.10, out, 92, 74, 0.12 * mult, 'sine');
+    playTone(ctx, start + 0.03, 0.42, out, 1850, 1580, 0.035 * mult, 'triangle');
+  } else if (name === 'freeze_shatter') {
+    playNoise(ctx, start, 0.35, out, 0.32 * mult, 1.0);
+    playTone(ctx, start, 0.22, out, 240, 72, 0.24 * mult, 'sawtooth');
+    playTone(ctx, start + 0.04, 0.16, out, 1260, 420, 0.14 * mult, 'triangle');
+  } else if (name === 'chainsaw_idle') {
+    playTone(ctx, start, 0.34, out, 78, 86, 0.14 * mult, 'sawtooth');
+    playNoise(ctx, start, 0.32, out, 0.08 * mult, 0.18);
+  } else if (name === 'chainsaw_rev') {
+    playTone(ctx, start, 0.42, out, 110, 210, 0.22 * mult, 'sawtooth');
+    playNoise(ctx, start, 0.38, out, 0.16 * mult, 0.35);
+  } else if (name === 'chainsaw_hit') {
+    playTone(ctx, start, 0.16, out, 185, 72, 0.22 * mult, 'sawtooth');
+    playNoise(ctx, start, 0.22, out, 0.26 * mult, 0.85);
+  } else if (name === 'blink') {
+    playTone(ctx, start, 0.18, out, 180, 720, 0.18 * mult, 'triangle');
+    playNoise(ctx, start + 0.03, 0.20, out, 0.18 * mult, 0.7);
+    playTone(ctx, start + 0.18, 0.11, out, 90, 48, 0.16 * mult, 'sine');
+  } else if (name === 'drone_fly') {
+    playTone(ctx, start, 0.26, out, 390, 430, 0.10 * mult, 'sawtooth');
+    playNoise(ctx, start, 0.20, out, 0.04 * mult, 0.25);
+  } else if (name === 'drone_lock') {
+    playTone(ctx, start, 0.05, out, 980, 980, 0.11 * mult, 'square');
+    playTone(ctx, start + 0.12, 0.04, out, 1180, 1180, 0.13 * mult, 'square');
+  } else if (name === 'drone_dive') {
+    playTone(ctx, start, 0.55, out, 520, 1260, 0.18 * mult, 'sawtooth');
+    playTone(ctx, start + 0.45, 0.22, out, 110, 42, 0.22 * mult, 'sine');
+  } else if (name === 'air_burst') {
+    playTone(ctx, start, 0.35, out, 95, 38, 0.28 * mult, 'sine');
+    playNoise(ctx, start, 0.26, out, 0.16 * mult, 0.22);
+  } else if (name === 'air_launch') {
+    playTone(ctx, start, 0.38, out, 260, 920, 0.12 * mult, 'triangle');
+  } else if (name === 'blackhole_activate') {
+    playTone(ctx, start, 0.45, out, 62, 38, 0.30 * mult, 'sine');
+    playNoise(ctx, start, 0.30, out, 0.12 * mult, 0.18);
+  } else if (name === 'blackhole_collapse') {
+    playNoise(ctx, start, 0.24, out, 0.26 * mult, 0.9);
+    playTone(ctx, start + 0.08, 0.36, out, 72, 28, 0.34 * mult, 'sawtooth');
+  } else if (name === 'fire_sizzle') {
+    playNoise(ctx, start, 0.32, out, 0.10 * mult, 0.75);
+    playTone(ctx, start + 0.04, 0.08, out, 720, 980, 0.035 * mult, 'triangle');
+  } else {
+    playTone(ctx, start, 0.12, out, 300, 120, 0.12 * mult, 'triangle');
+  }
+}
+
 // ── Lighting ───────────────────────────────────────────────────────────────
 scene.add(new THREE.AmbientLight(0xffffff, 0.6));
 const sun = new THREE.DirectionalLight(0xffffff, 1.2);
@@ -1525,13 +2012,34 @@ scene.add(sun);
 // ── Wall collision boxes ────────────────────────────────────────────────────
 // Populated by buildMap(); used by resolveWallCollisions() each frame.
 const wallColliders = []; // Array of THREE.Box3
+const PLAYER_EYE_HEIGHT = 1.65;
+const PLAYER_RADIUS = 0.38;
+
+function getGroundEyeY(px = camera.position.x, pz = camera.position.z, eyeY = camera.position.y) {
+  let groundY = PLAYER_EYE_HEIGHT;
+  const feetY = eyeY - PLAYER_EYE_HEIGHT;
+  for (const box of wallColliders) {
+    if (box.max.y <= 0.05 || box.max.y > 14) continue;
+    if (feetY + 0.35 < box.max.y) continue;
+    if (px < box.min.x - PLAYER_RADIUS || px > box.max.x + PLAYER_RADIUS) continue;
+    if (pz < box.min.z - PLAYER_RADIUS || pz > box.max.z + PLAYER_RADIUS) continue;
+    groundY = Math.max(groundY, box.max.y + PLAYER_EYE_HEIGHT);
+  }
+  return groundY;
+}
+
+function isPlayerGrounded() {
+  return camera.position.y <= getGroundEyeY() + 0.04 && (!slamState || slamState.vel <= 0);
+}
 
 function resolveWallCollisions() {
-  const RADIUS = 0.38; // player footprint radius
+  const RADIUS = PLAYER_RADIUS; // player footprint radius
   let px = camera.position.x;
   let pz = camera.position.z;
-  const py = 1.65;
+  const py = camera.position.y;
+  let feetY = py - PLAYER_EYE_HEIGHT;
   for (const box of wallColliders) {
+    if (feetY >= box.max.y - 0.08) continue;
     // Quick vertical cull — player occupies y ∈ [0.65, 2.65]
     if (py + 1.0 < box.min.y || py - 1.0 > box.max.y) continue;
     // Expand box horizontally by player radius (Minkowski sum)
@@ -1540,6 +2048,11 @@ function resolveWallCollisions() {
     const exMinZ = box.min.z - RADIUS;
     const exMaxZ = box.max.z + RADIUS;
     if (px <= exMinX || px >= exMaxX || pz <= exMinZ || pz >= exMaxZ) continue;
+    if (box.max.y > feetY && box.max.y <= feetY + 0.65) {
+      camera.position.y = box.max.y + PLAYER_EYE_HEIGHT;
+      feetY = box.max.y;
+      continue;
+    }
     // Inside — find smallest push-out distance and eject on that axis
     const dLeft  = px - exMinX;
     const dRight = exMaxX - px;
@@ -1556,8 +2069,10 @@ function resolveWallCollisions() {
 }
 
 function resolvePosCollisions(px, pz) {
-  const RADIUS = 0.38;
+  const RADIUS = PLAYER_RADIUS;
   for (const box of wallColliders) {
+    const feetY = camera.position.y - PLAYER_EYE_HEIGHT;
+    if (feetY >= box.max.y - 0.08) continue;
     const exMinX = box.min.x - RADIUS, exMaxX = box.max.x + RADIUS;
     const exMinZ = box.min.z - RADIUS, exMaxZ = box.max.z + RADIUS;
     if (px <= exMinX || px >= exMaxX || pz <= exMinZ || pz >= exMaxZ) continue;
@@ -1572,10 +2087,10 @@ function resolvePosCollisions(px, pz) {
 // ── Map Groups ──────────────────────────────────────────────────────────────
 const MAP_GROUPS = {};
 const MAP_COLLIDERS = {};
-// Per-map gimmicks — { damageZones, jumpPads, iceZones, lowGravZones } (each is array of {x,z,r})
+// Per-map gimmicks — { damageZones, jumpPads, iceZones, oilZones, lowGravZones } (each is array of {x,z,r})
 const MAP_GIMMICKS = {};
 let activeMapName = 'blank';
-let activeMapGimmicks = { damageZones: [], jumpPads: [], iceZones: [], lowGravZones: [] };
+let activeMapGimmicks = { damageZones: [], jumpPads: [], iceZones: [], oilZones: [], lowGravZones: [] };
 
 function registerMap(name) {
   const group = new THREE.Group();
@@ -1583,7 +2098,7 @@ function registerMap(name) {
   group.visible = false;
   MAP_GROUPS[name] = group;
   MAP_COLLIDERS[name] = [];
-  MAP_GIMMICKS[name] = { damageZones: [], jumpPads: [], iceZones: [], lowGravZones: [] };
+  MAP_GIMMICKS[name] = { damageZones: [], jumpPads: [], iceZones: [], oilZones: [], lowGravZones: [] };
 }
 
 // Legacy refs for existing buildBlankMap/Battlefield/Range — bridge them to the registry
@@ -1602,7 +2117,7 @@ function activateMap(name) {
   wallColliders.length = 0;
   if (MAP_COLLIDERS[name]) wallColliders.push(...MAP_COLLIDERS[name]);
   activeMapName = name;
-  activeMapGimmicks = MAP_GIMMICKS[name] || { damageZones: [], jumpPads: [], iceZones: [], lowGravZones: [] };
+  activeMapGimmicks = MAP_GIMMICKS[name] || { damageZones: [], jumpPads: [], iceZones: [], oilZones: [], lowGravZones: [] };
 }
 
 function buildBlankMap() {
@@ -1942,6 +2457,61 @@ function addOuterWalls(mapName, color) {
     addMapBox(mapName, x, y, z, w, h, d, color);
   });
 }
+function addJumpPad(mapName, x, z, r = 1.5, vel = 14, color = 0xffcc22) {
+  const pad = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.9, r * 0.9, 0.15, 16), new THREE.MeshBasicMaterial({ color }));
+  pad.position.set(x, 0.08, z);
+  MAP_GROUPS[mapName].add(pad);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(r, 0.08, 4, 20), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+  ring.rotation.x = Math.PI / 2;
+  ring.position.set(x, 0.16, z);
+  MAP_GROUPS[mapName].add(ring);
+  MAP_GIMMICKS[mapName].jumpPads.push({ x, z, r, vel });
+}
+function addSlickZone(mapName, x, z, r, color = 0x111111) {
+  const slick = new THREE.Mesh(
+    new THREE.CylinderGeometry(r, r, 0.04, 22),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.62 })
+  );
+  slick.position.set(x, 0.035, z);
+  MAP_GROUPS[mapName].add(slick);
+  MAP_GIMMICKS[mapName].oilZones.push({ x, z, r });
+}
+function addExplosiveBarrel(mapName, x, z, color = 0xb52b20) {
+  const barrel = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.62, 1.25, 14), new THREE.MeshLambertMaterial({ color }));
+  body.position.y = 0.72;
+  barrel.add(body);
+  const bandMat = new THREE.MeshBasicMaterial({ color: 0xffcc33 });
+  [-0.34, 0.34].forEach(y => {
+    const band = new THREE.Mesh(new THREE.TorusGeometry(0.63, 0.035, 5, 14), bandMat);
+    band.rotation.x = Math.PI / 2;
+    band.position.y = 0.72 + y;
+    barrel.add(band);
+  });
+  barrel.position.set(x, 0, z);
+  MAP_GROUPS[mapName].add(barrel);
+  barrel.updateMatrixWorld(true);
+  MAP_COLLIDERS[mapName].push(new THREE.Box3().setFromObject(barrel));
+  mapDestructibles.push({
+    mesh: barrel, hp: 60, maxHp: 60, type: 'explosive_barrel', mapName,
+    colliderRef: MAP_COLLIDERS[mapName][MAP_COLLIDERS[mapName].length - 1],
+    onDestroy: () => {
+      spawnAbilityAOEFX(new THREE.Vector3(x, 0.5, z), 7, 0xff7722);
+      flashScreen('rgba(255,120,20,0.35)', 450);
+      for (const bot of gameBots) {
+        if (bot.dead) continue;
+        const dx = bot.x - x, dz = bot.z - z;
+        if (dx*dx + dz*dz < 49) {
+          const mesh = remoteMeshes[bot.id];
+          const hp = mesh ? mesh.position.clone().setY(1.0) : new THREE.Vector3(bot.x, 1, bot.z);
+          emitHit(bot.id, `barrel_${Date.now()}_${bot.id}`, 'explosive_barrel', hp);
+        }
+      }
+      const pdx = camera.position.x - x, pdz = camera.position.z - z;
+      if (pdx*pdx + pdz*pdz < 49) applyBotDamageToPlayer('explosive_barrel', null);
+    },
+  });
+}
 
 // ──────────────────────────────────────────────────────────────────────────
 // 1. URBAN PLAZA — buildings as corner cover, cars as low cover in plaza
@@ -1954,18 +2524,42 @@ function buildUrbanMap() {
   // Sidewalks
   addMapBox(m, 0, 0.05, -25, 50, 0.10, 6, 0x9a9a9a);
   addMapBox(m, 0, 0.05,  25, 50, 0.10, 6, 0x9a9a9a);
-  // 4 corner buildings (tall)
+  // 4 hollow corner skyscrapers with roof access
   const bldg = 0x8b6f4e;
+  const roofMat = 0x6d563a;
+  const stairMat = 0x7c6750;
   const wnd  = 0x44ddff;
-  [[-32,-32],[32,-32],[-32,32],[32,32]].forEach(([x,z]) => {
-    addMapBox(m, x, 5, z, 14, 10, 14, bldg);
+  const addUrbanSkyscraper = (x, z) => {
+    const size = 14, half = size / 2, wallT = 0.9, height = 10;
+    const innerZ = z < 0 ? z + half - wallT / 2 : z - half + wallT / 2;
+    const outerZ = z < 0 ? z - half + wallT / 2 : z + half - wallT / 2;
+    addMapBox(m, x, 5, outerZ, size, height, wallT, bldg);
+    addMapBox(m, x - 4.4, 5, innerZ, 3.4, height, wallT, bldg);
+    addMapBox(m, x + 4.4, 5, innerZ, 3.4, height, wallT, bldg);
+    addMapBox(m, x - half + wallT / 2, 5, z, wallT, height, size, bldg);
+    addMapBox(m, x + half - wallT / 2, 5, z, wallT, height, size, bldg);
+    addMapBox(m, x, height + 0.15, z, size, 0.3, size, roofMat);
     // Windows (purely visual)
     for (let i = -1; i <= 1; i++) {
       const w = new THREE.Mesh(new THREE.BoxGeometry(2, 1.4, 0.1), new THREE.MeshBasicMaterial({ color: wnd }));
       w.position.set(x + i * 4, 3, z + (z < 0 ? 7.05 : -7.05));
       MAP_GROUPS[m].add(w);
     }
-  });
+    const dirX = x < 0 ? 1 : -1;
+    const dirZ = z < 0 ? 1 : -1;
+    const steps = 24;
+    for (let i = 0; i < steps; i++) {
+      const t = i / (steps - 1);
+      const stepH = 0.35 + t * 9.9;
+      const sx = x;
+      const sz = z + dirZ * (half + 11.2 - i * 0.42);
+      addMapBox(m, sx, stepH / 2, sz, 3.2, stepH, 0.75, stairMat);
+    }
+    const landingX = x;
+    const landingZ = z + dirZ * (half + 0.7);
+    addMapBox(m, landingX, height + 0.05, landingZ, 3.2, 0.2, 3.2, stairMat);
+  };
+  [[-32,-32],[32,-32],[-32,32],[32,32]].forEach(([x,z]) => addUrbanSkyscraper(x,z));
   // Cars as low cover scattered in plaza
   const carMat = new THREE.MeshLambertMaterial({ color: 0x4a8aff });
   [[-10,-5,0],[10,5,0.5],[0,12,-0.3],[-12,15,1],[14,-10,0],[6,-15,0.5]].forEach(([x,z,rot]) => {
@@ -2267,6 +2861,485 @@ function buildSpaceMap() {
   MAP_GROUPS[m]._skyColor = 0x000010;
 }
 buildSpaceMap();
+
+// ──────────────────────────────────────────────────────────────────────────
+// SPECIAL MAP MECHANIC STATE
+// ──────────────────────────────────────────────────────────────────────────
+const mapDestructibles = []; // [{ mesh, hp, maxHp, type, mapName, onDestroy }]
+const mapMortars       = []; // [{ mesh, ammo, maxAmmo, hp, x, z, pilotedBy: null|'player'|botId, side }]
+let airportLightLevel  = 1.0; // 1=full bright, 0=pitch black — controlled by airport map
+let chernobylGasActive = false; // when true, player takes 1 dmg/sec
+let lastChernobylTick  = 0;
+
+// ──────────────────────────────────────────────────────────────────────────
+// 9. AIRPORT — bright lights + breakable glass; gets darker as lights go out
+// ──────────────────────────────────────────────────────────────────────────
+registerMap('airport');
+function buildAirportMap() {
+  const m = 'airport';
+  addMapGround(m, 0xeeeeee, 0xaaaaaa); // pale terminal floor
+  addOuterWalls(m, 0xcccccc);
+  // Terminal walls — high glass panels mixed with structural columns
+  const wallMat = new THREE.MeshLambertMaterial({ color: 0xdddde2 });
+  // Outer terminal structure
+  [[-30,3,0,2,6,40],[30,3,0,2,6,40],[0,3,-30,40,6,2],[0,3,30,40,6,2]].forEach(([x,y,z,w,h,d]) => {
+    addMapBox(m, x, y, z, w, h, d, 0xcccccc);
+  });
+  // Structural support columns
+  for (let i = -25; i <= 25; i += 12.5) {
+    [[i, -25], [i, 25]].forEach(([cx, cz]) => {
+      const col = new THREE.Mesh(new THREE.BoxGeometry(1.2, 8, 1.2), wallMat);
+      col.position.set(cx, 4, cz);
+      MAP_GROUPS[m].add(col);
+      col.updateMatrixWorld(true);
+      MAP_COLLIDERS[m].push(new THREE.Box3().setFromObject(col));
+    });
+  }
+  // ── Breakable glass panels (between columns) ──
+  const glassMat = new THREE.MeshBasicMaterial({ color: 0x88ccee, transparent: true, opacity: 0.45 });
+  const glassPositions = [];
+  for (let i = -19; i <= 19; i += 12.5) {
+    glassPositions.push([i, 4, -25, 11, 7, 0.15]);
+    glassPositions.push([i, 4,  25, 11, 7, 0.15]);
+  }
+  glassPositions.forEach(([x, y, z, w, h, d]) => {
+    const g = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), glassMat);
+    g.position.set(x, y, z);
+    MAP_GROUPS[m].add(g);
+    g.updateMatrixWorld(true);
+    MAP_COLLIDERS[m].push(new THREE.Box3().setFromObject(g));
+    mapDestructibles.push({
+      mesh: g, hp: 30, maxHp: 30, type: 'glass', mapName: 'airport',
+      colliderRef: MAP_COLLIDERS[m][MAP_COLLIDERS[m].length - 1],
+    });
+  });
+  // ── Breakable overhead lights ──
+  const lightMat = new THREE.MeshBasicMaterial({ color: 0xffffcc });
+  const lightPositions = [];
+  for (let i = -22; i <= 22; i += 11) {
+    for (let j = -16; j <= 16; j += 8) {
+      lightPositions.push([i, 5.5, j]);
+    }
+  }
+  lightPositions.forEach(([x, y, z]) => {
+    const l = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.2, 0.5), lightMat);
+    l.position.set(x, y, z);
+    MAP_GROUPS[m].add(l);
+    mapDestructibles.push({
+      mesh: l, hp: 5, maxHp: 5, type: 'airport_light', mapName: 'airport',
+      onDestroy: () => {
+        // Each broken light darkens the map slightly
+        airportLightLevel = Math.max(0.1, airportLightLevel - 1 / lightPositions.length);
+      },
+    });
+  });
+  // Baggage carousels / luggage as low cover
+  const lugMat = new THREE.MeshLambertMaterial({ color: 0x222222 });
+  [[0,-5,4,1.4,5], [0,5,4,1.4,5], [-12,0,5,1.2,3], [12,0,5,1.2,3]].forEach(([x,z,w,h,d]) => {
+    addMapBox(m, x, h/2, z, w, h, d, 0x444444);
+    addMapBox(m, x, h+0.05, z, w*1.05, 0.10, d*1.05, 0x666666); // top trim
+  });
+  // Check-in counter rows
+  [-14, 14].forEach(x => {
+    addMapBox(m, x, 0.6, 0, 2, 1.2, 14, 0x884422);
+  });
+  MAP_GROUPS[m]._skyColor = 0xddeeff;
+}
+buildAirportMap();
+
+// ──────────────────────────────────────────────────────────────────────────
+// 10. MILITARY TRENCH FIELD — hills, barbed wire, trenches, crates, mortars
+// ──────────────────────────────────────────────────────────────────────────
+registerMap('trenches');
+function buildTrenchesMap() {
+  const m = 'trenches';
+  addMapGround(m, 0x6b5a3a, null); // muddy dirt
+  addOuterWalls(m, 0x3a2a18);
+  // Hills (raised mounds across the middle)
+  for (let i = 0; i < 8; i++) {
+    const hill = new THREE.Mesh(new THREE.SphereGeometry(4, 8, 5, 0, Math.PI*2, 0, Math.PI/2), new THREE.MeshLambertMaterial({ color: 0x7a6940 }));
+    hill.position.set((Math.random()-0.5)*35, 0, (Math.random()-0.5)*15);
+    hill.scale.y = 0.4 + Math.random() * 0.3;
+    MAP_GROUPS[m].add(hill);
+  }
+  // Barbed wire (decorative + low cover) — 3 horizontal lines down the middle (along X axis)
+  const wireMat = new THREE.MeshLambertMaterial({ color: 0x555555 });
+  for (let row = -1; row <= 1; row++) {
+    const x0 = row * 3;
+    for (let zi = -20; zi <= 20; zi += 4) {
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.2, 6), wireMat);
+      post.position.set(x0, 0.6, zi); MAP_GROUPS[m].add(post);
+    }
+    const wire = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 40, 4), wireMat);
+    wire.rotation.x = Math.PI/2; wire.position.set(x0, 0.9, 0); MAP_GROUPS[m].add(wire);
+  }
+  // Trenches (carved-out long strips on north and south — run East-West along X axis)
+  const trenchMat = new THREE.MeshLambertMaterial({ color: 0x3a2a18 });
+  [[0, -35], [0, 35]].forEach(([x, z]) => {
+    const trench = new THREE.Mesh(new THREE.BoxGeometry(40, 0.5, 8), trenchMat);
+    trench.position.set(x, -0.20, z); MAP_GROUPS[m].add(trench);
+    // Sandbag walls along the inside edge (facing no-man's-land)
+    const sandMat = new THREE.MeshLambertMaterial({ color: 0x8a7440 });
+    for (let xi = -18; xi <= 18; xi += 2.5) {
+      const bag = new THREE.Mesh(new THREE.SphereGeometry(0.6, 6, 5), sandMat);
+      bag.scale.y = 0.5;
+      bag.position.set(xi, 0.6, z + (z < 0 ? 4 : -4));
+      MAP_GROUPS[m].add(bag);
+      bag.updateMatrixWorld(true);
+      MAP_COLLIDERS[m].push(new THREE.Box3().setFromObject(bag));
+    }
+  });
+  // Wooden crates in the center for cover
+  const crateMat = new THREE.MeshLambertMaterial({ color: 0x8a5a2a });
+  [[-6, 0], [6, 0], [0, -6], [0, 6], [-3, 3], [3, -3]].forEach(([x, z]) => {
+    const c = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2), crateMat);
+    c.position.set(x, 1, z); MAP_GROUPS[m].add(c);
+    c.updateMatrixWorld(true);
+    MAP_COLLIDERS[m].push(new THREE.Box3().setFromObject(c));
+  });
+  // ── Mortar emplacements (2 per side) ──
+  const mortarBase = new THREE.MeshLambertMaterial({ color: 0x444444 });
+  const mortarTube = new THREE.MeshLambertMaterial({ color: 0x222222 });
+  // Mortars sit behind each trench (at z=±38, in line with the trench)
+  [
+    { x: -10, z:  38, side: 'ally'  }, // south trench (player side)
+    { x:  10, z:  38, side: 'ally'  },
+    { x: -10, z: -38, side: 'enemy' }, // north trench
+    { x:  10, z: -38, side: 'enemy' },
+  ].forEach(({ x, z, side }) => {
+    const g = new THREE.Group();
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 1.0, 0.3, 8), mortarBase);
+    base.position.y = 0.15; g.add(base);
+    const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.22, 1.2, 8), mortarTube);
+    tube.rotation.x = side === 'ally' ? -0.5 : -0.5; tube.position.set(0, 0.7, 0); g.add(tube);
+    g.position.set(x, 0, z);
+    MAP_GROUPS[m].add(g);
+    g.updateMatrixWorld(true);
+    MAP_COLLIDERS[m].push(new THREE.Box3().setFromObject(g));
+    mapMortars.push({ mesh: g, x, z, side, ammo: 5, maxAmmo: 5, hp: 20, maxHp: 20, pilotedBy: null, lastShot: 0, mapName: 'trenches' });
+  });
+  MAP_GROUPS[m]._skyColor = 0x6b6b4b;
+}
+buildTrenchesMap();
+
+// ──────────────────────────────────────────────────────────────────────────
+// 11. CHERNOBYL SITE — toxic green gas, 4 destroyable reactors
+// ──────────────────────────────────────────────────────────────────────────
+registerMap('chernobyl');
+function buildChernobylMap() {
+  const m = 'chernobyl';
+  addMapGround(m, 0x2a3a22, null); // contaminated soil
+  addOuterWalls(m, 0x1a2a18);
+  // Toxic green fog layer covering the whole map (ground level wisps)
+  const gasMat = new THREE.MeshBasicMaterial({ color: 0x44aa22, transparent: true, opacity: 0.18 });
+  for (let i = 0; i < 12; i++) {
+    const g = new THREE.Mesh(new THREE.SphereGeometry(8, 10, 6), gasMat);
+    g.position.set((Math.random()-0.5)*80, 1.5, (Math.random()-0.5)*80);
+    g.scale.y = 0.4;
+    MAP_GROUPS[m].add(g);
+  }
+  // Concrete blocks scattered as cover
+  const concMat = new THREE.MeshLambertMaterial({ color: 0x666666 });
+  for (let i = 0; i < 14; i++) {
+    const c = new THREE.Mesh(new THREE.BoxGeometry(2, 2.5, 2), concMat);
+    c.position.set((Math.random()-0.5)*60, 1.25, (Math.random()-0.5)*60);
+    c.rotation.y = Math.random() * Math.PI;
+    MAP_GROUPS[m].add(c);
+    c.updateMatrixWorld(true);
+    MAP_COLLIDERS[m].push(new THREE.Box3().setFromObject(c));
+  }
+  // ── 4 Reactors (one in each quadrant) — each is a destructible ──
+  const reactorPositions = [[-20, -20], [20, -20], [-20, 20], [20, 20]];
+  reactorPositions.forEach(([x, z], idx) => {
+    const reactor = new THREE.Group();
+    const towerMat = new THREE.MeshLambertMaterial({ color: 0x888888 });
+    const coreMat  = new THREE.MeshBasicMaterial({ color: 0xff8822 });
+    // Main cooling tower (hyperboloid-ish)
+    const tower = new THREE.Mesh(new THREE.CylinderGeometry(3, 4, 12, 12), towerMat);
+    tower.position.y = 6; reactor.add(tower);
+    // Glowing core at top
+    const core = new THREE.Mesh(new THREE.SphereGeometry(1.5, 10, 8), coreMat);
+    core.position.y = 10; reactor.add(core);
+    // Top vent ring
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(3, 0.3, 6, 16), towerMat);
+    ring.rotation.x = Math.PI/2; ring.position.y = 11.8; reactor.add(ring);
+    reactor.position.set(x, 0, z);
+    MAP_GROUPS[m].add(reactor);
+    reactor.updateMatrixWorld(true);
+    MAP_COLLIDERS[m].push(new THREE.Box3().setFromObject(reactor));
+    mapDestructibles.push({
+      mesh: reactor, core, hp: 500, maxHp: 500, type: 'reactor', mapName: 'chernobyl',
+      x, z, idx,
+      onDestroy: () => {
+        // Big explosion: 12m AOE, 250 dmg
+        spawnAbilityAOEFX(new THREE.Vector3(x, 1, z), 12, 0xffaa22);
+        flashScreen('rgba(255,170,34,0.5)', 800);
+        for (const bot of gameBots) {
+          if (bot.dead) continue;
+          const dx = bot.x - x, dz = bot.z - z;
+          if (dx*dx + dz*dz < 144) {
+            const mesh = remoteMeshes[bot.id];
+            const hp = mesh ? mesh.position.clone().setY(1.0) : new THREE.Vector3(bot.x, 1, bot.z);
+            emitHit(bot.id, `reactor_${idx}_${Date.now()}_${bot.id}`, 'tac_nuke', hp);
+          }
+        }
+        // Player damage if close
+        const pdx = camera.position.x - x, pdz = camera.position.z - z;
+        if (pdx*pdx + pdz*pdz < 144) applyBotDamageToPlayer('tac_nuke', null);
+      },
+    });
+  });
+  MAP_GROUPS[m]._skyColor = 0x2a3a18;
+}
+buildChernobylMap();
+
+// ──────────────────────────────────────────────────────────────────────────
+// 12. OIL REFINERY — slick ground, pipe cover, explosive barrels
+// ──────────────────────────────────────────────────────────────────────────
+registerMap('refinery');
+function buildRefineryMap() {
+  const m = 'refinery';
+  addMapGround(m, 0x34312b, 0x4c4638);
+  addOuterWalls(m, 0x28241d);
+  [[-20,-18,8], [17,14,7], [0,0,5.5], [-24,19,4.5], [24,-20,4.5]].forEach(([x,z,r]) => addSlickZone(m, x, z, r));
+  [[-14,-6], [14,6], [-6,18], [8,-20], [0,28], [28,0], [-28,0], [20,22]].forEach(([x,z]) => addExplosiveBarrel(m, x, z));
+  const pipeMat = new THREE.MeshLambertMaterial({ color: 0x777064 });
+  [[0,-28,34,0], [0,28,34,0], [-28,0,34,Math.PI/2], [28,0,34,Math.PI/2]].forEach(([x,z,len,rot]) => {
+    const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, len, 12), pipeMat);
+    pipe.rotation.z = Math.PI / 2;
+    pipe.rotation.y = rot;
+    pipe.position.set(x, 1.0, z);
+    addMapMesh(m, pipe, true);
+  });
+  [[-12,12,10,3], [12,-12,10,3], [0,18,3,10], [0,-18,3,10]].forEach(([x,z,w,d]) => {
+    addMapBox(m, x, 1.0, z, w, 2, d, 0x5b5144);
+  });
+  MAP_GROUPS[m]._skyColor = 0x4b4741;
+}
+buildRefineryMap();
+
+// ──────────────────────────────────────────────────────────────────────────
+// 13. SKYDOCK LAUNCH — jump pads and raised gantry cover
+// ──────────────────────────────────────────────────────────────────────────
+registerMap('skydock');
+function buildSkydockMap() {
+  const m = 'skydock';
+  addMapGround(m, 0x263544, 0x5b7c93);
+  addOuterWalls(m, 0x1d2a36);
+  [[-22,-22], [22,-22], [-22,22], [22,22], [0,0], [0,-28], [0,28]].forEach(([x,z], i) => addJumpPad(m, x, z, i === 4 ? 2.1 : 1.55, i === 4 ? 18 : 15, 0x44ddff));
+  [[0,-18,28,1.2], [0,18,28,1.2], [-18,0,1.2,28], [18,0,1.2,28]].forEach(([x,z,w,d]) => {
+    addMapBox(m, x, 2.2, z, w, 0.35, d, 0x7a8a94);
+    addMapBox(m, x, 1.0, z, w, 2, d < 2 ? 0.45 : 0.45, 0x44515b, 0, 0.8);
+  });
+  [[-8,-8], [8,8], [-8,8], [8,-8]].forEach(([x,z]) => addMapBox(m, x, 1.2, z, 5, 2.4, 1.2, 0x334c62, Math.PI / 4));
+  MAP_GROUPS[m]._skyColor = 0x6aa2c8;
+}
+buildSkydockMap();
+
+// ──────────────────────────────────────────────────────────────────────────
+// 14. ACID SEWER — toxic channels force bridge fights
+// ──────────────────────────────────────────────────────────────────────────
+registerMap('sewer');
+function buildSewerMap() {
+  const m = 'sewer';
+  addMapGround(m, 0x263123, null);
+  addOuterWalls(m, 0x182015);
+  const acidMat = new THREE.MeshBasicMaterial({ color: 0x55ff22, transparent: true, opacity: 0.72 });
+  [[0,0,8], [-25,0,5], [25,0,5], [0,-25,5], [0,25,5]].forEach(([x,z,r]) => {
+    const acid = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.08, 20), acidMat);
+    acid.position.set(x, 0.05, z);
+    MAP_GROUPS[m].add(acid);
+    MAP_GIMMICKS[m].damageZones.push({ x, z, r, dps: 6, type: 'acid' });
+  });
+  [[0,-13,36,2], [0,13,36,2], [-13,0,2,36], [13,0,2,36]].forEach(([x,z,w,d]) => addMapBox(m, x, 0.25, z, w, 0.5, d, 0x5a5141));
+  [[-30,-30], [30,-30], [-30,30], [30,30], [-8,0], [8,0]].forEach(([x,z]) => addMapBox(m, x, 1.5, z, 5, 3, 5, 0x3b4234));
+  MAP_GROUPS[m]._skyColor = 0x182318;
+}
+buildSewerMap();
+
+// ──────────────────────────────────────────────────────────────────────────
+// 15. GRAVITY LAB — low-grav domes plus launch pads for aerial duels
+// ──────────────────────────────────────────────────────────────────────────
+registerMap('gravity_lab');
+function buildGravityLabMap() {
+  const m = 'gravity_lab';
+  addMapGround(m, 0x202232, 0x445577);
+  addOuterWalls(m, 0x181a28);
+  const zoneMat = new THREE.MeshBasicMaterial({ color: 0x66aaff, transparent: true, opacity: 0.16, side: THREE.DoubleSide });
+  [[-18,-18,7], [18,-18,7], [-18,18,7], [18,18,7], [0,0,8]].forEach(([x,z,r]) => {
+    const zone = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 6, 18), zoneMat);
+    zone.position.set(x, 3, z);
+    MAP_GROUPS[m].add(zone);
+    const ring = new THREE.Mesh(new THREE.RingGeometry(r * 0.93, r, 22), new THREE.MeshBasicMaterial({ color: 0x66aaff, side: THREE.DoubleSide }));
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(x, 0.04, z);
+    MAP_GROUPS[m].add(ring);
+    MAP_GIMMICKS[m].lowGravZones.push({ x, z, r });
+  });
+  [[0,-18], [0,18], [-18,0], [18,0]].forEach(([x,z]) => addJumpPad(m, x, z, 1.35, 13, 0x66aaff));
+  [[0,-30,18,1], [0,30,18,1], [-30,0,1,18], [30,0,1,18], [0,0,5,5]].forEach(([x,z,w,d]) => addMapBox(m, x, 1.4, z, w, 2.8, d, 0x3a4060));
+  MAP_GROUPS[m]._skyColor = 0x0b0d24;
+}
+buildGravityLabMap();
+
+// ──────────────────────────────────────────────────────────────────────────
+// 16. GLASSWORKS — breakable glass maze with a few barrel traps
+// ──────────────────────────────────────────────────────────────────────────
+registerMap('glassworks');
+function buildGlassworksMap() {
+  const m = 'glassworks';
+  addMapGround(m, 0xdce8ec, 0xaad0dd);
+  addOuterWalls(m, 0x9eb6bf);
+  const glassMat = new THREE.MeshBasicMaterial({ color: 0x8ee8ff, transparent: true, opacity: 0.38 });
+  const panels = [
+    [0,-24,32,5,0], [0,24,32,5,0], [-24,0,5,32,0], [24,0,5,32,0],
+    [-10,0,1,28,0], [10,0,1,28,0], [0,-10,28,1,0], [0,10,28,1,0],
+    [-28,-28,12,1,Math.PI/4], [28,28,12,1,Math.PI/4], [-28,28,12,1,-Math.PI/4], [28,-28,12,1,-Math.PI/4],
+  ];
+  panels.forEach(([x,z,w,d,rot]) => {
+    const panel = new THREE.Mesh(new THREE.BoxGeometry(w, 4.5, d), glassMat);
+    panel.position.set(x, 2.25, z);
+    panel.rotation.y = rot;
+    MAP_GROUPS[m].add(panel);
+    panel.updateMatrixWorld(true);
+    MAP_COLLIDERS[m].push(new THREE.Box3().setFromObject(panel));
+    mapDestructibles.push({
+      mesh: panel, hp: 45, maxHp: 45, type: 'glass', mapName: m,
+      colliderRef: MAP_COLLIDERS[m][MAP_COLLIDERS[m].length - 1],
+    });
+  });
+  [[-16,-16], [16,-16], [-16,16], [16,16]].forEach(([x,z]) => addExplosiveBarrel(m, x, z, 0x2b86b5));
+  [[0,0], [-33,0], [33,0], [0,-33], [0,33]].forEach(([x,z]) => addMapBox(m, x, 0.55, z, 5, 1.1, 5, 0xb8c7cc));
+  MAP_GROUPS[m]._skyColor = 0xcfefff;
+}
+buildGlassworksMap();
+
+// ──────────────────────────────────────────────────────────────────────────
+// 17. KING OF THE HILL / BR ARENA — massive map with vehicles + helicopters
+// ──────────────────────────────────────────────────────────────────────────
+registerMap('br_arena');
+function buildBrArenaMap() {
+  const m = 'br_arena';
+  const SIZE = 250; // 250x250 — 6x bigger than standard maps
+  // Ground
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(SIZE, SIZE), new THREE.MeshLambertMaterial({ color: 0x5a7440 }));
+  ground.rotation.x = -Math.PI / 2;
+  MAP_GROUPS[m].add(ground);
+  // Outer perimeter walls — thicker (3 units) + taller (8 units) so they're visible from far away
+  const half = SIZE / 2;
+  const wallT = 3; // thickness
+  const wallH = 8; // height
+  [
+    [SIZE+wallT, wallH, wallT, 0, wallH/2, -half - wallT/2 + 1.5], // north
+    [SIZE+wallT, wallH, wallT, 0, wallH/2,  half + wallT/2 - 1.5], // south
+    [wallT, wallH, SIZE+wallT, -half - wallT/2 + 1.5, wallH/2, 0], // west
+    [wallT, wallH, SIZE+wallT,  half + wallT/2 - 1.5, wallH/2, 0], // east
+  ].forEach(([w,h,d,x,y,z]) => addMapBox(m, x, y, z, w, h, d, 0x4a4a3a));
+  // ── Town zones: 5 cluster areas with buildings (scattered across map) ──
+  const buildingClusters = [
+    [-80, -80], [80, -80], [-80, 80], [80, 80], [0, 0],
+    [-40, 40], [40, -40], [-100, 0], [100, 0], [0, -100], [0, 100]
+  ];
+  const bMatA = 0x8b7355, bMatB = 0x6a5540;
+  buildingClusters.forEach(([cx, cz], idx) => {
+    // Each cluster has 3-5 buildings
+    const n = 3 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < n; i++) {
+      const bx = cx + (Math.random() - 0.5) * 22;
+      const bz = cz + (Math.random() - 0.5) * 22;
+      const bw = 6 + Math.random() * 6;
+      const bd = 6 + Math.random() * 6;
+      const bh = 4 + Math.random() * 6;
+      addMapBox(m, bx, bh / 2, bz, bw, bh, bd, (idx + i) % 2 ? bMatA : bMatB);
+    }
+  });
+  // Roads (visual stripes)
+  const roadMat = new THREE.MeshBasicMaterial({ color: 0x333333 });
+  for (let r = -100; r <= 100; r += 50) {
+    const road = new THREE.Mesh(new THREE.PlaneGeometry(SIZE, 4), roadMat);
+    road.rotation.x = -Math.PI / 2; road.position.set(0, 0.02, r);
+    MAP_GROUPS[m].add(road);
+    const road2 = new THREE.Mesh(new THREE.PlaneGeometry(4, SIZE), roadMat);
+    road2.rotation.x = -Math.PI / 2; road2.position.set(r, 0.02, 0);
+    MAP_GROUPS[m].add(road2);
+  }
+  // ── Mortar cannons (6 stationary ones, scattered) ──
+  const mortarPositions = [[-60, -60], [60, 60], [-60, 60], [60, -60], [0, -90], [0, 90]];
+  mortarPositions.forEach(([x, z]) => {
+    const g = new THREE.Group();
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.1, 0.4, 8), new THREE.MeshLambertMaterial({ color: 0x444444 }));
+    base.position.y = 0.2; g.add(base);
+    const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.20, 0.24, 1.4, 8), new THREE.MeshLambertMaterial({ color: 0x222222 }));
+    tube.rotation.x = -0.5; tube.position.set(0, 0.85, 0); g.add(tube);
+    g.position.set(x, 0, z); MAP_GROUPS[m].add(g);
+    g.updateMatrixWorld(true);
+    MAP_COLLIDERS[m].push(new THREE.Box3().setFromObject(g));
+    mapMortars.push({ mesh: g, x, z, side: 'neutral', ammo: 8, maxAmmo: 8, hp: 30, maxHp: 30, pilotedBy: null, lastShot: 0, mapName: 'br_arena' });
+  });
+  // ── Ground vehicles (4 jeeps) ──
+  const vehiclePositions = [[-30, -50, 0], [30, 50, Math.PI], [-50, 30, Math.PI / 2], [50, -30, -Math.PI / 2]];
+  vehiclePositions.forEach(([x, z, yaw]) => {
+    const g = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.BoxGeometry(2.0, 1.0, 3.5), new THREE.MeshLambertMaterial({ color: 0x4a5a3a }));
+    body.position.y = 0.8; g.add(body);
+    const cab = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.6, 1.4), new THREE.MeshLambertMaterial({ color: 0x2a3a2a }));
+    cab.position.set(0, 1.6, 0.4); g.add(cab);
+    for (const [wx, wz] of [[-1.0, 1.2], [1.0, 1.2], [-1.0, -1.2], [1.0, -1.2]]) {
+      const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.3, 10), new THREE.MeshLambertMaterial({ color: 0x111111 }));
+      wheel.rotation.z = Math.PI / 2; wheel.position.set(wx, 0.42, wz); g.add(wheel);
+    }
+    g.position.set(x, 0, z); g.rotation.y = yaw;
+    MAP_GROUPS[m].add(g);
+    g.updateMatrixWorld(true);
+    MAP_COLLIDERS[m].push(new THREE.Box3().setFromObject(g));
+    mapVehicles.push({
+      mesh: g, x, z, rotY: yaw, hp: 80, maxHp: 80, pilotedBy: null,
+      type: 'jeep', mapName: 'br_arena',
+      maxSpeed: 18, // m/s
+      gunDmg: 22, gunFireRate: 200, lastShot: 0,
+    });
+  });
+  // ── Helicopters (2) ──
+  const heliPositions = [[-90, 90], [90, -90]];
+  heliPositions.forEach(([x, z]) => {
+    const g = new THREE.Group();
+    const fuselage = new THREE.Mesh(new THREE.BoxGeometry(1.8, 1.4, 4.5), new THREE.MeshLambertMaterial({ color: 0x3a4a3a }));
+    fuselage.position.y = 1.4; g.add(fuselage);
+    const tail = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 2.5), new THREE.MeshLambertMaterial({ color: 0x3a4a3a }));
+    tail.position.set(0, 1.8, -3.0); g.add(tail);
+    const rotor = new THREE.Mesh(new THREE.BoxGeometry(7, 0.08, 0.4), new THREE.MeshLambertMaterial({ color: 0x111111 }));
+    rotor.position.set(0, 2.4, 0); g.add(rotor);
+    const tailRotor = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.06, 0.06), new THREE.MeshLambertMaterial({ color: 0x111111 }));
+    tailRotor.position.set(0, 1.8, -4.0); g.add(tailRotor);
+    for (let i = 0; i < 4; i++) {
+      const skid = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 2), new THREE.MeshLambertMaterial({ color: 0x222222 }));
+      skid.position.set(i < 2 ? -0.9 : 0.9, 0.4, i % 2 ? 0.6 : -0.6);
+      g.add(skid);
+    }
+    g.position.set(x, 0, z); MAP_GROUPS[m].add(g);
+    g.updateMatrixWorld(true);
+    MAP_COLLIDERS[m].push(new THREE.Box3().setFromObject(g));
+    mapVehicles.push({
+      mesh: g, x, z, y: 0, rotY: 0, hp: 100, maxHp: 100, pilotedBy: null,
+      type: 'heli', mapName: 'br_arena',
+      maxSpeed: 28, rotor, tailRotor,
+      gunDmg: 18, gunFireRate: 100, lastShot: 0,
+    });
+  });
+  // Scattered cover rocks
+  for (let i = 0; i < 30; i++) {
+    const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(1 + Math.random() * 1.5, 0), new THREE.MeshLambertMaterial({ color: 0x808080 }));
+    rock.position.set((Math.random() - 0.5) * 220, 0.5, (Math.random() - 0.5) * 220);
+    rock.rotation.set(Math.random(), Math.random(), Math.random());
+    MAP_GROUPS[m].add(rock);
+    rock.updateMatrixWorld(true);
+    MAP_COLLIDERS[m].push(new THREE.Box3().setFromObject(rock));
+  }
+  MAP_GROUPS[m]._skyColor = 0x88aacc;
+}
+// Vehicles array — populated by br_arena
+const mapVehicles = [];
+buildBrArenaMap();
 
 buildBlankMap();
 buildBattlefieldMap();
@@ -3919,34 +4992,12 @@ function buildGarrote()    {
   g.position.set(0.14, -0.12, -0.30); return g;
 }
 function buildFists() {
-  // A closed fist with brass knuckles. Forearm hidden by sleeve.
+  // Simple skin-tone block — no knuckles, no fingers, no brass.
   const g = new THREE.Group();
-  const skin   = new THREE.MeshLambertMaterial({ color: 0xeac39a });
-  const sleeve = new THREE.MeshLambertMaterial({ color: 0x1a2a3a });
-  const brass  = new THREE.MeshLambertMaterial({ color: 0xddaa22 });
-  // Forearm / sleeve (rear)
-  const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.040, 0.16, 8), sleeve);
-  arm.rotation.x = Math.PI / 2; arm.position.set(0, 0, 0.06); g.add(arm);
-  // Wrist (skin)
-  const wrist = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.040, 0.05, 8), skin);
-  wrist.rotation.x = Math.PI / 2; wrist.position.set(0, 0, -0.04); g.add(wrist);
-  // Knuckles cluster (4 small knuckles)
-  for (let i = 0; i < 4; i++) {
-    const k = new THREE.Mesh(new THREE.SphereGeometry(0.024, 6, 5), skin);
-    k.position.set(-0.022 + i * 0.015, 0.014, -0.10); g.add(k);
-  }
-  // Brass knuckles bar across the knuckles
-  const bar = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.020, 0.035), brass);
-  bar.position.set(-0.001, 0.014, -0.10); g.add(bar);
-  // 4 knuckle stud spikes on the brass
-  for (let i = 0; i < 4; i++) {
-    const stud = new THREE.Mesh(new THREE.ConeGeometry(0.008, 0.018, 4), brass);
-    stud.rotation.x = -Math.PI / 2;
-    stud.position.set(-0.024 + i * 0.016, 0.020, -0.118); g.add(stud);
-  }
-  // Thumb wrap (subtle, side of fist)
-  const thumb = new THREE.Mesh(new THREE.SphereGeometry(0.022, 6, 5), skin);
-  thumb.position.set(0.035, 0.000, -0.085); g.add(thumb);
+  const skin = new THREE.MeshLambertMaterial({ color: 0xeac39a });
+  const block = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.10, 0.14), skin);
+  block.position.set(0, 0, -0.05);
+  g.add(block);
   g.position.set(0.16, -0.10, -0.22);
   return g;
 }
@@ -4527,8 +5578,8 @@ document.addEventListener('keydown', e => {
   // Spacebar — jump (only when on the ground)
   if (e.code === 'Space') {
     e.preventDefault();
-    if (!isDead && (camera.position.y <= 1.66 + 0.01) && (!slamState || slamState.vel <= 0)) {
-      slamState = { vel: 9 }; // jump velocity → ~1.4m peak height with 28 m/s² gravity
+    if (!isDead && isPlayerGrounded()) {
+      slamState = { vel: 13, type: 'jump' }; // ~2x the old jump height with 28 m/s² gravity
     }
   }
   // ── Admin cheat hotkeys (only when admin) ────────────────────────────────
@@ -4577,7 +5628,32 @@ document.addEventListener('keydown', e => {
     }
   }
   if (e.code==='KeyF' && nearTrashcan && !isDead) { showLoadoutScreen('swap'); }
-  if (e.code === 'KeyG') activateAbility();
+  // F = enter/exit a mortar (trench map)
+  if (e.code==='KeyF' && !nearTrashcan && !isDead && activeMapName === 'trenches' && !e.repeat) {
+    e.preventDefault();
+    tryEnterMortar();
+  }
+  // F = enter/exit a vehicle (BR arena) or pilot a mortar
+  if (e.code==='KeyF' && !nearTrashcan && !isDead && activeMapName === 'br_arena' && !e.repeat) {
+    e.preventDefault();
+    if (pilotedVehicle) { exitVehicle(); }
+    else if (pilotedMortar) { exitMortar(); }
+    else {
+      // Prefer vehicle if both nearby
+      const nearV = mapVehicles.find(v => v.mapName === activeMapName && v.hp > 0 && !v.pilotedBy
+        && Math.hypot(v.x - camera.position.x, v.z - camera.position.z) < 4);
+      if (nearV) tryEnterVehicle();
+      else tryEnterMortar();
+    }
+  }
+  if (e.code === 'KeyG') {
+    // C4: if any are placed, G detonates them all instead of triggering ability
+    if (placedC4s.length > 0 && activeSlot === 'support' && SUPPORT_ITEMS[selectedSupportIdx]?.id === 'c4') {
+      detonateAllC4();
+    } else {
+      activateAbility();
+    }
+  }
   if (e.code==='KeyQ' || e.code==='Digit1' || e.code==='Digit2' || e.code==='Digit3' || e.code==='Digit4') {
     if (!loadoutReady()) return;
     if (e.code==='KeyQ') cycleActiveSlot();
@@ -4595,6 +5671,10 @@ document.addEventListener('keyup', e => {
 document.addEventListener('mousedown', e => {
   // Spectator: any click cycles to next ally
   if (spectatorState && e.button === 0) { spectatorCycle(1); return; }
+  // Mortar: LMB fires a grenade instead of the equipped weapon
+  if (pilotedMortar && e.button === 0) { fireMortar(); return; }
+  // Vehicle: LMB fires the vehicle's gun
+  if (pilotedVehicle && e.button === 0) { fireVehicleGun(); return; }
   if (spectatorState && e.button === 2) { spectatorCycle(-1); return; }
   if (e.button !== 0) return;
   shooting = true;
@@ -4623,7 +5703,7 @@ function switchWeapon(idx) {
   supportModels.forEach(m => m.visible = false);
   weaponModels[currentWeaponIdx].visible = false;
   currentWeaponIdx = idx;
-  currentWeapon = WEAPONS[idx];
+  currentWeapon = applyUpgrades(WEAPONS[idx]);
   weaponModels[idx].visible = true;
   ammo    = weaponAmmo[idx].ammo;
   reserve = weaponAmmo[idx].reserve;
@@ -4653,8 +5733,9 @@ function resetCombatResources() {
     weaponAmmo[selectedPrimaryIdx] = { ammo: 5000, reserve: 0 };
     weaponAmmo[selectedSecondaryIdx] = { ammo: 30, reserve: 999999 };
   } else {
-    const pw = WEAPONS[selectedPrimaryIdx], sw = WEAPONS[selectedSecondaryIdx];
-    weaponAmmo[selectedPrimaryIdx] = { ammo: pw.mag, reserve: pw.reserve };
+    const pw = applyUpgrades(WEAPONS[selectedPrimaryIdx]);
+    const sw = applyUpgrades(WEAPONS[selectedSecondaryIdx]);
+    weaponAmmo[selectedPrimaryIdx]   = { ammo: pw.mag, reserve: pw.reserve };
     weaponAmmo[selectedSecondaryIdx] = { ammo: sw.mag, reserve: sw.reserve };
   }
   supportUses[selectedSupportIdx] = SUPPORT_ITEMS[selectedSupportIdx].uses;
@@ -4669,7 +5750,28 @@ function resetCombatResources() {
   equipActiveSlot();
 }
 
-function resetPlayerForRound(x = 0, z = 42) {
+function localPlayerTeam() {
+  return pvpMatch?.team === 'enemy' ? 'enemy' : 'ally';
+}
+
+function teamSideSpawn(team = 'ally', spread = 36, depth = 38) {
+  const side = team === 'enemy' ? -1 : 1;
+  return {
+    x: (Math.random() - 0.5) * spread,
+    z: side * (depth + Math.random() * 8),
+    yaw: team === 'enemy' ? 0 : Math.PI,
+  };
+}
+
+function placePlayerAtTeamSpawn(team = localPlayerTeam(), spread = 36, depth = 38) {
+  const sp = teamSideSpawn(team, spread, depth);
+  camera.position.set(sp.x, 1.65, sp.z);
+  euler.y = sp.yaw + (Math.random() - 0.5) * 0.6;
+  camera.quaternion.setFromEuler(euler);
+  return sp;
+}
+
+function resetPlayerForRound(x = null, z = null) {
   isDead = false;
   if (players[myId]) {
     players[myId].hp = 300;
@@ -4677,12 +5779,18 @@ function resetPlayerForRound(x = 0, z = 42) {
   }
   updateHealthHUD(300);
   resetCombatResources();
-  camera.position.set(x, 1.65, z);
-  euler.y = Math.PI;
-  camera.quaternion.setFromEuler(euler);
+  let sp;
+  if (x == null || z == null) {
+    sp = placePlayerAtTeamSpawn();
+  } else {
+    camera.position.set(x, 1.65, z);
+    euler.y = z < 0 ? 0 : Math.PI;
+    camera.quaternion.setFromEuler(euler);
+    sp = { x, z };
+  }
   document.getElementById('waiting-screen').style.display = 'none';
   document.getElementById('death-screen').style.display = 'none';
-  socket.emit('resetSelf', { x, z });
+  socket.emit('resetSelf', { x: sp.x, z: sp.z });
 }
 
 function cycleActiveSlot() {
@@ -4704,13 +5812,13 @@ function equipActiveSlot() {
 
   if (activeSlot === 'primary') {
     currentWeaponIdx = selectedPrimaryIdx;
-    currentWeapon = WEAPONS[selectedPrimaryIdx];
+    currentWeapon = applyUpgrades(WEAPONS[selectedPrimaryIdx]);
     weaponModels[selectedPrimaryIdx].visible = true;
     ammo = weaponAmmo[selectedPrimaryIdx].ammo;
     reserve = weaponAmmo[selectedPrimaryIdx].reserve;
   } else if (activeSlot === 'secondary') {
     currentWeaponIdx = selectedSecondaryIdx;
-    currentWeapon = WEAPONS[selectedSecondaryIdx];
+    currentWeapon = applyUpgrades(WEAPONS[selectedSecondaryIdx]);
     weaponModels[selectedSecondaryIdx].visible = true;
     ammo = weaponAmmo[selectedSecondaryIdx].ammo;
     reserve = weaponAmmo[selectedSecondaryIdx].reserve;
@@ -4806,10 +5914,13 @@ function setWeaponADSPos(ads) {
 const SPEED = 5;
 const dir = new THREE.Vector3();
 const BOUNDS = 48;
+// Map-aware boundary (BR arena is 6× larger). 123 lets player reach the actual wall surface (walls at ±125, 3 thick).
+function getMapBounds() { return activeMapName === 'br_arena' ? 123 : BOUNDS; }
 
 function updateMovement(dt) {
   if (isDead) return;
   if (match && !match.roundActive) return; // frozen during countdown
+  if (pilotedVehicle) return; // piloting handles its own movement
 
   // Arrow key look
   if (keys['ArrowLeft'])  { euler.y += ARROW_SENS; camera.quaternion.setFromEuler(euler); }
@@ -4863,34 +5974,43 @@ function updateMovement(dt) {
   if (playerPosHistory.length > 8) playerPosHistory.shift();
   lastPlayerPos.copy(camera.position);
   camera.position.addScaledVector(dir, SPEED * speedMult * joyMag * dt);
-  camera.position.x = Math.max(-BOUNDS, Math.min(BOUNDS, camera.position.x));
-  camera.position.z = Math.max(-BOUNDS, Math.min(BOUNDS, camera.position.z));
+  const _mb = getMapBounds();
+  camera.position.x = Math.max(-_mb, Math.min(_mb, camera.position.x));
+  camera.position.z = Math.max(-_mb, Math.min(_mb, camera.position.z));
   if (slamState) {
     // Low-grav zones reduce gravity to 1/3
     const gravMult = (typeof _playerInLowGrav !== 'undefined' && _playerInLowGrav) ? 0.33 : 1;
     slamState.vel -= 28 * dt * gravMult; // gravity
     camera.position.y += slamState.vel * dt;
-    if (camera.position.y <= 1.65) {
-      camera.position.y = 1.65;
-      // Slam AOE inline (can't use doAbilityAOE since it uses currentWeapon.id)
-      const slamOrigin = camera.position.clone();
-      const slamRadius = 4, slamColor = 0xff6600;
-      spawnAbilityAOEFX(slamOrigin.clone().setY(0.15), slamRadius, slamColor);
-      flashScreen('rgba(255,100,0,0.30)', 350);
-      for (const [pid, mesh] of Object.entries(remoteMeshes)) {
-        const d = slamOrigin.distanceTo(mesh.position.clone().setY(1.0));
-        if (d < slamRadius) {
-          const hp = mesh.position.clone().setY(1.0);
-          const dummy = TRAINING_DUMMIES.find(dd => dd.id === pid);
-          if (dummy) handleDummyHit(dummy, mesh, { damage: 80 }, hp);
-          else emitHit(pid, `slam_${myId}_${Date.now()}_${pid}`, 'sledge', hp);
-          spawnHitParticle(hp);
+    const groundEyeY = getGroundEyeY();
+    if (camera.position.y <= groundEyeY) {
+      camera.position.y = groundEyeY;
+      if (slamState.type === 'slam') {
+        // Slam AOE inline (can't use doAbilityAOE since it uses currentWeapon.id)
+        const slamOrigin = camera.position.clone();
+        const slamRadius = 4, slamColor = 0xff6600;
+        spawnAbilityAOEFX(slamOrigin.clone().setY(0.15), slamRadius, slamColor);
+        flashScreen('rgba(255,100,0,0.30)', 350);
+        for (const [pid, mesh] of Object.entries(remoteMeshes)) {
+          const d = slamOrigin.distanceTo(mesh.position.clone().setY(1.0));
+          if (d < slamRadius) {
+            const hp = mesh.position.clone().setY(1.0);
+            const dummy = TRAINING_DUMMIES.find(dd => dd.id === pid);
+            if (dummy) handleDummyHit(dummy, mesh, { damage: 80 }, hp);
+            else emitHit(pid, `slam_${myId}_${Date.now()}_${pid}`, 'sledge', hp);
+            spawnHitParticle(hp);
+          }
         }
       }
       slamState = null;
     }
   } else {
-    camera.position.y = 1.65;
+    const groundEyeY = getGroundEyeY();
+    if (camera.position.y > groundEyeY + 0.04) {
+      slamState = { vel: 0, type: 'fall' };
+    } else {
+      camera.position.y = groundEyeY;
+    }
   }
   resolveWallCollisions();
 
@@ -4964,7 +6084,7 @@ function activateMeleeAbility() {
     flashAbilityName(ab.name);
   }
   else if (ab.type === 'melee_slam') {
-    slamState = { vel: 9.5 };
+    slamState = { vel: 9.5, type: 'slam' };
     flashAbilityName(ab.name);
   }
   else if (ab.type === 'melee_throw') {
@@ -5147,6 +6267,7 @@ function doBulletWave(w) {
   const right = new THREE.Vector3(1, 0,  0).applyQuaternion(camera.quaternion).normalize();
   const up    = new THREE.Vector3(0, 1,  0).applyQuaternion(camera.quaternion).normalize();
   const now   = Date.now();
+  playWeaponSound('sg8_wave', { baseWeapon: w, volume: 1.1 });
   for (let row = 0; row < GRID; row++) {
     for (let col = 0; col < GRID; col++) {
       const oH = (col - (GRID - 1) / 2) * STEP;
@@ -5166,6 +6287,7 @@ function doThrowBomb(w, ab) {
   const dir = new THREE.Vector3(0, 0.08, -1).applyQuaternion(camera.quaternion).normalize();
   const id  = `paintbomb_${myId}_${Date.now()}`;
   const color = ab.color || 0xff44ff;
+  playWeaponSound(w.id, { baseWeapon: w, volume: 0.95 });
   spawnLocalBullet(origin, dir, id, true, 22, color, 0.13, w.id,
     { isPaintBomb: true, paintRadius: ab.radius || 4, paintColor: color });
 }
@@ -5198,6 +6320,7 @@ function fireCrossbowCharge() {
   const d = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
 
   socket.emit('shoot', { x: muzzleWorld.x, y: muzzleWorld.y, z: muzzleWorld.z, dx: d.x, dy: d.y, dz: d.z, weapon: weaponId });
+  playWeaponSound(weaponId, { baseWeapon: currentWeapon, volume: 1 + chargeMs / 3500 });
   // Speed also scales with charge
   const speedScale = chargeMs >= 1200 ? 2.5 : chargeMs >= 400 ? 1.6 : 1.0;
   spawnLocalBullet(muzzleWorld, d, `cb_${myId}_${now}`, true, currentWeapon.bulletSpeed * speedScale, currentWeapon.bulletColor, currentWeapon.bulletSize * (1 + chargeMs / 2000 * 0.6), weaponId);
@@ -5295,6 +6418,7 @@ function doMultishot(w, ab) {
   // Draw from mag first, then reserve — so low-mag weapons (GL: mag 1) still fire full count
   const totalAvail = pool.ammo + pool.reserve;
   const shots = Math.min(ab.count || 3, totalAvail);
+  if (shots > 0) playWeaponSound(ab.weaponAbId || w.id, { baseWeapon: w, volume: Math.min(1.25, 0.85 + shots * 0.02) });
   for (let i = 0; i < shots; i++) {
     const d = base.clone();
     d.x += (Math.random() - 0.5) * (ab.spread || 0.08);
@@ -5327,6 +6451,7 @@ function updatePendingFanFire(dt) {
     const now2 = Date.now();
     const bid = `fan_${myId}_${now2}_${pendingFanFire.count}`;
     socket.emit('shoot', { x: origin.x, y: origin.y, z: origin.z, dx: d.x, dy: d.y, dz: d.z, weapon: w.id });
+    playWeaponSound(w.id, { baseWeapon: w, minGap: 25 });
     spawnLocalBullet(origin, d, bid, true, w.bulletSpeed, w.bulletColor, w.bulletSize, w.id);
     const model = weaponModels[currentWeaponIdx];
     if (model) { model._flash.visible = true; setTimeout(() => { if (model) model._flash.visible = false; }, 50); }
@@ -5482,6 +6607,8 @@ function tryShoot() {
     }, 300);
   }
 
+  playWeaponSound(shotWeaponId, { baseWeapon: currentWeapon, volume: Math.min(1.2, 0.9 + shotPellets * 0.03) });
+
   for (let p = 0; p < shotPellets; p++) {
     const spreadDir = baseDir.clone();
     if (shotSpread > 0) {
@@ -5515,6 +6642,9 @@ function tryMelee() {
   const effectiveCooldown = meleeAbilityBuff?.type === 'revup' ? 15 : item.cooldown;
   if (now - lastMelee < effectiveCooldown) return;
   lastMelee = now;
+  if (item.id === 'chainsaw') {
+    playSoundEvent(meleeAbilityBuff?.type === 'revup' ? 'chainsaw_rev' : 'chainsaw_idle', { volume: 1.25, minGap: 120 });
+  }
 
   // Trigger swing animation — each swing type has its own characteristic duration
   meleeSwingType = MELEE_SWING_TYPES[selectedMeleeIdx] || 'slash';
@@ -5559,6 +6689,7 @@ function tryMelee() {
     }
 
     const dummy = TRAINING_DUMMIES.find(d => d.id === pid);
+    if (item.id === 'chainsaw') playSoundEvent('chainsaw_hit', { volume: 1.35, minGap: 80 });
     if (dummy) handleDummyHit(dummy, mesh, { weaponId: effectiveWeaponId }, hitPos.clone());
     else emitHit(pid, `melee_${myId}_${now}`, effectiveWeaponId, hitPos.clone());
     // Vampire Blade: heal on hit
@@ -5639,6 +6770,7 @@ function trySupport() {
   }
 
   if (item.blink) {
+    playSoundEvent('blink', { volume: 1.15 });
     const dir = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion).normalize();
     camera.position.addScaledVector(dir, item.blink);
     camera.position.x = Math.max(-48, Math.min(48, camera.position.x));
@@ -5695,6 +6827,14 @@ function trySupport() {
     placeLandMine(item);
     return;
   }
+  // ── 🪖 ADMIN utilities ────────────────────────────────────────────────────
+  if (item.id === 'c4')            { placeC4(item); return; }
+  if (item.id === 'claymore')      { placeClaymore(item); return; }
+  if (item.id === 'stun_grenade')  { throwStunGrenade(item); return; }
+  if (item.id === 'thermite')      { throwThermite(item); return; }
+  if (item.id === 'predator_uav')  { activateUAV(item); return; }
+  if (item.id === 'care_package')  { dropCarePackage(item); return; }
+  if (item.id === 'tac_nuke')      { dropTacNuke(item); return; }
 
   // ── Fallback: straight bullet (shouldn't reach here for defined items) ─────
   const origin = new THREE.Vector3();
@@ -5719,6 +6859,7 @@ function throwSupportItem(item) {
   const origin = new THREE.Vector3();
   camera.getWorldPosition(origin);
   origin.add(new THREE.Vector3(0.12, -0.18, -0.30).applyQuaternion(camera.quaternion));
+  if (item.id === 'black_hole_seed') playSoundEvent('blackhole_activate', { volume: 1.05 });
 
   // Arc: slightly upward from aim direction
   const aimDir = new THREE.Vector3(0, 0.18, -1).applyQuaternion(camera.quaternion).normalize();
@@ -5760,6 +6901,7 @@ function startReload() {
   const pool = weaponAmmo[currentWeaponIdx];
   if (reloading || pool.ammo === currentWeapon.mag || pool.reserve === 0) return;
   reloading = true;
+  playReloadSound(currentWeapon);
   document.getElementById('reload-flash').style.display = 'block';
   const dur = currentWeapon.reloadTime * (Date.now() < adrenalineUntil ? 0.5 : 1);
   // Trigger reload animation on the current weapon model
@@ -5852,13 +6994,16 @@ function updateMapGimmicks(dt) {
       if (dx*dx + dz*dz < z.r * z.r) { _playerInLowGrav = true; break; }
     }
   }
-  // Ice is handled inline in updateMovement (friction reduction)
+  // Ice and oil slicks are handled inline in updateMovement (friction reduction)
 }
 
 function playerOnIce() {
   const g = activeMapGimmicks;
-  if (!g || !g.iceZones || !g.iceZones.length) return false;
-  for (const z of g.iceZones) {
+  if (!g) return false;
+  const slicks = [];
+  if (g.iceZones && g.iceZones.length) slicks.push(...g.iceZones);
+  if (g.oilZones && g.oilZones.length) slicks.push(...g.oilZones);
+  for (const z of slicks) {
     const dx = camera.position.x - z.x, dz = camera.position.z - z.z;
     if (dx*dx + dz*dz < z.r * z.r) return true;
   }
@@ -6013,6 +7158,7 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false) {
   const mesh    = remoteMeshes[pid];
   if (hitWorldPos) showDamageNumber(hitWorldPos, dmg, headshot);
   if (mesh)        trackTotalDamage(pid, dmg, mesh);
+  playSoundEvent(headshot ? 'headshot' : 'hitmarker', { volume: headshot ? 1.15 : 0.75, minGap: headshot ? 60 : 35 });
   if (headshot)    flashHeadshot(instakill);
   // Switchblade Gun: any successful hit re-charges to the 100-dmg shot
   if (weaponId === 'switchblade_gun' || weaponId === 'switchblade_charged') {
@@ -6052,6 +7198,7 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false) {
         const kc = document.getElementById('kill-count');
         if (kc) kc.textContent = `Kills: ${myKills}`;
         const botName = players[pid]?.name || 'Bot';
+        playSoundEvent('kill', { volume: 1.05, minGap: 80 });
         showAnnouncement('ELIMINATED', botName, '#ff4444', 1200);
         onEntityDied(pid, myId);
         // Schedule local respawn after 3s (in case server isn't responding)
@@ -6369,6 +7516,18 @@ function updateBullets(dt) {
 
       if (wallHitPt && (!bestHit || wallHitT <= bestHit.t)) {
         spawnHitParticle(wallHitPt);
+        // ── Check if a destructible (glass, light, reactor) was hit ──
+        const destDmg = getClientWeaponDamage(b.weaponId) || 25;
+        for (const dest of mapDestructibles) {
+          if (dest.mapName !== activeMapName) continue;
+          if (!dest.mesh) continue;
+          const dpos = new THREE.Vector3();
+          dest.mesh.getWorldPosition(dpos);
+          if (dpos.distanceTo(wallHitPt) < (dest.type === 'reactor' ? 4 : dest.type === 'glass' ? 6 : dest.type === 'explosive_barrel' ? 2.2 : 1.5)) {
+            damageDestructible(dest, destDmg);
+            break;
+          }
+        }
         // Firework Launcher: leave a burn zone where it lands
         if (b.weaponId === 'firework_launcher') {
           spawnBurnZone(wallHitPt, 3, 3, 10000);
@@ -6533,6 +7692,7 @@ function throwAirGrenade(item) {
   const origin = new THREE.Vector3();
   camera.getWorldPosition(origin);
   origin.add(new THREE.Vector3(0.12, -0.18, -0.30).applyQuaternion(camera.quaternion));
+  playSoundEvent('air_burst', { volume: 0.65 });
   const aimDir = new THREE.Vector3(0, 0.20, -1).applyQuaternion(camera.quaternion).normalize();
   const speed = item.bulletSpeed || 50;
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(item.bulletSize || 0.11, 8, 6),
@@ -6566,6 +7726,360 @@ function placeLandMine(item) {
   });
   showAnnouncement('LAND MINE ARMED', `${item.damage} dmg + launch`, '#ff2200', 900);
 }
+// ── Destructible map objects (glass, lights, reactors) ───────────────────
+function damageDestructible(dest, dmg) {
+  if (dest.hp <= 0) return;
+  dest.hp = Math.max(0, dest.hp - dmg);
+  // Show damage number above the object
+  const dpos = new THREE.Vector3();
+  dest.mesh.getWorldPosition(dpos);
+  dpos.y += dest.type === 'reactor' ? 8 : 1;
+  showDamageNumber(dpos, dmg, false);
+  if (dest.hp <= 0) {
+    // Visual destruction: hide mesh, remove collider
+    dest.mesh.visible = false;
+    if (dest.colliderRef && wallColliders.includes(dest.colliderRef)) {
+      const idx = wallColliders.indexOf(dest.colliderRef);
+      if (idx >= 0) wallColliders.splice(idx, 1);
+    }
+    // Particle burst at the object's position
+    spawnHitParticle(dpos.clone().setY(dpos.y - 0.5));
+    if (dest.onDestroy) dest.onDestroy();
+    if (dest.type === 'glass') showAnnouncement('🔨 GLASS BROKEN', '', '#88ccee', 700);
+    if (dest.type === 'airport_light') showAnnouncement('💡 LIGHT OUT', `${Math.round(airportLightLevel * 100)}% brightness`, '#888888', 700);
+    if (dest.type === 'reactor') showAnnouncement('☢️ REACTOR DESTROYED', '12 m AOE explosion!', '#ffaa22', 2400);
+    if (dest.type === 'explosive_barrel') showAnnouncement('BARREL BOOM', '7 m AOE explosion!', '#ff7722', 1400);
+  }
+}
+
+// Per-frame map-effect tick (called from main loop)
+function updateMapEffects(dt) {
+  const now = Date.now();
+  // Airport darkness: lerp scene background toward black as lights break
+  if (activeMapName === 'airport' && scene.background?.setHex) {
+    // Original sky 0xddeeff → dark navy as lights die
+    const t = airportLightLevel;
+    const r = Math.round(0xdd * t + 0x05 * (1-t));
+    const g = Math.round(0xee * t + 0x05 * (1-t));
+    const b = Math.round(0xff * t + 0x10 * (1-t));
+    scene.background.setHex((r<<16) | (g<<8) | b);
+  }
+  // Chernobyl gas: 1 dmg/sec while alive on this map
+  if (activeMapName === 'chernobyl' && !isDead && match?.roundActive) {
+    if (now - lastChernobylTick >= 1000) {
+      lastChernobylTick = now;
+      const me = players[myId];
+      if (me && !isShielded() && !(adminCheats.godMode && currentUser?.isAdmin)) {
+        me.hp = Math.max(0, me.hp - 1);
+        updateHealthHUD(me.hp);
+        if (me.hp <= 0) applyBotDamageToPlayer('chernobyl_gas', null);
+      }
+    }
+  }
+  // Mortar interaction prompts
+  updateMortarPrompt();
+}
+
+// ── 🪖 ADMIN utility implementations ──────────────────────────────────────
+// ── Vehicle piloting (BR arena: jeeps + helicopters) ─────────────────────
+let pilotedVehicle = null; // { ref to mapVehicles entry }
+function updateVehiclePrompt() {
+  if (pilotedVehicle) return;
+  const near = mapVehicles.find(v => v.mapName === activeMapName && v.hp > 0 && !v.pilotedBy
+    && Math.hypot(v.x - camera.position.x, v.z - camera.position.z) < 4);
+  let prompt = document.getElementById('vehicle-prompt');
+  if (near) {
+    if (!prompt) {
+      prompt = document.createElement('div');
+      prompt.id = 'vehicle-prompt';
+      prompt.style.cssText = 'position:fixed;bottom:200px;left:50%;transform:translateX(-50%);'
+        + 'z-index:9000;color:#88ccff;font-family:"Courier New",monospace;font-size:14px;'
+        + 'background:rgba(0,0,0,0.7);padding:8px 18px;border:2px solid #88ccff;border-radius:6px;letter-spacing:2px;';
+      document.body.appendChild(prompt);
+    }
+    const icon = near.type === 'heli' ? '🚁' : '🚙';
+    prompt.innerHTML = `${icon} Press <b>F</b> to pilot ${near.type === 'heli' ? 'helicopter' : 'jeep'} · HP ${near.hp}/${near.maxHp}`;
+    prompt.style.display = 'block';
+  } else if (prompt) prompt.style.display = 'none';
+}
+function tryEnterVehicle() {
+  if (pilotedVehicle) { exitVehicle(); return; }
+  const near = mapVehicles.find(v => v.mapName === activeMapName && v.hp > 0 && !v.pilotedBy
+    && Math.hypot(v.x - camera.position.x, v.z - camera.position.z) < 4);
+  if (!near) return;
+  pilotedVehicle = near;
+  near.pilotedBy = 'player';
+  showAnnouncement(`${near.type === 'heli' ? '🚁' : '🚙'} ENTERED ${near.type.toUpperCase()}`,
+    near.type === 'heli' ? 'WASD move · Space up · Ctrl down · LMB fire · F exit' : 'WASD drive · LMB fire · F exit',
+    '#88ccff', 2400);
+}
+function exitVehicle() {
+  if (!pilotedVehicle) return;
+  pilotedVehicle.pilotedBy = null;
+  pilotedVehicle = null;
+}
+function updateVehiclePiloting(dt) {
+  if (!pilotedVehicle) return;
+  const v = pilotedVehicle;
+  if (v.hp <= 0) { exitVehicle(); return; }
+  // Steering — rotate via A/D
+  if (keys['KeyA']) v.rotY += 2.0 * dt;
+  if (keys['KeyD']) v.rotY -= 2.0 * dt;
+  // Forward/back via W/S
+  const speed = (keys['KeyW'] ? 1 : 0) - (keys['KeyS'] ? 1 : 0);
+  if (speed !== 0) {
+    const fwdX = -Math.sin(v.rotY), fwdZ = -Math.cos(v.rotY);
+    v.x += fwdX * speed * v.maxSpeed * dt;
+    v.z += fwdZ * speed * v.maxSpeed * dt;
+    const vBound = activeMapName === 'br_arena' ? 122 : 47;
+    v.x = Math.max(-vBound, Math.min(vBound, v.x));
+    v.z = Math.max(-vBound, Math.min(vBound, v.z));
+  }
+  // Helicopter vertical movement
+  if (v.type === 'heli') {
+    v.y = v.y || 0;
+    if (keys['Space']) v.y += 12 * dt;
+    if (keys['ControlLeft'] || keys['ControlRight'] || keys['ShiftLeft']) v.y -= 12 * dt;
+    v.y = Math.max(0, Math.min(28, v.y));
+    // Spin rotor (visual)
+    if (v.rotor) v.rotor.rotation.y += 25 * dt;
+    if (v.tailRotor) v.tailRotor.rotation.x += 25 * dt;
+  }
+  // Update mesh transform
+  v.mesh.position.set(v.x, v.y || 0, v.z);
+  v.mesh.rotation.y = v.rotY;
+  // Camera attaches to vehicle (third-person-ish for vehicles, first-person-ish for heli)
+  const camHeight = v.type === 'heli' ? 1.4 : 1.6;
+  camera.position.set(v.x, (v.y || 0) + camHeight, v.z);
+  // Allow free look — don't override euler from vehicle rotation
+}
+function fireVehicleGun() {
+  if (!pilotedVehicle) return;
+  const v = pilotedVehicle;
+  const now = Date.now();
+  if (now - (v.lastShot || 0) < (v.gunFireRate || 200)) return;
+  v.lastShot = now;
+  const origin = new THREE.Vector3(v.x, (v.y || 0) + 1.2, v.z);
+  const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+  spawnLocalBullet(origin, dir, `veh_${v.type}_${now}`, true, 180, 0xffaa44, 0.05, 'jeep_gun');
+}
+
+// ── Mortar piloting (trench map) ──────────────────────────────────────────
+let pilotedMortar = null; // { ref to mapMortars entry } when player is piloting
+function updateMortarPrompt() {
+  // Show "Press F to pilot" prompt when near a mortar
+  let prompt = document.getElementById('mortar-prompt');
+  if (pilotedMortar) {
+    if (prompt) prompt.style.display = 'none';
+    return;
+  }
+  const near = mapMortars.find(mor => mor.mapName === activeMapName && mor.hp > 0 && !mor.pilotedBy
+    && Math.hypot(mor.x - camera.position.x, mor.z - camera.position.z) < 3.5);
+  if (near) {
+    if (!prompt) {
+      prompt = document.createElement('div');
+      prompt.id = 'mortar-prompt';
+      prompt.style.cssText = 'position:fixed;bottom:200px;left:50%;transform:translateX(-50%);'
+        + 'z-index:9000;color:#ffcc44;font-family:"Courier New",monospace;font-size:14px;'
+        + 'background:rgba(0,0,0,0.7);padding:8px 18px;border:2px solid #ffcc44;border-radius:6px;letter-spacing:2px;';
+      document.body.appendChild(prompt);
+    }
+    prompt.innerHTML = `🎯 Press <b>F</b> to pilot mortar · ${near.ammo}/${near.maxAmmo} shells · HP ${near.hp}/${near.maxHp}`;
+    prompt.style.display = 'block';
+  } else if (prompt) {
+    prompt.style.display = 'none';
+  }
+}
+function tryEnterMortar() {
+  if (pilotedMortar) { exitMortar(); return; }
+  const near = mapMortars.find(mor => mor.mapName === activeMapName && mor.hp > 0 && !mor.pilotedBy
+    && Math.hypot(mor.x - camera.position.x, mor.z - camera.position.z) < 3.5);
+  if (!near) return;
+  pilotedMortar = near;
+  near.pilotedBy = 'player';
+  showAnnouncement('🎯 MORTAR ARMED', `${near.ammo}/${near.maxAmmo} shells · LMB to fire · F to exit`, '#ffcc44', 2200);
+}
+function exitMortar() {
+  if (!pilotedMortar) return;
+  pilotedMortar.pilotedBy = null;
+  pilotedMortar = null;
+  showAnnouncement('LEFT MORTAR', '', '#888', 600);
+}
+function fireMortar() {
+  if (!pilotedMortar || pilotedMortar.ammo <= 0) return;
+  const now = Date.now();
+  if (now - (pilotedMortar.lastShot || 0) < 800) return;
+  pilotedMortar.lastShot = now;
+  pilotedMortar.ammo--;
+  // Fire a grenade-like arcing shell in the direction the camera is facing
+  const origin = new THREE.Vector3(pilotedMortar.x, 1.5, pilotedMortar.z);
+  const aim = new THREE.Vector3(0, 0.55, -1).applyQuaternion(camera.quaternion).normalize();
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.15, 8, 6), new THREE.MeshLambertMaterial({ color: 0x666622 }));
+  mesh.position.copy(origin); scene.add(mesh);
+  const fragRef = SUPPORT_ITEMS.find(s => s.id === 'frag') || { damage: 80 };
+  activeGrenades.push({
+    mesh, id: `mortar_${now}`, isOwn: true, isSupport: true, itemRef: fragRef,
+    velX: aim.x * 38, velY: aim.y * 38, velZ: aim.z * 38,
+    gravMult: 1.0, explodeOnImpact: false, maxBounces: 0, bounceCount: 0,
+    explodeAt: now + 2000,
+  });
+  if (pilotedMortar.ammo <= 0) {
+    showAnnouncement('OUT OF SHELLS', '', '#ff6666', 1200);
+    setTimeout(() => exitMortar(), 600);
+  }
+}
+
+let placedC4s = []; // {mesh, x, z, damage, ownerId}
+function placeC4(item) {
+  const fwd = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion).normalize();
+  fwd.y = 0; fwd.normalize();
+  const pos = camera.position.clone().addScaledVector(fwd, 1.6); pos.y = 0;
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.12, 0.2), new THREE.MeshLambertMaterial({ color: 0xbbaa66 }));
+  body.position.y = 0.06; g.add(body);
+  const led = new THREE.Mesh(new THREE.SphereGeometry(0.04, 6, 5), new THREE.MeshBasicMaterial({ color: 0xff2222 }));
+  led.position.set(0.1, 0.14, 0); g.add(led);
+  g.position.set(pos.x, 0, pos.z); scene.add(g);
+  placedC4s.push({ mesh: g, led, x: pos.x, z: pos.z, damage: item.damage || 200, ownerId: myId });
+  showAnnouncement('💣 C4 PLACED', 'Press G to detonate', '#ff4444', 1400);
+}
+function detonateAllC4() {
+  if (placedC4s.length === 0) return false;
+  for (const c4 of placedC4s) {
+    spawnAbilityAOEFX(new THREE.Vector3(c4.x, 0.3, c4.z), 5, 0xff5500);
+    flashScreen('rgba(255,100,0,0.4)', 500);
+    for (const bot of gameBots) {
+      if (bot.dead) continue;
+      const dx = bot.x - c4.x, dz = bot.z - c4.z;
+      if (dx*dx + dz*dz < 25) {
+        const mesh = remoteMeshes[bot.id];
+        const hp = mesh ? mesh.position.clone().setY(1.0) : new THREE.Vector3(bot.x, 1, bot.z);
+        emitHit(bot.id, `c4_${myId}_${Date.now()}_${bot.id}`, 'c4', hp);
+      }
+    }
+    scene.remove(c4.mesh);
+  }
+  placedC4s = [];
+  return true;
+}
+function placeClaymore(item) {
+  // Place a directional mine; goes off when an enemy is in the arc
+  const fwd = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion).normalize();
+  fwd.y = 0; fwd.normalize();
+  const pos = camera.position.clone().addScaledVector(fwd, 1.2); pos.y = 0;
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.18, 0.07), new THREE.MeshLambertMaterial({ color: 0x2a3a26 }));
+  body.position.y = 0.10; g.add(body);
+  const yaw = Math.atan2(-fwd.x, -fwd.z);
+  g.rotation.y = yaw;
+  g.position.set(pos.x, 0, pos.z); scene.add(g);
+  traps.push({
+    type: 'claymore', x: pos.x, z: pos.z, fx: fwd.x, fz: fwd.z,
+    radius: item.claymoreRadius || 4, damage: item.damage || 250,
+    mesh: g, until: Date.now() + 120000, ownerId: myId,
+  });
+  showAnnouncement('💣 CLAYMORE ARMED', 'Front-facing trap', '#ff4444', 1200);
+}
+function throwStunGrenade(item) {
+  const origin = new THREE.Vector3();
+  camera.getWorldPosition(origin);
+  origin.add(new THREE.Vector3(0.12, -0.18, -0.30).applyQuaternion(camera.quaternion));
+  const aimDir = new THREE.Vector3(0, 0.20, -1).applyQuaternion(camera.quaternion).normalize();
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.10, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+  mesh.position.copy(origin); scene.add(mesh);
+  activeGrenades.push({
+    mesh, id: `stun_${Date.now()}`, isOwn: true, isSupport: true, itemRef: item,
+    velX: aimDir.x * 56, velY: aimDir.y * 56, velZ: aimDir.z * 56,
+    gravMult: 1.0, explodeOnImpact: false, maxBounces: 2, bounceCount: 0,
+    explodeAt: Date.now() + 1500, _isStun: true,
+  });
+}
+let stunUntil = 0; // bot stun timer
+function throwThermite(item) {
+  const origin = new THREE.Vector3();
+  camera.getWorldPosition(origin);
+  origin.add(new THREE.Vector3(0.12, -0.18, -0.30).applyQuaternion(camera.quaternion));
+  const aimDir = new THREE.Vector3(0, 0.15, -1).applyQuaternion(camera.quaternion).normalize();
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.10, 8, 6), new THREE.MeshBasicMaterial({ color: 0xff6622 }));
+  mesh.position.copy(origin); scene.add(mesh);
+  activeGrenades.push({
+    mesh, id: `therm_${Date.now()}`, isOwn: true, isSupport: true, itemRef: item,
+    velX: aimDir.x * 36, velY: aimDir.y * 36, velZ: aimDir.z * 36,
+    gravMult: 1.0, explodeOnImpact: true, maxBounces: 0, bounceCount: 0,
+    explodeAt: null, _isThermite: true,
+  });
+}
+let uavUntil = 0; // recon overlay timer
+function activateUAV(item) {
+  uavUntil = Date.now() + (item.uavDur || 10000);
+  showAnnouncement('🛰️ PREDATOR UAV', `${(item.uavDur || 10000)/1000}s · enemies revealed`, '#44ff66', 1800);
+  // Create or show the overhead minimap-style overlay
+  let mm = document.getElementById('uav-overlay');
+  if (!mm) {
+    mm = document.createElement('div');
+    mm.id = 'uav-overlay';
+    mm.style.cssText = 'position:fixed;top:80px;right:20px;width:200px;height:200px;'
+      + 'border:2px solid #44ff66;background:rgba(0,40,20,0.7);z-index:9700;'
+      + 'border-radius:8px;overflow:hidden;';
+    document.body.appendChild(mm);
+  }
+  mm.style.display = 'block';
+}
+function updateUAV(dt) {
+  const mm = document.getElementById('uav-overlay');
+  if (!mm) return;
+  if (Date.now() >= uavUntil) { mm.style.display = 'none'; return; }
+  if (mm.style.display === 'none') return;
+  // Render dots: player center, enemies red, allies green
+  const scale = 3.5; // px per meter (200px / ~56m visible)
+  let html = '<div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);'
+    + 'width:8px;height:8px;background:#44ff66;border-radius:50%;"></div>';
+  for (const bot of gameBots) {
+    if (bot.dead) continue;
+    const dx = (bot.x - camera.position.x) * scale + 100;
+    const dz = (bot.z - camera.position.z) * scale + 100;
+    if (dx < 0 || dx > 200 || dz < 0 || dz > 200) continue;
+    const color = bot.team === 'enemy' ? '#ff4444' : '#44aaff';
+    html += `<div style="position:absolute;left:${dx}px;top:${dz}px;width:6px;height:6px;background:${color};border-radius:50%;transform:translate(-50%,-50%);"></div>`;
+  }
+  mm.innerHTML = html;
+}
+function dropCarePackage(item) {
+  // Drop a crate that grants a random P2W item when player walks over it
+  const fwd = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion).normalize();
+  fwd.y = 0; fwd.normalize();
+  const pos = camera.position.clone().addScaledVector(fwd, 2); pos.y = 0;
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, 0.6), new THREE.MeshLambertMaterial({ color: 0x336622 }));
+  body.position.y = 0.3; g.add(body);
+  const tag = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.10, 0.62), new THREE.MeshBasicMaterial({ color: 0xff2222 }));
+  tag.position.y = 0.55; g.add(tag);
+  g.position.set(pos.x, 0, pos.z); scene.add(g);
+  traps.push({
+    type: 'care_package', x: pos.x, z: pos.z, mesh: g, until: Date.now() + 60000,
+  });
+  showAnnouncement('📦 CARE PACKAGE', 'Walk to the box for a random buff', '#88ff88', 1400);
+}
+function dropTacNuke(item) {
+  // Big delayed AOE wipes most of the arena
+  const fwd = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
+  const t = -camera.position.y / (fwd.y || -1);
+  const tx = camera.position.x + fwd.x * Math.max(2, Math.min(40, t));
+  const tz = camera.position.z + fwd.z * Math.max(2, Math.min(40, t));
+  // Big warning ring on the ground
+  const ringGeo = new THREE.RingGeometry((item.nukeRadius || 25) * 0.95, (item.nukeRadius || 25), 32);
+  const ringMat = new THREE.MeshBasicMaterial({ color: 0xff2200, side: THREE.DoubleSide, transparent: true, opacity: 0.7 });
+  const ring = new THREE.Mesh(ringGeo, ringMat);
+  ring.rotation.x = -Math.PI/2; ring.position.set(tx, 0.05, tz);
+  scene.add(ring);
+  orbitalMarkers.push({
+    mesh: ring, x: tx, z: tz, fireAt: Date.now() + (item.nukeDelay || 5000),
+    damage: item.damage || 500, radius: item.nukeRadius || 25,
+  });
+  showAnnouncement('☢️ TACTICAL NUKE INBOUND', `${(item.nukeDelay || 5000)/1000}s · ${item.nukeRadius || 25}m AOE`, '#ff2200', 2200);
+  flashScreen('rgba(255,30,0,0.25)', 600);
+}
+
 function activateNanoShield(item) {
   nanoShieldUntil = Date.now() + (item.shieldDur || 6000);
   showAnnouncement('NANO SHIELD', `+${item.healPerSec} HP/s · ${(item.shieldDur||6000)/1000}s`, '#66ddaa', 1400);
@@ -6757,6 +8271,59 @@ function updateTraps(dt) {
         }
       }
     }
+    else if (t.type === 'claymore') {
+      // Detonate when an enemy bot is in front (within the forward arc)
+      for (const bot of gameBots) {
+        if (bot.dead) continue;
+        const dx = bot.x - t.x, dz = bot.z - t.z;
+        const dd = Math.hypot(dx, dz);
+        if (dd > t.radius || dd < 0.1) continue;
+        // Check the bot is in front (dot product with claymore forward)
+        const dot = (dx / dd) * t.fx + (dz / dd) * t.fz;
+        if (dot < 0.2) continue; // behind or to the side
+        // Detonate — damage all in front of the claymore
+        for (const bot2 of gameBots) {
+          if (bot2.dead) continue;
+          const ex = bot2.x - t.x, ez = bot2.z - t.z;
+          const ed = Math.hypot(ex, ez);
+          if (ed > t.radius + 1.5) continue;
+          if (((ex/ed) * t.fx + (ez/ed) * t.fz) < 0.0) continue;
+          const m2 = remoteMeshes[bot2.id];
+          const hp2 = m2 ? m2.position.clone().setY(1.0) : new THREE.Vector3(bot2.x, 1, bot2.z);
+          emitHit(bot2.id, `cmy_${myId}_${now}_${bot2.id}`, 'claymore', hp2);
+        }
+        spawnAbilityAOEFX(new THREE.Vector3(t.x, 0.2, t.z), t.radius, 0xff2200);
+        flashScreen('rgba(255,60,0,0.35)', 320);
+        scene.remove(t.mesh); traps.splice(i, 1); break;
+      }
+    }
+    else if (t.type === 'care_package') {
+      // Player walks over it → grants a random temporary buff
+      const pdx = camera.position.x - t.x, pdz = camera.position.z - t.z;
+      if (pdx*pdx + pdz*pdz < 1.2 * 1.2) {
+        // Pick a random buff
+        const buffs = [
+          { name: '💉 Full Heal',        apply: () => { const me = players[myId]; if (me) { me.hp = 300; updateHealthHUD(300); } } },
+          { name: '⚡ Adrenaline 10s',   apply: () => { adrenalineUntil = Date.now() + 10000; } },
+          { name: '🛡️ Nano Shield 8s',  apply: () => { nanoShieldUntil = Date.now() + 8000; } },
+          { name: '📦 Full Ammo',         apply: () => {
+              weaponAmmo.forEach((_, idx) => {
+                const w = WEAPONS[idx];
+                if (w) weaponAmmo[idx] = { ammo: w.mag, reserve: w.reserve === 0 ? 99999 : w.reserve };
+              });
+              supportUses.forEach((_, i2) => { supportUses[i2] = SUPPORT_ITEMS[i2]?.uses || 1; });
+              updateAmmoHUD();
+            } },
+          { name: '❄️ Mass Frost',       apply: () => {
+              for (const bot of gameBots) { if (!bot.dead) bot.frostSlow = 30; }
+            } },
+        ];
+        const pick = buffs[Math.floor(Math.random() * buffs.length)];
+        pick.apply();
+        showAnnouncement('📦 CARE PACKAGE', pick.name, '#88ff88', 2000);
+        scene.remove(t.mesh); traps.splice(i, 1);
+      }
+    }
     else if (t.type === 'bounce') {
       // If player walks on it, launch upward
       const dx = camera.position.x - t.x, dz = camera.position.z - t.z;
@@ -6828,6 +8395,7 @@ function spawnBurnZone(pos, radius, dps, durationMs) {
   ring.rotation.x = -Math.PI / 2;
   ring.position.set(pos.x, 0.04, pos.z);
   scene.add(ring);
+  playSoundEvent('fire_sizzle', { position: pos, volume: 0.85, minGap: 180 });
   burnZones.push({ x: pos.x, z: pos.z, radius, dps, until: Date.now() + durationMs, mesh: ring, lastTick: 0 });
 }
 function updateBurnZones(dt) {
@@ -6840,6 +8408,7 @@ function updateBurnZones(dt) {
     // Tick DOT every 1s
     if (now - z.lastTick >= 1000) {
       z.lastTick = now;
+      playSoundEvent('fire_sizzle', { position: new THREE.Vector3(z.x, 0, z.z), remote: true, volume: 0.55, minGap: 260 });
       // Damage player
       const pdx = camera.position.x - z.x, pdz = camera.position.z - z.z;
       if (pdx*pdx + pdz*pdz < z.radius * z.radius) {
@@ -7036,8 +8605,12 @@ const CLIENT_WEAPON_DAMAGE = Object.fromEntries([
   ['hyper_disc', 80],
   // Map hazards
   ['lava', 4],
+  ['acid', 6],
+  ['explosive_barrel', 100],
   // The classic
   ['fists', 24],
+  // 👑 BR vehicle guns
+  ['jeep_gun', 22],
   // 🪖 ADMIN weapons + ability shots
   ['gau19', 50], ['mk44', 25], ['xm7', 60], ['barrett', 250], ['barrett_ab', 600],
   ['m134', 15], ['hkmp7', 30], ['p90_spec', 22],
@@ -7065,6 +8638,7 @@ function applyBotDamageToPlayer(weaponId, botId) {
     if (isDead) return;
     const me = players[myId];
     if (me) me.hp = 0;
+    playSoundEvent('freeze_shatter', { volume: 1.1 });
     updateHealthHUD(0);
     isDead = true;
     showAnnouncement('FROZEN', 'You turned to ice', '#99eeff', 1800);
@@ -7083,6 +8657,7 @@ function applyBotDamageToPlayer(weaponId, botId) {
   me.hp = Math.max(0, me.hp - dmg);
   console.log(`[damage] bot hit: ${weaponId}(${dmg}dmg) ${oldHp}→${me.hp}`);
   updateHealthHUD(me.hp);
+  if (oldHp > 75 && me.hp <= 75 && me.hp > 0) playSoundEvent('low_hp', { volume: 1.0, minGap: 2500 });
   flashHitIndicator();
   if (me.hp <= 0 && !isDead) {
     isDead = true;
@@ -7113,6 +8688,29 @@ function applyBotDamageToPlayer(weaponId, botId) {
       if (dmEl) dmEl.textContent = 'Waiting for round to end...';
       updateRoundScoreDisplay && updateRoundScoreDisplay();
       enterSpectator(); // watch live teammates while waiting
+    } else if (match && match.type === 'arcade') {
+      // Arcade: brief death screen, scheduleArcadeRespawn handles the actual respawn
+      if (ds) {
+        ds.style.display = 'flex';
+        const dm = document.getElementById('death-msg');
+        if (dm) dm.textContent = 'Respawning in 2.5s...';
+      }
+      setTimeout(() => { if (ds) ds.style.display = 'none'; }, 2400);
+    } else if (match && match.type === 'br') {
+      // BR: respawn handled by onEntityDied. Show brief death screen.
+      const livesLeft = Math.max(0, (match.lives[myId] || 0) - 1);
+      if (ds) {
+        ds.style.display = 'flex';
+        const dm = document.getElementById('death-msg');
+        if (dm) dm.textContent = livesLeft > 0 ? `Respawning in 4s · ${livesLeft} lives left` : 'You\'re out of lives — spectating';
+      }
+      if (livesLeft <= 0) {
+        // Out of lives — go into spectator mode for the rest of the match
+        setTimeout(() => { if (ds) ds.style.display = 'none'; enterSpectator(); }, 1500);
+      } else {
+        // Hide death screen when respawn fires (handled in onEntityDied)
+        setTimeout(() => { if (ds) ds.style.display = 'none'; }, 3800);
+      }
     } else if (match && match.type === 'dday') {
       if (ds) { ds.style.display = 'flex'; const dm = document.getElementById('death-msg'); if (dm) dm.textContent = 'Respawning in 3s...'; }
       setTimeout(() => {
@@ -7182,6 +8780,35 @@ socket.on('connect_error', () => {
   el.style.display = 'block';
   el.textContent = 'Cannot reach the game server. Start it, then open http://localhost:3001';
 });
+// Staging-lobby socket events
+socket.on('lobbyState', data => {
+  stagingLobbyState = data;
+  if (stagingLobbyMode === data.mode) renderStagingLobby();
+});
+socket.on('lobbyStart', data => {
+  // Server says: time to start the match. Set up pvpMatch + spawn flow.
+  hideStagingLobby();
+  stagingLobbyMode = null;
+  stagingLobbyState = null;
+  pvpMatch = {
+    mode: data.mode,
+    team: data.team,
+    opponents: data.opponents || [],
+    isHost: !!data.isHost,
+    allyBotsToSpawn: data.allyBots || 0,
+    enemyBotsToSpawn: data.enemyBots || 0,
+  };
+  showAnnouncement('MATCH FOUND',
+    `${data.opponents.length + 1} player(s) · You are ${data.team.toUpperCase()}${pvpMatch.isHost ? ' (HOST)' : ''}`,
+    '#44ff66', 2200);
+  // Now spawn the game (will use pvpMatch.isHost to decide bot spawning)
+  if (!gameStarted) {
+    gameStarted = true;
+    spawnGameBots();
+    requestPointerLockSafe();
+    loop();
+  }
+});
 socket.on('chatLine', data => {
   // From another player
   if (data.id === myId) return;
@@ -7213,7 +8840,9 @@ socket.on('playerLeft',   id => {
 socket.on('bulletFired', b => {
   if (b.ownerId===myId) return;
   const w = WEAPONS.find(x=>x.id===b.weapon)||WEAPONS[0];
-  spawnLocalBullet(new THREE.Vector3(b.x,b.y,b.z), new THREE.Vector3(b.dx,b.dy,b.dz), b.id, false, w.bulletSpeed, w.bulletColor, w.bulletSize, w.id);
+  const origin = new THREE.Vector3(b.x,b.y,b.z);
+  playWeaponSound(b.weapon || w.id, { baseWeapon: w, remote: true, position: origin });
+  spawnLocalBullet(origin, new THREE.Vector3(b.dx,b.dy,b.dz), b.id, false, w.bulletSpeed, w.bulletColor, w.bulletSize, w.id);
 });
 socket.on('playerHit', data => {
   // Range mode: player is invincible — just ignore any damage (no healSelf to avoid server loop)
@@ -7341,6 +8970,9 @@ socket.on('playerDied', data => {
     } else if (match && match.tiebreaker) {
       document.getElementById('death-msg').textContent = 'Tiebreaker — eliminated!';
       // endMatch called via onEntityDied
+    } else if (match && match.type === 'arcade') {
+      document.getElementById('death-msg').textContent = 'Respawning in 2.5s...';
+      setTimeout(() => { ds.style.display = 'none'; }, 2400);
     } else if (match && match.type === 'range') {
       // Range mode: instant respawn (player shouldn't die here, but just in case)
       ds.style.display = 'none';
@@ -7348,7 +8980,7 @@ socket.on('playerDied', data => {
       camera.position.set(0, 1.65, 38);
       euler.y = Math.PI;
       camera.quaternion.setFromEuler(euler);
-      socket.emit('readyRespawn');
+      socket.emit('readyRespawn', { x: camera.position.x, z: camera.position.z });
       requestPointerLockSafe();
     } else if (match && match.type === 'dday') {
       // D-Day: auto-respawn at bunker 0 after 3 seconds, same weapons
@@ -7360,7 +8992,7 @@ socket.on('playerDied', data => {
         camera.position.set(-22, 1.65, 22); // back to bunker 0 slit
         euler.y = 0; // face toward enemies (-Z)
         camera.quaternion.setFromEuler(euler);
-        socket.emit('readyRespawn');
+        socket.emit('readyRespawn', { x: camera.position.x, z: camera.position.z });
         grantSpawnShield(3000);
         requestPointerLockSafe();
       }, 3000);
@@ -7392,14 +9024,13 @@ socket.on('playerRespawned', p => {
       // D-Day: position already set by the 3s respawn timer, just refresh HP
       if (p.forcedReset) camera.position.set(p.x, 1.65, p.z);
     } else {
-      // Always teleport to ally side — never trust server's spawn point (they're near centre)
-      if (p.forcedReset) {
+      // Always teleport to the player's team side — never trust server's center-ish spawn.
+      if (p.forcedReset || p.clientSpawn) {
         camera.position.set(p.x, 1.65, p.z);
+        euler.y = p.z < 0 ? 0 : Math.PI;
       } else {
-        const sx = (Math.random() - 0.5) * 24;
-        camera.position.set(sx, 1.65, 38 + Math.random() * 3);
+        placePlayerAtTeamSpawn(localPlayerTeam(), 24, 38);
       }
-      euler.y = Math.PI;
       camera.quaternion.setFromEuler(euler);
     }
   } else if (remoteMeshes[p.id]) {
@@ -7634,12 +9265,38 @@ function explodeSupport(g) {
   if (!item) return;
   const pos = g.mesh.position.clone();
 
+  // 🪖 Admin stun grenade — flash + temporarily stop bot AI in radius
+  if (item.id === 'stun_grenade') {
+    spawnAbilityAOEFX(pos, item.stunRadius || 8, 0xffffff);
+    flashScreen('rgba(255,255,255,0.75)', 600);
+    const r2 = (item.stunRadius || 8) * (item.stunRadius || 8);
+    for (const bot of gameBots) {
+      if (bot.dead) continue;
+      const dx = bot.x - pos.x, dz = bot.z - pos.z;
+      if (dx*dx + dz*dz < r2) {
+        bot._stunUntil = Date.now() + (item.stunDur || 4000);
+        const mesh = remoteMeshes[bot.id];
+        const hp = mesh ? mesh.position.clone().setY(1.0) : new THREE.Vector3(bot.x, 1, bot.z);
+        emitHit(bot.id, `stun_${myId}_${Date.now()}_${bot.id}`, 'stun_grenade', hp);
+      }
+    }
+    return;
+  }
+  // 🪖 Admin thermite — burning zone DOT (reuses firework burn-zone system)
+  if (item.id === 'thermite') {
+    spawnAbilityAOEFX(pos, item.burnRadius || 3.5, 0xff6622);
+    spawnBurnZone(pos, item.burnRadius || 3.5, item.burnDps || 8, item.burnDur || 12000);
+    return;
+  }
+
   // Visual effect
   if (item.id === 'smoke') {
     spawnSmokeCloud(pos);
   } else {
     const color = item.randomBulletColor ? 0xffaa00 : (item.bulletColor || 0xff7700);
     spawnAbilityAOEFX(pos, getSupportRadius(item), color);
+    if (item.id === 'black_hole_seed') playSoundEvent('blackhole_collapse', { position: pos, volume: 1.15 });
+    else if (item.id === 'air_grenade') playSoundEvent('air_burst', { position: pos, volume: 1.15 });
     spawnExplosion(pos);
   }
 
@@ -7675,6 +9332,7 @@ function explodeSupport(g) {
       if (item.id === 'air_grenade') {
         const bot = gameBots.find(b => b.id === pid);
         if (bot) { bot.yVel = item.launchVel || 14; bot.y = bot.y || 0; }
+        playSoundEvent('air_launch', { position: target, remote: true, volume: 0.9, minGap: 90 });
       }
       spawnHitParticle(target);
     }
@@ -7684,6 +9342,7 @@ function explodeSupport(g) {
     if (item.id === 'air_grenade') {
       // Launch self upward (reuse slam-state vertical physics)
       slamState = { vel: item.launchVel || 14 };
+      playSoundEvent('air_launch', { volume: 1.0, minGap: 90 });
       flashScreen('rgba(170,204,255,0.2)', 250);
       applyBotDamageToPlayer(item.id, null); // also do the small damage
     } else {
@@ -8112,13 +9771,146 @@ function updateMeleeSwing(dt) {
 }
 
 // ── Match system ───────────────────────────────────────────────────────────
+// ── 🎮 Arcade mode helpers ──────────────────────────────────────────────
+// Gun Game tier ladder (weak → strong → knife at the top to "win"). Player advances on each kill.
+const GUN_GAME_TIERS = [
+  'pistol', 'cycler', 'machine_pistol', 'sg8', 'mp40',
+  'ak20', 'sg100', 'srx', 'rpd', 'paintball',
+  'burst', 'flamethrower', 'vector', 'crossbow', 'lever',
+  'minigun', 'railgun', 'boombow', 'auto_shotgun', 'hand_cannon',
+  'knife', // final tier — kill with knife to win
+];
+const SPEEDRUN_KILL_GOAL = 20;
+
+// Called from startMatchRound once bots exist — handles each mode's start state
+function setupArcadeStart(subtype) {
+  if (!match) return;
+  switch (subtype) {
+    case 'gungame': {
+      // Set all bot gun tiers to 0
+      for (const b of gameBots) match.gunTier[b.id] = 0;
+      // Start the player at tier 0
+      const startWeapon = GUN_GAME_TIERS[0];
+      forcePlayerWeapon(startWeapon);
+      showAnnouncement('🔫 GUN GAME', `Climb ${GUN_GAME_TIERS.length} weapon tiers · knife wins!`, '#ff44ff', 3000);
+      return;
+    }
+    case 'oitc': {
+      // One in the Chamber: force pistol with 1 bullet, 0 reserve. Each kill refills.
+      forcePlayerWeapon('pistol');
+      const idx = WEAPONS.findIndex(w => w.id === 'pistol');
+      if (idx >= 0) weaponAmmo[idx] = { ammo: 1, reserve: 0 };
+      updateAmmoHUD();
+      showAnnouncement('🎯 ONE IN THE CHAMBER', '1 bullet · 1-shot kill · refill on kill', '#ffcc22', 3000);
+      return;
+    }
+    case 'jugg': {
+      // Juggernaut: 50% chance player starts as juggernaut, else random bot
+      const candidates = [myId, ...gameBots.filter(b => !b.dead).map(b => b.id)];
+      const pick = candidates[Math.floor(Math.random() * candidates.length)];
+      match.juggernautId = pick;
+      if (pick === myId) {
+        // Player becomes the juggernaut: 1000 HP + admin gun
+        const me = players[myId]; if (me) { me.hp = 1000; updateHealthHUD(1000); }
+        forcePlayerWeapon('gau19'); // admin item — works even if not unlocked, for arcade
+        showAnnouncement('🛡️ YOU ARE JUGGERNAUT', '1000 HP · GAU-19 · kill them all', '#ff2222', 3000);
+      } else {
+        const bot = gameBots.find(b => b.id === pick);
+        if (bot) { bot.hp = 1000; bot.maxHp = 1000; bot.weaponId = 'gau19'; }
+        showAnnouncement('🛡️ JUGGERNAUT', `${players[pick]?.name || 'A bot'} is the juggernaut!`, '#ff2222', 3000);
+      }
+      return;
+    }
+    case 'infect': {
+      // 1 random bot starts as the zombie (uses knife) — others must survive
+      const startZombie = gameBots[Math.floor(Math.random() * gameBots.length)];
+      if (startZombie) {
+        match.infectedIds[startZombie.id] = true;
+        startZombie.weaponId = 'knife'; // melee-only zombie
+        startZombie.team = 'enemy';     // they hunt the player
+      }
+      showAnnouncement('🧟 INFECTION', 'Zombies infect on hit · last human wins!', '#44ff44', 3000);
+      return;
+    }
+    case 'sniper': {
+      forcePlayerWeapon('srx');
+      // Force bots to SR-X too
+      for (const b of gameBots) b.weaponId = 'srx';
+      showAnnouncement('🔭 SNIPER ONLY', 'SR-X only · long-range chess match', '#aaeeff', 3000);
+      return;
+    }
+    case 'speedrun': {
+      match.speedrunStart = 0;
+      match.speedrunKills = 0;
+      showAnnouncement('⏱️ SPEEDRUN', `Kill ${SPEEDRUN_KILL_GOAL} bots as fast as possible!`, '#ff8844', 3000);
+      // Personal best display
+      const pb = parseFloat(localStorage.getItem('pvp_speedrun_pb') || '0');
+      if (pb > 0) showAnnouncement('🏅 YOUR PB', `${pb.toFixed(1)}s`, '#ffcc44', 2200);
+      return;
+    }
+  }
+}
+
+function initArcadeMode(subtype) {
+  if (!match) return;
+  // Gun Game: everyone starts at tier 0
+  if (subtype === 'gungame') {
+    match.gunTier[myId] = 0;
+    // bots will get gun tiers after they spawn
+  }
+  // Juggernaut: random player starts as juggernaut (50% chance for player, else a bot — set after bots spawn)
+  // (handled in startMatchRound)
+  // Infection: 1 random infected (set in startMatchRound after bots spawn)
+}
+
+// Override a player's primary weapon (used by sniper-only, gun-game, etc.)
+function forcePlayerWeapon(weaponId, slot = 'primary') {
+  const idx = WEAPONS.findIndex(w => w.id === weaponId);
+  if (idx < 0) return;
+  if (slot === 'primary') selectedPrimaryIdx = idx;
+  else selectedSecondaryIdx = idx;
+  const w = WEAPONS[idx];
+  weaponAmmo[idx] = { ammo: w.mag, reserve: w.reserve };
+  activeSlot = slot;
+  currentWeaponIdx = idx; currentWeapon = w;
+  weaponModels.forEach(m => m.visible = false);
+  if (weaponModels[idx]) weaponModels[idx].visible = true;
+  updateAmmoHUD(); updateWeaponHUD(); updateWeaponSelector();
+}
+
+// Advance the player's gun tier (called on player kill in Gun Game)
+function gunGameAdvance(killerId) {
+  if (match?.arcade !== 'gungame') return;
+  const cur = match.gunTier[killerId] || 0;
+  const next = cur + 1;
+  match.gunTier[killerId] = next;
+  if (killerId === myId) {
+    if (next >= GUN_GAME_TIERS.length) {
+      // Won! Last tier (knife) kill → victory
+      endMatch('ally', `🏆 GUN GAME WIN · You climbed the ladder!`);
+      return;
+    }
+    const newWeapon = GUN_GAME_TIERS[next];
+    if (newWeapon === 'knife') {
+      // Final tier — give them the knife as melee
+      const knifeIdx = MELEE_ITEMS.findIndex(m => m.id === 'knife');
+      if (knifeIdx >= 0) selectedMeleeIdx = knifeIdx;
+      activeSlot = 'melee';
+      showAnnouncement('⚔️ FINAL TIER', 'Get a knife kill to win!', '#ff44ff', 2500);
+    } else {
+      forcePlayerWeapon(newWeapon);
+      showAnnouncement(`TIER ${next + 1}/${GUN_GAME_TIERS.length}`, newWeapon.toUpperCase(), '#ff44ff', 1800);
+    }
+  }
+}
+
 function initMatch() {
   const cfg = selectedModeConfig;
   if (!cfg) return;
   frontlineState = null;
   lastStandState = null;
   match = {
-    type: cfg.type,                        // 'elim' | 'race' | 'ffa' | 'frontlines' | 'laststand'
+    type: cfg.type,                        // 'elim' | 'race' | 'ffa' | 'frontlines' | 'laststand' | 'br'
     cfg,
     // Elimination
     round: 1,
@@ -8131,11 +9923,28 @@ function initMatch() {
     teamKills: { ally: 0, enemy: 0 },
     ffaKills: {},                          // entityId → kills
     timeLeft: cfg.timeLimit || 0,
+    // King-of-the-Hill / BR: per-entity lives
+    lives: {},                             // entityId → lives remaining
+    // 🎮 Arcade mode state
+    arcade: cfg.subtype || null,           // gungame | oitc | jugg | infect | sniper | speedrun
+    gunTier: {},                           // entityId → gun tier index (Gun Game)
+    juggernautId: null,                    // entityId of the juggernaut (Juggernaut)
+    infectedIds: {},                       // entityId → true (Infection: who's a zombie)
+    speedrunStart: 0,                      // timestamp first kill (Speedrun)
+    speedrunKills: 0,                      // (Speedrun)
     // Common
     active: false,
     over: false,
     tiebreaker: false,
   };
+  // Init lives for BR mode
+  if (cfg.type === 'br') {
+    const livesEach = cfg.livesPerPlayer || 3;
+    match.lives[myId] = livesEach;
+    // Bot lives initialized after they spawn (in startMatchRound)
+  }
+  // 🎮 Init for arcade modes
+  if (cfg.type === 'arcade') initArcadeMode(cfg.subtype);
   if (cfg.type === 'frontlines') initFrontlines();
   if (cfg.type === 'laststand')  initLastStand();
   if (cfg.type === 'dday')       initDDay();
@@ -8192,7 +10001,8 @@ function startMatchRound() {
     // For elim rounds: respawn the player now (after countdown)
     if (isDead) {
       isDead = false;
-      socket.emit('readyRespawn');
+      placePlayerAtTeamSpawn(localPlayerTeam(), 24, 38);
+      socket.emit('readyRespawn', { x: camera.position.x, z: camera.position.z });
       requestPointerLockSafe();
     }
     match.roundActive = true;
@@ -8219,6 +10029,13 @@ function startMatchRound() {
     } else if (match.type === 'range') {
       showAnnouncement('SHOOTING RANGE', 'Hit the targets · No enemies!', '#44ddff', 2800);
       grantSpawnShield(0);
+    } else if (match.type === 'br') {
+      // Init bot lives now that bots exist
+      const livesEach = match.cfg.livesPerPlayer || 3;
+      for (const bot of gameBots) match.lives[bot.id] = livesEach;
+      showAnnouncement('👑 KING OF THE HILL', `${gameBots.length + 1} players · 3 lives each · last alive wins`, '#ffaa44', 3200);
+    } else if (match.type === 'arcade') {
+      setupArcadeStart(match.arcade);
     } else {
       showAnnouncement('MATCH START', `Most kills in ${formatMatchTime(match.cfg.timeLimit)}`, '#ffffff', 2800);
     }
@@ -8290,6 +10107,45 @@ function updateMatchHUD() {
     L.textContent = `SHOTS ${rangeStats.shots}`;
     C.textContent = 'RANGE';
     R.textContent = `ACC ${rangeStats.shots > 0 ? Math.round(rangeStats.hits / rangeStats.shots * 100) : 0}%`;
+  } else if (match.type === 'br') {
+    const myLives = match.lives[myId] ?? 0;
+    const alive = Object.values(match.lives).filter(v => v > 0).length;
+    L.textContent = `❤️ ${myLives}/${match.cfg.livesPerPlayer || 3} LIVES`;
+    C.textContent = `👑 KING OF THE HILL`;
+    R.textContent = `${alive} PLAYERS ALIVE`;
+  } else if (match.type === 'arcade') {
+    const sub = match.arcade;
+    if (sub === 'gungame') {
+      const t = match.gunTier[myId] || 0;
+      L.textContent = `TIER ${t + 1}/${GUN_GAME_TIERS.length}`;
+      C.textContent = `🔫 GUN GAME`;
+      R.textContent = GUN_GAME_TIERS[t]?.toUpperCase() || '';
+    } else if (sub === 'speedrun') {
+      const elapsed = match.speedrunStart ? (Date.now() - match.speedrunStart) / 1000 : 0;
+      L.textContent = `KILLS ${match.speedrunKills}/${SPEEDRUN_KILL_GOAL}`;
+      C.textContent = `⏱️ ${elapsed.toFixed(1)}s`;
+      R.textContent = `PB ${localStorage.getItem('pvp_speedrun_pb') || '—'}s`;
+    } else if (sub === 'jugg') {
+      const juggName = match.juggernautId === myId ? 'YOU' : (players[match.juggernautId]?.name || '???');
+      L.textContent = `🛡️ JUGG: ${juggName}`;
+      C.textContent = `JUGGERNAUT`;
+      R.textContent = `YOUR KILLS: ${match.ffaKills[myId] || 0}`;
+    } else if (sub === 'infect') {
+      const zCount = Object.keys(match.infectedIds).length;
+      L.textContent = `🧟 ${zCount} INFECTED`;
+      C.textContent = `INFECTION`;
+      R.textContent = match.infectedIds[myId] ? 'YOU ARE ZOMBIE' : 'YOU ARE HUMAN';
+    } else if (sub === 'oitc') {
+      const idx = WEAPONS.findIndex(w => w.id === 'pistol');
+      const ammo = idx >= 0 ? weaponAmmo[idx]?.ammo : 0;
+      L.textContent = `BULLETS: ${ammo}`;
+      C.textContent = `🎯 ONE IN THE CHAMBER`;
+      R.textContent = `KILLS: ${match.ffaKills[myId] || 0}`;
+    } else {
+      L.textContent = `KILLS: ${match.ffaKills[myId] || 0}`;
+      C.textContent = `🎮 ARCADE`;
+      R.textContent = formatMatchTime(match.timeLeft);
+    }
   } else {
     const pk = match.ffaKills[myId] || 0;
     const topBot = Object.entries(match.ffaKills).filter(([k]) => k !== myId).sort(([,a],[,b]) => b-a)[0];
@@ -8299,12 +10155,223 @@ function updateMatchHUD() {
   }
 }
 
+// 🎮 Handle a kill in an arcade mode
+function handleArcadeKill(targetId, killerId) {
+  if (!match) return;
+  const sub = match.arcade;
+  // Gun Game: each kill upgrades the killer's weapon tier
+  if (sub === 'gungame') {
+    if (killerId) gunGameAdvance(killerId);
+    // Also: auto-respawn the dead player/bot after 3s with their current tier
+    if (targetId === myId) scheduleArcadeRespawn();
+    else scheduleBotArcadeRespawn(targetId);
+    return;
+  }
+  // One in the Chamber: killer gets 1 bullet back, victim respawns
+  if (sub === 'oitc') {
+    if (killerId === myId) {
+      const idx = WEAPONS.findIndex(w => w.id === 'pistol');
+      if (idx >= 0) { weaponAmmo[idx] = { ammo: 1, reserve: 0 }; updateAmmoHUD(); }
+    }
+    // Score = ffaKills
+    match.ffaKills[killerId] = (match.ffaKills[killerId] || 0) + 1;
+    if (targetId === myId) scheduleArcadeRespawn();
+    else scheduleBotArcadeRespawn(targetId);
+    updateMatchHUD();
+    return;
+  }
+  // Juggernaut: if the juggernaut dies, killer becomes the new juggernaut
+  if (sub === 'jugg') {
+    if (targetId === match.juggernautId) {
+      // Transfer juggernaut to killer
+      const oldJugg = match.juggernautId;
+      match.juggernautId = killerId;
+      if (killerId === myId) {
+        const me = players[myId]; if (me) { me.hp = 1000; updateHealthHUD(1000); }
+        forcePlayerWeapon('gau19');
+        showAnnouncement('🛡️ YOU ARE JUGGERNAUT', '1000 HP · GAU-19 · kill them all', '#ff2222', 2500);
+      } else {
+        const bot = gameBots.find(b => b.id === killerId);
+        if (bot) { bot.hp = 1000; bot.maxHp = 1000; bot.weaponId = 'gau19'; }
+        showAnnouncement('🛡️ NEW JUGGERNAUT', `${players[killerId]?.name || 'A bot'} took the crown`, '#ff2222', 2200);
+      }
+    }
+    match.ffaKills[killerId] = (match.ffaKills[killerId] || 0) + 1;
+    if (targetId === myId) scheduleArcadeRespawn();
+    else scheduleBotArcadeRespawn(targetId);
+    updateMatchHUD();
+    return;
+  }
+  // Infection: if a zombie kills someone, that someone becomes a zombie
+  if (sub === 'infect') {
+    const killerIsZombie = match.infectedIds[killerId];
+    if (killerIsZombie && targetId !== myId) {
+      // Bot becomes zombie
+      match.infectedIds[targetId] = true;
+      const bot = gameBots.find(b => b.id === targetId);
+      if (bot) { bot.weaponId = 'knife'; bot.team = 'enemy'; }
+      showAnnouncement('🧟 INFECTED', `${players[targetId]?.name || 'Someone'} turned!`, '#44ff44', 1600);
+    } else if (killerIsZombie && targetId === myId) {
+      // Player turned — they lose
+      endMatch('enemy', '🧟 INFECTED — You\'re a zombie now');
+      return;
+    }
+    // Check win condition: all bots infected = humans lost; no zombies left = humans won
+    const livingBots = gameBots.filter(b => !b.dead);
+    const allInfected = livingBots.every(b => match.infectedIds[b.id]);
+    const noZombies = livingBots.every(b => !match.infectedIds[b.id]);
+    if (allInfected && !isDead) {
+      endMatch('enemy', '🧟 LAST HUMAN STANDING... not quite');
+    } else if (noZombies) {
+      endMatch('ally', '🏆 ZOMBIES ELIMINATED');
+    }
+    if (targetId === myId) scheduleArcadeRespawn();
+    else scheduleBotArcadeRespawn(targetId);
+    return;
+  }
+  // Sniper Only: standard FFA kill counting + respawn
+  if (sub === 'sniper') {
+    match.ffaKills[killerId] = (match.ffaKills[killerId] || 0) + 1;
+    if (targetId === myId) scheduleArcadeRespawn();
+    else scheduleBotArcadeRespawn(targetId);
+    updateMatchHUD();
+    return;
+  }
+  // Speedrun: count player kills, time tracked, end at goal
+  if (sub === 'speedrun') {
+    if (killerId === myId) {
+      if (!match.speedrunStart) match.speedrunStart = Date.now();
+      match.speedrunKills++;
+      if (match.speedrunKills >= SPEEDRUN_KILL_GOAL) {
+        const elapsedSec = (Date.now() - match.speedrunStart) / 1000;
+        const pb = parseFloat(localStorage.getItem('pvp_speedrun_pb') || '0');
+        let pbMsg = '';
+        if (pb === 0 || elapsedSec < pb) {
+          localStorage.setItem('pvp_speedrun_pb', elapsedSec.toFixed(2));
+          pbMsg = '🏅 NEW PERSONAL BEST!';
+        } else {
+          pbMsg = `PB: ${pb.toFixed(1)}s (this: ${elapsedSec.toFixed(1)}s)`;
+        }
+        endMatch('ally', `⏱️ SPEEDRUN COMPLETE · ${elapsedSec.toFixed(2)}s\n${pbMsg}`);
+        return;
+      }
+    }
+    if (targetId === myId) {
+      // Speedrun fail
+      endMatch('enemy', `💀 SPEEDRUN FAILED · ${match.speedrunKills}/${SPEEDRUN_KILL_GOAL}`);
+      return;
+    }
+    if (targetId !== myId) scheduleBotArcadeRespawn(targetId);
+    updateMatchHUD();
+    return;
+  }
+}
+
+// Respawn the player after a brief delay (arcade modes are usually instant-respawn)
+function scheduleArcadeRespawn() {
+  setTimeout(() => {
+    if (!match || match.over || !isDead) return;
+    isDead = false;
+    const me = players[myId];
+    if (me) { me.hp = (match.juggernautId === myId) ? 1000 : 300; updateHealthHUD(me.hp); }
+    placePlayerAtTeamSpawn(localPlayerTeam(), 24, 38);
+    grantSpawnShield(2000);
+    document.getElementById('death-screen').style.display = 'none';
+    document.getElementById('waiting-screen').style.display = 'none';
+    socket.emit('readyRespawn', { x: camera.position.x, z: camera.position.z });
+    requestPointerLockSafe();
+  }, 2500);
+}
+function scheduleBotArcadeRespawn(botId) {
+  const bot = gameBots.find(b => b.id === botId);
+  if (!bot) return;
+  setTimeout(() => {
+    if (!bot || match?.over) return;
+    const ang = Math.random() * Math.PI * 2;
+    const r = 30 + Math.random() * 15;
+    bot.x = Math.cos(ang) * r; bot.z = Math.sin(ang) * r;
+    bot.hp = (match.juggernautId === botId) ? 1000 : 300;
+    bot.dead = false; bot.prevHp = bot.hp; bot.stuckTimer = 0;
+    if (players[bot.id]) { players[bot.id].hp = bot.hp; players[bot.id].dead = false; }
+    const mesh = remoteMeshes[bot.id];
+    if (mesh) { mesh.position.set(bot.x, 0, bot.z); mesh.visible = true; }
+    socket.emit('forceRespawnBot', { botId: bot.id, x: bot.x, z: bot.z });
+  }, 2500);
+}
+
+function checkBrWin() {
+  if (!match || match.type !== 'br' || match.over) return;
+  // Count entities with lives > 0
+  let alive = 0;
+  let lastAliveId = null;
+  for (const [id, lives] of Object.entries(match.lives)) {
+    if (lives > 0) { alive++; lastAliveId = id; }
+  }
+  if (alive <= 1) {
+    if (lastAliveId === myId) endMatch('ally', '👑 LAST ONE STANDING!');
+    else endMatch('enemy', '💀 BETTER LUCK NEXT TIME');
+  }
+}
+
 function onEntityDied(targetId, killerId) {
   if (!match || match.over) return;
   if (match.tiebreaker) {
     // Whoever dies first loses the match
     if (targetId === myId) endMatch('enemy', 'TIEBREAKER — You fell first');
     else endMatch('ally', 'TIEBREAKER — You survived!');
+    return;
+  }
+  // ── 🎮 ARCADE MODES ──────────────────────────────────────────────────
+  if (match.type === 'arcade') {
+    handleArcadeKill(targetId, killerId);
+    return;
+  }
+  // ── 👑 KING OF THE HILL / BR mode ──────────────────────────────────────
+  if (match.type === 'br') {
+    // Decrement lives
+    const remaining = Math.max(0, (match.lives[targetId] || 0) - 1);
+    match.lives[targetId] = remaining;
+    // Show life update for player
+    if (targetId === myId) {
+      if (remaining > 0) {
+        showAnnouncement('💔 LIFE LOST', `${remaining}/${match.cfg.livesPerPlayer || 3} lives remaining`, '#ffaa44', 2000);
+        // Auto-respawn after 4s at random map position
+        setTimeout(() => {
+          if (!match || match.over || !isDead) return;
+          const ang = Math.random() * Math.PI * 2;
+          const r = 80 + Math.random() * 30;
+          isDead = false;
+          const me = players[myId];
+          if (me) { me.hp = 300; updateHealthHUD(300); }
+          camera.position.set(Math.cos(ang) * r, 1.65, Math.sin(ang) * r);
+          euler.y = ang + Math.PI; camera.quaternion.setFromEuler(euler);
+          grantSpawnShield(3000);
+          document.getElementById('death-screen').style.display = 'none';
+          document.getElementById('waiting-screen').style.display = 'none';
+          socket.emit('readyRespawn', { x: camera.position.x, z: camera.position.z });
+          requestPointerLockSafe();
+        }, 4000);
+      } else {
+        showAnnouncement('💀 ELIMINATED', 'You\'re out of lives', '#ff2222', 3000);
+      }
+    } else {
+      // Bot died — respawn if it has lives left
+      const bot = gameBots.find(b => b.id === targetId);
+      if (bot && remaining > 0) {
+        setTimeout(() => {
+          if (!bot || match?.over) return;
+          const ang = Math.random() * Math.PI * 2;
+          const r = 90 + Math.random() * 25;
+          bot.x = Math.cos(ang) * r; bot.z = Math.sin(ang) * r;
+          bot.hp = 300; bot.dead = false; bot.prevHp = 300; bot.stuckTimer = 0;
+          if (players[bot.id]) { players[bot.id].hp = 300; players[bot.id].dead = false; }
+          const mesh = remoteMeshes[bot.id];
+          if (mesh) { mesh.position.set(bot.x, 0, bot.z); mesh.visible = true; }
+          socket.emit('forceRespawnBot', { botId: bot.id, x: bot.x, z: bot.z });
+        }, 4000);
+      }
+    }
+    checkBrWin();
     return;
   }
   if (match.type === 'elim') {
@@ -8472,7 +10539,9 @@ function onFrontlinesKill(targetId, killerId) {
       if (!match || match.over || !targetBot.dead) return;
       const idx = gameBots.filter(b => b.team === targetBot.team).indexOf(targetBot);
       const total = gameBots.filter(b => b.team === targetBot.team).length;
-      const sp = botSideSpawn(idx, total, targetBot.team);
+      // Re-roll a fresh randomized spawn so respawning bots don't conga-line
+      // back onto the exact slot they died at.
+      const sp = botSideSpawn(idx, Math.max(total, 3), targetBot.team);
       targetBot.dead = false; targetBot.hp = 300; targetBot.prevHp = 300; targetBot.stuckTimer = 0;
       targetBot.weaponId = targetBot.spawnWeaponId || targetBot.weaponId;
       targetBot.x = sp.x; targetBot.z = sp.z;
@@ -8492,10 +10561,8 @@ function onFrontlinesKill(targetId, killerId) {
     setTimeout(() => {
       if (!match || match.over || !isDead) return;
       isDead = false;
-      const sx = (Math.random() - 0.5) * 24;
-      camera.position.set(sx, 1.65, 38 + Math.random() * 3);
-      euler.y = Math.PI; camera.quaternion.setFromEuler(euler);
-      socket.emit('readyRespawn');
+      placePlayerAtTeamSpawn(localPlayerTeam(), 24, 38);
+      socket.emit('readyRespawn', { x: camera.position.x, z: camera.position.z });
       grantSpawnShield(3000);
       requestPointerLockSafe();
     }, 3000);
@@ -8695,7 +10762,7 @@ function updateRoundScoreDisplay() {
 function restartElimRound(lastWinner) {
   if (!match) return;
   if (lastWinner !== null) match.round++;
-  resetPlayerForRound(0, 42);
+  resetPlayerForRound();
   grantSpawnShield(3000);
   requestPointerLockSafe();
   // Respawn all bots back to their team edges with full health and fresh weapons
@@ -8835,7 +10902,8 @@ function startTiebreaker() {
       isDead = false;
       document.getElementById('waiting-screen').style.display = 'none';
       document.getElementById('death-screen').style.display   = 'none';
-      socket.emit('readyRespawn');
+      placePlayerAtTeamSpawn(localPlayerTeam(), 24, 38);
+      socket.emit('readyRespawn', { x: camera.position.x, z: camera.position.z });
       requestPointerLockSafe();
     }
     if (topEnemy) { topEnemy.dead = false; const m = remoteMeshes[topEnemy.id]; if (m) m.visible = true; }
@@ -8869,6 +10937,14 @@ function endMatch(winner, reason) {
   document.getElementById('death-screen').style.display   = 'none';
   document.getElementById('waiting-screen').style.display = 'none';
   el.style.display = 'flex';
+
+  // ── 💰 Award shop credits ────────────────────────────────────────────
+  const playerKills = (match.ffaKills?.[myId])
+    ?? (players[myId]?.kills)
+    ?? 0;
+  awardMatchCredits(playerKills, isWin);
+  // Trials are one-match only — clear them so they re-cost next time.
+  trialingThisMatch.clear();
 }
 
 // ── Bot AI ─────────────────────────────────────────────────────────────────
@@ -8878,16 +10954,32 @@ function botSideSpawn(idx, count, team) {
     const bunkerXs = [-7, 7, 22]; // bunkers 1, 2, 3
     return { x: bunkerXs[idx] || 0, z: 22 }; // near slit, inside bunker
   }
-  // Allies at z=+32 (behind player); enemies at z=-20 (close enough to navigate quickly)
+  // BR mode: scatter bots randomly around the perimeter of the big map
+  if (selectedModeConfig && selectedModeConfig.type === 'br') {
+    const ang = (idx / count) * Math.PI * 2 + Math.random() * 0.5;
+    const r = 90 + Math.random() * 20;
+    return { x: Math.cos(ang) * r, z: Math.sin(ang) * r };
+  }
+  // Allies at z≈+32 (behind player); enemies at z≈-20 (close enough to navigate quickly)
   const isAlly = team === 'ally';
-  const spread = Math.min(30, Math.max(6, count * 3.5));
-  const xPos   = count <= 1 ? 0 : ((idx / (count - 1)) - 0.5) * 2 * spread;
-  const jitter = (Math.random() - 0.5) * 2.5;
-  return { x: xPos + jitter, z: isAlly ? 32 : -20 };
+  // Use a wider spread floor so 1v1 / 1v2 don't stack everyone on x=0
+  const spread = Math.min(36, Math.max(14, count * 4));
+  const baseX  = count <= 1
+    ? (Math.random() - 0.5) * spread * 2          // lone bot: fully random across the spread
+    : ((idx / (count - 1)) - 0.5) * 2 * spread;
+  const xJit   = (Math.random() - 0.5) * 6;
+  const zJit   = (Math.random() - 0.5) * 6;
+  return { x: baseX + xJit, z: (isAlly ? 32 : -20) + zJit };
 }
 
 function spawnGameBots() {
   if (!selectedModeConfig) return;
+  // 🌐 Enter a private match BEFORE spawning bots — server will isolate this player's bots
+  // from other players who aren't in the same match.
+  const matchId = (pvpMatch && pvpMatch.mode)
+    ? `pvp-${[myId, ...(pvpMatch.opponents || []).map(o => o.socketId)].sort().join('-')}` // shared ID for PvP-paired players
+    : `match-${myId}-${Date.now()}`;
+  socket.emit('enterMatch', { matchId });
 
   // ── Clean up bots/meshes/bubbles from any previous mode session ──────────
   for (const bot of gameBots) {
@@ -8897,11 +10989,38 @@ function spawnGameBots() {
   }
   gameBots.length = 0;
   rangeTargets = [];
+  // Reset destructibles (heal back all glass/lights/reactors) and mortars
+  for (const d of mapDestructibles) {
+    d.hp = d.maxHp;
+    if (d.mesh) d.mesh.visible = true;
+    if (d.colliderRef && !wallColliders.includes(d.colliderRef) && d.mapName === activeMapName) {
+      // collider will be re-added when activateMap runs below
+    }
+  }
+  for (const mor of mapMortars) {
+    mor.hp = mor.maxHp;
+    mor.ammo = mor.maxAmmo;
+    mor.pilotedBy = null;
+    if (mor.mesh) mor.mesh.visible = true;
+  }
+  for (const v of mapVehicles) {
+    v.hp = v.maxHp;
+    v.pilotedBy = null;
+    // Reset to spawn positions (no easy way — would need to store originals; just clear pilot state)
+  }
+  airportLightLevel = 1.0;
+  if (pilotedMortar) { pilotedMortar.pilotedBy = null; pilotedMortar = null; }
+  if (pilotedVehicle) { pilotedVehicle.pilotedBy = null; pilotedVehicle = null; }
+  const mp = document.getElementById('mortar-prompt'); if (mp) mp.style.display = 'none';
+  const vp = document.getElementById('vehicle-prompt'); if (vp) vp.style.display = 'none';
   // ──────────────────────────────────────────────────────────────────────────
 
   // ── Pick & activate map (skip D-Day and Range — they use their own maps) ──
-  if (selectedModeConfig.type !== 'dday' && selectedModeConfig.type !== 'range') {
-    const pool = ['blank','urban','warehouse','forest','volcano','cyber','desert','tundra','space'];
+  if (selectedModeConfig.type === 'br') {
+    // King of the Hill: always use the giant BR arena
+    activateMap('br_arena');
+  } else if (selectedModeConfig.type !== 'dday' && selectedModeConfig.type !== 'range') {
+    const pool = ['blank','urban','warehouse','forest','volcano','cyber','desert','tundra','space','airport','trenches','chernobyl','refinery','skydock','sewer','gravity_lab','glassworks'];
     const chosen = (selectedMap === 'auto' || !MAP_GROUPS[selectedMap]) ? pool[Math.floor(Math.random()*pool.length)] : selectedMap;
     activateMap(chosen);
     // Update sky color if the map specifies one
@@ -8909,19 +11028,41 @@ function spawnGameBots() {
     if (sky != null && scene.background?.setHex) scene.background.setHex(sky);
   }
 
-  const { allies, enemies } = selectedModeConfig;
+  let { allies, enemies } = selectedModeConfig;
+  // ── 🏛️ Lobby-driven bot counts: server already computed how many bots to fill ─
+  if (pvpMatch && (pvpMatch.allyBotsToSpawn != null || pvpMatch.enemyBotsToSpawn != null)) {
+    if (!pvpMatch.isHost) {
+      // Guest: don't spawn any bots, host will broadcast them via networking
+      allies = 0; enemies = 0;
+    } else {
+      // Host spawns exactly what the server told us to
+      allies = pvpMatch.allyBotsToSpawn || 0;
+      enemies = pvpMatch.enemyBotsToSpawn || 0;
+      // If the player is on the enemy team, swap allies↔enemies in our local model
+      // (the existing code treats the player as 'ally' team by convention)
+      if (pvpMatch.team === 'enemy') {
+        const tmp = allies; allies = enemies; enemies = tmp;
+      }
+    }
+  }
   const now = Date.now();
   const botList = [];
 
-  // Move the player to the ally side before the round begins
+  // Move the player to their team side before the round begins
   if (selectedModeConfig && selectedModeConfig.type === 'dday') {
     camera.position.set(-22, 1.65, 22); euler.y = 0; // D-Day: inside bunker 0, facing enemies
   } else if (selectedModeConfig && selectedModeConfig.type === 'range') {
     camera.position.set(0, 1.65, 38); euler.y = Math.PI; // Shooting range: face -z toward targets
+  } else if (selectedModeConfig && selectedModeConfig.type === 'br') {
+    // BR: spawn at random spot in the big map
+    const ang = Math.random() * Math.PI * 2;
+    const r = 80 + Math.random() * 30;
+    camera.position.set(Math.cos(ang) * r, 1.65, Math.sin(ang) * r);
+    euler.y = ang + Math.PI; // face toward center
   } else {
-    camera.position.set(0, 1.65, 42);
-    euler.y = Math.PI; // face toward center
+    placePlayerAtTeamSpawn();
   }
+  socket.emit('resetSelf', { x: camera.position.x, z: camera.position.z });
 
   const makeBot = (idx, team) => {
     const isAlly   = team === 'ally';
@@ -8953,25 +11094,20 @@ function spawnGameBots() {
     // Per-bot difficulty rolls
     const w = WEAPONS.find(ww => ww.id === weaponId) || WEAPONS[0];
     const diff = selectedDifficulty;
-    const aimSkill   = diff === 'easy' ? 1.0
-                     : diff === 'medium' ? 0.7 + Math.random() * 0.6   // 0.7-1.3
-                     : diff === 'hard' ? 0.9 + Math.random() * 0.7     // 0.9-1.6
-                     : 1.4 + Math.random() * 0.6;                       // 1.4-2.0 (expert = surgical)
-    const reactionMs = diff === 'easy' ? 0
-                     : diff === 'medium' ? 150 + Math.random() * 250   // 150-400ms
-                     : diff === 'hard' ? 80 + Math.random() * 220      // 80-300ms
-                     : 40 + Math.random() * 100;                        // 40-140ms (expert = inhuman)
+    const tune = botTuning(diff);
+    const aimSkill   = tune.aimMin + Math.random() * tune.aimRand;
+    const reactionMs = tune.reactMin + Math.random() * tune.reactRand;
     // Personality: weapon-matched mostly (70% hard / 80% expert), with off-roll variance for unpredictability
     const personality = rollPersonality(weaponId, diff);
     const botDPS = WEAPON_DPS_CACHE[weaponId] || 150;
     gameBots.push({ id, team, weaponId, spawnWeaponId: weaponId, x: sx, z: sz, rotY: 0, hp: 300,
                     dead: false, state: 'chase',
                     wanderAngle: Math.random() * Math.PI * 2, wanderTimer: 0,
-                    lastShot: Date.now() + Math.random() * 2000, stuckTimer: 0,
+                    lastShot: Date.now() + Math.random() * tune.initialShotDelay, stuckTimer: 0,
                     strafeDir: Math.random() < 0.5 ? 1 : -1,
                     strafeFlipTimer: 0, tacTimer: 0, prevHp: 300, coverPt: null,
                     // Difficulty fields
-                    difficulty: diff, aimSkill, reactionMs, personality, dps: botDPS,
+                    difficulty: diff, aimSkill, reactionMs, personality, dps: botDPS, tune,
                     botAmmo: w.mag || 30, botMag: w.mag || 30, botReserve: (w.reserve === 0 ? 99999 : w.reserve) || 90,
                     reloadUntil: 0,
                     firstSeenAt: 0, lastSeenPos: null, lastSeenAt: 0,
@@ -9129,7 +11265,37 @@ function getBotTarget(bot) {
   }
 
   const oppositeTeam = bot.team === 'enemy' ? 'ally' : 'enemy';
-  // Enemy bots always prioritise the player when alive
+  // ── FFA-style modes: bots treat the player as just another entity (no gang-up) ──
+  // Picks the nearest valid target by distance — could be the player or another bot.
+  const isFFAMode = match && (match.type === 'ffa' || match.type === 'arcade' || match.type === 'br');
+  if (isFFAMode) {
+    let best = null, bestDist = Infinity, bestIsPlayer = false;
+    // Consider the player as a candidate (just like a bot)
+    if (!isDead) {
+      const d = Math.hypot(camera.position.x - bot.x, camera.position.z - bot.z);
+      if (d < bestDist) { bestDist = d; bestIsPlayer = true; best = null; }
+    }
+    // Consider other bots
+    for (const ob of gameBots) {
+      if (ob.dead || ob.id === bot.id) continue;
+      // In Infection mode, zombies hunt humans (anyone not infected), humans avoid zombies
+      if (match.arcade === 'infect') {
+        const meIsZombie = match.infectedIds[bot.id];
+        const targetIsZombie = match.infectedIds[ob.id];
+        if (meIsZombie && targetIsZombie) continue; // zombies don't fight each other
+        if (!meIsZombie && targetIsZombie) continue; // humans don't preemptively attack zombies (treat them like obstacles)
+      }
+      const d = Math.hypot(ob.x - bot.x, ob.z - bot.z);
+      if (d < bestDist) { bestDist = d; bestIsPlayer = false; best = ob; }
+    }
+    if (bestIsPlayer) {
+      bot.currentTargetId = myId;
+      return { x: camera.position.x, z: camera.position.z, isPlayer: true };
+    }
+    if (best) { bot.currentTargetId = best.id; return { x: best.x, z: best.z, isPlayer: false, botRef: best }; }
+    return null;
+  }
+  // Enemy bots always prioritise the player when alive (team-based modes only)
   if (bot.team === 'enemy' && !isDead) {
     bot.currentTargetId = myId;
     // EXPERT: if no LOS but a recent team sighting exists, push toward last known spot
@@ -9142,7 +11308,8 @@ function getBotTarget(bot) {
     return { x: camera.position.x, z: camera.position.z, isPlayer: true };
   }
   // HARD: focus fire — prefer the target most allies are already shooting at
-  if (bot.difficulty === 'hard') {
+  // Skip in FFA-style modes (no "allies" — would just gang up on player)
+  if (bot.difficulty === 'hard' && !isFFAMode) {
     const focusCounts = new Map(); // botId → count of allies targeting it
     for (const ally of gameBots) {
       if (ally.dead || ally.team !== bot.team || ally.id === bot.id) continue;
@@ -9210,12 +11377,16 @@ function updateBotAI(dt) {
   if (match?.type === 'range') return; // range targets are handled by updateRange()
   // ⚡ Admin freeze: stop all bot AI entirely
   if (adminCheats.freezeBots && currentUser?.isAdmin) return;
+  // Stun grenade: per-bot AI freeze
+  const __nowS = Date.now();
+  for (const b of gameBots) { if (b._stunUntil && __nowS < b._stunUntil) b._stunActive = true; else b._stunActive = false; }
   const roundLive = !match || match.roundActive; // false only during countdown
   const now = Date.now();
   const playerHp = players[myId]?.hp ?? 300; // used for melee-charge trigger
   for (const bot of gameBots) {
     if (bot.dead) continue;
     if (bot.state === 'target') continue; // range targets don't move or shoot
+    if (bot._stunActive) continue; // 🪖 stunned by admin stun grenade — frozen this frame
 
     // ── Vertical physics: air grenades + land mines can launch bots upward ──
     if (bot.yVel != null && (bot.yVel !== 0 || (bot.y || 0) > 0)) {
@@ -9577,9 +11748,10 @@ function updateBotAI(dt) {
 
       // EXPERT: hit-and-run — after firing, periodically reposition to a new flanking spot
       if (isExpert && now >= bot.nextRunCheck) {
-        bot.nextRunCheck = now + 2500 + Math.random() * 1500;
-        // 35% chance to enter hit-and-run when not already repositioning and not in cover
-        if (now > bot.hitAndRunUntil && bot.state !== 'cover' && bot.state !== 'melee_charge' && Math.random() < 0.35) {
+        const tune = bot.tune || botTuning(bot.difficulty);
+        bot.nextRunCheck = now + 3200 + Math.random() * 1200;
+        // Reposition occasionally, but never so often that Expert stops applying pressure.
+        if (now > bot.hitAndRunUntil && bot.state !== 'cover' && bot.state !== 'melee_charge' && dist < 24 && Math.random() < tune.hitRunChance) {
           // Pick a perpendicular reposition point relative to target
           const dx = target.x - bot.x, dz = target.z - bot.z;
           const len = Math.max(0.01, Math.hypot(dx, dz));
@@ -9837,13 +12009,14 @@ function updateBotAI(dt) {
       // ── Shooting (all states except melee_charge which uses swings) ─────
       if (bot.state !== 'melee_charge') {
         const w = WEAPONS.find(w => w.id === bot.weaponId) || WEAPONS[0];
+        const tune = bot.tune || botTuning(bot.difficulty);
         const isDDayAttacker = bot.state === 'dday_attacker';
         // MEDIUM/HARD: bot is currently reloading? skip
         const isReloading = bot.reloadUntil && now < bot.reloadUntil;
         const canShoot = !isReloading;
         const fireInterval = isDDayAttacker
           ? Math.max(w.fireRate, 500) + Math.random() * 400
-          : Math.max(w.fireRate, 900) + Math.random() * 600;
+          : Math.max(w.fireRate, tune.fireMin) + Math.random() * tune.fireRand;
         const tx = target.isPlayer ? camera.position.x : target.x;
         const tz = target.isPlayer ? camera.position.z : target.z;
         const hasLOS = hasLineOfSight(bot.x, bot.z, tx, tz);
@@ -9888,19 +12061,21 @@ function updateBotAI(dt) {
             applyBotDamageToPlayer(abId, bot.id);
             const origin = new THREE.Vector3(bot.x, 1.5, bot.z);
             const dir = new THREE.Vector3((tx - bot.x), 0, (tz - bot.z)).normalize();
+            playWeaponSound(abId, { baseWeapon: w, remote: true, position: origin, volume: 1.05 });
             spawnLocalBullet(origin, dir, `botab_${bot.id}_${now}`, false, (w.bulletSpeed||120)*1.5, 0xffaa00, 0.10, abId);
           }
         }
         // While kiting (retreating from scary close weapon), reduce fire interval so they shoot while running
-        const kiteFireInterval = bot._kiting ? Math.max(w.fireRate, 400) + Math.random() * 200 : fireInterval;
-        if (canShoot && reactionDone && roundLive && dist < 35 && now - bot.lastShot > kiteFireInterval) {
+        const kiteFireInterval = bot._kiting ? Math.max(w.fireRate, Math.min(360, tune.fireMin)) + Math.random() * Math.min(180, tune.fireRand) : fireInterval;
+        const shootRange = bot.difficulty === 'expert' ? 46 : bot.difficulty === 'hard' ? 40 : 35;
+        if (canShoot && reactionDone && roundLive && dist < shootRange && now - bot.lastShot > kiteFireInterval) {
           if (hasLOS) {
             bot.lastShot = now;
             // MEDIUM/HARD: consume ammo, trigger reload when empty
             if (bot.difficulty && bot.difficulty !== 'easy') {
               bot.botAmmo--;
               if (bot.botAmmo <= 0) {
-                const reloadMs = 1500 + Math.random() * 500;
+                const reloadMs = tune.reloadMin + Math.random() * tune.reloadRand;
                 bot.reloadUntil = now + reloadMs;
                 bot.botAmmo = bot.botMag;
               }
@@ -9958,6 +12133,7 @@ function updateBotAI(dt) {
               (Math.random()-0.5)*0.03,
               aimDz / aimLen + (Math.random()-0.5)*spread
             ).normalize();
+            playWeaponSound(w.id, { baseWeapon: w, remote: true, position: origin });
             spawnLocalBullet(origin, dir, `bot_${bot.id}_${now}`, false, w.bulletSpeed || 120, w.bulletColor, w.bulletSize, w.id);
           }
         }
@@ -9967,8 +12143,10 @@ function updateBotAI(dt) {
     // Apply movement + wall collision
     const prevBotX = bot.x, prevBotZ = bot.z;
     let nx = bot.x + moveX, nz = bot.z + moveZ;
-    nx = Math.max(-47, Math.min(47, nx));
-    nz = Math.max(-47, Math.min(47, nz));
+    // Map boundary varies — BR arena is 250×250, standard maps are 100×100
+    const mapHalf = activeMapName === 'br_arena' ? 123 : 47;
+    nx = Math.max(-mapHalf, Math.min(mapHalf, nx));
+    nz = Math.max(-mapHalf, Math.min(mapHalf, nz));
     [nx, nz] = resolvePosCollisions(nx, nz);
     bot.x = nx; bot.z = nz;
 
@@ -10066,6 +12244,10 @@ function loop() {
   updateBotSpeech(dt);  // bot speech bubbles follow their heads
   updateChatFeed();     // fade old chat lines
   updateAdminCheats(dt);// admin cheat tick (fly, kill aura, etc.)
+  updateUAV(dt);        // 🛰️ Predator UAV overlay tick
+  updateMapEffects(dt); // airport darkening, chernobyl gas, mortar prompt
+  updateVehiclePrompt();// 🚙 vehicle pickup prompt (BR arena)
+  updateVehiclePiloting(dt); // 🚙 move + sync vehicle while piloted
   updateReloadAnim();   // weapon tilts/rotates during reload
   updateSwitchbladeHUD(); // shows only when switchblade is active
   updateSpectatorCamera(dt); // follow teammates while dead
@@ -10148,6 +12330,275 @@ function loop() {
 }
 
 // ── Loadout screen ─────────────────────────────────────────────────────────
+// ── 🛒 Standalone SHOP screen (separate from the loadout / ready flow) ──
+let shopTab = 'bundles'; // 'bundles' | 'primary' | 'secondary' | 'melee' | 'utility'
+function openShop() {
+  if (!currentUser) { alert('Log in first.'); return; }
+  let scr = document.getElementById('shop-screen');
+  if (!scr) {
+    scr = document.createElement('div');
+    scr.id = 'shop-screen';
+    scr.style.cssText = 'display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(5,5,15,0.97);z-index:200;color:#fff;font-family:"Courier New",monospace;overflow-y:auto;padding:24px;';
+    document.body.appendChild(scr);
+  }
+  scr.style.display = 'block';
+  renderShop();
+}
+function closeShop() {
+  const scr = document.getElementById('shop-screen');
+  if (scr) scr.style.display = 'none';
+}
+
+function renderShop() {
+  const scr = document.getElementById('shop-screen');
+  if (!scr || !currentUser) return;
+  const credits = currentUser.isAdmin ? '∞' : (currentUser.credits ?? 0);
+  const frags   = currentUser.isAdmin ? '∞' : (currentUser.fragments ?? 0);
+  const ch = currentUser.chests || { common: 0, rare: 0 };
+  const tabs = [
+    ['bundles',   '💼 BUNDLES'],
+    ['primary',   '🔫 PRIMARY'],
+    ['secondary', '🔫 SECONDARY'],
+    ['melee',     '⚔️ MELEE'],
+    ['utility',   '🧰 UTILITY'],
+    ['chests',    '📦 CHESTS'],
+    ['wheel',     '🎡 WHEEL'],
+    ['upgrade',   '✨ UPGRADES'],
+  ];
+  scr.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #444;padding-bottom:10px;margin-bottom:14px;">
+      <div style="font-size:22px;letter-spacing:6px;color:#aaccff;">🛒 WEAPON SHOP</div>
+      <div style="display:flex;gap:14px;align-items:center;">
+        <span style="font-size:13px;color:#ffdd55;">💰 ${credits}</span>
+        <span style="font-size:13px;color:#aaccff;">🧩 ${frags}</span>
+        <span style="font-size:13px;color:#ddccff;">📦 ${ch.common}/${ch.rare}</span>
+        <button id="shop-close" style="padding:6px 14px;background:#3a1a1a;color:#ff8888;border:1px solid #ff4444;cursor:pointer;font-family:inherit;font-size:11px;letter-spacing:2px;border-radius:4px;">✕ CLOSE</button>
+      </div>
+    </div>
+    <div id="shop-tabs" style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;"></div>
+    <div id="shop-body" style="display:flex;gap:10px;flex-wrap:wrap;"></div>
+  `;
+  const tabsEl = scr.querySelector('#shop-tabs');
+  for (const [id, label] of tabs) {
+    const b = document.createElement('button');
+    const active = shopTab === id;
+    b.textContent = label;
+    b.style.cssText = `padding:7px 14px;background:${active ? '#2a2a4a' : '#1a1a1a'};color:${active ? '#aaccff' : '#888'};border:1px solid ${active ? '#6699ff' : '#444'};cursor:pointer;font-family:inherit;font-size:11px;letter-spacing:2px;border-radius:4px;`;
+    b.addEventListener('click', () => { shopTab = id; renderShop(); });
+    tabsEl.appendChild(b);
+  }
+  scr.querySelector('#shop-close').addEventListener('click', closeShop);
+  const body = scr.querySelector('#shop-body');
+  if (shopTab === 'bundles')      renderShopBundles(body);
+  else if (shopTab === 'chests')  renderShopChests(body);
+  else if (shopTab === 'wheel')   renderShopWheel(body);
+  else if (shopTab === 'upgrade') renderShopUpgrades(body);
+  else                            renderShopItems(body, shopTab);
+}
+
+function renderShopChests(body) {
+  const ch = currentUser.chests || { common: 0, rare: 0 };
+  const passActive = adminPassActive();
+  const minsLeft = Math.ceil(adminPassMsLeft() / 60000);
+  body.innerHTML = `
+    <div style="width:100%;font-size:11px;color:#aaa;margin-bottom:14px;letter-spacing:1px;">
+      Open chests to get 🧩 weapon fragments + 💰 credits.
+      Use 100 fragments to unlock any weapon, or upgrade ones you own.
+      Earn chests by playing matches (chance per match), or buy them here.
+    </div>
+    <div style="width:100%;background:linear-gradient(135deg,#3a1a1a,#2a1a3a);border:2px solid #ff8844;border-radius:6px;padding:14px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;">
+      <div>
+        <div style="font-size:17px;font-weight:bold;color:#ffcc88;letter-spacing:2px;">🪖 ADMIN PASS · 10 MINUTES</div>
+        <div style="font-size:11px;color:#ddc;margin-top:4px;">Unlocks EVERY weapon (admin items included) for one 10-minute window. Try anything.</div>
+        ${passActive ? `<div style="font-size:12px;color:#88ff99;margin-top:6px;">✓ ACTIVE — ${minsLeft} min left</div>` : ''}
+      </div>
+      <button id="buy-admin-pass" ${passActive ? 'disabled' : ''} style="padding:10px 22px;background:${passActive ? '#222' : '#3a1a1a'};color:${passActive ? '#666' : '#ffcc88'};border:1px solid ${passActive ? '#444' : '#ff8844'};font-size:13px;letter-spacing:2px;cursor:${passActive ? 'default' : 'pointer'};border-radius:4px;font-family:inherit;">
+        ${passActive ? 'ACTIVE' : `BUY · ${ADMIN_PASS_COST}💰`}
+      </button>
+    </div>
+  `;
+  const ap = body.querySelector('#buy-admin-pass');
+  if (ap) ap.addEventListener('click', async () => { if (await buyAdminPass()) renderShop(); });
+  for (const type of ['common', 'rare']) {
+    const have = ch[type] || 0;
+    const cost = CHEST_PRICES_CLIENT[type];
+    const isRare = type === 'rare';
+    const card = document.createElement('div');
+    card.style.cssText = `min-width:240px;background:#0f1018;border:2px solid ${isRare ? '#aa66ff' : '#888'};border-radius:6px;padding:14px;margin-right:10px;`;
+    card.innerHTML = `
+      <div style="font-size:22px;font-weight:bold;color:${isRare ? '#cc99ff' : '#ccc'};">${isRare ? '🟣 RARE' : '📦 COMMON'} CHEST</div>
+      <div style="font-size:11px;color:#aaa;margin:6px 0 10px;line-height:1.5;">
+        ${isRare ? '35-80 frags · 30-100 credits · 5% chance of a free weapon' : '10-25 frags · 0-30 credits'}
+      </div>
+      <div style="font-size:13px;margin-bottom:10px;">You have: <b style="color:${isRare ? '#cc99ff' : '#ccc'};">${have}</b></div>
+      <div style="display:flex;gap:6px;">
+        <button class="open" ${have <= 0 ? 'disabled' : ''} style="flex:1;padding:8px;background:${have > 0 ? '#1a2a1a' : '#222'};color:${have > 0 ? '#88ff99' : '#555'};border:1px solid ${have > 0 ? '#88ff99' : '#444'};font-size:12px;cursor:${have > 0 ? 'pointer' : 'not-allowed'};border-radius:4px;font-family:inherit;">OPEN</button>
+        <button class="buy" style="flex:1;padding:8px;background:#1a1a2a;color:#aabbff;border:1px solid #6688cc;font-size:12px;cursor:pointer;border-radius:4px;font-family:inherit;">BUY ${cost}💰</button>
+      </div>
+    `;
+    const o = card.querySelector('.open');
+    const b = card.querySelector('.buy');
+    o.addEventListener('click', async () => { if (await openChest(type)) renderShop(); });
+    b.addEventListener('click', async () => { if (await buyChest(type)) renderShop(); });
+    body.appendChild(card);
+  }
+}
+
+function renderShopWheel(body) {
+  body.innerHTML = `
+    <div style="width:100%;font-size:11px;color:#aaa;margin-bottom:14px;letter-spacing:1px;">
+      🎡 Spin the wheel for credits, fragments, or — if you're VERY lucky (0.3%) — a free rare weapon.
+      1 free spin per day; extra spins cost 100 credits.
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:center;width:100%;">
+      <div id="wheel-visual" style="width:280px;height:280px;border-radius:50%;border:8px solid #ffdd55;background:conic-gradient(#ffdd55 0deg 162deg,#aaccff 162deg 288deg,#88ff99 288deg 338deg,#ff8866 338deg 358deg,#cc99ff 358deg 360deg);display:flex;align-items:center;justify-content:center;font-size:60px;transition:transform 4s cubic-bezier(0.2,0.85,0.2,1);">🎡</div>
+      <div id="wheel-result" style="margin-top:18px;font-size:18px;letter-spacing:2px;color:#ffdd55;min-height:30px;text-align:center;"></div>
+      <button id="wheel-spin" style="margin-top:16px;padding:12px 40px;background:#3a2a1a;color:#ffdd55;border:2px solid #ffdd55;font-size:16px;letter-spacing:3px;cursor:pointer;border-radius:6px;font-family:inherit;">
+        ${currentUser.freeSpinAvailable || currentUser.isAdmin ? '🎁 FREE SPIN' : 'SPIN · 100💰'}
+      </button>
+    </div>
+  `;
+  const wheel = body.querySelector('#wheel-visual');
+  const out = body.querySelector('#wheel-result');
+  let rot = 0;
+  body.querySelector('#wheel-spin').addEventListener('click', async () => {
+    out.textContent = 'Spinning…';
+    rot += 360 * 5 + Math.random() * 360;
+    wheel.style.transform = `rotate(${rot}deg)`;
+    const res = await spinWheel();
+    setTimeout(() => {
+      if (!res) { out.textContent = '— spin failed —'; return; }
+      const lines = [];
+      if (res.kind === 'jackpot' && res.weapon) lines.push(`✨ JACKPOT! Unlocked: ${res.weapon}`);
+      else if (res.kind === 'bigBundle')         lines.push(`💎 BIG BUNDLE: +${res.credits || 0}💰 · +${res.fragments || 0}🧩`);
+      else if (res.kind === 'smallRare')         lines.push(`✨ RARE: ${res.credits ? `+${res.credits}💰` : `+${res.fragments}🧩`}`);
+      else if (res.kind === 'bigFragments')      lines.push(`🧩 +${res.fragments} fragments!`);
+      else if (res.kind === 'fragments')         lines.push(`🧩 +${res.fragments} fragments`);
+      else if (res.kind === 'credits')           lines.push(`💰 +${res.credits} credits`);
+      out.innerHTML = lines.join('<br/>');
+      // Re-render so the spin button updates (free → paid)
+      setTimeout(renderShop, 2200);
+    }, 4000);
+  });
+}
+
+function renderShopUpgrades(body) {
+  body.innerHTML = `
+    <div style="width:100%;font-size:11px;color:#aaa;margin-bottom:14px;letter-spacing:1px;">
+      ✨ Spend fragments to upgrade weapons you own. 3 upgrade slots per weapon — pick a stat each level.
+      Costs: 30 / 60 / 120 fragments. Effects: +12% damage, +25% magazine, or -15% reload time.
+    </div>
+  `;
+  const owned = [...FREE_WEAPONS, ...(currentUser.purchased || [])];
+  const uniq  = [...new Set(owned)];
+  for (const id of uniq) {
+    const w = WEAPONS.find(x => x.id === id) || MELEE_ITEMS.find(x => x.id === id) || SUPPORT_ITEMS.find(x => x.id === id);
+    if (!w) continue;
+    // Only primary/secondary upgrades affect gameplay right now — filter to slot-bearing items
+    if (w.slot !== 'primary' && w.slot !== 'secondary') continue;
+    const up = getWeaponUpgrades(id);
+    const total = totalUpgradeLevels(id);
+    const nextCost = total < MAX_UPGRADE_LEVELS ? UPGRADE_COSTS_CLIENT[total] : null;
+    const card = document.createElement('div');
+    card.style.cssText = 'min-width:230px;max-width:260px;background:#0f1018;border:1px solid #444;border-radius:5px;padding:10px 12px;';
+    card.innerHTML = `
+      <div style="font-size:13px;font-weight:bold;color:#ddd;">${w.name}</div>
+      <div style="font-size:9px;color:#888;margin:2px 0 6px;">${w.type}</div>
+      <div style="font-size:10px;color:#aaccff;margin-bottom:6px;">
+        DMG +${up.damage}/3 · MAG +${up.mag}/3 · RLD +${up.reload}/3 · TOTAL ${total}/${MAX_UPGRADE_LEVELS}
+      </div>
+      ${total >= MAX_UPGRADE_LEVELS ? '<div style="text-align:center;color:#88ff99;font-size:11px;">✓ MAXED</div>' : `
+        <div style="font-size:10px;color:#bbb;margin-bottom:6px;">Next upgrade cost: ${nextCost}🧩</div>
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <button data-stat="damage" style="padding:5px;background:#2a1a1a;color:#ff8866;border:1px solid #cc6644;font-size:10px;cursor:pointer;border-radius:3px;font-family:inherit;">+12% DAMAGE</button>
+          <button data-stat="mag"    style="padding:5px;background:#1a2a1a;color:#88ff99;border:1px solid #44aa66;font-size:10px;cursor:pointer;border-radius:3px;font-family:inherit;">+25% MAGAZINE</button>
+          <button data-stat="reload" style="padding:5px;background:#1a1a2a;color:#aaccff;border:1px solid #6699cc;font-size:10px;cursor:pointer;border-radius:3px;font-family:inherit;">-15% RELOAD TIME</button>
+        </div>
+      `}
+    `;
+    card.querySelectorAll('[data-stat]').forEach(btn => {
+      btn.addEventListener('click', async () => { if (await upgradeWeapon(id, btn.dataset.stat)) renderShop(); });
+    });
+    body.appendChild(card);
+  }
+}
+
+function renderShopBundles(body) {
+  for (const b of BUNDLES) {
+    const totalSum = b.items.reduce((s, id) => s + (shopCost(id) ?? 0), 0);
+    const ownedCt = b.items.filter(id => isOwned(id)).length;
+    const allOwned = ownedCt === b.items.length;
+    const card = document.createElement('div');
+    card.style.cssText = `min-width:200px;max-width:240px;background:#1a1424;border:2px solid ${allOwned ? '#666' : '#aa66ff'};border-radius:6px;padding:12px 14px;`;
+    card.innerHTML = `
+      <div style="font-size:15px;font-weight:bold;color:${allOwned ? '#88ff99' : '#ddccff'};margin-bottom:4px;">${b.icon} ${b.name}</div>
+      <div style="font-size:10px;color:#aaa;margin-bottom:8px;">${b.desc}</div>
+      <div style="font-size:10px;color:#ccc;line-height:1.5;margin-bottom:10px;">${b.items.map(id => isOwned(id) ? `<s style="color:#666">${id}</s>` : id).join(' · ')}</div>
+      <div style="font-size:9px;color:#aaccff;margin-bottom:8px;">${ownedCt}/${b.items.length} owned · save ${totalSum - b.price} (was ${totalSum})</div>
+      ${allOwned
+        ? '<div style="text-align:center;color:#88ff99;font-size:12px;padding:6px 0;">✓ FULLY OWNED</div>'
+        : `<button class="shop-buy-bundle" style="width:100%;padding:8px;background:#1a2a1a;color:#88ff99;border:1px solid #88ff99;font-size:13px;cursor:pointer;border-radius:4px;font-family:inherit;letter-spacing:1px;">BUY · ${b.price}💰</button>`
+      }
+    `;
+    const btn = card.querySelector('.shop-buy-bundle');
+    if (btn) btn.addEventListener('click', async () => { if (await buyBundle(b.id)) renderShop(); });
+    body.appendChild(card);
+  }
+}
+
+function renderShopItems(body, slot) {
+  // Decide which source list + how each card describes itself
+  let source, descFn, pickIsAdmin;
+  if (slot === 'primary') {
+    source = WEAPONS.filter(w => w.slot !== 'secondary' && !w.ddayOnly);
+    descFn = w => `DMG ${w.damage} · MAG ${w.mag} · ${w.auto ? 'AUTO' : 'SEMI'}`;
+    pickIsAdmin = w => !!w.adminItem;
+  } else if (slot === 'secondary') {
+    source = WEAPONS.filter(w => w.slot === 'secondary' && !w.ddayOnly);
+    descFn = w => `DMG ${w.damage} · MAG ${w.mag}`;
+    pickIsAdmin = w => !!w.adminItem;
+  } else if (slot === 'melee') {
+    source = MELEE_ITEMS;
+    descFn = m => `DMG ${m.damage} · RANGE ${m.range}`;
+    pickIsAdmin = m => !!m.adminItem;
+  } else {
+    source = SUPPORT_ITEMS;
+    descFn = s => `${s.heal ? 'HEAL ' + s.heal : 'DMG ' + (s.damage || 0)} · USES ${s.uses}`;
+    pickIsAdmin = s => !!s.adminItem;
+  }
+  for (const item of source) {
+    if (pickIsAdmin(item)) continue; // admin items are promo-only — not in shop
+    const id = item.id;
+    const cost = shopCost(id);
+    if (cost == null) continue; // not priced → not yet in the shop catalogue
+    const owned = isOwned(id);
+    const card = document.createElement('div');
+    card.style.cssText = `min-width:170px;max-width:200px;background:#0f1018;border:1px solid ${owned ? '#88ff99' : '#444'};border-radius:5px;padding:10px 12px;`;
+    card.innerHTML = `
+      <div style="font-size:13px;font-weight:bold;color:${owned ? '#88ff99' : '#ddd'};">${item.name}</div>
+      <div style="font-size:9px;color:#888;margin:2px 0 4px;">${item.type}</div>
+      <div style="font-size:10px;color:#bbb;margin-bottom:8px;">${descFn(item)}</div>
+      ${owned
+        ? `<div style="text-align:center;color:#88ff99;font-size:11px;">${FREE_WEAPONS.has(id) ? 'FREE' : '✓ OWNED'}</div>`
+        : `<div style="display:flex;flex-direction:column;gap:4px;">
+             <div style="display:flex;gap:4px;">
+               <button class="sbuy"   style="flex:1;padding:5px;background:#1a2a1a;color:#88ff99;border:1px solid #88ff99;font-size:10px;cursor:pointer;border-radius:3px;font-family:inherit;">BUY ${cost}💰</button>
+               <button class="strial" style="flex:1;padding:5px;background:#1a1a2a;color:#aabbff;border:1px solid #6688cc;font-size:10px;cursor:pointer;border-radius:3px;font-family:inherit;">TRIAL ${shopTrialCost(id)}💰</button>
+             </div>
+             <button class="sfrag" style="padding:4px;background:#1a1a2a;color:#aaccff;border:1px solid #6677aa;font-size:9px;cursor:pointer;border-radius:3px;font-family:inherit;">UNLOCK · 100🧩</button>
+           </div>`
+      }
+    `;
+    const b = card.querySelector('.sbuy');
+    const t = card.querySelector('.strial');
+    const f = card.querySelector('.sfrag');
+    if (b) b.addEventListener('click', async () => { if (await buyWeapon(id)) renderShop(); });
+    if (t) t.addEventListener('click', async () => { if (await trialWeapon(id)) renderShop(); });
+    if (f) f.addEventListener('click', async () => { if (await unlockWithFragments(id)) renderShop(); });
+    body.appendChild(card);
+  }
+}
+
 function showLoadoutScreen(mode) {
   loadoutMode = mode || 'death';
   const screen = document.getElementById('loadout-screen');
@@ -10162,7 +12613,22 @@ function showLoadoutScreen(mode) {
   const meleeEls = {};
   const supportEls = {};
   // Helper: is this admin item unlocked for the current user?
-  const isUnlocked = (id) => !!(currentUser && currentUser.unlocks && currentUser.unlocks.includes(id));
+  const isUnlocked = (id) => adminPassActive() || !!(currentUser && currentUser.unlocks && currentUser.unlocks.includes(id));
+
+  // Loadout screen only shows items the player can equip RIGHT NOW.
+  // Buying / trialing happens in the dedicated shop (open from mode-select).
+  function decorateOwnedBadge(card, id, isAdminItem) {
+    if (isAdminItem) return isUnlocked(id);
+    if (!isOwned(id)) return false; // caller will skip rendering
+    const badge = document.createElement('div');
+    badge.style.cssText = 'font-size:9px;color:#88ff99;letter-spacing:1px;margin-top:3px;';
+    badge.textContent = FREE_WEAPONS.has(id) ? 'FREE' : trialingThisMatch.has(id) ? '🧪 TRIAL' : '✓ OWNED';
+    card.appendChild(badge);
+    return true;
+  }
+
+  const rerenderLoadout = () => showLoadoutScreen(loadoutMode); // re-paint with fresh state
+
   WEAPONS.forEach((w, i) => {
     if (w.ddayOnly) return; // skip D-Day exclusive weapons
     if (w.adminItem && !isUnlocked(w.id)) return; // hide locked admin weapons
@@ -10170,14 +12636,18 @@ function showLoadoutScreen(mode) {
     const card = document.createElement('div');
     card.className = 'loadout-card';
     card.dataset.idx = i;
+    card.dataset.itemId = w.id;
     const fireTag = w.auto ? 'AUTO' : 'SEMI';
     const rateTag = w.ammoRegen ? 'REGEN' : `${Math.round(1000/w.fireRate)}/s`;
     const adminTag = w.adminItem ? ' <span style="color:#ffcc44;font-size:9px;">🪖 ADMIN</span>' : '';
     card.innerHTML = `<div class="lc-name">${w.name}${adminTag}</div>
       <div class="lc-type">${w.type}</div>
       <div class="lc-stats">DMG ${w.damage} · MAG ${w.mag} · ${fireTag} · ${rateTag}</div>`;
-    card.addEventListener('click',      () => pickLoadoutWeapon(i, isPrimary, card));
-    card.addEventListener('touchstart', e  => { e.stopPropagation(); e.preventDefault(); pickLoadoutWeapon(i, isPrimary, card); }, { passive: false });
+    if (!w.adminItem && !isOwned(w.id)) return; // not yet bought — hidden from loadout
+    const usable = decorateOwnedBadge(card, w.id, !!w.adminItem);
+    const handler = () => { if (usable) pickLoadoutWeapon(i, isPrimary, card); };
+    card.addEventListener('click',      handler);
+    card.addEventListener('touchstart', e => { e.stopPropagation(); e.preventDefault(); handler(); }, { passive: false });
     (isPrimary ? pList : sList).appendChild(card);
     cardEls[i] = card;
   });
@@ -10186,12 +12656,16 @@ function showLoadoutScreen(mode) {
     const card = document.createElement('div');
     card.className = 'loadout-card';
     card.dataset.idx = i;
+    card.dataset.itemId = m.id;
     const adminTag = m.adminItem ? ' <span style="color:#ffcc44;font-size:9px;">🪖 ADMIN</span>' : '';
     card.innerHTML = `<div class="lc-name">${m.name}${adminTag}</div>
       <div class="lc-type">${m.type}</div>
       <div class="lc-stats">DMG ${m.damage} · RANGE ${m.range} · ${Math.round(1000/m.cooldown)}/s</div>`;
-    card.addEventListener('click',      () => pickMelee(i, card));
-    card.addEventListener('touchstart', e  => { e.stopPropagation(); e.preventDefault(); pickMelee(i, card); }, { passive: false });
+    if (!m.adminItem && !isOwned(m.id)) return;
+    const usable = decorateOwnedBadge(card, m.id, !!m.adminItem);
+    const handler = () => { if (usable) pickMelee(i, card); };
+    card.addEventListener('click',      handler);
+    card.addEventListener('touchstart', e => { e.stopPropagation(); e.preventDefault(); handler(); }, { passive: false });
     mList.appendChild(card);
     meleeEls[i] = card;
   });
@@ -10200,13 +12674,17 @@ function showLoadoutScreen(mode) {
     const card = document.createElement('div');
     card.className = 'loadout-card';
     card.dataset.idx = i;
+    card.dataset.itemId = s.id;
     const stat = s.heal ? `HEAL ${s.heal}` : s.blink ? `BLINK ${s.blink}` : s.refill ? 'REFILL AMMO' : `DMG ${s.damage || 0}`;
     const adminTag = s.adminItem ? ' <span style="color:#ffcc44;font-size:9px;">🪖 ADMIN</span>' : '';
     card.innerHTML = `<div class="lc-name">${s.name}${adminTag}</div>
       <div class="lc-type">${s.type}</div>
       <div class="lc-stats">${stat} · USES ${s.uses}</div>`;
-    card.addEventListener('click',      () => pickSupport(i, card));
-    card.addEventListener('touchstart', e  => { e.stopPropagation(); e.preventDefault(); pickSupport(i, card); }, { passive: false });
+    if (!s.adminItem && !isOwned(s.id)) return;
+    const usable = decorateOwnedBadge(card, s.id, !!s.adminItem);
+    const handler = () => { if (usable) pickSupport(i, card); };
+    card.addEventListener('click',      handler);
+    card.addEventListener('touchstart', e => { e.stopPropagation(); e.preventDefault(); handler(); }, { passive: false });
     uList.appendChild(card);
     supportEls[i] = card;
   });
@@ -10222,11 +12700,16 @@ function showLoadoutScreen(mode) {
     readyBtn.disabled = false;
     readyBtn.style.pointerEvents = 'all';
   } else {
-    // First-time entry: apply defaults
-    selectedPrimaryIdx = WEAPONS.findIndex(w => w.slot !== 'secondary');
-    selectedSecondaryIdx = WEAPONS.findIndex(w => w.slot === 'secondary');
-    selectedMeleeIdx = 0;
-    selectedSupportIdx = 0;
+    // First-time entry: apply defaults — pick first OWNED item per slot so
+    // we don't auto-select something the user can't actually afford.
+    selectedPrimaryIdx   = WEAPONS.findIndex(w => w.slot !== 'secondary' && !w.ddayOnly && isOwned(w.id));
+    selectedSecondaryIdx = WEAPONS.findIndex(w => w.slot === 'secondary' && isOwned(w.id));
+    selectedMeleeIdx     = MELEE_ITEMS.findIndex(m => isOwned(m.id));
+    selectedSupportIdx   = SUPPORT_ITEMS.findIndex(s => isOwned(s.id));
+    if (selectedPrimaryIdx   < 0) selectedPrimaryIdx   = 0;
+    if (selectedSecondaryIdx < 0) selectedSecondaryIdx = WEAPONS.findIndex(w => w.slot === 'secondary');
+    if (selectedMeleeIdx     < 0) selectedMeleeIdx     = 0;
+    if (selectedSupportIdx   < 0) selectedSupportIdx   = 0;
     cardEls[selectedPrimaryIdx] && cardEls[selectedPrimaryIdx].classList.add('selected');
     cardEls[selectedSecondaryIdx] && cardEls[selectedSecondaryIdx].classList.add('selected');
     meleeEls[selectedMeleeIdx] && meleeEls[selectedMeleeIdx].classList.add('selected');
@@ -10272,6 +12755,124 @@ function pickSupport(idx, card) {
   ready.style.pointerEvents = loadoutReady() ? 'all' : 'none';
 }
 
+// PvP matchmaking searching overlay
+function showPvpSearching(mode) {
+  let el = document.getElementById('pvp-searching');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'pvp-searching';
+    el.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.92);'
+      + 'z-index:9900;display:flex;flex-direction:column;align-items:center;justify-content:center;'
+      + 'color:#fff;font-family:"Courier New",monospace;';
+    document.body.appendChild(el);
+  }
+  el.innerHTML = `
+    <div style="font-size:11px;letter-spacing:4px;color:#88ccff;margin-bottom:14px;">🌐 PVP MATCHMAKING</div>
+    <div style="font-size:36px;letter-spacing:8px;color:#fff;margin-bottom:10px;">SEARCHING…</div>
+    <div style="font-size:14px;color:#ccc;letter-spacing:2px;">Looking for other players in ${mode.toUpperCase()}</div>
+    <div style="font-size:11px;color:#888;margin-top:18px;">Will fall back to bots if no one joins in 3s</div>
+    <div style="margin-top:24px;width:200px;height:3px;background:#222;border-radius:2px;overflow:hidden;">
+      <div id="pvp-bar" style="height:100%;width:0%;background:#44ff66;transition:width 3s linear;"></div>
+    </div>`;
+  el.style.display = 'flex';
+  // Animate the progress bar
+  setTimeout(() => { const bar = document.getElementById('pvp-bar'); if (bar) bar.style.width = '100%'; }, 50);
+}
+function hidePvpSearching() {
+  const el = document.getElementById('pvp-searching');
+  if (el) el.style.display = 'none';
+}
+
+// ── 🌐 PvP match state (assigned by the server when matchmaking succeeds) ─
+// pvpMatch: null = solo with bots (current behavior)
+//           { mode, team, opponents: [{socketId, team}], isHost }
+let pvpMatch = null;
+
+// ── 🏛️ Staging-lobby state ───────────────────────────────────────────────
+let stagingLobbyMode = null; // mode ID we're currently waiting in, or null
+let stagingLobbyState = null; // last received state from server
+let pendingLobbyConfig = null; // saved selectedModeConfig when entering lobby
+
+function showStagingLobby(mode) {
+  let el = document.getElementById('staging-lobby');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'staging-lobby';
+    el.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;z-index:9800;'
+      + 'background:rgba(0,0,0,0.95);color:#fff;font-family:"Courier New",monospace;'
+      + 'display:flex;flex-direction:column;align-items:center;justify-content:center;padding:30px;';
+    document.body.appendChild(el);
+  }
+  el.style.display = 'flex';
+  renderStagingLobby();
+}
+function hideStagingLobby() {
+  const el = document.getElementById('staging-lobby');
+  if (el) el.style.display = 'none';
+}
+function renderStagingLobby() {
+  const el = document.getElementById('staging-lobby');
+  if (!el) return;
+  const s = stagingLobbyState;
+  const mode = stagingLobbyMode || (s && s.mode);
+  if (!mode) return;
+  const cfg = GAME_MODE_CONFIGS[mode] || {};
+  const teamSize = cfg.type === 'elim' ? (cfg.allies + 1) : Math.max(1, cfg.allies + 1);
+  const allyPlayers = s ? s.players.filter(p => p.team === 'ally') : [];
+  const enemyPlayers = s ? s.players.filter(p => p.team === 'enemy') : [];
+  const me = s ? s.players.find(p => p.socketId === myId) : null;
+  el.innerHTML = `
+    <div style="font-size:32px;letter-spacing:8px;color:#ffaa44;margin-bottom:6px;">🏛️ MATCH LOBBY</div>
+    <div style="font-size:14px;color:#888;letter-spacing:3px;margin-bottom:24px;">${mode.toUpperCase()} · WAITING FOR PLAYERS</div>
+    <div style="display:flex;gap:60px;margin-bottom:30px;">
+      <div style="text-align:center;min-width:200px;">
+        <div style="font-size:11px;color:#88ccff;letter-spacing:3px;margin-bottom:8px;">TEAM ALLY (${allyPlayers.length}/${cfg.allies != null ? cfg.allies + 1 : '?'})</div>
+        ${allyPlayers.length ? allyPlayers.map(p => `<div style="padding:6px 12px;background:rgba(68,170,255,0.15);border-left:3px solid #44aaff;margin-bottom:4px;text-align:left;">
+          ${p.ready ? '✅' : '⏳'} ${p.name}${p.socketId === myId ? ' (YOU)' : ''}
+        </div>`).join('') : '<div style="color:#666;font-style:italic;">empty</div>'}
+      </div>
+      <div style="font-size:36px;color:#666;align-self:center;">VS</div>
+      <div style="text-align:center;min-width:200px;">
+        <div style="font-size:11px;color:#ff6666;letter-spacing:3px;margin-bottom:8px;">TEAM ENEMY (${enemyPlayers.length}/${cfg.enemies != null ? cfg.enemies : '?'})</div>
+        ${enemyPlayers.length ? enemyPlayers.map(p => `<div style="padding:6px 12px;background:rgba(255,68,68,0.15);border-left:3px solid #ff4444;margin-bottom:4px;text-align:left;">
+          ${p.ready ? '✅' : '⏳'} ${p.name}${p.socketId === myId ? ' (YOU)' : ''}
+        </div>`).join('') : '<div style="color:#666;font-style:italic;">empty</div>'}
+      </div>
+    </div>
+    <label style="display:flex;align-items:center;gap:8px;margin-bottom:14px;color:#ccc;font-size:12px;cursor:pointer;">
+      <input type="checkbox" id="lobby-fillbots" ${me?.fillBots !== false ? 'checked' : ''}>
+      Fill missing slots with bots
+    </label>
+    <div style="display:flex;gap:10px;margin-top:6px;">
+      <button id="lobby-team-switch" style="padding:10px 18px;background:#222;color:#aaa;border:1px solid #555;cursor:pointer;font-family:inherit;font-size:13px;letter-spacing:2px;border-radius:4px;">SWITCH TEAM</button>
+      <button id="lobby-ready" style="padding:10px 30px;background:${me?.ready ? '#226622' : '#553311'};color:#fff;border:2px solid ${me?.ready ? '#44ff44' : '#ffaa44'};cursor:pointer;font-family:inherit;font-size:15px;font-weight:bold;letter-spacing:3px;border-radius:4px;">
+        ${me?.ready ? '✅ READY!' : '⏳ READY UP'}
+      </button>
+      <button id="lobby-leave" style="padding:10px 18px;background:#222;color:#aaa;border:1px solid #555;cursor:pointer;font-family:inherit;font-size:13px;letter-spacing:2px;border-radius:4px;">LEAVE LOBBY</button>
+    </div>
+    <div style="font-size:11px;color:#666;margin-top:18px;letter-spacing:1px;">Match starts when all players ready · ${me?.fillBots !== false ? 'Bots will fill empty slots' : 'No bots — playing as-is'}</div>
+  `;
+  // Wire buttons
+  const fbox = document.getElementById('lobby-fillbots');
+  const readyBtn = document.getElementById('lobby-ready');
+  const switchBtn = document.getElementById('lobby-team-switch');
+  const leaveBtn = document.getElementById('lobby-leave');
+  if (fbox) fbox.addEventListener('change', () => {
+    socket.emit('setLobbyReady', { ready: me?.ready || false, fillBots: fbox.checked });
+  });
+  if (readyBtn) readyBtn.addEventListener('click', () => {
+    socket.emit('setLobbyReady', { ready: !me?.ready, fillBots: fbox?.checked !== false });
+  });
+  if (switchBtn) switchBtn.addEventListener('click', () => socket.emit('switchLobbyTeam'));
+  if (leaveBtn) leaveBtn.addEventListener('click', () => {
+    socket.emit('leaveStagingLobby');
+    hideStagingLobby();
+    stagingLobbyMode = null;
+    stagingLobbyState = null;
+    document.getElementById('mode-screen').style.display = 'flex';
+  });
+}
+
 function confirmLoadout() {
   // Guard: both slots must be chosen (belt-and-suspenders against spurious mobile touch events)
   if (!loadoutReady()) return;
@@ -10280,6 +12881,20 @@ function confirmLoadout() {
   resetCombatResources();
 
   if (!gameStarted) {
+    // ── Find the mode ID and decide whether to route through the staging lobby ──
+    const modeIds = Object.entries(GAME_MODE_CONFIGS).find(([id, cfg]) => cfg === selectedModeConfig);
+    const modeId  = modeIds ? modeIds[0] : null;
+    // Lobby-eligible modes: 1v1/2v2/3v3 (elim) + 5v5/10v10 (race) + FFA + KOTH
+    const lobbyEligible = ['1v1','2v2','3v3','5v5','10v10','ffa5','ffa15','koth',
+                            'gungame','oitc','juggernaut','infection','sniper_only','speedrun'];
+    if (modeId && lobbyEligible.includes(modeId)) {
+      // Route through staging lobby — wait for others to ready up
+      stagingLobbyMode = modeId;
+      socket.emit('joinStagingLobby', { mode: modeId });
+      showStagingLobby(modeId);
+      return;
+    }
+    // Non-lobby modes (frontlines, dday, laststand, range, etc.): spawn bots immediately
     gameStarted = true;
     spawnGameBots();
     requestPointerLockSafe();
@@ -10293,9 +12908,8 @@ function confirmLoadout() {
     document.getElementById('waiting-screen').style.display = 'flex';
     showAnnouncement('LOADOUT UPDATED', 'Active next round', '#4cf', 1400);
   } else {
-    // Respawn after death — teleport to ally side immediately, don't rely on server position
-    const spawnX = (Math.random() - 0.5) * 24;
-    resetPlayerForRound(spawnX, 38 + Math.random() * 3);
+    // Respawn after death on this player's team side, don't rely on the server's center spawn.
+    resetPlayerForRound();
     grantSpawnShield(3000);
     requestPointerLockSafe();
   }
@@ -10335,7 +12949,7 @@ const adminCheats = {
       // Silently try to log in — populate currentUser if successful
       authRequest('/auth/login', saved).then(r => {
         if (r && r.ok) {
-          currentUser = { username: r.username, password: saved.password, unlocks: r.unlocks || [], isAdmin: !!r.isAdmin };
+          currentUser = { username: r.username, password: saved.password, unlocks: r.unlocks || [], purchased: r.purchased || [], credits: r.credits ?? 0, fragments: r.fragments ?? 0, chests: r.chests || { common: 0, rare: 0 }, upgrades: r.upgrades || {}, freeSpinAvailable: !!r.freeSpinAvailable, adminPassExpiresAt: r.adminPassExpiresAt || 0, isAdmin: !!r.isAdmin };
           const wb = document.getElementById('welcome-back');
           if (wb) {
             wb.textContent = r.isAdmin
@@ -10391,7 +13005,7 @@ async function startGame() {
     return;
   }
 
-  currentUser = { username: result.username, password: pass, unlocks: result.unlocks || [], isAdmin: !!result.isAdmin };
+  currentUser = { username: result.username, password: pass, unlocks: result.unlocks || [], purchased: result.purchased || [], credits: result.credits ?? 0, fragments: result.fragments ?? 0, chests: result.chests || { common: 0, rare: 0 }, upgrades: result.upgrades || {}, freeSpinAvailable: !!result.freeSpinAvailable, adminPassExpiresAt: result.adminPassExpiresAt || 0, isAdmin: !!result.isAdmin };
   localStorage.setItem('pvp_user', JSON.stringify({ username: name, password: pass }));
   setAuthStatus(result.isAdmin ? `🔓 ADMIN ACCESS GRANTED · ${result.username}` : `Logged in as ${result.username}`, result.isAdmin ? '#ff4444' : '#88ff88');
 
@@ -10427,6 +13041,193 @@ async function promptUnlockCode() {
   currentUser.unlocks = result.unlocks || [];
   alert(`✅ UNLOCKED: ${result.item}\n\nTotal admin items: ${currentUser.unlocks.length}`);
   updateUserInfoBar(); // refresh the count display
+}
+
+// ── 🛒 Shop actions: buy / trial / award ─────────────────────────────────
+async function buyWeapon(weaponId) {
+  if (!currentUser) { alert('Log in first.'); return false; }
+  if (currentUser.isAdmin) return true;
+  if (FREE_WEAPONS.has(weaponId) || (currentUser.purchased || []).includes(weaponId)) return true;
+  const cost = shopCost(weaponId);
+  if (cost == null) { alert('That item is not purchasable.'); return false; }
+  if ((currentUser.credits ?? 0) < cost) { alert(`Not enough credits.\nNeed ${cost} · You have ${currentUser.credits ?? 0}`); return false; }
+  if (!confirm(`Buy "${weaponId}" for ${cost} credits?\n\nYou have ${currentUser.credits} credits.`)) return false;
+  const r = await authRequest('/shop/buy', { username: currentUser.username, password: currentUser.password, weaponId });
+  if (!r || r.error) { alert('❌ ' + (r?.error || 'shop error')); return false; }
+  currentUser.purchased = r.purchased || currentUser.purchased;
+  currentUser.credits = r.credits ?? currentUser.credits;
+  updateUserInfoBar();
+  return true;
+}
+
+async function buyBundle(bundleId) {
+  if (!currentUser) { alert('Log in first.'); return false; }
+  const b = BUNDLES.find(x => x.id === bundleId);
+  if (!b) return false;
+  if (currentUser.isAdmin) return true;
+  const remaining = b.items.filter(id => !isOwned(id));
+  if (remaining.length === 0) { alert('You already own every item in this bundle!'); return false; }
+  if ((currentUser.credits ?? 0) < b.price) { alert(`Not enough credits.\nBundle costs ${b.price} · You have ${currentUser.credits ?? 0}`); return false; }
+  const sumIndividual = b.items.reduce((s, id) => s + (shopCost(id) ?? 0), 0);
+  if (!confirm(`Buy "${b.name}" bundle for ${b.price} credits?\n\nIncludes: ${b.items.join(', ')}\nValue: ${sumIndividual} credits (saving ${sumIndividual - b.price})\nNew items: ${remaining.length}`)) return false;
+  const r = await authRequest('/shop/buy-bundle', { username: currentUser.username, password: currentUser.password, bundleId });
+  if (!r || r.error) { alert('❌ ' + (r?.error || 'shop error')); return false; }
+  currentUser.purchased = r.purchased || currentUser.purchased;
+  currentUser.credits = r.credits ?? currentUser.credits;
+  updateUserInfoBar();
+  alert(`✅ Unlocked ${r.added?.length || 0} new items! Balance: ${currentUser.credits}`);
+  return true;
+}
+
+async function trialWeapon(weaponId) {
+  if (!currentUser) { alert('Log in first.'); return false; }
+  if (currentUser.isAdmin || FREE_WEAPONS.has(weaponId) || (currentUser.purchased || []).includes(weaponId)) {
+    trialingThisMatch.add(weaponId);
+    return true;
+  }
+  const cost = shopTrialCost(weaponId);
+  if (cost == null) { alert('That item is not purchasable.'); return false; }
+  if ((currentUser.credits ?? 0) < cost) { alert(`Not enough credits for trial.\nNeed ${cost} · You have ${currentUser.credits ?? 0}`); return false; }
+  if (!confirm(`Trial "${weaponId}" for ${cost} credits (one match only)?`)) return false;
+  const r = await authRequest('/shop/trial', { username: currentUser.username, password: currentUser.password, weaponId });
+  if (!r || r.error) { alert('❌ ' + (r?.error || 'shop error')); return false; }
+  currentUser.credits = r.credits ?? currentUser.credits;
+  trialingThisMatch.add(weaponId);
+  updateUserInfoBar();
+  return true;
+}
+
+async function awardMatchCredits(kills, won) {
+  if (!currentUser || currentUser.isAdmin) return;
+  try {
+    const r = await authRequest('/shop/award', { username: currentUser.username, password: currentUser.password, kills, won: !!won });
+    if (r && r.ok) {
+      currentUser.credits = r.credits ?? currentUser.credits;
+      if (r.chests) currentUser.chests = r.chests;
+      let msg = `💰 +${r.awarded} credits earned`;
+      if (r.chestDrops?.common) msg += ' · 📦 +1 Common';
+      if (r.chestDrops?.rare)   msg += ' · 🟣 +1 Rare';
+      updateUserInfoBar();
+      const t = document.createElement('div');
+      t.textContent = msg;
+      t.style.cssText = 'position:fixed;top:80px;right:20px;background:#1a1a0a;border:2px solid #ffdd55;color:#ffdd55;padding:10px 18px;font-family:"Courier New",monospace;font-size:14px;letter-spacing:2px;z-index:9999;border-radius:4px;';
+      document.body.appendChild(t);
+      setTimeout(() => t.remove(), 4500);
+    }
+  } catch (e) {}
+}
+
+// ── 📦 Chest, 🧩 fragment, ✨ upgrade, 🎡 wheel actions ────────────────
+const CHEST_PRICES_CLIENT = { common: 120, rare: 400 };
+const FRAGMENT_UNLOCK_COST = 100;
+const UPGRADE_COSTS_CLIENT = [30, 60, 120];
+const MAX_UPGRADE_LEVELS = 3;
+const UPGRADE_STAT_LABELS = { damage: '+12% Damage', mag: '+25% Magazine', reload: '-15% Reload Time' };
+
+const ADMIN_PASS_COST = 300;
+async function buyAdminPass() {
+  if (!currentUser) return false;
+  if (adminPassActive()) {
+    alert(`You already have an active Admin Pass — ${Math.ceil(adminPassMsLeft()/60000)} min left.`);
+    return false;
+  }
+  if (!currentUser.isAdmin && (currentUser.credits ?? 0) < ADMIN_PASS_COST) {
+    alert(`Need ${ADMIN_PASS_COST} credits · You have ${currentUser.credits ?? 0}`);
+    return false;
+  }
+  if (!confirm(`Buy Admin Pass for ${ADMIN_PASS_COST} credits?\n\nUnlocks EVERY weapon (including admin items) for 10 minutes.`)) return false;
+  const r = await authRequest('/shop/admin-pass', { username: currentUser.username, password: currentUser.password });
+  if (!r || r.error) { alert('❌ ' + (r?.error || 'shop error')); return false; }
+  currentUser.credits = r.credits ?? currentUser.credits;
+  currentUser.adminPassExpiresAt = r.adminPassExpiresAt;
+  updateUserInfoBar();
+  return true;
+}
+
+async function buyChest(type) {
+  if (!currentUser) return false;
+  const cost = CHEST_PRICES_CLIENT[type];
+  if (!cost) return false;
+  if (!confirm(`Buy a ${type.toUpperCase()} chest for ${cost} credits?`)) return false;
+  const r = await authRequest('/shop/buy-chest', { username: currentUser.username, password: currentUser.password, type });
+  if (!r || r.error) { alert('❌ ' + (r?.error || 'shop error')); return false; }
+  currentUser.credits = r.credits;
+  currentUser.chests = r.chests;
+  updateUserInfoBar();
+  return true;
+}
+async function openChest(type) {
+  if (!currentUser) return false;
+  if ((currentUser.chests?.[type] || 0) <= 0) { alert(`You don't have any ${type} chests.`); return false; }
+  const r = await authRequest('/shop/open-chest', { username: currentUser.username, password: currentUser.password, type });
+  if (!r || r.error) { alert('❌ ' + (r?.error || 'shop error')); return false; }
+  currentUser.credits = r.credits;
+  currentUser.fragments = r.fragments;
+  currentUser.chests = r.chests;
+  currentUser.purchased = r.purchased || currentUser.purchased;
+  updateUserInfoBar();
+  const lines = [`📦 ${type.toUpperCase()} CHEST OPENED`];
+  if (r.drops.fragments) lines.push(`🧩 +${r.drops.fragments} fragments`);
+  if (r.drops.credits)   lines.push(`💰 +${r.drops.credits} credits`);
+  if (r.drops.weapon)    lines.push(`✨ NEW WEAPON: ${r.drops.weapon}!`);
+  alert(lines.join('\n'));
+  return true;
+}
+async function unlockWithFragments(weaponId) {
+  if (!currentUser) return false;
+  if ((currentUser.fragments || 0) < FRAGMENT_UNLOCK_COST) { alert(`Need ${FRAGMENT_UNLOCK_COST} fragments · You have ${currentUser.fragments || 0}`); return false; }
+  if (!confirm(`Unlock "${weaponId}" for ${FRAGMENT_UNLOCK_COST} fragments?`)) return false;
+  const r = await authRequest('/shop/unlock-fragments', { username: currentUser.username, password: currentUser.password, weaponId });
+  if (!r || r.error) { alert('❌ ' + (r?.error || 'shop error')); return false; }
+  currentUser.fragments = r.fragments;
+  currentUser.purchased = r.purchased || currentUser.purchased;
+  updateUserInfoBar();
+  return true;
+}
+function getWeaponUpgrades(weaponId) {
+  return currentUser?.upgrades?.[weaponId] || { damage: 0, mag: 0, reload: 0 };
+}
+function totalUpgradeLevels(weaponId) {
+  const u = getWeaponUpgrades(weaponId);
+  return (u.damage || 0) + (u.mag || 0) + (u.reload || 0);
+}
+async function upgradeWeapon(weaponId, stat) {
+  if (!currentUser) return false;
+  const total = totalUpgradeLevels(weaponId);
+  if (total >= MAX_UPGRADE_LEVELS) { alert('Max upgrades reached for this weapon.'); return false; }
+  const cost = UPGRADE_COSTS_CLIENT[total];
+  if ((currentUser.fragments || 0) < cost) { alert(`Need ${cost} fragments · You have ${currentUser.fragments || 0}`); return false; }
+  const r = await authRequest('/shop/upgrade-weapon', { username: currentUser.username, password: currentUser.password, weaponId, stat });
+  if (!r || r.error) { alert('❌ ' + (r?.error || 'shop error')); return false; }
+  currentUser.fragments = r.fragments;
+  currentUser.upgrades = r.upgrades || currentUser.upgrades;
+  updateUserInfoBar();
+  return true;
+}
+async function spinWheel() {
+  if (!currentUser) return null;
+  const r = await authRequest('/shop/spin-wheel', { username: currentUser.username, password: currentUser.password });
+  if (!r || r.error) { alert('❌ ' + (r?.error || 'wheel error')); return null; }
+  currentUser.credits = r.result.credits_balance ?? currentUser.credits;
+  currentUser.fragments = r.result.fragments_balance ?? currentUser.fragments;
+  currentUser.purchased = r.result.purchased || currentUser.purchased;
+  currentUser.freeSpinAvailable = false;
+  updateUserInfoBar();
+  return r.result;
+}
+
+// Apply weapon upgrades to a base weapon definition for the current user.
+// Returns a shallow-cloned object with scaled damage/mag/reloadTime.
+function applyUpgrades(w) {
+  if (!w || !currentUser || !currentUser.upgrades) return w;
+  const up = currentUser.upgrades[w.id];
+  if (!up) return w;
+  const clone = { ...w };
+  if (up.damage) clone.damage = Math.round((w.damage || 0) * (1 + 0.12 * up.damage));
+  if (up.mag)    clone.mag    = Math.round((w.mag    || 0) * (1 + 0.25 * up.mag));
+  if (up.reload) clone.reloadTime = Math.round((w.reloadTime || 0) * Math.pow(0.85, up.reload));
+  clone._upgraded = true;
+  return clone;
 }
 
 function selectMode(modeId) {
@@ -10485,6 +13286,14 @@ if (_ecBtn) {
   _ecBtn.addEventListener('click', promptUnlockCode);
   _ecBtn.addEventListener('touchstart', e => { e.preventDefault(); promptUnlockCode(); }, { passive: false });
 }
+// Tick the user-info bar each 15s so the Admin Pass timer counts down live
+setInterval(() => { if (adminPassActive() && !currentUser?.isAdmin) updateUserInfoBar(); }, 15000);
+
+const _shopBtn = document.getElementById('open-shop-btn');
+if (_shopBtn) {
+  _shopBtn.addEventListener('click', openShop);
+  _shopBtn.addEventListener('touchstart', e => { e.preventDefault(); openShop(); }, { passive: false });
+}
 const _logoutBtn = document.getElementById('logout-btn');
 if (_logoutBtn) {
   _logoutBtn.addEventListener('click', () => {
@@ -10504,7 +13313,13 @@ function updateUserInfoBar() {
   if (nameEl) nameEl.style.color = currentUser.isAdmin ? '#ff4444' : '#88ccff';
   if (unlocksEl) {
     const n = currentUser.unlocks?.length || 0;
-    unlocksEl.textContent = n === 0 ? 'No admin items unlocked' : `🪖 ${n}/24 admin items unlocked`;
+    const credits  = currentUser.isAdmin ? '∞' : (currentUser.credits ?? 0);
+    const frags    = currentUser.isAdmin ? '∞' : (currentUser.fragments ?? 0);
+    const ch = currentUser.chests || { common: 0, rare: 0 };
+    const passTag = adminPassActive() && !currentUser.isAdmin
+      ? ` · <b style="color:#ffcc88">🪖 PASS ${Math.ceil(adminPassMsLeft()/60000)}m</b>`
+      : '';
+    unlocksEl.innerHTML = `💰 <b style="color:#ffdd55">${credits}</b> · 🧩 <b style="color:#aaccff">${frags}</b> frags · 📦 ${ch.common}c/${ch.rare}r · 🪖 ${n}/24${passTag}`;
   }
   // Show admin panel button if admin
   let adminBtn = document.getElementById('admin-panel-btn');
@@ -10668,7 +13483,7 @@ const DIFFICULTY_DESCS = {
   easy:   'Original AI · no reload · no leading · no reaction delay',
   medium: '+ Reloading · Bullet leading · Reaction time · Skill variation · Smarter melee charges',
   hard:   '+ Personalities · Weapon abilities · Focus fire · Low-HP retreat · Last-seen memory',
-  expert: '+ Hit-and-run · Weapon-aware positioning · Telepathic team comms · Punishes reloading · DPS-aware engagement · Trajectory prediction',
+  expert: '+ Faster aim/fire/reload · Weapon-aware pressure · Team comms · Punishes reloading · Trajectory prediction',
 };
 function selectDifficulty(diff) {
   selectedDifficulty = diff;
@@ -10704,6 +13519,14 @@ const MAP_DESCS = {
   desert:     'Desert Ruins — broken pillars + sand dunes, open sightlines',
   tundra:     '❄️ Tundra — ice patches make you slip and slide',
   space:      '🌌 Space Station — LOW GRAVITY zones · jump higher',
+  airport:    '🛬 Airport — break glass + lights · gets darker as lights die',
+  trenches:   '🪖 Trenches — barbed wire + 4 PILOTABLE mortar cannons (F to use)',
+  chernobyl:  '☢️ Chernobyl — toxic gas (1 dmg/s) + 4 destructible reactors (500 HP each)',
+  refinery:   'Oil Refinery — oil slicks make you slide + explosive barrels',
+  skydock:    'Skydock Launch — many jump pads + raised gantry fights',
+  sewer:      'Acid Sewer — toxic pools force bridge fights',
+  gravity_lab:'Gravity Lab — low gravity domes + launch pads',
+  glassworks: 'Glassworks — breakable glass maze + barrel traps',
 };
 function selectMapPick(mapId) {
   selectedMap = mapId;
