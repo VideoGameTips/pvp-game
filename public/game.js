@@ -785,28 +785,34 @@ const MELEE_ITEMS = [
   // ── 🆕 More melees — batch 4 ─────────────────────────────────────────────
   { id: 'brass_knuckles', name: 'Brass Knuckles', type: 'Punch',     damage: 28, range: 1.5, cooldown: 200, speedMult: 1.6,
     ability: { name: 'Haymaker', cd: 8000, desc: '2× damage on next hit', type: 'melee_heavy' } },
-  { id: 'hatchet',        name: 'Hatchet',        type: 'Melee',     damage: 50, range: 1.9, cooldown: 480,
-    ability: { name: 'Cleave',     cd: 8000,  desc: 'Next hit deals 2× damage',          type: 'melee_heavy' } },
-  { id: 'machete',        name: 'Machete',        type: 'Melee',     damage: 56, range: 2.4, cooldown: 520,
-    ability: { name: 'Slash Combo',cd: 10000, desc: '2.5 s · auto-slash combo',           type: 'melee_revup', duration: 2500 } },
-  { id: 'cane',           name: 'Walking Cane',   type: 'Melee',     damage: 30, range: 2.2, cooldown: 440,
-    ability: { name: 'Trip',       cd: 7000,  desc: 'Next hit deals 2× damage',          type: 'melee_heavy' } },
-  { id: 'cricket_bat',    name: 'Cricket Bat',    type: 'Melee',     damage: 42, range: 2.3, cooldown: 540,
-    ability: { name: 'Homerun',    cd: 9000,  desc: 'Next hit deals 2.5× damage',        type: 'melee_heavy' } },
-  { id: 'pipe',           name: 'Lead Pipe',      type: 'Melee',     damage: 44, range: 2.0, cooldown: 500,
-    ability: { name: 'Bonk',       cd: 8000,  desc: 'Next hit deals 2× damage',          type: 'melee_heavy' } },
+  { id: 'hatchet',        name: 'Hatchet',        type: 'Throwable Melee', damage: 50, range: 1.9, cooldown: 480,
+    ability: { name: 'Throw Hatchet', cd: 11000, desc: 'Hurl · 90 dmg · weapon gone until CD', type: 'melee_throw' } },
+  { id: 'machete',        name: 'Machete',        type: 'Bleed Melee', damage: 56, range: 2.4, cooldown: 520,
+    bleedOnHit: { dps: 8, dur: 4000, radius: 0.8, color: 0xaa0000 },
+    ability: { name: 'Slash Combo',cd: 10000, desc: '2.5 s · auto-slash · every hit bleeds', type: 'melee_revup', duration: 2500 } },
+  { id: 'cane',           name: 'Walking Cane',   type: 'Reach Melee', damage: 30, range: 2.2, cooldown: 440,
+    ability: { name: 'Yank',       cd: 8000,  desc: 'Pull target 4 m toward you',         type: 'melee_pull', distance: 4 } },
+  { id: 'cricket_bat',    name: 'Launching Melee', type: 'Melee', damage: 42, range: 2.3, cooldown: 540,
+    launchOnHit: 8, // every hit pops target up
+    ability: { name: 'Homerun',    cd: 9000,  desc: '2.5× dmg · launch target HIGH',     type: 'melee_heavy', launchMult: 2 } },
+  { id: 'pipe',           name: 'Lead Pipe',      type: 'Chain Melee', damage: 44, range: 2.0, cooldown: 500,
+    chainOnHit: { radius: 2.5, mult: 0.5 }, // splash damages nearby
+    ability: { name: 'Bonk',       cd: 8000,  desc: 'Next hit deals 2× dmg + chains',    type: 'melee_heavy' } },
   { id: 'wrench',         name: 'Wrench',         type: 'Utility Melee', damage: 36, range: 1.8, cooldown: 380,
     ability: { name: 'Spanner Toss', cd: 10000, desc: 'Hurl wrench · 90 dmg · weapon gone until CD', type: 'melee_throw' } },
-  { id: 'shovel',         name: 'Shovel',         type: 'Heavy Melee',   damage: 55, range: 2.2, cooldown: 620,
-    ability: { name: 'Dig In',     cd: 9000,  desc: 'Next hit deals 2× damage',          type: 'melee_heavy' } },
-  { id: 'golf_club',      name: 'Golf Club',      type: 'Melee',     damage: 40, range: 2.4, cooldown: 500,
-    ability: { name: 'Fore!',      cd: 9000,  desc: 'Next hit deals 2.5× damage',        type: 'melee_heavy' } },
-  { id: 'tennis_racket',  name: 'Tennis Racket',  type: 'Melee',     damage: 26, range: 2.2, cooldown: 360,
-    ability: { name: 'Smash',      cd: 7000,  desc: 'Next hit deals 2× damage',          type: 'melee_heavy' } },
-  { id: 'fire_poker',     name: 'Fire Poker',     type: 'Reach Melee',   damage: 38, range: 2.6, cooldown: 460,
-    ability: { name: 'Burn Strike',cd: 9000,  desc: 'Next hit deals 2× damage',          type: 'melee_heavy' } },
-  { id: 'meat_cleaver',   name: 'Meat Cleaver',   type: 'Heavy Melee',   damage: 60, range: 1.7, cooldown: 540,
-    ability: { name: 'Butcher',    cd: 10000, desc: '3 s · auto-chop combo',             type: 'melee_revup', duration: 3000 } },
+  { id: 'shovel',         name: 'Shovel',         type: 'AOE Melee', damage: 55, range: 2.2, cooldown: 620,
+    ability: { name: 'Ground Slam',cd: 11000, desc: 'Slam · 4 m AOE knockback',          type: 'melee_slam' } },
+  { id: 'golf_club',      name: 'Golf Club',      type: 'Launching Melee', damage: 40, range: 2.4, cooldown: 500,
+    launchOnHit: 6,
+    ability: { name: 'Fore!',      cd: 9000,  desc: '2.5× dmg · launch target SKY-HIGH', type: 'melee_heavy', launchMult: 3 } },
+  { id: 'tennis_racket',  name: 'Tennis Racket',  type: 'Reflect Melee', damage: 26, range: 2.2, cooldown: 360,
+    ability: { name: 'Backhand',   cd: 8000,  desc: '2 s · deflect incoming bullets',    type: 'melee_deflect', duration: 2000 } },
+  { id: 'fire_poker',     name: 'Fire Poker',     type: 'Burn Melee', damage: 38, range: 2.6, cooldown: 460,
+    burnOnHit: { dps: 7, dur: 4000, radius: 1.2, color: 0xff6622 },
+    ability: { name: 'Hot Brand',  cd: 9000,  desc: 'Next hit deals 2× dmg + ignites',   type: 'melee_heavy' } },
+  { id: 'meat_cleaver',   name: 'Meat Cleaver',   type: 'Vampiric Melee', damage: 60, range: 1.7, cooldown: 540,
+    lifestealOnHit: 10,
+    ability: { name: 'Butcher',    cd: 10000, desc: '3 s · auto-chop · double lifesteal', type: 'melee_revup', duration: 3000, lifestealMult: 2 } },
   { id: 'karambit',   name: 'Karambit',     type: 'Admin · Combat Knife', damage: 80, range: 1.6, cooldown: 200, speedMult: 1.8,
     adminItem: true,
     ability: { name: 'Stealth Stab', cd: 9000,  desc: 'Next hit · instakill from behind', type: 'melee_instakill' } },
@@ -6422,6 +6428,39 @@ function activateMeleeAbility() {
     flashAbilityName(ab.name);
     flashScreen('rgba(255,255,0,0.15)', 300);
   }
+  else if (ab.type === 'melee_pull') {
+    // Walking Cane "Yank" — pull the closest enemy in melee range toward us.
+    const pullDist = ab.distance || 4;
+    const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+    fwd.y = 0; fwd.normalize();
+    let bestPid = null, bestDist = Infinity;
+    for (const [pid, mesh] of Object.entries(remoteMeshes)) {
+      const toT = mesh.position.clone().sub(camera.position); toT.y = 0;
+      const d = toT.length();
+      if (d > item.range * 2.5 || d < 0.05) continue;
+      if (fwd.dot(toT.clone().normalize()) < 0.5) continue;
+      if (d < bestDist) { bestDist = d; bestPid = pid; }
+    }
+    if (bestPid) {
+      const bot = gameBots.find(b => b.id === bestPid);
+      if (bot) {
+        // Move the bot toward the player by pullDist (clamped to "almost touching")
+        const dx = camera.position.x - bot.x;
+        const dz = camera.position.z - bot.z;
+        const d  = Math.hypot(dx, dz) || 1;
+        const step = Math.min(pullDist, d - 0.6);
+        bot.x += (dx / d) * step;
+        bot.z += (dz / d) * step;
+        const mesh = remoteMeshes[bestPid];
+        if (mesh) mesh.position.set(bot.x, mesh.position.y, bot.z);
+        spawnHitParticle(camera.position.clone().setY(1.0));
+      } else {
+        // Remote player — tell server to teleport them via emitHit hack (skip; no-op)
+      }
+    }
+    flashScreen('rgba(220,200,140,0.18)', 250);
+    flashAbilityName(ab.name);
+  }
 
   updateAbilityHUD();
 }
@@ -6951,14 +6990,45 @@ function tryMelee() {
     if (item.id === 'chainsaw') playSoundEvent('chainsaw_hit', { volume: 1.35, minGap: 80 });
     if (dummy) handleDummyHit(dummy, mesh, { weaponId: effectiveWeaponId }, hitPos.clone());
     else emitHit(pid, `melee_${myId}_${now}`, effectiveWeaponId, hitPos.clone());
-    // Vampire Blade: heal on hit
-    if (item.healOnHit) {
+    // Vampire Blade / Meat Cleaver: heal on hit
+    const healPerHit = item.healOnHit || (item.lifestealOnHit && meleeAbilityBuff?.type === 'revup' ? item.lifestealOnHit : 0);
+    if (healPerHit) {
       const mult = meleeAbilityBuff?.lifestealMult || 1;
-      const healAmt = item.healOnHit * mult;
+      const healAmt = healPerHit * mult;
       socket.emit('healSelf', { amount: healAmt });
       const me = players[myId];
       if (me) { me.hp = Math.min(300, (me.hp || 300) + healAmt); updateHealthHUD(me.hp); }
       flashScreen('rgba(136,0,34,0.18)', 200);
+    }
+    // 🔥 Burn DOT (fire_poker) — drop a small burn zone at target
+    if (item.burnOnHit) {
+      const b = item.burnOnHit;
+      spawnBurnZone(mesh.position.clone(), b.radius, b.dps, b.dur);
+    }
+    // 🩸 Bleed DOT (machete) — only applies while Slash Combo is active
+    if (item.bleedOnHit && meleeAbilityBuff?.type === 'revup') {
+      const b = item.bleedOnHit;
+      spawnBurnZone(mesh.position.clone(), b.radius, b.dps, b.dur);
+    }
+    // ⬆️ Launch (cricket_bat / golf_club) — pop the target up
+    if (item.launchOnHit) {
+      const mult = (meleeAbilityBuff?.type === 'heavy' && item.ability?.launchMult) ? item.ability.launchMult : 1;
+      const launchVel = item.launchOnHit * mult;
+      const bot = gameBots.find(b => b.id === pid);
+      if (bot) { bot.yVel = launchVel; bot.y = bot.y || 0; }
+    }
+    // 🔗 Chain (pipe) — splash to nearby enemies in radius at reduced damage
+    if (item.chainOnHit) {
+      const { radius, mult } = item.chainOnHit;
+      for (const [pid2, mesh2] of Object.entries(remoteMeshes)) {
+        if (pid2 === pid) continue;
+        if (mesh.position.distanceTo(mesh2.position) > radius) continue;
+        const hp2 = mesh2.position.clone().setY(1.0);
+        const d2 = TRAINING_DUMMIES.find(d => d.id === pid2);
+        if (d2) handleDummyHit(d2, mesh2, { weaponId: item.id, dmgMult: mult }, hp2);
+        else emitHit(pid2, `chain_${myId}_${now}_${pid2}`, item.id, hp2);
+        spawnHitParticle(hp2);
+      }
     }
     // Titan Hammer: AOE on every swing — hit ALL enemies in radius around contact
     if (item.aoeOnSwing) {
