@@ -4641,6 +4641,81 @@ function buildRoyalMinigun()     { return _genericGun({ bodyShape:'heavy', bodyC
 function buildPocketRocket()     { return _genericGun({ bodyShape:'pistol', bodyColor:0x331100, accentColor:0xff8800, magType:'hidden', barrelR:0.020, emissive:true, flashColor:0xff8800 }); }
 function buildAutoRevolver()     { return _genericGun({ bodyShape:'pistol', bodyColor:0x222211, accentColor:0xffcc88, magType:'hidden', scope:'red_dot' }); }
 function buildFrostBlaster()     { return _genericGun({ bodyShape:'compact', bodyColor:0x113344, accentColor:0x99eeff, magType:'box', emissive:true, scope:'holo', flashColor:0x99eeff }); }
+
+// 🆕 Batch-4 secondaries — gun-shaped ones reuse _genericGun, throwables get bespoke shapes
+function buildSnubRevolver()  { return _genericGun({ bodyShape:'pistol', bodyColor:0x222222, accentColor:0x888888, magType:'hidden', barrelR:0.011 }); }
+function buildDuelistPistol() { return _genericGun({ bodyShape:'pistol', bodyColor:0x331111, accentColor:0xddccaa, magType:'hidden', barrelR:0.012, scope:'red_dot' }); }
+function buildMauser()        { return _genericGun({ bodyShape:'pistol', bodyColor:0x442211, accentColor:0xaa8844, magType:'hidden', barrelR:0.012 }); }
+function buildMiniUzi()       { return _genericGun({ bodyShape:'compact', bodyColor:0x1a1a1a, accentColor:0x555555, magType:'banana' }); }
+function buildNailGun()       { return _genericGun({ bodyShape:'compact', bodyColor:0xaa6622, accentColor:0xccccaa, magType:'box', barrelR:0.014 }); }
+function buildBoomstick()     { return _genericGun({ bodyShape:'pistol', bodyColor:0x553311, accentColor:0x886644, magType:'hidden', barrelR:0.022, barrelCount:2 }); }
+function buildSignalPistol()  { return _genericGun({ bodyShape:'pistol', bodyColor:0xffaa44, accentColor:0xffcc66, magType:'hidden', barrelR:0.024, emissive:true, flashColor:0xff8800 }); }
+
+// Throwable models — built from primitives, no gun chassis
+function _throwableHolder(meshFn) {
+  const g = new THREE.Group();
+  meshFn(g);
+  g.position.set(0.16, -0.10, -0.22);
+  return g;
+}
+function buildThrowingAxes() {
+  return _throwableHolder(g => {
+    const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.22, 8),
+      new THREE.MeshLambertMaterial({ color: 0x553322 }));
+    handle.rotation.x = Math.PI / 2; handle.position.set(0, 0, -0.02); g.add(handle);
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.10, 0.03),
+      new THREE.MeshLambertMaterial({ color: 0x8a5a2a }));
+    head.position.set(0, 0.06, -0.10); g.add(head);
+  });
+}
+function buildShuriken() {
+  return _throwableHolder(g => {
+    const mat = new THREE.MeshLambertMaterial({ color: 0xcccccc, metalness: 0.5 });
+    // 4-pointed star made of crossing rectangles
+    const a = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.025, 0.005), mat);
+    const b = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.14, 0.005), mat);
+    const c = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.10, 0.005), mat);
+    c.rotation.z = Math.PI / 4;
+    a.position.set(0, 0, -0.06); b.position.set(0, 0, -0.06); c.position.set(0, 0, -0.061);
+    g.add(a); g.add(b); g.add(c);
+  });
+}
+function buildBoomerang() {
+  return _throwableHolder(g => {
+    const mat = new THREE.MeshLambertMaterial({ color: 0xcc8855 });
+    const arm1 = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.03, 0.02), mat);
+    const arm2 = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.03, 0.02), mat);
+    arm1.rotation.z = Math.PI / 6; arm2.rotation.z = -Math.PI / 6;
+    arm1.position.set(-0.04, 0.02, -0.06); arm2.position.set(0.04, 0.02, -0.06);
+    g.add(arm1); g.add(arm2);
+  });
+}
+function buildSlingshot() {
+  return _throwableHolder(g => {
+    const wood = new THREE.MeshLambertMaterial({ color: 0x6a4a2a });
+    const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.16, 6), wood);
+    handle.rotation.x = Math.PI / 2; handle.position.set(0, -0.02, 0.03); g.add(handle);
+    const left  = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.12, 6), wood);
+    const right = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.12, 6), wood);
+    left.rotation.z = Math.PI / 6;  right.rotation.z = -Math.PI / 6;
+    left.position.set(-0.05, 0.07, -0.05); right.position.set(0.05, 0.07, -0.05);
+    g.add(left); g.add(right);
+    // band
+    const band = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.006, 0.002),
+      new THREE.MeshLambertMaterial({ color: 0x000000 }));
+    band.position.set(0, 0.12, -0.05); g.add(band);
+  });
+}
+function buildBlowgun() {
+  return _throwableHolder(g => {
+    const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.50, 10),
+      new THREE.MeshLambertMaterial({ color: 0x33aa55 }));
+    tube.rotation.x = Math.PI / 2; tube.position.set(0, 0, -0.20); g.add(tube);
+    const mouth = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.018, 0.04, 8),
+      new THREE.MeshLambertMaterial({ color: 0x223a33 }));
+    mouth.rotation.x = Math.PI / 2; mouth.position.set(0, 0, 0.02); g.add(mouth);
+  });
+}
 // 🔬 Tech / Physics models
 function buildPrismLauncher()    { return _genericGun({ bodyShape:'futuristic', bodyColor:0x440044, accentColor:0xffaaff, magType:'pan', emissive:true, scope:'holo', flashColor:0xffaaff }); }
 function buildFoamCannon()       { return _genericGun({ bodyShape:'heavy', bodyColor:0x445566, accentColor:0xddddee, magType:'drum', barrelR:0.020, foregrip:true, flashColor:0xeeeeff }); }
@@ -4697,6 +4772,10 @@ const weaponModels = [
   buildMachineRevolver(), buildEMPPistol(),
   // ── 😈 P2W secondaries ───────────────────────────────────────────────────
   buildPocketRocket(), buildAutoRevolver(), buildFrostBlaster(),
+  // ── 🆕 Batch-4 secondaries (must match WEAPONS order) ──────────────────
+  buildSnubRevolver(), buildDuelistPistol(), buildMauser(), buildMiniUzi(),
+  buildNailGun(), buildBoomstick(), buildSignalPistol(), buildThrowingAxes(),
+  buildShuriken(), buildBoomerang(), buildSlingshot(), buildBlowgun(),
   // ── 🪖 ADMIN primaries ───────────────────────────────────────────────────
   buildGAU19(), buildMK44(), buildXM7(), buildBarrett(), buildM134(), buildHKMP7(), buildP90Spec(),
   // ── 🪖 ADMIN secondaries ─────────────────────────────────────────────────
