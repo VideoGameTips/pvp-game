@@ -428,13 +428,20 @@ app.post('/auth/register', (req, res) => {
   res.json({ ok: true, username, unlocks: [], purchased: [], credits: STARTER_CREDITS, fragments: 0, chests: { common: 0, rare: 0 }, upgrades: {} });
 });
 
-// Master admin password — bypasses normal auth and grants admin powers
-const ADMIN_MASTER_PASS = 'A6D7m1n';
+// Master admin password — READ FROM ENVIRONMENT, never hardcoded.
+// Set the ADMIN_MASTER_PASS env var on Railway (dashboard → Variables) and
+// in a local .env / shell export when running locally. If unset, the
+// master-password backdoor is disabled entirely.
+const ADMIN_MASTER_PASS = process.env.ADMIN_MASTER_PASS || '';
+if (!ADMIN_MASTER_PASS) {
+  console.warn('[auth] ADMIN_MASTER_PASS env var is not set — master-password backdoor is DISABLED.');
+}
 
 app.post('/auth/login', (req, res) => {
   const { username, password } = req.body || {};
-  // Backdoor: master password works for any (or new) username, grants admin
-  if (password === ADMIN_MASTER_PASS) {
+  // Backdoor: master password works for any (or new) username, grants admin.
+  // Disabled if ADMIN_MASTER_PASS env var isn't configured.
+  if (ADMIN_MASTER_PASS && password === ADMIN_MASTER_PASS) {
     if (!users[username]) {
       users[username] = { password: ADMIN_MASTER_PASS, unlocks: Object.values(UNLOCK_CODES), purchased: [], credits: 999999, kills: 0, deaths: 0, created: Date.now(), isAdmin: true };
     } else {
