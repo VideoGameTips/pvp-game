@@ -12957,8 +12957,8 @@ function renderShopWheel(body) {
 function renderShopUpgrades(body) {
   body.innerHTML = `
     <div style="width:100%;font-size:11px;color:#aaa;margin-bottom:14px;letter-spacing:1px;">
-      ✨ Spend fragments to upgrade weapons you own. 3 upgrade slots per weapon — pick a stat each level.
-      Costs: 30 / 60 / 120 fragments. Effects: +12% damage, +25% magazine, or -15% reload time.
+      ✨ Spend fragments to upgrade weapons you own. Each stat can be levelled up to ${MAX_LEVELS_PER_STAT} times independently — max +120% damage, +250% mag, -85% reload.<br>
+      Costs scale: ${UPGRADE_COSTS_CLIENT.join(' / ')} fragments per level. Effects per level: +12% damage, +25% magazine, -15% reload time.
     </div>
   `;
   const owned = [...FREE_WEAPONS, ...(currentUser.purchased || [])];
@@ -12970,25 +12970,34 @@ function renderShopUpgrades(body) {
     if (w.slot !== 'primary' && w.slot !== 'secondary') continue;
     const up = getWeaponUpgrades(id);
     const total = totalUpgradeLevels(id);
-    const nextCost = total < MAX_UPGRADE_LEVELS ? UPGRADE_COSTS_CLIENT[total] : null;
+    const fullyMaxed = up.damage >= MAX_LEVELS_PER_STAT && up.mag >= MAX_LEVELS_PER_STAT && up.reload >= MAX_LEVELS_PER_STAT;
     const card = document.createElement('div');
-    card.style.cssText = 'min-width:230px;max-width:260px;background:#0f1018;border:1px solid #444;border-radius:5px;padding:10px 12px;';
+    card.style.cssText = 'min-width:240px;max-width:270px;background:#0f1018;border:1px solid #444;border-radius:5px;padding:10px 12px;';
+    const statRow = (stat, label, cssClr, border) => {
+      const lvl = up[stat] || 0;
+      const maxed = lvl >= MAX_LEVELS_PER_STAT;
+      const cost = maxed ? null : UPGRADE_COSTS_CLIENT[lvl];
+      return `<button data-stat="${stat}" ${maxed ? 'disabled' : ''} style="padding:5px;background:${maxed ? '#222' : '#1a1a1a'};color:${maxed ? '#88ff99' : cssClr};border:1px solid ${maxed ? '#88ff99' : border};font-size:10px;cursor:${maxed ? 'default' : 'pointer'};border-radius:3px;font-family:inherit;display:flex;justify-content:space-between;">
+        <span>${label} (${lvl}/${MAX_LEVELS_PER_STAT})</span>
+        <span>${maxed ? 'MAXED' : cost + '🧩'}</span>
+      </button>`;
+    };
     card.innerHTML = `
       <div style="font-size:13px;font-weight:bold;color:#ddd;">${w.name}</div>
       <div style="font-size:9px;color:#888;margin:2px 0 6px;">${w.type}</div>
       <div style="font-size:10px;color:#aaccff;margin-bottom:6px;">
-        DMG +${up.damage}/3 · MAG +${up.mag}/3 · RLD +${up.reload}/3 · TOTAL ${total}/${MAX_UPGRADE_LEVELS}
+        Total: ${total}/${MAX_LEVELS_PER_STAT * 3}
       </div>
-      ${total >= MAX_UPGRADE_LEVELS ? '<div style="text-align:center;color:#88ff99;font-size:11px;">✓ MAXED</div>' : `
-        <div style="font-size:10px;color:#bbb;margin-bottom:6px;">Next upgrade cost: ${nextCost}🧩</div>
+      ${fullyMaxed ? '<div style="text-align:center;color:#88ff99;font-size:11px;">✓ FULLY MAXED</div>' : `
         <div style="display:flex;flex-direction:column;gap:4px;">
-          <button data-stat="damage" style="padding:5px;background:#2a1a1a;color:#ff8866;border:1px solid #cc6644;font-size:10px;cursor:pointer;border-radius:3px;font-family:inherit;">+12% DAMAGE</button>
-          <button data-stat="mag"    style="padding:5px;background:#1a2a1a;color:#88ff99;border:1px solid #44aa66;font-size:10px;cursor:pointer;border-radius:3px;font-family:inherit;">+25% MAGAZINE</button>
-          <button data-stat="reload" style="padding:5px;background:#1a1a2a;color:#aaccff;border:1px solid #6699cc;font-size:10px;cursor:pointer;border-radius:3px;font-family:inherit;">-15% RELOAD TIME</button>
+          ${statRow('damage', '+12% DMG',    '#ff8866', '#cc6644')}
+          ${statRow('mag',    '+25% MAG',    '#88ff99', '#44aa66')}
+          ${statRow('reload', '-15% RELOAD', '#aaccff', '#6699cc')}
         </div>
       `}
     `;
     card.querySelectorAll('[data-stat]').forEach(btn => {
+      if (btn.disabled) return;
       btn.addEventListener('click', async () => { if (await upgradeWeapon(id, btn.dataset.stat)) renderShop(); });
     });
     body.appendChild(card);
@@ -13643,8 +13652,8 @@ async function awardMatchCredits(kills, won) {
 // ── 📦 Chest, 🧩 fragment, ✨ upgrade, 🎡 wheel actions ────────────────
 const CHEST_PRICES_CLIENT = { common: 120, rare: 400 };
 const FRAGMENT_UNLOCK_COST = 100;
-const UPGRADE_COSTS_CLIENT = [30, 60, 120];
-const MAX_UPGRADE_LEVELS = 3;
+const UPGRADE_COSTS_CLIENT = [30, 60, 120, 240, 480, 800, 1200, 1800, 2500, 3500];
+const MAX_LEVELS_PER_STAT = 10;
 const UPGRADE_STAT_LABELS = { damage: '+12% Damage', mag: '+25% Magazine', reload: '-15% Reload Time' };
 
 const ADMIN_PASS_COST = 300;
@@ -13716,9 +13725,10 @@ function totalUpgradeLevels(weaponId) {
 }
 async function upgradeWeapon(weaponId, stat) {
   if (!currentUser) return false;
-  const total = totalUpgradeLevels(weaponId);
-  if (total >= MAX_UPGRADE_LEVELS) { alert('Max upgrades reached for this weapon.'); return false; }
-  const cost = UPGRADE_COSTS_CLIENT[total];
+  const up = getWeaponUpgrades(weaponId);
+  const currentLvl = up[stat] || 0;
+  if (currentLvl >= MAX_LEVELS_PER_STAT) { alert(`Max level (${MAX_LEVELS_PER_STAT}) reached for that stat.`); return false; }
+  const cost = UPGRADE_COSTS_CLIENT[currentLvl];
   if ((currentUser.fragments || 0) < cost) { alert(`Need ${cost} fragments · You have ${currentUser.fragments || 0}`); return false; }
   const r = await authRequest('/shop/upgrade-weapon', { username: currentUser.username, password: currentUser.password, weaponId, stat });
   if (!r || r.error) { alert('❌ ' + (r?.error || 'shop error')); return false; }

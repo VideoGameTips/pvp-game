@@ -161,10 +161,11 @@ const ADMIN_PASS_LENGTH_MS = 10 * 60 * 1000; // 10 minutes
 // ── 📦 Chests, 🎡 wheel, ✨ upgrades ───────────────────────────────────
 const CHEST_PRICES = { common: 120, rare: 400 };
 const FRAGMENT_UNLOCK_COST = 100;
-const UPGRADE_COSTS = [30, 60, 120]; // level 1, 2, 3 — per stat
+// Cost to buy the Nth level of any single stat (10 levels per stat now)
+const UPGRADE_COSTS = [30, 60, 120, 240, 480, 800, 1200, 1800, 2500, 3500];
 const UPGRADE_STATS = ['damage', 'mag', 'reload']; // pickable per level
 const WHEEL_PAID_COST = 100;
-const MAX_UPGRADE_LEVELS_PER_WEAPON = 3; // total across all stats
+const MAX_LEVELS_PER_STAT = 10; // per-stat cap; total across 3 stats can reach 30
 
 function rand(min, max) { return min + Math.random() * (max - min); }
 function ri(min, max) { return Math.floor(rand(min, max + 1)); }
@@ -244,9 +245,9 @@ app.post('/shop/upgrade-weapon', (req, res) => {
   if (!UPGRADE_STATS.includes(stat)) return res.status(400).json({ error: 'invalid stat' });
   if (!u.purchased.includes(weaponId) && !FREE_WEAPONS.has(weaponId)) return res.status(400).json({ error: 'weapon not owned' });
   const up = u.upgrades[weaponId] || { damage: 0, mag: 0, reload: 0 };
-  const totalLevels = (up.damage || 0) + (up.mag || 0) + (up.reload || 0);
-  if (totalLevels >= MAX_UPGRADE_LEVELS_PER_WEAPON) return res.status(400).json({ error: 'max upgrades reached' });
-  const cost = UPGRADE_COSTS[totalLevels]; // next level cost
+  const currentLvl = up[stat] || 0;
+  if (currentLvl >= MAX_LEVELS_PER_STAT) return res.status(400).json({ error: 'max level for that stat' });
+  const cost = UPGRADE_COSTS[currentLvl]; // cost for the next level of THIS stat
   if ((u.fragments || 0) < cost) return res.status(402).json({ error: 'not enough fragments', fragments: u.fragments, cost });
   u.fragments -= cost;
   up[stat] = (up[stat] || 0) + 1;
