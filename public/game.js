@@ -4783,10 +4783,17 @@ function buildNailGun()       { return _genericGun({ bodyShape:'compact', bodyCo
 function buildBoomstick()     { return _genericGun({ bodyShape:'pistol', bodyColor:0x553311, accentColor:0x886644, magType:'hidden', barrelR:0.022, barrelCount:2 }); }
 function buildSignalPistol()  { return _genericGun({ bodyShape:'pistol', bodyColor:0xffaa44, accentColor:0xffcc66, magType:'hidden', barrelR:0.024, emissive:true, flashColor:0xff8800 }); }
 
-// Throwable models — built from primitives, no gun chassis
+// Throwable models — built from primitives, no gun chassis.
+// IMPORTANT: must include a `_flash` Object3D — the fire/fanfire code
+// accesses model._flash.visible / .getWorldPosition unconditionally.
 function _throwableHolder(meshFn) {
   const g = new THREE.Group();
   meshFn(g);
+  // Invisible muzzle stand-in so firing code doesn't crash on undefined.
+  const flash = new THREE.Object3D();
+  flash.position.set(0, 0, -0.20); // pretend muzzle ~20cm in front
+  g.add(flash);
+  g._flash = flash;
   g.position.set(0.16, -0.10, -0.22);
   return g;
 }
