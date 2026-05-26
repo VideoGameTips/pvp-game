@@ -6814,14 +6814,14 @@ function updateMovement(dt) {
   const adminSpeedMult = (adminCheats.speed && currentUser?.isAdmin) ? 3 : 1;
   // 🏃 Sprint (Shift): +50% speed.  🦆 Crouch (Ctrl/C): -45% speed.
   // Mobile mirrors via mobileSprintHeld / mobileCrouchHeld toggles.
-  const sprintHeld = !!(keys['ShiftLeft'] || keys['ShiftRight'] || window._mobileSprint);
   const crouchHeld = !!(keys['ControlLeft'] || keys['ControlRight'] || keys['KeyC'] || window._mobileCrouch);
-  // 🛹 Slide: edge-detect crouch while sprinting + moving → 0.8s slide burst.
-  // During slide, direction is locked and you stay crouched.
-  const crouchEdge = crouchHeld && !window._prevCrouchHeld;
-  window._prevCrouchHeld = crouchHeld;
+  // 🛹 Slide: edge-detect SHIFT (or mobile slide button) → 0.8s slide burst.
+  // No sustained sprint — SHIFT only triggers a slide while you're moving.
+  const shiftHeld = !!(keys['ShiftLeft'] || keys['ShiftRight'] || window._mobileSlide);
+  const shiftEdge = shiftHeld && !window._prevShiftHeld;
+  window._prevShiftHeld = shiftHeld;
   const nowMs = Date.now();
-  if (crouchEdge && sprintHeld && dir.lengthSq() > 0.001 && !window._slideUntil) {
+  if (shiftEdge && dir.lengthSq() > 0.001 && !window._slideUntil) {
     window._slideUntil = nowMs + 800; // 0.8s slide
     window._slideDir = dir.clone();
   }
@@ -6832,7 +6832,6 @@ function updateMovement(dt) {
   } else if (window._slideUntil) {
     window._slideUntil = 0; // ended
   }
-  const sprintMult = sprintHeld && !crouchHeld && !sliding ? 1.5 : 1;
   const crouchMult = (crouchHeld && !sliding) ? 0.55 : 1;
   // Slide gives a tapered burst: starts at 2.0×, decays to ~1.0× by the end
   let slideMult = 1;
@@ -6840,7 +6839,7 @@ function updateMovement(dt) {
     const t = (window._slideUntil - nowMs) / 800; // 1 → 0
     slideMult = 1.0 + 1.0 * t; // 2.0× → 1.0×
   }
-  const speedMult = baseSpeedMult * (adrenalineActive ? 1.6 : 1) * frostMult * adminSpeedMult * sprintMult * crouchMult * slideMult;
+  const speedMult = baseSpeedMult * (adrenalineActive ? 1.6 : 1) * frostMult * adminSpeedMult * crouchMult * slideMult;
   // Drop the camera ~0.5m when crouching (eased)
   if (!window._crouchEye) window._crouchEye = 1.65;
   // Slide forces a low posture — eye drops to ~0.95m mid-slide for the "low slide" feel
@@ -15098,8 +15097,20 @@ function _wireHold(id, prop) {
   el.addEventListener('mouseup',    off);
   el.addEventListener('mouseleave', off);
 }
-_wireHold('btn-sprint', '_mobileSprint');
 _wireHold('btn-crouch', '_mobileCrouch');
+// Slide is edge-triggered like jump — single tap = single slide burst
+const _slideBtn = document.getElementById('btn-slide');
+if (_slideBtn) {
+  const trigger = e => {
+    e?.preventDefault?.();
+    _slideBtn.classList.add('pressed');
+    window._mobileSlide = true;
+    // Clear the flag next frame so it edge-triggers exactly once
+    setTimeout(() => { window._mobileSlide = false; _slideBtn.classList.remove('pressed'); }, 100);
+  };
+  _slideBtn.addEventListener('touchstart', trigger, { passive: false });
+  _slideBtn.addEventListener('mousedown',  trigger);
+}
 // Jump is edge-triggered, not held — single tap = single jump
 const _jumpBtn = document.getElementById('btn-jump');
 if (_jumpBtn) {
