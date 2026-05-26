@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>PVP Arena Wiki</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: 'Helvetica Neue', Arial, sans-serif; background: #1a1a1a; color: #e4e4e4; line-height: 1.55; }
+  a { color: #58a6ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  /* Top bar */
+  header.topbar { background: linear-gradient(90deg, #c91414 0%, #7a0000 100%); color: white; padding: 14px 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.4); position: sticky; top: 0; z-index: 100; }
+  header.topbar .title { font-size: 24px; font-weight: 800; letter-spacing: 2px; }
+  header.topbar .tagline { font-size: 12px; opacity: 0.85; margin-top: 2px; }
+  header.topbar a.play-btn { float: right; background: white; color: #c91414; padding: 8px 16px; border-radius: 4px; font-weight: bold; font-size: 13px; }
+  /* Layout */
+  .layout { display: flex; max-width: 1280px; margin: 0 auto; }
+  /* Sidebar */
+  aside.sidebar { width: 240px; min-width: 240px; background: #232323; padding: 24px 16px; border-right: 1px solid #333; min-height: calc(100vh - 60px); position: sticky; top: 60px; align-self: flex-start; max-height: calc(100vh - 60px); overflow-y: auto; }
+  aside.sidebar h3 { font-size: 11px; letter-spacing: 2px; color: #888; text-transform: uppercase; margin: 18px 0 8px; padding-bottom: 4px; border-bottom: 1px solid #333; }
+  aside.sidebar ul { list-style: none; padding: 0; margin: 0; }
+  aside.sidebar li a { display: block; padding: 5px 10px; color: #ccc; font-size: 13px; border-left: 3px solid transparent; transition: all 0.15s; }
+  aside.sidebar li a:hover { background: #2c2c2c; border-left-color: #c91414; color: white; text-decoration: none; }
+  /* Main content */
+  main { flex: 1; padding: 32px 40px; max-width: 100%; overflow-x: auto; }
+  main h1 { font-size: 32px; font-weight: 800; margin: 0 0 6px; color: #ffcc44; border-bottom: 2px solid #444; padding-bottom: 10px; }
+  main h2 { font-size: 22px; margin: 32px 0 12px; color: #ffaa44; border-bottom: 1px solid #333; padding-bottom: 6px; }
+  main h3 { font-size: 17px; margin: 24px 0 8px; color: #ddd; }
+  main .lead { color: #aaa; font-size: 14px; margin-bottom: 24px; padding: 12px; background: #1f1f1f; border-left: 4px solid #c91414; border-radius: 3px; }
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 18px; font-size: 13px; }
+  th { background: #2a2a2a; color: #ffcc44; text-align: left; padding: 8px 12px; border-bottom: 2px solid #444; font-weight: 600; }
+  td { padding: 7px 12px; border-bottom: 1px solid #2a2a2a; }
+  tr:nth-child(even) td { background: #1c1c1c; }
+  /* Pills */
+  .pill { display: inline-block; padding: 2px 9px; border-radius: 10px; font-size: 11px; margin-right: 4px; }
+  .pill-meta { background: #2a3a44; color: #88ddff; }
+  .pill-fun  { background: #44324a; color: #cc99ff; }
+  .pill-p2w  { background: #443214; color: #ffcc44; }
+  .pill-admin { background: #4a2a2a; color: #ff8888; }
+  /* Stat boxes */
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 14px 0 20px; }
+  .stat-box { background: #232323; border: 1px solid #333; border-radius: 5px; padding: 12px 14px; }
+  .stat-box .label { font-size: 11px; color: #888; letter-spacing: 1.5px; text-transform: uppercase; }
+  .stat-box .value { font-size: 22px; font-weight: 700; color: #ffcc44; margin-top: 4px; }
+  /* Quote / tip box */
+  .tip-box { background: #1f2620; border-left: 4px solid #66ff99; padding: 10px 14px; margin: 10px 0; font-size: 13px; }
+  .secret-box { background: #261f26; border-left: 4px solid #cc99ff; padding: 10px 14px; margin: 10px 0; font-size: 13px; }
+  /* Code-style monospace */
+  code { background: #2a2a2a; padding: 2px 6px; border-radius: 3px; font-family: 'Courier New', monospace; font-size: 12px; color: #ffcc66; }
+  /* Footer */
+  footer { background: #161616; color: #888; padding: 20px 40px; font-size: 12px; text-align: center; border-top: 1px solid #333; margin-top: 40px; }
+  footer a { color: #58a6ff; }
+  /* Responsive */
+  @media (max-width: 800px) {
+    aside.sidebar { display: none; }
+    main { padding: 20px 16px; }
+    header.topbar a.play-btn { display: none; }
+  }
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <a class="play-btn" href="/">▶ PLAY</a>
+    <div class="title">⚔️ PVP ARENA WIKI</div>
+    <div class="tagline">The unofficial-official guide to a browser FPS</div>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <h3>Getting Started</h3>
+      <ul>
+        <li><a href="#overview">Overview</a></li>
+        <li><a href="#getting-started">First Steps</a></li>
+      </ul>
+      <h3>Gameplay</h3>
+      <ul>
+        <li><a href="#modes">Game Modes</a></li>
+        <li><a href="#arcade">Arcade Modes</a></li>
+        <li><a href="#difficulty">Difficulty</a></li>
+        <li><a href="#lobby">Lobby System</a></li>
+      </ul>
+      <h3>World</h3>
+      <ul>
+        <li><a href="#maps">Maps</a></li>
+        <li><a href="#secrets">Secrets</a></li>
+      </ul>
+      <h3>Arsenal</h3>
+      <ul>
+        <li><a href="#weapons">Weapons</a></li>
+        <li><a href="#admin-items">Admin Items</a></li>
+        <li><a href="#loadouts">Best Loadouts</a></li>
+      </ul>
+      <h3>Economy</h3>
+      <ul>
+        <li><a href="#shop">Shop</a></li>
+        <li><a href="#bundles">Bundles</a></li>
+        <li><a href="#chests">Chests &amp; Fragments</a></li>
+        <li><a href="#wheel">Daily Wheel</a></li>
+        <li><a href="#upgrades">Upgrades</a></li>
+        <li><a href="#admin-pass">Admin Pass</a></li>
+      </ul>
+      <h3>Reference</h3>
+      <ul>
+        <li><a href="#tips">Tips &amp; Tricks</a></li>
+        <li><a href="#fun-facts">Fun Facts</a></li>
+        <li><a href="#tech">Tech Stack</a></li>
+      </ul>
+    </aside>
+
+    <main>
+      <h1 id="overview">PVP Arena</h1>
+      <div class="lead">
+        Fast-paced multiplayer browser FPS built on Three.js + Socket.IO. Battle bots and other players across 13 maps, 15+ game modes, and an arsenal of 200+ weapons.<br>
+        🌐 <a href="https://pvp-game-production.up.railway.app">Play it live</a> &middot; 📦 <a href="https://github.com/VideoGameTips/pvp-game">Source code</a>
+      </div>
+
+      <div class="stat-grid">
+        <div class="stat-box"><div class="label">Weapons</div><div class="value">200+</div></div>
+        <div class="stat-box"><div class="label">Maps</div><div class="value">13</div></div>
+        <div class="stat-box"><div class="label">Game Modes</div><div class="value">15+</div></div>
+        <div class="stat-box"><div class="label">Bundles</div><div class="value">24</div></div>
+        <div class="stat-box"><div class="label">Best Loadouts</div><div class="value">30</div></div>
+        <div class="stat-box"><div class="label">Promo Codes</div><div class="value">24</div></div>
+      </div>
+
+      <h2 id="getting-started">First Steps</h2>
+      <p>Make an account on the login screen (username + password — auto-saves locally so you only do this once). You'll start with <strong>500 credits</strong> and the free starter loadout: <em>AK20, SG-8, Pistol, Flare, Fists, Frying Pan, Frag, Medkit</em>. From the mode-select screen you can shop, redeem promo codes, or jump straight into a match.</p>
+
+      <h2 id="modes">Game Modes</h2>
+
+      <h3>Elimination (Round-Based)</h3>
+      <table>
+        <tr><th>Mode</th><th>Format</th></tr>
+        <tr><td>1v1</td><td>First to N rounds, no respawns within a round</td></tr>
+        <tr><td>2v2</td><td>Team elimination</td></tr>
+        <tr><td>3v3</td><td>Team elimination</td></tr>
+      </table>
+
+      <h3>Race (First to N Kills)</h3>
+      <table>
+        <tr><th>Mode</th><th>Format</th></tr>
+        <tr><td>FFA5</td><td>Free-for-all, 5 bots</td></tr>
+        <tr><td>FFA8</td><td>Free-for-all, 8 bots</td></tr>
+        <tr><td>Race 2v2 / 3v3</td><td>Team kill race</td></tr>
+      </table>
+
+      <h3>Special Modes</h3>
+      <ul>
+        <li><strong>D-Day</strong> — Defend the hill against waves; MG42 + AK20 forced.</li>
+        <li><strong>Frontlines</strong> — Push the battle line to the enemy base.</li>
+        <li><strong>Last Stand</strong> — Survive 10 escalating waves.</li>
+        <li><strong>Shooting Range</strong> — Practice mode, no enemies.</li>
+        <li><strong>👑 King of the Hill (KOTH)</strong> — 10 players, 3 lives each. Plays on the 250×250 BR arena map with vehicles, helicopters, and mortars.</li>
+      </ul>
+
+      <h2 id="arcade">🎮 Arcade Modes (6)</h2>
+      <table>
+        <tr><th>Mode</th><th>Mechanic</th></tr>
+        <tr><td>Gun Game</td><td>21-tier weapon ladder, win on knife</td></tr>
+        <tr><td>One in the Chamber</td><td>1 bullet, every shot is a kill, refills on kill</td></tr>
+        <tr><td>Juggernaut</td><td>One mega-buffed player vs. the rest; killer becomes juggernaut</td></tr>
+        <tr><td>Infection</td><td>Zombies vs. humans; zombies convert on kill</td></tr>
+        <tr><td>Sniper Only</td><td>Snipers forced, no secondaries</td></tr>
+        <tr><td>Speedrun</td><td>Solo race to 20 kills, personal best tracked</td></tr>
+      </table>
+
+      <h2 id="difficulty">Difficulty Tiers</h2>
+      <table>
+        <tr><th>Tier</th><th>Bot Behavior</th></tr>
+        <tr><td>Easy</td><td>Slow aim, late reactions</td></tr>
+        <tr><td>Medium</td><td>Standard challenge</td></tr>
+        <tr><td>Hard</td><td>Faster reactions, ability use</td></tr>
+        <tr><td>Expert</td><td>Aggressive flanking, kite-retreat from scary weapons, low timidity</td></tr>
+      </table>
+
+      <h2 id="lobby">🏛️ Lobby System</h2>
+      <p>Every multiplayer mode routes you through a staging lobby. Players ready up, and the undermanned side can vote to fill with bots or play short-handed. Each match runs in its own isolated bubble — concurrent games don't bleed into each other.</p>
+
+      <h2 id="maps">🗺️ Maps</h2>
+      <table>
+        <tr><th>Map</th><th>Theme</th><th>Notable Features</th></tr>
+        <tr><td>Blank</td><td>Open arena</td><td>Default, no obstacles</td></tr>
+        <tr><td>Urban</td><td>City</td><td>🤫 Climbable skyscraper</td></tr>
+        <tr><td>Warehouse</td><td>Industrial</td><td>Crate cover</td></tr>
+        <tr><td>Forest</td><td>Woodland</td><td>Trees + tall grass</td></tr>
+        <tr><td>Volcano</td><td>Lava</td><td>Hot zones</td></tr>
+        <tr><td>Cyber</td><td>Neon city</td><td>Glowing structures</td></tr>
+        <tr><td>Desert</td><td>Arid</td><td>Long sightlines</td></tr>
+        <tr><td>Tundra</td><td>Snowy</td><td>Slippery surfaces</td></tr>
+        <tr><td>Space Station</td><td>Sci-fi</td><td>Low-G zones</td></tr>
+        <tr><td>🛬 Airport</td><td>Terminal</td><td>Breakable glass + lights</td></tr>
+        <tr><td>🪖 Trenches</td><td>WWI</td><td>Pilotable mortars (hold E)</td></tr>
+        <tr><td>☢️ Chernobyl</td><td>Nuclear</td><td>4 destructible reactors, toxic gas</td></tr>
+        <tr><td>🛢️/🛫/☣️/🌀/🔷</td><td>Various</td><td>Refinery, Skydock, Sewer, Gravity Lab, Glassworks</td></tr>
+        <tr><td>👑 BR Arena</td><td>Massive</td><td>250×250, vehicles + helis + mortars (KOTH only)</td></tr>
+      </table>
+
+      <h2 id="secrets">🤫 Map Secrets</h2>
+      <div class="secret-box">You can climb the skyscraper in <strong>URBAN</strong>.</div>
+      <div class="secret-box"><strong>Chernobyl's</strong> 4 reactors are destructible.</div>
+      <div class="secret-box"><strong>Airport</strong> glass + lights all break.</div>
+      <div class="secret-box"><strong>Mortars</strong> in Trenches can be piloted (hold E).</div>
+      <div class="secret-box"><strong>Helicopters</strong> in KOTH can be hijacked mid-air.</div>
+      <div class="secret-box">0.3% wheel jackpot drops a random rare weapon ≥400 credits.</div>
+
+      <h2 id="weapons">🔫 Weapon Arsenal</h2>
+      <p>Over 200 weapons across 4 slots. Most are buyable in the shop; admin items are promo-code only.</p>
+      <div class="stat-grid">
+        <div class="stat-box"><div class="label">Primaries</div><div class="value">60</div></div>
+        <div class="stat-box"><div class="label">Secondaries</div><div class="value">30</div></div>
+        <div class="stat-box"><div class="label">Melees</div><div class="value">34</div></div>
+        <div class="stat-box"><div class="label">Utilities</div><div class="value">37</div></div>
+      </div>
+
+      <h3>Notable P2W Weapons</h3>
+      <table>
+        <tr><th>Weapon</th><th>Slot</th><th>Cost</th></tr>
+        <tr><td>Royal Minigun</td><td>Primary</td><td>3,500💰</td></tr>
+        <tr><td>Orbital Strike</td><td>Utility</td><td>2,500💰</td></tr>
+        <tr><td>Titan Hammer</td><td>Melee</td><td>2,400💰</td></tr>
+        <tr><td>Black Hole Seed</td><td>Utility</td><td>2,200💰</td></tr>
+        <tr><td>Lightsabre</td><td>Melee</td><td>1,800💰</td></tr>
+        <tr><td>Vampire Blade</td><td>Melee</td><td>2,000💰</td></tr>
+        <tr><td>AMR (Anti-Material Rifle)</td><td>Primary</td><td>2,000💰</td></tr>
+      </table>
+
+      <h3>🌌 Sci-Fi P2W (Cosmic Tier)</h3>
+      <p>Ten primaries with reality-bending themes: <strong>Event Horizon Rifle</strong> (24,000💰), <strong>Void Harvester</strong> (40,000💰), <strong>Phase Driver</strong> (30,000💰), and more. Plus matching secondaries, melees, and utilities. <span class="pill pill-p2w">~$487k credits total</span></p>
+
+      <h2 id="admin-items">🪖 Admin Items (24)</h2>
+      <p>Unlockable only via case-sensitive promo codes. Bypasses the shop entirely. Once unlocked, they're permanently free on that account.</p>
+      <p><span class="pill pill-admin">Heavy primaries</span> Minigun M134, Anti-Material Barrett, MK-44 Bushmaster, GAU-19, XM7, HK-MP7, P90 Spec</p>
+      <p><span class="pill pill-admin">Secondaries</span> Desert Eagle, M1911 Match, Walther PPK, Glock 18, Five-Seven</p>
+      <p><span class="pill pill-admin">Combat knives</span> Karambit, Trench Bayonet, Tomahawk, OTs-04, Spec-Ops Garrote</p>
+      <p><span class="pill pill-admin">Utilities</span> C4 Charge, Claymore, M84 Stun, Thermite, Predator UAV, Care Package, Tactical Nuke</p>
+
+      <h2 id="loadouts">📋 Best Loadouts (30 Curated)</h2>
+      <p>Accessible via the <strong>📋 BEST LOADOUTS</strong> button on the loadout screen. Tap to auto-equip.</p>
+      <table>
+        <tr><th>#</th><th>Name</th><th>Theme</th></tr>
+        <tr><td>1</td><td>🏆 The Lockdown</td><td>Tournament-grade fundamentals</td></tr>
+        <tr><td>2</td><td>⚡ Caffeine Crash</td><td>Outrun every bullet</td></tr>
+        <tr><td>3</td><td>🎯 Headhunter</td><td>One scope. One tap.</td></tr>
+        <tr><td>4</td><td>💥 Demo Disco</td><td>Explosives party</td></tr>
+        <tr><td>5</td><td>🔥 Arsonist's Holiday</td><td>Everything burns</td></tr>
+        <tr><td>6</td><td>🤖 404: You Lose</td><td>Disable &amp; dismantle</td></tr>
+        <tr><td>7</td><td>🥷 Lights Out</td><td>Heard, never seen</td></tr>
+        <tr><td>8</td><td>🛡️ Immovable Object</td><td>You will not pass</td></tr>
+        <tr><td>9</td><td>🏏 Recess Bully</td><td>Playground chaos</td></tr>
+        <tr><td>10</td><td>🌪️ Yeet Squad</td><td>Send them flying</td></tr>
+        <tr><td>11</td><td>⚔️ For The Realm</td><td>Knight's loadout</td></tr>
+        <tr><td>12</td><td>🩸 Bloodletter</td><td>Heal off their pain</td></tr>
+        <tr><td>13</td><td>🏹 Sherwood Special</td><td>Bows + bolas</td></tr>
+        <tr><td>14</td><td>🛹 No Brakes</td><td>Sprint-only kit</td></tr>
+        <tr><td>15</td><td>🧊 Permafrost</td><td>Slow + finish</td></tr>
+        <tr><td>16</td><td>⚡ Thor's Allowance</td><td>Shock therapy</td></tr>
+        <tr><td>17</td><td>🎯 Steady Hand</td><td>Mid-range scalpel</td></tr>
+        <tr><td>18</td><td>🍳 Recipe for Disaster</td><td>Kitchen tools</td></tr>
+        <tr><td>19</td><td>💎 Credit Card Maxed</td><td>Pure P2W</td></tr>
+        <tr><td>20</td><td>🐢 The Hedge</td><td>Camp + punish</td></tr>
+        <tr><td>21</td><td>🌌 Spacefarer</td><td>Sci-fi tech</td></tr>
+        <tr><td>22</td><td>🎪 Clown Convention</td><td>Slapstick warfare</td></tr>
+        <tr><td>23</td><td>🔮 Light Show</td><td>Refractive chaos</td></tr>
+        <tr><td>24</td><td>🦅 Bread &amp; Butter</td><td>Reliable in any mode</td></tr>
+        <tr><td>25</td><td>🥊 Closing Time</td><td>Bar-fight ready</td></tr>
+        <tr><td>26</td><td>🌠 Reality Breaker</td><td>Endgame cosmic flex</td></tr>
+        <tr><td>27</td><td>🎤 Loudpack</td><td>Subtle as a brick</td></tr>
+        <tr><td>28</td><td>🪖 Boots on Ground</td><td>Mil-spec professional</td></tr>
+        <tr><td>29</td><td>🩹 Field Medic</td><td>Outlive everyone</td></tr>
+        <tr><td>30</td><td>👻 Through the Veil</td><td>Phase past wards</td></tr>
+      </table>
+
+      <h2 id="shop">🛒 Shop System</h2>
+      <p>Open the shop from the mode-select screen. Five tabs: <strong>Bundles</strong>, <strong>Primary</strong>, <strong>Secondary</strong>, <strong>Melee</strong>, <strong>Utility</strong>, plus <strong>Chests</strong>, <strong>Wheel</strong>, and <strong>Upgrades</strong>.</p>
+
+      <h3>💰 Credits</h3>
+      <p>Earned at match end: <code>5 × kills + 50 (win) / 20 (loss)</code>, capped at <strong>250/match</strong>. Spend on weapons, bundles, chests, wheel spins, and the Admin Pass.</p>
+
+      <h2 id="bundles">💼 Bundles (24)</h2>
+      <p>Save 40-70% off the sum of individual prices.</p>
+
+      <h3>Standard</h3>
+      <table>
+        <tr><th>Bundle</th><th>Cost</th><th>Contents</th></tr>
+        <tr><td>Pitiful Pack</td><td>420💰</td><td>AK30 · SG100 · Revolver · Bat · Smoke</td></tr>
+        <tr><td>Starter Pro</td><td>330💰</td><td>AK30 · Revolver · Bat · Stim</td></tr>
+        <tr><td>Heavy Duty</td><td>700💰</td><td>Minigun · Grenade Launcher · Machine Revolver · Crowbar · Sticky Charge</td></tr>
+      </table>
+
+      <h3>Themed</h3>
+      <table>
+        <tr><th>Bundle</th><th>Cost</th><th>Theme</th></tr>
+        <tr><td>Sniper Pack</td><td>580💰</td><td>Long-range duelist</td></tr>
+        <tr><td>Run &amp; Gun</td><td>430💰</td><td>Fast SMGs + speed</td></tr>
+        <tr><td>Melee Master</td><td>480💰</td><td>Close quarters</td></tr>
+        <tr><td>Shotgun Pack</td><td>430💰</td><td>Close-range chaos</td></tr>
+        <tr><td>Pyromaniac</td><td>620💰</td><td>Fire weapons</td></tr>
+        <tr><td>Stealth Ops</td><td>360💰</td><td>Silent kit</td></tr>
+        <tr><td>Storm Pack</td><td>420💰</td><td>Lightning</td></tr>
+        <tr><td>Defensive</td><td>450💰</td><td>Tank survival</td></tr>
+        <tr><td>Frostbite</td><td>380💰</td><td>Cold weapons</td></tr>
+        <tr><td>Knockback</td><td>500💰</td><td>Send 'em flying</td></tr>
+        <tr><td>Smart Tech</td><td>610💰</td><td>Tracking drones</td></tr>
+        <tr><td>Mortar Squad</td><td>550💰</td><td>Indirect fire</td></tr>
+        <tr><td>Sci-Fi Arsenal</td><td>500💰</td><td>Energy weapons</td></tr>
+        <tr><td>Demolition</td><td>600💰</td><td>Explosives</td></tr>
+        <tr><td>Archer's Kit</td><td>580💰</td><td>Bows + traps</td></tr>
+        <tr><td>Marksman</td><td>430💰</td><td>Precision</td></tr>
+        <tr><td>Knight's Honor</td><td>410💰</td><td>Swords + shotgun</td></tr>
+      </table>
+
+      <h3>Fun</h3>
+      <table>
+        <tr><th>Bundle</th><th>Cost</th><th>Theme</th></tr>
+        <tr><td>Retro Pack</td><td>145💰</td><td>Paintball, laser pointer, baguette, etc.</td></tr>
+        <tr><td>Chaos Mode</td><td>150💰</td><td>Goofy weapons</td></tr>
+        <tr><td>Kitchen Catastrophe</td><td>130💰</td><td>Frying pan, baguette, rubber duck</td></tr>
+      </table>
+
+      <h3>Premium <span class="pill pill-p2w">P2W</span></h3>
+      <table>
+        <tr><th>Bundle</th><th>Cost</th><th>Contents</th></tr>
+        <tr><td>Royalty</td><td>4,500💰</td><td>Royal Minigun + Vampire Blade + Hand Cannon + Orbital Strike</td></tr>
+        <tr><td>🌌 Cosmic P2W</td><td>80,000💰</td><td>All 21 sci-fi P2W items (~30% off)</td></tr>
+      </table>
+
+      <h2 id="chests">📦 Chests &amp; 🧩 Fragments</h2>
+      <p>Open chests to earn <strong>weapon fragments</strong>. Spend 100 fragments to unlock any priced weapon (alternative to credits), or spend them on upgrades.</p>
+      <table>
+        <tr><th>Chest</th><th>Cost</th><th>Drops</th></tr>
+        <tr><td>Common</td><td>120💰</td><td>10-25 frags + 0-30 credits</td></tr>
+        <tr><td>Rare</td><td>400💰</td><td>35-80 frags + 30-100 credits + 5% chance of a free weapon</td></tr>
+      </table>
+      <p><strong>Match-end drops:</strong> Win = 50% common + 15% rare. Loss = 30% common + 5% rare. (Independent rolls — not guaranteed every match.)</p>
+
+      <h2 id="wheel">🎡 Daily Wheel</h2>
+      <p>One free spin per day (UTC reset). Extra spins cost 100💰. Possible outcomes:</p>
+      <table>
+        <tr><th>Probability</th><th>Outcome</th></tr>
+        <tr><td>45%</td><td>Credits (60-180)</td></tr>
+        <tr><td>35%</td><td>Fragments (12-30)</td></tr>
+        <tr><td>14%</td><td>Big Fragments (40-80)</td></tr>
+        <tr><td>5%</td><td>Small Rare (200💰 or 100🧩)</td></tr>
+        <tr><td>0.7%</td><td>Big Bundle (400💰 + 150🧩)</td></tr>
+        <tr><td><strong>0.3%</strong></td><td><strong>JACKPOT — random rare weapon ≥400💰</strong></td></tr>
+      </table>
+
+      <h2 id="upgrades">✨ Weapon Upgrades</h2>
+      <p>Each owned weapon has three stats, each independently upgradeable up to <strong>level 10</strong>:</p>
+      <table>
+        <tr><th>Stat</th><th>Per-Level Effect</th><th>At Max (lvl 10)</th></tr>
+        <tr><td>Damage</td><td>+12%</td><td>+120%</td></tr>
+        <tr><td>Magazine</td><td>+25%</td><td>+250% (3.5×)</td></tr>
+        <tr><td>Reload</td><td>×0.85</td><td>-85% (6.7× faster)</td></tr>
+      </table>
+      <p><strong>Costs per level</strong> (per stat): <code>30 / 60 / 120 / 240 / 480 / 800 / 1,200 / 1,800 / 2,500 / 3,500</code> fragments. Maxing one stat = <strong>10,710 frags</strong>. Maxing all three = <strong>32,130 frags</strong>.</p>
+
+      <h2 id="admin-pass">🪖 Admin Pass</h2>
+      <p><strong>300 credits</strong> for a 10-minute window where every weapon (including all admin items) is equippable. Trial-style flex — once it expires, you go back to what you actually own.</p>
+
+      <h2 id="tips">💡 Tips &amp; Tricks</h2>
+
+      <h3>Useful</h3>
+      <div class="tip-box">The default loadout is more versatile than it looks.</div>
+      <div class="tip-box">Aiming down sights tightens spread on every gun.</div>
+      <div class="tip-box">Reloading early loses your reserve bullets — finish the mag.</div>
+      <div class="tip-box">Free spin resets daily at midnight UTC.</div>
+
+      <h3>Strategic</h3>
+      <div class="tip-box"><strong>Cycler</strong> never reloads — perfect for finishing weak enemies.</div>
+      <div class="tip-box"><strong>SR-X</strong> one-shots headshots.</div>
+      <div class="tip-box"><strong>Stim Shot</strong> is faster than Medkit.</div>
+      <div class="tip-box"><strong>Knife</strong> users move 2× as fast.</div>
+      <div class="tip-box"><strong>RPD</strong> never reloads either.</div>
+      <div class="tip-box"><strong>KOTH</strong> gives 3 lives — don't rush the center first.</div>
+
+      <h2 id="fun-facts">😂 Fun Facts</h2>
+      <p>Randomly shown in the lobby and 3 seconds after each match starts. 39 total facts across four categories: useful, strategic, secret, and funny. A sampling:</p>
+      <ul>
+        <li>"Chainsaw users are legally required to scream while charging."</li>
+        <li>"Frying Pan does NOT in fact deflect bullets. Stop trying."</li>
+        <li>"Tennis Racket reflects bullets. We don't know how."</li>
+        <li>"Baguette ability 'Eat' heals you. Carbs."</li>
+        <li>"Tac Nuke is balanced because it costs 250 of your fragile feelings."</li>
+        <li>"Fists are free. They have always been free. They will always be free."</li>
+        <li>"Trash123 has every admin item. Suspicious."</li>
+      </ul>
+
+      <h2 id="tech">🔧 Tech Stack</h2>
+      <ul>
+        <li><strong>Three.js</strong> — 3D rendering</li>
+        <li><strong>Socket.IO</strong> — multiplayer networking</li>
+        <li><strong>Express + Node.js</strong> — server</li>
+        <li><strong>Railway</strong> — production hosting</li>
+        <li><strong>Vanilla JS</strong> — no framework on the client</li>
+      </ul>
+
+      <h2 id="credits">📜 Credits</h2>
+      <ul>
+        <li>Engine, design, and most code: <strong>VideoGameTips</strong></li>
+        <li>Additional content: <strong>Codex</strong> (5 maps + respawn improvements)</li>
+        <li>Master Admin: <strong>Trash123</strong> 👑 <span class="pill pill-fun">suspiciously well-equipped</span></li>
+      </ul>
+    </main>
+  </div>
+
+  <footer>
+    <div>⚔️ PVP Arena · Made for fun · <a href="https://github.com/VideoGameTips/pvp-game">Source on GitHub</a></div>
+  </footer>
+</body>
+</html>
