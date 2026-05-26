@@ -6840,11 +6840,13 @@ function updateMovement(dt) {
     slideMult = 1.0 + 1.0 * t; // 2.0× → 1.0×
   }
   const speedMult = baseSpeedMult * (adrenalineActive ? 1.6 : 1) * frostMult * adminSpeedMult * crouchMult * slideMult;
-  // Drop the camera ~0.5m when crouching (eased)
+  // Drop the camera when crouching / sliding (eased)
   if (!window._crouchEye) window._crouchEye = 1.65;
-  // Slide forces a low posture — eye drops to ~0.95m mid-slide for the "low slide" feel
-  const targetEye = sliding ? 0.95 : (crouchHeld ? 1.10 : 1.65);
-  window._crouchEye += (targetEye - window._crouchEye) * Math.min(1, dt * 12);
+  // Slide drops the eye to 0.70 m so the view clearly dips below normal
+  const targetEye = sliding ? 0.70 : (crouchHeld ? 1.10 : 1.65);
+  // Slide transitions faster (~25/sec rate) so the drop is snappy at start of slide
+  const easeRate = sliding ? 25 : 12;
+  window._crouchEye += (targetEye - window._crouchEye) * Math.min(1, dt * easeRate);
   // 🦘 Jump physics — Space (or mobile button). Skip in slam/heli/mortar states.
   if (!slamState && !pilotedVehicle && !pilotedMortar) {
     const groundEyeY = getGroundEyeY() + (window._crouchEye - 1.65);
@@ -6925,10 +6927,16 @@ function updateMovement(dt) {
       slamState = null;
     }
   } else {
-    const groundEyeY = getGroundEyeY();
-    if (camera.position.y > groundEyeY + 0.04) {
+    // Crouch / slide eye-height delta. window._crouchEye is the *target* eye
+    // height (1.65 standing, 1.10 crouched, 0.95 sliding); subtract from
+    // 1.65 to get the y offset to apply on top of the ground.
+    const crouchDelta = (window._crouchEye != null) ? (window._crouchEye - 1.65) : 0;
+    const groundEyeY = getGroundEyeY() + crouchDelta;
+    if (camera.position.y > groundEyeY + 0.04 && (window._playerYVel || playerYVel) === 0) {
+      // We're somehow above ground without active jump velocity — drop us
       slamState = { vel: 0, type: 'fall' };
-    } else {
+    } else if (Math.abs(camera.position.y - groundEyeY) < 0.5) {
+      // Standing on (or just above) ground — snap to crouch-adjusted height
       camera.position.y = groundEyeY;
     }
   }
