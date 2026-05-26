@@ -1929,6 +1929,8 @@ camera.position.set(0, 1.65, 0);
 let audioCtx = null;
 let weaponSoundLastAt = {};
 let soundEventLastAt = {};
+// Master mix scale — dial down everything by 25% to give headroom for stacking
+const SOUND_MIX = 0.75;
 function getAudioCtx() {
   const Ctx = window.AudioContext || window.webkitAudioContext;
   if (!Ctx) return null;
@@ -2141,7 +2143,7 @@ function playWeaponSound(idOrWeapon, opts = {}) {
 
   const p = weaponAudioProfile(id, base);
   const distGain = soundDistanceGain(opts.position, opts.remote);
-  const mult = (opts.volume ?? 1) * distGain * (opts.remote ? 0.75 : 1);
+  const mult = (opts.volume ?? 1) * distGain * (opts.remote ? 0.75 : 1) * SOUND_MIX;
   const start = ctx.currentTime + 0.002;
   const mainGain = ctx.createGain();
   const comp = ctx.createDynamicsCompressor();
@@ -2155,8 +2157,10 @@ function playWeaponSound(idOrWeapon, opts = {}) {
     playTone(ctx, start + 0.055, 0.20, mainGain, 620, 1080, p.vol * 0.22 * mult, 'triangle');
     playNoise(ctx, start + 0.09, 0.13, mainGain, p.vol * 0.42 * mult, 0.9);
   } else if (p.kind === 'arc') {
+    // Sharp attack transient + sustained arc tone + crackling noise tail
+    playFilteredNoise(ctx, start, 0.022, mainGain, p.vol * 0.9 * mult, 'highpass', 2400, 0.4);
     playTone(ctx, start, p.dur, mainGain, p.f1, p.f2, p.vol * mult, 'sawtooth');
-    playNoise(ctx, start, p.dur, mainGain, p.vol * 0.85 * mult, 1.0);
+    playNoise(ctx, start, p.dur, mainGain, p.vol * 0.55 * mult, 1.0);
   } else if (p.kind === 'freeze') {
     playNoise(ctx, start, p.dur, mainGain, p.vol * mult, 0.52);
     playTone(ctx, start + 0.035, 0.08, mainGain, p.f1, p.f2, p.vol * 0.36 * mult, 'triangle');
@@ -2167,8 +2171,10 @@ function playWeaponSound(idOrWeapon, opts = {}) {
     playMuzzleBlast(ctx, start, mainGain, p.kind, p.vol * mult);
     playGunAction(ctx, start, mainGain, p.action, p.vol * mult);
   } else if (p.kind === 'energy') {
+    // Click-attack transient so it feels like the gun fired, then the energy tone
+    playFilteredNoise(ctx, start, 0.018, mainGain, p.vol * 0.7 * mult, 'highpass', 2800, 0.5);
     playTone(ctx, start, p.dur, mainGain, p.f1, p.f2, p.vol * mult, 'sawtooth');
-    playTone(ctx, start + 0.01, p.dur * 0.65, mainGain, p.f1 * 1.7, p.f2 * 1.2, p.vol * 0.35 * mult, 'sine');
+    playTone(ctx, start + 0.01, p.dur * 0.65, mainGain, p.f1 * 1.7, p.f2 * 1.2, p.vol * 0.30 * mult, 'sine');
   } else if (p.kind === 'twang') {
     playTone(ctx, start, p.dur, mainGain, p.f1, p.f2, p.vol * mult, 'triangle');
     playNoise(ctx, start + 0.015, 0.08, mainGain, p.vol * 0.25 * mult, 0.3);
@@ -2208,7 +2214,7 @@ function playSoundEvent(name, opts = {}) {
   unlockAudio();
 
   const posGain = soundDistanceGain(opts.position, opts.remote);
-  const mult = (opts.volume ?? 1) * posGain * (opts.remote ? 0.8 : 1);
+  const mult = (opts.volume ?? 1) * posGain * (opts.remote ? 0.8 : 1) * SOUND_MIX;
   const start = ctx.currentTime + 0.002;
   const out = ctx.createGain();
   const comp = ctx.createDynamicsCompressor();
@@ -2231,17 +2237,23 @@ function playSoundEvent(name, opts = {}) {
     playTone(ctx, start, 0.22, out, 240, 72, 0.24 * mult, 'sawtooth');
     playTone(ctx, start + 0.04, 0.16, out, 1260, 420, 0.14 * mult, 'triangle');
   } else if (name === 'chainsaw_idle') {
-    // 2-stroke engine: low buzzing sawtooth + rasping noise + slight pitch modulation
-    playTone(ctx, start, 0.18, out, 55, 62, 0.22 * mult, 'sawtooth');
-    playTone(ctx, start + 0.005, 0.18, out, 110, 124, 0.10 * mult, 'square'); // harmonic
-    playFilteredNoise(ctx, start, 0.18, out, 0.28 * mult, 'bandpass', 380, 1.4);
-    playTone(ctx, start, 0.18, out, 28, 32, 0.18 * mult, 'sine'); // sub-bass thrum
+    // 2-stroke engine: 3 quick pulses simulating piston firing + steady saw raspChainsaw
+    for (let i = 0; i < 3; i++) {
+      const t = start + i * 0.04;
+      playTone(ctx, t, 0.035, out, 88, 82, 0.20 * mult, 'sawtooth');
+      playFilteredNoise(ctx, t, 0.035, out, 0.22 * mult, 'highpass', 1800, 0.4);
+    }
+    playTone(ctx, start, 0.16, out, 58, 60, 0.16 * mult, 'sawtooth'); // steady idle drone
+    playTone(ctx, start, 0.16, out, 32, 34, 0.14 * mult, 'sine');     // sub
   } else if (name === 'chainsaw_rev') {
-    // Full throttle — higher fundamental + screaming saw harmonics
-    playTone(ctx, start, 0.22, out, 95, 145, 0.30 * mult, 'sawtooth');
-    playTone(ctx, start, 0.22, out, 190, 290, 0.16 * mult, 'square');
-    playFilteredNoise(ctx, start, 0.22, out, 0.40 * mult, 'bandpass', 720, 1.0);
-    playTone(ctx, start, 0.22, out, 42, 58, 0.22 * mult, 'sine');
+    // Full throttle — 4 rapid pulses (higher RPM) + screaming top end
+    for (let i = 0; i < 4; i++) {
+      const t = start + i * 0.025;
+      playTone(ctx, t, 0.022, out, 135, 128, 0.26 * mult, 'sawtooth');
+      playFilteredNoise(ctx, t, 0.022, out, 0.28 * mult, 'highpass', 2200, 0.35);
+    }
+    playTone(ctx, start, 0.13, out, 78, 82, 0.20 * mult, 'sawtooth'); // rev drone
+    playTone(ctx, start, 0.13, out, 240, 280, 0.10 * mult, 'square'); // shrieky harmonic
   } else if (name === 'chainsaw_hit') {
     // Crunching wood/flesh impact
     playFilteredNoise(ctx, start, 0.14, out, 0.42 * mult, 'lowpass', 1400, 0.6);
