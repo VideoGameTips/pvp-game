@@ -10262,19 +10262,38 @@ function setupArcadeStart(subtype) {
   if (!match) return;
   switch (subtype) {
     case 'gungame': {
-      // Set all bot gun tiers to 0
-      for (const b of gameBots) match.gunTier[b.id] = 0;
-      // Start the player at tier 0
+      // Everyone (player + bots) starts at tier 0
       const startWeapon = GUN_GAME_TIERS[0];
+      for (const b of gameBots) {
+        match.gunTier[b.id] = 0;
+        b.weaponId = startWeapon; // force all bots to the starter weapon
+        b.team = 'enemy';         // FFA: every bot is hostile
+        if (players[b.id]) players[b.id].weaponId = startWeapon;
+      }
+      match.gunTier[myId] = 0;
       forcePlayerWeapon(startWeapon);
       showAnnouncement('🔫 GUN GAME', `Climb ${GUN_GAME_TIERS.length} weapon tiers · knife wins!`, '#ff44ff', 3000);
       return;
     }
     case 'oitc': {
-      // One in the Chamber: force pistol with 1 bullet, 0 reserve. Each kill refills.
+      // One in the Chamber: force pistol everywhere, every shot 1-hit kill.
+      // Player gets 1 bullet; bots' fire is just their normal pistol cadence.
       forcePlayerWeapon('pistol');
       const idx = WEAPONS.findIndex(w => w.id === 'pistol');
       if (idx >= 0) weaponAmmo[idx] = { ammo: 1, reserve: 0 };
+      // Force every bot to pistol too — and FFA them
+      for (const b of gameBots) {
+        b.weaponId = 'pistol';
+        b.team = 'enemy';
+        if (players[b.id]) players[b.id].weaponId = 'pistol';
+      }
+      // Override pistol damage to 999 while in this match — restored when match ends
+      const pw = WEAPONS.find(w => w.id === 'pistol');
+      if (pw) {
+        match._oitcOrigDmg = pw.damage;
+        pw.damage = 999;
+        if (currentWeapon && currentWeapon.id === 'pistol') currentWeapon.damage = 999;
+      }
       updateAmmoHUD();
       showAnnouncement('🎯 ONE IN THE CHAMBER', '1 bullet · 1-shot kill · refill on kill', '#ffcc22', 3000);
       return;
@@ -10353,7 +10372,7 @@ function forcePlayerWeapon(weaponId, slot = 'primary') {
   updateAmmoHUD(); updateWeaponHUD(); updateWeaponSelector();
 }
 
-// Advance the player's gun tier (called on player kill in Gun Game)
+// Advance a player's or bot's gun tier (called on any kill in Gun Game)
 function gunGameAdvance(killerId) {
   if (match?.arcade !== 'gungame') return;
   const cur = match.gunTier[killerId] || 0;
@@ -10375,6 +10394,20 @@ function gunGameAdvance(killerId) {
     } else {
       forcePlayerWeapon(newWeapon);
       showAnnouncement(`TIER ${next + 1}/${GUN_GAME_TIERS.length}`, newWeapon.toUpperCase(), '#ff44ff', 1800);
+    }
+  } else {
+    // Bot got a kill — advance their weapon too so they keep up
+    const bot = gameBots.find(b => b.id === killerId);
+    if (bot) {
+      if (next >= GUN_GAME_TIERS.length) {
+        endMatch('enemy', `💀 ${players[killerId]?.name || 'A bot'} climbed the ladder first!`);
+        return;
+      }
+      const newWeapon = GUN_GAME_TIERS[next];
+      bot.weaponId = newWeapon;
+      if (players[bot.id]) players[bot.id].weaponId = newWeapon;
+      // Show a small notice so the player can see who's catching up
+      if (next >= 15) showAnnouncement('⚠️ THREAT', `${players[killerId]?.name || 'A bot'} reached tier ${next + 1}!`, '#ff8844', 1400);
     }
   }
 }
@@ -11393,6 +11426,12 @@ function endMatch(winner, reason) {
   if (!match || match.over) return;
   match.over   = true;
   match.active = false;
+  // Restore OITC pistol damage override (if any)
+  if (match._oitcOrigDmg != null) {
+    const pw = WEAPONS.find(w => w.id === 'pistol');
+    if (pw) pw.damage = match._oitcOrigDmg;
+    if (currentWeapon && currentWeapon.id === 'pistol') currentWeapon.damage = match._oitcOrigDmg;
+  }
   const isWin  = winner === 'ally';
   const el     = document.getElementById('match-over-screen');
   const title  = document.getElementById('match-over-title');
