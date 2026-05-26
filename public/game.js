@@ -6357,7 +6357,23 @@ function updateMovement(dt) {
   const frostMult = Math.max(0, playerFrostSlow) / 100;
   // ⚡ Admin speed boost: 3× speed
   const adminSpeedMult = (adminCheats.speed && currentUser?.isAdmin) ? 3 : 1;
-  const speedMult = baseSpeedMult * (adrenalineActive ? 1.6 : 1) * frostMult * adminSpeedMult;
+  // 🏃 Sprint (Shift): +50% speed.  🦆 Crouch (Ctrl/C): -45% speed.
+  // Mobile mirrors via mobileSprintHeld / mobileCrouchHeld toggles.
+  const sprintHeld = !!(keys['ShiftLeft'] || keys['ShiftRight'] || window._mobileSprint);
+  const crouchHeld = !!(keys['ControlLeft'] || keys['ControlRight'] || keys['KeyC'] || window._mobileCrouch);
+  const sprintMult = sprintHeld && !crouchHeld ? 1.5 : 1;
+  const crouchMult = crouchHeld ? 0.55 : 1;
+  const speedMult = baseSpeedMult * (adrenalineActive ? 1.6 : 1) * frostMult * adminSpeedMult * sprintMult * crouchMult;
+  // Drop the camera ~0.5m when crouching (eased)
+  if (!window._crouchEye) window._crouchEye = 1.65;
+  const targetEye = crouchHeld ? 1.10 : 1.65;
+  window._crouchEye += (targetEye - window._crouchEye) * Math.min(1, dt * 12);
+  // Apply the eye-height delta only when on ground (preserves slam/heli physics)
+  if (!slamState && !pilotedVehicle && !pilotedMortar) {
+    const groundEyeY = getGroundEyeY();
+    const isGrounded = Math.abs(camera.position.y - groundEyeY) < 0.05;
+    if (isGrounded) camera.position.y = (window._crouchEye - 1.65) + groundEyeY;
+  }
   // Ice: blend current input direction with last frame's direction for a slide feel
   if (typeof playerOnIce !== 'undefined' && playerOnIce()) {
     if (!window._iceDir) window._iceDir = new THREE.Vector3();
@@ -14383,5 +14399,21 @@ if (btnInteract) {
     if (nearTrashcan && !isDead && gameStarted) showLoadoutScreen('swap');
   });
 }
+
+// Mobile sprint / crouch buttons — set window._mobileSprint / _mobileCrouch flags
+function _wireHold(id, prop) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const on  = e => { e?.preventDefault?.(); el.classList.add('pressed'); window[prop] = true; };
+  const off = e => { e?.preventDefault?.(); el.classList.remove('pressed'); window[prop] = false; };
+  el.addEventListener('touchstart', on,  { passive: false });
+  el.addEventListener('touchend',   off, { passive: false });
+  el.addEventListener('touchcancel',off, { passive: false });
+  el.addEventListener('mousedown',  on);
+  el.addEventListener('mouseup',    off);
+  el.addEventListener('mouseleave', off);
+}
+_wireHold('btn-sprint', '_mobileSprint');
+_wireHold('btn-crouch', '_mobileCrouch');
 
 document.addEventListener('contextmenu', e => e.preventDefault());

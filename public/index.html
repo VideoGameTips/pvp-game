@@ -358,6 +358,18 @@
       right: 200px; bottom: 60px; width: 60px; height: 60px; border-radius: 50%;
       background: rgba(60,180,60,0.8); border: 2px solid rgba(100,220,100,0.9);
     }
+    #btn-sprint, #btn-crouch {
+      position: absolute; pointer-events: all; z-index: 60;
+      display: none; align-items: center; justify-content: center;
+      user-select: none; -webkit-user-select: none; touch-action: none;
+      font-weight: bold; color: #fff; font-size: 11px; letter-spacing: 1px;
+      width: 60px; height: 60px; border-radius: 50%;
+    }
+    #btn-sprint { left: 200px; bottom: 60px; background: rgba(100,170,255,0.7); border: 2px solid rgba(150,210,255,0.9); }
+    #btn-sprint.pressed { background: rgba(120,200,255,0.95); transform: scale(0.92); }
+    #btn-crouch { left: 200px; bottom: 130px; background: rgba(170,140,80,0.7); border: 2px solid rgba(220,180,120,0.9); }
+    #btn-crouch.pressed { background: rgba(220,180,120,0.95); transform: scale(0.92); }
+    #mobile-controls.active #btn-sprint, #mobile-controls.active #btn-crouch { display: flex; }
 
     /* ── Frontlines HUD ── */
     #frontline-hud {
@@ -605,7 +617,7 @@
       <canvas id="scope-canvas"></canvas>
     </div>
 
-    <div id="controls-hint">WASD · MOVE &nbsp;|&nbsp; MOUSE · AIM &nbsp;|&nbsp; LMB · USE &nbsp;|&nbsp; E · ADS &nbsp;|&nbsp; Q / 1 / 2 / 3 / 4 · SLOTS &nbsp;|&nbsp; R · RELOAD &nbsp;|&nbsp; TAB · SCORES &nbsp;|&nbsp; G · ABILITY</div>
+    <div id="controls-hint">WASD · MOVE &nbsp;|&nbsp; SHIFT · SPRINT &nbsp;|&nbsp; CTRL/C · CROUCH &nbsp;|&nbsp; MOUSE · AIM &nbsp;|&nbsp; LMB · USE &nbsp;|&nbsp; E · ADS &nbsp;|&nbsp; Q / 1-4 · SLOTS &nbsp;|&nbsp; R · RELOAD &nbsp;|&nbsp; G · ABILITY &nbsp;|&nbsp; Z / X · CHAT &nbsp;|&nbsp; TAB · SCORES &nbsp;|&nbsp; F · USE VEH/C4 &nbsp;|&nbsp; 📱 JOYSTICK · MOVE &nbsp;|&nbsp; SPRINT / CROUCH BUTTONS</div>
     <!-- Ability HUD -->
     <div id="ability-hud">
       <div id="ability-key-hint">[G]</div>
@@ -713,6 +725,8 @@
     <div id="btn-prev-weapon">&#8249;</div>
     <div id="btn-next-weapon">&#8250;</div>
     <div id="btn-interact">SWAP</div>
+    <div id="btn-sprint">SPRINT</div>
+    <div id="btn-crouch">CROUCH</div>
   </div>
 
   <!-- Loadout selection screen -->
