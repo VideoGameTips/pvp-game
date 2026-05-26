@@ -160,7 +160,14 @@ const ADMIN_PASS_LENGTH_MS = 10 * 60 * 1000; // 10 minutes
 
 // ── 📦 Chests, 🎡 wheel, ✨ upgrades ───────────────────────────────────
 const CHEST_PRICES = { common: 120, rare: 400 };
-const FRAGMENT_UNLOCK_COST = 100;
+// Fragment unlock = credit_price / 4, floor, with a 100-fragment minimum.
+// So cheap weapons still cost ~100 frags but a 40k P2W item costs 10k.
+const FRAGMENT_UNLOCK_MIN = 100;
+function fragmentUnlockCost(weaponId) {
+  const price = WEAPON_COSTS[weaponId];
+  if (price == null) return null;
+  return Math.max(FRAGMENT_UNLOCK_MIN, Math.floor(price / 4));
+}
 // Cost to buy the Nth level of any single stat (10 levels per stat now)
 const UPGRADE_COSTS = [30, 60, 120, 240, 480, 800, 1200, 1800, 2500, 3500];
 const UPGRADE_STATS = ['damage', 'mag', 'reload']; // pickable per level
@@ -231,11 +238,13 @@ app.post('/shop/unlock-fragments', (req, res) => {
   if (!u) return res.status(401).json({ error: 'auth failed' });
   if (!canPurchase(weaponId)) return res.status(400).json({ error: 'not purchasable' });
   if (FREE_WEAPONS.has(weaponId) || u.purchased.includes(weaponId)) return res.json({ ok: true, already: true });
-  if ((u.fragments || 0) < FRAGMENT_UNLOCK_COST) return res.status(402).json({ error: 'not enough fragments', fragments: u.fragments });
-  u.fragments -= FRAGMENT_UNLOCK_COST;
+  const cost = fragmentUnlockCost(weaponId);
+  if (cost == null) return res.status(400).json({ error: 'no fragment cost defined' });
+  if ((u.fragments || 0) < cost) return res.status(402).json({ error: 'not enough fragments', fragments: u.fragments, cost });
+  u.fragments -= cost;
   u.purchased.push(weaponId);
   saveUsers();
-  res.json({ ok: true, weaponId, fragments: u.fragments, purchased: u.purchased });
+  res.json({ ok: true, weaponId, fragments: u.fragments, purchased: u.purchased, cost });
 });
 
 app.post('/shop/upgrade-weapon', (req, res) => {

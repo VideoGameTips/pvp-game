@@ -13167,7 +13167,7 @@ function renderShopItems(body, slot) {
                <button class="sbuy"   style="flex:1;padding:5px;background:#1a2a1a;color:#88ff99;border:1px solid #88ff99;font-size:10px;cursor:pointer;border-radius:3px;font-family:inherit;">BUY ${cost}💰</button>
                <button class="strial" style="flex:1;padding:5px;background:#1a1a2a;color:#aabbff;border:1px solid #6688cc;font-size:10px;cursor:pointer;border-radius:3px;font-family:inherit;">TRIAL ${shopTrialCost(id)}💰</button>
              </div>
-             <button class="sfrag" style="padding:4px;background:#1a1a2a;color:#aaccff;border:1px solid #6677aa;font-size:9px;cursor:pointer;border-radius:3px;font-family:inherit;">UNLOCK · 100🧩</button>
+             <button class="sfrag" style="padding:4px;background:#1a1a2a;color:#aaccff;border:1px solid #6677aa;font-size:9px;cursor:pointer;border-radius:3px;font-family:inherit;">UNLOCK · ${fragmentUnlockCost(id)}🧩</button>
            </div>`
       }
     `;
@@ -13845,7 +13845,12 @@ async function awardMatchCredits(kills, won) {
 
 // ── 📦 Chest, 🧩 fragment, ✨ upgrade, 🎡 wheel actions ────────────────
 const CHEST_PRICES_CLIENT = { common: 120, rare: 400 };
-const FRAGMENT_UNLOCK_COST = 100;
+const FRAGMENT_UNLOCK_MIN = 100;
+function fragmentUnlockCost(weaponId) {
+  const price = WEAPON_COSTS[weaponId];
+  if (price == null) return null;
+  return Math.max(FRAGMENT_UNLOCK_MIN, Math.floor(price / 4));
+}
 const UPGRADE_COSTS_CLIENT = [30, 60, 120, 240, 480, 800, 1200, 1800, 2500, 3500];
 const MAX_LEVELS_PER_STAT = 10;
 const UPGRADE_STAT_LABELS = { damage: '+12% Damage', mag: '+25% Magazine', reload: '-15% Reload Time' };
@@ -13901,8 +13906,10 @@ async function openChest(type) {
 }
 async function unlockWithFragments(weaponId) {
   if (!currentUser) return false;
-  if ((currentUser.fragments || 0) < FRAGMENT_UNLOCK_COST) { alert(`Need ${FRAGMENT_UNLOCK_COST} fragments · You have ${currentUser.fragments || 0}`); return false; }
-  if (!confirm(`Unlock "${weaponId}" for ${FRAGMENT_UNLOCK_COST} fragments?`)) return false;
+  const cost = fragmentUnlockCost(weaponId);
+  if (cost == null) { alert('That item has no fragment cost.'); return false; }
+  if ((currentUser.fragments || 0) < cost) { alert(`Need ${cost} fragments · You have ${currentUser.fragments || 0}`); return false; }
+  if (!confirm(`Unlock "${weaponId}" for ${cost} fragments?`)) return false;
   const r = await authRequest('/shop/unlock-fragments', { username: currentUser.username, password: currentUser.password, weaponId });
   if (!r || r.error) { alert('❌ ' + (r?.error || 'shop error')); return false; }
   currentUser.fragments = r.fragments;
