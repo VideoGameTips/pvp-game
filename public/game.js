@@ -1955,23 +1955,60 @@ function weaponAudioProfile(id, baseWeapon) {
   const w = baseWeapon || WEAPONS.find(x => x.id === id) || {};
   const type = (w.type || '').toLowerCase();
   const lowerId = String(id || w.id || '').toLowerCase();
+  // ── Explicit per-weapon profiles (each unique-ish) ─────────────────────
   if (lowerId === 'p90' || lowerId === 'p90_spec') return { kind:'auto_blast', vol:0.20, dur:0.075, f1:760, f2:240, action:'water_smg' };
   if (lowerId === 'firework_launcher') return { kind:'firework', vol:0.36, dur:0.26, f1:130, f2:55 };
   if (lowerId === 'arc_torrent') return { kind:'arc', vol:0.26, dur:0.11, f1:980, f2:320 };
+  if (lowerId === 'arc_rifle')   return { kind:'arc', vol:0.30, dur:0.13, f1:1240, f2:380 };
   if (lowerId === 'freeze_gun' || lowerId === 'frost_blaster') return { kind:'freeze', vol:0.24, dur:0.16, f1:680, f2:420 };
   if (lowerId === 'flamethrower') return { kind:'flamethrower', vol:0.24, dur:0.18, f1:95, f2:58 };
-  if (lowerId.includes('crossbow') || lowerId.includes('bow') || lowerId.includes('harpoon')) return { kind:'twang', vol:0.34, dur:0.18, f1:420, f2:130 };
-  if (lowerId.includes('rail') || lowerId.includes('coil') || lowerId.includes('cycler') || lowerId.includes('laser')) return { kind:'energy', vol:0.32, dur:0.20, f1:920, f2:170 };
+  if (lowerId === 'plasma_carbine') return { kind:'energy', vol:0.30, dur:0.14, f1:880, f2:540 };
+  if (lowerId === 'railgun')        return { kind:'energy', vol:0.42, dur:0.32, f1:1620, f2:120 };
+  if (lowerId === 'coilgun')        return { kind:'energy', vol:0.36, dur:0.24, f1:1320, f2:160 };
+  if (lowerId === 'lazy_laser')     return { kind:'energy', vol:0.28, dur:0.18, f1:760, f2:1180 };
+  if (lowerId === 'arc_rifle')      return { kind:'arc',    vol:0.30, dur:0.13, f1:1240, f2:380 };
+  if (lowerId === 'cycler')         return { kind:'energy', vol:0.26, dur:0.10, f1:1080, f2:520 };
+  if (lowerId === 'paintball')      return { kind:'pop',    vol:0.32, dur:0.11, f1:480, f2:160 };
+  if (lowerId === 'sticker_blaster')return { kind:'pop',    vol:0.26, dur:0.10, f1:680, f2:240 };
+  if (lowerId === 'potato_cannon')  return { kind:'thump',  vol:0.36, dur:0.18, f1:140, f2:60, action:'single' };
+  if (lowerId === 'foam_cannon')    return { kind:'flame',  vol:0.20, dur:0.14, f1:160, f2:90 };
+  if (lowerId === 'taser')          return { kind:'arc',    vol:0.22, dur:0.20, f1:880, f2:1180 };
+  if (lowerId === 'glassmaker')     return { kind:'energy', vol:0.30, dur:0.16, f1:1480, f2:680 };
+  if (lowerId === 'magnet_rifle')   return { kind:'energy', vol:0.30, dur:0.18, f1:560, f2:880 };
+  if (lowerId === 'shockwave_launcher') return { kind:'thump', vol:0.46, dur:0.30, f1:80, f2:30, action:'single' };
+  if (lowerId === 'seismic_hammer') return { kind:'thump', vol:0.50, dur:0.34, f1:55, f2:22, action:'single' };
+  if (lowerId === 'mortar_rifle' || lowerId === 'grenade_launcher') return { kind:'thump', vol:0.44, dur:0.28, f1:120, f2:48, action:'single' };
+  // Sci-fi P2W primaries — each gets a distinctive synth blip
+  if (lowerId === 'event_horizon')   return { kind:'energy', vol:0.32, dur:0.18, f1:380, f2:120 };
+  if (lowerId === 'storm_core')      return { kind:'arc',    vol:0.34, dur:0.16, f1:1080, f2:540 };
+  if (lowerId === 'abs_zero')        return { kind:'freeze', vol:0.28, dur:0.18, f1:980, f2:380 };
+  if (lowerId === 'solar_lance')     return { kind:'energy', vol:0.36, dur:0.22, f1:1480, f2:880 };
+  if (lowerId === 'phase_driver')    return { kind:'energy', vol:0.30, dur:0.14, f1:1180, f2:720 };
+  if (lowerId === 'quantum_repeater')return { kind:'energy', vol:0.28, dur:0.10, f1:920, f2:1320 };
+  if (lowerId === 'magnetar')        return { kind:'energy', vol:0.40, dur:0.26, f1:580, f2:120 };
+  if (lowerId === 'nebula_mortar')   return { kind:'thump',  vol:0.48, dur:0.32, f1:90, f2:32, action:'single' };
+  if (lowerId === 'prism_engine')    return { kind:'energy', vol:0.28, dur:0.14, f1:1380, f2:980 };
+  if (lowerId === 'void_harvester')  return { kind:'energy', vol:0.44, dur:0.30, f1:280, f2:60 };
+  if (lowerId === 'pulse_needle')    return { kind:'energy', vol:0.22, dur:0.08, f1:1880, f2:780 };
+  if (lowerId === 'phase_pistol')    return { kind:'energy', vol:0.26, dur:0.10, f1:1280, f2:540 };
+  if (lowerId === 'ion_revolver')    return { kind:'arc',    vol:0.30, dur:0.12, f1:980, f2:380 };
+  // Throwables
+  if (lowerId.includes('crossbow') || lowerId.includes('bow') || lowerId.includes('harpoon') || lowerId === 'slingshot') return { kind:'twang', vol:0.34, dur:0.18, f1:420, f2:130 };
+  if (lowerId === 'blowgun')        return { kind:'throw', vol:0.18, dur:0.09, f1:660, f2:140 };
+  if (lowerId === 'boomerang')      return { kind:'twang', vol:0.20, dur:0.16, f1:380, f2:180 };
+  if (lowerId === 'throwing_axes' || lowerId === 'shuriken' || lowerId === 'throwing_knives' || lowerId === 'spear_throw') return { kind:'throw', vol:0.23, dur:0.12, f1:780, f2:260 };
+  // Pattern fallbacks
+  if (lowerId.includes('rail') || lowerId.includes('coil') || lowerId.includes('laser')) return { kind:'energy', vol:0.32, dur:0.20, f1:920, f2:170 };
   if (lowerId.includes('freeze') || lowerId.includes('cryo')) return { kind:'energy', vol:0.26, dur:0.22, f1:740, f2:260 };
   if (lowerId.includes('flame') || lowerId.includes('firework')) return { kind:'flame', vol:0.22, dur:0.16, f1:120, f2:70 };
   if (lowerId.includes('grenade') || lowerId.includes('boombow') || lowerId.includes('rocket') || lowerId.includes('flare')) return { kind:'thump', vol:0.42, dur:0.28, f1:110, f2:45, action:'single' };
   if (lowerId.includes('paint')) return { kind:'pop', vol:0.28, dur:0.13, f1:520, f2:190 };
   if (lowerId.includes('knife') || lowerId.includes('throwing')) return { kind:'throw', vol:0.23, dur:0.12, f1:780, f2:260 };
-  if (type.includes('shotgun') || lowerId.includes('shotgun') || lowerId.includes('sg8') || lowerId.includes('sg100') || lowerId.includes('shorty')) return { kind:'boom', vol:0.48, dur:0.22, f1:150, f2:55, action:'shotgun' };
-  if (type.includes('sniper') || type.includes('marksman') || lowerId.includes('srx') || lowerId.includes('lever')) return { kind:'crack', vol:0.44, dur:0.18, f1:680, f2:95, action:'bolt' };
-  if (type.includes('smg') || lowerId.includes('vector') || lowerId.includes('mp40')) return { kind:'auto_blast', vol:0.20, dur:0.075, f1:430, f2:160, action:'water_smg' };
-  if (type.includes('lmg') || type.includes('heavy') || lowerId.includes('minigun') || lowerId.includes('rpd')) return { kind:'auto_blast_heavy', vol:0.27, dur:0.11, f1:230, f2:80, action:'water_belt' };
-  if (type.includes('secondary') || lowerId.includes('pistol') || lowerId.includes('revolver') || lowerId.includes('hand_cannon')) return { kind:'pistol', vol:0.34, dur:0.12, f1:540, f2:120, action: lowerId.includes('revolver') ? 'revolver' : 'slide' };
+  if (type.includes('shotgun') || lowerId.includes('shotgun') || lowerId.includes('sg8') || lowerId.includes('sg100') || lowerId.includes('shorty') || lowerId.includes('sawed') || lowerId === 'boomstick' || lowerId.includes('spas')) return { kind:'boom', vol:0.48, dur:0.22, f1:150, f2:55, action:'shotgun' };
+  if (type.includes('sniper') || type.includes('marksman') || lowerId.includes('srx') || lowerId.includes('lever') || lowerId === 'amr' || lowerId === 'm1_garand' || lowerId === 'air_rifle' || lowerId === 'duelist_pistol') return { kind:'crack', vol:0.44, dur:0.18, f1:680, f2:95, action:'bolt' };
+  if (type.includes('smg') || lowerId.includes('vector') || lowerId.includes('mp40') || lowerId === 'mini_uzi' || lowerId === 'machine_pistol' || lowerId === 'hkmp7' || lowerId === 'smart_smg') return { kind:'auto_blast', vol:0.20, dur:0.075, f1:430, f2:160, action:'water_smg' };
+  if (type.includes('lmg') || type.includes('heavy') || lowerId.includes('minigun') || lowerId.includes('rpd') || lowerId === 'gau19' || lowerId === 'm134' || lowerId === 'thermal_lmg') return { kind:'auto_blast_heavy', vol:0.27, dur:0.11, f1:230, f2:80, action:'water_belt' };
+  if (type.includes('secondary') || lowerId.includes('pistol') || lowerId.includes('revolver') || lowerId.includes('hand_cannon') || lowerId === 'mauser' || lowerId === 'nail_gun') return { kind:'pistol', vol:0.34, dur:0.12, f1:540, f2:120, action: lowerId.includes('revolver') ? 'revolver' : 'slide' };
   return w.auto ? { kind:'auto_blast', vol:0.23, dur:0.080, f1:145, f2:52, action:'water_rifle' }
                 : { kind:'rifle', vol:0.38, dur:0.10, f1:145, f2:52, action:'rifle' };
 }
@@ -2194,14 +2231,22 @@ function playSoundEvent(name, opts = {}) {
     playTone(ctx, start, 0.22, out, 240, 72, 0.24 * mult, 'sawtooth');
     playTone(ctx, start + 0.04, 0.16, out, 1260, 420, 0.14 * mult, 'triangle');
   } else if (name === 'chainsaw_idle') {
-    playTone(ctx, start, 0.34, out, 78, 86, 0.14 * mult, 'sawtooth');
-    playNoise(ctx, start, 0.32, out, 0.08 * mult, 0.18);
+    // 2-stroke engine: low buzzing sawtooth + rasping noise + slight pitch modulation
+    playTone(ctx, start, 0.18, out, 55, 62, 0.22 * mult, 'sawtooth');
+    playTone(ctx, start + 0.005, 0.18, out, 110, 124, 0.10 * mult, 'square'); // harmonic
+    playFilteredNoise(ctx, start, 0.18, out, 0.28 * mult, 'bandpass', 380, 1.4);
+    playTone(ctx, start, 0.18, out, 28, 32, 0.18 * mult, 'sine'); // sub-bass thrum
   } else if (name === 'chainsaw_rev') {
-    playTone(ctx, start, 0.42, out, 110, 210, 0.22 * mult, 'sawtooth');
-    playNoise(ctx, start, 0.38, out, 0.16 * mult, 0.35);
+    // Full throttle — higher fundamental + screaming saw harmonics
+    playTone(ctx, start, 0.22, out, 95, 145, 0.30 * mult, 'sawtooth');
+    playTone(ctx, start, 0.22, out, 190, 290, 0.16 * mult, 'square');
+    playFilteredNoise(ctx, start, 0.22, out, 0.40 * mult, 'bandpass', 720, 1.0);
+    playTone(ctx, start, 0.22, out, 42, 58, 0.22 * mult, 'sine');
   } else if (name === 'chainsaw_hit') {
-    playTone(ctx, start, 0.16, out, 185, 72, 0.22 * mult, 'sawtooth');
-    playNoise(ctx, start, 0.22, out, 0.26 * mult, 0.85);
+    // Crunching wood/flesh impact
+    playFilteredNoise(ctx, start, 0.14, out, 0.42 * mult, 'lowpass', 1400, 0.6);
+    playTone(ctx, start, 0.10, out, 165, 65, 0.26 * mult, 'sawtooth');
+    playNoise(ctx, start + 0.02, 0.12, out, 0.30 * mult, 0.85);
   } else if (name === 'blink') {
     playTone(ctx, start, 0.18, out, 180, 720, 0.18 * mult, 'triangle');
     playNoise(ctx, start + 0.03, 0.20, out, 0.18 * mult, 0.7);
@@ -2229,8 +2274,19 @@ function playSoundEvent(name, opts = {}) {
   } else if (name === 'fire_sizzle') {
     playNoise(ctx, start, 0.32, out, 0.10 * mult, 0.75);
     playTone(ctx, start + 0.04, 0.08, out, 720, 980, 0.035 * mult, 'triangle');
+  } else if (name === 'melee_swing') {
+    playFilteredNoise(ctx, start, 0.10, out, 0.18 * mult, 'bandpass', 1200, 1.6);
+    playTone(ctx, start, 0.08, out, 880, 240, 0.04 * mult, 'sine');
+  } else if (name === 'melee_heavy') {
+    playFilteredNoise(ctx, start, 0.16, out, 0.30 * mult, 'lowpass', 600, 0.8);
+    playTone(ctx, start, 0.12, out, 140, 60, 0.20 * mult, 'sine');
+  } else if (name === 'melee_blade') {
+    playFilteredNoise(ctx, start, 0.10, out, 0.16 * mult, 'highpass', 2400, 0.5);
+    playTone(ctx, start, 0.06, out, 1480, 380, 0.06 * mult, 'triangle');
   } else {
-    playTone(ctx, start, 0.12, out, 300, 120, 0.12 * mult, 'triangle');
+    // Sub-bass thud (not a beep) for any unhandled event
+    playFilteredNoise(ctx, start, 0.10, out, 0.10 * mult, 'lowpass', 400, 0.6);
+    playTone(ctx, start, 0.08, out, 110, 60, 0.08 * mult, 'sine');
   }
 }
 
@@ -7534,6 +7590,12 @@ function tryMelee() {
   lastMelee = now;
   if (item.id === 'chainsaw') {
     playSoundEvent(meleeAbilityBuff?.type === 'revup' ? 'chainsaw_rev' : 'chainsaw_idle', { volume: 1.25, minGap: 120 });
+  } else {
+    // Per-type swing sound for every other melee
+    const isBlade = /blade|sabre|katana|machete|spear|hatchet|axe|cleaver|knife|karambit|bayonet|poker|fire_axe|garrote|lightsabre|machete|tomahawk/.test(item.id);
+    const isHeavy = item.type && (item.type.toLowerCase().includes('heavy') || /sledge|hammer|shovel|bat|pipe|wrench|cricket|brass_knuckles|fists|nunchucks/.test(item.id));
+    const ev = isHeavy ? 'melee_heavy' : isBlade ? 'melee_blade' : 'melee_swing';
+    playSoundEvent(ev, { volume: 0.85, minGap: 80 });
   }
 
   // Trigger swing animation — each swing type has its own characteristic duration
