@@ -6361,12 +6361,35 @@ function updateMovement(dt) {
   // Mobile mirrors via mobileSprintHeld / mobileCrouchHeld toggles.
   const sprintHeld = !!(keys['ShiftLeft'] || keys['ShiftRight'] || window._mobileSprint);
   const crouchHeld = !!(keys['ControlLeft'] || keys['ControlRight'] || keys['KeyC'] || window._mobileCrouch);
-  const sprintMult = sprintHeld && !crouchHeld ? 1.5 : 1;
-  const crouchMult = crouchHeld ? 0.55 : 1;
-  const speedMult = baseSpeedMult * (adrenalineActive ? 1.6 : 1) * frostMult * adminSpeedMult * sprintMult * crouchMult;
+  // 🛹 Slide: edge-detect crouch while sprinting + moving → 0.8s slide burst.
+  // During slide, direction is locked and you stay crouched.
+  const crouchEdge = crouchHeld && !window._prevCrouchHeld;
+  window._prevCrouchHeld = crouchHeld;
+  const nowMs = Date.now();
+  if (crouchEdge && sprintHeld && dir.lengthSq() > 0.001 && !window._slideUntil) {
+    window._slideUntil = nowMs + 800; // 0.8s slide
+    window._slideDir = dir.clone();
+  }
+  const sliding = window._slideUntil && nowMs < window._slideUntil;
+  if (sliding) {
+    // Lock direction to the slide vector + force crouch posture
+    dir.copy(window._slideDir);
+  } else if (window._slideUntil) {
+    window._slideUntil = 0; // ended
+  }
+  const sprintMult = sprintHeld && !crouchHeld && !sliding ? 1.5 : 1;
+  const crouchMult = (crouchHeld && !sliding) ? 0.55 : 1;
+  // Slide gives a tapered burst: starts at 2.0×, decays to ~1.0× by the end
+  let slideMult = 1;
+  if (sliding) {
+    const t = (window._slideUntil - nowMs) / 800; // 1 → 0
+    slideMult = 1.0 + 1.0 * t; // 2.0× → 1.0×
+  }
+  const speedMult = baseSpeedMult * (adrenalineActive ? 1.6 : 1) * frostMult * adminSpeedMult * sprintMult * crouchMult * slideMult;
   // Drop the camera ~0.5m when crouching (eased)
   if (!window._crouchEye) window._crouchEye = 1.65;
-  const targetEye = crouchHeld ? 1.10 : 1.65;
+  // Slide forces a low posture — eye drops to ~0.95m mid-slide for the "low slide" feel
+  const targetEye = sliding ? 0.95 : (crouchHeld ? 1.10 : 1.65);
   window._crouchEye += (targetEye - window._crouchEye) * Math.min(1, dt * 12);
   // 🦘 Jump physics — Space (or mobile button). Skip in slam/heli/mortar states.
   if (!slamState && !pilotedVehicle && !pilotedMortar) {
