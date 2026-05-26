@@ -2221,10 +2221,15 @@ function playSoundEvent(name, opts = {}) {
   out.connect(comp).connect(ctx.destination);
 
   if (name === 'hitmarker') {
-    playTone(ctx, start, 0.045, out, 980, 680, 0.09 * mult, 'square');
+    // Sharp transient "snap" — no tonal beep, just a percussive crack
+    playFilteredNoise(ctx, start, 0.020, out, 0.18 * mult, 'highpass', 3200, 0.4);
+    playFilteredNoise(ctx, start, 0.035, out, 0.10 * mult, 'lowpass', 1400, 0.6);
+    playTone(ctx, start, 0.028, out, 220, 80, 0.10 * mult, 'sine'); // tiny low thud body
   } else if (name === 'headshot') {
-    playTone(ctx, start, 0.16, out, 1180, 1860, 0.14 * mult, 'triangle');
-    playNoise(ctx, start + 0.025, 0.07, out, 0.06 * mult, 0.75);
+    // Sharper snap + brief metallic ring
+    playFilteredNoise(ctx, start, 0.022, out, 0.22 * mult, 'highpass', 4200, 0.35);
+    playTone(ctx, start, 0.10, out, 1860, 940, 0.10 * mult, 'triangle');
+    playTone(ctx, start, 0.05, out, 280, 110, 0.14 * mult, 'sine');
   } else if (name === 'kill') {
     playTone(ctx, start, 0.18, out, 125, 48, 0.22 * mult, 'sine');
     playNoise(ctx, start, 0.07, out, 0.08 * mult, 0.45);
@@ -2295,7 +2300,55 @@ function playSoundEvent(name, opts = {}) {
   } else if (name === 'melee_blade') {
     playFilteredNoise(ctx, start, 0.10, out, 0.16 * mult, 'highpass', 2400, 0.5);
     playTone(ctx, start, 0.06, out, 1480, 380, 0.06 * mult, 'triangle');
-  } else {
+  }
+  // 🦶 Footsteps — short low thud, alternates pitch for L/R variation
+  else if (name === 'footstep') {
+    const f = opts.pitch || 1.0;
+    playFilteredNoise(ctx, start, 0.06, out, 0.10 * mult, 'lowpass', 240 * f, 0.7);
+    playTone(ctx, start, 0.04, out, 120 * f, 60 * f, 0.06 * mult, 'sine');
+  }
+  // ⚔️ Specific weapon ability sounds
+  else if (name === 'katana_deflect') {
+    // Metallic "shiing" — bright sustained ring + sharp attack
+    playFilteredNoise(ctx, start, 0.022, out, 0.18 * mult, 'highpass', 3600, 0.4);
+    playTone(ctx, start, 0.32, out, 2200, 1640, 0.16 * mult, 'triangle');
+    playTone(ctx, start + 0.02, 0.26, out, 3400, 2400, 0.10 * mult, 'sine');
+  }
+  else if (name === 'parry_deflect') {
+    // Similar but heavier/lower for shield bash deflect
+    playFilteredNoise(ctx, start, 0.030, out, 0.22 * mult, 'highpass', 2400, 0.4);
+    playTone(ctx, start, 0.30, out, 1480, 920, 0.18 * mult, 'triangle');
+  }
+  else if (name === 'vampire_slash') {
+    // Wet squelch + bloody chime
+    playFilteredNoise(ctx, start, 0.10, out, 0.22 * mult, 'lowpass', 800, 0.7);
+    playTone(ctx, start + 0.04, 0.10, out, 880, 220, 0.10 * mult, 'sine');
+  }
+  else if (name === 'instakill_zip') {
+    // Quick zip for knife stealth stab
+    playFilteredNoise(ctx, start, 0.04, out, 0.20 * mult, 'highpass', 3000, 0.5);
+    playTone(ctx, start, 0.07, out, 1980, 380, 0.10 * mult, 'sawtooth');
+  }
+  else if (name === 'silent_kill') {
+    // Garrote — barely audible thud + breath
+    playFilteredNoise(ctx, start, 0.18, out, 0.06 * mult, 'lowpass', 300, 0.6);
+  }
+  else if (name === 'spin_revup') {
+    // Chainsaw revup-style for spin abilities (yoyo, screwdriver, nunchucks)
+    playTone(ctx, start, 0.20, out, 320, 540, 0.12 * mult, 'sawtooth');
+    playFilteredNoise(ctx, start, 0.20, out, 0.10 * mult, 'bandpass', 760, 0.9);
+  }
+  else if (name === 'heavy_buff') {
+    // Generic "heavy swing buff active" cue — low resonant pulse
+    playTone(ctx, start, 0.18, out, 88, 132, 0.20 * mult, 'sine');
+    playTone(ctx, start + 0.04, 0.12, out, 220, 110, 0.10 * mult, 'triangle');
+  }
+  else if (name === 'pull_yank') {
+    // Cane yank — whoosh + thud
+    playFilteredNoise(ctx, start, 0.18, out, 0.20 * mult, 'bandpass', 480, 1.2);
+    playTone(ctx, start + 0.06, 0.10, out, 220, 80, 0.16 * mult, 'sine');
+  }
+  else {
     // Sub-bass thud (not a beep) for any unhandled event
     playFilteredNoise(ctx, start, 0.10, out, 0.10 * mult, 'lowpass', 400, 0.6);
     playTone(ctx, start, 0.08, out, 110, 60, 0.08 * mult, 'sine');
@@ -6895,10 +6948,23 @@ function updateMovement(dt) {
   playerPosHistory.push({ x: camera.position.x, z: camera.position.z, t: Date.now() });
   if (playerPosHistory.length > 8) playerPosHistory.shift();
   lastPlayerPos.copy(camera.position);
-  camera.position.addScaledVector(dir, SPEED * speedMult * joyMag * dt);
+  const moveDist = SPEED * speedMult * joyMag * dt;
+  camera.position.addScaledVector(dir, moveDist);
   const _mb = getMapBounds();
   camera.position.x = Math.max(-_mb, Math.min(_mb, camera.position.x));
   camera.position.z = Math.max(-_mb, Math.min(_mb, camera.position.z));
+  // 🦶 Footsteps — accumulate distance, fire on every ~1.5 m of grounded travel
+  if (dir.lengthSq() > 0.001 && !slamState && !pilotedVehicle && !pilotedMortar && !isDead) {
+    window._stepDist = (window._stepDist || 0) + moveDist;
+    const stride = sliding ? 0.0 : (crouchHeld ? 1.8 : 1.4); // no steps during slide
+    if (stride > 0 && window._stepDist >= stride) {
+      window._stepDist = 0;
+      window._stepAlt = !window._stepAlt;
+      playSoundEvent('footstep', { volume: crouchHeld ? 0.4 : 0.7, pitch: window._stepAlt ? 1.0 : 1.15, minGap: 120 });
+    }
+  } else {
+    window._stepDist = 0;
+  }
   if (slamState) {
     // Low-grav zones reduce gravity to 1/3
     const gravMult = (typeof _playerInLowGrav !== 'undefined' && _playerInLowGrav) ? 0.33 : 1;
@@ -6968,6 +7034,7 @@ function activateMeleeAbility() {
   if (ab.type === 'melee_heavy') {
     meleeAbilityBuff = { type: 'heavy', usesLeft: 1 };
     flashAbilityName(ab.name);
+    playSoundEvent('heavy_buff', { volume: 0.9 });
   }
   else if (ab.type === 'melee_lunge' || ab.type === 'melee_charge') {
     const dist    = ab.distance || 6;
@@ -7034,6 +7101,8 @@ function activateMeleeAbility() {
     meleeAbilityBuff = { type: 'deflect', endTime: now + (ab.duration || 2000) };
     flashAbilityName(ab.name);
     flashScreen('rgba(200,220,255,0.18)', 300);
+    // Katana / Tennis-Racket: bright metallic "shiing"; Riot-shield: heavier parry
+    playSoundEvent(item.id === 'riot_shield' ? 'parry_deflect' : 'katana_deflect', { volume: 1.0 });
   }
   else if (ab.type === 'melee_eat') {
     socket.emit('healSelf', { amount: ab.heal || 40 });
@@ -7054,6 +7123,7 @@ function activateMeleeAbility() {
     flashAbilityName(ab.name);
   }
   else if (ab.type === 'melee_instakill') {
+    playSoundEvent('instakill_zip', { volume: 1.0 });
     // Immediately lunge and instakill nearest enemy in 2× range; buff next swing if miss
     const fwd2 = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
     let hitSomeone = false;
@@ -7081,6 +7151,13 @@ function activateMeleeAbility() {
     meleeAbilityBuff = { type: 'revup', endTime: now + (ab.duration || 2000) };
     flashAbilityName(ab.name);
     flashScreen('rgba(255,150,0,0.18)', 300);
+    // Item-specific cue: vampire-blade is wet, garrote silent, others are spin-revup
+    playSoundEvent(
+      item.id === 'vampire_blade' ? 'vampire_slash'
+      : item.id === 'garrote'     ? 'silent_kill'
+      : 'spin_revup',
+      { volume: 0.9 }
+    );
   }
   else if (ab.type === 'melee_parry') {
     meleeAbilityBuff = { type: 'parry', endTime: now + (ab.duration || 1500) };
@@ -7093,6 +7170,7 @@ function activateMeleeAbility() {
     flashScreen('rgba(255,255,0,0.15)', 300);
   }
   else if (ab.type === 'melee_pull') {
+    playSoundEvent('pull_yank', { volume: 1.0 });
     // Walking Cane "Yank" — pull the closest enemy in melee range toward us.
     const pullDist = ab.distance || 4;
     const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
