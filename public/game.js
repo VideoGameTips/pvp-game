@@ -3451,6 +3451,358 @@ function buildGlassworksMap() {
 buildGlassworksMap();
 
 // ──────────────────────────────────────────────────────────────────────────
+// BATCH-5 MAPS (16) — simpler thematic builds, full mechanics TBD
+// ──────────────────────────────────────────────────────────────────────────
+
+registerMap('carrier');
+function buildCarrierMap() {
+  const m = 'carrier';
+  addMapGround(m, 0x3a4248);
+  // Runway center stripes
+  for (let z = -40; z <= 40; z += 8) addMapBox(m, 0, 0.06, z, 1.5, 0.04, 4, 0xffffff);
+  // Control tower
+  addMapBox(m, -30, 4, -30, 8, 8, 8, 0x6a727a);
+  addMapBox(m, -30, 8.5, -30, 6, 1, 6, 0x2a3030);
+  // Hangar boxes
+  for (let i = 0; i < 4; i++) addMapBox(m, -38 + i * 7, 1.5, 32, 6, 3, 6, 0x5a626a);
+  // Jet wings (decorative)
+  addMapBox(m, 20, 1, 0, 12, 1.5, 4, 0xd0d4d8);
+  addMapBox(m, 20, 1.6, -5, 1.2, 2.2, 1.2, 0x666);
+  MAP_GROUPS[m]._skyColor = 0x6b88a0;
+}
+buildCarrierMap();
+
+registerMap('overgrowth');
+function buildOvergrowthMap() {
+  const m = 'overgrowth';
+  addMapGround(m, 0x4a6a3a);
+  // Crumbling buildings
+  for (let i = 0; i < 8; i++) {
+    const ang = (i / 8) * Math.PI * 2;
+    const r = 18 + (i % 2) * 10;
+    addMapBox(m, Math.cos(ang) * r, 3, Math.sin(ang) * r, 7, 6, 7, 0x6a6a5a);
+    // Vines (green pillars)
+    addMapBox(m, Math.cos(ang) * r + 3, 4, Math.sin(ang) * r, 0.4, 8, 0.4, 0x3a8a3a);
+  }
+  // Foliage clusters
+  for (let i = 0; i < 25; i++) {
+    const x = (Math.random() - 0.5) * 80, z = (Math.random() - 0.5) * 80;
+    addMapBox(m, x, 0.8, z, 2, 1.6, 2, 0x2a6a2a);
+  }
+  MAP_GROUPS[m]._skyColor = 0x4a5a3a;
+}
+buildOvergrowthMap();
+
+registerMap('orbital_station');
+function buildOrbitalStationMap() {
+  const m = 'orbital_station';
+  addMapGround(m, 0x2a3848);
+  // Modular pods around the edge
+  for (let i = 0; i < 6; i++) {
+    const ang = (i / 6) * Math.PI * 2;
+    addMapBox(m, Math.cos(ang) * 22, 2, Math.sin(ang) * 22, 8, 4, 8, 0xb8c4d4);
+    addMapBox(m, Math.cos(ang) * 22, 4.5, Math.sin(ang) * 22, 4, 1, 4, 0x6a88aa, ang);
+  }
+  // Central hub
+  addMapBox(m, 0, 3, 0, 14, 6, 14, 0x9aaabb);
+  // Antenna spire
+  addMapBox(m, 0, 9, 0, 0.6, 6, 0.6, 0xddeeff);
+  MAP_GROUPS[m]._skyColor = 0x000010;
+}
+buildOrbitalStationMap();
+
+registerMap('foundry');
+function buildFoundryMap() {
+  const m = 'foundry';
+  addMapGround(m, 0x2a2418);
+  // Conveyor belts
+  for (let i = 0; i < 3; i++) {
+    addMapBox(m, -20 + i * 20, 0.8, -10, 14, 0.5, 3, 0x4a4030);
+  }
+  // Molten steel pools (glowing red)
+  const moltenMat = new THREE.MeshBasicMaterial({ color: 0xff5522 });
+  for (const [x, z] of [[-15, 18], [15, 18], [0, 30]]) {
+    const pool = new THREE.Mesh(new THREE.CylinderGeometry(3, 3, 0.2, 16), moltenMat);
+    pool.position.set(x, 0.1, z);
+    MAP_GROUPS[m].add(pool);
+  }
+  // Giant gears (rings)
+  for (let i = 0; i < 4; i++) {
+    const ang = (i / 4) * Math.PI * 2;
+    const gear = new THREE.Mesh(new THREE.TorusGeometry(3, 0.6, 6, 16),
+      new THREE.MeshLambertMaterial({ color: 0x6a6a6a }));
+    gear.rotation.x = Math.PI / 2;
+    gear.position.set(Math.cos(ang) * 30, 5, Math.sin(ang) * 30);
+    MAP_GROUPS[m].add(gear);
+  }
+  MAP_GROUPS[m]._skyColor = 0x553322;
+}
+buildFoundryMap();
+
+registerMap('carnival');
+function buildCarnivalMap() {
+  const m = 'carnival';
+  addMapGround(m, 0x3a2a4a);
+  // Ferris wheel
+  const wheel = new THREE.Mesh(new THREE.TorusGeometry(8, 0.5, 6, 24),
+    new THREE.MeshLambertMaterial({ color: 0xffaa44 }));
+  wheel.position.set(0, 9, -30); MAP_GROUPS[m].add(wheel);
+  // Spokes
+  for (let i = 0; i < 8; i++) {
+    const sp = new THREE.Mesh(new THREE.BoxGeometry(0.3, 16, 0.3),
+      new THREE.MeshLambertMaterial({ color: 0xddbb44 }));
+    sp.position.set(0, 9, -30); sp.rotation.z = (i / 8) * Math.PI * 2;
+    MAP_GROUPS[m].add(sp);
+  }
+  // Tents (colored cones)
+  for (let i = 0; i < 5; i++) {
+    const ang = (i / 5) * Math.PI * 2;
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(3, 5, 6),
+      new THREE.MeshLambertMaterial({ color: [0xff4488, 0x44ff88, 0xff8844, 0x4488ff, 0xff44ff][i] }));
+    cone.position.set(Math.cos(ang) * 18, 2.5, Math.sin(ang) * 18);
+    MAP_GROUPS[m].add(cone);
+  }
+  // Bumper-car arena floor
+  addMapBox(m, 15, 0.1, 15, 16, 0.05, 16, 0x886644);
+  MAP_GROUPS[m]._skyColor = 0x1a0a2a;
+}
+buildCarnivalMap();
+
+registerMap('biosphere');
+function buildBiosphereMap() {
+  const m = 'biosphere';
+  addMapGround(m, 0x4a6a4a);
+  // 4 climate sectors
+  addMapBox(m, -22, 0.06,  22, 30, 0.05, 30, 0x4a8a3a); // jungle (green)
+  addMapBox(m,  22, 0.06,  22, 30, 0.05, 30, 0xddbb66); // desert (sand)
+  addMapBox(m, -22, 0.06, -22, 30, 0.05, 30, 0xddeeff); // frozen (ice)
+  addMapBox(m,  22, 0.06, -22, 30, 0.05, 30, 0x6a4a3a); // dirt
+  // Dome ring
+  for (let i = 0; i < 16; i++) {
+    const ang = (i / 16) * Math.PI * 2;
+    addMapBox(m, Math.cos(ang) * 46, 8, Math.sin(ang) * 46, 0.8, 16, 0.8, 0xaaddee, ang);
+  }
+  // Central control room
+  addMapBox(m, 0, 2, 0, 8, 4, 8, 0x666688);
+  MAP_GROUPS[m]._skyColor = 0x88aacc;
+}
+buildBiosphereMap();
+
+registerMap('lockdown');
+function buildLockdownMap() {
+  const m = 'lockdown';
+  addMapGround(m, 0x4a4a3a);
+  // Cell blocks (two rows of cells)
+  for (let i = -3; i <= 3; i++) {
+    addMapBox(m, i * 6, 1.5, -16, 5, 3, 4, 0x5a5a5a);
+    addMapBox(m, i * 6, 1.5,  16, 5, 3, 4, 0x5a5a5a);
+    // Bars (thin pillars front of cells)
+    for (let j = 0; j < 3; j++) {
+      addMapBox(m, i * 6 - 2 + j * 2, 1.5, -14, 0.15, 3, 0.15, 0x222222);
+      addMapBox(m, i * 6 - 2 + j * 2, 1.5,  14, 0.15, 3, 0.15, 0x222222);
+    }
+  }
+  // Security tower
+  addMapBox(m, 0, 5, 0, 4, 10, 4, 0x3a3a3a);
+  addMapBox(m, 0, 10.5, 0, 6, 1, 6, 0x222222);
+  MAP_GROUPS[m]._skyColor = 0x3a3a3a;
+}
+buildLockdownMap();
+
+registerMap('studio');
+function buildStudioMap() {
+  const m = 'studio';
+  addMapGround(m, 0x252525);
+  // Western town set
+  addMapBox(m, -28, 2,  20, 8, 4, 4, 0xaa8855);
+  addMapBox(m, -20, 2,  20, 8, 4, 4, 0x886633);
+  addMapBox(m, -12, 1.5, 22, 6, 3, 1, 0x442200); // saloon facade
+  // Spaceship set (smooth metal)
+  addMapBox(m, 22, 2, -20, 12, 4, 6, 0xaaccdd);
+  addMapBox(m, 22, 4.5, -20, 8, 1, 4, 0xddeeff);
+  // Castle set (stone)
+  addMapBox(m, -22, 4, -22, 10, 8, 4, 0x888888);
+  for (let i = -2; i <= 2; i++) addMapBox(m, -22 + i * 2, 8.5, -22, 1, 1, 1, 0x666666); // crenellations
+  // Green screens
+  addMapBox(m, 30, 4, 20, 0.3, 8, 8, 0x22ff22);
+  addMapBox(m, -30, 4, 0, 0.3, 8, 8, 0x22ff22);
+  MAP_GROUPS[m]._skyColor = 0x1a1a1a;
+}
+buildStudioMap();
+
+registerMap('temple');
+function buildTempleMap() {
+  const m = 'temple';
+  addMapGround(m, 0x6a5a3a);
+  // Columns in a square
+  for (let i = -2; i <= 2; i++) for (let j = -2; j <= 2; j++) {
+    if (Math.abs(i) < 2 && Math.abs(j) < 2) continue;
+    addMapBox(m, i * 10, 4, j * 10, 1.4, 8, 1.4, 0xcccc99);
+  }
+  // Giant statue (central pillar + head)
+  addMapBox(m, 0, 4, 0, 3, 8, 3, 0x8a7a4a);
+  addMapBox(m, 0, 9, 0, 2.5, 2.5, 2.5, 0x6a5a2a);
+  // Trap pits (decorative dark squares)
+  addMapBox(m, 15, 0.04, 15, 4, 0.05, 4, 0x111111);
+  addMapBox(m, -15, 0.04, -15, 4, 0.05, 4, 0x111111);
+  MAP_GROUPS[m]._skyColor = 0xddaa66;
+}
+buildTempleMap();
+
+registerMap('holiday');
+function buildHolidayMap() {
+  const m = 'holiday';
+  addMapGround(m, 0xf0f5ff);
+  // Christmas tree (cone)
+  const tree = new THREE.Mesh(new THREE.ConeGeometry(5, 14, 8),
+    new THREE.MeshLambertMaterial({ color: 0x2a6a2a }));
+  tree.position.set(0, 7, 0); MAP_GROUPS[m].add(tree);
+  // Star on top
+  const star = new THREE.Mesh(new THREE.OctahedronGeometry(0.8),
+    new THREE.MeshBasicMaterial({ color: 0xffee44 }));
+  star.position.set(0, 14.5, 0); MAP_GROUPS[m].add(star);
+  // Cozy houses
+  for (let i = 0; i < 5; i++) {
+    const ang = (i / 5) * Math.PI * 2;
+    addMapBox(m, Math.cos(ang) * 22, 2, Math.sin(ang) * 22, 6, 4, 6, 0x8a4a3a);
+    // Snow roof
+    addMapBox(m, Math.cos(ang) * 22, 4.5, Math.sin(ang) * 22, 6.5, 1, 6.5, 0xffffff);
+  }
+  // Frozen lake
+  addMapBox(m, -28, 0.04, -28, 16, 0.05, 16, 0xaaddff);
+  MAP_GROUPS[m]._skyColor = 0xccd8e8;
+}
+buildHolidayMap();
+
+registerMap('labyrinth');
+function buildLabyrinthMap() {
+  const m = 'labyrinth';
+  addMapGround(m, 0x2a2a2a);
+  // Maze walls — a hand-drawn-ish pattern
+  const walls = [
+    [-30, 0, 20, 4], [30, 0, 20, 4], [0, -30, 4, 20], [0, 30, 4, 20],
+    [-20, -10, 4, 12], [20, -10, 4, 12], [-10, 10, 12, 4], [10, 10, 12, 4],
+    [-10, -20, 4, 8], [10, -20, 4, 8], [0, 0, 6, 4], [0, 0, 4, 6],
+    [-25, 15, 10, 4], [25, 15, 10, 4], [-25, -25, 4, 10], [25, -25, 4, 10],
+  ];
+  for (const [x, z, w, d] of walls) addMapBox(m, x, 2, z, w, 4, d, 0x4a4a4a);
+  MAP_GROUPS[m]._skyColor = 0x1a1a1a;
+}
+buildLabyrinthMap();
+
+registerMap('arena');
+function buildArenaMap() {
+  const m = 'arena';
+  addMapGround(m, 0x2a6a2a); // green field
+  // Field markings
+  addMapBox(m, 0, 0.06, 0, 50, 0.05, 0.3, 0xffffff);
+  addMapBox(m, 0, 0.06, 0, 0.3, 0.05, 30, 0xffffff);
+  const circle = new THREE.Mesh(new THREE.TorusGeometry(5, 0.15, 4, 24),
+    new THREE.MeshLambertMaterial({ color: 0xffffff }));
+  circle.rotation.x = Math.PI / 2; circle.position.set(0, 0.07, 0);
+  MAP_GROUPS[m].add(circle);
+  // Stadium walls (tall bleachers)
+  for (let i = 0; i < 12; i++) {
+    const ang = (i / 12) * Math.PI * 2;
+    addMapBox(m, Math.cos(ang) * 40, 6, Math.sin(ang) * 40, 8, 12, 8, 0x666688, ang);
+  }
+  // Catwalks (decorative high beams)
+  addMapBox(m, 0, 14, -30, 30, 0.4, 1.5, 0x3a3a3a);
+  addMapBox(m, 0, 14,  30, 30, 0.4, 1.5, 0x3a3a3a);
+  MAP_GROUPS[m]._skyColor = 0x0a1a3a;
+}
+buildArenaMap();
+
+registerMap('opera');
+function buildOperaMap() {
+  const m = 'opera';
+  addMapGround(m, 0x4a2a3a); // red velvet carpet
+  // Stage
+  addMapBox(m, 0, 1, -25, 30, 2, 8, 0x6a4a4a);
+  // Curtains (tall red panels)
+  addMapBox(m, -15, 6, -28, 1, 10, 4, 0x882233);
+  addMapBox(m,  15, 6, -28, 1, 10, 4, 0x882233);
+  // Balconies (left + right tiered)
+  for (let i = 0; i < 3; i++) {
+    addMapBox(m, -30, 3 + i * 3, -10 + i * 6, 8, 1, 8, 0x6a4a3a);
+    addMapBox(m,  30, 3 + i * 3, -10 + i * 6, 8, 1, 8, 0x6a4a3a);
+  }
+  // Chandelier
+  const chand = new THREE.Mesh(new THREE.SphereGeometry(1.5, 8, 6),
+    new THREE.MeshBasicMaterial({ color: 0xffee88 }));
+  chand.position.set(0, 12, 0); MAP_GROUPS[m].add(chand);
+  MAP_GROUPS[m]._skyColor = 0x1a0a1a;
+}
+buildOperaMap();
+
+registerMap('doomsday');
+function buildDoomsdayMap() {
+  const m = 'doomsday';
+  addMapGround(m, 0x3a2a1a);
+  // Collapsing buildings (tilted boxes)
+  for (let i = 0; i < 6; i++) {
+    const ang = (i / 6) * Math.PI * 2;
+    addMapBox(m, Math.cos(ang) * 25, 4, Math.sin(ang) * 25, 7, 8, 7, 0x5a4a3a, ang * 0.1);
+  }
+  // Fire pillars
+  for (const [x, z] of [[-15, 0], [15, 0], [0, -20], [0, 20]]) {
+    const fire = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 1.5, 4, 8),
+      new THREE.MeshBasicMaterial({ color: 0xff5522 }));
+    fire.position.set(x, 2, z); MAP_GROUPS[m].add(fire);
+  }
+  // Abandoned helicopter
+  addMapBox(m, 30, 1.5, 30, 6, 2, 3, 0x4a4a4a);
+  addMapBox(m, 30, 2.6, 30, 8, 0.2, 0.4, 0x222222); // blade
+  MAP_GROUPS[m]._skyColor = 0x441111;
+}
+buildDoomsdayMap();
+
+registerMap('train');
+function buildTrainMap() {
+  const m = 'train';
+  addMapGround(m, 0x222222);
+  // 6 train cars in a long row
+  for (let i = -3; i < 3; i++) {
+    addMapBox(m, 0, 2, i * 14, 5, 4, 12, 0x4a3a5a);
+    addMapBox(m, 0, 4.2, i * 14, 5.4, 0.4, 13, 0x222);
+  }
+  // Coupling rods
+  for (let i = -2; i < 3; i++) addMapBox(m, 0, 1, i * 14 - 7, 2, 0.4, 0.4, 0x666);
+  // Engine front
+  addMapBox(m, 0, 2.5, -45, 6, 5, 6, 0x6a2a2a);
+  addMapBox(m, 0, 6, -45, 1.2, 1.5, 1.2, 0x222); // chimney
+  // Side rails (tracks)
+  addMapBox(m, -3, 0.1, 0, 0.3, 0.05, 90, 0x222);
+  addMapBox(m,  3, 0.1, 0, 0.3, 0.05, 90, 0x222);
+  MAP_GROUPS[m]._skyColor = 0x222233;
+}
+buildTrainMap();
+
+registerMap('dreamscape');
+function buildDreamscapeMap() {
+  const m = 'dreamscape';
+  addMapGround(m, 0x2a1a3a);
+  // Floating staircases
+  for (let i = 0; i < 8; i++) {
+    addMapBox(m, -25 + (i % 4) * 6, 1 + i * 0.6, -20 + Math.floor(i / 4) * 12, 4, 0.4, 4, 0xff88cc);
+  }
+  // Upside-down rooms (inverted boxes high up)
+  addMapBox(m, 20, 10, 0, 8, 0.5, 8, 0x44ddff);
+  addMapBox(m, 20, 8, -3, 0.5, 4, 4, 0x44ddff);
+  addMapBox(m, 20, 8, 3, 0.5, 4, 4, 0x44ddff);
+  // Giant floating impossible shapes
+  for (let i = 0; i < 6; i++) {
+    const ang = (i / 6) * Math.PI * 2;
+    const shape = new THREE.Mesh(new THREE.OctahedronGeometry(2),
+      new THREE.MeshLambertMaterial({ color: [0xff4488, 0x44ffcc, 0xffcc44, 0xcc44ff, 0x44ccff, 0xffff44][i] }));
+    shape.position.set(Math.cos(ang) * 30, 6 + Math.sin(i) * 2, Math.sin(ang) * 30);
+    MAP_GROUPS[m].add(shape);
+  }
+  MAP_GROUPS[m]._skyColor = 0x4a2a6a;
+}
+buildDreamscapeMap();
+
+// ──────────────────────────────────────────────────────────────────────────
 // 17. KING OF THE HILL / BR ARENA — massive map with vehicles + helicopters
 // ──────────────────────────────────────────────────────────────────────────
 registerMap('br_arena');
@@ -11593,7 +11945,7 @@ function spawnGameBots() {
     // King of the Hill: always use the giant BR arena
     activateMap('br_arena');
   } else if (selectedModeConfig.type !== 'dday' && selectedModeConfig.type !== 'range') {
-    const pool = ['blank','urban','warehouse','forest','volcano','cyber','desert','tundra','space','airport','trenches','chernobyl','refinery','skydock','sewer','gravity_lab','glassworks'];
+    const pool = ['blank','urban','warehouse','forest','volcano','cyber','desert','tundra','space','airport','trenches','chernobyl','refinery','skydock','sewer','gravity_lab','glassworks','carrier','overgrowth','orbital_station','foundry','carnival','biosphere','lockdown','studio','temple','holiday','labyrinth','arena','opera','doomsday','train','dreamscape'];
     const chosen = (selectedMap === 'auto' || !MAP_GROUPS[selectedMap]) ? pool[Math.floor(Math.random()*pool.length)] : selectedMap;
     activateMap(chosen);
     // Update sky color if the map specifies one
@@ -14266,6 +14618,22 @@ const MAP_DESCS = {
   sewer:      'Acid Sewer — toxic pools force bridge fights',
   gravity_lab:'Gravity Lab — low gravity domes + launch pads',
   glassworks: 'Glassworks — breakable glass maze + barrel traps',
+  carrier:    '🚢 Carrier — flat runway top deck · hangars + control tower',
+  overgrowth: '🌲 Overgrowth — abandoned city reclaimed by nature',
+  orbital_station: '🛰️ Orbital Station — modular pods + central hub',
+  foundry:    '🏭 Foundry — conveyor belts, molten pools, giant gears',
+  carnival:   '🎪 Carnival — ferris wheel, tents, bumper-car arena',
+  biosphere:  '🧬 Biosphere — 4-zone dome (jungle / desert / frozen / dirt)',
+  lockdown:   '🚨 Lockdown — prison cell blocks + security tower',
+  studio:     '🎥 Studio — western, sci-fi, and castle sets back-to-back',
+  temple:     '🕍 Temple — stone columns, giant idol, trap pits',
+  holiday:    '🎄 Holiday — snowy village + giant tree + frozen lake',
+  labyrinth:  '🧪 Labyrinth — maze of walls, lots of corners',
+  arena:      '🏟️ Arena — green field surrounded by stadium walls',
+  opera:      '🎭 Opera — stage + balconies + chandelier',
+  doomsday:   '🌋 Doomsday — collapsing city, fire pillars, abandoned heli',
+  train:      '🚂 Train — long row of cars + engine + side rails',
+  dreamscape: '🌌 Dreamscape — floating stairs + impossible shapes',
 };
 function selectMapPick(mapId) {
   selectedMap = mapId;
