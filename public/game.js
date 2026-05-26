@@ -6884,6 +6884,7 @@ function abilityReady(w) {
 function activateMeleeAbility() {
   const item = MELEE_ITEMS[selectedMeleeIdx];
   if (!item?.ability) return;
+  if (countdownActive) return;
   const ab = item.ability;
   const now = Date.now();
   if (now - (abilityCDs[item.id] || 0) < ab.cd) return; // on cooldown
@@ -7057,6 +7058,7 @@ function activateAbility() {
   const w = currentWeapon;
   const ab = w?.ability;
   if (!gameStarted || isDead) return;
+  if (countdownActive) return; // ability locked during pre-round countdown
   if (activeSlot === 'melee') { activateMeleeAbility(); return; }
   if (!ab || ab.type === 'charge') return; // crossbow charge: no G-key activation
   if (!isADS && !ab.noADS) return;         // most abilities need ADS unless noADS flag
@@ -7420,6 +7422,7 @@ function updateAbilityHUD() {
 
 function tryShoot() {
   if ((!pointerLocked && !gameStarted) || isDead || reloading) return;
+  if (countdownActive) return; // can't fire during pre-round countdown
   const now = Date.now();
   // Switchblade Gun: in knife mode → swing a close-range melee instead of firing
   if (currentWeapon.id === 'switchblade_gun' && !switchbladeCharged && switchbladeMode === 'knife') {
@@ -7522,6 +7525,7 @@ function tryUseActive() {
 
 function tryMelee() {
   if (!gameStarted || isDead) return;
+  if (countdownActive) return;
   const item = MELEE_ITEMS[selectedMeleeIdx];
   if (!item) return;
   const now = Date.now();
@@ -7641,6 +7645,7 @@ const THROWABLE_SUPPORT_IDS = new Set(['frag','smoke','confetti_cannon','moon_mi
 
 function trySupport() {
   if (!gameStarted || isDead) return;
+  if (countdownActive) return;
   const item = SUPPORT_ITEMS[selectedSupportIdx];
   if (!item || supportUses[selectedSupportIdx] <= 0) return;
   const now = Date.now();
@@ -11061,10 +11066,12 @@ function isLoadoutOpen() {
   return el && el.style.display !== 'none' && el.style.display !== '';
 }
 
+let countdownActive = false; // gates firing/abilities during pre-round countdown
 function runCountdown(seconds, onDone) {
   const overlay = document.getElementById('countdown-overlay');
   const lblEl   = document.getElementById('countdown-label');
   let remaining  = seconds;
+  countdownActive = true;
 
   function tick() {
     // PAUSE: if the loadout screen is open, hide countdown + re-check every 0.5s without ticking down
@@ -11075,6 +11082,7 @@ function runCountdown(seconds, onDone) {
     }
     if (remaining <= 0) {
       overlay.style.display = 'none';
+      countdownActive = false;
       onDone();
       return;
     }
