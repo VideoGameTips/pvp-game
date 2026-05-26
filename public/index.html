@@ -358,18 +358,20 @@
       right: 200px; bottom: 60px; width: 60px; height: 60px; border-radius: 50%;
       background: rgba(60,180,60,0.8); border: 2px solid rgba(100,220,100,0.9);
     }
-    #btn-sprint, #btn-crouch {
+    #btn-sprint, #btn-crouch, #btn-jump {
       position: absolute; pointer-events: all; z-index: 60;
       display: none; align-items: center; justify-content: center;
       user-select: none; -webkit-user-select: none; touch-action: none;
       font-weight: bold; color: #fff; font-size: 11px; letter-spacing: 1px;
       width: 60px; height: 60px; border-radius: 50%;
     }
-    #btn-sprint { left: 200px; bottom: 60px; background: rgba(100,170,255,0.7); border: 2px solid rgba(150,210,255,0.9); }
+    #btn-sprint { left: 200px; bottom: 60px;  background: rgba(100,170,255,0.7); border: 2px solid rgba(150,210,255,0.9); }
     #btn-sprint.pressed { background: rgba(120,200,255,0.95); transform: scale(0.92); }
-    #btn-crouch { left: 200px; bottom: 130px; background: rgba(170,140,80,0.7); border: 2px solid rgba(220,180,120,0.9); }
+    #btn-crouch { left: 200px; bottom: 130px; background: rgba(170,140,80,0.7);  border: 2px solid rgba(220,180,120,0.9); }
     #btn-crouch.pressed { background: rgba(220,180,120,0.95); transform: scale(0.92); }
-    #mobile-controls.active #btn-sprint, #mobile-controls.active #btn-crouch { display: flex; }
+    #btn-jump   { left: 280px; bottom: 60px;  background: rgba(120,220,120,0.7); border: 2px solid rgba(160,255,160,0.9); }
+    #btn-jump.pressed   { background: rgba(160,255,160,0.95); transform: scale(0.92); }
+    #mobile-controls.active #btn-sprint, #mobile-controls.active #btn-crouch, #mobile-controls.active #btn-jump { display: flex; }
 
     /* ── Frontlines HUD ── */
     #frontline-hud {
@@ -617,7 +619,7 @@
       <canvas id="scope-canvas"></canvas>
     </div>
 
-    <div id="controls-hint">WASD · MOVE &nbsp;|&nbsp; SHIFT · SPRINT &nbsp;|&nbsp; CTRL/C · CROUCH &nbsp;|&nbsp; MOUSE · AIM &nbsp;|&nbsp; LMB · USE &nbsp;|&nbsp; E · ADS &nbsp;|&nbsp; Q / 1-4 · SLOTS &nbsp;|&nbsp; R · RELOAD &nbsp;|&nbsp; G · ABILITY &nbsp;|&nbsp; Z / X · CHAT &nbsp;|&nbsp; TAB · SCORES &nbsp;|&nbsp; F · USE VEH/C4 &nbsp;|&nbsp; 📱 JOYSTICK · MOVE &nbsp;|&nbsp; SPRINT / CROUCH BUTTONS</div>
+    <div id="controls-hint">WASD · MOVE &nbsp;|&nbsp; SPACE · JUMP &nbsp;|&nbsp; SHIFT · SPRINT &nbsp;|&nbsp; CTRL/C · CROUCH &nbsp;|&nbsp; MOUSE · AIM &nbsp;|&nbsp; LMB · USE &nbsp;|&nbsp; E · ADS &nbsp;|&nbsp; Q / 1-4 · SLOTS &nbsp;|&nbsp; R · RELOAD &nbsp;|&nbsp; G · ABILITY &nbsp;|&nbsp; Z / X · CHAT &nbsp;|&nbsp; TAB · SCORES &nbsp;|&nbsp; F · USE VEH/C4 &nbsp;|&nbsp; 📱 JOYSTICK + JUMP / SPRINT / CROUCH BUTTONS</div>
     <!-- Ability HUD -->
     <div id="ability-hud">
       <div id="ability-key-hint">[G]</div>
@@ -727,6 +729,7 @@
     <div id="btn-interact">SWAP</div>
     <div id="btn-sprint">SPRINT</div>
     <div id="btn-crouch">CROUCH</div>
+    <div id="btn-jump">JUMP</div>
   </div>
 
   <!-- Loadout selection screen -->

@@ -6368,11 +6368,27 @@ function updateMovement(dt) {
   if (!window._crouchEye) window._crouchEye = 1.65;
   const targetEye = crouchHeld ? 1.10 : 1.65;
   window._crouchEye += (targetEye - window._crouchEye) * Math.min(1, dt * 12);
-  // Apply the eye-height delta only when on ground (preserves slam/heli physics)
+  // 🦘 Jump physics — Space (or mobile button). Skip in slam/heli/mortar states.
   if (!slamState && !pilotedVehicle && !pilotedMortar) {
-    const groundEyeY = getGroundEyeY();
-    const isGrounded = Math.abs(camera.position.y - groundEyeY) < 0.05;
-    if (isGrounded) camera.position.y = (window._crouchEye - 1.65) + groundEyeY;
+    const groundEyeY = getGroundEyeY() + (window._crouchEye - 1.65);
+    const isGrounded = camera.position.y <= groundEyeY + 0.05 && playerYVel <= 0;
+    const wantsJump = (keys['Space'] || window._mobileJump) && !crouchHeld;
+    if (wantsJump && isGrounded) {
+      playerYVel = 9; // ~1.4m peak — feels like a normal FPS jump
+      window._mobileJump = false; // edge-trigger from mobile so we don't spam
+    }
+    if (!isGrounded) {
+      playerYVel -= 28 * dt; // gravity
+      camera.position.y += playerYVel * dt;
+      if (camera.position.y <= groundEyeY) {
+        camera.position.y = groundEyeY;
+        playerYVel = 0;
+      }
+    } else {
+      // glue to ground when not jumping
+      camera.position.y = groundEyeY;
+      playerYVel = 0;
+    }
   }
   // Ice: blend current input direction with last frame's direction for a slide feel
   if (typeof playerOnIce !== 'undefined' && playerOnIce()) {
@@ -14415,5 +14431,17 @@ function _wireHold(id, prop) {
 }
 _wireHold('btn-sprint', '_mobileSprint');
 _wireHold('btn-crouch', '_mobileCrouch');
+// Jump is edge-triggered, not held — single tap = single jump
+const _jumpBtn = document.getElementById('btn-jump');
+if (_jumpBtn) {
+  const trigger = e => {
+    e?.preventDefault?.();
+    _jumpBtn.classList.add('pressed');
+    window._mobileJump = true;
+    setTimeout(() => _jumpBtn.classList.remove('pressed'), 120);
+  };
+  _jumpBtn.addEventListener('touchstart', trigger, { passive: false });
+  _jumpBtn.addEventListener('mousedown',  trigger);
+}
 
 document.addEventListener('contextmenu', e => e.preventDefault());
