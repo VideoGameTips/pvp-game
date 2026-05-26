@@ -21,10 +21,24 @@ app.use((req, res, next) => {
 });
 
 // ── User accounts (plaintext passwords — user opted for simplicity) ─────────
-const USERS_FILE = path.join(__dirname, 'users.json');
+// Storage location is configurable via env var so we can point at a persistent
+// volume on Railway. Without that, every redeploy wipes the file.
+// Set DATA_DIR=/data in Railway, attach a volume mounted at /data.
+const DATA_DIR = process.env.DATA_DIR || __dirname;
+const USERS_FILE = path.join(DATA_DIR, 'users.json');
+try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (e) {}
+console.log('[users] storage:', USERS_FILE);
 let users = {};
-try { users = JSON.parse(fs.readFileSync(USERS_FILE, 'utf-8')); } catch (e) { users = {}; }
-function saveUsers() { try { fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2)); } catch (e) { console.error('saveUsers:', e); } }
+try { users = JSON.parse(fs.readFileSync(USERS_FILE, 'utf-8')); console.log('[users] loaded', Object.keys(users).length, 'accounts'); }
+catch (e) { users = {}; console.log('[users] no existing file — starting fresh'); }
+function saveUsers() {
+  // Atomic write: write to .tmp then rename so a crash mid-write can't corrupt the file
+  try {
+    const tmp = USERS_FILE + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(users, null, 2));
+    fs.renameSync(tmp, USERS_FILE);
+  } catch (e) { console.error('saveUsers:', e); }
+}
 
 // ── 🛒 Shop: weapon costs + per-account credit balance ─────────────────────
 // Authoritative cost table (server-side so clients can't cheat their balance).
