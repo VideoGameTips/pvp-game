@@ -2354,6 +2354,21 @@ function activateMap(name) {
   if (MAP_COLLIDERS[name]) wallColliders.push(...MAP_COLLIDERS[name]);
   activeMapName = name;
   activeMapGimmicks = MAP_GIMMICKS[name] || { damageZones: [], jumpPads: [], iceZones: [], oilZones: [], lowGravZones: [] };
+  // Reset batch-5 stateful mechanics so a re-entered map starts fresh
+  if (typeof _batch5 !== 'undefined') {
+    if (_batch5.orbital_station) { _batch5.orbital_station.broken = false; _batch5.orbital_station.hp = 200;
+      if (_batch5.orbital_station.windowMesh) _batch5.orbital_station.windowMesh.visible = true; }
+    if (_batch5.lockdown) { _batch5.lockdown.lightsOut = false; _batch5.lockdown.hp = 80;
+      if (_batch5.lockdown.fuseBox) _batch5.lockdown.fuseBox.visible = true;
+      if (scene.fog) scene.fog.density = 0; }
+    if (_batch5.opera) { _batch5.opera.falling = false; _batch5.opera.hit = false; _batch5.opera.hp = 60; _batch5.opera.vy = 0;
+      if (_batch5.opera.chand) _batch5.opera.chand.position.y = 12; }
+    if (_batch5.doomsday) {
+      for (const d of _batch5.doomsday.debris) if (d.mesh) scene.remove(d.mesh);
+      _batch5.doomsday.debris = []; _batch5.doomsday.debrisTimer = 2;
+    }
+    if (_batch5.biosphere) { _batch5.biosphere.t = 0; _batch5.biosphere.lastPhase = -1; }
+  }
 }
 
 function buildBlankMap() {
@@ -3451,8 +3466,17 @@ function buildGlassworksMap() {
 buildGlassworksMap();
 
 // ──────────────────────────────────────────────────────────────────────────
-// BATCH-5 MAPS (16) — simpler thematic builds, full mechanics TBD
+// BATCH-5 MAPS (16) — thematic builds + special mechanics in updateBatch5
 // ──────────────────────────────────────────────────────────────────────────
+// Per-map mutable state (set by builders, read by updateBatch5 each frame).
+const _batch5 = {
+  train:           { rails: [], cars: [], scroll: 0 },
+  orbital_station: { windowMesh: null, hp: 200, broken: false },
+  biosphere:       { t: 0, lastPhase: -1, particles: [] },
+  lockdown:        { fuseBox: null, hp: 80, lightsOut: false, origAmbient: 1.0 },
+  opera:           { chand: null, hp: 60, falling: false, vy: 0, hit: false },
+  doomsday:        { debrisTimer: 0, debris: [] },
+};
 
 registerMap('carrier');
 function buildCarrierMap() {
@@ -3503,6 +3527,9 @@ function buildOrbitalStationMap() {
     addMapBox(m, Math.cos(ang) * 22, 2, Math.sin(ang) * 22, 8, 4, 8, 0xb8c4d4);
     addMapBox(m, Math.cos(ang) * 22, 4.5, Math.sin(ang) * 22, 4, 1, 4, 0x6a88aa, ang);
   }
+  // Breakable airlock window on pod 0 — destroys → vacuum suction
+  const winMesh = addMapBox(m, 22, 2, 0, 0.4, 3, 3, 0x88ddff);
+  _batch5.orbital_station.windowMesh = winMesh;
   // Central hub
   addMapBox(m, 0, 3, 0, 14, 6, 14, 0x9aaabb);
   // Antenna spire
@@ -3605,6 +3632,9 @@ function buildLockdownMap() {
   // Security tower
   addMapBox(m, 0, 5, 0, 4, 10, 4, 0x3a3a3a);
   addMapBox(m, 0, 10.5, 0, 6, 1, 6, 0x222222);
+  // Fuse box on the tower wall — destroy → lights out (dark fog + reduced ambient)
+  const fuse = addMapBox(m, 2.05, 1.5, 0, 0.2, 1, 1, 0xffaa22);
+  _batch5.lockdown.fuseBox = fuse;
   MAP_GROUPS[m]._skyColor = 0x3a3a3a;
 }
 buildLockdownMap();
@@ -3727,10 +3757,11 @@ function buildOperaMap() {
     addMapBox(m, -30, 3 + i * 3, -10 + i * 6, 8, 1, 8, 0x6a4a3a);
     addMapBox(m,  30, 3 + i * 3, -10 + i * 6, 8, 1, 8, 0x6a4a3a);
   }
-  // Chandelier
+  // Chandelier — destructible, falls when shot
   const chand = new THREE.Mesh(new THREE.SphereGeometry(1.5, 8, 6),
     new THREE.MeshBasicMaterial({ color: 0xffee88 }));
   chand.position.set(0, 12, 0); MAP_GROUPS[m].add(chand);
+  _batch5.opera.chand = chand;
   MAP_GROUPS[m]._skyColor = 0x1a0a1a;
 }
 buildOperaMap();
@@ -3771,7 +3802,11 @@ function buildTrainMap() {
   // Engine front
   addMapBox(m, 0, 2.5, -45, 6, 5, 6, 0x6a2a2a);
   addMapBox(m, 0, 6, -45, 1.2, 1.5, 1.2, 0x222); // chimney
-  // Side rails (tracks)
+  // Side rails (tracks) — scrolled by updateBatch5 to fake motion
+  for (let r = 0; r < 30; r++) {
+    const tie = addMapBox(m, 0, 0.05, -45 + r * 3, 6, 0.06, 0.6, 0x553322);
+    _batch5.train.rails.push(tie);
+  }
   addMapBox(m, -3, 0.1, 0, 0.3, 0.05, 90, 0x222);
   addMapBox(m,  3, 0.1, 0, 0.3, 0.05, 90, 0x222);
   MAP_GROUPS[m]._skyColor = 0x222233;
@@ -8398,6 +8433,16 @@ function updateBullets(dt) {
 
       if (wallHitPt && (!bestHit || wallHitT <= bestHit.t)) {
         spawnHitParticle(wallHitPt);
+        // ── Batch-5 special destructibles (orbital window, fuse box, chandelier) ──
+        const S = _batch5[activeMapName];
+        if (S) {
+          const targets = [S.windowMesh, S.fuseBox, S.chand].filter(Boolean);
+          for (const t of targets) {
+            const tp = new THREE.Vector3();
+            t.getWorldPosition(tp);
+            if (tp.distanceTo(wallHitPt) < 3) { batch5OnHit(t); break; }
+          }
+        }
         // ── Check if a destructible (glass, light, reactor) was hit ──
         const destDmg = getClientWeaponDamage(b.weaponId) || 25;
         for (const dest of mapDestructibles) {
@@ -8635,6 +8680,149 @@ function damageDestructible(dest, dmg) {
 }
 
 // Per-frame map-effect tick (called from main loop)
+function updateBatch5(dt) {
+  const m = activeMapName; if (!m || !_batch5[m]) return;
+  const S = _batch5[m];
+  const now = Date.now();
+
+  if (m === 'train') {
+    // Scroll all rail-ties backward to fake forward motion. Wrap when off the end.
+    S.scroll += dt * 18;
+    for (const tie of S.rails) {
+      tie.position.z = ((-45 + S.scroll + (S.rails.indexOf(tie) * 3)) % 90 + 90) % 90 - 45;
+    }
+  }
+  else if (m === 'orbital_station') {
+    // Once the window has been "shot" enough (hit-count tracked by mapDestructibles),
+    // apply suction toward it on the player.
+    if (S.broken) {
+      const dx = 22 - camera.position.x, dz = 0 - camera.position.z;
+      const d  = Math.hypot(dx, dz);
+      if (d < 30 && d > 0.1) {
+        const pull = 6 * dt; // m/s
+        camera.position.x += (dx / d) * pull;
+        camera.position.z += (dz / d) * pull;
+        if (d < 2.5 && !isDead) {
+          applyBotDamageToPlayer && applyBotDamageToPlayer('vacuum', null);
+        }
+      }
+    }
+  }
+  else if (m === 'biosphere') {
+    // Cycle 4 climates every 30s. Lerp sky color through phase index.
+    S.t = (S.t + dt) % 30;
+    const phase = Math.floor(S.t / 7.5) % 4;
+    if (phase !== S.lastPhase) {
+      S.lastPhase = phase;
+      const colors = [0x4a8a3a, 0xddbb66, 0xddeeff, 0x88aacc]; // jungle/desert/frozen/clear
+      if (scene.background?.setHex) scene.background.setHex(colors[phase]);
+    }
+  }
+  else if (m === 'lockdown') {
+    // Fuse box destroyed → fog + ambient drops
+    if (S.lightsOut) {
+      if (scene.fog) scene.fog.density = Math.min(0.15, (scene.fog.density || 0) + dt * 0.05);
+      else scene.fog = new THREE.FogExp2(0x000000, 0.02);
+    }
+  }
+  else if (m === 'opera') {
+    // Chandelier falling animation + AOE on impact
+    if (S.falling && S.chand) {
+      S.vy -= 30 * dt;
+      S.chand.position.y += S.vy * dt;
+      if (S.chand.position.y <= 1) {
+        S.chand.position.y = 1;
+        S.falling = false;
+        if (!S.hit) {
+          S.hit = true;
+          // 6m AOE damage at (0, 1, 0)
+          for (const bot of gameBots) {
+            if (bot.dead) continue;
+            const bd = Math.hypot(bot.x, bot.z);
+            if (bd < 6) {
+              bot.hp -= 200;
+              if (bot.hp <= 0) { bot.dead = true; if (remoteMeshes[bot.id]) remoteMeshes[bot.id].visible = false; }
+            }
+          }
+          const pd = Math.hypot(camera.position.x, camera.position.z);
+          if (pd < 6 && !isDead) applyBotDamageToPlayer && applyBotDamageToPlayer('chandelier', null);
+          spawnAbilityAOEFX(new THREE.Vector3(0, 0.1, 0), 6, 0xffee88);
+        }
+      }
+    }
+  }
+  else if (m === 'doomsday') {
+    // Spawn falling debris from above every ~2 s; damage if hit
+    S.debrisTimer -= dt;
+    if (S.debrisTimer <= 0) {
+      S.debrisTimer = 1.5 + Math.random() * 1.5;
+      const dx = (Math.random() - 0.5) * 60, dz = (Math.random() - 0.5) * 60;
+      const debris = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.5, 1.5),
+        new THREE.MeshLambertMaterial({ color: 0x6a4a3a }));
+      debris.position.set(dx, 25, dz);
+      scene.add(debris);
+      S.debris.push({ mesh: debris, x: dx, z: dz, vy: 0, alive: true });
+    }
+    for (let i = S.debris.length - 1; i >= 0; i--) {
+      const d = S.debris[i];
+      if (!d.alive) continue;
+      d.vy -= 28 * dt;
+      d.mesh.position.y += d.vy * dt;
+      d.mesh.rotation.x += dt * 2;
+      d.mesh.rotation.y += dt * 3;
+      if (d.mesh.position.y <= 0.75) {
+        d.mesh.position.y = 0.75;
+        d.alive = false;
+        // Damage anyone within 3m
+        const pd = Math.hypot(camera.position.x - d.x, camera.position.z - d.z);
+        if (pd < 3 && !isDead) applyBotDamageToPlayer && applyBotDamageToPlayer('debris', null);
+        for (const bot of gameBots) {
+          if (bot.dead) continue;
+          if (Math.hypot(bot.x - d.x, bot.z - d.z) < 3) {
+            bot.hp -= 120;
+            if (bot.hp <= 0) { bot.dead = true; if (remoteMeshes[bot.id]) remoteMeshes[bot.id].visible = false; }
+          }
+        }
+        setTimeout(() => { scene.remove(d.mesh); S.debris.splice(S.debris.indexOf(d), 1); }, 4000);
+      }
+    }
+  }
+}
+
+// Called from the bullet-hit pipeline when a hitscan/projectile strikes a special target
+function batch5OnHit(meshHit) {
+  if (!activeMapName || !_batch5[activeMapName]) return false;
+  const S = _batch5[activeMapName];
+  if (activeMapName === 'orbital_station' && meshHit === S.windowMesh && !S.broken) {
+    S.hp -= 25;
+    if (S.hp <= 0) {
+      S.broken = true;
+      if (S.windowMesh) S.windowMesh.visible = false;
+      showAnnouncement('🌌 HULL BREACH', 'The vacuum is pulling everyone in!', '#88ddff', 3500);
+    }
+    return true;
+  }
+  if (activeMapName === 'lockdown' && meshHit === S.fuseBox && !S.lightsOut) {
+    S.hp -= 25;
+    if (S.hp <= 0) {
+      S.lightsOut = true;
+      if (S.fuseBox) S.fuseBox.visible = false;
+      showAnnouncement('🚨 LIGHTS OUT', 'Power failure — visibility cut!', '#ffaa44', 3500);
+    }
+    return true;
+  }
+  if (activeMapName === 'opera' && meshHit === S.chand && !S.falling) {
+    S.hp -= 25;
+    if (S.hp <= 0) {
+      S.falling = true;
+      S.vy = 0;
+      showAnnouncement('🎭 CHANDELIER!', 'CLEAR THE CENTER!', '#ffee88', 3000);
+    }
+    return true;
+  }
+  return false;
+}
+
 function updateMapEffects(dt) {
   const now = Date.now();
   // Airport darkness: lerp scene background toward black as lights break
@@ -13171,6 +13359,7 @@ function loop() {
   updateAdminCheats(dt);// admin cheat tick (fly, kill aura, etc.)
   updateUAV(dt);        // 🛰️ Predator UAV overlay tick
   updateMapEffects(dt); // airport darkening, chernobyl gas, mortar prompt
+  updateBatch5(dt);     // train scroll, vacuum, weather, lights-out, chandelier, debris
   updateVehiclePrompt();// 🚙 vehicle pickup prompt (BR arena)
   updateVehiclePiloting(dt); // 🚙 move + sync vehicle while piloted
   updateReloadAnim();   // weapon tilts/rotates during reload
