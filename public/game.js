@@ -13087,6 +13087,99 @@ function renderShopItems(body, slot) {
   }
 }
 
+// ── 📋 Best Loadouts: 30 curated meta builds ────────────────────────────
+const BEST_LOADOUTS = [
+  { icon:'🏆', name:'Tournament Standard',  desc:'Clean fundamentals',    p:'burst',          s:'revolver',       m:'knife',         u:'medkit' },
+  { icon:'⚡', name:'Speed Demon',          desc:'Run them down',         p:'vector',         s:'machine_pistol', m:'knife',         u:'adrenaline' },
+  { icon:'🎯', name:'Sniper Classic',       desc:'Patient & lethal',      p:'srx',            s:'revolver',       m:'knife',         u:'smoke' },
+  { icon:'💥', name:'Boom-Boom Bonanza',    desc:'Blow it all up',        p:'grenade_launcher', s:'pocket_rocket', m:'sledge',     u:'sticky_charge' },
+  { icon:'🔥', name:'Pyro King',            desc:'Burn baby burn',        p:'flamethrower',   s:'flare',          m:'fire_axe',      u:'sticky_charge' },
+  { icon:'🤖', name:'Tech Wizard',          desc:'Disable & dismantle',   p:'smart_smg',      s:'emp_pistol',     m:'shock_baton',   u:'emp_grenade' },
+  { icon:'🥷', name:'Silent Killer',        desc:'Stealth + headshots',   p:'air_rifle',      s:'blowgun',        m:'knife',         u:'smoke' },
+  { icon:'🛡️', name:'Tank',                 desc:'Soak & survive',        p:'sg100',          s:'taser',          m:'riot_shield',   u:'nano_shield' },
+  { icon:'🏏', name:'Sports Star',          desc:'Goofy but works',       p:'paintball',      s:'slingshot',      m:'cricket_bat',   u:'rubber_duck' },
+  { icon:'🌪️', name:'Crowd Control',        desc:'Push them around',      p:'shockwave_launcher', s:'sawed_off',  m:'sledge',        u:'air_grenade' },
+  { icon:'⚔️', name:'Knight',               desc:'Classic warrior',       p:'sg8',            s:'flare',          m:'katana',        u:'smoke' },
+  { icon:'🩸', name:'Vampire',              desc:'Heal as you kill',      p:'auto_shotgun',   s:'hand_cannon',    m:'vampire_blade', u:'adrenaline' },
+  { icon:'🏹', name:'Archer',               desc:'Range + traps',         p:'crossbow',       s:'throwing_knives', m:'knife',        u:'tripwire' },
+  { icon:'🎮', name:'Run & Gun',            desc:'Never stop moving',     p:'p90',            s:'machine_pistol', m:'knife',         u:'adrenaline' },
+  { icon:'🧊', name:'Cold War',             desc:'Freeze & finish',       p:'freeze_gun',     s:'frost_blaster',  m:'knife',         u:'smoke' },
+  { icon:'⚡', name:'Lightning Lord',       desc:'Shock everything',      p:'arc_rifle',      s:'taser',          m:'shock_baton',   u:'emp_grenade' },
+  { icon:'🎯', name:'Sharpshooter',         desc:'Mid-range precision',   p:'lever',          s:'duelist_pistol', m:'bat',           u:'ammo_fountain' },
+  { icon:'🍳', name:'Kitchen Brigade',      desc:'Useless on purpose',    p:'paintball',      s:'laser_pointer',  m:'frying_pan',    u:'rubber_duck' },
+  { icon:'💎', name:'P2W Casual',           desc:'Pay the price',         p:'royal_minigun',  s:'auto_revolver',  m:'lightsabre',    u:'orbital_strike' },
+  { icon:'🐢', name:'Camper',               desc:'Hold an angle',         p:'srx',            s:'pistol',         m:'bat',           u:'tripwire' },
+  { icon:'🌌', name:'Sci-Fi Operator',      desc:'Future tech',           p:'plasma_carbine', s:'phase_pistol',   m:'phase_blade',   u:'warp_beacon' },
+  { icon:'🎪', name:'Chaos Mode',           desc:'Pure nonsense',         p:'paintball',      s:'slingshot',      m:'baguette',      u:'confetti_cannon' },
+  { icon:'🔮', name:'Magic Crystal',        desc:'Refraction tricks',     p:'prism_engine',   s:'dart_gun',       m:'cane',          u:'ink_bomb' },
+  { icon:'🦅', name:'Battle Royale',        desc:'Bread & butter',        p:'ak30',           s:'revolver',       m:'bat',           u:'frag' },
+  { icon:'🥊', name:'Brawler',              desc:'Punch & shoot',         p:'sg100',          s:'machine_pistol', m:'brass_knuckles',u:'adrenaline' },
+  { icon:'🌠', name:'Cosmic Wrath',         desc:'Endgame P2W',           p:'void_harvester', s:'ion_revolver',   m:'gravity_hammer',u:'specter_drone' },
+  { icon:'🎤', name:'Loud & Proud',         desc:'Maximum noise',         p:'minigun',        s:'boomstick',      m:'chainsaw',      u:'dynamite' },
+  { icon:'🪖', name:'Operator',             desc:'Military standard',     p:'an94',           s:'revolver',       m:'combat_axe',    u:'frag' },
+  { icon:'🩹', name:'Medic Build',          desc:'Stay in the fight',     p:'burst',          s:'pistol',         m:'bat',           u:'healing_pulse' },
+  { icon:'👻', name:'Wraith',               desc:'Phase through hell',    p:'phase_driver',   s:'phase_pistol',   m:'machete',       u:'cloak' },
+];
+
+function findWeaponIdx(id) { return WEAPONS.findIndex(w => w.id === id); }
+function findMeleeIdx(id)  { return MELEE_ITEMS.findIndex(m => m.id === id); }
+function findUtilIdx(id)   { return SUPPORT_ITEMS.findIndex(s => s.id === id); }
+
+function applyBestLoadout(L) {
+  const pIdx = findWeaponIdx(L.p);
+  const sIdx = findWeaponIdx(L.s);
+  const mIdx = findMeleeIdx(L.m);
+  const uIdx = findUtilIdx(L.u);
+  const missing = [];
+  if (pIdx < 0 || !isOwned(L.p)) missing.push(L.p);
+  if (sIdx < 0 || !isOwned(L.s)) missing.push(L.s);
+  if (mIdx < 0 || !isOwned(L.m)) missing.push(L.m);
+  if (uIdx < 0 || !isOwned(L.u)) missing.push(L.u);
+  if (missing.length) {
+    alert(`Can't equip "${L.name}" — missing/unowned items:\n\n• ${missing.join('\n• ')}\n\nBuy or trial them in the shop first.`);
+    return;
+  }
+  selectedPrimaryIdx   = pIdx;
+  selectedSecondaryIdx = sIdx;
+  selectedMeleeIdx     = mIdx;
+  selectedSupportIdx   = uIdx;
+  showLoadoutScreen(loadoutMode); // re-render to highlight the new picks
+  toggleBestLoadoutsPanel(false);
+}
+
+function toggleBestLoadoutsPanel(show) {
+  let panel = document.getElementById('best-loadouts-panel');
+  if (show && !panel) {
+    panel = document.createElement('div');
+    panel.id = 'best-loadouts-panel';
+    panel.style.cssText = 'position:fixed;top:0;right:0;width:380px;height:100%;background:rgba(10,10,16,0.97);border-left:2px solid #ffcc66;color:#fff;font-family:"Courier New",monospace;z-index:9700;overflow-y:auto;padding:18px;';
+    document.body.appendChild(panel);
+  }
+  if (!panel) return;
+  if (!show) { panel.style.display = 'none'; return; }
+  panel.style.display = 'block';
+  panel.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #444;padding-bottom:10px;margin-bottom:14px;">
+      <div style="font-size:16px;color:#ffcc66;letter-spacing:3px;">📋 BEST LOADOUTS</div>
+      <button id="best-close" style="padding:4px 10px;background:#3a1a1a;color:#ff8888;border:1px solid #ff4444;cursor:pointer;font-family:inherit;font-size:11px;border-radius:4px;">✕</button>
+    </div>
+    <div style="font-size:10px;color:#888;margin-bottom:14px;">30 curated meta builds — tap to equip. Missing items show in the shop.</div>
+    ${BEST_LOADOUTS.map((L, i) => {
+      const allOwned = isOwned(L.p) && isOwned(L.s) && isOwned(L.m) && isOwned(L.u);
+      return `<div data-idx="${i}" class="bl-card" style="background:${allOwned ? '#0f1018' : '#1a0f0f'};border:1px solid ${allOwned ? '#444' : '#553'};border-left:3px solid ${allOwned ? '#ffcc66' : '#666'};padding:8px 10px;margin-bottom:6px;cursor:pointer;border-radius:4px;">
+        <div style="font-size:12px;color:${allOwned ? '#ffdd88' : '#aa9966'};font-weight:bold;">${L.icon} ${L.name}</div>
+        <div style="font-size:9px;color:#aaa;margin:2px 0 3px;">${L.desc}</div>
+        <div style="font-size:9px;color:#888;line-height:1.4;">${L.p} · ${L.s} · ${L.m} · ${L.u}</div>
+        ${!allOwned ? '<div style="font-size:9px;color:#cc6644;margin-top:2px;">⚠ unowned items</div>' : ''}
+      </div>`;
+    }).join('')}
+  `;
+  panel.querySelector('#best-close').addEventListener('click', () => toggleBestLoadoutsPanel(false));
+  panel.querySelectorAll('.bl-card').forEach(el => {
+    el.addEventListener('click', () => applyBestLoadout(BEST_LOADOUTS[+el.dataset.idx]));
+  });
+}
+
 function showLoadoutScreen(mode) {
   loadoutMode = mode || 'death';
   const screen = document.getElementById('loadout-screen');
@@ -13833,6 +13926,11 @@ const _shopBtn = document.getElementById('open-shop-btn');
 if (_shopBtn) {
   _shopBtn.addEventListener('click', openShop);
   _shopBtn.addEventListener('touchstart', e => { e.preventDefault(); openShop(); }, { passive: false });
+}
+const _bestBtn = document.getElementById('best-loadouts-btn');
+if (_bestBtn) {
+  _bestBtn.addEventListener('click', () => toggleBestLoadoutsPanel(true));
+  _bestBtn.addEventListener('touchstart', e => { e.preventDefault(); toggleBestLoadoutsPanel(true); }, { passive: false });
 }
 const _logoutBtn = document.getElementById('logout-btn');
 if (_logoutBtn) {
