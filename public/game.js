@@ -227,7 +227,7 @@ const WEAPONS = [
     id: 'gravity_launcher', name: 'Gravity Launcher', type: 'Heavy', slot: 'primary',
     mag: 2, reserve: 10, damage: 75, fireRate: 850, reloadTime: 2800,
     auto: false, pellets: 1, spread: 0.005, adsZoom: 50, bulletSpeed: 60, noReload: false,
-    bulletColor: 0x7744cc, bulletSize: 0.16,
+    bulletColor: 0x7744cc, bulletSize: 0.16, doubleJump: true,
     gravityPull: 6, // pulls enemies 6m radius toward impact point
     ability: { name: 'Singularity', cd: 20000, desc: 'Mini black hole · 8 m pull · 90 dmg', type: 'aoe', radius: 8, damage: 90, color: 0x4400aa, weaponAbId: 'singularity' },
   },
@@ -656,8 +656,8 @@ const WEAPONS = [
   { id: 'phase_driver', name: 'Phase Driver', type: 'Phasing AR', slot: 'primary',
     mag: 20, reserve: 60, damage: 60, fireRate: 200, reloadTime: 2200,
     auto: true, pellets: 1, spread: 0.004, adsZoom: 46, bulletSpeed: 180, noReload: false,
-    bulletColor: 0xaa66ff, bulletSize: 0.06, emissive: true,
-    ability: { name: 'Ghost Protocol', cd: 18000, desc: '4 s · +50% speed · shots ignore cover', type: 'buff', duration: 4000, speedMult: 1.5, dmgMult: 1.3 } },
+    bulletColor: 0xaa66ff, bulletSize: 0.06, emissive: true, doubleJump: true,
+    ability: { name: 'Ghost Protocol', cd: 18000, desc: '4 s · +50% speed · shots ignore cover · DOUBLE JUMP', type: 'buff', duration: 4000, speedMult: 1.5, dmgMult: 1.3 } },
   { id: 'quantum_repeater', name: 'Quantum Repeater', type: 'Time-Shift AR', slot: 'primary',
     mag: 22, reserve: 66, damage: 50, fireRate: 200, reloadTime: 2300,
     auto: true, pellets: 1, spread: 0.005, adsZoom: 48, bulletSpeed: 150, noReload: false,
@@ -693,8 +693,8 @@ const WEAPONS = [
   { id: 'phase_pistol', name: 'Phase Pistol', type: 'Phasing Secondary', slot: 'secondary',
     mag: 8, reserve: 24, damage: 45, fireRate: 280, reloadTime: 1600,
     auto: false, pellets: 1, spread: 0.002, adsZoom: 50, bulletSpeed: 200, noReload: false,
-    bulletColor: 0xaa66ff, bulletSize: 0.05, emissive: true,
-    ability: { name: 'Blink Shot', cd: 11000, desc: 'Next shot · 3× damage · pierce-feel', type: 'powershot', pellets: 1, spreadMult: 0, dmgMult: 3 } },
+    bulletColor: 0xaa66ff, bulletSize: 0.05, emissive: true, doubleJump: true,
+    ability: { name: 'Blink Shot', cd: 11000, desc: 'Next shot · 3× damage · DOUBLE JUMP equipped', type: 'powershot', pellets: 1, spreadMult: 0, dmgMult: 3 } },
   { id: 'ion_revolver', name: 'Ion Revolver', type: 'Electric Revolver', slot: 'secondary',
     mag: 6, reserve: 18, damage: 50, fireRate: 320, reloadTime: 2000,
     auto: false, pellets: 1, spread: 0.005, adsZoom: 48, bulletSpeed: 170, noReload: false,
@@ -818,8 +818,8 @@ const MELEE_ITEMS = [
     ability: { name: 'Death Touch',  cd: 18000, desc: 'Next hit · instant kill · 9999 dmg', type: 'melee_instakill' } },
   { id: 'chainsaw',   name: 'Chainsaw',   type: 'Heavy Melee', damage: 45, range: 1.9, cooldown: 150,
     ability: { name: 'Rev Up',       cd: 12000, desc: '2s · 10× swing speed · 3× move speed', type: 'melee_revup', duration: 2000 } },
-  { id: 'lightsabre', name: 'Lightsabre', type: 'Melee',       damage: 72, range: 2.5, cooldown: 420,
-    ability: { name: 'Parry',        cd: 10000, desc: '1.5s · absorb all incoming bullets', type: 'melee_parry', duration: 1500 } },
+  { id: 'lightsabre', name: 'Lightsabre', type: 'Melee · Jedi',  damage: 72, range: 2.5, cooldown: 420, doubleJump: true,
+    ability: { name: 'Parry',        cd: 10000, desc: '1.5s · absorb all incoming bullets · DOUBLE JUMP', type: 'melee_parry', duration: 1500 } },
   { id: 'riot_shield',name: 'Riot Shield',type: 'Shield',      damage: 18, range: 1.7, cooldown: 700, shield: true,
     ability: { name: 'Shield Charge',cd: 9000,  desc: 'Charge forward · ram enemies · 60 dmg', type: 'melee_charge', distance: 7, damage: 60 } },
   { id: 'screwdriver',name: 'Screwdriver',type: 'Melee',       damage: 20, range: 1.5, cooldown: 220,
@@ -883,9 +883,9 @@ const MELEE_ITEMS = [
     lifestealOnHit: 10,
     ability: { name: 'Butcher',    cd: 10000, desc: '3 s · auto-chop · double lifesteal', type: 'melee_revup', duration: 3000, lifestealMult: 2 } },
   // ── 🌌 SCI-FI P2W MELEES ──────────────────────────────────────────────────
-  { id: 'phase_blade',   name: 'Phase Blade',     type: 'Phasing Melee',  damage: 90, range: 2.6, cooldown: 380, speedMult: 1.4,
+  { id: 'phase_blade',   name: 'Phase Blade',     type: 'Phasing Melee',  damage: 90, range: 2.6, cooldown: 380, speedMult: 1.4, doubleJump: true,
     ability: { name: 'Ghost Dash', cd: 9000,  desc: 'Dash 7 m through enemies · 110 dmg', type: 'melee_lunge', distance: 7, damage: 110 } },
-  { id: 'gravity_hammer',name: 'Gravity Hammer',  type: 'Heavy AOE',      damage: 110, range: 2.3, cooldown: 700,
+  { id: 'gravity_hammer',name: 'Gravity Hammer',  type: 'Heavy AOE',      damage: 110, range: 2.3, cooldown: 700, doubleJump: true,
     aoeOnSwing: 3.5,
     ability: { name: 'Singularity Slam', cd: 14000, desc: 'Slam · 6 m AOE knockback', type: 'melee_slam' } },
   { id: 'volt_whip',     name: 'Volt Whip',       type: 'Long Electric',  damage: 50, range: 4.0, cooldown: 420,
@@ -7039,13 +7039,31 @@ function updateMovement(dt) {
   const easeRate = sliding ? 25 : 12;
   window._crouchEye += (targetEye - window._crouchEye) * Math.min(1, dt * easeRate);
   // 🦘 Jump physics — Space (or mobile button). Skip in slam/heli/mortar states.
+  // ✨ Some weapons grant a mid-air double jump (sci-fi / gravity / jedi).
   if (!slamState && !pilotedVehicle && !pilotedMortar) {
     const groundEyeY = getGroundEyeY() + (window._crouchEye - 1.65);
     const isGrounded = camera.position.y <= groundEyeY + 0.05 && playerYVel <= 0;
-    const wantsJump = (keys['Space'] || window._mobileJump) && !crouchHeld;
-    if (wantsJump && isGrounded) {
-      playerYVel = 9; // ~1.4m peak — feels like a normal FPS jump
-      window._mobileJump = false; // edge-trigger from mobile so we don't spam
+    // Edge-detect Space so a held key doesn't auto-trigger the air jump
+    const spaceDown = (keys['Space'] || window._mobileJump) && !crouchHeld;
+    const spaceEdge = spaceDown && !window._prevSpaceDown;
+    window._prevSpaceDown = spaceDown;
+    // Does the currently equipped item grant a double jump?
+    const equipped = activeSlot === 'primary'   ? currentWeapon
+                   : activeSlot === 'secondary' ? currentWeapon
+                   : activeSlot === 'melee'     ? MELEE_ITEMS[selectedMeleeIdx]
+                   : activeSlot === 'support'   ? SUPPORT_ITEMS[selectedSupportIdx]
+                   : null;
+    const grantsDouble = !!(equipped && equipped.doubleJump);
+    if (isGrounded) window._airJumpsLeft = grantsDouble ? 1 : 0;
+    if (spaceEdge && isGrounded) {
+      playerYVel = 9;
+      window._mobileJump = false;
+    } else if (spaceEdge && !isGrounded && grantsDouble && (window._airJumpsLeft || 0) > 0) {
+      // ✨ Double jump in mid-air — reset velocity to full jump, brief sparkle FX
+      playerYVel = 9;
+      window._airJumpsLeft = 0;
+      window._mobileJump = false;
+      spawnAbilityAOEFX(camera.position.clone().setY(0.3), 1.2, 0xaaccff);
     }
     if (!isGrounded) {
       playerYVel -= 28 * dt; // gravity
