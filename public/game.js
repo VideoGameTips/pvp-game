@@ -6970,6 +6970,54 @@ function setWeaponADSPos(ads) {
 // ── Movement ───────────────────────────────────────────────────────────────
 const SPEED = 7.5; // base movement speed (was 5 — bumped 1.5× for snappier feel)
 
+// ── 🏆 WEAPON MASTERY — per-weapon kill counts + title progression
+const MASTERY_TIERS = [
+  { kills: 10,   title: 'Apprentice', color: '#88ccff' },
+  { kills: 25,   title: 'Adept',      color: '#88ff99' },
+  { kills: 100,  title: 'Veteran',    color: '#ffcc66' },
+  { kills: 500,  title: 'Master',     color: '#ff8844' },
+  { kills: 1000, title: 'Legend',     color: '#ff44dd' },
+  { kills: 5000, title: 'Mythic',     color: '#ddccff' },
+];
+let weaponKills = {};
+try { weaponKills = JSON.parse(localStorage.getItem('pvp_weapon_kills') || '{}'); } catch (e) {}
+function saveWeaponKills() { try { localStorage.setItem('pvp_weapon_kills', JSON.stringify(weaponKills)); } catch(e) {} }
+function weaponTitleFor(id) {
+  const n = weaponKills[id] || 0;
+  let t = null;
+  for (const tier of MASTERY_TIERS) if (n >= tier.kills) t = tier;
+  return t;
+}
+function weaponTitleString(id) {
+  const t = weaponTitleFor(id);
+  return t ? `${t.title}` : '';
+}
+function creditWeaponKill(weaponId) {
+  if (!weaponId) return;
+  const before = weaponKills[weaponId] || 0;
+  const after  = before + 1;
+  weaponKills[weaponId] = after;
+  saveWeaponKills();
+  // Did we just cross a tier threshold?
+  for (const tier of MASTERY_TIERS) {
+    if (before < tier.kills && after >= tier.kills) {
+      const wname = WEAPONS.find(w => w.id === weaponId)?.name
+                 || MELEE_ITEMS.find(m => m.id === weaponId)?.name
+                 || SUPPORT_ITEMS.find(s => s.id === weaponId)?.name
+                 || weaponId;
+      showAnnouncement(`🏆 ${tier.title.toUpperCase()}`, `${wname} · ${tier.kills} kills`, tier.color, 3500);
+      break;
+    }
+  }
+}
+function currentEquippedId() {
+  if (activeSlot === 'primary')   return WEAPONS[selectedPrimaryIdx]?.id;
+  if (activeSlot === 'secondary') return WEAPONS[selectedSecondaryIdx]?.id;
+  if (activeSlot === 'melee')     return MELEE_ITEMS[selectedMeleeIdx]?.id;
+  if (activeSlot === 'support')   return SUPPORT_ITEMS[selectedSupportIdx]?.id;
+  return null;
+}
+
 // ── 🎬 KILLCAM — record positions of all entities, play back from killer POV on death
 const KILLCAM = {
   buf: [],                // ring of frames { t, entities: { id: {x,y,z,rotY} } }
@@ -8533,6 +8581,50 @@ function updateDamageNumbers() {
 // Weapons that one-shot on headshot
 const INSTAKILL_HS_WEAPONS = new Set(['srx', 'railgun', 'lever', 'boombow', 'boombow_ab', 'boombow_c1', 'railgun_ab']);
 
+// 🤫 Secret weapon category sets used for hidden synergy mechanics
+const ELECTRIC_WEAPONS = new Set(['arc_rifle','arc_torrent','taser','emp_pistol','shock_baton','storm_core','ion_revolver','magnet_rifle','coilgun','plasma_carbine']);
+const FIRE_WEAPONS     = new Set(['flamethrower','firework_launcher','incendiary_shotgun','fire_axe','fire_poker','thermite']);
+const GRAVITY_WEAPONS  = new Set(['gravity_launcher','gravity_hammer','gravity_paint','event_horizon','magnetar','void_harvester','black_hole_seed']);
+const FROST_WEAPONS    = new Set(['freeze_gun','frost_blaster','abs_zero']);
+
+// Returns a synergy multiplier for damage based on map zones + weapon category.
+// Examples:
+//   electric weapons on ice/water = ×1.5
+//   fire weapons on forest map    = ×1.3 (and target keeps burning)
+//   gravity weapons in low-grav   = ×1.5
+//   frost weapons on tundra/space = ×1.4
+// All bonuses are discoverable, never advertised in the UI.
+function getSecretSynergy(weaponId, hitPos) {
+  if (!weaponId || !hitPos) return 1;
+  // Electric synergy with water/ice zones (frozen lake on holiday, ice patches on tundra, sewer pools)
+  if (ELECTRIC_WEAPONS.has(weaponId)) {
+    const ice = activeMapGimmicks.iceZones || [];
+    for (const z of ice) {
+      const dx = hitPos.x - z.x, dz = hitPos.z - z.z;
+      if (dx*dx + dz*dz < z.r * z.r) return 1.5;
+    }
+    if (activeMapName === 'sewer' || activeMapName === 'holiday') return 1.25;
+  }
+  // Fire synergy with foliage maps
+  if (FIRE_WEAPONS.has(weaponId)) {
+    if (activeMapName === 'forest' || activeMapName === 'overgrowth') return 1.30;
+  }
+  // Gravity synergy in low-grav zones
+  if (GRAVITY_WEAPONS.has(weaponId)) {
+    const lg = activeMapGimmicks.lowGravZones || [];
+    for (const z of lg) {
+      const dx = hitPos.x - z.x, dz = hitPos.z - z.z;
+      if (dx*dx + dz*dz < z.r * z.r) return 1.5;
+    }
+    if (activeMapName === 'space' || activeMapName === 'orbital_station' || activeMapName === 'gravity_lab') return 1.25;
+  }
+  // Frost synergy on cold maps
+  if (FROST_WEAPONS.has(weaponId)) {
+    if (activeMapName === 'tundra' || activeMapName === 'space' || activeMapName === 'holiday') return 1.40;
+  }
+  return 1;
+}
+
 // Helper: emit hit to server AND show damage numbers AND apply damage client-authoritatively
 function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false) {
   const isBot    = players[pid] && players[pid].isBot;
@@ -8543,9 +8635,18 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false) {
     headshot, instakill,
   });
   const baseDmg = getClientWeaponDamage(weaponId);
-  const dmg     = headshot ? (instakill ? 999 : baseDmg * 2) : baseDmg;
+  // 🤫 Secret synergy: certain weapons get a damage bonus in matching map zones
+  const synergy = getSecretSynergy(weaponId, hitWorldPos);
+  const dmg     = (headshot ? (instakill ? 999 : baseDmg * 2) : baseDmg) * synergy;
   const mesh    = remoteMeshes[pid];
-  if (hitWorldPos) showDamageNumber(hitWorldPos, dmg, headshot);
+  if (hitWorldPos) showDamageNumber(hitWorldPos, dmg, headshot || synergy > 1);
+  // Briefly tint the damage number / spawn a synergy spark for player discovery
+  if (synergy > 1 && hitWorldPos) {
+    spawnAbilityAOEFX(hitWorldPos.clone().setY(hitWorldPos.y + 0.4), 0.6,
+      ELECTRIC_WEAPONS.has(weaponId) ? 0x66ccff :
+      FIRE_WEAPONS.has(weaponId)     ? 0xff6622 :
+      GRAVITY_WEAPONS.has(weaponId)  ? 0xaa44ff : 0x99eeff);
+  }
   if (mesh)        trackTotalDamage(pid, dmg, mesh);
   playSoundEvent(headshot ? 'headshot' : 'hitmarker', { volume: headshot ? 1.15 : 0.75, minGap: headshot ? 60 : 35 });
   if (headshot)    flashHeadshot(instakill);
@@ -8584,6 +8685,7 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false) {
         if (players[pid]) players[pid].dead = true;
         if (mesh) mesh.visible = false;
         myKills++;
+        creditWeaponKill(currentEquippedId());
         const kc = document.getElementById('kill-count');
         if (kc) kc.textContent = `Kills: ${myKills}`;
         const botName = players[pid]?.name || 'Bot';
@@ -10476,6 +10578,7 @@ socket.on('playerHit', data => {
       hitBot.dead = true;
       if (remoteMeshes[data.targetId]) remoteMeshes[data.targetId].visible = false;
       myKills++;
+      creditWeaponKill(currentEquippedId());
       const kc = document.getElementById('kill-count');
       if (kc) kc.textContent = `Kills: ${myKills}`;
       const botName = players[data.targetId]?.name || 'Bot';
@@ -10494,7 +10597,7 @@ socket.on('playerDied', data => {
   if (players[data.targetId]) { players[data.targetId].hp = 0; players[data.targetId].dead = true; }
   // Only count kill if playerHit didn't already count it (check if bot.dead was already set)
   const _alreadyDead = gameBots.find(b => b.id === data.targetId)?.dead;
-  if (data.killerId===myId && !_alreadyDead) { myKills++; const kc=document.getElementById('kill-count'); if(kc) kc.textContent=`Kills: ${myKills}`; }
+  if (data.killerId===myId && !_alreadyDead) { myKills++; creditWeaponKill(currentEquippedId()); const kc=document.getElementById('kill-count'); if(kc) kc.textContent=`Kills: ${myKills}`; }
   if (data.targetId===myId) {
     isDead=true; isADS=false; targetFOV=75; shooting=false;
     reloading=false;
@@ -13005,6 +13108,7 @@ function updateBotAI(dt) {
           setTimeout(() => scene.remove(ice), 1500);
         }
         myKills++;
+        creditWeaponKill(currentEquippedId());
         const kc = document.getElementById('kill-count');
         if (kc) kc.textContent = `Kills: ${myKills}`;
         showAnnouncement('FROZEN', players[bot.id]?.name || 'Bot', '#99eeff', 1400);
@@ -14323,6 +14427,14 @@ function showLoadoutScreen(mode) {
     badge.style.cssText = 'font-size:9px;color:#88ff99;letter-spacing:1px;margin-top:3px;';
     badge.textContent = FREE_WEAPONS.has(id) ? 'FREE' : trialingThisMatch.has(id) ? '🧪 TRIAL' : '✓ OWNED';
     card.appendChild(badge);
+    // 🏆 Mastery title (if any) — shown below the OWNED badge
+    const tier = weaponTitleFor(id);
+    if (tier) {
+      const tb = document.createElement('div');
+      tb.style.cssText = `font-size:9px;color:${tier.color};letter-spacing:1px;margin-top:2px;font-weight:bold;`;
+      tb.textContent = `🏆 ${tier.title} · ${weaponKills[id] || 0} kills`;
+      card.appendChild(tb);
+    }
     return true;
   }
 
@@ -14514,6 +14626,11 @@ const FUN_FACTS = [
   '🎯 Throwing a frag at your feet during a finisher kills you and them.',
   '🎯 KOTH gives 3 lives — don\'t waste them rushing the center first.',
   // 🤫 Secretive
+  '🤫 Electric weapons hit harder on ice and water.',
+  '🤫 Fire weapons burn hotter in the forest.',
+  '🤫 Gravity weapons amplify in low-gravity zones.',
+  '🤫 Frost weapons are extra brutal in the tundra.',
+  '🤫 Some sci-fi weapons grant you a double jump while equipped.',
   '🤫 You can climb the skyscraper in URBAN.',
   '🤫 Chernobyl\'s 4 reactors can be destroyed for an XP bonus.',
   '🤫 Airport glass + lights are breakable.',
