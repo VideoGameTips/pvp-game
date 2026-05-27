@@ -1931,6 +1931,15 @@ let weaponSoundLastAt = {};
 let soundEventLastAt = {};
 // Master mix scale — bumped to 1.15 for a fuller mix
 const SOUND_MIX = 1.15;
+
+// 🎛️ Player-tweakable shoot-sound modulator (sliders in settings panel).
+// Each axis multiplies the corresponding aspect of the muzzle blast.
+let SHOOT_FX = { pitch: 1.0, vol: 1.0, attack: 1.0, body: 1.0, dur: 1.0 };
+try {
+  const s = JSON.parse(localStorage.getItem('pvp_shoot_fx') || 'null');
+  if (s) SHOOT_FX = { ...SHOOT_FX, ...s };
+} catch (e) {}
+function saveShootFx() { try { localStorage.setItem('pvp_shoot_fx', JSON.stringify(SHOOT_FX)); } catch(e) {} }
 function getAudioCtx() {
   const Ctx = window.AudioContext || window.webkitAudioContext;
   if (!Ctx) return null;
@@ -2067,42 +2076,50 @@ function playTone(ctx, start, dur, outNode, freqA, freqB, volume, type = 'square
   osc.stop(start + dur + 0.02);
 }
 function playMuzzleBlast(ctx, start, outNode, kind, volume) {
+  // Apply player FX modulator
+  const FX = SHOOT_FX;
+  volume *= FX.vol;
+  // Helper wrappers that fold FX scaling into the layered calls below
+  const PFN = (s, dur, gain, type, freq, q) =>
+    playFilteredNoise(ctx, s, dur * FX.dur, outNode, gain * FX.attack, type, freq * FX.pitch, q);
+  const PT = (s, dur, freq1, freq2, gain, wave) =>
+    playTone(ctx, s, dur * FX.dur, outNode, freq1 * FX.pitch, freq2 * FX.pitch, gain * FX.body, wave);
   if (kind === 'boom') {
-    playFilteredNoise(ctx, start, 0.13, outNode, volume * 1.3, 'lowpass', 1200, 0.7);
-    playFilteredNoise(ctx, start, 0.028, outNode, volume * 1.0, 'highpass', 1800, 0.5);
-    playTone(ctx, start, 0.07, outNode, 92, 46, volume * 0.32, 'sine');
+    PFN(start, 0.13, volume * 1.3, 'lowpass', 1200, 0.7);
+    PFN(start, 0.028, volume * 1.0, 'highpass', 1800, 0.5);
+    PT(start, 0.07, 92, 46, volume * 0.32, 'sine');
   } else if (kind === 'crack') {
-    playFilteredNoise(ctx, start, 0.030, outNode, volume * 0.72, 'highpass', 1900, 0.45);
-    playFilteredNoise(ctx, start, 0.075, outNode, volume * 0.95, 'bandpass', 760, 0.75);
-    playTone(ctx, start, 0.075, outNode, 118, 52, volume * 0.26, 'sine');
+    PFN(start, 0.030, volume * 0.72, 'highpass', 1900, 0.45);
+    PFN(start, 0.075, volume * 0.95, 'bandpass', 760, 0.75);
+    PT(start, 0.075, 118, 52, volume * 0.26, 'sine');
   } else if (kind === 'pistol') {
-    playFilteredNoise(ctx, start, 0.04, outNode, volume * 1.2, 'bandpass', 1550, 0.7);
-    playFilteredNoise(ctx, start + 0.015, 0.055, outNode, volume * 0.55, 'lowpass', 820, 0.7);
+    PFN(start, 0.04, volume * 1.2, 'bandpass', 1550, 0.7);
+    PFN(start + 0.015, 0.055, volume * 0.55, 'lowpass', 820, 0.7);
   } else if (kind === 'auto_blast') {
-    playFilteredNoise(ctx, start, 0.075, outNode, volume * 0.70, 'bandpass', 1180, 0.28);
-    playFilteredNoise(ctx, start + 0.010, 0.110, outNode, volume * 0.92, 'lowpass', 540, 0.55);
-    playFilteredNoise(ctx, start + 0.030, 0.070, outNode, volume * 0.42, 'bandpass', 260, 0.85);
-    playTone(ctx, start, 0.070, outNode, 66, 38, volume * 0.14, 'sine');
-    playTone(ctx, start + 0.014, 0.070, outNode, 170, 118, volume * 0.075, 'triangle');
+    PFN(start, 0.075, volume * 0.70, 'bandpass', 1180, 0.28);
+    PFN(start + 0.010, 0.110, volume * 0.92, 'lowpass', 540, 0.55);
+    PFN(start + 0.030, 0.070, volume * 0.42, 'bandpass', 260, 0.85);
+    PT(start, 0.070, 66, 38, volume * 0.14, 'sine');
+    PT(start + 0.014, 0.070, 170, 118, volume * 0.075, 'triangle');
   } else if (kind === 'auto_blast_heavy') {
-    playFilteredNoise(ctx, start, 0.085, outNode, volume * 0.62, 'bandpass', 980, 0.35);
-    playFilteredNoise(ctx, start + 0.006, 0.130, outNode, volume * 1.05, 'lowpass', 460, 0.68);
-    playFilteredNoise(ctx, start + 0.035, 0.080, outNode, volume * 0.42, 'bandpass', 230, 0.9);
-    playTone(ctx, start, 0.085, outNode, 72, 34, volume * 0.18, 'sine');
+    PFN(start, 0.085, volume * 0.62, 'bandpass', 980, 0.35);
+    PFN(start + 0.006, 0.130, volume * 1.05, 'lowpass', 460, 0.68);
+    PFN(start + 0.035, 0.080, volume * 0.42, 'bandpass', 230, 0.9);
+    PT(start, 0.085, 72, 34, volume * 0.18, 'sine');
   } else if (kind === 'tick' || kind === 'p90') {
-    playFilteredNoise(ctx, start, 0.028, outNode, volume * 1.05, 'bandpass', kind === 'p90' ? 2100 : 1600, 0.55);
-    playFilteredNoise(ctx, start + 0.012, 0.032, outNode, volume * 0.35, 'highpass', 2400, 0.4);
+    PFN(start, 0.028, volume * 1.05, 'bandpass', kind === 'p90' ? 2100 : 1600, 0.55);
+    PFN(start + 0.012, 0.032, volume * 0.35, 'highpass', 2400, 0.4);
   } else if (kind === 'heavy') {
-    playFilteredNoise(ctx, start, 0.05, outNode, volume * 1.15, 'bandpass', 980, 0.65);
-    playTone(ctx, start, 0.05, outNode, 120, 64, volume * 0.18, 'sine');
+    PFN(start, 0.05, volume * 1.15, 'bandpass', 980, 0.65);
+    PT(start, 0.05, 120, 64, volume * 0.18, 'sine');
   } else if (kind === 'thump') {
-    playFilteredNoise(ctx, start, 0.11, outNode, volume * 0.95, 'lowpass', 900, 0.7);
-    playTone(ctx, start, 0.11, outNode, 88, 36, volume * 0.34, 'sine');
+    PFN(start, 0.11, volume * 0.95, 'lowpass', 900, 0.7);
+    PT(start, 0.11, 88, 36, volume * 0.34, 'sine');
   } else {
-    playFilteredNoise(ctx, start, 0.030, outNode, volume * 0.52, 'bandpass', 1550, 0.45);
-    playFilteredNoise(ctx, start, 0.085, outNode, volume * 1.22, 'lowpass', 980, 0.75);
-    playFilteredNoise(ctx, start + 0.018, 0.050, outNode, volume * 0.42, 'bandpass', 430, 0.8);
-    playTone(ctx, start, 0.070, outNode, 96, 48, volume * 0.24, 'sine');
+    PFN(start, 0.030, volume * 0.52, 'bandpass', 1550, 0.45);
+    PFN(start, 0.085, volume * 1.22, 'lowpass', 980, 0.75);
+    PFN(start + 0.018, 0.050, volume * 0.42, 'bandpass', 430, 0.8);
+    PT(start, 0.070, 96, 48, volume * 0.24, 'sine');
   }
 }
 function playGunAction(ctx, start, outNode, action, volume) {
@@ -14876,6 +14893,70 @@ if (_ecBtn) {
 }
 // Tick the user-info bar each 15s so the Admin Pass timer counts down live
 setInterval(() => { if (adminPassActive() && !currentUser?.isAdmin) updateUserInfoBar(); }, 15000);
+
+// 🎛️ Shoot-FX settings panel
+function openShootFxPanel() {
+  let panel = document.getElementById('shoot-fx-panel');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'shoot-fx-panel';
+    panel.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9900;background:#1a1024;border:2px solid #aa77ff;border-radius:8px;padding:24px;color:#fff;font-family:"Courier New",monospace;min-width:340px;box-shadow:0 4px 30px rgba(0,0,0,0.6);';
+    document.body.appendChild(panel);
+  }
+  panel.style.display = 'block';
+  const rowHTML = (id, label, min, max, step, val) =>
+    `<label style="display:flex;justify-content:space-between;margin:10px 0;font-size:12px;color:#ddccff;">
+       <span>${label}</span>
+       <span id="${id}-val" style="color:#fff;width:42px;text-align:right;">${val.toFixed(2)}×</span>
+     </label>
+     <input id="${id}" type="range" min="${min}" max="${max}" step="${step}" value="${val}" style="width:100%;margin-bottom:6px;">`;
+  panel.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;border-bottom:1px solid #553388;padding-bottom:10px;">
+      <div style="font-size:18px;letter-spacing:3px;color:#cc99ff;">🔊 SHOOT FX</div>
+      <button id="sfx-close" style="background:#3a1a1a;color:#ff8888;border:1px solid #ff4444;padding:4px 10px;cursor:pointer;font-family:inherit;border-radius:3px;">✕</button>
+    </div>
+    <div style="font-size:10px;color:#aaa;margin-bottom:12px;line-height:1.4;">
+      Tweak the muzzle blast on every gun. Saved per device.
+    </div>
+    ${rowHTML('fx-vol',    'VOLUME',  0.3, 2.5, 0.05, SHOOT_FX.vol)}
+    ${rowHTML('fx-pitch',  'PITCH',   0.3, 2.5, 0.05, SHOOT_FX.pitch)}
+    ${rowHTML('fx-attack', 'ATTACK (snap)',  0.0, 2.5, 0.05, SHOOT_FX.attack)}
+    ${rowHTML('fx-body',   'BODY (boom)',    0.0, 2.5, 0.05, SHOOT_FX.body)}
+    ${rowHTML('fx-dur',    'DURATION',0.3, 2.5, 0.05, SHOOT_FX.dur)}
+    <div style="display:flex;gap:8px;margin-top:18px;">
+      <button id="sfx-test"  style="flex:1;padding:10px;background:#1a3a1a;color:#88ff99;border:1px solid #88ff99;cursor:pointer;font-family:inherit;letter-spacing:2px;border-radius:4px;">🔫 TEST</button>
+      <button id="sfx-reset" style="flex:1;padding:10px;background:#2a2a1a;color:#ffcc66;border:1px solid #ffaa44;cursor:pointer;font-family:inherit;letter-spacing:2px;border-radius:4px;">RESET</button>
+    </div>
+  `;
+  const bind = (id, key) => {
+    const input = document.getElementById(id);
+    const lbl = document.getElementById(id + '-val');
+    input.addEventListener('input', () => {
+      const v = parseFloat(input.value);
+      SHOOT_FX[key] = v;
+      lbl.textContent = v.toFixed(2) + '×';
+      saveShootFx();
+    });
+  };
+  bind('fx-vol', 'vol'); bind('fx-pitch', 'pitch'); bind('fx-attack', 'attack');
+  bind('fx-body', 'body'); bind('fx-dur', 'dur');
+  document.getElementById('sfx-close').addEventListener('click', () => panel.style.display = 'none');
+  document.getElementById('sfx-test').addEventListener('click', () => {
+    const ctx = getAudioCtx(); if (!ctx) return;
+    const gain = ctx.createGain(); gain.connect(ctx.destination);
+    playMuzzleBlast(ctx, ctx.currentTime + 0.002, gain, 'auto_blast', 0.9);
+  });
+  document.getElementById('sfx-reset').addEventListener('click', () => {
+    SHOOT_FX = { pitch: 1, vol: 1, attack: 1, body: 1, dur: 1 };
+    saveShootFx();
+    openShootFxPanel(); // refresh UI
+  });
+}
+const _sfxBtn = document.getElementById('shoot-fx-btn');
+if (_sfxBtn) {
+  _sfxBtn.addEventListener('click', openShootFxPanel);
+  _sfxBtn.addEventListener('touchstart', e => { e.preventDefault(); openShootFxPanel(); }, { passive: false });
+}
 
 const _shopBtn = document.getElementById('open-shop-btn');
 if (_shopBtn) {
