@@ -2348,6 +2348,26 @@ function playSoundEvent(name, opts = {}) {
     playFilteredNoise(ctx, start, 0.18, out, 0.20 * mult, 'bandpass', 480, 1.2);
     playTone(ctx, start + 0.06, 0.10, out, 220, 80, 0.16 * mult, 'sine');
   }
+  // 💣 Grenade throw — quick whoosh
+  else if (name === 'grenade_throw') {
+    playFilteredNoise(ctx, start, 0.18, out, 0.28 * mult, 'bandpass', 620, 0.9);
+    playTone(ctx, start, 0.10, out, 360, 180, 0.10 * mult, 'sine');
+  }
+  // 💥 Explosion — sub-bass thump + cracking noise + low-pass smoke rumble
+  else if (name === 'explosion') {
+    // Sharp transient crack
+    playFilteredNoise(ctx, start, 0.06, out, 0.42 * mult, 'highpass', 1800, 0.5);
+    // Body — big low-end thump
+    playTone(ctx, start, 0.30, out, 90, 28, 0.55 * mult, 'sine');
+    playTone(ctx, start, 0.30, out, 180, 60, 0.30 * mult, 'triangle');
+    // Smoky tail
+    playFilteredNoise(ctx, start + 0.05, 0.40, out, 0.22 * mult, 'lowpass', 540, 0.6);
+    // Debris pops
+    for (let i = 0; i < 4; i++) {
+      const t = start + 0.08 + Math.random() * 0.30;
+      playTone(ctx, t, 0.04, out, 220 + Math.random() * 200, 80, 0.10 * mult, 'square');
+    }
+  }
   else {
     // Sub-bass thud (not a beep) for any unhandled event
     playFilteredNoise(ctx, start, 0.10, out, 0.10 * mult, 'lowpass', 400, 0.6);
@@ -10648,6 +10668,8 @@ function spawnSmokeCloud(pos) {
 }
 
 function spawnExplosion(pos) {
+  // 💥 Boom — positional volume based on distance from camera
+  playSoundEvent('explosion', { position: pos, remote: pos.distanceTo(camera.position) > 5, volume: 1.1, minGap: 80 });
   // ── Fireball (grows + fades) ──
   const fbMat = new THREE.MeshBasicMaterial({ color: 0xff7700, transparent: true, opacity: 0.92 });
   const fb = new THREE.Mesh(new THREE.SphereGeometry(0.30, 8, 6), fbMat);
@@ -10763,6 +10785,7 @@ function updateGrenadeWindup(dt) {
     if (!grenadeThrowFired && e >= 0.70) {
       grenadeThrowFired = true;
       model.visible = false; // hand "releases" grenade
+      playSoundEvent('grenade_throw', { volume: 0.85 });
       doThrowGrenade();
     }
   } else {
