@@ -6968,7 +6968,43 @@ function setWeaponADSPos(ads) {
 }
 
 // ── Movement ───────────────────────────────────────────────────────────────
-const SPEED = 5;
+const SPEED = 7.5; // base movement speed (was 5 — bumped 1.5× for snappier feel)
+
+// 🏋️ Weapon weights — how much the equipped item slows your move speed.
+// 0 = no penalty (fast), 1 = -100% (frozen). Floor of 0.15 enforced.
+// Override per-weapon by adding `weight: 0.x` in the item definition.
+// Defaults are heuristic from type / damage / mag size:
+function getDefaultWeaponWeight(item) {
+  if (!item) return 0;
+  const id = item.id;
+  // Fixed targets requested by design:
+  const FIXED = {
+    fists: 0.00, knife: 0.05, baguette: 0.02, screwdriver: 0.05,
+    minigun: 0.40, royal_minigun: 0.70, m134: 0.55, gau19: 0.50, mk44: 0.45,
+    barrett: 0.45, amr: 0.45, thermal_lmg: 0.40, rpd: 0.30,
+    flamethrower: 0.35, mortar_rifle: 0.40, gravity_launcher: 0.35,
+    grenade_launcher: 0.30, sledge: 0.30, titan_hammer: 0.45, gravity_hammer: 0.30,
+    fire_axe: 0.20, combat_axe: 0.18, chainsaw: 0.25, lightsabre: 0.05,
+    riot_shield: 0.20, vampire_blade: 0.10, katana: 0.08, sabre: 0.06,
+    spear: 0.10, bat: 0.05, crowbar: 0.05, hatchet: 0.07, machete: 0.06,
+    shovel: 0.15, fire_poker: 0.06, meat_cleaver: 0.10,
+    void_harvester: 0.55, nebula_mortar: 0.50, storm_core: 0.40, prism_engine: 0.30,
+    pinball_launcher: 0.40, seismic_hammer: 0.45, harpoon_gun: 0.30,
+  };
+  if (FIXED[id] != null) return FIXED[id];
+  // Secondaries: light by default
+  if (item.slot === 'secondary') return 0.05;
+  // Melees: tiny default
+  if (item.range != null && item.cooldown != null && !item.slot) return 0.07; // melee
+  // Support items: usually light unless they're huge
+  if (item.uses != null && item.cooldown && !item.slot) return 0.05;
+  // Primaries: scale with damage * mag
+  const dmg = item.damage || 20;
+  const mag = item.mag || 30;
+  // Loosely: 6 × 30 = 180 → 0.10. 95 × 5 = 475 → ~0.20. 100 × 12 = 1200 → ~0.30.
+  const raw = (dmg * mag) / 5000;
+  return Math.max(0.05, Math.min(0.40, raw));
+}
 const dir = new THREE.Vector3();
 const BOUNDS = 48;
 // Map-aware boundary (BR arena is 6× larger). 123 lets player reach the actual wall surface (walls at ±125, 3 thick).
@@ -6995,9 +7031,18 @@ function updateMovement(dt) {
   if (keys['KeyD'] || joyDir.x >  0.15) dir.add(right);
   if (dir.lengthSq()>0) dir.normalize();
   const joyMag = joyActive ? Math.max(0.3, Math.min(1, Math.sqrt(joyDir.x**2+joyDir.y**2))) : 1;
-  const baseSpeedMult = activeSlot === 'melee'
+  // 🏋️ Weapon-weight slow: heavier guns drop your move speed. Computed
+  // from each item's `weight` (0 = no penalty, 1 = -100%). Defaults below.
+  const equippedItem = activeSlot === 'primary'   ? WEAPONS[selectedPrimaryIdx]
+                     : activeSlot === 'secondary' ? WEAPONS[selectedSecondaryIdx]
+                     : activeSlot === 'melee'     ? MELEE_ITEMS[selectedMeleeIdx]
+                     : activeSlot === 'support'   ? SUPPORT_ITEMS[selectedSupportIdx]
+                     : null;
+  const weight = (equippedItem && equippedItem.weight != null) ? equippedItem.weight : getDefaultWeaponWeight(equippedItem);
+  const weightMult = Math.max(0.15, 1 - weight); // floor at 15% so you're never frozen
+  const baseSpeedMult = (activeSlot === 'melee'
     ? (meleeAbilityBuff?.type === 'revup' ? 3.0 : (MELEE_ITEMS[selectedMeleeIdx]?.speedMult || 1.5))
-    : 1;
+    : 1) * weightMult;
   const adrenalineActive = Date.now() < adrenalineUntil;
   // Frost slow: 100 = normal, 0 = frozen. Linear scale.
   const frostMult = Math.max(0, playerFrostSlow) / 100;
