@@ -6970,6 +6970,90 @@ function setWeaponADSPos(ads) {
 // ── Movement ───────────────────────────────────────────────────────────────
 const SPEED = 7.5; // base movement speed (was 5 — bumped 1.5× for snappier feel)
 
+// ── 🎬 KILLCAM — record positions of all entities, play back from killer POV on death
+const KILLCAM = {
+  buf: [],                // ring of frames { t, entities: { id: {x,y,z,rotY} } }
+  capacity: 30,           // 30 frames × 100 ms = 3 s
+  lastSampleAt: 0,
+  active: false,
+  startedAt: 0,
+  durationMs: 2200,
+  killerId: null,
+  deathPos: null,         // {x,y,z} where player died
+  savedCamPos: null,
+  savedCamQuat: null,
+  banner: null,
+};
+function killcamSample(now) {
+  if (now - KILLCAM.lastSampleAt < 100) return;
+  KILLCAM.lastSampleAt = now;
+  const ents = {};
+  ents[myId] = { x: camera.position.x, y: camera.position.y, z: camera.position.z, rotY: euler.y, rotX: euler.x };
+  for (const b of gameBots) {
+    if (!b) continue;
+    ents[b.id] = { x: b.x, y: (b.y || 0) + 1, z: b.z, rotY: b.rotY || 0, rotX: b.rotX || 0 };
+  }
+  KILLCAM.buf.push({ t: now, entities: ents });
+  if (KILLCAM.buf.length > KILLCAM.capacity) KILLCAM.buf.shift();
+}
+function startKillcam(killerId) {
+  if (KILLCAM.active) return;
+  if (!killerId || killerId === myId) return; // no self-kill killcam
+  if (KILLCAM.buf.length < 4) return;          // not enough recorded frames
+  KILLCAM.active = true;
+  KILLCAM.startedAt = performance.now();
+  KILLCAM.killerId = killerId;
+  KILLCAM.deathPos = { x: camera.position.x, y: camera.position.y, z: camera.position.z };
+  KILLCAM.savedCamPos = camera.position.clone();
+  KILLCAM.savedCamQuat = camera.quaternion.clone();
+  // Banner
+  if (!KILLCAM.banner) {
+    KILLCAM.banner = document.createElement('div');
+    KILLCAM.banner.style.cssText = 'position:fixed;top:60px;left:50%;transform:translateX(-50%);z-index:9700;'
+      + 'background:rgba(20,0,0,0.85);color:#ff8888;border:2px solid #ff4444;padding:10px 24px;'
+      + 'font-family:"Courier New",monospace;font-size:14px;letter-spacing:3px;border-radius:6px;display:none;';
+    document.body.appendChild(KILLCAM.banner);
+  }
+  const killerName = players[killerId]?.name || 'an enemy';
+  KILLCAM.banner.textContent = `🎬 KILLCAM · killed by ${killerName}`;
+  KILLCAM.banner.style.display = 'block';
+  // Hide death screen during killcam
+  const ds = document.getElementById('death-screen');
+  if (ds) ds.style.display = 'none';
+}
+function stopKillcam() {
+  if (!KILLCAM.active) return;
+  KILLCAM.active = false;
+  if (KILLCAM.banner) KILLCAM.banner.style.display = 'none';
+  if (KILLCAM.savedCamPos) camera.position.copy(KILLCAM.savedCamPos);
+  if (KILLCAM.savedCamQuat) camera.quaternion.copy(KILLCAM.savedCamQuat);
+  // Show the actual death screen (if still dead)
+  if (isDead) {
+    const ds = document.getElementById('death-screen');
+    if (ds && match?.type !== 'elim') ds.style.display = 'flex';
+  }
+}
+function updateKillcam(now) {
+  if (!KILLCAM.active) return;
+  const t = (now - KILLCAM.startedAt) / KILLCAM.durationMs;
+  if (t >= 1) { stopKillcam(); return; }
+  // Map t (0..1) to a frame in the buffer
+  const i = Math.min(KILLCAM.buf.length - 1, Math.floor(t * KILLCAM.buf.length));
+  const frame = KILLCAM.buf[i];
+  if (!frame) return;
+  const killer = frame.entities[KILLCAM.killerId];
+  const victim = frame.entities[myId];
+  if (!killer) return;
+  // Camera ~2.5 m behind and 0.6 m above the killer, looking at the player
+  const fwd = new THREE.Vector3(-Math.sin(killer.rotY), 0, -Math.cos(killer.rotY));
+  const camPos = new THREE.Vector3(killer.x, killer.y + 0.6, killer.z).addScaledVector(fwd, -2.5);
+  camera.position.copy(camPos);
+  const look = victim
+    ? new THREE.Vector3(victim.x, victim.y, victim.z)
+    : new THREE.Vector3(KILLCAM.deathPos.x, KILLCAM.deathPos.y, KILLCAM.deathPos.z);
+  camera.lookAt(look);
+}
+
 // 🏋️ Weapon weights — how much the equipped item slows your move speed.
 // 0 = no penalty (fast), 1 = -100% (frozen). Floor of 0.15 enforced.
 // Override per-weapon by adding `weight: 0.x` in the item definition.
@@ -7777,6 +7861,7 @@ function updateAbilityHUD() {
 function tryShoot() {
   if ((!pointerLocked && !gameStarted) || isDead || reloading) return;
   if (countdownActive) return; // can't fire during pre-round countdown
+  if (KILLCAM.active) return;  // killcam playback is locked
   const now = Date.now();
   // Switchblade Gun: in knife mode → swing a close-range melee instead of firing
   if (currentWeapon.id === 'switchblade_gun' && !switchbladeCharged && switchbladeMode === 'knife') {
@@ -10416,7 +10501,10 @@ socket.on('playerDied', data => {
     // Clear lingering buffs so bots resume normal AI
     abilityBuff=null; meleeAbilityBuff=null; pendingFanFire=null;
     document.getElementById('scope-overlay').style.display='none';
-    const ds = document.getElementById('death-screen'); ds.style.display='flex';
+    // 🎬 Start killcam — overrides camera + hides death screen for ~2.2s
+    startKillcam(data.killerId);
+    const ds = document.getElementById('death-screen');
+    if (!KILLCAM.active) ds.style.display='flex';
     if (match && match.type === 'elim' && !match.over) {
       // No respawn in elimination — wait for round to end
       document.getElementById('death-msg').textContent = 'Waiting for round to end...';
@@ -13753,6 +13841,8 @@ function loop() {
   updateUAV(dt);        // 🛰️ Predator UAV overlay tick
   updateMapEffects(dt); // airport darkening, chernobyl gas, mortar prompt
   updateBatch5(dt);     // train scroll, vacuum, weather, lights-out, chandelier, debris
+  killcamSample(performance.now());
+  updateKillcam(performance.now());
   updateVehiclePrompt();// 🚙 vehicle pickup prompt (BR arena)
   updateVehiclePiloting(dt); // 🚙 move + sync vehicle while piloted
   updateReloadAnim();   // weapon tilts/rotates during reload
