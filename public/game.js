@@ -1929,8 +1929,8 @@ camera.position.set(0, 1.65, 0);
 let audioCtx = null;
 let weaponSoundLastAt = {};
 let soundEventLastAt = {};
-// Master mix scale — dial down everything by 25% to give headroom for stacking
-const SOUND_MIX = 0.75;
+// Master mix scale — bumped to 1.15 for a fuller mix
+const SOUND_MIX = 1.15;
 function getAudioCtx() {
   const Ctx = window.AudioContext || window.webkitAudioContext;
   if (!Ctx) return null;
@@ -2347,6 +2347,107 @@ function playSoundEvent(name, opts = {}) {
     // Cane yank — whoosh + thud
     playFilteredNoise(ctx, start, 0.18, out, 0.20 * mult, 'bandpass', 480, 1.2);
     playTone(ctx, start + 0.06, 0.10, out, 220, 80, 0.16 * mult, 'sine');
+  }
+  // 💉 Heal — soft chime + bubble (medkit, stim, healing_pulse, nano_swarm)
+  else if (name === 'heal') {
+    playTone(ctx, start, 0.22, out, 660, 990, 0.18 * mult, 'sine');
+    playTone(ctx, start + 0.06, 0.16, out, 1320, 1760, 0.12 * mult, 'triangle');
+    playFilteredNoise(ctx, start, 0.18, out, 0.08 * mult, 'lowpass', 380, 0.5);
+  }
+  // 💉 Inject — short syringe push (adrenaline, berserker, cloak)
+  else if (name === 'inject') {
+    playFilteredNoise(ctx, start, 0.10, out, 0.18 * mult, 'highpass', 1800, 0.6);
+    playTone(ctx, start + 0.04, 0.10, out, 520, 200, 0.12 * mult, 'sawtooth');
+  }
+  // 🔫 Ammo refill clack (ammo_fountain)
+  else if (name === 'ammo_refill') {
+    playFilteredNoise(ctx, start, 0.06, out, 0.20 * mult, 'highpass', 2200, 0.4);
+    playTone(ctx, start, 0.10, out, 420, 240, 0.14 * mult, 'triangle');
+    playTone(ctx, start + 0.10, 0.08, out, 320, 180, 0.10 * mult, 'square');
+  }
+  // 💨 Smoke / ink release — pressurized hiss
+  else if (name === 'smoke_hiss') {
+    playFilteredNoise(ctx, start, 0.40, out, 0.26 * mult, 'bandpass', 2400, 0.8);
+    playFilteredNoise(ctx, start, 0.40, out, 0.10 * mult, 'lowpass', 600, 0.5);
+  }
+  // 🪤 Mine / trap arm — beep beep
+  else if (name === 'mine_arm') {
+    playTone(ctx, start,        0.04, out, 1320, 1320, 0.12 * mult, 'square');
+    playTone(ctx, start + 0.12, 0.04, out, 1320, 1320, 0.12 * mult, 'square');
+  }
+  // 🪁 Bounce pad — boing
+  else if (name === 'bounce') {
+    playTone(ctx, start, 0.18, out, 220, 880, 0.22 * mult, 'sine');
+  }
+  // 🤖 Drone launch — fan whirr ramp
+  else if (name === 'drone_launch') {
+    playFilteredNoise(ctx, start, 0.50, out, 0.20 * mult, 'bandpass', 1800, 0.9);
+    playTone(ctx, start, 0.50, out, 240, 540, 0.10 * mult, 'sawtooth');
+  }
+  // ⚡ EMP / taser zap — buzzing burst
+  else if (name === 'emp_zap') {
+    playTone(ctx, start, 0.16, out, 80, 110, 0.22 * mult, 'square');
+    playFilteredNoise(ctx, start, 0.16, out, 0.30 * mult, 'highpass', 2400, 0.5);
+  }
+  // 🛡️ Shield activate — energy hum (nano_shield, quantum_barrier)
+  else if (name === 'shield_up') {
+    playTone(ctx, start, 0.32, out, 220, 440, 0.20 * mult, 'sine');
+    playTone(ctx, start + 0.04, 0.28, out, 660, 880, 0.10 * mult, 'triangle');
+  }
+  // ⚠️ Incoming strike siren (orbital_strike / drone_strike — pre-explosion)
+  else if (name === 'incoming_siren') {
+    playTone(ctx, start,        0.18, out, 1200, 1800, 0.16 * mult, 'triangle');
+    playTone(ctx, start + 0.22, 0.18, out, 1200, 1800, 0.16 * mult, 'triangle');
+    playTone(ctx, start + 0.44, 0.18, out, 1200, 1800, 0.16 * mult, 'triangle');
+  }
+  // ⚪ Flashbang — bright pop + ringing whine
+  else if (name === 'flashbang') {
+    playFilteredNoise(ctx, start, 0.08, out, 0.40 * mult, 'highpass', 3200, 0.5);
+    playTone(ctx, start, 0.05, out, 2200, 1200, 0.20 * mult, 'sine');
+    playTone(ctx, start + 0.05, 0.80, out, 3200, 3200, 0.08 * mult, 'sine'); // tinnitus ring
+  }
+  // 🔥 Thermite ignite — fire whoosh
+  else if (name === 'thermite_ignite') {
+    playFilteredNoise(ctx, start, 0.40, out, 0.30 * mult, 'bandpass', 1200, 0.7);
+    playTone(ctx, start, 0.25, out, 180, 360, 0.14 * mult, 'sawtooth');
+  }
+  // 🛰️ Radar / UAV ping
+  else if (name === 'radar_ping') {
+    playTone(ctx, start, 0.32, out, 1480, 980, 0.16 * mult, 'sine');
+    playTone(ctx, start + 0.05, 0.22, out, 2480, 1980, 0.08 * mult, 'triangle');
+  }
+  // 📦 Care package drop — distant horn
+  else if (name === 'air_drop') {
+    playTone(ctx, start, 0.40, out, 320, 240, 0.22 * mult, 'sawtooth');
+    playTone(ctx, start, 0.40, out, 160, 120, 0.18 * mult, 'sine');
+  }
+  // ☢️ Tac-nuke siren — long descending warble
+  else if (name === 'nuke_siren') {
+    playTone(ctx, start, 1.2, out, 220, 880, 0.32 * mult, 'sawtooth');
+    playTone(ctx, start, 1.2, out, 110, 440, 0.22 * mult, 'sine');
+  }
+  // 💣 C4 / claymore place — double click
+  else if (name === 'c4_place') {
+    playTone(ctx, start,        0.03, out, 1200, 800, 0.16 * mult, 'square');
+    playTone(ctx, start + 0.08, 0.03, out, 1200, 800, 0.16 * mult, 'square');
+  }
+  // 🦆 Quack — rubber duck
+  else if (name === 'quack') {
+    playTone(ctx, start, 0.12, out, 480, 320, 0.24 * mult, 'sawtooth');
+    playTone(ctx, start + 0.10, 0.10, out, 420, 280, 0.20 * mult, 'sawtooth');
+  }
+  // 🚨 Siren utility — short klaxon
+  else if (name === 'siren_loop') {
+    playTone(ctx, start,        0.18, out, 480, 880, 0.22 * mult, 'sawtooth');
+    playTone(ctx, start + 0.20, 0.18, out, 480, 880, 0.22 * mult, 'sawtooth');
+  }
+  // 🎉 Confetti / firework burst (confetti cannon, sticker blaster)
+  else if (name === 'confetti_blast') {
+    for (let i = 0; i < 6; i++) {
+      const t = start + i * 0.04;
+      playTone(ctx, t, 0.05, out, 600 + Math.random() * 1200, 200, 0.10 * mult, 'square');
+    }
+    playFilteredNoise(ctx, start, 0.12, out, 0.20 * mult, 'highpass', 2400, 0.5);
   }
   // 💣 Grenade throw — quick whoosh
   else if (name === 'grenade_throw') {
@@ -7822,6 +7923,26 @@ function tryMelee() {
 // Items that use arc (grenade) physics instead of straight bullets
 const THROWABLE_SUPPORT_IDS = new Set(['frag','smoke','confetti_cannon','moon_mine','rubber_duck','black_hole_seed','glitch_cube']);
 
+// Map every utility ID to the right sound event name (or null if it has its own already)
+const SUPPORT_SOUND = {
+  medkit: 'heal', stim: 'heal', healing_pulse: 'heal', nano_swarm: 'heal', vampire_syringe: 'inject',
+  adrenaline: 'inject', berserker_serum: 'inject', cloak: 'inject',
+  smoke: 'smoke_hiss', ink_bomb: 'smoke_hiss', siren: 'siren_loop',
+  bounce_pad: 'bounce', rubber_duck: 'quack',
+  ammo_fountain: 'ammo_refill',
+  tripwire: 'mine_arm', magnet_mine: 'mine_arm', proximity_mine: 'mine_arm', land_mine: 'mine_arm',
+  stasis_mine: 'mine_arm', caltrops: 'mine_arm', claymore: 'mine_arm', sticky_charge: 'c4_place', c4: 'c4_place',
+  hunter_drone: 'drone_launch', guardian_drone: 'drone_launch', specter_drone: 'drone_launch',
+  emp_grenade: 'emp_zap', taser_grenade: 'emp_zap',
+  nano_shield: 'shield_up', quantum_barrier: 'shield_up',
+  orbital_strike: 'incoming_siren', drone_strike: 'incoming_siren',
+  stun_grenade: 'flashbang', flashbang_basic: 'flashbang',
+  thermite: 'thermite_ignite', predator_uav: 'radar_ping', warp_beacon: 'radar_ping', teleport_beacon: 'radar_ping',
+  care_package: 'air_drop', tac_nuke: 'nuke_siren',
+  confetti_cannon: 'confetti_blast',
+  // hologram, glitch_cube, moon_mine, black_hole_seed already use their own sounds or none
+};
+
 function trySupport() {
   if (!gameStarted || isDead) return;
   if (countdownActive) return;
@@ -7844,6 +7965,8 @@ function trySupport() {
   lastSupport = now;
   supportUses[selectedSupportIdx]--;
   updateAmmoHUD();
+  // 🎵 Per-utility sound (mapped above). Some items override this with their own.
+  if (SUPPORT_SOUND[item.id]) playSoundEvent(SUPPORT_SOUND[item.id], { volume: 1.0 });
 
   // ── Instant-use consumables ────────────────────────────────────────────────
   if (item.heal) {
