@@ -11703,6 +11703,15 @@ function startMatchRound() {
       match.aliveAllies  = new Set(gameBots.filter(b => b.team === 'ally'  && !b.dead).map(b => b.id));
       match.aliveEnemies = new Set(gameBots.filter(b => b.team === 'enemy' && !b.dead).map(b => b.id));
       match.playerAlive  = !isDead;
+      // 🧑‍🤝‍🧑 Track REMOTE HUMAN opponents too — they aren't in gameBots.
+      // An opponent on my team → aliveAllies; otherwise → aliveEnemies.
+      if (pvpMatch && pvpMatch.opponents) {
+        for (const opp of pvpMatch.opponents) {
+          if (!opp.socketId) continue;
+          if (opp.team === pvpMatch.team) match.aliveAllies.add(opp.socketId);
+          else                            match.aliveEnemies.add(opp.socketId);
+        }
+      }
       // Start the 60-second per-round timer
       match.roundTimeLeft = match.cfg.roundTimeLimit || 0;
       const subTxt = `First to ${match.cfg.winsNeeded} round wins`;
@@ -12075,6 +12084,10 @@ function onEntityDied(targetId, killerId) {
       if (b) {
         if (b.team === 'ally')  match.aliveAllies.delete(targetId);
         else                    match.aliveEnemies.delete(targetId);
+      } else {
+        // Remote HUMAN opponent died — remove from whichever set holds them
+        match.aliveAllies.delete(targetId);
+        match.aliveEnemies.delete(targetId);
       }
     }
     checkElimRound();
