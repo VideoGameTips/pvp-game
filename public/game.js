@@ -12772,6 +12772,13 @@ function spawnGameBots() {
     const id       = `bot_${team}_${now}_${idx}`;
     const name     = isAlly ? `Ally ${idx+1}` : `Enemy ${idx+1}`;
     const weaponId = randomPrimaryId();
+    // 🆕 Full bot loadout — secondary, melee, utility (random non-admin picks)
+    const SECONDARIES = WEAPONS.filter(w => w.slot === 'secondary' && !w.adminItem && !w.ddayOnly);
+    const MELEES_NONADMIN = MELEE_ITEMS.filter(m => !m.adminItem);
+    const UTILS_NONADMIN  = SUPPORT_ITEMS.filter(s => !s.adminItem);
+    const botSecondaryId = SECONDARIES[Math.floor(Math.random() * SECONDARIES.length)]?.id || 'pistol';
+    const botMeleeId     = MELEES_NONADMIN[Math.floor(Math.random() * MELEES_NONADMIN.length)]?.id || 'bat';
+    const botUtilityId   = UTILS_NONADMIN[Math.floor(Math.random() * UTILS_NONADMIN.length)]?.id || 'frag';
 
     // ── Create locally RIGHT NOW (no network round-trip needed) ──────────
     const pData = { id, name, isBot: true, team, weaponId, ownerId: myId,
@@ -12801,6 +12808,12 @@ function spawnGameBots() {
     const personality = rollPersonality(weaponId, diff);
     const botDPS = WEAPON_DPS_CACHE[weaponId] || 150;
     gameBots.push({ id, team, weaponId, spawnWeaponId: weaponId, x: sx, z: sz, rotY: 0, hp: 300,
+                    // 🆕 Full loadout — bot will switch between these based on engagement range
+                    primaryId: weaponId, secondaryId: botSecondaryId,
+                    meleeId: botMeleeId, utilityId: botUtilityId,
+                    activeSlot: 'primary',          // 'primary' | 'secondary' | 'melee'
+                    nextUtilityAt: Date.now() + 6000 + Math.random() * 6000,
+                    utilityUsesLeft: 2,
                     dead: false, state: 'chase',
                     wanderAngle: Math.random() * Math.PI * 2, wanderTimer: 0,
                     lastShot: Date.now() + Math.random() * tune.initialShotDelay, stuckTimer: 0,
@@ -13087,6 +13100,47 @@ function updateBotAI(dt) {
     if (bot.dead) continue;
     if (bot.state === 'target') continue; // range targets don't move or shoot
     if (bot._stunActive) continue; // 🪖 stunned by admin stun grenade — frozen this frame
+
+    // 🎒 Auto loadout-swap based on engagement distance (NEW)
+    // < 4 m → secondary if it's a pistol/shotgun
+    // 4-30 m → primary (default)
+    // No melee swap yet (different fire path)
+    if (bot.primaryId) {
+      const myMe = players[myId];
+      const tgtDist = myMe ? Math.hypot(bot.x - myMe.x, bot.z - myMe.z) : 999;
+      const desired = (tgtDist < 4 && bot.secondaryId) ? 'secondary' : 'primary';
+      if (desired !== bot.activeSlot) {
+        bot.activeSlot = desired;
+        const newWeaponId = desired === 'secondary' ? bot.secondaryId : bot.primaryId;
+        if (newWeaponId !== bot.weaponId) {
+          bot.weaponId = newWeaponId;
+          if (players[bot.id]) players[bot.id].weaponId = newWeaponId;
+          const newW = WEAPONS.find(w => w.id === newWeaponId);
+          if (newW) { bot.botMag = newW.mag; bot.botAmmo = newW.mag; bot.botReserve = newW.reserve || 90; }
+        }
+      }
+    }
+
+    // 💣 Utility usage — throw a grenade-style utility occasionally if hostile + in range
+    if (bot.utilityId && bot.utilityUsesLeft > 0 && now >= (bot.nextUtilityAt || 0)) {
+      const myMe2 = players[myId];
+      if (myMe2 && !isDead && bot.team === 'enemy') {
+        const d2 = Math.hypot(bot.x - myMe2.x, bot.z - myMe2.z);
+        if (d2 < 14 && d2 > 4) {
+          // Use frag-like (explosive) utilities — others are silently consumed
+          const util = SUPPORT_ITEMS.find(s => s.id === bot.utilityId);
+          if (util && (util.damage >= 60 || util.id === 'frag')) {
+            // Apply damage directly (simplest; no projectile sim for bots)
+            applyBotDamageToPlayer && applyBotDamageToPlayer(util.id, bot.id);
+            // Show a brief AOE FX at the player's feet for visual feedback
+            spawnAbilityAOEFX(new THREE.Vector3(myMe2.x || camera.position.x, 0.1, myMe2.z || camera.position.z),
+              util.radius || 4, util.bulletColor || 0xff8844);
+          }
+        }
+      }
+      bot.utilityUsesLeft--;
+      bot.nextUtilityAt = now + 10000 + Math.random() * 8000;
+    }
 
     // ── Vertical physics: air grenades + land mines can launch bots upward ──
     if (bot.yVel != null && (bot.yVel !== 0 || (bot.y || 0) > 0)) {
@@ -13841,6 +13895,14 @@ function updateBotAI(dt) {
       }
     }
 
+    // 🏋️ Weapon weight slows the bot (same rule as the player). Floor at 0.15.
+    const botEquipped = WEAPONS.find(w => w.id === bot.weaponId);
+    if (botEquipped) {
+      const wgt = (botEquipped.weight != null) ? botEquipped.weight : getDefaultWeaponWeight(botEquipped);
+      const wMult = Math.max(0.15, 1 - wgt);
+      moveX *= wMult;
+      moveZ *= wMult;
+    }
     // Apply movement + wall collision
     const prevBotX = bot.x, prevBotZ = bot.z;
     let nx = bot.x + moveX, nz = bot.z + moveZ;
