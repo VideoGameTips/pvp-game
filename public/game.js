@@ -13769,9 +13769,19 @@ function updateBotAI(dt) {
         // MEDIUM/HARD: bot is currently reloading? skip
         const isReloading = bot.reloadUntil && now < bot.reloadUntil;
         const canShoot = !isReloading;
-        const fireInterval = isDDayAttacker
-          ? Math.max(w.fireRate, 500) + Math.random() * 400
-          : Math.max(w.fireRate, tune.fireMin) + Math.random() * tune.fireRand;
+        // 🔫 Burst-aware fire interval. Auto weapons fire a rapid burst at
+        // their REAL fireRate, then pause between bursts. Semi weapons keep
+        // the old one-shot-per-interval pacing.
+        let fireInterval;
+        if (isDDayAttacker) {
+          fireInterval = Math.max(w.fireRate, 500) + Math.random() * 400;
+        } else if (w.auto) {
+          fireInterval = (bot.burstLeft || 0) > 0
+            ? Math.max(55, w.fireRate)                          // mid-burst: real auto cadence
+            : tune.fireMin + Math.random() * tune.fireRand;     // between bursts: long pause
+        } else {
+          fireInterval = Math.max(w.fireRate, tune.fireMin) + Math.random() * tune.fireRand;
+        }
         const tx = target.isPlayer ? camera.position.x : target.x;
         const tz = target.isPlayer ? camera.position.z : target.z;
         const hasLOS = hasLineOfSight(bot.x, bot.z, tx, tz);
@@ -13826,6 +13836,19 @@ function updateBotAI(dt) {
         if (canShoot && reactionDone && roundLive && dist < shootRange && now - bot.lastShot > kiteFireInterval) {
           if (hasLOS) {
             bot.lastShot = now;
+            // 🔫 Burst bookkeeping: start a new 4-8 round burst when empty
+            if (w.auto) {
+              if ((bot.burstLeft || 0) <= 0) bot.burstLeft = 4 + Math.floor(Math.random() * 5);
+              bot.burstLeft--;
+            }
+            // Auto weapons spray fast, so each shot only lands on a hit-roll
+            // (semi weapons stay guaranteed since they fire slowly). Skill +
+            // proximity raise the odds; capped so it never feels unfair.
+            let shotHits = true;
+            if (w.auto && target.isPlayer) {
+              const hitChance = Math.max(0.18, Math.min(0.75, (bot.aimSkill || 1) * 0.42 - dist * 0.006));
+              shotHits = Math.random() < hitChance;
+            }
             // MEDIUM/HARD: consume ammo, trigger reload when empty
             if (bot.difficulty && bot.difficulty !== 'easy') {
               bot.botAmmo--;
@@ -13833,10 +13856,11 @@ function updateBotAI(dt) {
                 const reloadMs = tune.reloadMin + Math.random() * tune.reloadRand;
                 bot.reloadUntil = now + reloadMs;
                 bot.botAmmo = bot.botMag;
+                bot.burstLeft = 0; // reload interrupts the burst
               }
             }
             if (target.isPlayer) {
-              if (bot.team === 'enemy' && !isShielded() && !isRiotShieldBlocking()) {
+              if (bot.team === 'enemy' && !isShielded() && !isRiotShieldBlocking() && shotHits) {
                 const _mp = meleeAbilityBuff?.type;
                 if (_mp === 'parry' || _mp === 'deflect') {
                   if (_mp === 'deflect') {
