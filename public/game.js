@@ -13919,6 +13919,33 @@ function updateBotAI(dt) {
       }
     }
 
+    // ☣️ Hazard avoidance — steer around damage zones (lava, acid, toxic, fire).
+    // Easy bots are oblivious; medium/hard/expert dodge with rising urgency.
+    if (bot.difficulty && bot.difficulty !== 'easy') {
+      const avoidStrength = bot.difficulty === 'expert' ? 1.6 : bot.difficulty === 'hard' ? 1.2 : 0.8;
+      let pushX = 0, pushZ = 0;
+      const checkZone = (z, pad) => {
+        const ddx = bot.x - z.x, ddz = bot.z - z.z;
+        const d = Math.hypot(ddx, ddz);
+        const danger = (z.r || z.radius || 2) + pad; // react before touching
+        if (d < danger && d > 0.01) {
+          const force = (danger - d) / danger; // 0..1, stronger when closer
+          pushX += (ddx / d) * force;
+          pushZ += (ddz / d) * force;
+        }
+      };
+      const g = activeMapGimmicks;
+      if (g.damageZones) for (const z of g.damageZones) checkZone(z, 2.5);
+      // Active burn zones (thermite, fire poker, firework) too
+      for (const z of burnZones) checkZone(z, 2.0);
+      if (pushX || pushZ) {
+        const plen = Math.hypot(pushX, pushZ) || 1;
+        // Blend the repulsion into the planned movement
+        moveX += (pushX / plen) * Math.abs(moveX || 0.08) * avoidStrength * 2;
+        moveZ += (pushZ / plen) * Math.abs(moveZ || 0.08) * avoidStrength * 2;
+      }
+    }
+
     // 🏋️ Weapon weight slows the bot (same rule as the player). Floor at 0.15.
     const botEquipped = WEAPONS.find(w => w.id === bot.weaponId);
     if (botEquipped) {
