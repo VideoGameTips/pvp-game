@@ -10441,7 +10441,10 @@ socket.on('lobbyStart', data => {
     isHost: !!data.isHost,
     allyBotsToSpawn: data.allyBots || 0,
     enemyBotsToSpawn: data.enemyBots || 0,
+    mapId: data.mapId || null, // 🗺️ server-picked map; overrides client's random pick
   };
+  // Force every paired client to use the same map
+  if (data.mapId) selectedMap = data.mapId;
   showAnnouncement('MATCH FOUND',
     `${data.opponents.length + 1} player(s) · You are ${data.team.toUpperCase()}${pvpMatch.isHost ? ' (HOST)' : ''}`,
     '#44ff66', 2200);

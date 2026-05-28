@@ -580,12 +580,20 @@ function checkLobbyStart(mode) {
   const enemyBots = fillBots ? Math.max(0, cfg.enemy - enemyHumans) : 0;
   // Shared match ID for everyone
   const matchId = `lobby-${mode}-${Date.now()}`;
+  // 🗺️ Server picks the map ONCE so all players load the same one.
+  // (Was previously: each client picked random independently → different maps.)
+  const MAP_POOL = ['blank','urban','warehouse','forest','volcano','cyber','desert',
+                    'tundra','space','airport','trenches','chernobyl','refinery','skydock',
+                    'sewer','gravity_lab','glassworks','carrier','overgrowth','orbital_station',
+                    'foundry','carnival','biosphere','lockdown','studio','temple','holiday',
+                    'labyrinth','arena','opera','doomsday','train','dreamscape'];
+  const mapId = MAP_POOL[Math.floor(Math.random() * MAP_POOL.length)];
   // Designate the first player as host (they spawn the bots if any)
   const host = L.players[0];
   for (const p of L.players) {
     if (players[p.socketId]) players[p.socketId].team = p.team;
     io.to(p.socketId).emit('lobbyStart', {
-      mode, matchId, team: p.team, isHost: p.socketId === host?.socketId,
+      mode, matchId, mapId, team: p.team, isHost: p.socketId === host?.socketId,
       allyBots, enemyBots, opponents: L.players.filter(o => o.socketId !== p.socketId).map(o => ({ socketId: o.socketId, team: o.team })),
     });
   }
@@ -641,13 +649,20 @@ function tryPairPvpQueue(mode) {
     if (Math.random() < 0.5) { teamA = 'ally'; teamB = 'enemy'; }
     else { teamA = Math.random() < 0.5 ? 'ally' : 'enemy'; teamB = teamA; }
   }
+  // 🗺️ Server picks ONE map for both players so they don't diverge
+  const MAP_POOL = ['blank','urban','warehouse','forest','volcano','cyber','desert',
+                    'tundra','space','airport','trenches','chernobyl','refinery','skydock',
+                    'sewer','gravity_lab','glassworks','carrier','overgrowth','orbital_station',
+                    'foundry','carnival','biosphere','lockdown','studio','temple','holiday',
+                    'labyrinth','arena','opera','doomsday','train','dreamscape'];
+  const mapId = MAP_POOL[Math.floor(Math.random() * MAP_POOL.length)];
   io.to(a.socketId).emit('pvpResult', {
-    mode, paired: true, team: teamA,
+    mode, paired: true, team: teamA, mapId,
     opponents: [{ socketId: b.socketId, team: teamB }],
-    isHost: true, // first player spawns the bots
+    isHost: true,
   });
   io.to(b.socketId).emit('pvpResult', {
-    mode, paired: true, team: teamB,
+    mode, paired: true, team: teamB, mapId,
     opponents: [{ socketId: a.socketId, team: teamA }],
     isHost: false,
   });
