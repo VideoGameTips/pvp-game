@@ -7264,7 +7264,7 @@ function currentEquippedId() {
 // ── 🎬 KILLCAM — record positions of all entities, play back from killer POV on death
 const KILLCAM = {
   buf: [],                // ring of frames { t, entities: { id: {x,y,z,rotY} } }
-  capacity: 30,           // 30 frames × 100 ms = 3 s
+  capacity: 100,          // 100 frames × 100 ms = 10 s (the 10 s before the kill)
   lastSampleAt: 0,
   active: false,
   startedAt: 0,
@@ -7328,8 +7328,11 @@ function updateKillcam(now) {
   if (!KILLCAM.active) return;
   const t = (now - KILLCAM.startedAt) / KILLCAM.durationMs;
   if (t >= 1) { stopKillcam(); return; }
-  // Map t (0..1) to a frame in the buffer
-  const i = Math.min(KILLCAM.buf.length - 1, Math.floor(t * KILLCAM.buf.length));
+  // Map t (0..1) over only the last ~3 s of the buffer (the buffer now holds 10 s
+  // for the kill-log theater, but the death killcam stays a quick last-moments cam).
+  const tail = Math.min(KILLCAM.buf.length, 30);
+  const base = KILLCAM.buf.length - tail;
+  const i = base + Math.min(tail - 1, Math.floor(t * tail));
   const frame = KILLCAM.buf[i];
   if (!frame) return;
   const killer = frame.entities[KILLCAM.killerId];
@@ -7576,8 +7579,11 @@ function renderTheater() {
   const replay = THEATER.replay;
   if (!replay || !replay.frames.length) { closeKillTheater(); return; }
   const t = (performance.now() - THEATER.startedAt) / THEATER.durationMs;
-  const loopT = t % 1; // loop the clip
-  const i = Math.min(replay.frames.length - 1, Math.floor(loopT * replay.frames.length));
+  // Play ONCE (no loop): clamp progress to the last frame and freeze on the
+  // kill moment when finished. `done` stops the gunfire FX after the kill.
+  const done = t >= 1;
+  const clampT = Math.min(0.99999, t);
+  const i = Math.min(replay.frames.length - 1, Math.floor(clampT * replay.frames.length));
   const frame = replay.frames[i];
   // dt for the walk animation (clamped). theaterTick/loop both call us per frame.
   const nowMs = performance.now();
@@ -7602,7 +7608,7 @@ function renderTheater() {
     const muzzle = new THREE.Vector3(killer.x + fwd.x * 0.7, kFeet + 1.34, killer.z + fwd.z * 0.7);
     const target = new THREE.Vector3(victim.x, Math.max(0, (victim.y || 1) - 1.6) + 1.2, victim.z);
     THEATER.fireTimer -= dt;
-    if (THEATER.fireTimer <= 0) {
+    if (!done && THEATER.fireTimer <= 0) {
       THEATER.fireTimer = 0.11; // cyclic fire while replaying
       // Tracer: a thin bright cylinder that flies muzzle -> victim chest.
       const dir = target.clone().sub(muzzle); const len = Math.max(0.4, dir.length());
