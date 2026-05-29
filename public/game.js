@@ -6508,16 +6508,26 @@ function makePlayerMesh(name, isBot = false, team = 'enemy') {
   const torso = new THREE.Mesh(new THREE.BoxGeometry(0.55,0.65,0.3), mkMat(shirt));
   torso.position.set(0,1.2,0); torso.castShadow = true; group.add(torso);
 
-  // Arms
+  // Arms — wrapped in a shoulder pivot so they can swing about the shoulder joint
+  const armMeshes = [];
   [-0.39,0.39].forEach(x => {
+    const pivot = new THREE.Group();
+    pivot.position.set(x, 1.5, 0);            // shoulder joint (top of arm)
     const arm = new THREE.Mesh(new THREE.BoxGeometry(0.22,0.6,0.22), mkMat(shirt));
-    arm.position.set(x,1.2,0); arm.castShadow = true; group.add(arm);
+    arm.position.set(0, -0.3, 0);             // hang down from the joint
+    arm.castShadow = true; pivot.add(arm);
+    group.add(pivot); armMeshes.push(pivot);
   });
 
-  // Legs
+  // Legs — wrapped in a hip pivot so they can swing about the hip joint
+  const legMeshes = [];
   [-0.155,0.155].forEach(x => {
+    const pivot = new THREE.Group();
+    pivot.position.set(x, 0.875, 0);          // hip joint (top of leg)
     const leg = new THREE.Mesh(new THREE.BoxGeometry(0.24,0.65,0.26), mkMat(pant));
-    leg.position.set(x,0.55,0); leg.castShadow = true; group.add(leg);
+    leg.position.set(0, -0.325, 0);           // hang down from the joint
+    leg.castShadow = true; pivot.add(leg);
+    group.add(pivot); legMeshes.push(pivot);
   });
 
   // Name tag
@@ -6532,7 +6542,85 @@ function makePlayerMesh(name, isBot = false, team = 'enemy') {
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), depthTest: false }));
   sprite.scale.set(1.5,0.37,1); sprite.position.y = 2.35; group.add(sprite);
 
+  // ── Animation rig: store limb pivots + per-character walk state ───────────
+  group._rig = {
+    legL: legMeshes[0], legR: legMeshes[1],
+    armL: armMeshes[0], armR: armMeshes[1],
+    head, torso,
+    phase: 0,            // walk-cycle phase
+    speedSmooth: 0,      // smoothed horizontal speed
+    crouch: 0,           // 0 = standing, 1 = fully crouched/sliding
+    prevX: null, prevZ: null,
+  };
+
   return group;
+}
+
+// ── Character walk / slide animation ────────────────────────────────────────
+// Drives leg + arm swing from how far the mesh actually moved, plus a crouch/
+// slide pose. Works uniformly for bots and remote players. `crouchTarget` is
+// 0..1 (1 = sliding/crouched); pass null to auto-keep current.
+function animateCharacterMesh(mesh, dt, crouchTarget) {
+  const rig = mesh && mesh._rig;
+  if (!rig) return;
+  // Horizontal distance moved since last frame → speed estimate
+  const px = mesh.position.x, pz = mesh.position.z;
+  let dist = 0;
+  if (rig.prevX !== null) {
+    const dx = px - rig.prevX, dz = pz - rig.prevZ;
+    dist = Math.sqrt(dx*dx + dz*dz);
+  }
+  rig.prevX = px; rig.prevZ = pz;
+  const speed = dt > 0 ? dist / dt : 0;
+  rig.speedSmooth += (speed - rig.speedSmooth) * Math.min(1, dt * 12);
+  const moving = rig.speedSmooth > 0.6;
+
+  // Advance phase by distance travelled so stride length stays natural
+  rig.phase += dist * 5.5;
+  if (!moving) {
+    // Ease the phase back toward a neutral standing pose
+    rig.phase += (Math.round(rig.phase / Math.PI) * Math.PI - rig.phase) * Math.min(1, dt * 8);
+  }
+
+  // Crouch / slide blend
+  if (crouchTarget !== null && crouchTarget !== undefined) {
+    rig.crouch += (crouchTarget - rig.crouch) * Math.min(1, dt * 10);
+  } else {
+    rig.crouch += (0 - rig.crouch) * Math.min(1, dt * 6);
+  }
+  const crouch = rig.crouch;
+
+  const amp   = moving ? 0.7 : 0.0;       // leg swing amplitude (radians)
+  const swing = Math.sin(rig.phase) * amp;
+  const armAmp = moving ? 0.5 : 0.0;
+  const armSwing = Math.sin(rig.phase) * armAmp;
+
+  if (crouch < 0.5) {
+    // Upright walking: legs + arms swing in opposition
+    rig.legL.rotation.x =  swing;
+    rig.legR.rotation.x = -swing;
+    if (rig.holdsGun) {
+      // Right arm stays raised forward holding the weapon; left arm swings a bit
+      rig.armR.rotation.x = -1.25;
+      rig.armL.rotation.x = -armSwing * 0.5;
+    } else {
+      rig.armL.rotation.x = -armSwing;
+      rig.armR.rotation.x =  armSwing;
+    }
+    rig.torso.rotation.x = 0;
+    rig.head.rotation.x  = 0;
+  }
+
+  // Slide / crouch pose: tuck legs forward, lean torso back, arms back
+  if (crouch > 0.01) {
+    const c = crouch;
+    rig.legL.rotation.x = THREE.MathUtils.lerp(rig.legL.rotation.x,  1.1, c);
+    rig.legR.rotation.x = THREE.MathUtils.lerp(rig.legR.rotation.x,  0.4, c);
+    rig.armL.rotation.x = THREE.MathUtils.lerp(rig.armL.rotation.x, -0.8, c);
+    rig.armR.rotation.x = THREE.MathUtils.lerp(rig.armR.rotation.x, -0.8, c);
+    rig.torso.rotation.x = THREE.MathUtils.lerp(0, -0.45, c);
+    rig.head.rotation.x  = THREE.MathUtils.lerp(0,  0.45, c);
+  }
 }
 
 // ── Bot world-space weapon prop ────────────────────────────────────────────
@@ -12563,6 +12651,7 @@ function spawnDDayWave(count, waveNum) {
       const gun = makeBotWeaponProp(weaponId);
       gun.position.set(0.38, 1.18, -0.22);
       mesh.add(gun);
+      if (mesh._rig) mesh._rig.holdsGun = true;
     }
     gameBots.push({
       id, team: 'enemy', weaponId,
@@ -13014,6 +13103,7 @@ function spawnGameBots() {
       gun.position.set(0.38, 1.18, -0.22);
       gun.rotation.y = 0; // faces forward with the bot
       mesh.add(gun);
+      if (mesh._rig) mesh._rig.holdsGun = true;
     }
 
     // Per-bot difficulty rolls
@@ -14259,6 +14349,26 @@ function updateBotAI(dt) {
   }
 }
 
+// ── Per-frame character animation pass ──────────────────────────────────────
+// Bots never crouch; remote human players' crouch/slide is inferred from their
+// camera eye-height (synced via the `move` event into players[id].y).
+function animateCharacters(dt) {
+  for (const id in remoteMeshes) {
+    const mesh = remoteMeshes[id];
+    if (!mesh || !mesh.visible || !mesh._rig) continue;
+    let crouchTarget = 0;
+    const isBot = gameBots.some(b => b.id === id);
+    if (!isBot) {
+      const p = players[id];
+      if (p && typeof p.y === 'number') {
+        // 1.65 standing → 0.70 sliding. Map to 0..1 crouch amount.
+        crouchTarget = Math.max(0, Math.min(1, (1.65 - p.y) / (1.65 - 0.70)));
+      }
+    }
+    animateCharacterMesh(mesh, dt, crouchTarget);
+  }
+}
+
 // ── Game loop ──────────────────────────────────────────────────────────────
 let lastTime = performance.now();
 function loop() {
@@ -14269,6 +14379,7 @@ function loop() {
   updateMovement(dt);
   updateBullets(dt);
   updateBotAI(dt);
+  animateCharacters(dt); // walk-cycle + slide pose for bots & remote players
   updateBurnZones(dt); // firework launcher DOT fields
   updateTraps(dt); // tripwires, magnet mines, bounce pads, hologram decoys
   updateP2WSystems(dt); // orbital strikes, guardian drones, nano shield
