@@ -9281,20 +9281,27 @@ function updateBullets(dt) {
         let hitX = _bpos.x, hitY = _bpos.y, hitZ = _bpos.z;
         let hitT = 1;
 
+        // 🛹 Crouch/slide lowers the hitbox so it matches the visual pose.
+        // rig.crouch is 0 (standing) .. 1 (fully sliding). Head drops 0.75 m,
+        // body drops 0.45 m, so a sliding target's spheres sit much lower.
+        const _cr = mesh._rig ? mesh._rig.crouch : 0;
+        const headOff = 1.65 - _cr * 0.75;   // 1.65 → 0.90
+        const bodyOff = 1.0  - _cr * 0.45;   // 1.00 → 0.55
+
         if (segLenSq > 0.0001) {
-          // --- Head sphere: center at (mesh.x, mesh.y+1.65, mesh.z), r=0.28
-          let dox = mesh.position.x - px0, doy = mesh.position.y + 1.65 - py0, doz = mesh.position.z - pz0;
+          // --- Head sphere: center at (mesh.x, mesh.y+headOff, mesh.z), r=0.28
+          let dox = mesh.position.x - px0, doy = mesh.position.y + headOff - py0, doz = mesh.position.z - pz0;
           let t = Math.max(0, Math.min(1, (dox*sx + doy*sy + doz*sz) / segLenSq));
-          let cx = px0 + t*sx - mesh.position.x, cy = py0 + t*sy - (mesh.position.y+1.65), cz = pz0 + t*sz - mesh.position.z;
+          let cx = px0 + t*sx - mesh.position.x, cy = py0 + t*sy - (mesh.position.y+headOff), cz = pz0 + t*sz - mesh.position.z;
           if (cx*cx + cy*cy + cz*cz < 0.28*0.28) {
             isHeadshot = true; hitX = px0+t*sx; hitY = py0+t*sy; hitZ = pz0+t*sz;
             hitT = t;
           }
           if (!isHeadshot) {
-            // --- Body sphere: center at (mesh.x, mesh.y+1.0, mesh.z), r=0.65
-            dox = mesh.position.x - px0; doy = mesh.position.y + 1.0 - py0; doz = mesh.position.z - pz0;
+            // --- Body sphere: center at (mesh.x, mesh.y+bodyOff, mesh.z), r=0.65
+            dox = mesh.position.x - px0; doy = mesh.position.y + bodyOff - py0; doz = mesh.position.z - pz0;
             t = Math.max(0, Math.min(1, (dox*sx + doy*sy + doz*sz) / segLenSq));
-            cx = px0+t*sx - mesh.position.x; cy = py0+t*sy - (mesh.position.y+1.0); cz = pz0+t*sz - mesh.position.z;
+            cx = px0+t*sx - mesh.position.x; cy = py0+t*sy - (mesh.position.y+bodyOff); cz = pz0+t*sz - mesh.position.z;
             if (cx*cx + cy*cy + cz*cz < 0.65*0.65) {
               isBodyHit = true; hitX = px0+t*sx; hitY = py0+t*sy; hitZ = pz0+t*sz;
               hitT = t;
@@ -9302,9 +9309,9 @@ function updateBullets(dt) {
           }
         } else {
           // Bullet didn't travel this frame — plain point test
-          const headPos = _ppos.set(mesh.position.x, mesh.position.y + 1.65, mesh.position.z);
+          const headPos = _ppos.set(mesh.position.x, mesh.position.y + headOff, mesh.position.z);
           isHeadshot = _bpos.distanceTo(headPos) < 0.28;
-          _ppos.set(mesh.position.x, mesh.position.y + 1.0, mesh.position.z);
+          _ppos.set(mesh.position.x, mesh.position.y + bodyOff, mesh.position.z);
           isBodyHit = !isHeadshot && _bpos.distanceTo(_ppos) < 0.65;
         }
         if (!isHeadshot && !isBodyHit) continue;
