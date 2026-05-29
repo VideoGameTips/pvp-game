@@ -7419,7 +7419,7 @@ function openKillTheater(index) {
   // menu (e.g. #mode-screen, ~93% opaque black) would cover it, so hide them
   // while the theater is open and restore them on close.
   THEATER._hidden = [];
-  for (const sel of ['mode-screen', 'shop-screen', 'loadout-screen', 'login-screen']) {
+  for (const sel of ['mode-screen', 'shop-screen', 'loadout-screen', 'login-screen', 'overlay']) {
     const el = document.getElementById(sel);
     if (el && el.style.display !== 'none' && getComputedStyle(el).display !== 'none') {
       THEATER._hidden.push([el, el.style.display]);
@@ -7430,6 +7430,24 @@ function openKillTheater(index) {
   THEATER.ghostGroup = new THREE.Group();
   scene.add(THEATER.ghostGroup);
   THEATER.ghosts = {};
+  // Self-contained stage: a big lit ground plane + bright light follow the action,
+  // so the replay is always visible even when the current scene has no geometry
+  // at the replay's coordinates (e.g. watching from the lobby after a match).
+  const stageGround = new THREE.Mesh(
+    new THREE.PlaneGeometry(200, 200),
+    new THREE.MeshLambertMaterial({ color: 0x2a3340 }));
+  stageGround.rotation.x = -Math.PI / 2;
+  THEATER.ghostGroup.add(stageGround);
+  THEATER.stageGround = stageGround;
+  const stageGrid = new THREE.GridHelper(200, 80, 0x4a5a6a, 0x33414f);
+  THEATER.ghostGroup.add(stageGrid);
+  THEATER.stageGrid = stageGrid;
+  const stageLight = new THREE.PointLight(0xffffff, 1.1, 0, 1.2);
+  THEATER.ghostGroup.add(stageLight);
+  THEATER.stageLight = stageLight;
+  // Force a guaranteed-visible sky during the theater; restore on close.
+  THEATER._prevBg = scene.background;
+  scene.background = new THREE.Color(0x10141c);
   const f0 = replay.frames[0];
   for (const id of Object.keys(f0.entities)) {
     const isKiller = id === replay.killerId;
@@ -7499,6 +7517,8 @@ function closeKillTheater() {
   THEATER.active = false;
   if (THEATER.ghostGroup) { scene.remove(THEATER.ghostGroup); THEATER.ghostGroup = null; }
   THEATER.ghosts = {};
+  THEATER.stageGround = THEATER.stageGrid = THEATER.stageLight = null;
+  if (THEATER._prevBg !== undefined) { scene.background = THEATER._prevBg; THEATER._prevBg = undefined; }
   const ov = document.getElementById('theater-overlay');
   if (ov) ov.style.display = 'none';
   // Restore any menu screens we hid when the theater opened.
@@ -7524,6 +7544,10 @@ function renderTheater() {
   const cx = killer && victim ? (killer.x + victim.x) / 2 : (killer?.x || 0);
   const cz = killer && victim ? (killer.z + victim.z) / 2 : (killer?.z || 0);
   const center = new THREE.Vector3(cx, 1.2, cz);
+  // Keep the stage ground/grid/light centered on the action so it's always in view.
+  if (THEATER.stageGround) THEATER.stageGround.position.set(cx, 0, cz);
+  if (THEATER.stageGrid) THEATER.stageGrid.position.set(cx, 0.02, cz);
+  if (THEATER.stageLight) THEATER.stageLight.position.set(cx, 12, cz);
   const cams = THEATER.cams;
   // 0 TOP
   cams[0].position.set(cx, 24, cz); cams[0].lookAt(center);
