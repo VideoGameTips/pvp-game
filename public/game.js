@@ -8979,6 +8979,7 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false) {
         if (mesh) mesh.visible = false;
         myKills++;
         creditWeaponKill(currentEquippedId());
+        saveKillReplay(pid, currentEquippedId());
         const kc = document.getElementById('kill-count');
         if (kc) kc.textContent = `Kills: ${myKills}`;
         const botName = players[pid]?.name || 'Bot';
@@ -10875,6 +10876,7 @@ socket.on('playerHit', data => {
       if (remoteMeshes[data.targetId]) remoteMeshes[data.targetId].visible = false;
       myKills++;
       creditWeaponKill(currentEquippedId());
+      saveKillReplay(data.targetId, currentEquippedId());
       const kc = document.getElementById('kill-count');
       if (kc) kc.textContent = `Kills: ${myKills}`;
       const botName = players[data.targetId]?.name || 'Bot';
@@ -13474,6 +13476,7 @@ function updateBotAI(dt) {
         }
         myKills++;
         creditWeaponKill(currentEquippedId());
+        saveKillReplay(bot.id, currentEquippedId());
         const kc = document.getElementById('kill-count');
         if (kc) kc.textContent = `Kills: ${myKills}`;
         showAnnouncement('FROZEN', players[bot.id]?.name || 'Bot', '#99eeff', 1400);
