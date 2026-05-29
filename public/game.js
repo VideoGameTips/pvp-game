@@ -7377,7 +7377,7 @@ function saveKillReplay(victimId, weaponId) {
              || SUPPORT_ITEMS.find(s => s.id === weaponId)?.name || (weaponId || 'weapon');
   // Simple "score" heuristic: # of frames where target was alive (longer chase = higher)
   const score = frames.length;
-  killLog.unshift({ ts: Date.now(), victim: victimName, weapon: wname,
+  killLog.unshift({ ts: Date.now(), victim: victimName, weapon: wname, mapId: activeMapName,
                     frames, killerId: myId, victimId, favorite: false, pinned: false, score });
   autoCleanupKillLog();
   saveKillLogToDisk();
@@ -7436,24 +7436,34 @@ function openKillTheater(index) {
   THEATER.ghostGroup = new THREE.Group();
   scene.add(THEATER.ghostGroup);
   THEATER.ghosts = {};
-  // Self-contained stage: a big lit ground plane + bright light follow the action,
-  // so the replay is always visible even when the current scene has no geometry
-  // at the replay's coordinates (e.g. watching from the lobby after a match).
-  const stageGround = new THREE.Mesh(
-    new THREE.PlaneGeometry(200, 200),
-    new THREE.MeshLambertMaterial({ color: 0x2a3340 }));
-  stageGround.rotation.x = -Math.PI / 2;
-  THEATER.ghostGroup.add(stageGround);
-  THEATER.stageGround = stageGround;
-  const stageGrid = new THREE.GridHelper(200, 80, 0x4a5a6a, 0x33414f);
-  THEATER.ghostGroup.add(stageGrid);
-  THEATER.stageGrid = stageGrid;
-  const stageLight = new THREE.PointLight(0xffffff, 1.1, 0, 1.2);
-  THEATER.ghostGroup.add(stageLight);
-  THEATER.stageLight = stageLight;
-  // Force a guaranteed-visible sky during the theater; restore on close.
+  // Show the ACTUAL map the kill happened on. Maps are persistent groups toggled
+  // by activateMap(); we record the kill's map in the replay (mapId) and switch
+  // to it here, restoring the previous map on close. Old replays without a mapId
+  // (or an unknown map) fall back to a generic lit stage so they're still visible.
+  THEATER._prevMap = activeMapName;
   THEATER._prevBg = scene.background;
-  scene.background = new THREE.Color(0x10141c);
+  const realMap = replay.mapId && MAP_GROUPS[replay.mapId] ? replay.mapId : null;
+  THEATER.stageGround = THEATER.stageGrid = THEATER.stageLight = null;
+  if (realMap) {
+    activateMap(realMap);
+    const sky = MAP_GROUPS[realMap]._skyColor;
+    scene.background = new THREE.Color(sky != null ? sky : 0x87ceeb);
+  } else {
+    // Fallback generic stage: a big lit ground plane + bright light follow the action.
+    const stageGround = new THREE.Mesh(
+      new THREE.PlaneGeometry(200, 200),
+      new THREE.MeshLambertMaterial({ color: 0x2a3340 }));
+    stageGround.rotation.x = -Math.PI / 2;
+    THEATER.ghostGroup.add(stageGround);
+    THEATER.stageGround = stageGround;
+    const stageGrid = new THREE.GridHelper(200, 80, 0x4a5a6a, 0x33414f);
+    THEATER.ghostGroup.add(stageGrid);
+    THEATER.stageGrid = stageGrid;
+    const stageLight = new THREE.PointLight(0xffffff, 1.1, 0, 1.2);
+    THEATER.ghostGroup.add(stageLight);
+    THEATER.stageLight = stageLight;
+    scene.background = new THREE.Color(0x10141c);
+  }
   THEATER._lastT = performance.now();
   const f0 = replay.frames[0];
   for (const id of Object.keys(f0.entities)) {
@@ -7566,6 +7576,8 @@ function closeKillTheater() {
   THEATER.ghosts = {};
   THEATER.stageGround = THEATER.stageGrid = THEATER.stageLight = null;
   THEATER.fxGroup = null; THEATER.tracers = null; THEATER.muzzleFlash = null;
+  // Restore the map that was active before the theater swapped to the replay's map.
+  if (THEATER._prevMap && MAP_GROUPS[THEATER._prevMap]) { activateMap(THEATER._prevMap); THEATER._prevMap = null; }
   if (THEATER._prevBg !== undefined) { scene.background = THEATER._prevBg; THEATER._prevBg = undefined; }
   const ov = document.getElementById('theater-overlay');
   if (ov) ov.style.display = 'none';
