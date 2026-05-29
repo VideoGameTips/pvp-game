@@ -7480,6 +7480,16 @@ function openKillTheater(index) {
   `;
   document.getElementById('theater-close').addEventListener('click', closeKillTheater);
   document.getElementById('theater-rec').addEventListener('click', recordTheaterClip);
+  // The theater drives its OWN render loop. The main game loop() only runs after
+  // a match has started, but the kill log is opened from the cold menu/lobby —
+  // so without this the viewports never get drawn (pure black). theaterTick()
+  // owns rendering while active; loop() defers to it (see loop()).
+  requestAnimationFrame(theaterTick);
+}
+function theaterTick() {
+  if (!THEATER.active) return;
+  renderTheater();
+  requestAnimationFrame(theaterTick);
 }
 
 // 🎬 Record the 6-cam theater canvas to a downloadable webm video (~5 s)
@@ -14771,8 +14781,9 @@ function loop() {
     weaponModels[currentWeaponIdx]._barrelCluster.rotation.z +=
       (weaponModels[currentWeaponIdx]._spinRate || 10) * dt;
   }
-  if (THEATER.active) { renderTheater(); }
-  else renderer.render(scene, camera);
+  // While the theater is active, theaterTick() owns rendering (it runs even when
+  // loop() isn't, e.g. opened from the cold menu). Don't double-render here.
+  if (!THEATER.active) renderer.render(scene, camera);
 }
 
 // ── Loadout screen ─────────────────────────────────────────────────────────
