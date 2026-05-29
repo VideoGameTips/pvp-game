@@ -10583,6 +10583,31 @@ const CLIENT_WEAPON_DAMAGE = Object.fromEntries([
   // New melees
   ['crowbar', 32], ['fire_axe', 85], ['nunchucks', 22], ['umbrella', 18], ['yoyo', 30],
 ]);
+// 🛹 Does a bot's shot actually connect with the player's hitbox this frame?
+// Models the bot firing from gun height toward a "standing center-mass" aim
+// point (with skill/distance vertical spread), then tests that point against
+// the player's crouch-adjusted hit spheres — mirrors the player→entity hitbox
+// in updateBullets. Result: crouching/sliding (which lowers the spheres) makes
+// the bot's shot sail overhead, so duck-and-slide actually dodges bot fire.
+function botShotHitsPlayer(bot, dist) {
+  const curEye = window._crouchEye || 1.65;
+  const feetY  = camera.position.y - curEye;
+  const crouch = Math.max(0, Math.min(1, (1.65 - curEye) / (1.65 - 0.70)));
+  // Crouch-adjusted sphere centers (match the remote-mesh hitbox offsets)
+  const headY = feetY + (1.65 - crouch * 0.75); // 1.65 → 0.90 above feet
+  const bodyY = feetY + (1.0  - crouch * 0.45); // 1.00 → 0.55 above feet
+  const headR = 0.28, bodyR = 0.65;
+  // Bot aims for STANDING chest height (it doesn't perfectly track your duck),
+  // with vertical spread that grows with range and shrinks with aim skill.
+  const skill   = bot.aimSkill || 1;
+  const aimBase = feetY + 1.25;
+  const vSpread = (0.30 + dist * 0.018) * (1.6 - Math.min(1.2, skill));
+  const aimY    = aimBase + (Math.random() * 2 - 1) * vSpread;
+  const inHead = Math.abs(aimY - headY) < headR;
+  const inBody = !inHead && Math.abs(aimY - bodyY) < bodyR;
+  return { hit: inHead || inBody, headshot: inHead };
+}
+
 function applyBotDamageToPlayer(weaponId, botId) {
   // ⚡ Admin god mode: no damage taken
   if (adminCheats.godMode && currentUser?.isAdmin) { flashHitIndicator(); return; }
@@ -13526,9 +13551,10 @@ function updateBotAI(dt) {
             bot.lastShot = now;
             if (target.isPlayer) {
               const _mpType = meleeAbilityBuff?.type;
-              if (!isShielded() && !isRiotShieldBlocking() && _mpType !== 'parry' && _mpType !== 'deflect') {
+              const _turretHits = botShotHitsPlayer(bot, dist).hit; // duck below the slit to dodge
+              if (_turretHits && !isShielded() && !isRiotShieldBlocking() && _mpType !== 'parry' && _mpType !== 'deflect') {
                 socket.emit('botHitMe', { botId: bot.id, weapon: 'mg42' }); applyBotDamageToPlayer('mg42', bot.id);
-              } else if (!isShielded() && _mpType === 'deflect') {
+              } else if (_turretHits && !isShielded() && _mpType === 'deflect') {
                 const _defPos1 = remoteMeshes[bot.id] ? remoteMeshes[bot.id].position.clone().setY(1.0) : camera.position.clone().setY(1.0);
                 emitHit(bot.id, `deflect_${myId}_${Date.now()}`, 'katana', _defPos1);
               }
@@ -14174,13 +14200,16 @@ function updateBotAI(dt) {
               if ((bot.burstLeft || 0) <= 0) bot.burstLeft = 4 + Math.floor(Math.random() * 5);
               bot.burstLeft--;
             }
-            // Auto weapons spray fast, so each shot only lands on a hit-roll
-            // (semi weapons stay guaranteed since they fire slowly). Skill +
-            // proximity raise the odds; capped so it never feels unfair.
+            // 🛹 Raycast the shot against the player's (crouch-adjusted) hitbox
+            // so ducking/sliding lets shots sail overhead. Auto weapons add an
+            // extra spray-inaccuracy roll on top since they fire fast.
             let shotHits = true;
-            if (w.auto && target.isPlayer) {
-              const hitChance = Math.max(0.18, Math.min(0.75, (bot.aimSkill || 1) * 0.42 - dist * 0.006));
-              shotHits = Math.random() < hitChance;
+            if (target.isPlayer) {
+              shotHits = botShotHitsPlayer(bot, dist).hit;
+              if (shotHits && w.auto) {
+                const sprayChance = Math.max(0.35, Math.min(0.92, (bot.aimSkill || 1) * 0.6 - dist * 0.005));
+                shotHits = Math.random() < sprayChance;
+              }
             }
             // MEDIUM/HARD: consume ammo, trigger reload when empty
             if (bot.difficulty && bot.difficulty !== 'easy') {
