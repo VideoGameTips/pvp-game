@@ -768,6 +768,7 @@ function createPlayer(id, name) {
     hp: PLAYER_MAX_HP, dead: false,
     kills: 0, deaths: 0,
     lastShot: 0, isBot: false,
+    skin: 'default', isAdmin: false, // 🎭 cosmetic skin + crown marker
     matchId: 'lobby', // 🌐 lobby = idle / mode-select. Set to a unique match ID when in a real match.
   };
 }
@@ -825,6 +826,16 @@ io.on('connection', (socket) => {
 
   socket.on('setName', (name) => {
     if (players[socket.id]) players[socket.id].name = String(name).slice(0, 16);
+  });
+
+  // 🎭 Cosmetic skin + admin crown marker (purely visual; client-trusted — repo is public/hobby)
+  socket.on('setSkin', (data) => {
+    const p = players[socket.id];
+    if (!p) return;
+    p.skin = String((data && data.skin) || 'default').slice(0, 24);
+    p.isAdmin = !!(data && data.isAdmin);
+    // Tell everyone in the same match so they can re-skin this player's mesh
+    emitToMatch(p.matchId, 'skinChanged', { id: socket.id, skin: p.skin, isAdmin: p.isAdmin });
   });
 
   // ── 🌐 PvP matchmaking: player wants to find others playing the same elim mode ──

@@ -6487,7 +6487,118 @@ function darkenColor(hex, f) {
   return (Math.floor(((hex>>16)&0xff)*f)<<16)|(Math.floor(((hex>>8)&0xff)*f)<<8)|(Math.floor((hex&0xff)*f));
 }
 
-function makePlayerMesh(name, isBot = false, team = 'enemy') {
+// ── 🎭 Character skins (inspired by the comic crew) ─────────────────────────
+// Each skin recolors the blocky body and/or adds accessories. 'crown' is NOT a
+// skin — it's an overlay added on top of any skin for the admin / match leader.
+const SKINS = [
+  { id: 'default',     name: 'Recruit',       desc: 'Standard issue. Random shirt color.' },
+  { id: 'swat',        name: 'SWAT',          desc: 'Black tactical armor + glowing blue visor.' },
+  { id: 'swat_shades', name: 'SWAT · Shades', desc: 'Tactical armor with cool sunglasses.' },
+  { id: 'riot_chad',   name: 'Riot Chad',     desc: 'Dark jacket + red bandana. Has patience.' },
+  { id: 'soldier',     name: 'Soldier',       desc: 'Olive fatigues + combat helmet.' },
+  { id: 'shadow',      name: 'Shadow',        desc: 'All black, pale face. The strongest wear crowns.' },
+];
+const SKIN_IDS = SKINS.map(s => s.id);
+
+// Build a white "shadow" face (the comic protagonist's blank/angry look)
+function makeShadowFaceTexture() {
+  const c = document.createElement('canvas'); c.width = 64; c.height = 64;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#f4f4f4'; ctx.fillRect(0,0,64,64);
+  ctx.fillStyle = '#111';
+  // angry slanted eyes  >  <
+  ctx.fillRect(13,24,12,4); ctx.fillRect(13,28,7,4);
+  ctx.fillRect(39,24,12,4); ctx.fillRect(44,28,7,4);
+  // small mouth
+  ctx.fillRect(28,46,8,3);
+  return new THREE.CanvasTexture(c);
+}
+
+function applyCharacterSkin(skinId, parts) {
+  const { group, head, headMats, faceMat, torso, torsoMat, armLimbs, legLimbs } = parts;
+  const setBody = (hex) => {
+    torsoMat.color.setHex(hex);
+    armLimbs.forEach(m => m.material.color.setHex(hex));
+  };
+  const setLegs = (hex) => legLimbs.forEach(m => m.material.color.setHex(hex));
+  const setHeadAll = (hex) => headMats.forEach((m,i) => { if (i !== 4) m.color.setHex(hex); });
+
+  switch (skinId) {
+    case 'swat': {
+      setBody(0x23272e); setLegs(0x16181c); setHeadAll(0x1a1d22);
+      // Replace face with a glowing blue visor strip
+      faceMat.map = null; faceMat.color.setHex(0x10131a);
+      const visor = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.14, 0.04),
+        new THREE.MeshLambertMaterial({ color: 0x0a0d12, emissive: 0x2f7dff, emissiveIntensity: 1.2 }));
+      visor.position.set(0, 1.87, 0.255); group.add(visor);
+      _addHelmet(group, 0x14171c);
+      break;
+    }
+    case 'swat_shades': {
+      setBody(0x2a2e35); setLegs(0x1a1d22); setHeadAll(0xffcc99);
+      // Keep the skin-tone face, add black sunglasses across the eyes
+      const shades = new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.10, 0.04),
+        new THREE.MeshLambertMaterial({ color: 0x080808 }));
+      shades.position.set(0, 1.90, 0.255); group.add(shades);
+      _addHelmet(group, 0x14171c);
+      break;
+    }
+    case 'riot_chad': {
+      setBody(0x33271f); setLegs(0x20272e); setHeadAll(0xffcc99);
+      // Red bandana around the neck / lower face
+      const bandana = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.16, 0.34),
+        new THREE.MeshLambertMaterial({ color: 0xc62828 }));
+      bandana.position.set(0, 1.66, 0); group.add(bandana);
+      break;
+    }
+    case 'soldier': {
+      setBody(0x4b5320); setLegs(0x3a4019); setHeadAll(0xffcc99);
+      _addHelmet(group, 0x3d4a24);
+      break;
+    }
+    case 'shadow': {
+      setBody(0x121212); setLegs(0x0c0c0c); setHeadAll(0x141414);
+      faceMat.map = makeShadowFaceTexture(); faceMat.color.setHex(0xffffff); faceMat.needsUpdate = true;
+      // hood peak
+      _addHelmet(group, 0x0c0c0c);
+      break;
+    }
+    // 'default' → leave the randomly-colored recruit as-is
+  }
+}
+
+// Simple combat helmet / hood cap that sits on top of the head box
+function _addHelmet(group, color) {
+  const helm = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.22, 0.56),
+    new THREE.MeshLambertMaterial({ color }));
+  helm.position.set(0, 2.13, 0); helm.castShadow = true; group.add(helm);
+}
+
+// Gold crown overlay — toggled for admin / match leader. Idempotent.
+function setMeshCrown(group, on) {
+  if (!group) return;
+  if (on) {
+    if (group._crown) return;
+    const crown = new THREE.Group();
+    const gold = new THREE.MeshLambertMaterial({ color: 0xffd227, emissive: 0x6b4e00, emissiveIntensity: 0.5 });
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.20, 0.20, 0.10, 10), gold);
+    band.position.y = 0; crown.add(band);
+    for (let i = 0; i < 5; i++) {
+      const spike = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.16, 6), gold);
+      const a = (i / 5) * Math.PI * 2;
+      spike.position.set(Math.cos(a) * 0.18, 0.12, Math.sin(a) * 0.18);
+      crown.add(spike);
+    }
+    crown.position.set(0, 2.30, 0);
+    group.add(crown); group._crown = crown;
+  } else if (group._crown) {
+    group.remove(group._crown);
+    group._crown.traverse(o => { if (o.geometry) o.geometry.dispose(); });
+    group._crown = null;
+  }
+}
+
+function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default', opts = {}) {
   const group = new THREE.Group();
   const shirt = SHIRT_COLORS[colorIndex % SHIRT_COLORS.length]; colorIndex++;
   const pant  = darkenColor(shirt, 0.55);
@@ -6495,40 +6606,46 @@ function makePlayerMesh(name, isBot = false, team = 'enemy') {
 
   const mkMat = c => new THREE.MeshLambertMaterial({ color: c });
 
-  // Head with face
+  // Head with face — keep the material array so skins can recolor / reface it
   const headGeo = new THREE.BoxGeometry(0.5,0.5,0.5);
   const ft = makeFaceTexture();
-  const head = new THREE.Mesh(headGeo, [
-    mkMat(skin), mkMat(skin), mkMat(skin), mkMat(skin),
-    new THREE.MeshLambertMaterial({ map: ft }), mkMat(skin),
-  ]);
+  const faceMat = new THREE.MeshLambertMaterial({ map: ft });
+  const headMats = [ mkMat(skin), mkMat(skin), mkMat(skin), mkMat(skin), faceMat, mkMat(skin) ];
+  const head = new THREE.Mesh(headGeo, headMats);
   head.position.set(0,1.85,0); head.castShadow = true; group.add(head);
 
   // Torso
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.55,0.65,0.3), mkMat(shirt));
+  const torsoMat = mkMat(shirt);
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.55,0.65,0.3), torsoMat);
   torso.position.set(0,1.2,0); torso.castShadow = true; group.add(torso);
 
   // Arms — wrapped in a shoulder pivot so they can swing about the shoulder joint
-  const armMeshes = [];
+  const armMeshes = [];   // pivots
+  const armLimbs = [];    // the actual limb meshes (for recolor)
   [-0.39,0.39].forEach(x => {
     const pivot = new THREE.Group();
     pivot.position.set(x, 1.5, 0);            // shoulder joint (top of arm)
     const arm = new THREE.Mesh(new THREE.BoxGeometry(0.22,0.6,0.22), mkMat(shirt));
     arm.position.set(0, -0.3, 0);             // hang down from the joint
     arm.castShadow = true; pivot.add(arm);
-    group.add(pivot); armMeshes.push(pivot);
+    group.add(pivot); armMeshes.push(pivot); armLimbs.push(arm);
   });
 
   // Legs — wrapped in a hip pivot so they can swing about the hip joint
-  const legMeshes = [];
+  const legMeshes = [];   // pivots
+  const legLimbs = [];    // the actual limb meshes (for recolor)
   [-0.155,0.155].forEach(x => {
     const pivot = new THREE.Group();
     pivot.position.set(x, 0.875, 0);          // hip joint (top of leg)
     const leg = new THREE.Mesh(new THREE.BoxGeometry(0.24,0.65,0.26), mkMat(pant));
     leg.position.set(0, -0.325, 0);           // hang down from the joint
     leg.castShadow = true; pivot.add(leg);
-    group.add(pivot); legMeshes.push(pivot);
+    group.add(pivot); legMeshes.push(pivot); legLimbs.push(leg);
   });
+
+  // ── Apply skin (recolor + accessories) ────────────────────────────────────
+  applyCharacterSkin(skinId, { group, head, headMats, faceMat, torso, torsoMat, armLimbs, legLimbs });
+  if (opts.crown) setMeshCrown(group, true);
 
   // Name tag
   const cv = document.createElement('canvas'); cv.width=256; cv.height=64;
@@ -6552,6 +6669,8 @@ function makePlayerMesh(name, isBot = false, team = 'enemy') {
     crouch: 0,           // 0 = standing, 1 = fully crouched/sliding
     prevX: null, prevZ: null,
   };
+  group._skinId = skinId;
+  group._head = head; // crown attaches here
 
   return group;
 }
@@ -10825,6 +10944,20 @@ socket.on('playerLeft',   id => {
   delete players[id];
   if (remoteMeshes[id]) { scene.remove(remoteMeshes[id]); delete remoteMeshes[id]; }
 });
+// 🎭 A player changed skin (or their admin flag arrived) — rebuild their mesh
+socket.on('skinChanged', ({ id, skin, isAdmin }) => {
+  if (id === myId) return; // local player has no body mesh
+  if (players[id]) { players[id].skin = skin; players[id].isAdmin = isAdmin; }
+  const old = remoteMeshes[id];
+  if (!old) return;
+  const wasVisible = old.visible;
+  scene.remove(old);
+  const p = players[id] || { name: '', isBot: false, team: 'enemy', x: old.position.x, z: old.position.z };
+  const mesh = makePlayerMesh(p.name, p.isBot, p.team || 'enemy',
+                              SKIN_IDS.includes(skin) ? skin : 'default', { crown: !!isAdmin });
+  mesh.position.copy(old.position); mesh.rotation.y = old.rotation.y; mesh.visible = wasVisible;
+  scene.add(mesh); remoteMeshes[id] = mesh;
+});
 socket.on('bulletFired', b => {
   if (b.ownerId===myId) return;
   const w = WEAPONS.find(x=>x.id===b.weapon)||WEAPONS[0];
@@ -11048,7 +11181,8 @@ socket.on('playerRespawned', p => {
 });
 
 function spawnRemotePlayer(p) {
-  const mesh = makePlayerMesh(p.name, p.isBot, p.team || 'enemy');
+  const skinId = SKIN_IDS.includes(p.skin) ? p.skin : 'default';
+  const mesh = makePlayerMesh(p.name, p.isBot, p.team || 'enemy', skinId, { crown: !!p.isAdmin });
   mesh.position.set(p.x,0,p.z);
   scene.add(mesh); remoteMeshes[p.id]=mesh;
 }
@@ -12688,7 +12822,7 @@ function spawnDDayWave(count, waveNum) {
     const weaponId = randomPrimaryId();
     const pData = {
       id, name: `Trooper ${waveNum}-${i+1}`, isBot: true, team: 'enemy',
-      weaponId, ownerId: myId,
+      weaponId, ownerId: myId, skin: ['swat','swat_shades','soldier'][Math.floor(Math.random()*3)],
       x: xPos, y: 1, z: zPos, rotY: 0, rotX: 0,
       hp: 300, dead: false, kills: 0, deaths: 0,
     };
@@ -13137,7 +13271,11 @@ function spawnGameBots() {
     const botUtilityId   = UTILS_NONADMIN[Math.floor(Math.random() * UTILS_NONADMIN.length)]?.id || 'frag';
 
     // ── Create locally RIGHT NOW (no network round-trip needed) ──────────
-    const pData = { id, name, isBot: true, team, weaponId, ownerId: myId,
+    // Bots wear comic-crew skins: enemies = SWAT crew, allies = soldiers.
+    const botSkin = isAlly
+      ? (['soldier','default'][Math.floor(Math.random()*2)])
+      : (['swat','swat_shades','soldier'][Math.floor(Math.random()*3)]);
+    const pData = { id, name, isBot: true, team, weaponId, ownerId: myId, skin: botSkin,
                     x: sx, y: 1, z: sz, rotY: 0, rotX: 0,
                     hp: 300, dead: false, kills: 0, deaths: 0 };
     players[id] = pData;
@@ -14423,6 +14561,36 @@ function animateCharacters(dt) {
   }
 }
 
+// 👑 Crown the match's top fragger ("the strongest person"). Admin meshes keep
+// their crown regardless. Best-effort/local: each client crowns whoever it sees
+// leading among the meshes it has. Throttled to ~3 Hz.
+let _kingId = null, _kingTimer = 0;
+function updateKingCrown(dt) {
+  _kingTimer += dt;
+  if (_kingTimer < 0.33) return;
+  _kingTimer = 0;
+  const killsOf = (id) => {
+    if (id === myId) return myKills || 0;
+    const b = gameBots.find(b => b.id === id);
+    if (b && typeof b.kills === 'number') return b.kills;
+    return (players[id] && players[id].kills) || 0;
+  };
+  let bestId = null, bestK = 0;
+  if ((myKills || 0) > bestK) { bestK = myKills; bestId = myId; }
+  for (const id in remoteMeshes) {
+    const k = killsOf(id);
+    if (k > bestK) { bestK = k; bestId = id; }
+  }
+  if (bestK < 1) bestId = null; // nobody is "strongest" until a kill happens
+  if (bestId === _kingId) return;
+  // Un-crown the previous king (unless they're an admin — admins always wear it)
+  if (_kingId && _kingId !== myId && remoteMeshes[_kingId] && !(players[_kingId] && players[_kingId].isAdmin)) {
+    setMeshCrown(remoteMeshes[_kingId], false);
+  }
+  _kingId = bestId;
+  if (_kingId && _kingId !== myId && remoteMeshes[_kingId]) setMeshCrown(remoteMeshes[_kingId], true);
+}
+
 // ── Game loop ──────────────────────────────────────────────────────────────
 let lastTime = performance.now();
 function loop() {
@@ -14434,6 +14602,7 @@ function loop() {
   updateBullets(dt);
   updateBotAI(dt);
   animateCharacters(dt); // walk-cycle + slide pose for bots & remote players
+  updateKingCrown(dt);   // 👑 crown the current top fragger
   updateBurnZones(dt); // firework launcher DOT fields
   updateTraps(dt); // tripwires, magnet mines, bounce pads, hologram decoys
   updateP2WSystems(dt); // orbital strikes, guardian drones, nano shield
@@ -15293,6 +15462,12 @@ function requestPointerLockSafe() {
 // ── Start ──────────────────────────────────────────────────────────────────
 // ── User accounts + admin item unlocks ────────────────────────────────────
 let currentUser = null; // { username, password, unlocks: [], isAdmin: false }
+// 🎭 Locally-chosen character skin (others see it via setSkin broadcast)
+let mySkin = (() => { try { const s = localStorage.getItem('pvp_skin'); return SKIN_IDS.includes(s) ? s : 'default'; } catch(e){ return 'default'; } })();
+function emitMySkin() {
+  if (!socket) return;
+  socket.emit('setSkin', { skin: mySkin, isAdmin: !!(currentUser && currentUser.isAdmin) });
+}
 // Admin cheat toggles — only active when currentUser.isAdmin
 const adminCheats = {
   fly: false,
@@ -15378,6 +15553,7 @@ async function startGame() {
 
   players[myId] && (players[myId].name = name);
   socket.emit('setName', name);
+  emitMySkin();
   document.getElementById('overlay').style.display = 'none';
   const ms = document.getElementById('mode-screen');
   ms.style.display = 'flex';
@@ -15726,6 +15902,61 @@ const _sfxBtn = document.getElementById('shoot-fx-btn');
 if (_sfxBtn) {
   _sfxBtn.addEventListener('click', openShootFxPanel);
   _sfxBtn.addEventListener('touchstart', e => { e.preventDefault(); openShootFxPanel(); }, { passive: false });
+}
+
+// 🎭 Skin picker — choose how other players see your character
+const SKIN_SWATCH = {
+  default:     ['#1971c2', '#ffcc99'],
+  swat:        ['#23272e', '#2f7dff'],
+  swat_shades: ['#2a2e35', '#080808'],
+  riot_chad:   ['#33271f', '#c62828'],
+  soldier:     ['#4b5320', '#3d4a24'],
+  shadow:      ['#141414', '#f4f4f4'],
+};
+function openSkinsPanel() {
+  let panel = document.getElementById('skins-panel');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'skins-panel';
+    panel.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9550;background:#0d1622;border:2px solid #55bbff;border-radius:8px;padding:20px;color:#fff;font-family:"Courier New",monospace;min-width:360px;max-width:520px;max-height:78vh;overflow-y:auto;';
+    document.body.appendChild(panel);
+  }
+  panel.style.display = 'block';
+  const isAdmin = !!(currentUser && currentUser.isAdmin);
+  const cards = SKINS.map(s => {
+    const [c1, c2] = SKIN_SWATCH[s.id] || ['#444', '#888'];
+    const sel = s.id === mySkin;
+    return `<div class="skin-card" data-skin="${s.id}" style="display:flex;align-items:center;gap:12px;padding:10px;margin-bottom:8px;border:2px solid ${sel ? '#55ffaa' : '#2a3a4a'};border-radius:6px;cursor:pointer;background:${sel ? '#11261d' : '#11202e'};">
+        <div style="flex:none;width:34px;height:46px;border-radius:4px;background:${c1};display:flex;align-items:flex-start;justify-content:center;overflow:hidden;">
+          <div style="width:20px;height:14px;margin-top:5px;border-radius:3px;background:${c2};"></div>
+        </div>
+        <div style="flex:1;">
+          <div style="color:${sel ? '#88ffcc' : '#cfe8ff'};font-size:14px;letter-spacing:1px;">${s.name}${sel ? ' ✓' : ''}</div>
+          <div style="color:#7d97ad;font-size:10px;margin-top:2px;">${s.desc}</div>
+        </div>
+      </div>`;
+  }).join('');
+  panel.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #244;padding-bottom:10px;margin-bottom:12px;">
+      <div style="font-size:16px;color:#88ddff;letter-spacing:3px;">🎭 SKINS</div>
+      <button id="sk-close" style="background:#1a2a3a;color:#88ccff;border:1px solid #4499ff;padding:4px 10px;cursor:pointer;font-family:inherit;border-radius:3px;">✕</button>
+    </div>
+    ${cards}
+    <div style="margin-top:10px;font-size:10px;color:#ffd227;text-align:center;">👑 ${isAdmin ? 'As admin, you always wear the crown.' : 'The match\'s top fragger wears the crown.'}</div>`;
+  panel.querySelector('#sk-close').addEventListener('click', () => { panel.style.display = 'none'; });
+  panel.querySelectorAll('.skin-card').forEach(card => {
+    card.addEventListener('click', () => {
+      mySkin = card.dataset.skin;
+      try { localStorage.setItem('pvp_skin', mySkin); } catch(e){}
+      emitMySkin();
+      openSkinsPanel(); // re-render to show selection
+    });
+  });
+}
+const _skinsBtn = document.getElementById('skins-btn');
+if (_skinsBtn) {
+  _skinsBtn.addEventListener('click', openSkinsPanel);
+  _skinsBtn.addEventListener('touchstart', e => { e.preventDefault(); openSkinsPanel(); }, { passive: false });
 }
 
 // 📹 Kill Log list — pick a saved kill to watch in the 6-cam theater
