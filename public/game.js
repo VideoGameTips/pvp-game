@@ -7102,6 +7102,151 @@ function updateKillcam(now) {
   camera.lookAt(look);
 }
 
+// ── 📹 KILL LOG — save your kills and replay them from 6 cameras at once ──
+const killLog = []; // [{ ts, victim, weapon, frames:[...], killerId, victimId }]
+const KILL_LOG_CAP = 8;
+function saveKillReplay(victimId, weaponId) {
+  if (!KILLCAM.buf.length) return;
+  // Deep-copy the recent frames so future sampling doesn't mutate them
+  const frames = KILLCAM.buf.map(f => ({
+    t: f.t,
+    entities: Object.fromEntries(Object.entries(f.entities).map(([id, e]) => [id, { ...e }])),
+  }));
+  const victimName = players[victimId]?.name || 'Enemy';
+  const wname = WEAPONS.find(w => w.id === weaponId)?.name
+             || MELEE_ITEMS.find(m => m.id === weaponId)?.name
+             || SUPPORT_ITEMS.find(s => s.id === weaponId)?.name || (weaponId || 'weapon');
+  killLog.unshift({ ts: Date.now(), victim: victimName, weapon: wname,
+                    frames, killerId: myId, victimId });
+  if (killLog.length > KILL_LOG_CAP) killLog.pop();
+}
+
+// ── 6-camera replay theater ──────────────────────────────────────────────
+const THEATER = {
+  active: false,
+  replay: null,
+  startedAt: 0,
+  durationMs: 4000,    // slow-mo: 3 s of action stretched to 4 s
+  ghosts: {},          // id -> { mesh } temporary actor meshes
+  ghostGroup: null,
+  cams: [],            // 6 THREE.PerspectiveCamera
+  labels: ['TOP','1ST PERSON','LEFT','RIGHT','3RD PERSON','OPPONENT'],
+};
+function buildTheaterCams() {
+  if (THEATER.cams.length) return;
+  for (let i = 0; i < 6; i++) {
+    const c = new THREE.PerspectiveCamera(60, 1, 0.1, 1000);
+    THEATER.cams.push(c);
+  }
+}
+function openKillTheater(index) {
+  const replay = killLog[index];
+  if (!replay) return;
+  buildTheaterCams();
+  THEATER.active = true;
+  THEATER.replay = replay;
+  THEATER.startedAt = performance.now();
+  // Build ghost actor meshes for every entity in the replay
+  THEATER.ghostGroup = new THREE.Group();
+  scene.add(THEATER.ghostGroup);
+  THEATER.ghosts = {};
+  const f0 = replay.frames[0];
+  for (const id of Object.keys(f0.entities)) {
+    const isKiller = id === replay.killerId;
+    const isVictim = id === replay.victimId;
+    const color = isKiller ? 0x44aaff : isVictim ? 0xff4444 : 0xaaaaaa;
+    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.4, 1.0, 4, 8),
+      new THREE.MeshLambertMaterial({ color }));
+    THEATER.ghostGroup.add(body);
+    THEATER.ghosts[id] = { mesh: body };
+  }
+  // Overlay frame with 6 labeled panes + close button
+  let ov = document.getElementById('theater-overlay');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'theater-overlay';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:9600;pointer-events:none;font-family:"Courier New",monospace;';
+    document.body.appendChild(ov);
+  }
+  ov.style.display = 'block';
+  ov.innerHTML = `
+    <div style="position:absolute;top:8px;left:50%;transform:translateX(-50%);color:#ffcc66;font-size:14px;letter-spacing:3px;background:rgba(0,0,0,0.6);padding:6px 16px;border-radius:6px;">
+      📹 KILL LOG · ${replay.victim} · ${replay.weapon}
+    </div>
+    <button id="theater-close" style="position:absolute;top:8px;right:12px;pointer-events:all;background:#3a1a1a;color:#ff8888;border:1px solid #ff4444;padding:6px 14px;cursor:pointer;font-family:inherit;border-radius:4px;">✕ CLOSE</button>
+    ${THEATER.labels.map((l,i) => {
+      const col = i % 2, row = Math.floor(i / 2);
+      return `<div style="position:absolute;left:${col*50}%;top:${row*33.33}%;width:50%;color:#fff;font-size:10px;letter-spacing:2px;padding:4px 8px;text-shadow:0 0 4px #000;">${l}</div>`;
+    }).join('')}
+  `;
+  document.getElementById('theater-close').addEventListener('click', closeKillTheater);
+}
+function closeKillTheater() {
+  THEATER.active = false;
+  if (THEATER.ghostGroup) { scene.remove(THEATER.ghostGroup); THEATER.ghostGroup = null; }
+  THEATER.ghosts = {};
+  const ov = document.getElementById('theater-overlay');
+  if (ov) ov.style.display = 'none';
+}
+function renderTheater() {
+  const replay = THEATER.replay;
+  if (!replay || !replay.frames.length) { closeKillTheater(); return; }
+  const t = (performance.now() - THEATER.startedAt) / THEATER.durationMs;
+  const loopT = t % 1; // loop the clip
+  const i = Math.min(replay.frames.length - 1, Math.floor(loopT * replay.frames.length));
+  const frame = replay.frames[i];
+  // Position ghosts
+  for (const [id, e] of Object.entries(frame.entities)) {
+    const g = THEATER.ghosts[id];
+    if (g) { g.mesh.position.set(e.x, (e.y || 1) + 0.5, e.z); g.mesh.rotation.y = e.rotY || 0; }
+  }
+  const killer = frame.entities[replay.killerId];
+  const victim = frame.entities[replay.victimId];
+  const cx = killer && victim ? (killer.x + victim.x) / 2 : (killer?.x || 0);
+  const cz = killer && victim ? (killer.z + victim.z) / 2 : (killer?.z || 0);
+  const center = new THREE.Vector3(cx, 1.2, cz);
+  const cams = THEATER.cams;
+  // 0 TOP
+  cams[0].position.set(cx, 24, cz); cams[0].lookAt(center);
+  // 1 FIRST PERSON (killer eyes)
+  if (killer) {
+    const f = new THREE.Vector3(-Math.sin(killer.rotY), 0, -Math.cos(killer.rotY));
+    cams[1].position.set(killer.x, (killer.y || 1) + 0.6, killer.z);
+    cams[1].lookAt(cams[1].position.clone().add(f));
+  }
+  // 2 LEFT
+  cams[2].position.set(cx - 10, 3, cz); cams[2].lookAt(center);
+  // 3 RIGHT
+  cams[3].position.set(cx + 10, 3, cz); cams[3].lookAt(center);
+  // 4 THIRD PERSON (behind killer)
+  if (killer) {
+    const f = new THREE.Vector3(-Math.sin(killer.rotY), 0, -Math.cos(killer.rotY));
+    cams[4].position.set(killer.x - f.x*4, (killer.y||1)+2.5, killer.z - f.z*4);
+    cams[4].lookAt(center);
+  }
+  // 5 OPPONENT POV (victim eyes)
+  if (victim) {
+    const f = new THREE.Vector3(-Math.sin(victim.rotY), 0, -Math.cos(victim.rotY));
+    cams[5].position.set(victim.x, (victim.y||1)+0.6, victim.z);
+    cams[5].lookAt(cams[5].position.clone().add(f));
+  }
+  // Render the 6 viewports in a 2-col × 3-row grid
+  const W = renderer.domElement.width, H = renderer.domElement.height;
+  const cw = W / 2, ch = H / 3;
+  renderer.setScissorTest(true);
+  for (let k = 0; k < 6; k++) {
+    const col = k % 2, rowFromTop = Math.floor(k / 2);
+    const x = col * cw;
+    const y = H - (rowFromTop + 1) * ch; // GL origin is bottom-left
+    renderer.setViewport(x, y, cw, ch);
+    renderer.setScissor(x, y, cw, ch);
+    cams[k].aspect = cw / ch; cams[k].updateProjectionMatrix();
+    renderer.render(scene, cams[k]);
+  }
+  renderer.setScissorTest(false);
+  renderer.setViewport(0, 0, W, H);
+}
+
 // 🏋️ Weapon weights — how much the equipped item slows your move speed.
 // 0 = no penalty (fast), 1 = -100% (frozen). Floor of 0.15 enforced.
 // Override per-weapon by adding `weight: 0.x` in the item definition.
@@ -10600,7 +10745,7 @@ socket.on('playerDied', data => {
   if (players[data.targetId]) { players[data.targetId].hp = 0; players[data.targetId].dead = true; }
   // Only count kill if playerHit didn't already count it (check if bot.dead was already set)
   const _alreadyDead = gameBots.find(b => b.id === data.targetId)?.dead;
-  if (data.killerId===myId && !_alreadyDead) { myKills++; creditWeaponKill(currentEquippedId()); const kc=document.getElementById('kill-count'); if(kc) kc.textContent=`Kills: ${myKills}`; }
+  if (data.killerId===myId && !_alreadyDead) { myKills++; creditWeaponKill(currentEquippedId()); saveKillReplay(data.targetId, currentEquippedId()); const kc=document.getElementById('kill-count'); if(kc) kc.textContent=`Kills: ${myKills}`; }
   if (data.targetId===myId) {
     isDead=true; isADS=false; targetFOV=75; shooting=false;
     reloading=false;
@@ -14156,7 +14301,8 @@ function loop() {
     weaponModels[currentWeaponIdx]._barrelCluster.rotation.z +=
       (weaponModels[currentWeaponIdx]._spinRate || 10) * dt;
   }
-  renderer.render(scene, camera);
+  if (THEATER.active) { renderTheater(); }
+  else renderer.render(scene, camera);
 }
 
 // ── Loadout screen ─────────────────────────────────────────────────────────
@@ -15355,6 +15501,44 @@ const _sfxBtn = document.getElementById('shoot-fx-btn');
 if (_sfxBtn) {
   _sfxBtn.addEventListener('click', openShootFxPanel);
   _sfxBtn.addEventListener('touchstart', e => { e.preventDefault(); openShootFxPanel(); }, { passive: false });
+}
+
+// 📹 Kill Log list — pick a saved kill to watch in the 6-cam theater
+function openKillLogList() {
+  let panel = document.getElementById('kill-log-panel');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'kill-log-panel';
+    panel.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9550;background:#1a1208;border:2px solid #ff8844;border-radius:8px;padding:20px;color:#fff;font-family:"Courier New",monospace;min-width:340px;max-height:70vh;overflow-y:auto;';
+    document.body.appendChild(panel);
+  }
+  panel.style.display = 'block';
+  panel.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #553;padding-bottom:10px;margin-bottom:12px;">
+      <div style="font-size:16px;color:#ffaa66;letter-spacing:3px;">📹 KILL LOG</div>
+      <button id="kl-close" style="background:#3a1a1a;color:#ff8888;border:1px solid #ff4444;padding:4px 10px;cursor:pointer;font-family:inherit;border-radius:3px;">✕</button>
+    </div>
+    <div style="font-size:10px;color:#aaa;margin-bottom:12px;">Your last ${KILL_LOG_CAP} kills · tap one to watch from 6 angles at once.</div>
+    ${killLog.length === 0
+      ? '<div style="color:#777;font-style:italic;padding:14px 0;text-align:center;">No kills recorded yet — go get some!</div>'
+      : killLog.map((k, i) => `
+        <div class="kl-row" data-idx="${i}" style="background:#0f0a04;border:1px solid #553;border-left:3px solid #ff8844;border-radius:4px;padding:8px 12px;margin-bottom:6px;cursor:pointer;">
+          <div style="font-size:12px;color:#ffcc88;">💀 ${k.victim}</div>
+          <div style="font-size:10px;color:#aaa;margin-top:2px;">${k.weapon} · ${new Date(k.ts).toLocaleTimeString()}</div>
+        </div>`).join('')}
+  `;
+  panel.querySelector('#kl-close').addEventListener('click', () => panel.style.display = 'none');
+  panel.querySelectorAll('.kl-row').forEach(row => {
+    row.addEventListener('click', () => {
+      panel.style.display = 'none';
+      openKillTheater(+row.dataset.idx);
+    });
+  });
+}
+const _klBtn = document.getElementById('kill-log-btn');
+if (_klBtn) {
+  _klBtn.addEventListener('click', openKillLogList);
+  _klBtn.addEventListener('touchstart', e => { e.preventDefault(); openKillLogList(); }, { passive: false });
 }
 
 const _shopBtn = document.getElementById('open-shop-btn');
