@@ -7415,6 +7415,17 @@ function openKillTheater(index) {
   THEATER.active = true;
   THEATER.replay = replay;
   THEATER.startedAt = performance.now();
+  // The 6-cam theater renders to the WebGL canvas (low z-index). Any full-screen
+  // menu (e.g. #mode-screen, ~93% opaque black) would cover it, so hide them
+  // while the theater is open and restore them on close.
+  THEATER._hidden = [];
+  for (const sel of ['mode-screen', 'shop-screen', 'loadout-screen', 'login-screen']) {
+    const el = document.getElementById(sel);
+    if (el && el.style.display !== 'none' && getComputedStyle(el).display !== 'none') {
+      THEATER._hidden.push([el, el.style.display]);
+      el.style.display = 'none';
+    }
+  }
   // Build ghost actor meshes for every entity in the replay
   THEATER.ghostGroup = new THREE.Group();
   scene.add(THEATER.ghostGroup);
@@ -7490,6 +7501,11 @@ function closeKillTheater() {
   THEATER.ghosts = {};
   const ov = document.getElementById('theater-overlay');
   if (ov) ov.style.display = 'none';
+  // Restore any menu screens we hid when the theater opened.
+  if (THEATER._hidden) {
+    for (const [el, disp] of THEATER._hidden) { el.style.display = disp || 'flex'; }
+    THEATER._hidden = null;
+  }
 }
 function renderTheater() {
   const replay = THEATER.replay;
