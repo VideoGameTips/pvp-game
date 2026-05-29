@@ -7448,13 +7448,26 @@ function openKillTheater(index) {
   // Force a guaranteed-visible sky during the theater; restore on close.
   THEATER._prevBg = scene.background;
   scene.background = new THREE.Color(0x10141c);
+  THEATER._lastT = performance.now();
   const f0 = replay.frames[0];
   for (const id of Object.keys(f0.entities)) {
     const isKiller = id === replay.killerId;
     const isVictim = id === replay.victimId;
-    const color = isKiller ? 0x44aaff : isVictim ? 0xff4444 : 0xaaaaaa;
-    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.4, 1.0, 4, 8),
-      new THREE.MeshLambertMaterial({ color }));
+    // Real character model instead of a plain capsule. Replays don't store
+    // skins, so use the default model and tint the shirt blue (killer) / red
+    // (victim) to keep the who's-who color cue. The killer holds a gun pose.
+    const name = isKiller ? (id === replay.killerId && replay.killer ? replay.killer : (id === myId ? (currentUser?.username || 'You') : 'Killer'))
+               : isVictim ? (replay.victim || 'Victim') : 'Player';
+    const team = isKiller ? 'ally' : 'enemy';
+    const body = makePlayerMesh(name, false, team, 'default', {});
+    // Tint shirt + arms to the team color for at-a-glance identification.
+    const tint = isKiller ? 0x3a72d6 : isVictim ? 0xd63a3a : 0x9a9a9a;
+    if (body._rig) {
+      body._rig.torso.material.color.setHex(tint);
+      body._rig.armL.children[0].material.color.setHex(tint);
+      body._rig.armR.children[0].material.color.setHex(tint);
+      body._rig.holdsGun = isKiller; // killer keeps the weapon arm raised
+    }
     THEATER.ghostGroup.add(body);
     THEATER.ghosts[id] = { mesh: body };
   }
@@ -7544,10 +7557,19 @@ function renderTheater() {
   const loopT = t % 1; // loop the clip
   const i = Math.min(replay.frames.length - 1, Math.floor(loopT * replay.frames.length));
   const frame = replay.frames[i];
-  // Position ghosts
+  // dt for the walk animation (clamped). theaterTick/loop both call us per frame.
+  const nowMs = performance.now();
+  const dt = Math.min(0.05, Math.max(0, (nowMs - (THEATER._lastT || nowMs)) / 1000));
+  THEATER._lastT = nowMs;
+  // Position ghosts. Models have their origin at the feet; recorded e.y is the
+  // eye/upper-body height, so drop ~1.6 m to stand them on the ground.
   for (const [id, e] of Object.entries(frame.entities)) {
     const g = THEATER.ghosts[id];
-    if (g) { g.mesh.position.set(e.x, (e.y || 1) + 0.5, e.z); g.mesh.rotation.y = e.rotY || 0; }
+    if (g) {
+      g.mesh.position.set(e.x, Math.max(0, (e.y || 1) - 1.6), e.z);
+      g.mesh.rotation.y = e.rotY || 0;
+      animateCharacterMesh(g.mesh, dt, 0); // walk-cycle from distance moved
+    }
   }
   const killer = frame.entities[replay.killerId];
   const victim = frame.entities[replay.victimId];
