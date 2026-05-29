@@ -7103,22 +7103,48 @@ function updateKillcam(now) {
 }
 
 // ── 📹 KILL LOG — save your kills and replay them from 6 cameras at once ──
-const killLog = []; // [{ ts, victim, weapon, frames:[...], killerId, victimId }]
-const KILL_LOG_CAP = 8;
+// Each entry: { ts, victim, weapon, frames, killerId, victimId, favorite, pinned }
+let killLog = [];
+const KILL_LOG_CAP = 20; // auto-cleanup keeps newest 20 (favorites/pins immune)
+try {
+  const saved = JSON.parse(localStorage.getItem('pvp_kill_log') || '[]');
+  if (Array.isArray(saved)) killLog = saved;
+} catch (e) {}
+function saveKillLogToDisk() {
+  try { localStorage.setItem('pvp_kill_log', JSON.stringify(killLog)); }
+  catch (e) { /* quota — drop oldest non-favorite and retry once */
+    const i = killLog.map((k,idx)=>({k,idx})).reverse().find(o=>!o.k.favorite && !o.k.pinned);
+    if (i) { killLog.splice(i.idx, 1); try { localStorage.setItem('pvp_kill_log', JSON.stringify(killLog)); } catch(e2){} }
+  }
+}
+function rd(n) { return Math.round(n * 100) / 100; } // round to 2dp to shrink storage
 function saveKillReplay(victimId, weaponId) {
   if (!KILLCAM.buf.length) return;
-  // Deep-copy the recent frames so future sampling doesn't mutate them
+  // Deep-copy + round the recent frames so storage stays compact
   const frames = KILLCAM.buf.map(f => ({
-    t: f.t,
-    entities: Object.fromEntries(Object.entries(f.entities).map(([id, e]) => [id, { ...e }])),
+    entities: Object.fromEntries(Object.entries(f.entities).map(([id, e]) =>
+      [id, { x: rd(e.x), y: rd(e.y), z: rd(e.z), rotY: rd(e.rotY||0), rotX: rd(e.rotX||0) }])),
   }));
   const victimName = players[victimId]?.name || 'Enemy';
   const wname = WEAPONS.find(w => w.id === weaponId)?.name
              || MELEE_ITEMS.find(m => m.id === weaponId)?.name
              || SUPPORT_ITEMS.find(s => s.id === weaponId)?.name || (weaponId || 'weapon');
+  // Simple "score" heuristic: # of frames where target was alive (longer chase = higher)
+  const score = frames.length;
   killLog.unshift({ ts: Date.now(), victim: victimName, weapon: wname,
-                    frames, killerId: myId, victimId });
-  if (killLog.length > KILL_LOG_CAP) killLog.pop();
+                    frames, killerId: myId, victimId, favorite: false, pinned: false, score });
+  autoCleanupKillLog();
+  saveKillLogToDisk();
+}
+// 🤖 Keep newest KILL_LOG_CAP, but never evict favorited or pinned entries.
+function autoCleanupKillLog() {
+  // Sort so pinned float to the top, then newest first
+  killLog.sort((a, b) => (b.pinned - a.pinned) || (b.ts - a.ts));
+  if (killLog.length <= KILL_LOG_CAP) return;
+  // Remove the oldest non-protected entries until under cap
+  for (let i = killLog.length - 1; i >= 0 && killLog.length > KILL_LOG_CAP; i--) {
+    if (!killLog[i].favorite && !killLog[i].pinned) killLog.splice(i, 1);
+  }
 }
 
 // ── 6-camera replay theater ──────────────────────────────────────────────
@@ -7174,12 +7200,46 @@ function openKillTheater(index) {
       📹 KILL LOG · ${replay.victim} · ${replay.weapon}
     </div>
     <button id="theater-close" style="position:absolute;top:8px;right:12px;pointer-events:all;background:#3a1a1a;color:#ff8888;border:1px solid #ff4444;padding:6px 14px;cursor:pointer;font-family:inherit;border-radius:4px;">✕ CLOSE</button>
+    <button id="theater-rec" style="position:absolute;top:8px;right:120px;pointer-events:all;background:#1a3a1a;color:#88ff99;border:1px solid #44aa66;padding:6px 14px;cursor:pointer;font-family:inherit;border-radius:4px;">🎬 SAVE CLIP</button>
     ${THEATER.labels.map((l,i) => {
       const col = i % 2, row = Math.floor(i / 2);
       return `<div style="position:absolute;left:${col*50}%;top:${row*33.33}%;width:50%;color:#fff;font-size:10px;letter-spacing:2px;padding:4px 8px;text-shadow:0 0 4px #000;">${l}</div>`;
     }).join('')}
   `;
   document.getElementById('theater-close').addEventListener('click', closeKillTheater);
+  document.getElementById('theater-rec').addEventListener('click', recordTheaterClip);
+}
+
+// 🎬 Record the 6-cam theater canvas to a downloadable webm video (~5 s)
+function recordTheaterClip() {
+  const btn = document.getElementById('theater-rec');
+  if (!btn || btn._recording) return;
+  if (!renderer.domElement.captureStream) { alert('Your browser does not support canvas video capture.'); return; }
+  btn._recording = true;
+  btn.textContent = '● REC…';
+  btn.style.background = '#5a1a1a';
+  const stream = renderer.domElement.captureStream(30);
+  const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
+  const chunks = [];
+  let rec;
+  try { rec = new MediaRecorder(stream, { mimeType: mime }); }
+  catch (e) { alert('Recording not supported: ' + e.message); btn._recording = false; btn.textContent = '🎬 SAVE CLIP'; return; }
+  rec.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+  rec.onstop = () => {
+    const blob = new Blob(chunks, { type: 'video/webm' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const r = THEATER.replay;
+    a.href = url;
+    a.download = `killcam_${r ? r.victim.replace(/\s+/g,'_') : 'clip'}_${Date.now()}.webm`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    btn._recording = false;
+    btn.textContent = '🎬 SAVE CLIP';
+    btn.style.background = '#1a3a1a';
+  };
+  rec.start();
+  setTimeout(() => { if (rec.state !== 'inactive') rec.stop(); }, 5000); // 5-second clip
 }
 function closeKillTheater() {
   THEATER.active = false;
@@ -15515,25 +15575,38 @@ function openKillLogList() {
   panel.style.display = 'block';
   panel.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #553;padding-bottom:10px;margin-bottom:12px;">
-      <div style="font-size:16px;color:#ffaa66;letter-spacing:3px;">📹 KILL LOG</div>
+      <div style="font-size:16px;color:#ffaa66;letter-spacing:3px;">📹 KILL LOG <span style="font-size:10px;color:#888;">(${killLog.length}/${KILL_LOG_CAP})</span></div>
       <button id="kl-close" style="background:#3a1a1a;color:#ff8888;border:1px solid #ff4444;padding:4px 10px;cursor:pointer;font-family:inherit;border-radius:3px;">✕</button>
     </div>
-    <div style="font-size:10px;color:#aaa;margin-bottom:12px;">Your last ${KILL_LOG_CAP} kills · tap one to watch from 6 angles at once.</div>
+    <div style="font-size:10px;color:#aaa;margin-bottom:12px;">⭐ favorite (immune to cleanup) · 📌 pin to top · 🗑️ delete · tap the row to watch</div>
     ${killLog.length === 0
       ? '<div style="color:#777;font-style:italic;padding:14px 0;text-align:center;">No kills recorded yet — go get some!</div>'
       : killLog.map((k, i) => `
-        <div class="kl-row" data-idx="${i}" style="background:#0f0a04;border:1px solid #553;border-left:3px solid #ff8844;border-radius:4px;padding:8px 12px;margin-bottom:6px;cursor:pointer;">
-          <div style="font-size:12px;color:#ffcc88;">💀 ${k.victim}</div>
-          <div style="font-size:10px;color:#aaa;margin-top:2px;">${k.weapon} · ${new Date(k.ts).toLocaleTimeString()}</div>
+        <div style="display:flex;align-items:center;gap:6px;background:#0f0a04;border:1px solid #553;border-left:3px solid ${k.pinned ? '#ffdd44' : k.favorite ? '#ff66aa' : '#ff8844'};border-radius:4px;padding:8px 10px;margin-bottom:6px;">
+          <div class="kl-watch" data-idx="${i}" style="flex:1;cursor:pointer;">
+            <div style="font-size:12px;color:#ffcc88;">${k.pinned ? '📌 ' : ''}${k.favorite ? '⭐ ' : ''}💀 ${k.victim}</div>
+            <div style="font-size:10px;color:#aaa;margin-top:2px;">${k.weapon} · ${new Date(k.ts).toLocaleTimeString()}</div>
+          </div>
+          <button class="kl-fav"  data-idx="${i}" title="Favorite" style="background:${k.favorite?'#5a2a44':'#1a1a1a'};color:#ff66aa;border:1px solid #aa4477;padding:4px 7px;cursor:pointer;border-radius:3px;font-size:12px;">⭐</button>
+          <button class="kl-pin"  data-idx="${i}" title="Pin"      style="background:${k.pinned?'#5a4a1a':'#1a1a1a'};color:#ffdd44;border:1px solid #aa8833;padding:4px 7px;cursor:pointer;border-radius:3px;font-size:12px;">📌</button>
+          <button class="kl-del"  data-idx="${i}" title="Delete"   style="background:#1a1a1a;color:#ff6666;border:1px solid #aa3333;padding:4px 7px;cursor:pointer;border-radius:3px;font-size:12px;">🗑️</button>
         </div>`).join('')}
   `;
   panel.querySelector('#kl-close').addEventListener('click', () => panel.style.display = 'none');
-  panel.querySelectorAll('.kl-row').forEach(row => {
-    row.addEventListener('click', () => {
-      panel.style.display = 'none';
-      openKillTheater(+row.dataset.idx);
-    });
+  panel.querySelectorAll('.kl-watch').forEach(row => {
+    row.addEventListener('click', () => { panel.style.display = 'none'; openKillTheater(+row.dataset.idx); });
   });
+  panel.querySelectorAll('.kl-fav').forEach(b => b.addEventListener('click', e => {
+    e.stopPropagation(); const k = killLog[+b.dataset.idx]; k.favorite = !k.favorite; saveKillLogToDisk(); openKillLogList();
+  }));
+  panel.querySelectorAll('.kl-pin').forEach(b => b.addEventListener('click', e => {
+    e.stopPropagation(); const k = killLog[+b.dataset.idx]; k.pinned = !k.pinned; autoCleanupKillLog(); saveKillLogToDisk(); openKillLogList();
+  }));
+  panel.querySelectorAll('.kl-del').forEach(b => b.addEventListener('click', e => {
+    e.stopPropagation(); const k = killLog[+b.dataset.idx];
+    if (k.favorite && !confirm('This replay is favorited. Delete anyway?')) return;
+    killLog.splice(+b.dataset.idx, 1); saveKillLogToDisk(); openKillLogList();
+  }));
 }
 const _klBtn = document.getElementById('kill-log-btn');
 if (_klBtn) {
