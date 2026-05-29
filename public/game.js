@@ -6496,6 +6496,8 @@ const SKINS = [
   { id: 'swat_shades', name: 'SWAT · Shades', desc: 'Tactical armor with cool sunglasses.' },
   { id: 'riot_chad',   name: 'Riot Chad',     desc: 'Dark jacket + red bandana. Has patience.' },
   { id: 'soldier',     name: 'Soldier',       desc: 'Olive fatigues + combat helmet.' },
+  { id: 'spiky',       name: 'Spiky',         desc: 'Spiky hair, no helmet. Your P90 does 5 damage.' },
+  { id: 'green_cap',   name: 'Green Cap',     desc: 'Soft green cap. Default loadout enjoyer.' },
   { id: 'shadow',      name: 'Shadow',        desc: 'All black, pale face. The strongest wear crowns.' },
 ];
 const SKIN_IDS = SKINS.map(s => s.id);
@@ -6556,6 +6558,16 @@ function applyCharacterSkin(skinId, parts) {
       _addHelmet(group, 0x3d4a24);
       break;
     }
+    case 'spiky': {
+      setBody(0x5a2a2a); setLegs(0x222831); setHeadAll(0xffcc99);
+      _addSpikyHair(group, 0x2b1a10);
+      break;
+    }
+    case 'green_cap': {
+      setBody(0x6b5d3a); setLegs(0x4a4327); setHeadAll(0xffcc99);
+      _addCap(group, 0x3f6b2f);
+      break;
+    }
     case 'shadow': {
       setBody(0x121212); setLegs(0x0c0c0c); setHeadAll(0x141414);
       faceMat.map = makeShadowFaceTexture(); faceMat.color.setHex(0xffffff); faceMat.needsUpdate = true;
@@ -6572,6 +6584,30 @@ function _addHelmet(group, color) {
   const helm = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.22, 0.56),
     new THREE.MeshLambertMaterial({ color }));
   helm.position.set(0, 2.13, 0); helm.castShadow = true; group.add(helm);
+}
+
+// Spiky hair — a cluster of little cones on top of the head (no helmet)
+function _addSpikyHair(group, color) {
+  const mat = new THREE.MeshLambertMaterial({ color });
+  // a thin base layer so the scalp isn't bald skin
+  const base = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.10, 0.52), mat);
+  base.position.set(0, 2.07, 0); group.add(base);
+  const spikes = [[-0.15,0.07,-0.1],[0.16,0.06,-0.12],[0,0.10,0.0],[-0.12,0.06,0.14],[0.13,0.07,0.13],[0,0.08,-0.16],[-0.05,0.09,0.05]];
+  spikes.forEach(([x,yy,z]) => {
+    const s = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.20, 5), mat);
+    s.position.set(x, 2.12 + yy, z);
+    s.rotation.z = (x) * 0.8; s.rotation.x = (-z) * 0.8; // fan outward
+    s.castShadow = true; group.add(s);
+  });
+}
+
+// Soft cap with a forward brim (the green-cap "default loadout" guy)
+function _addCap(group, color) {
+  const mat = new THREE.MeshLambertMaterial({ color });
+  const dome = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.16, 0.54), mat);
+  dome.position.set(0, 2.10, 0); dome.castShadow = true; group.add(dome);
+  const brim = new THREE.Mesh(new THREE.BoxGeometry(0.50, 0.05, 0.20), mat);
+  brim.position.set(0, 2.04, 0.32); brim.castShadow = true; group.add(brim);
 }
 
 // Gold crown overlay — toggled for admin / match leader. Idempotent.
@@ -15911,6 +15947,8 @@ const SKIN_SWATCH = {
   swat_shades: ['#2a2e35', '#080808'],
   riot_chad:   ['#33271f', '#c62828'],
   soldier:     ['#4b5320', '#3d4a24'],
+  spiky:       ['#5a2a2a', '#2b1a10'],
+  green_cap:   ['#6b5d3a', '#3f6b2f'],
   shadow:      ['#141414', '#f4f4f4'],
 };
 function openSkinsPanel() {
