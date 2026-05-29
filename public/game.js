@@ -7415,6 +7415,9 @@ function openKillTheater(index) {
   THEATER.active = true;
   THEATER.replay = replay;
   THEATER.startedAt = performance.now();
+  // Play at 1.5× the real event speed. Frames were sampled every ~100 ms, so the
+  // real clip length is frames*100 ms; divide by 1.5 to compress the playback.
+  THEATER.durationMs = Math.max(700, (replay.frames.length * 100) / 1.5);
   // The 6-cam theater renders to the WebGL canvas (low z-index). Any full-screen
   // menu (e.g. #mode-screen, ~93% opaque black) would cover it, so hide them
   // while the theater is open and restore them on close.
@@ -7468,9 +7471,27 @@ function openKillTheater(index) {
       body._rig.armR.children[0].material.color.setHex(tint);
       body._rig.holdsGun = isKiller; // killer keeps the weapon arm raised
     }
+    // Give the killer a visible weapon in hand (generic gun, barrel along -Z).
+    if (isKiller) {
+      const gun = _genericGun({ bodyShape: 'classic', bodyColor: 0x222222, accentColor: 0x6a6a6a, magType: 'banana', topRail: true });
+      gun.scale.setScalar(1.25);
+      gun.position.set(0.26, 1.34, -0.34); // right-hand, forward of the chest
+      body.add(gun);
+      body._gun = gun;
+    }
     THEATER.ghostGroup.add(body);
-    THEATER.ghosts[id] = { mesh: body };
+    THEATER.ghosts[id] = { mesh: body, isKiller, isVictim };
   }
+  // Bullet/muzzle-flash FX layer for the replay.
+  THEATER.fxGroup = new THREE.Group();
+  THEATER.ghostGroup.add(THEATER.fxGroup);
+  THEATER.tracers = [];
+  THEATER.fireTimer = 0;
+  const flash = new THREE.Mesh(
+    new THREE.SphereGeometry(0.12, 8, 8),
+    new THREE.MeshBasicMaterial({ color: 0xffdd66, transparent: true, opacity: 0 }));
+  THEATER.fxGroup.add(flash);
+  THEATER.muzzleFlash = flash;
   // Overlay frame with 6 labeled panes + close button
   let ov = document.getElementById('theater-overlay');
   if (!ov) {
@@ -7541,6 +7562,7 @@ function closeKillTheater() {
   if (THEATER.ghostGroup) { scene.remove(THEATER.ghostGroup); THEATER.ghostGroup = null; }
   THEATER.ghosts = {};
   THEATER.stageGround = THEATER.stageGrid = THEATER.stageLight = null;
+  THEATER.fxGroup = null; THEATER.tracers = null; THEATER.muzzleFlash = null;
   if (THEATER._prevBg !== undefined) { scene.background = THEATER._prevBg; THEATER._prevBg = undefined; }
   const ov = document.getElementById('theater-overlay');
   if (ov) ov.style.display = 'none';
@@ -7573,6 +7595,36 @@ function renderTheater() {
   }
   const killer = frame.entities[replay.killerId];
   const victim = frame.entities[replay.victimId];
+  // ── Bullets + muzzle flash: fire tracers from the killer's gun at the victim ──
+  if (THEATER.fxGroup && killer && victim) {
+    const kFeet = Math.max(0, (killer.y || 1) - 1.6);
+    const fwd = new THREE.Vector3(-Math.sin(killer.rotY || 0), 0, -Math.cos(killer.rotY || 0));
+    const muzzle = new THREE.Vector3(killer.x + fwd.x * 0.7, kFeet + 1.34, killer.z + fwd.z * 0.7);
+    const target = new THREE.Vector3(victim.x, Math.max(0, (victim.y || 1) - 1.6) + 1.2, victim.z);
+    THEATER.fireTimer -= dt;
+    if (THEATER.fireTimer <= 0) {
+      THEATER.fireTimer = 0.11; // cyclic fire while replaying
+      // Tracer: a thin bright cylinder that flies muzzle -> victim chest.
+      const dir = target.clone().sub(muzzle); const len = Math.max(0.4, dir.length());
+      const geo = new THREE.CylinderGeometry(0.025, 0.025, 0.8, 6);
+      const mat = new THREE.MeshBasicMaterial({ color: 0xfff0a0 });
+      const tr = new THREE.Mesh(geo, mat);
+      tr.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
+      tr.userData = { from: muzzle.clone(), to: target.clone(), t: 0, speed: 9 };
+      THEATER.fxGroup.add(tr);
+      THEATER.tracers.push(tr);
+      // Muzzle flash blip
+      if (THEATER.muzzleFlash) { THEATER.muzzleFlash.position.copy(muzzle); THEATER.muzzleFlash.material.opacity = 1; }
+    }
+    if (THEATER.muzzleFlash) THEATER.muzzleFlash.material.opacity = Math.max(0, THEATER.muzzleFlash.material.opacity - dt * 14);
+    // Advance existing tracers along their path; remove on arrival.
+    for (let k = THEATER.tracers.length - 1; k >= 0; k--) {
+      const tr = THEATER.tracers[k], u = tr.userData;
+      u.t += dt * u.speed;
+      if (u.t >= 1) { THEATER.fxGroup.remove(tr); tr.geometry.dispose(); tr.material.dispose(); THEATER.tracers.splice(k, 1); continue; }
+      tr.position.lerpVectors(u.from, u.to, u.t);
+    }
+  }
   const cx = killer && victim ? (killer.x + victim.x) / 2 : (killer?.x || 0);
   const cz = killer && victim ? (killer.z + victim.z) / 2 : (killer?.z || 0);
   const center = new THREE.Vector3(cx, 1.2, cz);
