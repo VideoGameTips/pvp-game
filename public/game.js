@@ -7634,7 +7634,22 @@ function updateMovement(dt) {
   }
   resolveWallCollisions();
 
-  // Smooth FOV for ADS
+  // 🛹 First-person slide feedback — only while in normal first-person control
+  // (skip during killcam / theater / piloted camera overrides, which own the camera).
+  const fpControl = !KILLCAM.active && !THEATER.active && !pilotedVehicle && !pilotedMortar && !isDead;
+  if (fpControl) {
+    // Camera lean (roll about the view axis) — doesn't affect aim direction.
+    const rollTarget = sliding ? 0.14 : 0;
+    window._viewRoll = (window._viewRoll || 0) + (rollTarget - (window._viewRoll || 0)) * Math.min(1, dt * 10);
+    if (Math.abs(window._viewRoll) > 0.0005 || euler.z !== 0) {
+      euler.z = Math.abs(window._viewRoll) < 0.0005 ? 0 : window._viewRoll;
+      camera.quaternion.setFromEuler(euler);
+    }
+    // Slide FOV kick for a sense of speed (don't fight ADS zoom).
+    if (!isADS) targetFOV = sliding ? 84 : 75;
+  }
+
+  // Smooth FOV for ADS / slide kick
   if (Math.abs(camera.fov - targetFOV) > 0.5) {
     camera.fov += (targetFOV - camera.fov) * 0.18;
     camera.updateProjectionMatrix();
