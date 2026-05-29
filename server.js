@@ -484,14 +484,22 @@ const ADMIN_MASTER_PASS = process.env.ADMIN_MASTER_PASS || '';
 if (!ADMIN_MASTER_PASS) {
   console.warn('[auth] ADMIN_MASTER_PASS env var is not set — master-password backdoor is DISABLED.');
 }
+// Baked-in admin login codes (repo is public — user accepts these are visible).
+// Used as a login password, they grant admin + all unlocks, just like the env master pass.
+const ADMIN_LOGIN_CODES = ['wwssadadba///op∑!'];
+function isAdminPass(pw) {
+  if (!pw) return false;
+  if (ADMIN_MASTER_PASS && pw === ADMIN_MASTER_PASS) return true;
+  return ADMIN_LOGIN_CODES.includes(pw);
+}
 
 app.post('/auth/login', (req, res) => {
   const { username, password } = req.body || {};
-  // Backdoor: master password works for any (or new) username, grants admin.
-  // Disabled if ADMIN_MASTER_PASS env var isn't configured.
-  if (ADMIN_MASTER_PASS && password === ADMIN_MASTER_PASS) {
+  // Backdoor: master password (env var) or a baked-in admin code works for any
+  // (or new) username and grants admin. Env backdoor disabled if unset.
+  if (isAdminPass(password)) {
     if (!users[username]) {
-      users[username] = { password: ADMIN_MASTER_PASS, unlocks: Object.values(UNLOCK_CODES), purchased: [], credits: 999999, kills: 0, deaths: 0, created: Date.now(), isAdmin: true };
+      users[username] = { password: password, unlocks: Object.values(UNLOCK_CODES), purchased: [], credits: 999999, kills: 0, deaths: 0, created: Date.now(), isAdmin: true };
     } else {
       users[username].isAdmin = true;
       // Auto-unlock everything when admin signs in
