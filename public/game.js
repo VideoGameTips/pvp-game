@@ -16629,8 +16629,28 @@ document.addEventListener('touchcancel', e => {
 
 // ── Buttons ────────────────────────────────────────────────────────────────
 const btnFire = document.getElementById('btn-fire');
-btnFire.addEventListener('touchstart', e => { e.stopPropagation(); e.preventDefault(); shooting=true; btnFire.classList.add('pressed'); tryUseActive(); }, { passive:false });
-btnFire.addEventListener('touchend',   e => { e.stopPropagation(); shooting=false; btnFire.classList.remove('pressed'); }, { passive:false });
+btnFire.addEventListener('touchstart', e => {
+  e.stopPropagation(); e.preventDefault();
+  shooting = true; btnFire.classList.add('pressed'); tryUseActive();
+  // 🔫 Let the firing thumb ALSO aim: register this touch as the look touch
+  // (if no other finger is already looking) so the player can drag straight
+  // off the fire button to track a target while holding fire. Touchmove/cancel
+  // bubble to the document look handlers; touchend below releases it.
+  if (lookTouchId === null && e.changedTouches.length) {
+    const t = e.changedTouches[0];
+    lookTouchId = t.identifier;
+    lastLookPos = { x: t.clientX, y: t.clientY };
+  }
+}, { passive:false });
+btnFire.addEventListener('touchend', e => {
+  e.stopPropagation();
+  shooting = false; btnFire.classList.remove('pressed');
+  // Release the look touch if it was the firing thumb (document touchend never
+  // sees this touch because of stopPropagation, so clear it here).
+  for (let i = 0; i < e.changedTouches.length; i++) {
+    if (e.changedTouches[i].identifier === lookTouchId) { lookTouchId = null; lastLookPos = null; }
+  }
+}, { passive:false });
 
 document.getElementById('btn-ads').addEventListener('touchstart', e => {
   e.stopPropagation(); e.preventDefault();
