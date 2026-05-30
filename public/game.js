@@ -2583,10 +2583,13 @@ function resolveWallCollisions() {
   camera.position.z = pz;
 }
 
-function resolvePosCollisions(px, pz) {
+// feetY = the moving entity's feet height. Defaults to 0 (ground) because this
+// helper resolves BOT movement — bots stand on the floor. (Earlier it read the
+// PLAYER's camera height, so when the player jumped / climbed high, low walls
+// got skipped and bots phased straight through them.)
+function resolvePosCollisions(px, pz, feetY = 0) {
   const RADIUS = PLAYER_RADIUS;
   for (const box of wallColliders) {
-    const feetY = camera.position.y - PLAYER_EYE_HEIGHT;
     if (feetY >= box.max.y - 0.08) continue;
     const exMinX = box.min.x - RADIUS, exMaxX = box.max.x + RADIUS;
     const exMinZ = box.min.z - RADIUS, exMaxZ = box.max.z + RADIUS;
@@ -14689,7 +14692,7 @@ function updateBotAI(dt) {
     const mapHalf = activeMapName === 'br_arena' ? 123 : 47;
     nx = Math.max(-mapHalf, Math.min(mapHalf, nx));
     nz = Math.max(-mapHalf, Math.min(mapHalf, nz));
-    [nx, nz] = resolvePosCollisions(nx, nz);
+    [nx, nz] = resolvePosCollisions(nx, nz, bot.y || 0);
     bot.x = nx; bot.z = nz;
 
     // ── Stuck detection: if chasing but collision ate all movement, trigger detour ─
@@ -14719,7 +14722,7 @@ function updateBotAI(dt) {
       const stepZ = Math.sin(chosen) * 0.30;
       let fx = Math.max(-47, Math.min(47, bot.x + stepX));
       let fz = Math.max(-47, Math.min(47, bot.z + stepZ));
-      [fx, fz] = resolvePosCollisions(fx, fz);
+      [fx, fz] = resolvePosCollisions(fx, fz, bot.y || 0);
       bot.x = fx; bot.z = fz;
       bot.strafeDir = -bot.strafeDir;
       bot.strafeFlipTimer = 0.8;
@@ -14747,7 +14750,7 @@ function updateBotAI(dt) {
       const stepZ = Math.cos(bot.wanderAngle) * 0.15;
       let fx = Math.max(-47, Math.min(47, bot.x + stepX));
       let fz = Math.max(-47, Math.min(47, bot.z + stepZ));
-      [fx, fz] = resolvePosCollisions(fx, fz);
+      [fx, fz] = resolvePosCollisions(fx, fz, bot.y || 0);
       bot.x = fx; bot.z = fz;
     }
 
