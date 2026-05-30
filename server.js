@@ -636,7 +636,8 @@ function checkLobbyStart(L) {
                     'tundra','space','airport','trenches','chernobyl','refinery','skydock',
                     'sewer','gravity_lab','glassworks','carrier','overgrowth','orbital_station',
                     'foundry','carnival','biosphere','lockdown','studio','temple','holiday',
-                    'labyrinth','arena','opera','doomsday','train','dreamscape'];
+                    'labyrinth','arena','opera','doomsday','train','dreamscape',
+                    'pearl_harbor','titanic','supermarket','pyongyang'];
   const mapId = MAP_POOL[Math.floor(Math.random() * MAP_POOL.length)];
   // Designate the first player as host (they spawn the bots if any)
   const host = L.players[0];
@@ -704,7 +705,8 @@ function tryPairPvpQueue(mode) {
                     'tundra','space','airport','trenches','chernobyl','refinery','skydock',
                     'sewer','gravity_lab','glassworks','carrier','overgrowth','orbital_station',
                     'foundry','carnival','biosphere','lockdown','studio','temple','holiday',
-                    'labyrinth','arena','opera','doomsday','train','dreamscape'];
+                    'labyrinth','arena','opera','doomsday','train','dreamscape',
+                    'pearl_harbor','titanic','supermarket','pyongyang'];
   const mapId = MAP_POOL[Math.floor(Math.random() * MAP_POOL.length)];
   io.to(a.socketId).emit('pvpResult', {
     mode, paired: true, team: teamA, mapId,

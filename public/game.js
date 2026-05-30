@@ -3196,7 +3196,45 @@ function buildForestMap() {
     rock.updateMatrixWorld(true);
     MAP_COLLIDERS[m].push(new THREE.Box3().setFromObject(rock));
   });
-  MAP_GROUPS[m]._skyColor = 0x6fb2dd;
+  // 🌴🇻🇳 Dense jungle layer — extra trees, bamboo and ferns for a thick
+  // Vietnam-war canopy. Scattered procedurally; keeps the centre spawn clear.
+  const jungleLeaf = new THREE.MeshLambertMaterial({ color: 0x14431a });
+  for (let i = 0; i < 42; i++) {
+    const x = (Math.random() - 0.5) * 88, z = (Math.random() - 0.5) * 88;
+    if (Math.hypot(x, z) < 6) continue;
+    const h = 4 + Math.random() * 3;
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.45, h, 7), treeMat);
+    trunk.position.set(x, h / 2, z);
+    MAP_GROUPS[m].add(trunk);
+    trunk.updateMatrixWorld(true);
+    MAP_COLLIDERS[m].push(new THREE.Box3().setFromObject(trunk));
+    for (let k = 0; k < 3; k++) {
+      const leaf = new THREE.Mesh(new THREE.ConeGeometry(2.0 - k * 0.5, 1.8, 8), jungleLeaf);
+      leaf.position.set(x, h + k * 0.9, z);
+      MAP_GROUPS[m].add(leaf);
+    }
+  }
+  // Bamboo clusters (thin tall stalks)
+  const bambooMat = new THREE.MeshLambertMaterial({ color: 0x7aa83f });
+  for (let i = 0; i < 14; i++) {
+    const cx = (Math.random() - 0.5) * 80, cz = (Math.random() - 0.5) * 80;
+    if (Math.hypot(cx, cz) < 8) continue;
+    for (let s = 0; s < 4; s++) {
+      const bh = 5 + Math.random() * 2;
+      const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.14, bh, 6), bambooMat);
+      stalk.position.set(cx + (Math.random() - 0.5) * 1.4, bh / 2, cz + (Math.random() - 0.5) * 1.4);
+      MAP_GROUPS[m].add(stalk);
+    }
+  }
+  // Ground ferns / undergrowth (low, no collision)
+  const fernMat = new THREE.MeshLambertMaterial({ color: 0x2f6b25 });
+  for (let i = 0; i < 55; i++) {
+    const fern = new THREE.Mesh(new THREE.SphereGeometry(0.6 + Math.random() * 0.5, 6, 4, 0, Math.PI * 2, 0, Math.PI / 2), fernMat);
+    fern.position.set((Math.random() - 0.5) * 92, 0, (Math.random() - 0.5) * 92);
+    fern.scale.set(1, 0.5, 1);
+    MAP_GROUPS[m].add(fern);
+  }
+  MAP_GROUPS[m]._skyColor = 0xa9c08e; // hazy jungle green-grey
 }
 buildForestMap();
 
@@ -4122,6 +4160,149 @@ function buildDreamscapeMap() {
   MAP_GROUPS[m]._skyColor = 0x4a2a6a;
 }
 buildDreamscapeMap();
+
+// ──────────────────────────────────────────────────────────────────────────
+// PEARL HARBOR — WWII naval base: docks, battleships, fuel barrels
+// ──────────────────────────────────────────────────────────────────────────
+registerMap('pearl_harbor');
+function buildPearlHarborMap() {
+  const m = 'pearl_harbor';
+  addMapGround(m, 0x2a5a7a, null); // harbor water
+  addOuterWalls(m, 0x55504a);
+  const plank = 0xa07a4a, deck = 0x8a6a3a, hull = 0x55606a, hullDark = 0x3a444c;
+  // Central wooden pier running across the map
+  addMapBox(m, 0, 0.3, 0, 14, 0.6, 70, plank);
+  // Cross piers
+  addMapBox(m, -22, 0.3, 0, 30, 0.6, 8, plank);
+  addMapBox(m, 22, 0.3, 0, 30, 0.6, 8, plank);
+  // Two moored battleships (long hulls + superstructure + turrets)
+  [[-36, -16], [36, 16]].forEach(([sx, sz], idx) => {
+    addMapBox(m, sx, 1.4, sz, 12, 3.0, 34, hull);           // hull
+    addMapBox(m, sx, 4.0, sz, 6, 3.0, 12, hullDark);        // superstructure
+    addMapBox(m, sx, 6.5, sz - 3, 1.2, 5, 1.2, hullDark);   // mast
+    // Gun turrets
+    [-10, 10].forEach(off => {
+      const turret = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.8, 1.4, 10), new THREE.MeshLambertMaterial({ color: hullDark }));
+      turret.position.set(sx, 3.1, sz + off); MAP_GROUPS[m].add(turret);
+      const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 4, 8), new THREE.MeshLambertMaterial({ color: 0x222222 }));
+      barrel.rotation.z = Math.PI / 2; barrel.position.set(sx + (idx ? -2.5 : 2.5), 3.4, sz + off); MAP_GROUPS[m].add(barrel);
+    });
+  });
+  // Crate stacks for cover
+  [[-8, 20], [8, -20], [-12, -8], [12, 8], [0, 26], [0, -26]].forEach(([x, z]) => {
+    addMapBox(m, x, 1.0, z, 2.4, 2, 2.4, deck);
+  });
+  // Explosive fuel barrels dockside
+  [[-6, 6], [6, -6], [-16, 2], [16, -2], [4, 14], [-4, -14]].forEach(([x, z]) => addExplosiveBarrel(m, x, z, 0xcc4422));
+  MAP_GROUPS[m]._skyColor = 0x9fc4e0;
+}
+buildPearlHarborMap();
+
+// ──────────────────────────────────────────────────────────────────────────
+// TITANIC — ocean-liner deck: hull, smokestacks, lifeboats, iceberg
+// ──────────────────────────────────────────────────────────────────────────
+registerMap('titanic');
+function buildTitanicMap() {
+  const m = 'titanic';
+  addMapGround(m, 0x12243a, null); // night ocean
+  addOuterWalls(m, 0x1a2a3a);
+  const deckMat = 0x8a6a40, railMat = 0xddddcc, hullMat = 0x202830;
+  // Main deck platform (the playable ship)
+  addMapBox(m, 0, 0.4, 0, 30, 0.8, 80, deckMat);
+  // Raised hull sides
+  addMapBox(m, -15.5, 1.6, 0, 1, 2.4, 80, hullMat);
+  addMapBox(m, 15.5, 1.6, 0, 1, 2.4, 80, hullMat);
+  // Deck railings (low cover) along the sides
+  for (let z = -36; z <= 36; z += 8) {
+    addMapBox(m, -14, 1.4, z, 0.4, 1.2, 0.4, railMat);
+    addMapBox(m, 14, 1.4, z, 0.4, 1.2, 0.4, railMat);
+  }
+  // Four iconic smokestacks (black w/ red band)
+  [-21, -7, 7, 21].forEach(zz => {
+    const stack = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.4, 10, 14), new THREE.MeshLambertMaterial({ color: 0x111111 }));
+    stack.position.set(0, 5.4, zz); MAP_GROUPS[m].add(stack);
+    stack.updateMatrixWorld(true); MAP_COLLIDERS[m].push(new THREE.Box3().setFromObject(stack));
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(2.45, 2.45, 1.6, 14), new THREE.MeshLambertMaterial({ color: 0xc8761d }));
+    band.position.set(0, 9.4, zz); MAP_GROUPS[m].add(band);
+  });
+  // Central superstructure / bridge cabins as cover
+  addMapBox(m, -6, 1.8, -10, 5, 2.8, 6, 0xeeeae0);
+  addMapBox(m, 6, 1.8, 10, 5, 2.8, 6, 0xeeeae0);
+  // Lifeboats
+  [[-12, -24], [12, -24], [-12, 24], [12, 24]].forEach(([x, z]) => addMapBox(m, x, 1.6, z, 1.6, 1, 5, 0xb8a070));
+  // Grand stair (stepped boxes) amidships
+  for (let i = 0; i < 4; i++) addMapBox(m, 0, 0.8 + i * 0.5, -2 + i * 1.2, 8 - i * 1.2, 0.5, 1.2, 0xa88040);
+  // Iceberg looming off the bow
+  const berg = new THREE.Mesh(new THREE.IcosahedronGeometry(8, 0), new THREE.MeshLambertMaterial({ color: 0xbfe0ee }));
+  berg.position.set(20, 4, -42); berg.scale.set(1, 1.4, 1); MAP_GROUPS[m].add(berg);
+  MAP_GROUPS[m]._skyColor = 0x0a1430;
+}
+buildTitanicMap();
+
+// ──────────────────────────────────────────────────────────────────────────
+// SUPERMARKET — indoor store: aisles, checkout, freezers, carts
+// ──────────────────────────────────────────────────────────────────────────
+registerMap('supermarket');
+function buildSupermarketMap() {
+  const m = 'supermarket';
+  addMapGround(m, 0xdddddd, 0xbfc7cf); // white tile floor
+  addOuterWalls(m, 0xc8ccd0);
+  const shelf = 0x8899aa, shelfTop = 0xb04a3a, freezer = 0x9fdcff;
+  // Parallel shelving aisles (rows of shelf units)
+  for (let row = -2; row <= 2; row++) {
+    const x = row * 12;
+    for (let z = -28; z <= 28; z += 8) {
+      addMapBox(m, x, 1.1, z, 3, 2.2, 6, shelf);
+      addMapBox(m, x, 2.35, z, 3.2, 0.3, 6.2, shelfTop); // colored top trim
+    }
+  }
+  // Checkout counters near the front
+  for (let i = -2; i <= 2; i++) addMapBox(m, i * 6, 0.6, 38, 4, 1.2, 2, 0x6a5a3a);
+  // Freezer section (translucent cyan) along the back
+  for (let i = -3; i <= 3; i++) addMapBox(m, i * 7, 1.2, -40, 5, 2.4, 2, freezer, 0, 0.55);
+  // Scattered shopping carts (small low cover)
+  [[-18, 10], [18, -10], [-6, -18], [6, 18], [0, 0], [-24, -24], [24, 24]].forEach(([x, z]) => addMapBox(m, x, 0.5, z, 1.4, 1, 2, 0xcccccc));
+  MAP_GROUPS[m]._skyColor = 0xeef2f6;
+}
+buildSupermarketMap();
+
+// ──────────────────────────────────────────────────────────────────────────
+// PYONGYANG — grand socialist plaza: monument tower, statues, arch, flags
+// ──────────────────────────────────────────────────────────────────────────
+registerMap('pyongyang');
+function buildPyongyangMap() {
+  const m = 'pyongyang';
+  addMapGround(m, 0x9a9a92, 0x7a7a72); // grey granite plaza
+  addOuterWalls(m, 0x6a6a62);
+  const stone = 0x8a8a82, stoneDark = 0x6a6a62, bronze = 0x7a6a3a, red = 0xb01a1a;
+  // Central Juche-style monument tower (tapered) with a red flame on top
+  const tower = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 3.0, 22, 6), new THREE.MeshLambertMaterial({ color: stone }));
+  tower.position.set(0, 11, 0); MAP_GROUPS[m].add(tower);
+  tower.updateMatrixWorld(true); MAP_COLLIDERS[m].push(new THREE.Box3().setFromObject(tower));
+  const flame = new THREE.Mesh(new THREE.ConeGeometry(1.6, 4, 8), new THREE.MeshBasicMaterial({ color: 0xff3322 }));
+  flame.position.set(0, 24, 0); MAP_GROUPS[m].add(flame);
+  // Two monument statues on pedestals
+  [[-26, 0], [26, 0]].forEach(([x, z]) => {
+    addMapBox(m, x, 1.0, z, 5, 2, 5, stoneDark);              // pedestal
+    addMapBox(m, x, 4.0, z, 2, 4, 1.4, bronze);               // figure
+  });
+  // Triumphal arch on the north edge (two pillars + lintel)
+  addMapBox(m, -5, 4, -34, 2.5, 8, 2.5, stone);
+  addMapBox(m, 5, 4, -34, 2.5, 8, 2.5, stone);
+  addMapBox(m, 0, 8.5, -34, 13, 2, 2.5, stone);
+  // Apartment-block facades around the edges (tall cover)
+  [[-38, -20], [-38, 20], [38, -20], [38, 20], [-20, 38], [20, 38]].forEach(([x, z]) => addMapBox(m, x, 6, z, 8, 12, 6, stoneDark));
+  // Red flag poles flanking the plaza
+  [[-12, -12], [12, -12], [-12, 12], [12, 12]].forEach(([x, z]) => {
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 9, 6), new THREE.MeshLambertMaterial({ color: 0xcccccc }));
+    pole.position.set(x, 4.5, z); MAP_GROUPS[m].add(pole);
+    addMapBox(m, x + 1.4, 8, z, 2.6, 1.6, 0.1, red);
+  });
+  // Low planter cover dotted around
+  [[-8, 24], [8, -24], [-24, 8], [24, -8]].forEach(([x, z]) => addMapBox(m, x, 0.6, z, 4, 1.2, 4, stoneDark));
+  MAP_GROUPS[m]._skyColor = 0x9fb6cc;
+}
+buildPyongyangMap();
 
 // ──────────────────────────────────────────────────────────────────────────
 // 17. KING OF THE HILL / BR ARENA — massive map with vehicles + helicopters
@@ -13482,7 +13663,7 @@ function spawnGameBots() {
     // King of the Hill: always use the giant BR arena
     activateMap('br_arena');
   } else if (selectedModeConfig.type !== 'dday' && selectedModeConfig.type !== 'range') {
-    const pool = ['blank','urban','warehouse','forest','volcano','cyber','desert','tundra','space','airport','trenches','chernobyl','refinery','skydock','sewer','gravity_lab','glassworks','carrier','overgrowth','orbital_station','foundry','carnival','biosphere','lockdown','studio','temple','holiday','labyrinth','arena','opera','doomsday','train','dreamscape'];
+    const pool = ['blank','urban','warehouse','forest','volcano','cyber','desert','tundra','space','airport','trenches','chernobyl','refinery','skydock','sewer','gravity_lab','glassworks','carrier','overgrowth','orbital_station','foundry','carnival','biosphere','lockdown','studio','temple','holiday','labyrinth','arena','opera','doomsday','train','dreamscape','pearl_harbor','titanic','supermarket','pyongyang'];
     const chosen = (selectedMap === 'auto' || !MAP_GROUPS[selectedMap]) ? pool[Math.floor(Math.random()*pool.length)] : selectedMap;
     activateMap(chosen);
     // Update sky color if the map specifies one
