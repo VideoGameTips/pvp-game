@@ -2527,6 +2527,26 @@ function isPlayerGrounded() {
   return camera.position.y <= getGroundEyeY() + 0.04 && (!slamState || slamState.vel <= 0);
 }
 
+// 🧗 Returns a wall collider the player is currently pressed up against and
+// could climb (tall enough above the feet, within reach), or null. Used by the
+// wall-climb movement: jump into a wall and you can scramble up it.
+function nearClimbableWall() {
+  const px = camera.position.x, pz = camera.position.z;
+  const feetY = camera.position.y - PLAYER_EYE_HEIGHT;
+  const R = PLAYER_RADIUS;
+  const margin = 0.28; // contact band — how close counts as "touching" the face
+  for (const box of wallColliders) {
+    if (box.max.y <= feetY + 0.45) continue;   // nothing left above us to climb
+    if (box.min.y > feetY + 1.4) continue;     // wall starts above our reach
+    // Closest point on the box footprint (XZ) to the player
+    const cx = Math.max(box.min.x, Math.min(px, box.max.x));
+    const cz = Math.max(box.min.z, Math.min(pz, box.max.z));
+    const dx = px - cx, dz = pz - cz;
+    if (dx * dx + dz * dz <= (R + margin) * (R + margin)) return box;
+  }
+  return null;
+}
+
 function resolveWallCollisions() {
   const RADIUS = PLAYER_RADIUS; // player footprint radius
   let px = camera.position.x;
@@ -7821,19 +7841,49 @@ function updateMovement(dt) {
                    : activeSlot === 'support'   ? SUPPORT_ITEMS[selectedSupportIdx]
                    : null;
     const grantsDouble = !!(equipped && equipped.doubleJump);
-    if (isGrounded) window._airJumpsLeft = grantsDouble ? 1 : 0;
+    if (isGrounded) {
+      window._airJumpsLeft = grantsDouble ? 1 : 0;
+      window._climbArmed = false;   // wall-climb only after an actual jump
+      window._climbBudget = 1.4;    // refill ~1.4s of climb stamina on landing
+      window._climbing = false;
+    }
     if (spaceEdge && isGrounded) {
       playerYVel = 9;
+      window._climbArmed = true;    // a real jump arms the wall-climb
       window._mobileJump = false;
     } else if (spaceEdge && !isGrounded && grantsDouble && (window._airJumpsLeft || 0) > 0) {
       // ✨ Double jump in mid-air — reset velocity to full jump, brief sparkle FX
       playerYVel = 9;
       window._airJumpsLeft = 0;
+      window._climbArmed = true;    // an air jump re-arms the climb too
       window._mobileJump = false;
       spawnAbilityAOEFX(camera.position.clone().setY(0.3), 1.2, 0xaaccff);
     }
+    // 🧗 Wall-climb — airborne, you jumped (armed), you're pressing into a tall
+    // wall, and you still have climb stamina. Negates gravity and scrambles up.
+    let climbing = false;
+    if (!isGrounded && window._climbArmed && (window._climbBudget || 0) > 0 && dir.lengthSq() > 0.01) {
+      const wall = nearClimbableWall();
+      // Must be pushing roughly INTO the wall, not along/away from it
+      const cx = Math.max(wall ? wall.min.x : 0, Math.min(camera.position.x, wall ? wall.max.x : 0));
+      const cz = Math.max(wall ? wall.min.z : 0, Math.min(camera.position.z, wall ? wall.max.z : 0));
+      const intoWall = wall && (dir.x * (cx - camera.position.x) + dir.z * (cz - camera.position.z)) > -0.05;
+      if (wall && intoWall) {
+        climbing = true;
+        window._climbing = true;
+        window._climbBudget -= dt;
+        playerYVel = 5.4;           // steady upward scramble
+        window._climbFxT = (window._climbFxT || 0) + dt;
+        if (window._climbFxT > 0.16) {
+          window._climbFxT = 0;
+          spawnHitParticle(camera.position.clone().setY(camera.position.y - 1.2));
+          playSoundEvent('footstep', { volume: 0.32, pitch: 1.5, minGap: 100 });
+        }
+      }
+    }
+    if (!climbing) window._climbing = false;
     if (!isGrounded) {
-      playerYVel -= 28 * dt; // gravity
+      if (!climbing) playerYVel -= 28 * dt; // gravity (suspended while climbing)
       camera.position.y += playerYVel * dt;
       if (camera.position.y <= groundEyeY) {
         camera.position.y = groundEyeY;
