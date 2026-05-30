@@ -544,17 +544,53 @@ const TEAM_SIZES   = { '1v1': 1, '2v2': 2, '3v3': 3 };
 // ── 🏛️ MATCH STAGING LOBBIES — players gather, ready up, then start ─────
 // One lobby per mode. Players auto-assigned to balance teams.
 // lobbies[mode] = { players: [{socketId, team, ready, fillBots}], createdAt }
+// stagingLobbies[mode] is now an ARRAY of independent lobby instances, each
+// capped at the mode's total player count. This fixes the "3v3 becomes 6v6"
+// bug: extra players spill into a NEW lobby instance instead of piling into one.
 const stagingLobbies = {};
-function getOrCreateLobby(mode) {
-  if (!stagingLobbies[mode]) stagingLobbies[mode] = { players: [], mode, createdAt: Date.now() };
-  return stagingLobbies[mode];
+let _lobbySeq = 0;
+function lobbyMax(mode) {
+  const c = MODE_TEAM_SIZES[mode] || { ally: 1, enemy: 1 };
+  return c.ally + c.enemy; // e.g. 3v3 -> 6 humans max in one match
 }
-function broadcastLobbyState(mode) {
-  const L = stagingLobbies[mode];
+// First lobby instance of this mode with a free seat, or a fresh one.
+function getOpenLobby(mode) {
+  if (!stagingLobbies[mode]) stagingLobbies[mode] = [];
+  const max = lobbyMax(mode);
+  let L = stagingLobbies[mode].find(l => l.players.length < max);
+  if (!L) {
+    L = { id: `${mode}-${++_lobbySeq}`, players: [], mode, createdAt: Date.now() };
+    stagingLobbies[mode].push(L);
+  }
+  return L;
+}
+function allLobbies() {
+  const out = [];
+  for (const m of Object.keys(stagingLobbies)) for (const L of stagingLobbies[m]) out.push(L);
+  return out;
+}
+function findLobbyOfSocket(socketId) {
+  return allLobbies().find(L => L.players.some(p => p.socketId === socketId)) || null;
+}
+// Remove a socket from every lobby instance, prune empties. Returns a lobby
+// that changed (so the caller can re-broadcast its state), or null.
+function removeSocketFromLobbies(socketId) {
+  let changed = null;
+  for (const m of Object.keys(stagingLobbies)) {
+    for (const L of stagingLobbies[m]) {
+      const before = L.players.length;
+      L.players = L.players.filter(p => p.socketId !== socketId);
+      if (L.players.length !== before) changed = L;
+    }
+    stagingLobbies[m] = stagingLobbies[m].filter(L => L.players.length > 0);
+  }
+  return changed;
+}
+function broadcastLobbyState(L) {
   if (!L) return;
-  // Send full lobby state to each player in it
+  // Send full lobby state to each player in this specific lobby instance
   const state = {
-    mode,
+    mode: L.mode,
     players: L.players.map(p => ({
       socketId: p.socketId,
       name: players[p.socketId]?.name || '?',
@@ -565,16 +601,21 @@ function broadcastLobbyState(mode) {
   };
   for (const p of L.players) io.to(p.socketId).emit('lobbyState', state);
 }
-function autoAssignTeam(mode) {
-  // Assign to whichever team has fewer
-  const L = getOrCreateLobby(mode);
+// Assign to whichever team still has room (balanced). Never overfills a team.
+function autoAssignTeam(L, mode) {
+  const cfg = MODE_TEAM_SIZES[mode] || { ally: 1, enemy: 1 };
   const allies = L.players.filter(p => p.team === 'ally').length;
   const enemies = L.players.filter(p => p.team === 'enemy').length;
-  return allies <= enemies ? 'ally' : 'enemy';
+  const allyRoom = allies < cfg.ally, enemyRoom = enemies < cfg.enemy;
+  if (allyRoom && (!enemyRoom || allies <= enemies)) return 'ally';
+  if (enemyRoom) return 'enemy';
+  return allies <= enemies ? 'ally' : 'enemy'; // both full (shouldn't happen): balance
 }
-function checkLobbyStart(mode) {
-  const L = stagingLobbies[mode];
+function checkLobbyStart(L) {
   if (!L || L.players.length === 0) return;
+  const mode = L.mode;
+  // Hard cap: never start a match with more humans than the mode allows.
+  if (L.players.length > lobbyMax(mode)) L.players = L.players.slice(0, lobbyMax(mode));
   const allReady = L.players.every(p => p.ready);
   if (!allReady) return;
   // Everyone is ready — start the match
@@ -605,8 +646,8 @@ function checkLobbyStart(mode) {
       allyBots, enemyBots, opponents: L.players.filter(o => o.socketId !== p.socketId).map(o => ({ socketId: o.socketId, team: o.team })),
     });
   }
-  // Clear the lobby
-  stagingLobbies[mode] = { players: [], mode, createdAt: Date.now() };
+  // Remove this lobby instance now that it has launched
+  stagingLobbies[mode] = (stagingLobbies[mode] || []).filter(x => x !== L);
 }
 // Team sizes per mode (used to determine how many bots to fill)
 const MODE_TEAM_SIZES = {
@@ -987,45 +1028,42 @@ io.on('connection', (socket) => {
     const mode = String(data?.mode || '');
     if (!MODE_TEAM_SIZES[mode]) { socket.emit('lobbyError', { error: 'unknown mode' }); return; }
     // Remove from any other staging lobby first
-    for (const m of Object.keys(stagingLobbies)) {
-      stagingLobbies[m].players = stagingLobbies[m].players.filter(p => p.socketId !== socket.id);
-    }
-    const L = getOrCreateLobby(mode);
+    removeSocketFromLobbies(socket.id);
+    const L = getOpenLobby(mode);
     // Already in this lobby?
     if (L.players.some(p => p.socketId === socket.id)) return;
-    const team = autoAssignTeam(mode);
+    const team = autoAssignTeam(L, mode);
     L.players.push({ socketId: socket.id, team, ready: false, fillBots: true });
-    broadcastLobbyState(mode);
+    broadcastLobbyState(L);
   });
   socket.on('leaveStagingLobby', () => {
-    for (const m of Object.keys(stagingLobbies)) {
-      const before = stagingLobbies[m].players.length;
-      stagingLobbies[m].players = stagingLobbies[m].players.filter(p => p.socketId !== socket.id);
-      if (stagingLobbies[m].players.length !== before) broadcastLobbyState(m);
-    }
+    const L = removeSocketFromLobbies(socket.id);
+    if (L) broadcastLobbyState(L);
   });
   socket.on('setLobbyReady', (data) => {
     const ready = !!data?.ready;
     const fillBots = data?.fillBots !== false; // default true
-    for (const m of Object.keys(stagingLobbies)) {
-      const p = stagingLobbies[m].players.find(x => x.socketId === socket.id);
-      if (p) {
-        p.ready = ready;
-        p.fillBots = fillBots;
-        broadcastLobbyState(m);
-        checkLobbyStart(m);
-        return;
-      }
-    }
+    const L = findLobbyOfSocket(socket.id);
+    if (!L) return;
+    const p = L.players.find(x => x.socketId === socket.id);
+    if (!p) return;
+    p.ready = ready;
+    p.fillBots = fillBots;
+    broadcastLobbyState(L);
+    checkLobbyStart(L);
   });
   socket.on('switchLobbyTeam', () => {
-    for (const m of Object.keys(stagingLobbies)) {
-      const p = stagingLobbies[m].players.find(x => x.socketId === socket.id);
-      if (p) {
-        p.team = p.team === 'ally' ? 'enemy' : 'ally';
-        broadcastLobbyState(m);
-        return;
-      }
+    const L = findLobbyOfSocket(socket.id);
+    if (!L) return;
+    const p = L.players.find(x => x.socketId === socket.id);
+    if (!p) return;
+    const cfg = MODE_TEAM_SIZES[L.mode] || { ally: 1, enemy: 1 };
+    const target = p.team === 'ally' ? 'enemy' : 'ally';
+    // Respect the team cap — don't allow stacking beyond the mode size
+    const targetCount = L.players.filter(x => x !== p && x.team === target).length;
+    if (targetCount < (target === 'ally' ? cfg.ally : cfg.enemy)) {
+      p.team = target;
+      broadcastLobbyState(L);
     }
   });
 
@@ -1122,11 +1160,8 @@ io.on('connection', (socket) => {
       }
     }
     // Clean up any staging lobby memberships
-    for (const m of Object.keys(stagingLobbies)) {
-      const before = stagingLobbies[m].players.length;
-      stagingLobbies[m].players = stagingLobbies[m].players.filter(p => p.socketId !== socket.id);
-      if (stagingLobbies[m].players.length !== before) broadcastLobbyState(m);
-    }
+    const _leftLobby = removeSocketFromLobbies(socket.id);
+    if (_leftLobby) broadcastLobbyState(_leftLobby);
     delete players[socket.id];
     emitToMatch(leavingMatch, 'playerLeft', socket.id);
     // Remove bots owned by this client
