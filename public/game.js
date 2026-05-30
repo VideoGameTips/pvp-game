@@ -960,6 +960,8 @@ const SUPPORT_ITEMS = [
   { id: 'specter_drone',  name: 'Specter Drone',  type: 'Stealth Drone', uses: 1, damage: 160, cooldown: 1800, droneDur: 14000, droneRange: 32 },
   { id: 'quantum_barrier',name: 'Quantum Barrier',type: 'Shield',       uses: 1, healPerSec: 12, shieldDur: 9000, cooldown: 2000 },
 
+  // 🍔🇺🇸 Tasty heal
+  { id: 'hamburger',      name: 'All-American Burger', type: 'Heal · Tasty', uses: 2, heal: 75, cooldown: 1300 },
 
   { id: 'c4', name: 'C4 Charge', type: 'Admin · Explosive', uses: 2, damage: 200, cooldown: 1200, bulletSpeed: 40, bulletColor: 0x664433, bulletSize: 0.11, c4Detonate: true, adminItem: true },
   { id: 'claymore', name: 'Claymore Mine', type: 'Admin · Directional Mine', uses: 2, damage: 250, cooldown: 1100, claymoreRadius: 4, claymoreArc: 1.2, adminItem: true },
@@ -1118,6 +1120,8 @@ const WEAPON_COSTS = {
   // 🌌 Sci-fi P2W utilities
   nano_swarm: 20000, warp_beacon: 25000, stasis_mine: 18000,
   specter_drone: 30000, quantum_barrier: 21000,
+  // 🍔 Tasty heal
+  hamburger: 300,
 };
 const FREE_WEAPONS = new Set([
   'ak20','sg8','pistol','flare','fists','frying_pan','frag','medkit',
@@ -6109,6 +6113,41 @@ function buildMedkit() {
   g.position.set(0.10, -0.12, -0.20); return g;
 }
 
+// 🍔 Stacked cheeseburger — bun, patty, cheese, lettuce, sesame seeds.
+function buildHamburger() {
+  const g = new THREE.Group();
+  const bunMat     = new THREE.MeshLambertMaterial({ color: 0xd9a35b }); // toasted bun
+  const pattyMat   = new THREE.MeshLambertMaterial({ color: 0x5a3220 }); // beef
+  const cheeseMat  = new THREE.MeshBasicMaterial({ color: 0xffc02e });   // cheese
+  const lettuceMat = new THREE.MeshLambertMaterial({ color: 0x4caf50 }); // lettuce
+  const R = 0.075;
+  // Bottom bun
+  const bot = new THREE.Mesh(new THREE.CylinderGeometry(R, R * 0.9, 0.030, 16), bunMat);
+  bot.position.y = -0.045; g.add(bot);
+  // Patty
+  const patty = new THREE.Mesh(new THREE.CylinderGeometry(R * 1.02, R * 1.02, 0.026, 16), pattyMat);
+  patty.position.y = -0.018; g.add(patty);
+  // Cheese — thin wider square so the corners droop past the patty
+  const cheese = new THREE.Mesh(new THREE.BoxGeometry(R * 2.0, 0.008, R * 2.0), cheeseMat);
+  cheese.position.y = -0.002; cheese.rotation.y = Math.PI / 4; g.add(cheese);
+  // Lettuce — wider green disc
+  const lettuce = new THREE.Mesh(new THREE.CylinderGeometry(R * 1.12, R * 1.12, 0.012, 16), lettuceMat);
+  lettuce.position.y = 0.008; g.add(lettuce);
+  // Top bun (dome)
+  const top = new THREE.Mesh(new THREE.SphereGeometry(R, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2), bunMat);
+  top.position.y = 0.016; top.scale.y = 0.85; g.add(top);
+  // Sesame seeds
+  const seedMat = new THREE.MeshBasicMaterial({ color: 0xfff2cc });
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2;
+    const seed = new THREE.Mesh(new THREE.SphereGeometry(0.006, 6, 6), seedMat);
+    seed.position.set(Math.cos(a) * R * 0.45, 0.045, Math.sin(a) * R * 0.45);
+    seed.scale.set(1, 0.5, 1.6); g.add(seed);
+  }
+  g.scale.set(0.85, 0.85, 0.85);
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+
 function buildStimShot() {
   const g = new THREE.Group();
   const clearMat = new THREE.MeshLambertMaterial({ color: 0xaaddff, transparent: true, opacity: 0.8 });
@@ -6484,6 +6523,8 @@ const supportModels = [buildFragGrenade(), buildMedkit(), buildStimShot(), build
   buildSimpleSupport(0x66ccff, 'disc'),     // stasis_mine
   buildSimpleSupport(0x444466, 'cube'),     // specter_drone
   buildSimpleSupport(0xaaccff, 'sphere'),   // quantum_barrier
+  // 🍔 Tasty heal
+  buildHamburger(),                          // hamburger
   // 🪖 ADMIN supports
   buildC4(), buildClaymore(), buildStunGrenade(), buildThermite(),
   buildPredatorUAV(), buildCarePackage(), buildTacNuke()];
@@ -8796,7 +8837,7 @@ const THROWABLE_SUPPORT_IDS = new Set(['frag','smoke','confetti_cannon','moon_mi
 
 // Map every utility ID to the right sound event name (or null if it has its own already)
 const SUPPORT_SOUND = {
-  medkit: 'heal', stim: 'heal', healing_pulse: 'heal', nano_swarm: 'heal', vampire_syringe: 'inject',
+  medkit: 'heal', stim: 'heal', healing_pulse: 'heal', nano_swarm: 'heal', hamburger: 'heal', vampire_syringe: 'inject',
   adrenaline: 'inject', berserker_serum: 'inject', cloak: 'inject',
   smoke: 'smoke_hiss', ink_bomb: 'smoke_hiss', siren: 'siren_loop',
   bounce_pad: 'bounce', rubber_duck: 'quack',
