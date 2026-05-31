@@ -7617,13 +7617,23 @@ function saveKillReplay(victimId, weaponId) {
       [id, { x: rd(e.x), y: rd(e.y), z: rd(e.z), rotY: rd(e.rotY||0), rotX: rd(e.rotX||0) }])),
   }));
   const victimName = players[victimId]?.name || 'Enemy';
-  const wname = WEAPONS.find(w => w.id === weaponId)?.name
-             || MELEE_ITEMS.find(m => m.id === weaponId)?.name
-             || SUPPORT_ITEMS.find(s => s.id === weaponId)?.name || (weaponId || 'weapon');
+  const melee = MELEE_ITEMS.find(m => m.id === weaponId);
+  const wpn = WEAPONS.find(w => w.id === weaponId);
+  const sup = SUPPORT_ITEMS.find(s => s.id === weaponId);
+  const wname = wpn?.name || melee?.name || sup?.name || (weaponId || 'weapon');
+  // 🏷️ Classify the kill so the Kill Log can flex distinctive bragging graphics.
+  const typeStr = ((wpn?.type || sup?.type || '') + '').toLowerCase();
+  const idStr = (weaponId || '').toLowerCase();
+  let kind = 'gun';
+  if (melee) kind = 'melee';
+  else if (/explos|launcher|mortar|firework|grenade|rocket|bomb|nuke|missile|boombow|cannon|artillery/.test(typeStr + ' ' + idStr)) kind = 'explosive';
+  // Slide-kill = the player was mid-slide when the kill landed. Pure swagger.
+  const slide = !!(window._slideUntil && Date.now() < window._slideUntil);
   // Simple "score" heuristic: # of frames where target was alive (longer chase = higher)
   const score = frames.length;
   killLog.unshift({ ts: Date.now(), victim: victimName, weapon: wname, mapId: activeMapName,
-                    frames, killerId: myId, victimId, favorite: false, pinned: false, score });
+                    frames, killerId: myId, victimId, favorite: false, pinned: false, score,
+                    kind, slide });
   autoCleanupKillLog();
   saveKillLogToDisk();
 }
@@ -16416,6 +16426,32 @@ if (_skinsBtn) {
 }
 
 // 📹 Kill Log list — pick a saved kill to watch in the 6-cam theater
+// 🏆 Bragging-rights graphics for the Kill Log. A big icon tile on the left of
+// each row keyed to HOW the kill happened (knife / explosion / slide / gun),
+// plus inline emoji badges in the title line.
+function klKillGraphic(k) {
+  const map = {
+    melee:     { icon: '🔪', bg: 'linear-gradient(135deg,#3a1010,#7a1c1c)', ring: '#ff5555' },
+    explosive: { icon: '💥', bg: 'linear-gradient(135deg,#3a2400,#a85a00)', ring: '#ffaa33' },
+    gun:       { icon: '🔫', bg: 'linear-gradient(135deg,#10202a,#1c4a5a)', ring: '#55ccff' },
+  };
+  // Slide overrides the base art — a slide kill is the flashiest flex.
+  const base = k.slide
+    ? { icon: '🛹', bg: 'linear-gradient(135deg,#102a18,#1c7a44)', ring: '#44ff99' }
+    : (map[k.kind] || map.gun);
+  // If sliding AND knife/explosive, stack the secondary glyph in the corner.
+  const corner = k.slide && k.kind && k.kind !== 'gun'
+    ? `<span style="position:absolute;right:-3px;bottom:-3px;font-size:13px;filter:drop-shadow(0 0 2px #000);">${map[k.kind].icon}</span>`
+    : '';
+  return `<div style="position:relative;width:38px;height:38px;flex:0 0 38px;display:flex;align-items:center;justify-content:center;font-size:20px;border-radius:6px;background:${base.bg};border:1px solid ${base.ring};box-shadow:0 0 6px ${base.ring}55;">${base.icon}${corner}</div>`;
+}
+function klKillBadges(k) {
+  let s = '';
+  if (k.slide)            s += ' <span title="Slide kill" style="color:#44ff99;">🛹</span>';
+  if (k.kind === 'melee') s += ' <span title="Blade kill" style="color:#ff7777;">⚔️</span>';
+  if (k.kind === 'explosive') s += ' <span title="Explosive kill" style="color:#ffaa44;">🔥</span>';
+  return s;
+}
 function openKillLogList() {
   let panel = document.getElementById('kill-log-panel');
   if (!panel) {
@@ -16435,8 +16471,9 @@ function openKillLogList() {
       ? '<div style="color:#777;font-style:italic;padding:14px 0;text-align:center;">No kills recorded yet — go get some!</div>'
       : killLog.map((k, i) => `
         <div style="display:flex;align-items:center;gap:6px;background:#0f0a04;border:1px solid #553;border-left:3px solid ${k.pinned ? '#ffdd44' : k.favorite ? '#ff66aa' : '#ff8844'};border-radius:4px;padding:8px 10px;margin-bottom:6px;">
+          ${klKillGraphic(k)}
           <div class="kl-watch" data-idx="${i}" style="flex:1;cursor:pointer;">
-            <div style="font-size:12px;color:#ffcc88;">${k.pinned ? '📌 ' : ''}${k.favorite ? '⭐ ' : ''}💀 ${k.victim}</div>
+            <div style="font-size:12px;color:#ffcc88;">${k.pinned ? '📌 ' : ''}${k.favorite ? '⭐ ' : ''}💀 ${k.victim}${klKillBadges(k)}</div>
             <div style="font-size:10px;color:#aaa;margin-top:2px;">${k.weapon} · ${new Date(k.ts).toLocaleTimeString()}</div>
           </div>
           <button class="kl-fav"  data-idx="${i}" title="Favorite" style="background:${k.favorite?'#5a2a44':'#1a1a1a'};color:#ff66aa;border:1px solid #aa4477;padding:4px 7px;cursor:pointer;border-radius:3px;font-size:12px;">⭐</button>
