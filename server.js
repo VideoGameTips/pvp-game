@@ -78,7 +78,7 @@ const WEAPON_COSTS = {
   nebula_mortar: 35000, prism_engine: 27000, void_harvester: 40000,
   // Secondaries
   revolver: 150, flare: 80, pistol: 60, shorty: 180, cycler: 140,
-  hand_cannon: 260, throwing_knives: 120, taser: 200,
+  hand_cannon: 260, throwing_knives: 120, taser: 200, traffic_cone: 160, cream_pie: 140,
   machine_pistol: 220, sawed_off: 260, machine_revolver: 240, pocket_rocket: 320,
   dart_gun: 160, laser_pointer: 120, coin_gun: 180, emp_pistol: 240,
   auto_revolver: 220, frost_blaster: 240,
@@ -637,7 +637,7 @@ function checkLobbyStart(L) {
                     'sewer','gravity_lab','glassworks','carrier','overgrowth','orbital_station',
                     'foundry','carnival','biosphere','lockdown','studio','temple','holiday',
                     'labyrinth','arena','opera','doomsday','train','dreamscape',
-                    'pearl_harbor','titanic','supermarket','pyongyang'];
+                    'pearl_harbor','titanic','supermarket','pyongyang','traffic_cone_republic','flying_moai'];
   const mapId = MAP_POOL[Math.floor(Math.random() * MAP_POOL.length)];
   // Designate the first player as host (they spawn the bots if any)
   const host = L.players[0];
@@ -668,6 +668,7 @@ const MODE_TEAM_SIZES = {
   'infection':   { ally: 1, enemy: 5 },
   'sniper_only': { ally: 1, enemy: 5 },
   'speedrun':    { ally: 1, enemy: 20 },
+  'piefight':    { ally: 1, enemy: 7 },
 };
 
 function flushPvpSolo(socketId) {
@@ -706,7 +707,7 @@ function tryPairPvpQueue(mode) {
                     'sewer','gravity_lab','glassworks','carrier','overgrowth','orbital_station',
                     'foundry','carnival','biosphere','lockdown','studio','temple','holiday',
                     'labyrinth','arena','opera','doomsday','train','dreamscape',
-                    'pearl_harbor','titanic','supermarket','pyongyang'];
+                    'pearl_harbor','titanic','supermarket','pyongyang','traffic_cone_republic','flying_moai'];
   const mapId = MAP_POOL[Math.floor(Math.random() * MAP_POOL.length)];
   io.to(a.socketId).emit('pvpResult', {
     mode, paired: true, team: teamA, mapId,

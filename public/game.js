@@ -797,6 +797,21 @@ const WEAPONS = [
     ddayOnly: true,
     ability: null,
   },
+  // ── 🚧 / 🥧 Chuckable nonsense secondaries (must stay LAST — mirrored in weaponModels) ──
+  {
+    id: 'traffic_cone', name: 'Traffic Cone', type: 'Thrown', slot: 'secondary',
+    mag: 4, reserve: 16, damage: 38, fireRate: 320, reloadTime: 1400,
+    auto: false, pellets: 1, spread: 0.010, adsZoom: 50, bulletSpeed: 62, noReload: false,
+    bulletColor: 0xff6a00, bulletSize: 0.12,
+    ability: { name: 'Cone Barrage', cd: 10000, desc: 'Hurl 4 cones in a spread', type: 'multishot', count: 4, spread: 0.12 },
+  },
+  {
+    id: 'cream_pie', name: 'Cream Pie', type: 'Thrown', slot: 'secondary',
+    mag: 5, reserve: 20, damage: 34, fireRate: 280, reloadTime: 1200,
+    auto: false, pellets: 1, spread: 0.012, adsZoom: 50, bulletSpeed: 56, noReload: false,
+    bulletColor: 0xfff4d8, bulletSize: 0.13,
+    ability: { name: 'Pie Platter', cd: 8000, desc: 'Fling 5 pies at once', type: 'multishot', count: 5, spread: 0.14 },
+  },
 ];
 
 const MELEE_ITEMS = [
@@ -1039,6 +1054,7 @@ const GAME_MODE_CONFIGS = {
   'infection':  { type: 'arcade', subtype: 'infect',   allies: 0, enemies: 5, timeLimit: 180, arcade: true },
   'sniper_only':{ type: 'arcade', subtype: 'sniper',   allies: 0, enemies: 5, timeLimit: 240, arcade: true },
   'speedrun':   { type: 'arcade', subtype: 'speedrun', allies: 0, enemies: 20,timeLimit: 0,   arcade: true }, // solo
+  'piefight':   { type: 'arcade', subtype: 'piefight', allies: 0, enemies: 7, timeLimit: 240, arcade: true }, // 🥧 everyone throws pies
 };
 let selectedModeConfig = null;
 const gameBots = [];       // {id, team, weaponId, x, z, rotY, hp, dead, state, wanderAngle, wanderTimer, lastShot, lastBotMove}
@@ -1083,7 +1099,7 @@ const WEAPON_COSTS = {
   nebula_mortar: 35000, prism_engine: 27000, void_harvester: 40000,
   // Secondaries
   revolver: 150, flare: 80, pistol: 60, shorty: 180, cycler: 140,
-  hand_cannon: 260, throwing_knives: 120, taser: 200,
+  hand_cannon: 260, throwing_knives: 120, taser: 200, traffic_cone: 160, cream_pie: 140,
   machine_pistol: 220, sawed_off: 260, machine_revolver: 240, pocket_rocket: 320,
   dart_gun: 160, laser_pointer: 120, coin_gun: 180, emp_pistol: 240,
   auto_revolver: 220, frost_blaster: 240,
@@ -4305,6 +4321,109 @@ function buildPyongyangMap() {
 buildPyongyangMap();
 
 // ──────────────────────────────────────────────────────────────────────────
+// 🚧 TRAFFIC CONE REPUBLIC — King Chaos's roadwork-themed nation. Cones galore,
+// jersey barriers, a throne of cones in the middle. Long live the orange.
+// ──────────────────────────────────────────────────────────────────────────
+registerMap('traffic_cone_republic');
+function buildTrafficConeMap() {
+  const m = 'traffic_cone_republic';
+  addMapGround(m, 0x33373d, 0x55595f); // asphalt
+  addOuterWalls(m, 0x2a2d33);
+  const orange = 0xff6a00, white = 0xf0f0f0, barrier = 0xd8d4c8;
+  // Helper: a solid traffic cone (collidable) at x,z, scaled by s
+  function placeCone(x, z, s = 1, collide = true) {
+    const grp = new THREE.Group();
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(0.55 * s, 1.7 * s, 16),
+      new THREE.MeshLambertMaterial({ color: orange }));
+    cone.position.y = 0.85 * s; grp.add(cone);
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.42 * s, 0.5 * s, 0.28 * s, 16),
+      new THREE.MeshLambertMaterial({ color: white }));
+    band.position.y = 0.75 * s; grp.add(band);
+    const base = new THREE.Mesh(new THREE.BoxGeometry(1.3 * s, 0.16 * s, 1.3 * s),
+      new THREE.MeshLambertMaterial({ color: orange }));
+    base.position.y = 0.08 * s; grp.add(base);
+    grp.position.set(x, 0, z); MAP_GROUPS[m].add(grp);
+    if (collide) { grp.updateMatrixWorld(true); MAP_COLLIDERS[m].push(new THREE.Box3().setFromObject(grp)); }
+  }
+  // Lane stripes (dashed white painted boxes, no collision) running down the map
+  for (let z = -38; z <= 38; z += 6) addMapBox(m, 0, 0.03, z, 0.5, 0.02, 3, white, 0, 0.9);
+  // Jersey barriers forming staggered lanes of cover
+  const barrierRows = [[-20, -22], [20, -22], [-10, 0], [10, 0], [-20, 22], [20, 22], [0, -32], [0, 32]];
+  barrierRows.forEach(([x, z]) => addMapBox(m, x, 0.8, z, 6, 1.6, 1.2, barrier));
+  // A grid of giant traffic cones (cover + flavor)
+  const coneSpots = [[-30, -30], [-15, -34], [0, -20], [16, -32], [30, -28],
+                     [-34, -8], [-12, -10], [12, -8], [34, -10],
+                     [-28, 12], [-8, 16], [10, 14], [28, 12],
+                     [-30, 32], [-14, 34], [16, 30], [32, 34]];
+  coneSpots.forEach(([x, z]) => placeCone(x, z, 1 + Math.random() * 0.6));
+  // 👑 King Chaos's THRONE OF CONES at center: a stacked cone pyramid on a dais
+  addMapBox(m, 0, 0.5, 0, 8, 1, 8, 0x222222);            // black dais
+  placeCone(0, 0, 2.4);                                   // giant central cone
+  [[-2, -2], [2, -2], [-2, 2], [2, 2]].forEach(([x, z]) => placeCone(x, z, 1.2));
+  // A golden crown sign floating over the throne
+  const crown = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 2.0, 1.0, 8),
+    new THREE.MeshBasicMaterial({ color: 0xffcc22 }));
+  crown.position.set(0, 6.5, 0); MAP_GROUPS[m].add(crown);
+  // Construction "barrels" (reuse explosive barrels for chaos) in the corners
+  addExplosiveBarrel(m, -36, -36, 0xff6a00);
+  addExplosiveBarrel(m, 36, -36, 0xff6a00);
+  addExplosiveBarrel(m, -36, 36, 0xff6a00);
+  addExplosiveBarrel(m, 36, 36, 0xff6a00);
+  MAP_GROUPS[m]._skyColor = 0xffb066; // hazard-orange dusk
+}
+buildTrafficConeMap();
+
+// ──────────────────────────────────────────────────────────────────────────
+// 🗿 FLYING MOAI — a sky of floating Easter Island heads you fight on/around.
+// Big stone moai at varied heights act as platforms & cover.
+// ──────────────────────────────────────────────────────────────────────────
+registerMap('flying_moai');
+function buildFlyingMoaiMap() {
+  const m = 'flying_moai';
+  addMapGround(m, 0x2a3340, 0x3a4452); // moody twilight ground far below
+  addOuterWalls(m, 0x1f2730);
+  const stone = 0x8c8378, stoneDark = 0x6b6358;
+  // Build a single moai head (head box + brow + nose + ear slabs) as a group.
+  function placeMoai(x, y, z, s = 1, rotY = 0) {
+    const grp = new THREE.Group();
+    const head = new THREE.Mesh(new THREE.BoxGeometry(2.2 * s, 3.4 * s, 1.8 * s),
+      new THREE.MeshLambertMaterial({ color: stone }));
+    grp.add(head);
+    const brow = new THREE.Mesh(new THREE.BoxGeometry(2.4 * s, 0.5 * s, 0.4 * s),
+      new THREE.MeshLambertMaterial({ color: stoneDark }));
+    brow.position.set(0, 0.7 * s, 0.9 * s); grp.add(brow);
+    const nose = new THREE.Mesh(new THREE.BoxGeometry(0.5 * s, 1.4 * s, 0.6 * s),
+      new THREE.MeshLambertMaterial({ color: stoneDark }));
+    nose.position.set(0, -0.1 * s, 1.0 * s); grp.add(nose);
+    [-1.25, 1.25].forEach(ex => {
+      const ear = new THREE.Mesh(new THREE.BoxGeometry(0.35 * s, 1.6 * s, 0.5 * s),
+        new THREE.MeshLambertMaterial({ color: stoneDark }));
+      ear.position.set(ex * s, 0, 0); grp.add(ear);
+    });
+    // Flat hat platform on top you can stand on
+    const top = new THREE.Mesh(new THREE.BoxGeometry(2.6 * s, 0.6 * s, 2.2 * s),
+      new THREE.MeshLambertMaterial({ color: 0x9a4a2a }));
+    top.position.set(0, 2.0 * s, 0); grp.add(top);
+    grp.position.set(x, y, z); grp.rotation.y = rotY;
+    MAP_GROUPS[m].add(grp);
+    grp.updateMatrixWorld(true); MAP_COLLIDERS[m].push(new THREE.Box3().setFromObject(grp));
+  }
+  // A central ground-level cluster + a ring of floating moai at rising heights
+  placeMoai(0, 1.7, 0, 1.6, 0);
+  const ring = [[-26, 2, -10], [-14, 6, -24], [12, 8, -22], [26, 4, -8],
+                [30, 10, 12], [16, 14, 26], [-12, 12, 24], [-28, 7, 14],
+                [-6, 18, 2], [8, 16, -6]];
+  ring.forEach(([x, y, z], i) => placeMoai(x, y, z, 1 + (i % 3) * 0.25, (i * 0.7) % (Math.PI * 2)));
+  // A few thin sky bridges (stone slabs) connecting nearby heads
+  addMapBox(m, -20, 4, -17, 1.4, 0.4, 14, stoneDark);
+  addMapBox(m, 19, 6, -15, 14, 0.4, 1.4, stoneDark);
+  addMapBox(m, 22, 9, 2, 1.4, 0.4, 18, stoneDark);
+  addMapBox(m, 1, 15, -2, 12, 0.4, 1.4, stoneDark);
+  MAP_GROUPS[m]._skyColor = 0x4a5a78; // dusk sky
+}
+buildFlyingMoaiMap();
+
+// ──────────────────────────────────────────────────────────────────────────
 // 17. KING OF THE HILL / BR ARENA — massive map with vehicles + helicopters
 // ──────────────────────────────────────────────────────────────────────────
 registerMap('br_arena');
@@ -5724,6 +5843,34 @@ function buildBlowgun() {
     mouth.rotation.x = Math.PI / 2; mouth.position.set(0, 0, 0.02); g.add(mouth);
   });
 }
+// 🚧 Traffic Cone — a chuckable cone (the official sidearm of Traffic Cone Republic)
+function buildTrafficCone() {
+  return _throwableHolder(g => {
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(0.072, 0.20, 14),
+      new THREE.MeshLambertMaterial({ color: 0xff6a00 }));
+    cone.position.set(0, 0.02, -0.10); g.add(cone);
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.058, 0.035, 14),
+      new THREE.MeshLambertMaterial({ color: 0xffffff }));
+    band.position.set(0, 0.0, -0.10); g.add(band);
+    const base = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.02, 0.16),
+      new THREE.MeshLambertMaterial({ color: 0xff6a00 }));
+    base.position.set(0, -0.085, -0.10); g.add(base);
+  });
+}
+// 🥧 Cream Pie — the weapon of the Pie Fight (splat on impact)
+function buildCreamPie() {
+  return _throwableHolder(g => {
+    const tin = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.075, 0.03, 16),
+      new THREE.MeshLambertMaterial({ color: 0xc0a060 }));
+    tin.position.set(0, 0, -0.10); g.add(tin);
+    const cream = new THREE.Mesh(new THREE.CylinderGeometry(0.095, 0.092, 0.045, 16),
+      new THREE.MeshLambertMaterial({ color: 0xfff4d8 }));
+    cream.position.set(0, 0.035, -0.10); g.add(cream);
+    const cherry = new THREE.Mesh(new THREE.SphereGeometry(0.02, 8, 8),
+      new THREE.MeshLambertMaterial({ color: 0xcc2222 }));
+    cherry.position.set(0, 0.066, -0.10); g.add(cherry);
+  });
+}
 // 🔬 Tech / Physics models
 function buildPrismLauncher()    { return _genericGun({ bodyShape:'futuristic', bodyColor:0x440044, accentColor:0xffaaff, magType:'pan', emissive:true, scope:'holo', flashColor:0xffaaff }); }
 function buildFoamCannon()       { return _genericGun({ bodyShape:'heavy', bodyColor:0x445566, accentColor:0xddddee, magType:'drum', barrelR:0.020, foregrip:true, flashColor:0xeeeeff }); }
@@ -5795,6 +5942,8 @@ const weaponModels = [
   // ── 🪖 ADMIN secondaries ─────────────────────────────────────────────────
   buildDesertEagle(), buildM1911(), buildPPK(), buildGlock18(), buildFiveSeven(),
   buildMG42(),
+  // ── 🚧 / 🥧 must mirror the two trailing WEAPONS entries ──
+  buildTrafficCone(), buildCreamPie(),
 ];
 weaponModels.forEach((m,i) => { m.visible = i === 0; camera.add(m); });
 scene.add(camera);
@@ -12451,6 +12600,17 @@ function setupArcadeStart(subtype) {
       showAnnouncement('🔭 SNIPER ONLY', 'SR-X only · long-range chess match', '#aaeeff', 3000);
       return;
     }
+    case 'piefight': {
+      // 🥧 Everyone wields the Cream Pie and nothing else. Pure dessert warfare.
+      forcePlayerWeapon('cream_pie', 'secondary');
+      for (const b of gameBots) {
+        b.weaponId = 'cream_pie';
+        b.team = 'enemy'; // FFA — everyone's fair game
+        if (players[b.id]) players[b.id].weaponId = 'cream_pie';
+      }
+      showAnnouncement('🥧 PIE FIGHT', 'Cream pies only · splat everyone · most pies wins!', '#ffcc66', 3000);
+      return;
+    }
     case 'speedrun': {
       match.speedrunStart = 0;
       match.speedrunKills = 0;
@@ -13673,7 +13833,7 @@ function spawnGameBots() {
     // King of the Hill: always use the giant BR arena
     activateMap('br_arena');
   } else if (selectedModeConfig.type !== 'dday' && selectedModeConfig.type !== 'range') {
-    const pool = ['blank','urban','warehouse','forest','volcano','cyber','desert','tundra','space','airport','trenches','chernobyl','refinery','skydock','sewer','gravity_lab','glassworks','carrier','overgrowth','orbital_station','foundry','carnival','biosphere','lockdown','studio','temple','holiday','labyrinth','arena','opera','doomsday','train','dreamscape','pearl_harbor','titanic','supermarket','pyongyang'];
+    const pool = ['blank','urban','warehouse','forest','volcano','cyber','desert','tundra','space','airport','trenches','chernobyl','refinery','skydock','sewer','gravity_lab','glassworks','carrier','overgrowth','orbital_station','foundry','carnival','biosphere','lockdown','studio','temple','holiday','labyrinth','arena','opera','doomsday','train','dreamscape','pearl_harbor','titanic','supermarket','pyongyang','traffic_cone_republic','flying_moai'];
     const chosen = (selectedMap === 'auto' || !MAP_GROUPS[selectedMap]) ? pool[Math.floor(Math.random()*pool.length)] : selectedMap;
     activateMap(chosen);
     // Update sky color if the map specifies one
