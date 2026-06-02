@@ -433,6 +433,12 @@
   // ── Hooks ────────────────────────────────────────────────────────────────
   window.openCharacterChat = open;
   window.CHAT_CAST = byId;                 // game.js reads this for teammate name/emoji
+  // Expose the semi-pixel avatar renderer so the game can float it over the
+  // drafted teammate bot. Accepts a char object or an id; returns a <canvas>.
+  window.CHAT_AVATAR = (charOrId, size = 96) => {
+    const ch = typeof charOrId === 'string' ? byId[charOrId] : charOrId;
+    return ch ? avatarCanvas(ch, size) : null;
+  };
   window.PVP_TEAMMATE = (() => { try { return localStorage.getItem('pvp_teammate') || null; } catch (e) { return null; } })();
 
   function wireBtn() {
