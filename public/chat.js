@@ -157,13 +157,26 @@
   }
   function rng(a) { return a[Math.floor(Math.random() * a.length)]; }
 
+  // Per-character memory so the offline engine never says the same line twice
+  // in a row (the old version parroted the catchphrase ~50% of the time).
+  const _lastReply = {};
+  function freshLine(char, pool) {
+    const last = _lastReply[char.id];
+    let opts = pool.filter(l => l !== last);
+    if (!opts.length) opts = pool;
+    const pick = rng(opts);
+    _lastReply[char.id] = pick;
+    return pick;
+  }
   function replyFor(char, text) {
     const t = (text || '').toLowerCase();
     for (const topic of TOPIC) {
       if (topic.k.some(k => t.includes(k))) return topic.pick(char);
     }
-    // No keyword → personality line (weighted toward the catchphrase).
-    return Math.random() < 0.45 ? char.quip : rng(char.lines);
+    // No keyword → personality line, lightly weighted toward the catchphrase
+    // but never repeating the previous reply.
+    const pool = Math.random() < 0.25 ? char.lines : char.lines.slice(1).length ? char.lines.slice(1) : char.lines;
+    return freshLine(char, pool);
   }
 
   // ── 🤖 AI personality layer ───────────────────────────────────────────────
