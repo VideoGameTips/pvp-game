@@ -15420,15 +15420,19 @@ function updateBotAI(dt) {
     // alive, grounded, and actively engaging — aggressors juke constantly, snipers/
     // campers almost never (they'd lose their aim).
     {
-      const engaging = target && !isDead && dist < 38;
+      // NOTE: `dist` from the target-exists branch is out of scope here (that block
+      // already closed), so recompute it locally. Referencing the old `dist` threw a
+      // ReferenceError that the per-bot try/catch swallowed → bots froze like statues.
+      const engDist = target ? Math.hypot(target.x - bot.x, target.z - bot.z) : Infinity;
+      const engaging = target && !isDead && engDist < 38;
       const onGround = (bot.y || 0) <= 0.05 && (bot.yVel || 0) === 0;
       // — Slide: a short low-profile speed burst (boosts this frame's move).
       if (now < (bot._slideUntil || 0)) {
         moveX *= 1.55; moveZ *= 1.55;
       } else if (engaging && onGround && now >= (bot._nextSlideAt || 0)) {
         const wantSlide = bot._kiting
-          || (bot.personality === 'aggressor' && dist < 16)
-          || (bot.personality === 'tactician' && dist < 12 && Math.random() < 0.5);
+          || (bot.personality === 'aggressor' && engDist < 16)
+          || (bot.personality === 'tactician' && engDist < 12 && Math.random() < 0.5);
         if (wantSlide && Math.random() < 0.6) {
           bot._slideUntil  = now + 550;
           bot._nextSlideAt = now + 2200 + Math.random() * 2600;
