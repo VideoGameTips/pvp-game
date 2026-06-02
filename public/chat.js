@@ -223,18 +223,40 @@
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ system: buildSystemPrompt(char), messages }),
       });
-      if (res.status === 503) { aiState = 'off'; return null; }
-      if (!res.ok) return null;
+      if (res.status === 503) { aiState = 'off'; aiOfflineReason = 'no_key'; return null; }
+      if (!res.ok) { aiOfflineReason = await reasonFromRes(res); return null; }
       const data = await res.json();
-      if (data && data.reply) { aiState = 'on'; return data.reply; }
-      return null;
-    } catch (e) { return null; }
+      if (data && data.reply) { aiState = 'on'; aiOfflineReason = null; return data.reply; }
+      aiOfflineReason = 'empty'; return null;
+    } catch (e) { aiOfflineReason = 'network'; return null; }
   }
-  // Pure AI. No rule-based fallback — if the AI is unavailable we say so plainly.
-  const AI_OFFLINE = '⚙️ (AI is offline — set the ANTHROPIC_API_KEY env var to bring me to life.)';
+  // Pure AI. No rule-based fallback — if the AI is unavailable we say WHY.
+  let aiOfflineReason = null;
+  async function reasonFromRes(res) {
+    if (res.status === 429) return 'rate';
+    let d = {}; try { d = await res.json(); } catch (e) {}
+    if (res.status === 502) return 'upstream:' + (d.status || '?') + (d.detail ? ' ' + d.detail : '');
+    return 'http:' + res.status;
+  }
+  function offlineMsg() {
+    const r = aiOfflineReason || 'no_key';
+    if (r === 'no_key') return '⚙️ (AI is offline — set the ANTHROPIC_API_KEY env var in Railway, then reload.)';
+    if (r === 'rate') return '⚙️ (Too many messages — rate limited. Wait a minute.)';
+    if (r === 'network') return '⚙️ (Network error reaching the server.)';
+    if (r === 'empty') return '⚙️ (AI returned an empty reply.)';
+    if (r.startsWith('upstream:')) {
+      const code = r.slice(9).trim();
+      if (code.startsWith('401') || code.startsWith('403')) return '⚙️ (Anthropic rejected the key — it\'s invalid or unauthorized. Check ANTHROPIC_API_KEY.)';
+      if (code.startsWith('400')) return '⚙️ (Anthropic 400 — bad request, possibly an invalid model name in CHAT_AI_MODEL.)';
+      if (code.startsWith('429')) return '⚙️ (Anthropic rate limit / no credit on the account.)';
+      if (code.startsWith('529')) return '⚙️ (Anthropic is overloaded — try again shortly.)';
+      return '⚙️ (Anthropic API error ' + code + '.)';
+    }
+    return '⚙️ (AI unavailable: ' + r + ')';
+  }
   async function getReply(char, text) {
     const ai = await aiReply(char, text);
-    return ai || AI_OFFLINE;
+    return ai || offlineMsg();
   }
   // Group cross-talk reply: same AI, but the character knows it's in the room and
   // reacts to the recent transcript so arguments emerge naturally.
@@ -249,12 +271,12 @@
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ system: buildSystemPrompt(char, others), messages }),
       });
-      if (res.status === 503) { aiState = 'off'; return null; }
-      if (!res.ok) return null;
+      if (res.status === 503) { aiState = 'off'; aiOfflineReason = 'no_key'; return null; }
+      if (!res.ok) { aiOfflineReason = await reasonFromRes(res); return null; }
       const data = await res.json();
-      if (data && data.reply) { aiState = 'on'; return data.reply; }
-      return null;
-    } catch (e) { return null; }
+      if (data && data.reply) { aiState = 'on'; aiOfflineReason = null; return data.reply; }
+      aiOfflineReason = 'empty'; return null;
+    } catch (e) { aiOfflineReason = 'network'; return null; }
   }
 
   // ── UI ──────────────────────────────────────────────────────────────────
@@ -332,7 +354,7 @@
       if (isGroup) {
         GROUP_ROOM.slice(0, 3).forEach((id, i) => setTimeout(() => {
           const c = byId[id]; const t = showTyping(c);
-          groupAiReply(c).then(r => { removeTyping(t); pushBot(c, r || AI_OFFLINE); });
+          groupAiReply(c).then(r => { removeTyping(t); pushBot(c, r || offlineMsg()); });
         }, 250 + i * 600));
       } else {
         const t = showTyping(activeChar);
@@ -406,7 +428,7 @@
       const t = showTyping(c);
       groupAiReply(c).then(r => {
         removeTyping(t);
-        pushBot(c, r || AI_OFFLINE);
+        pushBot(c, r || offlineMsg());
         setTimeout(next, 350 + Math.random() * 500);
       });
     };

@@ -469,7 +469,7 @@ app.post('/api/chat', async (req, res) => {
     if (!r.ok) {
       const t = await r.text().catch(() => '');
       console.error('chat AI upstream error', r.status, t.slice(0, 200));
-      return res.status(502).json({ error: 'upstream' });
+      return res.status(502).json({ error: 'upstream', status: r.status, detail: t.slice(0, 160) });
     }
     const data = await r.json();
     const reply = (data.content || []).map(b => b.text || '').join(' ').trim();
