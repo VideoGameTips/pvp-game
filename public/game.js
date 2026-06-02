@@ -6969,8 +6969,101 @@ function applyCharacterSkin(skinId, parts) {
       _addHelmet(group, 0x0c0c0c);
       break;
     }
+    // ── 🎭 Signature skins for drafted comic-cast AIs (bot-only) ──────────────
+    case 'cc_kingchaos': {                       // dark sorcerer-king + crown + red eyes
+      setBody(0x2a0d3a); setLegs(0x140520); setHeadAll(0x1a0a26);
+      faceMat.map = null; faceMat.color.setHex(0x0a0410); faceMat.needsUpdate = true;
+      _addVisor(group, 0xff2233, 1.5);
+      _addCape(group, 0x4a1060);
+      setMeshCrown(group, true);
+      break;
+    }
+    case 'cc_bot': {                             // metallic robot + cyan optic + antenna
+      setBody(0x4a5560); setLegs(0x2e353c); setHeadAll(0x6a7480);
+      faceMat.map = null; faceMat.color.setHex(0x12161c); faceMat.needsUpdate = true;
+      _addVisor(group, 0x33e0ff, 1.4);
+      _addHelmet(group, 0x3a444c);
+      _addAntenna(group, 0x33e0ff);
+      break;
+    }
+    case 'cc_rager': {                           // all-red fury + spiky red hair
+      setBody(0x9b1b1b); setLegs(0x3a1010); setHeadAll(0xffb3a0);
+      _addSpikyHair(group, 0x6b0f0f);
+      break;
+    }
+    case 'cc_mirage': {                          // sleek purple ninja + shades
+      setBody(0x5a2a8a); setLegs(0x2a123f); setHeadAll(0xffcc99);
+      _addShades(group);
+      _addSpikyHair(group, 0x7a3aa5);
+      break;
+    }
+    case 'cc_grandmaster': {                     // navy strategist + glasses
+      setBody(0x1b2a4a); setLegs(0x10182c); setHeadAll(0xffcc99);
+      const hair = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.14, 0.52),
+        new THREE.MeshLambertMaterial({ color: 0x15110d }));
+      hair.position.set(0, 2.07, 0); group.add(hair);
+      const g = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.08, 0.03),
+        new THREE.MeshLambertMaterial({ color: 0x222222 }));
+      g.position.set(0, 1.90, 0.255); group.add(g);
+      break;
+    }
+    case 'cc_lucky': {                           // green leprechaun + green hat
+      setBody(0x1f7a1f); setLegs(0x144a14); setHeadAll(0xffcc99);
+      _addCap(group, 0x0f5a0f);
+      break;
+    }
+    case 'cc_medic': {                           // white medic + helmet + red cross
+      setBody(0xf2f2f2); setLegs(0xcfcfcf); setHeadAll(0xffcc99);
+      _addHelmet(group, 0xffffff);
+      const crossMat = new THREE.MeshLambertMaterial({ color: 0xcc1111 });
+      const c1 = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.22, 0.02), crossMat);
+      c1.position.set(0, 1.25, 0.16); group.add(c1);
+      const c2 = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.07, 0.02), crossMat);
+      c2.position.set(0, 1.25, 0.16); group.add(c2);
+      break;
+    }
+    case 'cc_goat': {                            // white tee + black shades GOAT
+      setBody(0xf0f0f0); setLegs(0x222831); setHeadAll(0xffcc99);
+      _addShades(group);
+      break;
+    }
+    case 'cc_pyro': {                            // orange/black pyro + fiery optic
+      setBody(0xd4540a); setLegs(0x221a14); setHeadAll(0x2a1a10);
+      faceMat.map = null; faceMat.color.setHex(0x140a06); faceMat.needsUpdate = true;
+      _addVisor(group, 0xffaa22, 1.3);
+      _addHelmet(group, 0x3a2a18);
+      break;
+    }
+    case 'cc_ghost': {                           // pale translucent specter
+      setBody(0xeaeaff); setLegs(0xcfcfe6); setHeadAll(0xf0f0ff);
+      [torsoMat, ...armLimbs.map(m => m.material), ...legLimbs.map(m => m.material), ...headMats]
+        .forEach(m => { m.transparent = true; m.opacity = 0.5; });
+      if (typeof makeShadowFaceTexture === 'function') { faceMat.map = makeShadowFaceTexture(); faceMat.color.setHex(0xffffff); faceMat.needsUpdate = true; }
+      break;
+    }
+    case 'cc_duck': {                            // yellow duck + orange bill
+      setBody(0xf2c014); setLegs(0xd99a00); setHeadAll(0xf2c014);
+      const bill = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.08, 0.16),
+        new THREE.MeshLambertMaterial({ color: 0xff8c1a }));
+      bill.position.set(0, 1.80, 0.26); group.add(bill);
+      break;
+    }
+    case 'cc_panic': {                           // panda — black body, white head + ears
+      setBody(0xf0f0f0); setLegs(0x1a1a1a); setHeadAll(0xf5f5f5);
+      [-0.18, 0.18].forEach(x => {
+        const ear = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8),
+          new THREE.MeshLambertMaterial({ color: 0x111111 }));
+        ear.position.set(x, 2.12, 0); group.add(ear);
+      });
+      break;
+    }
     // 'default' → leave the randomly-colored recruit as-is
   }
+}
+// Bot-only signature skins (NOT in the SKINS shop list — players can't pick them).
+const CHARACTER_SKIN_IDS = ['cc_kingchaos','cc_bot','cc_rager','cc_mirage','cc_grandmaster','cc_lucky','cc_medic','cc_goat','cc_pyro','cc_ghost','cc_duck','cc_panic'];
+function resolveSkinId(s) {
+  return (SKIN_IDS.includes(s) || CHARACTER_SKIN_IDS.includes(s)) ? s : 'default';
 }
 
 // Simple combat helmet / hood cap that sits on top of the head box
@@ -6993,6 +7086,34 @@ function _addSpikyHair(group, color) {
     s.rotation.z = (x) * 0.8; s.rotation.x = (-z) * 0.8; // fan outward
     s.castShadow = true; group.add(s);
   });
+}
+
+// Glowing eye-visor strip (robots / villains). intensity drives the glow.
+function _addVisor(group, color, intensity = 1.2) {
+  const visor = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.12, 0.04),
+    new THREE.MeshLambertMaterial({ color: 0x0a0d12, emissive: color, emissiveIntensity: intensity }));
+  visor.position.set(0, 1.88, 0.255); group.add(visor);
+}
+// Flowing cape behind the torso (King Chaos).
+function _addCape(group, color) {
+  const cape = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.85, 0.05),
+    new THREE.MeshLambertMaterial({ color }));
+  cape.position.set(0, 1.12, -0.19); cape.castShadow = true; group.add(cape);
+}
+// Little antenna with a glowing tip (robots).
+function _addAntenna(group, color) {
+  const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.18, 6),
+    new THREE.MeshLambertMaterial({ color: 0x888888 }));
+  rod.position.set(0.13, 2.30, 0); group.add(rod);
+  const tip = new THREE.Mesh(new THREE.SphereGeometry(0.045, 8, 8),
+    new THREE.MeshLambertMaterial({ color, emissive: color, emissiveIntensity: 1.0 }));
+  tip.position.set(0.13, 2.41, 0); group.add(tip);
+}
+// Flat black sunglasses across the eyes.
+function _addShades(group) {
+  const shades = new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.10, 0.04),
+    new THREE.MeshLambertMaterial({ color: 0x080808 }));
+  shades.position.set(0, 1.90, 0.255); group.add(shades);
 }
 
 // Soft cap with a forward brim (the green-cap "default loadout" guy)
@@ -11794,7 +11915,7 @@ socket.on('playerRespawned', p => {
 });
 
 function spawnRemotePlayer(p) {
-  const skinId = SKIN_IDS.includes(p.skin) ? p.skin : 'default';
+  const skinId = resolveSkinId(p.skin);
   const mesh = makePlayerMesh(p.name, p.isBot, p.team || 'enemy', skinId, { crown: !!p.isAdmin });
   mesh.position.set(p.x,0,p.z);
   scene.add(mesh); remoteMeshes[p.id]=mesh;
@@ -13839,6 +13960,21 @@ const TEAMMATE_PLAYSTYLES = {
 };
 const DEFAULT_TEAMMATE_PLAYSTYLE = { personality:'tactician', speedMult:1.0, aim:0.7, hp:300, style:'Balanced' };
 
+// 🎭 Which skin each drafted comic-cast character wears. Marquee AIs get a unique
+// signature skin (cc_*); the rest map to a fitting stock skin. Keeps every teammate
+// visually distinct and recognizable as their character.
+const TEAMMATE_SKINS = {
+  kingchaos:'cc_kingchaos', luckylarry:'cc_lucky', grandmaster:'cc_grandmaster', mirage:'cc_mirage',
+  bot47:'cc_bot', bot604:'cc_bot', rager:'cc_rager', duckguy:'cc_duck',
+  combatmedic:'cc_medic', juicebox:'cc_medic', sharpshooter:'swat_shades', ladymayhem:'riot_chad',
+  jinx:'spiky', pandora:'default', wildfire:'cc_pyro', anarchy:'shadow',
+  professional:'swat_shades', afkguy:'green_cap', ragebaiter:'swat', noskill:'soldier',
+  pyromaniac:'cc_pyro', engineer:'soldier', ghost:'cc_ghost', nucleardave:'soldier',
+  lorekeeper:'shadow', tankturtle:'soldier', casualbob:'green_cap', goat:'cc_goat',
+  mrsuspicious:'swat_shades', thesweat:'spiky', janitor:'default', timekeeper:'shadow',
+  wildcard:'riot_chad', panicpanda:'cc_panic', dramaqueen:'riot_chad', shadow:'shadow', pixelboy:'spiky',
+};
+
 // 🖼️ Float the drafted teammate's semi-pixel comic avatar (from chat.js) as a
 // billboard sprite above their bot, so you can spot your buddy in the fight.
 function attachTeammateAvatar(mesh, tc) {
@@ -13982,10 +14118,21 @@ function spawnGameBots() {
     const botUtilityId   = UTILS_NONADMIN[Math.floor(Math.random() * UTILS_NONADMIN.length)]?.id || 'frag';
 
     // ── Create locally RIGHT NOW (no network round-trip needed) ──────────
-    // Bots wear comic-crew skins: enemies = SWAT crew, allies = soldiers.
-    const botSkin = isAlly
-      ? (['soldier','default'][Math.floor(Math.random()*2)])
-      : (['swat','swat_shades','soldier'][Math.floor(Math.random()*3)]);
+    // Drafted teammate wears their character's signature skin; everyone else
+    // gets a VARIED stock skin (per team flavor) that never copies the player's.
+    let botSkin;
+    if (_teammateChar) {
+      const tmId2 = window.PVP_TEAMMATE || (() => { try { return localStorage.getItem('pvp_teammate'); } catch (e) { return null; } })();
+      botSkin = TEAMMATE_SKINS[tmId2] || (isAlly ? 'soldier' : 'swat');
+    } else {
+      const pool = isAlly
+        ? ['soldier','green_cap','riot_chad','default','spiky','swat_shades']
+        : ['swat','swat_shades','soldier','shadow','riot_chad','spiky'];
+      // spread choices across the team by index, then jitter, and never == player's skin
+      let pick = pool[(idx + Math.floor(Math.random() * pool.length)) % pool.length];
+      if (pick === mySkin) pick = pool[(pool.indexOf(pick) + 1) % pool.length];
+      botSkin = pick;
+    }
     const startHp = (_playstyle && _playstyle.hp) || 300;
     const pData = { id, name, isBot: true, team, weaponId, ownerId: myId, skin: botSkin,
                     x: sx, y: 1, z: sz, rotY: 0, rotX: 0,
