@@ -15416,29 +15416,49 @@ function updateBotAI(dt) {
       bot.strafeDir = -bot.strafeDir;
       bot.strafeFlipTimer = 0.8;
     }
-    // ── Anti-freeze safety net: if bot hasn't moved in 0.5s, force them to walk ─
-    // This catches ANY freeze cause: stuck cover-camping, dead-state-machine paths, broken hit-and-run, etc.
+    // ── Anti-freeze safety net: bots must NEVER stand still "like a statue". ──
+    // The old version re-rolled a RANDOM direction with a tiny 0.15 step — if it
+    // faced a wall the step got collision-eaten and the bot just twitched in a
+    // corner forever. Now we probe 8 directions, pick the most OPEN one (longest
+    // clear line of sight, biased toward the target), and take a decisive step.
+    // Intentional holds (Hold-position command) are exempt so they can camp.
+    const holdingStill = bot._holdPosActive
+      || (bot._commandOverride && bot._commandOverride.type === 'hold' && now < bot._commandOverride.until);
     const movedThisFrame = Math.hypot(bot.x - prevBotX, bot.z - prevBotZ);
-    if (movedThisFrame < 0.01) {
-      bot.freezeTimer = (bot.freezeTimer || 0) + dt;
-    } else {
-      bot.freezeTimer = 0;
+    if (movedThisFrame < 0.015) bot.freezeTimer = (bot.freezeTimer || 0) + dt;
+    else bot.freezeTimer = 0;
+    // Long-window check: catches the "slow wiggle" statue that nudges a hair each
+    // frame (so freezeTimer never accrues) yet never actually goes anywhere.
+    bot._slowCheckT = (bot._slowCheckT || 0) + dt;
+    let slowStuck = false;
+    if (bot._slowCheckT >= 1.5) {
+      const disp = Math.hypot(bot.x - (bot._slowX ?? bot.x), bot.z - (bot._slowZ ?? bot.z));
+      slowStuck = disp < 1.0;
+      bot._slowCheckT = 0; bot._slowX = bot.x; bot._slowZ = bot.z;
     }
-    if (bot.freezeTimer >= 0.5) {
-      // Force unstick: snap out of cover, clear hit-and-run, pick a new wander direction, and step
+    if ((bot.freezeTimer >= 0.35 || slowStuck) && !holdingStill) {
+      const towardA = target ? Math.atan2(target.x - bot.x, target.z - bot.z) : null;
+      let bestA = bot.wanderAngle || 0, bestScore = -Infinity;
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        const clear = hasLineOfSight(bot.x, bot.z, bot.x + Math.sin(a) * 5, bot.z + Math.cos(a) * 5);
+        let score = (clear ? 10 : -5) + Math.random();
+        if (towardA != null) score += Math.cos(a - towardA) * 2; // prefer heading at the target
+        if (score > bestScore) { bestScore = score; bestA = a; }
+      }
+      // Snap fully out of any stuck state and commit to the open heading
       bot.state = 'wander';
       bot.coverPt = null;
-      bot.hitAndRunUntil = 0;
-      bot.hitAndRunTarget = null;
+      bot.hitAndRunUntil = 0; bot.hitAndRunTarget = null;
       bot.tacTimer = 0;
-      bot.wanderAngle = Math.random() * Math.PI * 2;
-      bot.stuckTimer = 0.6; // brief commitment to the new direction
+      bot.wanderAngle = bestA;
+      bot.wanderTimer = 1.2;       // commit so it doesn't instantly re-pick
+      bot.stuckTimer = 0.8;
       bot.freezeTimer = 0;
-      // Apply a small immediate step so they visibly move this frame
-      const stepX = Math.sin(bot.wanderAngle) * 0.15;
-      const stepZ = Math.cos(bot.wanderAngle) * 0.15;
-      let fx = Math.max(-47, Math.min(47, bot.x + stepX));
-      let fz = Math.max(-47, Math.min(47, bot.z + stepZ));
+      // Decisive step in the chosen OPEN direction (won't be wall-eaten).
+      const stepX = Math.sin(bestA) * 0.5, stepZ = Math.cos(bestA) * 0.5;
+      let fx = Math.max(-mapHalf, Math.min(mapHalf, bot.x + stepX));
+      let fz = Math.max(-mapHalf, Math.min(mapHalf, bot.z + stepZ));
       [fx, fz] = resolvePosCollisions(fx, fz, bot.y || 0);
       bot.x = fx; bot.z = fz;
     }
