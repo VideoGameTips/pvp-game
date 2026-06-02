@@ -284,6 +284,9 @@
 
   // ── UI ──────────────────────────────────────────────────────────────────
   let panel, view = 'select', activeChar = null, thread = [];
+  let draftTeam = loadDraft('pvp_teammates'), draftFoes = loadDraft('pvp_opponents');
+  // Migrate the legacy single-teammate key into the multi-select array.
+  if (!draftTeam.length) { try { const legacy = localStorage.getItem('pvp_teammate'); if (legacy) draftTeam = [legacy]; } catch (e) {} }
   function ensurePanel() {
     if (panel) return panel;
     panel = document.createElement('div');
@@ -313,7 +316,7 @@
 
   function renderSelect() {
     panel.innerHTML = header('💬 CHARACTER CHAT') +
-      `<div style="padding:10px 16px 4px;font-size:11px;color:#c89;letter-spacing:1px;">Pick someone to chat 1-on-1 · or jump into the Group Chat where the cast argues. You can also draft one as your in-game teammate.</div>
+      `<div style="padding:10px 16px 4px;font-size:11px;color:#c89;letter-spacing:1px;">Pick someone to chat 1-on-1 · or jump into the Group Chat where the cast argues. Draft as many teammates (⚔️) and opponents (💀) as you like — they spawn next match.</div>
        <div style="padding:8px 16px;flex:0 0 auto;">
          <button id="cc-group" style="width:100%;background:linear-gradient(90deg,#7a1fa2,#c0392b);color:#fff;border:none;border-radius:8px;padding:12px;cursor:pointer;font-family:inherit;font-size:13px;letter-spacing:2px;">👥 GROUP CHAT — the whole crew (they will fight)</button>
        </div>
@@ -326,7 +329,8 @@
       card.onmouseleave = () => card.style.borderColor = '#3a2030';
       card.appendChild(avatarCanvas(c, 40));
       const txt = document.createElement('div');
-      txt.innerHTML = `<div style="font-size:11px;color:#fff;line-height:1.2;">${c.name}</div><div style="font-size:9px;color:#b58;margin-top:2px;">${blurb(c)}</div>`;
+      const badge = isTeammate(c.id) ? ' <span style="color:#88ddaa;">⚔️</span>' : isOpponent(c.id) ? ' <span style="color:#ff9988;">💀</span>' : '';
+      txt.innerHTML = `<div style="font-size:11px;color:#fff;line-height:1.2;">${c.name}${badge}</div><div style="font-size:9px;color:#b58;margin-top:2px;">${blurb(c)}</div>`;
       card.appendChild(txt);
       card.onclick = () => { activeChar = c; thread = []; view = 'chat'; render(); };
       grid.appendChild(card);
@@ -341,7 +345,10 @@
       `${!isGroup ? `<div style="display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid #2a1a2a;flex:0 0 auto;">
           <span id="cc-ava"></span>
           <div><div style="color:${activeChar.color};font-size:13px;">${activeChar.name}</div><div style="font-size:10px;color:#b58;">${blurb(activeChar)}</div></div>
-          <button id="cc-team" style="margin-left:auto;background:#1a2a3a;color:#88ddaa;border:1px solid #44aa77;border-radius:5px;padding:6px 10px;cursor:pointer;font-family:inherit;font-size:11px;">⚔️ Pick as Teammate</button>
+          <div style="margin-left:auto;display:flex;gap:6px;">
+            <button id="cc-team" style="background:#1a2a3a;color:#88ddaa;border:1px solid #44aa77;border-radius:5px;padding:6px 10px;cursor:pointer;font-family:inherit;font-size:11px;">${isTeammate(activeChar.id) ? '✓ Teammate' : '⚔️ Teammate'}</button>
+            <button id="cc-foe" style="background:#2a1a1a;color:#ff9988;border:1px solid #aa5544;border-radius:5px;padding:6px 10px;cursor:pointer;font-family:inherit;font-size:11px;">${isOpponent(activeChar.id) ? '✓ Opponent' : '💀 Opponent'}</button>
+          </div>
         </div>` : `<div style="padding:8px 16px;font-size:10px;color:#b58;border-bottom:1px solid #2a1a2a;flex:0 0 auto;">In the room: ${GROUP_ROOM.map(id => byId[id].emoji).join(' ')} — type a message (or @name) and watch the chaos.</div>`}
        <div id="cc-msgs" style="flex:1 1 auto;overflow-y:auto;padding:12px 16px;display:flex;flex-direction:column;gap:8px;min-height:220px;"></div>
        <div style="display:flex;gap:8px;padding:12px 16px;border-top:1px solid #2a1a2a;flex:0 0 auto;">
@@ -378,7 +385,9 @@
     input.onkeydown = e => { if (e.key === 'Enter') send(); };
     input.focus();
     const teamBtn = panel.querySelector('#cc-team');
-    if (teamBtn) teamBtn.onclick = () => pickTeammate(activeChar);
+    if (teamBtn) teamBtn.onclick = () => { toggleDraft(activeChar, 'team'); render(); };
+    const foeBtn = panel.querySelector('#cc-foe');
+    if (foeBtn) foeBtn.onclick = () => { toggleDraft(activeChar, 'foe'); render(); };
     wireCommon();
   }
 
@@ -439,14 +448,40 @@
   }
   function shuffle(a) { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1));[a[i], a[j]] = [a[j], a[i]]; } return a; }
 
-  function pickTeammate(char) {
-    try { localStorage.setItem('pvp_teammate', char.id); } catch (e) {}
-    window.PVP_TEAMMATE = char.id;
+  // ── Multi-select drafting (teammates + opponents) ─────────────────────────
+  function loadDraft(key) { try { const a = JSON.parse(localStorage.getItem(key) || '[]'); return Array.isArray(a) ? a.filter(Boolean) : []; } catch (e) { return []; } }
+  function saveDraft() {
+    try {
+      localStorage.setItem('pvp_teammates', JSON.stringify(draftTeam));
+      localStorage.setItem('pvp_opponents', JSON.stringify(draftFoes));
+      // backward-compat: keep the legacy single-teammate key in sync
+      if (draftTeam.length) localStorage.setItem('pvp_teammate', draftTeam[0]);
+      else localStorage.removeItem('pvp_teammate');
+    } catch (e) {}
+    window.PVP_TEAMMATES = draftTeam.slice();
+    window.PVP_OPPONENTS = draftFoes.slice();
+    window.PVP_TEAMMATE = draftTeam[0] || null;
+  }
+  function isTeammate(id) { return draftTeam.includes(id); }
+  function isOpponent(id) { return draftFoes.includes(id); }
+  function toggleDraft(char, side) {
+    const id = char.id;
+    if (side === 'team') {
+      if (isTeammate(id)) { draftTeam = draftTeam.filter(x => x !== id); toast(`${char.name} removed from your squad.`, false); }
+      else { draftTeam.push(id); draftFoes = draftFoes.filter(x => x !== id); toast(`⚔️ ${char.name} drafted to YOUR squad!`, true); }
+    } else {
+      if (isOpponent(id)) { draftFoes = draftFoes.filter(x => x !== id); toast(`${char.name} removed from the enemy roster.`, false); }
+      else { draftFoes.push(id); draftTeam = draftTeam.filter(x => x !== id); toast(`💀 ${char.name} marked as an ENEMY!`, false); }
+    }
+    saveDraft();
+  }
+  function toast(text, friendly) {
     const note = document.createElement('div');
-    note.textContent = `⚔️ ${char.name} drafted as your teammate! They'll spawn on your side next match.`;
-    note.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:9700;background:#16241a;border:1px solid #44aa77;color:#aaffcc;padding:10px 18px;border-radius:8px;font-family:"Courier New",monospace;font-size:13px;box-shadow:0 0 18px rgba(68,170,119,0.4);';
+    note.textContent = text;
+    const c = friendly ? ['#16241a', '#44aa77', '#aaffcc', '68,170,119'] : ['#241616', '#aa5544', '#ffccbb', '170,85,68'];
+    note.style.cssText = `position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:9700;background:${c[0]};border:1px solid ${c[1]};color:${c[2]};padding:10px 18px;border-radius:8px;font-family:"Courier New",monospace;font-size:13px;box-shadow:0 0 18px rgba(${c[3]},0.4);`;
     document.body.appendChild(note);
-    setTimeout(() => note.remove(), 3200);
+    setTimeout(() => note.remove(), 3000);
   }
 
   function wireCommon() {
@@ -464,7 +499,9 @@
     const ch = typeof charOrId === 'string' ? byId[charOrId] : charOrId;
     return ch ? avatarCanvas(ch, size) : null;
   };
-  window.PVP_TEAMMATE = (() => { try { return localStorage.getItem('pvp_teammate') || null; } catch (e) { return null; } })();
+  window.PVP_TEAMMATES = draftTeam.slice();
+  window.PVP_OPPONENTS = draftFoes.slice();
+  window.PVP_TEAMMATE = draftTeam[0] || null;
 
   function wireBtn() {
     const b = document.getElementById('char-chat-btn');

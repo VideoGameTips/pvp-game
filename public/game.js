@@ -1656,6 +1656,48 @@ const COMMAND_PHYSICAL = {
   },
 };
 
+// 🎭 Personality-flavored comms reactions. Each personality refuses the orders
+// that clash with how they play (an aggressor hates being told to hold/fall back;
+// a camper hates being told to charge) and answers in its own voice.
+const PERSONALITY_COMMS = {
+  aggressor: {
+    refuseTypes: ['hold', 'fallback', 'run', 'cover_sniper'],
+    ok:   ['CHARGING!', 'Yeah, LET\'S GO!', 'On it — rushing!', 'Finally, ACTION!'],
+    nope: ['Heck no, I\'m pushing!', 'Nah — CHARGE!', 'Boring! I attack!', 'No way, going IN!'],
+  },
+  camper: {
+    refuseTypes: ['charge', 'group_push', 'flank', 'distract'],
+    ok:   ['Holding my spot.', 'Locked down.', 'Watching this angle.', 'Got it, camping.'],
+    nope: ['Nope, holding here.', 'I\'m not leaving cover.', 'You go — I\'ll watch.', 'Nah, staying put.'],
+  },
+  sniper: {
+    refuseTypes: ['charge', 'group_push', 'scatter'],
+    ok:   ['Lining up the shot.', 'Overwatch set.', 'Copy — eyes up.', 'On the glass.'],
+    nope: ['Negative, holding the lane.', 'I\'m better at range.', 'No — I cover from here.'],
+  },
+  tactician: {
+    refuseTypes: [],
+    ok:   ['Understood.', 'Makes sense — moving.', 'Copy that.', 'Smart call, on it.'],
+    nope: ['Not optimal, but okay.', 'Risky... fine.'],
+  },
+};
+// Marquee characters get their own unmistakable one-liners (overrides personality).
+const CHAR_COMMS_FLAVOR = {
+  rager:    { ok: ['FINE! WHATEVER!', 'UGH, OKAY!'], nope: ['HECK NO!', 'ARE YOU KIDDING ME?!', 'NO! IT\'S THE LAG!'] },
+  duckguy:  { ok: ['Quack!', 'Quack quack!'],         nope: ['Quack.', '...quack?'] },
+  bot47:    { ok: ['Affirmative.', 'Executing.', 'Beep. Compliance.'], nope: ['Negative.', 'Command rejected.'] },
+  bot604:   { ok: ['Probability favorable. Moving.', 'Acknowledged.'], nope: ['Probability unfavorable.', 'Computing... no.'] },
+  goat:     { ok: ['ez', 'watch the GOAT'],           nope: ['lol no, skill issue', 'nah, I carry'] },
+  ghost:    { ok: ['...moving.', '...'],              nope: ['...no.', '...'] },
+  shadow:   { ok: ['...on it.', '...'],               nope: ['...no.'] },
+  kingchaos:{ ok: ['BOW, then YES!', 'A KINGLY yes!'], nope: ['A king obeys NO ONE!', 'No. I do as I please.'] },
+  ragebaiter:{ ok: ['...fine.'],                      nope: ['No.', 'No.', 'Hard no.'] },
+  panicpanda:{ ok: ['OKAY OKAY OKAY!', 'AAAH FINE!'], nope: ['I CAN\'T! TOO SCARY!', 'NO NO NO!'] },
+  professional:{ ok: ['Copy. Executing.', 'Affirmative.'], nope: ['Negative.'] },
+  thesweat: { ok: ['Already warmed up. Go.', 'Locked in.'], nope: ['That\'s griefing, no.'] },
+  dramaqueen:{ ok: ['For YOU, anything!', 'The DRAMA — fine!'], nope: ['How DARE you ask!', 'Absolutely NOT!'] },
+};
+function pickComms(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 function reactAllyBotsToComms(playerSaid) {
   const cmd = COMMAND_PHYSICAL[playerSaid];
   if (!cmd) return;
@@ -1667,13 +1709,20 @@ function reactAllyBotsToComms(playerSaid) {
     .sort((a,b) => a.d - b.d);
   nearbyAllies.forEach((x, i) => {
     setTimeout(() => {
-      const willComply = cmd.gate(x.b);
-      // Verbal reaction
-      const pool = willComply ? cmd.okLines : (cmd.nopeLines.length ? cmd.nopeLines : cmd.okLines);
-      const reply = pool[Math.floor(Math.random() * pool.length)];
+      const flavor = PERSONALITY_COMMS[x.b.personality] || PERSONALITY_COMMS.tactician;
+      const charF  = x.b.charId && CHAR_COMMS_FLAVOR[x.b.charId];
+      // Comply if the HP gate passes AND their personality doesn't refuse this order.
+      let willComply = cmd.gate(x.b);
+      if (willComply && cmd.type && flavor.refuseTypes.includes(cmd.type) && Math.random() < 0.7) {
+        willComply = false; // in-character refusal
+      }
+      // Verbal reaction: character voice → personality voice → generic command lines.
+      let reply;
+      if (willComply) reply = pickComms((charF && charF.ok) || flavor.ok || cmd.okLines);
+      else            reply = pickComms((charF && charF.nope) || flavor.nope || (cmd.nopeLines.length ? cmd.nopeLines : flavor.nope));
       showBotSpeech(x.b, reply, 2000, willComply ? '#88ccff' : '#ffaa66');
       pushChatLine(`${players[x.b.id]?.name || 'Ally'}: ${reply}`, willComply ? '#88ccff' : '#ffaa66');
-      // Physical reaction: set command override
+      // Physical reaction: set command override only if they actually agreed.
       if (willComply && cmd.type) {
         x.b._commandOverride = {
           type: cmd.type,
@@ -14095,19 +14144,40 @@ function spawnGameBots() {
   }
   socket.emit('resetSelf', { x: camera.position.x, z: camera.position.z });
 
+  // 🎭 Drafted comic-cast rosters: you can pick MULTIPLE teammates AND MULTIPLE
+  // opponents in Character Chat. They fill the first slots of their team (ally
+  // slots for teammates, enemy slots for opponents).
+  const readDraft = (winKey, lsKey, legacyLsKey) => {
+    let arr = window[winKey];
+    if (!Array.isArray(arr)) {
+      try { arr = JSON.parse(localStorage.getItem(lsKey) || '[]'); } catch (e) { arr = []; }
+    }
+    if (!Array.isArray(arr)) arr = [];
+    // backward-compat: promote a single legacy id if no array is stored
+    if (!arr.length && legacyLsKey) {
+      const single = window.PVP_TEAMMATE || (() => { try { return localStorage.getItem(legacyLsKey); } catch (e) { return null; } })();
+      if (single) arr = [single];
+    }
+    return arr.filter(Boolean);
+  };
+  const draftedAllies  = readDraft('PVP_TEAMMATES', 'pvp_teammates', 'pvp_teammate');
+  const draftedEnemies = readDraft('PVP_OPPONENTS', 'pvp_opponents', null);
+
   const makeBot = (idx, team) => {
     const isAlly   = team === 'ally';
     const count    = isAlly ? allies : enemies;
     const sp       = botSideSpawn(idx, count, team);
     const sx = sp.x, sz = sp.z;
     const id       = `bot_${team}_${now}_${idx}`;
-    // 💬 Drafted-teammate hook: the FIRST ally bot becomes your chosen comic-cast
-    // character (name + emoji), set via the Character Chat "Pick as Teammate" button.
+    // 💬 Drafted-character hook: the first ally slots become your drafted TEAMMATES
+    // and the first enemy slots become your drafted OPPONENTS (name + emoji + skin
+    // + playstyle), set via Character Chat. Each fills one slot, in order.
     let name = isAlly ? `Ally ${idx+1}` : `Enemy ${idx+1}`;
     let _teammateChar = null;
     let _playstyle = null;
-    if (isAlly && idx === 0) {
-      const tmId = window.PVP_TEAMMATE || (() => { try { return localStorage.getItem('pvp_teammate'); } catch (e) { return null; } })();
+    const _draftList = isAlly ? draftedAllies : draftedEnemies;
+    const tmId = (idx < _draftList.length) ? _draftList[idx] : null;
+    {
       const tmChar = tmId && window.CHAT_CAST && window.CHAT_CAST[tmId];
       if (tmChar) {
         name = `${tmChar.emoji} ${tmChar.name}`; _teammateChar = tmChar;
@@ -14133,9 +14203,8 @@ function spawnGameBots() {
     // Drafted teammate wears their character's signature skin; everyone else
     // gets a VARIED stock skin (per team flavor) that never copies the player's.
     let botSkin;
-    if (_teammateChar) {
-      const tmId2 = window.PVP_TEAMMATE || (() => { try { return localStorage.getItem('pvp_teammate'); } catch (e) { return null; } })();
-      botSkin = TEAMMATE_SKINS[tmId2] || (isAlly ? 'soldier' : 'swat');
+    if (_teammateChar && tmId) {
+      botSkin = TEAMMATE_SKINS[tmId] || (isAlly ? 'soldier' : 'swat');
     } else {
       const pool = isAlly
         ? ['soldier','green_cap','riot_chad','default','spiky','swat_shades']
@@ -14155,8 +14224,11 @@ function spawnGameBots() {
     if (_teammateChar) {
       const _tc = _teammateChar;
       const _ps = _playstyle || DEFAULT_TEAMMATE_PLAYSTYLE;
-      setTimeout(() => { try { showAnnouncement(`${_tc.emoji} ${_tc.name} JOINED`, `${_ps.style || 'Your teammate'}`, _tc.color || '#88ddaa', 2600); } catch (e) {} }, 1200);
-      // 🖼️ Float the semi-pixel comic avatar over the teammate bot.
+      const _sub = isAlly ? (_ps.style || 'Your teammate') : `Enemy · ${_ps.style || ''}`.trim();
+      const _col = isAlly ? (_tc.color || '#88ddaa') : '#ff6677';
+      const _tag = isAlly ? 'JOINED' : 'INCOMING';
+      setTimeout(() => { try { showAnnouncement(`${_tc.emoji} ${_tc.name} ${_tag}`, _sub, _col, 2400); } catch (e) {} }, 1200 + idx * 700);
+      // 🖼️ Float the semi-pixel comic avatar over the drafted character (ally or enemy).
       try { attachTeammateAvatar(remoteMeshes[id], _tc); } catch (e) {}
     }
 
@@ -14186,8 +14258,8 @@ function spawnGameBots() {
     }
     const botDPS = WEAPON_DPS_CACHE[weaponId] || 150;
     gameBots.push({ id, team, weaponId, spawnWeaponId: weaponId, x: sx, z: sz, rotY: 0, hp: startHp, maxHp: startHp,
-                    // 🎭 Teammate playstyle flavor
-                    speedMult: (_playstyle && _playstyle.speedMult) || 1, playstyle: _playstyle,
+                    // 🎭 Teammate playstyle flavor + which drafted character (if any) this bot is
+                    speedMult: (_playstyle && _playstyle.speedMult) || 1, playstyle: _playstyle, charId: tmId || null,
                     // 🆕 Full loadout — bot will switch between these based on engagement range
                     primaryId: weaponId, secondaryId: botSecondaryId,
                     meleeId: botMeleeId, utilityId: botUtilityId,
