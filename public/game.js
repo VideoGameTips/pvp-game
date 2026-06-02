@@ -15343,6 +15343,37 @@ function updateBotAI(dt) {
     }
     // 🎭 Drafted-teammate playstyle: per-character movement speed flavor
     if (bot.speedMult && bot.speedMult !== 1) { moveX *= bot.speedMult; moveZ *= bot.speedMult; }
+
+    // 🦘🛹 Bots use JUMP + SLIDE like players, flavored by personality. Only when
+    // alive, grounded, and actively engaging — aggressors juke constantly, snipers/
+    // campers almost never (they'd lose their aim).
+    {
+      const engaging = target && !isDead && dist < 38;
+      const onGround = (bot.y || 0) <= 0.05 && (bot.yVel || 0) === 0;
+      // — Slide: a short low-profile speed burst (boosts this frame's move).
+      if (now < (bot._slideUntil || 0)) {
+        moveX *= 1.55; moveZ *= 1.55;
+      } else if (engaging && onGround && now >= (bot._nextSlideAt || 0)) {
+        const wantSlide = bot._kiting
+          || (bot.personality === 'aggressor' && dist < 16)
+          || (bot.personality === 'tactician' && dist < 12 && Math.random() < 0.5);
+        if (wantSlide && Math.random() < 0.6) {
+          bot._slideUntil  = now + 550;
+          bot._nextSlideAt = now + 2200 + Math.random() * 2600;
+        } else {
+          bot._nextSlideAt = now + 900 + Math.random() * 1200; // re-check soon
+        }
+      }
+      // — Jump: hop mid-fight to dodge/juke. Same impulse as the player's jump.
+      if (engaging && onGround && now >= (bot._nextJumpAt || 0)) {
+        const jumpChance = bot.personality === 'aggressor' ? 0.7
+                         : bot.personality === 'tactician' ? 0.4
+                         : 0.12; // sniper / camper
+        if (Math.random() < jumpChance) { bot.yVel = 13; bot.y = bot.y || 0; }
+        const gap = bot.personality === 'aggressor' ? 1100 : 2200;
+        bot._nextJumpAt = now + gap + Math.random() * 2000;
+      }
+    }
     // Apply movement + wall collision
     const prevBotX = bot.x, prevBotZ = bot.z;
     let nx = bot.x + moveX, nz = bot.z + moveZ;
@@ -15432,20 +15463,22 @@ function updateBotAI(dt) {
 }
 
 // ── Per-frame character animation pass ──────────────────────────────────────
-// Bots never crouch; remote human players' crouch/slide is inferred from their
-// camera eye-height (synced via the `move` event into players[id].y).
+// Bots drop into a low slide pose while mid-slide; remote human players' crouch/
+// slide is inferred from their camera eye-height (synced via `move` into players[id].y).
 function animateCharacters(dt) {
   for (const id in remoteMeshes) {
     const mesh = remoteMeshes[id];
     if (!mesh || !mesh.visible || !mesh._rig) continue;
     let crouchTarget = 0;
-    const isBot = gameBots.some(b => b.id === id);
-    if (!isBot) {
+    const b = gameBots.find(bb => bb.id === id);
+    if (!b) {
       const p = players[id];
       if (p && typeof p.y === 'number') {
         // 1.65 standing → 0.70 sliding. Map to 0..1 crouch amount.
         crouchTarget = Math.max(0, Math.min(1, (1.65 - p.y) / (1.65 - 0.70)));
       }
+    } else if (b._slideUntil && Date.now() < b._slideUntil) {
+      crouchTarget = 1; // 🛹 bot is sliding → low profile
     }
     animateCharacterMesh(mesh, dt, crouchTarget);
   }
