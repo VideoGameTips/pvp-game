@@ -8013,7 +8013,9 @@ function openKillTheater(index) {
     if (isKiller) {
       const gun = _genericGun({ bodyShape: 'classic', bodyColor: 0x222222, accentColor: 0x6a6a6a, magType: 'banana', topRail: true });
       gun.scale.setScalar(1.25);
-      gun.position.set(0.26, 1.34, -0.34); // right-hand, forward of the chest
+      // +Z side + flipped barrel to match the ghost's +PI mesh facing.
+      gun.position.set(0.26, 1.34, 0.34); // right-hand, forward of the chest
+      gun.rotation.y = Math.PI;
       body.add(gun);
       body._gun = gun;
     }
@@ -8132,7 +8134,9 @@ function renderTheater() {
     const g = THEATER.ghosts[id];
     if (g) {
       g.mesh.position.set(e.x, Math.max(0, (e.y || 1) - 1.6), e.z);
-      g.mesh.rotation.y = e.rotY || 0;
+      // +PI so the face (+Z side) points along forward, matching makePlayerMesh /
+      // the remote-player convention. Without it killcam heads render backwards.
+      g.mesh.rotation.y = (e.rotY || 0) + Math.PI;
       animateCharacterMesh(g.mesh, dt, 0); // walk-cycle from distance moved
     }
   }
@@ -13577,7 +13581,9 @@ function spawnDDayWave(count, waveNum) {
     const mesh = remoteMeshes[id];
     if (mesh) {
       const gun = makeBotWeaponProp(weaponId);
-      gun.position.set(0.38, 1.18, -0.22);
+      // Gun on the +Z (forward) side + flipped barrel, matching the +PI mesh facing.
+      gun.position.set(0.38, 1.18, 0.22);
+      gun.rotation.y = Math.PI;
       mesh.add(gun);
       if (mesh._rig) mesh._rig.holdsGun = true;
     }
@@ -14152,9 +14158,9 @@ function spawnGameBots() {
     const mesh = remoteMeshes[id];
     if (mesh) {
       const gun = makeBotWeaponProp(weaponId);
-      // Right-arm position in bot-local space, pointing forward (−Z)
-      gun.position.set(0.38, 1.18, -0.22);
-      gun.rotation.y = 0; // faces forward with the bot
+      // Gun on the +Z (forward) side + flipped barrel, matching the +PI mesh facing.
+      gun.position.set(0.38, 1.18, 0.22);
+      gun.rotation.y = Math.PI; // barrel points along forward with the bot
       mesh.add(gun);
       if (mesh._rig) mesh._rig.holdsGun = true;
     }
@@ -14589,7 +14595,9 @@ function updateBotAI(dt) {
         }
       }
       const mesh = remoteMeshes[bot.id];
-      if (mesh) { mesh.position.set(bot.x, 0, bot.z); mesh.rotation.y = bot.rotY; }
+      // +PI so the face (+Z side of the head) points along forward, matching the
+      // remote-player convention. Without this, bot heads render backwards.
+      if (mesh) { mesh.position.set(bot.x, 0, bot.z); mesh.rotation.y = bot.rotY + Math.PI; }
       continue; // skip movement block
     }
 
@@ -15404,7 +15412,8 @@ function updateBotAI(dt) {
 
     // Sync remote mesh position (with vertical lift from air grenade)
     const mesh = remoteMeshes[bot.id];
-    if (mesh) { mesh.position.set(bot.x, bot.y || 0, bot.z); mesh.rotation.y = bot.rotY; }
+    // +PI so the face points forward (see note above; matches remote players).
+    if (mesh) { mesh.position.set(bot.x, bot.y || 0, bot.z); mesh.rotation.y = bot.rotY + Math.PI; }
     } catch(e) { console.error('[botAI] error for bot', bot.id, ':', e.message, e.stack); }
   }
   // Batch-send bot positions to server
