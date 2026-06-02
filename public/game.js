@@ -13883,7 +13883,15 @@ function spawnGameBots() {
     const sp       = botSideSpawn(idx, count, team);
     const sx = sp.x, sz = sp.z;
     const id       = `bot_${team}_${now}_${idx}`;
-    const name     = isAlly ? `Ally ${idx+1}` : `Enemy ${idx+1}`;
+    // 💬 Drafted-teammate hook: the FIRST ally bot becomes your chosen comic-cast
+    // character (name + emoji), set via the Character Chat "Pick as Teammate" button.
+    let name = isAlly ? `Ally ${idx+1}` : `Enemy ${idx+1}`;
+    let _teammateChar = null;
+    if (isAlly && idx === 0) {
+      const tmId = window.PVP_TEAMMATE || (() => { try { return localStorage.getItem('pvp_teammate'); } catch (e) { return null; } })();
+      const tmChar = tmId && window.CHAT_CAST && window.CHAT_CAST[tmId];
+      if (tmChar) { name = `${tmChar.emoji} ${tmChar.name}`; _teammateChar = tmChar; }
+    }
     const weaponId = randomPrimaryId();
     // 🆕 Full bot loadout — secondary, melee, utility (random non-admin picks)
     const SECONDARIES = WEAPONS.filter(w => w.slot === 'secondary' && !w.adminItem && !w.ddayOnly);
@@ -13904,6 +13912,10 @@ function spawnGameBots() {
     players[id] = pData;
     spawnRemotePlayer(pData);                    // adds mesh to scene immediately
     remoteMeshes[id].position.set(sx, 0, sz);   // make sure position is exact
+    if (_teammateChar) {
+      const _tc = _teammateChar;
+      setTimeout(() => { try { showAnnouncement(`${_tc.emoji} ${_tc.name} JOINED`, `"${_tc.quip}"`, _tc.color || '#88ddaa', 2600); } catch (e) {} }, 1200);
+    }
 
     // ── Attach weapon prop to bot mesh ────────────────────────────────────
     const mesh = remoteMeshes[id];

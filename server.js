@@ -434,6 +434,52 @@ app.post('/shop/buy-bundle', (req, res) => {
 
 app.get('/shop/bundles', (req, res) => res.json({ bundles: BUNDLES }));
 
+// ── 💬 Character Chat AI proxy ─────────────────────────────────────────────
+// Generates in-character replies from a personality system prompt the client
+// sends. Gated on ANTHROPIC_API_KEY — WITHOUT a key this returns 503 and the
+// client transparently falls back to its built-in rule-based personalities.
+// (Set ANTHROPIC_API_KEY in Railway env vars to enable real AI.)
+const CHAT_AI_MODEL = process.env.CHAT_AI_MODEL || 'claude-3-5-haiku-latest';
+const _chatRate = new Map(); // ip -> [timestamps] crude per-IP rate limit (public repo)
+app.get('/api/chat/status', (req, res) => res.json({ ai: !!process.env.ANTHROPIC_API_KEY }));
+app.post('/api/chat', async (req, res) => {
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key) return res.status(503).json({ error: 'no_ai' });
+  try {
+    const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'x').toString();
+    const now = Date.now();
+    const hits = (_chatRate.get(ip) || []).filter(t => now - t < 60000);
+    if (hits.length >= 40) return res.status(429).json({ error: 'rate' });
+    hits.push(now); _chatRate.set(ip, hits);
+
+    const system = String(req.body.system || '').slice(0, 2000);
+    let messages = Array.isArray(req.body.messages) ? req.body.messages.slice(-12) : [];
+    messages = messages
+      .filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
+      .map(m => ({ role: m.role, content: m.content.slice(0, 600) }));
+    // Anthropic requires the first message to be from the user.
+    while (messages.length && messages[0].role === 'assistant') messages.shift();
+    if (!messages.length) return res.status(400).json({ error: 'empty' });
+
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({ model: CHAT_AI_MODEL, max_tokens: 120, system, messages }),
+    });
+    if (!r.ok) {
+      const t = await r.text().catch(() => '');
+      console.error('chat AI upstream error', r.status, t.slice(0, 200));
+      return res.status(502).json({ error: 'upstream' });
+    }
+    const data = await r.json();
+    const reply = (data.content || []).map(b => b.text || '').join(' ').trim();
+    res.json({ reply: reply || '...' });
+  } catch (e) {
+    console.error('chat AI exception', e.message);
+    res.status(500).json({ error: 'exception' });
+  }
+});
+
 // ── Admin item unlock codes (one code per item) ────────────────────────────
 const UNLOCK_CODES = {
   // Primaries
