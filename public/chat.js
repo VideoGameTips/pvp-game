@@ -136,53 +136,14 @@
   }
 
   // ── Response engine ────────────────────────────────────────────────────
-  const TOPIC = [
-    { k: ['hi','hey','hello','yo','sup','wassup'], pick: c => greet(c) },
-    { k: ['fair','unfair','balance','broken','nerf','rigged','lag'], pick: c =>
-        c.id === 'rager' ? rng(c.lines) : `${c.name} shrugs: "${rng(['Sounds like a skill issue.','Balanced enough for me.','Working as intended, probably.'])}"` },
-    { k: ['win','won','lose','lost','gg','good game'], pick: c =>
-        rng([c.quip, ...c.lines.slice(1)]) },
-    { k: ['who','你是谁','what are you'], pick: c => `I'm ${c.name}. ${c.quip}` },
-    { k: ['cheat','hack','aimbot','cheater'], pick: c =>
-        c.id === 'mrsuspicious' ? rng(c.lines) : `"${rng(['I would NEVER.','No comment.','Define cheating.'])}" — ${c.name}` },
-    { k: ['love','cute','best','favorite','awesome','nice'], pick: c =>
-        rng(['Obviously. ' + c.quip, 'Flattery accepted.', 'I know. ' + c.quip]) },
-    { k: ['noob','trash','bad','suck','ez','easy'], pick: c =>
-        c.id === 'goat' ? rng(c.lines) : rng(['Bold words. ' + c.quip, 'We\'ll see about that.', '😏 ' + c.quip]) },
-    { k: ['map','wall','stuck','glitch'], pick: c =>
-        c.id === 'janitor' ? rng(c.lines) : rng(['Maps are hard. ' + c.quip, 'Skill issue with geometry.', c.quip]) },
-  ];
-  function greet(c) {
-    return rng([`${c.emoji} ${c.quip}`, `Oh, it's you. ${c.quip}`, `Hey. ${c.quip}`, `${c.quip}`]);
-  }
-  function rng(a) { return a[Math.floor(Math.random() * a.length)]; }
-
-  // Per-character memory so the offline engine never says the same line twice
-  // in a row (the old version parroted the catchphrase ~50% of the time).
-  const _lastReply = {};
-  function freshLine(char, pool) {
-    const last = _lastReply[char.id];
-    let opts = pool.filter(l => l !== last);
-    if (!opts.length) opts = pool;
-    const pick = rng(opts);
-    _lastReply[char.id] = pick;
-    return pick;
-  }
-  function replyFor(char, text) {
-    const t = (text || '').toLowerCase();
-    for (const topic of TOPIC) {
-      if (topic.k.some(k => t.includes(k))) return topic.pick(char);
-    }
-    // No keyword → personality line, lightly weighted toward the catchphrase
-    // but never repeating the previous reply.
-    const pool = Math.random() < 0.25 ? char.lines : char.lines.slice(1).length ? char.lines.slice(1) : char.lines;
-    return freshLine(char, pool);
-  }
+  // Fully AI-driven (see getReply / groupAiReply below). The old keyword
+  // rule-engine and canned catchphrase lines were removed — every reply is now
+  // improvised by the AI from the character's personality.
 
   // ── 🤖 AI personality layer ───────────────────────────────────────────────
   // The AI improvises in-character from a personality system prompt (per the
-  // "You are King Chaos…" design). Falls back to replyFor() when the server has
-  // no API key (503) or the request fails. aiState avoids re-pinging once off.
+  // "You are King Chaos…" design). When the server has no API key (503) we show
+  // a plain offline notice instead of canned lines. aiState avoids re-pinging.
   let aiState = 'unknown'; // 'unknown' | 'on' | 'off'
   const TRAITS = {
     kingchaos: 'chaotic, dramatic, theatrical, and wildly overconfident — you think every idea of yours is genius and you love being #1',
@@ -223,12 +184,21 @@
     shadow: 'a silent menacing lurker who speaks in "..." and short ominous lines',
     pixelboy: 'a retro-gamer who talks in achievements, high scores, and "GG"',
   };
-  function buildSystemPrompt(char) {
+  // Short personality tag shown under the name (replaces the old catchphrase).
+  function blurb(char) {
+    const t = TRAITS[char.id] || '';
+    const first = t.split(/[—,.]/)[0].trim();
+    return first ? first.charAt(0).toUpperCase() + first.slice(1) : char.name;
+  }
+  function buildSystemPrompt(char, group) {
     const traits = TRAITS[char.id] || `quirky and memorable — your vibe: ${char.lines.slice(0, 3).join(' / ')}`;
-    return `You are ${char.name}, a character in the chaotic multiplayer shooter "PVP Arena". `
-      + `Personality: you are ${traits}. Your signature catchphrase is "${char.quip}" and you work it in naturally (not every single time). `
+    let p = `You are ${char.name}, a character in the chaotic multiplayer shooter "PVP Arena". `
+      + `Personality: you are ${traits}. `
+      + `Improvise everything from this personality — do NOT fall back on a single repeated catchphrase, actually respond to what's said. `
       + `Stay FULLY in character at all times. Reply in 1-2 short, punchy, funny sentences. `
       + `Never break character. Never mention being an AI, a model, or a chatbot.`;
+    if (group) p += ` You are in a group chat with the rest of the cast (${group}). React to what others just said — agree, mock, one-up, or pick a fight. Keep it to ONE short line.`;
+    return p;
   }
   function sanitizeMsgs(msgs) {
     const out = [];
@@ -260,23 +230,32 @@
       return null;
     } catch (e) { return null; }
   }
-  // Scripted → AI → rule-based fallback (mirrors the "signature lines, else AI" design).
+  // Pure AI. No rule-based fallback — if the AI is unavailable we say so plainly.
+  const AI_OFFLINE = '⚙️ (AI is offline — set the ANTHROPIC_API_KEY env var to bring me to life.)';
   async function getReply(char, text) {
     const ai = await aiReply(char, text);
-    if (ai) return ai;
-    return replyFor(char, text);
+    return ai || AI_OFFLINE;
   }
-  // Cross-talk: a character throws shade at another in the room (the "argue" feel).
-  const SHADE = [
-    n => `${n} is wrong, as usual.`,
-    n => `Don't listen to ${n}.`,
-    n => `${n} started it, by the way.`,
-    n => `Ugh, ${n} again?`,
-    n => `${n}, nobody asked.`,
-    n => `That's rich coming from ${n}.`,
-    n => `${n} would say that.`,
-    n => `Hard disagree, ${n}.`,
-  ];
+  // Group cross-talk reply: same AI, but the character knows it's in the room and
+  // reacts to the recent transcript so arguments emerge naturally.
+  async function groupAiReply(char) {
+    if (aiState === 'off') return null;
+    const others = GROUP_ROOM.filter(id => id !== char.id).map(id => byId[id].name).join(', ');
+    const transcript = thread.slice(-8).map(m =>
+      m.who === 'user' ? `Player: ${m.text}` : `${m.char.name}: ${m.text}`).join('\n');
+    const messages = [{ role: 'user', content: `Recent group chat:\n${transcript || '(quiet so far)'}\n\nNow YOU (${char.name}) say your next line.` }];
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ system: buildSystemPrompt(char, others), messages }),
+      });
+      if (res.status === 503) { aiState = 'off'; return null; }
+      if (!res.ok) return null;
+      const data = await res.json();
+      if (data && data.reply) { aiState = 'on'; return data.reply; }
+      return null;
+    } catch (e) { return null; }
+  }
 
   // ── UI ──────────────────────────────────────────────────────────────────
   let panel, view = 'select', activeChar = null, thread = [];
@@ -322,7 +301,7 @@
       card.onmouseleave = () => card.style.borderColor = '#3a2030';
       card.appendChild(avatarCanvas(c, 40));
       const txt = document.createElement('div');
-      txt.innerHTML = `<div style="font-size:11px;color:#fff;line-height:1.2;">${c.name}</div><div style="font-size:9px;color:#b58;margin-top:2px;">"${c.quip}"</div>`;
+      txt.innerHTML = `<div style="font-size:11px;color:#fff;line-height:1.2;">${c.name}</div><div style="font-size:9px;color:#b58;margin-top:2px;">${blurb(c)}</div>`;
       card.appendChild(txt);
       card.onclick = () => { activeChar = c; thread = []; view = 'chat'; render(); };
       grid.appendChild(card);
@@ -336,7 +315,7 @@
     panel.innerHTML = header(title, true) +
       `${!isGroup ? `<div style="display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid #2a1a2a;flex:0 0 auto;">
           <span id="cc-ava"></span>
-          <div><div style="color:${activeChar.color};font-size:13px;">${activeChar.name}</div><div style="font-size:10px;color:#b58;">"${activeChar.quip}"</div></div>
+          <div><div style="color:${activeChar.color};font-size:13px;">${activeChar.name}</div><div style="font-size:10px;color:#b58;">${blurb(activeChar)}</div></div>
           <button id="cc-team" style="margin-left:auto;background:#1a2a3a;color:#88ddaa;border:1px solid #44aa77;border-radius:5px;padding:6px 10px;cursor:pointer;font-family:inherit;font-size:11px;">⚔️ Pick as Teammate</button>
         </div>` : `<div style="padding:8px 16px;font-size:10px;color:#b58;border-bottom:1px solid #2a1a2a;flex:0 0 auto;">In the room: ${GROUP_ROOM.map(id => byId[id].emoji).join(' ')} — type a message (or @name) and watch the chaos.</div>`}
        <div id="cc-msgs" style="flex:1 1 auto;overflow-y:auto;padding:12px 16px;display:flex;flex-direction:column;gap:8px;min-height:220px;"></div>
@@ -349,9 +328,16 @@
     // (re)draw existing thread
     thread.forEach(m => msgs.appendChild(bubble(m)));
     if (thread.length === 0) {
-      // opening line
-      if (isGroup) { GROUP_ROOM.slice(0, 3).forEach((id, i) => setTimeout(() => pushBot(byId[id], byId[id].quip), 250 + i * 450)); }
-      else pushBot(activeChar, activeChar.quip);
+      // AI-generated opening line(s)
+      if (isGroup) {
+        GROUP_ROOM.slice(0, 3).forEach((id, i) => setTimeout(() => {
+          const c = byId[id]; const t = showTyping(c);
+          groupAiReply(c).then(r => { removeTyping(t); pushBot(c, r || AI_OFFLINE); });
+        }, 250 + i * 600));
+      } else {
+        const t = showTyping(activeChar);
+        getReply(activeChar, 'Greet me in character with one short line.').then(r => { removeTyping(t); pushBot(activeChar, r); });
+      }
     }
     scrollMsgs();
     const input = panel.querySelector('#cc-input');
@@ -411,24 +397,20 @@
     const mentioned = CAST.filter(c => text.toLowerCase().includes('@' + c.id) || text.toLowerCase().includes('@' + c.name.toLowerCase().replace(/\s+/g, '')));
     let responders = mentioned.length ? mentioned.map(c => c.id)
       : shuffle(GROUP_ROOM).slice(0, 3 + Math.floor(Math.random() * 2));
-    let delay = 300;
-    responders.forEach((id, i) => {
-      const c = byId[id];
-      setTimeout(() => pushBot(c, replyFor(c, text)), delay);
-      delay += 500 + Math.random() * 500;
-    });
-    // …then someone throws shade at another responder → an argument breaks out
-    if (responders.length >= 2 && Math.random() < 0.85) {
-      const speaker = byId[responders[Math.floor(Math.random() * responders.length)]];
-      const targetId = responders[Math.floor(Math.random() * responders.length)];
-      const target = byId[targetId].name;
-      setTimeout(() => pushBot(speaker, rng(SHADE)(target)), delay + 200);
-      // and a rager-style blow-up sometimes
-      if (Math.random() < 0.5) {
-        const r = byId['rager'];
-        if (GROUP_ROOM.includes('rager')) setTimeout(() => pushBot(r, rng(r.lines)), delay + 900);
-      }
-    }
+    // Reply one at a time so each character sees what the previous ones said
+    // (the AI reads the live transcript) → real arguments emerge.
+    let i = 0;
+    const next = () => {
+      if (i >= responders.length) return;
+      const c = byId[responders[i++]];
+      const t = showTyping(c);
+      groupAiReply(c).then(r => {
+        removeTyping(t);
+        pushBot(c, r || AI_OFFLINE);
+        setTimeout(next, 350 + Math.random() * 500);
+      });
+    };
+    setTimeout(next, 300);
   }
   function shuffle(a) { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1));[a[i], a[j]] = [a[j], a[i]]; } return a; }
 
