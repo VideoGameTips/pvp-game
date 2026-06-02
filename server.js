@@ -436,15 +436,36 @@ app.get('/shop/bundles', (req, res) => res.json({ bundles: BUNDLES }));
 
 // ── 💬 Character Chat AI proxy ─────────────────────────────────────────────
 // Generates in-character replies from a personality system prompt the client
-// sends. Gated on ANTHROPIC_API_KEY — WITHOUT a key this returns 503 and the
-// client transparently falls back to its built-in rule-based personalities.
-// (Set ANTHROPIC_API_KEY in Railway env vars to enable real AI.)
-const CHAT_AI_MODEL = process.env.CHAT_AI_MODEL || 'claude-3-5-haiku-latest';
+// sends. Auto-detects ONE of several providers from env vars (no code change):
+//   GROQ_API_KEY    → Groq  (FREE, no credit card — console.groq.com)  ★ recommended
+//   OPENAI_API_KEY  → OpenAI / any OpenAI-compatible host (set CHAT_AI_BASE_URL too)
+//   ANTHROPIC_API_KEY → Anthropic (paid)
+// WITHOUT any key this returns 503 and the client shows an offline notice.
+// Optional model override: CHAT_AI_MODEL. Optional base URL: CHAT_AI_BASE_URL.
+function chatProvider() {
+  const m = process.env.CHAT_AI_MODEL;
+  if (process.env.GROQ_API_KEY) {
+    return { kind: 'openai', key: process.env.GROQ_API_KEY,
+      url: process.env.CHAT_AI_BASE_URL || 'https://api.groq.com/openai/v1/chat/completions',
+      model: m || 'llama-3.3-70b-versatile' };
+  }
+  if (process.env.OPENAI_API_KEY) {
+    return { kind: 'openai', key: process.env.OPENAI_API_KEY,
+      url: process.env.CHAT_AI_BASE_URL || 'https://api.openai.com/v1/chat/completions',
+      model: m || 'gpt-4o-mini' };
+  }
+  if (process.env.ANTHROPIC_API_KEY) {
+    return { kind: 'anthropic', key: process.env.ANTHROPIC_API_KEY,
+      url: 'https://api.anthropic.com/v1/messages',
+      model: m || 'claude-3-5-haiku-latest' };
+  }
+  return null;
+}
 const _chatRate = new Map(); // ip -> [timestamps] crude per-IP rate limit (public repo)
-app.get('/api/chat/status', (req, res) => res.json({ ai: !!process.env.ANTHROPIC_API_KEY }));
+app.get('/api/chat/status', (req, res) => res.json({ ai: !!chatProvider() }));
 app.post('/api/chat', async (req, res) => {
-  const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) return res.status(503).json({ error: 'no_ai' });
+  const prov = chatProvider();
+  if (!prov) return res.status(503).json({ error: 'no_ai' });
   try {
     const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'x').toString();
     const now = Date.now();
@@ -457,22 +478,41 @@ app.post('/api/chat', async (req, res) => {
     messages = messages
       .filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
       .map(m => ({ role: m.role, content: m.content.slice(0, 600) }));
-    // Anthropic requires the first message to be from the user.
+    // First turn must be from the user (Anthropic requires it; harmless elsewhere).
     while (messages.length && messages[0].role === 'assistant') messages.shift();
     if (!messages.length) return res.status(400).json({ error: 'empty' });
 
-    const r = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({ model: CHAT_AI_MODEL, max_tokens: 120, system, messages }),
-    });
-    if (!r.ok) {
-      const t = await r.text().catch(() => '');
-      console.error('chat AI upstream error', r.status, t.slice(0, 200));
-      return res.status(502).json({ error: 'upstream', status: r.status, detail: t.slice(0, 160) });
+    let r, reply;
+    if (prov.kind === 'anthropic') {
+      r = await fetch(prov.url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-api-key': prov.key, 'anthropic-version': '2023-06-01' },
+        body: JSON.stringify({ model: prov.model, max_tokens: 120, system, messages }),
+      });
+      if (!r.ok) {
+        const t = await r.text().catch(() => '');
+        console.error('chat AI upstream error', prov.kind, r.status, t.slice(0, 200));
+        return res.status(502).json({ error: 'upstream', status: r.status, detail: t.slice(0, 160) });
+      }
+      const data = await r.json();
+      reply = (data.content || []).map(b => b.text || '').join(' ').trim();
+    } else {
+      // OpenAI-compatible (Groq, OpenAI, OpenRouter, etc.): system goes in messages[].
+      r = await fetch(prov.url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'authorization': `Bearer ${prov.key}` },
+        body: JSON.stringify({ model: prov.model, max_tokens: 120,
+          messages: [{ role: 'system', content: system }, ...messages] }),
+      });
+      if (!r.ok) {
+        const t = await r.text().catch(() => '');
+        console.error('chat AI upstream error', prov.kind, r.status, t.slice(0, 200));
+        return res.status(502).json({ error: 'upstream', status: r.status, detail: t.slice(0, 160) });
+      }
+      const data = await r.json();
+      reply = (((data.choices || [])[0] || {}).message || {}).content;
+      reply = (reply || '').trim();
     }
-    const data = await r.json();
-    const reply = (data.content || []).map(b => b.text || '').join(' ').trim();
     res.json({ reply: reply || '...' });
   } catch (e) {
     console.error('chat AI exception', e.message);

@@ -240,17 +240,17 @@
   }
   function offlineMsg() {
     const r = aiOfflineReason || 'no_key';
-    if (r === 'no_key') return '⚙️ (AI is offline — set the ANTHROPIC_API_KEY env var in Railway, then reload.)';
+    if (r === 'no_key') return '⚙️ (AI is offline — add a FREE GROQ_API_KEY env var in Railway (get one at console.groq.com), then reload.)';
     if (r === 'rate') return '⚙️ (Too many messages — rate limited. Wait a minute.)';
     if (r === 'network') return '⚙️ (Network error reaching the server.)';
     if (r === 'empty') return '⚙️ (AI returned an empty reply.)';
     if (r.startsWith('upstream:')) {
       const code = r.slice(9).trim();
-      if (code.startsWith('401') || code.startsWith('403')) return '⚙️ (Anthropic rejected the key — it\'s invalid or unauthorized. Check ANTHROPIC_API_KEY.)';
-      if (code.startsWith('400')) return '⚙️ (Anthropic 400 — bad request, possibly an invalid model name in CHAT_AI_MODEL.)';
-      if (code.startsWith('429')) return '⚙️ (Anthropic rate limit / no credit on the account.)';
-      if (code.startsWith('529')) return '⚙️ (Anthropic is overloaded — try again shortly.)';
-      return '⚙️ (Anthropic API error ' + code + '.)';
+      if (code.startsWith('401') || code.startsWith('403')) return '⚙️ (The API key was rejected — it\'s invalid or unauthorized. Check your GROQ_API_KEY.)';
+      if (code.startsWith('400')) return '⚙️ (API 400 — bad request, possibly an invalid model name in CHAT_AI_MODEL.)';
+      if (code.startsWith('429')) return '⚙️ (API rate limit / free quota exhausted — wait a bit.)';
+      if (code.startsWith('5')) return '⚙️ (The AI provider is overloaded — try again shortly.)';
+      return '⚙️ (AI API error ' + code + '.)';
     }
     return '⚙️ (AI unavailable: ' + r + ')';
   }
