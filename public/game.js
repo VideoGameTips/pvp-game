@@ -13913,57 +13913,61 @@ function botSideSpawn(idx, count, team) {
   return { x: baseX + xJit, z: (isAlly ? 32 : -20) + zJit };
 }
 
-// 🎭 Per-character teammate PLAYSTYLES. When you draft a comic-cast character via
-// the Character Chat, their ally bot fights in their signature style: a chosen
-// loadout + tuned stats (speed, aim, aggression, hp). Falls back to DEFAULT for
-// anyone without a custom entry. primary/secondary/melee are weapon ids; personality
-// ∈ aggressor|camper|sniper|tactician; speedMult scales movement; aim ∈ 0..1.
+// 🎭 Per-character teammate PLAY STYLES. When you draft a comic-cast character via
+// the Character Chat, their ally bot fights in their signature style. Every
+// character shares the SAME default stat block (hp/speed/aim from
+// DEFAULT_TEAMMATE_PLAYSTYLE) — they are balanced, NOT stronger/weaker. The only
+// difference is PLAY STYLE: preferred weapons (primary/secondary/melee) + behavior
+// (personality ∈ aggressor|camper|sniper|tactician). Add only those fields here;
+// stats are inherited from the default so no character is objectively OP.
 const TEAMMATE_PLAYSTYLES = {
   // — Main heroes —
-  kingchaos:   { primary:'royal_minigun',     personality:'aggressor', speedMult:1.10, aim:0.78, hp:340, style:'Chaotic spray-and-pray' },
-  luckylarry:  { primary:'auto_revolver',     personality:'tactician', speedMult:1.0,  aim:0.55, hp:300, style:'Accidental clutch' },
-  grandmaster: { primary:'srx',               personality:'sniper',    speedMult:0.95, aim:0.95, hp:300, style:'Calculated picks' },
-  mirage:      { primary:'smart_smg', melee:'katana', personality:'aggressor', speedMult:1.45, aim:0.7, hp:260, style:'Fast hit-and-run' },
+  kingchaos:   { primary:'royal_minigun',     personality:'aggressor', style:'Chaotic spray-and-pray' },
+  luckylarry:  { primary:'auto_revolver',     personality:'tactician', style:'Accidental clutch' },
+  grandmaster: { primary:'srx',               personality:'sniper',    style:'Calculated picks' },
+  mirage:      { primary:'smart_smg', melee:'katana', personality:'aggressor', style:'Fast hit-and-run' },
   // — Fan favorites —
-  bot47:       { primary:'arc_rifle',         personality:'tactician', speedMult:1.0,  aim:0.9,  hp:320, style:'Cold precision' },
-  rager:       { primary:'auto_shotgun',      personality:'aggressor', speedMult:1.2,  aim:0.6,  hp:300, style:'Reckless rusher' },
-  duckguy:     { primary:'potato_cannon',     personality:'aggressor', speedMult:1.15, aim:0.5,  hp:300, style:'Quacks & chaos' },
-  combatmedic: { primary:'pulse_disc', secondary:'pistol', personality:'tactician', speedMult:1.05, aim:0.7, hp:380, style:'Tanky support' },
+  bot47:       { primary:'arc_rifle',         personality:'tactician', style:'Cold precision' },
+  rager:       { primary:'auto_shotgun',      personality:'aggressor', style:'Reckless rusher' },
+  duckguy:     { primary:'potato_cannon',     personality:'aggressor', style:'Quacks & chaos' },
+  combatmedic: { primary:'pulse_disc', secondary:'pistol', personality:'tactician', style:'Support' },
   // — Girls squad —
-  sharpshooter:{ primary:'railgun',           personality:'sniper',    speedMult:0.95, aim:0.98, hp:280, style:'One-shot sniper' },
-  ladymayhem:  { primary:'firework_launcher', personality:'aggressor', speedMult:1.1,  aim:0.6,  hp:300, style:'Explosive comedian' },
-  jinx:        { primary:'pinball_launcher',  personality:'tactician', speedMult:1.1,  aim:0.55, hp:300, style:'Unpredictable bounce' },
-  pandora:     { primary:'grenade_launcher',  personality:'aggressor', speedMult:1.0,  aim:0.6,  hp:300, style:'Press every button' },
-  wildfire:    { primary:'incendiary_shotgun',personality:'aggressor', speedMult:1.15, aim:0.6,  hp:300, style:'Burn it down' },
-  anarchy:     { primary:'storm_cannon',      personality:'aggressor', speedMult:1.1,  aim:0.62, hp:300, style:'Burn the meta' },
+  sharpshooter:{ primary:'railgun',           personality:'sniper',    style:'One-shot sniper' },
+  ladymayhem:  { primary:'firework_launcher', personality:'aggressor', style:'Explosive comedian' },
+  jinx:        { primary:'pinball_launcher',  personality:'tactician', style:'Unpredictable bounce' },
+  pandora:     { primary:'grenade_launcher',  personality:'aggressor', style:'Press every button' },
+  wildfire:    { primary:'incendiary_shotgun',personality:'aggressor', style:'Burn it down' },
+  anarchy:     { primary:'storm_cannon',      personality:'aggressor', style:'Burn the meta' },
   // — Specialists —
-  professional:{ primary:'srx',               personality:'sniper',    speedMult:1.0,  aim:0.96, hp:300, style:'Executes, never plays' },
-  afkguy:      { primary:'smart_smg',         personality:'camper',    speedMult:0.7,  aim:0.85, hp:300, style:'AFK but somehow cracked' },
-  ragebaiter:  { primary:'sawed_off',         personality:'camper',    speedMult:0.9,  aim:0.7,  hp:320, style:'Says no, holds angle' },
-  noskill:     { primary:'minigun',           personality:'aggressor', speedMult:1.0,  aim:0.45, hp:300, style:'More bullets = more skill' },
-  pyromaniac:  { primary:'flamethrower',      personality:'aggressor', speedMult:1.2,  aim:0.65, hp:300, style:'MORE FIRE' },
-  engineer:    { primary:'foam_cannon',       personality:'tactician', speedMult:1.0,  aim:0.7,  hp:320, style:'Fix it or break it' },
+  professional:{ primary:'srx',               personality:'sniper',    style:'Executes, never plays' },
+  afkguy:      { primary:'smart_smg',         personality:'camper',    style:'AFK but somehow cracked' },
+  ragebaiter:  { primary:'sawed_off',         personality:'camper',    style:'Says no, holds angle' },
+  noskill:     { primary:'minigun',           personality:'aggressor', style:'More bullets = more skill' },
+  pyromaniac:  { primary:'flamethrower',      personality:'aggressor', style:'MORE FIRE' },
+  engineer:    { primary:'foam_cannon',       personality:'tactician', style:'Fix it or break it' },
   // — Bots —
-  bot604:      { primary:'arc_rifle',         personality:'sniper',    speedMult:0.95, aim:0.92, hp:320, style:'Probability engine' },
-  juicebox:    { primary:'pulse_disc', secondary:'pistol', personality:'tactician', speedMult:1.1, aim:0.7, hp:360, style:'Hydration support' },
+  bot604:      { primary:'arc_rifle',         personality:'sniper',    style:'Probability engine' },
+  juicebox:    { primary:'pulse_disc', secondary:'pistol', personality:'tactician', style:'Hydration support' },
   // — Weird department —
-  ghost:       { primary:'glassmaker', melee:'knife', personality:'tactician', speedMult:1.3, aim:0.8, hp:240, style:'Silent flanker' },
-  nucleardave: { primary:'mortar_rifle',      personality:'aggressor', speedMult:1.0,  aim:0.6,  hp:300, style:'Watch this' },
-  lorekeeper:  { primary:'magnet_rifle',      personality:'camper',    speedMult:0.9,  aim:0.85, hp:300, style:'Prophesied control' },
-  tankturtle:  { primary:'thermal_lmg',       personality:'camper',    speedMult:0.6,  aim:0.8,  hp:450, style:'Slow but unstoppable' },
-  casualbob:   { primary:'ak30',              personality:'tactician', speedMult:1.0,  aim:0.6,  hp:300, style:'Just here for fun' },
-  goat:        { primary:'lever', melee:'katana', personality:'aggressor', speedMult:1.25, aim:0.95, hp:320, style:'Actual GOAT' },
-  mrsuspicious:{ primary:'auto_revolver',     personality:'sniper',    speedMult:1.05, aim:0.99, hp:300, style:'Definitely-not-aimbot' },
-  thesweat:    { primary:'ak20',              personality:'aggressor', speedMult:1.25, aim:0.93, hp:300, style:'Tryhard sweat' },
+  ghost:       { primary:'glassmaker', melee:'knife', personality:'tactician', style:'Silent flanker' },
+  nucleardave: { primary:'mortar_rifle',      personality:'aggressor', style:'Watch this' },
+  lorekeeper:  { primary:'magnet_rifle',      personality:'camper',    style:'Prophesied control' },
+  tankturtle:  { primary:'thermal_lmg',       personality:'camper',    style:'Slow but unstoppable' },
+  casualbob:   { primary:'ak30',              personality:'tactician', style:'Just here for fun' },
+  goat:        { primary:'lever', melee:'katana', personality:'aggressor', style:'Actual GOAT' },
+  mrsuspicious:{ primary:'auto_revolver',     personality:'sniper',    style:'Definitely-not-aimbot' },
+  thesweat:    { primary:'ak20',              personality:'aggressor', style:'Tryhard sweat' },
   // — Miscellaneous —
-  janitor:     { primary:'foam_cannon', melee:'bat', personality:'tactician', speedMult:1.0, aim:0.7, hp:320, style:'Cleans up messes' },
-  timekeeper:  { primary:'railgun',           personality:'sniper',    speedMult:0.95, aim:0.96, hp:300, style:'Never-miss timing' },
-  wildcard:    { primary:'portal_launcher',   personality:'aggressor', speedMult:1.2,  aim:0.6,  hp:300, style:'Total chaos' },
-  panicpanda:  { primary:'auto_shotgun',      personality:'aggressor', speedMult:1.4,  aim:0.4,  hp:300, style:'Panic-clutch sprint' },
-  dramaqueen:  { primary:'firework_launcher', personality:'aggressor', speedMult:1.1,  aim:0.55, hp:280, style:'Dramatic flair' },
-  shadow:      { primary:'glassmaker', melee:'knife', personality:'tactician', speedMult:1.35, aim:0.85, hp:240, style:'Menacing lurker' },
-  pixelboy:    { primary:'smart_smg',         personality:'aggressor', speedMult:1.15, aim:0.75, hp:300, style:'Retro tryhard' },
+  janitor:     { primary:'foam_cannon', melee:'bat', personality:'tactician', style:'Cleans up messes' },
+  timekeeper:  { primary:'railgun',           personality:'sniper',    style:'Never-miss timing' },
+  wildcard:    { primary:'portal_launcher',   personality:'aggressor', style:'Total chaos' },
+  panicpanda:  { primary:'auto_shotgun',      personality:'aggressor', style:'Panic-clutch sprint' },
+  dramaqueen:  { primary:'firework_launcher', personality:'aggressor', style:'Dramatic flair' },
+  shadow:      { primary:'glassmaker', melee:'knife', personality:'tactician', style:'Menacing lurker' },
+  pixelboy:    { primary:'smart_smg',         personality:'aggressor', style:'Retro tryhard' },
 };
+// Shared default stat block — every drafted teammate uses these numbers; only the
+// play-style fields above differ. (aim 0..1; speedMult scales movement; hp = health.)
 const DEFAULT_TEAMMATE_PLAYSTYLE = { personality:'tactician', speedMult:1.0, aim:0.7, hp:300, style:'Balanced' };
 
 // 🎭 Which skin each drafted comic-cast character wears. Marquee AIs get a unique
@@ -14107,7 +14111,9 @@ function spawnGameBots() {
       const tmChar = tmId && window.CHAT_CAST && window.CHAT_CAST[tmId];
       if (tmChar) {
         name = `${tmChar.emoji} ${tmChar.name}`; _teammateChar = tmChar;
-        _playstyle = TEAMMATE_PLAYSTYLES[tmId] || DEFAULT_TEAMMATE_PLAYSTYLE;
+        // Every character shares the same DEFAULT stat block (hp/speed/aim); their
+        // entry only overrides PLAY STYLE (personality + signature loadout + label).
+        _playstyle = { ...DEFAULT_TEAMMATE_PLAYSTYLE, ...(TEAMMATE_PLAYSTYLES[tmId] || {}) };
       }
     }
     // 🆕 Full bot loadout — secondary, melee, utility (random non-admin picks)
