@@ -9915,6 +9915,8 @@ function getSecretSynergy(weaponId, hitPos) {
 
 // Helper: emit hit to server AND show damage numbers AND apply damage client-authoritatively
 function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false) {
+  // 🛋️ Lobby 13 is a no-combat chill zone — the cast is neutral and can't be hurt.
+  if (match?.type === 'lobby') return;
   const isBot    = players[pid] && players[pid].isBot;
   const instakill = headshot && INSTAKILL_HS_WEAPONS.has(weaponId);
   socket.emit(isBot ? 'hitBot' : 'hit', {
@@ -11592,6 +11594,8 @@ function botShotHitsPlayer(bot, dist) {
 }
 
 function applyBotDamageToPlayer(weaponId, botId) {
+  // 🛋️ Lobby 13 is a no-combat chill zone — nobody takes damage.
+  if (match?.type === 'lobby') return;
   // ⚡ Admin god mode: no damage taken
   if (adminCheats.godMode && currentUser?.isAdmin) { flashHitIndicator(); return; }
   // Frost Blaster: doesn't deal HP damage, just reduces speed (lethal at 0)
