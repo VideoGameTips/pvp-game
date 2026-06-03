@@ -11783,7 +11783,7 @@ socket.on('lobbyStart', data => {
     gameStarted = true;
     spawnGameBots();
     requestPointerLockSafe();
-    loop();
+    startLoop();
   }
 });
 socket.on('chatLine', data => {
@@ -15758,6 +15758,12 @@ function updateKingCrown(dt) {
 
 // ── Game loop ──────────────────────────────────────────────────────────────
 let lastTime = performance.now();
+// Single RAF chain guard: once the render loop is running it stays running for
+// the page's lifetime (modes/lobby reuse it). startLoop() makes the initial kick
+// idempotent so re-entering a mode (e.g. Lobby 13 → menu → real match) never
+// spawns a second RAF chain (which would double game speed).
+let loopStarted = false;
+function startLoop() { if (loopStarted) return; loopStarted = true; loop(); }
 function loop() {
   requestAnimationFrame(loop);
   const now = performance.now();
@@ -16600,7 +16606,7 @@ function confirmLoadout() {
     gameStarted = true;
     spawnGameBots();
     requestPointerLockSafe();
-    loop();
+    startLoop();
   } else if (loadoutMode === 'swap') {
     // Mid-game swap via trashcan — player is still alive, no respawn needed
     requestPointerLockSafe();
@@ -16721,9 +16727,47 @@ async function startGame() {
   socket.emit('setName', name);
   emitMySkin();
   document.getElementById('overlay').style.display = 'none';
-  const ms = document.getElementById('mode-screen');
-  ms.style.display = 'flex';
-  updateUserInfoBar(); // populate user info on mode screen
+  updateUserInfoBar(); // populate user info for the mode screen (opened from the lobby)
+  // 🛋️ Land in Lobby 13 on login — the chill social hub IS the lobby now. The
+  // mode-select menu is one tap away via the floating MODES button.
+  document.getElementById('mode-screen').style.display = 'none';
+  selectMode('lobby13');
+}
+
+// 🛋️ Leave Lobby 13 → open the mode-select menu to pick a real match / shop.
+// Resets the "in-game" state so the normal first-match flow runs cleanly, and
+// clears the lobby cast so they don't linger behind the menu.
+function openModeMenu() {
+  gameStarted = false;
+  match = null; // drop the lobby match so HUD/match logic stops referencing it
+  try { document.exitPointerLock && document.exitPointerLock(); } catch (e) {}
+  for (const bot of gameBots) {
+    if (remoteMeshes[bot.id]) { scene.remove(remoteMeshes[bot.id]); delete remoteMeshes[bot.id]; }
+    if (bot._bubble) { bot._bubble.remove(); bot._bubble = null; }
+    delete players[bot.id];
+  }
+  gameBots.length = 0;
+  const hud = document.getElementById('match-hud'); if (hud) hud.style.display = 'none';
+  showLobbyModesButton(false);
+  document.getElementById('mode-screen').style.display = 'flex';
+  updateUserInfoBar();
+}
+// Floating "MODES" button — only visible while you're chilling in Lobby 13.
+function showLobbyModesButton(show) {
+  let btn = document.getElementById('lobby-modes-btn');
+  if (!btn) {
+    btn = document.createElement('button');
+    btn.id = 'lobby-modes-btn';
+    btn.textContent = '🎮 MODES';
+    btn.style.cssText = 'position:fixed;top:14px;left:14px;z-index:60;'
+      + 'padding:9px 22px;background:rgba(20,16,28,0.85);color:#aaffaa;border:2px solid #aaffaa;'
+      + 'border-radius:6px;font-family:inherit;font-size:14px;font-weight:bold;letter-spacing:3px;'
+      + 'cursor:pointer;box-shadow:0 2px 12px rgba(0,0,0,0.5);';
+    btn.addEventListener('click', openModeMenu);
+    btn.addEventListener('touchstart', e => { e.preventDefault(); openModeMenu(); }, { passive: false });
+    document.body.appendChild(btn);
+  }
+  btn.style.display = show ? 'block' : 'none';
 }
 
 // "Enter Code" button — opens prompt, redeems code on server (only shown after login)
@@ -16971,7 +17015,7 @@ function selectMode(modeId) {
     gameStarted = true;
     spawnGameBots();
     requestPointerLockSafe();
-    loop();
+    startLoop();
   } else if (modeId === 'range') {
     // Shooting range: skip loadout, give infinite ammo on all weapons
     selectedPrimaryIdx   = 0;
@@ -16991,7 +17035,7 @@ function selectMode(modeId) {
     gameStarted = true;
     spawnGameBots();
     requestPointerLockSafe();
-    loop();
+    startLoop();
   } else if (modeId === 'lobby13') {
     // 🛋️ Lobby 13: skip loadout, give a full kit with infinite ammo so people
     // can mess around / duel freely. No enemies, no scoring.
@@ -17011,7 +17055,8 @@ function selectMode(modeId) {
     gameStarted = true;
     spawnGameBots();
     requestPointerLockSafe();
-    loop();
+    startLoop();
+    showLobbyModesButton(true); // 🎮 floating button back to the mode menu
   } else {
     showLoadoutScreen('death');
   }
