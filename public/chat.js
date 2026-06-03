@@ -193,6 +193,23 @@
     const first = t.split(/[—,.]/)[0].trim();
     return first ? first.charAt(0).toUpperCase() + first.slice(1) : char.name;
   }
+  // 🧠 Pull this character's memory of the last match (written by game.js into
+  // localStorage 'pvp_char_memory'). Turns it into a short reminder the AI can
+  // bring up: who killed whom with what, and whether they won.
+  function matchMemoryBlurb(charId) {
+    let mem = null;
+    try { mem = (JSON.parse(localStorage.getItem('pvp_char_memory') || '{}') || {})[charId]; } catch (e) {}
+    if (!mem) return '';
+    const parts = [];
+    if (mem.team) parts.push(`you were ${mem.team === 'ally' ? "on the player's team" : 'against the player'}`);
+    if (mem.wonLastMatch === true)  parts.push('your team WON');
+    if (mem.wonLastMatch === false) parts.push('your team LOST');
+    if (mem.killedYouWith)    parts.push(`you killed the player with a ${mem.killedYouWith}`);
+    if (mem.youKilledThemWith) parts.push(`the player killed you with a ${mem.youKilledThemWith}`);
+    if (!parts.length) return '';
+    return ` MEMORY of your LAST match together: ${parts.join(', ')}. `
+      + `You actually remember this — feel free to bring it up, gloat, hold a grudge, or call for a rematch, in your own voice. Only mention it if it fits naturally.`;
+  }
   function buildSystemPrompt(char, group) {
     const traits = TRAITS[char.id] || `quirky and memorable — your vibe: ${char.lines.slice(0, 3).join(' / ')}`;
     let p = `You are ${char.name}, a character in the chaotic multiplayer shooter "PVP Arena". `
@@ -204,6 +221,7 @@
       + `Match YOUR tone, slang, and mood exactly — caps, "...", beeps, "GG", whatever fits you. `
       + `Stay FULLY in character at all times. Never break character. Never mention being an AI, a model, or a chatbot.`;
     if (group) p += ` You are in a group chat with the rest of the cast (${group}). React to what others just said — agree, mock, one-up, or pick a fight, in your own distinct voice. Keep it to ONE short line.`;
+    p += matchMemoryBlurb(char.id);
     return p;
   }
   function sanitizeMsgs(msgs) {

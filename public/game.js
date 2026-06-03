@@ -9975,6 +9975,8 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false) {
         myKills++;
         creditWeaponKill(currentEquippedId());
         saveKillReplay(pid, currentEquippedId());
+        // 🧠 The cast remembers: this character recalls you killing them with this weapon.
+        if (bot.charId) recordCharMemory(bot.charId, { youKilledThemWith: weaponDisplayName(currentEquippedId()), team: bot.team });
         const kc = document.getElementById('kill-count');
         if (kc) kc.textContent = `Kills: ${myKills}`;
         const botName = players[pid]?.name || 'Bot';
@@ -11643,6 +11645,8 @@ function applyBotDamageToPlayer(weaponId, botId) {
       if (killerBot) {
         const line = pickThought('killed_enemy');
         if (line) showBotSpeech(killerBot, line, 2500, '#44ff44');
+        // 🧠 The cast remembers: this character recalls killing you with this weapon.
+        if (killerBot.charId) recordCharMemory(killerBot.charId, { killedYouWith: weaponDisplayName(weaponId), team: killerBot.team });
       }
     }
     // Notify match logic (round end / kill tracking)
@@ -14015,6 +14019,12 @@ function endMatch(winner, reason) {
     ?? (players[myId]?.kills)
     ?? 0;
   awardMatchCredits(playerKills, isWin);
+  // 🧠 Match-memory: every comic-cast bot remembers whether THEIR team won, and
+  // whether they were on your side or against you. (Ally bots win when you win.)
+  for (const b of gameBots) {
+    if (!b.charId) continue;
+    recordCharMemory(b.charId, { wonLastMatch: b.team === winner, team: b.team, mode: match.type });
+  }
   // Trials are one-match only — clear them so they re-cost next time.
   trialingThisMatch.clear();
 }
@@ -14025,6 +14035,15 @@ function botSideSpawn(idx, count, team) {
   if (selectedModeConfig && selectedModeConfig.type === 'dday' && team === 'ally') {
     const bunkerXs = [-7, 7, 22]; // bunkers 1, 2, 3
     return { x: bunkerXs[idx] || 0, z: 22 }; // near slit, inside bunker
+  }
+  // 🛋️ Lobby 13: scatter the cast around the lounge (avoid the duel pit at x≈-22).
+  if (selectedModeConfig && selectedModeConfig.type === 'lobby') {
+    const ang = (idx / Math.max(1, count)) * Math.PI * 2 + Math.random() * 0.6;
+    const r = 6 + Math.random() * 18;
+    let x = Math.cos(ang) * r;
+    const z = Math.sin(ang) * r;
+    if (x < -14) x = -14 + Math.random() * 6; // keep them out of the duel pit
+    return { x, z };
   }
   // BR mode: scatter bots randomly around the perimeter of the big map
   if (selectedModeConfig && selectedModeConfig.type === 'br') {
@@ -14132,6 +14151,29 @@ function attachTeammateAvatar(mesh, tc) {
   sprite.name = '_teammateAvatar';
   mesh.add(sprite);
   mesh._teammateAvatar = sprite;
+}
+
+// ── 🧠 Character match-memory ───────────────────────────────────────────────
+// After a real match, each comic-cast bot (one with a `charId`) remembers how the
+// fight went: what they killed YOU with, what YOU killed THEM with, and whether
+// their team won. chat.js reads `localStorage['pvp_char_memory']` so the character
+// can bring it up when you talk to them ("still salty you railgunned me last game").
+const CHAR_MEMORY_KEY = 'pvp_char_memory';
+function loadCharMemory() {
+  try { return JSON.parse(localStorage.getItem(CHAR_MEMORY_KEY) || '{}') || {}; } catch (e) { return {}; }
+}
+function recordCharMemory(charId, patch) {
+  if (!charId) return;
+  try {
+    const m = loadCharMemory();
+    m[charId] = { ...(m[charId] || {}), ...patch, ts: Date.now() };
+    localStorage.setItem(CHAR_MEMORY_KEY, JSON.stringify(m));
+  } catch (e) {}
+}
+// Friendly weapon name for the memory blurb (falls back to the id).
+function weaponDisplayName(id) {
+  const w = WEAPONS.find(ww => ww.id === id) || MELEE_ITEMS.find(mm => mm.id === id);
+  return (w && w.name) || id || 'something';
 }
 
 function spawnGameBots() {
@@ -14248,8 +14290,17 @@ function spawnGameBots() {
     }
     return arr.filter(Boolean);
   };
-  const draftedAllies  = readDraft('PVP_TEAMMATES', 'pvp_teammates', 'pvp_teammate');
+  let   draftedAllies  = readDraft('PVP_TEAMMATES', 'pvp_teammates', 'pvp_teammate');
   const draftedEnemies = readDraft('PVP_OPPONENTS', 'pvp_opponents', null);
+
+  // 🛋️ Lobby 13: the ENTIRE chat cast hangs out as chill ally NPCs (no draft needed).
+  // They become ally-team bots so they never attack you — with no enemies present
+  // they just wander/idle around the lounge while you organize 1v1s in the duel pit.
+  if (selectedModeConfig.type === 'lobby' && window.CHAT_CAST) {
+    draftedAllies = Object.keys(window.CHAT_CAST);
+    allies  = draftedAllies.length;
+    enemies = 0;
+  }
 
   const makeBot = (idx, team) => {
     const isAlly   = team === 'ally';
@@ -14315,7 +14366,10 @@ function spawnGameBots() {
       const _sub = isAlly ? (_ps.style || 'Your teammate') : `Enemy · ${_ps.style || ''}`.trim();
       const _col = isAlly ? (_tc.color || '#88ddaa') : '#ff6677';
       const _tag = isAlly ? 'JOINED' : 'INCOMING';
-      setTimeout(() => { try { showAnnouncement(`${_tc.emoji} ${_tc.name} ${_tag}`, _sub, _col, 2400); } catch (e) {} }, 1200 + idx * 700);
+      // Skip the staggered per-bot announcement in Lobby 13 — 37 of them would spam the screen.
+      if (selectedModeConfig.type !== 'lobby') {
+        setTimeout(() => { try { showAnnouncement(`${_tc.emoji} ${_tc.name} ${_tag}`, _sub, _col, 2400); } catch (e) {} }, 1200 + idx * 700);
+      }
       // 🖼️ Float the semi-pixel comic avatar over the drafted character (ally or enemy).
       try { attachTeammateAvatar(remoteMeshes[id], _tc); } catch (e) {}
     }
