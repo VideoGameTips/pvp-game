@@ -1045,6 +1045,9 @@ const GAME_MODE_CONFIGS = {
   'laststand':  { type: 'laststand',  allies: 0, enemies: 0 },
   'dday':       { type: 'dday',       allies: 3, enemies: 0 },
   'range':      { type: 'range',      allies: 0, enemies: 0 },
+  // 🛋️ Lobby 13: a chill social hub (no enemies, no scoring) where players hang
+  // out and organize their own 1v1s instead of jumping straight into a map.
+  'lobby13':    { type: 'lobby',      allies: 0, enemies: 0 },
   // King of the Hill / Battle Royale: massive map, 10 players FFA, 3 lives each, last alive wins
   'koth':       { type: 'br',         allies: 0, enemies: 9, livesPerPlayer: 3, mapSize: 250 },
   // 🎮 ARCADE MODES — fast & gimmicky FFA variants
@@ -3116,6 +3119,75 @@ function addExplosiveBarrel(mapName, x, z, color = 0xb52b20) {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
+// 🛋️ LOBBY 13 — a chill social hub. No enemies, no scoring. Players hang out,
+// chat, and organize their own 1v1s in the marked duel pit on the side.
+// ──────────────────────────────────────────────────────────────────────────
+registerMap('lobby13');
+function buildLobby13Map() {
+  const m = 'lobby13';
+  addMapGround(m, 0x2b2233, null); // dark lounge carpet
+  MAP_GROUPS[m]._skyColor = 0x14101c;
+
+  // Soft inlaid "rug" in the central hangout area
+  const rug = new THREE.Mesh(new THREE.PlaneGeometry(22, 22),
+    new THREE.MeshLambertMaterial({ color: 0x4a3a66 }));
+  rug.rotation.x = -Math.PI / 2; rug.position.set(0, 0.02, 0);
+  MAP_GROUPS[m].add(rug);
+
+  // Outer room walls (warm wood tone)
+  const wallCol = 0x3a2e24;
+  addMapBox(m, 0, 3, -32, 70, 6, 1.2, wallCol);
+  addMapBox(m, 0, 3,  32, 70, 6, 1.2, wallCol);
+  addMapBox(m, -35, 3, 0, 1.2, 6, 66, wallCol);
+  addMapBox(m,  35, 3, 0, 1.2, 6, 66, wallCol);
+
+  // ── Central lounge: low couches + coffee tables (low cover, comfy vibe) ──
+  const couch = 0x884466, table = 0x5a4632;
+  addMapBox(m, -7, 0.5,  6, 6, 1.0, 2, couch);
+  addMapBox(m,  7, 0.5,  6, 6, 1.0, 2, couch);
+  addMapBox(m, -7, 0.5, -6, 6, 1.0, 2, couch);
+  addMapBox(m,  7, 0.5, -6, 6, 1.0, 2, couch);
+  addMapBox(m, 0, 0.4, 0, 4, 0.8, 4, table);     // central coffee table
+  addMapBox(m, 0, 1.1, 0, 1.4, 0.6, 1.4, 0xffcc55); // glowy lamp on the table
+
+  // ── A few bar stools / pillars around the edges to break sightlines ──
+  [[-20, 14], [20, 14], [-20, -14], [20, -14], [-26, 0], [26, 0]].forEach(([x, z]) => {
+    addMapBox(m, x, 1.5, z, 1.4, 3, 1.4, 0x4a3c30);
+  });
+
+  // ── 1v1 DUEL PIT (left side): a fenced square arena with a lighter floor ──
+  const pitX = -22, pitZ = 0;
+  const pitFloor = new THREE.Mesh(new THREE.PlaneGeometry(16, 24),
+    new THREE.MeshLambertMaterial({ color: 0x223a2a }));
+  pitFloor.rotation.x = -Math.PI / 2; pitFloor.position.set(pitX, 0.03, pitZ);
+  MAP_GROUPS[m].add(pitFloor);
+  // low fence rails around the pit (waist-high cover; gap on the inner side for entry)
+  addMapBox(m, pitX, 0.7, pitZ - 12, 16, 1.4, 0.5, 0x6688aa);
+  addMapBox(m, pitX, 0.7, pitZ + 12, 16, 1.4, 0.5, 0x6688aa);
+  addMapBox(m, pitX - 8, 0.7, pitZ, 0.5, 1.4, 24, 0x6688aa);
+  // one center block for cover in the duel pit
+  addMapBox(m, pitX, 0.9, pitZ, 2, 1.8, 2, 0x335544);
+
+  // ── Big neon "LOBBY 13" sign on the back wall ──
+  const signMat = new THREE.MeshBasicMaterial({ color: 0x66ddff });
+  const sign = new THREE.Mesh(new THREE.BoxGeometry(20, 3, 0.4), signMat);
+  sign.position.set(0, 5, -31.2);
+  MAP_GROUPS[m].add(sign);
+  const sign2 = new THREE.Mesh(new THREE.BoxGeometry(6, 2, 0.5),
+    new THREE.MeshBasicMaterial({ color: 0xff66bb }));
+  sign2.position.set(0, 5, -31.0); // "13" accent
+  MAP_GROUPS[m].add(sign2);
+
+  // Ambient glow blocks (purely decorative light strips along the floor)
+  [-30, -15, 0, 15, 30].forEach(x => {
+    const strip = new THREE.Mesh(new THREE.BoxGeometry(1, 0.1, 60),
+      new THREE.MeshBasicMaterial({ color: 0x3355aa }));
+    strip.position.set(x, 0.06, 0);
+    MAP_GROUPS[m].add(strip);
+  });
+}
+
+// ──────────────────────────────────────────────────────────────────────────
 // 1. URBAN PLAZA — buildings as corner cover, cars as low cover in plaza
 // ──────────────────────────────────────────────────────────────────────────
 registerMap('urban');
@@ -4602,6 +4674,7 @@ buildBrArenaMap();
 buildBlankMap();
 buildBattlefieldMap();
 buildRangeMap();
+buildLobby13Map();
 activateMap('blank');
 
 // ── Weapon view models ─────────────────────────────────────────────────────
@@ -7294,19 +7367,21 @@ function animateCharacterMesh(mesh, dt, crouchTarget) {
   rig.speedSmooth += (speed - rig.speedSmooth) * Math.min(1, dt * 12);
   const moving = rig.speedSmooth > 0.6;
 
-  // Advance phase by distance travelled so stride length stays natural
-  rig.phase += dist * 5.5;
+  // Advance phase by distance travelled so stride length stays natural.
+  // ×2.75 (half of the old ×5.5) so the LEG GRAPHIC swings 2× slower than the
+  // distance covered — purely cosmetic, does not change actual move speed.
+  rig.phase += dist * 2.75;
   if (!moving) {
     // Ease the phase back toward a neutral standing pose
     rig.phase += (Math.round(rig.phase / Math.PI) * Math.PI - rig.phase) * Math.min(1, dt * 8);
   }
 
-  // Crouch / slide blend
-  if (crouchTarget !== null && crouchTarget !== undefined) {
-    rig.crouch += (crouchTarget - rig.crouch) * Math.min(1, dt * 10);
-  } else {
-    rig.crouch += (0 - rig.crouch) * Math.min(1, dt * 6);
-  }
+  // Crouch / slide blend. Characters also crouch SLIGHTLY while moving (a tactical
+  // low walk) — blend a small movement-crouch in on top of any explicit crouch.
+  const baseCrouch = (crouchTarget !== null && crouchTarget !== undefined) ? crouchTarget : 0;
+  const moveCrouch = moving ? 0.2 : 0;
+  const effCrouch  = Math.max(baseCrouch, moveCrouch);
+  rig.crouch += (effCrouch - rig.crouch) * Math.min(1, dt * 8);
   const crouch = rig.crouch;
 
   const amp   = moving ? 0.7 : 0.0;       // leg swing amplitude (radians)
@@ -13002,6 +13077,9 @@ function startMatchRound() {
     } else if (match.type === 'range') {
       showAnnouncement('SHOOTING RANGE', 'Hit the targets · No enemies!', '#44ddff', 2800);
       grantSpawnShield(0);
+    } else if (match.type === 'lobby') {
+      showAnnouncement('🛋️ LOBBY 13', 'Chill zone · organize your 1v1s in the duel pit', '#aaffaa', 3400);
+      grantSpawnShield(0);
     } else if (match.type === 'br') {
       // Init bot lives now that bots exist
       const livesEach = match.cfg.livesPerPlayer || 3;
@@ -13084,6 +13162,10 @@ function updateMatchHUD() {
     L.textContent = `SHOTS ${rangeStats.shots}`;
     C.textContent = 'RANGE';
     R.textContent = `ACC ${rangeStats.shots > 0 ? Math.round(rangeStats.hits / rangeStats.shots * 100) : 0}%`;
+  } else if (match.type === 'lobby') {
+    L.textContent = '🛋️ CHILL';
+    C.textContent = 'LOBBY 13';
+    R.textContent = 'DUEL PIT →';
   } else if (match.type === 'br') {
     const myLives = match.lives[myId] ?? 0;
     const alive = Object.values(match.lives).filter(v => v > 0).length;
@@ -14099,6 +14181,10 @@ function spawnGameBots() {
   if (selectedModeConfig.type === 'br') {
     // King of the Hill: always use the giant BR arena
     activateMap('br_arena');
+  } else if (selectedModeConfig.type === 'lobby') {
+    // 🛋️ Lobby 13: the chill social hub
+    activateMap('lobby13');
+    if (MAP_GROUPS.lobby13?._skyColor != null && scene.background?.setHex) scene.background.setHex(MAP_GROUPS.lobby13._skyColor);
   } else if (selectedModeConfig.type !== 'dday' && selectedModeConfig.type !== 'range') {
     const pool = ['blank','urban','warehouse','forest','volcano','cyber','desert','tundra','space','airport','trenches','chernobyl','refinery','skydock','sewer','gravity_lab','glassworks','carrier','overgrowth','orbital_station','foundry','carnival','biosphere','lockdown','studio','temple','holiday','labyrinth','arena','opera','doomsday','train','dreamscape','pearl_harbor','titanic','supermarket','pyongyang','traffic_cone_republic','flying_moai'];
     const chosen = (selectedMap === 'auto' || !MAP_GROUPS[selectedMap]) ? pool[Math.floor(Math.random()*pool.length)] : selectedMap;
@@ -14133,6 +14219,8 @@ function spawnGameBots() {
     camera.position.set(-22, 1.65, 22); euler.y = 0; // D-Day: inside bunker 0, facing enemies
   } else if (selectedModeConfig && selectedModeConfig.type === 'range') {
     camera.position.set(0, 1.65, 38); euler.y = Math.PI; // Shooting range: face -z toward targets
+  } else if (selectedModeConfig && selectedModeConfig.type === 'lobby') {
+    camera.position.set(0, 1.65, 18); euler.y = Math.PI; // Lobby 13: drop in the central lounge facing the sign
   } else if (selectedModeConfig && selectedModeConfig.type === 'br') {
     // BR: spawn at random spot in the big map
     const ang = Math.random() * Math.PI * 2;
@@ -16833,6 +16921,26 @@ function selectMode(modeId) {
     selectedMeleeIdx     = 0;
     selectedSupportIdx   = 0;
     // Infinite ammo for all weapons
+    weaponAmmo.forEach((_, idx) => { weaponAmmo[idx] = { ammo: 999999, reserve: 999999 }; });
+    activeSlot = 'primary';
+    weaponModels.forEach(m => m.visible = false);
+    meleeModels.forEach(m  => m.visible = false);
+    supportModels.forEach(m => m.visible = false);
+    currentWeaponIdx = selectedPrimaryIdx;
+    currentWeapon    = WEAPONS[selectedPrimaryIdx];
+    if (weaponModels[selectedPrimaryIdx]) weaponModels[selectedPrimaryIdx].visible = true;
+    updateAmmoHUD(); updateWeaponHUD(); updateWeaponSelector();
+    gameStarted = true;
+    spawnGameBots();
+    requestPointerLockSafe();
+    loop();
+  } else if (modeId === 'lobby13') {
+    // 🛋️ Lobby 13: skip loadout, give a full kit with infinite ammo so people
+    // can mess around / duel freely. No enemies, no scoring.
+    selectedPrimaryIdx   = 0;
+    selectedSecondaryIdx = 1;
+    selectedMeleeIdx     = 0;
+    selectedSupportIdx   = 0;
     weaponAmmo.forEach((_, idx) => { weaponAmmo[idx] = { ammo: 999999, reserve: 999999 }; });
     activeSlot = 'primary';
     weaponModels.forEach(m => m.visible = false);
