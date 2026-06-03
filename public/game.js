@@ -14545,6 +14545,9 @@ function updateRange(dt) {
 }
 
 function getBotTarget(bot) {
+  // 🛋️ Lobby 13: nobody fights. The team-agnostic fallback below would otherwise
+  // make the all-ally cast target (and shoot) each other — so bail out entirely.
+  if (match?.type === 'lobby') return null;
   // D-Day turrets: target nearest attacking enemy bot
   if (bot.state === 'turret') {
     let best = null, bestDist = Infinity;
