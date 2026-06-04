@@ -1008,8 +1008,9 @@ let inLobby = false;
 // 3D duel-slot pads on the lobby floor (1V1 / 2V2 / 3V3). Stepping onto one and
 // pressing F starts that mode (bots fill the empty slots). Populated in buildLobby13Map.
 const LOBBY_DUEL_PADS = [];
-let lobbyPadHere = null;        // the duel pad the player is currently standing on
+let lobbyPadHere = null;        // the duel area the player is currently standing on
 let lobbyChallengeTarget = null;// nearest cast member to challenge (proximity F = 1V1)
+let lobbyActiveArea = null;     // duel area currently being staged (player on its blue pad)
 let spawnShieldUntil = 0; // timestamp: player is invincible until this time
 let spectatorState = null; // { idx, lastSwitch } — set when dead and watching teammates
 
@@ -3195,35 +3196,48 @@ function buildLobby13Map() {
     MAP_GROUPS[m].add(strip);
   });
 
-  // ── 3D DUEL SLOTS (right side): glowing floor pads. Stand on one + press F to
-  //    start that mode (bots fill the empty slots). Physical, not a menu. ──
+  // ── 3D DUEL SLOTS (right side): each mode has a BLUE pad (your team) and a RED
+  //    pad (the enemy team) so you can SEE who's on whose side. Stand on the blue
+  //    pad; willing cast members walk over to fill the red (and extra blue) slots.
+  //    Press F to start once you're set. Physical staging, not a menu. ──
   LOBBY_DUEL_PADS.length = 0;
   const padDefs = [
-    { modeId: '1v1', label: '1V1', cap: 2, z: -10, color: 0x66ffaa },
-    { modeId: '2v2', label: '2V2', cap: 4, z:   0, color: 0x66ddff },
-    { modeId: '3v3', label: '3V3', cap: 6, z:  10, color: 0xffaa66 },
+    { modeId: '1v1', label: '1V1', perTeam: 1, z: -11 },
+    { modeId: '2v2', label: '2V2', perTeam: 2, z:   0 },
+    { modeId: '3v3', label: '3V3', perTeam: 3, z:  11 },
   ];
-  padDefs.forEach(pd => {
-    const padX = 24, padZ = pd.z, radius = 3.4;
-    const disk = new THREE.Mesh(new THREE.CircleGeometry(radius, 40),
-      new THREE.MeshBasicMaterial({ color: pd.color, transparent: true, opacity: 0.32 }));
-    disk.rotation.x = -Math.PI / 2; disk.position.set(padX, 0.05, padZ);
+  const BLUE = 0x3a7bff, RED = 0xff3a3a;
+  const mkPad = (x, z, color, radius) => {
+    const disk = new THREE.Mesh(new THREE.CircleGeometry(radius, 36),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.30 }));
+    disk.rotation.x = -Math.PI / 2; disk.position.set(x, 0.05, z);
     MAP_GROUPS[m].add(disk);
-    const ring = new THREE.Mesh(new THREE.RingGeometry(radius - 0.3, radius, 40),
-      new THREE.MeshBasicMaterial({ color: pd.color }));
-    ring.rotation.x = -Math.PI / 2; ring.position.set(padX, 0.07, padZ);
+    const ring = new THREE.Mesh(new THREE.RingGeometry(radius - 0.28, radius, 36),
+      new THREE.MeshBasicMaterial({ color }));
+    ring.rotation.x = -Math.PI / 2; ring.position.set(x, 0.07, z);
     MAP_GROUPS[m].add(ring);
-    // Floating label sprite over the pad
-    const cv = document.createElement('canvas'); cv.width = 256; cv.height = 128;
+  };
+  const mkLabel = (text, color, x, z, y, scale) => {
+    const cv = document.createElement('canvas'); cv.width = 256; cv.height = 96;
     const ctx = cv.getContext('2d');
-    ctx.fillStyle = '#' + pd.color.toString(16).padStart(6, '0');
-    ctx.font = 'bold 84px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.shadowColor = '#000'; ctx.shadowBlur = 12;
-    ctx.fillText(pd.label, 128, 64);
+    ctx.fillStyle = color; ctx.font = 'bold 64px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.shadowColor = '#000'; ctx.shadowBlur = 10;
+    ctx.fillText(text, 128, 48);
     const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, depthTest: false }));
-    spr.scale.set(4.5, 2.25, 1); spr.position.set(padX, 3.0, padZ);
+    spr.scale.set(scale, scale * 0.375, 1); spr.position.set(x, y, z);
     MAP_GROUPS[m].add(spr);
-    LOBBY_DUEL_PADS.push({ modeId: pd.modeId, label: pd.label, capacity: pd.cap, x: padX, z: padZ, radius });
+  };
+  padDefs.forEach(pd => {
+    const blueX = 20, redX = 28, radius = 2.6;
+    mkPad(blueX, pd.z, BLUE, radius);
+    mkPad(redX,  pd.z, RED,  radius);
+    mkLabel(pd.label, '#ffffff', 24, pd.z, 3.4, 4.0);   // mode label, centered above
+    mkLabel('BLUE',  '#88bbff', blueX, pd.z, 2.1, 2.2); // team markers
+    mkLabel('RED',   '#ff9999', redX,  pd.z, 2.1, 2.2);
+    LOBBY_DUEL_PADS.push({
+      modeId: pd.modeId, label: pd.label, perTeam: pd.perTeam, radius,
+      blue: { x: blueX, z: pd.z }, red: { x: redX, z: pd.z },
+    });
   });
 }
 
@@ -14441,6 +14455,9 @@ function spawnGameBots() {
     gameBots.push({ id, team, weaponId, spawnWeaponId: weaponId, x: sx, z: sz, rotY: 0, hp: startHp, maxHp: startHp,
                     // 🎭 Teammate playstyle flavor + which drafted character (if any) this bot is
                     speedMult: (_playstyle && _playstyle.speedMult) || 1, playstyle: _playstyle, charId: tmId || null,
+                    // 🛋️ ~45% of the lobby cast are "down to duel" — they'll walk to a duel
+                    // slot to join you when you step onto a pad. (no effect outside lobby)
+                    _wantsDuel: (selectedModeConfig.type === 'lobby' && Math.random() < 0.45),
                     // 🆕 Full loadout — bot will switch between these based on engagement range
                     primaryId: weaponId, secondaryId: botSecondaryId,
                     meleeId: botMeleeId, utilityId: botUtilityId,
@@ -14889,13 +14906,26 @@ function updateBotAI(dt) {
     bot.strafeFlipTimer = (bot.strafeFlipTimer || 0) - dt;
 
     if (!target) {
-      // Wander
-      bot.state = 'wander';
-      bot.wanderTimer -= dt;
-      if (bot.wanderTimer <= 0) { bot.wanderAngle += (Math.random()-0.5)*1.8; bot.wanderTimer = 1.5 + Math.random()*2; }
-      moveX = Math.sin(bot.wanderAngle) * 4 * dt;
-      moveZ = Math.cos(bot.wanderAngle) * 4 * dt;
-      bot.rotY = Math.atan2(moveX, moveZ);
+      // 🛋️ Lobby duel staging: a willing bot assigned to a slot walks there, then idles.
+      if (inLobby && bot._duelGoto) {
+        const gdx = bot._duelGoto.x - bot.x, gdz = bot._duelGoto.z - bot.z;
+        const gd = Math.hypot(gdx, gdz);
+        if (gd > 0.35) {
+          const sp = Math.min(8 * dt, gd); // brisk walk over to the slot
+          moveX = (gdx / gd) * sp;
+          moveZ = (gdz / gd) * sp;
+          bot.rotY = Math.atan2(moveX, moveZ);
+        }
+        bot.state = 'duel_stage';
+      } else {
+        // Wander
+        bot.state = 'wander';
+        bot.wanderTimer -= dt;
+        if (bot.wanderTimer <= 0) { bot.wanderAngle += (Math.random()-0.5)*1.8; bot.wanderTimer = 1.5 + Math.random()*2; }
+        moveX = Math.sin(bot.wanderAngle) * 4 * dt;
+        moveZ = Math.cos(bot.wanderAngle) * 4 * dt;
+        bot.rotY = Math.atan2(moveX, moveZ);
+      }
     } else {
       const dx = target.x - bot.x, dz = target.z - bot.z;
       const dist = Math.sqrt(dx*dx + dz*dz);
@@ -16841,56 +16871,116 @@ function showLobbyPrompt(txt) {
   if (txt) { el.textContent = txt; el.style.display = 'block'; }
   else el.style.display = 'none';
 }
-// Per-frame (only while inLobby): figure out whether the player is on a duel pad
-// or near a cast member, and update the prompt accordingly.
+// Clear every bot's duel-slot assignment so they go back to wandering.
+function releaseDuelBots() {
+  for (const b of gameBots) { b._duelGoto = null; b._duelTeam = null; }
+}
+// Small spread so multiple bots on the same pad don't stack on one point.
+function duelSlotPoint(pt, i) {
+  if (i <= 0) return { x: pt.x, z: pt.z };
+  const ang = i * 2.4;
+  return { x: pt.x + Math.cos(ang) * 1.1, z: pt.z + Math.sin(ang) * 1.1 };
+}
+// Assign willing cast members to fill the open RED (enemy) and BLUE (teammate)
+// slots of the area the player is staging in. The player takes one blue slot.
+function stageDuelBots(area) {
+  const assignedRed  = gameBots.filter(b => !b.dead && b._duelTeam === 'red');
+  const assignedBlue = gameBots.filter(b => !b.dead && b._duelTeam === 'blue');
+  const freeWilling = () => gameBots
+    .filter(b => !b.dead && b._wantsDuel && !b._duelTeam && b.charId)
+    .sort((a, b) => (Math.hypot(a.x - area.red.x, a.z - area.red.z))
+                  - (Math.hypot(b.x - area.red.x, b.z - area.red.z)));
+  while (assignedRed.length < area.perTeam) {
+    const pool = freeWilling(); if (!pool.length) break;
+    const bot = pool[0]; bot._duelTeam = 'red';
+    bot._duelGoto = duelSlotPoint(area.red, assignedRed.length);
+    assignedRed.push(bot);
+  }
+  while (assignedBlue.length < area.perTeam - 1) {  // player fills one blue slot
+    const pool = freeWilling(); if (!pool.length) break;
+    const bot = pool[0]; bot._duelTeam = 'blue';
+    bot._duelGoto = duelSlotPoint(area.blue, assignedBlue.length + 1);
+    assignedBlue.push(bot);
+  }
+}
+// How many assigned bots have actually arrived on their pad.
+function countSeated(area) {
+  let blue = 0, red = 0;
+  for (const b of gameBots) {
+    if (b.dead || !b._duelTeam) continue;
+    const pad = b._duelTeam === 'red' ? area.red : area.blue;
+    if (Math.hypot(b.x - pad.x, b.z - pad.z) <= area.radius + 0.8) {
+      if (b._duelTeam === 'red') red++; else blue++;
+    }
+  }
+  return { blue, red };
+}
+// Per-frame (only while inLobby): stage duels on the blue/red pads, or offer a
+// proximity 1V1 challenge against the nearest cast member.
 function updateLobbyInteractions() {
   if (!inLobby) { showLobbyPrompt(null); return; }
-  lobbyPadHere = null; lobbyChallengeTarget = null;
   const px = camera.position.x, pz = camera.position.z;
-  for (const pad of LOBBY_DUEL_PADS) {
-    if (Math.hypot(px - pad.x, pz - pad.z) <= pad.radius) { lobbyPadHere = pad; break; }
+  // Which area's BLUE pad is the player standing on?
+  let area = null;
+  for (const a of LOBBY_DUEL_PADS) {
+    if (Math.hypot(px - a.blue.x, pz - a.blue.z) <= a.radius) { area = a; break; }
   }
-  if (!lobbyPadHere) {
+  // Switched areas (or stepped off) → release previously-assigned bots.
+  if (area !== lobbyActiveArea) { releaseDuelBots(); lobbyActiveArea = area; }
+  lobbyPadHere = area; lobbyChallengeTarget = null;
+
+  if (area) {
+    stageDuelBots(area);
+    const s = countSeated(area);
+    showLobbyPrompt(`⚔️ ${area.label}   🟦 BLUE ${s.blue + 1}/${area.perTeam}   🟥 RED ${s.red}/${area.perTeam}   ·   press F to start`);
+  } else {
     let best = null, bestD = 4.5;
     for (const bot of gameBots) {
-      if (bot.dead) continue;
+      if (bot.dead || !bot.charId) continue;
       const d = Math.hypot(px - bot.x, pz - bot.z);
       if (d < bestD) { bestD = d; best = bot; }
     }
     lobbyChallengeTarget = best;
-  }
-  if (lobbyPadHere) {
-    showLobbyPrompt(`⚔️  Press F to start ${lobbyPadHere.label}  ·  bots fill the empty slots`);
-  } else if (lobbyChallengeTarget) {
-    const nm = (players[lobbyChallengeTarget.id]?.name) || 'them';
-    showLobbyPrompt(`⚔️  Press F to challenge ${nm} to a 1V1`);
-  } else {
-    showLobbyPrompt(null);
+    if (best) {
+      const nm = (players[best.id]?.name) || 'them';
+      const keen = best._wantsDuel ? ' (wants a fight!)' : '';
+      showLobbyPrompt(`⚔️ Press F to challenge ${nm} to a 1V1${keen}`);
+    } else showLobbyPrompt(null);
   }
 }
-// F pressed in the lobby → act on whatever the prompt is offering.
+// F pressed in the lobby → start the staged duel, or challenge the nearest member.
 function lobbyInteract() {
   if (!inLobby) return;
-  if (lobbyPadHere) startDuel(lobbyPadHere.modeId, null);
-  else if (lobbyChallengeTarget) startDuel('1v1', lobbyChallengeTarget.charId || null);
+  if (lobbyPadHere) {
+    const reds  = gameBots.filter(b => !b.dead && b._duelTeam === 'red').map(b => b.charId).filter(Boolean);
+    const blues = gameBots.filter(b => !b.dead && b._duelTeam === 'blue').map(b => b.charId).filter(Boolean);
+    startDuel(lobbyPadHere.modeId, { allies: blues, enemies: reds });
+  } else if (lobbyChallengeTarget) {
+    startDuel('1v1', { enemies: [lobbyChallengeTarget.charId].filter(Boolean) });
+  }
 }
 // Leave the lobby and start a real match (the duel itself IS a normal match on a
-// real arena — the lobby stays a separate, match-free hub). A direct challenge
-// drafts that character as your opponent; pads just fill empty slots with bots.
-function startDuel(modeId, opponentCharId) {
+// real arena — the lobby stays a separate, match-free hub). The staged BLUE bots
+// become your teammates and RED bots your opponents; spawnGameBots fills any
+// still-empty slots with generic bots.
+function startDuel(modeId, picks) {
   const cfg = GAME_MODE_CONFIGS[modeId];
   if (!cfg) return;
   inLobby = false;
+  releaseDuelBots();
+  lobbyActiveArea = null; lobbyPadHere = null; lobbyChallengeTarget = null;
   showLobbyPrompt(null);
   showLobbyModesButton(false);
   const hud = document.getElementById('match-hud'); if (hud) hud.style.display = 'flex';
-  // Direct challenge: that character becomes your (only) opponent.
-  if (opponentCharId) window.PVP_OPPONENTS = [opponentCharId];
+  picks = picks || {};
+  if (picks.enemies && picks.enemies.length) window.PVP_OPPONENTS = picks.enemies.slice();
+  if (picks.allies  && picks.allies.length)  window.PVP_TEAMMATES = picks.allies.slice();
   selectedModeConfig = cfg;
   selectedMap = 'auto'; // random combat arena (NOT the lobby map)
   resetCombatResources(); // normal mags/reserves (lobby gave infinite ammo)
-  const oppName = opponentCharId && window.CHAT_CAST?.[opponentCharId] ? ` vs ${window.CHAT_CAST[opponentCharId].name}` : '';
-  showAnnouncement('⚔️ DUEL', `${modeId.toUpperCase()}${oppName}`, '#ffcc44', 2200);
+  const oppNames = (picks.enemies || []).map(id => window.CHAT_CAST?.[id]?.name).filter(Boolean);
+  const sub = oppNames.length ? `vs ${oppNames.join(', ')}` : modeId.toUpperCase();
+  showAnnouncement('⚔️ DUEL', sub, '#ffcc44', 2200);
   spawnGameBots();        // tears down the lobby cast + builds the elim match
   requestPointerLockSafe();
   startLoop();
