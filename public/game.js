@@ -1010,7 +1010,8 @@ let inLobby = false;
 const LOBBY_DUEL_PADS = [];
 let lobbyPadHere = null;        // the duel area the player is currently standing on
 let lobbyChallengeTarget = null;// nearest cast member to challenge (proximity F = 1V1)
-let lobbyActiveArea = null;     // duel area currently being staged (player on its blue pad)
+let lobbyActiveArea = null;     // duel area currently being staged (player on one of its pads)
+let lobbyPlayerSide = null;     // which pad the player chose: 'blue' or 'red'
 let spawnShieldUntil = 0; // timestamp: player is invincible until this time
 let spectatorState = null; // { idx, lastSwitch } — set when dead and watching teammates
 
@@ -16882,38 +16883,46 @@ function duelSlotPoint(pt, i) {
   const ang = i * 2.4;
   return { x: pt.x + Math.cos(ang) * 1.1, z: pt.z + Math.sin(ang) * 1.1 };
 }
-// Assign willing cast members to fill the open RED (enemy) and BLUE (teammate)
-// slots of the area the player is staging in. The player takes one blue slot.
-function stageDuelBots(area) {
-  const assignedRed  = gameBots.filter(b => !b.dead && b._duelTeam === 'red');
-  const assignedBlue = gameBots.filter(b => !b.dead && b._duelTeam === 'blue');
-  const freeWilling = () => gameBots
+// Assign willing cast members to fill the open slots. `playerSide` is the pad the
+// player chose ('blue' or 'red'); their side gets teammates ('mate'), the other
+// pad gets opponents ('foe'). The player occupies one slot on their own side.
+function stageDuelBots(area, playerSide) {
+  const matePad = playerSide === 'red' ? area.red : area.blue;
+  const foePad  = playerSide === 'red' ? area.blue : area.red;
+  const mates = gameBots.filter(b => !b.dead && b._duelTeam === 'mate');
+  const foes  = gameBots.filter(b => !b.dead && b._duelTeam === 'foe');
+  const freeWilling = (pad) => gameBots
     .filter(b => !b.dead && b._wantsDuel && !b._duelTeam && b.charId)
-    .sort((a, b) => (Math.hypot(a.x - area.red.x, a.z - area.red.z))
-                  - (Math.hypot(b.x - area.red.x, b.z - area.red.z)));
-  while (assignedRed.length < area.perTeam) {
-    const pool = freeWilling(); if (!pool.length) break;
-    const bot = pool[0]; bot._duelTeam = 'red';
-    bot._duelGoto = duelSlotPoint(area.red, assignedRed.length);
-    assignedRed.push(bot);
+    .sort((a, b) => (Math.hypot(a.x - pad.x, a.z - pad.z))
+                  - (Math.hypot(b.x - pad.x, b.z - pad.z)));
+  while (foes.length < area.perTeam) {
+    const pool = freeWilling(foePad); if (!pool.length) break;
+    const bot = pool[0]; bot._duelTeam = 'foe';
+    bot._duelGoto = duelSlotPoint(foePad, foes.length);
+    foes.push(bot);
   }
-  while (assignedBlue.length < area.perTeam - 1) {  // player fills one blue slot
-    const pool = freeWilling(); if (!pool.length) break;
-    const bot = pool[0]; bot._duelTeam = 'blue';
-    bot._duelGoto = duelSlotPoint(area.blue, assignedBlue.length + 1);
-    assignedBlue.push(bot);
+  while (mates.length < area.perTeam - 1) {  // player fills one slot on their side
+    const pool = freeWilling(matePad); if (!pool.length) break;
+    const bot = pool[0]; bot._duelTeam = 'mate';
+    bot._duelGoto = duelSlotPoint(matePad, mates.length + 1);
+    mates.push(bot);
   }
 }
-// How many assigned bots have actually arrived on their pad.
-function countSeated(area) {
-  let blue = 0, red = 0;
+// How many assigned bots have arrived, as physical BLUE/RED pad counts.
+function countSeated(area, playerSide) {
+  const matePad = playerSide === 'red' ? area.red : area.blue;
+  const foePad  = playerSide === 'red' ? area.blue : area.red;
+  let mate = 0, foe = 0;
   for (const b of gameBots) {
     if (b.dead || !b._duelTeam) continue;
-    const pad = b._duelTeam === 'red' ? area.red : area.blue;
+    const pad = b._duelTeam === 'mate' ? matePad : foePad;
     if (Math.hypot(b.x - pad.x, b.z - pad.z) <= area.radius + 0.8) {
-      if (b._duelTeam === 'red') red++; else blue++;
+      if (b._duelTeam === 'mate') mate++; else foe++;
     }
   }
+  // Map mate/foe → blue/red for display (player counts on their own side).
+  const blue = (playerSide === 'blue') ? mate + 1 : foe;
+  const red  = (playerSide === 'red')  ? mate + 1 : foe;
   return { blue, red };
 }
 // Per-frame (only while inLobby): stage duels on the blue/red pads, or offer a
@@ -16922,21 +16931,23 @@ function updateLobbyInteractions() {
   if (!inLobby) { showLobbyPrompt(null); return; }
   // Near a trashcan? Let its own "press F to change weapons" prompt take over and
   // don't offer a duel/challenge here — F swaps your loadout instead.
-  if (nearTrashcan) { releaseDuelBots(); lobbyActiveArea = null; lobbyPadHere = null; lobbyChallengeTarget = null; showLobbyPrompt(null); return; }
+  if (nearTrashcan) { releaseDuelBots(); lobbyActiveArea = null; lobbyPlayerSide = null; lobbyPadHere = null; lobbyChallengeTarget = null; showLobbyPrompt(null); return; }
   const px = camera.position.x, pz = camera.position.z;
-  // Which area's BLUE pad is the player standing on?
-  let area = null;
+  // Which pad (blue OR red) of which area is the player standing on?
+  let area = null, side = null;
   for (const a of LOBBY_DUEL_PADS) {
-    if (Math.hypot(px - a.blue.x, pz - a.blue.z) <= a.radius) { area = a; break; }
+    if (Math.hypot(px - a.blue.x, pz - a.blue.z) <= a.radius) { area = a; side = 'blue'; break; }
+    if (Math.hypot(px - a.red.x,  pz - a.red.z)  <= a.radius) { area = a; side = 'red';  break; }
   }
-  // Switched areas (or stepped off) → release previously-assigned bots.
-  if (area !== lobbyActiveArea) { releaseDuelBots(); lobbyActiveArea = area; }
+  // Switched area/side (or stepped off) → release previously-assigned bots.
+  if (area !== lobbyActiveArea || side !== lobbyPlayerSide) { releaseDuelBots(); lobbyActiveArea = area; lobbyPlayerSide = side; }
   lobbyPadHere = area; lobbyChallengeTarget = null;
 
   if (area) {
-    stageDuelBots(area);
-    const s = countSeated(area);
-    showLobbyPrompt(`⚔️ ${area.label}   🟦 BLUE ${s.blue + 1}/${area.perTeam}   🟥 RED ${s.red}/${area.perTeam}   ·   press F to start`);
+    stageDuelBots(area, side);
+    const s = countSeated(area, side);
+    const you = side === 'blue' ? '🟦' : '🟥';
+    showLobbyPrompt(`⚔️ ${area.label}  ${you} you · 🟦 BLUE ${s.blue}/${area.perTeam}  🟥 RED ${s.red}/${area.perTeam}  · press F to start`);
   } else {
     let best = null, bestD = 4.5;
     for (const bot of gameBots) {
@@ -16956,9 +16967,11 @@ function updateLobbyInteractions() {
 function lobbyInteract() {
   if (!inLobby) return;
   if (lobbyPadHere) {
-    const reds  = gameBots.filter(b => !b.dead && b._duelTeam === 'red').map(b => b.charId).filter(Boolean);
-    const blues = gameBots.filter(b => !b.dead && b._duelTeam === 'blue').map(b => b.charId).filter(Boolean);
-    startDuel(lobbyPadHere.modeId, { allies: blues, enemies: reds });
+    // Your side's bots are teammates, the other side's are opponents — regardless
+    // of whether you stood on blue or red.
+    const mates = gameBots.filter(b => !b.dead && b._duelTeam === 'mate').map(b => b.charId).filter(Boolean);
+    const foes  = gameBots.filter(b => !b.dead && b._duelTeam === 'foe').map(b => b.charId).filter(Boolean);
+    startDuel(lobbyPadHere.modeId, { allies: mates, enemies: foes });
   } else if (lobbyChallengeTarget) {
     startDuel('1v1', { enemies: [lobbyChallengeTarget.charId].filter(Boolean) });
   }
@@ -16972,7 +16985,7 @@ function startDuel(modeId, picks) {
   if (!cfg) return;
   inLobby = false;
   releaseDuelBots();
-  lobbyActiveArea = null; lobbyPadHere = null; lobbyChallengeTarget = null;
+  lobbyActiveArea = null; lobbyPlayerSide = null; lobbyPadHere = null; lobbyChallengeTarget = null;
   showLobbyPrompt(null);
   showLobbyModesButton(false);
   const hud = document.getElementById('match-hud'); if (hud) hud.style.display = 'flex';
