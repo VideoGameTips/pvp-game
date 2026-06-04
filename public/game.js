@@ -7073,6 +7073,93 @@ const SKINS = [
 ];
 const SKIN_IDS = SKINS.map(s => s.id);
 
+// 🎭 Per-character face: configurable eyes + mouth (+blush/brows) drawn on the
+// 64×64 head-front texture, so each cast member has their own expression.
+//   eyes:  normal | angry | happy | sleepy | wide | dead | sad | none
+//   mouth: smile | grin | frown | flat | open | smug | cry | none
+function makeCharFace(o = {}) {
+  const c = document.createElement('canvas'); c.width = 64; c.height = 64;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = o.skin || '#ffcc99'; ctx.fillRect(0, 0, 64, 64);
+  const eyeColor = o.eyeColor || '#1a1a1a';
+  const ex1 = 19, ex2 = 45, ey = 27;            // eye centers (match default face)
+  const eyes = o.eyes || 'normal';
+  if (o.glow) { ctx.shadowColor = eyeColor; ctx.shadowBlur = 9; }
+  const drawEye = (cx, mir) => {
+    ctx.fillStyle = eyeColor; ctx.strokeStyle = eyeColor; ctx.lineWidth = 3;
+    const d = mir ? -1 : 1;
+    if (eyes === 'none') return;
+    if (eyes === 'angry') {
+      ctx.fillRect(cx - 6, ey, 12, 4);
+      ctx.beginPath();                            // slanted brow
+      ctx.moveTo(cx - 7 * d, ey - 8); ctx.lineTo(cx + 7 * d, ey - 3);
+      ctx.lineTo(cx + 7 * d, ey - 1); ctx.lineTo(cx - 7 * d, ey - 6); ctx.closePath(); ctx.fill();
+    } else if (eyes === 'happy') {
+      ctx.beginPath(); ctx.arc(cx, ey + 3, 6, Math.PI + 0.3, -0.3); ctx.stroke();
+    } else if (eyes === 'sleepy') {
+      ctx.fillRect(cx - 6, ey + 1, 12, 3);
+    } else if (eyes === 'wide') {
+      ctx.fillRect(cx - 5, ey - 6, 10, 12);
+      ctx.fillStyle = '#fff'; ctx.fillRect(cx - 3, ey - 4, 4, 4);
+    } else if (eyes === 'dead') {
+      ctx.beginPath(); ctx.moveTo(cx - 5, ey - 5); ctx.lineTo(cx + 5, ey + 5);
+      ctx.moveTo(cx + 5, ey - 5); ctx.lineTo(cx - 5, ey + 5); ctx.stroke();
+    } else if (eyes === 'sad') {
+      ctx.fillRect(cx - 5, ey - 1, 10, 9);
+      ctx.fillStyle = '#fff'; ctx.fillRect(cx - 3, ey + 3, 3, 3);
+    } else { // normal
+      ctx.fillRect(cx - 5, ey - 5, 10, 10);
+      ctx.fillStyle = '#fff'; ctx.fillRect(cx - 3, ey - 3, 4, 4);
+    }
+  };
+  drawEye(ex1, false); drawEye(ex2, true);
+  ctx.shadowBlur = 0;
+  // ── Mouth ──
+  const mc = o.mouthColor || '#7a3b2e';
+  ctx.strokeStyle = mc; ctx.fillStyle = mc; ctx.lineWidth = 3;
+  const my = 45, m = o.mouth || 'smile';
+  if (m === 'smile') { ctx.beginPath(); ctx.arc(32, my - 2, 9, 0.15, Math.PI - 0.15); ctx.stroke(); }
+  else if (m === 'grin') { ctx.fillRect(22, my - 2, 20, 6); ctx.fillStyle = '#fff'; for (let i = 0; i < 4; i++) ctx.fillRect(24 + i * 5, my - 2, 2, 6); }
+  else if (m === 'frown') { ctx.beginPath(); ctx.arc(32, my + 7, 9, Math.PI + 0.15, -0.15); ctx.stroke(); }
+  else if (m === 'flat') { ctx.fillRect(26, my, 12, 3); }
+  else if (m === 'open') { ctx.fillStyle = '#5a1a1a'; ctx.beginPath(); ctx.ellipse(32, my + 1, 6, 7, 0, 0, Math.PI * 2); ctx.fill(); }
+  else if (m === 'smug') { ctx.beginPath(); ctx.moveTo(25, my); ctx.quadraticCurveTo(34, my + 5, 43, my - 3); ctx.stroke(); }
+  else if (m === 'cry') { ctx.beginPath(); ctx.arc(32, my + 7, 8, Math.PI + 0.2, -0.2); ctx.stroke(); }
+  // none → no mouth
+  if (o.blush) { ctx.fillStyle = o.blush; ctx.globalAlpha = 0.5; ctx.beginPath(); ctx.arc(13, 39, 5, 0, 7); ctx.arc(51, 39, 5, 0, 7); ctx.fill(); ctx.globalAlpha = 1; }
+  if (o.mustache) { ctx.fillStyle = o.mustache; ctx.fillRect(20, my - 5, 24, 4); }
+  const tex = new THREE.CanvasTexture(c); tex.needsUpdate = true; return tex;
+}
+// 🎭 Each comic-cast skin's facial expression (eyes/mouth/extras). Skins that hide
+// the face behind a visor/mask/bill are intentionally absent here.
+const CHAR_FACES = {
+  cc_rager:        { eyes:'angry', mouth:'open',  skin:'#ffb3a0', browColor:'#6b0f0f', mouthColor:'#5a1010' },
+  cc_grandmaster:  { eyes:'normal', mouth:'smug' },
+  cc_lucky:        { eyes:'happy', mouth:'grin',  blush:'#ff7777' },
+  cc_medic:        { eyes:'happy', mouth:'smile' },
+  cc_mirage:       { eyes:'none',  mouth:'smug' },     // shades cover the eyes
+  cc_goat:         { eyes:'none',  mouth:'smug' },     // shades
+  cc_duck:         { eyes:'wide',  mouth:'none', skin:'#f2c014' }, // bill is the mouth
+  cc_panic:        { eyes:'wide',  mouth:'open', skin:'#f5f5f5', eyeColor:'#000', mouthColor:'#222' },
+  cc_sharpshooter: { eyes:'angry', mouth:'flat' },
+  cc_ladymayhem:   { eyes:'happy', mouth:'grin',  blush:'#ff66bb' },
+  cc_jinx:         { eyes:'happy', mouth:'grin',  blush:'#33cccc' },
+  cc_pandora:      { eyes:'normal', mouth:'smug' },
+  cc_wildfire:     { eyes:'wide',  mouth:'open',  blush:'#ff8855' },
+  cc_anarchy:      { eyes:'angry', mouth:'smug' },
+  cc_professional: { eyes:'none',  mouth:'flat' },    // shades
+  cc_afk:          { eyes:'sleepy', mouth:'flat' },
+  cc_noskill:      { eyes:'normal', mouth:'grin' },
+  cc_juicebox:     { eyes:'happy', mouth:'smile', skin:'#ffffff', eyeColor:'#1a3a6a', mouthColor:'#1a3a6a' },
+  cc_turtle:       { eyes:'happy', mouth:'smile', skin:'#88bb55' },
+  cc_casual:       { eyes:'normal', mouth:'flat' },
+  cc_suspicious:   { eyes:'none',  mouth:'smug' },    // shades
+  cc_janitor:      { eyes:'sleepy', mouth:'flat', mustache:'#cccccc' },
+  cc_timekeeper:   { eyes:'normal', mouth:'flat' },
+  cc_wildcard:     { eyes:'wide',  mouth:'grin' },
+  cc_drama:        { eyes:'sad',   mouth:'cry' },
+};
+
 // Build a white "shadow" face (the comic protagonist's blank/angry look)
 function makeShadowFaceTexture() {
   const c = document.createElement('canvas'); c.width = 64; c.height = 64;
@@ -7399,6 +7486,13 @@ function applyCharacterSkin(skinId, parts) {
       break;
     }
     // 'default' → leave the randomly-colored recruit as-is
+  }
+  // 🎭 Layer on the character's facial expression (eyes/mouth) for human-faced
+  // skins. Visor/mask skins aren't in CHAR_FACES, so their face stays as set above.
+  if (CHAR_FACES[skinId]) {
+    faceMat.map = makeCharFace(CHAR_FACES[skinId]);
+    faceMat.color.setHex(0xffffff);
+    faceMat.needsUpdate = true;
   }
 }
 // Bot-only signature skins (NOT in the SKINS shop list — players can't pick them).
