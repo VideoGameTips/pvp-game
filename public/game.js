@@ -7168,17 +7168,16 @@ function applyCharacterSkin(skinId, parts) {
       _addSpikyHair(group, 0x6b0f0f);
       break;
     }
-    case 'cc_mirage': {                          // sleek purple ninja + shades
+    case 'cc_mirage': {                          // sleek purple ninja + shades + ears
       setBody(0x5a2a8a); setLegs(0x2a123f); setHeadAll(0xffcc99);
       _addShades(group);
-      _addSpikyHair(group, 0x7a3aa5);
+      _addSpikyHair(group, 0xcfc4e0);            // silver-lilac hair (poster look)
+      _addEars(group, 0xcfc4e0);
       break;
     }
-    case 'cc_grandmaster': {                     // navy strategist + glasses
+    case 'cc_grandmaster': {                     // ♀ navy strategist + long ponytail + glasses
       setBody(0x1b2a4a); setLegs(0x10182c); setHeadAll(0xffcc99);
-      const hair = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.14, 0.52),
-        new THREE.MeshLambertMaterial({ color: 0x15110d }));
-      hair.position.set(0, 2.07, 0); group.add(hair);
+      _addPonytail(group, 0x2a1840);             // long dark-purple hair
       const g = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.08, 0.03),
         new THREE.MeshLambertMaterial({ color: 0x222222 }));
       g.position.set(0, 1.90, 0.255); group.add(g);
@@ -7234,11 +7233,178 @@ function applyCharacterSkin(skinId, parts) {
       });
       break;
     }
+    // ── 🎭 Girls Squad ──────────────────────────────────────────────────────
+    case 'cc_sharpshooter': {                    // military cap, dark ponytail, scope glint
+      setBody(0x2e3a2a); setLegs(0x1c241a); setHeadAll(0xffcc99);
+      _addCap(group, 0x202820);
+      const pt = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.30, 0.14),
+        new THREE.MeshLambertMaterial({ color: 0x140f0a }));
+      pt.position.set(0, 1.80, -0.28); group.add(pt);
+      const eye = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.06, 0.03),
+        new THREE.MeshLambertMaterial({ color: 0x0a0d12, emissive: 0xff3344, emissiveIntensity: 1.4 }));
+      eye.position.set(0.1, 1.92, 0.255); group.add(eye);
+      break;
+    }
+    case 'cc_ladymayhem': {                      // pink/purple jester
+      setBody(0xc81e8c); setLegs(0x5a1240); setHeadAll(0xffcc99);
+      _addJesterHat(group, 0xc81e8c, 0x6a1ea0);
+      break;
+    }
+    case 'cc_jinx': {                            // teal mischief + cyan pigtails
+      setBody(0x14808a); setLegs(0x0c4a50); setHeadAll(0xffcc99);
+      _addPigtails(group, 0x1ad6e0);
+      break;
+    }
+    case 'cc_pandora': {                         // lavender witch + light hair
+      setBody(0x6a3aa5); setLegs(0x2a1240); setHeadAll(0xffcc99);
+      _addPonytail(group, 0xe0d0ff);
+      _addWitchHat(group, 0x3a1255);
+      break;
+    }
+    case 'cc_wildfire': {                        // red body + literal flame hair
+      setBody(0xb01818); setLegs(0x401010); setHeadAll(0xffcc99);
+      _addFlameHair(group);
+      break;
+    }
+    case 'cc_anarchy': {                         // purple punk mohawk + red bandana
+      setBody(0x4a2a6a); setLegs(0x201233); setHeadAll(0xffcc99);
+      _addMohawk(group, 0x9a2ad0);
+      const band = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.12, 0.34),
+        new THREE.MeshLambertMaterial({ color: 0xc0142a }));
+      band.position.set(0, 1.66, 0); group.add(band);
+      break;
+    }
+    // ── 🕶️ Specialists ──────────────────────────────────────────────────────
+    case 'cc_professional': {                    // grey suit, silver hair, shades
+      setBody(0x3a3f47); setLegs(0x232830); setHeadAll(0xffcc99);
+      const hair = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.14, 0.54),
+        new THREE.MeshLambertMaterial({ color: 0xcfcfd6 }));
+      hair.position.set(0, 2.07, 0); group.add(hair);
+      _addShades(group);
+      break;
+    }
+    case 'cc_afk': {                             // hoodie + big headphones
+      setBody(0x55606a); setLegs(0x30373e); setHeadAll(0xffcc99);
+      _addHelmet(group, 0x55606a);               // hood
+      _addHeadphones(group, 0x222831);
+      break;
+    }
+    case 'cc_ragebaiter': {                      // riot helmet + red visor
+      setBody(0x2a2e35); setLegs(0x16181c); setHeadAll(0x12151a);
+      faceMat.map = null; faceMat.color.setHex(0x0c0e12); faceMat.needsUpdate = true;
+      _addVisor(group, 0xff5555, 1.0);
+      _addHelmet(group, 0x1a1d22);
+      break;
+    }
+    case 'cc_noskill': {                         // tan body + red cap (spray'n'pray)
+      setBody(0x8a5a2a); setLegs(0x4a3418); setHeadAll(0xffcc99);
+      _addCap(group, 0xb01818);
+      break;
+    }
+    case 'cc_engineer': {                        // orange vest + hard hat + goggles
+      setBody(0xd47a14); setLegs(0x3a2a14); setHeadAll(0xffcc99);
+      const hat = new THREE.Mesh(new THREE.SphereGeometry(0.30, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+        new THREE.MeshLambertMaterial({ color: 0xffcc00 }));
+      hat.position.set(0, 2.04, 0); hat.castShadow = true; group.add(hat);
+      _addVisor(group, 0x99ddff, 0.8);           // goggles
+      break;
+    }
+    // ── 🤖 Bots ─────────────────────────────────────────────────────────────
+    case 'cc_juicebox': {                        // blue juice carton + pink straw
+      setBody(0x2f7de0); setLegs(0x1c4a88); setHeadAll(0x2f7de0);
+      faceMat.map = null; faceMat.color.setHex(0xffffff); faceMat.needsUpdate = true; // white label
+      const straw = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.42, 8),
+        new THREE.MeshLambertMaterial({ color: 0xff4488 }));
+      straw.position.set(0.12, 2.30, 0); straw.rotation.z = 0.3; group.add(straw);
+      break;
+    }
+    // ── 👻 Weird Department ──────────────────────────────────────────────────
+    case 'cc_nucleardave': {                     // yellow hazmat + gas-mask + glowing tanks
+      setBody(0xd8c81a); setLegs(0x7a701a); setHeadAll(0x141414);
+      faceMat.map = null; faceMat.color.setHex(0x0c0c0c); faceMat.needsUpdate = true;
+      _addVisor(group, 0x55ff44, 1.2);
+      _addHelmet(group, 0xd8c81a);
+      _addBackTanks(group, 0x888888, 0x55ff44);
+      break;
+    }
+    case 'cc_lorekeeper': {                      // brown hooded mage + glowing eyes + robe
+      setBody(0x4a3620); setLegs(0x2a1f12); setHeadAll(0x1a1410);
+      faceMat.map = null; faceMat.color.setHex(0x0e0a06); faceMat.needsUpdate = true;
+      _addVisor(group, 0xffcc44, 0.9);
+      _addHelmet(group, 0x3a2a18);               // hood
+      _addCape(group, 0x2e2014);                 // robe
+      break;
+    }
+    case 'cc_turtle': {                          // green + helmet + shell on the back
+      setBody(0x2e7d32); setLegs(0x1c4a20); setHeadAll(0x88bb55);
+      _addHelmet(group, 0x3d4a24);
+      _addShell(group, 0x5a3a1a);
+      break;
+    }
+    case 'cc_casual': {                          // blue tee + ball cap
+      setBody(0x2f6db0); setLegs(0x223a55); setHeadAll(0xffcc99);
+      _addCap(group, 0x224488);
+      break;
+    }
+    case 'cc_suspicious': {                      // black trenchcoat + fedora + shades
+      setBody(0x1a1a1f); setLegs(0x101012); setHeadAll(0xffcc99);
+      _addFedora(group, 0x121214);
+      _addShades(group);
+      _addCape(group, 0x141418);                 // coat tail
+      break;
+    }
+    case 'cc_sweat': {                           // tryhard gamer: VR visor + headset
+      setBody(0x202830); setLegs(0x141a20); setHeadAll(0xffcc99);
+      faceMat.map = null; faceMat.color.setHex(0x10131a); faceMat.needsUpdate = true;
+      _addVisor(group, 0x00e0ff, 1.4);
+      _addHeadphones(group, 0x222831);
+      break;
+    }
+    // ── 🧹 Miscellaneous ─────────────────────────────────────────────────────
+    case 'cc_janitor': {                         // blue jumpsuit + cap + grey 'stache
+      setBody(0x2f5a8a); setLegs(0x203a5a); setHeadAll(0xffcc99);
+      _addCap(group, 0x1f4a6a);
+      const beard = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.08, 0.06),
+        new THREE.MeshLambertMaterial({ color: 0xcccccc }));
+      beard.position.set(0, 1.78, 0.24); group.add(beard);
+      break;
+    }
+    case 'cc_timekeeper': {                      // brown coat + top hat + clock emblem
+      setBody(0x5a4632); setLegs(0x3a2e20); setHeadAll(0xffcc99);
+      _addTopHat(group, 0x3a2e20);
+      _addChestEmblem(group, 0xffcc44, 'clock');
+      break;
+    }
+    case 'cc_wildcard': {                         // purple harlequin + ? emblem
+      setBody(0x7a1ea0); setLegs(0x3a0f50); setHeadAll(0xffcc99);
+      _addJesterHat(group, 0x7a1ea0, 0xffcc00);
+      _addChestEmblem(group, 0xffcc00, 'q');
+      break;
+    }
+    case 'cc_drama': {                           // pink + pigtails + teary eyes
+      setBody(0xe0418c); setLegs(0x7a1f50); setHeadAll(0xffcc99);
+      _addPigtails(group, 0xff8cc0);
+      [-0.1, 0.1].forEach(x => {
+        const t = new THREE.Mesh(new THREE.SphereGeometry(0.03, 6, 6),
+          new THREE.MeshLambertMaterial({ color: 0x66ccff, emissive: 0x3399cc, emissiveIntensity: 0.6 }));
+        t.position.set(x, 1.84, 0.25); group.add(t);
+      });
+      break;
+    }
+    case 'cc_pixel': {                            // retro green + pixel visor + cap
+      setBody(0x2faa3a); setLegs(0x1c6a26); setHeadAll(0xffcc99);
+      faceMat.map = null; faceMat.color.setHex(0x10131a); faceMat.needsUpdate = true;
+      _addVisor(group, 0x66ff66, 1.2);
+      _addCap(group, 0x1c6a26);
+      break;
+    }
     // 'default' → leave the randomly-colored recruit as-is
   }
 }
 // Bot-only signature skins (NOT in the SKINS shop list — players can't pick them).
-const CHARACTER_SKIN_IDS = ['cc_kingchaos','cc_bot','cc_rager','cc_mirage','cc_grandmaster','cc_lucky','cc_medic','cc_goat','cc_pyro','cc_ghost','cc_duck','cc_panic'];
+const CHARACTER_SKIN_IDS = ['cc_kingchaos','cc_bot','cc_rager','cc_mirage','cc_grandmaster','cc_lucky','cc_medic','cc_goat','cc_pyro','cc_ghost','cc_duck','cc_panic',
+  'cc_sharpshooter','cc_ladymayhem','cc_jinx','cc_pandora','cc_wildfire','cc_anarchy','cc_professional','cc_afk','cc_ragebaiter','cc_noskill','cc_engineer',
+  'cc_juicebox','cc_nucleardave','cc_lorekeeper','cc_turtle','cc_casual','cc_suspicious','cc_sweat','cc_janitor','cc_timekeeper','cc_wildcard','cc_drama','cc_pixel'];
 function resolveSkinId(s) {
   return (SKIN_IDS.includes(s) || CHARACTER_SKIN_IDS.includes(s)) ? s : 'default';
 }
@@ -7300,6 +7466,116 @@ function _addCap(group, color) {
   dome.position.set(0, 2.10, 0); dome.castShadow = true; group.add(dome);
   const brim = new THREE.Mesh(new THREE.BoxGeometry(0.50, 0.05, 0.20), mat);
   brim.position.set(0, 2.04, 0.32); brim.castShadow = true; group.add(brim);
+}
+
+// ── More signature-skin accessories (comic-cast looks) ─────────────────────
+function _addPonytail(group, color) {
+  const mat = new THREE.MeshLambertMaterial({ color });
+  const base = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.16, 0.54), mat);
+  base.position.set(0, 2.07, 0); group.add(base);
+  const tail = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.5, 0.16), mat);
+  tail.position.set(0, 1.78, -0.30); tail.castShadow = true; group.add(tail);
+}
+function _addPigtails(group, color) {
+  const mat = new THREE.MeshLambertMaterial({ color });
+  const base = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.14, 0.54), mat);
+  base.position.set(0, 2.07, 0); group.add(base);
+  [-0.33, 0.33].forEach(x => {
+    const p = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.36, 0.14), mat);
+    p.position.set(x, 1.80, 0); p.castShadow = true; group.add(p);
+  });
+}
+function _addTopHat(group, color) {
+  const mat = new THREE.MeshLambertMaterial({ color });
+  const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.34, 0.04, 16), mat);
+  brim.position.set(0, 2.10, 0); brim.castShadow = true; group.add(brim);
+  const dome = new THREE.Mesh(new THREE.CylinderGeometry(0.23, 0.23, 0.34, 16), mat);
+  dome.position.set(0, 2.29, 0); dome.castShadow = true; group.add(dome);
+}
+function _addFedora(group, color) {
+  const mat = new THREE.MeshLambertMaterial({ color });
+  const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.03, 16), mat);
+  brim.position.set(0, 2.09, 0); brim.castShadow = true; group.add(brim);
+  const dome = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.27, 0.20, 16), mat);
+  dome.position.set(0, 2.20, 0); group.add(dome);
+}
+function _addWitchHat(group, color) {
+  const mat = new THREE.MeshLambertMaterial({ color });
+  const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.44, 0.44, 0.03, 18), mat);
+  brim.position.set(0, 2.10, 0); brim.castShadow = true; group.add(brim);
+  const cone = new THREE.Mesh(new THREE.ConeGeometry(0.24, 0.52, 18), mat);
+  cone.position.set(0, 2.38, 0); cone.rotation.z = 0.12; group.add(cone);
+}
+function _addHeadphones(group, color) {
+  const mat = new THREE.MeshLambertMaterial({ color });
+  const band = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.035, 8, 18, Math.PI), mat);
+  band.position.set(0, 1.95, 0); group.add(band);
+  [-0.29, 0.29].forEach(x => {
+    const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.07, 12), mat);
+    cup.rotation.z = Math.PI / 2; cup.position.set(x, 1.90, 0); group.add(cup);
+  });
+}
+function _addMohawk(group, color) {
+  const mat = new THREE.MeshLambertMaterial({ color });
+  for (let i = 0; i < 5; i++) {
+    const s = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.28, 5), mat);
+    s.position.set(0, 2.19, -0.16 + i * 0.08); s.castShadow = true; group.add(s);
+  }
+}
+function _addFlameHair(group) {
+  const cols = [0xff3300, 0xff7a00, 0xffcc00];
+  const pts = [[-0.14, 0, -0.08], [0.14, 0, -0.08], [0, 0.05, 0.02], [-0.1, 0.02, 0.13], [0.1, 0.02, 0.13], [0, 0.02, -0.16]];
+  pts.forEach(([x, yy, z], i) => {
+    const c = cols[i % 3];
+    const s = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.28 + yy, 5),
+      new THREE.MeshLambertMaterial({ color: c, emissive: c, emissiveIntensity: 0.45 }));
+    s.position.set(x, 2.16 + yy, z); group.add(s);
+  });
+}
+function _addShell(group, color) {
+  const shell = new THREE.Mesh(new THREE.SphereGeometry(0.36, 12, 10, 0, Math.PI * 2, 0, Math.PI / 2),
+    new THREE.MeshLambertMaterial({ color }));
+  shell.position.set(0, 1.15, -0.16); shell.rotation.x = -Math.PI / 2; shell.castShadow = true; group.add(shell);
+}
+function _addBackTanks(group, color, glow) {
+  const mat = new THREE.MeshLambertMaterial({ color });
+  [-0.14, 0.14].forEach(x => {
+    const t = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.42, 10), mat);
+    t.position.set(x, 1.2, -0.22); group.add(t);
+  });
+  if (glow) {
+    const g = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 8),
+      new THREE.MeshLambertMaterial({ color: glow, emissive: glow, emissiveIntensity: 1.0 }));
+    g.position.set(0, 1.3, -0.22); group.add(g);
+  }
+}
+function _addChestEmblem(group, color, kind) {
+  const mat = new THREE.MeshLambertMaterial({ color, emissive: color, emissiveIntensity: 0.35 });
+  if (kind === 'clock') {
+    const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.02, 16), mat);
+    disc.rotation.x = Math.PI / 2; disc.position.set(0, 1.25, 0.17); group.add(disc);
+  } else {
+    const disc = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 0.02), mat);
+    disc.position.set(0, 1.25, 0.17); group.add(disc);
+  }
+}
+function _addJesterHat(group, c1, c2) {
+  const base = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.12, 0.54), new THREE.MeshLambertMaterial({ color: c1 }));
+  base.position.set(0, 2.08, 0); group.add(base);
+  const horns = [[-0.26, -0.7, c2], [0.26, 0.7, c1], [0, 0, c2]];
+  horns.forEach(([x, rot, c]) => {
+    const h = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.30, 6), new THREE.MeshLambertMaterial({ color: c }));
+    h.position.set(x, 2.26, 0); h.rotation.z = rot; group.add(h);
+    const bell = new THREE.Mesh(new THREE.SphereGeometry(0.04, 6, 6), new THREE.MeshLambertMaterial({ color: 0xffd227, emissive: 0x554400, emissiveIntensity: 0.4 }));
+    bell.position.set(x * 1.6, 2.34, 0); group.add(bell);
+  });
+}
+function _addEars(group, color) {
+  const mat = new THREE.MeshLambertMaterial({ color });
+  [-0.2, 0.2].forEach(x => {
+    const ear = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.18, 5), mat);
+    ear.position.set(x, 2.16, 0); group.add(ear);
+  });
 }
 
 // Gold crown overlay — toggled for admin / match leader. Idempotent.
@@ -14181,13 +14457,13 @@ const DEFAULT_TEAMMATE_PLAYSTYLE = { personality:'tactician', speedMult:1.0, aim
 const TEAMMATE_SKINS = {
   kingchaos:'cc_kingchaos', luckylarry:'cc_lucky', grandmaster:'cc_grandmaster', mirage:'cc_mirage',
   bot47:'cc_bot', bot604:'cc_bot', rager:'cc_rager', duckguy:'cc_duck',
-  combatmedic:'cc_medic', juicebox:'cc_medic', sharpshooter:'swat_shades', ladymayhem:'riot_chad',
-  jinx:'spiky', pandora:'default', wildfire:'cc_pyro', anarchy:'shadow',
-  professional:'swat_shades', afkguy:'green_cap', ragebaiter:'swat', noskill:'soldier',
-  pyromaniac:'cc_pyro', engineer:'soldier', ghost:'cc_ghost', nucleardave:'soldier',
-  lorekeeper:'shadow', tankturtle:'soldier', casualbob:'green_cap', goat:'cc_goat',
-  mrsuspicious:'swat_shades', thesweat:'spiky', janitor:'default', timekeeper:'shadow',
-  wildcard:'riot_chad', panicpanda:'cc_panic', dramaqueen:'riot_chad', shadow:'shadow', pixelboy:'spiky',
+  combatmedic:'cc_medic', juicebox:'cc_juicebox', sharpshooter:'cc_sharpshooter', ladymayhem:'cc_ladymayhem',
+  jinx:'cc_jinx', pandora:'cc_pandora', wildfire:'cc_wildfire', anarchy:'cc_anarchy',
+  professional:'cc_professional', afkguy:'cc_afk', ragebaiter:'cc_ragebaiter', noskill:'cc_noskill',
+  pyromaniac:'cc_pyro', engineer:'cc_engineer', ghost:'cc_ghost', nucleardave:'cc_nucleardave',
+  lorekeeper:'cc_lorekeeper', tankturtle:'cc_turtle', casualbob:'cc_casual', goat:'cc_goat',
+  mrsuspicious:'cc_suspicious', thesweat:'cc_sweat', janitor:'cc_janitor', timekeeper:'cc_timekeeper',
+  wildcard:'cc_wildcard', panicpanda:'cc_panic', dramaqueen:'cc_drama', shadow:'shadow', pixelboy:'cc_pixel',
 };
 
 // 🖼️ Float the drafted teammate's semi-pixel comic avatar (from chat.js) as a
