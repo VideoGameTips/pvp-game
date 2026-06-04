@@ -1001,6 +1001,15 @@ let reloading = false, lastShot = 0, shooting = false;
 let isADS = false, adsFOV = 75, targetFOV = 75;
 
 let myKills = 0, isDead = false, gameStarted = false;
+// 🛋️ Lobby 13 is a standalone social hub — NOT a match. When inLobby is true there
+// is intentionally no `match` object: no scoring, no rounds, no win/lose, no combat.
+// All lobby behavior keys off this flag, never off match.type.
+let inLobby = false;
+// 3D duel-slot pads on the lobby floor (1V1 / 2V2 / 3V3). Stepping onto one and
+// pressing F starts that mode (bots fill the empty slots). Populated in buildLobby13Map.
+const LOBBY_DUEL_PADS = [];
+let lobbyPadHere = null;        // the duel pad the player is currently standing on
+let lobbyChallengeTarget = null;// nearest cast member to challenge (proximity F = 1V1)
 let spawnShieldUntil = 0; // timestamp: player is invincible until this time
 let spectatorState = null; // { idx, lastSwitch } — set when dead and watching teammates
 
@@ -3184,6 +3193,37 @@ function buildLobby13Map() {
       new THREE.MeshBasicMaterial({ color: 0x3355aa }));
     strip.position.set(x, 0.06, 0);
     MAP_GROUPS[m].add(strip);
+  });
+
+  // ── 3D DUEL SLOTS (right side): glowing floor pads. Stand on one + press F to
+  //    start that mode (bots fill the empty slots). Physical, not a menu. ──
+  LOBBY_DUEL_PADS.length = 0;
+  const padDefs = [
+    { modeId: '1v1', label: '1V1', cap: 2, z: -10, color: 0x66ffaa },
+    { modeId: '2v2', label: '2V2', cap: 4, z:   0, color: 0x66ddff },
+    { modeId: '3v3', label: '3V3', cap: 6, z:  10, color: 0xffaa66 },
+  ];
+  padDefs.forEach(pd => {
+    const padX = 24, padZ = pd.z, radius = 3.4;
+    const disk = new THREE.Mesh(new THREE.CircleGeometry(radius, 40),
+      new THREE.MeshBasicMaterial({ color: pd.color, transparent: true, opacity: 0.32 }));
+    disk.rotation.x = -Math.PI / 2; disk.position.set(padX, 0.05, padZ);
+    MAP_GROUPS[m].add(disk);
+    const ring = new THREE.Mesh(new THREE.RingGeometry(radius - 0.3, radius, 40),
+      new THREE.MeshBasicMaterial({ color: pd.color }));
+    ring.rotation.x = -Math.PI / 2; ring.position.set(padX, 0.07, padZ);
+    MAP_GROUPS[m].add(ring);
+    // Floating label sprite over the pad
+    const cv = document.createElement('canvas'); cv.width = 256; cv.height = 128;
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#' + pd.color.toString(16).padStart(6, '0');
+    ctx.font = 'bold 84px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.shadowColor = '#000'; ctx.shadowBlur = 12;
+    ctx.fillText(pd.label, 128, 64);
+    const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, depthTest: false }));
+    spr.scale.set(4.5, 2.25, 1); spr.position.set(padX, 3.0, padZ);
+    MAP_GROUPS[m].add(spr);
+    LOBBY_DUEL_PADS.push({ modeId: pd.modeId, label: pd.label, capacity: pd.cap, x: padX, z: padZ, radius });
   });
 }
 
@@ -7566,6 +7606,8 @@ document.addEventListener('keydown', e => {
       toggleADS();
     }
   }
+  // 🛋️ F in the lobby: start the duel pad you're on, or challenge the nearest cast member to a 1V1
+  if (e.code==='KeyF' && inLobby && !e.repeat) { e.preventDefault(); lobbyInteract(); return; }
   if (e.code==='KeyF' && nearTrashcan && !isDead) { showLoadoutScreen('swap'); }
   // F = enter/exit a mortar (trench map)
   if (e.code==='KeyF' && !nearTrashcan && !isDead && activeMapName === 'trenches' && !e.repeat) {
@@ -9916,7 +9958,7 @@ function getSecretSynergy(weaponId, hitPos) {
 // Helper: emit hit to server AND show damage numbers AND apply damage client-authoritatively
 function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false) {
   // 🛋️ Lobby 13 is a no-combat chill zone — the cast is neutral and can't be hurt.
-  if (match?.type === 'lobby') return;
+  if (inLobby) return;
   const isBot    = players[pid] && players[pid].isBot;
   const instakill = headshot && INSTAKILL_HS_WEAPONS.has(weaponId);
   socket.emit(isBot ? 'hitBot' : 'hit', {
@@ -11595,7 +11637,7 @@ function botShotHitsPlayer(bot, dist) {
 
 function applyBotDamageToPlayer(weaponId, botId) {
   // 🛋️ Lobby 13 is a no-combat chill zone — nobody takes damage.
-  if (match?.type === 'lobby') return;
+  if (inLobby) return;
   // ⚡ Admin god mode: no damage taken
   if (adminCheats.godMode && currentUser?.isAdmin) { flashHitIndicator(); return; }
   // Frost Blaster: doesn't deal HP damage, just reduces speed (lethal at 0)
@@ -13085,9 +13127,6 @@ function startMatchRound() {
     } else if (match.type === 'range') {
       showAnnouncement('SHOOTING RANGE', 'Hit the targets · No enemies!', '#44ddff', 2800);
       grantSpawnShield(0);
-    } else if (match.type === 'lobby') {
-      showAnnouncement('🛋️ LOBBY 13', 'Chill zone · organize your 1v1s in the duel pit', '#aaffaa', 3400);
-      grantSpawnShield(0);
     } else if (match.type === 'br') {
       // Init bot lives now that bots exist
       const livesEach = match.cfg.livesPerPlayer || 3;
@@ -13170,10 +13209,6 @@ function updateMatchHUD() {
     L.textContent = `SHOTS ${rangeStats.shots}`;
     C.textContent = 'RANGE';
     R.textContent = `ACC ${rangeStats.shots > 0 ? Math.round(rangeStats.hits / rangeStats.shots * 100) : 0}%`;
-  } else if (match.type === 'lobby') {
-    L.textContent = '🛋️ CHILL';
-    C.textContent = 'LOBBY 13';
-    R.textContent = 'DUEL PIT →';
   } else if (match.type === 'br') {
     const myLives = match.lives[myId] ?? 0;
     const alive = Object.values(match.lives).filter(v => v > 0).length;
@@ -14442,6 +14477,20 @@ function spawnGameBots() {
   for (let i = 0; i < enemies;  i++) makeBot(i, 'enemy');
 
   socket.emit('spawnBots', botList);
+
+  // 🛋️ Lobby 13 is NOT a match — skip the entire match system (no initMatch /
+  // startMatchRound, no `match` object, no scoring/rounds/win logic). It's a
+  // standalone social hub; the cast just wanders and you organize your own duels.
+  if (selectedModeConfig.type === 'lobby') {
+    match = null;
+    inLobby = true;
+    const hud = document.getElementById('match-hud'); if (hud) hud.style.display = 'none';
+    setTimeout(() => { try { showAnnouncement('🛋️ LOBBY 13', 'Chill zone · walk up to anyone and press F to duel', '#aaffaa', 3200); } catch (e) {} }, 600);
+    grantSpawnShield(0);
+    return;
+  }
+
+  inLobby = false;
   initMatch();
   setTimeout(() => startMatchRound(), 400 + (allies + enemies) * 40);
 }
@@ -14547,7 +14596,7 @@ function updateRange(dt) {
 function getBotTarget(bot) {
   // 🛋️ Lobby 13: nobody fights. The team-agnostic fallback below would otherwise
   // make the all-ally cast target (and shoot) each other — so bail out entirely.
-  if (match?.type === 'lobby') return null;
+  if (inLobby) return null;
   // D-Day turrets: target nearest attacking enemy bot
   if (bot.state === 'turret') {
     let best = null, bestDist = Infinity;
@@ -15782,6 +15831,7 @@ function loop() {
   updateP2WSystems(dt); // orbital strikes, guardian drones, nano shield
   updateMapGimmicks(dt); // lava DOT, jump pads, low-grav zones, ice friction
   updateBotSpeech(dt);  // bot speech bubbles follow their heads
+  if (inLobby) updateLobbyInteractions(); // 🛋️ duel-pad / challenge prompt
   updateChatFeed();     // fade old chat lines
   updateAdminCheats(dt);// admin cheat tick (fly, kill aura, etc.)
   updateUAV(dt);        // 🛰️ Predator UAV overlay tick
@@ -16742,7 +16792,8 @@ async function startGame() {
 // clears the lobby cast so they don't linger behind the menu.
 function openModeMenu() {
   gameStarted = false;
-  match = null; // drop the lobby match so HUD/match logic stops referencing it
+  inLobby = false;
+  match = null; // (lobby has no match anyway — belt & suspenders)
   try { document.exitPointerLock && document.exitPointerLock(); } catch (e) {}
   for (const bot of gameBots) {
     if (remoteMeshes[bot.id]) { scene.remove(remoteMeshes[bot.id]); delete remoteMeshes[bot.id]; }
@@ -16752,6 +16803,7 @@ function openModeMenu() {
   gameBots.length = 0;
   const hud = document.getElementById('match-hud'); if (hud) hud.style.display = 'none';
   showLobbyModesButton(false);
+  showLobbyPrompt(null);
   document.getElementById('mode-screen').style.display = 'flex';
   updateUserInfoBar();
 }
@@ -16771,6 +16823,77 @@ function showLobbyModesButton(show) {
     document.body.appendChild(btn);
   }
   btn.style.display = show ? 'block' : 'none';
+}
+
+// ── 🛋️ Lobby interactions: duel-slot pads + proximity F-to-challenge ─────────
+// Center-bottom prompt that tells you what F will do right now.
+function showLobbyPrompt(txt) {
+  let el = document.getElementById('lobby-prompt');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'lobby-prompt';
+    el.style.cssText = 'position:fixed;bottom:90px;left:50%;transform:translateX(-50%);z-index:55;'
+      + 'padding:10px 20px;background:rgba(16,12,22,0.85);color:#ffe9a8;border:2px solid #ffcc55;'
+      + 'border-radius:8px;font-family:inherit;font-size:16px;font-weight:bold;letter-spacing:1px;'
+      + 'box-shadow:0 2px 14px rgba(0,0,0,0.6);pointer-events:none;text-align:center;';
+    document.body.appendChild(el);
+  }
+  if (txt) { el.textContent = txt; el.style.display = 'block'; }
+  else el.style.display = 'none';
+}
+// Per-frame (only while inLobby): figure out whether the player is on a duel pad
+// or near a cast member, and update the prompt accordingly.
+function updateLobbyInteractions() {
+  if (!inLobby) { showLobbyPrompt(null); return; }
+  lobbyPadHere = null; lobbyChallengeTarget = null;
+  const px = camera.position.x, pz = camera.position.z;
+  for (const pad of LOBBY_DUEL_PADS) {
+    if (Math.hypot(px - pad.x, pz - pad.z) <= pad.radius) { lobbyPadHere = pad; break; }
+  }
+  if (!lobbyPadHere) {
+    let best = null, bestD = 4.5;
+    for (const bot of gameBots) {
+      if (bot.dead) continue;
+      const d = Math.hypot(px - bot.x, pz - bot.z);
+      if (d < bestD) { bestD = d; best = bot; }
+    }
+    lobbyChallengeTarget = best;
+  }
+  if (lobbyPadHere) {
+    showLobbyPrompt(`⚔️  Press F to start ${lobbyPadHere.label}  ·  bots fill the empty slots`);
+  } else if (lobbyChallengeTarget) {
+    const nm = (players[lobbyChallengeTarget.id]?.name) || 'them';
+    showLobbyPrompt(`⚔️  Press F to challenge ${nm} to a 1V1`);
+  } else {
+    showLobbyPrompt(null);
+  }
+}
+// F pressed in the lobby → act on whatever the prompt is offering.
+function lobbyInteract() {
+  if (!inLobby) return;
+  if (lobbyPadHere) startDuel(lobbyPadHere.modeId, null);
+  else if (lobbyChallengeTarget) startDuel('1v1', lobbyChallengeTarget.charId || null);
+}
+// Leave the lobby and start a real match (the duel itself IS a normal match on a
+// real arena — the lobby stays a separate, match-free hub). A direct challenge
+// drafts that character as your opponent; pads just fill empty slots with bots.
+function startDuel(modeId, opponentCharId) {
+  const cfg = GAME_MODE_CONFIGS[modeId];
+  if (!cfg) return;
+  inLobby = false;
+  showLobbyPrompt(null);
+  showLobbyModesButton(false);
+  const hud = document.getElementById('match-hud'); if (hud) hud.style.display = 'flex';
+  // Direct challenge: that character becomes your (only) opponent.
+  if (opponentCharId) window.PVP_OPPONENTS = [opponentCharId];
+  selectedModeConfig = cfg;
+  selectedMap = 'auto'; // random combat arena (NOT the lobby map)
+  resetCombatResources(); // normal mags/reserves (lobby gave infinite ammo)
+  const oppName = opponentCharId && window.CHAT_CAST?.[opponentCharId] ? ` vs ${window.CHAT_CAST[opponentCharId].name}` : '';
+  showAnnouncement('⚔️ DUEL', `${modeId.toUpperCase()}${oppName}`, '#ffcc44', 2200);
+  spawnGameBots();        // tears down the lobby cast + builds the elim match
+  requestPointerLockSafe();
+  startLoop();
 }
 
 // "Enter Code" button — opens prompt, redeems code on server (only shown after login)
