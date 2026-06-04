@@ -7620,8 +7620,9 @@ document.addEventListener('keydown', e => {
       toggleADS();
     }
   }
-  // 🛋️ F in the lobby: start the duel pad you're on, or challenge the nearest cast member to a 1V1
-  if (e.code==='KeyF' && inLobby && !e.repeat) { e.preventDefault(); lobbyInteract(); return; }
+  // 🛋️ F in the lobby: start the duel pad you're on, or challenge the nearest cast
+  // member to a 1V1 — BUT the trashcan (weapon swap) always takes priority when near it.
+  if (e.code==='KeyF' && inLobby && !nearTrashcan && !e.repeat) { e.preventDefault(); lobbyInteract(); return; }
   if (e.code==='KeyF' && nearTrashcan && !isDead) { showLoadoutScreen('swap'); }
   // F = enter/exit a mortar (trench map)
   if (e.code==='KeyF' && !nearTrashcan && !isDead && activeMapName === 'trenches' && !e.repeat) {
@@ -16919,6 +16920,9 @@ function countSeated(area) {
 // proximity 1V1 challenge against the nearest cast member.
 function updateLobbyInteractions() {
   if (!inLobby) { showLobbyPrompt(null); return; }
+  // Near a trashcan? Let its own "press F to change weapons" prompt take over and
+  // don't offer a duel/challenge here — F swaps your loadout instead.
+  if (nearTrashcan) { releaseDuelBots(); lobbyActiveArea = null; lobbyPadHere = null; lobbyChallengeTarget = null; showLobbyPrompt(null); return; }
   const px = camera.position.x, pz = camera.position.z;
   // Which area's BLUE pad is the player standing on?
   let area = null;
