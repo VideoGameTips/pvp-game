@@ -7926,6 +7926,8 @@ document.addEventListener('mousemove', e => {
   euler.x -= e.movementY * SENS;
   euler.x = Math.max(-Math.PI/2.2, Math.min(Math.PI/2.2, euler.x));
   camera.quaternion.setFromEuler(euler);
+  // 🎯 Manual aim always wins: while you're moving the mouse, the aim aids yield.
+  if (e.movementX || e.movementY) _lastManualAimAt = performance.now();
 });
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -7941,6 +7943,7 @@ try { const s = JSON.parse(localStorage.getItem('pvp_assist') || 'null'); if (s)
 function saveAssist() { try { localStorage.setItem('pvp_assist', JSON.stringify(ASSIST)); } catch (e) {} }
 
 const _assistVel = new Map();   // entityId → { x, z, vx, vz } smoothed velocity (units/s)
+let _lastManualAimAt = 0;       // perf.now() of the player's last mouse-look input
 let _aimbotTimer = 0;           // seconds an opponent has been on screen (aimbot warm-up)
 let _autoShootTimer = 0;        // seconds the crosshair has been on an opponent
 let _aiAimDot = null;           // red prediction marker mesh
@@ -8029,12 +8032,15 @@ function updateAimAssist(dt) {
 
   const wide  = (ASSIST.aimAssist || ASSIST.aimbot || ASSIST.aiAim) ? _pickAssistTarget(enemies, 38) : null;
   const tight = ASSIST.autoShoot ? _pickAssistTarget(enemies, 2.2) : null;
+  // While you're actively moving the mouse, the view aids step aside so you keep
+  // full manual control (they resume ~150ms after you stop).
+  const manualAiming = performance.now() - _lastManualAimAt < 150;
 
   // Aim Assist — gentle magnetism toward the body
-  if (ASSIST.aimAssist && wide) _aimToward(wide.pos, 5, dt);
+  if (ASSIST.aimAssist && wide && !manualAiming) _aimToward(wide.pos, 5, dt);
 
   // Aim Bot — after 0.2s of the target on screen, snap toward it fast
-  if (ASSIST.aimbot && wide) { _aimbotTimer += dt; if (_aimbotTimer >= 0.2) _aimToward(wide.pos, 50, dt); }
+  if (ASSIST.aimbot && wide) { _aimbotTimer += dt; if (_aimbotTimer >= 0.2 && !manualAiming) _aimToward(wide.pos, 50, dt); }
   else _aimbotTimer = 0;
 
   // Auto Shoot — fire 0.01s after the crosshair lands on an opponent. Only with a
@@ -17874,7 +17880,7 @@ function openAimAssistPanel() {
   }
   panel.style.display = 'block';
   const opts = [
-    { key: 'autoShoot', name: 'AUTO SHOOT',  desc: 'Crosshair on an opponent for 0.01s → auto-fires.' },
+    { key: 'autoShoot', name: 'AUTO SHOOT',  desc: 'Crosshair on an opponent for 0.01s → fires on its own. Turn OFF if you want to pull the trigger yourself.' },
     { key: 'aimAssist', name: 'AIM ASSIST',  desc: 'Opponent on screen → view drifts to their body at 5°/s.' },
     { key: 'aimbot',    name: 'AIM BOT',     desc: 'Opponent on screen 0.2s → snaps to them at 50°/s.' },
     { key: 'aiAim',     name: 'AI AIM',      desc: 'Red dot predicts where the opponent moves next — your call whether to trust it.' },
