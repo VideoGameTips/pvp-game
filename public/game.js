@@ -8037,8 +8037,11 @@ function updateAimAssist(dt) {
   if (ASSIST.aimbot && wide) { _aimbotTimer += dt; if (_aimbotTimer >= 0.2) _aimToward(wide.pos, 50, dt); }
   else _aimbotTimer = 0;
 
-  // Auto Shoot — fire 0.01s after the crosshair lands on an opponent
-  if (ASSIST.autoShoot && tight) { _autoShootTimer += dt; if (_autoShootTimer >= 0.01) tryShoot(); }
+  // Auto Shoot — fire 0.01s after the crosshair lands on an opponent. Only with a
+  // GUN equipped — never auto-fire the last gun while you're holding a melee/utility
+  // (that caused "taser shots coming out of the knife").
+  const gunEquipped = (activeSlot === 'primary' || activeSlot === 'secondary');
+  if (ASSIST.autoShoot && tight && gunEquipped) { _autoShootTimer += dt; if (_autoShootTimer >= 0.01) tryShoot(); }
   else _autoShootTimer = 0;
 
   // AI Aim — drop a red dot where the opponent is predicted to be ~0.35s from now
