@@ -5881,6 +5881,9 @@ function _genericGun(opts) {
   g.add(flash);
   g._flash = flash;
   g._kickZ = opts.kickZ ?? 0.014;
+  // 🎨 Weapon-skin hooks: the body + accent are per-gun materials we can recolor.
+  g._bodyMat = bodyMat; g._accentMat = accentMat;
+  g._origBody = bc; g._origAccent = ac;
   g.position.set(0.12, -0.1, -0.25);
   return g;
 }
@@ -6123,6 +6126,101 @@ const weaponModels = [
   buildTrafficCone(), buildCreamPie(),
 ];
 weaponModels.forEach((m,i) => { m.visible = i === 0; camera.add(m); });
+
+// ════════════════════════════════════════════════════════════════════════════
+// 🎨 WEAPON SKINS — recolor your gun + an optional flag/emblem decal. One global
+//   pick applies to every gun. Country themes use real national flags; the
+//   German theme uses the Iron Cross (Balkenkreuz — a legitimate military mark,
+//   NOT a Nazi symbol) and deliberately includes no hate imagery.
+// ════════════════════════════════════════════════════════════════════════════
+function _flagCanvas(draw) {
+  const c = document.createElement('canvas'); c.width = 96; c.height = 64;
+  const ctx = c.getContext('2d');
+  draw(ctx, 96, 64);
+  const t = new THREE.CanvasTexture(c); t.needsUpdate = true; return t;
+}
+const _star = (ctx, cx, cy, r, color, rot = -Math.PI / 2) => {
+  ctx.fillStyle = color; ctx.beginPath();
+  for (let i = 0; i < 5; i++) {
+    const a = rot + i * 4 * Math.PI / 5;
+    ctx[i ? 'lineTo' : 'moveTo'](cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+  }
+  ctx.closePath(); ctx.fill();
+};
+const FLAG_DRAW = {
+  japan: (x, w, h) => { x.fillStyle = '#fff'; x.fillRect(0, 0, w, h); x.fillStyle = '#bc002d'; x.beginPath(); x.arc(w/2, h/2, h*0.28, 0, 7); x.fill(); },
+  rising_sun: (x, w, h) => { x.fillStyle = '#fff'; x.fillRect(0, 0, w, h); x.fillStyle = '#bc002d'; x.save(); x.translate(w/2, h/2); for (let i = 0; i < 16; i++) { x.rotate(Math.PI/8); x.beginPath(); x.moveTo(0,0); x.lineTo(w, -6); x.lineTo(w, 6); x.fill(); } x.restore(); x.beginPath(); x.arc(w/2, h/2, h*0.22, 0, 7); x.fill(); },
+  soviet: (x, w, h) => { x.fillStyle = '#c8102e'; x.fillRect(0, 0, w, h); x.fillStyle = '#ffd700'; x.font = 'bold 30px serif'; x.textAlign='center'; x.textBaseline='middle'; x.fillText('☭', w*0.28, h*0.42); _star(x, w*0.28, h*0.18, 7, '#ffd700'); },
+  china: (x, w, h) => { x.fillStyle = '#de2910'; x.fillRect(0, 0, w, h); _star(x, w*0.18, h*0.3, 11, '#ffde00'); [[0.34,0.12],[0.40,0.24],[0.40,0.40],[0.34,0.52]].forEach(([px,py]) => _star(x, w*px, h*py, 4, '#ffde00')); },
+  vietnam: (x, w, h) => { x.fillStyle = '#da251d'; x.fillRect(0, 0, w, h); _star(x, w/2, h/2, h*0.32, '#ffff00'); },
+  israel: (x, w, h) => { x.fillStyle = '#fff'; x.fillRect(0, 0, w, h); x.fillStyle = '#0038b8'; x.fillRect(0, h*0.12, w, h*0.12); x.fillRect(0, h*0.76, w, h*0.12); x.strokeStyle = '#0038b8'; x.lineWidth = 4; const r = h*0.22, cx = w/2, cy = h/2; for (let k = 0; k < 2; k++) { x.beginPath(); for (let i = 0; i < 3; i++) { const a = -Math.PI/2 + k*Math.PI + i*2*Math.PI/3; x[i?'lineTo':'moveTo'](cx+Math.cos(a)*r, cy+Math.sin(a)*r); } x.closePath(); x.stroke(); } },
+  usa: (x, w, h) => { for (let i = 0; i < 13; i++) { x.fillStyle = i%2 ? '#fff' : '#b22234'; x.fillRect(0, i*h/13, w, h/13); } x.fillStyle = '#3c3b6e'; x.fillRect(0, 0, w*0.42, h*7/13); x.fillStyle = '#fff'; for (let r = 0; r < 5; r++) for (let cc = 0; cc < 5; cc++) { const px = w*0.04 + cc*w*0.085 + (r%2)*w*0.042, py = h*0.05 + r*h*0.095; x.beginPath(); x.arc(px, py, 1.6, 0, 7); x.fill(); } },
+  // 🇩🇪 German military Iron Cross (Balkenkreuz) — field-grey panel, white-edged black cross. No Nazi imagery.
+  iron_cross: (x, w, h) => { x.fillStyle = '#5a5f54'; x.fillRect(0, 0, w, h); const cx=w/2, cy=h/2; x.fillStyle = '#f0f0f0'; x.fillRect(cx-22, cy-9, 44, 18); x.fillRect(cx-9, cy-22, 18, 44); x.fillStyle = '#111'; x.fillRect(cx-18, cy-6, 36, 12); x.fillRect(cx-6, cy-18, 12, 36); },
+};
+// id, name, body color, accent color, flag-draw key (or null), swatch colors
+const WEAPON_SKINS = [
+  { id: 'default',   name: 'Stock',        body: null,     accent: null,     flag: null,         sw: ['#2a2a2a', '#666'] },
+  { id: 'gold',      name: 'Midas Gold',   body: 0xc8a020, accent: 0xffe070, flag: null,         sw: ['#c8a020', '#ffe070'] },
+  { id: 'crimson',   name: 'Crimson',      body: 0x7a1010, accent: 0xe04444, flag: null,         sw: ['#7a1010', '#e04444'] },
+  { id: 'arctic',    name: 'Arctic',       body: 0xdfe6ee, accent: 0x9fb6c8, flag: null,         sw: ['#dfe6ee', '#9fb6c8'] },
+  { id: 'neon',      name: 'Neon',         body: 0x141425, accent: 0x33ffcc, flag: null,         sw: ['#141425', '#33ffcc'] },
+  { id: 'woodland',  name: 'Woodland',     body: 0x4a5320, accent: 0x2e3618, flag: null,         sw: ['#4a5320', '#2e3618'] },
+  { id: 'urban',     name: 'Urban Camo',   body: 0x6a6f76, accent: 0x3a3d42, flag: null,         sw: ['#6a6f76', '#3a3d42'] },
+  { id: 'outlaw',    name: 'Outlaw Tan',   body: 0x8a7038, accent: 0x4a3a1c, flag: null,         sw: ['#8a7038', '#4a3a1c'] },
+  // ── Country themes ──
+  { id: 'japan',      name: 'Japan',        body: 0xe8e8e8, accent: 0xbc002d, flag: 'japan',      sw: ['#fff', '#bc002d'] },
+  { id: 'rising_sun', name: 'Rising Sun',   body: 0xdedede, accent: 0xcc2222, flag: 'rising_sun', sw: ['#fff', '#cc2222'] },
+  { id: 'soviet',     name: 'Soviet · CCCP',body: 0x7a1414, accent: 0xd4af37, flag: 'soviet',     sw: ['#c8102e', '#ffd700'] },
+  { id: 'china',      name: 'China',        body: 0x8a1414, accent: 0xffd700, flag: 'china',      sw: ['#de2910', '#ffde00'] },
+  { id: 'vietnam',    name: 'Vietnam',      body: 0x8a1414, accent: 0xffd700, flag: 'vietnam',    sw: ['#da251d', '#ffff00'] },
+  { id: 'israel',     name: 'Israel',       body: 0xe8eef5, accent: 0x0038b8, flag: 'israel',     sw: ['#fff', '#0038b8'] },
+  { id: 'usa',        name: 'USA',          body: 0x20305f, accent: 0xb22234, flag: 'usa',        sw: ['#3c3b6e', '#b22234'] },
+  { id: 'iron_cross', name: 'Iron Cross',   body: 0x5a5f54, accent: 0x222222, flag: 'iron_cross', sw: ['#5a5f54', '#111'] },
+];
+const WEAPON_SKINS_BY_ID = Object.fromEntries(WEAPON_SKINS.map(s => [s.id, s]));
+let selectedWeaponSkin = 'default';
+try { selectedWeaponSkin = localStorage.getItem('pvp_weapon_skin') || 'default'; } catch (e) {}
+
+function applyWeaponSkin(model, skin) {
+  if (!model) return;
+  if (model._bodyMat) {
+    // Generic gun: precise two-tone via the tagged per-gun materials.
+    model._bodyMat.color.setHex(skin && skin.body   != null ? skin.body   : (model._origBody   ?? 0x222222));
+    model._accentMat.color.setHex(skin && skin.accent != null ? skin.accent : (model._origAccent ?? 0x666666));
+  } else {
+    // Custom-built gun (no tags): tint all solid parts. Clone each material ONCE
+    // so we never recolor a module-shared material and bleed onto other guns.
+    if (!model._skinMats) {
+      model._skinMats = [];
+      model.traverse(o => {
+        if (o.isMesh && o.material && o.material.color && !o.material.map) {
+          const basic = !!o.material.isMeshBasicMaterial; // glow/lens/reticle — leave colored
+          const clone = o.material.clone(); o.material = clone;
+          model._skinMats.push({ mat: clone, orig: clone.color.getHex(), basic });
+        }
+      });
+    }
+    for (const e of model._skinMats) {
+      if (e.basic) continue;                 // keep emissive accents (scope lenses, glow strips)
+      e.mat.color.setHex(skin && skin.body != null ? skin.body : e.orig);
+    }
+  }
+  if (model._skinDecal) { model.remove(model._skinDecal); if (model._skinDecal.material.map) model._skinDecal.material.map.dispose(); model._skinDecal.geometry.dispose(); model._skinDecal = null; }
+  if (skin && skin.flag && FLAG_DRAW[skin.flag]) {
+    const tex = _flagCanvas((ctx, w, h) => FLAG_DRAW[skin.flag](ctx, w, h));
+    const decal = new THREE.Mesh(new THREE.PlaneGeometry(0.05, 0.033),
+      new THREE.MeshBasicMaterial({ map: tex, transparent: true }));
+    decal.rotation.x = -Math.PI / 2;        // lie flat on top of the receiver, readable when looking down
+    decal.position.set(0, 0.036, 0.03);
+    model.add(decal); model._skinDecal = decal;
+  }
+}
+function applySelectedWeaponSkinToAll() {
+  const skin = WEAPON_SKINS_BY_ID[selectedWeaponSkin] || WEAPON_SKINS_BY_ID.default;
+  for (const m of weaponModels) applyWeaponSkin(m, skin);
+}
+applySelectedWeaponSkinToAll();
 scene.add(camera);
 
 // ── Melee item model builders ─────────────────────────────────────────────
@@ -17916,6 +18014,45 @@ const _aaBtn = document.getElementById('aim-assist-btn');
 if (_aaBtn) {
   _aaBtn.addEventListener('click', openAimAssistPanel);
   _aaBtn.addEventListener('touchstart', e => { e.preventDefault(); openAimAssistPanel(); }, { passive: false });
+}
+
+// 🎨 GUN SKINS picker — pick one skin that applies to every weapon.
+function openWeaponSkinsPanel() {
+  let panel = document.getElementById('weapon-skins-panel');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'weapon-skins-panel';
+    panel.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9900;background:#16140e;border:2px solid #ccaa44;border-radius:8px;padding:22px;color:#fff;font-family:"Courier New",monospace;width:440px;max-height:80vh;overflow-y:auto;box-shadow:0 4px 30px rgba(0,0,0,0.6);';
+    document.body.appendChild(panel);
+  }
+  panel.style.display = 'block';
+  const swatch = (s) => `
+    <div data-skin="${s.id}" class="ws-cell" style="cursor:pointer;border:2px solid ${s.id===selectedWeaponSkin?'#ffdd55':'#444'};border-radius:6px;padding:8px;text-align:center;background:${s.id===selectedWeaponSkin?'#2a2410':'#1d1a12'};">
+      <div style="height:26px;border-radius:4px;background:linear-gradient(90deg, ${s.sw[0]} 0 50%, ${s.sw[1]} 50% 100%);border:1px solid #000;margin-bottom:6px;"></div>
+      <div style="font-size:10px;letter-spacing:1px;color:${s.id===selectedWeaponSkin?'#ffdd55':'#ccc'};">${s.name}</div>
+    </div>`;
+  panel.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;border-bottom:1px solid #6a5520;padding-bottom:10px;">
+      <div style="font-size:18px;letter-spacing:3px;color:#ffdd88;">🎨 GUN SKINS</div>
+      <button id="ws-close" style="background:#3a1a1a;color:#ff8888;border:1px solid #ff4444;padding:4px 10px;cursor:pointer;font-family:inherit;border-radius:3px;">✕</button>
+    </div>
+    <div style="font-size:10px;color:#aa9966;margin-bottom:12px;line-height:1.4;">One pick applies to every gun. Country themes use real national flags; the German theme is the Iron Cross military mark (no Nazi imagery).</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">${WEAPON_SKINS.map(swatch).join('')}</div>
+  `;
+  panel.querySelectorAll('.ws-cell').forEach(cell => {
+    cell.addEventListener('click', () => {
+      selectedWeaponSkin = cell.dataset.skin;
+      try { localStorage.setItem('pvp_weapon_skin', selectedWeaponSkin); } catch (e) {}
+      applySelectedWeaponSkinToAll();
+      openWeaponSkinsPanel(); // refresh highlight
+    });
+  });
+  document.getElementById('ws-close').addEventListener('click', () => panel.style.display = 'none');
+}
+const _wsBtn = document.getElementById('weapon-skins-btn');
+if (_wsBtn) {
+  _wsBtn.addEventListener('click', openWeaponSkinsPanel);
+  _wsBtn.addEventListener('touchstart', e => { e.preventDefault(); openWeaponSkinsPanel(); }, { passive: false });
 }
 
 // 🎭 Skin picker — choose how other players see your character
