@@ -7928,6 +7928,127 @@ document.addEventListener('mousemove', e => {
   camera.quaternion.setFromEuler(euler);
 });
 
+// ════════════════════════════════════════════════════════════════════════════
+// 🎯 AIM ASSIST SUITE — four independently-toggleable aim aids (Settings → AIM
+//   ASSIST). All key off the persisted ASSIST flags; none touch the match system.
+//     • autoShoot : crosshair directly on an opponent for 0.01s → auto-fires
+//     • aimAssist : opponent on screen → camera drifts to their body at 5°/s
+//     • aimbot    : opponent on screen for 0.2s → snaps to them at 50°/s
+//     • aiAim     : red dot marks where the opponent is predicted to move next
+// ════════════════════════════════════════════════════════════════════════════
+let ASSIST = { autoShoot: false, aimAssist: false, aimbot: false, aiAim: false };
+try { const s = JSON.parse(localStorage.getItem('pvp_assist') || 'null'); if (s) ASSIST = { ...ASSIST, ...s }; } catch (e) {}
+function saveAssist() { try { localStorage.setItem('pvp_assist', JSON.stringify(ASSIST)); } catch (e) {} }
+
+const _assistVel = new Map();   // entityId → { x, z, vx, vz } smoothed velocity (units/s)
+let _aimbotTimer = 0;           // seconds an opponent has been on screen (aimbot warm-up)
+let _autoShootTimer = 0;        // seconds the crosshair has been on an opponent
+let _aiAimDot = null;           // red prediction marker mesh
+
+function _getAiAimDot() {
+  if (!_aiAimDot) {
+    _aiAimDot = new THREE.Mesh(new THREE.SphereGeometry(0.16, 12, 12),
+      new THREE.MeshBasicMaterial({ color: 0xff2222, depthTest: false, transparent: true, opacity: 0.92 }));
+    _aiAimDot.renderOrder = 1000; _aiAimDot.visible = false; scene.add(_aiAimDot);
+  }
+  return _aiAimDot;
+}
+// All current opponents (enemy bots + non-teammate humans) with a chest-height aim point.
+function _assistEnemies() {
+  const out = [];
+  for (const bot of gameBots) {
+    if (bot.dead || bot.team === 'ally') continue;
+    out.push({ id: bot.id, x: bot.x, z: bot.z, pos: new THREE.Vector3(bot.x, (bot.y || 0) + 1.0, bot.z) });
+  }
+  const myTeam = players[myId] && players[myId].team;
+  for (const id in players) {
+    const p = players[id];
+    if (id === myId || p.isBot || p.dead) continue;
+    if (myTeam && p.team === myTeam) continue;
+    out.push({ id, x: p.x, z: p.z, pos: new THREE.Vector3(p.x, (p.y || 1.65) - 0.5, p.z) });
+  }
+  return out;
+}
+// Nearest-to-crosshair opponent within `coneDeg` of where you're looking + has LOS.
+function _pickAssistTarget(enemies, coneDeg) {
+  const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+  const cosCone = Math.cos(coneDeg * Math.PI / 180);
+  let best = null, bestDot = cosCone;
+  for (const e of enemies) {
+    const dir = e.pos.clone().sub(camera.position);
+    const dist = dir.length();
+    if (dist < 0.5 || dist > 90) continue;
+    dir.divideScalar(dist);
+    const d = fwd.dot(dir);
+    if (d <= bestDot) continue;
+    if (typeof hasLineOfSight === 'function' && !hasLineOfSight(camera.position.x, camera.position.z, e.x, e.z)) continue;
+    bestDot = d; best = e;
+  }
+  return best;
+}
+function _angleStep(cur, target, maxStep) {
+  let diff = target - cur;
+  while (diff > Math.PI) diff -= Math.PI * 2;
+  while (diff < -Math.PI) diff += Math.PI * 2;
+  if (Math.abs(diff) <= maxStep) return target;
+  return cur + Math.sign(diff) * maxStep;
+}
+// Rotate the view toward a world point at up to `degPerSec`.
+function _aimToward(pos, degPerSec, dt) {
+  const dx = pos.x - camera.position.x, dy = pos.y - camera.position.y, dz = pos.z - camera.position.z;
+  const horiz = Math.hypot(dx, dz) || 0.0001;
+  const desiredYaw = Math.atan2(-dx, -dz);
+  const desiredPitch = Math.atan2(dy, horiz);
+  const maxStep = degPerSec * Math.PI / 180 * dt;
+  euler.y = _angleStep(euler.y, desiredYaw, maxStep);
+  euler.x = _angleStep(euler.x, desiredPitch, maxStep);
+  euler.x = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, euler.x));
+  camera.quaternion.setFromEuler(euler);
+}
+function _resetAssistTimers() { _aimbotTimer = 0; _autoShootTimer = 0; }
+
+function updateAimAssist(dt) {
+  const anyOn = ASSIST.autoShoot || ASSIST.aimAssist || ASSIST.aimbot || ASSIST.aiAim;
+  if (!anyOn) { if (_aiAimDot) _aiAimDot.visible = false; return; }
+  if (isDead || !gameStarted || inLobby || countdownActive || KILLCAM.active) {
+    _resetAssistTimers(); if (_aiAimDot) _aiAimDot.visible = false; return;
+  }
+  const enemies = _assistEnemies();
+  const live = new Set();
+  for (const e of enemies) {
+    live.add(e.id);
+    const prev = _assistVel.get(e.id);
+    if (prev) {
+      const vx = (e.x - prev.x) / Math.max(dt, 0.001), vz = (e.z - prev.z) / Math.max(dt, 0.001);
+      e.vx = (prev.vx || 0) * 0.7 + vx * 0.3;
+      e.vz = (prev.vz || 0) * 0.7 + vz * 0.3;
+    } else { e.vx = 0; e.vz = 0; }
+    _assistVel.set(e.id, { x: e.x, z: e.z, vx: e.vx, vz: e.vz });
+  }
+  for (const id of _assistVel.keys()) if (!live.has(id)) _assistVel.delete(id);
+
+  const wide  = (ASSIST.aimAssist || ASSIST.aimbot || ASSIST.aiAim) ? _pickAssistTarget(enemies, 38) : null;
+  const tight = ASSIST.autoShoot ? _pickAssistTarget(enemies, 2.2) : null;
+
+  // Aim Assist — gentle magnetism toward the body
+  if (ASSIST.aimAssist && wide) _aimToward(wide.pos, 5, dt);
+
+  // Aim Bot — after 0.2s of the target on screen, snap toward it fast
+  if (ASSIST.aimbot && wide) { _aimbotTimer += dt; if (_aimbotTimer >= 0.2) _aimToward(wide.pos, 50, dt); }
+  else _aimbotTimer = 0;
+
+  // Auto Shoot — fire 0.01s after the crosshair lands on an opponent
+  if (ASSIST.autoShoot && tight) { _autoShootTimer += dt; if (_autoShootTimer >= 0.01) tryShoot(); }
+  else _autoShootTimer = 0;
+
+  // AI Aim — drop a red dot where the opponent is predicted to be ~0.35s from now
+  if (ASSIST.aiAim && wide) {
+    const lead = 0.35, dot = _getAiAimDot();
+    dot.position.set(wide.x + (wide.vx || 0) * lead, wide.pos.y, wide.z + (wide.vz || 0) * lead);
+    dot.visible = true;
+  } else if (_aiAimDot) { _aiAimDot.visible = false; }
+}
+
 // ── Input ──────────────────────────────────────────────────────────────────
 const keys = {};
 document.addEventListener('keydown', e => {
@@ -16233,6 +16354,7 @@ function loop() {
   updateP2WSystems(dt); // orbital strikes, guardian drones, nano shield
   updateMapGimmicks(dt); // lava DOT, jump pads, low-grav zones, ice friction
   updateBotSpeech(dt);  // bot speech bubbles follow their heads
+  updateAimAssist(dt);  // 🎯 auto-shoot / aim assist / aimbot / AI-aim dot
   if (inLobby) updateLobbyInteractions(); // 🛋️ duel-pad / challenge prompt
   updateChatFeed();     // fade old chat lines
   updateAdminCheats(dt);// admin cheat tick (fly, kill aura, etc.)
@@ -17736,6 +17858,55 @@ const _sfxBtn = document.getElementById('shoot-fx-btn');
 if (_sfxBtn) {
   _sfxBtn.addEventListener('click', openShootFxPanel);
   _sfxBtn.addEventListener('touchstart', e => { e.preventDefault(); openShootFxPanel(); }, { passive: false });
+}
+
+// 🎯 AIM ASSIST settings panel — four independent on/off toggles.
+function openAimAssistPanel() {
+  let panel = document.getElementById('aim-assist-panel');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'aim-assist-panel';
+    panel.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9900;background:#1a1014;border:2px solid #ff5544;border-radius:8px;padding:24px;color:#fff;font-family:"Courier New",monospace;min-width:380px;box-shadow:0 4px 30px rgba(0,0,0,0.6);';
+    document.body.appendChild(panel);
+  }
+  panel.style.display = 'block';
+  const opts = [
+    { key: 'autoShoot', name: 'AUTO SHOOT',  desc: 'Crosshair on an opponent for 0.01s → auto-fires.' },
+    { key: 'aimAssist', name: 'AIM ASSIST',  desc: 'Opponent on screen → view drifts to their body at 5°/s.' },
+    { key: 'aimbot',    name: 'AIM BOT',     desc: 'Opponent on screen 0.2s → snaps to them at 50°/s.' },
+    { key: 'aiAim',     name: 'AI AIM',      desc: 'Red dot predicts where the opponent moves next — your call whether to trust it.' },
+  ];
+  const rowHTML = (o) => `
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin:12px 0;padding-bottom:10px;border-bottom:1px solid #3a2020;">
+      <div style="flex:1;">
+        <div style="font-size:13px;letter-spacing:2px;color:#ffccbb;">${o.name}</div>
+        <div style="font-size:10px;color:#aa8888;margin-top:3px;line-height:1.4;">${o.desc}</div>
+      </div>
+      <button id="aa-${o.key}" data-key="${o.key}" style="min-width:62px;padding:7px 10px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:bold;letter-spacing:2px;border-radius:4px;
+        background:${ASSIST[o.key] ? '#1f5a25' : '#2a1a1a'};color:${ASSIST[o.key] ? '#88ff99' : '#ff8888'};border:2px solid ${ASSIST[o.key] ? '#55ff66' : '#774444'};">${ASSIST[o.key] ? 'ON' : 'OFF'}</button>
+    </div>`;
+  panel.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;border-bottom:1px solid #883333;padding-bottom:10px;">
+      <div style="font-size:18px;letter-spacing:3px;color:#ff9988;">🎯 AIM ASSIST</div>
+      <button id="aa-close" style="background:#3a1a1a;color:#ff8888;border:1px solid #ff4444;padding:4px 10px;cursor:pointer;font-family:inherit;border-radius:3px;">✕</button>
+    </div>
+    <div style="font-size:10px;color:#aa9999;margin-bottom:10px;line-height:1.4;">Toggle each aid on or off. Saved per device. Works against bots and other players in a match.</div>
+    ${opts.map(rowHTML).join('')}
+  `;
+  panel.querySelectorAll('button[data-key]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const k = btn.dataset.key;
+      ASSIST[k] = !ASSIST[k];
+      saveAssist();
+      openAimAssistPanel(); // refresh
+    });
+  });
+  document.getElementById('aa-close').addEventListener('click', () => panel.style.display = 'none');
+}
+const _aaBtn = document.getElementById('aim-assist-btn');
+if (_aaBtn) {
+  _aaBtn.addEventListener('click', openAimAssistPanel);
+  _aaBtn.addEventListener('touchstart', e => { e.preventDefault(); openAimAssistPanel(); }, { passive: false });
 }
 
 // 🎭 Skin picker — choose how other players see your character
