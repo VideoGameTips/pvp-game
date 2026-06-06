@@ -6153,6 +6153,7 @@ const FLAG_DRAW = {
   soviet: (x, w, h) => { x.fillStyle = '#c8102e'; x.fillRect(0, 0, w, h); x.fillStyle = '#ffd700'; x.font = 'bold 30px serif'; x.textAlign='center'; x.textBaseline='middle'; x.fillText('☭', w*0.28, h*0.42); _star(x, w*0.28, h*0.18, 7, '#ffd700'); },
   china: (x, w, h) => { x.fillStyle = '#de2910'; x.fillRect(0, 0, w, h); _star(x, w*0.18, h*0.3, 11, '#ffde00'); [[0.34,0.12],[0.40,0.24],[0.40,0.40],[0.34,0.52]].forEach(([px,py]) => _star(x, w*px, h*py, 4, '#ffde00')); },
   vietnam: (x, w, h) => { x.fillStyle = '#da251d'; x.fillRect(0, 0, w, h); _star(x, w/2, h/2, h*0.32, '#ffff00'); },
+  north_korea: (x, w, h) => { x.fillStyle = '#024fa2'; x.fillRect(0, 0, w, h); x.fillStyle = '#fff'; x.fillRect(0, h*0.17, w, h*0.66); x.fillStyle = '#ed1c27'; x.fillRect(0, h*0.20, w, h*0.60); x.fillStyle = '#fff'; x.beginPath(); x.arc(w*0.33, h/2, h*0.19, 0, 7); x.fill(); _star(x, w*0.33, h/2, h*0.13, '#ed1c27'); },
   israel: (x, w, h) => { x.fillStyle = '#fff'; x.fillRect(0, 0, w, h); x.fillStyle = '#0038b8'; x.fillRect(0, h*0.12, w, h*0.12); x.fillRect(0, h*0.76, w, h*0.12); x.strokeStyle = '#0038b8'; x.lineWidth = 4; const r = h*0.22, cx = w/2, cy = h/2; for (let k = 0; k < 2; k++) { x.beginPath(); for (let i = 0; i < 3; i++) { const a = -Math.PI/2 + k*Math.PI + i*2*Math.PI/3; x[i?'lineTo':'moveTo'](cx+Math.cos(a)*r, cy+Math.sin(a)*r); } x.closePath(); x.stroke(); } },
   usa: (x, w, h) => { for (let i = 0; i < 13; i++) { x.fillStyle = i%2 ? '#fff' : '#b22234'; x.fillRect(0, i*h/13, w, h/13); } x.fillStyle = '#3c3b6e'; x.fillRect(0, 0, w*0.42, h*7/13); x.fillStyle = '#fff'; for (let r = 0; r < 5; r++) for (let cc = 0; cc < 5; cc++) { const px = w*0.04 + cc*w*0.085 + (r%2)*w*0.042, py = h*0.05 + r*h*0.095; x.beginPath(); x.arc(px, py, 1.6, 0, 7); x.fill(); } },
   // 🇩🇪 German military Iron Cross (Balkenkreuz) — field-grey panel, white-edged black cross. No Nazi imagery.
@@ -6174,6 +6175,7 @@ const WEAPON_SKINS = [
   { id: 'soviet',     name: 'Soviet · CCCP',body: 0x7a1414, accent: 0xd4af37, flag: 'soviet',     sw: ['#c8102e', '#ffd700'] },
   { id: 'china',      name: 'China',        body: 0x8a1414, accent: 0xffd700, flag: 'china',      sw: ['#de2910', '#ffde00'] },
   { id: 'vietnam',    name: 'Vietnam',      body: 0x8a1414, accent: 0xffd700, flag: 'vietnam',    sw: ['#da251d', '#ffff00'] },
+  { id: 'north_korea',name: 'North Korea',  body: 0x024fa2, accent: 0xed1c27, flag: 'north_korea',sw: ['#ed1c27', '#024fa2'] },
   { id: 'israel',     name: 'Israel',       body: 0xe8eef5, accent: 0x0038b8, flag: 'israel',     sw: ['#fff', '#0038b8'] },
   { id: 'usa',        name: 'USA',          body: 0x20305f, accent: 0xb22234, flag: 'usa',        sw: ['#3c3b6e', '#b22234'] },
   { id: 'iron_cross', name: 'Iron Cross',   body: 0x5a5f54, accent: 0x222222, flag: 'iron_cross', sw: ['#5a5f54', '#111'] },
