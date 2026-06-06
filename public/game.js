@@ -6179,10 +6179,101 @@ const WEAPON_SKINS = [
   { id: 'israel',     name: 'Israel',       body: 0xe8eef5, accent: 0x0038b8, flag: 'israel',     sw: ['#fff', '#0038b8'] },
   { id: 'usa',        name: 'USA',          body: 0x20305f, accent: 0xb22234, flag: 'usa',        sw: ['#3c3b6e', '#b22234'] },
   { id: 'iron_cross', name: 'Iron Cross',   body: 0x5a5f54, accent: 0x222222, flag: 'iron_cross', sw: ['#5a5f54', '#111'] },
+  // ── ✨ FX skins (animated / structural) ──
+  { id: 'p2w_gold', name: '💰 P2W Gold',   body: 0xffcc00, accent: 0xfff0a0, flag: null, fx: 'gold_money', sw: ['#ffcc00', '#fff0a0'] },
+  { id: 'broke',    name: 'Broke',          body: 0x6b6256, accent: 0x3a342c, flag: null, fx: 'smoke',      sw: ['#6b6256', '#3a342c'] },
+  { id: 'crystal',  name: 'Crystal',        body: 0x55cfe6, accent: 0xbff6ff, flag: null, fx: 'crystal',    sw: ['#55cfe6', '#bff6ff'] },
+  { id: 'rock',     name: 'Rock',           body: 0x6a6258, accent: 0x4a443c, flag: null, fx: 'rock',       sw: ['#6a6258', '#4a443c'] },
+  { id: 'data',     name: 'Data',           body: 0x0a0a12, accent: 0x2266ff, flag: null, fx: 'data',       sw: ['#0a0a12', '#2266ff'] },
 ];
 const WEAPON_SKINS_BY_ID = Object.fromEntries(WEAPON_SKINS.map(s => [s.id, s]));
 let selectedWeaponSkin = 'default';
 try { selectedWeaponSkin = localStorage.getItem('pvp_weapon_skin') || 'default'; } catch (e) {}
+
+// ── ✨ Weapon-skin FX: particles ($ money, smoke) + structural extras
+//    (crystal shards, rock chunks, flickering data streaks). ──
+let _moneyTex = null, _smokeTex = null;
+function _getMoneyTex() {
+  if (_moneyTex) return _moneyTex;
+  const c = document.createElement('canvas'); c.width = c.height = 32; const x = c.getContext('2d');
+  x.font = 'bold 26px Arial'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.fillStyle = '#1faa3a'; x.fillText('$', 16, 17); x.lineWidth = 1.5; x.strokeStyle = '#0a5a1a'; x.strokeText('$', 16, 17);
+  _moneyTex = new THREE.CanvasTexture(c); return _moneyTex;
+}
+function _getSmokeTex() {
+  if (_smokeTex) return _smokeTex;
+  const c = document.createElement('canvas'); c.width = c.height = 32; const x = c.getContext('2d');
+  const g = x.createRadialGradient(16, 16, 1, 16, 16, 15);
+  g.addColorStop(0, 'rgba(190,190,190,0.9)'); g.addColorStop(1, 'rgba(120,120,120,0)');
+  x.fillStyle = g; x.fillRect(0, 0, 32, 32);
+  _smokeTex = new THREE.CanvasTexture(c); return _smokeTex;
+}
+const _skinParticles = [];
+let _skinFXTimer = 0;
+function _spawnSkinParticle(model, kind) {
+  const mat = new THREE.SpriteMaterial({ map: kind === 'money' ? _getMoneyTex() : _getSmokeTex(), transparent: true, depthTest: false });
+  const spr = new THREE.Sprite(mat);
+  spr.scale.setScalar(kind === 'money' ? 0.05 : 0.06);
+  spr.position.set((Math.random() - 0.5) * 0.05, 0.02 + Math.random() * 0.02, -0.05 - Math.random() * 0.1);
+  spr.renderOrder = 998; model.add(spr);
+  _skinParticles.push({ spr, model, kind, life: 0, max: kind === 'money' ? 0.9 : 0.7,
+    vx: (Math.random() - 0.5) * 0.06, vy: 0.12 + Math.random() * 0.08, vz: (Math.random() - 0.5) * 0.04,
+    rot: (Math.random() - 0.5) * 4 });
+}
+function _updateSkinParticles(dt) {
+  for (let i = _skinParticles.length - 1; i >= 0; i--) {
+    const p = _skinParticles[i]; p.life += dt; const t = p.life / p.max;
+    if (t >= 1) { try { p.model.remove(p.spr); } catch (e) {} p.spr.material.dispose(); _skinParticles.splice(i, 1); continue; }
+    p.spr.position.x += p.vx * dt; p.spr.position.y += p.vy * dt; p.spr.position.z += p.vz * dt;
+    if (p.kind === 'smoke') { const s = 0.06 + t * 0.12; p.spr.scale.setScalar(s); p.spr.material.opacity = 0.8 * (1 - t); }
+    else { p.spr.material.opacity = 1 - t * t; p.spr.material.rotation += p.rot * dt; }
+  }
+}
+function _clearModelParticles(model) {
+  for (let i = _skinParticles.length - 1; i >= 0; i--) if (_skinParticles[i].model === model) { try { model.remove(_skinParticles[i].spr); } catch (e) {} _skinParticles.splice(i, 1); }
+}
+function _buildSkinExtra(model, fx) {
+  const grp = new THREE.Group();
+  if (fx === 'crystal') {
+    const mat = new THREE.MeshBasicMaterial({ color: 0xbff6ff, transparent: true, opacity: 0.6 });
+    [[0.02,0.03,-0.05],[-0.02,0.022,0],[0.012,0.035,0.06],[-0.016,0.026,-0.1]].forEach(p => {
+      const sh = new THREE.Mesh(new THREE.ConeGeometry(0.013, 0.045, 5), mat.clone());
+      sh.position.set(p[0], p[1], p[2]); sh.rotation.set(Math.random(), Math.random(), Math.random()); grp.add(sh);
+    });
+  } else if (fx === 'rock') {
+    const mat = new THREE.MeshLambertMaterial({ color: 0x57514a });
+    [[0.022,0.022,-0.04],[-0.02,0.026,0.02],[0,0.03,0.08],[0.016,0.016,-0.1]].forEach(p => {
+      const r = new THREE.Mesh(new THREE.DodecahedronGeometry(0.018), mat);
+      r.position.set(p[0], p[1], p[2]); r.rotation.set(Math.random(), Math.random(), Math.random()); grp.add(r);
+    });
+  } else if (fx === 'data') {
+    for (let i = 0; i < 6; i++) {
+      const strip = new THREE.Mesh(new THREE.BoxGeometry(0.0022, 0.0022, 0.10 + Math.random() * 0.08),
+        new THREE.MeshBasicMaterial({ color: 0x3399ff, transparent: true, opacity: 0.8 }));
+      strip.position.set((Math.random() - 0.5) * 0.055, 0.005 + (Math.random() - 0.5) * 0.05, (Math.random() - 0.5) * 0.2);
+      grp.add(strip);
+    }
+  }
+  model.add(grp); model._skinExtra = grp;
+}
+function updateWeaponSkinFX(dt) {
+  _updateSkinParticles(dt);
+  const gunSlot = (activeSlot === 'primary' || activeSlot === 'secondary');
+  const model = gunSlot ? weaponModels[currentWeaponIdx] : null;
+  if (!model || !model.visible || !model._fx) return;
+  const fx = model._fx;
+  if (fx === 'gold_money' || fx === 'smoke') {
+    _skinFXTimer += dt;
+    const gap = fx === 'gold_money' ? 0.11 : 0.18;
+    if (_skinFXTimer >= gap) { _skinFXTimer = 0; _spawnSkinParticle(model, fx === 'gold_money' ? 'money' : 'smoke'); }
+  } else if (fx === 'data' && model._skinExtra) {
+    const flash = Math.random() < 0.12;
+    for (const s of model._skinExtra.children) s.material.opacity = flash ? 1 : 0.2 + Math.random() * 0.6;
+  } else if (fx === 'crystal' && model._skinExtra) {
+    const o = 0.45 + 0.25 * Math.sin(performance.now() * 0.005);
+    for (const s of model._skinExtra.children) s.material.opacity = o;
+  }
+}
 
 function applyWeaponSkin(model, skin) {
   if (!model) return;
@@ -6208,6 +6299,17 @@ function applyWeaponSkin(model, skin) {
       e.mat.color.setHex(skin && skin.body != null ? skin.body : e.orig);
     }
   }
+  // ── ✨ FX cleanup + setup ──
+  _clearModelParticles(model);
+  if (model._skinExtra) { model.remove(model._skinExtra); model._skinExtra.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); }); model._skinExtra = null; }
+  const bodyMats = model._bodyMat ? [model._bodyMat, model._accentMat]
+    : (model._skinMats ? model._skinMats.filter(e => !e.basic).map(e => e.mat) : []);
+  bodyMats.forEach(m => { m.transparent = false; m.opacity = 1; });
+  model._fx = (skin && skin.fx) || null;
+  if (model._fx === 'crystal') { bodyMats.forEach(m => { m.transparent = true; m.opacity = 0.72; }); _buildSkinExtra(model, 'crystal'); }
+  else if (model._fx === 'rock') { _buildSkinExtra(model, 'rock'); }
+  else if (model._fx === 'data') { _buildSkinExtra(model, 'data'); }
+
   if (model._skinDecal) { model.remove(model._skinDecal); if (model._skinDecal.material.map) model._skinDecal.material.map.dispose(); model._skinDecal.geometry.dispose(); model._skinDecal = null; }
   if (skin && skin.flag && FLAG_DRAW[skin.flag]) {
     const tex = _flagCanvas((ctx, w, h) => FLAG_DRAW[skin.flag](ctx, w, h));
@@ -16463,6 +16565,7 @@ function loop() {
   updateP2WSystems(dt); // orbital strikes, guardian drones, nano shield
   updateMapGimmicks(dt); // lava DOT, jump pads, low-grav zones, ice friction
   updateBotSpeech(dt);  // bot speech bubbles follow their heads
+  updateWeaponSkinFX(dt); // ✨ gun-skin particles/streaks (gold money, smoke, data, crystal)
   updateAimAssist(dt);  // 🎯 auto-shoot / aim assist / aimbot / AI-aim dot
   if (inLobby) updateLobbyInteractions(); // 🛋️ duel-pad / challenge prompt
   updateChatFeed();     // fade old chat lines
