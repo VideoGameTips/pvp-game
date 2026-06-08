@@ -978,6 +978,9 @@ const SUPPORT_ITEMS = [
   // 🍔🇺🇸 Tasty heal
   { id: 'hamburger',      name: 'All-American Burger', type: 'Heal · Tasty', uses: 2, heal: 75, cooldown: 1300 },
 
+  // 🔥 Molotov — shatters into a lingering fire pool (reuses the burn-zone DOT)
+  { id: 'molotov', name: 'Molotov Cocktail', type: 'Fire · Burn Zone', uses: 2, damage: 0, cooldown: 1100, bulletSpeed: 36, bulletColor: 0xff7722, bulletSize: 0.11, burnDps: 12, burnDur: 5000, burnRadius: 3.2 },
+
   { id: 'c4', name: 'C4 Charge', type: 'Admin · Explosive', uses: 2, damage: 200, cooldown: 1200, bulletSpeed: 40, bulletColor: 0x664433, bulletSize: 0.11, c4Detonate: true, adminItem: true },
   { id: 'claymore', name: 'Claymore Mine', type: 'Admin · Directional Mine', uses: 2, damage: 250, cooldown: 1100, claymoreRadius: 4, claymoreArc: 1.2, adminItem: true },
   { id: 'stun_grenade', name: 'M84 Stun Grenade', type: 'Admin · Flashbang', uses: 3, damage: 10, cooldown: 800, bulletSpeed: 56, bulletColor: 0xffffff, bulletSize: 0.10, stunDur: 4000, stunRadius: 8, adminItem: true },
@@ -1152,6 +1155,8 @@ const WEAPON_COSTS = {
   specter_drone: 30000, quantum_barrier: 21000,
   // 🍔 Tasty heal
   hamburger: 300,
+  // 🔥 Molotov
+  molotov: 180,
 };
 const FREE_WEAPONS = new Set([
   'ak20','sg8','pistol','flare','fists','frying_pan','frag','medkit',
@@ -6857,6 +6862,24 @@ function buildHamburger() {
   g.position.set(0.10, -0.12, -0.20); return g;
 }
 
+// 🔥 Molotov — green glass bottle, orange fuel, rag wick with a lit flame.
+function buildMolotov() {
+  const g = new THREE.Group();
+  const glass = new THREE.MeshLambertMaterial({ color: 0x3a6a3a, transparent: true, opacity: 0.7 });
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.11, 12), glass);
+  g.add(body);
+  const fuel = new THREE.Mesh(new THREE.CylinderGeometry(0.031, 0.031, 0.07, 12), new THREE.MeshBasicMaterial({ color: 0xff8822 }));
+  fuel.position.y = -0.015; g.add(fuel);
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.024, 0.04, 10), glass);
+  neck.position.y = 0.075; g.add(neck);
+  const rag = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.04, 0.02), new THREE.MeshLambertMaterial({ color: 0xd8c79a }));
+  rag.position.y = 0.105; g.add(rag);
+  const flame = new THREE.Mesh(new THREE.ConeGeometry(0.018, 0.045, 6), new THREE.MeshBasicMaterial({ color: 0xff7722 }));
+  flame.position.y = 0.14; g.add(flame);
+  g.position.set(0.10, -0.12, -0.18);
+  return g;
+}
+
 function buildStimShot() {
   const g = new THREE.Group();
   const clearMat = new THREE.MeshLambertMaterial({ color: 0xaaddff, transparent: true, opacity: 0.8 });
@@ -7234,6 +7257,8 @@ const supportModels = [buildFragGrenade(), buildMedkit(), buildStimShot(), build
   buildSimpleSupport(0xaaccff, 'sphere'),   // quantum_barrier
   // 🍔 Tasty heal
   buildHamburger(),                          // hamburger
+  // 🔥 Molotov (must align with the SUPPORT_ITEMS 'molotov' slot)
+  buildMolotov(),                            // molotov
   // 🪖 ADMIN supports
   buildC4(), buildClaymore(), buildStunGrenade(), buildThermite(),
   buildPredatorUAV(), buildCarePackage(), buildTacNuke()];
@@ -10312,6 +10337,10 @@ function trySupport() {
     placeLandMine(item);
     return;
   }
+  if (item.id === 'molotov') {            // 🔥 thrown bottle → fire pool on impact
+    throwThermite(item);
+    return;
+  }
   // ── 🪖 ADMIN utilities ────────────────────────────────────────────────────
   if (item.id === 'c4')            { placeC4(item); return; }
   if (item.id === 'claymore')      { placeClaymore(item); return; }
@@ -10631,7 +10660,7 @@ const INSTAKILL_HS_WEAPONS = new Set(['srx', 'railgun', 'lever', 'boombow', 'boo
 
 // 🤫 Secret weapon category sets used for hidden synergy mechanics
 const ELECTRIC_WEAPONS = new Set(['arc_rifle','arc_torrent','taser','emp_pistol','shock_baton','storm_core','ion_revolver','magnet_rifle','coilgun','plasma_carbine']);
-const FIRE_WEAPONS     = new Set(['flamethrower','firework_launcher','incendiary_shotgun','fire_axe','fire_poker','thermite']);
+const FIRE_WEAPONS     = new Set(['flamethrower','firework_launcher','incendiary_shotgun','fire_axe','fire_poker','thermite','molotov']);
 const GRAVITY_WEAPONS  = new Set(['gravity_launcher','gravity_hammer','gravity_paint','event_horizon','magnetar','void_harvester','black_hole_seed']);
 const FROST_WEAPONS    = new Set(['freeze_gun','frost_blaster','abs_zero']);
 
@@ -13039,8 +13068,9 @@ function explodeSupport(g) {
     }
     return;
   }
-  // 🪖 Admin thermite — burning zone DOT (reuses firework burn-zone system)
-  if (item.id === 'thermite') {
+  // 🔥 Thermite / Molotov — burning zone DOT (reuses firework burn-zone system)
+  if (item.id === 'thermite' || item.id === 'molotov') {
+    if (item.id === 'molotov') { spawnExplosion(pos); playSoundEvent('fire_sizzle', { position: pos, volume: 1.0 }); }
     spawnAbilityAOEFX(pos, item.burnRadius || 3.5, 0xff6622);
     spawnBurnZone(pos, item.burnRadius || 3.5, item.burnDps || 8, item.burnDur || 12000);
     return;

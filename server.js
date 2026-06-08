@@ -116,6 +116,7 @@ const WEAPON_COSTS = {
   nano_swarm: 20000, warp_beacon: 25000, stasis_mine: 18000,
   specter_drone: 30000, quantum_barrier: 21000,
   hamburger: 300,
+  molotov: 180,
 };
 
 // Free starter loadout — every account has these unlocked from day 1.
