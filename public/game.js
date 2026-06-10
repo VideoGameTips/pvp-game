@@ -12189,7 +12189,7 @@ function updateSwitchbladeHUD() {
 }
 
 // ── Firework Launcher: burn-zone system ────────────────────────────────────
-function spawnBurnZone(pos, radius, dps, durationMs) {
+function spawnBurnZone(pos, radius, dps, durationMs, opts = {}) {
   const ringGeo = new THREE.RingGeometry(radius * 0.85, radius, 24);
   const ringMat = new THREE.MeshBasicMaterial({ color: 0xff5522, side: THREE.DoubleSide, transparent: true, opacity: 0.55 });
   const ring = new THREE.Mesh(ringGeo, ringMat);
@@ -12197,45 +12197,64 @@ function spawnBurnZone(pos, radius, dps, durationMs) {
   ring.position.set(pos.x, 0.04, pos.z);
   scene.add(ring);
   playSoundEvent('fire_sizzle', { position: pos, volume: 0.85, minGap: 180 });
-  burnZones.push({ x: pos.x, z: pos.z, radius, dps, until: Date.now() + durationMs, mesh: ring, lastTick: 0 });
+  burnZones.push({ x: pos.x, z: pos.z, radius, dps, until: Date.now() + durationMs, mesh: ring, lastTick: 0,
+    tickMs: opts.tickMs || 1000, molotov: !!opts.molotov, igniteDur: opts.igniteDur || 0 });
+}
+// 🔥 Lingering "on fire" status — Molotov sets this when you touch the flames; it
+// keeps ticking after you leave (5/sec for ~10s). Player + per-bot timers.
+let playerFireUntil = 0;
+let _lastFireTick = 0;
+function damagePlayerDOT(amount, deathWeapon) {
+  const me = players[myId];
+  if (!me || isDead || isShielded() || isRiotShieldBlocking() || match?.type === 'range') return;
+  me.hp = Math.max(0, me.hp - amount);
+  updateHealthHUD(me.hp);
+  flashHitIndicator();
+  if (me.hp <= 0 && !isDead) applyBotDamageToPlayer(deathWeapon || 'firework_launcher', null);
 }
 function updateBurnZones(dt) {
   const now = Date.now();
+  let playerInMolotov = false;
   for (let i = burnZones.length - 1; i >= 0; i--) {
     const z = burnZones[i];
     if (now >= z.until) { scene.remove(z.mesh); burnZones.splice(i, 1); continue; }
-    // Pulse opacity
     z.mesh.material.opacity = 0.35 + 0.2 * Math.sin(now * 0.008);
-    // Tick DOT every 1s
-    if (now - z.lastTick >= 1000) {
+    const pdx = camera.position.x - z.x, pdz = camera.position.z - z.z;
+    const pInside = (pdx*pdx + pdz*pdz < z.radius * z.radius);
+    if (z.molotov && pInside) playerInMolotov = true;
+    // Inside-the-fire tick (Molotov: every 200ms; thermite/firework: every 1s)
+    if (now - z.lastTick >= (z.tickMs || 1000)) {
       z.lastTick = now;
       playSoundEvent('fire_sizzle', { position: new THREE.Vector3(z.x, 0, z.z), remote: true, volume: 0.55, minGap: 260 });
-      // Damage player
-      const pdx = camera.position.x - z.x, pdz = camera.position.z - z.z;
-      if (pdx*pdx + pdz*pdz < z.radius * z.radius) {
-        applyBotDamageToPlayer && (function(){
-          // synthesize a low DOT tick — same flow as bot damage
-          const me = players[myId];
-          if (me && !isDead && !isShielded() && !isRiotShieldBlocking() && match?.type !== 'range') {
-            me.hp = Math.max(0, me.hp - z.dps);
-            updateHealthHUD(me.hp);
-            flashHitIndicator();
-            if (me.hp <= 0 && !isDead) {
-              applyBotDamageToPlayer('firework_launcher', null); // route through death handler
-            }
-          }
-        })();
+      if (pInside) {
+        damagePlayerDOT(z.dps, 'firework_launcher');
+        if (z.molotov) playerFireUntil = now + (z.igniteDur || 10000); // catch fire
       }
-      // Damage bots
       for (const bot of gameBots) {
         if (bot.dead) continue;
         const bdx = bot.x - z.x, bdz = bot.z - z.z;
         if (bdx*bdx + bdz*bdz < z.radius * z.radius) {
           const mesh = remoteMeshes[bot.id];
           const hitPos = mesh ? mesh.position.clone().setY(1.0) : new THREE.Vector3(bot.x, 1, bot.z);
-          emitHit(bot.id, `burn_${myId}_${now}_${bot.id}`, 'firework_launcher', hitPos);
+          emitHit(bot.id, `burn_${myId}_${now}_${bot.id}`, z.molotov ? 'molotov_burn' : 'firework_launcher', hitPos);
+          if (z.molotov) bot._fireUntil = now + (z.igniteDur || 10000);
         }
       }
+    }
+  }
+  // 🔥 Lingering fire DOT — 5/sec while "on fire" and OUTSIDE the flames (so it
+  // doesn't double-dip with the heavy inside tick).
+  if (now - _lastFireTick >= 1000) {
+    _lastFireTick = now;
+    if (!playerInMolotov && playerFireUntil > now) damagePlayerDOT(5, 'firework_launcher');
+    for (const bot of gameBots) {
+      if (bot.dead || !bot._fireUntil || bot._fireUntil <= now) continue;
+      let inZone = false;
+      for (const z of burnZones) { if (!z.molotov) continue; const dx = bot.x - z.x, dz = bot.z - z.z; if (dx*dx + dz*dz < z.radius*z.radius) { inZone = true; break; } }
+      if (inZone) continue;
+      const mesh = remoteMeshes[bot.id];
+      const hitPos = mesh ? mesh.position.clone().setY(1.0) : new THREE.Vector3(bot.x, 1, bot.z);
+      emitHit(bot.id, `fire_${myId}_${now}_${bot.id}`, 'molotov_fire', hitPos);
     }
   }
 }
@@ -12381,6 +12400,7 @@ const CLIENT_WEAPON_DAMAGE = Object.fromEntries([
   ['chain_pull', 60], ['airburst', 95], ['toxin_dart', 30], ['blind_flash', 0],
   ['arc_torrent', 5], ['firework_launcher', 50], ['switchblade_gun', 50], ['switchblade_charged', 100],
   ['lancer_blade', 50],   // ⚔️ Lancer bayonet-charge hit (main shot uses the WEAPONS 'lancer' damage)
+  ['molotov_burn', 10], ['molotov_fire', 5],  // 🔥 inside-the-flames tick / lingering on-fire DOT
   // 3rd-batch primaries + abilities
   ['flechette', 16], ['thermal_lmg', 11], ['burst_cannon', 40], ['incendiary_shotgun', 14],
   ['coilgun', 92], ['smart_smg', 9], ['amr', 180], ['air_rifle', 34],
@@ -13138,9 +13158,14 @@ function explodeSupport(g) {
   }
   // 🔥 Thermite / Molotov — burning zone DOT (reuses firework burn-zone system)
   if (item.id === 'thermite' || item.id === 'molotov') {
-    if (item.id === 'molotov') { spawnExplosion(pos); playSoundEvent('fire_sizzle', { position: pos, volume: 1.0 }); }
     spawnAbilityAOEFX(pos, item.burnRadius || 3.5, 0xff6622);
-    spawnBurnZone(pos, item.burnRadius || 3.5, item.burnDps || 8, item.burnDur || 12000);
+    if (item.id === 'molotov') {
+      spawnExplosion(pos); playSoundEvent('fire_sizzle', { position: pos, volume: 1.0 });
+      // Inside the flames: 10 dmg every 0.2s. Touch them → "on fire" 5/sec for 10s after leaving.
+      spawnBurnZone(pos, item.burnRadius || 3.2, 10, item.burnDur || 5000, { tickMs: 200, molotov: true, igniteDur: 10000 });
+    } else {
+      spawnBurnZone(pos, item.burnRadius || 3.5, item.burnDps || 8, item.burnDur || 12000);
+    }
     return;
   }
 

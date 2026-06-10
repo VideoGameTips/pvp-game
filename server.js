@@ -828,6 +828,8 @@ const WEAPON_DAMAGE = {
   hand_cannon_ab: 175,
   // ⚔️ Lancer (single-shot blade rifle) + its bayonet-charge hit
   lancer: 95, lancer_blade: 50,
+  // 🔥 Molotov burn ticks
+  molotov_burn: 10, molotov_fire: 5,
   // MG
   mg42: 15,
   // Melee

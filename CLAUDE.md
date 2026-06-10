@@ -59,6 +59,7 @@ Multiplayer browser FPS. Three.js + Socket.IO + Express. Hosted on Railway, repo
 - **Commit + push after essentially every change.** Detailed commit messages, end with `Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>`. Push to `main` (PR #1 already merged). Report briefly after.
 - **Bias to action.** He often answers tersely ("y", "k", "do it", "go") or dismisses question prompts. Make the reasonable call and keep building rather than over-asking. Ask only when genuinely blocked or a decision is irreversible.
 - Requests arrive as a stream of small features; he frequently **playtests and reports bugs** in casual language ("the enemy walked through the wall", "shuriken doesn't work"). Treat those as real bug reports — investigate, don't hand-wave.
+- **New weapons: don't bother verifying they work in a live preview — Andy playtests those himself.** For a new/modified weapon, item, or skin, just `node --check` the files and confirm parallel-array alignment (gotcha #2) + client/server table mirrors (gotcha #4), then commit. (Still verify *bug fixes* and non-weapon behavior changes when practical.)
 - Likes **balance**: P2W weapons should be *ridiculously expensive*, not cheap. Fragments/credits should require grind for top-tier items.
 - Enjoys **humor + casual banter**; sometimes writes in Chinese/English mix. Match the energy but stay focused on shipping.
 - He can't run `claude` CLI (not in PATH) and sets up Railway via dashboard manually — give click-by-click guidance, can't do dashboard steps for him.
