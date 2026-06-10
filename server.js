@@ -51,6 +51,7 @@ const WEAPON_COSTS = {
   sg8: 220, sg100: 380, auto_shotgun: 340,
   // Primaries — Snipers / Marksman
   srx: 500, lever: 360,
+  lancer: 460, rpg: 520, bazooka: 620,
   // Primaries — Special
   rpd: 450, paintball: 120, crossbow: 280,
   // Primaries — Heavy
@@ -78,7 +79,7 @@ const WEAPON_COSTS = {
   nebula_mortar: 35000, prism_engine: 27000, void_harvester: 40000,
   // Secondaries
   revolver: 150, flare: 80, pistol: 60, shorty: 180, cycler: 140,
-  hand_cannon: 260, throwing_knives: 120, taser: 200,
+  hand_cannon: 260, throwing_knives: 120, taser: 200, traffic_cone: 160, cream_pie: 140,
   machine_pistol: 220, sawed_off: 260, machine_revolver: 240, pocket_rocket: 320,
   dart_gun: 160, laser_pointer: 120, coin_gun: 180, emp_pistol: 240,
   auto_revolver: 220, frost_blaster: 240,
@@ -115,6 +116,8 @@ const WEAPON_COSTS = {
   // 🌌 Sci-fi P2W utilities
   nano_swarm: 20000, warp_beacon: 25000, stasis_mine: 18000,
   specter_drone: 30000, quantum_barrier: 21000,
+  hamburger: 300,
+  molotov: 180,
 };
 
 // Free starter loadout — every account has these unlocked from day 1.
@@ -433,6 +436,92 @@ app.post('/shop/buy-bundle', (req, res) => {
 
 app.get('/shop/bundles', (req, res) => res.json({ bundles: BUNDLES }));
 
+// ── 💬 Character Chat AI proxy ─────────────────────────────────────────────
+// Generates in-character replies from a personality system prompt the client
+// sends. Auto-detects ONE of several providers from env vars (no code change):
+//   GROQ_API_KEY    → Groq  (FREE, no credit card — console.groq.com)  ★ recommended
+//   OPENAI_API_KEY  → OpenAI / any OpenAI-compatible host (set CHAT_AI_BASE_URL too)
+//   ANTHROPIC_API_KEY → Anthropic (paid)
+// WITHOUT any key this returns 503 and the client shows an offline notice.
+// Optional model override: CHAT_AI_MODEL. Optional base URL: CHAT_AI_BASE_URL.
+function chatProvider() {
+  const m = process.env.CHAT_AI_MODEL;
+  if (process.env.GROQ_API_KEY) {
+    return { kind: 'openai', key: process.env.GROQ_API_KEY,
+      url: process.env.CHAT_AI_BASE_URL || 'https://api.groq.com/openai/v1/chat/completions',
+      model: m || 'llama-3.3-70b-versatile' };
+  }
+  if (process.env.OPENAI_API_KEY) {
+    return { kind: 'openai', key: process.env.OPENAI_API_KEY,
+      url: process.env.CHAT_AI_BASE_URL || 'https://api.openai.com/v1/chat/completions',
+      model: m || 'gpt-4o-mini' };
+  }
+  if (process.env.ANTHROPIC_API_KEY) {
+    return { kind: 'anthropic', key: process.env.ANTHROPIC_API_KEY,
+      url: 'https://api.anthropic.com/v1/messages',
+      model: m || 'claude-3-5-haiku-latest' };
+  }
+  return null;
+}
+const _chatRate = new Map(); // ip -> [timestamps] crude per-IP rate limit (public repo)
+app.get('/api/chat/status', (req, res) => res.json({ ai: !!chatProvider() }));
+app.post('/api/chat', async (req, res) => {
+  const prov = chatProvider();
+  if (!prov) return res.status(503).json({ error: 'no_ai' });
+  try {
+    const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'x').toString();
+    const now = Date.now();
+    const hits = (_chatRate.get(ip) || []).filter(t => now - t < 60000);
+    if (hits.length >= 40) return res.status(429).json({ error: 'rate' });
+    hits.push(now); _chatRate.set(ip, hits);
+
+    const system = String(req.body.system || '').slice(0, 2000);
+    let messages = Array.isArray(req.body.messages) ? req.body.messages.slice(-12) : [];
+    messages = messages
+      .filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
+      .map(m => ({ role: m.role, content: m.content.slice(0, 600) }));
+    // First turn must be from the user (Anthropic requires it; harmless elsewhere).
+    while (messages.length && messages[0].role === 'assistant') messages.shift();
+    if (!messages.length) return res.status(400).json({ error: 'empty' });
+
+    let r, reply;
+    if (prov.kind === 'anthropic') {
+      r = await fetch(prov.url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-api-key': prov.key, 'anthropic-version': '2023-06-01' },
+        body: JSON.stringify({ model: prov.model, max_tokens: 120, system, messages }),
+      });
+      if (!r.ok) {
+        const t = await r.text().catch(() => '');
+        console.error('chat AI upstream error', prov.kind, r.status, t.slice(0, 200));
+        return res.status(502).json({ error: 'upstream', status: r.status, detail: t.slice(0, 160) });
+      }
+      const data = await r.json();
+      reply = (data.content || []).map(b => b.text || '').join(' ').trim();
+    } else {
+      // OpenAI-compatible (Groq, OpenAI, OpenRouter, etc.): system goes in messages[].
+      r = await fetch(prov.url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'authorization': `Bearer ${prov.key}` },
+        body: JSON.stringify({ model: prov.model, max_tokens: 120,
+          messages: [{ role: 'system', content: system }, ...messages] }),
+      });
+      if (!r.ok) {
+        const t = await r.text().catch(() => '');
+        console.error('chat AI upstream error', prov.kind, r.status, t.slice(0, 200));
+        return res.status(502).json({ error: 'upstream', status: r.status, detail: t.slice(0, 160) });
+      }
+      const data = await r.json();
+      reply = (((data.choices || [])[0] || {}).message || {}).content;
+      reply = (reply || '').trim();
+    }
+    res.json({ reply: reply || '...' });
+  } catch (e) {
+    console.error('chat AI exception', e.message);
+    res.status(500).json({ error: 'exception' });
+  }
+});
+
 // ── Admin item unlock codes (one code per item) ────────────────────────────
 const UNLOCK_CODES = {
   // Primaries
@@ -635,7 +724,8 @@ function checkLobbyStart(L) {
                     'tundra','space','airport','trenches','chernobyl','refinery','skydock',
                     'sewer','gravity_lab','glassworks','carrier','overgrowth','orbital_station',
                     'foundry','carnival','biosphere','lockdown','studio','temple','holiday',
-                    'labyrinth','arena','opera','doomsday','train','dreamscape'];
+                    'labyrinth','arena','opera','doomsday','train','dreamscape',
+                    'pearl_harbor','titanic','supermarket','pyongyang','traffic_cone_republic','flying_moai'];
   const mapId = MAP_POOL[Math.floor(Math.random() * MAP_POOL.length)];
   // Designate the first player as host (they spawn the bots if any)
   const host = L.players[0];
@@ -666,6 +756,7 @@ const MODE_TEAM_SIZES = {
   'infection':   { ally: 1, enemy: 5 },
   'sniper_only': { ally: 1, enemy: 5 },
   'speedrun':    { ally: 1, enemy: 20 },
+  'piefight':    { ally: 1, enemy: 7 },
 };
 
 function flushPvpSolo(socketId) {
@@ -703,7 +794,8 @@ function tryPairPvpQueue(mode) {
                     'tundra','space','airport','trenches','chernobyl','refinery','skydock',
                     'sewer','gravity_lab','glassworks','carrier','overgrowth','orbital_station',
                     'foundry','carnival','biosphere','lockdown','studio','temple','holiday',
-                    'labyrinth','arena','opera','doomsday','train','dreamscape'];
+                    'labyrinth','arena','opera','doomsday','train','dreamscape',
+                    'pearl_harbor','titanic','supermarket','pyongyang','traffic_cone_republic','flying_moai'];
   const mapId = MAP_POOL[Math.floor(Math.random() * MAP_POOL.length)];
   io.to(a.socketId).emit('pvpResult', {
     mode, paired: true, team: teamA, mapId,
@@ -734,6 +826,12 @@ const WEAPON_DAMAGE = {
   sg8_wave: 20,
   railgun_ab: 330, boombow_ab: 190, cycler_ab: 32,
   hand_cannon_ab: 175,
+  // ⚔️ Lancer (single-shot blade rifle) + its bayonet-charge hit
+  lancer: 95, lancer_blade: 50,
+  // 🔥 Molotov burn ticks
+  molotov_burn: 10, molotov_fire: 5,
+  // 🚀 Rocket launchers + area splash
+  rpg: 120, bazooka: 140, rpg_splash: 70, bazooka_splash: 85,
   // MG
   mg42: 15,
   // Melee

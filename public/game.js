@@ -797,6 +797,43 @@ const WEAPONS = [
     ddayOnly: true,
     ability: null,
   },
+  // ── 🚀 Rocket launchers — single-shot, big direct hit + area splash ──
+  {
+    id: 'rpg', name: 'RPG-7', type: 'Rocket', slot: 'primary',
+    mag: 1, reserve: 9, damage: 120, fireRate: 1000, reloadTime: 2300,
+    auto: false, pellets: 1, spread: 0.006, adsZoom: 48, bulletSpeed: 70, noReload: false,
+    bulletColor: 0xff7722, bulletSize: 0.15, splashRadius: 5,
+    ability: { name: 'Triple Warhead', cd: 16000, desc: 'Fire 3 rockets in a spread', type: 'multishot', count: 3, spread: 0.10, noADS: true },
+  },
+  {
+    id: 'bazooka', name: 'Bazooka', type: 'Rocket', slot: 'primary',
+    mag: 1, reserve: 8, damage: 140, fireRate: 1100, reloadTime: 2600,
+    auto: false, pellets: 1, spread: 0.005, adsZoom: 48, bulletSpeed: 64, noReload: false,
+    bulletColor: 0xffaa33, bulletSize: 0.17, splashRadius: 6,
+    ability: { name: 'Barrage', cd: 18000, desc: 'Unleash 4 rockets in a spread', type: 'multishot', count: 4, spread: 0.12, noADS: true },
+  },
+  // ── ⚔️ Lancer — single-shot blade rifle with a charging bayonet ability ──
+  {
+    id: 'lancer', name: 'Lancer', type: 'Blade Rifle', slot: 'primary',
+    mag: 1, reserve: 24, damage: 95, fireRate: 900, reloadTime: 1700,
+    auto: false, pellets: 1, spread: 0.004, adsZoom: 50, bulletSpeed: 150, noReload: false,
+    ability: { name: 'Bayonet Charge', cd: 9000, type: 'blade_charge', distance: 8, bladeDamage: 50, noADS: true, desc: 'Lunge forward · blade contact deals 50' },
+  },
+  // ── 🚧 / 🥧 Chuckable nonsense secondaries (must stay LAST — mirrored in weaponModels) ──
+  {
+    id: 'traffic_cone', name: 'Traffic Cone', type: 'Thrown', slot: 'secondary',
+    mag: 4, reserve: 16, damage: 38, fireRate: 320, reloadTime: 1400,
+    auto: false, pellets: 1, spread: 0.010, adsZoom: 50, bulletSpeed: 62, noReload: false,
+    bulletColor: 0xff6a00, bulletSize: 0.12,
+    ability: { name: 'Cone Barrage', cd: 10000, desc: 'Hurl 4 cones in a spread', type: 'multishot', count: 4, spread: 0.12 },
+  },
+  {
+    id: 'cream_pie', name: 'Cream Pie', type: 'Thrown', slot: 'secondary',
+    mag: 5, reserve: 20, damage: 34, fireRate: 280, reloadTime: 1200,
+    auto: false, pellets: 1, spread: 0.012, adsZoom: 50, bulletSpeed: 56, noReload: false,
+    bulletColor: 0xfff4d8, bulletSize: 0.13,
+    ability: { name: 'Pie Platter', cd: 8000, desc: 'Fling 5 pies at once', type: 'multishot', count: 5, spread: 0.14 },
+  },
 ];
 
 const MELEE_ITEMS = [
@@ -960,6 +997,11 @@ const SUPPORT_ITEMS = [
   { id: 'specter_drone',  name: 'Specter Drone',  type: 'Stealth Drone', uses: 1, damage: 160, cooldown: 1800, droneDur: 14000, droneRange: 32 },
   { id: 'quantum_barrier',name: 'Quantum Barrier',type: 'Shield',       uses: 1, healPerSec: 12, shieldDur: 9000, cooldown: 2000 },
 
+  // 🍔🇺🇸 Tasty heal
+  { id: 'hamburger',      name: 'All-American Burger', type: 'Heal · Tasty', uses: 2, heal: 75, cooldown: 1300 },
+
+  // 🔥 Molotov — shatters into a lingering fire pool (reuses the burn-zone DOT)
+  { id: 'molotov', name: 'Molotov Cocktail', type: 'Fire · Burn Zone', uses: 2, damage: 0, cooldown: 1100, bulletSpeed: 36, bulletColor: 0xff7722, bulletSize: 0.11, burnDps: 12, burnDur: 5000, burnRadius: 3.2 },
 
   { id: 'c4', name: 'C4 Charge', type: 'Admin · Explosive', uses: 2, damage: 200, cooldown: 1200, bulletSpeed: 40, bulletColor: 0x664433, bulletSize: 0.11, c4Detonate: true, adminItem: true },
   { id: 'claymore', name: 'Claymore Mine', type: 'Admin · Directional Mine', uses: 2, damage: 250, cooldown: 1100, claymoreRadius: 4, claymoreArc: 1.2, adminItem: true },
@@ -984,6 +1026,17 @@ let reloading = false, lastShot = 0, shooting = false;
 let isADS = false, adsFOV = 75, targetFOV = 75;
 
 let myKills = 0, isDead = false, gameStarted = false;
+// 🛋️ Lobby 13 is a standalone social hub — NOT a match. When inLobby is true there
+// is intentionally no `match` object: no scoring, no rounds, no win/lose, no combat.
+// All lobby behavior keys off this flag, never off match.type.
+let inLobby = false;
+// 3D duel-slot pads on the lobby floor (1V1 / 2V2 / 3V3). Stepping onto one and
+// pressing F starts that mode (bots fill the empty slots). Populated in buildLobby13Map.
+const LOBBY_DUEL_PADS = [];
+let lobbyPadHere = null;        // the duel area the player is currently standing on
+let lobbyChallengeTarget = null;// nearest cast member to challenge (proximity F = 1V1)
+let lobbyActiveArea = null;     // duel area currently being staged (player on one of its pads)
+let lobbyPlayerSide = null;     // which pad the player chose: 'blue' or 'red'
 let spawnShieldUntil = 0; // timestamp: player is invincible until this time
 let spectatorState = null; // { idx, lastSwitch } — set when dead and watching teammates
 
@@ -1028,6 +1081,9 @@ const GAME_MODE_CONFIGS = {
   'laststand':  { type: 'laststand',  allies: 0, enemies: 0 },
   'dday':       { type: 'dday',       allies: 3, enemies: 0 },
   'range':      { type: 'range',      allies: 0, enemies: 0 },
+  // 🛋️ Lobby 13: a chill social hub (no enemies, no scoring) where players hang
+  // out and organize their own 1v1s instead of jumping straight into a map.
+  'lobby13':    { type: 'lobby',      allies: 0, enemies: 0 },
   // King of the Hill / Battle Royale: massive map, 10 players FFA, 3 lives each, last alive wins
   'koth':       { type: 'br',         allies: 0, enemies: 9, livesPerPlayer: 3, mapSize: 250 },
   // 🎮 ARCADE MODES — fast & gimmicky FFA variants
@@ -1037,6 +1093,7 @@ const GAME_MODE_CONFIGS = {
   'infection':  { type: 'arcade', subtype: 'infect',   allies: 0, enemies: 5, timeLimit: 180, arcade: true },
   'sniper_only':{ type: 'arcade', subtype: 'sniper',   allies: 0, enemies: 5, timeLimit: 240, arcade: true },
   'speedrun':   { type: 'arcade', subtype: 'speedrun', allies: 0, enemies: 20,timeLimit: 0,   arcade: true }, // solo
+  'piefight':   { type: 'arcade', subtype: 'piefight', allies: 0, enemies: 7, timeLimit: 240, arcade: true }, // 🥧 everyone throws pies
 };
 let selectedModeConfig = null;
 const gameBots = [];       // {id, team, weaponId, x, z, rotY, hp, dead, state, wanderAngle, wanderTimer, lastShot, lastBotMove}
@@ -1054,6 +1111,7 @@ const WEAPON_COSTS = {
   sg8: 220, sg100: 380, auto_shotgun: 340,
   // Primaries — Snipers / Marksman
   srx: 500, lever: 360,
+  lancer: 460, rpg: 520, bazooka: 620,
   // Primaries — Special
   rpd: 450, paintball: 120, crossbow: 280,
   // Primaries — Heavy
@@ -1081,7 +1139,7 @@ const WEAPON_COSTS = {
   nebula_mortar: 35000, prism_engine: 27000, void_harvester: 40000,
   // Secondaries
   revolver: 150, flare: 80, pistol: 60, shorty: 180, cycler: 140,
-  hand_cannon: 260, throwing_knives: 120, taser: 200,
+  hand_cannon: 260, throwing_knives: 120, taser: 200, traffic_cone: 160, cream_pie: 140,
   machine_pistol: 220, sawed_off: 260, machine_revolver: 240, pocket_rocket: 320,
   dart_gun: 160, laser_pointer: 120, coin_gun: 180, emp_pistol: 240,
   auto_revolver: 220, frost_blaster: 240,
@@ -1118,6 +1176,10 @@ const WEAPON_COSTS = {
   // 🌌 Sci-fi P2W utilities
   nano_swarm: 20000, warp_beacon: 25000, stasis_mine: 18000,
   specter_drone: 30000, quantum_barrier: 21000,
+  // 🍔 Tasty heal
+  hamburger: 300,
+  // 🔥 Molotov
+  molotov: 180,
 };
 const FREE_WEAPONS = new Set([
   'ak20','sg8','pistol','flare','fists','frying_pan','frag','medkit',
@@ -1636,6 +1698,48 @@ const COMMAND_PHYSICAL = {
   },
 };
 
+// 🎭 Personality-flavored comms reactions. Each personality refuses the orders
+// that clash with how they play (an aggressor hates being told to hold/fall back;
+// a camper hates being told to charge) and answers in its own voice.
+const PERSONALITY_COMMS = {
+  aggressor: {
+    refuseTypes: ['hold', 'fallback', 'run', 'cover_sniper'],
+    ok:   ['CHARGING!', 'Yeah, LET\'S GO!', 'On it — rushing!', 'Finally, ACTION!'],
+    nope: ['Heck no, I\'m pushing!', 'Nah — CHARGE!', 'Boring! I attack!', 'No way, going IN!'],
+  },
+  camper: {
+    refuseTypes: ['charge', 'group_push', 'flank', 'distract'],
+    ok:   ['Holding my spot.', 'Locked down.', 'Watching this angle.', 'Got it, camping.'],
+    nope: ['Nope, holding here.', 'I\'m not leaving cover.', 'You go — I\'ll watch.', 'Nah, staying put.'],
+  },
+  sniper: {
+    refuseTypes: ['charge', 'group_push', 'scatter'],
+    ok:   ['Lining up the shot.', 'Overwatch set.', 'Copy — eyes up.', 'On the glass.'],
+    nope: ['Negative, holding the lane.', 'I\'m better at range.', 'No — I cover from here.'],
+  },
+  tactician: {
+    refuseTypes: [],
+    ok:   ['Understood.', 'Makes sense — moving.', 'Copy that.', 'Smart call, on it.'],
+    nope: ['Not optimal, but okay.', 'Risky... fine.'],
+  },
+};
+// Marquee characters get their own unmistakable one-liners (overrides personality).
+const CHAR_COMMS_FLAVOR = {
+  rager:    { ok: ['FINE! WHATEVER!', 'UGH, OKAY!'], nope: ['HECK NO!', 'ARE YOU KIDDING ME?!', 'NO! IT\'S THE LAG!'] },
+  duckguy:  { ok: ['Quack!', 'Quack quack!'],         nope: ['Quack.', '...quack?'] },
+  bot47:    { ok: ['Affirmative.', 'Executing.', 'Beep. Compliance.'], nope: ['Negative.', 'Command rejected.'] },
+  bot604:   { ok: ['Probability favorable. Moving.', 'Acknowledged.'], nope: ['Probability unfavorable.', 'Computing... no.'] },
+  goat:     { ok: ['ez', 'watch the GOAT'],           nope: ['lol no, skill issue', 'nah, I carry'] },
+  ghost:    { ok: ['...moving.', '...'],              nope: ['...no.', '...'] },
+  shadow:   { ok: ['...on it.', '...'],               nope: ['...no.'] },
+  kingchaos:{ ok: ['BOW, then YES!', 'A KINGLY yes!'], nope: ['A king obeys NO ONE!', 'No. I do as I please.'] },
+  ragebaiter:{ ok: ['...fine.'],                      nope: ['No.', 'No.', 'Hard no.'] },
+  panicpanda:{ ok: ['OKAY OKAY OKAY!', 'AAAH FINE!'], nope: ['I CAN\'T! TOO SCARY!', 'NO NO NO!'] },
+  professional:{ ok: ['Copy. Executing.', 'Affirmative.'], nope: ['Negative.'] },
+  thesweat: { ok: ['Already warmed up. Go.', 'Locked in.'], nope: ['That\'s griefing, no.'] },
+  dramaqueen:{ ok: ['For YOU, anything!', 'The DRAMA — fine!'], nope: ['How DARE you ask!', 'Absolutely NOT!'] },
+};
+function pickComms(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 function reactAllyBotsToComms(playerSaid) {
   const cmd = COMMAND_PHYSICAL[playerSaid];
   if (!cmd) return;
@@ -1647,13 +1751,20 @@ function reactAllyBotsToComms(playerSaid) {
     .sort((a,b) => a.d - b.d);
   nearbyAllies.forEach((x, i) => {
     setTimeout(() => {
-      const willComply = cmd.gate(x.b);
-      // Verbal reaction
-      const pool = willComply ? cmd.okLines : (cmd.nopeLines.length ? cmd.nopeLines : cmd.okLines);
-      const reply = pool[Math.floor(Math.random() * pool.length)];
+      const flavor = PERSONALITY_COMMS[x.b.personality] || PERSONALITY_COMMS.tactician;
+      const charF  = x.b.charId && CHAR_COMMS_FLAVOR[x.b.charId];
+      // Comply if the HP gate passes AND their personality doesn't refuse this order.
+      let willComply = cmd.gate(x.b);
+      if (willComply && cmd.type && flavor.refuseTypes.includes(cmd.type) && Math.random() < 0.7) {
+        willComply = false; // in-character refusal
+      }
+      // Verbal reaction: character voice → personality voice → generic command lines.
+      let reply;
+      if (willComply) reply = pickComms((charF && charF.ok) || flavor.ok || cmd.okLines);
+      else            reply = pickComms((charF && charF.nope) || flavor.nope || (cmd.nopeLines.length ? cmd.nopeLines : flavor.nope));
       showBotSpeech(x.b, reply, 2000, willComply ? '#88ccff' : '#ffaa66');
       pushChatLine(`${players[x.b.id]?.name || 'Ally'}: ${reply}`, willComply ? '#88ccff' : '#ffaa66');
-      // Physical reaction: set command override
+      // Physical reaction: set command override only if they actually agreed.
       if (willComply && cmd.type) {
         x.b._commandOverride = {
           type: cmd.type,
@@ -3047,6 +3158,119 @@ function addExplosiveBarrel(mapName, x, z, color = 0xb52b20) {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
+// 🛋️ LOBBY 13 — a chill social hub. No enemies, no scoring. Players hang out,
+// chat, and organize their own 1v1s in the marked duel pit on the side.
+// ──────────────────────────────────────────────────────────────────────────
+registerMap('lobby13');
+function buildLobby13Map() {
+  const m = 'lobby13';
+  addMapGround(m, 0x2b2233, null); // dark lounge carpet
+  MAP_GROUPS[m]._skyColor = 0x14101c;
+
+  // Soft inlaid "rug" in the central hangout area
+  const rug = new THREE.Mesh(new THREE.PlaneGeometry(22, 22),
+    new THREE.MeshLambertMaterial({ color: 0x4a3a66 }));
+  rug.rotation.x = -Math.PI / 2; rug.position.set(0, 0.02, 0);
+  MAP_GROUPS[m].add(rug);
+
+  // Outer room walls (warm wood tone)
+  const wallCol = 0x3a2e24;
+  addMapBox(m, 0, 3, -32, 70, 6, 1.2, wallCol);
+  addMapBox(m, 0, 3,  32, 70, 6, 1.2, wallCol);
+  addMapBox(m, -35, 3, 0, 1.2, 6, 66, wallCol);
+  addMapBox(m,  35, 3, 0, 1.2, 6, 66, wallCol);
+
+  // ── Central lounge: low couches + coffee tables (low cover, comfy vibe) ──
+  const couch = 0x884466, table = 0x5a4632;
+  addMapBox(m, -7, 0.5,  6, 6, 1.0, 2, couch);
+  addMapBox(m,  7, 0.5,  6, 6, 1.0, 2, couch);
+  addMapBox(m, -7, 0.5, -6, 6, 1.0, 2, couch);
+  addMapBox(m,  7, 0.5, -6, 6, 1.0, 2, couch);
+  addMapBox(m, 0, 0.4, 0, 4, 0.8, 4, table);     // central coffee table
+  addMapBox(m, 0, 1.1, 0, 1.4, 0.6, 1.4, 0xffcc55); // glowy lamp on the table
+
+  // ── A few bar stools / pillars around the edges to break sightlines ──
+  [[-20, 14], [20, 14], [-20, -14], [20, -14], [-26, 0], [26, 0]].forEach(([x, z]) => {
+    addMapBox(m, x, 1.5, z, 1.4, 3, 1.4, 0x4a3c30);
+  });
+
+  // ── 1v1 DUEL PIT (left side): a fenced square arena with a lighter floor ──
+  const pitX = -22, pitZ = 0;
+  const pitFloor = new THREE.Mesh(new THREE.PlaneGeometry(16, 24),
+    new THREE.MeshLambertMaterial({ color: 0x223a2a }));
+  pitFloor.rotation.x = -Math.PI / 2; pitFloor.position.set(pitX, 0.03, pitZ);
+  MAP_GROUPS[m].add(pitFloor);
+  // low fence rails around the pit (waist-high cover; gap on the inner side for entry)
+  addMapBox(m, pitX, 0.7, pitZ - 12, 16, 1.4, 0.5, 0x6688aa);
+  addMapBox(m, pitX, 0.7, pitZ + 12, 16, 1.4, 0.5, 0x6688aa);
+  addMapBox(m, pitX - 8, 0.7, pitZ, 0.5, 1.4, 24, 0x6688aa);
+  // one center block for cover in the duel pit
+  addMapBox(m, pitX, 0.9, pitZ, 2, 1.8, 2, 0x335544);
+
+  // ── Big neon "LOBBY 13" sign on the back wall ──
+  const signMat = new THREE.MeshBasicMaterial({ color: 0x66ddff });
+  const sign = new THREE.Mesh(new THREE.BoxGeometry(20, 3, 0.4), signMat);
+  sign.position.set(0, 5, -31.2);
+  MAP_GROUPS[m].add(sign);
+  const sign2 = new THREE.Mesh(new THREE.BoxGeometry(6, 2, 0.5),
+    new THREE.MeshBasicMaterial({ color: 0xff66bb }));
+  sign2.position.set(0, 5, -31.0); // "13" accent
+  MAP_GROUPS[m].add(sign2);
+
+  // Ambient glow blocks (purely decorative light strips along the floor)
+  [-30, -15, 0, 15, 30].forEach(x => {
+    const strip = new THREE.Mesh(new THREE.BoxGeometry(1, 0.1, 60),
+      new THREE.MeshBasicMaterial({ color: 0x3355aa }));
+    strip.position.set(x, 0.06, 0);
+    MAP_GROUPS[m].add(strip);
+  });
+
+  // ── 3D DUEL SLOTS (right side): each mode has a BLUE pad (your team) and a RED
+  //    pad (the enemy team) so you can SEE who's on whose side. Stand on the blue
+  //    pad; willing cast members walk over to fill the red (and extra blue) slots.
+  //    Press F to start once you're set. Physical staging, not a menu. ──
+  LOBBY_DUEL_PADS.length = 0;
+  const padDefs = [
+    { modeId: '1v1', label: '1V1', perTeam: 1, z: -11 },
+    { modeId: '2v2', label: '2V2', perTeam: 2, z:   0 },
+    { modeId: '3v3', label: '3V3', perTeam: 3, z:  11 },
+  ];
+  const BLUE = 0x3a7bff, RED = 0xff3a3a;
+  const mkPad = (x, z, color, radius) => {
+    const disk = new THREE.Mesh(new THREE.CircleGeometry(radius, 36),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.30 }));
+    disk.rotation.x = -Math.PI / 2; disk.position.set(x, 0.05, z);
+    MAP_GROUPS[m].add(disk);
+    const ring = new THREE.Mesh(new THREE.RingGeometry(radius - 0.28, radius, 36),
+      new THREE.MeshBasicMaterial({ color }));
+    ring.rotation.x = -Math.PI / 2; ring.position.set(x, 0.07, z);
+    MAP_GROUPS[m].add(ring);
+  };
+  const mkLabel = (text, color, x, z, y, scale) => {
+    const cv = document.createElement('canvas'); cv.width = 256; cv.height = 96;
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = color; ctx.font = 'bold 64px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.shadowColor = '#000'; ctx.shadowBlur = 10;
+    ctx.fillText(text, 128, 48);
+    const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, depthTest: false }));
+    spr.scale.set(scale, scale * 0.375, 1); spr.position.set(x, y, z);
+    MAP_GROUPS[m].add(spr);
+  };
+  padDefs.forEach(pd => {
+    const blueX = 20, redX = 28, radius = 2.6;
+    mkPad(blueX, pd.z, BLUE, radius);
+    mkPad(redX,  pd.z, RED,  radius);
+    mkLabel(pd.label, '#ffffff', 24, pd.z, 3.4, 4.0);   // mode label, centered above
+    mkLabel('BLUE',  '#88bbff', blueX, pd.z, 2.1, 2.2); // team markers
+    mkLabel('RED',   '#ff9999', redX,  pd.z, 2.1, 2.2);
+    LOBBY_DUEL_PADS.push({
+      modeId: pd.modeId, label: pd.label, perTeam: pd.perTeam, radius,
+      blue: { x: blueX, z: pd.z }, red: { x: redX, z: pd.z },
+    });
+  });
+}
+
+// ──────────────────────────────────────────────────────────────────────────
 // 1. URBAN PLAZA — buildings as corner cover, cars as low cover in plaza
 // ──────────────────────────────────────────────────────────────────────────
 registerMap('urban');
@@ -3192,7 +3416,45 @@ function buildForestMap() {
     rock.updateMatrixWorld(true);
     MAP_COLLIDERS[m].push(new THREE.Box3().setFromObject(rock));
   });
-  MAP_GROUPS[m]._skyColor = 0x6fb2dd;
+  // 🌴🇻🇳 Dense jungle layer — extra trees, bamboo and ferns for a thick
+  // Vietnam-war canopy. Scattered procedurally; keeps the centre spawn clear.
+  const jungleLeaf = new THREE.MeshLambertMaterial({ color: 0x14431a });
+  for (let i = 0; i < 42; i++) {
+    const x = (Math.random() - 0.5) * 88, z = (Math.random() - 0.5) * 88;
+    if (Math.hypot(x, z) < 6) continue;
+    const h = 4 + Math.random() * 3;
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.45, h, 7), treeMat);
+    trunk.position.set(x, h / 2, z);
+    MAP_GROUPS[m].add(trunk);
+    trunk.updateMatrixWorld(true);
+    MAP_COLLIDERS[m].push(new THREE.Box3().setFromObject(trunk));
+    for (let k = 0; k < 3; k++) {
+      const leaf = new THREE.Mesh(new THREE.ConeGeometry(2.0 - k * 0.5, 1.8, 8), jungleLeaf);
+      leaf.position.set(x, h + k * 0.9, z);
+      MAP_GROUPS[m].add(leaf);
+    }
+  }
+  // Bamboo clusters (thin tall stalks)
+  const bambooMat = new THREE.MeshLambertMaterial({ color: 0x7aa83f });
+  for (let i = 0; i < 14; i++) {
+    const cx = (Math.random() - 0.5) * 80, cz = (Math.random() - 0.5) * 80;
+    if (Math.hypot(cx, cz) < 8) continue;
+    for (let s = 0; s < 4; s++) {
+      const bh = 5 + Math.random() * 2;
+      const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.14, bh, 6), bambooMat);
+      stalk.position.set(cx + (Math.random() - 0.5) * 1.4, bh / 2, cz + (Math.random() - 0.5) * 1.4);
+      MAP_GROUPS[m].add(stalk);
+    }
+  }
+  // Ground ferns / undergrowth (low, no collision)
+  const fernMat = new THREE.MeshLambertMaterial({ color: 0x2f6b25 });
+  for (let i = 0; i < 55; i++) {
+    const fern = new THREE.Mesh(new THREE.SphereGeometry(0.6 + Math.random() * 0.5, 6, 4, 0, Math.PI * 2, 0, Math.PI / 2), fernMat);
+    fern.position.set((Math.random() - 0.5) * 92, 0, (Math.random() - 0.5) * 92);
+    fern.scale.set(1, 0.5, 1);
+    MAP_GROUPS[m].add(fern);
+  }
+  MAP_GROUPS[m]._skyColor = 0xa9c08e; // hazy jungle green-grey
 }
 buildForestMap();
 
@@ -4120,6 +4382,252 @@ function buildDreamscapeMap() {
 buildDreamscapeMap();
 
 // ──────────────────────────────────────────────────────────────────────────
+// PEARL HARBOR — WWII naval base: docks, battleships, fuel barrels
+// ──────────────────────────────────────────────────────────────────────────
+registerMap('pearl_harbor');
+function buildPearlHarborMap() {
+  const m = 'pearl_harbor';
+  addMapGround(m, 0x2a5a7a, null); // harbor water
+  addOuterWalls(m, 0x55504a);
+  const plank = 0xa07a4a, deck = 0x8a6a3a, hull = 0x55606a, hullDark = 0x3a444c;
+  // Central wooden pier running across the map
+  addMapBox(m, 0, 0.3, 0, 14, 0.6, 70, plank);
+  // Cross piers
+  addMapBox(m, -22, 0.3, 0, 30, 0.6, 8, plank);
+  addMapBox(m, 22, 0.3, 0, 30, 0.6, 8, plank);
+  // Two moored battleships (long hulls + superstructure + turrets)
+  [[-36, -16], [36, 16]].forEach(([sx, sz], idx) => {
+    addMapBox(m, sx, 1.4, sz, 12, 3.0, 34, hull);           // hull
+    addMapBox(m, sx, 4.0, sz, 6, 3.0, 12, hullDark);        // superstructure
+    addMapBox(m, sx, 6.5, sz - 3, 1.2, 5, 1.2, hullDark);   // mast
+    // Gun turrets
+    [-10, 10].forEach(off => {
+      const turret = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.8, 1.4, 10), new THREE.MeshLambertMaterial({ color: hullDark }));
+      turret.position.set(sx, 3.1, sz + off); MAP_GROUPS[m].add(turret);
+      const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 4, 8), new THREE.MeshLambertMaterial({ color: 0x222222 }));
+      barrel.rotation.z = Math.PI / 2; barrel.position.set(sx + (idx ? -2.5 : 2.5), 3.4, sz + off); MAP_GROUPS[m].add(barrel);
+    });
+  });
+  // Crate stacks for cover
+  [[-8, 20], [8, -20], [-12, -8], [12, 8], [0, 26], [0, -26]].forEach(([x, z]) => {
+    addMapBox(m, x, 1.0, z, 2.4, 2, 2.4, deck);
+  });
+  // Explosive fuel barrels dockside
+  [[-6, 6], [6, -6], [-16, 2], [16, -2], [4, 14], [-4, -14]].forEach(([x, z]) => addExplosiveBarrel(m, x, z, 0xcc4422));
+  MAP_GROUPS[m]._skyColor = 0x9fc4e0;
+}
+buildPearlHarborMap();
+
+// ──────────────────────────────────────────────────────────────────────────
+// TITANIC — ocean-liner deck: hull, smokestacks, lifeboats, iceberg
+// ──────────────────────────────────────────────────────────────────────────
+registerMap('titanic');
+function buildTitanicMap() {
+  const m = 'titanic';
+  addMapGround(m, 0x12243a, null); // night ocean
+  addOuterWalls(m, 0x1a2a3a);
+  const deckMat = 0x8a6a40, railMat = 0xddddcc, hullMat = 0x202830;
+  // Main deck platform (the playable ship)
+  addMapBox(m, 0, 0.4, 0, 30, 0.8, 80, deckMat);
+  // Raised hull sides
+  addMapBox(m, -15.5, 1.6, 0, 1, 2.4, 80, hullMat);
+  addMapBox(m, 15.5, 1.6, 0, 1, 2.4, 80, hullMat);
+  // Deck railings (low cover) along the sides
+  for (let z = -36; z <= 36; z += 8) {
+    addMapBox(m, -14, 1.4, z, 0.4, 1.2, 0.4, railMat);
+    addMapBox(m, 14, 1.4, z, 0.4, 1.2, 0.4, railMat);
+  }
+  // Four iconic smokestacks (black w/ red band)
+  [-21, -7, 7, 21].forEach(zz => {
+    const stack = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.4, 10, 14), new THREE.MeshLambertMaterial({ color: 0x111111 }));
+    stack.position.set(0, 5.4, zz); MAP_GROUPS[m].add(stack);
+    stack.updateMatrixWorld(true); MAP_COLLIDERS[m].push(new THREE.Box3().setFromObject(stack));
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(2.45, 2.45, 1.6, 14), new THREE.MeshLambertMaterial({ color: 0xc8761d }));
+    band.position.set(0, 9.4, zz); MAP_GROUPS[m].add(band);
+  });
+  // Central superstructure / bridge cabins as cover
+  addMapBox(m, -6, 1.8, -10, 5, 2.8, 6, 0xeeeae0);
+  addMapBox(m, 6, 1.8, 10, 5, 2.8, 6, 0xeeeae0);
+  // Lifeboats
+  [[-12, -24], [12, -24], [-12, 24], [12, 24]].forEach(([x, z]) => addMapBox(m, x, 1.6, z, 1.6, 1, 5, 0xb8a070));
+  // Grand stair (stepped boxes) amidships
+  for (let i = 0; i < 4; i++) addMapBox(m, 0, 0.8 + i * 0.5, -2 + i * 1.2, 8 - i * 1.2, 0.5, 1.2, 0xa88040);
+  // Iceberg looming off the bow
+  const berg = new THREE.Mesh(new THREE.IcosahedronGeometry(8, 0), new THREE.MeshLambertMaterial({ color: 0xbfe0ee }));
+  berg.position.set(20, 4, -42); berg.scale.set(1, 1.4, 1); MAP_GROUPS[m].add(berg);
+  MAP_GROUPS[m]._skyColor = 0x0a1430;
+}
+buildTitanicMap();
+
+// ──────────────────────────────────────────────────────────────────────────
+// SUPERMARKET — indoor store: aisles, checkout, freezers, carts
+// ──────────────────────────────────────────────────────────────────────────
+registerMap('supermarket');
+function buildSupermarketMap() {
+  const m = 'supermarket';
+  addMapGround(m, 0xdddddd, 0xbfc7cf); // white tile floor
+  addOuterWalls(m, 0xc8ccd0);
+  const shelf = 0x8899aa, shelfTop = 0xb04a3a, freezer = 0x9fdcff;
+  // Parallel shelving aisles (rows of shelf units)
+  for (let row = -2; row <= 2; row++) {
+    const x = row * 12;
+    for (let z = -28; z <= 28; z += 8) {
+      addMapBox(m, x, 1.1, z, 3, 2.2, 6, shelf);
+      addMapBox(m, x, 2.35, z, 3.2, 0.3, 6.2, shelfTop); // colored top trim
+    }
+  }
+  // Checkout counters near the front
+  for (let i = -2; i <= 2; i++) addMapBox(m, i * 6, 0.6, 38, 4, 1.2, 2, 0x6a5a3a);
+  // Freezer section (translucent cyan) along the back
+  for (let i = -3; i <= 3; i++) addMapBox(m, i * 7, 1.2, -40, 5, 2.4, 2, freezer, 0, 0.55);
+  // Scattered shopping carts (small low cover)
+  [[-18, 10], [18, -10], [-6, -18], [6, 18], [0, 0], [-24, -24], [24, 24]].forEach(([x, z]) => addMapBox(m, x, 0.5, z, 1.4, 1, 2, 0xcccccc));
+  MAP_GROUPS[m]._skyColor = 0xeef2f6;
+}
+buildSupermarketMap();
+
+// ──────────────────────────────────────────────────────────────────────────
+// PYONGYANG — grand socialist plaza: monument tower, statues, arch, flags
+// ──────────────────────────────────────────────────────────────────────────
+registerMap('pyongyang');
+function buildPyongyangMap() {
+  const m = 'pyongyang';
+  addMapGround(m, 0x9a9a92, 0x7a7a72); // grey granite plaza
+  addOuterWalls(m, 0x6a6a62);
+  const stone = 0x8a8a82, stoneDark = 0x6a6a62, bronze = 0x7a6a3a, red = 0xb01a1a;
+  // Central Juche-style monument tower (tapered) with a red flame on top
+  const tower = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 3.0, 22, 6), new THREE.MeshLambertMaterial({ color: stone }));
+  tower.position.set(0, 11, 0); MAP_GROUPS[m].add(tower);
+  tower.updateMatrixWorld(true); MAP_COLLIDERS[m].push(new THREE.Box3().setFromObject(tower));
+  const flame = new THREE.Mesh(new THREE.ConeGeometry(1.6, 4, 8), new THREE.MeshBasicMaterial({ color: 0xff3322 }));
+  flame.position.set(0, 24, 0); MAP_GROUPS[m].add(flame);
+  // Two monument statues on pedestals
+  [[-26, 0], [26, 0]].forEach(([x, z]) => {
+    addMapBox(m, x, 1.0, z, 5, 2, 5, stoneDark);              // pedestal
+    addMapBox(m, x, 4.0, z, 2, 4, 1.4, bronze);               // figure
+  });
+  // Triumphal arch on the north edge (two pillars + lintel)
+  addMapBox(m, -5, 4, -34, 2.5, 8, 2.5, stone);
+  addMapBox(m, 5, 4, -34, 2.5, 8, 2.5, stone);
+  addMapBox(m, 0, 8.5, -34, 13, 2, 2.5, stone);
+  // Apartment-block facades around the edges (tall cover)
+  [[-38, -20], [-38, 20], [38, -20], [38, 20], [-20, 38], [20, 38]].forEach(([x, z]) => addMapBox(m, x, 6, z, 8, 12, 6, stoneDark));
+  // Red flag poles flanking the plaza
+  [[-12, -12], [12, -12], [-12, 12], [12, 12]].forEach(([x, z]) => {
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 9, 6), new THREE.MeshLambertMaterial({ color: 0xcccccc }));
+    pole.position.set(x, 4.5, z); MAP_GROUPS[m].add(pole);
+    addMapBox(m, x + 1.4, 8, z, 2.6, 1.6, 0.1, red);
+  });
+  // Low planter cover dotted around
+  [[-8, 24], [8, -24], [-24, 8], [24, -8]].forEach(([x, z]) => addMapBox(m, x, 0.6, z, 4, 1.2, 4, stoneDark));
+  MAP_GROUPS[m]._skyColor = 0x9fb6cc;
+}
+buildPyongyangMap();
+
+// ──────────────────────────────────────────────────────────────────────────
+// 🚧 TRAFFIC CONE REPUBLIC — King Chaos's roadwork-themed nation. Cones galore,
+// jersey barriers, a throne of cones in the middle. Long live the orange.
+// ──────────────────────────────────────────────────────────────────────────
+registerMap('traffic_cone_republic');
+function buildTrafficConeMap() {
+  const m = 'traffic_cone_republic';
+  addMapGround(m, 0x33373d, 0x55595f); // asphalt
+  addOuterWalls(m, 0x2a2d33);
+  const orange = 0xff6a00, white = 0xf0f0f0, barrier = 0xd8d4c8;
+  // Helper: a solid traffic cone (collidable) at x,z, scaled by s
+  function placeCone(x, z, s = 1, collide = true) {
+    const grp = new THREE.Group();
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(0.55 * s, 1.7 * s, 16),
+      new THREE.MeshLambertMaterial({ color: orange }));
+    cone.position.y = 0.85 * s; grp.add(cone);
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.42 * s, 0.5 * s, 0.28 * s, 16),
+      new THREE.MeshLambertMaterial({ color: white }));
+    band.position.y = 0.75 * s; grp.add(band);
+    const base = new THREE.Mesh(new THREE.BoxGeometry(1.3 * s, 0.16 * s, 1.3 * s),
+      new THREE.MeshLambertMaterial({ color: orange }));
+    base.position.y = 0.08 * s; grp.add(base);
+    grp.position.set(x, 0, z); MAP_GROUPS[m].add(grp);
+    if (collide) { grp.updateMatrixWorld(true); MAP_COLLIDERS[m].push(new THREE.Box3().setFromObject(grp)); }
+  }
+  // Lane stripes (dashed white painted boxes, no collision) running down the map
+  for (let z = -38; z <= 38; z += 6) addMapBox(m, 0, 0.03, z, 0.5, 0.02, 3, white, 0, 0.9);
+  // Jersey barriers forming staggered lanes of cover
+  const barrierRows = [[-20, -22], [20, -22], [-10, 0], [10, 0], [-20, 22], [20, 22], [0, -32], [0, 32]];
+  barrierRows.forEach(([x, z]) => addMapBox(m, x, 0.8, z, 6, 1.6, 1.2, barrier));
+  // A grid of giant traffic cones (cover + flavor)
+  const coneSpots = [[-30, -30], [-15, -34], [0, -20], [16, -32], [30, -28],
+                     [-34, -8], [-12, -10], [12, -8], [34, -10],
+                     [-28, 12], [-8, 16], [10, 14], [28, 12],
+                     [-30, 32], [-14, 34], [16, 30], [32, 34]];
+  coneSpots.forEach(([x, z]) => placeCone(x, z, 1 + Math.random() * 0.6));
+  // 👑 King Chaos's THRONE OF CONES at center: a stacked cone pyramid on a dais
+  addMapBox(m, 0, 0.5, 0, 8, 1, 8, 0x222222);            // black dais
+  placeCone(0, 0, 2.4);                                   // giant central cone
+  [[-2, -2], [2, -2], [-2, 2], [2, 2]].forEach(([x, z]) => placeCone(x, z, 1.2));
+  // A golden crown sign floating over the throne
+  const crown = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 2.0, 1.0, 8),
+    new THREE.MeshBasicMaterial({ color: 0xffcc22 }));
+  crown.position.set(0, 6.5, 0); MAP_GROUPS[m].add(crown);
+  // Construction "barrels" (reuse explosive barrels for chaos) in the corners
+  addExplosiveBarrel(m, -36, -36, 0xff6a00);
+  addExplosiveBarrel(m, 36, -36, 0xff6a00);
+  addExplosiveBarrel(m, -36, 36, 0xff6a00);
+  addExplosiveBarrel(m, 36, 36, 0xff6a00);
+  MAP_GROUPS[m]._skyColor = 0xffb066; // hazard-orange dusk
+}
+buildTrafficConeMap();
+
+// ──────────────────────────────────────────────────────────────────────────
+// 🗿 FLYING MOAI — a sky of floating Easter Island heads you fight on/around.
+// Big stone moai at varied heights act as platforms & cover.
+// ──────────────────────────────────────────────────────────────────────────
+registerMap('flying_moai');
+function buildFlyingMoaiMap() {
+  const m = 'flying_moai';
+  addMapGround(m, 0x2a3340, 0x3a4452); // moody twilight ground far below
+  addOuterWalls(m, 0x1f2730);
+  const stone = 0x8c8378, stoneDark = 0x6b6358;
+  // Build a single moai head (head box + brow + nose + ear slabs) as a group.
+  function placeMoai(x, y, z, s = 1, rotY = 0) {
+    const grp = new THREE.Group();
+    const head = new THREE.Mesh(new THREE.BoxGeometry(2.2 * s, 3.4 * s, 1.8 * s),
+      new THREE.MeshLambertMaterial({ color: stone }));
+    grp.add(head);
+    const brow = new THREE.Mesh(new THREE.BoxGeometry(2.4 * s, 0.5 * s, 0.4 * s),
+      new THREE.MeshLambertMaterial({ color: stoneDark }));
+    brow.position.set(0, 0.7 * s, 0.9 * s); grp.add(brow);
+    const nose = new THREE.Mesh(new THREE.BoxGeometry(0.5 * s, 1.4 * s, 0.6 * s),
+      new THREE.MeshLambertMaterial({ color: stoneDark }));
+    nose.position.set(0, -0.1 * s, 1.0 * s); grp.add(nose);
+    [-1.25, 1.25].forEach(ex => {
+      const ear = new THREE.Mesh(new THREE.BoxGeometry(0.35 * s, 1.6 * s, 0.5 * s),
+        new THREE.MeshLambertMaterial({ color: stoneDark }));
+      ear.position.set(ex * s, 0, 0); grp.add(ear);
+    });
+    // Flat hat platform on top you can stand on
+    const top = new THREE.Mesh(new THREE.BoxGeometry(2.6 * s, 0.6 * s, 2.2 * s),
+      new THREE.MeshLambertMaterial({ color: 0x9a4a2a }));
+    top.position.set(0, 2.0 * s, 0); grp.add(top);
+    grp.position.set(x, y, z); grp.rotation.y = rotY;
+    MAP_GROUPS[m].add(grp);
+    grp.updateMatrixWorld(true); MAP_COLLIDERS[m].push(new THREE.Box3().setFromObject(grp));
+  }
+  // A central ground-level cluster + a ring of floating moai at rising heights
+  placeMoai(0, 1.7, 0, 1.6, 0);
+  const ring = [[-26, 2, -10], [-14, 6, -24], [12, 8, -22], [26, 4, -8],
+                [30, 10, 12], [16, 14, 26], [-12, 12, 24], [-28, 7, 14],
+                [-6, 18, 2], [8, 16, -6]];
+  ring.forEach(([x, y, z], i) => placeMoai(x, y, z, 1 + (i % 3) * 0.25, (i * 0.7) % (Math.PI * 2)));
+  // A few thin sky bridges (stone slabs) connecting nearby heads
+  addMapBox(m, -20, 4, -17, 1.4, 0.4, 14, stoneDark);
+  addMapBox(m, 19, 6, -15, 14, 0.4, 1.4, stoneDark);
+  addMapBox(m, 22, 9, 2, 1.4, 0.4, 18, stoneDark);
+  addMapBox(m, 1, 15, -2, 12, 0.4, 1.4, stoneDark);
+  MAP_GROUPS[m]._skyColor = 0x4a5a78; // dusk sky
+}
+buildFlyingMoaiMap();
+
+// ──────────────────────────────────────────────────────────────────────────
 // 17. KING OF THE HILL / BR ARENA — massive map with vehicles + helicopters
 // ──────────────────────────────────────────────────────────────────────────
 registerMap('br_arena');
@@ -4249,6 +4757,7 @@ buildBrArenaMap();
 buildBlankMap();
 buildBattlefieldMap();
 buildRangeMap();
+buildLobby13Map();
 activateMap('blank');
 
 // ── Weapon view models ─────────────────────────────────────────────────────
@@ -5400,6 +5909,9 @@ function _genericGun(opts) {
   g.add(flash);
   g._flash = flash;
   g._kickZ = opts.kickZ ?? 0.014;
+  // 🎨 Weapon-skin hooks: the body + accent are per-gun materials we can recolor.
+  g._bodyMat = bodyMat; g._accentMat = accentMat;
+  g._origBody = bc; g._origAccent = ac;
   g.position.set(0.12, -0.1, -0.25);
   return g;
 }
@@ -5539,6 +6051,78 @@ function buildBlowgun() {
     mouth.rotation.x = Math.PI / 2; mouth.position.set(0, 0, 0.02); g.add(mouth);
   });
 }
+// 🚀 RPG-7 — fat tube with a pointed warhead poking out the front.
+function buildRPG() {
+  const g = new THREE.Group();
+  const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.46, 12), new THREE.MeshLambertMaterial({ color: 0x3a4a2a }));
+  tube.rotation.x = Math.PI / 2; tube.position.set(0, 0.01, -0.10); g.add(tube);
+  const flare = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.04, 0.07, 12), new THREE.MeshLambertMaterial({ color: 0x2a341f }));
+  flare.rotation.x = Math.PI / 2; flare.position.set(0, 0.01, 0.16); g.add(flare);
+  const warhead = new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.12, 10), new THREE.MeshLambertMaterial({ color: 0x8a3a1a }));
+  warhead.rotation.x = -Math.PI / 2; warhead.position.set(0, 0.01, -0.40); g.add(warhead);
+  const grip = new THREE.Mesh(new THREE.BoxGeometry(0.028, 0.07, 0.04), new THREE.MeshLambertMaterial({ color: 0x222222 }));
+  grip.rotation.x = 0.25; grip.position.set(0, -0.06, 0.04); g.add(grip);
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.01, -0.48); g.add(flash); g._flash = flash;
+  g._kickZ = 0.03; g.position.set(0.12, -0.1, -0.25);
+  return g;
+}
+// 🚀 Bazooka — long olive shoulder tube with twin grips.
+function buildBazooka() {
+  const g = new THREE.Group();
+  const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.56, 14), new THREE.MeshLambertMaterial({ color: 0x4b5320 }));
+  tube.rotation.x = Math.PI / 2; tube.position.set(0, 0.01, -0.10); g.add(tube);
+  const mouth = new THREE.Mesh(new THREE.CylinderGeometry(0.062, 0.05, 0.06, 14), new THREE.MeshLambertMaterial({ color: 0x2e3416 }));
+  mouth.rotation.x = Math.PI / 2; mouth.position.set(0, 0.01, 0.19); g.add(mouth);
+  const sight = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.05, 0.012), new THREE.MeshLambertMaterial({ color: 0x222222 }));
+  sight.position.set(0.045, 0.06, -0.06); g.add(sight);
+  [-0.02, 0.10].forEach(z => { const gr = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.07, 0.04), new THREE.MeshLambertMaterial({ color: 0x222222 })); gr.rotation.x = 0.22; gr.position.set(0, -0.065, z); g.add(gr); });
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.01, -0.40); g.add(flash); g._flash = flash;
+  g._kickZ = 0.034; g.position.set(0.12, -0.1, -0.25);
+  return g;
+}
+// ⚔️ Lancer — a long single-shot rifle with a fixed bayonet blade out front.
+function buildLancer() {
+  const g = _genericGun({ bodyShape: 'sniper', bodyColor: 0x33271a, accentColor: 0x8a6a3a, magType: 'hidden', stock: 'classic', scope: 'none', barrelLen: 0.30, barrelColor: 0x2a2a2a });
+  // Bayonet: a flat steel blade extending past the muzzle.
+  const steel = new THREE.MeshLambertMaterial({ color: 0xcfd6dd });
+  const blade = new THREE.Mesh(new THREE.ConeGeometry(0.018, 0.20, 4), steel);
+  blade.rotation.x = -Math.PI / 2;            // point forward (along -Z barrel)
+  blade.position.set(0, 0.018, -0.46);
+  blade.scale.set(1, 1, 0.5);                 // flatten into a blade
+  g.add(blade);
+  const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.03, 8), new THREE.MeshLambertMaterial({ color: 0x555555 }));
+  collar.rotation.x = Math.PI / 2; collar.position.set(0, 0.014, -0.34); g.add(collar);
+  g._blade = blade;
+  return g;
+}
+// 🚧 Traffic Cone — a chuckable cone (the official sidearm of Traffic Cone Republic)
+function buildTrafficCone() {
+  return _throwableHolder(g => {
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(0.072, 0.20, 14),
+      new THREE.MeshLambertMaterial({ color: 0xff6a00 }));
+    cone.position.set(0, 0.02, -0.10); g.add(cone);
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.058, 0.035, 14),
+      new THREE.MeshLambertMaterial({ color: 0xffffff }));
+    band.position.set(0, 0.0, -0.10); g.add(band);
+    const base = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.02, 0.16),
+      new THREE.MeshLambertMaterial({ color: 0xff6a00 }));
+    base.position.set(0, -0.085, -0.10); g.add(base);
+  });
+}
+// 🥧 Cream Pie — the weapon of the Pie Fight (splat on impact)
+function buildCreamPie() {
+  return _throwableHolder(g => {
+    const tin = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.075, 0.03, 16),
+      new THREE.MeshLambertMaterial({ color: 0xc0a060 }));
+    tin.position.set(0, 0, -0.10); g.add(tin);
+    const cream = new THREE.Mesh(new THREE.CylinderGeometry(0.095, 0.092, 0.045, 16),
+      new THREE.MeshLambertMaterial({ color: 0xfff4d8 }));
+    cream.position.set(0, 0.035, -0.10); g.add(cream);
+    const cherry = new THREE.Mesh(new THREE.SphereGeometry(0.02, 8, 8),
+      new THREE.MeshLambertMaterial({ color: 0xcc2222 }));
+    cherry.position.set(0, 0.066, -0.10); g.add(cherry);
+  });
+}
 // 🔬 Tech / Physics models
 function buildPrismLauncher()    { return _genericGun({ bodyShape:'futuristic', bodyColor:0x440044, accentColor:0xffaaff, magType:'pan', emissive:true, scope:'holo', flashColor:0xffaaff }); }
 function buildFoamCannon()       { return _genericGun({ bodyShape:'heavy', bodyColor:0x445566, accentColor:0xddddee, magType:'drum', barrelR:0.020, foregrip:true, flashColor:0xeeeeff }); }
@@ -5610,8 +6194,213 @@ const weaponModels = [
   // ── 🪖 ADMIN secondaries ─────────────────────────────────────────────────
   buildDesertEagle(), buildM1911(), buildPPK(), buildGlock18(), buildFiveSeven(),
   buildMG42(),
+  // 🚀 Rocket launchers (must align with the 'rpg'/'bazooka' WEAPONS slots)
+  buildRPG(), buildBazooka(),
+  // ⚔️ Lancer (must align with the 'lancer' WEAPONS slot — right before the cone/pie)
+  buildLancer(),
+  // ── 🚧 / 🥧 must mirror the two trailing WEAPONS entries ──
+  buildTrafficCone(), buildCreamPie(),
 ];
 weaponModels.forEach((m,i) => { m.visible = i === 0; camera.add(m); });
+
+// ════════════════════════════════════════════════════════════════════════════
+// 🎨 WEAPON SKINS — recolor your gun + an optional flag/emblem decal. One global
+//   pick applies to every gun. Country themes use real national flags; the
+//   German theme uses the Iron Cross (Balkenkreuz — a legitimate military mark,
+//   NOT a Nazi symbol) and deliberately includes no hate imagery.
+// ════════════════════════════════════════════════════════════════════════════
+function _flagCanvas(draw) {
+  const c = document.createElement('canvas'); c.width = 96; c.height = 64;
+  const ctx = c.getContext('2d');
+  draw(ctx, 96, 64);
+  const t = new THREE.CanvasTexture(c); t.needsUpdate = true; return t;
+}
+const _star = (ctx, cx, cy, r, color, rot = -Math.PI / 2) => {
+  ctx.fillStyle = color; ctx.beginPath();
+  for (let i = 0; i < 5; i++) {
+    const a = rot + i * 4 * Math.PI / 5;
+    ctx[i ? 'lineTo' : 'moveTo'](cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+  }
+  ctx.closePath(); ctx.fill();
+};
+const FLAG_DRAW = {
+  japan: (x, w, h) => { x.fillStyle = '#fff'; x.fillRect(0, 0, w, h); x.fillStyle = '#bc002d'; x.beginPath(); x.arc(w/2, h/2, h*0.28, 0, 7); x.fill(); },
+  rising_sun: (x, w, h) => { x.fillStyle = '#fff'; x.fillRect(0, 0, w, h); x.fillStyle = '#bc002d'; x.save(); x.translate(w/2, h/2); for (let i = 0; i < 16; i++) { x.rotate(Math.PI/8); x.beginPath(); x.moveTo(0,0); x.lineTo(w, -6); x.lineTo(w, 6); x.fill(); } x.restore(); x.beginPath(); x.arc(w/2, h/2, h*0.22, 0, 7); x.fill(); },
+  soviet: (x, w, h) => { x.fillStyle = '#c8102e'; x.fillRect(0, 0, w, h); x.fillStyle = '#ffd700'; x.font = 'bold 30px serif'; x.textAlign='center'; x.textBaseline='middle'; x.fillText('☭', w*0.28, h*0.42); _star(x, w*0.28, h*0.18, 7, '#ffd700'); },
+  china: (x, w, h) => { x.fillStyle = '#de2910'; x.fillRect(0, 0, w, h); _star(x, w*0.18, h*0.3, 11, '#ffde00'); [[0.34,0.12],[0.40,0.24],[0.40,0.40],[0.34,0.52]].forEach(([px,py]) => _star(x, w*px, h*py, 4, '#ffde00')); },
+  vietnam: (x, w, h) => { x.fillStyle = '#da251d'; x.fillRect(0, 0, w, h); _star(x, w/2, h/2, h*0.32, '#ffff00'); },
+  north_korea: (x, w, h) => { x.fillStyle = '#024fa2'; x.fillRect(0, 0, w, h); x.fillStyle = '#fff'; x.fillRect(0, h*0.17, w, h*0.66); x.fillStyle = '#ed1c27'; x.fillRect(0, h*0.20, w, h*0.60); x.fillStyle = '#fff'; x.beginPath(); x.arc(w*0.33, h/2, h*0.19, 0, 7); x.fill(); _star(x, w*0.33, h/2, h*0.13, '#ed1c27'); },
+  israel: (x, w, h) => { x.fillStyle = '#fff'; x.fillRect(0, 0, w, h); x.fillStyle = '#0038b8'; x.fillRect(0, h*0.12, w, h*0.12); x.fillRect(0, h*0.76, w, h*0.12); x.strokeStyle = '#0038b8'; x.lineWidth = 4; const r = h*0.22, cx = w/2, cy = h/2; for (let k = 0; k < 2; k++) { x.beginPath(); for (let i = 0; i < 3; i++) { const a = -Math.PI/2 + k*Math.PI + i*2*Math.PI/3; x[i?'lineTo':'moveTo'](cx+Math.cos(a)*r, cy+Math.sin(a)*r); } x.closePath(); x.stroke(); } },
+  usa: (x, w, h) => { for (let i = 0; i < 13; i++) { x.fillStyle = i%2 ? '#fff' : '#b22234'; x.fillRect(0, i*h/13, w, h/13); } x.fillStyle = '#3c3b6e'; x.fillRect(0, 0, w*0.42, h*7/13); x.fillStyle = '#fff'; for (let r = 0; r < 5; r++) for (let cc = 0; cc < 5; cc++) { const px = w*0.04 + cc*w*0.085 + (r%2)*w*0.042, py = h*0.05 + r*h*0.095; x.beginPath(); x.arc(px, py, 1.6, 0, 7); x.fill(); } },
+  // 🇩🇪 German military Iron Cross (Balkenkreuz) — field-grey panel, white-edged black cross. No Nazi imagery.
+  iron_cross: (x, w, h) => { x.fillStyle = '#5a5f54'; x.fillRect(0, 0, w, h); const cx=w/2, cy=h/2; x.fillStyle = '#f0f0f0'; x.fillRect(cx-22, cy-9, 44, 18); x.fillRect(cx-9, cy-22, 18, 44); x.fillStyle = '#111'; x.fillRect(cx-18, cy-6, 36, 12); x.fillRect(cx-6, cy-18, 12, 36); },
+};
+// id, name, body color, accent color, flag-draw key (or null), swatch colors
+const WEAPON_SKINS = [
+  { id: 'default',   name: 'Stock',        body: null,     accent: null,     flag: null,         sw: ['#2a2a2a', '#666'] },
+  { id: 'gold',      name: 'Midas Gold',   body: 0xc8a020, accent: 0xffe070, flag: null,         sw: ['#c8a020', '#ffe070'] },
+  { id: 'crimson',   name: 'Crimson',      body: 0x7a1010, accent: 0xe04444, flag: null,         sw: ['#7a1010', '#e04444'] },
+  { id: 'arctic',    name: 'Arctic',       body: 0xdfe6ee, accent: 0x9fb6c8, flag: null,         sw: ['#dfe6ee', '#9fb6c8'] },
+  { id: 'neon',      name: 'Neon',         body: 0x141425, accent: 0x33ffcc, flag: null,         sw: ['#141425', '#33ffcc'] },
+  { id: 'woodland',  name: 'Woodland',     body: 0x4a5320, accent: 0x2e3618, flag: null,         sw: ['#4a5320', '#2e3618'] },
+  { id: 'urban',     name: 'Urban Camo',   body: 0x6a6f76, accent: 0x3a3d42, flag: null,         sw: ['#6a6f76', '#3a3d42'] },
+  { id: 'outlaw',    name: 'Outlaw Tan',   body: 0x8a7038, accent: 0x4a3a1c, flag: null,         sw: ['#8a7038', '#4a3a1c'] },
+  // ── Country themes ──
+  { id: 'japan',      name: 'Japan',        body: 0xe8e8e8, accent: 0xbc002d, flag: 'japan',      sw: ['#fff', '#bc002d'] },
+  { id: 'rising_sun', name: 'Rising Sun',   body: 0xdedede, accent: 0xcc2222, flag: 'rising_sun', sw: ['#fff', '#cc2222'] },
+  { id: 'soviet',     name: 'Soviet · CCCP',body: 0x7a1414, accent: 0xd4af37, flag: 'soviet',     sw: ['#c8102e', '#ffd700'] },
+  { id: 'china',      name: 'China',        body: 0x8a1414, accent: 0xffd700, flag: 'china',      sw: ['#de2910', '#ffde00'] },
+  { id: 'vietnam',    name: 'Vietnam',      body: 0x8a1414, accent: 0xffd700, flag: 'vietnam',    sw: ['#da251d', '#ffff00'] },
+  { id: 'north_korea',name: 'North Korea',  body: 0x024fa2, accent: 0xed1c27, flag: 'north_korea',sw: ['#ed1c27', '#024fa2'] },
+  { id: 'israel',     name: 'Israel',       body: 0xe8eef5, accent: 0x0038b8, flag: 'israel',     sw: ['#fff', '#0038b8'] },
+  { id: 'usa',        name: 'USA',          body: 0x20305f, accent: 0xb22234, flag: 'usa',        sw: ['#3c3b6e', '#b22234'] },
+  { id: 'iron_cross', name: 'Iron Cross',   body: 0x5a5f54, accent: 0x222222, flag: 'iron_cross', sw: ['#5a5f54', '#111'] },
+  // ── ✨ FX skins (animated / structural) ──
+  { id: 'p2w_gold', name: '💰 P2W Gold',   body: 0xffcc00, accent: 0xfff0a0, flag: null, fx: 'gold_money', sw: ['#ffcc00', '#fff0a0'] },
+  { id: 'broke',    name: 'Broke',          body: 0x6b6256, accent: 0x3a342c, flag: null, fx: 'smoke',      sw: ['#6b6256', '#3a342c'] },
+  { id: 'crystal',  name: 'Crystal',        body: 0x55cfe6, accent: 0xbff6ff, flag: null, fx: 'crystal',    sw: ['#55cfe6', '#bff6ff'] },
+  { id: 'rock',     name: 'Rock',           body: 0x6a6258, accent: 0x4a443c, flag: null, fx: 'rock',       sw: ['#6a6258', '#4a443c'] },
+  { id: 'data',     name: 'Data',           body: 0x0a0a12, accent: 0x2266ff, flag: null, fx: 'data',       sw: ['#0a0a12', '#2266ff'] },
+];
+const WEAPON_SKINS_BY_ID = Object.fromEntries(WEAPON_SKINS.map(s => [s.id, s]));
+let selectedWeaponSkin = 'default';
+try { selectedWeaponSkin = localStorage.getItem('pvp_weapon_skin') || 'default'; } catch (e) {}
+
+// ── ✨ Weapon-skin FX: particles ($ money, smoke) + structural extras
+//    (crystal shards, rock chunks, flickering data streaks). ──
+let _moneyTex = null, _smokeTex = null;
+function _getMoneyTex() {
+  if (_moneyTex) return _moneyTex;
+  const c = document.createElement('canvas'); c.width = c.height = 32; const x = c.getContext('2d');
+  x.font = 'bold 26px Arial'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.fillStyle = '#1faa3a'; x.fillText('$', 16, 17); x.lineWidth = 1.5; x.strokeStyle = '#0a5a1a'; x.strokeText('$', 16, 17);
+  _moneyTex = new THREE.CanvasTexture(c); return _moneyTex;
+}
+function _getSmokeTex() {
+  if (_smokeTex) return _smokeTex;
+  const c = document.createElement('canvas'); c.width = c.height = 32; const x = c.getContext('2d');
+  const g = x.createRadialGradient(16, 16, 1, 16, 16, 15);
+  g.addColorStop(0, 'rgba(190,190,190,0.9)'); g.addColorStop(1, 'rgba(120,120,120,0)');
+  x.fillStyle = g; x.fillRect(0, 0, 32, 32);
+  _smokeTex = new THREE.CanvasTexture(c); return _smokeTex;
+}
+const _skinParticles = [];
+let _skinFXTimer = 0;
+function _spawnSkinParticle(model, kind) {
+  const mat = new THREE.SpriteMaterial({ map: kind === 'money' ? _getMoneyTex() : _getSmokeTex(), transparent: true, depthTest: false });
+  const spr = new THREE.Sprite(mat);
+  spr.scale.setScalar(kind === 'money' ? 0.05 : 0.06);
+  spr.position.set((Math.random() - 0.5) * 0.05, 0.02 + Math.random() * 0.02, -0.05 - Math.random() * 0.1);
+  spr.renderOrder = 998; model.add(spr);
+  _skinParticles.push({ spr, model, kind, life: 0, max: kind === 'money' ? 0.9 : 0.7,
+    vx: (Math.random() - 0.5) * 0.06, vy: 0.12 + Math.random() * 0.08, vz: (Math.random() - 0.5) * 0.04,
+    rot: (Math.random() - 0.5) * 4 });
+}
+function _updateSkinParticles(dt) {
+  for (let i = _skinParticles.length - 1; i >= 0; i--) {
+    const p = _skinParticles[i]; p.life += dt; const t = p.life / p.max;
+    if (t >= 1) { try { p.model.remove(p.spr); } catch (e) {} p.spr.material.dispose(); _skinParticles.splice(i, 1); continue; }
+    p.spr.position.x += p.vx * dt; p.spr.position.y += p.vy * dt; p.spr.position.z += p.vz * dt;
+    if (p.kind === 'smoke') { const s = 0.06 + t * 0.12; p.spr.scale.setScalar(s); p.spr.material.opacity = 0.8 * (1 - t); }
+    else { p.spr.material.opacity = 1 - t * t; p.spr.material.rotation += p.rot * dt; }
+  }
+}
+function _clearModelParticles(model) {
+  for (let i = _skinParticles.length - 1; i >= 0; i--) if (_skinParticles[i].model === model) { try { model.remove(_skinParticles[i].spr); } catch (e) {} _skinParticles.splice(i, 1); }
+}
+function _buildSkinExtra(model, fx) {
+  const grp = new THREE.Group();
+  if (fx === 'crystal') {
+    const mat = new THREE.MeshBasicMaterial({ color: 0xbff6ff, transparent: true, opacity: 0.6 });
+    [[0.02,0.03,-0.05],[-0.02,0.022,0],[0.012,0.035,0.06],[-0.016,0.026,-0.1]].forEach(p => {
+      const sh = new THREE.Mesh(new THREE.ConeGeometry(0.013, 0.045, 5), mat.clone());
+      sh.position.set(p[0], p[1], p[2]); sh.rotation.set(Math.random(), Math.random(), Math.random()); grp.add(sh);
+    });
+  } else if (fx === 'rock') {
+    const mat = new THREE.MeshLambertMaterial({ color: 0x57514a });
+    [[0.022,0.022,-0.04],[-0.02,0.026,0.02],[0,0.03,0.08],[0.016,0.016,-0.1]].forEach(p => {
+      const r = new THREE.Mesh(new THREE.DodecahedronGeometry(0.018), mat);
+      r.position.set(p[0], p[1], p[2]); r.rotation.set(Math.random(), Math.random(), Math.random()); grp.add(r);
+    });
+  } else if (fx === 'data') {
+    for (let i = 0; i < 6; i++) {
+      const strip = new THREE.Mesh(new THREE.BoxGeometry(0.0022, 0.0022, 0.10 + Math.random() * 0.08),
+        new THREE.MeshBasicMaterial({ color: 0x3399ff, transparent: true, opacity: 0.8 }));
+      strip.position.set((Math.random() - 0.5) * 0.055, 0.005 + (Math.random() - 0.5) * 0.05, (Math.random() - 0.5) * 0.2);
+      grp.add(strip);
+    }
+  }
+  model.add(grp); model._skinExtra = grp;
+}
+function updateWeaponSkinFX(dt) {
+  _updateSkinParticles(dt);
+  const gunSlot = (activeSlot === 'primary' || activeSlot === 'secondary');
+  const model = gunSlot ? weaponModels[currentWeaponIdx] : null;
+  if (!model || !model.visible || !model._fx) return;
+  const fx = model._fx;
+  if (fx === 'gold_money' || fx === 'smoke') {
+    _skinFXTimer += dt;
+    const gap = fx === 'gold_money' ? 0.11 : 0.18;
+    if (_skinFXTimer >= gap) { _skinFXTimer = 0; _spawnSkinParticle(model, fx === 'gold_money' ? 'money' : 'smoke'); }
+  } else if (fx === 'data' && model._skinExtra) {
+    const flash = Math.random() < 0.12;
+    for (const s of model._skinExtra.children) s.material.opacity = flash ? 1 : 0.2 + Math.random() * 0.6;
+  } else if (fx === 'crystal' && model._skinExtra) {
+    const o = 0.45 + 0.25 * Math.sin(performance.now() * 0.005);
+    for (const s of model._skinExtra.children) s.material.opacity = o;
+  }
+}
+
+function applyWeaponSkin(model, skin) {
+  if (!model) return;
+  if (model._bodyMat) {
+    // Generic gun: precise two-tone via the tagged per-gun materials.
+    model._bodyMat.color.setHex(skin && skin.body   != null ? skin.body   : (model._origBody   ?? 0x222222));
+    model._accentMat.color.setHex(skin && skin.accent != null ? skin.accent : (model._origAccent ?? 0x666666));
+  } else {
+    // Custom-built gun (no tags): tint all solid parts. Clone each material ONCE
+    // so we never recolor a module-shared material and bleed onto other guns.
+    if (!model._skinMats) {
+      model._skinMats = [];
+      model.traverse(o => {
+        if (o.isMesh && o.material && o.material.color && !o.material.map) {
+          const basic = !!o.material.isMeshBasicMaterial; // glow/lens/reticle — leave colored
+          const clone = o.material.clone(); o.material = clone;
+          model._skinMats.push({ mat: clone, orig: clone.color.getHex(), basic });
+        }
+      });
+    }
+    for (const e of model._skinMats) {
+      if (e.basic) continue;                 // keep emissive accents (scope lenses, glow strips)
+      e.mat.color.setHex(skin && skin.body != null ? skin.body : e.orig);
+    }
+  }
+  // ── ✨ FX cleanup + setup ──
+  _clearModelParticles(model);
+  if (model._skinExtra) { model.remove(model._skinExtra); model._skinExtra.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); }); model._skinExtra = null; }
+  const bodyMats = model._bodyMat ? [model._bodyMat, model._accentMat]
+    : (model._skinMats ? model._skinMats.filter(e => !e.basic).map(e => e.mat) : []);
+  bodyMats.forEach(m => { m.transparent = false; m.opacity = 1; });
+  model._fx = (skin && skin.fx) || null;
+  if (model._fx === 'crystal') { bodyMats.forEach(m => { m.transparent = true; m.opacity = 0.72; }); _buildSkinExtra(model, 'crystal'); }
+  else if (model._fx === 'rock') { _buildSkinExtra(model, 'rock'); }
+  else if (model._fx === 'data') { _buildSkinExtra(model, 'data'); }
+
+  if (model._skinDecal) { model.remove(model._skinDecal); if (model._skinDecal.material.map) model._skinDecal.material.map.dispose(); model._skinDecal.geometry.dispose(); model._skinDecal = null; }
+  if (skin && skin.flag && FLAG_DRAW[skin.flag]) {
+    const tex = _flagCanvas((ctx, w, h) => FLAG_DRAW[skin.flag](ctx, w, h));
+    const decal = new THREE.Mesh(new THREE.PlaneGeometry(0.05, 0.033),
+      new THREE.MeshBasicMaterial({ map: tex, transparent: true }));
+    decal.rotation.x = -Math.PI / 2;        // lie flat on top of the receiver, readable when looking down
+    decal.position.set(0, 0.036, 0.03);
+    model.add(decal); model._skinDecal = decal;
+  }
+}
+function applySelectedWeaponSkinToAll() {
+  const skin = WEAPON_SKINS_BY_ID[selectedWeaponSkin] || WEAPON_SKINS_BY_ID.default;
+  for (const m of weaponModels) applyWeaponSkin(m, skin);
+}
+applySelectedWeaponSkinToAll();
 scene.add(camera);
 
 // ── Melee item model builders ─────────────────────────────────────────────
@@ -6109,6 +6898,59 @@ function buildMedkit() {
   g.position.set(0.10, -0.12, -0.20); return g;
 }
 
+// 🍔 Stacked cheeseburger — bun, patty, cheese, lettuce, sesame seeds.
+function buildHamburger() {
+  const g = new THREE.Group();
+  const bunMat     = new THREE.MeshLambertMaterial({ color: 0xd9a35b }); // toasted bun
+  const pattyMat   = new THREE.MeshLambertMaterial({ color: 0x5a3220 }); // beef
+  const cheeseMat  = new THREE.MeshBasicMaterial({ color: 0xffc02e });   // cheese
+  const lettuceMat = new THREE.MeshLambertMaterial({ color: 0x4caf50 }); // lettuce
+  const R = 0.075;
+  // Bottom bun
+  const bot = new THREE.Mesh(new THREE.CylinderGeometry(R, R * 0.9, 0.030, 16), bunMat);
+  bot.position.y = -0.045; g.add(bot);
+  // Patty
+  const patty = new THREE.Mesh(new THREE.CylinderGeometry(R * 1.02, R * 1.02, 0.026, 16), pattyMat);
+  patty.position.y = -0.018; g.add(patty);
+  // Cheese — thin wider square so the corners droop past the patty
+  const cheese = new THREE.Mesh(new THREE.BoxGeometry(R * 2.0, 0.008, R * 2.0), cheeseMat);
+  cheese.position.y = -0.002; cheese.rotation.y = Math.PI / 4; g.add(cheese);
+  // Lettuce — wider green disc
+  const lettuce = new THREE.Mesh(new THREE.CylinderGeometry(R * 1.12, R * 1.12, 0.012, 16), lettuceMat);
+  lettuce.position.y = 0.008; g.add(lettuce);
+  // Top bun (dome)
+  const top = new THREE.Mesh(new THREE.SphereGeometry(R, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2), bunMat);
+  top.position.y = 0.016; top.scale.y = 0.85; g.add(top);
+  // Sesame seeds
+  const seedMat = new THREE.MeshBasicMaterial({ color: 0xfff2cc });
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2;
+    const seed = new THREE.Mesh(new THREE.SphereGeometry(0.006, 6, 6), seedMat);
+    seed.position.set(Math.cos(a) * R * 0.45, 0.045, Math.sin(a) * R * 0.45);
+    seed.scale.set(1, 0.5, 1.6); g.add(seed);
+  }
+  g.scale.set(0.85, 0.85, 0.85);
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+
+// 🔥 Molotov — green glass bottle, orange fuel, rag wick with a lit flame.
+function buildMolotov() {
+  const g = new THREE.Group();
+  const glass = new THREE.MeshLambertMaterial({ color: 0x3a6a3a, transparent: true, opacity: 0.7 });
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.11, 12), glass);
+  g.add(body);
+  const fuel = new THREE.Mesh(new THREE.CylinderGeometry(0.031, 0.031, 0.07, 12), new THREE.MeshBasicMaterial({ color: 0xff8822 }));
+  fuel.position.y = -0.015; g.add(fuel);
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.024, 0.04, 10), glass);
+  neck.position.y = 0.075; g.add(neck);
+  const rag = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.04, 0.02), new THREE.MeshLambertMaterial({ color: 0xd8c79a }));
+  rag.position.y = 0.105; g.add(rag);
+  const flame = new THREE.Mesh(new THREE.ConeGeometry(0.018, 0.045, 6), new THREE.MeshBasicMaterial({ color: 0xff7722 }));
+  flame.position.y = 0.14; g.add(flame);
+  g.position.set(0.10, -0.12, -0.18);
+  return g;
+}
+
 function buildStimShot() {
   const g = new THREE.Group();
   const clearMat = new THREE.MeshLambertMaterial({ color: 0xaaddff, transparent: true, opacity: 0.8 });
@@ -6484,6 +7326,10 @@ const supportModels = [buildFragGrenade(), buildMedkit(), buildStimShot(), build
   buildSimpleSupport(0x66ccff, 'disc'),     // stasis_mine
   buildSimpleSupport(0x444466, 'cube'),     // specter_drone
   buildSimpleSupport(0xaaccff, 'sphere'),   // quantum_barrier
+  // 🍔 Tasty heal
+  buildHamburger(),                          // hamburger
+  // 🔥 Molotov (must align with the SUPPORT_ITEMS 'molotov' slot)
+  buildMolotov(),                            // molotov
   // 🪖 ADMIN supports
   buildC4(), buildClaymore(), buildStunGrenade(), buildThermite(),
   buildPredatorUAV(), buildCarePackage(), buildTacNuke()];
@@ -6524,6 +7370,93 @@ const SKINS = [
   { id: 'shadow',      name: 'Shadow',        desc: 'All black, pale face. The strongest wear crowns.' },
 ];
 const SKIN_IDS = SKINS.map(s => s.id);
+
+// 🎭 Per-character face: configurable eyes + mouth (+blush/brows) drawn on the
+// 64×64 head-front texture, so each cast member has their own expression.
+//   eyes:  normal | angry | happy | sleepy | wide | dead | sad | none
+//   mouth: smile | grin | frown | flat | open | smug | cry | none
+function makeCharFace(o = {}) {
+  const c = document.createElement('canvas'); c.width = 64; c.height = 64;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = o.skin || '#ffcc99'; ctx.fillRect(0, 0, 64, 64);
+  const eyeColor = o.eyeColor || '#1a1a1a';
+  const ex1 = 19, ex2 = 45, ey = 27;            // eye centers (match default face)
+  const eyes = o.eyes || 'normal';
+  if (o.glow) { ctx.shadowColor = eyeColor; ctx.shadowBlur = 9; }
+  const drawEye = (cx, mir) => {
+    ctx.fillStyle = eyeColor; ctx.strokeStyle = eyeColor; ctx.lineWidth = 3;
+    const d = mir ? -1 : 1;
+    if (eyes === 'none') return;
+    if (eyes === 'angry') {
+      ctx.fillRect(cx - 6, ey, 12, 4);
+      ctx.beginPath();                            // slanted brow
+      ctx.moveTo(cx - 7 * d, ey - 8); ctx.lineTo(cx + 7 * d, ey - 3);
+      ctx.lineTo(cx + 7 * d, ey - 1); ctx.lineTo(cx - 7 * d, ey - 6); ctx.closePath(); ctx.fill();
+    } else if (eyes === 'happy') {
+      ctx.beginPath(); ctx.arc(cx, ey + 3, 6, Math.PI + 0.3, -0.3); ctx.stroke();
+    } else if (eyes === 'sleepy') {
+      ctx.fillRect(cx - 6, ey + 1, 12, 3);
+    } else if (eyes === 'wide') {
+      ctx.fillRect(cx - 5, ey - 6, 10, 12);
+      ctx.fillStyle = '#fff'; ctx.fillRect(cx - 3, ey - 4, 4, 4);
+    } else if (eyes === 'dead') {
+      ctx.beginPath(); ctx.moveTo(cx - 5, ey - 5); ctx.lineTo(cx + 5, ey + 5);
+      ctx.moveTo(cx + 5, ey - 5); ctx.lineTo(cx - 5, ey + 5); ctx.stroke();
+    } else if (eyes === 'sad') {
+      ctx.fillRect(cx - 5, ey - 1, 10, 9);
+      ctx.fillStyle = '#fff'; ctx.fillRect(cx - 3, ey + 3, 3, 3);
+    } else { // normal
+      ctx.fillRect(cx - 5, ey - 5, 10, 10);
+      ctx.fillStyle = '#fff'; ctx.fillRect(cx - 3, ey - 3, 4, 4);
+    }
+  };
+  drawEye(ex1, false); drawEye(ex2, true);
+  ctx.shadowBlur = 0;
+  // ── Mouth ──
+  const mc = o.mouthColor || '#7a3b2e';
+  ctx.strokeStyle = mc; ctx.fillStyle = mc; ctx.lineWidth = 3;
+  const my = 45, m = o.mouth || 'smile';
+  if (m === 'smile') { ctx.beginPath(); ctx.arc(32, my - 2, 9, 0.15, Math.PI - 0.15); ctx.stroke(); }
+  else if (m === 'grin') { ctx.fillRect(22, my - 2, 20, 6); ctx.fillStyle = '#fff'; for (let i = 0; i < 4; i++) ctx.fillRect(24 + i * 5, my - 2, 2, 6); }
+  else if (m === 'frown') { ctx.beginPath(); ctx.arc(32, my + 7, 9, Math.PI + 0.15, -0.15); ctx.stroke(); }
+  else if (m === 'flat') { ctx.fillRect(26, my, 12, 3); }
+  else if (m === 'open') { ctx.fillStyle = '#5a1a1a'; ctx.beginPath(); ctx.ellipse(32, my + 1, 6, 7, 0, 0, Math.PI * 2); ctx.fill(); }
+  else if (m === 'smug') { ctx.beginPath(); ctx.moveTo(25, my); ctx.quadraticCurveTo(34, my + 5, 43, my - 3); ctx.stroke(); }
+  else if (m === 'cry') { ctx.beginPath(); ctx.arc(32, my + 7, 8, Math.PI + 0.2, -0.2); ctx.stroke(); }
+  // none → no mouth
+  if (o.blush) { ctx.fillStyle = o.blush; ctx.globalAlpha = 0.5; ctx.beginPath(); ctx.arc(13, 39, 5, 0, 7); ctx.arc(51, 39, 5, 0, 7); ctx.fill(); ctx.globalAlpha = 1; }
+  if (o.mustache) { ctx.fillStyle = o.mustache; ctx.fillRect(20, my - 5, 24, 4); }
+  const tex = new THREE.CanvasTexture(c); tex.needsUpdate = true; return tex;
+}
+// 🎭 Each comic-cast skin's facial expression (eyes/mouth/extras). Skins that hide
+// the face behind a visor/mask/bill are intentionally absent here.
+const CHAR_FACES = {
+  cc_rager:        { eyes:'angry', mouth:'open',  skin:'#ffb3a0', browColor:'#6b0f0f', mouthColor:'#5a1010' },
+  cc_grandmaster:  { eyes:'normal', mouth:'smug' },
+  cc_lucky:        { eyes:'happy', mouth:'grin',  blush:'#ff7777' },
+  cc_medic:        { eyes:'happy', mouth:'smile' },
+  cc_mirage:       { eyes:'none',  mouth:'smug' },     // shades cover the eyes
+  cc_goat:         { eyes:'none',  mouth:'smug' },     // shades
+  cc_duck:         { eyes:'wide',  mouth:'none', skin:'#f2c014' }, // bill is the mouth
+  cc_panic:        { eyes:'wide',  mouth:'open', skin:'#f5f5f5', eyeColor:'#000', mouthColor:'#222' },
+  cc_sharpshooter: { eyes:'angry', mouth:'flat' },
+  cc_ladymayhem:   { eyes:'happy', mouth:'grin',  blush:'#ff66bb' },
+  cc_jinx:         { eyes:'happy', mouth:'grin',  blush:'#33cccc' },
+  cc_pandora:      { eyes:'normal', mouth:'smug' },
+  cc_wildfire:     { eyes:'wide',  mouth:'open',  blush:'#ff8855' },
+  cc_anarchy:      { eyes:'angry', mouth:'smug' },
+  cc_professional: { eyes:'none',  mouth:'flat' },    // shades
+  cc_afk:          { eyes:'sleepy', mouth:'flat' },
+  cc_noskill:      { eyes:'normal', mouth:'grin' },
+  cc_juicebox:     { eyes:'happy', mouth:'smile', skin:'#ffffff', eyeColor:'#1a3a6a', mouthColor:'#1a3a6a' },
+  cc_turtle:       { eyes:'happy', mouth:'smile', skin:'#88bb55' },
+  cc_casual:       { eyes:'normal', mouth:'flat' },
+  cc_suspicious:   { eyes:'none',  mouth:'smug' },    // shades
+  cc_janitor:      { eyes:'sleepy', mouth:'flat', mustache:'#cccccc' },
+  cc_timekeeper:   { eyes:'normal', mouth:'flat' },
+  cc_wildcard:     { eyes:'wide',  mouth:'grin' },
+  cc_drama:        { eyes:'sad',   mouth:'cry' },
+};
 
 // Build a white "shadow" face (the comic protagonist's blank/angry look)
 function makeShadowFaceTexture() {
@@ -6598,8 +7531,274 @@ function applyCharacterSkin(skinId, parts) {
       _addHelmet(group, 0x0c0c0c);
       break;
     }
+    // ── 🎭 Signature skins for drafted comic-cast AIs (bot-only) ──────────────
+    case 'cc_kingchaos': {                       // dark sorcerer-king + crown + red eyes
+      setBody(0x2a0d3a); setLegs(0x140520); setHeadAll(0x1a0a26);
+      faceMat.map = null; faceMat.color.setHex(0x0a0410); faceMat.needsUpdate = true;
+      _addVisor(group, 0xff2233, 1.5);
+      _addCape(group, 0x4a1060);
+      setMeshCrown(group, true);
+      break;
+    }
+    case 'cc_bot': {                             // metallic robot + cyan optic + antenna
+      setBody(0x4a5560); setLegs(0x2e353c); setHeadAll(0x6a7480);
+      faceMat.map = null; faceMat.color.setHex(0x12161c); faceMat.needsUpdate = true;
+      _addVisor(group, 0x33e0ff, 1.4);
+      _addHelmet(group, 0x3a444c);
+      _addAntenna(group, 0x33e0ff);
+      break;
+    }
+    case 'cc_rager': {                           // all-red fury + spiky red hair
+      setBody(0x9b1b1b); setLegs(0x3a1010); setHeadAll(0xffb3a0);
+      _addSpikyHair(group, 0x6b0f0f);
+      break;
+    }
+    case 'cc_mirage': {                          // sleek purple ninja + shades + ears
+      setBody(0x5a2a8a); setLegs(0x2a123f); setHeadAll(0xffcc99);
+      _addShades(group);
+      _addSpikyHair(group, 0xcfc4e0);            // silver-lilac hair (poster look)
+      _addEars(group, 0xcfc4e0);
+      break;
+    }
+    case 'cc_grandmaster': {                     // ♀ navy strategist + long ponytail + glasses
+      setBody(0x1b2a4a); setLegs(0x10182c); setHeadAll(0xffcc99);
+      _addPonytail(group, 0x2a1840);             // long dark-purple hair
+      const g = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.08, 0.03),
+        new THREE.MeshLambertMaterial({ color: 0x222222 }));
+      g.position.set(0, 1.90, 0.255); group.add(g);
+      break;
+    }
+    case 'cc_lucky': {                           // green leprechaun + green hat
+      setBody(0x1f7a1f); setLegs(0x144a14); setHeadAll(0xffcc99);
+      _addCap(group, 0x0f5a0f);
+      break;
+    }
+    case 'cc_medic': {                           // white medic + helmet + red cross
+      setBody(0xf2f2f2); setLegs(0xcfcfcf); setHeadAll(0xffcc99);
+      _addHelmet(group, 0xffffff);
+      const crossMat = new THREE.MeshLambertMaterial({ color: 0xcc1111 });
+      const c1 = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.22, 0.02), crossMat);
+      c1.position.set(0, 1.25, 0.16); group.add(c1);
+      const c2 = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.07, 0.02), crossMat);
+      c2.position.set(0, 1.25, 0.16); group.add(c2);
+      break;
+    }
+    case 'cc_goat': {                            // white tee + black shades GOAT
+      setBody(0xf0f0f0); setLegs(0x222831); setHeadAll(0xffcc99);
+      _addShades(group);
+      break;
+    }
+    case 'cc_pyro': {                            // orange/black pyro + fiery optic
+      setBody(0xd4540a); setLegs(0x221a14); setHeadAll(0x2a1a10);
+      faceMat.map = null; faceMat.color.setHex(0x140a06); faceMat.needsUpdate = true;
+      _addVisor(group, 0xffaa22, 1.3);
+      _addHelmet(group, 0x3a2a18);
+      break;
+    }
+    case 'cc_ghost': {                           // pale translucent specter
+      setBody(0xeaeaff); setLegs(0xcfcfe6); setHeadAll(0xf0f0ff);
+      [torsoMat, ...armLimbs.map(m => m.material), ...legLimbs.map(m => m.material), ...headMats]
+        .forEach(m => { m.transparent = true; m.opacity = 0.5; });
+      if (typeof makeShadowFaceTexture === 'function') { faceMat.map = makeShadowFaceTexture(); faceMat.color.setHex(0xffffff); faceMat.needsUpdate = true; }
+      break;
+    }
+    case 'cc_duck': {                            // yellow duck + orange bill
+      setBody(0xf2c014); setLegs(0xd99a00); setHeadAll(0xf2c014);
+      const bill = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.08, 0.16),
+        new THREE.MeshLambertMaterial({ color: 0xff8c1a }));
+      bill.position.set(0, 1.80, 0.26); group.add(bill);
+      break;
+    }
+    case 'cc_panic': {                           // panda — black body, white head + ears
+      setBody(0xf0f0f0); setLegs(0x1a1a1a); setHeadAll(0xf5f5f5);
+      [-0.18, 0.18].forEach(x => {
+        const ear = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8),
+          new THREE.MeshLambertMaterial({ color: 0x111111 }));
+        ear.position.set(x, 2.12, 0); group.add(ear);
+      });
+      break;
+    }
+    // ── 🎭 Girls Squad ──────────────────────────────────────────────────────
+    case 'cc_sharpshooter': {                    // military cap, dark ponytail, scope glint
+      setBody(0x2e3a2a); setLegs(0x1c241a); setHeadAll(0xffcc99);
+      _addCap(group, 0x202820);
+      const pt = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.30, 0.14),
+        new THREE.MeshLambertMaterial({ color: 0x140f0a }));
+      pt.position.set(0, 1.80, -0.28); group.add(pt);
+      const eye = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.06, 0.03),
+        new THREE.MeshLambertMaterial({ color: 0x0a0d12, emissive: 0xff3344, emissiveIntensity: 1.4 }));
+      eye.position.set(0.1, 1.92, 0.255); group.add(eye);
+      break;
+    }
+    case 'cc_ladymayhem': {                      // pink/purple jester
+      setBody(0xc81e8c); setLegs(0x5a1240); setHeadAll(0xffcc99);
+      _addJesterHat(group, 0xc81e8c, 0x6a1ea0);
+      break;
+    }
+    case 'cc_jinx': {                            // teal mischief + cyan pigtails
+      setBody(0x14808a); setLegs(0x0c4a50); setHeadAll(0xffcc99);
+      _addPigtails(group, 0x1ad6e0);
+      break;
+    }
+    case 'cc_pandora': {                         // lavender witch + light hair
+      setBody(0x6a3aa5); setLegs(0x2a1240); setHeadAll(0xffcc99);
+      _addPonytail(group, 0xe0d0ff);
+      _addWitchHat(group, 0x3a1255);
+      break;
+    }
+    case 'cc_wildfire': {                        // red body + literal flame hair
+      setBody(0xb01818); setLegs(0x401010); setHeadAll(0xffcc99);
+      _addFlameHair(group);
+      break;
+    }
+    case 'cc_anarchy': {                         // purple punk mohawk + red bandana
+      setBody(0x4a2a6a); setLegs(0x201233); setHeadAll(0xffcc99);
+      _addMohawk(group, 0x9a2ad0);
+      const band = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.12, 0.34),
+        new THREE.MeshLambertMaterial({ color: 0xc0142a }));
+      band.position.set(0, 1.66, 0); group.add(band);
+      break;
+    }
+    // ── 🕶️ Specialists ──────────────────────────────────────────────────────
+    case 'cc_professional': {                    // grey suit, silver hair, shades
+      setBody(0x3a3f47); setLegs(0x232830); setHeadAll(0xffcc99);
+      const hair = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.14, 0.54),
+        new THREE.MeshLambertMaterial({ color: 0xcfcfd6 }));
+      hair.position.set(0, 2.07, 0); group.add(hair);
+      _addShades(group);
+      break;
+    }
+    case 'cc_afk': {                             // hoodie + big headphones
+      setBody(0x55606a); setLegs(0x30373e); setHeadAll(0xffcc99);
+      _addHelmet(group, 0x55606a);               // hood
+      _addHeadphones(group, 0x222831);
+      break;
+    }
+    case 'cc_ragebaiter': {                      // riot helmet + red visor
+      setBody(0x2a2e35); setLegs(0x16181c); setHeadAll(0x12151a);
+      faceMat.map = null; faceMat.color.setHex(0x0c0e12); faceMat.needsUpdate = true;
+      _addVisor(group, 0xff5555, 1.0);
+      _addHelmet(group, 0x1a1d22);
+      break;
+    }
+    case 'cc_noskill': {                         // tan body + red cap (spray'n'pray)
+      setBody(0x8a5a2a); setLegs(0x4a3418); setHeadAll(0xffcc99);
+      _addCap(group, 0xb01818);
+      break;
+    }
+    case 'cc_engineer': {                        // orange vest + hard hat + goggles
+      setBody(0xd47a14); setLegs(0x3a2a14); setHeadAll(0xffcc99);
+      const hat = new THREE.Mesh(new THREE.SphereGeometry(0.30, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+        new THREE.MeshLambertMaterial({ color: 0xffcc00 }));
+      hat.position.set(0, 2.04, 0); hat.castShadow = true; group.add(hat);
+      _addVisor(group, 0x99ddff, 0.8);           // goggles
+      break;
+    }
+    // ── 🤖 Bots ─────────────────────────────────────────────────────────────
+    case 'cc_juicebox': {                        // blue juice carton + pink straw
+      setBody(0x2f7de0); setLegs(0x1c4a88); setHeadAll(0x2f7de0);
+      faceMat.map = null; faceMat.color.setHex(0xffffff); faceMat.needsUpdate = true; // white label
+      const straw = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.42, 8),
+        new THREE.MeshLambertMaterial({ color: 0xff4488 }));
+      straw.position.set(0.12, 2.30, 0); straw.rotation.z = 0.3; group.add(straw);
+      break;
+    }
+    // ── 👻 Weird Department ──────────────────────────────────────────────────
+    case 'cc_nucleardave': {                     // yellow hazmat + gas-mask + glowing tanks
+      setBody(0xd8c81a); setLegs(0x7a701a); setHeadAll(0x141414);
+      faceMat.map = null; faceMat.color.setHex(0x0c0c0c); faceMat.needsUpdate = true;
+      _addVisor(group, 0x55ff44, 1.2);
+      _addHelmet(group, 0xd8c81a);
+      _addBackTanks(group, 0x888888, 0x55ff44);
+      break;
+    }
+    case 'cc_lorekeeper': {                      // brown hooded mage + glowing eyes + robe
+      setBody(0x4a3620); setLegs(0x2a1f12); setHeadAll(0x1a1410);
+      faceMat.map = null; faceMat.color.setHex(0x0e0a06); faceMat.needsUpdate = true;
+      _addVisor(group, 0xffcc44, 0.9);
+      _addHelmet(group, 0x3a2a18);               // hood
+      _addCape(group, 0x2e2014);                 // robe
+      break;
+    }
+    case 'cc_turtle': {                          // green + helmet + shell on the back
+      setBody(0x2e7d32); setLegs(0x1c4a20); setHeadAll(0x88bb55);
+      _addHelmet(group, 0x3d4a24);
+      _addShell(group, 0x5a3a1a);
+      break;
+    }
+    case 'cc_casual': {                          // blue tee + ball cap
+      setBody(0x2f6db0); setLegs(0x223a55); setHeadAll(0xffcc99);
+      _addCap(group, 0x224488);
+      break;
+    }
+    case 'cc_suspicious': {                      // black trenchcoat + fedora + shades
+      setBody(0x1a1a1f); setLegs(0x101012); setHeadAll(0xffcc99);
+      _addFedora(group, 0x121214);
+      _addShades(group);
+      _addCape(group, 0x141418);                 // coat tail
+      break;
+    }
+    case 'cc_sweat': {                           // tryhard gamer: VR visor + headset
+      setBody(0x202830); setLegs(0x141a20); setHeadAll(0xffcc99);
+      faceMat.map = null; faceMat.color.setHex(0x10131a); faceMat.needsUpdate = true;
+      _addVisor(group, 0x00e0ff, 1.4);
+      _addHeadphones(group, 0x222831);
+      break;
+    }
+    // ── 🧹 Miscellaneous ─────────────────────────────────────────────────────
+    case 'cc_janitor': {                         // blue jumpsuit + cap + grey 'stache
+      setBody(0x2f5a8a); setLegs(0x203a5a); setHeadAll(0xffcc99);
+      _addCap(group, 0x1f4a6a);
+      const beard = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.08, 0.06),
+        new THREE.MeshLambertMaterial({ color: 0xcccccc }));
+      beard.position.set(0, 1.78, 0.24); group.add(beard);
+      break;
+    }
+    case 'cc_timekeeper': {                      // brown coat + top hat + clock emblem
+      setBody(0x5a4632); setLegs(0x3a2e20); setHeadAll(0xffcc99);
+      _addTopHat(group, 0x3a2e20);
+      _addChestEmblem(group, 0xffcc44, 'clock');
+      break;
+    }
+    case 'cc_wildcard': {                         // purple harlequin + ? emblem
+      setBody(0x7a1ea0); setLegs(0x3a0f50); setHeadAll(0xffcc99);
+      _addJesterHat(group, 0x7a1ea0, 0xffcc00);
+      _addChestEmblem(group, 0xffcc00, 'q');
+      break;
+    }
+    case 'cc_drama': {                           // pink + pigtails + teary eyes
+      setBody(0xe0418c); setLegs(0x7a1f50); setHeadAll(0xffcc99);
+      _addPigtails(group, 0xff8cc0);
+      [-0.1, 0.1].forEach(x => {
+        const t = new THREE.Mesh(new THREE.SphereGeometry(0.03, 6, 6),
+          new THREE.MeshLambertMaterial({ color: 0x66ccff, emissive: 0x3399cc, emissiveIntensity: 0.6 }));
+        t.position.set(x, 1.84, 0.25); group.add(t);
+      });
+      break;
+    }
+    case 'cc_pixel': {                            // retro green + pixel visor + cap
+      setBody(0x2faa3a); setLegs(0x1c6a26); setHeadAll(0xffcc99);
+      faceMat.map = null; faceMat.color.setHex(0x10131a); faceMat.needsUpdate = true;
+      _addVisor(group, 0x66ff66, 1.2);
+      _addCap(group, 0x1c6a26);
+      break;
+    }
     // 'default' → leave the randomly-colored recruit as-is
   }
+  // 🎭 Layer on the character's facial expression (eyes/mouth) for human-faced
+  // skins. Visor/mask skins aren't in CHAR_FACES, so their face stays as set above.
+  if (CHAR_FACES[skinId]) {
+    faceMat.map = makeCharFace(CHAR_FACES[skinId]);
+    faceMat.color.setHex(0xffffff);
+    faceMat.needsUpdate = true;
+  }
+}
+// Bot-only signature skins (NOT in the SKINS shop list — players can't pick them).
+const CHARACTER_SKIN_IDS = ['cc_kingchaos','cc_bot','cc_rager','cc_mirage','cc_grandmaster','cc_lucky','cc_medic','cc_goat','cc_pyro','cc_ghost','cc_duck','cc_panic',
+  'cc_sharpshooter','cc_ladymayhem','cc_jinx','cc_pandora','cc_wildfire','cc_anarchy','cc_professional','cc_afk','cc_ragebaiter','cc_noskill','cc_engineer',
+  'cc_juicebox','cc_nucleardave','cc_lorekeeper','cc_turtle','cc_casual','cc_suspicious','cc_sweat','cc_janitor','cc_timekeeper','cc_wildcard','cc_drama','cc_pixel'];
+function resolveSkinId(s) {
+  return (SKIN_IDS.includes(s) || CHARACTER_SKIN_IDS.includes(s)) ? s : 'default';
 }
 
 // Simple combat helmet / hood cap that sits on top of the head box
@@ -6624,6 +7823,34 @@ function _addSpikyHair(group, color) {
   });
 }
 
+// Glowing eye-visor strip (robots / villains). intensity drives the glow.
+function _addVisor(group, color, intensity = 1.2) {
+  const visor = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.12, 0.04),
+    new THREE.MeshLambertMaterial({ color: 0x0a0d12, emissive: color, emissiveIntensity: intensity }));
+  visor.position.set(0, 1.88, 0.255); group.add(visor);
+}
+// Flowing cape behind the torso (King Chaos).
+function _addCape(group, color) {
+  const cape = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.85, 0.05),
+    new THREE.MeshLambertMaterial({ color }));
+  cape.position.set(0, 1.12, -0.19); cape.castShadow = true; group.add(cape);
+}
+// Little antenna with a glowing tip (robots).
+function _addAntenna(group, color) {
+  const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.18, 6),
+    new THREE.MeshLambertMaterial({ color: 0x888888 }));
+  rod.position.set(0.13, 2.30, 0); group.add(rod);
+  const tip = new THREE.Mesh(new THREE.SphereGeometry(0.045, 8, 8),
+    new THREE.MeshLambertMaterial({ color, emissive: color, emissiveIntensity: 1.0 }));
+  tip.position.set(0.13, 2.41, 0); group.add(tip);
+}
+// Flat black sunglasses across the eyes.
+function _addShades(group) {
+  const shades = new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.10, 0.04),
+    new THREE.MeshLambertMaterial({ color: 0x080808 }));
+  shades.position.set(0, 1.90, 0.255); group.add(shades);
+}
+
 // Soft cap with a forward brim (the green-cap "default loadout" guy)
 function _addCap(group, color) {
   const mat = new THREE.MeshLambertMaterial({ color });
@@ -6631,6 +7858,116 @@ function _addCap(group, color) {
   dome.position.set(0, 2.10, 0); dome.castShadow = true; group.add(dome);
   const brim = new THREE.Mesh(new THREE.BoxGeometry(0.50, 0.05, 0.20), mat);
   brim.position.set(0, 2.04, 0.32); brim.castShadow = true; group.add(brim);
+}
+
+// ── More signature-skin accessories (comic-cast looks) ─────────────────────
+function _addPonytail(group, color) {
+  const mat = new THREE.MeshLambertMaterial({ color });
+  const base = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.16, 0.54), mat);
+  base.position.set(0, 2.07, 0); group.add(base);
+  const tail = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.5, 0.16), mat);
+  tail.position.set(0, 1.78, -0.30); tail.castShadow = true; group.add(tail);
+}
+function _addPigtails(group, color) {
+  const mat = new THREE.MeshLambertMaterial({ color });
+  const base = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.14, 0.54), mat);
+  base.position.set(0, 2.07, 0); group.add(base);
+  [-0.33, 0.33].forEach(x => {
+    const p = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.36, 0.14), mat);
+    p.position.set(x, 1.80, 0); p.castShadow = true; group.add(p);
+  });
+}
+function _addTopHat(group, color) {
+  const mat = new THREE.MeshLambertMaterial({ color });
+  const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.34, 0.04, 16), mat);
+  brim.position.set(0, 2.10, 0); brim.castShadow = true; group.add(brim);
+  const dome = new THREE.Mesh(new THREE.CylinderGeometry(0.23, 0.23, 0.34, 16), mat);
+  dome.position.set(0, 2.29, 0); dome.castShadow = true; group.add(dome);
+}
+function _addFedora(group, color) {
+  const mat = new THREE.MeshLambertMaterial({ color });
+  const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.03, 16), mat);
+  brim.position.set(0, 2.09, 0); brim.castShadow = true; group.add(brim);
+  const dome = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.27, 0.20, 16), mat);
+  dome.position.set(0, 2.20, 0); group.add(dome);
+}
+function _addWitchHat(group, color) {
+  const mat = new THREE.MeshLambertMaterial({ color });
+  const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.44, 0.44, 0.03, 18), mat);
+  brim.position.set(0, 2.10, 0); brim.castShadow = true; group.add(brim);
+  const cone = new THREE.Mesh(new THREE.ConeGeometry(0.24, 0.52, 18), mat);
+  cone.position.set(0, 2.38, 0); cone.rotation.z = 0.12; group.add(cone);
+}
+function _addHeadphones(group, color) {
+  const mat = new THREE.MeshLambertMaterial({ color });
+  const band = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.035, 8, 18, Math.PI), mat);
+  band.position.set(0, 1.95, 0); group.add(band);
+  [-0.29, 0.29].forEach(x => {
+    const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.07, 12), mat);
+    cup.rotation.z = Math.PI / 2; cup.position.set(x, 1.90, 0); group.add(cup);
+  });
+}
+function _addMohawk(group, color) {
+  const mat = new THREE.MeshLambertMaterial({ color });
+  for (let i = 0; i < 5; i++) {
+    const s = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.28, 5), mat);
+    s.position.set(0, 2.19, -0.16 + i * 0.08); s.castShadow = true; group.add(s);
+  }
+}
+function _addFlameHair(group) {
+  const cols = [0xff3300, 0xff7a00, 0xffcc00];
+  const pts = [[-0.14, 0, -0.08], [0.14, 0, -0.08], [0, 0.05, 0.02], [-0.1, 0.02, 0.13], [0.1, 0.02, 0.13], [0, 0.02, -0.16]];
+  pts.forEach(([x, yy, z], i) => {
+    const c = cols[i % 3];
+    const s = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.28 + yy, 5),
+      new THREE.MeshLambertMaterial({ color: c, emissive: c, emissiveIntensity: 0.45 }));
+    s.position.set(x, 2.16 + yy, z); group.add(s);
+  });
+}
+function _addShell(group, color) {
+  const shell = new THREE.Mesh(new THREE.SphereGeometry(0.36, 12, 10, 0, Math.PI * 2, 0, Math.PI / 2),
+    new THREE.MeshLambertMaterial({ color }));
+  shell.position.set(0, 1.15, -0.16); shell.rotation.x = -Math.PI / 2; shell.castShadow = true; group.add(shell);
+}
+function _addBackTanks(group, color, glow) {
+  const mat = new THREE.MeshLambertMaterial({ color });
+  [-0.14, 0.14].forEach(x => {
+    const t = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.42, 10), mat);
+    t.position.set(x, 1.2, -0.22); group.add(t);
+  });
+  if (glow) {
+    const g = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 8),
+      new THREE.MeshLambertMaterial({ color: glow, emissive: glow, emissiveIntensity: 1.0 }));
+    g.position.set(0, 1.3, -0.22); group.add(g);
+  }
+}
+function _addChestEmblem(group, color, kind) {
+  const mat = new THREE.MeshLambertMaterial({ color, emissive: color, emissiveIntensity: 0.35 });
+  if (kind === 'clock') {
+    const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.02, 16), mat);
+    disc.rotation.x = Math.PI / 2; disc.position.set(0, 1.25, 0.17); group.add(disc);
+  } else {
+    const disc = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 0.02), mat);
+    disc.position.set(0, 1.25, 0.17); group.add(disc);
+  }
+}
+function _addJesterHat(group, c1, c2) {
+  const base = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.12, 0.54), new THREE.MeshLambertMaterial({ color: c1 }));
+  base.position.set(0, 2.08, 0); group.add(base);
+  const horns = [[-0.26, -0.7, c2], [0.26, 0.7, c1], [0, 0, c2]];
+  horns.forEach(([x, rot, c]) => {
+    const h = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.30, 6), new THREE.MeshLambertMaterial({ color: c }));
+    h.position.set(x, 2.26, 0); h.rotation.z = rot; group.add(h);
+    const bell = new THREE.Mesh(new THREE.SphereGeometry(0.04, 6, 6), new THREE.MeshLambertMaterial({ color: 0xffd227, emissive: 0x554400, emissiveIntensity: 0.4 }));
+    bell.position.set(x * 1.6, 2.34, 0); group.add(bell);
+  });
+}
+function _addEars(group, color) {
+  const mat = new THREE.MeshLambertMaterial({ color });
+  [-0.2, 0.2].forEach(x => {
+    const ear = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.18, 5), mat);
+    ear.position.set(x, 2.16, 0); group.add(ear);
+  });
 }
 
 // Gold crown overlay — toggled for admin / match leader. Idempotent.
@@ -6753,19 +8090,21 @@ function animateCharacterMesh(mesh, dt, crouchTarget) {
   rig.speedSmooth += (speed - rig.speedSmooth) * Math.min(1, dt * 12);
   const moving = rig.speedSmooth > 0.6;
 
-  // Advance phase by distance travelled so stride length stays natural
-  rig.phase += dist * 5.5;
+  // Advance phase by distance travelled so stride length stays natural.
+  // ×2.75 (half of the old ×5.5) so the LEG GRAPHIC swings 2× slower than the
+  // distance covered — purely cosmetic, does not change actual move speed.
+  rig.phase += dist * 2.75;
   if (!moving) {
     // Ease the phase back toward a neutral standing pose
     rig.phase += (Math.round(rig.phase / Math.PI) * Math.PI - rig.phase) * Math.min(1, dt * 8);
   }
 
-  // Crouch / slide blend
-  if (crouchTarget !== null && crouchTarget !== undefined) {
-    rig.crouch += (crouchTarget - rig.crouch) * Math.min(1, dt * 10);
-  } else {
-    rig.crouch += (0 - rig.crouch) * Math.min(1, dt * 6);
-  }
+  // Crouch / slide blend. Characters also crouch SLIGHTLY while moving (a tactical
+  // low walk) — blend a small movement-crouch in on top of any explicit crouch.
+  const baseCrouch = (crouchTarget !== null && crouchTarget !== undefined) ? crouchTarget : 0;
+  const moveCrouch = moving ? 0.2 : 0;
+  const effCrouch  = Math.max(baseCrouch, moveCrouch);
+  rig.crouch += (effCrouch - rig.crouch) * Math.min(1, dt * 8);
   const crouch = rig.crouch;
 
   const amp   = moving ? 0.7 : 0.0;       // leg swing amplitude (radians)
@@ -6885,7 +8224,137 @@ document.addEventListener('mousemove', e => {
   euler.x -= e.movementY * SENS;
   euler.x = Math.max(-Math.PI/2.2, Math.min(Math.PI/2.2, euler.x));
   camera.quaternion.setFromEuler(euler);
+  // 🎯 Manual aim always wins: while you're moving the mouse, the aim aids yield.
+  if (e.movementX || e.movementY) _lastManualAimAt = performance.now();
 });
+
+// ════════════════════════════════════════════════════════════════════════════
+// 🎯 AIM ASSIST SUITE — four independently-toggleable aim aids (Settings → AIM
+//   ASSIST). All key off the persisted ASSIST flags; none touch the match system.
+//     • autoShoot : crosshair directly on an opponent for 0.01s → auto-fires
+//     • aimAssist : opponent on screen → camera drifts to their body at 5°/s
+//     • aimbot    : opponent on screen for 0.2s → snaps to them at 50°/s
+//     • aiAim     : red dot marks where the opponent is predicted to move next
+// ════════════════════════════════════════════════════════════════════════════
+let ASSIST = { autoShoot: false, aimAssist: false, aimbot: false, aiAim: false };
+try { const s = JSON.parse(localStorage.getItem('pvp_assist') || 'null'); if (s) ASSIST = { ...ASSIST, ...s }; } catch (e) {}
+function saveAssist() { try { localStorage.setItem('pvp_assist', JSON.stringify(ASSIST)); } catch (e) {} }
+
+const _assistVel = new Map();   // entityId → { x, z, vx, vz } smoothed velocity (units/s)
+let _lastManualAimAt = 0;       // perf.now() of the player's last mouse-look input
+let _aimbotTimer = 0;           // seconds an opponent has been on screen (aimbot warm-up)
+let _autoShootTimer = 0;        // seconds the crosshair has been on an opponent
+let _aiAimDot = null;           // red prediction marker mesh
+
+function _getAiAimDot() {
+  if (!_aiAimDot) {
+    _aiAimDot = new THREE.Mesh(new THREE.SphereGeometry(0.16, 12, 12),
+      new THREE.MeshBasicMaterial({ color: 0xff2222, depthTest: false, transparent: true, opacity: 0.92 }));
+    _aiAimDot.renderOrder = 1000; _aiAimDot.visible = false; scene.add(_aiAimDot);
+  }
+  return _aiAimDot;
+}
+// All current opponents (enemy bots + non-teammate humans) with a chest-height aim point.
+function _assistEnemies() {
+  const out = [];
+  for (const bot of gameBots) {
+    if (bot.dead || bot.team === 'ally') continue;
+    out.push({ id: bot.id, x: bot.x, z: bot.z, pos: new THREE.Vector3(bot.x, (bot.y || 0) + 1.0, bot.z) });
+  }
+  const myTeam = players[myId] && players[myId].team;
+  for (const id in players) {
+    const p = players[id];
+    if (id === myId || p.isBot || p.dead) continue;
+    if (myTeam && p.team === myTeam) continue;
+    out.push({ id, x: p.x, z: p.z, pos: new THREE.Vector3(p.x, (p.y || 1.65) - 0.5, p.z) });
+  }
+  return out;
+}
+// Nearest-to-crosshair opponent within `coneDeg` of where you're looking + has LOS.
+function _pickAssistTarget(enemies, coneDeg) {
+  const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+  const cosCone = Math.cos(coneDeg * Math.PI / 180);
+  let best = null, bestDot = cosCone;
+  for (const e of enemies) {
+    const dir = e.pos.clone().sub(camera.position);
+    const dist = dir.length();
+    if (dist < 0.5 || dist > 90) continue;
+    dir.divideScalar(dist);
+    const d = fwd.dot(dir);
+    if (d <= bestDot) continue;
+    if (typeof hasLineOfSight === 'function' && !hasLineOfSight(camera.position.x, camera.position.z, e.x, e.z)) continue;
+    bestDot = d; best = e;
+  }
+  return best;
+}
+function _angleStep(cur, target, maxStep) {
+  let diff = target - cur;
+  while (diff > Math.PI) diff -= Math.PI * 2;
+  while (diff < -Math.PI) diff += Math.PI * 2;
+  if (Math.abs(diff) <= maxStep) return target;
+  return cur + Math.sign(diff) * maxStep;
+}
+// Rotate the view toward a world point at up to `degPerSec`.
+function _aimToward(pos, degPerSec, dt) {
+  const dx = pos.x - camera.position.x, dy = pos.y - camera.position.y, dz = pos.z - camera.position.z;
+  const horiz = Math.hypot(dx, dz) || 0.0001;
+  const desiredYaw = Math.atan2(-dx, -dz);
+  const desiredPitch = Math.atan2(dy, horiz);
+  const maxStep = degPerSec * Math.PI / 180 * dt;
+  euler.y = _angleStep(euler.y, desiredYaw, maxStep);
+  euler.x = _angleStep(euler.x, desiredPitch, maxStep);
+  euler.x = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, euler.x));
+  camera.quaternion.setFromEuler(euler);
+}
+function _resetAssistTimers() { _aimbotTimer = 0; _autoShootTimer = 0; }
+
+function updateAimAssist(dt) {
+  const anyOn = ASSIST.autoShoot || ASSIST.aimAssist || ASSIST.aimbot || ASSIST.aiAim;
+  if (!anyOn) { if (_aiAimDot) _aiAimDot.visible = false; return; }
+  if (isDead || !gameStarted || inLobby || countdownActive || KILLCAM.active) {
+    _resetAssistTimers(); if (_aiAimDot) _aiAimDot.visible = false; return;
+  }
+  const enemies = _assistEnemies();
+  const live = new Set();
+  for (const e of enemies) {
+    live.add(e.id);
+    const prev = _assistVel.get(e.id);
+    if (prev) {
+      const vx = (e.x - prev.x) / Math.max(dt, 0.001), vz = (e.z - prev.z) / Math.max(dt, 0.001);
+      e.vx = (prev.vx || 0) * 0.7 + vx * 0.3;
+      e.vz = (prev.vz || 0) * 0.7 + vz * 0.3;
+    } else { e.vx = 0; e.vz = 0; }
+    _assistVel.set(e.id, { x: e.x, z: e.z, vx: e.vx, vz: e.vz });
+  }
+  for (const id of _assistVel.keys()) if (!live.has(id)) _assistVel.delete(id);
+
+  const wide  = (ASSIST.aimAssist || ASSIST.aimbot || ASSIST.aiAim) ? _pickAssistTarget(enemies, 38) : null;
+  const tight = ASSIST.autoShoot ? _pickAssistTarget(enemies, 2.2) : null;
+  // While you're actively moving the mouse, the view aids step aside so you keep
+  // full manual control (they resume ~150ms after you stop).
+  const manualAiming = performance.now() - _lastManualAimAt < 150;
+
+  // Aim Assist — gentle magnetism toward the body
+  if (ASSIST.aimAssist && wide && !manualAiming) _aimToward(wide.pos, 5, dt);
+
+  // Aim Bot — after 0.2s of the target on screen, snap toward it fast
+  if (ASSIST.aimbot && wide) { _aimbotTimer += dt; if (_aimbotTimer >= 0.2 && !manualAiming) _aimToward(wide.pos, 50, dt); }
+  else _aimbotTimer = 0;
+
+  // Auto Shoot — fire 0.01s after the crosshair lands on an opponent. Only with a
+  // GUN equipped — never auto-fire the last gun while you're holding a melee/utility
+  // (that caused "taser shots coming out of the knife").
+  const gunEquipped = (activeSlot === 'primary' || activeSlot === 'secondary');
+  if (ASSIST.autoShoot && tight && gunEquipped) { _autoShootTimer += dt; if (_autoShootTimer >= 0.01) tryShoot(); }
+  else _autoShootTimer = 0;
+
+  // AI Aim — drop a red dot where the opponent is predicted to be ~0.35s from now
+  if (ASSIST.aiAim && wide) {
+    const lead = 0.35, dot = _getAiAimDot();
+    dot.position.set(wide.x + (wide.vx || 0) * lead, wide.pos.y, wide.z + (wide.vz || 0) * lead);
+    dot.visible = true;
+  } else if (_aiAimDot) { _aiAimDot.visible = false; }
+}
 
 // ── Input ──────────────────────────────────────────────────────────────────
 const keys = {};
@@ -6950,6 +8419,9 @@ document.addEventListener('keydown', e => {
       toggleADS();
     }
   }
+  // 🛋️ F in the lobby: start the duel pad you're on, or challenge the nearest cast
+  // member to a 1V1 — BUT the trashcan (weapon swap) always takes priority when near it.
+  if (e.code==='KeyF' && inLobby && !nearTrashcan && !e.repeat) { e.preventDefault(); lobbyInteract(); return; }
   if (e.code==='KeyF' && nearTrashcan && !isDead) { showLoadoutScreen('swap'); }
   // F = enter/exit a mortar (trench map)
   if (e.code==='KeyF' && !nearTrashcan && !isDead && activeMapName === 'trenches' && !e.repeat) {
@@ -7395,13 +8867,23 @@ function saveKillReplay(victimId, weaponId) {
       [id, { x: rd(e.x), y: rd(e.y), z: rd(e.z), rotY: rd(e.rotY||0), rotX: rd(e.rotX||0) }])),
   }));
   const victimName = players[victimId]?.name || 'Enemy';
-  const wname = WEAPONS.find(w => w.id === weaponId)?.name
-             || MELEE_ITEMS.find(m => m.id === weaponId)?.name
-             || SUPPORT_ITEMS.find(s => s.id === weaponId)?.name || (weaponId || 'weapon');
+  const melee = MELEE_ITEMS.find(m => m.id === weaponId);
+  const wpn = WEAPONS.find(w => w.id === weaponId);
+  const sup = SUPPORT_ITEMS.find(s => s.id === weaponId);
+  const wname = wpn?.name || melee?.name || sup?.name || (weaponId || 'weapon');
+  // 🏷️ Classify the kill so the Kill Log can flex distinctive bragging graphics.
+  const typeStr = ((wpn?.type || sup?.type || '') + '').toLowerCase();
+  const idStr = (weaponId || '').toLowerCase();
+  let kind = 'gun';
+  if (melee) kind = 'melee';
+  else if (/explos|launcher|mortar|firework|grenade|rocket|bomb|nuke|missile|boombow|cannon|artillery/.test(typeStr + ' ' + idStr)) kind = 'explosive';
+  // Slide-kill = the player was mid-slide when the kill landed. Pure swagger.
+  const slide = !!(window._slideUntil && Date.now() < window._slideUntil);
   // Simple "score" heuristic: # of frames where target was alive (longer chase = higher)
   const score = frames.length;
   killLog.unshift({ ts: Date.now(), victim: victimName, weapon: wname, mapId: activeMapName,
-                    frames, killerId: myId, victimId, favorite: false, pinned: false, score });
+                    frames, killerId: myId, victimId, favorite: false, pinned: false, score,
+                    kind, slide });
   autoCleanupKillLog();
   saveKillLogToDisk();
 }
@@ -7511,7 +8993,9 @@ function openKillTheater(index) {
     if (isKiller) {
       const gun = _genericGun({ bodyShape: 'classic', bodyColor: 0x222222, accentColor: 0x6a6a6a, magType: 'banana', topRail: true });
       gun.scale.setScalar(1.25);
-      gun.position.set(0.26, 1.34, -0.34); // right-hand, forward of the chest
+      // +Z side + flipped barrel to match the ghost's +PI mesh facing.
+      gun.position.set(0.26, 1.34, 0.34); // right-hand, forward of the chest
+      gun.rotation.y = Math.PI;
       body.add(gun);
       body._gun = gun;
     }
@@ -7630,7 +9114,9 @@ function renderTheater() {
     const g = THEATER.ghosts[id];
     if (g) {
       g.mesh.position.set(e.x, Math.max(0, (e.y || 1) - 1.6), e.z);
-      g.mesh.rotation.y = e.rotY || 0;
+      // +PI so the face (+Z side) points along forward, matching makePlayerMesh /
+      // the remote-player convention. Without it killcam heads render backwards.
+      g.mesh.rotation.y = (e.rotY || 0) + Math.PI;
       animateCharacterMesh(g.mesh, dt, 0); // walk-cycle from distance moved
     }
   }
@@ -8277,6 +9763,10 @@ function activateAbility() {
     flashAbilityName(ab.name);
     spawnHitParticle(camera.position.clone().setY(1.65));
   }
+  else if (ab.type === 'blade_charge') {
+    doBladeCharge(ab);
+    flashAbilityName(ab.name);
+  }
   // Switchblade Gun: force back to charged form
   else if (ab.type === 'switchblade_reset') {
     switchbladeCharged = true;
@@ -8287,6 +9777,44 @@ function activateAbility() {
   }
 
   updateAbilityHUD();
+}
+
+// ⚔️ Bayonet Charge — lunge forward; if the blade reaches an opponent, deal bladeDamage.
+function doBladeCharge(ab) {
+  const dist = ab.distance || 8;
+  const fwd = new THREE.Vector3(-Math.sin(euler.y), 0, -Math.cos(euler.y)).normalize();
+  // Nearest opponent roughly ahead, within charge reach.
+  let best = null, bestPid = null, bestD = Infinity;
+  const consider = (x, z, pid, ref) => {
+    const dx = x - camera.position.x, dz = z - camera.position.z, d = Math.hypot(dx, dz) || 0.001;
+    if (d > dist + 2) return;
+    if ((dx / d) * fwd.x + (dz / d) * fwd.z < 0.45) return; // must be in front (~63° cone)
+    if (d < bestD) { bestD = d; best = ref; bestPid = pid; }
+  };
+  for (const bot of gameBots) if (!bot.dead && bot.team !== 'ally') consider(bot.x, bot.z, bot.id, bot);
+  const myTeam = players[myId] && players[myId].team;
+  for (const id in players) { const p = players[id]; if (id !== myId && !p.isBot && !p.dead && !(myTeam && p.team === myTeam)) consider(p.x, p.z, id, p); }
+
+  // Lunge: stop just short of the target, else charge the full distance.
+  const moveDist = best ? Math.max(0, Math.min(dist, bestD - 1.1)) : dist;
+  camera.position.addScaledVector(fwd, moveDist);
+  camera.position.x = Math.max(-48, Math.min(48, camera.position.x));
+  camera.position.z = Math.max(-48, Math.min(48, camera.position.z));
+  resolveWallCollisions();
+  flashScreen('rgba(200,60,60,0.16)', 200);
+  playSoundEvent('melee_blade', { volume: 1.0 });
+
+  // Blade contact → damage.
+  if (best) {
+    const dx = best.x - camera.position.x, dz = best.z - camera.position.z;
+    if (Math.hypot(dx, dz) < 2.6) {
+      const mesh = remoteMeshes[bestPid];
+      const hp = mesh ? mesh.position.clone().setY(1.0) : new THREE.Vector3(best.x, 1, best.z);
+      emitHit(bestPid, `blade_${myId}_${Date.now()}`, 'lancer_blade', hp);
+      spawnHitParticle(hp);
+      showAnnouncement('⚔️ SKEWERED', '', '#ff7755', 700);
+    }
+  }
 }
 
 function doBulletWave(w) {
@@ -8796,7 +10324,7 @@ const THROWABLE_SUPPORT_IDS = new Set(['frag','smoke','confetti_cannon','moon_mi
 
 // Map every utility ID to the right sound event name (or null if it has its own already)
 const SUPPORT_SOUND = {
-  medkit: 'heal', stim: 'heal', healing_pulse: 'heal', nano_swarm: 'heal', vampire_syringe: 'inject',
+  medkit: 'heal', stim: 'heal', healing_pulse: 'heal', nano_swarm: 'heal', hamburger: 'heal', vampire_syringe: 'inject',
   adrenaline: 'inject', berserker_serum: 'inject', cloak: 'inject',
   smoke: 'smoke_hiss', ink_bomb: 'smoke_hiss', siren: 'siren_loop',
   bounce_pad: 'bounce', rubber_duck: 'quack',
@@ -8920,6 +10448,10 @@ function trySupport() {
   }
   if (item.id === 'land_mine') {
     placeLandMine(item);
+    return;
+  }
+  if (item.id === 'molotov') {            // 🔥 thrown bottle → fire pool on impact
+    throwThermite(item);
     return;
   }
   // ── 🪖 ADMIN utilities ────────────────────────────────────────────────────
@@ -9241,7 +10773,7 @@ const INSTAKILL_HS_WEAPONS = new Set(['srx', 'railgun', 'lever', 'boombow', 'boo
 
 // 🤫 Secret weapon category sets used for hidden synergy mechanics
 const ELECTRIC_WEAPONS = new Set(['arc_rifle','arc_torrent','taser','emp_pistol','shock_baton','storm_core','ion_revolver','magnet_rifle','coilgun','plasma_carbine']);
-const FIRE_WEAPONS     = new Set(['flamethrower','firework_launcher','incendiary_shotgun','fire_axe','fire_poker','thermite']);
+const FIRE_WEAPONS     = new Set(['flamethrower','firework_launcher','incendiary_shotgun','fire_axe','fire_poker','thermite','molotov']);
 const GRAVITY_WEAPONS  = new Set(['gravity_launcher','gravity_hammer','gravity_paint','event_horizon','magnetar','void_harvester','black_hole_seed']);
 const FROST_WEAPONS    = new Set(['freeze_gun','frost_blaster','abs_zero']);
 
@@ -9285,6 +10817,8 @@ function getSecretSynergy(weaponId, hitPos) {
 
 // Helper: emit hit to server AND show damage numbers AND apply damage client-authoritatively
 function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false) {
+  // 🛋️ Lobby 13 is a no-combat chill zone — the cast is neutral and can't be hurt.
+  if (inLobby) return;
   const isBot    = players[pid] && players[pid].isBot;
   const instakill = headshot && INSTAKILL_HS_WEAPONS.has(weaponId);
   socket.emit(isBot ? 'hitBot' : 'hit', {
@@ -9345,6 +10879,8 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false) {
         myKills++;
         creditWeaponKill(currentEquippedId());
         saveKillReplay(pid, currentEquippedId());
+        // 🧠 The cast remembers: this character recalls you killing them with this weapon.
+        if (bot.charId) recordCharMemory(bot.charId, { youKilledThemWith: weaponDisplayName(currentEquippedId()), team: bot.team });
         const kc = document.getElementById('kill-count');
         if (kc) kc.textContent = `Kills: ${myKills}`;
         const botName = players[pid]?.name || 'Bot';
@@ -9368,10 +10904,11 @@ function clientRespawnBot(botId) {
   const idx = teamBots.indexOf(bot);
   const sp = botSideSpawn(idx, teamBots.length, bot.team);
   bot.x = sp.x; bot.z = sp.z;
-  bot.hp = 300; bot.dead = false;
-  bot.prevHp = 300; bot.stuckTimer = 0;
+  const _rhp = bot.maxHp || 300;
+  bot.hp = _rhp; bot.dead = false;
+  bot.prevHp = _rhp; bot.stuckTimer = 0;
   if (bot.state !== 'turret') bot.state = 'chase';
-  if (players[botId]) { players[botId].hp = 300; players[botId].dead = false; players[botId].x = sp.x; players[botId].z = sp.z; }
+  if (players[botId]) { players[botId].hp = _rhp; players[botId].dead = false; players[botId].x = sp.x; players[botId].z = sp.z; }
   const mesh = remoteMeshes[botId];
   if (mesh) { mesh.position.set(sp.x, 0, sp.z); mesh.visible = true; }
 }
@@ -9558,6 +11095,27 @@ function hasLineOfSight(x1, z1, x2, z2) {
   return true;
 }
 
+// 🚀 Rocket detonation — direct hit aside, splash everyone else in radius.
+function rocketExplode(pos, weaponId, excludePid) {
+  const w = WEAPONS.find(x => x.id === weaponId) || {};
+  const radius = w.splashRadius || 5;
+  spawnExplosion(pos);
+  spawnAbilityAOEFX(pos.clone().setY(0.2), radius, 0xff7722);
+  playSoundEvent('explosion', { position: pos, volume: 1.1, minGap: 60 });
+  const splashId = weaponId + '_splash';
+  for (const [pid, mesh] of Object.entries(remoteMeshes)) {
+    if (pid === excludePid) continue;
+    const target = mesh.position.clone(); target.y += 1.0;
+    if (pos.distanceTo(target) <= radius) {
+      emitHit(pid, `rocket_${myId}_${Date.now()}_${pid}`, splashId, target);
+      spawnHitParticle(target);
+    }
+  }
+  // Self-splash (own rocket too close)
+  if (excludePid !== myId && camera.position.distanceTo(pos.clone().setY(camera.position.y)) <= radius) {
+    applyBotDamageToPlayer(splashId, null);
+  }
+}
 function updateBullets(dt) {
   const now = Date.now();
   const toRemove = [];
@@ -9699,6 +11257,11 @@ function updateBullets(dt) {
         if (b.weaponId === 'firework_launcher') {
           spawnBurnZone(wallHitPt, 3, 3, 10000);
         }
+        // 🚀 Rockets: detonate on terrain impact (area splash, no direct target)
+        if (b.weaponId === 'rpg' || b.weaponId === 'bazooka') {
+          rocketExplode(wallHitPt, b.weaponId, null);
+          scene.remove(b.mesh); toRemove.push(i); continue;
+        }
         // Bouncing weapons (prism, pulse disc, pinball): reflect off wall and speed up
         const wSpec = WEAPONS.find(w => w.id === b.weaponId);
         if (wSpec?.bounce && (b.bouncesLeft == null ? wSpec.bounce.maxBounces : b.bouncesLeft) > 0) {
@@ -9758,6 +11321,10 @@ function updateBullets(dt) {
         // Firework Launcher: also spawn burn zone on direct hit
         if (b.weaponId === 'firework_launcher') {
           spawnBurnZone(_bpos.clone(), 3, 3, 10000);
+        }
+        // 🚀 Rockets: direct target took the main hit; splash everyone else nearby
+        if (b.weaponId === 'rpg' || b.weaponId === 'bazooka') {
+          rocketExplode(_bpos.clone(), b.weaponId, bestHit.pid);
         }
         scene.remove(b.mesh); toRemove.push(i);
         spawnHitParticle(_bpos);
@@ -10698,7 +12265,7 @@ function updateSwitchbladeHUD() {
 }
 
 // ── Firework Launcher: burn-zone system ────────────────────────────────────
-function spawnBurnZone(pos, radius, dps, durationMs) {
+function spawnBurnZone(pos, radius, dps, durationMs, opts = {}) {
   const ringGeo = new THREE.RingGeometry(radius * 0.85, radius, 24);
   const ringMat = new THREE.MeshBasicMaterial({ color: 0xff5522, side: THREE.DoubleSide, transparent: true, opacity: 0.55 });
   const ring = new THREE.Mesh(ringGeo, ringMat);
@@ -10706,45 +12273,64 @@ function spawnBurnZone(pos, radius, dps, durationMs) {
   ring.position.set(pos.x, 0.04, pos.z);
   scene.add(ring);
   playSoundEvent('fire_sizzle', { position: pos, volume: 0.85, minGap: 180 });
-  burnZones.push({ x: pos.x, z: pos.z, radius, dps, until: Date.now() + durationMs, mesh: ring, lastTick: 0 });
+  burnZones.push({ x: pos.x, z: pos.z, radius, dps, until: Date.now() + durationMs, mesh: ring, lastTick: 0,
+    tickMs: opts.tickMs || 1000, molotov: !!opts.molotov, igniteDur: opts.igniteDur || 0 });
+}
+// 🔥 Lingering "on fire" status — Molotov sets this when you touch the flames; it
+// keeps ticking after you leave (5/sec for ~10s). Player + per-bot timers.
+let playerFireUntil = 0;
+let _lastFireTick = 0;
+function damagePlayerDOT(amount, deathWeapon) {
+  const me = players[myId];
+  if (!me || isDead || isShielded() || isRiotShieldBlocking() || match?.type === 'range') return;
+  me.hp = Math.max(0, me.hp - amount);
+  updateHealthHUD(me.hp);
+  flashHitIndicator();
+  if (me.hp <= 0 && !isDead) applyBotDamageToPlayer(deathWeapon || 'firework_launcher', null);
 }
 function updateBurnZones(dt) {
   const now = Date.now();
+  let playerInMolotov = false;
   for (let i = burnZones.length - 1; i >= 0; i--) {
     const z = burnZones[i];
     if (now >= z.until) { scene.remove(z.mesh); burnZones.splice(i, 1); continue; }
-    // Pulse opacity
     z.mesh.material.opacity = 0.35 + 0.2 * Math.sin(now * 0.008);
-    // Tick DOT every 1s
-    if (now - z.lastTick >= 1000) {
+    const pdx = camera.position.x - z.x, pdz = camera.position.z - z.z;
+    const pInside = (pdx*pdx + pdz*pdz < z.radius * z.radius);
+    if (z.molotov && pInside) playerInMolotov = true;
+    // Inside-the-fire tick (Molotov: every 200ms; thermite/firework: every 1s)
+    if (now - z.lastTick >= (z.tickMs || 1000)) {
       z.lastTick = now;
       playSoundEvent('fire_sizzle', { position: new THREE.Vector3(z.x, 0, z.z), remote: true, volume: 0.55, minGap: 260 });
-      // Damage player
-      const pdx = camera.position.x - z.x, pdz = camera.position.z - z.z;
-      if (pdx*pdx + pdz*pdz < z.radius * z.radius) {
-        applyBotDamageToPlayer && (function(){
-          // synthesize a low DOT tick — same flow as bot damage
-          const me = players[myId];
-          if (me && !isDead && !isShielded() && !isRiotShieldBlocking() && match?.type !== 'range') {
-            me.hp = Math.max(0, me.hp - z.dps);
-            updateHealthHUD(me.hp);
-            flashHitIndicator();
-            if (me.hp <= 0 && !isDead) {
-              applyBotDamageToPlayer('firework_launcher', null); // route through death handler
-            }
-          }
-        })();
+      if (pInside) {
+        damagePlayerDOT(z.dps, 'firework_launcher');
+        if (z.molotov) playerFireUntil = now + (z.igniteDur || 10000); // catch fire
       }
-      // Damage bots
       for (const bot of gameBots) {
         if (bot.dead) continue;
         const bdx = bot.x - z.x, bdz = bot.z - z.z;
         if (bdx*bdx + bdz*bdz < z.radius * z.radius) {
           const mesh = remoteMeshes[bot.id];
           const hitPos = mesh ? mesh.position.clone().setY(1.0) : new THREE.Vector3(bot.x, 1, bot.z);
-          emitHit(bot.id, `burn_${myId}_${now}_${bot.id}`, 'firework_launcher', hitPos);
+          emitHit(bot.id, `burn_${myId}_${now}_${bot.id}`, z.molotov ? 'molotov_burn' : 'firework_launcher', hitPos);
+          if (z.molotov) bot._fireUntil = now + (z.igniteDur || 10000);
         }
       }
+    }
+  }
+  // 🔥 Lingering fire DOT — 5/sec while "on fire" and OUTSIDE the flames (so it
+  // doesn't double-dip with the heavy inside tick).
+  if (now - _lastFireTick >= 1000) {
+    _lastFireTick = now;
+    if (!playerInMolotov && playerFireUntil > now) damagePlayerDOT(5, 'firework_launcher');
+    for (const bot of gameBots) {
+      if (bot.dead || !bot._fireUntil || bot._fireUntil <= now) continue;
+      let inZone = false;
+      for (const z of burnZones) { if (!z.molotov) continue; const dx = bot.x - z.x, dz = bot.z - z.z; if (dx*dx + dz*dz < z.radius*z.radius) { inZone = true; break; } }
+      if (inZone) continue;
+      const mesh = remoteMeshes[bot.id];
+      const hitPos = mesh ? mesh.position.clone().setY(1.0) : new THREE.Vector3(bot.x, 1, bot.z);
+      emitHit(bot.id, `fire_${myId}_${now}_${bot.id}`, 'molotov_fire', hitPos);
     }
   }
 }
@@ -10889,6 +12475,9 @@ const CLIENT_WEAPON_DAMAGE = Object.fromEntries([
   ['singularity', 90], ['rotten_potato', 40], ['sticker_bomb', 35],
   ['chain_pull', 60], ['airburst', 95], ['toxin_dart', 30], ['blind_flash', 0],
   ['arc_torrent', 5], ['firework_launcher', 50], ['switchblade_gun', 50], ['switchblade_charged', 100],
+  ['lancer_blade', 50],   // ⚔️ Lancer bayonet-charge hit (main shot uses the WEAPONS 'lancer' damage)
+  ['molotov_burn', 10], ['molotov_fire', 5],  // 🔥 inside-the-flames tick / lingering on-fire DOT
+  ['rpg_splash', 70], ['bazooka_splash', 85],  // 🚀 rocket area splash (direct hit uses the WEAPONS damage)
   // 3rd-batch primaries + abilities
   ['flechette', 16], ['thermal_lmg', 11], ['burst_cannon', 40], ['incendiary_shotgun', 14],
   ['coilgun', 92], ['smart_smg', 9], ['amr', 180], ['air_rifle', 34],
@@ -10959,6 +12548,8 @@ function botShotHitsPlayer(bot, dist) {
 }
 
 function applyBotDamageToPlayer(weaponId, botId) {
+  // 🛋️ Lobby 13 is a no-combat chill zone — nobody takes damage.
+  if (inLobby) return;
   // ⚡ Admin god mode: no damage taken
   if (adminCheats.godMode && currentUser?.isAdmin) { flashHitIndicator(); return; }
   // Frost Blaster: doesn't deal HP damage, just reduces speed (lethal at 0)
@@ -11012,6 +12603,8 @@ function applyBotDamageToPlayer(weaponId, botId) {
       if (killerBot) {
         const line = pickThought('killed_enemy');
         if (line) showBotSpeech(killerBot, line, 2500, '#44ff44');
+        // 🧠 The cast remembers: this character recalls killing you with this weapon.
+        if (killerBot.charId) recordCharMemory(killerBot.charId, { killedYouWith: weaponDisplayName(weaponId), team: killerBot.team });
       }
     }
     // Notify match logic (round end / kill tracking)
@@ -11144,7 +12737,7 @@ socket.on('lobbyStart', data => {
     gameStarted = true;
     spawnGameBots();
     requestPointerLockSafe();
-    loop();
+    startLoop();
   }
 });
 socket.on('chatLine', data => {
@@ -11412,7 +13005,7 @@ socket.on('playerRespawned', p => {
 });
 
 function spawnRemotePlayer(p) {
-  const skinId = SKIN_IDS.includes(p.skin) ? p.skin : 'default';
+  const skinId = resolveSkinId(p.skin);
   const mesh = makePlayerMesh(p.name, p.isBot, p.team || 'enemy', skinId, { crown: !!p.isAdmin });
   mesh.position.set(p.x,0,p.z);
   scene.add(mesh); remoteMeshes[p.id]=mesh;
@@ -11640,10 +13233,16 @@ function explodeSupport(g) {
     }
     return;
   }
-  // 🪖 Admin thermite — burning zone DOT (reuses firework burn-zone system)
-  if (item.id === 'thermite') {
+  // 🔥 Thermite / Molotov — burning zone DOT (reuses firework burn-zone system)
+  if (item.id === 'thermite' || item.id === 'molotov') {
     spawnAbilityAOEFX(pos, item.burnRadius || 3.5, 0xff6622);
-    spawnBurnZone(pos, item.burnRadius || 3.5, item.burnDps || 8, item.burnDur || 12000);
+    if (item.id === 'molotov') {
+      spawnExplosion(pos); playSoundEvent('fire_sizzle', { position: pos, volume: 1.0 });
+      // Inside the flames: 10 dmg every 0.2s. Touch them → "on fire" 5/sec for 10s after leaving.
+      spawnBurnZone(pos, item.burnRadius || 3.2, 10, item.burnDur || 5000, { tickMs: 200, molotov: true, igniteDur: 10000 });
+    } else {
+      spawnBurnZone(pos, item.burnRadius || 3.5, item.burnDps || 8, item.burnDur || 12000);
+    }
     return;
   }
 
@@ -12217,6 +13816,17 @@ function setupArcadeStart(subtype) {
       // Force bots to SR-X too
       for (const b of gameBots) b.weaponId = 'srx';
       showAnnouncement('🔭 SNIPER ONLY', 'SR-X only · long-range chess match', '#aaeeff', 3000);
+      return;
+    }
+    case 'piefight': {
+      // 🥧 Everyone wields the Cream Pie and nothing else. Pure dessert warfare.
+      forcePlayerWeapon('cream_pie', 'secondary');
+      for (const b of gameBots) {
+        b.weaponId = 'cream_pie';
+        b.team = 'enemy'; // FFA — everyone's fair game
+        if (players[b.id]) players[b.id].weaponId = 'cream_pie';
+      }
+      showAnnouncement('🥧 PIE FIGHT', 'Cream pies only · splat everyone · most pies wins!', '#ffcc66', 3000);
       return;
     }
     case 'speedrun': {
@@ -13063,7 +14673,9 @@ function spawnDDayWave(count, waveNum) {
     const mesh = remoteMeshes[id];
     if (mesh) {
       const gun = makeBotWeaponProp(weaponId);
-      gun.position.set(0.38, 1.18, -0.22);
+      // Gun on the +Z (forward) side + flipped barrel, matching the +PI mesh facing.
+      gun.position.set(0.38, 1.18, 0.22);
+      gun.rotation.y = Math.PI;
       mesh.add(gun);
       if (mesh._rig) mesh._rig.holdsGun = true;
     }
@@ -13364,6 +14976,12 @@ function endMatch(winner, reason) {
     ?? (players[myId]?.kills)
     ?? 0;
   awardMatchCredits(playerKills, isWin);
+  // 🧠 Match-memory: every comic-cast bot remembers whether THEIR team won, and
+  // whether they were on your side or against you. (Ally bots win when you win.)
+  for (const b of gameBots) {
+    if (!b.charId) continue;
+    recordCharMemory(b.charId, { wonLastMatch: b.team === winner, team: b.team, mode: match.type });
+  }
   // Trials are one-match only — clear them so they re-cost next time.
   trialingThisMatch.clear();
 }
@@ -13374,6 +14992,15 @@ function botSideSpawn(idx, count, team) {
   if (selectedModeConfig && selectedModeConfig.type === 'dday' && team === 'ally') {
     const bunkerXs = [-7, 7, 22]; // bunkers 1, 2, 3
     return { x: bunkerXs[idx] || 0, z: 22 }; // near slit, inside bunker
+  }
+  // 🛋️ Lobby 13: scatter the cast around the lounge (avoid the duel pit at x≈-22).
+  if (selectedModeConfig && selectedModeConfig.type === 'lobby') {
+    const ang = (idx / Math.max(1, count)) * Math.PI * 2 + Math.random() * 0.6;
+    const r = 6 + Math.random() * 18;
+    let x = Math.cos(ang) * r;
+    const z = Math.sin(ang) * r;
+    if (x < -14) x = -14 + Math.random() * 6; // keep them out of the duel pit
+    return { x, z };
   }
   // BR mode: scatter bots randomly around the perimeter of the big map
   if (selectedModeConfig && selectedModeConfig.type === 'br') {
@@ -13391,6 +15018,119 @@ function botSideSpawn(idx, count, team) {
   const xJit   = (Math.random() - 0.5) * 6;
   const zJit   = (Math.random() - 0.5) * 6;
   return { x: baseX + xJit, z: (isAlly ? 32 : -20) + zJit };
+}
+
+// 🎭 Per-character teammate PLAY STYLES. When you draft a comic-cast character via
+// the Character Chat, their ally bot fights in their signature style. Every
+// character shares the SAME default stat block (hp/speed/aim from
+// DEFAULT_TEAMMATE_PLAYSTYLE) — they are balanced, NOT stronger/weaker. The only
+// difference is PLAY STYLE: preferred weapons (primary/secondary/melee) + behavior
+// (personality ∈ aggressor|camper|sniper|tactician). Add only those fields here;
+// stats are inherited from the default so no character is objectively OP.
+const TEAMMATE_PLAYSTYLES = {
+  // — Main heroes —
+  kingchaos:   { primary:'royal_minigun',     personality:'aggressor', style:'Chaotic spray-and-pray' },
+  luckylarry:  { primary:'auto_revolver',     personality:'tactician', style:'Accidental clutch' },
+  grandmaster: { primary:'srx',               personality:'sniper',    style:'Calculated picks' },
+  mirage:      { primary:'smart_smg', melee:'katana', personality:'aggressor', style:'Fast hit-and-run' },
+  // — Fan favorites —
+  bot47:       { primary:'arc_rifle',         personality:'tactician', style:'Cold precision' },
+  rager:       { primary:'auto_shotgun',      personality:'aggressor', style:'Reckless rusher' },
+  duckguy:     { primary:'potato_cannon',     personality:'aggressor', style:'Quacks & chaos' },
+  combatmedic: { primary:'pulse_disc', secondary:'pistol', personality:'tactician', style:'Support' },
+  // — Girls squad —
+  sharpshooter:{ primary:'railgun',           personality:'sniper',    style:'One-shot sniper' },
+  ladymayhem:  { primary:'firework_launcher', personality:'aggressor', style:'Explosive comedian' },
+  jinx:        { primary:'pinball_launcher',  personality:'tactician', style:'Unpredictable bounce' },
+  pandora:     { primary:'grenade_launcher',  personality:'aggressor', style:'Press every button' },
+  wildfire:    { primary:'incendiary_shotgun',personality:'aggressor', style:'Burn it down' },
+  anarchy:     { primary:'storm_cannon',      personality:'aggressor', style:'Burn the meta' },
+  // — Specialists —
+  professional:{ primary:'srx',               personality:'sniper',    style:'Executes, never plays' },
+  afkguy:      { primary:'smart_smg',         personality:'camper',    style:'AFK but somehow cracked' },
+  ragebaiter:  { primary:'sawed_off',         personality:'camper',    style:'Says no, holds angle' },
+  noskill:     { primary:'minigun',           personality:'aggressor', style:'More bullets = more skill' },
+  pyromaniac:  { primary:'flamethrower',      personality:'aggressor', style:'MORE FIRE' },
+  engineer:    { primary:'foam_cannon',       personality:'tactician', style:'Fix it or break it' },
+  // — Bots —
+  bot604:      { primary:'arc_rifle',         personality:'sniper',    style:'Probability engine' },
+  juicebox:    { primary:'pulse_disc', secondary:'pistol', personality:'tactician', style:'Hydration support' },
+  // — Weird department —
+  ghost:       { primary:'glassmaker', melee:'knife', personality:'tactician', style:'Silent flanker' },
+  nucleardave: { primary:'mortar_rifle',      personality:'aggressor', style:'Watch this' },
+  lorekeeper:  { primary:'magnet_rifle',      personality:'camper',    style:'Prophesied control' },
+  tankturtle:  { primary:'thermal_lmg',       personality:'camper',    style:'Slow but unstoppable' },
+  casualbob:   { primary:'ak30',              personality:'tactician', style:'Just here for fun' },
+  goat:        { primary:'lever', melee:'katana', personality:'aggressor', style:'Actual GOAT' },
+  mrsuspicious:{ primary:'auto_revolver',     personality:'sniper',    style:'Definitely-not-aimbot' },
+  thesweat:    { primary:'ak20',              personality:'aggressor', style:'Tryhard sweat' },
+  // — Miscellaneous —
+  janitor:     { primary:'foam_cannon', melee:'bat', personality:'tactician', style:'Cleans up messes' },
+  timekeeper:  { primary:'railgun',           personality:'sniper',    style:'Never-miss timing' },
+  wildcard:    { primary:'portal_launcher',   personality:'aggressor', style:'Total chaos' },
+  panicpanda:  { primary:'auto_shotgun',      personality:'aggressor', style:'Panic-clutch sprint' },
+  dramaqueen:  { primary:'firework_launcher', personality:'aggressor', style:'Dramatic flair' },
+  shadow:      { primary:'glassmaker', melee:'knife', personality:'tactician', style:'Menacing lurker' },
+  pixelboy:    { primary:'smart_smg',         personality:'aggressor', style:'Retro tryhard' },
+};
+// Shared default stat block — every drafted teammate uses these numbers; only the
+// play-style fields above differ. (aim 0..1; speedMult scales movement; hp = health.)
+const DEFAULT_TEAMMATE_PLAYSTYLE = { personality:'tactician', speedMult:1.0, aim:0.7, hp:300, style:'Balanced' };
+
+// 🎭 Which skin each drafted comic-cast character wears. Marquee AIs get a unique
+// signature skin (cc_*); the rest map to a fitting stock skin. Keeps every teammate
+// visually distinct and recognizable as their character.
+const TEAMMATE_SKINS = {
+  kingchaos:'cc_kingchaos', luckylarry:'cc_lucky', grandmaster:'cc_grandmaster', mirage:'cc_mirage',
+  bot47:'cc_bot', bot604:'cc_bot', rager:'cc_rager', duckguy:'cc_duck',
+  combatmedic:'cc_medic', juicebox:'cc_juicebox', sharpshooter:'cc_sharpshooter', ladymayhem:'cc_ladymayhem',
+  jinx:'cc_jinx', pandora:'cc_pandora', wildfire:'cc_wildfire', anarchy:'cc_anarchy',
+  professional:'cc_professional', afkguy:'cc_afk', ragebaiter:'cc_ragebaiter', noskill:'cc_noskill',
+  pyromaniac:'cc_pyro', engineer:'cc_engineer', ghost:'cc_ghost', nucleardave:'cc_nucleardave',
+  lorekeeper:'cc_lorekeeper', tankturtle:'cc_turtle', casualbob:'cc_casual', goat:'cc_goat',
+  mrsuspicious:'cc_suspicious', thesweat:'cc_sweat', janitor:'cc_janitor', timekeeper:'cc_timekeeper',
+  wildcard:'cc_wildcard', panicpanda:'cc_panic', dramaqueen:'cc_drama', shadow:'shadow', pixelboy:'cc_pixel',
+};
+
+// 🖼️ Float the drafted teammate's semi-pixel comic avatar (from chat.js) as a
+// billboard sprite above their bot, so you can spot your buddy in the fight.
+function attachTeammateAvatar(mesh, tc) {
+  if (!mesh || !tc || typeof window.CHAT_AVATAR !== 'function') return;
+  const canvas = window.CHAT_AVATAR(tc, 96);
+  if (!canvas) return;
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.magFilter = THREE.NearestFilter; tex.minFilter = THREE.NearestFilter; // keep it crunchy/pixelated
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(0.9, 0.9, 0.9);
+  sprite.position.set(0, 2.85, 0); // above the head/nametag
+  sprite.renderOrder = 999;
+  sprite.name = '_teammateAvatar';
+  mesh.add(sprite);
+  mesh._teammateAvatar = sprite;
+}
+
+// ── 🧠 Character match-memory ───────────────────────────────────────────────
+// After a real match, each comic-cast bot (one with a `charId`) remembers how the
+// fight went: what they killed YOU with, what YOU killed THEM with, and whether
+// their team won. chat.js reads `localStorage['pvp_char_memory']` so the character
+// can bring it up when you talk to them ("still salty you railgunned me last game").
+const CHAR_MEMORY_KEY = 'pvp_char_memory';
+function loadCharMemory() {
+  try { return JSON.parse(localStorage.getItem(CHAR_MEMORY_KEY) || '{}') || {}; } catch (e) { return {}; }
+}
+function recordCharMemory(charId, patch) {
+  if (!charId) return;
+  try {
+    const m = loadCharMemory();
+    m[charId] = { ...(m[charId] || {}), ...patch, ts: Date.now() };
+    localStorage.setItem(CHAR_MEMORY_KEY, JSON.stringify(m));
+  } catch (e) {}
+}
+// Friendly weapon name for the memory blurb (falls back to the id).
+function weaponDisplayName(id) {
+  const w = WEAPONS.find(ww => ww.id === id) || MELEE_ITEMS.find(mm => mm.id === id);
+  return (w && w.name) || id || 'something';
 }
 
 function spawnGameBots() {
@@ -13440,8 +15180,12 @@ function spawnGameBots() {
   if (selectedModeConfig.type === 'br') {
     // King of the Hill: always use the giant BR arena
     activateMap('br_arena');
+  } else if (selectedModeConfig.type === 'lobby') {
+    // 🛋️ Lobby 13: the chill social hub
+    activateMap('lobby13');
+    if (MAP_GROUPS.lobby13?._skyColor != null && scene.background?.setHex) scene.background.setHex(MAP_GROUPS.lobby13._skyColor);
   } else if (selectedModeConfig.type !== 'dday' && selectedModeConfig.type !== 'range') {
-    const pool = ['blank','urban','warehouse','forest','volcano','cyber','desert','tundra','space','airport','trenches','chernobyl','refinery','skydock','sewer','gravity_lab','glassworks','carrier','overgrowth','orbital_station','foundry','carnival','biosphere','lockdown','studio','temple','holiday','labyrinth','arena','opera','doomsday','train','dreamscape'];
+    const pool = ['blank','urban','warehouse','forest','volcano','cyber','desert','tundra','space','airport','trenches','chernobyl','refinery','skydock','sewer','gravity_lab','glassworks','carrier','overgrowth','orbital_station','foundry','carnival','biosphere','lockdown','studio','temple','holiday','labyrinth','arena','opera','doomsday','train','dreamscape','pearl_harbor','titanic','supermarket','pyongyang','traffic_cone_republic','flying_moai'];
     const chosen = (selectedMap === 'auto' || !MAP_GROUPS[selectedMap]) ? pool[Math.floor(Math.random()*pool.length)] : selectedMap;
     activateMap(chosen);
     // Update sky color if the map specifies one
@@ -13474,6 +15218,8 @@ function spawnGameBots() {
     camera.position.set(-22, 1.65, 22); euler.y = 0; // D-Day: inside bunker 0, facing enemies
   } else if (selectedModeConfig && selectedModeConfig.type === 'range') {
     camera.position.set(0, 1.65, 38); euler.y = Math.PI; // Shooting range: face -z toward targets
+  } else if (selectedModeConfig && selectedModeConfig.type === 'lobby') {
+    camera.position.set(0, 1.65, 18); euler.y = Math.PI; // Lobby 13: drop in the central lounge facing the sign
   } else if (selectedModeConfig && selectedModeConfig.type === 'br') {
     // BR: spawn at random spot in the big map
     const ang = Math.random() * Math.PI * 2;
@@ -13485,41 +15231,113 @@ function spawnGameBots() {
   }
   socket.emit('resetSelf', { x: camera.position.x, z: camera.position.z });
 
+  // 🎭 Drafted comic-cast rosters: you can pick MULTIPLE teammates AND MULTIPLE
+  // opponents in Character Chat. They fill the first slots of their team (ally
+  // slots for teammates, enemy slots for opponents).
+  const readDraft = (winKey, lsKey, legacyLsKey) => {
+    let arr = window[winKey];
+    if (!Array.isArray(arr)) {
+      try { arr = JSON.parse(localStorage.getItem(lsKey) || '[]'); } catch (e) { arr = []; }
+    }
+    if (!Array.isArray(arr)) arr = [];
+    // backward-compat: promote a single legacy id if no array is stored
+    if (!arr.length && legacyLsKey) {
+      const single = window.PVP_TEAMMATE || (() => { try { return localStorage.getItem(legacyLsKey); } catch (e) { return null; } })();
+      if (single) arr = [single];
+    }
+    return arr.filter(Boolean);
+  };
+  let   draftedAllies  = readDraft('PVP_TEAMMATES', 'pvp_teammates', 'pvp_teammate');
+  const draftedEnemies = readDraft('PVP_OPPONENTS', 'pvp_opponents', null);
+
+  // 🛋️ Lobby 13: the ENTIRE chat cast hangs out as chill ally NPCs (no draft needed).
+  // They become ally-team bots so they never attack you — with no enemies present
+  // they just wander/idle around the lounge while you organize 1v1s in the duel pit.
+  if (selectedModeConfig.type === 'lobby' && window.CHAT_CAST) {
+    draftedAllies = Object.keys(window.CHAT_CAST);
+    allies  = draftedAllies.length;
+    enemies = 0;
+  }
+
   const makeBot = (idx, team) => {
     const isAlly   = team === 'ally';
     const count    = isAlly ? allies : enemies;
     const sp       = botSideSpawn(idx, count, team);
     const sx = sp.x, sz = sp.z;
     const id       = `bot_${team}_${now}_${idx}`;
-    const name     = isAlly ? `Ally ${idx+1}` : `Enemy ${idx+1}`;
-    const weaponId = randomPrimaryId();
+    // 💬 Drafted-character hook: the first ally slots become your drafted TEAMMATES
+    // and the first enemy slots become your drafted OPPONENTS (name + emoji + skin
+    // + playstyle), set via Character Chat. Each fills one slot, in order.
+    let name = isAlly ? `Ally ${idx+1}` : `Enemy ${idx+1}`;
+    let _teammateChar = null;
+    let _playstyle = null;
+    const _draftList = isAlly ? draftedAllies : draftedEnemies;
+    const tmId = (idx < _draftList.length) ? _draftList[idx] : null;
+    {
+      const tmChar = tmId && window.CHAT_CAST && window.CHAT_CAST[tmId];
+      if (tmChar) {
+        name = `${tmChar.emoji} ${tmChar.name}`; _teammateChar = tmChar;
+        // Every character shares the same DEFAULT stat block (hp/speed/aim); their
+        // entry only overrides PLAY STYLE (personality + signature loadout + label).
+        _playstyle = { ...DEFAULT_TEAMMATE_PLAYSTYLE, ...(TEAMMATE_PLAYSTYLES[tmId] || {}) };
+      }
+    }
     // 🆕 Full bot loadout — secondary, melee, utility (random non-admin picks)
     const SECONDARIES = WEAPONS.filter(w => w.slot === 'secondary' && !w.adminItem && !w.ddayOnly);
     const MELEES_NONADMIN = MELEE_ITEMS.filter(m => !m.adminItem);
     const UTILS_NONADMIN  = SUPPORT_ITEMS.filter(s => !s.adminItem);
-    const botSecondaryId = SECONDARIES[Math.floor(Math.random() * SECONDARIES.length)]?.id || 'pistol';
-    const botMeleeId     = MELEES_NONADMIN[Math.floor(Math.random() * MELEES_NONADMIN.length)]?.id || 'bat';
+    // 🎭 Drafted teammate uses their signature loadout; everyone else rolls random.
+    const weaponId = (_playstyle && _playstyle.primary && WEAPONS.some(w => w.id === _playstyle.primary))
+      ? _playstyle.primary : randomPrimaryId();
+    const botSecondaryId = (_playstyle && _playstyle.secondary && WEAPONS.some(w => w.id === _playstyle.secondary))
+      ? _playstyle.secondary : (SECONDARIES[Math.floor(Math.random() * SECONDARIES.length)]?.id || 'pistol');
+    const botMeleeId     = (_playstyle && _playstyle.melee && MELEE_ITEMS.some(m => m.id === _playstyle.melee))
+      ? _playstyle.melee : (MELEES_NONADMIN[Math.floor(Math.random() * MELEES_NONADMIN.length)]?.id || 'bat');
     const botUtilityId   = UTILS_NONADMIN[Math.floor(Math.random() * UTILS_NONADMIN.length)]?.id || 'frag';
 
     // ── Create locally RIGHT NOW (no network round-trip needed) ──────────
-    // Bots wear comic-crew skins: enemies = SWAT crew, allies = soldiers.
-    const botSkin = isAlly
-      ? (['soldier','default'][Math.floor(Math.random()*2)])
-      : (['swat','swat_shades','soldier'][Math.floor(Math.random()*3)]);
+    // Drafted teammate wears their character's signature skin; everyone else
+    // gets a VARIED stock skin (per team flavor) that never copies the player's.
+    let botSkin;
+    if (_teammateChar && tmId) {
+      botSkin = TEAMMATE_SKINS[tmId] || (isAlly ? 'soldier' : 'swat');
+    } else {
+      const pool = isAlly
+        ? ['soldier','green_cap','riot_chad','default','spiky','swat_shades']
+        : ['swat','swat_shades','soldier','shadow','riot_chad','spiky'];
+      // spread choices across the team by index, then jitter, and never == player's skin
+      let pick = pool[(idx + Math.floor(Math.random() * pool.length)) % pool.length];
+      if (pick === mySkin) pick = pool[(pool.indexOf(pick) + 1) % pool.length];
+      botSkin = pick;
+    }
+    const startHp = (_playstyle && _playstyle.hp) || 300;
     const pData = { id, name, isBot: true, team, weaponId, ownerId: myId, skin: botSkin,
                     x: sx, y: 1, z: sz, rotY: 0, rotX: 0,
-                    hp: 300, dead: false, kills: 0, deaths: 0 };
+                    hp: startHp, maxHp: startHp, dead: false, kills: 0, deaths: 0 };
     players[id] = pData;
     spawnRemotePlayer(pData);                    // adds mesh to scene immediately
     remoteMeshes[id].position.set(sx, 0, sz);   // make sure position is exact
+    if (_teammateChar) {
+      const _tc = _teammateChar;
+      const _ps = _playstyle || DEFAULT_TEAMMATE_PLAYSTYLE;
+      const _sub = isAlly ? (_ps.style || 'Your teammate') : `Enemy · ${_ps.style || ''}`.trim();
+      const _col = isAlly ? (_tc.color || '#88ddaa') : '#ff6677';
+      const _tag = isAlly ? 'JOINED' : 'INCOMING';
+      // Skip the staggered per-bot announcement in Lobby 13 — 37 of them would spam the screen.
+      if (selectedModeConfig.type !== 'lobby') {
+        setTimeout(() => { try { showAnnouncement(`${_tc.emoji} ${_tc.name} ${_tag}`, _sub, _col, 2400); } catch (e) {} }, 1200 + idx * 700);
+      }
+      // 🖼️ Float the semi-pixel comic avatar over the drafted character (ally or enemy).
+      try { attachTeammateAvatar(remoteMeshes[id], _tc); } catch (e) {}
+    }
 
     // ── Attach weapon prop to bot mesh ────────────────────────────────────
     const mesh = remoteMeshes[id];
     if (mesh) {
       const gun = makeBotWeaponProp(weaponId);
-      // Right-arm position in bot-local space, pointing forward (−Z)
-      gun.position.set(0.38, 1.18, -0.22);
-      gun.rotation.y = 0; // faces forward with the bot
+      // Gun on the +Z (forward) side + flipped barrel, matching the +PI mesh facing.
+      gun.position.set(0.38, 1.18, 0.22);
+      gun.rotation.y = Math.PI; // barrel points along forward with the bot
       mesh.add(gun);
       if (mesh._rig) mesh._rig.holdsGun = true;
     }
@@ -13528,12 +15346,22 @@ function spawnGameBots() {
     const w = WEAPONS.find(ww => ww.id === weaponId) || WEAPONS[0];
     const diff = selectedDifficulty;
     const tune = botTuning(diff);
-    const aimSkill   = tune.aimMin + Math.random() * tune.aimRand;
+    let aimSkill   = tune.aimMin + Math.random() * tune.aimRand;
     const reactionMs = tune.reactMin + Math.random() * tune.reactRand;
     // Personality: weapon-matched mostly (70% hard / 80% expert), with off-roll variance for unpredictability
-    const personality = rollPersonality(weaponId, diff);
+    let personality = rollPersonality(weaponId, diff);
+    // 🎭 Drafted teammate overrides: signature aim + personality (clamped, never below rolled)
+    if (_playstyle) {
+      if (_playstyle.aim != null) aimSkill = Math.max(aimSkill, _playstyle.aim);
+      if (_playstyle.personality) personality = _playstyle.personality;
+    }
     const botDPS = WEAPON_DPS_CACHE[weaponId] || 150;
-    gameBots.push({ id, team, weaponId, spawnWeaponId: weaponId, x: sx, z: sz, rotY: 0, hp: 300,
+    gameBots.push({ id, team, weaponId, spawnWeaponId: weaponId, x: sx, z: sz, rotY: 0, hp: startHp, maxHp: startHp,
+                    // 🎭 Teammate playstyle flavor + which drafted character (if any) this bot is
+                    speedMult: (_playstyle && _playstyle.speedMult) || 1, playstyle: _playstyle, charId: tmId || null,
+                    // 🛋️ ~45% of the lobby cast are "down to duel" — they'll walk to a duel
+                    // slot to join you when you step onto a pad. (no effect outside lobby)
+                    _wantsDuel: (selectedModeConfig.type === 'lobby' && Math.random() < 0.45),
                     // 🆕 Full loadout — bot will switch between these based on engagement range
                     primaryId: weaponId, secondaryId: botSecondaryId,
                     meleeId: botMeleeId, utilityId: botUtilityId,
@@ -13570,6 +15398,20 @@ function spawnGameBots() {
   for (let i = 0; i < enemies;  i++) makeBot(i, 'enemy');
 
   socket.emit('spawnBots', botList);
+
+  // 🛋️ Lobby 13 is NOT a match — skip the entire match system (no initMatch /
+  // startMatchRound, no `match` object, no scoring/rounds/win logic). It's a
+  // standalone social hub; the cast just wanders and you organize your own duels.
+  if (selectedModeConfig.type === 'lobby') {
+    match = null;
+    inLobby = true;
+    const hud = document.getElementById('match-hud'); if (hud) hud.style.display = 'none';
+    setTimeout(() => { try { showAnnouncement('🛋️ LOBBY 13', 'Chill zone · walk up to anyone and press F to duel', '#aaffaa', 3200); } catch (e) {} }, 600);
+    grantSpawnShield(0);
+    return;
+  }
+
+  inLobby = false;
   initMatch();
   setTimeout(() => startMatchRound(), 400 + (allies + enemies) * 40);
 }
@@ -13673,6 +15515,9 @@ function updateRange(dt) {
 }
 
 function getBotTarget(bot) {
+  // 🛋️ Lobby 13: nobody fights. The team-agnostic fallback below would otherwise
+  // make the all-ally cast target (and shoot) each other — so bail out entirely.
+  if (inLobby) return null;
   // D-Day turrets: target nearest attacking enemy bot
   if (bot.state === 'turret') {
     let best = null, bestDist = Infinity;
@@ -13947,7 +15792,9 @@ function updateBotAI(dt) {
         }
       }
       const mesh = remoteMeshes[bot.id];
-      if (mesh) { mesh.position.set(bot.x, 0, bot.z); mesh.rotation.y = bot.rotY; }
+      // +PI so the face (+Z side of the head) points along forward, matching the
+      // remote-player convention. Without this, bot heads render backwards.
+      if (mesh) { mesh.position.set(bot.x, 0, bot.z); mesh.rotation.y = bot.rotY + Math.PI; }
       continue; // skip movement block
     }
 
@@ -13963,13 +15810,26 @@ function updateBotAI(dt) {
     bot.strafeFlipTimer = (bot.strafeFlipTimer || 0) - dt;
 
     if (!target) {
-      // Wander
-      bot.state = 'wander';
-      bot.wanderTimer -= dt;
-      if (bot.wanderTimer <= 0) { bot.wanderAngle += (Math.random()-0.5)*1.8; bot.wanderTimer = 1.5 + Math.random()*2; }
-      moveX = Math.sin(bot.wanderAngle) * 4 * dt;
-      moveZ = Math.cos(bot.wanderAngle) * 4 * dt;
-      bot.rotY = Math.atan2(moveX, moveZ);
+      // 🛋️ Lobby duel staging: a willing bot assigned to a slot walks there, then idles.
+      if (inLobby && bot._duelGoto) {
+        const gdx = bot._duelGoto.x - bot.x, gdz = bot._duelGoto.z - bot.z;
+        const gd = Math.hypot(gdx, gdz);
+        if (gd > 0.35) {
+          const sp = Math.min(8 * dt, gd); // brisk walk over to the slot
+          moveX = (gdx / gd) * sp;
+          moveZ = (gdz / gd) * sp;
+          bot.rotY = Math.atan2(moveX, moveZ);
+        }
+        bot.state = 'duel_stage';
+      } else {
+        // Wander
+        bot.state = 'wander';
+        bot.wanderTimer -= dt;
+        if (bot.wanderTimer <= 0) { bot.wanderAngle += (Math.random()-0.5)*1.8; bot.wanderTimer = 1.5 + Math.random()*2; }
+        moveX = Math.sin(bot.wanderAngle) * 4 * dt;
+        moveZ = Math.cos(bot.wanderAngle) * 4 * dt;
+        bot.rotY = Math.atan2(moveX, moveZ);
+      }
     } else {
       const dx = target.x - bot.x, dz = target.z - bot.z;
       const dist = Math.sqrt(dx*dx + dz*dz);
@@ -14685,6 +16545,43 @@ function updateBotAI(dt) {
       moveX *= wMult;
       moveZ *= wMult;
     }
+    // 🎭 Drafted-teammate playstyle: per-character movement speed flavor
+    if (bot.speedMult && bot.speedMult !== 1) { moveX *= bot.speedMult; moveZ *= bot.speedMult; }
+
+    // 🦘🛹 Bots use JUMP + SLIDE like players, flavored by personality. Only when
+    // alive, grounded, and actively engaging — aggressors juke constantly, snipers/
+    // campers almost never (they'd lose their aim).
+    {
+      // NOTE: `dist` from the target-exists branch is out of scope here (that block
+      // already closed), so recompute it locally. Referencing the old `dist` threw a
+      // ReferenceError that the per-bot try/catch swallowed → bots froze like statues.
+      const engDist = target ? Math.hypot(target.x - bot.x, target.z - bot.z) : Infinity;
+      const engaging = target && !isDead && engDist < 38;
+      const onGround = (bot.y || 0) <= 0.05 && (bot.yVel || 0) === 0;
+      // — Slide: a short low-profile speed burst (boosts this frame's move).
+      if (now < (bot._slideUntil || 0)) {
+        moveX *= 1.55; moveZ *= 1.55;
+      } else if (engaging && onGround && now >= (bot._nextSlideAt || 0)) {
+        const wantSlide = bot._kiting
+          || (bot.personality === 'aggressor' && engDist < 16)
+          || (bot.personality === 'tactician' && engDist < 12 && Math.random() < 0.5);
+        if (wantSlide && Math.random() < 0.6) {
+          bot._slideUntil  = now + 550;
+          bot._nextSlideAt = now + 2200 + Math.random() * 2600;
+        } else {
+          bot._nextSlideAt = now + 900 + Math.random() * 1200; // re-check soon
+        }
+      }
+      // — Jump: hop mid-fight to dodge/juke. Same impulse as the player's jump.
+      if (engaging && onGround && now >= (bot._nextJumpAt || 0)) {
+        const jumpChance = bot.personality === 'aggressor' ? 0.7
+                         : bot.personality === 'tactician' ? 0.4
+                         : 0.12; // sniper / camper
+        if (Math.random() < jumpChance) { bot.yVel = 13; bot.y = bot.y || 0; }
+        const gap = bot.personality === 'aggressor' ? 1100 : 2200;
+        bot._nextJumpAt = now + gap + Math.random() * 2000;
+      }
+    }
     // Apply movement + wall collision
     const prevBotX = bot.x, prevBotZ = bot.z;
     let nx = bot.x + moveX, nz = bot.z + moveZ;
@@ -14727,29 +16624,49 @@ function updateBotAI(dt) {
       bot.strafeDir = -bot.strafeDir;
       bot.strafeFlipTimer = 0.8;
     }
-    // ── Anti-freeze safety net: if bot hasn't moved in 0.5s, force them to walk ─
-    // This catches ANY freeze cause: stuck cover-camping, dead-state-machine paths, broken hit-and-run, etc.
+    // ── Anti-freeze safety net: bots must NEVER stand still "like a statue". ──
+    // The old version re-rolled a RANDOM direction with a tiny 0.15 step — if it
+    // faced a wall the step got collision-eaten and the bot just twitched in a
+    // corner forever. Now we probe 8 directions, pick the most OPEN one (longest
+    // clear line of sight, biased toward the target), and take a decisive step.
+    // Intentional holds (Hold-position command) are exempt so they can camp.
+    const holdingStill = bot._holdPosActive
+      || (bot._commandOverride && bot._commandOverride.type === 'hold' && now < bot._commandOverride.until);
     const movedThisFrame = Math.hypot(bot.x - prevBotX, bot.z - prevBotZ);
-    if (movedThisFrame < 0.01) {
-      bot.freezeTimer = (bot.freezeTimer || 0) + dt;
-    } else {
-      bot.freezeTimer = 0;
+    if (movedThisFrame < 0.015) bot.freezeTimer = (bot.freezeTimer || 0) + dt;
+    else bot.freezeTimer = 0;
+    // Long-window check: catches the "slow wiggle" statue that nudges a hair each
+    // frame (so freezeTimer never accrues) yet never actually goes anywhere.
+    bot._slowCheckT = (bot._slowCheckT || 0) + dt;
+    let slowStuck = false;
+    if (bot._slowCheckT >= 1.5) {
+      const disp = Math.hypot(bot.x - (bot._slowX ?? bot.x), bot.z - (bot._slowZ ?? bot.z));
+      slowStuck = disp < 1.0;
+      bot._slowCheckT = 0; bot._slowX = bot.x; bot._slowZ = bot.z;
     }
-    if (bot.freezeTimer >= 0.5) {
-      // Force unstick: snap out of cover, clear hit-and-run, pick a new wander direction, and step
+    if ((bot.freezeTimer >= 0.35 || slowStuck) && !holdingStill) {
+      const towardA = target ? Math.atan2(target.x - bot.x, target.z - bot.z) : null;
+      let bestA = bot.wanderAngle || 0, bestScore = -Infinity;
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        const clear = hasLineOfSight(bot.x, bot.z, bot.x + Math.sin(a) * 5, bot.z + Math.cos(a) * 5);
+        let score = (clear ? 10 : -5) + Math.random();
+        if (towardA != null) score += Math.cos(a - towardA) * 2; // prefer heading at the target
+        if (score > bestScore) { bestScore = score; bestA = a; }
+      }
+      // Snap fully out of any stuck state and commit to the open heading
       bot.state = 'wander';
       bot.coverPt = null;
-      bot.hitAndRunUntil = 0;
-      bot.hitAndRunTarget = null;
+      bot.hitAndRunUntil = 0; bot.hitAndRunTarget = null;
       bot.tacTimer = 0;
-      bot.wanderAngle = Math.random() * Math.PI * 2;
-      bot.stuckTimer = 0.6; // brief commitment to the new direction
+      bot.wanderAngle = bestA;
+      bot.wanderTimer = 1.2;       // commit so it doesn't instantly re-pick
+      bot.stuckTimer = 0.8;
       bot.freezeTimer = 0;
-      // Apply a small immediate step so they visibly move this frame
-      const stepX = Math.sin(bot.wanderAngle) * 0.15;
-      const stepZ = Math.cos(bot.wanderAngle) * 0.15;
-      let fx = Math.max(-47, Math.min(47, bot.x + stepX));
-      let fz = Math.max(-47, Math.min(47, bot.z + stepZ));
+      // Decisive step in the chosen OPEN direction (won't be wall-eaten).
+      const stepX = Math.sin(bestA) * 0.5, stepZ = Math.cos(bestA) * 0.5;
+      let fx = Math.max(-mapHalf, Math.min(mapHalf, bot.x + stepX));
+      let fz = Math.max(-mapHalf, Math.min(mapHalf, bot.z + stepZ));
       [fx, fz] = resolvePosCollisions(fx, fz, bot.y || 0);
       bot.x = fx; bot.z = fz;
     }
@@ -14760,7 +16677,8 @@ function updateBotAI(dt) {
 
     // Sync remote mesh position (with vertical lift from air grenade)
     const mesh = remoteMeshes[bot.id];
-    if (mesh) { mesh.position.set(bot.x, bot.y || 0, bot.z); mesh.rotation.y = bot.rotY; }
+    // +PI so the face points forward (see note above; matches remote players).
+    if (mesh) { mesh.position.set(bot.x, bot.y || 0, bot.z); mesh.rotation.y = bot.rotY + Math.PI; }
     } catch(e) { console.error('[botAI] error for bot', bot.id, ':', e.message, e.stack); }
   }
   // Batch-send bot positions to server
@@ -14773,20 +16691,22 @@ function updateBotAI(dt) {
 }
 
 // ── Per-frame character animation pass ──────────────────────────────────────
-// Bots never crouch; remote human players' crouch/slide is inferred from their
-// camera eye-height (synced via the `move` event into players[id].y).
+// Bots drop into a low slide pose while mid-slide; remote human players' crouch/
+// slide is inferred from their camera eye-height (synced via `move` into players[id].y).
 function animateCharacters(dt) {
   for (const id in remoteMeshes) {
     const mesh = remoteMeshes[id];
     if (!mesh || !mesh.visible || !mesh._rig) continue;
     let crouchTarget = 0;
-    const isBot = gameBots.some(b => b.id === id);
-    if (!isBot) {
+    const b = gameBots.find(bb => bb.id === id);
+    if (!b) {
       const p = players[id];
       if (p && typeof p.y === 'number') {
         // 1.65 standing → 0.70 sliding. Map to 0..1 crouch amount.
         crouchTarget = Math.max(0, Math.min(1, (1.65 - p.y) / (1.65 - 0.70)));
       }
+    } else if (b._slideUntil && Date.now() < b._slideUntil) {
+      crouchTarget = 1; // 🛹 bot is sliding → low profile
     }
     animateCharacterMesh(mesh, dt, crouchTarget);
   }
@@ -14824,6 +16744,12 @@ function updateKingCrown(dt) {
 
 // ── Game loop ──────────────────────────────────────────────────────────────
 let lastTime = performance.now();
+// Single RAF chain guard: once the render loop is running it stays running for
+// the page's lifetime (modes/lobby reuse it). startLoop() makes the initial kick
+// idempotent so re-entering a mode (e.g. Lobby 13 → menu → real match) never
+// spawns a second RAF chain (which would double game speed).
+let loopStarted = false;
+function startLoop() { if (loopStarted) return; loopStarted = true; loop(); }
 function loop() {
   requestAnimationFrame(loop);
   const now = performance.now();
@@ -14839,6 +16765,9 @@ function loop() {
   updateP2WSystems(dt); // orbital strikes, guardian drones, nano shield
   updateMapGimmicks(dt); // lava DOT, jump pads, low-grav zones, ice friction
   updateBotSpeech(dt);  // bot speech bubbles follow their heads
+  updateWeaponSkinFX(dt); // ✨ gun-skin particles/streaks (gold money, smoke, data, crystal)
+  updateAimAssist(dt);  // 🎯 auto-shoot / aim assist / aimbot / AI-aim dot
+  if (inLobby) updateLobbyInteractions(); // 🛋️ duel-pad / challenge prompt
   updateChatFeed();     // fade old chat lines
   updateAdminCheats(dt);// admin cheat tick (fly, kill aura, etc.)
   updateUAV(dt);        // 🛰️ Predator UAV overlay tick
@@ -15666,7 +17595,7 @@ function confirmLoadout() {
     gameStarted = true;
     spawnGameBots();
     requestPointerLockSafe();
-    loop();
+    startLoop();
   } else if (loadoutMode === 'swap') {
     // Mid-game swap via trashcan — player is still alive, no respawn needed
     requestPointerLockSafe();
@@ -15787,9 +17716,195 @@ async function startGame() {
   socket.emit('setName', name);
   emitMySkin();
   document.getElementById('overlay').style.display = 'none';
-  const ms = document.getElementById('mode-screen');
-  ms.style.display = 'flex';
-  updateUserInfoBar(); // populate user info on mode screen
+  updateUserInfoBar(); // populate user info for the mode screen (opened from the lobby)
+  // 🛋️ Land in Lobby 13 on login — the chill social hub IS the lobby now. The
+  // mode-select menu is one tap away via the floating MODES button.
+  document.getElementById('mode-screen').style.display = 'none';
+  selectMode('lobby13');
+}
+
+// 🛋️ Leave Lobby 13 → open the mode-select menu to pick a real match / shop.
+// Resets the "in-game" state so the normal first-match flow runs cleanly, and
+// clears the lobby cast so they don't linger behind the menu.
+function openModeMenu() {
+  gameStarted = false;
+  inLobby = false;
+  match = null; // (lobby has no match anyway — belt & suspenders)
+  try { document.exitPointerLock && document.exitPointerLock(); } catch (e) {}
+  for (const bot of gameBots) {
+    if (remoteMeshes[bot.id]) { scene.remove(remoteMeshes[bot.id]); delete remoteMeshes[bot.id]; }
+    if (bot._bubble) { bot._bubble.remove(); bot._bubble = null; }
+    delete players[bot.id];
+  }
+  gameBots.length = 0;
+  const hud = document.getElementById('match-hud'); if (hud) hud.style.display = 'none';
+  showLobbyModesButton(false);
+  showLobbyPrompt(null);
+  document.getElementById('mode-screen').style.display = 'flex';
+  updateUserInfoBar();
+}
+// Floating "MODES" button — only visible while you're chilling in Lobby 13.
+function showLobbyModesButton(show) {
+  let btn = document.getElementById('lobby-modes-btn');
+  if (!btn) {
+    btn = document.createElement('button');
+    btn.id = 'lobby-modes-btn';
+    btn.textContent = '🎮 MODES';
+    btn.style.cssText = 'position:fixed;top:14px;left:14px;z-index:60;'
+      + 'padding:9px 22px;background:rgba(20,16,28,0.85);color:#aaffaa;border:2px solid #aaffaa;'
+      + 'border-radius:6px;font-family:inherit;font-size:14px;font-weight:bold;letter-spacing:3px;'
+      + 'cursor:pointer;box-shadow:0 2px 12px rgba(0,0,0,0.5);';
+    btn.addEventListener('click', openModeMenu);
+    btn.addEventListener('touchstart', e => { e.preventDefault(); openModeMenu(); }, { passive: false });
+    document.body.appendChild(btn);
+  }
+  btn.style.display = show ? 'block' : 'none';
+}
+
+// ── 🛋️ Lobby interactions: duel-slot pads + proximity F-to-challenge ─────────
+// Center-bottom prompt that tells you what F will do right now.
+function showLobbyPrompt(txt) {
+  let el = document.getElementById('lobby-prompt');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'lobby-prompt';
+    el.style.cssText = 'position:fixed;bottom:90px;left:50%;transform:translateX(-50%);z-index:55;'
+      + 'padding:10px 20px;background:rgba(16,12,22,0.85);color:#ffe9a8;border:2px solid #ffcc55;'
+      + 'border-radius:8px;font-family:inherit;font-size:16px;font-weight:bold;letter-spacing:1px;'
+      + 'box-shadow:0 2px 14px rgba(0,0,0,0.6);pointer-events:none;text-align:center;';
+    document.body.appendChild(el);
+  }
+  if (txt) { el.textContent = txt; el.style.display = 'block'; }
+  else el.style.display = 'none';
+}
+// Clear every bot's duel-slot assignment so they go back to wandering.
+function releaseDuelBots() {
+  for (const b of gameBots) { b._duelGoto = null; b._duelTeam = null; }
+}
+// Small spread so multiple bots on the same pad don't stack on one point.
+function duelSlotPoint(pt, i) {
+  if (i <= 0) return { x: pt.x, z: pt.z };
+  const ang = i * 2.4;
+  return { x: pt.x + Math.cos(ang) * 1.1, z: pt.z + Math.sin(ang) * 1.1 };
+}
+// Assign willing cast members to fill the open slots. `playerSide` is the pad the
+// player chose ('blue' or 'red'); their side gets teammates ('mate'), the other
+// pad gets opponents ('foe'). The player occupies one slot on their own side.
+function stageDuelBots(area, playerSide) {
+  const matePad = playerSide === 'red' ? area.red : area.blue;
+  const foePad  = playerSide === 'red' ? area.blue : area.red;
+  const mates = gameBots.filter(b => !b.dead && b._duelTeam === 'mate');
+  const foes  = gameBots.filter(b => !b.dead && b._duelTeam === 'foe');
+  const freeWilling = (pad) => gameBots
+    .filter(b => !b.dead && b._wantsDuel && !b._duelTeam && b.charId)
+    .sort((a, b) => (Math.hypot(a.x - pad.x, a.z - pad.z))
+                  - (Math.hypot(b.x - pad.x, b.z - pad.z)));
+  while (foes.length < area.perTeam) {
+    const pool = freeWilling(foePad); if (!pool.length) break;
+    const bot = pool[0]; bot._duelTeam = 'foe';
+    bot._duelGoto = duelSlotPoint(foePad, foes.length);
+    foes.push(bot);
+  }
+  while (mates.length < area.perTeam - 1) {  // player fills one slot on their side
+    const pool = freeWilling(matePad); if (!pool.length) break;
+    const bot = pool[0]; bot._duelTeam = 'mate';
+    bot._duelGoto = duelSlotPoint(matePad, mates.length + 1);
+    mates.push(bot);
+  }
+}
+// How many assigned bots have arrived, as physical BLUE/RED pad counts.
+function countSeated(area, playerSide) {
+  const matePad = playerSide === 'red' ? area.red : area.blue;
+  const foePad  = playerSide === 'red' ? area.blue : area.red;
+  let mate = 0, foe = 0;
+  for (const b of gameBots) {
+    if (b.dead || !b._duelTeam) continue;
+    const pad = b._duelTeam === 'mate' ? matePad : foePad;
+    if (Math.hypot(b.x - pad.x, b.z - pad.z) <= area.radius + 0.8) {
+      if (b._duelTeam === 'mate') mate++; else foe++;
+    }
+  }
+  // Map mate/foe → blue/red for display (player counts on their own side).
+  const blue = (playerSide === 'blue') ? mate + 1 : foe;
+  const red  = (playerSide === 'red')  ? mate + 1 : foe;
+  return { blue, red };
+}
+// Per-frame (only while inLobby): stage duels on the blue/red pads, or offer a
+// proximity 1V1 challenge against the nearest cast member.
+function updateLobbyInteractions() {
+  if (!inLobby) { showLobbyPrompt(null); return; }
+  // Near a trashcan? Let its own "press F to change weapons" prompt take over and
+  // don't offer a duel/challenge here — F swaps your loadout instead.
+  if (nearTrashcan) { releaseDuelBots(); lobbyActiveArea = null; lobbyPlayerSide = null; lobbyPadHere = null; lobbyChallengeTarget = null; showLobbyPrompt(null); return; }
+  const px = camera.position.x, pz = camera.position.z;
+  // Which pad (blue OR red) of which area is the player standing on?
+  let area = null, side = null;
+  for (const a of LOBBY_DUEL_PADS) {
+    if (Math.hypot(px - a.blue.x, pz - a.blue.z) <= a.radius) { area = a; side = 'blue'; break; }
+    if (Math.hypot(px - a.red.x,  pz - a.red.z)  <= a.radius) { area = a; side = 'red';  break; }
+  }
+  // Switched area/side (or stepped off) → release previously-assigned bots.
+  if (area !== lobbyActiveArea || side !== lobbyPlayerSide) { releaseDuelBots(); lobbyActiveArea = area; lobbyPlayerSide = side; }
+  lobbyPadHere = area; lobbyChallengeTarget = null;
+
+  if (area) {
+    stageDuelBots(area, side);
+    const s = countSeated(area, side);
+    const you = side === 'blue' ? '🟦' : '🟥';
+    showLobbyPrompt(`⚔️ ${area.label}  ${you} you · 🟦 BLUE ${s.blue}/${area.perTeam}  🟥 RED ${s.red}/${area.perTeam}  · press F to start`);
+  } else {
+    let best = null, bestD = 4.5;
+    for (const bot of gameBots) {
+      if (bot.dead || !bot.charId) continue;
+      const d = Math.hypot(px - bot.x, pz - bot.z);
+      if (d < bestD) { bestD = d; best = bot; }
+    }
+    lobbyChallengeTarget = best;
+    if (best) {
+      const nm = (players[best.id]?.name) || 'them';
+      const keen = best._wantsDuel ? ' (wants a fight!)' : '';
+      showLobbyPrompt(`⚔️ Press F to challenge ${nm} to a 1V1${keen}`);
+    } else showLobbyPrompt(null);
+  }
+}
+// F pressed in the lobby → start the staged duel, or challenge the nearest member.
+function lobbyInteract() {
+  if (!inLobby) return;
+  if (lobbyPadHere) {
+    // Your side's bots are teammates, the other side's are opponents — regardless
+    // of whether you stood on blue or red.
+    const mates = gameBots.filter(b => !b.dead && b._duelTeam === 'mate').map(b => b.charId).filter(Boolean);
+    const foes  = gameBots.filter(b => !b.dead && b._duelTeam === 'foe').map(b => b.charId).filter(Boolean);
+    startDuel(lobbyPadHere.modeId, { allies: mates, enemies: foes });
+  } else if (lobbyChallengeTarget) {
+    startDuel('1v1', { enemies: [lobbyChallengeTarget.charId].filter(Boolean) });
+  }
+}
+// Leave the lobby and start a real match (the duel itself IS a normal match on a
+// real arena — the lobby stays a separate, match-free hub). The staged BLUE bots
+// become your teammates and RED bots your opponents; spawnGameBots fills any
+// still-empty slots with generic bots.
+function startDuel(modeId, picks) {
+  const cfg = GAME_MODE_CONFIGS[modeId];
+  if (!cfg) return;
+  inLobby = false;
+  releaseDuelBots();
+  lobbyActiveArea = null; lobbyPlayerSide = null; lobbyPadHere = null; lobbyChallengeTarget = null;
+  showLobbyPrompt(null);
+  showLobbyModesButton(false);
+  const hud = document.getElementById('match-hud'); if (hud) hud.style.display = 'flex';
+  picks = picks || {};
+  if (picks.enemies && picks.enemies.length) window.PVP_OPPONENTS = picks.enemies.slice();
+  if (picks.allies  && picks.allies.length)  window.PVP_TEAMMATES = picks.allies.slice();
+  selectedModeConfig = cfg;
+  selectedMap = 'auto'; // random combat arena (NOT the lobby map)
+  resetCombatResources(); // normal mags/reserves (lobby gave infinite ammo)
+  const oppNames = (picks.enemies || []).map(id => window.CHAT_CAST?.[id]?.name).filter(Boolean);
+  const sub = oppNames.length ? `vs ${oppNames.join(', ')}` : modeId.toUpperCase();
+  showAnnouncement('⚔️ DUEL', sub, '#ffcc44', 2200);
+  spawnGameBots();        // tears down the lobby cast + builds the elim match
+  requestPointerLockSafe();
+  startLoop();
 }
 
 // "Enter Code" button — opens prompt, redeems code on server (only shown after login)
@@ -16037,7 +18152,7 @@ function selectMode(modeId) {
     gameStarted = true;
     spawnGameBots();
     requestPointerLockSafe();
-    loop();
+    startLoop();
   } else if (modeId === 'range') {
     // Shooting range: skip loadout, give infinite ammo on all weapons
     selectedPrimaryIdx   = 0;
@@ -16057,7 +18172,28 @@ function selectMode(modeId) {
     gameStarted = true;
     spawnGameBots();
     requestPointerLockSafe();
-    loop();
+    startLoop();
+  } else if (modeId === 'lobby13') {
+    // 🛋️ Lobby 13: skip loadout, give a full kit with infinite ammo so people
+    // can mess around / duel freely. No enemies, no scoring.
+    selectedPrimaryIdx   = 0;
+    selectedSecondaryIdx = 1;
+    selectedMeleeIdx     = 0;
+    selectedSupportIdx   = 0;
+    weaponAmmo.forEach((_, idx) => { weaponAmmo[idx] = { ammo: 999999, reserve: 999999 }; });
+    activeSlot = 'primary';
+    weaponModels.forEach(m => m.visible = false);
+    meleeModels.forEach(m  => m.visible = false);
+    supportModels.forEach(m => m.visible = false);
+    currentWeaponIdx = selectedPrimaryIdx;
+    currentWeapon    = WEAPONS[selectedPrimaryIdx];
+    if (weaponModels[selectedPrimaryIdx]) weaponModels[selectedPrimaryIdx].visible = true;
+    updateAmmoHUD(); updateWeaponHUD(); updateWeaponSelector();
+    gameStarted = true;
+    spawnGameBots();
+    requestPointerLockSafe();
+    startLoop();
+    showLobbyModesButton(true); // 🎮 floating button back to the mode menu
   } else {
     showLoadoutScreen('death');
   }
@@ -16136,6 +18272,94 @@ if (_sfxBtn) {
   _sfxBtn.addEventListener('touchstart', e => { e.preventDefault(); openShootFxPanel(); }, { passive: false });
 }
 
+// 🎯 AIM ASSIST settings panel — four independent on/off toggles.
+function openAimAssistPanel() {
+  let panel = document.getElementById('aim-assist-panel');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'aim-assist-panel';
+    panel.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9900;background:#1a1014;border:2px solid #ff5544;border-radius:8px;padding:24px;color:#fff;font-family:"Courier New",monospace;min-width:380px;box-shadow:0 4px 30px rgba(0,0,0,0.6);';
+    document.body.appendChild(panel);
+  }
+  panel.style.display = 'block';
+  const opts = [
+    { key: 'autoShoot', name: 'AUTO SHOOT',  desc: 'Crosshair on an opponent for 0.01s → fires on its own. Turn OFF if you want to pull the trigger yourself.' },
+    { key: 'aimAssist', name: 'AIM ASSIST',  desc: 'Opponent on screen → view drifts to their body at 5°/s.' },
+    { key: 'aimbot',    name: 'AIM BOT',     desc: 'Opponent on screen 0.2s → snaps to them at 50°/s.' },
+    { key: 'aiAim',     name: 'AI AIM',      desc: 'Red dot predicts where the opponent moves next — your call whether to trust it.' },
+  ];
+  const rowHTML = (o) => `
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin:12px 0;padding-bottom:10px;border-bottom:1px solid #3a2020;">
+      <div style="flex:1;">
+        <div style="font-size:13px;letter-spacing:2px;color:#ffccbb;">${o.name}</div>
+        <div style="font-size:10px;color:#aa8888;margin-top:3px;line-height:1.4;">${o.desc}</div>
+      </div>
+      <button id="aa-${o.key}" data-key="${o.key}" style="min-width:62px;padding:7px 10px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:bold;letter-spacing:2px;border-radius:4px;
+        background:${ASSIST[o.key] ? '#1f5a25' : '#2a1a1a'};color:${ASSIST[o.key] ? '#88ff99' : '#ff8888'};border:2px solid ${ASSIST[o.key] ? '#55ff66' : '#774444'};">${ASSIST[o.key] ? 'ON' : 'OFF'}</button>
+    </div>`;
+  panel.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;border-bottom:1px solid #883333;padding-bottom:10px;">
+      <div style="font-size:18px;letter-spacing:3px;color:#ff9988;">🎯 AIM ASSIST</div>
+      <button id="aa-close" style="background:#3a1a1a;color:#ff8888;border:1px solid #ff4444;padding:4px 10px;cursor:pointer;font-family:inherit;border-radius:3px;">✕</button>
+    </div>
+    <div style="font-size:10px;color:#aa9999;margin-bottom:10px;line-height:1.4;">Toggle each aid on or off. Saved per device. Works against bots and other players in a match.</div>
+    ${opts.map(rowHTML).join('')}
+  `;
+  panel.querySelectorAll('button[data-key]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const k = btn.dataset.key;
+      ASSIST[k] = !ASSIST[k];
+      saveAssist();
+      openAimAssistPanel(); // refresh
+    });
+  });
+  document.getElementById('aa-close').addEventListener('click', () => panel.style.display = 'none');
+}
+const _aaBtn = document.getElementById('aim-assist-btn');
+if (_aaBtn) {
+  _aaBtn.addEventListener('click', openAimAssistPanel);
+  _aaBtn.addEventListener('touchstart', e => { e.preventDefault(); openAimAssistPanel(); }, { passive: false });
+}
+
+// 🎨 GUN SKINS picker — pick one skin that applies to every weapon.
+function openWeaponSkinsPanel() {
+  let panel = document.getElementById('weapon-skins-panel');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'weapon-skins-panel';
+    panel.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9900;background:#16140e;border:2px solid #ccaa44;border-radius:8px;padding:22px;color:#fff;font-family:"Courier New",monospace;width:440px;max-height:80vh;overflow-y:auto;box-shadow:0 4px 30px rgba(0,0,0,0.6);';
+    document.body.appendChild(panel);
+  }
+  panel.style.display = 'block';
+  const swatch = (s) => `
+    <div data-skin="${s.id}" class="ws-cell" style="cursor:pointer;border:2px solid ${s.id===selectedWeaponSkin?'#ffdd55':'#444'};border-radius:6px;padding:8px;text-align:center;background:${s.id===selectedWeaponSkin?'#2a2410':'#1d1a12'};">
+      <div style="height:26px;border-radius:4px;background:linear-gradient(90deg, ${s.sw[0]} 0 50%, ${s.sw[1]} 50% 100%);border:1px solid #000;margin-bottom:6px;"></div>
+      <div style="font-size:10px;letter-spacing:1px;color:${s.id===selectedWeaponSkin?'#ffdd55':'#ccc'};">${s.name}</div>
+    </div>`;
+  panel.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;border-bottom:1px solid #6a5520;padding-bottom:10px;">
+      <div style="font-size:18px;letter-spacing:3px;color:#ffdd88;">🎨 GUN SKINS</div>
+      <button id="ws-close" style="background:#3a1a1a;color:#ff8888;border:1px solid #ff4444;padding:4px 10px;cursor:pointer;font-family:inherit;border-radius:3px;">✕</button>
+    </div>
+    <div style="font-size:10px;color:#aa9966;margin-bottom:12px;line-height:1.4;">One pick applies to every gun. Country themes use real national flags; the German theme is the Iron Cross military mark (no Nazi imagery).</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">${WEAPON_SKINS.map(swatch).join('')}</div>
+  `;
+  panel.querySelectorAll('.ws-cell').forEach(cell => {
+    cell.addEventListener('click', () => {
+      selectedWeaponSkin = cell.dataset.skin;
+      try { localStorage.setItem('pvp_weapon_skin', selectedWeaponSkin); } catch (e) {}
+      applySelectedWeaponSkinToAll();
+      openWeaponSkinsPanel(); // refresh highlight
+    });
+  });
+  document.getElementById('ws-close').addEventListener('click', () => panel.style.display = 'none');
+}
+const _wsBtn = document.getElementById('weapon-skins-btn');
+if (_wsBtn) {
+  _wsBtn.addEventListener('click', openWeaponSkinsPanel);
+  _wsBtn.addEventListener('touchstart', e => { e.preventDefault(); openWeaponSkinsPanel(); }, { passive: false });
+}
+
 // 🎭 Skin picker — choose how other players see your character
 const SKIN_SWATCH = {
   default:     ['#1971c2', '#ffcc99'],
@@ -16194,6 +18418,32 @@ if (_skinsBtn) {
 }
 
 // 📹 Kill Log list — pick a saved kill to watch in the 6-cam theater
+// 🏆 Bragging-rights graphics for the Kill Log. A big icon tile on the left of
+// each row keyed to HOW the kill happened (knife / explosion / slide / gun),
+// plus inline emoji badges in the title line.
+function klKillGraphic(k) {
+  const map = {
+    melee:     { icon: '🔪', bg: 'linear-gradient(135deg,#3a1010,#7a1c1c)', ring: '#ff5555' },
+    explosive: { icon: '💥', bg: 'linear-gradient(135deg,#3a2400,#a85a00)', ring: '#ffaa33' },
+    gun:       { icon: '🔫', bg: 'linear-gradient(135deg,#10202a,#1c4a5a)', ring: '#55ccff' },
+  };
+  // Slide overrides the base art — a slide kill is the flashiest flex.
+  const base = k.slide
+    ? { icon: '🛹', bg: 'linear-gradient(135deg,#102a18,#1c7a44)', ring: '#44ff99' }
+    : (map[k.kind] || map.gun);
+  // If sliding AND knife/explosive, stack the secondary glyph in the corner.
+  const corner = k.slide && k.kind && k.kind !== 'gun'
+    ? `<span style="position:absolute;right:-3px;bottom:-3px;font-size:13px;filter:drop-shadow(0 0 2px #000);">${map[k.kind].icon}</span>`
+    : '';
+  return `<div style="position:relative;width:38px;height:38px;flex:0 0 38px;display:flex;align-items:center;justify-content:center;font-size:20px;border-radius:6px;background:${base.bg};border:1px solid ${base.ring};box-shadow:0 0 6px ${base.ring}55;">${base.icon}${corner}</div>`;
+}
+function klKillBadges(k) {
+  let s = '';
+  if (k.slide)            s += ' <span title="Slide kill" style="color:#44ff99;">🛹</span>';
+  if (k.kind === 'melee') s += ' <span title="Blade kill" style="color:#ff7777;">⚔️</span>';
+  if (k.kind === 'explosive') s += ' <span title="Explosive kill" style="color:#ffaa44;">🔥</span>';
+  return s;
+}
 function openKillLogList() {
   let panel = document.getElementById('kill-log-panel');
   if (!panel) {
@@ -16213,8 +18463,9 @@ function openKillLogList() {
       ? '<div style="color:#777;font-style:italic;padding:14px 0;text-align:center;">No kills recorded yet — go get some!</div>'
       : killLog.map((k, i) => `
         <div style="display:flex;align-items:center;gap:6px;background:#0f0a04;border:1px solid #553;border-left:3px solid ${k.pinned ? '#ffdd44' : k.favorite ? '#ff66aa' : '#ff8844'};border-radius:4px;padding:8px 10px;margin-bottom:6px;">
+          ${klKillGraphic(k)}
           <div class="kl-watch" data-idx="${i}" style="flex:1;cursor:pointer;">
-            <div style="font-size:12px;color:#ffcc88;">${k.pinned ? '📌 ' : ''}${k.favorite ? '⭐ ' : ''}💀 ${k.victim}</div>
+            <div style="font-size:12px;color:#ffcc88;">${k.pinned ? '📌 ' : ''}${k.favorite ? '⭐ ' : ''}💀 ${k.victim}${klKillBadges(k)}</div>
             <div style="font-size:10px;color:#aaa;margin-top:2px;">${k.weapon} · ${new Date(k.ts).toLocaleTimeString()}</div>
           </div>
           <button class="kl-fav"  data-idx="${i}" title="Favorite" style="background:${k.favorite?'#5a2a44':'#1a1a1a'};color:#ff66aa;border:1px solid #aa4477;padding:4px 7px;cursor:pointer;border-radius:3px;font-size:12px;">⭐</button>
