@@ -797,6 +797,21 @@ const WEAPONS = [
     ddayOnly: true,
     ability: null,
   },
+  // ── 🚀 Rocket launchers — single-shot, big direct hit + area splash ──
+  {
+    id: 'rpg', name: 'RPG-7', type: 'Rocket', slot: 'primary',
+    mag: 1, reserve: 9, damage: 120, fireRate: 1000, reloadTime: 2300,
+    auto: false, pellets: 1, spread: 0.006, adsZoom: 48, bulletSpeed: 70, noReload: false,
+    bulletColor: 0xff7722, bulletSize: 0.15, splashRadius: 5,
+    ability: { name: 'Triple Warhead', cd: 16000, desc: 'Fire 3 rockets in a spread', type: 'multishot', count: 3, spread: 0.10, noADS: true },
+  },
+  {
+    id: 'bazooka', name: 'Bazooka', type: 'Rocket', slot: 'primary',
+    mag: 1, reserve: 8, damage: 140, fireRate: 1100, reloadTime: 2600,
+    auto: false, pellets: 1, spread: 0.005, adsZoom: 48, bulletSpeed: 64, noReload: false,
+    bulletColor: 0xffaa33, bulletSize: 0.17, splashRadius: 6,
+    ability: { name: 'Barrage', cd: 18000, desc: 'Unleash 4 rockets in a spread', type: 'multishot', count: 4, spread: 0.12, noADS: true },
+  },
   // ── ⚔️ Lancer — single-shot blade rifle with a charging bayonet ability ──
   {
     id: 'lancer', name: 'Lancer', type: 'Blade Rifle', slot: 'primary',
@@ -1096,7 +1111,7 @@ const WEAPON_COSTS = {
   sg8: 220, sg100: 380, auto_shotgun: 340,
   // Primaries — Snipers / Marksman
   srx: 500, lever: 360,
-  lancer: 460,
+  lancer: 460, rpg: 520, bazooka: 620,
   // Primaries — Special
   rpd: 450, paintball: 120, crossbow: 280,
   // Primaries — Heavy
@@ -6036,6 +6051,35 @@ function buildBlowgun() {
     mouth.rotation.x = Math.PI / 2; mouth.position.set(0, 0, 0.02); g.add(mouth);
   });
 }
+// 🚀 RPG-7 — fat tube with a pointed warhead poking out the front.
+function buildRPG() {
+  const g = new THREE.Group();
+  const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.46, 12), new THREE.MeshLambertMaterial({ color: 0x3a4a2a }));
+  tube.rotation.x = Math.PI / 2; tube.position.set(0, 0.01, -0.10); g.add(tube);
+  const flare = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.04, 0.07, 12), new THREE.MeshLambertMaterial({ color: 0x2a341f }));
+  flare.rotation.x = Math.PI / 2; flare.position.set(0, 0.01, 0.16); g.add(flare);
+  const warhead = new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.12, 10), new THREE.MeshLambertMaterial({ color: 0x8a3a1a }));
+  warhead.rotation.x = -Math.PI / 2; warhead.position.set(0, 0.01, -0.40); g.add(warhead);
+  const grip = new THREE.Mesh(new THREE.BoxGeometry(0.028, 0.07, 0.04), new THREE.MeshLambertMaterial({ color: 0x222222 }));
+  grip.rotation.x = 0.25; grip.position.set(0, -0.06, 0.04); g.add(grip);
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.01, -0.48); g.add(flash); g._flash = flash;
+  g._kickZ = 0.03; g.position.set(0.12, -0.1, -0.25);
+  return g;
+}
+// 🚀 Bazooka — long olive shoulder tube with twin grips.
+function buildBazooka() {
+  const g = new THREE.Group();
+  const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.56, 14), new THREE.MeshLambertMaterial({ color: 0x4b5320 }));
+  tube.rotation.x = Math.PI / 2; tube.position.set(0, 0.01, -0.10); g.add(tube);
+  const mouth = new THREE.Mesh(new THREE.CylinderGeometry(0.062, 0.05, 0.06, 14), new THREE.MeshLambertMaterial({ color: 0x2e3416 }));
+  mouth.rotation.x = Math.PI / 2; mouth.position.set(0, 0.01, 0.19); g.add(mouth);
+  const sight = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.05, 0.012), new THREE.MeshLambertMaterial({ color: 0x222222 }));
+  sight.position.set(0.045, 0.06, -0.06); g.add(sight);
+  [-0.02, 0.10].forEach(z => { const gr = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.07, 0.04), new THREE.MeshLambertMaterial({ color: 0x222222 })); gr.rotation.x = 0.22; gr.position.set(0, -0.065, z); g.add(gr); });
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.01, -0.40); g.add(flash); g._flash = flash;
+  g._kickZ = 0.034; g.position.set(0.12, -0.1, -0.25);
+  return g;
+}
 // ⚔️ Lancer — a long single-shot rifle with a fixed bayonet blade out front.
 function buildLancer() {
   const g = _genericGun({ bodyShape: 'sniper', bodyColor: 0x33271a, accentColor: 0x8a6a3a, magType: 'hidden', stock: 'classic', scope: 'none', barrelLen: 0.30, barrelColor: 0x2a2a2a });
@@ -6150,6 +6194,8 @@ const weaponModels = [
   // ── 🪖 ADMIN secondaries ─────────────────────────────────────────────────
   buildDesertEagle(), buildM1911(), buildPPK(), buildGlock18(), buildFiveSeven(),
   buildMG42(),
+  // 🚀 Rocket launchers (must align with the 'rpg'/'bazooka' WEAPONS slots)
+  buildRPG(), buildBazooka(),
   // ⚔️ Lancer (must align with the 'lancer' WEAPONS slot — right before the cone/pie)
   buildLancer(),
   // ── 🚧 / 🥧 must mirror the two trailing WEAPONS entries ──
@@ -11049,6 +11095,27 @@ function hasLineOfSight(x1, z1, x2, z2) {
   return true;
 }
 
+// 🚀 Rocket detonation — direct hit aside, splash everyone else in radius.
+function rocketExplode(pos, weaponId, excludePid) {
+  const w = WEAPONS.find(x => x.id === weaponId) || {};
+  const radius = w.splashRadius || 5;
+  spawnExplosion(pos);
+  spawnAbilityAOEFX(pos.clone().setY(0.2), radius, 0xff7722);
+  playSoundEvent('explosion', { position: pos, volume: 1.1, minGap: 60 });
+  const splashId = weaponId + '_splash';
+  for (const [pid, mesh] of Object.entries(remoteMeshes)) {
+    if (pid === excludePid) continue;
+    const target = mesh.position.clone(); target.y += 1.0;
+    if (pos.distanceTo(target) <= radius) {
+      emitHit(pid, `rocket_${myId}_${Date.now()}_${pid}`, splashId, target);
+      spawnHitParticle(target);
+    }
+  }
+  // Self-splash (own rocket too close)
+  if (excludePid !== myId && camera.position.distanceTo(pos.clone().setY(camera.position.y)) <= radius) {
+    applyBotDamageToPlayer(splashId, null);
+  }
+}
 function updateBullets(dt) {
   const now = Date.now();
   const toRemove = [];
@@ -11190,6 +11257,11 @@ function updateBullets(dt) {
         if (b.weaponId === 'firework_launcher') {
           spawnBurnZone(wallHitPt, 3, 3, 10000);
         }
+        // 🚀 Rockets: detonate on terrain impact (area splash, no direct target)
+        if (b.weaponId === 'rpg' || b.weaponId === 'bazooka') {
+          rocketExplode(wallHitPt, b.weaponId, null);
+          scene.remove(b.mesh); toRemove.push(i); continue;
+        }
         // Bouncing weapons (prism, pulse disc, pinball): reflect off wall and speed up
         const wSpec = WEAPONS.find(w => w.id === b.weaponId);
         if (wSpec?.bounce && (b.bouncesLeft == null ? wSpec.bounce.maxBounces : b.bouncesLeft) > 0) {
@@ -11249,6 +11321,10 @@ function updateBullets(dt) {
         // Firework Launcher: also spawn burn zone on direct hit
         if (b.weaponId === 'firework_launcher') {
           spawnBurnZone(_bpos.clone(), 3, 3, 10000);
+        }
+        // 🚀 Rockets: direct target took the main hit; splash everyone else nearby
+        if (b.weaponId === 'rpg' || b.weaponId === 'bazooka') {
+          rocketExplode(_bpos.clone(), b.weaponId, bestHit.pid);
         }
         scene.remove(b.mesh); toRemove.push(i);
         spawnHitParticle(_bpos);
@@ -12401,6 +12477,7 @@ const CLIENT_WEAPON_DAMAGE = Object.fromEntries([
   ['arc_torrent', 5], ['firework_launcher', 50], ['switchblade_gun', 50], ['switchblade_charged', 100],
   ['lancer_blade', 50],   // ⚔️ Lancer bayonet-charge hit (main shot uses the WEAPONS 'lancer' damage)
   ['molotov_burn', 10], ['molotov_fire', 5],  // 🔥 inside-the-flames tick / lingering on-fire DOT
+  ['rpg_splash', 70], ['bazooka_splash', 85],  // 🚀 rocket area splash (direct hit uses the WEAPONS damage)
   // 3rd-batch primaries + abilities
   ['flechette', 16], ['thermal_lmg', 11], ['burst_cannon', 40], ['incendiary_shotgun', 14],
   ['coilgun', 92], ['smart_smg', 9], ['amr', 180], ['air_rifle', 34],

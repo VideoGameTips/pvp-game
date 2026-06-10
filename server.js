@@ -51,7 +51,7 @@ const WEAPON_COSTS = {
   sg8: 220, sg100: 380, auto_shotgun: 340,
   // Primaries — Snipers / Marksman
   srx: 500, lever: 360,
-  lancer: 460,
+  lancer: 460, rpg: 520, bazooka: 620,
   // Primaries — Special
   rpd: 450, paintball: 120, crossbow: 280,
   // Primaries — Heavy
@@ -830,6 +830,8 @@ const WEAPON_DAMAGE = {
   lancer: 95, lancer_blade: 50,
   // 🔥 Molotov burn ticks
   molotov_burn: 10, molotov_fire: 5,
+  // 🚀 Rocket launchers + area splash
+  rpg: 120, bazooka: 140, rpg_splash: 70, bazooka_splash: 85,
   // MG
   mg42: 15,
   // Melee
