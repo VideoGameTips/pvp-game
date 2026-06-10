@@ -797,6 +797,13 @@ const WEAPONS = [
     ddayOnly: true,
     ability: null,
   },
+  // ── ⚔️ Lancer — single-shot blade rifle with a charging bayonet ability ──
+  {
+    id: 'lancer', name: 'Lancer', type: 'Blade Rifle', slot: 'primary',
+    mag: 1, reserve: 24, damage: 95, fireRate: 900, reloadTime: 1700,
+    auto: false, pellets: 1, spread: 0.004, adsZoom: 50, bulletSpeed: 150, noReload: false,
+    ability: { name: 'Bayonet Charge', cd: 9000, type: 'blade_charge', distance: 8, bladeDamage: 50, noADS: true, desc: 'Lunge forward · blade contact deals 50' },
+  },
   // ── 🚧 / 🥧 Chuckable nonsense secondaries (must stay LAST — mirrored in weaponModels) ──
   {
     id: 'traffic_cone', name: 'Traffic Cone', type: 'Thrown', slot: 'secondary',
@@ -1089,6 +1096,7 @@ const WEAPON_COSTS = {
   sg8: 220, sg100: 380, auto_shotgun: 340,
   // Primaries — Snipers / Marksman
   srx: 500, lever: 360,
+  lancer: 460,
   // Primaries — Special
   rpd: 450, paintball: 120, crossbow: 280,
   // Primaries — Heavy
@@ -6028,6 +6036,21 @@ function buildBlowgun() {
     mouth.rotation.x = Math.PI / 2; mouth.position.set(0, 0, 0.02); g.add(mouth);
   });
 }
+// ⚔️ Lancer — a long single-shot rifle with a fixed bayonet blade out front.
+function buildLancer() {
+  const g = _genericGun({ bodyShape: 'sniper', bodyColor: 0x33271a, accentColor: 0x8a6a3a, magType: 'hidden', stock: 'classic', scope: 'none', barrelLen: 0.30, barrelColor: 0x2a2a2a });
+  // Bayonet: a flat steel blade extending past the muzzle.
+  const steel = new THREE.MeshLambertMaterial({ color: 0xcfd6dd });
+  const blade = new THREE.Mesh(new THREE.ConeGeometry(0.018, 0.20, 4), steel);
+  blade.rotation.x = -Math.PI / 2;            // point forward (along -Z barrel)
+  blade.position.set(0, 0.018, -0.46);
+  blade.scale.set(1, 1, 0.5);                 // flatten into a blade
+  g.add(blade);
+  const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.03, 8), new THREE.MeshLambertMaterial({ color: 0x555555 }));
+  collar.rotation.x = Math.PI / 2; collar.position.set(0, 0.014, -0.34); g.add(collar);
+  g._blade = blade;
+  return g;
+}
 // 🚧 Traffic Cone — a chuckable cone (the official sidearm of Traffic Cone Republic)
 function buildTrafficCone() {
   return _throwableHolder(g => {
@@ -6127,6 +6150,8 @@ const weaponModels = [
   // ── 🪖 ADMIN secondaries ─────────────────────────────────────────────────
   buildDesertEagle(), buildM1911(), buildPPK(), buildGlock18(), buildFiveSeven(),
   buildMG42(),
+  // ⚔️ Lancer (must align with the 'lancer' WEAPONS slot — right before the cone/pie)
+  buildLancer(),
   // ── 🚧 / 🥧 must mirror the two trailing WEAPONS entries ──
   buildTrafficCone(), buildCreamPie(),
 ];
@@ -9692,6 +9717,10 @@ function activateAbility() {
     flashAbilityName(ab.name);
     spawnHitParticle(camera.position.clone().setY(1.65));
   }
+  else if (ab.type === 'blade_charge') {
+    doBladeCharge(ab);
+    flashAbilityName(ab.name);
+  }
   // Switchblade Gun: force back to charged form
   else if (ab.type === 'switchblade_reset') {
     switchbladeCharged = true;
@@ -9702,6 +9731,44 @@ function activateAbility() {
   }
 
   updateAbilityHUD();
+}
+
+// ⚔️ Bayonet Charge — lunge forward; if the blade reaches an opponent, deal bladeDamage.
+function doBladeCharge(ab) {
+  const dist = ab.distance || 8;
+  const fwd = new THREE.Vector3(-Math.sin(euler.y), 0, -Math.cos(euler.y)).normalize();
+  // Nearest opponent roughly ahead, within charge reach.
+  let best = null, bestPid = null, bestD = Infinity;
+  const consider = (x, z, pid, ref) => {
+    const dx = x - camera.position.x, dz = z - camera.position.z, d = Math.hypot(dx, dz) || 0.001;
+    if (d > dist + 2) return;
+    if ((dx / d) * fwd.x + (dz / d) * fwd.z < 0.45) return; // must be in front (~63° cone)
+    if (d < bestD) { bestD = d; best = ref; bestPid = pid; }
+  };
+  for (const bot of gameBots) if (!bot.dead && bot.team !== 'ally') consider(bot.x, bot.z, bot.id, bot);
+  const myTeam = players[myId] && players[myId].team;
+  for (const id in players) { const p = players[id]; if (id !== myId && !p.isBot && !p.dead && !(myTeam && p.team === myTeam)) consider(p.x, p.z, id, p); }
+
+  // Lunge: stop just short of the target, else charge the full distance.
+  const moveDist = best ? Math.max(0, Math.min(dist, bestD - 1.1)) : dist;
+  camera.position.addScaledVector(fwd, moveDist);
+  camera.position.x = Math.max(-48, Math.min(48, camera.position.x));
+  camera.position.z = Math.max(-48, Math.min(48, camera.position.z));
+  resolveWallCollisions();
+  flashScreen('rgba(200,60,60,0.16)', 200);
+  playSoundEvent('melee_blade', { volume: 1.0 });
+
+  // Blade contact → damage.
+  if (best) {
+    const dx = best.x - camera.position.x, dz = best.z - camera.position.z;
+    if (Math.hypot(dx, dz) < 2.6) {
+      const mesh = remoteMeshes[bestPid];
+      const hp = mesh ? mesh.position.clone().setY(1.0) : new THREE.Vector3(best.x, 1, best.z);
+      emitHit(bestPid, `blade_${myId}_${Date.now()}`, 'lancer_blade', hp);
+      spawnHitParticle(hp);
+      showAnnouncement('⚔️ SKEWERED', '', '#ff7755', 700);
+    }
+  }
 }
 
 function doBulletWave(w) {
@@ -12313,6 +12380,7 @@ const CLIENT_WEAPON_DAMAGE = Object.fromEntries([
   ['singularity', 90], ['rotten_potato', 40], ['sticker_bomb', 35],
   ['chain_pull', 60], ['airburst', 95], ['toxin_dart', 30], ['blind_flash', 0],
   ['arc_torrent', 5], ['firework_launcher', 50], ['switchblade_gun', 50], ['switchblade_charged', 100],
+  ['lancer_blade', 50],   // ⚔️ Lancer bayonet-charge hit (main shot uses the WEAPONS 'lancer' damage)
   // 3rd-batch primaries + abilities
   ['flechette', 16], ['thermal_lmg', 11], ['burst_cannon', 40], ['incendiary_shotgun', 14],
   ['coilgun', 92], ['smart_smg', 9], ['amr', 180], ['air_rifle', 34],

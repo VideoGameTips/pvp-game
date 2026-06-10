@@ -51,6 +51,7 @@ const WEAPON_COSTS = {
   sg8: 220, sg100: 380, auto_shotgun: 340,
   // Primaries — Snipers / Marksman
   srx: 500, lever: 360,
+  lancer: 460,
   // Primaries — Special
   rpd: 450, paintball: 120, crossbow: 280,
   // Primaries — Heavy
@@ -825,6 +826,8 @@ const WEAPON_DAMAGE = {
   sg8_wave: 20,
   railgun_ab: 330, boombow_ab: 190, cycler_ab: 32,
   hand_cannon_ab: 175,
+  // ⚔️ Lancer (single-shot blade rifle) + its bayonet-charge hit
+  lancer: 95, lancer_blade: 50,
   // MG
   mg42: 15,
   // Melee
