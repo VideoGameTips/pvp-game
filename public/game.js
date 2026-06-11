@@ -797,6 +797,13 @@ const WEAPONS = [
     ddayOnly: true,
     ability: null,
   },
+  // ── 🪖 M4A1 — accurate full-auto carbine ──
+  {
+    id: 'm4a1', name: 'M4A1', type: 'AR', slot: 'primary',
+    mag: 30, reserve: 120, damage: 24, fireRate: 130, reloadTime: 1900,
+    auto: true, pellets: 1, spread: 0.012, adsZoom: 48, bulletSpeed: 132, noReload: false,
+    ability: { name: 'Recoil Lock', cd: 9000, desc: '4s · near-zero recoil · +20% dmg', type: 'buff', duration: 4000, spreadMult: 0.2, dmgMult: 1.2 },
+  },
   // ── 🚀 Rocket launchers — single-shot, big direct hit + area splash ──
   {
     id: 'rpg', name: 'RPG-7', type: 'Rocket', slot: 'primary',
@@ -1111,7 +1118,7 @@ const WEAPON_COSTS = {
   sg8: 220, sg100: 380, auto_shotgun: 340,
   // Primaries — Snipers / Marksman
   srx: 500, lever: 360,
-  lancer: 460, rpg: 520, bazooka: 620,
+  lancer: 460, rpg: 520, bazooka: 620, m4a1: 340,
   // Primaries — Special
   rpd: 450, paintball: 120, crossbow: 280,
   // Primaries — Heavy
@@ -6051,6 +6058,10 @@ function buildBlowgun() {
     mouth.rotation.x = Math.PI / 2; mouth.position.set(0, 0, 0.02); g.add(mouth);
   });
 }
+// 🪖 M4A1 — classic black carbine: top rail + red dot, banana mag, ejection port.
+function buildM4A1() {
+  return _genericGun({ bodyShape: 'classic', bodyColor: 0x2b2b2b, accentColor: 0x474747, magType: 'banana', topRail: true, scope: 'red_dot', ejectionPort: true, barrelLen: 0.24, barrelColor: 0x1f1f1f });
+}
 // 🚀 RPG-7 — fat tube with a pointed warhead poking out the front.
 function buildRPG() {
   const g = new THREE.Group();
@@ -6194,6 +6205,8 @@ const weaponModels = [
   // ── 🪖 ADMIN secondaries ─────────────────────────────────────────────────
   buildDesertEagle(), buildM1911(), buildPPK(), buildGlock18(), buildFiveSeven(),
   buildMG42(),
+  // 🪖 M4A1 (must align with the 'm4a1' WEAPONS slot)
+  buildM4A1(),
   // 🚀 Rocket launchers (must align with the 'rpg'/'bazooka' WEAPONS slots)
   buildRPG(), buildBazooka(),
   // ⚔️ Lancer (must align with the 'lancer' WEAPONS slot — right before the cone/pie)
