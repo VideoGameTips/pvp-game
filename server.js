@@ -118,6 +118,7 @@ const WEAPON_COSTS = {
   specter_drone: 30000, quantum_barrier: 21000,
   hamburger: 300,
   molotov: 180,
+  heal_gun: 220, tesla_coil: 360,
 };
 
 // Free starter loadout — every account has these unlocked from day 1.
@@ -834,6 +835,8 @@ const WEAPON_DAMAGE = {
   rpg: 120, bazooka: 140, rpg_splash: 70, bazooka_splash: 85,
   // 🪖 M4A1
   m4a1: 24,
+  // ⚡ Tesla Coil zap
+  tesla_coil: 16,
   // MG
   mg42: 15,
   // Melee

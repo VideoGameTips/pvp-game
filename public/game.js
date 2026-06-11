@@ -1009,6 +1009,10 @@ const SUPPORT_ITEMS = [
 
   // 🔥 Molotov — shatters into a lingering fire pool (reuses the burn-zone DOT)
   { id: 'molotov', name: 'Molotov Cocktail', type: 'Fire · Burn Zone', uses: 2, damage: 0, cooldown: 1100, bulletSpeed: 36, bulletColor: 0xff7722, bulletSize: 0.11, burnDps: 12, burnDur: 5000, burnRadius: 3.2 },
+  // 💚 Heal Gun — heals you + mends nearby allies
+  { id: 'heal_gun', name: 'Heal Gun', type: 'Heal · Beam', uses: 2, heal: 70, cooldown: 1200, allyHeal: 50, allyHealRadius: 12 },
+  // ⚡ Tesla Coil — stationary coil that zaps the nearest enemy on a timer
+  { id: 'tesla_coil', name: 'Tesla Coil', type: 'Deployable · Shock', uses: 1, damage: 16, cooldown: 1800, coilDur: 10000, coilRange: 8, fireRate: 450 },
 
   { id: 'c4', name: 'C4 Charge', type: 'Admin · Explosive', uses: 2, damage: 200, cooldown: 1200, bulletSpeed: 40, bulletColor: 0x664433, bulletSize: 0.11, c4Detonate: true, adminItem: true },
   { id: 'claymore', name: 'Claymore Mine', type: 'Admin · Directional Mine', uses: 2, damage: 250, cooldown: 1100, claymoreRadius: 4, claymoreArc: 1.2, adminItem: true },
@@ -1187,6 +1191,8 @@ const WEAPON_COSTS = {
   hamburger: 300,
   // 🔥 Molotov
   molotov: 180,
+  // 💚 Heal Gun · ⚡ Tesla Coil
+  heal_gun: 220, tesla_coil: 360,
 };
 const FREE_WEAPONS = new Set([
   'ak20','sg8','pistol','flare','fists','frying_pan','frag','medkit',
@@ -1402,6 +1408,7 @@ const decoys       = [];          // { mesh, until }
 let adrenalineUntil = 0;          // timestamp player adrenaline buff expires
 let nanoShieldUntil = 0;          // timestamp Nano Shield expires (heal-over-time)
 const guardianDrones = [];        // {mesh, until, lastShot}
+const teslaCoils     = [];        // ⚡ {mesh, x, z, until, lastShot, fireRate, damage, range, orb}
 const orbitalMarkers = [];        // {mesh, x, z, fireAt, damage, radius}
 let playerFrostSlow = 100;        // 100 = full speed, 0 = frozen + dead. Frost Blaster reduces this on hit.
 let playerYVel = 0;               // Player vertical velocity (for air grenades launching the player)
@@ -6964,6 +6971,38 @@ function buildMolotov() {
   return g;
 }
 
+// 💚 Heal Gun — chunky white pistol with a green emitter + red cross.
+function buildHealGun() {
+  const g = new THREE.Group();
+  const white = new THREE.MeshLambertMaterial({ color: 0xeef2f0 });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.07, 0.16), white);
+  g.add(body);
+  const grip = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.09, 0.05), white);
+  grip.rotation.x = 0.25; grip.position.set(0, -0.07, 0.05); g.add(grip);
+  const emitter = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.034, 0.05, 12), new THREE.MeshBasicMaterial({ color: 0x44ff88 }));
+  emitter.rotation.x = Math.PI / 2; emitter.position.set(0, 0.005, -0.11); g.add(emitter);
+  const crossMat = new THREE.MeshBasicMaterial({ color: 0xdd2222 });
+  const c1 = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.04, 0.005), crossMat); c1.position.set(0, 0.005, 0.081); g.add(c1);
+  const c2 = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.012, 0.005), crossMat); c2.position.set(0, 0.005, 0.081); g.add(c2);
+  g.position.set(0.10, -0.12, -0.20);
+  return g;
+}
+// ⚡ Tesla Coil — a deploy puck with a copper coil + glowing top orb.
+function buildTeslaCoil() {
+  const g = new THREE.Group();
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.08, 0.03, 12), new THREE.MeshLambertMaterial({ color: 0x333740 }));
+  base.position.y = -0.05; g.add(base);
+  const post = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.10, 8), new THREE.MeshLambertMaterial({ color: 0x777777 }));
+  post.position.y = 0.0; g.add(post);
+  const coil = new THREE.Mesh(new THREE.TorusGeometry(0.03, 0.008, 6, 14), new THREE.MeshLambertMaterial({ color: 0xb87333 }));
+  coil.rotation.x = Math.PI / 2; coil.position.y = 0.02; g.add(coil);
+  const orb = new THREE.Mesh(new THREE.SphereGeometry(0.028, 10, 8), new THREE.MeshBasicMaterial({ color: 0x66ccff }));
+  orb.position.y = 0.06; g.add(orb);
+  g.scale.set(0.8, 0.8, 0.8);
+  g.position.set(0.10, -0.12, -0.18);
+  return g;
+}
+
 function buildStimShot() {
   const g = new THREE.Group();
   const clearMat = new THREE.MeshLambertMaterial({ color: 0xaaddff, transparent: true, opacity: 0.8 });
@@ -7343,6 +7382,8 @@ const supportModels = [buildFragGrenade(), buildMedkit(), buildStimShot(), build
   buildHamburger(),                          // hamburger
   // 🔥 Molotov (must align with the SUPPORT_ITEMS 'molotov' slot)
   buildMolotov(),                            // molotov
+  buildHealGun(),                            // heal_gun
+  buildTeslaCoil(),                          // tesla_coil
   // 🪖 ADMIN supports
   buildC4(), buildClaymore(), buildStunGrenade(), buildThermite(),
   buildPredatorUAV(), buildCarePackage(), buildTacNuke()];
@@ -10389,6 +10430,22 @@ function trySupport() {
       updateHealthHUD(me.hp);
     }
     spawnHitParticle(camera.position.clone().setY(1.4));
+    // 💚 Heal Gun: also mend nearby ally bots
+    if (item.allyHeal) {
+      const r = item.allyHealRadius || 12;
+      let mended = 0;
+      for (const bot of gameBots) {
+        if (bot.dead || bot.team !== 'ally') continue;
+        if (Math.hypot(bot.x - camera.position.x, bot.z - camera.position.z) > r) continue;
+        bot.hp = Math.min(bot.maxHp || 300, bot.hp + item.allyHeal);
+        if (players[bot.id]) players[bot.id].hp = bot.hp;
+        const mesh = remoteMeshes[bot.id];
+        if (mesh) spawnAbilityAOEFX(mesh.position.clone().setY(1.2), 0.7, 0x44ff88);
+        mended++;
+      }
+      flashScreen('rgba(68,255,136,0.14)', 220);
+      showAnnouncement('💚 HEAL GUN', mended ? `Mended ${mended} all${mended === 1 ? 'y' : 'ies'}` : '+70 HP', '#44ff88', 1000);
+    }
     return;
   }
 
@@ -10465,6 +10522,10 @@ function trySupport() {
   }
   if (item.id === 'molotov') {            // 🔥 thrown bottle → fire pool on impact
     throwThermite(item);
+    return;
+  }
+  if (item.id === 'tesla_coil') {         // ⚡ deploy a stationary zapping coil
+    deployTeslaCoil(item);
     return;
   }
   // ── 🪖 ADMIN utilities ────────────────────────────────────────────────────
@@ -11433,6 +11494,44 @@ function deployGuardianDrone(item) {
   scene.add(g);
   guardianDrones.push({ mesh: g, until: Date.now() + (item.droneDur || 10000), lastShot: 0, fireRate: item.fireRate || 100, damage: item.damage || 14, orbitAngle: 0 });
   showAnnouncement('GUARDIAN DRONE', `${(item.droneDur||10000)/1000}s`, '#ddcc66', 1200);
+}
+// ⚡ Deploy a stationary Tesla Coil at the player's feet — auto-zaps nearest enemy.
+function deployTeslaCoil(item) {
+  const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion); fwd.y = 0; fwd.normalize();
+  const px = camera.position.x + fwd.x * 1.2, pz = camera.position.z + fwd.z * 1.2;
+  const g = buildTeslaCoil ? buildTeslaCoil() : new THREE.Group();
+  g.scale.set(1.4, 1.4, 1.4);
+  g.position.set(px, 0.06, pz);
+  scene.add(g);
+  const orb = g.children.find(c => c.material && c.material.color && c.material.color.getHex() === 0x66ccff) || null;
+  teslaCoils.push({ mesh: g, x: px, z: pz, until: Date.now() + (item.coilDur || 10000),
+    lastShot: 0, fireRate: item.fireRate || 450, damage: item.damage || 16, range: item.coilRange || 8, orb });
+  showAnnouncement('⚡ TESLA COIL', `${(item.coilDur || 10000) / 1000}s · zaps nearby enemies`, '#66ccff', 1200);
+}
+function updateTeslaCoils(dt) {
+  const now = Date.now();
+  for (let i = teslaCoils.length - 1; i >= 0; i--) {
+    const c = teslaCoils[i];
+    if (now >= c.until) { scene.remove(c.mesh); teslaCoils.splice(i, 1); continue; }
+    if (c.orb) c.orb.material.color.setHex((Math.sin(now * 0.02) > 0) ? 0x99e6ff : 0x3399ff); // crackle
+    if (now - c.lastShot < c.fireRate) continue;
+    let nearest = null, nd = Infinity;
+    for (const bot of gameBots) {
+      if (bot.dead || bot.team !== 'enemy') continue;
+      const d = Math.hypot(bot.x - c.x, bot.z - c.z);
+      if (d < nd && d < c.range) { nd = d; nearest = bot; }
+    }
+    if (!nearest) continue;
+    c.lastShot = now;
+    const mesh = remoteMeshes[nearest.id];
+    const hp = mesh ? mesh.position.clone().setY(1.0) : new THREE.Vector3(nearest.x, 1, nearest.z);
+    emitHit(nearest.id, `tesla_${myId}_${now}`, 'tesla_coil', hp);
+    // Visual: a quick lightning bolt from the coil orb to the target
+    const origin = new THREE.Vector3(c.x, 1.0, c.z);
+    spawnLocalBullet(origin, hp.clone().sub(origin).normalize(), `tesla_b_${now}`, false, 260, 0x99e6ff, 0.05, 'tesla_coil');
+    spawnHitParticle(hp);
+    playSoundEvent('emp_zap', { position: origin, volume: 0.7, minGap: 120 });
+  }
 }
 function throwAirGrenade(item) {
   // Throw forward with arc, explodes on contact and launches everyone in radius upward
@@ -12506,7 +12605,7 @@ const CLIENT_WEAPON_DAMAGE = Object.fromEntries([
   ['swarm_rifle', 11], ['lazy_laser', 6], ['storm_cannon', 70], ['royal_minigun', 12],
   ['pocket_rocket', 90], ['auto_revolver', 42],
   ['titan_hammer', 95], ['vampire_blade', 52],
-  ['orbital_strike', 250], ['guardian_drone', 14], ['nano_shield', 0],
+  ['orbital_strike', 250], ['guardian_drone', 14], ['nano_shield', 0], ['tesla_coil', 16],
   ['thunderstorm', 60],
   // Lazy weapons batch
   ['frost_blaster', 0], ['air_grenade', 15], ['land_mine', 298], ['frost_freeze', 9999],
@@ -16776,6 +16875,7 @@ function loop() {
   updateBurnZones(dt); // firework launcher DOT fields
   updateTraps(dt); // tripwires, magnet mines, bounce pads, hologram decoys
   updateP2WSystems(dt); // orbital strikes, guardian drones, nano shield
+  updateTeslaCoils(dt); // ⚡ deployed tesla coils zap nearby enemies
   updateMapGimmicks(dt); // lava DOT, jump pads, low-grav zones, ice friction
   updateBotSpeech(dt);  // bot speech bubbles follow their heads
   updateWeaponSkinFX(dt); // ✨ gun-skin particles/streaks (gold money, smoke, data, crystal)
