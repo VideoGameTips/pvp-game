@@ -1028,7 +1028,7 @@ io.on('connection', (socket) => {
     const now = Date.now();
     if (p._lastChatAt && now - p._lastChatAt < 800) return; // throttle to ~1/0.8s
     p._lastChatAt = now;
-    socket.broadcast.emit('chatLine', {
+    emitToMatch(p.matchId, 'chatLine', {
       id: socket.id,
       text: String(data.text || '').slice(0, 60),
       color: String(data.color || '#fff').slice(0, 12),

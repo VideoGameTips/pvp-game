@@ -2,6 +2,11 @@ const socket = window.location.protocol === 'file:'
   ? io('http://localhost:3001')
   : io();
 
+// 🔒 Safety helpers — never let player-controlled text/colour reach innerHTML raw.
+// (mirrors escapeHtml in chat.js:431; used by the chat feed, killcam + scoreboard)
+function escapeHtml(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function safeColor(c){ const s = String(c == null ? '' : c); return (/^#[0-9a-fA-F]{3,8}$/.test(s) || /^[a-zA-Z]{1,20}$/.test(s)) ? s : '#ffffff'; }
+
 // ── Weapon definitions ─────────────────────────────────────────────────────
 const WEAPONS = [
   {
@@ -1816,7 +1821,8 @@ function renderChatFeed() {
   feed.innerHTML = chatLog.map(line => {
     const age = (Date.now() - line.t) / 1000;
     const op = age > 6 ? Math.max(0, 1 - (age - 6) / 2) : 1;
-    return `<div style="background:rgba(0,0,0,0.6);padding:4px 9px;border-radius:5px;border-left:3px solid ${line.color};color:${line.color};opacity:${op};text-shadow:1px 1px 0 #000;">${line.text}</div>`;
+    const _col = safeColor(line.color), _txt = escapeHtml(line.text);
+    return `<div style="background:rgba(0,0,0,0.6);padding:4px 9px;border-radius:5px;border-left:3px solid ${_col};color:${_col};opacity:${op};text-shadow:1px 1px 0 #000;">${_txt}</div>`;
   }).join('');
 }
 function updateChatFeed() {
@@ -9114,7 +9120,7 @@ function openKillTheater(index) {
   ov.style.display = 'block';
   ov.innerHTML = `
     <div style="position:absolute;top:8px;left:50%;transform:translateX(-50%);color:#ffcc66;font-size:14px;letter-spacing:3px;background:rgba(0,0,0,0.6);padding:6px 16px;border-radius:6px;">
-      📹 KILL LOG · ${replay.victim} · ${replay.weapon}
+      📹 KILL LOG · ${escapeHtml(replay.victim)} · ${escapeHtml(replay.weapon)}
     </div>
     <button id="theater-close" style="position:absolute;top:8px;right:12px;pointer-events:all;background:#3a1a1a;color:#ff8888;border:1px solid #ff4444;padding:6px 14px;cursor:pointer;font-family:inherit;border-radius:4px;">✕ CLOSE</button>
     <button id="theater-rec" style="position:absolute;top:8px;right:120px;pointer-events:all;background:#1a3a1a;color:#88ff99;border:1px solid #44aa66;padding:6px 14px;cursor:pointer;font-family:inherit;border-radius:4px;">🎬 SAVE CLIP</button>
@@ -12889,7 +12895,7 @@ function showScoreboard(v) {
   Object.values(players).sort((a,b)=>b.kills-a.kills).forEach(p => {
     const tr = document.createElement('tr');
     if (p.id===myId) tr.className='me';
-    tr.innerHTML=`<td>${p.name}</td><td>${p.kills}</td><td>${p.deaths}</td><td>${p.hp}</td>`;
+    tr.innerHTML=`<td>${escapeHtml(p.name)}</td><td>${p.kills}</td><td>${p.deaths}</td><td>${p.hp}</td>`;
     tbody.appendChild(tr);
   });
 }
