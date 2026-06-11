@@ -1013,6 +1013,10 @@ const SUPPORT_ITEMS = [
   { id: 'heal_gun', name: 'Heal Gun', type: 'Heal · Beam', uses: 2, heal: 70, cooldown: 1200, allyHeal: 50, allyHealRadius: 12 },
   // ⚡ Tesla Coil — stationary coil that zaps the nearest enemy on a timer
   { id: 'tesla_coil', name: 'Tesla Coil', type: 'Deployable · Shock', uses: 1, damage: 16, cooldown: 1800, coilDur: 10000, coilRange: 8, fireRate: 450 },
+  // 🧪 Acid Grenade — green goo pool that slows + lightly damages whoever stands in it
+  { id: 'acid_grenade', name: 'Acid Grenade', type: 'Goo · Slow Pool', uses: 2, damage: 0, cooldown: 1100, bulletSpeed: 38, bulletColor: 0x88dd33, bulletSize: 0.12, burnDur: 6000, burnRadius: 3.2 },
+  // 🐝 Bee Jar — release a swarm that homes the nearest enemy and stings repeatedly
+  { id: 'bee_jar', name: 'Bee Jar', type: 'Swarm', uses: 1, damage: 5, cooldown: 1400, swarmDur: 8000, swarmRange: 30, fireRate: 320 },
 
   { id: 'c4', name: 'C4 Charge', type: 'Admin · Explosive', uses: 2, damage: 200, cooldown: 1200, bulletSpeed: 40, bulletColor: 0x664433, bulletSize: 0.11, c4Detonate: true, adminItem: true },
   { id: 'claymore', name: 'Claymore Mine', type: 'Admin · Directional Mine', uses: 2, damage: 250, cooldown: 1100, claymoreRadius: 4, claymoreArc: 1.2, adminItem: true },
@@ -1191,8 +1195,8 @@ const WEAPON_COSTS = {
   hamburger: 300,
   // 🔥 Molotov
   molotov: 180,
-  // 💚 Heal Gun · ⚡ Tesla Coil
-  heal_gun: 220, tesla_coil: 360,
+  // 💚 Heal Gun · ⚡ Tesla Coil · 🧪 Acid · 🐝 Bees
+  heal_gun: 220, tesla_coil: 360, acid_grenade: 200, bee_jar: 240,
 };
 const FREE_WEAPONS = new Set([
   'ak20','sg8','pistol','flare','fists','frying_pan','frag','medkit',
@@ -1409,6 +1413,7 @@ let adrenalineUntil = 0;          // timestamp player adrenaline buff expires
 let nanoShieldUntil = 0;          // timestamp Nano Shield expires (heal-over-time)
 const guardianDrones = [];        // {mesh, until, lastShot}
 const teslaCoils     = [];        // ⚡ {mesh, x, z, until, lastShot, fireRate, damage, range, orb}
+const beeSwarms      = [];        // 🐝 {mesh, x, y, z, until, lastSting, fireRate, damage, range, targetId}
 const orbitalMarkers = [];        // {mesh, x, z, fireAt, damage, radius}
 let playerFrostSlow = 100;        // 100 = full speed, 0 = frozen + dead. Frost Blaster reduces this on hit.
 let playerYVel = 0;               // Player vertical velocity (for air grenades launching the player)
@@ -7002,6 +7007,36 @@ function buildTeslaCoil() {
   g.position.set(0.10, -0.12, -0.18);
   return g;
 }
+// 🧪 Acid Grenade — clear vial of glowing green goo with a pin.
+function buildAcidGrenade() {
+  const g = new THREE.Group();
+  const glass = new THREE.MeshLambertMaterial({ color: 0xaaffaa, transparent: true, opacity: 0.55 });
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.10, 12), glass); g.add(body);
+  const goo = new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.034, 0.07, 12), new THREE.MeshBasicMaterial({ color: 0x88dd33 }));
+  goo.position.y = -0.012; g.add(goo);
+  const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.025, 10), new THREE.MeshLambertMaterial({ color: 0x555555 }));
+  cap.position.y = 0.06; g.add(cap);
+  const pin = new THREE.Mesh(new THREE.TorusGeometry(0.012, 0.004, 6, 10), new THREE.MeshLambertMaterial({ color: 0x999999 }));
+  pin.position.set(0.03, 0.07, 0); g.add(pin);
+  g.position.set(0.10, -0.12, -0.18);
+  return g;
+}
+// 🐝 Bee Jar — mason jar buzzing with little bees inside.
+function buildBeeJar() {
+  const g = new THREE.Group();
+  const glass = new THREE.MeshLambertMaterial({ color: 0xddeeff, transparent: true, opacity: 0.4 });
+  const jar = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.11, 14), glass); g.add(jar);
+  const lid = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.052, 0.02, 14), new THREE.MeshLambertMaterial({ color: 0xc9a44a }));
+  lid.position.y = 0.064; g.add(lid);
+  const beeMat = new THREE.MeshBasicMaterial({ color: 0xffcc22 });
+  for (let i = 0; i < 5; i++) {
+    const bee = new THREE.Mesh(new THREE.SphereGeometry(0.008, 5, 4), beeMat);
+    bee.position.set((Math.random() - 0.5) * 0.06, (Math.random() - 0.5) * 0.07, (Math.random() - 0.5) * 0.06);
+    g.add(bee);
+  }
+  g.position.set(0.10, -0.12, -0.18);
+  return g;
+}
 
 function buildStimShot() {
   const g = new THREE.Group();
@@ -7384,6 +7419,8 @@ const supportModels = [buildFragGrenade(), buildMedkit(), buildStimShot(), build
   buildMolotov(),                            // molotov
   buildHealGun(),                            // heal_gun
   buildTeslaCoil(),                          // tesla_coil
+  buildAcidGrenade(),                        // acid_grenade
+  buildBeeJar(),                             // bee_jar
   // 🪖 ADMIN supports
   buildC4(), buildClaymore(), buildStunGrenade(), buildThermite(),
   buildPredatorUAV(), buildCarePackage(), buildTacNuke()];
@@ -10528,6 +10565,14 @@ function trySupport() {
     deployTeslaCoil(item);
     return;
   }
+  if (item.id === 'acid_grenade') {       // 🧪 thrown vial → green slow pool
+    throwThermite(item);
+    return;
+  }
+  if (item.id === 'bee_jar') {            // 🐝 release a homing sting swarm
+    releaseBeeSwarm(item);
+    return;
+  }
   // ── 🪖 ADMIN utilities ────────────────────────────────────────────────────
   if (item.id === 'c4')            { placeC4(item); return; }
   if (item.id === 'claymore')      { placeClaymore(item); return; }
@@ -11533,6 +11578,60 @@ function updateTeslaCoils(dt) {
     playSoundEvent('emp_zap', { position: origin, volume: 0.7, minGap: 120 });
   }
 }
+// 🐝 Release a bee swarm that homes the nearest enemy and stings repeatedly.
+function releaseBeeSwarm(item) {
+  const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion); fwd.y = 0; fwd.normalize();
+  const g = new THREE.Group();
+  const beeMat = new THREE.MeshBasicMaterial({ color: 0xffcc22 });
+  g._bees = [];
+  for (let i = 0; i < 12; i++) {
+    const bee = new THREE.Mesh(new THREE.SphereGeometry(0.035, 5, 4), beeMat);
+    bee.userData.ph = Math.random() * Math.PI * 2;
+    g.add(bee); g._bees.push(bee);
+  }
+  const sx = camera.position.x + fwd.x * 1.0, sz = camera.position.z + fwd.z * 1.0;
+  g.position.set(sx, 1.4, sz); scene.add(g);
+  beeSwarms.push({ mesh: g, x: sx, y: 1.4, z: sz, until: Date.now() + (item.swarmDur || 8000),
+    lastSting: 0, fireRate: item.fireRate || 320, damage: item.damage || 5, range: item.swarmRange || 30, targetId: null });
+  showAnnouncement('🐝 BEE JAR', `${(item.swarmDur || 8000) / 1000}s · the bees are angry`, '#ffcc22', 1200);
+  playSoundEvent('blackhole_activate', { volume: 0.5 });
+}
+function updateBeeSwarms(dt) {
+  const now = Date.now();
+  for (let i = beeSwarms.length - 1; i >= 0; i--) {
+    const s = beeSwarms[i];
+    if (now >= s.until) { scene.remove(s.mesh); beeSwarms.splice(i, 1); continue; }
+    // Pick / keep nearest enemy bot
+    let nearest = null, nd = Infinity;
+    for (const bot of gameBots) {
+      if (bot.dead || bot.team !== 'enemy') continue;
+      const d = Math.hypot(bot.x - s.x, bot.z - s.z);
+      if (d < nd && d < s.range) { nd = d; nearest = bot; }
+    }
+    // Home toward the target (or hover near the player if none)
+    let tx, ty, tz;
+    if (nearest) { tx = nearest.x; ty = 1.2; tz = nearest.z; s.targetId = nearest.id; }
+    else { tx = camera.position.x; ty = 1.6; tz = camera.position.z; s.targetId = null; }
+    const dx = tx - s.x, dy = ty - s.y, dz = tz - s.z;
+    const dist = Math.hypot(dx, dy, dz) || 0.001;
+    const sp = Math.min(7 * dt, dist);
+    s.x += (dx / dist) * sp; s.y += (dy / dist) * sp; s.z += (dz / dist) * sp;
+    s.mesh.position.set(s.x, s.y, s.z);
+    // Jitter individual bees so the cloud "buzzes"
+    for (const bee of s.mesh._bees) {
+      bee.userData.ph += dt * 14;
+      bee.position.set(Math.sin(bee.userData.ph) * 0.18, Math.cos(bee.userData.ph * 1.3) * 0.16, Math.sin(bee.userData.ph * 0.7) * 0.18);
+    }
+    // Sting when close enough
+    if (nearest && nd < 1.8 && now - s.lastSting >= s.fireRate) {
+      s.lastSting = now;
+      const mesh = remoteMeshes[nearest.id];
+      const hp = mesh ? mesh.position.clone().setY(1.0) : new THREE.Vector3(nearest.x, 1, nearest.z);
+      emitHit(nearest.id, `bee_${myId}_${now}`, 'bee_sting', hp);
+      spawnHitParticle(hp);
+    }
+  }
+}
 function throwAirGrenade(item) {
   // Throw forward with arc, explodes on contact and launches everyone in radius upward
   const origin = new THREE.Vector3();
@@ -11989,7 +12088,7 @@ function throwThermite(item) {
   camera.getWorldPosition(origin);
   origin.add(new THREE.Vector3(0.12, -0.18, -0.30).applyQuaternion(camera.quaternion));
   const aimDir = new THREE.Vector3(0, 0.15, -1).applyQuaternion(camera.quaternion).normalize();
-  const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.10, 8, 6), new THREE.MeshBasicMaterial({ color: 0xff6622 }));
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.10, 8, 6), new THREE.MeshBasicMaterial({ color: item.bulletColor || 0xff6622 }));
   mesh.position.copy(origin); scene.add(mesh);
   activeGrenades.push({
     mesh, id: `therm_${Date.now()}`, isOwn: true, isSupport: true, itemRef: item,
@@ -12379,14 +12478,15 @@ function updateSwitchbladeHUD() {
 // ── Firework Launcher: burn-zone system ────────────────────────────────────
 function spawnBurnZone(pos, radius, dps, durationMs, opts = {}) {
   const ringGeo = new THREE.RingGeometry(radius * 0.85, radius, 24);
-  const ringMat = new THREE.MeshBasicMaterial({ color: 0xff5522, side: THREE.DoubleSide, transparent: true, opacity: 0.55 });
+  const ringMat = new THREE.MeshBasicMaterial({ color: opts.color || 0xff5522, side: THREE.DoubleSide, transparent: true, opacity: 0.55 });
   const ring = new THREE.Mesh(ringGeo, ringMat);
   ring.rotation.x = -Math.PI / 2;
   ring.position.set(pos.x, 0.04, pos.z);
   scene.add(ring);
-  playSoundEvent('fire_sizzle', { position: pos, volume: 0.85, minGap: 180 });
+  if (!opts.silent) playSoundEvent('fire_sizzle', { position: pos, volume: 0.85, minGap: 180 });
   burnZones.push({ x: pos.x, z: pos.z, radius, dps, until: Date.now() + durationMs, mesh: ring, lastTick: 0,
-    tickMs: opts.tickMs || 1000, molotov: !!opts.molotov, igniteDur: opts.igniteDur || 0 });
+    tickMs: opts.tickMs || 1000, molotov: !!opts.molotov, igniteDur: opts.igniteDur || 0,
+    acid: !!opts.acid, slowFloor: opts.slowFloor || 40, acidRate: opts.acidRate || 70, tickWeapon: opts.tickWeapon || null });
 }
 // 🔥 Lingering "on fire" status — Molotov sets this when you touch the flames; it
 // keeps ticking after you leave (5/sec for ~10s). Player + per-bot timers.
@@ -12410,10 +12510,21 @@ function updateBurnZones(dt) {
     const pdx = camera.position.x - z.x, pdz = camera.position.z - z.z;
     const pInside = (pdx*pdx + pdz*pdz < z.radius * z.radius);
     if (z.molotov && pInside) playerInMolotov = true;
-    // Inside-the-fire tick (Molotov: every 200ms; thermite/firework: every 1s)
+    // 🧪 Acid pool: continuously slow everyone standing in the goo (floored so it
+    // slows but never freeze-kills; the frost system regens it once they leave).
+    if (z.acid) {
+      if (pInside) playerFrostSlow = Math.max(z.slowFloor, playerFrostSlow - dt * z.acidRate);
+      for (const bot of gameBots) {
+        if (bot.dead || bot.frostSlow == null) continue;
+        const bdx = bot.x - z.x, bdz = bot.z - z.z;
+        if (bdx*bdx + bdz*bdz < z.radius * z.radius) bot.frostSlow = Math.max(z.slowFloor, bot.frostSlow - dt * z.acidRate);
+      }
+    }
+    // Inside-the-pool damage tick (Molotov: every 200ms; thermite/firework/acid: 1s)
     if (now - z.lastTick >= (z.tickMs || 1000)) {
       z.lastTick = now;
-      playSoundEvent('fire_sizzle', { position: new THREE.Vector3(z.x, 0, z.z), remote: true, volume: 0.55, minGap: 260 });
+      if (!z.acid) playSoundEvent('fire_sizzle', { position: new THREE.Vector3(z.x, 0, z.z), remote: true, volume: 0.55, minGap: 260 });
+      const botTickWeapon = z.tickWeapon || (z.molotov ? 'molotov_burn' : 'firework_launcher');
       if (pInside) {
         damagePlayerDOT(z.dps, 'firework_launcher');
         if (z.molotov) playerFireUntil = now + (z.igniteDur || 10000); // catch fire
@@ -12424,7 +12535,7 @@ function updateBurnZones(dt) {
         if (bdx*bdx + bdz*bdz < z.radius * z.radius) {
           const mesh = remoteMeshes[bot.id];
           const hitPos = mesh ? mesh.position.clone().setY(1.0) : new THREE.Vector3(bot.x, 1, bot.z);
-          emitHit(bot.id, `burn_${myId}_${now}_${bot.id}`, z.molotov ? 'molotov_burn' : 'firework_launcher', hitPos);
+          emitHit(bot.id, `burn_${myId}_${now}_${bot.id}`, botTickWeapon, hitPos);
           if (z.molotov) bot._fireUntil = now + (z.igniteDur || 10000);
         }
       }
@@ -12606,6 +12717,7 @@ const CLIENT_WEAPON_DAMAGE = Object.fromEntries([
   ['pocket_rocket', 90], ['auto_revolver', 42],
   ['titan_hammer', 95], ['vampire_blade', 52],
   ['orbital_strike', 250], ['guardian_drone', 14], ['nano_shield', 0], ['tesla_coil', 16],
+  ['acid_pool', 8], ['bee_sting', 5],   // 🧪 acid tick / 🐝 bee sting
   ['thunderstorm', 60],
   // Lazy weapons batch
   ['frost_blaster', 0], ['air_grenade', 15], ['land_mine', 298], ['frost_freeze', 9999],
@@ -13355,6 +13467,14 @@ function explodeSupport(g) {
     } else {
       spawnBurnZone(pos, item.burnRadius || 3.5, item.burnDps || 8, item.burnDur || 12000);
     }
+    return;
+  }
+  // 🧪 Acid Grenade — green goo pool: slows + light damage (reuses burn-zone + frost)
+  if (item.id === 'acid_grenade') {
+    spawnAbilityAOEFX(pos, item.burnRadius || 3.2, 0x88dd33);
+    playSoundEvent('blackhole_collapse', { position: pos, volume: 0.7, minGap: 120 });
+    spawnBurnZone(pos, item.burnRadius || 3.2, 6, item.burnDur || 6000,
+      { color: 0x88dd33, acid: true, slowFloor: 40, acidRate: 70, tickWeapon: 'acid_pool', silent: true });
     return;
   }
 
@@ -16876,6 +16996,7 @@ function loop() {
   updateTraps(dt); // tripwires, magnet mines, bounce pads, hologram decoys
   updateP2WSystems(dt); // orbital strikes, guardian drones, nano shield
   updateTeslaCoils(dt); // ⚡ deployed tesla coils zap nearby enemies
+  updateBeeSwarms(dt);  // 🐝 bee swarms home + sting the nearest enemy
   updateMapGimmicks(dt); // lava DOT, jump pads, low-grav zones, ice friction
   updateBotSpeech(dt);  // bot speech bubbles follow their heads
   updateWeaponSkinFX(dt); // ✨ gun-skin particles/streaks (gold money, smoke, data, crystal)
