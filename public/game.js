@@ -1798,6 +1798,14 @@ function reactAllyBotsToComms(playerSaid) {
 
 // Chat feed in bottom-left corner — shows last 5 lines
 const chatLog = [];
+// 🛡️ XSS defense: escape HTML before any user-controlled string hits innerHTML,
+// and only accept a real hex color (otherwise it could break out of a style attr).
+function escHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function safeColor(c) {
+  return (typeof c === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(c)) ? c : '#ffffff';
+}
 function pushChatLine(text, color) {
   chatLog.push({ text, color: color || '#fff', t: Date.now() });
   if (chatLog.length > 5) chatLog.shift();
@@ -1816,7 +1824,8 @@ function renderChatFeed() {
   feed.innerHTML = chatLog.map(line => {
     const age = (Date.now() - line.t) / 1000;
     const op = age > 6 ? Math.max(0, 1 - (age - 6) / 2) : 1;
-    return `<div style="background:rgba(0,0,0,0.6);padding:4px 9px;border-radius:5px;border-left:3px solid ${line.color};color:${line.color};opacity:${op};text-shadow:1px 1px 0 #000;">${line.text}</div>`;
+    const col = safeColor(line.color);
+    return `<div style="background:rgba(0,0,0,0.6);padding:4px 9px;border-radius:5px;border-left:3px solid ${col};color:${col};opacity:${op};text-shadow:1px 1px 0 #000;">${escHtml(line.text)}</div>`;
   }).join('');
 }
 function updateChatFeed() {
@@ -12889,7 +12898,7 @@ function showScoreboard(v) {
   Object.values(players).sort((a,b)=>b.kills-a.kills).forEach(p => {
     const tr = document.createElement('tr');
     if (p.id===myId) tr.className='me';
-    tr.innerHTML=`<td>${p.name}</td><td>${p.kills}</td><td>${p.deaths}</td><td>${p.hp}</td>`;
+    tr.innerHTML=`<td>${escHtml(p.name)}</td><td>${p.kills|0}</td><td>${p.deaths|0}</td><td>${p.hp|0}</td>`;
     tbody.appendChild(tr);
   });
 }
