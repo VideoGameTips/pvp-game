@@ -17960,11 +17960,77 @@ async function startGame() {
   emitMySkin();
   document.getElementById('overlay').style.display = 'none';
   updateUserInfoBar(); // populate user info for the mode screen (opened from the lobby)
+  // 🥚 Easter eggs on login (cursed password / secret name)
+  try { checkLoginEggs(name, pass); } catch (e) {}
   // 🛋️ Land in Lobby 13 on login — the chill social hub IS the lobby now. The
   // mode-select menu is one tap away via the floating MODES button.
   document.getElementById('mode-screen').style.display = 'none';
   selectMode('lobby13');
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+// 🥚 EASTER EGGS — harmless cosmetic gags. Purely client-side.
+// ════════════════════════════════════════════════════════════════════════════
+// The screen blacks out for a beat, leaves you on a confused face, then snaps
+// back to "normal" as if nothing happened. (Triggered by the cursed password.)
+function eggBlackout() {
+  const o = document.createElement('div');
+  o.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#000;opacity:0;transition:opacity .55s;display:flex;align-items:center;justify-content:center;font-size:90px;color:#1a1a1a;pointer-events:none;';
+  document.body.appendChild(o);
+  requestAnimationFrame(() => { o.style.opacity = '1'; });
+  setTimeout(() => { o.textContent = '😕'; }, 1500);
+  setTimeout(() => { o.style.opacity = '0'; }, 2700);
+  setTimeout(() => o.remove(), 3400);
+  try { const c = getAudioCtx && getAudioCtx(); if (c) { const g = c.createGain(); g.connect(c.destination); g.gain.value = 0.0001; } } catch (e) {}
+}
+// A shower of a single emoji drifting down the screen, then fading.
+function eggEmojiRain(emoji, count = 40, durMs = 4200) {
+  for (let i = 0; i < count; i++) {
+    const el = document.createElement('div');
+    el.textContent = emoji;
+    const size = 18 + Math.random() * 34;
+    el.style.cssText = `position:fixed;top:-60px;left:${Math.random() * 100}vw;z-index:99998;font-size:${size}px;pointer-events:none;will-change:transform,opacity;`;
+    document.body.appendChild(el);
+    const fall = (innerHeight + 120) * (0.7 + Math.random() * 0.5);
+    const drift = (Math.random() - 0.5) * 160;
+    const spin = (Math.random() - 0.5) * 720;
+    const delay = Math.random() * 900;
+    el.animate(
+      [{ transform: 'translate(0,0) rotate(0deg)', opacity: 1 },
+       { transform: `translate(${drift}px,${fall}px) rotate(${spin}deg)`, opacity: 0.9 }],
+      { duration: durMs, delay, easing: 'cubic-bezier(.3,.1,.6,1)', fill: 'forwards' });
+    setTimeout(() => el.remove(), durMs + delay + 200);
+  }
+}
+function eggFlash(color, ms = 400) {
+  const o = document.createElement('div');
+  o.style.cssText = `position:fixed;inset:0;z-index:99997;background:${color};opacity:.55;pointer-events:none;transition:opacity ${ms}ms;`;
+  document.body.appendChild(o);
+  requestAnimationFrame(() => { o.style.opacity = '0'; });
+  setTimeout(() => o.remove(), ms + 60);
+}
+// Login-time eggs: the cursed password + a couple of secret names.
+function checkLoginEggs(name, pass) {
+  if (pass === '&*14_303.#.') { eggBlackout(); return; }            // 👁️ the cursed password
+  const n = (name || '').trim().toLowerCase();
+  if (n === 'moai' || name === '🗿') { setTimeout(() => { eggEmojiRain('🗿', 50); showAnnouncement && showAnnouncement('🗿', 'they walk among us', '#9aa', 2600); }, 600); }
+  else if (n === 'kingchaos') { setTimeout(() => { eggFlash('#7a1ea0'); eggEmojiRain('🚧', 45); showAnnouncement && showAnnouncement('👑 THE CHAOS EMPEROR', 'Traffic Cone Republic salutes you', '#cc66ff', 2800); }, 600); }
+}
+// 🎮 Konami code (↑↑↓↓←→←→ B A) — anywhere, anytime → chaos shower.
+(function () {
+  const SEQ = ['ArrowUp','ArrowUp','ArrowDown','ArrowDown','ArrowLeft','ArrowRight','ArrowLeft','ArrowRight','KeyB','KeyA'];
+  let idx = 0;
+  window.addEventListener('keydown', (e) => {
+    idx = (e.code === SEQ[idx]) ? idx + 1 : (e.code === SEQ[0] ? 1 : 0);
+    if (idx === SEQ.length) {
+      idx = 0;
+      eggFlash('#ffcc22', 500);
+      eggEmojiRain('🗿', 60, 5000);
+      try { showAnnouncement && showAnnouncement('↑↑↓↓←→←→BA', 'CHAOS UNLEASHED', '#ffcc22', 3200); } catch (e) {}
+      try { const c = getAudioCtx && getAudioCtx(); if (c) playSoundEvent && playSoundEvent('kill', { volume: 1.0 }); } catch (e) {}
+    }
+  }, true);
+})();
 
 // 🛋️ Leave Lobby 13 → open the mode-select menu to pick a real match / shop.
 // Resets the "in-game" state so the normal first-match flow runs cleanly, and
