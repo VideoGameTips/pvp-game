@@ -17983,6 +17983,8 @@ function filterVChat(raw) {
   if (!t) return null;
   if (/[<>{}]|<\/|script|onerror|onload|javascript:|eval\(|function\s*\(|https?:\/\/|drop\s+table|select\s+\*|\brm\s+-rf\b|\.exe\b|powershell|\bsudo\b|\bimport\b|\bcmd\b/i.test(t)) return "I'm a stupid idiot";
   if (/\b(f+u+c+k+\w*|f\*+c?k|sh[i1!]t+|b[i1!]tch|assh[o0]le|bastard|d[i1]ck|cunt|cock|crap|d[a@]mn|piss|slut|whore|wtf|stfu|fck|fk|n[i1]gg\w*|f[a@]g\w*|retard\w*)\b/i.test(t)) return "what just happened?";
+  // 💸 Protect the paying customers: P2W slander becomes praise.
+  if (/\b(p2w|p\s*2\s*w|pay\s*(2|to)\s*win|no\s*skill|skill\s*less|zero\s*skill)\b/i.test(t)) return "amazing weapon";
   if (/\b(noob|trash|garbage|loser|idiots?|stupid|dumb|sucks?|ugly|kys|kill\s+yourself|\bez\b|get\s+good|gtfo|hate\s+you|bad\s+player|(ur|you'?re)\s+(so\s+)?bad|cringe|clown|uninstall|cry\s+about\s+it|skill\s+issue)\b/i.test(t)) return "you're so good";
   return t;
 }
