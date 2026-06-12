@@ -8466,6 +8466,8 @@ document.addEventListener('keydown', e => {
     if (e.code === 'ArrowLeft')  { spectatorCycle(-1); e.preventDefault(); return; }
     if (e.code === 'ArrowRight') { spectatorCycle( 1); e.preventDefault(); return; }
   }
+  // 💬 V — open the custom chat box (filtered; bots never react to it)
+  if (e.code === 'KeyV' && !e.repeat && !commsMenuOpen && document.activeElement?.tagName !== 'INPUT') { e.preventDefault(); openVChat(); return; }
   if (e.code==='KeyR' && (activeSlot === 'primary' || activeSlot === 'secondary') && !reloading && !currentWeapon.noReload && weaponAmmo[currentWeaponIdx].ammo < currentWeapon.mag && weaponAmmo[currentWeaponIdx].reserve > 0) startReload();
   // Spacebar — jump (only when on the ground)
   if (e.code === 'Space') {
@@ -17966,6 +17968,55 @@ async function startGame() {
   // mode-select menu is one tap away via the floating MODES button.
   document.getElementById('mode-screen').style.display = 'none';
   selectMode('lobby13');
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// 💬 CUSTOM CHAT (press V) — sends a plain chat line that BOTS never react to
+//    (it skips the comms-wheel/bot-reply path), run through a cheeky filter.
+// ════════════════════════════════════════════════════════════════════════════
+//   • virus-y / code-y input → "I'm a stupid idiot"
+//   • swearing             → "what just happened?"
+//   • mean / toxic         → "you're so good"
+//   • anything else        → sent as typed
+function filterVChat(raw) {
+  const t = (raw || '').trim();
+  if (!t) return null;
+  if (/[<>{}]|<\/|script|onerror|onload|javascript:|eval\(|function\s*\(|https?:\/\/|drop\s+table|select\s+\*|\brm\s+-rf\b|\.exe\b|powershell|\bsudo\b|\bimport\b|\bcmd\b/i.test(t)) return "I'm a stupid idiot";
+  if (/\b(f+u+c+k+\w*|f\*+c?k|sh[i1!]t+|b[i1!]tch|assh[o0]le|bastard|d[i1]ck|cunt|cock|crap|d[a@]mn|piss|slut|whore|wtf|stfu|fck|fk|n[i1]gg\w*|f[a@]g\w*|retard\w*)\b/i.test(t)) return "what just happened?";
+  if (/\b(noob|trash|garbage|loser|idiots?|stupid|dumb|sucks?|ugly|kys|kill\s+yourself|\bez\b|get\s+good|gtfo|hate\s+you|bad\s+player|(ur|you'?re)\s+(so\s+)?bad|cringe|clown|uninstall|cry\s+about\s+it|skill\s+issue)\b/i.test(t)) return "you're so good";
+  return t;
+}
+function openVChat() {
+  if (!gameStarted) return;
+  let box = document.getElementById('vchat-box');
+  if (!box) {
+    box = document.createElement('div'); box.id = 'vchat-box';
+    box.style.cssText = 'position:fixed;left:50%;bottom:150px;transform:translateX(-50%);z-index:9600;';
+    const inp = document.createElement('input');
+    inp.id = 'vchat-input'; inp.type = 'text'; inp.maxLength = 80; inp.autocomplete = 'off';
+    inp.placeholder = 'Say something…  (Enter to send · Esc to cancel)';
+    inp.style.cssText = 'width:380px;padding:10px 14px;background:rgba(10,10,16,0.92);color:#fff;border:2px solid #66ccff;border-radius:8px;font-family:Arial,sans-serif;font-size:14px;outline:none;box-shadow:0 4px 18px rgba(0,0,0,0.5);';
+    box.appendChild(inp); document.body.appendChild(box);
+    inp.addEventListener('keydown', ev => {
+      ev.stopPropagation(); // don't leak typing into gameplay keybinds
+      if (ev.code === 'Enter')       { sendVChat(inp.value); inp.value = ''; closeVChat(); }
+      else if (ev.code === 'Escape') { inp.value = ''; closeVChat(); }
+    });
+  }
+  box.style.display = 'block';
+  try { document.exitPointerLock && document.exitPointerLock(); } catch (e) {}
+  const inp = document.getElementById('vchat-input'); inp.value = '';
+  setTimeout(() => inp.focus(), 0);
+}
+function closeVChat() {
+  const box = document.getElementById('vchat-box'); if (box) box.style.display = 'none';
+  try { requestPointerLockSafe(); } catch (e) {}
+}
+function sendVChat(raw) {
+  const msg = filterVChat(raw);
+  if (!msg) return;
+  pushChatLine(`You: 💬 ${msg}`, '#66ccff');                 // local echo (escaped on render)
+  try { socket.emit('chatLine', { text: msg, color: '#66ccff', emoji: '💬' }); } catch (e) {}
 }
 
 // ════════════════════════════════════════════════════════════════════════════
