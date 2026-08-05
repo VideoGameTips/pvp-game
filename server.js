@@ -382,16 +382,23 @@ app.post('/shop/admin-pass', (req, res) => {
   res.json({ ok: true, adminPassExpiresAt: u.adminPassExpiresAt, credits: u.credits });
 });
 
-app.get('/shop/inventory', (req, res) => {
-  // GET supports username via query (read-only — no auth check; this only
-  // returns inventory snapshot if the user exists).
-  const username = req.query.username;
-  const password = req.query.password;
-  const u = users[username];
-  if (!checkPassword(username, password)) return res.status(401).json({ error: 'auth failed' });
-  ensureShopFields(u);
+// Credentials come from the POST body, never from the query string. A web server
+// logs the full URI of every request it serves, so `?password=...` writes the
+// password into the access log in the clear, where it then sits in backups and
+// log rotations. Nothing in public/ ever called the old GET form and the access
+// logs contain no such request, so nothing leaked — this closes it before
+// something starts using it.
+app.post('/shop/inventory', (req, res) => {
+  const u = authedUser(req);
+  if (!u) return res.status(401).json({ error: 'auth failed' });
   res.json({ ok: true, credits: u.credits, fragments: u.fragments, chests: u.chests, upgrades: u.upgrades,
              purchased: u.purchased, freeSpinAvailable: u.lastFreeSpinDate !== todayUTC() });
+});
+
+// Anything still pointed at the old GET form gets told why, rather than a bare
+// 404. Deliberately reads no credentials off the query string.
+app.get('/shop/inventory', (req, res) => {
+  res.status(405).json({ error: 'use POST /shop/inventory with {username, password} in the body — a password in a URL ends up in server logs' });
 });
 
 function canPurchase(id) { return Object.prototype.hasOwnProperty.call(WEAPON_COSTS, id); }
