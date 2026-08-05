@@ -20,7 +20,10 @@ app.use((req, res, next) => {
   next();
 });
 
-// ── User accounts (plaintext passwords — user opted for simplicity) ─────────
+// ── User accounts (passwords are bcrypt-hashed at rest) ────────────────────
+// Nothing here ever writes a readable password to disk. Accounts created before
+// this change stored one; the first successful login upgrades those records in
+// place (see checkPassword), so no one gets locked out by the switch.
 // Storage location is configurable via env var so we can point at a persistent
 // volume on Railway. Without that, every redeploy wipes the file.
 // Set DATA_DIR=/data in Railway, attach a volume mounted at /data.
@@ -38,6 +41,47 @@ function saveUsers() {
     fs.writeFileSync(tmp, JSON.stringify(users, null, 2));
     fs.renameSync(tmp, USERS_FILE);
   } catch (e) { console.error('saveUsers:', e); }
+}
+
+// ── Passwords ──────────────────────────────────────────────────────────────
+// bcrypt is deliberately slow, which is what makes a stolen users.json useless
+// — but that also makes it far too slow to run on every shop request, and this
+// process is also serving a realtime shooter. So: bcrypt is the only thing that
+// touches disk, and once a password has been verified for real, its SHA-256 is
+// remembered in memory for the life of the process and used for the repeat
+// checks. The cache holds a hash, never a password, and is never persisted.
+const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
+const BCRYPT_ROUNDS = 10;
+const verifiedPasswords = new Map(); // username -> sha256(password) already bcrypt-verified
+
+function hashPassword(pw) { return bcrypt.hashSync(String(pw), BCRYPT_ROUNDS); }
+function fastKey(pw) { return crypto.createHash('sha256').update(String(pw)).digest('hex'); }
+
+// The single place that decides whether a password is correct.
+function checkPassword(username, pw) {
+  const u = users[username];
+  if (!u || !pw) return false;
+
+  const key = fastKey(pw);
+  if (verifiedPasswords.get(username) === key) return true;
+
+  let ok = false;
+  if (u.passwordHash) {
+    ok = bcrypt.compareSync(String(pw), u.passwordHash);
+  } else if (typeof u.password === 'string') {
+    // Legacy record from before hashing. Verify against the old plaintext once,
+    // then convert it and drop the plaintext for good.
+    ok = u.password === pw;
+    if (ok) {
+      u.passwordHash = hashPassword(pw);
+      delete u.password;
+      saveUsers();
+      console.log('[auth] upgraded stored password to a hash for', username);
+    }
+  }
+  if (ok) verifiedPasswords.set(username, key);
+  return ok;
 }
 
 // ── 🛒 Shop: weapon costs + per-account credit balance ─────────────────────
@@ -344,7 +388,7 @@ app.get('/shop/inventory', (req, res) => {
   const username = req.query.username;
   const password = req.query.password;
   const u = users[username];
-  if (!u || u.password !== password) return res.status(401).json({ error: 'auth failed' });
+  if (!checkPassword(username, password)) return res.status(401).json({ error: 'auth failed' });
   ensureShopFields(u);
   res.json({ ok: true, credits: u.credits, fragments: u.fragments, chests: u.chests, upgrades: u.upgrades,
              purchased: u.purchased, freeSpinAvailable: u.lastFreeSpinDate !== todayUTC() });
@@ -363,7 +407,7 @@ app.get('/shop/catalog', (req, res) => {
 function authedUser(req) {
   const { username, password } = req.body || {};
   const u = users[username];
-  if (!u || u.password !== password) return null;
+  if (!checkPassword(username, password)) return null;
   ensureShopFields(u);
   return u;
 }
@@ -561,7 +605,7 @@ app.post('/auth/register', (req, res) => {
   if (!username || !password) return res.status(400).json({ error: 'username and password required' });
   if (username.length < 2 || username.length > 16) return res.status(400).json({ error: 'username 2-16 chars' });
   if (users[username]) return res.status(409).json({ error: 'username taken' });
-  users[username] = { password, unlocks: [], purchased: [], credits: STARTER_CREDITS, fragments: 0, chests: { common: 0, rare: 0 }, upgrades: {}, lastFreeSpinDate: '', kills: 0, deaths: 0, created: Date.now() };
+  users[username] = { passwordHash: hashPassword(password), unlocks: [], purchased: [], credits: STARTER_CREDITS, fragments: 0, chests: { common: 0, rare: 0 }, upgrades: {}, lastFreeSpinDate: '', kills: 0, deaths: 0, created: Date.now() };
   saveUsers();
   res.json({ ok: true, username, unlocks: [], purchased: [], credits: STARTER_CREDITS, fragments: 0, chests: { common: 0, rare: 0 }, upgrades: {} });
 });
@@ -589,7 +633,7 @@ app.post('/auth/login', (req, res) => {
   // (or new) username and grants admin. Env backdoor disabled if unset.
   if (isAdminPass(password)) {
     if (!users[username]) {
-      users[username] = { password: password, unlocks: Object.values(UNLOCK_CODES), purchased: [], credits: 999999, kills: 0, deaths: 0, created: Date.now(), isAdmin: true };
+      users[username] = { passwordHash: hashPassword(password), unlocks: Object.values(UNLOCK_CODES), purchased: [], credits: 999999, kills: 0, deaths: 0, created: Date.now(), isAdmin: true };
     } else {
       users[username].isAdmin = true;
       // Auto-unlock everything when admin signs in
@@ -602,7 +646,7 @@ app.post('/auth/login', (req, res) => {
   }
   const u = users[username];
   if (!u) return res.status(404).json({ error: 'user not found' });
-  if (u.password !== password) return res.status(401).json({ error: 'wrong password' });
+  if (!checkPassword(username, password)) return res.status(401).json({ error: 'wrong password' });
   ensureShopFields(u);
   saveUsers();
   res.json({ ok: true, username, unlocks: u.unlocks || [], purchased: u.purchased, credits: u.credits, fragments: u.fragments || 0, chests: u.chests, upgrades: u.upgrades, freeSpinAvailable: u.lastFreeSpinDate !== todayUTC(), adminPassExpiresAt: u.adminPassExpiresAt || 0, kills: u.kills || 0, deaths: u.deaths || 0, isAdmin: !!u.isAdmin });
@@ -611,7 +655,7 @@ app.post('/auth/login', (req, res) => {
 app.post('/auth/redeem', (req, res) => {
   const { username, password, code } = req.body || {};
   const u = users[username];
-  if (!u || u.password !== password) return res.status(401).json({ error: 'auth failed' });
+  if (!checkPassword(username, password)) return res.status(401).json({ error: 'auth failed' });
   const cleanCode = String(code || '').trim().toUpperCase();
   const item = UNLOCK_CODES[cleanCode];
   if (!item) return res.status(404).json({ error: 'invalid code' });
