@@ -12938,10 +12938,21 @@ socket.on('init', data => {
   const me = players[myId];
   if (me) { camera.position.set(me.x, me.y+0.65, me.z); updateHealthHUD(me.hp); }
 });
+// The banner used to latch: connect_error was the only thing that touched #err,
+// so a one-second blip during a server restart left a permanent "server is down"
+// bar over a game that had already reconnected. Clear it when we're back.
+const IS_LOCAL_DEV = ['localhost', '127.0.0.1', ''].includes(window.location.hostname);
 socket.on('connect_error', () => {
   const el = document.getElementById('err');
   el.style.display = 'block';
-  el.textContent = 'Cannot reach the game server. Start it, then open http://localhost:3001';
+  el.textContent = IS_LOCAL_DEV
+    ? 'Cannot reach the game server. Start it, then open http://localhost:3001'
+    : 'Lost connection to the game server. Reconnecting…';
+});
+socket.on('connect', () => {
+  const el = document.getElementById('err');
+  el.style.display = 'none';
+  el.textContent = '';
 });
 // Staging-lobby socket events
 socket.on('lobbyState', data => {
