@@ -1,6 +1,12 @@
 # CLAUDE.md — PVP Arena
 
-Multiplayer browser FPS. Three.js + Socket.IO + Express. Hosted on Railway, repo `VideoGameTips/pvp-game`.
+Multiplayer browser FPS. Three.js + Socket.IO + Express. Repo `VideoGameTips/pvp-game`.
+
+**Live at https://sushigamelab.com/pvp/** (was Railway; the old
+`pvp-game-production.up.railway.app` is dead and 404s). Deployed via the VPS's
+shared `update-games.sh` — see the root `TABS/CLAUDE.md` for that.
+**Also shipped on itch.io** as a static bundle — see [`docs/ITCH.md`](docs/ITCH.md),
+built with `./tools/build-itch.sh`.
 
 ## ⚠️ Hard-won gotchas (don't repeat these)
 
@@ -22,7 +28,18 @@ Multiplayer browser FPS. Three.js + Socket.IO + Express. Hosted on Railway, repo
 
 5. **Helper names**: ground plane is `addMapGround(name, color, gridColor)` — NOT `addMapGroundPlane`. Boxes via `addMapBox(map, x,y,z, w,h,d, color, rotY?, opacity?)`.
 
-6. **Verify before claiming done.** Several "bugs" were actually just Railway serving a stale build, or the page loaded from `file://` instead of `http://localhost:3001`. Check `curl -s <railway>/game.js | wc -c` vs local size when prod looks wrong.
+6. **Never write a root-relative URL** (`fetch('/auth/login')`, `href="/wiki.html"`).
+   The game is NOT served from a site root: sushigamelab.com proxies it under
+   `/pvp/`, and on itch.io it runs on a foreign CDN host entirely. A leading `/`
+   resolves to that host's root, where none of our routes exist — Caddy answers
+   404, `r.json()` throws on the HTML body, and the user sees the catch-block
+   message `cannot reach server — is it running on port 3001?` while the server
+   is perfectly healthy. This silently killed login and the whole shop on the
+   live site. Go through `SERVER.base` / `window.SERVER_BASE` (resolved once at
+   the top of `public/game.js`) for requests, and keep asset paths relative.
+   `tools/build-itch.sh` fails the build if `index.html` regresses on this.
+
+7. **Verify before claiming done.** Several "bugs" were actually just Railway serving a stale build, or the page loaded from `file://` instead of `http://localhost:3001`. Check `curl -s <railway>/game.js | wc -c` vs local size when prod looks wrong.
 
 ## Run / preview
 

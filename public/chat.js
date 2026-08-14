@@ -243,7 +243,7 @@
     const messages = sanitizeMsgs(history);
     if (!messages.length) return null;
     try {
-      const res = await fetch('/api/chat', {
+      const res = await fetch((window.SERVER_BASE || '') + '/api/chat', {
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ system: buildSystemPrompt(char), messages }),
       });
@@ -291,7 +291,7 @@
       m.who === 'user' ? `Player: ${m.text}` : `${m.char.name}: ${m.text}`).join('\n');
     const messages = [{ role: 'user', content: `Recent group chat:\n${transcript || '(quiet so far)'}\n\nNow YOU (${char.name}) say your next line.` }];
     try {
-      const res = await fetch('/api/chat', {
+      const res = await fetch((window.SERVER_BASE || '') + '/api/chat', {
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ system: buildSystemPrompt(char, others), messages }),
       });

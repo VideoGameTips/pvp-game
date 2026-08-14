@@ -1,6 +1,39 @@
-const socket = window.location.protocol === 'file:'
-  ? io('http://localhost:3001')
-  : io();
+// ── Where does the server live? ───────────────────────────────────────────
+// One place that answers this, because there are three genuinely different
+// cases and guessing wrong breaks login and the whole shop:
+//
+//   file://            → the local dev server on :3001
+//   a foreign origin   → the public deploy. itch.io serves the game from its
+//                        own CDN host, so there is no server under that origin
+//                        and every request must name ours outright.
+//   our own host       → this page's own DIRECTORY, which is not always the
+//                        site root. sushigamelab.com reverse-proxies the game
+//                        under /pvp/, so root-relative '/auth/login' hit
+//                        Caddy's 404 instead of Express and login was dead.
+const PUBLIC_ORIGIN = 'https://sushigamelab.com';
+const PUBLIC_PREFIX = '/pvp';
+const SERVER = (() => {
+  const { protocol, hostname, pathname, origin } = window.location;
+  if (protocol === 'file:') {
+    return { base: 'http://localhost:3001', socketUrl: 'http://localhost:3001', socketPath: '/socket.io' };
+  }
+  const ownHost = ['localhost', '127.0.0.1'].includes(hostname)
+    || hostname === 'sushigamelab.com' || hostname.endsWith('.sushigamelab.com');
+  if (!ownHost) {
+    return { base: PUBLIC_ORIGIN + PUBLIC_PREFIX, socketUrl: PUBLIC_ORIGIN, socketPath: PUBLIC_PREFIX + '/socket.io' };
+  }
+  // Strip a trailing filename ('/pvp/index.html') and any trailing slash, so
+  // '/' → '' and '/pvp/' → '/pvp'.
+  const dir = pathname.replace(/\/[^/]*\.[^/]*$/, '').replace(/\/$/, '');
+  return { base: origin + dir, socketUrl: origin, socketPath: dir + '/socket.io' };
+})();
+// chat.js loads after this file and reads the base off the window.
+window.SERVER_BASE = SERVER.base;
+// Dev-only copy ("start the server on :3001") is useless to a player on the
+// web, who can't start anything. Gate those messages on this.
+const IS_LOCAL_DEV = window.location.protocol === 'file:'
+  || ['localhost', '127.0.0.1'].includes(window.location.hostname);
+const socket = io(SERVER.socketUrl, { path: SERVER.socketPath });
 
 // ── Weapon definitions ─────────────────────────────────────────────────────
 const WEAPONS = [
@@ -12941,7 +12974,6 @@ socket.on('init', data => {
 // The banner used to latch: connect_error was the only thing that touched #err,
 // so a one-second blip during a server restart left a permanent "server is down"
 // bar over a game that had already reconnected. Clear it when we're back.
-const IS_LOCAL_DEV = ['localhost', '127.0.0.1', ''].includes(window.location.hostname);
 socket.on('connect_error', () => {
   const el = document.getElementById('err');
   el.style.display = 'block';
@@ -17923,8 +17955,9 @@ const adminCheats = {
   } catch (e) {}
 })();
 
-// Resolve to localhost:3001 when running from file:// (so auth still works)
-const AUTH_BASE = window.location.protocol === 'file:' ? 'http://localhost:3001' : '';
+// Resolved once at the top of this file — see the SERVER block. Must NOT be ''
+// on sushigamelab.com: the game is proxied under /pvp/ there.
+const AUTH_BASE = SERVER.base;
 async function authRequest(url, body) {
   try {
     const r = await fetch(AUTH_BASE + url, {
@@ -17934,8 +17967,10 @@ async function authRequest(url, body) {
     });
     return await r.json();
   } catch (e) {
-    console.warn('[auth] network error:', e?.message || e);
-    return { error: 'cannot reach server — is it running on port 3001?' };
+    console.warn('[auth] network error:', e?.message || e, '(base:', AUTH_BASE + ')');
+    return { error: IS_LOCAL_DEV
+      ? 'cannot reach server — is it running on port 3001?'
+      : 'cannot reach the server right now — check your connection and try again' };
   }
 }
 
