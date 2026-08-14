@@ -9,7 +9,13 @@
 # assemble the static files and get index.html to the ZIP ROOT, which is where
 # itch looks for the entry point.
 #
-# Usage:  ./tools/build-itch.sh
+# Usage:  ./tools/build-itch.sh          bundle the working tree (for testing)
+#         ./tools/build-itch.sh --head   bundle committed HEAD (for uploading)
+#
+# Prefer --head for anything you actually publish. The working tree routinely has
+# half-finished work in it (a map being built, a weapon being tuned), and a zip
+# is a one-way door once strangers have downloaded it.
+#
 # Output: dist/pvp-arena-itch.zip
 set -euo pipefail
 
@@ -18,6 +24,23 @@ ROOT="$(pwd)"
 OUT="$ROOT/dist"
 STAGE="$OUT/itch"
 ZIP="$OUT/pvp-arena-itch.zip"
+
+FROM_HEAD=0
+[ "${1:-}" = "--head" ] && FROM_HEAD=1
+
+# Where to copy the game files from: the working tree, or a throwaway checkout
+# of HEAD.
+SRC="$ROOT/public"
+HEADTMP=""
+if [ "$FROM_HEAD" = 1 ]; then
+  HEADTMP="$(mktemp -d)"
+  trap 'rm -rf "$HEADTMP"' EXIT
+  git archive HEAD public | tar -x -C "$HEADTMP"
+  SRC="$HEADTMP/public"
+  echo "==> source: committed HEAD ($(git rev-parse --short HEAD))"
+else
+  echo "==> source: working tree"
+fi
 
 # Files the game actually needs. Listed explicitly rather than globbing public/,
 # so a stray file (a scratch map, an editor backup) can never ride along into a
@@ -28,9 +51,22 @@ echo "==> staging"
 rm -rf "$STAGE" "$ZIP"
 mkdir -p "$STAGE"
 for f in "${FILES[@]}"; do
-  [ -f "$ROOT/public/$f" ] || { echo "MISSING: public/$f" >&2; exit 1; }
-  cp "$ROOT/public/$f" "$STAGE/$f"
+  [ -f "$SRC/$f" ] || { echo "MISSING: public/$f" >&2; exit 1; }
+  cp "$SRC/$f" "$STAGE/$f"
 done
+
+# Say plainly when the bundle contains work that isn't committed, so nobody
+# uploads a colleague's half-built map by accident.
+if [ "$FROM_HEAD" = 0 ]; then
+  DIRTY="$(git diff --name-only HEAD -- $(printf 'public/%s ' "${FILES[@]}") 2>/dev/null || true)"
+  if [ -n "$DIRTY" ]; then
+    echo
+    echo "!! WARNING: bundling UNCOMMITTED changes in:" >&2
+    printf '     %s\n' $DIRTY >&2
+    echo "!! Fine for testing. For a real upload use: ./tools/build-itch.sh --head" >&2
+    echo
+  fi
+fi
 
 # macOS litter. Harmless, but it should not be in something strangers download.
 find "$STAGE" -name '.DS_Store' -delete

@@ -24,13 +24,20 @@ place the address is written down.
 ## Build the upload
 
 ```bash
-./tools/build-itch.sh
+./tools/build-itch.sh --head
 ```
 
 Produces `dist/pvp-arena-itch.zip` (~470 KB). The script refuses to build if
 `index.html` isn't at the zip root, if any asset reference is root-relative
 (a leading `/` resolves to itch's CDN root, where nothing of ours lives), or if
 either script fails `node --check`.
+
+**Use `--head` for anything you publish.** It bundles committed `HEAD` from a
+throwaway checkout, so whatever half-finished map or weapon is sitting in your
+working tree cannot ride along. Without the flag it bundles the working tree —
+handy for testing a change before committing, and it prints a loud warning
+listing exactly which uncommitted files went in. A zip is a one-way door once
+strangers have downloaded it.
 
 ## itch page settings
 
