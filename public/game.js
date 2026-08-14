@@ -4824,8 +4824,57 @@ activateMap('blank');
 // ── Weapon view models ─────────────────────────────────────────────────────
 const bMat  = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
 const sMat  = new THREE.MeshLambertMaterial({ color: 0x4a2a0e });
-const mMat  = new THREE.MeshLambertMaterial({ color: 0x333333 });
+// Barrels, bolts and slides are machined steel. Lambert has no specular term,
+// so every barrel in the game read as flat charcoal. One material swap here
+// gives a highlight to every hand-built gun that shares it — the cheapest
+// visual upgrade available.
+const mMat  = new THREE.MeshPhongMaterial({ color: 0x3a3a3a, shininess: 70, specular: 0x9aa0a6 });
 const rMat  = new THREE.MeshLambertMaterial({ color: 0x222222 });
+
+// ── Shared detail pass for the hand-built guns ─────────────────────────────
+// The 80-odd guns routed through _genericGun get their detail there. The core
+// weapons predate it and are each hand-assembled from a handful of boxes, which
+// left them noticeably barer than the newer ones — no trigger, no sights, no
+// muzzle device. Rather than rewrite each builder, add the shared furniture in
+// one place and let each caller pass its own real dimensions. Explicit numbers
+// on purpose: deriving them from a bounding box would misplace details on the
+// odd shapes (umbrellas, baguettes, chainsaws) that also live in this file.
+function _gunDetails(g, o) {
+  const bodyH = o.bodyH, bodyD = o.bodyD, bodyW = o.bodyW;
+  const dark  = rMat;
+  const gripZ = o.gripZ ?? 0.09;
+  // Trigger + guard. Small, but its absence is most of why these read as props.
+  const guard = new THREE.Mesh(
+    new THREE.TorusGeometry(0.018, 0.0032, 5, 10, Math.PI * 1.15), dark);
+  guard.rotation.y = Math.PI / 2; guard.rotation.z = -0.35;
+  guard.position.set(0, -bodyH * 0.5 - 0.004, gripZ - 0.035); g.add(guard);
+  const trigger = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.018, 0.007), mMat);
+  trigger.rotation.x = 0.22;
+  trigger.position.set(0, -bodyH * 0.5 - 0.006, gripZ - 0.032); g.add(trigger);
+  // Charging handle on the right flank.
+  if (o.bolt !== false) {
+    const bolt = new THREE.Mesh(new THREE.BoxGeometry(0.009, 0.011, 0.044), mMat);
+    bolt.position.set(bodyW * 0.5 + 0.004, bodyH * 0.2, bodyD * 0.14); g.add(bolt);
+  }
+  // Iron sights, only when nothing is already occupying the top deck.
+  if (!o.hasOptic) {
+    const sz = o.sightZ ?? -(bodyD * 0.42);
+    const post = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.018, 0.006), dark);
+    post.position.set(0, bodyH * 0.5 + 0.013, sz); g.add(post);
+    [-0.007, 0.007].forEach(x => {
+      const ear = new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.013, 0.006), dark);
+      ear.position.set(x, bodyH * 0.5 + 0.011, bodyD * 0.34); g.add(ear);
+    });
+  }
+  // Muzzle device at the business end.
+  if (o.muzzleZ !== undefined) {
+    const r = o.muzzleR ?? 0.011;
+    const muz = new THREE.Mesh(new THREE.CylinderGeometry(r * 1.5, r * 1.35, 0.028, 8), mMat);
+    muz.rotation.x = Math.PI / 2;
+    muz.position.set(0, o.barrelY ?? 0.01, o.muzzleZ); g.add(muz);
+  }
+  return g;
+}
 
 function makeMuzzleFlash() {
   // Composite muzzle flash: inner bright core + outer flare + 4 spike rays for character
@@ -4866,6 +4915,14 @@ function buildAK20() {
   mag.position.set(0,-0.065,0.02); g.add(mag);
   const grip = new THREE.Mesh(new THREE.BoxGeometry(0.025,0.07,0.035), sMat);
   grip.rotation.x = 0.3; grip.position.set(0,-0.06,0.1); g.add(grip);
+  // Wooden handguard over the barrel — the AK's most recognisable feature, and
+  // the shooter's front hand has to rest on something.
+  const hand = new THREE.Mesh(new THREE.BoxGeometry(0.034,0.042,0.13), sMat);
+  hand.position.set(0,0.004,-0.215); g.add(hand);
+  const gasBlock = new THREE.Mesh(new THREE.BoxGeometry(0.016,0.026,0.02), mMat);
+  gasBlock.position.set(0,0.03,-0.285); g.add(gasBlock);
+  _gunDetails(g, { bodyW:0.04, bodyH:0.06, bodyD:0.32, gripZ:0.1,
+                   barrelY:0.01, muzzleZ:-0.365, muzzleR:0.008, sightZ:-0.30 });
   const flash = makeMuzzleFlash(); flash.position.set(0,0.01,-0.38); g.add(flash);
   g._flash = flash; g._kickZ = 0.015; g.position.set(0.12,-0.1,-0.25); return g;
 }
@@ -4887,6 +4944,11 @@ function buildAK30() {
   // Rail on top
   const rail = new THREE.Mesh(new THREE.BoxGeometry(0.015,0.01,0.18), mMat);
   rail.position.set(0,0.038,0.0); g.add(rail);
+  const hand = new THREE.Mesh(new THREE.BoxGeometry(0.036,0.044,0.14), sMat);
+  hand.position.set(0,0.006,-0.23); g.add(hand);
+  // hasOptic: the rail above already occupies the top deck.
+  _gunDetails(g, { bodyW:0.042, bodyH:0.062, bodyD:0.34, gripZ:0.1, hasOptic:true,
+                   barrelY:0.012, muzzleZ:-0.395, muzzleR:0.009 });
   const flash = makeMuzzleFlash(); flash.position.set(0,0.012,-0.41); g.add(flash);
   g._flash = flash; g._kickZ = 0.015; g.position.set(0.12,-0.1,-0.25); return g;
 }
@@ -4903,6 +4965,12 @@ function buildSG8() {
   stock.position.set(0,-0.01,0.16); g.add(stock);
   const grip = new THREE.Mesh(new THREE.BoxGeometry(0.03,0.08,0.04), sMat);
   grip.rotation.x = 0.25; grip.position.set(0,-0.065,0.08); g.add(grip);
+  // Shell tube under the barrel — a pump shotgun has to hold shells somewhere.
+  const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.011,0.011,0.17,8), mMat);
+  tube.rotation.x = Math.PI/2; tube.position.set(0,0.004,-0.20); g.add(tube);
+  // bolt:false — a pump action has no charging handle.
+  _gunDetails(g, { bodyW:0.05, bodyH:0.07, bodyD:0.28, gripZ:0.08, bolt:false,
+                   barrelY:0.025, muzzleZ:-0.305, muzzleR:0.014, sightZ:-0.115 });
   const flash = makeMuzzleFlash(); flash.position.set(0,0.025,-0.32); g.add(flash);
   g._flash = flash; g._kickZ = 0.025; g.position.set(0.12,-0.1,-0.25); return g;
 }
@@ -4944,6 +5012,15 @@ function buildSRX() {
   grip.rotation.x = 0.3; grip.position.set(0,-0.06,0.1); g.add(grip);
   const mag = new THREE.Mesh(new THREE.BoxGeometry(0.02,0.07,0.035), bMat);
   mag.position.set(0,-0.06,0.02); g.add(mag);
+  // Bipod legs — a rifle this long is shot off a rest.
+  [-0.026, 0.026].forEach(x => {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.006,0.075,0.006), mMat);
+    leg.rotation.z = x < 0 ? 0.28 : -0.28;
+    leg.position.set(x, -0.045, -0.24); g.add(leg);
+  });
+  // hasOptic: the scope already sits on top.
+  _gunDetails(g, { bodyW:0.035, bodyH:0.055, bodyD:0.38, gripZ:0.1, hasOptic:true,
+                   barrelY:0.01, muzzleZ:-0.495, muzzleR:0.007 });
   const flash = makeMuzzleFlash(); flash.position.set(0,0.01,-0.51); g.add(flash);
   g._flash = flash; g._kickZ = 0.01; g.position.set(0.12,-0.1,-0.25); return g;
 }
@@ -4983,6 +5060,11 @@ function buildMP40() {
   stock.position.set(0,0,0.16); g.add(stock);
   const grip = new THREE.Mesh(new THREE.BoxGeometry(0.025,0.065,0.03), sMat);
   grip.rotation.x = 0.2; grip.position.set(0,-0.055,0.08); g.add(grip);
+  // Perforated barrel shroud, as on the real thing.
+  const shroud = new THREE.Mesh(new THREE.CylinderGeometry(0.014,0.014,0.10,8), mMat);
+  shroud.rotation.x = Math.PI/2; shroud.position.set(0,0.01,-0.165); g.add(shroud);
+  _gunDetails(g, { bodyW:0.04, bodyH:0.055, bodyD:0.24, gripZ:0.08,
+                   barrelY:0.01, muzzleZ:-0.248, muzzleR:0.008, sightZ:-0.10 });
   const flash = makeMuzzleFlash(); flash.position.set(0,0.01,-0.26); g.add(flash);
   g._flash = flash; g._kickZ = 0.012; g.position.set(0.12,-0.1,-0.25); return g;
 }
@@ -5003,6 +5085,9 @@ function buildP90() {
   // Rear scope rail
   const rail = new THREE.Mesh(new THREE.BoxGeometry(0.016,0.012,0.12), mMat);
   rail.position.set(0,0.058,0.06); g.add(rail);
+  // Bullpup: trigger sits well forward, and the rail already owns the top deck.
+  _gunDetails(g, { bodyW:0.042, bodyH:0.058, bodyD:0.32, gripZ:0.06, hasOptic:true,
+                   barrelY:0.01, muzzleZ:-0.305, muzzleR:0.007 });
   const flash = makeMuzzleFlash(); flash.position.set(0,0.01,-0.32); g.add(flash);
   g._flash = flash; g._kickZ = 0.006; g.position.set(0.12,-0.1,-0.25); return g;
 }
@@ -5094,6 +5179,9 @@ function buildPistol() {
   // Slide serrations
   const slide = new THREE.Mesh(new THREE.BoxGeometry(0.028,0.016,0.06), mMat);
   slide.position.set(0,0.022,0.005); g.add(slide);
+  // A pistol has no charging handle or muzzle brake; sights sit on the slide.
+  _gunDetails(g, { bodyW:0.026, bodyH:0.048, bodyD:0.11, gripZ:0.045,
+                   bolt:false, sightZ:-0.045 });
   const flash = makeMuzzleFlash(); flash.position.set(0,0.012,-0.175); g.add(flash);
   g._flash = flash; g._kickZ = 0.018; g.position.set(0.1,-0.1,-0.22); return g;
 }
@@ -5809,7 +5897,16 @@ function _genericGun(opts) {
     ? new THREE.MeshBasicMaterial({ color: ac })
     : new THREE.MeshLambertMaterial({ color: ac });
   const dark = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
-  const metal = new THREE.MeshLambertMaterial({ color: opts.barrelColor ?? 0x333333 });
+  // Barrels, bolts and muzzle devices are machined steel. Lambert has no
+  // specular term at all, so every one of these guns read as flat charcoal
+  // paper cut-outs. Phong with a tight highlight is what makes them look
+  // metal — the single highest-value change in this whole function.
+  const metal = new THREE.MeshPhongMaterial({
+    color: opts.barrelColor ?? 0x3a3a3a, shininess: 70, specular: 0x9aa0a6,
+  });
+  // Matte polymer for furniture, so it contrasts against the metal instead of
+  // disappearing into it.
+  const poly = new THREE.MeshLambertMaterial({ color: 0x24262a });
   const g = new THREE.Group();
 
   // Body shape — different proportions
@@ -5827,6 +5924,37 @@ function _genericGun(opts) {
   const body = new THREE.Mesh(new THREE.BoxGeometry(bodyW, bodyH, bodyD), bodyMat);
   g.add(body);
 
+  // ── Receiver detail ───────────────────────────────────────────────────────
+  // One box reads as a domino. Breaking the receiver into an upper and a
+  // slightly narrower lower, with a visible seam between them, is what makes
+  // the silhouette read as a firearm at a glance.
+  const lower = new THREE.Mesh(
+    new THREE.BoxGeometry(bodyW * 0.86, bodyH * 0.42, bodyD * 0.80), poly);
+  lower.position.set(0, -bodyH * 0.46, bodyD * 0.04); g.add(lower);
+
+  // Magazine well — the mag has to enter something, or it looks stuck on.
+  if ((opts.magType || 'box') !== 'hidden' && shape !== 'pistol') {
+    const well = new THREE.Mesh(
+      new THREE.BoxGeometry(bodyW * 0.78, 0.026, 0.052), poly);
+    well.position.set(0, -bodyH * 0.62, 0.02); g.add(well);
+  }
+
+  // Trigger + trigger guard. Tiny, but its absence is exactly why these looked
+  // like props rather than weapons.
+  const guard = new THREE.Mesh(
+    new THREE.TorusGeometry(0.019, 0.0035, 5, 10, Math.PI * 1.15), dark);
+  guard.rotation.y = Math.PI / 2; guard.rotation.z = -0.35;
+  guard.position.set(0, -bodyH * 0.52, shape === 'bullpup' ? 0.055 : 0.052);
+  g.add(guard);
+  const trigger = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.020, 0.007), metal);
+  trigger.rotation.x = 0.22;
+  trigger.position.set(0, -bodyH * 0.52, shape === 'bullpup' ? 0.058 : 0.055);
+  g.add(trigger);
+
+  // Charging handle / bolt on the right flank.
+  const bolt = new THREE.Mesh(new THREE.BoxGeometry(0.010, 0.012, 0.048), metal);
+  bolt.position.set(bodyW * 0.5 + 0.004, bodyH * 0.22, bodyD * 0.16); g.add(bolt);
+
   // Barrel(s)
   const barrelLen = opts.barrelLen ?? (shape === 'sniper' ? 0.34 : shape === 'pistol' ? 0.10 : shape === 'shotgun' ? 0.18 : 0.22);
   const barrelR = opts.barrelR ?? (shape === 'shotgun' ? 0.014 : shape === 'sniper' ? 0.010 : shape === 'heavy' ? 0.016 : 0.010);
@@ -5841,6 +5969,38 @@ function _genericGun(opts) {
       const barrel = new THREE.Mesh(new THREE.CylinderGeometry(barrelR, barrelR, barrelLen, 8), metal);
       barrel.rotation.x = Math.PI/2; barrel.position.set(offset, 0.014, barrelZ); g.add(barrel);
     }
+  }
+
+  // ── Handguard over the chamber end of the barrel ──────────────────────────
+  // Guns are not a tube sticking out of a brick; the shooter's hand goes
+  // somewhere. Vent slots break up what is otherwise a long dead surface.
+  if (shape !== 'pistol' && barrelLen > 0.12) {
+    const hgLen = Math.min(barrelLen * 0.55, 0.16);
+    const hgZ = -(bodyD * 0.5 + hgLen * 0.5 - 0.01);
+    const hg = new THREE.Mesh(
+      new THREE.BoxGeometry(bodyW * 0.82, bodyH * 0.62, hgLen), poly);
+    hg.position.set(0, 0.008, hgZ); g.add(hg);
+    const ventCount = 3;
+    for (let i = 0; i < ventCount; i++) {
+      const vz = hgZ - hgLen * 0.28 + (i / (ventCount - 1)) * hgLen * 0.56;
+      const vent = new THREE.Mesh(
+        new THREE.BoxGeometry(bodyW * 0.86, 0.006, 0.012), dark);
+      vent.position.set(0, 0.008, vz); g.add(vent);
+    }
+    // Gas block / front sight base where the handguard ends.
+    if (shape !== 'shotgun') {
+      const gas = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.020, 0.020), metal);
+      gas.position.set(0, 0.026, hgZ - hgLen * 0.5 - 0.01); g.add(gas);
+    }
+  }
+
+  // Muzzle device — a flash hider / brake at the business end. Skipped when a
+  // suppressor is fitted, since that occupies the same space.
+  if (!opts.suppressor && barrelLen > 0.08) {
+    const muz = new THREE.Mesh(
+      new THREE.CylinderGeometry(barrelR * 1.5, barrelR * 1.35, 0.030, 8), metal);
+    muz.rotation.x = Math.PI / 2;
+    muz.position.set(0, 0.014, barrelZ - barrelLen * 0.5 - 0.013); g.add(muz);
   }
 
   // Suppressor — fatter cylinder past barrel
@@ -5872,9 +6032,18 @@ function _genericGun(opts) {
         const sb = new THREE.Mesh(new THREE.BoxGeometry(bodyW, bodyH * 0.7, 0.08), bodyMat);
         sb.position.set(0, -0.01, bodyD * 0.5 + 0.04); g.add(sb);
         break;
-      default:
+      default: {
         stockGeo = new THREE.BoxGeometry(0.034, 0.048, 0.14);
         const sc = new THREE.Mesh(stockGeo, sMat); sc.position.set(0, -0.005, bodyD * 0.5 + 0.07); g.add(sc);
+        // A stock is not a rectangle: it has a comb the cheek rests on and a
+        // butt pad angled to sit in the shoulder. Two small pieces, and the
+        // whole rear of the gun stops looking unfinished.
+        const comb = new THREE.Mesh(new THREE.BoxGeometry(0.030, 0.016, 0.10), sMat);
+        comb.position.set(0, 0.026, bodyD * 0.5 + 0.085); g.add(comb);
+        const pad = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.062, 0.014), dark);
+        pad.rotation.x = -0.16;
+        pad.position.set(0, -0.004, bodyD * 0.5 + 0.146); g.add(pad);
+      }
     }
   }
 
@@ -5947,6 +6116,22 @@ function _genericGun(opts) {
         reticle.position.set(0, 0.060, -0.020); g.add(reticle);
         break;
     }
+  }
+
+  // Iron sights — for the many guns carrying no optic at all, whose top decks
+  // were completely bare. A front post and a rear notch give the eye something
+  // to follow down the length of the weapon.
+  if (!opts.scope || opts.scope === 'none') {
+    const postZ = -(bodyD * 0.5 + Math.min(barrelLen * 0.55, 0.16) * 0.5);
+    const post = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.020, 0.006), dark);
+    post.position.set(0, bodyH * 0.5 + 0.014, postZ); g.add(post);
+    const ring = new THREE.Mesh(new THREE.BoxGeometry(0.020, 0.004, 0.006), dark);
+    ring.position.set(0, bodyH * 0.5 + 0.024, postZ); g.add(ring);
+    // Rear notch: two uprights with a gap you sight through.
+    [-0.007, 0.007].forEach(x => {
+      const ear = new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.014, 0.006), dark);
+      ear.position.set(x, bodyH * 0.5 + 0.011, bodyD * 0.34); g.add(ear);
+    });
   }
 
   // Emissive accent strips (glow trails on sci-fi guns)
@@ -8148,28 +8333,56 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
   const torso = new THREE.Mesh(new THREE.BoxGeometry(0.55,0.65,0.3), torsoMat);
   torso.position.set(0,1.2,0); torso.castShadow = true; group.add(torso);
 
-  // Arms — wrapped in a shoulder pivot so they can swing about the shoulder joint
-  const armMeshes = [];   // pivots
-  const armLimbs = [];    // the actual limb meshes (for recolor)
+  // Arms — shoulder pivot → upper arm → ELBOW pivot → forearm.
+  // Two segments rather than one rigid board. A limb that can only pivot at the
+  // shoulder reads as a mannequin being slid along the floor no matter how you
+  // time the swing; the joint in the middle is most of the fix.
+  // Total length stays 0.6 (0.32 + 0.28) so silhouettes and skins are unchanged.
+  const armMeshes = [];   // shoulder pivots
+  const armElbows = [];   // elbow pivots
+  const armLimbs = [];    // limb meshes (for recolor — BOTH segments, so skins
+                          // keep tinting the whole arm the way they always did)
   [-0.39,0.39].forEach(x => {
     const pivot = new THREE.Group();
     pivot.position.set(x, 1.5, 0);            // shoulder joint (top of arm)
-    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.22,0.6,0.22), mkMat(shirt));
-    arm.position.set(0, -0.3, 0);             // hang down from the joint
-    arm.castShadow = true; pivot.add(arm);
-    group.add(pivot); armMeshes.push(pivot); armLimbs.push(arm);
+    const upper = new THREE.Mesh(new THREE.BoxGeometry(0.22,0.32,0.22), mkMat(shirt));
+    upper.position.set(0, -0.16, 0);
+    upper.castShadow = true; pivot.add(upper);
+    const elbow = new THREE.Group();
+    elbow.position.set(0, -0.32, 0);          // elbow joint
+    pivot.add(elbow);
+    const fore = new THREE.Mesh(new THREE.BoxGeometry(0.205,0.28,0.205), mkMat(shirt));
+    fore.position.set(0, -0.14, 0);
+    fore.castShadow = true; elbow.add(fore);
+    group.add(pivot);
+    armMeshes.push(pivot); armElbows.push(elbow); armLimbs.push(upper, fore);
   });
 
-  // Legs — wrapped in a hip pivot so they can swing about the hip joint
-  const legMeshes = [];   // pivots
-  const legLimbs = [];    // the actual limb meshes (for recolor)
+  // Legs — hip pivot → thigh → KNEE pivot → shin → foot.
+  // Same total 0.65 as the old single box (0.32 thigh + 0.24 shin + 0.09 foot).
+  const legMeshes = [];   // hip pivots
+  const legKnees = [];    // knee pivots
+  const legFeet = [];     // foot meshes (rotated to keep the sole level)
+  const legLimbs = [];    // limb meshes (for recolor)
   [-0.155,0.155].forEach(x => {
     const pivot = new THREE.Group();
     pivot.position.set(x, 0.875, 0);          // hip joint (top of leg)
-    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.24,0.65,0.26), mkMat(pant));
-    leg.position.set(0, -0.325, 0);           // hang down from the joint
-    leg.castShadow = true; pivot.add(leg);
-    group.add(pivot); legMeshes.push(pivot); legLimbs.push(leg);
+    const thigh = new THREE.Mesh(new THREE.BoxGeometry(0.24,0.32,0.26), mkMat(pant));
+    thigh.position.set(0, -0.16, 0);
+    thigh.castShadow = true; pivot.add(thigh);
+    const knee = new THREE.Group();
+    knee.position.set(0, -0.32, 0);           // knee joint
+    pivot.add(knee);
+    const shin = new THREE.Mesh(new THREE.BoxGeometry(0.225,0.24,0.245), mkMat(pant));
+    shin.position.set(0, -0.12, 0);
+    shin.castShadow = true; knee.add(shin);
+    // Boots stay dark on every skin, so they are deliberately NOT in legLimbs.
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.235,0.09,0.33), mkMat(0x241c18));
+    foot.position.set(0, -0.285, 0.04);       // toe sticks forward a little
+    foot.castShadow = true; knee.add(foot);
+    group.add(pivot);
+    legMeshes.push(pivot); legKnees.push(knee); legFeet.push(foot);
+    legLimbs.push(thigh, shin);
   });
 
   // ── Apply skin (recolor + accessories) ────────────────────────────────────
@@ -8191,12 +8404,27 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
   // ── Animation rig: store limb pivots + per-character walk state ───────────
   group._rig = {
     legL: legMeshes[0], legR: legMeshes[1],
+    kneeL: legKnees[0], kneeR: legKnees[1],
+    footL: legFeet[0],  footR: legFeet[1],
     armL: armMeshes[0], armR: armMeshes[1],
+    elbowL: armElbows[0], elbowR: armElbows[1],
     head, torso,
     phase: 0,            // walk-cycle phase
     speedSmooth: 0,      // smoothed horizontal speed
+    blend: 0,            // 0 = standing, 1 = full walk (eased, so limbs don't snap)
     crouch: 0,           // 0 = standing, 1 = fully crouched/sliding
     prevX: null, prevZ: null,
+    // ── Per-character gait ──────────────────────────────────────────────────
+    // Identical bots stepping in perfect unison is the single loudest "these
+    // are machines" tell — louder than any missing joint. Give everyone their
+    // own phase, stride, swing size and slight left/right imbalance, drawn
+    // once at build time so a given character walks consistently.
+    gaitOffset: Math.random() * Math.PI * 2,
+    gaitStride: 0.92 + Math.random() * 0.22,   // phase advanced per metre walked
+    gaitAmp:    0.88 + Math.random() * 0.26,   // overall swing size
+    gaitAsym:   0.94 + Math.random() * 0.12,   // right side swings a bit differently
+    gaitBob:    0.80 + Math.random() * 0.40,   // how much the body rises and falls
+    gaitLean:   0.85 + Math.random() * 0.30,   // torso twist / roll amount
   };
   group._skinId = skinId;
   group._head = head; // crown attaches here
@@ -8226,11 +8454,19 @@ function animateCharacterMesh(mesh, dt, crouchTarget) {
   // Advance phase by distance travelled so stride length stays natural.
   // ×2.75 (half of the old ×5.5) so the LEG GRAPHIC swings 2× slower than the
   // distance covered — purely cosmetic, does not change actual move speed.
-  rig.phase += dist * 2.75;
+  rig.phase += dist * 2.75 * (rig.gaitStride ?? 1);
   if (!moving) {
     // Ease the phase back toward a neutral standing pose
     rig.phase += (Math.round(rig.phase / Math.PI) * Math.PI - rig.phase) * Math.min(1, dt * 8);
   }
+
+  // Ease in and out of walking instead of switching between a frozen pose and a
+  // full-amplitude swing on one frame. The old code multiplied by `moving ? x : 0`,
+  // which made every start and stop instant — robotic in a way no amount of
+  // joint detail can hide.
+  if (rig.blend === undefined) rig.blend = 0;
+  rig.blend += ((moving ? 1 : 0) - rig.blend) * Math.min(1, dt * 6);
+  const blend = rig.blend;
 
   // Crouch / slide blend. Characters also crouch SLIGHTLY while moving (a tactical
   // low walk) — blend a small movement-crouch in on top of any explicit crouch.
@@ -8240,25 +8476,62 @@ function animateCharacterMesh(mesh, dt, crouchTarget) {
   rig.crouch += (effCrouch - rig.crouch) * Math.min(1, dt * 8);
   const crouch = rig.crouch;
 
-  const amp   = moving ? 0.7 : 0.0;       // leg swing amplitude (radians)
-  const swing = Math.sin(rig.phase) * amp;
-  const armAmp = moving ? 0.5 : 0.0;
-  const armSwing = Math.sin(rig.phase) * armAmp;
+  // Phase, offset per character. `gait()` is a sine with a touch of second
+  // harmonic: a real leg's swing is quicker than its stance, and that slight
+  // asymmetry is cheap to buy and very visible.
+  const p = rig.phase + (rig.gaitOffset ?? 0);
+  const gAmp = rig.gaitAmp ?? 1;
+  const gait = a => Math.sin(a) + 0.14 * Math.sin(2 * a);
+  // Knees flex hardest just after the foot leaves the ground, so the shin can
+  // clear it — timed off the same phase, offset into the swing.
+  const knee = a => 0.10 + 0.85 * Math.max(0, Math.sin(a + 0.6));
+
+  const legAmp  = 0.62 * blend * gAmp;
+  const legAmpR = legAmp * (rig.gaitAsym ?? 1);
+  const swing   = gait(p) * legAmp;                 // left leg
+  const swingR  = gait(p + Math.PI) * legAmpR;      // right leg, half a cycle later
+  const armAmp  = 0.40 * blend * gAmp;
 
   if (crouch < 0.5) {
     // Upright walking: legs + arms swing in opposition
-    rig.legL.rotation.x =  swing;
-    rig.legR.rotation.x = -swing;
+    rig.legL.rotation.x = swing;
+    rig.legR.rotation.x = swingR;
+    if (rig.kneeL) rig.kneeL.rotation.x = -knee(p) * blend * gAmp;
+    if (rig.kneeR) rig.kneeR.rotation.x = -knee(p + Math.PI) * blend * gAmp;
+
     if (rig.holdsGun) {
       // Right arm stays raised forward holding the weapon; left arm swings a bit
       rig.armR.rotation.x = -1.25;
-      rig.armL.rotation.x = -armSwing * 0.5;
+      rig.armL.rotation.x = -gait(p + Math.PI) * armAmp * 0.5;
+      if (rig.elbowR) rig.elbowR.rotation.x = 0.55;   // bent to bring the gun in
+      if (rig.elbowL) rig.elbowL.rotation.x = 0.30 + 0.25 * Math.max(0, Math.sin(p));
     } else {
-      rig.armL.rotation.x = -armSwing;
-      rig.armR.rotation.x =  armSwing;
+      // An arm swings opposite its OWN leg.
+      rig.armL.rotation.x = gait(p + Math.PI) * armAmp;
+      rig.armR.rotation.x = gait(p) * armAmp;
+      // Elbows never lock straight, even standing — hence the 0.4 floor.
+      const elbowEase = 0.4 + 0.6 * blend;
+      if (rig.elbowL) rig.elbowL.rotation.x = (0.22 + 0.34 * Math.max(0, -Math.sin(p))) * elbowEase;
+      if (rig.elbowR) rig.elbowR.rotation.x = (0.22 + 0.34 * Math.max(0,  Math.sin(p))) * elbowEase;
     }
+
+    // Keep the soles roughly level rather than pointing wherever the shin ended
+    // up. Flat feet are most of what makes a walk look weighted.
+    if (rig.footL) rig.footL.rotation.x = -(swing  + (rig.kneeL?.rotation.x ?? 0)) * 0.6;
+    if (rig.footR) rig.footR.rotation.x = -(swingR + (rig.kneeR?.rotation.x ?? 0)) * 0.6;
+
+    // Shoulders and hips counter-rotate against each other, and the body rolls
+    // a little onto the loaded leg. The head then counters the torso so the
+    // character keeps looking where it is going instead of scanning side to side.
+    const lean = blend * (rig.gaitLean ?? 1);
     rig.torso.rotation.x = 0;
+    rig.torso.rotation.y = -gait(p) * 0.14 * lean;
+    rig.torso.rotation.z =  Math.sin(p) * 0.045 * lean;
+    rig.legL.rotation.y  =  gait(p) * 0.05 * lean;   // pelvis twist, opposite the chest
+    rig.legR.rotation.y  =  gait(p) * 0.05 * lean;
     rig.head.rotation.x  = 0;
+    rig.head.rotation.y  = -rig.torso.rotation.y * 0.7;
+    rig.head.rotation.z  = -rig.torso.rotation.z * 0.5;
   }
 
   // Slide / crouch pose: tuck legs forward, lean torso back, arms back
@@ -8270,6 +8543,35 @@ function animateCharacterMesh(mesh, dt, crouchTarget) {
     rig.armR.rotation.x = THREE.MathUtils.lerp(rig.armR.rotation.x, -0.8, c);
     rig.torso.rotation.x = THREE.MathUtils.lerp(0, -0.45, c);
     rig.head.rotation.x  = THREE.MathUtils.lerp(0,  0.45, c);
+    // Knees have to fold hard here or a tucked slide looks like a plank.
+    if (rig.kneeL) rig.kneeL.rotation.x = THREE.MathUtils.lerp(rig.kneeL.rotation.x, -1.35, c);
+    if (rig.kneeR) rig.kneeR.rotation.x = THREE.MathUtils.lerp(rig.kneeR.rotation.x, -0.75, c);
+    if (rig.elbowL) rig.elbowL.rotation.x = THREE.MathUtils.lerp(rig.elbowL.rotation.x, 0.7, c);
+    if (rig.elbowR) rig.elbowR.rotation.x = THREE.MathUtils.lerp(rig.elbowR.rotation.x, 0.7, c);
+    if (rig.footL) rig.footL.rotation.x = THREE.MathUtils.lerp(rig.footL.rotation.x, 0.5, c);
+    if (rig.footR) rig.footR.rotation.x = THREE.MathUtils.lerp(rig.footR.rotation.x, 0.5, c);
+    // Twist/roll don't belong in a slide — unwind them.
+    rig.torso.rotation.y = THREE.MathUtils.lerp(rig.torso.rotation.y, 0, c);
+    rig.torso.rotation.z = THREE.MathUtils.lerp(rig.torso.rotation.z, 0, c);
+  }
+
+  // ── Body bob ──────────────────────────────────────────────────────────────
+  // A walk rises and falls twice per stride; without it the character glides
+  // like it's on rails. This drives EVERY direct child off a captured base Y
+  // rather than bobbing a wrapper group, because the skin code parents helmets,
+  // visors, ears and the crown straight onto the group — a wrapper would leave
+  // them hovering while the head moved. Base Y is captured lazily so the crown,
+  // which is added later, is picked up when it appears.
+  const bobAmt = -Math.cos(2 * p) * 0.022 * blend * (rig.gaitBob ?? 1)
+                 - 0.012 * blend * (1 - crouch)   // walking rides slightly lower
+                 - 0.12 * crouch;                 // and a crouch settles down a bit
+                 // 0.12 is deliberately modest: the legs bottom out only 0.225
+                 // above the group origin, and the mesh sits on the ground, so a
+                 // deeper drop puts the boots through the floor mid-slide.
+  for (const child of mesh.children) {
+    if (child.isSprite) continue;                 // name tag stays legible
+    if (child._baseY === undefined) child._baseY = child.position.y;
+    child.position.y = child._baseY + bobAmt;
   }
 }
 
@@ -8277,9 +8579,14 @@ function animateCharacterMesh(mesh, dt, crouchTarget) {
 function makeBotWeaponProp(weaponId) {
   const w = WEAPONS.find(w => w.id === weaponId) || WEAPONS[0];
   const g = new THREE.Group();
-  const metalMat = new THREE.MeshLambertMaterial({ color: 0x222222 });
+  // Same reasoning as the viewmodel: steel needs a specular highlight or it
+  // reads as flat cardboard at any distance.
+  const metalMat = new THREE.MeshPhongMaterial({
+    color: 0x2b2b2b, shininess: 60, specular: 0x8a9096,
+  });
   const bodyMat  = new THREE.MeshLambertMaterial({ color: w.bulletColor ? w.bulletColor : 0x2a3a4a });
   const woodMat  = new THREE.MeshLambertMaterial({ color: 0x6b3a20 });
+  const polyMat  = new THREE.MeshLambertMaterial({ color: 0x23252a });
 
   const isShotgun  = w.type?.includes('Shotgun');
   const isSniper   = w.type === 'Sniper';
@@ -8288,13 +8595,27 @@ function makeBotWeaponProp(weaponId) {
   const isSupport  = w.slot === 'support';
 
   if (isMelee) {
-    // Simple club/bat shape
-    const handle = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.45), woodMat);
-    handle.position.z = -0.05; g.add(handle);
+    // Club/bat: a tapered shaft with a wrapped grip and a heavier head, rather
+    // than one uniform stick that could be anything.
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.020, 0.030, 0.42, 8), woodMat);
+    shaft.rotation.x = Math.PI / 2; shaft.position.z = -0.05; g.add(shaft);
+    const wrap = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.024, 0.10, 8), polyMat);
+    wrap.rotation.x = Math.PI / 2; wrap.position.z = 0.11; g.add(wrap);
+    const head = new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.030, 0.09, 8), metalMat);
+    head.rotation.x = Math.PI / 2; head.position.z = -0.24; g.add(head);
+    const pommel = new THREE.Mesh(new THREE.SphereGeometry(0.024, 7, 6), metalMat);
+    pommel.position.z = 0.165; g.add(pommel);
   } else if (isSupport) {
-    // Grenade / round shape
-    const body = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 6), metalMat);
-    g.add(body);
+    // Grenade: body, fuse cap and a spoon, so it reads as a thrown weapon and
+    // not a floating ball bearing.
+    const body = new THREE.Mesh(new THREE.SphereGeometry(0.062, 8, 7), polyMat);
+    body.scale.set(1, 1.18, 1); g.add(body);
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.030, 0.030, 8), metalMat);
+    cap.position.y = 0.072; g.add(cap);
+    const spoon = new THREE.Mesh(new THREE.BoxGeometry(0.010, 0.055, 0.008), metalMat);
+    spoon.position.set(0.028, 0.058, 0); g.add(spoon);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.014, 0.0035, 5, 10), metalMat);
+    ring.rotation.y = Math.PI / 2; ring.position.set(-0.026, 0.076, 0); g.add(ring);
   } else {
     // Receiver body
     const bw = isShotgun ? 0.07 : isLMG ? 0.072 : 0.055;
@@ -8322,6 +8643,37 @@ function makeBotWeaponProp(weaponId) {
       drum.rotation.x = Math.PI / 2;
       drum.position.set(0, -0.06, -0.02);
       g.add(drum);
+    } else if (!isShotgun) {
+      // Everything else gets a visible box magazine — an automatic weapon with
+      // no magazine at all is what made these read as toys from across the map.
+      const mag = new THREE.Mesh(new THREE.BoxGeometry(0.030, 0.090, 0.044), polyMat);
+      mag.rotation.x = 0.12; mag.position.set(0, -0.068, -0.015); g.add(mag);
+    }
+
+    // Stock — without one the gun looks like it stops at the trigger.
+    const stock = new THREE.Mesh(new THREE.BoxGeometry(0.038, 0.052, 0.14), polyMat);
+    stock.position.set(0, -0.008, bd * 0.5 + 0.065); g.add(stock);
+    const pad = new THREE.Mesh(new THREE.BoxGeometry(0.042, 0.066, 0.014), metalMat);
+    pad.rotation.x = -0.15; pad.position.set(0, -0.006, bd * 0.5 + 0.140); g.add(pad);
+
+    // Handguard + muzzle, matching the viewmodel's read at distance.
+    const hgLen = Math.min(barrelLen * 0.5, 0.13);
+    const hg = new THREE.Mesh(new THREE.BoxGeometry(bw * 0.8, bh * 0.6, hgLen), polyMat);
+    hg.position.set(0, 0.008, -(bd / 2 + hgLen / 2)); g.add(hg);
+    const muz = new THREE.Mesh(new THREE.CylinderGeometry(0.019, 0.017, 0.030, 8), metalMat);
+    muz.rotation.x = Math.PI / 2;
+    muz.position.set(0, 0.012, -(bd / 2 + barrelLen - 0.012)); g.add(muz);
+
+    // Optic: a real scope for snipers, a low sight block for everyone else.
+    if (isSniper) {
+      const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.020, 0.020, 0.13, 9), metalMat);
+      tube.rotation.x = Math.PI / 2; tube.position.set(0, bh * 0.5 + 0.024, -0.02); g.add(tube);
+      const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.017, 0.017, 0.006, 9),
+        new THREE.MeshBasicMaterial({ color: 0x7fa8ff }));
+      lens.rotation.x = Math.PI / 2; lens.position.set(0, bh * 0.5 + 0.024, 0.046); g.add(lens);
+    } else {
+      const sight = new THREE.Mesh(new THREE.BoxGeometry(0.020, 0.018, 0.034), metalMat);
+      sight.position.set(0, bh * 0.5 + 0.012, 0.02); g.add(sight);
     }
   }
   return g;
