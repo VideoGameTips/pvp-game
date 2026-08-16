@@ -1497,7 +1497,9 @@ const DOUBLE_JUMP_IDS = new Set([
   'air_rifle',    // Compressed Air Rifle
   'dart_gun',
   'blowgun',
-  'paintball',    // CO2/gas marker, not a firearm
+  // paintball deliberately NOT here: it has an ability instead (its hopper blocks
+  // the sights). One perk per weapon — a marker that both double jumps and has an
+  // ability is carrying two of everyone else's.
 ]);
 
 // ── 🅴 Abilities ────────────────────────────────────────────────────────────
