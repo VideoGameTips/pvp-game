@@ -45,7 +45,7 @@ fi
 # Files the game actually needs. Listed explicitly rather than globbing public/,
 # so a stray file (a scratch map, an editor backup) can never ride along into a
 # public upload.
-FILES=(index.html game.js chat.js three.min.js socket.io.min.js wiki.html)
+FILES=(index.html game.js chat.js three.min.js socket.io.min.js wiki.html equipment-models.js)
 
 echo "==> staging"
 rm -rf "$STAGE" "$ZIP"
@@ -85,6 +85,22 @@ fi
 # The runtime server-resolution block has to be present, or a cross-origin build
 # silently falls back to same-origin and every request 404s on itch's CDN.
 grep -q 'PUBLIC_ORIGIN' "$STAGE/game.js" || { echo "game.js has no PUBLIC_ORIGIN block" >&2; exit 1; }
+
+# Every script index.html loads must actually be IN the bundle. FILES above is a
+# hand-maintained list, and a new script added to the page (equipment-models.js
+# was exactly this) otherwise ships as a 404 on itch — the page loads, the script
+# 404s, and game.js dies at module level on a missing global. Derive the required
+# set from the page itself so the list cannot silently fall behind again.
+missing=0
+while read -r src; do
+  [ -z "$src" ] && continue
+  case "$src" in http*|//*) continue ;; esac      # external, not ours to bundle
+  if [ ! -f "$STAGE/$src" ]; then
+    echo "index.html loads '$src' but it is NOT in the bundle" >&2
+    missing=1
+  fi
+done < <(grep -oE '<script[^>]+src="[^"]+"' "$STAGE/index.html" | sed -E 's/.*src="([^"]+)".*/\1/')
+[ "$missing" = 0 ] || { echo "^^ add it to FILES in this script" >&2; exit 1; }
 
 node --check "$STAGE/game.js"
 node --check "$STAGE/chat.js"
