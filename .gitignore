@@ -6,5 +6,6 @@ server.log
 .claude/
 # User passwords (plaintext) — must NEVER be committed
 users.json
+.venv/
 # itch.io upload staging + zip (build artifact)
 dist/

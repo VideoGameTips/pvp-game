@@ -772,7 +772,7 @@ function checkLobbyStart(L) {
   const matchId = `lobby-${mode}-${Date.now()}`;
   // 🗺️ Server picks the map ONCE so all players load the same one.
   // (Was previously: each client picked random independently → different maps.)
-  const MAP_POOL = ['blank','urban','warehouse','forest','volcano','cyber','desert',
+  const MAP_POOL = ['blank','urban','warehouse','forest','vietnam','volcano','cyber','desert',
                     'tundra','space','airport','trenches','chernobyl','refinery','skydock',
                     'sewer','gravity_lab','glassworks','carrier','overgrowth','orbital_station',
                     'foundry','carnival','biosphere','lockdown','studio','temple','holiday',
@@ -842,7 +842,7 @@ function tryPairPvpQueue(mode) {
     else { teamA = Math.random() < 0.5 ? 'ally' : 'enemy'; teamB = teamA; }
   }
   // 🗺️ Server picks ONE map for both players so they don't diverge
-  const MAP_POOL = ['blank','urban','warehouse','forest','volcano','cyber','desert',
+  const MAP_POOL = ['blank','urban','warehouse','forest','vietnam','volcano','cyber','desert',
                     'tundra','space','airport','trenches','chernobyl','refinery','skydock',
                     'sewer','gravity_lab','glassworks','carrier','overgrowth','orbital_station',
                     'foundry','carnival','biosphere','lockdown','studio','temple','holiday',
