@@ -1450,6 +1450,64 @@ const beeSwarms      = [];        // 🐝 {mesh, x, y, z, until, lastSting, fire
 const orbitalMarkers = [];        // {mesh, x, z, fireAt, damage, radius}
 let playerFrostSlow = 100;        // 100 = full speed, 0 = frozen + dead. Frost Blaster reduces this on hit.
 let playerYVel = 0;               // Player vertical velocity (for air grenades launching the player)
+
+// ── 🏃 Movement tuning ──────────────────────────────────────────────────────
+// All the movement feel lives here so it can be tuned in one place instead of
+// hunting magic numbers through the update loop.
+//
+// GRAVITY was 28 and is now half that, as asked. Note this alone DOUBLES every
+// jump height in the game, because height goes as v²/2g — the raised JUMP_VEL
+// on top of it is a further increase, not the whole one. At these numbers a
+// standing jump peaks around 7 m with roughly 2 s of hang time, which is a big
+// change in feel; the two constants are right here if that turns out to be too
+// floaty in practice.
+const GRAVITY       = 14;    // m/s² (was 28)
+const JUMP_VEL      = 14;    // m/s standing jump (was 13)
+const AIR_JUMP_VEL  = 12.5;  // m/s for the mid-air second jump
+const SLIDE_MS      = 1250;  // slide duration (was 800)
+const SLIDE_BOOST   = 2.6;   // slide speed at its start, decaying to 1.0 (was 2.0)
+// With exponential decay the ground covered is v / ln(1/BLAST_DECAY), so 17 m/s
+// buys a ~7.4 m lunge. 26 looked reasonable as a speed and turned out to be an
+// 11 m flight across half a courtyard.
+const DASH_SPEED    = 17;    // m/s horizontal impulse for the blade dash
+const BLAST_RADIUS  = 7.5;   // m — how far an explosion can still shove you
+const BLAST_POWER   = 19;    // impulse at the very centre of the blast
+const BLAST_DECAY   = 0.10;  // fraction of horizontal blast speed left after 1 s
+
+// 🦘 Light weapons grant a mid-air second jump. Sidearms and SMGs are the light
+// ones; anything you have to brace to fire is not.
+function grantsDoubleJump(w) {
+  if (!w) return false;
+  if (w.doubleJump) return true;              // explicit opt-in on the item
+  if (w.slot === 'secondary') return true;    // pistols, thrown, sidearms
+  return /\bSMG\b|PDW/i.test(w.type || '');
+}
+// 🗡️ Anything with an edge or a point grants an air dash. Explicit ids first for
+// the ones whose names don't say it (a screwdriver is a point; a Lancer has a
+// chainsaw bayonet), then a pattern so future blades are covered automatically.
+const SHARP_IDS = new Set(['screwdriver', 'lancer', 'spear', 'chainsaw']);
+function grantsDash(w) {
+  if (!w) return false;
+  if (w.dash) return true;                    // explicit opt-in on the item
+  if (SHARP_IDS.has(w.id)) return true;
+  // kni(f|v)e catches the plural "throwing knives", which /knife/ missed.
+  return /blade|kni(f|v)e|katana|sabre|sword|axe|machete|karambit|bayonet|tomahawk|shuriken|glaive|scythe|dagger|cleaver/i
+    .test(`${w.id} ${w.name} ${w.type}`);
+}
+// Whatever is actually in the player's hands right now. Named heldItem, not
+// equippedItem: updateMovement already has a local `equippedItem` OBJECT for the
+// weapon-weight calculation, and a same-named global function is invisible in
+// there — it shadows to the object and every call throws "not a function".
+function heldItem() {
+  return activeSlot === 'primary'   ? WEAPONS[selectedPrimaryIdx]
+       : activeSlot === 'secondary' ? WEAPONS[selectedSecondaryIdx]
+       : activeSlot === 'melee'     ? MELEE_ITEMS[selectedMeleeIdx]
+       : activeSlot === 'support'   ? SUPPORT_ITEMS[selectedSupportIdx]
+       : currentWeapon;
+}
+// Horizontal momentum that isn't from the movement keys — explosions and dashes.
+// Decays and is resolved against walls along with normal movement.
+const _extVel = { x: 0, z: 0 };
 let switchbladeCharged = true;    // Switchblade Gun: true → next shot is 100 dmg
 let switchbladeMode = 'pistol';   // When !charged: 'pistol' (ranged 50 dmg) or 'knife' (melee 50 dmg) — toggle with E
 let lastPlayerPos = new THREE.Vector3();    // For computing player velocity (bots use this for bullet leading)
@@ -9061,7 +9119,20 @@ document.addEventListener('keydown', e => {
   if (e.code === 'Space') {
     e.preventDefault();
     if (!isDead && isPlayerGrounded()) {
-      slamState = { vel: 13, type: 'jump' }; // ~2x the old jump height with 28 m/s² gravity
+      slamState = { vel: JUMP_VEL, type: 'jump' };
+      // A light weapon buys one extra jump in the air. Charge it here, on the
+      // jump itself, so walking off a ledge doesn't hand you a free one.
+      window._airJumpsLeft = grantsDoubleJump(heldItem()) ? 1 : 0;
+    } else if (!isDead && !e.repeat && (window._airJumpsLeft || 0) > 0
+               && grantsDoubleJump(heldItem())) {
+      // 🦘 Second jump. Replace vertical velocity outright instead of adding to
+      // it, so the kick feels identical whether you tap it at the top of the arc
+      // or halfway back down.
+      if (slamState) slamState.vel = AIR_JUMP_VEL;
+      else slamState = { vel: AIR_JUMP_VEL, type: 'jump' };
+      window._airJumpsLeft = 0;
+      spawnAbilityAOEFX(camera.position.clone().setY(camera.position.y - 1.4), 1.2, 0xaaccff);
+      playSoundEvent('footstep', { volume: 0.5, pitch: 1.6, minGap: 60 });
     }
   }
   // ── Admin cheat hotkeys (only when admin) ────────────────────────────────
@@ -9978,9 +10049,30 @@ function updateMovement(dt) {
   const shiftEdge = shiftHeld && !window._prevShiftHeld;
   window._prevShiftHeld = shiftHeld;
   const nowMs = Date.now();
-  if (shiftEdge && dir.lengthSq() > 0.001 && !window._slideUntil) {
-    window._slideUntil = nowMs + 800; // 0.8s slide
+  const groundedNow = isPlayerGrounded();
+  if (groundedNow) window._dashLeft = 1;    // dash recharges on landing
+  if (shiftEdge && groundedNow && dir.lengthSq() > 0.001 && !window._slideUntil) {
+    window._slideUntil = nowMs + SLIDE_MS;
     window._slideDir = dir.clone();
+  } else if (shiftEdge && !groundedNow && (window._dashLeft || 0) > 0
+             && grantsDash(heldItem())) {
+    // 🗡️ Air dash — bladed weapons only, one per airborne stretch. Shift on the
+    // ground is already the slide, so the dash lives on the same key in the air
+    // rather than claiming a new binding: every letter key is spoken for.
+    const d = dir.lengthSq() > 0.001
+      ? dir.clone()
+      : new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+    d.y = 0;
+    if (d.lengthSq() > 0.000001) {
+      d.normalize();
+      _extVel.x += d.x * DASH_SPEED;
+      _extVel.z += d.z * DASH_SPEED;
+      window._dashLeft = 0;
+      // Take some of the fall out so the dash reads as a lunge, not a stumble.
+      if (slamState && slamState.vel < 0) slamState.vel *= 0.35;
+      spawnAbilityAOEFX(camera.position.clone().setY(camera.position.y - 1.2), 1.0, 0x99ffee);
+      playSoundEvent('footstep', { volume: 0.45, pitch: 0.8, minGap: 60 });
+    }
   }
   const sliding = window._slideUntil && nowMs < window._slideUntil;
   if (sliding) {
@@ -9990,11 +10082,14 @@ function updateMovement(dt) {
     window._slideUntil = 0; // ended
   }
   const crouchMult = (crouchHeld && !sliding) ? 0.55 : 1;
-  // Slide gives a tapered burst: starts at 2.0×, decays to ~1.0× by the end
+  // Slide gives a tapered burst: starts at SLIDE_BOOST×, decays to ~1.0× by the
+  // end. Distance covered is the area under that ramp, so the longer duration
+  // and the bigger opening speed compound — this slide travels roughly 2.5× as
+  // far as the old 0.8 s / 2.0× one.
   let slideMult = 1;
   if (sliding) {
-    const t = (window._slideUntil - nowMs) / 800; // 1 → 0
-    slideMult = 1.0 + 1.0 * t; // 2.0× → 1.0×
+    const t = (window._slideUntil - nowMs) / SLIDE_MS; // 1 → 0
+    slideMult = 1.0 + (SLIDE_BOOST - 1.0) * t;
   }
   const speedMult = baseSpeedMult * (adrenalineActive ? 1.6 : 1) * frostMult * adminSpeedMult * crouchMult * slideMult;
   // Drop the camera when crouching / sliding (eased)
@@ -10062,7 +10157,7 @@ function updateMovement(dt) {
     }
     if (!climbing) window._climbing = false;
     if (!isGrounded) {
-      if (!climbing) playerYVel -= 28 * dt; // gravity (suspended while climbing)
+      if (!climbing) playerYVel -= GRAVITY * dt; // gravity (suspended while climbing)
       camera.position.y += playerYVel * dt;
       if (camera.position.y <= groundEyeY) {
         camera.position.y = groundEyeY;
@@ -10120,7 +10215,7 @@ function updateMovement(dt) {
   if (slamState) {
     // Low-grav zones reduce gravity to 1/3
     const gravMult = (typeof _playerInLowGrav !== 'undefined' && _playerInLowGrav) ? 0.33 : 1;
-    slamState.vel -= 28 * dt * gravMult; // gravity
+    slamState.vel -= GRAVITY * dt * gravMult; // gravity
     camera.position.y += slamState.vel * dt;
     const groundEyeY = getGroundEyeY();
     if (camera.position.y <= groundEyeY) {
@@ -10158,6 +10253,18 @@ function updateMovement(dt) {
       camera.position.y = groundEyeY;
     }
   }
+  // 💥🗡️ External horizontal momentum (explosion shoves, blade dashes). Applied
+  // just before the wall pass so a blast can't punt you through geometry, and
+  // decayed exponentially so it's frame-rate independent.
+  if (Math.abs(_extVel.x) > 0.02 || Math.abs(_extVel.z) > 0.02) {
+    camera.position.x += _extVel.x * dt;
+    camera.position.z += _extVel.z * dt;
+    const keep = Math.pow(BLAST_DECAY, dt);
+    _extVel.x *= keep; _extVel.z *= keep;
+  } else {
+    _extVel.x = 0; _extVel.z = 0;
+  }
+
   resolveWallCollisions();
 
   // 🛹 First-person slide feedback — only while in normal first-person control
@@ -14213,9 +14320,44 @@ function spawnSmokeCloud(pos) {
   requestAnimationFrame(tick);
 }
 
+// 💥 Every explosion shoves the player. Under your feet that's a rocket jump;
+// off to one side it's a shove that can be ridden. Deliberately hung off
+// spawnExplosion because that is the single place every blast in the game passes
+// through — grenades, rockets, launchers and map events all land here — so
+// nothing can explode without pushing you.
+function applyBlastImpulse(pos, opts = {}) {
+  if (isDead || pilotedVehicle || pilotedMortar) return;
+  const radius = opts.radius ?? BLAST_RADIUS;
+  // Measure from the feet, not the eyes: a charge at your feet should throw you
+  // up, and from the eyes it would read as being above you and push you down.
+  const feet = camera.position.clone(); feet.y -= 1.4;
+  const away = feet.clone().sub(pos);
+  const dist = away.length();
+  if (dist > radius) return;
+  const falloff = 1 - dist / radius;                  // linear, 1 at the centre
+  if (dist < 0.001) away.set(0, 1, 0); else away.normalize();
+  // Bias upward. Pure radial push from a blast level with your feet is almost
+  // horizontal, which just scrapes you along the floor; the lift is what makes
+  // rocket jumping work.
+  away.y = Math.max(away.y, 0.45);
+  away.normalize();
+  const power = (opts.power ?? BLAST_POWER) * falloff;
+  // Vertical rides the same slamState the jump uses. Add to any climb already in
+  // progress but never subtract from it, so a blast can only ever help you up.
+  const up = away.y * power;
+  if (slamState) slamState.vel = Math.max(slamState.vel, 0) + up;
+  else slamState = { vel: up, type: 'jump' };
+  _extVel.x += away.x * power;
+  _extVel.z += away.z * power;
+  // A blast you rode is a fresh air state: you get your air jump and dash back.
+  if (grantsDoubleJump(heldItem())) window._airJumpsLeft = 1;
+  window._dashLeft = 1;
+}
+
 function spawnExplosion(pos) {
   // 💥 Boom — positional volume based on distance from camera
   playSoundEvent('explosion', { position: pos, remote: pos.distanceTo(camera.position) > 5, volume: 1.1, minGap: 80 });
+  applyBlastImpulse(pos);
   // ── Fireball (grows + fades) ──
   const fbMat = new THREE.MeshBasicMaterial({ color: 0xff7700, transparent: true, opacity: 0.92 });
   const fb = new THREE.Mesh(new THREE.SphereGeometry(0.30, 8, 6), fbMat);
@@ -16558,7 +16700,7 @@ function updateBotAI(dt) {
 
     // ── Vertical physics: air grenades + land mines can launch bots upward ──
     if (bot.yVel != null && (bot.yVel !== 0 || (bot.y || 0) > 0)) {
-      bot.yVel -= 28 * dt; // gravity
+      bot.yVel -= GRAVITY * dt; // gravity — bots share the player's physics
       bot.y = (bot.y || 0) + bot.yVel * dt;
       if (bot.y <= 0) { bot.y = 0; bot.yVel = 0; }
     }
