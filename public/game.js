@@ -1499,6 +1499,26 @@ const DOUBLE_JUMP_IDS = new Set([
   'blowgun',
   'paintball',    // CO2/gas marker, not a firearm
 ]);
+
+// ── 🅴 Abilities ────────────────────────────────────────────────────────────
+// Nearly everything used to carry an ability (120 of 121 guns, all 42 melee) on
+// a separate G key, which is a lot of ceremony for something most weapons never
+// needed. Abilities now belong to things that CANNOT just aim and shoot:
+//   • anything that isn't a gun — every melee and utility keeps its ability
+//   • guns that genuinely can't aim, or are one of a kind: the paintball marker
+//     (that hopper sits right where the sights should be) and the revolver
+// Ordinary guns lost theirs. They can aim; that IS their thing.
+const ABILITY_GUNS = new Set(['paintball', 'revolver']);
+function hasAbility(w) {
+  if (!w || !w.ability) return false;
+  if (ABILITY_GUNS.has(w.id)) return true;
+  // Not a gun. MELEE_ITEMS and SUPPORT_ITEMS entries carry NO `slot` field — only
+  // WEAPONS do — so identify them by membership rather than by a property they
+  // don't have. Testing w.slot here silently stripped all 42 melee abilities.
+  return (typeof MELEE_ITEMS !== 'undefined' && MELEE_ITEMS.includes(w))
+      || (typeof SUPPORT_ITEMS !== 'undefined' && SUPPORT_ITEMS.includes(w));
+}
+
 function grantsDoubleJump(w) {
   if (!w) return false;
   // Per-item opt-in stays: gravity_launcher, phase_driver, phase_pistol,
@@ -9243,6 +9263,18 @@ document.addEventListener('keydown', e => {
   }
   if (e.code==='Tab') { e.preventDefault(); showScoreboard(true); }
   if (e.code==='KeyE') {
+    // 🅴 One key, two jobs, and they never collide: if what you're holding has an
+    // ability it fires that, otherwise E aims down sights as it always did.
+    // Abilities only exist on things that can't aim anyway (see hasAbility), so
+    // no weapon ever wants both from this key.
+    const _held = heldItem();
+    if (hasAbility(_held) && !isDead) {
+      // C4 keeps its special case: if charges are out, E blows them.
+      if (placedC4s.length > 0 && activeSlot === 'support'
+          && SUPPORT_ITEMS[selectedSupportIdx]?.id === 'c4') detonateAllC4();
+      else activateAbility();
+      return;
+    }
     // Switchblade Gun: in split state, E toggles pistol ↔ knife instead of ADS
     if (activeSlot === 'primary' && currentWeapon?.id === 'switchblade_gun' && !switchbladeCharged) {
       switchbladeMode = (switchbladeMode === 'pistol') ? 'knife' : 'pistol';
@@ -9275,6 +9307,7 @@ document.addEventListener('keydown', e => {
     }
   }
   if (e.code === 'KeyG') {
+    // Legacy alias — E is the documented key now, but G still works.
     // C4: if any are placed, G detonates them all instead of triggering ability
     if (placedC4s.length > 0 && activeSlot === 'support' && SUPPORT_ITEMS[selectedSupportIdx]?.id === 'c4') {
       detonateAllC4();
@@ -10568,9 +10601,14 @@ function activateAbility() {
   const ab = w?.ability;
   if (!gameStarted || isDead) return;
   if (countdownActive) return; // ability locked during pre-round countdown
+  // Ordinary guns no longer have abilities at all — see hasAbility. This also
+  // gates the legacy G key, so the two keys can never disagree.
+  if (!hasAbility(heldItem())) return;
   if (activeSlot === 'melee') { activateMeleeAbility(); return; }
-  if (!ab || ab.type === 'charge') return; // crossbow charge: no G-key activation
-  if (!isADS && !ab.noADS) return;         // most abilities need ADS unless noADS flag
+  if (!ab || ab.type === 'charge') return; // crossbow charge: no key activation
+  // The old ADS requirement is gone. It cannot survive the move to E: E used to
+  // BE the aim key, so on the very weapons that still have abilities, demanding
+  // ADS first would make the ability permanently unreachable.
   if (!abilityReady(w)) return;
   abilityCDs[w.id] = Date.now();
 
@@ -10941,7 +10979,7 @@ function updateAbilityHUD() {
     if (!ab) { nameEl.textContent = '—'; fillEl.style.width = '100%'; fillEl.style.background='#555'; return; }
     nameEl.textContent = ab.name;
     if (descEl) descEl.textContent = ab.desc || '';
-    if (keyEl) { keyEl.textContent = '[G]'; keyEl.style.opacity = '1'; }
+    if (keyEl) { keyEl.textContent = '[E]'; keyEl.style.opacity = '1'; }
     const elapsed = Date.now() - (abilityCDs[item.id] || 0);
     const pct = Math.min(1, elapsed / ab.cd);
     fillEl.style.width = (pct * 100) + '%';
@@ -10952,7 +10990,7 @@ function updateAbilityHUD() {
 
   // Default: show gun weapon ability
   const w = currentWeapon;
-  if (!w?.ability) { nameEl.textContent = '—'; fillEl.style.width = '100%'; fillEl.style.background='#555'; if (keyEl) keyEl.textContent='[G]'; if (descEl) descEl.textContent=''; return; }
+  if (!w?.ability) { nameEl.textContent = '—'; fillEl.style.width = '100%'; fillEl.style.background='#555'; if (keyEl) keyEl.textContent='[E]'; if (descEl) descEl.textContent=''; return; }
   if (w.ability.type === 'charge') {
     nameEl.textContent = w.ability.name;
     if (descEl) descEl.textContent = w.ability.desc || '';
@@ -10963,7 +11001,7 @@ function updateAbilityHUD() {
   }
   nameEl.textContent = w.ability.name;
   if (descEl) descEl.textContent = w.ability.desc || '';
-  if (keyEl) keyEl.textContent = '[G]';
+  if (keyEl) keyEl.textContent = '[E]';
   const elapsed = Date.now() - (abilityCDs[w.id] || 0);
   const pct = Math.min(1, elapsed / w.ability.cd);
   fillEl.style.width = (pct * 100) + '%';
@@ -12824,7 +12862,7 @@ function placeC4(item) {
   led.position.set(0.1, 0.14, 0); g.add(led);
   g.position.set(pos.x, 0, pos.z); scene.add(g);
   placedC4s.push({ mesh: g, led, x: pos.x, z: pos.z, damage: item.damage || 200, ownerId: myId });
-  showAnnouncement('💣 C4 PLACED', 'Press G to detonate', '#ff4444', 1400);
+  showAnnouncement('💣 C4 PLACED', 'Press E to detonate', '#ff4444', 1400);
 }
 function detonateAllC4() {
   if (placedC4s.length === 0) return false;
