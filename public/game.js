@@ -1477,7 +1477,11 @@ const SLIDE_BOOST   = 2.6;   // slide speed at its start, decaying to 1.0 (was 2
 // 11 m flight across half a courtyard.
 const DASH_SPEED    = 17;    // m/s horizontal impulse for the blade dash
 const BLAST_RADIUS  = 7.5;   // m — how far an explosion can still shove you
-const BLAST_POWER   = 19;    // impulse at the very centre of the blast
+// 19 was a polite nudge — a rocket at your feet lifted you a storey and a shove
+// slid you 7 m. Five times that is the point: a centre hit now throws you ~40 m
+// across the map or straight up over the rooftops. Rocket jumping is the ride,
+// not a hop. (Horizontal reach is power / ln(1/BLAST_DECAY) ≈ power / 2.3.)
+const BLAST_POWER   = 95;    // impulse at the very centre of the blast
 const BLAST_DECAY   = 0.10;  // fraction of horizontal blast speed left after 1 s
 
 // 🦘 Light weapons grant a mid-air second jump. Sidearms and SMGs are the light
@@ -10262,8 +10266,18 @@ function updateMovement(dt) {
   // just before the wall pass so a blast can't punt you through geometry, and
   // decayed exponentially so it's frame-rate independent.
   if (Math.abs(_extVel.x) > 0.02 || Math.abs(_extVel.z) > 0.02) {
-    camera.position.x += _extVel.x * dt;
-    camera.position.z += _extVel.z * dt;
+    // At blast speeds one frame's travel is metres, which would sail clean
+    // through a wall before the collision pass ever sees it. Walk the shove in
+    // sub-steps of at most ~0.35 m and resolve walls after each one, so you get
+    // slammed *against* the geometry instead of through it.
+    const speed = Math.hypot(_extVel.x, _extVel.z);
+    const steps = Math.min(16, Math.max(1, Math.ceil(speed * dt / 0.35)));
+    const sdt = dt / steps;
+    for (let i = 0; i < steps; i++) {
+      camera.position.x += _extVel.x * sdt;
+      camera.position.z += _extVel.z * sdt;
+      if (steps > 1) resolveWallCollisions();
+    }
     const keep = Math.pow(BLAST_DECAY, dt);
     _extVel.x *= keep; _extVel.z *= keep;
   } else {
