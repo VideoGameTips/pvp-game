@@ -1307,6 +1307,21 @@ io.on('connection', (socket) => {
     }
   });
 
+  // 🧹 The client has stopped simulating these bots — reclaim them.
+  // Without this, spawnBots only ever ADDED: bots accumulated for the whole
+  // session and were reclaimed solely on leaveMatch/disconnect. The leftovers
+  // still had bodies on every client in the match but no simulator, so they
+  // stood frozen, ignored gravity and could not be damaged.
+  socket.on('despawnBots', (ids) => {
+    if (!Array.isArray(ids)) return;
+    for (const id of ids.slice(0, 200)) {
+      const b = players[id];
+      if (!b || !b.isBot || b.ownerId !== socket.id) continue;   // only your own
+      emitToMatch(b.matchId, 'playerLeft', id);
+      delete players[id];
+    }
+  });
+
   socket.on('botMove', (moves) => {
     for (const m of moves) {
       const bot = players[m.id];

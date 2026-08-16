@@ -10477,7 +10477,7 @@ function activateMeleeAbility() {
       if (d < bestDist) { bestDist = d; bestPid = pid; }
     }
     if (bestPid) {
-      const bot = gameBots.find(b => b.id === bestPid);
+      const bot = resolveBot(bestPid);
       if (bot) {
         // Move the bot toward the player by pullDist (clamped to "almost touching")
         const dx = camera.position.x - bot.x;
@@ -11101,7 +11101,7 @@ function tryMelee() {
     if (item.launchOnHit) {
       const mult = (meleeAbilityBuff?.type === 'heavy' && item.ability?.launchMult) ? item.ability.launchMult : 1;
       const launchVel = item.launchOnHit * mult;
-      const bot = gameBots.find(b => b.id === pid);
+      const bot = resolveBot(pid);
       if (bot) { bot.yVel = launchVel; bot.y = bot.y || 0; }
     }
     // 🔗 Chain (pipe) — splash to nearby enemies in radius at reduced damage
@@ -11699,7 +11699,7 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false) {
   }
   // Frost Blaster: subtract 3 speed points on hit; lethal at 0
   if (weaponId === 'frost_blaster') {
-    const bot = gameBots.find(b => b.id === pid);
+    const bot = resolveBot(pid);
     if (bot && !bot.dead) {
       bot.frostSlow = Math.max(0, (bot.frostSlow || 100) - 3);
       // Visual: brief cyan particle (already from spawnHitParticle in caller)
@@ -11708,7 +11708,7 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false) {
 
   // ── Client-authoritative damage: apply HP loss locally (works offline too) ─
   if (isBot) {
-    const bot = gameBots.find(b => b.id === pid);
+    const bot = resolveBot(pid);
     if (bot && !bot.dead) {
       const effective = instakill ? 9999 : dmg;
       bot.hp = Math.max(0, bot.hp - effective);
@@ -11745,7 +11745,7 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false) {
 
 // Local bot respawn (fallback when server is unavailable)
 function clientRespawnBot(botId) {
-  const bot = gameBots.find(b => b.id === botId);
+  const bot = resolveBot(botId);
   if (!bot || !bot.dead) return;
   // Only respawn in modes where bots should respawn (not elim - that handles rounds separately)
   if (match?.type === 'elim') return;
@@ -13863,7 +13863,7 @@ socket.on('playerHit', data => {
     }
     if ((tgt.hp ?? 0) <= 0) tgt.dead = true;
   }
-  const hitBot = gameBots.find(b => b.id === data.targetId);
+  const hitBot = resolveBot(data.targetId);
   if (hitBot && !hitBot.dead) {
     // Only sync HP from server if it would LOWER our local HP (avoid race where in-flight
     // local hits put us below the server's view, and a stale server message bumps us back up)
@@ -13946,7 +13946,7 @@ socket.on('playerDied', data => {
     }
   }
   if (remoteMeshes[data.targetId]) remoteMeshes[data.targetId].visible=false;
-  const bot = gameBots.find(b => b.id === data.targetId);
+  const bot = resolveBot(data.targetId);
   if (bot) { bot.dead = true; bot.hp = 0; }
   if (players[data.targetId]) players[data.targetId].dead = true;
   // Show kill feed
@@ -14289,7 +14289,7 @@ function explodeSupport(g) {
       emitHit(pid, g.id + '_x', item.id, target);
       // Air Grenade: launch each hit bot upward
       if (item.id === 'air_grenade') {
-        const bot = gameBots.find(b => b.id === pid);
+        const bot = resolveBot(pid);
         if (bot) { bot.yVel = item.launchVel || 14; bot.y = bot.y || 0; }
         playSoundEvent('air_launch', { position: target, remote: true, volume: 0.9, minGap: 90 });
       }
@@ -15265,7 +15265,7 @@ function handleArcadeKill(targetId, killerId) {
     if (killerIsZombie && targetId !== myId) {
       // Bot becomes zombie
       match.infectedIds[targetId] = true;
-      const bot = gameBots.find(b => b.id === targetId);
+      const bot = resolveBot(targetId);
       if (bot) { bot.weaponId = 'knife'; bot.team = 'enemy'; }
       showAnnouncement('🧟 INFECTED', `${players[targetId]?.name || 'Someone'} turned!`, '#44ff44', 1600);
     } else if (killerIsZombie && targetId === myId) {
@@ -15340,7 +15340,7 @@ function scheduleArcadeRespawn() {
   }, 2500);
 }
 function scheduleBotArcadeRespawn(botId) {
-  const bot = gameBots.find(b => b.id === botId);
+  const bot = resolveBot(botId);
   if (!bot) return;
   setTimeout(() => {
     if (!bot || match?.over) return;
@@ -15413,7 +15413,7 @@ function onEntityDied(targetId, killerId) {
       }
     } else {
       // Bot died — respawn if it has lives left
-      const bot = gameBots.find(b => b.id === targetId);
+      const bot = resolveBot(targetId);
       if (bot && remaining > 0) {
         setTimeout(() => {
           if (!bot || match?.over) return;
@@ -15469,7 +15469,7 @@ function onEntityDied(targetId, killerId) {
       const rt = rangeTargets.find(r => r.id === targetId);
       if (rt) {
         rt.respawnAt = Date.now() + 2000;
-        const bot = gameBots.find(b => b.id === targetId);
+        const bot = resolveBot(targetId);
         if (bot) bot.dead = true;
         if (players[targetId]) players[targetId].dead = true;
         const mesh = remoteMeshes[targetId];
@@ -15573,7 +15573,7 @@ function updateFrontlineHUD() {
 function onFrontlinesKill(targetId, killerId) {
   if (!frontlineState || !match) return;
   const killerBot = gameBots.find(b => b.id === killerId);
-  const targetBot = gameBots.find(b => b.id === targetId);
+  const targetBot = resolveBot(targetId);
   const killerIsAlly = killerId === myId || (killerBot && killerBot.team === 'ally');
 
   if (killerIsAlly) frontlineState.z = Math.max(-38, frontlineState.z - FL_PUSH);
@@ -15732,7 +15732,7 @@ function spawnDDayWave(count, waveNum) {
 
 function onDDayKill(targetId, killerId) {
   if (!ddayState || !match) return;
-  const targetBot = gameBots.find(b => b.id === targetId);
+  const targetBot = resolveBot(targetId);
   if (targetBot && targetBot.team === 'enemy') {
     ddayState.enemiesAlive = Math.max(0, ddayState.enemiesAlive - 1);
     ddayState.totalKills = (ddayState.totalKills || 0) + 1;
@@ -16184,6 +16184,13 @@ function spawnGameBots() {
   socket.emit('enterMatch', { matchId });
 
   // ── Clean up bots/meshes/bubbles from any previous mode session ──────────
+  // 🧹 Tell the server too. It creates a player entry per bot on spawnBots and
+  // only ever reclaimed them on leaveMatch/disconnect, so every round left its
+  // bots behind server-side for the rest of the session — bodies the client had
+  // stopped simulating, which is how they end up frozen and undamageable.
+  if (gameBots.length && socket && socket.connected) {
+    socket.emit('despawnBots', gameBots.map(b => b.id));
+  }
   for (const bot of gameBots) {
     if (remoteMeshes[bot.id]) { scene.remove(remoteMeshes[bot.id]); delete remoteMeshes[bot.id]; }
     if (bot._bubble) { bot._bubble.remove(); bot._bubble = null; }
@@ -16697,6 +16704,59 @@ function findBotCover(bot, target) {
   return bestPt;
 }
 
+// ── 🩺 Bot lifecycle diagnostics ────────────────────────────────────────────
+// The freeze bug was invisible because THREE structures can disagree and none of
+// them reported it: gameBots (the simulated entity), remoteMeshes (the body you
+// see) and the server's players table (network identity). A bot with a body but
+// no gameBots entry gets no AI, no gravity — bot physics lives inside the AI
+// loop — and cannot be damaged, because every damage path resolves through
+// gameBots.find(). That is all three freeze symptoms from one inconsistency.
+const _botDiag = { counts: {}, seen: new Set(), lastError: null };
+function botDiag(kind, detail) {
+  _botDiag.counts[kind] = (_botDiag.counts[kind] || 0) + 1;
+  const key = kind + '|' + detail;
+  if (_botDiag.seen.has(key)) return;   // report each distinct problem once, not every frame
+  _botDiag.seen.add(key);
+  console.warn('[bot] ' + kind + ' — ' + detail);
+}
+window._botDiag = _botDiag;   // inspect in the console after a match
+
+// Damage, death and killfeed all resolve a bot id through here. A hit landing on
+// an id that has a BODY but no simulated entity used to do nothing at all and say
+// nothing — exactly the "bot stopped taking damage" symptom.
+function resolveBot(pid) {
+  const bot = gameBots.find(b => b.id === pid);
+  if (!bot && remoteMeshes[pid] && players[pid] && players[pid].isBot) {
+    botDiag('orphaned-body', pid + ' has a mesh but no gameBots entry: not simulated, cannot take damage');
+  }
+  return bot;
+}
+
+// Bodies whose owning entity is gone, and bots we are supposed to be simulating
+// but aren't. Cheap, so it runs on a timer rather than every frame.
+function reconcileBotEntities() {
+  for (const pid of Object.keys(remoteMeshes)) {
+    if (pid === myId) continue;
+    if (gameBots.some(b => b.id === pid)) continue;                       // simulated here
+    if (typeof TRAINING_DUMMIES !== 'undefined'
+        && TRAINING_DUMMIES.some(d => d.id === pid)) continue;            // purely local
+    const p = players[pid];
+    if (!p) {
+      botDiag('stale-body', pid + ' has no player entry; removing the body');
+      scene.remove(remoteMeshes[pid]); delete remoteMeshes[pid];
+      continue;
+    }
+    // Someone else's bot is legitimately un-simulated here — the host drives it
+    // and we just receive positions. Only OUR OWN orphans are a fault.
+    if (p.isBot && p.ownerId === myId) {
+      botDiag('unsimulated-bot', pid + ' is our bot but missing from gameBots; removing and despawning');
+      scene.remove(remoteMeshes[pid]); delete remoteMeshes[pid];
+      delete players[pid];
+      if (socket && socket.connected) socket.emit('despawnBots', [pid]);
+    }
+  }
+}
+
 function updateBotAI(dt) {
   if (!gameBots.length) return;
   if (match?.type === 'range') return; // range targets are handled by updateRange()
@@ -16705,10 +16765,20 @@ function updateBotAI(dt) {
   // Stun grenade: per-bot AI freeze
   const __nowS = Date.now();
   for (const b of gameBots) { if (b._stunUntil && __nowS < b._stunUntil) b._stunActive = true; else b._stunActive = false; }
+  // Sweep for bodies with no owning entity roughly once a second.
+  if (!window._botReconcileAt || __nowS > window._botReconcileAt) {
+    window._botReconcileAt = __nowS + 1000;
+    reconcileBotEntities();
+  }
   const roundLive = !match || match.roundActive; // false only during countdown
   const now = Date.now();
   const playerHp = players[myId]?.hp ?? 300; // used for melee-charge trigger
   for (const bot of gameBots) {
+    // One bot must never be able to freeze the other nineteen. The loop body
+    // is ~1000 lines with no isolation: a single throw used to abort the whole
+    // pass, and since bot gravity lives in here too, every bot after the culprit
+    // lost AI AND physics for that frame — permanently, if the throw repeats.
+    try {
     if (bot.dead) continue;
     if (bot.state === 'target') continue; // range targets don't move or shoot
     if (bot._stunActive) continue; // 🪖 stunned by admin stun grenade — frozen this frame
@@ -17721,6 +17791,17 @@ function updateBotAI(dt) {
     // +PI so the face points forward (see note above; matches remote players).
     if (mesh) { mesh.position.set(bot.x, bot.y || 0, bot.z); mesh.rotation.y = bot.rotY + Math.PI; }
     } catch(e) { console.error('[botAI] error for bot', bot.id, ':', e.message, e.stack); }
+    } catch (err) {
+      // This handler runs when a bot is ALREADY in a bad state, so it must not
+      // be able to throw itself — read nothing off the bot unguarded.
+      let id = '?', st = '?';
+      try { id = String(bot && bot.id); } catch (_) {}
+      try { st = String(bot && bot.state); } catch (_) {}
+      const msg = (err && err.message) || String(err);
+      _botDiag.lastError = { id, state: st, msg,
+                             stack: String((err && err.stack) || '').split('\n').slice(1, 4) };
+      botDiag('ai-threw', id + ' in state ' + st + ': ' + msg);
+    }
   }
   // Batch-send bot positions to server
   botMoveTimer += dt;
