@@ -9498,6 +9498,12 @@ function equipActiveSlot() {
 // ── ADS ────────────────────────────────────────────────────────────────────
 function toggleADS() {
   if (isDead) return;
+  // Aiming is a GUN action. This function ends by forcing
+  // weaponModels[currentWeaponIdx].visible = true, so calling it with a knife or
+  // a utility in hand flipped the GUN's viewmodel on over whatever you were
+  // actually holding — the knife vanished and a gun appeared. Any entry point
+  // reaching here with melee/support equipped (E, right-click) hits this guard.
+  if (activeSlot !== 'primary' && activeSlot !== 'secondary') return;
   isADS = !isADS;
   targetFOV = isADS ? currentWeapon.adsZoom : 75;
   setWeaponADSPos(isADS);
