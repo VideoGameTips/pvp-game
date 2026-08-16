@@ -1455,15 +1455,20 @@ let playerYVel = 0;               // Player vertical velocity (for air grenades 
 // All the movement feel lives here so it can be tuned in one place instead of
 // hunting magic numbers through the update loop.
 //
-// GRAVITY was 28 and is now half that, as asked. Note this alone DOUBLES every
-// jump height in the game, because height goes as v²/2g — the raised JUMP_VEL
-// on top of it is a further increase, not the whole one. At these numbers a
-// standing jump peaks around 7 m with roughly 2 s of hang time, which is a big
-// change in feel; the two constants are right here if that turns out to be too
-// floaty in practice.
-const GRAVITY       = 14;    // m/s² (was 28)
-const JUMP_VEL      = 14;    // m/s standing jump (was 13)
-const AIR_JUMP_VEL  = 12.5;  // m/s for the mid-air second jump
+// Height goes as v²/2g, so these two constants are not independent — that is
+// why JUMP_VEL barely moved while the jump got a third shorter.
+//
+//   original game   28 m/s², 13 m/s  ->  3.02 m apex, 0.93 s hang
+//   the floaty pass 14 m/s², 14 m/s  ->  7.00 m apex, 2.00 s hang  (bouncy castle)
+//   now             21 m/s², 13.8    ->  4.55 m apex, 1.31 s hang
+//
+// Gravity ×1.5 and jump height ×0.65 off that floaty pass. Raising gravity
+// alone already cuts height to 0.67×, so the velocity only needed a nudge to
+// land on 0.65× — dropping v by a further 0.65 would have taken the jump to
+// 3.0 m, back to where it started.
+const GRAVITY       = 21;    // m/s² (was 14, originally 28)
+const JUMP_VEL      = 13.8;  // m/s standing jump -> 4.55 m apex
+const AIR_JUMP_VEL  = 12.3;  // m/s mid-air second jump -> 3.6 m, same ratio as before
 const SLIDE_MS      = 1250;  // slide duration (was 800)
 const SLIDE_BOOST   = 2.6;   // slide speed at its start, decaying to 1.0 (was 2.0)
 // With exponential decay the ground covered is v / ln(1/BLAST_DECAY), so 17 m/s
