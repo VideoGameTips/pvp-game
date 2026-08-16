@@ -1462,14 +1462,15 @@ let playerYVel = 0;               // Player vertical velocity (for air grenades 
 //   original game   28 m/s², 13 m/s  ->  3.02 m apex, 0.93 s hang
 //   the floaty pass 14 m/s², 14 m/s  ->  7.00 m apex, 2.00 s hang  (bouncy castle)
 //   the 21 pass     21 m/s², 13.8    ->  4.55 m apex, 1.31 s hang
-//   now             15.75, 13.8      ->  6.05 m apex, 1.75 s hang
+//   the float pass  15.75, 13.8      ->  6.05 m apex, 1.75 s hang  (too floaty)
+//   now             31.5,  13.8      ->  3.02 m apex, 0.88 s hang
 //
-// The last step is gravity ×0.75 to give the blast boosts room to arc. It
-// lightens the plain jump too — height goes as v²/2g, so 0.75× gravity is a
-// 1.33× jump — which is the intent: everything floats a little more.
-const GRAVITY       = 15.75; // m/s² (was 21, before that 14, originally 28)
-const JUMP_VEL      = 13.8;  // m/s standing jump -> 6.05 m apex
-const AIR_JUMP_VEL  = 12.3;  // m/s mid-air second jump -> 4.8 m, same ratio as before
+// Gravity ×2 off the floaty pass. That is the heaviest the game has ever been —
+// with JUMP_VEL untouched the plain jump lands back on the original 3.0 m, and
+// blast arcs come down fast and hard instead of hanging.
+const GRAVITY       = 31.5;  // m/s² (was 15.75, before that 21 and 14, originally 28)
+const JUMP_VEL      = 13.8;  // m/s standing jump -> 3.02 m apex
+const AIR_JUMP_VEL  = 12.3;  // m/s mid-air second jump -> 2.4 m, same ratio as before
 const SLIDE_MS      = 1250;  // slide duration (was 800)
 const SLIDE_BOOST   = 2.6;   // slide speed at its start, decaying to 1.0 (was 2.0)
 // With exponential decay the ground covered is v / ln(1/BLAST_DECAY), so 17 m/s
