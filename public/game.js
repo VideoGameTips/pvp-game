@@ -8839,13 +8839,62 @@ const PAINTBALL_COLORS = [
   0xff00ee, 0xffee00, 0x00ffcc, 0xaa00ff,
 ];
 
-function makeBulletMesh(color, size) {
-  const isCycler = color === 0x00ffee;
+// Projectiles that are genuinely objects rather than rounds in flight. These
+// keep the old ball; a thrown pickle should not leave a tracer trail.
+const SOLID_PROJECTILES = new Set(['paintball', 'pickle', 'spear_throw']);
+
+// Bullets are spawned continuously — a minigun makes a lot of them — so the
+// geometry and materials are shared per (colour, size) instead of allocating a
+// fresh set for every round. Nothing ever mutates a bullet's material, so
+// sharing is safe, and it also means removing a bullet leaks nothing.
+const _tracerParts = new Map();
+function _tracerFor(tint, r) {
+  const key = tint + '|' + r;
+  let p = _tracerParts.get(key);
+  if (p) return p;
+  const len = Math.max(0.42, r * 11);
+  p = {
+    len,
+    // Tapered sheath: fat at the nose, thinning to nothing behind. Additive so
+    // overlapping tracers bloom together instead of flattening each other, and
+    // depthWrite off so they don't punch holes in one another.
+    glowGeo: new THREE.CylinderGeometry(r * 0.95, r * 0.12, len, 6, 1, true),
+    glowMat: new THREE.MeshBasicMaterial({
+      color: tint, transparent: true, opacity: 0.55,
+      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+    }),
+    // Short white-hot core riding at the nose — this is what reads as "bullet"
+    // at speed, with the coloured sheath trailing it.
+    coreGeo: new THREE.CylinderGeometry(r * 0.38, r * 0.22, len * 0.45, 6),
+    coreMat: new THREE.MeshBasicMaterial({ color: 0xfff3d6 }),
+  };
+  _tracerParts.set(key, p);
+  return p;
+}
+
+function makeBulletMesh(color, size, weaponId) {
   const r = size || 0.04;
-  return new THREE.Mesh(
-    isCycler ? new THREE.CylinderGeometry(0.015, 0.015, 0.18, 6) : new THREE.SphereGeometry(r, 5, 5),
-    new THREE.MeshBasicMaterial({ color: color || 0xffee44 })
-  );
+  // A sphere reads as a thrown pea no matter what colour it is. Real rounds in
+  // flight read as a streak stretched along the path, so that is what these are
+  // now: an orange/white tracer by default, tinted per weapon where a weapon
+  // specifies its own colour.
+  if (SOLID_PROJECTILES.has(weaponId)) {
+    const ball = new THREE.Mesh(new THREE.SphereGeometry(r, 6, 6),
+      new THREE.MeshBasicMaterial({ color: color || 0xffee44 }));
+    ball._alignToDir = false;
+    return ball;
+  }
+  const tint = color || 0xff8a1e;     // default is orange now, not yellow
+  const p = _tracerFor(tint, r);
+  const g = new THREE.Group();
+  const glow = new THREE.Mesh(p.glowGeo, p.glowMat);
+  glow.position.y = -p.len * 0.5;     // trail BEHIND the bullet's actual point
+  g.add(glow);
+  const core = new THREE.Mesh(p.coreGeo, p.coreMat);
+  core.position.y = -p.len * 0.20;
+  g.add(core);
+  g._alignToDir = true;               // +Y is the nose; spawn aims it down `dir`
+  return g;
 }
 
 // ── Pointer Lock / ADS / Camera ────────────────────────────────────────────
@@ -11338,10 +11387,12 @@ function updateReloadAnim() {
 }
 
 function spawnLocalBullet(origin, dir, id, isOwn, speed, color, size, weaponId, opts = {}) {
-  const mesh = makeBulletMesh(color, size);
+  const mesh = makeBulletMesh(color, size, weaponId);
   mesh.position.copy(origin);
-  // Orient cylindrical energy beams along direction of travel
-  if (color === 0x00ffee) {
+  // Streaks and energy beams have to lie along the flight path. `dir` never
+  // changes over a bullet's life, so this is a one-off at spawn rather than
+  // per-frame work in the bullet loop.
+  if (mesh._alignToDir) {
     mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), dir.clone().normalize());
   }
   scene.add(mesh);
