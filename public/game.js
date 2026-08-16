@@ -1468,7 +1468,7 @@ let playerYVel = 0;               // Player vertical velocity (for air grenades 
 // Gravity ×2 off the floaty pass. That is the heaviest the game has ever been —
 // with JUMP_VEL untouched the plain jump lands back on the original 3.0 m, and
 // blast arcs come down fast and hard instead of hanging.
-const GRAVITY       = 31.5;  // m/s² (was 15.75, before that 21 and 14, originally 28)
+const GRAVITY       = 24;    // m/s² -> 3.97 m apex, 1.15 s hang (was 31.5, before that 21)
 const JUMP_VEL      = 13.8;  // m/s standing jump -> 3.02 m apex
 const AIR_JUMP_VEL  = 12.3;  // m/s mid-air second jump -> 2.4 m, same ratio as before
 const SLIDE_MS      = 1250;  // slide duration (was 800)
