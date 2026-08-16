@@ -9041,6 +9041,51 @@ function _assistEnemies() {
   }
   return out;
 }
+// 🎯 Auto Shoot asks a different question from the other aids: not "is an
+// opponent near my crosshair" but "is my gun actually POINTING AT them". The old
+// answer was a 2.2° cone around ONE point at chest height, so a crosshair sitting
+// squarely on a head, an arm or a leg counted as a miss.
+//
+// This raycasts the real body instead. The rig is head + torso + upper arm +
+// forearm + thigh + shin + foot per side, so any limb the ray passes through is a
+// hit, at whatever pose the character is in — a bot mid-stride with a leg thrown
+// forward is hittable on that leg.
+const _autoShootRay = new THREE.Raycaster();
+const _autoShootFwd = new THREE.Vector3();
+function _pickAutoShootTarget(enemies) {
+  _autoShootFwd.set(0, 0, -1).applyQuaternion(camera.quaternion);
+  _autoShootRay.set(camera.position, _autoShootFwd);
+  _autoShootRay.far = 90;
+  let best = null, bestDist = Infinity;
+  for (const e of enemies) {
+    const mesh = remoteMeshes[e.id];
+    if (!mesh || !mesh.visible) continue;
+    // Cheap reject before the expensive part: skip anyone nowhere near the
+    // crosshair. Generous (~30°) so it never rejects someone the ray would hit.
+    const to = e.pos.clone().sub(camera.position);
+    const dist = to.length();
+    if (dist < 0.5 || dist > 90) continue;
+    if (_autoShootFwd.dot(to.divideScalar(dist)) < 0.86) continue;
+    // Raycast the body parts only, never the whole group. The floating name tag
+    // is a Sprite child, and pointing at someone's label is not pointing at
+    // them — worse, THREE's Sprite.raycast dereferences raycaster.camera and
+    // throws outright when it is unset, which would take auto-shoot down with it.
+    const parts = mesh.children.filter(c => !c.isSprite && c.visible);
+    if (!parts.length) continue;
+    const hits = _autoShootRay.intersectObjects(parts, true);
+    const hit = hits.find(h => h.object && !h.object.isSprite && h.object.visible);
+    if (!hit || hit.distance >= bestDist) continue;
+    if (typeof hasLineOfSight === 'function'
+        && !hasLineOfSight(camera.position.x, camera.position.z, e.x, e.z)) continue;
+    bestDist = hit.distance; best = e;
+  }
+  // Union, not replacement. The raycast adds the head, shoulders and arms, which
+  // the old centre-point cone missed entirely — but the cone still catches cases
+  // the ray does not (it was hitting thighs that the ray currently misses), and
+  // dropping it would trade one blind spot for another. Whichever says "on
+  // target" wins, so this can only ever widen coverage, never narrow it.
+  return best || _pickAssistTarget(enemies, 2.2);
+}
 // Nearest-to-crosshair opponent within `coneDeg` of where you're looking + has LOS.
 function _pickAssistTarget(enemies, coneDeg) {
   const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
@@ -9100,7 +9145,7 @@ function updateAimAssist(dt) {
   for (const id of _assistVel.keys()) if (!live.has(id)) _assistVel.delete(id);
 
   const wide  = (ASSIST.aimAssist || ASSIST.aimbot || ASSIST.aiAim) ? _pickAssistTarget(enemies, 38) : null;
-  const tight = ASSIST.autoShoot ? _pickAssistTarget(enemies, 2.2) : null;
+  const tight = ASSIST.autoShoot ? _pickAutoShootTarget(enemies) : null;
   // While you're actively moving the mouse, the view aids step aside so you keep
   // full manual control (they resume ~150ms after you stop).
   const manualAiming = performance.now() - _lastManualAimAt < 150;
@@ -9115,6 +9160,8 @@ function updateAimAssist(dt) {
   // Auto Shoot — fire 0.01s after the crosshair lands on an opponent. Only with a
   // GUN equipped — never auto-fire the last gun while you're holding a melee/utility
   // (that caused "taser shots coming out of the knife").
+  // `tight` is now a real body hit rather than a 2.2° cone around the chest, so
+  // any limb under the crosshair counts.
   const gunEquipped = (activeSlot === 'primary' || activeSlot === 'secondary');
   if (ASSIST.autoShoot && tight && gunEquipped) { _autoShootTimer += dt; if (_autoShootTimer >= 0.01) tryShoot(); }
   else _autoShootTimer = 0;
