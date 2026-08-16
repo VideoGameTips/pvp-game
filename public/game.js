@@ -1065,6 +1065,7 @@ let myId = null;
 let players = {};
 let remoteMeshes = {};
 let localBullets = [];
+const BULLET_SPEED_MULTIPLIER = 2.3;
 
 let currentWeaponIdx = 0;
 let currentWeapon = WEAPONS[0];
@@ -3581,6 +3582,93 @@ function buildForestMap() {
   MAP_GROUPS[m]._skyColor = 0xa9c08e; // hazy jungle green-grey
 }
 buildForestMap();
+
+// ──────────────────────────────────────────────────────────────────────────
+// 🇻🇳 VIETNAM — a huge, dense jungle. Thick canopy, bamboo thickets, ferns,
+// fallen logs and a couple of huts. Limited sightlines — close-range chaos.
+// ──────────────────────────────────────────────────────────────────────────
+registerMap('vietnam');
+function buildVietnamMap() {
+  const m = 'vietnam';
+  addMapGround(m, 0x2e4a22, 0x223a18);   // muddy jungle floor
+  addOuterWalls(m, 0x1c2e14);
+  MAP_GROUPS[m]._skyColor = 0x6f8a5a;     // humid green haze
+
+  const trunkMat  = new THREE.MeshLambertMaterial({ color: 0x3e2a12 });
+  const canopyMat = new THREE.MeshLambertMaterial({ color: 0x123d15 });
+  const canopy2   = new THREE.MeshLambertMaterial({ color: 0x1c5320 });
+  const bambooMat = new THREE.MeshLambertMaterial({ color: 0x7aa83f });
+  const fernMat   = new THREE.MeshLambertMaterial({ color: 0x2f6b25 });
+  const logMat    = new THREE.MeshLambertMaterial({ color: 0x4a3318 });
+  const hutMat    = new THREE.MeshLambertMaterial({ color: 0x6b5a32 });
+  const roofMat   = new THREE.MeshLambertMaterial({ color: 0x3a2f16 });
+
+  // ── DENSE trees — big multi-cone canopies, solid trunks (collide) ──────────
+  const TREES = 120;
+  for (let i = 0; i < TREES; i++) {
+    const x = (Math.random() - 0.5) * 94, z = (Math.random() - 0.5) * 94;
+    if (Math.hypot(x, z) < 5) continue;                 // keep the very centre walkable
+    const h = 5 + Math.random() * 5;
+    const r = 0.32 + Math.random() * 0.28;
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.8, r, h, 7), trunkMat);
+    trunk.position.set(x, h / 2, z);
+    MAP_GROUPS[m].add(trunk);
+    trunk.updateMatrixWorld(true);
+    MAP_COLLIDERS[m].push(new THREE.Box3().setFromObject(trunk));
+    const layers = 3 + (Math.random() < 0.5 ? 1 : 0);
+    for (let k = 0; k < layers; k++) {
+      const leaf = new THREE.Mesh(new THREE.ConeGeometry(2.6 - k * 0.5, 2.0, 8), k % 2 ? canopy2 : canopyMat);
+      leaf.position.set(x, h + k * 1.0, z);
+      MAP_GROUPS[m].add(leaf);
+    }
+  }
+
+  // ── Bamboo thickets (thin tall stalks, light cover) ────────────────────────
+  for (let i = 0; i < 26; i++) {
+    const cx = (Math.random() - 0.5) * 88, cz = (Math.random() - 0.5) * 88;
+    if (Math.hypot(cx, cz) < 7) continue;
+    for (let s = 0; s < 6; s++) {
+      const bh = 5 + Math.random() * 3;
+      const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.13, bh, 6), bambooMat);
+      stalk.position.set(cx + (Math.random() - 0.5) * 1.8, bh / 2, cz + (Math.random() - 0.5) * 1.8);
+      MAP_GROUPS[m].add(stalk);
+    }
+  }
+
+  // ── Fallen logs as low cover (collide) ─────────────────────────────────────
+  for (let i = 0; i < 10; i++) {
+    const x = (Math.random() - 0.5) * 80, z = (Math.random() - 0.5) * 80;
+    if (Math.hypot(x, z) < 8) continue;
+    const len = 3 + Math.random() * 3;
+    const log = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, len, 8), logMat);
+    log.rotation.z = Math.PI / 2; log.rotation.y = Math.random() * Math.PI;
+    log.position.set(x, 0.5, z);
+    MAP_GROUPS[m].add(log);
+    log.updateMatrixWorld(true);
+    MAP_COLLIDERS[m].push(new THREE.Box3().setFromObject(log));
+  }
+
+  // ── A couple of thatched huts (4 corner posts + box body + pyramid roof) ────
+  [[-26, 22], [24, -20], [-18, -26]].forEach(([hx, hz]) => {
+    const body = new THREE.Mesh(new THREE.BoxGeometry(5, 3, 5), hutMat);
+    body.position.set(hx, 1.5, hz);
+    MAP_GROUPS[m].add(body);
+    body.updateMatrixWorld(true);
+    MAP_COLLIDERS[m].push(new THREE.Box3().setFromObject(body));
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(4.2, 2.2, 4), roofMat);
+    roof.rotation.y = Math.PI / 4; roof.position.set(hx, 4.1, hz);
+    MAP_GROUPS[m].add(roof);
+  });
+
+  // ── Ground ferns / undergrowth (decorative, no collision) ──────────────────
+  for (let i = 0; i < 110; i++) {
+    const fern = new THREE.Mesh(new THREE.SphereGeometry(0.55 + Math.random() * 0.6, 6, 4, 0, Math.PI * 2, 0, Math.PI / 2), fernMat);
+    fern.position.set((Math.random() - 0.5) * 96, 0, (Math.random() - 0.5) * 96);
+    fern.scale.set(1, 0.45, 1);
+    MAP_GROUPS[m].add(fern);
+  }
+}
+buildVietnamMap();
 
 // ──────────────────────────────────────────────────────────────────────────
 // 4. VOLCANO — rocky terrain with LAVA DAMAGE ZONES (4 dmg/sec when standing)
@@ -6269,55 +6357,9 @@ function _genericGun(opts) {
   g.position.set(0.12, -0.1, -0.25);
   return g;
 }
-function buildAN94()           { return _genericGun({ bodyShape:'classic', bodyColor:0x2a2a2a, accentColor:0x6a6a6a, magType:'banana', topRail:true, scope:'red_dot', ejectionPort:true }); }
-function buildSPAS12()         { return _genericGun({ bodyShape:'shotgun', bodyColor:0x1b1b1b, accentColor:0x8a4a1a, magType:'hidden', foregrip:true, scope:'holo', barrelR:0.014 }); }
-function buildM1Garand()       { return _genericGun({ bodyShape:'sniper', bodyColor:0x5a3a18, accentColor:0xddc066, magType:'hidden', stock:'classic', ejectionPort:true }); }
-function buildPlasmaCarbine()  { return _genericGun({ bodyShape:'futuristic', bodyColor:0x224400, accentColor:0x66ff99, magType:'box', emissive:true, scope:'holo', flashColor:0x66ff99 }); }
-function buildArcRifle()       { return _genericGun({ bodyShape:'futuristic', bodyColor:0x223344, accentColor:0xaaeeff, magType:'box', emissive:true, scope:'red_dot', flashColor:0xaaeeff }); }
-function buildGravityLauncher(){ return _genericGun({ bodyShape:'heavy', bodyColor:0x331144, accentColor:0x7744cc, magType:'drum', emissive:true, flashColor:0xaa44ff, kickZ:0.030 }); }
-function buildPotatoCannon()   { return _genericGun({ bodyShape:'heavy', bodyColor:0x6a4422, accentColor:0xc89060, magType:'hidden', foregrip:true, barrelR:0.016, flashColor:0xc89060 }); }
-function buildStickerBlaster() { return _genericGun({ bodyShape:'compact', bodyColor:0xff66cc, accentColor:0xffff66, magType:'drum', emissive:true, flashColor:0xff44ff }); }
-function buildHarpoonGun()     { return _genericGun({ bodyShape:'sniper', bodyColor:0x445566, accentColor:0xb8b8b8, magType:'hidden', suppressor:true, foregrip:true, barrelR:0.013 }); }
-function buildMortarRifle()    { return _genericGun({ bodyShape:'heavy', bodyColor:0x445533, accentColor:0x223322, magType:'banana', foregrip:true, scope:'acog' }); }
-function buildMachinePistol()  { return _genericGun({ bodyShape:'pistol', bodyColor:0x222222, accentColor:0x444444, magType:'banana', stock:'folding' }); }
-function buildSawedOff()       { return _genericGun({ bodyShape:'compact', bodyColor:0x301810, accentColor:0x5a2a10, magType:'hidden', barrelCount:2, barrelR:0.012, stock:'hidden' }); }
-function buildDartGun()        { return _genericGun({ bodyShape:'pistol', bodyColor:0x224422, accentColor:0x44ff66, magType:'box', suppressor:true, flashColor:0x44ff66 }); }
-function buildLaserPointer()   { return _genericGun({ bodyShape:'pistol', bodyColor:0x111111, accentColor:0xff2222, magType:'hidden', emissive:true, scope:'red_dot', flashColor:0xff2222 }); }
-function buildCoinGun()        { return _genericGun({ bodyShape:'pistol', bodyColor:0xddaa22, accentColor:0xffd700, magType:'hidden', emissive:true, flashColor:0xffd700 }); }
-function buildArcTorrent()     { return _genericGun({ bodyShape:'futuristic', bodyColor:0x113355, accentColor:0xaaeeff, magType:'box', emissive:true, foregrip:true, flashColor:0xaaeeff, barrelR:0.015 }); }
-function buildFireworkLauncher(){ return _genericGun({ bodyShape:'heavy', bodyColor:0x551133, accentColor:0xff44aa, magType:'drum', emissive:true, flashColor:0xff44aa, kickZ:0.028 }); }
-function buildSwitchbladeGun() { return _genericGun({ bodyShape:'compact', bodyColor:0x442266, accentColor:0xcc66ff, magType:'banana', emissive:true, scope:'holo', flashColor:0xcc66ff }); }
 // 3rd-batch primary models
-function buildFlechette()        { return _genericGun({ bodyShape:'bullpup', bodyColor:0xb0b0b0, accentColor:0xeeeeee, magType:'box', scope:'sniper', suppressor:true, flashColor:0xcccccc }); }
-function buildThermalLMG()       { return _genericGun({ bodyShape:'heavy', bodyColor:0x661a1a, accentColor:0xff6644, magType:'drum', foregrip:true, emissive:true, flashColor:0xff6644 }); }
-function buildBurstCannon()      { return _genericGun({ bodyShape:'bullpup', bodyColor:0x554433, accentColor:0xffaa22, magType:'banana', scope:'acog', foregrip:true }); }
-function buildIncendiaryShotgun(){ return _genericGun({ bodyShape:'shotgun', bodyColor:0x331100, accentColor:0xff5522, magType:'hidden', foregrip:true, emissive:true, flashColor:0xff5522, barrelR:0.014 }); }
-function buildCoilgun()          { return _genericGun({ bodyShape:'sniper', bodyColor:0x223344, accentColor:0x66ddff, magType:'box', scope:'sniper', emissive:true, flashColor:0x66ddff }); }
-function buildSmartSMG()         { return _genericGun({ bodyShape:'compact', bodyColor:0x114433, accentColor:0x99ff99, magType:'banana', scope:'holo', emissive:true, flashColor:0x99ff99 }); }
-function buildAMR()              { return _genericGun({ bodyShape:'sniper', bodyColor:0x554422, accentColor:0xddaa44, magType:'box', scope:'sniper', suppressor:true, foregrip:true, barrelR:0.014 }); }
-function buildAirRifle()         { return _genericGun({ bodyShape:'sniper', bodyColor:0x223355, accentColor:0xaaccff, magType:'hidden', suppressor:true, scope:'sniper' }); }
-function buildShockwaveLauncher(){ return _genericGun({ bodyShape:'heavy', bodyColor:0x333366, accentColor:0xddddff, magType:'hidden', barrelR:0.022, emissive:true, flashColor:0xddddff, kickZ:0.030 }); }
-function buildTwinAR()           { return _genericGun({ bodyShape:'classic', bodyColor:0x332211, accentColor:0xffcc66, magType:'banana', barrelCount:2, scope:'red_dot' }); }
-function buildMachineRevolver()  { return _genericGun({ bodyShape:'pistol', bodyColor:0x222222, accentColor:0xaaaaaa, magType:'hidden', barrelR:0.013 }); }
-function buildEMPPistol()        { return _genericGun({ bodyShape:'pistol', bodyColor:0x113355, accentColor:0x66ccff, magType:'hidden', emissive:true, flashColor:0x66ccff }); }
 // 😈 P2W models
-function buildSwarmRifle()       { return _genericGun({ bodyShape:'futuristic', bodyColor:0x440044, accentColor:0xff00ff, magType:'banana', scope:'holo', emissive:true, flashColor:0xff44ff }); }
-function buildLazyLaser()        { return _genericGun({ bodyShape:'futuristic', bodyColor:0x550055, accentColor:0xff44ff, magType:'box', barrelR:0.024, emissive:true, flashColor:0xff44ff, foregrip:true }); }
-function buildStormCannon()      { return _genericGun({ bodyShape:'heavy', bodyColor:0x113355, accentColor:0xaaeeff, magType:'drum', emissive:true, flashColor:0xaaeeff, foregrip:true }); }
-function buildRoyalMinigun()     { return _genericGun({ bodyShape:'heavy', bodyColor:0x554400, accentColor:0xffd700, magType:'pan', barrelCount:6, barrelR:0.008, foregrip:true, emissive:true, flashColor:0xffd700 }); }
-function buildPocketRocket()     { return _genericGun({ bodyShape:'pistol', bodyColor:0x331100, accentColor:0xff8800, magType:'hidden', barrelR:0.020, emissive:true, flashColor:0xff8800 }); }
-function buildAutoRevolver()     { return _genericGun({ bodyShape:'pistol', bodyColor:0x222211, accentColor:0xffcc88, magType:'hidden', scope:'red_dot' }); }
-function buildFrostBlaster()     { return _genericGun({ bodyShape:'compact', bodyColor:0x113344, accentColor:0x99eeff, magType:'box', emissive:true, scope:'holo', flashColor:0x99eeff }); }
-
 // 🆕 Batch-4 secondaries — gun-shaped ones reuse _genericGun, throwables get bespoke shapes
-function buildSnubRevolver()  { return _genericGun({ bodyShape:'pistol', bodyColor:0x222222, accentColor:0x888888, magType:'hidden', barrelR:0.011 }); }
-function buildDuelistPistol() { return _genericGun({ bodyShape:'pistol', bodyColor:0x331111, accentColor:0xddccaa, magType:'hidden', barrelR:0.012, scope:'red_dot' }); }
-function buildMauser()        { return _genericGun({ bodyShape:'pistol', bodyColor:0x442211, accentColor:0xaa8844, magType:'hidden', barrelR:0.012 }); }
-function buildMiniUzi()       { return _genericGun({ bodyShape:'compact', bodyColor:0x1a1a1a, accentColor:0x555555, magType:'banana' }); }
-function buildNailGun()       { return _genericGun({ bodyShape:'compact', bodyColor:0xaa6622, accentColor:0xccccaa, magType:'box', barrelR:0.014 }); }
-function buildBoomstick()     { return _genericGun({ bodyShape:'pistol', bodyColor:0x553311, accentColor:0x886644, magType:'hidden', barrelR:0.022, barrelCount:2 }); }
-function buildSignalPistol()  { return _genericGun({ bodyShape:'pistol', bodyColor:0xffaa44, accentColor:0xffcc66, magType:'hidden', barrelR:0.024, emissive:true, flashColor:0xff8800 }); }
-
 // Throwable models — built from primitives, no gun chassis.
 // IMPORTANT: must include a `_flash` Object3D — the fire/fanfire code
 // accesses model._flash.visible / .getWorldPosition unconditionally.
@@ -6427,20 +6469,6 @@ function buildSlingshot() {
   });
 }
 // 🌌 Sci-fi P2W models — emissive, futuristic chassis
-function buildEventHorizonRifle() { return _genericGun({ bodyShape:'futuristic', bodyColor:0x220033, accentColor:0x6633ff, magType:'box', emissive:true, scope:'holo', flashColor:0x9966ff, kickZ:0.025 }); }
-function buildStormCore()         { return _genericGun({ bodyShape:'heavy',      bodyColor:0x113355, accentColor:0x88ddff, magType:'drum', emissive:true, foregrip:true, flashColor:0xaaeeff }); }
-function buildAbsZero()           { return _genericGun({ bodyShape:'futuristic', bodyColor:0x113344, accentColor:0x99eeff, magType:'pan', emissive:true, scope:'holo', flashColor:0xaaffff, barrelR:0.020 }); }
-function buildSolarLance()        { return _genericGun({ bodyShape:'futuristic', bodyColor:0xaa6611, accentColor:0xffee44, magType:'hidden', emissive:true, scope:'sniper', flashColor:0xffee88, barrelR:0.014 }); }
-function buildPhaseDriver()       { return _genericGun({ bodyShape:'classic',    bodyColor:0x331144, accentColor:0xaa66ff, magType:'banana', emissive:true, scope:'holo', flashColor:0xcc99ff }); }
-function buildQuantumRepeater()   { return _genericGun({ bodyShape:'futuristic', bodyColor:0x224455, accentColor:0x66ffcc, magType:'box', emissive:true, scope:'holo', flashColor:0x88ffdd }); }
-function buildMagnetar()          { return _genericGun({ bodyShape:'heavy',      bodyColor:0x441133, accentColor:0xff77cc, magType:'drum', emissive:true, foregrip:true, flashColor:0xff99dd, barrelR:0.022, kickZ:0.030 }); }
-function buildNebulaMortar()      { return _genericGun({ bodyShape:'heavy',      bodyColor:0x331144, accentColor:0x9966ff, magType:'hidden', emissive:true, foregrip:true, flashColor:0xaa88ff, barrelR:0.028, kickZ:0.040 }); }
-function buildPrismEngine()       { return _genericGun({ bodyShape:'futuristic', bodyColor:0x442266, accentColor:0xffaaff, magType:'drum', emissive:true, scope:'holo', flashColor:0xffccff }); }
-function buildVoidHarvester()     { return _genericGun({ bodyShape:'heavy',      bodyColor:0x110011, accentColor:0x440066, magType:'box', emissive:true, foregrip:true, flashColor:0x6633aa, barrelR:0.024, kickZ:0.035 }); }
-function buildPulseNeedle()       { return _genericGun({ bodyShape:'compact',    bodyColor:0x331133, accentColor:0xff66cc, magType:'box', emissive:true, flashColor:0xff99dd }); }
-function buildPhasePistol()       { return _genericGun({ bodyShape:'pistol',     bodyColor:0x222244, accentColor:0xaa66ff, magType:'hidden', emissive:true, scope:'red_dot', flashColor:0xcc99ff }); }
-function buildIonRevolver()       { return _genericGun({ bodyShape:'pistol',     bodyColor:0x114455, accentColor:0x66ccff, magType:'hidden', emissive:true, flashColor:0x99ddff }); }
-
 function buildBlowgun() {
   return _throwableHolder(g => {
     const cane = new THREE.MeshLambertMaterial({ color: 0x33aa55 });
@@ -6466,9 +6494,6 @@ function buildBlowgun() {
   });
 }
 // 🪖 M4A1 — classic black carbine: top rail + red dot, banana mag, ejection port.
-function buildM4A1() {
-  return _genericGun({ bodyShape: 'classic', bodyColor: 0x2b2b2b, accentColor: 0x474747, magType: 'banana', topRail: true, scope: 'red_dot', ejectionPort: true, barrelLen: 0.24, barrelColor: 0x1f1f1f });
-}
 // 🚀 RPG-7 — fat tube with a pointed warhead poking out the front.
 function buildRPG() {
   const g = new THREE.Group();
@@ -6524,20 +6549,6 @@ function buildBazooka() {
   return g;
 }
 // ⚔️ Lancer — a long single-shot rifle with a fixed bayonet blade out front.
-function buildLancer() {
-  const g = _genericGun({ bodyShape: 'sniper', bodyColor: 0x33271a, accentColor: 0x8a6a3a, magType: 'hidden', stock: 'classic', scope: 'none', barrelLen: 0.30, barrelColor: 0x2a2a2a });
-  // Bayonet: a flat steel blade extending past the muzzle.
-  const steel = new THREE.MeshLambertMaterial({ color: 0xcfd6dd });
-  const blade = new THREE.Mesh(new THREE.ConeGeometry(0.018, 0.20, 4), steel);
-  blade.rotation.x = -Math.PI / 2;            // point forward (along -Z barrel)
-  blade.position.set(0, 0.018, -0.46);
-  blade.scale.set(1, 1, 0.5);                 // flatten into a blade
-  g.add(blade);
-  const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.03, 8), new THREE.MeshLambertMaterial({ color: 0x555555 }));
-  collar.rotation.x = Math.PI / 2; collar.position.set(0, 0.014, -0.34); g.add(collar);
-  g._blade = blade;
-  return g;
-}
 // 🚧 Traffic Cone — a chuckable cone (the official sidearm of Traffic Cone Republic)
 function buildTrafficCone() {
   return _throwableHolder(g => {
@@ -6591,33 +6602,54 @@ function buildCreamPie() {
   });
 }
 // 🔬 Tech / Physics models
-function buildPrismLauncher()    { return _genericGun({ bodyShape:'futuristic', bodyColor:0x440044, accentColor:0xffaaff, magType:'pan', emissive:true, scope:'holo', flashColor:0xffaaff }); }
-function buildFoamCannon()       { return _genericGun({ bodyShape:'heavy', bodyColor:0x445566, accentColor:0xddddee, magType:'drum', barrelR:0.020, foregrip:true, flashColor:0xeeeeff }); }
-function buildAirburstProjector(){ return _genericGun({ bodyShape:'futuristic', bodyColor:0x224455, accentColor:0xaaffff, magType:'box', barrelR:0.018, emissive:true, flashColor:0xaaffff }); }
-function buildGlassmaker()       { return _genericGun({ bodyShape:'futuristic', bodyColor:0x337755, accentColor:0xccffee, magType:'box', emissive:true, scope:'holo', flashColor:0xccffee }); }
-function buildMagnetRifle()      { return _genericGun({ bodyShape:'futuristic', bodyColor:0x441133, accentColor:0xff77cc, magType:'banana', scope:'red_dot', emissive:true, flashColor:0xff77cc }); }
-function buildSeismicHammer()    { return _genericGun({ bodyShape:'heavy', bodyColor:0x442211, accentColor:0x885522, magType:'hidden', barrelR:0.024, foregrip:true, kickZ:0.032, flashColor:0xaa5522 }); }
-function buildPainterBeam()      { return _genericGun({ bodyShape:'futuristic', bodyColor:0x556622, accentColor:0xffff44, magType:'drum', emissive:true, flashColor:0xffff44 }); }
-function buildPortalLauncher()   { return _genericGun({ bodyShape:'futuristic', bodyColor:0x113355, accentColor:0x66ccff, magType:'box', emissive:true, scope:'holo', flashColor:0x66ccff, barrelR:0.018 }); }
-function buildPulseDisc()        { return _genericGun({ bodyShape:'futuristic', bodyColor:0x112244, accentColor:0x44ddff, magType:'pan', emissive:true, flashColor:0x44ddff }); }
-function buildGravityPaint()     { return _genericGun({ bodyShape:'futuristic', bodyColor:0x331144, accentColor:0xaa44ff, magType:'drum', emissive:true, scope:'holo', flashColor:0xaa44ff }); }
-function buildTrafficController(){ return _genericGun({ bodyShape:'compact', bodyColor:0x332211, accentColor:0xff2200, magType:'box', scope:'holo', emissive:true, flashColor:0xffaa00 }); }
-function buildPinballLauncher()  { return _genericGun({ bodyShape:'heavy', bodyColor:0x551111, accentColor:0xffaa44, magType:'pan', barrelR:0.024, emissive:true, foregrip:true, flashColor:0xffaa44, kickZ:0.030 }); }
 // 🪖 ADMIN weapon models — military theme, mostly olive/gunmetal + tactical accessories
-function buildGAU19()        { return _genericGun({ bodyShape:'heavy', bodyColor:0x2a3526, accentColor:0x6a6a6a, magType:'drum', barrelCount:3, barrelR:0.012, foregrip:true, topRail:true, kickZ:0.020 }); }
-function buildMK44()         { return _genericGun({ bodyShape:'heavy', bodyColor:0x3a3a2a, accentColor:0x666633, magType:'drum', barrelR:0.015, foregrip:true, scope:'acog' }); }
-function buildXM7()          { return _genericGun({ bodyShape:'classic', bodyColor:0x222222, accentColor:0x888888, magType:'banana', scope:'acog', foregrip:true, ejectionPort:true }); }
-function buildBarrett()      { return _genericGun({ bodyShape:'sniper', bodyColor:0x2a2a1a, accentColor:0xddaa44, magType:'box', scope:'sniper', suppressor:true, foregrip:true, barrelR:0.014 }); }
-function buildM134()         { return _genericGun({ bodyShape:'heavy', bodyColor:0x333333, accentColor:0x222222, magType:'pan', barrelCount:6, barrelR:0.009, foregrip:true, kickZ:0.020 }); }
-function buildHKMP7()        { return _genericGun({ bodyShape:'compact', bodyColor:0x1a1a1a, accentColor:0x555555, magType:'banana', scope:'holo', suppressor:true, foregrip:true }); }
-function buildP90Spec()      { return _genericGun({ bodyShape:'bullpup', bodyColor:0x1a1a1a, accentColor:0x444444, magType:'pan', scope:'red_dot', topRail:true }); }
-function buildDesertEagle()  { return _genericGun({ bodyShape:'pistol', bodyColor:0xa68b3a, accentColor:0xddc466, magType:'hidden', barrelR:0.014, scope:'red_dot' }); }
-function buildM1911()        { return _genericGun({ bodyShape:'pistol', bodyColor:0x222222, accentColor:0x888888, magType:'hidden', ejectionPort:true }); }
-function buildPPK()          { return _genericGun({ bodyShape:'pistol', bodyColor:0x1a1a1a, accentColor:0x444444, magType:'hidden', suppressor:true }); }
-function buildGlock18()      { return _genericGun({ bodyShape:'pistol', bodyColor:0x222222, accentColor:0x555555, magType:'banana' }); }
-function buildFiveSeven()    { return _genericGun({ bodyShape:'pistol', bodyColor:0x333333, accentColor:0xddddff, magType:'hidden', scope:'red_dot' }); }
+// Universal first-person equipment detail pass. These overlays make every
+// roster item read more like a real object without changing gameplay stats.
 
-// Order must match WEAPONS array.
+function detailCylinder(model, mat, radius, depth, pos, rot, segments = 12) {
+  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, depth, segments), mat);
+  mesh.position.set(pos[0], pos[1], pos[2]);
+  if (rot) mesh.rotation.set(rot[0], rot[1], rot[2]);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  model.add(mesh);
+  return mesh;
+}
+
+function detailSphere(model, mat, radius, pos, segments = 8) {
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(radius, segments, Math.max(4, Math.floor(segments / 2))), mat);
+  mesh.position.set(pos[0], pos[1], pos[2]);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  model.add(mesh);
+  return mesh;
+}
+
+function detailTorus(model, mat, radius, tube, pos, rot) {
+  const mesh = new THREE.Mesh(new THREE.TorusGeometry(radius, tube, 6, 18), mat);
+  mesh.position.set(pos[0], pos[1], pos[2]);
+  if (rot) mesh.rotation.set(rot[0], rot[1], rot[2]);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  model.add(mesh);
+  return mesh;
+}
+
+function detailGlowMat(item) {
+  const text = ((item && (item.name + ' ' + item.type + ' ' + item.id)) || '').toLowerCase();
+  if (/acid|heal|nano|toxic|venom/.test(text)) return detailGreenGlowMat;
+  if (/void|phase|gravity|portal|prism|warp|quantum|vampire/.test(text)) return detailPurpleGlowMat;
+  return detailBlueGlowMat;
+}
+
+function detailItemText(item) {
+  return ((item && (item.name + ' ' + item.type + ' ' + item.id + ' ' + item.slot)) || '').toLowerCase();
+}
+
+// Order must match WEAPONS array. Later roster entries use individually
+// composed models from equipment-models.js; none of these calls route through
+// the old generic gun factory.
+const handcraftedWeapon = id => HandcraftedModels.buildWeapon(id);
 const weaponModels = [
   buildAK20(), buildAK30(), buildSG8(), buildSG100(),
   buildSRX(), buildRPD(), buildMP40(), buildP90(),
@@ -6627,46 +6659,59 @@ const weaponModels = [
   buildRevolver(), buildFlare(), buildPistol(), buildShorty(), buildCycler(),
   buildHandCannon(), buildThrowingKnives(), buildTaser(),
   // ── New primaries ──────────────────────────────────────────────────────
-  buildAN94(), buildSPAS12(), buildM1Garand(), buildPlasmaCarbine(), buildArcRifle(),
-  buildGravityLauncher(), buildPotatoCannon(), buildStickerBlaster(), buildHarpoonGun(), buildMortarRifle(),
-  buildArcTorrent(), buildFireworkLauncher(), buildSwitchbladeGun(),
+  handcraftedWeapon('an94'), handcraftedWeapon('spas12'), handcraftedWeapon('m1_garand'),
+  handcraftedWeapon('plasma_carbine'), handcraftedWeapon('arc_rifle'),
+  handcraftedWeapon('gravity_launcher'), handcraftedWeapon('potato_cannon'),
+  handcraftedWeapon('sticker_blaster'), handcraftedWeapon('harpoon_gun'), handcraftedWeapon('mortar_rifle'),
+  handcraftedWeapon('arc_torrent'), handcraftedWeapon('firework_launcher'), handcraftedWeapon('switchblade_gun'),
   // ── 3rd-batch primaries ──────────────────────────────────────────────────
-  buildFlechette(), buildThermalLMG(), buildBurstCannon(), buildIncendiaryShotgun(),
-  buildCoilgun(), buildSmartSMG(), buildAMR(), buildAirRifle(),
-  buildShockwaveLauncher(), buildTwinAR(),
+  handcraftedWeapon('flechette'), handcraftedWeapon('thermal_lmg'), handcraftedWeapon('burst_cannon'),
+  handcraftedWeapon('incendiary_shotgun'), handcraftedWeapon('coilgun'), handcraftedWeapon('smart_smg'),
+  handcraftedWeapon('amr'), handcraftedWeapon('air_rifle'),
+  handcraftedWeapon('shockwave_launcher'), handcraftedWeapon('twin_ar'),
   // ── 😈 P2W primaries ─────────────────────────────────────────────────────
-  buildSwarmRifle(), buildLazyLaser(), buildStormCannon(), buildRoyalMinigun(),
+  handcraftedWeapon('swarm_rifle'), handcraftedWeapon('lazy_laser'),
+  handcraftedWeapon('storm_cannon'), handcraftedWeapon('royal_minigun'),
   // ── 🔬 Tech / Physics primaries ──────────────────────────────────────────
-  buildPrismLauncher(), buildFoamCannon(), buildAirburstProjector(), buildGlassmaker(),
-  buildMagnetRifle(), buildSeismicHammer(), buildPainterBeam(), buildPortalLauncher(),
-  buildPulseDisc(), buildGravityPaint(), buildTrafficController(), buildPinballLauncher(),
+  handcraftedWeapon('prism_launcher'), handcraftedWeapon('foam_cannon'),
+  handcraftedWeapon('airburst_projector'), handcraftedWeapon('glassmaker'),
+  handcraftedWeapon('magnet_rifle'), handcraftedWeapon('seismic_hammer'),
+  handcraftedWeapon('painter_beam'), handcraftedWeapon('portal_launcher'),
+  handcraftedWeapon('pulse_disc'), handcraftedWeapon('gravity_paint'),
+  handcraftedWeapon('traffic_controller'), handcraftedWeapon('pinball_launcher'),
   // ── New secondaries ────────────────────────────────────────────────────
-  buildMachinePistol(), buildSawedOff(), buildDartGun(), buildLaserPointer(), buildCoinGun(),
+  handcraftedWeapon('machine_pistol'), handcraftedWeapon('sawed_off'), handcraftedWeapon('dart_gun'),
+  handcraftedWeapon('laser_pointer'), handcraftedWeapon('coin_gun'),
   // ── 3rd-batch secondaries ─────────────────────────────────────────────────
-  buildMachineRevolver(), buildEMPPistol(),
+  handcraftedWeapon('machine_revolver'), handcraftedWeapon('emp_pistol'),
   // ── 😈 P2W secondaries ───────────────────────────────────────────────────
-  buildPocketRocket(), buildAutoRevolver(), buildFrostBlaster(),
+  handcraftedWeapon('pocket_rocket'), handcraftedWeapon('auto_revolver'), handcraftedWeapon('frost_blaster'),
   // ── 🆕 Batch-4 secondaries (must match WEAPONS order) ──────────────────
-  buildSnubRevolver(), buildDuelistPistol(), buildMauser(), buildMiniUzi(),
-  buildNailGun(), buildBoomstick(), buildSignalPistol(), buildThrowingAxes(),
+  handcraftedWeapon('snub_revolver'), handcraftedWeapon('duelist_pistol'),
+  handcraftedWeapon('mauser'), handcraftedWeapon('mini_uzi'),
+  handcraftedWeapon('nail_gun'), handcraftedWeapon('boomstick'), handcraftedWeapon('signal_pistol'), buildThrowingAxes(),
   buildShuriken(), buildBoomerang(), buildSlingshot(), buildBlowgun(),
   // ── 🌌 SCI-FI P2W primaries ─────────────────────────────────────────────
-  buildEventHorizonRifle(), buildStormCore(), buildAbsZero(), buildSolarLance(),
-  buildPhaseDriver(), buildQuantumRepeater(), buildMagnetar(), buildNebulaMortar(),
-  buildPrismEngine(), buildVoidHarvester(),
+  handcraftedWeapon('event_horizon'), handcraftedWeapon('storm_core'),
+  handcraftedWeapon('abs_zero'), handcraftedWeapon('solar_lance'),
+  handcraftedWeapon('phase_driver'), handcraftedWeapon('quantum_repeater'),
+  handcraftedWeapon('magnetar'), handcraftedWeapon('nebula_mortar'),
+  handcraftedWeapon('prism_engine'), handcraftedWeapon('void_harvester'),
   // ── 🌌 SCI-FI P2W secondaries ───────────────────────────────────────────
-  buildPulseNeedle(), buildPhasePistol(), buildIonRevolver(),
+  handcraftedWeapon('pulse_needle'), handcraftedWeapon('phase_pistol'), handcraftedWeapon('ion_revolver'),
   // ── 🪖 ADMIN primaries ───────────────────────────────────────────────────
-  buildGAU19(), buildMK44(), buildXM7(), buildBarrett(), buildM134(), buildHKMP7(), buildP90Spec(),
+  handcraftedWeapon('gau19'), handcraftedWeapon('mk44'), handcraftedWeapon('xm7'),
+  handcraftedWeapon('barrett'), handcraftedWeapon('m134'), handcraftedWeapon('hkmp7'), handcraftedWeapon('p90_spec'),
   // ── 🪖 ADMIN secondaries ─────────────────────────────────────────────────
-  buildDesertEagle(), buildM1911(), buildPPK(), buildGlock18(), buildFiveSeven(),
+  handcraftedWeapon('desert_eagle'), handcraftedWeapon('m1911'), handcraftedWeapon('ppk'),
+  handcraftedWeapon('glock18'), handcraftedWeapon('five_seven'),
   buildMG42(),
   // 🪖 M4A1 (must align with the 'm4a1' WEAPONS slot)
-  buildM4A1(),
+  handcraftedWeapon('m4a1'),
   // 🚀 Rocket launchers (must align with the 'rpg'/'bazooka' WEAPONS slots)
   buildRPG(), buildBazooka(),
   // ⚔️ Lancer (must align with the 'lancer' WEAPONS slot — right before the cone/pie)
-  buildLancer(),
+  handcraftedWeapon('lancer'),
   // ── 🚧 / 🥧 must mirror the two trailing WEAPONS entries ──
   buildTrafficCone(), buildCreamPie(),
 ];
@@ -7274,54 +7319,29 @@ function buildFists() {
 
 // Generic placeholder melee model — used for the batch-4 melees so we don't
 // need 12 hand-modeled meshes. Each variant just adjusts shape + color.
-function buildSimpleMelee(shape, color) {
-  const g = new THREE.Group();
-  const mat = new THREE.MeshLambertMaterial({ color });
-  const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.18, 6), new THREE.MeshLambertMaterial({ color: 0x553322 }));
-  grip.rotation.x = Math.PI / 2; grip.position.set(0, 0, 0.05); g.add(grip);
-  let head;
-  if (shape === 'blade')       head = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.32, 0.10), mat);
-  else if (shape === 'pipe')   head = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.36, 8), mat);
-  else if (shape === 'club')   head = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.025, 0.28, 8), mat);
-  else if (shape === 'axe')    head = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.12, 0.04), mat);
-  else if (shape === 'sphere') head = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 6), mat);
-  else                         head = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.20, 0.04), mat);
-  head.position.set(0, 0.14, -0.08);
-  g.add(head);
-  g.position.set(0.16, -0.10, -0.22);
-  return g;
-}
+const handcraftedMelee = id => HandcraftedModels.buildMelee(id);
 const meleeModels = [
   buildBat(), buildSabre(), buildFryingPan(), buildSledge(), buildSpear(),
   buildKatana(), buildBaguette(), buildKnife(), buildChainsaw(), buildLightsabre(),
   buildRiotShield(), buildScrewdriver(),
   // New melees (must match MELEE_ITEMS order)
-  buildCrowbar(), buildFireAxe(), buildNunchucks(), buildUmbrella(), buildYoyo(),
+  handcraftedMelee('crowbar'), handcraftedMelee('fire_axe'), handcraftedMelee('nunchucks'),
+  buildUmbrella(), buildYoyo(),
   // 3rd-batch melees
-  buildCombatAxe(), buildShockBaton(),
+  handcraftedMelee('combat_axe'), buildShockBaton(),
   // 😈 P2W melees
   buildTitanHammer(), buildVampireBlade(),
   // The classic
   buildFists(),
-  // 🆕 Batch-4 melees (simple placeholder models)
-  buildSimpleMelee('sphere', 0xddaa22), // brass_knuckles
-  buildSimpleMelee('axe',    0x8a6a3a), // hatchet
-  buildSimpleMelee('blade',  0x9a9a9a), // machete
-  buildSimpleMelee('pipe',   0x6a4a2a), // cane
-  buildSimpleMelee('club',   0xaa6633), // cricket_bat
-  buildSimpleMelee('pipe',   0x888888), // pipe
-  buildSimpleMelee('axe',    0x5a5a5a), // wrench (chunky)
-  buildSimpleMelee('blade',  0x6a5a4a), // shovel
-  buildSimpleMelee('club',   0x8a8a4a), // golf_club
-  buildSimpleMelee('axe',    0xddaa88), // tennis_racket
-  buildSimpleMelee('pipe',   0xcc6622), // fire_poker
-  buildSimpleMelee('axe',    0xcccccc), // meat_cleaver
-  // 🌌 Sci-fi P2W melees (color-coded placeholders)
-  buildSimpleMelee('blade',  0xaa66ff), // phase_blade
-  buildSimpleMelee('club',   0x6633ff), // gravity_hammer
-  buildSimpleMelee('pipe',   0x66ccff), // volt_whip
+  // Batch-4 and sci-fi melees: individually composed silhouettes.
+  handcraftedMelee('brass_knuckles'), handcraftedMelee('hatchet'), handcraftedMelee('machete'),
+  handcraftedMelee('cane'), handcraftedMelee('cricket_bat'), handcraftedMelee('pipe'),
+  handcraftedMelee('wrench'), handcraftedMelee('shovel'), handcraftedMelee('golf_club'),
+  handcraftedMelee('tennis_racket'), handcraftedMelee('fire_poker'), handcraftedMelee('meat_cleaver'),
+  handcraftedMelee('phase_blade'), handcraftedMelee('gravity_hammer'), handcraftedMelee('volt_whip'),
   // 🪖 ADMIN melees
-  buildKarambit(), buildBayonet(), buildTomahawk(), buildOts04(), buildGarrote(),
+  handcraftedMelee('karambit'), handcraftedMelee('bayonet'),
+  handcraftedMelee('tomahawk'), handcraftedMelee('ots04'), buildGarrote(),
 ];
 meleeModels.forEach(m => { m.visible = false; camera.add(m); });
 
@@ -7815,18 +7835,7 @@ function buildLandMine() {
 }
 
 // Generic placeholder support model — used for the batch-4 utilities.
-function buildSimpleSupport(color, shape = 'sphere') {
-  const g = new THREE.Group();
-  const mat = new THREE.MeshLambertMaterial({ color });
-  let body;
-  if (shape === 'cube')      body = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.10, 0.10), mat);
-  else if (shape === 'disc') body = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.03, 12), mat);
-  else if (shape === 'caps') body = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.12, 8), mat);
-  else                       body = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), mat);
-  g.add(body);
-  g.position.set(0.16, -0.10, -0.22);
-  return g;
-}
+const handcraftedSupport = id => HandcraftedModels.buildSupport(id);
 const supportModels = [buildFragGrenade(), buildMedkit(), buildStimShot(), buildSmokeBomb(),
   buildBlinkPearl(), buildAmmoFountain(), buildConfettiCannon(), buildMoonMine(),
   buildRubberDuck(), buildBlackHoleSeed(), buildGlitchCube(), buildVampireSyringe(),
@@ -7838,25 +7847,16 @@ const supportModels = [buildFragGrenade(), buildMedkit(), buildStimShot(), build
   buildOrbitalStrike(), buildGuardianDrone(), buildNanoShield(),
   // Lazy weapons supports
   buildAirGrenade(), buildLandMine(),
-  // 🆕 Batch-4 utilities (placeholder models)
-  buildSimpleSupport(0xffffff, 'sphere'),  // flashbang_basic
-  buildSimpleSupport(0xff5555, 'disc'),    // proximity_mine
-  buildSimpleSupport(0xdd4422, 'caps'),    // dynamite
-  buildSimpleSupport(0x88aaff, 'cube'),    // drone_strike
-  buildSimpleSupport(0x66ff99, 'sphere'),  // healing_pulse
-  buildSimpleSupport(0xaa44ff, 'cube'),    // teleport_beacon
-  buildSimpleSupport(0x666688, 'sphere'),  // cloak
-  buildSimpleSupport(0xff6644, 'caps'),    // berserker_serum
-  buildSimpleSupport(0x66ccff, 'sphere'),  // taser_grenade
-  buildSimpleSupport(0x111111, 'sphere'),  // ink_bomb
-  buildSimpleSupport(0xffaa44, 'cube'),    // siren
-  buildSimpleSupport(0x888888, 'disc'),    // caltrops
-  // 🌌 Sci-fi P2W utilities
-  buildSimpleSupport(0x66ffcc, 'sphere'),   // nano_swarm
-  buildSimpleSupport(0xaa66ff, 'cube'),     // warp_beacon
-  buildSimpleSupport(0x66ccff, 'disc'),     // stasis_mine
-  buildSimpleSupport(0x444466, 'cube'),     // specter_drone
-  buildSimpleSupport(0xaaccff, 'sphere'),   // quantum_barrier
+  // Batch-4 and sci-fi utilities: individually composed props.
+  handcraftedSupport('flashbang_basic'), handcraftedSupport('proximity_mine'),
+  handcraftedSupport('dynamite'), handcraftedSupport('drone_strike'),
+  handcraftedSupport('healing_pulse'), handcraftedSupport('teleport_beacon'),
+  handcraftedSupport('cloak'), handcraftedSupport('berserker_serum'),
+  handcraftedSupport('taser_grenade'), handcraftedSupport('ink_bomb'),
+  handcraftedSupport('siren'), handcraftedSupport('caltrops'),
+  handcraftedSupport('nano_swarm'), handcraftedSupport('warp_beacon'),
+  handcraftedSupport('stasis_mine'), handcraftedSupport('specter_drone'),
+  handcraftedSupport('quantum_barrier'),
   // 🍔 Tasty heal
   buildHamburger(),                          // hamburger
   // 🔥 Molotov (must align with the SUPPORT_ITEMS 'molotov' slot)
@@ -11501,17 +11501,20 @@ function updateReloadAnim() {
 function spawnLocalBullet(origin, dir, id, isOwn, speed, color, size, weaponId, opts = {}) {
   const mesh = makeBulletMesh(color, size, weaponId);
   mesh.position.copy(origin);
+  const flightDir = dir.clone();
+  if (flightDir.lengthSq() < 0.000001) flightDir.set(0, 0, -1);
+  flightDir.normalize();
   // Streaks and energy beams have to lie along the flight path. `dir` never
   // changes over a bullet's life, so this is a one-off at spawn rather than
   // per-frame work in the bullet loop.
   if (mesh._alignToDir) {
-    mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), dir.clone().normalize());
+    mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), flightDir);
   }
   scene.add(mesh);
   // Track origin and max range for short-range weapons (arc torrent)
   const wSpec = WEAPONS.find(w => w.id === weaponId);
   const maxRange = opts.maxRange || wSpec?.maxRange;
-  localBullets.push({ mesh, dir: dir.clone(), createdAt: Date.now(), id, isOwn, speed: speed||120, weaponId,
+  localBullets.push({ mesh, dir: flightDir, createdAt: Date.now(), id, isOwn, speed: (speed || 120) * BULLET_SPEED_MULTIPLIER, weaponId,
     spawnX: origin.x, spawnY: origin.y, spawnZ: origin.z, maxRange, ...opts });
 }
 
@@ -11950,13 +11953,16 @@ function rocketExplode(pos, weaponId, excludePid) {
 }
 function updateBullets(dt) {
   const now = Date.now();
-  const toRemove = [];
   for (let i = localBullets.length-1; i>=0; i--) {
     const b = localBullets[i];
+    const removeBullet = () => {
+      scene.remove(b.mesh);
+      localBullets.splice(i, 1);
+    };
     const maxAge = b.weaponId === 'frag' ? 3500 : 1800;
     if (now - b.createdAt > maxAge) {
       if (b.isPaintBomb) triggerPaintExplosion(b.mesh.position.clone(), b);
-      scene.remove(b.mesh); toRemove.push(i); continue;
+      removeBullet(); continue;
     }
     // Save start position for swept (CCD) hit detection
     const px0 = b.mesh.position.x, py0 = b.mesh.position.y, pz0 = b.mesh.position.z;
@@ -11990,7 +11996,7 @@ function updateBullets(dt) {
         }
         if (wallHit && !b.isOwn) {
           spawnHitParticle(wallHitPt);
-          scene.remove(b.mesh); toRemove.push(i);
+          removeBullet();
           continue;
         }
       }
@@ -12001,7 +12007,7 @@ function updateBullets(dt) {
       b.dir.y -= 9.8 * dt; // arc gravity
       if (_bpos.y < 0.25) {
         triggerPaintExplosion(_bpos.clone(), b);
-        scene.remove(b.mesh); toRemove.push(i); continue;
+        removeBullet(); continue;
       }
     }
 
@@ -12092,7 +12098,7 @@ function updateBullets(dt) {
         // 🚀 Rockets: detonate on terrain impact (area splash, no direct target)
         if (b.weaponId === 'rpg' || b.weaponId === 'bazooka') {
           rocketExplode(wallHitPt, b.weaponId, null);
-          scene.remove(b.mesh); toRemove.push(i); continue;
+          removeBullet(); continue;
         }
         // Bouncing weapons (prism, pulse disc, pinball): reflect off wall and speed up
         const wSpec = WEAPONS.find(w => w.id === b.weaponId);
@@ -12122,7 +12128,7 @@ function updateBullets(dt) {
           b.spawnX = b.mesh.position.x; b.spawnY = b.mesh.position.y; b.spawnZ = b.mesh.position.z;
           continue; // keep the bullet alive
         }
-        scene.remove(b.mesh); toRemove.push(i);
+        removeBullet();
         continue;
       }
 
@@ -12130,7 +12136,7 @@ function updateBullets(dt) {
       if (bestHit && !hasLineOfSight(px0, pz0, bestHit.mesh.position.x, bestHit.mesh.position.z)) {
         // There's a wall between the bullet origin and the target in 2D — reject the hit
         spawnHitParticle(_bpos);
-        scene.remove(b.mesh); toRemove.push(i);
+        removeBullet();
         continue;
       }
 
@@ -12158,7 +12164,7 @@ function updateBullets(dt) {
         if (b.weaponId === 'rpg' || b.weaponId === 'bazooka') {
           rocketExplode(_bpos.clone(), b.weaponId, bestHit.pid);
         }
-        scene.remove(b.mesh); toRemove.push(i);
+        removeBullet();
         spawnHitParticle(_bpos);
         continue;
       }
@@ -12167,15 +12173,14 @@ function updateBullets(dt) {
     if (b.maxRange) {
       const dx = _bpos.x - b.spawnX, dy = _bpos.y - b.spawnY, dz = _bpos.z - b.spawnZ;
       if (dx*dx + dy*dy + dz*dz > b.maxRange * b.maxRange) {
-        scene.remove(b.mesh); toRemove.push(i); continue;
+        removeBullet(); continue;
       }
     }
     if (Math.abs(_bpos.x)>50||Math.abs(_bpos.z)>50||_bpos.y<0||_bpos.y>30) {
       if (b.isPaintBomb) triggerPaintExplosion(_bpos.clone(), b);
-      scene.remove(b.mesh); toRemove.push(i);
+      removeBullet();
     }
   }
-  for (let i=toRemove.length-1; i>=0; i--) localBullets.splice(toRemove[i],1);
 }
 
 // ── New support items ─────────────────────────────────────────────────────
@@ -13714,6 +13719,34 @@ socket.on('playerJoined', p => {
 socket.on('playerLeft',   id => {
   delete players[id];
   if (remoteMeshes[id]) { scene.remove(remoteMeshes[id]); delete remoteMeshes[id]; }
+});
+// 🌐 Authoritative "who is actually in your match" list, sent whenever the
+// server moves you between matches. Anyone not on it gets dropped.
+//
+// Without this, changing match was silent: you kept every body you'd already
+// been told about, so the lobby crowd — and players from whatever match you were
+// in before — walked into your game with you and stood there frozen, because
+// position updates are match-scoped and never reached them again.
+socket.on('matchRoster', ({ players: roster }) => {
+  roster = roster || {};
+  // Client-side-only entities are not in the server's player table and must
+  // survive this pass: training dummies are purely local, and the host's own
+  // bots are simulated here.
+  const localOnly = new Set();
+  if (typeof TRAINING_DUMMIES !== 'undefined') for (const d of TRAINING_DUMMIES) localOnly.add(d.id);
+  for (const b of gameBots) localOnly.add(b.id);
+  for (const pid of Object.keys(remoteMeshes)) {
+    if (pid === myId || roster[pid] || localOnly.has(pid)) continue;
+    scene.remove(remoteMeshes[pid]);
+    delete remoteMeshes[pid];
+    delete players[pid];
+  }
+  // And pick up anyone already in the match we just walked into.
+  for (const [pid, p] of Object.entries(roster)) {
+    if (pid === myId) continue;
+    players[pid] = p;
+    if (!remoteMeshes[pid]) spawnRemotePlayer(p);
+  }
 });
 // 🎭 A player changed skin (or their admin flag arrived) — rebuild their mesh
 socket.on('skinChanged', ({ id, skin, isAdmin }) => {
@@ -15931,6 +15964,10 @@ function endMatch(winner, reason) {
   if (!match || match.over) return;
   match.over   = true;
   match.active = false;
+  // 🌐 Hand our match back to the server. Nothing used to send this, so a
+  // finished player stayed parked in a dead private match until they closed the
+  // tab — invisible to the lobby, and still occupying a match nobody was in.
+  socket.emit('leaveMatch');
   // Restore OITC pistol damage override (if any)
   if (match._oitcOrigDmg != null) {
     const pw = WEAPONS.find(w => w.id === 'pistol');
@@ -16175,7 +16212,7 @@ function spawnGameBots() {
     activateMap('lobby13');
     if (MAP_GROUPS.lobby13?._skyColor != null && scene.background?.setHex) scene.background.setHex(MAP_GROUPS.lobby13._skyColor);
   } else if (selectedModeConfig.type !== 'dday' && selectedModeConfig.type !== 'range') {
-    const pool = ['blank','urban','warehouse','forest','volcano','cyber','desert','tundra','space','airport','trenches','chernobyl','refinery','skydock','sewer','gravity_lab','glassworks','carrier','overgrowth','orbital_station','foundry','carnival','biosphere','lockdown','studio','temple','holiday','labyrinth','arena','opera','doomsday','train','dreamscape','pearl_harbor','titanic','supermarket','pyongyang','traffic_cone_republic','flying_moai'];
+    const pool = ['blank','urban','warehouse','forest','vietnam','volcano','cyber','desert','tundra','space','airport','trenches','chernobyl','refinery','skydock','sewer','gravity_lab','glassworks','carrier','overgrowth','orbital_station','foundry','carnival','biosphere','lockdown','studio','temple','holiday','labyrinth','arena','opera','doomsday','train','dreamscape','pearl_harbor','titanic','supermarket','pyongyang','traffic_cone_republic','flying_moai'];
     const chosen = (selectedMap === 'auto' || !MAP_GROUPS[selectedMap]) ? pool[Math.floor(Math.random()*pool.length)] : selectedMap;
     activateMap(chosen);
     // Update sky color if the map specifies one
@@ -19837,6 +19874,7 @@ const MAP_DESCS = {
   urban:      'Urban Plaza — corner buildings, cars as low cover',
   warehouse:  'Warehouse — stacked crates, pipes, narrow lanes',
   forest:     'Forest Clearing — trees + rocks, mostly open',
+  vietnam:    '🇻🇳 Vietnam — huge dense jungle, thick canopy, tight sightlines',
   volcano:    '🔥 Volcano — lava pools deal 4 dmg/sec',
   cyber:      '⚡ Cyber Alley — neon city, JUMP PADS launch you up',
   desert:     'Desert Ruins — broken pillars + sand dunes, open sightlines',

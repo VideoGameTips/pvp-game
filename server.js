@@ -992,6 +992,50 @@ function socketIdsInMatch(matchId) {
 function emitToMatch(matchId, event, data) {
   for (const sid of socketIdsInMatch(matchId)) io.to(sid).emit(event, data);
 }
+// Same, but skip one socket — used when announcing a player's own arrival or
+// departure, which that player must not receive about themselves.
+function emitToMatchExcept(matchId, exceptId, event, data) {
+  for (const sid of socketIdsInMatch(matchId)) {
+    if (sid !== exceptId) io.to(sid).emit(event, data);
+  }
+}
+// Hand a socket the authoritative list of who is in its match RIGHT NOW.
+// Changing matchId used to be silent, which meant a client kept every body it
+// had already been told about: walk from the lobby into a match and the lobby
+// crowd — and anyone from a previous match — came with you, standing frozen
+// (position updates are match-scoped, so they never moved again). The client
+// treats this list as the truth and drops everyone not on it.
+function sendMatchRoster(socketId) {
+  const p = players[socketId];
+  if (!p) return;
+  const roster = {};
+  for (const [pid, other] of Object.entries(players)) {
+    if (pid !== socketId && other.matchId === p.matchId) roster[pid] = other;
+  }
+  io.to(socketId).emit('matchRoster', { matchId: p.matchId, players: roster });
+}
+// Move a player (and the bots they own) between matches, telling everyone who
+// needs to know. Both sides matter: the match being left has to be told this
+// player is gone or their body stands there forever, and the match being joined
+// has to be told they arrived.
+function movePlayerToMatch(socketId, newMatchId) {
+  const p = players[socketId];
+  if (!p) return;
+  const prev = p.matchId;
+  if (prev === newMatchId) { sendMatchRoster(socketId); return; }
+  const ownedBots = Object.values(players).filter(b => b.isBot && b.ownerId === socketId);
+  // 1. Everyone left behind loses sight of this player and their bots.
+  emitToMatchExcept(prev, socketId, 'playerLeft', socketId);
+  for (const b of ownedBots) emitToMatch(prev, 'playerLeft', b.id);
+  // 2. Actually move.
+  p.matchId = newMatchId;
+  for (const b of ownedBots) b.matchId = newMatchId;
+  // 3. The match being joined gains them.
+  emitToMatchExcept(newMatchId, socketId, 'playerJoined', p);
+  for (const b of ownedBots) emitToMatchExcept(newMatchId, socketId, 'playerJoined', b);
+  // 4. And the mover gets a clean slate of who is actually here.
+  sendMatchRoster(socketId);
+}
 
 
 // ── Position broadcast — each client only sees players in their own match ─
@@ -1226,23 +1270,23 @@ io.on('connection', (socket) => {
     const p = players[socket.id];
     if (!p) return;
     const matchId = String(data?.matchId || `match-${socket.id}`).slice(0, 64);
-    p.matchId = matchId;
-    // Move any bots owned by this player into the same match
-    for (const other of Object.values(players)) {
-      if (other.isBot && other.ownerId === socket.id) other.matchId = matchId;
-    }
+    // Announces the move in both directions and hands this socket a fresh
+    // roster; see movePlayerToMatch.
+    movePlayerToMatch(socket.id, matchId);
   });
   socket.on('leaveMatch', () => {
     const p = players[socket.id];
     if (!p) return;
-    p.matchId = 'lobby';
-    // Remove this player's bots entirely when leaving (they're not needed in the lobby)
+    // Remove this player's bots entirely when leaving (they're not needed in the
+    // lobby). Tell the match they were in before deleting them, or their bodies
+    // stay standing there for everyone else.
     for (const [id, other] of Object.entries(players)) {
       if (other.isBot && other.ownerId === socket.id) {
-        delete players[id];
         emitToMatch(other.matchId, 'playerLeft', id);
+        delete players[id];
       }
     }
+    movePlayerToMatch(socket.id, 'lobby');
   });
 
   socket.on('spawnBots', (botList) => {
