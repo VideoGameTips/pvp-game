@@ -1484,13 +1484,29 @@ const BLAST_RADIUS  = 7.5;   // m — how far an explosion can still shove you
 const BLAST_POWER   = 95;    // impulse at the very centre of the blast
 const BLAST_DECAY   = 0.10;  // fraction of horizontal blast speed left after 1 s
 
-// 🦘 Light weapons grant a mid-air second jump. Sidearms and SMGs are the light
-// ones; anything you have to brace to fire is not.
+// 🦘 Mid-air second jump. The rule is NO FIREARMS — a gun is a lump of steel and
+// a magazine, and it made no sense that a revolver let you double jump while
+// bare fists did not. What qualifies is being unburdened or carrying something
+// that isn't a firearm at all:
+//   • fists — nothing in your hands, the lightest possible loadout
+//   • crossbow and the compressed-air weapons — no powder, no recoil, no weight
+// Sidearms and SMGs used to qualify wholesale and no longer do.
+const DOUBLE_JUMP_IDS = new Set([
+  'fists',        // Brass Knuckles — empty-handed
+  'crossbow',
+  'air_rifle',    // Compressed Air Rifle
+  'dart_gun',
+  'blowgun',
+  'paintball',    // CO2/gas marker, not a firearm
+]);
 function grantsDoubleJump(w) {
   if (!w) return false;
-  if (w.doubleJump) return true;              // explicit opt-in on the item
-  if (w.slot === 'secondary') return true;    // pistols, thrown, sidearms
-  return /\bSMG\b|PDW/i.test(w.type || '');
+  // Per-item opt-in stays: gravity_launcher, phase_driver, phase_pistol,
+  // lightsabre, phase_blade and gravity_hammer set doubleJump themselves, and
+  // three of them ADVERTISE it in their ability text ("… DOUBLE JUMP"). Dropping
+  // it silently would make the shop copy lie.
+  if (w.doubleJump) return true;
+  return DOUBLE_JUMP_IDS.has(w.id);
 }
 // 🗡️ Anything with an edge or a point grants an air dash. Explicit ids first for
 // the ones whose names don't say it (a screwdriver is a point; a Lancer has a
