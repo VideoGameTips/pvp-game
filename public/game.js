@@ -1408,6 +1408,409 @@ const ABILITY_OPTIONS = {
       duration:5000, rateMult:0.6, spreadMult:0.6, spinBoost:true,
       desc:'5 s · barrels wound up · faster and tighter' },
   ],
+  // ── Assault rifles & marksman ───────────────────────────
+  burst: [
+      { id:'burst_focus', name:'Focus Fire', price:150, ...{ type:'buff', cd:10000, duration:4000, spreadMult:0.25, dmgMult:1.15 }, desc:'4 s · near-zero spread · +15% damage' },
+      { id:'burst_slug', name:'Slug Round', price:200, ...{ type:'powershot', cd:11000, pellets:1, spreadMult:0, dmgMult:2.4 }, desc:'Next shot · 2.4x damage, pinpoint' },
+  ],
+  lever: [
+      { id:'lever_focus', name:'Focus Fire', price:200, ...{ type:'buff', cd:10000, duration:4000, spreadMult:0.25, dmgMult:1.15 }, desc:'4 s · near-zero spread · +15% damage' },
+      { id:'lever_slug', name:'Slug Round', price:250, ...{ type:'powershot', cd:11000, pellets:1, spreadMult:0, dmgMult:2.4 }, desc:'Next shot · 2.4x damage, pinpoint' },
+  ],
+  railgun: [
+      { id:'railgun_focus', name:'Focus Fire', price:330, ...{ type:'buff', cd:10000, duration:4000, spreadMult:0.25, dmgMult:1.15 }, desc:'4 s · near-zero spread · +15% damage' },
+      { id:'railgun_slug', name:'Slug Round', price:420, ...{ type:'powershot', cd:11000, pellets:1, spreadMult:0, dmgMult:2.4 }, desc:'Next shot · 2.4x damage, pinpoint' },
+  ],
+  m1_garand: [
+      { id:'m1_garand_focus', name:'Focus Fire', price:210, ...{ type:'buff', cd:10000, duration:4000, spreadMult:0.25, dmgMult:1.15 }, desc:'4 s · near-zero spread · +15% damage' },
+      { id:'m1_garand_slug', name:'Slug Round', price:270, ...{ type:'powershot', cd:11000, pellets:1, spreadMult:0, dmgMult:2.4 }, desc:'Next shot · 2.4x damage, pinpoint' },
+  ],
+  switchblade_gun: [
+      { id:'switchblade_gun_focus', name:'Focus Fire', price:230, ...{ type:'buff', cd:10000, duration:4000, spreadMult:0.25, dmgMult:1.15 }, desc:'4 s · near-zero spread · +15% damage' },
+      { id:'switchblade_gun_slug', name:'Slug Round', price:290, ...{ type:'powershot', cd:11000, pellets:1, spreadMult:0, dmgMult:2.4 }, desc:'Next shot · 2.4x damage, pinpoint' },
+  ],
+  flechette: [
+      { id:'flechette_focus', name:'Focus Fire', price:210, ...{ type:'buff', cd:10000, duration:4000, spreadMult:0.25, dmgMult:1.15 }, desc:'4 s · near-zero spread · +15% damage' },
+      { id:'flechette_slug', name:'Slug Round', price:270, ...{ type:'powershot', cd:11000, pellets:1, spreadMult:0, dmgMult:2.4 }, desc:'Next shot · 2.4x damage, pinpoint' },
+  ],
+  coilgun: [
+      { id:'coilgun_focus', name:'Focus Fire', price:250, ...{ type:'buff', cd:10000, duration:4000, spreadMult:0.25, dmgMult:1.15 }, desc:'4 s · near-zero spread · +15% damage' },
+      { id:'coilgun_slug', name:'Slug Round', price:320, ...{ type:'powershot', cd:11000, pellets:1, spreadMult:0, dmgMult:2.4 }, desc:'Next shot · 2.4x damage, pinpoint' },
+  ],
+  air_rifle: [
+      { id:'air_rifle_focus', name:'Focus Fire', price:180, ...{ type:'buff', cd:10000, duration:4000, spreadMult:0.25, dmgMult:1.15 }, desc:'4 s · near-zero spread · +15% damage' },
+      { id:'air_rifle_slug', name:'Slug Round', price:220, ...{ type:'powershot', cd:11000, pellets:1, spreadMult:0, dmgMult:2.4 }, desc:'Next shot · 2.4x damage, pinpoint' },
+  ],
+  twin_ar: [
+      { id:'twin_ar_focus', name:'Focus Fire', price:240, ...{ type:'buff', cd:10000, duration:4000, spreadMult:0.25, dmgMult:1.15 }, desc:'4 s · near-zero spread · +15% damage' },
+      { id:'twin_ar_slug', name:'Slug Round', price:310, ...{ type:'powershot', cd:11000, pellets:1, spreadMult:0, dmgMult:2.4 }, desc:'Next shot · 2.4x damage, pinpoint' },
+  ],
+  swarm_rifle: [
+      { id:'swarm_rifle_focus', name:'Focus Fire', price:250, ...{ type:'buff', cd:10000, duration:4000, spreadMult:0.25, dmgMult:1.15 }, desc:'4 s · near-zero spread · +15% damage' },
+      { id:'swarm_rifle_slug', name:'Slug Round', price:320, ...{ type:'powershot', cd:11000, pellets:1, spreadMult:0, dmgMult:2.4 }, desc:'Next shot · 2.4x damage, pinpoint' },
+  ],
+  airburst_projector: [
+      { id:'airburst_projector_focus', name:'Focus Fire', price:200, ...{ type:'buff', cd:10000, duration:4000, spreadMult:0.25, dmgMult:1.15 }, desc:'4 s · near-zero spread · +15% damage' },
+      { id:'airburst_projector_slug', name:'Slug Round', price:250, ...{ type:'powershot', cd:11000, pellets:1, spreadMult:0, dmgMult:2.4 }, desc:'Next shot · 2.4x damage, pinpoint' },
+  ],
+  seismic_hammer: [
+      { id:'seismic_hammer_focus', name:'Focus Fire', price:260, ...{ type:'buff', cd:10000, duration:4000, spreadMult:0.25, dmgMult:1.15 }, desc:'4 s · near-zero spread · +15% damage' },
+      { id:'seismic_hammer_slug', name:'Slug Round', price:340, ...{ type:'powershot', cd:11000, pellets:1, spreadMult:0, dmgMult:2.4 }, desc:'Next shot · 2.4x damage, pinpoint' },
+  ],
+  event_horizon: [
+      { id:'event_horizon_focus', name:'Focus Fire', price:900, ...{ type:'buff', cd:10000, duration:4000, spreadMult:0.25, dmgMult:1.15 }, desc:'4 s · near-zero spread · +15% damage' },
+      { id:'event_horizon_slug', name:'Slug Round', price:900, ...{ type:'powershot', cd:11000, pellets:1, spreadMult:0, dmgMult:2.4 }, desc:'Next shot · 2.4x damage, pinpoint' },
+  ],
+  quantum_repeater: [
+      { id:'quantum_repeater_focus', name:'Focus Fire', price:900, ...{ type:'buff', cd:10000, duration:4000, spreadMult:0.25, dmgMult:1.15 }, desc:'4 s · near-zero spread · +15% damage' },
+      { id:'quantum_repeater_slug', name:'Slug Round', price:900, ...{ type:'powershot', cd:11000, pellets:1, spreadMult:0, dmgMult:2.4 }, desc:'Next shot · 2.4x damage, pinpoint' },
+  ],
+  xm7: [
+      { id:'xm7_focus', name:'Focus Fire', price:140, ...{ type:'buff', cd:10000, duration:4000, spreadMult:0.25, dmgMult:1.15 }, desc:'4 s · near-zero spread · +15% damage' },
+      { id:'xm7_slug', name:'Slug Round', price:180, ...{ type:'powershot', cd:11000, pellets:1, spreadMult:0, dmgMult:2.4 }, desc:'Next shot · 2.4x damage, pinpoint' },
+  ],
+  lancer: [
+      { id:'lancer_focus', name:'Focus Fire', price:250, ...{ type:'buff', cd:10000, duration:4000, spreadMult:0.25, dmgMult:1.15 }, desc:'4 s · near-zero spread · +15% damage' },
+      { id:'lancer_slug', name:'Slug Round', price:320, ...{ type:'powershot', cd:11000, pellets:1, spreadMult:0, dmgMult:2.4 }, desc:'Next shot · 2.4x damage, pinpoint' },
+  ],
+
+  // ── SMGs ────────────────────────────────────────────────
+  mp40: [
+      { id:'mp40_trigger', name:'Hair Trigger', price:110, ...{ type:'buff', cd:9000, duration:4000, rateMult:0.55, dmgMult:0.9 }, desc:'4 s · much faster fire for 90% damage' },
+      { id:'mp40_control', name:'Spray Control', price:120, ...{ type:'buff', cd:10000, duration:5000, spreadMult:0.2, dmgMult:1.1 }, desc:'5 s · tight spray · +10% damage' },
+  ],
+  p90: [
+      { id:'p90_trigger', name:'Hair Trigger', price:190, ...{ type:'buff', cd:9000, duration:4000, rateMult:0.55, dmgMult:0.9 }, desc:'4 s · much faster fire for 90% damage' },
+      { id:'p90_control', name:'Spray Control', price:210, ...{ type:'buff', cd:10000, duration:5000, spreadMult:0.2, dmgMult:1.1 }, desc:'5 s · tight spray · +10% damage' },
+  ],
+  vector: [
+      { id:'vector_trigger', name:'Hair Trigger', price:170, ...{ type:'buff', cd:9000, duration:4000, rateMult:0.55, dmgMult:0.9 }, desc:'4 s · much faster fire for 90% damage' },
+      { id:'vector_control', name:'Spray Control', price:180, ...{ type:'buff', cd:10000, duration:5000, spreadMult:0.2, dmgMult:1.1 }, desc:'5 s · tight spray · +10% damage' },
+  ],
+  smart_smg: [
+      { id:'smart_smg_trigger', name:'Hair Trigger', price:210, ...{ type:'buff', cd:9000, duration:4000, rateMult:0.55, dmgMult:0.9 }, desc:'4 s · much faster fire for 90% damage' },
+      { id:'smart_smg_control', name:'Spray Control', price:230, ...{ type:'buff', cd:10000, duration:5000, spreadMult:0.2, dmgMult:1.1 }, desc:'5 s · tight spray · +10% damage' },
+  ],
+  hkmp7: [
+      { id:'hkmp7_trigger', name:'Hair Trigger', price:140, ...{ type:'buff', cd:9000, duration:4000, rateMult:0.55, dmgMult:0.9 }, desc:'4 s · much faster fire for 90% damage' },
+      { id:'hkmp7_control', name:'Spray Control', price:150, ...{ type:'buff', cd:10000, duration:5000, spreadMult:0.2, dmgMult:1.1 }, desc:'5 s · tight spray · +10% damage' },
+  ],
+  p90_spec: [
+      { id:'p90_spec_trigger', name:'Hair Trigger', price:140, ...{ type:'buff', cd:9000, duration:4000, rateMult:0.55, dmgMult:0.9 }, desc:'4 s · much faster fire for 90% damage' },
+      { id:'p90_spec_control', name:'Spray Control', price:150, ...{ type:'buff', cd:10000, duration:5000, spreadMult:0.2, dmgMult:1.1 }, desc:'5 s · tight spray · +10% damage' },
+  ],
+
+  // ── Snipers ─────────────────────────────────────────────
+  amr: [
+      { id:'amr_hold', name:'Hold Breath', price:900, ...{ type:'buff', cd:12000, duration:5000, spreadMult:0.1, dmgMult:1.2 }, desc:'5 s · steadied aim · +20% damage' },
+      { id:'amr_pierce', name:'Piercing Shot', price:900, ...{ type:'powershot', cd:13000, pellets:1, spreadMult:0, dmgMult:2.0, speedMult:1.8 }, desc:'Next shot · 2x damage at 1.8x velocity' },
+  ],
+  barrett: [
+      { id:'barrett_hold', name:'Hold Breath', price:130, ...{ type:'buff', cd:12000, duration:5000, spreadMult:0.1, dmgMult:1.2 }, desc:'5 s · steadied aim · +20% damage' },
+      { id:'barrett_pierce', name:'Piercing Shot', price:180, ...{ type:'powershot', cd:13000, pellets:1, spreadMult:0, dmgMult:2.0, speedMult:1.8 }, desc:'Next shot · 2x damage at 1.8x velocity' },
+  ],
+
+  // ── Machine guns ────────────────────────────────────────
+  rpd: [
+      { id:'rpd_suppress', name:'Suppressing Fire', price:250, ...{ type:'buff', cd:12000, duration:5000, rateMult:0.7, spreadMult:0.5 }, desc:'5 s · faster and tighter sustained fire' },
+      { id:'rpd_spin', name:'Spin Up', price:320, ...{ type:'buff', cd:14000, duration:5000, rateMult:0.6, spreadMult:0.6, spinBoost:true }, desc:'5 s · barrels wound up' },
+  ],
+  burst_cannon: [
+      { id:'burst_cannon_suppress', name:'Suppressing Fire', price:260, ...{ type:'buff', cd:12000, duration:5000, rateMult:0.7, spreadMult:0.5 }, desc:'5 s · faster and tighter sustained fire' },
+      { id:'burst_cannon_spin', name:'Spin Up', price:340, ...{ type:'buff', cd:14000, duration:5000, rateMult:0.6, spreadMult:0.6, spinBoost:true }, desc:'5 s · barrels wound up' },
+  ],
+  magnetar: [
+      { id:'magnetar_suppress', name:'Suppressing Fire', price:900, ...{ type:'buff', cd:12000, duration:5000, rateMult:0.7, spreadMult:0.5 }, desc:'5 s · faster and tighter sustained fire' },
+      { id:'magnetar_spin', name:'Spin Up', price:900, ...{ type:'buff', cd:14000, duration:5000, rateMult:0.6, spreadMult:0.6, spinBoost:true }, desc:'5 s · barrels wound up' },
+  ],
+  gau19: [
+      { id:'gau19_suppress', name:'Suppressing Fire', price:140, ...{ type:'buff', cd:12000, duration:5000, rateMult:0.7, spreadMult:0.5 }, desc:'5 s · faster and tighter sustained fire' },
+      { id:'gau19_spin', name:'Spin Up', price:180, ...{ type:'buff', cd:14000, duration:5000, rateMult:0.6, spreadMult:0.6, spinBoost:true }, desc:'5 s · barrels wound up' },
+  ],
+  mk44: [
+      { id:'mk44_suppress', name:'Suppressing Fire', price:140, ...{ type:'buff', cd:12000, duration:5000, rateMult:0.7, spreadMult:0.5 }, desc:'5 s · faster and tighter sustained fire' },
+      { id:'mk44_spin', name:'Spin Up', price:180, ...{ type:'buff', cd:14000, duration:5000, rateMult:0.6, spreadMult:0.6, spinBoost:true }, desc:'5 s · barrels wound up' },
+  ],
+  m134: [
+      { id:'m134_suppress', name:'Suppressing Fire', price:140, ...{ type:'buff', cd:12000, duration:5000, rateMult:0.7, spreadMult:0.5 }, desc:'5 s · faster and tighter sustained fire' },
+      { id:'m134_spin', name:'Spin Up', price:180, ...{ type:'buff', cd:14000, duration:5000, rateMult:0.6, spreadMult:0.6, spinBoost:true }, desc:'5 s · barrels wound up' },
+  ],
+  mg42: [
+      { id:'mg42_suppress', name:'Suppressing Fire', price:140, ...{ type:'buff', cd:12000, duration:5000, rateMult:0.7, spreadMult:0.5 }, desc:'5 s · faster and tighter sustained fire' },
+      { id:'mg42_spin', name:'Spin Up', price:180, ...{ type:'buff', cd:14000, duration:5000, rateMult:0.6, spreadMult:0.6, spinBoost:true }, desc:'5 s · barrels wound up' },
+  ],
+
+  // ── Grenade launchers ───────────────────────────────────
+  grenade_launcher: [
+      { id:'grenade_launcher_cluster', name:'Cluster Shot', price:350, ...{ type:'multishot', cd:13000, count:3, spread:0.12 }, desc:'Three rounds in a spread' },
+      { id:'grenade_launcher_airburst', name:'Airburst', price:380, ...{ type:'powershot', cd:12000, pellets:1, spreadMult:0, dmgMult:1.6, explodeOnHit:true }, desc:'Next round · 1.6x damage, bursts on contact' },
+  ],
+  gravity_launcher: [
+      { id:'gravity_launcher_cluster', name:'Cluster Shot', price:340, ...{ type:'multishot', cd:13000, count:3, spread:0.12 }, desc:'Three rounds in a spread' },
+      { id:'gravity_launcher_airburst', name:'Airburst', price:360, ...{ type:'powershot', cd:12000, pellets:1, spreadMult:0, dmgMult:1.6, explodeOnHit:true }, desc:'Next round · 1.6x damage, bursts on contact' },
+  ],
+  potato_cannon: [
+      { id:'potato_cannon_cluster', name:'Cluster Shot', price:150, ...{ type:'multishot', cd:13000, count:3, spread:0.12 }, desc:'Three rounds in a spread' },
+      { id:'potato_cannon_airburst', name:'Airburst', price:170, ...{ type:'powershot', cd:12000, pellets:1, spreadMult:0, dmgMult:1.6, explodeOnHit:true }, desc:'Next round · 1.6x damage, bursts on contact' },
+  ],
+  mortar_rifle: [
+      { id:'mortar_rifle_cluster', name:'Cluster Shot', price:340, ...{ type:'multishot', cd:13000, count:3, spread:0.12 }, desc:'Three rounds in a spread' },
+      { id:'mortar_rifle_airburst', name:'Airburst', price:360, ...{ type:'powershot', cd:12000, pellets:1, spreadMult:0, dmgMult:1.6, explodeOnHit:true }, desc:'Next round · 1.6x damage, bursts on contact' },
+  ],
+  firework_launcher: [
+      { id:'firework_launcher_cluster', name:'Cluster Shot', price:250, ...{ type:'multishot', cd:13000, count:3, spread:0.12 }, desc:'Three rounds in a spread' },
+      { id:'firework_launcher_airburst', name:'Airburst', price:270, ...{ type:'powershot', cd:12000, pellets:1, spreadMult:0, dmgMult:1.6, explodeOnHit:true }, desc:'Next round · 1.6x damage, bursts on contact' },
+  ],
+  shockwave_launcher: [
+      { id:'shockwave_launcher_cluster', name:'Cluster Shot', price:320, ...{ type:'multishot', cd:13000, count:3, spread:0.12 }, desc:'Three rounds in a spread' },
+      { id:'shockwave_launcher_airburst', name:'Airburst', price:350, ...{ type:'powershot', cd:12000, pellets:1, spreadMult:0, dmgMult:1.6, explodeOnHit:true }, desc:'Next round · 1.6x damage, bursts on contact' },
+  ],
+  storm_cannon: [
+      { id:'storm_cannon_cluster', name:'Cluster Shot', price:380, ...{ type:'multishot', cd:13000, count:3, spread:0.12 }, desc:'Three rounds in a spread' },
+      { id:'storm_cannon_airburst', name:'Airburst', price:410, ...{ type:'powershot', cd:12000, pellets:1, spreadMult:0, dmgMult:1.6, explodeOnHit:true }, desc:'Next round · 1.6x damage, bursts on contact' },
+  ],
+  pinball_launcher: [
+      { id:'pinball_launcher_cluster', name:'Cluster Shot', price:310, ...{ type:'multishot', cd:13000, count:3, spread:0.12 }, desc:'Three rounds in a spread' },
+      { id:'pinball_launcher_airburst', name:'Airburst', price:330, ...{ type:'powershot', cd:12000, pellets:1, spreadMult:0, dmgMult:1.6, explodeOnHit:true }, desc:'Next round · 1.6x damage, bursts on contact' },
+  ],
+  nebula_mortar: [
+      { id:'nebula_mortar_cluster', name:'Cluster Shot', price:900, ...{ type:'multishot', cd:13000, count:3, spread:0.12 }, desc:'Three rounds in a spread' },
+      { id:'nebula_mortar_airburst', name:'Airburst', price:900, ...{ type:'powershot', cd:12000, pellets:1, spreadMult:0, dmgMult:1.6, explodeOnHit:true }, desc:'Next round · 1.6x damage, bursts on contact' },
+  ],
+
+  // ── Rocket launchers ────────────────────────────────────
+  rpg: [
+      { id:'rpg_salvo', name:'Salvo', price:360, ...{ type:'multishot', cd:15000, count:2, spread:0.08 }, desc:'Two rockets at once' },
+      { id:'rpg_shaped', name:'Shaped Charge', price:390, ...{ type:'powershot', cd:14000, pellets:1, spreadMult:0, dmgMult:2.0, explodeOnHit:true }, desc:'Next rocket · 2x damage' },
+  ],
+  bazooka: [
+      { id:'bazooka_salvo', name:'Salvo', price:430, ...{ type:'multishot', cd:15000, count:2, spread:0.08 }, desc:'Two rockets at once' },
+      { id:'bazooka_shaped', name:'Shaped Charge', price:470, ...{ type:'powershot', cd:14000, pellets:1, spreadMult:0, dmgMult:2.0, explodeOnHit:true }, desc:'Next rocket · 2x damage' },
+  ],
+
+  // ── Sidearms ────────────────────────────────────────────
+  revolver: [
+      { id:'revolver_fan', name:'Rapid Fan', price:90, ...{ type:'fanfire', cd:8000, count:5, delay:70 }, desc:'Five shots as fast as the hammer falls' },
+      { id:'revolver_quick', name:'Quick Draw', price:80, ...{ type:'buff', cd:8000, duration:4000, rateMult:0.5, dmgMult:0.85 }, desc:'4 s · double fire rate for 85% damage' },
+  ],
+  flare: [
+      { id:'flare_fan', name:'Rapid Fan', price:80, ...{ type:'fanfire', cd:8000, count:5, delay:70 }, desc:'Five shots as fast as the hammer falls' },
+      { id:'flare_quick', name:'Quick Draw', price:80, ...{ type:'buff', cd:8000, duration:4000, rateMult:0.5, dmgMult:0.85 }, desc:'4 s · double fire rate for 85% damage' },
+  ],
+  hand_cannon: [
+      { id:'hand_cannon_fan', name:'Rapid Fan', price:160, ...{ type:'fanfire', cd:8000, count:5, delay:70 }, desc:'Five shots as fast as the hammer falls' },
+      { id:'hand_cannon_quick', name:'Quick Draw', price:130, ...{ type:'buff', cd:8000, duration:4000, rateMult:0.5, dmgMult:0.85 }, desc:'4 s · double fire rate for 85% damage' },
+  ],
+  snub_revolver: [
+      { id:'snub_revolver_fan', name:'Rapid Fan', price:80, ...{ type:'fanfire', cd:8000, count:5, delay:70 }, desc:'Five shots as fast as the hammer falls' },
+      { id:'snub_revolver_quick', name:'Quick Draw', price:80, ...{ type:'buff', cd:8000, duration:4000, rateMult:0.5, dmgMult:0.85 }, desc:'4 s · double fire rate for 85% damage' },
+  ],
+  duelist_pistol: [
+      { id:'duelist_pistol_fan', name:'Rapid Fan', price:170, ...{ type:'fanfire', cd:8000, count:5, delay:70 }, desc:'Five shots as fast as the hammer falls' },
+      { id:'duelist_pistol_quick', name:'Quick Draw', price:140, ...{ type:'buff', cd:8000, duration:4000, rateMult:0.5, dmgMult:0.85 }, desc:'4 s · double fire rate for 85% damage' },
+  ],
+  mauser: [
+      { id:'mauser_fan', name:'Rapid Fan', price:120, ...{ type:'fanfire', cd:8000, count:5, delay:70 }, desc:'Five shots as fast as the hammer falls' },
+      { id:'mauser_quick', name:'Quick Draw', price:100, ...{ type:'buff', cd:8000, duration:4000, rateMult:0.5, dmgMult:0.85 }, desc:'4 s · double fire rate for 85% damage' },
+  ],
+  signal_pistol: [
+      { id:'signal_pistol_fan', name:'Rapid Fan', price:120, ...{ type:'fanfire', cd:8000, count:5, delay:70 }, desc:'Five shots as fast as the hammer falls' },
+      { id:'signal_pistol_quick', name:'Quick Draw', price:100, ...{ type:'buff', cd:8000, duration:4000, rateMult:0.5, dmgMult:0.85 }, desc:'4 s · double fire rate for 85% damage' },
+  ],
+  desert_eagle: [
+      { id:'desert_eagle_fan', name:'Rapid Fan', price:150, ...{ type:'fanfire', cd:8000, count:5, delay:70 }, desc:'Five shots as fast as the hammer falls' },
+      { id:'desert_eagle_quick', name:'Quick Draw', price:130, ...{ type:'buff', cd:8000, duration:4000, rateMult:0.5, dmgMult:0.85 }, desc:'4 s · double fire rate for 85% damage' },
+  ],
+  m1911: [
+      { id:'m1911_fan', name:'Rapid Fan', price:150, ...{ type:'fanfire', cd:8000, count:5, delay:70 }, desc:'Five shots as fast as the hammer falls' },
+      { id:'m1911_quick', name:'Quick Draw', price:130, ...{ type:'buff', cd:8000, duration:4000, rateMult:0.5, dmgMult:0.85 }, desc:'4 s · double fire rate for 85% damage' },
+  ],
+  five_seven: [
+      { id:'five_seven_fan', name:'Rapid Fan', price:150, ...{ type:'fanfire', cd:8000, count:5, delay:70 }, desc:'Five shots as fast as the hammer falls' },
+      { id:'five_seven_quick', name:'Quick Draw', price:130, ...{ type:'buff', cd:8000, duration:4000, rateMult:0.5, dmgMult:0.85 }, desc:'4 s · double fire rate for 85% damage' },
+  ],
+
+  // ── Automatic sidearms ──────────────────────────────────
+  cycler: [
+      { id:'cycler_trigger', name:'Hair Trigger', price:80, ...{ type:'buff', cd:9000, duration:4000, rateMult:0.55, dmgMult:0.9 }, desc:'4 s · much faster fire for 90% damage' },
+      { id:'cycler_dump', name:'Mag Dump', price:80, ...{ type:'fanfire_all', cd:11000, delay:60 }, desc:'Empty the magazine as fast as it will go' },
+  ],
+  machine_pistol: [
+      { id:'machine_pistol_trigger', name:'Hair Trigger', price:120, ...{ type:'buff', cd:9000, duration:4000, rateMult:0.55, dmgMult:0.9 }, desc:'4 s · much faster fire for 90% damage' },
+      { id:'machine_pistol_dump', name:'Mag Dump', price:130, ...{ type:'fanfire_all', cd:11000, delay:60 }, desc:'Empty the magazine as fast as it will go' },
+  ],
+  laser_pointer: [
+      { id:'laser_pointer_trigger', name:'Hair Trigger', price:80, ...{ type:'buff', cd:9000, duration:4000, rateMult:0.55, dmgMult:0.9 }, desc:'4 s · much faster fire for 90% damage' },
+      { id:'laser_pointer_dump', name:'Mag Dump', price:80, ...{ type:'fanfire_all', cd:11000, delay:60 }, desc:'Empty the magazine as fast as it will go' },
+  ],
+  machine_revolver: [
+      { id:'machine_revolver_trigger', name:'Hair Trigger', price:130, ...{ type:'buff', cd:9000, duration:4000, rateMult:0.55, dmgMult:0.9 }, desc:'4 s · much faster fire for 90% damage' },
+      { id:'machine_revolver_dump', name:'Mag Dump', price:140, ...{ type:'fanfire_all', cd:11000, delay:60 }, desc:'Empty the magazine as fast as it will go' },
+  ],
+  auto_revolver: [
+      { id:'auto_revolver_trigger', name:'Hair Trigger', price:120, ...{ type:'buff', cd:9000, duration:4000, rateMult:0.55, dmgMult:0.9 }, desc:'4 s · much faster fire for 90% damage' },
+      { id:'auto_revolver_dump', name:'Mag Dump', price:130, ...{ type:'fanfire_all', cd:11000, delay:60 }, desc:'Empty the magazine as fast as it will go' },
+  ],
+  nail_gun: [
+      { id:'nail_gun_trigger', name:'Hair Trigger', price:100, ...{ type:'buff', cd:9000, duration:4000, rateMult:0.55, dmgMult:0.9 }, desc:'4 s · much faster fire for 90% damage' },
+      { id:'nail_gun_dump', name:'Mag Dump', price:110, ...{ type:'fanfire_all', cd:11000, delay:60 }, desc:'Empty the magazine as fast as it will go' },
+  ],
+  pulse_needle: [
+      { id:'pulse_needle_trigger', name:'Hair Trigger', price:900, ...{ type:'buff', cd:9000, duration:4000, rateMult:0.55, dmgMult:0.9 }, desc:'4 s · much faster fire for 90% damage' },
+      { id:'pulse_needle_dump', name:'Mag Dump', price:900, ...{ type:'fanfire_all', cd:11000, delay:60 }, desc:'Empty the magazine as fast as it will go' },
+  ],
+  glock18: [
+      { id:'glock18_trigger', name:'Hair Trigger', price:140, ...{ type:'buff', cd:9000, duration:4000, rateMult:0.55, dmgMult:0.9 }, desc:'4 s · much faster fire for 90% damage' },
+      { id:'glock18_dump', name:'Mag Dump', price:150, ...{ type:'fanfire_all', cd:11000, delay:60 }, desc:'Empty the magazine as fast as it will go' },
+  ],
+
+  // ── Pellet sidearms ─────────────────────────────────────
+  shorty: [
+      { id:'shorty_double', name:'Double Tap', price:100, ...{ type:'fanfire', cd:8000, count:2, delay:110 }, desc:'Both barrels, back to back' },
+      { id:'shorty_slug', name:'Slug Shell', price:120, ...{ type:'powershot', cd:10000, pellets:1, spreadMult:0, dmgMult:3.0 }, desc:'Next shell · one heavy slug' },
+  ],
+  sawed_off: [
+      { id:'sawed_off_double', name:'Double Tap', price:140, ...{ type:'fanfire', cd:8000, count:2, delay:110 }, desc:'Both barrels, back to back' },
+      { id:'sawed_off_slug', name:'Slug Shell', price:170, ...{ type:'powershot', cd:10000, pellets:1, spreadMult:0, dmgMult:3.0 }, desc:'Next shell · one heavy slug' },
+  ],
+  boomstick: [
+      { id:'boomstick_double', name:'Double Tap', price:120, ...{ type:'fanfire', cd:8000, count:2, delay:110 }, desc:'Both barrels, back to back' },
+      { id:'boomstick_slug', name:'Slug Shell', price:140, ...{ type:'powershot', cd:10000, pellets:1, spreadMult:0, dmgMult:3.0 }, desc:'Next shell · one heavy slug' },
+  ],
+
+  // ── Thrown weapons ──────────────────────────────────────
+  throwing_knives: [
+      { id:'throwing_knives_triple', name:'Triple Throw', price:80, ...{ type:'multishot', cd:9000, count:3, spread:0.14 }, desc:'Three at once, fanned out' },
+      { id:'throwing_knives_heavy', name:'Heavy Throw', price:80, ...{ type:'powershot', cd:9000, pellets:1, spreadMult:0, dmgMult:2.2, speedMult:1.4 }, desc:'Next throw · 2.2x damage, thrown harder' },
+  ],
+  throwing_axes: [
+      { id:'throwing_axes_triple', name:'Triple Throw', price:140, ...{ type:'multishot', cd:9000, count:3, spread:0.14 }, desc:'Three at once, fanned out' },
+      { id:'throwing_axes_heavy', name:'Heavy Throw', price:130, ...{ type:'powershot', cd:9000, pellets:1, spreadMult:0, dmgMult:2.2, speedMult:1.4 }, desc:'Next throw · 2.2x damage, thrown harder' },
+  ],
+  boomerang: [
+      { id:'boomerang_triple', name:'Triple Throw', price:110, ...{ type:'multishot', cd:9000, count:3, spread:0.14 }, desc:'Three at once, fanned out' },
+      { id:'boomerang_heavy', name:'Heavy Throw', price:100, ...{ type:'powershot', cd:9000, pellets:1, spreadMult:0, dmgMult:2.2, speedMult:1.4 }, desc:'Next throw · 2.2x damage, thrown harder' },
+  ],
+  traffic_cone: [
+      { id:'traffic_cone_triple', name:'Triple Throw', price:100, ...{ type:'multishot', cd:9000, count:3, spread:0.14 }, desc:'Three at once, fanned out' },
+      { id:'traffic_cone_heavy', name:'Heavy Throw', price:90, ...{ type:'powershot', cd:9000, pellets:1, spreadMult:0, dmgMult:2.2, speedMult:1.4 }, desc:'Next throw · 2.2x damage, thrown harder' },
+  ],
+  cream_pie: [
+      { id:'cream_pie_triple', name:'Triple Throw', price:80, ...{ type:'multishot', cd:9000, count:3, spread:0.14 }, desc:'Three at once, fanned out' },
+      { id:'cream_pie_heavy', name:'Heavy Throw', price:80, ...{ type:'powershot', cd:9000, pellets:1, spreadMult:0, dmgMult:2.2, speedMult:1.4 }, desc:'Next throw · 2.2x damage, thrown harder' },
+  ],
+
+  // ── Bows & bolt throwers ────────────────────────────────
+  harpoon_gun: [
+      { id:'harpoon_gun_charge', name:'Charge Shot', price:310, ...{ type:'charge' }, desc:'Hold to draw · longer hold = faster bolt + more damage' },
+      { id:'harpoon_gun_quick', name:'Quick Draw', price:240, ...{ type:'buff', cd:9000, duration:4000, rateMult:0.45, dmgMult:0.7 }, desc:'4 s · fire twice as fast for 70% damage' },
+  ],
+  dart_gun: [
+      { id:'dart_gun_charge', name:'Charge Shot', price:110, ...{ type:'charge' }, desc:'Hold to draw · longer hold = faster bolt + more damage' },
+      { id:'dart_gun_quick', name:'Quick Draw', price:90, ...{ type:'buff', cd:9000, duration:4000, rateMult:0.45, dmgMult:0.7 }, desc:'4 s · fire twice as fast for 70% damage' },
+  ],
+
+  // ── Energy weapons ──────────────────────────────────────
+  plasma_carbine: [
+      { id:'plasma_carbine_over', name:'Overcharge', price:250, ...{ type:'buff', cd:11000, duration:4500, dmgMult:1.5, rateMult:0.85 }, desc:'4.5 s · +50% damage' },
+      { id:'plasma_carbine_lens', name:'Focus Lens', price:290, ...{ type:'powershot', cd:12000, pellets:1, spreadMult:0, dmgMult:2.2, speedMult:1.6 }, desc:'Next shot · 2.2x damage at 1.6x velocity' },
+  ],
+  prism_launcher: [
+      { id:'prism_launcher_over', name:'Overcharge', price:250, ...{ type:'buff', cd:11000, duration:4500, dmgMult:1.5, rateMult:0.85 }, desc:'4.5 s · +50% damage' },
+      { id:'prism_launcher_lens', name:'Focus Lens', price:290, ...{ type:'powershot', cd:12000, pellets:1, spreadMult:0, dmgMult:2.2, speedMult:1.6 }, desc:'Next shot · 2.2x damage at 1.6x velocity' },
+  ],
+  painter_beam: [
+      { id:'painter_beam_over', name:'Overcharge', price:180, ...{ type:'buff', cd:11000, duration:4500, dmgMult:1.5, rateMult:0.85 }, desc:'4.5 s · +50% damage' },
+      { id:'painter_beam_lens', name:'Focus Lens', price:210, ...{ type:'powershot', cd:12000, pellets:1, spreadMult:0, dmgMult:2.2, speedMult:1.6 }, desc:'Next shot · 2.2x damage at 1.6x velocity' },
+  ],
+  portal_launcher: [
+      { id:'portal_launcher_over', name:'Overcharge', price:280, ...{ type:'buff', cd:11000, duration:4500, dmgMult:1.5, rateMult:0.85 }, desc:'4.5 s · +50% damage' },
+      { id:'portal_launcher_lens', name:'Focus Lens', price:320, ...{ type:'powershot', cd:12000, pellets:1, spreadMult:0, dmgMult:2.2, speedMult:1.6 }, desc:'Next shot · 2.2x damage at 1.6x velocity' },
+  ],
+  traffic_controller: [
+      { id:'traffic_controller_over', name:'Overcharge', price:190, ...{ type:'buff', cd:11000, duration:4500, dmgMult:1.5, rateMult:0.85 }, desc:'4.5 s · +50% damage' },
+      { id:'traffic_controller_lens', name:'Focus Lens', price:220, ...{ type:'powershot', cd:12000, pellets:1, spreadMult:0, dmgMult:2.2, speedMult:1.6 }, desc:'Next shot · 2.2x damage at 1.6x velocity' },
+  ],
+  solar_lance: [
+      { id:'solar_lance_over', name:'Overcharge', price:900, ...{ type:'buff', cd:11000, duration:4500, dmgMult:1.5, rateMult:0.85 }, desc:'4.5 s · +50% damage' },
+      { id:'solar_lance_lens', name:'Focus Lens', price:900, ...{ type:'powershot', cd:12000, pellets:1, spreadMult:0, dmgMult:2.2, speedMult:1.6 }, desc:'Next shot · 2.2x damage at 1.6x velocity' },
+  ],
+  prism_engine: [
+      { id:'prism_engine_over', name:'Overcharge', price:900, ...{ type:'buff', cd:11000, duration:4500, dmgMult:1.5, rateMult:0.85 }, desc:'4.5 s · +50% damage' },
+      { id:'prism_engine_lens', name:'Focus Lens', price:900, ...{ type:'powershot', cd:12000, pellets:1, spreadMult:0, dmgMult:2.2, speedMult:1.6 }, desc:'Next shot · 2.2x damage at 1.6x velocity' },
+  ],
+  void_harvester: [
+      { id:'void_harvester_over', name:'Overcharge', price:900, ...{ type:'buff', cd:11000, duration:4500, dmgMult:1.5, rateMult:0.85 }, desc:'4.5 s · +50% damage' },
+      { id:'void_harvester_lens', name:'Focus Lens', price:900, ...{ type:'powershot', cd:12000, pellets:1, spreadMult:0, dmgMult:2.2, speedMult:1.6 }, desc:'Next shot · 2.2x damage at 1.6x velocity' },
+  ],
+
+  // ── Electric weapons ────────────────────────────────────
+  taser: [
+      { id:'taser_overload', name:'Overload', price:130, ...{ type:'aoe', cd:13000, radius:5, damage:55, color:0x99eaff }, desc:'5 m discharge around you' },
+      { id:'taser_chain', name:'Chain Bolt', price:120, ...{ type:'multishot', cd:10000, count:3, spread:0.16 }, desc:'Three forking bolts' },
+  ],
+  arc_rifle: [
+      { id:'arc_rifle_overload', name:'Overload', price:260, ...{ type:'aoe', cd:13000, radius:5, damage:55, color:0x99eaff }, desc:'5 m discharge around you' },
+      { id:'arc_rifle_chain', name:'Chain Bolt', price:240, ...{ type:'multishot', cd:10000, count:3, spread:0.16 }, desc:'Three forking bolts' },
+  ],
+  arc_torrent: [
+      { id:'arc_torrent_overload', name:'Overload', price:300, ...{ type:'aoe', cd:13000, radius:5, damage:55, color:0x99eaff }, desc:'5 m discharge around you' },
+      { id:'arc_torrent_chain', name:'Chain Bolt', price:280, ...{ type:'multishot', cd:10000, count:3, spread:0.16 }, desc:'Three forking bolts' },
+  ],
+  storm_core: [
+      { id:'storm_core_overload', name:'Overload', price:900, ...{ type:'aoe', cd:13000, radius:5, damage:55, color:0x99eaff }, desc:'5 m discharge around you' },
+      { id:'storm_core_chain', name:'Chain Bolt', price:900, ...{ type:'multishot', cd:10000, count:3, spread:0.16 }, desc:'Three forking bolts' },
+  ],
+
+  // ── Paint & goo ─────────────────────────────────────────
+  sticker_blaster: [
+      { id:'sticker_blaster_splatter', name:'Splatter', price:150, ...{ type:'multishot', cd:9000, count:4, spread:0.18 }, desc:'Four blobs in a wide arc' },
+      { id:'sticker_blaster_sticky', name:'Sticky Shot', price:180, ...{ type:'powershot', cd:11000, pellets:1, spreadMult:0, dmgMult:1.8, explodeOnHit:true }, desc:'Next blob · 1.8x damage, bursts on contact' },
+  ],
+  foam_cannon: [
+      { id:'foam_cannon_splatter', name:'Splatter', price:150, ...{ type:'multishot', cd:9000, count:4, spread:0.18 }, desc:'Four blobs in a wide arc' },
+      { id:'foam_cannon_sticky', name:'Sticky Shot', price:180, ...{ type:'powershot', cd:11000, pellets:1, spreadMult:0, dmgMult:1.8, explodeOnHit:true }, desc:'Next blob · 1.8x damage, bursts on contact' },
+  ],
+  glassmaker: [
+      { id:'glassmaker_splatter', name:'Splatter', price:210, ...{ type:'multishot', cd:9000, count:4, spread:0.18 }, desc:'Four blobs in a wide arc' },
+      { id:'glassmaker_sticky', name:'Sticky Shot', price:250, ...{ type:'powershot', cd:11000, pellets:1, spreadMult:0, dmgMult:1.8, explodeOnHit:true }, desc:'Next blob · 1.8x damage, bursts on contact' },
+  ],
+  gravity_paint: [
+      { id:'gravity_paint_splatter', name:'Splatter', price:220, ...{ type:'multishot', cd:9000, count:4, spread:0.18 }, desc:'Four blobs in a wide arc' },
+      { id:'gravity_paint_sticky', name:'Sticky Shot', price:260, ...{ type:'powershot', cd:11000, pellets:1, spreadMult:0, dmgMult:1.8, explodeOnHit:true }, desc:'Next blob · 1.8x damage, bursts on contact' },
+  ],
+
+  // ── Cryo weapons ────────────────────────────────────────
+  freeze_gun: [
+      { id:'freeze_gun_deep', name:'Deep Freeze', price:210, ...{ type:'buff', cd:12000, duration:5000, dmgMult:1.4, rateMult:0.8 }, desc:'5 s · +40% damage, faster' },
+      { id:'freeze_gun_nova', name:'Frost Nova', price:240, ...{ type:'aoe', cd:14000, radius:6, damage:40, color:0x9fe8ff }, desc:'6 m freezing burst around you' },
+  ],
+  frost_blaster: [
+      { id:'frost_blaster_deep', name:'Deep Freeze', price:140, ...{ type:'buff', cd:12000, duration:5000, dmgMult:1.4, rateMult:0.8 }, desc:'5 s · +40% damage, faster' },
+      { id:'frost_blaster_nova', name:'Frost Nova', price:170, ...{ type:'aoe', cd:14000, radius:6, damage:40, color:0x9fe8ff }, desc:'6 m freezing burst around you' },
+  ],
+  abs_zero: [
+      { id:'abs_zero_deep', name:'Deep Freeze', price:900, ...{ type:'buff', cd:12000, duration:5000, dmgMult:1.4, rateMult:0.8 }, desc:'5 s · +40% damage, faster' },
+      { id:'abs_zero_nova', name:'Frost Nova', price:900, ...{ type:'aoe', cd:14000, radius:6, damage:40, color:0x9fe8ff }, desc:'6 m freezing burst around you' },
+  ],
+
+  // ── Flame weapons ───────────────────────────────────────
+  flamethrower: [
+      { id:'flamethrower_backdraft', name:'Backdraft', price:270, ...{ type:'aoe', cd:13000, radius:5, damage:60, color:0xff7722 }, desc:'5 m ignition around you' },
+      { id:'flamethrower_pressure', name:'Pressure Tank', price:250, ...{ type:'buff', cd:11000, duration:5000, dmgMult:1.5, rateMult:0.8 }, desc:'5 s · +50% damage' },
+  ],
+
+  // ── Slings ──────────────────────────────────────────────
+  slingshot: [
+      { id:'slingshot_heavy', name:'Heavy Stone', price:80, ...{ type:'powershot', cd:9000, pellets:1, spreadMult:0, dmgMult:2.5, speedMult:1.4 }, desc:'Next stone · 2.5x damage' },
+      { id:'slingshot_triple', name:'Triple Shot', price:80, ...{ type:'multishot', cd:10000, count:3, spread:0.14 }, desc:'Three stones at once' },
+  ],
+
+  // ── Markers ─────────────────────────────────────────────
+  paintball: [
+      { id:'paintball_splatter', name:'Splatter', price:80, ...{ type:'multishot', cd:9000, count:4, spread:0.18 }, desc:'Four shells in a wide arc' },
+      { id:'paintball_sticky', name:'Sticky Shot', price:80, ...{ type:'powershot', cd:11000, pellets:1, spreadMult:0, dmgMult:1.8, explodeOnHit:true }, desc:'Next shell · 1.8x damage, bursts on contact' },
+  ],
 };
 
 // The player's equipped choice per weapon, persisted locally. Ownership itself
