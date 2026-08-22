@@ -884,6 +884,8 @@ const WEAPON_DAMAGE = {
   molotov_burn: 10, molotov_fire: 5,
   // 🚀 Rocket launchers + area splash
   rpg: 120, bazooka: 140, rpg_splash: 70, bazooka_splash: 85,
+  // 💣 launcher area splash — mirrors the client table (60% of the direct hit)
+  grenade_launcher_splash: 54, gravity_launcher_splash: 45, potato_cannon_splash: 36, mortar_rifle_splash: 51, firework_launcher_splash: 30, shockwave_launcher_splash: 29, storm_cannon_splash: 42, pinball_launcher_splash: 36, nebula_mortar_splash: 66,
   // 🪖 M4A1
 
   // ⚡ Tesla Coil zap · 🧪 acid pool · 🐝 bee sting

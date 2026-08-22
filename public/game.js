@@ -8864,7 +8864,7 @@ const PROJECTILE_KIND_BY_ID = {
   slingshot:'stone', air_rifle:'bullet',
   flamethrower:'flame',
   freeze_gun:'ice', abs_zero:'ice', frost_blaster:'ice',
-  paintball:'blob', glassmaker:'blob', gravity_paint:'blob',
+  paintball:'paintball', glassmaker:'blob', gravity_paint:'blob',
   foam_cannon:'blob', sticker_blaster:'blob',
   taser:'spark', arc_rifle:'spark', arc_torrent:'spark', storm_core:'spark',
   railgun:'slug', coilgun:'slug', magnetar:'slug',
@@ -8880,7 +8880,8 @@ const PROJECTILE_SPEED_SCALE = {
   energy: 0.80,
   spark:  0.80,
   ice:    0.70,
-  bolt:   0.60,   // crossbow bolts arc, they don't snap
+  paintball: 0.85, // a marker shell is slower than a rifle round, but not by much
+  bolt:   0.98,   // arrows and bolts fly nearly flat
   blob:   0.55,
   solid:  0.55,   // thrown objects
   stone:  0.55,
@@ -8888,8 +8889,24 @@ const PROJECTILE_SPEED_SCALE = {
   rocket: 0.50,   // visibly climbs away from the muzzle
   grenade:0.50,   // lobbed, not shot
 };
+// Kinds that detonate on impact rather than simply hitting.
+const EXPLOSIVE_KINDS = new Set(['rocket', 'grenade']);
+// Some kinds were specified relative to A BULLET rather than to their own
+// bulletSpeed — "arrows fly at 0.98x" means 0.98x of a rifle round, not 0.98x of
+// whatever the crossbow happened to be tuned to (68, which would have left the
+// arrow at less than half a bullet's speed). For these, the weapon's own
+// bulletSpeed is replaced by a fraction of the bullet baseline.
+const BULLET_REF_SPEED = 155;   // mean bulletSpeed across the metal-round weapons
+const BULLET_RELATIVE_KINDS = { bolt: 0.98, paintball: 0.90 };
 function projectileSpeedScale(weaponId, weapon) {
   return PROJECTILE_SPEED_SCALE[projectileKind(weaponId, weapon)] ?? 1;
+}
+// Final muzzle speed for a projectile, before the global multiplier.
+function projectileBaseSpeed(weaponId, weapon, declaredSpeed) {
+  const kind = projectileKind(weaponId, weapon);
+  const rel = BULLET_RELATIVE_KINDS[kind];
+  if (rel != null) return BULLET_REF_SPEED * rel;
+  return (declaredSpeed || 120) * (PROJECTILE_SPEED_SCALE[kind] ?? 1);
 }
 function projectileKind(weaponId, weapon) {
   if (SOLID_PROJECTILES.has(weaponId)) return 'solid';
@@ -9048,6 +9065,24 @@ function _buildBlob(tint, r) {
   g._spin = { x: 4, y: 6, z: 3 };
   return g;
 }
+function _buildPaintball(tint, r) {
+  // A marker round: a glossy gelatin shell with the fill showing through, not
+  // the generic paint splat the other paint weapons throw.
+  const c = tint || 0xff2299;
+  const P = _projCache('paintball|'+c+'|'+r, () => ({
+    shell: new THREE.SphereGeometry(r*1.25, 10, 8),
+    shellM: new THREE.MeshPhongMaterial({ color: c, shininess: 95, specular: 0xffffff }),
+    sheen: new THREE.SphereGeometry(r*0.42, 6, 5),
+    sheenM: new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55 }),
+  }));
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(P.shell, P.shellM));
+  const sheen = new THREE.Mesh(P.sheen, P.sheenM);
+  sheen.position.set(r*0.5, r*0.55, r*0.4); g.add(sheen);   // highlight, so it reads as wet
+  g._alignToDir = false;
+  g._spin = { x: 5, y: 7, z: 3 };
+  return g;
+}
 function _buildStone(tint, r) {
   const P = _projCache('stone|'+r, () => ({
     rock: new THREE.DodecahedronGeometry(r*1.2, 0), rockM: _lam(0x7a7268),
@@ -9093,6 +9128,7 @@ function makeBulletMesh(color, size, weaponId) {
     case 'flame':   return _buildFlame(color, r);
     case 'ice':     return _buildIce(color, r);
     case 'blob':    return _buildBlob(color, r);
+    case 'paintball': return _buildPaintball(color, r);
     case 'stone':   return _buildStone(color, r);
     case 'slug':    return _buildSlug(color, r);
   }
@@ -11746,7 +11782,7 @@ function spawnLocalBullet(origin, dir, id, isOwn, speed, color, size, weaponId, 
   const wSpec = WEAPONS.find(w => w.id === weaponId);
   const maxRange = opts.maxRange || wSpec?.maxRange;
   localBullets.push({ mesh, dir: flightDir, createdAt: Date.now(), id, isOwn,
-    speed: (speed || 120) * BULLET_SPEED_MULTIPLIER * projectileSpeedScale(weaponId, wSpec), weaponId,
+    speed: projectileBaseSpeed(weaponId, wSpec, speed) * BULLET_SPEED_MULTIPLIER, weaponId,
     spawnX: origin.x, spawnY: origin.y, spawnZ: origin.z, maxRange, ...opts });
 }
 
@@ -11915,12 +11951,26 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false) {
     showAnnouncement('CHARGED', 'Next shot: 100 dmg', '#cc66ff', 800);
     updateSwitchbladeHUD();
   }
-  // Frost Blaster: subtract 3 speed points on hit; lethal at 0
-  if (weaponId === 'frost_blaster') {
+  // ❄️ Ice weapons chill on hit — the Frost Blaster was the only one that did,
+  // which made the cryo weapons cosmetic. Every ice-kind projectile now bleeds
+  // the target's speed; frostSlow is 100 = full speed, 0 = frozen solid.
+  const _hitKind = projectileKind(weaponId, WEAPONS.find(w => w.id === weaponId));
+  if (_hitKind === 'ice') {
     const bot = resolveBot(pid);
     if (bot && !bot.dead) {
-      bot.frostSlow = Math.max(0, (bot.frostSlow || 100) - 3);
-      // Visual: brief cyan particle (already from spawnHitParticle in caller)
+      const chill = weaponId === 'frost_blaster' ? 3 : 8;   // the dedicated chiller ticks
+      bot.frostSlow = Math.max(0, (bot.frostSlow || 100) - chill);
+      spawnAbilityAOEFX(hitWorldPos ? hitWorldPos.clone() : mesh.position.clone(), 0.5, 0x9fe8ff);
+    }
+  }
+  // ⚡ Energy weapons flash whatever they hit — a bright overload that leaves the
+  // target briefly unable to act. Reuses the stun-grenade freeze the bot AI
+  // already honours, so it needs no new AI state.
+  if (_hitKind === 'energy') {
+    const bot = resolveBot(pid);
+    if (bot && !bot.dead) {
+      bot._stunUntil = Math.max(bot._stunUntil || 0, Date.now() + 700);
+      spawnAbilityAOEFX(hitWorldPos ? hitWorldPos.clone() : mesh.position.clone(), 0.7, 0xffffff);
     }
   }
 
@@ -12020,7 +12070,15 @@ function getClientWeaponDamage(weaponId) {
   if (s) return s.damage;
   const ab = { sg8_wave:20, crossbow_ab:220, crossbow_c1:140, sg100_ab:140, lever_ab:150,
                railgun_ab:330, boombow_ab:250, boombow_c1:160, cycler_ab:32, hand_cannon_ab:175 };
-  return ab[weaponId] || 10;
+  if (ab[weaponId] != null) return ab[weaponId];
+  // Fall through to the big table the bot->player path uses, so synthetic ids
+  // like '<weapon>_splash' resolve in BOTH directions. Without this every splash
+  // hit we dealt was worth the 10 default — including rockets, whose 70-damage
+  // splash entry has been sitting in that table unused.
+  if (typeof CLIENT_WEAPON_DAMAGE !== 'undefined' && CLIENT_WEAPON_DAMAGE[weaponId] != null) {
+    return CLIENT_WEAPON_DAMAGE[weaponId];
+  }
+  return 10;
 }
 
 function makeTrainingDummyMesh(dummy) {
@@ -12333,8 +12391,10 @@ function updateBullets(dt) {
         if (b.weaponId === 'firework_launcher') {
           spawnBurnZone(wallHitPt, 3, 3, 10000);
         }
-        // 🚀 Rockets: detonate on terrain impact (area splash, no direct target)
-        if (b.weaponId === 'rpg' || b.weaponId === 'bazooka') {
+        // 🚀💣 Rockets AND grenades detonate on terrain impact. Keyed off the
+        // projectile kind rather than two hardcoded ids, so every launcher in
+        // the roster explodes instead of only the two rockets.
+        if (EXPLOSIVE_KINDS.has(projectileKind(b.weaponId, WEAPONS.find(w => w.id === b.weaponId)))) {
           rocketExplode(wallHitPt, b.weaponId, null);
           removeBullet(); continue;
         }
@@ -12398,8 +12458,8 @@ function updateBullets(dt) {
         if (b.weaponId === 'firework_launcher') {
           spawnBurnZone(_bpos.clone(), 3, 3, 10000);
         }
-        // 🚀 Rockets: direct target took the main hit; splash everyone else nearby
-        if (b.weaponId === 'rpg' || b.weaponId === 'bazooka') {
+        // 🚀💣 Direct target took the main hit; splash everyone else nearby.
+        if (EXPLOSIVE_KINDS.has(projectileKind(b.weaponId, WEAPONS.find(w => w.id === b.weaponId)))) {
           rocketExplode(_bpos.clone(), b.weaponId, bestHit.pid);
         }
         removeBullet();
@@ -13657,6 +13717,7 @@ const CLIENT_WEAPON_DAMAGE = Object.fromEntries([
   ['lancer_blade', 50],   // ⚔️ Lancer bayonet-charge hit (main shot uses the WEAPONS 'lancer' damage)
   ['molotov_burn', 10], ['molotov_fire', 5],  // 🔥 inside-the-flames tick / lingering on-fire DOT
   ['rpg_splash', 70], ['bazooka_splash', 85],  // 🚀 rocket area splash (direct hit uses the WEAPONS damage)
+  ['grenade_launcher_splash', 54], ['gravity_launcher_splash', 45], ['potato_cannon_splash', 36], ['mortar_rifle_splash', 51], ['firework_launcher_splash', 30], ['shockwave_launcher_splash', 29], ['storm_cannon_splash', 42], ['pinball_launcher_splash', 36], ['nebula_mortar_splash', 66],  // 💣 launcher area splash (60% of the direct hit)
   // 3rd-batch primaries + abilities
   ['flechette', 16], ['rpd'], ['burst_cannon', 40], ['sg8'],
   ['coilgun', 92], ['smart_smg', 9], ['amr', 180], ['air_rifle', 34],
@@ -13738,6 +13799,14 @@ function applyBotDamageToPlayer(weaponId, botId) {
     playerFrostSlow = Math.max(0, playerFrostSlow - 3);
     flashHitIndicator();
     return;
+  }
+  // ❄️⚡ The same effects, pointed at us. Ice bleeds our speed on top of its
+  // damage; energy whites out the screen for a moment. Both fall through to the
+  // normal damage path below — only the Frost Blaster above deals no HP.
+  {
+    const k = projectileKind(weaponId, WEAPONS.find(w => w.id === weaponId));
+    if (k === 'ice' && !isDead) playerFrostSlow = Math.max(0, playerFrostSlow - 8);
+    if (k === 'energy' && !isDead) flashScreen('rgba(255,255,255,0.55)', 260);
   }
   // Frost-freeze death routes via this function with a special weapon ID
   if (weaponId === 'frost_freeze') {
