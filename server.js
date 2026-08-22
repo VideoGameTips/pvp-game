@@ -90,49 +90,49 @@ function checkPassword(username, pw) {
 // Admin items are NOT in this table (they're not purchasable; promo-only).
 const WEAPON_COSTS = {
   // Primaries — ARs / SMGs
-  ak20: 250, ak30: 300, mp40: 200, p90: 350, vector: 300, burst: 280,
+  ak20: 250,  mp40: 200, p90: 350, vector: 300, burst: 280,
   // Primaries — Shotguns
   sg8: 220, sg100: 380, auto_shotgun: 340,
   // Primaries — Snipers / Marksman
   srx: 500, lever: 360,
-  lancer: 460, rpg: 520, bazooka: 620, m4a1: 340,
+  lancer: 460,  bazooka: 620,
   // Primaries — Special
   rpd: 450, paintball: 120, crossbow: 280,
   // Primaries — Heavy
   minigun: 600, grenade_launcher: 500, flamethrower: 420,
   // Primaries — Sci-fi / energy
   railgun: 600, freeze_gun: 350, plasma_carbine: 420, arc_rifle: 400,
-  arc_torrent: 460, prism_launcher: 420, lazy_laser: 420, storm_cannon: 540,
-  coilgun: 460, magnet_rifle: 380, painter_beam: 300, gravity_paint: 400,
-  portal_launcher: 460, pulse_disc: 380, traffic_controller: 320,
+  arc_torrent: 460, prism_launcher: 420,  storm_cannon: 540,
+  coilgun: 460,  painter_beam: 300, gravity_paint: 400,
+  portal_launcher: 460,  traffic_controller: 320,
   // Primaries — Explosive / projectile
   boombow: 500, gravity_launcher: 480, harpoon_gun: 440, mortar_rifle: 480,
   firework_launcher: 360, shockwave_launcher: 460, airburst_projector: 360,
   pinball_launcher: 440, seismic_hammer: 480, glassmaker: 380,
   // Primaries — Tactical / precision / battle rifle
-  an94: 380, spas12: 360, m1_garand: 380, flechette: 380, thermal_lmg: 520,
-  burst_cannon: 480, incendiary_shotgun: 400, amr: 2000, air_rifle: 320,
+   spas12: 360, m1_garand: 380, flechette: 380,
+  burst_cannon: 480,  amr: 2000, air_rifle: 320,
   twin_ar: 440, swarm_rifle: 460, smart_smg: 380, switchblade_gun: 420,
   // Primaries — Joke / chaos
   potato_cannon: 220, sticker_blaster: 280, foam_cannon: 280,
   // Premium / P2W — ridiculously expensive on purpose
-  royal_minigun: 3500,
+
   // 🌌 Sci-fi P2W primaries
   event_horizon: 24000, storm_core: 20000, abs_zero: 22000, solar_lance: 26000,
-  phase_driver: 30000, quantum_repeater: 28000, magnetar: 25000,
+   quantum_repeater: 28000, magnetar: 25000,
   nebula_mortar: 35000, prism_engine: 27000, void_harvester: 40000,
   // Secondaries
   revolver: 150, flare: 80, pistol: 60, shorty: 180, cycler: 140,
-  hand_cannon: 260, throwing_knives: 120, taser: 200, traffic_cone: 160, cream_pie: 140,
-  machine_pistol: 220, sawed_off: 260, machine_revolver: 240, pocket_rocket: 320,
-  dart_gun: 160, laser_pointer: 120, coin_gun: 180, emp_pistol: 240,
+  hand_cannon: 260, throwing_knives: 120, taser: 200,
+  machine_pistol: 220, sawed_off: 260, machine_revolver: 240,
+  dart_gun: 160, laser_pointer: 120,
   auto_revolver: 220, frost_blaster: 240,
   // Batch-4 secondaries
-  snub_revolver: 140, duelist_pistol: 280, mauser: 200, mini_uzi: 240,
+  snub_revolver: 140, duelist_pistol: 280, mauser: 200,
   nail_gun: 180, boomstick: 220, signal_pistol: 200, throwing_axes: 240,
-  shuriken: 160, boomerang: 180, slingshot: 100, blowgun: 200,
+   boomerang: 180, slingshot: 100,
   // 🌌 Sci-fi P2W secondaries
-  pulse_needle: 12000, phase_pistol: 16000, ion_revolver: 14000,
+  pulse_needle: 12000,
   // Melees
   bat: 80, sabre: 140, frying_pan: 60, sledge: 360, spear: 200,
   katana: 360, baguette: 50, knife: 280, chainsaw: 1400, lightsabre: 1800,
@@ -176,31 +176,31 @@ const FREE_WEAPONS = new Set([
 // ── 💼 Bundles — ~60% off the sum of individual prices ─────────────
 // Keep in sync with public/game.js BUNDLES table.
 const BUNDLES = {
-  pitiful:      { name: 'Pitiful Pack', price: 420, items: ['ak30','sg100','revolver','bat','smoke'] },
+  pitiful:      { name: 'Pitiful Pack', price: 420, items: ['ak20','sg100','revolver','bat','smoke'] },
   retro:        { name: 'Retro Pack',   price: 145, items: ['paintball','laser_pointer','baguette','rubber_duck','confetti_cannon'] },
-  starter_pro:  { name: 'Starter Pro',  price: 330, items: ['ak30','revolver','bat','stim'] },
+  starter_pro:  { name: 'Starter Pro',  price: 330, items: ['ak20','revolver','bat','stim'] },
   heavy_duty:   { name: 'Heavy Duty',   price: 700, items: ['minigun','grenade_launcher','machine_revolver','crowbar','sticky_charge'] },
   sniper_pack:  { name: 'Sniper Pack',  price: 580, items: ['srx','revolver','knife','smoke'] },
   run_n_gun:    { name: 'Run & Gun',    price: 430, items: ['p90','machine_pistol','knife','adrenaline'] },
   melee_master: { name: 'Melee Master', price: 480, items: ['auto_shotgun','revolver','fire_axe','smoke'] },
   shotgun_pack: { name: 'Shotgun Pack', price: 430, items: ['sg100','sawed_off','crowbar','frag'] },
   scifi:        { name: 'Sci-Fi Arsenal',     price: 500, items: ['plasma_carbine','arc_rifle','dart_gun','emp_grenade'] },
-  demolition:   { name: 'Demolition',         price: 600, items: ['grenade_launcher','pocket_rocket','sledge','sticky_charge'] },
+  demolition:   { name: 'Demolition',         price: 600, items: ['grenade_launcher','throwing_axes','sledge','sticky_charge'] },
   archery:      { name: "Archer's Kit",       price: 580, items: ['crossbow','boombow','throwing_knives','tripwire'] },
   marksman:     { name: 'Marksman',           price: 430, items: ['lever','hand_cannon','knife','ammo_fountain'] },
-  pyro:         { name: 'Pyromaniac',         price: 620, items: ['flamethrower','incendiary_shotgun','fire_axe','sticky_charge'] },
+  pyro:         { name: 'Pyromaniac',         price: 620, items: ['flamethrower','sg8','fire_axe','sticky_charge'] },
   chaos:        { name: 'Chaos Mode',         price: 150, items: ['paintball','confetti_cannon','baguette','rubber_duck'] },
   stealth:      { name: 'Stealth Ops',        price: 360, items: ['air_rifle','throwing_knives','knife','smoke'] },
   storm:        { name: 'Storm Pack',         price: 420, items: ['arc_rifle','taser','shock_baton','emp_grenade'] },
   defensive:    { name: 'Defensive',          price: 450, items: ['sg100','taser','riot_shield','nano_shield'] },
-  royalty:      { name: 'Royalty',            price: 4500, items: ['royal_minigun','vampire_blade','hand_cannon','orbital_strike'] },
+  royalty:      { name: 'Royalty',            price: 4500, items: ['minigun','vampire_blade','hand_cannon','orbital_strike'] },
   kitchen:      { name: 'Kitchen Catastrophe',price: 130, items: ['paintball','baguette','frying_pan','rubber_duck'] },
   knight:       { name: "Knight's Honor",     price: 410, items: ['sg8','sabre','katana','smoke'] },
   frostbite:    { name: 'Frostbite',          price: 380, items: ['freeze_gun','frost_blaster','knife','smoke'] },
   knockback:    { name: 'Knockback',          price: 500, items: ['shockwave_launcher','sawed_off','sledge','air_grenade'] },
   smart_tech:   { name: 'Smart Tech',         price: 610, items: ['swarm_rifle','smart_smg','hunter_drone','magnet_mine'] },
   mortar:       { name: 'Mortar Squad',       price: 550, items: ['mortar_rifle','grenade_launcher','hand_cannon','frag'] },
-  cosmic_p2w:   { name: 'Cosmic P2W',         price: 80000, items: ['event_horizon','storm_core','abs_zero','solar_lance','phase_driver','quantum_repeater','magnetar','nebula_mortar','prism_engine','void_harvester','pulse_needle','phase_pistol','ion_revolver','phase_blade','gravity_hammer','volt_whip','nano_swarm','warp_beacon','stasis_mine','specter_drone','quantum_barrier'] },
+  cosmic_p2w:   { name: 'Cosmic P2W',         price: 80000, items: ['event_horizon','storm_core','abs_zero','solar_lance','quantum_repeater','magnetar','nebula_mortar','prism_engine','void_harvester','pulse_needle','revolver','phase_blade','gravity_hammer','volt_whip','nano_swarm','warp_beacon','stasis_mine','specter_drone','quantum_barrier'] },
 };
 
 const STARTER_CREDITS = 500;
@@ -587,7 +587,7 @@ const UNLOCK_CODES = {
   // Secondaries
   'DEAGLE':          'desert_eagle',
   'MATCHGRADE':      'm1911',
-  'SILENTAGENT':     'ppk',
+  'SILENTAGENT':     'm1911',
   'SWITCHGLOCK':     'glock18',
   'ARMORPIERCER':    'five_seven',
   // Melees
@@ -864,7 +864,7 @@ function tryPairPvpQueue(mode) {
 // Weapon damage table (must match client WEAPONS array)
 const WEAPON_DAMAGE = {
   // Primaries
-  ak20: 25, ak30: 22, sg8: 18, sg100: 70,
+  ak20: 25,  sg8: 18, sg100: 70,
   srx: 95, rpd: 10, mp40: 15, p90: 5,
   paintball: 40, burst: 21, lever: 62, auto_shotgun: 12,
   vector: 12, crossbow: 80, flamethrower: 6,
@@ -883,9 +883,9 @@ const WEAPON_DAMAGE = {
   // 🔥 Molotov burn ticks
   molotov_burn: 10, molotov_fire: 5,
   // 🚀 Rocket launchers + area splash
-  rpg: 120, bazooka: 140, rpg_splash: 70, bazooka_splash: 85,
+   bazooka: 140, rpg_splash: 70, bazooka_splash: 85,
   // 🪖 M4A1
-  m4a1: 24,
+
   // ⚡ Tesla Coil zap · 🧪 acid pool · 🐝 bee sting
   tesla_coil: 16, acid_pool: 8, bee_sting: 5,
   // MG
@@ -899,25 +899,25 @@ const WEAPON_DAMAGE = {
   frag: 80, smoke: 0, confetti_cannon: 8, moon_mine: 65,
   rubber_duck: 18, black_hole_seed: 105, glitch_cube: 42,
   // ── NEW PRIMARIES ──────────────────────────────────────────────────────
-  an94: 24, spas12: 20, m1_garand: 78, plasma_carbine: 18, arc_rifle: 22,
+   spas12: 20, m1_garand: 78, plasma_carbine: 18, arc_rifle: 22,
   gravity_launcher: 75, potato_cannon: 60, sticker_blaster: 8,
   harpoon_gun: 95, mortar_rifle: 85,
   arc_torrent: 5, firework_launcher: 50, switchblade_gun: 50, switchblade_charged: 100,
   jeep_gun: 22, chernobyl_gas: 1,
   // 3rd-batch primaries
-  flechette: 16, thermal_lmg: 11, burst_cannon: 40, incendiary_shotgun: 14,
+  flechette: 16,  burst_cannon: 40,
   coilgun: 92, smart_smg: 9, amr: 180, air_rifle: 34, shockwave_launcher: 48, twin_ar: 20,
   // 3rd-batch ability shots
   coilgun_ab: 220, needle_storm: 16, vent_burst: 30, dragon_breath: 4,
   // 3rd-batch secondaries
-  machine_revolver: 24, emp_pistol: 26, emp_burst: 25,
+  machine_revolver: 24,  emp_burst: 25,
   // 3rd-batch melees
   combat_axe: 78, combat_axe_throw: 120, shock_baton: 32,
   // 3rd-batch supports
   hunter_drone: 100, emp_grenade: 25, sticky_charge: 120,
   // 😈 P2W batch
-  swarm_rifle: 11, lazy_laser: 6, storm_cannon: 70, royal_minigun: 12,
-  pocket_rocket: 90, auto_revolver: 42,
+  swarm_rifle: 11,  storm_cannon: 70,
+   auto_revolver: 42,
   titan_hammer: 95, vampire_blade: 52,
   orbital_strike: 250, guardian_drone: 14, nano_shield: 0,
   thunderstorm: 60,
@@ -925,19 +925,19 @@ const WEAPON_DAMAGE = {
   frost_blaster: 0, air_grenade: 15, land_mine: 298, frost_freeze: 9999,
   // 🪖 ADMIN — Military OP weapons (unlock codes required)
   gau19: 50, mk44: 25, xm7: 60, barrett: 250, m134: 15, hkmp7: 30, p90_spec: 22,
-  desert_eagle: 65, m1911: 50, ppk: 45, glock18: 30, five_seven: 40,
+  desert_eagle: 65, m1911: 50,  glock18: 30, five_seven: 40,
   karambit: 80, bayonet: 100, tomahawk: 120, tomahawk_throw: 180, ots04: 90, garrote: 9999,
   c4: 200, claymore: 250, stun_grenade: 10, thermite: 8, predator_uav: 0,
   care_package: 0, tac_nuke: 500,
   // 🔬 Tech / Physics batch
   prism_launcher: 38, foam_cannon: 18, airburst_projector: 22, glassmaker: 28,
-  magnet_rifle: 16, seismic_hammer: 70, painter_beam: 6, portal_launcher: 10,
-  pulse_disc: 32, gravity_paint: 4, traffic_controller: 4, pinball_launcher: 60,
+   seismic_hammer: 70, painter_beam: 6, portal_launcher: 10,
+   gravity_paint: 4, traffic_controller: 4, pinball_launcher: 60,
   hyper_disc: 80,
   lava: 4,
   fists: 24,
   // NEW SECONDARIES
-  machine_pistol: 14, sawed_off: 35, dart_gun: 25, laser_pointer: 6, coin_gun: 30,
+  machine_pistol: 14, sawed_off: 35, dart_gun: 25, laser_pointer: 6,
   // NEW MELEES
   crowbar: 32, fire_axe: 85, nunchucks: 22, umbrella: 18, yoyo: 30,
   // NEW ABILITY SHOTS

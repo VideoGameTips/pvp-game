@@ -44,12 +44,6 @@ const WEAPONS = [
     ability: { name: 'Focus Fire', cd: 8000, desc: '3s · laser-accurate · +40% dmg', type: 'buff', duration: 3000, spreadMult: 0, dmgMult: 1.4 },
   },
   {
-    id: 'ak30',  name: 'AK30',  type: 'AR+', slot: 'primary',
-    mag: 45,  reserve: 135, damage: 22, fireRate: 140,  reloadTime: 2000,
-    auto: true,  pellets: 1, spread: 0,    adsZoom: 45, bulletSpeed: 124, noReload: false,
-    ability: { name: 'Armor Pierce', cd: 10000, desc: '4s · +50% dmg · ignores distance', type: 'buff', duration: 4000, spreadMult: 0.5, dmgMult: 1.5 },
-  },
-  {
     id: 'sg8',   name: 'SG-8',  type: 'Shotgun', slot: 'primary',
     mag: 8,   reserve: 32,  damage: 18, fireRate: 900,  reloadTime: 2500,
     auto: false, pellets: 6, spread: 0.08, adsZoom: 55, bulletSpeed: 110, noReload: false,
@@ -218,14 +212,6 @@ const WEAPONS = [
     bulletColor: 0xffff55, bulletSize: 0.06,
     ability: { name: 'Discharge', cd: 11000, desc: 'AOE electric burst 2.5 m · 70 dmg', type: 'aoe', radius: 2.5, damage: 70, color: 0xffff44 },
   },
-  // ── New primaries ──────────────────────────────────────────────────────────
-  {
-    id: 'an94', name: 'AN-94', type: 'Hyperburst AR', slot: 'primary',
-    mag: 30, reserve: 90, damage: 24, fireRate: 130, reloadTime: 2000,
-    auto: true, pellets: 1, spread: 0.004, adsZoom: 44, bulletSpeed: 134, noReload: false,
-    hyperburstFirst2: true, // first 2 rounds after re-pull fire at 25ms
-    ability: { name: 'Hyperburst', cd: 5000, desc: 'Fire 2 instant bullets', type: 'fanfire', count: 2, delay: 25 },
-  },
   {
     id: 'spas12', name: 'SPAS-12', type: 'Tactical Shotgun', slot: 'primary',
     mag: 8, reserve: 24, damage: 20, fireRate: 800, reloadTime: 2600,
@@ -331,28 +317,12 @@ const WEAPONS = [
     ability: { name: 'Needle Storm', cd: 9000, desc: 'Fire 12 flechettes instantly', type: 'fanfire', count: 12, delay: 22 },
   },
   {
-    id: 'thermal_lmg', name: 'Thermal LMG', type: 'Heavy LMG', slot: 'primary',
-    mag: 180, reserve: 360, damage: 11, fireRate: 55, reloadTime: 4000,
-    auto: true, pellets: 1, spread: 0.022, adsZoom: 50, bulletSpeed: 135, noReload: false,
-    bulletColor: 0xff6644, bulletSize: 0.05,
-    heatsUp: true, // sustained fire ramps damage 11 → 15
-    ability: { name: 'Vent Burst', cd: 14000, desc: 'AOE heatwave · 4 m · 30 dmg', type: 'aoe', radius: 4, damage: 30, color: 0xff6644 },
-  },
-  {
     id: 'burst_cannon', name: 'Burst Cannon', type: 'Heavy Burst Rifle', slot: 'primary',
     mag: 24, reserve: 72, damage: 40, fireRate: 420, reloadTime: 2200,
     auto: true, pellets: 1, spread: 0.007, adsZoom: 42, bulletSpeed: 155, noReload: false,
     bulletColor: 0xffaa22, bulletSize: 0.05,
     burstSize: 3, burstDelay: 65, // 3-round bursts
     ability: { name: 'Stabilizer', cd: 10000, desc: '4 s · zero recoil + tight spread', type: 'buff', duration: 4000, spreadMult: 0.1 },
-  },
-  {
-    id: 'incendiary_shotgun', name: 'Incendiary Shotgun', type: 'Fire Shotgun', slot: 'primary',
-    mag: 8, reserve: 32, damage: 14, fireRate: 780, reloadTime: 2500,
-    auto: false, pellets: 8, spread: 0.075, adsZoom: 56, bulletSpeed: 105, noReload: false,
-    bulletColor: 0xff5522, bulletSize: 0.06,
-    burnOnHit: { dps: 4, dur: 6000 }, // ignites target — 4 dmg/sec for 6 sec
-    ability: { name: 'Dragon Breath', cd: 12000, desc: 'Cone of fire · pellets ignite enemies', type: 'fanfire_all', delay: 100, noADS: true },
   },
   {
     id: 'coilgun', name: 'Coilgun', type: 'Electromagnetic Rifle', slot: 'primary',
@@ -410,27 +380,12 @@ const WEAPONS = [
     ability: { name: 'Hive Mode', cd: 11000, desc: 'Bullets split into 3 tracking rounds for 3 s', type: 'buff', duration: 3000, pelletsAdd: 2, trackingBoost: true },
   },
   {
-    id: 'lazy_laser', name: 'Lazy Laser', type: 'Wide Beam', slot: 'primary',
-    mag: 120, reserve: 240, damage: 6, fireRate: 95, reloadTime: 2600,
-    auto: true, pellets: 1, spread: 0.05, adsZoom: 50, bulletSpeed: 260, noReload: false,
-    bulletColor: 0xff44ff, bulletSize: 0.08,
-    maxRange: 18, slowOnHit: { factor: 0.7, dur: 600 },
-    ability: { name: 'Full Sweep', cd: 12000, desc: '3 s · massive beam width', type: 'buff', duration: 3000, spreadMult: 4.0, sweepBeam: true },
-  },
-  {
     id: 'storm_cannon', name: 'Storm Cannon', type: 'Lightning Explosive', slot: 'primary',
     mag: 4, reserve: 16, damage: 70, fireRate: 600, reloadTime: 2400,
     auto: false, pellets: 1, spread: 0.005, adsZoom: 46, bulletSpeed: 90, noReload: false,
     bulletColor: 0xaaeeff, bulletSize: 0.14,
     splashRadius: 4, splashDamage: 50,
     ability: { name: 'Thunderstorm', cd: 15000, desc: 'Random lightning strikes · 5 bolts · 60 dmg ea.', type: 'aoe', radius: 10, damage: 60, color: 0xaaeeff, weaponAbId: 'thunderstorm' },
-  },
-  {
-    id: 'royal_minigun', name: 'Royal Minigun', type: 'Premium Heavy', slot: 'primary',
-    mag: 400, reserve: 400, damage: 12, fireRate: 35, reloadTime: 4500,
-    auto: true, pellets: 1, spread: 0.008, adsZoom: 50, bulletSpeed: 160, noReload: false,
-    bulletColor: 0xffd700, bulletSize: 0.045,
-    ability: { name: 'Golden Overheat', cd: 18000, desc: '4 s · infinite ammo · +rate', type: 'buff', duration: 4000, rateMult: 0.7, infiniteAmmo: true },
   },
   // ── 🔬 Tech / Physics primaries ──────────────────────────────────────────
   {
@@ -466,14 +421,6 @@ const WEAPONS = [
     ability: { name: 'Crystal Rain', cd: 13000, desc: 'Fire 6 glass blobs · sharp field everywhere', type: 'multishot', count: 6, spread: 0.14, noADS: true },
   },
   {
-    id: 'magnet_rifle', name: 'Magnet Rifle', type: 'Electromagnetic', slot: 'primary',
-    mag: 24, reserve: 96, damage: 16, fireRate: 140, reloadTime: 2200,
-    auto: true, pellets: 1, spread: 0.005, adsZoom: 48, bulletSpeed: 175, noReload: false,
-    bulletColor: 0xff77cc, bulletSize: 0.05,
-    bendProjectiles: 4, pull: 1.5,
-    ability: { name: 'Polar Shift', cd: 13000, desc: '4 s · pulls all enemy projectiles toward you', type: 'buff', duration: 4000, polarShift: true },
-  },
-  {
     id: 'seismic_hammer', name: 'Seismic Hammer', type: 'Ground Shockwave', slot: 'primary',
     mag: 4, reserve: 16, damage: 70, fireRate: 950, reloadTime: 2600,
     auto: false, pellets: 1, spread: 0.003, adsZoom: 46, bulletSpeed: 65, noReload: false,
@@ -496,14 +443,6 @@ const WEAPONS = [
     bulletColor: 0x66ccff, bulletSize: 0.10,
     portal: true, portalDur: 4000,
     ability: { name: 'Portal Storm', cd: 18000, desc: '3 portals at random spots', type: 'multishot', count: 3, spread: 0.20, noADS: true },
-  },
-  {
-    id: 'pulse_disc', name: 'Pulse Disc Launcher', type: 'Bouncing Disc', slot: 'primary',
-    mag: 8, reserve: 32, damage: 32, fireRate: 420, reloadTime: 2200,
-    auto: false, pellets: 1, spread: 0.003, adsZoom: 50, bulletSpeed: 110, noReload: false,
-    bulletColor: 0x44ddff, bulletSize: 0.09,
-    bounce: { maxBounces: 6, speedMult: 1.3 }, // accelerates more per bounce than prism
-    ability: { name: 'Hyper Disc', cd: 13000, desc: 'Giant spinning disc · 80 dmg', type: 'powershot', pellets: 1, spreadMult: 0, weaponAbId: 'hyper_disc' },
   },
   {
     id: 'gravity_paint', name: 'Gravity Paint', type: 'Reality Paint', slot: 'primary',
@@ -559,37 +498,12 @@ const WEAPONS = [
     blindOnHit: { dur: 800 }, // brief screen flash on player hit
     ability: { name: 'Blinding Flash', cd: 12000, desc: 'Strobe enemies in front · blinds 2 s', type: 'aoe', radius: 8, damage: 0, color: 0xffffff, weaponAbId: 'blind_flash' },
   },
-  {
-    id: 'coin_gun', name: 'Coin Gun', type: 'Secondary', slot: 'secondary',
-    mag: 8, reserve: 32, damage: 30, fireRate: 280, reloadTime: 1800,
-    auto: false, pellets: 1, spread: 0.006, adsZoom: 52, bulletSpeed: 158, noReload: false,
-    bulletColor: 0xffd700, bulletSize: 0.045,
-    ricochet: { bounces: 2, dmgMult: 0.85 }, // up to 2 wall bounces
-    ability: { name: 'Jackpot', cd: 10000, desc: 'Fire 3 bouncing coins in a spread', type: 'multishot', count: 3, spread: 0.10 },
-  },
   // ── 3rd-batch secondaries ─────────────────────────────────────────────────
   {
     id: 'machine_revolver', name: 'Machine Revolver', type: 'Secondary', slot: 'secondary',
     mag: 8, reserve: 24, damage: 24, fireRate: 75, reloadTime: 2000,
     auto: true, pellets: 1, spread: 0.03, adsZoom: 50, bulletSpeed: 165, noReload: false,
     ability: { name: 'Wild Spin', cd: 11000, desc: 'Fan-fire all rounds instantly', type: 'fanfire_all', delay: 35 },
-  },
-  {
-    id: 'emp_pistol', name: 'EMP Pistol', type: 'Secondary', slot: 'secondary',
-    mag: 12, reserve: 48, damage: 26, fireRate: 240, reloadTime: 1600,
-    auto: false, pellets: 1, spread: 0.005, adsZoom: 50, bulletSpeed: 140, noReload: false,
-    bulletColor: 0x66ccff, bulletSize: 0.045,
-    empOnHit: 3000, // disables enemy abilities for 3 s on hit (stub)
-    ability: { name: 'EMP Burst', cd: 14000, desc: 'AOE · disable abilities 4 s · 25 dmg', type: 'aoe', radius: 6, damage: 25, color: 0x66ccff },
-  },
-  // ── 😈 P2W secondaries ────────────────────────────────────────────────────
-  {
-    id: 'pocket_rocket', name: 'Pocket Rocket', type: 'Secondary', slot: 'secondary',
-    mag: 1, reserve: 6, damage: 90, fireRate: 850, reloadTime: 2200,
-    auto: false, pellets: 1, spread: 0.005, adsZoom: 48, bulletSpeed: 78, noReload: false,
-    bulletColor: 0xff8800, bulletSize: 0.13,
-    splashRadius: 4, splashDamage: 60,
-    ability: { name: 'Mini Barrage', cd: 14000, desc: 'Fire 4 rockets in a spread', type: 'multishot', count: 4, spread: 0.10, noADS: true },
   },
   {
     id: 'auto_revolver', name: 'Auto Revolver', type: 'Secondary', slot: 'secondary',
@@ -621,10 +535,6 @@ const WEAPONS = [
     mag: 10, reserve: 30, damage: 24, fireRate: 150, reloadTime: 1800,
     auto: false, pellets: 1, spread: 0.006, adsZoom: 50, bulletSpeed: 150, noReload: false,
     ability: { name: 'Rapid Strip', cd: 9000, desc: 'Empty mag at 2× rate', type: 'fanfire', count: 10, delay: 60 } },
-  { id: 'mini_uzi', name: 'Mini Uzi', type: 'Secondary', slot: 'secondary',
-    mag: 25, reserve: 75, damage: 12, fireRate: 70, reloadTime: 1500,
-    auto: true, pellets: 1, spread: 0.012, adsZoom: 52, bulletSpeed: 130, noReload: false,
-    ability: { name: 'Spray', cd: 8000, desc: '3s · spread halved', type: 'buff', duration: 3000, spreadMult: 0.5 } },
   { id: 'nail_gun', name: 'Nail Gun', type: 'Secondary', slot: 'secondary',
     mag: 20, reserve: 60, damage: 18, fireRate: 110, reloadTime: 1600,
     auto: true, pellets: 1, spread: 0.005, adsZoom: 48, bulletSpeed: 140, noReload: false,
@@ -644,11 +554,6 @@ const WEAPONS = [
     auto: false, pellets: 1, spread: 0.01, adsZoom: 50, bulletSpeed: 70, noReload: false,
     bulletColor: 0x8a5a2a, bulletSize: 0.10,
     ability: { name: 'Triple Toss', cd: 11000, desc: 'Throw 3 axes in a spread', type: 'multishot', count: 3, spread: 0.12 } },
-  { id: 'shuriken', name: 'Shuriken', type: 'Thrown', slot: 'secondary',
-    mag: 8, reserve: 24, damage: 22, fireRate: 180, reloadTime: 1400,
-    auto: false, pellets: 1, spread: 0.008, adsZoom: 52, bulletSpeed: 110, noReload: false,
-    bulletColor: 0xcccccc, bulletSize: 0.05,
-    ability: { name: 'Star Storm', cd: 10000, desc: 'Throw 8 shurikens in rapid burst', type: 'fanfire', count: 8, delay: 50 } },
   { id: 'boomerang', name: 'Boomerang', type: 'Thrown', slot: 'secondary',
     mag: 1, reserve: 4, damage: 35, fireRate: 800, reloadTime: 1200,
     auto: false, pellets: 1, spread: 0, adsZoom: 50, bulletSpeed: 80, noReload: false,
@@ -659,12 +564,6 @@ const WEAPONS = [
     auto: false, pellets: 1, spread: 0.008, adsZoom: 48, bulletSpeed: 80, noReload: false,
     bulletColor: 0x666666,
     ability: { name: 'Volley', cd: 8000, desc: 'Loose 5 pellets in a spread', type: 'multishot', count: 5, spread: 0.18 } },
-  { id: 'blowgun', name: 'Blowgun', type: 'Secondary', slot: 'secondary',
-    mag: 1, reserve: 10, damage: 32, fireRate: 600, reloadTime: 800,
-    auto: false, pellets: 1, spread: 0.002, adsZoom: 50, bulletSpeed: 120, noReload: false,
-    bulletColor: 0x33aa55, bulletSize: 0.025,
-    ability: { name: 'Toxic Dart', cd: 10000, desc: 'Next dart deals 3× damage', type: 'powershot', pellets: 1, spreadMult: 0, dmgMult: 3 } },
-
   // ── 🌌 SCI-FI P2W PRIMARIES (very expensive, fantasy-tier mechanics) ────
   { id: 'event_horizon', name: 'Event Horizon Rifle', type: 'Gravity AR', slot: 'primary',
     mag: 18, reserve: 54, damage: 75, fireRate: 280, reloadTime: 2400,
@@ -686,11 +585,6 @@ const WEAPONS = [
     auto: true, pellets: 1, spread: 0.002, adsZoom: 44, bulletSpeed: 220, noReload: true, ammoRegen: 2,
     bulletColor: 0xffee44, bulletSize: 0.05, emissive: true,
     ability: { name: 'Solar Flare', cd: 14000, desc: 'Blinding beam burst · 7 m AOE 90 dmg', type: 'aoe', radius: 7, damage: 90, color: 0xffee44, reveal: true, revealDur: 3000 } },
-  { id: 'phase_driver', name: 'Phase Driver', type: 'Phasing AR', slot: 'primary',
-    mag: 20, reserve: 60, damage: 60, fireRate: 200, reloadTime: 2200,
-    auto: true, pellets: 1, spread: 0.004, adsZoom: 46, bulletSpeed: 180, noReload: false,
-    bulletColor: 0xaa66ff, bulletSize: 0.06, emissive: true, doubleJump: true,
-    ability: { name: 'Ghost Protocol', cd: 18000, desc: '4 s · +50% speed · shots ignore cover · DOUBLE JUMP', type: 'buff', duration: 4000, speedMult: 1.5, dmgMult: 1.3 } },
   { id: 'quantum_repeater', name: 'Quantum Repeater', type: 'Time-Shift AR', slot: 'primary',
     mag: 22, reserve: 66, damage: 50, fireRate: 200, reloadTime: 2300,
     auto: true, pellets: 1, spread: 0.005, adsZoom: 48, bulletSpeed: 150, noReload: false,
@@ -716,24 +610,12 @@ const WEAPONS = [
     auto: false, pellets: 1, spread: 0.002, adsZoom: 42, bulletSpeed: 120, noReload: false,
     bulletColor: 0x220033, bulletSize: 0.11, emissive: true,
     ability: { name: 'Consume', cd: 22000, desc: 'Detonate all remnants · 15 m AOE 250 dmg', type: 'aoe', radius: 15, damage: 250, color: 0x440066, frostBurst: 40 } },
-
   // ── 🌌 SCI-FI P2W SECONDARIES ────────────────────────────────────────────
   { id: 'pulse_needle', name: 'Pulse Needle', type: 'Tracking Secondary', slot: 'secondary',
     mag: 12, reserve: 36, damage: 14, fireRate: 110, reloadTime: 1500,
     auto: true, pellets: 1, spread: 0.003, adsZoom: 50, bulletSpeed: 160, noReload: false,
     bulletColor: 0xff66cc, bulletSize: 0.03,
     ability: { name: 'Detonate', cd: 10000, desc: 'All pulse marks explode · 12-shot burst', type: 'fanfire', count: 12, delay: 30 } },
-  { id: 'phase_pistol', name: 'Phase Pistol', type: 'Phasing Secondary', slot: 'secondary',
-    mag: 8, reserve: 24, damage: 45, fireRate: 280, reloadTime: 1600,
-    auto: false, pellets: 1, spread: 0.002, adsZoom: 50, bulletSpeed: 200, noReload: false,
-    bulletColor: 0xaa66ff, bulletSize: 0.05, emissive: true, doubleJump: true,
-    ability: { name: 'Blink Shot', cd: 11000, desc: 'Next shot · 3× damage · DOUBLE JUMP equipped', type: 'powershot', pellets: 1, spreadMult: 0, dmgMult: 3 } },
-  { id: 'ion_revolver', name: 'Ion Revolver', type: 'Electric Revolver', slot: 'secondary',
-    mag: 6, reserve: 18, damage: 50, fireRate: 320, reloadTime: 2000,
-    auto: false, pellets: 1, spread: 0.005, adsZoom: 48, bulletSpeed: 170, noReload: false,
-    bulletColor: 0x66ccff, bulletSize: 0.05, emissive: true,
-    ability: { name: 'Arc Burst', cd: 12000, desc: 'Empty cylinder · chain shots', type: 'fanfire', count: 6, delay: 60 } },
-
   // ── 🪖 ADMIN PRIMARIES (locked behind unlock codes) ──────────────────────
   {
     id: 'gau19', name: 'GAU-19 Heavy', type: 'Admin · Mounted MG', slot: 'primary',
@@ -800,14 +682,6 @@ const WEAPONS = [
     ability: { name: 'Mozambique', cd: 7000, desc: 'Triple-tap · 3 shots in 90ms', type: 'fanfire', count: 3, delay: 30 },
   },
   {
-    id: 'ppk', name: 'Walther PPK', type: 'Admin · Spy Pistol', slot: 'secondary',
-    mag: 8, reserve: 24, damage: 45, fireRate: 100, reloadTime: 1300,
-    auto: false, pellets: 1, spread: 0, adsZoom: 50, bulletSpeed: 165, noReload: false,
-    bulletColor: 0x666666, bulletSize: 0.035, adminItem: true,
-    silentShots: true,
-    ability: { name: 'Stealth Strike', cd: 9000, desc: 'Next shot · 135 dmg silent', type: 'powershot', pellets: 1, spreadMult: 0, weaponAbId: 'ppk_ab' },
-  },
-  {
     id: 'glock18', name: 'Glock-18 Auto', type: 'Admin · Full-Auto Pistol', slot: 'secondary',
     mag: 33, reserve: 99, damage: 30, fireRate: 70, reloadTime: 1500,
     auto: true, pellets: 1, spread: 0.008, adsZoom: 50, bulletSpeed: 160, noReload: false,
@@ -830,21 +704,6 @@ const WEAPONS = [
     ddayOnly: true,
     ability: null,
   },
-  // ── 🪖 M4A1 — accurate full-auto carbine ──
-  {
-    id: 'm4a1', name: 'M4A1', type: 'AR', slot: 'primary',
-    mag: 30, reserve: 120, damage: 24, fireRate: 130, reloadTime: 1900,
-    auto: true, pellets: 1, spread: 0.012, adsZoom: 48, bulletSpeed: 132, noReload: false,
-    ability: { name: 'Recoil Lock', cd: 9000, desc: '4s · near-zero recoil · +20% dmg', type: 'buff', duration: 4000, spreadMult: 0.2, dmgMult: 1.2 },
-  },
-  // ── 🚀 Rocket launchers — single-shot, big direct hit + area splash ──
-  {
-    id: 'rpg', name: 'RPG-7', type: 'Rocket', slot: 'primary',
-    mag: 1, reserve: 9, damage: 120, fireRate: 1000, reloadTime: 2300,
-    auto: false, pellets: 1, spread: 0.006, adsZoom: 48, bulletSpeed: 70, noReload: false,
-    bulletColor: 0xff7722, bulletSize: 0.15, splashRadius: 5,
-    ability: { name: 'Triple Warhead', cd: 16000, desc: 'Fire 3 rockets in a spread', type: 'multishot', count: 3, spread: 0.10, noADS: true },
-  },
   {
     id: 'bazooka', name: 'Bazooka', type: 'Rocket', slot: 'primary',
     mag: 1, reserve: 8, damage: 140, fireRate: 1100, reloadTime: 2600,
@@ -858,21 +717,6 @@ const WEAPONS = [
     mag: 1, reserve: 24, damage: 95, fireRate: 900, reloadTime: 1700,
     auto: false, pellets: 1, spread: 0.004, adsZoom: 50, bulletSpeed: 150, noReload: false,
     ability: { name: 'Bayonet Charge', cd: 9000, type: 'blade_charge', distance: 8, bladeDamage: 50, noADS: true, desc: 'Lunge forward · blade contact deals 50' },
-  },
-  // ── 🚧 / 🥧 Chuckable nonsense secondaries (must stay LAST — mirrored in weaponModels) ──
-  {
-    id: 'traffic_cone', name: 'Traffic Cone', type: 'Thrown', slot: 'secondary',
-    mag: 4, reserve: 16, damage: 38, fireRate: 320, reloadTime: 1400,
-    auto: false, pellets: 1, spread: 0.010, adsZoom: 50, bulletSpeed: 62, noReload: false,
-    bulletColor: 0xff6a00, bulletSize: 0.12,
-    ability: { name: 'Cone Barrage', cd: 10000, desc: 'Hurl 4 cones in a spread', type: 'multishot', count: 4, spread: 0.12 },
-  },
-  {
-    id: 'cream_pie', name: 'Cream Pie', type: 'Thrown', slot: 'secondary',
-    mag: 5, reserve: 20, damage: 34, fireRate: 280, reloadTime: 1200,
-    auto: false, pellets: 1, spread: 0.012, adsZoom: 50, bulletSpeed: 56, noReload: false,
-    bulletColor: 0xfff4d8, bulletSize: 0.13,
-    ability: { name: 'Pie Platter', cd: 8000, desc: 'Fling 5 pies at once', type: 'multishot', count: 5, spread: 0.14 },
   },
 ];
 
@@ -1155,49 +999,49 @@ const BOT_MOVE_INTERVAL = 0.05; // send position updates every 50ms
 // Admin items are NOT priced — they're claimed via promo codes only.
 const WEAPON_COSTS = {
   // Primaries — ARs / SMGs
-  ak20: 250, ak30: 300, mp40: 200, p90: 350, vector: 300, burst: 280,
+  ak20: 250,  mp40: 200, p90: 350, vector: 300, burst: 280,
   // Primaries — Shotguns
   sg8: 220, sg100: 380, auto_shotgun: 340,
   // Primaries — Snipers / Marksman
   srx: 500, lever: 360,
-  lancer: 460, rpg: 520, bazooka: 620, m4a1: 340,
+  lancer: 460,  bazooka: 620,
   // Primaries — Special
   rpd: 450, paintball: 120, crossbow: 280,
   // Primaries — Heavy
   minigun: 600, grenade_launcher: 500, flamethrower: 420,
   // Primaries — Sci-fi / energy
   railgun: 600, freeze_gun: 350, plasma_carbine: 420, arc_rifle: 400,
-  arc_torrent: 460, prism_launcher: 420, lazy_laser: 420, storm_cannon: 540,
-  coilgun: 460, magnet_rifle: 380, painter_beam: 300, gravity_paint: 400,
-  portal_launcher: 460, pulse_disc: 380, traffic_controller: 320,
+  arc_torrent: 460, prism_launcher: 420,  storm_cannon: 540,
+  coilgun: 460,  painter_beam: 300, gravity_paint: 400,
+  portal_launcher: 460,  traffic_controller: 320,
   // Primaries — Explosive / projectile
   boombow: 500, gravity_launcher: 480, harpoon_gun: 440, mortar_rifle: 480,
   firework_launcher: 360, shockwave_launcher: 460, airburst_projector: 360,
   pinball_launcher: 440, seismic_hammer: 480, glassmaker: 380,
   // Primaries — Tactical / precision / battle rifle
-  an94: 380, spas12: 360, m1_garand: 380, flechette: 380, thermal_lmg: 520,
-  burst_cannon: 480, incendiary_shotgun: 400, amr: 2000, air_rifle: 320,
+   spas12: 360, m1_garand: 380, flechette: 380,
+  burst_cannon: 480,  amr: 2000, air_rifle: 320,
   twin_ar: 440, swarm_rifle: 460, smart_smg: 380, switchblade_gun: 420,
   // Primaries — Joke / chaos
   potato_cannon: 220, sticker_blaster: 280, foam_cannon: 280,
   // Premium / P2W — ridiculously expensive on purpose
-  royal_minigun: 3500,
+
   // 🌌 Sci-fi P2W primaries
   event_horizon: 24000, storm_core: 20000, abs_zero: 22000, solar_lance: 26000,
-  phase_driver: 30000, quantum_repeater: 28000, magnetar: 25000,
+   quantum_repeater: 28000, magnetar: 25000,
   nebula_mortar: 35000, prism_engine: 27000, void_harvester: 40000,
   // Secondaries
   revolver: 150, flare: 80, pistol: 60, shorty: 180, cycler: 140,
-  hand_cannon: 260, throwing_knives: 120, taser: 200, traffic_cone: 160, cream_pie: 140,
-  machine_pistol: 220, sawed_off: 260, machine_revolver: 240, pocket_rocket: 320,
-  dart_gun: 160, laser_pointer: 120, coin_gun: 180, emp_pistol: 240,
+  hand_cannon: 260, throwing_knives: 120, taser: 200,
+  machine_pistol: 220, sawed_off: 260, machine_revolver: 240,
+  dart_gun: 160, laser_pointer: 120,
   auto_revolver: 220, frost_blaster: 240,
   // Batch-4 secondaries
-  snub_revolver: 140, duelist_pistol: 280, mauser: 200, mini_uzi: 240,
+  snub_revolver: 140, duelist_pistol: 280, mauser: 200,
   nail_gun: 180, boomstick: 220, signal_pistol: 200, throwing_axes: 240,
-  shuriken: 160, boomerang: 180, slingshot: 100, blowgun: 200,
+   boomerang: 180, slingshot: 100,
   // 🌌 Sci-fi P2W secondaries
-  pulse_needle: 12000, phase_pistol: 16000, ion_revolver: 14000,
+  pulse_needle: 12000,
   // Melees
   bat: 80, sabre: 140, frying_pan: 60, sledge: 360, spear: 200,
   katana: 360, baguette: 50, knife: 280, chainsaw: 1400, lightsabre: 1800,
@@ -1243,13 +1087,13 @@ const trialingThisMatch = new Set(); // ids the player paid a trial for this mat
 const BUNDLES = [
   { id: 'pitiful',     name: 'Pitiful Pack', icon: '🪖', price: 420,
     desc: 'Classic loadout: AR · shotgun · pistol · melee · smoke',
-    items: ['ak30','sg100','revolver','bat','smoke'] },
+    items: ['ak20','sg100','revolver','bat','smoke'] },
   { id: 'retro',       name: 'Retro Pack',   icon: '🕹️', price: 145,
     desc: 'Quirky old-school weapons · 70% off',
     items: ['paintball','laser_pointer','baguette','rubber_duck','confetti_cannon'] },
   { id: 'starter_pro', name: 'Starter Pro',  icon: '🎯', price: 330,
     desc: 'Upgrade past the freebies',
-    items: ['ak30','revolver','bat','stim'] },
+    items: ['ak20','revolver','bat','stim'] },
   { id: 'heavy_duty',  name: 'Heavy Duty',   icon: '💥', price: 700,
     desc: 'Minigun · GL · machine revolver',
     items: ['minigun','grenade_launcher','machine_revolver','crowbar','sticky_charge'] },
@@ -1270,7 +1114,7 @@ const BUNDLES = [
     items: ['plasma_carbine','arc_rifle','dart_gun','emp_grenade'] },
   { id: 'demolition',  name: 'Demolition',   icon: '💣', price: 600,
     desc: 'Blow stuff up',
-    items: ['grenade_launcher','pocket_rocket','sledge','sticky_charge'] },
+    items: ['grenade_launcher','throwing_axes','sledge','sticky_charge'] },
   { id: 'archery',     name: "Archer's Kit", icon: '🏹', price: 580,
     desc: 'Bows, knives, traps',
     items: ['crossbow','boombow','throwing_knives','tripwire'] },
@@ -1279,7 +1123,7 @@ const BUNDLES = [
     items: ['lever','hand_cannon','knife','ammo_fountain'] },
   { id: 'pyro',        name: 'Pyromaniac',   icon: '🔥', price: 620,
     desc: 'Burn it all down',
-    items: ['flamethrower','incendiary_shotgun','fire_axe','sticky_charge'] },
+    items: ['flamethrower','sg8','fire_axe','sticky_charge'] },
   { id: 'chaos',       name: 'Chaos Mode',   icon: '🤡', price: 150,
     desc: 'Goofy weapons only',
     items: ['paintball','confetti_cannon','baguette','rubber_duck'] },
@@ -1294,7 +1138,7 @@ const BUNDLES = [
     items: ['sg100','taser','riot_shield','nano_shield'] },
   { id: 'royalty',     name: 'Royalty',      icon: '💎', price: 4500,
     desc: 'High-end P2W power fantasy · ~45% off',
-    items: ['royal_minigun','vampire_blade','hand_cannon','orbital_strike'] },
+    items: ['minigun','vampire_blade','hand_cannon','orbital_strike'] },
   { id: 'kitchen',     name: 'Kitchen Catastrophe', icon: '🍳', price: 130,
     desc: 'Household weapons only',
     items: ['paintball','baguette','frying_pan','rubber_duck'] },
@@ -1315,11 +1159,7 @@ const BUNDLES = [
     items: ['mortar_rifle','grenade_launcher','hand_cannon','frag'] },
   { id: 'cosmic_p2w',  name: 'Cosmic P2W',   icon: '🌌', price: 80000,
     desc: 'Every sci-fi P2W item · 30% off',
-    items: ['event_horizon','storm_core','abs_zero','solar_lance','phase_driver',
-            'quantum_repeater','magnetar','nebula_mortar','prism_engine','void_harvester',
-            'pulse_needle','phase_pistol','ion_revolver',
-            'phase_blade','gravity_hammer','volt_whip',
-            'nano_swarm','warp_beacon','stasis_mine','specter_drone','quantum_barrier'] },
+    items: ['event_horizon','storm_core','abs_zero','solar_lance','quantum_repeater','magnetar','nebula_mortar','prism_engine','void_harvester','pulse_needle','revolver','phase_blade','gravity_hammer','volt_whip','nano_swarm','warp_beacon','stasis_mine','specter_drone','quantum_barrier'] },
 ];
 
 function shopCost(id)      { return WEAPON_COSTS[id]; }
@@ -1493,16 +1333,7 @@ const BLAST_DECAY   = 0.10;  // fraction of horizontal blast speed left after 1 
 //   • fists — nothing in your hands, the lightest possible loadout
 //   • crossbow and the compressed-air weapons — no powder, no recoil, no weight
 // Sidearms and SMGs used to qualify wholesale and no longer do.
-const DOUBLE_JUMP_IDS = new Set([
-  'fists',        // Brass Knuckles — empty-handed
-  'crossbow',
-  'air_rifle',    // Compressed Air Rifle
-  'dart_gun',
-  'blowgun',
-  // paintball deliberately NOT here: it has an ability instead (its hopper blocks
-  // the sights). One perk per weapon — a marker that both double jumps and has an
-  // ability is carrying two of everyone else's.
-]);
+const DOUBLE_JUMP_IDS = new Set(['fists','crossbow','air_rifle','dart_gun']);
 
 // ── 🅴 Abilities ────────────────────────────────────────────────────────────
 // Nearly everything used to carry an ability (120 of 121 guns, all 42 melee) on
@@ -1525,7 +1356,7 @@ function hasAbility(w) {
 
 function grantsDoubleJump(w) {
   if (!w) return false;
-  // Per-item opt-in stays: gravity_launcher, phase_driver, phase_pistol,
+  // Per-item opt-in stays: gravity_launcher, quantum_repeater,
   // lightsabre, phase_blade and gravity_hammer set doubleJump themselves, and
   // three of them ADVERTISE it in their ability text ("… DOUBLE JUMP"). Dropping
   // it silently would make the shop copy lie.
@@ -2256,7 +2087,6 @@ function weaponAudioProfile(id, baseWeapon) {
   if (lowerId === 'plasma_carbine') return { kind:'energy', vol:0.30, dur:0.14, f1:880, f2:540 };
   if (lowerId === 'railgun')        return { kind:'energy', vol:0.42, dur:0.32, f1:1620, f2:120 };
   if (lowerId === 'coilgun')        return { kind:'energy', vol:0.36, dur:0.24, f1:1320, f2:160 };
-  if (lowerId === 'lazy_laser')     return { kind:'energy', vol:0.28, dur:0.18, f1:760, f2:1180 };
   if (lowerId === 'arc_rifle')      return { kind:'arc',    vol:0.30, dur:0.13, f1:1240, f2:380 };
   if (lowerId === 'cycler')         return { kind:'energy', vol:0.26, dur:0.10, f1:1080, f2:520 };
   if (lowerId === 'paintball')      return { kind:'pop',    vol:0.32, dur:0.11, f1:480, f2:160 };
@@ -2265,7 +2095,6 @@ function weaponAudioProfile(id, baseWeapon) {
   if (lowerId === 'foam_cannon')    return { kind:'flame',  vol:0.20, dur:0.14, f1:160, f2:90 };
   if (lowerId === 'taser')          return { kind:'arc',    vol:0.22, dur:0.20, f1:880, f2:1180 };
   if (lowerId === 'glassmaker')     return { kind:'energy', vol:0.30, dur:0.16, f1:1480, f2:680 };
-  if (lowerId === 'magnet_rifle')   return { kind:'energy', vol:0.30, dur:0.18, f1:560, f2:880 };
   if (lowerId === 'shockwave_launcher') return { kind:'thump', vol:0.46, dur:0.30, f1:80, f2:30, action:'single' };
   if (lowerId === 'seismic_hammer') return { kind:'thump', vol:0.50, dur:0.34, f1:55, f2:22, action:'single' };
   if (lowerId === 'mortar_rifle' || lowerId === 'grenade_launcher') return { kind:'thump', vol:0.44, dur:0.28, f1:120, f2:48, action:'single' };
@@ -2274,20 +2103,16 @@ function weaponAudioProfile(id, baseWeapon) {
   if (lowerId === 'storm_core')      return { kind:'arc',    vol:0.34, dur:0.16, f1:1080, f2:540 };
   if (lowerId === 'abs_zero')        return { kind:'freeze', vol:0.28, dur:0.18, f1:980, f2:380 };
   if (lowerId === 'solar_lance')     return { kind:'energy', vol:0.36, dur:0.22, f1:1480, f2:880 };
-  if (lowerId === 'phase_driver')    return { kind:'energy', vol:0.30, dur:0.14, f1:1180, f2:720 };
   if (lowerId === 'quantum_repeater')return { kind:'energy', vol:0.28, dur:0.10, f1:920, f2:1320 };
   if (lowerId === 'magnetar')        return { kind:'energy', vol:0.40, dur:0.26, f1:580, f2:120 };
   if (lowerId === 'nebula_mortar')   return { kind:'thump',  vol:0.48, dur:0.32, f1:90, f2:32, action:'single' };
   if (lowerId === 'prism_engine')    return { kind:'energy', vol:0.28, dur:0.14, f1:1380, f2:980 };
   if (lowerId === 'void_harvester')  return { kind:'energy', vol:0.44, dur:0.30, f1:280, f2:60 };
   if (lowerId === 'pulse_needle')    return { kind:'energy', vol:0.22, dur:0.08, f1:1880, f2:780 };
-  if (lowerId === 'phase_pistol')    return { kind:'energy', vol:0.26, dur:0.10, f1:1280, f2:540 };
-  if (lowerId === 'ion_revolver')    return { kind:'arc',    vol:0.30, dur:0.12, f1:980, f2:380 };
   // Throwables
   if (lowerId.includes('crossbow') || lowerId.includes('bow') || lowerId.includes('harpoon') || lowerId === 'slingshot') return { kind:'twang', vol:0.34, dur:0.18, f1:420, f2:130 };
-  if (lowerId === 'blowgun')        return { kind:'throw', vol:0.18, dur:0.09, f1:660, f2:140 };
   if (lowerId === 'boomerang')      return { kind:'twang', vol:0.20, dur:0.16, f1:380, f2:180 };
-  if (lowerId === 'throwing_axes' || lowerId === 'shuriken' || lowerId === 'throwing_knives' || lowerId === 'spear_throw') return { kind:'throw', vol:0.23, dur:0.12, f1:780, f2:260 };
+  if (lowerId === 'throwing_axes' || lowerId === 'throwing_knives' || lowerId === 'spear_throw') return { kind:'throw', vol:0.23, dur:0.12, f1:780, f2:260 };
   // Pattern fallbacks
   if (lowerId.includes('rail') || lowerId.includes('coil') || lowerId.includes('laser')) return { kind:'energy', vol:0.32, dur:0.20, f1:920, f2:170 };
   if (lowerId.includes('freeze') || lowerId.includes('cryo')) return { kind:'energy', vol:0.26, dur:0.22, f1:740, f2:260 };
@@ -2297,8 +2122,8 @@ function weaponAudioProfile(id, baseWeapon) {
   if (lowerId.includes('knife') || lowerId.includes('throwing')) return { kind:'throw', vol:0.23, dur:0.12, f1:780, f2:260 };
   if (type.includes('shotgun') || lowerId.includes('shotgun') || lowerId.includes('sg8') || lowerId.includes('sg100') || lowerId.includes('shorty') || lowerId.includes('sawed') || lowerId === 'boomstick' || lowerId.includes('spas')) return { kind:'boom', vol:0.48, dur:0.22, f1:150, f2:55, action:'shotgun' };
   if (type.includes('sniper') || type.includes('marksman') || lowerId.includes('srx') || lowerId.includes('lever') || lowerId === 'amr' || lowerId === 'm1_garand' || lowerId === 'air_rifle' || lowerId === 'duelist_pistol') return { kind:'crack', vol:0.44, dur:0.18, f1:680, f2:95, action:'bolt' };
-  if (type.includes('smg') || lowerId.includes('vector') || lowerId.includes('mp40') || lowerId === 'mini_uzi' || lowerId === 'machine_pistol' || lowerId === 'hkmp7' || lowerId === 'smart_smg') return { kind:'auto_blast', vol:0.20, dur:0.075, f1:430, f2:160, action:'water_smg' };
-  if (type.includes('lmg') || type.includes('heavy') || lowerId.includes('minigun') || lowerId.includes('rpd') || lowerId === 'gau19' || lowerId === 'm134' || lowerId === 'thermal_lmg') return { kind:'auto_blast_heavy', vol:0.27, dur:0.11, f1:230, f2:80, action:'water_belt' };
+  if (type.includes('smg') || lowerId.includes('vector') || lowerId.includes('mp40') || lowerId === 'machine_pistol' || lowerId === 'hkmp7' || lowerId === 'smart_smg') return { kind:'auto_blast', vol:0.20, dur:0.075, f1:430, f2:160, action:'water_smg' };
+  if (type.includes('lmg') || type.includes('heavy') || lowerId.includes('minigun') || lowerId.includes('rpd') || lowerId === 'gau19' || lowerId === 'm134') return { kind:'auto_blast_heavy', vol:0.27, dur:0.11, f1:230, f2:80, action:'water_belt' };
   if (type.includes('secondary') || lowerId.includes('pistol') || lowerId.includes('revolver') || lowerId.includes('hand_cannon') || lowerId === 'mauser' || lowerId === 'nail_gun') return { kind:'pistol', vol:0.34, dur:0.12, f1:540, f2:120, action: lowerId.includes('revolver') ? 'revolver' : 'slide' };
   return w.auto ? { kind:'auto_blast', vol:0.23, dur:0.080, f1:145, f2:52, action:'water_rifle' }
                 : { kind:'rifle', vol:0.38, dur:0.10, f1:145, f2:52, action:'rifle' };
@@ -6695,69 +6520,116 @@ function detailItemText(item) {
 // the old generic gun factory.
 const handcraftedWeapon = id => HandcraftedModels.buildWeapon(id);
 const weaponModels = [
-  buildAK20(), buildAK30(), buildSG8(), buildSG100(),
-  buildSRX(), buildRPD(), buildMP40(), buildP90(),
-  buildPaintball(), buildBurstRifle(), buildLeverRifle(), buildAutoShotgun(),
-  buildVectorSMG(), buildCrossbow(), buildFlamethrower(), buildGrenadeLauncher(),
-  buildRailgun(), buildMinigun(), buildFreezeGun(), buildBoombow(),
-  buildRevolver(), buildFlare(), buildPistol(), buildShorty(), buildCycler(),
-  buildHandCannon(), buildThrowingKnives(), buildTaser(),
-  // ── New primaries ──────────────────────────────────────────────────────
-  handcraftedWeapon('an94'), handcraftedWeapon('spas12'), handcraftedWeapon('m1_garand'),
-  handcraftedWeapon('plasma_carbine'), handcraftedWeapon('arc_rifle'),
-  handcraftedWeapon('gravity_launcher'), handcraftedWeapon('potato_cannon'),
-  handcraftedWeapon('sticker_blaster'), handcraftedWeapon('harpoon_gun'), handcraftedWeapon('mortar_rifle'),
-  handcraftedWeapon('arc_torrent'), handcraftedWeapon('firework_launcher'), handcraftedWeapon('switchblade_gun'),
+  buildAK20(),  // ak20
+  buildSG8(),  // sg8
+  buildSG100(),  // sg100
+  buildSRX(),  // srx
+  buildRPD(),  // rpd
+  buildMP40(),  // mp40
+  buildP90(),  // p90
+  buildPaintball(),  // paintball
+  buildBurstRifle(),  // burst
+  buildLeverRifle(),  // lever
+  buildAutoShotgun(),  // auto_shotgun
+  buildVectorSMG(),  // vector
+  buildCrossbow(),  // crossbow
+  buildFlamethrower(),  // flamethrower
+  buildGrenadeLauncher(),  // grenade_launcher
+  buildRailgun(),  // railgun
+  buildMinigun(),  // minigun
+  buildFreezeGun(),  // freeze_gun
+  buildBoombow(),  // boombow
+  buildRevolver(),  // revolver
+  buildFlare(),  // flare
+  buildPistol(),  // pistol
+  buildShorty(),  // shorty
+  buildCycler(),  // cycler
+  buildHandCannon(),  // hand_cannon
+  buildThrowingKnives(),  // throwing_knives
+  buildTaser(),  // taser
+  handcraftedWeapon('spas12'),  // spas12
+  handcraftedWeapon('m1_garand'),  // m1_garand
+  handcraftedWeapon('plasma_carbine'),  // plasma_carbine
+  handcraftedWeapon('arc_rifle'),  // arc_rifle
+  handcraftedWeapon('gravity_launcher'),  // gravity_launcher
+  handcraftedWeapon('potato_cannon'),  // potato_cannon
+  handcraftedWeapon('sticker_blaster'),  // sticker_blaster
+  handcraftedWeapon('harpoon_gun'),  // harpoon_gun
+  handcraftedWeapon('mortar_rifle'),  // mortar_rifle
+  handcraftedWeapon('arc_torrent'),  // arc_torrent
+  handcraftedWeapon('firework_launcher'),  // firework_launcher
+  handcraftedWeapon('switchblade_gun'),  // switchblade_gun
   // ── 3rd-batch primaries ──────────────────────────────────────────────────
-  handcraftedWeapon('flechette'), handcraftedWeapon('thermal_lmg'), handcraftedWeapon('burst_cannon'),
-  handcraftedWeapon('incendiary_shotgun'), handcraftedWeapon('coilgun'), handcraftedWeapon('smart_smg'),
-  handcraftedWeapon('amr'), handcraftedWeapon('air_rifle'),
-  handcraftedWeapon('shockwave_launcher'), handcraftedWeapon('twin_ar'),
+  handcraftedWeapon('flechette'),  // flechette
+  handcraftedWeapon('burst_cannon'),  // burst_cannon
+  handcraftedWeapon('coilgun'),  // coilgun
+  handcraftedWeapon('smart_smg'),  // smart_smg
+  handcraftedWeapon('amr'),  // amr
+  handcraftedWeapon('air_rifle'),  // air_rifle
+  handcraftedWeapon('shockwave_launcher'),  // shockwave_launcher
+  handcraftedWeapon('twin_ar'),  // twin_ar
   // ── 😈 P2W primaries ─────────────────────────────────────────────────────
-  handcraftedWeapon('swarm_rifle'), handcraftedWeapon('lazy_laser'),
-  handcraftedWeapon('storm_cannon'), handcraftedWeapon('royal_minigun'),
+  handcraftedWeapon('swarm_rifle'),  // swarm_rifle
+  handcraftedWeapon('storm_cannon'),  // storm_cannon
   // ── 🔬 Tech / Physics primaries ──────────────────────────────────────────
-  handcraftedWeapon('prism_launcher'), handcraftedWeapon('foam_cannon'),
-  handcraftedWeapon('airburst_projector'), handcraftedWeapon('glassmaker'),
-  handcraftedWeapon('magnet_rifle'), handcraftedWeapon('seismic_hammer'),
-  handcraftedWeapon('painter_beam'), handcraftedWeapon('portal_launcher'),
-  handcraftedWeapon('pulse_disc'), handcraftedWeapon('gravity_paint'),
-  handcraftedWeapon('traffic_controller'), handcraftedWeapon('pinball_launcher'),
+  handcraftedWeapon('prism_launcher'),  // prism_launcher
+  handcraftedWeapon('foam_cannon'),  // foam_cannon
+  handcraftedWeapon('airburst_projector'),  // airburst_projector
+  handcraftedWeapon('glassmaker'),  // glassmaker
+  handcraftedWeapon('seismic_hammer'),  // seismic_hammer
+  handcraftedWeapon('painter_beam'),  // painter_beam
+  handcraftedWeapon('portal_launcher'),  // portal_launcher
+  handcraftedWeapon('gravity_paint'),  // gravity_paint
+  handcraftedWeapon('traffic_controller'),  // traffic_controller
+  handcraftedWeapon('pinball_launcher'),  // pinball_launcher
   // ── New secondaries ────────────────────────────────────────────────────
-  handcraftedWeapon('machine_pistol'), handcraftedWeapon('sawed_off'), handcraftedWeapon('dart_gun'),
-  handcraftedWeapon('laser_pointer'), handcraftedWeapon('coin_gun'),
+  handcraftedWeapon('machine_pistol'),  // machine_pistol
+  handcraftedWeapon('sawed_off'),  // sawed_off
+  handcraftedWeapon('dart_gun'),  // dart_gun
+  handcraftedWeapon('laser_pointer'),  // laser_pointer
   // ── 3rd-batch secondaries ─────────────────────────────────────────────────
-  handcraftedWeapon('machine_revolver'), handcraftedWeapon('emp_pistol'),
-  // ── 😈 P2W secondaries ───────────────────────────────────────────────────
-  handcraftedWeapon('pocket_rocket'), handcraftedWeapon('auto_revolver'), handcraftedWeapon('frost_blaster'),
+  handcraftedWeapon('machine_revolver'),  // machine_revolver
+  handcraftedWeapon('auto_revolver'),  // auto_revolver
+  handcraftedWeapon('frost_blaster'),  // frost_blaster
   // ── 🆕 Batch-4 secondaries (must match WEAPONS order) ──────────────────
-  handcraftedWeapon('snub_revolver'), handcraftedWeapon('duelist_pistol'),
-  handcraftedWeapon('mauser'), handcraftedWeapon('mini_uzi'),
-  handcraftedWeapon('nail_gun'), handcraftedWeapon('boomstick'), handcraftedWeapon('signal_pistol'), buildThrowingAxes(),
-  buildShuriken(), buildBoomerang(), buildSlingshot(), buildBlowgun(),
+  handcraftedWeapon('snub_revolver'),  // snub_revolver
+  handcraftedWeapon('duelist_pistol'),  // duelist_pistol
+  handcraftedWeapon('mauser'),  // mauser
+  handcraftedWeapon('nail_gun'),  // nail_gun
+  handcraftedWeapon('boomstick'),  // boomstick
+  handcraftedWeapon('signal_pistol'),  // signal_pistol
+  buildThrowingAxes(),  // throwing_axes
+  buildBoomerang(),  // boomerang
+  buildSlingshot(),  // slingshot
   // ── 🌌 SCI-FI P2W primaries ─────────────────────────────────────────────
-  handcraftedWeapon('event_horizon'), handcraftedWeapon('storm_core'),
-  handcraftedWeapon('abs_zero'), handcraftedWeapon('solar_lance'),
-  handcraftedWeapon('phase_driver'), handcraftedWeapon('quantum_repeater'),
-  handcraftedWeapon('magnetar'), handcraftedWeapon('nebula_mortar'),
-  handcraftedWeapon('prism_engine'), handcraftedWeapon('void_harvester'),
+  handcraftedWeapon('event_horizon'),  // event_horizon
+  handcraftedWeapon('storm_core'),  // storm_core
+  handcraftedWeapon('abs_zero'),  // abs_zero
+  handcraftedWeapon('solar_lance'),  // solar_lance
+  handcraftedWeapon('quantum_repeater'),  // quantum_repeater
+  handcraftedWeapon('magnetar'),  // magnetar
+  handcraftedWeapon('nebula_mortar'),  // nebula_mortar
+  handcraftedWeapon('prism_engine'),  // prism_engine
+  handcraftedWeapon('void_harvester'),  // void_harvester
   // ── 🌌 SCI-FI P2W secondaries ───────────────────────────────────────────
-  handcraftedWeapon('pulse_needle'), handcraftedWeapon('phase_pistol'), handcraftedWeapon('ion_revolver'),
+  handcraftedWeapon('pulse_needle'),  // pulse_needle
   // ── 🪖 ADMIN primaries ───────────────────────────────────────────────────
-  handcraftedWeapon('gau19'), handcraftedWeapon('mk44'), handcraftedWeapon('xm7'),
-  handcraftedWeapon('barrett'), handcraftedWeapon('m134'), handcraftedWeapon('hkmp7'), handcraftedWeapon('p90_spec'),
+  handcraftedWeapon('gau19'),  // gau19
+  handcraftedWeapon('mk44'),  // mk44
+  handcraftedWeapon('xm7'),  // xm7
+  handcraftedWeapon('barrett'),  // barrett
+  handcraftedWeapon('m134'),  // m134
+  handcraftedWeapon('hkmp7'),  // hkmp7
+  handcraftedWeapon('p90_spec'),  // p90_spec
   // ── 🪖 ADMIN secondaries ─────────────────────────────────────────────────
-  handcraftedWeapon('desert_eagle'), handcraftedWeapon('m1911'), handcraftedWeapon('ppk'),
-  handcraftedWeapon('glock18'), handcraftedWeapon('five_seven'),
-  buildMG42(),
-  // 🪖 M4A1 (must align with the 'm4a1' WEAPONS slot)
-  handcraftedWeapon('m4a1'),
-  // 🚀 Rocket launchers (must align with the 'rpg'/'bazooka' WEAPONS slots)
-  buildRPG(), buildBazooka(),
+  handcraftedWeapon('desert_eagle'),  // desert_eagle
+  handcraftedWeapon('m1911'),  // m1911
+  handcraftedWeapon('glock18'),  // glock18
+  handcraftedWeapon('five_seven'),  // five_seven
+  buildMG42(),  // mg42
+  buildBazooka(),  // bazooka
   // ⚔️ Lancer (must align with the 'lancer' WEAPONS slot — right before the cone/pie)
-  handcraftedWeapon('lancer'),
-  // ── 🚧 / 🥧 must mirror the two trailing WEAPONS entries ──
-  buildTrafficCone(), buildCreamPie(),
+  handcraftedWeapon('lancer'),  // lancer
 ];
 weaponModels.forEach((m,i) => { m.visible = i === 0; camera.add(m); });
 
@@ -10087,8 +9959,8 @@ function getDefaultWeaponWeight(item) {
   // Fixed targets requested by design:
   const FIXED = {
     fists: 0.00, knife: 0.05, baguette: 0.02, screwdriver: 0.05,
-    minigun: 0.40, royal_minigun: 0.70, m134: 0.55, gau19: 0.50, mk44: 0.45,
-    barrett: 0.45, amr: 0.45, thermal_lmg: 0.40, rpd: 0.30,
+    minigun: 0.40, m134: 0.55, gau19: 0.50, mk44: 0.45,
+    barrett: 0.45, amr: 0.45, rpd: 0.30,
     flamethrower: 0.35, mortar_rifle: 0.40, gravity_launcher: 0.35,
     grenade_launcher: 0.30, sledge: 0.30, titan_hammer: 0.45, gravity_hammer: 0.30,
     fire_axe: 0.20, combat_axe: 0.18, chainsaw: 0.25, lightsabre: 0.05,
@@ -11732,8 +11604,8 @@ function updateDamageNumbers() {
 const INSTAKILL_HS_WEAPONS = new Set(['srx', 'railgun', 'lever', 'boombow', 'boombow_ab', 'boombow_c1', 'railgun_ab']);
 
 // 🤫 Secret weapon category sets used for hidden synergy mechanics
-const ELECTRIC_WEAPONS = new Set(['arc_rifle','arc_torrent','taser','emp_pistol','shock_baton','storm_core','ion_revolver','magnet_rifle','coilgun','plasma_carbine']);
-const FIRE_WEAPONS     = new Set(['flamethrower','firework_launcher','incendiary_shotgun','fire_axe','fire_poker','thermite','molotov']);
+const ELECTRIC_WEAPONS = new Set(['arc_rifle','arc_torrent','taser','pistol','shock_baton','storm_core','revolver','freeze_gun','coilgun','plasma_carbine']);
+const FIRE_WEAPONS     = new Set(['flamethrower','firework_launcher','sg8','fire_axe','fire_poker','thermite','molotov']);
 const GRAVITY_WEAPONS  = new Set(['gravity_launcher','gravity_hammer','gravity_paint','event_horizon','magnetar','void_harvester','black_hole_seed']);
 const FROST_WEAPONS    = new Set(['freeze_gun','frost_blaster','abs_zero']);
 
@@ -12221,7 +12093,7 @@ function updateBullets(dt) {
           spawnBurnZone(wallHitPt, 3, 3, 10000);
         }
         // 🚀 Rockets: detonate on terrain impact (area splash, no direct target)
-        if (b.weaponId === 'rpg' || b.weaponId === 'bazooka') {
+        if (b.weaponId === 'bazooka') {
           rocketExplode(wallHitPt, b.weaponId, null);
           removeBullet(); continue;
         }
@@ -12286,7 +12158,7 @@ function updateBullets(dt) {
           spawnBurnZone(_bpos.clone(), 3, 3, 10000);
         }
         // 🚀 Rockets: direct target took the main hit; splash everyone else nearby
-        if (b.weaponId === 'rpg' || b.weaponId === 'bazooka') {
+        if (b.weaponId === 'bazooka') {
           rocketExplode(_bpos.clone(), b.weaponId, bestHit.pid);
         }
         removeBullet();
@@ -13545,19 +13417,19 @@ const CLIENT_WEAPON_DAMAGE = Object.fromEntries([
   ['molotov_burn', 10], ['molotov_fire', 5],  // 🔥 inside-the-flames tick / lingering on-fire DOT
   ['rpg_splash', 70], ['bazooka_splash', 85],  // 🚀 rocket area splash (direct hit uses the WEAPONS damage)
   // 3rd-batch primaries + abilities
-  ['flechette', 16], ['thermal_lmg', 11], ['burst_cannon', 40], ['incendiary_shotgun', 14],
+  ['flechette', 16], ['rpd'], ['burst_cannon', 40], ['sg8'],
   ['coilgun', 92], ['smart_smg', 9], ['amr', 180], ['air_rifle', 34],
   ['shockwave_launcher', 48], ['twin_ar', 20],
   ['coilgun_ab', 220], ['needle_storm', 16], ['vent_burst', 30], ['dragon_breath', 4],
   // 3rd-batch secondaries
-  ['machine_revolver', 24], ['emp_pistol', 26], ['emp_burst', 25],
+  ['machine_revolver', 24], ['pistol'], ['emp_burst', 25],
   // 3rd-batch melees
   ['combat_axe', 78], ['combat_axe_throw', 120], ['shock_baton', 32],
   // 3rd-batch supports
   ['hunter_drone', 100], ['emp_grenade', 25], ['sticky_charge', 120],
   // 😈 P2W batch
-  ['swarm_rifle', 11], ['lazy_laser', 6], ['storm_cannon', 70], ['royal_minigun', 12],
-  ['pocket_rocket', 90], ['auto_revolver', 42],
+  ['swarm_rifle', 11], ['painter_beam'], ['storm_cannon', 70], ['minigun'],
+  ['throwing_axes'], ['auto_revolver', 42],
   ['titan_hammer', 95], ['vampire_blade', 52],
   ['orbital_strike', 250], ['guardian_drone', 14], ['nano_shield', 0], ['tesla_coil', 16],
   ['acid_pool', 8], ['bee_sting', 5],   // 🧪 acid tick / 🐝 bee sting
@@ -13566,8 +13438,8 @@ const CLIENT_WEAPON_DAMAGE = Object.fromEntries([
   ['frost_blaster', 0], ['air_grenade', 15], ['land_mine', 298], ['frost_freeze', 9999],
   // 🔬 Tech / Physics batch
   ['prism_launcher', 38], ['foam_cannon', 18], ['airburst_projector', 22], ['glassmaker', 28],
-  ['magnet_rifle', 16], ['seismic_hammer', 70], ['painter_beam', 6], ['portal_launcher', 10],
-  ['pulse_disc', 32], ['gravity_paint', 4], ['traffic_controller', 4], ['pinball_launcher', 60],
+  ['freeze_gun'], ['seismic_hammer', 70], ['painter_beam', 6], ['portal_launcher', 10],
+  ['glassmaker'], ['gravity_paint', 4], ['traffic_controller', 4], ['pinball_launcher', 60],
   ['hyper_disc', 80],
   // Map hazards
   ['lava', 4],
@@ -13580,7 +13452,7 @@ const CLIENT_WEAPON_DAMAGE = Object.fromEntries([
   // 🪖 ADMIN weapons + ability shots
   ['gau19', 50], ['mk44', 25], ['xm7', 60], ['barrett', 250], ['barrett_ab', 600],
   ['m134', 15], ['hkmp7', 30], ['p90_spec', 22],
-  ['desert_eagle', 65], ['desert_eagle_ab', 195], ['m1911', 50], ['ppk', 45], ['ppk_ab', 135],
+  ['desert_eagle', 65], ['desert_eagle_ab', 195], ['m1911', 50], ['m1911'], ['ppk_ab', 135],
   ['glock18', 30], ['five_seven', 40],
   ['karambit', 80], ['bayonet', 100], ['tomahawk', 120], ['tomahawk_throw', 180],
   ['ots04', 90], ['garrote', 9999],
@@ -14968,11 +14840,11 @@ function setupArcadeStart(subtype) {
     }
     case 'piefight': {
       // 🥧 Everyone wields the Cream Pie and nothing else. Pure dessert warfare.
-      forcePlayerWeapon('cream_pie', 'secondary');
+      forcePlayerWeapon('snub_revolver', 'secondary');
       for (const b of gameBots) {
-        b.weaponId = 'cream_pie';
+        b.weaponId = 'snub_revolver';
         b.team = 'enemy'; // FFA — everyone's fair game
-        if (players[b.id]) players[b.id].weaponId = 'cream_pie';
+        if (players[b.id]) players[b.id].weaponId = 'snub_revolver';
       }
       showAnnouncement('🥧 PIE FIGHT', 'Cream pies only · splat everyone · most pies wins!', '#ffcc66', 3000);
       return;
@@ -16181,7 +16053,7 @@ function botSideSpawn(idx, count, team) {
 // stats are inherited from the default so no character is objectively OP.
 const TEAMMATE_PLAYSTYLES = {
   // — Main heroes —
-  kingchaos:   { primary:'royal_minigun',     personality:'aggressor', style:'Chaotic spray-and-pray' },
+  kingchaos:   { primary:'minigun',     personality:'aggressor', style:'Chaotic spray-and-pray' },
   luckylarry:  { primary:'auto_revolver',     personality:'tactician', style:'Accidental clutch' },
   grandmaster: { primary:'srx',               personality:'sniper',    style:'Calculated picks' },
   mirage:      { primary:'smart_smg', melee:'katana', personality:'aggressor', style:'Fast hit-and-run' },
@@ -16189,13 +16061,13 @@ const TEAMMATE_PLAYSTYLES = {
   bot47:       { primary:'arc_rifle',         personality:'tactician', style:'Cold precision' },
   rager:       { primary:'auto_shotgun',      personality:'aggressor', style:'Reckless rusher' },
   duckguy:     { primary:'potato_cannon',     personality:'aggressor', style:'Quacks & chaos' },
-  combatmedic: { primary:'pulse_disc', secondary:'pistol', personality:'tactician', style:'Support' },
+  combatmedic: { primary:'glassmaker', secondary:'pistol', personality:'tactician', style:'Support' },
   // — Girls squad —
   sharpshooter:{ primary:'railgun',           personality:'sniper',    style:'One-shot sniper' },
   ladymayhem:  { primary:'firework_launcher', personality:'aggressor', style:'Explosive comedian' },
   jinx:        { primary:'pinball_launcher',  personality:'tactician', style:'Unpredictable bounce' },
   pandora:     { primary:'grenade_launcher',  personality:'aggressor', style:'Press every button' },
-  wildfire:    { primary:'incendiary_shotgun',personality:'aggressor', style:'Burn it down' },
+  wildfire:    { primary:'sg8',personality:'aggressor', style:'Burn it down' },
   anarchy:     { primary:'storm_cannon',      personality:'aggressor', style:'Burn the meta' },
   // — Specialists —
   professional:{ primary:'srx',               personality:'sniper',    style:'Executes, never plays' },
@@ -16206,13 +16078,13 @@ const TEAMMATE_PLAYSTYLES = {
   engineer:    { primary:'foam_cannon',       personality:'tactician', style:'Fix it or break it' },
   // — Bots —
   bot604:      { primary:'arc_rifle',         personality:'sniper',    style:'Probability engine' },
-  juicebox:    { primary:'pulse_disc', secondary:'pistol', personality:'tactician', style:'Hydration support' },
+  juicebox:    { primary:'glassmaker', secondary:'pistol', personality:'tactician', style:'Hydration support' },
   // — Weird department —
   ghost:       { primary:'glassmaker', melee:'knife', personality:'tactician', style:'Silent flanker' },
   nucleardave: { primary:'mortar_rifle',      personality:'aggressor', style:'Watch this' },
-  lorekeeper:  { primary:'magnet_rifle',      personality:'camper',    style:'Prophesied control' },
-  tankturtle:  { primary:'thermal_lmg',       personality:'camper',    style:'Slow but unstoppable' },
-  casualbob:   { primary:'ak30',              personality:'tactician', style:'Just here for fun' },
+  lorekeeper:  { primary:'freeze_gun',      personality:'camper',    style:'Prophesied control' },
+  tankturtle:  { primary:'rpd',       personality:'camper',    style:'Slow but unstoppable' },
+  casualbob:   { primary:'ak20',              personality:'tactician', style:'Just here for fun' },
   goat:        { primary:'lever', melee:'katana', personality:'aggressor', style:'Actual GOAT' },
   mrsuspicious:{ primary:'auto_revolver',     personality:'sniper',    style:'Definitely-not-aimbot' },
   thesweat:    { primary:'ak20',              personality:'aggressor', style:'Tryhard sweat' },
@@ -18379,10 +18251,10 @@ const BEST_LOADOUTS = [
   { icon:'🏆', name:'The Lockdown',            desc:'Tournament-grade fundamentals', p:'burst',              s:'revolver',         m:'knife',          u:'medkit' },
   { icon:'⚡', name:'Caffeine Crash',          desc:'Outrun every bullet',           p:'vector',             s:'machine_pistol',   m:'knife',          u:'adrenaline' },
   { icon:'🎯', name:'Headhunter',              desc:'One scope. One tap.',           p:'srx',                s:'revolver',         m:'knife',          u:'smoke' },
-  { icon:'💥', name:'Demo Disco',              desc:'Make the floor shake',          p:'grenade_launcher',   s:'pocket_rocket',    m:'sledge',         u:'sticky_charge' },
+  { icon:'💥', name:'Demo Disco',              desc:'Make the floor shake',          p:'grenade_launcher',   s:'throwing_axes',    m:'sledge',         u:'sticky_charge' },
   { icon:'🔥', name:"Arsonist's Holiday",      desc:'Everything burns',              p:'flamethrower',       s:'flare',            m:'fire_axe',       u:'sticky_charge' },
-  { icon:'🤖', name:'404: You Lose',           desc:'Nothing works for them',        p:'smart_smg',          s:'emp_pistol',       m:'shock_baton',    u:'emp_grenade' },
-  { icon:'🥷', name:'Lights Out',              desc:'Heard, never seen',             p:'air_rifle',          s:'blowgun',          m:'knife',          u:'smoke' },
+  { icon:'🤖', name:'404: You Lose',           desc:'Nothing works for them',        p:'smart_smg',          s:'pistol',       m:'shock_baton',    u:'emp_grenade' },
+  { icon:'🥷', name:'Lights Out',              desc:'Heard, never seen',             p:'air_rifle',          s:'boomerang',          m:'knife',          u:'smoke' },
   { icon:'🛡️', name:'Immovable Object',        desc:'You will not pass',             p:'sg100',              s:'taser',            m:'riot_shield',    u:'nano_shield' },
   { icon:'🏏', name:'Recess Bully',            desc:'Playground chaos',              p:'paintball',          s:'slingshot',        m:'cricket_bat',    u:'rubber_duck' },
   { icon:'🌪️', name:'Yeet Squad',              desc:'Send them flying',              p:'shockwave_launcher', s:'sawed_off',        m:'sledge',         u:'air_grenade' },
@@ -18394,18 +18266,18 @@ const BEST_LOADOUTS = [
   { icon:'⚡', name:"Thor's Allowance",        desc:'Shock therapy',                 p:'arc_rifle',          s:'taser',            m:'shock_baton',    u:'emp_grenade' },
   { icon:'🎯', name:'Steady Hand',             desc:'Mid-range scalpel',             p:'lever',              s:'duelist_pistol',   m:'bat',            u:'ammo_fountain' },
   { icon:'🍳', name:'Recipe for Disaster',     desc:'Loaded with kitchen tools',     p:'paintball',          s:'laser_pointer',    m:'frying_pan',     u:'rubber_duck' },
-  { icon:'💎', name:'Credit Card Maxed',       desc:'Pure P2W energy',               p:'royal_minigun',      s:'auto_revolver',    m:'lightsabre',     u:'orbital_strike' },
+  { icon:'💎', name:'Credit Card Maxed',       desc:'Pure P2W energy',               p:'minigun',      s:'auto_revolver',    m:'lightsabre',     u:'orbital_strike' },
   { icon:'🐢', name:'The Hedge',               desc:'Camp + punish',                 p:'srx',                s:'pistol',           m:'bat',            u:'tripwire' },
-  { icon:'🌌', name:'Spacefarer',              desc:'Built in orbit',                p:'plasma_carbine',     s:'phase_pistol',     m:'phase_blade',    u:'warp_beacon' },
+  { icon:'🌌', name:'Spacefarer',              desc:'Built in orbit',                p:'plasma_carbine',     s:'revolver',     m:'phase_blade',    u:'warp_beacon' },
   { icon:'🎪', name:'Clown Convention',        desc:'Slapstick warfare',             p:'paintball',          s:'slingshot',        m:'baguette',       u:'confetti_cannon' },
   { icon:'🔮', name:'Light Show',              desc:'Refractive chaos',              p:'prism_engine',       s:'dart_gun',         m:'cane',           u:'ink_bomb' },
-  { icon:'🦅', name:'Bread & Butter',          desc:'Reliable in any mode',          p:'ak30',               s:'revolver',         m:'bat',            u:'frag' },
+  { icon:'🦅', name:'Bread & Butter',          desc:'Reliable in any mode',          p:'ak20',               s:'revolver',         m:'bat',            u:'frag' },
   { icon:'🥊', name:'Closing Time',            desc:'Bar-fight ready',               p:'sg100',              s:'machine_pistol',   m:'brass_knuckles', u:'adrenaline' },
-  { icon:'🌠', name:'Reality Breaker',         desc:'Endgame cosmic flex',           p:'void_harvester',     s:'ion_revolver',     m:'gravity_hammer', u:'specter_drone' },
+  { icon:'🌠', name:'Reality Breaker',         desc:'Endgame cosmic flex',           p:'void_harvester',     s:'revolver',     m:'gravity_hammer', u:'specter_drone' },
   { icon:'🎤', name:'Loudpack',                desc:'Subtle as a brick',             p:'minigun',            s:'boomstick',        m:'chainsaw',       u:'dynamite' },
-  { icon:'🪖', name:'Boots on Ground',         desc:'Mil-spec professional',         p:'an94',               s:'revolver',         m:'combat_axe',     u:'frag' },
+  { icon:'🪖', name:'Boots on Ground',         desc:'Mil-spec professional',         p:'ak20',               s:'revolver',         m:'combat_axe',     u:'frag' },
   { icon:'🩹', name:'Field Medic',             desc:'Outlive everyone',              p:'burst',              s:'pistol',           m:'bat',            u:'healing_pulse' },
-  { icon:'👻', name:'Through the Veil',        desc:'Phase past their wards',        p:'phase_driver',       s:'phase_pistol',     m:'machete',        u:'cloak' },
+  { icon:'👻', name:'Through the Veil',        desc:'Phase past their wards',        p:'quantum_repeater',       s:'revolver',     m:'machete',        u:'cloak' },
 ];
 
 function findWeaponIdx(id) { return WEAPONS.findIndex(w => w.id === id); }
