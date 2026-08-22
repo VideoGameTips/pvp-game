@@ -8818,7 +8818,7 @@ const PAINTBALL_COLORS = [
 
 // Projectiles that are genuinely objects rather than rounds in flight. These
 // keep the old ball; a thrown pickle should not leave a tracer trail.
-const SOLID_PROJECTILES = new Set(['paintball', 'pickle', 'spear_throw']);
+const SOLID_PROJECTILES = new Set(['pickle', 'spear_throw']);  // paintball gets the paint blob
 
 // Bullets are spawned continuously — a minigun makes a lot of them — so the
 // geometry and materials are shared per (colour, size) instead of allocating a
@@ -8849,28 +8849,242 @@ function _tracerFor(tint, r) {
   return p;
 }
 
+// ── 🚀 Projectile kinds ────────────────────────────────────────────────────
+// Only guns that fire solid metal rounds get the tracer. A grenade launcher
+// should visibly lob a grenade, an RPG should fly a rocket with an exhaust
+// plume, a flamethrower should not be spitting rifle tracers. Kind is resolved
+// from the weapon's own id first, then its type label, so a new weapon inherits
+// something sensible instead of silently defaulting to a bullet.
+const PROJECTILE_KIND_BY_ID = {
+  rpg:'rocket', bazooka:'rocket',
+  grenade_launcher:'grenade', firework_launcher:'grenade', mortar_rifle:'grenade',
+  nebula_mortar:'grenade', pinball_launcher:'grenade', shockwave_launcher:'grenade',
+  storm_cannon:'grenade', gravity_launcher:'grenade', potato_cannon:'grenade',
+  crossbow:'bolt', boombow:'bolt', dart_gun:'bolt', harpoon_gun:'bolt',
+  slingshot:'stone', air_rifle:'bullet',
+  flamethrower:'flame',
+  freeze_gun:'ice', abs_zero:'ice', frost_blaster:'ice',
+  paintball:'blob', glassmaker:'blob', gravity_paint:'blob',
+  foam_cannon:'blob', sticker_blaster:'blob',
+  taser:'spark', arc_rifle:'spark', arc_torrent:'spark', storm_core:'spark',
+  railgun:'slug', coilgun:'slug', magnetar:'slug',
+};
+function projectileKind(weaponId, weapon) {
+  if (SOLID_PROJECTILES.has(weaponId)) return 'solid';
+  const k = PROJECTILE_KIND_BY_ID[weaponId];
+  if (k) return k;
+  const t = (weapon && weapon.type) || '';
+  if (/Rocket/i.test(t))                                            return 'rocket';
+  if (/Explosive|Indirect|Mortar|Launcher/i.test(t))                return 'grenade';
+  if (/Beam|Energy|Plasma|Lightning|Refract|Painter|Light|Void|Spatial/i.test(t)) return 'energy';
+  if (/Cryo/i.test(t))                                              return 'ice';
+  if (/Projectile/i.test(t))                                        return 'bolt';
+  if (/Paint/i.test(t))                                             return 'blob';
+  if (/Thrown/i.test(t))                                            return 'solid';
+  return 'bullet';                                                  // metal rounds
+}
+
+// Geometry and materials are shared per (kind, colour, size). Projectiles are
+// created constantly — a minigun makes a lot of them — and nothing ever mutates
+// a projectile's material, so sharing is safe and removing one leaks nothing.
+const _projParts = new Map();
+function _projCache(key, build) {
+  let v = _projParts.get(key);
+  if (!v) { v = build(); _projParts.set(key, v); }
+  return v;
+}
+const _lam = c => new THREE.MeshLambertMaterial({ color: c });
+const _glow = c => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.6,
+  blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+
+function _buildRocket(tint, r) {
+  const P = _projCache('rocket|'+tint+'|'+r, () => ({
+    body: new THREE.CylinderGeometry(r*0.8, r*0.8, r*6, 8),  bodyM: _lam(0x4a5230),
+    nose: new THREE.ConeGeometry(r*0.8, r*2.2, 8),           noseM: _lam(0x8a3a1a),
+    fin:  new THREE.BoxGeometry(r*0.14, r*1.5, r*1.0),       finM:  _lam(0x2e3416),
+    ring: new THREE.CylinderGeometry(r*0.9, r*0.9, r*0.5, 8),
+    plume: new THREE.ConeGeometry(r*1.0, r*4.5, 8, 1, true), plumeM: _glow(tint || 0xffaa33),
+  }));
+  const g = new THREE.Group();
+  const nose = new THREE.Mesh(P.nose, P.noseM); nose.position.y = -r*1.1; g.add(nose);
+  const body = new THREE.Mesh(P.body, P.bodyM); body.position.y = -r*5.2; g.add(body);
+  const ring = new THREE.Mesh(P.ring, P.noseM); ring.position.y = -r*3.0; g.add(ring);
+  [0, Math.PI/2, Math.PI, -Math.PI/2].forEach(a => {
+    const f = new THREE.Mesh(P.fin, P.finM);
+    f.position.set(Math.cos(a)*r*0.8, -r*7.8, Math.sin(a)*r*0.8);
+    f.rotation.y = -a; g.add(f);
+  });
+  const plume = new THREE.Mesh(P.plume, P.plumeM);
+  plume.rotation.x = Math.PI;            // flare backwards
+  plume.position.y = -r*10.5; g.add(plume);
+  g._alignToDir = true;
+  return g;
+}
+function _buildGrenade(tint, r) {
+  const P = _projCache('grenade|'+tint+'|'+r, () => ({
+    body: new THREE.SphereGeometry(r*1.5, 8, 7),  bodyM: _lam(0x3d4a2a),
+    cap:  new THREE.CylinderGeometry(r*0.6, r*0.7, r*0.7, 7), capM: _lam(0x6a6a6a),
+    spoon:new THREE.BoxGeometry(r*0.22, r*1.3, r*0.18),
+    band: new THREE.TorusGeometry(r*1.5, r*0.16, 5, 10),  bandM: _lam(tint || 0x9a8a4a),
+  }));
+  const g = new THREE.Group();
+  const b = new THREE.Mesh(P.body, P.bodyM); b.scale.y = 1.15; g.add(b);
+  const c = new THREE.Mesh(P.cap, P.capM); c.position.y = r*1.7; g.add(c);
+  const sp = new THREE.Mesh(P.spoon, P.capM); sp.position.set(r*0.7, r*1.4, 0); g.add(sp);
+  const bd = new THREE.Mesh(P.band, P.bandM); bd.rotation.x = Math.PI/2; g.add(bd);
+  g._alignToDir = false;
+  g._spin = { x: 7.5, y: 3.0, z: 1.5 };   // tumbles in flight
+  return g;
+}
+function _buildBolt(tint, r) {
+  const P = _projCache('bolt|'+tint+'|'+r, () => ({
+    shaft: new THREE.CylinderGeometry(r*0.22, r*0.22, r*9, 6), shaftM: _lam(0x6b4a28),
+    head:  new THREE.ConeGeometry(r*0.55, r*1.8, 6),           headM: _lam(0xb8bec4),
+    fletch:new THREE.BoxGeometry(r*0.05, r*1.2, r*0.9),        fletchM: _lam(tint || 0xcc3333),
+  }));
+  const g = new THREE.Group();
+  const h = new THREE.Mesh(P.head, P.headM); h.position.y = -r*0.9; g.add(h);
+  const sh = new THREE.Mesh(P.shaft, P.shaftM); sh.position.y = -r*6.3; g.add(sh);
+  [0, Math.PI*2/3, Math.PI*4/3].forEach(a => {
+    const f = new THREE.Mesh(P.fletch, P.fletchM);
+    f.position.set(Math.cos(a)*r*0.3, -r*10.2, Math.sin(a)*r*0.3);
+    f.rotation.y = -a; g.add(f);
+  });
+  g._alignToDir = true;
+  return g;
+}
+function _buildEnergy(tint, r) {
+  const c = tint || 0x66ddff;
+  const P = _projCache('energy|'+c+'|'+r, () => ({
+    core: new THREE.SphereGeometry(r*0.8, 8, 6), coreM: new THREE.MeshBasicMaterial({ color: 0xffffff }),
+    halo: new THREE.SphereGeometry(r*1.7, 8, 6), haloM: _glow(c),
+    tail: new THREE.ConeGeometry(r*1.2, r*5, 7, 1, true), tailM: _glow(c),
+  }));
+  const g = new THREE.Group();
+  const core = new THREE.Mesh(P.core, P.coreM); core.scale.y = 1.9; g.add(core);
+  const halo = new THREE.Mesh(P.halo, P.haloM); halo.scale.y = 1.7; g.add(halo);
+  const tail = new THREE.Mesh(P.tail, P.tailM); tail.rotation.x = Math.PI; tail.position.y = -r*3.2; g.add(tail);
+  g._alignToDir = true;
+  return g;
+}
+function _buildSpark(tint, r) {
+  const c = tint || 0x99eaff;
+  const P = _projCache('spark|'+c+'|'+r, () => ({
+    bolt: new THREE.BoxGeometry(r*0.3, r*2.2, r*0.3), boltM: new THREE.MeshBasicMaterial({ color: 0xffffff }),
+    arc:  new THREE.BoxGeometry(r*0.22, r*1.5, r*0.22), arcM: _glow(c),
+  }));
+  const g = new THREE.Group();
+  // A jagged zig-zag rather than a smooth bolt — electricity should look angular.
+  for (let k = 0; k < 4; k++) {
+    const seg = new THREE.Mesh(k % 2 ? P.arc : P.bolt, k % 2 ? P.arcM : P.boltM);
+    seg.position.set((k % 2 ? 1 : -1) * r*0.45, -k * r*1.6, 0);
+    seg.rotation.z = (k % 2 ? 1 : -1) * 0.45;
+    g.add(seg);
+  }
+  g._alignToDir = true;
+  g._spin = { x: 0, y: 14, z: 0 };
+  return g;
+}
+function _buildFlame(tint, r) {
+  const c = tint || 0xff7722;
+  const P = _projCache('flame|'+c+'|'+r, () => ({
+    inner: new THREE.SphereGeometry(r*0.9, 7, 6), innerM: new THREE.MeshBasicMaterial({ color: 0xffdd66 }),
+    outer: new THREE.SphereGeometry(r*1.8, 7, 6), outerM: _glow(c),
+  }));
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(P.inner, P.innerM));
+  const o = new THREE.Mesh(P.outer, P.outerM); o.scale.set(1, 1.3, 1); g.add(o);
+  g._alignToDir = false;
+  g._spin = { x: 3, y: 5, z: 2 };
+  return g;
+}
+function _buildIce(tint, r) {
+  const c = tint || 0x9fe8ff;
+  const P = _projCache('ice|'+c+'|'+r, () => ({
+    shard: new THREE.OctahedronGeometry(r*1.5, 0),
+    shardM: new THREE.MeshLambertMaterial({ color: c, transparent: true, opacity: 0.85 }),
+    glint: new THREE.OctahedronGeometry(r*0.7, 0), glintM: new THREE.MeshBasicMaterial({ color: 0xffffff }),
+  }));
+  const g = new THREE.Group();
+  const sh = new THREE.Mesh(P.shard, P.shardM); sh.scale.y = 2.0; g.add(sh);
+  g.add(new THREE.Mesh(P.glint, P.glintM));
+  g._alignToDir = true;
+  g._spin = { x: 0, y: 9, z: 4 };
+  return g;
+}
+function _buildBlob(tint, r) {
+  const c = tint || 0x66cc44;
+  const P = _projCache('blob|'+c+'|'+r, () => ({
+    body: new THREE.SphereGeometry(r*1.3, 8, 7), bodyM: _lam(c),
+    drip: new THREE.SphereGeometry(r*0.5, 6, 5),
+  }));
+  const g = new THREE.Group();
+  const b = new THREE.Mesh(P.body, P.bodyM); b.scale.set(1.1, 0.85, 1.1); g.add(b);
+  const d1 = new THREE.Mesh(P.drip, P.bodyM); d1.position.set(r*0.6, -r*0.7, r*0.3); g.add(d1);
+  const d2 = new THREE.Mesh(P.drip, P.bodyM); d2.position.set(-r*0.7, r*0.4, -r*0.4); d2.scale.setScalar(0.7); g.add(d2);
+  g._alignToDir = false;
+  g._spin = { x: 4, y: 6, z: 3 };
+  return g;
+}
+function _buildStone(tint, r) {
+  const P = _projCache('stone|'+r, () => ({
+    rock: new THREE.DodecahedronGeometry(r*1.2, 0), rockM: _lam(0x7a7268),
+  }));
+  const g = new THREE.Group();
+  const s = new THREE.Mesh(P.rock, P.rockM); s.scale.set(1, 0.85, 1.1); g.add(s);
+  g._alignToDir = false;
+  g._spin = { x: 8, y: 5, z: 6 };
+  return g;
+}
+function _buildSlug(tint, r) {
+  // Railgun / coilgun: still a metal projectile, but a fat glowing slug rather
+  // than a rifle tracer — it is magnetically driven, not powder driven.
+  const c = tint || 0xaaddff;
+  const P = _projCache('slug|'+c+'|'+r, () => ({
+    body: new THREE.CylinderGeometry(r*0.7, r*0.5, r*3.2, 8),
+    bodyM: new THREE.MeshPhongMaterial({ color: 0xc8ccd2, shininess: 90, specular: 0xffffff }),
+    wake: new THREE.CylinderGeometry(r*0.9, r*0.1, r*12, 8, 1, true), wakeM: _glow(c),
+  }));
+  const g = new THREE.Group();
+  const b = new THREE.Mesh(P.body, P.bodyM); b.position.y = -r*1.6; g.add(b);
+  const w = new THREE.Mesh(P.wake, P.wakeM); w.position.y = -r*6.5; g.add(w);
+  g._alignToDir = true;
+  return g;
+}
+
 function makeBulletMesh(color, size, weaponId) {
   const r = size || 0.04;
-  // A sphere reads as a thrown pea no matter what colour it is. Real rounds in
-  // flight read as a streak stretched along the path, so that is what these are
-  // now: an orange/white tracer by default, tinted per weapon where a weapon
-  // specifies its own colour.
-  if (SOLID_PROJECTILES.has(weaponId)) {
-    const ball = new THREE.Mesh(new THREE.SphereGeometry(r, 6, 6),
-      new THREE.MeshBasicMaterial({ color: color || 0xffee44 }));
-    ball._alignToDir = false;
-    return ball;
+  const weapon = (typeof WEAPONS !== 'undefined') ? WEAPONS.find(w => w.id === weaponId) : null;
+  const kind = projectileKind(weaponId, weapon);
+  switch (kind) {
+    case 'solid': {
+      const ball = new THREE.Mesh(new THREE.SphereGeometry(r, 6, 6),
+        new THREE.MeshBasicMaterial({ color: color || 0xffee44 }));
+      ball._alignToDir = false;
+      return ball;
+    }
+    case 'rocket':  return _buildRocket(color, r);
+    case 'grenade': return _buildGrenade(color, r);
+    case 'bolt':    return _buildBolt(color, r);
+    case 'energy':  return _buildEnergy(color, r);
+    case 'spark':   return _buildSpark(color, r);
+    case 'flame':   return _buildFlame(color, r);
+    case 'ice':     return _buildIce(color, r);
+    case 'blob':    return _buildBlob(color, r);
+    case 'stone':   return _buildStone(color, r);
+    case 'slug':    return _buildSlug(color, r);
   }
-  const tint = color || 0xff8a1e;     // default is orange now, not yellow
+  // 'bullet' — a solid metal round. Orange/white tracer stretched along the path.
+  const tint = color || 0xff8a1e;
   const p = _tracerFor(tint, r);
   const g = new THREE.Group();
   const glow = new THREE.Mesh(p.glowGeo, p.glowMat);
-  glow.position.y = -p.len * 0.5;     // trail BEHIND the bullet's actual point
+  glow.position.y = -p.len * 0.5;
   g.add(glow);
   const core = new THREE.Mesh(p.coreGeo, p.coreMat);
   core.position.y = -p.len * 0.20;
   g.add(core);
-  g._alignToDir = true;               // +Y is the nose; spawn aims it down `dir`
+  g._alignToDir = true;
   return g;
 }
 
@@ -11962,6 +12176,12 @@ function updateBullets(dt) {
     // Save start position for swept (CCD) hit detection
     const px0 = b.mesh.position.x, py0 = b.mesh.position.y, pz0 = b.mesh.position.z;
     b.mesh.position.addScaledVector(b.dir, b.speed * dt);
+    // Grenades, blobs and shards tumble; tracers and rockets hold their line.
+    if (b.mesh._spin) {
+      b.mesh.rotation.x += b.mesh._spin.x * dt;
+      b.mesh.rotation.y += b.mesh._spin.y * dt;
+      b.mesh.rotation.z += b.mesh._spin.z * dt;
+    }
     _bpos.copy(b.mesh.position);
 
     // ── Wall collision (swept ray vs all wall AABBs) ─────────────────────
