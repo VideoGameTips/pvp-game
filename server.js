@@ -92,10 +92,10 @@ const WEAPON_COSTS = {
   // Primaries — ARs / SMGs
   ak20: 250,  mp40: 200, p90: 350, vector: 300, burst: 280,
   // Primaries — Shotguns
-  sg8: 220, sg100: 380, auto_shotgun: 340,
+  sg8: 220,
   // Primaries — Snipers / Marksman
   srx: 500, lever: 360,
-  lancer: 460,  bazooka: 620,
+  lancer: 460, rpg: 520, bazooka: 620,
   // Primaries — Special
   rpd: 450, paintball: 120, crossbow: 280,
   // Primaries — Heavy
@@ -110,7 +110,7 @@ const WEAPON_COSTS = {
   firework_launcher: 360, shockwave_launcher: 460, airburst_projector: 360,
   pinball_launcher: 440, seismic_hammer: 480, glassmaker: 380,
   // Primaries — Tactical / precision / battle rifle
-   spas12: 360, m1_garand: 380, flechette: 380,
+    m1_garand: 380, flechette: 380,
   burst_cannon: 480,  amr: 2000, air_rifle: 320,
   twin_ar: 440, swarm_rifle: 460, smart_smg: 380, switchblade_gun: 420,
   // Primaries — Joke / chaos
@@ -123,7 +123,7 @@ const WEAPON_COSTS = {
   nebula_mortar: 35000, prism_engine: 27000, void_harvester: 40000,
   // Secondaries
   revolver: 150, flare: 80, pistol: 60, shorty: 180, cycler: 140,
-  hand_cannon: 260, throwing_knives: 120, taser: 200,
+  hand_cannon: 260, throwing_knives: 120, taser: 200, traffic_cone: 160, cream_pie: 140,
   machine_pistol: 220, sawed_off: 260, machine_revolver: 240,
   dart_gun: 160, laser_pointer: 120,
   auto_revolver: 220, frost_blaster: 240,
@@ -176,14 +176,14 @@ const FREE_WEAPONS = new Set([
 // ── 💼 Bundles — ~60% off the sum of individual prices ─────────────
 // Keep in sync with public/game.js BUNDLES table.
 const BUNDLES = {
-  pitiful:      { name: 'Pitiful Pack', price: 420, items: ['ak20','sg100','revolver','bat','smoke'] },
+  pitiful:      { name: 'Pitiful Pack', price: 420, items: ['ak20','sg8','revolver','bat','smoke'] },
   retro:        { name: 'Retro Pack',   price: 145, items: ['paintball','laser_pointer','baguette','rubber_duck','confetti_cannon'] },
   starter_pro:  { name: 'Starter Pro',  price: 330, items: ['ak20','revolver','bat','stim'] },
   heavy_duty:   { name: 'Heavy Duty',   price: 700, items: ['minigun','grenade_launcher','machine_revolver','crowbar','sticky_charge'] },
   sniper_pack:  { name: 'Sniper Pack',  price: 580, items: ['srx','revolver','knife','smoke'] },
   run_n_gun:    { name: 'Run & Gun',    price: 430, items: ['p90','machine_pistol','knife','adrenaline'] },
-  melee_master: { name: 'Melee Master', price: 480, items: ['auto_shotgun','revolver','fire_axe','smoke'] },
-  shotgun_pack: { name: 'Shotgun Pack', price: 430, items: ['sg100','sawed_off','crowbar','frag'] },
+  melee_master: { name: 'Melee Master', price: 480, items: ['sg8','revolver','fire_axe','smoke'] },
+  shotgun_pack: { name: 'Shotgun Pack', price: 430, items: ['sg8','sawed_off','crowbar','frag'] },
   scifi:        { name: 'Sci-Fi Arsenal',     price: 500, items: ['plasma_carbine','arc_rifle','dart_gun','emp_grenade'] },
   demolition:   { name: 'Demolition',         price: 600, items: ['grenade_launcher','throwing_axes','sledge','sticky_charge'] },
   archery:      { name: "Archer's Kit",       price: 580, items: ['crossbow','boombow','throwing_knives','tripwire'] },
@@ -192,7 +192,7 @@ const BUNDLES = {
   chaos:        { name: 'Chaos Mode',         price: 150, items: ['paintball','confetti_cannon','baguette','rubber_duck'] },
   stealth:      { name: 'Stealth Ops',        price: 360, items: ['air_rifle','throwing_knives','knife','smoke'] },
   storm:        { name: 'Storm Pack',         price: 420, items: ['arc_rifle','taser','shock_baton','emp_grenade'] },
-  defensive:    { name: 'Defensive',          price: 450, items: ['sg100','taser','riot_shield','nano_shield'] },
+  defensive:    { name: 'Defensive',          price: 450, items: ['sg8','taser','riot_shield','nano_shield'] },
   royalty:      { name: 'Royalty',            price: 4500, items: ['minigun','vampire_blade','hand_cannon','orbital_strike'] },
   kitchen:      { name: 'Kitchen Catastrophe',price: 130, items: ['paintball','baguette','frying_pan','rubber_duck'] },
   knight:       { name: "Knight's Honor",     price: 410, items: ['sg8','sabre','katana','smoke'] },
@@ -864,9 +864,9 @@ function tryPairPvpQueue(mode) {
 // Weapon damage table (must match client WEAPONS array)
 const WEAPON_DAMAGE = {
   // Primaries
-  ak20: 25,  sg8: 18, sg100: 70,
+  ak20: 25,  sg8: 18,
   srx: 95, rpd: 10, mp40: 15, p90: 5,
-  paintball: 40, burst: 21, lever: 62, auto_shotgun: 12,
+  paintball: 40, burst: 21, lever: 62,
   vector: 12, crossbow: 80, flamethrower: 6,
   grenade_launcher: 90, railgun: 110, minigun: 9,
   freeze_gun: 13, boombow: 95,
@@ -883,7 +883,7 @@ const WEAPON_DAMAGE = {
   // 🔥 Molotov burn ticks
   molotov_burn: 10, molotov_fire: 5,
   // 🚀 Rocket launchers + area splash
-   bazooka: 140, rpg_splash: 70, bazooka_splash: 85,
+  rpg: 120, bazooka: 140, rpg_splash: 70, bazooka_splash: 85,
   // 🪖 M4A1
 
   // ⚡ Tesla Coil zap · 🧪 acid pool · 🐝 bee sting
@@ -899,7 +899,7 @@ const WEAPON_DAMAGE = {
   frag: 80, smoke: 0, confetti_cannon: 8, moon_mine: 65,
   rubber_duck: 18, black_hole_seed: 105, glitch_cube: 42,
   // ── NEW PRIMARIES ──────────────────────────────────────────────────────
-   spas12: 20, m1_garand: 78, plasma_carbine: 18, arc_rifle: 22,
+    m1_garand: 78, plasma_carbine: 18, arc_rifle: 22,
   gravity_launcher: 75, potato_cannon: 60, sticker_blaster: 8,
   harpoon_gun: 95, mortar_rifle: 85,
   arc_torrent: 5, firework_launcher: 50, switchblade_gun: 50, switchblade_charged: 100,

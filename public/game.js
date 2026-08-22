@@ -50,12 +50,6 @@ const WEAPONS = [
     ability: { name: 'Bullet Wave', cd: 12000, desc: '6×6 grid · 36 bullets · 20 dmg each', type: 'bulletwave', noADS: true },
   },
   {
-    id: 'sg100', name: 'SG100', type: 'Shotgun+', slot: 'primary',
-    mag: 10,  reserve: 50,  damage: 70, fireRate: 700,  reloadTime: 2800,
-    auto: false, pellets: 2, spread: 0.04, adsZoom: 52, bulletSpeed: 116, noReload: false,
-    ability: { name: 'Fan Hammer', cd: 14000, desc: 'Rapidly fires all remaining shots', type: 'fanfire_all', delay: 80, noADS: true },
-  },
-  {
     id: 'srx',   name: 'SR-X',  type: 'Sniper', slot: 'primary',
     mag: 5,   reserve: 20,  damage: 95, fireRate: 1200, reloadTime: 3000,
     auto: false, pellets: 1, spread: 0,    adsZoom: 15, bulletSpeed: 200, noReload: false,
@@ -98,12 +92,6 @@ const WEAPONS = [
     mag: 8, reserve: 40, damage: 62, fireRate: 520, reloadTime: 2300,
     auto: false, pellets: 1, spread: 0.002, adsZoom: 32, bulletSpeed: 184, noReload: false,
     ability: { name: 'Deadeye', cd: 16000, desc: 'Next shot deals 150 dmg', type: 'powershot', pellets: 1, spreadMult: 0, weaponAbId: 'lever_ab' },
-  },
-  {
-    id: 'auto_shotgun', name: 'Auto Shotgun', type: 'Shotgun', slot: 'primary',
-    mag: 12, reserve: 48, damage: 12, fireRate: 260, reloadTime: 2600,
-    auto: true, pellets: 7, spread: 0.095, adsZoom: 58, bulletSpeed: 108, noReload: false,
-    ability: { name: 'Tight Choke', cd: 11000, desc: '3s · spread ×0.3 · +20% dmg', type: 'buff', duration: 3000, spreadMult: 0.3, dmgMult: 1.2 },
   },
   {
     id: 'vector', name: 'Vector SMG', type: 'SMG', slot: 'primary',
@@ -211,12 +199,6 @@ const WEAPONS = [
     auto: false, pellets: 1, spread: 0.004, adsZoom: 52, bulletSpeed: 92, noReload: false,
     bulletColor: 0xffff55, bulletSize: 0.06,
     ability: { name: 'Discharge', cd: 11000, desc: 'AOE electric burst 2.5 m · 70 dmg', type: 'aoe', radius: 2.5, damage: 70, color: 0xffff44 },
-  },
-  {
-    id: 'spas12', name: 'SPAS-12', type: 'Tactical Shotgun', slot: 'primary',
-    mag: 8, reserve: 24, damage: 20, fireRate: 800, reloadTime: 2600,
-    auto: false, pellets: 8, spread: 0.085, adsZoom: 56, bulletSpeed: 112, noReload: false,
-    ability: { name: 'Slam Fire', cd: 13000, desc: 'Unload tube rapidly', type: 'fanfire_all', delay: 90, noADS: true },
   },
   {
     id: 'm1_garand', name: 'M1 Garand', type: 'Battle Rifle', slot: 'primary',
@@ -704,6 +686,14 @@ const WEAPONS = [
     ddayOnly: true,
     ability: null,
   },
+  // ── 🚀 Rocket launchers — single-shot, big direct hit + area splash ──
+  {
+    id: 'rpg', name: 'RPG-7', type: 'Rocket', slot: 'primary',
+    mag: 1, reserve: 9, damage: 120, fireRate: 1000, reloadTime: 2300,
+    auto: false, pellets: 1, spread: 0.006, adsZoom: 48, bulletSpeed: 70, noReload: false,
+    bulletColor: 0xff7722, bulletSize: 0.15, splashRadius: 5,
+    ability: { name: 'Triple Warhead', cd: 16000, desc: 'Fire 3 rockets in a spread', type: 'multishot', count: 3, spread: 0.10, noADS: true },
+  },
   {
     id: 'bazooka', name: 'Bazooka', type: 'Rocket', slot: 'primary',
     mag: 1, reserve: 8, damage: 140, fireRate: 1100, reloadTime: 2600,
@@ -717,6 +707,21 @@ const WEAPONS = [
     mag: 1, reserve: 24, damage: 95, fireRate: 900, reloadTime: 1700,
     auto: false, pellets: 1, spread: 0.004, adsZoom: 50, bulletSpeed: 150, noReload: false,
     ability: { name: 'Bayonet Charge', cd: 9000, type: 'blade_charge', distance: 8, bladeDamage: 50, noADS: true, desc: 'Lunge forward · blade contact deals 50' },
+  },
+  // ── 🚧 / 🥧 Chuckable nonsense secondaries (must stay LAST — mirrored in weaponModels) ──
+  {
+    id: 'traffic_cone', name: 'Traffic Cone', type: 'Thrown', slot: 'secondary',
+    mag: 4, reserve: 16, damage: 38, fireRate: 320, reloadTime: 1400,
+    auto: false, pellets: 1, spread: 0.010, adsZoom: 50, bulletSpeed: 62, noReload: false,
+    bulletColor: 0xff6a00, bulletSize: 0.12,
+    ability: { name: 'Cone Barrage', cd: 10000, desc: 'Hurl 4 cones in a spread', type: 'multishot', count: 4, spread: 0.12 },
+  },
+  {
+    id: 'cream_pie', name: 'Cream Pie', type: 'Thrown', slot: 'secondary',
+    mag: 5, reserve: 20, damage: 34, fireRate: 280, reloadTime: 1200,
+    auto: false, pellets: 1, spread: 0.012, adsZoom: 50, bulletSpeed: 56, noReload: false,
+    bulletColor: 0xfff4d8, bulletSize: 0.13,
+    ability: { name: 'Pie Platter', cd: 8000, desc: 'Fling 5 pies at once', type: 'multishot', count: 5, spread: 0.14 },
   },
 ];
 
@@ -1001,10 +1006,10 @@ const WEAPON_COSTS = {
   // Primaries — ARs / SMGs
   ak20: 250,  mp40: 200, p90: 350, vector: 300, burst: 280,
   // Primaries — Shotguns
-  sg8: 220, sg100: 380, auto_shotgun: 340,
+  sg8: 220,
   // Primaries — Snipers / Marksman
   srx: 500, lever: 360,
-  lancer: 460,  bazooka: 620,
+  lancer: 460, rpg: 520, bazooka: 620,
   // Primaries — Special
   rpd: 450, paintball: 120, crossbow: 280,
   // Primaries — Heavy
@@ -1019,7 +1024,7 @@ const WEAPON_COSTS = {
   firework_launcher: 360, shockwave_launcher: 460, airburst_projector: 360,
   pinball_launcher: 440, seismic_hammer: 480, glassmaker: 380,
   // Primaries — Tactical / precision / battle rifle
-   spas12: 360, m1_garand: 380, flechette: 380,
+    m1_garand: 380, flechette: 380,
   burst_cannon: 480,  amr: 2000, air_rifle: 320,
   twin_ar: 440, swarm_rifle: 460, smart_smg: 380, switchblade_gun: 420,
   // Primaries — Joke / chaos
@@ -1032,7 +1037,7 @@ const WEAPON_COSTS = {
   nebula_mortar: 35000, prism_engine: 27000, void_harvester: 40000,
   // Secondaries
   revolver: 150, flare: 80, pistol: 60, shorty: 180, cycler: 140,
-  hand_cannon: 260, throwing_knives: 120, taser: 200,
+  hand_cannon: 260, throwing_knives: 120, taser: 200, traffic_cone: 160, cream_pie: 140,
   machine_pistol: 220, sawed_off: 260, machine_revolver: 240,
   dart_gun: 160, laser_pointer: 120,
   auto_revolver: 220, frost_blaster: 240,
@@ -1087,7 +1092,7 @@ const trialingThisMatch = new Set(); // ids the player paid a trial for this mat
 const BUNDLES = [
   { id: 'pitiful',     name: 'Pitiful Pack', icon: '🪖', price: 420,
     desc: 'Classic loadout: AR · shotgun · pistol · melee · smoke',
-    items: ['ak20','sg100','revolver','bat','smoke'] },
+    items: ['ak20','sg8','revolver','bat','smoke'] },
   { id: 'retro',       name: 'Retro Pack',   icon: '🕹️', price: 145,
     desc: 'Quirky old-school weapons · 70% off',
     items: ['paintball','laser_pointer','baguette','rubber_duck','confetti_cannon'] },
@@ -1105,10 +1110,10 @@ const BUNDLES = [
     items: ['p90','machine_pistol','knife','adrenaline'] },
   { id: 'melee_master',name: 'Melee Master', icon: '⚔️', price: 480,
     desc: 'Get up close and stay there',
-    items: ['auto_shotgun','revolver','fire_axe','smoke'] },
+    items: ['sg8','revolver','fire_axe','smoke'] },
   { id: 'shotgun_pack',name: 'Shotgun Pack', icon: '🔫', price: 430,
     desc: 'Close-range chaos',
-    items: ['sg100','sawed_off','crowbar','frag'] },
+    items: ['sg8','sawed_off','crowbar','frag'] },
   { id: 'scifi',       name: 'Sci-Fi Arsenal', icon: '🔬', price: 500,
     desc: 'Energy weapons & EMP',
     items: ['plasma_carbine','arc_rifle','dart_gun','emp_grenade'] },
@@ -1135,7 +1140,7 @@ const BUNDLES = [
     items: ['arc_rifle','taser','shock_baton','emp_grenade'] },
   { id: 'defensive',   name: 'Defensive',    icon: '🛡️', price: 450,
     desc: 'Tank-style survival',
-    items: ['sg100','taser','riot_shield','nano_shield'] },
+    items: ['sg8','taser','riot_shield','nano_shield'] },
   { id: 'royalty',     name: 'Royalty',      icon: '💎', price: 4500,
     desc: 'High-end P2W power fantasy · ~45% off',
     items: ['minigun','vampire_blade','hand_cannon','orbital_strike'] },
@@ -1447,16 +1452,7 @@ function rollPersonality(weaponId, difficulty) {
 }
 
 // Weapons that demolish anyone within ~10 m. Hard/expert bots will refuse to close on these.
-const SCARY_CLOSE_WEAPONS = new Set([
-  // Shotguns
-  'sg8', 'sg100', 'auto_shotgun', 'spas12', 'shorty', 'sawed_off',
-  // Continuous-fire close
-  'flamethrower', 'arc_torrent',
-  // High-DPS melees
-  'chainsaw', 'lightsabre', 'katana', 'fire_axe', 'sledge',
-  // The instakill threat
-  'knife', // knife has Death Touch ability
-]);
+const SCARY_CLOSE_WEAPONS = new Set(['sg8','shorty','sawed_off','flamethrower','arc_torrent','chainsaw','lightsabre','katana','fire_axe','sledge','knife']);
 
 const BOT_DIFFICULTY_TUNING = {
   easy:   { aimMin: 0.75, aimRand: 0.25, reactMin: 320, reactRand: 260, fireMin: 1200, fireRand: 650, reloadMin: 2200, reloadRand: 800, hitRunChance: 0.00, initialShotDelay: 1800 },
@@ -2120,7 +2116,7 @@ function weaponAudioProfile(id, baseWeapon) {
   if (lowerId.includes('grenade') || lowerId.includes('boombow') || lowerId.includes('rocket') || lowerId.includes('flare')) return { kind:'thump', vol:0.42, dur:0.28, f1:110, f2:45, action:'single' };
   if (lowerId.includes('paint')) return { kind:'pop', vol:0.28, dur:0.13, f1:520, f2:190 };
   if (lowerId.includes('knife') || lowerId.includes('throwing')) return { kind:'throw', vol:0.23, dur:0.12, f1:780, f2:260 };
-  if (type.includes('shotgun') || lowerId.includes('shotgun') || lowerId.includes('sg8') || lowerId.includes('sg100') || lowerId.includes('shorty') || lowerId.includes('sawed') || lowerId === 'boomstick' || lowerId.includes('spas')) return { kind:'boom', vol:0.48, dur:0.22, f1:150, f2:55, action:'shotgun' };
+  if (type.includes('shotgun') || lowerId.includes('shotgun') || lowerId.includes('sg8') || lowerId.includes('sg8') || lowerId.includes('shorty') || lowerId.includes('sawed') || lowerId === 'boomstick' || lowerId.includes('spas')) return { kind:'boom', vol:0.48, dur:0.22, f1:150, f2:55, action:'shotgun' };
   if (type.includes('sniper') || type.includes('marksman') || lowerId.includes('srx') || lowerId.includes('lever') || lowerId === 'amr' || lowerId === 'm1_garand' || lowerId === 'air_rifle' || lowerId === 'duelist_pistol') return { kind:'crack', vol:0.44, dur:0.18, f1:680, f2:95, action:'bolt' };
   if (type.includes('smg') || lowerId.includes('vector') || lowerId.includes('mp40') || lowerId === 'machine_pistol' || lowerId === 'hkmp7' || lowerId === 'smart_smg') return { kind:'auto_blast', vol:0.20, dur:0.075, f1:430, f2:160, action:'water_smg' };
   if (type.includes('lmg') || type.includes('heavy') || lowerId.includes('minigun') || lowerId.includes('rpd') || lowerId === 'gau19' || lowerId === 'm134') return { kind:'auto_blast_heavy', vol:0.27, dur:0.11, f1:230, f2:80, action:'water_belt' };
@@ -6522,7 +6518,6 @@ const handcraftedWeapon = id => HandcraftedModels.buildWeapon(id);
 const weaponModels = [
   buildAK20(),  // ak20
   buildSG8(),  // sg8
-  buildSG100(),  // sg100
   buildSRX(),  // srx
   buildRPD(),  // rpd
   buildMP40(),  // mp40
@@ -6530,7 +6525,6 @@ const weaponModels = [
   buildPaintball(),  // paintball
   buildBurstRifle(),  // burst
   buildLeverRifle(),  // lever
-  buildAutoShotgun(),  // auto_shotgun
   buildVectorSMG(),  // vector
   buildCrossbow(),  // crossbow
   buildFlamethrower(),  // flamethrower
@@ -6547,7 +6541,6 @@ const weaponModels = [
   buildHandCannon(),  // hand_cannon
   buildThrowingKnives(),  // throwing_knives
   buildTaser(),  // taser
-  handcraftedWeapon('spas12'),  // spas12
   handcraftedWeapon('m1_garand'),  // m1_garand
   handcraftedWeapon('plasma_carbine'),  // plasma_carbine
   handcraftedWeapon('arc_rifle'),  // arc_rifle
@@ -6627,9 +6620,14 @@ const weaponModels = [
   handcraftedWeapon('glock18'),  // glock18
   handcraftedWeapon('five_seven'),  // five_seven
   buildMG42(),  // mg42
+  // 🚀 Rocket launchers (must align with the 'rpg'/'bazooka' WEAPONS slots)
+  buildRPG(),  // rpg
   buildBazooka(),  // bazooka
   // ⚔️ Lancer (must align with the 'lancer' WEAPONS slot — right before the cone/pie)
   handcraftedWeapon('lancer'),  // lancer
+  // ── 🚧 / 🥧 must mirror the two trailing WEAPONS entries ──
+  buildTrafficCone(),  // traffic_cone
+  buildCreamPie(),  // cream_pie
 ];
 weaponModels.forEach((m,i) => { m.visible = i === 0; camera.add(m); });
 
@@ -12093,7 +12091,7 @@ function updateBullets(dt) {
           spawnBurnZone(wallHitPt, 3, 3, 10000);
         }
         // 🚀 Rockets: detonate on terrain impact (area splash, no direct target)
-        if (b.weaponId === 'bazooka') {
+        if (b.weaponId === 'rpg' || b.weaponId === 'bazooka') {
           rocketExplode(wallHitPt, b.weaponId, null);
           removeBullet(); continue;
         }
@@ -12158,7 +12156,7 @@ function updateBullets(dt) {
           spawnBurnZone(_bpos.clone(), 3, 3, 10000);
         }
         // 🚀 Rockets: direct target took the main hit; splash everyone else nearby
-        if (b.weaponId === 'bazooka') {
+        if (b.weaponId === 'rpg' || b.weaponId === 'bazooka') {
           rocketExplode(_bpos.clone(), b.weaponId, bestHit.pid);
         }
         removeBullet();
@@ -14755,9 +14753,9 @@ function updateMeleeSwing(dt) {
 // Gun Game tier ladder (weak → strong → knife at the top to "win"). Player advances on each kill.
 const GUN_GAME_TIERS = [
   'pistol', 'cycler', 'machine_pistol', 'sg8', 'mp40',
-  'ak20', 'sg100', 'srx', 'rpd', 'paintball',
+  'ak20', 'sg8', 'srx', 'rpd', 'paintball',
   'burst', 'flamethrower', 'vector', 'crossbow', 'lever',
-  'minigun', 'railgun', 'boombow', 'auto_shotgun', 'hand_cannon',
+  'minigun', 'railgun', 'boombow', 'sg8', 'hand_cannon',
   'knife', // final tier — kill with knife to win
 ];
 const SPEEDRUN_KILL_GOAL = 20;
@@ -14840,11 +14838,11 @@ function setupArcadeStart(subtype) {
     }
     case 'piefight': {
       // 🥧 Everyone wields the Cream Pie and nothing else. Pure dessert warfare.
-      forcePlayerWeapon('snub_revolver', 'secondary');
+      forcePlayerWeapon('cream_pie', 'secondary');
       for (const b of gameBots) {
-        b.weaponId = 'snub_revolver';
+        b.weaponId = 'cream_pie';
         b.team = 'enemy'; // FFA — everyone's fair game
-        if (players[b.id]) players[b.id].weaponId = 'snub_revolver';
+        if (players[b.id]) players[b.id].weaponId = 'cream_pie';
       }
       showAnnouncement('🥧 PIE FIGHT', 'Cream pies only · splat everyone · most pies wins!', '#ffcc66', 3000);
       return;
@@ -16059,7 +16057,7 @@ const TEAMMATE_PLAYSTYLES = {
   mirage:      { primary:'smart_smg', melee:'katana', personality:'aggressor', style:'Fast hit-and-run' },
   // — Fan favorites —
   bot47:       { primary:'arc_rifle',         personality:'tactician', style:'Cold precision' },
-  rager:       { primary:'auto_shotgun',      personality:'aggressor', style:'Reckless rusher' },
+  rager:       { primary:'sg8',      personality:'aggressor', style:'Reckless rusher' },
   duckguy:     { primary:'potato_cannon',     personality:'aggressor', style:'Quacks & chaos' },
   combatmedic: { primary:'glassmaker', secondary:'pistol', personality:'tactician', style:'Support' },
   // — Girls squad —
@@ -16092,7 +16090,7 @@ const TEAMMATE_PLAYSTYLES = {
   janitor:     { primary:'foam_cannon', melee:'bat', personality:'tactician', style:'Cleans up messes' },
   timekeeper:  { primary:'railgun',           personality:'sniper',    style:'Never-miss timing' },
   wildcard:    { primary:'portal_launcher',   personality:'aggressor', style:'Total chaos' },
-  panicpanda:  { primary:'auto_shotgun',      personality:'aggressor', style:'Panic-clutch sprint' },
+  panicpanda:  { primary:'sg8',      personality:'aggressor', style:'Panic-clutch sprint' },
   dramaqueen:  { primary:'firework_launcher', personality:'aggressor', style:'Dramatic flair' },
   shadow:      { primary:'glassmaker', melee:'knife', personality:'tactician', style:'Menacing lurker' },
   pixelboy:    { primary:'smart_smg',         personality:'aggressor', style:'Retro tryhard' },
@@ -18255,11 +18253,11 @@ const BEST_LOADOUTS = [
   { icon:'🔥', name:"Arsonist's Holiday",      desc:'Everything burns',              p:'flamethrower',       s:'flare',            m:'fire_axe',       u:'sticky_charge' },
   { icon:'🤖', name:'404: You Lose',           desc:'Nothing works for them',        p:'smart_smg',          s:'pistol',       m:'shock_baton',    u:'emp_grenade' },
   { icon:'🥷', name:'Lights Out',              desc:'Heard, never seen',             p:'air_rifle',          s:'boomerang',          m:'knife',          u:'smoke' },
-  { icon:'🛡️', name:'Immovable Object',        desc:'You will not pass',             p:'sg100',              s:'taser',            m:'riot_shield',    u:'nano_shield' },
+  { icon:'🛡️', name:'Immovable Object',        desc:'You will not pass',             p:'sg8',              s:'taser',            m:'riot_shield',    u:'nano_shield' },
   { icon:'🏏', name:'Recess Bully',            desc:'Playground chaos',              p:'paintball',          s:'slingshot',        m:'cricket_bat',    u:'rubber_duck' },
   { icon:'🌪️', name:'Yeet Squad',              desc:'Send them flying',              p:'shockwave_launcher', s:'sawed_off',        m:'sledge',         u:'air_grenade' },
   { icon:'⚔️', name:'For The Realm',           desc:"Knight's loadout",              p:'sg8',                s:'flare',            m:'katana',         u:'smoke' },
-  { icon:'🩸', name:'Bloodletter',             desc:'Heal off their pain',           p:'auto_shotgun',       s:'hand_cannon',      m:'vampire_blade',  u:'adrenaline' },
+  { icon:'🩸', name:'Bloodletter',             desc:'Heal off their pain',           p:'sg8',       s:'hand_cannon',      m:'vampire_blade',  u:'adrenaline' },
   { icon:'🏹', name:'Sherwood Special',        desc:'Bows + bolas',                  p:'crossbow',           s:'throwing_knives',  m:'knife',          u:'tripwire' },
   { icon:'🛹', name:'No Brakes',               desc:'Sprint-only kit',               p:'p90',                s:'machine_pistol',   m:'knife',          u:'adrenaline' },
   { icon:'🧊', name:'Permafrost',              desc:'Slow them, finish them',        p:'freeze_gun',         s:'frost_blaster',    m:'knife',          u:'smoke' },
@@ -18272,7 +18270,7 @@ const BEST_LOADOUTS = [
   { icon:'🎪', name:'Clown Convention',        desc:'Slapstick warfare',             p:'paintball',          s:'slingshot',        m:'baguette',       u:'confetti_cannon' },
   { icon:'🔮', name:'Light Show',              desc:'Refractive chaos',              p:'prism_engine',       s:'dart_gun',         m:'cane',           u:'ink_bomb' },
   { icon:'🦅', name:'Bread & Butter',          desc:'Reliable in any mode',          p:'ak20',               s:'revolver',         m:'bat',            u:'frag' },
-  { icon:'🥊', name:'Closing Time',            desc:'Bar-fight ready',               p:'sg100',              s:'machine_pistol',   m:'brass_knuckles', u:'adrenaline' },
+  { icon:'🥊', name:'Closing Time',            desc:'Bar-fight ready',               p:'sg8',              s:'machine_pistol',   m:'brass_knuckles', u:'adrenaline' },
   { icon:'🌠', name:'Reality Breaker',         desc:'Endgame cosmic flex',           p:'void_harvester',     s:'revolver',     m:'gravity_hammer', u:'specter_drone' },
   { icon:'🎤', name:'Loudpack',                desc:'Subtle as a brick',             p:'minigun',            s:'boomstick',        m:'chainsaw',       u:'dynamite' },
   { icon:'🪖', name:'Boots on Ground',         desc:'Mil-spec professional',         p:'ak20',               s:'revolver',         m:'combat_axe',     u:'frag' },
