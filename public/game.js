@@ -1331,6 +1331,122 @@ const BLAST_RADIUS  = 7.5;   // m — how far an explosion can still shove you
 const BLAST_POWER   = 66.5;  // impulse at the very centre of the blast
 const BLAST_DECAY   = 0.10;  // fraction of horizontal blast speed left after 1 s
 
+// ══════════════════════════════════════════════════════════════════════════
+// 🎛️ ABILITY MARKETPLACE
+// A weapon can own several abilities and equip ONE. With a smaller roster,
+// depth moves from "which of 121 guns" to "how do you want this gun to play".
+//
+// The rule from the ability rework still holds underneath: an ordinary gun has
+// no ability by default. What the marketplace adds is a way to BUY one — so a
+// gun's ability is a deliberate, paid-for choice rather than something every
+// weapon carries for free. Non-guns keep their built-in ability free and can
+// buy alternatives on top.
+//
+// Every option is built from ability types the game already runs, so nothing
+// here needs new combat code:
+//   charge     hold to charge — tiered by hold time (the crossbow's own)
+//   buff       temporary dmg/rate/spread/speed multipliers
+//   powershot  next shot modified; supports explodeOnHit
+//   fanfire    burst of N shots
+//   multishot  N projectiles in a spread
+//   aoe        area burst around you
+const ABILITY_OPTIONS = {
+  crossbow: [
+    { id:'crossbow_charge',    name:'Charge Shot',    price:220, type:'charge',
+      desc:'Hold to draw · longer hold = faster arrow + more damage' },
+    { id:'crossbow_quickdraw', name:'Quick Draw',     price:180, type:'buff', cd:9000,
+      duration:4000, rateMult:0.45, dmgMult:0.7,
+      desc:'4 s · fire twice as fast for 70% damage' },
+    { id:'crossbow_firework',  name:'Firework Arrow', price:300, type:'powershot', cd:12000,
+      pellets:1, spreadMult:0, dmgMult:1.3, explodeOnHit:true,
+      desc:'Next arrow detonates on impact · 1.3x damage' },
+  ],
+  boombow: [
+    { id:'boombow_charge',     name:'Charge Shot',    price:240, type:'charge',
+      desc:'Hold to draw · longer hold = faster arrow + more damage' },
+    { id:'boombow_quickdraw',  name:'Quick Draw',     price:200, type:'buff', cd:9000,
+      duration:4000, rateMult:0.45, dmgMult:0.7,
+      desc:'4 s · fire twice as fast for 70% damage' },
+    { id:'boombow_cluster',    name:'Cluster Arrow',  price:340, type:'multishot', cd:13000,
+      count:3, spread:0.10,
+      desc:'Three arrows in a spread' },
+  ],
+  ak20: [
+    { id:'ak20_focus',   name:'Focus Fire', price:200, type:'buff', cd:10000,
+      duration:4000, spreadMult:0.25, dmgMult:1.15,
+      desc:'4 s · near-zero spread · +15% damage' },
+    { id:'ak20_slug',    name:'Slug Round', price:260, type:'powershot', cd:11000,
+      pellets:1, spreadMult:0, dmgMult:2.4,
+      desc:'Next shot · 2.4x damage, pinpoint' },
+  ],
+  sg8: [
+    { id:'sg8_dragon',   name:"Dragon's Breath", price:280, type:'powershot', cd:12000,
+      pellets:8, spreadMult:1.2, dmgMult:1.4, explodeOnHit:true,
+      desc:'Next shell burns and bursts on impact' },
+    { id:'sg8_slug',     name:'Slug Shell',      price:220, type:'powershot', cd:10000,
+      pellets:1, spreadMult:0, dmgMult:3.5,
+      desc:'Next shell · one heavy slug instead of pellets' },
+  ],
+  srx: [
+    { id:'srx_hold',     name:'Hold Breath', price:240, type:'buff', cd:12000,
+      duration:5000, spreadMult:0.1, dmgMult:1.2,
+      desc:'5 s · steadied aim · +20% damage' },
+    { id:'srx_pierce',   name:'Piercing Shot', price:320, type:'powershot', cd:13000,
+      pellets:1, spreadMult:0, dmgMult:2.0, speedMult:1.8,
+      desc:'Next shot · 2x damage at 1.8x velocity' },
+  ],
+  pistol: [
+    { id:'pistol_akimbo', name:'Rapid Fan', price:120, type:'fanfire', cd:8000,
+      count:5, delay:70,
+      desc:'Five shots as fast as the hammer falls' },
+    { id:'pistol_quick',  name:'Quick Draw', price:100, type:'buff', cd:8000,
+      duration:4000, rateMult:0.5, dmgMult:0.85,
+      desc:'4 s · double fire rate for 85% damage' },
+  ],
+  minigun: [
+    { id:'minigun_spin',  name:'Spin Up', price:300, type:'buff', cd:14000,
+      duration:5000, rateMult:0.6, spreadMult:0.6, spinBoost:true,
+      desc:'5 s · barrels wound up · faster and tighter' },
+  ],
+};
+
+// The player's equipped choice per weapon, persisted locally. Ownership itself
+// lives on the server in u.purchased, alongside weapons.
+let equippedAbilities = {};
+try { equippedAbilities = JSON.parse(localStorage.getItem('pvp_abilities') || '{}') || {}; } catch (e) {}
+function saveEquippedAbilities() {
+  try { localStorage.setItem('pvp_abilities', JSON.stringify(equippedAbilities)); } catch (e) {}
+}
+// Does this item carry an ability of its own, for free? (the pre-marketplace rule)
+function hasBuiltInAbility(w) {
+  if (!w || !w.ability) return false;
+  if (ABILITY_GUNS.has(w.id)) return true;
+  return (typeof MELEE_ITEMS !== 'undefined' && MELEE_ITEMS.includes(w))
+      || (typeof SUPPORT_ITEMS !== 'undefined' && SUPPORT_ITEMS.includes(w));
+}
+// Everything this weapon could equip: its free default first, then the shop.
+function abilityOptionsFor(w) {
+  if (!w) return [];
+  const extra = ABILITY_OPTIONS[w.id] || [];
+  const base = hasBuiltInAbility(w)
+    ? [{ id: w.id + '_default', name: w.ability.name, price: 0,
+         desc: w.ability.desc || '', ...w.ability }]
+    : [{ id: w.id + '_none', name: 'No ability', price: 0, none: true,
+         desc: 'This weapon aims and shoots. That is the whole trick.' }];
+  return base.concat(extra);
+}
+function ownsAbility(opt) {
+  if (!opt || opt.price === 0) return true;
+  return !!(currentUser && (currentUser.purchased || []).includes(opt.id));
+}
+function equippedAbility(w) {
+  const opts = abilityOptionsFor(w);
+  if (!opts.length) return null;
+  const chosen = opts.find(o => o.id === equippedAbilities[w.id] && ownsAbility(o));
+  const opt = chosen || opts[0];
+  return opt.none ? null : opt;
+}
+
 // 🦘 Mid-air second jump. The rule is NO FIREARMS — a gun is a lump of steel and
 // a magazine, and it made no sense that a revolver let you double jump while
 // bare fists did not. What qualifies is being unburdened or carrying something
@@ -1350,7 +1466,11 @@ const DOUBLE_JUMP_IDS = new Set(['fists','crossbow','air_rifle','dart_gun']);
 // Ordinary guns lost theirs. They can aim; that IS their thing.
 const ABILITY_GUNS = new Set(['paintball', 'revolver']);
 function hasAbility(w) {
-  if (!w || !w.ability) return false;
+  if (!w) return false;
+  // A marketplace ability counts even on a gun that has none of its own — that
+  // is the entire point of buying one.
+  if (equippedAbility(w)) return true;
+  if (!w.ability) return false;
   if (ABILITY_GUNS.has(w.id)) return true;
   // Not a gun. MELEE_ITEMS and SUPPORT_ITEMS entries carry NO `slot` field — only
   // WEAPONS do — so identify them by membership rather than by a property they
@@ -9486,7 +9606,11 @@ document.addEventListener('mousedown', e => {
   if (e.button !== 0) return;
   shooting = true;
   // Crossbow charge: start charging instead of shooting
-  if (activeSlot === 'primary' && currentWeapon?.id === 'crossbow' && !isDead && gameStarted) {
+  // Any weapon whose EQUIPPED ability is a charge draws instead of firing — the
+  // crossbow was hardcoded here, which meant the marketplace's Charge Shot could
+  // never work on anything else, and could never be turned OFF on the crossbow.
+  if (activeSlot === 'primary' && !isDead && gameStarted
+      && equippedAbility(currentWeapon)?.type === 'charge') {
     crossbowCharging    = true;
     crossbowChargeStart = Date.now();
     return; // don't fire yet
@@ -10559,8 +10683,9 @@ function updateMovement(dt) {
 // ── Shooting ───────────────────────────────────────────────────────────────
 // ── Ability helpers ────────────────────────────────────────────────────────
 function abilityReady(w) {
-  if (!w?.ability) return false;
-  return Date.now() - (abilityCDs[w.id] || 0) >= w.ability.cd;
+  const ab = equippedAbility(w);
+  if (!ab) return false;
+  return Date.now() - (abilityCDs[w.id] || 0) >= (ab.cd || 10000);
 }
 
 function activateMeleeAbility() {
@@ -10750,7 +10875,9 @@ function activateMeleeAbility() {
 
 function activateAbility() {
   const w = currentWeapon;
-  const ab = w?.ability;
+  // Whatever the player has equipped for this weapon — which may be a bought
+  // ability rather than the one baked into the roster entry.
+  const ab = equippedAbility(w);
   if (!gameStarted || isDead) return;
   if (countdownActive) return; // ability locked during pre-round countdown
   // Ordinary guns no longer have abilities at all — see hasAbility. This also
@@ -10923,15 +11050,16 @@ function doThrowBomb(w, ab) {
 
 function fireCrossbowCharge() {
   if (!gameStarted || isDead) return;
-  if (activeSlot !== 'primary' || currentWeapon?.id !== 'crossbow') return;
+  if (activeSlot !== 'primary') return;
+  if (equippedAbility(currentWeapon)?.type !== 'charge') return;
   const pool = weaponAmmo[currentWeaponIdx];
   if (pool.ammo <= 0) { if (pool.reserve > 0 && !currentWeapon.noReload) startReload(); return; }
   if (reloading) return;
   const chargeMs = Math.min(Date.now() - crossbowChargeStart, 2000);
   // Tier: tap (<400ms) = base, medium (400-1200ms) = c1, full (>=1200ms) = ab
-  let weaponId = 'crossbow';
-  if (chargeMs >= 1200) weaponId = 'crossbow_ab';
-  else if (chargeMs >= 400) weaponId = 'crossbow_c1';
+  let weaponId = currentWeapon.id;
+  if (chargeMs >= 1200) weaponId = currentWeapon.id + '_ab';
+  else if (chargeMs >= 400) weaponId = currentWeapon.id + '_c1';
 
   const now = Date.now();
   if (now - lastShot < currentWeapon.fireRate) return;
@@ -11142,20 +11270,21 @@ function updateAbilityHUD() {
 
   // Default: show gun weapon ability
   const w = currentWeapon;
-  if (!w?.ability) { nameEl.textContent = '—'; fillEl.style.width = '100%'; fillEl.style.background='#555'; if (keyEl) keyEl.textContent='[E]'; if (descEl) descEl.textContent=''; return; }
-  if (w.ability.type === 'charge') {
-    nameEl.textContent = w.ability.name;
-    if (descEl) descEl.textContent = w.ability.desc || '';
+  const _hudAb = equippedAbility(w);
+  if (!_hudAb) { nameEl.textContent = '—'; fillEl.style.width = '100%'; fillEl.style.background='#555'; if (keyEl) keyEl.textContent='[E]'; if (descEl) descEl.textContent=''; return; }
+  if (_hudAb.type === 'charge') {
+    nameEl.textContent = _hudAb.name;
+    if (descEl) descEl.textContent = _hudAb.desc || '';
     fillEl.style.width = '100%';
     fillEl.style.background = '#4caf50';
     if (keyEl) { keyEl.textContent = '[HOLD]'; keyEl.style.opacity = '1'; }
     return;
   }
-  nameEl.textContent = w.ability.name;
-  if (descEl) descEl.textContent = w.ability.desc || '';
+  nameEl.textContent = _hudAb.name;
+  if (descEl) descEl.textContent = _hudAb.desc || '';
   if (keyEl) keyEl.textContent = '[E]';
   const elapsed = Date.now() - (abilityCDs[w.id] || 0);
-  const pct = Math.min(1, elapsed / w.ability.cd);
+  const pct = Math.min(1, elapsed / (_hudAb.cd || 10000));
   fillEl.style.width = (pct * 100) + '%';
   fillEl.style.background = pct >= 1 ? '#4caf50' : '#e74c3c';
   if (keyEl) keyEl.style.opacity = pct >= 1 ? '1' : '0.4';
@@ -18305,6 +18434,7 @@ function renderShop() {
   const ch = currentUser.chests || { common: 0, rare: 0 };
   const tabs = [
     ['bundles',   '💼 BUNDLES'],
+    ['abilities', '🎛️ ABILITIES'],
     ['primary',   '🔫 PRIMARY'],
     ['secondary', '🔫 SECONDARY'],
     ['melee',     '⚔️ MELEE'],
@@ -18338,6 +18468,7 @@ function renderShop() {
   scr.querySelector('#shop-close').addEventListener('click', closeShop);
   const body = scr.querySelector('#shop-body');
   if (shopTab === 'bundles')      renderShopBundles(body);
+  else if (shopTab === 'abilities') renderShopAbilities(body);
   else if (shopTab === 'chests')  renderShopChests(body);
   else if (shopTab === 'wheel')   renderShopWheel(body);
   else if (shopTab === 'upgrade') renderShopUpgrades(body);
@@ -18480,6 +18611,69 @@ function renderShopUpgrades(body) {
   }
 }
 
+// 🎛️ The ability marketplace. One card per weapon that has choices, each listing
+// its options: the free default first, then what you can buy. Buying and
+// equipping are separate actions — owning three and running one is the point.
+async function buyAbility(opt) {
+  if (!currentUser) { alert('Log in first.'); return false; }
+  const r = await authRequest('/shop/buy-ability',
+    { username: currentUser.username, password: currentUser.password, abilityId: opt.id });
+  if (!r || r.error) { alert('❌ ' + (r?.error || 'shop error')); return false; }
+  currentUser.purchased = r.purchased || currentUser.purchased;
+  currentUser.credits   = r.credits ?? currentUser.credits;
+  updateUserInfoBar();
+  return true;
+}
+function renderShopAbilities(body) {
+  body.style.display = 'block';
+  const ids = Object.keys(ABILITY_OPTIONS);
+  if (!ids.length) { body.innerHTML = '<div style="color:#888;">No abilities for sale yet.</div>'; return; }
+  body.innerHTML = `<div style="color:#88aacc;font-size:12px;margin-bottom:12px;line-height:1.6;">
+    Each weapon can hold several abilities and run <b>one</b>. Buy the ones you
+    want, then equip whichever suits the match. Fire it with <b>[E]</b>.</div>`;
+  ids.forEach(wid => {
+    const w = WEAPONS.find(x => x.id === wid);
+    if (!w) return;
+    const card = document.createElement('div');
+    card.style.cssText = 'background:rgba(255,255,255,0.04);border:1px solid #444;border-radius:8px;padding:14px 16px;margin-bottom:12px;';
+    const head = document.createElement('div');
+    head.style.cssText = 'font-size:14px;letter-spacing:2px;color:#ffdd88;margin-bottom:10px;';
+    head.textContent = w.name.toUpperCase();
+    card.appendChild(head);
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:10px;flex-wrap:wrap;';
+    abilityOptionsFor(w).forEach(opt => {
+      const owned    = ownsAbility(opt);
+      const equipped = (equippedAbility(w)?.id || abilityOptionsFor(w)[0].id) === opt.id;
+      const tile = document.createElement('div');
+      tile.style.cssText = `flex:1 1 200px;min-width:200px;background:${equipped ? 'rgba(80,140,255,0.14)' : 'rgba(0,0,0,0.3)'};
+        border:1px solid ${equipped ? '#6699ff' : owned ? '#555' : '#3a3a3a'};border-radius:6px;padding:10px 12px;`;
+      tile.innerHTML = `
+        <div style="font-size:12px;letter-spacing:1px;color:${owned ? '#fff' : '#999'};">${opt.name}</div>
+        <div style="font-size:10px;color:#8899aa;margin:5px 0 8px;line-height:1.5;min-height:28px;">${opt.desc || ''}</div>`;
+      const btn = document.createElement('button');
+      const label = equipped ? '✓ EQUIPPED' : owned ? 'EQUIP' : `💰 ${opt.price}`;
+      btn.textContent = label;
+      btn.disabled = equipped;
+      btn.style.cssText = `width:100%;padding:6px;font-family:inherit;font-size:10px;letter-spacing:1px;border-radius:4px;
+        cursor:${equipped ? 'default' : 'pointer'};
+        background:${equipped ? '#24304a' : owned ? '#1a2a1a' : '#2a2415'};
+        color:${equipped ? '#88aaff' : owned ? '#88cc88' : '#ffcc55'};
+        border:1px solid ${equipped ? '#4466aa' : owned ? '#448844' : '#886622'};`;
+      btn.addEventListener('click', async () => {
+        if (equipped) return;
+        if (!owned && !(await buyAbility(opt))) return;
+        equippedAbilities[w.id] = opt.id;
+        saveEquippedAbilities();
+        renderShop();
+      });
+      tile.appendChild(btn);
+      row.appendChild(tile);
+    });
+    card.appendChild(row);
+    body.appendChild(card);
+  });
+}
 function renderShopBundles(body) {
   for (const b of BUNDLES) {
     const totalSum = b.items.reduce((s, id) => s + (shopCost(id) ?? 0), 0);

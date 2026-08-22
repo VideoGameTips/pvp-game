@@ -419,6 +419,26 @@ function authedUser(req) {
   return u;
 }
 
+
+// 🎛️ Ability marketplace — mirrors ABILITY_OPTIONS in public/game.js.
+// Prices live on the server because credits do; the client table is display only.
+const ABILITY_COSTS = {
+  crossbow_charge:         220,   // Charge Shot
+  crossbow_quickdraw:      180,   // Quick Draw
+  crossbow_firework:       300,   // Firework Arrow
+  boombow_charge:          240,   // Charge Shot
+  boombow_quickdraw:       200,   // Quick Draw
+  boombow_cluster:         340,   // Cluster Arrow
+  ak20_focus:              200,   // Focus Fire
+  ak20_slug:               260,   // Slug Round
+  sg8_slug:                220,   // Slug Shell
+  srx_hold:                240,   // Hold Breath
+  srx_pierce:              320,   // Piercing Shot
+  pistol_akimbo:           120,   // Rapid Fan
+  pistol_quick:            100,   // Quick Draw
+  minigun_spin:            300,   // Spin Up
+};
+
 app.post('/shop/buy', (req, res) => {
   const { weaponId } = req.body || {};
   const u = authedUser(req);
@@ -432,6 +452,27 @@ app.post('/shop/buy', (req, res) => {
   u.purchased.push(weaponId);
   saveUsers();
   res.json({ ok: true, weaponId, cost, credits: u.credits, purchased: u.purchased });
+});
+
+// Buy an ability for a weapon. Deliberately a separate endpoint from /shop/buy:
+// abilities are priced from their own table, and mixing them into the weapon
+// path would let a crafted weaponId buy an ability at a weapon's price.
+app.post('/shop/buy-ability', (req, res) => {
+  const { abilityId } = req.body || {};
+  const u = authedUser(req);
+  if (!u) return res.status(401).json({ error: 'auth failed' });
+  const cost = ABILITY_COSTS[abilityId];
+  if (cost == null) return res.status(400).json({ error: 'no such ability' });
+  if (u.purchased.includes(abilityId)) {
+    return res.json({ ok: true, already: true, credits: u.credits, purchased: u.purchased });
+  }
+  if ((u.credits || 0) < cost) {
+    return res.status(402).json({ error: 'not enough credits', credits: u.credits, cost });
+  }
+  u.credits -= cost;
+  u.purchased.push(abilityId);
+  saveUsers();
+  res.json({ ok: true, abilityId, cost, credits: u.credits, purchased: u.purchased });
 });
 
 app.post('/shop/trial', (req, res) => {
