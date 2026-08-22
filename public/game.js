@@ -115,7 +115,7 @@ const WEAPONS = [
   },
   {
     id: 'grenade_launcher', name: 'Grenade Launcher', type: 'Explosive', slot: 'primary',
-    mag: 1, reserve: 12, damage: 90, fireRate: 900, reloadTime: 1800,
+    mag: 6, reserve: 18, damage: 90, fireRate: 900, reloadTime: 1800,
     auto: false, pellets: 1, spread: 0.006, adsZoom: 52, bulletSpeed: 52, noReload: false,
     bulletColor: 0x2f8f2f, bulletSize: 0.14,
     ability: { name: 'Cluster', cd: 15000, desc: 'Fire 3 grenades in a spread', type: 'multishot', count: 3, spread: 0.12, noADS: true },
@@ -8869,6 +8869,28 @@ const PROJECTILE_KIND_BY_ID = {
   taser:'spark', arc_rifle:'spark', arc_torrent:'spark', storm_core:'spark',
   railgun:'slug', coilgun:'slug', magnetar:'slug',
 };
+// How fast each kind flies, relative to a metal round. A bullet is supersonic;
+// a lobbed grenade, a rocket building thrust and a gout of flame are not, and
+// they should be readable in the air rather than teleporting to the target.
+// Applied on top of the weapon's own bulletSpeed, so the per-weapon tuning
+// underneath still counts.
+const PROJECTILE_SPEED_SCALE = {
+  bullet: 1.00,   // reference
+  slug:   1.00,   // railgun/coilgun — the fastest things in the game already
+  energy: 0.80,
+  spark:  0.80,
+  ice:    0.70,
+  bolt:   0.60,   // crossbow bolts arc, they don't snap
+  blob:   0.55,
+  solid:  0.55,   // thrown objects
+  stone:  0.55,
+  flame:  0.50,
+  rocket: 0.50,   // visibly climbs away from the muzzle
+  grenade:0.50,   // lobbed, not shot
+};
+function projectileSpeedScale(weaponId, weapon) {
+  return PROJECTILE_SPEED_SCALE[projectileKind(weaponId, weapon)] ?? 1;
+}
 function projectileKind(weaponId, weapon) {
   if (SOLID_PROJECTILES.has(weaponId)) return 'solid';
   const k = PROJECTILE_KIND_BY_ID[weaponId];
@@ -11723,7 +11745,8 @@ function spawnLocalBullet(origin, dir, id, isOwn, speed, color, size, weaponId, 
   // Track origin and max range for short-range weapons (arc torrent)
   const wSpec = WEAPONS.find(w => w.id === weaponId);
   const maxRange = opts.maxRange || wSpec?.maxRange;
-  localBullets.push({ mesh, dir: flightDir, createdAt: Date.now(), id, isOwn, speed: (speed || 120) * BULLET_SPEED_MULTIPLIER, weaponId,
+  localBullets.push({ mesh, dir: flightDir, createdAt: Date.now(), id, isOwn,
+    speed: (speed || 120) * BULLET_SPEED_MULTIPLIER * projectileSpeedScale(weaponId, wSpec), weaponId,
     spawnX: origin.x, spawnY: origin.y, spawnZ: origin.z, maxRange, ...opts });
 }
 
