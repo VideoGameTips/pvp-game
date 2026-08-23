@@ -1316,6 +1316,7 @@ let playerYVel = 0;               // Player vertical velocity (for air grenades 
 const GRAVITY       = 24;    // m/s² -> 3.97 m apex, 1.15 s hang (was 31.5, before that 21)
 const JUMP_VEL      = 13.8;  // m/s standing jump -> 3.02 m apex
 const AIR_JUMP_VEL  = 12.3;  // m/s mid-air second jump -> 2.4 m, same ratio as before
+const BOT_SPEED_MULT = 1.5;  // NPCs keep pace with the player's 1.5x bump
 const SLIDE_MS      = 1250;  // slide duration (was 800)
 const SLIDE_BOOST   = 2.6;   // slide speed at its start, decaying to 1.0 (was 2.0)
 // With exponential decay the ground covered is v / ln(1/BLAST_DECAY), so 17 m/s
@@ -10251,7 +10252,7 @@ function setWeaponADSPos(ads) {
 }
 
 // ── Movement ───────────────────────────────────────────────────────────────
-const SPEED = 7.5; // base movement speed (was 5 — bumped 1.5× for snappier feel)
+const SPEED = 11.25; // base movement speed (5 -> 7.5 -> 11.25, each a 1.5x bump)
 
 // ── 🏆 WEAPON MASTERY — per-weapon kill counts + title progression
 const MASTERY_TIERS = [
@@ -10835,7 +10836,13 @@ function updateMovement(dt) {
   const nowMs = Date.now();
   const groundedNow = isPlayerGrounded();
   if (groundedNow) window._dashLeft = 1;    // dash recharges on landing
-  if (shiftEdge && groundedNow && dir.lengthSq() > 0.001 && !window._slideUntil) {
+  // 🛹 Easy slide: crouch WHILE MOVING slides, exactly as Shift does. Standing
+  // still it still just crouches, so nothing is taken away — you get the slide
+  // without having to learn that it lives on a different key.
+  const crouchEdge = crouchHeld && !window._prevCrouchHeld;
+  window._prevCrouchHeld = crouchHeld;
+  const slideEdge = shiftEdge || (crouchEdge && dir.lengthSq() > 0.001);
+  if (slideEdge && groundedNow && dir.lengthSq() > 0.001 && !window._slideUntil) {
     window._slideUntil = nowMs + SLIDE_MS;
     window._slideDir = dir.clone();
   } else if (shiftEdge && !groundedNow && (window._dashLeft || 0) > 0
@@ -18608,8 +18615,18 @@ function updateBotAI(dt) {
     }
 
     // Apply frost-slow to movement (bots get slower as they freeze)
+    // 🏃 Bot speed is scaled here, on the frame's NET movement, rather than at the
+    // dozen literal step speeds scattered through the AI (13*dt, 10*dt, 0.30,
+    // 0.5 …). One place to change, and it cannot drift out of step with itself.
+    // Frost slow folds into the same multiply. Note the AI's own distance checks
+    // above run on the UNSCALED movement, which is what we want: they measure
+    // intent (am I stuck, am I kiting), not ground actually covered.
     const frostMult = (bot.frostSlow || 100) / 100;
-    if (frostMult < 1) { bot.x = prevBotX + (bot.x - prevBotX) * frostMult; bot.z = prevBotZ + (bot.z - prevBotZ) * frostMult; }
+    const moveScale = BOT_SPEED_MULT * frostMult;
+    if (moveScale !== 1) {
+      bot.x = prevBotX + (bot.x - prevBotX) * moveScale;
+      bot.z = prevBotZ + (bot.z - prevBotZ) * moveScale;
+    }
 
     // Sync remote mesh position (with vertical lift from air grenade)
     const mesh = remoteMeshes[bot.id];
