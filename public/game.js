@@ -8627,9 +8627,90 @@ function weldModelParts(root, gap = 0.004, maxPasses = 8) {
   }
 }
 
+
+// ── 🔩 Greebling ──────────────────────────────────────────────────────────
+// Welding and shine fixed "parts floating" and "nothing catches light", but a
+// receiver was still a single bare cuboid — the gun read as a box with a tube.
+// Real firearms are covered in edges: panel seams, a side plate, pins, a rail.
+// This adds that surface breakup to the biggest one or two parts of each gun,
+// procedurally, so all 99 get it rather than any being hand-detailed.
+//
+// Greebles are parented to the host part and sized from ITS bounding box, so
+// they scale with the weapon, inherit its transform, and are attached by
+// construction — nothing here can float.
+function greebleModel(root, opts = {}) {
+  if (!root || root._greebled) return;
+  root._greebled = true;
+  // Rank parts by volume; only the chassis is worth detailing.
+  const parts = [];
+  root.traverse(o => {
+    if (!o.isMesh || !o.geometry || (o.material && o.material.transparent)) return;
+    if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+    const b = o.geometry.boundingBox, sz = new THREE.Vector3();
+    b.getSize(sz);
+    parts.push({ o, sz, vol: sz.x * sz.y * sz.z, b });
+  });
+  if (parts.length < 2) return;
+  parts.sort((a, b) => b.vol - a.vol);
+  const biggest = parts[0].vol;
+  const hosts = parts.filter(p => p.vol > biggest * 0.35).slice(0, 2);
+
+  hosts.forEach(host => {
+    const { o, sz, b } = host;
+    // Only worth detailing something with a real face to detail.
+    if (sz.x < 0.012 || sz.y < 0.012) return;
+    const base = (o.material && o.material.color) ? o.material.color.getHex() : 0x333333;
+    const c = new THREE.Color(base), hsl = { h:0, s:0, l:0 }; c.getHSL(hsl);
+    const darker = new THREE.Color().setHSL(hsl.h, hsl.s, Math.max(0.04, hsl.l * 0.55)).getHex();
+    const lighter = new THREE.Color().setHSL(hsl.h, hsl.s * 0.7, Math.min(0.72, hsl.l * 1.9 + 0.06)).getHex();
+    const seamMat  = new THREE.MeshPhongMaterial({ color: darker,  shininess: 60,  specular: 0x2a2c30 });
+    const plateMat = new THREE.MeshPhongMaterial({ color: lighter, shininess: 120, specular: 0x8a9098 });
+
+    const long = Math.max(sz.x, sz.y, sz.z);
+    const axis = sz.z >= sz.x && sz.z >= sz.y ? 'z' : (sz.x >= sz.y ? 'x' : 'y');
+    const mid = new THREE.Vector3(); b.getCenter(mid);
+
+    // 1. Panel seam along the top, running the length of the part.
+    const seam = new THREE.Mesh(new THREE.BoxGeometry(
+      axis === 'x' ? long * 0.78 : sz.x * 0.42,
+      Math.max(0.0035, sz.y * 0.07),
+      axis === 'z' ? long * 0.78 : sz.z * 0.42), seamMat);
+    seam.position.set(mid.x, b.max.y - sz.y * 0.03, mid.z);
+    o.add(seam);
+
+    // 2. A raised side plate — the single biggest cure for "flat slab".
+    const plate = new THREE.Mesh(new THREE.BoxGeometry(
+      Math.max(0.003, sz.x * 0.10),
+      sz.y * 0.5,
+      axis === 'z' ? long * 0.5 : sz.z * 0.5), plateMat);
+    plate.position.set(b.max.x - sz.x * 0.02, mid.y + sz.y * 0.04, mid.z - long * 0.05);
+    o.add(plate);
+
+    // 3. A row of pins along the flank.
+    const pinGeo = new THREE.CylinderGeometry(Math.max(0.0016, sz.y * 0.045), Math.max(0.0016, sz.y * 0.045),
+                                              Math.max(0.003, sz.x * 0.07), 6);
+    for (let i = 0; i < 3; i++) {
+      const pin = new THREE.Mesh(pinGeo, plateMat);
+      pin.rotation.z = Math.PI / 2;
+      const t = (i - 1) * long * 0.22;
+      pin.position.set(b.max.x - sz.x * 0.01,
+                       mid.y - sz.y * 0.22,
+                       axis === 'z' ? mid.z + t : mid.z);
+      o.add(pin);
+    }
+
+    // 4. Vent slots cut visually into the underside.
+    for (let i = 0; i < 3; i++) {
+      const vent = new THREE.Mesh(new THREE.BoxGeometry(sz.x * 0.55, Math.max(0.0025, sz.y * 0.05), long * 0.05), seamMat);
+      const t = (i - 1) * long * 0.13;
+      vent.position.set(mid.x, b.min.y + sz.y * 0.04, axis === 'z' ? mid.z + t : mid.z);
+      o.add(vent);
+    }
+  });
+}
 // Finish every model the player can see: welded together, and shiny.
 [weaponModels, meleeModels, supportModels].forEach(arr => {
-  arr.forEach(m => { if (!m) return; try { weldModelParts(m); shinifyModel(m); } catch (e) {} });
+  arr.forEach(m => { if (!m) return; try { greebleModel(m); weldModelParts(m); shinifyModel(m); } catch (e) {} });
 });
 
 const SKIN_IDS = SKINS.map(s => s.id);
