@@ -8342,6 +8342,127 @@ const SKINS = [
   { id: 'green_cap',   name: 'Green Cap',     desc: 'Soft green cap. Default loadout enjoyer.' },
   { id: 'shadow',      name: 'Shadow',        desc: 'All black, pale face. The strongest wear crowns.' },
 ];
+
+// ══════════════════════════════════════════════════════════════════════════
+// 🔧 MODEL FINISHING PASS
+// Two problems the hand-built models all share, fixed once here rather than in
+// two thousand lines of per-gun construction:
+//
+//   1. FLOATING PARTS. Scopes, magazines, stocks and grips were positioned by
+//      eye, so 61 of 99 guns had geometry that never touched the body — 264
+//      pieces hanging in mid-air. weldModelParts finds them by treating each
+//      part's bounding box as a node and "touching" as an edge: anything not in
+//      the same connected component as the receiver is loose, and gets nudged
+//      the shortest distance that makes it touch. Whole clusters move together,
+//      so a scope keeps its lens.
+//
+//   2. NO SHINE. Most parts were MeshLambertMaterial, which has no specular
+//      term at all, so guns read as flat paper whatever colour they were.
+//      shinifyModel swaps them for Phong. Materials are shared between models,
+//      so conversions are memoised — one swap covers every gun using it.
+const _shinyCache = new Map();
+function shinifyModel(root) {
+  root.traverse(o => {
+    if (!o.isMesh || !o.material) return;
+    const m = o.material;
+    // Glows, reticles and muzzle flashes are MeshBasicMaterial on purpose —
+    // they are meant to look self-lit, not polished.
+    if (m.type !== 'MeshLambertMaterial' || m.transparent) return;
+    let shiny = _shinyCache.get(m);
+    if (!shiny) {
+      const hex = m.color.getHex();
+      // Dark polymer stays fairly matte; bright metal gets a hard highlight.
+      const lum = ((hex >> 16 & 255) * 0.299 + (hex >> 8 & 255) * 0.587 + (hex & 255) * 0.114) / 255;
+      shiny = new THREE.MeshPhongMaterial({
+        color: hex,
+        shininess: 30 + lum * 80,
+        specular: new THREE.Color().setHSL(0, 0, 0.25 + lum * 0.45).getHex(),
+        map: m.map || null,
+      });
+      _shinyCache.set(m, shiny);
+    }
+    o.material = shiny;
+  });
+}
+
+function weldModelParts(root, gap = 0.004, maxPasses = 8) {
+  const collect = () => {
+    root.updateMatrixWorld(true);
+    const parts = [];
+    root.traverse(o => {
+      if (!o.isMesh || !o.geometry) return;
+      if (o.material && o.material.transparent) return;   // flashes, glows
+      if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+      parts.push({ o, b: o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld) });
+    });
+    return parts;
+  };
+  const components = parts => {
+    const n = parts.length, adj = Array.from({ length: n }, () => []);
+    const grown = parts.map(p => p.b.clone().expandByScalar(gap));
+    for (let i = 0; i < n; i++)
+      for (let j = i + 1; j < n; j++)
+        if (grown[i].intersectsBox(grown[j])) { adj[i].push(j); adj[j].push(i); }
+    const seen = new Array(n).fill(false), comps = [];
+    for (let i = 0; i < n; i++) {
+      if (seen[i]) continue;
+      const st = [i], c = []; seen[i] = true;
+      while (st.length) { const k = st.pop(); c.push(k); adj[k].forEach(x => { if (!seen[x]) { seen[x] = true; st.push(x); } }); }
+      comps.push(c);
+    }
+    return comps.sort((a, b) => b.length - a.length);
+  };
+  for (let pass = 0; pass < maxPasses; pass++) {
+    const parts = collect();
+    if (parts.length < 2) return;
+    const comps = components(parts);
+    if (comps.length <= 1) return;                 // everything is attached
+    const main = comps[0];
+    let movedAny = false;
+    for (const comp of comps.slice(1)) {
+      let best = null;
+      for (const ci of comp) for (const mi of main) {
+        const a = parts[ci].b, b = parts[mi].b;
+        const dx = Math.max(b.min.x - a.max.x, a.min.x - b.max.x, 0);
+        const dy = Math.max(b.min.y - a.max.y, a.min.y - b.max.y, 0);
+        const dz = Math.max(b.min.z - a.max.z, a.min.z - b.max.z, 0);
+        const d = Math.hypot(dx, dy, dz);
+        if (!best || d < best.d) best = { d, ci, mi };
+      }
+      if (!best) continue;
+      const a = parts[best.ci].b, b = parts[best.mi].b;
+      const move = new THREE.Vector3();
+      if (b.min.x - a.max.x > 0)      move.x =  (b.min.x - a.max.x) + gap;
+      else if (a.min.x - b.max.x > 0) move.x = -((a.min.x - b.max.x) + gap);
+      if (b.min.y - a.max.y > 0)      move.y =  (b.min.y - a.max.y) + gap;
+      else if (a.min.y - b.max.y > 0) move.y = -((a.min.y - b.max.y) + gap);
+      if (b.min.z - a.max.z > 0)      move.z =  (b.min.z - a.max.z) + gap;
+      else if (a.min.z - b.max.z > 0) move.z = -((a.min.z - b.max.z) + gap);
+      if (move.lengthSq() === 0) continue;
+      const seenObj = new Set();
+      for (const ci of comp) {
+        const mesh = parts[ci].o;
+        if (seenObj.has(mesh)) continue;
+        seenObj.add(mesh);
+        const local = move.clone();
+        if (mesh.parent) {
+          const q = new THREE.Quaternion();
+          mesh.parent.getWorldQuaternion(q);
+          local.applyQuaternion(q.invert());
+        }
+        mesh.position.add(local);
+      }
+      movedAny = true;
+    }
+    if (!movedAny) return;
+  }
+}
+
+// Finish every model the player can see: welded together, and shiny.
+[weaponModels, meleeModels, supportModels].forEach(arr => {
+  arr.forEach(m => { if (!m) return; try { weldModelParts(m); shinifyModel(m); } catch (e) {} });
+});
+
 const SKIN_IDS = SKINS.map(s => s.id);
 
 // 🎭 Per-character face: configurable eyes + mouth (+blush/brows) drawn on the
