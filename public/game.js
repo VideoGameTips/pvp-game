@@ -2544,6 +2544,11 @@ const supportUses = SUPPORT_ITEMS.map(s => s.uses);
 // ── Three.js setup ─────────────────────────────────────────────────────────
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
+// Render at the display's real pixel density. Without this the canvas is drawn
+// at CSS resolution and upscaled, which is why edges looked soft on a retina
+// screen no matter how much antialiasing was on. Capped at 2 so a 3x phone
+// doesn't quadruple its fragment cost for no visible gain.
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.body.appendChild(renderer.domElement);
@@ -3120,6 +3125,15 @@ function playSoundEvent(name, opts = {}) {
 
 // ── Lighting ───────────────────────────────────────────────────────────────
 scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+// 🔦 Viewmodel rig. A directional light lights every point of a flat face
+// identically, so the gun in your hands rendered as flat blocks of colour. These
+// travel with the camera: the point light falls off ACROSS a face and Phong's
+// specular is computed per pixel, so surfaces get the smooth gradient and the
+// travelling highlight that make a model read as a solid object.
+const _vmKey  = new THREE.PointLight(0xfff2e0, 0.85, 14, 1.4);
+_vmKey.position.set(0.45, 0.25, 0.35);
+const _vmFill = new THREE.PointLight(0x9fc0ff, 0.45, 14, 1.4);
+_vmFill.position.set(-0.5, -0.15, 0.3);
 const sun = new THREE.DirectionalLight(0xffffff, 1.2);
 sun.position.set(30, 50, 20);
 sun.castShadow = true;
@@ -3255,6 +3269,7 @@ const blankMapColliders       = MAP_COLLIDERS.blank;
 const battlefieldMapColliders = MAP_COLLIDERS.battlefield;
 const rangeMapColliders       = MAP_COLLIDERS.range;
 
+function _weatherOnActivate(name) { if (MAP_GROUPS[name]) weatherMapGroup(MAP_GROUPS[name]); }
 function activateMap(name) {
   for (const [n, g] of Object.entries(MAP_GROUPS)) g.visible = (n === name);
   wallColliders.length = 0;
@@ -5359,6 +5374,70 @@ buildBlankMap();
 buildBattlefieldMap();
 buildRangeMap();
 buildLobby13Map();
+
+// ══════════════════════════════════════════════════════════════════════════
+// 🏚️ MAP SURFACE PASS — reflective, and not perfectly clean
+// Map geometry was MeshLambertMaterial in flat single colours: no specular
+// term, so nothing ever caught the light, and every face of every wall was the
+// exact same shade, which is what makes a level read as untextured blocks.
+//
+// Two cheap fixes, applied once to every built map:
+//   • Phong instead of Lambert, so floors and metal pick up highlights. Ground
+//     planes get more shine than walls — a floor is the surface you actually
+//     see light travel across.
+//   • Per-vertex brightness jitter, seeded from the vertex's own position so it
+//     is stable frame to frame and identical across reloads. This is what kills
+//     the "perfect" look: edges and corners vary slightly, like wear and grime.
+//
+// Geometry is often shared between meshes, so the colour attribute is added to
+// the geometry once and every mesh using it inherits the same wear pattern.
+const _mapMatCache = new Map();
+function _weatherGeometry(geo) {
+  if (!geo || geo.attributes.color || !geo.attributes.position) return;
+  const pos = geo.attributes.position, n = pos.count;
+  const col = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    // Deterministic hash of the vertex position -> a small brightness offset.
+    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+    const h = Math.sin(x * 12.9898 + y * 78.233 + z * 37.719) * 43758.5453;
+    const v = 1 + ((h - Math.floor(h)) - 0.5) * 0.17;   // +-8.5% brightness
+    col[i*3] = col[i*3+1] = col[i*3+2] = v;
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+}
+function weatherMapGroup(group) {
+  if (!group || group._weathered) return;
+  group._weathered = true;
+  group.traverse(o => {
+    if (!o.isMesh || !o.material || !o.geometry) return;
+    const m = o.material;
+    if (m.type !== 'MeshLambertMaterial' || m.transparent) return;   // glass, glows: leave alone
+    _weatherGeometry(o.geometry);
+    // A ground plane lies flat and is the surface light actually rakes across,
+    // so it gets the stronger sheen.
+    const isGround = o.geometry.type === 'PlaneGeometry';
+    const key = m.uuid + (isGround ? '|g' : '|w');
+    let weathered = _mapMatCache.get(key);
+    if (!weathered) {
+      weathered = new THREE.MeshPhongMaterial({
+        color: m.color.getHex(),
+        map: m.map || null,
+        shininess: isGround ? 26 : 12,
+        specular: isGround ? 0x55585c : 0x2e3033,
+        vertexColors: true,
+        side: m.side,
+      });
+      _mapMatCache.set(key, weathered);
+    }
+    o.material = weathered;
+  });
+}
+function weatherAllMaps() {
+  Object.values(MAP_GROUPS).forEach(g => { try { weatherMapGroup(g); } catch (e) {} });
+}
+weatherAllMaps();
+camera.add(_vmKey); camera.add(_vmFill);
+scene.add(camera);   // lights parented to the camera only render if it is in the scene
 activateMap('blank');
 
 // ── Weapon view models ─────────────────────────────────────────────────────
@@ -5420,6 +5499,86 @@ function _gunDetails(g, o) {
   return g;
 }
 
+
+// ── 💥 Muzzle blast ────────────────────────────────────────────────────────
+// The flash was a static star switched on for 60 ms: identical on every shot,
+// and it lit nothing. A real blast is brief, violently bright, throws light onto
+// whatever is in front of you, and leaves smoke behind. All of that here.
+//
+// One pooled light and a small ring of reusable smoke puffs, so a minigun
+// emptying its drum allocates nothing.
+let _muzzleLight = null;
+function _getMuzzleLight() {
+  if (!_muzzleLight) {
+    _muzzleLight = new THREE.PointLight(0xffcc66, 0, 10, 2);
+    scene.add(_muzzleLight);
+  }
+  return _muzzleLight;
+}
+const _smokePool = [];
+let _smokeIdx = 0;
+function _getSmokePuff() {
+  if (_smokePool.length < 10) {
+    const m = new THREE.Mesh(
+      new THREE.SphereGeometry(1, 7, 6),
+      new THREE.MeshBasicMaterial({ color: 0x9a9a9a, transparent: true, opacity: 0, depthWrite: false }));
+    m.visible = false; scene.add(m); _smokePool.push(m);
+    return m;
+  }
+  const m = _smokePool[_smokeIdx % _smokePool.length]; _smokeIdx++;
+  return m;
+}
+function triggerMuzzleBlast(model, opts = {}) {
+  if (!model || !model._flash) return;
+  const flash = model._flash;
+  const tint = opts.color || (flash.material && flash.material.color ? flash.material.color.getHex() : 0xffcc66);
+  // No two shots look alike: random roll and a size jitter.
+  const s0 = (opts.scale || 1) * (0.85 + Math.random() * 0.55);
+  flash.visible = true;
+  flash.rotation.z = Math.random() * Math.PI * 2;
+  flash.scale.setScalar(s0);
+
+  const world = new THREE.Vector3(); flash.getWorldPosition(world);
+  const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+  const light = _getMuzzleLight();
+  light.color.setHex(tint);
+  light.position.copy(world);
+
+  const puff = _getSmokePuff();
+  puff.visible = true;
+  puff.position.copy(world).addScaledVector(fwd, 0.05);
+  puff.scale.setScalar(0.02);
+  puff.material.opacity = 0.32;
+
+  const dur = opts.duration || 95;
+  const start = performance.now();
+  const step = () => {
+    const t = (performance.now() - start) / dur;
+    if (t >= 1) {
+      flash.visible = false; flash.scale.setScalar(1);
+      light.intensity = 0;
+    } else {
+      // The flash blooms outward and the light falls off fast — a blast is a
+      // spike, not a lamp being switched on.
+      flash.scale.setScalar(s0 * (1 + t * 2.1));
+      light.intensity = 3.2 * s0 * (1 - t) * (1 - t);
+      requestAnimationFrame(step);
+    }
+  };
+  requestAnimationFrame(step);
+
+  // Smoke outlives the flash: it keeps expanding and drifting as it thins.
+  const sStart = performance.now(), sDur = 320;
+  const smoke = () => {
+    const t = (performance.now() - sStart) / sDur;
+    if (t >= 1) { puff.visible = false; puff.material.opacity = 0; return; }
+    puff.scale.setScalar(0.02 + t * 0.16);
+    puff.position.addScaledVector(fwd, 0.004);
+    puff.material.opacity = 0.32 * (1 - t);
+    requestAnimationFrame(smoke);
+  };
+  requestAnimationFrame(smoke);
+}
 function makeMuzzleFlash() {
   // Composite muzzle flash: inner bright core + outer flare + 4 spike rays for character
   const g = new THREE.Group();
@@ -8370,13 +8529,23 @@ function shinifyModel(root) {
     if (m.type !== 'MeshLambertMaterial' || m.transparent) return;
     let shiny = _shinyCache.get(m);
     if (!shiny) {
-      const hex = m.color.getHex();
-      // Dark polymer stays fairly matte; bright metal gets a hard highlight.
-      const lum = ((hex >> 16 & 255) * 0.299 + (hex >> 8 & 255) * 0.587 + (hex & 255) * 0.114) / 255;
+      let hex = m.color.getHex();
+      let lum = ((hex >> 16 & 255) * 0.299 + (hex >> 8 & 255) * 0.587 + (hex & 255) * 0.114) / 255;
+      // Near-black parts cannot show shading — every light level clamps to the
+      // same near-zero value, so the gun reads as a silhouette however well it
+      // is lit. Lift the darkest materials to a dark GREY, which is what gun
+      // metal actually looks like, and let the shading do the rest.
+      if (lum < 0.13) {
+        const c = new THREE.Color(hex);
+        const hsl = { h: 0, s: 0, l: 0 }; c.getHSL(hsl);
+        c.setHSL(hsl.h, hsl.s, Math.max(hsl.l, 0.16));
+        hex = c.getHex();
+        lum = 0.16;
+      }
       shiny = new THREE.MeshPhongMaterial({
         color: hex,
-        shininess: 30 + lum * 80,
-        specular: new THREE.Color().setHSL(0, 0, 0.25 + lum * 0.45).getHex(),
+        shininess: 110 + lum * 120,
+        specular: new THREE.Color().setHSL(0, 0, 0.16 + lum * 0.30).getHex(),
         map: m.map || null,
       });
       _shinyCache.set(m, shiny);
@@ -11598,8 +11767,7 @@ function fireCrossbowCharge() {
   pool.ammo--; ammo = pool.ammo; updateAmmoHUD();
 
   const model = weaponModels[currentWeaponIdx];
-  model._flash.visible = true;
-  setTimeout(() => model._flash.visible = false, 60);
+  triggerMuzzleBlast(model);
   model.position.z += model._kickZ;
   setTimeout(() => model.position.z = -0.25, 80);
 
@@ -11742,7 +11910,7 @@ function updatePendingFanFire(dt) {
     playWeaponSound(w.id, { baseWeapon: w, minGap: 25 });
     spawnLocalBullet(origin, d, bid, true, w.bulletSpeed, w.bulletColor, w.bulletSize, w.id);
     const model = weaponModels[currentWeaponIdx];
-    if (model) { model._flash.visible = true; setTimeout(() => { if (model) model._flash.visible = false; }, 50); }
+    if (model) triggerMuzzleBlast(model, { duration: 70 });
     pool.ammo--; ammo = pool.ammo; updateAmmoHUD();
     pendingFanFire.count--;
     pendingFanFire.timer = pendingFanFire.delay;
@@ -11847,8 +12015,7 @@ function tryShoot() {
   if (match?.type === 'range') { rangeStats.shots++; updateRangeHUD(); updateMatchHUD(); }
 
   const model = weaponModels[currentWeaponIdx];
-  model._flash.visible = true;
-  setTimeout(() => model._flash.visible = false, 60);
+  triggerMuzzleBlast(model);
   model.position.z += model._kickZ;
   setTimeout(() => model.position.z = isADS ? -0.25 : -0.25, 80);
 
