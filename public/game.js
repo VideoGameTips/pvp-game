@@ -5624,20 +5624,30 @@ function buildAK20() {
   const amber = new THREE.MeshLambertMaterial({ color: 0x7b4618 });
   const shadowWood = new THREE.MeshLambertMaterial({ color: 0x3b1d08 });
 
+  // 🔧 The outlines below are fine — the triangulation was not. This used to
+  // close each face with a triangle FAN (0, i, i+1), which is only valid on a
+  // CONVEX polygon. The AK's profile is 41 points with deep concavities: the
+  // magazine well, the pistol grip, the trigger guard cutout. A fan bridges
+  // straight across those, which is why the rifle rendered as a black wedge
+  // with two giant spikes instead of a gun.
+  //
+  // ExtrudeGeometry runs the outline through a proper ear-clipping
+  // triangulation, so concave profiles come out right, and it gives the plate
+  // edges a chamfer for free — the same treatment the rest of the roster gets.
   function sidePlate(mat, pts, width, x = 0) {
-    const verts = [], indices = [];
-    pts.forEach(p => verts.push(x - width / 2, p[1], p[0]));
-    pts.forEach(p => verts.push(x + width / 2, p[1], p[0]));
-    const n = pts.length;
-    for (let i = 1; i < n - 1; i++) indices.push(0, i, i + 1, n, n + i + 1, n + i);
-    for (let i = 0; i < n; i++) {
-      const j = (i + 1) % n;
-      indices.push(i, j, n + j, i, n + j, n + i);
-    }
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
-    geo.setIndex(indices);
-    geo.computeVertexNormals();
+    const shape = new THREE.Shape();
+    pts.forEach((p, i) => (i ? shape.lineTo(p[0], p[1]) : shape.moveTo(p[0], p[1])));
+    shape.closePath();
+    const bevel = Math.min(0.0016, width * 0.2);
+    const geo = new THREE.ExtrudeGeometry(shape, {
+      depth: width, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel,
+      bevelSegments: 1, curveSegments: 1,
+    });
+    // The outline is drawn in (z, y) and extruded along the shape's own +Z.
+    // Rotate so that extrusion becomes the gun's X (plate thickness) and the
+    // profile lands in the ZY plane, then centre it on x.
+    geo.rotateY(-Math.PI / 2);
+    geo.translate(x + width / 2, 0, 0);
     const mesh = new THREE.Mesh(geo, mat);
     mesh.castShadow = true; mesh.receiveShadow = true;
     g.add(mesh);
@@ -5665,28 +5675,12 @@ function buildAK20() {
       left.push([centers[i][0] + nz * height / 2, centers[i][1] + ny * height / 2]);
       right.push([centers[i][0] - nz * height / 2, centers[i][1] - ny * height / 2]);
     }
-    const verts = [], indices = [], n = centers.length;
-    const add = (px, p) => verts.push(px, p[1], p[0]) / 3 - 1;
-    for (let i = 0; i < n; i++) add(x - width / 2, left[i]);
-    for (let i = 0; i < n; i++) add(x - width / 2, right[i]);
-    for (let i = 0; i < n; i++) add(x + width / 2, left[i]);
-    for (let i = 0; i < n; i++) add(x + width / 2, right[i]);
-    for (let i = 0; i < n - 1; i++) {
-      indices.push(i, i + 1, n + i + 1, i, n + i + 1, n + i);
-      indices.push(n * 2 + i, n * 3 + i + 1, n * 2 + i + 1, n * 2 + i, n * 3 + i, n * 3 + i + 1);
-      indices.push(i, n * 2 + i, n * 2 + i + 1, i, n * 2 + i + 1, i + 1);
-      indices.push(n + i, n + i + 1, n * 3 + i + 1, n + i, n * 3 + i + 1, n * 3 + i);
-    }
-    indices.push(0, n, n * 3, 0, n * 3, n * 2);
-    indices.push(n - 1, n * 2 + n - 1, n * 3 + n - 1, n - 1, n * 3 + n - 1, n + n - 1);
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
-    geo.setIndex(indices);
-    geo.computeVertexNormals();
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.castShadow = true; mesh.receiveShadow = true;
-    g.add(mesh);
-    return mesh;
+    // Hand-stitched winding here disagreed with itself between the four walls,
+    // so the magazine rendered inside-out: you saw through the near face into
+    // the back of the far one and it read as a hollow outline rather than a
+    // solid mag. Walking one side out and the other back gives a single closed
+    // outline, which sidePlate already extrudes and triangulates correctly.
+    return sidePlate(mat, left.concat(right.slice().reverse()), width, x);
   }
 
   sidePlate(blackSteel, [

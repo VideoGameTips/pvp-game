@@ -525,12 +525,24 @@
   defineGun('air_rifle',[0x724a27,0x6aa8cf],[0,0.020,-0.72],0.006,(g,p)=>{
     box(g,p.wood,[0.055,0.070,0.38],[0,-0.010,0.03]);
     box(g,p.wood,[0.070,0.080,0.22],[0,-0.020,0.31],[-0.12,0,0]);
-    cyl(g,p.dark,0.007,0.52,[0,0.020,-0.47]);
-    cyl(g,p.accent,0.025,0.32,[0,-0.020,-0.30]);
-    cyl(g,p.steel,0.006,0.080,[0.040,0.030,-0.02],[0,0,PI/2]);
-    sphere(g,p.rubber,0.012,[0.083,0.030,-0.02]);
-    box(g,p.dark,[0.020,0.038,0.012],[0,0.060,-0.55]);
-    torus(g,p.dark,0.018,0.004,[0,0.066,-0.565],[0,PI/2,0]);
+    // The barrel used to run z -0.73..-0.21, stopping 50 mm short of a receiver
+    // that starts at -0.16, while the air reservoir below it topped out at
+    // y=0.005 against a barrel bottom of y=0.013. It touched neither, so the
+    // barrel, its front sight and its hood floated off the front of the gun as
+    // one detached clump. Lengthened to run back into the receiver...
+    cyl(g,p.dark,0.007,0.61,[0,0.020,-0.425]);
+    // ...and the reservoir lifted to meet the barrel it is strapped to.
+    cyl(g,p.accent,0.025,0.32,[0,-0.008,-0.30]);
+    // Bolt handle: was a 80 mm rod starting at x=0.040 with its inboard end
+    // 12 mm clear of a receiver only 27 mm wide, and sitting 5 mm above the
+    // top face — so the rod and its knob hung in the air beside the gun.
+    // Shorter, lowered into the receiver, and rooted inside it.
+    cyl(g,p.steel,0.006,0.046,[0.030,0.008,-0.02],[0,0,PI/2]);
+    sphere(g,p.rubber,0.012,[0.052,0.008,-0.02]);
+    // Front sight and its hood were floating 14 mm over a barrel whose top
+    // surface is at y=0.027. Both now stand on the barrel.
+    box(g,p.dark,[0.020,0.030,0.012],[0,0.038,-0.55]);
+    torus(g,p.dark,0.018,0.004,[0,0.052,-0.565],[0,PI/2,0]);
     box(g,p.rubber,[0.032,0.080,0.045],[0,-0.077,0.11],[0.30,0,0]);
     box(g,p.rubber,[0.072,0.085,0.016],[0,-0.020,0.43],[-0.12,0,0]);
   });
