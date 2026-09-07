@@ -6379,13 +6379,21 @@ function buildMinigun() {
   const barrelCluster = new THREE.Group();
   barrelCluster.position.set(0, 0.004, -0.30); // centred on the shroud
   g.add(barrelCluster);
+  // The three barrels must sit on ONE circle at exactly 120° apart, or the
+  // cluster is not a rigid shape when it spins. The old hand-typed offsets put
+  // barrel 1 at radius 0.0220 and barrels 2 and 3 at 0.0246 — 11.8% further
+  // out, spaced 116.6/126.8/116.6 — so the silhouette wobbled as it rotated
+  // and the gun appeared to change shape while firing. Generated from the
+  // angle now, so it cannot drift again.
   const bGeo = new THREE.CylinderGeometry(0.010, 0.010, 0.32, 8);
-  const b1 = new THREE.Mesh(bGeo, darkMat);
-  b1.rotation.x = Math.PI / 2; b1.position.set(0, 0.022, 0); barrelCluster.add(b1);
-  const b2 = new THREE.Mesh(bGeo, darkMat);
-  b2.rotation.x = Math.PI / 2; b2.position.set(-0.022, -0.011, 0); barrelCluster.add(b2);
-  const b3 = new THREE.Mesh(bGeo, darkMat);
-  b3.rotation.x = Math.PI / 2; b3.position.set( 0.022, -0.011, 0); barrelCluster.add(b3);
+  const CLUSTER_R = 0.022;
+  for (let i = 0; i < 3; i++) {
+    const a = Math.PI / 2 + i * (Math.PI * 2 / 3);
+    const b = new THREE.Mesh(bGeo, darkMat);
+    b.rotation.x = Math.PI / 2;
+    b.position.set(Math.cos(a) * CLUSTER_R, Math.sin(a) * CLUSTER_R, 0);
+    barrelCluster.add(b);
+  }
   g._barrelCluster = barrelCluster; // spin THIS group, not individual barrels
   g._spinRate = 10;
   // Barrel shroud / housing at front
@@ -6789,6 +6797,25 @@ function _genericGun(opts) {
     default:          bodyW=0.048; bodyH=0.058; bodyD=opts.bodyLen ?? 0.30;
   }
   const halfW = bodyW * 0.5, halfH = bodyH * 0.5, halfD = bodyD * 0.5;
+  // 📏 One visual language across the whole roster. Every human-scale detail
+  // below — grip, trigger, sights, rail, magazine, stock — used to be a
+  // hardcoded absolute size while the bodies vary a lot, so the SAME grip came
+  // out at 74% of the receiver's width on a pistol and 37% on an LMG. Nothing
+  // read as coming from the same factory, which is the real reason the guns
+  // looked inconsistent next to each other.
+  //
+  // These two factors scale the details with the body. The 0.6 exponent
+  // deliberately UNDER-scales: a grip is sized by a hand as much as by the gun,
+  // so it should grow with a bigger receiver but not proportionally. Net effect
+  // is the roster-wide proportion swing dropping from about 2.0× to about 1.3×.
+  const sW = Math.pow(bodyW / 0.048, 0.6);
+  const sH = Math.pow(bodyH / 0.058, 0.6);
+  // Parts that only make sense on some actions. A pistol works its slide, not a
+  // charging handle on the flank; an energy weapon has no cartridge to chamber
+  // and no gas to tap. Fitting them anyway is exactly the "extra parts that
+  // don't make sense" problem.
+  const hasBolt = shape !== 'pistol' && shape !== 'futuristic';
+  const hasGasBlock = shape !== 'shotgun' && shape !== 'futuristic';
   // 📐 Everything bolted to this gun is seated by SEAT metres INTO its host
   // rather than balanced on top of it. A part that merely touches its mount
   // shows a hairline of background at the joint and reads as floating; sunk a
@@ -6810,24 +6837,25 @@ function _genericGun(opts) {
   // Magazine well — the mag has to enter something, or it looks stuck on.
   if ((opts.magType || 'box') !== 'hidden' && shape !== 'pistol') {
     const well = new THREE.Mesh(
-      _softBox(bodyW * 0.78, 0.026, 0.052, 0.003), poly);
+      _softBox(bodyW * 0.78, 0.026 * sH, 0.052 * sW, 0.003), poly);
     well.position.set(0, -bodyH * 0.62, 0.02); g.add(well);
     // Flared lip around the mouth of the well. Without it the magazine crosses
     // a flat underside with nothing marking the joint, which is precisely the
     // "box pushed into another box" read.
     const lip = new THREE.Mesh(
-      _softBox(bodyW * 0.90, 0.008, 0.060, 0.003), dark);
-    lip.position.set(0, -bodyH * 0.62 - 0.010, 0.02); g.add(lip);
+      _softBox(bodyW * 0.90, 0.008 * sH, 0.060 * sW, 0.003), dark);
+    lip.position.set(0, -bodyH * 0.62 - 0.010 * sH, 0.02); g.add(lip);
   }
 
   // Trigger + trigger guard. Tiny, but its absence is exactly why these looked
   // like props rather than weapons.
   const guard = new THREE.Mesh(
-    new THREE.TorusGeometry(0.019, 0.0035, 5, 10, Math.PI * 1.15), dark);
+    new THREE.TorusGeometry(0.019 * sH, 0.0035 * sW, 5, 10, Math.PI * 1.15), dark);
   guard.rotation.y = Math.PI / 2; guard.rotation.z = -0.35;
   guard.position.set(0, -bodyH * 0.52, shape === 'bullpup' ? 0.055 : 0.052);
   g.add(guard);
-  const trigger = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.020, 0.007), metal);
+  const trigger = new THREE.Mesh(
+    new THREE.BoxGeometry(0.006 * sW, 0.020 * sH, 0.007 * sW), metal);
   trigger.rotation.x = 0.22;
   trigger.position.set(0, -bodyH * 0.52, shape === 'bullpup' ? 0.058 : 0.055);
   g.add(trigger);
@@ -6835,10 +6863,12 @@ function _genericGun(opts) {
   // Charging handle on the right flank, running in a raceway milled into the
   // receiver. The handle alone was a floating tab; the slot it rides in is what
   // ties it to the gun.
-  const race = new THREE.Mesh(_softBox(0.004, 0.016, 0.062, 0.0015), dark);
-  race.position.set(halfW - 0.0005, bodyH * 0.22, bodyD * 0.16); g.add(race);
-  const bolt = new THREE.Mesh(_softBox(0.010, 0.012, 0.048, 0.002), metal);
-  bolt.position.set(halfW + 0.003, bodyH * 0.22, bodyD * 0.16); g.add(bolt);
+  if (hasBolt) {
+    const race = new THREE.Mesh(_softBox(0.004, 0.016 * sH, 0.062 * sW, 0.0015), dark);
+    race.position.set(halfW - 0.0005, bodyH * 0.22, bodyD * 0.16); g.add(race);
+    const bolt = new THREE.Mesh(_softBox(0.010 * sW, 0.012 * sH, 0.048 * sW, 0.002), metal);
+    bolt.position.set(halfW + 0.003 * sW, bodyH * 0.22, bodyD * 0.16); g.add(bolt);
+  }
 
   // Barrel(s)
   const barrelLen = opts.barrelLen ?? (shape === 'sniper' ? 0.34 : shape === 'pistol' ? 0.10 : shape === 'shotgun' ? 0.18 : 0.22);
@@ -6887,9 +6917,10 @@ function _genericGun(opts) {
     }
     // Gas block / front sight base where the handguard ends — sunk into the
     // handguard's front face rather than parked in front of it.
-    if (shape !== 'shotgun') {
-      const gas = new THREE.Mesh(_softBox(0.018, 0.020, 0.022, 0.003), metal);
-      gas.position.set(0, hgTopY - 0.008, hgFrontZ + 0.004); g.add(gas);
+    if (hasGasBlock) {
+      const gas = new THREE.Mesh(
+        _softBox(0.018 * sW, 0.020 * sH, 0.022 * sW, 0.003), metal);
+      gas.position.set(0, hgTopY - 0.008 * sH, hgFrontZ + 0.004); g.add(gas);
     }
   }
 
@@ -6945,14 +6976,17 @@ function _genericGun(opts) {
         // stock so the two read as one continuous piece of furniture.
         const tang = new THREE.Mesh(_softBox(bodyW * 0.92, bodyH * 0.86, 0.040, 0.004), sMat);
         tang.position.set(0, -0.002, halfD + 0.010); g.add(tang);
-        const sc = new THREE.Mesh(_softBox(0.034, 0.048, 0.15, 0.005), sMat);
+        // Stock width follows the receiver so an LMG does not get a spindly
+        // rifle stock and a pistol-calibre gun does not get a plank.
+        const stW = bodyW * 0.71, stH = 0.048 * sH;
+        const sc = new THREE.Mesh(_softBox(stW, stH, 0.15, 0.005), sMat);
         sc.position.set(0, -0.005, halfD + 0.058); g.add(sc);
         // A stock is not a rectangle: it has a comb the cheek rests on and a
         // butt pad angled to sit in the shoulder. Two small pieces, and the
         // whole rear of the gun stops looking unfinished.
-        const comb = new THREE.Mesh(_softBox(0.030, 0.018, 0.10, 0.004), sMat);
-        comb.position.set(0, 0.022, halfD + 0.080); g.add(comb);
-        const pad = new THREE.Mesh(_softBox(0.036, 0.062, 0.014, 0.004), dark);
+        const comb = new THREE.Mesh(_softBox(stW * 0.88, 0.018 * sH, 0.10, 0.004), sMat);
+        comb.position.set(0, stH * 0.46, halfD + 0.080); g.add(comb);
+        const pad = new THREE.Mesh(_softBox(stW * 1.06, stH * 1.29, 0.014, 0.004), dark);
         pad.rotation.x = -0.16;
         pad.position.set(0, -0.004, halfD + 0.128); g.add(pad);
       }
@@ -6965,21 +6999,24 @@ function _genericGun(opts) {
     let mag;
     switch (magType) {
       case 'drum':
-        mag = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.038, 12), accentMat);
-        mag.rotation.x = Math.PI/2; mag.position.set(0, -0.080, 0.02); g.add(mag);
+        mag = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.055 * sH, 0.055 * sH, 0.038 * sW, 12), accentMat);
+        mag.rotation.x = Math.PI/2; mag.position.set(0, -0.080 * sH, 0.02); g.add(mag);
         break;
       case 'banana':
-        mag = new THREE.Mesh(_softBox(0.028, 0.13, 0.045, 0.004), accentMat);
-        mag.rotation.x = 0.20; mag.position.set(0, -0.082, 0.04); g.add(mag);
+        mag = new THREE.Mesh(_softBox(0.028 * sW, 0.13 * sH, 0.045 * sW, 0.004), accentMat);
+        mag.rotation.x = 0.20; mag.position.set(0, -0.082 * sH, 0.04); g.add(mag);
         break;
       case 'pan':
         // Was parked 22 mm above the receiver with clear air under it — the
         // worst floater on the gun. Now it sits down on the top deck.
-        mag = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.018, 14), accentMat);
-        mag.position.set(0, halfH + 0.009 - SEAT, 0.02); g.add(mag);
+        mag = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.06 * sW, 0.06 * sW, 0.018 * sH, 14), accentMat);
+        mag.position.set(0, halfH + 0.009 * sH - SEAT, 0.02); g.add(mag);
         // Spindle through the middle, into the receiver.
-        const spin = new THREE.Mesh(new THREE.CylinderGeometry(0.010, 0.010, 0.026, 8), metal);
-        spin.position.set(0, halfH + 0.004, 0.02); g.add(spin);
+        const spin = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.010 * sW, 0.010 * sW, 0.026 * sH, 8), metal);
+        spin.position.set(0, halfH + 0.004 * sH, 0.02); g.add(spin);
         break;
       default: // 'box'
         if (shape === 'pistol') {
@@ -6987,40 +7024,48 @@ function _genericGun(opts) {
           // middle of the frame as its own separate slab, attached to nothing —
           // there is no magwell on a pistol for it to enter. Tuck it into the
           // grip on the grip's own angle, with the baseplate proud at the heel.
-          mag = new THREE.Mesh(_softBox(0.020, 0.082, 0.030, 0.003), accentMat);
-          mag.rotation.x = 0.28; mag.position.set(0, -0.062, 0.077); g.add(mag);
+          mag = new THREE.Mesh(
+            _softBox(0.020 * sW, 0.082 * sH, 0.030 * sW, 0.003), accentMat);
+          mag.rotation.x = 0.28; mag.position.set(0, -0.062 * sH, 0.077); g.add(mag);
         } else {
-          mag = new THREE.Mesh(_softBox(0.026, opts.magH ?? 0.085, 0.040, 0.003), accentMat);
-          mag.position.set(0, -0.060, 0.02); g.add(mag);
+          mag = new THREE.Mesh(
+            _softBox(0.026 * sW, (opts.magH ?? 0.085) * sH, 0.040 * sW, 0.003), accentMat);
+          mag.position.set(0, -0.060 * sH, 0.02); g.add(mag);
         }
     }
   }
 
   // Grip
-  const grip = new THREE.Mesh(_softBox(0.028, 0.072, 0.040, 0.005), sMat);
-  grip.rotation.x = 0.28; grip.position.set(0, -0.058, shape === 'bullpup' ? 0.02 : 0.08); g.add(grip);
+  const grip = new THREE.Mesh(
+    _softBox(0.028 * sW, 0.072 * sH, 0.040 * sW, 0.005), sMat);
+  grip.rotation.x = 0.28;
+  grip.position.set(0, -0.058 * sH, shape === 'bullpup' ? 0.02 : 0.08); g.add(grip);
 
   // Foregrip (vertical front grip) — hung off the underside of the handguard it
   // is actually clamped to, instead of floating under the receiver.
   if (opts.foregrip) {
-    const fgY = (hgBotY != null) ? hgBotY - 0.030 + SEAT : -0.058;
+    const fgH = 0.060 * sH;
+    const fgY = (hgBotY != null) ? hgBotY - fgH * 0.5 + SEAT : -0.058 * sH;
     const fgZ = (hgMidZ != null) ? hgMidZ + 0.010 : -(bodyD * 0.4);
-    const fg = new THREE.Mesh(_softBox(0.022, 0.060, 0.028, 0.004), sMat);
+    const fg = new THREE.Mesh(_softBox(0.022 * sW, fgH, 0.028 * sW, 0.004), sMat);
     fg.position.set(0, fgY, fgZ); g.add(fg);
   }
 
   // Top rail — seated into the receiver, with slots cut across it. A smooth bar
   // floating a hair above the deck was reading as a separate object entirely.
   if (opts.topRail || opts.scope) {
-    const railH = 0.012;
+    const railW = 0.024 * sW, railH = 0.012 * sH;
     const railY = halfH + railH * 0.5 - SEAT;
     const railLen = bodyD * 0.85;
-    const rail = new THREE.Mesh(_softBox(0.024, railH, railLen, 0.002), dark);
+    const rail = new THREE.Mesh(_softBox(railW, railH, railLen, 0.002), dark);
     rail.position.set(0, railY, 0); g.add(rail);
-    for (let i = 0; i < 7; i++) {
-      const slot = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.004, 0.006), poly);
+    // Slot count follows the rail's length so the pitch stays even instead of
+    // stretching seven slots across whatever length the receiver happens to be.
+    const slots = Math.max(4, Math.round(railLen / 0.038));
+    for (let i = 0; i < slots; i++) {
+      const slot = new THREE.Mesh(new THREE.BoxGeometry(railW + 0.002, 0.004, 0.006), poly);
       slot.position.set(0, railY + railH * 0.5 - 0.002,
-        -railLen * 0.42 + (i / 6) * railLen * 0.84); g.add(slot);
+        -railLen * 0.42 + (i / (slots - 1)) * railLen * 0.84); g.add(slot);
     }
     deckY = railY + railH * 0.5;
   }
@@ -7093,26 +7138,32 @@ function _genericGun(opts) {
     // is standing on.
     const fsY = (hgTopY != null) ? hgTopY : halfH;
     const fsZ = (hgFrontZ != null) ? hgFrontZ + 0.024 : -(halfD - 0.016);
-    const fBase = new THREE.Mesh(_softBox(0.016, 0.012, 0.016, 0.002), metal);
-    fBase.position.set(0, fsY + 0.006 - SEAT, fsZ); g.add(fBase);
-    const fTop = fsY + 0.012 - SEAT;
-    const post = new THREE.Mesh(_softBox(0.006, 0.018, 0.006, 0.0015), dark);
-    post.position.set(0, fTop + 0.007, fsZ); g.add(post);
+    const fBase = new THREE.Mesh(
+      _softBox(0.016 * sW, 0.012 * sH, 0.016 * sW, 0.002), metal);
+    fBase.position.set(0, fsY + 0.006 * sH - SEAT, fsZ); g.add(fBase);
+    const fTop = fsY + 0.012 * sH - SEAT;
+    const post = new THREE.Mesh(
+      _softBox(0.006 * sW, 0.018 * sH, 0.006 * sW, 0.0015), dark);
+    post.position.set(0, fTop + 0.007 * sH, fsZ); g.add(post);
     // Protective ears either side of the post, joined over the top.
-    [-0.008, 0.008].forEach(x => {
-      const wing = new THREE.Mesh(_softBox(0.004, 0.017, 0.007, 0.0015), dark);
-      wing.position.set(x, fTop + 0.007, fsZ); g.add(wing);
+    [-0.008 * sW, 0.008 * sW].forEach(x => {
+      const wing = new THREE.Mesh(
+        _softBox(0.004 * sW, 0.017 * sH, 0.007 * sW, 0.0015), dark);
+      wing.position.set(x, fTop + 0.007 * sH, fsZ); g.add(wing);
     });
-    const hood = new THREE.Mesh(_softBox(0.020, 0.004, 0.007, 0.0015), dark);
-    hood.position.set(0, fTop + 0.014, fsZ); g.add(hood);
+    const hood = new THREE.Mesh(
+      _softBox(0.020 * sW, 0.004 * sH, 0.007 * sW, 0.0015), dark);
+    hood.position.set(0, fTop + 0.014 * sH, fsZ); g.add(hood);
     // Rear notch: a base with two uprights and a gap you sight through.
     const rZ = bodyD * 0.34;
-    const rBase = new THREE.Mesh(_softBox(0.020, 0.010, 0.018, 0.002), metal);
-    rBase.position.set(0, deckY + 0.005 - SEAT, rZ); g.add(rBase);
-    const rTop = deckY + 0.010 - SEAT;
-    [-0.007, 0.007].forEach(x => {
-      const ear = new THREE.Mesh(_softBox(0.005, 0.014, 0.006, 0.0015), dark);
-      ear.position.set(x, rTop + 0.005, rZ); g.add(ear);
+    const rBase = new THREE.Mesh(
+      _softBox(0.020 * sW, 0.010 * sH, 0.018 * sW, 0.002), metal);
+    rBase.position.set(0, deckY + 0.005 * sH - SEAT, rZ); g.add(rBase);
+    const rTop = deckY + 0.010 * sH - SEAT;
+    [-0.007 * sW, 0.007 * sW].forEach(x => {
+      const ear = new THREE.Mesh(
+        _softBox(0.005 * sW, 0.014 * sH, 0.006 * sW, 0.0015), dark);
+      ear.position.set(x, rTop + 0.005 * sH, rZ); g.add(ear);
     });
   }
 
@@ -7762,17 +7813,28 @@ scene.add(camera);
 
 function buildBat() {
   const g = new THREE.Group();
-  const woodMat  = new THREE.MeshLambertMaterial({ color: 0x8b5a2b });
-  const darkMat  = new THREE.MeshLambertMaterial({ color: 0x5a3810 });
-  // Barrel (wide end)
-  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.015, 0.38, 8), woodMat);
-  barrel.rotation.x = Math.PI / 2; barrel.position.set(0, 0, -0.06); g.add(barrel);
-  // Grip (narrow handle)
-  const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.012, 0.12, 8), darkMat);
-  handle.rotation.x = Math.PI / 2; handle.position.set(0, 0, 0.155); g.add(handle);
-  // Knob at end of handle
-  const knob = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.014, 0.022, 8), darkMat);
-  knob.rotation.x = Math.PI / 2; knob.position.set(0, 0, 0.228); g.add(knob);
+  const woodMat = new THREE.MeshLambertMaterial({ color: 0x8b5a2b });
+  // 🏏 One lathed surface, not three stacked cylinders. Two things were wrong
+  // with the old bat. First, rotation.x = +PI/2 maps the cylinder's +Y end to
+  // +Z, so the WIDE 0.035 end was sitting at the hand and the 0.015 end was the
+  // striking tip — the taper ran backwards. Second, the barrel, the handle and
+  // the knob were three separate meshes in two colours, so the joints showed as
+  // steps in a shape that in reality is one unbroken curve.
+  //
+  // A revolved profile fixes both at once: a single continuous surface, widest
+  // at the tip and narrowing all the way down to the hand, with no seams and
+  // nothing bolted on. Profile runs from the knob (y=0) to the tip (y=0.52).
+  const profile = [
+    [0.000, 0.000], [0.020, 0.004], [0.021, 0.014], [0.0145, 0.026],
+    [0.0135, 0.070], [0.015, 0.130], [0.019, 0.195], [0.024, 0.265],
+    [0.029, 0.340], [0.033, 0.415], [0.035, 0.480], [0.033, 0.508],
+    [0.026, 0.518], [0.000, 0.520],
+  ].map(([r, y]) => new THREE.Vector2(r, y));
+  const bat = new THREE.Mesh(new THREE.LatheGeometry(profile, 14), woodMat);
+  // -PI/2 maps +Y to -Z, putting the fat end away from the player where it
+  // belongs. Shifted so the knob still lands where the old grip did.
+  bat.rotation.x = -Math.PI / 2; bat.position.set(0, 0, 0.230);
+  g.add(bat);
   g.position.set(0.10, -0.12, -0.20); return g;
 }
 
@@ -8192,20 +8254,36 @@ function buildFragGrenade() {
   const g = new THREE.Group();
   const oliveMat = new THREE.MeshLambertMaterial({ color: 0x4a5a28 });
   const darkMat  = new THREE.MeshLambertMaterial({ color: 0x222222 });
+  const steelMat = new THREE.MeshPhongMaterial({ color: 0x9aa0a8, shininess: 80, specular: 0xffffff });
   // Main body
-  const body = new THREE.Mesh(new THREE.SphereGeometry(0.045, 8, 6), oliveMat);
+  // 14x10 rather than 10x8: on a coarse sphere the flat of a facet sits ~1.7 mm
+  // inside the nominal radius, which was enough for the lever to poke back out
+  // through the body low down. Smoother body, and the lever stays buried.
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.045, 14, 10), oliveMat);
   g.add(body);
-  // Segmented ridges
-  for (let i = 0; i < 4; i++) {
-    const ridge = new THREE.Mesh(new THREE.TorusGeometry(0.030, 0.006, 4, 8), darkMat);
-    ridge.rotation.y = (i / 4) * Math.PI; g.add(ridge);
-  }
-  // Top neck
-  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.016, 0.018, 6), darkMat);
+  // 💣 The four "segmented ridges" that used to be here were tori of outer
+  // radius 0.036 sitting inside a sphere of radius 0.045 — buried 9 mm under
+  // the surface, so not one of them was ever visible. Four meshes of pure cost.
+  // Deleted. What a grenade actually needs to read as a grenade is the fuse
+  // assembly on top, the spoon down the side and the ring you pull.
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.017, 0.020, 8), darkMat);
   neck.position.y = 0.048; g.add(neck);
-  // Safety pin wire
-  const pin = new THREE.Mesh(new THREE.TorusGeometry(0.012, 0.003, 4, 8, Math.PI), darkMat);
-  pin.position.set(0, 0.058, 0); g.add(pin);
+  const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.017, 0.015, 0.009, 8), darkMat);
+  cap.position.y = 0.061; g.add(cap);
+  // Safety lever ("spoon"): a tab under the cap and the arm that runs down the
+  // side of the body. Both ends overlap what they attach to — the tab into the
+  // neck, the arm's foot into the sphere — so it lies along the grenade rather
+  // than hovering beside it.
+  const tab = new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.006, 0.013), steelMat);
+  tab.position.set(0.011, 0.057, 0); g.add(tab);
+  const lever = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.070, 0.014), steelMat);
+  lever.rotation.z = 0.259;
+  lever.position.set(0.029, 0.024, 0); g.add(lever);
+  // Pull ring on the opposite side, on a pin that passes through the fuse.
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.002, 0.002, 0.034, 6), steelMat);
+  shaft.rotation.z = Math.PI / 2; shaft.position.set(-0.008, 0.056, 0); g.add(shaft);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.011, 0.0025, 5, 12), steelMat);
+  ring.rotation.y = Math.PI / 2; ring.position.set(-0.023, 0.056, 0); g.add(ring);
   g.position.set(0.10, -0.12, -0.20); return g;
 }
 
