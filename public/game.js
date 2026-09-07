@@ -7187,6 +7187,34 @@ function _genericGun(opts) {
     recess.position.set(halfW - 0.0005, 0.014, -0.02); g.add(recess);
   }
 
+  // 🏁 Livery stripes down both flanks. Purely decoration — stripping the guns
+  // back to only parts that mean something left the plain ones reading as bare
+  // slabs, and a painted-on flash costs nothing to justify. Two rules keep them
+  // from undoing the rest of the work: they sit 0.7 mm proud of the flank, so
+  // they read as paint rather than another box bolted to the side; and they
+  // live in the forward section of the receiver, clear of the ejection port, so
+  // no gun ends up with a stripe running through its port. accentMat means the
+  // weapon skins recolour them along with the magazine.
+  if (opts.stripes !== false && !opts.emissive) {
+    // The port sits at a fixed z regardless of how long the receiver is, so a
+    // stripe measured purely as a fraction of bodyD ran straight through it on
+    // the short bodies. Clamp the back edge instead of trusting the fraction.
+    const stFront = -bodyD * 0.47;
+    const stBack = Math.min(-bodyD * 0.16, -0.042);
+    const stLen = stBack - stFront;
+    if (stLen > 0.012) {
+      const stZ = (stFront + stBack) * 0.5, stX = halfW - 0.0008;
+      [-1, 1].forEach(s => {
+        const bold = new THREE.Mesh(
+          _softBox(0.003, bodyH * 0.19, stLen, 0.0008), accentMat);
+        bold.position.set(s * stX, bodyH * 0.06, stZ); g.add(bold);
+        const pin = new THREE.Mesh(
+          _softBox(0.003, bodyH * 0.06, stLen, 0.0006), accentMat);
+        pin.position.set(s * stX, -bodyH * 0.13, stZ); g.add(pin);
+      });
+    }
+  }
+
   // Muzzle flash
   const flash = makeMuzzleFlash();
   if (opts.flashColor && flash.material) flash.material.color.setHex(opts.flashColor);
