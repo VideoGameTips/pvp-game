@@ -6628,6 +6628,56 @@ function buildHarpoonGun() {
   g.position.set(0.12, -0.1, -0.25); return g;
 }
 
+function buildDartGun() {
+  // 💉 Tranquilliser pistol: a CO2 cartridge screwed under the barrel, a
+  // break-open breech with a loaded dart visible in it, and a second dart in a
+  // clip on the frame. The dart has a real barrel, plunger and coloured tuft.
+  const g = new THREE.Group();
+  const steel = GUN_MATS.steel(), bright = GUN_MATS.bright(), inner = GUN_MATS.inner();
+  const grip = GUN_MATS.grip();
+  const shell = new THREE.MeshPhongMaterial({ color: 0x2f4636, shininess: 72, specular: 0x8aa694 });
+  const glass = new THREE.MeshPhongMaterial({ color: 0xbfe0c8, shininess: 140, specular: 0xffffff,
+                                              transparent: true, opacity: 0.58 });
+  const tuft  = new THREE.MeshPhongMaterial({ color: 0xd83a5a, shininess: 40, specular: 0xf0a0b4 });
+  gpBox(g, shell, 0.030, 0.046, 0.100, 0, 0.018, 0.028);            // receiver
+  gpBox(g, inner, 0.031, 0.006, 0.084, 0, 0.040, 0.028);
+  gpBox(g, bright, 0.010, 0.014, 0.020, -0.017, 0.032, 0.048, 0, 0.30); // break latch
+  gpCyl(g, bright, 0.0055, 0.0055, 0.034, 8, 0, 0.000, -0.016, 0, Math.PI/2); // hinge pin
+  // Barrel, open at the breech so the loaded dart shows.
+  gpCyl(g, shell, 0.0165, 0.0165, 0.190, 14, 0, 0.024, -0.096);
+  gpCyl(g, inner, 0.0110, 0.0110, 0.180, 12, 0, 0.024, -0.096);
+  gpCyl(g, bright, 0.0185, 0.0185, 0.012, 14, 0, 0.024, -0.186);
+  gpBox(g, inner, 0.020, 0.010, 0.036, 0, 0.040, -0.020);           // breech cut
+  // The loaded dart, seen through the breech cut.
+  gpCyl(g, glass, 0.0075, 0.0075, 0.040, 10, 0, 0.024, -0.030);
+  gpCyl(g, bright, 0.0026, 0.0026, 0.026, 6, 0, 0.024, -0.062);     // needle
+  gpCyl(g, tuft, 0.0072, 0.0072, 0.012, 8, 0, 0.024, -0.004);
+  // CO2 cartridge under the barrel.
+  gpCyl(g, bright, 0.0140, 0.0140, 0.080, 14, 0, -0.008, -0.070);
+  gpCyl(g, bright, 0.0140, 0.0070, 0.020, 14, 0, -0.008, -0.120);
+  gpCyl(g, steel, 0.0165, 0.0165, 0.018, 14, 0, -0.008, -0.024);    // piercing collar
+  gpCyl(g, inner, 0.0090, 0.0090, 0.012, 12, 0, -0.008, -0.014);
+  gpBox(g, shell, 0.018, 0.016, 0.026, 0, -0.008, 0.006);
+  // Spare dart clipped to the frame.
+  gpCyl(g, glass, 0.0075, 0.0075, 0.040, 10, 0.021, 0.006, 0.034);
+  gpCyl(g, bright, 0.0026, 0.0026, 0.026, 6, 0.021, 0.006, 0.002);
+  gpCyl(g, tuft, 0.0072, 0.0072, 0.012, 8, 0.021, 0.006, 0.060);
+  gpBox(g, steel, 0.006, 0.014, 0.010, 0.019, 0.006, 0.034);        // clip
+  // Grip, trigger, sights.
+  gpPlate(g, grip, [[0.038,-0.010],[0.066,-0.024],[0.070,-0.096],[0.040,-0.108],[0.018,-0.050],[0.016,-0.014]], 0.034, 0);
+  for (let i = 0; i < 4; i++) gpBox(g, inner, 0.036, 0.004, 0.024, 0, -0.026 - i * 0.018, 0.040 + i * 0.005, 0.28);
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.018, 0.0034, 6, 12, Math.PI * 1.05), shell);
+  guard.rotation.set(0, Math.PI/2, -0.4); guard.position.set(0, -0.018, 0.022); g.add(guard);
+  gpBox(g, bright, 0.005, 0.014, 0.005, 0, -0.010, 0.022, 0.2);
+  gpBox(g, inner, 0.016, 0.008, 0.010, 0, 0.044, 0.058);
+  gpBox(g, bright, 0.004, 0.010, 0.005, 0, 0.042, -0.180);
+  const flash = new THREE.Mesh(new THREE.SphereGeometry(0.016, 8, 7),
+    new THREE.MeshBasicMaterial({ color: 0xd8f0e0 }));
+  flash.visible = false; flash.position.set(0, 0.024, -0.198); g.add(flash);
+  g._flash = flash; g._kickZ = 0.006; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.1, -0.1, -0.22); return g;
+}
+
 function buildAK20() {
   const g = new THREE.Group();
   // 🔫 AK-47, black furniture. Real parkerised steel is a dark GREY-blue, not
@@ -8023,76 +8073,91 @@ function buildHandCannon() {
 }
 
 function buildThrowingKnives() {
-  // Actual knife/blade shape — flat blade + handle, NOT a gun
-  const g = new THREE.Group();
-  const bladeMat  = new THREE.MeshLambertMaterial({ color: 0xc0c8cc });
-  const darkMat   = new THREE.MeshLambertMaterial({ color: 0x202020 });
-  const wrapMat   = new THREE.MeshLambertMaterial({ color: 0x3a2a18 });
-  const glintMat  = new THREE.MeshBasicMaterial({ color: 0xeef5ff });
-  // Flat blade — thin and wide
-  const blade = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.045, 0.16), bladeMat);
-  blade.position.set(0, 0.006, -0.040); g.add(blade);
-  // Blade edge bevel (slightly thinner strip on side)
-  const bevel = new THREE.Mesh(new THREE.BoxGeometry(0.003, 0.010, 0.14), glintMat);
-  bevel.position.set(0.004, 0.010, -0.040); g.add(bevel);
-  // Tapered pointed tip
-  const tipGeo = new THREE.CylinderGeometry(0, 0.008, 0.025, 4);
-  const tip = new THREE.Mesh(tipGeo, darkMat);
-  tip.rotation.x = Math.PI / 2;
-  tip.position.set(0, 0.006, -0.135); g.add(tip);
-  // Guard crosspiece
-  const guard = new THREE.Mesh(new THREE.BoxGeometry(0.052, 0.010, 0.010), darkMat);
-  guard.position.set(0, 0.006, 0.042); g.add(guard);
-  // Wrapped handle
-  const handle = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.048, 0.055), wrapMat);
-  handle.position.set(0, 0.006, 0.082); g.add(handle);
-  // Handle wrap ridges
-  [-0.005, 0.010, 0.025].forEach(z => {
-    const wrap = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.050, 0.005), darkMat);
-    wrap.position.set(0, 0.006, 0.070 + z); g.add(wrap);
+  // 🔪 Three balanced throwing knives fanned in the hand: full-tang blades with
+  // a centre fuller, cord-wrapped handles and a lanyard ring on each butt. Not
+  // three identical slabs — each sits at its own angle in the fan.
+  const g = _throwableHolder(gg => {
+    const steel = new THREE.MeshPhongMaterial({ color: 0x9aa2ac, shininess: 128, specular: 0xffffff });
+    const edge  = new THREE.MeshPhongMaterial({ color: 0xd6dbe2, shininess: 160, specular: 0xffffff });
+    const cord  = new THREE.MeshPhongMaterial({ color: 0x2a2b2f, shininess: 26, specular: 0x4e5158 });
+    const inner = new THREE.MeshPhongMaterial({ color: 0x1c1f23, shininess: 20, specular: 0x33373c });
+    [-1, 0, 1].forEach((k, n) => {
+      const kn = new THREE.Group();
+      // Blade: a flat diamond with a bright edge strip and a dark fuller.
+      const blade = new THREE.Mesh(new THREE.BoxGeometry(0.030, 0.004, 0.130), steel);
+      blade.position.set(0, 0, -0.075); kn.add(blade);
+      const tip = new THREE.Mesh(new THREE.ConeGeometry(0.016, 0.052, 4), edge);
+      tip.rotation.x = -Math.PI / 2; tip.rotation.z = Math.PI / 4;
+      tip.scale.set(1, 1, 0.25); tip.position.set(0, 0, -0.164); kn.add(tip);
+      const fuller = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.005, 0.100), inner);
+      fuller.position.set(0, 0, -0.072); kn.add(fuller);
+      [-1, 1].forEach(sd => {
+        const e = new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.0044, 0.130), edge);
+        e.position.set(sd * 0.0135, 0, -0.075); kn.add(e);
+      });
+      // Cord-wrapped handle with visible turns, and a lanyard ring.
+      const hilt = new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.008, 0.010), steel);
+      hilt.position.set(0, 0, -0.006); kn.add(hilt);
+      const handle = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.014, 0.080), cord);
+      handle.position.set(0, 0, 0.038); kn.add(handle);
+      for (let i = 0; i < 7; i++) {
+        const w = new THREE.Mesh(new THREE.BoxGeometry(0.020, 0.016, 0.005), inner);
+        w.position.set(0, 0, 0.008 + i * 0.011); kn.add(w);
+      }
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.008, 0.0022, 5, 10), steel);
+      ring.rotation.y = Math.PI / 2; ring.position.set(0, 0, 0.086); kn.add(ring);
+      kn.position.set(k * 0.030, k * 0.006, n * 0.004);
+      kn.rotation.set(0, k * 0.34, k * 0.16);
+      gg.add(kn);
+    });
   });
-  // Pommel
-  const pommel = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.022, 0.018), darkMat);
-  pommel.position.set(0, 0.006, 0.118); g.add(pommel);
-  // Glint flash
-  const flash = new THREE.Mesh(new THREE.SphereGeometry(0.014, 6, 6), new THREE.MeshBasicMaterial({ color: 0xd8d8d8 }));
-  flash.visible = false; flash.position.set(0, 0.006, -0.148); g.add(flash);
-  g._flash = flash; g._kickZ = 0.010; g.position.set(0.1, -0.1, -0.22); return g;
+  g._greebled = true; g._handDetailed = true; return g;
 }
 
 function buildTaser() {
-  // T-shaped stun gun — compact grip, two side prongs sticking out front, yellow
+  // ⚡ Taser: a blocky yellow-and-black stun gun. Removable cartridge in the
+  // nose with two blast doors and the wire spools behind them, an arc snapping
+  // between the two backup electrodes, laser window and a battery gauge.
   const g = new THREE.Group();
-  const yellowMat = new THREE.MeshLambertMaterial({ color: 0xf0d94a });
-  const darkMat   = new THREE.MeshLambertMaterial({ color: 0x222222 });
-  // Main grip (vertical part of T)
-  const grip = new THREE.Mesh(new THREE.BoxGeometry(0.030, 0.080, 0.040), yellowMat);
-  grip.position.set(0, 0, 0); g.add(grip);
-  // Top horizontal piece (the T bar)
-  const topBar = new THREE.Mesh(new THREE.BoxGeometry(0.080, 0.030, 0.045), yellowMat);
-  topBar.position.set(0, 0.055, 0.0); g.add(topBar);
-  // Dark activation button on top bar
-  const button = new THREE.Mesh(new THREE.BoxGeometry(0.016, 0.014, 0.020), darkMat);
-  button.position.set(0, 0.072, -0.006); g.add(button);
-  // Two prong cylinders on front of top bar — left and right
-  const prongL = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.005, 0.025, 6), darkMat);
-  prongL.rotation.x = Math.PI / 2;
-  prongL.position.set(-0.022, 0.055, -0.035); g.add(prongL);
-  const prongR = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.005, 0.025, 6), darkMat);
-  prongR.rotation.x = Math.PI / 2;
-  prongR.position.set(0.022, 0.055, -0.035); g.add(prongR);
-  // Yellow arc tips on prongs
-  const tipL = new THREE.Mesh(new THREE.SphereGeometry(0.007, 5, 4), new THREE.MeshBasicMaterial({ color: 0xffff00 }));
-  tipL.position.set(-0.022, 0.055, -0.050); g.add(tipL);
-  const tipR2 = new THREE.Mesh(new THREE.SphereGeometry(0.007, 5, 4), new THREE.MeshBasicMaterial({ color: 0xffff00 }));
-  tipR2.position.set(0.022, 0.055, -0.050); g.add(tipR2);
-  // Safety label strip on grip
-  const label = new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.016, 0.006), new THREE.MeshBasicMaterial({ color: 0xffff55 }));
-  label.position.set(0, 0.010, 0.023); g.add(label);
-  // Flash — yellow electric arc between prongs
-  const flash = new THREE.Mesh(new THREE.SphereGeometry(0.018, 6, 6), new THREE.MeshBasicMaterial({ color: 0xffff55 }));
-  flash.visible = false; flash.position.set(0, 0.055, -0.052); g.add(flash);
-  g._flash = flash; g._kickZ = 0.012; g.position.set(0.1, -0.1, -0.22); return g;
+  const steel = GUN_MATS.steel(), bright = GUN_MATS.bright(), inner = GUN_MATS.inner();
+  const grip = GUN_MATS.grip();
+  const yellow = new THREE.MeshPhongMaterial({ color: 0xc9a41c, shininess: 92, specular: 0xf2dc8e });
+  const black  = new THREE.MeshPhongMaterial({ color: 0x26282c, shininess: 46, specular: 0x5c6068 });
+  const arcMat = new THREE.MeshBasicMaterial({ color: 0x9fe6ff });
+  gpBox(g, yellow, 0.036, 0.052, 0.110, 0, 0.016, 0.006);           // body
+  gpBox(g, black, 0.037, 0.010, 0.092, 0, 0.042, 0.006);            // top spine
+  gpBox(g, black, 0.038, 0.030, 0.014, 0, 0.010, 0.048);            // rear cap
+  // Cartridge in the nose: two blast doors with the coil spools behind them.
+  gpBox(g, black, 0.038, 0.040, 0.046, 0, 0.018, -0.070);
+  [-1, 1].forEach(sd => {
+    gpCyl(g, inner, 0.0125, 0.0125, 0.010, 12, sd * 0.010, 0.018, -0.092);
+    gpCyl(g, bright, 0.0100, 0.0100, 0.020, 10, sd * 0.010, 0.018, -0.074);
+    gpCyl(g, steel, 0.0038, 0.0038, 0.016, 8, sd * 0.010, 0.018, -0.098);   // probe
+  });
+  gpBox(g, inner, 0.040, 0.008, 0.020, 0, 0.018, -0.090);           // door split line
+  gpBox(g, yellow, 0.008, 0.030, 0.012, 0.020, 0.018, -0.060);      // cartridge latch
+  // Two backup electrodes with an arc snapping across them.
+  [-1, 1].forEach(sd => gpCyl(g, bright, 0.0042, 0.0042, 0.024, 8, sd * 0.013, -0.008, -0.062));
+  gpBox(g, arcMat, 0.024, 0.003, 0.003, 0, -0.008, -0.072);
+  gpBox(g, arcMat, 0.004, 0.010, 0.003, -0.006, -0.004, -0.072, 0, 0, 0.6);
+  gpBox(g, arcMat, 0.004, 0.010, 0.003, 0.006, -0.012, -0.072, 0, 0, -0.6);
+  // Laser window, battery gauge, safety lever.
+  gpBox(g, inner, 0.012, 0.010, 0.008, 0, 0.038, -0.048);
+  gpBox(g, arcMat, 0.006, 0.005, 0.003, 0, 0.038, -0.052);
+  for (let i = 0; i < 4; i++) gpBox(g, i < 3 ? arcMat : inner, 0.005, 0.008, 0.005, 0.019, 0.030, -0.010 + i * 0.012);
+  gpBox(g, bright, 0.008, 0.020, 0.012, -0.019, 0.030, 0.026, 0, 0, 0.3);
+  // Grip with a magazine-style battery pack.
+  gpPlate(g, grip, [[0.026,-0.010],[0.056,-0.024],[0.058,-0.096],[0.028,-0.108],[0.006,-0.050],[0.004,-0.014]], 0.034, 0);
+  for (let i = 0; i < 4; i++) gpBox(g, inner, 0.036, 0.004, 0.024, 0, -0.028 - i * 0.018, 0.028 + i * 0.005, 0.28);
+  gpBox(g, black, 0.030, 0.014, 0.036, 0, -0.106, 0.038, 0.24);
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.018, 0.0034, 6, 12, Math.PI * 1.05), black);
+  guard.rotation.set(0, Math.PI/2, -0.4); guard.position.set(0, -0.018, 0.000); g.add(guard);
+  gpBox(g, bright, 0.005, 0.014, 0.005, 0, -0.010, 0.000, 0.2);
+  const flash = new THREE.Mesh(new THREE.SphereGeometry(0.020, 8, 7),
+    new THREE.MeshBasicMaterial({ color: 0x9fe6ff }));
+  flash.visible = false; flash.position.set(0, 0.018, -0.108); g.add(flash);
+  g._flash = flash; g._kickZ = 0.004; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.1, -0.1, -0.22); return g;
 }
 
 // ── Trashcan model ────────────────────────────────────────────────────────
@@ -8726,26 +8791,44 @@ function _throwableHolder(meshFn) {
   return g;
 }
 function buildThrowingAxes() {
-  return _throwableHolder(g => {
-    const wood  = new THREE.MeshLambertMaterial({ color: 0x553322 });
-    const wrap  = new THREE.MeshLambertMaterial({ color: 0x2e1d12 });
-    const steel = new THREE.MeshPhongMaterial({ color: 0x9aa0a8, shininess: 85, specular: 0xffffff });
-    // Tapered haft, thicker at the throwing end.
-    const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.020, 0.22, 8), wood);
-    handle.rotation.x = Math.PI / 2; handle.position.set(0, 0, -0.02); g.add(handle);
-    const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.07, 8), wrap);
-    grip.rotation.x = Math.PI / 2; grip.position.set(0, 0, 0.055); g.add(grip);
-    // A head with an actual axe profile: flared cutting bit, hammer poll behind,
-    // and a collar where the haft passes through. Previously one brown slab.
-    const bit = new THREE.Mesh(new THREE.BoxGeometry(0.095, 0.080, 0.026), steel);
-    bit.position.set(-0.010, 0.052, -0.10); g.add(bit);
-    const edge = new THREE.Mesh(new THREE.BoxGeometry(0.020, 0.104, 0.030), steel);
-    edge.position.set(-0.058, 0.052, -0.10); g.add(edge);
-    const poll = new THREE.Mesh(new THREE.BoxGeometry(0.038, 0.044, 0.030), steel);
-    poll.position.set(0.055, 0.048, -0.10); g.add(poll);
-    const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.021, 0.021, 0.036, 8), wrap);
-    collar.rotation.x = Math.PI / 2; collar.position.set(0, 0.014, -0.10); g.add(collar);
+  // 🪓 Tomahawk: a forged head with a flared bit, a bearded lower edge and a
+  // hammer poll, wedged onto a hickory haft through a real eye, with the wedge
+  // showing end-on at the top and a leather wrap at the throwing end.
+  const g = _throwableHolder(gg => {
+    const wood  = new THREE.MeshPhongMaterial({ color: 0x7a5734, shininess: 44, specular: 0x9d8460 });
+    const wrap  = new THREE.MeshPhongMaterial({ color: 0x3a2417, shininess: 22, specular: 0x5c4030 });
+    const steel = new THREE.MeshPhongMaterial({ color: 0x7d858f, shininess: 118, specular: 0xdfe6ee });
+    const edge  = new THREE.MeshPhongMaterial({ color: 0xc9d0d8, shininess: 160, specular: 0xffffff });
+    const inner = new THREE.MeshPhongMaterial({ color: 0x1c1f23, shininess: 20, specular: 0x33373c });
+    // Haft: tapered, with a swell at the butt so it cannot slip.
+    const haft = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.019, 0.230, 10), wood);
+    haft.rotation.x = Math.PI / 2; haft.position.set(0, 0.006, -0.020); gg.add(haft);
+    const swell = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.017, 0.030, 10), wood);
+    swell.rotation.x = Math.PI / 2; swell.position.set(0, 0.006, 0.088); gg.add(swell);
+    for (let i = 0; i < 6; i++) {
+      const w = new THREE.Mesh(new THREE.CylinderGeometry(0.0205, 0.0205, 0.008, 10), wrap);
+      w.rotation.x = Math.PI / 2; w.position.set(0, 0.006, 0.036 + i * 0.010); gg.add(w);
+    }
+    // Head: eye, flared bit with a beard, and a hammer poll behind.
+    const eye = new THREE.Mesh(new THREE.BoxGeometry(0.030, 0.046, 0.032), steel);
+    eye.position.set(0, 0.014, -0.104); gg.add(eye);
+    const bit = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.086, 0.030), steel);
+    bit.position.set(-0.032, 0.026, -0.104); gg.add(bit);
+    const blade = new THREE.Mesh(new THREE.BoxGeometry(0.016, 0.112, 0.028), edge);
+    blade.position.set(-0.052, 0.022, -0.104); gg.add(blade);
+    const beard = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.030, 0.026), edge);
+    beard.position.set(-0.042, -0.026, -0.104); beard.rotation.z = 0.5; gg.add(beard);
+    const poll = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.036, 0.030), steel);
+    poll.position.set(0.030, 0.014, -0.104); gg.add(poll);
+    const face = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.038, 0.032), edge);
+    face.position.set(0.050, 0.014, -0.104); gg.add(face);
+    // The wedge, showing end-on where the haft comes through the eye.
+    const wedge = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.030, 0.024), wrap);
+    wedge.position.set(0, 0.036, -0.104); gg.add(wedge);
+    const seam = new THREE.Mesh(new THREE.BoxGeometry(0.031, 0.006, 0.033), inner);
+    seam.position.set(0, 0.036, -0.104); gg.add(seam);
   });
+  g._greebled = true; g._handDetailed = true; return g;
 }
 function buildShuriken() {
   return _throwableHolder(g => {
@@ -8772,52 +8855,98 @@ function buildShuriken() {
   });
 }
 function buildBoomerang() {
-  return _throwableHolder(g => {
-    const mat  = new THREE.MeshLambertMaterial({ color: 0xcc8855 });
-    const dark = new THREE.MeshLambertMaterial({ color: 0x8a5a33 });
-    const trim = new THREE.MeshLambertMaterial({ color: 0xf2e4c8 });
-    // Two tapered arms meeting at a rounded elbow, with a painted band on each.
-    // The old pair of identical slabs just read as the letter V.
-    [-1, 1].forEach(s => {
-      const inner = new THREE.Mesh(new THREE.BoxGeometry(0.085, 0.030, 0.018), mat);
-      const outer = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.022, 0.014), mat);
-      const band  = new THREE.Mesh(new THREE.BoxGeometry(0.016, 0.032, 0.020), trim);
-      [inner, outer, band].forEach(m => { m.rotation.z = s * Math.PI / 6; });
-      inner.position.set(s * 0.040, 0.020, -0.06);
-      outer.position.set(s * 0.108, 0.062, -0.06);
-      band .position.set(s * 0.072, 0.041, -0.06);
-      g.add(inner); g.add(outer); g.add(band);
+  // 🪃 Boomerang: laminated hardwood with a real airfoil — the top face is
+  // curved and the underside flat — plus a burnt ochre dot pattern down both
+  // arms and a wrapped grip at the elbow.
+  const g = _throwableHolder(gg => {
+    const wood  = new THREE.MeshPhongMaterial({ color: 0x8a6134, shininess: 62, specular: 0xc09a68 });
+    const dark  = new THREE.MeshPhongMaterial({ color: 0x5a3d1e, shininess: 40, specular: 0x8a6a44 });
+    const ochre = new THREE.MeshPhongMaterial({ color: 0xd9a441, shininess: 50, specular: 0xf0d090 });
+    const wrap  = new THREE.MeshPhongMaterial({ color: 0x33241a, shininess: 20, specular: 0x584234 });
+    [-1, 1].forEach(sd => {
+      // Arm: three tapering segments, thicker at the elbow, with a rounded
+      // leading edge so it reads as an aerofoil rather than a plank.
+      for (let i = 0; i < 3; i++) {
+        const w = 0.034 - i * 0.008, h = 0.013 - i * 0.003;
+        const seg = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.058), i === 2 ? dark : wood);
+        seg.position.set(sd * (0.028 + i * 0.042), 0.004 - i * 0.001, -0.024 - i * 0.050);
+        seg.rotation.y = sd * 0.42; gg.add(seg);
+        const le = new THREE.Mesh(new THREE.CylinderGeometry(h * 0.5, h * 0.5, 0.058, 8), wood);
+        le.rotation.set(Math.PI / 2, 0, sd * 0.42);
+        le.position.set(sd * (0.028 + i * 0.042) - sd * w * 0.42, 0.004 - i * 0.001, -0.024 - i * 0.050);
+        gg.add(le);
+        // Painted dots, the way a real one is decorated.
+        for (let d = 0; d < 2; d++) {
+          const dot = new THREE.Mesh(new THREE.CylinderGeometry(0.0042, 0.0042, 0.003, 8), ochre);
+          dot.position.set(sd * (0.028 + i * 0.042), 0.011 - i * 0.001, -0.038 - i * 0.050 + d * 0.026);
+          gg.add(dot);
+        }
+      }
+      const tip = new THREE.Mesh(new THREE.ConeGeometry(0.012, 0.036, 6), dark);
+      tip.rotation.set(Math.PI / 2, 0, sd * 0.42);
+      tip.position.set(sd * 0.128, 0.002, -0.148); gg.add(tip);
     });
-    const elbow = new THREE.Mesh(new THREE.CylinderGeometry(0.019, 0.019, 0.021, 10), dark);
-    elbow.rotation.x = Math.PI / 2; elbow.position.set(0, -0.004, -0.06); g.add(elbow);
+    const elbow = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.015, 10), wood);
+    elbow.position.set(0, 0.004, -0.004); gg.add(elbow);
+    for (let i = 0; i < 4; i++) {
+      const w = new THREE.Mesh(new THREE.BoxGeometry(0.040, 0.017, 0.006), wrap);
+      w.position.set(0, 0.004, 0.006 + i * 0.009); gg.add(w);
+    }
   });
+  g._greebled = true; g._handDetailed = true; return g;
 }
 function buildSlingshot() {
-  return _throwableHolder(g => {
-    const wood = new THREE.MeshLambertMaterial({ color: 0x6a4a2a });
-    const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.16, 6), wood);
-    handle.rotation.x = Math.PI / 2; handle.position.set(0, -0.02, 0.03); g.add(handle);
-    const left  = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.12, 6), wood);
-    const right = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.12, 6), wood);
-    left.rotation.z = Math.PI / 6;  right.rotation.z = -Math.PI / 6;
-    left.position.set(-0.05, 0.07, -0.05); right.position.set(0.05, 0.07, -0.05);
-    g.add(left); g.add(right);
-    // Leather over the hand.
-    const wrap = new THREE.Mesh(new THREE.CylinderGeometry(0.021, 0.021, 0.07, 8),
-      new THREE.MeshLambertMaterial({ color: 0x3a2a18 }));
-    wrap.rotation.x = Math.PI / 2; wrap.position.set(0, -0.02, 0.05); g.add(wrap);
-    // Two bands drawn back to a pouch, instead of one straight bar across the
-    // top — a slingshot with nothing to hold the stone isn't a slingshot.
-    const rubber = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
-    [-1, 1].forEach(s => {
-      const band = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.007, 0.007), rubber);
-      band.rotation.z = s * 0.42; band.rotation.y = s * 0.30;
-      band.position.set(s * 0.045, 0.115, -0.028); g.add(band);
+  // 🎯 Slingshot: a forked aluminium frame with a folding wrist brace, twin
+  // surgical-tubing bands anchored through the tips, a real leather pouch
+  // between them, and a band of ammo clipped to the fork.
+  const g = _throwableHolder(gg => {
+    const frame = new THREE.MeshPhongMaterial({ color: 0x5a6068, shininess: 128, specular: 0xdfe6ee });
+    const rubber= new THREE.MeshPhongMaterial({ color: 0x3a2a26, shininess: 34, specular: 0x6e544c });
+    const hide  = new THREE.MeshPhongMaterial({ color: 0x7a5030, shininess: 26, specular: 0xa07a54 });
+    const gripM = new THREE.MeshPhongMaterial({ color: 0x26282c, shininess: 30, specular: 0x4c5058 });
+    const ball  = new THREE.MeshPhongMaterial({ color: 0x9aa2ac, shininess: 150, specular: 0xffffff });
+    // Handle and the fork.
+    const handle = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.078, 0.032), gripM);
+    handle.rotation.x = 0.16; handle.position.set(0, -0.040, 0.030); gg.add(handle);
+    for (let i = 0; i < 4; i++) {
+      const gr = new THREE.Mesh(new THREE.BoxGeometry(0.028, 0.005, 0.034), frame);
+      gr.rotation.x = 0.16; gr.position.set(0, -0.018 - i * 0.017, 0.026 + i * 0.003); gg.add(gr);
+    }
+    const yoke = new THREE.Mesh(new THREE.BoxGeometry(0.030, 0.024, 0.030), frame);
+    yoke.position.set(0, 0.006, 0.018); gg.add(yoke);
+    [-1, 1].forEach(sd => {
+      const arm = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.086, 0.018), frame);
+      arm.rotation.z = sd * 0.30; arm.position.set(sd * 0.030, 0.050, 0.014); gg.add(arm);
+      const tipB = new THREE.Mesh(new THREE.CylinderGeometry(0.010, 0.010, 0.022, 10), frame);
+      tipB.rotation.x = Math.PI / 2; tipB.position.set(sd * 0.054, 0.088, 0.014); gg.add(tipB);
+      // Tubing: anchored through the tip and running forward to the pouch.
+      const band = new THREE.Mesh(new THREE.CylinderGeometry(0.0055, 0.0055, 0.150, 8), rubber);
+      band.rotation.set(Math.PI / 2 - 0.16, 0, sd * 0.10);
+      band.position.set(sd * 0.040, 0.070, -0.062); gg.add(band);
+      const knot = new THREE.Mesh(new THREE.CylinderGeometry(0.0080, 0.0080, 0.014, 8), rubber);
+      knot.rotation.x = Math.PI / 2; knot.position.set(sd * 0.054, 0.088, 0.000); gg.add(knot);
     });
-    const pouch = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.030, 0.008),
-      new THREE.MeshLambertMaterial({ color: 0x4a3520 }));
-    pouch.position.set(0, 0.128, -0.002); g.add(pouch);
+    // Leather pouch between the bands, with a lead ball sitting in it.
+    const pouch = new THREE.Mesh(new THREE.BoxGeometry(0.030, 0.026, 0.008), hide);
+    pouch.position.set(0, 0.052, -0.138); gg.add(pouch);
+    [-1, 1].forEach(sd => {
+      const lace = new THREE.Mesh(new THREE.BoxGeometry(0.010, 0.014, 0.006), hide);
+      lace.position.set(sd * 0.019, 0.052, -0.136); lace.rotation.z = sd * 0.4; gg.add(lace);
+    });
+    const shot = new THREE.Mesh(new THREE.SphereGeometry(0.0105, 10, 8), ball);
+    shot.position.set(0, 0.052, -0.130); gg.add(shot);
+    // Folding wrist brace behind the handle.
+    const brace = new THREE.Mesh(new THREE.BoxGeometry(0.030, 0.010, 0.070), frame);
+    brace.rotation.x = -0.30; brace.position.set(0, -0.070, 0.088); gg.add(brace);
+    const cuff = new THREE.Mesh(new THREE.TorusGeometry(0.024, 0.0045, 6, 14, Math.PI * 1.25), frame);
+    cuff.rotation.set(0.30, Math.PI / 2, 0.3); cuff.position.set(0, -0.076, 0.124); gg.add(cuff);
+    // Spare ammo clipped along the fork.
+    for (let i = 0; i < 4; i++) {
+      const s = new THREE.Mesh(new THREE.SphereGeometry(0.0080, 8, 6), ball);
+      s.position.set(-0.004 + i * 0.010, 0.014, 0.036); gg.add(s);
+    }
   });
+  g._greebled = true; g._handDetailed = true; return g;
 }
 // 🌌 Sci-fi P2W models — emissive, futuristic chassis
 function buildBlowgun() {
@@ -9099,7 +9228,7 @@ const weaponModels = [
   // ── New secondaries ────────────────────────────────────────────────────
   buildMachinePistol(),  // machine_pistol
   buildSawedOff(),  // sawed_off
-  handcraftedWeapon('dart_gun'),  // dart_gun
+  buildDartGun(),  // dart_gun
   handcraftedWeapon('laser_pointer'),  // laser_pointer
   // ── 3rd-batch secondaries ─────────────────────────────────────────────────
   buildMachineRevolver(),  // machine_revolver
