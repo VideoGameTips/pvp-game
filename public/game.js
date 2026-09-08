@@ -5618,22 +5618,19 @@ function makeMuzzleFlash() {
 // AK20
 function buildAK20() {
   const g = new THREE.Group();
-  const blackSteel = new THREE.MeshPhongMaterial({ color: 0x141619, shininess: 54, specular: 0x70747a });
-  const wornEdge = new THREE.MeshPhongMaterial({ color: 0x6a7075, shininess: 90, specular: 0xc7d0da });
-  const redPaint = new THREE.MeshLambertMaterial({ color: 0xb33a26 });
-  const amber = new THREE.MeshLambertMaterial({ color: 0x7b4618 });
-  const shadowWood = new THREE.MeshLambertMaterial({ color: 0x3b1d08 });
+  // 🔫 AK-47, black furniture. Real parkerised steel is a dark GREY-blue, not
+  // black: at luminance 0.085 the old receiver had no shading range at all, so
+  // every light level clamped to the same value and the rifle rendered as a
+  // silhouette. These sit at 0.16-0.22, which is where gun metal actually lives,
+  // and let the specular do the work.
+  const steel   = new THREE.MeshPhongMaterial({ color: 0x3a3f47, shininess: 105, specular: 0xb2bcc7 });
+  const blued   = new THREE.MeshPhongMaterial({ color: 0x454b53, shininess: 140, specular: 0xd2dbe4 });
+  const bright  = new THREE.MeshPhongMaterial({ color: 0x8d959d, shininess: 150, specular: 0xdfe6ee });
+  const polymer = new THREE.MeshPhongMaterial({ color: 0x2b2f35, shininess: 40,  specular: 0x5e646c });
+  const grip    = new THREE.MeshPhongMaterial({ color: 0x272b30, shininess: 30,  specular: 0x4a5057 });
+  const magMat  = new THREE.MeshPhongMaterial({ color: 0x32373d, shininess: 66,  specular: 0x8d959e });
+  const inner   = new THREE.MeshPhongMaterial({ color: 0x121417, shininess: 20,  specular: 0x2a2d31 });
 
-  // 🔧 The outlines below are fine — the triangulation was not. This used to
-  // close each face with a triangle FAN (0, i, i+1), which is only valid on a
-  // CONVEX polygon. The AK's profile is 41 points with deep concavities: the
-  // magazine well, the pistol grip, the trigger guard cutout. A fan bridges
-  // straight across those, which is why the rifle rendered as a black wedge
-  // with two giant spikes instead of a gun.
-  //
-  // ExtrudeGeometry runs the outline through a proper ear-clipping
-  // triangulation, so concave profiles come out right, and it gives the plate
-  // edges a chamfer for free — the same treatment the rest of the roster gets.
   function sidePlate(mat, pts, width, x = 0) {
     const shape = new THREE.Shape();
     pts.forEach((p, i) => (i ? shape.lineTo(p[0], p[1]) : shape.moveTo(p[0], p[1])));
@@ -5643,9 +5640,6 @@ function buildAK20() {
       depth: width, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel,
       bevelSegments: 1, curveSegments: 1,
     });
-    // The outline is drawn in (z, y) and extruded along the shape's own +Z.
-    // Rotate so that extrusion becomes the gun's X (plate thickness) and the
-    // profile lands in the ZY plane, then centre it on x.
     geo.rotateY(-Math.PI / 2);
     geo.translate(x + width / 2, 0, 0);
     const mesh = new THREE.Mesh(geo, mat);
@@ -5653,77 +5647,135 @@ function buildAK20() {
     g.add(mesh);
     return mesh;
   }
+  const box = (mat, w, h, d, x, y, z, rx = 0, ry = 0, rz = 0) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+    m.position.set(x, y, z); m.rotation.set(rx, ry, rz);
+    m.castShadow = true; g.add(m); return m;
+  };
+  const cyl = (mat, r1, r2, h, seg, x, y, z, rx = Math.PI / 2, rz = 0) => {
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(r1, r2, h, seg), mat);
+    m.position.set(x, y, z); m.rotation.set(rx, 0, rz);
+    m.castShadow = true; g.add(m); return m;
+  };
 
-  function curve(a, b, steps, bend = 0) {
-    const pts = [];
-    for (let i = 0; i <= steps; i++) {
-      const t = i / steps;
-      const z = a[0] + (b[0] - a[0]) * t;
-      const y = a[1] + (b[1] - a[1]) * t + Math.sin(t * Math.PI) * bend;
-      pts.push([z, y]);
-    }
-    return pts;
+  // ── Receiver ────────────────────────────────────────────────────────────
+  // This used to be a single 41-point extruded plate carrying the WHOLE rifle
+  // silhouette — receiver, magazine, grip and barrel in one outline. Every part
+  // modelled below was therefore a duplicate sitting slightly off it, and the
+  // profile's thin magazine spike is what read as a stray spindle hanging under
+  // the gun. The monolith is gone; each component is its own solid now.
+  box(steel, 0.048, 0.100, 0.320, 0, 0.005, -0.010);                 // receiver box
+  box(steel, 0.050, 0.030, 0.030, 0, -0.030, -0.156);                // front trunnion
+  box(inner, 0.049, 0.010, 0.300, 0, -0.046, -0.010);                // lower rail seam
+  // The receiver narrows at the top where the dust cover seats.
+  box(steel, 0.044, 0.014, 0.310, 0, 0.052, -0.014);
+
+  // Dust cover, sitting proud of the receiver with its stamped ribs.
+  box(steel, 0.050, 0.010, 0.196, 0, 0.063, -0.020);
+  for (let i = 0; i < 5; i++) box(blued, 0.044, 0.0035, 0.008, 0, 0.0685, -0.086 + i * 0.032);
+  // Rear sight leaf + notch, on its block.
+  box(steel, 0.030, 0.012, 0.040, 0, 0.070, -0.070);
+  box(inner,  0.008, 0.006, 0.010, 0, 0.076, -0.070);
+
+  // ── Right-side furniture: the AK's most recognisable face ───────────────
+  // Selector lever — the long stamped bar with its two detent stops.
+  box(bright, 0.006, 0.052, 0.010, 0.028, 0.014, 0.010, 0, 0, 0.20);
+  box(bright, 0.007, 0.010, 0.044, 0.028, 0.034, -0.008);
+  box(inner,  0.003, 0.005, 0.006, 0.030, 0.044, 0.004);   // SAFE stop
+  box(inner,  0.003, 0.005, 0.006, 0.030, 0.044, -0.026);  // AUTO stop
+  // Ejection port, cut into the flank, with the charging handle above it.
+  box(inner,  0.004, 0.024, 0.062, 0.026, 0.030, -0.036);
+  box(bright, 0.014, 0.011, 0.030, 0.030, 0.046, -0.030);
+  cyl(bright, 0.006, 0.006, 0.016, 10, 0.036, 0.046, -0.018, Math.PI / 2, Math.PI / 2);
+  // Receiver rivets — six a side, the giveaway of a stamped AK receiver.
+  [-0.150, -0.090, -0.020, 0.040, 0.090, 0.128].forEach(z => {
+    cyl(bright, 0.0032, 0.0032, 0.056, 8, 0, -0.020, z, 0, Math.PI / 2);
+  });
+
+  // ── Fire control ────────────────────────────────────────────────────────
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.021, 0.0038, 6, 12, Math.PI * 1.1), steel);
+  guard.rotation.set(0, Math.PI / 2, -0.45); guard.position.set(0, -0.078, 0.020); g.add(guard);
+  box(bright, 0.005, 0.017, 0.006, 0, -0.068, 0.020, 0.22);          // trigger
+  box(steel,  0.010, 0.012, 0.014, 0, -0.070, -0.014);               // mag catch paddle
+
+  // ── Magazine: the banana curve, built from segments that follow it ──────
+  // A 30-round AK magazine curves about 25 degrees end to end. The first pass
+  // advanced 0.14 rad per segment over six segments — 57 degrees — which swung
+  // the bottom of the mag out into a thin forward-pointing spindle instead of
+  // the familiar banana.
+  let my = -0.060, mz = -0.010, ang = 0.09;
+  for (let i = 0; i < 5; i++) {
+    box(magMat, 0.030, 0.036, 0.046, 0, my, mz, ang);
+    box(inner,  0.031, 0.004, 0.011, 0, my, mz, ang);                // stamped rib
+    my -= Math.cos(ang) * 0.032;
+    mz -= Math.sin(ang) * 0.032;
+    ang += 0.055;
   }
-  function stripPlate(mat, centers, height, width, x = 0) {
-    const left = [], right = [];
-    for (let i = 0; i < centers.length; i++) {
-      const prev = centers[Math.max(0, i - 1)];
-      const next = centers[Math.min(centers.length - 1, i + 1)];
-      const dz = next[0] - prev[0], dy = next[1] - prev[1];
-      const len = Math.hypot(dz, dy) || 1;
-      const nz = -dy / len, ny = dz / len;
-      left.push([centers[i][0] + nz * height / 2, centers[i][1] + ny * height / 2]);
-      right.push([centers[i][0] - nz * height / 2, centers[i][1] - ny * height / 2]);
-    }
-    // Hand-stitched winding here disagreed with itself between the four walls,
-    // so the magazine rendered inside-out: you saw through the near face into
-    // the back of the far one and it read as a hollow outline rather than a
-    // solid mag. Walking one side out and the other back gives a single closed
-    // outline, which sidePlate already extrudes and triangulates correctly.
-    return sidePlate(mat, left.concat(right.slice().reverse()), width, x);
-  }
+  box(magMat, 0.032, 0.011, 0.048, 0, my + 0.014, mz - 0.002, ang);  // floorplate
 
-  sidePlate(blackSteel, [
-    [-0.590,0.010],[-0.485,0.010],[-0.480,0.058],[-0.468,0.068],[-0.452,0.058],
-    [-0.430,0.020],[-0.340,0.018],[-0.312,0.040],[-0.176,0.040],
-    [-0.156,0.060],[-0.064,0.060],[0.096,0.058],[0.150,0.032],
-    [0.150,-0.038],[0.210,0.016],[0.332,0.020],[0.406,-0.014],
-    [0.372,-0.052],[0.214,-0.054],[0.126,-0.046],[0.094,-0.056],
-    [0.128,-0.084],[0.132,-0.154],[0.100,-0.180],[0.066,-0.108],
-    [0.050,-0.060],[-0.060,-0.058],[-0.070,-0.064],[-0.096,-0.096],
-    [-0.122,-0.154],[-0.154,-0.224],[-0.182,-0.286],[-0.150,-0.302],
-    [-0.108,-0.250],[-0.080,-0.180],[-0.062,-0.102],[-0.082,-0.060],
-    [-0.160,-0.052],[-0.190,-0.012],[-0.324,-0.010],[-0.352,0.014],
-  ], 0.052);
+  // ── Pistol grip ─────────────────────────────────────────────────────────
+  // Lifted 0.024 so the grip tang actually meets the receiver — it used to top
+  // out at -0.064 against a receiver bottom of -0.045 and hang in the air.
+  sidePlate(grip, [
+    [0.080,-0.040],[0.112,-0.066],[0.116,-0.128],[0.096,-0.144],[0.070,-0.084],[0.064,-0.046],
+  ], 0.034, -0.017);
+  for (let i = 0; i < 4; i++) box(inner, 0.036, 0.0035, 0.008, 0, -0.074 - i * 0.018, 0.094 + i * 0.004, 0.35);
 
-  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.0062,0.0062,0.345,32), mMat);
-  barrel.rotation.x = Math.PI/2; barrel.position.set(0,0.018,-0.398); g.add(barrel);
-  const gasTube = new THREE.Mesh(new THREE.CylinderGeometry(0.0050,0.0050,0.270,28), wornEdge);
-  gasTube.rotation.x = Math.PI/2; gasTube.position.set(0,0.045,-0.342); g.add(gasTube);
-  const brake = new THREE.Mesh(new THREE.CylinderGeometry(0.0095,0.0080,0.038,28), wornEdge);
-  brake.rotation.x = Math.PI/2; brake.position.set(0,0.018,-0.575); g.add(brake);
+  // ── Stock: comb, toe, butt plate, sling loop ────────────────────────────
+  sidePlate(polymer, [
+    [0.154,-0.038],[0.214,0.012],[0.326,0.014],[0.392,-0.012],[0.386,-0.030],[0.220,-0.048],[0.166,-0.052],
+  ], 0.047, -0.024);
+  box(inner,  0.048, 0.052, 0.008, 0, -0.002, 0.404, 0.10);          // butt plate
+  box(bright, 0.030, 0.006, 0.004, 0, -0.040, 0.250);                // sling loop
+  box(inner,  0.049, 0.004, 0.070, 0, 0.010, 0.300);                 // comb seam
+  box(steel,  0.046, 0.044, 0.028, 0, -0.012, 0.162);                // rear trunnion
+  box(polymer, 0.046, 0.056, 0.070, 0, -0.014, 0.184);               // stock wrist
 
-  sidePlate(wornEdge, [
-    [-0.150,0.038],[-0.118,0.058],[0.096,0.056],[0.136,0.038],
-    [0.078,0.030],[-0.128,0.030],
-  ], 0.046);
-  sidePlate(rMat, [[-0.024,-0.016],[0.092,-0.014],[0.110,-0.034],[-0.012,-0.038]], 0.053);
-  sidePlate(sMat, [[0.154,-0.038],[0.214,0.012],[0.326,0.014],[0.390,-0.014],[0.360,-0.044],[0.218,-0.048]], 0.047);
-  sidePlate(sMat, [[0.080,-0.064],[0.112,-0.090],[0.116,-0.148],[0.098,-0.164],[0.074,-0.108],[0.066,-0.070]], 0.034);
-  stripPlate(rMat, curve([-0.080,-0.096], [-0.158,-0.258], 12, -0.010), 0.028, 0.054, 0.001);
-  sidePlate(sMat, [[-0.336,0.010],[-0.306,0.034],[-0.186,0.034],[-0.164,0.012],[-0.190,-0.006],[-0.320,-0.006]], 0.050);
-  sidePlate(shadowWood, [[-0.318,-0.014],[-0.198,-0.012],[-0.176,-0.026],[-0.214,-0.040],[-0.324,-0.036]], 0.052);
+  // ── Handguards + gas system ─────────────────────────────────────────────
+  sidePlate(polymer, [
+    [-0.336,0.010],[-0.306,0.034],[-0.186,0.034],[-0.164,0.012],[-0.190,-0.008],[-0.320,-0.006],
+  ], 0.050, -0.025);
+  // Finger grooves in the lower handguard.
+  for (let i = 0; i < 4; i++) box(inner, 0.052, 0.006, 0.007, 0, 0.002, -0.310 + i * 0.038);
+  // Upper handguard over the gas tube, with its cooling vents.
+  sidePlate(polymer, [
+    [-0.332,0.038],[-0.310,0.056],[-0.196,0.056],[-0.176,0.038],
+  ], 0.044, -0.022);
+  for (let i = 0; i < 3; i++) box(inner, 0.046, 0.004, 0.009, 0, 0.056, -0.300 + i * 0.042);
+  cyl(blued, 0.0052, 0.0052, 0.180, 14, 0, 0.046, -0.256);           // gas tube
+  // Gas block, canted port, bayonet lug.
+  box(steel, 0.020, 0.030, 0.022, 0, 0.032, -0.418);
+  cyl(blued, 0.007, 0.007, 0.026, 10, 0, 0.048, -0.418, 0.5);
+  box(steel, 0.010, 0.008, 0.030, 0, -0.002, -0.430);
 
-  const gasBlock = new THREE.Mesh(new THREE.BoxGeometry(0.018,0.026,0.018), mMat);
-  gasBlock.position.set(0,0.034,-0.416); g.add(gasBlock);
-  const rearSight = new THREE.Mesh(new THREE.BoxGeometry(0.026,0.009,0.038), rMat);
-  rearSight.position.set(0,0.064,-0.062); g.add(rearSight);
-  const topMark = new THREE.Mesh(new THREE.BoxGeometry(0.012,0.003,0.046), redPaint);
-  topMark.position.set(0,0.061,0.046); g.add(topMark);
-  const trigger = new THREE.Mesh(new THREE.BoxGeometry(0.004,0.013,0.005), mMat);
-  trigger.rotation.x = 0.18; trigger.position.set(0,-0.064,0.018); g.add(trigger);
-  const flash = makeMuzzleFlash(); flash.position.set(0,0.018,-0.585); g.add(flash);
-  g._flash = flash; g._kickZ = 0.015; g.position.set(0.12,-0.1,-0.25); return g;
+  // ── Barrel, front sight, slant brake ────────────────────────────────────
+  cyl(blued, 0.0064, 0.0064, 0.330, 20, 0, 0.018, -0.396);
+  cyl(bright, 0.0038, 0.0038, 0.120, 10, 0, 0.002, -0.372);          // cleaning rod, tucked under the barrel
+  // Front sight tower — tall, hooded, and the tallest thing on the rifle. On the
+  // real gun this dominates the muzzle end; scaled down it was disappearing.
+  box(steel, 0.022, 0.040, 0.024, 0, 0.040, -0.505);
+  box(steel, 0.006, 0.034, 0.020, -0.010, 0.058, -0.505);
+  box(steel, 0.006, 0.034, 0.020,  0.010, 0.058, -0.505);
+  box(steel, 0.026, 0.006, 0.020, 0, 0.074, -0.505);                 // hood bridge
+  box(bright, 0.0035, 0.022, 0.0035, 0, 0.058, -0.505);              // post
+  // Front trunnion band the barrel passes through, so the barrel doesn't just
+  // emerge from nothing.
+  cyl(steel, 0.0115, 0.0115, 0.016, 14, 0, 0.018, -0.455);
+  // AKM slant compensator: cut at an angle, which is why it is unmistakable.
+  const brake = cyl(steel, 0.0118, 0.0104, 0.046, 18, 0, 0.018, -0.556);
+  brake.rotation.x = Math.PI / 2 - 0.13;
+  cyl(inner, 0.0080, 0.0080, 0.014, 14, 0, 0.0235, -0.575, Math.PI / 2 - 0.13);
+  box(bright, 0.0075, 0.0075, 0.020, 0.005, 0.026, -0.548, 0, 0, 0.3);  // brake port
+  box(bright, 0.020, 0.005, 0.006, 0, 0.006, -0.300);                // front sling loop
+
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.020, -0.585); g.add(flash);
+  g._flash = flash; g._kickZ = 0.015;
+  // Hand-detailed: the procedural greeble pass would stamp generic seams and
+  // pins on top of real hardware, and welding would shove the deliberately
+  // proud parts (selector, charging handle, sling loops) back into the body.
+  g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25);
+  return g;
 }
 
 // AK30 — longer mag, tan/desert colour
@@ -8899,6 +8951,7 @@ function shinifyModel(root) {
 }
 
 function weldModelParts(root, gap = 0.004, maxPasses = 8) {
+  if (root && root._handDetailed) return;   // proud parts are proud on purpose
   const collect = () => {
     root.updateMatrixWorld(true);
     const parts = [];
