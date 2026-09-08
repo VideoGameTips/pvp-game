@@ -5616,6 +5616,50 @@ function makeMuzzleFlash() {
 }
 
 // AK20
+
+// ── Shared gun-building helpers ────────────────────────────────────────────
+// Extracted from the AK rebuild so every hand-detailed weapon uses the same
+// primitives instead of re-declaring them. `gp` = gun part.
+function gpBox(g, mat, w, h, d, x, y, z, rx = 0, ry = 0, rz = 0) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+  m.position.set(x, y, z); m.rotation.set(rx, ry, rz);
+  m.castShadow = true; g.add(m); return m;
+}
+function gpCyl(g, mat, r1, r2, h, seg, x, y, z, rx = Math.PI / 2, rz = 0) {
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r1, r2, h, seg), mat);
+  m.position.set(x, y, z); m.rotation.set(rx, 0, rz);
+  m.castShadow = true; g.add(m); return m;
+}
+// A flat profile extruded across the weapon's width. Handles concave outlines
+// correctly (ear clipping) and chamfers the edges, which is what stops a plate
+// reading as a paper cut-out.
+function gpPlate(g, mat, pts, width, x = 0) {
+  const shape = new THREE.Shape();
+  pts.forEach((pt, i) => (i ? shape.lineTo(pt[0], pt[1]) : shape.moveTo(pt[0], pt[1])));
+  shape.closePath();
+  const bevel = Math.min(0.0016, width * 0.2);
+  const geo = new THREE.ExtrudeGeometry(shape, {
+    depth: width, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel,
+    bevelSegments: 1, curveSegments: 1,
+  });
+  geo.rotateY(-Math.PI / 2);
+  geo.translate(x + width / 2, 0, 0);
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.castShadow = true; mesh.receiveShadow = true;
+  g.add(mesh); return mesh;
+}
+// The palette real gun metal actually lives in. Nothing here goes below 0.16
+// luminance: darker than that has no shading range and renders as a silhouette.
+const GUN_MATS = {
+  steel:   () => new THREE.MeshPhongMaterial({ color: 0x3a3f47, shininess: 105, specular: 0xb2bcc7 }),
+  blued:   () => new THREE.MeshPhongMaterial({ color: 0x454b53, shininess: 140, specular: 0xd2dbe4 }),
+  bright:  () => new THREE.MeshPhongMaterial({ color: 0x8d959d, shininess: 150, specular: 0xdfe6ee }),
+  polymer: () => new THREE.MeshPhongMaterial({ color: 0x2b2f35, shininess: 40,  specular: 0x5e646c }),
+  grip:    () => new THREE.MeshPhongMaterial({ color: 0x272b30, shininess: 30,  specular: 0x4a5057 }),
+  wood:    () => new THREE.MeshPhongMaterial({ color: 0x6b4a2c, shininess: 46,  specular: 0x8a7256 }),
+  inner:   () => new THREE.MeshPhongMaterial({ color: 0x1c1f23, shininess: 20,  specular: 0x33373c }),
+};
+
 function buildAK20() {
   const g = new THREE.Group();
   // 🔫 AK-47, black furniture. Real parkerised steel is a dark GREY-blue, not
@@ -5806,24 +5850,39 @@ function buildAK30() {
 
 // SG-8
 function buildSG8() {
+  // 🔫 Pump shotgun: tube magazine under the barrel, ribbed forend on twin action
+  // bars, bead front sight, shell carrier and loading port.
   const g = new THREE.Group();
-  const body = new THREE.Mesh(new THREE.BoxGeometry(0.05,0.07,0.28), bMat); g.add(body);
-  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.014,0.014,0.18,8), mMat);
-  barrel.rotation.x = Math.PI/2; barrel.position.set(0,0.025,-0.23); g.add(barrel);
-  const pump = new THREE.Mesh(new THREE.BoxGeometry(0.04,0.04,0.09), mMat);
-  pump.position.set(0,0.01,-0.18); g.add(pump);
-  const stock = new THREE.Mesh(new THREE.BoxGeometry(0.035,0.05,0.16), sMat);
-  stock.position.set(0,-0.01,0.16); g.add(stock);
-  const grip = new THREE.Mesh(new THREE.BoxGeometry(0.03,0.08,0.04), sMat);
-  grip.rotation.x = 0.25; grip.position.set(0,-0.065,0.08); g.add(grip);
-  // Shell tube under the barrel — a pump shotgun has to hold shells somewhere.
-  const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.011,0.011,0.17,8), mMat);
-  tube.rotation.x = Math.PI/2; tube.position.set(0,0.004,-0.20); g.add(tube);
-  // bolt:false — a pump action has no charging handle.
-  _gunDetails(g, { bodyW:0.05, bodyH:0.07, bodyD:0.28, gripZ:0.08, bolt:false,
-                   barrelY:0.025, muzzleZ:-0.305, muzzleR:0.014, sightZ:-0.115 });
-  const flash = makeMuzzleFlash(); flash.position.set(0,0.025,-0.32); g.add(flash);
-  g._flash = flash; g._kickZ = 0.025; g.position.set(0.12,-0.1,-0.25); return g;
+  const steel = GUN_MATS.steel(), blued = GUN_MATS.blued(), bright = GUN_MATS.bright();
+  const wood = GUN_MATS.wood(), inner = GUN_MATS.inner(), poly = GUN_MATS.polymer();
+  gpBox(g, steel, 0.040, 0.052, 0.170, 0, 0.008, 0.030);               // receiver
+  gpBox(g, inner, 0.041, 0.008, 0.150, 0, 0.032, 0.030);               // top flat
+  gpBox(g, inner, 0.005, 0.018, 0.056, 0.021, 0.010, 0.014);           // ejection port
+  gpBox(g, inner, 0.005, 0.016, 0.050, -0.021, -0.006, 0.030);         // loading port
+  gpCyl(g, blued, 0.0135, 0.0135, 0.300, 20, 0, 0.020, -0.200);        // barrel
+  gpCyl(g, steel, 0.0155, 0.0155, 0.020, 18, 0, 0.020, -0.344);        // choke
+  gpCyl(g, blued, 0.0090, 0.0090, 0.240, 16, 0, -0.008, -0.170);       // magazine tube
+  gpCyl(g, steel, 0.0100, 0.0100, 0.014, 14, 0, -0.008, -0.284);       // tube cap
+  gpBox(g, steel, 0.020, 0.014, 0.020, 0, 0.006, -0.062);              // barrel ring
+  // Forend on its action bars, with grip ribs.
+  gpPlate(g, wood, [[-0.100,0.006],[-0.078,0.022],[-0.190,0.022],[-0.210,0.004],[-0.190,-0.020],[-0.098,-0.020]], 0.046, -0.023);
+  for (let i = 0; i < 6; i++) gpBox(g, inner, 0.048, 0.008, 0.008, 0, 0.002, -0.110 - i * 0.016);
+  [-0.016, 0.016].forEach(x => gpBox(g, steel, 0.004, 0.006, 0.120, x, -0.014, -0.060));
+  // Stock with comb and recoil pad.
+  gpPlate(g, wood, [[0.106,-0.020],[0.130,0.012],[0.250,0.016],[0.278,-0.010],[0.272,-0.052],[0.150,-0.060],[0.118,-0.044]], 0.042, -0.021);
+  gpBox(g, poly, 0.044, 0.052, 0.012, 0, -0.006, 0.284, 0.12);         // recoil pad
+  gpBox(g, inner, 0.043, 0.004, 0.070, 0, 0.014, 0.210);               // comb seam
+  // Fire control + sights.
+  gpPlate(g, wood, [[0.060,-0.020],[0.084,-0.040],[0.086,-0.092],[0.062,-0.102],[0.044,-0.052],[0.042,-0.024]], 0.030, -0.015);
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.019, 0.0034, 6, 12, Math.PI * 1.05), steel);
+  guard.rotation.set(0, Math.PI/2, -0.4); guard.position.set(0, -0.030, 0.008); g.add(guard);
+  gpBox(g, bright, 0.005, 0.015, 0.005, 0, -0.022, 0.008, 0.2);
+  gpBox(g, bright, 0.010, 0.008, 0.012, 0, -0.020, 0.044);             // safety button
+  gpCyl(g, bright, 0.0035, 0.0035, 0.006, 8, 0, 0.036, -0.336, 0);     // brass bead
+  gpBox(g, inner, 0.030, 0.004, 0.230, 0, 0.034, -0.200);              // vent rib
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.020, -0.370); g.add(flash);
+  g._flash = flash; g._kickZ = 0.025; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
 }
 
 // SG100 — double barrel, heavy
@@ -5850,33 +5909,50 @@ function buildSG100() {
 
 // SR-X sniper
 function buildSRX() {
+  // 🔫 SVD-pattern marksman rifle: long fluted barrel, slotted brake, thumbhole
+  // stock with cheek riser, big glass on side mounts, bipod.
   const g = new THREE.Group();
-  const body = new THREE.Mesh(new THREE.BoxGeometry(0.035,0.055,0.38), bMat); g.add(body);
-  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.007,0.007,0.32,8), mMat);
-  barrel.rotation.x = Math.PI/2; barrel.position.set(0,0.01,-0.35); g.add(barrel);
-  const scopeBody = new THREE.Mesh(new THREE.CylinderGeometry(0.014,0.014,0.18,8), rMat);
-  scopeBody.rotation.x = Math.PI/2; scopeBody.position.set(0,0.05,-0.05); g.add(scopeBody);
-  const scopeL = new THREE.Mesh(new THREE.CylinderGeometry(0.012,0.012,0.01,8), mMat);
-  scopeL.rotation.x = Math.PI/2; scopeL.position.set(0,0.05,-0.14); g.add(scopeL);
-  const scopeR = new THREE.Mesh(new THREE.CylinderGeometry(0.012,0.012,0.01,8), mMat);
-  scopeR.rotation.x = Math.PI/2; scopeR.position.set(0,0.05,0.04); g.add(scopeR);
-  const stock = new THREE.Mesh(new THREE.BoxGeometry(0.03,0.05,0.14), sMat);
-  stock.position.set(0,-0.005,0.22); g.add(stock);
-  const grip = new THREE.Mesh(new THREE.BoxGeometry(0.025,0.07,0.035), sMat);
-  grip.rotation.x = 0.3; grip.position.set(0,-0.06,0.1); g.add(grip);
-  const mag = new THREE.Mesh(new THREE.BoxGeometry(0.02,0.07,0.035), bMat);
-  mag.position.set(0,-0.06,0.02); g.add(mag);
-  // Bipod legs — a rifle this long is shot off a rest.
-  [-0.026, 0.026].forEach(x => {
-    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.006,0.075,0.006), mMat);
-    leg.rotation.z = x < 0 ? 0.28 : -0.28;
-    leg.position.set(x, -0.045, -0.24); g.add(leg);
-  });
-  // hasOptic: the scope already sits on top.
-  _gunDetails(g, { bodyW:0.035, bodyH:0.055, bodyD:0.38, gripZ:0.1, hasOptic:true,
-                   barrelY:0.01, muzzleZ:-0.495, muzzleR:0.007 });
-  const flash = makeMuzzleFlash(); flash.position.set(0,0.01,-0.51); g.add(flash);
-  g._flash = flash; g._kickZ = 0.01; g.position.set(0.12,-0.1,-0.25); return g;
+  const steel = GUN_MATS.steel(), blued = GUN_MATS.blued(), bright = GUN_MATS.bright();
+  const wood = GUN_MATS.wood(), inner = GUN_MATS.inner(), poly = GUN_MATS.polymer();
+  gpBox(g, steel, 0.038, 0.062, 0.230, 0, 0.006, 0.010);               // receiver
+  gpBox(g, inner, 0.039, 0.008, 0.210, 0, 0.036, 0.010);               // top flat
+  gpBox(g, inner, 0.004, 0.020, 0.060, 0.020, 0.014, -0.030);          // ejection port
+  gpBox(g, bright, 0.012, 0.010, 0.026, 0.024, 0.026, -0.006);         // charging handle
+  gpCyl(g, blued, 0.0070, 0.0070, 0.360, 20, 0, 0.014, -0.290);        // barrel
+  for (let i = 0; i < 4; i++) gpCyl(g, inner, 0.0074, 0.0074, 0.030, 12, 0, 0.014, -0.200 - i * 0.050); // flutes
+  gpCyl(g, steel, 0.0115, 0.0115, 0.048, 16, 0, 0.014, -0.464);        // muzzle brake
+  [0, 1, 2].forEach(i => gpBox(g, inner, 0.024, 0.004, 0.008, 0, 0.014, -0.450 - i * 0.014)); // brake slots
+  // Handguard halves with vents.
+  gpPlate(g, wood, [[-0.110,0.034],[-0.086,0.048],[-0.230,0.048],[-0.252,0.030],[-0.230,0.016],[-0.108,0.016]], 0.044, -0.022);
+  for (let i = 0; i < 4; i++) gpBox(g, inner, 0.046, 0.008, 0.010, 0, 0.038, -0.130 - i * 0.032);
+  // Thumbhole stock + cheek riser.
+  gpPlate(g, wood, [[0.126,-0.024],[0.150,0.010],[0.290,0.014],[0.320,-0.010],[0.316,-0.048],[0.230,-0.052],[0.196,-0.086],[0.168,-0.086],[0.150,-0.050]], 0.040, -0.020);
+  gpBox(g, inner, 0.041, 0.026, 0.042, 0, -0.014, 0.232);              // thumbhole void
+  gpBox(g, wood, 0.042, 0.020, 0.090, 0, 0.026, 0.242);                // cheek riser
+  gpBox(g, poly, 0.044, 0.048, 0.010, 0, -0.014, 0.326, 0.10);         // butt pad
+  // Optic on its side mount.
+  gpBox(g, steel, 0.014, 0.026, 0.030, -0.022, 0.036, 0.020);          // mount rail
+  gpCyl(g, blued, 0.0155, 0.0155, 0.150, 18, 0, 0.070, -0.030);        // scope tube
+  gpCyl(g, blued, 0.0215, 0.0215, 0.030, 18, 0, 0.070, -0.098);        // objective bell
+  gpCyl(g, blued, 0.0195, 0.0195, 0.026, 18, 0, 0.070, 0.036);         // ocular bell
+  gpCyl(g, inner, 0.0180, 0.0180, 0.006, 16, 0, 0.070, -0.112);        // lens
+  [(-0.040), 0.010].forEach(z => gpBox(g, steel, 0.026, 0.026, 0.014, 0, 0.052, z)); // rings
+  gpCyl(g, bright, 0.0075, 0.0075, 0.012, 10, 0.017, 0.078, -0.020, 0, Math.PI/2);   // turret
+  // Magazine + fire control + bipod.
+  gpBox(g, blued, 0.024, 0.070, 0.048, 0, -0.058, -0.020, 0.12);
+  for (let i = 0; i < 3; i++) gpBox(g, inner, 0.025, 0.004, 0.012, 0, -0.038 - i * 0.022, -0.020, 0.12);
+  gpPlate(g, wood, [[0.062,-0.028],[0.086,-0.048],[0.088,-0.104],[0.064,-0.114],[0.046,-0.062],[0.044,-0.032]], 0.030, -0.015);
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.019, 0.0034, 6, 12, Math.PI * 1.05), steel);
+  guard.rotation.set(0, Math.PI/2, -0.4); guard.position.set(0, -0.038, 0.012); g.add(guard);
+  gpBox(g, bright, 0.005, 0.015, 0.005, 0, -0.030, 0.012, 0.2);
+  // Bipod: legs hung at y -0.103..-0.013 against a barrel bottom of 0.007, so
+  // they floated. A yoke clamped round the barrel now carries them.
+  gpBox(g, steel, 0.030, 0.022, 0.026, 0, 0.000, -0.240);              // bipod yoke
+  [-1, 1].forEach(sd => gpBox(g, steel, 0.005, 0.086, 0.005, sd * 0.018, -0.048, -0.240, 0, 0, sd * 0.30));
+  [-1, 1].forEach(sd => gpBox(g, GUN_MATS.inner(), 0.010, 0.006, 0.014, sd * 0.030, -0.088, -0.240)); // feet
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.014, -0.500); g.add(flash);
+  g._flash = flash; g._kickZ = 0.010; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
 }
 
 // RPD — LMG with huge drum, olive green
@@ -5906,23 +5982,38 @@ function buildRPD() {
 
 // MP-40
 function buildMP40() {
+  // 🔫 MP 40: tubular receiver, underfolding stock, straight vertical magazine
+  // ahead of the grip, and the bakelite resting bar under the barrel.
   const g = new THREE.Group();
-  const body = new THREE.Mesh(new THREE.BoxGeometry(0.04,0.055,0.24), bMat); g.add(body);
-  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.008,0.008,0.14,8), mMat);
-  barrel.rotation.x = Math.PI/2; barrel.position.set(0,0.01,-0.19); g.add(barrel);
-  const drum = new THREE.Mesh(new THREE.CylinderGeometry(0.038,0.038,0.04,12), bMat);
-  drum.rotation.x = Math.PI/2; drum.position.set(0,-0.06,0.0); g.add(drum);
-  const stock = new THREE.Mesh(new THREE.BoxGeometry(0.025,0.04,0.1), sMat);
-  stock.position.set(0,0,0.16); g.add(stock);
-  const grip = new THREE.Mesh(new THREE.BoxGeometry(0.025,0.065,0.03), sMat);
-  grip.rotation.x = 0.2; grip.position.set(0,-0.055,0.08); g.add(grip);
-  // Perforated barrel shroud, as on the real thing.
-  const shroud = new THREE.Mesh(new THREE.CylinderGeometry(0.014,0.014,0.10,8), mMat);
-  shroud.rotation.x = Math.PI/2; shroud.position.set(0,0.01,-0.165); g.add(shroud);
-  _gunDetails(g, { bodyW:0.04, bodyH:0.055, bodyD:0.24, gripZ:0.08,
-                   barrelY:0.01, muzzleZ:-0.248, muzzleR:0.008, sightZ:-0.10 });
-  const flash = makeMuzzleFlash(); flash.position.set(0,0.01,-0.26); g.add(flash);
-  g._flash = flash; g._kickZ = 0.012; g.position.set(0.12,-0.1,-0.25); return g;
+  const steel = GUN_MATS.steel(), blued = GUN_MATS.blued(), bright = GUN_MATS.bright();
+  const bake = GUN_MATS.grip(), inner = GUN_MATS.inner();
+  gpCyl(g, steel, 0.021, 0.021, 0.230, 18, 0, 0.010, -0.040);          // receiver tube
+  for (let i = 0; i < 5; i++) gpCyl(g, inner, 0.0215, 0.0215, 0.004, 18, 0, 0.010, -0.128 + i * 0.044); // cooling rings
+  gpBox(g, steel, 0.030, 0.020, 0.070, 0, 0.026, 0.055);               // rear cap
+  gpCyl(g, blued, 0.0072, 0.0072, 0.190, 16, 0, 0.010, -0.240);        // barrel
+  gpCyl(g, steel, 0.0125, 0.0125, 0.026, 16, 0, 0.010, -0.152);        // barrel nut
+  gpBox(g, bake, 0.024, 0.020, 0.060, 0, -0.010, -0.196);              // resting bar
+  gpBox(g, bright, 0.010, 0.010, 0.030, -0.022, 0.020, -0.070, 0, 0, 0.3); // charging handle
+  // Magazine housing + the long straight stick mag.
+  gpBox(g, steel, 0.026, 0.036, 0.044, 0, -0.024, -0.030);
+  gpBox(g, blued, 0.022, 0.150, 0.038, 0, -0.110, -0.030);
+  for (let i = 0; i < 5; i++) gpBox(g, inner, 0.023, 0.004, 0.010, 0, -0.060 - i * 0.026, -0.030);
+  gpBox(g, steel, 0.024, 0.010, 0.040, 0, -0.188, -0.030);             // floorplate
+  // Grip, trigger, guard.
+  gpPlate(g, bake, [[0.070,-0.012],[0.098,-0.036],[0.100,-0.104],[0.078,-0.116],[0.056,-0.052],[0.052,-0.016]], 0.030, -0.015);
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.019, 0.0034, 6, 12, Math.PI * 1.05), steel);
+  guard.rotation.set(0, Math.PI/2, -0.4); guard.position.set(0, -0.030, 0.026); g.add(guard);
+  gpBox(g, bright, 0.005, 0.015, 0.005, 0, -0.022, 0.026, 0.2);
+  // Underfolding stock: two struts and a shoulder plate.
+  [-0.013, 0.013].forEach(x => gpBox(g, steel, 0.005, 0.005, 0.150, x, -0.024, 0.140, 0.10));
+  gpBox(g, steel, 0.036, 0.030, 0.008, 0, -0.040, 0.214);
+  // Sights.
+  gpBox(g, steel, 0.012, 0.014, 0.010, 0, 0.032, -0.230);
+  gpBox(g, bright, 0.003, 0.010, 0.003, 0, 0.040, -0.230);
+  gpBox(g, steel, 0.016, 0.012, 0.012, 0, 0.032, 0.036);
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.010, -0.340); g.add(flash);
+  g._flash = flash; g._kickZ = 0.012; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
 }
 
 // P90 — futuristic bullpup, translucent top mag
@@ -6026,23 +6117,39 @@ function buildFlare() {
 
 // ── Pistol ────────────────────────────────────────────────────────────────
 function buildPistol() {
-  const dark = new THREE.MeshLambertMaterial({ color: 0x2a2a2a });
+  // 🔫 M1911-pattern: slide with cocking serrations, ejection port, beavertail,
+  // hammer, thumb safety, checkered grip panels.
   const g = new THREE.Group();
-  const body = new THREE.Mesh(new THREE.BoxGeometry(0.026,0.048,0.11), dark); g.add(body);
-  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.007,0.007,0.12,8), mMat);
-  barrel.rotation.x = Math.PI/2; barrel.position.set(0,0.012,-0.115); g.add(barrel);
-  const grip = new THREE.Mesh(new THREE.BoxGeometry(0.024,0.068,0.034), dark);
-  grip.rotation.x = 0.18; grip.position.set(0,-0.056,0.045); g.add(grip);
-  const mag = new THREE.Mesh(new THREE.BoxGeometry(0.020,0.056,0.028), mMat);
-  mag.position.set(0,-0.052,0.038); g.add(mag);
-  // Slide serrations
-  const slide = new THREE.Mesh(new THREE.BoxGeometry(0.028,0.016,0.06), mMat);
-  slide.position.set(0,0.022,0.005); g.add(slide);
-  // A pistol has no charging handle or muzzle brake; sights sit on the slide.
-  _gunDetails(g, { bodyW:0.026, bodyH:0.048, bodyD:0.11, gripZ:0.045,
-                   bolt:false, sightZ:-0.045 });
-  const flash = makeMuzzleFlash(); flash.position.set(0,0.012,-0.175); g.add(flash);
-  g._flash = flash; g._kickZ = 0.018; g.position.set(0.1,-0.1,-0.22); return g;
+  const steel = GUN_MATS.steel(), blued = GUN_MATS.blued(), bright = GUN_MATS.bright();
+  const grip = GUN_MATS.wood(), inner = GUN_MATS.inner();
+  gpBox(g, blued, 0.026, 0.030, 0.150, 0, 0.020, -0.040);              // slide
+  gpBox(g, inner, 0.027, 0.006, 0.120, 0, 0.036, -0.044);              // slide top flat
+  for (let i = 0; i < 6; i++) gpBox(g, inner, 0.027, 0.020, 0.0035, 0, 0.020, 0.014 - i * 0.007); // serrations
+  gpBox(g, inner, 0.005, 0.014, 0.044, 0.013, 0.026, -0.056);          // ejection port
+  gpBox(g, steel, 0.024, 0.026, 0.100, 0, -0.004, -0.020);             // frame
+  gpCyl(g, bright, 0.0062, 0.0062, 0.020, 14, 0, 0.020, -0.116);       // barrel bushing
+  gpCyl(g, inner, 0.0042, 0.0042, 0.012, 12, 0, 0.020, -0.122);        // bore
+  gpCyl(g, bright, 0.0038, 0.0038, 0.030, 10, 0, 0.004, -0.110);       // recoil spring plug
+  // Grip: frame plate plus checkered panels either side.
+  gpPlate(g, steel, [[0.030,-0.014],[0.052,-0.036],[0.056,-0.104],[0.030,-0.112],[0.014,-0.052],[0.012,-0.018]], 0.026, -0.013);
+  [-0.014, 0.014].forEach(x => {
+    const panel = gpBox(g, grip, 0.004, 0.060, 0.028, x, -0.062, 0.034, 0.30);
+    for (let i = 0; i < 4; i++) gpBox(g, inner, 0.005, 0.0025, 0.026, x, -0.042 - i * 0.014, 0.038 - i * 0.004, 0.30);
+  });
+  gpBox(g, blued, 0.020, 0.012, 0.026, 0, -0.100, 0.028, 0.30);        // magwell floor
+  // Fire control + rear furniture.
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.016, 0.003, 6, 12, Math.PI * 1.05), steel);
+  guard.rotation.set(0, Math.PI/2, -0.35); guard.position.set(0, -0.026, 0.000); g.add(guard);
+  gpBox(g, bright, 0.004, 0.013, 0.004, 0, -0.020, 0.000, 0.2);        // trigger
+  gpBox(g, steel, 0.022, 0.014, 0.018, 0, 0.030, 0.038, -0.25);        // beavertail
+  gpBox(g, bright, 0.006, 0.014, 0.008, 0, 0.042, 0.044, -0.4);        // hammer
+  gpBox(g, bright, 0.005, 0.006, 0.020, 0.013, 0.012, 0.026);          // thumb safety
+  gpBox(g, bright, 0.004, 0.008, 0.010, 0.013, 0.014, -0.012);         // slide stop
+  gpBox(g, inner, 0.010, 0.008, 0.006, 0, 0.040, 0.026);               // rear sight
+  gpBox(g, bright, 0.004, 0.007, 0.004, 0, 0.040, -0.104);             // front sight
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.020, -0.135); g.add(flash);
+  g._flash = flash; g._kickZ = 0.018; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.1, -0.1, -0.22); return g;
 }
 
 // ── Shorty ────────────────────────────────────────────────────────────────
