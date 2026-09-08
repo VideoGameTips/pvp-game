@@ -6080,6 +6080,234 @@ function buildMauser() {
   g.position.set(0.1, -0.1, -0.22); return g;
 }
 
+function buildSawedOff() {
+  // 🔫 Sawed-off: a side-by-side coach gun with the barrels hacked short and
+  // the stock cut down to a stub. Exposed hammers, top lever, and the ragged
+  // saw cut left visible on the muzzles.
+  const g = new THREE.Group();
+  const steel = GUN_MATS.steel(), blued = GUN_MATS.blued(), bright = GUN_MATS.bright();
+  const wood = GUN_MATS.wood(), inner = GUN_MATS.inner();
+  gpBox(g, steel, 0.052, 0.046, 0.090, 0, 0.006, 0.042);            // action body
+  gpBox(g, inner, 0.053, 0.006, 0.076, 0, 0.028, 0.042);
+  gpBox(g, bright, 0.010, 0.012, 0.030, 0, 0.036, 0.062, 0, 0.30);  // top lever
+  // Side-by-side barrels, cut short, with the rib between them.
+  [-0.014, 0.014].forEach(x => {
+    gpCyl(g, blued, 0.0165, 0.0165, 0.180, 14, x, 0.014, -0.086);
+    gpCyl(g, bright, 0.0168, 0.0168, 0.006, 14, x, 0.014, -0.174);  // bright saw cut
+    gpCyl(g, inner, 0.0125, 0.0125, 0.012, 12, x, 0.014, -0.172);   // bore
+  });
+  gpBox(g, blued, 0.010, 0.010, 0.170, 0, 0.014, -0.086);           // rib
+  gpBox(g, steel, 0.038, 0.024, 0.030, 0, 0.014, 0.006);            // barrel lump
+  // Splinter forend and the cut-down stock.
+  gpPlate(g, wood, [[-0.012,0.004],[0.000,0.020],[-0.086,0.020],[-0.098,0.002],[-0.084,-0.016],[-0.010,-0.016]], 0.040, 0);
+  gpPlate(g, wood, [[0.078,-0.020],[0.098,0.008],[0.164,0.010],[0.180,-0.012],[0.174,-0.056],[0.106,-0.060],[0.088,-0.044]], 0.040, 0);
+  gpBox(g, inner, 0.042, 0.046, 0.010, 0, -0.022, 0.186, 0.14);     // sawn butt face
+  for (let i = 0; i < 3; i++) gpBox(g, inner, 0.041, 0.004, 0.026, 0, -0.036 - i * 0.010, 0.118 + i * 0.008, 0.30);
+  // Twin exposed hammers, twin triggers.
+  [-0.012, 0.012].forEach(x => gpBox(g, bright, 0.008, 0.022, 0.014, x, 0.036, 0.082, -0.45));
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.020, 0.0036, 6, 12, Math.PI * 1.05), steel);
+  guard.rotation.set(0, Math.PI/2, -0.4); guard.position.set(0, -0.024, 0.052); g.add(guard);
+  [0.042, 0.060].forEach(z => gpBox(g, bright, 0.005, 0.016, 0.005, 0, -0.014, z, 0.2));
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.014, -0.192); g.add(flash);
+  g._flash = flash; g._kickZ = 0.036; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.1, -0.1, -0.22); return g;
+}
+
+function buildBoomstick() {
+  // 🔫 Boomstick: the full-length double barrel the Sawed-Off used to be, held
+  // together with a leather wrist cuff and a wrap of tape over a cracked
+  // forend. Over-under barrels this time, so the two read differently.
+  const g = new THREE.Group();
+  const steel = GUN_MATS.steel(), blued = GUN_MATS.blued(), bright = GUN_MATS.bright();
+  const wood = GUN_MATS.wood(), inner = GUN_MATS.inner();
+  const leather = new THREE.MeshPhongMaterial({ color: 0x5a3a24, shininess: 26, specular: 0x7a5a3e });
+  const tape    = new THREE.MeshPhongMaterial({ color: 0x2e2f31, shininess: 18, specular: 0x4c4e52 });
+  gpBox(g, steel, 0.044, 0.062, 0.100, 0, 0.008, 0.048);            // action
+  gpBox(g, inner, 0.045, 0.006, 0.084, 0, 0.036, 0.048);
+  gpBox(g, bright, 0.010, 0.012, 0.032, 0, 0.044, 0.070, 0, 0.30);  // top lever
+  // Over-under barrels.
+  [0.032, -0.004].forEach(y => {
+    gpCyl(g, blued, 0.0160, 0.0160, 0.320, 14, 0, y, -0.156);
+    gpCyl(g, inner, 0.0120, 0.0120, 0.012, 12, 0, y, -0.312);
+  });
+  gpBox(g, blued, 0.010, 0.040, 0.310, 0, 0.014, -0.152);           // side ribs
+  gpCyl(g, steel, 0.0230, 0.0230, 0.020, 14, 0, 0.014, -0.310, Math.PI/2, 0);
+  for (let i = 0; i < 3; i++) gpBox(g, tape, 0.038, 0.052, 0.014, 0, 0.014, -0.230 - i * 0.026); // tape wrap
+  // Cracked wooden forend and the full stock.
+  gpPlate(g, wood, [[-0.024,0.014],[-0.008,0.032],[-0.148,0.030],[-0.162,0.010],[-0.146,-0.014],[-0.022,-0.014]], 0.042, 0);
+  gpBox(g, inner, 0.043, 0.006, 0.090, 0, 0.016, -0.096, 0, 0, 0.05); // the crack
+  gpPlate(g, wood, [[0.090,-0.026],[0.114,0.010],[0.242,0.014],[0.268,-0.012],[0.262,-0.062],[0.146,-0.070],[0.114,-0.052]], 0.042, 0);
+  gpBox(g, leather, 0.044, 0.056, 0.030, 0, -0.024, 0.130, 0.10);   // wrist cuff
+  [-1, 1].forEach(sd => gpCyl(g, bright, 0.0045, 0.0045, 0.008, 8, sd * 0.020, -0.030, 0.130, 0, Math.PI/2)); // rivets
+  gpBox(g, leather, 0.044, 0.052, 0.012, 0, -0.020, 0.272, 0.10);   // butt pad
+  // Twin triggers, hammers.
+  [-0.010, 0.010].forEach(x => gpBox(g, bright, 0.008, 0.024, 0.014, x, 0.048, 0.088, -0.45));
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.021, 0.0036, 6, 12, Math.PI * 1.05), steel);
+  guard.rotation.set(0, Math.PI/2, -0.4); guard.position.set(0, -0.028, 0.058); g.add(guard);
+  [0.048, 0.066].forEach(z => gpBox(g, bright, 0.005, 0.016, 0.005, 0, -0.018, z, 0.2));
+  gpBox(g, bright, 0.005, 0.012, 0.006, 0, 0.052, -0.294);          // bead sight
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.014, -0.330); g.add(flash);
+  g._flash = flash; g._kickZ = 0.040; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.1, -0.1, -0.22); return g;
+}
+
+function buildSnubRevolver() {
+  // 🔫 Snub-nose .38: two-inch barrel, shrouded ejector rod, the fluted
+  // five-shot cylinder with its chambers actually bored, a bobbed hammer and
+  // a rounded boot grip.
+  const g = new THREE.Group();
+  const steel = GUN_MATS.steel(), blued = GUN_MATS.blued(), bright = GUN_MATS.bright();
+  const grip = GUN_MATS.grip(), inner = GUN_MATS.inner();
+  gpBox(g, blued, 0.026, 0.040, 0.070, 0, 0.016, 0.024);            // frame
+  gpBox(g, inner, 0.027, 0.006, 0.058, 0, 0.034, 0.024);            // top strap
+  // Cylinder: fluted, with the chambers bored through the face.
+  gpCyl(g, steel, 0.026, 0.026, 0.048, 14, 0, 0.014, -0.014);
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2;
+    gpBox(g, inner, 0.010, 0.010, 0.040, Math.cos(a) * 0.024, 0.014 + Math.sin(a) * 0.024, -0.014, 0, 0, a);
+    gpCyl(g, inner, 0.0055, 0.0055, 0.052, 8, Math.cos(a) * 0.013, 0.014 + Math.sin(a) * 0.013, -0.014);
+  }
+  gpCyl(g, bright, 0.0060, 0.0060, 0.050, 10, 0, 0.014, -0.014);    // centre pin
+  // Stub barrel with the ejector shroud under it.
+  gpCyl(g, blued, 0.0105, 0.0105, 0.056, 14, 0, 0.022, -0.064);
+  gpBox(g, blued, 0.016, 0.016, 0.054, 0, 0.004, -0.062);           // shroud
+  gpCyl(g, inner, 0.0058, 0.0058, 0.010, 12, 0, 0.022, -0.088);
+  gpBox(g, bright, 0.004, 0.012, 0.010, 0, 0.038, -0.082);          // ramp front sight
+  gpBox(g, inner, 0.006, 0.006, 0.014, 0, 0.036, 0.044);            // rear notch
+  // Bobbed hammer, cylinder latch, trigger.
+  gpBox(g, bright, 0.010, 0.014, 0.014, 0, 0.042, 0.052, -0.35);
+  gpBox(g, bright, 0.008, 0.010, 0.022, -0.014, 0.014, 0.006);      // latch
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.017, 0.0032, 6, 12, Math.PI * 1.05), blued);
+  guard.rotation.set(0, Math.PI/2, -0.4); guard.position.set(0, -0.014, 0.024); g.add(guard);
+  gpBox(g, bright, 0.005, 0.014, 0.005, 0, -0.006, 0.024, 0.2);
+  // Rounded boot grip.
+  gpPlate(g, grip, [[0.042,-0.002],[0.070,-0.014],[0.072,-0.078],[0.044,-0.090],[0.022,-0.044],[0.020,-0.006]], 0.036, 0);
+  for (let i = 0; i < 3; i++) gpBox(g, inner, 0.038, 0.004, 0.024, 0, -0.024 - i * 0.018, 0.040 + i * 0.006, 0.26);
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.022, -0.102); g.add(flash);
+  g._flash = flash; g._kickZ = 0.024; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.1, -0.1, -0.22); return g;
+}
+
+function buildDuelistPistol() {
+  // 🔫 Duelling pistol: a flintlock. Long octagonal barrel, brass furniture,
+  // the frizzen and cock standing proud of the lock plate, a wooden ramrod in
+  // its pipes under the barrel, and a chequered saw-handle grip.
+  const g = new THREE.Group();
+  const steel = GUN_MATS.steel(), blued = GUN_MATS.blued(), bright = GUN_MATS.bright();
+  const wood = GUN_MATS.wood(), inner = GUN_MATS.inner();
+  const brass = new THREE.MeshPhongMaterial({ color: 0x9a7a34, shininess: 130, specular: 0xe0c98a });
+  // Octagonal barrel, tapering, with a brass blade up front.
+  gpCyl(g, blued, 0.0130, 0.0112, 0.250, 8, 0, 0.020, -0.130);
+  gpCyl(g, inner, 0.0062, 0.0062, 0.012, 10, 0, 0.020, -0.250);
+  gpBox(g, brass, 0.004, 0.012, 0.006, 0, 0.034, -0.240);           // front blade
+  gpBox(g, blued, 0.022, 0.024, 0.040, 0, 0.020, 0.008);            // breech
+  gpBox(g, inner, 0.023, 0.005, 0.034, 0, 0.033, 0.008);            // top flat
+  // Full-length wooden stock under the barrel, into the saw handle.
+  gpPlate(g, wood, [[-0.244,0.008],[-0.240,-0.008],[0.030,-0.014],[0.036,0.010],[-0.030,0.014]], 0.026, 0);
+  gpPlate(g, wood, [[0.030,-0.006],[0.062,-0.018],[0.078,-0.096],[0.048,-0.110],[0.022,-0.048],[0.018,-0.010]], 0.032, 0);
+  for (let i = 0; i < 4; i++) gpBox(g, inner, 0.034, 0.004, 0.024, 0, -0.030 - i * 0.018, 0.042 + i * 0.008, 0.30);
+  gpBox(g, brass, 0.034, 0.014, 0.030, 0, -0.106, 0.062, 0.24);     // brass butt cap
+  // Ramrod in its pipes.
+  gpCyl(g, wood, 0.0038, 0.0038, 0.210, 8, 0, -0.004, -0.126);
+  [-0.062, -0.146, -0.216].forEach(z => gpCyl(g, brass, 0.0062, 0.0062, 0.010, 10, 0, -0.004, z));
+  // Lock: plate, cock with flint, frizzen, pan, and the brass side plate.
+  gpBox(g, steel, 0.006, 0.030, 0.056, 0.014, 0.014, 0.012);
+  gpBox(g, brass, 0.006, 0.026, 0.048, -0.014, 0.014, 0.012);
+  gpBox(g, bright, 0.008, 0.026, 0.014, 0.017, 0.040, 0.026, -0.40); // cock
+  gpBox(g, inner, 0.007, 0.010, 0.010, 0.017, 0.052, 0.018, -0.40);  // flint
+  gpBox(g, bright, 0.008, 0.020, 0.010, 0.017, 0.040, -0.002, 0.30); // frizzen
+  gpBox(g, brass, 0.010, 0.008, 0.014, 0.016, 0.026, 0.004);         // pan
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.018, 0.0034, 6, 12, Math.PI * 1.05), brass);
+  guard.rotation.set(0, Math.PI/2, -0.4); guard.position.set(0, -0.014, 0.026); g.add(guard);
+  gpBox(g, bright, 0.005, 0.016, 0.005, 0, -0.004, 0.026, 0.2);
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.020, -0.266); g.add(flash);
+  g._flash = flash; g._kickZ = 0.022; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.1, -0.1, -0.22); return g;
+}
+
+function buildAutoRevolver() {
+  // 🔫 Mateba-style auto revolver: the barrel sits at the BOTTOM of the
+  // cylinder, not the top, and the whole upper assembly rides back on rails
+  // when it fires. Slab-sided, with a shrouded cylinder and a low bore axis.
+  const g = new THREE.Group();
+  const steel = GUN_MATS.steel(), blued = GUN_MATS.blued(), bright = GUN_MATS.bright();
+  const grip = GUN_MATS.grip(), inner = GUN_MATS.inner();
+  gpBox(g, blued, 0.030, 0.052, 0.110, 0, 0.024, 0.030);            // upper assembly
+  gpBox(g, inner, 0.031, 0.006, 0.094, 0, 0.048, 0.030);
+  for (let i = 0; i < 5; i++) gpBox(g, inner, 0.032, 0.030, 0.005, 0, 0.024, 0.056 + i * 0.010); // recoil rails
+  // Shrouded cylinder, chambers visible at the front face.
+  gpBox(g, blued, 0.048, 0.048, 0.062, 0, 0.020, -0.038);           // shroud
+  gpCyl(g, steel, 0.023, 0.023, 0.064, 14, 0, 0.020, -0.038);
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    gpCyl(g, inner, 0.0058, 0.0058, 0.068, 8, Math.cos(a) * 0.012, 0.020 + Math.sin(a) * 0.012, -0.038);
+  }
+  gpBox(g, inner, 0.050, 0.008, 0.050, 0, 0.043, -0.038);           // shroud vent
+  // Barrel BELOW the cylinder axis — the whole point.
+  gpCyl(g, blued, 0.0115, 0.0115, 0.130, 14, 0, 0.002, -0.128);
+  gpBox(g, blued, 0.024, 0.012, 0.120, 0, -0.010, -0.126);          // underlug
+  for (let i = 0; i < 3; i++) gpBox(g, inner, 0.026, 0.006, 0.012, 0, -0.016, -0.108 - i * 0.026);
+  gpCyl(g, inner, 0.0062, 0.0062, 0.010, 12, 0, 0.002, -0.190);
+  gpBox(g, bright, 0.004, 0.012, 0.008, 0, 0.016, -0.184);          // front sight
+  gpBox(g, steel, 0.022, 0.012, 0.018, 0, 0.056, 0.068);            // rear sight block
+  gpBox(g, inner, 0.006, 0.007, 0.006, 0, 0.060, 0.068);
+  // Frame, grip, trigger.
+  gpBox(g, steel, 0.028, 0.024, 0.076, 0, -0.006, 0.020);
+  gpPlate(g, grip, [[0.038,-0.014],[0.068,-0.026],[0.072,-0.100],[0.042,-0.114],[0.018,-0.056],[0.016,-0.018]], 0.038, 0);
+  for (let i = 0; i < 4; i++) gpBox(g, inner, 0.040, 0.004, 0.026, 0, -0.036 - i * 0.018, 0.038 + i * 0.006, 0.28);
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.018, 0.0034, 6, 12, Math.PI * 1.05), steel);
+  guard.rotation.set(0, Math.PI/2, -0.4); guard.position.set(0, -0.028, 0.014); g.add(guard);
+  gpBox(g, bright, 0.005, 0.015, 0.005, 0, -0.020, 0.014, 0.2);
+  gpBox(g, bright, 0.010, 0.014, 0.012, 0, 0.058, 0.086, -0.40);    // low-profile hammer
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.002, -0.204); g.add(flash);
+  g._flash = flash; g._kickZ = 0.020; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.1, -0.1, -0.22); return g;
+}
+
+function buildMachineRevolver() {
+  // 🔫 Machine revolver: a revolver that never stops turning. Extended
+  // twelve-chamber drum, a vented barrel shroud to shed the heat, a folding
+  // wire brace over the shooter's forearm, and a compensator on the muzzle.
+  const g = new THREE.Group();
+  const steel = GUN_MATS.steel(), blued = GUN_MATS.blued(), bright = GUN_MATS.bright();
+  const grip = GUN_MATS.grip(), inner = GUN_MATS.inner();
+  gpBox(g, blued, 0.030, 0.046, 0.090, 0, 0.020, 0.038);            // frame
+  gpBox(g, inner, 0.031, 0.006, 0.076, 0, 0.041, 0.038);
+  // Long twelve-chamber drum.
+  gpCyl(g, steel, 0.034, 0.034, 0.096, 18, 0, 0.018, -0.030);
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2;
+    gpCyl(g, inner, 0.0052, 0.0052, 0.100, 8, Math.cos(a) * 0.022, 0.018 + Math.sin(a) * 0.022, -0.030);
+  }
+  for (let i = 0; i < 3; i++) gpCyl(g, blued, 0.0352, 0.0352, 0.008, 18, 0, 0.018, -0.062 + i * 0.032); // drum bands
+  gpCyl(g, bright, 0.0065, 0.0065, 0.104, 10, 0, 0.018, -0.030);    // centre pin
+  // Vented shroud over the barrel, plus a compensator.
+  gpCyl(g, blued, 0.0110, 0.0110, 0.170, 14, 0, 0.020, -0.164);
+  gpBox(g, steel, 0.030, 0.030, 0.150, 0, 0.020, -0.158);           // shroud
+  for (let i = 0; i < 5; i++) {
+    [-1, 1].forEach(sd => gpBox(g, inner, 0.006, 0.018, 0.014, sd * 0.016, 0.020, -0.104 - i * 0.026));
+    gpBox(g, inner, 0.014, 0.006, 0.014, 0, 0.036, -0.104 - i * 0.026);
+  }
+  gpBox(g, steel, 0.032, 0.026, 0.032, 0, 0.020, -0.246);           // compensator
+  for (let i = 0; i < 2; i++) gpBox(g, inner, 0.034, 0.006, 0.010, 0, 0.034, -0.240 - i * 0.016);
+  gpCyl(g, inner, 0.0060, 0.0060, 0.012, 12, 0, 0.020, -0.262);
+  gpBox(g, bright, 0.004, 0.012, 0.006, 0, 0.038, -0.230);
+  gpBox(g, steel, 0.024, 0.014, 0.020, 0, 0.050, 0.064);            // rear sight
+  gpCyl(g, inner, 0.0032, 0.0032, 0.008, 10, 0, 0.052, 0.064);
+  // Grip and the folding forearm brace.
+  gpPlate(g, grip, [[0.046,-0.010],[0.078,-0.024],[0.082,-0.104],[0.050,-0.118],[0.026,-0.054],[0.024,-0.014]], 0.038, 0);
+  for (let i = 0; i < 4; i++) gpBox(g, inner, 0.040, 0.004, 0.026, 0, -0.032 - i * 0.018, 0.048 + i * 0.006, 0.28);
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.019, 0.0034, 6, 12, Math.PI * 1.05), blued);
+  guard.rotation.set(0, Math.PI/2, -0.4); guard.position.set(0, -0.020, 0.030); g.add(guard);
+  gpBox(g, bright, 0.005, 0.015, 0.005, 0, -0.012, 0.030, 0.2);
+  [-0.014, 0.014].forEach(x => gpBox(g, steel, 0.005, 0.005, 0.090, x, 0.006, 0.114));
+  const cuff = new THREE.Mesh(new THREE.TorusGeometry(0.026, 0.0040, 6, 14, Math.PI * 1.3), steel);
+  cuff.rotation.set(0, Math.PI/2, 0.4); cuff.position.set(0, 0.000, 0.158); g.add(cuff);
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.020, -0.276); g.add(flash);
+  g._flash = flash; g._kickZ = 0.014; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.1, -0.1, -0.22); return g;
+}
+
 function buildAK20() {
   const g = new THREE.Group();
   // 🔫 AK-47, black furniture. Real parkerised steel is a dark GREY-blue, not
@@ -8402,19 +8630,19 @@ const weaponModels = [
   handcraftedWeapon('pinball_launcher'),  // pinball_launcher
   // ── New secondaries ────────────────────────────────────────────────────
   buildMachinePistol(),  // machine_pistol
-  handcraftedWeapon('sawed_off'),  // sawed_off
+  buildSawedOff(),  // sawed_off
   handcraftedWeapon('dart_gun'),  // dart_gun
   handcraftedWeapon('laser_pointer'),  // laser_pointer
   // ── 3rd-batch secondaries ─────────────────────────────────────────────────
-  handcraftedWeapon('machine_revolver'),  // machine_revolver
-  handcraftedWeapon('auto_revolver'),  // auto_revolver
+  buildMachineRevolver(),  // machine_revolver
+  buildAutoRevolver(),  // auto_revolver
   handcraftedWeapon('frost_blaster'),  // frost_blaster
   // ── 🆕 Batch-4 secondaries (must match WEAPONS order) ──────────────────
-  handcraftedWeapon('snub_revolver'),  // snub_revolver
-  handcraftedWeapon('duelist_pistol'),  // duelist_pistol
+  buildSnubRevolver(),  // snub_revolver
+  buildDuelistPistol(),  // duelist_pistol
   buildMauser(),  // mauser
   handcraftedWeapon('nail_gun'),  // nail_gun
-  handcraftedWeapon('boomstick'),  // boomstick
+  buildBoomstick(),  // boomstick
   handcraftedWeapon('signal_pistol'),  // signal_pistol
   buildThrowingAxes(),  // throwing_axes
   buildBoomerang(),  // boomerang
