@@ -16886,30 +16886,15 @@ function playerOnIce() {
 // that slice of z. Pistols get a cupped support hand under the grip instead,
 // because nobody puts their off hand on a Glock's muzzle.
 const VM_SKIN_MAT = () => new THREE.MeshPhongMaterial({ color: 0xeac39a, shininess: 18, specular: 0x6a5a48 });
-const VM_CUFF_MAT = () => new THREE.MeshPhongMaterial({ color: 0x35383f, shininess: 26, specular: 0x63676f });
 
 function _makeViewHand(mirror) {
-  // A fist, built to the same blocky language as buildFists: one palm block,
-  // a thumb laid across it, four knuckle ridges and a sleeve cuff behind.
+  // A fist is one block. The Fists melee is a single skin-tone box with no
+  // knuckles and no fingers, and these match it exactly — anything more
+  // detailed would read as a different pair of hands to the ones you punch with.
   const h = new THREE.Group();
-  const skin = VM_SKIN_MAT(), cuff = VM_CUFF_MAT();
-  const dark = new THREE.MeshPhongMaterial({ color: 0xc79a72, shininess: 14, specular: 0x5a4a3a });
-  const palm = new THREE.Mesh(new THREE.BoxGeometry(0.074, 0.072, 0.094), skin);
-  palm.castShadow = true; h.add(palm);
-  for (let i = 0; i < 4; i++) {                      // knuckle ridges
-    const k = new THREE.Mesh(new THREE.BoxGeometry(0.070, 0.012, 0.014), dark);
-    k.position.set(0, 0.033, -0.030 + i * 0.021); h.add(k);
-  }
-  const thumb = new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.030, 0.046), skin);
-  thumb.position.set(mirror * 0.042, 0.012, -0.016); thumb.rotation.z = mirror * 0.28; h.add(thumb);
-  const nail = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.014, 0.016), dark);
-  nail.position.set(mirror * 0.053, 0.016, -0.032); h.add(nail);
-  const wrist = new THREE.Mesh(new THREE.BoxGeometry(0.062, 0.060, 0.030), skin);
-  wrist.position.set(0, -0.002, 0.060); h.add(wrist);
-  const sleeve = new THREE.Mesh(new THREE.BoxGeometry(0.082, 0.080, 0.044), cuff);
-  sleeve.position.set(0, -0.002, 0.092); h.add(sleeve);
-  const band = new THREE.Mesh(new THREE.BoxGeometry(0.086, 0.084, 0.008), skin);
-  band.position.set(0, -0.002, 0.072); h.add(band);
+  const fist = new THREE.Mesh(new THREE.BoxGeometry(0.086, 0.086, 0.112), VM_SKIN_MAT());
+  fist.castShadow = true;
+  h.add(fist);
   // Tagged so the skin system leaves them alone: a gold weapon skin should
   // gild the gun, not the hands holding it.
   h.traverse(o => { if (o.isMesh) { o.castShadow = true; o.userData.vmHand = true; } });
@@ -17010,8 +16995,12 @@ function attachViewHands(root) {
   }
   root.add(front);
 
+  // A pistol is fired one-handed: the support hand is hidden until a reload
+  // needs it, and hidden again the moment the reload is over.
+  if (pistolish) front.visible = false;
   root._homePos = root.position.clone();
   root._hands = {
+    hideFront: pistolish,
     rear, front,
     rearHome: rear.position.clone(), frontHome: front.position.clone(),
     rearRot: rear.rotation.clone(), frontRot: front.rotation.clone(),
@@ -17028,175 +17017,571 @@ function attachViewHands(root) {
 weaponModels.forEach(m => { if (!m) return; try { attachViewHands(m); } catch (e) { console.warn('[hands]', e); } });
 
 // ── 🔁 Reload choreography ───────────────────────────────────────────────────
-// One tilt for ninety-nine weapons made every reload look the same. Each gun
-// now reloads the way its action actually works: a belt-fed gun lifts its top
-// cover, a revolver rolls over so the cylinder can swing out, a pump racks its
-// slide, a break-action hinges at the breech, a muzzle-loader gets rammed.
+// Every weapon reloads differently. Not eleven shared styles — ninety-nine
+// tracks, one per gun, each built around what that specific action actually
+// does: the Garand's clip goes in from the top and the empty pings out, the
+// lever throws down and forward, the SG8 feeds shells one at a time into the
+// tube, the minigun's ammo can gets swung out and dropped.
 //
-// Style comes from how the weapon FEEDS, not from what it fires, so guns that
-// share a mechanism share a motion and nothing else does.
-const RELOAD_STYLE = {};
-const _rs = (style, ids) => ids.forEach(id => { RELOAD_STYLE[id] = style; });
-_rs('revolver', ['revolver', 'snub_revolver', 'auto_revolver', 'machine_revolver']);
-_rs('swingout', ['grenade_launcher', 'nebula_mortar', 'burst_cannon']);
-_rs('pump',     ['sg8', 'shorty', 'flechette']);
-_rs('break',    ['sawed_off', 'boomstick', 'signal_pistol', 'dart_gun', 'duelist_pistol', 'flare', 'taser']);
-_rs('belt',     ['rpd', 'mg42', 'minigun', 'gau19', 'm134', 'mk44']);
-_rs('bolt',     ['srx', 'lever', 'amr', 'mauser', 'm1_garand', 'barrett', 'air_rifle', 'railgun', 'coilgun']);
-_rs('muzzle',   ['rpg', 'bazooka', 'boombow', 'crossbow', 'harpoon_gun', 'mortar_rifle',
-                 'potato_cannon', 'firework_launcher', 'shockwave_launcher', 'airburst_projector']);
-_rs('cell',     ['plasma_carbine', 'arc_rifle', 'arc_torrent', 'event_horizon', 'storm_core',
-                 'solar_lance', 'quantum_repeater', 'magnetar', 'prism_engine', 'prism_launcher',
-                 'void_harvester', 'portal_launcher', 'gravity_launcher', 'pulse_needle',
-                 'laser_pointer', 'painter_beam', 'railgun_ab', 'seismic_hammer', 'pinball_launcher']);
-_rs('tank',     ['flamethrower', 'freeze_gun', 'frost_blaster', 'abs_zero', 'foam_cannon',
-                 'gravity_paint', 'storm_cannon', 'glassmaker']);
-_rs('hopper',   ['paintball', 'sticker_blaster', 'swarm_rifle', 'traffic_controller', 'nail_gun']);
-function reloadStyleFor(id) { return RELOAD_STYLE[id] || 'mag'; }
+// A track is a list of keyframes. Between them the pose is interpolated with a
+// smoothstep, and there are implicit rest keys at t=0 and t=1, so every reload
+// leaves the aim pose and returns to it without needing to say so.
+//
+//   px py pz   gun position offset, metres
+//   rx ry rz   gun rotation, radians  (rx = muzzle down, rz = roll right)
+//   hx hy hz   support-hand offset, metres
+//   hr         support-hand pitch
+const K = (t, o) => Object.assign({ t, px:0, py:0, pz:0, rx:0, ry:0, rz:0, hx:0, hy:0, hz:0, hr:0 }, o);
+const _RELOAD_REST = K(0, {});
 
-// A stable per-weapon jitter so two guns sharing a style never run in lockstep:
-// same mechanism, different hands working it.
-function _reloadSeed(id) {
-  let h = 0;
-  for (let i = 0; i < (id || '').length; i++) h = (h * 31 + id.charCodeAt(i)) & 0xffff;
-  return (h % 1000) / 1000;
+const RELOAD_KEYS = {
+// ════ MAGAZINE GUNS ════ strip · discard · reach · seat · lock · charge ══════
+ak20: [K(.08,{py:-.05,rx:.30,rz:.20,hy:-.05,hz:.01}), K(.20,{py:-.07,rx:.40,rz:.26,hy:-.16,hz:.03}),
+       K(.30,{py:-.07,rx:.42,rz:.28,hx:-.10,hy:-.21,hz:-.02,hr:.8}), K(.44,{py:-.08,rx:.44,rz:.26,hx:.04,hy:-.25,hz:.02}),
+       K(.56,{py:-.08,rx:.44,rz:.26,hy:-.12,hz:.05}), K(.66,{py:-.07,rx:.46,rz:.26,hy:-.03,hz:.06}),
+       K(.74,{py:-.11,rx:.42,rz:.22,hy:0,hz:.03}), K(.84,{py:-.06,rx:.30,rz:.34,hy:.09,hz:.13,hr:-.7}),
+       K(.91,{py:-.06,rx:.30,rz:.36,hy:.10,hz:.20,hr:-.7}), K(.96,{py:-.04,rx:.24,rz:.26,hy:.07,hz:.06})],
+xm7:  [K(.09,{py:-.04,rx:.24,rz:.10,hy:-.04}), K(.21,{py:-.05,rx:.30,rz:.12,hy:-.15,hz:.02}),
+       K(.31,{py:-.05,rx:.32,rz:.12,hx:-.08,hy:-.20,hr:.7}), K(.45,{py:-.06,rx:.32,rz:.12,hx:.04,hy:-.24,hz:.02}),
+       K(.58,{py:-.06,rx:.32,rz:.12,hy:-.11,hz:.04}), K(.69,{py:-.05,rx:.34,rz:.12,hy:-.02,hz:.05}),
+       K(.77,{py:-.08,rx:.30,rz:.10,hy:0,hz:.02}), K(.87,{py:-.05,rx:.22,rz:.18,hx:-.06,hy:.06,hz:.10,hr:-.5}),
+       K(.94,{py:-.04,rx:.18,rz:.12,hx:-.03,hy:.03,hz:.02})],
+burst:[K(.09,{py:-.04,rx:.26,rz:-.14,hy:-.04}), K(.22,{py:-.06,rx:.34,rz:-.18,hy:-.15,hz:.02}),
+       K(.32,{py:-.06,rx:.36,rz:-.18,hx:.09,hy:-.20,hr:-.7}), K(.46,{py:-.07,rx:.36,rz:-.18,hx:-.03,hy:-.24,hz:.02}),
+       K(.59,{py:-.07,rx:.36,rz:-.18,hy:-.11,hz:.04}), K(.70,{py:-.06,rx:.38,rz:-.18,hy:-.02,hz:.05}),
+       K(.78,{py:-.09,rx:.34,rz:-.16,hy:0,hz:.02}), K(.88,{py:-.05,rx:.24,rz:-.24,hy:.08,hz:.11,hr:-.6}),
+       K(.95,{py:-.04,rx:.18,rz:-.14,hy:.04,hz:.03})],
+vector:[K(.10,{py:-.03,rx:.20,rz:.10,hy:-.04}), K(.24,{py:-.05,rx:.26,rz:.12,hy:-.13,hz:.01}),
+        K(.34,{py:-.05,rx:.28,rz:.12,hx:-.07,hy:-.17,hr:.6}), K(.48,{py:-.06,rx:.28,rz:.12,hx:.03,hy:-.21,hz:.01}),
+        K(.61,{py:-.06,rx:.28,rz:.12,hy:-.10,hz:.03}), K(.72,{py:-.05,rx:.30,rz:.12,hy:-.02,hz:.04}),
+        K(.80,{py:-.08,rx:.26,rz:.10,hy:0,hz:.02}), K(.90,{py:-.04,rx:.18,rz:.16,hy:.06,hz:.09,hr:-.5}),
+        K(.96,{py:-.03,rx:.14,rz:.10,hy:.02,hz:.02})],
+mp40: [K(.08,{py:-.04,rx:.26,rz:.30,hy:-.04}), K(.21,{py:-.06,rx:.34,rz:.36,hy:-.17,hz:.02}),
+       K(.31,{py:-.06,rx:.36,rz:.38,hx:-.09,hy:-.22,hr:.8}), K(.45,{py:-.07,rx:.36,rz:.36,hx:.04,hy:-.26,hz:.02}),
+       K(.58,{py:-.07,rx:.36,rz:.36,hy:-.12,hz:.05}), K(.69,{py:-.06,rx:.38,rz:.36,hy:-.03,hz:.06}),
+       K(.77,{py:-.10,rx:.34,rz:.32,hy:0,hz:.03}), K(.87,{py:-.05,rx:.26,rz:.44,hx:.07,hy:.05,hz:.12,hr:-.6}),
+       K(.94,{py:-.04,rx:.22,rz:.32,hx:.03,hy:.02,hz:.03})],
+p90:  [K(.10,{py:-.02,rx:-.26,rz:.08,hy:.05,hz:.02}), K(.24,{py:-.02,rx:-.36,rz:.10,hy:.10,hz:-.04,hr:-.6}),
+       K(.34,{py:-.02,rx:-.38,rz:.10,hx:-.08,hy:.13,hz:-.09,hr:-.8}), K(.48,{py:-.03,rx:-.38,rz:.10,hx:.04,hy:-.06,hz:-.02}),
+       K(.60,{py:-.03,rx:-.38,rz:.10,hy:.08,hz:-.05,hr:-.7}), K(.71,{py:-.02,rx:-.40,rz:.10,hy:.11,hz:.01}),
+       K(.79,{py:-.04,rx:-.34,rz:.08,hy:.06,hz:.02}), K(.89,{py:-.03,rx:-.24,rz:.14,hx:-.05,hy:.03,hz:.08,hr:-.5}),
+       K(.96,{py:-.03,rx:-.18,rz:.08,hy:.01})],
+p90_spec:[K(.09,{py:-.02,rx:-.24,rz:-.10,hy:.06,hz:.02}), K(.22,{py:-.02,rx:-.34,rz:-.12,hy:.11,hz:-.05,hr:-.7}),
+          K(.32,{py:-.02,rx:-.36,rz:-.12,hx:.08,hy:.14,hz:-.10,hr:-.9}), K(.46,{py:-.03,rx:-.36,rz:-.12,hx:-.04,hy:-.07,hz:-.02}),
+          K(.58,{py:-.03,rx:-.36,rz:-.12,hy:.09,hz:-.06,hr:-.8}), K(.69,{py:-.02,rx:-.38,rz:-.12,hy:.12,hz:.01}),
+          K(.77,{py:-.04,rx:-.32,rz:-.10,hy:.07,hz:.02}), K(.86,{py:-.03,rx:-.22,rz:-.16,hx:.05,hy:.03,hz:.09,hr:-.5}),
+          K(.93,{py:-.03,rx:-.16,rz:-.28,hy:-.04,hz:-.10,hr:.5}), K(.97,{py:-.02,rx:-.12,rz:-.14})],
+hkmp7:[K(.11,{py:-.03,rx:.18,rz:.14,hy:-.03}), K(.26,{py:-.04,rx:.24,rz:.16,hy:-.12,hz:.01}),
+       K(.36,{py:-.04,rx:.26,rz:.16,hx:-.06,hy:-.16,hr:.6}), K(.50,{py:-.05,rx:.26,rz:.16,hx:.03,hy:-.20,hz:.01}),
+       K(.63,{py:-.05,rx:.26,rz:.16,hy:-.09,hz:.03}), K(.74,{py:-.04,rx:.28,rz:.16,hy:-.02,hz:.04}),
+       K(.82,{py:-.07,rx:.24,rz:.14,hy:0,hz:.02}), K(.91,{py:-.03,rx:.16,rz:.20,hx:-.05,hy:.05,hz:.08,hr:-.5}),
+       K(.97,{py:-.03,rx:.12,rz:.12})],
+machine_pistol:[K(.11,{py:-.03,rx:.22,rz:.18,hy:-.04}), K(.26,{py:-.04,rx:.28,rz:.20,hy:-.13,hz:.01}),
+                K(.36,{py:-.04,rx:.30,rz:.20,hx:-.06,hy:-.18,hr:.7}), K(.50,{py:-.05,rx:.30,rz:.20,hx:.03,hy:-.22,hz:.01}),
+                K(.63,{py:-.05,rx:.30,rz:.20,hy:-.10,hz:.03}), K(.74,{py:-.04,rx:.32,rz:.20,hy:-.02,hz:.04}),
+                K(.82,{py:-.07,rx:.28,rz:.18,hy:0,hz:.02}), K(.91,{py:-.03,rx:.20,rz:.26,hy:.06,hz:.09,hr:-.5}),
+                K(.97,{py:-.03,rx:.14,rz:.16})],
+smart_smg:[K(.09,{py:-.03,rx:.22,rz:.12,hy:-.04}), K(.22,{py:-.05,rx:.30,rz:.14,hy:-.14,hz:.02}),
+           K(.32,{py:-.05,rx:.32,rz:.14,hx:-.07,hy:-.19,hr:.7}), K(.45,{py:-.06,rx:.32,rz:.14,hx:.03,hy:-.23,hz:.02}),
+           K(.57,{py:-.06,rx:.32,rz:.14,hy:-.11,hz:.04}), K(.68,{py:-.05,rx:.34,rz:.14,hy:-.02,hz:.05}),
+           K(.76,{py:-.08,rx:.30,rz:.12,hy:0,hz:.02}), K(.86,{py:-.03,rx:.12,rz:.06,hy:.06,hz:-.05,hr:-.5}),
+           K(.93,{py:-.02,rx:.06,rz:.02,hy:.09,hz:-.07,hr:-.7}), K(.97,{py:-.02,rx:.04,rz:.02})],
+swarm_rifle:[K(.09,{py:-.04,rx:.22,rz:.16,hy:-.05}), K(.22,{py:-.06,rx:.28,rz:.18,hy:-.16,hz:.02}),
+             K(.32,{py:-.06,rx:.30,rz:.18,hx:-.08,hy:-.21,hr:.8}), K(.45,{py:-.07,rx:.30,rz:.18,hx:.04,hy:-.25,hz:.02}),
+             K(.57,{py:-.07,rx:.30,rz:.18,hy:-.12,hz:.05}), K(.68,{py:-.06,rx:.32,rz:.18,hy:-.03,hz:.06}),
+             K(.76,{py:-.09,rx:.28,rz:.16,hy:0,hz:.03}), K(.86,{py:-.04,rx:.14,rz:.08,hy:.07,hz:-.04,hr:-.6}),
+             K(.93,{py:-.03,rx:.08,rz:.04,hy:.10,hz:-.06,hr:-.8}), K(.98,{py:-.02,rx:.04,rz:.02})],
+twin_ar:[K(.07,{py:-.05,rx:.32,rz:-.20,hx:-.02,hy:-.05}), K(.18,{py:-.08,rx:.42,rz:-.26,hx:-.04,hy:-.17,hz:.02}),
+         K(.27,{py:-.08,rx:.44,rz:-.26,hx:-.11,hy:-.22,hr:.8}), K(.38,{py:-.09,rx:.44,rz:-.26,hx:.03,hy:-.25,hz:.02}),
+         K(.47,{py:-.08,rx:.44,rz:-.26,hy:-.10,hz:.05}), K(.54,{py:-.09,rx:.44,rz:-.24,hy:-.01,hz:.03}),
+         K(.62,{py:-.08,rx:.42,rz:.24,hx:.04,hy:-.17,hz:.02}), K(.71,{py:-.08,rx:.44,rz:.26,hx:.11,hy:-.22,hr:-.8}),
+         K(.81,{py:-.09,rx:.44,rz:.26,hx:-.03,hy:-.10,hz:.05}), K(.89,{py:-.10,rx:.42,rz:.22,hy:-.01,hz:.03}),
+         K(.96,{py:-.05,rx:.26,rz:.12,hy:.05,hz:.08,hr:-.5})],
+lancer:[K(.08,{py:-.04,rx:.28,rz:.20,hy:-.05}), K(.20,{py:-.06,rx:.36,rz:.22,hy:-.16,hz:.02}),
+        K(.30,{py:-.06,rx:.38,rz:.22,hx:-.09,hy:-.21,hr:.8}), K(.43,{py:-.07,rx:.38,rz:.22,hx:.04,hy:-.25,hz:.02}),
+        K(.55,{py:-.07,rx:.38,rz:.22,hy:-.12,hz:.05}), K(.66,{py:-.06,rx:.40,rz:.22,hy:-.03,hz:.06}),
+        K(.74,{py:-.10,rx:.36,rz:.20,hy:0,hz:.03}), K(.83,{py:-.05,rx:.26,rz:.14,hy:-.05,hz:-.08,hr:.6}),
+        K(.90,{py:-.06,rx:.30,rz:.16,hy:-.03,hz:-.04}), K(.96,{py:-.04,rx:.22,rz:.10,hy:-.05,hz:-.07,hr:.5})],
+flechette:[K(.09,{py:-.05,rx:.26,rz:.14,hx:.02,hy:-.05}), K(.22,{py:-.07,rx:.34,rz:.18,hy:-.18,hz:.02}),
+           K(.32,{py:-.07,rx:.36,rz:.18,hx:-.09,hy:-.23,hr:.8}), K(.46,{py:-.08,rx:.36,rz:.18,hx:.05,hy:-.27,hz:.02}),
+           K(.58,{py:-.08,rx:.36,rz:.18,hy:-.13,hz:.05}), K(.69,{py:-.07,rx:.38,rz:.18,hy:-.03,hz:.07}),
+           K(.77,{py:-.10,rx:.34,rz:.16,hy:0,hz:.03}), K(.88,{py:-.05,rx:.24,rz:.24,hx:-.06,hy:.06,hz:.11,hr:-.6}),
+           K(.96,{py:-.04,rx:.18,rz:.14})],
+five_seven:[K(.11,{py:-.03,rx:.26,rz:.22,hy:-.04}), K(.26,{py:-.05,rx:.32,rz:.24,hy:-.13,hz:.01}),
+            K(.36,{py:-.05,rx:.34,rz:.24,hx:-.06,hy:-.18,hr:.7}), K(.50,{py:-.06,rx:.34,rz:.24,hx:.03,hy:-.22,hz:.01}),
+            K(.63,{py:-.06,rx:.34,rz:.24,hy:-.10,hz:.03}), K(.74,{py:-.05,rx:.36,rz:.24,hy:-.02,hz:.04}),
+            K(.82,{py:-.08,rx:.32,rz:.22,hy:0,hz:.02}), K(.92,{py:-.04,rx:.24,rz:.30,hx:-.05,hy:.04,hz:.05,hr:-.5}),
+            K(.97,{py:-.03,rx:.18,rz:.18})],
+glock18:[K(.10,{py:-.03,rx:.28,rz:.26,hy:-.04}), K(.24,{py:-.05,rx:.34,rz:.28,hy:-.17,hz:.01}),
+         K(.34,{py:-.05,rx:.36,rz:.28,hx:-.07,hy:-.23,hr:.8}), K(.48,{py:-.06,rx:.36,rz:.28,hx:.03,hy:-.27,hz:.01}),
+         K(.61,{py:-.06,rx:.36,rz:.28,hy:-.13,hz:.03}), K(.72,{py:-.05,rx:.38,rz:.28,hy:-.03,hz:.04}),
+         K(.80,{py:-.09,rx:.34,rz:.26,hy:0,hz:.02}), K(.90,{py:-.04,rx:.26,rz:.34,hx:-.05,hy:.04,hz:.06,hr:-.5}),
+         K(.97,{py:-.03,rx:.20,rz:.20})],
+m1911:[K(.11,{py:-.03,rx:.28,rz:.30,hy:-.04}), K(.26,{py:-.05,rx:.36,rz:.32,hy:-.14,hz:.01}),
+       K(.36,{py:-.05,rx:.38,rz:.32,hx:-.06,hy:-.19,hr:.7}), K(.50,{py:-.06,rx:.38,rz:.32,hx:.03,hy:-.23,hz:.01}),
+       K(.62,{py:-.06,rx:.38,rz:.32,hy:-.11,hz:.03}), K(.73,{py:-.05,rx:.40,rz:.32,hy:-.02,hz:.04}),
+       K(.81,{py:-.08,rx:.36,rz:.30,hy:0,hz:.02}), K(.90,{py:-.04,rx:.28,rz:.38,hx:-.05,hy:.03,hz:.05,hr:-.5}),
+       K(.96,{py:-.04,rx:.22,rz:.24,hz:-.02})],
+desert_eagle:[K(.10,{py:-.05,rx:.32,rz:.34,hy:-.05}), K(.24,{py:-.08,rx:.42,rz:.38,hy:-.16,hz:.01}),
+              K(.34,{py:-.08,rx:.44,rz:.38,hx:-.07,hy:-.21,hr:.8}), K(.48,{py:-.09,rx:.44,rz:.38,hx:.04,hy:-.25,hz:.02}),
+              K(.61,{py:-.09,rx:.44,rz:.38,hy:-.12,hz:.04}), K(.72,{py:-.08,rx:.46,rz:.38,hy:-.02,hz:.05}),
+              K(.80,{py:-.13,rx:.40,rz:.34,hy:0,hz:.02}), K(.90,{py:-.06,rx:.32,rz:.44,hx:-.06,hy:.04,hz:.06,hr:-.6}),
+              K(.97,{py:-.05,rx:.24,rz:.28})],
+hand_cannon:[K(.09,{py:-.06,rx:.36,rz:.38,hy:-.05}), K(.23,{py:-.09,rx:.46,rz:.42,hy:-.17,hz:.02}),
+             K(.33,{py:-.09,rx:.48,rz:.42,hx:-.08,hy:-.22,hr:.9}), K(.47,{py:-.10,rx:.48,rz:.42,hx:.04,hy:-.26,hz:.02}),
+             K(.60,{py:-.10,rx:.48,rz:.42,hy:-.13,hz:.05}), K(.71,{py:-.09,rx:.50,rz:.42,hy:-.03,hz:.06}),
+             K(.79,{py:-.15,rx:.44,rz:.36,hy:0,hz:.03}), K(.90,{py:-.07,rx:.34,rz:.48,hx:-.07,hy:.05,hz:.07,hr:-.7}),
+             K(.97,{py:-.06,rx:.26,rz:.30})],
+pistol:[K(.12,{py:-.03,rx:.28,rz:.28,hy:-.04}), K(.27,{py:-.05,rx:.34,rz:.30,hy:-.13,hz:.01}),
+        K(.37,{py:-.05,rx:.36,rz:.30,hx:-.06,hy:-.18,hr:.7}), K(.51,{py:-.06,rx:.36,rz:.30,hx:.03,hy:-.22,hz:.01}),
+        K(.64,{py:-.06,rx:.36,rz:.30,hy:-.10,hz:.03}), K(.75,{py:-.05,rx:.38,rz:.30,hy:-.02,hz:.04}),
+        K(.83,{py:-.08,rx:.34,rz:.28,hy:0,hz:.02}), K(.93,{py:-.04,rx:.26,rz:.34,hx:-.05,hy:.03,hz:.05,hr:-.5})],
+switchblade_gun:[K(.10,{py:-.03,rx:.24,rz:.24,hy:-.04}), K(.24,{py:-.05,rx:.32,rz:.26,hy:-.13,hz:.01}),
+                 K(.34,{py:-.05,rx:.34,rz:.26,hx:-.06,hy:-.18,hr:.7}), K(.47,{py:-.06,rx:.34,rz:.26,hx:.03,hy:-.22,hz:.01}),
+                 K(.59,{py:-.06,rx:.34,rz:.26,hy:-.10,hz:.03}), K(.70,{py:-.05,rx:.36,rz:.26,hy:-.02,hz:.04}),
+                 K(.78,{py:-.08,rx:.32,rz:.24,hy:0,hz:.02}), K(.87,{py:-.04,rx:.20,rz:.14,hy:-.04,hz:-.09,hr:.7}),
+                 K(.94,{py:-.05,rx:.24,rz:.18,hy:-.01,hz:-.03})],
+burst_cannon:[K(.07,{py:-.06,rx:.24,rz:-.28,hx:-.02,hy:-.04}), K(.19,{py:-.10,rx:.32,rz:-.40,hx:-.05,hy:-.12,hz:.03}),
+              K(.29,{py:-.11,rx:.34,rz:-.44,hx:-.12,hy:-.18,hr:.9}), K(.42,{py:-.12,rx:.34,rz:-.44,hx:.05,hy:-.22,hz:.03}),
+              K(.55,{py:-.12,rx:.34,rz:-.44,hy:-.08,hz:.07}), K(.67,{py:-.11,rx:.36,rz:-.44,hy:.01,hz:.04}),
+              K(.76,{py:-.14,rx:.30,rz:-.36,hy:.02,hz:.02}), K(.87,{py:-.08,rx:.22,rz:-.26,hy:.06,hz:.10,hr:-.6}),
+              K(.95,{py:-.09,rx:.18,rz:-.18,hy:.03,hz:.03})],
+// ════ BELT FED ════ latch · cover up · sweep · lay the belt · slam · charge ══
+rpd:  [K(.08,{py:-.04,rx:.14,rz:.36,hx:-.02,hy:.03}), K(.19,{py:-.06,rx:.20,rz:.52,hx:-.04,hy:.09,hr:-.6}),
+       K(.29,{py:-.07,rx:.24,rz:.58,hy:.14,hz:-.03,hr:-.9}), K(.41,{py:-.07,rx:.24,rz:.58,hx:.06,hy:.05,hz:-.08}),
+       K(.53,{py:-.08,rx:.24,rz:.58,hy:-.10,hz:.02}), K(.65,{py:-.07,rx:.24,rz:.58,hy:.06,hz:.06}),
+       K(.75,{py:-.07,rx:.22,rz:.56,hy:.12,hz:.02,hr:-.7}), K(.84,{py:-.09,rx:.18,rz:.46,hy:.02,hz:.01}),
+       K(.92,{py:-.06,rx:.16,rz:.52,hy:.06,hz:.10,hr:-.5}), K(.97,{py:-.05,rx:.12,rz:.34})],
+mg42: [K(.07,{py:-.05,rx:.18,rz:.44,hx:-.03,hy:.04}), K(.18,{py:-.07,rx:.26,rz:.62,hx:-.05,hy:.10,hr:-.7}),
+       K(.28,{py:-.08,rx:.30,rz:.70,hy:.16,hz:-.04,hr:-1.0}), K(.40,{py:-.08,rx:.30,rz:.70,hx:.07,hy:.06,hz:-.09}),
+       K(.52,{py:-.09,rx:.30,rz:.70,hy:-.11,hz:.02}), K(.64,{py:-.08,rx:.30,rz:.70,hy:.07,hz:.07}),
+       K(.74,{py:-.08,rx:.28,rz:.66,hy:.13,hz:.02,hr:-.8}), K(.83,{py:-.11,rx:.22,rz:.52,hy:.02,hz:.01}),
+       K(.91,{py:-.07,rx:.20,rz:.60,hx:.06,hy:.05,hz:.11,hr:-.6}), K(.97,{py:-.06,rx:.14,rz:.38})],
+minigun:[K(.09,{py:-.06,rx:.10,rz:-.24,hx:.03,hy:-.03}), K(.21,{py:-.10,rx:.14,rz:-.38,hx:.07,hy:-.08,hz:.04}),
+         K(.31,{py:-.11,rx:.16,rz:-.42,hx:.11,hy:-.14,hr:.8}), K(.43,{py:-.12,rx:.16,rz:-.42,hx:-.04,hy:-.18,hz:.03}),
+         K(.55,{py:-.12,rx:.16,rz:-.42,hy:-.06,hz:.08}), K(.66,{py:-.11,rx:.16,rz:-.42,hy:.03,hz:.05}),
+         K(.75,{py:-.13,rx:.12,rz:-.34,hy:.04,hz:.02}), K(.85,{py:-.08,rx:.10,rz:-.24,hy:.02,hz:-.04}),
+         K(.92,{py:-.09,rx:.14,rz:-.30,hy:-.02,hz:.03}), K(.97,{py:-.07,rx:.08,rz:-.18})],
+gau19:[K(.08,{py:-.07,rx:.08,rz:-.30,hx:.04,hy:-.02}), K(.20,{py:-.12,rx:.12,rz:-.48,hx:.08,hy:-.07,hz:.05}),
+       K(.30,{py:-.13,rx:.14,rz:-.54,hx:.13,hy:-.13,hr:.9}), K(.42,{py:-.14,rx:.14,rz:-.54,hx:-.05,hy:-.17,hz:.04}),
+       K(.54,{py:-.14,rx:.14,rz:-.54,hy:-.05,hz:.09}), K(.65,{py:-.13,rx:.14,rz:-.54,hy:.04,hz:.06}),
+       K(.74,{py:-.15,rx:.10,rz:-.44,hy:.05,hz:.02}), K(.84,{py:-.10,rx:.08,rz:-.30,hy:.02,hz:-.05}),
+       K(.92,{py:-.11,rx:.12,rz:-.38,hy:-.02,hz:.04}), K(.97,{py:-.08,rx:.06,rz:-.22})],
+m134: [K(.09,{py:-.06,rx:.12,rz:.32,hx:-.03,hy:.04}), K(.21,{py:-.10,rx:.18,rz:.46,hx:-.06,hy:.10,hr:-.6}),
+       K(.31,{py:-.11,rx:.22,rz:.52,hy:.15,hz:-.03,hr:-.9}), K(.43,{py:-.12,rx:.22,rz:.52,hx:.07,hy:.05,hz:-.08}),
+       K(.55,{py:-.12,rx:.22,rz:.52,hy:-.09,hz:.03}), K(.66,{py:-.11,rx:.22,rz:.52,hy:.06,hz:.07}),
+       K(.75,{py:-.11,rx:.20,rz:.48,hy:.12,hz:.02,hr:-.7}), K(.85,{py:-.13,rx:.16,rz:.38,hy:.02}),
+       K(.93,{py:-.09,rx:.14,rz:.44,hy:.04,hz:.09,hr:-.5}), K(.98,{py:-.07,rx:.10,rz:.26})],
+mk44: [K(.07,{py:-.05,rx:.14,rz:.38,hx:-.03,hy:.05}), K(.18,{py:-.09,rx:.22,rz:.54,hx:-.06,hy:.12,hr:-.7}),
+       K(.28,{py:-.10,rx:.26,rz:.62,hy:.17,hz:-.04,hr:-1.0}), K(.40,{py:-.10,rx:.26,rz:.62,hx:.08,hy:.07,hz:-.09}),
+       K(.51,{py:-.11,rx:.26,rz:.62,hy:-.10,hz:.03}), K(.62,{py:-.10,rx:.26,rz:.62,hy:.08,hz:.08}),
+       K(.71,{py:-.10,rx:.24,rz:.58,hy:.14,hz:.02,hr:-.8}), K(.80,{py:-.12,rx:.20,rz:.46,hy:.03}),
+       K(.88,{py:-.09,rx:.20,rz:.52,hx:.05,hy:.01,hz:-.06,hr:.5}), K(.95,{py:-.08,rx:.14,rz:.34})],
+// ════ BOLT · LEVER · CLIP ════ lift · draw · feed · run home · lock down ═════
+srx:  [K(.10,{py:-.02,rz:.26,hz:.04,hy:.04,hx:.02}), K(.20,{py:-.02,rz:.32,hz:.07,hy:.08,hx:.03,rx:-.05}),
+       K(.31,{py:-.03,rz:.34,hz:.17,hy:.08,rx:.06}), K(.42,{py:-.02,rz:.34,hz:.19,hy:.02,hr:.5}),
+       K(.53,{py:-.02,rz:.34,hz:.15,hy:.05}), K(.63,{py:-.03,rz:.32,hz:.04,hy:.06,rx:.06}),
+       K(.72,{py:-.02,rz:.30,hz:.02,hy:.07,rx:-.04}), K(.83,{py:-.03,rz:.32,hz:.16,hy:.06,rx:.06}),
+       K(.92,{py:-.02,rz:.30,hz:.04,hy:.06}), K(.97,{py:-.02,rz:.20})],
+barrett:[K(.08,{py:-.04,rx:.20,rz:.20,hy:-.05}), K(.20,{py:-.07,rx:.28,rz:.26,hy:-.18,hz:.02}),
+         K(.30,{py:-.08,rx:.30,rz:.26,hx:-.09,hy:-.23,hr:.8}), K(.43,{py:-.09,rx:.30,rz:.26,hx:.05,hy:-.27,hz:.02}),
+         K(.55,{py:-.09,rx:.30,rz:.26,hy:-.13,hz:.06}), K(.66,{py:-.08,rx:.32,rz:.26,hy:-.03,hz:.07}),
+         K(.74,{py:-.12,rx:.28,rz:.22,hy:0,hz:.03}), K(.85,{py:-.05,rz:.28,hz:.10,hy:.05,hx:.03}),
+         K(.92,{py:-.06,rz:.30,hz:.18,hy:.06}), K(.97,{py:-.05,rz:.22,hz:.05})],
+amr:  [K(.11,{py:-.02,rz:.22,hz:.05,hy:.05,hx:.03}), K(.22,{py:-.02,rz:.28,hz:.09,hy:.09,rx:-.06}),
+       K(.33,{py:-.03,rz:.30,hz:.20,hy:.09,rx:.07}), K(.44,{py:-.03,rz:.30,hz:.23,hy:.03,hr:.6}),
+       K(.55,{py:-.02,rz:.30,hz:.18,hy:.06}), K(.65,{py:-.03,rz:.28,hz:.05,hy:.07,rx:.07}),
+       K(.75,{py:-.02,rz:.26,hz:.02,hy:.08,rx:-.05}), K(.85,{py:-.04,rz:.28,hz:.19,hy:.07,rx:.07}),
+       K(.94,{py:-.03,rz:.24,hz:.05,hy:.06})],
+lever:[K(.09,{py:-.02,rx:.14,rz:.12,hy:-.04,hz:.02}), K(.19,{py:-.02,rx:-.12,rz:.10,hy:-.12,hz:.10,hr:.8}),
+       K(.28,{py:-.03,rx:.18,rz:.14,hy:-.03,hz:.03}), K(.38,{py:-.02,rx:-.12,rz:.10,hy:-.12,hz:.10,hr:.8}),
+       K(.47,{py:-.03,rx:.18,rz:.14,hy:-.03,hz:.03}), K(.57,{py:-.02,rx:-.12,rz:.10,hy:-.12,hz:.10,hr:.8}),
+       K(.66,{py:-.03,rx:.18,rz:.14,hy:-.03,hz:.03}), K(.76,{py:-.02,rx:-.12,rz:.10,hy:-.12,hz:.10,hr:.8}),
+       K(.86,{py:-.03,rx:.20,rz:.16,hy:-.02,hz:.02}), K(.94,{py:-.02,rx:-.16,rz:.12,hy:-.08,hz:.08,hr:.7})],
+m1_garand:[K(.09,{py:-.02,rz:.20,hz:.12,hy:.05,hx:.03}), K(.19,{py:-.02,rz:.24,hz:.19,hy:.06,rx:.05}),
+           K(.29,{py:-.01,rx:-.28,rz:.12,hy:.08,hz:.02}), K(.41,{py:-.01,rx:-.34,rz:.12,hx:.04,hy:-.10,hz:-.04}),
+           K(.53,{py:-.01,rx:-.34,rz:.12,hy:.09,hz:-.02}), K(.64,{py:-.02,rx:-.36,rz:.12,hy:.13,hz:.02,hr:-.8}),
+           K(.74,{py:-.04,rx:-.30,rz:.12,hy:.06,hz:.01}), K(.84,{py:-.02,rz:.18,hz:.16,hy:.06}),
+           K(.92,{py:-.03,rz:.16,hz:.03,hy:.05}), K(.97,{py:-.02,rz:.10})],
+mauser:[K(.10,{py:-.02,rz:.28,hz:.05,hy:.04,hx:.02}), K(.21,{py:-.03,rz:.34,hz:.09,hy:.07,rx:-.10}),
+        K(.32,{py:-.03,rz:.38,hz:.15,hy:.08,rx:-.16}), K(.44,{py:-.03,rz:.38,hx:.04,hy:-.10,hz:-.03}),
+        K(.56,{py:-.03,rz:.38,hy:.07,hz:.02}), K(.67,{py:-.02,rz:.38,hy:.10,hz:-.02,hr:-.7}),
+        K(.77,{py:-.03,rz:.36,hy:.05,hz:.03,rx:.05}), K(.87,{py:-.03,rz:.32,hz:.12,hy:.05}),
+        K(.95,{py:-.02,rz:.24,hz:.03})],
+air_rifle:[K(.10,{py:-.02,rz:-.24,hz:.04,hy:.03,hx:-.03}), K(.21,{py:-.02,rz:-.32,hz:.12,hy:.07,hr:.6}),
+           K(.32,{py:-.02,rz:-.34,hz:.15,hy:.08,hr:.8}), K(.44,{py:-.02,rz:-.34,hx:.04,hy:-.09,hz:-.03}),
+           K(.56,{py:-.02,rz:-.34,hy:.06,hz:.01}), K(.67,{py:-.02,rz:-.34,hy:.09,hz:-.03,hr:-.6}),
+           K(.78,{py:-.02,rz:-.32,hz:.04,hy:.05}), K(.88,{py:-.03,rz:-.28,hz:.10,hy:.04}),
+           K(.96,{py:-.02,rz:-.18})],
+railgun:[K(.10,{py:-.010,rx:.03,rz:.02}), K(.16,{py:-.026,rx:.07,rz:-.03,pz:.006}),
+         K(.24,{py:-.012,rx:.03,rz:.02}), K(.31,{py:-.032,rx:.09,rz:-.04,pz:.008}),
+         K(.40,{py:-.014,rx:.04,rz:.03}), K(.47,{py:-.040,rx:.11,rz:-.05,pz:.010}),
+         K(.56,{py:-.016,rx:.04,rz:.03}), K(.63,{py:-.048,rx:.13,rz:-.06,pz:.012}),
+         K(.72,{py:-.018,rx:.05,rz:.04}), K(.79,{py:-.058,rx:.15,rz:-.07,pz:.014}),
+         K(.88,{py:-.020,rx:.05,rz:.04}), K(.94,{py:-.070,rx:.18,rz:-.08,pz:.016})],
+coilgun:[K(.09,{py:-.03,rx:.16,rz:-.16,hx:-.02,hy:-.04}), K(.22,{py:-.05,rx:.24,rz:-.22,hy:-.15,hz:.02}),
+         K(.32,{py:-.05,rx:.26,rz:-.22,hx:.08,hy:-.20,hr:-.7}), K(.45,{py:-.06,rx:.26,rz:-.22,hx:-.03,hy:-.24,hz:.02}),
+         K(.57,{py:-.06,rx:.26,rz:-.22,hy:-.11,hz:.05}), K(.68,{py:-.05,rx:.28,rz:-.22,hy:-.02,hz:.06}),
+         K(.76,{py:-.08,rx:.24,rz:-.20,hy:0,hz:.03}), K(.83,{py:-.02,rx:.06,rz:-.06}), K(.87,{py:-.05,rx:.12,rz:-.10}),
+         K(.91,{py:-.02,rx:.06,rz:-.06}), K(.95,{py:-.06,rx:.14,rz:-.10})],
+// ════ PUMP · BREAK ════ shells, one at a time ═══════════════════════════════
+sg8:  [K(.08,{py:-.03,rx:.10,rz:.34}),
+       K(.16,{py:-.03,rx:.10,rz:.34,hy:-.14,hz:.02}), K(.24,{py:-.04,rx:.12,rz:.36,hy:-.02,hz:.05}),
+       K(.32,{py:-.03,rx:.10,rz:.34,hy:-.14,hz:.02}), K(.40,{py:-.04,rx:.12,rz:.36,hy:-.02,hz:.05}),
+       K(.48,{py:-.03,rx:.10,rz:.34,hy:-.14,hz:.02}), K(.56,{py:-.04,rx:.12,rz:.36,hy:-.02,hz:.05}),
+       K(.64,{py:-.03,rx:.10,rz:.34,hy:-.14,hz:.02}), K(.72,{py:-.04,rx:.12,rz:.36,hy:-.02,hz:.05}),
+       K(.80,{py:-.03,rx:.10,rz:.34,hy:-.14,hz:.02}), K(.87,{py:-.04,rx:.12,rz:.36,hy:-.02,hz:.05}),
+       K(.93,{py:-.02,rx:.06,rz:.08,hz:-.06,hy:-.06}), K(.97,{py:-.04,rx:.14,rz:.06,hz:.09})],
+shorty:[K(.10,{py:-.03,rx:.14,rz:.38}),
+        K(.22,{py:-.03,rx:.14,rz:.38,hy:-.13,hz:.02}), K(.32,{py:-.04,rx:.16,rz:.40,hy:-.02,hz:.05}),
+        K(.44,{py:-.03,rx:.14,rz:.38,hy:-.13,hz:.02}), K(.54,{py:-.04,rx:.16,rz:.40,hy:-.02,hz:.05}),
+        K(.66,{py:-.03,rx:.14,rz:.38,hy:-.13,hz:.02}), K(.76,{py:-.04,rx:.16,rz:.40,hy:-.02,hz:.05}),
+        K(.86,{py:-.02,rx:.08,rz:.10,hz:-.05,hy:-.05}), K(.95,{py:-.05,rx:.18,rz:.08,hz:.10})],
+sawed_off:[K(.08,{py:-.03,rx:.20,rz:.14,hx:.03}), K(.18,{py:-.05,rx:.90,pz:.04,hx:.05,hy:-.02}),
+           K(.30,{py:-.05,rx:.98,pz:.05,hx:.06,hy:-.09,hz:-.05,hr:.7}), K(.40,{py:-.05,rx:.98,pz:.05,hx:-.06,hy:-.14,hr:.9}),
+           K(.52,{py:-.05,rx:.98,pz:.05,hy:-.16,hz:-.02}), K(.62,{py:-.05,rx:.98,pz:.05,hy:.02,hz:-.03}),
+           K(.72,{py:-.05,rx:.98,pz:.05,hy:-.14,hz:-.02}), K(.82,{py:-.05,rx:.98,pz:.05,hy:.02,hz:-.03}),
+           K(.92,{py:-.03,rx:.34,pz:.02,hy:-.02}), K(.97,{py:-.05,rx:.16})],
+boomstick:[K(.07,{py:-.04,rx:.24,rz:-.12,hx:.04}), K(.16,{py:-.06,rx:1.00,pz:.05,hx:.06,hy:-.03}),
+           K(.27,{py:-.06,rx:1.08,pz:.06,hx:.07,hy:-.10,hz:-.06,hr:.8}), K(.37,{py:-.06,rx:1.08,pz:.06,hx:-.07,hy:-.15,hr:1.0}),
+           K(.48,{py:-.06,rx:1.08,pz:.06,hy:-.17,hz:-.03}), K(.58,{py:-.06,rx:1.08,pz:.06,hy:.03,hz:-.04}),
+           K(.69,{py:-.06,rx:1.08,pz:.06,hy:-.15,hz:-.03}), K(.79,{py:-.06,rx:1.08,pz:.06,hy:.03,hz:-.04}),
+           K(.90,{py:-.04,rx:.38,pz:.03,hy:-.02}), K(.96,{py:-.06,rx:.18})],
+duelist_pistol:[K(.09,{py:-.02,rx:-.44,rz:.18,hy:-.03,hz:-.05}), K(.20,{py:-.02,rx:-.56,rz:.22,hy:-.11,hz:-.14,hr:.8}),
+                K(.31,{py:-.02,rx:-.58,rz:.22,hy:-.03,hz:-.08}), K(.42,{py:-.02,rx:-.58,rz:.22,hy:-.12,hz:-.17,hr:.9}),
+                K(.53,{py:-.02,rx:-.58,rz:.22,hy:-.04,hz:-.09}), K(.63,{py:-.02,rx:-.58,rz:.22,hy:-.09,hz:-.20,hr:1.0}),
+                K(.73,{py:-.02,rx:-.58,rz:.22,hy:-.04,hz:-.10}), K(.83,{py:-.02,rx:-.30,rz:.30,hy:.04,hz:.03,hr:-.6}),
+                K(.92,{py:-.03,rx:-.20,rz:.20,hy:.01})],
+signal_pistol:[K(.10,{py:-.02,rx:.26,rz:.12,hx:.03}), K(.22,{py:-.03,rx:.86,pz:.04,hx:.05,hy:-.02}),
+               K(.34,{py:-.04,rx:.94,pz:.05,hx:.06,hy:-.09,hz:-.05,hr:.7}), K(.46,{py:-.04,rx:.94,pz:.05,hx:-.06,hy:-.14,hr:.9}),
+               K(.58,{py:-.04,rx:.94,pz:.05,hy:-.16,hz:-.02}), K(.70,{py:-.04,rx:.94,pz:.05,hy:.02,hz:-.03}),
+               K(.84,{py:-.02,rx:.30,pz:.02,hy:-.02}), K(.94,{py:-.04,rx:.14})],
+dart_gun:[K(.11,{py:-.02,rx:.22,rz:.10,hx:.03}), K(.24,{py:-.03,rx:.74,pz:.04,hx:.04,hy:-.02}),
+          K(.36,{py:-.04,rx:.80,pz:.05,hx:.05,hy:-.08,hz:-.05,hr:.6}), K(.48,{py:-.04,rx:.80,pz:.05,hx:-.05,hy:-.13,hr:.8}),
+          K(.60,{py:-.04,rx:.80,pz:.05,hy:-.15,hz:-.02}), K(.72,{py:-.04,rx:.80,pz:.05,hy:.02,hz:-.03}),
+          K(.86,{py:-.02,rx:.24,pz:.02,hy:-.01}), K(.95,{py:-.03,rx:.12})],
+flare:[K(.12,{py:-.02,rx:.16,rz:-.46,hx:.03,hy:-.02}), K(.26,{py:-.02,rx:.20,rz:-.58,ry:.30,hx:.05,hy:-.04,hz:.04}),
+       K(.38,{py:-.02,rx:.20,rz:-.60,ry:.70,hx:.06,hy:-.05,hz:.08,hr:.6}), K(.50,{py:-.02,rx:.20,rz:-.60,ry:.70,hx:-.05,hy:-.13,hz:.02}),
+       K(.62,{py:-.02,rx:.20,rz:-.60,ry:.70,hy:-.04,hz:.05}), K(.74,{py:-.02,rx:.20,rz:-.60,ry:.40,hy:-.02,hz:.06,hr:-.5}),
+       K(.86,{py:-.02,rx:.18,rz:-.50,ry:.14,hy:.01,hz:.02}), K(.95,{py:-.02,rx:.12,rz:-.28})],
+taser:[K(.12,{py:-.02,rx:.30,rz:.14,hz:-.05,hy:-.02}), K(.26,{py:-.03,rx:.38,rz:.18,hz:-.13,hy:-.06,hr:.6}),
+       K(.38,{py:-.03,rx:.40,rz:.18,hx:-.06,hy:-.12,hz:-.16,hr:.8}), K(.52,{py:-.03,rx:.40,rz:.18,hx:.03,hy:-.18,hz:-.04}),
+       K(.65,{py:-.03,rx:.40,rz:.18,hy:-.06,hz:-.11}), K(.77,{py:-.03,rx:.38,rz:.18,hy:-.01,hz:-.05}),
+       K(.88,{py:-.04,rx:.30,rz:.14,hz:-.02}), K(.96,{py:-.02,rx:.16,rz:.08})],
+// ════ MUZZLE · BREECH ════ tip up · reach · seat · ram · come down ══════════
+rpg:  [K(.09,{py:.02,pz:.03,rx:-.44,rz:.14,hy:-.03,hz:-.05}), K(.21,{py:.04,pz:.06,rx:-.62,rz:.18,hy:-.10,hz:-.13}),
+       K(.31,{py:.04,pz:.06,rx:-.64,rz:.18,hx:.06,hy:-.20,hz:-.06,hr:.8}), K(.44,{py:.04,pz:.06,rx:-.64,rz:.18,hx:-.03,hy:-.16,hz:-.18}),
+       K(.57,{py:.04,pz:.06,rx:-.64,rz:.18,hy:-.06,hz:-.21}), K(.68,{py:.04,pz:.06,rx:-.64,rz:.18,hy:-.02,hz:-.12}),
+       K(.78,{py:.05,pz:.07,rx:-.60,rz:.18,hy:-.03,hz:-.16}), K(.88,{py:.02,pz:.04,rx:-.40,rz:.14,hy:.02,hz:-.04}),
+       K(.96,{py:.01,pz:.02,rx:-.22,rz:.08})],
+bazooka:[K(.09,{py:.02,pz:.04,rx:-.34,rz:-.18,hy:-.03,hz:.06}), K(.21,{py:.03,pz:.07,rx:-.48,rz:-.24,hy:-.09,hz:.14}),
+         K(.31,{py:.03,pz:.07,rx:-.50,rz:-.24,hx:-.06,hy:-.18,hz:.08,hr:.8}), K(.44,{py:.03,pz:.07,rx:-.50,rz:-.24,hx:.03,hy:-.14,hz:.19}),
+         K(.57,{py:.03,pz:.07,rx:-.50,rz:-.24,hy:-.05,hz:.22}), K(.68,{py:.03,pz:.07,rx:-.50,rz:-.24,hy:-.01,hz:.13}),
+         K(.79,{py:.03,pz:.08,rx:-.46,rz:-.24,hy:.03,hz:.09,hr:-.5}), K(.89,{py:.02,pz:.04,rx:-.30,rz:-.16,hy:.01,hz:.03}),
+         K(.96,{py:.01,pz:.02,rx:-.16,rz:-.08})],
+boombow:[K(.10,{py:-.02,rx:-.24,rz:-.20,hx:-.03,hy:-.04}), K(.22,{py:-.01,rx:-.34,rz:-.26,hy:-.12,hz:-.10,hr:.6}),
+         K(.33,{py:-.01,rx:-.36,rz:-.26,hx:-.07,hy:-.19,hz:-.05,hr:.9}), K(.46,{py:-.02,rx:-.36,rz:-.26,hx:.03,hy:-.14,hz:-.13}),
+         K(.58,{py:-.02,rx:-.36,rz:-.26,hy:-.05,hz:-.16}), K(.69,{py:-.02,rx:-.36,rz:-.26,hy:-.02,hz:-.08}),
+         K(.80,{py:-.01,rx:-.30,rz:-.22,hz:.05,hy:.01}), K(.90,{py:-.02,rx:-.22,rz:-.16,hz:.11,hy:.02,hr:-.5}),
+         K(.97,{py:-.01,rx:-.12,rz:-.08})],
+crossbow:[K(.09,{py:-.04,rx:.08,rz:.10,hz:.04,hy:-.03}), K(.20,{py:-.06,rx:.12,rz:.10,hz:.12,hy:-.06,hr:-.6}),
+          K(.31,{py:-.06,rx:.12,rz:.10,hz:.16,hy:-.08,hr:-.8}), K(.42,{py:-.05,rx:-.20,rz:.12,hy:-.05,hz:-.06}),
+          K(.54,{py:-.04,rx:-.24,rz:.12,hx:.04,hy:-.16,hz:-.12,hr:.8}), K(.66,{py:-.04,rx:-.24,rz:.12,hy:-.06,hz:-.16}),
+          K(.77,{py:-.04,rx:-.24,rz:.12,hy:-.02,hz:-.08}), K(.88,{py:-.05,rx:-.10,rz:.10,hy:.01,hz:-.02}),
+          K(.96,{py:-.03,rx:-.04,rz:.06})],
+harpoon_gun:[K(.09,{py:-.02,rx:-.28,rz:.16,hy:-.03,hz:-.06}), K(.21,{py:-.02,rx:-.40,rz:.20,hy:-.10,hz:-.15}),
+             K(.32,{py:-.02,rx:-.42,rz:.20,hx:-.06,hy:-.19,hz:-.08,hr:.9}), K(.45,{py:-.03,rx:-.42,rz:.20,hx:.03,hy:-.14,hz:-.19}),
+             K(.57,{py:-.03,rx:-.42,rz:.20,hy:-.05,hz:-.23}), K(.68,{py:-.03,rx:-.42,rz:.20,hy:-.02,hz:-.13}),
+             K(.78,{py:-.02,rx:-.36,rz:.20,hy:.02,hz:-.05}), K(.88,{py:-.04,rx:-.18,rz:.14,hy:.03,hz:.05,hr:-.6}),
+             K(.96,{py:-.02,rx:-.08,rz:.06})],
+mortar_rifle:[K(.10,{py:.02,pz:.03,rx:-.48,rz:.08,hy:.01,hz:-.03}), K(.22,{py:.04,pz:.05,rx:-.68,rz:.12,hy:.07,hz:-.10}),
+              K(.33,{py:.04,pz:.05,rx:-.70,rz:.12,hx:.05,hy:-.10,hz:-.05,hr:.7}), K(.46,{py:.04,pz:.05,rx:-.70,rz:.12,hx:-.03,hy:.05,hz:-.14}),
+              K(.58,{py:.04,pz:.05,rx:-.70,rz:.12,hy:.10,hz:-.16,hr:-.6}), K(.69,{py:.04,pz:.05,rx:-.70,rz:.12,hy:.03,hz:-.07}),
+              K(.79,{py:.05,pz:.06,rx:-.66,rz:.12,hy:.06,hz:-.11}), K(.89,{py:.02,pz:.03,rx:-.44,rz:.08,hy:.02}),
+              K(.96,{py:.01,rx:-.24,rz:.04})],
+potato_cannon:[K(.09,{py:.02,pz:.03,rx:-.28,rz:-.22,hy:-.04,hz:-.08}), K(.21,{py:.03,pz:.05,rx:-.38,rz:-.30,hy:-.13,hz:-.18}),
+               K(.32,{py:.03,pz:.05,rx:-.40,rz:-.30,hx:-.07,hy:-.20,hz:-.09,hr:.9}), K(.44,{py:.03,pz:.05,rx:-.40,rz:-.30,hx:.04,hy:-.15,hz:-.22}),
+               K(.55,{py:.03,pz:.05,rx:-.40,rz:-.30,hy:-.06,hz:-.26}), K(.66,{py:.03,pz:.05,rx:-.40,rz:-.30,hy:-.03,hz:-.14}),
+               K(.76,{py:.02,pz:.07,rx:-.22,rz:-.52,ry:.55,hy:.04,hz:.06,hr:-.7}), K(.86,{py:.02,pz:.07,rx:-.22,rz:-.54,ry:.60,hy:.06,hz:.09,hr:-.9}),
+               K(.94,{py:.01,pz:.03,rx:-.12,rz:-.24,ry:.20})],
+firework_launcher:[K(.10,{py:.02,pz:.02,rx:-.36,rz:.18,hy:-.02,hz:-.05}), K(.22,{py:.03,pz:.04,rx:-.52,rz:.26,hy:-.09,hz:-.14}),
+                   K(.33,{py:.03,pz:.04,rx:-.54,rz:.26,hx:.06,hy:-.18,hz:-.07,hr:.8}), K(.45,{py:.03,pz:.04,rx:-.54,rz:.26,hx:-.03,hy:-.12,hz:-.16}),
+                   K(.56,{py:.03,pz:.04,rx:-.54,rz:.26,hy:-.04,hz:-.18}), K(.67,{py:.03,pz:.04,rx:-.54,rz:.26,hy:-.14,hz:-.15}),
+                   K(.77,{py:.03,pz:.04,rx:-.54,rz:.26,hy:-.03,hz:-.17}), K(.87,{py:.02,rx:-.36,rz:.18,hy:.05,hz:.04,hr:-.6}),
+                   K(.95,{py:.02,rx:-.20,rz:.10,hy:.02})],
+shockwave_launcher:[K(.09,{py:-.04,rx:.10,rz:-.22,hx:-.03,hy:-.04}), K(.21,{py:-.07,rx:.18,rz:-.34,hy:-.12,hz:.04}),
+                    K(.32,{py:-.07,rx:.18,rz:-.36,hx:.08,hy:-.18,hr:-.8}), K(.45,{py:-.08,rx:.18,rz:-.36,hx:-.04,hy:-.22,hz:.04}),
+                    K(.57,{py:-.08,rx:.18,rz:-.36,hy:-.09,hz:.08}), K(.68,{py:-.07,rx:.18,rz:-.36,hy:0,hz:.05}),
+                    K(.78,{py:-.09,rx:.14,rz:-.28,hy:.02,hz:.02}), K(.88,{py:-.04,rx:.04,rz:-.18,hy:.06,hz:-.06,hr:-.6}),
+                    K(.96,{py:-.03,rx:.02,rz:-.10})],
+airburst_projector:[K(.09,{py:-.04,rx:.24,rz:.16,hy:-.05}), K(.21,{py:-.07,rx:.32,rz:.20,hy:-.17,hz:.02}),
+                    K(.31,{py:-.07,rx:.34,rz:.20,hx:-.08,hy:-.22,hr:.8}), K(.44,{py:-.08,rx:.34,rz:.20,hx:.04,hy:-.26,hz:.02}),
+                    K(.56,{py:-.08,rx:.34,rz:.20,hy:-.12,hz:.05}), K(.67,{py:-.07,rx:.36,rz:.20,hy:-.02,hz:.06}),
+                    K(.75,{py:-.10,rx:.32,rz:.18,hy:0,hz:.03}), K(.85,{py:-.04,rx:.14,rz:.08,hy:.07,hz:-.05,hr:-.7}),
+                    K(.92,{py:-.03,rx:.08,rz:.04,hy:.10,hz:-.07,hr:-.9}), K(.97,{py:-.02,rx:.04,rz:.02})],
+grenade_launcher:[K(.07,{py:-.05,rx:.22,rz:-.34,px:-.01,hx:.04}), K(.17,{py:-.09,rx:.34,rz:-.68,px:-.03,hx:.09,hy:.03}),
+                  K(.27,{py:-.10,rx:.36,rz:-.74,hx:.12,hy:.06,hz:.05,hr:.7}), K(.37,{py:-.10,rx:.36,rz:-.74,hx:-.04,hy:-.16,hz:.02}),
+                  K(.47,{py:-.10,rx:.36,rz:-.74,hx:.08,hy:.02,hz:.05}), K(.57,{py:-.10,rx:.36,rz:-.74,hx:-.04,hy:-.16,hz:.02}),
+                  K(.67,{py:-.10,rx:.36,rz:-.74,hx:.08,hy:.02,hz:.05}), K(.77,{py:-.10,rx:.36,rz:-.74,hx:-.04,hy:-.16,hz:.02}),
+                  K(.86,{py:-.10,rx:.36,rz:-.74,hx:.08,hy:.02,hz:.05}), K(.94,{py:-.11,rx:.26,rz:-.48,hz:-.04})],
+nebula_mortar:[K(.08,{py:-.05,rx:.18,rz:-.30,px:-.01,hx:.04}), K(.19,{py:-.09,rx:.30,rz:-.62,px:-.02,hx:.08,hy:.04}),
+               K(.30,{py:-.10,rx:.32,rz:-.68,hx:.11,hy:.07,hz:.06,hr:.7}), K(.42,{py:-.10,rx:.32,rz:-.68,hx:-.04,hy:-.15,hz:.02}),
+               K(.54,{py:-.10,rx:.32,rz:-.68,hx:.08,hy:.03,hz:.06}), K(.66,{py:-.10,rx:.32,rz:-.68,hx:-.04,hy:-.15,hz:.02}),
+               K(.78,{py:-.10,rx:.32,rz:-.68,hx:.08,hy:.03,hz:.06}), K(.90,{py:-.11,rx:.22,rz:-.44,hz:-.03}),
+               K(.97,{py:-.07,rx:.12,rz:-.24})],
+// ════ REVOLVERS ════ latch · swing · eject · load · flick shut ══════════════
+revolver:[K(.08,{py:-.03,rx:.14,rz:-.50,ry:.14,hx:.03}), K(.18,{py:-.06,rx:.24,rz:-1.02,ry:.34,hx:.07,hy:.05,hr:.5}),
+          K(.28,{py:-.06,rx:.24,rz:-1.06,ry:.36,hx:.09,hy:.09,hz:-.05,hr:.9}), K(.38,{py:-.06,rx:.30,rz:-1.10,ry:.36,hx:.09,hy:.12,hz:-.08,hr:1.1}),
+          K(.50,{py:-.06,rx:.26,rz:-1.06,ry:.36,hx:.02,hy:-.14,hz:-.02}), K(.62,{py:-.06,rx:.26,rz:-1.06,ry:.36,hx:.08,hy:.04,hz:-.04}),
+          K(.73,{py:-.06,rx:.26,rz:-1.06,ry:.36,hx:.09,hy:.07,hz:-.02,hr:.7}), K(.84,{py:-.07,rx:.18,rz:-.72,ry:.20,hx:.04,hy:.02}),
+          K(.93,{py:-.05,rx:.12,rz:-.36,ry:.08})],
+snub_revolver:[K(.10,{py:-.03,rx:.12,rz:-.56,ry:.16,hx:.03}), K(.22,{py:-.05,rx:.22,rz:-1.12,ry:.38,hx:.07,hy:.06,hr:.6}),
+               K(.33,{py:-.05,rx:.22,rz:-1.16,ry:.40,hx:.10,hy:.10,hz:-.05,hr:1.0}), K(.44,{py:-.05,rx:.28,rz:-1.20,ry:.40,hx:.10,hy:.13,hz:-.08,hr:1.2}),
+               K(.56,{py:-.05,rx:.24,rz:-1.16,ry:.40,hx:.02,hy:-.13,hz:-.02}), K(.68,{py:-.05,rx:.24,rz:-1.16,ry:.40,hx:.08,hy:.05,hz:-.04}),
+               K(.80,{py:-.05,rx:.24,rz:-1.16,ry:.40,hx:.10,hy:.08,hr:.8}), K(.90,{py:-.06,rx:.16,rz:-.78,ry:.22,hx:.04}),
+               K(.97,{py:-.04,rx:.10,rz:-.38,ry:.08})],
+auto_revolver:[K(.09,{py:-.03,rx:.16,rz:-.44,ry:.12,hx:.03}), K(.20,{py:-.06,rx:.26,rz:-.92,ry:.30,hx:.06,hy:.05,hr:.5}),
+               K(.31,{py:-.06,rx:.26,rz:-.96,ry:.32,hx:.08,hy:.09,hz:-.06,hr:.9}), K(.42,{py:-.06,rx:.32,rz:-1.00,ry:.32,hx:.08,hy:.12,hz:-.09,hr:1.1}),
+               K(.54,{py:-.06,rx:.28,rz:-.96,ry:.32,hx:.02,hy:-.13,hz:-.02}), K(.66,{py:-.06,rx:.28,rz:-.96,ry:.32,hx:.07,hy:.04,hz:-.04}),
+               K(.77,{py:-.06,rx:.28,rz:-.96,ry:.32,hx:.08,hy:.07,hr:.7}), K(.87,{py:-.08,rx:.20,rz:-.64,ry:.18,hx:.03,hz:.05}),
+               K(.95,{py:-.05,rx:.12,rz:-.32,ry:.08})],
+machine_revolver:[K(.07,{py:-.04,rx:.12,rz:-.42,ry:.14,hx:.03}), K(.17,{py:-.07,rx:.20,rz:-.86,ry:.32,hx:.07,hy:.04,hr:.6}),
+                  K(.26,{py:-.08,rx:.22,rz:-.92,ry:.34,hx:.10,hy:.09,hz:-.06,hr:1.0}), K(.36,{py:-.08,rx:.28,rz:-.96,ry:.34,hx:.10,hy:.13,hz:-.10,hr:1.2}),
+                  K(.46,{py:-.08,rx:.24,rz:-.92,ry:.34,hx:.02,hy:-.15,hz:-.02}), K(.56,{py:-.08,rx:.24,rz:-.92,ry:.34,hx:.09,hy:.05,hz:-.05}),
+                  K(.66,{py:-.08,rx:.24,rz:-.92,ry:.34,hx:.02,hy:-.15,hz:-.02}), K(.76,{py:-.08,rx:.24,rz:-.92,ry:.34,hx:.09,hy:.05,hz:-.05}),
+                  K(.86,{py:-.08,rx:.24,rz:-.92,ry:.34,hx:.10,hy:.08,hr:.8}), K(.94,{py:-.09,rx:.16,rz:-.60,ry:.18,hx:.04})],
+// ════ ENERGY ════ release · cell out · fresh cell · seat · purge ════════════
+cycler:[K(.14,{py:-.02,rx:.14,rz:.08,hy:-.02}), K(.28,{py:-.04,rx:.24,rz:.12,hy:-.09,hz:-.03}),
+        K(.40,{py:-.04,rx:.26,rz:.12,hx:-.05,hy:-.13,hr:.6}), K(.54,{py:-.04,rx:.26,rz:.12,hy:-.06,hz:-.02}),
+        K(.66,{py:-.05,rx:.24,rz:.10,hy:-.01}), K(.75,{py:-.02,rx:.08,rz:.03}), K(.81,{py:-.05,rx:.14,rz:.06}),
+        K(.87,{py:-.02,rx:.08,rz:.03}), K(.93,{py:-.05,rx:.14,rz:.06}), K(.98,{py:-.02,rx:.06})],
+plasma_carbine:[K(.09,{py:-.03,rx:.20,rz:-.12,hy:-.04}), K(.22,{py:-.05,rx:.28,rz:-.16,hy:-.14,hz:.02}),
+                K(.32,{py:-.05,rx:.30,rz:-.16,hx:.08,hy:-.19,hr:-.7}), K(.45,{py:-.06,rx:.30,rz:-.16,hx:-.03,hy:-.23,hz:.02}),
+                K(.57,{py:-.06,rx:.30,rz:-.16,hy:-.11,hz:.05}), K(.68,{py:-.05,rx:.32,rz:-.16,hy:-.02,hz:.06}),
+                K(.76,{py:-.08,rx:.28,rz:-.14,hy:0,hz:.03}), K(.84,{py:-.03,rx:.10,rz:-.06,hy:.05,hz:-.05,hr:-.5}),
+                K(.90,{py:-.05,rx:.16,rz:-.08}), K(.96,{py:-.02,rx:.06,rz:-.02})],
+arc_rifle:[K(.10,{py:-.02,rx:.10,rz:.26,hx:-.02,hy:.04}), K(.22,{py:-.04,rx:.16,rz:.40,hy:.11,hz:.03,hr:-.6}),
+           K(.33,{py:-.04,rx:.16,rz:.42,hy:.14,hz:-.02,hr:-.9}), K(.45,{py:-.04,rx:.16,rz:.42,hx:.06,hy:-.06,hz:-.06}),
+           K(.57,{py:-.04,rx:.16,rz:.42,hy:.10,hz:.02}), K(.68,{py:-.04,rx:.16,rz:.40,hy:.05,hz:.04}),
+           K(.77,{py:-.05,rx:.12,rz:.30,hy:.02}), K(.84,{py:-.02,rx:.04,rz:.14}), K(.89,{py:-.05,rx:.10,rz:.20}),
+           K(.94,{py:-.02,rx:.04,rz:.12}), K(.98,{py:-.04,rx:.08,rz:.16})],
+arc_torrent:[K(.09,{py:-.03,rx:.12,rz:-.24,hx:-.02,hy:.03}), K(.21,{py:-.06,rx:.18,rz:-.42,hy:.09,hz:.04,hr:-.7}),
+             K(.32,{py:-.06,rx:.20,rz:-.44,hy:.13,hz:-.02,hr:-.9}), K(.44,{py:-.06,rx:.20,rz:-.44,hx:-.06,hy:-.07,hz:-.06}),
+             K(.56,{py:-.06,rx:.20,rz:-.44,hy:.08,hz:.03}), K(.67,{py:-.06,rx:.20,rz:-.42,hy:.04,hz:.05}),
+             K(.77,{py:-.07,rx:.14,rz:-.30,hy:.01}), K(.85,{py:-.03,rx:.06,rz:-.14}), K(.90,{py:-.07,rx:.12,rz:-.22}),
+             K(.96,{py:-.03,rx:.06,rz:-.12})],
+storm_core:[K(.11,{py:-.02,rx:-.16,rz:.12,hy:.04,hz:.02}), K(.24,{py:-.03,rx:-.28,rz:.18,hy:.10,hz:-.03,hr:-.7}),
+            K(.35,{py:-.03,rx:-.30,rz:.18,hx:.06,hy:.13,hz:-.07,hr:-.9}), K(.48,{py:-.03,rx:-.30,rz:.18,hx:-.03,hy:-.05,hz:-.02}),
+            K(.60,{py:-.03,rx:-.30,rz:.18,hy:.09,hz:.01}), K(.71,{py:-.03,rx:-.28,rz:.18,hy:.05,hz:.03}),
+            K(.80,{py:-.04,rx:-.20,rz:.12,hy:.02}), K(.88,{py:-.02,rx:-.08,rz:.06}), K(.94,{py:-.04,rx:-.14,rz:.10})],
+event_horizon:[K(.10,{py:-.03,rx:.10,rz:.16,ry:-.14,hy:-.04}), K(.23,{py:-.05,rx:.18,rz:.26,ry:-.32,hy:-.10,hz:-.04}),
+               K(.34,{py:-.05,rx:.18,rz:.28,ry:-.40,hx:-.06,hy:-.14,hr:.7}), K(.46,{py:-.05,rx:.18,rz:.28,ry:-.40,hx:.03,hy:-.07,hz:-.03}),
+               K(.58,{py:-.05,rx:.18,rz:.28,ry:.34,hy:-.05,hz:-.02}), K(.69,{py:-.05,rx:.18,rz:.26,ry:.20,hy:-.02}),
+               K(.79,{py:-.06,rx:.14,rz:.18,ry:.08}), K(.87,{py:-.02,rx:.04,rz:.06,ry:-.14}), K(.94,{py:-.05,rx:.10,rz:.12,ry:.10})],
+quantum_repeater:[K(.08,{py:-.02,rx:.08,rz:-.12,ry:.16,hy:-.03}), K(.19,{py:-.04,rx:.14,rz:-.22,ry:.34,hy:-.12,hz:.03}),
+                  K(.28,{py:-.04,rx:.14,rz:-.22,ry:.34,hx:.07,hy:-.17,hr:-.7}), K(.39,{py:-.04,rx:.14,rz:-.22,ry:.34,hy:-.06,hz:.05}),
+                  K(.48,{py:-.05,rx:.14,rz:-.20,ry:.30,hy:0,hz:.02}), K(.58,{py:-.04,rx:.14,rz:.22,ry:-.34,hy:-.12,hz:.03}),
+                  K(.68,{py:-.04,rx:.14,rz:.22,ry:-.34,hx:-.07,hy:-.17,hr:.7}), K(.79,{py:-.04,rx:.14,rz:.22,ry:-.34,hy:-.06,hz:.05}),
+                  K(.88,{py:-.05,rx:.14,rz:.20,ry:-.30,hy:0,hz:.02}), K(.96,{py:-.03,rx:.06,rz:.08,ry:-.10})],
+magnetar:[K(.09,{py:-.03,rx:.14,rz:.20,hx:-.02,hy:-.03}), K(.21,{py:-.07,rx:.24,rz:.38,hy:-.10,hz:.05}),
+          K(.31,{py:-.07,rx:.24,rz:.40,hx:-.08,hy:-.15,hr:.8}), K(.42,{py:-.07,rx:.24,rz:.40,hy:-.05,hz:.03}),
+          K(.52,{py:-.06,rx:.20,rz:.10,hy:-.02}), K(.62,{py:-.07,rx:.24,rz:-.38,hx:.08,hy:-.10,hz:.05}),
+          K(.72,{py:-.07,rx:.24,rz:-.40,hx:.10,hy:-.15,hr:-.8}), K(.83,{py:-.07,rx:.24,rz:-.40,hy:-.05,hz:.03}),
+          K(.92,{py:-.08,rx:.18,rz:-.22,hy:-.01})],
+solar_lance:[K(.11,{py:-.02,rx:-.24,rz:-.12,hy:.05,hz:.01}), K(.24,{py:-.02,rx:-.40,rz:-.20,hy:.12,hz:-.04,hr:-.8}),
+             K(.35,{py:-.02,rx:-.44,rz:-.22,hx:-.06,hy:.15,hz:-.08,hr:-1.0}), K(.48,{py:-.02,rx:-.44,rz:-.22,hx:.03,hy:-.04,hz:-.02}),
+             K(.60,{py:-.02,rx:-.44,rz:-.22,hy:.11,hz:.01}), K(.71,{py:-.02,rx:-.42,rz:-.20,hy:.06,hz:.03}),
+             K(.81,{py:-.03,rx:-.30,rz:-.14,hy:.02}), K(.90,{py:-.02,rx:-.16,rz:-.08}), K(.96,{py:-.03,rx:-.08,rz:-.04})],
+prism_launcher:[K(.11,{py:-.03,rx:.12,rz:-.18,hx:-.02,hy:-.03}), K(.24,{py:-.05,rx:.20,rz:-.30,hy:-.09,hz:.04,hr:.4}),
+                K(.35,{py:-.05,rx:.20,rz:-.32,hx:.06,hy:-.13,hz:.07,hr:.6}), K(.48,{py:-.05,rx:.20,rz:-.32,hx:-.03,hy:-.05,hz:.02}),
+                K(.60,{py:-.05,rx:.20,rz:-.32,hy:-.09,hz:.06,hr:.5}), K(.71,{py:-.05,rx:.20,rz:-.30,hy:-.03,hz:.02}),
+                K(.81,{py:-.06,rx:.14,rz:-.20}), K(.90,{py:-.03,rx:.06,rz:-.10}), K(.96,{py:-.04,rx:.08,rz:-.06})],
+prism_engine:[K(.09,{py:-.03,rx:.10,rz:.18,ry:.20,hy:-.03,hz:.02}), K(.21,{py:-.05,rx:.16,rz:.30,ry:.50,hy:-.08,hz:.05}),
+              K(.32,{py:-.05,rx:.16,rz:.30,ry:.68,hx:-.06,hy:-.12,hr:.6}), K(.44,{py:-.05,rx:.16,rz:.30,ry:.68,hx:.03,hy:-.05,hz:.02}),
+              K(.56,{py:-.05,rx:.16,rz:.30,ry:.40,hy:-.03,hz:.04}), K(.67,{py:-.05,rx:.16,rz:.28,ry:.20,hy:-.01}),
+              K(.78,{py:-.06,rx:.12,rz:.18,ry:.06}), K(.88,{py:-.03,rx:.04,rz:.08}), K(.95,{py:-.04,rx:.08,rz:.10})],
+void_harvester:[K(.10,{py:-.03,rx:-.12,rz:.16,hy:.04,hz:.02}), K(.23,{py:-.05,rx:-.24,rz:.28,hy:.11,hz:-.04,hr:-.7}),
+                K(.34,{py:-.05,rx:-.26,rz:.28,hx:-.06,hy:.14,hz:-.08,hr:-.9}), K(.46,{py:-.05,rx:-.26,rz:.28,hx:.03,hy:-.06,hz:-.02}),
+                K(.58,{py:-.05,rx:-.26,rz:.28,hy:.10,hz:.01}), K(.69,{py:-.05,rx:-.24,rz:.28,hy:.14,hz:-.03,hr:-.8}),
+                K(.79,{py:-.06,rx:-.18,rz:.20,hy:.05}), K(.89,{py:-.06,rx:-.10,rz:.12,hy:.01}), K(.96,{py:-.04,rx:-.04,rz:.06})],
+portal_launcher:[K(.12,{py:-.02,rx:.08,rz:-.14,ry:.16,hy:-.03}), K(.26,{py:-.04,rx:.14,rz:-.24,ry:.36,hy:-.08,hz:.03}),
+                 K(.37,{py:-.04,rx:.14,rz:-.26,ry:.42,hx:.06,hy:-.11,hr:-.6}), K(.50,{py:-.04,rx:.14,rz:-.26,ry:-.42,hx:-.06,hy:-.11,hr:.6}),
+                 K(.62,{py:-.04,rx:.14,rz:-.26,ry:-.36,hy:-.06,hz:.03}), K(.73,{py:-.04,rx:.14,rz:-.24,ry:-.16,hy:-.02}),
+                 K(.83,{py:-.05,rx:.10,rz:-.16,ry:.10}), K(.92,{py:-.03,rx:.04,rz:-.08,ry:-.06})],
+gravity_launcher:[K(.10,{py:-.03,rx:.10,rz:.14,ry:-.18,hy:-.03,hz:-.02}), K(.23,{py:-.05,rx:.16,rz:.24,ry:-.46,hy:-.09,hz:-.05}),
+                  K(.34,{py:-.05,rx:.18,rz:.24,ry:-.52,hx:-.06,hy:-.13,hr:.7}), K(.46,{py:-.05,rx:.18,rz:.24,ry:-.52,hx:.03,hy:-.06,hz:-.03}),
+                  K(.58,{py:-.05,rx:.18,rz:.24,ry:-.30,hy:-.04,hz:-.02}), K(.69,{py:-.05,rx:.16,rz:.22,ry:-.10,hy:-.01}),
+                  K(.79,{py:-.06,rx:.12,rz:.14,ry:.10}), K(.88,{py:-.03,rx:.04,rz:.06,ry:-.08}), K(.95,{py:-.04,rx:.08,rz:.08})],
+pulse_needle:[K(.12,{py:-.03,rx:.22,rz:.18,hy:-.04}), K(.26,{py:-.04,rx:.28,rz:.22,hy:-.12,hz:.01}),
+              K(.37,{py:-.04,rx:.30,rz:.22,hx:-.06,hy:-.17,hr:.7}), K(.50,{py:-.05,rx:.30,rz:.22,hx:.03,hy:-.20,hz:.01}),
+              K(.62,{py:-.05,rx:.30,rz:.22,hy:-.09,hz:.03}), K(.73,{py:-.04,rx:.32,rz:.22,hy:-.02,hz:.04}),
+              K(.82,{py:-.07,rx:.28,rz:.20,hy:0,hz:.02}), K(.90,{py:-.02,rx:.08,rz:.06}), K(.96,{py:-.05,rx:.14,rz:.10})],
+laser_pointer:[K(.14,{py:-.02,rx:.08,rz:-.30,ry:.30,hy:-.01,hz:.02}), K(.30,{py:-.02,rx:.10,rz:-.44,ry:.80,hz:.05}),
+               K(.42,{py:-.02,rx:.10,rz:-.46,ry:1.10,hz:.07}), K(.54,{py:-.02,rx:.10,rz:-.46,ry:1.10,hy:-.06,hz:.02}),
+               K(.66,{py:-.02,rx:.10,rz:-.46,ry:.70,hz:.06}), K(.78,{py:-.02,rx:.10,rz:-.44,ry:.30,hz:.04}),
+               K(.90,{py:-.02,rx:.08,rz:-.28,ry:.08})],
+painter_beam:[K(.12,{py:-.02,rx:-.10,rz:.12,hy:.03,hz:.02}), K(.26,{py:-.03,rx:-.20,rz:.20,hy:.10,hz:-.03,hr:-.7}),
+              K(.37,{py:-.03,rx:-.22,rz:.20,hx:-.05,hy:.13,hz:-.07,hr:-.9}), K(.50,{py:-.03,rx:-.22,rz:.20,hx:.03,hy:-.05,hz:-.02}),
+              K(.62,{py:-.03,rx:-.22,rz:.20,hy:.09,hz:.01}), K(.73,{py:-.03,rx:-.20,rz:.18,hy:.05,hz:.03}),
+              K(.84,{py:-.03,rx:-.12,rz:.10,hy:.02}), K(.93,{py:-.02,rx:-.06,rz:.04})],
+seismic_hammer:[K(.09,{py:-.04,rx:.16,rz:.10,hy:-.03,hz:.03}), K(.20,{py:-.11,rx:.30,rz:.16,hy:-.02,hz:.12}),
+                K(.30,{py:-.05,rx:.14,rz:.08,hy:-.06,hz:.02}), K(.41,{py:-.12,rx:.32,rz:.16,hy:-.02,hz:.13}),
+                K(.51,{py:-.05,rx:.14,rz:.08,hy:-.06,hz:.02}), K(.62,{py:-.13,rx:.34,rz:.16,hy:-.01,hz:.14}),
+                K(.72,{py:-.05,rx:.14,rz:.08,hy:-.06,hz:.02}), K(.83,{py:-.14,rx:.36,rz:.16,hy:-.01,hz:.15}),
+                K(.92,{py:-.06,rx:.16,rz:.08,hy:-.04})],
+pinball_launcher:[K(.10,{py:-.02,rx:.08,rz:.12,hz:.06,hy:-.02}), K(.22,{py:-.02,rx:.06,rz:.12,hz:.18,hy:-.05}),
+                  K(.32,{py:-.03,rx:.10,rz:.14,hz:.03}), K(.44,{py:-.02,rx:.06,rz:.12,hz:.20,hy:-.05}),
+                  K(.54,{py:-.04,rx:.12,rz:.14,hz:.03}), K(.66,{py:-.02,rx:.06,rz:.12,hz:.22,hy:-.06}),
+                  K(.76,{py:-.05,rx:.14,rz:.16,hz:.03}), K(.88,{py:-.02,rx:.06,rz:.12,hz:.24,hy:-.06}),
+                  K(.96,{py:-.06,rx:.16,rz:.14,hz:.02})],
+// ════ TANKS · BOTTLES · HOPPERS ════ close · twist off · swap · thread · bleed
+flamethrower:[K(.08,{py:-.03,rx:.16,rz:-.26,hx:.03,hy:-.02}), K(.19,{py:-.06,rx:.26,rz:-.46,ry:.26,hx:.06,hy:-.07,hz:.04}),
+              K(.29,{py:-.07,rx:.28,rz:-.48,ry:.62,hx:.07,hy:-.09,hz:.08,hr:.6}), K(.40,{py:-.07,rx:.28,rz:-.48,ry:.62,hx:-.06,hy:-.18,hz:.02}),
+              K(.52,{py:-.07,rx:.28,rz:-.48,ry:.62,hy:-.08,hz:.06}), K(.63,{py:-.07,rx:.28,rz:-.48,ry:.30,hy:-.04,hz:.08,hr:-.5}),
+              K(.73,{py:-.07,rx:.28,rz:-.48,ry:.04,hy:-.02,hz:.06}), K(.83,{py:-.05,rx:.18,rz:-.34,hy:.04,hz:-.04,hr:-.6}),
+              K(.92,{py:-.04,rx:.10,rz:-.20,hy:.02})],
+freeze_gun:[K(.09,{py:-.03,rx:.18,rz:-.24,hx:.03,hy:-.02}), K(.20,{py:-.06,rx:.28,rz:-.42,ry:-.24,hx:.06,hy:-.07,hz:.04}),
+            K(.30,{py:-.07,rx:.30,rz:-.44,ry:-.58,hx:.07,hy:-.09,hz:.07,hr:.6}), K(.42,{py:-.07,rx:.30,rz:-.44,ry:-.58,hx:-.06,hy:-.17,hz:.02}),
+            K(.54,{py:-.07,rx:.30,rz:-.44,ry:-.58,hy:-.08,hz:.06}), K(.65,{py:-.07,rx:.30,rz:-.44,ry:-.28,hy:-.04,hz:.07,hr:-.5}),
+            K(.76,{py:-.07,rx:.30,rz:-.44,ry:-.04,hy:-.02,hz:.05}), K(.86,{py:-.05,rx:.20,rz:-.30,hy:.03,hz:-.04,hr:-.6}),
+            K(.95,{py:-.04,rx:.10,rz:-.16})],
+frost_blaster:[K(.11,{py:-.03,rx:.24,rz:-.20,hy:-.04,hx:.02}), K(.24,{py:-.05,rx:.34,rz:-.32,ry:-.20,hy:-.11,hz:.02}),
+               K(.35,{py:-.06,rx:.36,rz:-.34,ry:-.44,hx:.06,hy:-.16,hr:-.7}), K(.48,{py:-.06,rx:.36,rz:-.34,ry:-.44,hx:-.03,hy:-.20,hz:.02}),
+               K(.60,{py:-.06,rx:.36,rz:-.34,ry:-.44,hy:-.09,hz:.04}), K(.71,{py:-.05,rx:.36,rz:-.34,ry:-.20,hy:-.02,hz:.05}),
+               K(.81,{py:-.08,rx:.32,rz:-.28,hy:0,hz:.02}), K(.91,{py:-.04,rx:.16,rz:-.16,hy:.04,hz:-.04,hr:-.5})],
+abs_zero:[K(.08,{py:-.03,rx:.14,rz:-.22,hx:.03,hy:-.02}), K(.19,{py:-.06,rx:.24,rz:-.40,ry:.24,hx:.05,hy:-.06,hz:.04}),
+          K(.29,{py:-.06,rx:.26,rz:-.42,ry:.56,hx:.06,hy:-.08,hz:.07,hr:.6}), K(.41,{py:-.06,rx:.26,rz:-.42,ry:.56,hx:-.05,hy:-.16,hz:.02}),
+          K(.53,{py:-.06,rx:.26,rz:-.42,ry:.56,hy:-.07,hz:.06}), K(.64,{py:-.06,rx:.26,rz:-.42,ry:.26,hy:-.03,hz:.07,hr:-.5}),
+          K(.74,{py:-.06,rx:.26,rz:-.42,ry:.04,hy:-.02,hz:.05}), K(.84,{py:-.04,rx:.14,rz:-.28,hy:.05,hz:-.05,hr:-.7}),
+          K(.93,{py:-.03,rx:.08,rz:-.14,hy:.02})],
+foam_cannon:[K(.08,{py:-.03,rx:.14,rz:-.24,hx:.04,hy:-.03}), K(.19,{py:-.06,rx:.24,rz:-.42,ry:.26,hx:.06,hy:-.08,hz:.05}),
+             K(.29,{py:-.06,rx:.24,rz:-.44,ry:.60,hx:.07,hy:-.10,hz:.08,hr:.6}), K(.40,{py:-.06,rx:.24,rz:-.44,ry:.60,hx:-.06,hy:-.18,hz:.02}),
+             K(.50,{py:-.06,rx:.24,rz:-.44,ry:.60,hy:-.08,hz:.07}), K(.60,{py:-.06,rx:.24,rz:-.44,ry:.24,hy:-.03,hz:.08,hr:-.5}),
+             K(.70,{py:-.06,rx:.24,rz:.44,ry:-.60,hx:-.06,hy:-.17,hz:.02}), K(.80,{py:-.06,rx:.24,rz:.44,ry:-.24,hy:-.03,hz:.07,hr:-.5}),
+             K(.90,{py:-.05,rx:.14,rz:.10,hy:.03,hz:-.06,hr:-.7}), K(.97,{py:-.04,rx:.08})],
+gravity_paint:[K(.10,{py:-.02,rx:-.16,rz:-.20,hy:.03,hz:.02}), K(.22,{py:-.03,rx:-.30,rz:-.36,ry:.28,hy:.09,hz:-.03,hr:-.7}),
+               K(.33,{py:-.03,rx:-.32,rz:-.38,ry:.62,hx:-.06,hy:.12,hz:-.07,hr:-.9}), K(.45,{py:-.03,rx:-.32,rz:-.38,ry:.62,hx:.03,hy:-.06,hz:-.02}),
+               K(.55,{py:-.02,rx:-.34,rz:-.38,ry:.62,hy:.10,hz:.02}), K(.63,{py:-.05,rx:-.28,rz:-.44,ry:.62,hy:.06,hz:-.04}),
+               K(.71,{py:-.02,rx:-.34,rz:-.32,ry:.62,hy:.10,hz:.02}), K(.80,{py:-.03,rx:-.32,rz:-.38,ry:.26,hy:.06,hz:.03}),
+               K(.90,{py:-.04,rx:-.18,rz:-.22,hy:.02}), K(.97,{py:-.03,rx:-.08,rz:-.10})],
+storm_cannon:[K(.10,{py:-.03,rx:-.14,rz:.18,hy:.04,hz:.02}), K(.22,{py:-.04,rx:-.28,rz:.32,hy:.11,hz:-.03,hr:-.8}),
+              K(.33,{py:-.04,rx:-.30,rz:.34,hx:-.06,hy:.14,hz:-.08,hr:-1.0}), K(.45,{py:-.04,rx:-.30,rz:.34,hx:.03,hy:-.06,hz:-.02}),
+              K(.57,{py:-.04,rx:-.30,rz:.34,hy:.10,hz:.02}), K(.68,{py:-.04,rx:-.28,rz:.32,hy:.06,hz:.04}),
+              K(.78,{py:-.05,rx:-.20,rz:.22,hy:.02}), K(.87,{py:-.06,rx:-.12,rz:.14,hy:.05,hz:-.05,hr:-.6}),
+              K(.95,{py:-.04,rx:-.06,rz:.06})],
+glassmaker:[K(.11,{py:-.02,rx:-.26,rz:-.12,hy:.06,hz:.01}), K(.24,{py:-.02,rx:-.44,rz:-.22,hy:.13,hz:-.03,hr:-.8}),
+            K(.35,{py:-.02,rx:-.48,rz:-.24,hx:-.06,hy:.16,hz:-.07,hr:-1.0}), K(.47,{py:-.02,rx:-.48,rz:-.24,hx:.04,hy:-.04,hz:-.02}),
+            K(.57,{py:-.01,rx:-.50,rz:-.24,hy:.14,hz:.01}), K(.65,{py:-.04,rx:-.44,rz:-.30,hy:.10,hz:-.03}),
+            K(.73,{py:-.01,rx:-.50,rz:-.20,hy:.14,hz:.01}), K(.83,{py:-.02,rx:-.44,rz:-.24,hy:.07,hz:.03}),
+            K(.92,{py:-.03,rx:-.24,rz:-.12,hy:.02})],
+paintball:[K(.10,{py:-.02,rx:-.22,rz:-.14,hy:.05,hz:.02}), K(.22,{py:-.02,rx:-.40,rz:-.26,hy:.12,hz:-.03,hr:-.7}),
+           K(.33,{py:-.02,rx:-.44,rz:-.28,hx:-.06,hy:.15,hz:-.07,hr:-.9}), K(.44,{py:-.02,rx:-.44,rz:-.28,hx:.04,hy:-.04,hz:-.02}),
+           K(.53,{py:-.01,rx:-.46,rz:-.28,hy:.13,hz:.01}), K(.61,{py:-.04,rx:-.40,rz:-.34,hy:.09,hz:-.03}),
+           K(.69,{py:-.01,rx:-.46,rz:-.22,hy:.13,hz:.01}), K(.78,{py:-.02,rx:-.44,rz:-.28,hy:.14,hz:-.02,hr:-.8}),
+           K(.88,{py:-.03,rx:-.30,rz:-.18,hx:.05,hy:.02,hz:.05}), K(.96,{py:-.04,rx:-.16,rz:-.10})],
+sticker_blaster:[K(.11,{py:-.02,rx:-.20,rz:.16,hy:.04,hz:.02}), K(.24,{py:-.02,rx:-.36,rz:.28,ry:-.22,hy:.11,hz:-.03,hr:-.7}),
+                 K(.35,{py:-.02,rx:-.38,rz:.30,ry:-.40,hx:-.06,hy:.14,hz:-.07,hr:-.9}), K(.47,{py:-.02,rx:-.38,rz:.30,ry:-.40,hx:.04,hy:-.05,hz:-.02}),
+                 K(.58,{py:-.02,rx:-.38,rz:.30,ry:-.40,hy:.10,hz:.02}), K(.69,{py:-.02,rx:-.36,rz:.28,ry:-.18,hy:.06,hz:.04}),
+                 K(.79,{py:-.03,rx:-.26,rz:.20,hy:.03}), K(.88,{py:-.03,rx:-.18,rz:.24,hx:-.05,hy:.01,hz:.06,hr:-.6}),
+                 K(.96,{py:-.02,rx:-.08,rz:.10})],
+traffic_controller:[K(.11,{py:-.02,rx:-.16,rz:.14,hy:.04,hz:.02}), K(.24,{py:-.03,rx:-.30,rz:.24,hy:.10,hz:-.03,hr:-.6}),
+                    K(.35,{py:-.03,rx:-.32,rz:.26,hx:-.05,hy:.13,hz:-.07,hr:-.8}), K(.47,{py:-.03,rx:-.32,rz:.26,hx:.03,hy:-.05,hz:-.02}),
+                    K(.58,{py:-.03,rx:-.32,rz:.26,hy:.09,hz:.02}), K(.68,{py:-.03,rx:-.30,rz:.24,hy:.05,hz:.03}),
+                    K(.77,{py:-.04,rx:-.22,rz:.16,hy:.02}), K(.84,{py:-.02,rx:-.10,rz:.08}), K(.90,{py:-.04,rx:-.16,rz:.12}),
+                    K(.96,{py:-.02,rx:-.08,rz:.06})],
+nail_gun:[K(.12,{py:-.03,rx:.20,rz:-.18,hx:-.02,hy:-.04}), K(.26,{py:-.05,rx:.28,rz:-.30,hy:-.12,hz:.05}),
+          K(.37,{py:-.05,rx:.30,rz:-.32,hx:.07,hy:-.17,hz:.09,hr:-.7}), K(.50,{py:-.05,rx:.30,rz:-.32,hx:-.03,hy:-.20,hz:.03}),
+          K(.62,{py:-.05,rx:.30,rz:-.32,hy:-.09,hz:.09}), K(.73,{py:-.05,rx:.30,rz:-.32,hy:-.02,hz:.11}),
+          K(.83,{py:-.06,rx:.26,rz:-.26,hy:-.01,hz:.04}), K(.92,{py:-.03,rx:.12,rz:-.14,hz:-.03,hy:.02})],
+// ════ THROWN ════ reach the belt · draw · set it in the hand ════════════════
+throwing_knives:[K(.12,{py:-.06,rx:.26,rz:.34,hy:-.12,hz:.03}), K(.26,{py:-.07,rx:.30,rz:.40,hy:-.20,hz:.06,hr:.7}),
+                 K(.38,{py:-.06,rx:.30,rz:.40,hy:-.13,hz:.04}), K(.52,{py:-.07,rx:.30,rz:.40,hy:-.20,hz:.06,hr:.7}),
+                 K(.64,{py:-.06,rx:.30,rz:.40,hy:-.13,hz:.04}), K(.76,{py:-.07,rx:.30,rz:.40,hy:-.20,hz:.06,hr:.7}),
+                 K(.87,{py:-.05,rx:.24,rz:.32,hy:-.06,hz:.02}), K(.95,{py:-.04,rx:.14,rz:.18})],
+throwing_axes:[K(.13,{py:-.08,rx:.30,rz:.40,hy:-.13,hz:.04}), K(.28,{py:-.09,rx:.34,rz:.46,hy:-.22,hz:.07,hr:.8}),
+               K(.42,{py:-.08,rx:.34,rz:.46,hy:-.14,hz:.05}), K(.57,{py:-.09,rx:.34,rz:.46,hy:-.22,hz:.07,hr:.8}),
+               K(.71,{py:-.08,rx:.34,rz:.46,hy:-.14,hz:.05}), K(.84,{py:-.06,rx:.26,rz:.36,hy:-.06,hz:.02}),
+               K(.94,{py:-.05,rx:.16,rz:.20})],
+boomerang:[K(.14,{py:-.05,rx:.16,rz:-.42,hy:-.09,hz:.04}), K(.30,{py:-.05,rx:.20,rz:-.50,hy:-.16,hz:.07,hr:.6}),
+           K(.44,{py:-.04,rx:.20,rz:-.50,hy:-.08,hz:.03}), K(.58,{py:-.04,rx:.18,rz:-.48,ry:.30,hy:-.04}),
+           K(.72,{py:-.04,rx:.16,rz:-.44,ry:-.20,hy:-.02}), K(.86,{py:-.03,rx:.12,rz:-.34,hy:.01}),
+           K(.95,{py:-.03,rx:.06,rz:-.18})],
+slingshot:[K(.11,{py:-.03,rx:.18,rz:.14,hz:-.06,hy:-.03}), K(.24,{py:-.03,rx:.20,rz:.16,hz:-.14,hy:-.11,hr:.7}),
+           K(.36,{py:-.03,rx:.20,rz:.16,hz:-.18,hy:-.06,hr:.5}), K(.50,{py:-.03,rx:.20,rz:.16,hz:-.20,hy:-.03}),
+           K(.62,{py:-.04,rx:.18,rz:.14,hz:-.13,hy:-.02}), K(.74,{py:-.04,rx:.16,rz:.12,hz:-.05}),
+           K(.86,{py:-.05,rx:.14,rz:.10,hz:.04,hy:-.02}), K(.95,{py:-.03,rx:.08,rz:.06})],
+traffic_cone:[K(.14,{py:-.07,rx:-.24,rz:.30,hy:.05,hz:.03}), K(.30,{py:-.08,rx:-.32,rz:.38,hy:.11,hz:.06,hr:-.7}),
+              K(.44,{py:-.07,rx:-.30,rz:.36,hy:.04,hz:.02}), K(.58,{py:-.06,rx:-.26,rz:.32,ry:.26,hy:.01}),
+              K(.72,{py:-.05,rx:-.22,rz:.28,ry:-.18}), K(.86,{py:-.04,rx:-.16,rz:.20}), K(.95,{py:-.03,rx:-.08,rz:.10})],
+cream_pie:[K(.14,{py:-.05,rx:.12,rz:-.28,hy:-.05,hz:-.04}), K(.30,{py:-.06,rx:.16,rz:-.36,hy:-.12,hz:-.08,hr:.6}),
+           K(.44,{py:-.05,rx:.16,rz:-.34,hy:-.05,hz:-.03}), K(.58,{py:-.04,rx:.12,rz:-.28,hy:-.02}),
+           K(.72,{py:-.04,rx:.10,rz:-.22,ry:.20}), K(.86,{py:-.03,rx:.06,rz:-.14}), K(.95,{py:-.02,rx:.04,rz:-.06})],
+};
+
+// The one fallback, for anything that isn't a numbered weapon (ability
+// variants, anything added later): a plain magazine change.
+const _RELOAD_DEFAULT = [K(.20,{py:-.07,rx:.40,rz:.18,hy:-.14}),
+                         K(.55,{py:-.08,rx:.42,rz:.20,hy:-.02,hz:.04}),
+                         K(.82,{py:-.09,rx:.40,rz:.18})];
+
+function _reloadPose(track, t) {
+  let a = _RELOAD_REST, b = _RELOAD_REST;
+  for (let i = 0; i < track.length; i++) {
+    if (track[i].t <= t) a = track[i];
+    else { b = track[i]; break; }
+  }
+  // Past the last keyframe we settle back to rest rather than holding the pose.
+  if (b === _RELOAD_REST && a !== _RELOAD_REST && a.t <= t) b = K(1, {});
+  const span = Math.max(0.0001, b.t - a.t);
+  const p = Math.max(0, Math.min(1, (t - a.t) / span));
+  const s = p * p * (3 - 2 * p);            // smoothstep, so nothing snaps
+  const L = (k) => a[k] + (b[k] - a[k]) * s;
+  return { px:L('px'), py:L('py'), pz:L('pz'), rx:L('rx'), ry:L('ry'), rz:L('rz'),
+           hx:L('hx'), hy:L('hy'), hz:L('hz'), hr:L('hr') };
 }
 
 function updateReloadAnim() {
   const model = weaponModels[currentWeaponIdx];
   if (!model) return;
   const H = model._hands;
-  if (!model._reloadStart || !model._reloadDur) {
-    if (model._wasReloading) {
-      model.position.set(0.12, -0.1, -0.25);
-      if (model._homePos) model.position.copy(model._homePos);
-      model.rotation.set(0, 0, 0);
-      if (H) {
-        H.rear.position.copy(H.rearHome);   H.rear.rotation.copy(H.rearRot);
-        if (!H.single) { H.front.position.copy(H.frontHome); H.front.rotation.copy(H.frontRot); }
-      }
-      model._wasReloading = false;
-    }
-    return;
-  }
-  if (!model._homePos) model._homePos = model.position.clone();
-  model._wasReloading = true;
-  const t = Math.min(1, (Date.now() - model._reloadStart) / model._reloadDur);
-  if (t >= 1) {
-    // Land back in the aim pose on the final frame rather than freezing in
-    // whatever pose the animation happened to stop on.
-    model.position.copy(model._homePos); model.rotation.set(0, 0, 0);
+  const rest = () => {
+    if (model._homePos) model.position.copy(model._homePos);
+    else model.position.set(0.12, -0.1, -0.25);
+    model.rotation.set(0, 0, 0);
+    if (H && H.hideFront) H.front.visible = false;   // back to one-handed
     if (H) {
       H.rear.position.copy(H.rearHome); H.rear.rotation.copy(H.rearRot);
       if (!H.single) { H.front.position.copy(H.frontHome); H.front.rotation.copy(H.frontRot); }
     }
+  };
+  if (!model._reloadStart || !model._reloadDur) {
+    if (model._wasReloading) { rest(); model._wasReloading = false; }
     return;
   }
+  if (!model._homePos) model._homePos = model.position.clone();
+  if (H && H.hideFront) H.front.visible = true;   // the off hand comes in to work
+  model._wasReloading = true;
+  const t = Math.min(1, (Date.now() - model._reloadStart) / model._reloadDur);
+  if (t >= 1) { rest(); return; }
 
-  const id    = WEAPONS[currentWeaponIdx]?.id || '';
-  const style = reloadStyleFor(id);
-  const seed  = _reloadSeed(id);
-  // Ease the gun out of the aim pose and back into it, so every style shares
-  // the same settle but not the same middle.
-  const inOut = t < 0.22 ? t / 0.22 : t > 0.82 ? (1 - t) / 0.18 : 1;
-  const mid   = Math.max(0, Math.min(1, (t - 0.22) / 0.60));   // 0..1 across the work
-  const home  = model._homePos;
-  let px = 0, py = 0, pz = 0, rx = 0, ry = 0, rz = 0;
-  let fx = 0, fy = 0, fz = 0, frx = 0;   // support-hand offset
-  const wob = Math.sin(mid * Math.PI * (2 + Math.floor(seed * 3)));
-
-  switch (style) {
-    case 'revolver':
-      // Roll the gun over so the cylinder can swing out to the left, then the
-      // off hand comes up under it to punch the ejector and feed.
-      rz = -inOut * 1.05; rx = inOut * 0.20; ry = inOut * 0.30;
-      px = -inOut * 0.035; py = -inOut * 0.055;
-      fx = inOut * 0.070; fy = inOut * (0.050 + wob * 0.018); fz = -inOut * 0.020;
-      frx = inOut * 0.5;
-      break;
-    case 'swingout':
-      // A six-shot drum is heavy: it drops out to the side and takes both
-      // hands and a shove to come back.
-      rz = -inOut * 0.70; rx = inOut * 0.34; py = -inOut * 0.075;
-      px = -inOut * 0.020 + Math.sin(mid * Math.PI) * 0.018;
-      fx = inOut * 0.090; fy = inOut * 0.030; fz = inOut * (0.030 + wob * 0.030);
-      break;
-    case 'pump':
-      // The gun stays level and pointing; the support hand racks the slide
-      // back and forward, twice, and the gun rocks with it.
-      py = -inOut * 0.020; rx = inOut * 0.10;
-      { const rack = Math.sin(mid * Math.PI * 2);
-        fz = inOut * rack * 0.085; pz = inOut * rack * -0.020; rx += inOut * rack * 0.06; }
-      break;
-    case 'break':
-      // Hinge the barrels down hard, eject, feed a shell, snap it shut.
-      rx = inOut * (mid < 0.75 ? 0.95 : 0.95 * (1 - (mid - 0.75) / 0.25));
-      py = -inOut * 0.040; pz = inOut * 0.030;
-      fx = inOut * 0.055; fy = -inOut * 0.020 + Math.sin(mid * Math.PI * 2) * 0.030 * inOut;
-      break;
-    case 'belt':
-      // Tip the gun over, lift the cover with the off hand, lay in the belt.
-      rz = inOut * 0.55; rx = inOut * 0.24; py = -inOut * 0.060; px = inOut * 0.030;
-      fx = -inOut * 0.030; fy = inOut * (0.090 + wob * 0.020); fz = inOut * 0.050;
-      frx = -inOut * 0.6;
-      break;
-    case 'bolt':
-      // Short, sharp: the off hand goes back to the bolt and works it, and
-      // the gun kicks against the shoulder each time.
-      rz = inOut * 0.28; py = -inOut * 0.014;
-      { const cyc = Math.sin(mid * Math.PI * 2);
-        fz = inOut * (0.090 + cyc * 0.060); fy = inOut * 0.055; fx = inOut * 0.030;
-        pz = inOut * cyc * 0.014; rx = inOut * cyc * 0.05; }
-      break;
-    case 'muzzle':
-      // Point it up and load from the front — a rocket, a bomb, a bolt, a
-      // potato. Slow, deliberate, one round.
-      rx = -inOut * 0.55; py = inOut * 0.030; pz = inOut * 0.045; rz = inOut * 0.16;
-      fy = -inOut * (0.060 + Math.sin(mid * Math.PI) * 0.070);
-      fz = -inOut * (0.100 + Math.sin(mid * Math.PI) * 0.090);
-      break;
-    case 'cell':
-      // Nothing to rack. Vent the core, let it cycle, bring it back — the gun
-      // shivers as it dumps heat rather than being handled.
-      py = -inOut * 0.030; rx = inOut * 0.20; rz = inOut * 0.10;
-      px = inOut * Math.sin(mid * Math.PI * 6) * 0.006;
-      py += inOut * Math.sin(mid * Math.PI * 9) * 0.004;
-      fy = -inOut * 0.030; fz = -inOut * 0.020;
-      break;
-    case 'tank':
-      // Twist the bottle out, swap it, twist it home.
-      rz = -inOut * 0.40; rx = inOut * 0.30; py = -inOut * 0.065;
-      ry = inOut * Math.sin(mid * Math.PI) * 0.40;
-      fx = inOut * 0.055; fy = -inOut * 0.055; fz = inOut * (0.060 + wob * 0.040);
-      break;
-    case 'hopper':
-      // Tip it back and pour into the top.
-      rx = -inOut * 0.42; rz = -inOut * 0.22; py = -inOut * 0.030; pz = inOut * 0.020;
-      fy = inOut * (0.100 + Math.sin(mid * Math.PI) * 0.040); fz = inOut * 0.010;
-      frx = -inOut * 0.8;
-      break;
-    default: {
-      // Magazine swap: drop it, reach down, bring one up, seat it with a
-      // knock, chamber a round.
-      rx = inOut * 0.42; rz = inOut * 0.20; py = -inOut * 0.075; px = -inOut * 0.010;
-      const reach = mid < 0.45 ? mid / 0.45 : 1 - (mid - 0.45) / 0.55;
-      fy = -inOut * reach * 0.150; fz = inOut * reach * 0.040; fx = inOut * reach * 0.020;
-      if (mid > 0.80) { const k = (mid - 0.80) / 0.20; py -= Math.sin(k * Math.PI) * 0.020; }
-      break;
-    }
-  }
-
-  model.position.set(home.x + px, home.y + py, home.z + pz);
-  model.rotation.set(rx, ry, rz);
+  const id = WEAPONS[currentWeaponIdx]?.id || '';
+  const P = _reloadPose(RELOAD_KEYS[id] || _RELOAD_DEFAULT, t);
+  const home = model._homePos;
+  model.position.set(home.x + P.px, home.y + P.py, home.z + P.pz);
+  model.rotation.set(P.rx, P.ry, P.rz);
   if (H && !H.single) {
-    H.front.position.set(H.frontHome.x + fx, H.frontHome.y + fy, H.frontHome.z + fz);
-    H.front.rotation.set(H.frontRot.x + frx, H.frontRot.y, H.frontRot.z);
-    // The trigger hand never lets go — it just relaxes a little on the grip.
-    H.rear.position.set(H.rearHome.x, H.rearHome.y - inOut * 0.004, H.rearHome.z + inOut * 0.006);
+    H.front.position.set(H.frontHome.x + P.hx, H.frontHome.y + P.hy, H.frontHome.z + P.hz);
+    H.front.rotation.set(H.frontRot.x + P.hr, H.frontRot.y, H.frontRot.z);
+    // The trigger hand never lets go of the grip — it only rides the gun.
+    H.rear.position.set(H.rearHome.x, H.rearHome.y - Math.abs(P.py) * 0.06,
+                        H.rearHome.z + Math.abs(P.rx) * 0.012);
   } else if (H) {
-    H.rear.position.set(H.rearHome.x, H.rearHome.y - inOut * 0.010, H.rearHome.z + inOut * 0.014);
+    H.rear.position.set(H.rearHome.x + P.hx * 0.4, H.rearHome.y + P.hy * 0.4,
+                        H.rearHome.z + P.hz * 0.4);
+    H.rear.rotation.set(H.rearRot.x + P.hr * 0.5, H.rearRot.y, H.rearRot.z);
   }
 }
+
 
 
 function spawnLocalBullet(origin, dir, id, isOwn, speed, color, size, weaponId, opts = {}) {
