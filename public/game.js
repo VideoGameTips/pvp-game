@@ -10823,6 +10823,7 @@ function _throwableHolder(meshFn) {
   flash.position.set(0, 0, -0.20); // pretend muzzle ~20cm in front
   g.add(flash);
   g._flash = flash;
+  g._throwable = true;   // held IN the hand, so attachViewHands skips it
   g.position.set(0.16, -0.10, -0.22);
   return g;
 }
@@ -11526,6 +11527,7 @@ function applyWeaponSkin(model, skin) {
     if (!model._skinMats) {
       model._skinMats = [];
       model.traverse(o => {
+        if (o.userData && o.userData.vmHand) return;   // hands are not part of the gun
         if (o.isMesh && o.material && o.material.color && !o.material.map) {
           const basic = !!o.material.isMeshBasicMaterial; // glow/lens/reticle — leave colored
           const clone = o.material.clone(); o.material = clone;
@@ -16722,36 +16724,329 @@ function playerOnIce() {
   return false;
 }
 
-// Animate reload: weapon tilts down + rotates as if dropping/inserting mag
+// ── 🤚 View hands ────────────────────────────────────────────────────────────
+// Every gun gets two blocky fists in the same skin tone as the Fists melee, so
+// the weapon reads as being HELD rather than floating in front of the camera.
+//
+// The anchors are derived from each model's own geometry rather than being
+// hand-placed 99 times. The trigger hand is found from the trigger-guard torus
+// (every hand-detailed gun has exactly one, at a distinctive radius); the
+// support hand is placed under the forend, at the model's actual underside for
+// that slice of z. Pistols get a cupped support hand under the grip instead,
+// because nobody puts their off hand on a Glock's muzzle.
+const VM_SKIN_MAT = () => new THREE.MeshPhongMaterial({ color: 0xeac39a, shininess: 18, specular: 0x6a5a48 });
+const VM_CUFF_MAT = () => new THREE.MeshPhongMaterial({ color: 0x35383f, shininess: 26, specular: 0x63676f });
+
+function _makeViewHand(mirror) {
+  // A fist, built to the same blocky language as buildFists: one palm block,
+  // a thumb laid across it, four knuckle ridges and a sleeve cuff behind.
+  const h = new THREE.Group();
+  const skin = VM_SKIN_MAT(), cuff = VM_CUFF_MAT();
+  const dark = new THREE.MeshPhongMaterial({ color: 0xc79a72, shininess: 14, specular: 0x5a4a3a });
+  const palm = new THREE.Mesh(new THREE.BoxGeometry(0.074, 0.072, 0.094), skin);
+  palm.castShadow = true; h.add(palm);
+  for (let i = 0; i < 4; i++) {                      // knuckle ridges
+    const k = new THREE.Mesh(new THREE.BoxGeometry(0.070, 0.012, 0.014), dark);
+    k.position.set(0, 0.033, -0.030 + i * 0.021); h.add(k);
+  }
+  const thumb = new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.030, 0.046), skin);
+  thumb.position.set(mirror * 0.042, 0.012, -0.016); thumb.rotation.z = mirror * 0.28; h.add(thumb);
+  const nail = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.014, 0.016), dark);
+  nail.position.set(mirror * 0.053, 0.016, -0.032); h.add(nail);
+  const wrist = new THREE.Mesh(new THREE.BoxGeometry(0.062, 0.060, 0.030), skin);
+  wrist.position.set(0, -0.002, 0.060); h.add(wrist);
+  const sleeve = new THREE.Mesh(new THREE.BoxGeometry(0.082, 0.080, 0.044), cuff);
+  sleeve.position.set(0, -0.002, 0.092); h.add(sleeve);
+  const band = new THREE.Mesh(new THREE.BoxGeometry(0.086, 0.084, 0.008), skin);
+  band.position.set(0, -0.002, 0.072); h.add(band);
+  // Tagged so the skin system leaves them alone: a gold weapon skin should
+  // gild the gun, not the hands holding it.
+  h.traverse(o => { if (o.isMesh) { o.castShadow = true; o.userData.vmHand = true; } });
+  return h;
+}
+
+// Every mesh's box, expressed in the ROOT's own space. Built by walking the
+// tree with an accumulated matrix rather than Box3.setFromObject, which would
+// bake in the model's viewmodel offset and any parent transform.
+function _localPartBoxes(root) {
+  const out = [];
+  const walk = (o, m) => {
+    o.updateMatrix();
+    const mm = m.clone().multiply(o.matrix);
+    if (o.isMesh && o.geometry && o.visible !== false) {
+      if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+      out.push({ box: o.geometry.boundingBox.clone().applyMatrix4(mm), obj: o, m: mm });
+    }
+    for (const c of o.children) walk(c, mm);
+  };
+  for (const c of root.children) walk(c, new THREE.Matrix4());
+  return out;
+}
+
+function attachViewHands(root) {
+  if (!root || root._hands || root._throwable) return;
+  const parts = _localPartBoxes(root);
+  if (!parts.length) return;
+  const full = new THREE.Box3();
+  parts.forEach(p => full.union(p.box));
+  const size = full.getSize(new THREE.Vector3());
+  const ctr  = full.getCenter(new THREE.Vector3());
+  if (!isFinite(size.z) || size.z < 0.02) return;
+
+  // Trigger hand: locate the trigger-guard torus. Every hand-detailed gun has
+  // one at ring radius 0.017-0.023 with a 0.0032-0.0040 tube, which no coil,
+  // cam or chain link in the set matches.
+  let gripAt = null;
+  for (const p of parts) {
+    const g = p.obj.geometry;
+    if (g.type !== 'TorusGeometry') continue;
+    const pr = g.parameters || {};
+    if (pr.radius >= 0.015 && pr.radius <= 0.024 && pr.tube >= 0.0030 && pr.tube <= 0.0042) {
+      const c = p.box.getCenter(new THREE.Vector3());
+      if (!gripAt || c.y < gripAt.y) gripAt = c;
+    }
+  }
+  if (!gripAt) {
+    // Fallback for the guns with no guard torus -- the rotaries held by spade
+    // grips, the improvised ones with a handle bolted on, the Desert Eagle's
+    // squared guard. On all of those the grip is the lowest thing in the REAR
+    // of the weapon, not the lowest thing overall: on a minigun that would be
+    // the ammo can slung under the middle.
+    let best = null;
+    const rearOf = ctr.z + size.z * 0.05;
+    for (const p of parts) {
+      const c = p.box.getCenter(new THREE.Vector3());
+      if (c.z < rearOf) continue;
+      if (!best || c.y < best.y) best = c;
+    }
+    gripAt = best || ctr.clone();
+  }
+  const rear = _makeViewHand(1);
+  rear.position.set(0.004, gripAt.y - 0.014, gripAt.z + 0.026);
+  rear.rotation.set(0.26, 0, 0.10);
+  root.add(rear);
+
+  // Something pen-sized (the Laser Pointer) is held in one hand. Two fists on
+  // a 12 cm pointer looks like a hostage situation.
+  const tiny = Math.max(size.x, size.y, size.z) < 0.22;
+  if (tiny) {
+    root._homePos = root.position.clone();
+    root._hands = { rear, front: rear, rearHome: rear.position.clone(),
+                    frontHome: rear.position.clone(), rearRot: rear.rotation.clone(),
+                    frontRot: rear.rotation.clone(), gripAt: gripAt.clone(), size,
+                    pistolish: true, single: true };
+    return;
+  }
+
+  // Support hand. A short gun is fired one-handed, so its off hand cups under
+  // the grip; a long gun gets a hand on the forend, resting on whatever the
+  // underside actually is at that point rather than at a guessed height.
+  const pistolish = size.z < 0.34;
+  const front = _makeViewHand(-1);
+  if (pistolish) {
+    front.position.set(-0.052, gripAt.y - 0.050, gripAt.z + 0.030);
+    front.rotation.set(0.30, 0.22, -0.42);
+  } else {
+    const fz = Math.min(gripAt.z - 0.090, ctr.z - size.z * 0.16);
+    let underY = full.min.y;
+    for (const p of parts) {
+      if (p.box.max.z < fz - 0.030 || p.box.min.z > fz + 0.030) continue;
+      underY = Math.min(underY, p.box.min.y);   // the true underside at this slice
+    }
+    if (!isFinite(underY)) underY = full.min.y;
+    front.position.set(-0.004, Math.max(underY - 0.030, gripAt.y - 0.010), fz);
+    front.rotation.set(0.16, 0, -0.10);
+  }
+  root.add(front);
+
+  root._homePos = root.position.clone();
+  root._hands = {
+    rear, front,
+    rearHome: rear.position.clone(), frontHome: front.position.clone(),
+    rearRot: rear.rotation.clone(), frontRot: front.rotation.clone(),
+    gripAt: gripAt.clone(), size, pistolish,
+  };
+}
+
+// Hands go on last, after the finishing pass, so the greebler never panels a
+// knuckle and the welder never drags a fist into the gun. This runs HERE and
+// not up with the finishing pass: attachViewHands reads consts declared just
+// above it, and calling it earlier would hit the temporal dead zone -- inside
+// a try/catch, which would have swallowed the ReferenceError and silently
+// shipped a game with no hands on any gun.
+weaponModels.forEach(m => { if (!m) return; try { attachViewHands(m); } catch (e) { console.warn('[hands]', e); } });
+
+// ── 🔁 Reload choreography ───────────────────────────────────────────────────
+// One tilt for ninety-nine weapons made every reload look the same. Each gun
+// now reloads the way its action actually works: a belt-fed gun lifts its top
+// cover, a revolver rolls over so the cylinder can swing out, a pump racks its
+// slide, a break-action hinges at the breech, a muzzle-loader gets rammed.
+//
+// Style comes from how the weapon FEEDS, not from what it fires, so guns that
+// share a mechanism share a motion and nothing else does.
+const RELOAD_STYLE = {};
+const _rs = (style, ids) => ids.forEach(id => { RELOAD_STYLE[id] = style; });
+_rs('revolver', ['revolver', 'snub_revolver', 'auto_revolver', 'machine_revolver']);
+_rs('swingout', ['grenade_launcher', 'nebula_mortar', 'burst_cannon']);
+_rs('pump',     ['sg8', 'shorty', 'flechette']);
+_rs('break',    ['sawed_off', 'boomstick', 'signal_pistol', 'dart_gun', 'duelist_pistol', 'flare', 'taser']);
+_rs('belt',     ['rpd', 'mg42', 'minigun', 'gau19', 'm134', 'mk44']);
+_rs('bolt',     ['srx', 'lever', 'amr', 'mauser', 'm1_garand', 'barrett', 'air_rifle', 'railgun', 'coilgun']);
+_rs('muzzle',   ['rpg', 'bazooka', 'boombow', 'crossbow', 'harpoon_gun', 'mortar_rifle',
+                 'potato_cannon', 'firework_launcher', 'shockwave_launcher', 'airburst_projector']);
+_rs('cell',     ['plasma_carbine', 'arc_rifle', 'arc_torrent', 'event_horizon', 'storm_core',
+                 'solar_lance', 'quantum_repeater', 'magnetar', 'prism_engine', 'prism_launcher',
+                 'void_harvester', 'portal_launcher', 'gravity_launcher', 'pulse_needle',
+                 'laser_pointer', 'painter_beam', 'railgun_ab', 'seismic_hammer', 'pinball_launcher']);
+_rs('tank',     ['flamethrower', 'freeze_gun', 'frost_blaster', 'abs_zero', 'foam_cannon',
+                 'gravity_paint', 'storm_cannon', 'glassmaker']);
+_rs('hopper',   ['paintball', 'sticker_blaster', 'swarm_rifle', 'traffic_controller', 'nail_gun']);
+function reloadStyleFor(id) { return RELOAD_STYLE[id] || 'mag'; }
+
+// A stable per-weapon jitter so two guns sharing a style never run in lockstep:
+// same mechanism, different hands working it.
+function _reloadSeed(id) {
+  let h = 0;
+  for (let i = 0; i < (id || '').length; i++) h = (h * 31 + id.charCodeAt(i)) & 0xffff;
+  return (h % 1000) / 1000;
+}
+
 function updateReloadAnim() {
   const model = weaponModels[currentWeaponIdx];
   if (!model) return;
+  const H = model._hands;
   if (!model._reloadStart || !model._reloadDur) {
-    // Restore base position if we just exited reload
     if (model._wasReloading) {
-      model.position.y = -0.1; model.rotation.x = 0; model.rotation.z = 0;
+      model.position.set(0.12, -0.1, -0.25);
+      if (model._homePos) model.position.copy(model._homePos);
+      model.rotation.set(0, 0, 0);
+      if (H) {
+        H.rear.position.copy(H.rearHome);   H.rear.rotation.copy(H.rearRot);
+        if (!H.single) { H.front.position.copy(H.frontHome); H.front.rotation.copy(H.frontRot); }
+      }
       model._wasReloading = false;
     }
     return;
   }
+  if (!model._homePos) model._homePos = model.position.clone();
   model._wasReloading = true;
-  const t = (Date.now() - model._reloadStart) / model._reloadDur;
-  if (t >= 1) return;
-  // 3-phase animation: 0–0.3 tilt down + rotate, 0.3–0.7 hold (mag swap), 0.7–1.0 tilt back up
-  let tiltAmt, rotAmt;
-  if (t < 0.3) {
-    const p = t / 0.3;
-    tiltAmt = p; rotAmt = p;
-  } else if (t < 0.7) {
-    tiltAmt = 1; rotAmt = 1 + Math.sin((t - 0.3) * 10) * 0.15;
-  } else {
-    const p = 1 - ((t - 0.7) / 0.3);
-    tiltAmt = p; rotAmt = p;
+  const t = Math.min(1, (Date.now() - model._reloadStart) / model._reloadDur);
+  if (t >= 1) {
+    // Land back in the aim pose on the final frame rather than freezing in
+    // whatever pose the animation happened to stop on.
+    model.position.copy(model._homePos); model.rotation.set(0, 0, 0);
+    if (H) {
+      H.rear.position.copy(H.rearHome); H.rear.rotation.copy(H.rearRot);
+      if (!H.single) { H.front.position.copy(H.frontHome); H.front.rotation.copy(H.frontRot); }
+    }
+    return;
   }
-  model.position.y = -0.1 - tiltAmt * 0.08;
-  model.rotation.x = rotAmt * 0.45;  // tilt forward
-  model.rotation.z = rotAmt * 0.18;  // slight roll
+
+  const id    = WEAPONS[currentWeaponIdx]?.id || '';
+  const style = reloadStyleFor(id);
+  const seed  = _reloadSeed(id);
+  // Ease the gun out of the aim pose and back into it, so every style shares
+  // the same settle but not the same middle.
+  const inOut = t < 0.22 ? t / 0.22 : t > 0.82 ? (1 - t) / 0.18 : 1;
+  const mid   = Math.max(0, Math.min(1, (t - 0.22) / 0.60));   // 0..1 across the work
+  const home  = model._homePos;
+  let px = 0, py = 0, pz = 0, rx = 0, ry = 0, rz = 0;
+  let fx = 0, fy = 0, fz = 0, frx = 0;   // support-hand offset
+  const wob = Math.sin(mid * Math.PI * (2 + Math.floor(seed * 3)));
+
+  switch (style) {
+    case 'revolver':
+      // Roll the gun over so the cylinder can swing out to the left, then the
+      // off hand comes up under it to punch the ejector and feed.
+      rz = -inOut * 1.05; rx = inOut * 0.20; ry = inOut * 0.30;
+      px = -inOut * 0.035; py = -inOut * 0.055;
+      fx = inOut * 0.070; fy = inOut * (0.050 + wob * 0.018); fz = -inOut * 0.020;
+      frx = inOut * 0.5;
+      break;
+    case 'swingout':
+      // A six-shot drum is heavy: it drops out to the side and takes both
+      // hands and a shove to come back.
+      rz = -inOut * 0.70; rx = inOut * 0.34; py = -inOut * 0.075;
+      px = -inOut * 0.020 + Math.sin(mid * Math.PI) * 0.018;
+      fx = inOut * 0.090; fy = inOut * 0.030; fz = inOut * (0.030 + wob * 0.030);
+      break;
+    case 'pump':
+      // The gun stays level and pointing; the support hand racks the slide
+      // back and forward, twice, and the gun rocks with it.
+      py = -inOut * 0.020; rx = inOut * 0.10;
+      { const rack = Math.sin(mid * Math.PI * 2);
+        fz = inOut * rack * 0.085; pz = inOut * rack * -0.020; rx += inOut * rack * 0.06; }
+      break;
+    case 'break':
+      // Hinge the barrels down hard, eject, feed a shell, snap it shut.
+      rx = inOut * (mid < 0.75 ? 0.95 : 0.95 * (1 - (mid - 0.75) / 0.25));
+      py = -inOut * 0.040; pz = inOut * 0.030;
+      fx = inOut * 0.055; fy = -inOut * 0.020 + Math.sin(mid * Math.PI * 2) * 0.030 * inOut;
+      break;
+    case 'belt':
+      // Tip the gun over, lift the cover with the off hand, lay in the belt.
+      rz = inOut * 0.55; rx = inOut * 0.24; py = -inOut * 0.060; px = inOut * 0.030;
+      fx = -inOut * 0.030; fy = inOut * (0.090 + wob * 0.020); fz = inOut * 0.050;
+      frx = -inOut * 0.6;
+      break;
+    case 'bolt':
+      // Short, sharp: the off hand goes back to the bolt and works it, and
+      // the gun kicks against the shoulder each time.
+      rz = inOut * 0.28; py = -inOut * 0.014;
+      { const cyc = Math.sin(mid * Math.PI * 2);
+        fz = inOut * (0.090 + cyc * 0.060); fy = inOut * 0.055; fx = inOut * 0.030;
+        pz = inOut * cyc * 0.014; rx = inOut * cyc * 0.05; }
+      break;
+    case 'muzzle':
+      // Point it up and load from the front — a rocket, a bomb, a bolt, a
+      // potato. Slow, deliberate, one round.
+      rx = -inOut * 0.55; py = inOut * 0.030; pz = inOut * 0.045; rz = inOut * 0.16;
+      fy = -inOut * (0.060 + Math.sin(mid * Math.PI) * 0.070);
+      fz = -inOut * (0.100 + Math.sin(mid * Math.PI) * 0.090);
+      break;
+    case 'cell':
+      // Nothing to rack. Vent the core, let it cycle, bring it back — the gun
+      // shivers as it dumps heat rather than being handled.
+      py = -inOut * 0.030; rx = inOut * 0.20; rz = inOut * 0.10;
+      px = inOut * Math.sin(mid * Math.PI * 6) * 0.006;
+      py += inOut * Math.sin(mid * Math.PI * 9) * 0.004;
+      fy = -inOut * 0.030; fz = -inOut * 0.020;
+      break;
+    case 'tank':
+      // Twist the bottle out, swap it, twist it home.
+      rz = -inOut * 0.40; rx = inOut * 0.30; py = -inOut * 0.065;
+      ry = inOut * Math.sin(mid * Math.PI) * 0.40;
+      fx = inOut * 0.055; fy = -inOut * 0.055; fz = inOut * (0.060 + wob * 0.040);
+      break;
+    case 'hopper':
+      // Tip it back and pour into the top.
+      rx = -inOut * 0.42; rz = -inOut * 0.22; py = -inOut * 0.030; pz = inOut * 0.020;
+      fy = inOut * (0.100 + Math.sin(mid * Math.PI) * 0.040); fz = inOut * 0.010;
+      frx = -inOut * 0.8;
+      break;
+    default: {
+      // Magazine swap: drop it, reach down, bring one up, seat it with a
+      // knock, chamber a round.
+      rx = inOut * 0.42; rz = inOut * 0.20; py = -inOut * 0.075; px = -inOut * 0.010;
+      const reach = mid < 0.45 ? mid / 0.45 : 1 - (mid - 0.45) / 0.55;
+      fy = -inOut * reach * 0.150; fz = inOut * reach * 0.040; fx = inOut * reach * 0.020;
+      if (mid > 0.80) { const k = (mid - 0.80) / 0.20; py -= Math.sin(k * Math.PI) * 0.020; }
+      break;
+    }
+  }
+
+  model.position.set(home.x + px, home.y + py, home.z + pz);
+  model.rotation.set(rx, ry, rz);
+  if (H && !H.single) {
+    H.front.position.set(H.frontHome.x + fx, H.frontHome.y + fy, H.frontHome.z + fz);
+    H.front.rotation.set(H.frontRot.x + frx, H.frontRot.y, H.frontRot.z);
+    // The trigger hand never lets go — it just relaxes a little on the grip.
+    H.rear.position.set(H.rearHome.x, H.rearHome.y - inOut * 0.004, H.rearHome.z + inOut * 0.006);
+  } else if (H) {
+    H.rear.position.set(H.rearHome.x, H.rearHome.y - inOut * 0.010, H.rearHome.z + inOut * 0.014);
+  }
 }
+
 
 function spawnLocalBullet(origin, dir, id, isOwn, speed, color, size, weaponId, opts = {}) {
   const mesh = makeBulletMesh(color, size, weaponId);
