@@ -7912,6 +7912,299 @@ function buildTrafficController() {
   g.position.set(0.12, -0.1, -0.25); return g;
 }
 
+function buildMK44() {
+  // 🔫 MK-44 Bushmaster: a chain gun. The chain itself runs in an open race
+  // along the right side of the receiver with a visible sprocket at each end,
+  // a dual-feed selector on top, a long fluted barrel with a thermal sleeve,
+  // and a proper trunnion cradle.
+  const g = new THREE.Group();
+  const steel = GUN_MATS.steel(), blued = GUN_MATS.blued(), bright = GUN_MATS.bright();
+  const poly = GUN_MATS.polymer(), grip = GUN_MATS.grip(), inner = GUN_MATS.inner();
+  gpBox(g, poly, 0.070, 0.076, 0.230, 0, 0.008, 0.070);             // receiver
+  gpBox(g, inner, 0.071, 0.010, 0.210, 0, 0.048, 0.070);
+  for (let i = 0; i < 5; i++) gpBox(g, inner, 0.072, 0.030, 0.006, 0, 0.008, -0.010 + i * 0.038);
+  // The chain, in an open race with a sprocket at each end.
+  gpBox(g, steel, 0.010, 0.052, 0.200, 0.038, 0.008, 0.070);
+  [-0.020, 0.160].forEach(z => {
+    gpCyl(g, bright, 0.021, 0.021, 0.012, 12, 0.038, 0.008, z, 0, Math.PI/2);
+    for (let t = 0; t < 8; t++) gpBox(g, inner, 0.014, 0.007, 0.007, 0.038, 0.008, z, 0, 0, t * 0.4);
+  });
+  for (let i = 0; i < 9; i++) [-1, 1].forEach(sd => gpBox(g, bright, 0.008, 0.008, 0.014, 0.038, 0.008 + sd * 0.020, -0.010 + i * 0.020));
+  gpBox(g, inner, 0.012, 0.020, 0.190, 0.038, 0.008, 0.070);
+  // Dual feed selector on top.
+  gpBox(g, steel, 0.056, 0.026, 0.060, 0, 0.062, 0.040);
+  [-1, 1].forEach(sd => {
+    gpCyl(g, inner, 0.011, 0.011, 0.056, 10, sd * 0.018, 0.062, 0.040, 0, Math.PI/2);
+    for (let i = 0; i < 3; i++) gpCyl(g, bright, 0.0060, 0.0060, 0.024, 8, sd * 0.018, 0.062, 0.016 + i * 0.020);
+  });
+  gpBox(g, bright, 0.012, 0.014, 0.020, 0, 0.078, 0.070, 0, 0.3);   // selector lever
+  // Fluted barrel in a thermal sleeve.
+  gpCyl(g, blued, 0.0165, 0.0165, 0.360, 16, 0, 0.008, -0.220);
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    gpBox(g, inner, 0.007, 0.007, 0.300, Math.cos(a) * 0.016, 0.008 + Math.sin(a) * 0.016, -0.220, 0, 0, a);
+  }
+  gpCyl(g, steel, 0.026, 0.026, 0.130, 16, 0, 0.008, -0.110);       // thermal sleeve
+  for (let i = 0; i < 5; i++) gpCyl(g, inner, 0.0265, 0.0265, 0.006, 16, 0, 0.008, -0.062 - i * 0.026);
+  gpBox(g, steel, 0.044, 0.038, 0.070, 0, 0.008, -0.386);           // double-baffle brake
+  [-1, 1].forEach(sd => gpBox(g, inner, 0.008, 0.030, 0.016, sd * 0.021, 0.008, -0.376));
+  [-1, 1].forEach(sd => gpBox(g, inner, 0.008, 0.030, 0.016, sd * 0.021, 0.008, -0.402));
+  gpCyl(g, inner, 0.0105, 0.0105, 0.014, 12, 0, 0.008, -0.418);
+  // Trunnion cradle, grips, spade handles.
+  gpCyl(g, steel, 0.048, 0.048, 0.024, 16, 0, 0.008, -0.048);
+  gpBox(g, steel, 0.108, 0.014, 0.100, 0, -0.038, 0.020);
+  [-1, 1].forEach(sd => gpBox(g, steel, 0.012, 0.036, 0.012, sd * 0.048, -0.020, 0.020));
+  [-1, 1].forEach(sd => {
+    gpBox(g, steel, 0.010, 0.010, 0.070, sd * 0.036, 0.010, 0.204);
+    gpBox(g, grip, 0.016, 0.066, 0.020, sd * 0.036, -0.024, 0.232, 0.20);
+  });
+  gpBox(g, steel, 0.082, 0.012, 0.016, 0, 0.010, 0.236);
+  gpBox(g, bright, 0.006, 0.016, 0.006, 0, -0.008, 0.228, 0.2);
+  gpBox(g, blued, 0.024, 0.010, 0.200, 0, 0.078, 0.000);            // optic rail
+  for (let i = 0; i < 9; i++) gpBox(g, inner, 0.026, 0.005, 0.006, 0, 0.084, -0.088 + i * 0.022);
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.008, -0.440); g.add(flash);
+  g._flash = flash; g._kickZ = 0.020; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildLancer() {
+  // 🪚 Lancer: an assault rifle with a chainsaw bayonet under the barrel. The
+  // saw has a real bar, a sprocket at the root, and individual cutting teeth
+  // round the chain, plus a starter grip and a fuel cap on the housing.
+  const g = new THREE.Group();
+  const steel = GUN_MATS.steel(), blued = GUN_MATS.blued(), bright = GUN_MATS.bright();
+  const poly = GUN_MATS.polymer(), grip = GUN_MATS.grip(), inner = GUN_MATS.inner();
+  const edge = new THREE.MeshPhongMaterial({ color: 0xd0d6de, shininess: 170, specular: 0xffffff });
+  gpBox(g, poly, 0.042, 0.056, 0.200, 0, 0.020, 0.040);             // receiver
+  gpBox(g, inner, 0.043, 0.006, 0.180, 0, 0.048, 0.040);
+  gpBox(g, inner, 0.005, 0.024, 0.056, 0.022, 0.022, 0.010);
+  gpBox(g, bright, 0.014, 0.012, 0.026, 0.022, 0.040, 0.076);       // charging handle
+  gpBox(g, blued, 0.024, 0.008, 0.230, 0, 0.058, 0.010);            // top rail
+  for (let i = 0; i < 10; i++) gpBox(g, inner, 0.026, 0.005, 0.006, 0, 0.062, -0.090 + i * 0.022);
+  gpBox(g, steel, 0.022, 0.024, 0.020, 0, 0.074, 0.100);            // rear sight
+  gpCyl(g, inner, 0.0035, 0.0035, 0.008, 10, 0, 0.078, 0.100);
+  // Barrel and magazine.
+  gpCyl(g, blued, 0.0090, 0.0090, 0.160, 14, 0, 0.016, -0.140);
+  gpCyl(g, steel, 0.0145, 0.0145, 0.034, 14, 0, 0.016, -0.226);
+  for (let i = 0; i < 3; i++) gpBox(g, inner, 0.032, 0.005, 0.008, 0, 0.032, -0.218 - i * 0.010);
+  gpCyl(g, inner, 0.0060, 0.0060, 0.012, 12, 0, 0.016, -0.242);
+  gpBox(g, poly, 0.032, 0.026, 0.056, 0, -0.016, -0.010);           // magwell
+  for (let i = 0; i < 4; i++) gpBox(g, blued, 0.028, 0.028, 0.052, 0, -0.044 - i * 0.026, -0.010 + i * 0.005, -0.055 * i - 0.03);
+  gpBox(g, poly, 0.030, 0.010, 0.054, 0, -0.150, 0.014, -0.20);
+  // Chainsaw bayonet: housing, bar, sprocket, chain with real teeth.
+  gpBox(g, poly, 0.038, 0.040, 0.070, 0, -0.038, -0.062);           // saw housing
+  gpCyl(g, bright, 0.017, 0.017, 0.024, 12, 0, -0.038, -0.062, 0, Math.PI/2);
+  for (let i = 0; i < 8; i++) gpBox(g, inner, 0.026, 0.006, 0.006, 0, -0.038, -0.062, 0, 0, i * 0.4);
+  gpCyl(g, bright, 0.011, 0.011, 0.012, 12, 0.020, -0.020, -0.040, 0, Math.PI/2);  // fuel cap
+  gpBox(g, bright, 0.010, 0.026, 0.010, -0.022, -0.030, -0.036, 0, 0, 0.4);        // starter grip
+  gpCyl(g, inner, 0.0032, 0.0032, 0.030, 6, -0.022, -0.030, -0.052);               // starter cord
+  gpBox(g, steel, 0.014, 0.030, 0.170, 0, -0.038, -0.176);          // the bar
+  gpBox(g, inner, 0.008, 0.016, 0.150, 0, -0.038, -0.176);          // bar groove
+  const nose = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.014, 12), steel);
+  nose.rotation.z = Math.PI / 2; nose.position.set(0, -0.038, -0.258); g.add(nose);
+  for (let i = 0; i < 9; i++) {                                     // cutting teeth
+    const z = -0.106 - i * 0.018;
+    [-1, 1].forEach(sd => {
+      const t = new THREE.Mesh(new THREE.BoxGeometry(0.016, 0.009, 0.010), edge);
+      t.position.set(0, -0.038 + sd * 0.019, z); t.rotation.x = sd * 0.5; g.add(t);
+    });
+  }
+  [-1, 1].forEach(sd => gpBox(g, bright, 0.010, 0.006, 0.160, 0, -0.038 + sd * 0.018, -0.176));
+  // Grip, trigger, stock.
+  gpPlate(g, grip, [[0.070,-0.026],[0.098,-0.040],[0.102,-0.112],[0.072,-0.126],[0.050,-0.066],[0.048,-0.032]], 0.034, 0);
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.020, 0.0036, 6, 12, Math.PI * 1.05), poly);
+  guard.rotation.set(0, Math.PI/2, -0.4); guard.position.set(0, -0.038, 0.038); g.add(guard);
+  gpBox(g, bright, 0.005, 0.016, 0.005, 0, -0.028, 0.038, 0.2);
+  gpBox(g, poly, 0.038, 0.048, 0.090, 0, 0.014, 0.196);
+  gpBox(g, inner, 0.040, 0.050, 0.012, 0, 0.014, 0.246, 0.08);
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.016, -0.256); g.add(flash);
+  g._flash = flash; g._kickZ = 0.014; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildPinballLauncher() {
+  // 🎱 Pinball launcher: an actual plunger mechanism. A chrome shaft through a
+  // coil spring against a stop, a red ball knob to pull, a curved shooter lane
+  // with a rail, a scoring bumper with a lit skirt and a flipper for a trigger.
+  const g = new THREE.Group();
+  const steel = GUN_MATS.steel(), bright = GUN_MATS.bright(), inner = GUN_MATS.inner();
+  const grip = GUN_MATS.grip();
+  const cab   = new THREE.MeshPhongMaterial({ color: 0x1e3a6a, shininess: 108, specular: 0xa8c4ee });
+  const red   = new THREE.MeshPhongMaterial({ color: 0xd8322a, shininess: 120, specular: 0xffb0a8 });
+  const chrome= new THREE.MeshPhongMaterial({ color: 0xa8b0ba, shininess: 180, specular: 0xffffff });
+  const lamp  = new THREE.MeshBasicMaterial({ color: 0xffd84a });
+  gpBox(g, cab, 0.044, 0.052, 0.170, 0, 0.010, 0.070);
+  gpBox(g, inner, 0.045, 0.006, 0.150, 0, 0.036, 0.070);
+  for (let i = 0; i < 4; i++) gpBox(g, lamp, 0.008, 0.008, 0.006, 0.023, 0.030, 0.020 + i * 0.026);
+  // Plunger: shaft, spring, stop, ball knob.
+  gpCyl(g, chrome, 0.0075, 0.0075, 0.190, 12, 0, 0.010, 0.120);
+  for (let i = 0; i < 11; i++) {
+    const r = new THREE.Mesh(new THREE.TorusGeometry(0.0130, 0.0028, 5, 12), chrome);
+    r.rotation.set(0, Math.PI / 2, 0); r.position.set(0, 0.010, 0.076 + i * 0.011); g.add(r);
+  }
+  gpCyl(g, steel, 0.019, 0.019, 0.012, 14, 0, 0.010, 0.068);        // spring stop
+  gpCyl(g, steel, 0.016, 0.016, 0.010, 14, 0, 0.010, 0.200);
+  const knob = new THREE.Mesh(new THREE.SphereGeometry(0.019, 12, 10), red);
+  knob.position.set(0, 0.010, 0.220); g.add(knob);
+  gpCyl(g, inner, 0.0195, 0.0195, 0.005, 12, 0, 0.010, 0.212);
+  // Shooter lane, curving up and away, with a rail.
+  gpBox(g, cab, 0.036, 0.010, 0.190, 0, -0.008, -0.052, -0.16);
+  [-1, 1].forEach(sd => gpCyl(g, chrome, 0.0042, 0.0042, 0.190, 6, sd * 0.017, 0.002, -0.052, -0.16, 0));
+  gpBox(g, inner, 0.030, 0.005, 0.170, 0, -0.004, -0.052, -0.16);
+  const ball = new THREE.Mesh(new THREE.SphereGeometry(0.0135, 12, 10), chrome);
+  ball.position.set(0, 0.008, -0.020); g.add(ball);
+  // Scoring bumper with a lit skirt.
+  gpCyl(g, red, 0.026, 0.026, 0.014, 16, 0, 0.026, -0.150);
+  gpCyl(g, lamp, 0.022, 0.022, 0.008, 16, 0, 0.026, -0.160);
+  gpCyl(g, chrome, 0.013, 0.013, 0.026, 12, 0, 0.026, -0.166);
+  gpCyl(g, inner, 0.028, 0.028, 0.005, 16, 0, 0.026, -0.140);
+  gpBox(g, cab, 0.020, 0.030, 0.036, 0, 0.010, -0.132);
+  // Flipper for a trigger, plus the grip.
+  gpBox(g, red, 0.010, 0.014, 0.040, 0, -0.026, 0.040, 0.24);
+  gpCyl(g, chrome, 0.0065, 0.0065, 0.016, 10, 0, -0.020, 0.060, 0, Math.PI/2);
+  gpPlate(g, grip, [[0.084,-0.020],[0.112,-0.034],[0.116,-0.106],[0.086,-0.120],[0.064,-0.060],[0.062,-0.026]], 0.034, 0);
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.020, 0.0036, 6, 12, Math.PI * 1.05), cab);
+  guard.rotation.set(0, Math.PI/2, -0.4); guard.position.set(0, -0.032, 0.052); g.add(guard);
+  gpBox(g, cab, 0.038, 0.044, 0.070, 0, 0.008, 0.172);
+  const flash = new THREE.Mesh(new THREE.SphereGeometry(0.024, 8, 7),
+    new THREE.MeshBasicMaterial({ color: 0xffe07a }));
+  flash.visible = false; flash.position.set(0, 0.014, -0.186); g.add(flash);
+  g._flash = flash; g._kickZ = 0.020; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildLaserPointer() {
+  // 🔴 Laser pointer: a machined aluminium pen. Knurled barrel bands, a
+  // pocket clip, a clicky tailcap switch, a lens bezel at the business end and
+  // a battery band showing where it unscrews.
+  const g = new THREE.Group();
+  const bright = GUN_MATS.bright(), inner = GUN_MATS.inner();
+  const alum  = new THREE.MeshPhongMaterial({ color: 0x8e96a0, shininess: 170, specular: 0xffffff });
+  const anod  = new THREE.MeshPhongMaterial({ color: 0x2a2e34, shininess: 130, specular: 0x9aa4b0 });
+  const beam  = new THREE.MeshBasicMaterial({ color: 0xff4438 });
+  gpCyl(g, alum, 0.0125, 0.0125, 0.150, 16, 0, 0.010, -0.010);      // body
+  gpCyl(g, anod, 0.0135, 0.0135, 0.026, 16, 0, 0.010, 0.026);       // knurl band
+  for (let i = 0; i < 14; i++) gpBox(g, inner, 0.004, 0.004, 0.026, Math.cos(i / 14 * Math.PI * 2) * 0.0133, 0.010 + Math.sin(i / 14 * Math.PI * 2) * 0.0133, 0.026);
+  gpCyl(g, anod, 0.0135, 0.0135, 0.026, 16, 0, 0.010, -0.046);
+  for (let i = 0; i < 14; i++) gpBox(g, inner, 0.004, 0.004, 0.026, Math.cos(i / 14 * Math.PI * 2) * 0.0133, 0.010 + Math.sin(i / 14 * Math.PI * 2) * 0.0133, -0.046);
+  gpCyl(g, inner, 0.0128, 0.0128, 0.005, 16, 0, 0.010, 0.000);      // battery seam
+  // Lens bezel and emitter.
+  gpCyl(g, anod, 0.0140, 0.0140, 0.016, 16, 0, 0.010, -0.092);
+  gpCyl(g, inner, 0.0095, 0.0095, 0.006, 14, 0, 0.010, -0.100);
+  gpCyl(g, beam, 0.0045, 0.0045, 0.004, 12, 0, 0.010, -0.103);
+  // Tailcap switch with its boot.
+  gpCyl(g, anod, 0.0140, 0.0140, 0.020, 16, 0, 0.010, 0.074);
+  gpCyl(g, inner, 0.0088, 0.0088, 0.008, 12, 0, 0.010, 0.086);
+  gpCyl(g, beam, 0.0052, 0.0052, 0.004, 10, 0, 0.010, 0.089);
+  // Pocket clip, riveted on.
+  gpBox(g, bright, 0.005, 0.006, 0.056, 0.013, 0.010, 0.036, 0, 0, 0.06);
+  gpBox(g, bright, 0.005, 0.010, 0.008, 0.013, 0.006, 0.012);
+  gpCyl(g, bright, 0.0125, 0.0125, 0.006, 16, 0, 0.010, 0.062);     // clip ring
+  const flash = new THREE.Mesh(new THREE.SphereGeometry(0.010, 8, 7),
+    new THREE.MeshBasicMaterial({ color: 0xff6a5a }));
+  flash.visible = false; flash.position.set(0, 0.010, -0.112); g.add(flash);
+  g._flash = flash; g._kickZ = 0.002; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.1, -0.1, -0.22); return g;
+}
+
+function buildFrostBlaster() {
+  // ❄️ Frost blaster: the pistol version of the Freeze Gun. A small cryo
+  // cartridge in the grip well with frost creeping up it, twin condenser
+  // barrels, a bleed valve venting vapour, and ice on the muzzle ring only.
+  const g = new THREE.Group();
+  const steel = GUN_MATS.steel(), bright = GUN_MATS.bright(), inner = GUN_MATS.inner();
+  const grip = GUN_MATS.grip();
+  const shell = new THREE.MeshPhongMaterial({ color: 0x34505c, shininess: 100, specular: 0xa8c8d6 });
+  const cryo  = new THREE.MeshPhongMaterial({ color: 0x8fd8ea, shininess: 150, specular: 0xffffff,
+                                              transparent: true, opacity: 0.62 });
+  const rime  = new THREE.MeshPhongMaterial({ color: 0xdff0f6, shininess: 20, specular: 0x9fb8c2 });
+  gpBox(g, shell, 0.034, 0.044, 0.130, 0, 0.022, -0.010);           // body
+  gpBox(g, inner, 0.035, 0.006, 0.110, 0, 0.042, -0.010);
+  gpBox(g, inner, 0.005, 0.018, 0.040, 0.018, 0.026, -0.014);
+  // Twin condenser barrels with finned collars.
+  [-0.011, 0.011].forEach(x => {
+    gpCyl(g, shell, 0.0110, 0.0110, 0.110, 12, x, 0.020, -0.098);
+    gpCyl(g, inner, 0.0062, 0.0062, 0.010, 12, x, 0.020, -0.150);
+  });
+  for (let i = 0; i < 4; i++) gpBox(g, steel, 0.040, 0.026, 0.007, 0, 0.020, -0.070 - i * 0.022);
+  gpBox(g, steel, 0.040, 0.024, 0.016, 0, 0.020, -0.152);           // muzzle ring
+  for (let i = 0; i < 7; i++) {
+    const a = (i / 7) * Math.PI * 2;
+    const ic = new THREE.Mesh(new THREE.ConeGeometry(0.005 + (i % 2) * 0.002, 0.016 + (i % 3) * 0.006, 5), rime);
+    ic.position.set(Math.cos(a) * 0.021, 0.020 + Math.sin(a) * 0.015, -0.156);
+    ic.rotation.set(Math.PI / 2 + (i % 3 - 1) * 0.4, 0, a); g.add(ic);
+  }
+  // Bleed valve venting vapour off the top.
+  gpCyl(g, bright, 0.0080, 0.0080, 0.018, 10, 0, 0.048, -0.046, 0, 0);
+  for (let i = 0; i < 3; i++) {
+    const v = new THREE.Mesh(new THREE.SphereGeometry(0.006 + i * 0.003, 7, 6), rime);
+    v.position.set(0.004 * i, 0.062 + i * 0.010, -0.046 + i * 0.006); g.add(v);
+  }
+  // Cryo cartridge in the grip well, frost creeping up it.
+  gpPlate(g, grip, [[0.014,-0.014],[0.046,-0.026],[0.052,-0.104],[0.022,-0.118],[-0.004,-0.054],[-0.006,-0.018]], 0.036, 0);
+  gpCyl(g, cryo, 0.0135, 0.0135, 0.084, 14, 0, -0.062, 0.020, 0.22, 0);
+  gpCyl(g, steel, 0.0155, 0.0155, 0.012, 14, 0, -0.024, 0.010, 0.22, 0);
+  for (let i = 0; i < 3; i++) gpCyl(g, rime, 0.0150, 0.0150, 0.008, 14, 0, -0.086 + i * 0.014, 0.030 - i * 0.004, 0.22, 0);
+  gpBox(g, steel, 0.030, 0.010, 0.038, 0, -0.116, 0.030, 0.22);
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.018, 0.0034, 6, 12, Math.PI * 1.05), shell);
+  guard.rotation.set(0, Math.PI/2, -0.4); guard.position.set(0, -0.028, -0.014); g.add(guard);
+  gpBox(g, bright, 0.005, 0.014, 0.005, 0, -0.020, -0.014, 0.2);
+  gpCyl(g, bright, 0.013, 0.013, 0.008, 14, 0.019, 0.020, 0.026, 0, Math.PI/2);   // gauge
+  gpBox(g, inner, 0.003, 0.009, 0.003, 0.023, 0.024, 0.026, 0, 0, 0.5);
+  gpBox(g, inner, 0.018, 0.008, 0.010, 0, 0.046, 0.036);            // rear sight
+  const flash = new THREE.Mesh(new THREE.SphereGeometry(0.022, 8, 7),
+    new THREE.MeshBasicMaterial({ color: 0xbdeeff }));
+  flash.visible = false; flash.position.set(0, 0.020, -0.174); g.add(flash);
+  g._flash = flash; g._kickZ = 0.008; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.1, -0.1, -0.22); return g;
+}
+
+function buildPulseNeedle() {
+  // 💉 Pulse needle: a slim sidearm that fires charged flechettes. A magazine
+  // of needles is visible edge-on through a slot, three accelerator rings run
+  // down an open frame, and a charge meter climbs the spine.
+  const g = new THREE.Group();
+  const steel = GUN_MATS.steel(), bright = GUN_MATS.bright(), inner = GUN_MATS.inner();
+  const grip = GUN_MATS.grip();
+  const shell = new THREE.MeshPhongMaterial({ color: 0x3a4450, shininess: 120, specular: 0xc0ccd8 });
+  const glow  = new THREE.MeshBasicMaterial({ color: 0x7ad8ff });
+  gpBox(g, shell, 0.028, 0.042, 0.130, 0, 0.024, -0.006);           // body
+  gpBox(g, inner, 0.029, 0.006, 0.110, 0, 0.042, -0.006);
+  // Open frame with three accelerator rings.
+  [-1, 1].forEach(sd => gpBox(g, shell, 0.006, 0.020, 0.110, sd * 0.012, 0.022, -0.116));
+  for (let i = 0; i < 3; i++) {
+    const r = new THREE.Mesh(new THREE.TorusGeometry(0.014, 0.0038, 5, 14), bright);
+    r.rotation.set(0, Math.PI / 2, 0); r.position.set(0, 0.022, -0.086 - i * 0.032); g.add(r);
+    const c = new THREE.Mesh(new THREE.TorusGeometry(0.0090, 0.0022, 4, 12), glow);
+    c.rotation.set(0, Math.PI / 2, 0); c.position.set(0, 0.022, -0.086 - i * 0.032); g.add(c);
+  }
+  gpCyl(g, bright, 0.0032, 0.0032, 0.100, 6, 0, 0.022, -0.116);     // the needle in flight path
+  gpCyl(g, steel, 0.017, 0.017, 0.014, 14, 0, 0.022, -0.174);
+  gpCyl(g, inner, 0.0085, 0.0085, 0.010, 12, 0, 0.022, -0.180);
+  // Needle magazine, seen edge-on through a slot.
+  gpBox(g, shell, 0.024, 0.026, 0.044, 0, -0.004, -0.014);
+  gpBox(g, inner, 0.026, 0.014, 0.036, 0, -0.002, -0.014);
+  for (let i = 0; i < 7; i++) gpCyl(g, bright, 0.0022, 0.0022, 0.030, 6, -0.008 + i * 0.0026, -0.002, -0.014);
+  gpBox(g, shell, 0.022, 0.070, 0.038, 0, -0.056, 0.014, -0.12);
+  for (let i = 0; i < 3; i++) gpBox(g, inner, 0.023, 0.004, 0.012, 0, -0.042 - i * 0.020, 0.016 + i * 0.003, -0.12);
+  gpBox(g, shell, 0.026, 0.010, 0.040, 0, -0.094, 0.024, -0.12);
+  // Charge meter climbing the spine.
+  for (let i = 0; i < 6; i++) gpBox(g, i < 4 ? glow : inner, 0.005, 0.007, 0.008, 0.015, 0.036, -0.036 + i * 0.016);
+  // Grip, trigger, sight.
+  gpPlate(g, grip, [[0.014,-0.012],[0.044,-0.024],[0.048,-0.096],[0.018,-0.108],[-0.004,-0.050],[-0.006,-0.016]], 0.030, 0);
+  for (let i = 0; i < 3; i++) gpBox(g, inner, 0.032, 0.004, 0.022, 0, -0.034 - i * 0.018, 0.016 + i * 0.005, 0.26);
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.017, 0.0032, 6, 12, Math.PI * 1.05), shell);
+  guard.rotation.set(0, Math.PI/2, -0.4); guard.position.set(0, -0.026, -0.010); g.add(guard);
+  gpBox(g, bright, 0.005, 0.013, 0.005, 0, -0.018, -0.010, 0.2);
+  gpBox(g, inner, 0.016, 0.008, 0.010, 0, 0.046, 0.038);
+  gpBox(g, glow, 0.004, 0.005, 0.004, 0, 0.046, -0.166);
+  const flash = new THREE.Mesh(new THREE.SphereGeometry(0.016, 8, 7),
+    new THREE.MeshBasicMaterial({ color: 0xa8e8ff }));
+  flash.visible = false; flash.position.set(0, 0.022, -0.192); g.add(flash);
+  g._flash = flash; g._kickZ = 0.006; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.1, -0.1, -0.22); return g;
+}
+
 function buildAK20() {
   const g = new THREE.Group();
   // 🔫 AK-47, black furniture. Real parkerised steel is a dark GREY-blue, not
@@ -10458,16 +10751,16 @@ const weaponModels = [
   buildPortalLauncher(),  // portal_launcher
   buildGravityPaint(),  // gravity_paint
   buildTrafficController(),  // traffic_controller
-  handcraftedWeapon('pinball_launcher'),  // pinball_launcher
+  buildPinballLauncher(),  // pinball_launcher
   // ── New secondaries ────────────────────────────────────────────────────
   buildMachinePistol(),  // machine_pistol
   buildSawedOff(),  // sawed_off
   buildDartGun(),  // dart_gun
-  handcraftedWeapon('laser_pointer'),  // laser_pointer
+  buildLaserPointer(),  // laser_pointer
   // ── 3rd-batch secondaries ─────────────────────────────────────────────────
   buildMachineRevolver(),  // machine_revolver
   buildAutoRevolver(),  // auto_revolver
-  handcraftedWeapon('frost_blaster'),  // frost_blaster
+  buildFrostBlaster(),  // frost_blaster
   // ── 🆕 Batch-4 secondaries (must match WEAPONS order) ──────────────────
   buildSnubRevolver(),  // snub_revolver
   buildDuelistPistol(),  // duelist_pistol
@@ -10489,10 +10782,10 @@ const weaponModels = [
   handcraftedWeapon('prism_engine'),  // prism_engine
   handcraftedWeapon('void_harvester'),  // void_harvester
   // ── 🌌 SCI-FI P2W secondaries ───────────────────────────────────────────
-  handcraftedWeapon('pulse_needle'),  // pulse_needle
+  buildPulseNeedle(),  // pulse_needle
   // ── 🪖 ADMIN primaries ───────────────────────────────────────────────────
   buildGAU19(),  // gau19
-  handcraftedWeapon('mk44'),  // mk44
+  buildMK44(),  // mk44
   buildXM7(),  // xm7
   buildBarrett(),  // barrett
   buildM134(),  // m134
@@ -10508,7 +10801,7 @@ const weaponModels = [
   buildRPG(),  // rpg
   buildBazooka(),  // bazooka
   // ⚔️ Lancer (must align with the 'lancer' WEAPONS slot — right before the cone/pie)
-  handcraftedWeapon('lancer'),  // lancer
+  buildLancer(),  // lancer
   // ── 🚧 / 🥧 must mirror the two trailing WEAPONS entries ──
   buildTrafficCone(),  // traffic_cone
   buildCreamPie(),  // cream_pie
