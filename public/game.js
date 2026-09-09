@@ -13845,6 +13845,17 @@ const PROJECTILE_KIND_BY_ID = {
   foam_cannon:'blob', sticker_blaster:'blob',
   taser:'spark', arc_rifle:'spark', arc_torrent:'spark', storm_core:'spark',
   railgun:'slug', coilgun:'slug', magnetar:'slug',
+  // Twelve weapons used to fall through to the plain metal tracer despite not
+  // firing metal. A flare gun is not a rifle; a nail gun fires nails; the
+  // Swarm Rifle literally launches drones.
+  flare:'flare', signal_pistol:'flare',
+  nail_gun:'nail', pulse_needle:'nail', flechette:'bolt',
+  swarm_rifle:'drone',
+  seismic_hammer:'shock',
+  event_horizon:'void',
+  quantum_repeater:'phase',
+  cycler:'energy', laser_pointer:'energy',
+  airburst_projector:'grenade',
 };
 // How fast each kind flies, relative to a metal round. A bullet is supersonic;
 // a lobbed grenade, a rocket building thrust and a gout of flame are not, and
@@ -13865,6 +13876,12 @@ const PROJECTILE_SPEED_SCALE = {
   flame:  0.50,
   rocket: 0.50,   // visibly climbs away from the muzzle
   grenade:0.50,   // lobbed, not shot
+  nail:   0.92,   // short and heavy — quick, but no rifle round
+  phase:  0.95,
+  drone:  0.62,   // it flies itself there, it does not get thrown
+  void:   0.58,
+  shock:  0.55,   // a wave through the ground
+  flare:  0.45,   // you are meant to watch it arc
 };
 // Kinds that detonate on impact rather than simply hitting.
 const EXPLOSIVE_KINDS = new Set(['rocket', 'grenade']);
@@ -14070,6 +14087,134 @@ function _buildStone(tint, r) {
   g._spin = { x: 8, y: 5, z: 6 };
   return g;
 }
+function _buildFlare(tint, r) {
+  // A signal flare: a burning ember trailing smoke. Not a bullet -- you should
+  // be able to watch it arc and know it is not going to hit like one.
+  const c = tint || 0xff5522;
+  const P = _projCache('flare|'+c+'|'+r, () => ({
+    ember: new THREE.SphereGeometry(r*1.1, 8, 7), emberM: new THREE.MeshBasicMaterial({ color: c }),
+    halo:  new THREE.SphereGeometry(r*2.1, 8, 7), haloM: _glow(c),
+    puff:  new THREE.SphereGeometry(r*0.9, 6, 5),
+    puffM: new THREE.MeshBasicMaterial({ color: 0x6a5a52 }),
+  }));
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(P.ember, P.emberM));
+  g.add(new THREE.Mesh(P.halo, P.haloM));
+  for (let i = 0; i < 3; i++) {
+    const s2 = new THREE.Mesh(P.puff, P.puffM);
+    s2.position.y = r * (1.6 + i * 1.5); s2.scale.setScalar(1 + i * 0.45);
+    g.add(s2);
+  }
+  g._alignToDir = true;
+  return g;
+}
+
+function _buildNail(tint, r) {
+  // A nail or a charged needle: a thin steel shank with a flat head, spinning
+  // end over end. Reads as hardware, not as a tracer.
+  const c = tint || 0xc8ccd2;
+  const P = _projCache('nail|'+c+'|'+r, () => ({
+    shank: new THREE.CylinderGeometry(r*0.24, r*0.10, r*4.2, 6),
+    shankM: new THREE.MeshPhongMaterial({ color: 0xb8bec6, shininess: 140, specular: 0xffffff }),
+    head: new THREE.CylinderGeometry(r*0.62, r*0.62, r*0.30, 8),
+    headM: new THREE.MeshPhongMaterial({ color: 0x9aa2ac, shininess: 120, specular: 0xffffff }),
+    glow: new THREE.CylinderGeometry(r*0.36, r*0.36, r*4.4, 6), glowM: _glow(c),
+  }));
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(P.shank, P.shankM));
+  const h = new THREE.Mesh(P.head, P.headM); h.position.y = r * 2.1; g.add(h);
+  g.add(new THREE.Mesh(P.glow, P.glowM));
+  g._alignToDir = true;
+  g._spin = { x: 0, y: 22, z: 0 };
+  return g;
+}
+
+function _buildDrone(tint, r) {
+  // The Swarm Rifle fires drones, so it should fire drones: a stub body with
+  // an eye, four rotor discs and a running light.
+  const c = tint || 0xffb43a;
+  const P = _projCache('drone|'+c+'|'+r, () => ({
+    body: new THREE.CylinderGeometry(r*0.7, r*0.7, r*2.0, 8),
+    bodyM: new THREE.MeshPhongMaterial({ color: 0x3c4a44, shininess: 90, specular: 0xa2bab2 }),
+    eye: new THREE.SphereGeometry(r*0.34, 7, 6), eyeM: new THREE.MeshBasicMaterial({ color: c }),
+    rotor: new THREE.CylinderGeometry(r*0.62, r*0.62, r*0.10, 8),
+    rotorM: new THREE.MeshBasicMaterial({ color: 0x8a949c, transparent: true, opacity: 0.45,
+                                          depthWrite: false, side: THREE.DoubleSide }),
+    halo: new THREE.SphereGeometry(r*1.5, 7, 6), haloM: _glow(c),
+  }));
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(P.body, P.bodyM));
+  const e = new THREE.Mesh(P.eye, P.eyeM); e.position.y = -r * 1.0; g.add(e);
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2;
+    const ro = new THREE.Mesh(P.rotor, P.rotorM);
+    ro.position.set(Math.cos(a) * r * 1.1, r * 0.5, Math.sin(a) * r * 1.1);
+    g.add(ro);
+  }
+  g.add(new THREE.Mesh(P.halo, P.haloM));
+  g._alignToDir = true;
+  g._spin = { x: 0, y: 14, z: 0 };
+  return g;
+}
+
+function _buildShock(tint, r) {
+  // A ground shockwave: an expanding ring travelling edge-on, with a dust core.
+  const c = tint || 0xd8c8a0;
+  const P = _projCache('shock|'+c+'|'+r, () => ({
+    ring: new THREE.TorusGeometry(r*1.7, r*0.28, 6, 16), ringM: _glow(c),
+    ring2: new THREE.TorusGeometry(r*1.1, r*0.20, 6, 14), ring2M: _glow(c),
+    core: new THREE.SphereGeometry(r*0.8, 7, 6),
+    coreM: new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.75 }),
+  }));
+  const g = new THREE.Group();
+  const a = new THREE.Mesh(P.ring, P.ringM); a.rotation.x = Math.PI / 2; g.add(a);
+  const b = new THREE.Mesh(P.ring2, P.ring2M); b.rotation.x = Math.PI / 2; b.position.y = -r * 0.9; g.add(b);
+  g.add(new THREE.Mesh(P.core, P.coreM));
+  g._alignToDir = true;
+  return g;
+}
+
+function _buildVoid(tint, r) {
+  // A gravity round: a black core with a violet accretion halo round it. The
+  // core is genuinely dark, so it reads against a bright sky as an absence.
+  const c = tint || 0xa46cff;
+  const P = _projCache('void|'+c+'|'+r, () => ({
+    core: new THREE.SphereGeometry(r*0.9, 10, 8),
+    coreM: new THREE.MeshBasicMaterial({ color: 0x0e0b16 }),
+    disc: new THREE.TorusGeometry(r*1.6, r*0.26, 6, 18), discM: _glow(c),
+    halo: new THREE.SphereGeometry(r*2.0, 8, 7), haloM: _glow(c),
+  }));
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(P.core, P.coreM));
+  const d = new THREE.Mesh(P.disc, P.discM); d.rotation.set(1.2, 0.3, 0); g.add(d);
+  g.add(new THREE.Mesh(P.halo, P.haloM));
+  g._alignToDir = false;
+  g._spin = { x: 0, y: 9, z: 4 };
+  return g;
+}
+
+function _buildPhase(tint, r) {
+  // A time-shifted round: the shot plus two faint echoes of itself trailing
+  // behind it, slightly offset, as though it has not decided when it is.
+  const c = tint || 0x5ce0c8;
+  const P = _projCache('phase|'+c+'|'+r, () => ({
+    core: new THREE.CylinderGeometry(r*0.30, r*0.18, r*3.0, 7),
+    coreM: new THREE.MeshBasicMaterial({ color: c }),
+    echo: new THREE.CylinderGeometry(r*0.34, r*0.20, r*3.0, 7),
+    echoM: _glow(c),
+  }));
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(P.core, P.coreM));
+  for (let i = 0; i < 2; i++) {
+    const e = new THREE.Mesh(P.echo, P.echoM);
+    e.position.set(r * (i ? 0.5 : -0.4), r * (2.0 + i * 2.0), 0);
+    e.scale.setScalar(1 - i * 0.22);
+    g.add(e);
+  }
+  g._alignToDir = true;
+  return g;
+}
+
 function _buildSlug(tint, r) {
   // Railgun / coilgun: still a metal projectile, but a fat glowing slug rather
   // than a rifle tracer — it is magnetically driven, not powder driven.
@@ -14108,6 +14253,12 @@ function makeBulletMesh(color, size, weaponId) {
     case 'paintball': return _buildPaintball(color, r);
     case 'stone':   return _buildStone(color, r);
     case 'slug':    return _buildSlug(color, r);
+    case 'flare':   return _buildFlare(color, r);
+    case 'nail':    return _buildNail(color, r);
+    case 'drone':   return _buildDrone(color, r);
+    case 'shock':   return _buildShock(color, r);
+    case 'void':    return _buildVoid(color, r);
+    case 'phase':   return _buildPhase(color, r);
   }
   // 'bullet' — a solid metal round. Orange/white tracer stretched along the path.
   const tint = color || 0xff8a1e;
