@@ -5537,8 +5537,32 @@ function _getSmokePuff() {
   const m = _smokePool[_smokeIdx % _smokePool.length]; _smokeIdx++;
   return m;
 }
+// A cartridge gun throws its empty out on every shot — the pump gun spits a
+// hull each time it is racked, the sniper each time the bolt is worked.
+// Revolvers are deliberately absent: their brass stays in the cylinder until it
+// is swung out, which is what their reload already shows.
+const EJECT_ON_FIRE = {
+  sg8:'shell', shorty:'shell',
+  ak20:'case', xm7:'case', burst:'case', vector:'case', mp40:'case', p90:'case',
+  p90_spec:'case', hkmp7:'case', machine_pistol:'case', smart_smg:'case', twin_ar:'case',
+  lancer:'case', flechette:'case', burst_cannon:'case', srx:'case', lever:'case',
+  m1_garand:'case', amr:'case', barrett:'case', mauser:'case', rpd:'case', mg42:'case',
+  minigun:'case', gau19:'case', m134:'case', mk44:'case',
+  pistol:'case', hand_cannon:'case', desert_eagle:'case', m1911:'case', glock18:'case',
+  five_seven:'case', switchblade_gun:'case', nail_gun:'nail', pulse_needle:'nail',
+};
+function ejectFiredCase(model) {
+  const id = WEAPONS[currentWeaponIdx]?.id;
+  const k = EJECT_ON_FIRE[id];
+  if (!k || !model || !model._anchors) return;
+  // A minigun at 32 ms a round would bury the screen in brass.
+  if (_rProps.length > 26) return;
+  try { spawnReloadProp(model, k, 'eject', 'breech', { life: 0.70, eject: true }); } catch (e) {}
+}
+
 function triggerMuzzleBlast(model, opts = {}) {
   if (!model || !model._flash) return;
+  ejectFiredCase(model);
   const flash = model._flash;
   const tint = opts.color || (flash.material && flash.material.color ? flash.material.color.getHex() : 0xffcc66);
   // No two shots look alike: random roll and a size jitter.
@@ -8776,15 +8800,21 @@ function buildAK20() {
   // advanced 0.14 rad per segment over six segments — 57 degrees — which swung
   // the bottom of the mag out into a thin forward-pointing spindle instead of
   // the familiar banana.
-  let my = -0.060, mz = -0.010, ang = 0.09;
+  // A 30-round AK magazine is about a quarter of the rifle's length and curves
+  // roughly 25-30 degrees end to end. The old one dropped 192 mm -- nearly
+  // twice the receiver's height -- over only 21 degrees, so it read as a long
+  // straight spike rather than a banana. Five segments, 140 mm, 27 degrees.
+  let my = -0.056, mz = -0.012, ang = 0.10;
   for (let i = 0; i < 5; i++) {
-    box(magMat, 0.030, 0.036, 0.046, 0, my, mz, ang);
-    box(inner,  0.031, 0.004, 0.011, 0, my, mz, ang);                // stamped rib
-    my -= Math.cos(ang) * 0.032;
-    mz -= Math.sin(ang) * 0.032;
-    ang += 0.055;
+    box(magMat, 0.030, 0.034, 0.048, 0, my, mz, ang);
+    box(inner,  0.031, 0.004, 0.012, 0, my, mz, ang);                // stamped rib
+    box(inner,  0.031, 0.010, 0.004, 0, my, mz + 0.020, ang);        // spine seam
+    my -= Math.cos(ang) * 0.028;
+    mz -= Math.sin(ang) * 0.028;
+    ang += 0.085;
   }
-  box(magMat, 0.032, 0.011, 0.048, 0, my + 0.014, mz - 0.002, ang);  // floorplate
+  box(magMat, 0.032, 0.012, 0.050, 0, my + 0.012, mz - 0.004, ang);  // floorplate
+  box(inner,  0.033, 0.004, 0.016, 0, my + 0.018, mz - 0.004, ang);  // floorplate lip
 
   // ── Pistol grip ─────────────────────────────────────────────────────────
   // Lifted 0.024 so the grip tang actually meets the receiver — it used to top
@@ -16083,7 +16113,7 @@ function fireCrossbowCharge() {
   const model = weaponModels[currentWeaponIdx];
   triggerMuzzleBlast(model);
   model.position.z += model._kickZ;
-  setTimeout(() => model.position.z = -0.25, 80);
+  setTimeout(() => { if (!reloading) model.position.z = (model._homePos ? model._homePos.z : -0.25); }, 80);
 
   const muzzleWorld = new THREE.Vector3();
   model._flash.getWorldPosition(muzzleWorld);
@@ -16331,7 +16361,7 @@ function tryShoot() {
   const model = weaponModels[currentWeaponIdx];
   triggerMuzzleBlast(model);
   model.position.z += model._kickZ;
-  setTimeout(() => model.position.z = isADS ? -0.25 : -0.25, 80);
+  setTimeout(() => { if (!reloading) model.position.z = (model._homePos ? model._homePos.z : -0.25); }, 80);
 
   const muzzleWorld = new THREE.Vector3();
   model._flash.getWorldPosition(muzzleWorld);
@@ -16892,7 +16922,10 @@ function _makeViewHand(mirror) {
   // knuckles and no fingers, and these match it exactly — anything more
   // detailed would read as a different pair of hands to the ones you punch with.
   const h = new THREE.Group();
-  const fist = new THREE.Mesh(new THREE.BoxGeometry(0.086, 0.086, 0.112), VM_SKIN_MAT());
+  // 86 x 86 x 112 was a forearm, not a fist. On the AK it spanned y -0.144 to
+  // -0.024 and 86 mm across, which completely enclosed a 30 mm magazine and
+  // hid it from view -- the gun looked like it had no magazine at all.
+  const fist = new THREE.Mesh(new THREE.BoxGeometry(0.070, 0.074, 0.090), VM_SKIN_MAT());
   fist.castShadow = true;
   h.add(fist);
   // Tagged so the skin system leaves them alone: a gold weapon skin should
@@ -16974,7 +17007,9 @@ function attachViewHands(root) {
   if (root._throwable) return;
 
   const rear = _makeViewHand(1);
-  rear.position.set(0.004, gripAt.y - 0.014, gripAt.z + 0.026);
+  // Sit the trigger hand ON the grip and a little behind it, so its front face
+  // clears the magwell instead of covering it.
+  rear.position.set(0.004, gripAt.y - 0.020, gripAt.z + 0.036);
   rear.rotation.set(0.26, 0, 0.10);
   root.add(rear);
 
@@ -17643,8 +17678,9 @@ function _propAnchor(model, where) {
   return new THREE.Vector3(model.position.x + p.x, model.position.y + p.y, model.position.z + p.z);
 }
 
-function spawnReloadProp(model, kind, mode, where) {
+function spawnReloadProp(model, kind, mode, where, opts) {
   if (!camera) return;
+  const o = opts || {};
   const mesh = _makeReloadProp(kind);
   const at = _propAnchor(model, where);
   const R = (a) => (Math.random() - 0.5) * a;
@@ -17656,9 +17692,12 @@ function spawnReloadProp(model, kind, mode, where) {
   } else {
     mesh.position.copy(at);
     mesh.rotation.set(R(1.2), R(1.2), R(1.2));
-    _rProps.push({ mesh, mode, t: 0, life: 0.95,
-      vel: new THREE.Vector3(-0.22 + R(0.30), 0.10 + R(0.14), 0.34 + R(0.24)),
-      spin: new THREE.Vector3(R(9), R(9), R(9)) });
+    _rProps.push({ mesh, mode, t: 0, life: o.life || 0.95,
+      vel: o.eject
+        // A fired case is thrown out of the port to the right and back, hard.
+        ? new THREE.Vector3(0.62 + R(0.26), 0.30 + R(0.18), 0.30 + R(0.22))
+        : new THREE.Vector3(-0.22 + R(0.30), 0.10 + R(0.14), 0.34 + R(0.24)),
+      spin: new THREE.Vector3(R(o.eject ? 22 : 9), R(o.eject ? 22 : 9), R(o.eject ? 22 : 9)) });
   }
   camera.add(mesh);
 }
