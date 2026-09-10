@@ -5551,6 +5551,24 @@ const EJECT_ON_FIRE = {
   pistol:'case', hand_cannon:'case', desert_eagle:'case', m1911:'case', glock18:'case',
   five_seven:'case', switchblade_gun:'case', nail_gun:'nail', pulse_needle:'nail',
 };
+// A gun whose ammunition sits in a revolving cylinder turns it one chamber
+// every time it fires — the grenade launcher's drum, and any cylinder tagged
+// the same way. The gatling guns already spin via _barrelCluster.
+function indexCylinder(model) {
+  const m = model && model._parts && model._parts.main;
+  if (!m || !m._chambers) return;
+  m._spinTo = (m._spinTo || 0) + (Math.PI * 2) / m._chambers;
+}
+function updateCylinders(dt) {
+  const m = weaponModels[currentWeaponIdx] && weaponModels[currentWeaponIdx]._parts
+          && weaponModels[currentWeaponIdx]._parts.main;
+  if (!m || !m._chambers) return;
+  const to = m._spinTo || 0;
+  m._spin = (m._spin || 0) + (to - (m._spin || 0)) * Math.min(1, dt * 14);
+  // While reloading, the reload owns the rotation and folds _spin in itself.
+  if (!reloading) m.rotation.z = m._spin;
+}
+
 function ejectFiredCase(model) {
   const id = WEAPONS[currentWeaponIdx]?.id;
   const k = EJECT_ON_FIRE[id];
@@ -5563,6 +5581,7 @@ function ejectFiredCase(model) {
 function triggerMuzzleBlast(model, opts = {}) {
   if (!model || !model._flash) return;
   ejectFiredCase(model);
+  indexCylinder(model);
   const flash = model._flash;
   const tint = opts.color || (flash.material && flash.material.color ? flash.material.color.getHex() : 0xffcc66);
   // No two shots look alike: random roll and a size jitter.
@@ -5682,18 +5701,28 @@ function gpPlate(g, mat, pts, width, x = 0) {
 // Two names are animated: 'main' is the assembly the reload opens or works
 // (a cylinder, a drum, a pump, a break-open barrel group, a top cover, a
 // magazine) and 'aux' is a second one (a bolt, a charging handle, an ejector).
-function gpPart(g, name, fn) {
+function gpPart(g, name, fn, pivot) {
   const reg = g._parts || (g._parts = {});
   const from = g.children.length;
   fn();
   const moved = g.children.splice(from);
   let grp = reg[name];
-  if (!grp) { grp = new THREE.Group(); grp._n = 0; reg[name] = grp; g.add(grp); }
+  if (!grp) {
+    grp = new THREE.Group(); grp._n = 0; reg[name] = grp; g.add(grp);
+    // With a pivot the group sits on that point and its contents are shifted
+    // back by it, so rotating the group turns the assembly about its OWN axis.
+    // A cylinder indexing round the model origin instead of its centre would
+    // orbit, not spin.
+    if (pivot) grp.position.set(pivot.x || 0, pivot.y || 0, pivot.z || 0);
+  }
   // Called once per round inside a loop, this accumulates into one group and
   // counts the rounds, so the reload can reveal them one at a time rather than
   // a fraction of a grenade.
   grp._n++;
-  moved.forEach(m => grp.add(m));
+  moved.forEach(m => {
+    m.position.sub(grp.position);   // no-op unless the group has a pivot
+    grp.add(m);
+  });
   return grp;
 }
 // The palette real gun metal actually lives in. Nothing here goes below 0.16
@@ -6208,14 +6237,17 @@ function buildSnubRevolver() {
   const grip = GUN_MATS.grip(), inner = GUN_MATS.inner();
   gpBox(g, blued, 0.026, 0.040, 0.070, 0, 0.016, 0.024);            // frame
   gpBox(g, inner, 0.027, 0.006, 0.058, 0, 0.034, 0.024);            // top strap
-  // Cylinder: fluted, with the chambers bored through the face.
-  gpCyl(g, steel, 0.026, 0.026, 0.048, 14, 0, 0.014, -0.014);
-  for (let i = 0; i < 5; i++) {
-    const a = (i / 5) * Math.PI * 2;
-    gpBox(g, inner, 0.010, 0.010, 0.040, Math.cos(a) * 0.024, 0.014 + Math.sin(a) * 0.024, -0.014, 0, 0, a);
-    gpCyl(g, inner, 0.0055, 0.0055, 0.052, 8, Math.cos(a) * 0.013, 0.014 + Math.sin(a) * 0.013, -0.014);
-  }
-  gpCyl(g, bright, 0.0060, 0.0060, 0.050, 10, 0, 0.014, -0.014);    // centre pin
+  // Five chambers, so 72 degrees a shot.
+  gpPart(g, 'main', () => {
+    // Cylinder: fluted, with the chambers bored through the face.
+    gpCyl(g, steel, 0.026, 0.026, 0.048, 14, 0, 0.014, -0.014);
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2;
+      gpBox(g, inner, 0.010, 0.010, 0.040, Math.cos(a) * 0.024, 0.014 + Math.sin(a) * 0.024, -0.014, 0, 0, a);
+      gpCyl(g, inner, 0.0055, 0.0055, 0.052, 8, Math.cos(a) * 0.013, 0.014 + Math.sin(a) * 0.013, -0.014);
+    }
+    gpCyl(g, bright, 0.0060, 0.0060, 0.050, 10, 0, 0.014, -0.014);    // centre pin
+  }, { x: 0, y: 0.014, z: -0.014 });
   // Stub barrel with the ejector shroud under it.
   gpCyl(g, blued, 0.0105, 0.0105, 0.056, 14, 0, 0.022, -0.064);
   gpBox(g, blued, 0.016, 0.016, 0.054, 0, 0.004, -0.062);           // shroud
@@ -6233,6 +6265,7 @@ function buildSnubRevolver() {
   for (let i = 0; i < 3; i++) gpBox(g, inner, 0.038, 0.004, 0.024, 0, -0.024 - i * 0.018, 0.040 + i * 0.006, 0.26);
   const flash = makeMuzzleFlash(); flash.position.set(0, 0.022, -0.102); g.add(flash);
   g._flash = flash; g._kickZ = 0.024; g._greebled = true; g._handDetailed = true;
+  g._parts.main._chambers = 5;   // indexes one chamber a shot
   g.position.set(0.1, -0.1, -0.22); return g;
 }
 
@@ -6321,14 +6354,17 @@ function buildMachineRevolver() {
   const grip = GUN_MATS.grip(), inner = GUN_MATS.inner();
   gpBox(g, blued, 0.030, 0.046, 0.090, 0, 0.020, 0.038);            // frame
   gpBox(g, inner, 0.031, 0.006, 0.076, 0, 0.041, 0.038);
-  // Long twelve-chamber drum.
-  gpCyl(g, steel, 0.034, 0.034, 0.096, 18, 0, 0.018, -0.030);
-  for (let i = 0; i < 12; i++) {
-    const a = (i / 12) * Math.PI * 2;
-    gpCyl(g, inner, 0.0052, 0.0052, 0.100, 8, Math.cos(a) * 0.022, 0.018 + Math.sin(a) * 0.022, -0.030);
-  }
-  for (let i = 0; i < 3; i++) gpCyl(g, blued, 0.0352, 0.0352, 0.008, 18, 0, 0.018, -0.062 + i * 0.032); // drum bands
-  gpCyl(g, bright, 0.0065, 0.0065, 0.104, 10, 0, 0.018, -0.030);    // centre pin
+  // Twelve chambers: it barely seems to stop turning.
+  gpPart(g, 'main', () => {
+    // Long twelve-chamber drum.
+    gpCyl(g, steel, 0.034, 0.034, 0.096, 18, 0, 0.018, -0.030);
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      gpCyl(g, inner, 0.0052, 0.0052, 0.100, 8, Math.cos(a) * 0.022, 0.018 + Math.sin(a) * 0.022, -0.030);
+    }
+    for (let i = 0; i < 3; i++) gpCyl(g, blued, 0.0352, 0.0352, 0.008, 18, 0, 0.018, -0.062 + i * 0.032); // drum bands
+    gpCyl(g, bright, 0.0065, 0.0065, 0.104, 10, 0, 0.018, -0.030);    // centre pin
+  }, { x: 0, y: 0.018, z: -0.030 });
   // Vented shroud over the barrel, plus a compensator.
   gpCyl(g, blued, 0.0110, 0.0110, 0.170, 14, 0, 0.020, -0.164);
   gpBox(g, steel, 0.030, 0.030, 0.150, 0, 0.020, -0.158);           // shroud
@@ -6353,6 +6389,7 @@ function buildMachineRevolver() {
   cuff.rotation.set(0, Math.PI/2, 0.4); cuff.position.set(0, 0.000, 0.158); g.add(cuff);
   const flash = makeMuzzleFlash(); flash.position.set(0, 0.020, -0.276); g.add(flash);
   g._flash = flash; g._kickZ = 0.014; g._greebled = true; g._handDetailed = true;
+  g._parts.main._chambers = 12;   // indexes one chamber a shot
   g.position.set(0.1, -0.1, -0.22); return g;
 }
 
@@ -9238,15 +9275,18 @@ function buildRevolver() {
   const wood = GUN_MATS.wood(), inner = GUN_MATS.inner();
   gpBox(g, blued, 0.022, 0.044, 0.076, 0, 0.014, 0.020);               // frame
   gpBox(g, inner, 0.023, 0.014, 0.040, 0, 0.030, 0.030);               // topstrap channel
-  // Cylinder: six chambers and the flutes between them.
-  gpCyl(g, blued, 0.019, 0.019, 0.042, 6, 0, 0.012, -0.008);
-  for (let i = 0; i < 6; i++) {
-    const a = (i / 6) * Math.PI * 2;
-    gpCyl(g, inner, 0.0042, 0.0042, 0.044, 8, Math.cos(a) * 0.0125, 0.012 + Math.sin(a) * 0.0125, -0.008);
-    gpBox(g, inner, 0.004, 0.004, 0.030, Math.cos(a) * 0.019, 0.012 + Math.sin(a) * 0.019, -0.008, 0, 0, -a);
-  }
-  gpBox(g, bright, 0.006, 0.010, 0.024, -0.014, 0.012, 0.020);         // cylinder latch
-  gpCyl(g, bright, 0.0035, 0.0035, 0.050, 8, 0, 0.012, -0.010);        // centre pin
+  // The cylinder turns one chamber every shot.
+  gpPart(g, 'main', () => {
+    // Cylinder: six chambers and the flutes between them.
+    gpCyl(g, blued, 0.019, 0.019, 0.042, 6, 0, 0.012, -0.008);
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      gpCyl(g, inner, 0.0042, 0.0042, 0.044, 8, Math.cos(a) * 0.0125, 0.012 + Math.sin(a) * 0.0125, -0.008);
+      gpBox(g, inner, 0.004, 0.004, 0.030, Math.cos(a) * 0.019, 0.012 + Math.sin(a) * 0.019, -0.008, 0, 0, -a);
+    }
+    gpBox(g, bright, 0.006, 0.010, 0.024, -0.014, 0.012, 0.020);         // cylinder latch
+    gpCyl(g, bright, 0.0035, 0.0035, 0.050, 8, 0, 0.012, -0.010);        // centre pin
+  }, { x: 0, y: 0.012, z: -0.010 });
   // Barrel: vent rib on top, ejector rod shroud beneath.
   gpCyl(g, blued, 0.0082, 0.0082, 0.130, 16, 0, 0.012, -0.098);
   gpBox(g, blued, 0.016, 0.010, 0.130, 0, 0.026, -0.098);              // vent rib
@@ -9268,6 +9308,7 @@ function buildRevolver() {
   gpBox(g, inner, 0.012, 0.007, 0.008, 0, 0.038, 0.048);               // rear notch
   const flash = makeMuzzleFlash(); flash.position.set(0, 0.012, -0.172); g.add(flash);
   g._flash = flash; g._kickZ = 0.022; g._greebled = true; g._handDetailed = true;
+  g._parts.main._chambers = 6;   // indexes one chamber a shot
   g.position.set(0.1, -0.1, -0.22); return g;
 }
 
@@ -9778,7 +9819,7 @@ function buildGrenadeLauncher() {
   gpBox(g, poly, 0.048, 0.056, 0.140, 0, 0.010, 0.086);             // receiver
   gpBox(g, inner, 0.049, 0.006, 0.120, 0, 0.036, 0.086);
   // The drum: six chambers, each loaded, with a wound spring cover on the face.
-  // The drum swings out of the frame to be loaded — see RELOAD_KEYS.
+  // The drum opens upward to be loaded, and indexes one chamber per shot.
   gpPart(g, 'main', () => {
     gpCyl(g, steel, 0.060, 0.060, 0.130, 20, 0, 0.010, -0.020);
     gpCyl(g, inner, 0.062, 0.062, 0.008, 20, 0, 0.010, -0.060);
@@ -9796,7 +9837,7 @@ function buildGrenadeLauncher() {
     gpCyl(g, bright, 0.0090, 0.0090, 0.140, 12, 0, 0.010, -0.020);    // axis pin
     gpCyl(g, blued, 0.030, 0.030, 0.020, 14, 0, 0.010, -0.098);       // spring cover
     for (let i = 0; i < 3; i++) gpBox(g, inner, 0.050, 0.006, 0.008, 0, 0.010, -0.096, 0, 0, i * 1.05);
-  });
+  }, { x: 0, y: 0.010, z: -0.020 });
   // Short barrel out of the front, plus the frame that carries the drum.
   gpCyl(g, blued, 0.0230, 0.0230, 0.090, 14, 0, 0.010, -0.146);
   gpCyl(g, inner, 0.0180, 0.0180, 0.012, 12, 0, 0.010, -0.186);
@@ -9818,6 +9859,7 @@ function buildGrenadeLauncher() {
   [-0.014, 0.014].forEach(x => gpBox(g, steel, 0.006, 0.006, 0.090, x, 0.010, 0.190));
   gpBox(g, poly, 0.040, 0.046, 0.012, 0, 0.010, 0.240, 0.08);
   const flash = makeMuzzleFlash(); flash.position.set(0, 0.010, -0.200); g.add(flash);
+  g._parts.main._chambers = 6;   // indexes 60 degrees a shot
   g._flash = flash; g._kickZ = 0.030; g._greebled = true; g._handDetailed = true;
   g.position.set(0.12, -0.1, -0.25); return g;
 }
@@ -17424,20 +17466,21 @@ airburst_projector:[K(.09,{py:.04,rx:.24,rz:.16,hy:-.05}), K(.21,{py:.07,rx:.32,
                     K(.75,{py:.10,rx:.32,rz:.18,hy:0,hz:.03}), K(.85,{py:.04,rx:.14,rz:.08,hy:.07,hz:-.05,hr:-.7}),
                     K(.92,{py:.03,rx:.08,rz:.04,hy:.10,hz:-.07,hr:-.9}), K(.97,{py:.02,rx:.04,rz:.02})],
 grenade_launcher:[
-  // The drum is the whole gun. It comes out of the frame empty, takes six
-  // grenades one at a time — each one appearing in its chamber as it goes in —
-  // and swings shut. av is how many rounds are showing; ax/arz swing the drum.
-  K(.04,{py:.03,rx:.16,rz:-.24,av:0}),
-  K(.14,{py:.09,rx:.32,rz:-.62,ax:-.050,arz:-.22,av:0,hx:.07,hy:.03}),
-  K(.24,{py:.10,rx:.36,rz:-.74,ax:-.092,arz:-.40,av:0,hx:.12,hy:.06,hz:.05,hr:.7}),
-  K(.34,{py:.10,rx:.36,rz:-.74,ax:-.092,arz:-.40,av:.17,hx:-.04,hy:-.16,hz:.02}),
-  K(.44,{py:.10,rx:.36,rz:-.74,ax:-.092,arz:-.40,av:.34,hx:.08,hy:.02,hz:.05}),
-  K(.54,{py:.10,rx:.36,rz:-.74,ax:-.092,arz:-.40,av:.50,hx:-.04,hy:-.16,hz:.02}),
-  K(.64,{py:.10,rx:.36,rz:-.74,ax:-.092,arz:-.40,av:.67,hx:.08,hy:.02,hz:.05}),
-  K(.74,{py:.10,rx:.36,rz:-.74,ax:-.092,arz:-.40,av:.84,hx:-.04,hy:-.16,hz:.02}),
-  K(.83,{py:.10,rx:.36,rz:-.74,ax:-.092,arz:-.40,av:1,hx:.08,hy:.02,hz:.05}),
-  K(.92,{py:.11,rx:.28,rz:-.52,ax:-.030,arz:-.14,av:1,hz:-.04}),
-  K(.97,{py:.10,rx:.22,rz:-.40,av:1})],
+  // The drum opens UPWARD until the chamber mouths face you, tips six spent
+  // rounds out, and only then takes fresh grenades one at a time. av is how
+  // many rounds are showing; ay lifts the drum and arx rolls it face-up.
+  K(.05,{py:.03,rx:.14,rz:-.10,av:1}),                                        // still full of empties
+  K(.14,{py:.09,rx:.26,rz:-.24,ay:.045,arx:-.26,av:1,hx:.06,hy:.03}),         // latch, drum starts up
+  K(.24,{py:.11,rx:.32,rz:-.30,ay:.090,arx:-.55,av:1,hx:.10,hy:.06,hz:.04,hr:.7}), // open, facing up
+  K(.31,{py:.11,rx:.34,rz:-.30,ay:.090,arx:-.58,av:0,hx:.12,hy:.09,hz:.02,hr:.9}), // tip the empties out
+  K(.39,{py:.11,rx:.34,rz:-.30,ay:.090,arx:-.55,av:.17,hx:-.04,hy:-.16,hz:.02}),
+  K(.47,{py:.11,rx:.34,rz:-.30,ay:.090,arx:-.55,av:.34,hx:.08,hy:.02,hz:.05}),
+  K(.55,{py:.11,rx:.34,rz:-.30,ay:.090,arx:-.55,av:.50,hx:-.04,hy:-.16,hz:.02}),
+  K(.63,{py:.11,rx:.34,rz:-.30,ay:.090,arx:-.55,av:.67,hx:.08,hy:.02,hz:.05}),
+  K(.71,{py:.11,rx:.34,rz:-.30,ay:.090,arx:-.55,av:.84,hx:-.04,hy:-.16,hz:.02}),
+  K(.79,{py:.11,rx:.34,rz:-.30,ay:.090,arx:-.55,av:1,hx:.08,hy:.02,hz:.05}),
+  K(.89,{py:.11,rx:.28,rz:-.20,ay:.040,arx:-.24,av:1,hz:-.04}),               // swing shut
+  K(.96,{py:.09,rx:.20,rz:-.12,av:1})],
 nebula_mortar:[K(.08,{py:.05,rx:.18,rz:-.30,px:-.01,hx:.04}), K(.19,{py:.09,rx:.30,rz:-.62,px:-.02,hx:.08,hy:.04}),
                K(.30,{py:.10,rx:.32,rz:-.68,hx:.11,hy:.07,hz:.06,hr:.7}), K(.42,{py:.10,rx:.32,rz:-.68,hx:-.04,hy:-.15,hz:.02}),
                K(.54,{py:.10,rx:.32,rz:-.68,hx:.08,hy:.03,hz:.06}), K(.66,{py:.10,rx:.32,rz:-.68,hx:-.04,hy:-.15,hz:.02}),
@@ -17856,10 +17899,10 @@ const RELOAD_PROPS = {
   // ── Muzzle and breech loaders: one big round, by hand ────────────────────
   rpg:[RP(.44,'rocket','arrive',1,'muzzle')],
   bazooka:[RP(.44,'rocket','arrive',1,'breech')],
-  grenade_launcher:[RP(.24,'case',null,6,'breech'),
-                    RP(.31,'grenade','arrive',1,'mag'),RP(.41,'grenade','arrive',1,'mag'),
-                    RP(.51,'grenade','arrive',1,'mag'),RP(.61,'grenade','arrive',1,'mag'),
-                    RP(.71,'grenade','arrive',1,'mag'),RP(.80,'grenade','arrive',1,'mag')],
+  grenade_launcher:[RP(.31,'case',null,6,'breech'),
+                    RP(.37,'grenade','arrive',1,'mag'),RP(.45,'grenade','arrive',1,'mag'),
+                    RP(.53,'grenade','arrive',1,'mag'),RP(.61,'grenade','arrive',1,'mag'),
+                    RP(.69,'grenade','arrive',1,'mag'),RP(.77,'grenade','arrive',1,'mag')],
   nebula_mortar:[RP(.30,'case',null,3,'breech'),RP(.54,'grenade','arrive',1,'mag'),RP(.78,'grenade','arrive',1,'mag')],
   mortar_rifle:[RP(.46,'grenade','arrive',1,'muzzle')],
   potato_cannon:[RP(.44,'ball','arrive',1,'muzzle')],
@@ -17938,7 +17981,7 @@ function updateReloadAnim() {
     // of its ammunition again.
     const pr = model._parts;
     if (pr) {
-      if (pr.main) { pr.main.position.set(0,0,0); pr.main.rotation.set(0,0,0); }
+      if (pr.main) { pr.main.position.set(0,0,0); pr.main.rotation.set(0, 0, pr.main._spin || 0); }
       if (pr.ammo) pr.ammo.children.forEach(c => { c.visible = true; });
     }
     if (H && H.hideFront) H.front.visible = false;   // back to one-handed
@@ -17983,7 +18026,7 @@ function updateReloadAnim() {
   if (parts) {
     if (parts.main) {
       parts.main.position.set(P.ax, P.ay, P.az);
-      parts.main.rotation.set(P.arx, P.ary, P.arz);
+      parts.main.rotation.set(P.arx, P.ary, P.arz + (parts.main._spin || 0));
     }
     // And the rounds appear in it as they are put in, one at a time, so the
     // reload actually shows ammunition going into the gun.
@@ -24485,6 +24528,7 @@ function loop() {
   updateVehiclePiloting(dt); // 🚙 move + sync vehicle while piloted
   updateReloadAnim();       // the gun and the hands work the action
   updateReloadProps(dt);    // and the parts they moved go on moving
+  updateCylinders(dt);      // revolving cylinders index round as they fire
   updateSwitchbladeHUD(); // shows only when switchblade is active
   updateSpectatorCamera(dt); // follow teammates while dead
   if (spectatorState) updateSpectatorHUD(); // refresh HUD (ally name / count may change)
