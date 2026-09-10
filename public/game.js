@@ -8828,7 +8828,14 @@ function buildAK20() {
   // roughly 25-30 degrees end to end. The old one dropped 192 mm -- nearly
   // twice the receiver's height -- over only 21 degrees, so it read as a long
   // straight spike rather than a banana. Five segments, 140 mm, 27 degrees.
-  let my = -0.056, mz = -0.012, ang = 0.10;
+  // The magwell belongs well FORWARD of the trigger. It used to start at
+  // z -0.012, so the magazine's rear face (+0.012) overlapped the trigger
+  // guard (-0.001 to 0.041) and butted straight up against the firing hand --
+  // which is why it read as being where the pistol grip should be. On a real
+  // AK the trigger-to-magwell distance is about 90 mm, which at this model's
+  // scale is 0.106, putting the well at z -0.086 and leaving an open gap back
+  // to the handguard at -0.164, exactly as the real rifle has.
+  let my = -0.056, mz = -0.060, ang = 0.10;
   for (let i = 0; i < 5; i++) {
     box(magMat, 0.030, 0.034, 0.048, 0, my, mz, ang);
     box(inner,  0.031, 0.004, 0.012, 0, my, mz, ang);                // stamped rib
@@ -8843,15 +8850,21 @@ function buildAK20() {
   // ── Pistol grip ─────────────────────────────────────────────────────────
   // Lifted 0.024 so the grip tang actually meets the receiver — it used to top
   // out at -0.064 against a receiver bottom of -0.045 and hang in the air.
+  // It was there, but it bottomed out at y -0.144 while the firing fist covers
+  // down to -0.135 -- so only 9 mm of grip showed past the hand and the gun
+  // looked like it had no handle at all. It now runs to -0.170, is a little
+  // wider, and wears a grip cap, so a clear handle sits below the fist.
   sidePlate(grip, [
-    [0.080,-0.040],[0.112,-0.066],[0.116,-0.128],[0.096,-0.144],[0.070,-0.084],[0.064,-0.046],
-  ], 0.034, 0);
-  for (let i = 0; i < 4; i++) box(inner, 0.036, 0.0035, 0.008, 0, -0.074 - i * 0.018, 0.094 + i * 0.004, 0.35);
+    [0.078,-0.038],[0.114,-0.064],[0.122,-0.150],[0.098,-0.170],[0.068,-0.088],[0.062,-0.044],
+  ], 0.038, 0);
+  for (let i = 0; i < 6; i++) box(inner, 0.040, 0.0035, 0.009, 0, -0.070 - i * 0.017, 0.092 + i * 0.005, 0.35);
+  box(grip,  0.042, 0.012, 0.040, 0, -0.172, 0.108, 0.30);           // grip cap
+  box(inner, 0.043, 0.004, 0.014, 0, -0.178, 0.108, 0.30);           // cap seam
 
   // ── Stock: comb, toe, butt plate, sling loop ────────────────────────────
   sidePlate(polymer, [
     [0.154,-0.038],[0.214,0.012],[0.326,0.014],[0.392,-0.012],[0.386,-0.030],[0.220,-0.048],[0.166,-0.052],
-  ], 0.047, -0.024);
+  ], 0.047, 0);
   box(inner,  0.048, 0.052, 0.008, 0, -0.002, 0.404, 0.10);          // butt plate
   box(bright, 0.030, 0.006, 0.004, 0, -0.040, 0.250);                // sling loop
   box(inner,  0.049, 0.004, 0.070, 0, 0.010, 0.300);                 // comb seam
@@ -8861,13 +8874,13 @@ function buildAK20() {
   // ── Handguards + gas system ─────────────────────────────────────────────
   sidePlate(polymer, [
     [-0.336,0.010],[-0.306,0.034],[-0.186,0.034],[-0.164,0.012],[-0.190,-0.008],[-0.320,-0.006],
-  ], 0.050, -0.025);
+  ], 0.050, 0);
   // Finger grooves in the lower handguard.
   for (let i = 0; i < 4; i++) box(inner, 0.052, 0.006, 0.007, 0, 0.002, -0.310 + i * 0.038);
   // Upper handguard over the gas tube, with its cooling vents.
   sidePlate(polymer, [
     [-0.332,0.038],[-0.310,0.056],[-0.196,0.056],[-0.176,0.038],
-  ], 0.044, -0.022);
+  ], 0.044, 0);
   for (let i = 0; i < 3; i++) box(inner, 0.046, 0.004, 0.009, 0, 0.056, -0.300 + i * 0.042);
   cyl(blued, 0.0052, 0.0052, 0.180, 14, 0, 0.046, -0.256);           // gas tube
   // Gas block, canted port, bayonet lug.
