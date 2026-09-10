@@ -16920,7 +16920,8 @@ function _localPartBoxes(root) {
 }
 
 function attachViewHands(root) {
-  if (!root || root._hands || root._throwable) return;
+  if (!root || root._handsDone) return;
+  root._handsDone = true;
   const parts = _localPartBoxes(root);
   if (!parts.length) return;
   const full = new THREE.Box3();
@@ -16957,16 +16958,31 @@ function attachViewHands(root) {
     }
     gripAt = best || ctr.clone();
   }
+  // Where reload parts come from and go to on THIS weapon. Computed for every
+  // one of them, before any early return: a weapon without anchors spawns its
+  // magazine at the camera origin, floating in the middle of the screen.
+  const fl0 = root._flash ? root._flash.position : null;
+  root._anchors = {
+    mag:    { x: 0,     y: gripAt.y - 0.020, z: gripAt.z - 0.055 },
+    breech: { x: 0.022, y: gripAt.y + 0.078, z: gripAt.z - 0.045 },
+    muzzle: { x: fl0 ? fl0.x : 0, y: fl0 ? fl0.y : gripAt.y + 0.06, z: fl0 ? fl0.z + 0.02 : full.min.z },
+  };
+  root._homePos = root.position.clone();
+
+  // A throwable IS the thing in the hand — a fan of knives, a cone, a pie.
+  // Bolting fists onto it would double up the hand.
+  if (root._throwable) return;
+
   const rear = _makeViewHand(1);
   rear.position.set(0.004, gripAt.y - 0.014, gripAt.z + 0.026);
   rear.rotation.set(0.26, 0, 0.10);
   root.add(rear);
 
-  // Something pen-sized (the Laser Pointer) is held in one hand. Two fists on
-  // a 12 cm pointer looks like a hostage situation.
-  const tiny = Math.max(size.x, size.y, size.z) < 0.22;
+  // Only something genuinely pen-shaped is held in one hand throughout: short
+  // AND thin. Measuring length alone caught the taser, nail gun, flare and
+  // signal pistol, which are small but have a proper grip and a second hand.
+  const tiny = Math.max(size.x, size.y, size.z) < 0.22 && size.x < 0.08 && size.y < 0.08;
   if (tiny) {
-    root._homePos = root.position.clone();
     root._hands = { rear, front: rear, rearHome: rear.position.clone(),
                     frontHome: rear.position.clone(), rearRot: rear.rotation.clone(),
                     frontRot: rear.rotation.clone(), gripAt: gripAt.clone(), size,
@@ -16999,15 +17015,6 @@ function attachViewHands(root) {
   // needs it, and hidden again the moment the reload is over.
   if (pistolish) front.visible = false;
 
-  // Where reload parts come from and go to on THIS gun: the magwell just
-  // forward of the trigger, the breech up top, and the muzzle.
-  const fl = root._flash ? root._flash.position : null;
-  root._anchors = {
-    mag:    { x: 0,     y: gripAt.y - 0.020, z: gripAt.z - 0.055 },
-    breech: { x: 0.022, y: gripAt.y + 0.078, z: gripAt.z - 0.045 },
-    muzzle: { x: fl ? fl.x : 0, y: fl ? fl.y : gripAt.y + 0.06, z: fl ? fl.z + 0.02 : full.min.z },
-  };
-  root._homePos = root.position.clone();
   root._hands = {
     hideFront: pistolish,
     rear, front,
