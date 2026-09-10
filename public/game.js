@@ -16998,6 +16998,15 @@ function attachViewHands(root) {
   // A pistol is fired one-handed: the support hand is hidden until a reload
   // needs it, and hidden again the moment the reload is over.
   if (pistolish) front.visible = false;
+
+  // Where reload parts come from and go to on THIS gun: the magwell just
+  // forward of the trigger, the breech up top, and the muzzle.
+  const fl = root._flash ? root._flash.position : null;
+  root._anchors = {
+    mag:    { x: 0,     y: gripAt.y - 0.020, z: gripAt.z - 0.055 },
+    breech: { x: 0.022, y: gripAt.y + 0.078, z: gripAt.z - 0.045 },
+    muzzle: { x: fl ? fl.x : 0, y: fl ? fl.y : gripAt.y + 0.06, z: fl ? fl.z + 0.02 : full.min.z },
+  };
   root._homePos = root.position.clone();
   root._hands = {
     hideFront: pistolish,
@@ -17524,6 +17533,270 @@ const _RELOAD_DEFAULT = [K(.20,{py:-.07,rx:.40,rz:.18,hy:-.14}),
                          K(.55,{py:-.08,rx:.42,rz:.20,hy:-.02,hz:.04}),
                          K(.82,{py:-.09,rx:.40,rz:.18})];
 
+// ── 🧰 Reload props ─────────────────────────────────────────────────────────
+// Parts that come off the gun, get thrown away, or arrive to be fitted are
+// spawned as their own meshes in VIEWMODEL space — siblings of the weapon
+// rather than children of it — so a discarded magazine keeps falling on its
+// own path while the gun carries on with the rest of the drill.
+//
+// They are generated rather than cut out of the model. Detecting "the
+// magazine" geometrically across ninety-nine hand-built guns was only right
+// about six times in ten, and the failures were spectacular: on the Desert
+// Eagle it picked the gas tube. A spawned part is always the right part.
+const _rProps = [];
+const _rPropGeo = new Map();
+const _rGeo = (key, build) => { let g = _rPropGeo.get(key); if (!g) { g = build(); _rPropGeo.set(key, g); } return g; };
+
+function _makeReloadProp(kind) {
+  const M = (c, o) => new THREE.MeshPhongMaterial({ color: c, shininess: o === undefined ? 60 : o,
+                                                    specular: 0x9aa2ac, transparent: true, opacity: 1 });
+  const g = new THREE.Group();
+  switch (kind) {
+    case 'mag':
+      g.add(new THREE.Mesh(_rGeo('mag', () => new THREE.BoxGeometry(0.026, 0.090, 0.044)), M(0x32373d, 66)));
+      g.add(new THREE.Mesh(_rGeo('maglip', () => new THREE.BoxGeometry(0.028, 0.010, 0.046)), M(0x8d959e, 120)));
+      g.children[1].position.y = 0.048;
+      break;
+    case 'shell': {   // a shotgun cartridge: red hull, brass head
+      const h = new THREE.Mesh(_rGeo('shellh', () => new THREE.CylinderGeometry(0.0095, 0.0095, 0.044, 8)), M(0x8a2622, 62));
+      h.rotation.x = Math.PI / 2; g.add(h);
+      const b = new THREE.Mesh(_rGeo('shellb', () => new THREE.CylinderGeometry(0.0100, 0.0100, 0.012, 8)), M(0x9a7a34, 130));
+      b.rotation.x = Math.PI / 2; b.position.z = 0.026; g.add(b);
+      break; }
+    case 'case': {    // a spent brass case
+      const c = new THREE.Mesh(_rGeo('case', () => new THREE.CylinderGeometry(0.0055, 0.0062, 0.032, 8)), M(0x9a7a34, 140));
+      c.rotation.x = Math.PI / 2; g.add(c);
+      break; }
+    case 'round': {   // a live round: brass case, copper nose
+      const c = new THREE.Mesh(_rGeo('case', () => new THREE.CylinderGeometry(0.0055, 0.0062, 0.032, 8)), M(0x9a7a34, 140));
+      c.rotation.x = Math.PI / 2; g.add(c);
+      const n = new THREE.Mesh(_rGeo('nose', () => new THREE.ConeGeometry(0.0055, 0.016, 8)), M(0xa9622c, 130));
+      n.rotation.x = -Math.PI / 2; n.position.z = -0.023; g.add(n);
+      break; }
+    case 'link':      // a belt link
+      g.add(new THREE.Mesh(_rGeo('link', () => new THREE.BoxGeometry(0.012, 0.010, 0.016)), M(0x8d959e, 120)));
+      break;
+    case 'clip': {    // an en-bloc clip, sprung out of the top
+      g.add(new THREE.Mesh(_rGeo('clip', () => new THREE.BoxGeometry(0.026, 0.030, 0.010)), M(0x8d959e, 130)));
+      break; }
+    case 'cell': {    // an energy cell, still lit
+      g.add(new THREE.Mesh(_rGeo('cell', () => new THREE.BoxGeometry(0.026, 0.070, 0.042)), M(0x2b2f35, 40)));
+      const w = new THREE.Mesh(_rGeo('cellw', () => new THREE.BoxGeometry(0.028, 0.038, 0.008)),
+        new THREE.MeshBasicMaterial({ color: 0x59ccff, transparent: true, opacity: 1 }));
+      w.position.z = 0.022; g.add(w);
+      break; }
+    case 'bottle': {  // a gas bottle off a tank weapon
+      const b = new THREE.Mesh(_rGeo('bottle', () => new THREE.CylinderGeometry(0.020, 0.020, 0.100, 10)), M(0x7a4b22, 84));
+      b.rotation.x = Math.PI / 2; g.add(b);
+      const v = new THREE.Mesh(_rGeo('valve', () => new THREE.CylinderGeometry(0.008, 0.008, 0.020, 8)), M(0x8d959e, 130));
+      v.rotation.x = Math.PI / 2; v.position.z = -0.056; g.add(v);
+      break; }
+    case 'rocket': {  // a rocket going down the tube
+      const b = new THREE.Mesh(_rGeo('rkt', () => new THREE.CylinderGeometry(0.017, 0.017, 0.070, 10)), M(0x4a5334, 40));
+      b.rotation.x = Math.PI / 2; g.add(b);
+      const w = new THREE.Mesh(_rGeo('rktw', () => new THREE.ConeGeometry(0.026, 0.050, 10)), M(0x7a4a2a, 60));
+      w.rotation.x = -Math.PI / 2; w.position.z = -0.056; g.add(w);
+      break; }
+    case 'grenade': { // a 40 mm grenade
+      const b = new THREE.Mesh(_rGeo('gren', () => new THREE.CylinderGeometry(0.0165, 0.0165, 0.046, 10)), M(0x6d6a3a, 54));
+      b.rotation.x = Math.PI / 2; g.add(b);
+      break; }
+    case 'bolt': {    // a crossbow bolt / arrow / spear
+      const s = new THREE.Mesh(_rGeo('boltS', () => new THREE.CylinderGeometry(0.0035, 0.0035, 0.150, 6)), M(0x8d959e, 120));
+      s.rotation.x = Math.PI / 2; g.add(s);
+      const t = new THREE.Mesh(_rGeo('boltT', () => new THREE.ConeGeometry(0.0075, 0.026, 6)), M(0xc9d0d8, 160));
+      t.rotation.x = -Math.PI / 2; t.position.z = -0.086; g.add(t);
+      break; }
+    case 'dart': {
+      const s = new THREE.Mesh(_rGeo('dartS', () => new THREE.CylinderGeometry(0.0072, 0.0072, 0.038, 8)), M(0xbfe0c8, 140));
+      s.rotation.x = Math.PI / 2; g.add(s);
+      const t = new THREE.Mesh(_rGeo('dartT', () => new THREE.CylinderGeometry(0.0072, 0.0072, 0.012, 8)), M(0xd83a5a, 40));
+      t.rotation.x = Math.PI / 2; t.position.z = 0.024; g.add(t);
+      break; }
+    case 'ball': {    // a lead ball, a paintball, a slug
+      g.add(new THREE.Mesh(_rGeo('ball', () => new THREE.SphereGeometry(0.011, 8, 7)), M(0x9aa2ac, 150)));
+      break; }
+    case 'nail': {
+      const s = new THREE.Mesh(_rGeo('nailS', () => new THREE.CylinderGeometry(0.0022, 0.0010, 0.038, 6)), M(0xb8bec6, 140));
+      s.rotation.x = Math.PI / 2; g.add(s);
+      break; }
+    default:
+      g.add(new THREE.Mesh(_rGeo('mag', () => new THREE.BoxGeometry(0.026, 0.090, 0.044)), M(0x32373d, 66)));
+  }
+  g.traverse(o => { if (o.isMesh) { o.userData.vmHand = true; o.castShadow = false; } });
+  return g;
+}
+
+// Where on the gun a part comes from or goes to. Derived once, from the
+// model's own bounds and its trigger anchor, so it lands on the right gun.
+function _propAnchor(model, where) {
+  const A = model._anchors;
+  if (!A) return new THREE.Vector3(0, 0, 0);
+  const p = A[where] || A.mag;
+  return new THREE.Vector3(model.position.x + p.x, model.position.y + p.y, model.position.z + p.z);
+}
+
+function spawnReloadProp(model, kind, mode, where) {
+  if (!camera) return;
+  const mesh = _makeReloadProp(kind);
+  const at = _propAnchor(model, where);
+  const R = (a) => (Math.random() - 0.5) * a;
+  if (mode === 'arrive') {
+    // Comes up into frame from below and disappears once it is fitted: from
+    // here on it is part of the gun again.
+    mesh.position.set(at.x + R(0.04), at.y - 0.26, at.z + 0.05 + R(0.02));
+    _rProps.push({ mesh, mode, t: 0, life: 0.30, from: mesh.position.clone(), to: at });
+  } else {
+    mesh.position.copy(at);
+    mesh.rotation.set(R(1.2), R(1.2), R(1.2));
+    _rProps.push({ mesh, mode, t: 0, life: 0.95,
+      vel: new THREE.Vector3(-0.22 + R(0.30), 0.10 + R(0.14), 0.34 + R(0.24)),
+      spin: new THREE.Vector3(R(9), R(9), R(9)) });
+  }
+  camera.add(mesh);
+}
+
+function updateReloadProps(dt) {
+  for (let i = _rProps.length - 1; i >= 0; i--) {
+    const p = _rProps[i];
+    p.t += dt;
+    if (p.mode === 'arrive') {
+      const k = Math.min(1, p.t / p.life), s = k * k * (3 - 2 * k);
+      p.mesh.position.lerpVectors(p.from, p.to, s);
+    } else {
+      p.vel.y -= 2.4 * dt;                       // viewmodel-scale gravity
+      p.mesh.position.addScaledVector(p.vel, dt);
+      p.mesh.rotation.x += p.spin.x * dt; p.mesh.rotation.y += p.spin.y * dt; p.mesh.rotation.z += p.spin.z * dt;
+      const fade = Math.max(0, 1 - Math.max(0, p.t - p.life * 0.55) / (p.life * 0.45));
+      p.mesh.traverse(o => { if (o.isMesh) o.material.opacity = fade; });
+    }
+    if (p.t >= p.life) {
+      camera.remove(p.mesh);
+      p.mesh.traverse(o => { if (o.isMesh && o.material.transparent) o.material.opacity = 1; });
+      _rProps.splice(i, 1);
+    }
+  }
+}
+function clearReloadProps() { while (_rProps.length) { camera.remove(_rProps.pop().mesh); } }
+
+// What each weapon throws away, feeds in, or spits out — and when. Times line
+// up with that weapon's own keyframe track, so the part moves on the beat the
+// hands move.  t · kind · mode ('eject' throws it clear, 'arrive' brings it in)
+// · count · where ('mag' under the receiver, 'breech' up top, 'muzzle' out front)
+const RP = (t, k, m, n, w) => ({ t, k, m: m || 'eject', n: n || 1, w: w || 'mag' });
+const RELOAD_PROPS = {
+  // ── Magazine guns: the old mag is thrown clear, a fresh one comes up ──────
+  ak20:[RP(.30,'mag'),RP(.56,'mag','arrive')],
+  xm7:[RP(.31,'mag'),RP(.58,'mag','arrive')],
+  burst:[RP(.32,'mag'),RP(.59,'mag','arrive')],
+  vector:[RP(.34,'mag'),RP(.61,'mag','arrive')],
+  mp40:[RP(.31,'mag'),RP(.58,'mag','arrive')],
+  p90:[RP(.34,'mag',null,1,'breech'),RP(.60,'mag','arrive',1,'breech')],
+  p90_spec:[RP(.32,'mag',null,1,'breech'),RP(.58,'mag','arrive',1,'breech')],
+  hkmp7:[RP(.36,'mag'),RP(.63,'mag','arrive')],
+  machine_pistol:[RP(.36,'mag'),RP(.63,'mag','arrive')],
+  smart_smg:[RP(.32,'mag'),RP(.57,'mag','arrive')],
+  swarm_rifle:[RP(.32,'mag'),RP(.57,'mag','arrive')],
+  twin_ar:[RP(.27,'mag'),RP(.47,'mag','arrive'),RP(.71,'mag'),RP(.81,'mag','arrive')],
+  lancer:[RP(.30,'mag'),RP(.55,'mag','arrive')],
+  flechette:[RP(.32,'mag'),RP(.58,'mag','arrive')],
+  five_seven:[RP(.36,'mag'),RP(.63,'mag','arrive')],
+  glock18:[RP(.34,'mag'),RP(.61,'mag','arrive')],
+  m1911:[RP(.36,'mag'),RP(.62,'mag','arrive')],
+  desert_eagle:[RP(.34,'mag'),RP(.61,'mag','arrive')],
+  hand_cannon:[RP(.33,'mag'),RP(.60,'mag','arrive')],
+  pistol:[RP(.37,'mag'),RP(.64,'mag','arrive')],
+  switchblade_gun:[RP(.34,'mag'),RP(.59,'mag','arrive')],
+  burst_cannon:[RP(.29,'mag'),RP(.55,'mag','arrive'),RP(.29,'link',null,3,'breech')],
+  barrett:[RP(.30,'mag'),RP(.55,'mag','arrive'),RP(.92,'case',null,1,'breech')],
+  amr:[RP(.44,'case',null,1,'breech'),RP(.55,'round','arrive',1,'breech')],
+  srx:[RP(.42,'case',null,1,'breech'),RP(.53,'round','arrive',1,'breech')],
+  mauser:[RP(.44,'clip','arrive',1,'breech'),RP(.67,'round','arrive',3,'breech'),RP(.87,'clip',null,1,'breech')],
+  air_rifle:[RP(.44,'ball','arrive',1,'breech'),RP(.78,'case',null,1,'breech')],
+  m1_garand:[RP(.19,'clip',null,1,'breech'),RP(.41,'clip','arrive',1,'breech'),RP(.84,'case',null,1,'breech')],
+  lever:[RP(.19,'case',null,1,'breech'),RP(.38,'case'),RP(.57,'case'),RP(.76,'case'),RP(.94,'round','arrive',1,'breech')],
+  coilgun:[RP(.32,'mag'),RP(.57,'mag','arrive')],
+  plasma_carbine:[RP(.32,'cell'),RP(.57,'cell','arrive')],
+  airburst_projector:[RP(.31,'mag'),RP(.56,'mag','arrive'),RP(.85,'grenade','arrive',1,'breech')],
+  pulse_needle:[RP(.37,'mag'),RP(.62,'mag','arrive')],
+  nail_gun:[RP(.37,'mag'),RP(.62,'mag','arrive'),RP(.83,'nail',null,2,'breech')],
+  frost_blaster:[RP(.35,'cell'),RP(.60,'cell','arrive')],
+  dart_gun:[RP(.36,'case',null,1,'breech'),RP(.60,'dart','arrive',1,'breech')],
+  // ── Belt fed: the old belt's links spill out, a new belt goes in ──────────
+  rpd:[RP(.29,'link',null,5,'breech'),RP(.53,'link','arrive',3,'breech'),RP(.92,'case',null,1,'breech')],
+  mg42:[RP(.28,'link',null,6,'breech'),RP(.52,'link','arrive',4,'breech'),RP(.91,'case',null,1,'breech')],
+  minigun:[RP(.31,'link',null,6,'breech'),RP(.55,'link','arrive',4,'breech')],
+  gau19:[RP(.30,'link',null,7,'breech'),RP(.54,'link','arrive',4,'breech')],
+  m134:[RP(.31,'link',null,6,'breech'),RP(.55,'link','arrive',4,'breech')],
+  mk44:[RP(.28,'link',null,6,'breech'),RP(.51,'link','arrive',4,'breech'),RP(.88,'case',null,1,'breech')],
+  // ── Pump and break: cartridges, counted in one at a time ─────────────────
+  sg8:[RP(.24,'shell','arrive'),RP(.40,'shell','arrive'),RP(.56,'shell','arrive'),
+       RP(.72,'shell','arrive'),RP(.87,'shell','arrive'),RP(.95,'shell',null,1,'breech')],
+  shorty:[RP(.32,'shell','arrive'),RP(.54,'shell','arrive'),RP(.76,'shell','arrive'),RP(.93,'shell',null,1,'breech')],
+  sawed_off:[RP(.40,'shell',null,2,'breech'),RP(.62,'shell','arrive',1,'breech'),RP(.82,'shell','arrive',1,'breech')],
+  boomstick:[RP(.37,'shell',null,2,'breech'),RP(.58,'shell','arrive',1,'breech'),RP(.79,'shell','arrive',1,'breech')],
+  signal_pistol:[RP(.46,'shell',null,1,'breech'),RP(.70,'shell','arrive',1,'breech')],
+  flare:[RP(.50,'case'),RP(.62,'round','arrive',1,'breech')],
+  taser:[RP(.38,'case'),RP(.65,'mag','arrive',1,'breech')],
+  duelist_pistol:[RP(.31,'ball','arrive',1,'muzzle'),RP(.53,'ball','arrive',1,'muzzle'),RP(.83,'case',null,1,'breech')],
+  // ── Revolvers: cases punched out together, fresh rounds thumbed in ───────
+  revolver:[RP(.38,'case',null,6,'breech'),RP(.62,'round','arrive',6,'breech')],
+  snub_revolver:[RP(.44,'case',null,5,'breech'),RP(.68,'round','arrive',5,'breech')],
+  auto_revolver:[RP(.42,'case',null,6,'breech'),RP(.66,'round','arrive',6,'breech')],
+  machine_revolver:[RP(.36,'case',null,8,'breech'),RP(.56,'round','arrive',6,'breech'),RP(.76,'round','arrive',6,'breech')],
+  // ── Muzzle and breech loaders: one big round, by hand ────────────────────
+  rpg:[RP(.44,'rocket','arrive',1,'muzzle')],
+  bazooka:[RP(.44,'rocket','arrive',1,'breech')],
+  grenade_launcher:[RP(.27,'case',null,6,'breech'),RP(.47,'grenade','arrive',1,'mag'),
+                    RP(.67,'grenade','arrive',1,'mag'),RP(.86,'grenade','arrive',1,'mag')],
+  nebula_mortar:[RP(.30,'case',null,3,'breech'),RP(.54,'grenade','arrive',1,'mag'),RP(.78,'grenade','arrive',1,'mag')],
+  mortar_rifle:[RP(.46,'grenade','arrive',1,'muzzle')],
+  potato_cannon:[RP(.44,'ball','arrive',1,'muzzle')],
+  firework_launcher:[RP(.45,'shell','arrive',1,'muzzle'),RP(.67,'shell','arrive',1,'muzzle')],
+  shockwave_launcher:[RP(.32,'bottle'),RP(.57,'bottle','arrive')],
+  crossbow:[RP(.54,'bolt','arrive',1,'breech')],
+  boombow:[RP(.46,'bolt','arrive',1,'breech')],
+  harpoon_gun:[RP(.45,'bolt','arrive',1,'breech')],
+  slingshot:[RP(.36,'ball','arrive',1,'muzzle')],
+  // ── Energy: the spent cell comes out and a live one goes in ──────────────
+  cycler:[RP(.40,'cell'),RP(.54,'cell','arrive')],
+  arc_rifle:[RP(.33,'cell'),RP(.57,'cell','arrive')],
+  arc_torrent:[RP(.32,'cell'),RP(.56,'cell','arrive')],
+  storm_core:[RP(.35,'cell',null,1,'breech'),RP(.60,'cell','arrive',1,'breech')],
+  event_horizon:[RP(.34,'cell'),RP(.58,'cell','arrive')],
+  quantum_repeater:[RP(.28,'cell'),RP(.48,'cell','arrive'),RP(.68,'cell'),RP(.88,'cell','arrive')],
+  magnetar:[RP(.31,'cell'),RP(.42,'cell','arrive'),RP(.72,'cell'),RP(.83,'cell','arrive')],
+  solar_lance:[RP(.35,'cell',null,1,'breech'),RP(.60,'cell','arrive',1,'breech')],
+  prism_launcher:[RP(.35,'cell'),RP(.60,'cell','arrive')],
+  prism_engine:[RP(.32,'cell'),RP(.56,'cell','arrive')],
+  void_harvester:[RP(.34,'bottle',null,1,'breech'),RP(.58,'bottle','arrive',1,'breech')],
+  portal_launcher:[RP(.37,'cell'),RP(.50,'cell','arrive')],
+  gravity_launcher:[RP(.34,'cell'),RP(.58,'cell','arrive')],
+  railgun:[RP(.31,'round','arrive',1,'breech'),RP(.63,'case',null,1,'breech')],
+  laser_pointer:[RP(.42,'case'),RP(.54,'round','arrive')],
+  painter_beam:[RP(.37,'cell'),RP(.62,'cell','arrive')],
+  seismic_hammer:[RP(.41,'case',null,2,'muzzle'),RP(.83,'case',null,2,'muzzle')],
+  pinball_launcher:[RP(.32,'ball','arrive',1,'breech'),RP(.54,'ball','arrive',1,'breech'),
+                    RP(.76,'ball','arrive',1,'breech'),RP(.96,'ball','arrive',1,'breech')],
+  // ── Tanks, bottles, hoppers ──────────────────────────────────────────────
+  flamethrower:[RP(.29,'bottle'),RP(.52,'bottle','arrive')],
+  freeze_gun:[RP(.30,'bottle'),RP(.54,'bottle','arrive')],
+  abs_zero:[RP(.29,'bottle'),RP(.53,'bottle','arrive')],
+  foam_cannon:[RP(.29,'bottle'),RP(.50,'bottle','arrive'),RP(.70,'bottle'),RP(.80,'bottle','arrive')],
+  gravity_paint:[RP(.33,'bottle',null,1,'breech'),RP(.55,'bottle','arrive',1,'breech')],
+  storm_cannon:[RP(.33,'bottle',null,1,'breech'),RP(.57,'bottle','arrive',1,'breech')],
+  glassmaker:[RP(.35,'ball','arrive',6,'breech'),RP(.57,'ball','arrive',5,'breech')],
+  paintball:[RP(.33,'ball','arrive',6,'breech'),RP(.53,'ball','arrive',6,'breech'),RP(.69,'ball','arrive',5,'breech')],
+  sticker_blaster:[RP(.35,'mag',null,1,'breech'),RP(.58,'mag','arrive',1,'breech')],
+  traffic_controller:[RP(.35,'cell',null,1,'breech'),RP(.58,'cell','arrive',1,'breech')],
+  // ── Thrown: the next one is drawn from the belt ──────────────────────────
+  throwing_knives:[RP(.26,'nail','arrive',1,'breech'),RP(.52,'nail','arrive',1,'breech'),RP(.76,'nail','arrive',1,'breech')],
+  throwing_axes:[RP(.28,'nail','arrive',1,'breech'),RP(.57,'nail','arrive',1,'breech')],
+  boomerang:[RP(.30,'bolt','arrive',1,'breech')],
+  traffic_cone:[RP(.30,'bottle','arrive',1,'breech')],
+  cream_pie:[RP(.30,'ball','arrive',1,'breech')],
+};
+
 function _reloadPose(track, t) {
   let a = _RELOAD_REST, b = _RELOAD_REST;
   for (let i = 0; i < track.length; i++) {
@@ -17565,6 +17838,20 @@ function updateReloadAnim() {
   if (t >= 1) { rest(); return; }
 
   const id = WEAPONS[currentWeaponIdx]?.id || '';
+
+  // Parts come off, get thrown clear, and arrive to be fitted, on the same
+  // beats the hands work. Each event fires once per reload.
+  if (model._propRun !== model._reloadStart) { model._propRun = model._reloadStart; model._propFired = 0; }
+  const evs = RELOAD_PROPS[id];
+  if (evs) for (let i = 0; i < evs.length && i < 30; i++) {
+    if (model._propFired & (1 << i)) continue;
+    if (t < evs[i].t) continue;
+    model._propFired |= (1 << i);
+    for (let n = 0; n < evs[i].n; n++) {
+      try { spawnReloadProp(model, evs[i].k, evs[i].m, evs[i].w); } catch (e) {}
+    }
+  }
+
   const P = _reloadPose(RELOAD_KEYS[id] || _RELOAD_DEFAULT, t);
   const home = model._homePos;
   model.position.set(home.x + P.px, home.y + P.py, home.z + P.pz);
@@ -24059,7 +24346,8 @@ function loop() {
   updateKillcam(performance.now());
   updateVehiclePrompt();// 🚙 vehicle pickup prompt (BR arena)
   updateVehiclePiloting(dt); // 🚙 move + sync vehicle while piloted
-  updateReloadAnim();   // weapon tilts/rotates during reload
+  updateReloadAnim();       // the gun and the hands work the action
+  updateReloadProps(dt);    // and the parts they moved go on moving
   updateSwitchbladeHUD(); // shows only when switchblade is active
   updateSpectatorCamera(dt); // follow teammates while dead
   if (spectatorState) updateSpectatorHUD(); // refresh HUD (ally name / count may change)
