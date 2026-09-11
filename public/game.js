@@ -6319,11 +6319,14 @@ function buildAutoRevolver() {
   for (let i = 0; i < 5; i++) gpBox(g, inner, 0.032, 0.030, 0.005, 0, 0.024, 0.056 + i * 0.010); // recoil rails
   // Shrouded cylinder, chambers visible at the front face.
   gpBox(g, blued, 0.048, 0.048, 0.062, 0, 0.020, -0.038);           // shroud
-  gpCyl(g, steel, 0.023, 0.023, 0.064, 14, 0, 0.020, -0.038);
-  for (let i = 0; i < 6; i++) {
-    const a = (i / 6) * Math.PI * 2;
-    gpCyl(g, inner, 0.0058, 0.0058, 0.068, 8, Math.cos(a) * 0.012, 0.020 + Math.sin(a) * 0.012, -0.038);
-  }
+  // Cylinder turns inside its shroud, which stays put. One chamber a shot.
+  gpPart(g, 'main', () => {
+    gpCyl(g, steel, 0.023, 0.023, 0.064, 14, 0, 0.020, -0.038);
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      gpCyl(g, inner, 0.0058, 0.0058, 0.068, 8, Math.cos(a) * 0.012, 0.020 + Math.sin(a) * 0.012, -0.038);
+    }
+  }, { x: 0, y: 0.020, z: -0.038 });
   gpBox(g, inner, 0.050, 0.008, 0.050, 0, 0.043, -0.038);           // shroud vent
   // Barrel BELOW the cylinder axis — the whole point.
   gpCyl(g, blued, 0.0115, 0.0115, 0.130, 14, 0, 0.002, -0.128);
@@ -6343,6 +6346,7 @@ function buildAutoRevolver() {
   gpBox(g, bright, 0.010, 0.014, 0.012, 0, 0.058, 0.086, -0.40);    // low-profile hammer
   const flash = makeMuzzleFlash(); flash.position.set(0, 0.002, -0.204); g.add(flash);
   g._flash = flash; g._kickZ = 0.020; g._greebled = true; g._handDetailed = true;
+  g._parts.main._chambers = 6;   // indexes one chamber a shot
   g.position.set(0.1, -0.1, -0.22); return g;
 }
 
@@ -8628,15 +8632,18 @@ function buildNebulaMortar() {
   }
   gpCyl(g, glow, 0.0075, 0.0075, 0.070, 10, 0, 0.010, -0.110);
   for (let i = 0; i < 4; i++) gpCyl(g, bright, 0.0325, 0.0325, 0.008, 16, 0, 0.010, -0.076 + i * 0.028);
-  // Three-round cylinder of glass shells.
-  gpCyl(g, steel, 0.036, 0.036, 0.070, 16, 0, 0.010, 0.028);
-  for (let i = 0; i < 3; i++) {
-    const a = (i / 3) * Math.PI * 2;
-    const cx = Math.cos(a) * 0.020, cy = 0.010 + Math.sin(a) * 0.020;
-    gpCyl(g, inner, 0.0140, 0.0140, 0.074, 12, cx, cy, 0.028);
-    gpCyl(g, glass, 0.0115, 0.0115, 0.052, 12, cx, cy, 0.028);
-    gpCyl(g, neb, 0.0080, 0.0080, 0.044, 10, cx, cy, 0.028);
-  }
+  // Three glass shells on a cylinder: 120 degrees a shot.
+  gpPart(g, 'main', () => {
+    // Three-round cylinder of glass shells.
+    gpCyl(g, steel, 0.036, 0.036, 0.070, 16, 0, 0.010, 0.028);
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * Math.PI * 2;
+      const cx = Math.cos(a) * 0.020, cy = 0.010 + Math.sin(a) * 0.020;
+      gpCyl(g, inner, 0.0140, 0.0140, 0.074, 12, cx, cy, 0.028);
+      gpCyl(g, glass, 0.0115, 0.0115, 0.052, 12, cx, cy, 0.028);
+      gpCyl(g, neb, 0.0080, 0.0080, 0.044, 10, cx, cy, 0.028);
+    }
+  }, { x: 0, y: 0.010, z: 0.028 });
   gpCyl(g, bright, 0.0075, 0.0075, 0.076, 10, 0, 0.010, 0.028);     // axis pin
   gpCyl(g, steel, 0.038, 0.038, 0.010, 16, 0, 0.010, 0.066);
   // Curved elevation arm and gas manifold underneath.
@@ -8656,6 +8663,7 @@ function buildNebulaMortar() {
     new THREE.MeshBasicMaterial({ color: 0xd0a8ff }));
   flash.visible = false; flash.position.set(0, 0.010, -0.184); g.add(flash);
   g._flash = flash; g._kickZ = 0.030; g._greebled = true; g._handDetailed = true;
+  g._parts.main._chambers = 3;   // indexes one chamber a shot
   g.position.set(0.12, -0.1, -0.25); return g;
 }
 
