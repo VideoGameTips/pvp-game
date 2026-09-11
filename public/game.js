@@ -18546,6 +18546,61 @@ function hasLineOfSight(x1, z1, x2, z2) {
   return true;
 }
 
+// 💢 Impact marks — a round that hits something leaves evidence it hit it.
+// Capped and aged out, because a long firefight would otherwise carpet the
+// level in quads and every one of them is a draw call.
+const GROUND_PLANE_Y = 0;
+const _impactMarks = [];
+const IMPACT_MARK_LIMIT = 64;
+const IMPACT_MARK_LIFE = 12000;
+const IMPACT_MARK_FADE = 2200;
+const _UNIT_Z = new THREE.Vector3(0, 0, 1);
+
+function spawnImpactMark(pos, normal, weaponId) {
+  const w = WEAPONS.find(x => x.id === weaponId);
+  const r = Math.max(0.05, Math.min(0.26, (w && w.bulletSize ? w.bulletSize * 2.2 : 0.09)));
+  const m = new THREE.Mesh(
+    new THREE.CircleGeometry(r, 10),
+    new THREE.MeshBasicMaterial({ color: 0x15110e, transparent: true, opacity: 0.80,
+                                  depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }));
+  // Sit on the surface, facing out of it, lifted just clear so it does not
+  // fight the floor for the same pixels.
+  m.quaternion.setFromUnitVectors(_UNIT_Z, normal);
+  m.position.copy(pos).addScaledVector(normal, 0.012);
+  scene.add(m);
+  _impactMarks.push({ mesh: m, born: Date.now() });
+  while (_impactMarks.length > IMPACT_MARK_LIMIT) {
+    const old = _impactMarks.shift();
+    scene.remove(old.mesh); old.mesh.geometry.dispose(); old.mesh.material.dispose();
+  }
+}
+
+function updateImpactMarks() {
+  const now = Date.now();
+  for (let i = _impactMarks.length - 1; i >= 0; i--) {
+    const age = now - _impactMarks[i].born;
+    if (age >= IMPACT_MARK_LIFE) {
+      const d = _impactMarks.splice(i, 1)[0];
+      scene.remove(d.mesh); d.mesh.geometry.dispose(); d.mesh.material.dispose();
+    } else if (age > IMPACT_MARK_LIFE - IMPACT_MARK_FADE) {
+      _impactMarks[i].mesh.material.opacity = 0.80 * (IMPACT_MARK_LIFE - age) / IMPACT_MARK_FADE;
+    }
+  }
+}
+
+// Which face of a box a point landed on, so a mark lies flat against it
+// instead of standing at whatever angle the bullet happened to arrive.
+const _bnC = new THREE.Vector3(), _bnS = new THREE.Vector3();
+function boxFaceNormal(box, p) {
+  box.getCenter(_bnC); box.getSize(_bnS);
+  const dx = Math.abs(p.x - _bnC.x) / (_bnS.x || 1e-6);
+  const dy = Math.abs(p.y - _bnC.y) / (_bnS.y || 1e-6);
+  const dz = Math.abs(p.z - _bnC.z) / (_bnS.z || 1e-6);
+  if (dx >= dy && dx >= dz) return new THREE.Vector3(Math.sign(p.x - _bnC.x) || 1, 0, 0);
+  if (dy >= dz) return new THREE.Vector3(0, Math.sign(p.y - _bnC.y) || 1, 0);
+  return new THREE.Vector3(0, 0, Math.sign(p.z - _bnC.z) || 1);
+}
+
 // 🚀 Rocket detonation — direct hit aside, splash everyone else in radius.
 function rocketExplode(pos, weaponId, excludePid) {
   const w = WEAPONS.find(x => x.id === weaponId) || {};
@@ -18594,6 +18649,7 @@ function updateBullets(dt) {
     // ── Wall collision (swept ray vs all wall AABBs) ─────────────────────
     let wallHitPt = null;
     let wallHitT = Infinity;
+    const wallHitNormal = new THREE.Vector3(0, 1, 0);
     if (!b.isPaintBomb) {
       const tDx = _bpos.x - px0, tDy = _bpos.y - py0, tDz = _bpos.z - pz0;
       const travelDist = Math.sqrt(tDx*tDx + tDy*tDy + tDz*tDz);
@@ -18611,13 +18667,37 @@ function updateBullets(dt) {
               if (hitT < wallHitT) {
                 wallHitT = hitT;
                 wallHitPt = _wallHitPt.clone();
+                wallHitNormal.copy(boxFaceNormal(box, wallHitPt));
                 wallHit = true;
               }
             }
           }
         }
+        // ── The ground is a wall ──────────────────────────────────────
+        // It had no collider of any kind, so every round that missed simply
+        // flew through the floor and out of the level, silently. Folding it
+        // into the same wallHitPt the boxes use means marks, bounces and
+        // explosions all come out of one path instead of three.
+        if (tDy < 0 && py0 > GROUND_PLANE_Y) {
+          const gT = (py0 - GROUND_PLANE_Y) / (py0 - _bpos.y);
+          if (gT >= 0 && gT <= 1 && gT < wallHitT) {
+            wallHitT = gT;
+            wallHitPt = new THREE.Vector3(px0 + tDx * gT, GROUND_PLANE_Y, pz0 + tDz * gT);
+            wallHitNormal.set(0, 1, 0);
+            wallHit = true;
+          }
+        }
         if (wallHit && !b.isOwn) {
           spawnHitParticle(wallHitPt);
+          // Somebody else's rocket landing in the dirt should still go off to
+          // look at. Only the visual: damage for a remote shot is decided by
+          // whoever fired it, and calling rocketExplode here would apply it a
+          // second time.
+          if (EXPLOSIVE_KINDS.has(projectileKind(b.weaponId, WEAPONS.find(w => w.id === b.weaponId)))) {
+            spawnExplosion(wallHitPt);
+          } else {
+            spawnImpactMark(wallHitPt, wallHitNormal, b.weaponId);
+          }
           removeBullet();
           continue;
         }
@@ -18691,6 +18771,8 @@ function updateBullets(dt) {
 
       if (wallHitPt && (!bestHit || wallHitT <= bestHit.t)) {
         spawnHitParticle(wallHitPt);
+        if (!EXPLOSIVE_KINDS.has(projectileKind(b.weaponId, WEAPONS.find(w => w.id === b.weaponId))))
+          spawnImpactMark(wallHitPt, wallHitNormal, b.weaponId);
         // ── Batch-5 special destructibles (orbital window, fuse box, chandelier) ──
         const S = _batch5[activeMapName];
         if (S) {
@@ -24544,6 +24626,7 @@ function loop() {
   lastTime = now;
   updateMovement(dt);
   updateBullets(dt);
+  updateImpactMarks();
   updateBotAI(dt);
   animateCharacters(dt); // walk-cycle + slide pose for bots & remote players
   updateKingCrown(dt);   // 👑 crown the current top fragger
