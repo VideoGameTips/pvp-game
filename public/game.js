@@ -10410,7 +10410,17 @@ function buildMG42() {
   const steel = GUN_MATS.steel(), blued = GUN_MATS.blued(), bright = GUN_MATS.bright();
   const poly = GUN_MATS.polymer(), inner = GUN_MATS.inner(), wood = GUN_MATS.wood();
   gpBox(g, steel, 0.048, 0.060, 0.170, 0, 0.012, 0.060);            // receiver
-  gpBox(g, inner, 0.049, 0.008, 0.150, 0, 0.042, 0.060);            // top cover hinge
+  // Feed cover, on the hinge pin at its rear end. Everything in here lifts as
+  // one; the tray underneath stays with the receiver so the belt can be laid in.
+  gpPart(g, 'main', () => {
+    gpBox(g, inner, 0.049, 0.008, 0.150, 0, 0.042, 0.060);          // hinge strip
+    gpBox(g, steel, 0.050, 0.016, 0.148, 0, 0.054, 0.060);          // cover plate
+    gpBox(g, inner, 0.051, 0.005, 0.120, 0, 0.062, 0.060);          // stamped centre rib
+    for (let i = 0; i < 5; i++)
+      gpBox(g, inner, 0.052, 0.004, 0.007, 0, 0.054, 0.004 + i * 0.028);   // stiffening ribs
+    gpBox(g, bright, 0.016, 0.012, 0.014, 0, 0.054, -0.016);        // front latch
+    gpCyl(g, bright, 0.0045, 0.0045, 0.040, 8, 0, 0.046, 0.134, 0, Math.PI / 2); // hinge pin
+  }, { x: 0, y: 0.046, z: 0.134 });
   gpBox(g, bright, 0.014, 0.014, 0.030, 0.026, 0.020, 0.096);       // charging handle
   gpBox(g, inner, 0.006, 0.024, 0.056, -0.025, 0.006, 0.030);       // feed tray mouth
   // Perforated shroud: two shells with a row of oval ports cut down each flank.
@@ -17373,10 +17383,10 @@ rpd:  [K(.08,{py:.04,rx:.14,rz:.36,hx:-.02,hy:.03}), K(.19,{py:.06,rx:.20,rz:.52
        K(.53,{py:.08,rx:.24,rz:.58,hy:-.10,hz:.02}), K(.65,{py:.07,rx:.24,rz:.58,hy:.06,hz:.06}),
        K(.75,{py:.07,rx:.22,rz:.56,hy:.12,hz:.02,hr:-.7}), K(.84,{py:.09,rx:.18,rz:.46,hy:.02,hz:.01}),
        K(.92,{py:.06,rx:.16,rz:.52,hy:.06,hz:.10,hr:-.5}), K(.97,{py:.05,rx:.12,rz:.34})],
-mg42: [K(.07,{py:.05,rx:.18,rz:.44,hx:-.03,hy:.04}), K(.18,{py:.07,rx:.26,rz:.62,hx:-.05,hy:.10,hr:-.7}),
-       K(.28,{py:.08,rx:.30,rz:.70,hy:.16,hz:-.04,hr:-1.0}), K(.40,{py:.08,rx:.30,rz:.70,hx:.07,hy:.06,hz:-.09}),
-       K(.52,{py:.09,rx:.30,rz:.70,hy:-.11,hz:.02}), K(.64,{py:.08,rx:.30,rz:.70,hy:.07,hz:.07}),
-       K(.74,{py:.08,rx:.28,rz:.66,hy:.13,hz:.02,hr:-.8}), K(.83,{py:.11,rx:.22,rz:.52,hy:.02,hz:.01}),
+mg42: [K(.07,{py:.05,rx:.18,rz:.44,hx:-.03,hy:.04}), K(.18,{arx:0.359,py:.07,rx:.26,rz:.62,hx:-.05,hy:.10,hr:-.7}),
+       K(.28,{arx:0.620,py:.08,rx:.30,rz:.70,hy:.16,hz:-.04,hr:-1.0}), K(.40,{arx:0.620,py:.08,rx:.30,rz:.70,hx:.07,hy:.06,hz:-.09}),
+       K(.52,{arx:0.620,py:.09,rx:.30,rz:.70,hy:-.11,hz:.02}), K(.64,{arx:0.620,py:.08,rx:.30,rz:.70,hy:.07,hz:.07}),
+       K(.74,{arx:0.620,py:.08,rx:.28,rz:.66,hy:.13,hz:.02,hr:-.8}), K(.83,{arx:0.155,py:.11,rx:.22,rz:.52,hy:.02,hz:.01}),
        K(.91,{py:.07,rx:.20,rz:.60,hx:.06,hy:.05,hz:.11,hr:-.6}), K(.97,{py:.06,rx:.14,rz:.38})],
 minigun:[K(.09,{py:.06,rx:.10,rz:-.24,hx:.03,hy:-.03}), K(.21,{py:.10,rx:.14,rz:-.38,hx:.07,hy:-.08,hz:.04}),
          K(.31,{py:.11,rx:.16,rz:-.42,hx:.11,hy:-.14,hr:.8}), K(.43,{py:.12,rx:.16,rz:-.42,hx:-.04,hy:-.18,hz:.03}),
