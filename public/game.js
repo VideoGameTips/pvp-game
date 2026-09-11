@@ -17170,9 +17170,42 @@ function attachViewHands(root) {
 // above it, and calling it earlier would hit the temporal dead zone -- inside
 // a try/catch, which would have swallowed the ReferenceError and silently
 // shipped a game with no hands on any gun.
+// A heavy weapon held as close to your eye as a pistol simply does not fit in
+// a 75-degree view: the minigun, the GAU-19 and the bazooka were each showing
+// about two thirds of themselves with the rest hanging off the edges of the
+// screen. Rather than hand-tuning ninety-nine rest positions, each weapon is
+// pushed back until it fits -- which is also what you would physically do with
+// something that size.
+//
+// A part at camera-space y is inside the frame at depth z when |y| <= -z*TAN,
+// so the depth that part NEEDS is -(|y|/TAN) minus its own offset along the
+// barrel. Taking the distance that satisfies seven parts in eight leaves the
+// grip and the magazine floor free to sit off the bottom edge, where they
+// belong, without dragging the whole gun back to accommodate them.
+const _VM_TAN = Math.tan((75 / 2) * Math.PI / 180);
+const VM_MIN_Z = -0.25;   // never closer than the original rest distance
+const VM_MAX_Z = -0.42;   // and never so far it looks like someone else's gun
+
+function fitRestDistance(m) {
+  const b = new THREE.Box3(), c = new THREE.Vector3();
+  const need = [];
+  m.updateMatrixWorld(true);
+  m.traverse(o => {
+    if (!o.isMesh || o.userData.vmHand) return;
+    b.setFromObject(o); b.getCenter(c);
+    if (-c.z <= 0.05) return;                 // behind the eye: a stock lives there
+    need.push(-(Math.abs(c.y) / _VM_TAN) - (c.z - m.position.z));
+  });
+  if (need.length < 4) return;
+  need.sort((a, z) => a - z);
+  const want = need[Math.floor(need.length * 0.125)];
+  m.position.z = Math.max(VM_MAX_Z, Math.min(VM_MIN_Z, want));
+}
+
 weaponModels.forEach(m => {
   if (!m) return;
   m.scale.setScalar(VM_GUN_SCALE);
+  fitRestDistance(m);                          // before hands: attachViewHands captures _homePos
   try { attachViewHands(m); } catch (e) { console.warn('[hands]', e); }
 });
 

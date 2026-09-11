@@ -52,6 +52,10 @@ function load() {
   // The shipped viewmodels are scaled as a group; measure what ships, not the
   // unscaled builder output.
   code += src.match(/^const VM_GUN_SCALE = .*$/m)[0] + '\n';
+  code += src.match(/^const _VM_TAN = .*$/m)[0] + '\n';
+  code += src.match(/^const VM_MIN_Z = .*$/m)[0] + '\n';
+  code += src.match(/^const VM_MAX_Z = .*$/m)[0] + '\n';
+  code += fnBlock('fitRestDistance') + '\n';
   // K spans more than one line, so match through its closing "}, o);".
   code += src.match(/^const K = [\s\S]*?\}, o\);/m)[0] + '\n';
   code += src.match(/^const _RELOAD_REST = .*$/m)[0] + '\n';
@@ -69,7 +73,7 @@ function load() {
     .filter(r => r.includes('//') && r.split('//')[0].includes('('))
     .map(r => ({ id: r.split('//')[1].trim(), fn: r.split('//')[0].trim().split('(')[0] }));
   code += 'return { RELOAD_KEYS, RELOAD_PROPS, _RELOAD_DEFAULT, _reloadPose, attachViewHands,'
-        + ' VM_GUN_SCALE,'
+        + ' VM_GUN_SCALE, fitRestDistance,'
         + ' builders: ' + JSON.stringify(rows.map(r => r.fn)) + '.map(n => eval(n)) };';
   return { api: new Function('THREE', code)(THREE), rows };
 }
@@ -96,6 +100,8 @@ const built = rows.map((r, i) => {
   try {
     const g = api.builders[i]();
     g.scale.setScalar(api.VM_GUN_SCALE);
+    g.position.set(REST_POS.x, REST_POS.y, REST_POS.z);
+    api.fitRestDistance(g);                    // the rest distance the gun actually ships at
     api.attachViewHands(g);
     return g;
   } catch (e) { fail(r.id, 'failed to build: ' + e.message); return null; }
@@ -122,7 +128,8 @@ built.forEach((g, i) => {
 
 // ── 2. How much of each weapon is inside the view ──────────────────────────
 function visibility(g, pose) {
-  g.position.set(REST_POS.x + pose.px, REST_POS.y + pose.py, REST_POS.z + pose.pz);
+  const home = g._homePos || REST_POS;
+  g.position.set(home.x + pose.px, home.y + pose.py, home.z + pose.pz);
   g.rotation.set(pose.rx, pose.ry, pose.rz);
   g.updateMatrixWorld(true);
   let tot = 0, vis = 0;
