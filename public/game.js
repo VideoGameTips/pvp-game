@@ -6168,14 +6168,17 @@ function buildSawedOff() {
   gpBox(g, steel, 0.052, 0.046, 0.090, 0, 0.006, 0.042);            // action body
   gpBox(g, inner, 0.053, 0.006, 0.076, 0, 0.028, 0.042);
   gpBox(g, bright, 0.010, 0.012, 0.030, 0, 0.036, 0.062, 0, 0.30);  // top lever
-  // Side-by-side barrels, cut short, with the rib between them.
-  [-0.014, 0.014].forEach(x => {
-    gpCyl(g, blued, 0.0165, 0.0165, 0.180, 14, x, 0.014, -0.086);
-    gpCyl(g, bright, 0.0168, 0.0168, 0.006, 14, x, 0.014, -0.174);  // bright saw cut
-    gpCyl(g, inner, 0.0125, 0.0125, 0.012, 12, x, 0.014, -0.172);   // bore
-  });
-  gpBox(g, blued, 0.010, 0.010, 0.170, 0, 0.014, -0.086);           // rib
-  gpBox(g, steel, 0.038, 0.024, 0.030, 0, 0.014, 0.006);            // barrel lump
+  // Barrels break open on the hinge pin at the front of the action.
+  gpPart(g, 'main', () => {
+    // Side-by-side barrels, cut short, with the rib between them.
+    [-0.014, 0.014].forEach(x => {
+      gpCyl(g, blued, 0.0165, 0.0165, 0.180, 14, x, 0.014, -0.086);
+      gpCyl(g, bright, 0.0168, 0.0168, 0.006, 14, x, 0.014, -0.174);  // bright saw cut
+      gpCyl(g, inner, 0.0125, 0.0125, 0.012, 12, x, 0.014, -0.172);   // bore
+    });
+    gpBox(g, blued, 0.010, 0.010, 0.170, 0, 0.014, -0.086);           // rib
+    gpBox(g, steel, 0.038, 0.024, 0.030, 0, 0.014, 0.006);            // barrel lump
+  }, { x: 0, y: 0.000, z: 0.002 });
   // Splinter forend and the cut-down stock.
   gpPlate(g, wood, [[-0.012,0.004],[0.000,0.020],[-0.086,0.020],[-0.098,0.002],[-0.084,-0.016],[-0.010,-0.016]], 0.040, 0);
   gpPlate(g, wood, [[0.078,-0.020],[0.098,0.008],[0.164,0.010],[0.180,-0.012],[0.174,-0.056],[0.106,-0.060],[0.088,-0.044]], 0.040, 0);
@@ -6203,14 +6206,17 @@ function buildBoomstick() {
   gpBox(g, steel, 0.044, 0.062, 0.100, 0, 0.008, 0.048);            // action
   gpBox(g, inner, 0.045, 0.006, 0.084, 0, 0.036, 0.048);
   gpBox(g, bright, 0.010, 0.012, 0.032, 0, 0.044, 0.070, 0, 0.30);  // top lever
-  // Over-under barrels.
-  [0.032, -0.004].forEach(y => {
-    gpCyl(g, blued, 0.0160, 0.0160, 0.320, 14, 0, y, -0.156);
-    gpCyl(g, inner, 0.0120, 0.0120, 0.012, 12, 0, y, -0.312);
-  });
-  gpBox(g, blued, 0.010, 0.040, 0.310, 0, 0.014, -0.152);           // side ribs
-  gpCyl(g, steel, 0.0230, 0.0230, 0.020, 14, 0, 0.014, -0.310, Math.PI/2, 0);
-  for (let i = 0; i < 3; i++) gpBox(g, tape, 0.038, 0.052, 0.014, 0, 0.014, -0.230 - i * 0.026); // tape wrap
+  // Both barrels and everything taped to them break as one.
+  gpPart(g, 'main', () => {
+    // Over-under barrels.
+    [0.032, -0.004].forEach(y => {
+      gpCyl(g, blued, 0.0160, 0.0160, 0.320, 14, 0, y, -0.156);
+      gpCyl(g, inner, 0.0120, 0.0120, 0.012, 12, 0, y, -0.312);
+    });
+    gpBox(g, blued, 0.010, 0.040, 0.310, 0, 0.014, -0.152);           // side ribs
+    gpCyl(g, steel, 0.0230, 0.0230, 0.020, 14, 0, 0.014, -0.310, Math.PI/2, 0);
+    for (let i = 0; i < 3; i++) gpBox(g, tape, 0.038, 0.052, 0.014, 0, 0.014, -0.230 - i * 0.026); // tape wrap
+  }, { x: 0, y: 0.000, z: -0.002 });
   // Cracked wooden forend and the full stock.
   gpPlate(g, wood, [[-0.024,0.014],[-0.008,0.032],[-0.148,0.030],[-0.162,0.010],[-0.146,-0.014],[-0.022,-0.014]], 0.042, 0);
   gpBox(g, inner, 0.043, 0.006, 0.090, 0, 0.016, -0.096, 0, 0, 0.05); // the crack
@@ -6441,15 +6447,20 @@ function buildSignalPistol() {
   const steel = GUN_MATS.steel(), bright = GUN_MATS.bright(), inner = GUN_MATS.inner();
   const wood = GUN_MATS.wood();
   const brass = new THREE.MeshPhongMaterial({ color: 0x9a7a34, shininess: 130, specular: 0xe0c98a });
-  gpCyl(g, brass, 0.026, 0.026, 0.150, 16, 0, 0.026, -0.062);       // fat barrel
-  gpCyl(g, inner, 0.0195, 0.0195, 0.020, 14, 0, 0.026, -0.128);     // the big bore
-  gpCyl(g, brass, 0.029, 0.029, 0.010, 16, 0, 0.026, -0.134);       // muzzle ring
-  for (let i = 0; i < 3; i++) gpCyl(g, inner, 0.0265, 0.0265, 0.006, 16, 0, 0.026, -0.100 + i * 0.032);
-  gpBox(g, brass, 0.030, 0.028, 0.046, 0, 0.026, 0.026);            // breech block
+  // Barrel breaks on the hinge pin below it; the frame stays where it is.
+  gpPart(g, 'main', () => {
+    gpCyl(g, brass, 0.026, 0.026, 0.150, 16, 0, 0.026, -0.062);       // fat barrel
+    gpCyl(g, inner, 0.0195, 0.0195, 0.020, 14, 0, 0.026, -0.128);     // the big bore
+    gpCyl(g, brass, 0.029, 0.029, 0.010, 16, 0, 0.026, -0.134);       // muzzle ring
+    for (let i = 0; i < 3; i++) gpCyl(g, inner, 0.0265, 0.0265, 0.006, 16, 0, 0.026, -0.100 + i * 0.032);
+    gpBox(g, brass, 0.030, 0.028, 0.046, 0, 0.026, 0.026);            // breech block
+  }, { x: 0, y: 0.006, z: 0.006 });
   gpCyl(g, bright, 0.0060, 0.0060, 0.036, 10, 0, 0.006, 0.006, 0, Math.PI/2); // hinge pin
   gpBox(g, bright, 0.008, 0.014, 0.020, -0.017, 0.034, 0.030);      // barrel latch
-  gpBox(g, brass, 0.010, 0.010, 0.030, 0, 0.046, -0.058);           // sight rib
-  gpBox(g, bright, 0.004, 0.010, 0.005, 0, 0.054, -0.126);          // bead
+  gpPart(g, 'main', () => {
+    gpBox(g, brass, 0.010, 0.010, 0.030, 0, 0.046, -0.058);           // sight rib
+    gpBox(g, bright, 0.004, 0.010, 0.005, 0, 0.054, -0.126);          // bead
+  }, { x: 0, y: 0.006, z: 0.006 });
   // Frame, spur hammer, trigger, wooden grip.
   gpBox(g, steel, 0.026, 0.026, 0.070, 0, 0.000, 0.028);
   gpBox(g, bright, 0.012, 0.026, 0.018, 0, 0.038, 0.060, -0.40);    // spur hammer
@@ -9006,10 +9017,13 @@ function buildSG8() {
   gpCyl(g, blued, 0.0090, 0.0090, 0.240, 16, 0, -0.008, -0.170);       // magazine tube
   gpCyl(g, steel, 0.0100, 0.0100, 0.014, 14, 0, -0.008, -0.284);       // tube cap
   gpBox(g, steel, 0.020, 0.014, 0.020, 0, 0.006, -0.062);              // barrel ring
-  // Forend on its action bars, with grip ribs.
-  gpPlate(g, wood, [[-0.100,0.006],[-0.078,0.022],[-0.190,0.022],[-0.210,0.004],[-0.190,-0.020],[-0.098,-0.020]], 0.046, 0);
-  for (let i = 0; i < 6; i++) gpBox(g, inner, 0.048, 0.008, 0.008, 0, 0.002, -0.110 - i * 0.016);
-  [-0.016, 0.016].forEach(x => gpBox(g, steel, 0.004, 0.006, 0.120, x, -0.014, -0.060));
+  // Forend and its action bars ride back and forward as one.
+  gpPart(g, 'main', () => {
+    // Forend on its action bars, with grip ribs.
+    gpPlate(g, wood, [[-0.100,0.006],[-0.078,0.022],[-0.190,0.022],[-0.210,0.004],[-0.190,-0.020],[-0.098,-0.020]], 0.046, 0);
+    for (let i = 0; i < 6; i++) gpBox(g, inner, 0.048, 0.008, 0.008, 0, 0.002, -0.110 - i * 0.016);
+    [-0.016, 0.016].forEach(x => gpBox(g, steel, 0.004, 0.006, 0.120, x, -0.014, -0.060));
+  });
   // Stock with comb and recoil pad.
   gpPlate(g, wood, [[0.106,-0.020],[0.130,0.012],[0.250,0.016],[0.278,-0.010],[0.272,-0.052],[0.150,-0.060],[0.118,-0.044]], 0.042, 0);
   gpBox(g, poly, 0.044, 0.052, 0.012, 0, -0.006, 0.284, 0.12);         // recoil pad
@@ -9412,9 +9426,12 @@ function buildShorty() {
   gpCyl(g, blued, 0.0135, 0.0135, 0.170, 12, 0, -0.014, -0.100);
   gpCyl(g, steel, 0.0155, 0.0155, 0.014, 12, 0, -0.014, -0.180);    // tube cap
   gpBox(g, steel, 0.016, 0.024, 0.014, 0, 0.004, -0.152);           // barrel clamp
-  // Ribbed pump handle.
-  gpCyl(g, poly, 0.026, 0.026, 0.090, 14, 0, 0.002, -0.078);
-  for (let i = 0; i < 7; i++) gpCyl(g, inner, 0.0265, 0.0265, 0.006, 14, 0, 0.002, -0.112 + i * 0.012);
+  // The slide handle racks back and forward as one.
+  gpPart(g, 'main', () => {
+    // Ribbed pump handle.
+    gpCyl(g, poly, 0.026, 0.026, 0.090, 14, 0, 0.002, -0.078);
+    for (let i = 0; i < 7; i++) gpCyl(g, inner, 0.0265, 0.0265, 0.006, 14, 0, 0.002, -0.112 + i * 0.012);
+  });
   // Side saddle: four spare shells, brass heads out.
   for (let i = 0; i < 4; i++) {
     gpCyl(g, hull, 0.0090, 0.0090, 0.040, 10, -0.022, 0.026 - i * 0.019, 0.040);
@@ -17436,30 +17453,42 @@ sg8:  [K(.08,{py:.03,rx:.10,rz:.34}),
        K(.64,{py:.03,rx:.10,rz:.34,hy:-.14,hz:.02}), K(.72,{py:.04,rx:.12,rz:.36,hy:-.02,hz:.05}),
        K(.80,{py:.03,rx:.10,rz:.34,hy:-.14,hz:.02}), K(.87,{py:.04,rx:.12,rz:.36,hy:-.02,hz:.05}),
        K(.93,{py:.02,rx:.06,rz:.08,hz:-.06,hy:-.06}), K(.97,{py:.04,rx:.14,rz:.06,hz:.09})],
+sg8:[K(.10,{py:.03,rx:.13,rz:.34}),
+     K(.24,{py:.03,rx:.13,rz:.34,hy:-.13,hz:.02}), K(.32,{py:.04,rx:.15,rz:.36,hy:-.02,hz:.05}),
+     K(.40,{py:.03,rx:.13,rz:.34,hy:-.13,hz:.02}), K(.48,{py:.04,rx:.15,rz:.36,hy:-.02,hz:.05}),
+     K(.56,{py:.03,rx:.13,rz:.34,hy:-.13,hz:.02}), K(.64,{py:.04,rx:.15,rz:.36,hy:-.02,hz:.05}),
+     K(.72,{py:.03,rx:.13,rz:.34,hy:-.13,hz:.02}), K(.80,{py:.04,rx:.15,rz:.36,hy:-.02,hz:.05}),
+     K(.87,{py:.02,rx:.08,rz:.10,hz:-.05,hy:-.05}),
+     K(.93,{az:.040,py:.03,rx:.10,rz:.10,hz:-.06}),              // forend back on its bars
+     K(.98,{az:0,py:.05,rx:.16,rz:.06,hz:.09})],                 // and run forward, chambered
 shorty:[K(.10,{py:.03,rx:.14,rz:.38}),
         K(.22,{py:.03,rx:.14,rz:.38,hy:-.13,hz:.02}), K(.32,{py:.04,rx:.16,rz:.40,hy:-.02,hz:.05}),
         K(.44,{py:.03,rx:.14,rz:.38,hy:-.13,hz:.02}), K(.54,{py:.04,rx:.16,rz:.40,hy:-.02,hz:.05}),
         K(.66,{py:.03,rx:.14,rz:.38,hy:-.13,hz:.02}), K(.76,{py:.04,rx:.16,rz:.40,hy:-.02,hz:.05}),
-        K(.86,{py:.02,rx:.08,rz:.10,hz:-.05,hy:-.05}), K(.95,{py:.05,rx:.18,rz:.08,hz:.10})],
-sawed_off:[K(.08,{py:.03,rx:.20,rz:.14,hx:.03}), K(.18,{py:.05,rx:.90,pz:.04,hx:.05,hy:-.02}),
-           K(.30,{py:.05,rx:.98,pz:.05,hx:.06,hy:-.09,hz:-.05,hr:.7}), K(.40,{py:.05,rx:.98,pz:.05,hx:-.06,hy:-.14,hr:.9}),
-           K(.52,{py:.05,rx:.98,pz:.05,hy:-.16,hz:-.02}), K(.62,{py:.05,rx:.98,pz:.05,hy:.02,hz:-.03}),
-           K(.72,{py:.05,rx:.98,pz:.05,hy:-.14,hz:-.02}), K(.82,{py:.05,rx:.98,pz:.05,hy:.02,hz:-.03}),
-           K(.92,{py:.03,rx:.34,pz:.02,hy:-.02}), K(.97,{py:.05,rx:.16})],
-boomstick:[K(.07,{py:.04,rx:.24,rz:-.12,hx:.04}), K(.16,{py:.06,rx:1.00,pz:.05,hx:.06,hy:-.03}),
-           K(.27,{py:.06,rx:1.08,pz:.06,hx:.07,hy:-.10,hz:-.06,hr:.8}), K(.37,{py:.06,rx:1.08,pz:.06,hx:-.07,hy:-.15,hr:1.0}),
-           K(.48,{py:.06,rx:1.08,pz:.06,hy:-.17,hz:-.03}), K(.58,{py:.06,rx:1.08,pz:.06,hy:.03,hz:-.04}),
-           K(.69,{py:.06,rx:1.08,pz:.06,hy:-.15,hz:-.03}), K(.79,{py:.06,rx:1.08,pz:.06,hy:.03,hz:-.04}),
-           K(.90,{py:.04,rx:.38,pz:.03,hy:-.02}), K(.96,{py:.06,rx:.18})],
+        K(.84,{py:.02,rx:.08,rz:.10,hz:-.05,hy:-.05}),
+        K(.90,{az:.036,py:.03,rx:.10,rz:.10,hz:-.06,hy:-.04}),   // slide back — the empty comes out here
+        K(.96,{az:0,py:.05,rx:.18,rz:.08,hz:.10})],              // and slammed shut on a live one
+sawed_off:[K(.08,{py:.03,rx:.20,rz:.14,hx:.03}), K(.18,{arx:-.16,py:.05,rx:.90,pz:.04,hx:.05,hy:-.02}),
+           K(.30,{arx:-.44,py:.05,rx:.98,pz:.05,hx:.06,hy:-.09,hz:-.05,hr:.7}),   // broken open
+           K(.40,{arx:-.46,py:.05,rx:.98,pz:.05,hx:-.06,hy:-.14,hr:.9}),          // both empties out
+           K(.52,{arx:-.44,py:.05,rx:.98,pz:.05,hy:-.16,hz:-.02}), K(.62,{arx:-.44,py:.05,rx:.98,pz:.05,hy:.02,hz:-.03}),
+           K(.72,{arx:-.44,py:.05,rx:.98,pz:.05,hy:-.14,hz:-.02}), K(.82,{arx:-.44,py:.05,rx:.98,pz:.05,hy:.02,hz:-.03}),
+           K(.90,{arx:-.20,py:.03,rx:.34,pz:.02,hy:-.02}),                        // snapped shut
+           K(.97,{arx:0,py:.05,rx:.16})],
+boomstick:[K(.07,{py:.04,rx:.24,rz:-.12,hx:.04}), K(.16,{arx:-0.207,py:.06,rx:1.00,pz:.05,hx:.06,hy:-.03}),
+           K(.27,{arx:-0.460,py:.06,rx:1.08,pz:.06,hx:.07,hy:-.10,hz:-.06,hr:.8}), K(.37,{arx:-0.460,py:.06,rx:1.08,pz:.06,hx:-.07,hy:-.15,hr:1.0}),
+           K(.48,{arx:-0.460,py:.06,rx:1.08,pz:.06,hy:-.17,hz:-.03}), K(.58,{arx:-0.460,py:.06,rx:1.08,pz:.06,hy:.03,hz:-.04}),
+           K(.69,{arx:-0.460,py:.06,rx:1.08,pz:.06,hy:-.15,hz:-.03}), K(.79,{arx:-0.460,py:.06,rx:1.08,pz:.06,hy:.03,hz:-.04}),
+           K(.90,{arx:-0.123,py:.04,rx:.38,pz:.03,hy:-.02}), K(.96,{py:.06,rx:.18})],
 duelist_pistol:[K(.09,{py:.02,rx:-.44,rz:.18,hy:-.03,hz:-.05}), K(.20,{py:.02,rx:-.56,rz:.22,hy:-.11,hz:-.14,hr:.8}),
                 K(.31,{py:.02,rx:-.58,rz:.22,hy:-.03,hz:-.08}), K(.42,{py:.02,rx:-.58,rz:.22,hy:-.12,hz:-.17,hr:.9}),
                 K(.53,{py:.02,rx:-.58,rz:.22,hy:-.04,hz:-.09}), K(.63,{py:.02,rx:-.58,rz:.22,hy:-.09,hz:-.20,hr:1.0}),
                 K(.73,{py:.02,rx:-.58,rz:.22,hy:-.04,hz:-.10}), K(.83,{py:.02,rx:-.30,rz:.30,hy:.04,hz:.03,hr:-.6}),
                 K(.92,{py:.03,rx:-.20,rz:.20,hy:.01})],
-signal_pistol:[K(.10,{py:.02,rx:.26,rz:.12,hx:.03}), K(.22,{py:.03,rx:.86,pz:.04,hx:.05,hy:-.02}),
-               K(.34,{py:.04,rx:.94,pz:.05,hx:.06,hy:-.09,hz:-.05,hr:.7}), K(.46,{py:.04,rx:.94,pz:.05,hx:-.06,hy:-.14,hr:.9}),
-               K(.58,{py:.04,rx:.94,pz:.05,hy:-.16,hz:-.02}), K(.70,{py:.04,rx:.94,pz:.05,hy:.02,hz:-.03}),
-               K(.84,{py:.02,rx:.30,pz:.02,hy:-.02}), K(.94,{py:.04,rx:.14})],
+signal_pistol:[K(.10,{py:.02,rx:.26,rz:.12,hx:.03}), K(.22,{arx:-0.210,py:.03,rx:.86,pz:.04,hx:.05,hy:-.02}),
+               K(.34,{arx:-0.420,py:.04,rx:.94,pz:.05,hx:.06,hy:-.09,hz:-.05,hr:.7}), K(.46,{arx:-0.420,py:.04,rx:.94,pz:.05,hx:-.06,hy:-.14,hr:.9}),
+               K(.58,{arx:-0.420,py:.04,rx:.94,pz:.05,hy:-.16,hz:-.02}), K(.70,{arx:-0.420,py:.04,rx:.94,pz:.05,hy:.02,hz:-.03}),
+               K(.84,{arx:-0.153,py:.02,rx:.30,pz:.02,hy:-.02}), K(.94,{py:.04,rx:.14})],
 dart_gun:[K(.11,{py:.02,rx:.22,rz:.10,hx:.03}), K(.24,{py:.03,rx:.74,pz:.04,hx:.04,hy:-.02}),
           K(.36,{py:.04,rx:.80,pz:.05,hx:.05,hy:-.08,hz:-.05,hr:.6}), K(.48,{py:.04,rx:.80,pz:.05,hx:-.05,hy:-.13,hr:.8}),
           K(.60,{py:.04,rx:.80,pz:.05,hy:-.15,hz:-.02}), K(.72,{py:.04,rx:.80,pz:.05,hy:.02,hz:-.03}),
