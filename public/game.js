@@ -1319,6 +1319,8 @@ const AIR_JUMP_VEL  = 12.3;  // m/s mid-air second jump -> 2.4 m, same ratio as 
 const BOT_SPEED_MULT = 1.5;  // NPCs keep pace with the player's 1.5x bump
 const SLIDE_MS      = 1250;  // slide duration (was 800)
 const SLIDE_BOOST   = 2.6;   // slide speed at its start, decaying to 1.0 (was 2.0)
+const SLIDE_JUMP_CARRY = 11; // m/s of the slide carried into a slide jump
+const SLIDE_JUMP_LIFT  = 0.88; // slide jumps go farther, so they go a little lower
 // With exponential decay the ground covered is v / ln(1/BLAST_DECAY), so 17 m/s
 // buys a ~7.4 m lunge. 26 looked reasonable as a speed and turned out to be an
 // 11 m flight across half a courtyard.
@@ -1331,6 +1333,16 @@ const BLAST_RADIUS  = 7.5;   // m — how far an explosion can still shove you
 // Rocket jumping is the ride, not a hop.
 const BLAST_POWER   = 66.5;  // impulse at the very centre of the blast
 const BLAST_DECAY   = 0.10;  // fraction of horizontal blast speed left after 1 s
+// A point-blank charge used to hand you 65 m/s straight up -- an 88 m apex,
+// twenty-two times a normal jump, seven seconds of helpless hang time and a
+// clean exit from the play area. Rocket jumping is worth keeping; launching to
+// orbit is not. Vertical is capped so the arc is something you can learn and
+// aim, and the horizontal is left generous, because crossing a gap is the
+// interesting trick.
+const BLAST_MAX_UP    = 24;   // m/s -> 12.0 m apex, about 3x a normal jump
+const BLAST_MAX_HORIZ = 46;   // m/s -> roughly 20 m of travel after decay
+const BLAST_UP_BIAS   = 0.32; // minimum upward share; lower than it was, so a
+                              // blast beside you shoves you sideways, not up
 
 // ══════════════════════════════════════════════════════════════════════════
 // 🎛️ ABILITY MARKETPLACE
@@ -14636,18 +14648,37 @@ document.addEventListener('keydown', e => {
   if (e.code === 'Space') {
     e.preventDefault();
     if (!isDead && isPlayerGrounded()) {
-      slamState = { vel: JUMP_VEL, type: 'jump' };
+      // 🛹 Slide jump: leaving the ground out of a slide trades a little height
+      // for the slide's speed carried into the air. The slide ends on the jump,
+      // so you cannot hold the boost and hop repeatedly on it.
+      const slidingNow = !!(window._slideUntil && Date.now() < window._slideUntil);
+      if (slidingNow && window._slideDir) {
+        const t = (window._slideUntil - Date.now()) / SLIDE_MS;   // 1 -> 0
+        const carry = SLIDE_JUMP_CARRY * (0.55 + 0.45 * Math.max(0, t));
+        _extVel.x += window._slideDir.x * carry;
+        _extVel.z += window._slideDir.z * carry;
+        window._slideUntil = 0;
+        slamState = { vel: JUMP_VEL * SLIDE_JUMP_LIFT, type: 'jump' };
+        playSoundEvent('footstep', { volume: 0.5, pitch: 1.3, minGap: 60 });
+      } else {
+        slamState = { vel: JUMP_VEL, type: 'jump' };
+      }
       // A light weapon buys one extra jump in the air. Charge it here, on the
       // jump itself, so walking off a ledge doesn't hand you a free one.
       window._airJumpsLeft = grantsDoubleJump(heldItem()) ? 1 : 0;
-    } else if (!isDead && !e.repeat && (window._airJumpsLeft || 0) > 0
-               && grantsDoubleJump(heldItem())) {
+      window._blastJumpsLeft = 0;
+    } else if (!isDead && !e.repeat
+               && (((window._airJumpsLeft || 0) > 0 && grantsDoubleJump(heldItem()))
+                   || (window._blastJumpsLeft || 0) > 0)) {
       // 🦘 Second jump. Replace vertical velocity outright instead of adding to
       // it, so the kick feels identical whether you tap it at the top of the arc
       // or halfway back down.
       if (slamState) slamState.vel = AIR_JUMP_VEL;
       else slamState = { vel: AIR_JUMP_VEL, type: 'jump' };
-      window._airJumpsLeft = 0;
+      // Spend the weapon's jump first and keep the blast one in reserve, so
+      // riding a charge while holding a light weapon really does leave you two.
+      if ((window._airJumpsLeft || 0) > 0 && grantsDoubleJump(heldItem())) window._airJumpsLeft = 0;
+      else window._blastJumpsLeft = 0;
       spawnAbilityAOEFX(camera.position.clone().setY(camera.position.y - 1.4), 1.2, 0xaaccff);
       playSoundEvent('footstep', { volume: 0.5, pitch: 1.6, minGap: 60 });
     }
@@ -14788,7 +14819,8 @@ document.addEventListener('mouseup', e => {
 // ── Weapon switching ───────────────────────────────────────────────────────
 function switchWeapon(idx) {
   if (idx === null || idx === undefined || idx < 0) return;
-  if (idx === currentWeaponIdx || reloading) return;
+  if (idx === currentWeaponIdx) return;
+  cancelReload();                      // you can always swap out of a reload
   meleeModels.forEach(m => m.visible = false);
   supportModels.forEach(m => m.visible = false);
   weaponModels[currentWeaponIdx].visible = false;
@@ -14894,6 +14926,7 @@ function equipActiveSlot() {
   meleeModels.forEach(m => { m.position.copy(MELEE_REST_POS); m.rotation.set(0, 0, 0); });
   // Reset grenade windup
   grenadeWindupT = 1;
+  cancelReload();   // the number keys land here; a reload never follows you across
   // Hide all guns, melee, support first
   weaponModels.forEach(m => m.visible = false);
   meleeModels.forEach(m => m.visible = false);
@@ -15763,7 +15796,12 @@ function updateMovement(dt) {
     const gravMult = (typeof _playerInLowGrav !== 'undefined' && _playerInLowGrav) ? 0.33 : 1;
     slamState.vel -= GRAVITY * dt * gravMult; // gravity
     camera.position.y += slamState.vel * dt;
-    const groundEyeY = getGroundEyeY();
+    // Land at the eye height you are actually going to stand at. This branch
+    // used to ignore the crouch/slide offset the grounded branch applies, so
+    // touching down mid-slide snapped the camera from 0.70 up to 1.65 and then
+    // dropped it back the next frame.
+    const airCrouchDelta = (window._crouchEye != null) ? (window._crouchEye - 1.65) : 0;
+    const groundEyeY = getGroundEyeY() + airCrouchDelta;
     if (camera.position.y <= groundEyeY) {
       camera.position.y = groundEyeY;
       if (slamState.type === 'slam') {
@@ -16913,9 +16951,30 @@ function throwSupportItem(item) {
   });
 }
 
+// A reload belongs to the weapon that began it. The number keys change
+// activeSlot directly and the slot-apply path reassigns currentWeapon with no
+// reload check, so a reload started on the primary used to finish while you
+// were holding the secondary -- and it read currentWeapon.mag at that point,
+// filling the PRIMARY's pool to the SECONDARY's magazine size. Switching now
+// cancels the reload outright, which is what every other shooter does.
+let _reloadToken = 0;
+
+function cancelReload() {
+  if (!reloading) return;
+  _reloadToken++;                       // any timer still pending is now stale
+  reloading = false;
+  const flash = document.getElementById('reload-flash');
+  if (flash) flash.style.display = 'none';
+  const m = weaponModels[currentWeaponIdx];
+  if (m) m._reloadStart = 0;
+}
+
 function startReload() {
   const pool = weaponAmmo[currentWeaponIdx];
   if (reloading || pool.ammo === currentWeapon.mag || pool.reserve === 0) return;
+  const token = ++_reloadToken;
+  const reloadIdx = currentWeaponIdx;   // whose reload this is
+  const reloadWeapon = currentWeapon;   // and whose magazine size to fill to
   reloading = true;
   playReloadSound(currentWeapon);
   document.getElementById('reload-flash').style.display = 'block';
@@ -16927,13 +16986,15 @@ function startReload() {
     model._reloadDur = dur;
   }
   setTimeout(() => {
-    const need = currentWeapon.mag - pool.ammo;
+    if (token !== _reloadToken) return;          // cancelled, or superseded
+    const need = reloadWeapon.mag - pool.ammo;   // the mag of the gun being reloaded
     const take = Math.min(need, pool.reserve);
     pool.ammo += take; pool.reserve -= take;
-    ammo = pool.ammo; reserve = pool.reserve;
     reloading = false;
     document.getElementById('reload-flash').style.display = 'none';
     if (model) { model._reloadStart = 0; }
+    // Only touch the HUD globals if that gun is still the one in your hands.
+    if (currentWeaponIdx === reloadIdx) { ammo = pool.ammo; reserve = pool.reserve; }
     updateAmmoHUD();
   }, dur);
 }
@@ -21207,18 +21268,28 @@ function applyBlastImpulse(pos, opts = {}) {
   // Bias upward. Pure radial push from a blast level with your feet is almost
   // horizontal, which just scrapes you along the floor; the lift is what makes
   // rocket jumping work.
-  away.y = Math.max(away.y, 0.45);
+  away.y = Math.max(away.y, BLAST_UP_BIAS);
   away.normalize();
   const power = (opts.power ?? BLAST_POWER) * falloff;
   // Vertical rides the same slamState the jump uses. Add to any climb already in
-  // progress but never subtract from it, so a blast can only ever help you up.
-  const up = away.y * power;
-  if (slamState) slamState.vel = Math.max(slamState.vel, 0) + up;
-  else slamState = { vel: up, type: 'jump' };
+  // progress but never subtract from it, so a blast can only ever help you up --
+  // but cap the total, or two charges stack into the same orbit the single one
+  // used to reach.
+  const up = Math.min(away.y * power, BLAST_MAX_UP);
+  const before = slamState ? Math.max(slamState.vel, 0) : 0;
+  const climb = Math.min(before + up, BLAST_MAX_UP);
+  if (slamState) slamState.vel = climb;
+  else slamState = { vel: climb, type: 'jump' };
   _extVel.x += away.x * power;
   _extVel.z += away.z * power;
-  // A blast you rode is a fresh air state: you get your air jump and dash back.
+  const hz = Math.hypot(_extVel.x, _extVel.z);
+  if (hz > BLAST_MAX_HORIZ) { const k = BLAST_MAX_HORIZ / hz; _extVel.x *= k; _extVel.z *= k; }
+  // A blast you rode is a fresh air state: you get your dash back, and an air
+  // jump you can use whatever you are holding. This one is counted separately
+  // from the light-weapon double jump, so riding a blast while carrying a
+  // weapon that already grants one leaves you BOTH -- they stack.
   if (grantsDoubleJump(heldItem())) window._airJumpsLeft = 1;
+  window._blastJumpsLeft = 1;
   window._dashLeft = 1;
 }
 
