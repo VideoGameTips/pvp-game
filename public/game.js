@@ -18845,6 +18845,55 @@ function updateBullets(dt) {
             wallHit = true;
           }
         }
+        // ── A bot's bullet against your own hitbox ────────────────────
+        // Bot fire used to be decided by a dice roll at the trigger while this
+        // bullet flew past as decoration -- so a shot you had plainly dodged
+        // still took health off you. The bullet is the hit now. Tested as three
+        // spheres down your middle, dropped as you crouch, the same way your own
+        // shots are tested against everyone else.
+        if (!b.isOwn && b.botId && !isDead && b.botTeam === 'enemy') {
+          const curEye = window._crouchEye || 1.65;
+          const feetY = camera.position.y - curEye;
+          const crouch = Math.max(0, Math.min(1, (1.65 - curEye) / (1.65 - 0.70)));
+          const px = camera.position.x, pz = camera.position.z;
+          // head, chest, pelvis — each sinks as you go down
+          const spheres = [
+            { y: feetY + (1.62 - crouch * 0.74), r: 0.26, head: true },
+            { y: feetY + (1.16 - crouch * 0.52), r: 0.40, head: false },
+            { y: feetY + (0.62 - crouch * 0.28), r: 0.36, head: false },
+          ];
+          let bestT = Infinity, wasHead = false;
+          for (const sp of spheres) {
+            // closest approach of this frame's travel to the sphere centre
+            let t = travelDist > 0.0001
+              ? ((px - px0) * tDx + (sp.y - py0) * tDy + (pz - pz0) * tDz) / (travelDist * travelDist)
+              : 0;
+            t = Math.max(0, Math.min(1, t));
+            const cx = px0 + tDx * t - px, cy = py0 + tDy * t - sp.y, cz = pz0 + tDz * t - pz;
+            if (cx * cx + cy * cy + cz * cz < sp.r * sp.r && t < bestT) { bestT = t; wasHead = sp.head; }
+          }
+          if (bestT < Infinity && bestT <= wallHitT) {
+            const at = new THREE.Vector3(px0 + tDx * bestT, py0 + tDy * bestT, pz0 + tDz * bestT);
+            spawnHitParticle(at);
+            // Shields and parry are judged HERE, when the round actually
+            // arrives, so raising one mid-flight genuinely saves you.
+            if (!isShielded() && !isRiotShieldBlocking()) {
+              const _mp = meleeAbilityBuff?.type;
+              if (_mp === 'deflect') {
+                const dp = remoteMeshes[b.botId] ? remoteMeshes[b.botId].position.clone().setY(1.0)
+                                                 : camera.position.clone().setY(1.0);
+                emitHit(b.botId, `deflect_${myId}_${Date.now()}`, 'katana', dp);
+              } else if (_mp !== 'parry') {
+                socket.emit('botHitMe', { botId: b.botId, weapon: b.weaponId });
+                // wasHead is known here, but bot damage is not scaled by
+                // location yet, so it is deliberately not passed as if it were.
+                applyBotDamageToPlayer(b.weaponId, b.botId);
+              }
+            }
+            removeBullet();
+            continue;
+          }
+        }
         if (wallHit && !b.isOwn) {
           spawnHitParticle(wallHitPt);
           // Somebody else's rocket landing in the dirt should still go off to
@@ -24473,14 +24522,11 @@ function updateBotAI(dt) {
             // 🛹 Raycast the shot against the player's (crouch-adjusted) hitbox
             // so ducking/sliding lets shots sail overhead. Auto weapons add an
             // extra spray-inaccuracy roll on top since they fire fast.
-            let shotHits = true;
-            if (target.isPlayer) {
-              shotHits = botShotHitsPlayer(bot, dist).hit;
-              if (shotHits && w.auto) {
-                const sprayChance = Math.max(0.35, Math.min(0.92, (bot.aimSkill || 1) * 0.6 - dist * 0.005));
-                shotHits = Math.random() < sprayChance;
-              }
-            }
+            // Whether this shot connects is no longer decided here. A real
+            // bullet is spawned below and collided against your hitbox in
+            // updateBullets, so the thing you can see IS the thing that hurts
+            // you. Bot-vs-bot is still resolved instantly; those shots are not
+            // yours to dodge and flying them would cost for no gain.
             // MEDIUM/HARD: consume ammo, trigger reload when empty
             if (bot.difficulty && bot.difficulty !== 'easy') {
               bot.botAmmo--;
@@ -24492,17 +24538,7 @@ function updateBotAI(dt) {
               }
             }
             if (target.isPlayer) {
-              if (bot.team === 'enemy' && !isShielded() && !isRiotShieldBlocking() && shotHits) {
-                const _mp = meleeAbilityBuff?.type;
-                if (_mp === 'parry' || _mp === 'deflect') {
-                  if (_mp === 'deflect') {
-                    const _defPos3 = remoteMeshes[bot.id] ? remoteMeshes[bot.id].position.clone().setY(1.0) : camera.position.clone().setY(1.0);
-                    emitHit(bot.id, `deflect_${myId}_${Date.now()}`, 'katana', _defPos3);
-                  }
-                } else {
-                  scheduleBotHitOnPlayer(bot.id, bot.weaponId, dist, w.bulletSpeed || 120);
-                }
-              }
+              /* damage happens when the bullet arrives — see updateBullets */
             } else if (target.botRef) {
               target.botRef.hp = Math.max(0, target.botRef.hp - (w.damage || 25));
               if (target.botRef.hp <= 0 && !target.botRef.dead) {
@@ -24514,8 +24550,16 @@ function updateBotAI(dt) {
             const origin = new THREE.Vector3(bot.x, 1.5, bot.z);
             // MEDIUM/HARD: skill-based spread reduction (higher aimSkill = tighter shots)
             const skill = bot.aimSkill || 1;
-            const spreadBase = bot.state === 'cover' ? 0.18 : 0.06;
-            const spread = (spreadBase + Math.max(0, dist - 8) / 100) / skill;
+            // This is the bot's real accuracy now, not decoration on a tracer
+            // nobody measured. It was 0.06 + (dist-8)/100, which comes to 0.18
+            // at 20 m -- the round landing 1.8 m wide of a target 0.8 m across,
+            // missing 91% of the time. It never showed because a dice roll
+            // applied the damage regardless of where the bullet went.
+            // A near-constant angular spread gives the falloff for free: close
+            // range is lethal, long range is survivable, and crossing the bot's
+            // line of fire beats it because the lead is only half-compensated.
+            const spreadBase = bot.state === 'cover' ? 0.070 : 0.040;
+            const spread = (spreadBase + Math.max(0, dist - 30) / 1200) / skill;
             // MEDIUM/HARD: bullet leading for player targets
             let aimX = tx, aimZ = tz;
             if (target.isPlayer && bot.difficulty && bot.difficulty !== 'easy') {
@@ -24539,13 +24583,36 @@ function updateBotAI(dt) {
             }
             const aimDx = aimX - bot.x, aimDz = aimZ - bot.z;
             const aimLen = Math.max(Math.hypot(aimDx, aimDz), 0.01);
+            // Aim at a real height instead of firing flat. The shot used to
+            // leave at y 1.5 with a token +/-0.015 of vertical wobble and no
+            // idea where you actually were, because a separate dice roll
+            // decided whether it hit. Now the bullet IS the hit, so it has to
+            // be aimed: at STANDING chest height above your feet, which is why
+            // ducking still works -- crouch and the shot passes over you.
+            let aimUpY = 1.25;
+            if (target.isPlayer) {
+              const pEye = window._crouchEye || 1.65;
+              const pFeet = camera.position.y - pEye;
+              // It follows your duck, but only partly, and better bots follow it
+              // further. Aiming at standing chest and nothing else made crouching
+              // a total dodge at every range; tracking it perfectly would make
+              // ducking pointless. Half-tracked, crouching makes you a smaller
+              // target rather than an invisible one.
+              const pCrouch = Math.max(0, Math.min(1, (1.65 - pEye) / 0.95));
+              const track = Math.min(0.85, 0.35 + skill * 0.35);
+              aimUpY = (pFeet + 1.25 - pCrouch * 0.55 * track) - origin.y;
+            } else if (target.botRef) {
+              aimUpY = 1.1 - origin.y;
+            }
+            const vErr = (Math.random() - 0.5) * spread * 0.9;
             const dir = new THREE.Vector3(
               aimDx / aimLen + (Math.random()-0.5)*spread,
-              (Math.random()-0.5)*0.03,
+              aimUpY / Math.max(aimLen, 0.01) + vErr,
               aimDz / aimLen + (Math.random()-0.5)*spread
             ).normalize();
             playWeaponSound(w.id, { baseWeapon: w, remote: true, position: origin });
-            spawnLocalBullet(origin, dir, `bot_${bot.id}_${now}`, false, w.bulletSpeed || 120, w.bulletColor, w.bulletSize, w.id);
+            spawnLocalBullet(origin, dir, `bot_${bot.id}_${now}`, false, w.bulletSpeed || 120,
+                             w.bulletColor, w.bulletSize, w.id, { botId: bot.id, botTeam: bot.team });
           }
         }
       }
