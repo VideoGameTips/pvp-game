@@ -14658,10 +14658,20 @@ document.addEventListener('keydown', e => {
         _extVel.x += window._slideDir.x * carry;
         _extVel.z += window._slideDir.z * carry;
         window._slideUntil = 0;
-        slamState = { vel: JUMP_VEL * SLIDE_JUMP_LIFT, type: 'jump' };
+        // You are 0.95 m lower than standing when you push off, so the eye has
+        // that to climb before it is even level with where a normal jump
+        // STARTS. Pay for it in the launch, or the apex lands barely above your
+        // own head and the whole thing reads as standing up.
+        const standGap = Math.max(0, 1.65 - (window._crouchEye ?? 1.65));
+        const base = JUMP_VEL * SLIDE_JUMP_LIFT;
+        slamState = { vel: Math.sqrt(base * base + 2 * GRAVITY * standGap), type: 'jump' };
+        window._crouchEye = 1.65;          // you stand up as you leave the ground
         playSoundEvent('footstep', { volume: 0.5, pitch: 1.3, minGap: 60 });
       } else {
-        slamState = { vel: JUMP_VEL, type: 'jump' };
+        // Same debt for a crouch jump, which had the same problem more quietly.
+        const standGap = Math.max(0, 1.65 - (window._crouchEye ?? 1.65));
+        slamState = { vel: Math.sqrt(JUMP_VEL * JUMP_VEL + 2 * GRAVITY * standGap), type: 'jump' };
+        window._crouchEye = 1.65;
       }
       // A light weapon buys one extra jump in the air. Charge it here, on the
       // jump itself, so walking off a ledge doesn't hand you a free one.
@@ -15802,7 +15812,14 @@ function updateMovement(dt) {
     // dropped it back the next frame.
     const airCrouchDelta = (window._crouchEye != null) ? (window._crouchEye - 1.65) : 0;
     const groundEyeY = getGroundEyeY() + airCrouchDelta;
-    if (camera.position.y <= groundEyeY) {
+    // ...and only while you are on the way DOWN. Leaving the ground out of a
+    // slide starts the eye at 0.70 while this reference races back up to 1.65 at
+    // 12/s, and the eye ease runs earlier in the frame than this does. At 60 fps
+    // a slide jump cleared it by 6 mm on the first frame; at 30 fps it missed by
+    // 2 mm, got clamped, and the jump was cancelled before it had risen at all --
+    // which read as simply standing up out of the slide. Rising velocity means
+    // you are not landing, whatever the reference says this frame.
+    if (camera.position.y <= groundEyeY && slamState.vel <= 0) {
       camera.position.y = groundEyeY;
       if (slamState.type === 'slam') {
         // Slam AOE inline (can't use doAbilityAOE since it uses currentWeapon.id)
@@ -20332,8 +20349,33 @@ function botShotHitsPlayer(bot, dist) {
   const aimBase = feetY + 1.25;
   const vSpread = (0.30 + dist * 0.018) * (1.6 - Math.min(1.2, skill));
   const aimY    = aimBase + (Math.random() * 2 - 1) * vSpread;
-  const inHead = Math.abs(aimY - headY) < headR;
-  const inBody = !inHead && Math.abs(aimY - bodyY) < bodyR;
+  // ── Horizontal. This did not exist at all ────────────────────────────────
+  // The test was vertical ONLY: it compared an aim height against your head and
+  // body heights and stopped there. Moving sideways could not miss a shot no
+  // matter how fast you crossed the bot's line of fire, so the only dodge in the
+  // game was ducking. Worse, the bot's TRACER is aimed with a proper movement
+  // lead (see the aimX/aimZ lead further down), so the bullet you watched sail
+  // wide still took health off you.
+  const hSpread = (0.20 + dist * 0.015) * (1.6 - Math.min(1.2, skill));
+  // Only movement ACROSS the bot's line of fire should help. Running straight
+  // at it or straight away changes nothing about how hard you are to hit.
+  const toX = (bot.x ?? camera.position.x) - camera.position.x;
+  const toZ = (bot.z ?? camera.position.z) - camera.position.z;
+  const toLen = Math.hypot(toX, toZ) || 1;
+  const crossSpeed = Math.abs((playerVelocity.x * toZ - playerVelocity.z * toX) / toLen);
+  // The bot leads you, but imperfectly, and the longer the bullet is in the air
+  // the more its error costs. A sharp bot barely misses; a poor one trails badly.
+  const flight = dist / 120;
+  // Capped, and a RANGE rather than a fixed miss: a bot that mostly leads you
+  // correctly should still land some of them. Erring by exactly this much every
+  // time made bots harmless past 30 m against anyone moving at all.
+  const leadErr = Math.min(0.85, crossSpeed * flight * (1.6 - Math.min(1.2, skill)));
+  const aimOffH = (Math.random() * 2 - 1) * hSpread + (Math.random() * 2 - 1) * leadErr;
+  // You are a good deal narrower than you are tall.
+  const headRH = 0.24, bodyRH = 0.42;
+  const offH = Math.abs(aimOffH);
+  const inHead = offH < headRH && Math.abs(aimY - headY) < headR;
+  const inBody = !inHead && offH < bodyRH && Math.abs(aimY - bodyY) < bodyR;
   return { hit: inHead || inBody, headshot: inHead };
 }
 
