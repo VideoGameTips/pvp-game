@@ -5714,6 +5714,7 @@ function gpPart(g, name, fn, pivot) {
     // A cylinder indexing round the model origin instead of its centre would
     // orbit, not spin.
     if (pivot) grp.position.set(pivot.x || 0, pivot.y || 0, pivot.z || 0);
+    grp._home = grp.position.clone();   // reload offsets are added to this
   }
   // Called once per round inside a loop, this accumulates into one group and
   // counts the rounds, so the reload can reveal them one at a time rather than
@@ -9860,6 +9861,7 @@ function buildGrenadeLauncher() {
   gpBox(g, poly, 0.040, 0.046, 0.012, 0, 0.010, 0.240, 0.08);
   const flash = makeMuzzleFlash(); flash.position.set(0, 0.010, -0.200); g.add(flash);
   g._parts.main._chambers = 6;   // indexes 60 degrees a shot
+  g._anchorPart = { mag: 'main' };  // grenades fly to the drum, wherever it has swung
   g._flash = flash; g._kickZ = 0.030; g._greebled = true; g._handDetailed = true;
   g.position.set(0.12, -0.1, -0.25); return g;
 }
@@ -17006,10 +17008,13 @@ function _makeViewHand(mirror) {
   // knuckles and no fingers, and these match it exactly — anything more
   // detailed would read as a different pair of hands to the ones you punch with.
   const h = new THREE.Group();
-  // 86 x 86 x 112 was a forearm, not a fist. On the AK it spanned y -0.144 to
-  // -0.024 and 86 mm across, which completely enclosed a 30 mm magazine and
-  // hid it from view -- the gun looked like it had no magazine at all.
-  const fist = new THREE.Mesh(new THREE.BoxGeometry(0.070, 0.074, 0.090), VM_SKIN_MAT());
+  // 86 x 86 x 112 was a forearm, not a fist: on the AK it spanned 86 mm across
+  // and completely enclosed a 30 mm magazine, so the gun looked like it had no
+  // magazine at all. 70 x 74 x 90 fixed that but the hands still covered 68% of
+  // the gun's own screen area, measured across all 93 weapons that have them --
+  // near enough as wide as the weapon they hold. At 56 x 59 x 72 they take
+  // about 45%, which reads as hands ON a gun rather than hands WITH one.
+  const fist = new THREE.Mesh(new THREE.BoxGeometry(0.056, 0.059, 0.072), VM_SKIN_MAT());
   fist.castShadow = true;
   h.add(fist);
   // Tagged so the skin system leaves them alone: a gold weapon skin should
@@ -17017,6 +17022,11 @@ function _makeViewHand(mirror) {
   h.traverse(o => { if (o.isMesh) { o.castShadow = true; o.userData.vmHand = true; } });
   return h;
 }
+
+// The viewmodel guns were covering 39% of the screen's width, which is small
+// for a first-person weapon. They are scaled up as a group, and the hands are
+// counter-scaled in attachViewHands so this lever moves the GUN only.
+const VM_GUN_SCALE = 1.10;
 
 // Every mesh's box, expressed in the ROOT's own space. Built by walking the
 // tree with an accumulated matrix rather than Box3.setFromObject, which would
@@ -17037,6 +17047,7 @@ function _localPartBoxes(root) {
 }
 
 function attachViewHands(root) {
+  const handScale = 1 / (root.scale.x || 1);   // hands stay the size they were measured at
   if (!root || root._handsDone) return;
   root._handsDone = true;
   const parts = _localPartBoxes(root);
@@ -17091,6 +17102,7 @@ function attachViewHands(root) {
   if (root._throwable) return;
 
   const rear = _makeViewHand(1);
+  rear.scale.setScalar(handScale);
   // Sit the trigger hand ON the grip and a little behind it, so its front face
   // clears the magwell instead of covering it.
   rear.position.set(0.004, gripAt.y - 0.020, gripAt.z + 0.036);
@@ -17114,6 +17126,7 @@ function attachViewHands(root) {
   // underside actually is at that point rather than at a guessed height.
   const pistolish = size.z < 0.34;
   const front = _makeViewHand(-1);
+  front.scale.setScalar(handScale);
   if (pistolish) {
     front.position.set(-0.052, gripAt.y - 0.050, gripAt.z + 0.030);
     front.rotation.set(0.30, 0.22, -0.42);
@@ -17149,7 +17162,11 @@ function attachViewHands(root) {
 // above it, and calling it earlier would hit the temporal dead zone -- inside
 // a try/catch, which would have swallowed the ReferenceError and silently
 // shipped a game with no hands on any gun.
-weaponModels.forEach(m => { if (!m) return; try { attachViewHands(m); } catch (e) { console.warn('[hands]', e); } });
+weaponModels.forEach(m => {
+  if (!m) return;
+  m.scale.setScalar(VM_GUN_SCALE);
+  try { attachViewHands(m); } catch (e) { console.warn('[hands]', e); }
+});
 
 // ── 🔁 Reload choreography ───────────────────────────────────────────────────
 // Every weapon reloads differently. Not eleven shared styles — ninety-nine
@@ -17469,18 +17486,18 @@ grenade_launcher:[
   // The drum opens UPWARD until the chamber mouths face you, tips six spent
   // rounds out, and only then takes fresh grenades one at a time. av is how
   // many rounds are showing; ay lifts the drum and arx rolls it face-up.
-  K(.05,{py:.03,rx:.14,rz:-.10,av:1}),                                        // still full of empties
-  K(.14,{py:.09,rx:.26,rz:-.24,ay:.045,arx:-.26,av:1,hx:.06,hy:.03}),         // latch, drum starts up
-  K(.24,{py:.11,rx:.32,rz:-.30,ay:.090,arx:-.55,av:1,hx:.10,hy:.06,hz:.04,hr:.7}), // open, facing up
-  K(.31,{py:.11,rx:.34,rz:-.30,ay:.090,arx:-.58,av:0,hx:.12,hy:.09,hz:.02,hr:.9}), // tip the empties out
-  K(.39,{py:.11,rx:.34,rz:-.30,ay:.090,arx:-.55,av:.17,hx:-.04,hy:-.16,hz:.02}),
-  K(.47,{py:.11,rx:.34,rz:-.30,ay:.090,arx:-.55,av:.34,hx:.08,hy:.02,hz:.05}),
-  K(.55,{py:.11,rx:.34,rz:-.30,ay:.090,arx:-.55,av:.50,hx:-.04,hy:-.16,hz:.02}),
-  K(.63,{py:.11,rx:.34,rz:-.30,ay:.090,arx:-.55,av:.67,hx:.08,hy:.02,hz:.05}),
-  K(.71,{py:.11,rx:.34,rz:-.30,ay:.090,arx:-.55,av:.84,hx:-.04,hy:-.16,hz:.02}),
-  K(.79,{py:.11,rx:.34,rz:-.30,ay:.090,arx:-.55,av:1,hx:.08,hy:.02,hz:.05}),
-  K(.89,{py:.11,rx:.28,rz:-.20,ay:.040,arx:-.24,av:1,hz:-.04}),               // swing shut
-  K(.96,{py:.09,rx:.20,rz:-.12,av:1})],
+  K(.05,{py:.03,rx:.10,rz:-.10,av:1}),                                        // still full of empties
+  K(.14,{py:.09,rx:.17,rz:-.24,ay:.045,arx:-.26,av:1,hx:.06,hy:.03}),         // latch, drum starts up
+  K(.24,{py:.11,rx:.20,rz:-.30,ay:.090,arx:-.55,av:1,hx:.10,hy:.06,hz:.04,hr:.7}), // open, facing up
+  K(.31,{py:.11,rx:.21,rz:-.30,ay:.090,arx:-.58,av:0,hx:.12,hy:.09,hz:.02,hr:.9}), // tip the empties out
+  K(.39,{py:.11,rx:.21,rz:-.30,ay:.090,arx:-.55,av:.17,hx:-.04,hy:-.16,hz:.02}),
+  K(.47,{py:.11,rx:.21,rz:-.30,ay:.090,arx:-.55,av:.34,hx:.08,hy:.02,hz:.05}),
+  K(.55,{py:.11,rx:.21,rz:-.30,ay:.090,arx:-.55,av:.50,hx:-.04,hy:-.16,hz:.02}),
+  K(.63,{py:.11,rx:.21,rz:-.30,ay:.090,arx:-.55,av:.67,hx:.08,hy:.02,hz:.05}),
+  K(.71,{py:.11,rx:.21,rz:-.30,ay:.090,arx:-.55,av:.84,hx:-.04,hy:-.16,hz:.02}),
+  K(.79,{py:.11,rx:.21,rz:-.30,ay:.090,arx:-.55,av:1,hx:.08,hy:.02,hz:.05}),
+  K(.89,{py:.11,rx:.18,rz:-.20,ay:.040,arx:-.24,av:1,hz:-.04}),               // swing shut
+  K(.96,{py:.09,rx:.14,rz:-.12,av:1})],
 nebula_mortar:[K(.08,{py:.05,rx:.18,rz:-.30,px:-.01,hx:.04}), K(.19,{py:.09,rx:.30,rz:-.62,px:-.02,hx:.08,hy:.04}),
                K(.30,{py:.10,rx:.32,rz:-.68,hx:.11,hy:.07,hz:.06,hr:.7}), K(.42,{py:.10,rx:.32,rz:-.68,hx:-.04,hy:-.15,hz:.02}),
                K(.54,{py:.10,rx:.32,rz:-.68,hx:.08,hy:.03,hz:.06}), K(.66,{py:.10,rx:.32,rz:-.68,hx:-.04,hy:-.15,hz:.02}),
@@ -17777,11 +17794,30 @@ function _makeReloadProp(kind) {
 
 // Where on the gun a part comes from or goes to. Derived once, from the
 // model's own bounds and its trigger anchor, so it lands on the right gun.
+const _ZERO3 = new THREE.Vector3(0, 0, 0);
+
 function _propAnchor(model, where) {
   const A = model._anchors;
   if (!A) return new THREE.Vector3(0, 0, 0);
   const p = A[where] || A.mag;
-  return new THREE.Vector3(model.position.x + p.x, model.position.y + p.y, model.position.z + p.z);
+  const v = new THREE.Vector3(p.x, p.y, p.z);
+  // Follow a moving assembly when the anchor belongs to one. The grenade
+  // launcher's drum swings up out of the frame to be loaded; a round flying to
+  // a fixed offset arrives where the drum ISN'T, which is why the grenades
+  // never appeared to go in.
+  const partName = model._anchorPart && model._anchorPart[where];
+  const part = partName && model._parts && model._parts[partName];
+  if (part) {
+    v.sub(part._home || _ZERO3);   // into the assembly's own frame
+    part.updateMatrix();
+    v.applyMatrix4(part.matrix);   // and back out, carrying its swing
+  }
+  // Then through the gun's own transform. This used to add model.position
+  // alone, so every round ignored the gun's rotation -- fine while the gun sat
+  // level, wrong the moment a reload tilted it.
+  model.updateMatrix();
+  v.applyMatrix4(model.matrix);
+  return v;
 }
 
 function spawnReloadProp(model, kind, mode, where, opts) {
@@ -17981,7 +18017,10 @@ function updateReloadAnim() {
     // of its ammunition again.
     const pr = model._parts;
     if (pr) {
-      if (pr.main) { pr.main.position.set(0,0,0); pr.main.rotation.set(0, 0, pr.main._spin || 0); }
+      if (pr.main) {
+        const h = pr.main._home || _ZERO3;
+        pr.main.position.copy(h); pr.main.rotation.set(0, 0, pr.main._spin || 0);
+      }
       if (pr.ammo) pr.ammo.children.forEach(c => { c.visible = true; });
     }
     if (H && H.hideFront) H.front.visible = false;   // back to one-handed
@@ -18025,7 +18064,8 @@ function updateReloadAnim() {
   const parts = model._parts;
   if (parts) {
     if (parts.main) {
-      parts.main.position.set(P.ax, P.ay, P.az);
+      const mh = parts.main._home || _ZERO3;
+      parts.main.position.set(mh.x + P.ax, mh.y + P.ay, mh.z + P.az);
       parts.main.rotation.set(P.arx, P.ary, P.arz + (parts.main._spin || 0));
     }
     // And the rounds appear in it as they are put in, one at a time, so the

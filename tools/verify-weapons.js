@@ -49,6 +49,9 @@ function load() {
   }
   code += constBlock('GUN_MATS') + '\n';
   code += src.match(/^const VM_SKIN_MAT = .*$/m)[0] + '\n';
+  // The shipped viewmodels are scaled as a group; measure what ships, not the
+  // unscaled builder output.
+  code += src.match(/^const VM_GUN_SCALE = .*$/m)[0] + '\n';
   // K spans more than one line, so match through its closing "}, o);".
   code += src.match(/^const K = [\s\S]*?\}, o\);/m)[0] + '\n';
   code += src.match(/^const _RELOAD_REST = .*$/m)[0] + '\n';
@@ -66,6 +69,7 @@ function load() {
     .filter(r => r.includes('//') && r.split('//')[0].includes('('))
     .map(r => ({ id: r.split('//')[1].trim(), fn: r.split('//')[0].trim().split('(')[0] }));
   code += 'return { RELOAD_KEYS, RELOAD_PROPS, _RELOAD_DEFAULT, _reloadPose, attachViewHands,'
+        + ' VM_GUN_SCALE,'
         + ' builders: ' + JSON.stringify(rows.map(r => r.fn)) + '.map(n => eval(n)) };';
   return { api: new Function('THREE', code)(THREE), rows };
 }
@@ -91,6 +95,7 @@ const inView = p => {
 const built = rows.map((r, i) => {
   try {
     const g = api.builders[i]();
+    g.scale.setScalar(api.VM_GUN_SCALE);
     api.attachViewHands(g);
     return g;
   } catch (e) { fail(r.id, 'failed to build: ' + e.message); return null; }
