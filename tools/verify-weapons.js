@@ -232,19 +232,28 @@ Object.entries(api.RELOAD_PROPS).forEach(([id, evs]) => {
     if (Math.abs(a0[c] - restVal) > 1e-6) fail('INSPECT', 'starts away from rest on ' + c);
     if (Math.abs(a1[c] - restVal) > 1e-6) fail('INSPECT', 'ends away from rest on ' + c);
   });
-  let opens = 0, worstVis = 101, worstId = '';
+  // The absolute figure is dominated by weapons that do not fit the view at
+  // rest either, so what matters is whether the LOOK makes a gun worse than it
+  // already is. A weapon that shows 65% standing still and 65% while you turn
+  // it over has lost nothing to the animation.
+  let opens = 0, worstLoss = 0, worstId = '', worstAbs = 101;
   built.forEach((g, i) => {
     if (!g) return;
     const id = rows[i].id;
     if (api.inspectOpenPose(id)) opens++;
-    for (let sN = 0; sN <= 12; sN++) {
-      const t = sN / 12;
-      const P = api._reloadPose(api.INSPECT_DEFAULT, t);
-      const v = visibility(g, P);
-      if (v < worstVis) { worstVis = v; worstId = id; }
+    const atRest = visibility(g, REST_POSE);
+    let low = 101;
+    for (let sN = 0; sN <= 16; sN++) {
+      const v = visibility(g, api._reloadPose(api.INSPECT_DEFAULT, sN / 16));
+      if (v < low) low = v;
     }
+    if (low < worstAbs) worstAbs = low;
+    const loss = atRest - low;
+    if (loss > worstLoss) { worstLoss = loss; worstId = id; }
   });
-  inspectReport = { opens, worstVis, worstId };
+  inspectReport = { opens, worstLoss, worstId, worstAbs };
+  if (worstLoss > 25) fail('INSPECT', 'the look costs ' + worstLoss.toFixed(0)
+    + ' points of visibility on ' + worstId + ' — the gun leaves frame while you admire it');
 }
 
 // ── 6. Tagged assemblies turn about their own axis ─────────────────────────
@@ -280,8 +289,10 @@ console.log('   under 80% at some point: ' + thin.length + '/' + vis.length);
 
 if (inspectReport) {
   console.log('\ninspect: ' + inspectReport.opens + '/' + rows.length
-    + ' weapons open something while being looked at; worst visibility during the look '
-    + inspectReport.worstVis.toFixed(0) + '% (' + inspectReport.worstId + ')');
+    + ' weapons open something while being looked at');
+  console.log('   most visibility any weapon LOSES to the look: '
+    + inspectReport.worstLoss.toFixed(0) + ' points (' + inspectReport.worstId
+    + ');  lowest any weapon reaches: ' + inspectReport.worstAbs.toFixed(0) + '%');
 }
 
 if (cyl.length) {

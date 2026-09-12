@@ -18082,12 +18082,12 @@ const _RELOAD_DEFAULT = [K(.20,{py:-.07,rx:.40,rz:.18,hy:-.14}),
 // changes, and no props are thrown.
 const INSPECT_MS = 2400;
 const INSPECT_DEFAULT = [
-  K(.10,{py:.055,pz:.070,rx:-.12,ry:.34,rz:.12,hy:.03}),
-  K(.26,{py:.085,pz:.115,rx:-.20,ry:1.18,rz:.24,hy:.05,hz:.03}),   // left side round to you
-  K(.42,{py:.085,pz:.120,rx:-.24,ry:1.42,rz:.30,hy:.05,hz:.04}),
-  K(.58,{py:.080,pz:.105,rx:-.62,ry:.58,rz:-.08,hy:.04,hz:.02}),   // tipped to show the top
-  K(.74,{py:.065,pz:.085,rx:-.34,ry:-.52,rz:-.24,hy:.03}),         // and over to the right
-  K(.88,{py:.035,pz:.040,rx:-.14,ry:-.18,rz:-.08}),
+  K(.10,{px:-.038,py:.040,pz:-.090,rx:-.09,ry:.26,rz:.08,hy:.03}),
+  K(.26,{px:-.065,py:.060,pz:-.150,rx:-.15,ry:.88,rz:.17,hy:.05,hz:.03}),   // left side round to you
+  K(.42,{px:-.070,py:.062,pz:-.160,rx:-.18,ry:1.04,rz:.22,hy:.05,hz:.04}),
+  K(.58,{px:-.065,py:.058,pz:-.145,rx:-.48,ry:.42,rz:-.05,hy:.04,hz:.02}),  // tipped to show the top
+  K(.74,{px:-.048,py:.048,pz:-.110,rx:-.26,ry:-.36,rz:-.16,hy:.03}),        // and over to the right
+  K(.88,{px:-.022,py:.025,pz:-.050,rx:-.10,ry:-.14,rz:-.05}),
 ];
 
 // A weapon that opens should open while you are looking at it. Rather than
