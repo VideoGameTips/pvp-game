@@ -14856,6 +14856,9 @@ document.addEventListener('keydown', e => {
   // 💬 V — open the custom chat box (filtered; bots never react to it)
   if (e.code === 'KeyV' && !e.repeat && !commsMenuOpen && document.activeElement?.tagName !== 'INPUT') { e.preventDefault(); openVChat(); return; }
   if (e.code==='KeyR' && (activeSlot === 'primary' || activeSlot === 'secondary') && !reloading && !currentWeapon.noReload && weaponAmmo[currentWeaponIdx].ammo < currentWeapon.mag && weaponAmmo[currentWeaponIdx].reserve > 0) startReload();
+  // 🔎 T — look the gun over. Cancelled by anything that needs the weapon.
+  if (e.code === 'KeyT' && !e.repeat && !isDead && document.activeElement?.tagName !== 'INPUT'
+      && (activeSlot === 'primary' || activeSlot === 'secondary')) { e.preventDefault(); startInspect(); return; }
   // Spacebar — jump (only when on the ground)
   if (e.code === 'Space') {
     e.preventDefault();
@@ -15042,6 +15045,7 @@ document.addEventListener('mouseup', e => {
 function switchWeapon(idx) {
   if (idx === null || idx === undefined || idx < 0) return;
   if (idx === currentWeaponIdx) return;
+  cancelInspect();
   cancelReload();                      // you can always swap out of a reload
   meleeModels.forEach(m => m.visible = false);
   supportModels.forEach(m => m.visible = false);
@@ -15148,6 +15152,7 @@ function equipActiveSlot() {
   meleeModels.forEach(m => { m.position.copy(MELEE_REST_POS); m.rotation.set(0, 0, 0); });
   // Reset grenade windup
   grenadeWindupT = 1;
+  cancelInspect();
   cancelReload();   // the number keys land here; a reload never follows you across
   // Hide all guns, melee, support first
   weaponModels.forEach(m => m.visible = false);
@@ -16723,6 +16728,7 @@ function updateAbilityHUD() {
 
 function tryShoot() {
   if ((!pointerLocked && !gameStarted) || isDead || reloading) return;
+  cancelInspect();
   if (countdownActive) return; // can't fire during pre-round countdown
   if (KILLCAM.active) return;  // killcam playback is locked
   const now = Date.now();
@@ -17199,6 +17205,7 @@ function cancelReload() {
 }
 
 function startReload() {
+  cancelInspect();
   const pool = weaponAmmo[currentWeaponIdx];
   if (reloading || pool.ammo === currentWeapon.mag || pool.reserve === 0) return;
   const token = ++_reloadToken;
@@ -18068,6 +18075,62 @@ const _RELOAD_DEFAULT = [K(.20,{py:-.07,rx:.40,rz:.18,hy:-.14}),
                          K(.55,{py:-.08,rx:.42,rz:.20,hy:-.02,hz:.04}),
                          K(.82,{py:-.09,rx:.40,rz:.18})];
 
+// ── 🔎 Inspect ───────────────────────────────────────────────────────────────
+// Press T and the gun comes up to be looked at. It runs through exactly the
+// same machinery as a reload -- same keyframe format, same pose application,
+// same assemblies -- because it is the same thing: a track. Only the table
+// changes, and no props are thrown.
+const INSPECT_MS = 2400;
+const INSPECT_DEFAULT = [
+  K(.10,{py:.055,pz:.070,rx:-.12,ry:.34,rz:.12,hy:.03}),
+  K(.26,{py:.085,pz:.115,rx:-.20,ry:1.18,rz:.24,hy:.05,hz:.03}),   // left side round to you
+  K(.42,{py:.085,pz:.120,rx:-.24,ry:1.42,rz:.30,hy:.05,hz:.04}),
+  K(.58,{py:.080,pz:.105,rx:-.62,ry:.58,rz:-.08,hy:.04,hz:.02}),   // tipped to show the top
+  K(.74,{py:.065,pz:.085,rx:-.34,ry:-.52,rz:-.24,hy:.03}),         // and over to the right
+  K(.88,{py:.035,pz:.040,rx:-.14,ry:-.18,rz:-.08}),
+];
+
+// A weapon that opens should open while you are looking at it. Rather than
+// authoring a second pose for all ten of them, the widest assembly position in
+// that weapon's own reload is reused -- so a cylinder cranes out, a drum lifts,
+// a pump racks and a barrel breaks, each in the way it already knows how.
+const _inspectOpenCache = {};
+function inspectOpenPose(id) {
+  if (id in _inspectOpenCache) return _inspectOpenCache[id];
+  const tr = RELOAD_KEYS[id];
+  let best = null, mag = 0;
+  if (tr) for (const k of tr) {
+    const m2 = Math.abs(k.ax) + Math.abs(k.ay) + Math.abs(k.az)
+             + Math.abs(k.arx) + Math.abs(k.ary) + Math.abs(k.arz);
+    if (m2 > mag) { mag = m2; best = k; }
+  }
+  return (_inspectOpenCache[id] = mag > 0.001 ? best : null);
+}
+
+function startInspect() {
+  if (isDead || reloading) return;
+  const model = weaponModels[currentWeaponIdx];
+  if (!model || model._inspectMode) return;
+  model._inspectMode = true;
+  model._reloadStart = Date.now();
+  model._reloadDur = INSPECT_MS;
+  const ctx = getAudioCtx();
+  if (ctx) {
+    const t0 = ctx.currentTime + 0.002;
+    const g = ctx.createGain(); g.connect(ctx.destination);
+    metalClack(ctx, t0 + 0.10, g, 0.16, 620, 0.050);
+    if (inspectOpenPose(WEAPONS[currentWeaponIdx]?.id || '')) {
+      metalClack(ctx, t0 + 0.62, g, 0.30, 540, 0.080);
+      metalClack(ctx, t0 + 1.62, g, 0.26, 700, 0.070);
+    }
+  }
+}
+function cancelInspect() {
+  const model = weaponModels[currentWeaponIdx];
+  if (model && model._inspectMode) { model._inspectMode = false; model._reloadStart = 0; }
+}
+
+
 // ── 🧰 Reload props ─────────────────────────────────────────────────────────
 // Parts that come off the gun, get thrown away, or arrive to be fitted are
 // spawned as their own meshes in VIEWMODEL space — siblings of the weapon
@@ -18407,14 +18470,16 @@ function updateReloadAnim() {
   if (H && H.hideFront) H.front.visible = true;   // the off hand comes in to work
   model._wasReloading = true;
   const t = Math.min(1, (Date.now() - model._reloadStart) / model._reloadDur);
-  if (t >= 1) { rest(); return; }
+  if (t >= 1) { model._inspectMode = false; rest(); return; }
 
   const id = WEAPONS[currentWeaponIdx]?.id || '';
+  const inspecting = !!model._inspectMode;
 
   // Parts come off, get thrown clear, and arrive to be fitted, on the same
-  // beats the hands work. Each event fires once per reload.
+  // beats the hands work. Each event fires once per reload -- and never while
+  // inspecting: you are looking at the gun, not emptying it onto the floor.
   if (model._propRun !== model._reloadStart) { model._propRun = model._reloadStart; model._propFired = 0; }
-  const evs = RELOAD_PROPS[id];
+  const evs = inspecting ? null : RELOAD_PROPS[id];
   if (evs) for (let i = 0; i < evs.length && i < 30; i++) {
     if (model._propFired & (1 << i)) continue;
     if (t < evs[i].t) continue;
@@ -18424,7 +18489,18 @@ function updateReloadAnim() {
     }
   }
 
-  const P = _reloadPose(RELOAD_KEYS[id] || _RELOAD_DEFAULT, t);
+  const P = _reloadPose(
+    inspecting ? INSPECT_DEFAULT : (RELOAD_KEYS[id] || _RELOAD_DEFAULT), t);
+  if (inspecting) {
+    // Open whatever this weapon opens, out and back across the middle of the
+    // look. Same channels the reload drives, so nothing special downstream.
+    const op = inspectOpenPose(id);
+    if (op) {
+      const w = t > 0.20 && t < 0.80 ? Math.sin((t - 0.20) / 0.60 * Math.PI) : 0;
+      P.ax += op.ax * w; P.ay += op.ay * w; P.az += op.az * w;
+      P.arx += op.arx * w; P.ary += op.ary * w; P.arz += op.arz * w;
+    }
+  }
   const home = model._homePos;
   model.position.set(home.x + P.px, home.y + P.py, home.z + P.pz);
   model.rotation.set(P.rx, P.ry, P.rz);

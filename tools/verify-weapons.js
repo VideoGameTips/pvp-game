@@ -61,6 +61,8 @@ function load() {
   code += src.match(/^const _RELOAD_REST = .*$/m)[0] + '\n';
   code += constBlock('RELOAD_KEYS') + '\n';
   code += src.match(/^const _RELOAD_DEFAULT = [\s\S]*?\];/m)[0] + '\n';
+  code += src.match(/^const INSPECT_DEFAULT = [\s\S]*?\];/m)[0] + '\n';
+  code += fnBlock('inspectOpenPose') + '\nconst _inspectOpenCache = {};\n';
   code += src.match(/^const RP = .*$/m)[0] + '\n';
   code += constBlock('RELOAD_PROPS') + '\n';
   for (const m of src.matchAll(/^function (build\w+)\(\)/gm)) {
@@ -73,13 +75,14 @@ function load() {
     .filter(r => r.includes('//') && r.split('//')[0].includes('('))
     .map(r => ({ id: r.split('//')[1].trim(), fn: r.split('//')[0].trim().split('(')[0] }));
   code += 'return { RELOAD_KEYS, RELOAD_PROPS, _RELOAD_DEFAULT, _reloadPose, attachViewHands,'
-        + ' VM_GUN_SCALE, fitRestDistance,'
+        + ' VM_GUN_SCALE, fitRestDistance, INSPECT_DEFAULT, inspectOpenPose,'
         + ' builders: ' + JSON.stringify(rows.map(r => r.fn)) + '.map(n => eval(n)) };';
   return { api: new Function('THREE', code)(THREE), rows };
 }
 
 const { api, rows } = load();
 const problems = [];
+let inspectReport = null;
 const loadsFirst = [];   // loaded before ejecting: right for some mechanisms, worth an eye
 const fail = (w, msg) => problems.push(w.padEnd(20) + msg);
 
@@ -217,6 +220,33 @@ Object.entries(api.RELOAD_PROPS).forEach(([id, evs]) => {
   });
 });
 
+// ── 5b. Inspect: the gun is being shown off, so it must stay in shot ──────
+// It runs through the same pose machinery as a reload, so the same things can
+// go wrong: drifting off rest, or swinging out of frame at the moment you are
+// meant to be admiring it.
+{
+  const CH2 = ['px','py','pz','rx','ry','rz','hx','hy','hz','hr','ax','ay','az','arx','ary','arz','av'];
+  const a0 = api._reloadPose(api.INSPECT_DEFAULT, 0), a1 = api._reloadPose(api.INSPECT_DEFAULT, 1);
+  CH2.forEach(c => {
+    const restVal = c === 'av' ? 1 : 0;
+    if (Math.abs(a0[c] - restVal) > 1e-6) fail('INSPECT', 'starts away from rest on ' + c);
+    if (Math.abs(a1[c] - restVal) > 1e-6) fail('INSPECT', 'ends away from rest on ' + c);
+  });
+  let opens = 0, worstVis = 101, worstId = '';
+  built.forEach((g, i) => {
+    if (!g) return;
+    const id = rows[i].id;
+    if (api.inspectOpenPose(id)) opens++;
+    for (let sN = 0; sN <= 12; sN++) {
+      const t = sN / 12;
+      const P = api._reloadPose(api.INSPECT_DEFAULT, t);
+      const v = visibility(g, P);
+      if (v < worstVis) { worstVis = v; worstId = id; }
+    }
+  });
+  inspectReport = { opens, worstVis, worstId };
+}
+
 // ── 6. Tagged assemblies turn about their own axis ─────────────────────────
 const cyl = [];
 built.forEach((g, i) => {
@@ -247,6 +277,12 @@ console.log('\nvisible inside the view (worst point of the reload):');
   console.log('   ' + v.id.padEnd(20) + 'rest ' + v.rest.toFixed(0).padStart(3) + '%   worst '
             + v.worst.toFixed(0).padStart(3) + '%  at t=' + v.at.toFixed(2)));
 console.log('   under 80% at some point: ' + thin.length + '/' + vis.length);
+
+if (inspectReport) {
+  console.log('\ninspect: ' + inspectReport.opens + '/' + rows.length
+    + ' weapons open something while being looked at; worst visibility during the look '
+    + inspectReport.worstVis.toFixed(0) + '% (' + inspectReport.worstId + ')');
+}
 
 if (cyl.length) {
   console.log('\nrevolving cylinders:');
