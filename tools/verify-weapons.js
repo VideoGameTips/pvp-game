@@ -65,6 +65,7 @@ function load() {
   code += fnBlock('inspectOpenPose') + '\nconst _inspectOpenCache = {};\n';
   code += src.match(/^const RP = .*$/m)[0] + '\n';
   code += constBlock('RELOAD_PROPS') + '\n';
+  code += fnBlock('assemblyBeats') + '\nconst _asmBeatCache = {};\n';
   for (const m of src.matchAll(/^function (build\w+)\(\)/gm)) {
     const b = fnBlock(m[1]);
     if (b) code += b + '\n';
@@ -75,7 +76,7 @@ function load() {
     .filter(r => r.includes('//') && r.split('//')[0].includes('('))
     .map(r => ({ id: r.split('//')[1].trim(), fn: r.split('//')[0].trim().split('(')[0] }));
   code += 'return { RELOAD_KEYS, RELOAD_PROPS, _RELOAD_DEFAULT, _reloadPose, attachViewHands,'
-        + ' VM_GUN_SCALE, fitRestDistance, INSPECT_DEFAULT, inspectOpenPose,'
+        + ' VM_GUN_SCALE, fitRestDistance, INSPECT_DEFAULT, inspectOpenPose, assemblyBeats,'
         + ' builders: ' + JSON.stringify(rows.map(r => r.fn)) + '.map(n => eval(n)) };';
   return { api: new Function('THREE', code)(THREE), rows };
 }
@@ -83,6 +84,7 @@ function load() {
 const { api, rows } = load();
 const problems = [];
 let inspectReport = null;
+let audioReport = null;
 const loadsFirst = [];   // loaded before ejecting: right for some mechanisms, worth an eye
 const fail = (w, msg) => problems.push(w.padEnd(20) + msg);
 
@@ -256,6 +258,26 @@ Object.entries(api.RELOAD_PROPS).forEach(([id, evs]) => {
     + ' points of visibility on ' + worstId + ' — the gun leaves frame while you admire it');
 }
 
+// ── 5c. The reload you hear is the reload you see ─────────────────────────
+// The audio is scheduled off RELOAD_PROPS and the assembly channels of
+// RELOAD_KEYS, so a weapon whose reload is derived from neither falls back to a
+// generic pair of clacks — which is the old problem in miniature, a sound that
+// has nothing to do with what the gun is doing. Worth knowing how many.
+{
+  let derived = 0, generic = 0, beats = 0;
+  const thin = [];
+  Object.keys(api.RELOAD_KEYS).forEach(id => {
+    const evs = api.RELOAD_PROPS[id] || [];
+    const asm = api.assemblyBeats(id);
+    const n = evs.length + (asm ? (asm.open !== null) + (asm.shut !== null) : 0);
+    beats += n;
+    if (n === 0) { generic++; thin.push(id); } else derived++;
+  });
+  audioReport = { derived, generic, beats, thin };
+  if (generic > 0) fail('RELOAD AUDIO', generic + ' weapon(s) fall back to a generic sound: '
+    + thin.slice(0, 6).join(', '));
+}
+
 // ── 6. Tagged assemblies turn about their own axis ─────────────────────────
 const cyl = [];
 built.forEach((g, i) => {
@@ -293,6 +315,13 @@ if (inspectReport) {
   console.log('   most visibility any weapon LOSES to the look: '
     + inspectReport.worstLoss.toFixed(0) + ' points (' + inspectReport.worstId
     + ');  lowest any weapon reaches: ' + inspectReport.worstAbs.toFixed(0) + '%');
+}
+
+if (audioReport) {
+  console.log('\nreload audio: ' + audioReport.beats + ' sound events across '
+    + (audioReport.derived + audioReport.generic) + ' reloads ('
+    + (audioReport.beats / Math.max(1, audioReport.derived + audioReport.generic)).toFixed(1)
+    + ' each), all scheduled off the animation; ' + audioReport.generic + ' fall back to a generic pair');
 }
 
 if (cyl.length) {

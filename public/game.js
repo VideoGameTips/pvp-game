@@ -3038,16 +3038,109 @@ function playWeaponSound(idOrWeapon, opts = {}) {
     playGunAction(ctx, start, mainGain, p.action || 'rifle', p.vol * mult);
   }
 }
-function playReloadSound(w) {
+// ── 🔁 Reload audio ─────────────────────────────────────────────────────────
+// Every reload in the game used to be the same two beeps: a 360 -> 210 Hz
+// square and a 180 -> 320 triangle. Meanwhile the animation knew, per weapon and
+// to the millisecond, when the magazine leaves, when the fresh one seats, when
+// six grenades go into a drum one at a time and when it snaps shut. The picture
+// and the sound were unrelated systems.
+//
+// They are one system now. The audio is scheduled off RELOAD_PROPS -- the same
+// table that spawns the magazines and shells you see -- and off the assembly
+// channels in RELOAD_KEYS, so a cylinder craning out, a pump racking, a barrel
+// breaking and a feed cover lifting each get their sound at the frame it
+// happens. Nothing here is hand-timed; it is read from the animation.
+
+// Where a weapon's moving assembly opens and shuts, as fractions of the reload.
+const _asmBeatCache = {};
+function assemblyBeats(id) {
+  if (id in _asmBeatCache) return _asmBeatCache[id];
+  const tr = RELOAD_KEYS[id];
+  const mag = k => Math.abs(k.ax) + Math.abs(k.ay) + Math.abs(k.az)
+                 + Math.abs(k.arx) + Math.abs(k.ary) + Math.abs(k.arz);
+  let peak = 0;
+  if (tr) for (const k of tr) peak = Math.max(peak, mag(k));
+  if (!tr || peak < 0.005) return (_asmBeatCache[id] = null);
+  let open = null, shut = null;
+  for (const k of tr) if (open === null && mag(k) > peak * 0.5) open = k.t;
+  for (let i = tr.length - 1; i >= 0; i--) {
+    if (shut === null && mag(tr[i]) > peak * 0.5) shut = Math.min(0.99, tr[i].t + 0.06);
+  }
+  return (_asmBeatCache[id] = { open, shut });
+}
+
+function playReloadSound(w, durMs) {
   const ctx = getAudioCtx();
   if (!ctx) return;
   unlockAudio();
-  const start = ctx.currentTime + 0.002;
-  const gain = ctx.createGain();
-  gain.connect(ctx.destination);
-  const low = w?.noReload ? 120 : 210;
-  playTone(ctx, start, 0.055, gain, 360, low, 0.10, 'square');
-  playTone(ctx, start + 0.13, 0.07, gain, 180, 320, 0.08, 'triangle');
+  const id = w?.id || '';
+  const dur = Math.max(0.2, (durMs || w?.reloadTime || 1500) / 1000);
+  const t0 = ctx.currentTime + 0.002;
+  const g = ctx.createGain();
+  const comp = ctx.createDynamicsCompressor();
+  g.connect(comp).connect(ctx.destination);
+  // Reloads live in the same room as everything else.
+  try {
+    const indoor = INDOOR_MAPS.has(typeof activeMapName !== 'undefined' ? activeMapName : '');
+    const send = ctx.createGain(); send.gain.value = indoor ? 0.16 : 0.12;
+    g.connect(send).connect(getReverbBus(ctx, indoor));
+  } catch (e) {}
+
+  const V = 0.62;
+  const at = frac => t0 + dur * frac;
+
+  // A box magazine dropping free: the catch, then the magazine itself hitting
+  // the floor a good while later, which is the part that sells the weight.
+  const magOut = (t) => {
+    playFilteredNoise(ctx, t, 0.018, g, V * 0.55, 'bandpass', 2300, 6, 0.0003, 1.4);  // catch
+    metalClack(ctx, t + 0.02, g, V * 0.50, 430, 0.070);                               // mag free
+    const land = t + 0.34 + Math.random() * 0.12;
+    playFilteredNoise(ctx, land, 0.060, g, V * 0.34, 'bandpass', 320, 3.5, 0.0005, 1.7);
+    playFilteredNoise(ctx, land + 0.045, 0.040, g, V * 0.18, 'bandpass', 520, 4, 0.0005, 1.8);
+  };
+  const magIn  = (t) => {                       // seated, and it is a solid hit
+    playFilteredNoise(ctx, t, 0.030, g, V * 0.40, 'lowpass', 700, 0.9, 0.0004, 1.5);
+    metalClack(ctx, t + 0.012, g, V * 0.95, 380, 0.090);
+  };
+  const shellIn = (t) => {                      // a shell thumbed into a tube
+    playFilteredNoise(ctx, t, 0.022, g, V * 0.42, 'bandpass', 900, 3.0, 0.0004, 1.6);
+    playFilteredNoise(ctx, t + 0.018, 0.030, g, V * 0.30, 'bandpass', 460, 5, 0.0005, 1.5);
+  };
+  const roundIn = (t) => {                      // a cartridge into a chamber
+    playFilteredNoise(ctx, t, 0.016, g, V * 0.38, 'bandpass', 1700, 7, 0.0003, 1.5);
+    metalClack(ctx, t + 0.010, g, V * 0.30, 620, 0.038);
+  };
+  const heavyIn = (t) => metalClack(ctx, t, g, V * 0.85, 300, 0.110);   // a grenade
+  const tinkle  = (t, n) => { for (let i = 0; i < n; i++)
+    playFilteredNoise(ctx, t + i * 0.045 + Math.random() * 0.05, 0.028, g,
+                      V * 0.22, 'bandpass', 2600 + Math.random() * 1600, 11, 0.0004, 1.6); };
+
+  // ── Everything the reload actually does, in the order it does it ──────────
+  const evs = RELOAD_PROPS[id] || [];
+  let sawMagOut = false, sawAnything = false;
+  for (const e of evs) {
+    const t = at(e.t);
+    sawAnything = true;
+    const arriving = e.m === 'arrive';
+    if (e.k === 'mag')          { arriving ? magIn(t) : (magOut(t), sawMagOut = true); }
+    else if (e.k === 'shell')   { arriving ? shellIn(t) : tinkle(t, Math.min(4, e.n)); }
+    else if (e.k === 'round')   { arriving ? roundIn(t) : tinkle(t, Math.min(4, e.n)); }
+    else if (e.k === 'grenade') { arriving ? heavyIn(t) : tinkle(t, Math.min(4, e.n)); }
+    else if (e.k === 'clip')    { arriving ? magIn(t)   : tinkle(t, 2); }
+    else                        { tinkle(t, Math.min(5, e.n)); }   // cases, links
+  }
+
+  // The assembly, at the frames it actually moves.
+  const beats = assemblyBeats(id);
+  if (beats) {
+    if (beats.open !== null) metalClack(ctx, at(beats.open), g, V * 0.75, 500, 0.085);
+    if (beats.shut !== null) metalClack(ctx, at(beats.shut), g, V * 0.95, 400, 0.100);
+  }
+
+  // Charging handle at the end for anything that runs a bolt, and a fallback
+  // pair for weapons with no prop table at all so nothing is ever silent.
+  if (!sawAnything) { magOut(at(0.22)); magIn(at(0.62)); }
+  if (sawMagOut || !sawAnything) metalClack(ctx, at(0.93), g, V * 0.80, 560, 0.075);
 }
 const REVERB_EVENTS = new Set(['explosion', 'freeze_shatter', 'fire_sizzle']);
 function playSoundEvent(name, opts = {}) {
@@ -17212,9 +17305,11 @@ function startReload() {
   const reloadIdx = currentWeaponIdx;   // whose reload this is
   const reloadWeapon = currentWeapon;   // and whose magazine size to fill to
   reloading = true;
-  playReloadSound(currentWeapon);
   document.getElementById('reload-flash').style.display = 'block';
   const dur = currentWeapon.reloadTime * (Date.now() < adrenalineUntil ? 0.5 : 1);
+  // After dur, not before: the whole sequence is scheduled against the real
+  // length of this reload, so adrenaline halving it moves every beat with it.
+  playReloadSound(currentWeapon, dur);
   // Trigger reload animation on the current weapon model
   const model = weaponModels[currentWeaponIdx];
   if (model) {
