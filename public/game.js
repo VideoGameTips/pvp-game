@@ -2683,6 +2683,64 @@ function playNoise(ctx, start, dur, outNode, volume, tone = 0.5) {
   src.start(start);
   src.stop(start + dur + 0.02);
 }
+// 🔊 Shared echo bus. A gunshot outdoors is the report plus the map answering
+// it back: a couple of hard slaps off nearby buildings, then a wash rolling
+// away. Every shot was bone dry, which is most of why they sounded like they
+// happened inside a cupboard rather than on a street.
+let _revBus = null;
+function getReverbBus(ctx) {
+  if (_revBus) return _revBus;
+  const input = ctx.createGain();
+  // Impulse response: decaying noise, two channels so the wash has width.
+  const len = Math.floor(ctx.sampleRate * 1.1);
+  const ir = ctx.createBuffer(2, len, ctx.sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = ir.getChannelData(ch);
+    for (let i = 0; i < len; i++) {
+      const t = i / len;
+      // Early reflections cluster in the first 80 ms, then a smooth tail.
+      const early = t < 0.07 ? (1 + Math.random() * 2.2) : 1;
+      d[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, 2.6) * early * 0.55;
+    }
+  }
+  const conv = ctx.createConvolver();
+  conv.buffer = ir;
+  const wash = ctx.createGain(); wash.gain.value = 0.9;
+  const washCut = ctx.createBiquadFilter();
+  washCut.type = 'lowpass'; washCut.frequency.value = 2600;   // distance eats the top
+  input.connect(conv).connect(washCut).connect(wash).connect(ctx.destination);
+  // Two discrete slaps — the crack coming back off hard surfaces. These are
+  // what make it read as OUTDOORS rather than as a reverb preset.
+  [[0.085, 0.34, 1700], [0.185, 0.17, 1100]].forEach(([time, gain, cut]) => {
+    const dl = ctx.createDelay(1.0); dl.delayTime.value = time;
+    const g = ctx.createGain(); g.gain.value = gain;
+    const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = cut; f.Q.value = 0.6;
+    input.connect(dl).connect(f).connect(g).connect(ctx.destination);
+  });
+  _revBus = input;
+  return input;
+}
+
+// Noise whose filter FALLS while it plays. A blast's spectrum collapses
+// downward as the gas expands, and every filter in here was static, which is
+// why the loud layers read as "a burst of noise" rather than as an explosion.
+function playSweptNoise(ctx, start, dur, outNode, volume, type, fromF, toF, q = 0.8, shape = 1.4) {
+  const len = Math.max(1, Math.floor(ctx.sampleRate * dur));
+  const buffer = ctx.createBuffer(1, len, ctx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, shape);
+  const src = ctx.createBufferSource(); src.buffer = buffer;
+  const filter = ctx.createBiquadFilter();
+  filter.type = type; filter.Q.value = q;
+  filter.frequency.setValueAtTime(fromF, start);
+  filter.frequency.exponentialRampToValueAtTime(Math.max(40, toF), start + dur);
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(Math.max(0.001, volume), start);
+  gain.gain.exponentialRampToValueAtTime(0.001, start + dur);
+  src.connect(filter).connect(gain).connect(outNode);
+  src.start(start); src.stop(start + dur + 0.02);
+}
+
 function playFilteredNoise(ctx, start, dur, outNode, volume, filterType, freq, q = 0.7, attack = 0.001, shape = 1.8) {
   const len = Math.max(1, Math.floor(ctx.sampleRate * dur));
   const buffer = ctx.createBuffer(1, len, ctx.sampleRate);
@@ -2755,80 +2813,123 @@ function playMuzzleBlast(ctx, start, outNode, kind, volume) {
     playFilteredNoise(ctx, start + 0.012, dur * FX.dur, outNode, gain * FX.attack,
                       'lowpass', freq * FX.pitch, 0.5, 0.004, 1.1);
 
+  // BLAST: the swept layer that makes it an explosion rather than a noise
+  // burst. Starts wide open and collapses, the way expanding gas does.
+  const BLAST = (gain, fromF, toF, dur, q) =>
+    playSweptNoise(ctx, start, dur * FX.dur, outNode, gain * FX.attack,
+                   'lowpass', fromF * FX.pitch, toF * FX.pitch, q || 0.9, 1.3);
+
   if (kind === 'boom') {                       // shotguns
-    CRACK(volume * 1.30, 2900, 0.008);
-    PFN(start, 0.055, volume * 1.15, 'bandpass', 720, 0.6);
-    PFN(start + 0.004, 0.100, volume * 0.80, 'lowpass', 900, 0.7);
-    PT(start, 0.085, 150, 44, volume * 0.42, 'triangle');
-    TAIL(volume * 0.30, 0.42, 640);
+    CRACK(volume * 1.15, 2700, 0.008);
+    BLAST(volume * 1.25, 4400, 320, 0.110);
+    PFN(start, 0.055, volume * 0.88, 'bandpass', 700, 0.6);
+    PT(start, 0.082, 200, 58, volume * 0.72, 'triangle');
+    TAIL(volume * 0.32, 0.44, 620);
   } else if (kind === 'crack') {               // rifles, snipers
-    CRACK(volume * 1.70, 3800, 0.005);
-    PFN(start, 0.040, volume * 0.90, 'bandpass', 1150, 0.7);
-    PFN(start + 0.003, 0.070, volume * 0.50, 'lowpass', 760, 0.7);
-    PT(start, 0.060, 175, 52, volume * 0.26, 'triangle');
-    TAIL(volume * 0.34, 0.50, 780);
+    CRACK(volume * 1.50, 3500, 0.005);
+    BLAST(volume * 1.05, 6000, 470, 0.062);
+    PFN(start, 0.038, volume * 0.78, 'bandpass', 1120, 0.7);
+    PT(start, 0.056, 240, 72, volume * 0.50, 'triangle');
+    TAIL(volume * 0.34, 0.52, 760);
   } else if (kind === 'pistol') {
-    CRACK(volume * 1.45, 3400, 0.005);
-    PFN(start, 0.035, volume * 0.95, 'bandpass', 1350, 0.7);
-    PFN(start + 0.003, 0.055, volume * 0.42, 'lowpass', 820, 0.7);
-    PT(start, 0.045, 165, 58, volume * 0.22, 'triangle');
-    TAIL(volume * 0.24, 0.28, 900);
+    CRACK(volume * 1.28, 3200, 0.005);
+    BLAST(volume * 0.95, 5400, 540, 0.047);
+    PFN(start, 0.032, volume * 0.76, 'bandpass', 1300, 0.7);
+    PT(start, 0.044, 230, 74, volume * 0.44, 'triangle');
+    TAIL(volume * 0.26, 0.30, 880);
   } else if (kind === 'auto_blast') {          // SMGs and autos
-    CRACK(volume * 1.50, 3300, 0.004);
-    PFN(start, 0.030, volume * 0.82, 'bandpass', 1250, 0.5);
-    PFN(start + 0.003, 0.055, volume * 0.52, 'lowpass', 700, 0.6);
-    PT(start, 0.040, 150, 55, volume * 0.20, 'triangle');
-    TAIL(volume * 0.20, 0.22, 820);
+    CRACK(volume * 1.32, 3100, 0.004);
+    BLAST(volume * 1.00, 5500, 500, 0.042);
+    PFN(start, 0.028, volume * 0.72, 'bandpass', 1220, 0.5);
+    PT(start, 0.040, 225, 70, volume * 0.40, 'triangle');
+    TAIL(volume * 0.21, 0.24, 800);
   } else if (kind === 'auto_blast_heavy') {    // LMGs, miniguns
-    CRACK(volume * 1.45, 2900, 0.006);
-    PFN(start, 0.040, volume * 0.85, 'bandpass', 980, 0.55);
-    PFN(start + 0.004, 0.080, volume * 0.62, 'lowpass', 560, 0.65);
-    PT(start, 0.060, 160, 42, volume * 0.30, 'triangle');
-    TAIL(volume * 0.26, 0.34, 620);
+    CRACK(volume * 1.28, 2750, 0.006);
+    BLAST(volume * 1.10, 4700, 380, 0.068);
+    PFN(start, 0.038, volume * 0.76, 'bandpass', 960, 0.55);
+    PT(start, 0.060, 208, 62, volume * 0.58, 'triangle');
+    TAIL(volume * 0.28, 0.36, 600);
   } else if (kind === 'tick' || kind === 'p90') {
     CRACK(volume * 1.35, kind === 'p90' ? 4200 : 3700, 0.004);
-    PFN(start, 0.024, volume * 0.80, 'bandpass', kind === 'p90' ? 2100 : 1700, 0.55);
-    TAIL(volume * 0.14, 0.16, 1100);
+    BLAST(volume * 0.70, 6800, 900, 0.026);
+    PFN(start, 0.022, volume * 0.60, 'bandpass', kind === 'p90' ? 2100 : 1700, 0.55);
+    TAIL(volume * 0.13, 0.16, 1100);
   } else if (kind === 'heavy') {
-    CRACK(volume * 1.40, 2700, 0.007);
-    PFN(start, 0.050, volume * 0.95, 'bandpass', 900, 0.65);
-    PT(start, 0.070, 165, 48, volume * 0.32, 'triangle');
-    TAIL(volume * 0.30, 0.40, 600);
+    CRACK(volume * 1.24, 2550, 0.007);
+    BLAST(volume * 1.15, 4200, 340, 0.078);
+    PFN(start, 0.046, volume * 0.80, 'bandpass', 880, 0.65);
+    PT(start, 0.070, 212, 62, volume * 0.62, 'triangle');
+    TAIL(volume * 0.32, 0.42, 580);
   } else if (kind === 'thump') {
     CRACK(volume * 0.70, 2300, 0.006);
-    PFN(start, 0.090, volume * 0.85, 'lowpass', 820, 0.7);
-    PT(start, 0.110, 130, 34, volume * 0.42, 'triangle');
-    TAIL(volume * 0.30, 0.45, 460);
+    BLAST(volume * 1.00, 3600, 300, 0.100);
+    PFN(start, 0.080, volume * 0.55, 'lowpass', 820, 0.7);
+    PT(start, 0.095, 180, 52, volume * 0.40, 'triangle');
+    TAIL(volume * 0.28, 0.45, 460);
   } else {                                     // the default rifle
-    CRACK(volume * 1.60, 3600, 0.005);
-    PFN(start, 0.038, volume * 0.95, 'bandpass', 1200, 0.6);
-    PFN(start + 0.003, 0.065, volume * 0.55, 'lowpass', 780, 0.7);
-    PT(start, 0.055, 180, 50, volume * 0.26, 'triangle');
-    TAIL(volume * 0.30, 0.38, 800);
+    CRACK(volume * 1.40, 3400, 0.005);
+    BLAST(volume * 1.05, 5600, 440, 0.057);
+    PFN(start, 0.034, volume * 0.75, 'bandpass', 1180, 0.6);
+    PT(start, 0.052, 235, 70, volume * 0.48, 'triangle');
+    TAIL(volume * 0.32, 0.40, 780);
+  }
+}
+// 🔧 The gun working. Every action in here was a couple of soft bandpassed
+// noise blips at a fifth of the shot's volume, which is not a mechanism -- it
+// is a tap. Steel moving under spring pressure rings, so these are built from
+// high-Q resonances: a dead impact plus two ringing partials, which is what
+// separates "metal" from "click".
+function metalClack(ctx, at, outNode, vol, freq, ringDur = 0.055) {
+  playFilteredNoise(ctx, at, 0.004, outNode, vol, 'bandpass', freq * 0.8, 1.0, 0.0002, 0);
+  playFilteredNoise(ctx, at, ringDur, outNode, vol * 0.55, 'bandpass', freq, 11, 0.0004, 1.2);
+  playFilteredNoise(ctx, at, ringDur * 0.7, outNode, vol * 0.30, 'bandpass', freq * 1.87, 14, 0.0004, 1.4);
+}
+// The case landing, well after everything else. Nobody notices it consciously;
+// its absence is part of why the old shots felt like they came from nothing.
+function brassDrop(ctx, at, outNode, vol) {
+  for (let i = 0; i < 2; i++) {
+    const t = at + 0.34 + Math.random() * 0.22 + i * (0.06 + Math.random() * 0.05);
+    const f = 3800 + Math.random() * 2400;
+    playFilteredNoise(ctx, t, 0.030, outNode, vol * (i ? 0.45 : 1), 'bandpass', f, 13, 0.0003, 1.6);
   }
 }
 function playGunAction(ctx, start, outNode, action, volume) {
   if (!action) return;
   const waterAction = action === 'water_smg' || action === 'water_rifle' || action === 'water_belt';
-  const clickVol = volume * (waterAction ? 0.18 : action === 'smg' || action === 'rifle' || action === 'belt' ? 0.24 : 0.42);
+  // Roughly three times what these used to be. The mechanism is half the
+  // character of a gun and it was mixed almost to silence.
+  const V = volume * (waterAction ? 0.34 : 0.85);
   if (action === 'shotgun') {
-    playFilteredNoise(ctx, start + 0.11, 0.035, outNode, clickVol, 'bandpass', 950, 1.0);
-    playFilteredNoise(ctx, start + 0.19, 0.045, outNode, clickVol * 0.85, 'bandpass', 620, 1.0);
+    metalClack(ctx, start + 0.115, outNode, V * 0.95, 780, 0.075);   // pump back
+    metalClack(ctx, start + 0.150, outNode, V * 0.50, 1400, 0.040);  // shell out
+    metalClack(ctx, start + 0.215, outNode, V * 1.00, 620, 0.085);   // pump forward, lock up
+    brassDrop(ctx, start + 0.10, outNode, V * 0.35);
   } else if (action === 'bolt') {
-    playFilteredNoise(ctx, start + 0.13, 0.030, outNode, clickVol, 'bandpass', 1250, 1.2);
-    playFilteredNoise(ctx, start + 0.23, 0.040, outNode, clickVol * 0.75, 'bandpass', 720, 1.1);
+    metalClack(ctx, start + 0.135, outNode, V * 0.85, 1250, 0.070);  // lift and pull
+    metalClack(ctx, start + 0.205, outNode, V * 0.45, 2050, 0.035);  // extract
+    metalClack(ctx, start + 0.285, outNode, V * 0.95, 900, 0.080);   // push and lock
+    brassDrop(ctx, start + 0.16, outNode, V * 0.40);
   } else if (action === 'revolver') {
-    playFilteredNoise(ctx, start + 0.055, 0.024, outNode, clickVol * 0.8, 'bandpass', 1350, 1.2);
+    metalClack(ctx, start + 0.050, outNode, V * 0.70, 1500, 0.045);  // cylinder indexes
+    metalClack(ctx, start + 0.082, outNode, V * 0.45, 1050, 0.035);  // hand and bolt
   } else if (action === 'belt') {
-    playFilteredNoise(ctx, start + 0.035, 0.026, outNode, clickVol * 0.8, 'bandpass', 760, 1.0);
+    metalClack(ctx, start + 0.022, outNode, V * 0.80, 820, 0.050);   // bolt back
+    metalClack(ctx, start + 0.046, outNode, V * 0.60, 1250, 0.035);  // feed pawl
+    brassDrop(ctx, start + 0.03, outNode, V * 0.30);
   } else if (waterAction) {
     const delay = action === 'water_smg' ? 0.030 : action === 'water_belt' ? 0.040 : 0.052;
-    playTone(ctx, start + 0.006, 0.070, outNode, 155, 190, clickVol * 0.75, 'triangle');
-    playFilteredNoise(ctx, start + delay, 0.026, outNode, clickVol, 'bandpass', 980, 0.75);
-    playFilteredNoise(ctx, start + delay + 0.030, 0.018, outNode, clickVol * 0.52, 'bandpass', 1450, 0.55);
-  } else {
-    playFilteredNoise(ctx, start + (action === 'smg' ? 0.026 : 0.045), 0.024, outNode, clickVol, 'bandpass', action === 'slide' ? 1650 : 1050, 1.0);
-    playFilteredNoise(ctx, start + (action === 'smg' ? 0.048 : 0.075), 0.018, outNode, clickVol * 0.55, 'highpass', 2200, 0.6);
+    playTone(ctx, start + 0.006, 0.070, outNode, 155, 190, V * 0.75, 'triangle');
+    playFilteredNoise(ctx, start + delay, 0.026, outNode, V, 'bandpass', 980, 0.75);
+    playFilteredNoise(ctx, start + delay + 0.030, 0.018, outNode, V * 0.52, 'bandpass', 1450, 0.55);
+  } else if (action === 'slide') {                                    // pistols
+    metalClack(ctx, start + 0.028, outNode, V * 0.85, 1650, 0.045);  // slide to the rear
+    metalClack(ctx, start + 0.062, outNode, V * 1.00, 1150, 0.055);  // slide slams shut
+    brassDrop(ctx, start + 0.04, outNode, V * 0.45);
+  } else {                                                            // rifle, smg
+    const fast = action === 'smg';
+    metalClack(ctx, start + (fast ? 0.018 : 0.026), outNode, V * 0.75, 1450, 0.040);
+    metalClack(ctx, start + (fast ? 0.040 : 0.058), outNode, V * 0.95, 1000, 0.055);
+    brassDrop(ctx, start + 0.03, outNode, V * 0.40);
   }
 }
 function playWeaponSound(idOrWeapon, opts = {}) {
@@ -2850,6 +2951,13 @@ function playWeaponSound(idOrWeapon, opts = {}) {
   const mainGain = ctx.createGain();
   const comp = ctx.createDynamicsCompressor();
   mainGain.connect(comp).connect(ctx.destination);
+  // Send to the shared echo bus. Someone else's shot across the map gets more
+  // of it than your own does, because that is what distance sounds like.
+  try {
+    const send = ctx.createGain();
+    send.gain.value = (opts.remote ? 0.42 : 0.22) * distGain;
+    mainGain.connect(send).connect(getReverbBus(ctx));
+  } catch (e) {}
 
   if (p.kind === 'auto_blast' || p.kind === 'auto_blast_heavy') {
     playMuzzleBlast(ctx, start, mainGain, p.kind, p.vol * mult);
