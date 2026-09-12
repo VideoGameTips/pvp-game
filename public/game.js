@@ -2683,13 +2683,15 @@ function playNoise(ctx, start, dur, outNode, volume, tone = 0.5) {
   src.start(start);
   src.stop(start + dur + 0.02);
 }
-function playFilteredNoise(ctx, start, dur, outNode, volume, filterType, freq, q = 0.7, attack = 0.001) {
+function playFilteredNoise(ctx, start, dur, outNode, volume, filterType, freq, q = 0.7, attack = 0.001, shape = 1.8) {
   const len = Math.max(1, Math.floor(ctx.sampleRate * dur));
   const buffer = ctx.createBuffer(1, len, ctx.sampleRate);
   const data = buffer.getChannelData(0);
   for (let i = 0; i < len; i++) {
     const t = i / len;
-    data[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, 1.8);
+    // shape 0 leaves the noise flat so the gain envelope alone shapes it --
+    // needed for a real transient, which must be at full amplitude instantly.
+    data[i] = (Math.random() * 2 - 1) * (shape ? Math.pow(1 - t, shape) : 1);
   }
   const src = ctx.createBufferSource();
   const filter = ctx.createBiquadFilter();
@@ -2718,50 +2720,91 @@ function playTone(ctx, start, dur, outNode, freqA, freqB, volume, type = 'square
   osc.stop(start + dur + 0.02);
 }
 function playMuzzleBlast(ctx, start, outNode, kind, volume) {
-  // Apply player FX modulator
+  // A gunshot is four things at once, and the old synthesis had one of them.
+  // Every layer was filtered under about 2 kHz -- lowpass 1200, bandpass 760,
+  // bandpass 1550 -- sitting on a 92 Hz sine, so every weapon in the game came
+  // out as low-mid thud with no top end at all. That is "toomh". A "BANG" needs:
+  //
+  //   crack   3-7 ms of wideband noise above 3 kHz, at full amplitude within a
+  //           fraction of a millisecond. This is the B, and it did not exist.
+  //   body    30-70 ms around 500-1100 Hz -- the A, the part with a pitch.
+  //   punch   a tone falling fast from ~190 Hz -- felt more than heard.
+  //   tail    250-500 ms of quiet low noise, the report rolling away across the
+  //           map. Nothing had one, which is why every shot stopped dead.
   const FX = SHOOT_FX;
   volume *= FX.vol;
-  // Helper wrappers that fold FX scaling into the layered calls below
-  const PFN = (s, dur, gain, type, freq, q) =>
-    playFilteredNoise(ctx, s, dur * FX.dur, outNode, gain * FX.attack, type, freq * FX.pitch, q);
+  // A little variation per shot, or a held trigger sounds like a photocopier.
+  const vary = 0.94 + Math.random() * 0.12;
+
+  const PFN = (s, dur, gain, type, freq, q, shape) =>
+    playFilteredNoise(ctx, s, dur * FX.dur, outNode, gain * FX.attack, type,
+                      freq * FX.pitch * vary, q, 0.001, shape);
   const PT = (s, dur, freq1, freq2, gain, wave) =>
     playTone(ctx, s, dur * FX.dur, outNode, freq1 * FX.pitch, freq2 * FX.pitch, gain * FX.body, wave);
-  if (kind === 'boom') {
-    PFN(start, 0.13, volume * 1.3, 'lowpass', 1200, 0.7);
-    PFN(start, 0.028, volume * 1.0, 'highpass', 1800, 0.5);
-    PT(start, 0.07, 92, 46, volume * 0.32, 'sine');
-  } else if (kind === 'crack') {
-    PFN(start, 0.030, volume * 0.72, 'highpass', 1900, 0.45);
-    PFN(start, 0.075, volume * 0.95, 'bandpass', 760, 0.75);
-    PT(start, 0.075, 118, 52, volume * 0.26, 'sine');
+  // The transient. Flat buffer so it is at full amplitude within 0.2 ms.
+  // Bandpass rather than highpass: a highpass ran 26% of the shot's energy out
+  // above 16 kHz, which is inaudible on most speakers and reads as hiss on the
+  // ones where it isn't. Band-limited, that energy lands at 1-4 kHz instead --
+  // where a rifle's crack actually is, and where hearing is most sensitive.
+  const CRACK = (gain, freq, dur) =>
+    playFilteredNoise(ctx, start, (dur || 0.006) * FX.dur, outNode, gain * FX.attack,
+                      'bandpass', freq * FX.pitch * vary, 0.45, 0.0002, 0);
+  // The report rolling away. Quiet, long, and the reason it sounds like it
+  // happened somewhere rather than inside a box.
+  const TAIL = (gain, dur, freq) =>
+    playFilteredNoise(ctx, start + 0.012, dur * FX.dur, outNode, gain * FX.attack,
+                      'lowpass', freq * FX.pitch, 0.5, 0.004, 1.1);
+
+  if (kind === 'boom') {                       // shotguns
+    CRACK(volume * 1.30, 2900, 0.008);
+    PFN(start, 0.055, volume * 1.15, 'bandpass', 720, 0.6);
+    PFN(start + 0.004, 0.100, volume * 0.80, 'lowpass', 900, 0.7);
+    PT(start, 0.085, 150, 44, volume * 0.42, 'triangle');
+    TAIL(volume * 0.30, 0.42, 640);
+  } else if (kind === 'crack') {               // rifles, snipers
+    CRACK(volume * 1.70, 3800, 0.005);
+    PFN(start, 0.040, volume * 0.90, 'bandpass', 1150, 0.7);
+    PFN(start + 0.003, 0.070, volume * 0.50, 'lowpass', 760, 0.7);
+    PT(start, 0.060, 175, 52, volume * 0.26, 'triangle');
+    TAIL(volume * 0.34, 0.50, 780);
   } else if (kind === 'pistol') {
-    PFN(start, 0.04, volume * 1.2, 'bandpass', 1550, 0.7);
-    PFN(start + 0.015, 0.055, volume * 0.55, 'lowpass', 820, 0.7);
-  } else if (kind === 'auto_blast') {
-    PFN(start, 0.075, volume * 0.70, 'bandpass', 1180, 0.28);
-    PFN(start + 0.010, 0.110, volume * 0.92, 'lowpass', 540, 0.55);
-    PFN(start + 0.030, 0.070, volume * 0.42, 'bandpass', 260, 0.85);
-    PT(start, 0.070, 66, 38, volume * 0.14, 'sine');
-    PT(start + 0.014, 0.070, 170, 118, volume * 0.075, 'triangle');
-  } else if (kind === 'auto_blast_heavy') {
-    PFN(start, 0.085, volume * 0.62, 'bandpass', 980, 0.35);
-    PFN(start + 0.006, 0.130, volume * 1.05, 'lowpass', 460, 0.68);
-    PFN(start + 0.035, 0.080, volume * 0.42, 'bandpass', 230, 0.9);
-    PT(start, 0.085, 72, 34, volume * 0.18, 'sine');
+    CRACK(volume * 1.45, 3400, 0.005);
+    PFN(start, 0.035, volume * 0.95, 'bandpass', 1350, 0.7);
+    PFN(start + 0.003, 0.055, volume * 0.42, 'lowpass', 820, 0.7);
+    PT(start, 0.045, 165, 58, volume * 0.22, 'triangle');
+    TAIL(volume * 0.24, 0.28, 900);
+  } else if (kind === 'auto_blast') {          // SMGs and autos
+    CRACK(volume * 1.50, 3300, 0.004);
+    PFN(start, 0.030, volume * 0.82, 'bandpass', 1250, 0.5);
+    PFN(start + 0.003, 0.055, volume * 0.52, 'lowpass', 700, 0.6);
+    PT(start, 0.040, 150, 55, volume * 0.20, 'triangle');
+    TAIL(volume * 0.20, 0.22, 820);
+  } else if (kind === 'auto_blast_heavy') {    // LMGs, miniguns
+    CRACK(volume * 1.45, 2900, 0.006);
+    PFN(start, 0.040, volume * 0.85, 'bandpass', 980, 0.55);
+    PFN(start + 0.004, 0.080, volume * 0.62, 'lowpass', 560, 0.65);
+    PT(start, 0.060, 160, 42, volume * 0.30, 'triangle');
+    TAIL(volume * 0.26, 0.34, 620);
   } else if (kind === 'tick' || kind === 'p90') {
-    PFN(start, 0.028, volume * 1.05, 'bandpass', kind === 'p90' ? 2100 : 1600, 0.55);
-    PFN(start + 0.012, 0.032, volume * 0.35, 'highpass', 2400, 0.4);
+    CRACK(volume * 1.35, kind === 'p90' ? 4200 : 3700, 0.004);
+    PFN(start, 0.024, volume * 0.80, 'bandpass', kind === 'p90' ? 2100 : 1700, 0.55);
+    TAIL(volume * 0.14, 0.16, 1100);
   } else if (kind === 'heavy') {
-    PFN(start, 0.05, volume * 1.15, 'bandpass', 980, 0.65);
-    PT(start, 0.05, 120, 64, volume * 0.18, 'sine');
+    CRACK(volume * 1.40, 2700, 0.007);
+    PFN(start, 0.050, volume * 0.95, 'bandpass', 900, 0.65);
+    PT(start, 0.070, 165, 48, volume * 0.32, 'triangle');
+    TAIL(volume * 0.30, 0.40, 600);
   } else if (kind === 'thump') {
-    PFN(start, 0.11, volume * 0.95, 'lowpass', 900, 0.7);
-    PT(start, 0.11, 88, 36, volume * 0.34, 'sine');
-  } else {
-    PFN(start, 0.030, volume * 0.52, 'bandpass', 1550, 0.45);
-    PFN(start, 0.085, volume * 1.22, 'lowpass', 980, 0.75);
-    PFN(start + 0.018, 0.050, volume * 0.42, 'bandpass', 430, 0.8);
-    PT(start, 0.070, 96, 48, volume * 0.24, 'sine');
+    CRACK(volume * 0.70, 2300, 0.006);
+    PFN(start, 0.090, volume * 0.85, 'lowpass', 820, 0.7);
+    PT(start, 0.110, 130, 34, volume * 0.42, 'triangle');
+    TAIL(volume * 0.30, 0.45, 460);
+  } else {                                     // the default rifle
+    CRACK(volume * 1.60, 3600, 0.005);
+    PFN(start, 0.038, volume * 0.95, 'bandpass', 1200, 0.6);
+    PFN(start + 0.003, 0.065, volume * 0.55, 'lowpass', 780, 0.7);
+    PT(start, 0.055, 180, 50, volume * 0.26, 'triangle');
+    TAIL(volume * 0.30, 0.38, 800);
   }
 }
 function playGunAction(ctx, start, outNode, action, volume) {
