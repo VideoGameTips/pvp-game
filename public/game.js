@@ -541,70 +541,18 @@ const WEAPONS = [
     auto: false, pellets: 1, spread: 0, adsZoom: 50, bulletSpeed: 80, noReload: false,
     bulletColor: 0xcc8855,
     ability: { name: 'Trick Shot', cd: 9000, desc: 'Next throw deals 2× damage', type: 'powershot', pellets: 1, spreadMult: 0, dmgMult: 2 } },
-  { id: 'slingshot', name: 'Slingshot', type: 'Secondary', slot: 'secondary',
-    mag: 1, reserve: 12, damage: 24, fireRate: 400, reloadTime: 700,
-    auto: false, pellets: 1, spread: 0.008, adsZoom: 48, bulletSpeed: 80, noReload: false,
-    bulletColor: 0x666666,
-    ability: { name: 'Volley', cd: 8000, desc: 'Loose 5 pellets in a spread', type: 'multishot', count: 5, spread: 0.18 } },
-  // ── 🌌 SCI-FI P2W PRIMARIES (very expensive, fantasy-tier mechanics) ────
-  { id: 'event_horizon', name: 'Event Horizon Rifle', type: 'Gravity AR', slot: 'primary',
-    mag: 18, reserve: 54, damage: 75, fireRate: 280, reloadTime: 2400,
-    auto: true, pellets: 1, spread: 0.005, adsZoom: 46, bulletSpeed: 140, noReload: false,
-    bulletColor: 0x6633ff, bulletSize: 0.07,
-    ability: { name: 'Collapse', cd: 14000, desc: 'Gravity field · 8 m AOE 80 dmg · slows', type: 'aoe', radius: 8, damage: 80, color: 0x6633ff, frostBurst: 30 } },
-  { id: 'storm_core', name: 'Storm Core', type: 'Plasma Heavy', slot: 'primary',
-    mag: 24, reserve: 72, damage: 55, fireRate: 220, reloadTime: 2300,
-    auto: true, pellets: 1, spread: 0.008, adsZoom: 50, bulletSpeed: 130, noReload: false,
-    bulletColor: 0x88ddff, bulletSize: 0.08, emissive: true,
-    ability: { name: 'Supercell', cd: 16000, desc: 'Lightning storm · 10 m AOE 100 dmg', type: 'aoe', radius: 10, damage: 100, color: 0xaaeeff, launchVel: 6 } },
-  { id: 'abs_zero', name: 'Absolute Zero Projector', type: 'Cryo', slot: 'primary',
-    mag: 30, reserve: 90, damage: 35, fireRate: 100, reloadTime: 2400,
-    auto: true, pellets: 1, spread: 0.010, adsZoom: 48, bulletSpeed: 120, noReload: false,
-    bulletColor: 0x99eeff, bulletSize: 0.06,
-    ability: { name: 'Cryostasis', cd: 18000, desc: 'Freeze 9 m AOE · slows all', type: 'aoe', radius: 9, damage: 30, color: 0x99eeff, frostBurst: 60 } },
-  { id: 'solar_lance', name: 'Solar Lance', type: 'Beam', slot: 'primary',
-    mag: 200, reserve: 0, damage: 12, fireRate: 40, reloadTime: 99999,
-    auto: true, pellets: 1, spread: 0.002, adsZoom: 44, bulletSpeed: 220, noReload: true, ammoRegen: 2,
-    bulletColor: 0xffee44, bulletSize: 0.05, emissive: true,
-    ability: { name: 'Solar Flare', cd: 14000, desc: 'Blinding beam burst · 7 m AOE 90 dmg', type: 'aoe', radius: 7, damage: 90, color: 0xffee44, reveal: true, revealDur: 3000 } },
-  { id: 'quantum_repeater', name: 'Quantum Repeater', type: 'Time-Shift AR', slot: 'primary',
-    mag: 22, reserve: 66, damage: 50, fireRate: 200, reloadTime: 2300,
-    auto: true, pellets: 1, spread: 0.005, adsZoom: 48, bulletSpeed: 150, noReload: false,
-    bulletColor: 0x66ffcc, bulletSize: 0.06,
-    ability: { name: 'Timeline Break', cd: 15000, desc: 'Replay last mag instantly · 12 shots fast', type: 'fanfire', count: 12, delay: 40 } },
-  { id: 'magnetar', name: 'Magnetar Cannon', type: 'Magnetic Heavy', slot: 'primary',
-    mag: 12, reserve: 36, damage: 90, fireRate: 500, reloadTime: 2600,
-    auto: false, pellets: 1, spread: 0.003, adsZoom: 44, bulletSpeed: 140, noReload: false,
-    bulletColor: 0xff77cc, bulletSize: 0.09,
-    ability: { name: 'Polar Collapse', cd: 16000, desc: 'Magnetic implosion · 8 m AOE 120 dmg', type: 'aoe', radius: 8, damage: 120, color: 0xff77cc, launchVel: 14 } },
-  { id: 'nebula_mortar', name: 'Nebula Mortar', type: 'Cosmic Indirect', slot: 'primary',
-    mag: 4, reserve: 16, damage: 110, fireRate: 800, reloadTime: 3000,
-    auto: false, pellets: 1, spread: 0.002, adsZoom: 38, bulletSpeed: 70, noReload: false,
-    bulletColor: 0x9966ff, bulletSize: 0.14,
-    ability: { name: 'Starfall', cd: 20000, desc: 'Meteor shower · 12 m AOE 180 dmg', type: 'aoe', radius: 12, damage: 180, color: 0xaa88ff, launchVel: 8 } },
-  { id: 'prism_engine', name: 'Prism Engine', type: 'Refractive Beam', slot: 'primary',
-    mag: 50, reserve: 150, damage: 22, fireRate: 70, reloadTime: 2200,
-    auto: true, pellets: 1, spread: 0.004, adsZoom: 48, bulletSpeed: 160, noReload: false,
-    bulletColor: 0xffaaff, bulletSize: 0.05, emissive: true,
-    ability: { name: 'Refraction Overload', cd: 14000, desc: 'Fire 14 split-beams', type: 'multishot', count: 14, spread: 0.20 } },
-  { id: 'void_harvester', name: 'Void Harvester', type: 'Void Heavy', slot: 'primary',
-    mag: 6, reserve: 24, damage: 130, fireRate: 700, reloadTime: 3000,
-    auto: false, pellets: 1, spread: 0.002, adsZoom: 42, bulletSpeed: 120, noReload: false,
-    bulletColor: 0x220033, bulletSize: 0.11, emissive: true,
-    ability: { name: 'Consume', cd: 22000, desc: 'Detonate all remnants · 15 m AOE 250 dmg', type: 'aoe', radius: 15, damage: 250, color: 0x440066, frostBurst: 40 } },
-  // ── 🌌 SCI-FI P2W SECONDARIES ────────────────────────────────────────────
-  { id: 'pulse_needle', name: 'Pulse Needle', type: 'Tracking Secondary', slot: 'secondary',
-    mag: 12, reserve: 36, damage: 14, fireRate: 110, reloadTime: 1500,
-    auto: true, pellets: 1, spread: 0.003, adsZoom: 50, bulletSpeed: 160, noReload: false,
-    bulletColor: 0xff66cc, bulletSize: 0.03,
-    ability: { name: 'Detonate', cd: 10000, desc: 'All pulse marks explode · 12-shot burst', type: 'fanfire', count: 12, delay: 30 } },
-  // ── 🪖 ADMIN PRIMARIES (locked behind unlock codes) ──────────────────────
   {
-    id: 'gau19', name: 'GAU-19 Heavy', type: 'Admin · Mounted MG', slot: 'primary',
-    mag: 500, reserve: 1000, damage: 50, fireRate: 18, reloadTime: 4000,
-    auto: true, pellets: 1, spread: 0.01, adsZoom: 50, bulletSpeed: 180, noReload: false,
-    bulletColor: 0xffaa22, bulletSize: 0.06, adminItem: true,
-    ability: { name: 'Sustained Fire', cd: 18000, desc: '8 s · double fire rate', type: 'buff', duration: 8000, rateMult: 0.5 },
+    id: 'slingshot',  name: 'Slingshot',  type: 'Secondary', slot: 'secondary',
+    // Was a one-shot pea-shooter: 24 damage, one round in the pouch and a reload
+    // between every shot, which is five reloads to kill one person and the worst
+    // sustained damage in the game. Now it is a firehose of gravel — 9 a hit but
+    // twenty a second and it never runs dry in a fight. Each pellet falls and
+    // bounces once, so it is lethal up close and has to be lobbed at range.
+    mag: 999,  reserve: 0,  damage: 9,  fireRate: 50,  reloadTime: 700,
+    auto: true,  pellets: 1, spread: 0.020, adsZoom: 48, bulletSpeed: 80, noReload: true,
+    arcShot: true, bounce: { maxBounces: 1, speedMult: 0.62 },
+    bulletColor: 0x9a8c72, bulletSize: 0.045,
+    ability: { name: 'Volley', cd: 8000, desc: 'Loose 5 pellets in a spread', type: 'multishot', count: 5, spread: 0.18 },
   },
   {
     id: 'mk44', name: 'MK-44 Bushmaster', type: 'Admin · Chain Gun', slot: 'primary',
@@ -1332,6 +1280,7 @@ const BLAST_RADIUS  = 7.5;   // m — how far an explosion can still shove you
 // is power / ln(1/BLAST_DECAY) ≈ power / 2.3) but keeps the arc readable.
 // Rocket jumping is the ride, not a hop.
 const BLAST_POWER   = 66.5;  // impulse at the very centre of the blast
+const BULLET_GRAVITY = 26;   // m/s^2 on arcing shots, scaled by their speed
 const BLAST_DECAY   = 0.10;  // fraction of horizontal blast speed left after 1 s
 // A point-blank charge used to hand you 65 m/s straight up -- an 88 m apex,
 // twenty-two times a normal jump, seven seconds of helpless hang time and a
@@ -14864,6 +14813,31 @@ let ASSIST = { autoShoot: false, aimAssist: false, aimbot: false, aiAim: false }
 try { const s = JSON.parse(localStorage.getItem('pvp_assist') || 'null'); if (s) ASSIST = { ...ASSIST, ...s }; } catch (e) {}
 function saveAssist() { try { localStorage.setItem('pvp_assist', JSON.stringify(ASSIST)); } catch (e) {} }
 
+let GAMEPLAY_SETTINGS = {
+  showFPS: true,
+  autoReload: false,
+  adsMode: 'toggle',
+  cameraShake: 1,
+  screenFx: 1,
+};
+try {
+  const saved = JSON.parse(localStorage.getItem('pvp_gameplay_settings') || 'null');
+  if (saved) GAMEPLAY_SETTINGS = { ...GAMEPLAY_SETTINGS, ...saved };
+} catch (e) {}
+function saveGameplaySettings() {
+  try { localStorage.setItem('pvp_gameplay_settings', JSON.stringify(GAMEPLAY_SETTINGS)); } catch (e) {}
+}
+function gameplaySettingMult(key) {
+  const v = Number(GAMEPLAY_SETTINGS[key]);
+  return Number.isFinite(v) ? Math.max(0, Math.min(1.5, v)) : 1;
+}
+function scaleCssAlpha(cssColor, mult) {
+  if (mult >= 0.99) return cssColor;
+  if (mult <= 0) return null;
+  return String(cssColor).replace(/rgba\(([^,]+),([^,]+),([^,]+),([^)]+)\)/i, (_, r, g, b, a) =>
+    `rgba(${r},${g},${b},${Math.max(0, Math.min(1, parseFloat(a) * mult)).toFixed(3)})`);
+}
+
 const _assistVel = new Map();   // entityId → { x, z, vx, vz } smoothed velocity (units/s)
 let _lastManualAimAt = 0;       // perf.now() of the player's last mouse-look input
 let _aimbotTimer = 0;           // seconds an opponent has been on screen (aimbot warm-up)
@@ -15146,7 +15120,8 @@ document.addEventListener('keydown', e => {
       showAnnouncement(switchbladeMode.toUpperCase(), switchbladeMode === 'knife' ? 'Melee · 50 dmg' : 'Ranged · 50 dmg', '#cc66ff', 900);
       updateSwitchbladeHUD();
     } else {
-      toggleADS();
+      if (GAMEPLAY_SETTINGS.adsMode === 'hold') setADS(true);
+      else toggleADS();
     }
   }
   // 🛋️ F in the lobby: start the duel pad you're on, or challenge the nearest cast
@@ -15193,6 +15168,10 @@ document.addEventListener('keydown', e => {
 document.addEventListener('keyup', e => {
   keys[e.code] = false;
   if (e.code==='Tab') showScoreboard(false);
+  if (e.code === 'KeyE' && GAMEPLAY_SETTINGS.adsMode === 'hold'
+      && isADS && activeSlot !== 'melee' && activeSlot !== 'support') {
+    setADS(false);
+  }
 });
 document.addEventListener('mousedown', e => {
   // Spectator: any click cycles to next ally
@@ -15368,6 +15347,10 @@ function equipActiveSlot() {
 
 // ── ADS ────────────────────────────────────────────────────────────────────
 function toggleADS() {
+  setADS(!isADS);
+}
+
+function setADS(on) {
   if (isDead) return;
   // Aiming is a GUN action. This function ends by forcing
   // weaponModels[currentWeaponIdx].visible = true, so calling it with a knife or
@@ -15375,7 +15358,7 @@ function toggleADS() {
   // actually holding — the knife vanished and a gun appeared. Any entry point
   // reaching here with melee/support equipped (E, right-click) hits this guard.
   if (activeSlot !== 'primary' && activeSlot !== 'secondary') return;
-  isADS = !isADS;
+  isADS = !!on;
   targetFOV = isADS ? currentWeapon.adsZoom : 75;
   setWeaponADSPos(isADS);
   const isSniperADS = isADS && currentWeapon.id === 'srx';
@@ -16686,10 +16669,16 @@ function fireCrossbowCharge() {
   if (now - lastShot < currentWeapon.fireRate) return;
   lastShot = now;
   pool.ammo--; ammo = pool.ammo; updateAmmoHUD();
+  if (GAMEPLAY_SETTINGS.autoReload && pool.ammo <= 0 && pool.reserve > 0 && !currentWeapon.noReload) {
+    setTimeout(() => {
+      const latest = weaponAmmo[currentWeaponIdx];
+      if (!reloading && latest && latest.ammo <= 0 && latest.reserve > 0) startReload();
+    }, 120);
+  }
 
   const model = weaponModels[currentWeaponIdx];
   triggerMuzzleBlast(model);
-  model.position.z += model._kickZ;
+  model.position.z += model._kickZ * gameplaySettingMult('cameraShake');
   setTimeout(() => { if (!reloading) model.position.z = (model._homePos ? model._homePos.z : -0.25); }, 80);
 
   const muzzleWorld = new THREE.Vector3();
@@ -16763,12 +16752,46 @@ function spawnSplatBombFX(origin) {
 }
 
 function flashScreen(cssColor, durationMs) {
+  cssColor = scaleCssAlpha(cssColor, gameplaySettingMult('screenFx'));
+  if (!cssColor) return;
   const div = document.createElement('div');
   div.style.cssText = `position:fixed;inset:0;background:${cssColor};pointer-events:none;z-index:999;transition:opacity ${durationMs}ms ease-out`;
   div.style.opacity = '1';
   document.body.appendChild(div);
   requestAnimationFrame(() => requestAnimationFrame(() => { div.style.opacity = '0'; }));
   setTimeout(() => div.remove(), durationMs + 60);
+}
+
+const fpsCounter = document.createElement('div');
+fpsCounter.id = 'fps-counter';
+fpsCounter.textContent = 'FPS: --';
+fpsCounter.style.cssText = [
+  'position:fixed',
+  'top:8px',
+  'left:8px',
+  'z-index:65',
+  'padding:3px 7px',
+  'border-radius:4px',
+  'background:rgba(0,0,0,0.45)',
+  'color:#8dff9a',
+  'font:700 13px/1.1 monospace',
+  'text-shadow:0 1px 2px #000',
+  'pointer-events:none',
+  'user-select:none'
+].join(';');
+document.body.appendChild(fpsCounter);
+
+let fpsFrameCount = 0;
+let fpsLastSample = performance.now();
+function updateFPSCounter(now) {
+  fpsCounter.style.display = GAMEPLAY_SETTINGS.showFPS ? 'block' : 'none';
+  if (!GAMEPLAY_SETTINGS.showFPS) return;
+  fpsFrameCount++;
+  const elapsed = now - fpsLastSample;
+  if (elapsed < 250) return;
+  fpsCounter.textContent = `FPS: ${Math.round((fpsFrameCount * 1000) / elapsed)}`;
+  fpsFrameCount = 0;
+  fpsLastSample = now;
 }
 
 function spawnAbilityAOEFX(pos, radius, color) {
@@ -16933,12 +16956,18 @@ function tryShoot() {
   if (!adminInfAmmo) pool.ammo--; // ⚡ admin infinite ammo: don't decrement
   ammo = pool.ammo;
   updateAmmoHUD();
+  if (GAMEPLAY_SETTINGS.autoReload && pool.ammo <= 0 && pool.reserve > 0 && !currentWeapon.noReload) {
+    setTimeout(() => {
+      const latest = weaponAmmo[currentWeaponIdx];
+      if (!reloading && latest && latest.ammo <= 0 && latest.reserve > 0) startReload();
+    }, 120);
+  }
   expireSpawnShield(); // firing breaks the spawn shield
   if (match?.type === 'range') { rangeStats.shots++; updateRangeHUD(); updateMatchHUD(); }
 
   const model = weaponModels[currentWeaponIdx];
   triggerMuzzleBlast(model);
-  model.position.z += model._kickZ;
+  model.position.z += model._kickZ * gameplaySettingMult('cameraShake');
   setTimeout(() => { if (!reloading) model.position.z = (model._homePos ? model._homePos.z : -0.25); }, 80);
 
   const muzzleWorld = new THREE.Vector3();
@@ -19444,6 +19473,16 @@ function updateBullets(dt) {
       }
     }
 
+    // Projectiles that fall. arcShot has been in the weapon table since the
+    // Mortar Rifle was added and was never read by anything, so nothing in the
+    // game actually arced. A pellet that drops has to be aimed high and led,
+    // which is what makes a slow lobbed weapon feel different to a rifle.
+    const _wArc = b._arc !== undefined ? b._arc : (b._arc =
+      (WEAPONS.find(w => w.id === b.weaponId)?.arcShot ? 1 : 0));
+    if (_wArc && !b.isPaintBomb) {
+      b.dir.y -= (BULLET_GRAVITY / Math.max(20, b.speed)) * dt;
+    }
+
     // Paint bomb: gravity + ground impact
     if (b.isPaintBomb) {
       b.dir.y -= 9.8 * dt; // arc gravity
@@ -19552,20 +19591,18 @@ function updateBullets(dt) {
           // Initialize bounces remaining
           if (b.bouncesLeft == null) b.bouncesLeft = wSpec.bounce.maxBounces;
           b.bouncesLeft--;
-          // Reflect direction: figure out which axis hit (X or Z slab) and flip that component.
-          // Cheap heuristic: choose axis with greater normal magnitude (use mesh delta vs box center).
-          // Walls in this game are axis-aligned boxes — we can pick the dominant axis of approach.
-          // Find which box was hit by walking through wallColliders again to identify it:
-          for (const box of wallColliders) {
-            if (wallHitPt.x >= box.min.x - 0.05 && wallHitPt.x <= box.max.x + 0.05 &&
-                wallHitPt.z >= box.min.z - 0.05 && wallHitPt.z <= box.max.z + 0.05) {
-              // Determine which face: compare distance from hit point to each face
-              const distX = Math.min(Math.abs(wallHitPt.x - box.min.x), Math.abs(wallHitPt.x - box.max.x));
-              const distZ = Math.min(Math.abs(wallHitPt.z - box.min.z), Math.abs(wallHitPt.z - box.max.z));
-              if (distX < distZ) b.dir.x = -b.dir.x; else b.dir.z = -b.dir.z;
-              break;
-            }
-          }
+          // Reflect off the surface that was actually hit: d' = d - 2(d.n)n.
+          // This used to re-walk wallColliders to find the box and flip either X
+          // or Z, whichever face was nearer. That could not bounce off the FLOOR
+          // at all — the ground is a plane test, not a box, so the search found
+          // nothing and the pellet carried straight on through its own bounce —
+          // and a shot into the top of a crate flipped sideways instead of up.
+          // The normal is already worked out when the hit is found.
+          const dn = b.dir.x * wallHitNormal.x + b.dir.y * wallHitNormal.y + b.dir.z * wallHitNormal.z;
+          b.dir.x -= 2 * dn * wallHitNormal.x;
+          b.dir.y -= 2 * dn * wallHitNormal.y;
+          b.dir.z -= 2 * dn * wallHitNormal.z;
+          b.dir.normalize();
           // Move the bullet slightly off the wall so it doesn't immediately re-collide
           b.mesh.position.copy(wallHitPt).addScaledVector(b.dir, 0.15);
           // Speed up per bounce
@@ -25415,6 +25452,7 @@ function startLoop() { if (loopStarted) return; loopStarted = true; loop(); }
 function loop() {
   requestAnimationFrame(loop);
   const now = performance.now();
+  updateFPSCounter(now);
   const dt = Math.min((now-lastTime)/1000, 0.05);
   lastTime = now;
   updateMovement(dt);
@@ -26619,25 +26657,64 @@ function openSettingsHub() {
   if (!panel) {
     panel = document.createElement('div');
     panel.id = 'settings-hub-panel';
-    panel.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9900;background:#0f1a18;border:2px solid #44cc99;border-radius:8px;padding:22px;color:#fff;font-family:"Courier New",monospace;min-width:320px;box-shadow:0 4px 30px rgba(0,0,0,0.6);';
+    panel.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9900;background:#0f1a18;border:2px solid #44cc99;border-radius:8px;padding:22px;color:#fff;font-family:"Courier New",monospace;min-width:380px;max-width:520px;box-shadow:0 4px 30px rgba(0,0,0,0.6);';
     document.body.appendChild(panel);
   }
-  const hasGameplay = typeof openGameplaySettingsPanel === 'function';
+  const toggleRow = (key, label) => `
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin:10px 0;padding:10px;background:rgba(255,255,255,0.035);border:1px solid #244c42;border-radius:6px;">
+      <div style="font-size:12px;letter-spacing:2px;color:#d8fff2;">${label}</div>
+      <button data-settings-toggle="${key}" style="min-width:66px;padding:7px 10px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:bold;letter-spacing:2px;border-radius:4px;background:${GAMEPLAY_SETTINGS[key] ? '#1f5a3a' : '#1f2422'};color:${GAMEPLAY_SETTINGS[key] ? '#88ffcc' : '#a0aaa6'};border:2px solid ${GAMEPLAY_SETTINGS[key] ? '#44cc99' : '#46544f'};">${GAMEPLAY_SETTINGS[key] ? 'ON' : 'OFF'}</button>
+    </div>`;
+  const rangeRow = (key, label) => `
+    <div style="margin:12px 0;padding:10px;background:rgba(255,255,255,0.035);border:1px solid #244c42;border-radius:6px;">
+      <div style="display:flex;justify-content:space-between;font-size:12px;letter-spacing:2px;color:#d8fff2;">
+        <span>${label}</span><span id="settings-${key}-val" style="color:#88ffcc;">${Number(GAMEPLAY_SETTINGS[key]).toFixed(2)}x</span>
+      </div>
+      <input data-settings-range="${key}" type="range" min="0" max="1.5" step="0.05" value="${GAMEPLAY_SETTINGS[key]}" style="width:100%;margin-top:8px;">
+    </div>`;
   panel.style.display = 'block';
   panel.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;border-bottom:1px solid #276b55;padding-bottom:10px;">
       <div style="font-size:18px;letter-spacing:3px;color:#88ffcc;">⚙ SETTINGS</div>
       <button id="settings-hub-close" style="background:#1f2a27;color:#ffaaaa;border:1px solid #ff6666;padding:4px 10px;cursor:pointer;font-family:inherit;border-radius:3px;">✕</button>
     </div>
+    ${toggleRow('showFPS', 'SHOW FPS')}
+    ${toggleRow('autoReload', 'AUTO RELOAD')}
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin:10px 0;padding:10px;background:rgba(255,255,255,0.035);border:1px solid #244c42;border-radius:6px;">
+      <div style="font-size:12px;letter-spacing:2px;color:#d8fff2;">ADS MODE</div>
+      <button id="settings-ads-mode" style="min-width:92px;padding:7px 10px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:bold;letter-spacing:2px;border-radius:4px;background:#132a24;color:#88ffcc;border:2px solid #44cc99;">${String(GAMEPLAY_SETTINGS.adsMode).toUpperCase()}</button>
+    </div>
+    ${rangeRow('cameraShake', 'CAMERA SHAKE')}
+    ${rangeRow('screenFx', 'SCREEN EFFECTS')}
+    <div style="height:1px;background:#276b55;margin:16px 0 12px;"></div>
     <button id="settings-shoot-fx" style="display:block;width:100%;margin:8px 0;padding:12px;background:#2a1a3a;color:#cc99ff;border:1px solid #aa77ff;cursor:pointer;font-family:inherit;letter-spacing:2px;border-radius:4px;">🔊 SHOOT FX</button>
     <button id="settings-aim-assist" style="display:block;width:100%;margin:8px 0;padding:12px;background:#3a1a1a;color:#ff9988;border:1px solid #ff5544;cursor:pointer;font-family:inherit;letter-spacing:2px;border-radius:4px;">🎯 AIM ASSIST</button>
-    ${hasGameplay ? '<button id="settings-gameplay" style="display:block;width:100%;margin:8px 0;padding:12px;background:#132a24;color:#88ffcc;border:1px solid #44cc99;cursor:pointer;font-family:inherit;letter-spacing:2px;border-radius:4px;">⚙ GAMEPLAY</button>' : ''}
   `;
   document.getElementById('settings-hub-close').addEventListener('click', () => panel.style.display = 'none');
+  panel.querySelectorAll('[data-settings-toggle]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      GAMEPLAY_SETTINGS[btn.dataset.settingsToggle] = !GAMEPLAY_SETTINGS[btn.dataset.settingsToggle];
+      saveGameplaySettings();
+      openSettingsHub();
+    });
+  });
+  document.getElementById('settings-ads-mode').addEventListener('click', () => {
+    GAMEPLAY_SETTINGS.adsMode = GAMEPLAY_SETTINGS.adsMode === 'hold' ? 'toggle' : 'hold';
+    if (GAMEPLAY_SETTINGS.adsMode === 'toggle' && isADS) setADS(false);
+    saveGameplaySettings();
+    openSettingsHub();
+  });
+  panel.querySelectorAll('[data-settings-range]').forEach(input => {
+    input.addEventListener('input', () => {
+      const key = input.dataset.settingsRange;
+      GAMEPLAY_SETTINGS[key] = parseFloat(input.value);
+      const val = document.getElementById(`settings-${key}-val`);
+      if (val) val.textContent = Number(GAMEPLAY_SETTINGS[key]).toFixed(2) + 'x';
+      saveGameplaySettings();
+    });
+  });
   document.getElementById('settings-shoot-fx').addEventListener('click', () => { panel.style.display = 'none'; openShootFxPanel(); });
   document.getElementById('settings-aim-assist').addEventListener('click', () => { panel.style.display = 'none'; openAimAssistPanel(); });
-  const gp = document.getElementById('settings-gameplay');
-  if (gp) gp.addEventListener('click', () => { panel.style.display = 'none'; openGameplaySettingsPanel(); });
 }
 
 function showFloatingSettingsButton(show) {
