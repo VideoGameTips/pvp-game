@@ -2687,37 +2687,61 @@ function playNoise(ctx, start, dur, outNode, volume, tone = 0.5) {
 // it back: a couple of hard slaps off nearby buildings, then a wash rolling
 // away. Every shot was bone dry, which is most of why they sounded like they
 // happened inside a cupboard rather than on a street.
-let _revBus = null;
-function getReverbBus(ctx) {
-  if (_revBus) return _revBus;
+// Two of them, because they are not the same sound. Indoors the walls are
+// close: a dense cluster of early reflections, bright, and gone quickly. Out on
+// a street the nearest hard surface is tens of metres away, so you get silence,
+// then a few distinct slaps off buildings, then a long thin decay rolling across
+// open ground. One reverb cannot be both, and most of these maps are outdoors.
+const INDOOR_MAPS = new Set([
+  'warehouse', 'supermarket', 'space', 'orbital_station', 'sewer', 'gravity_lab',
+  'glassworks', 'airport', 'foundry', 'lockdown', 'studio', 'opera', 'labyrinth',
+  'train', 'temple', 'biosphere', 'lobby13', 'range',
+]);   // everything else -- urban, forest, trenches, desert, tundra, the rest -- is outside
+const _revBus = { indoor: null, outdoor: null };
+function getReverbBus(ctx, indoor) {
+  const key = indoor ? 'indoor' : 'outdoor';
+  if (_revBus[key]) return _revBus[key];
   const input = ctx.createGain();
-  // Impulse response: decaying noise, two channels so the wash has width.
-  const len = Math.floor(ctx.sampleRate * 1.1);
+  const secs = indoor ? 1.1 : 2.0;
+  const len = Math.floor(ctx.sampleRate * secs);
   const ir = ctx.createBuffer(2, len, ctx.sampleRate);
   for (let ch = 0; ch < 2; ch++) {
     const d = ir.getChannelData(ch);
     for (let i = 0; i < len; i++) {
       const t = i / len;
-      // Early reflections cluster in the first 80 ms, then a smooth tail.
-      const early = t < 0.07 ? (1 + Math.random() * 2.2) : 1;
-      d[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, 2.6) * early * 0.55;
+      if (indoor) {
+        // Close walls: energy piles up in the first 80 ms and decays fast.
+        const early = t < 0.07 ? (1 + Math.random() * 2.2) : 1;
+        d[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, 2.6) * early * 0.55;
+      } else {
+        // Open ground: almost nothing early -- there is no wall to reflect off
+        // for the first 40 ms -- then a long, thin, sparse decay.
+        const gap = t < 0.02 ? t / 0.02 : 1;
+        d[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, 1.5) * gap * 0.26;
+      }
     }
   }
   const conv = ctx.createConvolver();
   conv.buffer = ir;
-  const wash = ctx.createGain(); wash.gain.value = 0.9;
+  const wash = ctx.createGain(); wash.gain.value = indoor ? 0.9 : 0.62;
   const washCut = ctx.createBiquadFilter();
-  washCut.type = 'lowpass'; washCut.frequency.value = 2600;   // distance eats the top
+  washCut.type = 'lowpass';
+  // Distance eats the top, and outdoors there is much more distance.
+  washCut.frequency.value = indoor ? 2600 : 1250;
   input.connect(conv).connect(washCut).connect(wash).connect(ctx.destination);
-  // Two discrete slaps — the crack coming back off hard surfaces. These are
-  // what make it read as OUTDOORS rather than as a reverb preset.
-  [[0.085, 0.34, 1700], [0.185, 0.17, 1100]].forEach(([time, gain, cut]) => {
+  // The discrete slaps. Indoors they come back almost immediately off near
+  // walls; outdoors they are the crack returning off buildings across the map,
+  // later, darker and further apart. These are what actually place the shot.
+  const slaps = indoor
+    ? [[0.085, 0.34, 1700], [0.185, 0.17, 1100]]
+    : [[0.165, 0.30, 1150], [0.315, 0.19, 820], [0.520, 0.10, 620]];
+  slaps.forEach(([time, gain, cut]) => {
     const dl = ctx.createDelay(1.0); dl.delayTime.value = time;
     const g = ctx.createGain(); g.gain.value = gain;
     const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = cut; f.Q.value = 0.6;
     input.connect(dl).connect(f).connect(g).connect(ctx.destination);
   });
-  _revBus = input;
+  _revBus[key] = input;
   return input;
 }
 
@@ -2821,56 +2845,56 @@ function playMuzzleBlast(ctx, start, outNode, kind, volume) {
 
   if (kind === 'boom') {                       // shotguns
     CRACK(volume * 1.15, 2700, 0.008);
-    BLAST(volume * 1.25, 4400, 320, 0.110);
+    BLAST(volume * 1.25, 5192, 378, 0.110);
     PFN(start, 0.055, volume * 0.88, 'bandpass', 700, 0.6);
-    PT(start, 0.082, 200, 58, volume * 0.72, 'triangle');
+    PT(start, 0.082, 230, 67, volume * 0.72, 'triangle');
     TAIL(volume * 0.32, 0.44, 620);
   } else if (kind === 'crack') {               // rifles, snipers
     CRACK(volume * 1.50, 3500, 0.005);
-    BLAST(volume * 1.05, 6000, 470, 0.062);
+    BLAST(volume * 1.05, 7080, 555, 0.062);
     PFN(start, 0.038, volume * 0.78, 'bandpass', 1120, 0.7);
-    PT(start, 0.056, 240, 72, volume * 0.50, 'triangle');
+    PT(start, 0.056, 276, 83, volume * 0.50, 'triangle');
     TAIL(volume * 0.34, 0.52, 760);
   } else if (kind === 'pistol') {
     CRACK(volume * 1.28, 3200, 0.005);
-    BLAST(volume * 0.95, 5400, 540, 0.047);
+    BLAST(volume * 0.95, 6372, 637, 0.047);
     PFN(start, 0.032, volume * 0.76, 'bandpass', 1300, 0.7);
-    PT(start, 0.044, 230, 74, volume * 0.44, 'triangle');
+    PT(start, 0.044, 264, 85, volume * 0.44, 'triangle');
     TAIL(volume * 0.26, 0.30, 880);
   } else if (kind === 'auto_blast') {          // SMGs and autos
     CRACK(volume * 1.32, 3100, 0.004);
-    BLAST(volume * 1.00, 5500, 500, 0.042);
+    BLAST(volume * 1.00, 6490, 590, 0.042);
     PFN(start, 0.028, volume * 0.72, 'bandpass', 1220, 0.5);
-    PT(start, 0.040, 225, 70, volume * 0.40, 'triangle');
+    PT(start, 0.040, 259, 80, volume * 0.40, 'triangle');
     TAIL(volume * 0.21, 0.24, 800);
   } else if (kind === 'auto_blast_heavy') {    // LMGs, miniguns
     CRACK(volume * 1.28, 2750, 0.006);
-    BLAST(volume * 1.10, 4700, 380, 0.068);
+    BLAST(volume * 1.10, 5546, 448, 0.068);
     PFN(start, 0.038, volume * 0.76, 'bandpass', 960, 0.55);
-    PT(start, 0.060, 208, 62, volume * 0.58, 'triangle');
+    PT(start, 0.060, 239, 71, volume * 0.58, 'triangle');
     TAIL(volume * 0.28, 0.36, 600);
   } else if (kind === 'tick' || kind === 'p90') {
     CRACK(volume * 1.35, kind === 'p90' ? 4200 : 3700, 0.004);
-    BLAST(volume * 0.70, 6800, 900, 0.026);
+    BLAST(volume * 0.70, 8024, 1062, 0.026);
     PFN(start, 0.022, volume * 0.60, 'bandpass', kind === 'p90' ? 2100 : 1700, 0.55);
     TAIL(volume * 0.13, 0.16, 1100);
   } else if (kind === 'heavy') {
     CRACK(volume * 1.24, 2550, 0.007);
-    BLAST(volume * 1.15, 4200, 340, 0.078);
+    BLAST(volume * 1.15, 4956, 401, 0.078);
     PFN(start, 0.046, volume * 0.80, 'bandpass', 880, 0.65);
-    PT(start, 0.070, 212, 62, volume * 0.62, 'triangle');
+    PT(start, 0.070, 244, 71, volume * 0.62, 'triangle');
     TAIL(volume * 0.32, 0.42, 580);
   } else if (kind === 'thump') {
     CRACK(volume * 0.70, 2300, 0.006);
-    BLAST(volume * 1.00, 3600, 300, 0.100);
+    BLAST(volume * 1.00, 4248, 354, 0.100);
     PFN(start, 0.080, volume * 0.55, 'lowpass', 820, 0.7);
-    PT(start, 0.095, 180, 52, volume * 0.40, 'triangle');
+    PT(start, 0.095, 207, 60, volume * 0.40, 'triangle');
     TAIL(volume * 0.28, 0.45, 460);
   } else {                                     // the default rifle
     CRACK(volume * 1.40, 3400, 0.005);
-    BLAST(volume * 1.05, 5600, 440, 0.057);
+    BLAST(volume * 1.05, 6608, 519, 0.057);
     PFN(start, 0.034, volume * 0.75, 'bandpass', 1180, 0.6);
-    PT(start, 0.052, 235, 70, volume * 0.48, 'triangle');
+    PT(start, 0.052, 270, 80, volume * 0.48, 'triangle');
     TAIL(volume * 0.32, 0.40, 780);
   }
 }
@@ -2965,9 +2989,10 @@ function playWeaponSound(idOrWeapon, opts = {}) {
   // Send to the shared echo bus. Someone else's shot across the map gets more
   // of it than your own does, because that is what distance sounds like.
   try {
+    const indoor = INDOOR_MAPS.has(typeof activeMapName !== 'undefined' ? activeMapName : '');
     const send = ctx.createGain();
-    send.gain.value = (opts.remote ? 0.42 : 0.22) * distGain;
-    mainGain.connect(send).connect(getReverbBus(ctx));
+    send.gain.value = (opts.remote ? 0.42 : 0.22) * distGain * (indoor ? 1 : 1.15);
+    mainGain.connect(send).connect(getReverbBus(ctx, indoor));
   } catch (e) {}
 
   if (p.kind === 'auto_blast' || p.kind === 'auto_blast_heavy') {
