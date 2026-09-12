@@ -39,7 +39,11 @@ const socket = io(SERVER.socketUrl, { path: SERVER.socketPath });
 const WEAPONS = [
   {
     id: 'ak20',  name: 'AK20',  type: 'AR', slot: 'primary',
-    mag: 30,  reserve: 90,  damage: 25, fireRate: 150,  reloadTime: 2000,
+    // Buffed to sit at the top of the roster. Spread was already 0 and there is
+    // no recoil or bloom anywhere in the fire path, so it was always pin
+    // accurate; headshots are already x2 for every weapon. The levers that
+    // actually moved are damage (x1.5) and reload (x1.5 faster).
+    mag: 30,  reserve: 90,  damage: 38, fireRate: 150,  reloadTime: 1333,
     auto: true,  pellets: 1, spread: 0,    adsZoom: 45, bulletSpeed: 120, noReload: false,
     ability: { name: 'Focus Fire', cd: 8000, desc: '3s · laser-accurate · +40% dmg', type: 'buff', duration: 3000, spreadMult: 0, dmgMult: 1.4 },
   },
@@ -25909,7 +25913,86 @@ function renderShopItems(body, slot) {
   }
 }
 
-// ── 📋 Best Loadouts: 30 curated meta builds ────────────────────────────
+// ── 📋 Balanced rankings + Best Loadouts ────────────────────────────────
+function _rankClamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+function weaponDPS(w) {
+  return (w.damage || 0) * (w.pellets || 1) * (1000 / Math.max(20, w.fireRate || 200));
+}
+function weaponSustainDPS(w) {
+  const shots = Math.max(1, w.mag || 1);
+  const cycle = w.noReload ? (shots * Math.max(20, w.fireRate || 200)) : (shots * Math.max(20, w.fireRate || 200) + Math.max(0, w.reloadTime || 0));
+  return ((w.damage || 0) * (w.pellets || 1) * shots) / Math.max(0.1, cycle / 1000);
+}
+function abilityValue(ab) {
+  if (!ab) return 0;
+  let v = 0;
+  if (ab.damage) v += Math.min(60, ab.damage * 0.45);
+  if (ab.radius) v += Math.min(28, ab.radius * 4);
+  if (ab.count) v += Math.min(32, ab.count * 4);
+  if (ab.dmgMult) v += 18 * (ab.dmgMult - 1);
+  if (ab.rateMult && ab.rateMult < 1) v += 12;
+  if (ab.speedMult && ab.speedMult > 1) v += Math.min(22, ab.speedMult * 3);
+  if (ab.reveal || ab.empDur || ab.stunDur || ab.launchVel || ab.antiGrav || ab.trafficStop) v += 22;
+  if (ab.foamFortress || ab.deflect || ab.type === 'melee_parry') v += 18;
+  return v;
+}
+function balancedGunScore(w) {
+  const burst = weaponDPS(w);
+  const sustain = weaponSustainDPS(w);
+  const spread = Math.max(0, w.spread || 0);
+  const pellets = Math.max(1, w.pellets || 1);
+  const accuracy = _rankClamp(1 - spread * (pellets > 1 ? 2.6 : 15), 0.22, 1);
+  const projectile = _rankClamp((w.bulletSpeed || 100) / 160, 0.25, 1.8);
+  const mag = _rankClamp((w.mag || 1) / 40, 0.3, 2.0);
+  const reload = w.noReload ? 1.25 : _rankClamp(2400 / Math.max(700, w.reloadTime || 2200), 0.55, 1.45);
+  const speedFeel = projectile * (spread > 0.025 ? 0.86 : 1);
+  const utility = abilityValue(w.ability) + (w.bounce ? 12 : 0) + (w.poisonOnHit || w.burnOnHit || w.bleedOnHit ? 18 : 0) + (w.frostSlow ? 18 : 0);
+  return Math.round((burst * 0.38 + sustain * 0.32) * accuracy + speedFeel * 42 + mag * 8 + reload * 12 + utility);
+}
+function balancedMeleeScore(m) {
+  const dps = (m.damage || 0) * (1000 / Math.max(120, m.cooldown || 450));
+  const range = _rankClamp((m.range || 1.5) / 2.2, 0.6, 1.9);
+  const speed = _rankClamp(m.speedMult || 1, 0.9, 2.2);
+  const traits = (m.shield ? 26 : 0) + (m.doubleJump ? 24 : 0) + (m.aoeOnSwing ? 22 : 0) +
+    (m.healOnHit || m.lifestealOnHit ? 20 : 0) + (m.chainOnHit ? 16 : 0) +
+    (m.launchOnHit ? 12 : 0) + (m.bleedOnHit || m.burnOnHit ? 14 : 0);
+  return Math.round(dps * 0.58 + range * 32 + speed * 34 + abilityValue(m.ability) + traits);
+}
+function balancedUtilityScore(u) {
+  const uses = Math.max(1, u.uses || 1);
+  const dmg = (u.damage || 0) * uses;
+  const heal = (u.heal || 0) * uses + (u.healPerSec || 0) * ((u.shieldDur || 0) / 1000);
+  const burst = (u.burst || 1) * (u.damage || 0) * 0.45;
+  const area = (u.radius || u.empRadius || u.stunRadius || u.burnRadius || u.nukeRadius || 0) * 10;
+  const mobility = (u.blink || 0) * 7 + (u.speedBuff ? (u.speedBuff - 1) * 55 : 0) + (u.bounceVel || 0) * 4;
+  const control = (u.empDur || u.stunDur || 0) / 100 + (u.isTripwire ? 18 : 0) + (u.decoyDur ? 18 : 0) + (u.magnetRadius ? 20 : 0);
+  const deploy = (u.droneDur ? 28 : 0) + (u.coilDur ? 24 : 0) + (u.swarmDur ? 24 : 0);
+  const cooldown = _rankClamp(1400 / Math.max(500, u.cooldown || 1000), 0.65, 1.5);
+  return Math.round((dmg * 0.5 + heal * 0.85 + burst + area + mobility + control + deploy) * cooldown);
+}
+function rankedItems(kind, limit = 10) {
+  let items;
+  if (kind === 'primary') items = WEAPONS.filter(w => w.slot !== 'secondary' && !w.ddayOnly && !w.adminItem);
+  else if (kind === 'secondary') items = WEAPONS.filter(w => w.slot === 'secondary' && !w.ddayOnly && !w.adminItem);
+  else if (kind === 'melee') items = MELEE_ITEMS.filter(m => !m.adminItem);
+  else items = SUPPORT_ITEMS.filter(u => !u.adminItem);
+  const scoreFn = kind === 'melee' ? balancedMeleeScore : kind === 'utility' ? balancedUtilityScore : balancedGunScore;
+  return items.map(item => ({ item, score: scoreFn(item) }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
+}
+function rankingBlock(title, kind) {
+  return `<div style="margin:10px 0 14px;">
+    <div style="font-size:11px;color:#ffcc66;letter-spacing:2px;margin-bottom:6px;">${title}</div>
+    ${rankedItems(kind, 8).map((r, i) => {
+      const owned = isOwned(r.item.id);
+      return `<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;background:${owned ? 'rgba(255,255,255,0.04)' : 'rgba(80,40,20,0.11)'};border:1px solid #333;border-radius:4px;padding:5px 7px;margin-bottom:3px;">
+        <span style="font-size:10px;color:${owned ? '#ddd' : '#aa8866'};">${i + 1}. ${r.item.name}</span>
+        <span style="font-size:9px;color:#88ccff;">${r.score}</span>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
 const BEST_LOADOUTS = [
   { icon:'🏆', name:'The Lockdown',            desc:'Tournament-grade fundamentals', p:'burst',              s:'revolver',         m:'knife',          u:'medkit' },
   { icon:'⚡', name:'Caffeine Crash',          desc:'Outrun every bullet',           p:'vector',             s:'machine_pistol',   m:'knife',          u:'adrenaline' },
@@ -25985,7 +26068,17 @@ function toggleBestLoadoutsPanel(show) {
       <div style="font-size:16px;color:#ffcc66;letter-spacing:3px;">📋 BEST LOADOUTS</div>
       <button id="best-close" style="padding:4px 10px;background:#3a1a1a;color:#ff8888;border:1px solid #ff4444;cursor:pointer;font-family:inherit;font-size:11px;border-radius:4px;">✕</button>
     </div>
-    <div style="font-size:10px;color:#888;margin-bottom:14px;">30 curated meta builds — tap to equip. Missing items show in the shop.</div>
+    <div style="font-size:10px;color:#9db;margin-bottom:10px;line-height:1.45;">
+      Re-ranked from Claude's DPS-only list: score now blends DPS, sustain, spread/accuracy, projectile speed,
+      reload/magazine feel, melee movement/range, and utility impact.
+    </div>
+    <div style="background:rgba(255,204,102,0.05);border:1px solid #443822;border-radius:6px;padding:10px;margin-bottom:14px;">
+      ${rankingBlock('PRIMARY WEAPONS', 'primary')}
+      ${rankingBlock('SECONDARIES', 'secondary')}
+      ${rankingBlock('MELEES', 'melee')}
+      ${rankingBlock('UTILITIES', 'utility')}
+    </div>
+    <div style="font-size:10px;color:#888;margin:12px 0 14px;">Curated meta builds - tap to equip. Missing items show in the shop.</div>
     ${BEST_LOADOUTS.map((L, i) => {
       const allOwned = isOwned(L.p) && isOwned(L.s) && isOwned(L.m) && isOwned(L.u);
       return `<div data-idx="${i}" class="bl-card" style="background:${allOwned ? '#0f1018' : '#1a0f0f'};border:1px solid ${allOwned ? '#444' : '#553'};border-left:3px solid ${allOwned ? '#ffcc66' : '#666'};padding:8px 10px;margin-bottom:6px;cursor:pointer;border-radius:4px;">

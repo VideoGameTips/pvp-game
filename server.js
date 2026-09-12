@@ -1091,9 +1091,22 @@ function tryPairPvpQueue(mode) {
 
 // Weapon damage table (must match client WEAPONS array)
 const WEAPON_DAMAGE = {
+  // Mirrored from WEAPONS[] in public/game.js — CLAUDE.md gotcha #4. Without an
+  // entry here the server falls back to || 25, so these ten all dealt 25 in PvP
+  // regardless of what the game told the player.
+  snub_revolver: 32,
+  duelist_pistol: 90,
+  mauser: 24,
+  nail_gun: 18,
+  boomstick: 35,
+  signal_pistol: 70,
+  throwing_axes: 70,
+  boomerang: 35,
+  traffic_cone: 38,
+  cream_pie: 34,
   slingshot: 9,   // mirrors WEAPONS[] in public/game.js — see CLAUDE.md gotcha #4
   // Primaries
-  ak20: 25,  sg8: 18,
+  ak20: 38,  sg8: 18,
   srx: 95, rpd: 10, mp40: 15, p90: 5,
   paintball: 40, burst: 21, lever: 62,
   vector: 12, crossbow: 80, flamethrower: 6,
