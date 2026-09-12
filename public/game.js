@@ -2880,56 +2880,67 @@ function playMuzzleBlast(ctx, start, outNode, kind, volume) {
 // high-Q resonances: a dead impact plus two ringing partials, which is what
 // separates "metal" from "click".
 function metalClack(ctx, at, outNode, vol, freq, ringDur = 0.055) {
-  playFilteredNoise(ctx, at, 0.004, outNode, vol, 'bandpass', freq * 0.8, 1.0, 0.0002, 0);
-  playFilteredNoise(ctx, at, ringDur, outNode, vol * 0.55, 'bandpass', freq, 11, 0.0004, 1.2);
-  playFilteredNoise(ctx, at, ringDur * 0.7, outNode, vol * 0.30, 'bandpass', freq * 1.87, 14, 0.0004, 1.4);
+  // A low thud under the ring gives the part some mass. Without it a clack at
+  // any pitch sounds like a pen on a desk rather than a bolt carrier.
+  playFilteredNoise(ctx, at, 0.020, outNode, vol * 0.60, 'lowpass', freq * 0.45, 0.9, 0.0003, 1.6);
+  playFilteredNoise(ctx, at, 0.005, outNode, vol * 0.95, 'bandpass', freq * 0.8, 1.0, 0.0002, 0);
+  playFilteredNoise(ctx, at, ringDur, outNode, vol * 0.60, 'bandpass', freq, 11, 0.0004, 1.2);
+  playFilteredNoise(ctx, at, ringDur * 0.7, outNode, vol * 0.26, 'bandpass', freq * 1.87, 14, 0.0004, 1.4);
 }
 // The case landing, well after everything else. Nobody notices it consciously;
 // its absence is part of why the old shots felt like they came from nothing.
 function brassDrop(ctx, at, outNode, vol) {
   for (let i = 0; i < 2; i++) {
     const t = at + 0.34 + Math.random() * 0.22 + i * (0.06 + Math.random() * 0.05);
-    const f = 3800 + Math.random() * 2400;
+    const f = 2900 + Math.random() * 1900;
     playFilteredNoise(ctx, t, 0.030, outNode, vol * (i ? 0.45 : 1), 'bandpass', f, 13, 0.0003, 1.6);
   }
 }
 function playGunAction(ctx, start, outNode, action, volume) {
   if (!action) return;
   const waterAction = action === 'water_smg' || action === 'water_rifle' || action === 'water_belt';
-  // Roughly three times what these used to be. The mechanism is half the
-  // character of a gun and it was mixed almost to silence.
-  const V = volume * (waterAction ? 0.34 : 0.85);
+  // Loud. The mechanism is half the character of a gun and it was mixed at a
+  // fifth of the shot's level. Measured by energy rather than by peak -- the
+  // thud under each clack spreads its energy instead of spiking it, so peak
+  // badly understates how much louder this is -- 2.9 comes out 3.3x the old
+  // level and peaks at 39% of the shot. 3.6 was tried and starts competing with
+  // the bang rather than sitting with it.
+  const V = volume * (waterAction ? 0.40 : 2.9);
+  // And it starts with the shot, not after it. These used to wait 28-115 ms,
+  // which reads as a separate event happening later; the steel actually begins
+  // moving while the muzzle is still flashing. Everything here is pulled to
+  // within a few milliseconds of the blast, with only the return stroke behind.
   if (action === 'shotgun') {
-    metalClack(ctx, start + 0.115, outNode, V * 0.95, 780, 0.075);   // pump back
-    metalClack(ctx, start + 0.150, outNode, V * 0.50, 1400, 0.040);  // shell out
-    metalClack(ctx, start + 0.215, outNode, V * 1.00, 620, 0.085);   // pump forward, lock up
-    brassDrop(ctx, start + 0.10, outNode, V * 0.35);
+    metalClack(ctx, start + 0.006, outNode, V * 1.00, 520, 0.085);   // action unlocks
+    metalClack(ctx, start + 0.052, outNode, V * 0.52, 900, 0.045);   // shell out
+    metalClack(ctx, start + 0.100, outNode, V * 0.95, 420, 0.095);   // forward, locked
+    brassDrop(ctx, start + 0.10, outNode, V * 0.22);
   } else if (action === 'bolt') {
-    metalClack(ctx, start + 0.135, outNode, V * 0.85, 1250, 0.070);  // lift and pull
-    metalClack(ctx, start + 0.205, outNode, V * 0.45, 2050, 0.035);  // extract
-    metalClack(ctx, start + 0.285, outNode, V * 0.95, 900, 0.080);   // push and lock
-    brassDrop(ctx, start + 0.16, outNode, V * 0.40);
+    metalClack(ctx, start + 0.008, outNode, V * 0.95, 760, 0.080);   // lift and pull
+    metalClack(ctx, start + 0.058, outNode, V * 0.48, 1200, 0.040);  // extract
+    metalClack(ctx, start + 0.118, outNode, V * 0.90, 560, 0.090);   // push and lock
+    brassDrop(ctx, start + 0.09, outNode, V * 0.24);
   } else if (action === 'revolver') {
-    metalClack(ctx, start + 0.050, outNode, V * 0.70, 1500, 0.045);  // cylinder indexes
-    metalClack(ctx, start + 0.082, outNode, V * 0.45, 1050, 0.035);  // hand and bolt
+    metalClack(ctx, start + 0.005, outNode, V * 0.85, 900, 0.050);   // cylinder indexes
+    metalClack(ctx, start + 0.030, outNode, V * 0.55, 640, 0.040);   // hand and bolt
   } else if (action === 'belt') {
-    metalClack(ctx, start + 0.022, outNode, V * 0.80, 820, 0.050);   // bolt back
-    metalClack(ctx, start + 0.046, outNode, V * 0.60, 1250, 0.035);  // feed pawl
-    brassDrop(ctx, start + 0.03, outNode, V * 0.30);
+    metalClack(ctx, start + 0.003, outNode, V * 0.95, 540, 0.055);   // bolt back
+    metalClack(ctx, start + 0.024, outNode, V * 0.65, 760, 0.040);   // feed pawl
+    brassDrop(ctx, start + 0.03, outNode, V * 0.18);
   } else if (waterAction) {
     const delay = action === 'water_smg' ? 0.030 : action === 'water_belt' ? 0.040 : 0.052;
     playTone(ctx, start + 0.006, 0.070, outNode, 155, 190, V * 0.75, 'triangle');
     playFilteredNoise(ctx, start + delay, 0.026, outNode, V, 'bandpass', 980, 0.75);
     playFilteredNoise(ctx, start + delay + 0.030, 0.018, outNode, V * 0.52, 'bandpass', 1450, 0.55);
   } else if (action === 'slide') {                                    // pistols
-    metalClack(ctx, start + 0.028, outNode, V * 0.85, 1650, 0.045);  // slide to the rear
-    metalClack(ctx, start + 0.062, outNode, V * 1.00, 1150, 0.055);  // slide slams shut
-    brassDrop(ctx, start + 0.04, outNode, V * 0.45);
+    metalClack(ctx, start + 0.004, outNode, V * 0.90, 980, 0.048);   // slide to the rear
+    metalClack(ctx, start + 0.030, outNode, V * 1.05, 680, 0.062);   // slide slams shut
+    brassDrop(ctx, start + 0.04, outNode, V * 0.26);
   } else {                                                            // rifle, smg
     const fast = action === 'smg';
-    metalClack(ctx, start + (fast ? 0.018 : 0.026), outNode, V * 0.75, 1450, 0.040);
-    metalClack(ctx, start + (fast ? 0.040 : 0.058), outNode, V * 0.95, 1000, 0.055);
-    brassDrop(ctx, start + 0.03, outNode, V * 0.40);
+    metalClack(ctx, start + 0.003, outNode, V * 0.85, 870, 0.044);   // bolt back
+    metalClack(ctx, start + (fast ? 0.022 : 0.030), outNode, V * 1.00, 600, 0.060); // into battery
+    brassDrop(ctx, start + 0.03, outNode, V * 0.24);
   }
 }
 function playWeaponSound(idOrWeapon, opts = {}) {
