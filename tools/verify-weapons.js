@@ -66,6 +66,13 @@ function load() {
   code += src.match(/^const RP = .*$/m)[0] + '\n';
   code += constBlock('RELOAD_PROPS') + '\n';
   code += fnBlock('assemblyBeats') + '\nconst _asmBeatCache = {};\n';
+  code += fnBlock('prepViewModel') + '\n';
+  // Model skins replace a weapon outright, so they must satisfy everything a
+  // weapon does. The table is rewritten without its build closures, which the
+  // sandbox resolves back to the real builders by name.
+  const ms = src.match(/^const MODEL_SKINS = \[[\s\S]*?\n\];/m);
+  if (ms) code += ms[0].replace(/build: (\w+)/g, "build: $1") + '\n';
+  else code += 'const MODEL_SKINS = [];\n';
   for (const m of src.matchAll(/^function (build\w+)\(\)/gm)) {
     const b = fnBlock(m[1]);
     if (b) code += b + '\n';
@@ -77,6 +84,7 @@ function load() {
     .map(r => ({ id: r.split('//')[1].trim(), fn: r.split('//')[0].trim().split('(')[0] }));
   code += 'return { RELOAD_KEYS, RELOAD_PROPS, _RELOAD_DEFAULT, _reloadPose, attachViewHands,'
         + ' VM_GUN_SCALE, fitRestDistance, INSPECT_DEFAULT, inspectOpenPose, assemblyBeats,'
+        + ' MODEL_SKINS, prepViewModel,'
         + ' builders: ' + JSON.stringify(rows.map(r => r.fn)) + '.map(n => eval(n)) };';
   return { api: new Function('THREE', code)(THREE), rows };
 }
@@ -85,6 +93,7 @@ const { api, rows } = load();
 const problems = [];
 let inspectReport = null;
 let audioReport = null;
+let modelSkinReport = null;
 const loadsFirst = [];   // loaded before ejecting: right for some mechanisms, worth an eye
 const fail = (w, msg) => problems.push(w.padEnd(20) + msg);
 
@@ -278,6 +287,36 @@ Object.entries(api.RELOAD_PROPS).forEach(([id, evs]) => {
     + thin.slice(0, 6).join(', '));
 }
 
+// ── 5d. Model skins are whole weapons and must behave like one ────────────
+// A skin that replaces the gun has to satisfy everything the gun did: finite
+// geometry, hands that land on it, and enough of itself inside the view. It is
+// not covered by the weapon table, so it is checked on its own.
+{
+  const out = [];
+  (api.MODEL_SKINS || []).forEach(skin => {
+    let g;
+    try { g = api.prepViewModel(skin.build()); }
+    catch (e) { fail(skin.id, 'model skin failed to build: ' + e.message); return; }
+    g.updateMatrixWorld(true);
+    let hands = 0, bad = 0;
+    g.traverse(o => {
+      if (!o.isMesh) return;
+      if (o.userData.vmHand) { hands++; return; }
+      const b = new THREE.Box3().setFromObject(o);
+      if (![b.min.x, b.min.y, b.min.z, b.max.x, b.max.y, b.max.z].every(Number.isFinite)) bad++;
+    });
+    const base = built[rows.findIndex(r => r.id === skin.weapon)];
+    const vis = visibility(g, REST_POSE);
+    const baseVis = base ? visibility(base, REST_POSE) : 100;
+    if (bad) fail(skin.id, bad + ' part(s) with non-finite geometry');
+    if (!hands) fail(skin.id, 'no hands attached');
+    if (vis < baseVis - 15) fail(skin.id, 'only ' + vis.toFixed(0)
+      + '% in frame against the stock weapon\'s ' + baseVis.toFixed(0) + '%');
+    out.push({ id: skin.id, weapon: skin.weapon, vis, baseVis, hands });
+  });
+  modelSkinReport = out;
+}
+
 // ── 6. Tagged assemblies turn about their own axis ─────────────────────────
 const cyl = [];
 built.forEach((g, i) => {
@@ -322,6 +361,12 @@ if (audioReport) {
     + (audioReport.derived + audioReport.generic) + ' reloads ('
     + (audioReport.beats / Math.max(1, audioReport.derived + audioReport.generic)).toFixed(1)
     + ' each), all scheduled off the animation; ' + audioReport.generic + ' fall back to a generic pair');
+}
+
+if (modelSkinReport && modelSkinReport.length) {
+  console.log('\nmodel skins (weapons that replace a weapon):');
+  modelSkinReport.forEach(m => console.log('   ' + m.id.padEnd(10) + 'replaces ' + m.weapon.padEnd(10)
+    + m.vis.toFixed(0) + '% in frame vs the stock ' + m.baseVis.toFixed(0) + '%, hands ' + m.hands));
 }
 
 if (cyl.length) {

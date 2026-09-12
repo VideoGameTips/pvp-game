@@ -9292,6 +9292,97 @@ function buildAK20() {
   return g;
 }
 
+function buildAUG() {
+  // 🔫 AUG — a model skin for the AK-20, and deliberately not a recolour. It is
+  // a bullpup: the magazine sits BEHIND the trigger, inside the stock, so the
+  // whole silhouette is different from the rifle it replaces. Olive polymer
+  // shell, the integrated optic in its carry handle, and the folding vertical
+  // foregrip under the barrel.
+  const g = new THREE.Group();
+  const steel = GUN_MATS.steel(), blued = GUN_MATS.blued(), bright = GUN_MATS.bright();
+  const inner = GUN_MATS.inner();
+  // The green is the whole point of the gun, so it is mixed here rather than
+  // taken from GUN_MATS, which is all blacks and greys.
+  const shell = new THREE.MeshPhongMaterial({ color: 0x4c5339, shininess: 24, specular: 0x6e7758 });
+  const dark  = new THREE.MeshPhongMaterial({ color: 0x2b2e26, shininess: 18, specular: 0x4a4d42 });
+  const mag   = new THREE.MeshPhongMaterial({ color: 0x6c7a46, shininess: 60, specular: 0xb6c288,
+                                              transparent: true, opacity: 0.72 });
+
+  // ── The shell: one continuous polymer body from butt to muzzle end ───────
+  gpPlate(g, shell, [
+    [0.300,-0.030],[0.300,0.036],[0.130,0.048],[-0.070,0.046],[-0.150,0.030],
+    [-0.150,-0.012],[-0.040,-0.026],[0.120,-0.034],
+  ], 0.052, 0);
+  gpBox(g, dark,  0.054, 0.010, 0.070, 0, 0.006, 0.296, 0.10);      // butt plate
+  gpBox(g, inner, 0.055, 0.005, 0.150, 0, 0.046, 0.140);            // shell seam
+  gpBox(g, dark,  0.056, 0.030, 0.028, 0, 0.004, 0.246);            // sling loop block
+  gpBox(g, bright, 0.010, 0.006, 0.022, 0, -0.026, 0.250);          // sling loop
+
+  // ── Magazine, behind the grip. This is what makes it a bullpup ───────────
+  gpBox(g, mag,   0.028, 0.130, 0.052, 0, -0.082, 0.150, 0.06);
+  gpBox(g, inner, 0.029, 0.006, 0.054, 0, -0.020, 0.150, 0.06);     // feed lips
+  gpBox(g, dark,  0.031, 0.014, 0.056, 0, -0.146, 0.154, 0.06);     // floorplate
+  for (let i = 0; i < 4; i++)                                        // witness holes
+    gpBox(g, inner, 0.029, 0.005, 0.008, 0, -0.048 - i * 0.024, 0.176, 0.06);
+  gpBox(g, dark,  0.040, 0.026, 0.030, 0, -0.014, 0.150);           // magwell throat
+  gpBox(g, bright, 0.010, 0.012, 0.010, 0.022, -0.020, 0.126);      // paddle release
+
+  // ── Grip and the wrap-around trigger guard the AUG is known for ──────────
+  gpPlate(g, dark, [
+    [0.060,-0.030],[0.086,-0.052],[0.088,-0.148],[0.058,-0.164],[0.028,-0.092],[0.026,-0.036],
+  ], 0.036, 0);
+  for (let i = 0; i < 5; i++) gpBox(g, inner, 0.038, 0.004, 0.008, 0, -0.058 - i * 0.020, 0.056 + i * 0.004, 0.30);
+  // The guard is a full hoop enclosing the whole hand, not a finger loop.
+  gpPlate(g, dark, [
+    [0.024,-0.030],[0.026,-0.106],[-0.030,-0.110],[-0.032,-0.030],[-0.020,-0.026],[0.012,-0.026],
+  ], 0.034, 0);
+  gpBox(g, inner, 0.036, 0.076, 0.044, 0, -0.068, -0.002);          // the opening through it
+  gpBox(g, bright, 0.006, 0.016, 0.006, 0, -0.040, 0.010, 0.20);    // trigger
+
+  // ── Carry handle with the optic inside it ────────────────────────────────
+  gpCyl(g, dark, 0.019, 0.019, 0.230, 12, 0, 0.078, 0.020);
+  gpCyl(g, inner, 0.0150, 0.0150, 0.012, 12, 0, 0.078, 0.136);      // eyepiece
+  gpCyl(g, bright, 0.0165, 0.0165, 0.006, 12, 0, 0.078, -0.092);    // objective ring
+  gpCyl(g, inner, 0.0140, 0.0140, 0.010, 12, 0, 0.078, -0.088);     // objective glass
+  [0.055, -0.020, -0.070].forEach(z => gpBox(g, dark, 0.030, 0.034, 0.016, 0, 0.056, z));  // handle legs
+  gpBox(g, inner, 0.032, 0.006, 0.190, 0, 0.096, 0.020);            // rib along the top
+
+  // ── Barrel, gas system, foregrip ─────────────────────────────────────────
+  gpCyl(g, blued, 0.0115, 0.0115, 0.250, 14, 0, 0.006, -0.268);
+  gpCyl(g, steel, 0.0165, 0.0165, 0.042, 14, 0, 0.006, -0.176);     // barrel trunnion
+  gpCyl(g, blued, 0.0075, 0.0075, 0.120, 10, 0, 0.032, -0.230);     // gas tube
+  gpBox(g, steel, 0.026, 0.030, 0.030, 0, 0.020, -0.294);           // gas block
+  gpCyl(g, inner, 0.0060, 0.0060, 0.014, 8, 0, 0.040, -0.294);      // gas port
+  gpCyl(g, blued, 0.0150, 0.0150, 0.034, 12, 0, 0.006, -0.388);     // flash hider
+  for (let i = 0; i < 3; i++) gpBox(g, inner, 0.032, 0.005, 0.006, 0, 0.006, -0.380 + i * 0.010);
+  gpCyl(g, inner, 0.0085, 0.0085, 0.012, 10, 0, 0.006, -0.402);     // bore
+  // Folding vertical foregrip, down and slightly forward.
+  gpPlate(g, dark, [
+    [-0.214,-0.012],[-0.196,-0.030],[-0.214,-0.132],[-0.246,-0.128],[-0.248,-0.026],[-0.238,-0.010],
+  ], 0.030, 0);
+  gpBox(g, inner, 0.032, 0.012, 0.030, 0, -0.136, -0.232, 0.10);    // grip cap
+  gpBox(g, dark, 0.040, 0.020, 0.070, 0, -0.006, -0.232);           // grip hinge block
+
+  // ── Charging handle down the left, and the ejection port ─────────────────
+  gpBox(g, bright, 0.012, 0.012, 0.070, -0.032, 0.030, 0.022);
+  gpBox(g, bright, 0.020, 0.014, 0.018, -0.036, 0.030, 0.058);      // the knob
+  gpBox(g, inner, 0.006, 0.028, 0.060, 0.027, 0.014, 0.066);        // ejection port, right side
+  gpBox(g, dark,  0.008, 0.032, 0.064, 0.026, 0.014, 0.066);        // port cover lip
+
+  const flash = makeMuzzleFlash();
+  flash.position.set(0, 0.006, -0.412);
+  g.add(flash);
+  g._flash = flash; g._kickZ = 0.014;
+  // Hand-built, so the greebler and welder leave it alone: the optic tube and
+  // the charging handle are meant to stand proud.
+  g._greebled = true; g._handDetailed = true;
+  // Bullpup: the magazine is behind the grip, so a reload prop flying to the
+  // usual magwell offset would arrive in front of the trigger, at nothing.
+  g._anchorOverride = { mag: { x: 0, y: -0.075, z: 0.150 } };
+  g.position.set(0.12, -0.1, -0.25);
+  return g;
+}
+
 // AK30 — longer mag, tan/desert colour
 function buildAK30() {
   const tan = new THREE.MeshLambertMaterial({ color: 0x8b7040 });
@@ -17621,12 +17712,71 @@ function fitRestDistance(m) {
   m.position.z = Math.max(VM_MAX_Z, Math.min(VM_MIN_Z, want));
 }
 
-weaponModels.forEach(m => {
-  if (!m) return;
+function prepViewModel(m) {
+  if (!m) return m;
   m.scale.setScalar(VM_GUN_SCALE);
   fitRestDistance(m);                          // before hands: attachViewHands captures _homePos
   try { attachViewHands(m); } catch (e) { console.warn('[hands]', e); }
-});
+  // A bullpup puts its magazine behind the grip, so the generic magwell anchor
+  // lands in front of the trigger at nothing. A builder can say otherwise.
+  if (m._anchorOverride && m._anchors) Object.assign(m._anchors, m._anchorOverride);
+  return m;
+}
+weaponModels.forEach(prepViewModel);
+
+// ── 🔫 Model skins ──────────────────────────────────────────────────────────
+// A skin that is a different GUN, not a different colour. The weapon keeps its
+// id, its stats, its reload track and its prop beats -- only the thing in your
+// hands changes -- so everything downstream (reload, inspect, hands, anchors,
+// audio) works on it without knowing it happened.
+const MODEL_SKINS = [
+  { id: 'aug', weapon: 'ak20', name: 'AUG', rarity: 'rare',
+    sw: ['#4c5339', '#6c7a46'], build: buildAUG,
+    blurb: 'Bullpup. The magazine sits behind the trigger.' },
+];
+const MODEL_SKINS_BY_WEAPON = {};
+for (const ms of MODEL_SKINS) (MODEL_SKINS_BY_WEAPON[ms.weapon] ||= []).push(ms);
+
+let equippedModelSkins = (() => {
+  try { return JSON.parse(localStorage.getItem('pvp_model_skins')) || {}; } catch (e) { return {}; }
+})();
+const _baseWeaponModels = {};
+
+function applyModelSkin(weaponId) {
+  const idx = WEAPONS.findIndex(w => w.id === weaponId);
+  if (idx < 0 || !weaponModels[idx]) return;
+  if (!(idx in _baseWeaponModels)) _baseWeaponModels[idx] = weaponModels[idx];
+  const want = equippedModelSkins[weaponId];
+  const skin = MODEL_SKINS.find(m => m.id === want && m.weapon === weaponId);
+  let next;
+  if (!skin) next = _baseWeaponModels[idx];
+  else {
+    // Built once, on first equip, then kept. Rebuilding a model every time you
+    // opened a menu would leak geometry into the scene graph.
+    if (!skin._model) {
+      try {
+        skin._model = prepViewModel(skin.build());
+        skin._model.visible = false;
+        camera.add(skin._model);
+      } catch (e) { console.warn('[model skin]', e); return; }
+    }
+    next = skin._model;
+  }
+  const cur = weaponModels[idx];
+  if (next === cur) return;
+  const wasVisible = cur.visible;
+  cur.visible = false;
+  next.visible = wasVisible;
+  weaponModels[idx] = next;
+}
+function setModelSkin(weaponId, skinId) {
+  if (skinId) equippedModelSkins[weaponId] = skinId;
+  else delete equippedModelSkins[weaponId];
+  try { localStorage.setItem('pvp_model_skins', JSON.stringify(equippedModelSkins)); } catch (e) {}
+  applyModelSkin(weaponId);
+}
+// Whatever was equipped last session comes back with you.
+Object.keys(equippedModelSkins).forEach(applyModelSkin);
 
 // ── 🔁 Reload choreography ───────────────────────────────────────────────────
 // Every weapon reloads differently. Not eleven shared styles — ninety-nine
@@ -26441,6 +26591,7 @@ function openModeMenu() {
   gameBots.length = 0;
   const hud = document.getElementById('match-hud'); if (hud) hud.style.display = 'none';
   showLobbyModesButton(false);
+  showFloatingSettingsButton(false);
   showLobbyPrompt(null);
   document.getElementById('mode-screen').style.display = 'flex';
   updateUserInfoBar();
@@ -26458,6 +26609,49 @@ function showLobbyModesButton(show) {
       + 'cursor:pointer;box-shadow:0 2px 12px rgba(0,0,0,0.5);';
     btn.addEventListener('click', openModeMenu);
     btn.addEventListener('touchstart', e => { e.preventDefault(); openModeMenu(); }, { passive: false });
+    document.body.appendChild(btn);
+  }
+  btn.style.display = show ? 'block' : 'none';
+}
+
+function openSettingsHub() {
+  let panel = document.getElementById('settings-hub-panel');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'settings-hub-panel';
+    panel.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9900;background:#0f1a18;border:2px solid #44cc99;border-radius:8px;padding:22px;color:#fff;font-family:"Courier New",monospace;min-width:320px;box-shadow:0 4px 30px rgba(0,0,0,0.6);';
+    document.body.appendChild(panel);
+  }
+  const hasGameplay = typeof openGameplaySettingsPanel === 'function';
+  panel.style.display = 'block';
+  panel.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;border-bottom:1px solid #276b55;padding-bottom:10px;">
+      <div style="font-size:18px;letter-spacing:3px;color:#88ffcc;">⚙ SETTINGS</div>
+      <button id="settings-hub-close" style="background:#1f2a27;color:#ffaaaa;border:1px solid #ff6666;padding:4px 10px;cursor:pointer;font-family:inherit;border-radius:3px;">✕</button>
+    </div>
+    <button id="settings-shoot-fx" style="display:block;width:100%;margin:8px 0;padding:12px;background:#2a1a3a;color:#cc99ff;border:1px solid #aa77ff;cursor:pointer;font-family:inherit;letter-spacing:2px;border-radius:4px;">🔊 SHOOT FX</button>
+    <button id="settings-aim-assist" style="display:block;width:100%;margin:8px 0;padding:12px;background:#3a1a1a;color:#ff9988;border:1px solid #ff5544;cursor:pointer;font-family:inherit;letter-spacing:2px;border-radius:4px;">🎯 AIM ASSIST</button>
+    ${hasGameplay ? '<button id="settings-gameplay" style="display:block;width:100%;margin:8px 0;padding:12px;background:#132a24;color:#88ffcc;border:1px solid #44cc99;cursor:pointer;font-family:inherit;letter-spacing:2px;border-radius:4px;">⚙ GAMEPLAY</button>' : ''}
+  `;
+  document.getElementById('settings-hub-close').addEventListener('click', () => panel.style.display = 'none');
+  document.getElementById('settings-shoot-fx').addEventListener('click', () => { panel.style.display = 'none'; openShootFxPanel(); });
+  document.getElementById('settings-aim-assist').addEventListener('click', () => { panel.style.display = 'none'; openAimAssistPanel(); });
+  const gp = document.getElementById('settings-gameplay');
+  if (gp) gp.addEventListener('click', () => { panel.style.display = 'none'; openGameplaySettingsPanel(); });
+}
+
+function showFloatingSettingsButton(show) {
+  let btn = document.getElementById('floating-settings-btn');
+  if (!btn) {
+    btn = document.createElement('button');
+    btn.id = 'floating-settings-btn';
+    btn.textContent = '⚙ SETTINGS';
+    btn.style.cssText = 'position:fixed;top:58px;left:14px;z-index:60;'
+      + 'padding:9px 18px;background:rgba(10,24,22,0.88);color:#88ffcc;border:2px solid #44cc99;'
+      + 'border-radius:6px;font-family:inherit;font-size:13px;font-weight:bold;letter-spacing:2px;'
+      + 'cursor:pointer;box-shadow:0 2px 12px rgba(0,0,0,0.5);';
+    btn.addEventListener('click', openSettingsHub);
+    btn.addEventListener('touchstart', e => { e.preventDefault(); openSettingsHub(); }, { passive: false });
     document.body.appendChild(btn);
   }
   btn.style.display = show ? 'block' : 'none';
@@ -26855,6 +27049,7 @@ function selectMode(modeId) {
     spawnGameBots();
     requestPointerLockSafe();
     startLoop();
+    showFloatingSettingsButton(true);
   } else if (modeId === 'range') {
     // Shooting range: skip loadout, give infinite ammo on all weapons
     selectedPrimaryIdx   = 0;
@@ -26875,6 +27070,7 @@ function selectMode(modeId) {
     spawnGameBots();
     requestPointerLockSafe();
     startLoop();
+    showFloatingSettingsButton(true);
   } else if (modeId === 'lobby13') {
     // 🛋️ Lobby 13: skip loadout, give a full kit with infinite ammo so people
     // can mess around / duel freely. No enemies, no scoring.
@@ -26896,7 +27092,9 @@ function selectMode(modeId) {
     requestPointerLockSafe();
     startLoop();
     showLobbyModesButton(true); // 🎮 floating button back to the mode menu
+    showFloatingSettingsButton(true);
   } else {
+    showFloatingSettingsButton(true);
     showLoadoutScreen('death');
   }
 }
@@ -27033,6 +27231,40 @@ function openWeaponSkinsPanel() {
     document.body.appendChild(panel);
   }
   panel.style.display = 'block';
+  // Model skins are per weapon and replace the gun itself, so they get their
+  // own section rather than a swatch in a grid that applies to everything.
+  const modelSkinSection = () => {
+    const rows = [];
+    for (const wid of Object.keys(MODEL_SKINS_BY_WEAPON)) {
+      const w = WEAPONS.find(x => x.id === wid);
+      if (!w) continue;
+      const on = equippedModelSkins[wid];
+      const cells = MODEL_SKINS_BY_WEAPON[wid].map(ms => `
+        <div data-mskin="${ms.id}" data-mweapon="${wid}" class="ms-cell"
+             style="cursor:pointer;border:2px solid ${on===ms.id?'#88ff99':'#444'};border-radius:6px;padding:8px;background:${on===ms.id?'#162a18':'#1d1a12'};">
+          <div style="height:26px;border-radius:4px;background:linear-gradient(90deg, ${ms.sw[0]} 0 50%, ${ms.sw[1]} 50% 100%);border:1px solid #000;margin-bottom:6px;"></div>
+          <div style="font-size:11px;letter-spacing:1px;color:${on===ms.id?'#88ff99':'#ddd'};">${ms.name}</div>
+          <div style="font-size:9px;color:#8a8a7a;margin-top:3px;line-height:1.3;">${ms.blurb}</div>
+        </div>`).join('');
+      rows.push(`
+        <div style="margin-top:14px;">
+          <div style="font-size:11px;letter-spacing:2px;color:#99cc88;margin-bottom:6px;">${w.name.toUpperCase()}</div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
+            ${cells}
+            <div data-mskin="" data-mweapon="${wid}" class="ms-cell"
+                 style="cursor:pointer;border:2px solid ${!on?'#88ff99':'#444'};border-radius:6px;padding:8px;background:${!on?'#162a18':'#1d1a12'};display:flex;align-items:center;justify-content:center;">
+              <div style="font-size:10px;letter-spacing:1px;color:${!on?'#88ff99':'#999'};">STOCK</div>
+            </div>
+          </div>
+        </div>`);
+    }
+    if (!rows.length) return '';
+    return `<div style="margin-top:18px;border-top:1px solid #6a5520;padding-top:12px;">
+      <div style="font-size:14px;letter-spacing:2px;color:#aaffaa;">🔫 WEAPON MODELS</div>
+      <div style="font-size:10px;color:#7a8a6a;margin:5px 0 2px;line-height:1.4;">These replace the gun, not its colour. Same stats, same reload — different weapon in your hands. Press T in game to look it over.</div>
+      ${rows.join('')}
+    </div>`;
+  };
   const swatch = (s) => `
     <div data-skin="${s.id}" class="ws-cell" style="cursor:pointer;border:2px solid ${s.id===selectedWeaponSkin?'#ffdd55':'#444'};border-radius:6px;padding:8px;text-align:center;background:${s.id===selectedWeaponSkin?'#2a2410':'#1d1a12'};">
       <div style="height:26px;border-radius:4px;background:linear-gradient(90deg, ${s.sw[0]} 0 50%, ${s.sw[1]} 50% 100%);border:1px solid #000;margin-bottom:6px;"></div>
@@ -27045,7 +27277,14 @@ function openWeaponSkinsPanel() {
     </div>
     <div style="font-size:10px;color:#aa9966;margin-bottom:12px;line-height:1.4;">One pick applies to every gun. Country themes use real national flags; the German theme is the Iron Cross military mark (no Nazi imagery).</div>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">${WEAPON_SKINS.map(swatch).join('')}</div>
+    ${modelSkinSection()}
   `;
+  panel.querySelectorAll('.ms-cell').forEach(cell => {
+    cell.addEventListener('click', () => {
+      setModelSkin(cell.dataset.mweapon, cell.dataset.mskin || null);
+      openWeaponSkinsPanel();      // redraw so the selection moves
+    });
+  });
   panel.querySelectorAll('.ws-cell').forEach(cell => {
     cell.addEventListener('click', () => {
       selectedWeaponSkin = cell.dataset.skin;
