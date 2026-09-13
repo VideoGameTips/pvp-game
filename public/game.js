@@ -17258,10 +17258,12 @@ function tryShoot() {
     heat = weaponHeatState[currentWeapon.id] || (weaponHeatState[currentWeapon.id] = { shotCount: 0, cooldownUntil: 0 });
     if (now < heat.cooldownUntil) return; // overheated — locked out until cooldown ends
     if (heat.shotCount >= wStats.heatShots) {
+      // Safety net: normally the burst self-completes and starts the cooldown
+      // below, so this only fires if something reset shotCount unexpectedly.
       heat.cooldownUntil = now + wStats.heatCooldown;
       heat.shotCount = 0;
       flashAbilityName('OVERHEATED');
-      return; // 3 shots already fired since the last cooldown — this pull is eaten
+      return;
     }
   }
   const pool = weaponAmmo[currentWeaponIdx];
@@ -17269,7 +17271,21 @@ function tryShoot() {
   if (pool.ammo <= 0 && !adminInfAmmo) { if (pool.reserve > 0 && !wStats.noReload) startReload(); return; }
 
   lastShot = now;
-  if (heat) heat.shotCount++;
+  if (heat) {
+    heat.shotCount++;
+    if (heat.shotCount >= wStats.heatShots) {
+      // Burst complete (3rd shot just fired) — start the lockout immediately
+      // rather than waiting for a wasted next trigger pull to discover it.
+      heat.cooldownUntil = now + wStats.heatCooldown;
+      heat.shotCount = 0;
+      flashAbilityName('OVERHEATED');
+    } else {
+      // Auto-continue the burst: one tap or one auto-fire tick fires all N
+      // shots on its own, whether or not the trigger is still held.
+      const burstIdx = currentWeaponIdx;
+      setTimeout(() => { if (currentWeaponIdx === burstIdx) tryShoot(); }, wStats.fireRate);
+    }
+  }
   addRecoil(currentWeapon);
   if (!adminInfAmmo) pool.ammo--; // ⚡ admin infinite ammo: don't decrement
   ammo = pool.ammo;
