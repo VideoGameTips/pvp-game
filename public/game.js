@@ -91,9 +91,9 @@ const WEAPONS = [
   },
   {
     id: 'burst', name: 'Burst Rifle', type: 'Burst AR', slot: 'primary',
-    mag: 36, reserve: 108, damage: 21, fireRate: 95, reloadTime: 1900,
+    mag: 36, reserve: 108, damage: 21, fireRate: 47, reloadTime: 1900,
     auto: true, pellets: 1, spread: 0.006, adsZoom: 43, bulletSpeed: 136, noReload: false,
-    bulletColor: 0xffdd66,
+    bulletColor: 0xffdd66, heatWindow: 1000, heatCooldown: 1000,
     ability: { name: 'Triple Burst', cd: 9000, desc: 'Fire 3 rapid bursts instantly', type: 'fanfire', count: 9, delay: 40, noADS: true },
   },
   {
@@ -1045,6 +1045,7 @@ let currentWeapon = WEAPONS[0];
 let ammo = currentWeapon.mag;
 let reserve = currentWeapon.reserve;
 let reloading = false, lastShot = 0, shooting = false;
+const weaponHeatState = {}; // per-weapon-id { windowStart, lastFireAt, cooldownUntil } for heatWindow/heatCooldown weapons
 let isADS = false, adsFOV = 75, targetFOV = 75;
 
 let myKills = 0, isDead = false, gameStarted = false;
@@ -17187,11 +17188,24 @@ function tryShoot() {
   }
   const activeRateMult = (abilityBuff?.weaponId === currentWeapon.id && abilityBuff.rateMult) ? abilityBuff.rateMult : 1;
   if (now - lastShot < wStats.fireRate * activeRateMult) return;
+  let heat = null;
+  if (wStats.heatWindow) {
+    heat = weaponHeatState[currentWeapon.id] || (weaponHeatState[currentWeapon.id] = { windowStart: 0, lastFireAt: 0, cooldownUntil: 0 });
+    if (now < heat.cooldownUntil) return; // overheated — locked out until cooldown ends
+    if (!heat.windowStart || now - heat.lastFireAt > wStats.fireRate * 3) heat.windowStart = now; // trigger was released — fresh window
+    if (now - heat.windowStart >= wStats.heatWindow) {
+      heat.cooldownUntil = now + wStats.heatCooldown;
+      heat.windowStart = 0;
+      flashAbilityName('OVERHEATED');
+      return; // this trigger pull is eaten by the cooldown
+    }
+  }
   const pool = weaponAmmo[currentWeaponIdx];
   const adminInfAmmo = adminCheats.infiniteAmmo && currentUser?.isAdmin;
   if (pool.ammo <= 0 && !adminInfAmmo) { if (pool.reserve > 0 && !wStats.noReload) startReload(); return; }
 
   lastShot = now;
+  if (heat) heat.lastFireAt = now;
   addRecoil(currentWeapon);
   if (!adminInfAmmo) pool.ammo--; // ⚡ admin infinite ammo: don't decrement
   ammo = pool.ammo;
