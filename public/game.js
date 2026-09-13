@@ -93,7 +93,7 @@ const WEAPONS = [
     id: 'burst', name: 'Burst Rifle', type: 'Burst AR', slot: 'primary',
     mag: 36, reserve: 108, damage: 21, fireRate: 47, reloadTime: 1900,
     auto: true, pellets: 1, spread: 0.006, adsZoom: 43, bulletSpeed: 136, noReload: false,
-    bulletColor: 0xffdd66, heatShots: 3, heatCooldown: 750,
+    bulletColor: 0xffdd66, heatWindow: 1000, heatCooldown: 1000,
     ability: { name: 'Triple Burst', cd: 9000, desc: 'Fire 3 rapid bursts instantly', type: 'fanfire', count: 9, delay: 40, noADS: true },
   },
   {
@@ -117,9 +117,18 @@ const WEAPONS = [
   },
   {
     id: 'flamethrower', name: 'Flamethrower', type: 'Area', slot: 'primary',
-    mag: 80, reserve: 160, damage: 6, fireRate: 35, reloadTime: 3200,
+    mag: 80, reserve: 160, damage: 3, fireRate: 35, reloadTime: 3200,
     auto: true, pellets: 4, spread: 0.16, adsZoom: 60, bulletSpeed: 48, noReload: false,
     bulletColor: 0xff6600, bulletSize: 0.11,
+    // Halved per-tick damage, but anything it touches CATCHES. 7 a second for
+    // ten seconds is 70 off a 100 HP bar from a single pellet, and it does not
+    // stack -- contact refreshes the ten seconds rather than adding a second burn.
+    burnOnHit: { dps: 7, dur: 10000 },
+    // And the flames now stop. They used to carry 86 m (48 m/s for the 1.8 s a
+    // bullet lives), which with a 70-damage burn attached would have let you tag
+    // a whole lobby from across the map. 12 m is about what a real one throws.
+    maxRange: 12,
+    moveBoost: 1.10,   // you close ground while you are pouring it on
     ability: { name: 'Propane Burst', cd: 12000, desc: 'Blast 22 concentrated flames directly forward', type: 'multishot', count: 22, spread: 0.025, noADS: true },
   },
   {
@@ -728,6 +737,40 @@ const WEAPONS = [
   },
 ];
 
+// ── Damage drop-off by range ────────────────────────────────────────────────
+// Full damage inside `near` meters, then a straight-line decay down to a
+// `min` multiplier by `far` meters (held flat beyond that). {min:0} guns do
+// nothing at long range; {near:9999} guns (heavy ordnance) don't fall off —
+// a direct rocket/grenade hit is a direct hit regardless of distance.
+// Bucketed from each gun's own stats (pellets, bullet speed, fire rate, mag,
+// auto) so all 99 of them land somewhere sensible without hand-tuning each
+// one. Mirror WEAPON_FALLOFF in server.js if this logic changes (CLAUDE.md
+// gotcha #4) — the server is authoritative for real PvP damage.
+function computeWeaponFalloff(w) {
+  const pellets = w.pellets || 1;
+  const speed = w.bulletSpeed || 100;
+  const dmg = w.damage || 0;
+  const mag = w.mag || 1;
+  const auto = !!w.auto;
+  const rate = w.fireRate || 100;
+  if (pellets >= 4) return { near: 8, far: 20, min: 0 };                              // shotguns/flame
+  if (speed <= 75 && !auto && dmg >= 45) return { near: 9999, far: 9999, min: 1 };     // heavy ordnance
+  if (!auto && speed >= 160 && mag <= 10 && dmg >= 45) return { near: 40, far: 90, min: 0.85 }; // snipers/marksman
+  if (auto && mag >= 100) return { near: 20, far: 45, min: 0.55 };                     // LMGs/sustained-fire
+  if (auto && rate <= 80 && dmg < 35 && speed < 170) return { near: 12, far: 28, min: 0.35 }; // SMGs/CQB autos
+  if (!auto) return { near: 16, far: 36, min: 0.45 };                                 // sidearms/utility
+  return { near: 22, far: 48, min: 0.6 };                                             // assault rifles (default)
+}
+const WEAPON_FALLOFF = Object.fromEntries(WEAPONS.map(w => [w.id, computeWeaponFalloff(w)]));
+function falloffMultiplier(weaponId, dist) {
+  const f = WEAPON_FALLOFF[weaponId];
+  if (!f || dist == null) return 1;
+  if (dist <= f.near) return 1;
+  if (dist >= f.far) return f.min;
+  const t = (dist - f.near) / (f.far - f.near);
+  return 1 - t * (1 - f.min);
+}
+
 const MELEE_ITEMS = [
   { id: 'bat',        name: 'Bat',        type: 'Melee',       damage: 38, range: 2.1, cooldown: 520,
     ability: { name: 'Heavy Strike', cd: 8000,  desc: 'Next hit deals 2× damage', type: 'melee_heavy' } },
@@ -860,6 +903,9 @@ const BASIC_GUN_STAT_SKINS = [
   { id: 'ak20_swarm_rifle', weapon: 'ak20', name: 'Swarm AK', rarity: 'basic', sw: ['#2b193c', '#ff55ff'],
     blurb: 'Fast tracking rounds, lower damage per bullet.', damageId: 'ak20_skin_swarm', modelSkin: 'ak20_swarm_rifle',
     stats: { damage: 17, fireRate: 70, spread: 0.018, bulletSpeed: 110, tracking: 0.35, bulletColor: 0xff55ff, bulletSize: 0.05 } },
+  { id: 'pistol_darker_handgun', weapon: 'pistol', name: 'Darker Handgun', rarity: 'lame', sw: ['#111', '#2a2a2a'],
+    blurb: 'It is a handgun, but darker. Somehow +1 damage.', damageId: 'pistol_skin_darker',
+    stats: { damage: 21, bulletColor: 0x333333 } },
 ];
 
 const BASIC_MELEE_SKINS = [
@@ -905,6 +951,11 @@ const GUN_STAT_SKINS_BY_WEAPON = {};
 for (const s of BASIC_GUN_STAT_SKINS) (GUN_STAT_SKINS_BY_WEAPON[s.weapon] ||= []).push(s);
 const MELEE_SKINS_BY_BASE = {};
 for (const s of BASIC_MELEE_SKINS) (MELEE_SKINS_BY_BASE[s.skinFor] ||= []).push(s);
+const GEN1_SKIN_DEFS = [
+  ...BASIC_GUN_STAT_SKINS.filter(s => s.id !== 'stock'),
+  ...BASIC_MELEE_SKINS,
+];
+const GEN1_SKIN_BY_ID = Object.fromEntries(GEN1_SKIN_DEFS.map(s => [s.id, s]));
 
 let equippedGunStatSkins = (() => {
   try { return JSON.parse(localStorage.getItem('pvp_gun_stat_skins') || '{}') || {}; } catch (e) { return {}; }
@@ -916,8 +967,16 @@ function saveSkinEquips() {
   try { localStorage.setItem('pvp_gun_stat_skins', JSON.stringify(equippedGunStatSkins)); } catch (e) {}
   try { localStorage.setItem('pvp_melee_skins', JSON.stringify(equippedMeleeSkins)); } catch (e) {}
 }
+function ownedSkinIds() {
+  if (currentUser?.isAdmin) return new Set(GEN1_SKIN_DEFS.map(s => s.id));
+  return new Set(currentUser?.skinInventory || []);
+}
+function ownsSkin(id) {
+  return !id || id === 'stock' || currentUser?.isAdmin || ownedSkinIds().has(id);
+}
 function gunStatSkinFor(weaponId) {
   const want = equippedGunStatSkins[weaponId];
+  if (!ownsSkin(want)) return null;
   return BASIC_GUN_STAT_SKINS.find(s => s.weapon === weaponId && s.id === want) || null;
 }
 function effectiveGunStats(w) {
@@ -932,6 +991,7 @@ function effectiveGunStats(w) {
 }
 function meleeSkinFor(baseId) {
   const want = equippedMeleeSkins[baseId];
+  if (!ownsSkin(want)) return null;
   return BASIC_MELEE_SKINS.find(s => s.skinFor === baseId && s.id === want) || null;
 }
 function effectiveMeleeItem(base) {
@@ -1045,7 +1105,7 @@ let currentWeapon = WEAPONS[0];
 let ammo = currentWeapon.mag;
 let reserve = currentWeapon.reserve;
 let reloading = false, lastShot = 0, shooting = false;
-const weaponHeatState = {}; // per-weapon-id { shotCount, cooldownUntil } for heatShots/heatCooldown weapons
+const weaponHeatState = {}; // per-weapon-id { windowStart, lastFireAt, cooldownUntil } for heatWindow/heatCooldown weapons
 let isADS = false, adsFOV = 75, targetFOV = 75;
 
 let myKills = 0, isDead = false, gameStarted = false;
@@ -16303,7 +16363,12 @@ function updateMovement(dt) {
     const t = (window._slideUntil - nowMs) / SLIDE_MS; // 1 → 0
     slideMult = 1.0 + (SLIDE_BOOST - 1.0) * t;
   }
-  const speedMult = baseSpeedMult * (adrenalineActive ? 1.6 : 1) * frostMult * adminSpeedMult * crouchMult * slideMult;
+  // A weapon can make you quicker while you are actually firing it — the
+  // flamethrower wants you closing the distance, not backing off.
+  const fireBoost = (shooting && currentWeapon && currentWeapon.moveBoost
+                     && (activeSlot === 'primary' || activeSlot === 'secondary'))
+                    ? currentWeapon.moveBoost : 1;
+  const speedMult = baseSpeedMult * (adrenalineActive ? 1.6 : 1) * frostMult * adminSpeedMult * crouchMult * slideMult * fireBoost;
   // Drop the camera when crouching / sliding (eased)
   if (!window._crouchEye) window._crouchEye = 1.65;
   // Slide drops the eye to 0.70 m so the view clearly dips below normal
@@ -17189,14 +17254,15 @@ function tryShoot() {
   const activeRateMult = (abilityBuff?.weaponId === currentWeapon.id && abilityBuff.rateMult) ? abilityBuff.rateMult : 1;
   if (now - lastShot < wStats.fireRate * activeRateMult) return;
   let heat = null;
-  if (wStats.heatShots) {
-    heat = weaponHeatState[currentWeapon.id] || (weaponHeatState[currentWeapon.id] = { shotCount: 0, cooldownUntil: 0 });
+  if (wStats.heatWindow) {
+    heat = weaponHeatState[currentWeapon.id] || (weaponHeatState[currentWeapon.id] = { windowStart: 0, lastFireAt: 0, cooldownUntil: 0 });
     if (now < heat.cooldownUntil) return; // overheated — locked out until cooldown ends
-    if (heat.shotCount >= wStats.heatShots) {
+    if (!heat.windowStart || now - heat.lastFireAt > wStats.fireRate * 3) heat.windowStart = now; // trigger was released — fresh window
+    if (now - heat.windowStart >= wStats.heatWindow) {
       heat.cooldownUntil = now + wStats.heatCooldown;
-      heat.shotCount = 0;
+      heat.windowStart = 0;
       flashAbilityName('OVERHEATED');
-      return; // 3 shots already fired since the last cooldown — this pull is eaten
+      return; // this trigger pull is eaten by the cooldown
     }
   }
   const pool = weaponAmmo[currentWeaponIdx];
@@ -17204,7 +17270,7 @@ function tryShoot() {
   if (pool.ammo <= 0 && !adminInfAmmo) { if (pool.reserve > 0 && !wStats.noReload) startReload(); return; }
 
   lastShot = now;
-  if (heat) heat.shotCount++;
+  if (heat) heat.lastFireAt = now;
   addRecoil(currentWeapon);
   if (!adminInfAmmo) pool.ammo--; // ⚡ admin infinite ammo: don't decrement
   ammo = pool.ammo;
@@ -19738,6 +19804,7 @@ function updateBullets(dt) {
                 emitHit(b.botId, `deflect_${myId}_${Date.now()}`, 'katana', dp);
               } else if (_mp !== 'parry') {
                 socket.emit('botHitMe', { botId: b.botId, weapon: b.weaponId });
+                applyDotToPlayer(b.weaponId);
                 // wasHead is known here, but bot damage is not scaled by
                 // location yet, so it is deliberately not passed as if it were.
                 applyBotDamageToPlayer(b.weaponId, b.botId);
@@ -19929,6 +19996,7 @@ function updateBullets(dt) {
           triggerPaintExplosion(_bpos.clone(), b);
         } else {
           emitHit(bestHit.pid, b.id, b.weaponId || currentWeapon.id, _bpos.clone(), bestHit.headshot);
+          applyDotOnHit(b.weaponId || currentWeapon.id, bestHit.pid);
         }
         // Firework Launcher: also spawn burn zone on direct hit
         if (b.weaponId === 'firework_launcher') {
@@ -21050,6 +21118,49 @@ function updateBurnZones(dt) {
   }
 }
 
+// 🔥 Damage over time from a hit, rather than from standing in a puddle. Burn
+// does NOT stack: touching a target again refreshes its ten seconds instead of
+// adding a second burn, so holding the trigger on one person is no better than
+// tagging them once and moving on.
+const _dotTargets = {};        // botId/pid -> { until, dps, weaponId }
+let _playerDot = null;         // the same, for you
+
+function applyDotOnHit(weaponId, targetPid) {
+  const w = WEAPONS.find(x => x.id === weaponId);
+  const d = w && (w.burnOnHit || w.poisonOnHit);
+  if (!d) return;
+  const until = Date.now() + d.dur;
+  const cur = _dotTargets[targetPid];
+  // Refresh, never add. A longer burn already running is left alone.
+  _dotTargets[targetPid] = { until: Math.max(until, cur ? cur.until : 0),
+                             dps: d.dps, weaponId: w.burnOnHit ? 'flame_burn' : 'caustic_burn' };
+}
+function applyDotToPlayer(weaponId) {
+  const w = WEAPONS.find(x => x.id === weaponId);
+  const d = w && (w.burnOnHit || w.poisonOnHit);
+  if (!d) return;
+  const until = Date.now() + d.dur;
+  _playerDot = { until: Math.max(until, _playerDot ? _playerDot.until : 0), dps: d.dps,
+                 weaponId: w.burnOnHit ? 'flame_burn' : 'caustic_burn' };
+}
+let _lastDotTick = 0;
+function updateDots() {
+  const now = Date.now();
+  if (now - _lastDotTick < 1000) return;
+  _lastDotTick = now;
+  for (const pid of Object.keys(_dotTargets)) {
+    const d = _dotTargets[pid];
+    if (d.until <= now) { delete _dotTargets[pid]; continue; }
+    const mesh = remoteMeshes[pid];
+    if (!mesh) { delete _dotTargets[pid]; continue; }
+    emitHit(pid, `dot_${myId}_${now}_${pid}`, d.weaponId, mesh.position.clone().setY(1.0));
+  }
+  if (_playerDot) {
+    if (_playerDot.until <= now) _playerDot = null;
+    else if (typeof damagePlayerDOT === 'function') damagePlayerDOT(_playerDot.dps, _playerDot.weaponId);
+  }
+}
+
 function triggerPaintExplosion(pos, b) {
   const radius = b.paintRadius || 4;
   const color  = b.paintColor  || 0xff44ff;
@@ -21181,7 +21292,7 @@ function updateSpectatorHUD() {
 const CLIENT_WEAPON_DAMAGE = Object.fromEntries([
   ...WEAPONS.map(w => [w.id, w.damage]),
   ...MELEE_ITEMS.map(m => [m.id, m.damage]),
-  ['ak20_skin_twin', 20], ['ak20_skin_tracking', 25], ['ak20_skin_swarm', 17],
+  ['ak20_skin_twin', 20], ['ak20_skin_tracking', 25], ['ak20_skin_swarm', 17], ['pistol_skin_darker', 21],
   ['mg42', 15], ['bat', 38], ['sabre', 45], ['frying_pan', 32], ['sledge', 70],
   ['spear', 50], ['spear_throw', 85], ['pickle', 22], ['shield_charge', 60],
   ['knife_instakill', 9999], ['chainsaw', 45], ['katana', 65], ['knife', 28],
@@ -25749,6 +25860,7 @@ function loop() {
   lastTime = now;
   updateMovement(dt);
   updateRecoil(dt);   // the muzzle settles back between shots
+  updateDots();       // anything set alight keeps taking damage
   updateBullets(dt);
   updateImpactMarks();
   updateBotAI(dt);
@@ -26447,9 +26559,15 @@ function showLoadoutScreen(mode) {
     row.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap;margin-top:6px;';
     skins.forEach(s => {
       const b = document.createElement('button');
+      const unlocked = ownsSkin(s.id);
       b.textContent = s.id === 'stock' ? 'STOCK' : s.name.replace(/^AK20 | AK /, '');
-      b.style.cssText = `padding:3px 5px;font-size:8px;font-family:inherit;border-radius:4px;cursor:pointer;background:${on===s.id?'#173044':'#151515'};color:${on===s.id?'#88ccff':'#aaa'};border:1px solid ${on===s.id?'#88ccff':'#444'};`;
-      b.addEventListener('click', e => { e.stopPropagation(); setGunStatSkin(w.id, s.id); rerenderLoadout(); });
+      if (!unlocked) b.textContent = '🔒 ' + b.textContent;
+      b.style.cssText = `padding:3px 5px;font-size:8px;font-family:inherit;border-radius:4px;cursor:${unlocked?'pointer':'not-allowed'};opacity:${unlocked?1:0.5};background:${on===s.id?'#173044':'#151515'};color:${on===s.id?'#88ccff':'#aaa'};border:1px solid ${on===s.id?'#88ccff':'#444'};`;
+      b.addEventListener('click', e => {
+        e.stopPropagation();
+        if (!unlocked) { alert('You have not pulled that skin yet. Open Gen 1 cases in Lobby 13.'); return; }
+        setGunStatSkin(w.id, s.id); rerenderLoadout();
+      });
       row.appendChild(b);
     });
     card.appendChild(row);
@@ -26467,9 +26585,14 @@ function showLoadoutScreen(mode) {
     row.appendChild(stock);
     skins.forEach(s => {
       const b = document.createElement('button');
-      b.textContent = s.name;
-      b.style.cssText = `padding:3px 5px;font-size:8px;font-family:inherit;border-radius:4px;cursor:pointer;background:${on===s.id?'#332414':'#151515'};color:${on===s.id?'#ffcc99':'#aaa'};border:1px solid ${on===s.id?'#ffcc99':'#444'};`;
-      b.addEventListener('click', e => { e.stopPropagation(); setMeleeSkin(m.id, s.id); rerenderLoadout(); });
+      const unlocked = ownsSkin(s.id);
+      b.textContent = unlocked ? s.name : '🔒 ' + s.name;
+      b.style.cssText = `padding:3px 5px;font-size:8px;font-family:inherit;border-radius:4px;cursor:${unlocked?'pointer':'not-allowed'};opacity:${unlocked?1:0.5};background:${on===s.id?'#332414':'#151515'};color:${on===s.id?'#ffcc99':'#aaa'};border:1px solid ${on===s.id?'#ffcc99':'#444'};`;
+      b.addEventListener('click', e => {
+        e.stopPropagation();
+        if (!unlocked) { alert('You have not pulled that skin yet. Open Gen 1 cases in Lobby 13.'); return; }
+        setMeleeSkin(m.id, s.id); rerenderLoadout();
+      });
       row.appendChild(b);
     });
     card.appendChild(row);
@@ -26873,7 +26996,7 @@ const adminCheats = {
       // Silently try to log in — populate currentUser if successful
       authRequest('/auth/login', saved).then(r => {
         if (r && r.ok) {
-          currentUser = { username: r.username, password: saved.password, unlocks: r.unlocks || [], purchased: r.purchased || [], credits: r.credits ?? 0, fragments: r.fragments ?? 0, chests: r.chests || { common: 0, rare: 0 }, upgrades: r.upgrades || {}, skinCases: r.skinCases || [], freeSpinAvailable: !!r.freeSpinAvailable, adminPassExpiresAt: r.adminPassExpiresAt || 0, isAdmin: !!r.isAdmin };
+          currentUser = { username: r.username, password: saved.password, unlocks: r.unlocks || [], purchased: r.purchased || [], credits: r.credits ?? 0, fragments: r.fragments ?? 0, chests: r.chests || { common: 0, rare: 0 }, upgrades: r.upgrades || {}, skinCases: r.skinCases || [], skinCasePacks: r.skinCasePacks || {}, skinInventory: r.skinInventory || [], freeSpinAvailable: !!r.freeSpinAvailable, adminPassExpiresAt: r.adminPassExpiresAt || 0, isAdmin: !!r.isAdmin };
           const wb = document.getElementById('welcome-back');
           if (wb) {
             wb.textContent = r.isAdmin
@@ -26932,7 +27055,7 @@ async function startGame() {
     return;
   }
 
-  currentUser = { username: result.username, password: pass, unlocks: result.unlocks || [], purchased: result.purchased || [], credits: result.credits ?? 0, fragments: result.fragments ?? 0, chests: result.chests || { common: 0, rare: 0 }, upgrades: result.upgrades || {}, skinCases: result.skinCases || [], freeSpinAvailable: !!result.freeSpinAvailable, adminPassExpiresAt: result.adminPassExpiresAt || 0, isAdmin: !!result.isAdmin };
+  currentUser = { username: result.username, password: pass, unlocks: result.unlocks || [], purchased: result.purchased || [], credits: result.credits ?? 0, fragments: result.fragments ?? 0, chests: result.chests || { common: 0, rare: 0 }, upgrades: result.upgrades || {}, skinCases: result.skinCases || [], skinCasePacks: result.skinCasePacks || {}, skinInventory: result.skinInventory || [], freeSpinAvailable: !!result.freeSpinAvailable, adminPassExpiresAt: result.adminPassExpiresAt || 0, isAdmin: !!result.isAdmin };
   localStorage.setItem('pvp_user', JSON.stringify({ username: name, password: pass }));
   setAuthStatus(result.isAdmin ? `🔓 ADMIN ACCESS GRANTED · ${result.username}` : `Logged in as ${result.username}`, result.isAdmin ? '#ff4444' : '#88ff88');
 
@@ -27413,22 +27536,79 @@ async function trialWeapon(weaponId) {
 
 async function buySkinCaseGen1() {
   if (!currentUser) { alert('Log in first.'); return false; }
-  if (currentUser.isAdmin) {
-    currentUser.skinCases = [...new Set([...(currentUser.skinCases || []), 'gen1_basic'])];
-    return true;
-  }
-  if ((currentUser.skinCases || []).includes('gen1_basic')) return true;
   if ((currentUser.credits ?? 0) < SKIN_CASE_GEN1_COST) {
     alert(`Not enough donuts.\nNeed ${money(SKIN_CASE_GEN1_COST)} · You have ${currentUser.credits ?? 0}`);
     return false;
   }
-  if (!confirm(`Buy Skin Case Gen 1 for ${money(SKIN_CASE_GEN1_COST)}?\n\nContains the basic stat-changing skins.`)) return false;
+  if (!confirm(`Buy one Skin Case Gen 1 for ${money(SKIN_CASE_GEN1_COST)}?\n\nOpen it in Lobby 13 to reveal one basic stat-changing skin.`)) return false;
   const r = await authRequest('/shop/buy-skin-case', { username: currentUser.username, password: currentUser.password, caseId: 'gen1_basic' });
   if (!r || r.error) { alert('❌ ' + (r?.error || 'shop error')); return false; }
   currentUser.credits = r.credits ?? currentUser.credits;
-  currentUser.skinCases = r.skinCases || [...(currentUser.skinCases || []), 'gen1_basic'];
+  currentUser.skinCasePacks = r.skinCasePacks || currentUser.skinCasePacks || {};
+  currentUser.skinInventory = r.skinInventory || currentUser.skinInventory || [];
   updateUserInfoBar();
   return true;
+}
+
+async function openSkinCaseGen1() {
+  if (!currentUser) { alert('Log in first.'); return false; }
+  if (!inLobby) { alert('Open skin cases in Lobby 13. It is more dramatic there.'); return false; }
+  const count = currentUser.isAdmin ? 99 : (currentUser.skinCasePacks?.gen1_basic || 0);
+  if (count <= 0) { alert(`No unopened Gen 1 cases. Buy one for ${money(SKIN_CASE_GEN1_COST)}.`); return false; }
+  const r = currentUser.isAdmin
+    ? (() => {
+        const missing = GEN1_SKIN_DEFS.filter(s => !ownedSkinIds().has(s.id));
+        const pool = missing.length ? missing : GEN1_SKIN_DEFS;
+        const skin = pool[Math.floor(Math.random() * pool.length)];
+        currentUser.skinInventory = [...new Set([...(currentUser.skinInventory || []), skin.id])];
+        return { ok: true, skinId: skin.id, duplicate: false, skinCasePacks: currentUser.skinCasePacks || { gen1_basic: 99 }, skinInventory: currentUser.skinInventory };
+      })()
+    : await authRequest('/shop/open-skin-case', { username: currentUser.username, password: currentUser.password, caseId: 'gen1_basic' });
+  if (!r || r.error) { alert('❌ ' + (r?.error || 'case error')); return false; }
+  currentUser.skinCasePacks = r.skinCasePacks || currentUser.skinCasePacks || {};
+  currentUser.skinInventory = r.skinInventory || currentUser.skinInventory || [];
+  showSkinCaseOpening(r.skinId, !!r.duplicate);
+  updateUserInfoBar();
+  return true;
+}
+
+function showSkinCaseOpening(skinId, duplicate) {
+  const skin = GEN1_SKIN_BY_ID[skinId] || { name: skinId || 'Mystery Skin', rarity: 'basic', blurb: 'A thing happened.' };
+  const roll = [...GEN1_SKIN_DEFS].sort(() => Math.random() - 0.5).slice(0, 9);
+  roll.push(skin);
+  const old = document.getElementById('skin-case-opening');
+  if (old) old.remove();
+  const el = document.createElement('div');
+  el.id = 'skin-case-opening';
+  el.style.cssText = 'position:fixed;inset:0;z-index:12000;background:rgba(0,0,0,0.82);display:flex;align-items:center;justify-content:center;font-family:"Courier New",monospace;color:#fff;';
+  el.innerHTML = `
+    <div style="width:min(720px,92vw);background:#100f16;border:2px solid #88ccff;border-radius:8px;padding:22px;box-shadow:0 0 40px rgba(136,204,255,0.35);text-align:center;overflow:hidden;">
+      <div style="font-size:13px;letter-spacing:4px;color:#88ccff;margin-bottom:12px;">📦 SKIN CASE GEN 1</div>
+      <div id="case-reel" style="display:flex;gap:8px;transform:translateX(0);transition:transform 2.4s cubic-bezier(.12,.8,.08,1);margin:18px 0 20px;">
+        ${roll.map(s => `<div style="flex:0 0 150px;height:92px;background:#171923;border:1px solid ${s.id===skin.id?'#ffdd66':'#444'};border-radius:6px;padding:10px;display:flex;flex-direction:column;justify-content:center;">
+          <div style="font-size:10px;color:#8aa;letter-spacing:1px;">${(s.rarity || 'basic').toUpperCase()}</div>
+          <div style="font-size:13px;color:${s.id===skin.id?'#ffdd66':'#ddd'};font-weight:bold;">${s.name}</div>
+        </div>`).join('')}
+      </div>
+      <div id="case-result" style="opacity:0;transform:scale(.9);transition:all .45s ease;">
+        <div style="font-size:28px;color:#ffdd66;font-weight:bold;margin-bottom:6px;">${skin.name}</div>
+        <div style="font-size:12px;color:#9ab;line-height:1.5;">${skin.blurb || ''}</div>
+        ${duplicate ? '<div style="font-size:11px;color:#ff9966;margin-top:8px;">Duplicate. Emotionally devastating, mechanically harmless.</div>' : '<div style="font-size:11px;color:#88ff99;margin-top:8px;">NEW SKIN UNLOCKED</div>'}
+      </div>
+      <button id="case-close" style="margin-top:18px;padding:8px 22px;background:#182438;color:#88ccff;border:1px solid #66aaff;border-radius:4px;font-family:inherit;letter-spacing:2px;cursor:pointer;">OK</button>
+    </div>`;
+  document.body.appendChild(el);
+  playSoundEvent('ammo_refill', { volume: 0.7, minGap: 0 });
+  setTimeout(() => {
+    const reel = document.getElementById('case-reel');
+    if (reel) reel.style.transform = 'translateX(-' + Math.max(0, (roll.length - 3) * 158) + 'px)';
+  }, 80);
+  setTimeout(() => {
+    const result = document.getElementById('case-result');
+    if (result) { result.style.opacity = '1'; result.style.transform = 'scale(1)'; }
+    playSoundEvent(skin.rarity === 'lame' ? 'hitmarker' : 'kill', { volume: 0.9, minGap: 0 });
+  }, 2550);
+  el.querySelector('#case-close').addEventListener('click', () => { el.remove(); openWeaponSkinsPanel(); });
 }
 
 async function awardMatchCredits(kills, won) {
@@ -27819,21 +27999,23 @@ function openWeaponSkinsPanel() {
       <div style="font-size:10px;letter-spacing:1px;color:${s.id===selectedWeaponSkin?'#ffdd55':'#ccc'};">${s.name}</div>
     </div>`;
   const basicCaseSection = () => {
-    const ownsGen1 = !!(currentUser?.isAdmin || currentUser?.skinCases?.includes('gen1_basic'));
-    const lockedStyle = ownsGen1 ? '' : 'opacity:0.38;filter:grayscale(0.7);pointer-events:none;';
+    const unopened = currentUser?.isAdmin ? 99 : (currentUser?.skinCasePacks?.gen1_basic || 0);
+    const ownedCount = currentUser?.isAdmin ? GEN1_SKIN_DEFS.length : ownedSkinIds().size;
     const gunRows = Object.entries(GUN_STAT_SKINS_BY_WEAPON).map(([wid, skins]) => {
       const w = WEAPONS.find(x => x.id === wid);
       if (!w) return '';
       const on = equippedGunStatSkins[wid] || 'stock';
-      return `<div style="margin-top:12px;${lockedStyle}">
+      return `<div style="margin-top:12px;">
         <div style="font-size:11px;letter-spacing:2px;color:#99ccff;margin-bottom:6px;">${w.name.toUpperCase()} STAT SKINS</div>
         <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;">
-          ${skins.map(s => `<div data-gskin="${s.id}" data-gweapon="${wid}" class="gs-cell"
-            style="cursor:pointer;border:2px solid ${on===s.id?'#88ccff':'#444'};border-radius:6px;padding:8px;background:${on===s.id?'#132434':'#161820'};">
+          ${skins.map(s => {
+            const unlocked = ownsSkin(s.id);
+            return `<div data-gskin="${s.id}" data-gweapon="${wid}" class="gs-cell"
+            style="cursor:${unlocked?'pointer':'not-allowed'};opacity:${unlocked?1:0.45};filter:${unlocked?'none':'grayscale(0.8)'};border:2px solid ${on===s.id?'#88ccff':'#444'};border-radius:6px;padding:8px;background:${on===s.id?'#132434':'#161820'};">
             <div style="height:20px;border-radius:4px;background:linear-gradient(90deg, ${s.sw[0]} 0 50%, ${s.sw[1]} 50% 100%);border:1px solid #000;margin-bottom:5px;"></div>
-            <div style="font-size:10px;color:${on===s.id?'#88ccff':'#ddd'};">${s.name}</div>
+            <div style="font-size:10px;color:${on===s.id?'#88ccff':'#ddd'};">${unlocked ? s.name : '🔒 ' + s.name}</div>
             <div style="font-size:9px;color:#899;line-height:1.25;margin-top:3px;">${s.blurb}</div>
-          </div>`).join('')}
+          </div>`; }).join('')}
         </div>
       </div>`;
     }).join('');
@@ -27841,27 +28023,31 @@ function openWeaponSkinsPanel() {
       const base = MELEE_ITEMS.find(x => x.id === baseId);
       if (!base) return '';
       const on = equippedMeleeSkins[baseId] || '';
-      return `<div style="margin-top:10px;${lockedStyle}">
+      return `<div style="margin-top:10px;">
         <div style="font-size:10px;letter-spacing:1px;color:#ffcc99;margin-bottom:5px;">${base.name.toUpperCase()}</div>
         <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;">
           <div data-mskin2="" data-mbase="${baseId}" class="melee-skin-cell"
             style="cursor:pointer;border:1px solid ${!on?'#ffcc99':'#444'};border-radius:5px;padding:6px;background:${!on?'#2a2118':'#161616'};font-size:9px;color:${!on?'#ffcc99':'#999'};">STOCK</div>
-          ${skins.map(s => `<div data-mskin2="${s.id}" data-mbase="${baseId}" class="melee-skin-cell"
-            style="cursor:pointer;border:1px solid ${on===s.id?'#ffcc99':'#444'};border-radius:5px;padding:6px;background:${on===s.id?'#2a2118':'#161616'};">
-            <div style="font-size:9px;color:${on===s.id?'#ffcc99':'#ddd'};">${s.name}</div>
+          ${skins.map(s => {
+            const unlocked = ownsSkin(s.id);
+            return `<div data-mskin2="${s.id}" data-mbase="${baseId}" class="melee-skin-cell"
+            style="cursor:${unlocked?'pointer':'not-allowed'};opacity:${unlocked?1:0.45};filter:${unlocked?'none':'grayscale(0.8)'};border:1px solid ${on===s.id?'#ffcc99':'#444'};border-radius:5px;padding:6px;background:${on===s.id?'#2a2118':'#161616'};">
+            <div style="font-size:9px;color:${on===s.id?'#ffcc99':'#ddd'};">${unlocked ? s.name : '🔒 ' + s.name}</div>
             <div style="font-size:8px;color:#998;line-height:1.25;margin-top:2px;">${s.blurb}</div>
-          </div>`).join('')}
+          </div>`; }).join('')}
         </div>
       </div>`;
     }).join('');
     return `<div style="margin-top:18px;border-top:1px solid #6a5520;padding-top:12px;">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
         <div style="font-size:14px;letter-spacing:2px;color:#88ccff;">📦 SKIN CASE GEN 1</div>
-        ${ownsGen1
-          ? '<div style="font-size:10px;color:#88ff99;letter-spacing:1px;">✓ OWNED</div>'
-          : `<button id="buy-skin-case-gen1" style="padding:6px 10px;background:#182438;color:#88ccff;border:1px solid #66aaff;border-radius:4px;font-family:inherit;font-size:10px;letter-spacing:1px;cursor:pointer;">BUY · ${money(SKIN_CASE_GEN1_COST)}</button>`}
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
+          <div style="font-size:10px;color:#88ff99;letter-spacing:1px;">${ownedCount}/${GEN1_SKIN_DEFS.length} SKINS · ${unopened} CASES</div>
+          <button id="open-skin-case-gen1" ${unopened<=0?'disabled':''} style="padding:6px 10px;background:${unopened>0?'#183824':'#222'};color:${unopened>0?'#88ff99':'#666'};border:1px solid ${unopened>0?'#66ff99':'#444'};border-radius:4px;font-family:inherit;font-size:10px;letter-spacing:1px;cursor:${unopened>0?'pointer':'not-allowed'};">OPEN</button>
+          <button id="buy-skin-case-gen1" style="padding:6px 10px;background:#182438;color:#88ccff;border:1px solid #66aaff;border-radius:4px;font-family:inherit;font-size:10px;letter-spacing:1px;cursor:pointer;">BUY · ${money(SKIN_CASE_GEN1_COST)}</button>
+        </div>
       </div>
-      <div style="font-size:10px;color:#8a9aaa;margin:5px 0 2px;line-height:1.4;">Gen 1 contains basic stat-changing skins. They change stats a little, then reuse the base weapon slot.</div>
+      <div style="font-size:10px;color:#8a9aaa;margin:5px 0 2px;line-height:1.4;">Buy cases anywhere, but open them in Lobby 13. Each case reveals one basic stat-changing skin.</div>
       ${gunRows}
       <div style="margin-top:14px;font-size:12px;letter-spacing:2px;color:#ffcc99;">MELEE SKINS</div>
       ${meleeRows}
@@ -27881,16 +28067,20 @@ function openWeaponSkinsPanel() {
   if (buyCaseBtn) buyCaseBtn.addEventListener('click', async () => {
     if (await buySkinCaseGen1()) openWeaponSkinsPanel();
   });
+  const openCaseBtn = panel.querySelector('#open-skin-case-gen1');
+  if (openCaseBtn) openCaseBtn.addEventListener('click', async () => {
+    await openSkinCaseGen1();
+  });
   panel.querySelectorAll('.gs-cell').forEach(cell => {
     cell.addEventListener('click', () => {
-      if (!(currentUser?.isAdmin || currentUser?.skinCases?.includes('gen1_basic'))) { alert(`Skin Case Gen 1 costs ${money(SKIN_CASE_GEN1_COST)}.`); return; }
+      if (!ownsSkin(cell.dataset.gskin)) { alert('You have not pulled that skin yet. Open Gen 1 cases in Lobby 13.'); return; }
       setGunStatSkin(cell.dataset.gweapon, cell.dataset.gskin || null);
       openWeaponSkinsPanel();
     });
   });
   panel.querySelectorAll('.melee-skin-cell').forEach(cell => {
     cell.addEventListener('click', () => {
-      if (!(currentUser?.isAdmin || currentUser?.skinCases?.includes('gen1_basic'))) { alert(`Skin Case Gen 1 costs ${money(SKIN_CASE_GEN1_COST)}.`); return; }
+      if (!ownsSkin(cell.dataset.mskin2)) { alert('You have not pulled that skin yet. Open Gen 1 cases in Lobby 13.'); return; }
       setMeleeSkin(cell.dataset.mbase, cell.dataset.mskin2 || null);
       openWeaponSkinsPanel();
     });
@@ -28084,10 +28274,11 @@ function updateUserInfoBar() {
     const credits  = currentUser.isAdmin ? '∞' : (currentUser.credits ?? 0);
     const frags    = currentUser.isAdmin ? '∞' : (currentUser.fragments ?? 0);
     const ch = currentUser.chests || { common: 0, rare: 0 };
+    const cases = currentUser.isAdmin ? '∞' : (currentUser.skinCasePacks?.gen1_basic || 0);
     const passTag = adminPassActive() && !currentUser.isAdmin
       ? ` · <b style="color:#ffcc88">🪖 PASS ${Math.ceil(adminPassMsLeft()/60000)}m</b>`
       : '';
-    unlocksEl.innerHTML = `${CURRENCY_ICON} <b style="color:#ffdd55">${credits}</b> · 🧩 <b style="color:#aaccff">${frags}</b> frags · 📦 ${ch.common}c/${ch.rare}r · 🪖 ${n}/24${passTag}`;
+    unlocksEl.innerHTML = `${CURRENCY_ICON} <b style="color:#ffdd55">${credits}</b> · 🧩 <b style="color:#aaccff">${frags}</b> frags · 📦 ${ch.common}c/${ch.rare}r · 🎁 ${cases} skin · 🪖 ${n}/24${passTag}`;
   }
   // Show admin panel button if admin
   let adminBtn = document.getElementById('admin-panel-btn');

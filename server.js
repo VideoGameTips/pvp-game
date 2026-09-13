@@ -164,6 +164,19 @@ const WEAPON_COSTS = {
   molotov: 180,
   heal_gun: 220, tesla_coil: 360, acid_grenade: 200, bee_jar: 240,
 };
+const CURRENCY_NAME = 'donuts';
+const CURRENCY_ICON = '🍩';
+const WEAPON_PRICE_MULT = 100;
+const MATCH_REWARD_MULT = 40;
+const SKIN_CASE_GEN1_COST = 50000;
+const GEN1_SKIN_IDS = [
+  'ak20_twin_barrel', 'ak20_tracking_ar', 'ak20_swarm_rifle', 'pistol_darker_handgun',
+  'brass_knuckles', 'hatchet', 'machete', 'cane', 'cricket_bat', 'pipe',
+  'wrench', 'shovel', 'golf_club', 'tennis_racket', 'fire_poker', 'meat_cleaver',
+];
+for (const id of Object.keys(WEAPON_COSTS)) {
+  if (WEAPON_COSTS[id] > 0) WEAPON_COSTS[id] *= WEAPON_PRICE_MULT;
+}
 
 // Free starter loadout — every account has these unlocked from day 1.
 const FREE_WEAPONS = new Set([
@@ -198,12 +211,13 @@ const BUNDLES = {
   knight:       { name: "Knight's Honor",     price: 410, items: ['sg8','sabre','katana','smoke'] },
   frostbite:    { name: 'Frostbite',          price: 380, items: ['freeze_gun','frost_blaster','knife','smoke'] },
   knockback:    { name: 'Knockback',          price: 500, items: ['shockwave_launcher','sawed_off','sledge','air_grenade'] },
-  smart_tech:   { name: 'Smart Tech',         price: 610, items: ['swarm_rifle','smart_smg','hunter_drone','magnet_mine'] },
+  smart_tech:   { name: 'Smart Tech',         price: 610, items: ['ak20','smart_smg','hunter_drone','magnet_mine'] },
   mortar:       { name: 'Mortar Squad',       price: 550, items: ['mortar_rifle','grenade_launcher','hand_cannon','frag'] },
   cosmic_p2w:   { name: 'Cosmic P2W',         price: 80000, items: ['event_horizon','storm_core','abs_zero','solar_lance','quantum_repeater','magnetar','nebula_mortar','prism_engine','void_harvester','pulse_needle','revolver','phase_blade','gravity_hammer','volt_whip','nano_swarm','warp_beacon','stasis_mine','specter_drone','quantum_barrier'] },
 };
+for (const b of Object.values(BUNDLES)) b.price *= WEAPON_PRICE_MULT;
 
-const STARTER_CREDITS = 500;
+const STARTER_CREDITS = 500 * MATCH_REWARD_MULT;
 const TRIAL_DIVISOR = 20; // trial costs 1/20 of buy price (min 1)
 
 function ensureShopFields(u) {
@@ -213,6 +227,16 @@ function ensureShopFields(u) {
   if (typeof u.fragments !== 'number') u.fragments = 0;
   if (!u.chests) u.chests = { common: 0, rare: 0 };
   if (!u.upgrades) u.upgrades = {}; // { [weaponId]: { damage, mag, reload } }
+  if (!Array.isArray(u.skinCases)) u.skinCases = [];
+  if (!u.skinCasePacks || typeof u.skinCasePacks !== 'object') u.skinCasePacks = {};
+  if (typeof u.skinCasePacks.gen1_basic !== 'number') u.skinCasePacks.gen1_basic = 0;
+  if (!Array.isArray(u.skinInventory)) u.skinInventory = [];
+  // Legacy migration: the previous build used skinCases:['gen1_basic'] to mean
+  // "owns every Gen 1 skin." Preserve that instead of locking old buyers out.
+  if (u.skinCases.includes('gen1_basic')) {
+    for (const id of GEN1_SKIN_IDS) if (!u.skinInventory.includes(id)) u.skinInventory.push(id);
+    u.skinCases = u.skinCases.filter(id => id !== 'gen1_basic');
+  }
   if (!u.lastFreeSpinDate) u.lastFreeSpinDate = ''; // YYYY-MM-DD UTC
   if (typeof u.adminPassExpiresAt !== 'number') u.adminPassExpiresAt = 0; // 10-min trial of all admin items
 }
@@ -255,11 +279,11 @@ function rollWheel() {
   // Sum is 100. 0.3% jackpot at the top.
   const r = Math.random() * 100;
   if (r < 0.3) return { kind: 'jackpot' };          // random rare weapon (>=400 cost)
-  if (r < 1.0) return { kind: 'bigBundle' };        // 400 credits + 150 fragments
-  if (r < 6.0) return { kind: 'smallRare' };        // 200 credits OR 100 fragments
+  if (r < 1.0) return { kind: 'bigBundle' };        // 400 donuts + 150 fragments
+  if (r < 6.0) return { kind: 'smallRare' };        // 200 donuts OR 100 fragments
   if (r < 20.0) return { kind: 'bigFragments' };    // 40-80 fragments
   if (r < 55.0) return { kind: 'fragments' };       // 12-30 fragments
-  return { kind: 'credits' };                       // 60-180 credits
+  return { kind: 'credits' };                       // 60-180 donuts
 }
 
 app.post('/shop/buy-chest', (req, res) => {
@@ -268,7 +292,7 @@ app.post('/shop/buy-chest', (req, res) => {
   if (!u) return res.status(401).json({ error: 'auth failed' });
   if (!CHEST_PRICES[type]) return res.status(400).json({ error: 'unknown chest type' });
   const cost = CHEST_PRICES[type];
-  if ((u.credits || 0) < cost) return res.status(402).json({ error: 'not enough credits', credits: u.credits });
+  if ((u.credits || 0) < cost) return res.status(402).json({ error: 'not enough donuts', credits: u.credits });
   u.credits -= cost;
   u.chests[type] = (u.chests[type] || 0) + 1;
   saveUsers();
@@ -333,7 +357,7 @@ app.post('/shop/spin-wheel', (req, res) => {
   const today = todayUTC();
   let free = u.lastFreeSpinDate !== today;
   if (u.isAdmin) free = true; // admin: always free, never deducted
-  if (!free && (u.credits || 0) < WHEEL_PAID_COST) return res.status(402).json({ error: 'not enough credits', credits: u.credits });
+  if (!free && (u.credits || 0) < WHEEL_PAID_COST) return res.status(402).json({ error: 'not enough donuts', credits: u.credits });
   if (free && !u.isAdmin) u.lastFreeSpinDate = today;
   else if (!free) u.credits -= WHEEL_PAID_COST;
   const outcome = rollWheel();
@@ -374,7 +398,7 @@ app.post('/shop/admin-pass', (req, res) => {
     return res.json({ ok: true, already: true, adminPassExpiresAt: u.adminPassExpiresAt, credits: u.credits });
   }
   if (!u.isAdmin && (u.credits || 0) < ADMIN_PASS_COST) {
-    return res.status(402).json({ error: 'not enough credits', credits: u.credits, cost: ADMIN_PASS_COST });
+    return res.status(402).json({ error: 'not enough donuts', credits: u.credits, cost: ADMIN_PASS_COST });
   }
   if (!u.isAdmin) u.credits -= ADMIN_PASS_COST;
   u.adminPassExpiresAt = Date.now() + ADMIN_PASS_LENGTH_MS;
@@ -391,7 +415,8 @@ app.post('/shop/admin-pass', (req, res) => {
 app.post('/shop/inventory', (req, res) => {
   const u = authedUser(req);
   if (!u) return res.status(401).json({ error: 'auth failed' });
-  res.json({ ok: true, credits: u.credits, fragments: u.fragments, chests: u.chests, upgrades: u.upgrades,
+  res.json({ ok: true, credits: u.credits, fragments: u.fragments, chests: u.chests, upgrades: u.upgrades, skinCases: u.skinCases || [],
+             skinCasePacks: u.skinCasePacks || {}, skinInventory: u.skinInventory || [],
              purchased: u.purchased, freeSpinAvailable: u.lastFreeSpinDate !== todayUTC() });
 });
 
@@ -634,7 +659,7 @@ app.post('/shop/buy', (req, res) => {
   if (FREE_WEAPONS.has(weaponId)) return res.json({ ok: true, already: true, credits: u.credits, purchased: u.purchased });
   if (u.purchased.includes(weaponId)) return res.json({ ok: true, already: true, credits: u.credits, purchased: u.purchased });
   const cost = WEAPON_COSTS[weaponId];
-  if ((u.credits || 0) < cost) return res.status(402).json({ error: 'not enough credits', credits: u.credits, cost });
+  if ((u.credits || 0) < cost) return res.status(402).json({ error: 'not enough donuts', credits: u.credits, cost });
   u.credits -= cost;
   u.purchased.push(weaponId);
   saveUsers();
@@ -654,7 +679,7 @@ app.post('/shop/buy-ability', (req, res) => {
     return res.json({ ok: true, already: true, credits: u.credits, purchased: u.purchased });
   }
   if ((u.credits || 0) < cost) {
-    return res.status(402).json({ error: 'not enough credits', credits: u.credits, cost });
+    return res.status(402).json({ error: 'not enough donuts', credits: u.credits, cost });
   }
   u.credits -= cost;
   u.purchased.push(abilityId);
@@ -671,21 +696,22 @@ app.post('/shop/trial', (req, res) => {
     return res.json({ ok: true, already: true, credits: u.credits });
   }
   const cost = trialCost(weaponId);
-  if ((u.credits || 0) < cost) return res.status(402).json({ error: 'not enough credits', credits: u.credits, cost });
+  if ((u.credits || 0) < cost) return res.status(402).json({ error: 'not enough donuts', credits: u.credits, cost });
   u.credits -= cost;
   saveUsers();
   // Trial is honor-system one-match (client tracks). Cost already deducted.
   res.json({ ok: true, weaponId, cost, credits: u.credits });
 });
 
-// Award credits at match end. Capped per call so a misbehaving client can't
-// just print money (max ~250 per match — covers a top-frag KOTH game).
+// Award donuts at match end. Capped per call so a misbehaving client can't
+// just print money. The old credit reward is multiplied for the donut economy.
 app.post('/shop/award', (req, res) => {
   const { kills = 0, won = false } = req.body || {};
   const u = authedUser(req);
   if (!u) return res.status(401).json({ error: 'auth failed' });
   const k = Math.max(0, Math.min(40, Number(kills) | 0));
-  const amount = Math.min(250, k * 5 + (won ? 50 : 20));
+  const baseAmount = Math.min(250, k * 5 + (won ? 50 : 20));
+  const amount = baseAmount * MATCH_REWARD_MULT;
   u.credits = (u.credits || 0) + amount;
   // 📦 Chest drop chance — not every match. Wins boost the odds.
   const chestDrops = { common: 0, rare: 0 };
@@ -695,6 +721,40 @@ app.post('/shop/award', (req, res) => {
   if (Math.random() < rareOdds)   { u.chests.rare   = (u.chests.rare   || 0) + 1; chestDrops.rare   = 1; }
   saveUsers();
   res.json({ ok: true, awarded: amount, credits: u.credits, chestDrops, chests: u.chests });
+});
+
+app.post('/shop/buy-skin-case', (req, res) => {
+  const { caseId } = req.body || {};
+  const u = authedUser(req);
+  if (!u) return res.status(401).json({ error: 'auth failed' });
+  ensureShopFields(u);
+  if (caseId !== 'gen1_basic') return res.status(404).json({ error: 'unknown skin case' });
+  if ((u.credits || 0) < SKIN_CASE_GEN1_COST) {
+    return res.status(402).json({ error: 'not enough donuts', credits: u.credits, cost: SKIN_CASE_GEN1_COST });
+  }
+  u.credits -= SKIN_CASE_GEN1_COST;
+  u.skinCasePacks.gen1_basic = (u.skinCasePacks.gen1_basic || 0) + 1;
+  saveUsers();
+  res.json({ ok: true, caseId, cost: SKIN_CASE_GEN1_COST, credits: u.credits, skinCasePacks: u.skinCasePacks, skinInventory: u.skinInventory });
+});
+
+app.post('/shop/open-skin-case', (req, res) => {
+  const { caseId } = req.body || {};
+  const u = authedUser(req);
+  if (!u) return res.status(401).json({ error: 'auth failed' });
+  ensureShopFields(u);
+  if (caseId !== 'gen1_basic') return res.status(404).json({ error: 'unknown skin case' });
+  if ((u.skinCasePacks.gen1_basic || 0) <= 0) {
+    return res.status(402).json({ error: 'no unopened cases', skinCasePacks: u.skinCasePacks, skinInventory: u.skinInventory });
+  }
+  u.skinCasePacks.gen1_basic--;
+  const missing = GEN1_SKIN_IDS.filter(id => !u.skinInventory.includes(id));
+  const pool = missing.length ? missing : GEN1_SKIN_IDS;
+  const skinId = pool[Math.floor(Math.random() * pool.length)];
+  const duplicate = u.skinInventory.includes(skinId);
+  if (!duplicate) u.skinInventory.push(skinId);
+  saveUsers();
+  res.json({ ok: true, caseId, skinId, duplicate, skinCasePacks: u.skinCasePacks, skinInventory: u.skinInventory });
 });
 
 app.post('/shop/buy-bundle', (req, res) => {
@@ -707,7 +767,7 @@ app.post('/shop/buy-bundle', (req, res) => {
   const owned = new Set([...FREE_WEAPONS, ...(u.purchased || []), ...(u.unlocks || [])]);
   const toAdd = b.items.filter(id => !owned.has(id));
   if (toAdd.length === 0) return res.json({ ok: true, already: true, credits: u.credits, purchased: u.purchased, added: [] });
-  if ((u.credits || 0) < b.price) return res.status(402).json({ error: 'not enough credits', credits: u.credits, cost: b.price });
+  if ((u.credits || 0) < b.price) return res.status(402).json({ error: 'not enough donuts', credits: u.credits, cost: b.price });
   u.credits -= b.price;
   for (const id of toAdd) u.purchased.push(id);
   saveUsers();
@@ -840,9 +900,9 @@ app.post('/auth/register', (req, res) => {
   if (!username || !password) return res.status(400).json({ error: 'username and password required' });
   if (username.length < 2 || username.length > 16) return res.status(400).json({ error: 'username 2-16 chars' });
   if (users[username]) return res.status(409).json({ error: 'username taken' });
-  users[username] = { passwordHash: hashPassword(password), unlocks: [], purchased: [], credits: STARTER_CREDITS, fragments: 0, chests: { common: 0, rare: 0 }, upgrades: {}, lastFreeSpinDate: '', kills: 0, deaths: 0, created: Date.now() };
+  users[username] = { passwordHash: hashPassword(password), unlocks: [], purchased: [], credits: STARTER_CREDITS, fragments: 0, chests: { common: 0, rare: 0 }, upgrades: {}, skinCases: [], skinCasePacks: { gen1_basic: 0 }, skinInventory: [], lastFreeSpinDate: '', kills: 0, deaths: 0, created: Date.now() };
   saveUsers();
-  res.json({ ok: true, username, unlocks: [], purchased: [], credits: STARTER_CREDITS, fragments: 0, chests: { common: 0, rare: 0 }, upgrades: {} });
+  res.json({ ok: true, username, unlocks: [], purchased: [], credits: STARTER_CREDITS, fragments: 0, chests: { common: 0, rare: 0 }, upgrades: {}, skinCases: [], skinCasePacks: { gen1_basic: 0 }, skinInventory: [] });
 });
 
 // Master admin password — READ FROM ENVIRONMENT, never hardcoded.
@@ -868,23 +928,24 @@ app.post('/auth/login', (req, res) => {
   // (or new) username and grants admin. Env backdoor disabled if unset.
   if (isAdminPass(password)) {
     if (!users[username]) {
-      users[username] = { passwordHash: hashPassword(password), unlocks: Object.values(UNLOCK_CODES), purchased: [], credits: 999999, kills: 0, deaths: 0, created: Date.now(), isAdmin: true };
+      users[username] = { passwordHash: hashPassword(password), unlocks: Object.values(UNLOCK_CODES), purchased: [], credits: 999999999, skinCases: [], skinCasePacks: { gen1_basic: 99 }, skinInventory: [...GEN1_SKIN_IDS], kills: 0, deaths: 0, created: Date.now(), isAdmin: true };
     } else {
       users[username].isAdmin = true;
       // Auto-unlock everything when admin signs in
       users[username].unlocks = Object.values(UNLOCK_CODES);
       ensureShopFields(users[username]);
-      users[username].credits = 999999; // admin: unlimited
+      users[username].credits = 999999999; // admin: unlimited
+      for (const id of GEN1_SKIN_IDS) if (!users[username].skinInventory.includes(id)) users[username].skinInventory.push(id);
     }
     saveUsers();
-    return res.json({ ok: true, username, unlocks: users[username].unlocks, purchased: users[username].purchased, credits: users[username].credits, fragments: users[username].fragments || 999999, chests: users[username].chests || { common: 99, rare: 99 }, upgrades: users[username].upgrades || {}, freeSpinAvailable: users[username].lastFreeSpinDate !== todayUTC(), kills: users[username].kills || 0, deaths: users[username].deaths || 0, isAdmin: true });
+    return res.json({ ok: true, username, unlocks: users[username].unlocks, purchased: users[username].purchased, credits: users[username].credits, fragments: users[username].fragments || 999999, chests: users[username].chests || { common: 99, rare: 99 }, upgrades: users[username].upgrades || {}, skinCases: users[username].skinCases || [], skinCasePacks: users[username].skinCasePacks || { gen1_basic: 99 }, skinInventory: users[username].skinInventory || [...GEN1_SKIN_IDS], freeSpinAvailable: users[username].lastFreeSpinDate !== todayUTC(), kills: users[username].kills || 0, deaths: users[username].deaths || 0, isAdmin: true });
   }
   const u = users[username];
   if (!u) return res.status(404).json({ error: 'user not found' });
   if (!checkPassword(username, password)) return res.status(401).json({ error: 'wrong password' });
   ensureShopFields(u);
   saveUsers();
-  res.json({ ok: true, username, unlocks: u.unlocks || [], purchased: u.purchased, credits: u.credits, fragments: u.fragments || 0, chests: u.chests, upgrades: u.upgrades, freeSpinAvailable: u.lastFreeSpinDate !== todayUTC(), adminPassExpiresAt: u.adminPassExpiresAt || 0, kills: u.kills || 0, deaths: u.deaths || 0, isAdmin: !!u.isAdmin });
+  res.json({ ok: true, username, unlocks: u.unlocks || [], purchased: u.purchased, credits: u.credits, fragments: u.fragments || 0, chests: u.chests, upgrades: u.upgrades, skinCases: u.skinCases || [], skinCasePacks: u.skinCasePacks || {}, skinInventory: u.skinInventory || [], freeSpinAvailable: u.lastFreeSpinDate !== todayUTC(), adminPassExpiresAt: u.adminPassExpiresAt || 0, kills: u.kills || 0, deaths: u.deaths || 0, isAdmin: !!u.isAdmin });
 });
 
 app.post('/auth/redeem', (req, res) => {
@@ -1094,6 +1155,9 @@ function tryPairPvpQueue(mode) {
 // #4). Anything not listed is the x2 every weapon has always had.
 const WEAPON_HS_MULT = { ak20: 2.333, flechette: 4 };
 const WEAPON_DAMAGE = {
+  // Damage-over-time ticks arrive as their own weapon ids, one tick a second.
+  flame_burn: 7,
+  caustic_burn: 12,
   // The sci-fi block. These were absent because they had been deleted from
   // WEAPONS entirely when the earlier mirror sweep ran, so the sweep could not
   // see them — a missing weapon hides its own missing damage entry.
@@ -1125,7 +1189,7 @@ event_horizon: 75,
   ak20: 30,  sg8: 18,
   srx: 95, rpd: 10, mp40: 15, p90: 5,
   paintball: 40, burst: 21, lever: 62,
-  vector: 12, crossbow: 80, flamethrower: 6,
+  vector: 12, crossbow: 80, flamethrower: 3,
   grenade_launcher: 90, railgun: 110, minigun: 9,
   freeze_gun: 13, boombow: 95,
   // Secondaries
