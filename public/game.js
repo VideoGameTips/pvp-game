@@ -75,7 +75,11 @@ const WEAPONS = [
   {
     id: 'p90',   name: 'P90',   type: 'SMG+', slot: 'primary',
     mag: 50,  reserve: 150, damage: 5,  fireRate: 20,   reloadTime: 1400,
-    auto: true,  pellets: 1, spread: 0.015, adsZoom: 50, bulletSpeed: 140, noReload: false,
+    auto: true,  pellets: 1, spread: 0.005,
+    // Fifty rounds a second out of a fifty-round magazine: the whole mag is gone
+    // in one second, so the per-shot kick is tiny and the CLIMB is what you feel.
+    // Pin accurate on the first rounds, walking up your target by the last.
+    recoil: { up: 0.0022, side: 0.0011, climb: 0.045, max: 2.6, recover: 7, adsMult: 0.55 }, adsZoom: 50, bulletSpeed: 140, noReload: false,
     ability: { name: 'Hyperspin', cd: 15000, desc: '3s · fire rate ×4', type: 'buff', duration: 3000, rateMult: 0.25 },
   },
   {
@@ -833,6 +837,127 @@ const MELEE_ITEMS = [
     ability: { name: 'Lights Out',   cd: 16000, desc: '5 s · all hits instakill', type: 'melee_revup', duration: 5000 } },
 ];
 
+// ── 📦 Basic Skin Case generation ──────────────────────────────────────────
+// Skins are not purely cosmetic in this game. Basic case skins are modest stat
+// variants of a base weapon, so themed duplicates stop crowding the weapon list.
+const SKIN_ONLY_WEAPON_IDS = new Set(['twin_ar', 'swarm_rifle']);
+const SKIN_ONLY_MELEE_IDS = new Set([
+  'brass_knuckles', 'hatchet', 'machete', 'cane', 'cricket_bat', 'pipe',
+  'wrench', 'shovel', 'golf_club', 'tennis_racket', 'fire_poker', 'meat_cleaver',
+]);
+for (const w of WEAPONS) if (SKIN_ONLY_WEAPON_IDS.has(w.id)) w.skinOnly = true;
+for (const m of MELEE_ITEMS) if (SKIN_ONLY_MELEE_IDS.has(m.id)) m.skinOnly = true;
+
+const BASIC_GUN_STAT_SKINS = [
+  { id: 'stock', weapon: 'ak20', name: 'Stock AK20', rarity: 'stock', sw: ['#222', '#666'],
+    blurb: 'The normal AK20 setup.', stats: {} },
+  { id: 'ak20_twin_barrel', weapon: 'ak20', name: 'Twin Barrel AK', rarity: 'basic', sw: ['#3c3540', '#ffcc66'],
+    blurb: '+1 pellet, lower damage, slightly wider spread.', damageId: 'ak20_skin_twin', modelSkin: 'ak20_twin_barrel',
+    stats: { damage: 20, pellets: 2, spread: 0.012, bulletSpeed: 150, fireRate: 155, bulletColor: 0xffcc66 } },
+  { id: 'ak20_tracking_ar', weapon: 'ak20', name: 'Tracking AK', rarity: 'basic', sw: ['#1c3b36', '#66ffcc'],
+    blurb: 'Tiny homing pull, less damage, more spread.', damageId: 'ak20_skin_tracking',
+    stats: { damage: 25, spread: 0.014, bulletSpeed: 116, tracking: 0.18, bulletColor: 0x66ffcc } },
+  { id: 'ak20_swarm_rifle', weapon: 'ak20', name: 'Swarm AK', rarity: 'basic', sw: ['#2b193c', '#ff55ff'],
+    blurb: 'Fast tracking rounds, lower damage per bullet.', damageId: 'ak20_skin_swarm', modelSkin: 'ak20_swarm_rifle',
+    stats: { damage: 17, fireRate: 70, spread: 0.018, bulletSpeed: 110, tracking: 0.35, bulletColor: 0xff55ff, bulletSize: 0.05 } },
+];
+
+const BASIC_MELEE_SKINS = [
+  { id: 'brass_knuckles', skinFor: 'fists', name: 'Brass Knuckles', type: 'Punch', rarity: 'basic',
+    blurb: '+damage, +speed, tiny range bump.', stats: { damage: 28, range: 1.5, cooldown: 200, speedMult: 1.6 },
+    ability: { name: 'Haymaker', cd: 8000, desc: '2× damage on next hit', type: 'melee_heavy' } },
+  { id: 'hatchet', skinFor: 'combat_axe', name: 'Hatchet', type: 'Throwable Melee', rarity: 'basic',
+    blurb: 'Faster axe skin, lower hit damage.', stats: { damage: 50, range: 1.9, cooldown: 480 },
+    ability: { name: 'Throw Hatchet', cd: 11000, desc: 'Hurl · 90 dmg · weapon gone until CD', type: 'melee_throw' } },
+  { id: 'machete', skinFor: 'katana', name: 'Machete', type: 'Bleed Melee', rarity: 'basic',
+    blurb: 'Shorter than katana, bleeds during combo.', stats: { damage: 56, range: 2.4, cooldown: 520, bleedOnHit: { dps: 8, dur: 4000, radius: 0.8, color: 0xaa0000 } },
+    ability: { name: 'Slash Combo', cd: 10000, desc: '2.5 s · auto-slash · every hit bleeds', type: 'melee_revup', duration: 2500 } },
+  { id: 'cane', skinFor: 'spear', name: 'Walking Cane', type: 'Reach Melee', rarity: 'basic',
+    blurb: 'Less damage, quicker control reach.', stats: { damage: 30, range: 2.2, cooldown: 440 },
+    ability: { name: 'Yank', cd: 8000, desc: 'Pull target 4 m toward you', type: 'melee_pull', distance: 4 } },
+  { id: 'cricket_bat', skinFor: 'bat', name: 'Launching Melee', type: 'Melee', rarity: 'basic',
+    blurb: 'Bat skin with vertical launch.', stats: { damage: 42, range: 2.3, cooldown: 540, launchOnHit: 8 },
+    ability: { name: 'Homerun', cd: 9000, desc: '2.5× dmg · launch target HIGH', type: 'melee_heavy', launchMult: 2 } },
+  { id: 'pipe', skinFor: 'bat', name: 'Lead Pipe', type: 'Chain Melee', rarity: 'basic',
+    blurb: 'Heavier bat skin that chains nearby hits.', stats: { damage: 44, range: 2.0, cooldown: 500, chainOnHit: { radius: 2.5, mult: 0.5 } },
+    ability: { name: 'Bonk', cd: 8000, desc: 'Next hit deals 2× dmg + chains', type: 'melee_heavy' } },
+  { id: 'wrench', skinFor: 'crowbar', name: 'Wrench', type: 'Utility Melee', rarity: 'basic',
+    blurb: 'Quicker utility swing, throwable special.', stats: { damage: 36, range: 1.8, cooldown: 380 },
+    ability: { name: 'Spanner Toss', cd: 10000, desc: 'Hurl wrench · 90 dmg · weapon gone until CD', type: 'melee_throw' } },
+  { id: 'shovel', skinFor: 'sledge', name: 'Shovel', type: 'AOE Melee', rarity: 'basic',
+    blurb: 'Lighter sledge skin with slam utility.', stats: { damage: 55, range: 2.2, cooldown: 620 },
+    ability: { name: 'Ground Slam', cd: 11000, desc: 'Slam · 4 m AOE knockback', type: 'melee_slam' } },
+  { id: 'golf_club', skinFor: 'bat', name: 'Golf Club', type: 'Launching Melee', rarity: 'basic',
+    blurb: 'Longer bat skin, launches harder.', stats: { damage: 40, range: 2.4, cooldown: 500, launchOnHit: 6 },
+    ability: { name: 'Fore!', cd: 9000, desc: '2.5× dmg · launch target SKY-HIGH', type: 'melee_heavy', launchMult: 3 } },
+  { id: 'tennis_racket', skinFor: 'frying_pan', name: 'Tennis Racket', type: 'Reflect Melee', rarity: 'basic',
+    blurb: 'Quick reflect-focused pan skin.', stats: { damage: 26, range: 2.2, cooldown: 360 },
+    ability: { name: 'Backhand', cd: 8000, desc: '2 s · deflect incoming bullets', type: 'melee_deflect', duration: 2000 } },
+  { id: 'fire_poker', skinFor: 'spear', name: 'Fire Poker', type: 'Burn Melee', rarity: 'basic',
+    blurb: 'Long reach and burn on heavy hit.', stats: { damage: 38, range: 2.6, cooldown: 460, burnOnHit: { dps: 7, dur: 4000, radius: 1.2, color: 0xff6622 } },
+    ability: { name: 'Hot Brand', cd: 9000, desc: 'Next hit deals 2× dmg + ignites', type: 'melee_heavy' } },
+  { id: 'meat_cleaver', skinFor: 'knife', name: 'Meat Cleaver', type: 'Vampiric Melee', rarity: 'basic',
+    blurb: 'Slower knife skin with lifesteal.', stats: { damage: 60, range: 1.7, cooldown: 540, lifestealOnHit: 10 },
+    ability: { name: 'Butcher', cd: 10000, desc: '3 s · auto-chop · double lifesteal', type: 'melee_revup', duration: 3000, lifestealMult: 2 } },
+];
+
+const GUN_STAT_SKINS_BY_WEAPON = {};
+for (const s of BASIC_GUN_STAT_SKINS) (GUN_STAT_SKINS_BY_WEAPON[s.weapon] ||= []).push(s);
+const MELEE_SKINS_BY_BASE = {};
+for (const s of BASIC_MELEE_SKINS) (MELEE_SKINS_BY_BASE[s.skinFor] ||= []).push(s);
+
+let equippedGunStatSkins = (() => {
+  try { return JSON.parse(localStorage.getItem('pvp_gun_stat_skins') || '{}') || {}; } catch (e) { return {}; }
+})();
+let equippedMeleeSkins = (() => {
+  try { return JSON.parse(localStorage.getItem('pvp_melee_skins') || '{}') || {}; } catch (e) { return {}; }
+})();
+function saveSkinEquips() {
+  try { localStorage.setItem('pvp_gun_stat_skins', JSON.stringify(equippedGunStatSkins)); } catch (e) {}
+  try { localStorage.setItem('pvp_melee_skins', JSON.stringify(equippedMeleeSkins)); } catch (e) {}
+}
+function gunStatSkinFor(weaponId) {
+  const want = equippedGunStatSkins[weaponId];
+  return BASIC_GUN_STAT_SKINS.find(s => s.weapon === weaponId && s.id === want) || null;
+}
+function effectiveGunStats(w) {
+  const skin = w && gunStatSkinFor(w.id);
+  if (!skin) return w;
+  return Object.assign({}, w, skin.stats, {
+    baseId: w.id,
+    skinId: skin.id,
+    skinName: skin.name,
+    damageId: skin.damageId || w.id,
+  });
+}
+function meleeSkinFor(baseId) {
+  const want = equippedMeleeSkins[baseId];
+  return BASIC_MELEE_SKINS.find(s => s.skinFor === baseId && s.id === want) || null;
+}
+function effectiveMeleeItem(base) {
+  const skin = base && meleeSkinFor(base.id);
+  if (!skin) return base;
+  return Object.assign({}, base, skin.stats, {
+    id: skin.id,
+    baseId: base.id,
+    skinId: skin.id,
+    name: skin.name,
+    type: skin.type,
+    ability: skin.ability || base.ability,
+  });
+}
+function equippedMeleeItem() {
+  return effectiveMeleeItem(MELEE_ITEMS[selectedMeleeIdx]);
+}
+function displayWeaponName(w) {
+  const skin = w && gunStatSkinFor(w.id);
+  return skin && skin.id !== 'stock' ? `${w.name} · ${skin.name}` : (w ? w.name : '—');
+}
+function displayMeleeName(m) {
+  const skin = m && meleeSkinFor(m.id);
+  return skin ? `${m.name} · ${skin.name}` : (m ? m.name : '—');
+}
+
 const SUPPORT_ITEMS = [
   { id: 'frag', name: 'Frag Grenade', type: 'Explosive', uses: 2, damage: 80, cooldown: 900, bulletSpeed: 56, bulletColor: 0x4d7f36, bulletSize: 0.14 },
   { id: 'medkit', name: 'Medkit', type: 'Heal', uses: 1, heal: 45, cooldown: 1200 },
@@ -1080,6 +1205,14 @@ const WEAPON_COSTS = {
   // 💚 Heal Gun · ⚡ Tesla Coil · 🧪 Acid · 🐝 Bees
   heal_gun: 220, tesla_coil: 360, acid_grenade: 200, bee_jar: 240,
 };
+const CURRENCY_NAME = 'donuts';
+const CURRENCY_ICON = '🍩';
+const WEAPON_PRICE_MULT = 100;
+const SKIN_CASE_GEN1_COST = 50000;
+for (const id of Object.keys(WEAPON_COSTS)) {
+  if (WEAPON_COSTS[id] > 0) WEAPON_COSTS[id] *= WEAPON_PRICE_MULT;
+}
+function money(n) { return `${n}${CURRENCY_ICON}`; }
 const FREE_WEAPONS = new Set([
   'ak20','sg8','pistol','flare','fists','frying_pan','frag','medkit',
 ]);
@@ -1157,7 +1290,7 @@ const BUNDLES = [
     items: ['shockwave_launcher','sawed_off','sledge','air_grenade'] },
   { id: 'smart_tech',  name: 'Smart Tech',   icon: '👁️', price: 610,
     desc: 'Tracking, drones, mines',
-    items: ['swarm_rifle','smart_smg','hunter_drone','magnet_mine'] },
+    items: ['ak20','smart_smg','hunter_drone','magnet_mine'] },
   { id: 'mortar',      name: 'Mortar Squad', icon: '🪂', price: 550,
     desc: 'Indirect fire specialists',
     items: ['mortar_rifle','grenade_launcher','hand_cannon','frag'] },
@@ -1165,6 +1298,7 @@ const BUNDLES = [
     desc: 'Every sci-fi P2W item · 30% off',
     items: ['event_horizon','storm_core','abs_zero','solar_lance','quantum_repeater','magnetar','nebula_mortar','prism_engine','void_harvester','pulse_needle','revolver','phase_blade','gravity_hammer','volt_whip','nano_swarm','warp_beacon','stasis_mine','specter_drone','quantum_barrier'] },
 ];
+for (const b of BUNDLES) b.price *= WEAPON_PRICE_MULT;
 
 function shopCost(id)      { return WEAPON_COSTS[id]; }
 function shopTrialCost(id) { const c = WEAPON_COSTS[id]; return c == null ? null : Math.max(1, Math.ceil(c / TRIAL_DIVISOR)); }
@@ -14846,6 +14980,55 @@ const ARROW_SENS = 0.03;
 document.addEventListener('pointerlockchange', () => {
   pointerLocked = document.pointerLockElement === renderer.domElement;
 });
+// ── 🔫 Recoil ───────────────────────────────────────────────────────────────
+// There was none, anywhere. Every weapon in the game fired perfectly flat, and
+// the only thing separating an accurate gun from a sloppy one was its spread
+// value — which is a random scatter, not a climb you can learn and pull down
+// against. Recoil moves the AIM, not just the picture: the kick goes into the
+// same euler the mouse drives, so the rounds go where the muzzle went.
+//
+// A weapon opts in with recoil: { up, side, climb, max, recover, adsMult }.
+//   up      radians of pitch per shot
+//   side    random horizontal kick, +/- this
+//   climb   how much each consecutive shot adds to the kick (the walk)
+//   max     ceiling on that multiplier, so it settles instead of running away
+//   recover fraction of the accumulated kick pulled back per second
+let _recoilPitch = 0, _recoilYaw = 0, _recoilShots = 0, _recoilLastShot = 0, _recoilRecover = 7;
+
+function addRecoil(w) {
+  const rc = w && w.recoil;
+  if (!rc) return;
+  const now = performance.now();
+  // A pause lets the muzzle settle: the walk restarts rather than continuing
+  // from wherever the last burst left off.
+  if (now - _recoilLastShot > 260) _recoilShots = 0;
+  _recoilLastShot = now;
+  const mult = Math.min(rc.max || 2.5, 1 + _recoilShots * (rc.climb || 0));
+  _recoilShots++;
+  const ads = isADS ? (rc.adsMult != null ? rc.adsMult : 0.6) : 1;
+  const up = (rc.up || 0) * mult * ads * (0.8 + Math.random() * 0.4);
+  const side = (rc.side || 0) * mult * ads * (Math.random() * 2 - 1);
+  _recoilRecover = rc.recover || 7;
+  euler.x += up; euler.y += side;
+  euler.x = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, euler.x));
+  camera.quaternion.setFromEuler(euler);
+  _recoilPitch += up; _recoilYaw += side;
+}
+
+function updateRecoil(dt) {
+  if (!_recoilPitch && !_recoilYaw) return;
+  const k = Math.min(1, _recoilRecover * dt);
+  const dp = _recoilPitch * k, dy = _recoilYaw * k;
+  // Subtract what we put in, so pulling down against the climb leaves the aim
+  // BELOW where it started rather than snapping back over your correction.
+  euler.x -= dp; euler.y -= dy;
+  _recoilPitch -= dp; _recoilYaw -= dy;
+  if (Math.abs(_recoilPitch) < 1e-5) _recoilPitch = 0;
+  if (Math.abs(_recoilYaw)   < 1e-5) _recoilYaw = 0;
+  euler.x = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, euler.x));
+  camera.quaternion.setFromEuler(euler);
+}
+
 document.addEventListener('mousemove', e => {
   if ((!pointerLocked && !gameStarted) || isDead) return;
   euler.y -= e.movementX * SENS;
@@ -15534,7 +15717,7 @@ function creditWeaponKill(weaponId) {
 function currentEquippedId() {
   if (activeSlot === 'primary')   return WEAPONS[selectedPrimaryIdx]?.id;
   if (activeSlot === 'secondary') return WEAPONS[selectedSecondaryIdx]?.id;
-  if (activeSlot === 'melee')     return MELEE_ITEMS[selectedMeleeIdx]?.id;
+  if (activeSlot === 'melee')     return equippedMeleeItem()?.id;
   if (activeSlot === 'support')   return SUPPORT_ITEMS[selectedSupportIdx]?.id;
   return null;
 }
@@ -16047,15 +16230,15 @@ function updateMovement(dt) {
   const joyMag = joyActive ? Math.max(0.3, Math.min(1, Math.sqrt(joyDir.x**2+joyDir.y**2))) : 1;
   // 🏋️ Weapon-weight slow: heavier guns drop your move speed. Computed
   // from each item's `weight` (0 = no penalty, 1 = -100%). Defaults below.
-  const equippedItem = activeSlot === 'primary'   ? WEAPONS[selectedPrimaryIdx]
-                     : activeSlot === 'secondary' ? WEAPONS[selectedSecondaryIdx]
-                     : activeSlot === 'melee'     ? MELEE_ITEMS[selectedMeleeIdx]
+  const equippedItem = activeSlot === 'primary'   ? effectiveGunStats(WEAPONS[selectedPrimaryIdx])
+                     : activeSlot === 'secondary' ? effectiveGunStats(WEAPONS[selectedSecondaryIdx])
+                     : activeSlot === 'melee'     ? equippedMeleeItem()
                      : activeSlot === 'support'   ? SUPPORT_ITEMS[selectedSupportIdx]
                      : null;
   const weight = (equippedItem && equippedItem.weight != null) ? equippedItem.weight : getDefaultWeaponWeight(equippedItem);
   const weightMult = Math.max(0.15, 1 - weight); // floor at 15% so you're never frozen
   const baseSpeedMult = (activeSlot === 'melee'
-    ? (meleeAbilityBuff?.type === 'revup' ? 3.0 : (MELEE_ITEMS[selectedMeleeIdx]?.speedMult || 1.5))
+    ? (meleeAbilityBuff?.type === 'revup' ? 3.0 : (equippedMeleeItem()?.speedMult || 1.5))
     : 1) * weightMult;
   const adrenalineActive = Date.now() < adrenalineUntil;
   // Frost slow: 100 = normal, 0 = frozen. Linear scale.
@@ -16137,9 +16320,9 @@ function updateMovement(dt) {
     const spaceEdge = spaceDown && !window._prevSpaceDown;
     window._prevSpaceDown = spaceDown;
     // Does the currently equipped item grant a double jump?
-    const equipped = activeSlot === 'primary'   ? currentWeapon
-                   : activeSlot === 'secondary' ? currentWeapon
-                   : activeSlot === 'melee'     ? MELEE_ITEMS[selectedMeleeIdx]
+    const equipped = activeSlot === 'primary'   ? effectiveGunStats(currentWeapon)
+                   : activeSlot === 'secondary' ? effectiveGunStats(currentWeapon)
+                   : activeSlot === 'melee'     ? equippedMeleeItem()
                    : activeSlot === 'support'   ? SUPPORT_ITEMS[selectedSupportIdx]
                    : null;
     const grantsDouble = !!(equipped && equipped.doubleJump);
@@ -16348,7 +16531,7 @@ function abilityReady(w) {
 }
 
 function activateMeleeAbility() {
-  const item = MELEE_ITEMS[selectedMeleeIdx];
+  const item = equippedMeleeItem();
   if (!item?.ability) return;
   if (countdownActive) return;
   const ab = item.ability;
@@ -16952,7 +17135,7 @@ function updateAbilityHUD() {
 
   // Show melee ability when melee slot is active
   if (activeSlot === 'melee' && selectedMeleeIdx !== null && selectedMeleeIdx >= 0) {
-    const item = MELEE_ITEMS[selectedMeleeIdx];
+    const item = equippedMeleeItem();
     const ab = item?.ability;
     if (!ab) { nameEl.textContent = '—'; fillEl.style.width = '100%'; fillEl.style.background='#555'; return; }
     nameEl.textContent = ab.name;
@@ -16994,6 +17177,7 @@ function tryShoot() {
   if (countdownActive) return; // can't fire during pre-round countdown
   if (KILLCAM.active) return;  // killcam playback is locked
   const now = Date.now();
+  const wStats = effectiveGunStats(currentWeapon);
   // Switchblade Gun: in knife mode → swing a close-range melee instead of firing
   if (currentWeapon.id === 'switchblade_gun' && !switchbladeCharged && switchbladeMode === 'knife') {
     if (now - lastShot < 280) return; // knife swing CD
@@ -17002,16 +17186,17 @@ function tryShoot() {
     return;
   }
   const activeRateMult = (abilityBuff?.weaponId === currentWeapon.id && abilityBuff.rateMult) ? abilityBuff.rateMult : 1;
-  if (now - lastShot < currentWeapon.fireRate * activeRateMult) return;
+  if (now - lastShot < wStats.fireRate * activeRateMult) return;
   const pool = weaponAmmo[currentWeaponIdx];
   const adminInfAmmo = adminCheats.infiniteAmmo && currentUser?.isAdmin;
-  if (pool.ammo <= 0 && !adminInfAmmo) { if (pool.reserve > 0 && !currentWeapon.noReload) startReload(); return; }
+  if (pool.ammo <= 0 && !adminInfAmmo) { if (pool.reserve > 0 && !wStats.noReload) startReload(); return; }
 
   lastShot = now;
+  addRecoil(currentWeapon);
   if (!adminInfAmmo) pool.ammo--; // ⚡ admin infinite ammo: don't decrement
   ammo = pool.ammo;
   updateAmmoHUD();
-  if (GAMEPLAY_SETTINGS.autoReload && pool.ammo <= 0 && pool.reserve > 0 && !currentWeapon.noReload) {
+  if (GAMEPLAY_SETTINGS.autoReload && pool.ammo <= 0 && pool.reserve > 0 && !wStats.noReload) {
     setTimeout(() => {
       const latest = weaponAmmo[currentWeaponIdx];
       if (!reloading && latest && latest.ammo <= 0 && latest.reserve > 0) startReload();
@@ -17045,10 +17230,10 @@ function tryShoot() {
 
   // Apply ability buff for this shot
   const ab = (abilityBuff && abilityBuff.weaponId === currentWeapon.id) ? abilityBuff : null;
-  const shotPellets  = ab?.pellets      ?? currentWeapon.pellets;
-  const shotSpread   = currentWeapon.spread * (ab?.spreadMult ?? 1);
-  let shotWeaponId   = ab?.weaponAbId   ?? currentWeapon.id;
-  const shotSpeed    = currentWeapon.bulletSpeed * (ab?.speedMult ?? 1);
+  const shotPellets  = ab?.pellets      ?? wStats.pellets;
+  const shotSpread   = wStats.spread * (ab?.spreadMult ?? 1);
+  let shotWeaponId   = ab?.weaponAbId   ?? (wStats.damageId || currentWeapon.id);
+  const shotSpeed    = wStats.bulletSpeed * (ab?.speedMult ?? 1);
 
   // Switchblade Gun: charged state fires a 100-dmg shot; subsequent shots are 50 dmg until a hit lands
   if (currentWeapon.id === 'switchblade_gun') {
@@ -17071,7 +17256,7 @@ function tryShoot() {
     }, 300);
   }
 
-  playWeaponSound(shotWeaponId, { baseWeapon: currentWeapon, volume: Math.min(1.2, 0.9 + shotPellets * 0.03) });
+  playWeaponSound(shotWeaponId, { baseWeapon: wStats, volume: Math.min(1.2, 0.9 + shotPellets * 0.03) });
 
   for (let p = 0; p < shotPellets; p++) {
     const spreadDir = baseDir.clone();
@@ -17085,10 +17270,10 @@ function tryShoot() {
       dx: spreadDir.x, dy: spreadDir.y, dz: spreadDir.z,
       weapon: shotWeaponId,
     });
-    const bColor = currentWeapon.randomBulletColor
+    const bColor = wStats.randomBulletColor
       ? PAINTBALL_COLORS[Math.floor(Math.random() * PAINTBALL_COLORS.length)]
-      : currentWeapon.bulletColor;
-    spawnLocalBullet(muzzleWorld, spreadDir, `local_${myId}_${now}_${p}`, true, shotSpeed, bColor, currentWeapon.bulletSize, currentWeapon.id);
+      : wStats.bulletColor;
+    spawnLocalBullet(muzzleWorld, spreadDir, `local_${myId}_${now}_${p}`, true, shotSpeed, bColor, wStats.bulletSize, shotWeaponId);
   }
 }
 
@@ -17101,7 +17286,7 @@ function tryUseActive() {
 function tryMelee() {
   if (!gameStarted || isDead) return;
   if (countdownActive) return;
-  const item = MELEE_ITEMS[selectedMeleeIdx];
+  const item = equippedMeleeItem();
   if (!item) return;
   const now = Date.now();
   const effectiveCooldown = meleeAbilityBuff?.type === 'revup' ? 15 : item.cooldown;
@@ -17817,6 +18002,12 @@ const MODEL_SKINS = [
   { id: 'aug', weapon: 'ak20', name: 'AUG', rarity: 'rare',
     sw: ['#4c5339', '#6c7a46'], build: buildAUG,
     blurb: 'Bullpup. The magazine sits behind the trigger.' },
+  { id: 'ak20_twin_barrel', weapon: 'ak20', name: 'Twin Barrel AK', rarity: 'basic',
+    sw: ['#3c3540', '#ffcc66'], build: buildTwinAR,
+    blurb: 'Basic case stat skin: two barrels, lower damage per pellet.' },
+  { id: 'ak20_swarm_rifle', weapon: 'ak20', name: 'Swarm AK', rarity: 'basic',
+    sw: ['#2b193c', '#ff55ff'], build: buildSwarmRifle,
+    blurb: 'Basic case stat skin: fast tracking rounds with lower damage.' },
 ];
 const MODEL_SKINS_BY_WEAPON = {};
 for (const ms of MODEL_SKINS) (MODEL_SKINS_BY_WEAPON[ms.weapon] ||= []).push(ms);
@@ -17859,8 +18050,29 @@ function setModelSkin(weaponId, skinId) {
   try { localStorage.setItem('pvp_model_skins', JSON.stringify(equippedModelSkins)); } catch (e) {}
   applyModelSkin(weaponId);
 }
+function setGunStatSkin(weaponId, skinId) {
+  if (skinId && skinId !== 'stock') equippedGunStatSkins[weaponId] = skinId;
+  else delete equippedGunStatSkins[weaponId];
+  const def = BASIC_GUN_STAT_SKINS.find(s => s.weapon === weaponId && s.id === skinId);
+  if (def && def.modelSkin) setModelSkin(weaponId, def.modelSkin);
+  else if (weaponId === 'ak20' && (!def || skinId === 'stock')) setModelSkin(weaponId, null);
+  saveSkinEquips();
+  updateAmmoHUD();
+  updateWeaponSelector();
+}
+function setMeleeSkin(baseId, skinId) {
+  if (skinId) equippedMeleeSkins[baseId] = skinId;
+  else delete equippedMeleeSkins[baseId];
+  saveSkinEquips();
+  updateAmmoHUD();
+  updateWeaponSelector();
+}
 // Whatever was equipped last session comes back with you.
 Object.keys(equippedModelSkins).forEach(applyModelSkin);
+Object.entries(equippedGunStatSkins).forEach(([wid, sid]) => {
+  const def = BASIC_GUN_STAT_SKINS.find(s => s.weapon === wid && s.id === sid);
+  if (def?.modelSkin) setModelSkin(wid, def.modelSkin);
+});
 
 // ── 🔁 Reload choreography ───────────────────────────────────────────────────
 // Every weapon reloads differently. Not eleven shared styles — ninety-nine
@@ -20862,7 +21074,7 @@ function updateAmmoHUD() {
 }
 function updateWeaponHUD() {
   if (activeSlot === 'melee' && selectedMeleeIdx !== null && selectedMeleeIdx >= 0) {
-    document.getElementById('ammo-gun').textContent = MELEE_ITEMS[selectedMeleeIdx].name;
+    document.getElementById('ammo-gun').textContent = displayMeleeName(MELEE_ITEMS[selectedMeleeIdx]);
     document.getElementById('ammo-count').textContent = 'MELEE';
     document.getElementById('ammo-reserve').textContent = 'RANGE';
     return;
@@ -20874,7 +21086,7 @@ function updateWeaponHUD() {
     document.getElementById('ammo-reserve').textContent = 'USES';
     return;
   }
-  document.getElementById('ammo-gun').textContent = currentWeapon.name;
+  document.getElementById('ammo-gun').textContent = displayWeaponName(currentWeapon);
 }
 function updateHealthHUD(hp) {
   document.getElementById('health-fill').style.width = `${(hp / 300 * 100).toFixed(1)}%`;
@@ -20956,6 +21168,7 @@ function updateSpectatorHUD() {
 const CLIENT_WEAPON_DAMAGE = Object.fromEntries([
   ...WEAPONS.map(w => [w.id, w.damage]),
   ...MELEE_ITEMS.map(m => [m.id, m.damage]),
+  ['ak20_skin_twin', 20], ['ak20_skin_tracking', 25], ['ak20_skin_swarm', 17],
   ['mg42', 15], ['bat', 38], ['sabre', 45], ['frying_pan', 32], ['sledge', 70],
   ['spear', 50], ['spear_throw', 85], ['pickle', 22], ['shield_charge', 60],
   ['knife_instakill', 9999], ['chainsaw', 45], ['katana', 65], ['knife', 28],
@@ -21237,15 +21450,15 @@ function updateWeaponSelector() {
   const mSlot = document.getElementById('ws-melee');
   const uSlot = document.getElementById('ws-support');
   if (pSlot) {
-    pSlot.querySelector('.ws-name').textContent = selectedPrimaryIdx !== null ? WEAPONS[selectedPrimaryIdx].name : '—';
+    pSlot.querySelector('.ws-name').textContent = selectedPrimaryIdx !== null ? displayWeaponName(WEAPONS[selectedPrimaryIdx]) : '—';
     pSlot.classList.toggle('active', activeSlot === 'primary');
   }
   if (sSlot) {
-    sSlot.querySelector('.ws-name').textContent = selectedSecondaryIdx !== null ? WEAPONS[selectedSecondaryIdx].name : '—';
+    sSlot.querySelector('.ws-name').textContent = selectedSecondaryIdx !== null ? displayWeaponName(WEAPONS[selectedSecondaryIdx]) : '—';
     sSlot.classList.toggle('active', activeSlot === 'secondary');
   }
   if (mSlot) {
-    mSlot.querySelector('.ws-name').textContent = selectedMeleeIdx !== null && selectedMeleeIdx >= 0 ? MELEE_ITEMS[selectedMeleeIdx].name : '—';
+    mSlot.querySelector('.ws-name').textContent = selectedMeleeIdx !== null && selectedMeleeIdx >= 0 ? displayMeleeName(MELEE_ITEMS[selectedMeleeIdx]) : '—';
     mSlot.classList.toggle('active', activeSlot === 'melee');
   }
   if (uSlot) {
@@ -23626,7 +23839,7 @@ function endMatch(winner, reason) {
   document.getElementById('waiting-screen').style.display = 'none';
   el.style.display = 'flex';
 
-  // ── 💰 Award shop credits ────────────────────────────────────────────
+  // ── 🍩 Award shop donuts ─────────────────────────────────────────────
   const playerKills = (match.ffaKills?.[myId])
     ?? (players[myId]?.kills)
     ?? 0;
@@ -25522,6 +25735,7 @@ function loop() {
   const dt = Math.min((now-lastTime)/1000, 0.05);
   lastTime = now;
   updateMovement(dt);
+  updateRecoil(dt);   // the muzzle settles back between shots
   updateBullets(dt);
   updateImpactMarks();
   updateBotAI(dt);
@@ -25672,7 +25886,7 @@ function renderShop() {
     <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #444;padding-bottom:10px;margin-bottom:14px;">
       <div style="font-size:22px;letter-spacing:6px;color:#aaccff;">🛒 WEAPON SHOP</div>
       <div style="display:flex;gap:14px;align-items:center;">
-        <span style="font-size:13px;color:#ffdd55;">💰 ${credits}</span>
+        <span style="font-size:13px;color:#ffdd55;">${CURRENCY_ICON} ${credits}</span>
         <span style="font-size:13px;color:#aaccff;">🧩 ${frags}</span>
         <span style="font-size:13px;color:#ddccff;">📦 ${ch.common}/${ch.rare}</span>
         <button id="shop-close" style="padding:6px 14px;background:#3a1a1a;color:#ff8888;border:1px solid #ff4444;cursor:pointer;font-family:inherit;font-size:11px;letter-spacing:2px;border-radius:4px;">✕ CLOSE</button>
@@ -25706,7 +25920,7 @@ function renderShopChests(body) {
   const minsLeft = Math.ceil(adminPassMsLeft() / 60000);
   body.innerHTML = `
     <div style="width:100%;font-size:11px;color:#aaa;margin-bottom:14px;letter-spacing:1px;">
-      Open chests to get 🧩 weapon fragments + 💰 credits.
+      Open chests to get 🧩 weapon fragments + ${CURRENCY_ICON} donuts.
       Use 100 fragments to unlock any weapon, or upgrade ones you own.
       Earn chests by playing matches (chance per match), or buy them here.
     </div>
@@ -25717,7 +25931,7 @@ function renderShopChests(body) {
         ${passActive ? `<div style="font-size:12px;color:#88ff99;margin-top:6px;">✓ ACTIVE — ${minsLeft} min left</div>` : ''}
       </div>
       <button id="buy-admin-pass" ${passActive ? 'disabled' : ''} style="padding:10px 22px;background:${passActive ? '#222' : '#3a1a1a'};color:${passActive ? '#666' : '#ffcc88'};border:1px solid ${passActive ? '#444' : '#ff8844'};font-size:13px;letter-spacing:2px;cursor:${passActive ? 'default' : 'pointer'};border-radius:4px;font-family:inherit;">
-        ${passActive ? 'ACTIVE' : `BUY · ${ADMIN_PASS_COST}💰`}
+        ${passActive ? 'ACTIVE' : `BUY · ${money(ADMIN_PASS_COST)}`}
       </button>
     </div>
   `;
@@ -25732,12 +25946,12 @@ function renderShopChests(body) {
     card.innerHTML = `
       <div style="font-size:22px;font-weight:bold;color:${isRare ? '#cc99ff' : '#ccc'};">${isRare ? '🟣 RARE' : '📦 COMMON'} CHEST</div>
       <div style="font-size:11px;color:#aaa;margin:6px 0 10px;line-height:1.5;">
-        ${isRare ? '35-80 frags · 30-100 credits · 5% chance of a free weapon' : '10-25 frags · 0-30 credits'}
+        ${isRare ? `35-80 frags · 30-100 ${CURRENCY_NAME} · 5% chance of a free weapon` : `10-25 frags · 0-30 ${CURRENCY_NAME}`}
       </div>
       <div style="font-size:13px;margin-bottom:10px;">You have: <b style="color:${isRare ? '#cc99ff' : '#ccc'};">${have}</b></div>
       <div style="display:flex;gap:6px;">
         <button class="open" ${have <= 0 ? 'disabled' : ''} style="flex:1;padding:8px;background:${have > 0 ? '#1a2a1a' : '#222'};color:${have > 0 ? '#88ff99' : '#555'};border:1px solid ${have > 0 ? '#88ff99' : '#444'};font-size:12px;cursor:${have > 0 ? 'pointer' : 'not-allowed'};border-radius:4px;font-family:inherit;">OPEN</button>
-        <button class="buy" style="flex:1;padding:8px;background:#1a1a2a;color:#aabbff;border:1px solid #6688cc;font-size:12px;cursor:pointer;border-radius:4px;font-family:inherit;">BUY ${cost}💰</button>
+        <button class="buy" style="flex:1;padding:8px;background:#1a1a2a;color:#aabbff;border:1px solid #6688cc;font-size:12px;cursor:pointer;border-radius:4px;font-family:inherit;">BUY ${money(cost)}</button>
       </div>
     `;
     const o = card.querySelector('.open');
@@ -25751,14 +25965,14 @@ function renderShopChests(body) {
 function renderShopWheel(body) {
   body.innerHTML = `
     <div style="width:100%;font-size:11px;color:#aaa;margin-bottom:14px;letter-spacing:1px;">
-      🎡 Spin the wheel for credits, fragments, or — if you're VERY lucky (0.3%) — a free rare weapon.
-      1 free spin per day; extra spins cost 100 credits.
+      🎡 Spin the wheel for donuts, fragments, or — if you're VERY lucky (0.3%) — a free rare weapon.
+      1 free spin per day; extra spins cost ${money(100)}.
     </div>
     <div style="display:flex;flex-direction:column;align-items:center;width:100%;">
       <div id="wheel-visual" style="width:280px;height:280px;border-radius:50%;border:8px solid #ffdd55;background:conic-gradient(#ffdd55 0deg 162deg,#aaccff 162deg 288deg,#88ff99 288deg 338deg,#ff8866 338deg 358deg,#cc99ff 358deg 360deg);display:flex;align-items:center;justify-content:center;font-size:60px;transition:transform 4s cubic-bezier(0.2,0.85,0.2,1);">🎡</div>
       <div id="wheel-result" style="margin-top:18px;font-size:18px;letter-spacing:2px;color:#ffdd55;min-height:30px;text-align:center;"></div>
       <button id="wheel-spin" style="margin-top:16px;padding:12px 40px;background:#3a2a1a;color:#ffdd55;border:2px solid #ffdd55;font-size:16px;letter-spacing:3px;cursor:pointer;border-radius:6px;font-family:inherit;">
-        ${currentUser.freeSpinAvailable || currentUser.isAdmin ? '🎁 FREE SPIN' : 'SPIN · 100💰'}
+        ${currentUser.freeSpinAvailable || currentUser.isAdmin ? '🎁 FREE SPIN' : `SPIN · ${money(100)}`}
       </button>
     </div>
   `;
@@ -25774,11 +25988,11 @@ function renderShopWheel(body) {
       if (!res) { out.textContent = '— spin failed —'; return; }
       const lines = [];
       if (res.kind === 'jackpot' && res.weapon) lines.push(`✨ JACKPOT! Unlocked: ${res.weapon}`);
-      else if (res.kind === 'bigBundle')         lines.push(`💎 BIG BUNDLE: +${res.credits || 0}💰 · +${res.fragments || 0}🧩`);
-      else if (res.kind === 'smallRare')         lines.push(`✨ RARE: ${res.credits ? `+${res.credits}💰` : `+${res.fragments}🧩`}`);
+      else if (res.kind === 'bigBundle')         lines.push(`💎 BIG BUNDLE: +${money(res.credits || 0)} · +${res.fragments || 0}🧩`);
+      else if (res.kind === 'smallRare')         lines.push(`✨ RARE: ${res.credits ? `+${money(res.credits)}` : `+${res.fragments}🧩`}`);
       else if (res.kind === 'bigFragments')      lines.push(`🧩 +${res.fragments} fragments!`);
       else if (res.kind === 'fragments')         lines.push(`🧩 +${res.fragments} fragments`);
-      else if (res.kind === 'credits')           lines.push(`💰 +${res.credits} credits`);
+      else if (res.kind === 'credits')           lines.push(`${CURRENCY_ICON} +${res.credits} donuts`);
       out.innerHTML = lines.join('<br/>');
       // Re-render so the spin button updates (free → paid)
       setTimeout(renderShop, 2200);
@@ -25877,7 +26091,7 @@ function renderShopAbilities(body) {
         <div style="font-size:12px;letter-spacing:1px;color:${owned ? '#fff' : '#999'};">${opt.name}</div>
         <div style="font-size:10px;color:#8899aa;margin:5px 0 8px;line-height:1.5;min-height:28px;">${opt.desc || ''}</div>`;
       const btn = document.createElement('button');
-      const label = equipped ? '✓ EQUIPPED' : owned ? 'EQUIP' : `💰 ${opt.price}`;
+      const label = equipped ? '✓ EQUIPPED' : owned ? 'EQUIP' : money(opt.price);
       btn.textContent = label;
       btn.disabled = equipped;
       btn.style.cssText = `width:100%;padding:6px;font-family:inherit;font-size:10px;letter-spacing:1px;border-radius:4px;
@@ -25913,7 +26127,7 @@ function renderShopBundles(body) {
       <div style="font-size:9px;color:#aaccff;margin-bottom:8px;">${ownedCt}/${b.items.length} owned · save ${totalSum - b.price} (was ${totalSum})</div>
       ${allOwned
         ? '<div style="text-align:center;color:#88ff99;font-size:12px;padding:6px 0;">✓ FULLY OWNED</div>'
-        : `<button class="shop-buy-bundle" style="width:100%;padding:8px;background:#1a2a1a;color:#88ff99;border:1px solid #88ff99;font-size:13px;cursor:pointer;border-radius:4px;font-family:inherit;letter-spacing:1px;">BUY · ${b.price}💰</button>`
+        : `<button class="shop-buy-bundle" style="width:100%;padding:8px;background:#1a2a1a;color:#88ff99;border:1px solid #88ff99;font-size:13px;cursor:pointer;border-radius:4px;font-family:inherit;letter-spacing:1px;">BUY · ${money(b.price)}</button>`
       }
     `;
     const btn = card.querySelector('.shop-buy-bundle');
@@ -25926,15 +26140,15 @@ function renderShopItems(body, slot) {
   // Decide which source list + how each card describes itself
   let source, descFn, pickIsAdmin;
   if (slot === 'primary') {
-    source = WEAPONS.filter(w => w.slot !== 'secondary' && !w.ddayOnly);
+    source = WEAPONS.filter(w => w.slot !== 'secondary' && !w.ddayOnly && !w.skinOnly);
     descFn = w => `DMG ${w.damage} · MAG ${w.mag} · ${w.auto ? 'AUTO' : 'SEMI'}`;
     pickIsAdmin = w => !!w.adminItem;
   } else if (slot === 'secondary') {
-    source = WEAPONS.filter(w => w.slot === 'secondary' && !w.ddayOnly);
+    source = WEAPONS.filter(w => w.slot === 'secondary' && !w.ddayOnly && !w.skinOnly);
     descFn = w => `DMG ${w.damage} · MAG ${w.mag}`;
     pickIsAdmin = w => !!w.adminItem;
   } else if (slot === 'melee') {
-    source = MELEE_ITEMS;
+    source = MELEE_ITEMS.filter(m => !m.skinOnly);
     descFn = m => `DMG ${m.damage} · RANGE ${m.range}`;
     pickIsAdmin = m => !!m.adminItem;
   } else {
@@ -25958,8 +26172,8 @@ function renderShopItems(body, slot) {
         ? `<div style="text-align:center;color:#88ff99;font-size:11px;">${FREE_WEAPONS.has(id) ? 'FREE' : '✓ OWNED'}</div>`
         : `<div style="display:flex;flex-direction:column;gap:4px;">
              <div style="display:flex;gap:4px;">
-               <button class="sbuy"   style="flex:1;padding:5px;background:#1a2a1a;color:#88ff99;border:1px solid #88ff99;font-size:10px;cursor:pointer;border-radius:3px;font-family:inherit;">BUY ${cost}💰</button>
-               <button class="strial" style="flex:1;padding:5px;background:#1a1a2a;color:#aabbff;border:1px solid #6688cc;font-size:10px;cursor:pointer;border-radius:3px;font-family:inherit;">TRIAL ${shopTrialCost(id)}💰</button>
+               <button class="sbuy"   style="flex:1;padding:5px;background:#1a2a1a;color:#88ff99;border:1px solid #88ff99;font-size:10px;cursor:pointer;border-radius:3px;font-family:inherit;">BUY ${money(cost)}</button>
+               <button class="strial" style="flex:1;padding:5px;background:#1a1a2a;color:#aabbff;border:1px solid #6688cc;font-size:10px;cursor:pointer;border-radius:3px;font-family:inherit;">TRIAL ${money(shopTrialCost(id))}</button>
              </div>
              <button class="sfrag" style="padding:4px;background:#1a1a2a;color:#aaccff;border:1px solid #6677aa;font-size:9px;cursor:pointer;border-radius:3px;font-family:inherit;">UNLOCK · ${fragmentUnlockCost(id)}🧩</button>
            </div>`
@@ -26034,9 +26248,9 @@ function balancedUtilityScore(u) {
 }
 function rankedItems(kind, limit = 10) {
   let items;
-  if (kind === 'primary') items = WEAPONS.filter(w => w.slot !== 'secondary' && !w.ddayOnly && !w.adminItem);
-  else if (kind === 'secondary') items = WEAPONS.filter(w => w.slot === 'secondary' && !w.ddayOnly && !w.adminItem);
-  else if (kind === 'melee') items = MELEE_ITEMS.filter(m => !m.adminItem);
+  if (kind === 'primary') items = WEAPONS.filter(w => w.slot !== 'secondary' && !w.ddayOnly && !w.adminItem && !w.skinOnly);
+  else if (kind === 'secondary') items = WEAPONS.filter(w => w.slot === 'secondary' && !w.ddayOnly && !w.adminItem && !w.skinOnly);
+  else if (kind === 'melee') items = MELEE_ITEMS.filter(m => !m.adminItem && !m.skinOnly);
   else items = SUPPORT_ITEMS.filter(u => !u.adminItem);
   const scoreFn = kind === 'melee' ? balancedMeleeScore : kind === 'utility' ? balancedUtilityScore : balancedGunScore;
   return items.map(item => ({ item, score: scoreFn(item) }))
@@ -26091,16 +26305,28 @@ const BEST_LOADOUTS = [
 function findWeaponIdx(id) { return WEAPONS.findIndex(w => w.id === id); }
 function findMeleeIdx(id)  { return MELEE_ITEMS.findIndex(m => m.id === id); }
 function findUtilIdx(id)   { return SUPPORT_ITEMS.findIndex(s => s.id === id); }
+function resolveWeaponLoadoutId(id) {
+  if (id === 'twin_ar') return { id: 'ak20', skin: 'ak20_twin_barrel' };
+  if (id === 'swarm_rifle') return { id: 'ak20', skin: 'ak20_swarm_rifle' };
+  return { id, skin: null };
+}
+function resolveMeleeLoadoutId(id) {
+  const skin = BASIC_MELEE_SKINS.find(s => s.id === id);
+  return skin ? { id: skin.skinFor, skin: skin.id } : { id, skin: null };
+}
 
 function applyBestLoadout(L) {
-  const pIdx = findWeaponIdx(L.p);
-  const sIdx = findWeaponIdx(L.s);
-  const mIdx = findMeleeIdx(L.m);
+  const pLoad = resolveWeaponLoadoutId(L.p);
+  const sLoad = resolveWeaponLoadoutId(L.s);
+  const mLoad = resolveMeleeLoadoutId(L.m);
+  const pIdx = findWeaponIdx(pLoad.id);
+  const sIdx = findWeaponIdx(sLoad.id);
+  const mIdx = findMeleeIdx(mLoad.id);
   const uIdx = findUtilIdx(L.u);
   const missing = [];
-  if (pIdx < 0 || !isOwned(L.p)) missing.push(L.p);
-  if (sIdx < 0 || !isOwned(L.s)) missing.push(L.s);
-  if (mIdx < 0 || !isOwned(L.m)) missing.push(L.m);
+  if (pIdx < 0 || !isOwned(pLoad.id)) missing.push(L.p);
+  if (sIdx < 0 || !isOwned(sLoad.id)) missing.push(L.s);
+  if (mIdx < 0 || !isOwned(mLoad.id)) missing.push(L.m);
   if (uIdx < 0 || !isOwned(L.u)) missing.push(L.u);
   if (missing.length) {
     alert(`Can't equip "${L.name}" — missing/unowned items:\n\n• ${missing.join('\n• ')}\n\nBuy or trial them in the shop first.`);
@@ -26110,6 +26336,9 @@ function applyBestLoadout(L) {
   selectedSecondaryIdx = sIdx;
   selectedMeleeIdx     = mIdx;
   selectedSupportIdx   = uIdx;
+  if (pLoad.skin) setGunStatSkin(pLoad.id, pLoad.skin);
+  if (sLoad.skin) setGunStatSkin(sLoad.id, sLoad.skin);
+  if (mLoad.skin) setMeleeSkin(mLoad.id, mLoad.skin);
   showLoadoutScreen(loadoutMode); // re-render to highlight the new picks
   toggleBestLoadoutsPanel(false);
 }
@@ -26142,7 +26371,10 @@ function toggleBestLoadoutsPanel(show) {
     </div>
     <div style="font-size:10px;color:#888;margin:12px 0 14px;">Curated meta builds - tap to equip. Missing items show in the shop.</div>
     ${BEST_LOADOUTS.map((L, i) => {
-      const allOwned = isOwned(L.p) && isOwned(L.s) && isOwned(L.m) && isOwned(L.u);
+      const pLoad = resolveWeaponLoadoutId(L.p);
+      const sLoad = resolveWeaponLoadoutId(L.s);
+      const mLoad = resolveMeleeLoadoutId(L.m);
+      const allOwned = isOwned(pLoad.id) && isOwned(sLoad.id) && isOwned(mLoad.id) && isOwned(L.u);
       return `<div data-idx="${i}" class="bl-card" style="background:${allOwned ? '#0f1018' : '#1a0f0f'};border:1px solid ${allOwned ? '#444' : '#553'};border-left:3px solid ${allOwned ? '#ffcc66' : '#666'};padding:8px 10px;margin-bottom:6px;cursor:pointer;border-radius:4px;">
         <div style="font-size:12px;color:${allOwned ? '#ffdd88' : '#aa9966'};font-weight:bold;">${L.icon} ${L.name}</div>
         <div style="font-size:9px;color:#aaa;margin:2px 0 3px;">${L.desc}</div>
@@ -26194,23 +26426,61 @@ function showLoadoutScreen(mode) {
   }
 
   const rerenderLoadout = () => showLoadoutScreen(loadoutMode); // re-paint with fresh state
+  function addGunSkinChips(card, w) {
+    const skins = GUN_STAT_SKINS_BY_WEAPON[w.id] || [];
+    if (!skins.length) return;
+    const on = equippedGunStatSkins[w.id] || 'stock';
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap;margin-top:6px;';
+    skins.forEach(s => {
+      const b = document.createElement('button');
+      b.textContent = s.id === 'stock' ? 'STOCK' : s.name.replace(/^AK20 | AK /, '');
+      b.style.cssText = `padding:3px 5px;font-size:8px;font-family:inherit;border-radius:4px;cursor:pointer;background:${on===s.id?'#173044':'#151515'};color:${on===s.id?'#88ccff':'#aaa'};border:1px solid ${on===s.id?'#88ccff':'#444'};`;
+      b.addEventListener('click', e => { e.stopPropagation(); setGunStatSkin(w.id, s.id); rerenderLoadout(); });
+      row.appendChild(b);
+    });
+    card.appendChild(row);
+  }
+  function addMeleeSkinChips(card, m) {
+    const skins = MELEE_SKINS_BY_BASE[m.id] || [];
+    if (!skins.length) return;
+    const on = equippedMeleeSkins[m.id] || '';
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap;margin-top:6px;';
+    const stock = document.createElement('button');
+    stock.textContent = 'STOCK';
+    stock.style.cssText = `padding:3px 5px;font-size:8px;font-family:inherit;border-radius:4px;cursor:pointer;background:${!on?'#332414':'#151515'};color:${!on?'#ffcc99':'#aaa'};border:1px solid ${!on?'#ffcc99':'#444'};`;
+    stock.addEventListener('click', e => { e.stopPropagation(); setMeleeSkin(m.id, null); rerenderLoadout(); });
+    row.appendChild(stock);
+    skins.forEach(s => {
+      const b = document.createElement('button');
+      b.textContent = s.name;
+      b.style.cssText = `padding:3px 5px;font-size:8px;font-family:inherit;border-radius:4px;cursor:pointer;background:${on===s.id?'#332414':'#151515'};color:${on===s.id?'#ffcc99':'#aaa'};border:1px solid ${on===s.id?'#ffcc99':'#444'};`;
+      b.addEventListener('click', e => { e.stopPropagation(); setMeleeSkin(m.id, s.id); rerenderLoadout(); });
+      row.appendChild(b);
+    });
+    card.appendChild(row);
+  }
 
   WEAPONS.forEach((w, i) => {
     if (w.ddayOnly) return; // skip D-Day exclusive weapons
+    if (w.skinOnly) return; // generated as a skin now, not a standalone weapon
     if (w.adminItem && !isUnlocked(w.id)) return; // hide locked admin weapons
     const isPrimary = w.slot !== 'secondary';
+    const dw = effectiveGunStats(w);
     const card = document.createElement('div');
     card.className = 'loadout-card';
     card.dataset.idx = i;
     card.dataset.itemId = w.id;
-    const fireTag = w.auto ? 'AUTO' : 'SEMI';
-    const rateTag = w.ammoRegen ? 'REGEN' : `${Math.round(1000/w.fireRate)}/s`;
+    const fireTag = dw.auto ? 'AUTO' : 'SEMI';
+    const rateTag = dw.ammoRegen ? 'REGEN' : `${Math.round(1000/dw.fireRate)}/s`;
     const adminTag = w.adminItem ? ' <span style="color:#ffcc44;font-size:9px;">🪖 ADMIN</span>' : '';
-    card.innerHTML = `<div class="lc-name">${w.name}${adminTag}</div>
-      <div class="lc-type">${w.type}</div>
-      <div class="lc-stats">DMG ${w.damage} · MAG ${w.mag} · ${fireTag} · ${rateTag}</div>`;
+    card.innerHTML = `<div class="lc-name">${displayWeaponName(w)}${adminTag}</div>
+      <div class="lc-type">${dw.type}${dw.skinName ? ' · SKIN' : ''}</div>
+      <div class="lc-stats">DMG ${dw.damage} · MAG ${w.mag} · ${fireTag} · ${rateTag}</div>`;
     if (!w.adminItem && !isOwned(w.id)) return; // not yet bought — hidden from loadout
     const usable = decorateOwnedBadge(card, w.id, !!w.adminItem);
+    addGunSkinChips(card, w);
     const handler = () => { if (usable) pickLoadoutWeapon(i, isPrimary, card); };
     card.addEventListener('click',      handler);
     card.addEventListener('touchstart', e => { e.stopPropagation(); e.preventDefault(); handler(); }, { passive: false });
@@ -26218,17 +26488,20 @@ function showLoadoutScreen(mode) {
     cardEls[i] = card;
   });
   MELEE_ITEMS.forEach((m, i) => {
+    if (m.skinOnly) return; // generated as a skin now, not a standalone melee
     if (m.adminItem && !isUnlocked(m.id)) return;
+    const dm = effectiveMeleeItem(m);
     const card = document.createElement('div');
     card.className = 'loadout-card';
     card.dataset.idx = i;
     card.dataset.itemId = m.id;
     const adminTag = m.adminItem ? ' <span style="color:#ffcc44;font-size:9px;">🪖 ADMIN</span>' : '';
-    card.innerHTML = `<div class="lc-name">${m.name}${adminTag}</div>
-      <div class="lc-type">${m.type}</div>
-      <div class="lc-stats">DMG ${m.damage} · RANGE ${m.range} · ${Math.round(1000/m.cooldown)}/s</div>`;
+    card.innerHTML = `<div class="lc-name">${displayMeleeName(m)}${adminTag}</div>
+      <div class="lc-type">${dm.type}${dm.skinId ? ' · SKIN' : ''}</div>
+      <div class="lc-stats">DMG ${dm.damage} · RANGE ${dm.range} · ${Math.round(1000/dm.cooldown)}/s</div>`;
     if (!m.adminItem && !isOwned(m.id)) return;
     const usable = decorateOwnedBadge(card, m.id, !!m.adminItem);
+    addMeleeSkinChips(card, m);
     const handler = () => { if (usable) pickMelee(i, card); };
     card.addEventListener('click',      handler);
     card.addEventListener('touchstart', e => { e.stopPropagation(); e.preventDefault(); handler(); }, { passive: false });
@@ -26257,6 +26530,16 @@ function showLoadoutScreen(mode) {
 
   // Always pre-select previous loadout when one exists; only fall back to defaults the very first time
   const readyBtn = document.getElementById('loadout-ready-btn');
+  if (selectedPrimaryIdx != null && WEAPONS[selectedPrimaryIdx]?.skinOnly) {
+    const r = resolveWeaponLoadoutId(WEAPONS[selectedPrimaryIdx].id);
+    selectedPrimaryIdx = findWeaponIdx(r.id);
+    if (r.skin) setGunStatSkin(r.id, r.skin);
+  }
+  if (selectedMeleeIdx != null && MELEE_ITEMS[selectedMeleeIdx]?.skinOnly) {
+    const r = resolveMeleeLoadoutId(MELEE_ITEMS[selectedMeleeIdx].id);
+    selectedMeleeIdx = findMeleeIdx(r.id);
+    if (r.skin) setMeleeSkin(r.id, r.skin);
+  }
   if (loadoutReady()) {
     // We've equipped a loadout before → keep it pre-selected
     cardEls[selectedPrimaryIdx]   && cardEls[selectedPrimaryIdx].classList.add('selected');
@@ -26268,9 +26551,9 @@ function showLoadoutScreen(mode) {
   } else {
     // First-time entry: apply defaults — pick first OWNED item per slot so
     // we don't auto-select something the user can't actually afford.
-    selectedPrimaryIdx   = WEAPONS.findIndex(w => w.slot !== 'secondary' && !w.ddayOnly && isOwned(w.id));
+    selectedPrimaryIdx   = WEAPONS.findIndex(w => w.slot !== 'secondary' && !w.ddayOnly && !w.skinOnly && isOwned(w.id));
     selectedSecondaryIdx = WEAPONS.findIndex(w => w.slot === 'secondary' && isOwned(w.id));
-    selectedMeleeIdx     = MELEE_ITEMS.findIndex(m => isOwned(m.id));
+    selectedMeleeIdx     = MELEE_ITEMS.findIndex(m => !m.skinOnly && isOwned(m.id));
     selectedSupportIdx   = SUPPORT_ITEMS.findIndex(s => isOwned(s.id));
     if (selectedPrimaryIdx   < 0) selectedPrimaryIdx   = 0;
     if (selectedSecondaryIdx < 0) selectedSecondaryIdx = WEAPONS.findIndex(w => w.slot === 'secondary');
@@ -26362,7 +26645,7 @@ const FUN_FACTS = [
   '💡 Aiming down sights tightens spread on every gun.',
   '💡 Reloading early loses your reserve bullets — finish the mag.',
   '💡 You can buy a Trial for 1/20 the price to test a weapon for one match.',
-  '💡 Match wins award more credits than losses — try to live.',
+  '💡 Match wins award more donuts than losses — try to live.',
   '💡 Upgrades cost fragments — open chests to stack them.',
   '💡 Free spin resets daily at midnight UTC.',
   '💡 The shop is open between matches from the mode-select screen.',
@@ -26393,7 +26676,7 @@ const FUN_FACTS = [
   '🤫 Helicopters in KOTH can be hijacked mid-air.',
   '🤫 The admin password is `(redacted)` — but it\'s patched now anyway.',
   '🤫 Type the right unlock code and get free admin weapons.',
-  '🤫 0.3% wheel jackpot drops a random rare weapon ≥400 credits.',
+  '🤫 0.3% wheel jackpot drops a random rare weapon ≥40,000 donuts.',
   // 😂 Funny
   '😂 Chainsaw users are legally required to scream while charging.',
   '😂 Frying Pan does NOT in fact deflect bullets. Stop trying.',
@@ -26577,7 +26860,7 @@ const adminCheats = {
       // Silently try to log in — populate currentUser if successful
       authRequest('/auth/login', saved).then(r => {
         if (r && r.ok) {
-          currentUser = { username: r.username, password: saved.password, unlocks: r.unlocks || [], purchased: r.purchased || [], credits: r.credits ?? 0, fragments: r.fragments ?? 0, chests: r.chests || { common: 0, rare: 0 }, upgrades: r.upgrades || {}, freeSpinAvailable: !!r.freeSpinAvailable, adminPassExpiresAt: r.adminPassExpiresAt || 0, isAdmin: !!r.isAdmin };
+          currentUser = { username: r.username, password: saved.password, unlocks: r.unlocks || [], purchased: r.purchased || [], credits: r.credits ?? 0, fragments: r.fragments ?? 0, chests: r.chests || { common: 0, rare: 0 }, upgrades: r.upgrades || {}, skinCases: r.skinCases || [], freeSpinAvailable: !!r.freeSpinAvailable, adminPassExpiresAt: r.adminPassExpiresAt || 0, isAdmin: !!r.isAdmin };
           const wb = document.getElementById('welcome-back');
           if (wb) {
             wb.textContent = r.isAdmin
@@ -26636,7 +26919,7 @@ async function startGame() {
     return;
   }
 
-  currentUser = { username: result.username, password: pass, unlocks: result.unlocks || [], purchased: result.purchased || [], credits: result.credits ?? 0, fragments: result.fragments ?? 0, chests: result.chests || { common: 0, rare: 0 }, upgrades: result.upgrades || {}, freeSpinAvailable: !!result.freeSpinAvailable, adminPassExpiresAt: result.adminPassExpiresAt || 0, isAdmin: !!result.isAdmin };
+  currentUser = { username: result.username, password: pass, unlocks: result.unlocks || [], purchased: result.purchased || [], credits: result.credits ?? 0, fragments: result.fragments ?? 0, chests: result.chests || { common: 0, rare: 0 }, upgrades: result.upgrades || {}, skinCases: result.skinCases || [], freeSpinAvailable: !!result.freeSpinAvailable, adminPassExpiresAt: result.adminPassExpiresAt || 0, isAdmin: !!result.isAdmin };
   localStorage.setItem('pvp_user', JSON.stringify({ username: name, password: pass }));
   setAuthStatus(result.isAdmin ? `🔓 ADMIN ACCESS GRANTED · ${result.username}` : `Logged in as ${result.username}`, result.isAdmin ? '#ff4444' : '#88ff88');
 
@@ -27068,8 +27351,8 @@ async function buyWeapon(weaponId) {
   if (FREE_WEAPONS.has(weaponId) || (currentUser.purchased || []).includes(weaponId)) return true;
   const cost = shopCost(weaponId);
   if (cost == null) { alert('That item is not purchasable.'); return false; }
-  if ((currentUser.credits ?? 0) < cost) { alert(`Not enough credits.\nNeed ${cost} · You have ${currentUser.credits ?? 0}`); return false; }
-  if (!confirm(`Buy "${weaponId}" for ${cost} credits?\n\nYou have ${currentUser.credits} credits.`)) return false;
+  if ((currentUser.credits ?? 0) < cost) { alert(`Not enough donuts.\nNeed ${money(cost)} · You have ${currentUser.credits ?? 0}`); return false; }
+  if (!confirm(`Buy "${weaponId}" for ${money(cost)}?\n\nYou have ${currentUser.credits} donuts.`)) return false;
   const r = await authRequest('/shop/buy', { username: currentUser.username, password: currentUser.password, weaponId });
   if (!r || r.error) { alert('❌ ' + (r?.error || 'shop error')); return false; }
   currentUser.purchased = r.purchased || currentUser.purchased;
@@ -27085,15 +27368,15 @@ async function buyBundle(bundleId) {
   if (currentUser.isAdmin) return true;
   const remaining = b.items.filter(id => !isOwned(id));
   if (remaining.length === 0) { alert('You already own every item in this bundle!'); return false; }
-  if ((currentUser.credits ?? 0) < b.price) { alert(`Not enough credits.\nBundle costs ${b.price} · You have ${currentUser.credits ?? 0}`); return false; }
+  if ((currentUser.credits ?? 0) < b.price) { alert(`Not enough donuts.\nBundle costs ${money(b.price)} · You have ${currentUser.credits ?? 0}`); return false; }
   const sumIndividual = b.items.reduce((s, id) => s + (shopCost(id) ?? 0), 0);
-  if (!confirm(`Buy "${b.name}" bundle for ${b.price} credits?\n\nIncludes: ${b.items.join(', ')}\nValue: ${sumIndividual} credits (saving ${sumIndividual - b.price})\nNew items: ${remaining.length}`)) return false;
+  if (!confirm(`Buy "${b.name}" bundle for ${money(b.price)}?\n\nIncludes: ${b.items.join(', ')}\nValue: ${money(sumIndividual)} (saving ${money(sumIndividual - b.price)})\nNew items: ${remaining.length}`)) return false;
   const r = await authRequest('/shop/buy-bundle', { username: currentUser.username, password: currentUser.password, bundleId });
   if (!r || r.error) { alert('❌ ' + (r?.error || 'shop error')); return false; }
   currentUser.purchased = r.purchased || currentUser.purchased;
   currentUser.credits = r.credits ?? currentUser.credits;
   updateUserInfoBar();
-  alert(`✅ Unlocked ${r.added?.length || 0} new items! Balance: ${currentUser.credits}`);
+  alert(`✅ Unlocked ${r.added?.length || 0} new items! Balance: ${currentUser.credits} donuts`);
   return true;
 }
 
@@ -27105,12 +27388,32 @@ async function trialWeapon(weaponId) {
   }
   const cost = shopTrialCost(weaponId);
   if (cost == null) { alert('That item is not purchasable.'); return false; }
-  if ((currentUser.credits ?? 0) < cost) { alert(`Not enough credits for trial.\nNeed ${cost} · You have ${currentUser.credits ?? 0}`); return false; }
-  if (!confirm(`Trial "${weaponId}" for ${cost} credits (one match only)?`)) return false;
+  if ((currentUser.credits ?? 0) < cost) { alert(`Not enough donuts for trial.\nNeed ${money(cost)} · You have ${currentUser.credits ?? 0}`); return false; }
+  if (!confirm(`Trial "${weaponId}" for ${money(cost)} (one match only)?`)) return false;
   const r = await authRequest('/shop/trial', { username: currentUser.username, password: currentUser.password, weaponId });
   if (!r || r.error) { alert('❌ ' + (r?.error || 'shop error')); return false; }
   currentUser.credits = r.credits ?? currentUser.credits;
   trialingThisMatch.add(weaponId);
+  updateUserInfoBar();
+  return true;
+}
+
+async function buySkinCaseGen1() {
+  if (!currentUser) { alert('Log in first.'); return false; }
+  if (currentUser.isAdmin) {
+    currentUser.skinCases = [...new Set([...(currentUser.skinCases || []), 'gen1_basic'])];
+    return true;
+  }
+  if ((currentUser.skinCases || []).includes('gen1_basic')) return true;
+  if ((currentUser.credits ?? 0) < SKIN_CASE_GEN1_COST) {
+    alert(`Not enough donuts.\nNeed ${money(SKIN_CASE_GEN1_COST)} · You have ${currentUser.credits ?? 0}`);
+    return false;
+  }
+  if (!confirm(`Buy Skin Case Gen 1 for ${money(SKIN_CASE_GEN1_COST)}?\n\nContains the basic stat-changing skins.`)) return false;
+  const r = await authRequest('/shop/buy-skin-case', { username: currentUser.username, password: currentUser.password, caseId: 'gen1_basic' });
+  if (!r || r.error) { alert('❌ ' + (r?.error || 'shop error')); return false; }
+  currentUser.credits = r.credits ?? currentUser.credits;
+  currentUser.skinCases = r.skinCases || [...(currentUser.skinCases || []), 'gen1_basic'];
   updateUserInfoBar();
   return true;
 }
@@ -27122,7 +27425,7 @@ async function awardMatchCredits(kills, won) {
     if (r && r.ok) {
       currentUser.credits = r.credits ?? currentUser.credits;
       if (r.chests) currentUser.chests = r.chests;
-      let msg = `💰 +${r.awarded} credits earned`;
+      let msg = `${CURRENCY_ICON} +${r.awarded} donuts earned`;
       if (r.chestDrops?.common) msg += ' · 📦 +1 Common';
       if (r.chestDrops?.rare)   msg += ' · 🟣 +1 Rare';
       updateUserInfoBar();
@@ -27155,10 +27458,10 @@ async function buyAdminPass() {
     return false;
   }
   if (!currentUser.isAdmin && (currentUser.credits ?? 0) < ADMIN_PASS_COST) {
-    alert(`Need ${ADMIN_PASS_COST} credits · You have ${currentUser.credits ?? 0}`);
+    alert(`Need ${money(ADMIN_PASS_COST)} · You have ${currentUser.credits ?? 0} donuts`);
     return false;
   }
-  if (!confirm(`Buy Admin Pass for ${ADMIN_PASS_COST} credits?\n\nUnlocks EVERY weapon (including admin items) for 10 minutes.`)) return false;
+  if (!confirm(`Buy Admin Pass for ${money(ADMIN_PASS_COST)}?\n\nUnlocks EVERY weapon (including admin items) for 10 minutes.`)) return false;
   const r = await authRequest('/shop/admin-pass', { username: currentUser.username, password: currentUser.password });
   if (!r || r.error) { alert('❌ ' + (r?.error || 'shop error')); return false; }
   currentUser.credits = r.credits ?? currentUser.credits;
@@ -27171,7 +27474,7 @@ async function buyChest(type) {
   if (!currentUser) return false;
   const cost = CHEST_PRICES_CLIENT[type];
   if (!cost) return false;
-  if (!confirm(`Buy a ${type.toUpperCase()} chest for ${cost} credits?`)) return false;
+  if (!confirm(`Buy a ${type.toUpperCase()} chest for ${money(cost)}?`)) return false;
   const r = await authRequest('/shop/buy-chest', { username: currentUser.username, password: currentUser.password, type });
   if (!r || r.error) { alert('❌ ' + (r?.error || 'shop error')); return false; }
   currentUser.credits = r.credits;
@@ -27191,7 +27494,7 @@ async function openChest(type) {
   updateUserInfoBar();
   const lines = [`📦 ${type.toUpperCase()} CHEST OPENED`];
   if (r.drops.fragments) lines.push(`🧩 +${r.drops.fragments} fragments`);
-  if (r.drops.credits)   lines.push(`💰 +${r.drops.credits} credits`);
+  if (r.drops.credits)   lines.push(`${CURRENCY_ICON} +${r.drops.credits} donuts`);
   if (r.drops.weapon)    lines.push(`✨ NEW WEAPON: ${r.drops.weapon}!`);
   alert(lines.join('\n'));
   return true;
@@ -27502,6 +27805,55 @@ function openWeaponSkinsPanel() {
       <div style="height:26px;border-radius:4px;background:linear-gradient(90deg, ${s.sw[0]} 0 50%, ${s.sw[1]} 50% 100%);border:1px solid #000;margin-bottom:6px;"></div>
       <div style="font-size:10px;letter-spacing:1px;color:${s.id===selectedWeaponSkin?'#ffdd55':'#ccc'};">${s.name}</div>
     </div>`;
+  const basicCaseSection = () => {
+    const ownsGen1 = !!(currentUser?.isAdmin || currentUser?.skinCases?.includes('gen1_basic'));
+    const lockedStyle = ownsGen1 ? '' : 'opacity:0.38;filter:grayscale(0.7);pointer-events:none;';
+    const gunRows = Object.entries(GUN_STAT_SKINS_BY_WEAPON).map(([wid, skins]) => {
+      const w = WEAPONS.find(x => x.id === wid);
+      if (!w) return '';
+      const on = equippedGunStatSkins[wid] || 'stock';
+      return `<div style="margin-top:12px;${lockedStyle}">
+        <div style="font-size:11px;letter-spacing:2px;color:#99ccff;margin-bottom:6px;">${w.name.toUpperCase()} STAT SKINS</div>
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;">
+          ${skins.map(s => `<div data-gskin="${s.id}" data-gweapon="${wid}" class="gs-cell"
+            style="cursor:pointer;border:2px solid ${on===s.id?'#88ccff':'#444'};border-radius:6px;padding:8px;background:${on===s.id?'#132434':'#161820'};">
+            <div style="height:20px;border-radius:4px;background:linear-gradient(90deg, ${s.sw[0]} 0 50%, ${s.sw[1]} 50% 100%);border:1px solid #000;margin-bottom:5px;"></div>
+            <div style="font-size:10px;color:${on===s.id?'#88ccff':'#ddd'};">${s.name}</div>
+            <div style="font-size:9px;color:#899;line-height:1.25;margin-top:3px;">${s.blurb}</div>
+          </div>`).join('')}
+        </div>
+      </div>`;
+    }).join('');
+    const meleeRows = Object.entries(MELEE_SKINS_BY_BASE).map(([baseId, skins]) => {
+      const base = MELEE_ITEMS.find(x => x.id === baseId);
+      if (!base) return '';
+      const on = equippedMeleeSkins[baseId] || '';
+      return `<div style="margin-top:10px;${lockedStyle}">
+        <div style="font-size:10px;letter-spacing:1px;color:#ffcc99;margin-bottom:5px;">${base.name.toUpperCase()}</div>
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;">
+          <div data-mskin2="" data-mbase="${baseId}" class="melee-skin-cell"
+            style="cursor:pointer;border:1px solid ${!on?'#ffcc99':'#444'};border-radius:5px;padding:6px;background:${!on?'#2a2118':'#161616'};font-size:9px;color:${!on?'#ffcc99':'#999'};">STOCK</div>
+          ${skins.map(s => `<div data-mskin2="${s.id}" data-mbase="${baseId}" class="melee-skin-cell"
+            style="cursor:pointer;border:1px solid ${on===s.id?'#ffcc99':'#444'};border-radius:5px;padding:6px;background:${on===s.id?'#2a2118':'#161616'};">
+            <div style="font-size:9px;color:${on===s.id?'#ffcc99':'#ddd'};">${s.name}</div>
+            <div style="font-size:8px;color:#998;line-height:1.25;margin-top:2px;">${s.blurb}</div>
+          </div>`).join('')}
+        </div>
+      </div>`;
+    }).join('');
+    return `<div style="margin-top:18px;border-top:1px solid #6a5520;padding-top:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+        <div style="font-size:14px;letter-spacing:2px;color:#88ccff;">📦 SKIN CASE GEN 1</div>
+        ${ownsGen1
+          ? '<div style="font-size:10px;color:#88ff99;letter-spacing:1px;">✓ OWNED</div>'
+          : `<button id="buy-skin-case-gen1" style="padding:6px 10px;background:#182438;color:#88ccff;border:1px solid #66aaff;border-radius:4px;font-family:inherit;font-size:10px;letter-spacing:1px;cursor:pointer;">BUY · ${money(SKIN_CASE_GEN1_COST)}</button>`}
+      </div>
+      <div style="font-size:10px;color:#8a9aaa;margin:5px 0 2px;line-height:1.4;">Gen 1 contains basic stat-changing skins. They change stats a little, then reuse the base weapon slot.</div>
+      ${gunRows}
+      <div style="margin-top:14px;font-size:12px;letter-spacing:2px;color:#ffcc99;">MELEE SKINS</div>
+      ${meleeRows}
+    </div>`;
+  };
   panel.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;border-bottom:1px solid #6a5520;padding-bottom:10px;">
       <div style="font-size:18px;letter-spacing:3px;color:#ffdd88;">🎨 GUN SKINS</div>
@@ -27509,8 +27861,27 @@ function openWeaponSkinsPanel() {
     </div>
     <div style="font-size:10px;color:#aa9966;margin-bottom:12px;line-height:1.4;">One pick applies to every gun. Country themes use real national flags; the German theme is the Iron Cross military mark (no Nazi imagery).</div>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">${WEAPON_SKINS.map(swatch).join('')}</div>
+    ${basicCaseSection()}
     ${modelSkinSection()}
   `;
+  const buyCaseBtn = panel.querySelector('#buy-skin-case-gen1');
+  if (buyCaseBtn) buyCaseBtn.addEventListener('click', async () => {
+    if (await buySkinCaseGen1()) openWeaponSkinsPanel();
+  });
+  panel.querySelectorAll('.gs-cell').forEach(cell => {
+    cell.addEventListener('click', () => {
+      if (!(currentUser?.isAdmin || currentUser?.skinCases?.includes('gen1_basic'))) { alert(`Skin Case Gen 1 costs ${money(SKIN_CASE_GEN1_COST)}.`); return; }
+      setGunStatSkin(cell.dataset.gweapon, cell.dataset.gskin || null);
+      openWeaponSkinsPanel();
+    });
+  });
+  panel.querySelectorAll('.melee-skin-cell').forEach(cell => {
+    cell.addEventListener('click', () => {
+      if (!(currentUser?.isAdmin || currentUser?.skinCases?.includes('gen1_basic'))) { alert(`Skin Case Gen 1 costs ${money(SKIN_CASE_GEN1_COST)}.`); return; }
+      setMeleeSkin(cell.dataset.mbase, cell.dataset.mskin2 || null);
+      openWeaponSkinsPanel();
+    });
+  });
   panel.querySelectorAll('.ms-cell').forEach(cell => {
     cell.addEventListener('click', () => {
       setModelSkin(cell.dataset.mweapon, cell.dataset.mskin || null);
@@ -27703,7 +28074,7 @@ function updateUserInfoBar() {
     const passTag = adminPassActive() && !currentUser.isAdmin
       ? ` · <b style="color:#ffcc88">🪖 PASS ${Math.ceil(adminPassMsLeft()/60000)}m</b>`
       : '';
-    unlocksEl.innerHTML = `💰 <b style="color:#ffdd55">${credits}</b> · 🧩 <b style="color:#aaccff">${frags}</b> frags · 📦 ${ch.common}c/${ch.rare}r · 🪖 ${n}/24${passTag}`;
+    unlocksEl.innerHTML = `${CURRENCY_ICON} <b style="color:#ffdd55">${credits}</b> · 🧩 <b style="color:#aaccff">${frags}</b> frags · 📦 ${ch.common}c/${ch.rare}r · 🪖 ${n}/24${passTag}`;
   }
   // Show admin panel button if admin
   let adminBtn = document.getElementById('admin-panel-btn');
