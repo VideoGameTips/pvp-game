@@ -906,6 +906,42 @@ const BASIC_GUN_STAT_SKINS = [
   { id: 'pistol_darker_handgun', weapon: 'pistol', name: 'Darker Handgun', rarity: 'lame', sw: ['#111', '#2a2a2a'],
     blurb: 'It is a handgun, but darker. Somehow +1 damage.', damageId: 'pistol_skin_darker',
     stats: { damage: 21, bulletColor: 0x333333 } },
+  { id: 'pistol_slightly_bluish', weapon: 'pistol', name: 'Slightly Bluish Pistol', rarity: 'lame', sw: ['#22283a', '#5f78aa'],
+    blurb: 'Almost blue. Almost exciting.', damageId: 'pistol_skin_bluish',
+    stats: { damage: 20, spread: 0.007, bulletColor: 0x88aaff } },
+  { id: 'revolver_rusty_cylinder', weapon: 'revolver', name: 'Rusty Cylinder', rarity: 'lame', sw: ['#5a3a22', '#9a6a35'],
+    blurb: 'Tetanus not included. +2 damage, slower fan swagger.', damageId: 'revolver_skin_rusty',
+    stats: { damage: 57, fireRate: 640, bulletColor: 0xaa7744 } },
+  { id: 'ak20_cardboard_wrap', weapon: 'ak20', name: 'Cardboard Wrap', rarity: 'lame', sw: ['#8b6a3e', '#c9aa6d'],
+    blurb: 'Budget camouflage. Slightly worse, emotionally cheaper.', damageId: 'ak20_skin_cardboard',
+    stats: { damage: 29, spread: 0.004, bulletColor: 0xccaa66 } },
+  { id: 'ak20_midnight_oil', weapon: 'ak20', name: 'Midnight Oil', rarity: 'good', sw: ['#05070d', '#55aaff'],
+    blurb: 'Clean recoil, cold finish.', damageId: 'ak20_skin_midnight',
+    stats: { damage: 31, spread: 0.002, bulletSpeed: 128, bulletColor: 0x55aaff } },
+  { id: 'sg8_duck_tape', weapon: 'sg8', name: 'Duck Tape SG-8', rarity: 'lame', sw: ['#777777', '#ffdd44'],
+    blurb: 'Not duct tape. Duck tape. The spread is offended.', damageId: 'sg8_skin_duck_tape',
+    stats: { damage: 17, spread: 0.07, bulletColor: 0xffdd44 } },
+  { id: 'sg8_confetti_shells', weapon: 'sg8', name: 'Confetti Shells', rarity: 'good', sw: ['#ff55cc', '#55ffee'],
+    blurb: 'Party shotgun. Tighter party.', damageId: 'sg8_skin_confetti',
+    stats: { damage: 16, pellets: 7, spread: 0.065, randomBulletColor: true } },
+  { id: 'srx_laser_pointer_taped', weapon: 'srx', name: 'Taped-On Laser', rarity: 'lame', sw: ['#202020', '#ff3333'],
+    blurb: 'The tape does most of the aiming.', damageId: 'srx_skin_taped_laser',
+    stats: { damage: 92, spread: 0, bulletSpeed: 210, bulletColor: 0xff3333 } },
+  { id: 'paintball_moldy_green', weapon: 'paintball', name: 'Moldy Paint', rarity: 'lame', sw: ['#446622', '#99aa55'],
+    blurb: 'This paint expired in 2014.', damageId: 'paintball_skin_moldy',
+    stats: { damage: 39, bulletColor: 0x88aa33, randomBulletColor: false } },
+  { id: 'flamethrower_water_thrower', weapon: 'flamethrower', name: 'Water Thrower', rarity: 'good', sw: ['#2b6cff', '#aaddff'],
+    blurb: 'why does this burn me?!', damageId: 'flamethrower_skin_water',
+    stats: { damage: 9, fireRate: 55, spread: 0.08, bulletSpeed: 54, bulletColor: 0x55ccff, bulletSize: 0.085 } },
+  { id: 'crossbow_pool_noodle', weapon: 'crossbow', name: 'Pool Noodle Limbs', rarity: 'lame', sw: ['#ff66aa', '#66ffaa'],
+    blurb: 'Technically flexible. Spiritually embarrassing.', damageId: 'crossbow_skin_noodle',
+    stats: { damage: 76, reloadTime: 1100, bulletColor: 0xff66aa } },
+  { id: 'minigun_arcade_cabinet', weapon: 'minigun', name: 'Arcade Cabinet', rarity: 'good', sw: ['#251044', '#00ffcc'],
+    blurb: 'Insert donut. Receive suppression.', damageId: 'minigun_skin_arcade',
+    stats: { damage: 7, fireRate: 34, spread: 0.02, bulletColor: 0x00ffcc } },
+  { id: 'rpg_soda_bottle', weapon: 'rpg', name: 'Soda Bottle RPG', rarity: 'lame', sw: ['#2f7a3f', '#ff5533'],
+    blurb: 'Do not shake before firing.', damageId: 'rpg_skin_soda',
+    stats: { damage: 118, bulletSpeed: 66, bulletColor: 0x77dd55 } },
 ];
 
 const BASIC_MELEE_SKINS = [
@@ -945,6 +981,30 @@ const BASIC_MELEE_SKINS = [
   { id: 'meat_cleaver', skinFor: 'knife', name: 'Meat Cleaver', type: 'Vampiric Melee', rarity: 'basic',
     blurb: 'Slower knife skin with lifesteal.', stats: { damage: 60, range: 1.7, cooldown: 540, lifestealOnHit: 10 },
     ability: { name: 'Butcher', cd: 10000, desc: '3 s · auto-chop · double lifesteal', type: 'melee_revup', duration: 3000, lifestealMult: 2 } },
+  { id: 'knife_dental_floss', skinFor: 'knife', name: 'Dental Floss', type: 'Thread Melee', rarity: 'good',
+    blurb: 'I hate dentists...', stats: { damage: 24, range: 2.4, cooldown: 210, speedMult: 2.15 },
+    ability: { name: 'Floss Cut', cd: 9000, desc: 'Next hit · 2× dmg · surprisingly clean', type: 'melee_heavy' } },
+  { id: 'knife_butter_knife', skinFor: 'knife', name: 'Butter Knife', type: 'Lame Melee', rarity: 'lame',
+    blurb: 'Barely sharp. Extremely committed.', stats: { damage: 20, range: 1.55, cooldown: 230, speedMult: 2.05 },
+    ability: { name: 'Spread', cd: 8000, desc: '2× damage on next hit, somehow', type: 'melee_heavy' } },
+  { id: 'bat_pool_noodle', skinFor: 'bat', name: 'Pool Noodle', type: 'Foam Melee', rarity: 'lame',
+    blurb: 'Makes a noise. That is the feature.', stats: { damage: 24, range: 2.5, cooldown: 430, launchOnHit: 3 },
+    ability: { name: 'Bonk?', cd: 9000, desc: 'Launches target a little. Very silly.', type: 'melee_heavy', launchMult: 1.4 } },
+  { id: 'sledge_gold_brick', skinFor: 'sledge', name: 'Gold Brick', type: 'Heavy Flex', rarity: 'good',
+    blurb: 'Heavy, shiny, irresponsible.', stats: { damage: 82, range: 1.8, cooldown: 980 },
+    ability: { name: 'Market Crash', cd: 12000, desc: 'Leap up · slam · expensive AOE', type: 'melee_slam', radius: 4, damage: 90 } },
+  { id: 'katana_ruler', skinFor: 'katana', name: 'School Ruler', type: 'Strict Melee', rarity: 'lame',
+    blurb: 'Thirty centimeters of discipline.', stats: { damage: 42, range: 2.9, cooldown: 390 },
+    ability: { name: 'Detention', cd: 10000, desc: '2 s · deflect incoming bullets', type: 'melee_deflect', duration: 2000 } },
+  { id: 'frying_pan_nonstick', skinFor: 'frying_pan', name: 'Nonstick Pan', type: 'Kitchen Melee', rarity: 'good',
+    blurb: 'Hits slide right off. Bullets too, if you time it.', stats: { damage: 34, range: 1.9, cooldown: 390 },
+    ability: { name: 'Nonstick Parry', cd: 9000, desc: '1.5 s · block incoming bullets', type: 'melee_parry', duration: 1500 } },
+  { id: 'spear_broom_handle', skinFor: 'spear', name: 'Broom Handle', type: 'Long Lame', rarity: 'lame',
+    blurb: 'Sweeps the floor. Occasionally the enemy.', stats: { damage: 35, range: 3.2, cooldown: 620 },
+    ability: { name: 'Sweep', cd: 9000, desc: 'Pull target 3 m toward you', type: 'melee_pull', distance: 3 } },
+  { id: 'fists_sock_puppets', skinFor: 'fists', name: 'Sock Puppets', type: 'Punch', rarity: 'lame',
+    blurb: 'The left one is named violence.', stats: { damage: 22, range: 1.45, cooldown: 190, speedMult: 1.7 },
+    ability: { name: 'Puppet Show', cd: 8000, desc: '2× damage on next hit', type: 'melee_heavy' } },
 ];
 
 const GUN_STAT_SKINS_BY_WEAPON = {};
@@ -14597,6 +14657,10 @@ const PROJECTILE_KIND_BY_ID = {
   storm_cannon:'grenade', gravity_launcher:'grenade', potato_cannon:'grenade',
   crossbow:'bolt', boombow:'bolt', dart_gun:'bolt', harpoon_gun:'bolt',
   slingshot:'stone', air_rifle:'bullet',
+  // These five used to share the generic 'solid' ball, so a thrown knife flew
+  // as a sphere. Each has its own shape and its own tumble now.
+  throwing_knives:'knife', throwing_axes:'axe', boomerang:'boomerang',
+  traffic_cone:'cone', cream_pie:'pie',
   flamethrower:'flame',
   freeze_gun:'ice', abs_zero:'ice', frost_blaster:'ice',
   paintball:'paintball', glassmaker:'blob', gravity_paint:'blob',
@@ -14835,6 +14899,89 @@ function _buildPaintball(tint, r) {
   g._spin = { x: 5, y: 7, z: 3 };
   return g;
 }
+// A thrown knife: flat blade, dark grip, turning end over end the way one does.
+function _buildKnife(tint, r) {
+  const P = _projCache('knife|'+r, () => ({
+    blade: new THREE.BoxGeometry(r*0.30, r*0.12, r*2.6),
+    guard: new THREE.BoxGeometry(r*0.85, r*0.16, r*0.16),
+    grip:  new THREE.BoxGeometry(r*0.34, r*0.34, r*1.0),
+    steel: _lam(0xc8ced6), dark: _lam(0x23262b),
+  }));
+  const g = new THREE.Group();
+  const b = new THREE.Mesh(P.blade, P.steel); b.position.z = -r*0.9; g.add(b);
+  const gu = new THREE.Mesh(P.guard, P.dark); gu.position.z = r*0.42; g.add(gu);
+  const gr = new THREE.Mesh(P.grip, P.dark);  gr.position.z = r*1.0;  g.add(gr);
+  g._alignToDir = true;
+  g._spin = { x: 26, y: 0, z: 0 };     // end over end, fast
+  return g;
+}
+// A hatchet: haft with a bit at the head, tumbling nose-heavy.
+function _buildAxe(tint, r) {
+  const P = _projCache('axe|'+r, () => ({
+    haft: new THREE.BoxGeometry(r*0.22, r*0.22, r*2.2),
+    head: new THREE.BoxGeometry(r*1.1, r*0.28, r*0.7),
+    edge: new THREE.BoxGeometry(r*0.30, r*0.30, r*0.72),
+    wood: _lam(0x6b4a2c), steel: _lam(0xb9c0c8), bright: _lam(0xe4e9ee),
+  }));
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(P.haft, P.wood));
+  const h = new THREE.Mesh(P.head, P.steel); h.position.set(r*0.42, 0, -r*0.85); g.add(h);
+  const e = new THREE.Mesh(P.edge, P.bright); e.position.set(r*0.94, 0, -r*0.85); g.add(e);
+  g._alignToDir = true;
+  g._spin = { x: 19, y: 0, z: 0 };
+  return g;
+}
+// A boomerang is two arms meeting at an angle, spinning flat about its middle.
+function _buildBoomerang(tint, r) {
+  const P = _projCache('boom|'+r, () => ({
+    arm: new THREE.BoxGeometry(r*0.34, r*0.16, r*1.9),
+    wood: _lam(0x8a5a2e), stripe: _lam(0xe8d8a8),
+    band: new THREE.BoxGeometry(r*0.36, r*0.18, r*0.22),
+  }));
+  const g = new THREE.Group();
+  [[-0.55, 0.5], [0.55, -0.5]].forEach(([off, rot]) => {
+    const a = new THREE.Mesh(P.arm, P.wood);
+    a.position.set(off*r*0.9, 0, 0); a.rotation.y = rot;
+    g.add(a);
+    const bnd = new THREE.Mesh(P.band, P.stripe);
+    bnd.position.set(off*r*1.5, 0, off*r*0.8); bnd.rotation.y = rot;
+    g.add(bnd);
+  });
+  g._alignToDir = false;
+  g._spin = { x: 0, y: 24, z: 0 };     // flat, about the vertical axis
+  return g;
+}
+// A traffic cone, tumbling base over point.
+function _buildCone(tint, r) {
+  const P = _projCache('cone|'+r, () => ({
+    body: new THREE.ConeGeometry(r*0.78, r*2.1, 10),
+    base: new THREE.BoxGeometry(r*1.7, r*0.22, r*1.7),
+    band: new THREE.CylinderGeometry(r*0.56, r*0.62, r*0.34, 10),
+    orange: _lam(0xe8631c), white: _lam(0xf2f2ee),
+  }));
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(P.body, P.orange));
+  const b = new THREE.Mesh(P.base, P.orange); b.position.y = -r*1.0; g.add(b);
+  const bd = new THREE.Mesh(P.band, P.white); bd.position.y = r*0.16; g.add(bd);
+  g._alignToDir = false;
+  g._spin = { x: 11, y: 4, z: 7 };
+  return g;
+}
+// A pie: foil tin, cream on top, spinning flat like a frisbee.
+function _buildPie(tint, r) {
+  const P = _projCache('pie|'+r, () => ({
+    tin:   new THREE.CylinderGeometry(r*1.25, r*1.0, r*0.42, 12),
+    cream: new THREE.SphereGeometry(r*1.05, 10, 6, 0, Math.PI*2, 0, Math.PI/2),
+    foil: _lam(0xb9bcc2), white: _lam(0xfbf6e6),
+  }));
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(P.tin, P.foil));
+  const c = new THREE.Mesh(P.cream, P.white); c.position.y = r*0.16; g.add(c);
+  g._alignToDir = false;
+  g._spin = { x: 2, y: 17, z: 2 };
+  return g;
+}
+
 function _buildStone(tint, r) {
   const P = _projCache('stone|'+r, () => ({
     rock: new THREE.DodecahedronGeometry(r*1.2, 0), rockM: _lam(0x7a7268),
@@ -15010,6 +15157,11 @@ function makeBulletMesh(color, size, weaponId) {
     case 'blob':    return _buildBlob(color, r);
     case 'paintball': return _buildPaintball(color, r);
     case 'stone':   return _buildStone(color, r);
+    case 'knife':     return _buildKnife(color, r);
+    case 'axe':       return _buildAxe(color, r);
+    case 'boomerang': return _buildBoomerang(color, r);
+    case 'cone':      return _buildCone(color, r);
+    case 'pie':       return _buildPie(color, r);
     case 'slug':    return _buildSlug(color, r);
     case 'flare':   return _buildFlare(color, r);
     case 'nail':    return _buildNail(color, r);
@@ -21312,7 +21464,12 @@ function updateSpectatorHUD() {
 const CLIENT_WEAPON_DAMAGE = Object.fromEntries([
   ...WEAPONS.map(w => [w.id, w.damage]),
   ...MELEE_ITEMS.map(m => [m.id, m.damage]),
-  ['ak20_skin_twin', 20], ['ak20_skin_tracking', 25], ['ak20_skin_swarm', 17], ['pistol_skin_darker', 21],
+  ['ak20_skin_twin', 20], ['ak20_skin_tracking', 25], ['ak20_skin_swarm', 17],
+  ['pistol_skin_darker', 21], ['pistol_skin_bluish', 20], ['revolver_skin_rusty', 57],
+  ['ak20_skin_cardboard', 29], ['ak20_skin_midnight', 31], ['sg8_skin_duck_tape', 17],
+  ['sg8_skin_confetti', 16], ['srx_skin_taped_laser', 92], ['paintball_skin_moldy', 39],
+  ['flamethrower_skin_water', 9], ['crossbow_skin_noodle', 76], ['minigun_skin_arcade', 7],
+  ['rpg_skin_soda', 118],
   ['mg42', 15], ['bat', 38], ['sabre', 45], ['frying_pan', 32], ['sledge', 70],
   ['spear', 50], ['spear_throw', 85], ['pickle', 22], ['shield_charge', 60],
   ['knife_instakill', 9999], ['chainsaw', 45], ['katana', 65], ['knife', 28],
