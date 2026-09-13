@@ -1090,6 +1090,9 @@ function tryPairPvpQueue(mode) {
 }
 
 // Weapon damage table (must match client WEAPONS array)
+// Headshot multipliers, mirroring headshotMult in WEAPONS[] (CLAUDE.md gotcha
+// #4). Anything not listed is the x2 every weapon has always had.
+const WEAPON_HS_MULT = { ak20: 2.333, flechette: 4 };
 const WEAPON_DAMAGE = {
   // Mirrored from WEAPONS[] in public/game.js — CLAUDE.md gotcha #4. Without an
   // entry here the server falls back to || 25, so these ten all dealt 25 in PvP
@@ -1106,7 +1109,7 @@ const WEAPON_DAMAGE = {
   cream_pie: 34,
   slingshot: 9,   // mirrors WEAPONS[] in public/game.js — see CLAUDE.md gotcha #4
   // Primaries
-  ak20: 38,  sg8: 18,
+  ak20: 30,  sg8: 18,
   srx: 95, rpd: 10, mp40: 15, p90: 5,
   paintball: 40, burst: 21, lever: 62,
   vector: 12, crossbow: 80, flamethrower: 6,
@@ -1404,7 +1407,7 @@ io.on('connection', (socket) => {
     const shooter = players[socket.id];
     if (!target || !shooter || target.dead || target.isBot) return;
     let dmg = WEAPON_DAMAGE[data.weapon] || 25;
-    if (data.headshot) dmg = data.instakill ? target.hp : dmg * 2; // headshot: 2× (or instakill)
+    if (data.headshot) dmg = data.instakill ? target.hp : Math.round(dmg * (WEAPON_HS_MULT[data.weapon] || 2));
     target.hp = Math.max(0, target.hp - dmg);
     emitToMatch(target.matchId, 'playerHit', { targetId: target.id, hp: target.hp, bulletId: data.bulletId });
     if (target.hp <= 0) {
@@ -1423,7 +1426,7 @@ io.on('connection', (socket) => {
       : players[socket.id];
     if (!bot || !bot.isBot || bot.dead || !shooter) return;
     let dmg = WEAPON_DAMAGE[data.weapon] || 25;
-    if (data.headshot) dmg = data.instakill ? bot.hp : dmg * 2;
+    if (data.headshot) dmg = data.instakill ? bot.hp : Math.round(dmg * (WEAPON_HS_MULT[data.weapon] || 2));
     bot.hp = Math.max(0, bot.hp - dmg);
     emitToMatch(bot.matchId, 'playerHit', { targetId: bot.id, hp: bot.hp, bulletId: data.bulletId });
     if (bot.hp <= 0) {

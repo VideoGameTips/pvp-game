@@ -39,11 +39,12 @@ const socket = io(SERVER.socketUrl, { path: SERVER.socketPath });
 const WEAPONS = [
   {
     id: 'ak20',  name: 'AK20',  type: 'AR', slot: 'primary',
-    // Buffed to sit at the top of the roster. Spread was already 0 and there is
-    // no recoil or bloom anywhere in the fire path, so it was always pin
-    // accurate; headshots are already x2 for every weapon. The levers that
-    // actually moved are damage (x1.5) and reload (x1.5 faster).
-    mag: 30,  reserve: 90,  damage: 38, fireRate: 150,  reloadTime: 1333,
+    // Pulled back from the 38/1333 buff, which overshot into absolute dominance.
+    // 30 a shot still kills in four, and the 2.33x head multiplier puts a
+    // headshot at 70 — two of them and you are down. The reload goes back to
+    // 2000, because the gun has to be cocked and that takes as long as it takes.
+    mag: 30,  reserve: 90,  damage: 30, fireRate: 150,  reloadTime: 2000,
+    headshotMult: 2.333,
     auto: true,  pellets: 1, spread: 0,    adsZoom: 45, bulletSpeed: 120, noReload: false,
     ability: { name: 'Focus Fire', cd: 8000, desc: '3s · laser-accurate · +40% dmg', type: 'buff', duration: 3000, spreadMult: 0, dmgMult: 1.4 },
   },
@@ -299,7 +300,7 @@ const WEAPONS = [
     mag: 40, reserve: 120, damage: 16, fireRate: 70, reloadTime: 2000,
     auto: true, pellets: 1, spread: 0.003, adsZoom: 44, bulletSpeed: 175, noReload: false,
     bulletColor: 0xcccccc, bulletSize: 0.04,
-    headshotMult: 2, // doubled headshot multiplier (stub — base headshot is already x2, this would be x4)
+    headshotMult: 4, // now genuinely read — see headshotMultFor()
     ability: { name: 'Needle Storm', cd: 9000, desc: 'Fire 12 flechettes instantly', type: 'fanfire', count: 12, delay: 22 },
   },
   {
@@ -9133,8 +9134,12 @@ function buildAK20() {
   box(inner,  0.003, 0.005, 0.006, 0.030, 0.044, -0.026);  // AUTO stop
   // Ejection port, cut into the flank, with the charging handle above it.
   box(inner,  0.004, 0.024, 0.062, 0.026, 0.030, -0.036);
-  box(bright, 0.014, 0.011, 0.030, 0.030, 0.046, -0.030);
-  cyl(bright, 0.006, 0.006, 0.016, 10, 0.036, 0.046, -0.018, Math.PI / 2, Math.PI / 2);
+  // The handle is its own assembly so the reload can actually cock the gun.
+  // Everything else about the AK is welded to the receiver; this one piece runs.
+  gpPart(g, 'main', () => {
+    box(bright, 0.014, 0.011, 0.030, 0.030, 0.046, -0.030);
+    cyl(bright, 0.006, 0.006, 0.016, 10, 0.036, 0.046, -0.018, Math.PI / 2, Math.PI / 2);
+  });
   // Receiver rivets — six a side, the giveaway of a stamped AK receiver.
   [-0.150, -0.090, -0.020, 0.040, 0.090, 0.128].forEach(z => {
     cyl(bright, 0.0032, 0.0032, 0.056, 8, 0, -0.020, z, 0, Math.PI / 2);
@@ -17845,8 +17850,10 @@ const RELOAD_KEYS = {
 ak20: [K(.08,{py:.05,rx:.30,rz:.20,hy:-.05,hz:.01}), K(.20,{py:.07,rx:.40,rz:.26,hy:-.16,hz:.03}),
        K(.30,{py:.07,rx:.42,rz:.28,hx:-.10,hy:-.21,hz:-.02,hr:.8}), K(.44,{py:.08,rx:.44,rz:.26,hx:.04,hy:-.25,hz:.02}),
        K(.56,{py:.08,rx:.44,rz:.26,hy:-.12,hz:.05}), K(.66,{py:.07,rx:.46,rz:.26,hy:-.03,hz:.06}),
-       K(.74,{py:.11,rx:.42,rz:.22,hy:0,hz:.03}), K(.84,{py:.06,rx:.30,rz:.34,hy:.09,hz:.13,hr:-.7}),
-       K(.91,{py:.06,rx:.30,rz:.36,hy:.10,hz:.20,hr:-.7}), K(.96,{py:.04,rx:.24,rz:.26,hy:.07,hz:.06})],
+       K(.74,{py:.11,rx:.42,rz:.22,hy:0,hz:.03}),
+       K(.84,{az:.034,py:.06,rx:.30,rz:.34,hy:.09,hz:.13,hr:-.7}),   // handle hauled back — chunk
+       K(.91,{az:0,py:.06,rx:.30,rz:.36,hy:.10,hz:.20,hr:-.7}),      // let go, bolt slams — chunk
+       K(.96,{py:.04,rx:.24,rz:.26,hy:.07,hz:.06})],
 xm7:  [K(.09,{py:.04,rx:.24,rz:.10,hy:-.04}), K(.21,{py:.05,rx:.30,rz:.12,hy:-.15,hz:.02}),
        K(.31,{py:.05,rx:.32,rz:.12,hx:-.08,hy:-.20,hr:.7}), K(.45,{py:.06,rx:.32,rz:.12,hx:.04,hy:-.24,hz:.02}),
        K(.58,{py:.06,rx:.32,rz:.12,hy:-.11,hz:.04}), K(.69,{py:.05,rx:.34,rz:.12,hy:-.02,hz:.05}),
@@ -18585,7 +18592,7 @@ function clearReloadProps() { while (_rProps.length) { camera.remove(_rProps.pop
 const RP = (t, k, m, n, w) => ({ t, k, m: m || 'eject', n: n || 1, w: w || 'mag' });
 const RELOAD_PROPS = {
   // ── Magazine guns: the old mag is thrown clear, a fresh one comes up ──────
-  ak20:[RP(.30,'mag'),RP(.56,'mag','arrive')],
+  ak20:[RP(.30,'mag'),RP(.56,'mag','arrive'),RP(.74,'case',null,1,'breech')],
   xm7:[RP(.31,'mag'),RP(.58,'mag','arrive')],
   burst:[RP(.32,'mag'),RP(.59,'mag','arrive')],
   vector:[RP(.34,'mag'),RP(.61,'mag','arrive')],
@@ -18982,7 +18989,8 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false) {
   const baseDmg = getClientWeaponDamage(weaponId);
   // 🤫 Secret synergy: certain weapons get a damage bonus in matching map zones
   const synergy = getSecretSynergy(weaponId, hitWorldPos);
-  const dmg     = (headshot ? (instakill ? 999 : baseDmg * 2) : baseDmg) * synergy;
+  const dmg = Math.round(
+    (headshot ? (instakill ? 999 : baseDmg * headshotMultFor(weaponId)) : baseDmg) * synergy);
   const mesh    = remoteMeshes[pid];
   if (hitWorldPos) showDamageNumber(hitWorldPos, dmg, headshot || synergy > 1);
   // Briefly tint the damage number / spawn a synergy spark for player discovery
@@ -19110,6 +19118,14 @@ const TRAINING_DUMMIES = [
   { id: 'dummy_100', label: '300 HP', hp: 300, maxHp: 300, infinite: false, x:  7, z: 5, color: 0xdd4422 },
   { id: 'dummy_inf', label: '∞ HP',   hp: 999, maxHp: 999, infinite: true,  x: -7, z: 5, color: 0x2255dd },
 ];
+
+// Headshots were a flat x2 for every weapon in the game, and headshotMult sat
+// in the table doing nothing but carrying a comment admitting it was a stub.
+// It is read now, so a weapon can be worth more or less than double up top.
+function headshotMultFor(weaponId) {
+  const w = WEAPONS.find(x => x.id === weaponId);
+  return (w && w.headshotMult) ? w.headshotMult : 2;
+}
 
 function getClientWeaponDamage(weaponId) {
   const w = WEAPONS.find(x => x.id === weaponId);
@@ -19634,7 +19650,7 @@ function updateBullets(dt) {
           if (b.isPaintBomb) triggerPaintExplosion(_bpos.clone(), b);
           else {
             const baseDmg = getClientWeaponDamage(b.weaponId);
-            const dmg = bestHit.headshot ? baseDmg * 2 : baseDmg;
+            const dmg = Math.round(bestHit.headshot ? baseDmg * headshotMultFor(b.weaponId) : baseDmg);
             handleDummyHit(dummy, bestHit.mesh, { damage: dmg }, _bpos.clone());
             if (bestHit.headshot) flashHeadshot(false);
           }
