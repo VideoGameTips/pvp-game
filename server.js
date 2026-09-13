@@ -1094,6 +1094,19 @@ function tryPairPvpQueue(mode) {
 // #4). Anything not listed is the x2 every weapon has always had.
 const WEAPON_HS_MULT = { ak20: 2.333, flechette: 4 };
 const WEAPON_DAMAGE = {
+  // The sci-fi block. These were absent because they had been deleted from
+  // WEAPONS entirely when the earlier mirror sweep ran, so the sweep could not
+  // see them — a missing weapon hides its own missing damage entry.
+event_horizon: 75,
+  storm_core: 55,
+  abs_zero: 35,
+  solar_lance: 12,
+  quantum_repeater: 50,
+  magnetar: 90,
+  nebula_mortar: 110,
+  prism_engine: 22,
+  void_harvester: 130,
+  pulse_needle: 14,
   // Mirrored from WEAPONS[] in public/game.js — CLAUDE.md gotcha #4. Without an
   // entry here the server falls back to || 25, so these ten all dealt 25 in PvP
   // regardless of what the game told the player.

@@ -91,6 +91,31 @@ function load() {
 
 const { api, rows } = load();
 const problems = [];
+
+// ── 0. The parallel arrays must line up, index for index ──────────────────
+// WEAPONS[] and weaponModels[] are matched by POSITION (CLAUDE.md gotcha #2),
+// and nothing in the game notices when they drift — every weapon after the
+// break simply holds the wrong gun. A regex edit of mine deleted eleven weapon
+// objects and this harness still reported "99/99 build", because it was
+// counting model rows and never looked at the weapon table at all.
+{
+  const tbl = require('fs').readFileSync(GAME, 'utf8');
+  const wm = tbl.match(/const WEAPONS = \[[\s\S]*?\n\];/);
+  if (!wm) problems.push('WEAPONS'.padEnd(20) + 'table not found');
+  else {
+    const WEAPONS = new Function('return ' + wm[0].replace('const WEAPONS = ', '') + ';')();
+    if (WEAPONS.length !== rows.length) {
+      problems.push('PARALLEL ARRAYS'.padEnd(20) + 'WEAPONS has ' + WEAPONS.length
+        + ' entries but weaponModels has ' + rows.length + ' — every weapon past the'
+        + ' first gap holds the wrong model');
+    }
+    const n = Math.min(WEAPONS.length, rows.length);
+    const drift = [];
+    for (let i = 0; i < n; i++) if (WEAPONS[i].id !== rows[i].id) drift.push(i + ': ' + WEAPONS[i].id + ' vs ' + rows[i].id);
+    if (drift.length) problems.push('PARALLEL ARRAYS'.padEnd(20) + drift.length
+      + ' index mismatch(es), first at ' + drift[0]);
+  }
+}
 let inspectReport = null;
 let audioReport = null;
 let modelSkinReport = null;

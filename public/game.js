@@ -152,7 +152,6 @@ const WEAPONS = [
     bulletColor: 0xffaa22, bulletSize: 0.10,
     ability: { name: 'Power Draw', cd: 17000, desc: 'Next arrow · 190 dmg', type: 'powershot', pellets: 1, spreadMult: 0, weaponAbId: 'boombow_ab' },
   },
-  // ── Secondaries ────────────────────────────────────────────────────────────
   {
     id: 'revolver', name: 'Revolver', type: 'Secondary', slot: 'secondary',
     mag: 6,   reserve: 18,  damage: 55, fireRate: 350,  reloadTime: 2200,
@@ -294,7 +293,6 @@ const WEAPONS = [
     splitMechanic: true, // first shot of "cycle" = 100 dmg; lands hit → resets to charged
     ability: { name: 'Recombine', cd: 9000, desc: 'Instantly reset to charged form', type: 'switchblade_reset' },
   },
-  // ── 3rd-batch primaries ───────────────────────────────────────────────────
   {
     id: 'flechette', name: 'Flechette Rifle', type: 'Precision AR', slot: 'primary',
     mag: 40, reserve: 120, damage: 16, fireRate: 70, reloadTime: 2000,
@@ -357,7 +355,6 @@ const WEAPONS = [
     bulletColor: 0xffcc66, bulletSize: 0.04,
     ability: { name: 'Dual Burst', cd: 9000, desc: 'Fire both barrels at once · heavy recoil', type: 'fanfire', count: 4, delay: 30 },
   },
-  // ── 😈 P2W primaries ──────────────────────────────────────────────────────
   {
     id: 'swarm_rifle', name: 'Swarm Rifle', type: 'Tracking AR', slot: 'primary',
     mag: 60, reserve: 180, damage: 11, fireRate: 45, reloadTime: 2300,
@@ -374,7 +371,6 @@ const WEAPONS = [
     splashRadius: 4, splashDamage: 50,
     ability: { name: 'Thunderstorm', cd: 15000, desc: 'Random lightning strikes · 5 bolts · 60 dmg ea.', type: 'aoe', radius: 10, damage: 60, color: 0xaaeeff, weaponAbId: 'thunderstorm' },
   },
-  // ── 🔬 Tech / Physics primaries ──────────────────────────────────────────
   {
     id: 'prism_launcher', name: 'Prism Launcher', type: 'Bouncing Light', slot: 'primary',
     mag: 12, reserve: 36, damage: 38, fireRate: 380, reloadTime: 2200,
@@ -455,7 +451,6 @@ const WEAPONS = [
     bounce: { maxBounces: 10, speedMult: 1.4 }, // most bounces, biggest accel
     ability: { name: 'Multiball', cd: 14000, desc: 'Fire 3 pinballs in a cone', type: 'multishot', count: 3, spread: 0.12, noADS: true },
   },
-  // ── New secondaries ────────────────────────────────────────────────────────
   {
     id: 'machine_pistol', name: 'Machine Pistol', type: 'Secondary', slot: 'secondary',
     mag: 24, reserve: 96, damage: 14, fireRate: 70, reloadTime: 1500,
@@ -485,7 +480,6 @@ const WEAPONS = [
     blindOnHit: { dur: 800 }, // brief screen flash on player hit
     ability: { name: 'Blinding Flash', cd: 12000, desc: 'Strobe enemies in front · blinds 2 s', type: 'aoe', radius: 8, damage: 0, color: 0xffffff, weaponAbId: 'blind_flash' },
   },
-  // ── 3rd-batch secondaries ─────────────────────────────────────────────────
   {
     id: 'machine_revolver', name: 'Machine Revolver', type: 'Secondary', slot: 'secondary',
     mag: 8, reserve: 24, damage: 24, fireRate: 75, reloadTime: 2000,
@@ -508,7 +502,6 @@ const WEAPONS = [
     frostSlow: 3, // each shot subtracts 3 speed points from target
     ability: { name: 'Cryo Burst', cd: 12000, desc: 'Frost AOE · -25 speed all targets in 5 m', type: 'aoe', radius: 5, damage: 0, color: 0x99eeff, frostBurst: 25 },
   },
-  // ── 🆕 More secondaries — batch 4 ────────────────────────────────────────
   { id: 'snub_revolver', name: 'Snubnose', type: 'Secondary', slot: 'secondary',
     mag: 6, reserve: 18, damage: 32, fireRate: 280, reloadTime: 1800,
     auto: false, pellets: 1, spread: 0.008, adsZoom: 50, bulletSpeed: 160, noReload: false,
@@ -559,6 +552,63 @@ const WEAPONS = [
     bulletColor: 0x9a8c72, bulletSize: 0.045,
     ability: { name: 'Volley', cd: 8000, desc: 'Loose 5 pellets in a spread', type: 'multishot', count: 5, spread: 0.18 },
   },
+  { id: 'event_horizon', name: 'Event Horizon Rifle', type: 'Gravity AR', slot: 'primary',
+    mag: 18, reserve: 54, damage: 75, fireRate: 280, reloadTime: 2400,
+    auto: true, pellets: 1, spread: 0.005, adsZoom: 46, bulletSpeed: 140, noReload: false,
+    bulletColor: 0x6633ff, bulletSize: 0.07,
+    ability: { name: 'Collapse', cd: 14000, desc: 'Gravity field · 8 m AOE 80 dmg · slows', type: 'aoe', radius: 8, damage: 80, color: 0x6633ff, frostBurst: 30 } },
+  { id: 'storm_core', name: 'Storm Core', type: 'Plasma Heavy', slot: 'primary',
+    mag: 24, reserve: 72, damage: 55, fireRate: 220, reloadTime: 2300,
+    auto: true, pellets: 1, spread: 0.008, adsZoom: 50, bulletSpeed: 130, noReload: false,
+    bulletColor: 0x88ddff, bulletSize: 0.08, emissive: true,
+    ability: { name: 'Supercell', cd: 16000, desc: 'Lightning storm · 10 m AOE 100 dmg', type: 'aoe', radius: 10, damage: 100, color: 0xaaeeff, launchVel: 6 } },
+  { id: 'abs_zero', name: 'Absolute Zero Projector', type: 'Cryo', slot: 'primary',
+    mag: 30, reserve: 90, damage: 35, fireRate: 100, reloadTime: 2400,
+    auto: true, pellets: 1, spread: 0.010, adsZoom: 48, bulletSpeed: 120, noReload: false,
+    bulletColor: 0x99eeff, bulletSize: 0.06,
+    ability: { name: 'Cryostasis', cd: 18000, desc: 'Freeze 9 m AOE · slows all', type: 'aoe', radius: 9, damage: 30, color: 0x99eeff, frostBurst: 60 } },
+  { id: 'solar_lance', name: 'Solar Lance', type: 'Beam', slot: 'primary',
+    mag: 200, reserve: 0, damage: 12, fireRate: 40, reloadTime: 99999,
+    auto: true, pellets: 1, spread: 0.002, adsZoom: 44, bulletSpeed: 220, noReload: true, ammoRegen: 2,
+    bulletColor: 0xffee44, bulletSize: 0.05, emissive: true,
+    ability: { name: 'Solar Flare', cd: 14000, desc: 'Blinding beam burst · 7 m AOE 90 dmg', type: 'aoe', radius: 7, damage: 90, color: 0xffee44, reveal: true, revealDur: 3000 } },
+  { id: 'quantum_repeater', name: 'Quantum Repeater', type: 'Time-Shift AR', slot: 'primary',
+    mag: 22, reserve: 66, damage: 50, fireRate: 200, reloadTime: 2300,
+    auto: true, pellets: 1, spread: 0.005, adsZoom: 48, bulletSpeed: 150, noReload: false,
+    bulletColor: 0x66ffcc, bulletSize: 0.06,
+    ability: { name: 'Timeline Break', cd: 15000, desc: 'Replay last mag instantly · 12 shots fast', type: 'fanfire', count: 12, delay: 40 } },
+  { id: 'magnetar', name: 'Magnetar Cannon', type: 'Magnetic Heavy', slot: 'primary',
+    mag: 12, reserve: 36, damage: 90, fireRate: 500, reloadTime: 2600,
+    auto: false, pellets: 1, spread: 0.003, adsZoom: 44, bulletSpeed: 140, noReload: false,
+    bulletColor: 0xff77cc, bulletSize: 0.09,
+    ability: { name: 'Polar Collapse', cd: 16000, desc: 'Magnetic implosion · 8 m AOE 120 dmg', type: 'aoe', radius: 8, damage: 120, color: 0xff77cc, launchVel: 14 } },
+  { id: 'nebula_mortar', name: 'Nebula Mortar', type: 'Cosmic Indirect', slot: 'primary',
+    mag: 4, reserve: 16, damage: 110, fireRate: 800, reloadTime: 3000,
+    auto: false, pellets: 1, spread: 0.002, adsZoom: 38, bulletSpeed: 70, noReload: false,
+    bulletColor: 0x9966ff, bulletSize: 0.14,
+    ability: { name: 'Starfall', cd: 20000, desc: 'Meteor shower · 12 m AOE 180 dmg', type: 'aoe', radius: 12, damage: 180, color: 0xaa88ff, launchVel: 8 } },
+  { id: 'prism_engine', name: 'Prism Engine', type: 'Refractive Beam', slot: 'primary',
+    mag: 50, reserve: 150, damage: 22, fireRate: 70, reloadTime: 2200,
+    auto: true, pellets: 1, spread: 0.004, adsZoom: 48, bulletSpeed: 160, noReload: false,
+    bulletColor: 0xffaaff, bulletSize: 0.05, emissive: true,
+    ability: { name: 'Refraction Overload', cd: 14000, desc: 'Fire 14 split-beams', type: 'multishot', count: 14, spread: 0.20 } },
+  { id: 'void_harvester', name: 'Void Harvester', type: 'Void Heavy', slot: 'primary',
+    mag: 6, reserve: 24, damage: 130, fireRate: 700, reloadTime: 3000,
+    auto: false, pellets: 1, spread: 0.002, adsZoom: 42, bulletSpeed: 120, noReload: false,
+    bulletColor: 0x220033, bulletSize: 0.11, emissive: true,
+    ability: { name: 'Consume', cd: 22000, desc: 'Detonate all remnants · 15 m AOE 250 dmg', type: 'aoe', radius: 15, damage: 250, color: 0x440066, frostBurst: 40 } },
+  { id: 'pulse_needle', name: 'Pulse Needle', type: 'Tracking Secondary', slot: 'secondary',
+    mag: 12, reserve: 36, damage: 14, fireRate: 110, reloadTime: 1500,
+    auto: true, pellets: 1, spread: 0.003, adsZoom: 50, bulletSpeed: 160, noReload: false,
+    bulletColor: 0xff66cc, bulletSize: 0.03,
+    ability: { name: 'Detonate', cd: 10000, desc: 'All pulse marks explode · 12-shot burst', type: 'fanfire', count: 12, delay: 30 } },
+  {
+    id: 'gau19', name: 'GAU-19 Heavy', type: 'Admin · Mounted MG', slot: 'primary',
+    mag: 500, reserve: 1000, damage: 50, fireRate: 18, reloadTime: 4000,
+    auto: true, pellets: 1, spread: 0.01, adsZoom: 50, bulletSpeed: 180, noReload: false,
+    bulletColor: 0xffaa22, bulletSize: 0.06, adminItem: true,
+    ability: { name: 'Sustained Fire', cd: 18000, desc: '8 s · double fire rate', type: 'buff', duration: 8000, rateMult: 0.5 },
+  },
   {
     id: 'mk44', name: 'MK-44 Bushmaster', type: 'Admin · Chain Gun', slot: 'primary',
     mag: 360, reserve: 720, damage: 25, fireRate: 40, reloadTime: 3500,
@@ -601,7 +651,6 @@ const WEAPONS = [
     adminItem: true,
     ability: { name: 'Spec Ops Drill', cd: 11000, desc: '4 s · piercing rounds', type: 'buff', duration: 4000, dmgMult: 1.5 },
   },
-  // ── 🪖 ADMIN SECONDARIES ─────────────────────────────────────────────────
   {
     id: 'desert_eagle', name: 'Desert Eagle', type: 'Admin · Hand Cannon', slot: 'secondary',
     mag: 7, reserve: 28, damage: 65, fireRate: 200, reloadTime: 1900,
@@ -639,7 +688,6 @@ const WEAPONS = [
     ddayOnly: true,
     ability: null,
   },
-  // ── 🚀 Rocket launchers — single-shot, big direct hit + area splash ──
   {
     id: 'rpg', name: 'RPG-7', type: 'Rocket', slot: 'primary',
     mag: 1, reserve: 9, damage: 120, fireRate: 1000, reloadTime: 2300,
@@ -654,14 +702,12 @@ const WEAPONS = [
     bulletColor: 0xffaa33, bulletSize: 0.17, splashRadius: 6,
     ability: { name: 'Barrage', cd: 18000, desc: 'Unleash 4 rockets in a spread', type: 'multishot', count: 4, spread: 0.12, noADS: true },
   },
-  // ── ⚔️ Lancer — single-shot blade rifle with a charging bayonet ability ──
   {
     id: 'lancer', name: 'Lancer', type: 'Blade Rifle', slot: 'primary',
     mag: 1, reserve: 24, damage: 95, fireRate: 900, reloadTime: 1700,
     auto: false, pellets: 1, spread: 0.004, adsZoom: 50, bulletSpeed: 150, noReload: false,
     ability: { name: 'Bayonet Charge', cd: 9000, type: 'blade_charge', distance: 8, bladeDamage: 50, noADS: true, desc: 'Lunge forward · blade contact deals 50' },
   },
-  // ── 🚧 / 🥧 Chuckable nonsense secondaries (must stay LAST — mirrored in weaponModels) ──
   {
     id: 'traffic_cone', name: 'Traffic Cone', type: 'Thrown', slot: 'secondary',
     mag: 4, reserve: 16, damage: 38, fireRate: 320, reloadTime: 1400,
