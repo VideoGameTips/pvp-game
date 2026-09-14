@@ -891,121 +891,350 @@ const SKIN_ONLY_MELEE_IDS = new Set([
 for (const w of WEAPONS) if (SKIN_ONLY_WEAPON_IDS.has(w.id)) w.skinOnly = true;
 for (const m of MELEE_ITEMS) if (SKIN_ONLY_MELEE_IDS.has(m.id)) m.skinOnly = true;
 
+// 🎨 Gun skins. PURELY COSMETIC — colours, a bullet tint and sometimes an FX
+// shell. Nothing here touches damage, spread, fire rate or anything else that
+// decides a fight; effectiveGunStats() filters this table down to the cosmetic
+// keys, so a stats block full of damage numbers would simply be ignored.
 const BASIC_GUN_STAT_SKINS = [
-  { id: 'stock', weapon: 'ak20', name: 'Stock AK20', rarity: 'stock', sw: ['#222', '#666'],
-    blurb: 'The normal AK20 setup.', stats: {} },
-  { id: 'ak20_twin_barrel', weapon: 'ak20', name: 'Twin Barrel AK', rarity: 'basic', sw: ['#3c3540', '#ffcc66'],
-    blurb: '+1 pellet, lower damage, slightly wider spread.', damageId: 'ak20_skin_twin', modelSkin: 'ak20_twin_barrel',
-    stats: { damage: 20, pellets: 2, spread: 0.012, bulletSpeed: 150, fireRate: 155, bulletColor: 0xffcc66 } },
-  { id: 'ak20_tracking_ar', weapon: 'ak20', name: 'Tracking AK', rarity: 'basic', sw: ['#1c3b36', '#66ffcc'],
-    blurb: 'Tiny homing pull, less damage, more spread.', damageId: 'ak20_skin_tracking',
-    stats: { damage: 25, spread: 0.014, bulletSpeed: 116, tracking: 0.18, bulletColor: 0x66ffcc } },
-  { id: 'ak20_swarm_rifle', weapon: 'ak20', name: 'Swarm AK', rarity: 'basic', sw: ['#2b193c', '#ff55ff'],
-    blurb: 'Fast tracking rounds, lower damage per bullet.', damageId: 'ak20_skin_swarm', modelSkin: 'ak20_swarm_rifle',
-    stats: { damage: 17, fireRate: 70, spread: 0.018, bulletSpeed: 110, tracking: 0.35, bulletColor: 0xff55ff, bulletSize: 0.05 } },
-  { id: 'pistol_darker_handgun', weapon: 'pistol', name: 'Darker Handgun', rarity: 'lame', sw: ['#111', '#2a2a2a'],
-    blurb: 'It is a handgun, but darker. Somehow +1 damage.', damageId: 'pistol_skin_darker',
-    stats: { damage: 21, bulletColor: 0x333333 } },
-  { id: 'pistol_slightly_bluish', weapon: 'pistol', name: 'Slightly Bluish Pistol', rarity: 'lame', sw: ['#22283a', '#5f78aa'],
-    blurb: 'Almost blue. Almost exciting.', damageId: 'pistol_skin_bluish',
-    stats: { damage: 20, spread: 0.007, bulletColor: 0x88aaff } },
-  { id: 'revolver_rusty_cylinder', weapon: 'revolver', name: 'Rusty Cylinder', rarity: 'lame', sw: ['#5a3a22', '#9a6a35'],
-    blurb: 'Tetanus not included. +2 damage, slower fan swagger.', damageId: 'revolver_skin_rusty',
-    stats: { damage: 57, fireRate: 640, bulletColor: 0xaa7744 } },
-  { id: 'ak20_cardboard_wrap', weapon: 'ak20', name: 'Cardboard Wrap', rarity: 'lame', sw: ['#8b6a3e', '#c9aa6d'],
-    blurb: 'Budget camouflage. Slightly worse, emotionally cheaper.', damageId: 'ak20_skin_cardboard',
-    stats: { damage: 29, spread: 0.004, bulletColor: 0xccaa66 } },
-  { id: 'ak20_midnight_oil', weapon: 'ak20', name: 'Midnight Oil', rarity: 'good', sw: ['#05070d', '#55aaff'],
-    blurb: 'Clean recoil, cold finish.', damageId: 'ak20_skin_midnight',
-    stats: { damage: 31, spread: 0.002, bulletSpeed: 128, bulletColor: 0x55aaff } },
-  { id: 'sg8_duck_tape', weapon: 'sg8', name: 'Duck Tape SG-8', rarity: 'lame', sw: ['#777777', '#ffdd44'],
-    blurb: 'Not duct tape. Duck tape. The spread is offended.', damageId: 'sg8_skin_duck_tape',
-    stats: { damage: 17, spread: 0.07, bulletColor: 0xffdd44 } },
-  { id: 'sg8_confetti_shells', weapon: 'sg8', name: 'Confetti Shells', rarity: 'good', sw: ['#ff55cc', '#55ffee'],
-    blurb: 'Party shotgun. Tighter party.', damageId: 'sg8_skin_confetti',
-    stats: { damage: 16, pellets: 7, spread: 0.065, randomBulletColor: true } },
-  { id: 'srx_laser_pointer_taped', weapon: 'srx', name: 'Taped-On Laser', rarity: 'lame', sw: ['#202020', '#ff3333'],
-    blurb: 'The tape does most of the aiming.', damageId: 'srx_skin_taped_laser',
-    stats: { damage: 92, spread: 0, bulletSpeed: 210, bulletColor: 0xff3333 } },
-  { id: 'paintball_moldy_green', weapon: 'paintball', name: 'Moldy Paint', rarity: 'lame', sw: ['#446622', '#99aa55'],
-    blurb: 'This paint expired in 2014.', damageId: 'paintball_skin_moldy',
-    stats: { damage: 39, bulletColor: 0x88aa33, randomBulletColor: false } },
-  { id: 'flamethrower_water_thrower', weapon: 'flamethrower', name: 'Water Thrower', rarity: 'good', sw: ['#2b6cff', '#aaddff'],
-    blurb: 'why does this burn me?!', damageId: 'flamethrower_skin_water',
-    stats: { damage: 9, fireRate: 55, spread: 0.08, bulletSpeed: 54, bulletColor: 0x55ccff, bulletSize: 0.085 } },
-  { id: 'crossbow_pool_noodle', weapon: 'crossbow', name: 'Pool Noodle Limbs', rarity: 'lame', sw: ['#ff66aa', '#66ffaa'],
-    blurb: 'Technically flexible. Spiritually embarrassing.', damageId: 'crossbow_skin_noodle',
-    stats: { damage: 76, reloadTime: 1100, bulletColor: 0xff66aa } },
-  { id: 'minigun_arcade_cabinet', weapon: 'minigun', name: 'Arcade Cabinet', rarity: 'good', sw: ['#251044', '#00ffcc'],
-    blurb: 'Insert donut. Receive suppression.', damageId: 'minigun_skin_arcade',
-    stats: { damage: 7, fireRate: 34, spread: 0.02, bulletColor: 0x00ffcc } },
-  { id: 'rpg_soda_bottle', weapon: 'rpg', name: 'Soda Bottle RPG', rarity: 'lame', sw: ['#2f7a3f', '#ff5533'],
-    blurb: 'Do not shake before firing.', damageId: 'rpg_skin_soda',
-    stats: { damage: 118, bulletSpeed: 66, bulletColor: 0x77dd55 } },
+  { id: 'stock', weapon: 'ak20', name: 'Stock', rarity: 'stock', sw: ['#222222', '#666666'],
+    blurb: 'However it left the factory.', stats: {} },
+  { id: 'ak20_midnight_oil', weapon: 'ak20', name: 'Midnight Oil', rarity: 'good',
+    sw: ['#05070d', '#2f6fbf'], body: 0x05070d, accent: 0x2f6fbf,
+    blurb: 'Black on black, with a cold blue sheen where the light catches.', stats: { bulletColor: 0x55aaff } },
+  { id: 'ak20_cardboard_wrap', weapon: 'ak20', name: 'Cardboard Wrap', rarity: 'lame',
+    sw: ['#9a7a4c', '#d8b87e'], body: 0x9a7a4c, accent: 0xd8b87e,
+    blurb: 'Someone taped a box to a rifle. It is holding.', stats: { bulletColor: 0xccaa66 } },
+  { id: 'ak20_birch', weapon: 'ak20', name: 'Pale Birch', rarity: 'basic',
+    sw: ['#d8c49a', '#6b5436'], body: 0xd8c49a, accent: 0x6b5436,
+    blurb: 'Blond furniture, bone-white stock.', stats: {} },
+  { id: 'ak20_hazard', weapon: 'ak20', name: 'Hazard Stripe', rarity: 'good',
+    sw: ['#e8b400', '#141414'], body: 0xe8b400, accent: 0x141414,
+    blurb: 'Yellow and black. Read the warning.', stats: { bulletColor: 0xffcc22 } },
+  { id: 'ak20_verdigris', weapon: 'ak20', name: 'Verdigris', rarity: 'good',
+    sw: ['#3f7d6a', '#a8d8c4'], body: 0x3f7d6a, accent: 0xa8d8c4,
+    blurb: 'Left in a damp cellar for a century.', stats: {} },
+  { id: 'ak20_gold_leaf', weapon: 'ak20', name: 'Gold Leaf', rarity: 'good',
+    sw: ['#c8a020', '#fff0a0'], body: 0xc8a020, accent: 0xfff0a0, fx: 'gold_money',
+    blurb: 'Tasteless. Expensive. Perfect.', stats: { bulletColor: 0xffe070 } },
+  { id: 'ak20_bone', weapon: 'ak20', name: 'Bone Inlay', rarity: 'good',
+    sw: ['#e8e2d2', '#3a332a'], body: 0xe8e2d2, accent: 0x3a332a,
+    blurb: 'Ivory panels, dark steel between.', stats: {} },
+  { id: 'ak20_chalkboard', weapon: 'ak20', name: 'Chalkboard', rarity: 'lame',
+    sw: ['#1e2a24', '#d8d8cc'], body: 0x1e2a24, accent: 0xd8d8cc,
+    blurb: 'Someone did their homework on it.', stats: {} },
+  { id: 'sg8_duck_tape', weapon: 'sg8', name: 'Duck Tape', rarity: 'lame',
+    sw: ['#8a8a84', '#e8c23a'], body: 0x8a8a84, accent: 0xe8c23a,
+    blurb: 'Held together with tape and optimism.', stats: { bulletColor: 0xffdd44 } },
+  { id: 'sg8_confetti', weapon: 'sg8', name: 'Confetti', rarity: 'good',
+    sw: ['#ff55cc', '#55ffee'], body: 0xff55cc, accent: 0x55ffee,
+    blurb: 'Party shotgun. Nobody is invited.', stats: {} },
+  { id: 'sg8_driftwood', weapon: 'sg8', name: 'Driftwood', rarity: 'basic',
+    sw: ['#8a7256', '#4a3a2a'], body: 0x8a7256, accent: 0x4a3a2a,
+    blurb: 'Salt-bleached furniture, pitted barrel.', stats: {} },
+  { id: 'sg8_fire_brigade', weapon: 'sg8', name: 'Fire Brigade', rarity: 'good',
+    sw: ['#b01c1c', '#d8d8d8'], body: 0xb01c1c, accent: 0xd8d8d8,
+    blurb: 'Break glass. Then everything else.', stats: {} },
+  { id: 'sg8_seafoam', weapon: 'sg8', name: 'Seafoam', rarity: 'basic',
+    sw: ['#7fd4c1', '#2a4a44'], body: 0x7fd4c1, accent: 0x2a4a44,
+    blurb: 'A very calm shotgun.', stats: {} },
+  { id: 'srx_taped_laser', weapon: 'srx', name: 'Taped-On Laser', rarity: 'lame',
+    sw: ['#202020', '#d03030'], body: 0x202020, accent: 0xd03030,
+    blurb: 'The tape does most of the aiming.', stats: { bulletColor: 0xff3333 } },
+  { id: 'srx_alpine', weapon: 'srx', name: 'Alpine', rarity: 'good',
+    sw: ['#e6ecf2', '#8fa4b8'], body: 0xe6ecf2, accent: 0x8fa4b8,
+    blurb: 'White on white. Good luck.', stats: {} },
+  { id: 'srx_walnut', weapon: 'srx', name: 'Walnut Match', rarity: 'good',
+    sw: ['#5a3a22', '#c0a070'], body: 0x5a3a22, accent: 0xc0a070,
+    blurb: 'Oiled stock, competition furniture.', stats: {} },
+  { id: 'srx_carbon', weapon: 'srx', name: 'Carbon Weave', rarity: 'good',
+    sw: ['#181a1e', '#4a5058'], body: 0x181a1e, accent: 0x4a5058,
+    blurb: 'Matte, grey, faintly smug.', stats: {} },
+  { id: 'pistol_darker_handgun', weapon: 'pistol', name: 'Darker Handgun', rarity: 'lame',
+    sw: ['#111111', '#2a2a2a'], body: 0x111111, accent: 0x2a2a2a,
+    blurb: 'It is a handgun, but darker.', stats: {} },
+  { id: 'pistol_slightly_bluish', weapon: 'pistol', name: 'Slightly Bluish', rarity: 'lame',
+    sw: ['#22283a', '#5f78aa'], body: 0x22283a, accent: 0x5f78aa,
+    blurb: 'Almost blue. Almost exciting.', stats: { bulletColor: 0x88aaff } },
+  { id: 'pistol_nickel', weapon: 'pistol', name: 'Nickel Plate', rarity: 'good',
+    sw: ['#d8dce0', '#8a8f96'], body: 0xd8dce0, accent: 0x8a8f96,
+    blurb: 'Shiny enough to check your hair in.', stats: {} },
+  { id: 'pistol_desert', weapon: 'pistol', name: 'Desert Tan', rarity: 'basic',
+    sw: ['#bfa77a', '#5a4c32'], body: 0xbfa77a, accent: 0x5a4c32,
+    blurb: 'Sand-coloured, sand-filled.', stats: {} },
+  { id: 'pistol_bubblegum', weapon: 'pistol', name: 'Bubblegum', rarity: 'lame',
+    sw: ['#ff9ec4', '#fff0f6'], body: 0xff9ec4, accent: 0xfff0f6,
+    blurb: 'Strawberry. Somehow menacing.', stats: { bulletColor: 0xff9ec4 } },
+  { id: 'revolver_rusty_cylinder', weapon: 'revolver', name: 'Rusty Cylinder', rarity: 'lame',
+    sw: ['#6a4326', '#a8732f'], body: 0x6a4326, accent: 0xa8732f,
+    blurb: 'Tetanus not included.', stats: { bulletColor: 0xaa7744 } },
+  { id: 'revolver_pearl', weapon: 'revolver', name: 'Pearl Grip', rarity: 'good',
+    sw: ['#2a2a30', '#f0e8dc'], body: 0x2a2a30, accent: 0xf0e8dc,
+    blurb: 'Gunfighter energy, dentist budget.', stats: {} },
+  { id: 'revolver_blued', weapon: 'revolver', name: 'Deep Blued', rarity: 'basic',
+    sw: ['#1a2230', '#44506a'], body: 0x1a2230, accent: 0x44506a,
+    blurb: 'Proper old bluing, oil-dark.', stats: {} },
+  { id: 'revolver_brass', weapon: 'revolver', name: 'Brass Frame', rarity: 'good',
+    sw: ['#9a7a34', '#2a2320'], body: 0x9a7a34, accent: 0x2a2320,
+    blurb: 'Heavy, warm, faintly green at the edges.', stats: {} },
+  { id: 'paintball_moldy', weapon: 'paintball', name: 'Moldy Paint', rarity: 'lame',
+    sw: ['#556633', '#99aa55'], body: 0x556633, accent: 0x99aa55,
+    blurb: 'This paint expired in 2014.', stats: { bulletColor: 0x88aa33 } },
+  { id: 'paintball_neon', weapon: 'paintball', name: 'Neon Splatter', rarity: 'good',
+    sw: ['#141425', '#33ffcc'], body: 0x141425, accent: 0x33ffcc,
+    blurb: 'Blacklight ready.', stats: {} },
+  { id: 'flamethrower_water', weapon: 'flamethrower', name: 'Water Thrower', rarity: 'good',
+    sw: ['#2b6cff', '#aaddff'], body: 0x2b6cff, accent: 0xaaddff,
+    blurb: 'why does this burn me?!', stats: { bulletColor: 0x55ccff } },
+  { id: 'flamethrower_soot', weapon: 'flamethrower', name: 'Sooted', rarity: 'basic',
+    sw: ['#2a2622', '#6a5a4a'], body: 0x2a2622, accent: 0x6a5a4a, fx: 'smoke',
+    blurb: 'Used properly. Repeatedly.', stats: {} },
+  { id: 'crossbow_pool_noodle', weapon: 'crossbow', name: 'Pool Noodle Limbs', rarity: 'lame',
+    sw: ['#ff66aa', '#66ffaa'], body: 0xff66aa, accent: 0x66ffaa,
+    blurb: 'Technically flexible. Spiritually embarrassing.', stats: { bulletColor: 0xff66aa } },
+  { id: 'crossbow_yew', weapon: 'crossbow', name: 'Yew and Horn', rarity: 'good',
+    sw: ['#6a4a28', '#d8c8a8'], body: 0x6a4a28, accent: 0xd8c8a8,
+    blurb: 'The old way, badly maintained.', stats: {} },
+  { id: 'minigun_arcade', weapon: 'minigun', name: 'Arcade Cabinet', rarity: 'good',
+    sw: ['#251044', '#00ffcc'], body: 0x251044, accent: 0x00ffcc, fx: 'data',
+    blurb: 'Insert donut. Receive suppression.', stats: { bulletColor: 0x00ffcc } },
+  { id: 'minigun_tractor', weapon: 'minigun', name: 'Tractor Green', rarity: 'basic',
+    sw: ['#2f5a2a', '#d8c020'], body: 0x2f5a2a, accent: 0xd8c020,
+    blurb: 'Agricultural. In every sense.', stats: {} },
+  { id: 'rpg_soda_bottle', weapon: 'rpg', name: 'Soda Bottle', rarity: 'lame',
+    sw: ['#2f7a3f', '#ff5533'], body: 0x2f7a3f, accent: 0xff5533,
+    blurb: 'Do not shake before firing.', stats: { bulletColor: 0x77dd55 } },
+  { id: 'rpg_hazard', weapon: 'rpg', name: 'Hazard Orange', rarity: 'basic',
+    sw: ['#d85a10', '#2a2a2a'], body: 0xd85a10, accent: 0x2a2a2a,
+    blurb: 'Visible from orbit. On purpose.', stats: {} },
+  { id: 'bazooka_rust', weapon: 'bazooka', name: 'Barn Find', rarity: 'lame',
+    sw: ['#7a4a32', '#3a2a20'], body: 0x7a4a32, accent: 0x3a2a20, fx: 'rock',
+    blurb: 'Found it behind the barn. Still works.', stats: {} },
+  { id: 'mp40_museum', weapon: 'mp40', name: 'Museum Piece', rarity: 'good',
+    sw: ['#2a2622', '#8a7256'], body: 0x2a2622, accent: 0x8a7256,
+    blurb: 'Behind glass until ten minutes ago.', stats: {} },
+  { id: 'mp40_winter', weapon: 'mp40', name: 'Winter Wrap', rarity: 'basic',
+    sw: ['#e0e4e8', '#5a6068'], body: 0xe0e4e8, accent: 0x5a6068,
+    blurb: 'Bandaged in white tape.', stats: {} },
+  { id: 'vector_cyber', weapon: 'vector', name: 'Cyberdeck', rarity: 'good',
+    sw: ['#0a0a12', '#2266ff'], body: 0x0a0a12, accent: 0x2266ff, fx: 'data',
+    blurb: 'Runs on something that is not gunpowder.', stats: { bulletColor: 0x66aaff } },
+  { id: 'vector_creamsicle', weapon: 'vector', name: 'Creamsicle', rarity: 'lame',
+    sw: ['#ff8a3c', '#fff0d8'], body: 0xff8a3c, accent: 0xfff0d8,
+    blurb: 'Orange and cream. Do not lick it.', stats: {} },
+  { id: 'p90_labcoat', weapon: 'p90', name: 'Lab Coat', rarity: 'good',
+    sw: ['#f2f4f6', '#3a7a8a'], body: 0xf2f4f6, accent: 0x3a7a8a,
+    blurb: 'Clinical. Slightly unsettling.', stats: {} },
+  { id: 'p90_wasp', weapon: 'p90', name: 'Wasp', rarity: 'good',
+    sw: ['#e8b400', '#1a1a1a'], body: 0xe8b400, accent: 0x1a1a1a,
+    blurb: 'Angry, striped, comes in numbers.', stats: { bulletColor: 0xffcc22 } },
+  { id: 'machine_pistol_chrome', weapon: 'machine_pistol', name: 'Chrome Dip', rarity: 'good',
+    sw: ['#dfe6ee', '#9fb6c8'], body: 0xdfe6ee, accent: 0x9fb6c8,
+    blurb: 'Mirror finish. Terrible for hiding.', stats: {} },
+  { id: 'smart_smg_circuit', weapon: 'smart_smg', name: 'Circuit Trace', rarity: 'good',
+    sw: ['#0d1a12', '#33ff88'], body: 0x0d1a12, accent: 0x33ff88, fx: 'data',
+    blurb: 'You can see it thinking.', stats: { bulletColor: 0x33ff88 } },
+  { id: 'burst_copper', weapon: 'burst', name: 'Copper Heat', rarity: 'good',
+    sw: ['#8a4a2a', '#d89a5a'], body: 0x8a4a2a, accent: 0xd89a5a,
+    blurb: 'Discoloured from doing its job.', stats: {} },
+  { id: 'lever_cattleman', weapon: 'lever', name: 'Cattleman', rarity: 'basic',
+    sw: ['#5a3a22', '#b08040'], body: 0x5a3a22, accent: 0xb08040,
+    blurb: 'Smells like a saddle.', stats: {} },
+  { id: 'm1_garand_parade', weapon: 'm1_garand', name: 'Parade Ready', rarity: 'good',
+    sw: ['#3a2a1a', '#e8e2d2'], body: 0x3a2a1a, accent: 0xe8e2d2,
+    blurb: 'Polished for people who are not shooting back.', stats: {} },
+  { id: 'flechette_surgical', weapon: 'flechette', name: 'Surgical', rarity: 'good',
+    sw: ['#e8eef2', '#2a6a7a'], body: 0xe8eef2, accent: 0x2a6a7a,
+    blurb: 'Clean lines, unkind intent.', stats: {} },
+  { id: 'twin_ar_matched', weapon: 'twin_ar', name: 'Matched Pair', rarity: 'good',
+    sw: ['#22262c', '#c8a020'], body: 0x22262c, accent: 0xc8a020,
+    blurb: 'Two of everything, gold on both.', stats: {} },
+  { id: 'amr_gravel', weapon: 'amr', name: 'Gravel Pit', rarity: 'basic',
+    sw: ['#6a6258', '#4a443c'], body: 0x6a6258, accent: 0x4a443c, fx: 'rock',
+    blurb: 'Heavy, grey, unbothered.', stats: {} },
+  { id: 'barrett_snowfield', weapon: 'srx', name: 'Snowfield', rarity: 'basic',
+    sw: ['#eef2f6', '#a8b8c4'], body: 0xeef2f6, accent: 0xa8b8c4,
+    blurb: 'Pale enough to lose in the sky.', stats: {} },
+  { id: 'sawed_off_saloon', weapon: 'sawed_off', name: 'Saloon', rarity: 'good',
+    sw: ['#6a4226', '#c8a020'], body: 0x6a4226, accent: 0xc8a020,
+    blurb: 'Kept under the bar for years.', stats: {} },
+  { id: 'boomstick_taped', weapon: 'boomstick', name: 'Tape and Hope', rarity: 'lame',
+    sw: ['#4a4a46', '#d8c23a'], body: 0x4a4a46, accent: 0xd8c23a,
+    blurb: 'Every joint is tape. Every shot is a gamble.', stats: {} },
+  { id: 'shorty_pocket', weapon: 'shorty', name: 'Pocket Change', rarity: 'lame',
+    sw: ['#8a8f96', '#b8a06a'], body: 0x8a8f96, accent: 0xb8a06a,
+    blurb: 'Small, grubby, oddly effective.', stats: {} },
+  { id: 'railgun_arcfire', weapon: 'railgun', name: 'Arcfire', rarity: 'good',
+    sw: ['#101828', '#66ccff'], body: 0x101828, accent: 0x66ccff,
+    blurb: 'The rails glow long after.', stats: { bulletColor: 0x66ccff } },
+  { id: 'coilgun_magnet', weapon: 'coilgun', name: 'Lodestone', rarity: 'good',
+    sw: ['#2a2a34', '#9a66ff'], body: 0x2a2a34, accent: 0x9a66ff,
+    blurb: 'Sticks to things it should not.', stats: { bulletColor: 0x9a66ff } },
+  { id: 'freeze_gun_glacier', weapon: 'freeze_gun', name: 'Glacier', rarity: 'good',
+    sw: ['#9fd8e8', '#eaf8ff'], body: 0x9fd8e8, accent: 0xeaf8ff, fx: 'crystal',
+    blurb: 'Blue the way deep ice is blue.', stats: { bulletColor: 0xaaeeff } },
+  { id: 'plasma_carbine_ember', weapon: 'plasma_carbine', name: 'Ember', rarity: 'good',
+    sw: ['#2a1410', '#ff6622'], body: 0x2a1410, accent: 0xff6622,
+    blurb: 'Warm to hold. That is not a feature.', stats: { bulletColor: 0xff6622 } },
+  { id: 'arc_rifle_stormglass', weapon: 'arc_rifle', name: 'Stormglass', rarity: 'good',
+    sw: ['#141c2a', '#88ccff'], body: 0x141c2a, accent: 0x88ccff, fx: 'crystal',
+    blurb: 'Hums before it fires.', stats: { bulletColor: 0x88ccff } },
+  { id: 'taser_traffic', weapon: 'taser', name: 'Traffic Warden', rarity: 'lame',
+    sw: ['#e8d800', '#2a2a2a'], body: 0xe8d800, accent: 0x2a2a2a,
+    blurb: 'Authority, but only a little.', stats: {} },
+  { id: 'laser_pointer_cat', weapon: 'laser_pointer', name: 'Cat Toy', rarity: 'lame',
+    sw: ['#d83a3a', '#f2f2f2'], body: 0xd83a3a, accent: 0xf2f2f2,
+    blurb: 'The cat is not impressed either.', stats: { bulletColor: 0xff4444 } },
+  { id: 'grenade_launcher_pumpkin', weapon: 'grenade_launcher', name: 'Pumpkin Patch', rarity: 'good',
+    sw: ['#d8621c', '#3a5a24'], body: 0xd8621c, accent: 0x3a5a24,
+    blurb: 'Six of them. All orange.', stats: { bulletColor: 0xe8802c } },
+  { id: 'firework_launcher_festival', weapon: 'firework_launcher', name: 'Festival', rarity: 'good',
+    sw: ['#b01c3a', '#ffd84a'], body: 0xb01c3a, accent: 0xffd84a,
+    blurb: 'Legal in exactly no country.', stats: {} },
+  { id: 'potato_cannon_allotment', weapon: 'potato_cannon', name: 'Allotment', rarity: 'lame',
+    sw: ['#6a5a3a', '#a8c060'], body: 0x6a5a3a, accent: 0xa8c060,
+    blurb: 'Made from drainpipe and spite.', stats: {} },
+  { id: 'mortar_rifle_surveyor', weapon: 'mortar_rifle', name: 'Surveyor', rarity: 'basic',
+    sw: ['#3a4a3a', '#d8c48a'], body: 0x3a4a3a, accent: 0xd8c48a,
+    blurb: 'Comes with a protractor nobody uses.', stats: {} },
+  { id: 'nail_gun_site', weapon: 'nail_gun', name: 'Site Issue', rarity: 'basic',
+    sw: ['#d8a800', '#2a2a2a'], body: 0xd8a800, accent: 0x2a2a2a,
+    blurb: 'Borrowed from a building site. Permanently.', stats: {} },
+  { id: 'dart_gun_vet', weapon: 'dart_gun', name: 'Veterinary', rarity: 'lame',
+    sw: ['#e8f0f4', '#4a8a6a'], body: 0xe8f0f4, accent: 0x4a8a6a,
+    blurb: 'For large animals. Allegedly.', stats: {} },
+  { id: 'harpoon_gun_trawler', weapon: 'harpoon_gun', name: 'Trawler', rarity: 'basic',
+    sw: ['#2a4a5a', '#c8a020'], body: 0x2a4a5a, accent: 0xc8a020,
+    blurb: 'Smells of the North Sea.', stats: {} },
+  { id: 'slingshot_catapult', weapon: 'slingshot', name: 'Catapult Club', rarity: 'lame',
+    sw: ['#6a4a28', '#d84a4a'], body: 0x6a4a28, accent: 0xd84a4a,
+    blurb: 'Red rubber, bad intentions.', stats: {} },
+  { id: 'signal_pistol_lighthouse', weapon: 'signal_pistol', name: 'Lighthouse', rarity: 'good',
+    sw: ['#d8d8d0', '#b01c1c'], body: 0xd8d8d0, accent: 0xb01c1c,
+    blurb: 'Brass, salt and a hundred years.', stats: {} },
+  { id: 'flare_emergency', weapon: 'flare', name: 'Emergency Kit', rarity: 'lame',
+    sw: ['#e8621c', '#f2f2f2'], body: 0xe8621c, accent: 0xf2f2f2,
+    blurb: 'From the boot of a car.', stats: {} },
+  { id: 'hand_cannon_artillery', weapon: 'hand_cannon', name: 'Pocket Artillery', rarity: 'good',
+    sw: ['#2a2a30', '#c8a020'], body: 0x2a2a30, accent: 0xc8a020,
+    blurb: 'A field gun that fits in a holster.', stats: {} },
+  { id: 'mg42_foundry', weapon: 'mg42', name: 'Foundry', rarity: 'good',
+    sw: ['#2a2622', '#d85a10'], body: 0x2a2622, accent: 0xd85a10, fx: 'smoke',
+    blurb: 'Still warm from being made.', stats: {} },
+  { id: 'rpd_jungle', weapon: 'rpd', name: 'Jungle Wrap', rarity: 'basic',
+    sw: ['#3a4a28', '#6a5a3a'], body: 0x3a4a28, accent: 0x6a5a3a,
+    blurb: 'Wrapped in whatever was nearby.', stats: {} },
+  { id: 'auto_revolver_noir', weapon: 'auto_revolver', name: 'Noir', rarity: 'good',
+    sw: ['#14161a', '#b8bcc2'], body: 0x14161a, accent: 0xb8bcc2,
+    blurb: 'Black and white, and very pleased about it.', stats: {} },
+  { id: 'machine_revolver_carousel', weapon: 'machine_revolver', name: 'Carousel', rarity: 'good',
+    sw: ['#8a1c3a', '#f0d8a8'], body: 0x8a1c3a, accent: 0xf0d8a8,
+    blurb: 'Twelve horses. All of them angry.', stats: {} },
+  { id: 'snub_revolver_handbag', weapon: 'snub_revolver', name: 'Handbag', rarity: 'lame',
+    sw: ['#8a3a5a', '#e8d8e0'], body: 0x8a3a5a, accent: 0xe8d8e0,
+    blurb: 'Fits beside the lipstick.', stats: {} },
+  { id: 'duelist_pistol_dawn', weapon: 'duelist_pistol', name: 'Dawn Appointment', rarity: 'good',
+    sw: ['#3a2a2a', '#d8c8a8'], body: 0x3a2a2a, accent: 0xd8c8a8,
+    blurb: 'Ten paces. Turn. Regret.', stats: {} },
+  { id: 'mauser_broomhandle', weapon: 'mauser', name: 'Broomhandle', rarity: 'basic',
+    sw: ['#4a3a2a', '#b09060'], body: 0x4a3a2a, accent: 0xb09060,
+    blurb: 'Wooden holster sold separately.', stats: {} },
+  { id: 'throwing_knives_circus', weapon: 'throwing_knives', name: 'Circus Act', rarity: 'good',
+    sw: ['#b01c3a', '#f0e0b0'], body: 0xb01c3a, accent: 0xf0e0b0,
+    blurb: 'Volunteers to the front, please.', stats: {} },
+  { id: 'throwing_axes_lumber', weapon: 'throwing_axes', name: 'Lumberyard', rarity: 'basic',
+    sw: ['#5a3a22', '#c8ccd2'], body: 0x5a3a22, accent: 0xc8ccd2,
+    blurb: 'Honest wood. Honest steel.', stats: {} },
+  { id: 'boomerang_outback', weapon: 'boomerang', name: 'Outback', rarity: 'basic',
+    sw: ['#8a5a2e', '#e8d8a8'], body: 0x8a5a2e, accent: 0xe8d8a8,
+    blurb: 'It does come back. Usually.', stats: {} },
+  { id: 'traffic_cone_roadworks', weapon: 'traffic_cone', name: 'Roadworks', rarity: 'lame',
+    sw: ['#e8631c', '#f2f2ee'], body: 0xe8631c, accent: 0xf2f2ee,
+    blurb: 'Liberated from the A road.', stats: {} },
+  { id: 'cream_pie_patisserie', weapon: 'cream_pie', name: 'Patisserie', rarity: 'good',
+    sw: ['#f0e4d0', '#d8a0b8'], body: 0xf0e4d0, accent: 0xd8a0b8,
+    blurb: 'Piped by somebody who trained for this.', stats: {} },
+  { id: 'nebula_mortar_deepfield', weapon: 'nebula_mortar', name: 'Deep Field', rarity: 'good',
+    sw: ['#1a1030', '#a070ff'], body: 0x1a1030, accent: 0xa070ff, fx: 'crystal',
+    blurb: 'Points at things very far away.', stats: { bulletColor: 0xa070ff } },
+  { id: 'solar_lance_corona', weapon: 'solar_lance', name: 'Corona', rarity: 'good',
+    sw: ['#2a1a00', '#ffcc44'], body: 0x2a1a00, accent: 0xffcc44,
+    blurb: 'Too bright to look at directly.', stats: { bulletColor: 0xffdd66 } },
+  { id: 'void_harvester_eventide', weapon: 'void_harvester', name: 'Eventide', rarity: 'good',
+    sw: ['#0a0812', '#6a3aff'], body: 0x0a0812, accent: 0x6a3aff, fx: 'data',
+    blurb: 'The dark bits move when you are not looking.', stats: { bulletColor: 0x6a3aff } },
+  { id: 'prism_engine_spectrum', weapon: 'prism_engine', name: 'Spectrum', rarity: 'good',
+    sw: ['#f2f2f8', '#44ccff'], body: 0xf2f2f8, accent: 0x44ccff, fx: 'crystal',
+    blurb: 'All the colours, one at a time.', stats: {} },
 ];
 
+
+// 🔪 Melee skins. Also purely cosmetic: a different name and flavour on the
+// same weapon. Codex's originals changed damage, range, cooldown AND swapped
+// the ability, which makes a skin a different weapon rather than a new coat of
+// paint. effectiveMeleeItem() now keeps the base item's numbers and ability.
 const BASIC_MELEE_SKINS = [
-  { id: 'brass_knuckles', skinFor: 'fists', name: 'Brass Knuckles', type: 'Punch', rarity: 'basic',
-    blurb: '+damage, +speed, tiny range bump.', stats: { damage: 28, range: 1.5, cooldown: 200, speedMult: 1.6 },
-    ability: { name: 'Haymaker', cd: 8000, desc: '2× damage on next hit', type: 'melee_heavy' } },
-  { id: 'hatchet', skinFor: 'combat_axe', name: 'Hatchet', type: 'Throwable Melee', rarity: 'basic',
-    blurb: 'Faster axe skin, lower hit damage.', stats: { damage: 50, range: 1.9, cooldown: 480 },
-    ability: { name: 'Throw Hatchet', cd: 11000, desc: 'Hurl · 90 dmg · weapon gone until CD', type: 'melee_throw' } },
-  { id: 'machete', skinFor: 'katana', name: 'Machete', type: 'Bleed Melee', rarity: 'basic',
-    blurb: 'Shorter than katana, bleeds during combo.', stats: { damage: 56, range: 2.4, cooldown: 520, bleedOnHit: { dps: 8, dur: 4000, radius: 0.8, color: 0xaa0000 } },
-    ability: { name: 'Slash Combo', cd: 10000, desc: '2.5 s · auto-slash · every hit bleeds', type: 'melee_revup', duration: 2500 } },
-  { id: 'cane', skinFor: 'spear', name: 'Walking Cane', type: 'Reach Melee', rarity: 'basic',
-    blurb: 'Less damage, quicker control reach.', stats: { damage: 30, range: 2.2, cooldown: 440 },
-    ability: { name: 'Yank', cd: 8000, desc: 'Pull target 4 m toward you', type: 'melee_pull', distance: 4 } },
-  { id: 'cricket_bat', skinFor: 'bat', name: 'Launching Melee', type: 'Melee', rarity: 'basic',
-    blurb: 'Bat skin with vertical launch.', stats: { damage: 42, range: 2.3, cooldown: 540, launchOnHit: 8 },
-    ability: { name: 'Homerun', cd: 9000, desc: '2.5× dmg · launch target HIGH', type: 'melee_heavy', launchMult: 2 } },
-  { id: 'pipe', skinFor: 'bat', name: 'Lead Pipe', type: 'Chain Melee', rarity: 'basic',
-    blurb: 'Heavier bat skin that chains nearby hits.', stats: { damage: 44, range: 2.0, cooldown: 500, chainOnHit: { radius: 2.5, mult: 0.5 } },
-    ability: { name: 'Bonk', cd: 8000, desc: 'Next hit deals 2× dmg + chains', type: 'melee_heavy' } },
-  { id: 'wrench', skinFor: 'crowbar', name: 'Wrench', type: 'Utility Melee', rarity: 'basic',
-    blurb: 'Quicker utility swing, throwable special.', stats: { damage: 36, range: 1.8, cooldown: 380 },
-    ability: { name: 'Spanner Toss', cd: 10000, desc: 'Hurl wrench · 90 dmg · weapon gone until CD', type: 'melee_throw' } },
-  { id: 'shovel', skinFor: 'sledge', name: 'Shovel', type: 'AOE Melee', rarity: 'basic',
-    blurb: 'Lighter sledge skin with slam utility.', stats: { damage: 55, range: 2.2, cooldown: 620 },
-    ability: { name: 'Ground Slam', cd: 11000, desc: 'Slam · 4 m AOE knockback', type: 'melee_slam' } },
-  { id: 'golf_club', skinFor: 'bat', name: 'Golf Club', type: 'Launching Melee', rarity: 'basic',
-    blurb: 'Longer bat skin, launches harder.', stats: { damage: 40, range: 2.4, cooldown: 500, launchOnHit: 6 },
-    ability: { name: 'Fore!', cd: 9000, desc: '2.5× dmg · launch target SKY-HIGH', type: 'melee_heavy', launchMult: 3 } },
-  { id: 'tennis_racket', skinFor: 'frying_pan', name: 'Tennis Racket', type: 'Reflect Melee', rarity: 'basic',
-    blurb: 'Quick reflect-focused pan skin.', stats: { damage: 26, range: 2.2, cooldown: 360 },
-    ability: { name: 'Backhand', cd: 8000, desc: '2 s · deflect incoming bullets', type: 'melee_deflect', duration: 2000 } },
-  { id: 'fire_poker', skinFor: 'spear', name: 'Fire Poker', type: 'Burn Melee', rarity: 'basic',
-    blurb: 'Long reach and burn on heavy hit.', stats: { damage: 38, range: 2.6, cooldown: 460, burnOnHit: { dps: 7, dur: 4000, radius: 1.2, color: 0xff6622 } },
-    ability: { name: 'Hot Brand', cd: 9000, desc: 'Next hit deals 2× dmg + ignites', type: 'melee_heavy' } },
-  { id: 'meat_cleaver', skinFor: 'knife', name: 'Meat Cleaver', type: 'Vampiric Melee', rarity: 'basic',
-    blurb: 'Slower knife skin with lifesteal.', stats: { damage: 60, range: 1.7, cooldown: 540, lifestealOnHit: 10 },
-    ability: { name: 'Butcher', cd: 10000, desc: '3 s · auto-chop · double lifesteal', type: 'melee_revup', duration: 3000, lifestealMult: 2 } },
-  { id: 'knife_dental_floss', skinFor: 'knife', name: 'Dental Floss', type: 'Thread Melee', rarity: 'good',
-    blurb: 'I hate dentists...', stats: { damage: 24, range: 2.4, cooldown: 210, speedMult: 2.15 },
-    ability: { name: 'Floss Cut', cd: 9000, desc: 'Next hit · 2× dmg · surprisingly clean', type: 'melee_heavy' } },
-  { id: 'knife_butter_knife', skinFor: 'knife', name: 'Butter Knife', type: 'Lame Melee', rarity: 'lame',
-    blurb: 'Barely sharp. Extremely committed.', stats: { damage: 20, range: 1.55, cooldown: 230, speedMult: 2.05 },
-    ability: { name: 'Spread', cd: 8000, desc: '2× damage on next hit, somehow', type: 'melee_heavy' } },
-  { id: 'bat_pool_noodle', skinFor: 'bat', name: 'Pool Noodle', type: 'Foam Melee', rarity: 'lame',
-    blurb: 'Makes a noise. That is the feature.', stats: { damage: 24, range: 2.5, cooldown: 430, launchOnHit: 3 },
-    ability: { name: 'Bonk?', cd: 9000, desc: 'Launches target a little. Very silly.', type: 'melee_heavy', launchMult: 1.4 } },
-  { id: 'sledge_gold_brick', skinFor: 'sledge', name: 'Gold Brick', type: 'Heavy Flex', rarity: 'good',
-    blurb: 'Heavy, shiny, irresponsible.', stats: { damage: 82, range: 1.8, cooldown: 980 },
-    ability: { name: 'Market Crash', cd: 12000, desc: 'Leap up · slam · expensive AOE', type: 'melee_slam', radius: 4, damage: 90 } },
-  { id: 'katana_ruler', skinFor: 'katana', name: 'School Ruler', type: 'Strict Melee', rarity: 'lame',
-    blurb: 'Thirty centimeters of discipline.', stats: { damage: 42, range: 2.9, cooldown: 390 },
-    ability: { name: 'Detention', cd: 10000, desc: '2 s · deflect incoming bullets', type: 'melee_deflect', duration: 2000 } },
-  { id: 'frying_pan_nonstick', skinFor: 'frying_pan', name: 'Nonstick Pan', type: 'Kitchen Melee', rarity: 'good',
-    blurb: 'Hits slide right off. Bullets too, if you time it.', stats: { damage: 34, range: 1.9, cooldown: 390 },
-    ability: { name: 'Nonstick Parry', cd: 9000, desc: '1.5 s · block incoming bullets', type: 'melee_parry', duration: 1500 } },
-  { id: 'spear_broom_handle', skinFor: 'spear', name: 'Broom Handle', type: 'Long Lame', rarity: 'lame',
-    blurb: 'Sweeps the floor. Occasionally the enemy.', stats: { damage: 35, range: 3.2, cooldown: 620 },
-    ability: { name: 'Sweep', cd: 9000, desc: 'Pull target 3 m toward you', type: 'melee_pull', distance: 3 } },
-  { id: 'fists_sock_puppets', skinFor: 'fists', name: 'Sock Puppets', type: 'Punch', rarity: 'lame',
-    blurb: 'The left one is named violence.', stats: { damage: 22, range: 1.45, cooldown: 190, speedMult: 1.7 },
-    ability: { name: 'Puppet Show', cd: 8000, desc: '2× damage on next hit', type: 'melee_heavy' } },
+  { id: 'brass_knuckles', skinFor: 'fists', name: 'Brass Knuckles', rarity: 'basic',
+    blurb: 'Four rings of unfriendly brass.', stats: {} },
+  { id: 'fists_sock_puppets', skinFor: 'fists', name: 'Sock Puppets', rarity: 'lame',
+    blurb: 'The left one is named violence.', stats: {} },
+  { id: 'hatchet', skinFor: 'combat_axe', name: 'Hatchet', rarity: 'basic',
+    blurb: 'Shorter haft, same argument.', stats: {} },
+  { id: 'machete', skinFor: 'katana', name: 'Machete', rarity: 'basic',
+    blurb: 'A field tool that took a wrong turn.', stats: {} },
+  { id: 'katana_ruler', skinFor: 'katana', name: 'School Ruler', rarity: 'lame',
+    blurb: 'Thirty centimetres of discipline.', stats: {} },
+  { id: 'cane', skinFor: 'spear', name: 'Walking Cane', rarity: 'basic',
+    blurb: 'Brass handle. Entirely respectable.', stats: {} },
+  { id: 'spear_broom_handle', skinFor: 'spear', name: 'Broom Handle', rarity: 'lame',
+    blurb: 'Sweeps the floor. Occasionally the enemy.', stats: {} },
+  { id: 'fire_poker', skinFor: 'spear', name: 'Fire Poker', rarity: 'basic',
+    blurb: 'Blackened at one end from honest work.', stats: {} },
+  { id: 'cricket_bat', skinFor: 'bat', name: 'Cricket Bat', rarity: 'basic',
+    blurb: 'Willow, taped at the toe.', stats: {} },
+  { id: 'pipe', skinFor: 'bat', name: 'Lead Pipe', rarity: 'basic',
+    blurb: 'Found under the sink. Kept.', stats: {} },
+  { id: 'golf_club', skinFor: 'bat', name: 'Golf Club', rarity: 'basic',
+    blurb: 'A seven iron, well out of bounds.', stats: {} },
+  { id: 'bat_pool_noodle', skinFor: 'bat', name: 'Pool Noodle', rarity: 'lame',
+    blurb: 'Makes a noise. That is the feature.', stats: {} },
+  { id: 'wrench', skinFor: 'crowbar', name: 'Wrench', rarity: 'basic',
+    blurb: 'Adjustable. Mostly adjusted wrong.', stats: {} },
+  { id: 'shovel', skinFor: 'sledge', name: 'Shovel', rarity: 'basic',
+    blurb: 'Entrenching tool, sharpened edge.', stats: {} },
+  { id: 'sledge_gold_brick', skinFor: 'sledge', name: 'Gold Brick', rarity: 'good',
+    blurb: 'Heavy, shiny, irresponsible.', stats: {} },
+  { id: 'tennis_racket', skinFor: 'frying_pan', name: 'Tennis Racket', rarity: 'basic',
+    blurb: 'Strung a little tight.', stats: {} },
+  { id: 'frying_pan_nonstick', skinFor: 'frying_pan', name: 'Nonstick Pan', rarity: 'good',
+    blurb: 'Nothing sticks. Not even dignity.', stats: {} },
+  { id: 'meat_cleaver', skinFor: 'knife', name: 'Meat Cleaver', rarity: 'basic',
+    blurb: 'Butcher’s pattern, well used.', stats: {} },
+  { id: 'knife_dental_floss', skinFor: 'knife', name: 'Dental Floss', rarity: 'good',
+    blurb: 'I hate dentists...', stats: {} },
+  { id: 'knife_butter_knife', skinFor: 'knife', name: 'Butter Knife', rarity: 'lame',
+    blurb: 'Barely sharp. Extremely committed.', stats: {} },
+  { id: 'katana_umbrella_sword', skinFor: 'katana', name: 'Umbrella Sword', rarity: 'good',
+    blurb: 'Waterproof. Mostly.', stats: {} },
+  { id: 'bat_cricket_stump', skinFor: 'bat', name: 'Cricket Stump', rarity: 'lame',
+    blurb: 'One of three. Nobody misses it.', stats: {} },
+  { id: 'knife_letter_opener', skinFor: 'knife', name: 'Letter Opener', rarity: 'lame',
+    blurb: 'Desk tidy. Desk weapon.', stats: {} },
+  { id: 'sledge_anvil_on_a_stick', skinFor: 'sledge', name: 'Anvil On A Stick', rarity: 'lame',
+    blurb: 'Exactly what it says.', stats: {} },
+  { id: 'crowbar_tyre_iron', skinFor: 'crowbar', name: 'Tyre Iron', rarity: 'basic',
+    blurb: 'From the boot. Never used on a tyre.', stats: {} },
+  { id: 'frying_pan_copper', skinFor: 'frying_pan', name: 'Copper Pan', rarity: 'good',
+    blurb: 'Restaurant grade. Restaurant heavy.', stats: {} },
+  { id: 'fists_gardening_gloves', skinFor: 'fists', name: 'Gardening Gloves', rarity: 'lame',
+    blurb: 'Thorn-proof. Mostly.', stats: {} },
+  { id: 'spear_flagpole', skinFor: 'spear', name: 'Flagpole', rarity: 'good',
+    blurb: 'The flag is still on it.', stats: {} },
+  { id: 'combat_axe_firemans', skinFor: 'combat_axe', name: 'Fireman’s Axe', rarity: 'good',
+    blurb: 'Red haft, chipped edge.', stats: {} },
+  { id: 'chainsaw_pruning', skinFor: 'chainsaw', name: 'Pruning Saw', rarity: 'basic',
+    blurb: 'For hedges. Allegedly.', stats: {} },
 ];
+
 
 const GUN_STAT_SKINS_BY_WEAPON = {};
 for (const s of BASIC_GUN_STAT_SKINS) (GUN_STAT_SKINS_BY_WEAPON[s.weapon] ||= []).push(s);
@@ -1039,14 +1268,27 @@ function gunStatSkinFor(weaponId) {
   if (!ownsSkin(want)) return null;
   return BASIC_GUN_STAT_SKINS.find(s => s.weapon === weaponId && s.id === want) || null;
 }
+// A skin changes how a gun LOOKS and nothing else. Only these keys are allowed
+// through from a skin's stats block; damage, spread, pellets, fireRate,
+// tracking and the rest are ignored even when a skin declares them, so no skin
+// can ever be a balance change wearing a costume — including one added later by
+// someone who did not read this comment.
+const COSMETIC_SKIN_KEYS = ['bulletColor', 'bulletSize', 'randomBulletColor', 'tracerStyle'];
+function cosmeticOnly(stats) {
+  const out = {};
+  if (stats) for (const k of COSMETIC_SKIN_KEYS) if (stats[k] !== undefined) out[k] = stats[k];
+  return out;
+}
 function effectiveGunStats(w) {
   const skin = w && gunStatSkinFor(w.id);
   if (!skin) return w;
-  return Object.assign({}, w, skin.stats, {
+  return Object.assign({}, w, cosmeticOnly(skin.stats), {
     baseId: w.id,
     skinId: skin.id,
     skinName: skin.name,
-    damageId: skin.damageId || w.id,
+    // NOT skin.damageId: routing a skin to its own server damage entry is
+    // exactly how a cosmetic becomes a stat change.
+    damageId: w.id,
   });
 }
 function meleeSkinFor(baseId) {
@@ -1057,13 +1299,14 @@ function meleeSkinFor(baseId) {
 function effectiveMeleeItem(base) {
   const skin = base && meleeSkinFor(base.id);
   if (!skin) return base;
-  return Object.assign({}, base, skin.stats, {
+  // Melee skins are cosmetic too: a new name and look, never a new weapon.
+  return Object.assign({}, base, cosmeticOnly(skin.stats), {
     id: skin.id,
     baseId: base.id,
     skinId: skin.id,
     name: skin.name,
-    type: skin.type,
-    ability: skin.ability || base.ability,
+    type: skin.type || base.type,
+    ability: base.ability,
   });
 }
 function equippedMeleeItem() {
@@ -1329,9 +1572,16 @@ const WEAPON_COSTS = {
 const CURRENCY_NAME = 'donuts';
 const CURRENCY_ICON = '🍩';
 const WEAPON_PRICE_MULT = 100;
+const NORMAL_WEAPON_PRICE_MULT = Math.max(1, Math.round(WEAPON_PRICE_MULT / 50));
 const SKIN_CASE_GEN1_COST = 50000;
+const P2W_ITEM_IDS = new Set([
+  'event_horizon', 'storm_core', 'abs_zero', 'solar_lance', 'quantum_repeater',
+  'magnetar', 'nebula_mortar', 'prism_engine', 'void_harvester',
+  'pulse_needle', 'phase_blade', 'gravity_hammer', 'volt_whip',
+  'nano_swarm', 'warp_beacon', 'stasis_mine', 'specter_drone', 'quantum_barrier',
+]);
 for (const id of Object.keys(WEAPON_COSTS)) {
-  if (WEAPON_COSTS[id] > 0) WEAPON_COSTS[id] *= WEAPON_PRICE_MULT;
+  if (WEAPON_COSTS[id] > 0) WEAPON_COSTS[id] *= P2W_ITEM_IDS.has(id) ? WEAPON_PRICE_MULT : NORMAL_WEAPON_PRICE_MULT;
 }
 function money(n) { return `${n}${CURRENCY_ICON}`; }
 const FREE_WEAPONS = new Set([
@@ -1419,7 +1669,7 @@ const BUNDLES = [
     desc: 'Every sci-fi P2W item · 30% off',
     items: ['event_horizon','storm_core','abs_zero','solar_lance','quantum_repeater','magnetar','nebula_mortar','prism_engine','void_harvester','pulse_needle','revolver','phase_blade','gravity_hammer','volt_whip','nano_swarm','warp_beacon','stasis_mine','specter_drone','quantum_barrier'] },
 ];
-for (const b of BUNDLES) b.price *= WEAPON_PRICE_MULT;
+for (const b of BUNDLES) b.price *= b.id === 'cosmic_p2w' ? WEAPON_PRICE_MULT : NORMAL_WEAPON_PRICE_MULT;
 
 function shopCost(id)      { return WEAPON_COSTS[id]; }
 function shopTrialCost(id) { const c = WEAPON_COSTS[id]; return c == null ? null : Math.max(1, Math.ceil(c / TRIAL_DIVISOR)); }
@@ -12379,9 +12629,24 @@ function applyWeaponSkin(model, skin) {
     model.add(decal); model._skinDecal = decal;
   }
 }
+// A gun wearing its own skin keeps it; the global pick dresses everything else.
+// Without this a per-weapon skin was invisible — the only ones that changed
+// anything you could see were the handful that swapped the whole model.
+function gunSkinLookFor(weaponId) {
+  const skin = (typeof gunStatSkinFor === 'function') ? gunStatSkinFor(weaponId) : null;
+  if (skin && skin.body != null) return skin;
+  return WEAPON_SKINS_BY_ID[selectedWeaponSkin] || WEAPON_SKINS_BY_ID.default;
+}
+function applyGunSkinLook(weaponId) {
+  const idx = WEAPONS.findIndex(w => w.id === weaponId);
+  if (idx < 0 || !weaponModels[idx]) return;
+  applyWeaponSkin(weaponModels[idx], gunSkinLookFor(weaponId));
+}
 function applySelectedWeaponSkinToAll() {
-  const skin = WEAPON_SKINS_BY_ID[selectedWeaponSkin] || WEAPON_SKINS_BY_ID.default;
-  for (const m of weaponModels) applyWeaponSkin(m, skin);
+  for (let i = 0; i < weaponModels.length; i++) {
+    if (!weaponModels[i]) continue;
+    applyWeaponSkin(weaponModels[i], gunSkinLookFor(WEAPONS[i] ? WEAPONS[i].id : ''));
+  }
 }
 applySelectedWeaponSkinToAll();
 scene.add(camera);
@@ -18302,6 +18567,7 @@ function setGunStatSkin(weaponId, skinId) {
   const def = BASIC_GUN_STAT_SKINS.find(s => s.weapon === weaponId && s.id === skinId);
   if (def && def.modelSkin) setModelSkin(weaponId, def.modelSkin);
   else if (weaponId === 'ak20' && (!def || skinId === 'stock')) setModelSkin(weaponId, null);
+  applyGunSkinLook(weaponId);          // repaint it — after any model swap
   saveSkinEquips();
   updateAmmoHUD();
   updateWeaponSelector();
@@ -18318,6 +18584,7 @@ Object.keys(equippedModelSkins).forEach(applyModelSkin);
 Object.entries(equippedGunStatSkins).forEach(([wid, sid]) => {
   const def = BASIC_GUN_STAT_SKINS.find(s => s.weapon === wid && s.id === sid);
   if (def?.modelSkin) setModelSkin(wid, def.modelSkin);
+  applyGunSkinLook(wid);
 });
 
 // ── 🔁 Reload choreography ───────────────────────────────────────────────────
