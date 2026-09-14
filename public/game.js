@@ -12634,7 +12634,16 @@ function applyWeaponSkin(model, skin) {
 // Without this a per-weapon skin was invisible — the only ones that changed
 // anything you could see were the handful that swapped the whole model.
 function gunSkinLookFor(weaponId) {
-  const skin = (typeof gunStatSkinFor === 'function') ? gunStatSkinFor(weaponId) : null;
+  // This runs during module evaluation (applySelectedWeaponSkinToAll is called
+  // at load), and gunStatSkinFor -> ownsSkin reads `currentUser`, which is a
+  // `let` declared FIFTEEN THOUSAND LINES further down. Touching it that early
+  // throws a temporal-dead-zone ReferenceError, evaluation stops dead, and the
+  // rest of the game never loads — the page comes up and nothing works.
+  // A `typeof` guard on the function is not enough: the function exists (they
+  // hoist), it is the variable inside it that is not ready.
+  let skin = null;
+  try { skin = (typeof gunStatSkinFor === 'function') ? gunStatSkinFor(weaponId) : null; }
+  catch (e) { skin = null; }   // too early to know — the global look will do
   if (skin && skin.body != null) return skin;
   return WEAPON_SKINS_BY_ID[selectedWeaponSkin] || WEAPON_SKINS_BY_ID.default;
 }
