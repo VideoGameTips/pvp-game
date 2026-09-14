@@ -147,8 +147,9 @@ const WEAPONS = [
   },
   {
     id: 'minigun', name: 'Minigun', type: 'Heavy', slot: 'primary',
-    mag: 180, reserve: 360, damage: 9, fireRate: 32, reloadTime: 4200,
+    mag: 180, reserve: 360, damage: 27, fireRate: 32, reloadTime: 4200,
     auto: true, pellets: 1, spread: 0.026, adsZoom: 55, bulletSpeed: 144, noReload: false,
+    weight: 0.30, adsWeight: 0.50, heatWindow: 10000, heatCooldown: 2000, heatSkipADS: true,
     ability: { name: 'Spin-Up', cd: 16000, desc: '4s · fire rate ×2 · barrels spin faster', type: 'buff', duration: 4000, rateMult: 0.5, spinBoost: true },
   },
   {
@@ -1408,7 +1409,7 @@ let currentWeapon = WEAPONS[0];
 let ammo = currentWeapon.mag;
 let reserve = currentWeapon.reserve;
 let reloading = false, lastShot = 0, shooting = false;
-const weaponHeatState = {}; // per-weapon-id { shotCount, cooldownUntil } for heatShots/heatCooldown weapons
+const weaponHeatState = {}; // per-weapon-id { shotCount, cooldownUntil } for heatShots, or { windowStart, lastFireAt, cooldownUntil } for heatWindow weapons
 let isADS = false, adsFOV = 75, targetFOV = 75;
 
 let myKills = 0, isDead = false, gameStarted = false;
@@ -16713,7 +16714,8 @@ function updateMovement(dt) {
                      : activeSlot === 'melee'     ? equippedMeleeItem()
                      : activeSlot === 'support'   ? SUPPORT_ITEMS[selectedSupportIdx]
                      : null;
-  const weight = (equippedItem && equippedItem.weight != null) ? equippedItem.weight : getDefaultWeaponWeight(equippedItem);
+  const weight = (isADS && equippedItem && equippedItem.adsWeight != null) ? equippedItem.adsWeight
+               : (equippedItem && equippedItem.weight != null) ? equippedItem.weight : getDefaultWeaponWeight(equippedItem);
   const weightMult = Math.max(0.15, 1 - weight); // floor at 15% so you're never frozen
   const baseSpeedMult = (activeSlot === 'melee'
     ? (meleeAbilityBuff?.type === 'revup' ? 3.0 : (equippedMeleeItem()?.speedMult || 1.5))
@@ -17682,13 +17684,30 @@ function tryShoot() {
       flashAbilityName('OVERHEATED');
       return;
     }
+  } else if (wStats.heatWindow) {
+    if (wStats.heatSkipADS && isADS) {
+      // Aiming keeps the barrel spinning — no warm-up needed, and it wipes
+      // the heat clock so dropping back to hip-fire afterward starts clean.
+      const st = weaponHeatState[currentWeapon.id];
+      if (st) { st.windowStart = 0; st.cooldownUntil = 0; }
+    } else {
+      heat = weaponHeatState[currentWeapon.id] || (weaponHeatState[currentWeapon.id] = { windowStart: 0, lastFireAt: 0, cooldownUntil: 0 });
+      if (now < heat.cooldownUntil) return; // overheated — locked out until the warm-up ends
+      if (!heat.windowStart || now - heat.lastFireAt > wStats.fireRate * 3) heat.windowStart = now; // trigger released — fresh window
+      if (now - heat.windowStart >= wStats.heatWindow) {
+        heat.cooldownUntil = now + wStats.heatCooldown;
+        heat.windowStart = 0;
+        flashAbilityName('OVERHEATED');
+        return;
+      }
+    }
   }
   const pool = weaponAmmo[currentWeaponIdx];
   const adminInfAmmo = adminCheats.infiniteAmmo && currentUser?.isAdmin;
   if (pool.ammo <= 0 && !adminInfAmmo) { if (pool.reserve > 0 && !wStats.noReload) startReload(); return; }
 
   lastShot = now;
-  if (heat) {
+  if (heat && wStats.heatShots) {
     heat.shotCount++;
     if (heat.shotCount >= wStats.heatShots) {
       // Burst complete (3rd shot just fired) — start the lockout immediately
@@ -17702,6 +17721,8 @@ function tryShoot() {
       const burstIdx = currentWeaponIdx;
       setTimeout(() => { if (currentWeaponIdx === burstIdx) tryShoot(); }, wStats.fireRate);
     }
+  } else if (heat && wStats.heatWindow) {
+    heat.lastFireAt = now;
   }
   addRecoil(currentWeapon);
   if (!adminInfAmmo) pool.ammo--; // ⚡ admin infinite ammo: don't decrement
