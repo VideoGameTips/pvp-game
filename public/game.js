@@ -133,7 +133,7 @@ const WEAPONS = [
   },
   {
     id: 'grenade_launcher', name: 'Grenade Launcher', type: 'Explosive', slot: 'primary',
-    mag: 6, reserve: 18, damage: 90, fireRate: 900, reloadTime: 1800,
+    mag: 6, reserve: 18, damage: 90, fireRate: 692, reloadTime: 1500,
     auto: false, pellets: 1, spread: 0.006, adsZoom: 52, bulletSpeed: 52, noReload: false,
     bulletColor: 0x2f8f2f, bulletSize: 0.14,
     ability: { name: 'Cluster', cd: 15000, desc: 'Fire 3 grenades in a spread', type: 'multishot', count: 3, spread: 0.12, noADS: true },
