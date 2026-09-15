@@ -896,277 +896,16 @@ for (const m of MELEE_ITEMS) if (SKIN_ONLY_MELEE_IDS.has(m.id)) m.skinOnly = tru
 // shell. Nothing here touches damage, spread, fire rate or anything else that
 // decides a fight; effectiveGunStats() filters this table down to the cosmetic
 // keys, so a stats block full of damage numbers would simply be ignored.
+// Gun "stat skins" are down to the stock entry. The ninety I generated here were
+// wraps — a body colour, an accent and a tinted tracer — which is not a skin, it
+// is a repaint. Real skins live in MODEL_SKINS and replace the weapon with a
+// different OBJECT. This table stays so the equip plumbing keeps working, and so
+// a future skin that genuinely only needs a tint has somewhere to go.
 const BASIC_GUN_STAT_SKINS = [
   { id: 'stock', weapon: 'ak20', name: 'Stock', rarity: 'stock', sw: ['#222222', '#666666'],
     blurb: 'However it left the factory.', stats: {} },
-  { id: 'ak20_midnight_oil', weapon: 'ak20', name: 'Midnight Oil', rarity: 'good',
-    sw: ['#05070d', '#2f6fbf'], body: 0x05070d, accent: 0x2f6fbf,
-    blurb: 'Black on black, with a cold blue sheen where the light catches.', stats: { bulletColor: 0x55aaff } },
-  { id: 'ak20_cardboard_wrap', weapon: 'ak20', name: 'Cardboard Wrap', rarity: 'lame',
-    sw: ['#9a7a4c', '#d8b87e'], body: 0x9a7a4c, accent: 0xd8b87e,
-    blurb: 'Someone taped a box to a rifle. It is holding.', stats: { bulletColor: 0xccaa66 } },
-  { id: 'ak20_birch', weapon: 'ak20', name: 'Pale Birch', rarity: 'basic',
-    sw: ['#d8c49a', '#6b5436'], body: 0xd8c49a, accent: 0x6b5436,
-    blurb: 'Blond furniture, bone-white stock.', stats: {} },
-  { id: 'ak20_hazard', weapon: 'ak20', name: 'Hazard Stripe', rarity: 'good',
-    sw: ['#e8b400', '#141414'], body: 0xe8b400, accent: 0x141414,
-    blurb: 'Yellow and black. Read the warning.', stats: { bulletColor: 0xffcc22 } },
-  { id: 'ak20_verdigris', weapon: 'ak20', name: 'Verdigris', rarity: 'good',
-    sw: ['#3f7d6a', '#a8d8c4'], body: 0x3f7d6a, accent: 0xa8d8c4,
-    blurb: 'Left in a damp cellar for a century.', stats: {} },
-  { id: 'ak20_gold_leaf', weapon: 'ak20', name: 'Gold Leaf', rarity: 'good',
-    sw: ['#c8a020', '#fff0a0'], body: 0xc8a020, accent: 0xfff0a0, fx: 'gold_money',
-    blurb: 'Tasteless. Expensive. Perfect.', stats: { bulletColor: 0xffe070 } },
-  { id: 'ak20_bone', weapon: 'ak20', name: 'Bone Inlay', rarity: 'good',
-    sw: ['#e8e2d2', '#3a332a'], body: 0xe8e2d2, accent: 0x3a332a,
-    blurb: 'Ivory panels, dark steel between.', stats: {} },
-  { id: 'ak20_chalkboard', weapon: 'ak20', name: 'Chalkboard', rarity: 'lame',
-    sw: ['#1e2a24', '#d8d8cc'], body: 0x1e2a24, accent: 0xd8d8cc,
-    blurb: 'Someone did their homework on it.', stats: {} },
-  { id: 'sg8_duck_tape', weapon: 'sg8', name: 'Duck Tape', rarity: 'lame',
-    sw: ['#8a8a84', '#e8c23a'], body: 0x8a8a84, accent: 0xe8c23a,
-    blurb: 'Held together with tape and optimism.', stats: { bulletColor: 0xffdd44 } },
-  { id: 'sg8_confetti', weapon: 'sg8', name: 'Confetti', rarity: 'good',
-    sw: ['#ff55cc', '#55ffee'], body: 0xff55cc, accent: 0x55ffee,
-    blurb: 'Party shotgun. Nobody is invited.', stats: {} },
-  { id: 'sg8_driftwood', weapon: 'sg8', name: 'Driftwood', rarity: 'basic',
-    sw: ['#8a7256', '#4a3a2a'], body: 0x8a7256, accent: 0x4a3a2a,
-    blurb: 'Salt-bleached furniture, pitted barrel.', stats: {} },
-  { id: 'sg8_fire_brigade', weapon: 'sg8', name: 'Fire Brigade', rarity: 'good',
-    sw: ['#b01c1c', '#d8d8d8'], body: 0xb01c1c, accent: 0xd8d8d8,
-    blurb: 'Break glass. Then everything else.', stats: {} },
-  { id: 'sg8_seafoam', weapon: 'sg8', name: 'Seafoam', rarity: 'basic',
-    sw: ['#7fd4c1', '#2a4a44'], body: 0x7fd4c1, accent: 0x2a4a44,
-    blurb: 'A very calm shotgun.', stats: {} },
-  { id: 'srx_taped_laser', weapon: 'srx', name: 'Taped-On Laser', rarity: 'lame',
-    sw: ['#202020', '#d03030'], body: 0x202020, accent: 0xd03030,
-    blurb: 'The tape does most of the aiming.', stats: { bulletColor: 0xff3333 } },
-  { id: 'srx_alpine', weapon: 'srx', name: 'Alpine', rarity: 'good',
-    sw: ['#e6ecf2', '#8fa4b8'], body: 0xe6ecf2, accent: 0x8fa4b8,
-    blurb: 'White on white. Good luck.', stats: {} },
-  { id: 'srx_walnut', weapon: 'srx', name: 'Walnut Match', rarity: 'good',
-    sw: ['#5a3a22', '#c0a070'], body: 0x5a3a22, accent: 0xc0a070,
-    blurb: 'Oiled stock, competition furniture.', stats: {} },
-  { id: 'srx_carbon', weapon: 'srx', name: 'Carbon Weave', rarity: 'good',
-    sw: ['#181a1e', '#4a5058'], body: 0x181a1e, accent: 0x4a5058,
-    blurb: 'Matte, grey, faintly smug.', stats: {} },
-  { id: 'pistol_darker_handgun', weapon: 'pistol', name: 'Darker Handgun', rarity: 'lame',
-    sw: ['#111111', '#2a2a2a'], body: 0x111111, accent: 0x2a2a2a,
-    blurb: 'It is a handgun, but darker.', stats: {} },
-  { id: 'pistol_slightly_bluish', weapon: 'pistol', name: 'Slightly Bluish', rarity: 'lame',
-    sw: ['#22283a', '#5f78aa'], body: 0x22283a, accent: 0x5f78aa,
-    blurb: 'Almost blue. Almost exciting.', stats: { bulletColor: 0x88aaff } },
-  { id: 'pistol_nickel', weapon: 'pistol', name: 'Nickel Plate', rarity: 'good',
-    sw: ['#d8dce0', '#8a8f96'], body: 0xd8dce0, accent: 0x8a8f96,
-    blurb: 'Shiny enough to check your hair in.', stats: {} },
-  { id: 'pistol_desert', weapon: 'pistol', name: 'Desert Tan', rarity: 'basic',
-    sw: ['#bfa77a', '#5a4c32'], body: 0xbfa77a, accent: 0x5a4c32,
-    blurb: 'Sand-coloured, sand-filled.', stats: {} },
-  { id: 'pistol_bubblegum', weapon: 'pistol', name: 'Bubblegum', rarity: 'lame',
-    sw: ['#ff9ec4', '#fff0f6'], body: 0xff9ec4, accent: 0xfff0f6,
-    blurb: 'Strawberry. Somehow menacing.', stats: { bulletColor: 0xff9ec4 } },
-  { id: 'revolver_rusty_cylinder', weapon: 'revolver', name: 'Rusty Cylinder', rarity: 'lame',
-    sw: ['#6a4326', '#a8732f'], body: 0x6a4326, accent: 0xa8732f,
-    blurb: 'Tetanus not included.', stats: { bulletColor: 0xaa7744 } },
-  { id: 'revolver_pearl', weapon: 'revolver', name: 'Pearl Grip', rarity: 'good',
-    sw: ['#2a2a30', '#f0e8dc'], body: 0x2a2a30, accent: 0xf0e8dc,
-    blurb: 'Gunfighter energy, dentist budget.', stats: {} },
-  { id: 'revolver_blued', weapon: 'revolver', name: 'Deep Blued', rarity: 'basic',
-    sw: ['#1a2230', '#44506a'], body: 0x1a2230, accent: 0x44506a,
-    blurb: 'Proper old bluing, oil-dark.', stats: {} },
-  { id: 'revolver_brass', weapon: 'revolver', name: 'Brass Frame', rarity: 'good',
-    sw: ['#9a7a34', '#2a2320'], body: 0x9a7a34, accent: 0x2a2320,
-    blurb: 'Heavy, warm, faintly green at the edges.', stats: {} },
-  { id: 'paintball_moldy', weapon: 'paintball', name: 'Moldy Paint', rarity: 'lame',
-    sw: ['#556633', '#99aa55'], body: 0x556633, accent: 0x99aa55,
-    blurb: 'This paint expired in 2014.', stats: { bulletColor: 0x88aa33 } },
-  { id: 'paintball_neon', weapon: 'paintball', name: 'Neon Splatter', rarity: 'good',
-    sw: ['#141425', '#33ffcc'], body: 0x141425, accent: 0x33ffcc,
-    blurb: 'Blacklight ready.', stats: {} },
-  { id: 'flamethrower_water', weapon: 'flamethrower', name: 'Water Thrower', rarity: 'good',
-    sw: ['#2b6cff', '#aaddff'], body: 0x2b6cff, accent: 0xaaddff,
-    blurb: 'why does this burn me?!', stats: { bulletColor: 0x55ccff } },
-  { id: 'flamethrower_soot', weapon: 'flamethrower', name: 'Sooted', rarity: 'basic',
-    sw: ['#2a2622', '#6a5a4a'], body: 0x2a2622, accent: 0x6a5a4a, fx: 'smoke',
-    blurb: 'Used properly. Repeatedly.', stats: {} },
-  { id: 'crossbow_pool_noodle', weapon: 'crossbow', name: 'Pool Noodle Limbs', rarity: 'lame',
-    sw: ['#ff66aa', '#66ffaa'], body: 0xff66aa, accent: 0x66ffaa,
-    blurb: 'Technically flexible. Spiritually embarrassing.', stats: { bulletColor: 0xff66aa } },
-  { id: 'crossbow_yew', weapon: 'crossbow', name: 'Yew and Horn', rarity: 'good',
-    sw: ['#6a4a28', '#d8c8a8'], body: 0x6a4a28, accent: 0xd8c8a8,
-    blurb: 'The old way, badly maintained.', stats: {} },
-  { id: 'minigun_arcade', weapon: 'minigun', name: 'Arcade Cabinet', rarity: 'good',
-    sw: ['#251044', '#00ffcc'], body: 0x251044, accent: 0x00ffcc, fx: 'data',
-    blurb: 'Insert donut. Receive suppression.', stats: { bulletColor: 0x00ffcc } },
-  { id: 'minigun_tractor', weapon: 'minigun', name: 'Tractor Green', rarity: 'basic',
-    sw: ['#2f5a2a', '#d8c020'], body: 0x2f5a2a, accent: 0xd8c020,
-    blurb: 'Agricultural. In every sense.', stats: {} },
-  { id: 'rpg_soda_bottle', weapon: 'rpg', name: 'Soda Bottle', rarity: 'lame',
-    sw: ['#2f7a3f', '#ff5533'], body: 0x2f7a3f, accent: 0xff5533,
-    blurb: 'Do not shake before firing.', stats: { bulletColor: 0x77dd55 } },
-  { id: 'rpg_hazard', weapon: 'rpg', name: 'Hazard Orange', rarity: 'basic',
-    sw: ['#d85a10', '#2a2a2a'], body: 0xd85a10, accent: 0x2a2a2a,
-    blurb: 'Visible from orbit. On purpose.', stats: {} },
-  { id: 'bazooka_rust', weapon: 'bazooka', name: 'Barn Find', rarity: 'lame',
-    sw: ['#7a4a32', '#3a2a20'], body: 0x7a4a32, accent: 0x3a2a20, fx: 'rock',
-    blurb: 'Found it behind the barn. Still works.', stats: {} },
-  { id: 'mp40_museum', weapon: 'mp40', name: 'Museum Piece', rarity: 'good',
-    sw: ['#2a2622', '#8a7256'], body: 0x2a2622, accent: 0x8a7256,
-    blurb: 'Behind glass until ten minutes ago.', stats: {} },
-  { id: 'mp40_winter', weapon: 'mp40', name: 'Winter Wrap', rarity: 'basic',
-    sw: ['#e0e4e8', '#5a6068'], body: 0xe0e4e8, accent: 0x5a6068,
-    blurb: 'Bandaged in white tape.', stats: {} },
-  { id: 'vector_cyber', weapon: 'vector', name: 'Cyberdeck', rarity: 'good',
-    sw: ['#0a0a12', '#2266ff'], body: 0x0a0a12, accent: 0x2266ff, fx: 'data',
-    blurb: 'Runs on something that is not gunpowder.', stats: { bulletColor: 0x66aaff } },
-  { id: 'vector_creamsicle', weapon: 'vector', name: 'Creamsicle', rarity: 'lame',
-    sw: ['#ff8a3c', '#fff0d8'], body: 0xff8a3c, accent: 0xfff0d8,
-    blurb: 'Orange and cream. Do not lick it.', stats: {} },
-  { id: 'p90_labcoat', weapon: 'p90', name: 'Lab Coat', rarity: 'good',
-    sw: ['#f2f4f6', '#3a7a8a'], body: 0xf2f4f6, accent: 0x3a7a8a,
-    blurb: 'Clinical. Slightly unsettling.', stats: {} },
-  { id: 'p90_wasp', weapon: 'p90', name: 'Wasp', rarity: 'good',
-    sw: ['#e8b400', '#1a1a1a'], body: 0xe8b400, accent: 0x1a1a1a,
-    blurb: 'Angry, striped, comes in numbers.', stats: { bulletColor: 0xffcc22 } },
-  { id: 'machine_pistol_chrome', weapon: 'machine_pistol', name: 'Chrome Dip', rarity: 'good',
-    sw: ['#dfe6ee', '#9fb6c8'], body: 0xdfe6ee, accent: 0x9fb6c8,
-    blurb: 'Mirror finish. Terrible for hiding.', stats: {} },
-  { id: 'smart_smg_circuit', weapon: 'smart_smg', name: 'Circuit Trace', rarity: 'good',
-    sw: ['#0d1a12', '#33ff88'], body: 0x0d1a12, accent: 0x33ff88, fx: 'data',
-    blurb: 'You can see it thinking.', stats: { bulletColor: 0x33ff88 } },
-  { id: 'burst_copper', weapon: 'burst', name: 'Copper Heat', rarity: 'good',
-    sw: ['#8a4a2a', '#d89a5a'], body: 0x8a4a2a, accent: 0xd89a5a,
-    blurb: 'Discoloured from doing its job.', stats: {} },
-  { id: 'lever_cattleman', weapon: 'lever', name: 'Cattleman', rarity: 'basic',
-    sw: ['#5a3a22', '#b08040'], body: 0x5a3a22, accent: 0xb08040,
-    blurb: 'Smells like a saddle.', stats: {} },
-  { id: 'm1_garand_parade', weapon: 'm1_garand', name: 'Parade Ready', rarity: 'good',
-    sw: ['#3a2a1a', '#e8e2d2'], body: 0x3a2a1a, accent: 0xe8e2d2,
-    blurb: 'Polished for people who are not shooting back.', stats: {} },
-  { id: 'flechette_surgical', weapon: 'flechette', name: 'Surgical', rarity: 'good',
-    sw: ['#e8eef2', '#2a6a7a'], body: 0xe8eef2, accent: 0x2a6a7a,
-    blurb: 'Clean lines, unkind intent.', stats: {} },
-  { id: 'twin_ar_matched', weapon: 'twin_ar', name: 'Matched Pair', rarity: 'good',
-    sw: ['#22262c', '#c8a020'], body: 0x22262c, accent: 0xc8a020,
-    blurb: 'Two of everything, gold on both.', stats: {} },
-  { id: 'amr_gravel', weapon: 'amr', name: 'Gravel Pit', rarity: 'basic',
-    sw: ['#6a6258', '#4a443c'], body: 0x6a6258, accent: 0x4a443c, fx: 'rock',
-    blurb: 'Heavy, grey, unbothered.', stats: {} },
-  { id: 'barrett_snowfield', weapon: 'srx', name: 'Snowfield', rarity: 'basic',
-    sw: ['#eef2f6', '#a8b8c4'], body: 0xeef2f6, accent: 0xa8b8c4,
-    blurb: 'Pale enough to lose in the sky.', stats: {} },
-  { id: 'sawed_off_saloon', weapon: 'sawed_off', name: 'Saloon', rarity: 'good',
-    sw: ['#6a4226', '#c8a020'], body: 0x6a4226, accent: 0xc8a020,
-    blurb: 'Kept under the bar for years.', stats: {} },
-  { id: 'boomstick_taped', weapon: 'boomstick', name: 'Tape and Hope', rarity: 'lame',
-    sw: ['#4a4a46', '#d8c23a'], body: 0x4a4a46, accent: 0xd8c23a,
-    blurb: 'Every joint is tape. Every shot is a gamble.', stats: {} },
-  { id: 'shorty_pocket', weapon: 'shorty', name: 'Pocket Change', rarity: 'lame',
-    sw: ['#8a8f96', '#b8a06a'], body: 0x8a8f96, accent: 0xb8a06a,
-    blurb: 'Small, grubby, oddly effective.', stats: {} },
-  { id: 'railgun_arcfire', weapon: 'railgun', name: 'Arcfire', rarity: 'good',
-    sw: ['#101828', '#66ccff'], body: 0x101828, accent: 0x66ccff,
-    blurb: 'The rails glow long after.', stats: { bulletColor: 0x66ccff } },
-  { id: 'coilgun_magnet', weapon: 'coilgun', name: 'Lodestone', rarity: 'good',
-    sw: ['#2a2a34', '#9a66ff'], body: 0x2a2a34, accent: 0x9a66ff,
-    blurb: 'Sticks to things it should not.', stats: { bulletColor: 0x9a66ff } },
-  { id: 'freeze_gun_glacier', weapon: 'freeze_gun', name: 'Glacier', rarity: 'good',
-    sw: ['#9fd8e8', '#eaf8ff'], body: 0x9fd8e8, accent: 0xeaf8ff, fx: 'crystal',
-    blurb: 'Blue the way deep ice is blue.', stats: { bulletColor: 0xaaeeff } },
-  { id: 'plasma_carbine_ember', weapon: 'plasma_carbine', name: 'Ember', rarity: 'good',
-    sw: ['#2a1410', '#ff6622'], body: 0x2a1410, accent: 0xff6622,
-    blurb: 'Warm to hold. That is not a feature.', stats: { bulletColor: 0xff6622 } },
-  { id: 'arc_rifle_stormglass', weapon: 'arc_rifle', name: 'Stormglass', rarity: 'good',
-    sw: ['#141c2a', '#88ccff'], body: 0x141c2a, accent: 0x88ccff, fx: 'crystal',
-    blurb: 'Hums before it fires.', stats: { bulletColor: 0x88ccff } },
-  { id: 'taser_traffic', weapon: 'taser', name: 'Traffic Warden', rarity: 'lame',
-    sw: ['#e8d800', '#2a2a2a'], body: 0xe8d800, accent: 0x2a2a2a,
-    blurb: 'Authority, but only a little.', stats: {} },
-  { id: 'laser_pointer_cat', weapon: 'laser_pointer', name: 'Cat Toy', rarity: 'lame',
-    sw: ['#d83a3a', '#f2f2f2'], body: 0xd83a3a, accent: 0xf2f2f2,
-    blurb: 'The cat is not impressed either.', stats: { bulletColor: 0xff4444 } },
-  { id: 'grenade_launcher_pumpkin', weapon: 'grenade_launcher', name: 'Pumpkin Patch', rarity: 'good',
-    sw: ['#d8621c', '#3a5a24'], body: 0xd8621c, accent: 0x3a5a24,
-    blurb: 'Six of them. All orange.', stats: { bulletColor: 0xe8802c } },
-  { id: 'firework_launcher_festival', weapon: 'firework_launcher', name: 'Festival', rarity: 'good',
-    sw: ['#b01c3a', '#ffd84a'], body: 0xb01c3a, accent: 0xffd84a,
-    blurb: 'Legal in exactly no country.', stats: {} },
-  { id: 'potato_cannon_allotment', weapon: 'potato_cannon', name: 'Allotment', rarity: 'lame',
-    sw: ['#6a5a3a', '#a8c060'], body: 0x6a5a3a, accent: 0xa8c060,
-    blurb: 'Made from drainpipe and spite.', stats: {} },
-  { id: 'mortar_rifle_surveyor', weapon: 'mortar_rifle', name: 'Surveyor', rarity: 'basic',
-    sw: ['#3a4a3a', '#d8c48a'], body: 0x3a4a3a, accent: 0xd8c48a,
-    blurb: 'Comes with a protractor nobody uses.', stats: {} },
-  { id: 'nail_gun_site', weapon: 'nail_gun', name: 'Site Issue', rarity: 'basic',
-    sw: ['#d8a800', '#2a2a2a'], body: 0xd8a800, accent: 0x2a2a2a,
-    blurb: 'Borrowed from a building site. Permanently.', stats: {} },
-  { id: 'dart_gun_vet', weapon: 'dart_gun', name: 'Veterinary', rarity: 'lame',
-    sw: ['#e8f0f4', '#4a8a6a'], body: 0xe8f0f4, accent: 0x4a8a6a,
-    blurb: 'For large animals. Allegedly.', stats: {} },
-  { id: 'harpoon_gun_trawler', weapon: 'harpoon_gun', name: 'Trawler', rarity: 'basic',
-    sw: ['#2a4a5a', '#c8a020'], body: 0x2a4a5a, accent: 0xc8a020,
-    blurb: 'Smells of the North Sea.', stats: {} },
-  { id: 'slingshot_catapult', weapon: 'slingshot', name: 'Catapult Club', rarity: 'lame',
-    sw: ['#6a4a28', '#d84a4a'], body: 0x6a4a28, accent: 0xd84a4a,
-    blurb: 'Red rubber, bad intentions.', stats: {} },
-  { id: 'signal_pistol_lighthouse', weapon: 'signal_pistol', name: 'Lighthouse', rarity: 'good',
-    sw: ['#d8d8d0', '#b01c1c'], body: 0xd8d8d0, accent: 0xb01c1c,
-    blurb: 'Brass, salt and a hundred years.', stats: {} },
-  { id: 'flare_emergency', weapon: 'flare', name: 'Emergency Kit', rarity: 'lame',
-    sw: ['#e8621c', '#f2f2f2'], body: 0xe8621c, accent: 0xf2f2f2,
-    blurb: 'From the boot of a car.', stats: {} },
-  { id: 'hand_cannon_artillery', weapon: 'hand_cannon', name: 'Pocket Artillery', rarity: 'good',
-    sw: ['#2a2a30', '#c8a020'], body: 0x2a2a30, accent: 0xc8a020,
-    blurb: 'A field gun that fits in a holster.', stats: {} },
-  { id: 'mg42_foundry', weapon: 'mg42', name: 'Foundry', rarity: 'good',
-    sw: ['#2a2622', '#d85a10'], body: 0x2a2622, accent: 0xd85a10, fx: 'smoke',
-    blurb: 'Still warm from being made.', stats: {} },
-  { id: 'rpd_jungle', weapon: 'rpd', name: 'Jungle Wrap', rarity: 'basic',
-    sw: ['#3a4a28', '#6a5a3a'], body: 0x3a4a28, accent: 0x6a5a3a,
-    blurb: 'Wrapped in whatever was nearby.', stats: {} },
-  { id: 'auto_revolver_noir', weapon: 'auto_revolver', name: 'Noir', rarity: 'good',
-    sw: ['#14161a', '#b8bcc2'], body: 0x14161a, accent: 0xb8bcc2,
-    blurb: 'Black and white, and very pleased about it.', stats: {} },
-  { id: 'machine_revolver_carousel', weapon: 'machine_revolver', name: 'Carousel', rarity: 'good',
-    sw: ['#8a1c3a', '#f0d8a8'], body: 0x8a1c3a, accent: 0xf0d8a8,
-    blurb: 'Twelve horses. All of them angry.', stats: {} },
-  { id: 'snub_revolver_handbag', weapon: 'snub_revolver', name: 'Handbag', rarity: 'lame',
-    sw: ['#8a3a5a', '#e8d8e0'], body: 0x8a3a5a, accent: 0xe8d8e0,
-    blurb: 'Fits beside the lipstick.', stats: {} },
-  { id: 'duelist_pistol_dawn', weapon: 'duelist_pistol', name: 'Dawn Appointment', rarity: 'good',
-    sw: ['#3a2a2a', '#d8c8a8'], body: 0x3a2a2a, accent: 0xd8c8a8,
-    blurb: 'Ten paces. Turn. Regret.', stats: {} },
-  { id: 'mauser_broomhandle', weapon: 'mauser', name: 'Broomhandle', rarity: 'basic',
-    sw: ['#4a3a2a', '#b09060'], body: 0x4a3a2a, accent: 0xb09060,
-    blurb: 'Wooden holster sold separately.', stats: {} },
-  { id: 'throwing_knives_circus', weapon: 'throwing_knives', name: 'Circus Act', rarity: 'good',
-    sw: ['#b01c3a', '#f0e0b0'], body: 0xb01c3a, accent: 0xf0e0b0,
-    blurb: 'Volunteers to the front, please.', stats: {} },
-  { id: 'throwing_axes_lumber', weapon: 'throwing_axes', name: 'Lumberyard', rarity: 'basic',
-    sw: ['#5a3a22', '#c8ccd2'], body: 0x5a3a22, accent: 0xc8ccd2,
-    blurb: 'Honest wood. Honest steel.', stats: {} },
-  { id: 'boomerang_outback', weapon: 'boomerang', name: 'Outback', rarity: 'basic',
-    sw: ['#8a5a2e', '#e8d8a8'], body: 0x8a5a2e, accent: 0xe8d8a8,
-    blurb: 'It does come back. Usually.', stats: {} },
-  { id: 'traffic_cone_roadworks', weapon: 'traffic_cone', name: 'Roadworks', rarity: 'lame',
-    sw: ['#e8631c', '#f2f2ee'], body: 0xe8631c, accent: 0xf2f2ee,
-    blurb: 'Liberated from the A road.', stats: {} },
-  { id: 'cream_pie_patisserie', weapon: 'cream_pie', name: 'Patisserie', rarity: 'good',
-    sw: ['#f0e4d0', '#d8a0b8'], body: 0xf0e4d0, accent: 0xd8a0b8,
-    blurb: 'Piped by somebody who trained for this.', stats: {} },
-  { id: 'nebula_mortar_deepfield', weapon: 'nebula_mortar', name: 'Deep Field', rarity: 'good',
-    sw: ['#1a1030', '#a070ff'], body: 0x1a1030, accent: 0xa070ff, fx: 'crystal',
-    blurb: 'Points at things very far away.', stats: { bulletColor: 0xa070ff } },
-  { id: 'solar_lance_corona', weapon: 'solar_lance', name: 'Corona', rarity: 'good',
-    sw: ['#2a1a00', '#ffcc44'], body: 0x2a1a00, accent: 0xffcc44,
-    blurb: 'Too bright to look at directly.', stats: { bulletColor: 0xffdd66 } },
-  { id: 'void_harvester_eventide', weapon: 'void_harvester', name: 'Eventide', rarity: 'good',
-    sw: ['#0a0812', '#6a3aff'], body: 0x0a0812, accent: 0x6a3aff, fx: 'data',
-    blurb: 'The dark bits move when you are not looking.', stats: { bulletColor: 0x6a3aff } },
-  { id: 'prism_engine_spectrum', weapon: 'prism_engine', name: 'Spectrum', rarity: 'good',
-    sw: ['#f2f2f8', '#44ccff'], body: 0xf2f2f8, accent: 0x44ccff, fx: 'crystal',
-    blurb: 'All the colours, one at a time.', stats: {} },
 ];
+
 
 
 // 🔪 Melee skins. Also purely cosmetic: a different name and flavour on the
@@ -9893,6 +9632,210 @@ function buildAUG() {
   return g;
 }
 
+// ── 🎭 Concept skins ────────────────────────────────────────────────────────
+// A skin should be a different OBJECT, not a different colour. Each of these
+// replaces the weapon's model outright while its stats stay exactly as they
+// were, so a Water Balloon Launcher fires grenades on the grenade launcher's
+// numbers and simply looks like a garden toy while doing it.
+
+function buildWaterBalloonLauncher() {
+  // 🎈 Grenade launcher -> water balloon launcher. Clear plastic drum with six
+  // balloons visible in it, a garden-hose feed and a bicycle-pump handle.
+  const g = new THREE.Group();
+  const steel = GUN_MATS.steel(), inner = GUN_MATS.inner(), bright = GUN_MATS.bright();
+  const plastic = new THREE.MeshPhongMaterial({ color: 0x3a9ad8, shininess: 90, specular: 0xbfe6ff });
+  const clear   = new THREE.MeshPhongMaterial({ color: 0xcfe8f5, shininess: 150, specular: 0xffffff,
+                                                transparent: true, opacity: 0.42 });
+  const hose    = new THREE.MeshPhongMaterial({ color: 0x2f8a3a, shininess: 40, specular: 0x7ac08a });
+  const BAL = [0xff5566, 0xffcc33, 0x66dd55, 0xff77cc, 0x55bbff, 0xaa77ff];
+  gpBox(g, plastic, 0.052, 0.062, 0.150, 0, 0.004, 0.084);            // body
+  gpBox(g, inner,  0.053, 0.006, 0.120, 0, 0.036, 0.084);
+  gpPart(g, 'main', () => {
+    gpCyl(g, clear, 0.062, 0.062, 0.096, 16, 0, 0.010, -0.020);        // the drum
+    gpCyl(g, plastic, 0.066, 0.066, 0.010, 16, 0, 0.010, -0.066);
+    gpCyl(g, plastic, 0.066, 0.066, 0.010, 16, 0, 0.010,  0.026);
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2, cx = Math.cos(a) * 0.036, cy = 0.010 + Math.sin(a) * 0.036;
+      gpPart(g, 'ammo', () => {
+        const bal = new THREE.MeshPhongMaterial({ color: BAL[i], shininess: 120, specular: 0xffffff });
+        gpCyl(g, bal, 0.0175, 0.0175, 0.072, 10, cx, cy, -0.020);      // the balloon
+        gpCyl(g, bright, 0.0055, 0.0055, 0.012, 8, cx, cy, 0.018);     // its knot
+      });
+    }
+  }, { x: 0, y: 0.010, z: -0.020 });
+  g._parts.main._chambers = 6;
+  g._anchorPart = { mag: 'main' };
+  gpCyl(g, plastic, 0.020, 0.020, 0.180, 12, 0, 0.010, -0.150);        // spout
+  gpCyl(g, inner, 0.015, 0.015, 0.012, 12, 0, 0.010, -0.236);
+  // Garden hose looping down off the side, because of course it does.
+  for (let i = 0; i < 7; i++) {
+    const t = i / 6;
+    gpCyl(g, hose, 0.010, 0.010, 0.038, 8,
+          -0.030 - Math.sin(t * 3.0) * 0.016, -0.030 - t * 0.048, 0.030 + t * 0.028, Math.PI / 2, 0.5);
+  }
+  gpBox(g, hose, 0.020, 0.020, 0.020, -0.030, -0.014, 0.030);
+  gpPlate(g, plastic, [                                                 // pump grip
+    [0.086,-0.034],[0.120,-0.058],[0.126,-0.150],[0.098,-0.168],[0.070,-0.086],[0.064,-0.040],
+  ], 0.038, 0);
+  for (let i = 0; i < 5; i++) gpBox(g, inner, 0.040, 0.004, 0.009, 0, -0.064 - i * 0.019, 0.096 + i * 0.005, 0.32);
+  gpBox(g, steel, 0.026, 0.014, 0.040, 0, -0.030, 0.020);              // trigger housing
+  gpBox(g, bright, 0.006, 0.016, 0.006, 0, -0.038, 0.014, 0.22);
+  gpBox(g, plastic, 0.046, 0.030, 0.062, 0, 0.000, 0.176);             // stock stub
+  gpBox(g, inner, 0.048, 0.006, 0.020, 0, 0.016, 0.204);
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.010, -0.248); g.add(flash);
+  g._flash = flash; g._kickZ = 0.026; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildSpyPistol() {
+  // 🕵️ Pistol -> spy pistol. Slim slide, oversized suppressor, walnut grip and
+  // a tiny red ready-light. Understated on purpose: it is the quiet one.
+  const g = new THREE.Group();
+  const steel = GUN_MATS.steel(), blued = GUN_MATS.blued(), bright = GUN_MATS.bright();
+  const inner = GUN_MATS.inner(), wood = GUN_MATS.wood();
+  const noir = new THREE.MeshPhongMaterial({ color: 0x14161a, shininess: 70, specular: 0x6a7280 });
+  const glow = new THREE.MeshBasicMaterial({ color: 0xff3344 });
+  gpBox(g, noir, 0.030, 0.038, 0.150, 0, 0.026, -0.010);               // slide
+  gpBox(g, inner, 0.031, 0.005, 0.120, 0, 0.046, -0.010);
+  for (let i = 0; i < 6; i++) gpBox(g, inner, 0.032, 0.020, 0.005, 0, 0.026, 0.040 + i * 0.009); // serrations
+  gpBox(g, steel, 0.026, 0.026, 0.100, 0, 0.000, 0.010);               // frame
+  gpBox(g, inner, 0.006, 0.020, 0.044, 0.014, 0.026, 0.018);           // ejection port
+  gpCyl(g, blued, 0.0245, 0.0245, 0.150, 14, 0, 0.026, -0.140);        // suppressor
+  for (let i = 0; i < 5; i++) gpCyl(g, inner, 0.0252, 0.0252, 0.006, 14, 0, 0.026, -0.086 - i * 0.026);
+  gpCyl(g, inner, 0.0105, 0.0105, 0.012, 12, 0, 0.026, -0.212);
+  gpCyl(g, bright, 0.0265, 0.0265, 0.008, 14, 0, 0.026, -0.070);       // mount collar
+  gpPlate(g, wood, [                                                    // walnut grip
+    [0.052,-0.016],[0.078,-0.038],[0.082,-0.122],[0.054,-0.136],[0.030,-0.066],[0.028,-0.022],
+  ], 0.030, 0);
+  for (let i = 0; i < 6; i++) gpBox(g, inner, 0.032, 0.003, 0.007, 0, -0.038 - i * 0.016, 0.050 + i * 0.004, 0.30);
+  gpBox(g, bright, 0.010, 0.010, 0.008, 0, -0.030, 0.062);             // magazine catch
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.016, 0.0030, 6, 12, Math.PI * 1.05), steel);
+  guard.rotation.set(0, Math.PI / 2, -0.42); guard.position.set(0, -0.020, 0.008); g.add(guard);
+  gpBox(g, bright, 0.005, 0.013, 0.005, 0, -0.014, 0.008, 0.20);       // trigger
+  gpBox(g, noir, 0.012, 0.010, 0.014, 0, 0.050, 0.052);                // rear sight
+  gpBox(g, bright, 0.003, 0.008, 0.004, 0, 0.050, -0.062);             // front sight
+  gpCyl(g, glow, 0.0035, 0.0035, 0.004, 8, 0.013, 0.038, 0.048);       // ready light
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.026, -0.222); g.add(flash);
+  g._flash = flash; g._kickZ = 0.008; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildLeafBlower() {
+  // 🍃 SG-8 -> leaf blower. Wide plastic housing, corrugated tube, a pull cord
+  // and a warning sticker nobody has ever read.
+  const g = new THREE.Group();
+  const inner = GUN_MATS.inner(), bright = GUN_MATS.bright(), steel = GUN_MATS.steel();
+  const shell = new THREE.MeshPhongMaterial({ color: 0xe8631c, shininess: 80, specular: 0xffc49a });
+  const dark  = new THREE.MeshPhongMaterial({ color: 0x24262a, shininess: 30, specular: 0x50545c });
+  const label = new THREE.MeshBasicMaterial({ color: 0xf2e63a });
+  gpBox(g, shell, 0.070, 0.086, 0.190, 0, 0.012, 0.096);               // motor housing
+  gpBox(g, dark,  0.072, 0.014, 0.150, 0, 0.056, 0.096);
+  for (let i = 0; i < 6; i++) gpBox(g, inner, 0.074, 0.006, 0.010, 0, 0.030, 0.030 + i * 0.026); // vents
+  gpBox(g, label, 0.020, 0.026, 0.002, 0.036, 0.016, 0.070);           // warning sticker
+  gpCyl(g, dark, 0.030, 0.030, 0.060, 14, 0, 0.012, -0.010);           // fan shroud
+  gpCyl(g, inner, 0.0245, 0.0245, 0.010, 14, 0, 0.012, -0.040);
+  // Corrugated tube: rings down its length, tapering to the nozzle.
+  for (let i = 0; i < 9; i++) {
+    const t = i / 8, r = 0.026 - t * 0.008;
+    gpCyl(g, shell, r, r, 0.020, 12, 0, 0.012, -0.056 - i * 0.026);
+    gpCyl(g, dark,  r + 0.003, r + 0.003, 0.006, 12, 0, 0.012, -0.066 - i * 0.026);
+  }
+  gpCyl(g, dark, 0.020, 0.024, 0.030, 12, 0, 0.012, -0.300);           // nozzle flare
+  gpCyl(g, inner, 0.0145, 0.0145, 0.012, 12, 0, 0.012, -0.318);
+  gpPlate(g, dark, [                                                    // handle over the top
+    [0.130,0.062],[0.150,0.086],[0.052,0.098],[0.020,0.078],[0.046,0.062],[0.114,0.052],
+  ], 0.034, 0);
+  for (let i = 0; i < 4; i++) gpBox(g, inner, 0.036, 0.004, 0.010, 0, 0.090, 0.058 + i * 0.016);
+  gpBox(g, bright, 0.008, 0.014, 0.020, 0, 0.060, 0.038, 0.22);        // throttle trigger
+  gpCyl(g, bright, 0.014, 0.014, 0.008, 10, -0.038, 0.030, 0.150);     // pull-cord boss
+  gpCyl(g, inner, 0.0045, 0.0045, 0.060, 8, -0.052, 0.014, 0.150, 0, 0.6);
+  gpBox(g, dark, 0.050, 0.024, 0.040, 0, -0.026, 0.150);               // battery pack
+  gpBox(g, bright, 0.020, 0.006, 0.014, 0, -0.040, 0.150);
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.012, -0.330); g.add(flash);
+  g._flash = flash; g._kickZ = 0.020; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildSlushieMachine() {
+  // 🥤 Freeze gun -> slushie machine. A clear hopper of blue slush with an auger
+  // turning in it, a chrome tap and a drip tray.
+  const g = new THREE.Group();
+  const inner = GUN_MATS.inner(), bright = GUN_MATS.bright(), steel = GUN_MATS.steel();
+  const chrome = new THREE.MeshPhongMaterial({ color: 0xd8dce2, shininess: 180, specular: 0xffffff });
+  const tank   = new THREE.MeshPhongMaterial({ color: 0xd8f0ff, shininess: 160, specular: 0xffffff,
+                                               transparent: true, opacity: 0.38 });
+  const slush  = new THREE.MeshPhongMaterial({ color: 0x3aa8e8, shininess: 60, specular: 0xbfe6ff,
+                                               transparent: true, opacity: 0.88 });
+  const trim   = new THREE.MeshPhongMaterial({ color: 0xe03a5a, shininess: 70, specular: 0xffb0c0 });
+  gpCyl(g, tank, 0.052, 0.052, 0.170, 16, 0, 0.026, 0.010, Math.PI / 2, 0);   // hopper
+  gpCyl(g, slush, 0.045, 0.045, 0.140, 16, 0, 0.020, 0.010, Math.PI / 2, 0);  // the slush
+  gpCyl(g, chrome, 0.056, 0.056, 0.012, 16, 0, 0.026, 0.098, Math.PI / 2, 0); // rim
+  gpCyl(g, trim,   0.056, 0.056, 0.012, 16, 0, 0.026, -0.078, Math.PI / 2, 0);
+  gpPart(g, 'main', () => {                                             // the auger turns
+    gpCyl(g, chrome, 0.008, 0.008, 0.150, 10, 0, 0.026, 0.010, Math.PI / 2, 0);
+    for (let i = 0; i < 7; i++)
+      gpBox(g, chrome, 0.060, 0.004, 0.018, 0, 0.026, -0.052 + i * 0.022, 0, 0, i * 0.9);
+  }, { x: 0, y: 0.026, z: 0.010 });
+  g._parts.main._chambers = 7;
+  gpBox(g, chrome, 0.040, 0.030, 0.040, 0, -0.024, -0.060);             // tap block
+  gpCyl(g, chrome, 0.013, 0.013, 0.060, 12, 0, -0.030, -0.102);         // spout
+  gpBox(g, trim, 0.012, 0.034, 0.012, 0, -0.006, -0.088, 0.30);         // tap handle
+  gpBox(g, chrome, 0.058, 0.006, 0.044, 0, -0.056, -0.096);             // drip tray
+  for (let i = 0; i < 5; i++) gpBox(g, inner, 0.008, 0.004, 0.040, -0.020 + i * 0.010, -0.052, -0.096);
+  gpPlate(g, trim, [                                                     // grip
+    [0.070,-0.030],[0.098,-0.052],[0.102,-0.140],[0.074,-0.154],[0.048,-0.080],[0.046,-0.036],
+  ], 0.034, 0);
+  for (let i = 0; i < 5; i++) gpBox(g, inner, 0.036, 0.004, 0.008, 0, -0.058 - i * 0.018, 0.078 + i * 0.004, 0.30);
+  gpBox(g, bright, 0.006, 0.014, 0.006, 0, -0.026, 0.040, 0.22);        // trigger
+  gpBox(g, chrome, 0.048, 0.040, 0.040, 0, 0.010, 0.136);               // compressor box
+  gpBox(g, inner, 0.050, 0.006, 0.030, 0, 0.032, 0.136);
+  const flash = makeMuzzleFlash(); flash.position.set(0, -0.030, -0.136); g.add(flash);
+  g._flash = flash; g._kickZ = 0.010; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildNerfElite() {
+  // 🧡 AK20 -> foam blaster. Orange shell, blue furniture, a clear dart drum and
+  // the safety-orange muzzle that makes it legal to own.
+  const g = new THREE.Group();
+  const inner = GUN_MATS.inner(), bright = GUN_MATS.bright();
+  const shell = new THREE.MeshPhongMaterial({ color: 0xf07a1c, shininess: 90, specular: 0xffd0a0 });
+  const blue  = new THREE.MeshPhongMaterial({ color: 0x2f6fd8, shininess: 80, specular: 0xa8c8ff });
+  const grey  = new THREE.MeshPhongMaterial({ color: 0x5a6068, shininess: 40, specular: 0x9aa4b0 });
+  const clear = new THREE.MeshPhongMaterial({ color: 0xdfeaf2, shininess: 150, specular: 0xffffff,
+                                              transparent: true, opacity: 0.44 });
+  const foam  = new THREE.MeshPhongMaterial({ color: 0xf2e63a, shininess: 20, specular: 0x8a8a40 });
+  gpBox(g, shell, 0.050, 0.098, 0.300, 0, 0.006, -0.010);              // body
+  gpBox(g, blue,  0.052, 0.020, 0.230, 0, 0.052, -0.010);              // top rail
+  for (let i = 0; i < 7; i++) gpBox(g, inner, 0.054, 0.008, 0.010, 0, 0.062, -0.100 + i * 0.030);
+  gpBox(g, grey, 0.054, 0.028, 0.060, 0, 0.030, 0.090);                // charging slide
+  gpBox(g, blue, 0.062, 0.016, 0.026, 0, 0.044, 0.116);
+  // Clear drum of darts under the body.
+  gpCyl(g, clear, 0.054, 0.054, 0.046, 16, 0, -0.066, -0.020);
+  gpCyl(g, blue,  0.058, 0.058, 0.008, 16, 0, -0.066, -0.046);
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    gpCyl(g, foam, 0.0090, 0.0090, 0.034, 8, Math.cos(a) * 0.032, -0.066 + Math.sin(a) * 0.032, -0.020);
+  }
+  gpBox(g, shell, 0.034, 0.034, 0.060, 0, -0.030, -0.020);             // drum housing
+  gpCyl(g, blue, 0.021, 0.021, 0.190, 12, 0, 0.010, -0.230);           // barrel
+  gpCyl(g, shell, 0.026, 0.026, 0.040, 12, 0, 0.010, -0.336);          // orange muzzle
+  gpCyl(g, inner, 0.0135, 0.0135, 0.012, 12, 0, 0.010, -0.354);
+  gpBox(g, grey, 0.030, 0.026, 0.110, 0, -0.026, -0.220);              // underrail
+  gpPlate(g, blue, [                                                    // grip
+    [0.082,-0.038],[0.114,-0.062],[0.120,-0.152],[0.096,-0.170],[0.070,-0.088],[0.064,-0.044],
+  ], 0.040, 0);
+  for (let i = 0; i < 5; i++) gpBox(g, inner, 0.042, 0.004, 0.009, 0, -0.070 - i * 0.019, 0.094 + i * 0.005, 0.32);
+  gpBox(g, bright, 0.006, 0.016, 0.006, 0, -0.058, 0.026, 0.22);       // trigger
+  gpPlate(g, shell, [                                                   // stock
+    [0.156,-0.040],[0.216,0.010],[0.324,0.012],[0.388,-0.014],[0.382,-0.034],[0.222,-0.050],[0.168,-0.054],
+  ], 0.048, 0);
+  gpBox(g, blue, 0.050, 0.054, 0.010, 0, -0.004, 0.400, 0.10);         // butt pad
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.010, -0.362); g.add(flash);
+  g._flash = flash; g._kickZ = 0.010; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
 // AK30 — longer mag, tan/desert colour
 function buildAK30() {
   const tan = new THREE.MeshLambertMaterial({ color: 0x8b7040 });
@@ -18545,10 +18488,25 @@ const MODEL_SKINS = [
     blurb: 'Bullpup. The magazine sits behind the trigger.' },
   { id: 'ak20_twin_barrel', weapon: 'ak20', name: 'Twin Barrel AK', rarity: 'basic',
     sw: ['#3c3540', '#ffcc66'], build: buildTwinAR,
-    blurb: 'Basic case stat skin: two barrels, lower damage per pellet.' },
+    blurb: 'Two barrels where there was one. Fires the same rounds.' },
   { id: 'ak20_swarm_rifle', weapon: 'ak20', name: 'Swarm AK', rarity: 'basic',
     sw: ['#2b193c', '#ff55ff'], build: buildSwarmRifle,
-    blurb: 'Basic case stat skin: fast tracking rounds with lower damage.' },
+    blurb: 'The tracking rifle\'s shell on the AK\'s insides.' },
+  { id: 'ak20_nerf_elite', weapon: 'ak20', name: 'Nerf Elite', rarity: 'good',
+    sw: ['#f07a1c', '#2f6fd8'], build: buildNerfElite,
+    blurb: 'Foam darts in a clear drum. The orange tip is the legal part.' },
+  { id: 'gl_water_balloon', weapon: 'grenade_launcher', name: 'Water Balloon Launcher', rarity: 'good',
+    sw: ['#3a9ad8', '#ff5566'], build: buildWaterBalloonLauncher,
+    blurb: 'Six balloons in a clear drum, fed by a garden hose.' },
+  { id: 'pistol_spy', weapon: 'pistol', name: 'Spy Pistol', rarity: 'good',
+    sw: ['#14161a', '#8a7256'], build: buildSpyPistol,
+    blurb: 'Slim slide, oversized can, walnut grip. The quiet one.' },
+  { id: 'sg8_leaf_blower', weapon: 'sg8', name: 'Leaf Blower', rarity: 'good',
+    sw: ['#e8631c', '#24262a'], build: buildLeafBlower,
+    blurb: 'Corrugated tube, pull cord, a warning sticker nobody reads.' },
+  { id: 'freeze_slushie', weapon: 'freeze_gun', name: 'Slushie Machine', rarity: 'good',
+    sw: ['#3aa8e8', '#e03a5a'], build: buildSlushieMachine,
+    blurb: 'Blue raspberry, turning in a clear hopper. Chrome tap.' },
 ];
 const MODEL_SKINS_BY_WEAPON = {};
 for (const ms of MODEL_SKINS) (MODEL_SKINS_BY_WEAPON[ms.weapon] ||= []).push(ms);
