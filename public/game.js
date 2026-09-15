@@ -28668,10 +28668,11 @@ function openWeaponSkinsPanel() {
       <div style="font-size:18px;letter-spacing:3px;color:#ffdd88;">🎨 GUN SKINS</div>
       <button id="ws-close" style="background:#3a1a1a;color:#ff8888;border:1px solid #ff4444;padding:4px 10px;cursor:pointer;font-family:inherit;border-radius:3px;">✕</button>
     </div>
+    ${modelSkinSection()}
+    <div style="font-size:12px;letter-spacing:2px;color:#ffdd88;margin:20px 0 6px;border-top:1px solid #6a5520;padding-top:14px;">🎨 COLOUR THEMES</div>
     <div style="font-size:10px;color:#aa9966;margin-bottom:12px;line-height:1.4;">One pick applies to every gun. Country themes use real national flags; the German theme is the Iron Cross military mark (no Nazi imagery).</div>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">${WEAPON_SKINS.map(swatch).join('')}</div>
     ${basicCaseSection()}
-    ${modelSkinSection()}
   `;
   const buyCaseBtn = panel.querySelector('#buy-skin-case-gen1');
   if (buyCaseBtn) buyCaseBtn.addEventListener('click', async () => {
