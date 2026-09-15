@@ -9894,6 +9894,152 @@ function buildNerfElite() {
   g.position.set(0.12, -0.1, -0.25); return g;
 }
 
+function buildFishingRod() {
+  // 🎣 Lever rifle -> fishing rod. The lever becomes the reel handle, the barrel
+  // becomes a tapering rod with line guides, and there is a float on the line.
+  const g = new THREE.Group();
+  const inner = GUN_MATS.inner(), bright = GUN_MATS.bright(), steel = GUN_MATS.steel();
+  const cork = new THREE.MeshPhongMaterial({ color: 0xc8a165, shininess: 18, specular: 0x8a7050 });
+  const rod  = new THREE.MeshPhongMaterial({ color: 0x23282e, shininess: 110, specular: 0x9aa8b8 });
+  const reel = new THREE.MeshPhongMaterial({ color: 0x8a1c2a, shininess: 120, specular: 0xffa0a8 });
+  const line = new THREE.MeshBasicMaterial({ color: 0xdfe8f0 });
+  const float = new THREE.MeshPhongMaterial({ color: 0xe8442c, shininess: 90, specular: 0xffc0b0 });
+  gpCyl(g, cork, 0.024, 0.021, 0.190, 12, 0, 0.004, 0.130);            // cork butt
+  for (let i = 0; i < 5; i++) gpCyl(g, inner, 0.0245, 0.0245, 0.005, 12, 0, 0.004, 0.060 + i * 0.034);
+  gpCyl(g, rod, 0.018, 0.018, 0.070, 12, 0, 0.004, 0.010);             // reel seat
+  // The reel where the lever was.
+  gpCyl(g, reel, 0.040, 0.040, 0.026, 16, 0, -0.030, 0.014, 0, Math.PI / 2);
+  gpCyl(g, inner, 0.030, 0.030, 0.030, 16, 0, -0.030, 0.014, 0, Math.PI / 2);
+  gpCyl(g, bright, 0.0075, 0.0075, 0.052, 10, 0, -0.030, 0.014, 0, Math.PI / 2);
+  gpBox(g, bright, 0.008, 0.034, 0.008, 0.030, -0.046, 0.014, 0.4);    // reel handle
+  gpCyl(g, reel, 0.011, 0.011, 0.012, 10, 0.036, -0.058, 0.014, 0, Math.PI / 2);
+  gpBox(g, rod, 0.030, 0.020, 0.048, 0, -0.010, 0.038);                // foregrip block
+  // Tapering rod with guides.
+  for (let i = 0; i < 6; i++) {
+    const t = i / 5, r = 0.014 - t * 0.0085;
+    gpCyl(g, rod, r, r * 0.86, 0.095, 10, 0, 0.004, -0.058 - i * 0.092);
+    const gr = new THREE.Mesh(new THREE.TorusGeometry(r + 0.008, 0.0016, 5, 10), bright);
+    gr.rotation.set(0, Math.PI / 2, 0); gr.position.set(0, 0.004 - r - 0.008, -0.100 - i * 0.092); g.add(gr);
+  }
+  gpCyl(g, bright, 0.004, 0.004, 0.010, 8, 0, 0.004, -0.606);          // tip ring
+  // Line running out to a float, slack and hanging.
+  for (let i = 0; i < 8; i++) {
+    const t = i / 7;
+    gpCyl(g, line, 0.0012, 0.0012, 0.072, 5, 0, -0.006 - t * t * 0.062, -0.180 - i * 0.056, 0, 0.06);
+  }
+  gpCyl(g, float, 0.013, 0.013, 0.040, 10, 0, -0.072, -0.612);
+  gpCyl(g, bright, 0.0135, 0.0135, 0.010, 10, 0, -0.056, -0.612);
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.004, -0.618); g.add(flash);
+  g._flash = flash; g._kickZ = 0.012; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildStapleGun() {
+  // 📎 Burst rifle -> heavy-duty stapler. Pressed-steel body, a visible strip of
+  // staples through a window in the magazine, and a sprung handle on top.
+  const g = new THREE.Group();
+  const inner = GUN_MATS.inner(), bright = GUN_MATS.bright();
+  const body  = new THREE.MeshPhongMaterial({ color: 0x1f5f8a, shininess: 100, specular: 0xa8d8f0 });
+  const chrome= new THREE.MeshPhongMaterial({ color: 0xc8ced6, shininess: 170, specular: 0xffffff });
+  const grip  = new THREE.MeshPhongMaterial({ color: 0x24262a, shininess: 30, specular: 0x585c64 });
+  const brass = new THREE.MeshPhongMaterial({ color: 0xbfa03a, shininess: 140, specular: 0xffe8a0 });
+  gpBox(g, body, 0.044, 0.070, 0.280, 0, 0.010, -0.020);               // pressed body
+  gpBox(g, inner, 0.046, 0.008, 0.240, 0, 0.046, -0.020);
+  gpBox(g, body, 0.052, 0.020, 0.090, 0, 0.032, 0.070);                // sprung top handle
+  gpCyl(g, chrome, 0.009, 0.009, 0.048, 10, 0, 0.042, 0.112, 0, Math.PI / 2);   // hinge pin
+  gpBox(g, chrome, 0.030, 0.012, 0.070, 0, 0.026, 0.028);              // spring plate
+  for (let i = 0; i < 6; i++) gpCyl(g, chrome, 0.010, 0.010, 0.006, 8, 0, 0.026, -0.002 + i * 0.011, 0, Math.PI / 2);
+  // Staple strip visible through a slot.
+  gpBox(g, inner, 0.010, 0.026, 0.150, 0.023, -0.006, -0.050);
+  for (let i = 0; i < 11; i++) gpBox(g, brass, 0.014, 0.018, 0.005, 0.023, -0.006, -0.116 + i * 0.013);
+  gpBox(g, chrome, 0.038, 0.030, 0.040, 0, -0.006, -0.176);            // nose
+  gpBox(g, inner, 0.018, 0.008, 0.012, 0, -0.018, -0.196);             // the slot it fires from
+  gpPlate(g, grip, [
+    [0.086,-0.034],[0.118,-0.058],[0.124,-0.148],[0.098,-0.166],[0.070,-0.084],[0.064,-0.040],
+  ], 0.038, 0);
+  for (let i = 0; i < 5; i++) gpBox(g, inner, 0.040, 0.004, 0.009, 0, -0.064 - i * 0.019, 0.096 + i * 0.005, 0.32);
+  gpBox(g, bright, 0.006, 0.016, 0.006, 0, -0.030, 0.026, 0.22);
+  gpBox(g, brass, 0.016, 0.014, 0.014, -0.026, 0.018, 0.096);          // warning tag
+  const flash = makeMuzzleFlash(); flash.position.set(0, -0.014, -0.206); g.add(flash);
+  g._flash = flash; g._kickZ = 0.012; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildSaladSpinner() {
+  // 🥗 Minigun -> salad spinner. Six clear tubes of lettuce on a rotating drum,
+  // a pull-cord lid and a kitchen-white plastic housing.
+  const g = new THREE.Group();
+  const inner = GUN_MATS.inner(), bright = GUN_MATS.bright();
+  const white = new THREE.MeshPhongMaterial({ color: 0xf0f2f2, shininess: 110, specular: 0xffffff });
+  const clear = new THREE.MeshPhongMaterial({ color: 0xdfeef2, shininess: 160, specular: 0xffffff,
+                                              transparent: true, opacity: 0.40 });
+  const leaf  = new THREE.MeshPhongMaterial({ color: 0x5aa832, shininess: 40, specular: 0xa8d88a });
+  const green = new THREE.MeshPhongMaterial({ color: 0x2f7a3f, shininess: 70, specular: 0x9ad8a8 });
+  gpCyl(g, white, 0.062, 0.062, 0.090, 18, 0, 0.010, 0.120);           // motor tub
+  gpCyl(g, green, 0.066, 0.066, 0.014, 18, 0, 0.010, 0.166);           // lid rim
+  gpCyl(g, white, 0.030, 0.030, 0.020, 14, 0, 0.010, 0.180);           // pull knob
+  gpCyl(g, bright, 0.0045, 0.0045, 0.070, 8, 0.030, 0.010, 0.186, 0, 0.5);
+  gpPart(g, 'main', () => {                                             // the basket spins
+    gpCyl(g, clear, 0.058, 0.058, 0.200, 18, 0, 0.010, -0.030);
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2, cx = Math.cos(a) * 0.036, cy = 0.010 + Math.sin(a) * 0.036;
+      gpCyl(g, clear, 0.015, 0.015, 0.210, 10, cx, cy, -0.030);
+      for (let n = 0; n < 4; n++)
+        gpBox(g, leaf, 0.020, 0.018, 0.028, cx, cy, -0.110 + n * 0.048, n * 0.8, 0, n * 0.6);
+    }
+    gpCyl(g, white, 0.060, 0.060, 0.012, 18, 0, 0.010, -0.132);
+  }, { x: 0, y: 0.010, z: -0.030 });
+  g._parts.main._chambers = 6;
+  g._barrelCluster = g._parts.main;                                     // it spins up like the minigun
+  gpCyl(g, white, 0.020, 0.020, 0.030, 12, 0, 0.010, -0.150);
+  gpPlate(g, green, [
+    [0.086,-0.038],[0.118,-0.062],[0.124,-0.152],[0.098,-0.170],[0.070,-0.088],[0.064,-0.044],
+  ], 0.040, 0);
+  for (let i = 0; i < 5; i++) gpBox(g, inner, 0.042, 0.004, 0.009, 0, -0.068 - i * 0.019, 0.096 + i * 0.005, 0.32);
+  gpBox(g, bright, 0.006, 0.016, 0.006, 0, -0.034, 0.030, 0.22);
+  gpBox(g, white, 0.044, 0.030, 0.060, 0, -0.016, 0.070);              // under-tub
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.010, -0.170); g.add(flash);
+  g._flash = flash; g._kickZ = 0.010; g._spinRate = 0; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildCapGun() {
+  // 🤠 Revolver -> toy cap gun. Red plastic, gold scrollwork, a roll of caps in
+  // the cylinder and a pearl grip that is very obviously plastic.
+  const g = new THREE.Group();
+  const inner = GUN_MATS.inner();
+  const red   = new THREE.MeshPhongMaterial({ color: 0xd8222a, shininess: 130, specular: 0xffa0a0 });
+  const gold  = new THREE.MeshPhongMaterial({ color: 0xd8a820, shininess: 160, specular: 0xfff0b0 });
+  const pearl = new THREE.MeshPhongMaterial({ color: 0xf0ece0, shininess: 150, specular: 0xffffff });
+  const cap   = new THREE.MeshPhongMaterial({ color: 0xc8342a, shininess: 40, specular: 0x8a4038 });
+  gpBox(g, red, 0.026, 0.040, 0.090, 0, 0.014, 0.024);                 // frame
+  gpBox(g, gold, 0.027, 0.006, 0.070, 0, 0.032, 0.024);                // top strap
+  gpPart(g, 'main', () => {                                             // cylinder of caps
+    gpCyl(g, gold, 0.026, 0.026, 0.044, 12, 0, 0.012, -0.012);
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      gpCyl(g, cap, 0.0055, 0.0055, 0.046, 8, Math.cos(a) * 0.015, 0.012 + Math.sin(a) * 0.015, -0.012);
+    }
+    gpCyl(g, inner, 0.0055, 0.0055, 0.050, 8, 0, 0.012, -0.012);
+  }, { x: 0, y: 0.012, z: -0.012 });
+  g._parts.main._chambers = 6;
+  gpCyl(g, red, 0.013, 0.013, 0.110, 12, 0, 0.014, -0.090);            // barrel
+  gpCyl(g, gold, 0.015, 0.015, 0.012, 12, 0, 0.014, -0.140);
+  gpCyl(g, inner, 0.0075, 0.0075, 0.010, 10, 0, 0.014, -0.146);
+  gpBox(g, gold, 0.006, 0.010, 0.060, 0, 0.032, -0.090);               // rib
+  gpBox(g, red, 0.016, 0.020, 0.014, 0, 0.038, 0.060, -0.40);          // spur hammer
+  gpPlate(g, pearl, [                                                   // pearl grip
+    [0.062,-0.010],[0.090,-0.034],[0.094,-0.126],[0.062,-0.140],[0.036,-0.062],[0.034,-0.016],
+  ], 0.032, 0);
+  gpBox(g, gold, 0.034, 0.008, 0.012, 0, -0.132, 0.070, 0.28);         // grip cap
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.018, 0.0032, 6, 12, Math.PI * 1.05), gold);
+  guard.rotation.set(0, Math.PI / 2, -0.42); guard.position.set(0, -0.016, 0.012); g.add(guard);
+  gpBox(g, gold, 0.005, 0.014, 0.005, 0, -0.010, 0.012, 0.20);         // trigger
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.014, -0.152); g.add(flash);
+  g._flash = flash; g._kickZ = 0.010; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
 // AK30 — longer mag, tan/desert colour
 function buildAK30() {
   const tan = new THREE.MeshLambertMaterial({ color: 0x8b7040 });
@@ -18633,6 +18779,18 @@ const MODEL_SKINS = [
   { id: 'freeze_slushie', weapon: 'freeze_gun', name: 'Slushie Machine', rarity: 'good',
     sw: ['#3aa8e8', '#e03a5a'], build: buildSlushieMachine,
     blurb: 'Blue raspberry, turning in a clear hopper. Chrome tap.' },
+  { id: 'lever_fishing_rod', weapon: 'lever', name: 'Fishing Rod', rarity: 'good',
+    sw: ['#23282e', '#8a1c2a'], build: buildFishingRod,
+    blurb: 'The lever is the reel. There is a float on the line.' },
+  { id: 'burst_staple_gun', weapon: 'burst', name: 'Staple Gun', rarity: 'good',
+    sw: ['#1f5f8a', '#bfa03a'], build: buildStapleGun,
+    blurb: 'Heavy duty. You can see the staples through the slot.' },
+  { id: 'minigun_salad_spinner', weapon: 'minigun', name: 'Salad Spinner', rarity: 'good',
+    sw: ['#f0f2f2', '#5aa832'], build: buildSaladSpinner,
+    blurb: 'Six tubes of lettuce. It spins up exactly like the real one.' },
+  { id: 'revolver_cap_gun', weapon: 'revolver', name: 'Cap Gun', rarity: 'good',
+    sw: ['#d8222a', '#d8a820'], build: buildCapGun,
+    blurb: 'Red plastic, gold scroll, a roll of caps in the cylinder.' },
 ];
 const MODEL_SKINS_BY_WEAPON = {};
 for (const ms of MODEL_SKINS) (MODEL_SKINS_BY_WEAPON[ms.weapon] ||= []).push(ms);
