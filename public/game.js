@@ -50,7 +50,7 @@ const WEAPONS = [
   },
   {
     id: 'sg8',   name: 'SG-8',  type: 'Shotgun', slot: 'primary',
-    mag: 8,   reserve: 32,  damage: 18, fireRate: 900,  reloadTime: 2500,
+    mag: 8,   reserve: 32,  damage: 18, fireRate: 450,  reloadTime: 2500,
     auto: false, pellets: 6, spread: 0.08, adsZoom: 55, bulletSpeed: 110, noReload: false,
     ability: { name: 'Bullet Wave', cd: 12000, desc: '6×6 grid · 36 bullets · 20 dmg each', type: 'bulletwave', noADS: true },
   },
@@ -101,8 +101,9 @@ const WEAPONS = [
   },
   {
     id: 'lever', name: 'Lever Rifle', type: 'Marksman', slot: 'primary',
-    mag: 8, reserve: 40, damage: 62, fireRate: 520, reloadTime: 2300,
+    mag: 8, reserve: 40, damage: 93, fireRate: 520, reloadTime: 2300,
     auto: false, pellets: 1, spread: 0.002, adsZoom: 32, bulletSpeed: 184, noReload: false,
+    recoil: { up: 0.016, side: 0.007, climb: 0.16, max: 1.9, recover: 7.5, adsMult: 0.55 },
     ability: { name: 'Deadeye', cd: 16000, desc: 'Next shot deals 150 dmg', type: 'powershot', pellets: 1, spreadMult: 0, weaponAbId: 'lever_ab' },
   },
   {
@@ -171,8 +172,9 @@ const WEAPONS = [
   },
   {
     id: 'revolver', name: 'Revolver', type: 'Secondary', slot: 'secondary',
-    mag: 6,   reserve: 18,  damage: 55, fireRate: 350,  reloadTime: 2200,
+    mag: 6,   reserve: 18,  damage: 83, fireRate: 350,  reloadTime: 2200,
     auto: false, pellets: 1, spread: 0.004, adsZoom: 48, bulletSpeed: 170, noReload: false,
+    recoil: { up: 0.012, side: 0.006, climb: 0.15, max: 1.8, recover: 9, adsMult: 0.6 },
     ability: { name: 'Fan Hammer', cd: 9000, desc: 'Rapidly fire all chambers', type: 'fanfire', count: 6, delay: 70 },
   },
   {
@@ -203,8 +205,9 @@ const WEAPONS = [
   },
   {
     id: 'hand_cannon', name: 'Hand Cannon', type: 'Secondary+', slot: 'secondary',
-    mag: 5, reserve: 20, damage: 70, fireRate: 520, reloadTime: 2400,
+    mag: 5, reserve: 20, damage: 105, fireRate: 520, reloadTime: 2400,
     auto: false, pellets: 1, spread: 0.014, adsZoom: 48, bulletSpeed: 164, noReload: false,
+    recoil: { up: 0.018, side: 0.008, climb: 0.18, max: 1.9, recover: 8, adsMult: 0.6 },
     ability: { name: 'Execution', cd: 16000, desc: 'Next shot · 175 dmg', type: 'powershot', pellets: 1, spreadMult: 0, weaponAbId: 'hand_cannon_ab' },
   },
   {
@@ -216,15 +219,17 @@ const WEAPONS = [
   },
   {
     id: 'taser', name: 'Taser', type: 'Control', slot: 'secondary',
-    mag: 2, reserve: 16, damage: 35, fireRate: 450, reloadTime: 1300,
+    mag: 2, reserve: 16, damage: 53, fireRate: 450, reloadTime: 1300,
     auto: false, pellets: 1, spread: 0.004, adsZoom: 52, bulletSpeed: 92, noReload: false,
+    recoil: { up: 0.007, side: 0.004, climb: 0.12, max: 1.6, recover: 9, adsMult: 0.6 },
     bulletColor: 0xffff55, bulletSize: 0.06,
     ability: { name: 'Discharge', cd: 11000, desc: 'AOE electric burst 2.5 m · 70 dmg', type: 'aoe', radius: 2.5, damage: 70, color: 0xffff44 },
   },
   {
     id: 'm1_garand', name: 'M1 Garand', type: 'Battle Rifle', slot: 'primary',
-    mag: 8, reserve: 32, damage: 78, fireRate: 400, reloadTime: 2200,
+    mag: 8, reserve: 32, damage: 117, fireRate: 400, reloadTime: 2200,
     auto: false, pellets: 1, spread: 0.003, adsZoom: 35, bulletSpeed: 188, noReload: false,
+    recoil: { up: 0.014, side: 0.006, climb: 0.15, max: 1.8, recover: 8, adsMult: 0.55 },
     lastBulletBonus: 60, // last bullet of mag deals +60 dmg with a "PING" sound
     bulletColor: 0xddc066,
     ability: { name: 'Last Ping', cd: 14000, desc: 'Instantly empty to last round · 150 dmg', type: 'powershot', pellets: 1, spreadMult: 0, weaponAbId: 'm1_garand_ab' },
@@ -351,8 +356,9 @@ const WEAPONS = [
   },
   {
     id: 'air_rifle', name: 'Compressed Air Rifle', type: 'Silent Rifle', slot: 'primary',
-    mag: 20, reserve: 80, damage: 34, fireRate: 180, reloadTime: 2000,
+    mag: 20, reserve: 80, damage: 51, fireRate: 180, reloadTime: 2000,
     auto: false, pellets: 1, spread: 0.004, adsZoom: 38, bulletSpeed: 145, noReload: false,
+    recoil: { up: 0.006, side: 0.003, climb: 0.1, max: 1.6, recover: 9, adsMult: 0.55 },
     bulletColor: 0xaaccff, bulletSize: 0.04,
     silentShots: true, // bots can't "hear" gunfire (stub — bots don't track audio yet)
     ability: { name: 'Silent Step', cd: 11000, desc: '5 s · reduced footstep noise', type: 'buff', duration: 5000, stealth: true },
@@ -482,8 +488,9 @@ const WEAPONS = [
   },
   {
     id: 'dart_gun', name: 'Dart Gun', type: 'Secondary', slot: 'secondary',
-    mag: 6, reserve: 18, damage: 25, fireRate: 350, reloadTime: 1600,
+    mag: 6, reserve: 18, damage: 38, fireRate: 350, reloadTime: 1600,
     auto: false, pellets: 1, spread: 0.004, adsZoom: 50, bulletSpeed: 92, noReload: false,
+    recoil: { up: 0.005, side: 0.003, climb: 0.1, max: 1.5, recover: 9, adsMult: 0.6 },
     bulletColor: 0x44ff66, bulletSize: 0.04,
     poisonOnHit: { dps: 12, dur: 4000 }, // 48 dmg over 4 s
     ability: { name: 'Toxin Dart', cd: 12000, desc: 'Next dart · poison DOT 80 dmg over 4 s', type: 'powershot', pellets: 1, spreadMult: 0, weaponAbId: 'toxin_dart' },
@@ -499,8 +506,9 @@ const WEAPONS = [
   },
   {
     id: 'machine_revolver', name: 'Machine Revolver', type: 'Secondary', slot: 'secondary',
-    mag: 8, reserve: 24, damage: 24, fireRate: 75, reloadTime: 2000,
+    mag: 8, reserve: 24, damage: 36, fireRate: 75, reloadTime: 2000,
     auto: true, pellets: 1, spread: 0.03, adsZoom: 50, bulletSpeed: 165, noReload: false,
+    recoil: { up: 0.006, side: 0.003, climb: 0.05, max: 2.2, recover: 8, adsMult: 0.55 },
     ability: { name: 'Wild Spin', cd: 11000, desc: 'Fan-fire all rounds instantly', type: 'fanfire_all', delay: 35 },
   },
   {
@@ -520,8 +528,9 @@ const WEAPONS = [
     ability: { name: 'Cryo Burst', cd: 12000, desc: 'Frost AOE · -25 speed all targets in 5 m', type: 'aoe', radius: 5, damage: 0, color: 0x99eeff, frostBurst: 25 },
   },
   { id: 'snub_revolver', name: 'Snubnose', type: 'Secondary', slot: 'secondary',
-    mag: 6, reserve: 18, damage: 32, fireRate: 280, reloadTime: 1800,
+    mag: 6, reserve: 18, damage: 48, fireRate: 280, reloadTime: 1800,
     auto: false, pellets: 1, spread: 0.008, adsZoom: 50, bulletSpeed: 160, noReload: false,
+    recoil: { up: 0.009, side: 0.005, climb: 0.15, max: 1.7, recover: 9, adsMult: 0.6 },
     ability: { name: 'Fan', cd: 7000, desc: 'Empty cylinder fast', type: 'fanfire', count: 6, delay: 60 } },
   { id: 'duelist_pistol', name: 'Duelist', type: 'Secondary', slot: 'secondary',
     mag: 1, reserve: 8, damage: 90, fireRate: 350, reloadTime: 1600,
@@ -529,12 +538,14 @@ const WEAPONS = [
     bulletColor: 0xddccaa,
     ability: { name: 'Honor Shot', cd: 12000, desc: 'Next shot 1-hit kill on under-50 HP', type: 'powershot', pellets: 1, spreadMult: 0, dmgMult: 2.0 } },
   { id: 'mauser', name: 'Mauser C96', type: 'Secondary', slot: 'secondary',
-    mag: 10, reserve: 30, damage: 24, fireRate: 150, reloadTime: 1800,
+    mag: 10, reserve: 30, damage: 36, fireRate: 150, reloadTime: 1800,
     auto: false, pellets: 1, spread: 0.006, adsZoom: 50, bulletSpeed: 150, noReload: false,
+    recoil: { up: 0.008, side: 0.005, climb: 0.12, max: 1.8, recover: 8.5, adsMult: 0.6 },
     ability: { name: 'Rapid Strip', cd: 9000, desc: 'Empty mag at 2× rate', type: 'fanfire', count: 10, delay: 60 } },
   { id: 'nail_gun', name: 'Nail Gun', type: 'Secondary', slot: 'secondary',
-    mag: 20, reserve: 60, damage: 18, fireRate: 110, reloadTime: 1600,
+    mag: 20, reserve: 60, damage: 27, fireRate: 110, reloadTime: 1600,
     auto: true, pellets: 1, spread: 0.005, adsZoom: 48, bulletSpeed: 140, noReload: false,
+    recoil: { up: 0.007, side: 0.004, climb: 0.06, max: 2.0, recover: 8, adsMult: 0.55 },
     bulletColor: 0xccccaa, bulletSize: 0.03,
     ability: { name: 'Pin Down', cd: 8000, desc: 'Next shot deals 3× damage', type: 'powershot', pellets: 1, spreadMult: 0, dmgMult: 3 } },
   { id: 'boomstick', name: 'Boomstick', type: 'Secondary', slot: 'secondary',
@@ -2907,10 +2918,10 @@ function weaponAudioProfile(id, baseWeapon) {
   if (lowerId.includes('grenade') || lowerId.includes('boombow') || lowerId.includes('rocket') || lowerId.includes('flare')) return { kind:'thump', vol:0.42, dur:0.28, f1:110, f2:45, action:'single' };
   if (lowerId.includes('paint')) return { kind:'pop', vol:0.28, dur:0.13, f1:520, f2:190 };
   if (lowerId.includes('knife') || lowerId.includes('throwing')) return { kind:'throw', vol:0.23, dur:0.12, f1:780, f2:260 };
-  if (type.includes('shotgun') || lowerId.includes('shotgun') || lowerId.includes('sg8') || lowerId.includes('sg8') || lowerId.includes('shorty') || lowerId.includes('sawed') || lowerId === 'boomstick' || lowerId.includes('spas')) return { kind:'boom', vol:0.48, dur:0.22, f1:150, f2:55, action:'shotgun' };
-  if (type.includes('sniper') || type.includes('marksman') || lowerId.includes('srx') || lowerId.includes('lever') || lowerId === 'amr' || lowerId === 'm1_garand' || lowerId === 'air_rifle' || lowerId === 'duelist_pistol') return { kind:'crack', vol:0.44, dur:0.18, f1:680, f2:95, action:'bolt' };
+  if (type.includes('shotgun') || lowerId.includes('shotgun') || lowerId.includes('sg8') || lowerId.includes('sg8') || lowerId.includes('shorty') || lowerId.includes('sawed') || lowerId === 'boomstick' || lowerId.includes('spas')) return { kind:'boom', vol:0.56, dur:0.22, f1:150, f2:55, action:'shotgun', tail:0.55 };
+  if (type.includes('sniper') || type.includes('marksman') || lowerId.includes('srx') || lowerId.includes('lever') || lowerId === 'amr' || lowerId === 'm1_garand' || lowerId === 'air_rifle' || lowerId === 'duelist_pistol') return { kind:'crack', vol:0.66, dur:0.18, f1:680, f2:95, action:'bolt', tail: lowerId === 'amr' ? 1.35 : 1.0 };
   if (type.includes('smg') || lowerId.includes('vector') || lowerId.includes('mp40') || lowerId === 'machine_pistol' || lowerId === 'hkmp7' || lowerId === 'smart_smg') return { kind:'auto_blast', vol:0.20, dur:0.075, f1:430, f2:160, action:'water_smg' };
-  if (type.includes('lmg') || type.includes('heavy') || lowerId.includes('minigun') || lowerId.includes('rpd') || lowerId === 'gau19' || lowerId === 'm134') return { kind:'auto_blast_heavy', vol:0.27, dur:0.11, f1:230, f2:80, action:'water_belt' };
+  if (type.includes('lmg') || type.includes('heavy') || lowerId.includes('minigun') || lowerId.includes('rpd') || lowerId === 'gau19' || lowerId === 'm134') return { kind:'auto_blast_heavy', vol:0.30, dur:0.11, f1:230, f2:80, action:'water_belt', tail:0.30 };
   if (type.includes('secondary') || lowerId.includes('pistol') || lowerId.includes('revolver') || lowerId.includes('hand_cannon') || lowerId === 'mauser' || lowerId === 'nail_gun') return { kind:'pistol', vol:0.34, dur:0.12, f1:540, f2:120, action: lowerId.includes('revolver') ? 'revolver' : 'slide' };
   return w.auto ? { kind:'auto_blast', vol:0.23, dur:0.080, f1:145, f2:52, action:'water_rifle' }
                 : { kind:'rifle', vol:0.38, dur:0.10, f1:145, f2:52, action:'rifle' };
@@ -3154,12 +3165,19 @@ function playMuzzleBlast(ctx, start, outNode, kind, volume) {
 // high-Q resonances: a dead impact plus two ringing partials, which is what
 // separates "metal" from "click".
 function metalClack(ctx, at, outNode, vol, freq, ringDur = 0.055) {
-  // A low thud under the ring gives the part some mass. Without it a clack at
-  // any pitch sounds like a pen on a desk rather than a bolt carrier.
-  playFilteredNoise(ctx, at, 0.020, outNode, vol * 0.60, 'lowpass', freq * 0.45, 0.9, 0.0003, 1.6);
-  playFilteredNoise(ctx, at, 0.005, outNode, vol * 0.95, 'bandpass', freq * 0.8, 1.0, 0.0002, 0);
-  playFilteredNoise(ctx, at, ringDur, outNode, vol * 0.60, 'bandpass', freq, 11, 0.0004, 1.2);
-  playFilteredNoise(ctx, at, ringDur * 0.7, outNode, vol * 0.26, 'bandpass', freq * 1.87, 14, 0.0004, 1.4);
+  // This used to drip. The two ring layers were bandpasses at Q 11 and Q 14,
+  // and a high-Q bandpass excited by noise IS a damped sinusoid at one
+  // frequency — which is exactly the physics of a falling water droplet. It was
+  // not a bad metal sound, it was a good water sound.
+  //
+  // A chunk is broadband and it STOPS. Spelled out: "ch" is a wide noisy edge,
+  // "u" is the mass behind it, "nk" is a short mid body that cuts off rather
+  // than rings, and then the part seats a few milliseconds later, which is the
+  // second contact that makes it chunk-chunk instead of one clack.
+  playFilteredNoise(ctx, at, 0.006, outNode, vol * 0.85, 'bandpass', freq * 2.4, 0.8, 0.0002, 0);   // ch
+  playFilteredNoise(ctx, at, 0.030, outNode, vol * 1.00, 'lowpass',  freq * 0.72, 0.9, 0.0004, 1.9); // u
+  playFilteredNoise(ctx, at, ringDur * 0.40, outNode, vol * 0.55, 'bandpass', freq, 2.6, 0.0004, 2.4); // nk
+  playFilteredNoise(ctx, at + 0.012, 0.018, outNode, vol * 0.48, 'lowpass', freq * 0.58, 1.0, 0.0004, 2.2); // seats
 }
 // The case landing, well after everything else. Nobody notices it consciously;
 // its absence is part of why the old shots felt like they came from nothing.
@@ -3217,6 +3235,26 @@ function playGunAction(ctx, start, outNode, action, volume) {
     brassDrop(ctx, start + 0.03, outNode, V * 0.24);
   }
 }
+// 🏔️ The long report. A rifle crack does not stop when the muzzle does — it
+// runs off across the map and comes back off whatever is out there, later and
+// darker each time. The shared reverb bus handles the room; this is the part
+// that travels, and it is what makes a sniper sound like a sniper rather than a
+// loud pistol. Returns are scheduled individually so they can get progressively
+// duller, which a single reverb tail cannot do.
+function longReport(ctx, start, outNode, volume, scale) {
+  if (!scale) return;
+  //      delay      level   how dark it has gone by then
+  const R = [[0.30, 0.34, 1500],
+             [0.62, 0.21,  950],
+             [1.05, 0.13,  620],
+             [1.55, 0.075, 430]];
+  for (const [t, g, cut] of R) {
+    const at = start + t * (0.7 + scale * 0.5);
+    playFilteredNoise(ctx, at, 0.22 + t * 0.35, outNode, volume * g * scale,
+                      'lowpass', cut, 0.6, 0.02, 1.0);
+  }
+}
+
 function playWeaponSound(idOrWeapon, opts = {}) {
   const ctx = getAudioCtx();
   if (!ctx) return;
@@ -3241,9 +3279,16 @@ function playWeaponSound(idOrWeapon, opts = {}) {
   try {
     const indoor = INDOOR_MAPS.has(typeof activeMapName !== 'undefined' ? activeMapName : '');
     const send = ctx.createGain();
-    send.gain.value = (opts.remote ? 0.42 : 0.22) * distGain * (indoor ? 1 : 1.15);
+    // A gun with a long report also puts far more into the room.
+    const tailBoost = 1 + (p.tail || 0) * 1.1;
+    send.gain.value = (opts.remote ? 0.42 : 0.22) * distGain * (indoor ? 1 : 1.15) * tailBoost;
     mainGain.connect(send).connect(getReverbBus(ctx, indoor));
   } catch (e) {}
+  // Outdoors the crack keeps going. Indoors there is nowhere for it to go.
+  if (p.tail) {
+    const indoorNow = INDOOR_MAPS.has(typeof activeMapName !== 'undefined' ? activeMapName : '');
+    longReport(ctx, start, mainGain, p.vol * mult, p.tail * (indoorNow ? 0.35 : 1));
+  }
 
   if (p.kind === 'auto_blast' || p.kind === 'auto_blast_heavy') {
     playMuzzleBlast(ctx, start, mainGain, p.kind, p.vol * mult);

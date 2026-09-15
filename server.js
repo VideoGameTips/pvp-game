@@ -1174,10 +1174,10 @@ event_horizon: 75,
   // Mirrored from WEAPONS[] in public/game.js — CLAUDE.md gotcha #4. Without an
   // entry here the server falls back to || 25, so these ten all dealt 25 in PvP
   // regardless of what the game told the player.
-  snub_revolver: 32,
+  snub_revolver: 48,
   duelist_pistol: 90,
-  mauser: 24,
-  nail_gun: 18,
+  mauser: 36,
+  nail_gun: 27,
   boomstick: 35,
   signal_pistol: 70,
   throwing_axes: 70,
@@ -1188,13 +1188,13 @@ event_horizon: 75,
   // Primaries
   ak20: 30,  sg8: 18,
   srx: 95, rpd: 10, mp40: 15, p90: 15,
-  paintball: 40, burst: 21, lever: 62,
+  paintball: 40, burst: 21, lever: 93,
   vector: 12, crossbow: 80, flamethrower: 3,
   grenade_launcher: 90, railgun: 110, minigun: 27,
   freeze_gun: 13, boombow: 95,
   // Secondaries
-  revolver: 55, flare: 85, pistol: 20, shorty: 30, cycler: 8,
-  hand_cannon: 70, throwing_knives: 45, taser: 35,
+  revolver: 83, flare: 85, pistol: 20, shorty: 30, cycler: 8,
+  hand_cannon: 105, throwing_knives: 45, taser: 53,
   // Ability shots
   sg100_ab: 140, lever_ab: 150, crossbow_ab: 220, crossbow_c1: 140,
   sg8_wave: 20,
@@ -1223,18 +1223,18 @@ event_horizon: 75,
   frag: 80, smoke: 0, confetti_cannon: 8, moon_mine: 65,
   rubber_duck: 18, black_hole_seed: 105, glitch_cube: 42,
   // ── NEW PRIMARIES ──────────────────────────────────────────────────────
-    m1_garand: 78, plasma_carbine: 18, arc_rifle: 22,
+    m1_garand: 117, plasma_carbine: 18, arc_rifle: 22,
   gravity_launcher: 75, potato_cannon: 60, sticker_blaster: 8,
   harpoon_gun: 95, mortar_rifle: 85,
   arc_torrent: 5, firework_launcher: 50, switchblade_gun: 50, switchblade_charged: 100,
   jeep_gun: 22, chernobyl_gas: 1,
   // 3rd-batch primaries
   flechette: 16,  burst_cannon: 40,
-  coilgun: 92, smart_smg: 9, amr: 180, air_rifle: 34, shockwave_launcher: 48, twin_ar: 20,
+  coilgun: 92, smart_smg: 9, amr: 180, air_rifle: 51, shockwave_launcher: 48, twin_ar: 20,
   // 3rd-batch ability shots
   coilgun_ab: 220, needle_storm: 16, vent_burst: 30, dragon_breath: 4,
   // 3rd-batch secondaries
-  machine_revolver: 24,  emp_burst: 25,
+  machine_revolver: 36,  emp_burst: 25,
   // 3rd-batch melees
   combat_axe: 78, combat_axe_throw: 120, shock_baton: 32,
   // 3rd-batch supports
@@ -1261,7 +1261,7 @@ event_horizon: 75,
   lava: 4,
   fists: 24,
   // NEW SECONDARIES
-  machine_pistol: 14, sawed_off: 35, dart_gun: 25, laser_pointer: 6,
+  machine_pistol: 14, sawed_off: 35, dart_gun: 38, laser_pointer: 6,
   // NEW MELEES
   crowbar: 32, fire_axe: 85, nunchucks: 22, umbrella: 18, yoyo: 30,
   // NEW ABILITY SHOTS
