@@ -85,8 +85,8 @@ const WEAPONS = [
   {
     id: 'paintball', name: 'Paintball', type: 'Paintball', slot: 'primary',
     mag: 8,   reserve: 48,  damage: 40, fireRate: 200,  reloadTime: 1600,
-    auto: true,  pellets: 1, spread: 0.018, adsZoom: 52, bulletSpeed: 84, noReload: false,
-    randomBulletColor: true, bulletSize: 0.07,
+    auto: true,  pellets: 1, spread: 0.018, adsZoom: 52, bulletSpeed: 50, noReload: false,
+    randomBulletColor: true, bulletSize: 0.2,
     ability: { name: 'Splat Bomb', cd: 10000, desc: 'Launch a paint bomb · explodes on impact · 4m AOE', type: 'throwbomb', radius: 4, color: 0xff44ff, noADS: true },
   },
   {
@@ -19640,7 +19640,7 @@ function spawnLocalBullet(origin, dir, id, isOwn, speed, color, size, weaponId, 
   const wSpec = WEAPONS.find(w => w.id === weaponId);
   const maxRange = opts.maxRange || wSpec?.maxRange;
   localBullets.push({ mesh, dir: flightDir, createdAt: Date.now(), id, isOwn,
-    speed: projectileBaseSpeed(weaponId, wSpec, speed) * BULLET_SPEED_MULTIPLIER, weaponId,
+    speed: projectileBaseSpeed(weaponId, wSpec, speed) * BULLET_SPEED_MULTIPLIER, weaponId, size,
     spawnX: origin.x, spawnY: origin.y, spawnZ: origin.z, maxRange, ...opts });
 }
 
@@ -20324,6 +20324,12 @@ function updateBullets(dt) {
       const sx = _bpos.x - px0, sy = _bpos.y - py0, sz = _bpos.z - pz0;
       const segLenSq = sx*sx + sy*sy + sz*sz;
       let bestHit = null;
+      // A bullet has its own physical size — it doesn't need to reach the
+      // target's center to land, just close enough that the two spheres
+      // touch. Padding the target radius by the bullet's radius is the
+      // standard way to test sphere-vs-sphere with a point-vs-sphere check.
+      const bulletR = b.size || 0;
+      const headR = 0.28 + bulletR, bodyR = 0.65 + bulletR;
 
       for (const [pid, mesh] of Object.entries(remoteMeshes)) {
         if (!mesh.visible) continue;           // skip dead/hidden entities
@@ -20347,16 +20353,16 @@ function updateBullets(dt) {
           let dox = mesh.position.x - px0, doy = mesh.position.y + headOff - py0, doz = mesh.position.z - pz0;
           let t = Math.max(0, Math.min(1, (dox*sx + doy*sy + doz*sz) / segLenSq));
           let cx = px0 + t*sx - mesh.position.x, cy = py0 + t*sy - (mesh.position.y+headOff), cz = pz0 + t*sz - mesh.position.z;
-          if (cx*cx + cy*cy + cz*cz < 0.28*0.28) {
+          if (cx*cx + cy*cy + cz*cz < headR*headR) {
             isHeadshot = true; hitX = px0+t*sx; hitY = py0+t*sy; hitZ = pz0+t*sz;
             hitT = t;
           }
           if (!isHeadshot) {
-            // --- Body sphere: center at (mesh.x, mesh.y+bodyOff, mesh.z), r=0.65
+            // --- Body sphere: center at (mesh.x, mesh.y+bodyOff, mesh.z), r=0.65 (+ bullet radius)
             dox = mesh.position.x - px0; doy = mesh.position.y + bodyOff - py0; doz = mesh.position.z - pz0;
             t = Math.max(0, Math.min(1, (dox*sx + doy*sy + doz*sz) / segLenSq));
             cx = px0+t*sx - mesh.position.x; cy = py0+t*sy - (mesh.position.y+bodyOff); cz = pz0+t*sz - mesh.position.z;
-            if (cx*cx + cy*cy + cz*cz < 0.65*0.65) {
+            if (cx*cx + cy*cy + cz*cz < bodyR*bodyR) {
               isBodyHit = true; hitX = px0+t*sx; hitY = py0+t*sy; hitZ = pz0+t*sz;
               hitT = t;
             }
@@ -20364,9 +20370,9 @@ function updateBullets(dt) {
         } else {
           // Bullet didn't travel this frame — plain point test
           const headPos = _ppos.set(mesh.position.x, mesh.position.y + headOff, mesh.position.z);
-          isHeadshot = _bpos.distanceTo(headPos) < 0.28;
+          isHeadshot = _bpos.distanceTo(headPos) < headR;
           _ppos.set(mesh.position.x, mesh.position.y + bodyOff, mesh.position.z);
-          isBodyHit = !isHeadshot && _bpos.distanceTo(_ppos) < 0.65;
+          isBodyHit = !isHeadshot && _bpos.distanceTo(_ppos) < bodyR;
         }
         if (!isHeadshot && !isBodyHit) continue;
 
