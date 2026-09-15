@@ -22819,14 +22819,14 @@ function explodeSupport(g) {
 }
 
 function getSupportRadius(item) {
-  const radii = { smoke: 6, confetti_cannon: 3, moon_mine: 5.5, rubber_duck: 3.5, black_hole_seed: 7, glitch_cube: 4 };
+  const radii = { smoke: 9, confetti_cannon: 3, moon_mine: 5.5, rubber_duck: 3.5, black_hole_seed: 7, glitch_cube: 4 };
   return radii[item.id] || 4;
 }
 
 function spawnSmokeCloud(pos) {
-  // Used to be 5 thin puffs you could see straight through. This is ~15x the
-  // puff volume, spread wider to actually fill the radius getSupportRadius()
-  // already promised — a cloud thick enough to block a lane, not decorate it.
+  // Round 1 took 5 thin see-through puffs to 18 on a spiral (~15x volume).
+  // Still read as small, so round 2 scales that same spiral up another 3x by
+  // volume (radius/spread × cbrt(3) ≈ 1.44) — ~45x the original puff volume.
   const GROW_MS   = 1400;  // expand phase
   const HOLD_MS   = 7000;  // linger phase
   const FADE_MS   = 2000;  // fade-out phase
@@ -22838,12 +22838,12 @@ function spawnSmokeCloud(pos) {
   for (let i = 0; i < PUFF_COUNT; i++) {
     const t = i / PUFF_COUNT;
     const ang = i * GOLDEN_ANGLE;
-    const spread = 1.2 + t * 2.4; // inner puffs tight, outer puffs wider
+    const spread = 1.73 + t * 3.46; // inner puffs tight, outer puffs wider
     puffs.push({
       ox: Math.cos(ang) * spread,
       oz: Math.sin(ang) * spread,
-      oy: 0.3 + (i % 5) * 0.45,
-      r: [2.2, 2.6, 3.0, 3.4][i % 4],
+      oy: 0.4 + (i % 5) * 0.65,
+      r: [3.2, 3.75, 4.3, 4.9][i % 4],
       maxOp: 0.58 + (i % 3) * 0.06,
     });
   }
