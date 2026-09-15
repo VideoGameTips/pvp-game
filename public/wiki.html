@@ -401,6 +401,27 @@
         <li><strong>Vanilla JS</strong> — no framework on the client</li>
       </ul>
 
+      <h2 id="controls">🎮 Controls</h2>
+      <table>
+        <tr><th>Key</th><th>Does</th></tr>
+        <tr><td><code>WASD</code></td><td>Move</td></tr>
+        <tr><td><code>Space</code></td><td>Jump. Press it out of a slide for a <strong>slide jump</strong> — lower, but it carries the slide with you</td></tr>
+        <tr><td><code>Shift</code> / <code>Ctrl</code></td><td>Slide / crouch</td></tr>
+        <tr><td><code>1</code> <code>2</code> <code>3</code> <code>4</code></td><td>Primary · secondary · melee · support</td></tr>
+        <tr><td><code>Q</code></td><td>Cycle slot</td></tr>
+        <tr><td><code>B</code> or <strong>middle mouse</strong></td><td><strong>Quick melee</strong> — swings or fires the melee's ability, then puts you straight back on the gun you were holding. If your melee grants a double jump and you are in the air, it spends the jump instead</td></tr>
+        <tr><td><code>R</code></td><td>Reload</td></tr>
+        <tr><td><code>E</code></td><td>Ability, or aim down sights if what you hold has none</td></tr>
+        <tr><td><code>T</code></td><td><strong>Inspect</strong> — turn the weapon over. Anything that opens, opens</td></tr>
+        <tr><td><code>F</code></td><td>Interact / pilot</td></tr>
+        <tr><td><code>V</code></td><td>Chat</td></tr>
+        <tr><td><code>Tab</code></td><td>Scoreboard</td></tr>
+      </table>
+      <p><strong>Slide into an explosion.</strong> A blast normally shoves you away from itself, which stops a
+      slide dead. If one goes off <em>in front of you while you are sliding</em>, it drives you along the slide
+      instead &mdash; and 50% faster than the shove would have been. Behind or beside you, it pushes you the
+      usual way.</p>
+
       <h2 id="skins">🎨 Skins</h2>
       <p><strong>Skins are purely cosmetic.</strong> Every one of them changes how a weapon looks
       &mdash; body and accent colours, the tint of its tracer, sometimes a effect shell like
@@ -485,20 +506,24 @@
   </tr><tr>
     <td>P90</td>
     <td>SMG+</td>
-    <td>5</td>
+    <td>15</td>
     <td>50/150</td>
     <td>50/s</td>
     <td>AUTO</td>
     <td>Hyperspin</td>
     <td>350🍩</td>
-    <td><em>Pin accurate and always was — the spread is now 0.005, which puts every
+    <td><em>Pin accurate and always was — the spread is 0.005, which puts every
     round inside a hand's width at 25&nbsp;m. What stops it is new: the P90 is the
     first weapon in the game with real recoil. Fifty rounds a second out of a
     fifty-round magazine means the whole mag is gone in one second, so the kick
     per shot is tiny and the CLIMB is what you feel — 1.5&deg; after ten rounds,
     12.7&deg; if you hold the whole thing down. It should feel like a laser for
     the first half-second and a fight after that. Aim down sights and it kicks
-    45% less.</em></td>
+    45% less. Still, 250 damage a second was forgettable next to guns half its
+    fire rate, so damage triples: 5 &rarr; 15, 750 dps at full auto. That much
+    output earns a second cost besides the climb — a small spread bloom now
+    stacks in with every shot, roughly doubling the base spread by the time the
+    mag runs dry. Shot 1 is always clean; shot 40 is not.</em></td>
   </tr><tr>
     <td>Paintball</td>
     <td>Paintball</td>

@@ -74,12 +74,15 @@ const WEAPONS = [
   },
   {
     id: 'p90',   name: 'P90',   type: 'SMG+', slot: 'primary',
-    mag: 50,  reserve: 150, damage: 5,  fireRate: 20,   reloadTime: 1400,
+    mag: 50,  reserve: 150, damage: 15,  fireRate: 20,   reloadTime: 1400,
     auto: true,  pellets: 1, spread: 0.005,
     // Fifty rounds a second out of a fifty-round magazine: the whole mag is gone
     // in one second, so the per-shot kick is tiny and the CLIMB is what you feel.
     // Pin accurate on the first rounds, walking up your target by the last.
+    // spreadBloom stacks a little raw inconsistency on top of that climb —
+    // shot 1 is always clean, shot 40 is a bit looser than shot 2 was.
     recoil: { up: 0.0022, side: 0.0011, climb: 0.045, max: 2.6, recover: 7, adsMult: 0.55 }, adsZoom: 50, bulletSpeed: 140, noReload: false,
+    spreadBloom: { perShot: 0.00015, max: 0.006 },
     ability: { name: 'Hyperspin', cd: 15000, desc: '3s · fire rate ×4', type: 'buff', duration: 3000, rateMult: 0.25 },
   },
   {
@@ -1149,6 +1152,7 @@ let ammo = currentWeapon.mag;
 let reserve = currentWeapon.reserve;
 let reloading = false, lastShot = 0, shooting = false;
 const weaponHeatState = {}; // per-weapon-id { shotCount, cooldownUntil } for heatShots, or { windowStart, lastFireAt, cooldownUntil } for heatWindow weapons
+const spreadBloomState = {}; // per-weapon-id { amount, lastShotAt } for spreadBloom weapons
 let isADS = false, adsFOV = 75, targetFOV = 75;
 
 let myKills = 0, isDead = false, gameStarted = false;
@@ -1576,6 +1580,7 @@ const BLAST_RADIUS  = 7.5;   // m — how far an explosion can still shove you
 // is power / ln(1/BLAST_DECAY) ≈ power / 2.3) but keeps the arc readable.
 // Rocket jumping is the ride, not a hop.
 const BLAST_POWER   = 66.5;  // impulse at the very centre of the blast
+const SLIDE_BLAST_BOOST = 1.5;  // a blast you slide into drives you on, faster
 const BULLET_GRAVITY = 26;   // m/s^2 on arcing shots, scaled by their speed
 const BLAST_DECAY   = 0.10;  // fraction of horizontal blast speed left after 1 s
 // A point-blank charge used to hand you 65 m/s straight up -- an 88 m apex,
@@ -15824,7 +15829,12 @@ document.addEventListener('keydown', e => {
       activateAbility();
     }
   }
+  // 🔪 B — quick melee. Also on the middle mouse button, below.
+  if (e.code === 'KeyB' && !e.repeat && !isDead
+      && document.activeElement?.tagName !== 'INPUT') { e.preventDefault(); quickMelee(); return; }
   if (e.code==='KeyQ' || e.code==='Digit1' || e.code==='Digit2' || e.code==='Digit3' || e.code==='Digit4') {
+    // Choosing a slot yourself cancels a quick-melee return — you meant it.
+    _quickMeleeReturn = null;
     if (!loadoutReady()) return;
     if (e.code==='KeyQ') cycleActiveSlot();
     if (e.code==='Digit1') activeSlot = 'primary';
@@ -15844,6 +15854,8 @@ document.addEventListener('keyup', e => {
 });
 document.addEventListener('mousedown', e => {
   // Spectator: any click cycles to next ally
+  // Middle mouse is quick melee, which is where most shooters put it.
+  if (e.button === 1 && !isDead && gameStarted) { e.preventDefault(); quickMelee(); return; }
   if (spectatorState && e.button === 0) { spectatorCycle(1); return; }
   // Mortar: LMB fires a grenade instead of the equipped weapon
   if (pilotedMortar && e.button === 0) { fireMortar(); return; }
@@ -15976,6 +15988,54 @@ function resetPlayerForRound(x = null, z = null) {
 function cycleActiveSlot() {
   const slots = ['primary', 'secondary', 'melee', 'support'];
   activeSlot = slots[(slots.indexOf(activeSlot) + 1) % slots.length];
+}
+
+// ── 🔪 Quick melee ──────────────────────────────────────────────────────────
+// One press: swing or use the melee's ability, then come straight back to
+// whatever you were holding. You never have to think about the slot.
+//
+// A melee that grants a double jump is a MOVEMENT tool, not a weapon — quick
+// melee spends the jump instead of swinging, so the lightsabre, phase blade and
+// gravity hammer stay useful in the air without switching to them.
+let _quickMeleeReturn = null;      // slot to go back to
+let _quickMeleeUntil  = 0;         // hard stop, so a held buff cannot strand you
+
+function quickMelee() {
+  if (isDead || !gameStarted || activeSlot === 'melee' || _quickMeleeReturn) return;
+  const m = equippedMeleeItem();
+  if (!m) return;
+  // Airborne with a jump in hand and a melee that grants one: jump instead.
+  if (m.doubleJump && !isPlayerGrounded() && (window._airJumpsLeft || 0) > 0) {
+    if (slamState) slamState.vel = AIR_JUMP_VEL;
+    else slamState = { vel: AIR_JUMP_VEL, type: 'jump' };
+    window._airJumpsLeft = 0;
+    spawnAbilityAOEFX(camera.position.clone().setY(camera.position.y - 1.4), 1.2, 0xaaccff);
+    playSoundEvent('footstep', { volume: 0.5, pitch: 1.6, minGap: 60 });
+    return;
+  }
+  _quickMeleeReturn = activeSlot;
+  _quickMeleeUntil  = Date.now() + 3000;   // never stuck in melee longer than this
+  activeSlot = 'melee';
+  equipActiveSlot();
+  // Use the ability if it has one, otherwise just swing.
+  if (hasAbility(m)) activateAbility();
+  else tryMelee();
+}
+
+function updateQuickMelee() {
+  if (!_quickMeleeReturn) return;
+  const now = Date.now();
+  // Wait for the ability to actually finish: a timed buff until it expires, a
+  // charge-based one until it is spent, and a plain swing until it lands.
+  const buff = meleeAbilityBuff;
+  const busy = !!(buff && ((buff.endTime && buff.endTime > now) || buff.usesLeft > 0))
+            || meleeSwingT < 1;
+  if (busy && now < _quickMeleeUntil) return;
+  const back = _quickMeleeReturn;
+  _quickMeleeReturn = null;
+  if (isDead) return;
+  activeSlot = back;
+  equipActiveSlot();
 }
 
 function equipActiveSlot() {
@@ -17659,6 +17719,19 @@ function tryShoot() {
   if (pool.ammo <= 0 && !adminInfAmmo) { if (pool.reserve > 0 && !wStats.noReload) startReload(); return; }
 
   lastShot = now;
+  // Sustained-fire spread bloom: a weapon can get a little less precise the
+  // longer the trigger stays down, on top of its fixed recoil climb. Applies
+  // to THIS shot using whatever built up from previous shots, then grows for
+  // the next one — so the opening shot of a burst is always clean.
+  let bloomAdd = 0;
+  if (wStats.spreadBloom) {
+    const bloom = wStats.spreadBloom;
+    const bs = spreadBloomState[currentWeapon.id] || (spreadBloomState[currentWeapon.id] = { amount: 0, lastShotAt: 0 });
+    if (now - bs.lastShotAt > wStats.fireRate * 3) bs.amount = 0; // trigger released — reset
+    bloomAdd = bs.amount;
+    bs.amount = Math.min(bloom.max, bs.amount + bloom.perShot);
+    bs.lastShotAt = now;
+  }
   if (heat && wStats.heatShots) {
     heat.shotCount++;
     if (heat.shotCount >= wStats.heatShots) {
@@ -17715,7 +17788,7 @@ function tryShoot() {
   // Apply ability buff for this shot
   const ab = (abilityBuff && abilityBuff.weaponId === currentWeapon.id) ? abilityBuff : null;
   const shotPellets  = ab?.pellets      ?? wStats.pellets;
-  const shotSpread   = wStats.spread * (ab?.spreadMult ?? 1);
+  const shotSpread   = (wStats.spread + bloomAdd) * (ab?.spreadMult ?? 1);
   let shotWeaponId   = ab?.weaponAbId   ?? (wStats.damageId || currentWeapon.id);
   const shotSpeed    = wStats.bulletSpeed * (ab?.speedMult ?? 1);
 
@@ -22782,8 +22855,24 @@ function applyBlastImpulse(pos, opts = {}) {
   const climb = Math.min(before + up, BLAST_MAX_UP);
   if (slamState) slamState.vel = climb;
   else slamState = { vel: climb, type: 'jump' };
-  _extVel.x += away.x * power;
-  _extVel.z += away.z * power;
+  // 🛹 Slide into a blast and it carries you. Normally a charge shoves you away
+  // from itself, which means one going off ahead of you stops a slide dead and
+  // throws you back the way you came. While sliding, a blast in FRONT of you is
+  // redirected along the slide instead — you duck under it and get fired down
+  // the lane. Behind you it still shoves you forward, as it always did.
+  let px = away.x * power, pz = away.z * power;
+  const slidingNow = !!(window._slideUntil && Date.now() < window._slideUntil && window._slideDir);
+  if (slidingNow) {
+    const f = window._slideDir;
+    const toBlast = { x: pos.x - feet.x, z: pos.z - feet.z };
+    const ahead = toBlast.x * f.x + toBlast.z * f.z;      // >0 means it went off in front
+    if (ahead > 0) {
+      const mag = Math.hypot(px, pz) * SLIDE_BLAST_BOOST;
+      px = f.x * mag; pz = f.z * mag;
+    }
+  }
+  _extVel.x += px;
+  _extVel.z += pz;
   const hz = Math.hypot(_extVel.x, _extVel.z);
   if (hz > BLAST_MAX_HORIZ) { const k = BLAST_MAX_HORIZ / hz; _extVel.x *= k; _extVel.z *= k; }
   // A blast you rode is a fresh air state: you get your dash back, and an air
@@ -26297,6 +26386,7 @@ function loop() {
   const dt = Math.min((now-lastTime)/1000, 0.05);
   lastTime = now;
   updateMovement(dt);
+  updateQuickMelee();  // and back to what you were holding
   updateRecoil(dt);   // the muzzle settles back between shots
   updateDots();       // anything set alight keeps taking damage
   updateBullets(dt);

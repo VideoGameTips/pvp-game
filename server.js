@@ -1187,7 +1187,7 @@ event_horizon: 75,
   slingshot: 9,   // mirrors WEAPONS[] in public/game.js — see CLAUDE.md gotcha #4
   // Primaries
   ak20: 30,  sg8: 18,
-  srx: 95, rpd: 10, mp40: 15, p90: 5,
+  srx: 95, rpd: 10, mp40: 15, p90: 15,
   paintball: 40, burst: 21, lever: 62,
   vector: 12, crossbow: 80, flamethrower: 3,
   grenade_launcher: 90, railgun: 110, minigun: 27,
