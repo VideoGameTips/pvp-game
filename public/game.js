@@ -22808,24 +22808,34 @@ function explodeSupport(g) {
 }
 
 function getSupportRadius(item) {
-  const radii = { smoke: 4, confetti_cannon: 3, moon_mine: 5.5, rubber_duck: 3.5, black_hole_seed: 7, glitch_cube: 4 };
+  const radii = { smoke: 6, confetti_cannon: 3, moon_mine: 5.5, rubber_duck: 3.5, black_hole_seed: 7, glitch_cube: 4 };
   return radii[item.id] || 4;
 }
 
 function spawnSmokeCloud(pos) {
-  // Spawn 5 overlapping puffs at slightly offset positions for a chunky cloud
+  // Used to be 5 thin puffs you could see straight through. This is ~15x the
+  // puff volume, spread wider to actually fill the radius getSupportRadius()
+  // already promised — a cloud thick enough to block a lane, not decorate it.
   const GROW_MS   = 1400;  // expand phase
   const HOLD_MS   = 7000;  // linger phase
   const FADE_MS   = 2000;  // fade-out phase
   const TOTAL_MS  = GROW_MS + HOLD_MS + FADE_MS;
 
-  const puffs = [
-    { ox:  0.0, oy: 0.6, oz:  0.0, r: 2.2, maxOp: 0.72 },
-    { ox:  1.1, oy: 0.4, oz:  0.4, r: 1.6, maxOp: 0.60 },
-    { ox: -1.0, oy: 0.5, oz: -0.3, r: 1.7, maxOp: 0.58 },
-    { ox:  0.3, oy: 1.4, oz:  0.6, r: 1.4, maxOp: 0.50 },
-    { ox: -0.4, oy: 0.2, oz:  1.0, r: 1.5, maxOp: 0.55 },
-  ];
+  const PUFF_COUNT = 18;
+  const GOLDEN_ANGLE = 2.3999632; // radians — spaces puffs evenly with no RNG
+  const puffs = [];
+  for (let i = 0; i < PUFF_COUNT; i++) {
+    const t = i / PUFF_COUNT;
+    const ang = i * GOLDEN_ANGLE;
+    const spread = 1.2 + t * 2.4; // inner puffs tight, outer puffs wider
+    puffs.push({
+      ox: Math.cos(ang) * spread,
+      oz: Math.sin(ang) * spread,
+      oy: 0.3 + (i % 5) * 0.45,
+      r: [2.2, 2.6, 3.0, 3.4][i % 4],
+      maxOp: 0.58 + (i % 3) * 0.06,
+    });
+  }
 
   const meshes = puffs.map(p => {
     const mat  = new THREE.MeshBasicMaterial({ color: 0xb0b0b0, transparent: true, opacity: 0 });
