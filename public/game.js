@@ -15635,6 +15635,11 @@ document.addEventListener('pointerlockchange', () => {
 //   max     ceiling on that multiplier, so it settles instead of running away
 //   recover fraction of the accumulated kick pulled back per second
 let _recoilPitch = 0, _recoilYaw = 0, _recoilShots = 0, _recoilLastShot = 0, _recoilRecover = 7;
+// Decaying measure of how hard the player is currently dragging the aim
+// DOWN (opposite the climb). Fed by real mousemove input, drained fast when
+// you stop — so only active, sustained counter-drag earns a discount on the
+// next kick, not a one-time flick or a mouse that's merely sitting still.
+let _recoilCounterRate = 0;
 
 function addRecoil(w) {
   const rc = w && w.recoil;
@@ -15647,7 +15652,12 @@ function addRecoil(w) {
   const mult = Math.min(rc.max || 2.5, 1 + _recoilShots * (rc.climb || 0));
   _recoilShots++;
   const ads = isADS ? (rc.adsMult != null ? rc.adsMult : 0.6) : 1;
-  const up = (rc.up || 0) * mult * ads * (0.8 + Math.random() * 0.4);
+  // Recoil control: actively dragging the aim down earns a real cut on THIS
+  // shot's push, not just a position offset the next shot immediately
+  // overwrites. Capped well under 1 so it's a skill discount, not a cheat
+  // code — you still have to out-drag an escalating climb, just less badly.
+  const control = Math.min(0.6, _recoilCounterRate / ((rc.up || 0.001) * 8));
+  const up = (rc.up || 0) * mult * ads * (0.8 + Math.random() * 0.4) * (1 - control);
   const side = (rc.side || 0) * mult * ads * (Math.random() * 2 - 1);
   _recoilRecover = rc.recover || 7;
   euler.x += up; euler.y += side;
@@ -15657,6 +15667,10 @@ function addRecoil(w) {
 }
 
 function updateRecoil(dt) {
+  // Fast decay so counter-drag credit reflects "right now", not a stale
+  // flick from a second ago — runs even with no active recoil so it never
+  // lingers into the next fight.
+  if (_recoilCounterRate > 0) _recoilCounterRate = Math.max(0, _recoilCounterRate - _recoilCounterRate * Math.min(1, dt * 10));
   if (!_recoilPitch && !_recoilYaw) return;
   // While the trigger is still down (shots landing inside the same window
   // addRecoil uses to keep the climb going), don't settle at all — recoil
@@ -15682,6 +15696,9 @@ document.addEventListener('mousemove', e => {
   camera.quaternion.setFromEuler(euler);
   // 🎯 Manual aim always wins: while you're moving the mouse, the aim aids yield.
   if (e.movementX || e.movementY) _lastManualAimAt = performance.now();
+  // Dragging the aim DOWN (screen-space movementY > 0) is fighting recoil's
+  // climb — feed that into the counter-rate addRecoil reads for its discount.
+  if (e.movementY > 0) _recoilCounterRate += e.movementY * SENS;
 });
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -22704,8 +22721,9 @@ setInterval(()=>{
   socket.emit('move',{ x:camera.position.x, y:camera.position.y, z:camera.position.z, rotY:euler.y, rotX:euler.x });
 },50);
 
-// Auto-fire loop
-setInterval(()=>{ if(shooting && (activeSlot === 'primary' || activeSlot === 'secondary') && currentWeapon.auto) tryShoot(); }, 50);
+// Auto-fire now polls every render frame inside loop() — see the 'auto-fire'
+// safeLoopStep — instead of this fixed 50ms interval, which silently capped
+// every auto weapon faster than 20 shots/sec below its real fire rate.
 
 // Cycler ammo regen (and any future ammoRegen weapons)
 let _regenLast = performance.now();
@@ -26637,6 +26655,16 @@ function loop() {
   lastTime = now;
   safeLoopStep('movement', () => updateMovement(dt));
   safeLoopStep('quick-melee', () => updateQuickMelee());  // and back to what you were holding
+  // Auto-fire used to poll on a fixed 50ms setInterval, independent of the
+  // render loop. Fine for anything fireRate >= 50, but P90 (20ms), Minigun
+  // (32ms) and Burst Rifle (47ms) were all capped at the interval's ~20
+  // shots/sec instead of their real rate — visibly under-firing, and (since
+  // recoil accumulates per actual shot) under-recoiling too. tryShoot()
+  // already self-limits per weapon via wStats.fireRate, so polling every
+  // frame here is just removing an artificial second ceiling underneath it.
+  safeLoopStep('auto-fire', () => {
+    if (shooting && (activeSlot === 'primary' || activeSlot === 'secondary') && currentWeapon.auto) tryShoot();
+  });
   safeLoopStep('recoil', () => updateRecoil(dt));   // the muzzle settles back between shots
   safeLoopStep('dots', () => updateDots());       // anything set alight keeps taking damage
   safeLoopStep('bullets', () => updateBullets(dt));
