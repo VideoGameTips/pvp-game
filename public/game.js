@@ -94,9 +94,9 @@ const WEAPONS = [
   },
   {
     id: 'burst', name: 'Burst Rifle', type: 'Burst AR', slot: 'primary',
-    mag: 36, reserve: 108, damage: 21, fireRate: 47, reloadTime: 1900,
+    mag: 36, reserve: 108, damage: 63, fireRate: 47, reloadTime: 1900,
     auto: true, pellets: 1, spread: 0.006, adsZoom: 43, bulletSpeed: 136, noReload: false,
-    bulletColor: 0xffdd66, heatShots: 3, heatCooldown: 750,
+    bulletColor: 0xffdd66, heatShots: 3, heatCooldown: 750, falloffLift: 0.13,
     ability: { name: 'Triple Burst', cd: 9000, desc: 'Fire 3 rapid bursts instantly', type: 'fanfire', count: 9, delay: 40, noADS: true },
   },
   {
@@ -768,13 +768,19 @@ function computeWeaponFalloff(w) {
   const mag = w.mag || 1;
   const auto = !!w.auto;
   const rate = w.fireRate || 100;
-  if (pellets >= 4) return { near: 10, far: 24, min: 0.05 };                          // shotguns/flame
-  if (speed <= 75 && !auto && dmg >= 45) return { near: 9999, far: 9999, min: 1 };     // heavy ordnance
-  if (!auto && speed >= 160 && mag <= 10 && dmg >= 45) return { near: 45, far: 95, min: 0.9 }; // snipers/marksman
-  if (auto && mag >= 100) return { near: 24, far: 50, min: 0.62 };                     // LMGs/sustained-fire
-  if (auto && rate <= 80 && dmg < 35 && speed < 170) return { near: 15, far: 32, min: 0.42 }; // SMGs/CQB autos
-  if (!auto) return { near: 19, far: 40, min: 0.52 };                                 // sidearms/utility
-  return { near: 25, far: 52, min: 0.67 };                                            // assault rifles (default)
+  let f;
+  if (pellets >= 4) f = { near: 10, far: 24, min: 0.05 };                          // shotguns/flame
+  else if (speed <= 75 && !auto && dmg >= 45) f = { near: 9999, far: 9999, min: 1 };     // heavy ordnance
+  else if (!auto && speed >= 160 && mag <= 10 && dmg >= 45) f = { near: 45, far: 95, min: 0.9 }; // snipers/marksman
+  else if (auto && mag >= 100) f = { near: 24, far: 50, min: 0.62 };                     // LMGs/sustained-fire
+  else if (auto && rate <= 80 && dmg < 35 && speed < 170) f = { near: 15, far: 32, min: 0.42 }; // SMGs/CQB autos
+  else if (!auto) f = { near: 19, far: 40, min: 0.52 };                                 // sidearms/utility
+  else f = { near: 25, far: 52, min: 0.67 };                                            // assault rifles (default)
+  // Per-weapon override: a gun can lift its own floor above the archetype
+  // default (e.g. a bespoke design call) without moving the shared constant
+  // every other gun in its class still uses.
+  if (w.falloffLift) f = { ...f, min: Math.min(1, f.min + w.falloffLift) };
+  return f;
 }
 const WEAPON_FALLOFF = Object.fromEntries(WEAPONS.map(w => [w.id, computeWeaponFalloff(w)]));
 function falloffMultiplier(weaponId, dist) {
