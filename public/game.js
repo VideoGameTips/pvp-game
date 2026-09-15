@@ -768,13 +768,13 @@ function computeWeaponFalloff(w) {
   const mag = w.mag || 1;
   const auto = !!w.auto;
   const rate = w.fireRate || 100;
-  if (pellets >= 4) return { near: 8, far: 20, min: 0 };                              // shotguns/flame
+  if (pellets >= 4) return { near: 10, far: 24, min: 0.05 };                          // shotguns/flame
   if (speed <= 75 && !auto && dmg >= 45) return { near: 9999, far: 9999, min: 1 };     // heavy ordnance
-  if (!auto && speed >= 160 && mag <= 10 && dmg >= 45) return { near: 40, far: 90, min: 0.85 }; // snipers/marksman
-  if (auto && mag >= 100) return { near: 20, far: 45, min: 0.55 };                     // LMGs/sustained-fire
-  if (auto && rate <= 80 && dmg < 35 && speed < 170) return { near: 12, far: 28, min: 0.35 }; // SMGs/CQB autos
-  if (!auto) return { near: 16, far: 36, min: 0.45 };                                 // sidearms/utility
-  return { near: 22, far: 48, min: 0.6 };                                             // assault rifles (default)
+  if (!auto && speed >= 160 && mag <= 10 && dmg >= 45) return { near: 45, far: 95, min: 0.9 }; // snipers/marksman
+  if (auto && mag >= 100) return { near: 24, far: 50, min: 0.62 };                     // LMGs/sustained-fire
+  if (auto && rate <= 80 && dmg < 35 && speed < 170) return { near: 15, far: 32, min: 0.42 }; // SMGs/CQB autos
+  if (!auto) return { near: 19, far: 40, min: 0.52 };                                 // sidearms/utility
+  return { near: 25, far: 52, min: 0.67 };                                            // assault rifles (default)
 }
 const WEAPON_FALLOFF = Object.fromEntries(WEAPONS.map(w => [w.id, computeWeaponFalloff(w)]));
 function falloffMultiplier(weaponId, dist) {
@@ -3701,33 +3701,41 @@ function playSoundEvent(name, opts = {}) {
   }
   // 💥 Explosion — sub-bass thump + cracking noise + low-pass smoke rumble
   else if (name === 'explosion') {
-    // This was two sustained oscillators -- a sine sliding 90 -> 28 Hz and a
-    // triangle 180 -> 60, both running 300 ms -- with square waves for debris.
-    // A blast has no PITCH. Anything that holds a note for a third of a second
-    // reads as a cartoon boom, and the square-wave debris read as a chiptune.
-    // It is all broadband now, shaped by filters that collapse the way real
-    // expanding gas does.
+    // Third pass. The oscillators went first (it was playing a musical note),
+    // then the debris and the sweeps turned out to be wrong in two more ways.
+    //
+    // 1. The rubble was bandpassed at Q 9 — the same high-Q resonance that made
+    //    every bolt and slide in the game sound like a dripping tap. Seven
+    //    pitched pings after each blast. Q 1.8 now: clatter, not chimes.
+    // 2. Both loud layers were SWEPT, one over 340 ms and one over 750. A slow
+    //    smooth filter glide does not read as an explosion, it reads as a
+    //    whoosh — it is a synth effect, and a long one. Real gas is done
+    //    expanding almost immediately. The sweep is 140 ms now and everything
+    //    behind it is static, so nothing glides.
     const V = mult;
-    // The detonation snap.
-    playFilteredNoise(ctx, start, 0.008, out, 0.62 * V, 'bandpass', 2200, 0.5, 0.0002, 0);
-    // The fireball: wide open, closing hard. This is the explosion.
-    playSweptNoise(ctx, start, 0.34, out, 0.85 * V, 'lowpass', 4200, 130, 0.9, 1.2);
-    // The roll behind it, slower and deeper.
-    playSweptNoise(ctx, start + 0.02, 0.75, out, 0.42 * V, 'lowpass', 1500, 62, 0.8, 1.0);
-    // A short punch for the chest. Short, and quiet: measured, halving this
-    // made the whole blast measurably less tonal, and dropping it entirely
-    // gained nothing further -- so it keeps the thump without the note.
-    playTone(ctx, start, 0.11, out, 115, 40, 0.16 * V, 'triangle');
+    // Detonation: instant and wide.
+    playFilteredNoise(ctx, start, 0.010, out, 0.70 * V, 'bandpass', 1800, 0.5, 0.0002, 0);
+    // The fireball, collapsing fast.
+    playSweptNoise(ctx, start, 0.14, out, 0.95 * V, 'lowpass', 5000, 240, 0.8, 1.1);
+    // The body. Static — this is where the weight is, and it must not glide.
+    playFilteredNoise(ctx, start + 0.010, 0.30, out, 0.62 * V, 'lowpass', 420, 0.7, 0.002, 1.5);
+    // A brief punch for the chest. Quiet, or the whole thing turns into a note.
+    playTone(ctx, start, 0.10, out, 120, 44, 0.16 * V, 'triangle');
     // Rumble rolling away.
-    playFilteredNoise(ctx, start + 0.06, 1.05, out, 0.20 * V, 'lowpass', 300, 0.6, 0.02, 1.1);
-    // Debris and rubble: short resonant noise, scattered. Not tones.
-    for (let i = 0; i < 7; i++) {
-      const t = start + 0.09 + Math.random() * 0.55;
-      const f = 700 + Math.random() * 2300;
-      playFilteredNoise(ctx, t, 0.020 + Math.random() * 0.035, out,
-                        (0.10 + Math.random() * 0.09) * V, 'bandpass', f, 9, 0.0004, 1.5);
+    playFilteredNoise(ctx, start + 0.05, 1.10, out, 0.22 * V, 'lowpass', 260, 0.6, 0.02, 1.1);
+    // Rubble. Nine discrete bursts read as nine separate taps after the bang —
+    // measured, they dragged the brightness back up to 1800 Hz half a second in,
+    // which is the blast being followed by somebody knocking on a door. Real
+    // debris is a WASH with a few real impacts in it, so that is what this is.
+    playFilteredNoise(ctx, start + 0.06, 0.45, out, 0.13 * V, 'bandpass', 1100, 0.7, 0.01, 2.0);
+    for (let i = 0; i < 4; i++) {
+      const t = start + 0.09 + Math.random() * 0.34;
+      const f = 800 + Math.random() * 1800;
+      playFilteredNoise(ctx, t, 0.010 + Math.random() * 0.016, out,
+                        (0.045 + Math.random() * 0.04) * V, 'bandpass', f, 1.6, 0.0003, 2.4);
     }
   }
+
   else {
     // Sub-bass thud (not a beep) for any unhandled event
     playFilteredNoise(ctx, start, 0.10, out, 0.10 * mult, 'lowpass', 400, 0.6);
@@ -19813,6 +19821,7 @@ const ELECTRIC_WEAPONS = new Set(['arc_rifle','arc_torrent','taser','pistol','sh
 const FIRE_WEAPONS     = new Set(['flamethrower','firework_launcher','sg8','fire_axe','fire_poker','thermite','molotov']);
 const GRAVITY_WEAPONS  = new Set(['gravity_launcher','gravity_hammer','gravity_paint','event_horizon','magnetar','void_harvester','black_hole_seed']);
 const FROST_WEAPONS    = new Set(['freeze_gun','frost_blaster','abs_zero']);
+const BOT_STUN_ON_HIT_WEAPONS = new Set(['arc_torrent', 'taser']);
 
 // Returns a synergy multiplier for damage based on map zones + weapon category.
 // Examples:
@@ -19903,13 +19912,15 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false) {
       spawnAbilityAOEFX(hitWorldPos ? hitWorldPos.clone() : mesh.position.clone(), 0.5, 0x9fe8ff);
     }
   }
-  // ⚡ Energy weapons flash whatever they hit — a bright overload that leaves the
-  // target briefly unable to act. Reuses the stun-grenade freeze the bot AI
-  // already honours, so it needs no new AI state.
-  if (_hitKind === 'energy') {
+  // ⚡ Only explicit stun weapons should interrupt bot AI. Cycler and Laser
+  // Pointer are also "energy" visuals and fire rapidly; treating every energy
+  // hit as a stun chain-locked bots forever and skipped their gravity updates.
+  if (BOT_STUN_ON_HIT_WEAPONS.has(weaponId)) {
     const bot = resolveBot(pid);
     if (bot && !bot.dead) {
-      bot._stunUntil = Math.max(bot._stunUntil || 0, Date.now() + 700);
+      const wSpec = WEAPONS.find(w => w.id === weaponId);
+      const dur = Math.max(120, Math.min(1200, wSpec?.disableOnHit || 700));
+      bot._stunUntil = Math.max(bot._stunUntil || 0, Date.now() + dur);
       spawnAbilityAOEFX(hitWorldPos ? hitWorldPos.clone() : mesh.position.clone(), 0.7, 0xffffff);
     }
   }
@@ -25315,7 +25326,6 @@ function updateBotAI(dt) {
     try {
     if (bot.dead) continue;
     if (bot.state === 'target') continue; // range targets don't move or shoot
-    if (bot._stunActive) continue; // 🪖 stunned by admin stun grenade — frozen this frame
 
     // 🎒 Auto loadout-swap based on engagement distance (NEW)
     // < 4 m → secondary if it's a pistol/shotgun
@@ -25390,6 +25400,12 @@ function updateBotAI(dt) {
         setTimeout(() => clientRespawnBot(bot.id), 3000);
         continue;
       }
+    }
+
+    if (bot._stunActive) {
+      const mesh = remoteMeshes[bot.id];
+      if (mesh) { mesh.position.set(bot.x, bot.y || 0, bot.z); mesh.rotation.y = bot.rotY + Math.PI; }
+      continue; // stunned bots skip decisions/shooting, but physics above still runs
     }
 
     // During countdown: bots walk toward the centre so they're in position when it ends
@@ -26434,47 +26450,58 @@ let lastTime = performance.now();
 // spawns a second RAF chain (which would double game speed).
 let loopStarted = false;
 function startLoop() { if (loopStarted) return; loopStarted = true; loop(); }
+const _loopErrors = {};
+function safeLoopStep(name, fn) {
+  try { fn(); }
+  catch (e) {
+    const now = performance.now();
+    if (!_loopErrors[name] || now - _loopErrors[name] > 2000) {
+      _loopErrors[name] = now;
+      console.error('[loop] ' + name + ' failed:', e?.message || e, e?.stack || '');
+    }
+  }
+}
 function loop() {
   requestAnimationFrame(loop);
   const now = performance.now();
   updateFPSCounter(now);
   const dt = Math.min((now-lastTime)/1000, 0.05);
   lastTime = now;
-  updateMovement(dt);
-  updateQuickMelee();  // and back to what you were holding
-  updateRecoil(dt);   // the muzzle settles back between shots
-  updateDots();       // anything set alight keeps taking damage
-  updateBullets(dt);
-  updateImpactMarks();
-  updateBotAI(dt);
-  animateCharacters(dt); // walk-cycle + slide pose for bots & remote players
-  updateKingCrown(dt);   // 👑 crown the current top fragger
-  updateBurnZones(dt); // firework launcher DOT fields
-  updateTraps(dt); // tripwires, magnet mines, bounce pads, hologram decoys
-  updateP2WSystems(dt); // orbital strikes, guardian drones, nano shield
-  updateTeslaCoils(dt); // ⚡ deployed tesla coils zap nearby enemies
-  updateBeeSwarms(dt);  // 🐝 bee swarms home + sting the nearest enemy
-  updateMapGimmicks(dt); // lava DOT, jump pads, low-grav zones, ice friction
-  updateBotSpeech(dt);  // bot speech bubbles follow their heads
-  updateWeaponSkinFX(dt); // ✨ gun-skin particles/streaks (gold money, smoke, data, crystal)
-  updateAimAssist(dt);  // 🎯 auto-shoot / aim assist / aimbot / AI-aim dot
-  if (inLobby) updateLobbyInteractions(); // 🛋️ duel-pad / challenge prompt
-  updateChatFeed();     // fade old chat lines
-  updateAdminCheats(dt);// admin cheat tick (fly, kill aura, etc.)
-  updateUAV(dt);        // 🛰️ Predator UAV overlay tick
-  updateMapEffects(dt); // airport darkening, chernobyl gas, mortar prompt
-  updateBatch5(dt);     // train scroll, vacuum, weather, lights-out, chandelier, debris
-  killcamSample(performance.now());
-  updateKillcam(performance.now());
-  updateVehiclePrompt();// 🚙 vehicle pickup prompt (BR arena)
-  updateVehiclePiloting(dt); // 🚙 move + sync vehicle while piloted
-  updateReloadAnim();       // the gun and the hands work the action
-  updateReloadProps(dt);    // and the parts they moved go on moving
-  updateCylinders(dt);      // revolving cylinders index round as they fire
-  updateSwitchbladeHUD(); // shows only when switchblade is active
-  updateSpectatorCamera(dt); // follow teammates while dead
-  if (spectatorState) updateSpectatorHUD(); // refresh HUD (ally name / count may change)
-  if (match?.type === 'range') updateRange(dt);
+  safeLoopStep('movement', () => updateMovement(dt));
+  safeLoopStep('quick-melee', () => updateQuickMelee());  // and back to what you were holding
+  safeLoopStep('recoil', () => updateRecoil(dt));   // the muzzle settles back between shots
+  safeLoopStep('dots', () => updateDots());       // anything set alight keeps taking damage
+  safeLoopStep('bullets', () => updateBullets(dt));
+  safeLoopStep('impact-marks', () => updateImpactMarks());
+  safeLoopStep('bot-ai', () => updateBotAI(dt));
+  safeLoopStep('characters', () => animateCharacters(dt)); // walk-cycle + slide pose for bots & remote players
+  safeLoopStep('king-crown', () => updateKingCrown(dt));   // crown the current top fragger
+  safeLoopStep('burn-zones', () => updateBurnZones(dt)); // firework launcher DOT fields
+  safeLoopStep('traps', () => updateTraps(dt)); // tripwires, magnet mines, bounce pads, hologram decoys
+  safeLoopStep('p2w-systems', () => updateP2WSystems(dt)); // orbital strikes, guardian drones, nano shield
+  safeLoopStep('tesla-coils', () => updateTeslaCoils(dt)); // deployed tesla coils zap nearby enemies
+  safeLoopStep('bee-swarms', () => updateBeeSwarms(dt));  // bee swarms home + sting the nearest enemy
+  safeLoopStep('map-gimmicks', () => updateMapGimmicks(dt)); // lava DOT, jump pads, low-grav zones, ice friction
+  safeLoopStep('bot-speech', () => updateBotSpeech(dt));  // bot speech bubbles follow their heads
+  safeLoopStep('weapon-skin-fx', () => updateWeaponSkinFX(dt)); // gun-skin particles/streaks
+  safeLoopStep('aim-assist', () => updateAimAssist(dt));  // auto-shoot / aim assist / aimbot / AI-aim dot
+  if (inLobby) safeLoopStep('lobby-interactions', () => updateLobbyInteractions()); // duel-pad / challenge prompt
+  safeLoopStep('chat-feed', () => updateChatFeed());     // fade old chat lines
+  safeLoopStep('admin-cheats', () => updateAdminCheats(dt));// admin cheat tick (fly, kill aura, etc.)
+  safeLoopStep('uav', () => updateUAV(dt));        // Predator UAV overlay tick
+  safeLoopStep('map-effects', () => updateMapEffects(dt)); // airport darkening, chernobyl gas, mortar prompt
+  safeLoopStep('batch5', () => updateBatch5(dt));     // train scroll, vacuum, weather, lights-out, chandelier, debris
+  safeLoopStep('killcam-sample', () => killcamSample(performance.now()));
+  safeLoopStep('killcam', () => updateKillcam(performance.now()));
+  safeLoopStep('vehicle-prompt', () => updateVehiclePrompt());// vehicle pickup prompt (BR arena)
+  safeLoopStep('vehicle-piloting', () => updateVehiclePiloting(dt)); // move + sync vehicle while piloted
+  safeLoopStep('reload-anim', () => updateReloadAnim());       // the gun and the hands work the action
+  safeLoopStep('reload-props', () => updateReloadProps(dt));    // and the parts they moved go on moving
+  safeLoopStep('cylinders', () => updateCylinders(dt));      // revolving cylinders index round as they fire
+  safeLoopStep('switchblade-hud', () => updateSwitchbladeHUD()); // shows only when switchblade is active
+  safeLoopStep('spectator-camera', () => updateSpectatorCamera(dt)); // follow teammates while dead
+  if (spectatorState) safeLoopStep('spectator-hud', () => updateSpectatorHUD()); // refresh HUD
+  if (match?.type === 'range') safeLoopStep('range', () => updateRange(dt));
 
   // ── Melee ability buff updates ─────────────────────────────────────────────
   if (meleeAbilityBuff) {
