@@ -167,15 +167,28 @@ const WEAPON_COSTS = {
 const CURRENCY_NAME = 'donuts';
 const CURRENCY_ICON = '🍩';
 const WEAPON_PRICE_MULT = 100;
-const MATCH_REWARD_MULT = 40;
+const NORMAL_WEAPON_PRICE_MULT = Math.max(1, Math.round(WEAPON_PRICE_MULT / 50));
+const MATCH_REWARD_MULT = 400;
 const SKIN_CASE_GEN1_COST = 50000;
+const P2W_ITEM_IDS = new Set([
+  'event_horizon', 'storm_core', 'abs_zero', 'solar_lance', 'quantum_repeater',
+  'magnetar', 'nebula_mortar', 'prism_engine', 'void_harvester',
+  'pulse_needle', 'phase_blade', 'gravity_hammer', 'volt_whip',
+  'nano_swarm', 'warp_beacon', 'stasis_mine', 'specter_drone', 'quantum_barrier',
+]);
 const GEN1_SKIN_IDS = [
-  'ak20_twin_barrel', 'ak20_tracking_ar', 'ak20_swarm_rifle', 'pistol_darker_handgun',
+  'ak20_twin_barrel', 'ak20_tracking_ar', 'ak20_swarm_rifle',
+  'pistol_darker_handgun', 'pistol_slightly_bluish', 'revolver_rusty_cylinder',
+  'ak20_cardboard_wrap', 'ak20_midnight_oil', 'sg8_duck_tape', 'sg8_confetti_shells',
+  'srx_laser_pointer_taped', 'paintball_moldy_green', 'flamethrower_water_thrower',
+  'crossbow_pool_noodle', 'minigun_arcade_cabinet', 'rpg_soda_bottle',
   'brass_knuckles', 'hatchet', 'machete', 'cane', 'cricket_bat', 'pipe',
   'wrench', 'shovel', 'golf_club', 'tennis_racket', 'fire_poker', 'meat_cleaver',
+  'knife_dental_floss', 'knife_butter_knife', 'bat_pool_noodle', 'sledge_gold_brick',
+  'katana_ruler', 'frying_pan_nonstick', 'spear_broom_handle', 'fists_sock_puppets',
 ];
 for (const id of Object.keys(WEAPON_COSTS)) {
-  if (WEAPON_COSTS[id] > 0) WEAPON_COSTS[id] *= WEAPON_PRICE_MULT;
+  if (WEAPON_COSTS[id] > 0) WEAPON_COSTS[id] *= P2W_ITEM_IDS.has(id) ? WEAPON_PRICE_MULT : NORMAL_WEAPON_PRICE_MULT;
 }
 
 // Free starter loadout — every account has these unlocked from day 1.
@@ -215,9 +228,9 @@ const BUNDLES = {
   mortar:       { name: 'Mortar Squad',       price: 550, items: ['mortar_rifle','grenade_launcher','hand_cannon','frag'] },
   cosmic_p2w:   { name: 'Cosmic P2W',         price: 80000, items: ['event_horizon','storm_core','abs_zero','solar_lance','quantum_repeater','magnetar','nebula_mortar','prism_engine','void_harvester','pulse_needle','revolver','phase_blade','gravity_hammer','volt_whip','nano_swarm','warp_beacon','stasis_mine','specter_drone','quantum_barrier'] },
 };
-for (const b of Object.values(BUNDLES)) b.price *= WEAPON_PRICE_MULT;
+for (const [id, b] of Object.entries(BUNDLES)) b.price *= id === 'cosmic_p2w' ? WEAPON_PRICE_MULT : NORMAL_WEAPON_PRICE_MULT;
 
-const STARTER_CREDITS = 500 * MATCH_REWARD_MULT;
+const STARTER_CREDITS = 20000;
 const TRIAL_DIVISOR = 20; // trial costs 1/20 of buy price (min 1)
 
 function ensureShopFields(u) {
@@ -1272,6 +1285,43 @@ event_horizon: 75,
   tripwire: 60, magnet_mine: 40,
 };
 
+// Damage drop-off by range — the server is authoritative for real PvP hits,
+// so this table (and dist3/falloffMultiplier below) must mirror
+// computeWeaponFalloff()/WEAPON_FALLOFF in public/game.js (CLAUDE.md gotcha
+// #4). Full damage inside `near` meters, straight-line decay to a `min`
+// multiplier by `far` meters, held flat beyond that. {min:0} guns (shotguns)
+// do nothing at long range; {near:9999} guns (rockets/grenades/mortars)
+// don't fall off — a direct hit is a direct hit.
+const FALLOFF_SHOTGUN = { near: 10, far: 24, min: 0.05 };
+const FALLOFF_SNIPER  = { near: 45, far: 95, min: 0.9 };
+const FALLOFF_LMG     = { near: 24, far: 50, min: 0.62 };
+const FALLOFF_SMG     = { near: 15, far: 32, min: 0.42 };
+const FALLOFF_BURST   = { near: 15, far: 32, min: 0.55 }; // Burst Rifle's own — floor lifted above stock SMG
+const FALLOFF_NONE    = { near: 9999, far: 9999, min: 1 };
+const FALLOFF_SIDEARM = { near: 19, far: 40, min: 0.52 };
+const FALLOFF_AR      = { near: 25, far: 52, min: 0.67 };
+const WEAPON_FALLOFF = {
+  sg8: FALLOFF_SHOTGUN, flamethrower: FALLOFF_SHOTGUN, shorty: FALLOFF_SHOTGUN, sawed_off: FALLOFF_SHOTGUN, boomstick: FALLOFF_SHOTGUN,
+  srx: FALLOFF_SNIPER, lever: FALLOFF_SNIPER, railgun: FALLOFF_SNIPER, revolver: FALLOFF_SNIPER, hand_cannon: FALLOFF_SNIPER, m1_garand: FALLOFF_SNIPER, coilgun: FALLOFF_SNIPER, amr: FALLOFF_SNIPER, duelist_pistol: FALLOFF_SNIPER, barrett: FALLOFF_SNIPER, desert_eagle: FALLOFF_SNIPER, m1911: FALLOFF_SNIPER,
+  rpd: FALLOFF_LMG, minigun: FALLOFF_LMG, cycler: FALLOFF_LMG, arc_torrent: FALLOFF_LMG, slingshot: FALLOFF_LMG, solar_lance: FALLOFF_LMG, gau19: FALLOFF_LMG, mk44: FALLOFF_LMG, m134: FALLOFF_LMG, mg42: FALLOFF_LMG,
+  mp40: FALLOFF_SMG, p90: FALLOFF_SMG, burst: FALLOFF_BURST, vector: FALLOFF_SMG, sticker_blaster: FALLOFF_SMG, smart_smg: FALLOFF_SMG, swarm_rifle: FALLOFF_SMG, painter_beam: FALLOFF_SMG, machine_pistol: FALLOFF_SMG, machine_revolver: FALLOFF_SMG, prism_engine: FALLOFF_SMG, p90_spec: FALLOFF_SMG, glock18: FALLOFF_SMG,
+  crossbow: FALLOFF_NONE, grenade_launcher: FALLOFF_NONE, boombow: FALLOFF_NONE, flare: FALLOFF_NONE, gravity_launcher: FALLOFF_NONE, potato_cannon: FALLOFF_NONE, mortar_rifle: FALLOFF_NONE, firework_launcher: FALLOFF_NONE, seismic_hammer: FALLOFF_NONE, signal_pistol: FALLOFF_NONE, throwing_axes: FALLOFF_NONE, nebula_mortar: FALLOFF_NONE, rpg: FALLOFF_NONE, bazooka: FALLOFF_NONE,
+  pistol: FALLOFF_SIDEARM, throwing_knives: FALLOFF_SIDEARM, taser: FALLOFF_SIDEARM, harpoon_gun: FALLOFF_SIDEARM, switchblade_gun: FALLOFF_SIDEARM, air_rifle: FALLOFF_SIDEARM, shockwave_launcher: FALLOFF_SIDEARM, storm_cannon: FALLOFF_SIDEARM, prism_launcher: FALLOFF_SIDEARM, foam_cannon: FALLOFF_SIDEARM, portal_launcher: FALLOFF_SIDEARM, traffic_controller: FALLOFF_SIDEARM, pinball_launcher: FALLOFF_SIDEARM, dart_gun: FALLOFF_SIDEARM, snub_revolver: FALLOFF_SIDEARM, mauser: FALLOFF_SIDEARM, boomerang: FALLOFF_SIDEARM, magnetar: FALLOFF_SIDEARM, void_harvester: FALLOFF_SIDEARM, five_seven: FALLOFF_SIDEARM, lancer: FALLOFF_SIDEARM, traffic_cone: FALLOFF_SIDEARM, cream_pie: FALLOFF_SIDEARM,
+  ak20: FALLOFF_AR, paintball: FALLOFF_AR, freeze_gun: FALLOFF_AR, plasma_carbine: FALLOFF_AR, arc_rifle: FALLOFF_AR, flechette: FALLOFF_AR, burst_cannon: FALLOFF_AR, twin_ar: FALLOFF_AR, airburst_projector: FALLOFF_AR, glassmaker: FALLOFF_AR, gravity_paint: FALLOFF_AR, laser_pointer: FALLOFF_AR, auto_revolver: FALLOFF_AR, frost_blaster: FALLOFF_AR, nail_gun: FALLOFF_AR, event_horizon: FALLOFF_AR, storm_core: FALLOFF_AR, abs_zero: FALLOFF_AR, quantum_repeater: FALLOFF_AR, pulse_needle: FALLOFF_AR, xm7: FALLOFF_AR, hkmp7: FALLOFF_AR,
+};
+function dist3(a, b) {
+  const dx = a.x - b.x, dy = (a.y || 0) - (b.y || 0), dz = a.z - b.z;
+  return Math.sqrt(dx * dx + dy * dy + dz * dz);
+}
+function falloffMultiplier(weaponId, dist) {
+  const f = WEAPON_FALLOFF[weaponId];
+  if (!f || dist == null) return 1;
+  if (dist <= f.near) return 1;
+  if (dist >= f.far) return f.min;
+  const t = (dist - f.near) / (f.far - f.near);
+  return 1 - t * (1 - f.min);
+}
+
 const players = {};
 
 // ── Spawn helpers ──────────────────────────────────────────────────────────
@@ -1483,7 +1533,7 @@ io.on('connection', (socket) => {
     const target  = players[data.targetId];
     const shooter = players[socket.id];
     if (!target || !shooter || target.dead || target.isBot) return;
-    let dmg = WEAPON_DAMAGE[data.weapon] || 25;
+    let dmg = Math.round((WEAPON_DAMAGE[data.weapon] || 25) * falloffMultiplier(data.weapon, dist3(shooter, target)));
     if (data.headshot) dmg = data.instakill ? target.hp : Math.round(dmg * (WEAPON_HS_MULT[data.weapon] || 2));
     target.hp = Math.max(0, target.hp - dmg);
     emitToMatch(target.matchId, 'playerHit', { targetId: target.id, hp: target.hp, bulletId: data.bulletId });
@@ -1502,7 +1552,7 @@ io.on('connection', (socket) => {
       ? requestedKiller
       : players[socket.id];
     if (!bot || !bot.isBot || bot.dead || !shooter) return;
-    let dmg = WEAPON_DAMAGE[data.weapon] || 25;
+    let dmg = Math.round((WEAPON_DAMAGE[data.weapon] || 25) * falloffMultiplier(data.weapon, dist3(shooter, bot)));
     if (data.headshot) dmg = data.instakill ? bot.hp : Math.round(dmg * (WEAPON_HS_MULT[data.weapon] || 2));
     bot.hp = Math.max(0, bot.hp - dmg);
     emitToMatch(bot.matchId, 'playerHit', { targetId: bot.id, hp: bot.hp, bulletId: data.bulletId });
@@ -1660,7 +1710,7 @@ io.on('connection', (socket) => {
     const player = players[socket.id];
     const bot    = players[data.botId];
     if (!player || player.dead || !bot || !bot.isBot) return;
-    let dmg = WEAPON_DAMAGE[data.weapon] || 25;
+    let dmg = Math.round((WEAPON_DAMAGE[data.weapon] || 25) * falloffMultiplier(data.weapon, dist3(bot, player)));
     player.hp = Math.max(0, player.hp - dmg);
     emitToMatch(player.matchId, 'playerHit', { targetId: player.id, hp: player.hp, bulletId: null });
     if (player.hp <= 0) {

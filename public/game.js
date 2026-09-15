@@ -2962,8 +2962,10 @@ function playNoise(ctx, start, dur, outNode, volume, tone = 0.5) {
 const INDOOR_MAPS = new Set([
   'warehouse', 'supermarket', 'space', 'orbital_station', 'sewer', 'gravity_lab',
   'glassworks', 'airport', 'foundry', 'lockdown', 'studio', 'opera', 'labyrinth',
-  'train', 'temple', 'biosphere', 'lobby13', 'range',
+  'temple', 'biosphere', 'lobby13', 'range',
 ]);   // everything else -- urban, forest, trenches, desert, tundra, the rest -- is outside
+// 'train' moved out here — it's an open-air terminal yard now, not a row of
+// train-car interiors, so it gets the outdoor reverb bus.
 const _revBus = { indoor: null, outdoor: null };
 function getReverbBus(ctx, indoor) {
   const key = indoor ? 'indoor' : 'outdoor';
@@ -5575,27 +5577,147 @@ function buildDoomsdayMap() {
 buildDoomsdayMap();
 
 registerMap('train');
+// ──────────────────────────────────────────────────────────────────────────
+// TRAIN TERMINAL — was a bare rail + a single row of cars. Now a real
+// station: 3 tracks, 2 island platforms under a steel canopy, a long-haul
+// train parked on one side and a shorter regional train on the other, a
+// footbridge overlooking the whole yard, a level crossing with striped gates
+// at the south throat, and a headhouse with a clock tower at the north end.
+// The centre track keeps the old scrolling-tie illusion — it's the through
+// line an express blows past on — while the two flanking tracks hold the
+// parked stock.
+// Real-player spawns (placePlayerAtTeamSpawn) land at |x|<=18, z in
+// [±38,±46], so every structure below stays inboard of |z|=32 to leave that
+// clear on both ends.
+// ──────────────────────────────────────────────────────────────────────────
 function buildTrainMap() {
   const m = 'train';
-  addMapGround(m, 0x222222);
-  // 6 train cars in a long row
-  for (let i = -3; i < 3; i++) {
-    addMapBox(m, 0, 2, i * 14, 5, 4, 12, 0x4a3a5a);
-    addMapBox(m, 0, 4.2, i * 14, 5.4, 0.4, 13, 0x222);
+  addMapGround(m, 0x36383a);
+  addOuterWalls(m, 0x2a2a2a);
+
+  const TRACK_X = [-12, 0, 12];
+  const YARD_Z0 = -32, YARD_Z1 = 32;
+
+  // ── Track bed: ballast + rails + ties on all 3 tracks ───────────────────
+  // The centre track's ties are handed to _batch5.train.rails so
+  // updateBatch5() keeps scrolling them — the express-passing-through
+  // illusion the map used to be built entirely around.
+  TRACK_X.forEach(tx => {
+    addMapBox(m, tx, 0.02, 0, 3.6, 0.05, YARD_Z1 - YARD_Z0, 0x4a3b2e);        // ballast
+    addMapBox(m, tx - 0.9, 0.09, 0, 0.18, 0.14, YARD_Z1 - YARD_Z0, 0x8a8f94); // rail
+    addMapBox(m, tx + 0.9, 0.09, 0, 0.18, 0.14, YARD_Z1 - YARD_Z0, 0x8a8f94); // rail
+    for (let z = YARD_Z0 + 1; z <= YARD_Z1 - 1; z += 2) {
+      const tie = addMapBox(m, tx, 0.05, z, 2.6, 0.08, 0.6, 0x4a3325);
+      if (tx === 0) _batch5.train.rails.push(tie);
+    }
+  });
+
+  // ── Platforms + canopy ───────────────────────────────────────────────────
+  const PLAT_X = [-6, 6];
+  PLAT_X.forEach(px => {
+    addMapBox(m, px, 0.2, 0, 5.4, 0.4, 56, 0x9a958c);            // platform slab
+    addMapBox(m, px - 2.55, 0.41, 0, 0.3, 0.02, 56, 0xffcc00);   // safety stripe
+    addMapBox(m, px + 2.55, 0.41, 0, 0.3, 0.02, 56, 0xffcc00);   // safety stripe
+  });
+  for (let z = -14; z <= 14; z += 7) {
+    PLAT_X.forEach(px => {
+      addMapBox(m, px < 0 ? px - 2.3 : px + 2.3, 2.3, z, 0.35, 4.6, 0.35, 0x3a3e42); // pillar
+    });
   }
-  // Coupling rods
-  for (let i = -2; i < 3; i++) addMapBox(m, 0, 1, i * 14 - 7, 2, 0.4, 0.4, 0x666);
-  // Engine front
-  addMapBox(m, 0, 2.5, -45, 6, 5, 6, 0x6a2a2a);
-  addMapBox(m, 0, 6, -45, 1.2, 1.5, 1.2, 0x222); // chimney
-  // Side rails (tracks) — scrolled by updateBatch5 to fake motion
-  for (let r = 0; r < 30; r++) {
-    const tie = addMapBox(m, 0, 0.05, -45 + r * 3, 6, 0.06, 0.6, 0x553322);
-    _batch5.train.rails.push(tie);
-  }
-  addMapBox(m, -3, 0.1, 0, 0.3, 0.05, 90, 0x222);
-  addMapBox(m,  3, 0.1, 0, 0.3, 0.05, 90, 0x222);
-  MAP_GROUPS[m]._skyColor = 0x222233;
+  PLAT_X.forEach(px => addMapBox(m, px, 4.6, 0, 5.6, 0.3, 32, 0x555a5e)); // canopy roof
+  // Benches + lamp posts along the platforms
+  PLAT_X.forEach(px => {
+    [-20, -6, 6, 20].forEach(z => addMapBox(m, px, 0.6, z, 1.4, 0.4, 0.5, 0x2f2f2f));
+    [-21, 21].forEach(z => {
+      const lx = px < 0 ? px - 2.3 : px + 2.3;
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 4, 6), new THREE.MeshLambertMaterial({ color: 0x222222 }));
+      post.position.set(lx, 2, z); MAP_GROUPS[m].add(post);
+      const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 6), new THREE.MeshBasicMaterial({ color: 0xfff6bf }));
+      lamp.position.set(lx, 4.05, z); MAP_GROUPS[m].add(lamp);
+    });
+  });
+
+  // ── Headhouse + clock tower (north end, z≈27) ────────────────────────────
+  const HH_Z = 27, wnd = 0x88ddff;
+  // Footprint kept inboard of x=±8.4 so both trackside engines (x=±12, half-
+  // width 2.5) clear the walls by a comfortable margin.
+  addMapBox(m, 0, 3.5, 30, 16.8, 7, 0.6, 0x7a6a52);   // back wall
+  addMapBox(m, -8.4, 3.5, HH_Z, 0.6, 7, 6, 0x7a6a52); // side wall
+  addMapBox(m,  8.4, 3.5, HH_Z, 0.6, 7, 6, 0x7a6a52); // side wall
+  addMapBox(m, 0, 7.15, HH_Z, 17.4, 0.3, 6.6, 0x4a3f33); // roof (open-front concourse below)
+  [-8.4, 8.4].forEach(x => [26, 28.5].forEach(z => {
+    const win = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.6, 1.4), new THREE.MeshBasicMaterial({ color: wnd }));
+    win.position.set(x < 0 ? x + 0.31 : x - 0.31, 3.5, z); MAP_GROUPS[m].add(win);
+  }));
+  // Forward awning — lower canopy stretching toward the platforms
+  addMapBox(m, -6.5, 1.9, 21, 0.35, 3.8, 0.35, 0x3a3e42);
+  addMapBox(m,  6.5, 1.9, 21, 0.35, 3.8, 0.35, 0x3a3e42);
+  addMapBox(m, 0, 3.8, 21, 17.2, 0.25, 6, 0x555a5e);
+  // Clock tower on the building's back-right corner
+  addMapBox(m, 7, 9, 29.5, 2, 4, 2, 0xd8c9a3);
+  const clockFace = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.2, 0.1), new THREE.MeshBasicMaterial({ color: 0xfff6bf }));
+  clockFace.position.set(7, 9, 26.45); MAP_GROUPS[m].add(clockFace);
+
+  // ── Level crossing (south end, z≈-28) ────────────────────────────────────
+  addMapBox(m, 0, 0.03, -28, 44, 0.06, 4, 0x2e2e2e); // road slab, over all 3 tracks
+  for (let x = -20; x <= 20; x += 4) addMapBox(m, x, 0.07, -28, 1.4, 0.02, 0.3, 0xffffff); // dashes
+  [-16, 16].forEach(px => {
+    const dir = px < 0 ? 1 : -1;
+    addMapBox(m, px, 0.7, -28, 0.15, 1.4, 0.15, 0x333333); // post
+    const armColors = [0xdd2222, 0xffffff, 0xdd2222];
+    for (let s = 0; s < 3; s++) {
+      addMapBox(m, px + dir * (1.7 + s * 3.3), 1.0, -28, 3.3, 0.15, 0.15, armColors[s]); // striped arm
+    }
+    const light = new THREE.Mesh(new THREE.SphereGeometry(0.14, 8, 6), new THREE.MeshBasicMaterial({ color: 0xff2222 }));
+    light.position.set(px, 1.45, -28); MAP_GROUPS[m].add(light);
+  });
+  // Crossbuck sign
+  addMapBox(m, -20, 1.2, -28, 0.14, 2.4, 0.14, 0x333333);
+  [Math.PI / 4, -Math.PI / 4].forEach(rot => {
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.22, 0.1), new THREE.MeshBasicMaterial({ color: 0xf4f0e0 }));
+    bar.position.set(-20, 2.3, -27.8); bar.rotation.z = rot; MAP_GROUPS[m].add(bar);
+  });
+
+  // ── Footbridge overlooking the yard (z=-24, clear of the canopy, both ────
+  // trains' ends and the crossing) ─────────────────────────────────────────
+  addMapBox(m, 0, 5.0, -24, 34, 0.25, 3, 0x555a5e);            // deck
+  addMapBox(m, 0, 5.5, -25.4, 34, 0.5, 0.12, 0x3a3e42);        // railing
+  addMapBox(m, 0, 5.5, -22.6, 34, 0.5, 0.12, 0x3a3e42);        // railing
+  [-6, 6].forEach(x => addMapBox(m, x, 2.5, -24, 0.4, 5.0, 0.4, 0x3a3e42)); // support columns
+  // Stepped stairs down from each end of the deck to open ground
+  [-1, 1].forEach(dir => {
+    for (let i = 0; i < 12; i++) {
+      const t = (i + 1) / 12;
+      const stepH = Math.max(0.2, 5.0 * (1 - t));
+      const sx = dir * (17 + (i + 0.5) * 0.5);
+      addMapBox(m, sx, stepH / 2, -24, 0.55, stepH, 2.6, 0x4a4e52);
+    }
+  });
+
+  // ── Two consists: a long-haul train (west track) + a shorter regional ───
+  // train (east track), each with windows, a coupling-rod chain and an
+  // engine block + chimney.
+  const addConsist = (trackX, engineZ, carCount, carStartZ, carPitch, bodyColor, engineColor) => {
+    addMapBox(m, trackX, 2.5, engineZ, 5.0, 5, 6, engineColor);
+    addMapBox(m, trackX, 5.4, engineZ - Math.sign(carStartZ - engineZ) * 1.8, 1.1, 1.6, 1.1, 0x1c1c1c); // chimney
+    for (let i = 0; i < carCount; i++) {
+      const cz = carStartZ + i * carPitch;
+      addMapBox(m, trackX, 2, cz, 5, 4, 7, bodyColor);
+      addMapBox(m, trackX, 4.2, cz, 5.4, 0.4, 7.4, 0x1c1c1c); // roof trim
+      [-2.51, 2.51].forEach(ox => [-2, 0, 2].forEach(oz => {
+        const win = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.1, 1.3), new THREE.MeshBasicMaterial({ color: wnd }));
+        win.position.set(trackX + ox, 2.3, cz + oz); MAP_GROUPS[m].add(win);
+      }));
+      if (i > 0) addMapBox(m, trackX, 1, cz - carPitch / 2, 1.8, 0.35, 0.35, 0x666666); // coupling rod
+    }
+  };
+  // Long-haul: engine at the north end (z=28), 6 cars trailing south
+  addConsist(-12, 28, 6, 21, -8, 0x4a3a5a, 0x6a2a2a);
+  // Regional: engine at the south end (z=-19), 4 cars trailing north — leaves
+  // the platform open near the headhouse on this side for variety
+  addConsist(12, -19, 4, -13, 8, 0x2a5a4a, 0x2a4a6a);
+
+  MAP_GROUPS[m]._skyColor = 0x5a6270;
 }
 buildTrainMap();
 
@@ -15640,6 +15762,10 @@ let _recoilPitch = 0, _recoilYaw = 0, _recoilShots = 0, _recoilLastShot = 0, _re
 // you stop — so only active, sustained counter-drag earns a discount on the
 // next kick, not a one-time flick or a mouse that's merely sitting still.
 let _recoilCounterRate = 0;
+let _realismLandKick = 0;
+let _nearMissUntil = 0;
+let _lastNearMissAt = 0;
+const _gunKick = { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 };
 
 function addRecoil(w) {
   const rc = w && w.recoil;
@@ -15686,6 +15812,94 @@ function updateRecoil(dt) {
   if (Math.abs(_recoilYaw)   < 1e-5) _recoilYaw = 0;
   euler.x = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, euler.x));
   camera.quaternion.setFromEuler(euler);
+}
+
+function registerNearMiss(pos, speed = 120) {
+  const now = performance.now();
+  if (now - _lastNearMissAt < 130) return;
+  _lastNearMissAt = now;
+  _nearMissUntil = Math.max(_nearMissUntil, now + 180);
+  const loudness = Math.min(1.2, 0.55 + speed / 280);
+  playSoundEvent('bullet_whiz', { position: pos, volume: loudness, minGap: 80 });
+  flashScreen('rgba(255,255,255,0.055)', 80);
+}
+
+function spawnImpactDebris(pos, normal, weaponId) {
+  const kind = projectileKind(weaponId, WEAPONS.find(w => w.id === weaponId));
+  const count = kind === 'slug' || kind === 'rocket' || kind === 'grenade' ? 8 : 4;
+  const color = normal.y > 0.65 ? 0x8a7861 : 0xc6b18a;
+  for (let i = 0; i < count; i++) {
+    const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.75 });
+    const p = new THREE.Mesh(new THREE.SphereGeometry(0.018 + Math.random() * 0.018, 5, 4), mat);
+    p.position.copy(pos).addScaledVector(normal, 0.035);
+    scene.add(p);
+    const side = new THREE.Vector3(Math.random() - 0.5, Math.random() * 0.9, Math.random() - 0.5).normalize();
+    side.addScaledVector(normal, 0.8).normalize();
+    const speed = 1.5 + Math.random() * 3.4;
+    let age = 0;
+    const tick = () => {
+      age += 0.016;
+      p.position.addScaledVector(side, speed * 0.016);
+      side.y -= 4.8 * 0.016;
+      mat.opacity = Math.max(0, 0.75 * (1 - age / 0.42));
+      if (age < 0.42) requestAnimationFrame(tick);
+      else { scene.remove(p); p.geometry.dispose(); p.material.dispose(); }
+    };
+    requestAnimationFrame(tick);
+  }
+}
+
+function updateRealismFeedback(dt) {
+  const model = weaponModels[currentWeaponIdx];
+  if (model && model.visible && model._homePos && !reloading && activeSlot !== 'melee' && activeSlot !== 'support') {
+    const moving = Math.min(1, Math.hypot(playerVelocity.x, playerVelocity.z) / 8);
+    const t = performance.now() * 0.001;
+    const ads = isADS ? 0.34 : 1;
+    const crouch = (window._crouchEye || 1.65) < 1.4 ? 0.55 : 1;
+    const amp = (0.0035 + moving * 0.010) * ads * crouch;
+    const targetX = model._homePos.x + Math.sin(t * 1.8) * amp + Math.sin(t * 8.2) * amp * moving * 0.35 + _gunKick.x;
+    const targetY = model._homePos.y + Math.cos(t * 2.2) * amp * 0.65 - _realismLandKick * 0.035 + _gunKick.y;
+    const targetZ = model._homePos.z + _gunKick.z;
+    model.position.x += (targetX - model.position.x) * Math.min(1, dt * 7);
+    model.position.y += (targetY - model.position.y) * Math.min(1, dt * 7);
+    model.position.z += (targetZ - model.position.z) * Math.min(1, dt * 18);
+    model.rotation.x += (_gunKick.rx - model.rotation.x) * Math.min(1, dt * 22);
+    model.rotation.y += (_gunKick.ry - model.rotation.y) * Math.min(1, dt * 18);
+    model.rotation.z += (_gunKick.rz - model.rotation.z) * Math.min(1, dt * 18);
+  }
+  const settle = Math.pow(0.018, dt);
+  _gunKick.x *= settle; _gunKick.y *= settle; _gunKick.z *= settle;
+  _gunKick.rx *= settle; _gunKick.ry *= settle; _gunKick.rz *= settle;
+  if (_realismLandKick > 0) _realismLandKick = Math.max(0, _realismLandKick - dt * 5.5);
+  if (_nearMissUntil > performance.now()) {
+    const shake = gameplaySettingMult('cameraShake') * 0.0008;
+    euler.y += (Math.random() - 0.5) * shake;
+    euler.x += (Math.random() - 0.5) * shake * 0.65;
+    camera.quaternion.setFromEuler(euler);
+  }
+}
+
+function weaponKickStrength(w, pellets = 1) {
+  if (!w) return 1;
+  const projectile = (w.damage || 20) * Math.max(1, pellets || w.pellets || 1);
+  const rateLift = w.auto ? 0.82 : 1.12;
+  const speedLift = Math.max(0.65, Math.min(1.45, (w.bulletSpeed || 120) / 135));
+  return Math.max(0.45, Math.min(2.4, (projectile / 35) * rateLift * speedLift));
+}
+
+function kickWeaponVisual(w, pellets = 1) {
+  const model = weaponModels[currentWeaponIdx];
+  if (!model || !model._homePos) return;
+  const shake = gameplaySettingMult('cameraShake');
+  if (shake <= 0) return;
+  const s = weaponKickStrength(w, pellets) * shake;
+  const side = Math.random() < 0.5 ? -1 : 1;
+  _gunKick.z += Math.min(0.11, (model._kickZ || 0.015) * (2.3 + s * 0.65));
+  _gunKick.y += Math.min(0.040, 0.006 + s * 0.010);
+  _gunKick.x += side * Math.min(0.036, 0.005 + s * 0.007);
+  _gunKick.rx += Math.min(0.20, 0.030 + s * 0.040);
+  _gunKick.ry += side * Math.min(0.050, 0.008 + s * 0.010);
+  _gunKick.rz += -side * Math.min(0.075, 0.012 + s * 0.014);
 }
 
 document.addEventListener('mousemove', e => {
@@ -16381,11 +16595,13 @@ window.addEventListener('resize', () => {
 
 function setWeaponADSPos(ads) {
   const model = weaponModels[currentWeaponIdx];
-  if (ads) {
-    model.position.set(0, -0.1, -0.25);
-  } else {
-    model.position.set(0.12, -0.1, -0.25);
-  }
+  const x = ads ? 0 : 0.12;
+  model.position.set(x, -0.1, -0.25);
+  // updateRealismFeedback() lerps sway/kick back toward _homePos every frame —
+  // it's captured once at model-build time and never followed ADS, so the gun
+  // would snap back to the hip pose the instant that ran. Move the anchor with
+  // it so ADS actually holds its centered position.
+  if (model._homePos) model._homePos.set(x, -0.1, -0.25);
 }
 
 // ── Movement ───────────────────────────────────────────────────────────────
@@ -17165,7 +17381,12 @@ function updateMovement(dt) {
     // which read as simply standing up out of the slide. Rising velocity means
     // you are not landing, whatever the reference says this frame.
     if (camera.position.y <= groundEyeY && slamState.vel <= 0) {
+      const landingHardness = Math.min(1.2, Math.abs(slamState.vel || 0) / 12);
       camera.position.y = groundEyeY;
+      if (landingHardness > 0.18) {
+        _realismLandKick = Math.max(_realismLandKick, landingHardness);
+        playSoundEvent('footstep', { volume: Math.min(1, 0.35 + landingHardness * 0.45), pitch: 0.72, minGap: 80 });
+      }
       if (slamState.type === 'slam') {
         // Slam AOE inline (can't use doAbilityAOE since it uses currentWeapon.id)
         const slamOrigin = camera.position.clone();
@@ -17639,8 +17860,7 @@ function fireCrossbowCharge() {
 
   const model = weaponModels[currentWeaponIdx];
   triggerMuzzleBlast(model);
-  model.position.z += model._kickZ * gameplaySettingMult('cameraShake');
-  setTimeout(() => { if (!reloading) model.position.z = (model._homePos ? model._homePos.z : -0.25); }, 80);
+  kickWeaponVisual(currentWeapon, 1 + chargeMs / 900);
 
   const muzzleWorld = new THREE.Vector3();
   model._flash.getWorldPosition(muzzleWorld);
@@ -17721,6 +17941,27 @@ function flashScreen(cssColor, durationMs) {
   document.body.appendChild(div);
   requestAnimationFrame(() => requestAnimationFrame(() => { div.style.opacity = '0'; }));
   setTimeout(() => div.remove(), durationMs + 60);
+}
+
+function flashDamageScreen(amount = 20) {
+  const fx = gameplaySettingMult('screenFx');
+  if (fx <= 0) return;
+  const strength = Math.max(0.10, Math.min(0.46, (0.12 + amount / 170) * fx));
+  const dur = Math.max(120, Math.min(360, 130 + amount * 3.2));
+  const div = document.createElement('div');
+  div.style.cssText = [
+    'position:fixed',
+    'inset:0',
+    'pointer-events:none',
+    'z-index:1000',
+    `background:radial-gradient(circle at 50% 50%, rgba(255,0,0,${strength * 0.25}) 0%, rgba(255,0,0,${strength * 0.08}) 42%, rgba(110,0,0,${strength}) 100%)`,
+    `box-shadow:inset 0 0 ${Math.round(120 + amount * 2)}px rgba(120,0,0,${strength})`,
+    `transition:opacity ${dur}ms ease-out`,
+  ].join(';');
+  div.style.opacity = '1';
+  document.body.appendChild(div);
+  requestAnimationFrame(() => requestAnimationFrame(() => { div.style.opacity = '0'; }));
+  setTimeout(() => div.remove(), dur + 80);
 }
 
 const fpsCounter = document.createElement('div');
@@ -17990,8 +18231,7 @@ function tryShoot() {
 
   const model = weaponModels[currentWeaponIdx];
   triggerMuzzleBlast(model);
-  model.position.z += model._kickZ * gameplaySettingMult('cameraShake');
-  setTimeout(() => { if (!reloading) model.position.z = (model._homePos ? model._homePos.z : -0.25); }, 80);
+  kickWeaponVisual(wStats, wStats.pellets || 1);
 
   const muzzleWorld = new THREE.Vector3();
   model._flash.getWorldPosition(muzzleWorld);
@@ -20386,6 +20626,7 @@ function spawnImpactMark(pos, normal, weaponId) {
   m.quaternion.setFromUnitVectors(_UNIT_Z, normal);
   m.position.copy(pos).addScaledVector(normal, 0.012);
   scene.add(m);
+  spawnImpactDebris(pos, normal, weaponId);
   _impactMarks.push({ mesh: m, born: Date.now() });
   while (_impactMarks.length > IMPACT_MARK_LIMIT) {
     const old = _impactMarks.shift();
@@ -20523,6 +20764,7 @@ function updateBullets(dt) {
             { y: feetY + (0.62 - crouch * 0.28), r: 0.36, head: false },
           ];
           let bestT = Infinity, wasHead = false;
+          let closestT = 0, closestD2 = Infinity;
           for (const sp of spheres) {
             // closest approach of this frame's travel to the sphere centre
             let t = travelDist > 0.0001
@@ -20530,7 +20772,9 @@ function updateBullets(dt) {
               : 0;
             t = Math.max(0, Math.min(1, t));
             const cx = px0 + tDx * t - px, cy = py0 + tDy * t - sp.y, cz = pz0 + tDz * t - pz;
-            if (cx * cx + cy * cy + cz * cz < sp.r * sp.r && t < bestT) { bestT = t; wasHead = sp.head; }
+            const d2 = cx * cx + cy * cy + cz * cz;
+            if (d2 < closestD2) { closestD2 = d2; closestT = t; }
+            if (d2 < sp.r * sp.r && t < bestT) { bestT = t; wasHead = sp.head; }
           }
           if (bestT < Infinity && bestT <= wallHitT) {
             const at = new THREE.Vector3(px0 + tDx * bestT, py0 + tDy * bestT, pz0 + tDz * bestT);
@@ -20553,6 +20797,9 @@ function updateBullets(dt) {
             }
             removeBullet();
             continue;
+          }
+          if (closestD2 < 1.35 * 1.35 && closestT <= wallHitT) {
+            registerNearMiss(new THREE.Vector3(px0 + tDx * closestT, py0 + tDy * closestT, pz0 + tDz * closestT), b.speed);
           }
         }
         if (wallHit && !b.isOwn) {
@@ -21011,10 +21258,11 @@ function updateBatch5(dt) {
   const now = Date.now();
 
   if (m === 'train') {
-    // Scroll all rail-ties backward to fake forward motion. Wrap when off the end.
+    // Scroll the centre track's ties backward to fake an express blowing
+    // through non-stop. Ties sit every 2 m across the 64 m yard (±32).
     S.scroll += dt * 18;
     for (const tie of S.rails) {
-      tie.position.z = ((-45 + S.scroll + (S.rails.indexOf(tie) * 3)) % 90 + 90) % 90 - 45;
+      tie.position.z = ((-32 + S.scroll + (S.rails.indexOf(tie) * 2)) % 64 + 64) % 64 - 32;
     }
   }
   else if (m === 'orbital_station') {
@@ -22233,6 +22481,7 @@ function applyBotDamageToPlayer(weaponId, botId) {
   console.log(`[damage] bot hit: ${weaponId}(${dmg}dmg) ${oldHp}→${me.hp}`);
   updateHealthHUD(me.hp);
   if (oldHp > 75 && me.hp <= 75 && me.hp > 0) playSoundEvent('low_hp', { volume: 1.0, minGap: 2500 });
+  flashDamageScreen(oldHp - me.hp);
   flashHitIndicator();
   if (me.hp <= 0 && !isDead) {
     isDead = true;
@@ -22545,6 +22794,7 @@ socket.on('playerHit', data => {
     }
     return;
   }
+  const hpBeforeServerHit = data.targetId === myId ? (players[myId]?.hp ?? 300) : null;
   if (players[data.targetId]) {
     const tgt = players[data.targetId];
     if (tgt.isBot) {
@@ -22575,7 +22825,11 @@ socket.on('playerHit', data => {
       onEntityDied(data.targetId, myId);
     }
   }
-  if (data.targetId===myId) { updateHealthHUD(data.hp); flashHitIndicator(); }
+  if (data.targetId===myId) {
+    updateHealthHUD(data.hp);
+    if (hpBeforeServerHit != null && data.hp < hpBeforeServerHit) flashDamageScreen(hpBeforeServerHit - data.hp);
+    flashHitIndicator();
+  }
   if (data.bulletId) {
     for (let i=localBullets.length-1; i>=0; i--) {
       if (localBullets[i].id===data.bulletId) { scene.remove(localBullets[i].mesh); localBullets.splice(i,1); break; }
@@ -26666,6 +26920,7 @@ function loop() {
     if (shooting && (activeSlot === 'primary' || activeSlot === 'secondary') && currentWeapon.auto) tryShoot();
   });
   safeLoopStep('recoil', () => updateRecoil(dt));   // the muzzle settles back between shots
+  safeLoopStep('realism-feedback', () => updateRealismFeedback(dt));
   safeLoopStep('dots', () => updateDots());       // anything set alight keeps taking damage
   safeLoopStep('bullets', () => updateBullets(dt));
   safeLoopStep('impact-marks', () => updateImpactMarks());
@@ -29308,7 +29563,7 @@ const MAP_DESCS = {
   arena:      '🏟️ Arena — green field surrounded by stadium walls',
   opera:      '🎭 Opera — stage + balconies + chandelier',
   doomsday:   '🌋 Doomsday — collapsing city, fire pillars, abandoned heli',
-  train:      '🚂 Train — long row of cars + engine + side rails',
+  train:      '🚂 Train Terminal — 3 tracks, platforms + canopy, footbridge, level crossing',
   dreamscape: '🌌 Dreamscape — floating stairs + impossible shapes',
 };
 function selectMapPick(mapId) {
