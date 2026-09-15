@@ -15658,6 +15658,10 @@ function addRecoil(w) {
 
 function updateRecoil(dt) {
   if (!_recoilPitch && !_recoilYaw) return;
+  // While the trigger is still down (shots landing inside the same window
+  // addRecoil uses to keep the climb going), don't settle at all — recoil
+  // should climb continuously and only start recovering once you let go.
+  if (performance.now() - _recoilLastShot < 260) return;
   const k = Math.min(1, _recoilRecover * dt);
   const dp = _recoilPitch * k, dy = _recoilYaw * k;
   // Subtract what we put in, so pulling down against the climb leaves the aim
