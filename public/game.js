@@ -10937,6 +10937,183 @@ function buildGumballMachine() {
   function g_ink() { return GUN_MATS.inner(); }
 }
 
+function buildSelfieStick() {
+  // 🤳 Harpoon gun -> selfie stick. A telescoping pole with a phone clamped on
+  // the far end, camera facing you, and the shutter button on the handle.
+  const g = new THREE.Group();
+  const inner = GUN_MATS.inner(), bright = GUN_MATS.bright();
+  const black = new THREE.MeshPhongMaterial({ color: 0x1c1e22, shininess: 60, specular: 0x5a6068 });
+  const steel = new THREE.MeshPhongMaterial({ color: 0xc0c8d0, shininess: 190, specular: 0xffffff });
+  const phone = new THREE.MeshPhongMaterial({ color: 0xe8e0f0, shininess: 150, specular: 0xffffff });
+  const lens  = new THREE.MeshPhongMaterial({ color: 0x0a0a14, shininess: 220, specular: 0x8888ff });
+  const screen= new THREE.MeshBasicMaterial({ color: 0x5a9ae8 });
+  gpCyl(g, black, 0.016, 0.016, 0.110, 12, 0, 0.012, 0.080);           // handle
+  for (let i = 0; i < 4; i++)                                           // grip rings
+    gpCyl(g, inner, 0.017, 0.017, 0.004, 12, 0, 0.012, 0.050 + i * 0.020);
+  gpCyl(g, bright, 0.006, 0.006, 0.006, 8, 0, 0.030, 0.040, 0);        // shutter button
+  for (let i = 0; i < 4; i++)                                           // telescoping sections
+    gpCyl(g, steel, 0.010 - i * 0.0018, 0.010 - i * 0.0018, 0.075, 10, 0, 0.012, -0.010 - i * 0.068);
+  gpCyl(g, black, 0.008, 0.008, 0.016, 10, 0, 0.012, -0.226);          // tilt joint
+  gpBox(g, black, 0.090, 0.010, 0.010, 0, 0.012, -0.240);              // clamp bar
+  gpBox(g, black, 0.008, 0.050, 0.012, -0.046, 0.012, -0.244);          // clamp jaws
+  gpBox(g, black, 0.008, 0.050, 0.012, 0.046, 0.012, -0.244);
+  gpBox(g, phone, 0.080, 0.150, 0.008, 0, 0.012, -0.252);              // the phone, standing up
+  gpBox(g, screen, 0.070, 0.136, 0.002, 0, 0.012, -0.2475);            // screen faces you
+  gpCyl(g, lens, 0.007, 0.007, 0.004, 12, -0.024, 0.066, -0.257);      // camera faces out
+  gpCyl(g, lens, 0.007, 0.007, 0.004, 12, -0.024, 0.046, -0.257);
+  gpPlate(g, black, [
+    [0.030,-0.002],[0.060,-0.018],[0.068,-0.118],[0.040,-0.132],[0.012,-0.040],[0.008,-0.004],
+  ], 0.034, 0);
+  gpBox(g, bright, 0.006, 0.014, 0.006, 0, -0.014, 0.004, 0.22);
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.012, -0.270); g.add(flash);
+  g._flash = flash; g._kickZ = 0.010; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildBBQLighter() {
+  // 🔥 Flamethrower -> barbecue lighter. The long-neck kind, with a child-lock
+  // slider, a clear fuel window and a small flame at the tip.
+  const g = new THREE.Group();
+  const orange= new THREE.MeshPhongMaterial({ color: 0xf07a1a, shininess: 110, specular: 0xffd0a0 });
+  const steel = new THREE.MeshPhongMaterial({ color: 0xc0c8d0, shininess: 190, specular: 0xffffff });
+  const black = new THREE.MeshPhongMaterial({ color: 0x1c1e22, shininess: 60, specular: 0x5a6068 });
+  const fuel  = new THREE.MeshPhongMaterial({ color: 0x8ad8ff, shininess: 200, specular: 0xffffff, transparent: true, opacity: 0.6 });
+  const flameO= new THREE.MeshBasicMaterial({ color: 0xff8a22, transparent: true, opacity: 0.85 });
+  const flameB= new THREE.MeshBasicMaterial({ color: 0x3a8aff, transparent: true, opacity: 0.9 });
+  gpBox(g, orange, 0.040, 0.060, 0.130, 0, 0.010, 0.060);              // body
+  gpBox(g, fuel, 0.042, 0.020, 0.050, 0, 0.012, 0.080);                // fuel window
+  gpBox(g, black, 0.012, 0.010, 0.030, 0, 0.044, 0.030);               // child-lock slider
+  gpCyl(g, orange, 0.018, 0.012, 0.040, 12, 0, 0.018, -0.022);         // neck collar
+  gpCyl(g, steel, 0.008, 0.008, 0.260, 10, 0, 0.018, -0.170);          // the long neck
+  gpCyl(g, steel, 0.009, 0.009, 0.020, 10, 0, 0.018, -0.300);          // burner tip
+  for (let i = 0; i < 3; i++) gpBox(g, black, 0.003, 0.003, 0.006, 0, 0.027, -0.296 + i * 0.006);
+  const f1 = new THREE.Mesh(new THREE.ConeGeometry(0.010, 0.040, 8), flameO);
+  f1.rotation.x = -Math.PI / 2; f1.position.set(0, 0.018, -0.330); g.add(f1);
+  const f2 = new THREE.Mesh(new THREE.ConeGeometry(0.005, 0.016, 8), flameB);
+  f2.rotation.x = -Math.PI / 2; f2.position.set(0, 0.018, -0.316); g.add(f2);
+  gpPlate(g, orange, [
+    [0.070,-0.014],[0.100,-0.032],[0.108,-0.130],[0.080,-0.144],[0.052,-0.054],[0.050,-0.016],
+  ], 0.036, 0);
+  gpPlate(g, black, [                                                   // ignition trigger
+    [0.010,-0.018],[0.036,-0.020],[0.050,-0.090],[0.034,-0.096],[0.014,-0.040],
+  ], 0.020, 0);
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.018, -0.350); g.add(flash);
+  g._flash = flash; g._kickZ = 0.006; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildMegaphone() {
+  // 📣 Hand cannon -> megaphone. A white horn, a red siren button and the
+  // pistol grip every megaphone actually has.
+  const g = new THREE.Group();
+  const inner = GUN_MATS.inner(), bright = GUN_MATS.bright();
+  const white = new THREE.MeshPhongMaterial({ color: 0xf4f4f0, shininess: 130, specular: 0xffffff, side: THREE.DoubleSide });
+  const red   = new THREE.MeshPhongMaterial({ color: 0xd8302a, shininess: 110, specular: 0xffa098 });
+  const grey  = new THREE.MeshPhongMaterial({ color: 0x4a4e56, shininess: 60, specular: 0x8a9098 });
+  gpCyl(g, grey, 0.030, 0.030, 0.070, 16, 0, 0.030, 0.050);            // driver housing
+  gpCyl(g, white, 0.080, 0.030, 0.180, 20, 0, 0.030, -0.075, -Math.PI / 2); // horn flaring forward
+  gpCyl(g, red, 0.082, 0.082, 0.010, 20, 0, 0.030, -0.166);            // rim
+  gpCyl(g, inner, 0.074, 0.074, 0.003, 20, 0, 0.030, -0.160);          // mouth
+  gpCyl(g, grey, 0.026, 0.026, 0.004, 16, 0, 0.030, -0.155);           // driver grille
+  gpCyl(g, red, 0.010, 0.010, 0.010, 10, 0, 0.064, 0.050, 0);          // siren button
+  gpBox(g, grey, 0.030, 0.012, 0.020, 0, 0.060, 0.080);                // volume slider
+  gpCyl(g, inner, 0.024, 0.024, 0.008, 16, 0, 0.030, 0.088);           // mic grille at your face
+  gpPlate(g, grey, [
+    [0.030,-0.002],[0.060,-0.018],[0.068,-0.118],[0.040,-0.132],[0.012,-0.040],[0.008,-0.004],
+  ], 0.036, 0);
+  gpBox(g, bright, 0.006, 0.016, 0.008, 0, -0.016, 0.006, 0.22);       // talk trigger
+  gpBox(g, grey, 0.010, 0.006, 0.120, 0.034, 0.030, -0.010);           // strap
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.030, -0.176); g.add(flash);
+  g._flash = flash; g._kickZ = 0.016; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildBinoculars() {
+  // 🔭 Boomstick -> binoculars. Two barrels were already the design. Rubber
+  // armour, the focus wheel on the bridge and a neck strap.
+  const g = new THREE.Group();
+  const bright = GUN_MATS.bright();
+  const rubber= new THREE.MeshPhongMaterial({ color: 0x3a4a2a, shininess: 30, specular: 0x5a6a4a });
+  const black = new THREE.MeshPhongMaterial({ color: 0x14161a, shininess: 70, specular: 0x5a6068 });
+  const lens  = new THREE.MeshPhongMaterial({ color: 0x4a2a8a, shininess: 220, specular: 0xffffff, transparent: true, opacity: 0.8 });
+  const strap = new THREE.MeshPhongMaterial({ color: 0x2a2a2e, shininess: 20, specular: 0x4a4a50 });
+  [-0.030, 0.030].forEach(x => {
+    gpCyl(g, rubber, 0.028, 0.028, 0.150, 16, x, 0.020, -0.050);       // barrel
+    gpCyl(g, black, 0.031, 0.031, 0.030, 16, x, 0.020, -0.130);        // objective bell
+    gpCyl(g, lens, 0.026, 0.026, 0.003, 16, x, 0.020, -0.145);
+    gpCyl(g, black, 0.018, 0.022, 0.030, 14, x, 0.020, 0.040);         // eyecup
+    for (let i = 0; i < 3; i++) gpCyl(g, black, 0.0285, 0.0285, 0.004, 16, x, 0.020, -0.090 + i * 0.030);
+  });
+  gpBox(g, black, 0.030, 0.018, 0.050, 0, 0.034, -0.010);              // bridge
+  gpCyl(g, bright, 0.012, 0.012, 0.024, 14, 0, 0.044, 0.004, 0, Math.PI / 2); // focus wheel
+  for (let i = 0; i < 8; i++) gpBox(g, black, 0.026, 0.002, 0.002, 0, 0.044 + Math.sin(i) * 0.012, 0.004 + Math.cos(i) * 0.012);
+  gpBox(g, strap, 0.006, 0.004, 0.090, -0.060, 0.010, 0.080, 0.4);     // neck strap
+  gpBox(g, strap, 0.006, 0.004, 0.090, 0.060, 0.010, 0.080, 0.4);
+  gpPlate(g, black, [
+    [0.034,-0.006],[0.064,-0.022],[0.072,-0.120],[0.044,-0.134],[0.016,-0.044],[0.012,-0.008],
+  ], 0.036, 0);
+  gpBox(g, bright, 0.006, 0.014, 0.006, 0, -0.018, 0.010, 0.22);
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.020, -0.154); g.add(flash);
+  g._flash = flash; g._kickZ = 0.014; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildMilkshakeStraw() {
+  // 🥤 Dart gun -> milkshake with a straw. The oldest projectile weapon in any
+  // school: the cup, the lid, and a very long bendy straw aimed forward.
+  const g = new THREE.Group();
+  const bright = GUN_MATS.bright();
+  const cup   = new THREE.MeshPhongMaterial({ color: 0xf8f4ec, shininess: 90, specular: 0xffffff });
+  const pink  = new THREE.MeshPhongMaterial({ color: 0xf07ab0, shininess: 90, specular: 0xffd0e8 });
+  const lid   = new THREE.MeshPhongMaterial({ color: 0xe8f0f8, shininess: 200, specular: 0xffffff, transparent: true, opacity: 0.55 });
+  const shake = new THREE.MeshPhongMaterial({ color: 0xf8c8d8, shininess: 60, specular: 0xffffff });
+  const cherry= new THREE.MeshPhongMaterial({ color: 0xd01830, shininess: 200, specular: 0xffffff });
+  const stripeW = new THREE.MeshPhongMaterial({ color: 0xffffff, shininess: 80, specular: 0xffffff });
+  gpCyl(g, cup, 0.044, 0.032, 0.110, 16, 0, -0.050, 0.040, 0);         // cup (the grip)
+  gpCyl(g, pink, 0.041, 0.037, 0.020, 16, 0, -0.050, 0.040, 0);        // sleeve
+  gpCyl(g, lid, 0.046, 0.046, 0.014, 16, 0, 0.010, 0.040, 0);          // dome lid
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(0.044, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), shake);
+  dome.position.set(0, 0.012, 0.040); dome.scale.set(1, 0.5, 1); g.add(dome);
+  const c = new THREE.Mesh(new THREE.SphereGeometry(0.009, 10, 8), cherry);
+  c.position.set(0.018, 0.036, 0.050); g.add(c);
+  gpCyl(g, pink, 0.005, 0.005, 0.050, 8, 0, 0.040, 0.030, 0);          // straw up out of the lid
+  for (let i = 0; i < 4; i++)                                           // the bendy bit
+    gpCyl(g, i % 2 ? stripeW : pink, 0.0055, 0.0055, 0.008, 8, 0, 0.068 - i * 0.001, 0.024 - i * 0.006, 0.4 + i * 0.3);
+  for (let i = 0; i < 9; i++)                                           // long run forward, striped
+    gpCyl(g, i % 2 ? stripeW : pink, 0.005, 0.005, 0.030, 8, 0, 0.070, -0.004 - i * 0.030);
+  gpBox(g, bright, 0.006, 0.014, 0.006, 0, -0.010, -0.008, 0.22);
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.070, -0.280); g.add(flash);
+  g._flash = flash; g._kickZ = 0.006; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildBikeHorn() {
+  // 📯 Signal pistol -> bike horn. Rubber squeeze bulb at the back, a coiled
+  // brass horn out the front and the handlebar clamp underneath.
+  const g = new THREE.Group();
+  const bright = GUN_MATS.bright();
+  const bulb  = new THREE.MeshPhongMaterial({ color: 0xd8242a, shininess: 90, specular: 0xffb0b0 });
+  const brass = new THREE.MeshPhongMaterial({ color: 0xd8aa3a, shininess: 200, specular: 0xfff0b0, side: THREE.DoubleSide });
+  const black = new THREE.MeshPhongMaterial({ color: 0x1c1e22, shininess: 50, specular: 0x5a6068 });
+  const b = new THREE.Mesh(new THREE.SphereGeometry(0.036, 16, 12), bulb);
+  b.scale.set(1, 1, 1.3); b.position.set(0, 0.020, 0.070); g.add(b);   // squeeze bulb
+  gpCyl(g, black, 0.016, 0.020, 0.020, 12, 0, 0.020, 0.024);           // bulb collar
+  gpCyl(g, brass, 0.009, 0.009, 0.060, 10, 0, 0.020, -0.018);          // reed pipe
+  const coil = new THREE.Mesh(new THREE.TorusGeometry(0.030, 0.008, 8, 20, Math.PI * 1.6), brass);
+  coil.rotation.y = Math.PI / 2; coil.position.set(0, 0.050, -0.050); g.add(coil);
+  gpCyl(g, brass, 0.034, 0.010, 0.080, 16, 0, 0.020, -0.110, -Math.PI / 2); // flared bell
+  gpCyl(g, brass, 0.036, 0.036, 0.004, 16, 0, 0.020, -0.150);
+  gpBox(g, black, 0.020, 0.030, 0.020, 0, -0.012, -0.020);             // handlebar clamp
+  gpCyl(g, black, 0.004, 0.004, 0.030, 6, 0.012, -0.020, -0.020, 0, Math.PI / 2);
+  gpPlate(g, black, [
+    [0.030,-0.010],[0.060,-0.026],[0.068,-0.126],[0.040,-0.140],[0.012,-0.048],[0.008,-0.012],
+  ], 0.034, 0);
+  gpBox(g, bright, 0.006, 0.014, 0.006, 0, -0.024, 0.004, 0.22);
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.020, -0.160); g.add(flash);
+  g._flash = flash; g._kickZ = 0.010; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
 function buildHairDryer() {
   // 💨 MP-40 -> hair dryer. Cream housing, a chrome barrel with the heating
   // element glowing inside, a cable coiling off the butt and two slider
@@ -20118,6 +20295,24 @@ const MODEL_SKINS = [
   { id: 'paintball_gumball', weapon: 'paintball', name: 'Gumball Machine', rarity: 'rare',
     sw: ['#d02a2a', '#44cc66'], build: buildGumballMachine,
     blurb: 'The globe is the hopper. Insert coin. Receive welt.' },
+  { id: 'harpoon_selfie_stick', weapon: 'harpoon_gun', name: 'Selfie Stick', rarity: 'good',
+    sw: ['#1c1e22', '#e8e0f0'], build: buildSelfieStick,
+    blurb: 'Telescoping pole, phone on the end. Say cheese.' },
+  { id: 'flamethrower_bbq_lighter', weapon: 'flamethrower', name: 'BBQ Lighter', rarity: 'good',
+    sw: ['#f07a1a', '#c0c8d0'], build: buildBBQLighter,
+    blurb: 'Long-neck lighter, child lock off, a small flame at the tip.' },
+  { id: 'hand_cannon_megaphone', weapon: 'hand_cannon', name: 'Megaphone', rarity: 'good',
+    sw: ['#f4f4f0', '#d8302a'], build: buildMegaphone,
+    blurb: 'White horn, red siren button. Every shot is an announcement.' },
+  { id: 'boomstick_binoculars', weapon: 'boomstick', name: 'Binoculars', rarity: 'good',
+    sw: ['#3a4a2a', '#4a2a8a'], build: buildBinoculars,
+    blurb: 'Two barrels were already the design. Focus wheel on the bridge.' },
+  { id: 'dart_gun_milkshake', weapon: 'dart_gun', name: 'Milkshake Straw', rarity: 'good',
+    sw: ['#f07ab0', '#f8f4ec'], build: buildMilkshakeStraw,
+    blurb: 'The oldest projectile weapon in any school. Cherry on top.' },
+  { id: 'signal_pistol_bike_horn', weapon: 'signal_pistol', name: 'Bike Horn', rarity: 'lame',
+    sw: ['#d8242a', '#d8aa3a'], build: buildBikeHorn,
+    blurb: 'Squeeze bulb, coiled brass. Honk.' },
 ];
 const MODEL_SKINS_BY_WEAPON = {};
 for (const ms of MODEL_SKINS) (MODEL_SKINS_BY_WEAPON[ms.weapon] ||= []).push(ms);
