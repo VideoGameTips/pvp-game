@@ -20141,6 +20141,220 @@ function buildMeatTenderizer() {
   g.position.set(0.10, -0.12, -0.20); return g;
 }
 
+// 🗡️ Phase Blade → Light-Up Toy Sword. Translucent, battery powered, phases
+// through people because it is plastic.
+function buildToySword() {
+  const g = new THREE.Group();
+  const hiltMat  = new THREE.MeshLambertMaterial({ color: 0x2b4a86 });
+  const trimMat  = new THREE.MeshLambertMaterial({ color: 0xd8a828 });
+  const screwMat = new THREE.MeshLambertMaterial({ color: 0x8a8e94 });
+  const gemMat   = new THREE.MeshBasicMaterial({ color: 0xff4466 });
+  const bladeMat = new THREE.MeshBasicMaterial({ color: 0x66ddff, transparent: true, opacity: 0.55 });
+  const coreMat  = new THREE.MeshBasicMaterial({ color: 0xeafcff });
+  // Hilt, with the battery hatch and the one screw that holds it together.
+  const grip = new THREE.Mesh(new THREE.BoxGeometry(0.030, 0.034, 0.110), hiltMat);
+  grip.position.set(0, 0, 0.120); g.add(grip);
+  const hatch = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.004, 0.058), screwMat);
+  hatch.position.set(0, -0.018, 0.124); g.add(hatch);
+  const screw = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.004, 6), screwMat);
+  screw.rotation.x = Math.PI / 2; screw.position.set(0, -0.019, 0.152); g.add(screw);
+  const pommel = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.018, 0.022, 8), trimMat);
+  pommel.rotation.x = Math.PI / 2; pommel.position.set(0, 0, 0.186); g.add(pommel);
+  // Moulded crossguard with the plastic "jewels" in it.
+  const guard = new THREE.Mesh(new THREE.BoxGeometry(0.096, 0.026, 0.024), trimMat);
+  guard.position.set(0, 0, 0.056); g.add(guard);
+  [-0.036, 0.036].forEach(x => {
+    const gem = new THREE.Mesh(new THREE.SphereGeometry(0.010, 8, 6), gemMat);
+    gem.position.set(x, 0.012, 0.056); g.add(gem);
+  });
+  // The blade: hollow, tapering, lit from inside.
+  const blade = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.024, 0.300, 4), bladeMat);
+  blade.rotation.x = -Math.PI / 2; blade.position.set(0, 0, -0.108); g.add(blade);
+  const core = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.009, 0.296, 6), coreMat);
+  core.rotation.x = -Math.PI / 2; core.position.set(0, 0, -0.108); g.add(core);
+  const point = new THREE.Mesh(new THREE.ConeGeometry(0.013, 0.048, 4), bladeMat);
+  point.rotation.x = -Math.PI / 2; point.position.set(0, 0, -0.282); g.add(point);
+  _meleeOffset(g, 0, 0.030, -0.125);
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+
+// 🥫 Karambit → Can Opener. The hooked blade, the finger ring, the whole idea.
+function buildCanOpener() {
+  const g = new THREE.Group();
+  const steelMat = new THREE.MeshLambertMaterial({ color: 0xb4bcc4 });
+  const gripMat  = new THREE.MeshLambertMaterial({ color: 0xc03028 });
+  const darkMat  = new THREE.MeshLambertMaterial({ color: 0x3a3e44 });
+  const edgeMat  = new THREE.MeshLambertMaterial({ color: 0xe4eaf0 });
+  // Two levers, scissored open.
+  [[-0.018, -0.16], [0.018, 0.16]].forEach(([y, tilt]) => {
+    const lever = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.011, 0.150), steelMat);
+    lever.position.set(0, y, 0.090); lever.rotation.x = tilt; g.add(lever);
+    const pad = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.019, 0.086), gripMat);
+    pad.position.set(0, y + (y > 0 ? 0.012 : -0.012) * 0.9, 0.126);
+    pad.rotation.x = tilt; g.add(pad);
+  });
+  // Pivot rivet.
+  const pivot = new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.007, 0.046, 8), darkMat);
+  pivot.rotation.z = Math.PI / 2; pivot.position.set(0, 0, 0.022); g.add(pivot);
+  // Head: the toothed feed wheel and the cutting disc beside it.
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.044, 0.056), steelMat);
+  body.position.set(0, 0, -0.034); g.add(body);
+  const feed = new THREE.Mesh(new THREE.CylinderGeometry(0.019, 0.019, 0.010, 12), darkMat);
+  feed.rotation.z = Math.PI / 2; feed.position.set(-0.018, -0.012, -0.050); g.add(feed);
+  for (let i = 0; i < 10; i++) {
+    const a = (i / 10) * Math.PI * 2;
+    const tooth = new THREE.Mesh(new THREE.BoxGeometry(0.011, 0.005, 0.005), darkMat);
+    tooth.position.set(-0.018, -0.012 + Math.cos(a) * 0.020, -0.050 + Math.sin(a) * 0.020);
+    g.add(tooth);
+  }
+  const cutter = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.004, 14), edgeMat);
+  cutter.rotation.z = Math.PI / 2; cutter.position.set(0.006, -0.010, -0.054); g.add(cutter);
+  // Butterfly crank on the side.
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.005, 0.040, 6), steelMat);
+  shaft.rotation.z = Math.PI / 2; shaft.position.set(0.030, 0.006, -0.034); g.add(shaft);
+  [-0.014, 0.014].forEach(d => {
+    const wing = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.026, 0.014), gripMat);
+    wing.position.set(0.048, 0.006 + d, -0.034); g.add(wing);
+  });
+  _meleeOffset(g, 0, 0.016, -0.075);
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+
+// 🍢 Trench Bayonet → Giant Cocktail Toothpick. Reach knife, frilly end.
+function buildGiantToothpick() {
+  const g = new THREE.Group();
+  const woodMat  = new THREE.MeshLambertMaterial({ color: 0xe0c48e });
+  const tipMat   = new THREE.MeshLambertMaterial({ color: 0xc8a468 });
+  const frills   = [0xff5577, 0x55cc88, 0xffdd55, 0x66aaff]
+    .map(c => new THREE.MeshLambertMaterial({ color: c, side: THREE.DoubleSide }));
+  // One dowel, pointed at both ends, the way they come out of the box.
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.0095, 0.0095, 0.430, 8), woodMat);
+  shaft.rotation.x = Math.PI / 2; shaft.position.set(0, 0, -0.040); g.add(shaft);
+  const front = new THREE.Mesh(new THREE.ConeGeometry(0.0095, 0.050, 8), tipMat);
+  front.rotation.x = -Math.PI / 2; front.position.set(0, 0, -0.280); g.add(front);
+  const back = new THREE.Mesh(new THREE.ConeGeometry(0.0095, 0.038, 8), tipMat);
+  back.rotation.x = Math.PI / 2; back.position.set(0, 0, 0.194); g.add(back);
+  // The frilly cellophane, fanned out at the back.
+  for (let i = 0; i < 10; i++) {
+    const a = (i / 10) * Math.PI * 2;
+    const strip = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.030, 0.052), frills[i % 4]);
+    strip.position.set(Math.cos(a) * 0.014, Math.sin(a) * 0.014, 0.152);
+    strip.rotation.z = a; strip.rotation.x = -0.35; g.add(strip);
+  }
+  const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.012, 8), frills[0]);
+  collar.rotation.x = Math.PI / 2; collar.position.set(0, 0, 0.126); g.add(collar);
+  _meleeOffset(g, 0, 0.032, -0.155);
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+
+// 🧊 Tactical Tomahawk → Ice Scraper. Throwable. Not recommended.
+function buildIceScraper() {
+  const g = new THREE.Group();
+  const gripMat   = new THREE.MeshLambertMaterial({ color: 0x1d2a3a });
+  const shellMat  = new THREE.MeshLambertMaterial({ color: 0xe86a10 });
+  const bladeMat  = new THREE.MeshLambertMaterial({ color: 0xd8dce2 });
+  const bristleMat= new THREE.MeshLambertMaterial({ color: 0x2b3340 });
+  // Moulded handle with a thumb rest.
+  const handle = new THREE.Mesh(new THREE.BoxGeometry(0.030, 0.034, 0.130), shellMat);
+  handle.position.set(0, 0, 0.112); g.add(handle);
+  const rubber = new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.016, 0.086), gripMat);
+  rubber.position.set(0, -0.012, 0.118); g.add(rubber);
+  const loop = new THREE.Mesh(new THREE.TorusGeometry(0.013, 0.0045, 5, 10), gripMat);
+  loop.rotation.y = Math.PI / 2; loop.position.set(0, 0, 0.190); g.add(loop);
+  // Neck into the head.
+  const neck = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.026, 0.070), shellMat);
+  neck.position.set(0, 0, 0.018); g.add(neck);
+  // Scraper blade: a wide wedge, angled the way you hold it against glass.
+  const blade = new THREE.Mesh(new THREE.BoxGeometry(0.115, 0.009, 0.075), bladeMat);
+  blade.position.set(0, 0.014, -0.058); blade.rotation.x = 0.30; g.add(blade);
+  const edge = new THREE.Mesh(new THREE.BoxGeometry(0.115, 0.004, 0.010), bladeMat);
+  edge.position.set(0, -0.005, -0.094); edge.rotation.x = 0.30; g.add(edge);
+  // Serrated section for the frost that will not come off.
+  for (let i = 0; i < 7; i++) {
+    const tooth = new THREE.Mesh(new THREE.ConeGeometry(0.006, 0.014, 4), bladeMat);
+    tooth.rotation.x = -Math.PI / 2;
+    tooth.position.set(-0.048 + i * 0.016, -0.001, -0.100); g.add(tooth);
+  }
+  // Brush on the back for the snow.
+  const spine = new THREE.Mesh(new THREE.BoxGeometry(0.100, 0.014, 0.024), shellMat);
+  spine.position.set(0, 0.030, -0.014); g.add(spine);
+  for (let i = 0; i < 9; i++) {
+    const b = new THREE.Mesh(new THREE.BoxGeometry(0.007, 0.030, 0.007), bristleMat);
+    b.position.set(-0.040 + i * 0.010, 0.050, -0.014); g.add(b);
+  }
+  _meleeOffset(g, 0, 0.010, -0.080);
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+
+// 💅 OTs-04 Bayonet → Nail File. Spetsnaz grooming standards.
+function buildNailFile() {
+  const g = new THREE.Group();
+  const gritMat  = new THREE.MeshLambertMaterial({ color: 0xb0a292 });
+  const fineMat  = new THREE.MeshLambertMaterial({ color: 0xd8ccbc });
+  const steelMat = new THREE.MeshLambertMaterial({ color: 0xc0c6cc });
+  const gripMat  = new THREE.MeshLambertMaterial({ color: 0xd8447a });
+  // Metal spine the board is glued to.
+  const spine = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.005, 0.300), steelMat);
+  spine.position.set(0, 0, -0.050); g.add(spine);
+  // Two grits, coarse one side, fine the other.
+  const coarse = new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.003, 0.230), gritMat);
+  coarse.position.set(0, 0.004, -0.082); g.add(coarse);
+  const fine = new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.003, 0.230), fineMat);
+  fine.position.set(0, -0.004, -0.082); g.add(fine);
+  // The rounded working end.
+  const tipTop = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.013, 0.011, 10), gritMat);
+  tipTop.rotation.z = Math.PI / 2; tipTop.rotation.x = Math.PI / 2;
+  tipTop.position.set(0, 0, -0.196); g.add(tipTop);
+  // Cuticle pusher point at the very end.
+  const point = new THREE.Mesh(new THREE.ConeGeometry(0.009, 0.026, 6), steelMat);
+  point.rotation.x = -Math.PI / 2; point.position.set(0, 0, -0.216); g.add(point);
+  // Moulded grip with the hanging hole.
+  const grip = new THREE.Mesh(new THREE.BoxGeometry(0.030, 0.014, 0.100), gripMat);
+  grip.position.set(0, 0, 0.076); g.add(grip);
+  const hole = new THREE.Mesh(new THREE.TorusGeometry(0.008, 0.004, 5, 10), gripMat);
+  hole.rotation.x = Math.PI / 2; hole.position.set(0, 0, 0.118); g.add(hole);
+  _meleeOffset(g, 0, 0.016, -0.060);
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+
+// 🔌 Spec-Ops Garrote → Phone Charger Cable. Silent, and it was in your bag anyway.
+function buildChargerCable() {
+  const g = new THREE.Group();
+  const jacketMat = new THREE.MeshLambertMaterial({ color: 0xf0f0ee });
+  const frayMat   = new THREE.MeshLambertMaterial({ color: 0xc8c4b8 });
+  const usbAMat   = new THREE.MeshLambertMaterial({ color: 0xe8e8e4 });
+  const contactMat= new THREE.MeshLambertMaterial({ color: 0xc8a23a });
+  const shellMat  = new THREE.MeshLambertMaterial({ color: 0x9aa0a8 });
+  // A loop of cable pulled taut between both hands.
+  const N = 30;
+  for (let i = 0; i <= N; i++) {
+    const t = i / N;
+    const x = Math.cos(Math.PI * t) * 0.062;
+    const z = 0.050 - Math.sin(Math.PI * t) * 0.320;
+    const y = -0.008 * Math.sin(Math.PI * t);
+    const bead = new THREE.Mesh(new THREE.SphereGeometry(0.0058, 6, 5),
+      (i > 3 && i < 7) ? frayMat : jacketMat);
+    bead.position.set(x, y, z); g.add(bead);
+  }
+  // USB-A brick on one end.
+  const brick = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.018, 0.042), usbAMat);
+  brick.position.set(0.062, 0, 0.082); g.add(brick);
+  const tongue = new THREE.Mesh(new THREE.BoxGeometry(0.016, 0.011, 0.026), shellMat);
+  tongue.position.set(0.062, 0, 0.114); g.add(tongue);
+  const contact = new THREE.Mesh(new THREE.BoxGeometry(0.011, 0.002, 0.016), contactMat);
+  contact.position.set(0.062, 0.003, 0.116); g.add(contact);
+  // USB-C on the other, with the strain relief.
+  const boot = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.011, 0.028, 8), usbAMat);
+  boot.rotation.x = Math.PI / 2; boot.position.set(-0.062, 0, 0.070); g.add(boot);
+  const plug = new THREE.Mesh(new THREE.BoxGeometry(0.019, 0.010, 0.022), shellMat);
+  plug.position.set(-0.062, 0, 0.094); g.add(plug);
+  // The kink every cable develops just behind the plug.
+  const kink = new THREE.Mesh(new THREE.SphereGeometry(0.0085, 6, 5), frayMat);
+  kink.position.set(-0.062, 0.003, 0.054); g.add(kink);
+  _meleeOffset(g, 0, 0.020, -0.120);
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+
 const MELEE_MODEL_SKINS = [
   { id: 'knife_floss', melee: 'knife', name: 'Dental Floss', rarity: 'good',
     sw: ['#f2f4f6', '#3ab2c8'], build: buildDentalFloss,
@@ -20214,6 +20428,24 @@ const MELEE_MODEL_SKINS = [
   { id: 'gravity_hammer_tenderizer', melee: 'gravity_hammer', name: 'Meat Tenderizer', rarity: 'rare',
     sw: ['#9aa2ab', '#c09456'], build: buildMeatTenderizer,
     blurb: 'Heavy AOE, studded on both faces. Rest ten minutes before serving.' },
+  { id: 'phase_blade_toy_sword', melee: 'phase_blade', name: 'Light-Up Toy Sword', rarity: 'rare',
+    sw: ['#66ddff', '#2b4a86'], build: buildToySword,
+    blurb: 'Translucent, battery powered, phases through people because it is plastic.' },
+  { id: 'karambit_can_opener', melee: 'karambit', name: 'Can Opener', rarity: 'rare',
+    sw: ['#b4bcc4', '#c03028'], build: buildCanOpener,
+    blurb: 'The hooked blade, the finger ring, the whole idea.' },
+  { id: 'bayonet_toothpick', melee: 'bayonet', name: 'Cocktail Toothpick', rarity: 'rare',
+    sw: ['#e0c48e', '#ff5577'], build: buildGiantToothpick,
+    blurb: 'Reach knife, frilly end. Comes with the olive.' },
+  { id: 'tomahawk_ice_scraper', melee: 'tomahawk', name: 'Ice Scraper', rarity: 'rare',
+    sw: ['#e86a10', '#d8dce2'], build: buildIceScraper,
+    blurb: 'Throwable. Not recommended. Brush on the back.' },
+  { id: 'ots04_nail_file', melee: 'ots04', name: 'Nail File', rarity: 'rare',
+    sw: ['#b0a292', '#d8447a'], build: buildNailFile,
+    blurb: 'Spetsnaz grooming standards. Coarse one side, fine the other.' },
+  { id: 'garrote_charger_cable', melee: 'garrote', name: 'Phone Charger', rarity: 'rare',
+    sw: ['#f0f0ee', '#c8a23a'], build: buildChargerCable,
+    blurb: 'Silent, and it was in your bag anyway. Already frayed.' },
 ];
 const MELEE_MODEL_SKINS_BY_BASE = {};
 for (const ms of MELEE_MODEL_SKINS) (MELEE_MODEL_SKINS_BY_BASE[ms.melee] ||= []).push(ms);
