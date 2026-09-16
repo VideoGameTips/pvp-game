@@ -19889,6 +19889,258 @@ function buildKetchupBottle() {
   g.position.set(0.10, -0.12, -0.20); return g;
 }
 
+// 🎋 Sabre → Backscratcher. Bamboo, and the little hand is the business end.
+function buildBackscratcher() {
+  const g = new THREE.Group();
+  const caneMat = new THREE.MeshLambertMaterial({ color: 0xd8bc82 });
+  const nodeMat = new THREE.MeshLambertMaterial({ color: 0xb8945a });
+  const cordMat = new THREE.MeshLambertMaterial({ color: 0xa8303a });
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.0095, 0.0115, 0.360, 8), caneMat);
+  shaft.rotation.x = -Math.PI / 2; shaft.position.set(0, 0, 0.000); g.add(shaft);
+  // Bamboo nodes, the rings it grew at.
+  [-0.110, 0.000, 0.110].forEach(z => {
+    const node = new THREE.Mesh(new THREE.TorusGeometry(0.0108, 0.0028, 4, 10), nodeMat);
+    node.position.set(0, 0, z); g.add(node);
+  });
+  // The little hand: a cupped palm with four curled fingers.
+  const palm = new THREE.Mesh(new THREE.BoxGeometry(0.046, 0.009, 0.038), caneMat);
+  palm.position.set(0, 0.006, -0.198); palm.rotation.x = 0.28; g.add(palm);
+  for (let i = 0; i < 4; i++) {
+    const finger = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.008, 0.026), caneMat);
+    finger.position.set(-0.017 + i * 0.0113, 0.013, -0.226);
+    finger.rotation.x = 0.75; g.add(finger);
+  }
+  // Hanging cord through the butt.
+  const eye = new THREE.Mesh(new THREE.TorusGeometry(0.010, 0.0028, 4, 10), cordMat);
+  eye.rotation.y = Math.PI / 2; eye.position.set(0, 0, 0.196); g.add(eye);
+  _meleeOffset(g, 0, 0.014, -0.085);
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+
+// 📰 Baguette → Rolled Newspaper. Sunday edition, rubber band still on.
+function buildRolledNewspaper() {
+  const g = new THREE.Group();
+  const paperMat = new THREE.MeshLambertMaterial({ color: 0xe6e2d4 });
+  const shadeMat = new THREE.MeshLambertMaterial({ color: 0xcdc8b8 });
+  const inkMat   = new THREE.MeshLambertMaterial({ color: 0x4a4a48 });
+  const bandMat  = new THREE.MeshLambertMaterial({ color: 0xb08a5a });
+  const roll = new THREE.Mesh(new THREE.CylinderGeometry(0.027, 0.030, 0.330, 14), paperMat);
+  roll.rotation.x = -Math.PI / 2; roll.position.set(0, 0, -0.020); g.add(roll);
+  // The outer sheet has not quite gone round: a lip of it stands proud.
+  const lip = new THREE.Mesh(new THREE.CylinderGeometry(0.0315, 0.0345, 0.330, 14, 1, true, 0.4, 1.5), shadeMat);
+  lip.material.side = THREE.DoubleSide;
+  lip.rotation.x = -Math.PI / 2; lip.position.set(0, 0, -0.020); g.add(lip);
+  // Print showing at the cut end.
+  for (let i = 0; i < 4; i++) {
+    const line = new THREE.Mesh(new THREE.BoxGeometry(0.040, 0.0025, 0.0035), inkMat);
+    line.position.set(0, 0.014 - i * 0.011, -0.184); g.add(line);
+  }
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.048, 0.010, 0.004), inkMat);
+  head.position.set(0, 0.028, -0.184); g.add(head);
+  // The rubber band nobody takes off.
+  const band = new THREE.Mesh(new THREE.TorusGeometry(0.0300, 0.0035, 4, 14), bandMat);
+  band.position.set(0, 0, -0.088); g.add(band);
+  _meleeOffset(g, 0, 0.010, -0.060);
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+
+// 📡 Umbrella → Satellite Dish. Still a big round thing between you and harm.
+function buildSatelliteDish() {
+  const g = new THREE.Group();
+  const dishMat  = new THREE.MeshLambertMaterial({ color: 0xe0e2e0, side: THREE.DoubleSide });
+  const rimMat   = new THREE.MeshLambertMaterial({ color: 0xa8aaa8 });
+  const armMat   = new THREE.MeshLambertMaterial({ color: 0x2f3338 });
+  const lnbMat   = new THREE.MeshLambertMaterial({ color: 0xf0f0ec });
+  const boltMat  = new THREE.MeshLambertMaterial({ color: 0x6a6e72 });
+  // The dish, concave toward whatever is shooting at you.
+  const dish = new THREE.Mesh(new THREE.SphereGeometry(0.155, 18, 8, 0, Math.PI * 2, 0, Math.PI / 3.4), dishMat);
+  dish.rotation.x = Math.PI / 2; dish.position.set(-0.03, 0, -0.085); g.add(dish);
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(0.129, 0.008, 5, 20), rimMat);
+  rim.position.set(-0.03, 0, -0.135); g.add(rim);
+  // Feed arm out to the LNB at the focus.
+  const arm = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.012, 0.120), armMat);
+  arm.position.set(-0.03, -0.062, -0.150); arm.rotation.x = -0.35; g.add(arm);
+  const lnb = new THREE.Mesh(new THREE.CylinderGeometry(0.019, 0.015, 0.050, 10), lnbMat);
+  lnb.rotation.x = Math.PI / 2 + 0.35; lnb.position.set(-0.03, -0.088, -0.200); g.add(lnb);
+  // Mount and the stub of pole it was unbolted from.
+  const bracket = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.070, 0.022), armMat);
+  bracket.position.set(0.010, 0, -0.058); g.add(bracket);
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.110, 10), boltMat);
+  pole.rotation.x = Math.PI / 2; pole.position.set(0.020, 0, 0.010); g.add(pole);
+  const bolt = new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.007, 0.046, 6), boltMat);
+  bolt.rotation.z = Math.PI / 2; bolt.position.set(0.010, 0.026, -0.058); g.add(bolt);
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+
+// 🫖 Yo-Yo → Tea Bag. The string was always the weapon.
+function buildTeaBag() {
+  const g = new THREE.Group();
+  const tagMat   = new THREE.MeshLambertMaterial({ color: 0xf2ead6 });
+  const inkMat   = new THREE.MeshLambertMaterial({ color: 0x2a6a4a });
+  const stringMat= new THREE.MeshLambertMaterial({ color: 0xe8e4d8 });
+  const bagMat   = new THREE.MeshLambertMaterial({ color: 0xd8c9a4 });
+  const leafMat  = new THREE.MeshLambertMaterial({ color: 0x6a5230 });
+  const staplMat = new THREE.MeshLambertMaterial({ color: 0xb8bcc4 });
+  // The paper tag, pinched between finger and thumb.
+  const tag = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.003, 0.030), tagMat);
+  tag.position.set(0, 0.010, 0.040); g.add(tag);
+  const logo = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.004, 0.012), inkMat);
+  logo.position.set(0, 0.011, 0.040); g.add(logo);
+  // String out to the bag, sagging on the way.
+  for (let i = 0; i < 12; i++) {
+    const t = i / 11;
+    const seg = new THREE.Mesh(new THREE.CylinderGeometry(0.0013, 0.0013, 0.026, 4), stringMat);
+    seg.rotation.x = Math.PI / 2 + 0.22;
+    seg.position.set(0, 0.006 - t * 0.062, 0.022 - t * 0.270); g.add(seg);
+  }
+  // The bag itself: a paper pillow with the leaves showing through.
+  const bag = new THREE.Mesh(new THREE.BoxGeometry(0.052, 0.020, 0.062), bagMat);
+  bag.position.set(0, -0.068, -0.286); bag.rotation.x = 0.20; g.add(bag);
+  [-0.014, 0.010].forEach((dz, i) => {
+    const leaf = new THREE.Mesh(new THREE.BoxGeometry(0.030, 0.022, 0.018), leafMat);
+    leaf.position.set(-0.006 + i * 0.012, -0.068, -0.286 + dz); g.add(leaf);
+  });
+  const staple = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.006, 0.004), staplMat);
+  staple.position.set(0, -0.056, -0.252); g.add(staple);
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+
+// 🍕 Combat Axe → Pizza Cutter. The wheel does all the work.
+function buildPizzaCutter() {
+  const g = new THREE.Group();
+  const gripMat  = new THREE.MeshLambertMaterial({ color: 0x24282e });
+  const steelMat = new THREE.MeshLambertMaterial({ color: 0xc2c8d0 });
+  const edgeMat  = new THREE.MeshLambertMaterial({ color: 0xe8eef4 });
+  const bandMat  = new THREE.MeshLambertMaterial({ color: 0xc8342a });
+  // Moulded grip.
+  const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.020, 0.024, 0.140, 12), gripMat);
+  grip.rotation.x = Math.PI / 2; grip.position.set(0, 0, 0.115); g.add(grip);
+  [0.070, 0.105, 0.140].forEach(z => {
+    const ridge = new THREE.Mesh(new THREE.TorusGeometry(0.0225, 0.004, 4, 12), bandMat);
+    ridge.position.set(0, 0, z); g.add(ridge);
+  });
+  const cap = new THREE.Mesh(new THREE.SphereGeometry(0.021, 10, 7), gripMat);
+  cap.position.set(0, 0, 0.186); g.add(cap);
+  // Shank forward to the yoke.
+  const shank = new THREE.Mesh(new THREE.CylinderGeometry(0.010, 0.012, 0.110, 8), steelMat);
+  shank.rotation.x = Math.PI / 2; shank.position.set(0, 0, -0.008); g.add(shank);
+  // Thumb guard over the wheel.
+  const guard = new THREE.Mesh(new THREE.BoxGeometry(0.030, 0.008, 0.052), steelMat);
+  guard.position.set(0, 0.040, -0.088); g.add(guard);
+  // Yoke arms either side of the blade.
+  [-0.016, 0.016].forEach(x => {
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.052, 0.014), steelMat);
+    arm.position.set(x, 0.020, -0.086); g.add(arm);
+  });
+  // The wheel, on a hub, turning across the swing.
+  const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.058, 0.058, 0.005, 20), edgeMat);
+  wheel.rotation.z = Math.PI / 2; wheel.position.set(0, -0.006, -0.086); g.add(wheel);
+  const edge = new THREE.Mesh(new THREE.TorusGeometry(0.058, 0.0028, 4, 20), steelMat);
+  edge.rotation.y = Math.PI / 2; edge.position.set(0, -0.006, -0.086); g.add(edge);
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.040, 10), steelMat);
+  hub.rotation.z = Math.PI / 2; hub.position.set(0, -0.006, -0.086); g.add(hub);
+  _meleeOffset(g, 0, 0.016, -0.075);
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+
+// 📺 Shock Baton → TV Remote. It already shocked people. Now it changes channel.
+function buildTVRemote() {
+  const g = new THREE.Group();
+  const shellMat = new THREE.MeshLambertMaterial({ color: 0x1c1e22 });
+  const panelMat = new THREE.MeshLambertMaterial({ color: 0x2c3036 });
+  const btnMat   = new THREE.MeshLambertMaterial({ color: 0x585e66 });
+  const powerMat = new THREE.MeshLambertMaterial({ color: 0xc8302c });
+  const irMat    = new THREE.MeshBasicMaterial({ color: 0xff5a5a });
+  const inkMat   = new THREE.MeshLambertMaterial({ color: 0x8a9098 });
+  // Body, slightly wedge shaped the way remotes are.
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.056, 0.020, 0.230), shellMat);
+  body.position.set(0, 0, 0.015); g.add(body);
+  const face = new THREE.Mesh(new THREE.BoxGeometry(0.050, 0.004, 0.222), panelMat);
+  face.position.set(0, 0.011, 0.015); g.add(face);
+  // Battery bulge at the back.
+  const batt = new THREE.Mesh(new THREE.BoxGeometry(0.046, 0.012, 0.060), shellMat);
+  batt.position.set(0, -0.015, 0.098); g.add(batt);
+  // Power button, then a number grid.
+  const power = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.006, 10), powerMat);
+  power.rotation.x = Math.PI / 2; power.rotation.z = 0;
+  power.position.set(-0.014, 0.015, -0.076); g.add(power);
+  for (let r = 0; r < 5; r++) for (let c = 0; c < 3; c++) {
+    const b = new THREE.Mesh(new THREE.BoxGeometry(0.011, 0.005, 0.011), btnMat);
+    b.position.set(-0.016 + c * 0.016, 0.015, -0.040 + r * 0.026); g.add(b);
+  }
+  // The brand strip, worn off.
+  const brand = new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.004, 0.006), inkMat);
+  brand.position.set(0, 0.014, 0.106); g.add(brand);
+  // The IR window at the tip, which is the pointy end.
+  const nose = new THREE.Mesh(new THREE.BoxGeometry(0.046, 0.017, 0.022), panelMat);
+  nose.position.set(0, 0, -0.110); g.add(nose);
+  const led = new THREE.Mesh(new THREE.SphereGeometry(0.008, 8, 6), irMat);
+  led.position.set(0, 0.002, -0.121); g.add(led);
+  _meleeOffset(g, 0, 0.018, -0.070);
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+
+// 🎄 Volt Whip → Christmas Lights. A long electric thing that chains. Literally.
+function buildChristmasLights() {
+  const g = new THREE.Group();
+  const cableMat = new THREE.MeshLambertMaterial({ color: 0x1f6a2a });
+  const plugMat  = new THREE.MeshLambertMaterial({ color: 0xf0f0ea });
+  const socketMat= new THREE.MeshLambertMaterial({ color: 0x14381c });
+  const bulbMats = [0xff4444, 0x44ff66, 0x4477ff, 0xffdd44, 0xff66dd]
+    .map(c => new THREE.MeshBasicMaterial({ color: c }));
+  // The plug, in the hand.
+  const plug = new THREE.Mesh(new THREE.BoxGeometry(0.034, 0.026, 0.044), plugMat);
+  plug.position.set(0, 0, 0.150); g.add(plug);
+  [-0.008, 0.008].forEach(x => {
+    const pin = new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.012, 0.018), plugMat);
+    pin.position.set(x, 0, 0.180); g.add(pin);
+  });
+  // The run: beads down a sagging path, a bulb every few.
+  const N = 26;
+  for (let i = 0; i <= N; i++) {
+    const t = i / N;
+    const z = 0.124 - t * 0.520;
+    const y = -0.090 * Math.sin(Math.PI * t);
+    const bead = new THREE.Mesh(new THREE.SphereGeometry(0.0062, 6, 5), cableMat);
+    bead.position.set(0, y, z); g.add(bead);
+    if (i % 5 === 2) {
+      const socket = new THREE.Mesh(new THREE.CylinderGeometry(0.0085, 0.0105, 0.016, 8), socketMat);
+      socket.position.set(0, y - 0.014, z); g.add(socket);
+      const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.0125, 8, 6), bulbMats[(i / 5 | 0) % 5]);
+      bulb.scale.set(1, 1.25, 1); bulb.position.set(0, y - 0.032, z); g.add(bulb);
+    }
+  }
+  _meleeOffset(g, 0, 0.026, -0.115);
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+
+// 🥩 Gravity Hammer → Meat Tenderizer. Heavy AOE, studded both sides.
+function buildMeatTenderizer() {
+  const g = new THREE.Group();
+  const woodMat  = new THREE.MeshLambertMaterial({ color: 0xc09456 });
+  const steelMat = new THREE.MeshLambertMaterial({ color: 0x9aa2ab });
+  const darkMat  = new THREE.MeshLambertMaterial({ color: 0x6e757d });
+  const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.019, 0.023, 0.220, 12), woodMat);
+  handle.rotation.x = Math.PI / 2; handle.position.set(0, 0, 0.090); g.add(handle);
+  const knob = new THREE.Mesh(new THREE.SphereGeometry(0.024, 10, 7), woodMat);
+  knob.position.set(0, 0, 0.198); g.add(knob);
+  const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.026, 0.026, 12), darkMat);
+  collar.rotation.x = Math.PI / 2; collar.position.set(0, 0, -0.030); g.add(collar);
+  // The head lies across the swing, so both studded faces are edge-on to you.
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.115, 0.062, 0.062), steelMat);
+  head.position.set(0, 0, -0.088); g.add(head);
+  // Pyramid studs, a grid on each face.
+  [-1, 1].forEach(dir => {
+    for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) {
+      const stud = new THREE.Mesh(new THREE.ConeGeometry(0.0095, 0.016, 4), darkMat);
+      stud.rotation.z = dir * Math.PI / 2;
+      stud.position.set(dir * 0.0655, -0.020 + r * 0.020, -0.108 + c * 0.020); g.add(stud);
+    }
+  });
+  _meleeOffset(g, 0, 0.014, -0.070);
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+
 const MELEE_MODEL_SKINS = [
   { id: 'knife_floss', melee: 'knife', name: 'Dental Floss', rarity: 'good',
     sw: ['#f2f4f6', '#3ab2c8'], build: buildDentalFloss,
@@ -19938,6 +20190,30 @@ const MELEE_MODEL_SKINS = [
   { id: 'vampire_blade_ketchup', melee: 'vampire_blade', name: 'Ketchup Bottle', rarity: 'good',
     sw: ['#c41f24', '#f4f0e4'], build: buildKetchupBottle,
     blurb: 'It was always about draining something red.' },
+  { id: 'sabre_backscratcher', melee: 'sabre', name: 'Backscratcher', rarity: 'good',
+    sw: ['#d8bc82', '#a8303a'], build: buildBackscratcher,
+    blurb: 'Bamboo. The little hand is the business end.' },
+  { id: 'baguette_newspaper', melee: 'baguette', name: 'Rolled Newspaper', rarity: 'good',
+    sw: ['#e6e2d4', '#b08a5a'], build: buildRolledNewspaper,
+    blurb: 'Sunday edition. The rubber band is still on it.' },
+  { id: 'umbrella_satellite_dish', melee: 'umbrella', name: 'Satellite Dish', rarity: 'good',
+    sw: ['#e0e2e0', '#2f3338'], build: buildSatelliteDish,
+    blurb: 'Still a big round thing between you and harm.' },
+  { id: 'yoyo_tea_bag', melee: 'yoyo', name: 'Tea Bag', rarity: 'good',
+    sw: ['#d8c9a4', '#2a6a4a'], build: buildTeaBag,
+    blurb: 'The string was always the weapon. Brew strength: lethal.' },
+  { id: 'combat_axe_pizza_cutter', melee: 'combat_axe', name: 'Pizza Cutter', rarity: 'good',
+    sw: ['#c2c8d0', '#c8342a'], build: buildPizzaCutter,
+    blurb: 'The wheel does all the work. Mind the thumb guard.' },
+  { id: 'shock_baton_tv_remote', melee: 'shock_baton', name: 'TV Remote', rarity: 'good',
+    sw: ['#1c1e22', '#c8302c'], build: buildTVRemote,
+    blurb: 'It already shocked people. Now it changes the channel.' },
+  { id: 'volt_whip_fairy_lights', melee: 'volt_whip', name: 'Christmas Lights', rarity: 'rare',
+    sw: ['#1f6a2a', '#ff4444'], build: buildChristmasLights,
+    blurb: 'A long electric thing that chains. Literally.' },
+  { id: 'gravity_hammer_tenderizer', melee: 'gravity_hammer', name: 'Meat Tenderizer', rarity: 'rare',
+    sw: ['#9aa2ab', '#c09456'], build: buildMeatTenderizer,
+    blurb: 'Heavy AOE, studded on both faces. Rest ten minutes before serving.' },
 ];
 const MELEE_MODEL_SKINS_BY_BASE = {};
 for (const ms of MELEE_MODEL_SKINS) (MELEE_MODEL_SKINS_BY_BASE[ms.melee] ||= []).push(ms);
