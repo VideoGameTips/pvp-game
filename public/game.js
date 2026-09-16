@@ -94,7 +94,7 @@ const WEAPONS = [
   },
   {
     id: 'burst', name: 'Burst Rifle', type: 'Burst AR', slot: 'primary',
-    mag: 36, reserve: 108, damage: 63, fireRate: 47, reloadTime: 1900,
+    mag: 36, reserve: 108, damage: 47, fireRate: 47, reloadTime: 1900,
     auto: true, pellets: 1, spread: 0.006, adsZoom: 43, bulletSpeed: 136, noReload: false,
     bulletColor: 0xffdd66, heatShots: 3, heatCooldown: 750, falloffLift: 0.13,
     ability: { name: 'Triple Burst', cd: 9000, desc: 'Fire 3 rapid bursts instantly', type: 'fanfire', count: 9, delay: 40, noADS: true },
