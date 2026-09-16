@@ -15887,6 +15887,14 @@ function weaponKickStrength(w, pellets = 1) {
   return Math.max(0.45, Math.min(2.4, (projectile / 35) * rateLift * speedLift));
 }
 
+// Each call ADDS to the accumulator with no cap of its own, so a fast
+// automatic (P90, minigun...) can add kick faster than updateRealismFeedback's
+// per-frame decay bleeds it off — the gun climbs and keeps climbing for as
+// long as the trigger is held, with nothing (unlike the real aim-recoil
+// system) the player can do to fight it. Clamp the ACCUMULATED total, not
+// just each shot's contribution, so sustained fire settles at a fixed kick
+// instead of walking off the top of the screen.
+const _GUN_KICK_MAX = { x: 0.05, y: 0.05, z: 0.14, rx: 0.09, ry: 0.06, rz: 0.06 };
 function kickWeaponVisual(w, pellets = 1) {
   const model = weaponModels[currentWeaponIdx];
   if (!model || !model._homePos) return;
@@ -15900,6 +15908,10 @@ function kickWeaponVisual(w, pellets = 1) {
   _gunKick.rx += Math.min(0.20, 0.030 + s * 0.040);
   _gunKick.ry += side * Math.min(0.050, 0.008 + s * 0.010);
   _gunKick.rz += -side * Math.min(0.075, 0.012 + s * 0.014);
+  for (const key of ['x', 'y', 'z', 'rx', 'ry', 'rz']) {
+    const max = _GUN_KICK_MAX[key];
+    _gunKick[key] = Math.max(-max, Math.min(max, _gunKick[key]));
+  }
 }
 
 document.addEventListener('mousemove', e => {
