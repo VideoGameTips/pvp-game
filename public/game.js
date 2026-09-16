@@ -10751,6 +10751,192 @@ function buildHandMixer() {
   g.position.set(0.12, -0.1, -0.25); return g;
 }
 
+function buildPowerDrill() {
+  // 🔩 MP7 -> cordless drill. Battery pack for a magazine, a chuck and a bit
+  // for a barrel, the forward/reverse rocker above the trigger.
+  const g = new THREE.Group();
+  const inner = GUN_MATS.inner();
+  const teal  = new THREE.MeshPhongMaterial({ color: 0x1a8a8a, shininess: 100, specular: 0xa8e8e8 });
+  const black = new THREE.MeshPhongMaterial({ color: 0x1c1e22, shininess: 50, specular: 0x5a6068 });
+  const steel = new THREE.MeshPhongMaterial({ color: 0xc0c8d0, shininess: 180, specular: 0xffffff });
+  const red   = new THREE.MeshPhongMaterial({ color: 0xd8302a, shininess: 100, specular: 0xffa098 });
+  const led   = new THREE.MeshBasicMaterial({ color: 0x66ff88 });
+  gpBox(g, teal, 0.052, 0.064, 0.150, 0, 0.020, 0.010);                // motor housing
+  for (let i = 0; i < 5; i++) gpBox(g, inner, 0.054, 0.004, 0.006, 0, 0.034, 0.050 + i * 0.010); // vents
+  gpCyl(g, black, 0.026, 0.028, 0.030, 12, 0, 0.020, -0.078);          // clutch ring
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    gpBox(g, teal, 0.004, 0.004, 0.028, Math.cos(a) * 0.028, 0.020 + Math.sin(a) * 0.028, -0.078);
+  }
+  gpCyl(g, black, 0.020, 0.016, 0.040, 12, 0, 0.020, -0.112);          // chuck
+  gpCyl(g, steel, 0.005, 0.005, 0.080, 8, 0, 0.020, -0.170);           // bit
+  for (let i = 0; i < 6; i++)                                           // its flutes
+    gpBox(g, steel, 0.012, 0.002, 0.003, 0, 0.020, -0.146 - i * 0.010, 0, 0, i * 0.5);
+  gpBox(g, red, 0.030, 0.012, 0.010, 0, -0.004, -0.024);               // fwd/rev rocker
+  gpPlate(g, teal, [
+    [0.020,-0.012],[0.050,-0.024],[0.058,-0.120],[0.030,-0.132],[0.004,-0.052],[0.000,-0.016],
+  ], 0.036, 0);
+  gpBox(g, black, 0.076, 0.042, 0.090, 0, -0.150, 0.024);              // battery pack
+  gpBox(g, red, 0.078, 0.008, 0.092, 0, -0.130, 0.024);
+  for (let i = 0; i < 3; i++) gpBox(g, led, 0.006, 0.004, 0.004, 0.036, -0.146, 0.004 + i * 0.010);
+  gpBox(g, black, 0.012, 0.024, 0.010, 0, -0.030, -0.006, 0.20);       // trigger
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.020, -0.214); g.add(flash);
+  g._flash = flash; g._kickZ = 0.008; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildSoapDispenser() {
+  // 🧼 Five-seveN -> soap dispenser. A pump bottle, the nozzle aimed down range,
+  // soap sloshing in the clear body and a bubble stuck to the spout.
+  const g = new THREE.Group();
+  const bright = GUN_MATS.bright();
+  const clear = new THREE.MeshPhongMaterial({ color: 0xf0f8ff, shininess: 200, specular: 0xffffff, transparent: true, opacity: 0.45 });
+  const soap  = new THREE.MeshPhongMaterial({ color: 0xe860a8, shininess: 160, specular: 0xffc0e0, transparent: true, opacity: 0.85 });
+  const white = new THREE.MeshPhongMaterial({ color: 0xf6f6f2, shininess: 120, specular: 0xffffff });
+  const bubble= new THREE.MeshPhongMaterial({ color: 0xc8f0ff, shininess: 220, specular: 0xffffff, transparent: true, opacity: 0.35 });
+  const label = new THREE.MeshPhongMaterial({ color: 0x5ab8e8, shininess: 60, specular: 0xd0f0ff });
+  gpBox(g, clear, 0.044, 0.110, 0.070, 0, -0.030, 0.030);              // bottle (the grip)
+  gpBox(g, soap, 0.038, 0.080, 0.064, 0, -0.044, 0.030);               // soap level
+  gpBox(g, label, 0.046, 0.040, 0.050, 0, -0.050, 0.030);              // label
+  gpCyl(g, white, 0.020, 0.020, 0.020, 12, 0, 0.034, 0.030, 0);        // collar
+  gpCyl(g, white, 0.010, 0.010, 0.030, 10, 0, 0.056, 0.030, 0);        // pump stem
+  gpBox(g, white, 0.030, 0.020, 0.040, 0, 0.074, 0.018);               // pump head
+  gpCyl(g, white, 0.007, 0.006, 0.110, 10, 0, 0.074, -0.056);          // spout = barrel
+  gpCyl(g, white, 0.009, 0.009, 0.010, 10, 0, 0.074, -0.114);
+  const b = new THREE.Mesh(new THREE.SphereGeometry(0.012, 10, 8), bubble);
+  b.position.set(0.006, 0.062, -0.124); g.add(b);                       // a bubble on the spout
+  gpBox(g, bright, 0.006, 0.014, 0.006, 0, 0.044, -0.010, 0.22);       // trigger = pump press
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.074, -0.124); g.add(flash);
+  g._flash = flash; g._kickZ = 0.008; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildHockeyStick() {
+  // 🏒 M1 Garand -> hockey stick. Shaft to the shoulder, taped blade out front,
+  // a puck balanced on it ready to go.
+  const g = new THREE.Group();
+  const inner = GUN_MATS.inner(), bright = GUN_MATS.bright();
+  const shaft = new THREE.MeshPhongMaterial({ color: 0xd8b070, shininess: 100, specular: 0xf0e0c0 });
+  const graph = new THREE.MeshPhongMaterial({ color: 0x1c1e24, shininess: 80, specular: 0x6a7080 });
+  const tape  = new THREE.MeshPhongMaterial({ color: 0xf4f4f0, shininess: 30, specular: 0xffffff });
+  const puck  = new THREE.MeshPhongMaterial({ color: 0x0e0e10, shininess: 40, specular: 0x3a3a40 });
+  gpBox(g, shaft, 0.022, 0.030, 0.380, 0, 0.018, 0.000);               // shaft
+  gpBox(g, graph, 0.024, 0.032, 0.040, 0, 0.018, 0.100);               // brand band
+  gpBox(g, tape, 0.026, 0.034, 0.060, 0, 0.018, 0.170);                // knob tape
+  gpCyl(g, tape, 0.018, 0.018, 0.012, 10, 0, 0.018, 0.200);            // knob
+  gpBox(g, shaft, 0.024, 0.040, 0.050, 0, -0.004, -0.200, 0.5);        // heel bend
+  gpBox(g, graph, 0.018, 0.034, 0.110, -0.012, -0.030, -0.260, 0, -0.35); // blade
+  for (let i = 0; i < 5; i++)                                           // tape wraps
+    gpBox(g, tape, 0.020, 0.036, 0.008, -0.014 - i * 0.004, -0.030, -0.232 - i * 0.014, 0, -0.35);
+  gpCyl(g, puck, 0.030, 0.030, 0.020, 16, -0.030, 0.000, -0.270, 0);   // puck on the blade
+  gpPlate(g, inner, [
+    [0.030,-0.004],[0.060,-0.020],[0.068,-0.120],[0.040,-0.134],[0.012,-0.042],[0.008,-0.006],
+  ], 0.034, 0);
+  gpBox(g, bright, 0.006, 0.014, 0.006, 0, -0.016, 0.004, 0.22);
+  const flash = makeMuzzleFlash(); flash.position.set(-0.030, 0.000, -0.300); g.add(flash);
+  g._flash = flash; g._kickZ = 0.014; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildCrispTube() {
+  // 🥔 Potato cannon -> crisp tube. It was already launching potatoes. Foil
+  // lid peeled back, a stack of crisps showing, the cartoon face on the side.
+  const g = new THREE.Group();
+  const inner = GUN_MATS.inner(), bright = GUN_MATS.bright();
+  const red   = new THREE.MeshPhongMaterial({ color: 0xd8242a, shininess: 110, specular: 0xffa0a0 });
+  const foil  = new THREE.MeshPhongMaterial({ color: 0xd0d6de, shininess: 200, specular: 0xffffff, side: THREE.DoubleSide });
+  const crisp = new THREE.MeshPhongMaterial({ color: 0xf0c050, shininess: 60, specular: 0xfff0c0 });
+  const cream = new THREE.MeshPhongMaterial({ color: 0xf8eed8, shininess: 60, specular: 0xffffff });
+  const ink   = new THREE.MeshPhongMaterial({ color: 0x2a1a10, shininess: 20, specular: 0x4a3a30 });
+  gpCyl(g, red, 0.042, 0.042, 0.300, 18, 0, 0.030, -0.010);            // tube
+  gpCyl(g, cream, 0.0425, 0.0425, 0.010, 18, 0, 0.030, 0.100);         // bands
+  gpCyl(g, cream, 0.0425, 0.0425, 0.010, 18, 0, 0.030, -0.120);
+  gpCyl(g, inner, 0.043, 0.043, 0.012, 18, 0, 0.030, 0.140);           // base cap
+  gpCyl(g, cream, 0.020, 0.020, 0.004, 14, 0, 0.074, 0.000, 0);        // the face
+  gpBox(g, ink, 0.024, 0.004, 0.003, 0, 0.076, -0.010);                // moustache
+  gpBox(g, ink, 0.004, 0.004, 0.004, -0.007, 0.076, 0.006);
+  gpBox(g, ink, 0.004, 0.004, 0.004, 0.007, 0.076, 0.006);
+  for (let i = 0; i < 6; i++)                                           // stacked crisps
+    gpCyl(g, crisp, 0.036, 0.036, 0.004, 12, 0, 0.030 + (i % 2) * 0.002, -0.160 - i * 0.007);
+  const lid = gpBox(g, foil, 0.080, 0.002, 0.070, 0, 0.072, -0.180);   // peeled foil
+  lid.rotation.set(-0.8, 0, 0.1);
+  gpPlate(g, inner, [
+    [0.030,-0.012],[0.060,-0.030],[0.068,-0.130],[0.040,-0.144],[0.012,-0.052],[0.008,-0.014],
+  ], 0.034, 0);
+  gpBox(g, bright, 0.006, 0.014, 0.006, 0, -0.028, 0.004, 0.22);
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.030, -0.206); g.add(flash);
+  g._flash = flash; g._kickZ = 0.016; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildFireExtinguisher() {
+  // 🧯 Foam cannon -> fire extinguisher. It already sprays foam. Red cylinder,
+  // the valve head and lever, a pressure gauge and the discharge horn.
+  const g = new THREE.Group();
+  const bright = GUN_MATS.bright();
+  const red   = new THREE.MeshPhongMaterial({ color: 0xd01c1c, shininess: 170, specular: 0xffb0b0 });
+  const brass = new THREE.MeshPhongMaterial({ color: 0xc8a040, shininess: 170, specular: 0xfff0b0 });
+  const black = new THREE.MeshPhongMaterial({ color: 0x1c1e22, shininess: 50, specular: 0x5a6068 });
+  const label = new THREE.MeshPhongMaterial({ color: 0xf4f0e4, shininess: 60, specular: 0xffffff });
+  const face  = new THREE.MeshPhongMaterial({ color: 0xfafaf6, shininess: 120, specular: 0xffffff });
+  gpCyl(g, red, 0.046, 0.046, 0.240, 18, 0, 0.012, 0.050);             // cylinder
+  gpCyl(g, red, 0.034, 0.046, 0.030, 18, 0, 0.012, -0.085, -Math.PI / 2); // dome
+  gpCyl(g, label, 0.0465, 0.0465, 0.080, 18, 0, 0.012, 0.060);         // label
+  gpBox(g, red, 0.030, 0.006, 0.050, 0, 0.060, 0.060);                 // red print band on the label
+  gpCyl(g, brass, 0.020, 0.024, 0.040, 14, 0, 0.012, -0.118);          // valve head
+  gpBox(g, black, 0.010, 0.008, 0.070, 0, 0.042, -0.110, 0.25);        // squeeze lever
+  gpCyl(g, brass, 0.010, 0.012, 0.050, 10, 0, 0.012, -0.160);          // discharge pipe
+  gpCyl(g, black, 0.022, 0.011, 0.030, 12, 0, 0.012, -0.198);          // horn
+  gpCyl(g, face, 0.014, 0.014, 0.006, 14, 0.026, 0.012, -0.118, 0, Math.PI / 2); // gauge
+  gpBox(g, black, 0.002, 0.012, 0.002, 0.030, 0.014, -0.118, 0, 0, 0.6);
+  gpBox(g, black, 0.020, 0.014, 0.070, 0, -0.040, 0.050);              // wall bracket
+  gpPlate(g, black, [
+    [0.034,-0.040],[0.064,-0.058],[0.072,-0.156],[0.044,-0.170],[0.016,-0.080],[0.012,-0.044],
+  ], 0.034, 0);
+  gpBox(g, bright, 0.006, 0.014, 0.006, 0, -0.056, 0.010, 0.22);
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.012, -0.216); g.add(flash);
+  g._flash = flash; g._kickZ = 0.014; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildGumballMachine() {
+  // 🍬 Paintball -> gumball machine. The glass globe full of coloured balls is
+  // the hopper, the coin mechanism is the receiver, and the chute is the barrel.
+  const g = new THREE.Group();
+  const bright = GUN_MATS.bright();
+  const red   = new THREE.MeshPhongMaterial({ color: 0xd02a2a, shininess: 170, specular: 0xffb0b0 });
+  const chrome= new THREE.MeshPhongMaterial({ color: 0xc8ced6, shininess: 190, specular: 0xffffff });
+  const glass = new THREE.MeshPhongMaterial({ color: 0xe8f4ff, shininess: 220, specular: 0xffffff, transparent: true, opacity: 0.3 });
+  const balls = [0xff4466, 0x44cc66, 0x4488ff, 0xffdd33, 0xff8833, 0xffffff]
+    .map(c => new THREE.MeshPhongMaterial({ color: c, shininess: 120, specular: 0xffffff }));
+  gpBox(g, red, 0.060, 0.060, 0.140, 0, 0.000, -0.010);                // coin mechanism body
+  gpCyl(g, chrome, 0.018, 0.018, 0.008, 14, 0.031, 0.000, 0.000, 0, Math.PI / 2); // coin dial
+  gpBox(g, chrome, 0.008, 0.028, 0.006, 0.036, 0.000, 0.000);          // its crank
+  gpBox(g, g_ink(), 0.004, 0.010, 0.002, 0.036, 0.016, 0.000);          // coin slot
+  gpCyl(g, chrome, 0.032, 0.036, 0.012, 16, 0, 0.036, -0.010, 0);      // globe seat
+  const globe = new THREE.Mesh(new THREE.SphereGeometry(0.052, 18, 12), glass);
+  globe.position.set(0, 0.090, -0.010); g.add(globe);
+  for (let i = 0; i < 22; i++) {                                        // the gumballs
+    const a = i * 2.4, h = (i / 22);
+    const r = 0.040 * Math.sqrt(1 - Math.pow(h * 1.4 - 0.3, 2) * 0.8);
+    const gb = new THREE.Mesh(new THREE.SphereGeometry(0.009, 8, 6), balls[i % 6]);
+    gb.position.set(Math.cos(a) * r * 0.9, 0.056 + h * 0.070, -0.010 + Math.sin(a) * r * 0.9);
+    g.add(gb);
+  }
+  gpCyl(g, red, 0.022, 0.018, 0.018, 14, 0, 0.144, -0.010, 0);         // lid
+  gpCyl(g, chrome, 0.006, 0.006, 0.010, 8, 0, 0.158, -0.010, 0);
+  gpBox(g, chrome, 0.030, 0.026, 0.080, 0, -0.008, -0.118);            // chute
+  gpBox(g, chrome, 0.030, 0.016, 0.010, 0, 0.004, -0.154);             // flap
+  gpPlate(g, red, [
+    [0.030,-0.030],[0.060,-0.046],[0.068,-0.144],[0.040,-0.158],[0.012,-0.066],[0.008,-0.032],
+  ], 0.036, 0);
+  gpBox(g, bright, 0.006, 0.014, 0.006, 0, -0.046, 0.004, 0.22);
+  const flash = makeMuzzleFlash(); flash.position.set(0, -0.008, -0.164); g.add(flash);
+  g._flash = flash; g._kickZ = 0.010; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+  function g_ink() { return GUN_MATS.inner(); }
+}
+
 function buildHairDryer() {
   // 💨 MP-40 -> hair dryer. Cream housing, a chrome barrel with the heating
   // element glowing inside, a cable coiling off the butt and two slider
@@ -19914,6 +20100,24 @@ const MODEL_SKINS = [
   { id: 'taser_hand_mixer', weapon: 'taser', name: 'Hand Mixer', rarity: 'good',
     sw: ['#f4f4f0', '#8ad8c8'], build: buildHandMixer,
     blurb: 'Two beaters, three speeds, whisks to stiff peaks.' },
+  { id: 'hkmp7_power_drill', weapon: 'hkmp7', name: 'Cordless Drill', rarity: 'good',
+    sw: ['#1a8a8a', '#d8302a'], build: buildPowerDrill,
+    blurb: 'Battery pack for a magazine, a bit for a barrel. Forward, not reverse.' },
+  { id: 'five_seven_soap', weapon: 'five_seven', name: 'Soap Dispenser', rarity: 'good',
+    sw: ['#e860a8', '#f6f6f2'], build: buildSoapDispenser,
+    blurb: 'Pump bottle, pink soap, a bubble stuck to the spout.' },
+  { id: 'garand_hockey_stick', weapon: 'm1_garand', name: 'Hockey Stick', rarity: 'good',
+    sw: ['#d8b070', '#1c1e24'], build: buildHockeyStick,
+    blurb: 'Taped blade, puck balanced on it. The ping is a slapshot.' },
+  { id: 'potato_cannon_crisp_tube', weapon: 'potato_cannon', name: 'Crisp Tube', rarity: 'good',
+    sw: ['#d8242a', '#f0c050'], build: buildCrispTube,
+    blurb: 'It was already launching potatoes. Once you pop.' },
+  { id: 'foam_cannon_extinguisher', weapon: 'foam_cannon', name: 'Fire Extinguisher', rarity: 'good',
+    sw: ['#d01c1c', '#c8a040'], build: buildFireExtinguisher,
+    blurb: 'It already sprayed foam. Now it has a gauge and a lever.' },
+  { id: 'paintball_gumball', weapon: 'paintball', name: 'Gumball Machine', rarity: 'rare',
+    sw: ['#d02a2a', '#44cc66'], build: buildGumballMachine,
+    blurb: 'The globe is the hopper. Insert coin. Receive welt.' },
 ];
 const MODEL_SKINS_BY_WEAPON = {};
 for (const ms of MODEL_SKINS) (MODEL_SKINS_BY_WEAPON[ms.weapon] ||= []).push(ms);
