@@ -43,7 +43,8 @@ function load() {
   let code = '';
   for (const n of ['gpBox', 'gpCyl', 'gpPlate', 'gpPart', 'makeMuzzleFlash',
                    '_throwableHolder', '_gunDetails', '_makeViewHand',
-                   '_localPartBoxes', 'attachViewHands', '_reloadPose']) {
+                   '_localPartBoxes', 'attachViewHands', '_reloadPose',
+                   '_meleeOffset']) {
     const b = fnBlock(n);
     if (b) code += b + '\n';
   }

@@ -969,8 +969,6 @@ const BASIC_MELEE_SKINS = [
     blurb: 'Butcher’s pattern, well used.', stats: {} },
   { id: 'knife_butter_knife', skinFor: 'knife', name: 'Butter Knife', rarity: 'lame', sw: ['#c8ccd2', '#e8d8a8'],
     blurb: 'Barely sharp. Extremely committed.', stats: {} },
-  { id: 'katana_umbrella_sword', skinFor: 'katana', name: 'Umbrella Sword', rarity: 'good', sw: ['#2a2a3a', '#8a2a4a'],
-    blurb: 'Waterproof. Mostly.', stats: {} },
   { id: 'bat_cricket_stump', skinFor: 'bat', name: 'Cricket Stump', rarity: 'lame', sw: ['#d8c49a', '#6a4a28'],
     blurb: 'One of three. Nobody misses it.', stats: {} },
   { id: 'knife_letter_opener', skinFor: 'knife', name: 'Letter Opener', rarity: 'lame', sw: ['#b9a06a', '#3a3a3a'],
@@ -19324,6 +19322,18 @@ Object.entries(equippedGunStatSkins).forEach(([wid, sid]) => {
 // models got (greeble, weld, shine) or it would read flatter than the thing it
 // replaced.
 
+// Slide a whole melee model inside its own group. The swing code owns
+// g.position and rewrites it every frame, so an offset has to live one level
+// down. Long objects need it: the butt of a pool cue sits behind the eye at the
+// melee rest position, and everything behind the near plane is off the screen.
+function _meleeOffset(g, x, y, z) {
+  const b = new THREE.Group();
+  b.position.set(x, y, z);
+  while (g.children.length) b.add(g.children[0]);
+  g.add(b);
+  return g;
+}
+
 // 🦷 Knife → Dental Floss. The dispenser sits in the palm and the "blade" is a
 // taut strand pinched out in front of it.
 function buildDentalFloss() {
@@ -19607,6 +19617,278 @@ function buildPoolNoodle() {
   g.position.set(0.10, -0.12, -0.20); return g;
 }
 
+// 🧤 Fists → Oven Mitts. Quilted, scorched at the thumb.
+function buildOvenMitts() {
+  const g = new THREE.Group();
+  const clothMat = new THREE.MeshLambertMaterial({ color: 0xe4d8c0 });
+  const trimMat  = new THREE.MeshLambertMaterial({ color: 0xb03a30 });
+  const charMat  = new THREE.MeshLambertMaterial({ color: 0x8a7a62 });
+  // The mitt body: a padded slab, wider than the hand inside it.
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.110, 0.098, 0.150), clothMat);
+  body.position.set(0, 0, -0.050); g.add(body);
+  // Rounded fingertip end.
+  const tipL = new THREE.Mesh(new THREE.SphereGeometry(0.052, 10, 7), clothMat);
+  tipL.scale.set(1.0, 0.92, 0.55); tipL.position.set(0, 0, -0.122); g.add(tipL);
+  // Thumb lobe off the side.
+  const thumb = new THREE.Mesh(new THREE.BoxGeometry(0.042, 0.062, 0.078), clothMat);
+  thumb.position.set(-0.066, -0.008, -0.048); thumb.rotation.z = 0.30; g.add(thumb);
+  const thumbTip = new THREE.Mesh(new THREE.SphereGeometry(0.026, 8, 6), clothMat);
+  thumbTip.position.set(-0.074, -0.004, -0.086); g.add(thumbTip);
+  // Quilting: the stitch lines that make it a mitt and not a sock.
+  for (let i = 0; i < 4; i++) {
+    const stitch = new THREE.Mesh(new THREE.BoxGeometry(0.108, 0.003, 0.004), charMat);
+    stitch.position.set(0, 0.050, -0.110 + i * 0.038); g.add(stitch);
+  }
+  for (let i = 0; i < 2; i++) {
+    const stitch = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.003, 0.148), charMat);
+    stitch.position.set(-0.030 + i * 0.060, 0.050, -0.050); g.add(stitch);
+  }
+  // Scorch mark, because of course there is one.
+  const burn = new THREE.Mesh(new THREE.BoxGeometry(0.034, 0.003, 0.028), charMat);
+  burn.position.set(0.024, 0.050, -0.100); g.add(burn);
+  // Cuff band and the loop it hangs from.
+  const cuff = new THREE.Mesh(new THREE.BoxGeometry(0.116, 0.104, 0.030), trimMat);
+  cuff.position.set(0, 0, 0.038); g.add(cuff);
+  const loop = new THREE.Mesh(new THREE.TorusGeometry(0.016, 0.005, 5, 10), trimMat);
+  loop.rotation.y = Math.PI / 2; loop.position.set(0, 0.058, 0.058); g.add(loop);
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+
+// 🎱 Spear → Pool Cue. The reach was always the point.
+function buildPoolCue() {
+  const g = new THREE.Group();
+  const shaftMat  = new THREE.MeshLambertMaterial({ color: 0xd8b276 });
+  const buttMat   = new THREE.MeshLambertMaterial({ color: 0x3a1f14 });
+  const wrapMat   = new THREE.MeshLambertMaterial({ color: 0x1c1c20 });
+  const brassMat  = new THREE.MeshLambertMaterial({ color: 0xc8a23a });
+  const ferruleMat= new THREE.MeshLambertMaterial({ color: 0xf2f0e8 });
+  const chalkMat  = new THREE.MeshLambertMaterial({ color: 0x2a6fa8 });
+  // One taper the whole length: thin at the tip, fat at the butt.
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.0062, 0.0135, 0.560, 10), shaftMat);
+  shaft.rotation.x = -Math.PI / 2; shaft.position.set(0, 0, -0.020); g.add(shaft);
+  // Butt section is darker below the joint.
+  const butt = new THREE.Mesh(new THREE.CylinderGeometry(0.0128, 0.0152, 0.190, 10), buttMat);
+  butt.rotation.x = -Math.PI / 2; butt.position.set(0, 0, 0.165); g.add(butt);
+  // Brass joint ring at the halfway split.
+  const joint = new THREE.Mesh(new THREE.CylinderGeometry(0.0134, 0.0134, 0.014, 10), brassMat);
+  joint.rotation.x = Math.PI / 2; joint.position.set(0, 0, 0.070); g.add(joint);
+  // Irish linen wrap where the back hand goes.
+  const wrap = new THREE.Mesh(new THREE.CylinderGeometry(0.0150, 0.0156, 0.090, 10), wrapMat);
+  wrap.rotation.x = Math.PI / 2; wrap.position.set(0, 0, 0.190); g.add(wrap);
+  const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.0154, 0.0154, 0.012, 10), wrapMat);
+  cap.rotation.x = Math.PI / 2; cap.position.set(0, 0, 0.264); g.add(cap);
+  // Ferrule and the chalked tip.
+  const ferrule = new THREE.Mesh(new THREE.CylinderGeometry(0.0064, 0.0064, 0.024, 10), ferruleMat);
+  ferrule.rotation.x = Math.PI / 2; ferrule.position.set(0, 0, -0.288); g.add(ferrule);
+  const tip = new THREE.Mesh(new THREE.CylinderGeometry(0.0062, 0.0064, 0.010, 10), chalkMat);
+  tip.rotation.x = Math.PI / 2; tip.position.set(0, 0, -0.304); g.add(tip);
+  _meleeOffset(g, 0, 0.018, -0.135);
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+
+// 🪰 Frying Pan → Fly Swatter. Flat thing on a handle. Same idea, less mass.
+function buildFlySwatter() {
+  const g = new THREE.Group();
+  const meshMat  = new THREE.MeshLambertMaterial({ color: 0xe8d84a, side: THREE.DoubleSide });
+  const wireMat  = new THREE.MeshLambertMaterial({ color: 0x9aa0a8 });
+  const gridMat  = new THREE.MeshLambertMaterial({ color: 0x9a8c22 });
+  const gripMat  = new THREE.MeshLambertMaterial({ color: 0xd8442a });
+  // The paddle.
+  const pad = new THREE.Mesh(new THREE.BoxGeometry(0.130, 0.005, 0.110), meshMat);
+  pad.position.set(0, 0, -0.095); g.add(pad);
+  // The holes, faked as a proud grid — a swatter is mostly not there.
+  for (let i = 0; i < 5; i++) {
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(0.128, 0.007, 0.006), gridMat);
+    bar.position.set(0, 0.001, -0.140 + i * 0.022); g.add(bar);
+  }
+  for (let i = 0; i < 5; i++) {
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.007, 0.108), gridMat);
+    bar.position.set(-0.052 + i * 0.026, 0.001, -0.095); g.add(bar);
+  }
+  // Rolled border.
+  [[0, -0.152, 0.130, 0.008], [0, -0.038, 0.130, 0.008]].forEach(([x, z, w, d]) => {
+    const e = new THREE.Mesh(new THREE.BoxGeometry(w, 0.009, d), meshMat);
+    e.position.set(x, 0, z); g.add(e);
+  });
+  [-0.063, 0.063].forEach(x => {
+    const e = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.009, 0.118), meshMat);
+    e.position.set(x, 0, -0.095); g.add(e);
+  });
+  // Springy wire handle with the hanging loop at the end.
+  const wire = new THREE.Mesh(new THREE.CylinderGeometry(0.0048, 0.0048, 0.230, 6), wireMat);
+  wire.rotation.x = Math.PI / 2; wire.position.set(0, 0, 0.075); g.add(wire);
+  const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.0085, 0.0085, 0.070, 8), gripMat);
+  grip.rotation.x = Math.PI / 2; grip.position.set(0, 0, 0.140); g.add(grip);
+  const loop = new THREE.Mesh(new THREE.TorusGeometry(0.014, 0.0045, 5, 10), wireMat);
+  loop.rotation.y = Math.PI / 2; loop.position.set(0, 0, 0.192); g.add(loop);
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+
+// ☂️ Katana → Umbrella Sword. Closed, strapped, and the blade is already out.
+function buildUmbrellaSword() {
+  const g = new THREE.Group();
+  const fabricMat = new THREE.MeshLambertMaterial({ color: 0x232a3c });
+  const ribMat    = new THREE.MeshLambertMaterial({ color: 0x1a1f2c });
+  const woodMat   = new THREE.MeshLambertMaterial({ color: 0x5a3a20 });
+  const steelMat  = new THREE.MeshLambertMaterial({ color: 0xc4ccd4 });
+  const strapMat  = new THREE.MeshLambertMaterial({ color: 0x8a2a3a });
+  // Furled canopy, tapering toward the tip.
+  const canopy = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.031, 0.235, 8), fabricMat);
+  canopy.rotation.x = -Math.PI / 2; canopy.position.set(0, 0, -0.088); g.add(canopy);
+  // Rib creases down the fold.
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2;
+    const rib = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.004, 0.230), ribMat);
+    rib.position.set(Math.cos(a) * 0.024, Math.sin(a) * 0.024, -0.088); g.add(rib);
+  }
+  // Velcro strap holding it shut.
+  const strap = new THREE.Mesh(new THREE.CylinderGeometry(0.030, 0.030, 0.014, 10), strapMat);
+  strap.rotation.x = Math.PI / 2; strap.position.set(0, 0, -0.030); g.add(strap);
+  // Crook handle behind the hand.
+  const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.010, 0.010, 0.090, 8), woodMat);
+  stem.rotation.x = Math.PI / 2; stem.position.set(0, 0, 0.078); g.add(stem);
+  const crook = new THREE.Mesh(new THREE.TorusGeometry(0.030, 0.0095, 6, 12, Math.PI * 1.1), woodMat);
+  crook.rotation.y = Math.PI / 2; crook.rotation.z = -Math.PI / 2;
+  crook.position.set(0, -0.030, 0.124); g.add(crook);
+  // The part that makes it a sword: a slim blade out of the ferrule.
+  const ferrule = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.017, 0.022, 8), steelMat);
+  ferrule.rotation.x = Math.PI / 2; ferrule.position.set(0, 0, -0.212); g.add(ferrule);
+  const blade = new THREE.Mesh(new THREE.BoxGeometry(0.011, 0.005, 0.150), steelMat);
+  blade.position.set(0, 0, -0.298); g.add(blade);
+  const point = new THREE.Mesh(new THREE.ConeGeometry(0.007, 0.030, 4), steelMat);
+  point.rotation.x = -Math.PI / 2; point.position.set(0, 0, -0.388); g.add(point);
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+
+// ✏️ Screwdriver → Giant Pencil. Hexagonal, sharpened, well chewed.
+function buildGiantPencil() {
+  const g = new THREE.Group();
+  const paintMat  = new THREE.MeshLambertMaterial({ color: 0xe8b41c });
+  const woodMat   = new THREE.MeshLambertMaterial({ color: 0xdcc08a });
+  const leadMat   = new THREE.MeshLambertMaterial({ color: 0x2a2a2e });
+  const ferruleMat= new THREE.MeshLambertMaterial({ color: 0xb8bcc4 });
+  const eraserMat = new THREE.MeshLambertMaterial({ color: 0xe86a7a });
+  const inkMat    = new THREE.MeshLambertMaterial({ color: 0x3a2a10 });
+  // Hex barrel.
+  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.280, 6), paintMat);
+  barrel.rotation.x = Math.PI / 2; barrel.position.set(0, 0, 0.035); g.add(barrel);
+  // Printed band, the only text on a pencil anyone reads.
+  const band = new THREE.Mesh(new THREE.CylinderGeometry(0.0184, 0.0184, 0.020, 6), inkMat);
+  band.rotation.x = Math.PI / 2; band.position.set(0, 0, 0.100); g.add(band);
+  // Sharpened cone, exposed wood, graphite point.
+  const sharp = new THREE.Mesh(new THREE.ConeGeometry(0.018, 0.052, 6), woodMat);
+  sharp.rotation.x = -Math.PI / 2; sharp.position.set(0, 0, -0.131); g.add(sharp);
+  const lead = new THREE.Mesh(new THREE.ConeGeometry(0.0055, 0.020, 6), leadMat);
+  lead.rotation.x = -Math.PI / 2; lead.position.set(0, 0, -0.167); g.add(lead);
+  // Crimped ferrule and the eraser nobody has left.
+  const ferrule = new THREE.Mesh(new THREE.CylinderGeometry(0.0186, 0.0186, 0.034, 10), ferruleMat);
+  ferrule.rotation.x = Math.PI / 2; ferrule.position.set(0, 0, 0.192); g.add(ferrule);
+  [0.184, 0.200].forEach(z => {
+    const crimp = new THREE.Mesh(new THREE.TorusGeometry(0.0188, 0.0022, 4, 10), ferruleMat);
+    crimp.position.set(0, 0, z); g.add(crimp);
+  });
+  const eraser = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.017, 0.030, 10), eraserMat);
+  eraser.rotation.x = Math.PI / 2; eraser.position.set(0, 0, 0.224); g.add(eraser);
+  _meleeOffset(g, 0, 0.022, -0.110);
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+
+// 💡 Lightsabre → Fluorescent Tube. It hums, it glows, it will not survive a parry.
+function buildFluorescentTube() {
+  const g = new THREE.Group();
+  const glowMat = new THREE.MeshBasicMaterial({ color: 0xeaf6ff });
+  const capMat  = new THREE.MeshLambertMaterial({ color: 0xb4bac2 });
+  const pinMat  = new THREE.MeshLambertMaterial({ color: 0xd8c86a });
+  const tapeMat = new THREE.MeshLambertMaterial({ color: 0x1e1e22 });
+  const gasMat  = new THREE.MeshBasicMaterial({ color: 0xa8e0ff });
+  // The tube. Basic material so it reads as lit rather than shaded.
+  const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.017, 0.017, 0.430, 12), glowMat);
+  tube.rotation.x = Math.PI / 2; tube.position.set(0, 0, -0.085); g.add(tube);
+  // Brighter core, the way a tube looks end-on.
+  const core = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.436, 8), gasMat);
+  core.rotation.x = Math.PI / 2; core.position.set(0, 0, -0.085); g.add(core);
+  // End caps with their bi-pins.
+  [[-0.306, -1], [0.136, 1]].forEach(([z, dir]) => {
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.0185, 0.0185, 0.022, 12), capMat);
+    cap.rotation.x = Math.PI / 2; cap.position.set(0, 0, z); g.add(cap);
+    [-0.006, 0.006].forEach(x => {
+      const pin = new THREE.Mesh(new THREE.CylinderGeometry(0.0022, 0.0022, 0.014, 6), pinMat);
+      pin.rotation.x = Math.PI / 2; pin.position.set(x, 0, z + dir * 0.017); g.add(pin);
+    });
+  });
+  // Electrical tape where the hand goes, because the last one shattered.
+  const tape = new THREE.Mesh(new THREE.CylinderGeometry(0.0195, 0.0195, 0.050, 12), tapeMat);
+  tape.rotation.x = Math.PI / 2; tape.position.set(0, 0, 0.085); g.add(tape);
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+
+// 🔨 Titan Hammer → Inflatable Hammer. Still knocks everyone over. Squeaks.
+function buildInflatableHammer() {
+  const g = new THREE.Group();
+  const headMat  = new THREE.MeshLambertMaterial({ color: 0xe03a44 });
+  const handMat  = new THREE.MeshLambertMaterial({ color: 0xf0c020 });
+  const seamMat  = new THREE.MeshLambertMaterial({ color: 0x9a1c26 });
+  const starMat  = new THREE.MeshLambertMaterial({ color: 0xfaf4e0 });
+  const plugMat  = new THREE.MeshLambertMaterial({ color: 0x2a6fc8 });
+  // Handle: a blown-up tube, fatter than a real haft and half the weight.
+  const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.023, 0.026, 0.250, 12), handMat);
+  handle.rotation.x = Math.PI / 2; handle.position.set(0, 0, 0.100); g.add(handle);
+  const grip = new THREE.Mesh(new THREE.TorusGeometry(0.026, 0.006, 5, 12), seamMat);
+  grip.position.set(0, 0, 0.150); g.add(grip);
+  // Head: a drum lying across the swing, rounded at both ends.
+  const drum = new THREE.Mesh(new THREE.CylinderGeometry(0.072, 0.072, 0.165, 16), headMat);
+  drum.rotation.z = Math.PI / 2; drum.position.set(0, 0, -0.105); g.add(drum);
+  [-0.0825, 0.0825].forEach(x => {
+    const end = new THREE.Mesh(new THREE.SphereGeometry(0.072, 14, 9), headMat);
+    end.scale.set(0.45, 1, 1); end.position.set(x, 0, -0.105); g.add(end);
+  });
+  // Welded seam right round the middle.
+  const seam = new THREE.Mesh(new THREE.TorusGeometry(0.0725, 0.005, 5, 16), seamMat);
+  seam.rotation.y = Math.PI / 2; seam.position.set(0, 0, -0.105); g.add(seam);
+  // A printed star on the striking face, and the inflation plug.
+  const star = new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.034, 0.006, 5), starMat);
+  star.rotation.z = Math.PI / 2; star.position.set(-0.106, 0, -0.105); g.add(star);
+  const plug = new THREE.Mesh(new THREE.CylinderGeometry(0.010, 0.012, 0.016, 8), plugMat);
+  plug.rotation.x = Math.PI / 2; plug.position.set(0, 0, 0.232); g.add(plug);
+  _meleeOffset(g, 0, 0.020, -0.095);
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+
+// 🍅 Vampire Blade → Ketchup Bottle. It was always about draining something red.
+function buildKetchupBottle() {
+  const g = new THREE.Group();
+  const bodyMat  = new THREE.MeshLambertMaterial({ color: 0xc41f24 });
+  const labelMat = new THREE.MeshLambertMaterial({ color: 0xf4f0e4 });
+  const capMat   = new THREE.MeshLambertMaterial({ color: 0xf2f4f6 });
+  const dripMat  = new THREE.MeshLambertMaterial({ color: 0x8e1015 });
+  const inkMat   = new THREE.MeshLambertMaterial({ color: 0x1c6a3a });
+  // Squeeze body with the waist a diner bottle has.
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.040, 0.044, 0.170, 14), bodyMat);
+  body.rotation.x = Math.PI / 2; body.position.set(0, 0, 0.055); g.add(body);
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.044, 0.038, 0.020, 14), bodyMat);
+  base.rotation.x = Math.PI / 2; base.position.set(0, 0, 0.148); g.add(base);
+  // Label band with a stripe on it.
+  const label = new THREE.Mesh(new THREE.CylinderGeometry(0.0425, 0.0445, 0.090, 14), labelMat);
+  label.rotation.x = Math.PI / 2; label.position.set(0, 0, 0.078); g.add(label);
+  const stripe = new THREE.Mesh(new THREE.CylinderGeometry(0.0448, 0.0448, 0.012, 14), inkMat);
+  stripe.rotation.x = Math.PI / 2; stripe.position.set(0, 0, 0.052); g.add(stripe);
+  // Shoulder into the neck, then the pointed nozzle cap.
+  const shoulder = new THREE.Mesh(new THREE.CylinderGeometry(0.020, 0.040, 0.055, 14), bodyMat);
+  shoulder.rotation.x = -Math.PI / 2; shoulder.position.set(0, 0, -0.058); g.add(shoulder);
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.020, 0.020, 0.024, 12), capMat);
+  neck.rotation.x = Math.PI / 2; neck.position.set(0, 0, -0.098); g.add(neck);
+  for (let i = 0; i < 2; i++) {
+    const thread = new THREE.Mesh(new THREE.TorusGeometry(0.0206, 0.0022, 4, 12), capMat);
+    thread.position.set(0, 0, -0.092 - i * 0.010); g.add(thread);
+  }
+  const nozzle = new THREE.Mesh(new THREE.ConeGeometry(0.019, 0.070, 12), capMat);
+  nozzle.rotation.x = -Math.PI / 2; nozzle.position.set(0, 0, -0.145); g.add(nozzle);
+  // The bead that is always hanging off the end.
+  const drip = new THREE.Mesh(new THREE.SphereGeometry(0.010, 8, 6), dripMat);
+  drip.scale.set(1, 1, 1.5); drip.position.set(0, 0, -0.186); g.add(drip);
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+
 const MELEE_MODEL_SKINS = [
   { id: 'knife_floss', melee: 'knife', name: 'Dental Floss', rarity: 'good',
     sw: ['#f2f4f6', '#3ab2c8'], build: buildDentalFloss,
@@ -19632,6 +19914,30 @@ const MELEE_MODEL_SKINS = [
   { id: 'bat_pool_noodle', melee: 'bat', name: 'Pool Noodle', rarity: 'good',
     sw: ['#33cfdc', '#ff8ec4'], build: buildPoolNoodle,
     blurb: 'Hollow, weightless, and it still makes the noise.' },
+  { id: 'fists_oven_mitts', melee: 'fists', name: 'Oven Mitts', rarity: 'good',
+    sw: ['#e4d8c0', '#b03a30'], build: buildOvenMitts,
+    blurb: 'Quilted, scorched at the thumb. Gas mark nine.' },
+  { id: 'spear_pool_cue', melee: 'spear', name: 'Pool Cue', rarity: 'good',
+    sw: ['#d8b276', '#2a6fa8'], build: buildPoolCue,
+    blurb: 'The reach was always the point. Chalked and ready.' },
+  { id: 'frying_pan_fly_swatter', melee: 'frying_pan', name: 'Fly Swatter', rarity: 'good',
+    sw: ['#e8d84a', '#d8442a'], build: buildFlySwatter,
+    blurb: 'Flat thing on a handle. Same idea, less mass.' },
+  { id: 'katana_umbrella_sword', melee: 'katana', name: 'Umbrella Sword', rarity: 'rare',
+    sw: ['#232a3c', '#c4ccd4'], build: buildUmbrellaSword,
+    blurb: 'Waterproof. Mostly. The blade is already out.' },
+  { id: 'screwdriver_pencil', melee: 'screwdriver', name: 'Giant Pencil', rarity: 'good',
+    sw: ['#e8b41c', '#2a2a2e'], build: buildGiantPencil,
+    blurb: 'Hexagonal, sharpened, and the eraser is long gone.' },
+  { id: 'lightsabre_fluoro_tube', melee: 'lightsabre', name: 'Fluorescent Tube', rarity: 'rare',
+    sw: ['#eaf6ff', '#b4bac2'], build: buildFluorescentTube,
+    blurb: 'It hums. It glows. It will not survive a parry.' },
+  { id: 'titan_hammer_inflatable', melee: 'titan_hammer', name: 'Inflatable Hammer', rarity: 'good',
+    sw: ['#e03a44', '#f0c020'], build: buildInflatableHammer,
+    blurb: 'Still knocks everyone over. Squeaks on the way down.' },
+  { id: 'vampire_blade_ketchup', melee: 'vampire_blade', name: 'Ketchup Bottle', rarity: 'good',
+    sw: ['#c41f24', '#f4f0e4'], build: buildKetchupBottle,
+    blurb: 'It was always about draining something red.' },
 ];
 const MELEE_MODEL_SKINS_BY_BASE = {};
 for (const ms of MELEE_MODEL_SKINS) (MELEE_MODEL_SKINS_BY_BASE[ms.melee] ||= []).push(ms);
