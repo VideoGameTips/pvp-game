@@ -28969,6 +28969,7 @@ function loop() {
     if (shooting && (activeSlot === 'primary' || activeSlot === 'secondary') && currentWeapon.auto) tryShoot();
   });
   safeLoopStep('recoil', () => updateRecoil(dt));   // the muzzle settles back between shots
+  safeLoopStep('fire-shake', () => updateFireShake(dt)); // camera punch on every shot, snaps back fast
   safeLoopStep('realism-feedback', () => updateRealismFeedback(dt));
   safeLoopStep('dots', () => updateDots());       // anything set alight keeps taking damage
   safeLoopStep('bullets', () => updateBullets(dt));
