@@ -10168,6 +10168,169 @@ function buildCapGun() {
   g.position.set(0.12, -0.1, -0.25); return g;
 }
 
+function buildHairDryer() {
+  // 💨 MP-40 -> hair dryer. Cream housing, a chrome barrel with the heating
+  // element glowing inside, a cable coiling off the butt and two slider
+  // switches where the selector was.
+  const g = new THREE.Group();
+  const inner = GUN_MATS.inner(), bright = GUN_MATS.bright();
+  const cream = new THREE.MeshPhongMaterial({ color: 0xf0e4d2, shininess: 110, specular: 0xffffff });
+  const teal  = new THREE.MeshPhongMaterial({ color: 0x2f8a92, shininess: 90, specular: 0xa8e0e4 });
+  const chrome= new THREE.MeshPhongMaterial({ color: 0xc8ced6, shininess: 180, specular: 0xffffff });
+  const coil  = new THREE.MeshBasicMaterial({ color: 0xff6a22 });
+  const cable = new THREE.MeshPhongMaterial({ color: 0x1c1e22, shininess: 40, specular: 0x50545c });
+  gpCyl(g, cream, 0.040, 0.040, 0.190, 16, 0, 0.010, -0.040);          // body
+  gpCyl(g, teal, 0.042, 0.042, 0.020, 16, 0, 0.010, 0.040);            // collar
+  gpCyl(g, chrome, 0.036, 0.030, 0.070, 16, 0, 0.010, -0.168);         // nozzle
+  gpCyl(g, inner, 0.024, 0.024, 0.010, 14, 0, 0.010, -0.200);
+  for (let i = 0; i < 3; i++)                                           // element rings
+    gpCyl(g, coil, 0.018, 0.018, 0.005, 12, 0, 0.010, -0.150 + i * 0.016);
+  gpCyl(g, inner, 0.041, 0.041, 0.006, 16, 0, 0.010, 0.062);           // intake grille
+  for (let i = 0; i < 5; i++) gpBox(g, inner, 0.056, 0.004, 0.004, 0, 0.010 - 0.020 + i * 0.010, 0.066);
+  gpBox(g, teal, 0.014, 0.010, 0.030, 0.026, 0.030, -0.010);           // heat slider
+  gpBox(g, bright, 0.010, 0.008, 0.010, 0.026, 0.030, -0.018);
+  gpBox(g, teal, 0.014, 0.010, 0.026, -0.026, 0.030, -0.010);          // speed slider
+  gpBox(g, bright, 0.010, 0.008, 0.009, -0.026, 0.030, -0.004);
+  gpPlate(g, cream, [                                                   // handle
+    [0.056,-0.020],[0.086,-0.044],[0.092,-0.150],[0.062,-0.166],[0.032,-0.074],[0.030,-0.026],
+  ], 0.038, 0);
+  for (let i = 0; i < 5; i++) gpBox(g, inner, 0.040, 0.004, 0.008, 0, -0.050 - i * 0.021, 0.060 + i * 0.005, 0.30);
+  gpBox(g, bright, 0.006, 0.014, 0.006, 0, -0.030, 0.020, 0.22);       // trigger
+  gpBox(g, teal, 0.042, 0.012, 0.040, 0, -0.158, 0.078, 0.30);         // cable boot
+  for (let i = 0; i < 8; i++) {                                         // coiled cable
+    const t = i / 7, a = t * Math.PI * 2.4;
+    gpCyl(g, cable, 0.0075, 0.0075, 0.034, 6,
+          Math.cos(a) * 0.026, -0.180 - t * 0.058, 0.092 + Math.sin(a) * 0.020, Math.PI / 2, a);
+  }
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.010, -0.208); g.add(flash);
+  g._flash = flash; g._kickZ = 0.008; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildMetalDetector() {
+  // 🪙 Railgun -> metal detector. A long shaft down to a search coil, an
+  // armrest cuff at the back and a little control box with a needle gauge.
+  const g = new THREE.Group();
+  const inner = GUN_MATS.inner(), bright = GUN_MATS.bright();
+  const shaft = new THREE.MeshPhongMaterial({ color: 0xc8ccd2, shininess: 170, specular: 0xffffff });
+  const black = new THREE.MeshPhongMaterial({ color: 0x1a1c20, shininess: 60, specular: 0x6a7078 });
+  const amber = new THREE.MeshBasicMaterial({ color: 0xffb020 });
+  const dial  = new THREE.MeshPhongMaterial({ color: 0xe8e2d0, shininess: 120, specular: 0xffffff });
+  gpBox(g, black, 0.052, 0.058, 0.110, 0, 0.026, 0.100);               // control box
+  gpBox(g, inner, 0.054, 0.006, 0.090, 0, 0.056, 0.100);
+  gpCyl(g, dial, 0.020, 0.020, 0.006, 14, 0, 0.040, 0.046);            // gauge face
+  gpBox(g, black, 0.003, 0.016, 0.003, 0, 0.044, 0.044, 0.5);          // its needle
+  gpCyl(g, amber, 0.0045, 0.0045, 0.005, 8, 0.018, 0.050, 0.046);      // pilot lamp
+  for (let i = 0; i < 3; i++) gpCyl(g, bright, 0.0075, 0.0075, 0.008, 10, -0.014 + i * 0.014, 0.014, 0.046);
+  // Armrest cuff behind the box.
+  gpCyl(g, black, 0.030, 0.030, 0.050, 14, 0, 0.030, 0.178, Math.PI / 2, 0);
+  gpBox(g, black, 0.056, 0.008, 0.044, 0, 0.056, 0.178);
+  // Shaft running forward and down to the coil.
+  for (let i = 0; i < 5; i++)
+    gpCyl(g, shaft, 0.011 - i * 0.0008, 0.011 - i * 0.0008, 0.098, 10, 0, 0.018 - i * 0.017, -0.010 - i * 0.092, 0.18);
+  gpCyl(g, black, 0.013, 0.013, 0.020, 10, 0, -0.056, -0.290);         // knuckle
+  // The search coil: a flat ring on the end.
+  const coil = new THREE.Mesh(new THREE.TorusGeometry(0.072, 0.010, 8, 22), black);
+  coil.rotation.set(Math.PI / 2 - 0.30, 0, 0); coil.position.set(0, -0.082, -0.356); g.add(coil);
+  const web = new THREE.Mesh(new THREE.CylinderGeometry(0.066, 0.066, 0.006, 20), shaft);
+  web.rotation.set(0.30, 0, 0); web.position.set(0, -0.082, -0.356); g.add(web);
+  gpBox(g, black, 0.020, 0.016, 0.040, 0, -0.068, -0.318);             // coil mount
+  gpPlate(g, black, [                                                   // grip
+    [0.052,-0.010],[0.080,-0.034],[0.086,-0.126],[0.056,-0.142],[0.028,-0.062],[0.026,-0.016],
+  ], 0.034, 0);
+  for (let i = 0; i < 4; i++) gpBox(g, inner, 0.036, 0.004, 0.008, 0, -0.040 - i * 0.020, 0.052 + i * 0.004, 0.30);
+  gpBox(g, bright, 0.006, 0.014, 0.006, 0, -0.022, 0.014, 0.22);
+  const flash = makeMuzzleFlash(); flash.position.set(0, -0.082, -0.392); g.add(flash);
+  g._flash = flash; g._kickZ = 0.014; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildBicyclePump() {
+  // 🚲 Compressed air rifle -> track pump. Steel barrel, a T-handle on a plunger
+  // rod, a pressure gauge at the foot and a hose running to the nozzle.
+  const g = new THREE.Group();
+  const inner = GUN_MATS.inner(), bright = GUN_MATS.bright();
+  const steelP = new THREE.MeshPhongMaterial({ color: 0x9aa2ac, shininess: 150, specular: 0xffffff });
+  const red    = new THREE.MeshPhongMaterial({ color: 0xc02a22, shininess: 100, specular: 0xffa098 });
+  const rubber = new THREE.MeshPhongMaterial({ color: 0x1c1e22, shininess: 30, specular: 0x4a4e56 });
+  const face   = new THREE.MeshPhongMaterial({ color: 0xf0ece0, shininess: 120, specular: 0xffffff });
+  gpCyl(g, steelP, 0.026, 0.026, 0.300, 14, 0, 0.006, 0.020);          // barrel
+  gpCyl(g, red, 0.029, 0.029, 0.016, 14, 0, 0.006, 0.168);             // top collar
+  gpCyl(g, steelP, 0.011, 0.011, 0.120, 10, 0, 0.006, 0.226);          // plunger rod
+  gpBox(g, red, 0.090, 0.022, 0.026, 0, 0.006, 0.288);                 // T-handle
+  gpCyl(g, rubber, 0.013, 0.013, 0.022, 10, -0.044, 0.006, 0.288, 0, Math.PI / 2);
+  gpCyl(g, rubber, 0.013, 0.013, 0.022, 10,  0.044, 0.006, 0.288, 0, Math.PI / 2);
+  gpCyl(g, red, 0.034, 0.034, 0.020, 14, 0, 0.006, -0.128);            // foot base
+  gpBox(g, red, 0.100, 0.012, 0.040, 0, -0.008, -0.140);               // foot plate
+  gpCyl(g, face, 0.024, 0.024, 0.008, 16, 0, 0.040, -0.120, Math.PI / 2, 0);  // gauge
+  gpCyl(g, red, 0.026, 0.026, 0.004, 16, 0, 0.040, -0.116, Math.PI / 2, 0);
+  gpBox(g, inner, 0.003, 0.018, 0.003, 0, 0.046, -0.114, 0, 0, 0.7);   // needle
+  // Hose from the foot forward to the nozzle.
+  for (let i = 0; i < 7; i++) {
+    const t = i / 6;
+    gpCyl(g, rubber, 0.0075, 0.0075, 0.042, 8,
+          0, -0.010 - Math.sin(t * 2.2) * 0.020, -0.156 - i * 0.038, Math.PI / 2, 0.25);
+  }
+  gpCyl(g, steelP, 0.011, 0.011, 0.030, 10, 0, -0.026, -0.402);        // chuck
+  gpCyl(g, inner, 0.0065, 0.0065, 0.010, 8, 0, -0.026, -0.420);
+  gpPlate(g, rubber, [                                                  // grip
+    [0.060,-0.026],[0.088,-0.048],[0.094,-0.136],[0.064,-0.152],[0.036,-0.074],[0.034,-0.032],
+  ], 0.034, 0);
+  for (let i = 0; i < 4; i++) gpBox(g, inner, 0.036, 0.004, 0.008, 0, -0.056 - i * 0.020, 0.066 + i * 0.004, 0.30);
+  gpBox(g, bright, 0.006, 0.014, 0.006, 0, -0.034, 0.028, 0.22);
+  const flash = makeMuzzleFlash(); flash.position.set(0, -0.026, -0.428); g.add(flash);
+  g._flash = flash; g._kickZ = 0.010; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildJumperCables() {
+  // 🔋 Arc rifle -> jumper cables. A car battery slung under it, two thick leads
+  // twisting forward and a pair of copper clamps that spark at the jaws.
+  const g = new THREE.Group();
+  const inner = GUN_MATS.inner(), bright = GUN_MATS.bright();
+  const batt  = new THREE.MeshPhongMaterial({ color: 0x1c2a34, shininess: 60, specular: 0x6a8a9a });
+  const cap   = new THREE.MeshPhongMaterial({ color: 0xd8d4c8, shininess: 90, specular: 0xffffff });
+  const copper= new THREE.MeshPhongMaterial({ color: 0xb87333, shininess: 160, specular: 0xffd0a0 });
+  const redL  = new THREE.MeshPhongMaterial({ color: 0xc0201c, shininess: 60, specular: 0xff9088 });
+  const blkL  = new THREE.MeshPhongMaterial({ color: 0x14161a, shininess: 50, specular: 0x505660 });
+  const spark = new THREE.MeshBasicMaterial({ color: 0x9fe8ff });
+  gpBox(g, batt, 0.076, 0.070, 0.130, 0, -0.026, 0.080);               // battery
+  gpBox(g, cap, 0.078, 0.014, 0.120, 0, 0.014, 0.080);                 // cell caps
+  for (let i = 0; i < 3; i++) gpCyl(g, cap, 0.012, 0.012, 0.008, 10, -0.022 + i * 0.022, 0.024, 0.080);
+  gpBox(g, cap, 0.030, 0.010, 0.020, 0.020, 0.022, 0.030);             // label
+  gpCyl(g, copper, 0.011, 0.011, 0.016, 10, -0.026, 0.026, 0.024);     // terminals
+  gpCyl(g, copper, 0.011, 0.011, 0.016, 10,  0.026, 0.026, 0.024);
+  // Two leads twisting forward.
+  for (let i = 0; i < 9; i++) {
+    const t = i / 8, a = t * Math.PI * 2.6;
+    gpCyl(g, redL, 0.0085, 0.0085, 0.046, 6,
+          Math.cos(a) * 0.022 - 0.006, 0.028 + Math.sin(a) * 0.014, -0.010 - i * 0.040, Math.PI / 2, a * 0.4);
+    gpCyl(g, blkL, 0.0085, 0.0085, 0.046, 6,
+          Math.cos(a + Math.PI) * 0.022 - 0.006, 0.028 + Math.sin(a + Math.PI) * 0.014, -0.010 - i * 0.040, Math.PI / 2, a * 0.4);
+  }
+  // The clamps at the business end.
+  [[-0.026, redL], [0.026, blkL]].forEach(([x, mat]) => {
+    gpBox(g, mat, 0.024, 0.030, 0.052, x, 0.028, -0.372);
+    gpBox(g, copper, 0.014, 0.010, 0.048, x, 0.046, -0.404, -0.28);    // upper jaw
+    gpBox(g, copper, 0.014, 0.010, 0.048, x, 0.010, -0.404,  0.28);    // lower jaw
+    for (let i = 0; i < 3; i++) {
+      gpBox(g, copper, 0.015, 0.004, 0.005, x, 0.040 - i * 0.002, -0.420 - i * 0.004, -0.28);
+      gpBox(g, copper, 0.015, 0.004, 0.005, x, 0.016 + i * 0.002, -0.420 - i * 0.004,  0.28);
+    }
+    gpCyl(g, bright, 0.0055, 0.0055, 0.026, 8, x, 0.028, -0.382, 0, Math.PI / 2);  // pivot
+  });
+  gpCyl(g, spark, 0.0055, 0.0055, 0.006, 8, 0, 0.028, -0.434);         // arc between them
+  gpBox(g, spark, 0.048, 0.003, 0.003, 0, 0.028, -0.430);
+  gpPlate(g, blkL, [                                                    // grip
+    [0.070,-0.030],[0.100,-0.054],[0.106,-0.146],[0.076,-0.162],[0.046,-0.080],[0.044,-0.036],
+  ], 0.038, 0);
+  for (let i = 0; i < 5; i++) gpBox(g, inner, 0.040, 0.004, 0.009, 0, -0.058 - i * 0.019, 0.078 + i * 0.005, 0.30);
+  gpBox(g, bright, 0.006, 0.016, 0.006, 0, -0.034, 0.038, 0.22);
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.028, -0.442); g.add(flash);
+  g._flash = flash; g._kickZ = 0.012; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
 // AK30 — longer mag, tan/desert colour
 function buildAK30() {
   const tan = new THREE.MeshLambertMaterial({ color: 0x8b7040 });
@@ -19070,6 +19233,18 @@ const MODEL_SKINS = [
   { id: 'revolver_cap_gun', weapon: 'revolver', name: 'Cap Gun', rarity: 'good',
     sw: ['#d8222a', '#d8a820'], build: buildCapGun,
     blurb: 'Red plastic, gold scroll, a roll of caps in the cylinder.' },
+  { id: 'mp40_hair_dryer', weapon: 'mp40', name: 'Hair Dryer', rarity: 'good',
+    sw: ['#f0e4d2', '#2f8a92'], build: buildHairDryer,
+    blurb: 'Two settings and a glowing element. The cable is coiled.' },
+  { id: 'railgun_metal_detector', weapon: 'railgun', name: 'Metal Detector', rarity: 'good',
+    sw: ['#c8ccd2', '#1a1c20'], build: buildMetalDetector,
+    blurb: 'Search coil on a shaft, armrest cuff, a needle that twitches.' },
+  { id: 'air_rifle_bike_pump', weapon: 'air_rifle', name: 'Bicycle Pump', rarity: 'good',
+    sw: ['#9aa2ac', '#c02a22'], build: buildBicyclePump,
+    blurb: 'Track pump with a foot plate, pressure gauge and a hose.' },
+  { id: 'arc_rifle_jumper_cables', weapon: 'arc_rifle', name: 'Jumper Cables', rarity: 'good',
+    sw: ['#1c2a34', '#b87333'], build: buildJumperCables,
+    blurb: 'Car battery underneath, copper clamps arcing at the jaws.' },
 ];
 const MODEL_SKINS_BY_WEAPON = {};
 for (const ms of MODEL_SKINS) (MODEL_SKINS_BY_WEAPON[ms.weapon] ||= []).push(ms);
