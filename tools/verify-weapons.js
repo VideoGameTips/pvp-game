@@ -73,18 +73,33 @@ function load() {
   const ms = src.match(/^const MODEL_SKINS = \[[\s\S]*?\n\];/m);
   if (ms) code += ms[0].replace(/build: (\w+)/g, "build: $1") + '\n';
   else code += 'const MODEL_SKINS = [];\n';
+  // Melee skins replace the whole object too, and melee viewmodels are built
+  // differently from guns: no scaling, no hands, just a group parked at the
+  // melee rest position. They get their own table and their own comparison.
+  const mms = src.match(/^const MELEE_MODEL_SKINS = \[[\s\S]*?\n\];/m);
+  code += (mms ? mms[0] : "const MELEE_MODEL_SKINS = [];") + "\n";
   for (const m of src.matchAll(/^function (build\w+)\(\)/gm)) {
     const b = fnBlock(m[1]);
     if (b) code += b + '\n';
   }
   // The weapon table pairs each builder with the id the reload tables key on.
+  // Each melee row becomes a thunk keyed by its MELEE_ITEMS id, so a stock
+  // model that cannot be built in here (the handcrafted ones need a module we
+  // do not load) is skipped rather than taking the whole run down.
+  const mmBody = src.match(/const meleeModels = \[([\s\S]*?)\n\];/)[1].replace(/\/\/[^\n]*/g, "");
+  const mItems = src.match(/^const MELEE_ITEMS = \[[\s\S]*?\n\];/m)[0];
+  const mIds = [...mItems.matchAll(/^  \{ id: '([\w]+)'/gm)].map(m => m[1]);
+  code += "const handcraftedMelee = () => { throw new Error('handcrafted'); };\n";
+  code += "const _meleeThunks = [" + mmBody.replace(/(\w+)\(([^)]*)\)/g, "() => $1($2)") + "];\n";
+  code += "const meleeStock = {}; " + JSON.stringify(mIds)
+        + ".forEach((id, i) => { if (_meleeThunks[i]) meleeStock[id] = _meleeThunks[i]; });\n";
   const tbl = src.match(/const weaponModels = \[([\s\S]*?)\n\];/)[1];
   const rows = tbl.split('\n')
     .filter(r => r.includes('//') && r.split('//')[0].includes('('))
     .map(r => ({ id: r.split('//')[1].trim(), fn: r.split('//')[0].trim().split('(')[0] }));
   code += 'return { RELOAD_KEYS, RELOAD_PROPS, _RELOAD_DEFAULT, _reloadPose, attachViewHands,'
         + ' VM_GUN_SCALE, fitRestDistance, INSPECT_DEFAULT, inspectOpenPose, assemblyBeats,'
-        + ' MODEL_SKINS, prepViewModel,'
+        + ' MODEL_SKINS, prepViewModel, MELEE_MODEL_SKINS, meleeStock,'
         + ' builders: ' + JSON.stringify(rows.map(r => r.fn)) + '.map(n => eval(n)) };';
   return { api: new Function('THREE', code)(THREE), rows };
 }
@@ -119,6 +134,7 @@ const problems = [];
 let inspectReport = null;
 let audioReport = null;
 let modelSkinReport = null;
+let meleeSkinReport = null;
 const loadsFirst = [];   // loaded before ejecting: right for some mechanisms, worth an eye
 const fail = (w, msg) => problems.push(w.padEnd(20) + msg);
 
@@ -342,6 +358,58 @@ Object.entries(api.RELOAD_PROPS).forEach(([id, evs]) => {
   modelSkinReport = out;
 }
 
+// ── 5e. Melee model skins ─────────────────────────────────────────────────
+// A melee skin is not scaled and gets no hands, so the gun checks do not apply.
+// What does apply: finite geometry, and enough of the object inside the view
+// once the swing code parks it at MELEE_REST_POS.
+{
+  const MREST = { x: 0.10, y: -0.12, z: -0.20 };
+  const meleeVis = g => {
+    g.position.set(MREST.x, MREST.y, MREST.z);
+    g.rotation.set(0, 0, 0);
+    g.updateMatrixWorld(true);
+    let tot = 0, vis = 0;
+    g.traverse(o => {
+      if (!o.isMesh) return;
+      const b = new THREE.Box3().setFromObject(o);
+      const c = [[b.min.x, b.min.y, b.min.z], [b.max.x, b.min.y, b.min.z], [b.min.x, b.max.y, b.min.z],
+                 [b.max.x, b.max.y, b.min.z], [b.min.x, b.min.y, b.max.z], [b.max.x, b.min.y, b.max.z],
+                 [b.min.x, b.max.y, b.max.z], [b.max.x, b.max.y, b.max.z]];
+      c.forEach(([x, y, z]) => { tot++; if (inView({ x, y, z })) vis++; });
+    });
+    return tot ? (vis / tot) * 100 : 0;
+  };
+  const out = [];
+  (api.MELEE_MODEL_SKINS || []).forEach(skin => {
+    let g;
+    try { g = skin.build(); }
+    catch (e) { fail(skin.id, 'melee skin failed to build: ' + e.message); return; }
+    g.updateMatrixWorld(true);
+    let bad = 0, parts = 0;
+    g.traverse(o => {
+      if (!o.isMesh) return;
+      parts++;
+      const b = new THREE.Box3().setFromObject(o);
+      if (![b.min.x, b.min.y, b.min.z, b.max.x, b.max.y, b.max.z].every(Number.isFinite)) bad++;
+    });
+    if (bad) fail(skin.id, bad + ' part(s) with non-finite geometry');
+    if (!parts) fail(skin.id, 'melee skin builds nothing visible');
+    const vis = meleeVis(g);
+    let baseVis = null;
+    const mk = (api.meleeStock || {})[skin.melee];
+    if (mk) { try { baseVis = meleeVis(mk()); } catch (e) {} }
+    // Melee viewmodels deliberately hang low — the stock knife measures 43% and
+    // the stock bat 50% — so the gun table's 80% floor is meaningless here. The
+    // absolute floor only catches an object that has fallen off the screen; the
+    // comparison against the weapon it replaces is what actually matters.
+    if (vis < 30) fail(skin.id, 'only ' + vis.toFixed(0) + '% of it is inside the view');
+    if (baseVis !== null && vis < baseVis - 20) fail(skin.id, 'only ' + vis.toFixed(0)
+      + '% in frame against the stock melee\'s ' + baseVis.toFixed(0) + '%');
+    out.push({ id: skin.id, melee: skin.melee, vis, baseVis, parts });
+  });
+  meleeSkinReport = out;
+}
+
 // ── 6. Tagged assemblies turn about their own axis ─────────────────────────
 const cyl = [];
 built.forEach((g, i) => {
@@ -392,6 +460,13 @@ if (modelSkinReport && modelSkinReport.length) {
   console.log('\nmodel skins (weapons that replace a weapon):');
   modelSkinReport.forEach(m => console.log('   ' + m.id.padEnd(10) + 'replaces ' + m.weapon.padEnd(10)
     + m.vis.toFixed(0) + '% in frame vs the stock ' + m.baseVis.toFixed(0) + '%, hands ' + m.hands));
+}
+
+if (meleeSkinReport && meleeSkinReport.length) {
+  console.log('\nmelee model skins (objects that replace a melee weapon):');
+  meleeSkinReport.forEach(m => console.log('   ' + m.id.padEnd(22) + 'replaces ' + m.melee.padEnd(12)
+    + m.vis.toFixed(0) + '% in frame vs the stock '
+    + (m.baseVis === null ? 'n/a' : m.baseVis.toFixed(0) + '%') + ', ' + m.parts + ' parts'));
 }
 
 if (cyl.length) {

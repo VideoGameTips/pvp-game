@@ -955,8 +955,6 @@ const BASIC_MELEE_SKINS = [
     blurb: 'Found under the sink. Kept.', stats: {} },
   { id: 'golf_club', skinFor: 'bat', name: 'Golf Club', rarity: 'basic', sw: ['#c8ccd2', '#2a2a2a'],
     blurb: 'A seven iron, well out of bounds.', stats: {} },
-  { id: 'bat_pool_noodle', skinFor: 'bat', name: 'Pool Noodle', rarity: 'lame', sw: ['#3ad8d8', '#ff9ec4'],
-    blurb: 'Makes a noise. That is the feature.', stats: {} },
   { id: 'wrench', skinFor: 'crowbar', name: 'Wrench', rarity: 'basic', sw: ['#8a8f96', '#c83a2a'],
     blurb: 'Adjustable. Mostly adjusted wrong.', stats: {} },
   { id: 'shovel', skinFor: 'sledge', name: 'Shovel', rarity: 'basic', sw: ['#4a4a3a', '#8a7256'],
@@ -969,8 +967,6 @@ const BASIC_MELEE_SKINS = [
     blurb: 'Nothing sticks. Not even dignity.', stats: {} },
   { id: 'meat_cleaver', skinFor: 'knife', name: 'Meat Cleaver', rarity: 'basic', sw: ['#c8ced6', '#4a2a1a'],
     blurb: 'Butcher’s pattern, well used.', stats: {} },
-  { id: 'knife_dental_floss', skinFor: 'knife', name: 'Dental Floss', rarity: 'good', sw: ['#f2f2f2', '#66ccdd'],
-    blurb: 'I hate dentists...', stats: {} },
   { id: 'knife_butter_knife', skinFor: 'knife', name: 'Butter Knife', rarity: 'lame', sw: ['#c8ccd2', '#e8d8a8'],
     blurb: 'Barely sharp. Extremely committed.', stats: {} },
   { id: 'katana_umbrella_sword', skinFor: 'katana', name: 'Umbrella Sword', rarity: 'good', sw: ['#2a2a3a', '#8a2a4a'],
@@ -19313,6 +19309,383 @@ Object.entries(equippedGunStatSkins).forEach(([wid, sid]) => {
   applyGunSkinLook(wid);
 });
 
+// ── 🔪 Melee model skins ────────────────────────────────────────────────────
+// The same idea as MODEL_SKINS, for the other hand. Up to now a "melee skin"
+// was a rename: Dental Floss was the knife with a different label on the HUD,
+// which is not a skin, it is a caption. These replace the OBJECT. The item
+// keeps its id, damage, range, cooldown and ability, and the swing style is
+// indexed off MELEE_ITEMS rather than off the model, so nothing downstream
+// notices the swap.
+//
+// Melee viewmodels are not scaled or hand-fitted the way guns are — no
+// prepViewModel, no attachViewHands. Every builder returns a group and the
+// swing code parks it at MELEE_REST_POS each frame, so a skin only has to get
+// its local geometry right. It does get the same finishing pass the stock
+// models got (greeble, weld, shine) or it would read flatter than the thing it
+// replaced.
+
+// 🦷 Knife → Dental Floss. The dispenser sits in the palm and the "blade" is a
+// taut strand pinched out in front of it.
+function buildDentalFloss() {
+  const g = new THREE.Group();
+  // Everything hangs off an offset group: at MELEE_REST_POS a palm-height
+  // object falls out of the bottom of the frustum, and the dispenser is the
+  // whole point of this one. The swing code owns g.position, so the lift has to
+  // live inside.
+  const b = new THREE.Group();
+  b.position.set(0, 0.052, -0.070);
+  g.add(b);
+  const caseMat  = new THREE.MeshLambertMaterial({ color: 0xf2f4f6 });
+  const lidMat   = new THREE.MeshLambertMaterial({ color: 0x3ab2c8 });
+  const steelMat = new THREE.MeshLambertMaterial({ color: 0xb8bec6 });
+  const flossMat = new THREE.MeshBasicMaterial({ color: 0xfbfdff });
+  const inkMat   = new THREE.MeshLambertMaterial({ color: 0x1f6f80 });
+  // Dispenser body, lid hinged along the top edge.
+  const box = new THREE.Mesh(new THREE.BoxGeometry(0.048, 0.050, 0.026), caseMat);
+  box.position.set(0, 0, 0.082); b.add(box);
+  const lid = new THREE.Mesh(new THREE.BoxGeometry(0.050, 0.013, 0.028), lidMat);
+  lid.position.set(0, 0.031, 0.082); b.add(lid);
+  // Mint stripe across the face — the only branding a floss box ever has.
+  const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.049, 0.008, 0.027), inkMat);
+  stripe.position.set(0, -0.006, 0.082); b.add(stripe);
+  // Spool showing through the side window, axis across the hand.
+  const spool = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.030, 12), flossMat);
+  spool.rotation.z = Math.PI / 2; spool.position.set(0, 0.002, 0.082); b.add(spool);
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.005, 0.034, 8), steelMat);
+  hub.rotation.z = Math.PI / 2; hub.position.set(0, 0.002, 0.082); b.add(hub);
+  // The cutter: a stamped metal tooth on the front lip. This is the edge.
+  const cutter = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.004, 0.009), steelMat);
+  cutter.position.set(0.017, 0.018, 0.068); cutter.rotation.z = -0.5; b.add(cutter);
+  // Two strands out to a pinch loop — floss doubles back on itself.
+  [-0.006, 0.006].forEach(x => {
+    const s = new THREE.Mesh(new THREE.CylinderGeometry(0.0016, 0.0016, 0.215, 4), flossMat);
+    s.rotation.x = Math.PI / 2; s.position.set(x, 0.012, -0.040); b.add(s);
+  });
+  const loop = new THREE.Mesh(new THREE.TorusGeometry(0.0075, 0.0016, 4, 10), flossMat);
+  loop.rotation.y = Math.PI / 2; loop.position.set(0, 0.012, -0.146); b.add(loop);
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+
+// 🌭 Nunchucks → Sausage Links. Two bangers on a butcher's chain.
+function buildSausageLinks() {
+  const g = new THREE.Group();
+  const meatMat = new THREE.MeshLambertMaterial({ color: 0xb2604a });
+  const charMat = new THREE.MeshLambertMaterial({ color: 0x6a3320 });
+  const linkMat = new THREE.MeshLambertMaterial({ color: 0x9aa2aa });
+  const banger = () => {
+    const s = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.021, 0.021, 0.100, 10), meatMat);
+    s.add(body);
+    [-0.050, 0.050].forEach(y => {
+      const cap = new THREE.Mesh(new THREE.SphereGeometry(0.021, 10, 7), meatMat);
+      cap.position.y = y; s.add(cap);
+    });
+    // Grill marks, charred where the bars were.
+    for (let i = 0; i < 3; i++) {
+      const mark = new THREE.Mesh(new THREE.TorusGeometry(0.0212, 0.0032, 4, 10), charMat);
+      mark.rotation.x = Math.PI / 2; mark.position.y = -0.028 + i * 0.028; s.add(mark);
+    }
+    // The twisted casing at each end.
+    [-0.062, 0.062].forEach(y => {
+      const tie = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.014, 6), charMat);
+      tie.position.y = y; s.add(tie);
+    });
+    return s;
+  };
+  const held = banger();
+  held.rotation.x = Math.PI / 2; held.position.set(0, 0, 0.055); g.add(held);
+  const free = banger();
+  free.rotation.set(Math.PI / 2, 0, 0); free.rotation.z = 0.30;
+  free.position.set(0.018, -0.060, -0.190); g.add(free);
+  // Chain between them, sagging as it goes.
+  for (let i = 0; i < 4; i++) {
+    const link = new THREE.Mesh(new THREE.TorusGeometry(0.0085, 0.0028, 4, 8), linkMat);
+    const t = i / 3;
+    link.position.set(0.004 + t * 0.010, -0.006 - t * 0.042, -0.012 - t * 0.100);
+    link.rotation.x = Math.PI / 2; link.rotation.y = i % 2 ? Math.PI / 2 : 0;
+    g.add(link);
+  }
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+
+// 🚽 Sledge → Toilet Plunger. Same swing, less dignity.
+function buildPlunger() {
+  const g = new THREE.Group();
+  const woodMat   = new THREE.MeshLambertMaterial({ color: 0xb98a52 });
+  const rubberMat = new THREE.MeshLambertMaterial({ color: 0xa8261a });
+  const darkMat   = new THREE.MeshLambertMaterial({ color: 0x6a1710 });
+  const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.016, 0.33, 10), woodMat);
+  handle.rotation.x = Math.PI / 2; handle.position.set(0, 0, 0.080); g.add(handle);
+  // Turned knob at the butt, the way a broom handle is finished.
+  const knob = new THREE.Mesh(new THREE.SphereGeometry(0.020, 8, 6), woodMat);
+  knob.position.set(0, 0, 0.248); g.add(knob);
+  // The cup: a cone opening forward, with the rolled rim and the ridge above it.
+  const cup = new THREE.Mesh(new THREE.ConeGeometry(0.062, 0.100, 14, 1, true), rubberMat);
+  cup.material.side = THREE.DoubleSide;
+  cup.rotation.x = Math.PI / 2; cup.position.set(0, 0, -0.112); g.add(cup);
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(0.060, 0.009, 5, 14), rubberMat);
+  rim.position.set(0, 0, -0.160); g.add(rim);
+  const ridge = new THREE.Mesh(new THREE.TorusGeometry(0.040, 0.006, 5, 14), darkMat);
+  ridge.position.set(0, 0, -0.122); g.add(ridge);
+  // Socket where the wood goes into the rubber.
+  const socket = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.026, 0.030, 10), darkMat);
+  socket.rotation.x = Math.PI / 2; socket.position.set(0, 0, -0.072); g.add(socket);
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+
+// 🎸 Fire Axe → Electric Guitar. It is called an axe. Held by the neck, so the
+// body is the part that arrives.
+function buildElectricGuitar() {
+  const g = new THREE.Group();
+  const bodyMat   = new THREE.MeshLambertMaterial({ color: 0xa8161e });
+  const neckMat   = new THREE.MeshLambertMaterial({ color: 0x8a5a2a });
+  const boardMat  = new THREE.MeshLambertMaterial({ color: 0x2a1a12 });
+  const chromeMat = new THREE.MeshLambertMaterial({ color: 0xc8ccd2 });
+  const blackMat  = new THREE.MeshLambertMaterial({ color: 0x14161a });
+  const pearlMat  = new THREE.MeshLambertMaterial({ color: 0xe8e4d8 });
+  // Body — a slab with two cutaway horns so it is not a rectangle.
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.150, 0.034, 0.170), bodyMat);
+  body.position.set(0, 0, -0.185); g.add(body);
+  [-0.086, 0.086].forEach(x => {
+    const horn = new THREE.Mesh(new THREE.BoxGeometry(0.048, 0.032, 0.070), bodyMat);
+    horn.position.set(x, 0, -0.128); horn.rotation.y = x < 0 ? 0.28 : -0.28; g.add(horn);
+  });
+  // Scratchplate.
+  const plate = new THREE.Mesh(new THREE.BoxGeometry(0.096, 0.004, 0.120), pearlMat);
+  plate.position.set(0.012, 0.019, -0.180); g.add(plate);
+  // Neck through the hand, fretboard on top.
+  const neck = new THREE.Mesh(new THREE.BoxGeometry(0.028, 0.020, 0.190), neckMat);
+  neck.position.set(0, 0, -0.005); g.add(neck);
+  const board = new THREE.Mesh(new THREE.BoxGeometry(0.030, 0.006, 0.190), boardMat);
+  board.position.set(0, 0.012, -0.005); g.add(board);
+  for (let i = 0; i < 7; i++) {
+    const fret = new THREE.Mesh(new THREE.BoxGeometry(0.031, 0.002, 0.0022), chromeMat);
+    fret.position.set(0, 0.0155, 0.070 - i * 0.026); g.add(fret);
+  }
+  // Headstock, tilted back, six tuners down one side.
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.012, 0.062), boardMat);
+  head.position.set(0, 0.020, 0.122); head.rotation.x = -0.22; g.add(head);
+  for (let i = 0; i < 6; i++) {
+    const peg = new THREE.Mesh(new THREE.CylinderGeometry(0.0035, 0.0035, 0.016, 6), chromeMat);
+    peg.rotation.z = Math.PI / 2;
+    peg.position.set(i < 3 ? -0.024 : 0.024, 0.022, 0.104 + (i % 3) * 0.018); g.add(peg);
+  }
+  // Two humbuckers, bridge, two knobs and a jack.
+  [-0.150, -0.212].forEach(z => {
+    const pu = new THREE.Mesh(new THREE.BoxGeometry(0.082, 0.010, 0.020), blackMat);
+    pu.position.set(0, 0.021, z); g.add(pu);
+  });
+  const bridge = new THREE.Mesh(new THREE.BoxGeometry(0.072, 0.010, 0.014), chromeMat);
+  bridge.position.set(0, 0.021, -0.242); g.add(bridge);
+  [[-0.046, -0.252], [-0.046, -0.228]].forEach(([x, z]) => {
+    const knob = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.009, 0.012, 8), blackMat);
+    knob.position.set(x, 0.024, z); g.add(knob);
+  });
+  const jack = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.012, 8), chromeMat);
+  jack.rotation.z = Math.PI / 2; jack.position.set(0.078, 0.008, -0.220); g.add(jack);
+  // Six strings running the whole scale length.
+  for (let i = 0; i < 6; i++) {
+    const str = new THREE.Mesh(new THREE.BoxGeometry(0.0016, 0.0016, 0.360), chromeMat);
+    str.position.set(-0.0125 + i * 0.005, 0.0255, -0.062); g.add(str);
+  }
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+
+// 🪥 Chainsaw → Electric Toothbrush. It already revs.
+function buildElectricToothbrush() {
+  const g = new THREE.Group();
+  const shellMat  = new THREE.MeshLambertMaterial({ color: 0xf4f6f8 });
+  const gripMat   = new THREE.MeshLambertMaterial({ color: 0x2f8fc8 });
+  const darkMat   = new THREE.MeshLambertMaterial({ color: 0x2a2e34 });
+  const ledMat    = new THREE.MeshBasicMaterial({ color: 0x55ff88 });
+  const bristleA  = new THREE.MeshLambertMaterial({ color: 0xfafcfe });
+  const bristleB  = new THREE.MeshLambertMaterial({ color: 0x2f8fc8 });
+  // Handle — fat at the base, tapering toward the head.
+  const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.019, 0.026, 0.215, 12), shellMat);
+  handle.rotation.x = Math.PI / 2; handle.position.set(0, 0, 0.075); g.add(handle);
+  // Rubber grip panel on the underside.
+  const grip = new THREE.Mesh(new THREE.BoxGeometry(0.030, 0.010, 0.100), gripMat);
+  grip.position.set(0, -0.019, 0.060); g.add(grip);
+  // Power button and the charge light above it.
+  const btn = new THREE.Mesh(new THREE.CylinderGeometry(0.010, 0.010, 0.008, 10), gripMat);
+  btn.rotation.x = Math.PI / 2; btn.position.set(0, 0.019, 0.055); btn.rotation.z = 0; g.add(btn);
+  const led = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.003, 0.004), ledMat);
+  led.position.set(0, 0.021, 0.100); g.add(led);
+  // Base contact ring where it sits on the charger.
+  const base = new THREE.Mesh(new THREE.TorusGeometry(0.025, 0.004, 5, 12), darkMat);
+  base.position.set(0, 0, 0.176); g.add(base);
+  // Neck and the round head.
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.013, 0.095, 10), shellMat);
+  neck.rotation.x = Math.PI / 2; neck.position.set(0, 0.004, -0.075); g.add(neck);
+  const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.012, 10), gripMat);
+  collar.rotation.x = Math.PI / 2; collar.position.set(0, 0, -0.030); g.add(collar);
+  const head = new THREE.Mesh(new THREE.CylinderGeometry(0.030, 0.026, 0.016, 14), shellMat);
+  head.rotation.x = Math.PI / 2; head.position.set(0, 0.006, -0.130); g.add(head);
+  // Bristles: an outer ring plus a centre tuft, two colours like the real thing.
+  for (let i = 0; i < 10; i++) {
+    const a = (i / 10) * Math.PI * 2;
+    const b = new THREE.Mesh(new THREE.CylinderGeometry(0.0045, 0.0045, 0.020, 5), i % 2 ? bristleB : bristleA);
+    b.rotation.x = Math.PI / 2;
+    b.position.set(Math.cos(a) * 0.020, 0.006 + Math.sin(a) * 0.020, -0.148); g.add(b);
+  }
+  const tuft = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.022, 8), bristleA);
+  tuft.rotation.x = Math.PI / 2; tuft.position.set(0, 0.006, -0.149); g.add(tuft);
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+
+// 🗑️ Riot Shield → Trash Can Lid. Galvanised, dented, and legally a shield.
+function buildBinLid() {
+  const g = new THREE.Group();
+  const zincMat = new THREE.MeshLambertMaterial({ color: 0xa8aeb4 });
+  const darkMat = new THREE.MeshLambertMaterial({ color: 0x6e747a });
+  const gripMat = new THREE.MeshLambertMaterial({ color: 0x2a2a2a });
+  // The lid itself — a shallow dish facing the enemy.
+  const face = new THREE.Mesh(new THREE.CylinderGeometry(0.170, 0.158, 0.020, 20), zincMat);
+  face.rotation.x = Math.PI / 2; face.position.set(-0.04, 0, -0.100); g.add(face);
+  // Rolled edge.
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(0.170, 0.011, 6, 20), zincMat);
+  rim.position.set(-0.04, 0, -0.096); g.add(rim);
+  // Pressed concentric rings — the stiffening ribs every metal lid has.
+  [0.060, 0.104, 0.140].forEach((r, i) => {
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(r, 0.005, 4, 18), darkMat);
+    ring.position.set(-0.04, 0, -0.108 - i * 0.002); g.add(ring);
+  });
+  // Raised dome in the middle.
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(0.048, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), zincMat);
+  dome.rotation.x = -Math.PI / 2; dome.position.set(-0.04, 0, -0.114); g.add(dome);
+  // Handle across the back, held like the shield's grip.
+  const bar = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.100, 0.016), gripMat);
+  bar.position.set(0.020, 0, -0.056); g.add(bar);
+  [[0.020, 0.052], [0.020, -0.052]].forEach(([x, y]) => {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.016, 0.040), darkMat);
+    leg.position.set(x, y, -0.074); g.add(leg);
+  });
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+
+// 🍬 Crowbar → Candy Cane. The hook is the pry end. Built from beads along the
+// path so the stripes wrap round the bend instead of stopping at it.
+function buildCandyCane() {
+  const g = new THREE.Group();
+  const redMat   = new THREE.MeshLambertMaterial({ color: 0xcc2233 });
+  const whiteMat = new THREE.MeshLambertMaterial({ color: 0xf6f8fa });
+  const pts = [];
+  for (let z = 0.210; z > -0.100; z -= 0.0135) pts.push([0, 0, z]);
+  for (let i = 0; i <= 10; i++) {
+    const a = -Math.PI / 2 + (i / 10) * Math.PI;
+    pts.push([0, 0.046 + Math.sin(a) * 0.046, -0.100 - Math.cos(a) * 0.046]);
+  }
+  pts.forEach(([x, y, z], i) => {
+    const bead = new THREE.Mesh(new THREE.SphereGeometry(0.0135, 8, 6),
+      Math.floor(i / 2) % 2 ? redMat : whiteMat);
+    bead.position.set(x, y, z); g.add(bead);
+  });
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+
+// 🏊 Bat → Pool Noodle. Hollow, weightless, and it makes a noise.
+function buildPoolNoodle() {
+  const g = new THREE.Group();
+  const foamMat  = new THREE.MeshLambertMaterial({ color: 0x33cfdc });
+  const stripeMat= new THREE.MeshLambertMaterial({ color: 0xff8ec4 });
+  const holeMat  = new THREE.MeshLambertMaterial({ color: 0x0f5a63 });
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.034, 0.420, 14), foamMat);
+  shaft.rotation.x = Math.PI / 2; shaft.position.set(0, 0, 0.010); g.add(shaft);
+  // The tip droops. Foam does that.
+  const tip = new THREE.Mesh(new THREE.CylinderGeometry(0.033, 0.032, 0.130, 14), foamMat);
+  tip.rotation.x = Math.PI / 2 + 0.17; tip.position.set(0, -0.008, -0.262); g.add(tip);
+  // Hollow core, visible at both ends.
+  [[0, 0.216, 0], [0, -0.318, 0.17]].forEach(([x, z, tilt]) => {
+    const hole = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.014, 10), holeMat);
+    hole.rotation.x = Math.PI / 2 + tilt;
+    hole.position.set(x, tilt ? -0.019 : 0, z); g.add(hole);
+  });
+  [0.140, 0.020, -0.100, -0.210].forEach(z => {
+    const band = new THREE.Mesh(new THREE.TorusGeometry(0.0345, 0.005, 5, 14), stripeMat);
+    band.position.set(0, 0, z); g.add(band);
+  });
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+
+const MELEE_MODEL_SKINS = [
+  { id: 'knife_floss', melee: 'knife', name: 'Dental Floss', rarity: 'good',
+    sw: ['#f2f4f6', '#3ab2c8'], build: buildDentalFloss,
+    blurb: 'I hate dentists... the cutter is the sharp part.' },
+  { id: 'nunchucks_sausage', melee: 'nunchucks', name: 'Sausage Links', rarity: 'good',
+    sw: ['#b2604a', '#9aa2aa'], build: buildSausageLinks,
+    blurb: 'Two bangers on a butcher’s chain. Grill marks included.' },
+  { id: 'sledge_plunger', melee: 'sledge', name: 'Toilet Plunger', rarity: 'good',
+    sw: ['#a8261a', '#b98a52'], build: buildPlunger,
+    blurb: 'Same swing, considerably less dignity.' },
+  { id: 'fire_axe_guitar', melee: 'fire_axe', name: 'Electric Guitar', rarity: 'rare',
+    sw: ['#a8161e', '#c8ccd2'], build: buildElectricGuitar,
+    blurb: 'It is called an axe. Held by the neck, so the body lands.' },
+  { id: 'chainsaw_toothbrush', melee: 'chainsaw', name: 'Electric Toothbrush', rarity: 'good',
+    sw: ['#f4f6f8', '#2f8fc8'], build: buildElectricToothbrush,
+    blurb: 'Two minutes, twice a day, or until they stop moving.' },
+  { id: 'riot_shield_bin_lid', melee: 'riot_shield', name: 'Trash Can Lid', rarity: 'good',
+    sw: ['#a8aeb4', '#6e747a'], build: buildBinLid,
+    blurb: 'Galvanised, dented, and legally a shield.' },
+  { id: 'crowbar_candy_cane', melee: 'crowbar', name: 'Candy Cane', rarity: 'good',
+    sw: ['#cc2233', '#f6f8fa'], build: buildCandyCane,
+    blurb: 'The hook is the pry end. Peppermint throughout.' },
+  { id: 'bat_pool_noodle', melee: 'bat', name: 'Pool Noodle', rarity: 'good',
+    sw: ['#33cfdc', '#ff8ec4'], build: buildPoolNoodle,
+    blurb: 'Hollow, weightless, and it still makes the noise.' },
+];
+const MELEE_MODEL_SKINS_BY_BASE = {};
+for (const ms of MELEE_MODEL_SKINS) (MELEE_MODEL_SKINS_BY_BASE[ms.melee] ||= []).push(ms);
+
+let equippedMeleeModelSkins = (() => {
+  try { return JSON.parse(localStorage.getItem('pvp_melee_model_skins')) || {}; } catch (e) { return {}; }
+})();
+const _baseMeleeModels = {};
+
+function applyMeleeModelSkin(baseId) {
+  const idx = MELEE_ITEMS.findIndex(m => m.id === baseId);
+  if (idx < 0 || !meleeModels[idx]) return;
+  if (!(idx in _baseMeleeModels)) _baseMeleeModels[idx] = meleeModels[idx];
+  const want = equippedMeleeModelSkins[baseId];
+  const skin = MELEE_MODEL_SKINS.find(s => s.id === want && s.melee === baseId);
+  let next;
+  if (!skin) next = _baseMeleeModels[idx];
+  else {
+    // Built once, on first equip, then kept — rebuilding on every menu open
+    // would leak a group into the camera each time.
+    if (!skin._model) {
+      try {
+        const m = skin.build();
+        try { greebleModel(m); } catch (e) {}
+        try { weldModelParts(m); } catch (e) {}
+        try { shinifyModel(m); } catch (e) {}
+        m.visible = false;
+        camera.add(m);
+        skin._model = m;
+      } catch (e) { console.warn('[melee skin]', e); return; }
+    }
+    next = skin._model;
+  }
+  const cur = meleeModels[idx];
+  if (next === cur) return;
+  const wasVisible = cur.visible;
+  cur.visible = false;
+  next.visible = wasVisible;
+  meleeModels[idx] = next;
+}
+function setMeleeModelSkin(baseId, skinId) {
+  if (skinId) equippedMeleeModelSkins[baseId] = skinId;
+  else delete equippedMeleeModelSkins[baseId];
+  try { localStorage.setItem('pvp_melee_model_skins', JSON.stringify(equippedMeleeModelSkins)); } catch (e) {}
+  applyMeleeModelSkin(baseId);
+  updateAmmoHUD();
+  updateWeaponSelector();
+}
+// Whatever was equipped last session comes back. Wrapped because this runs at
+// module scope: a throw here kills the rest of the file and the game never boots.
+try { Object.keys(equippedMeleeModelSkins).forEach(applyMeleeModelSkin); }
+catch (e) { console.warn('[melee skin restore]', e); }
+
+
 // ── 🔁 Reload choreography ───────────────────────────────────────────────────
 // Every weapon reloads differently. Not eleven shared styles — ninety-nine
 // tracks, one per gun, each built around what that specific action actually
@@ -29241,6 +29614,40 @@ function openWeaponSkinsPanel() {
       ${rows.join('')}
     </div>`;
   };
+  // Melee models get their own section: they are per melee item, not a wrap
+  // that applies to everything, and they are free — no case, no unlock.
+  const meleeModelSkinSection = () => {
+    const rows = [];
+    for (const bid of Object.keys(MELEE_MODEL_SKINS_BY_BASE)) {
+      const base = MELEE_ITEMS.find(x => x.id === bid);
+      if (!base) continue;
+      const on = equippedMeleeModelSkins[bid];
+      const cells = MELEE_MODEL_SKINS_BY_BASE[bid].map(ms => `
+        <div data-mmskin="${ms.id}" data-mmbase="${bid}" class="mms-cell"
+             style="cursor:pointer;border:2px solid ${on===ms.id?"#ffcc99":"#444"};border-radius:6px;padding:8px;background:${on===ms.id?"#2a2118":"#1d1a12"};">
+          <div style="height:26px;border-radius:4px;background:linear-gradient(90deg, ${ms.sw[0]} 0 50%, ${ms.sw[1]} 50% 100%);border:1px solid #000;margin-bottom:6px;"></div>
+          <div style="font-size:11px;letter-spacing:1px;color:${on===ms.id?"#ffcc99":"#ddd"};">${ms.name}</div>
+          <div style="font-size:9px;color:#8a8a7a;margin-top:3px;line-height:1.3;">${ms.blurb}</div>
+        </div>`).join("");
+      rows.push(`
+        <div style="margin-top:14px;">
+          <div style="font-size:11px;letter-spacing:2px;color:#ffcc99;margin-bottom:6px;">${base.name.toUpperCase()}</div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
+            ${cells}
+            <div data-mmskin="" data-mmbase="${bid}" class="mms-cell"
+                 style="cursor:pointer;border:2px solid ${!on?"#ffcc99":"#444"};border-radius:6px;padding:8px;background:${!on?"#2a2118":"#1d1a12"};display:flex;align-items:center;justify-content:center;">
+              <div style="font-size:10px;letter-spacing:1px;color:${!on?"#ffcc99":"#999"};">STOCK</div>
+            </div>
+          </div>
+        </div>`);
+    }
+    if (!rows.length) return "";
+    return `<div style="margin-top:18px;border-top:1px solid #6a5520;padding-top:12px;">
+      <div style="font-size:14px;letter-spacing:2px;color:#ffddaa;">🔪 MELEE MODELS</div>
+      <div style="font-size:10px;color:#8a7a6a;margin:5px 0 2px;line-height:1.4;">These replace the weapon itself, not its colour. Same damage, same reach, same ability — a different object in your hand.</div>
+      ${rows.join("")}
+    </div>`;
+  };
   const swatch = (s) => `
     <div data-skin="${s.id}" class="ws-cell" style="cursor:pointer;border:2px solid ${s.id===selectedWeaponSkin?'#ffdd55':'#444'};border-radius:6px;padding:8px;text-align:center;background:${s.id===selectedWeaponSkin?'#2a2410':'#1d1a12'};">
       <div style="height:26px;border-radius:4px;background:linear-gradient(90deg, ${s.sw[0]} 0 50%, ${s.sw[1]} 50% 100%);border:1px solid #000;margin-bottom:6px;"></div>
@@ -29307,6 +29714,7 @@ function openWeaponSkinsPanel() {
       <button id="ws-close" style="background:#3a1a1a;color:#ff8888;border:1px solid #ff4444;padding:4px 10px;cursor:pointer;font-family:inherit;border-radius:3px;">✕</button>
     </div>
     ${modelSkinSection()}
+    ${meleeModelSkinSection()}
     <div style="font-size:12px;letter-spacing:2px;color:#ffdd88;margin:20px 0 6px;border-top:1px solid #6a5520;padding-top:14px;">🎨 COLOUR THEMES</div>
     <div style="font-size:10px;color:#aa9966;margin-bottom:12px;line-height:1.4;">One pick applies to every gun. Country themes use real national flags; the German theme is the Iron Cross military mark (no Nazi imagery).</div>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">${WEAPON_SKINS.map(swatch).join('')}</div>
@@ -29331,6 +29739,12 @@ function openWeaponSkinsPanel() {
     cell.addEventListener('click', () => {
       if (!ownsSkin(cell.dataset.mskin2)) { alert('You have not pulled that skin yet. Open Gen 1 cases in Lobby 13.'); return; }
       setMeleeSkin(cell.dataset.mbase, cell.dataset.mskin2 || null);
+      openWeaponSkinsPanel();
+    });
+  });
+  panel.querySelectorAll('.mms-cell').forEach(cell => {
+    cell.addEventListener('click', () => {
+      setMeleeModelSkin(cell.dataset.mmbase, cell.dataset.mmskin || null);
       openWeaponSkinsPanel();
     });
   });
