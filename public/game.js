@@ -10378,6 +10378,197 @@ function buildSewingMachine() {
   g.position.set(0.12, -0.1, -0.25); return g;
 }
 
+function buildBananaPistol() {
+  // 🍌 Desert Eagle -> banana. Two from the same bunch, joined at the crown:
+  // one is the barrel, one is the grip. The stem is the muzzle.
+  const g = new THREE.Group();
+  const bright = GUN_MATS.bright();
+  const peel  = new THREE.MeshPhongMaterial({ color: 0xf2d02a, shininess: 70, specular: 0xfff4b0 });
+  const green = new THREE.MeshPhongMaterial({ color: 0x8aa82a, shininess: 50, specular: 0xd0e0a0 });
+  const brown = new THREE.MeshPhongMaterial({ color: 0x4a3218, shininess: 20, specular: 0x6a5030 });
+  const spot  = new THREE.MeshPhongMaterial({ color: 0x7a5a20, shininess: 20, specular: 0x6a5030 });
+  // A banana is a tapering arc: beads along it, fattest in the middle.
+  const banana = (x0, y0, z0, len, bend, dirY, dirZ) => {
+    const N = 12;
+    for (let i = 0; i <= N; i++) {
+      const t = i / N;
+      const r = 0.012 + Math.sin(Math.PI * Math.min(1, t * 1.1)) * 0.016;
+      const off = Math.sin(Math.PI * t) * bend;
+      const b = new THREE.Mesh(new THREE.SphereGeometry(r, 8, 6), peel);
+      b.scale.set(1, 0.92, 1.6);
+      b.position.set(x0, y0 + dirY * len * t + off * -dirZ, z0 + dirZ * len * t + off * dirY);
+      g.add(b);
+    }
+  };
+  banana(0, 0.012, -0.010, 0.200, 0.022, 0, -1);                        // barrel banana
+  banana(0, -0.010, 0.020, 0.150, 0.016, -0.8, 0.45);                   // grip banana
+  gpCyl(g, green, 0.006, 0.009, 0.030, 8, 0, 0.012, -0.216);           // stem = muzzle
+  gpCyl(g, brown, 0.0065, 0.0065, 0.004, 8, 0, 0.012, -0.232);
+  gpCyl(g, green, 0.018, 0.016, 0.022, 10, 0, 0.004, 0.012, 0.6);      // the crown
+  gpCyl(g, brown, 0.008, 0.004, 0.012, 8, 0, -0.130, 0.090, 2.6);      // grip tip
+  [[0.012, 0.026, -0.080], [-0.010, 0.030, -0.130], [0.013, -0.060, 0.050]].forEach(([x, y, z]) =>
+    gpBox(g, spot, 0.004, 0.008, 0.008, x, y, z));                      // ripeness spots
+  gpBox(g, bright, 0.005, 0.016, 0.006, 0, -0.024, -0.010, 0.25);      // trigger
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.012, -0.236); g.add(flash);
+  g._flash = flash; g._kickZ = 0.014; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildWaterPistol() {
+  // 💦 Glock 18 -> water pistol. Translucent tank on top with the water
+  // sloshing in it, an orange nozzle and a chunky toy trigger.
+  const g = new THREE.Group();
+  const inner = GUN_MATS.inner();
+  const lime  = new THREE.MeshPhongMaterial({ color: 0x5ad83a, shininess: 110, specular: 0xd8ffc8 });
+  const orange= new THREE.MeshPhongMaterial({ color: 0xff8a1a, shininess: 110, specular: 0xffd8a8 });
+  const tank  = new THREE.MeshPhongMaterial({ color: 0xd8f0ff, shininess: 200, specular: 0xffffff, transparent: true, opacity: 0.45 });
+  const water = new THREE.MeshPhongMaterial({ color: 0x2a8ae8, shininess: 180, specular: 0xffffff, transparent: true, opacity: 0.8 });
+  gpBox(g, lime, 0.036, 0.040, 0.160, 0, 0.004, -0.030);               // body
+  gpCyl(g, orange, 0.012, 0.016, 0.040, 12, 0, 0.004, -0.128);         // nozzle
+  gpCyl(g, inner, 0.004, 0.004, 0.004, 8, 0, 0.004, -0.149);
+  gpBox(g, tank, 0.050, 0.044, 0.110, 0, 0.048, -0.010);               // tank
+  gpBox(g, water, 0.044, 0.026, 0.104, 0, 0.038, -0.010);              // the water
+  gpCyl(g, orange, 0.010, 0.010, 0.012, 10, 0, 0.074, 0.030, 0);       // fill cap
+  gpPlate(g, lime, [
+    [0.030,-0.010],[0.058,-0.024],[0.066,-0.120],[0.038,-0.132],[0.012,-0.052],[0.010,-0.014],
+  ], 0.034, 0);
+  gpPlate(g, orange, [                                                  // big toy trigger
+    [-0.010,-0.016],[0.012,-0.018],[0.018,-0.070],[0.000,-0.074],[-0.014,-0.040],
+  ], 0.018, 0);
+  gpBox(g, orange, 0.036, 0.004, 0.090, 0, -0.018, -0.030);            // trigger guard rail
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.004, -0.152); g.add(flash);
+  g._flash = flash; g._kickZ = 0.006; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildHairBrush() {
+  // 💇 M1911 -> paddle hairbrush. The handle is the grip, the paddle points
+  // down range, and the bristles stand up out of a rubber cushion.
+  const g = new THREE.Group();
+  const bright = GUN_MATS.bright();
+  const wood  = new THREE.MeshPhongMaterial({ color: 0x9a6a3a, shininess: 90, specular: 0xe0c098 });
+  const pad   = new THREE.MeshPhongMaterial({ color: 0x1c1e24, shininess: 40, specular: 0x4a5058 });
+  const pin   = new THREE.MeshPhongMaterial({ color: 0xd8dce2, shininess: 120, specular: 0xffffff });
+  const tip   = new THREE.MeshPhongMaterial({ color: 0x2a2c30, shininess: 60, specular: 0x6a7078 });
+  gpBox(g, wood, 0.056, 0.022, 0.150, 0, 0.000, -0.060);               // paddle
+  gpBox(g, pad, 0.046, 0.008, 0.136, 0, 0.014, -0.060);                // cushion
+  for (let r = 0; r < 8; r++) for (let c = 0; c < 4; c++) {            // bristles
+    const x = -0.015 + c * 0.010 + (r % 2) * 0.004, z = -0.120 + r * 0.017;
+    gpCyl(g, pin, 0.0014, 0.0014, 0.018, 4, x, 0.026, z, 0);
+    gpCyl(g, tip, 0.0026, 0.0026, 0.003, 5, x, 0.036, z, 0);
+  }
+  gpBox(g, wood, 0.030, 0.020, 0.030, 0, -0.002, 0.020);               // neck
+  gpPlate(g, wood, [                                                    // handle = grip
+    [0.020,-0.004],[0.050,-0.018],[0.064,-0.140],[0.036,-0.154],[0.006,-0.050],[0.004,-0.010],
+  ], 0.032, 0);
+  gpCyl(g, pad, 0.006, 0.006, 0.034, 8, 0, -0.140, 0.048, 0, Math.PI / 2); // hanging hole
+  gpBox(g, bright, 0.006, 0.014, 0.006, 0, -0.022, 0.006, 0.22);
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.000, -0.140); g.add(flash);
+  g._flash = flash; g._kickZ = 0.010; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildAccordion() {
+  // 🪗 MG42 -> accordion. The bellows run the length of the gun, piano keys
+  // down the right-hand board, bass buttons on the left, straps over the top.
+  const g = new THREE.Group();
+  const inner = GUN_MATS.inner(), bright = GUN_MATS.bright();
+  const red   = new THREE.MeshPhongMaterial({ color: 0xb01c2a, shininess: 140, specular: 0xffb0b8 });
+  const fold  = new THREE.MeshPhongMaterial({ color: 0x1c1c22, shininess: 40, specular: 0x5a5a66 });
+  const pearl = new THREE.MeshPhongMaterial({ color: 0xf4eee0, shininess: 160, specular: 0xffffff });
+  const chrome= new THREE.MeshPhongMaterial({ color: 0xc8ced6, shininess: 180, specular: 0xffffff });
+  const strap = new THREE.MeshPhongMaterial({ color: 0x5a3a20, shininess: 30, specular: 0x6a5030 });
+  gpBox(g, red, 0.080, 0.110, 0.070, 0, 0.020, 0.100);                 // treble board (back)
+  gpBox(g, red, 0.080, 0.110, 0.060, 0, 0.020, -0.200);                // bass board (front)
+  for (let i = 0; i < 11; i++)                                          // bellows
+    gpBox(g, i % 2 ? fold : pearl, 0.074 + (i % 2) * 0.006, 0.104 + (i % 2) * 0.006, 0.020,
+          0, 0.020, 0.052 - i * 0.021);
+  gpBox(g, chrome, 0.082, 0.004, 0.072, 0, 0.076, 0.100);              // grille trim
+  for (let i = 0; i < 9; i++) {                                         // piano keys
+    gpBox(g, pearl, 0.008, 0.012, 0.064, -0.044, -0.024 + i * 0.010, 0.100);
+    if (i % 3 !== 2) gpBox(g, fold, 0.006, 0.006, 0.040, -0.048, -0.019 + i * 0.010, 0.090);
+  }
+  for (let r = 0; r < 3; r++) for (let c = 0; c < 4; c++)              // bass buttons
+    gpCyl(g, pearl, 0.005, 0.005, 0.006, 8, 0.043, -0.012 + c * 0.020, -0.215 + r * 0.016, 0, Math.PI / 2);
+  gpBox(g, chrome, 0.020, 0.008, 0.290, 0.034, 0.078, -0.050);         // bellows straps
+  gpBox(g, chrome, 0.020, 0.008, 0.290, -0.034, 0.078, -0.050);
+  gpBox(g, strap, 0.030, 0.006, 0.090, 0.044, 0.030, 0.100, 0, 0, Math.PI / 2); // hand strap
+  gpPlate(g, inner, [
+    [0.030,-0.040],[0.060,-0.058],[0.068,-0.160],[0.040,-0.174],[0.012,-0.080],[0.008,-0.044],
+  ], 0.036, 0);
+  gpBox(g, bright, 0.006, 0.014, 0.006, 0, -0.058, 0.006, 0.22);
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.020, -0.236); g.add(flash);
+  g._flash = flash; g._kickZ = 0.010; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildCarrotLauncher() {
+  // 🥕 RPG -> carrot launcher. A garden-hose green tube with a giant carrot
+  // loaded in the front, its leaves still on.
+  const g = new THREE.Group();
+  const inner = GUN_MATS.inner(), bright = GUN_MATS.bright();
+  const tube  = new THREE.MeshPhongMaterial({ color: 0x2f8a3a, shininess: 90, specular: 0xb0e0b8 });
+  const carrot= new THREE.MeshPhongMaterial({ color: 0xf07a1a, shininess: 60, specular: 0xffc890 });
+  const ridge = new THREE.MeshPhongMaterial({ color: 0xc85a10, shininess: 40, specular: 0xffa060 });
+  const leaf  = new THREE.MeshPhongMaterial({ color: 0x3aa82a, shininess: 40, specular: 0xa8e098, side: THREE.DoubleSide });
+  const yellow= new THREE.MeshPhongMaterial({ color: 0xf0c020, shininess: 90, specular: 0xfff0a0 });
+  gpCyl(g, tube, 0.034, 0.034, 0.380, 16, 0, 0.030, 0.020);            // launch tube
+  gpCyl(g, yellow, 0.037, 0.037, 0.016, 16, 0, 0.030, -0.160);         // muzzle band
+  gpCyl(g, yellow, 0.037, 0.037, 0.016, 16, 0, 0.030, 0.200);          // rear band
+  gpCyl(g, inner, 0.030, 0.030, 0.004, 14, 0, 0.030, 0.211);
+  gpCyl(g, carrot, 0.000, 0.034, 0.160, 14, 0, 0.030, -0.240, -Math.PI / 2); // carrot, point forward
+  for (let i = 0; i < 4; i++)                                           // growth rings
+    gpCyl(g, ridge, 0.030 - i * 0.006, 0.030 - i * 0.006, 0.003, 12, 0, 0.030, -0.180 - i * 0.026);
+  for (let i = 0; i < 5; i++) {                                         // leaves out the top
+    const a = -0.6 + i * 0.3;
+    const l = gpBox(g, leaf, 0.020, 0.090, 0.004, Math.sin(a) * 0.030, 0.090, -0.150 + Math.abs(a) * 0.02);
+    l.rotation.set(-0.25, 0, a);
+  }
+  gpBox(g, tube, 0.024, 0.030, 0.080, 0, 0.074, 0.020);                // sight block
+  gpBox(g, yellow, 0.004, 0.018, 0.004, 0, 0.098, -0.010);
+  gpPlate(g, inner, [                                                   // rear grip
+    [0.030,-0.004],[0.060,-0.020],[0.068,-0.120],[0.040,-0.134],[0.012,-0.042],[0.008,-0.006],
+  ], 0.034, 0);
+  gpPlate(g, inner, [                                                   // fore grip
+    [-0.090,-0.004],[-0.066,-0.006],[-0.062,-0.090],[-0.086,-0.096],
+  ], 0.030, 0);
+  gpBox(g, bright, 0.006, 0.014, 0.006, 0, -0.016, 0.004, 0.22);
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.030, -0.330); g.add(flash);
+  g._flash = flash; g._kickZ = 0.020; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildTuba() {
+  // 🎺 Bazooka -> tuba. The bazooka was named after a comedian's homemade horn,
+  // so this is it going home. Bell forward, three valves on top, mouthpiece at
+  // the back, a loop of tubing round the side.
+  const g = new THREE.Group();
+  const inner = GUN_MATS.inner(), bright = GUN_MATS.bright();
+  const brass = new THREE.MeshPhongMaterial({ color: 0xd8aa3a, shininess: 200, specular: 0xfff0b0, side: THREE.DoubleSide });
+  const dark  = new THREE.MeshPhongMaterial({ color: 0x9a7420, shininess: 120, specular: 0xe8c878 });
+  const pearl = new THREE.MeshPhongMaterial({ color: 0xf4eee0, shininess: 160, specular: 0xffffff });
+  gpCyl(g, brass, 0.026, 0.026, 0.260, 14, 0, 0.030, 0.000);           // main bore
+  gpCyl(g, brass, 0.080, 0.026, 0.130, 20, 0, 0.030, -0.190);          // flaring bell
+  gpCyl(g, dark, 0.082, 0.082, 0.008, 20, 0, 0.030, -0.256);           // bell rim
+  gpCyl(g, inner, 0.074, 0.074, 0.003, 20, 0, 0.030, -0.250);          // inside the bell
+  const loop = new THREE.Mesh(new THREE.TorusGeometry(0.060, 0.012, 8, 22), brass);
+  loop.rotation.y = Math.PI / 2; loop.position.set(0.034, 0.030, 0.010); g.add(loop);
+  for (let i = 0; i < 3; i++) {                                         // valves
+    gpCyl(g, brass, 0.012, 0.012, 0.060, 12, -0.004, 0.070, -0.030 + i * 0.030, 0);
+    gpCyl(g, dark, 0.004, 0.004, 0.014, 8, -0.004, 0.106, -0.030 + i * 0.030, 0);
+    gpCyl(g, pearl, 0.010, 0.010, 0.006, 12, -0.004, 0.115, -0.030 + i * 0.030, 0);
+  }
+  gpCyl(g, brass, 0.010, 0.010, 0.080, 10, 0, 0.056, 0.160, 0.5);      // lead pipe
+  gpCyl(g, brass, 0.005, 0.014, 0.030, 10, 0, 0.078, 0.200, 0.5);      // mouthpiece
+  gpPlate(g, inner, [
+    [0.030,-0.004],[0.060,-0.020],[0.068,-0.120],[0.040,-0.134],[0.012,-0.042],[0.008,-0.006],
+  ], 0.034, 0);
+  gpBox(g, bright, 0.006, 0.014, 0.006, 0, -0.016, 0.004, 0.22);
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.030, -0.262); g.add(flash);
+  g._flash = flash; g._kickZ = 0.020; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
 function buildHairDryer() {
   // 💨 MP-40 -> hair dryer. Cream housing, a chrome barrel with the heating
   // element glowing inside, a cable coiling off the butt and two slider
@@ -19473,6 +19664,24 @@ const MODEL_SKINS = [
   { id: 'rpd_sewing_machine', weapon: 'rpd', name: 'Sewing Machine', rarity: 'rare',
     sw: ['#9ad8c0', '#d8304a'], build: buildSewingMachine,
     blurb: 'Belt-fed, in the sense that there is fabric going through it.' },
+  { id: 'deagle_banana', weapon: 'desert_eagle', name: 'Banana', rarity: 'good',
+    sw: ['#f2d02a', '#4a3218'], build: buildBananaPistol,
+    blurb: 'Two from the same bunch. The stem is the muzzle.' },
+  { id: 'glock18_water_pistol', weapon: 'glock18', name: 'Water Pistol', rarity: 'good',
+    sw: ['#5ad83a', '#ff8a1a'], build: buildWaterPistol,
+    blurb: 'You can see the water sloshing in the tank.' },
+  { id: 'm1911_hair_brush', weapon: 'm1911', name: 'Hairbrush', rarity: 'good',
+    sw: ['#9a6a3a', '#1c1e24'], build: buildHairBrush,
+    blurb: 'Paddle brush. Detangles. Also other things.' },
+  { id: 'mg42_accordion', weapon: 'mg42', name: 'Accordion', rarity: 'rare',
+    sw: ['#b01c2a', '#f4eee0'], build: buildAccordion,
+    blurb: 'Twelve hundred notes a minute. None of them in tune.' },
+  { id: 'rpg_carrot', weapon: 'rpg', name: 'Carrot Launcher', rarity: 'good',
+    sw: ['#2f8a3a', '#f07a1a'], build: buildCarrotLauncher,
+    blurb: 'Garden-hose tube, one giant carrot, leaves still on.' },
+  { id: 'bazooka_tuba', weapon: 'bazooka', name: 'Tuba', rarity: 'rare',
+    sw: ['#d8aa3a', '#9a7420'], build: buildTuba,
+    blurb: 'The bazooka was named after a comedian\'s horn. This is it going home.' },
 ];
 const MODEL_SKINS_BY_WEAPON = {};
 for (const ms of MODEL_SKINS) (MODEL_SKINS_BY_WEAPON[ms.weapon] ||= []).push(ms);
