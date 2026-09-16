@@ -11114,6 +11114,178 @@ function buildBikeHorn() {
   g.position.set(0.12, -0.1, -0.25); return g;
 }
 
+function buildHairClippers() {
+  // 💈 Shorty -> hair clippers. Short, loud, close range. A comb guard on the
+  // blade, the taper lever on the side and a cord out the back.
+  const g = new THREE.Group();
+  const inner = GUN_MATS.inner(), bright = GUN_MATS.bright();
+  const body  = new THREE.MeshPhongMaterial({ color: 0x2a2c34, shininess: 120, specular: 0x8a90a0 });
+  const gold  = new THREE.MeshPhongMaterial({ color: 0xc8a040, shininess: 180, specular: 0xfff0b0 });
+  const steel = new THREE.MeshPhongMaterial({ color: 0xd0d6de, shininess: 200, specular: 0xffffff });
+  const guard = new THREE.MeshPhongMaterial({ color: 0x3a8ad8, shininess: 80, specular: 0xb0d8ff, transparent: true, opacity: 0.8 });
+  gpBox(g, body, 0.056, 0.050, 0.150, 0, 0.012, 0.010);                // body
+  gpBox(g, gold, 0.058, 0.006, 0.100, 0, 0.040, 0.020);                // gold top panel
+  gpCyl(g, body, 0.028, 0.028, 0.030, 14, 0, 0.012, 0.090);            // rounded tail
+  gpBox(g, steel, 0.064, 0.012, 0.030, 0, 0.012, -0.076);              // blade set
+  for (let i = 0; i < 12; i++) gpBox(g, steel, 0.003, 0.008, 0.012, -0.029 + i * 0.0053, 0.012, -0.096); // teeth
+  gpBox(g, guard, 0.066, 0.030, 0.050, 0, 0.004, -0.100, 0.2);         // comb guard
+  for (let i = 0; i < 8; i++) gpBox(g, guard, 0.004, 0.026, 0.040, -0.028 + i * 0.008, -0.010, -0.110, 0.2);
+  gpBox(g, bright, 0.008, 0.024, 0.012, 0.032, 0.014, -0.040);         // taper lever
+  gpBox(g, gold, 0.020, 0.008, 0.016, 0, 0.042, 0.060);                // power switch
+  gpPlate(g, body, [
+    [0.030,-0.012],[0.060,-0.030],[0.068,-0.128],[0.040,-0.142],[0.012,-0.052],[0.008,-0.014],
+  ], 0.036, 0);
+  gpBox(g, inner, 0.006, 0.014, 0.006, 0, -0.028, 0.004, 0.22);
+  gpCyl(g, inner, 0.006, 0.006, 0.060, 6, 0, 0.012, 0.130);            // cord
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.012, -0.130); g.add(flash);
+  g._flash = flash; g._kickZ = 0.012; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildTapeGun() {
+  // 📦 Machine pistol -> packing tape gun. It was always gun-shaped. Roll on
+  // top, the serrated cutter at the front, tape running down over the roller.
+  const g = new THREE.Group();
+  const inner = GUN_MATS.inner(), bright = GUN_MATS.bright();
+  const red   = new THREE.MeshPhongMaterial({ color: 0xd02a2a, shininess: 110, specular: 0xffa0a0 });
+  const tape  = new THREE.MeshPhongMaterial({ color: 0xc89a52, shininess: 160, specular: 0xffe8c0, transparent: true, opacity: 0.85 });
+  const core  = new THREE.MeshPhongMaterial({ color: 0x8a6a3a, shininess: 20, specular: 0x6a5030 });
+  const steel = new THREE.MeshPhongMaterial({ color: 0xc0c8d0, shininess: 190, specular: 0xffffff });
+  gpBox(g, red, 0.012, 0.100, 0.150, 0.030, 0.030, -0.030);            // side frame
+  gpCyl(g, tape, 0.056, 0.056, 0.048, 22, 0, 0.056, -0.010, 0, Math.PI / 2); // the roll
+  gpCyl(g, core, 0.028, 0.028, 0.050, 16, 0, 0.056, -0.010, 0, Math.PI / 2);
+  gpCyl(g, inner, 0.022, 0.022, 0.052, 12, 0, 0.056, -0.010, 0, Math.PI / 2);
+  gpCyl(g, steel, 0.012, 0.012, 0.056, 12, 0, -0.012, -0.092, 0, Math.PI / 2); // pressure roller
+  gpBox(g, tape, 0.046, 0.002, 0.070, 0, 0.004, -0.068, 1.0);          // tape run down to it
+  gpBox(g, steel, 0.050, 0.020, 0.004, 0, -0.012, -0.112);             // cutter plate
+  for (let i = 0; i < 9; i++)                                           // serrations
+    gpBox(g, steel, 0.004, 0.006, 0.004, -0.022 + i * 0.0055, -0.024, -0.112, 0, 0, Math.PI / 4);
+  gpPlate(g, red, [
+    [0.030,-0.030],[0.060,-0.046],[0.068,-0.144],[0.040,-0.158],[0.012,-0.066],[0.008,-0.032],
+  ], 0.034, 0);
+  gpBox(g, bright, 0.006, 0.014, 0.006, 0, -0.046, 0.004, 0.22);
+  const flash = makeMuzzleFlash(); flash.position.set(0, -0.012, -0.124); g.add(flash);
+  g._flash = flash; g._kickZ = 0.008; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildKeytar() {
+  // 🎹 Mk 44 -> keytar. Two octaves down the body, the neck with the pitch
+  // ribbon and mod wheel, and a strap. Suppressive fire, but in C major.
+  const g = new THREE.Group();
+  const inner = GUN_MATS.inner(), bright = GUN_MATS.bright();
+  const body  = new THREE.MeshPhongMaterial({ color: 0xe8e8ec, shininess: 150, specular: 0xffffff });
+  const white = new THREE.MeshPhongMaterial({ color: 0xfafaf6, shininess: 120, specular: 0xffffff });
+  const black = new THREE.MeshPhongMaterial({ color: 0x14161a, shininess: 90, specular: 0x6a7078 });
+  const neon  = new THREE.MeshBasicMaterial({ color: 0xff3ac8 });
+  gpBox(g, body, 0.090, 0.030, 0.240, -0.010, 0.012, 0.020);           // body
+  for (let i = 0; i < 15; i++) {                                        // white keys along the side
+    gpBox(g, white, 0.030, 0.012, 0.0145, -0.044, 0.030, -0.085 + i * 0.015);
+    if ([0, 1, 3, 4, 5, 7, 8, 10, 11, 12].includes(i))
+      gpBox(g, black, 0.018, 0.008, 0.008, -0.048, 0.040, -0.078 + i * 0.015);
+  }
+  gpBox(g, body, 0.036, 0.026, 0.150, 0.012, 0.014, -0.180);           // neck
+  gpBox(g, black, 0.020, 0.004, 0.120, 0.012, 0.028, -0.180);          // pitch ribbon
+  gpBox(g, neon, 0.004, 0.002, 0.120, 0.012, 0.031, -0.180);
+  gpCyl(g, black, 0.012, 0.012, 0.010, 14, 0.030, 0.014, -0.120, 0, Math.PI / 2); // mod wheel
+  gpBox(g, neon, 0.092, 0.004, 0.004, -0.010, 0.028, 0.140);           // neon trim
+  gpBox(g, black, 0.008, 0.006, 0.160, 0.040, 0.030, 0.060);           // strap
+  gpPlate(g, black, [
+    [0.030,-0.004],[0.060,-0.020],[0.068,-0.120],[0.040,-0.134],[0.012,-0.042],[0.008,-0.006],
+  ], 0.034, 0);
+  gpBox(g, bright, 0.006, 0.014, 0.006, 0, -0.016, 0.004, 0.22);
+  const flash = makeMuzzleFlash(); flash.position.set(0.012, 0.014, -0.264); g.add(flash);
+  g._flash = flash; g._kickZ = 0.010; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildPoolNet() {
+  // 🏊 AMR -> pool skimmer net. A very long aluminium pole, the blue frame at
+  // the far end and a leaf caught in the mesh.
+  const g = new THREE.Group();
+  const inner = GUN_MATS.inner(), bright = GUN_MATS.bright();
+  const alu   = new THREE.MeshPhongMaterial({ color: 0xc8d0d8, shininess: 190, specular: 0xffffff });
+  const blue  = new THREE.MeshPhongMaterial({ color: 0x2a7ad8, shininess: 110, specular: 0xb0d8ff });
+  const mesh  = new THREE.MeshPhongMaterial({ color: 0xe8f0f8, shininess: 30, specular: 0xffffff, transparent: true, opacity: 0.4, side: THREE.DoubleSide });
+  const leaf  = new THREE.MeshPhongMaterial({ color: 0x6a9a2a, shininess: 40, specular: 0xb0d080, side: THREE.DoubleSide });
+  gpCyl(g, alu, 0.012, 0.012, 0.420, 12, 0, 0.018, -0.060);            // pole
+  gpCyl(g, blue, 0.014, 0.014, 0.030, 12, 0, 0.018, 0.140);            // end cap
+  gpCyl(g, blue, 0.015, 0.015, 0.024, 12, 0, 0.018, 0.000);            // twist lock
+  gpBox(g, blue, 0.020, 0.020, 0.030, 0, 0.018, -0.278);               // head socket
+  gpBox(g, blue, 0.120, 0.012, 0.012, 0, 0.018, -0.296);               // frame back
+  gpBox(g, blue, 0.012, 0.012, 0.110, -0.054, 0.018, -0.350);          // frame sides
+  gpBox(g, blue, 0.012, 0.012, 0.110, 0.054, 0.018, -0.350);
+  gpBox(g, blue, 0.120, 0.012, 0.012, 0, 0.018, -0.404);               // frame front
+  gpBox(g, mesh, 0.104, 0.002, 0.100, 0, 0.012, -0.350);               // the net
+  const l = gpBox(g, leaf, 0.028, 0.002, 0.020, 0.018, 0.015, -0.340); l.rotation.set(0, 0.6, 0);
+  gpPlate(g, inner, [
+    [0.030,-0.006],[0.060,-0.022],[0.068,-0.122],[0.040,-0.136],[0.012,-0.044],[0.008,-0.008],
+  ], 0.034, 0);
+  gpBox(g, bright, 0.006, 0.014, 0.006, 0, -0.018, 0.004, 0.22);
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.018, -0.414); g.add(flash);
+  g._flash = flash; g._kickZ = 0.020; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildFlashlight() {
+  // 🔦 Laser pointer -> flashlight. A heavy knurled torch, a reflector in the
+  // head and the lens lit. It was already pointing light at people.
+  const g = new THREE.Group();
+  const inner = GUN_MATS.inner(), bright = GUN_MATS.bright();
+  const alu   = new THREE.MeshPhongMaterial({ color: 0x2a2c30, shininess: 150, specular: 0x9aa0a8 });
+  const knurl = new THREE.MeshPhongMaterial({ color: 0x4a4e56, shininess: 60, specular: 0x8a9098 });
+  const refl  = new THREE.MeshPhongMaterial({ color: 0xe0e6ee, shininess: 240, specular: 0xffffff, side: THREE.DoubleSide });
+  const lens  = new THREE.MeshBasicMaterial({ color: 0xfff6d0 });
+  const beam  = new THREE.MeshBasicMaterial({ color: 0xfff6c0, transparent: true, opacity: 0.12 });
+  gpCyl(g, alu, 0.020, 0.020, 0.200, 14, 0, 0.012, 0.040);             // body tube
+  for (let i = 0; i < 6; i++) gpCyl(g, knurl, 0.0205, 0.0205, 0.012, 14, 0, 0.012, 0.030 + i * 0.020); // knurling
+  gpCyl(g, alu, 0.032, 0.020, 0.050, 16, 0, 0.012, -0.085, -Math.PI / 2); // head flare
+  gpCyl(g, refl, 0.028, 0.012, 0.020, 16, 0, 0.012, -0.102, -Math.PI / 2); // reflector
+  gpCyl(g, lens, 0.029, 0.029, 0.003, 16, 0, 0.012, -0.111);           // lit lens
+  gpCyl(g, alu, 0.033, 0.033, 0.008, 16, 0, 0.012, -0.112);            // bezel
+  gpCyl(g, beam, 0.070, 0.030, 0.160, 16, 0, 0.012, -0.195, -Math.PI / 2); // faint beam
+  gpCyl(g, bright, 0.008, 0.008, 0.006, 10, 0, 0.034, -0.040, 0);      // click button
+  gpCyl(g, alu, 0.022, 0.022, 0.012, 14, 0, 0.012, 0.146);             // tail cap
+  gpPlate(g, alu, [
+    [0.030,-0.012],[0.060,-0.030],[0.068,-0.128],[0.040,-0.142],[0.012,-0.052],[0.008,-0.014],
+  ], 0.034, 0);
+  gpBox(g, inner, 0.006, 0.014, 0.006, 0, -0.028, 0.004, 0.22);
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.012, -0.120); g.add(flash);
+  g._flash = flash; g._kickZ = 0.006; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildCandlestick() {
+  // 🕯️ Duelist pistol -> candlestick. The chamberstick with a finger loop for a
+  // grip, a tall candle for a barrel, wax running down and a flame at the tip.
+  const g = new THREE.Group();
+  const brass = new THREE.MeshPhongMaterial({ color: 0xc8a040, shininess: 190, specular: 0xfff0b0 });
+  const wax   = new THREE.MeshPhongMaterial({ color: 0xf6f0e0, shininess: 60, specular: 0xffffff });
+  const wick  = new THREE.MeshPhongMaterial({ color: 0x1a1410, shininess: 10, specular: 0x2a2420 });
+  const flameO= new THREE.MeshBasicMaterial({ color: 0xffb030, transparent: true, opacity: 0.9 });
+  const flameI= new THREE.MeshBasicMaterial({ color: 0xfff4c0 });
+  gpCyl(g, brass, 0.040, 0.044, 0.008, 18, 0, -0.012, 0.030, Math.PI / 2); // drip pan
+  gpCyl(g, brass, 0.016, 0.020, 0.024, 14, 0, -0.012, 0.006);          // socket
+  gpCyl(g, wax, 0.013, 0.013, 0.180, 14, 0, -0.012, -0.090);           // candle
+  for (let i = 0; i < 4; i++) {                                         // wax runs
+    const a = i * 1.7;
+    gpBox(g, wax, 0.004, 0.004, 0.030 + i * 0.010, Math.cos(a) * 0.013, -0.012 + Math.sin(a) * 0.013, -0.160 + i * 0.012);
+  }
+  gpCyl(g, wick, 0.0015, 0.0015, 0.010, 4, 0, -0.012, -0.184);
+  const f1 = new THREE.Mesh(new THREE.SphereGeometry(0.008, 10, 8), flameO);
+  f1.scale.set(1, 1, 2.2); f1.position.set(0, -0.012, -0.200); g.add(f1);
+  const f2 = new THREE.Mesh(new THREE.SphereGeometry(0.004, 8, 6), flameI);
+  f2.scale.set(1, 1, 2); f2.position.set(0, -0.012, -0.195); g.add(f2);
+  const loop = new THREE.Mesh(new THREE.TorusGeometry(0.020, 0.005, 8, 16), brass);
+  loop.rotation.y = Math.PI / 2; loop.position.set(0, -0.034, 0.060); g.add(loop); // finger loop
+  gpPlate(g, brass, [
+    [0.030,-0.030],[0.056,-0.044],[0.064,-0.140],[0.036,-0.152],[0.012,-0.064],[0.008,-0.032],
+  ], 0.030, 0);
+  const flash = makeMuzzleFlash(); flash.position.set(0, -0.012, -0.212); g.add(flash);
+  g._flash = flash; g._kickZ = 0.010; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
 function buildHairDryer() {
   // 💨 MP-40 -> hair dryer. Cream housing, a chrome barrel with the heating
   // element glowing inside, a cable coiling off the butt and two slider
@@ -20313,6 +20485,24 @@ const MODEL_SKINS = [
   { id: 'signal_pistol_bike_horn', weapon: 'signal_pistol', name: 'Bike Horn', rarity: 'lame',
     sw: ['#d8242a', '#d8aa3a'], build: buildBikeHorn,
     blurb: 'Squeeze bulb, coiled brass. Honk.' },
+  { id: 'shorty_hair_clippers', weapon: 'shorty', name: 'Hair Clippers', rarity: 'good',
+    sw: ['#2a2c34', '#c8a040'], build: buildHairClippers,
+    blurb: 'Short, loud, close range. Number two on the guard.' },
+  { id: 'machine_pistol_tape_gun', weapon: 'machine_pistol', name: 'Packing Tape Gun', rarity: 'good',
+    sw: ['#d02a2a', '#c89a52'], build: buildTapeGun,
+    blurb: 'It was always gun-shaped. That noise is the whole point.' },
+  { id: 'mk44_keytar', weapon: 'mk44', name: 'Keytar', rarity: 'rare',
+    sw: ['#e8e8ec', '#ff3ac8'], build: buildKeytar,
+    blurb: 'Suppressive fire, in C major.' },
+  { id: 'amr_pool_net', weapon: 'amr', name: 'Pool Skimmer', rarity: 'good',
+    sw: ['#c8d0d8', '#2a7ad8'], build: buildPoolNet,
+    blurb: 'Extremely long reach. There is a leaf in it.' },
+  { id: 'laser_pointer_flashlight', weapon: 'laser_pointer', name: 'Flashlight', rarity: 'good',
+    sw: ['#2a2c30', '#fff6d0'], build: buildFlashlight,
+    blurb: 'Heavy, knurled, already pointing light at people.' },
+  { id: 'duelist_candlestick', weapon: 'duelist_pistol', name: 'Candlestick', rarity: 'rare',
+    sw: ['#c8a040', '#f6f0e0'], build: buildCandlestick,
+    blurb: 'Brass chamberstick, wax running down. Pistols at dawn, by candlelight.' },
 ];
 const MODEL_SKINS_BY_WEAPON = {};
 for (const ms of MODEL_SKINS) (MODEL_SKINS_BY_WEAPON[ms.weapon] ||= []).push(ms);
