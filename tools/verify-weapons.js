@@ -56,11 +56,13 @@ function load() {
   for (const n of ['gpBox', 'gpCyl', 'gpPlate', 'gpPart', 'makeMuzzleFlash',
                    '_throwableHolder', '_gunDetails', '_makeViewHand',
                    '_localPartBoxes', 'attachViewHands', '_reloadPose',
-                   '_meleeOffset', '_collarGeometry', 'blendProudSteps']) {
+                   '_meleeOffset', '_collarGeometry', 'blendProudSteps',
+                   '_emoStroke', '_emoMats']) {
     const b = fnBlock(n);
     if (b) code += b + '\n';
   }
   code += src.match(/^const _COLLAR_AXES = .*$/m)[0] + '\n';
+  code += src.match(/^const EMO_FACE = .*$/m)[0] + '\n';
   code += constBlock('GUN_MATS') + '\n';
   code += src.match(/^const VM_SKIN_MAT = .*$/m)[0] + '\n';
   // The shipped viewmodels are scaled as a group; measure what ships, not the

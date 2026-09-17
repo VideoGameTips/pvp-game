@@ -12180,6 +12180,144 @@ function buildWindowAC() {
   g.position.set(0.12, -0.1, -0.25); return g;
 }
 
+// ── ✒️ The emoticon family ────────────────────────────────────────────────
+// Not a gun with a coat of paint on it: a gun drawn out of characters. Every
+// part is one stroke of a glyph, extruded — white face, black rim, nothing in
+// between, because the whole family is one bit deep. They fire "-".
+const EMO_FACE = 0.027, EMO_CORE = 0.022, EMO_RIM = 0.005;
+function _emoStroke(g, white, black, z, y, d, h, rot = 0) {
+  // The black goes UNDER and wider, the white sits proud of both faces, so the
+  // silhouette is outlined the way a character is without a texture anywhere.
+  gpBox(g, black, EMO_CORE, h + EMO_RIM * 2, d + EMO_RIM * 2, 0, y, z, rot);
+  gpBox(g, white, EMO_FACE, h, d, 0, y, z, rot);
+}
+function _emoMats() {
+  return [new THREE.MeshBasicMaterial({ color: 0xf6f6f6 }),
+          new THREE.MeshBasicMaterial({ color: 0x0d0d0d })];
+}
+
+function buildEmoticonAK() {
+  // ᡕᠵデᡁ╾━  — the text gun, stretched into three dimensions.
+  const g = new THREE.Group();
+  const [W, K] = _emoMats();
+  const S = (z, y, d, h, r) => _emoStroke(g, W, K, z, y, d, h, r);
+  // ᡕ — the grip: a stem with a curl off the bottom of it
+  S(0.150, -0.036, 0.016, 0.092);
+  S(0.138, -0.086, 0.016, 0.044, 0.60);
+  S(0.114, -0.104, 0.046, 0.014);
+  // ᠵ — the trigger tick
+  S(0.084, -0.024, 0.032, 0.014, -0.55);
+  // デ — the receiver
+  S(0.036, 0.048, 0.116, 0.016);
+  S(0.026, 0.012, 0.094, 0.016);
+  S(0.000, -0.022, 0.016, 0.070);
+  S(-0.022, 0.006, 0.032, 0.014, 0.45);
+  // ᡁ — the magazine
+  S(-0.068, 0.004, 0.016, 0.082);
+  S(-0.100, 0.004, 0.016, 0.082);
+  S(-0.084, 0.004, 0.044, 0.014);
+  // ╾ — barrel, with the nub on the back of it
+  S(-0.148, 0.030, 0.028, 0.032);
+  S(-0.212, 0.030, 0.104, 0.014);
+  // ━ — the heavy bar at the muzzle
+  S(-0.300, 0.030, 0.092, 0.020);
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.030, -0.352); g.add(flash);
+  g._flash = flash; g._kickZ = 0.014; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildEmoticonPistol() {
+  // ᕦ╾━  — the short one. Two glyphs and a bar.
+  const g = new THREE.Group();
+  const [W, K] = _emoMats();
+  // Lifted as it is drawn: a pistol sits low in the frame already, and the
+  // grip glyph hangs below the stock one, which cost 14 points of framing.
+  const S = (z, y, d, h, r) => _emoStroke(g, W, K, z, y + 0.020, d, h, r);
+  S(0.086, -0.030, 0.016, 0.080);              // ᕦ stem
+  S(0.072, -0.076, 0.044, 0.014);              // its foot
+  S(0.056, 0.012, 0.046, 0.014, -0.45);        // the arm
+  S(0.018, 0.026, 0.070, 0.016);               // ╾ shoulder
+  S(-0.030, 0.026, 0.028, 0.030);              // its nub
+  S(-0.086, 0.026, 0.078, 0.014);              // ━ the bar
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.026, -0.132); g.add(flash);
+  g._flash = flash; g._kickZ = 0.010; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.1, -0.1, -0.22); return g;
+}
+
+function buildEmoticonSniper() {
+  // ᡕᠵ[o]═╾━━  — the long one, with a scope drawn on top of it.
+  const g = new THREE.Group();
+  const [W, K] = _emoMats();
+  const S = (z, y, d, h, r) => _emoStroke(g, W, K, z, y, d, h, r);
+  S(0.200, -0.030, 0.016, 0.090);              // ᡕ grip stem
+  S(0.188, -0.080, 0.016, 0.042, 0.60);
+  S(0.164, -0.098, 0.046, 0.014);
+  S(0.134, -0.020, 0.032, 0.014, -0.55);       // ᠵ tick
+  S(0.096, 0.020, 0.130, 0.016);               // the body bar
+  S(0.060, 0.076, 0.016, 0.044);               // [ of the scope
+  S(0.096, 0.096, 0.086, 0.014);               // its lid
+  S(0.096, 0.056, 0.086, 0.014);               // its floor
+  S(0.132, 0.076, 0.016, 0.044);               // ]
+  S(0.096, 0.076, 0.026, 0.026);               // the o inside it
+  S(0.010, 0.030, 0.060, 0.026);               // ═ the double bar
+  S(-0.064, 0.030, 0.030, 0.034);              // ╾ nub
+  S(-0.150, 0.030, 0.140, 0.014);              // ━━ the long bar
+  S(-0.268, 0.030, 0.080, 0.018);
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.030, -0.318); g.add(flash);
+  g._flash = flash; g._kickZ = 0.018; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildEmoticonShotgun() {
+  // ᡕデ╾══  — short, wide, and it says so.
+  const g = new THREE.Group();
+  const [W, K] = _emoMats();
+  const S = (z, y, d, h, r) => _emoStroke(g, W, K, z, y, d, h, r);
+  S(0.140, -0.034, 0.016, 0.086);              // grip
+  S(0.126, -0.082, 0.044, 0.014);
+  S(0.086, -0.018, 0.032, 0.014, -0.55);
+  S(0.040, 0.046, 0.100, 0.016);               // デ bars
+  S(0.030, 0.012, 0.082, 0.016);
+  S(0.004, -0.018, 0.016, 0.062);
+  S(-0.052, 0.030, 0.030, 0.034);              // ╾ nub
+  S(-0.130, 0.048, 0.110, 0.016);              // ══ over and under
+  S(-0.130, 0.012, 0.110, 0.016);
+  S(-0.196, 0.030, 0.026, 0.056);              // the muzzle cap
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.030, -0.226); g.add(flash);
+  g._flash = flash; g._kickZ = 0.016; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildEmoticonMinigun() {
+  // デ≡≡≡  — three bars where the barrels were, and they spin, because the
+  // cluster does not care that it is now punctuation.
+  const g = new THREE.Group();
+  const [W, K] = _emoMats();
+  const S = (z, y, d, h, r) => _emoStroke(g, W, K, z, y, d, h, r);
+  S(0.170, -0.040, 0.016, 0.090);              // grip
+  S(0.156, -0.090, 0.046, 0.014);
+  S(0.116, -0.024, 0.032, 0.014, -0.55);
+  S(0.060, 0.052, 0.120, 0.016);               // デ
+  S(0.050, 0.014, 0.098, 0.016);
+  S(0.020, -0.020, 0.016, 0.070);
+  const bars = new THREE.Group(); g.add(bars);
+  const spin = fn => { const from = g.children.length; fn(); g.children.splice(from).forEach(m => bars.add(m)); };
+  spin(() => {
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * Math.PI * 2;
+      const y = 0.020 + Math.sin(a) * 0.030;
+      const zoff = Math.cos(a) * 0.030;
+      _emoStroke(g, W, K, -0.150 + zoff * 0.10, y, 0.150, 0.016);
+      _emoStroke(g, W, K, -0.236 + zoff * 0.10, y, 0.030, 0.016);
+    }
+  });
+  g._barrelCluster = bars;
+  S(-0.100, 0.020, 0.030, 0.034);              // the hub they turn on
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.020, -0.268); g.add(flash);
+  g._flash = flash; g._kickZ = 0.012; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
 function buildHairDryer() {
   // 💨 MP-40 -> hair dryer. Cream housing, a chrome barrel with the heating
   // element glowing inside, a cable coiling off the butt and two slider
@@ -17962,6 +18100,24 @@ function _buildPhase(tint, r) {
   return g;
 }
 
+function _buildDash(tint, r) {
+  // A round that is the character "-". It does NOT turn to face its flight
+  // path: a dash that rolled onto its side would stop being a dash, and the
+  // whole point of the emoticon family is that it stays typed.
+  const c = tint || 0xf6f6f6;
+  const P = _projCache('dash|' + c + '|' + r, () => ({
+    face: new THREE.BoxGeometry(r * 5.0, r * 0.9, r * 0.9),
+    faceM: new THREE.MeshBasicMaterial({ color: c }),
+    rim: new THREE.BoxGeometry(r * 5.6, r * 1.5, r * 0.6),
+    rimM: new THREE.MeshBasicMaterial({ color: 0x0d0d0d }),
+  }));
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(P.rim, P.rimM));
+  g.add(new THREE.Mesh(P.face, P.faceM));
+  g._alignToDir = false;
+  return g;
+}
+
 function _buildSlug(tint, r) {
   // Railgun / coilgun: still a metal projectile, but a fat glowing slug rather
   // than a rifle tracer — it is magnetically driven, not powder driven.
@@ -17978,10 +18134,15 @@ function _buildSlug(tint, r) {
   return g;
 }
 
-function makeBulletMesh(color, size, weaponId) {
+function makeBulletMesh(color, size, weaponId, own) {
   const r = size || 0.04;
   const weapon = (typeof WEAPONS !== 'undefined') ? WEAPONS.find(w => w.id === weaponId) : null;
-  const kind = projectileKind(weaponId, weapon);
+  // A model skin can say what its rounds look like. Only for bullets YOU fire:
+  // an enemy carrying the same weapon is carrying THEIR skin, not yours, and
+  // the server never hears about any of this.
+  const look = own && typeof _modelSkinLook !== 'undefined' ? _modelSkinLook[weaponId] : null;
+  if (look && look.bulletColor !== undefined) color = look.bulletColor;
+  const kind = (look && look.projectile) || projectileKind(weaponId, weapon);
   switch (kind) {
     case 'solid': {
       const ball = new THREE.Mesh(new THREE.SphereGeometry(r, 6, 6),
@@ -18004,6 +18165,7 @@ function makeBulletMesh(color, size, weaponId) {
     case 'boomerang': return _buildBoomerang(color, r);
     case 'cone':      return _buildCone(color, r);
     case 'pie':       return _buildPie(color, r);
+    case 'dash':    return _buildDash(color, r);
     case 'slug':    return _buildSlug(color, r);
     case 'flare':   return _buildFlare(color, r);
     case 'nail':    return _buildNail(color, r);
@@ -21586,6 +21748,22 @@ const MODEL_SKINS = [
   { id: 'flamethrower_m2', weapon: 'flamethrower', name: 'M2 Flamethrower', rarity: 'good',
     sw: ['#3a4028', '#1c1e1a'], build: buildM2Flamethrower,
     blurb: 'Fuel hose to the tanks, ignition wand, pilot light at the tip.' },
+  // ✒️ The emoticon family. One bit deep, and they all fire "-".
+  { id: 'ak20_emoticon', weapon: 'ak20', name: 'Emoticon AK', rarity: 'rare',
+    sw: ['#f6f6f6', '#0d0d0d'], build: buildEmoticonAK, look: { projectile: 'dash', bulletColor: 0xf6f6f6 },
+    blurb: 'The text gun, stretched into three dimensions. Fires "-".' },
+  { id: 'pistol_emoticon', weapon: 'pistol', name: 'Emoticon Pistol', rarity: 'good',
+    sw: ['#f6f6f6', '#0d0d0d'], build: buildEmoticonPistol, look: { projectile: 'dash', bulletColor: 0xf6f6f6 },
+    blurb: 'Two glyphs and a bar. Still fires "-".' },
+  { id: 'srx_emoticon', weapon: 'srx', name: 'Emoticon Sniper', rarity: 'rare',
+    sw: ['#f6f6f6', '#0d0d0d'], build: buildEmoticonSniper, look: { projectile: 'dash', bulletColor: 0xf6f6f6 },
+    blurb: 'The long one, with a scope drawn on top of it.' },
+  { id: 'sg8_emoticon', weapon: 'sg8', name: 'Emoticon Shotgun', rarity: 'good',
+    sw: ['#f6f6f6', '#0d0d0d'], build: buildEmoticonShotgun, look: { projectile: 'dash', bulletColor: 0xf6f6f6 },
+    blurb: 'Short, wide, and it says so. A spread of "-".' },
+  { id: 'minigun_emoticon', weapon: 'minigun', name: 'Emoticon Minigun', rarity: 'rare',
+    sw: ['#f6f6f6', '#0d0d0d'], build: buildEmoticonMinigun, look: { projectile: 'dash', bulletColor: 0xf6f6f6 },
+    blurb: 'Three bars where the barrels were, and they still spin up.' },
 ];
 const MODEL_SKINS_BY_WEAPON = {};
 for (const ms of MODEL_SKINS) (MODEL_SKINS_BY_WEAPON[ms.weapon] ||= []).push(ms);
@@ -21609,6 +21787,9 @@ let equippedModelSkins = (() => {
   try { return JSON.parse(localStorage.getItem('pvp_model_skins')) || {}; } catch (e) { return {}; }
 })();
 const _baseWeaponModels = {};
+// What the equipped model skin does to the rounds, by weapon. Empty for every
+// skin that only changes the object in your hands, which is most of them.
+const _modelSkinLook = {};
 
 function applyModelSkin(weaponId) {
   const idx = WEAPONS.findIndex(w => w.id === weaponId);
@@ -21631,6 +21812,8 @@ function applyModelSkin(weaponId) {
     }
     next = skin._model;
   }
+  if (skin && skin.look) _modelSkinLook[weaponId] = skin.look;
+  else delete _modelSkinLook[weaponId];
   const cur = weaponModels[idx];
   if (next === cur) return;
   const wasVisible = cur.visible;
@@ -23871,7 +24054,7 @@ function updateReloadAnim() {
 
 
 function spawnLocalBullet(origin, dir, id, isOwn, speed, color, size, weaponId, opts = {}) {
-  const mesh = makeBulletMesh(color, size, weaponId);
+  const mesh = makeBulletMesh(color, size, weaponId, isOwn);
   mesh.position.copy(origin);
   const flightDir = dir.clone();
   if (flightDir.lengthSq() < 0.000001) flightDir.set(0, 0, -1);
