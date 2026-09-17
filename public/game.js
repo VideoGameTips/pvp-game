@@ -21590,6 +21590,21 @@ const MODEL_SKINS = [
 const MODEL_SKINS_BY_WEAPON = {};
 for (const ms of MODEL_SKINS) (MODEL_SKINS_BY_WEAPON[ms.weapon] ||= []).push(ms);
 
+// The realistic military model skins (AK-47 through M2 Flamethrower) are
+// gated behind Gen 1 cases, unlike the rest of MODEL_SKINS which stay free.
+// They still live in MODEL_SKINS itself — same picker, same build-fn model
+// swap — this only adds them to the unlock pool and to the picker's lock
+// check below.
+const GATED_MODEL_SKIN_IDS = new Set([
+  'ak20_ak47_wood', 'burst_m4a1', 'flechette_bullpup', 'vector_mp5',
+  'rpd_m249', 'lever_winchester94', 'pistol_m9', 'sg8_remington870',
+  'srx_dragunov', 'revolver_python', 'grenade_launcher_mgl', 'flamethrower_m2',
+]);
+for (const id of GATED_MODEL_SKIN_IDS) {
+  const ms = MODEL_SKINS.find(m => m.id === id);
+  if (ms && !GEN1_SKIN_BY_ID[id]) { GEN1_SKIN_DEFS.push(ms); GEN1_SKIN_BY_ID[id] = ms; }
+}
+
 let equippedModelSkins = (() => {
   try { return JSON.parse(localStorage.getItem('pvp_model_skins')) || {}; } catch (e) { return {}; }
 })();
@@ -32752,13 +32767,16 @@ function openWeaponSkinsPanel() {
       const w = WEAPONS.find(x => x.id === wid);
       if (!w) continue;
       const on = equippedModelSkins[wid];
-      const cells = MODEL_SKINS_BY_WEAPON[wid].map(ms => `
+      const cells = MODEL_SKINS_BY_WEAPON[wid].map(ms => {
+        const locked = GATED_MODEL_SKIN_IDS.has(ms.id) && !ownsSkin(ms.id);
+        return `
         <div data-mskin="${ms.id}" data-mweapon="${wid}" class="ms-cell"
-             style="cursor:pointer;border:2px solid ${on===ms.id?'#88ff99':'#444'};border-radius:6px;padding:8px;background:${on===ms.id?'#162a18':'#1d1a12'};">
+             style="cursor:${locked?'not-allowed':'pointer'};opacity:${locked?0.45:1};filter:${locked?'grayscale(0.8)':'none'};border:2px solid ${on===ms.id?'#88ff99':'#444'};border-radius:6px;padding:8px;background:${on===ms.id?'#162a18':'#1d1a12'};">
           <div style="height:26px;border-radius:4px;background:linear-gradient(90deg, ${ms.sw[0]} 0 50%, ${ms.sw[1]} 50% 100%);border:1px solid #000;margin-bottom:6px;"></div>
-          <div style="font-size:11px;letter-spacing:1px;color:${on===ms.id?'#88ff99':'#ddd'};">${ms.name}</div>
+          <div style="font-size:11px;letter-spacing:1px;color:${on===ms.id?'#88ff99':'#ddd'};">${locked ? '🔒 ' + ms.name : ms.name}</div>
           <div style="font-size:9px;color:#8a8a7a;margin-top:3px;line-height:1.3;">${ms.blurb}</div>
-        </div>`).join('');
+        </div>`;
+      }).join('');
       rows.push(`
         <div style="margin-top:14px;">
           <div style="font-size:11px;letter-spacing:2px;color:#99cc88;margin-bottom:6px;">${w.name.toUpperCase()}</div>
@@ -32774,7 +32792,7 @@ function openWeaponSkinsPanel() {
     if (!rows.length) return '';
     return `<div style="margin-top:18px;border-top:1px solid #6a5520;padding-top:12px;">
       <div style="font-size:14px;letter-spacing:2px;color:#aaffaa;">🔫 WEAPON MODELS</div>
-      <div style="font-size:10px;color:#7a8a6a;margin:5px 0 2px;line-height:1.4;">These replace the gun, not its colour. Same stats, same reload — different weapon in your hands. Press T in game to look it over.</div>
+      <div style="font-size:10px;color:#7a8a6a;margin:5px 0 2px;line-height:1.4;">These replace the gun, not its colour. Same stats, same reload — different weapon in your hands. Press T in game to look it over. 🔒 realistic military skins pull from Gen 1 cases below.</div>
       ${rows.join('')}
     </div>`;
   };
@@ -32914,7 +32932,9 @@ function openWeaponSkinsPanel() {
   });
   panel.querySelectorAll('.ms-cell').forEach(cell => {
     cell.addEventListener('click', () => {
-      setModelSkin(cell.dataset.mweapon, cell.dataset.mskin || null);
+      const id = cell.dataset.mskin;
+      if (id && GATED_MODEL_SKIN_IDS.has(id) && !ownsSkin(id)) { alert('You have not pulled that skin yet. Open Gen 1 cases in Lobby 13.'); return; }
+      setModelSkin(cell.dataset.mweapon, id || null);
       openWeaponSkinsPanel();      // redraw so the selection moves
     });
   });

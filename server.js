@@ -186,6 +186,11 @@ const GEN1_SKIN_IDS = [
   'wrench', 'shovel', 'golf_club', 'tennis_racket', 'fire_poker', 'meat_cleaver',
   'knife_dental_floss', 'knife_butter_knife', 'bat_pool_noodle', 'sledge_gold_brick',
   'katana_ruler', 'frying_pan_nonstick', 'spear_broom_handle', 'fists_sock_puppets',
+  // Realistic military model skins — gated behind Gen 1 cases too, unlike the
+  // rest of MODEL_SKINS in public/game.js which stay free/always-equippable.
+  'ak20_ak47_wood', 'burst_m4a1', 'flechette_bullpup', 'vector_mp5',
+  'rpd_m249', 'lever_winchester94', 'pistol_m9', 'sg8_remington870',
+  'srx_dragunov', 'revolver_python', 'grenade_launcher_mgl', 'flamethrower_m2',
 ];
 for (const id of Object.keys(WEAPON_COSTS)) {
   if (WEAPON_COSTS[id] > 0) WEAPON_COSTS[id] *= P2W_ITEM_IDS.has(id) ? WEAPON_PRICE_MULT : NORMAL_WEAPON_PRICE_MULT;
