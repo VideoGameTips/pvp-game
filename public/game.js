@@ -11698,6 +11698,137 @@ function buildMP5() {
   g.position.set(0.12, -0.1, -0.25); return g;
 }
 
+function buildM249() {
+  // 🔫 RPD -> M249 SAW. Long black receiver, folding bipod, top carry handle,
+  // a hinged feed tray cover and a 200-round ammo box hanging under the
+  // gun — belt-fed, not magazine-fed, even though nothing about the reload
+  // actually changes.
+  const g = new THREE.Group();
+  const poly = GUN_MATS.polymer(), steel = GUN_MATS.steel(), inner = GUN_MATS.inner(), bright = GUN_MATS.bright();
+  const olive = new THREE.MeshPhongMaterial({ color: 0x3a3f30, shininess: 30, specular: 0x606850 });
+  gpBox(g, poly, 0.056, 0.070, 0.290, 0, 0.010, -0.020);                // receiver
+  gpBox(g, steel, 0.046, 0.010, 0.260, 0, 0.048, -0.020);               // top cover
+  gpBox(g, inner, 0.048, 0.006, 0.060, 0, 0.054, -0.130);               // feed cover hinge seam
+  gpBox(g, steel, 0.006, 0.036, 0.070, 0.032, 0.070, -0.070);           // carry handle post
+  gpBox(g, steel, 0.050, 0.006, 0.006, 0, 0.104, -0.070);               // carry handle bar
+  gpBox(g, steel, 0.006, 0.036, 0.070, -0.032, 0.070, -0.070);
+  // Ammo box, hanging under the receiver.
+  gpBox(g, olive, 0.070, 0.060, 0.080, 0, -0.056, -0.070);
+  gpBox(g, inner, 0.072, 0.004, 0.010, 0, -0.028, -0.070);              // box lid seam
+  gpBox(g, bright, 0.010, 0.014, 0.010, -0.034, -0.030, -0.030, 0, 0, 0.3); // latch
+  // Barrel + perforated heat shield.
+  gpCyl(g, steel, 0.020, 0.020, 0.230, 16, 0, 0.010, -0.320);
+  for (let i = 0; i < 5; i++) for (let j = 0; j < 3; j++) {
+    const a = (j / 3) * Math.PI * 2;
+    gpCyl(g, inner, 0.0035, 0.0035, 0.006, 6, Math.cos(a) * 0.014, 0.010 + Math.sin(a) * 0.014, -0.230 - i * 0.038);
+  }
+  gpCyl(g, bright, 0.024, 0.020, 0.030, 12, 0, 0.010, -0.440);          // flash hider
+  // Folding bipod, legs splayed forward.
+  [-1, 1].forEach(sd => gpBox(g, steel, 0.008, 0.008, 0.130, sd * 0.030, -0.040, -0.360, 0.5 * sd));
+  gpBox(g, steel, 0.020, 0.016, 0.020, 0, 0.006, -0.360);               // bipod swivel
+  // Pistol grip and fixed shoulder stock.
+  gpPlate(g, poly, [
+    [0.076,-0.036],[0.108,-0.058],[0.114,-0.146],[0.090,-0.164],[0.064,-0.084],[0.058,-0.040],
+  ], 0.038, 0);
+  gpBox(g, bright, 0.006, 0.016, 0.006, 0, -0.058, 0.010, 0.22);        // trigger
+  gpBox(g, poly, 0.044, 0.056, 0.180, 0, 0.010, 0.190);                 // shoulder stock
+  gpBox(g, inner, 0.046, 0.052, 0.008, 0, 0.010, 0.276);                // butt plate
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.010, -0.455); g.add(flash);
+  g._flash = flash; g._kickZ = 0.012; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildWinchester94() {
+  // 🔫 Lever Rifle -> Winchester 94. Full wood stock, tube magazine under the
+  // barrel, exposed hammer, blued receiver and the loop lever the gun is
+  // named for. The opposite of the fishing-rod skin sitting next to it in
+  // the picker.
+  const g = new THREE.Group();
+  const steel = GUN_MATS.steel(), blued = GUN_MATS.blued(), bright = GUN_MATS.bright();
+  const wood = GUN_MATS.wood(), inner = GUN_MATS.inner();
+  gpBox(g, blued, 0.036, 0.052, 0.150, 0, 0.010, -0.020);               // receiver
+  gpBox(g, inner, 0.010, 0.026, 0.030, 0.020, 0.012, -0.020);           // ejection port
+  gpBox(g, bright, 0.010, 0.030, 0.006, 0, 0.040, -0.010, 0, 0, 0.15);  // hammer spur
+  const lever = new THREE.Mesh(new THREE.TorusGeometry(0.034, 0.0055, 6, 14, Math.PI * 1.5), steel);
+  lever.rotation.set(0, Math.PI / 2, -0.2); lever.position.set(0, -0.078, -0.010); g.add(lever);
+  // Tube magazine, running the length of the barrel.
+  gpCyl(g, steel, 0.0095, 0.0095, 0.360, 14, 0, -0.022, -0.220);
+  gpCyl(g, bright, 0.011, 0.011, 0.014, 12, 0, -0.022, -0.398);         // magazine cap
+  gpCyl(g, blued, 0.0075, 0.0075, 0.330, 16, 0, 0.010, -0.220);         // barrel
+  gpBox(g, bright, 0.004, 0.014, 0.004, 0, 0.018, -0.380);              // front sight blade
+  gpBox(g, blued, 0.010, 0.006, 0.014, 0, 0.020, -0.170);               // rear sight
+  // Wood forend and full-length wood stock.
+  gpPlate(g, wood, [
+    [-0.100,0.016],[-0.078,0.024],[0.010,0.024],[0.026,0.010],[0.010,-0.006],[-0.086,-0.006],
+  ], 0.034, 0);
+  gpPlate(g, wood, [
+    [0.080,-0.040],[0.088,0.030],[0.150,0.038],[0.320,0.026],[0.394,-0.008],[0.386,-0.034],[0.150,-0.052],[0.096,-0.056],
+  ], 0.044, 0);
+  gpBox(g, inner, 0.046, 0.050, 0.008, 0, -0.006, 0.396, 0.10);         // butt plate
+  gpBox(g, bright, 0.020, 0.005, 0.004, 0, -0.040, 0.220);              // sling stud
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.010, -0.390); g.add(flash);
+  g._flash = flash; g._kickZ = 0.020; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildM9Beretta() {
+  // 🔫 Pistol -> M9 Beretta. Open-top slide showing the barrel underneath —
+  // the detail that makes a Beretta unmistakable — plus the decocker lever
+  // and the wide, thin frame the M9 is known for.
+  const g = new THREE.Group();
+  const steel = GUN_MATS.steel(), inner = GUN_MATS.inner(), bright = GUN_MATS.bright(), poly = GUN_MATS.polymer();
+  gpBox(g, poly, 0.026, 0.058, 0.130, 0, 0.006, -0.006);                // frame
+  gpBox(g, steel, 0.030, 0.026, 0.150, 0, 0.036, -0.008);               // slide
+  gpBox(g, inner, 0.032, 0.012, 0.120, 0, 0.040, -0.008);               // open-top cut
+  gpCyl(g, bright, 0.006, 0.006, 0.130, 14, 0, 0.026, -0.006);          // barrel, visible through the cut
+  gpBox(g, bright, 0.008, 0.008, 0.008, 0, 0.050, 0.052, 0, 0, 0.3);    // decocker lever
+  gpBox(g, inner, 0.006, 0.016, 0.026, 0.017, 0.038, 0.026);            // ejection port
+  gpBox(g, bright, 0.003, 0.008, 0.003, 0, 0.048, -0.066);              // front sight
+  gpBox(g, bright, 0.009, 0.007, 0.005, 0, 0.048, 0.044);               // rear sight
+  gpPlate(g, poly, [
+    [0.048,-0.020],[0.048,-0.108],[0.026,-0.122],[-0.006,-0.110],[-0.006,-0.018],
+  ], 0.028, -0.010);
+  for (let i = 0; i < 5; i++) gpBox(g, inner, 0.030, 0.0035, 0.009, -0.010, -0.030 - i * 0.016, 0.008, 0, 0, 0.15);
+  gpBox(g, bright, 0.005, 0.012, 0.005, 0, -0.018, -0.014, 0.22);       // trigger
+  gpBox(g, steel, 0.022, 0.024, 0.006, 0, -0.128, -0.002);              // mag floorplate
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.026, -0.082); g.add(flash);
+  g._flash = flash; g._kickZ = 0.010; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildRemington870() {
+  // 🔫 SG-8 -> Remington 870. Wood stock and pump forend, exposed hammer,
+  // a tubular magazine under the barrel and a brass bead front sight —
+  // the pump shotgun every hunting cabin has one of.
+  const g = new THREE.Group();
+  const steel = GUN_MATS.steel(), blued = GUN_MATS.blued(), bright = GUN_MATS.bright();
+  const wood = GUN_MATS.wood(), inner = GUN_MATS.inner();
+  const brass = new THREE.MeshPhongMaterial({ color: 0xc8a040, shininess: 190, specular: 0xfff0b0 });
+  gpBox(g, blued, 0.042, 0.056, 0.140, 0, 0.010, -0.020);               // receiver
+  gpBox(g, bright, 0.010, 0.026, 0.006, 0, 0.036, 0.000, 0, 0, 0.15);   // hammer spur
+  gpBox(g, inner, 0.010, 0.024, 0.030, 0.022, 0.014, -0.010);           // ejection port
+  gpCyl(g, blued, 0.0095, 0.0095, 0.320, 16, 0, 0.010, -0.230);         // barrel
+  gpCyl(g, steel, 0.0105, 0.0105, 0.220, 14, 0, -0.024, -0.190);        // magazine tube
+  // Wood pump forend, ribbed for grip.
+  gpPlate(g, wood, [
+    [-0.100,0.014],[-0.072,0.026],[0.020,0.026],[0.036,0.006],[0.020,-0.010],[-0.086,-0.010],
+  ], 0.040, 0);
+  for (let i = 0; i < 6; i++) gpBox(g, inner, 0.042, 0.005, 0.006, 0, -0.008, -0.078 + i * 0.020);
+  gpBox(g, brass, 0.005, 0.005, 0.005, 0, 0.020, -0.386);               // bead front sight
+  // Wood stock, straight English-style profile.
+  gpPlate(g, wood, [
+    [0.070,-0.042],[0.082,0.024],[0.150,0.032],[0.310,0.020],[0.376,-0.012],[0.368,-0.036],[0.148,-0.050],[0.088,-0.056],
+  ], 0.046, 0);
+  gpBox(g, inner, 0.048, 0.052, 0.008, 0, -0.006, 0.380, 0.10);         // butt plate
+  gpBox(g, bright, 0.020, 0.005, 0.004, 0, -0.040, 0.210);              // sling stud
+  const trGuard = new THREE.Mesh(new THREE.TorusGeometry(0.020, 0.0038, 6, 12, Math.PI * 1.1), blued);
+  trGuard.rotation.set(0, Math.PI / 2, -0.42); trGuard.position.set(0, -0.046, 0.014); g.add(trGuard);
+  gpBox(g, bright, 0.006, 0.015, 0.006, 0, -0.036, 0.014, 0.22);        // trigger
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.010, -0.394); g.add(flash);
+  g._flash = flash; g._kickZ = 0.024; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
 function buildFilmProjector() {
   // 🎞️ Machine revolver -> film projector. Twelve chambers, twelve spokes on
   // the reel: it indexes one frame a shot, which is what a projector does.
@@ -21281,6 +21412,18 @@ const MODEL_SKINS = [
   { id: 'vector_mp5', weapon: 'vector', name: 'MP5', rarity: 'good',
     sw: ['#2a2d31', '#8d959d'], build: buildMP5,
     blurb: 'Roller-delayed blowback in a tube. Every movie SWAT team carries one.' },
+  { id: 'rpd_m249', weapon: 'rpd', name: 'M249 SAW', rarity: 'rare',
+    sw: ['#2b2f35', '#3a3f30'], build: buildM249,
+    blurb: 'Bipod, carry handle, 200-round box slung underneath. Belt-fed in spirit.' },
+  { id: 'lever_winchester94', weapon: 'lever', name: 'Winchester 94', rarity: 'rare',
+    sw: ['#6b4a2c', '#454b53'], build: buildWinchester94,
+    blurb: 'Full wood stock, tube magazine, the loop lever it is named for.' },
+  { id: 'pistol_m9', weapon: 'pistol', name: 'M9 Beretta', rarity: 'good',
+    sw: ['#3a3f47', '#8d959d'], build: buildM9Beretta,
+    blurb: 'Open-top slide, barrel visible underneath. Standard issue for a reason.' },
+  { id: 'sg8_remington870', weapon: 'sg8', name: 'Remington 870', rarity: 'rare',
+    sw: ['#6b4a2c', '#454b53'], build: buildRemington870,
+    blurb: 'Wood stock, pump forend, brass bead sight. Every cabin has one.' },
 ];
 const MODEL_SKINS_BY_WEAPON = {};
 for (const ms of MODEL_SKINS) (MODEL_SKINS_BY_WEAPON[ms.weapon] ||= []).push(ms);
