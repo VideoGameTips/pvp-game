@@ -15429,6 +15429,10 @@ function blendProudSteps(root, opts = {}) {
   for (const a of parts) {
     let best = null;
     const longest = Math.max(a.sz.x, a.sz.y, a.sz.z);
+    // A thin plate standing proud is a rib, a fin or a sight rail — it is meant
+    // to stand off the surface, and a fillet round a 6 mm plate reads as a
+    // flange. Only chunky parts can be lumps.
+    if (Math.min(a.sz.x, a.sz.y, a.sz.z) < 0.011) continue;
     for (const host of parts) {
       if (host === a || host.vol < a.vol * 2.5) continue;
       const inside = AX.map(k => {
@@ -15453,6 +15457,11 @@ function blendProudSteps(root, opts = {}) {
   for (const f of found.slice(0, maxCollars)) {
     const { a, k, dir, plane } = f;
     const [ax, az] = _COLLAR_AXES[k];
+    // A collar is a fitting. Once the face it would run around is this big the
+    // step is a ledge, not an edge, and a rim around it reads as a flange bolted
+    // to the gun. Those are left alone and the harness keeps reporting them, so
+    // they get remodelled rather than papered over.
+    if (Math.max(a.sz[ax], a.sz[az]) > 0.10) continue;
     const h = Math.min(f.step * 0.5, 0.010);
     // A 45-degree flare is what a chamfer is; the collar reaches as far across
     // the host's face as it stands tall.

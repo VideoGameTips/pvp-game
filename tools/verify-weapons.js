@@ -150,6 +150,7 @@ let audioReport = null;
 let modelSkinReport = null;
 let meleeSkinReport = null;
 let proudReport = null;
+let collarCount = 0;
 const loadsFirst = [];   // loaded before ejecting: right for some mechanisms, worth an eye
 const fail = (w, msg) => problems.push(w.padEnd(20) + msg);
 
@@ -452,6 +453,10 @@ function proudSteps(g, minStep = 0.012) {
   const AX = ['x', 'y', 'z'];
   const out = [];
   for (const a of parts) for (const b of parts) {
+    // A thin plate standing proud is a rib, a fin or a sight rail — it is meant
+    // to stand off the surface, and a fillet round a 6 mm plate reads as a
+    // flange. Only chunky parts can be lumps.
+    if (Math.min(a.sz.x, a.sz.y, a.sz.z) < 0.011) continue;
     // Parts of a similar size are a STACK, not an attachment: the AK magazine is
     // five near-equal boxes following the banana curve, and every joint in it
     // looks like a step to a naive test. An attachment is small on big.
@@ -487,6 +492,21 @@ function proudSteps(g, minStep = 0.012) {
     // a collar on it is a fitting, and only what it could not reach is a defect.
     try { api.blendProudSteps(g); } catch (e) { fail(rows_id(i), 'blend pass threw: ' + e.message); }
     const st = proudSteps(g);
+    // A collar is a fitting, not a feature: it may never grow into one. Anything
+    // that got through the axis maths wrong would show up here as a slab.
+    let collars = 0;
+    g.traverse(o => {
+      if (!o.userData || !o.userData.blendCollar) return;
+      collars++;
+      if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+      const cs = o.geometry.boundingBox.getSize(new THREE.Vector3());
+      if (![cs.x, cs.y, cs.z].every(Number.isFinite))
+        fail(rows_id(i), 'blend collar with non-finite geometry');
+      else if (Math.max(cs.x, cs.y, cs.z) > 0.12 || Math.min(cs.x, cs.y, cs.z) > 0.022)
+        fail(rows_id(i), 'blend collar is a slab, not a fitting ('
+          + [cs.x, cs.y, cs.z].map(v => (v * 1000).toFixed(0)).join('x') + 'mm)');
+    });
+    collarCount += collars;
     const raw = st.filter(x => !x.part.o.userData.blended);
     if (st.length) rows.push({ id: rows_id(i), n: st.length, raw: raw.length,
       worst: (raw[0] || st[0]).step, axis: (raw[0] || st[0]).axis, blended: st.length - raw.length });
@@ -568,7 +588,7 @@ if (proudReport && proudReport.length) {
   const left = proudReport.filter(r => r.raw > 0);
   console.log('\nattachments standing proud of the part they sit on: ' + steps + ' across '
     + proudReport.length + ' weapons, ' + blended + ' blended by the collar pass, '
-    + (steps - blended) + ' left on ' + left.length + ' weapon(s)');
+    + (steps - blended) + ' left on ' + left.length + ' weapon(s); ' + collarCount + ' collars fitted');
   (VERBOSE ? left : left.slice(0, 14)).forEach(r =>
     console.log('   ' + r.id.padEnd(20) + r.raw + ' unblended of ' + r.n + ', worst '
       + (r.worst * 1000).toFixed(0).padStart(3) + 'mm on ' + r.axis));
