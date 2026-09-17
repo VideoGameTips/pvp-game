@@ -369,6 +369,23 @@ Object.entries(api.RELOAD_PROPS).forEach(([id, evs]) => {
     if (!hands) fail(skin.id, 'no hands attached');
     if (vis < baseVis - 15) fail(skin.id, 'only ' + vis.toFixed(0)
       + '% in frame against the stock weapon\'s ' + baseVis.toFixed(0) + '%');
+    // A skin that replaces a revolver has to index its cylinder the same way,
+    // about its OWN axis. A dial that orbits the model origin instead of
+    // spinning is the exact failure the stock check exists for.
+    const cm = g._parts && g._parts.main;
+    if (cm && cm._chambers) {
+      const at = g.position.clone(), rot = g.rotation.clone();
+      g.position.set(0, 0, 0); g.rotation.set(0, 0, 0);
+      cm.rotation.set(0, 0, 0); g.updateMatrixWorld(true);
+      const b4 = new THREE.Box3().setFromObject(cm).getCenter(new THREE.Vector3());
+      cm.rotation.z = (Math.PI * 2) / cm._chambers; g.updateMatrixWorld(true);
+      const af = new THREE.Box3().setFromObject(cm).getCenter(new THREE.Vector3());
+      cm.rotation.set(0, 0, 0);
+      g.position.copy(at); g.rotation.copy(rot); g.updateMatrixWorld(true);
+      const drift = b4.distanceTo(af);
+      if (drift > 0.004) fail(skin.id, 'cylinder orbits instead of spinning (drift '
+        + drift.toFixed(4) + ')');
+    }
     out.push({ id: skin.id, weapon: skin.weapon, vis, baseVis, hands });
   });
   modelSkinReport = out;

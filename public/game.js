@@ -11294,6 +11294,227 @@ function buildCandlestick() {
   g.position.set(0.12, -0.1, -0.25); return g;
 }
 
+function buildPipeOrgan() {
+  // 🎹 GAU-19 -> pipe organ. Three barrels, three pipes, and they spin up
+  // together the way the gun's cluster does. Oak case, gold mouths.
+  const g = new THREE.Group();
+  const inner = GUN_MATS.inner(), bright = GUN_MATS.bright();
+  const oak   = new THREE.MeshPhongMaterial({ color: 0x6a4424, shininess: 110, specular: 0xd8b088 });
+  const tin   = new THREE.MeshPhongMaterial({ color: 0xd8dce4, shininess: 210, specular: 0xffffff });
+  const gold  = new THREE.MeshPhongMaterial({ color: 0xd8aa3a, shininess: 190, specular: 0xfff0b0 });
+  const felt  = new THREE.MeshPhongMaterial({ color: 0x8a1c2a, shininess: 30, specular: 0x6a3038 });
+  gpBox(g, oak, 0.090, 0.090, 0.130, 0, 0.020, 0.100);                 // wind chest
+  gpBox(g, gold, 0.094, 0.006, 0.120, 0, 0.066, 0.100);                // cornice
+  gpBox(g, felt, 0.078, 0.030, 0.008, 0, 0.020, 0.036);                // the mouth board
+  const pipes = new THREE.Group(); g.add(pipes);
+  const spin = (fn) => { const from = g.children.length; fn(); g.children.splice(from).forEach(m => pipes.add(m)); };
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2;
+    const x = Math.cos(a) * 0.030, y = 0.020 + Math.sin(a) * 0.030;
+    const len = 0.240 - i * 0.030;
+    spin(() => {
+      gpCyl(g, tin, 0.014, 0.014, len, 14, x, y, 0.030 - len / 2);      // the pipe
+      gpCyl(g, gold, 0.0155, 0.0155, 0.014, 14, x, y, 0.020);           // its mouth band
+      gpBox(g, gold, 0.014, 0.006, 0.010, x, y - 0.014, 0.010);         // the lip
+      gpCyl(g, tin, 0.011, 0.014, 0.020, 14, x, y, 0.038 - len);        // the foot
+    });
+  }
+  g._barrelCluster = pipes;                                            // spins up like the cluster it replaces
+  gpCyl(g, oak, 0.030, 0.030, 0.026, 14, 0, 0.020, 0.036);             // hub
+  gpBox(g, oak, 0.100, 0.020, 0.040, 0, -0.030, 0.100);                // keyboard shelf
+  for (let i = 0; i < 9; i++) gpBox(g, tin, 0.009, 0.006, 0.036, -0.040 + i * 0.010, -0.018, 0.098);
+  gpPlate(g, oak, [
+    [0.040,-0.042],[0.070,-0.058],[0.078,-0.156],[0.050,-0.170],[0.022,-0.078],[0.018,-0.044],
+  ], 0.040, 0);
+  gpBox(g, bright, 0.006, 0.014, 0.006, 0, -0.058, 0.012, 0.22);
+  gpBox(g, inner, 0.030, 0.014, 0.060, 0, -0.030, 0.170);              // bellows lever
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.020, -0.216); g.add(flash);
+  g._flash = flash; g._kickZ = 0.014; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildLawnSprinkler() {
+  // 💦 M134 -> lawn sprinkler. Six nozzles on a head that spins up exactly like
+  // the minigun's, a hose on the back and the ground spike still attached.
+  const g = new THREE.Group();
+  const inner = GUN_MATS.inner(), bright = GUN_MATS.bright();
+  const green = new THREE.MeshPhongMaterial({ color: 0x2f8a3a, shininess: 110, specular: 0xb0e0b8 });
+  const brass = new THREE.MeshPhongMaterial({ color: 0xc8a040, shininess: 190, specular: 0xfff0b0 });
+  const grey  = new THREE.MeshPhongMaterial({ color: 0x6a7078, shininess: 120, specular: 0xd0d8e0 });
+  const hose  = new THREE.MeshPhongMaterial({ color: 0x1f6a2a, shininess: 80, specular: 0x8ac098 });
+  gpBox(g, green, 0.080, 0.080, 0.130, 0, 0.016, 0.090);               // body
+  gpCyl(g, grey, 0.040, 0.040, 0.030, 16, 0, 0.016, 0.014);            // bearing collar
+  const head = new THREE.Group(); g.add(head);
+  const spin = (fn) => { const from = g.children.length; fn(); g.children.splice(from).forEach(m => head.add(m)); };
+  spin(() => {
+    gpCyl(g, brass, 0.034, 0.034, 0.024, 16, 0, 0.016, -0.010);        // the turning head
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      const x = Math.cos(a) * 0.026, y = 0.016 + Math.sin(a) * 0.026;
+      gpCyl(g, brass, 0.008, 0.008, 0.110, 10, x, y, -0.070);          // nozzle arm
+      gpCyl(g, grey, 0.010, 0.006, 0.016, 10, x, y, -0.132);           // its jet
+    }
+  });
+  g._barrelCluster = head;
+  gpCyl(g, brass, 0.014, 0.014, 0.040, 12, 0, 0.016, -0.120);          // centre spindle
+  gpCyl(g, hose, 0.016, 0.016, 0.070, 12, 0, 0.016, 0.180);            // hose tail
+  gpCyl(g, brass, 0.020, 0.020, 0.018, 12, 0, 0.016, 0.148);           // coupling
+  for (let i = 0; i < 5; i++) gpCyl(g, hose, 0.017, 0.017, 0.006, 12, 0, 0.016, 0.160 + i * 0.012);
+  gpBox(g, grey, 0.016, 0.070, 0.016, 0, -0.050, 0.120);               // ground spike
+  gpCyl(g, grey, 0.008, 0.000, 0.030, 8, 0, -0.098, 0.120, 0);
+  gpPlate(g, green, [
+    [0.030,-0.026],[0.060,-0.044],[0.068,-0.142],[0.040,-0.156],[0.012,-0.064],[0.008,-0.028],
+  ], 0.038, 0);
+  gpBox(g, bright, 0.006, 0.014, 0.006, 0, -0.044, 0.004, 0.22);
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.016, -0.150); g.add(flash);
+  g._flash = flash; g._kickZ = 0.012; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildRotaryPhone() {
+  // ☎️ Auto revolver -> rotary phone. The dial IS the cylinder: it indexes one
+  // finger hole a shot, which is the joke and also exactly what the part does.
+  const g = new THREE.Group();
+  const inner = GUN_MATS.inner(), bright = GUN_MATS.bright();
+  const bake  = new THREE.MeshPhongMaterial({ color: 0x1c1a18, shininess: 170, specular: 0x9a9088 });
+  const cream = new THREE.MeshPhongMaterial({ color: 0xe8dcc0, shininess: 140, specular: 0xffffff });
+  const chrome= new THREE.MeshPhongMaterial({ color: 0xc8ced6, shininess: 200, specular: 0xffffff });
+  const cord  = new THREE.MeshPhongMaterial({ color: 0x2a2622, shininess: 60, specular: 0x6a6058 });
+  gpBox(g, bake, 0.056, 0.034, 0.090, 0, -0.004, 0.028);               // the phone body
+  gpBox(g, bake, 0.050, 0.014, 0.070, 0, 0.016, 0.028);                // cradle deck
+  gpPart(g, 'main', () => {                                            // the dial = the cylinder
+    gpCyl(g, chrome, 0.028, 0.028, 0.012, 18, 0, 0.008, -0.030);
+    gpCyl(g, cream, 0.024, 0.024, 0.014, 18, 0, 0.008, -0.030);
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      gpCyl(g, inner, 0.0055, 0.0055, 0.016, 10, Math.cos(a) * 0.017, 0.008 + Math.sin(a) * 0.017, -0.030);
+    }
+    gpCyl(g, chrome, 0.006, 0.006, 0.018, 10, 0, 0.008, -0.030);       // hub
+  }, { x: 0, y: 0.008, z: -0.030 });
+  g._parts.main._chambers = 6;
+  gpCyl(g, chrome, 0.004, 0.004, 0.030, 8, 0.024, 0.026, -0.030, 0.6); // finger stop
+  // The handset lies across the top: earpiece forward, so it points down range.
+  gpCyl(g, bake, 0.013, 0.013, 0.110, 12, 0, 0.034, -0.010);
+  gpCyl(g, bake, 0.022, 0.018, 0.026, 14, 0, 0.034, -0.076);           // earpiece
+  gpCyl(g, inner, 0.014, 0.014, 0.006, 14, 0, 0.034, -0.091);
+  gpCyl(g, bake, 0.022, 0.018, 0.026, 14, 0, 0.034, 0.058);            // mouthpiece
+  for (let i = 0; i < 6; i++) {                                         // coiled cord
+    const t = i / 5, a = t * Math.PI * 2.2;
+    gpCyl(g, cord, 0.006, 0.006, 0.028, 6,
+          Math.cos(a) * 0.020, -0.030 - t * 0.040, 0.086 + Math.sin(a) * 0.014, Math.PI / 2, a);
+  }
+  gpPlate(g, bake, [
+    [0.050,-0.022],[0.078,-0.038],[0.086,-0.132],[0.058,-0.146],[0.030,-0.064],[0.028,-0.026],
+  ], 0.036, 0);
+  gpBox(g, bright, 0.006, 0.014, 0.006, 0, -0.038, 0.012, 0.22);
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.034, -0.100); g.add(flash);
+  g._flash = flash; g._kickZ = 0.016; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.1, -0.1, -0.22); return g;
+}
+
+function buildEggTimer() {
+  // 🥚 Snub revolver -> kitchen egg timer. Short, round and it goes off. The
+  // wind-up dial indexes a fifth of a turn a shot, same as the five-shot cylinder.
+  const g = new THREE.Group();
+  const inner = GUN_MATS.inner(), bright = GUN_MATS.bright();
+  const shell = new THREE.MeshPhongMaterial({ color: 0xe84a4a, shininess: 150, specular: 0xffc0c0 });
+  const face  = new THREE.MeshPhongMaterial({ color: 0xf6f2e6, shininess: 120, specular: 0xffffff });
+  const chrome= new THREE.MeshPhongMaterial({ color: 0xc8ced6, shininess: 200, specular: 0xffffff });
+  const ink   = new THREE.MeshPhongMaterial({ color: 0x24262a, shininess: 40, specular: 0x5a6068 });
+  gpCyl(g, shell, 0.044, 0.044, 0.046, 20, 0, 0.006, -0.012);          // the body
+  gpCyl(g, chrome, 0.046, 0.046, 0.008, 20, 0, 0.006, -0.032);         // bezel
+  gpPart(g, 'main', () => {                                            // the wind-up dial
+    gpCyl(g, face, 0.038, 0.038, 0.010, 20, 0, 0.006, -0.040);
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2;
+      gpBox(g, ink, 0.004, 0.014, 0.004, Math.cos(a) * 0.026, 0.006 + Math.sin(a) * 0.026, -0.044, 0, 0, a);
+    }
+    gpBox(g, shell, 0.010, 0.030, 0.008, 0, 0.018, -0.046);            // the pointer
+    gpCyl(g, chrome, 0.006, 0.006, 0.012, 10, 0, 0.006, -0.046);
+  }, { x: 0, y: 0.006, z: -0.040 });
+  g._parts.main._chambers = 5;
+  gpCyl(g, chrome, 0.026, 0.026, 0.006, 16, 0, 0.006, 0.014);          // the bell under the cap
+  gpCyl(g, shell, 0.030, 0.022, 0.020, 16, 0, 0.006, 0.026);           // back cap
+  gpCyl(g, chrome, 0.005, 0.005, 0.014, 8, 0, 0.036, 0.020, 0);        // the striker
+  gpPlate(g, shell, [
+    [0.028,-0.030],[0.056,-0.044],[0.062,-0.126],[0.034,-0.138],[0.010,-0.062],[0.008,-0.034],
+  ], 0.034, 0);
+  gpBox(g, bright, 0.006, 0.014, 0.006, 0, -0.042, 0.002, 0.22);
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.006, -0.056); g.add(flash);
+  g._flash = flash; g._kickZ = 0.018; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.1, -0.1, -0.22); return g;
+}
+
+function buildHarp() {
+  // 🎵 Boombow -> harp. A bow already is a frame under tension with a string
+  // across it. This one has thirty of them and a carved column.
+  const g = new THREE.Group();
+  const inner = GUN_MATS.inner(), bright = GUN_MATS.bright();
+  const wood  = new THREE.MeshPhongMaterial({ color: 0x8a5a28, shininess: 120, specular: 0xe0c098 });
+  const dark  = new THREE.MeshPhongMaterial({ color: 0x4a2e14, shininess: 90, specular: 0xb08858 });
+  const gold  = new THREE.MeshPhongMaterial({ color: 0xd8aa3a, shininess: 190, specular: 0xfff0b0 });
+  const gut   = new THREE.MeshPhongMaterial({ color: 0xf0e8d0, shininess: 60, specular: 0xffffff });
+  const red   = new THREE.MeshPhongMaterial({ color: 0xc83a3a, shininess: 60, specular: 0xffa0a0 });
+  // Soundboard along the bottom, neck curving over the top, column up the front.
+  gpBox(g, wood, 0.036, 0.048, 0.330, 0, -0.030, 0.020, 0.10);         // soundboard
+  gpBox(g, dark, 0.020, 0.008, 0.320, 0, -0.006, 0.020, 0.10);         // string rib
+  for (let i = 0; i < 5; i++)                                           // the curve of the neck
+    gpBox(g, wood, 0.028, 0.030, 0.070, 0, 0.090 - i * 0.008 - i * i * 0.0035, 0.120 - i * 0.062, 0.32 - i * 0.12);
+  gpCyl(g, wood, 0.016, 0.016, 0.240, 12, 0, 0.026, -0.150, 0.40);     // column
+  gpCyl(g, gold, 0.020, 0.020, 0.012, 12, 0, 0.100, -0.060, 0.40);     // capital
+  gpCyl(g, gold, 0.020, 0.020, 0.012, 12, 0, -0.046, -0.232, 0.40);    // base
+  // Strings from the neck down to the board, two of them coloured as they are
+  // on a real harp so a player can find middle C without looking.
+  for (let i = 0; i < 14; i++) {
+    const t = i / 13;
+    const z = 0.140 - t * 0.300;
+    const top = 0.082 - t * 0.108, bot = -0.026 - t * 0.026;
+    const mat = i % 7 === 0 ? red : gut;
+    gpBox(g, mat, 0.0022, top - bot, 0.0022, 0, (top + bot) / 2, z);
+    gpCyl(g, gold, 0.004, 0.004, 0.008, 6, 0, top + 0.004, z, 0, Math.PI / 2);  // tuning pin
+  }
+  gpPlate(g, dark, [
+    [0.030,-0.058],[0.060,-0.074],[0.068,-0.170],[0.040,-0.184],[0.012,-0.094],[0.008,-0.060],
+  ], 0.034, 0);
+  gpBox(g, bright, 0.006, 0.014, 0.006, 0, -0.074, 0.004, 0.22);
+  const flash = makeMuzzleFlash(); flash.position.set(0, -0.010, -0.190); g.add(flash);
+  g._flash = flash; g._kickZ = 0.014; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildSqueegee() {
+  // 🪟 Glassmaker -> window squeegee. Rubber blade, brass channel, a scrubbing
+  // sleeve on the back and suds running off the end.
+  const g = new THREE.Group();
+  const inner = GUN_MATS.inner(), bright = GUN_MATS.bright();
+  const brass = new THREE.MeshPhongMaterial({ color: 0xc8a040, shininess: 190, specular: 0xfff0b0 });
+  const rubber= new THREE.MeshPhongMaterial({ color: 0x1c1e22, shininess: 40, specular: 0x5a6068 });
+  const blue  = new THREE.MeshPhongMaterial({ color: 0x2a7ad8, shininess: 110, specular: 0xb0d8ff });
+  const cloth = new THREE.MeshPhongMaterial({ color: 0xe8ecf0, shininess: 20, specular: 0xffffff });
+  const suds  = new THREE.MeshPhongMaterial({ color: 0xd8f0ff, shininess: 200, specular: 0xffffff, transparent: true, opacity: 0.55 });
+  gpCyl(g, blue, 0.018, 0.018, 0.120, 12, 0, 0.010, 0.080);            // handle
+  for (let i = 0; i < 5; i++) gpCyl(g, rubber, 0.019, 0.019, 0.008, 12, 0, 0.010, 0.040 + i * 0.018);
+  gpCyl(g, brass, 0.014, 0.014, 0.060, 12, 0, 0.010, -0.010);          // neck
+  gpCyl(g, brass, 0.016, 0.016, 0.018, 12, 0, 0.010, -0.044, 0.5);     // swivel
+  gpBox(g, brass, 0.190, 0.016, 0.014, 0, 0.010, -0.066);              // channel
+  gpBox(g, rubber, 0.196, 0.010, 0.006, 0, -0.002, -0.070);            // the rubber blade
+  gpBox(g, brass, 0.010, 0.020, 0.018, -0.094, 0.010, -0.066);         // end clips
+  gpBox(g, brass, 0.010, 0.020, 0.018, 0.094, 0.010, -0.066);
+  gpBox(g, cloth, 0.180, 0.030, 0.026, 0, 0.038, -0.062);              // scrubber sleeve
+  for (let i = 0; i < 9; i++) gpBox(g, cloth, 0.014, 0.010, 0.030, -0.072 + i * 0.018, 0.054, -0.062);
+  [[-0.060, -0.020], [0.030, -0.028], [0.074, -0.014]].forEach(([x, y]) => {
+    const drip = new THREE.Mesh(new THREE.SphereGeometry(0.008, 8, 6), suds);
+    drip.scale.set(1, 1.4, 1); drip.position.set(x, y, -0.070); g.add(drip);
+  });
+  gpPlate(g, blue, [
+    [0.034,-0.012],[0.064,-0.030],[0.072,-0.128],[0.044,-0.142],[0.016,-0.054],[0.012,-0.016],
+  ], 0.034, 0);
+  gpBox(g, bright, 0.006, 0.014, 0.006, 0, -0.028, 0.006, 0.22);
+  const flash = makeMuzzleFlash(); flash.position.set(0, -0.002, -0.080); g.add(flash);
+  g._flash = flash; g._kickZ = 0.010; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
 function buildHairDryer() {
   // 💨 MP-40 -> hair dryer. Cream housing, a chrome barrel with the heating
   // element glowing inside, a cable coiling off the butt and two slider
@@ -20628,6 +20849,24 @@ const MODEL_SKINS = [
   { id: 'duelist_candlestick', weapon: 'duelist_pistol', name: 'Candlestick', rarity: 'rare',
     sw: ['#c8a040', '#f6f0e0'], build: buildCandlestick,
     blurb: 'Brass chamberstick, wax running down. Pistols at dawn, by candlelight.' },
+  { id: 'gau19_pipe_organ', weapon: 'gau19', name: 'Pipe Organ', rarity: 'rare',
+    sw: ['#6a4424', '#d8dce4'], build: buildPipeOrgan,
+    blurb: 'Three barrels, three pipes, and they spin up together.' },
+  { id: 'm134_lawn_sprinkler', weapon: 'm134', name: 'Lawn Sprinkler', rarity: 'rare',
+    sw: ['#2f8a3a', '#c8a040'], build: buildLawnSprinkler,
+    blurb: 'Six nozzles on a head that spins exactly like the real one.' },
+  { id: 'auto_revolver_rotary_phone', weapon: 'auto_revolver', name: 'Rotary Phone', rarity: 'rare',
+    sw: ['#1c1a18', '#e8dcc0'], build: buildRotaryPhone,
+    blurb: 'The dial IS the cylinder. It indexes one finger hole a shot.' },
+  { id: 'snub_revolver_egg_timer', weapon: 'snub_revolver', name: 'Egg Timer', rarity: 'good',
+    sw: ['#e84a4a', '#f6f2e6'], build: buildEggTimer,
+    blurb: 'Short, round, and it goes off. Five minutes a cylinder.' },
+  { id: 'boombow_harp', weapon: 'boombow', name: 'Harp', rarity: 'rare',
+    sw: ['#8a5a28', '#d8aa3a'], build: buildHarp,
+    blurb: 'A bow is a frame under tension with a string across it. This one has thirty.' },
+  { id: 'glassmaker_squeegee', weapon: 'glassmaker', name: 'Squeegee', rarity: 'good',
+    sw: ['#2a7ad8', '#c8a040'], build: buildSqueegee,
+    blurb: 'Rubber blade, brass channel, suds running off the end.' },
 ];
 const MODEL_SKINS_BY_WEAPON = {};
 for (const ms of MODEL_SKINS) (MODEL_SKINS_BY_WEAPON[ms.weapon] ||= []).push(ms);
