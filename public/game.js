@@ -11829,6 +11829,156 @@ function buildRemington870() {
   g.position.set(0.12, -0.1, -0.25); return g;
 }
 
+function buildDragunov() {
+  // 🔫 SR-X -> Dragunov SVD. Wood stock with its skeleton cutout, the PSO-1
+  // scope on a side-offset mount, exposed gas tube and a perforated muzzle
+  // brake — AK-pattern internals dressed as a designated marksman rifle.
+  const g = new THREE.Group();
+  const steel = GUN_MATS.steel(), blued = GUN_MATS.blued(), bright = GUN_MATS.bright();
+  const wood = GUN_MATS.wood(), inner = GUN_MATS.inner();
+  gpBox(g, steel, 0.044, 0.080, 0.280, 0, 0.008, -0.020);               // receiver
+  gpBox(g, inner, 0.008, 0.022, 0.050, 0.024, 0.024, -0.030);           // ejection port
+  gpCyl(g, blued, 0.0058, 0.0058, 0.180, 14, 0, 0.040, -0.240);         // gas tube
+  gpBox(g, steel, 0.018, 0.026, 0.020, 0, 0.026, -0.400);               // gas block
+  gpCyl(g, blued, 0.0062, 0.0062, 0.330, 18, 0, 0.014, -0.380);         // barrel
+  gpCyl(g, steel, 0.010, 0.008, 0.040, 12, 0, 0.014, -0.540);           // ported muzzle brake
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2;
+    gpBox(g, inner, 0.004, 0.004, 0.016, Math.cos(a) * 0.007, 0.014 + Math.sin(a) * 0.007, -0.540);
+  }
+  // PSO-1 scope, offset to the left on its own mount rail.
+  gpBox(g, blued, 0.010, 0.030, 0.070, -0.034, 0.056, -0.100);          // side mount
+  gpCyl(g, steel, 0.020, 0.020, 0.220, 16, -0.034, 0.076, -0.100);
+  gpCyl(g, inner, 0.021, 0.021, 0.006, 16, -0.034, 0.076, -0.204);      // objective lens
+  gpCyl(g, bright, 0.012, 0.012, 0.030, 12, -0.034, 0.076, 0.006);      // eyepiece
+  // Wood stock with the SVD's signature skeleton cutout.
+  gpPlate(g, wood, [
+    [0.140,-0.040],[0.150,0.040],[0.220,0.048],[0.330,0.020],[0.390,-0.010],[0.384,-0.030],[0.220,-0.048],[0.166,-0.052],
+  ], 0.044, 0);
+  gpBox(g, inner, 0.046, 0.026, 0.070, 0, 0.004, 0.260);                // skeleton cutout
+  gpBox(g, inner, 0.048, 0.052, 0.008, 0, -0.002, 0.388, 0.10);         // butt plate
+  // Wood handguard and pistol grip.
+  gpPlate(g, wood, [
+    [-0.320,0.012],[-0.290,0.032],[-0.180,0.032],[-0.160,0.010],[-0.184,-0.008],[-0.306,-0.006],
+  ], 0.046, 0);
+  gpPlate(g, wood, [
+    [0.070,-0.036],[0.104,-0.060],[0.110,-0.146],[0.086,-0.164],[0.058,-0.086],[0.052,-0.040],
+  ], 0.036, 0);
+  gpBox(g, bright, 0.005, 0.016, 0.006, 0, -0.066, 0.006, 0.22);        // trigger
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.014, -0.562); g.add(flash);
+  g._flash = flash; g._kickZ = 0.017; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildColtPython() {
+  // 🔫 Revolver -> Colt Python. Full-lug vented barrel, wood target grips
+  // and a fluted six-round cylinder — the same chambered cylinder the cap
+  // gun skin uses, just blued steel instead of a roll of caps.
+  const g = new THREE.Group();
+  const steel = GUN_MATS.steel(), blued = GUN_MATS.blued(), bright = GUN_MATS.bright();
+  const wood = GUN_MATS.wood(), inner = GUN_MATS.inner();
+  gpBox(g, blued, 0.028, 0.044, 0.100, 0, 0.016, 0.026);                // frame
+  gpBox(g, steel, 0.030, 0.008, 0.080, 0, 0.036, 0.026);                // top strap + rib
+  gpPart(g, 'main', () => {                                             // fluted cylinder
+    gpCyl(g, blued, 0.028, 0.028, 0.046, 14, 0, 0.014, -0.014);
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      gpCyl(g, inner, 0.007, 0.007, 0.048, 8, Math.cos(a) * 0.017, 0.014 + Math.sin(a) * 0.017, -0.014);
+      gpCyl(g, bright, 0.0068, 0.0068, 0.010, 8, Math.cos(a) * 0.017, 0.014 + Math.sin(a) * 0.017, 0.008);
+    }
+  }, { x: 0, y: 0.014, z: -0.014 });
+  g._parts.main._chambers = 6;
+  gpCyl(g, blued, 0.014, 0.014, 0.150, 14, 0, 0.016, -0.100);           // full-lug barrel
+  gpCyl(g, inner, 0.007, 0.007, 0.010, 10, 0, 0.016, -0.172);
+  gpBox(g, steel, 0.026, 0.006, 0.130, 0, 0.036, -0.100);               // vented rib
+  for (let i = 0; i < 5; i++) gpBox(g, inner, 0.006, 0.004, 0.010, 0, 0.036, -0.050 - i * 0.024);
+  gpBox(g, blued, 0.018, 0.022, 0.014, 0, 0.042, 0.070, -0.40);         // hammer spur
+  gpPlate(g, wood, [                                                     // target grip
+    [0.064,-0.012],[0.094,-0.038],[0.100,-0.134],[0.066,-0.150],[0.038,-0.068],[0.036,-0.016],
+  ], 0.034, 0);
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.019, 0.0034, 6, 12, Math.PI * 1.05), blued);
+  guard.rotation.set(0, Math.PI / 2, -0.42); guard.position.set(0, -0.018, 0.012); g.add(guard);
+  gpBox(g, bright, 0.005, 0.014, 0.005, 0, -0.012, 0.012, 0.20);        // trigger
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.016, -0.180); g.add(flash);
+  g._flash = flash; g._kickZ = 0.014; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildMilkorMGL() {
+  // 🔫 Grenade launcher -> Milkor MGL. Six 40mm chambers in a revolving
+  // drum ahead of the trigger — the same six-chamber mechanic the water
+  // balloon launcher skin uses, just olive steel instead of a garden hose.
+  const g = new THREE.Group();
+  const steel = GUN_MATS.steel(), inner = GUN_MATS.inner(), bright = GUN_MATS.bright();
+  const olive = new THREE.MeshPhongMaterial({ color: 0x3a4028, shininess: 30, specular: 0x606850 });
+  const poly = GUN_MATS.polymer();
+  gpBox(g, olive, 0.050, 0.060, 0.140, 0, 0.004, 0.084);                // rear housing
+  gpBox(g, inner, 0.052, 0.006, 0.110, 0, 0.034, 0.084);
+  gpPart(g, 'main', () => {
+    gpCyl(g, olive, 0.062, 0.062, 0.140, 16, 0, 0.010, -0.020);         // 6-chamber drum
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2, cx = Math.cos(a) * 0.038, cy = 0.010 + Math.sin(a) * 0.038;
+      gpCyl(g, inner, 0.017, 0.017, 0.144, 10, cx, cy, -0.020);
+      gpCyl(g, bright, 0.0175, 0.0175, 0.010, 10, cx, cy, -0.090);
+    }
+  }, { x: 0, y: 0.010, z: -0.020 });
+  g._parts.main._chambers = 6;
+  g._anchorPart = { mag: 'main' };
+  gpCyl(g, steel, 0.020, 0.020, 0.180, 14, 0, 0.010, -0.150);           // barrel/spindle guide
+  gpCyl(g, inner, 0.015, 0.015, 0.012, 12, 0, 0.010, -0.236);
+  gpBox(g, steel, 0.026, 0.026, 0.026, 0, 0.010, -0.170);               // front sight post block
+  gpBox(g, bright, 0.004, 0.020, 0.004, 0, 0.024, -0.170);
+  gpBox(g, olive, 0.030, 0.010, 0.010, 0, 0.060, 0.010);                // quadrant sight leaf
+  gpPlate(g, poly, [                                                     // pistol grip
+    [0.086,-0.034],[0.120,-0.058],[0.126,-0.150],[0.098,-0.168],[0.070,-0.086],[0.064,-0.040],
+  ], 0.038, 0);
+  gpBox(g, bright, 0.006, 0.016, 0.006, 0, -0.038, 0.014, 0.22);        // trigger
+  gpBox(g, poly, 0.046, 0.030, 0.062, 0, 0.000, 0.176);                 // stock stub
+  gpBox(g, inner, 0.048, 0.006, 0.020, 0, 0.016, 0.204);
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.010, -0.248); g.add(flash);
+  g._flash = flash; g._kickZ = 0.026; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildM2Flamethrower() {
+  // 🔫 Flamethrower -> M2 backpack flamethrower. Olive-drab valve body, a
+  // fuel hose looping back toward the (unseen) tanks, and the long
+  // ignition wand with its pilot light at the tip.
+  const g = new THREE.Group();
+  const steel = GUN_MATS.steel(), inner = GUN_MATS.inner();
+  const olive = new THREE.MeshPhongMaterial({ color: 0x3a4028, shininess: 26, specular: 0x606850 });
+  const hose  = new THREE.MeshPhongMaterial({ color: 0x1c1e1a, shininess: 20, specular: 0x3a3c38 });
+  const flameO= new THREE.MeshBasicMaterial({ color: 0xff8a22, transparent: true, opacity: 0.85 });
+  const flameB= new THREE.MeshBasicMaterial({ color: 0x3a8aff, transparent: true, opacity: 0.9 });
+  gpBox(g, olive, 0.056, 0.070, 0.130, 0, 0.010, 0.060);                // valve body
+  gpCyl(g, steel, 0.014, 0.014, 0.030, 10, 0, 0.030, 0.130);            // pressure gauge boss
+  gpCyl(g, inner, 0.010, 0.010, 0.006, 10, 0, 0.030, 0.146);
+  // Fuel hose looping back off the body toward the tanks.
+  for (let i = 0; i < 6; i++) {
+    const t = i / 5;
+    gpCyl(g, hose, 0.011, 0.011, 0.040, 8,
+          0.030 + Math.sin(t * 2.4) * 0.014, -0.010 - t * 0.052, 0.120 + t * 0.030, Math.PI / 2, 0.4);
+  }
+  gpBox(g, hose, 0.020, 0.020, 0.020, 0.030, -0.010, 0.120);
+  // Long ignition wand.
+  gpCyl(g, steel, 0.017, 0.017, 0.260, 14, 0, 0.014, -0.180);
+  gpCyl(g, olive, 0.020, 0.020, 0.026, 12, 0, 0.014, -0.020);           // nozzle collar
+  gpCyl(g, steel, 0.010, 0.010, 0.020, 10, 0, 0.014, -0.318);           // pilot light housing
+  const f1 = new THREE.Mesh(new THREE.ConeGeometry(0.020, 0.070, 8), flameO);
+  f1.rotation.x = -Math.PI / 2; f1.position.set(0, 0.014, -0.360); g.add(f1);
+  const f2 = new THREE.Mesh(new THREE.ConeGeometry(0.010, 0.030, 8), flameB);
+  f2.rotation.x = -Math.PI / 2; f2.position.set(0, 0.014, -0.336); g.add(f2);
+  gpPlate(g, olive, [
+    [0.086,-0.030],[0.118,-0.052],[0.124,-0.148],[0.096,-0.164],[0.068,-0.080],[0.062,-0.034],
+  ], 0.038, 0);
+  gpPlate(g, inner, [                                                    // ignition trigger
+    [0.020,-0.034],[0.050,-0.038],[0.064,-0.110],[0.046,-0.118],[0.024,-0.062],
+  ], 0.022, 0);
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.014, -0.390); g.add(flash);
+  g._flash = flash; g._kickZ = 0.008; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
 function buildFilmProjector() {
   // 🎞️ Machine revolver -> film projector. Twelve chambers, twelve spokes on
   // the reel: it indexes one frame a shot, which is what a projector does.
@@ -21424,6 +21574,18 @@ const MODEL_SKINS = [
   { id: 'sg8_remington870', weapon: 'sg8', name: 'Remington 870', rarity: 'rare',
     sw: ['#6b4a2c', '#454b53'], build: buildRemington870,
     blurb: 'Wood stock, pump forend, brass bead sight. Every cabin has one.' },
+  { id: 'srx_dragunov', weapon: 'srx', name: 'Dragunov SVD', rarity: 'rare',
+    sw: ['#6b4a2c', '#3a3f47'], build: buildDragunov,
+    blurb: 'Skeleton stock cutout, PSO-1 scope offset to the side. Designated marksman.' },
+  { id: 'revolver_python', weapon: 'revolver', name: 'Colt Python', rarity: 'rare',
+    sw: ['#454b53', '#6b4a2c'], build: buildColtPython,
+    blurb: 'Full-lug vented barrel, wood target grips, fluted six-shot cylinder.' },
+  { id: 'grenade_launcher_mgl', weapon: 'grenade_launcher', name: 'Milkor MGL', rarity: 'rare',
+    sw: ['#3a4028', '#8d959d'], build: buildMilkorMGL,
+    blurb: 'Six 40mm chambers in a revolving drum. Spring-fed, quadrant-sighted.' },
+  { id: 'flamethrower_m2', weapon: 'flamethrower', name: 'M2 Flamethrower', rarity: 'good',
+    sw: ['#3a4028', '#1c1e1a'], build: buildM2Flamethrower,
+    blurb: 'Fuel hose to the tanks, ignition wand, pilot light at the tip.' },
 ];
 const MODEL_SKINS_BY_WEAPON = {};
 for (const ms of MODEL_SKINS) (MODEL_SKINS_BY_WEAPON[ms.weapon] ||= []).push(ms);
