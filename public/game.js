@@ -11515,6 +11515,189 @@ function buildSqueegee() {
   g.position.set(0.12, -0.1, -0.25); return g;
 }
 
+function buildAK47Wood() {
+  // 🪵 AK-20 -> classic AK-47. Where the AK20 is stamped steel with black
+  // polymer furniture, this is the milled-receiver original: birch stock,
+  // handguard and pistol grip, and a plain steel curved magazine instead of
+  // the AK20's smoke-tinted polymer one.
+  const g = new THREE.Group();
+  const steel = GUN_MATS.steel(), blued = GUN_MATS.blued(), bright = GUN_MATS.bright();
+  const wood = GUN_MATS.wood(), inner = GUN_MATS.inner();
+  const magMat = new THREE.MeshPhongMaterial({ color: 0x2a2d31, shininess: 90, specular: 0xa8b0b8 });
+  gpBox(g, steel, 0.048, 0.100, 0.320, 0, 0.005, -0.010);              // receiver
+  gpBox(g, steel, 0.044, 0.014, 0.310, 0, 0.052, -0.014);              // dust cover
+  gpBox(g, blued, 0.030, 0.012, 0.040, 0, 0.070, -0.070);              // rear sight block
+  gpBox(g, inner, 0.004, 0.024, 0.062, 0.026, 0.030, -0.036);          // ejection port
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.021, 0.0038, 6, 12, Math.PI * 1.1), steel);
+  guard.rotation.set(0, Math.PI / 2, -0.45); guard.position.set(0, -0.078, 0.020); g.add(guard);
+  gpBox(g, bright, 0.005, 0.017, 0.006, 0, -0.068, 0.020, 0.22);       // trigger
+  // Curved steel magazine, five ribbed segments following the banana.
+  let my = -0.056, mz = -0.060, ang = 0.10;
+  for (let i = 0; i < 5; i++) {
+    gpBox(g, magMat, 0.030, 0.034, 0.048, 0, my, mz, ang);
+    gpBox(g, inner, 0.031, 0.004, 0.012, 0, my, mz, ang);
+    my -= Math.cos(ang) * 0.028; mz -= Math.sin(ang) * 0.028; ang += 0.085;
+  }
+  gpBox(g, magMat, 0.032, 0.012, 0.050, 0, my + 0.012, mz - 0.004, ang);
+  // Wood pistol grip — the AK's original triangular profile.
+  gpPlate(g, wood, [
+    [0.078,-0.038],[0.114,-0.064],[0.122,-0.150],[0.098,-0.170],[0.068,-0.088],[0.062,-0.044],
+  ], 0.038, 0);
+  gpBox(g, wood, 0.042, 0.012, 0.040, 0, -0.172, 0.108, 0.30);         // grip cap
+  // Wood stock, straight-line profile — no polymer pistol-grip wrist.
+  gpPlate(g, wood, [
+    [0.140,-0.046],[0.150,0.038],[0.214,0.044],[0.326,0.014],[0.392,-0.012],[0.386,-0.030],[0.220,-0.048],[0.166,-0.052],
+  ], 0.047, 0);
+  gpBox(g, inner, 0.048, 0.052, 0.008, 0, -0.002, 0.404, 0.10);        // butt plate
+  gpBox(g, bright, 0.030, 0.006, 0.004, 0, -0.040, 0.250);             // sling loop
+  // Wood handguards, lower and upper.
+  gpPlate(g, wood, [
+    [-0.336,0.010],[-0.306,0.034],[-0.186,0.034],[-0.164,0.012],[-0.190,-0.008],[-0.320,-0.006],
+  ], 0.050, 0);
+  gpPlate(g, wood, [
+    [-0.332,0.038],[-0.310,0.056],[-0.196,0.056],[-0.176,0.038],
+  ], 0.044, 0);
+  gpCyl(g, blued, 0.0052, 0.0052, 0.180, 14, 0, 0.046, -0.256);        // gas tube
+  gpBox(g, steel, 0.020, 0.030, 0.022, 0, 0.032, -0.418);              // gas block
+  gpCyl(g, blued, 0.0064, 0.0064, 0.330, 20, 0, 0.018, -0.396);        // barrel
+  gpBox(g, steel, 0.022, 0.040, 0.024, 0, 0.040, -0.505);              // front sight tower
+  gpBox(g, bright, 0.026, 0.006, 0.020, 0, 0.074, -0.505);             // sight hood
+  const brake = gpCyl(g, steel, 0.0118, 0.0104, 0.046, 18, 0, 0.018, -0.556);
+  brake.rotation.x = Math.PI / 2 - 0.13;                               // slant brake
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.020, -0.585); g.add(flash);
+  g._flash = flash; g._kickZ = 0.015; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildM4A1() {
+  // 🔫 Burst Rifle -> M4A1. Flat-top upper with a full-length picatinny rail,
+  // quad-rail RIS handguard, collapsible buttstock and a birdcage flash
+  // hider — the silhouette that made the platform. Matte black throughout.
+  const g = new THREE.Group();
+  const poly = GUN_MATS.polymer(), steel = GUN_MATS.steel(), inner = GUN_MATS.inner(), bright = GUN_MATS.bright();
+  const mag = new THREE.MeshPhongMaterial({ color: 0x2a2d31, shininess: 50, specular: 0x60666e });
+  gpBox(g, poly, 0.044, 0.058, 0.230, 0, 0.010, -0.020);                // upper+lower receiver
+  gpBox(g, steel, 0.040, 0.008, 0.220, 0, 0.042, -0.020);               // top rail
+  for (let i = 0; i < 8; i++) gpBox(g, inner, 0.042, 0.006, 0.008, 0, 0.048, -0.112 + i * 0.028);
+  gpBox(g, poly, 0.030, 0.030, 0.030, 0.030, 0.016, -0.006, 0, 0, 0.4); // charging handle nub
+  gpBox(g, inner, 0.036, 0.022, 0.060, 0.024, 0.012, -0.026);           // ejection port
+  gpBox(g, bright, 0.030, 0.006, 0.020, 0, -0.070, -0.006);             // mag catch
+  // Quad-rail handguard — ribs on all four faces.
+  gpBox(g, poly, 0.052, 0.052, 0.220, 0, 0.010, -0.256);
+  for (const ry of [0, Math.PI / 2, Math.PI, -Math.PI / 2])
+    for (let i = 0; i < 6; i++) gpBox(g, inner, 0.054, 0.005, 0.007, 0, 0.010, -0.150 - i * 0.032, 0, ry);
+  gpBox(g, poly, 0.020, 0.040, 0.026, 0.030, -0.030, -0.220, 0, 0, 0.3); // vertical foregrip
+  // Straight PMAG.
+  gpBox(g, mag, 0.030, 0.190, 0.048, 0, -0.140, -0.010, 0.02);
+  gpBox(g, inner, 0.031, 0.006, 0.050, 0, -0.050, -0.010, 0.02);
+  // Pistol grip.
+  gpPlate(g, poly, [
+    [0.076,-0.036],[0.108,-0.058],[0.114,-0.146],[0.090,-0.164],[0.064,-0.084],[0.058,-0.040],
+  ], 0.038, 0);
+  gpBox(g, bright, 0.006, 0.016, 0.006, 0, -0.058, 0.010, 0.22);        // trigger
+  // Collapsible buttstock — skeleton frame on a buffer tube.
+  gpCyl(g, steel, 0.020, 0.020, 0.130, 12, 0, 0.010, 0.150);
+  gpBox(g, poly, 0.046, 0.056, 0.014, 0, 0.010, 0.230);
+  gpBox(g, poly, 0.046, 0.010, 0.110, 0, 0.036, 0.176);
+  gpBox(g, poly, 0.046, 0.010, 0.110, 0, -0.016, 0.176);
+  gpBox(g, inner, 0.048, 0.050, 0.008, 0, 0.010, 0.238);                // butt plate
+  // Barrel + birdcage flash hider.
+  gpCyl(g, steel, 0.0068, 0.0068, 0.190, 16, 0, 0.010, -0.400);
+  gpCyl(g, steel, 0.0088, 0.0088, 0.044, 12, 0, 0.010, -0.508);
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    gpBox(g, inner, 0.005, 0.005, 0.036, Math.cos(a) * 0.007, 0.010 + Math.sin(a) * 0.007, -0.508);
+  }
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.010, -0.534); g.add(flash);
+  g._flash = flash; g._kickZ = 0.013; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildBullpupCarbine() {
+  // 🔫 Flechette Rifle -> bullpup carbine. Same idea as the AUG skin on the
+  // AK20 — magazine behind the trigger so the whole rifle is shorter than
+  // its barrel — but a different platform: tan polymer shell, an integrated
+  // carry-handle optic instead of the AUG's scope, and a short rail forend.
+  const g = new THREE.Group();
+  const inner = GUN_MATS.inner(), bright = GUN_MATS.bright(), steel = GUN_MATS.steel();
+  const shell = new THREE.MeshPhongMaterial({ color: 0xb8a878, shininess: 30, specular: 0x8a7a58 });
+  const dark  = new THREE.MeshPhongMaterial({ color: 0x3a342a, shininess: 22, specular: 0x5a5040 });
+  const mag   = new THREE.MeshPhongMaterial({ color: 0x2a2620, shininess: 50, specular: 0x6a6050 });
+  gpPlate(g, shell, [
+    [0.280,-0.032],[0.280,0.040],[0.110,0.050],[-0.090,0.046],[-0.160,0.028],
+    [-0.160,-0.014],[-0.050,-0.028],[0.100,-0.036],
+  ], 0.054, 0);
+  gpBox(g, dark, 0.056, 0.012, 0.072, 0, 0.006, 0.278, 0.10);          // butt plate
+  gpBox(g, dark, 0.058, 0.030, 0.028, 0, 0.004, 0.230);                // sling block
+  // Magazine, behind the grip — the bullpup layout.
+  gpBox(g, mag, 0.028, 0.140, 0.052, 0, -0.086, 0.140, 0.05);
+  gpBox(g, inner, 0.029, 0.006, 0.054, 0, -0.018, 0.140, 0.05);
+  gpBox(g, dark, 0.031, 0.014, 0.056, 0, -0.156, 0.144, 0.05);         // floorplate
+  gpBox(g, dark, 0.040, 0.026, 0.030, 0.022, -0.012, 0.140);           // magwell throat
+  // Carry-handle optic on top, running most of the length.
+  gpBox(g, dark, 0.030, 0.030, 0.200, 0, 0.066, 0.010);
+  gpCyl(g, steel, 0.016, 0.016, 0.060, 14, 0, 0.086, -0.010);          // scope tube
+  gpCyl(g, inner, 0.017, 0.017, 0.006, 14, 0, 0.086, -0.042);          // lens
+  gpBox(g, bright, 0.024, 0.006, 0.024, 0, 0.096, 0.040);              // rear sight leaf
+  // Grip and full-hoop trigger guard.
+  gpPlate(g, dark, [
+    [0.058,-0.028],[0.084,-0.050],[0.086,-0.144],[0.056,-0.160],[0.026,-0.090],[0.024,-0.034],
+  ], 0.036, 0);
+  gpBox(g, bright, 0.006, 0.015, 0.006, 0, -0.060, 0.030, 0.22);       // trigger
+  const trGuard = new THREE.Mesh(new THREE.TorusGeometry(0.020, 0.0035, 6, 12, Math.PI * 1.15), dark);
+  trGuard.rotation.set(0, Math.PI / 2, -0.4); trGuard.position.set(0, -0.062, 0.028); g.add(trGuard);
+  // Short rail forend and vertical grip.
+  gpBox(g, dark, 0.046, 0.040, 0.140, 0, 0.006, -0.198);
+  for (let i = 0; i < 4; i++) gpBox(g, inner, 0.048, 0.005, 0.007, 0, 0.026, -0.150 - i * 0.026);
+  gpBox(g, dark, 0.018, 0.036, 0.024, 0.026, -0.026, -0.190, 0, 0, 0.3);
+  gpCyl(g, steel, 0.0072, 0.0072, 0.150, 16, 0, 0.010, -0.334);        // barrel
+  gpCyl(g, steel, 0.010, 0.008, 0.032, 12, 0, 0.010, -0.418);          // flash hider
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.010, -0.436); g.add(flash);
+  g._flash = flash; g._kickZ = 0.012; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildMP5() {
+  // 🔫 Vector SMG -> MP5. Round roller-delayed receiver tube, ribbed
+  // polymer handguard, a curved magazine and the drum rear sight the MP5
+  // is instantly recognisable by.
+  const g = new THREE.Group();
+  const steel = GUN_MATS.steel(), inner = GUN_MATS.inner(), bright = GUN_MATS.bright();
+  const poly = new THREE.MeshPhongMaterial({ color: 0x2a2d31, shininess: 46, specular: 0x6a7078 });
+  const mag  = new THREE.MeshPhongMaterial({ color: 0x35383e, shininess: 70, specular: 0x9aa2ac });
+  gpCyl(g, steel, 0.026, 0.026, 0.260, 16, 0, 0.010, -0.020);          // receiver tube
+  gpBox(g, inner, 0.014, 0.030, 0.070, 0.024, 0.014, -0.040);          // ejection port
+  gpBox(g, poly, 0.030, 0.014, 0.020, 0.020, 0.038, 0.010, 0, 0, 0.3); // cocking handle
+  // Rear drum sight — the MP5's signature diopter.
+  gpCyl(g, steel, 0.014, 0.014, 0.014, 12, 0, 0.046, 0.096);
+  gpBox(g, inner, 0.004, 0.004, 0.016, 0, 0.046, 0.090);
+  gpBox(g, steel, 0.020, 0.024, 0.020, 0, 0.032, -0.160);              // front sight post block
+  gpBox(g, bright, 0.0035, 0.020, 0.0035, 0, 0.046, -0.160);
+  // Curved magazine, slight banana.
+  let my = -0.050, mz = -0.030, ang = 0.06;
+  for (let i = 0; i < 4; i++) {
+    gpBox(g, mag, 0.024, 0.036, 0.044, 0, my, mz, ang);
+    my -= Math.cos(ang) * 0.030; mz -= Math.sin(ang) * 0.030; ang += 0.05;
+  }
+  gpBox(g, mag, 0.026, 0.012, 0.046, 0, my + 0.010, mz - 0.004, ang);  // floorplate
+  // Ribbed polymer handguard/foregrip.
+  gpBox(g, poly, 0.044, 0.044, 0.130, 0, 0.008, -0.220);
+  for (let i = 0; i < 6; i++) gpCyl(g, inner, 0.023, 0.023, 0.006, 16, 0, 0.008, -0.170 - i * 0.020);
+  // Pistol grip.
+  gpPlate(g, poly, [
+    [0.072,-0.032],[0.100,-0.054],[0.104,-0.140],[0.082,-0.158],[0.056,-0.080],[0.052,-0.036],
+  ], 0.036, 0);
+  gpBox(g, bright, 0.006, 0.015, 0.006, 0, -0.054, 0.010, 0.22);       // trigger
+  // Fixed stock, slim profile.
+  gpBox(g, poly, 0.040, 0.040, 0.012, 0, 0.012, 0.190);
+  gpBox(g, poly, 0.020, 0.038, 0.140, 0, 0.012, 0.130);
+  gpBox(g, inner, 0.042, 0.036, 0.008, 0, 0.012, 0.196);               // butt plate
+  gpCyl(g, steel, 0.007, 0.007, 0.150, 14, 0, 0.010, -0.300);          // barrel shroud
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.010, -0.372); g.add(flash);
+  g._flash = flash; g._kickZ = 0.011; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
 function buildFilmProjector() {
   // 🎞️ Machine revolver -> film projector. Twelve chambers, twelve spokes on
   // the reel: it indexes one frame a shot, which is what a projector does.
@@ -21086,6 +21269,18 @@ const MODEL_SKINS = [
   { id: 'frost_blaster_window_ac', weapon: 'frost_blaster', name: 'Window AC Unit', rarity: 'good',
     sw: ['#e8e4d8', '#8ad8ff'], build: buildWindowAC,
     blurb: 'Louvred front, frost on the fins, two knobs and a cord.' },
+  { id: 'ak20_ak47_wood', weapon: 'ak20', name: 'AK-47', rarity: 'rare',
+    sw: ['#6b4a2c', '#3a3f47'], build: buildAK47Wood,
+    blurb: 'Milled steel, birch furniture. The AK20 in its original wood.' },
+  { id: 'burst_m4a1', weapon: 'burst', name: 'M4A1', rarity: 'rare',
+    sw: ['#2b2f35', '#3a3f47'], build: buildM4A1,
+    blurb: 'Quad rail, collapsible stock, birdcage flash hider. The platform everyone copies.' },
+  { id: 'flechette_bullpup', weapon: 'flechette', name: 'Bullpup Carbine', rarity: 'rare',
+    sw: ['#b8a878', '#3a342a'], build: buildBullpupCarbine,
+    blurb: 'Magazine behind the trigger. Same barrel, shorter rifle.' },
+  { id: 'vector_mp5', weapon: 'vector', name: 'MP5', rarity: 'good',
+    sw: ['#2a2d31', '#8d959d'], build: buildMP5,
+    blurb: 'Roller-delayed blowback in a tube. Every movie SWAT team carries one.' },
 ];
 const MODEL_SKINS_BY_WEAPON = {};
 for (const ms of MODEL_SKINS) (MODEL_SKINS_BY_WEAPON[ms.weapon] ||= []).push(ms);
