@@ -9671,8 +9671,16 @@ function buildAK20() {
   box(inner,  0.048, 0.052, 0.008, 0, -0.002, 0.404, 0.10);          // butt plate
   box(bright, 0.030, 0.006, 0.004, 0, -0.040, 0.250);                // sling loop
   box(inner,  0.049, 0.004, 0.070, 0, 0.010, 0.300);                 // comb seam
-  box(steel,  0.046, 0.044, 0.028, 0, -0.012, 0.162);                // rear trunnion
-  box(polymer, 0.046, 0.056, 0.070, 0, -0.014, 0.184);               // stock wrist
+  box(steel,  0.044, 0.040, 0.026, 0, -0.014, 0.160);                // rear trunnion
+  // The wrist used to be a plain 56 mm box parked between the receiver and the
+  // stock. The receiver is 100 mm deep there and the stock's comb has already
+  // fallen away to y -0.03, so a full-height rectangle stood proud of BOTH and
+  // read as a bulge behind the receiver. It is a ramp now: full receiver height
+  // where it meets the receiver, falling to the comb line where the stock picks
+  // it up, which is the shape the real rifle's wrist actually has.
+  sidePlate(polymer, [
+    [0.142,-0.046],[0.142,0.050],[0.170,0.042],[0.200,0.024],[0.222,0.011],[0.224,-0.046],
+  ], 0.046, 0);
 
   // ── Handguards + gas system ─────────────────────────────────────────────
   sidePlate(polymer, [
@@ -15359,6 +15367,114 @@ function weldModelParts(root, gap = 0.004, maxPasses = 8) {
 }
 
 
+// ── 🪛 Blending the step where an attachment meets its host ────────────────
+// Welding stopped parts floating and greebling stopped a receiver reading as a
+// bare cuboid, but a part sitting ON another part still ended in a cliff: a
+// square shoulder standing proud of the surface under it with nothing between
+// the two faces. That is what reads as a bulge rather than a fitting.
+//
+// This finds the same thing the harness measures — a part seated on a bigger
+// part (over half of it inside that part's footprint on two axes) that steps
+// past its surface on the third — and lays a small tapered collar into the
+// corner, flaring from the attachment's own cross-section out onto the face it
+// stands on. It is a weld fillet: the eye reads a blend instead of an edge.
+//
+// Two things it deliberately does NOT touch. A part that protrudes along its
+// own longest axis is a LIMB — a barrel out of a receiver, a magazine out of a
+// magwell — and is meant to stick out. Parts of a similar size are a STACK, not
+// an attachment: the AK magazine is five near-equal boxes following the banana
+// curve, and collaring every joint would turn a smooth curve into a concertina.
+function _collarGeometry(uTop, vTop, uBot, vBot, h) {
+  const hy = h / 2;
+  const t = [[-uTop / 2, hy, -vTop / 2], [uTop / 2, hy, -vTop / 2], [uTop / 2, hy, vTop / 2], [-uTop / 2, hy, vTop / 2]];
+  const b = [[-uBot / 2, -hy, -vBot / 2], [uBot / 2, -hy, -vBot / 2], [uBot / 2, -hy, vBot / 2], [-uBot / 2, -hy, vBot / 2]];
+  const pos = [];
+  for (let i = 0; i < 4; i++) {
+    const j = (i + 1) % 4;
+    pos.push(...b[i], ...t[j], ...b[j], ...b[i], ...t[i], ...t[j]);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.computeVertexNormals();
+  return geo;
+}
+// Which world axes the collar's own X and Z map to once it is turned onto the
+// axis it blends. The geometry is built about +Y, wide end at -Y.
+const _COLLAR_AXES = { x: ['y', 'z'], y: ['x', 'z'], z: ['x', 'y'] };
+function blendProudSteps(root, opts = {}) {
+  if (!root || root._blended) return;
+  root._blended = true;
+  const minStep = opts.minStep ?? 0.012, maxStep = opts.maxStep ?? 0.060;
+  const maxCollars = opts.max ?? 20;   // a cap, not a budget: the busiest gun needs 18
+  root.updateMatrixWorld(true);
+  // Everything is measured in the MODEL's own space, not the world's. A model
+  // parented to the camera would otherwise be measured against world axes, and
+  // the moment the player looked sideways every box would be the wrong shape.
+  const toRoot = new THREE.Matrix4().copy(root.matrixWorld).invert();
+  const parts = [];
+  root.traverse(o => {
+    if (!o.isMesh || !o.geometry) return;
+    if (o.userData.vmHand || o.userData.blendCollar) return;
+    if (o.material && o.material.transparent) return;
+    if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+    const m = new THREE.Matrix4().multiplyMatrices(toRoot, o.matrixWorld);
+    const b = o.geometry.boundingBox.clone().applyMatrix4(m);
+    const sz = b.getSize(new THREE.Vector3());
+    if (![sz.x, sz.y, sz.z].every(Number.isFinite)) return;
+    parts.push({ o, b, sz, m, vol: sz.x * sz.y * sz.z });
+  });
+  if (parts.length < 2) return;
+  const AX = ['x', 'y', 'z'];
+  const found = [];
+  for (const a of parts) {
+    let best = null;
+    const longest = Math.max(a.sz.x, a.sz.y, a.sz.z);
+    for (const host of parts) {
+      if (host === a || host.vol < a.vol * 2.5) continue;
+      const inside = AX.map(k => {
+        const lo = Math.max(a.b.min[k], host.b.min[k]), hi = Math.min(a.b.max[k], host.b.max[k]);
+        return a.sz[k] > 1e-9 ? Math.max(0, hi - lo) / a.sz[k] : 1;
+      });
+      for (let i = 0; i < 3; i++) {
+        const k = AX[i];
+        if (inside[(i + 1) % 3] < 0.55 || inside[(i + 2) % 3] < 0.55) continue;
+        if (inside[i] < 0.35) continue;
+        if (a.sz[k] >= longest - 1e-9) continue;
+        const up = a.b.max[k] - host.b.max[k], dn = host.b.min[k] - a.b.min[k];
+        const step = Math.max(up, dn);
+        if (step < minStep || step > maxStep) continue;
+        const plane = up >= dn ? host.b.max[k] : host.b.min[k];
+        if (!best || step > best.step) best = { k, dir: up >= dn ? 1 : -1, step, plane };
+      }
+    }
+    if (best) found.push(Object.assign({ a }, best));
+  }
+  found.sort((p, q) => q.step - p.step);
+  for (const f of found.slice(0, maxCollars)) {
+    const { a, k, dir, plane } = f;
+    const [ax, az] = _COLLAR_AXES[k];
+    const h = Math.min(f.step * 0.5, 0.010);
+    // A 45-degree flare is what a chamfer is; the collar reaches as far across
+    // the host's face as it stands tall.
+    const uT = a.sz[ax], vT = a.sz[az], uB = uT + h * 2, vB = vT + h * 2;
+    const geo = dir > 0 ? _collarGeometry(uT, vT, uB, vB, h) : _collarGeometry(uB, vB, uT, vT, h);
+    if (k === 'x') geo.rotateZ(Math.PI / 2);
+    else if (k === 'z') geo.rotateX(Math.PI / 2);
+    const centre = a.b.getCenter(new THREE.Vector3());
+    centre[k] = plane + dir * h / 2;
+    const want = new THREE.Matrix4().makeTranslation(centre.x, centre.y, centre.z);
+    const local = new THREE.Matrix4().multiplyMatrices(new THREE.Matrix4().copy(a.m).invert(), want);
+    const collar = new THREE.Mesh(geo, a.o.material);
+    local.decompose(collar.position, collar.quaternion, collar.scale);
+    collar.castShadow = true;
+    collar.userData.blendCollar = true;
+    a.o.userData.blended = true;
+    // Parented to the attachment itself, so a magazine that drops on a reload
+    // takes its collar with it instead of leaving a ring hanging in the air.
+    a.o.add(collar);
+  }
+}
+
 // ── 🔩 Greebling ──────────────────────────────────────────────────────────
 // Welding and shine fixed "parts floating" and "nothing catches light", but a
 // receiver was still a single bare cuboid — the gun read as a box with a tube.
@@ -15441,7 +15557,7 @@ function greebleModel(root, opts = {}) {
 }
 // Finish every model the player can see: welded together, and shiny.
 [weaponModels, meleeModels, supportModels].forEach(arr => {
-  arr.forEach(m => { if (!m) return; try { greebleModel(m); weldModelParts(m); shinifyModel(m); } catch (e) {} });
+  arr.forEach(m => { if (!m) return; try { greebleModel(m); weldModelParts(m); blendProudSteps(m); shinifyModel(m); } catch (e) {} });
 });
 
 const SKIN_IDS = SKINS.map(s => s.id);
@@ -20526,6 +20642,7 @@ function applyModelSkin(weaponId) {
     if (!skin._model) {
       try {
         skin._model = prepViewModel(skin.build());
+        try { blendProudSteps(skin._model); } catch (e) {}   // same fittings as the gun it replaces
         skin._model.visible = false;
         camera.add(skin._model);
       } catch (e) { console.warn('[model skin]', e); return; }
@@ -21735,6 +21852,7 @@ function applyMeleeModelSkin(baseId) {
         const m = skin.build();
         try { greebleModel(m); } catch (e) {}
         try { weldModelParts(m); } catch (e) {}
+        try { blendProudSteps(m); } catch (e) {}
         try { shinifyModel(m); } catch (e) {}
         m.visible = false;
         camera.add(m);

@@ -29,6 +29,18 @@ function blockAt(re) {
   const m = src.match(re);
   if (!m) return null;
   let i = m.index, depth = 0, k = src.indexOf('{', i);
+  // Skip the parameter list before counting. A default argument writes its own
+  // braces -- `function f(root, opts = {})` -- and starting the count there
+  // matched the empty object and returned a 40-character "function".
+  if (src.startsWith('function', i)) {
+    let pk = src.indexOf('(', i), d = 0;
+    while (pk < src.length) {
+      if (src[pk] === '(') d++;
+      else if (src[pk] === ')') { d--; if (!d) break; }
+      pk++;
+    }
+    k = src.indexOf('{', pk);
+  }
   while (k < src.length) {
     if (src[k] === '{') depth++;
     else if (src[k] === '}') { depth--; if (!depth) break; }
@@ -44,10 +56,11 @@ function load() {
   for (const n of ['gpBox', 'gpCyl', 'gpPlate', 'gpPart', 'makeMuzzleFlash',
                    '_throwableHolder', '_gunDetails', '_makeViewHand',
                    '_localPartBoxes', 'attachViewHands', '_reloadPose',
-                   '_meleeOffset']) {
+                   '_meleeOffset', '_collarGeometry', 'blendProudSteps']) {
     const b = fnBlock(n);
     if (b) code += b + '\n';
   }
+  code += src.match(/^const _COLLAR_AXES = .*$/m)[0] + '\n';
   code += constBlock('GUN_MATS') + '\n';
   code += src.match(/^const VM_SKIN_MAT = .*$/m)[0] + '\n';
   // The shipped viewmodels are scaled as a group; measure what ships, not the
@@ -100,7 +113,7 @@ function load() {
     .map(r => ({ id: r.split('//')[1].trim(), fn: r.split('//')[0].trim().split('(')[0] }));
   code += 'return { RELOAD_KEYS, RELOAD_PROPS, _RELOAD_DEFAULT, _reloadPose, attachViewHands,'
         + ' VM_GUN_SCALE, fitRestDistance, INSPECT_DEFAULT, inspectOpenPose, assemblyBeats,'
-        + ' MODEL_SKINS, prepViewModel, MELEE_MODEL_SKINS, meleeStock,'
+        + ' MODEL_SKINS, prepViewModel, MELEE_MODEL_SKINS, meleeStock, blendProudSteps,'
         + ' builders: ' + JSON.stringify(rows.map(r => r.fn)) + '.map(n => eval(n)) };';
   return { api: new Function('THREE', code)(THREE), rows };
 }
@@ -136,6 +149,7 @@ let inspectReport = null;
 let audioReport = null;
 let modelSkinReport = null;
 let meleeSkinReport = null;
+let proudReport = null;
 const loadsFirst = [];   // loaded before ejecting: right for some mechanisms, worth an eye
 const fail = (w, msg) => problems.push(w.padEnd(20) + msg);
 
@@ -411,6 +425,84 @@ Object.entries(api.RELOAD_PROPS).forEach(([id, evs]) => {
   meleeSkinReport = out;
 }
 
+// ── 5f. Attachments that stand proud of the part they sit on ──────────────
+// The complaint that started this: a squared block poking out of the AK's
+// tapered stock, read as a bulge. The shape of that defect is general — a part
+// sitting mostly INSIDE a bigger part's footprint but stepping past its surface
+// in one direction, with nothing blending the step. This finds them by measuring
+// it rather than by eye.
+function proudSteps(g, minStep = 0.012) {
+  const parts = [];
+  g.updateMatrixWorld(true);
+  const toRoot = new THREE.Matrix4().copy(g.matrixWorld).invert();
+  g.traverse(o => {
+    if (!o.isMesh || !o.geometry) return;
+    // Measured exactly the way the shipped blend pass measures: each part's own
+    // geometry in the model's space. setFromObject would fold a part's collar
+    // into the part's own box and report a different gun than the one blended.
+    if (o.userData.vmHand || o.userData.blendCollar) return;
+    if (o.material && o.material.transparent) return;
+    if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+    const b = o.geometry.boundingBox.clone()
+      .applyMatrix4(new THREE.Matrix4().multiplyMatrices(toRoot, o.matrixWorld));
+    const sz = b.getSize(new THREE.Vector3());
+    if (!Number.isFinite(sz.x + sz.y + sz.z)) return;
+    parts.push({ o, b, sz, vol: sz.x * sz.y * sz.z });
+  });
+  const AX = ['x', 'y', 'z'];
+  const out = [];
+  for (const a of parts) for (const b of parts) {
+    // Parts of a similar size are a STACK, not an attachment: the AK magazine is
+    // five near-equal boxes following the banana curve, and every joint in it
+    // looks like a step to a naive test. An attachment is small on big.
+    if (a === b || b.vol < a.vol * 2.5) continue;
+    // How much of a's extent falls inside b's, per axis.
+    const inside = AX.map(k => {
+      const lo = Math.max(a.b.min[k], b.b.min[k]), hi = Math.min(a.b.max[k], b.b.max[k]);
+      return a.sz[k] > 1e-9 ? Math.max(0, hi - lo) / a.sz[k] : 1;
+    });
+    for (let i = 0; i < 3; i++) {
+      const k = AX[i], o1 = inside[(i + 1) % 3], o2 = inside[(i + 2) % 3];
+      if (o1 < 0.55 || o2 < 0.55) continue;         // not seated on it
+      const over = Math.max(a.b.max[k] - b.b.max[k], b.b.min[k] - a.b.min[k]);
+      if (over < minStep || over > 0.060) continue;
+      // A limb is a part that protrudes along its OWN longest axis: a barrel out
+      // of a receiver, a magazine out of a magwell. Those are meant to stick out.
+      // A lump protrudes sideways, across its short axis, which is what reads as
+      // a bulge. That one distinction is what separates the defect from the gun.
+      const longest = Math.max(a.sz.x, a.sz.y, a.sz.z);
+      if (a.sz[k] >= longest - 1e-9) continue;
+      if (inside[i] < 0.35) continue;
+      out.push({ step: over, axis: k, cover: Math.min(o1, o2), part: a });
+    }
+  }
+  return out.sort((x, y) => y.step - x.step);
+}
+{
+  const rows = [];
+  built.forEach((g, i) => {
+    if (!g) return;
+    g.position.set(0, 0, 0); g.rotation.set(0, 0, 0);
+    // Run the shipped blend pass, then measure: a step that came out of it with
+    // a collar on it is a fitting, and only what it could not reach is a defect.
+    try { api.blendProudSteps(g); } catch (e) { fail(rows_id(i), 'blend pass threw: ' + e.message); }
+    const st = proudSteps(g);
+    const raw = st.filter(x => !x.part.o.userData.blended);
+    if (st.length) rows.push({ id: rows_id(i), n: st.length, raw: raw.length,
+      worst: (raw[0] || st[0]).step, axis: (raw[0] || st[0]).axis, blended: st.length - raw.length });
+    if (process.env.DBG && rows_id(i) === process.env.DBG) st.slice(0, 6).forEach(x => {
+      const b = x.part.b, z = x.part.sz;
+      console.log('  DBG ' + x.axis + ' step ' + (x.step*1000).toFixed(0) + 'mm  size '
+        + [z.x,z.y,z.z].map(v=>v.toFixed(3)).join('x') + '  at y[' + b.min.y.toFixed(3) + ','
+        + b.max.y.toFixed(3) + '] z[' + b.min.z.toFixed(3) + ',' + b.max.z.toFixed(3) + '] x['
+        + b.min.x.toFixed(3) + ',' + b.max.x.toFixed(3) + ']');
+    });
+    g.position.set(REST_POS.x, REST_POS.y, REST_POS.z);
+  });
+  proudReport = rows.sort((a, b) => b.worst - a.worst);
+}
+function rows_id(i) { return rows[i].id; }
+
 // ── 6. Tagged assemblies turn about their own axis ─────────────────────────
 const cyl = [];
 built.forEach((g, i) => {
@@ -468,6 +560,18 @@ if (meleeSkinReport && meleeSkinReport.length) {
   meleeSkinReport.forEach(m => console.log('   ' + m.id.padEnd(22) + 'replaces ' + m.melee.padEnd(12)
     + m.vis.toFixed(0) + '% in frame vs the stock '
     + (m.baseVis === null ? 'n/a' : m.baseVis.toFixed(0) + '%') + ', ' + m.parts + ' parts'));
+}
+
+if (proudReport && proudReport.length) {
+  const steps = proudReport.reduce((n, r) => n + r.n, 0);
+  const blended = proudReport.reduce((n, r) => n + r.blended, 0);
+  const left = proudReport.filter(r => r.raw > 0);
+  console.log('\nattachments standing proud of the part they sit on: ' + steps + ' across '
+    + proudReport.length + ' weapons, ' + blended + ' blended by the collar pass, '
+    + (steps - blended) + ' left on ' + left.length + ' weapon(s)');
+  (VERBOSE ? left : left.slice(0, 14)).forEach(r =>
+    console.log('   ' + r.id.padEnd(20) + r.raw + ' unblended of ' + r.n + ', worst '
+      + (r.worst * 1000).toFixed(0).padStart(3) + 'mm on ' + r.axis));
 }
 
 if (cyl.length) {
