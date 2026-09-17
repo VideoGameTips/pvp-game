@@ -11515,6 +11515,207 @@ function buildSqueegee() {
   g.position.set(0.12, -0.1, -0.25); return g;
 }
 
+function buildFilmProjector() {
+  // 🎞️ Machine revolver -> film projector. Twelve chambers, twelve spokes on
+  // the reel: it indexes one frame a shot, which is what a projector does.
+  const g = new THREE.Group();
+  const inner = GUN_MATS.inner(), bright = GUN_MATS.bright();
+  const crackle= new THREE.MeshPhongMaterial({ color: 0x3a3e44, shininess: 90, specular: 0x9aa2ac });
+  const chrome = new THREE.MeshPhongMaterial({ color: 0xc8ced6, shininess: 200, specular: 0xffffff });
+  const film   = new THREE.MeshPhongMaterial({ color: 0x2a1c14, shininess: 60, specular: 0x8a6a50 });
+  const lensM  = new THREE.MeshPhongMaterial({ color: 0xe8f0ff, shininess: 220, specular: 0xffffff, transparent: true, opacity: 0.8 });
+  const lamp   = new THREE.MeshBasicMaterial({ color: 0xfff2c0 });
+  gpBox(g, crackle, 0.052, 0.068, 0.120, 0, 0.010, 0.020);            // lamp house
+  for (let i = 0; i < 5; i++) gpBox(g, inner, 0.054, 0.004, 0.006, 0, 0.032, -0.010 + i * 0.014); // vents
+  gpCyl(g, crackle, 0.020, 0.020, 0.060, 14, 0, 0.004, -0.076);       // lens barrel
+  gpCyl(g, chrome, 0.022, 0.022, 0.010, 14, 0, 0.004, -0.102);
+  gpCyl(g, lensM, 0.017, 0.017, 0.004, 14, 0, 0.004, -0.108);
+  gpCyl(g, lamp, 0.010, 0.010, 0.004, 12, 0, 0.004, -0.044);          // the lamp behind it
+  gpPart(g, 'main', () => {                                            // the feed reel
+    gpCyl(g, chrome, 0.048, 0.048, 0.004, 24, 0, 0.074, 0.010, Math.PI / 2, Math.PI / 2);
+    gpCyl(g, film, 0.040, 0.040, 0.012, 24, 0, 0.074, 0.010, Math.PI / 2, Math.PI / 2);
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      gpBox(g, chrome, 0.006, 0.026, 0.006, 0.004, 0.074 + Math.cos(a) * 0.030, 0.010 + Math.sin(a) * 0.030, 0, 0, a);
+    }
+    gpCyl(g, chrome, 0.008, 0.008, 0.020, 10, 0, 0.074, 0.010, 0, Math.PI / 2);
+  }, { x: 0, y: 0.074, z: 0.010 });
+  g._parts.main._chambers = 12;
+  gpBox(g, chrome, 0.008, 0.050, 0.008, 0, 0.046, 0.010);             // reel arm
+  gpBox(g, film, 0.004, 0.002, 0.070, 0.006, 0.040, -0.020, 0.5);     // film run to the gate
+  gpCyl(g, crackle, 0.014, 0.014, 0.008, 12, 0.026, 0.010, 0.040, 0, Math.PI / 2); // focus knob
+  gpPlate(g, crackle, [
+    [0.040,-0.028],[0.070,-0.044],[0.078,-0.140],[0.050,-0.154],[0.022,-0.070],[0.018,-0.032],
+  ], 0.036, 0);
+  gpBox(g, bright, 0.006, 0.014, 0.006, 0, -0.044, 0.010, 0.22);
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.004, -0.116); g.add(flash);
+  g._flash = flash; g._kickZ = 0.014; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.1, -0.1, -0.22); return g;
+}
+
+function buildPaintRoller() {
+  // 🎨 Painter beam -> paint roller. It already painted things. Sleeve loaded,
+  // wire frame, and a run of emulsion down the handle.
+  const g = new THREE.Group();
+  const inner = GUN_MATS.inner(), bright = GUN_MATS.bright();
+  const wire  = new THREE.MeshPhongMaterial({ color: 0xb8c0c8, shininess: 190, specular: 0xffffff });
+  const handleM= new THREE.MeshPhongMaterial({ color: 0x2a2c32, shininess: 80, specular: 0x8a9098 });
+  const sleeve= new THREE.MeshPhongMaterial({ color: 0xf0ece0, shininess: 20, specular: 0xd8d4c8 });
+  const paint = new THREE.MeshPhongMaterial({ color: 0x3a8ad8, shininess: 140, specular: 0xd0e8ff });
+  gpCyl(g, handleM, 0.019, 0.022, 0.130, 12, 0, 0.006, 0.100);        // grip
+  for (let i = 0; i < 5; i++) gpCyl(g, inner, 0.0205, 0.0205, 0.006, 12, 0, 0.006, 0.060 + i * 0.020);
+  gpCyl(g, wire, 0.009, 0.009, 0.014, 10, 0, 0.006, 0.026);           // ferrule
+  gpCyl(g, wire, 0.005, 0.005, 0.090, 8, 0, 0.006, -0.026);           // stem
+  gpCyl(g, wire, 0.005, 0.005, 0.060, 8, 0, 0.016, -0.072, 0, Math.PI / 2);  // the cranked frame
+  gpCyl(g, wire, 0.005, 0.005, 0.040, 8, -0.030, 0.026, -0.072);
+  gpCyl(g, sleeve, 0.026, 0.026, 0.150, 18, 0.012, 0.026, -0.092, 0, Math.PI / 2); // the roller
+  gpCyl(g, paint, 0.0272, 0.0272, 0.120, 18, 0.014, 0.026, -0.092, 0, Math.PI / 2); // loaded with paint
+  gpCyl(g, inner, 0.012, 0.012, 0.154, 10, 0.012, 0.026, -0.092, 0, Math.PI / 2);   // core
+  [[0.040, -0.006], [-0.020, -0.014], [0.070, 0.002]].forEach(([x, dy]) => {
+    const drip = new THREE.Mesh(new THREE.SphereGeometry(0.007, 8, 6), paint);
+    drip.scale.set(1, 1.6, 1); drip.position.set(x, dy - 0.004, -0.092); g.add(drip);
+  });
+  gpPlate(g, handleM, [
+    [0.040,-0.010],[0.070,-0.026],[0.078,-0.124],[0.050,-0.138],[0.022,-0.052],[0.018,-0.014],
+  ], 0.034, 0);
+  gpBox(g, bright, 0.006, 0.014, 0.006, 0, -0.026, 0.010, 0.22);
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.026, -0.122); g.add(flash);
+  g._flash = flash; g._kickZ = 0.010; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildPogoStick() {
+  // 🦘 Seismic hammer -> pogo stick. Both of them work by slamming the ground.
+  // Spring in the middle, foot pegs, rubber tip and grips on the bar.
+  const g = new THREE.Group();
+  const inner = GUN_MATS.inner(), bright = GUN_MATS.bright();
+  const red   = new THREE.MeshPhongMaterial({ color: 0xd8342a, shininess: 130, specular: 0xffa098 });
+  const steel = new THREE.MeshPhongMaterial({ color: 0xb8c0c8, shininess: 190, specular: 0xffffff });
+  const rubber= new THREE.MeshPhongMaterial({ color: 0x1c1e22, shininess: 40, specular: 0x5a6068 });
+  const yellow= new THREE.MeshPhongMaterial({ color: 0xf0c020, shininess: 110, specular: 0xfff0a0 });
+  gpCyl(g, red, 0.018, 0.018, 0.140, 14, 0, 0.020, 0.100);            // upper shaft
+  gpBox(g, red, 0.130, 0.020, 0.020, 0, 0.020, 0.168);                // handlebar
+  gpCyl(g, rubber, 0.014, 0.014, 0.030, 10, -0.058, 0.020, 0.168, 0, Math.PI / 2); // grips
+  gpCyl(g, rubber, 0.014, 0.014, 0.030, 10,  0.058, 0.020, 0.168, 0, Math.PI / 2);
+  for (let i = 0; i < 9; i++) {                                        // the spring
+    const coil = new THREE.Mesh(new THREE.TorusGeometry(0.021, 0.0042, 5, 14), steel);
+    coil.rotation.x = Math.PI / 2 + 0.12;
+    coil.position.set(0, 0.020, 0.018 - i * 0.013); g.add(coil);
+  }
+  gpCyl(g, steel, 0.009, 0.009, 0.150, 10, 0, 0.020, -0.040);         // inner rod
+  gpCyl(g, red, 0.016, 0.016, 0.060, 14, 0, 0.020, -0.140);           // lower shaft
+  gpBox(g, yellow, 0.100, 0.016, 0.034, 0, 0.006, -0.108);            // foot pegs
+  gpBox(g, rubber, 0.036, 0.006, 0.030, -0.042, 0.016, -0.108);
+  gpBox(g, rubber, 0.036, 0.006, 0.030,  0.042, 0.016, -0.108);
+  gpCyl(g, rubber, 0.020, 0.020, 0.030, 14, 0, 0.020, -0.184);        // the rubber tip
+  gpCyl(g, inner, 0.021, 0.021, 0.006, 14, 0, 0.020, -0.196);
+  gpPlate(g, red, [
+    [0.040,-0.014],[0.070,-0.030],[0.078,-0.128],[0.050,-0.142],[0.022,-0.056],[0.018,-0.018],
+  ], 0.034, 0);
+  gpBox(g, bright, 0.006, 0.014, 0.006, 0, -0.030, 0.012, 0.22);
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.020, -0.208); g.add(flash);
+  g._flash = flash; g._kickZ = 0.020; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildStopSign() {
+  // 🛑 Traffic controller -> crossing guard's stop sign. Octagon on a pole,
+  // reflective border, and the little flashing light on the corner.
+  const g = new THREE.Group();
+  const inner = GUN_MATS.inner(), bright = GUN_MATS.bright();
+  const red   = new THREE.MeshPhongMaterial({ color: 0xc8202a, shininess: 100, specular: 0xffa0a0 });
+  const white = new THREE.MeshPhongMaterial({ color: 0xf6f6f2, shininess: 130, specular: 0xffffff });
+  const pole  = new THREE.MeshPhongMaterial({ color: 0x2a2c32, shininess: 90, specular: 0x9aa0a8 });
+  const amber = new THREE.MeshBasicMaterial({ color: 0xffb020 });
+  gpCyl(g, red, 0.090, 0.090, 0.010, 8, 0, 0.030, -0.180);            // the octagon
+  gpCyl(g, white, 0.092, 0.092, 0.004, 8, 0, 0.030, -0.186);          // reflective border
+  gpCyl(g, red, 0.078, 0.078, 0.004, 8, 0, 0.030, -0.188);
+  gpBox(g, white, 0.092, 0.020, 0.004, 0, 0.030, -0.190);             // the word, blocked in
+  gpBox(g, red, 0.006, 0.020, 0.005, -0.024, 0.030, -0.191);
+  gpBox(g, red, 0.006, 0.020, 0.005, 0.000, 0.030, -0.191);
+  gpBox(g, red, 0.006, 0.020, 0.005, 0.024, 0.030, -0.191);
+  gpCyl(g, amber, 0.010, 0.010, 0.008, 12, 0.060, 0.090, -0.184);     // flashing light
+  gpCyl(g, pole, 0.014, 0.014, 0.230, 12, 0, 0.018, -0.040);          // pole
+  gpCyl(g, pole, 0.020, 0.020, 0.020, 12, 0, 0.024, -0.150);          // sign boss
+  for (let i = 0; i < 4; i++) gpCyl(g, inner, 0.0145, 0.0145, 0.006, 12, 0, 0.018, 0.010 + i * 0.020);
+  gpCyl(g, pole, 0.018, 0.018, 0.016, 12, 0, 0.018, 0.082);           // butt cap
+  gpPlate(g, pole, [
+    [0.030,-0.010],[0.060,-0.026],[0.068,-0.124],[0.040,-0.138],[0.012,-0.052],[0.008,-0.014],
+  ], 0.034, 0);
+  gpBox(g, bright, 0.006, 0.014, 0.006, 0, -0.026, 0.006, 0.22);
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.030, -0.200); g.add(flash);
+  g._flash = flash; g._kickZ = 0.012; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildPocketKnife() {
+  // 🔪 Switchblade gun -> pocket multi-tool. Red scales, and everything is out
+  // at once because there was never a wrong time for the corkscrew.
+  const g = new THREE.Group();
+  const inner = GUN_MATS.inner(), bright = GUN_MATS.bright();
+  const red   = new THREE.MeshPhongMaterial({ color: 0xc8202a, shininess: 160, specular: 0xffb0b0 });
+  const steel = new THREE.MeshPhongMaterial({ color: 0xd0d6de, shininess: 210, specular: 0xffffff });
+  const brass = new THREE.MeshPhongMaterial({ color: 0xc8a040, shininess: 180, specular: 0xfff0b0 });
+  const white = new THREE.MeshPhongMaterial({ color: 0xf6f6f2, shininess: 120, specular: 0xffffff });
+  gpBox(g, red, 0.036, 0.040, 0.150, 0, 0.010, 0.050);                // the scales
+  gpBox(g, steel, 0.038, 0.006, 0.150, 0, 0.032, 0.050);              // liner
+  gpBox(g, steel, 0.038, 0.006, 0.150, 0, -0.012, 0.050);
+  gpBox(g, white, 0.018, 0.006, 0.006, 0, 0.032, 0.040);              // the emblem
+  gpBox(g, white, 0.006, 0.006, 0.018, 0, 0.032, 0.040);
+  gpBox(g, steel, 0.010, 0.014, 0.130, 0.008, 0.016, -0.090);         // main blade
+  gpBox(g, steel, 0.004, 0.006, 0.110, 0.011, 0.012, -0.086);         // its edge
+  gpBox(g, steel, 0.008, 0.010, 0.090, -0.010, 0.020, -0.060, 0, 0.12); // screwdriver
+  gpBox(g, steel, 0.012, 0.004, 0.012, -0.016, 0.020, -0.106);
+  gpBox(g, steel, 0.006, 0.008, 0.070, -0.002, -0.006, -0.050, 0, -0.10); // can opener
+  for (let i = 0; i < 6; i++) {                                        // the corkscrew
+    const a = i * 1.1;
+    gpCyl(g, brass, 0.0022, 0.0022, 0.014, 5,
+          0.014 + Math.cos(a) * 0.008, -0.014 + Math.sin(a) * 0.008, -0.030 - i * 0.012);
+  }
+  gpCyl(g, steel, 0.0035, 0.0035, 0.040, 8, 0, 0.010, -0.026, 0, Math.PI / 2); // pivot pin
+  gpCyl(g, steel, 0.0035, 0.0035, 0.040, 8, 0, 0.010, 0.120, 0, Math.PI / 2);
+  gpCyl(g, brass, 0.006, 0.006, 0.008, 10, 0, 0.034, 0.124, 0);       // the ring
+  gpPlate(g, red, [
+    [0.046,-0.012],[0.076,-0.028],[0.084,-0.126],[0.056,-0.140],[0.028,-0.054],[0.024,-0.016],
+  ], 0.034, 0);
+  gpBox(g, bright, 0.006, 0.014, 0.006, 0, -0.028, 0.014, 0.22);
+  const flash = makeMuzzleFlash(); flash.position.set(0.008, 0.016, -0.158); g.add(flash);
+  g._flash = flash; g._kickZ = 0.008; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildWindowAC() {
+  // ❄️ Frost blaster -> window air conditioner. Louvred front, frost on the
+  // fins, two knobs and a cord. The coldest thing in the building.
+  const g = new THREE.Group();
+  const inner = GUN_MATS.inner(), bright = GUN_MATS.bright();
+  const beige = new THREE.MeshPhongMaterial({ color: 0xe8e4d8, shininess: 110, specular: 0xffffff });
+  const grey  = new THREE.MeshPhongMaterial({ color: 0x8a9098, shininess: 130, specular: 0xd8e0e8 });
+  const dark  = new THREE.MeshPhongMaterial({ color: 0x2a2e34, shininess: 60, specular: 0x7a828a });
+  const frost = new THREE.MeshPhongMaterial({ color: 0xdff2ff, shininess: 200, specular: 0xffffff });
+  const cold  = new THREE.MeshBasicMaterial({ color: 0x8ad8ff, transparent: true, opacity: 0.35 });
+  gpBox(g, beige, 0.110, 0.090, 0.150, 0, 0.020, 0.030);              // the case
+  gpBox(g, grey, 0.114, 0.006, 0.150, 0, 0.066, 0.030);               // top panel
+  gpBox(g, dark, 0.100, 0.076, 0.010, 0, 0.020, -0.050);              // front bezel
+  for (let i = 0; i < 7; i++)                                          // louvres
+    gpBox(g, beige, 0.092, 0.008, 0.006, 0, -0.008 + i * 0.011, -0.056, 0.30);
+  gpBox(g, frost, 0.094, 0.010, 0.004, 0, 0.050, -0.058);             // frost along the top slat
+  gpBox(g, cold, 0.090, 0.060, 0.070, 0, 0.016, -0.100);              // the cold air
+  for (let i = 0; i < 6; i++) gpBox(g, grey, 0.004, 0.070, 0.006, -0.048 + i * 0.019, 0.020, 0.106); // side grille
+  gpCyl(g, dark, 0.012, 0.012, 0.008, 12, -0.030, -0.034, -0.050);    // knobs
+  gpCyl(g, dark, 0.012, 0.012, 0.008, 12, 0.030, -0.034, -0.050);
+  gpBox(g, bright, 0.003, 0.010, 0.004, -0.030, -0.030, -0.056);
+  gpBox(g, dark, 0.030, 0.014, 0.020, 0, -0.030, 0.100);              // cord boot
+  gpCyl(g, dark, 0.006, 0.006, 0.070, 6, 0, -0.044, 0.140, 1.9);      // cord
+  gpPlate(g, grey, [
+    [0.046,-0.026],[0.076,-0.044],[0.084,-0.142],[0.056,-0.156],[0.028,-0.068],[0.024,-0.030],
+  ], 0.036, 0);
+  gpBox(g, bright, 0.006, 0.014, 0.006, 0, -0.044, 0.014, 0.22);
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.020, -0.140); g.add(flash);
+  g._flash = flash; g._kickZ = 0.012; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
 function buildHairDryer() {
   // 💨 MP-40 -> hair dryer. Cream housing, a chrome barrel with the heating
   // element glowing inside, a cable coiling off the butt and two slider
@@ -20867,6 +21068,24 @@ const MODEL_SKINS = [
   { id: 'glassmaker_squeegee', weapon: 'glassmaker', name: 'Squeegee', rarity: 'good',
     sw: ['#2a7ad8', '#c8a040'], build: buildSqueegee,
     blurb: 'Rubber blade, brass channel, suds running off the end.' },
+  { id: 'machine_revolver_projector', weapon: 'machine_revolver', name: 'Film Projector', rarity: 'rare',
+    sw: ['#3a3e44', '#c8ced6'], build: buildFilmProjector,
+    blurb: 'Twelve chambers, twelve spokes. One frame a shot.' },
+  { id: 'painter_beam_roller', weapon: 'painter_beam', name: 'Paint Roller', rarity: 'good',
+    sw: ['#3a8ad8', '#f0ece0'], build: buildPaintRoller,
+    blurb: 'It already painted things. Sleeve loaded, emulsion dripping.' },
+  { id: 'seismic_pogo_stick', weapon: 'seismic_hammer', name: 'Pogo Stick', rarity: 'rare',
+    sw: ['#d8342a', '#f0c020'], build: buildPogoStick,
+    blurb: 'Both of them work by slamming the ground.' },
+  { id: 'traffic_stop_sign', weapon: 'traffic_controller', name: 'Stop Sign', rarity: 'good',
+    sw: ['#c8202a', '#f6f6f2'], build: buildStopSign,
+    blurb: 'Crossing guard issue. The little light actually flashes.' },
+  { id: 'switchblade_pocket_knife', weapon: 'switchblade_gun', name: 'Pocket Multi-Tool', rarity: 'good',
+    sw: ['#c8202a', '#d0d6de'], build: buildPocketKnife,
+    blurb: 'Everything out at once. There was never a wrong time for the corkscrew.' },
+  { id: 'frost_blaster_window_ac', weapon: 'frost_blaster', name: 'Window AC Unit', rarity: 'good',
+    sw: ['#e8e4d8', '#8ad8ff'], build: buildWindowAC,
+    blurb: 'Louvred front, frost on the fins, two knobs and a cord.' },
 ];
 const MODEL_SKINS_BY_WEAPON = {};
 for (const ms of MODEL_SKINS) (MODEL_SKINS_BY_WEAPON[ms.weapon] ||= []).push(ms);
