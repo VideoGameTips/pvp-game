@@ -18385,8 +18385,8 @@ function kickWeaponVisual(w, pellets = 1) {
 
 document.addEventListener('mousemove', e => {
   if ((!pointerLocked && !gameStarted) || isDead) return;
-  euler.y -= e.movementX * SENS;
-  euler.x -= e.movementY * SENS;
+  euler.y -= e.movementX * SENS * lookSensMult();
+  euler.x -= e.movementY * SENS * lookSensMult();
   euler.x = Math.max(-Math.PI/2.2, Math.min(Math.PI/2.2, euler.x));
   camera.quaternion.setFromEuler(euler);
   // 🎯 Manual aim always wins: while you're moving the mouse, the aim aids yield.
@@ -18415,6 +18415,7 @@ let GAMEPLAY_SETTINGS = {
   cameraShake: 1,
   screenFx: 1,
   touchScale: 1,   // ⚙ → BUTTON SIZE on phones: 0.85 / 1 / 1.2 (#29)
+  lookSens: 1,     // ⚙ → LOOK / MOUSE SENSITIVITY, a multiplier of the old fixed speed (#45)
 };
 try {
   const saved = JSON.parse(localStorage.getItem('pvp_gameplay_settings') || 'null');
@@ -18430,6 +18431,11 @@ try {
   }
 } catch (e) {}
 const TOUCH_SCALES = [['SMALL', 0.85], ['NORMAL', 1], ['BIG', 1.2]];
+// Aim speed was fixed (SENS for the mouse, TOUCH_SENS for a thumb) — every hand is different (#45).
+function lookSensMult() {
+  const v = Number(GAMEPLAY_SETTINGS.lookSens);
+  return Number.isFinite(v) ? Math.max(0.3, Math.min(2.5, v)) : 1;
+}
 function applyTouchScale() {
   const v = Number(GAMEPLAY_SETTINGS.touchScale);
   document.documentElement.style.setProperty('--tbs', Number.isFinite(v) ? Math.max(0.7, Math.min(1.4, v)) : 1);
@@ -26781,13 +26787,32 @@ function showScoreboard(v) {
   el.style.display='block';
   const tbody = document.getElementById('score-body');
   tbody.innerHTML='';
-  Object.values(players).sort((a,b)=>b.kills-a.kills).forEach(p => {
+  // Bots' kills live in this match's own count (#31), not on the server's player records — the
+  // board used to show 0 for every bot (#44).
+  const kills = p => Math.max(p.kills | 0, matchScore[p.id] | 0), deaths = p => Math.max(p.deaths | 0, matchDeaths[p.id] | 0);
+  Object.values(players).sort((a,b)=>kills(b)-kills(a)).forEach(p => {
     const tr = document.createElement('tr');
     if (p.id===myId) tr.className='me';
-    tr.innerHTML=`<td>${escHtml(p.name)}</td><td>${p.kills|0}</td><td>${p.deaths|0}</td><td>${p.hp|0}</td>`;
+    tr.innerHTML=`<td>${escHtml(p.name)}</td><td>${kills(p)}</td><td>${deaths(p)}</td><td>${p.hp|0}</td>`;
     tbody.appendChild(tr);
   });
 }
+// 📋 Phones have no Tab key, so they had no scoreboard at all (#44): tap the score strip to open it,
+// tap it (or the board) again to close; it closes itself after 6 s.
+(() => {
+  const strip = document.getElementById('match-hud'), board = document.getElementById('scoreboard');
+  if (!strip || !board) return;
+  const toggle = e => {
+    if (!isTouchUI()) return;
+    e.preventDefault(); e.stopPropagation();
+    const open = board.style.display === 'block';
+    showScoreboard(!open);
+    clearTimeout(board._t);
+    if (!open) board._t = setTimeout(() => showScoreboard(false), 6000);
+  };
+  strip.addEventListener('touchstart', toggle, { passive: false });
+  board.addEventListener('touchstart', toggle, { passive: false });
+})();
 
 // Weapon selector HUD — shows only the 2 chosen loadout slots
 function updateWeaponSelector() {
@@ -33089,12 +33114,12 @@ function openSettingsHub() {
       <div style="font-size:12px;letter-spacing:2px;color:#d8fff2;">${label}</div>
       <button data-settings-toggle="${key}" style="min-width:66px;padding:7px 10px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:bold;letter-spacing:2px;border-radius:4px;background:${GAMEPLAY_SETTINGS[key] ? '#1f5a3a' : '#1f2422'};color:${GAMEPLAY_SETTINGS[key] ? '#88ffcc' : '#a0aaa6'};border:2px solid ${GAMEPLAY_SETTINGS[key] ? '#44cc99' : '#46544f'};">${GAMEPLAY_SETTINGS[key] ? 'ON' : 'OFF'}</button>
     </div>`;
-  const rangeRow = (key, label) => `
+  const rangeRow = (key, label, min = 0, max = 1.5, step = 0.05) => `
     <div style="margin:12px 0;padding:10px;background:rgba(255,255,255,0.035);border:1px solid #244c42;border-radius:6px;">
       <div style="display:flex;justify-content:space-between;font-size:12px;letter-spacing:2px;color:#d8fff2;">
         <span>${label}</span><span id="settings-${key}-val" style="color:#88ffcc;">${Number(GAMEPLAY_SETTINGS[key]).toFixed(2)}x</span>
       </div>
-      <input data-settings-range="${key}" type="range" min="0" max="1.5" step="0.05" value="${GAMEPLAY_SETTINGS[key]}" style="width:100%;margin-top:8px;">
+      <input data-settings-range="${key}" type="range" min="${min}" max="${max}" step="${step}" value="${GAMEPLAY_SETTINGS[key]}" style="width:100%;margin-top:8px;">
     </div>`;
   panel.style.display = 'block';
   panel.innerHTML = `
@@ -33120,6 +33145,7 @@ function openSettingsHub() {
       <div style="font-size:12px;letter-spacing:2px;color:#d8fff2;">ADS MODE</div>
       <button id="settings-ads-mode" style="min-width:92px;padding:7px 10px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:bold;letter-spacing:2px;border-radius:4px;background:#132a24;color:#88ffcc;border:2px solid #44cc99;">${String(GAMEPLAY_SETTINGS.adsMode).toUpperCase()}</button>
     </div>
+    ${rangeRow('lookSens', isTouchUI() ? 'LOOK SENSITIVITY' : 'MOUSE SENSITIVITY', 0.3, 2.5, 0.05)}
     ${rangeRow('cameraShake', 'CAMERA SHAKE')}
     ${rangeRow('screenFx', 'SCREEN EFFECTS')}
     <div style="height:1px;background:#276b55;margin:16px 0 12px;"></div>
@@ -34627,8 +34653,8 @@ document.addEventListener('touchmove', e => {
       joystickThumb.style.left = (50 + joyDir.x * 50) + '%';
       joystickThumb.style.top  = (50 + joyDir.y * 50) + '%';
     } else if (t.identifier === lookTouchId) {
-      euler.y -= (t.clientX - lastLookPos.x) * TOUCH_SENS;
-      euler.x -= (t.clientY - lastLookPos.y) * TOUCH_SENS;
+      euler.y -= (t.clientX - lastLookPos.x) * TOUCH_SENS * lookSensMult();
+      euler.x -= (t.clientY - lastLookPos.y) * TOUCH_SENS * lookSensMult();
       euler.x  = Math.max(-Math.PI/2.2, Math.min(Math.PI/2.2, euler.x));
       camera.quaternion.setFromEuler(euler);
       lastLookPos = { x: t.clientX, y: t.clientY };

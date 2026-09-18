@@ -418,6 +418,7 @@
     '⚙ SETTINGS': '⚙ 设置',
     'LANGUAGE': '语言',
     'SHOW FPS': '显示帧率', 'AUTO RELOAD': '自动换弹', 'ADS MODE': '瞄准方式',
+    'LOOK SENSITIVITY': '滑屏灵敏度', 'MOUSE SENSITIVITY': '鼠标灵敏度',
     'BUTTON SIZE': '按钮大小', 'SMALL': '小', 'NORMAL': '中', 'BIG': '大',
     'HOLD': '按住', 'TOGGLE': '切换', 'ON': '开', 'OFF': '关',
     'CAMERA SHAKE': '镜头晃动', 'SCREEN EFFECTS': '屏幕特效',
