@@ -34182,6 +34182,7 @@ if (_jumpBtn) {
   // …and a held state: holding JUMP climbs in the helicopter (#23)
   const hold = on => e => { window._mobileUp = on; };
   _jumpBtn.addEventListener('touchstart', hold(true), { passive: true });
+  _jumpBtn.addEventListener('mousedown', hold(true)); // the release side listens for mouseup too
   for (const ev of ['touchend', 'touchcancel', 'mouseup', 'mouseleave']) _jumpBtn.addEventListener(ev, hold(false));
 }
 
