@@ -1554,7 +1554,8 @@ io.on('connection', (socket) => {
     let dmg = Math.round((WEAPON_DAMAGE[data.weapon] || 25) * falloffMultiplier(data.weapon, dist3(shooter, target)));
     if (data.headshot) dmg = data.instakill ? target.hp : Math.round(dmg * (WEAPON_HS_MULT[data.weapon] || 2));
     target.hp = Math.max(0, target.hp - dmg);
-    emitToMatch(target.matchId, 'playerHit', { targetId: target.id, hp: target.hp, bulletId: data.bulletId });
+    // shooterId: the victim's screen points an arc at whoever fired (#36)
+    emitToMatch(target.matchId, 'playerHit', { targetId: target.id, hp: target.hp, bulletId: data.bulletId, shooterId: socket.id });
     if (target.hp <= 0) {
       target.dead = true; target.deaths++; shooter.kills++;
       emitToMatch(target.matchId, 'playerDied', { targetId: target.id, killerId: socket.id });

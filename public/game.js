@@ -24098,6 +24098,18 @@ const DMG_BASE_STYLE = [
   'transform:translate(-50%,-50%)',
 ].join(';');
 
+let _lobbyHitNoted = false;
+function noteLobbyHit() {
+  if (_lobbyHitNoted) return;
+  _lobbyHitNoted = true;
+  pushFeedLine('No damage in the lobby — ⚔️ DUEL or 🎮 MODES to fight', '', '#aaffaa', true);
+}
+function syncLobbyTag() {
+  const el = document.getElementById('lobby-tag');
+  const on = gameStarted && inLobby;
+  if (el && (el.style.display === 'block') !== on) el.style.display = on ? 'block' : 'none';
+}
+
 // ── 🎯 Hit / kill / ammo at the crosshair (#34) ─────────────────────────────
 // Before this a hit showed only a small number at the target (and a sound a muted phone never
 // plays); a kill made the body vanish and left one line in the corner feed; an empty gun did
@@ -24292,8 +24304,10 @@ function getSecretSynergy(weaponId, hitPos) {
 
 // Helper: emit hit to server AND show damage numbers AND apply damage client-authoritatively
 function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false) {
-  // 🛋️ Lobby 13 is a no-combat chill zone — the cast is neutral and can't be hurt.
-  if (inLobby) return;
+  // 🛋️ Lobby 13 is a no-combat chill zone — the cast is neutral and can't be hurt. The hit still
+  // shows (grey), and the first one says why nothing happened: a gun that seems to do nothing reads
+  // as broken (#35).
+  if (inLobby) { showHitmarker('lobby'); noteLobbyHit(); return; }
   if (players[pid]?.dead) return;   // a body going down is not a target (#34)
   const isBot    = players[pid] && players[pid].isBot;
   const instakill = headshot && INSTAKILL_HS_WEAPONS.has(weaponId);
@@ -26231,14 +26245,37 @@ function updateWeaponHUD() {
   }
   document.getElementById('ammo-gun').textContent = displayWeaponName(currentWeapon);
 }
+// Damage with no known direction (lava, burning, a shield soaking a hit): a short red pulse at the
+// screen edge. The ring that used to flash here sat on the crosshair, where a shooter looks for
+// their OWN hits — the hitmarker lives there now (#34, #36).
+function flashHitIndicator() {
+  const el = document.getElementById('dmg-edge');
+  if (!el) return;
+  el.style.transition = 'none'; el.style.opacity = '1';
+  clearTimeout(el._t);
+  el._t = setTimeout(() => { el.style.transition = 'opacity 0.25s'; el.style.opacity = '0'; }, 120);
+}
+// An arc around the crosshair, turned toward whoever hit you: up = in front, down = behind (#36).
+function showDamageDirection(fromId) {
+  const layer = document.getElementById('dmg-dir');
+  const src = players[fromId] || gameBots.find(b => b.id === fromId);
+  if (!layer || !src || src.x == null) return;
+  const toYaw = Math.atan2(camera.position.x - src.x, camera.position.z - src.z);   // the yaw that would face them
+  let rel = toYaw - euler.y;                                                          // how far to turn, + = left
+  rel = Math.atan2(Math.sin(rel), Math.cos(rel));
+  const arc = document.createElement('div');
+  arc.className = 'dmg-arc';
+  arc.style.transform = `rotate(${(-rel * 180 / Math.PI).toFixed(1)}deg)`;
+  layer.appendChild(arc);
+  while (layer.children.length > 4) layer.firstElementChild.remove();
+  setTimeout(() => { arc.style.opacity = '0'; setTimeout(() => arc.remove(), 650); }, 450);
+}
 function updateHealthHUD(hp) {
   document.getElementById('health-fill').style.width = `${(hp / 300 * 100).toFixed(1)}%`;
   document.getElementById('health-num').textContent = hp;
-}
-function flashHitIndicator() {
-  const el = document.getElementById('hit-indicator');
-  el.classList.add('flash');
-  setTimeout(() => el.classList.remove('flash'), 200);
+  // Under 30%: the edges stay red until you heal, respawn or die (#36).
+  const low = document.getElementById('low-hp');
+  if (low) low.classList.toggle('on', hp > 0 && hp <= 90 && !inLobby);
 }
 
 // ── Spectator mode (watch teammates after dying) ────────────────────────────
@@ -26512,7 +26549,7 @@ function applyBotDamageToPlayer(weaponId, botId) {
   updateHealthHUD(me.hp);
   if (oldHp > 75 && me.hp <= 75 && me.hp > 0) playSoundEvent('low_hp', { volume: 1.0, minGap: 2500 });
   flashDamageScreen(oldHp - me.hp);
-  flashHitIndicator();
+  if (botId) showDamageDirection(botId); else flashHitIndicator();
   if (me.hp <= 0 && !isDead) {
     isDead = true;
     isADS = false; targetFOV = 75; shooting = false;
@@ -26849,21 +26886,22 @@ socket.on('playerHit', data => {
     hitBot.prevHp = hitBot.hp;
     if (hitBot.hp <= 0) {
       hitBot.dead = true;
-      if (remoteMeshes[data.targetId]) remoteMeshes[data.targetId].visible = false;
+      if (players[data.targetId]) players[data.targetId].dead = true;
+      dropBody(data.targetId);   // tips over, then hides (#34)
       myKills++;
       creditWeaponKill(currentEquippedId());
       saveKillReplay(data.targetId, currentEquippedId());
       const kc = document.getElementById('kill-count');
       if (kc) kc.textContent = `Kills: ${myKills}`;
       const botName = players[data.targetId]?.name || 'Bot';
-      showAnnouncement('ELIMINATED', botName, '#ff4444', 1200);
+      if (confirmKill(data.targetId, botName)) showAnnouncement('ELIMINATED', botName, '#ff4444', 1200);
       onEntityDied(data.targetId, myId);
     }
   }
   if (data.targetId===myId) {
     updateHealthHUD(data.hp);
     if (hpBeforeServerHit != null && data.hp < hpBeforeServerHit) flashDamageScreen(hpBeforeServerHit - data.hp);
-    flashHitIndicator();
+    if (data.shooterId) showDamageDirection(data.shooterId); else flashHitIndicator();
   }
   if (data.bulletId) {
     for (let i=localBullets.length-1; i>=0; i--) {
@@ -31135,6 +31173,7 @@ function loop() {
   if (inLobby) safeLoopStep('lobby-interactions', () => updateLobbyInteractions()); // duel-pad / challenge prompt
   safeLoopStep('interact-button', syncInteractButton); // every frame, so DUEL clears once you leave the lobby
   safeLoopStep('ability-button', syncAbilityButton);   // shows only while what you hold has an ability (#30)
+  safeLoopStep('lobby-tag', syncLobbyTag);             // "LOBBY 13 · CHILL ZONE · NO DAMAGE" (#35)
   safeLoopStep('admin-cheats', () => updateAdminCheats(dt));// admin cheat tick (fly, kill aura, etc.)
   safeLoopStep('uav', () => updateUAV(dt));        // Predator UAV overlay tick
   safeLoopStep('map-effects', () => updateMapEffects(dt)); // airport darkening, chernobyl gas, mortar prompt

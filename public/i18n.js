@@ -192,6 +192,9 @@
     // ammo at the crosshair (#34)
     'LOW AMMO': '弹药不足', 'TAP ↻ TO RELOAD': '点 ↻ 换弹', 'PRESS R TO RELOAD': '按 R 换弹',
     'OUT OF AMMO · SWITCH WEAPON': '没子弹了 · 换把武器',
+    // Lobby 13 (#35)
+    'LOBBY 13 · CHILL ZONE · NO DAMAGE': '13 号大厅 · 休闲区 · 不计伤害',
+    'No damage in the lobby — ⚔️ DUEL or 🎮 MODES to fight': '大厅里不会受伤 —— 点 ⚔️ 约战 或 🎮 模式 开打',
     // ⚔️ duel picker + end-screen rivals (#31)
     '⚔️ DUEL': '⚔️ 约战', '⚔️ DUEL 1V1': '⚔️ 约战 1V1',
     'RECENTLY FOUGHT': '最近交过手', 'BEST RECORD': '战绩最好的',

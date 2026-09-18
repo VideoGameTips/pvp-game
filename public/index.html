@@ -72,14 +72,6 @@
     #scoreboard td { padding: 6px 8px; font-size: 14px; }
     #scoreboard tr.me td { color: #4fc3f7; }
 
-    #hit-indicator {
-      position: absolute; top: 50%; left: 50%;
-      transform: translate(-50%, -50%);
-      width: 60px; height: 60px; border-radius: 50%;
-      border: 2px solid transparent; pointer-events: none;
-      transition: border-color 0.05s;
-    }
-    #hit-indicator.flash { border-color: rgba(231,76,60,0.9); }
 
     /* ── 🎯 Hit / kill / ammo at the crosshair (#34) ──
        An ✕ of four ticks around the crosshair (the centre is masked out so the crosshair stays
@@ -114,6 +106,38 @@
     #ammo.low #ammo-count { color: #ffd23f; }
     #ammo.empty #ammo-count, #ammo.out #ammo-count { color: #ff5b5b; }
     body.touch-ui #btn-reload-mobile.pulse { animation: reloadPulse 0.8s ease-in-out infinite; }
+
+    /* 🛋️ Lobby 13's own tag, where the score strip sits in a match (#35) */
+    #lobby-tag {
+      display: none; position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+      padding: 5px 14px; border-radius: 8px; background: rgba(0,0,0,0.55); border: 1px solid rgba(170,255,170,0.45);
+      color: #aaffaa; font: 700 12px/1.3 -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+      letter-spacing: 1px; white-space: nowrap; pointer-events: none;
+    }
+    body.touch-ui #lobby-tag { top: 52px; font-size: 11px; }
+    @media (orientation: landscape) { body.touch-ui #lobby-tag { top: 8px; } }
+
+    /* 🧭 Incoming damage (#36): an arc on the ring around the crosshair, turned toward the shooter;
+       a red edge that stays while HP is low; a short edge pulse for damage with no direction. */
+    #dmg-dir, #low-hp, #dmg-edge { position: fixed; inset: 0; pointer-events: none; z-index: 79; }
+    .dmg-arc {
+      position: absolute; top: 50%; left: 50%; width: min(58vw, 58vh); height: min(58vw, 58vh);
+      margin: calc(min(58vw, 58vh) / -2) 0 0 calc(min(58vw, 58vh) / -2); border-radius: 50%;
+      background: conic-gradient(from -32deg, rgba(255,40,40,0.9) 0deg 64deg, transparent 64deg);
+      -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 7px), #000 calc(100% - 6px));
+              mask: radial-gradient(farthest-side, transparent calc(100% - 7px), #000 calc(100% - 6px));
+      transition: opacity 0.6s; filter: drop-shadow(0 0 4px rgba(255,0,0,0.6));
+    }
+    #low-hp {
+      opacity: 0; transition: opacity 0.4s;
+      background: radial-gradient(ellipse at center, transparent 55%, rgba(200,0,0,0.38) 100%);
+    }
+    #low-hp.on { opacity: 1; animation: lowHp 1.4s ease-in-out infinite; }
+    @keyframes lowHp { 50% { opacity: 0.6; } }
+    #dmg-edge {
+      opacity: 0; transition: opacity 0.25s;
+      background: radial-gradient(ellipse at center, transparent 62%, rgba(255,30,30,0.35) 100%);
+    }
     @keyframes reloadPulse { 50% { box-shadow: 0 0 0 7px rgba(255,154,60,0.55); border-color: #ffb46b; } }
 
     #death-screen {
@@ -1001,11 +1025,16 @@
 
   <div id="hud">
     <div id="crosshair"></div>
-    <div id="hit-indicator"></div>
     <!-- Your own hits, kills and ammo, at the crosshair where your eyes already are (#34) -->
     <div id="hitmarker"></div>
     <div id="kill-confirm"></div>
     <div id="ammo-hint"></div>
+    <!-- Lobby 13 says what it is: shooting works, nothing takes damage (#35) -->
+    <div id="lobby-tag">LOBBY 13 · CHILL ZONE · NO DAMAGE</div>
+    <!-- Where the hit came from, and when you are low (#36) -->
+    <div id="dmg-dir"></div>
+    <div id="low-hp"></div>
+    <div id="dmg-edge"></div>
 
     <div id="health-bar">
       <div id="health-label">HEALTH</div>
