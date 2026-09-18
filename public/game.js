@@ -1488,6 +1488,8 @@ let meleeAbilityBuff = null; // { type, endTime?, usesLeft?, lastSpinHits? }
 let slamState = null;        // { vel } — for sledge ground slam animation
 let spearThrown = false;     // true while spear weapon is "in the air"
 let meleeSwingDur  = 400;     // ms for full swing arc
+let meleeDeflectDir = 1;      // alternates the katana guard each time it catches a round
+let meleeDeflectPulseAt = 0;  // short extra twitch layered on the held deflect pose
 let meleeSwingType = 'slash'; // 'slash' | 'slam' | 'thrust' | 'spin' | 'stab' | 'bash' | 'chop'
 // Swing style per MELEE_ITEMS index — must align with MELEE_ITEMS order!
 const MELEE_SWING_TYPES = [
@@ -3868,6 +3870,12 @@ function playSoundEvent(name, opts = {}) {
     playFilteredNoise(ctx, start, 0.022, out, 0.18 * mult, 'highpass', 3600, 0.4);
     playTone(ctx, start, 0.32, out, 2200, 1640, 0.16 * mult, 'triangle');
     playTone(ctx, start + 0.02, 0.26, out, 3400, 2400, 0.10 * mult, 'sine');
+  }
+  else if (name === 'deflect_ping') {
+    // Short, bright blade-on-bullet ping for each successful deflect.
+    playFilteredNoise(ctx, start, 0.012, out, 0.16 * mult, 'highpass', 5200, 0.45);
+    playTone(ctx, start, 0.18, out, 3150, 2350, 0.18 * mult, 'triangle');
+    playTone(ctx, start + 0.012, 0.12, out, 5600, 3800, 0.07 * mult, 'sine');
   }
   else if (name === 'parry_deflect') {
     // Similar but heavier/lower for shield bash deflect
@@ -12794,6 +12802,116 @@ function buildPixelSniper() {
   g.position.set(0.12, -0.1, -0.25); return g;
 }
 
+// Shared by the rest of the 8-bit family below — same technique as the SR-X's
+// pixel sprite: a grid of characters becomes a grid of voxel cubes. Pulled out
+// once there was more than one of these, rather than copy-pasting the loop.
+// buildPixelSniper is left as it was, hand-built before this existed.
+function buildPixelGunModel(SPRITE, COL, opts = {}) {
+  const g = new THREE.Group();
+  const emissive = new Set(opts.emissive || []);
+  const wide = new Set(opts.wide || ['k', 'w']);
+  const mats = {};
+  for (const [ch, c] of Object.entries(COL))
+    mats[ch] = emissive.has(ch) ? new THREE.MeshBasicMaterial({ color: c })
+                                : new THREE.MeshPhongMaterial({ color: c, shininess: 30, specular: 0x555555 });
+  const V = 0.017, VOX = new THREE.BoxGeometry(V * 0.98, V * 0.98, V * 0.98);
+  const VOXW = new THREE.BoxGeometry(0.030, V * 0.98, V * 0.98);
+  SPRITE.forEach((row, r) => {
+    for (let col = 0; col < row.length; col++) {
+      const ch = row[col];
+      if (!mats[ch]) continue;
+      const m = new THREE.Mesh(wide.has(ch) ? VOXW : VOX, mats[ch]);
+      m.position.set(0, 0.110 - r * V, 0.110 - col * V);
+      g.add(m);
+    }
+  });
+  const flash = makeMuzzleFlash();
+  flash.position.set(0, opts.flashY ?? 0.042, opts.flashZ ?? -0.365);
+  g.add(flash);
+  g._flash = flash; g._kickZ = opts.kickZ ?? 0.016; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildPixelAK20() {
+  // 👾 AK-20 -> 8-bit. Same pixel-sprite technique as the SR-X's 8-Bit skin:
+  // a rear sight block, a long wood-and-black receiver bar, then a curved
+  // banana magazine drawn a pixel-step at a time down to the floorplate.
+  const SPRITE = [
+    '..........bbbbb.............',
+    '..........bkkkb.............',
+    '..........bbbbb.............',
+    'wwkkkkkkkkkkkkkkkkkkkkkkkkkb',
+    'wwwkkkkkkkkkkkkkkkkkk.......',
+    'www..kk........kk...........',
+    'ww....kk......kk............',
+    'w......kk....kk.............',
+    '........kkkkkk..............',
+    '.........kcck...............',
+  ];
+  const COL = { k: 0x2a2e34, w: 0x8a5a2a, c: 0xffaa33, b: 0x0d0d0d };
+  return buildPixelGunModel(SPRITE, COL, { emissive: ['c'], flashZ: -0.480 });
+}
+
+function buildPixelSG8() {
+  // 👾 SG-8 -> 8-bit. A double-thick barrel bar (shotguns read wider than
+  // rifles), two loaded shells glowing red through the receiver, and a wide
+  // wood stock base.
+  const SPRITE = [
+    '..............bbbbb.........',
+    '..............bkkkb.........',
+    '..............bbbbb.........',
+    'wwwwkkkkkkkkkkkkkkkkkkkkkkkb',
+    'wwwwkkkkkkkkkkkkkkkkkkkkkkkb',
+    'wwww.........................',
+    'ww....bb...bb................',
+    'ww...bcb...bcb................',
+    'ww....bb...bb................',
+    'wwwwwwwwww...................',
+  ];
+  const COL = { k: 0x2a2e34, w: 0x8a5a2a, c: 0xdd3333, b: 0x0d0d0d };
+  return buildPixelGunModel(SPRITE, COL, { emissive: ['c'], flashZ: -0.500, kickZ: 0.022 });
+}
+
+function buildPixelRevolver() {
+  // 👾 Revolver -> 8-bit. Shorter than the rifles — a revolver is a shorter
+  // gun — with a nickel cylinder bulge up top and a brass accent set into
+  // the grip where the cap gun skin puts its caps.
+  const SPRITE = [
+    '.......bbbbb.................',
+    '......bgggggb.................',
+    '.......bbbbb..................',
+    '....ggkkkkkkkkkkkkkb..........',
+    '....gg...............b........',
+    '.....kk.......................',
+    '.....bcb.......................',
+    '......kk.......................',
+    '......bb.......................',
+    '.......kkk......................',
+  ];
+  const COL = { k: 0x2a2e34, g: 0x8a8f96, c: 0xd8a840, b: 0x0d0d0d };
+  return buildPixelGunModel(SPRITE, COL, { emissive: [], flashZ: -0.330, kickZ: 0.014 });
+}
+
+function buildPixelVector() {
+  // 👾 Vector SMG -> 8-bit. A boxy receiver over a straight magazine, with a
+  // green-cyan strip down the middle of the mag standing in for rounds
+  // visible through the translucent window the real skin has.
+  const SPRITE = [
+    '.........bbbbb...............',
+    '.........bgggb...............',
+    '.........bbbbb...............',
+    'kkkkkkkkkkkkkkkkkkkkkkkkkkkkb',
+    'kkkkkkkkkkkkkkkkkkkkkkkkkkkkb',
+    '....kk.........kk............',
+    '....kk...bcb...kk............',
+    '....kk...bcb...kk............',
+    '....kk...bcb...kk............',
+    '....kkkkkbcbkkkk..............',
+  ];
+  const COL = { k: 0x2a2e34, g: 0x6a7078, c: 0x66ddaa, b: 0x0d0d0d };
+  return buildPixelGunModel(SPRITE, COL, { emissive: ['c'], flashZ: -0.365, kickZ: 0.012 });
+}
+
 function buildPortalSG8() {
   // 🌀 SG8 -> portal shotgun. Two rings at the muzzle, orange and blue, and
   // when it is drawn it steps out of a portal of its own.
@@ -21569,6 +21687,10 @@ function activateMeleeAbility() {
   }
   else if (ab.type === 'melee_deflect') {
     meleeAbilityBuff = { type: 'deflect', endTime: now + (ab.duration || 2000) };
+    meleeDeflectDir = 1;
+    meleeDeflectPulseAt = performance.now() - 220;
+    meleeSwingT = 1;
+    if (activeSlot === 'melee' && meleeModels[selectedMeleeIdx]) applyMeleeDeflectPose(meleeModels[selectedMeleeIdx]);
     flashAbilityName(ab.name);
     flashScreen('rgba(200,220,255,0.18)', 300);
     // Katana / Tennis-Racket: bright metallic "shiing"; Riot-shield: heavier parry
@@ -23303,6 +23425,18 @@ const MODEL_SKINS = [
   { id: 'srx_8bit', weapon: 'srx', name: '8-Bit SR-X', rarity: 'good',
     sw: ['#2a2e34', '#55ddff'], build: buildPixelSniper,
     blurb: 'Loads in a pixel at a time. Fires a chiptune.' },
+  { id: 'ak20_8bit', weapon: 'ak20', name: '8-Bit AK-20', rarity: 'good',
+    sw: ['#2a2e34', '#ffaa33'], build: buildPixelAK20,
+    blurb: 'Same pixel-sprite trick as the 8-Bit SR-X. Banana mag, one voxel at a time.' },
+  { id: 'sg8_8bit', weapon: 'sg8', name: '8-Bit SG-8', rarity: 'good',
+    sw: ['#2a2e34', '#dd3333'], build: buildPixelSG8,
+    blurb: 'Loads in a pixel at a time. Two shells glowing red through the receiver.' },
+  { id: 'revolver_8bit', weapon: 'revolver', name: '8-Bit Revolver', rarity: 'good',
+    sw: ['#2a2e34', '#d8a840'], build: buildPixelRevolver,
+    blurb: 'The short one of the pixel family. Fires a chiptune, reloads in blips.' },
+  { id: 'vector_8bit', weapon: 'vector', name: '8-Bit Vector', rarity: 'good',
+    sw: ['#2a2e34', '#66ddaa'], build: buildPixelVector,
+    blurb: 'Boxy sprite, straight mag, a strip of green pixels standing in for rounds.' },
   { id: 'sg8_portal', weapon: 'sg8', name: 'Portal SG8', rarity: 'rare',
     sw: ['#1c2230', '#ff8a22'], build: buildPortalSG8,
     blurb: 'Steps out of a portal of its own when you draw it.' },
@@ -26193,6 +26327,20 @@ const SKIN_FX = {
   srx_8bit: { sound: _fxS('chip', .28, .14, 1400, 110),
     reload: _fxR(RELOAD_KEYS.srx, [RP(.30,'pixel','eject',3), RP(.56,'pixel','arrive',3)], null, 'blip'),
     equip: 'pixelate', equipMs: 800, equipSfx: ['blip', null] },
+  // ── The rest of the 8-bit family: same chip voice, same pixel reload and
+  //    pixelate equip as the SR-X's, tuned per weapon ──
+  ak20_8bit: { sound: _fxS('chip', .24, .09, 900, 90),
+    reload: _fxR(RELOAD_KEYS.ak20, [RP(.30,'pixel','eject',3), RP(.56,'pixel','arrive',3)], null, 'blip'),
+    equip: 'pixelate', equipMs: 800, equipSfx: ['blip', null] },
+  sg8_8bit: { sound: _fxS('chip', .40, .22, 300, 60),
+    reload: _fxR(RELOAD_KEYS.sg8, [RP(.30,'pixel','eject',2), RP(.56,'pixel','arrive',2)], null, 'blip'),
+    equip: 'pixelate', equipMs: 800, equipSfx: ['blip', null] },
+  revolver_8bit: { sound: _fxS('chip', .22, .10, 1100, 140),
+    reload: _fxR(RELOAD_KEYS.revolver, [RP(.30,'pixel','eject',3), RP(.56,'pixel','arrive',3)], null, 'blip'),
+    equip: 'pixelate', equipMs: 800, equipSfx: ['blip', null] },
+  vector_8bit: { sound: _fxS('chip', .16, .06, 1800, 180),
+    reload: _fxR(RELOAD_KEYS.vector, [RP(.30,'pixel','eject',3), RP(.56,'pixel','arrive',3)], null, 'blip'),
+    equip: 'pixelate', equipMs: 800, equipSfx: ['blip', null] },
   sg8_portal: { sound: _fxS('warp', .34, .20, 160, 900),
     equip: 'warp', equipMs: 900, equipSfx: ['warp', 'chime'] },
   p90_quantum_scanner: { sound: _fxS('beep', .24, .07, 2600, 1800),
@@ -27336,6 +27484,7 @@ function updateBullets(dt) {
             if (!isShielded() && !isRiotShieldBlocking()) {
               const _mp = meleeAbilityBuff?.type;
               if (_mp === 'deflect') {
+                triggerDeflectImpact(at);
                 const dp = remoteMeshes[b.botId] ? remoteMeshes[b.botId].position.clone().setY(1.0)
                                                  : camera.position.clone().setY(1.0);
                 emitHit(b.botId, `deflect_${myId}_${Date.now()}`, 'katana', dp);
@@ -28745,6 +28894,66 @@ function spawnHitParticle(pos) {
   setTimeout(() => scene.remove(m), 200);
 }
 
+function _fallbackDeflectWorldPos() {
+  const pos = camera.position.clone();
+  const fwd = new THREE.Vector3(0, -0.10, -1).applyQuaternion(camera.quaternion).normalize();
+  return pos.addScaledVector(fwd, 0.85);
+}
+
+function _bulletWorldPosById(bulletId) {
+  if (!bulletId) return null;
+  const b = localBullets.find(x => x.id === bulletId);
+  return b ? b.mesh.position.clone() : null;
+}
+
+function triggerDeflectImpact(pos, opts = {}) {
+  const at = (pos && Number.isFinite(pos.x)) ? pos.clone() : _fallbackDeflectWorldPos();
+  meleeDeflectDir *= -1;
+  meleeDeflectPulseAt = performance.now();
+  playSoundEvent(opts.shield ? 'parry_deflect' : 'deflect_ping', { volume: opts.shield ? 0.85 : 1.05, minGap: 18 });
+  spawnHitParticle(at);
+
+  const ringMat = new THREE.MeshBasicMaterial({
+    color: opts.shield ? 0xaaccff : 0xf5fbff,
+    transparent: true,
+    opacity: 0.92,
+    depthWrite: false,
+    side: THREE.DoubleSide
+  });
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.045, 0.18, 20), ringMat);
+  ring.position.copy(at);
+  ring.quaternion.copy(camera.quaternion);
+  scene.add(ring);
+
+  const sparkMat = new THREE.MeshBasicMaterial({
+    color: opts.shield ? 0x99ddff : 0xffffff,
+    transparent: true,
+    opacity: 0.95,
+    depthWrite: false
+  });
+  const spark = new THREE.Mesh(new THREE.SphereGeometry(0.075, 10, 8), sparkMat);
+  spark.position.copy(at);
+  scene.add(spark);
+
+  let t = 0;
+  const tick = () => {
+    t += 0.08;
+    const fade = Math.max(0, 1 - t);
+    ring.scale.setScalar(1 + t * 2.6);
+    ring.rotation.z += 0.34;
+    ringMat.opacity = 0.92 * fade;
+    spark.scale.setScalar(1 + t * 3.2);
+    sparkMat.opacity = 0.95 * fade;
+    if (t < 1) requestAnimationFrame(tick);
+    else {
+      scene.remove(ring); scene.remove(spark);
+      ring.geometry.dispose(); ringMat.dispose();
+      spark.geometry.dispose(); sparkMat.dispose();
+    }
+  };
+  requestAnimationFrame(tick);
+}
+
 // ── HUD ────────────────────────────────────────────────────────────────────
 function updateAmmoHUD() {
   if (activeSlot === 'melee' || activeSlot === 'support') {
@@ -29409,6 +29618,7 @@ socket.on('playerHit', data => {
     const oldHp = players[myId]?.hp ?? data.hp;
     const dmgAbsorbed = Math.max(0, oldHp - data.hp);
     flashHitIndicator();
+    triggerDeflectImpact(_bulletWorldPosById(data.bulletId) || _fallbackDeflectWorldPos());
     if (dmgAbsorbed > 0) socket.emit('healSelf', { amount: dmgAbsorbed });
     // Reflect: hit nearest enemy bot
     let nearest = null, nearDist = Infinity;
@@ -30237,7 +30447,24 @@ function updateGrenadeWindup(dt) {
 // ── Melee swing animation ──────────────────────────────────────────────────
 const MELEE_REST_POS = new THREE.Vector3(0.10, -0.12, -0.20);
 
+function applyMeleeDeflectPose(model) {
+  if (!model) return;
+  const age = Math.max(0, performance.now() - (meleeDeflectPulseAt || 0));
+  const pulse = age < 180 ? (1 - age / 180) : 0;
+  const side = meleeDeflectDir || 1;
+  model.position.set(0.045 * side, -0.075 - pulse * 0.018, -0.315 - pulse * 0.055);
+  model.rotation.set(
+    -0.32 - pulse * 0.18,
+    0.20 * side,
+    side * (Math.PI / 4 + pulse * 0.35)
+  );
+}
+
 function updateMeleeSwing(dt) {
+  if (meleeAbilityBuff?.type === 'deflect' && activeSlot === 'melee' && selectedMeleeIdx !== null) {
+    const model = meleeModels[selectedMeleeIdx];
+    if (model && model.visible && meleeSwingT >= 1) applyMeleeDeflectPose(model);
+  }
   if (meleeSwingT >= 1) return;
   if (activeSlot !== 'melee' || selectedMeleeIdx === null) { meleeSwingT = 1; return; }
   const model = meleeModels[selectedMeleeIdx];
@@ -32690,6 +32917,7 @@ function updateBotAI(dt) {
               if (_turretHits && !isShielded() && !isRiotShieldBlocking() && _mpType !== 'parry' && _mpType !== 'deflect') {
                 scheduleBotHitOnPlayer(bot.id, 'mg42', dist, 145);
               } else if (_turretHits && !isShielded() && _mpType === 'deflect') {
+                triggerDeflectImpact(_fallbackDeflectWorldPos());
                 const _defPos1 = remoteMeshes[bot.id] ? remoteMeshes[bot.id].position.clone().setY(1.0) : camera.position.clone().setY(1.0);
                 emitHit(bot.id, `deflect_${myId}_${Date.now()}`, 'katana', _defPos1);
               }
@@ -33154,6 +33382,7 @@ function updateBotAI(dt) {
             const _mp = meleeAbilityBuff?.type;
             if (_mp === 'parry' || _mp === 'deflect') {
               if (_mp === 'deflect') {
+                triggerDeflectImpact(_fallbackDeflectWorldPos());
                 const _defPos2 = remoteMeshes[bot.id] ? remoteMeshes[bot.id].position.clone().setY(1.0) : camera.position.clone().setY(1.0);
                 emitHit(bot.id, `deflect_${myId}_${Date.now()}`, 'katana', _defPos2);
               }
@@ -33790,6 +34019,10 @@ function loop() {
       // Reset spin rotation on the actually-equipped melee (any model that was spinning)
       if (mab.type === 'spin') {
         for (const m of meleeModels) m.rotation.z = 0;
+      }
+      if (mab.type === 'deflect' && activeSlot === 'melee' && meleeModels[selectedMeleeIdx]) {
+        meleeModels[selectedMeleeIdx].position.copy(MELEE_REST_POS);
+        meleeModels[selectedMeleeIdx].rotation.set(0, 0, 0);
       }
       meleeAbilityBuff = null;
       updateAbilityHUD();
