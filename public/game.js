@@ -26457,14 +26457,14 @@ function applyBotDamageToPlayer(weaponId, botId) {
       }
       if (livesLeft <= 0) {
         // Out of lives — go into spectator mode for the rest of the match
-        setTimeout(() => { if (ds) ds.style.display = 'none'; enterSpectator(); }, 1500);
+        afterDeath(1500, () => { if (ds) ds.style.display = 'none'; enterSpectator(); });
       } else {
         // Hide death screen when respawn fires (handled in onEntityDied)
         setTimeout(() => { if (ds) ds.style.display = 'none'; }, 3800);
       }
     } else if (match && match.type === 'dday') {
       if (ds) { ds.style.display = 'flex'; const dm = document.getElementById('death-msg'); if (dm) dm.textContent = 'Respawning in 3s...'; }
-      setTimeout(() => {
+      afterDeath(3000, () => {
         if (!isDead) return;
         if (ds) ds.style.display = 'none';
         isDead = false;
@@ -26472,10 +26472,10 @@ function applyBotDamageToPlayer(weaponId, botId) {
         camera.position.set(-22, 1.65, 22); euler.y = 0; camera.quaternion.setFromEuler(euler);
         grantSpawnShield(3000);
         requestPointerLockSafe();
-      }, 3000);
+      });
     } else {
       if (ds) { ds.style.display = 'flex'; const dm = document.getElementById('death-msg'); if (dm) dm.textContent = 'Select your loadout...'; }
-      setTimeout(() => { if (ds) ds.style.display='none'; showLoadoutScreen('death'); }, 1500);
+      afterDeath(1500, () => { if (ds) ds.style.display='none'; showLoadoutScreen('death'); });
     }
   }
 }
@@ -26802,7 +26802,7 @@ socket.on('playerDied', data => {
     } else if (match && match.type === 'dday') {
       // D-Day: auto-respawn at bunker 0 after 3 seconds, same weapons
       document.getElementById('death-msg').textContent = 'Respawning in 3s...';
-      setTimeout(() => {
+      afterDeath(3000, () => {
         if (!match || match.over || !isDead) return;
         ds.style.display = 'none';
         isDead = false;
@@ -26812,10 +26812,10 @@ socket.on('playerDied', data => {
         socket.emit('readyRespawn', { x: camera.position.x, z: camera.position.z });
         grantSpawnShield(3000);
         requestPointerLockSafe();
-      }, 3000);
+      });
     } else if (!match || match.cfg?.type !== 'elim') {
       document.getElementById('death-msg').textContent = 'Select your loadout...';
-      setTimeout(() => { ds.style.display='none'; showLoadoutScreen('death'); }, 1500);
+      afterDeath(1500, () => { ds.style.display='none'; showLoadoutScreen('death'); });
     }
   }
   if (remoteMeshes[data.targetId]) remoteMeshes[data.targetId].visible=false;
@@ -32313,7 +32313,16 @@ function checkLoginEggs(name, pass) {
 
 // Everything a finished match (or Lobby 13) leaves behind that the next start must not
 // inherit. Shared by the mode menu and the end-of-match buttons so they can't drift apart.
+// What a death schedules — the death loadout, spectating, the D-Day respawn — runs on a timer.
+// PLAY AGAIN / CHANGE MODE / BACK TO LOBBY now leave a match without reloading the page, so a timer
+// from the old match must not fire into whatever comes next: every teardown starts a new epoch.
+let matchEpoch = 0;
+function afterDeath(ms, fn) {
+  const epoch = matchEpoch;
+  setTimeout(() => { if (epoch === matchEpoch) fn(); }, ms);
+}
 function teardownMatchWorld() {
+  matchEpoch++;
   stopKillcam();   // restores the camera; may re-show the death screen, hidden again below
   exitSpectator();
   gameStarted = false;
@@ -32327,7 +32336,10 @@ function teardownMatchWorld() {
     delete players[bot.id];
   }
   gameBots.length = 0;
-  for (const id of ['match-hud', 'match-over-screen', 'waiting-screen', 'death-screen']) {
+  // The loadout too: a match that ends on your death leaves the death loadout open behind the end
+  // screen, and it resurfaced over Lobby 13 covering every button.
+  cancelAutoRespawn();
+  for (const id of ['match-hud', 'match-over-screen', 'waiting-screen', 'death-screen', 'loadout-screen']) {
     const el = document.getElementById(id); if (el) el.style.display = 'none';
   }
   showLobbyModesButton(false);
