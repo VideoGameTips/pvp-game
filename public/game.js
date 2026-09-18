@@ -3572,6 +3572,22 @@ function playObjectSfx(ctx, out, name, t, v) {
     case 'warp':
       playTone(ctx, t, 0.5, out, 180, 900, v * 0.22, 'sine');
       playSweptNoise(ctx, t, 0.5, out, v * 0.16, 'bandpass', 3000, 400, 1.2); break;
+    case 'flicks':   // a butterfly knife's pins, clacking as the handles go round
+      for (let i = 0; i < 6; i++)
+        metalClack(ctx, t + i * 0.085 + Math.random() * 0.02, out, v * 0.35, 2200 + Math.random() * 800, 0.02);
+      break;
+    case 'ignite':   // a blade of light running out: a rising hum and a crackle
+      playTone(ctx, t, 0.35, out, 90, 180, v * 0.24, 'sawtooth');
+      playTone(ctx, t, 0.40, out, 180, 360, v * 0.14, 'sine');
+      playFilteredNoise(ctx, t, 0.20, out, v * 0.12, 'highpass', 4200, 0.6, 0.002, 1.2); break;
+    case 'whoosh':   // something spun or thrown past the ear
+      playSweptNoise(ctx, t, 0.25, out, v * 0.30, 'bandpass', 500, 2400, 1.0); break;
+    case 'rack':     // a lever worked: out, and home
+      metalClack(ctx, t, out, v * 0.80, 420, 0.060);
+      metalClack(ctx, t + 0.12, out, v * 0.90, 360, 0.070); break;
+    case 'cock':     // a hammer drawn back
+      metalClack(ctx, t, out, v * 0.60, 900, 0.040);
+      playObjectSfx(ctx, out, 'click', t + 0.03, v * 0.6); break;
     default:         playObjectSfx(ctx, out, 'click', t, v);
   }
 }
@@ -12784,6 +12800,73 @@ function buildPortalSG8() {
   g.position.set(0.12, -0.1, -0.25); return g;
 }
 
+function buildOutlawShorty() {
+  // 🤠 Shorty -> sawn-off lever action, the kind that gets spun. Brass receiver,
+  // a big loop lever, and when it is drawn it spin-cocks round that loop.
+  const g = new THREE.Group();
+  const inner = GUN_MATS.inner(), bright = GUN_MATS.bright();
+  const blued = new THREE.MeshPhongMaterial({ color: 0x2a2e36, shininess: 150, specular: 0xa0a8b8 });
+  const brass = new THREE.MeshPhongMaterial({ color: 0xc8a040, shininess: 190, specular: 0xfff0b0 });
+  const wood  = new THREE.MeshPhongMaterial({ color: 0x6a3a1a, shininess: 90, specular: 0xd8a878 });
+  gpBox(g, brass, 0.034, 0.050, 0.100, 0, 0.010, 0.010);               // receiver
+  gpBox(g, inner, 0.035, 0.010, 0.040, 0, 0.016, 0.000);               // loading gate
+  gpCyl(g, blued, 0.013, 0.013, 0.200, 14, 0, 0.022, -0.140);          // barrel
+  gpCyl(g, blued, 0.010, 0.010, 0.160, 12, 0, -0.004, -0.120);         // magazine tube
+  gpBox(g, wood, 0.036, 0.030, 0.090, 0, 0.004, -0.100);               // forend
+  gpCyl(g, blued, 0.016, 0.016, 0.010, 14, 0, 0.012, -0.200, Math.PI / 2, 0); // barrel band
+  gpCyl(g, inner, 0.0085, 0.0085, 0.006, 12, 0, 0.022, -0.241);        // muzzle
+  gpBox(g, brass, 0.004, 0.006, 0.004, 0, 0.037, -0.236);              // bead sight
+  gpBox(g, blued, 0.012, 0.018, 0.012, 0, 0.042, 0.052, -0.4);         // hammer
+  gpPlate(g, wood, [                                                    // sawn-off pistol grip
+    [0.058,-0.010],[0.086,-0.026],[0.094,-0.118],[0.066,-0.132],[0.038,-0.050],[0.034,-0.014],
+  ], 0.034, 0);
+  // The loop lever: a ring big enough to spin the gun on.
+  const loop = new THREE.Mesh(new THREE.TorusGeometry(0.026, 0.0045, 8, 20), blued);
+  loop.rotation.y = Math.PI / 2; loop.position.set(0, -0.050, 0.032); g.add(loop);
+  gpBox(g, blued, 0.008, 0.024, 0.010, 0, -0.024, 0.030);              // lever to receiver
+  gpBox(g, bright, 0.005, 0.014, 0.005, 0, -0.030, 0.020, 0.2);        // trigger inside it
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.022, -0.250); g.add(flash);
+  g._flash = flash; g._kickZ = 0.016; g._greebled = true; g._handDetailed = true;
+  g._spinPivot = new THREE.Vector3(0, -0.050, 0.032);                  // the loop
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildGunslingerRevolver() {
+  // 🌵 Snub revolver -> gunslinger. Nickel, engraved, ivory grips with a gold
+  // medallion; drawn, it twirls twice round the trigger finger.
+  const g = new THREE.Group();
+  const inner = GUN_MATS.inner();
+  const nickel = new THREE.MeshPhongMaterial({ color: 0xd8dce2, shininess: 220, specular: 0xffffff });
+  const ivory  = new THREE.MeshPhongMaterial({ color: 0xf2ead6, shininess: 120, specular: 0xffffff });
+  const gold   = new THREE.MeshPhongMaterial({ color: 0xd8aa3a, shininess: 200, specular: 0xfff0b0 });
+  const etch   = new THREE.MeshBasicMaterial({ color: 0x8a9098 });
+  gpBox(g, nickel, 0.026, 0.040, 0.080, 0, 0.012, 0.022);              // frame
+  for (let i = 0; i < 4; i++) gpBox(g, etch, 0.027, 0.002, 0.050, 0, 0.004 + i * 0.008, 0.024, 0, 0, 0.3); // scrollwork
+  gpPart(g, 'main', () => {                                            // the cylinder, five-shot
+    gpCyl(g, nickel, 0.024, 0.024, 0.040, 15, 0, 0.012, -0.012);
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2;
+      gpCyl(g, inner, 0.005, 0.005, 0.042, 8, Math.cos(a) * 0.014, 0.012 + Math.sin(a) * 0.014, -0.012);
+    }
+  }, { x: 0, y: 0.012, z: -0.012 });
+  g._parts.main._chambers = 5;
+  gpCyl(g, nickel, 0.010, 0.010, 0.060, 12, 0, 0.022, -0.062);         // barrel
+  gpCyl(g, nickel, 0.004, 0.004, 0.050, 8, 0, 0.006, -0.056);          // ejector rod
+  gpBox(g, nickel, 0.004, 0.010, 0.006, 0, 0.034, -0.088);             // front sight
+  gpBox(g, nickel, 0.010, 0.016, 0.014, 0, 0.036, 0.062, -0.4);        // hammer spur
+  gpPlate(g, ivory, [                                                   // birdshead grip
+    [0.040,-0.008],[0.070,-0.022],[0.080,-0.100],[0.052,-0.114],[0.024,-0.046],[0.020,-0.010],
+  ], 0.034, 0);
+  gpCyl(g, gold, 0.008, 0.008, 0.036, 12, 0, -0.056, 0.056, 0, Math.PI / 2); // medallion
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.016, 0.003, 6, 14, Math.PI * 1.1), nickel);
+  guard.rotation.set(0, Math.PI / 2, -0.4); guard.position.set(0, -0.024, 0.016); g.add(guard);
+  gpBox(g, gold, 0.005, 0.014, 0.005, 0, -0.018, 0.016, 0.2);          // trigger
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.022, -0.096); g.add(flash);
+  g._flash = flash; g._kickZ = 0.020; g._greebled = true; g._handDetailed = true;
+  g._spinPivot = new THREE.Vector3(0, -0.024, 0.016);                  // the trigger guard
+  g.position.set(0.1, -0.1, -0.22); return g;
+}
+
 function buildHairDryer() {
   // 💨 MP-40 -> hair dryer. Cream housing, a chrome barrel with the heating
   // element glowing inside, a cable coiling off the butt and two slider
@@ -19448,48 +19531,78 @@ function playEquipSound(name) {
   } catch (e) {}
 }
 
+var _EQ_X = new THREE.Vector3(1, 0, 0), _EQ_Z = new THREE.Vector3(0, 0, 1);
+function _eqOut(t) { return 1 - Math.pow(1 - t, 3); }
+function _eqHomeOf(c) {
+  if (!c.userData.eqHome) c.userData.eqHome = {
+    p: (c._home || c.position).clone(), q: c.quaternion.clone(), s: c.scale.clone() };
+  return c.userData.eqHome;
+}
+
 function startEquipAnim(idx) {
   finishEquip();
   try {
     const model = weaponModels[idx], w = WEAPONS[idx];
     const fx = model && w && _skinFxFor(w.id);
-    if (!fx || !fx.equip) return;
-    const pieces = _equipPieces(model);
-    if (!pieces.length) return;
-    const ctr = new THREE.Vector3();
-    pieces.forEach(c => ctr.add(c.userData.eqHome.p));
-    ctr.multiplyScalar(1 / pieces.length);
-    const R = () => Math.random() * 2 - 1;
-    const ps = pieces.map(c => {
-      const h = c.userData.eqHome;
-      const out = h.p.clone().sub(ctr);
-      if (out.lengthSq() < 1e-8) out.set(R(), R(), R());
-      out.normalize();
-      return { c, h,
-        dir: new THREE.Vector3(out.x + R() * 0.6, out.y + R() * 0.6, out.z + R() * 0.6).normalize(),
-        spin: new THREE.Vector3(R(), R(), R()).normalize(),
-        rq: new THREE.Quaternion().setFromEuler(new THREE.Euler(R() * 2.5, R() * 2.5, R() * 2.5)),
-        phase: Math.random() * 6.283, delay: Math.random() };
-    });
-    // The orderly ones need an order: paper opens back to front, bricks stack
-    // from the bottom up.
-    if (fx.equip === 'unfold') ps.sort((a, b) => b.h.p.z - a.h.p.z);
-    if (fx.equip === 'build')  ps.sort((a, b) => a.h.p.y - b.h.p.y);
-    if (fx.equip === 'unfold' || fx.equip === 'build')
-      ps.forEach((p, i) => { p.delay = i / Math.max(1, ps.length - 1); });
-    let ring = null;
-    if (fx.equip === 'warp') {
-      ring = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.008, 8, 32),
-        new THREE.MeshBasicMaterial({ color: 0x66ccff, transparent: true, opacity: 0.9 }));
-      ring.position.copy(ctr);
-      model.add(ring);
-    }
-    const glow = (model._equipGlow || []).map(m => [m, m.emissiveIntensity]);
-    _equip = { model, type: fx.equip, t0: performance.now(), dur: fx.equipMs || 900,
-               ps, ctr, ring, glow, sfx: fx.equipSfx || null };
-    playEquipSound(_equip.sfx && _equip.sfx[0]);
-    _equipStep(_equip, 0);
+    if (fx && fx.equip) _beginEquip(model, fx, false);
   } catch (e) { finishEquip(); }
+}
+// Melee skins carry their entrance on their own table entry. Only the skin
+// actually in your hand plays one -- the model has to be the skin's own.
+function startMeleeEquipAnim(idx) {
+  finishEquip();
+  try {
+    const base = MELEE_ITEMS[idx], model = meleeModels[idx];
+    const want = base && equippedMeleeModelSkins[base.id];
+    const skin = want && MELEE_MODEL_SKINS.find(s => s.id === want && s.melee === base.id);
+    if (skin && skin.equip && skin._model === model) _beginEquip(model, skin, true);
+  } catch (e) { finishEquip(); }
+}
+
+function _beginEquip(model, spec, melee) {
+  const type = spec.equip;
+  // A whole-object move acts on the one part the model names for it -- the
+  // pivot it is tossed about, the blade that ignites, the two handles of a
+  // butterfly knife. Everything else acts on every piece.
+  const targets = type === 'balisong' ? (model._bali || [])
+                : type === 'flip'     ? (model._pivot ? [model._pivot] : [])
+                : type === 'ignite'   ? (model._blade ? [model._blade] : [])
+                : _equipPieces(model);
+  if (!targets.length) return;
+  targets.forEach(_eqHomeOf);
+  const ctr = new THREE.Vector3();
+  targets.forEach(c => ctr.add(c.userData.eqHome.p));
+  ctr.multiplyScalar(1 / targets.length);
+  const R = () => Math.random() * 2 - 1;
+  const ps = targets.map((c, i) => {
+    const h = c.userData.eqHome;
+    const out = h.p.clone().sub(ctr);
+    if (out.lengthSq() < 1e-8) out.set(R(), R(), R());
+    out.normalize();
+    return { c, h, i,
+      dir: new THREE.Vector3(out.x + R() * 0.6, out.y + R() * 0.6, out.z + R() * 0.6).normalize(),
+      spin: new THREE.Vector3(R(), R(), R()).normalize(),
+      rq: new THREE.Quaternion().setFromEuler(new THREE.Euler(R() * 2.5, R() * 2.5, R() * 2.5)),
+      phase: Math.random() * 6.283, delay: Math.random() };
+  });
+  // The orderly ones need an order: paper opens back to front, bricks stack
+  // from the bottom up.
+  if (type === 'unfold') ps.sort((a, b) => b.h.p.z - a.h.p.z);
+  if (type === 'build')  ps.sort((a, b) => a.h.p.y - b.h.p.y);
+  if (type === 'unfold' || type === 'build') ps.forEach((p, i) => { p.delay = i / Math.max(1, ps.length - 1); });
+  let ring = null;
+  if (type === 'warp') {
+    ring = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.008, 8, 32),
+      new THREE.MeshBasicMaterial({ color: 0x66ccff, transparent: true, opacity: 0.9 }));
+    ring.position.copy(ctr);
+    model.add(ring);
+  }
+  const glow = (model._equipGlow || []).map(m => [m, m.emissiveIntensity]);
+  _equip = { model, melee, type, t0: performance.now(), dur: spec.equipMs || 900,
+             ps, ctr, ring, glow, sfx: spec.equipSfx || null,
+             turns: spec.spinTurns || 1, pivot: (model._spinPivot || ctr).clone() };
+  playEquipSound(_equip.sfx && _equip.sfx[0]);
+  _equipStep(_equip, 0);
 }
 
 function finishEquip() {
@@ -19506,10 +19619,12 @@ function finishEquip() {
 function updateEquipAnim() {
   const e = _equip;
   if (!e) return;
-  // Something to look at, never something in the way.
-  if (!e.model.visible || e.model !== weaponModels[currentWeaponIdx] || shooting || reloading || isADS) {
-    finishEquip(); return;
-  }
+  // Something to look at, never something in the way: a gun is finished the
+  // moment you shoot, reload or aim; a blade the moment you swing it.
+  const gone = e.melee
+    ? (!e.model.visible || activeSlot !== 'melee' || e.model !== meleeModels[selectedMeleeIdx] || meleeSwingT < 1)
+    : (!e.model.visible || e.model !== weaponModels[currentWeaponIdx] || shooting || reloading || isADS);
+  if (gone) { finishEquip(); return; }
   const t = (performance.now() - e.t0) / e.dur;
   if (t >= 1) { playEquipSound(e.sfx && e.sfx[1]); finishEquip(); return; }
   _equipStep(e, t);
@@ -19522,9 +19637,9 @@ function _equipStep(e, t) {
     c.visible = true;
     switch (e.type) {
       case 'assemble': {
-        // Drift, then fuse: every shard hangs in space around where the gun will
-        // be, turning slowly, then they come in one after another and lock.
-        const far = h.p.clone().addScaledVector(p.dir, 0.13 + p.delay * 0.10);
+        // Drift, then fuse: every shard hangs in space around where the weapon
+        // will be, turning slowly, then they come in one after another and lock.
+        const far = h.p.clone().addScaledVector(p.dir, (e.melee ? 0.08 : 0.13) + p.delay * (e.melee ? 0.07 : 0.10));
         far.y += Math.sin(now * 3 + p.phase) * 0.008;
         const k = _eqEase(_eqClamp((t - 0.30 - p.delay * 0.35) / 0.35));
         c.position.copy(far).lerp(h.p, k);
@@ -19536,8 +19651,7 @@ function _equipStep(e, t) {
         // Folded flat, then opened out a panel at a time, back to front.
         const k = _eqEase(_eqClamp((t - p.delay * 0.6) / 0.4));
         c.position.copy(h.p);
-        c.quaternion.copy(h.q).multiply(
-          new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), (1 - k) * Math.PI * 0.5));
+        c.quaternion.copy(h.q).multiply(new THREE.Quaternion().setFromAxisAngle(_EQ_X, (1 - k) * Math.PI * 0.5));
         c.scale.set(h.s.x, h.s.y * Math.max(0.02, k), h.s.z);
         break; }
       case 'build': {
@@ -19560,9 +19674,47 @@ function _equipStep(e, t) {
         // outward with a twist while the ring spins down behind it.
         const k = _eqEase(_eqClamp((t - 0.15 - p.delay * 0.2) / 0.55));
         c.position.copy(e.ctr).lerp(h.p, k);
-        c.quaternion.copy(h.q).premultiply(
-          new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), (1 - k) * 3.0));
+        c.quaternion.copy(h.q).premultiply(new THREE.Quaternion().setFromAxisAngle(_EQ_Z, (1 - k) * 3.0));
         c.scale.copy(h.s).multiplyScalar(Math.max(0.001, k));
+        break; }
+      case 'flip': {
+        // Tossed up out of the hand, two turns end over end, and caught. Two
+        // whole turns so it lands the right way round.
+        const k = _eqOut(t), arc = Math.sin(Math.PI * t);
+        c.position.copy(h.p);
+        c.position.y += arc * 0.11;
+        c.position.z -= arc * 0.03;
+        c.quaternion.copy(h.q).multiply(new THREE.Quaternion().setFromAxisAngle(_EQ_X, -k * Math.PI * 4));
+        c.scale.copy(h.s);
+        break; }
+      case 'balisong': {
+        // The two handles flip round the blade on their pins, the second
+        // chasing the first the other way, until they close behind it as the
+        // grip. Each ends a whole number of turns round, which is open.
+        const lag = p.i ? 0.14 : 0;
+        const k = _eqOut(_eqClamp((t - lag) / (1 - lag)));
+        const ang = (1 - k) * Math.PI + k * Math.PI * 4 * (p.i ? -1 : 1);
+        c.position.copy(h.p);
+        c.quaternion.copy(h.q).multiply(new THREE.Quaternion().setFromAxisAngle(_EQ_X, ang));
+        c.scale.copy(h.s);
+        break; }
+      case 'ignite': {
+        // The blade runs out of the hilt, overshoots a hair, settles, and
+        // then hums -- a flicker in its width.
+        const k = _eqClamp(t / 0.55);
+        c.visible = k > 0;
+        c.position.copy(h.p); c.quaternion.copy(h.q);
+        c.scale.set(h.s.x * (t > 0.55 ? 1 + Math.sin(now * 90) * 0.05 : 1), h.s.y,
+                    h.s.z * Math.max(0.01, _eqBack(k)));
+        break; }
+      case 'spin': {
+        // A spin-cock or a gunslinger's twirl: the gun turns about the point
+        // the finger holds -- the lever loop, the trigger guard -- while the
+        // hands stay exactly where they are.
+        const q = new THREE.Quaternion().setFromAxisAngle(_EQ_X, -_eqOut(t) * Math.PI * 2 * e.turns);
+        c.position.copy(h.p).sub(e.pivot).applyQuaternion(q).add(e.pivot);
+        c.quaternion.copy(q).multiply(h.q);
+        c.scale.copy(h.s);
         break; }
     }
   }
@@ -19770,8 +19922,10 @@ function equipActiveSlot() {
     ammo = weaponAmmo[selectedSecondaryIdx].ammo;
     reserve = weaponAmmo[selectedSecondaryIdx].reserve;
   } else if (activeSlot === 'melee') {
-    if (selectedMeleeIdx !== null && selectedMeleeIdx >= 0)
+    if (selectedMeleeIdx !== null && selectedMeleeIdx >= 0) {
       meleeModels[selectedMeleeIdx].visible = true;
+      startMeleeEquipAnim(selectedMeleeIdx);
+    }
   } else if (activeSlot === 'support') {
     if (selectedSupportIdx !== null && selectedSupportIdx >= 0)
       supportModels[selectedSupportIdx].visible = true;
@@ -22682,6 +22836,12 @@ const MODEL_SKINS = [
   { id: 'sg8_portal', weapon: 'sg8', name: 'Portal SG8', rarity: 'rare',
     sw: ['#1c2230', '#ff8a22'], build: buildPortalSG8,
     blurb: 'Steps out of a portal of its own when you draw it.' },
+  { id: 'shorty_outlaw', weapon: 'shorty', name: 'Outlaw Shorty', rarity: 'rare',
+    sw: ['#c8a040', '#6a3a1a'], build: buildOutlawShorty,
+    blurb: 'Sawn-off lever action. Drawn, it spin-cocks round the loop.' },
+  { id: 'snub_gunslinger', weapon: 'snub_revolver', name: 'Gunslinger', rarity: 'rare',
+    sw: ['#d8dce2', '#f2ead6'], build: buildGunslingerRevolver,
+    blurb: 'Nickel and ivory. Drawn, it twirls twice round the trigger finger.' },
 ];
 const MODEL_SKINS_BY_WEAPON = {};
 for (const ms of MODEL_SKINS) (MODEL_SKINS_BY_WEAPON[ms.weapon] ||= []).push(ms);
@@ -23835,6 +23995,158 @@ function buildChargerCable() {
   g.position.set(0.10, -0.12, -0.20); return g;
 }
 
+// ── ✨ Melee skins that make an entrance ─────────────────────────────────────
+// The swing code owns a melee model's own transform and rewrites it every
+// frame, so a whole-object entrance -- a toss, a flip -- has to happen one
+// level down, on a pivot group. The pivot sits where the object would really
+// turn: the middle of an axe, the pin of a butterfly knife.
+function _mPivot(g, x, y, z) {
+  const P = new THREE.Group(); P.position.set(x, y, z); g.add(P); g._pivot = P; return P;
+}
+function _eqCrystalMats() {
+  return [
+    new THREE.MeshPhongMaterial({ color: 0x8ae8ff, emissive: 0x1a5a7a, emissiveIntensity: 0.6,
+      shininess: 220, specular: 0xffffff, transparent: true, opacity: 0.78 }),
+    new THREE.MeshPhongMaterial({ color: 0x9a6aff, emissive: 0x3a1a8a, emissiveIntensity: 0.6,
+      shininess: 220, specular: 0xffffff, transparent: true, opacity: 0.82 }),
+  ];
+}
+
+function buildHyperspaceKnife() {
+  // 🌌 Knife -> Hyperspace Knife. The AK's crystal, in a blade: every shard is
+  // a piece of its own, so drawn, they hang in the air and then fuse.
+  const g = new THREE.Group();
+  const [ice, deep] = _eqCrystalMats();
+  const core = new THREE.MeshBasicMaterial({ color: 0xeafcff });
+  const OCT = new THREE.OctahedronGeometry(0.5, 0);
+  const O = [0, 0.030, -0.070];                // lifted and pushed out into the frame
+  const shard = (mat, w, h, d, x, y, z, rx = 0) => {
+    const m = new THREE.Mesh(OCT, mat);
+    m.scale.set(w, h, d); m.position.set(x + O[0], y + O[1], z + O[2]); m.rotation.x = rx;
+    g.add(m); return m;
+  };
+  [[0.036, -0.020], [0.030, -0.060], [0.024, -0.100], [0.016, -0.140]].forEach(([h, z]) =>
+    shard(ice, 0.010, h, 0.060, 0, 0, z));                                // the blade, tapering
+  shard(ice, 0.006, 0.012, 0.042, 0, 0.002, -0.176);                    // the point
+  const seam = new THREE.Mesh(new THREE.BoxGeometry(0.002, 0.004, 0.160), core);
+  seam.position.set(O[0], O[1], -0.080 + O[2]); g.add(seam);            // the light down its spine
+  shard(deep, 0.052, 0.014, 0.016, 0, 0, 0.030);                        // guard
+  for (let i = 0; i < 3; i++) shard(ice, 0.018, 0.032, 0.042, 0, -0.002, 0.062 + i * 0.034, (i % 2) * 0.4);
+  shard(deep, 0.026, 0.026, 0.026, 0, -0.002, 0.164);                   // pommel
+  g._equipGlow = [ice, deep];
+  g._greebled = true; g._handDetailed = true;
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+
+function buildButterflyKnife() {
+  // 🦋 Knife -> butterfly knife. Two handles on pins either side of the blade;
+  // drawn, they flip round it, one chasing the other, and close as the grip.
+  const g = new THREE.Group();
+  const steel = new THREE.MeshPhongMaterial({ color: 0xc8d0d8, shininess: 220, specular: 0xffffff });
+  const edge  = new THREE.MeshPhongMaterial({ color: 0xf0f4f8, shininess: 240, specular: 0xffffff });
+  const hand  = new THREE.MeshPhongMaterial({ color: 0x2a2f3a, shininess: 120, specular: 0x8a9ab8 });
+  const cut   = new THREE.MeshBasicMaterial({ color: 0x0c0e12 });
+  const gold  = new THREE.MeshPhongMaterial({ color: 0xd8aa3a, shininess: 190, specular: 0xfff0b0 });
+  const P = _mPivot(g, 0, 0.030, -0.030);      // the pin
+  const blade = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.022, 0.110), steel);
+  blade.position.set(0, 0, -0.060); P.add(blade);
+  const bevel = new THREE.Mesh(new THREE.BoxGeometry(0.0045, 0.006, 0.100), edge);
+  bevel.position.set(0, -0.008, -0.062); P.add(bevel);
+  const tip = new THREE.Mesh(new THREE.CylinderGeometry(0, 0.011, 0.032, 3), steel);
+  tip.rotation.x = -Math.PI / 2; tip.position.set(0, 0.000, -0.131); P.add(tip);
+  const pin = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.024, 8), gold);
+  pin.rotation.z = Math.PI / 2; P.add(pin);
+  const handle = (x, latch) => {
+    const H = new THREE.Group(); H.position.set(x, 0, 0); P.add(H);
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.018, 0.124), hand);
+    bar.position.set(0, 0, 0.064); H.add(bar);
+    for (let i = 0; i < 3; i++) {                     // skeletonised cut-outs
+      const c = new THREE.Mesh(new THREE.BoxGeometry(0.0065, 0.008, 0.020), cut);
+      c.position.set(0, 0, 0.034 + i * 0.030); H.add(c);
+    }
+    const capM = new THREE.Mesh(new THREE.BoxGeometry(0.007, 0.020, 0.008), gold);
+    capM.position.set(0, 0, 0.126); H.add(capM);
+    if (latch) {
+      const l = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.006, 0.024), gold);
+      l.position.set(-0.004, -0.010, 0.120); l.rotation.x = 0.3; H.add(l);
+    }
+    return H;
+  };
+  g._bali = [handle(0.006, false), handle(-0.006, true)];
+  g._greebled = true; g._handDetailed = true;
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+
+function buildLaserKatana() {
+  // ⚔️ Katana -> laser katana. A wrapped hilt and a glowing tsuba; drawn, the
+  // blade runs out of the hilt, overshoots a hair, and hums.
+  const g = new THREE.Group();
+  const wrapM = new THREE.MeshPhongMaterial({ color: 0x16181e, shininess: 40, specular: 0x4a5058 });
+  const silver= new THREE.MeshPhongMaterial({ color: 0xc8ced6, shininess: 200, specular: 0xffffff });
+  const tsubaM= new THREE.MeshPhongMaterial({ color: 0x2a2e36, shininess: 150, specular: 0xa0a8b8 });
+  const neon  = new THREE.MeshBasicMaterial({ color: 0xff3ac8 });
+  const coreM = new THREE.MeshBasicMaterial({ color: 0xfff2fc });
+  const glowM = new THREE.MeshBasicMaterial({ color: 0xff3ac8, transparent: true, opacity: 0.45 });
+  const P = _mPivot(g, 0, 0.022, -0.020);
+  const hilt = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.150, 12), wrapM);
+  hilt.rotation.x = Math.PI / 2; hilt.position.set(0, 0, 0.078); P.add(hilt);
+  for (let i = 0; i < 6; i++) {                         // the diamond wrap
+    const d = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.006, 0.010), silver);
+    d.position.set(0, 0, 0.020 + i * 0.022); d.rotation.z = 0.785; P.add(d);
+  }
+  const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.013, 0.014, 12), silver);
+  cap.rotation.x = Math.PI / 2; cap.position.set(0, 0, 0.158); P.add(cap);
+  const tsuba = new THREE.Mesh(new THREE.CylinderGeometry(0.030, 0.030, 0.008, 20), tsubaM);
+  tsuba.rotation.x = Math.PI / 2; P.add(tsuba);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.024, 0.0025, 6, 24), neon);
+  ring.position.z = -0.005; P.add(ring);
+  const habaki = new THREE.Mesh(new THREE.BoxGeometry(0.010, 0.022, 0.014), silver);
+  habaki.position.z = -0.011; P.add(habaki);
+  // The blade grows along -Z from the guard, so its group sits AT the guard.
+  const B = new THREE.Group(); B.position.set(0, 0, -0.016); P.add(B);
+  const core = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.016, 0.300), coreM);
+  core.position.z = -0.150; B.add(core);
+  const glow = new THREE.Mesh(new THREE.BoxGeometry(0.011, 0.028, 0.306), glowM);
+  glow.position.z = -0.152; B.add(glow);
+  g._blade = B;
+  g._greebled = true; g._handDetailed = true;
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+
+function buildFrostAxe() {
+  // 🪓 Combat axe -> frost axe. A haft with an ice blade on it; drawn, it is
+  // tossed up, turns end over end twice, and is caught.
+  const g = new THREE.Group();
+  const [ice, deep] = _eqCrystalMats();
+  const wood  = new THREE.MeshPhongMaterial({ color: 0x3a2818, shininess: 60, specular: 0x6a5040 });
+  const wrap  = new THREE.MeshPhongMaterial({ color: 0x1c1e22, shininess: 30, specular: 0x4a5058 });
+  const rime  = new THREE.MeshPhongMaterial({ color: 0xf2faff, shininess: 200, specular: 0xffffff });
+  const OCT = new THREE.OctahedronGeometry(0.5, 0);
+  // The pivot is near the head: an axe's weight is at the business end, and
+  // that is what it turns about when it is thrown.
+  const P = _mPivot(g, 0, 0.025, -0.090);
+  const haft = new THREE.Mesh(new THREE.CylinderGeometry(0.010, 0.012, 0.300, 10), wood);
+  haft.rotation.x = Math.PI / 2; haft.position.set(0, 0, 0.100); P.add(haft);
+  const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.0135, 0.0135, 0.080, 10), wrap);
+  grip.rotation.x = Math.PI / 2; grip.position.set(0, 0, 0.200); P.add(grip);
+  const blade = new THREE.Mesh(OCT, ice);
+  blade.scale.set(0.012, 0.110, 0.074); blade.position.set(0, -0.026, -0.036); P.add(blade);
+  const beard = new THREE.Mesh(OCT, deep);
+  beard.scale.set(0.010, 0.050, 0.040); beard.position.set(0, -0.070, -0.020); P.add(beard);
+  const spike = new THREE.Mesh(new THREE.ConeGeometry(0.010, 0.040, 6), deep);
+  spike.position.set(0, 0.034, -0.036); P.add(spike);
+  const socket = new THREE.Mesh(new THREE.BoxGeometry(0.020, 0.030, 0.026), wrap);
+  socket.position.set(0, 0, -0.036); P.add(socket);
+  for (let i = 0; i < 4; i++) {                        // frost creeping down the haft
+    const r = new THREE.Mesh(OCT, rime);
+    r.scale.set(0.012, 0.012, 0.016);
+    r.position.set((i % 2 ? 1 : -1) * 0.008, 0.004, -0.008 + i * 0.020); P.add(r);
+  }
+  g._equipGlow = [ice, deep];
+  g._greebled = true; g._handDetailed = true;
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+
 const MELEE_MODEL_SKINS = [
   { id: 'knife_floss', melee: 'knife', name: 'Dental Floss', rarity: 'good',
     sw: ['#f2f4f6', '#3ab2c8'], build: buildDentalFloss,
@@ -23926,6 +24238,23 @@ const MELEE_MODEL_SKINS = [
   { id: 'garrote_charger_cable', melee: 'garrote', name: 'Phone Charger', rarity: 'rare',
     sw: ['#f0f0ee', '#c8a23a'], build: buildChargerCable,
     blurb: 'Silent, and it was in your bag anyway. Already frayed.' },
+  // ✨ They make an entrance: `equip` is the animation played when drawn.
+  { id: 'knife_hyperspace', melee: 'knife', name: 'Hyperspace Knife', rarity: 'rare',
+    sw: ['#8ae8ff', '#9a6aff'], build: buildHyperspaceKnife,
+    blurb: 'The AK\'s crystal, as a blade. Shards hang in the air, then fuse.',
+    equip: 'assemble', equipMs: 900, equipSfx: ['crystal', 'chime'] },
+  { id: 'knife_butterfly', melee: 'knife', name: 'Butterfly Knife', rarity: 'rare',
+    sw: ['#2a2f3a', '#d8aa3a'], build: buildButterflyKnife,
+    blurb: 'Drawn, the handles flip round the blade and close as the grip.',
+    equip: 'balisong', equipMs: 950, equipSfx: ['flicks', 'snapin'] },
+  { id: 'katana_laser', melee: 'katana', name: 'Laser Katana', rarity: 'rare',
+    sw: ['#16181e', '#ff3ac8'], build: buildLaserKatana,
+    blurb: 'Drawn, the blade runs out of the hilt and hums.',
+    equip: 'ignite', equipMs: 700, equipSfx: ['ignite', 'hum'] },
+  { id: 'combat_axe_frost', melee: 'combat_axe', name: 'Frost Axe', rarity: 'rare',
+    sw: ['#8ae8ff', '#3a2818'], build: buildFrostAxe,
+    blurb: 'Drawn, it is tossed up, turns end over end twice, and caught.',
+    equip: 'flip', equipMs: 900, equipSfx: ['whoosh', 'clink'] },
 ];
 const MELEE_MODEL_SKINS_BY_BASE = {};
 for (const ms of MELEE_MODEL_SKINS) (MELEE_MODEL_SKINS_BY_BASE[ms.melee] ||= []).push(ms);
@@ -23972,6 +24301,8 @@ function setMeleeModelSkin(baseId, skinId) {
   else delete equippedMeleeModelSkins[baseId];
   try { localStorage.setItem('pvp_melee_model_skins', JSON.stringify(equippedMeleeModelSkins)); } catch (e) {}
   applyMeleeModelSkin(baseId);
+  // Holding that melee right now? Then it makes its entrance straight away.
+  if (activeSlot === 'melee' && MELEE_ITEMS[selectedMeleeIdx]?.id === baseId) startMeleeEquipAnim(selectedMeleeIdx);
   updateAmmoHUD();
   updateWeaponSelector();
 }
@@ -25307,6 +25638,12 @@ const SKIN_FX = {
     equip: 'pixelate', equipMs: 800, equipSfx: ['blip', null] },
   sg8_portal: { sound: _fxS('warp', .34, .20, 160, 900),
     equip: 'warp', equipMs: 900, equipSfx: ['warp', 'chime'] },
+  // Real guns, so the gun's own reload; the entrance is a spin round the point
+  // the finger holds.
+  shorty_outlaw: { sound: _fxS('boom', .60, .22, 0, 0, { action:'rifle', tail:.65 }),
+    equip: 'spin', equipMs: 750, spinTurns: 1, equipSfx: ['whoosh', 'rack'] },
+  snub_gunslinger: { sound: _fxS('heavy', .42, .14, 0, 0, { action:'revolver', tail:.70 }),
+    equip: 'spin', equipMs: 900, spinTurns: 2, equipSfx: ['whoosh', 'cock'] },
 };
 
 function _reloadPose(track, t) {
@@ -25570,7 +25907,205 @@ function dropBody(id) {
     mesh._drop = null;
     mesh.rotation.x = from;
     if (players[id]?.dead !== false) mesh.visible = false;   // still dead (or gone): now it can disappear
-  }, 750);
+  }, 1600);
+}
+
+const FINISHERS = [
+  { id: 'launch',    name: 'Launch Finish',     color: 0x66ccff, title: 'LAUNCHED' },
+  { id: 'spin',      name: 'Spinout Finish',    color: 0xffdd55, title: 'SPUN OUT' },
+  { id: 'shatter',   name: 'Shatter Finish',    color: 0x9fe8ff, title: 'SHATTERED' },
+  { id: 'confetti',  name: 'Confetti Finish',   color: 0xff66cc, title: 'PARTY FINISH' },
+  { id: 'lightning', name: 'Lightning Finish',  color: 0x88ddff, title: 'ZAPPED' },
+  { id: 'collapse',  name: 'Collapse Finish',   color: 0xaa66ff, title: 'COLLAPSED' },
+  { id: 'raincloud', name: 'Raincloud Finish',  color: 0x8aa0b8, title: 'CLOUD PUNISHED' },
+];
+let _lastFinisher = { id: null, t: 0 };
+function _disposeFinisherObject(o) {
+  if (!o) return;
+  if (o.geometry) o.geometry.dispose();
+  if (o.material) {
+    if (Array.isArray(o.material)) o.material.forEach(m => m && m.dispose && m.dispose());
+    else o.material.dispose();
+  }
+}
+function _spawnFinisherSpark(pos, color, opts = {}) {
+  const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: opts.opacity ?? 0.9 });
+  const m = new THREE.Mesh(new THREE.SphereGeometry(opts.size || 0.07, 5, 4), mat);
+  m.position.copy(pos);
+  scene.add(m);
+  const vel = opts.vel || new THREE.Vector3((Math.random() - 0.5) * 6, 2 + Math.random() * 5, (Math.random() - 0.5) * 6);
+  const born = performance.now(), life = opts.life || 620;
+  const tick = () => {
+    const t = (performance.now() - born) / life;
+    if (t >= 1) { scene.remove(m); _disposeFinisherObject(m); return; }
+    m.position.addScaledVector(vel, 0.016);
+    vel.y -= 8 * 0.016;
+    mat.opacity = (opts.opacity ?? 0.9) * (1 - t);
+    m.scale.setScalar(1 + t * 0.8);
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+function _spawnFinisherRing(pos, color, radius = 1.9) {
+  const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.72, depthWrite: false });
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.018, 8, 42), mat);
+  ring.position.copy(pos).setY(pos.y + 0.08);
+  ring.rotation.x = Math.PI / 2;
+  scene.add(ring);
+  const born = performance.now(), life = 520;
+  const tick = () => {
+    const t = (performance.now() - born) / life;
+    if (t >= 1) { scene.remove(ring); _disposeFinisherObject(ring); return; }
+    ring.scale.setScalar(1 + t * radius);
+    mat.opacity = 0.72 * (1 - t);
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+function _spawnFinisherBeam(from, to, color) {
+  const dir = to.clone().sub(from);
+  const len = Math.max(0.1, dir.length());
+  const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85 });
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, len, 8), mat);
+  beam.position.copy(from).add(to).multiplyScalar(0.5);
+  beam.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
+  scene.add(beam);
+  setTimeout(() => { scene.remove(beam); _disposeFinisherObject(beam); }, 140);
+}
+function _spawnRaincloudFinisher(mesh, pos) {
+  const cloud = new THREE.Group();
+  const mat = new THREE.MeshLambertMaterial({ color: 0x5f6875, transparent: true, opacity: 0.92 });
+  [[0,0,0],[-0.28,0.02,0.04],[0.28,0.03,0.02],[-0.10,0.12,-0.06],[0.14,0.11,-0.05]].forEach(([x,y,z], i) => {
+    const puff = new THREE.Mesh(new THREE.SphereGeometry(0.24 - i * 0.015, 10, 8), mat);
+    puff.position.set(x, y, z); cloud.add(puff);
+  });
+  cloud.position.copy(pos).add(new THREE.Vector3(0, 1.65, 0));
+  scene.add(cloud);
+  const junk = [
+    { c: 0x777777, s: 0.10, name: 'rock' },
+    { c: 0xffdd55, s: 0.08, name: 'donut' },
+    { c: 0x55ddff, s: 0.075, name: 'ice' },
+    { c: 0xff6655, s: 0.085, name: 'tomato' },
+  ];
+  const born = performance.now(), life = 1350;
+  const drops = [];
+  const spawnDrop = () => {
+    const j = junk[Math.floor(Math.random() * junk.length)];
+    const m = new THREE.Mesh(
+      j.name === 'rock' ? new THREE.DodecahedronGeometry(j.s) : new THREE.SphereGeometry(j.s, 7, 6),
+      new THREE.MeshLambertMaterial({ color: j.c }));
+    m.position.copy(cloud.position).add(new THREE.Vector3((Math.random() - 0.5) * 0.9, -0.18, (Math.random() - 0.5) * 0.9));
+    scene.add(m);
+    drops.push({ m, vy: -0.02 - Math.random() * 0.03, spin: (Math.random() - 0.5) * 0.35 });
+  };
+  const tick = () => {
+    const t = (performance.now() - born) / life;
+    if (t >= 1 || !mesh.visible) {
+      scene.remove(cloud); cloud.traverse(_disposeFinisherObject);
+      drops.forEach(d => { scene.remove(d.m); _disposeFinisherObject(d.m); });
+      return;
+    }
+    cloud.position.x = pos.x + Math.sin(t * Math.PI * 5) * 0.18;
+    cloud.position.z = pos.z + Math.cos(t * Math.PI * 4) * 0.12;
+    if (Math.random() < 0.55) spawnDrop();
+    for (let i = drops.length - 1; i >= 0; i--) {
+      const d = drops[i];
+      d.vy -= 0.006;
+      d.m.position.y += d.vy;
+      d.m.rotation.x += d.spin;
+      d.m.rotation.z -= d.spin * 0.7;
+      if (d.m.position.y <= mesh.position.y + 0.35) {
+        _spawnFinisherSpark(d.m.position, d.m.material.color.getHex(), { size: 0.035, life: 260, vel: new THREE.Vector3((Math.random()-0.5)*2, 1.2, (Math.random()-0.5)*2) });
+        mesh.rotation.z += 0.05;
+        scene.remove(d.m); _disposeFinisherObject(d.m); drops.splice(i, 1);
+      }
+    }
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+  playSoundEvent('air_drop', { position: pos, volume: 0.75, minGap: 80 });
+}
+function _pickFinisher(weaponId) {
+  const kind = projectileKind(weaponId, WEAPONS.find(w => w.id === weaponId));
+  const id = String(weaponId || '');
+  if (kind === 'ice' || FROST_WEAPONS.has(id)) return FINISHERS.find(f => f.id === 'shatter');
+  if (kind === 'energy' || ELECTRIC_WEAPONS.has(id)) return FINISHERS.find(f => f.id === 'lightning');
+  if (/black|void|gravity|event_horizon|magnetar|quantum/.test(id)) return FINISHERS.find(f => f.id === 'collapse');
+  if (/confetti|paintball|sticker|firework/.test(id)) return FINISHERS.find(f => f.id === 'confetti');
+  if (/melee|knife|katana|sabre|axe|blade|chainsaw|fists|bat|sledge|hammer/.test(id)) return FINISHERS.find(f => f.id === 'spin');
+  return FINISHERS[Math.floor(Math.random() * FINISHERS.length)];
+}
+function triggerFinisher(targetId, weaponId) {
+  const now = performance.now();
+  if (_lastFinisher.id === targetId && now - _lastFinisher.t < 1400) return;
+  _lastFinisher = { id: targetId, t: now };
+  const mesh = remoteMeshes[targetId];
+  if (!mesh || !mesh.visible) return;
+  const fin = _pickFinisher(weaponId || currentEquippedId());
+  const color = fin.color || 0xffffff;
+  const pos = mesh.position.clone().add(new THREE.Vector3(0, 1.05, 0));
+  _spawnFinisherRing(pos.clone().setY(mesh.position.y), color, fin.id === 'collapse' ? 2.8 : 1.9);
+  for (let i = 0; i < (fin.id === 'confetti' ? 24 : 12); i++) {
+    const c = fin.id === 'confetti' ? [0xff4477, 0xffdd55, 0x55ddff, 0x88ff66][i % 4] : color;
+    _spawnFinisherSpark(pos, c, {
+      size: fin.id === 'shatter' ? 0.045 : 0.06,
+      vel: new THREE.Vector3((Math.random() - 0.5) * 7, 2 + Math.random() * 6, (Math.random() - 0.5) * 7),
+      life: 520 + Math.random() * 360,
+    });
+  }
+  if (fin.id === 'launch') {
+    const start = mesh.position.clone(), born = performance.now();
+    const side = new THREE.Vector3(Math.random() < 0.5 ? -1 : 1, 0, (Math.random() - 0.5) * 0.8).normalize();
+    const distance = 3.0 + Math.random() * 2.0;
+    const tick = () => {
+      const t = Math.min(1, (performance.now() - born) / 720);
+      mesh.position.copy(start)
+        .addScaledVector(side, distance * t)
+        .add(new THREE.Vector3(0, Math.sin(t * Math.PI) * 2.4 + t * 0.5, 0));
+      mesh.rotation.x += 0.20;
+      mesh.rotation.z += 0.24;
+      if (t < 1 && mesh.visible) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+    playSoundEvent('air_launch', { position: pos, volume: 0.9, minGap: 80 });
+  } else if (fin.id === 'spin') {
+    const born = performance.now();
+    const tick = () => {
+      const t = Math.min(1, (performance.now() - born) / 560);
+      mesh.rotation.y += 0.45 * (1 - t);
+      mesh.rotation.z += 0.16 * (1 - t);
+      if (t < 1 && mesh.visible) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+    playSoundEvent('spin_revup', { position: pos, volume: 0.9, minGap: 80 });
+  } else if (fin.id === 'shatter') {
+    flashScreen('rgba(160,230,255,0.16)', 180);
+    playSoundEvent('freeze_shatter', { position: pos, volume: 0.9, minGap: 80 });
+  } else if (fin.id === 'confetti') {
+    spawnSplatBombFX(pos.clone().setY(mesh.position.y + 0.2));
+    playSoundEvent('confetti_blast', { position: pos, volume: 0.9, minGap: 80 });
+  } else if (fin.id === 'lightning') {
+    for (let i = 0; i < 3; i++) {
+      const from = pos.clone().add(new THREE.Vector3((Math.random() - 0.5) * 1.2, 1.4 + Math.random() * 0.8, (Math.random() - 0.5) * 1.2));
+      _spawnFinisherBeam(from, pos.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.35, 0, (Math.random() - 0.5) * 0.35)), color);
+    }
+    playSoundEvent('emp_zap', { position: pos, volume: 0.95, minGap: 80 });
+  } else if (fin.id === 'collapse') {
+    const born = performance.now(), startScale = mesh.scale.clone();
+    const tick = () => {
+      const t = Math.min(1, (performance.now() - born) / 620);
+      const s = Math.max(0.16, 1 - t * 0.72);
+      mesh.scale.set(startScale.x * s, startScale.y * s, startScale.z * s);
+      mesh.rotation.y += 0.28;
+      if (t < 1 && mesh.visible) requestAnimationFrame(tick);
+      else mesh.scale.copy(startScale);
+    };
+    requestAnimationFrame(tick);
+    playSoundEvent('blackhole_collapse', { position: pos, volume: 0.85, minGap: 80 });
+  } else if (fin.id === 'raincloud') {
+    _spawnRaincloudFinisher(mesh, pos);
+  }
+  pushFeedLine(fin.title, players[targetId]?.name || 'Enemy', '#' + color.toString(16).padStart(6, '0'));
 }
 // One line under the crosshair: LOW AMMO / RELOAD / OUT OF AMMO. RELOADING... takes the same spot.
 function updateAmmoHint() {
@@ -25803,6 +26338,7 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false) {
       if (bot.hp <= 0) {
         bot.dead = true;
         if (players[pid]) players[pid].dead = true;
+        triggerFinisher(pid, currentEquippedId());
         dropBody(pid);   // tips over, then hides (#34)
         myKills++;
         creditWeaponKill(currentEquippedId());
@@ -28309,6 +28845,7 @@ socket.on('playerHit', data => {
     if (hitBot.hp <= 0) {
       hitBot.dead = true;
       if (players[data.targetId]) players[data.targetId].dead = true;
+      triggerFinisher(data.targetId, currentEquippedId());
       dropBody(data.targetId);   // tips over, then hides (#34)
       myKills++;
       creditWeaponKill(currentEquippedId());
@@ -28391,7 +28928,10 @@ socket.on('playerDied', data => {
       afterDeath(1500, () => { ds.style.display='none'; showLoadoutScreen('death'); });
     }
   }
-  if (remoteMeshes[data.targetId]) dropBody(data.targetId);   // falls, then hides (#34)
+  if (remoteMeshes[data.targetId]) {
+    if (data.killerId === myId && data.targetId !== myId) triggerFinisher(data.targetId, currentEquippedId());
+    dropBody(data.targetId);   // falls, then hides (#34)
+  }
   const bot = resolveBot(data.targetId);
   if (bot) { bot.dead = true; bot.hp = 0; }
   if (players[data.targetId]) players[data.targetId].dead = true;
