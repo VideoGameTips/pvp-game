@@ -2347,7 +2347,7 @@ function pickCommsLine(idx) {
   if (!line) return;
   closeCommsMenu();
   // Show in chat feed
-  pushChatLine(`You: ${line.emoji} ${line.txt}`, line.color);
+  pushChatLine(`${I18N.exact('You')}: ${line.emoji} ${I18N.exact(line.txt)}`, line.color);
   // Show speech bubble over the player's own mesh (other players will see this; locally we still get the feed)
   socket.emit('chatLine', { text: line.txt, color: line.color, emoji: line.emoji });
   // Have nearby ally bots react with a follow-up thought
@@ -25366,7 +25366,7 @@ function updateVehiclePrompt() {
       document.body.appendChild(prompt);
     }
     const icon = near.type === 'heli' ? '🚁' : '🚙';
-    prompt.innerHTML = `${icon} Press <b>F</b> to pilot ${near.type === 'heli' ? 'helicopter' : 'jeep'} · HP ${near.hp}/${near.maxHp}`;
+    prompt.textContent = `${icon} Press F to pilot ${near.type === 'heli' ? 'helicopter' : 'jeep'} · HP ${near.hp}/${near.maxHp}`;
     prompt.style.display = 'block';
   } else if (prompt) prompt.style.display = 'none';
 }
@@ -25452,7 +25452,7 @@ function updateMortarPrompt() {
         + 'background:rgba(0,0,0,0.7);padding:8px 18px;border:2px solid #ffcc44;border-radius:6px;letter-spacing:2px;';
       document.body.appendChild(prompt);
     }
-    prompt.innerHTML = `🎯 Press <b>F</b> to pilot mortar · ${near.ammo}/${near.maxAmmo} shells · HP ${near.hp}/${near.maxHp}`;
+    prompt.textContent = `🎯 Press F to pilot mortar · ${near.ammo}/${near.maxAmmo} shells · HP ${near.hp}/${near.maxHp}`;
     prompt.style.display = 'block';
   } else if (prompt) {
     prompt.style.display = 'none';
@@ -26577,7 +26577,7 @@ socket.on('chatLine', data => {
   // From another player
   if (data.id === myId) return;
   const name = players[data.id]?.name || 'Player';
-  pushChatLine(`${name}: ${data.emoji || '💬'} ${data.text}`, data.color || '#fff');
+  pushChatLine(`${name}: ${data.emoji || '💬'} ${I18N.exact(data.text)}`, data.color || '#fff'); // exact phrases only: canned comms lines translate, typed chat doesn't
 });
 socket.on('playerJoined', p => {
   players[p.id] = p;
@@ -26950,7 +26950,7 @@ function syncInteractButton() {
   const btn = document.getElementById('btn-interact');
   if (!btn) return;
   const duel = inLobby && !nearTrashcan && !!(lobbyPadHere || lobbyChallengeTarget);
-  const label = duel ? 'DUEL' : 'SWAP';
+  const label = I18N.t(duel ? 'DUEL' : 'SWAP'); // compare with what's shown, which may be translated
   const display = (nearTrashcan || duel) ? 'flex' : 'none';
   if (btn.textContent !== label) btn.textContent = label;
   if (btn.style.display !== display) btn.style.display = display;
@@ -31202,9 +31202,7 @@ function renderShopAbilities(body) {
   body.style.display = 'block';
   const ids = Object.keys(ABILITY_OPTIONS);
   if (!ids.length) { body.innerHTML = '<div style="color:#888;">No abilities for sale yet.</div>'; return; }
-  body.innerHTML = `<div style="color:#88aacc;font-size:12px;margin-bottom:12px;line-height:1.6;">
-    Each weapon can hold several abilities and run <b>one</b>. Buy the ones you
-    want, then equip whichever suits the match. Fire it with <b>[E]</b>.</div>`;
+  body.innerHTML = `<div style="color:#88aacc;font-size:12px;margin-bottom:12px;line-height:1.6;">Each weapon can hold several abilities and run one at a time. Buy the ones you want, then equip whichever suits the match. Fire it with [E].</div>`;
   ids.forEach(wid => {
     const w = WEAPONS.find(x => x.id === wid);
     if (!w) return;
@@ -31906,7 +31904,7 @@ function renderStagingLobby() {
   const me = s ? s.players.find(p => p.socketId === myId) : null;
   el.innerHTML = `
     <div style="font-size:clamp(22px,7vw,32px);letter-spacing:clamp(3px,1.5vw,8px);color:#ffaa44;margin-bottom:6px;">🏛️ MATCH LOBBY</div>
-    <div style="font-size:14px;color:#888;letter-spacing:3px;margin-bottom:8px;">${mode.toUpperCase()} · WAITING FOR PLAYERS</div>
+    <div style="font-size:14px;color:#888;letter-spacing:3px;margin-bottom:8px;">${modeCardLabel(mode)} · WAITING FOR PLAYERS</div>
     <div id="lobby-map" style="font-size:13px;color:#cfd8e3;letter-spacing:2px;margin-bottom:22px;">MAP: ${mapCardLabel(s && s.map)}</div>
     <div style="display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:12px 60px;margin-bottom:24px;max-width:100%;">
       <div style="text-align:center;min-width:min(200px,100%);">
@@ -32390,6 +32388,11 @@ function showLobbyModesButton(show) {
   btn.style.display = show ? 'block' : 'none';
 }
 
+// Switching language re-renders the settings panel (its EN/中文 buttons carry the state).
+document.addEventListener('langchange', () => {
+  const p = document.getElementById('settings-hub-panel');
+  if (p && p.style.display === 'block') openSettingsHub();
+});
 function openSettingsHub() {
   let panel = document.getElementById('settings-hub-panel');
   if (!panel) {
@@ -32415,6 +32418,13 @@ function openSettingsHub() {
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;border-bottom:1px solid #276b55;padding-bottom:10px;">
       <div style="font-size:18px;letter-spacing:3px;color:#88ffcc;">⚙ SETTINGS</div>
       <button id="settings-hub-close" style="background:#1f2a27;color:#ffaaaa;border:1px solid #ff6666;padding:4px 10px;cursor:pointer;font-family:inherit;border-radius:3px;">✕</button>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin:10px 0;padding:10px;background:rgba(255,255,255,0.035);border:1px solid #244c42;border-radius:6px;">
+      <div style="font-size:12px;letter-spacing:2px;color:#d8fff2;">LANGUAGE</div>
+      <div data-no-i18n style="display:flex;gap:6px;">
+        <button type="button" data-lang="en" aria-pressed="${I18N.lang === 'en'}" style="min-width:52px;min-height:36px;padding:0 10px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:bold;border-radius:4px;background:${I18N.lang === 'en' ? '#1f5a3a' : '#1f2422'};color:${I18N.lang === 'en' ? '#88ffcc' : '#a0aaa6'};border:2px solid ${I18N.lang === 'en' ? '#44cc99' : '#46544f'};">EN</button>
+        <button type="button" data-lang="zh" aria-pressed="${I18N.lang === 'zh'}" style="min-width:52px;min-height:36px;padding:0 10px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:bold;border-radius:4px;background:${I18N.lang === 'zh' ? '#1f5a3a' : '#1f2422'};color:${I18N.lang === 'zh' ? '#88ffcc' : '#a0aaa6'};border:2px solid ${I18N.lang === 'zh' ? '#44cc99' : '#46544f'};">中文</button>
+      </div>
     </div>
     ${toggleRow('showFPS', 'SHOW FPS')}
     ${toggleRow('autoReload', 'AUTO RELOAD')}

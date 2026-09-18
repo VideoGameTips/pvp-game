@@ -45,7 +45,7 @@ fi
 # Files the game actually needs. Listed explicitly rather than globbing public/,
 # so a stray file (a scratch map, an editor backup) can never ride along into a
 # public upload.
-FILES=(index.html game.js chat.js three.min.js socket.io.min.js wiki.html equipment-models.js)
+FILES=(index.html game.js chat.js i18n.js three.min.js socket.io.min.js wiki.html equipment-models.js)
 
 echo "==> staging"
 rm -rf "$STAGE" "$ZIP"
@@ -104,6 +104,7 @@ done < <(grep -oE '<script[^>]+src="[^"]+"' "$STAGE/index.html" | sed -E 's/.*sr
 
 node --check "$STAGE/game.js"
 node --check "$STAGE/chat.js"
+node --check "$STAGE/i18n.js"
 
 echo "==> zipping"
 # -X drops resource forks / extra attrs; cd so paths in the zip are bare names.

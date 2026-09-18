@@ -222,6 +222,8 @@
       + `Stay FULLY in character at all times. Never break character. Never mention being an AI, a model, or a chatbot.`;
     if (group) p += ` You are in a group chat with the rest of the cast (${group}). React to what others just said — agree, mock, one-up, or pick a fight, in your own distinct voice. Keep it to ONE short line.`;
     p += matchMemoryBlurb(char.id);
+    // The player picked Chinese (#16): same character, same voice — in Simplified Chinese.
+    if (window.I18N && I18N.lang === 'zh') p += ' Always reply in Simplified Chinese (简体中文), keeping your exact personality and style.';
     return p;
   }
   function sanitizeMsgs(msgs) {

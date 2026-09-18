@@ -109,6 +109,13 @@
       font-size: 18px; border-radius: 4px; cursor: pointer; letter-spacing: 2px;
     }
     #overlay button:hover { background: #c0392b; }
+    /* EN / 中文 (#16) — the same data-lang buttons also live in ⚙ settings */
+    #lang-switch { position: absolute; top: 12px; right: 12px; display: flex; border: 1px solid #444; border-radius: 6px; overflow: hidden; }
+    #overlay #lang-switch button {
+      background: transparent; color: #999; border: 0; padding: 0 14px; min-height: 40px; min-width: 52px;
+      font-size: 13px; letter-spacing: 1px; font-family: inherit; border-radius: 0;
+    }
+    #overlay #lang-switch button[aria-pressed="true"] { background: #e74c3c; color: #fff; }
     #online-count { color: #6fcf8a; font-size: 12px; letter-spacing: 1px; min-height: 16px; margin: -18px 0 18px; }
     #overlay #login-toggle {
       background: transparent; color: #8fb4d8; padding: 0 12px; min-height: 44px; margin: -8px 0 4px;
@@ -597,6 +604,9 @@
   <!-- A nickname is enough to play (#11): a guest gets a real account behind the scenes, with a
        random secret kept on this device. The password only matters for playing elsewhere. -->
   <div id="overlay">
+    <div id="lang-switch" role="group" aria-label="Language / 语言" data-no-i18n>
+      <button type="button" data-lang="en">EN</button><button type="button" data-lang="zh">中文</button>
+    </div>
     <h1>PVP ARENA</h1>
     <p id="tagline">Free 3D arena shooter · no download</p>
     <div id="online-count"></div>
@@ -968,6 +978,7 @@
     }
   </script>
   <script src="equipment-models.js"></script>
+  <script src="i18n.js"></script>
   <script src="game.js"></script>
   <script src="chat.js"></script>
 </body>

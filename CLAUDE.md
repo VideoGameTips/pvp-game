@@ -41,6 +41,16 @@ built with `./tools/build-itch.sh`.
 
 7. **Verify before claiming done.** Several "bugs" were actually just Railway serving a stale build, or the page loaded from `file://` instead of `http://localhost:3001`. Check `curl -s <railway>/game.js | wc -c` vs local size when prod looks wrong.
 
+8. **The UI is bilingual (EN / 中文, `public/i18n.js`).** English is the key: a
+   MutationObserver translates text nodes and placeholder/title/aria-label as the
+   game writes them, `alert/confirm/prompt` are wrapped, and `{placeholders}` match
+   whole strings (`'ROUND {n}': '第 {n} 回合'`). So: write new UI text in English
+   as usual and add the Chinese to the `ZH` table — a missing entry just shows
+   English. Never branch on displayed text (`if (btn.textContent === 'READY')`):
+   in Chinese it isn't English any more. Text people type (chat) goes through
+   `I18N.exact()` or lives under `data-no-i18n`. Weapon/skin/map/character names
+   stay untranslated on purpose.
+
 ## Run / preview
 
 - `.claude/launch.json` defines server `pvp-game` on port 3001 (`node server.js`).
