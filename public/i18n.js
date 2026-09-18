@@ -24,7 +24,7 @@
     'Have an account? Log in to keep your progress ▾': '已有账号？登录以保存进度 ▾',
     "Pick a throwaway password — it only saves your shop progress. Don't reuse one from anywhere else.": '随便起一个密码就行——它只用来保存商店进度。别用你在别处用过的密码。',
     'PLAY': '开始游戏',
-    'DOWNLOAD ZIP': '下载离线版 (ZIP)',
+    '⬇️ DOWNLOAD ZIP': '⬇️ 下载离线版（ZIP）',
     '🟢 {n} players online': '🟢 {n} 人在线',
     "🟢 You're the first one here — bots fill every match": '🟢 现在就你一个人——每局都有机器人陪你打',
     'Signing in…': '登录中…',
