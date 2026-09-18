@@ -189,6 +189,9 @@
     'GET READY': '准备', 'GO!': '开始！',
     'FIRE': '开火', 'ADS': '瞄准', 'R': '换弹', 'SLIDE': '滑铲', 'CROUCH': '蹲', 'JUMP': '跳',
     'SWAP': '换装', 'DUEL': '约战', 'START': '开打',
+    // ammo at the crosshair (#34)
+    'LOW AMMO': '弹药不足', 'TAP ↻ TO RELOAD': '点 ↻ 换弹', 'PRESS R TO RELOAD': '按 R 换弹',
+    'OUT OF AMMO · SWITCH WEAPON': '没子弹了 · 换把武器',
     // ⚔️ duel picker + end-screen rivals (#31)
     '⚔️ DUEL': '⚔️ 约战', '⚔️ DUEL 1V1': '⚔️ 约战 1V1',
     'RECENTLY FOUGHT': '最近交过手', 'BEST RECORD': '战绩最好的',

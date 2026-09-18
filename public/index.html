@@ -81,6 +81,41 @@
     }
     #hit-indicator.flash { border-color: rgba(231,76,60,0.9); }
 
+    /* ── 🎯 Hit / kill / ammo at the crosshair (#34) ──
+       An ✕ of four ticks around the crosshair (the centre is masked out so the crosshair stays
+       readable): white = hit, gold = headshot, red = kill, grey = the lobby, where nothing takes
+       damage (#35). Under it: the kill confirm, then one line for ammo (or RELOADING). */
+    #hitmarker {
+      position: absolute; top: 50%; left: 50%; width: 26px; height: 26px; color: #fff;
+      transform: translate(-50%, -50%) rotate(45deg); pointer-events: none; opacity: 0;
+      -webkit-mask: radial-gradient(circle, transparent 5px, #000 5.5px); mask: radial-gradient(circle, transparent 5px, #000 5.5px);
+    }
+    #hitmarker::before, #hitmarker::after { content: ''; position: absolute; background: currentColor; }
+    #hitmarker::before { left: 50%; top: 0; width: 3px; height: 100%; transform: translateX(-50%); }
+    #hitmarker::after  { top: 50%; left: 0; height: 3px; width: 100%; transform: translateY(-50%); }
+    #hitmarker.head  { color: #ffd23f; }
+    #hitmarker.kill  { color: #ff3b3b; width: 36px; height: 36px; }
+    #hitmarker.lobby { color: #aab0b8; }
+    #kill-confirm {
+      position: absolute; top: calc(50% + 30px); left: 50%; transform: translateX(-50%);
+      font: 700 15px/1.2 -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+      color: #ff6b6b; letter-spacing: 1px; white-space: nowrap; pointer-events: none; opacity: 0;
+      text-shadow: 0 1px 2px #000, 0 0 10px rgba(0,0,0,0.7);
+    }
+    #ammo-hint {
+      position: absolute; top: calc(50% + 52px); left: 50%; transform: translate(-50%, -50%);
+      font: 700 13px/1.2 -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+      letter-spacing: 1px; white-space: nowrap; pointer-events: none; display: none;
+      text-shadow: 0 1px 2px #000, 0 0 8px rgba(0,0,0,0.7);
+    }
+    #ammo-hint.low   { display: block; color: #ffd23f; }
+    #ammo-hint.empty { display: block; color: #ff9a3c; }
+    #ammo-hint.out   { display: block; color: #ff5b5b; }
+    #ammo.low #ammo-count { color: #ffd23f; }
+    #ammo.empty #ammo-count, #ammo.out #ammo-count { color: #ff5b5b; }
+    body.touch-ui #btn-reload-mobile.pulse { animation: reloadPulse 0.8s ease-in-out infinite; }
+    @keyframes reloadPulse { 50% { box-shadow: 0 0 0 7px rgba(255,154,60,0.55); border-color: #ffb46b; } }
+
     #death-screen {
       position: absolute; top: 0; left: 0; width: 100%; height: 100%;
       background: rgba(180,0,0,0.4); display: none; align-items: center; justify-content: center;
@@ -509,7 +544,7 @@
 
     #reload-flash {
       position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-      font-size: 14px; color: #ffd700; display: none; margin-top: 24px;
+      font-size: 14px; color: #ffd700; display: none; margin-top: 52px;   /* the ammo-hint line; +30 is the kill confirm (#34) */
     }
 
     #interact-hint {
@@ -967,6 +1002,10 @@
   <div id="hud">
     <div id="crosshair"></div>
     <div id="hit-indicator"></div>
+    <!-- Your own hits, kills and ammo, at the crosshair where your eyes already are (#34) -->
+    <div id="hitmarker"></div>
+    <div id="kill-confirm"></div>
+    <div id="ammo-hint"></div>
 
     <div id="health-bar">
       <div id="health-label">HEALTH</div>

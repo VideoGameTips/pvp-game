@@ -3588,6 +3588,10 @@ function playSoundEvent(name, opts = {}) {
     playFilteredNoise(ctx, start, 0.40, out, 0.10 * mult, 'lowpass', 600, 0.5);
   }
   // 🪤 Mine / trap arm — beep beep
+  // 🔫 Dry fire — the click of a trigger on an empty gun (#34)
+  else if (name === 'dry_fire') {
+    playTone(ctx, start, 0.025, out, 2200, 1600, 0.16 * mult, 'square');
+  }
   else if (name === 'mine_arm') {
     playTone(ctx, start,        0.04, out, 1320, 1320, 0.12 * mult, 'square');
     playTone(ctx, start + 0.12, 0.04, out, 1320, 1320, 0.12 * mult, 'square');
@@ -18419,6 +18423,10 @@ try {
   if (!saved || saved.showFPS === undefined) {
     GAMEPLAY_SETTINGS.showFPS = !(navigator.maxTouchPoints > 0 || 'ontouchstart' in window);
   }
+  // …and reloads by itself: with a thumb on FIRE, reaching for ↻ costs the fight (#34).
+  if (!saved || saved.autoReload === undefined) {
+    GAMEPLAY_SETTINGS.autoReload = (navigator.maxTouchPoints > 0 || 'ontouchstart' in window);
+  }
 } catch (e) {}
 const TOUCH_SCALES = [['SMALL', 0.85], ['NORMAL', 1], ['BIG', 1.2]];
 function applyTouchScale() {
@@ -20675,7 +20683,7 @@ function tryShoot() {
   }
   const pool = weaponAmmo[currentWeaponIdx];
   const adminInfAmmo = adminCheats.infiniteAmmo && currentUser?.isAdmin;
-  if (pool.ammo <= 0 && !adminInfAmmo) { if (pool.reserve > 0 && !wStats.noReload) startReload(); return; }
+  if (pool.ammo <= 0 && !adminInfAmmo) { if (pool.reserve > 0 && !wStats.noReload) startReload(); else dryFire(); return; }
 
   lastShot = now;
   // Sustained-fire spread bloom: a weapon can get a little less precise the
@@ -21180,6 +21188,7 @@ function startReload() {
   const reloadIdx = currentWeaponIdx;   // whose reload this is
   const reloadWeapon = currentWeapon;   // and whose magazine size to fill to
   reloading = true;
+  updateAmmoHint();   // RELOADING... takes the hint's line (#34)
   document.getElementById('reload-flash').style.display = 'block';
   const dur = currentWeapon.reloadTime * (Date.now() < adrenalineUntil ? 0.5 : 1);
   // After dur, not before: the whole sequence is scheduled against the real
@@ -24089,6 +24098,86 @@ const DMG_BASE_STYLE = [
   'transform:translate(-50%,-50%)',
 ].join(';');
 
+// ── 🎯 Hit / kill / ammo at the crosshair (#34) ─────────────────────────────
+// Before this a hit showed only a small number at the target (and a sound a muted phone never
+// plays); a kill made the body vanish and left one line in the corner feed; an empty gun did
+// nothing at all. Shooters answer all three where the eyes already are: on the crosshair.
+function showHitmarker(kind) {
+  const el = document.getElementById('hitmarker');
+  if (!el) return;
+  el.className = kind === 'hit' ? '' : kind;          // '' = white; head / kill / lobby recolour it
+  el.style.transition = 'none'; el.style.opacity = '1';
+  clearTimeout(el._t);
+  el._t = setTimeout(() => { el.style.transition = 'opacity 0.18s'; el.style.opacity = '0'; }, kind === 'kill' ? 380 : 110);
+}
+// The local hit path and the server's echo both report the same kill; only the first one counts.
+let _lastKillConfirm = { id: null, t: 0 };
+function confirmKill(id, name) {
+  const now = performance.now();
+  if (_lastKillConfirm.id === id && now - _lastKillConfirm.t < 1500) return false;
+  _lastKillConfirm = { id, t: now };
+  showHitmarker('kill');
+  const el = document.getElementById('kill-confirm');
+  if (el) {
+    el.textContent = '☠ ' + (name || 'Enemy');
+    el.style.transition = 'none'; el.style.opacity = '1';
+    clearTimeout(el._t);
+    el._t = setTimeout(() => { el.style.transition = 'opacity 0.25s'; el.style.opacity = '0'; }, 900);
+  }
+  return true;
+}
+// A kill used to make the body vanish on the spot. It tips over for a moment first, so you see it
+// go down — and is upright again before anything can show it again (respawns set visible = true).
+function dropBody(id) {
+  const mesh = remoteMeshes[id];
+  if (!mesh || mesh._drop || !mesh.visible) return;
+  const token = (mesh._drop = {});
+  const t0 = performance.now(), from = mesh.rotation.x;
+  const step = () => {
+    if (mesh._drop !== token) return;
+    const t = Math.min(1, (performance.now() - t0) / 280);
+    mesh.rotation.x = from - (Math.PI / 2) * t * t;
+    if (t < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+  setTimeout(() => {
+    if (mesh._drop !== token) return;
+    mesh._drop = null;
+    mesh.rotation.x = from;
+    if (players[id]?.dead !== false) mesh.visible = false;   // still dead (or gone): now it can disappear
+  }, 750);
+}
+// One line under the crosshair: LOW AMMO / RELOAD / OUT OF AMMO. RELOADING... takes the same spot.
+function updateAmmoHint() {
+  const hint = document.getElementById('ammo-hint'), box = document.getElementById('ammo');
+  if (!hint) return;
+  let state = '';
+  if (gameStarted && !isDead && !reloading && (activeSlot === 'primary' || activeSlot === 'secondary')
+      && currentWeapon && !currentWeapon.ammoRegen) {
+    const pool = weaponAmmo[currentWeaponIdx];
+    if (pool && pool.ammo < 900000) {                      // lobby / range: bottomless, nothing to say
+      if (pool.ammo <= 0) state = pool.reserve > 0 ? 'empty' : 'out';
+      else if (pool.ammo <= Math.max(1, Math.ceil((currentWeapon.mag || 30) * 0.25))) state = 'low';
+    }
+  }
+  hint.className = state;
+  hint.textContent = state === 'low' ? 'LOW AMMO'
+    : state === 'empty' ? (isTouchUI() ? 'TAP ↻ TO RELOAD' : 'PRESS R TO RELOAD')
+    : state === 'out' ? 'OUT OF AMMO · SWITCH WEAPON' : '';
+  if (box) { box.classList.toggle('low', state === 'low'); box.classList.toggle('empty', state === 'empty'); box.classList.toggle('out', state === 'out'); }
+  const rb = document.getElementById('btn-reload-mobile');
+  if (rb) rb.classList.toggle('pulse', state === 'empty');
+}
+// Pulling the trigger on nothing: a click, and the hint says why.
+let _lastDryFire = 0;
+function dryFire() {
+  const now = performance.now();
+  if (now - _lastDryFire < 250) return;
+  _lastDryFire = now;
+  playSoundEvent('dry_fire', { volume: 0.9, minGap: 200 });
+  updateAmmoHint();
+}
+
 function showDamageNumber(worldPos, damage, headshot = false) {
   if (!(damage > 0)) return;
   const sc = worldToScreen(worldPos);
@@ -24205,6 +24294,7 @@ function getSecretSynergy(weaponId, hitPos) {
 function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false) {
   // 🛋️ Lobby 13 is a no-combat chill zone — the cast is neutral and can't be hurt.
   if (inLobby) return;
+  if (players[pid]?.dead) return;   // a body going down is not a target (#34)
   const isBot    = players[pid] && players[pid].isBot;
   const instakill = headshot && INSTAKILL_HS_WEAPONS.has(weaponId);
   socket.emit(isBot ? 'hitBot' : 'hit', {
@@ -24224,6 +24314,7 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false) {
   const dmg = (headshot && instakill) ? 999 : Math.round(
     (headshot ? baseDmg * headshotMultFor(weaponId) : baseDmg) * synergy * falloff);
   if (hitWorldPos) showDamageNumber(hitWorldPos, dmg, headshot || synergy > 1);
+  showHitmarker(headshot ? 'head' : 'hit');   // a kill below turns it red
   // Briefly tint the damage number / spawn a synergy spark for player discovery
   if (synergy > 1 && hitWorldPos) {
     spawnAbilityAOEFX(hitWorldPos.clone().setY(hitWorldPos.y + 0.4), 0.6,
@@ -24283,7 +24374,7 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false) {
       if (bot.hp <= 0) {
         bot.dead = true;
         if (players[pid]) players[pid].dead = true;
-        if (mesh) mesh.visible = false;
+        dropBody(pid);   // tips over, then hides (#34)
         myKills++;
         creditWeaponKill(currentEquippedId());
         saveKillReplay(pid, currentEquippedId());
@@ -24296,7 +24387,7 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false) {
         if (kc) kc.textContent = `Kills: ${myKills}`;
         const botName = players[pid]?.name || 'Bot';
         playSoundEvent('kill', { volume: 1.05, minGap: 80 });
-        showAnnouncement('ELIMINATED', botName, '#ff4444', 1200);
+        if (confirmKill(pid, botName)) showAnnouncement('ELIMINATED', botName, '#ff4444', 1200);
         onEntityDied(pid, myId);
         // Schedule local respawn after 3s (in case server isn't responding)
         setTimeout(() => clientRespawnBot(pid), 3000);
@@ -26121,8 +26212,10 @@ function updateAmmoHUD() {
   document.getElementById('ammo-count').textContent = pool.ammo;
   document.getElementById('ammo-reserve').textContent =
     currentWeapon.ammoRegen ? '↑ AUTO' : `/ ${pool.reserve}`;
+  updateAmmoHint();
 }
 function updateWeaponHUD() {
+  updateAmmoHint();   // melee / support: nothing to warn about
   if (activeSlot === 'melee' && selectedMeleeIdx !== null && selectedMeleeIdx >= 0) {
     document.getElementById('ammo-gun').textContent = displayMeleeName(MELEE_ITEMS[selectedMeleeIdx]);
     document.getElementById('ammo-count').textContent = 'MELEE';
@@ -26835,14 +26928,15 @@ socket.on('playerDied', data => {
       afterDeath(1500, () => { ds.style.display='none'; showLoadoutScreen('death'); });
     }
   }
-  if (remoteMeshes[data.targetId]) remoteMeshes[data.targetId].visible=false;
+  if (remoteMeshes[data.targetId]) dropBody(data.targetId);   // falls, then hides (#34)
   const bot = resolveBot(data.targetId);
   if (bot) { bot.dead = true; bot.hp = 0; }
   if (players[data.targetId]) players[data.targetId].dead = true;
   // Show kill feed
   if (data.killerId === myId && data.targetId !== myId) {
     const botName = players[data.targetId]?.name || 'Bot';
-    showAnnouncement('ELIMINATED', botName, '#ff4444', 1400);
+    // The local hit path usually got here first; the echo must not say it twice (#34).
+    if (confirmKill(data.targetId, botName)) showAnnouncement('ELIMINATED', botName, '#ff4444', 1400);
   }
   onEntityDied(data.targetId, data.killerId);
 });
