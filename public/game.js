@@ -18825,7 +18825,9 @@ document.addEventListener('mouseup', e => {
 
 // ── Weapon switching ───────────────────────────────────────────────────────
 function switchWeapon(idx) {
-  if (idx === null || idx === undefined || idx < 0) return;
+  // Upper bound too: WEAPONS / weaponModels are parallel arrays (tools/verify-weapons.js checks
+  // their lengths), and a stray index used to crash on weaponModels[idx].visible (#4).
+  if (idx === null || idx === undefined || idx < 0 || idx >= WEAPONS.length || !weaponModels[idx]) return;
   if (idx === currentWeaponIdx) return;
   cancelInspect();
   cancelReload();                      // you can always swap out of a reload
