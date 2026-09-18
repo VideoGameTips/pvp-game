@@ -51,6 +51,7 @@ code += "function playMuzzleBlast(ctx) { ctx.createOscillator().start(); }\n";
 code += "function playGunAction(ctx) { ctx.createOscillator().start(); }\n";
 code += src.match(/^const K = [\s\S]*?\}, o\);/m)[0] + '\n';
 code += src.match(/^const RP = .*$/m)[0] + '\n';
+code += 'const RELOAD_PROPS = ' + blockAt(/^const RELOAD_PROPS = \{/m).replace(/^const RELOAD_PROPS = /, '') + ';\n';
 code += 'const RELOAD_KEYS = ' + blockAt(/^const RELOAD_KEYS = \{/m).replace(/^const RELOAD_KEYS = /, '') + ';\n';
 code += cblock('_RK') + '\n';
 code += src.match(/^const _emoReload = [\s\S]*?'ding'\);/m)[0] + '\n';

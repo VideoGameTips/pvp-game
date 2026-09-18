@@ -3587,6 +3587,12 @@ function playObjectSfx(ctx, out, name, t, v) {
         playFilteredNoise(ctx, t + 0.05 + i * 0.06 + Math.random() * 0.03, 0.012, out, v * 0.18,
                           'highpass', 2600 + Math.random() * 2400, 0.8, 0.0003, 1.5);
       break;
+    case 'shing':    // steel leaving a scabbard, and ringing
+      playSweptNoise(ctx, t, 0.35, out, v * 0.30, 'highpass', 2400, 6800, 1.2);
+      playTone(ctx, t + 0.25, 0.5, out, 3400, 3380, v * 0.12, 'sine'); break;
+    case 'slam':     // something heavy hitting the floor, and the fire running out from it
+      playTone(ctx, t, 0.25, out, 90, 40, v * 0.5, 'sine');
+      playFilteredNoise(ctx, t, 0.4, out, v * 0.35, 'lowpass', 500, 0.8, 0.002, 1.2); break;
     case 'flicks':   // a butterfly knife's pins, clacking as the handles go round
       for (let i = 0; i < 6; i++)
         metalClack(ctx, t + i * 0.085 + Math.random() * 0.02, out, v * 0.35, 2200 + Math.random() * 800, 0.02);
@@ -3623,6 +3629,7 @@ const PROP_SFX = {
   candle: ['tap', 'tap'], reel: ['rattle', 'click'], paint: ['splat', 'splat'],
   filter: ['slideout', 'snapin'], canister: ['hiss', 'snapin'], dash: ['type', 'type'],
   shard: ['clink', 'clink'], paper: ['fold', 'fold'], brick: ['click', 'snapin'], pixel: ['blip', 'blip'],
+  soul: ['whoosh', 'fireup'], ash: ['brush', 'brush'], coal: ['crunch', 'hiss'], magma: ['hiss', 'snapin'],
 };
 
 // ── 🔁 Reload audio ─────────────────────────────────────────────────────────
@@ -12986,17 +12993,19 @@ function _legendize(g, o) {
       const m = new THREE.Mesh(cone(r * FS, h * FS), mat);
       m.position.set((li - 1) * 0.002, y - 0.004, z);
       m.renderOrder = 2 + li;
+      m.userData.legendFx = true;
       g.add(m);
       flames.push({ mesh: m, s: m.scale.clone(), phase: Math.random() * 6.283, speed: 9 + Math.random() * 7 + li * 3 });
     });
     for (let k = 0; k < 3; k++) {
       const e = new THREE.Mesh(new THREE.BoxGeometry(0.004 * FS, 0.004 * FS, 0.004 * FS), M.core);
+      e.userData.legendFx = true;
       g.add(e);
       embers.push({ mesh: e, x: 0, y, z, t: Math.random(), speed: 0.8 + Math.random() * 0.8,
                     phase: Math.random() * 6.283, h: 0.10 * FS });
     }
   }
-  g._flames = flames; g._embers = embers;
+  g._flames = flames; g._embers = embers; g._legendMats = M;
   g._greebled = true; g._handDetailed = true;
   g.position.copy(at);
   return g;
@@ -19674,7 +19683,7 @@ const _eqClamp = v => Math.max(0, Math.min(1, v));
 function _equipPieces(model) {
   const out = [];
   for (const c of model.children) {
-    if (c === model._flash) continue;
+    if (c === model._flash || c.userData.legendFx) continue;
     let hand = !!(c.userData && c.userData.vmHand);
     if (!hand) c.traverse(o => { if (o.userData && o.userData.vmHand) hand = true; });
     if (hand) continue;
@@ -19703,6 +19712,104 @@ function _eqHomeOf(c) {
   if (!c.userData.eqHome) c.userData.eqHome = {
     p: (c._home || c.position).clone(), q: c.quaternion.clone(), s: c.scale.clone() };
   return c.userData.eqHome;
+}
+
+// The model's own bounds, in its own space -- where to put a scabbard, a cube.
+function _eqLocalBox(model, pieces) {
+  model.updateMatrixWorld(true);
+  const inv = new THREE.Matrix4().copy(model.matrixWorld).invert();
+  const B = new THREE.Box3();
+  for (const c of pieces) c.traverse(o => {
+    if (!o.isMesh || !o.geometry) return;
+    if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+    B.union(o.geometry.boundingBox.clone().applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld)));
+  });
+  return B;
+}
+// Things an entrance brings with it and takes away again: the cube the pistol
+// comes out of, the katana's scabbard, the bat's shockwave. They are children
+// of the model while they last and are disposed of when it finishes.
+function _eqMakeProps(model, type, ctr, box) {
+  const out = [];
+  const red = () => new THREE.MeshBasicMaterial({ color: 0xff2a1a, transparent: true, opacity: 0.9,
+    blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  if (type === 'cube') {
+    const cube = new THREE.Group(); cube.position.copy(ctr);
+    const S = 0.09;
+    const dirs = [[0, 0, 1], [0, 0, -1], [1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0]];
+    cube.userData.faces = dirs.map(([x, y, z]) => {
+      const f = new THREE.Group();
+      const n = new THREE.Vector3(x, y, z);
+      f.position.copy(n).multiplyScalar(S / 2);
+      f.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), n);
+      const face = new THREE.Mesh(new THREE.PlaneGeometry(S, S),
+        new THREE.MeshBasicMaterial({ color: 0x0c0608, side: THREE.DoubleSide, transparent: true, opacity: 1 }));
+      f.add(face);
+      const edge = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.PlaneGeometry(S, S)), new THREE.LineBasicMaterial({ color: 0xff2a1a, transparent: true }));
+      edge.position.z = 0.0005; f.add(edge);
+      f.userData.n = n; f.userData.home = f.position.clone();
+      cube.add(f); return f;
+    });
+    model.add(cube); out.push(cube);
+  }
+  if (type === 'unsheathe') {
+    const len = box.max.z - box.min.z, cz = box.min.z + len * 0.36;
+    const sc = new THREE.Group(); sc.position.set(ctr.x, ctr.y, cz);
+    const sheath = new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.036, len * 0.72),
+      new THREE.MeshPhongMaterial({ color: 0x17121a, shininess: 190, specular: 0x9a3a3a, transparent: true, opacity: 1 }));
+    sc.add(sheath);
+    const band = new THREE.Mesh(new THREE.BoxGeometry(0.027, 0.039, 0.014), red());
+    band.position.z = len * 0.36 - 0.007; sc.add(band);                         // the mouth
+    sc.userData.from = sc.position.clone(); sc.userData.len = len;
+    model.add(sc); out.push(sc);
+  }
+  if (type === 'slam') {
+    const ringM = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.008, 6, 32), red());
+    ringM.rotation.x = Math.PI / 2;
+    ringM.position.set(ctr.x, box.min.y, ctr.z); ringM.visible = false;
+    model.add(ringM); out.push(ringM);
+  }
+  return out;
+}
+function _eqStepProps(e, t) {
+  const m = e.model, lm = m._legendMats;
+  // How much of the fire shows while it arrives: most entrances keep it back
+  // until the very end; the eruption and the forge are made of it.
+  if (e.type === 'eruption') { m._fireGate = 1; m._fireBoost = (1 - t) * 1.6; }
+  else if (e.type === 'forge') { m._fireGate = 1; m._fireBoost = 0.4; }
+  else { m._fireGate = t < 0.85 ? 0 : (t - 0.85) / 0.15; m._fireBoost = 0; }
+  if (lm && e.type === 'forge') {
+    lm.obsidian.emissive.setHex(0xff3a10);
+    lm.obsidian.emissiveIntensity = 2.2 * Math.pow(1 - t, 1.5) + Math.sin(t * 60) * 0.05;
+  }
+  if (lm && e.type === 'unsheathe') {
+    const f = t > 0.5 && t < 0.9 ? Math.sin((t - 0.5) / 0.4 * Math.PI) : 0;
+    lm.obsidian.emissive.setHex(0xff2010); lm.obsidian.emissiveIntensity = 1.6 * f;
+  }
+  for (const o of e.temp || []) {
+    if (o.userData.faces) {                      // the cube: spin, then unfold
+      o.rotation.set(t * 5, t * 7, 0);
+      const k = _eqEase(_eqClamp((t - 0.30) / 0.25));
+      for (const f of o.userData.faces) {
+        f.position.copy(f.userData.home).addScaledVector(f.userData.n, k * 0.05);
+        f.children.forEach(x => { x.material.opacity = 1 - k; });
+        f.rotation.x = k * 1.4;
+      }
+      o.visible = k < 1;
+    }
+    if (o.userData.len) {                        // the scabbard: slides off the blade
+      const k = _eqClamp((t - 0.12) / 0.45);
+      o.position.copy(o.userData.from); o.position.z -= k * k * o.userData.len * 0.85;
+      o.position.y -= _eqClamp((t - 0.45) / 0.3) * 0.06;
+      o.children.forEach(x => { x.material.opacity = 1 - _eqClamp((t - 0.45) / 0.25); });
+    }
+    if (o.geometry && o.geometry.type === 'TorusGeometry') {   // the shockwave
+      const k = _eqClamp((t - 0.55) / 0.45);
+      o.visible = t >= 0.55;
+      o.scale.setScalar(1 + k * 4);
+      o.material.opacity = 0.9 * (1 - k);
+    }
+  }
 }
 
 function startEquipAnim(idx) {
@@ -19757,7 +19864,10 @@ function _beginEquip(model, spec, melee) {
   // from the bottom up.
   if (type === 'unfold') ps.sort((a, b) => b.h.p.z - a.h.p.z);
   if (type === 'build')  ps.sort((a, b) => a.h.p.y - b.h.p.y);
-  if (type === 'unfold' || type === 'build') ps.forEach((p, i) => { p.delay = i / Math.max(1, ps.length - 1); });
+  if (type === 'eruption') ps.sort((a, b) => b.h.p.z - a.h.p.z);   // rising back to front
+  if (type === 'meteor')   ps.sort((a, b) => a.h.p.z - b.h.p.z);   // raining front to back
+  if (type === 'unfold' || type === 'build' || type === 'eruption' || type === 'meteor')
+    ps.forEach((p, i) => { p.delay = i / Math.max(1, ps.length - 1); });
   let ring = null;
   if (type === 'warp') {
     ring = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.008, 8, 32),
@@ -19766,8 +19876,11 @@ function _beginEquip(model, spec, melee) {
     model.add(ring);
   }
   const glow = (model._equipGlow || []).map(m => [m, m.emissiveIntensity]);
+  const box = _eqLocalBox(model, targets);
+  const temp = _eqMakeProps(model, type, ctr, box);
   _equip = { model, melee, type, t0: performance.now(), dur: spec.equipMs || 900,
-             ps, ctr, ring, glow, sfx: spec.equipSfx || null,
+             ps, ctr, ring, glow, sfx: spec.equipSfx || null, box, temp,
+             beats: (spec.equipBeats || []).map(([t, name]) => ({ t, name, done: false })),
              turns: spec.spinTurns || 1, pivot: (model._spinPivot || ctr).clone() };
   playEquipSound(_equip.sfx && _equip.sfx[0]);
   _equipStep(_equip, 0);
@@ -19782,6 +19895,13 @@ function finishEquip() {
   }
   if (e.ring) { e.model.remove(e.ring); e.ring.geometry.dispose(); e.ring.material.dispose(); }
   for (const [m, v] of e.glow) m.emissiveIntensity = v;
+  for (const o of e.temp || []) {
+    e.model.remove(o);
+    o.traverse(x => { if (x.geometry) x.geometry.dispose(); if (x.material) x.material.dispose(); });
+  }
+  e.model._fireGate = 1; e.model._fireBoost = 0;
+  const lm = e.model._legendMats;
+  if (lm) { lm.obsidian.emissive.setHex(0x000000); lm.obsidian.emissiveIntensity = 1; }
 }
 
 function updateEquipAnim() {
@@ -19794,6 +19914,7 @@ function updateEquipAnim() {
     : (!e.model.visible || e.model !== weaponModels[currentWeaponIdx] || shooting || reloading || isADS);
   if (gone) { finishEquip(); return; }
   const t = (performance.now() - e.t0) / e.dur;
+  for (const b of e.beats) if (!b.done && t >= b.t) { b.done = true; playEquipSound(b.name); }
   if (t >= 1) { playEquipSound(e.sfx && e.sfx[1]); finishEquip(); return; }
   _equipStep(e, t);
 }
@@ -19891,6 +20012,74 @@ function _equipStep(e, t) {
         c.scale.set(h.s.x * (t > 0.55 ? 1 + Math.sin(now * 90) * 0.05 : 1), h.s.y,
                     h.s.z * Math.max(0.01, _eqBack(k)));
         break; }
+      case 'eruption': {
+        // FFA Legend AK: it rises out of an eruption of fire, back to front,
+        // each piece overshooting a hair as it arrives.
+        const k = _eqBack(_eqClamp((t - p.delay * 0.45) / 0.45));
+        c.position.copy(h.p); c.position.y -= (1 - k) * 0.28;
+        c.quaternion.copy(p.rq).slerp(h.q, _eqClamp(k)); c.scale.copy(h.s);
+        break; }
+      case 'cube': {
+        // FFA Legend Pistol: packed inside a black cube until its faces fold
+        // open, then out to where it belongs.
+        const k = _eqEase(_eqClamp((t - 0.42 - p.delay * 0.12) / 0.45));
+        c.visible = t > 0.38;
+        c.position.copy(e.ctr).lerp(h.p, k);
+        c.quaternion.copy(p.rq).slerp(h.q, k);
+        c.scale.copy(h.s).multiplyScalar(0.05 + 0.95 * k);
+        break; }
+      case 'forge': {
+        // FFA Legend SG8: forged. It is all there from the start, red hot,
+        // jumping under three hammer blows, and cools to black.
+        let jolt = 0;
+        for (const tb of [0.2, 0.4, 0.6]) jolt += Math.exp(-Math.pow((t - tb) / 0.025, 2));
+        c.position.copy(h.p); c.position.y -= jolt * 0.010;
+        c.quaternion.copy(h.q); c.scale.copy(h.s);
+        break; }
+      case 'meteor': {
+        // FFA Legend SR-X: the pieces rain down from far out in front,
+        // accelerating, tumbling, front to back, and slam home.
+        const k = _eqClamp((t - p.delay * 0.55) / 0.32);
+        c.visible = k > 0;
+        const from = h.p.clone().add(new THREE.Vector3((p.dir.x) * 0.05, 0.45, -0.35));
+        c.position.copy(from).lerp(h.p, k * k);
+        c.quaternion.copy(h.q).multiply(new THREE.Quaternion().setFromAxisAngle(p.spin, (1 - k) * 5));
+        c.scale.copy(h.s);
+        break; }
+      case 'vortex': {
+        // FFA Legend Vector: a fiery vortex -- every piece spirals in round the
+        // gun's long axis, the circle tightening until it is shut.
+        const k = _eqEase(_eqClamp((t - p.delay * 0.35) / 0.6));
+        const r = (1 - k) * 0.18, a = (1 - k) * Math.PI * 4 + p.phase;
+        c.position.set(h.p.x + Math.cos(a) * r, h.p.y + Math.sin(a) * r, h.p.z + (1 - k) * 0.05);
+        c.quaternion.copy(h.q).multiply(new THREE.Quaternion().setFromAxisAngle(_EQ_Z, (1 - k) * 6));
+        c.scale.copy(h.s).multiplyScalar(0.4 + 0.6 * k);
+        break; }
+      case 'hellflip': {
+        // FFA Legend Knife: thrown up and drilled round three times about its
+        // own length, then back into the hand.
+        const q = new THREE.Quaternion().setFromAxisAngle(_EQ_Z, _eqOut(t) * Math.PI * 6);
+        const arc = Math.sin(Math.PI * _eqClamp(t / 0.9));   // lands at 90%, so the end never snaps
+        q.premultiply(new THREE.Quaternion().setFromAxisAngle(_EQ_X, arc * 0.5));
+        c.position.copy(h.p).sub(e.ctr).applyQuaternion(q).add(e.ctr);
+        c.position.y += arc * 0.12;
+        c.quaternion.copy(q).multiply(h.q); c.scale.copy(h.s);
+        break; }
+      case 'unsheathe': {
+        // FFA Legend Katana: drawn from a black scabbard; the blade itself
+        // does not move -- the scabbard is what leaves.
+        c.position.copy(h.p); c.quaternion.copy(h.q); c.scale.copy(h.s);
+        break; }
+      case 'slam': {
+        // FFA Legend Bat: dropped from above, tipped back, and slammed down --
+        // a small bounce, and a ring of fire running out from the impact.
+        const fall = _eqClamp(t / 0.55);
+        const y = t < 0.55 ? (1 - fall * fall) * 0.30 : Math.exp(-(t - 0.55) * 14) * Math.abs(Math.sin((t - 0.55) * 30)) * 0.03;
+        const q = new THREE.Quaternion().setFromAxisAngle(_EQ_X, t < 0.55 ? (1 - fall) * 0.9 : 0);
+        c.position.copy(h.p).sub(e.ctr).applyQuaternion(q).add(e.ctr);
+        c.position.y += y;
+        c.quaternion.copy(q).multiply(h.q); c.scale.copy(h.s);
+        break; }
       case 'spin': {
         // A spin-cock or a gunslinger's twirl: the gun turns about the point
         // the finger holds -- the lever loop, the trigger guard -- while the
@@ -19902,6 +20091,7 @@ function _equipStep(e, t) {
         break; }
     }
   }
+  _eqStepProps(e, t);
   if (e.ring) {
     const r = t < 0.15 ? t / 0.15 : t > 0.75 ? Math.max(0, 1 - (t - 0.75) / 0.25) : 1;
     e.ring.scale.setScalar(Math.max(0.001, r * 1.6));
@@ -19929,11 +20119,17 @@ function updateLegendFire(dt) {
   if (mm && mm.visible && mm._flames) held.push(mm);
   for (const m of _legendLit) if (!held.includes(m)) _legendLit.delete(m);
   for (const m of held) {
-    if (!_legendLit.has(m)) { _legendLit.add(m); m._flare = now; playEquipSound('fireup'); }
-    const flare = Math.max(0, 1 - (now - m._flare) / 0.7);
+    // While the weapon is still making its entrance the fire belongs to the
+    // entrance -- hidden, or roaring, as it says -- and catches, with the
+    // whoomph, only once the weapon is whole.
+    const assembling = !!(_equip && _equip.model === m);
+    if (!_legendLit.has(m) && !assembling) { _legendLit.add(m); m._flare = now; playEquipSound('fireup'); }
+    const gate = assembling ? Math.max(0.001, m._fireGate ?? 0) : 1;
+    const boost = assembling ? (m._fireBoost || 0) : 0;
+    const flare = _legendLit.has(m) ? Math.max(0, 1 - (now - m._flare) / 0.7) : 0;
     for (const f of m._flames) {
       const n = Math.sin(now * f.speed + f.phase) * 0.5 + Math.sin(now * f.speed * 2.3 + f.phase * 1.7) * 0.5;
-      const w = (1 - n * 0.12) * (1 + flare * 0.5), k = 1 + n * 0.28 + flare * 1.8;
+      const w = (1 - n * 0.12) * (1 + flare * 0.5 + boost * 0.4) * gate, k = (1 + n * 0.28 + flare * 1.8 + boost * 2.2) * gate;
       f.mesh.scale.set(f.s.x * w, f.s.y * k, f.s.z * w);
     }
     for (const e of m._embers) {
@@ -19942,8 +20138,66 @@ function updateLegendFire(dt) {
       e.mesh.position.set(e.x + Math.sin(e.t * 7 + e.phase) * 0.008,
                           e.y + e.t * e.h * (1 + flare),
                           e.z + Math.cos(e.t * 5 + e.phase) * 0.004);
-      e.mesh.scale.setScalar(Math.max(0.001, 1 - e.t));
+      e.mesh.scale.setScalar(Math.max(0.001, (1 - e.t) * (assembling ? gate : 1)));
     }
+  }
+}
+
+// ── 🔥 Reload effects ───────────────────────────────────────────────────────
+// Two FFA Legends reload with light rather than parts: a wave of red light
+// bursts through the AK from stock to muzzle, and the SR-X draws red energy
+// back up its barrel into the chamber. A skin's reload names it as `fx`; this
+// draws it on the reload's own clock and clears it the moment the reload ends
+// or is cut off.
+var _rfx = null;
+function _clearReloadFx() {
+  const r = _rfx;
+  if (!r) return;
+  _rfx = null;
+  r.model.remove(r.group);
+  r.group.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
+  const lm = r.model._legendMats;
+  if (lm) { lm.obsidian.emissive.setHex(0x000000); lm.obsidian.emissiveIntensity = 1; }
+}
+function updateSkinReloadFx() {
+  const model = weaponModels[currentWeaponIdx], w = WEAPONS[currentWeaponIdx];
+  const fx = model && w && _skinFxFor(w.id);
+  const kind = fx && fx.reload && fx.reload.fx;
+  if (!kind || !model._reloadStart || !model._reloadDur || model._inspectMode || !model.visible) { _clearReloadFx(); return; }
+  const t = Math.min(1, (Date.now() - model._reloadStart) / model._reloadDur);
+  if (t >= 1) { _clearReloadFx(); return; }
+  if (!_rfx || _rfx.model !== model || _rfx.kind !== kind) {
+    _clearReloadFx();
+    const box = _eqLocalBox(model, _equipPieces(model));
+    const size = box.getSize(new THREE.Vector3()), ctr = box.getCenter(new THREE.Vector3());
+    const R = Math.max(size.x, size.y) * 0.75;
+    const glow = (c, op, side) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: op,
+      blending: THREE.AdditiveBlending, depthWrite: false, side: side || THREE.FrontSide });
+    const group = new THREE.Group();
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(R, 0.005, 6, 36), glow(0xff2a1a, 0.95));
+    const disc = new THREE.Mesh(new THREE.CircleGeometry(R, 32), glow(0xff3a10, 0.35, THREE.DoubleSide));
+    group.add(ring); group.add(disc);
+    model.add(group);
+    _rfx = { model, kind, group, ring, disc, box, ctr };
+  }
+  const r = _rfx, b = r.box, lm = r.model._legendMats;
+  const glowBody = v => { if (lm) { lm.obsidian.emissive.setHex(0xff2010); lm.obsidian.emissiveIntensity = v; } };
+  if (kind === 'wave') {
+    // Stock to muzzle, lighting the gun as it passes, then a burst out the end.
+    const k = _eqClamp((t - 0.15) / 0.55), burst = _eqClamp((t - 0.70) / 0.18);
+    r.group.position.set(r.ctr.x, r.ctr.y, b.max.z + (b.min.z - b.max.z) * _eqEase(k));
+    r.group.scale.setScalar(1 + burst * 2.5);
+    const vis = t < 0.15 ? t / 0.15 : 1 - burst;
+    r.ring.material.opacity = 0.95 * vis; r.disc.material.opacity = 0.35 * vis;
+    glowBody(t > 0.15 && t < 0.75 ? 1.2 + Math.sin(t * 40) * 0.2 : 1.2 * (1 - burst) * (t > 0.7 ? 1 : 0));
+  } else if (kind === 'charge') {
+    // Muzzle back to the chamber, tightening and brightening, then a flash.
+    const k = _eqClamp((t - 0.10) / 0.65), flash = _eqClamp((t - 0.75) / 0.12);
+    r.group.position.set(r.ctr.x, r.ctr.y, b.min.z + (r.ctr.z - b.min.z) * _eqEase(k));
+    r.group.scale.setScalar(1.6 - k);
+    const vis = t < 0.10 ? t / 0.10 : 1 - flash;
+    r.ring.material.opacity = 0.95 * vis; r.disc.material.opacity = (0.2 + 0.4 * k) * vis;
+    glowBody(0.3 + k * 1.6 * (1 - flash) + (flash > 0 && flash < 1 ? 2.0 * (1 - flash) : 0));
   }
 }
 
@@ -24532,13 +24786,16 @@ const MELEE_MODEL_SKINS = [
   // 🔥 FFA Legend blades: they burn, so drawing one flares the fire up.
   { id: 'knife_legend', melee: 'knife', name: 'FFA Legend Knife', rarity: 'legend',
     sw: ['#17121a', '#ff2a1a'], build: buildLegendKnife,
-    blurb: 'A black blade with a burning edge and a spine of spikes.' },
+    blurb: 'A black blade with a burning edge and a spine of spikes.',
+    equip: 'hellflip', equipMs: 850, equipSfx: ['whoosh', 'snapin'] },
   { id: 'katana_legend', melee: 'katana', name: 'FFA Legend Katana', rarity: 'legend',
     sw: ['#17121a', '#ff2a1a'], build: buildLegendKatana,
-    blurb: 'Obsidian steel, the whole length of it burning.' },
+    blurb: 'Obsidian steel, the whole length of it burning.',
+    equip: 'unsheathe', equipMs: 1000, equipSfx: [null, null], equipBeats: [[.12,'shing']] },
   { id: 'bat_legend', melee: 'bat', name: 'FFA Legend Bat', rarity: 'legend',
     sw: ['#17121a', '#ff2a1a'], build: buildLegendBat,
-    blurb: 'Nails were not enough. Spikes, and fire.' },
+    blurb: 'Nails were not enough. Spikes, and fire.',
+    equip: 'slam', equipMs: 900, equipSfx: ['whoosh', null], equipBeats: [[.55,'slam']] },
 ];
 const MELEE_MODEL_SKINS_BY_BASE = {};
 for (const ms of MELEE_MODEL_SKINS) (MELEE_MODEL_SKINS_BY_BASE[ms.melee] ||= []).push(ms);
@@ -25342,6 +25599,22 @@ function _makeObjectProp(kind, M, g) {
       add('s', C(0.0048, 0.0048, 0.005, 10), M(0xf0c020, 140), 0, 0.017, 0); return true;
     case 'pixel':
       add('p', B(0.020, 0.020, 0.020), M(pick([0x2a2e34, 0x55ddff, 0x8a5a2a]), 30)); return true;
+    case 'soul':       // an FFA Legend pistol's round: a burning soul in black smoke
+      add('c', S(0.011), new THREE.MeshBasicMaterial({ color: 0xff3a1a }));
+      add('s', S(0.019, 10, 8), new THREE.MeshBasicMaterial({ color: 0x0a0405, transparent: true, opacity: 0.55,
+        depthWrite: false })).scale.set(1, 1.3, 1);
+      return true;
+    case 'ash':        // what is left of the old one
+      add('a', S(0.016, 7, 5), M(0x3a3634, 5)).scale.set(1.3, 0.6, 1.2); return true;
+    case 'coal':       // a coal where a shell would go
+      add('c', () => new THREE.DodecahedronGeometry(0.012, 0), M(0x1a1412, 20));
+      add('g', S(0.007, 6, 5), new THREE.MeshBasicMaterial({ color: 0xff4a1a }), 0.004, 0.004, 0);
+      return true;
+    case 'magma':      // a molten magazine, cracked and glowing
+      add('m', B(0.026, 0.090, 0.044), M(0x17121a, 120));
+      for (let i = 0; i < 3; i++)
+        add('v' + i, B(0.027, 0.004, 0.030), new THREE.MeshBasicMaterial({ color: 0xff3a10 }), 0, -0.030 + i * 0.030, 0, 0, 0, 0.3 * (i - 1));
+      return true;
     case 'dash':       // "-" — black rim, white face, same as the guns that fire it
       add('k', B(0.060, 0.014, 0.008), M(0x0d0d0d, 20));
       add('w', B(0.054, 0.009, 0.010), M(0xf6f6f6, 20)); return true;
@@ -25949,11 +26222,31 @@ const SKIN_FX = {
     equip: 'spin', equipMs: 900, spinTurns: 2, equipSfx: ['whoosh', 'cock'] },
   // FFA Legends are the real guns, so the gun's reload; the voice is the gun's
   // own report with the fire roaring behind it.
-  ak20_legend:   { sound: _fxS('hellfire', .26, .09, 0, 0, { base:'auto_blast', action:'water_rifle', tail:.30 }) },
-  pistol_legend: { sound: _fxS('hellfire', .34, .12, 0, 0, { base:'pistol', action:'slide', tail:.25 }) },
-  sg8_legend:    { sound: _fxS('hellfire', .58, .22, 0, 0, { base:'boom', action:'shotgun', tail:.70 }) },
-  srx_legend:    { sound: _fxS('hellfire', .64, .18, 0, 0, { base:'crack', action:'bolt', tail:1.20 }) },
-  vector_legend: { sound: _fxS('hellfire', .21, .07, 0, 0, { base:'auto_blast', action:'water_smg', tail:.20 }) },
+  // Each has its own entrance and its own reload -- no two alike, and none of
+  // them a magazine.
+  ak20_legend: { sound: _fxS('hellfire', .26, .09, 0, 0, { base:'auto_blast', action:'water_rifle', tail:.30 }),
+    equip: 'eruption', equipMs: 1000, equipSfx: ['fireup', 'cock'],
+    // a wave of red light bursts through it, stock to muzzle
+    reload: Object.assign(_fxR([K(.10,{py:.05,rx:.18,rz:-.30,hy:.02}), K(.30,{py:.07,rx:.22,rz:-.42,hy:.04}),
+      K(.62,{py:.07,rx:.22,rz:-.44,hy:.04}), K(.76,{py:.03,rx:.32,rz:-.10}), K(.90,{py:.01,rx:.04})],
+      null, [[.15,'ignite'],[.70,'fireup']]), { fx: 'wave' }) },
+  pistol_legend: { sound: _fxS('hellfire', .34, .12, 0, 0, { base:'pistol', action:'slide', tail:.25 }),
+    equip: 'cube', equipMs: 1000, equipSfx: ['ignite', 'snapin'], equipBeats: [[.30,'click'],[.38,'click'],[.46,'click']],
+    // the old soul crumbles to ash; a burning one is stuffed into the grip
+    reload: _fxR(_RK.under(), [RP(.30,'ash'), RP(.56,'soul','arrive')], [[.48,'whoosh']], 'cock') },
+  sg8_legend: { sound: _fxS('hellfire', .58, .22, 0, 0, { base:'boom', action:'shotgun', tail:.70 }),
+    equip: 'forge', equipMs: 1100, equipSfx: ['fireup', 'hiss'], equipBeats: [[.2,'clink'],[.4,'clink'],[.6,'clink']],
+    // coals fed in where the shells would go, on the SG8's own beats
+    reload: _fxR(RELOAD_KEYS.sg8, (RELOAD_PROPS.sg8 || []).map(e => e.k === 'shell' ? Object.assign({}, e, { k: 'coal' }) : e), null, 'rack') },
+  srx_legend: { sound: _fxS('hellfire', .64, .18, 0, 0, { base:'crack', action:'bolt', tail:1.20 }),
+    equip: 'meteor', equipMs: 1100, equipSfx: ['whoosh', 'clink'], equipBeats: [[.5,'tap'],[.65,'tap'],[.8,'tap']],
+    // red energy drawn back up the barrel into the chamber
+    reload: Object.assign(_fxR(RELOAD_KEYS.srx, [], [[.10,'ignite']], 'cock'), { fx: 'charge' }) },
+  vector_legend: { sound: _fxS('hellfire', .21, .07, 0, 0, { base:'auto_blast', action:'water_smg', tail:.20 }),
+    equip: 'vortex', equipMs: 1000, equipSfx: ['whoosh', 'click'],
+    // the old magazine crumbles to ash; a molten one goes in
+    reload: _fxR(RELOAD_KEYS.vector, (RELOAD_PROPS.vector || []).map(e => e.k === 'mag'
+      ? Object.assign({}, e, { k: e.m === 'arrive' ? 'magma' : 'ash' }) : e), [[.30,'hiss']], 'snapin') },
 };
 
 function _reloadPose(track, t) {
@@ -33480,6 +33773,7 @@ function loop() {
   safeLoopStep('reload-props', () => updateReloadProps(dt));    // and the parts they moved go on moving
   safeLoopStep('equip-anim', () => updateEquipAnim());          // a skin making its entrance
   safeLoopStep('legend-fire', () => updateLegendFire(dt));      // FFA Legend skins burning
+  safeLoopStep('reload-fx', () => updateSkinReloadFx());        // and reloading with light
   safeLoopStep('cylinders', () => updateCylinders(dt));      // revolving cylinders index round as they fire
   safeLoopStep('switchblade-hud', () => updateSwitchbladeHUD()); // shows only when switchblade is active
   safeLoopStep('spectator-camera', () => updateSpectatorCamera(dt)); // follow teammates while dead
