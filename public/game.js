@@ -25362,7 +25362,10 @@ function updateMapEffects(dt) {
 // ── Vehicle piloting (BR arena: jeeps + helicopters) ─────────────────────
 let pilotedVehicle = null; // { ref to mapVehicles entry }
 function updateVehiclePrompt() {
-  if (pilotedVehicle) return;
+  if (pilotedVehicle) {   // hide it first, as the mortar's does — returning early left "tap PILOT…" up for the whole drive (#23)
+    const p = document.getElementById('vehicle-prompt'); if (p) p.style.display = 'none';
+    return;
+  }
   const near = mapVehicles.find(v => v.mapName === activeMapName && v.hp > 0 && !v.pilotedBy
     && Math.hypot(v.x - camera.position.x, v.z - camera.position.z) < 4);
   let prompt = document.getElementById('vehicle-prompt');
