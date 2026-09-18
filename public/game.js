@@ -32167,6 +32167,10 @@ function finishLogin(result, creds) {
   emitMySkin();
   document.getElementById('overlay').style.display = 'none';
   document.body.classList.remove('login-open');
+  // Let go of the nickname/password field. Chrome already drops focus once the overlay hides; this
+  // covers engines that don't, where a focused field keeps a phone's keyboard up over the game and
+  // switches off the V / T / melee keys on desktop.
+  if (document.activeElement) document.activeElement.blur();
   stopOnlineCount();
   updateUserInfoBar(); // populate user info for the mode screen (opened from the lobby)
   // 🥚 Easter eggs on login (cursed password / secret name)
@@ -33002,6 +33006,16 @@ function selectMode(modeId) {
 }
 document.getElementById('play-btn').addEventListener('click', startGame);
 document.getElementById('play-btn').addEventListener('touchstart', e => { e.preventDefault(); startGame(); }, { passive: false });
+// Enter / the keyboard's Go key plays too. On a phone the open keyboard covers PLAY, so without
+// this the only way in was closing the keyboard first. Enter that commits an IME composition
+// (pinyin → 你好) only finishes the text; keyCode 229 covers browsers that clear isComposing early.
+for (const id of ['name-input', 'pass-input']) {
+  document.getElementById(id).addEventListener('keydown', e => {
+    if (e.key !== 'Enter' || e.isComposing || e.keyCode === 229) return;
+    e.preventDefault();
+    startGame();
+  });
+}
 // click + touchstart. Mid-match the document touchstart handler preventDefault()s every
 // touch, which swallows the synthesized click — an onclick-only button is dead on phones.
 // stopPropagation keeps this touch from also starting a joystick / look drag.
