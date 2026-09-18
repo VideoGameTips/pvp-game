@@ -3240,7 +3240,11 @@ function playWeaponSound(idOrWeapon, opts = {}) {
   weaponSoundLastAt[key] = nowMs;
   unlockAudio();
 
-  const p = weaponAudioProfile(id, base);
+  // Your own shots sound like whatever you are holding: a barcode scanner that
+  // goes BANG is only a gun in a costume. Other people's shots keep the gun's
+  // voice, because what they have equipped is not yours to know.
+  const fx = opts.remote ? null : _skinFxFor(id);
+  const p = (fx && fx.sound) || weaponAudioProfile(id, base);
   const distGain = soundDistanceGain(opts.position, opts.remote);
   const mult = (opts.volume ?? 1) * distGain * (opts.remote ? 0.75 : 1) * SOUND_MIX;
   const start = ctx.currentTime + 0.002;
@@ -3263,7 +3267,9 @@ function playWeaponSound(idOrWeapon, opts = {}) {
     longReport(ctx, start, mainGain, p.vol * mult, p.tail * (indoorNow ? 0.35 : 1));
   }
 
-  if (p.kind === 'auto_blast' || p.kind === 'auto_blast_heavy') {
+  if (playObjectShot(ctx, start, mainGain, p, mult)) {
+    // an object's own voice -- see playObjectShot
+  } else if (p.kind === 'auto_blast' || p.kind === 'auto_blast_heavy') {
     playMuzzleBlast(ctx, start, mainGain, p.kind, p.vol * mult);
     playGunAction(ctx, start, mainGain, p.action, p.vol * mult);
   } else if (p.kind === 'firework') {
@@ -3305,7 +3311,257 @@ function playWeaponSound(idOrWeapon, opts = {}) {
     playMuzzleBlast(ctx, start, mainGain, 'rifle', p.vol * mult);
     playGunAction(ctx, start, mainGain, p.action || 'rifle', p.vol * mult);
   }
+  // Two barrels, two reports, a hair apart.
+  if (p.double) playMuzzleBlast(ctx, start + 0.028, mainGain,
+    p.kind === 'auto_blast' ? 'auto_blast' : 'rifle', p.vol * mult * 0.85);
 }
+// ── 🔔 What an object sounds like when it fires ─────────────────────────────
+// A model skin turns the gun into a barcode scanner, and a barcode scanner that
+// goes BANG is still a gun in a costume. These are the object's own voices. A
+// profile uses the same fields a gun's does (kind, vol, dur, f1, f2), so a skin
+// entry reads exactly like the weapon table's sound entries. Returns false for
+// a kind it does not know, and the gun synthesis below takes over.
+function playObjectShot(ctx, start, out, p, m) {
+  const v = p.vol * m, d = p.dur || 0.1, f1 = p.f1 || 800, f2 = p.f2 || f1;
+  switch (p.kind) {
+    case 'beep':     // a scanner, a detector
+      playTone(ctx, start, d, out, f1, f2, v, 'square');
+      playFilteredNoise(ctx, start, 0.005, out, v * 0.5, 'highpass', 4200, 0.5, 0.0002, 1.4); return true;
+    case 'squirt':   // water, soap, slush
+      playSweptNoise(ctx, start, d, out, v, 'bandpass', f1, f2, 1.6);
+      playTone(ctx, start, d * 0.6, out, f1 * 0.4, f2 * 0.3, v * 0.20, 'sine'); return true;
+    case 'boing':    // a spring
+      playTone(ctx, start, d * 0.35, out, f1, f2, v, 'triangle');
+      playTone(ctx, start + d * 0.35, d * 0.65, out, f2, (f1 + f2) / 2, v * 0.7, 'triangle'); return true;
+    case 'honk':
+      playTone(ctx, start, d, out, f1, f2, v, 'sawtooth');
+      playTone(ctx, start, d, out, f1 * 1.5, f2 * 1.5, v * 0.35, 'square'); return true;
+    case 'cork':     // the pop, then the fizz running on after it
+      playTone(ctx, start, 0.035, out, f1, f2, v, 'sine');
+      playFilteredNoise(ctx, start, 0.012, out, v * 0.8, 'highpass', 3000, 0.6, 0.0002, 1.4);
+      playFilteredNoise(ctx, start + 0.03, 0.5, out, v * 0.14, 'highpass', 5200, 0.5, 0.01, 1.0); return true;
+    case 'whirr':    // a motor
+      playTone(ctx, start, d, out, f1, f2, v, 'sawtooth');
+      playNoise(ctx, start, d, out, v * 0.35, 0.4); return true;
+    case 'swish':    // air past something long
+      playSweptNoise(ctx, start, d, out, v, 'bandpass', f1, f2, 1.0); return true;
+    case 'ding':     // a bell: the fundamental and its inharmonic partial
+      playTone(ctx, start, d, out, f1, f1 * 0.995, v, 'sine');
+      playTone(ctx, start, d * 0.6, out, f1 * 2.76, f1 * 2.7, v * 0.25, 'sine');
+      playFilteredNoise(ctx, start, 0.004, out, v * 0.4, 'highpass', 4000, 0.6, 0.0002, 1.4); return true;
+    case 'reed':     // accordion: two reeds a hair apart, which is the wobble
+      playTone(ctx, start, d, out, f1, f1, v * 0.6, 'sawtooth');
+      playTone(ctx, start, d, out, f1 * 1.006, f1 * 1.006, v * 0.5, 'square');
+      playTone(ctx, start, d, out, f2, f2, v * 0.3, 'sawtooth'); return true;
+    case 'organ':    // a stopped pipe and its harmonics
+      [1, 2, 3, 4].forEach((h, i) => playTone(ctx, start, d, out, f1 * h, f1 * h, v / (i + 1.4), 'sine'));
+      playTone(ctx, start, d, out, f2, f2, v * 0.4, 'sine'); return true;
+    case 'synth':    // keytar lead: a blip down onto the note
+      playTone(ctx, start, d, out, f1 * 2, f1, v * 0.7, 'square');
+      playTone(ctx, start, d, out, f2, f2, v * 0.5, 'sawtooth'); return true;
+    case 'toot':     // brass: buzz of the lips, then the horn
+      playTone(ctx, start, d, out, f1, f2, v, 'sawtooth');
+      playTone(ctx, start, d, out, f1 * 2, f2 * 2, v * 0.35, 'square');
+      playFilteredNoise(ctx, start, 0.03, out, v * 0.3, 'lowpass', 400, 0.8, 0.002, 1.6); return true;
+    case 'pluck':    // a plucked string
+      playTone(ctx, start, d, out, f1, f1 * 0.998, v, 'triangle');
+      playTone(ctx, start, d * 0.5, out, f2, f2, v * 0.35, 'sine');
+      playFilteredNoise(ctx, start, 0.006, out, v * 0.3, 'highpass', 3200, 0.6, 0.0002, 1.4); return true;
+    case 'zip':
+    case 'rip':      // tape off a roll, a label out of a slot
+      playSweptNoise(ctx, start, d, out, v, 'highpass', f1, f2, 0.8); return true;
+    case 'hiss':     // pressure let go
+      playFilteredNoise(ctx, start, d, out, v, 'highpass', f1, 0.5, 0.003, 1.0);
+      playFilteredNoise(ctx, start, 0.01, out, v * 0.6, 'bandpass', f1 * 0.6, 1.0, 0.0003, 1.4); return true;
+    case 'crunch':
+      for (let i = 0; i < 5; i++)
+        playFilteredNoise(ctx, start + i * d / 5, d / 5, out, v * (1 - i * 0.12), 'bandpass', f1 + Math.random() * f2, 1.6, 0.0003, 1.6);
+      return true;
+    case 'grind':    // a pepper mill: teeth, fast
+      for (let i = 0; i < 7; i++)
+        playFilteredNoise(ctx, start + i * d / 7, d / 8, out, v * 0.8, 'bandpass', f1 + (i % 2) * f2 * 0.3, 2.0, 0.0003, 1.6);
+      return true;
+    case 'thwack':   // something flat hitting something hard
+      playTone(ctx, start, d, out, f1, f2, v, 'sine');
+      playFilteredNoise(ctx, start, 0.014, out, v * 0.9, 'highpass', 2600, 0.6, 0.0002, 1.4); return true;
+    case 'buzz':
+      playTone(ctx, start, d, out, f1, f2, v, 'square');
+      playTone(ctx, start, d, out, f1 * 1.5, f2 * 1.5, v * 0.3, 'square'); return true;
+    case 'type':     // a typewriter key; the sniper rings the carriage bell
+      metalClack(ctx, start, out, v, f1, 0.022);
+      playFilteredNoise(ctx, start, 0.005, out, v * 0.8, 'highpass', 4400, 0.6, 0.0002, 1.4);
+      if (p.n) for (let i = 1; i < p.n; i++) metalClack(ctx, start + i * 0.018, out, v * 0.7, f1 * (1 + i * 0.08), 0.018);
+      if (p.bell) playTone(ctx, start + 0.02, 0.6, out, 2400, 2390, v * 0.35, 'sine');
+      return true;
+    case 'ring':     // a telephone bell: the hammer between two gongs
+      for (let i = 0; i < 6; i++)
+        playTone(ctx, start + i * d / 6, d / 6, out, i % 2 ? f2 : f1, i % 2 ? f2 : f1, v, 'triangle');
+      return true;
+    case 'splat':
+      playFilteredNoise(ctx, start, d, out, v, 'lowpass', f1 * 3, 0.8, 0.001, 1.6);
+      playTone(ctx, start, d * 0.7, out, f1, f2, v * 0.6, 'sine'); return true;
+    case 'splash':
+      playFilteredNoise(ctx, start, d, out, v, 'bandpass', f1 * 3, 0.7, 0.002, 1.2);
+      playFilteredNoise(ctx, start + 0.02, d * 1.5, out, v * 0.4, 'highpass', 3000, 0.5, 0.01, 1.2); return true;
+    case 'snap':     // a cap going off, a clicky switch
+      playFilteredNoise(ctx, start, d, out, v, 'highpass', f1, 0.6, 0.0002, 1.5);
+      playTone(ctx, start, 0.02, out, f2, f2 * 0.6, v * 0.3, 'square'); return true;
+    case 'pfft':     // a suppressed pistol: the gas, then the slide
+      playFilteredNoise(ctx, start, d, out, v, 'lowpass', f1, 0.7, 0.0005, 1.6);
+      metalClack(ctx, start + 0.004, out, v * 0.8, 700, 0.030); return true;
+    case 'popper':   // the snap, then the paper coming down
+      playFilteredNoise(ctx, start, 0.012, out, v, 'highpass', f1 * 2.5, 0.6, 0.0002, 1.4);
+      playTone(ctx, start, 0.03, out, f1, f2, v * 0.5, 'sine');
+      for (let i = 0; i < 6; i++)
+        playFilteredNoise(ctx, start + 0.03 + i * 0.03, 0.03, out, v * 0.12, 'bandpass', 3000 + Math.random() * 2000, 2, 0.0003, 1.6);
+      return true;
+    case 'shutter':  // a camera: the blades open, then shut
+      playFilteredNoise(ctx, start, 0.010, out, v, 'highpass', f1, 0.6, 0.0002, 1.5);
+      playFilteredNoise(ctx, start + 0.06, 0.012, out, v * 0.8, 'highpass', f2, 0.6, 0.0002, 1.5); return true;
+    case 'siren':
+      playTone(ctx, start, d * 0.5, out, f1, f2, v, 'sawtooth');
+      playTone(ctx, start + d * 0.5, d * 0.5, out, f2, f1, v, 'sawtooth'); return true;
+    case 'pthew':    // a spitball down a straw
+      playSweptNoise(ctx, start, d, out, v, 'bandpass', f1, f2, 2.0);
+      playTone(ctx, start, d * 0.4, out, 700, 300, v * 0.3, 'sine'); return true;
+    case 'whistle':  // two sines a hair apart: the pea rattling in the chamber
+      playTone(ctx, start, d, out, f1, f2, v, 'sine');
+      playTone(ctx, start, d, out, f1 * 1.03, f2 * 1.03, v * 0.5, 'sine'); return true;
+    case 'squeak':   // rubber on glass
+      playTone(ctx, start, d, out, f1, f2, v, 'triangle');
+      playTone(ctx, start, d, out, f1 * 2.01, f2 * 2.01, v * 0.3, 'sine'); return true;
+    case 'shing':    // a blade out of its handle
+      playFilteredNoise(ctx, start, d, out, v, 'highpass', f1, 1.0, 0.001, 1.4);
+      playTone(ctx, start, d, out, f2, f2 * 1.02, v * 0.25, 'sine'); return true;
+    case 'sparkle':  // a rising arpeggio: a shooting star, for a telescope
+      [1, 1.26, 1.5, 2].forEach((r, i) => playTone(ctx, start + i * 0.04, d, out, f1 * r, f1 * r, v * (1 - i * 0.2), 'sine'));
+      return true;
+    case 'sprinkle': // an impact sprinkler: its arm ticking round, and the spray
+      for (let i = 0; i < 3; i++)
+        playFilteredNoise(ctx, start + i * 0.02, 0.006, out, v, 'highpass', f1, 0.6, 0.0002, 1.4);
+      playFilteredNoise(ctx, start, d, out, v * 0.4, 'highpass', f2, 0.5, 0.005, 1.2); return true;
+    case 'clatter':  // a mechanism, several parts at once
+      for (let i = 0; i < 3; i++) metalClack(ctx, start + i * 0.02, out, v * (1 - i * 0.25), f1 + i * f2 * 0.2, 0.02);
+      return true;
+    case 'rattle':   // gumballs down a chute
+      for (let i = 0; i < 4; i++)
+        playFilteredNoise(ctx, start + i * 0.025, 0.02, out, v * (1 - i * 0.15), 'bandpass', f1 + Math.random() * f2, 2.4, 0.0003, 1.6);
+      playTone(ctx, start, 0.05, out, 300, 180, v * 0.4, 'sine'); return true;
+    case 'aircon':   // air, and the compressor humming under it
+      playFilteredNoise(ctx, start, d, out, v, 'highpass', f1, 0.5, 0.01, 1.0);
+      playTone(ctx, start, d, out, 60, 60, v * 0.6, 'sine');
+      playTone(ctx, start, d, out, f2, f2, v * 0.2, 'sawtooth'); return true;
+  }
+  return false;
+}
+
+// ── 🔧 What an object sounds like while it is being reloaded ────────────────
+// Used three ways: by each reload part as it comes off or goes on, by the
+// sound-only beats a skin's reload lists, and by the one it finishes on.
+function playObjectSfx(ctx, out, name, t, v) {
+  switch (name) {
+    case 'click':
+      playFilteredNoise(ctx, t, 0.010, out, v * 0.55, 'highpass', 2600, 0.6, 0.0002, 1.6);
+      playFilteredNoise(ctx, t + 0.004, 0.018, out, v * 0.30, 'bandpass', 1400, 1.2, 0.0003, 2.0); break;
+    case 'snapin':   metalClack(ctx, t, out, v * 0.55, 900, 0.030);
+      playFilteredNoise(ctx, t, 0.012, out, v * 0.5, 'highpass', 3000, 0.6, 0.0002, 1.6); break;
+    case 'slideout': playSweptNoise(ctx, t, 0.10, out, v * 0.30, 'bandpass', 900, 1600, 1.0); break;
+    case 'rattle':
+      for (let i = 0; i < 4; i++)
+        playFilteredNoise(ctx, t + i * 0.03 + Math.random() * 0.02, 0.020, out, v * 0.22, 'bandpass', 2000 + Math.random() * 1500, 2.5, 0.0003, 1.8);
+      break;
+    case 'rustle':
+      for (let i = 0; i < 3; i++)
+        playFilteredNoise(ctx, t + i * 0.04, 0.05, out, v * 0.14, 'bandpass', 3200 + Math.random() * 1400, 1.2, 0.002, 1.3);
+      break;
+    case 'brush':    playSweptNoise(ctx, t, 0.16, out, v * 0.22, 'bandpass', 3800, 1600, 1.4); break;
+    case 'clink':    playTone(ctx, t, 0.16, out, 2600, 2590, v * 0.20, 'sine');
+      playTone(ctx, t, 0.10, out, 2600 * 2.7, 2600 * 2.7, v * 0.06, 'sine'); break;
+    case 'plop':     playTone(ctx, t, 0.07, out, 520, 180, v * 0.40, 'sine'); break;
+    case 'bloop':    playTone(ctx, t, 0.08, out, 300, 900, v * 0.35, 'sine'); break;
+    case 'glug':
+      for (let i = 0; i < 3; i++) playTone(ctx, t + i * 0.09, 0.06, out, 360 - i * 50, 220 - i * 30, v * 0.30, 'sine');
+      break;
+    case 'fizz':     playFilteredNoise(ctx, t, 0.45, out, v * 0.18, 'highpass', 5200, 0.5, 0.01, 1.0); break;
+    case 'hiss':     playFilteredNoise(ctx, t, 0.30, out, v * 0.26, 'highpass', 3400, 0.5, 0.01, 1.2); break;
+    case 'squeak':   playTone(ctx, t, 0.07, out, 1400, 1900, v * 0.18, 'triangle'); break;
+    case 'pump':
+      playSweptNoise(ctx, t, 0.16, out, v * 0.30, 'bandpass', 700, 1800, 1.2);
+      playFilteredNoise(ctx, t + 0.15, 0.02, out, v * 0.3, 'highpass', 2400, 0.6, 0.0002, 1.6); break;
+    case 'wheeze':
+      playSweptNoise(ctx, t, 0.22, out, v * 0.22, 'bandpass', 500, 900, 2.0);
+      playTone(ctx, t, 0.22, out, 196, 196, v * 0.10, 'sawtooth'); break;
+    case 'tick':     playFilteredNoise(ctx, t, 0.006, out, v * 0.45, 'highpass', 4200, 0.6, 0.0002, 1.4); break;
+    case 'ticking':  for (let i = 0; i < 6; i++) playObjectSfx(ctx, out, 'tick', t + i * 0.11, v * (i % 2 ? 0.7 : 1)); break;
+    case 'dial':     for (let i = 0; i < 7; i++) playObjectSfx(ctx, out, 'tick', t + i * 0.055, v * 0.8); break;
+    case 'ding':
+      playTone(ctx, t, 0.9, out, 2100, 2080, v * 0.30, 'sine');
+      playTone(ctx, t, 0.5, out, 2100 * 2.76, 2100 * 2.7, v * 0.08, 'sine'); break;
+    case 'beep':
+      playTone(ctx, t, 0.07, out, 1760, 1760, v * 0.22, 'square');
+      playTone(ctx, t + 0.10, 0.09, out, 2349, 2349, v * 0.22, 'square'); break;
+    case 'chord':    [262, 330, 392].forEach((f, i) => playTone(ctx, t + i * 0.02, 0.5, out, f, f, v * 0.14, 'triangle')); break;
+    case 'lowchord': [87, 110, 131].forEach((f, i) => playTone(ctx, t + i * 0.02, 0.6, out, f, f, v * 0.20, 'sawtooth')); break;
+    case 'pluck':    playTone(ctx, t, 0.35, out, 440, 438, v * 0.26, 'triangle'); break;
+    case 'gliss':
+      [392, 440, 494, 523, 587, 659, 698, 784].forEach((f, i) => playTone(ctx, t + i * 0.05, 0.30, out, f, f, v * 0.16, 'triangle'));
+      break;
+    case 'boing':
+      playTone(ctx, t, 0.10, out, 180, 420, v * 0.30, 'triangle');
+      playTone(ctx, t + 0.10, 0.14, out, 420, 260, v * 0.22, 'triangle'); break;
+    case 'honk':
+      playTone(ctx, t, 0.14, out, 370, 360, v * 0.26, 'sawtooth');
+      playTone(ctx, t, 0.14, out, 555, 540, v * 0.10, 'square'); break;
+    case 'whistle':  playTone(ctx, t, 0.18, out, 2800, 2700, v * 0.20, 'sine'); break;
+    case 'whirr':
+      playTone(ctx, t, 0.35, out, 140, 520, v * 0.18, 'sawtooth');
+      playNoise(ctx, t, 0.35, out, v * 0.10, 0.4); break;
+    case 'buzz':     playTone(ctx, t, 0.30, out, 120, 120, v * 0.16, 'square'); break;
+    case 'hum':
+      playTone(ctx, t, 0.40, out, 60, 60, v * 0.22, 'sine');
+      playTone(ctx, t, 0.40, out, 120, 120, v * 0.10, 'sine'); break;
+    case 'rip':      playSweptNoise(ctx, t, 0.14, out, v * 0.32, 'highpass', 1800, 5200, 0.7); break;
+    case 'splat':
+      playFilteredNoise(ctx, t, 0.08, out, v * 0.40, 'lowpass', 700, 0.8, 0.001, 1.6);
+      playTone(ctx, t, 0.06, out, 160, 70, v * 0.3, 'sine'); break;
+    case 'crunch':
+      for (let i = 0; i < 4; i++)
+        playFilteredNoise(ctx, t + i * 0.025, 0.02, out, v * 0.30, 'bandpass', 2400 + Math.random() * 1800, 1.8, 0.0003, 1.6);
+      break;
+    case 'slurp':    playSweptNoise(ctx, t, 0.22, out, v * 0.22, 'bandpass', 600, 1400, 3.0); break;
+    case 'shutter':  playObjectSfx(ctx, out, 'click', t, v); playObjectSfx(ctx, out, 'click', t + 0.07, v * 0.8); break;
+    case 'strike':   // a match
+      playSweptNoise(ctx, t, 0.12, out, v * 0.30, 'bandpass', 2400, 900, 1.0);
+      playFilteredNoise(ctx, t + 0.10, 0.25, out, v * 0.14, 'lowpass', 900, 0.7, 0.01, 1.2); break;
+    case 'type':
+      metalClack(ctx, t, out, v * 0.40, 1500, 0.020);
+      playFilteredNoise(ctx, t, 0.006, out, v * 0.40, 'highpass', 4000, 0.6, 0.0002, 1.4); break;
+    case 'typing':   for (let i = 0; i < 5; i++) playObjectSfx(ctx, out, 'type', t + i * 0.075 + Math.random() * 0.02, v * 0.8); break;
+    case 'sprinkle':
+      for (let i = 0; i < 5; i++) playObjectSfx(ctx, out, 'tick', t + i * 0.07, v);
+      playFilteredNoise(ctx, t, 0.35, out, v * 0.12, 'highpass', 3000, 0.5, 0.01, 1.2); break;
+    case 'tap':      playFilteredNoise(ctx, t, 0.025, out, v * 0.40, 'bandpass', 900, 1.2, 0.0004, 1.8); break;
+    default:         playObjectSfx(ctx, out, 'click', t, v);
+  }
+}
+// What each reload part sounds like: [taken off / thrown clear, put on / fitted].
+const PROP_SFX = {
+  battery: ['slideout', 'snapin'], cell: ['rattle', 'snapin'], drum: ['slideout', 'snapin'],
+  balloon: ['plop', 'plop'], leaf: ['rustle', 'rustle'], ice: ['clink', 'clink'],
+  lettuce: ['rustle', 'rustle'], bobber: ['plop', 'plop'], staples: ['slideout', 'snapin'],
+  caps: ['rustle', 'click'], plug: ['click', 'snapin'], tape: ['rip', 'snapin'],
+  lenscap: ['click', 'click'], cork: ['squeak', 'squeak'], gluestick: ['squeak', 'squeak'],
+  spool: ['rattle', 'click'], peel: ['rip', 'rip'], banana: ['tap', 'tap'],
+  drop: ['plop', 'plop'], hairball: ['brush', 'brush'], note: ['pluck', 'pluck'],
+  carrot: ['crunch', 'tap'], coupling: ['click', 'snapin'], grain: ['rattle', 'rattle'],
+  band: ['boing', 'boing'], dust: ['brush', 'brush'], popper: ['rustle', 'click'],
+  beater: ['click', 'snapin'], refill: ['glug', 'glug'], bubble: ['bloop', 'bloop'],
+  puck: ['tap', 'tap'], crisp: ['crunch', 'crunch'], pin: ['click', 'click'],
+  coin: ['clink', 'clink'], gumball: ['rattle', 'rattle'], comb: ['click', 'snapin'],
+  candle: ['tap', 'tap'], reel: ['rattle', 'click'], paint: ['splat', 'splat'],
+  filter: ['slideout', 'snapin'], canister: ['hiss', 'snapin'], dash: ['type', 'type'],
+};
+
 // ── 🔁 Reload audio ─────────────────────────────────────────────────────────
 // Every reload in the game used to be the same two beeps: a 360 -> 210 Hz
 // square and a 180 -> 320 triangle. Meanwhile the animation knew, per weapon and
@@ -3384,18 +3640,29 @@ function playReloadSound(w, durMs) {
                       V * 0.22, 'bandpass', 2600 + Math.random() * 1600, 11, 0.0004, 1.6); };
 
   // ── Everything the reload actually does, in the order it does it ──────────
-  const evs = RELOAD_PROPS[id] || [];
+  const fx = _skinFxFor(id);
+  const skinReload = fx && fx.reload;
+  const evs = (skinReload && skinReload.props) || RELOAD_PROPS[id] || [];
   let sawMagOut = false, sawAnything = false;
   for (const e of evs) {
     const t = at(e.t);
     sawAnything = true;
     const arriving = e.m === 'arrive';
-    if (e.k === 'mag')          { arriving ? magIn(t) : (magOut(t), sawMagOut = true); }
+    if (PROP_SFX[e.k])          playObjectSfx(ctx, g, PROP_SFX[e.k][arriving ? 1 : 0], t, V);
+    else if (e.k === 'mag')          { arriving ? magIn(t) : (magOut(t), sawMagOut = true); }
     else if (e.k === 'shell')   { arriving ? shellIn(t) : tinkle(t, Math.min(4, e.n)); }
     else if (e.k === 'round')   { arriving ? roundIn(t) : tinkle(t, Math.min(4, e.n)); }
     else if (e.k === 'grenade') { arriving ? heavyIn(t) : tinkle(t, Math.min(4, e.n)); }
     else if (e.k === 'clip')    { arriving ? magIn(t)   : tinkle(t, 2); }
     else                        { tinkle(t, Math.min(5, e.n)); }   // cases, links
+  }
+
+  // An object's reload is the object's: its own beats, the sound it finishes
+  // on, and none of the gun's -- no bolt to rack, no magazine to fall back on.
+  if (skinReload) {
+    for (const b of skinReload.beats) playObjectSfx(ctx, g, b.s, at(b.t), V);
+    if (skinReload.finish) playObjectSfx(ctx, g, skinReload.finish, at(0.94), V);
+    return;
   }
 
   // The assembly, at the frames it actually moves.
@@ -15041,6 +15308,16 @@ const WEAPON_SKINS = [
   { id: 'woodland',  name: 'Woodland',     body: 0x4a5320, accent: 0x2e3618, flag: null,         sw: ['#4a5320', '#2e3618'] },
   { id: 'urban',     name: 'Urban Camo',   body: 0x6a6f76, accent: 0x3a3d42, flag: null,         sw: ['#6a6f76', '#3a3d42'] },
   { id: 'outlaw',    name: 'Outlaw Tan',   body: 0x8a7038, accent: 0x4a3a1c, flag: null,         sw: ['#8a7038', '#4a3a1c'] },
+  { id: 'obsidian',  name: 'Obsidian',     body: 0x08090c, accent: 0x8a2cff, flag: null,         sw: ['#08090c', '#8a2cff'] },
+  { id: 'toxic',     name: 'Toxic Slime',  body: 0x203a12, accent: 0x8cff2a, flag: null,         sw: ['#203a12', '#8cff2a'] },
+  { id: 'bubblegum', name: 'Bubblegum',    body: 0xff7ab8, accent: 0x74d7ff, flag: null,         sw: ['#ff7ab8', '#74d7ff'] },
+  { id: 'carbon',    name: 'Carbon Fiber', body: 0x1a1d22, accent: 0x9aa3ad, flag: null,         sw: ['#1a1d22', '#9aa3ad'] },
+  { id: 'royal',     name: 'Royal Purple', body: 0x3b1466, accent: 0xffd227, flag: null,         sw: ['#3b1466', '#ffd227'] },
+  { id: 'sunset',    name: 'Sunset',       body: 0xff6a2a, accent: 0xffd15c, flag: null,         sw: ['#ff6a2a', '#ffd15c'] },
+  { id: 'ocean',     name: 'Deep Ocean',   body: 0x0b335f, accent: 0x36d1dc, flag: null,         sw: ['#0b335f', '#36d1dc'] },
+  { id: 'candycane', name: 'Candy Cane',   body: 0xf5f2e8, accent: 0xd92828, flag: null,         sw: ['#f5f2e8', '#d92828'] },
+  { id: 'hazard',    name: 'Hazard',       body: 0x1b1b1b, accent: 0xffc400, flag: null,         sw: ['#1b1b1b', '#ffc400'] },
+  { id: 'copper',    name: 'Copper',       body: 0xb46a2d, accent: 0x5f351d, flag: null,         sw: ['#b46a2d', '#5f351d'] },
   // ── Country themes ──
   { id: 'japan',      name: 'Japan',        body: 0xe8e8e8, accent: 0xbc002d, flag: 'japan',      sw: ['#fff', '#bc002d'] },
   { id: 'rising_sun', name: 'Rising Sun',   body: 0xdedede, accent: 0xcc2222, flag: 'rising_sun', sw: ['#fff', '#cc2222'] },
@@ -15057,6 +15334,10 @@ const WEAPON_SKINS = [
   { id: 'crystal',  name: 'Crystal',        body: 0x55cfe6, accent: 0xbff6ff, flag: null, fx: 'crystal',    sw: ['#55cfe6', '#bff6ff'] },
   { id: 'rock',     name: 'Rock',           body: 0x6a6258, accent: 0x4a443c, flag: null, fx: 'rock',       sw: ['#6a6258', '#4a443c'] },
   { id: 'data',     name: 'Data',           body: 0x0a0a12, accent: 0x2266ff, flag: null, fx: 'data',       sw: ['#0a0a12', '#2266ff'] },
+  { id: 'glacier',  name: 'Glacier',        body: 0x9be8ff, accent: 0xffffff, flag: null, fx: 'crystal',    sw: ['#9be8ff', '#ffffff'] },
+  { id: 'meteor',   name: 'Meteor',         body: 0x2a201a, accent: 0xff5a1f, flag: null, fx: 'rock',       sw: ['#2a201a', '#ff5a1f'] },
+  { id: 'matrix',   name: 'Matrix',         body: 0x050805, accent: 0x00ff66, flag: null, fx: 'data',       sw: ['#050805', '#00ff66'] },
+  { id: 'smog',     name: 'Smog',           body: 0x383a3d, accent: 0x777b80, flag: null, fx: 'smoke',      sw: ['#383a3d', '#777b80'] },
 ];
 const WEAPON_SKINS_BY_ID = Object.fromEntries(WEAPON_SKINS.map(s => [s.id, s]));
 let selectedWeaponSkin = 'default';
@@ -18495,20 +18776,71 @@ function _assistEnemies() {
 // forward is hittable on that leg.
 const _autoShootRay = new THREE.Raycaster();
 const _autoShootFwd = new THREE.Vector3();
+const _autoShootTmpA = new THREE.Vector3();
+const _autoShootTmpB = new THREE.Vector3();
+const _autoShootTmpC = new THREE.Vector3();
+function _rayDistanceToSegment(rayOrigin, rayDir, a, b) {
+  // Closest distance between the camera ray and a finite body segment. Based on
+  // the standard two-line closest-points solve, clamped so the target side stays
+  // on the actual body segment and the camera side stays in front of the player.
+  const u = rayDir;
+  const v = _autoShootTmpA.copy(b).sub(a);
+  const w = _autoShootTmpB.copy(rayOrigin).sub(a);
+  const vv = v.dot(v) || 0.0001;
+  const uv = u.dot(v);
+  const uw = u.dot(w);
+  const vw = v.dot(w);
+  const denom = vv - uv * uv;
+  let t = denom > 0.000001 ? (uv * vw - vv * uw) / denom : -uw;
+  t = Math.max(0, t);
+  let s = (uv * t + vw) / vv;
+  s = Math.max(0, Math.min(1, s));
+  // Recompute ray t after clamping the segment parameter.
+  t = Math.max(0, u.dot(_autoShootTmpC.copy(a).addScaledVector(v, s).sub(rayOrigin)));
+  const pRay = _autoShootTmpB.copy(rayOrigin).addScaledVector(u, t);
+  const pSeg = _autoShootTmpC.copy(a).addScaledVector(v, s);
+  return { dist: pRay.distanceTo(pSeg), along: t, seg: s };
+}
+function _autoShootCapsuleHit(e, distToTarget) {
+  const baseY = Number.isFinite(e.pos.y) ? e.pos.y - 1.0 : 0;
+  const bottom = new THREE.Vector3(e.x, baseY + 0.22, e.z);
+  const top = new THREE.Vector3(e.x, baseY + 2.03, e.z);
+  const hit = _rayDistanceToSegment(camera.position, _autoShootFwd, bottom, top);
+  if (hit.along < 0.5 || hit.along > 95) return false;
+  // Real blocky bodies are about 0.55 m wide, but net positions and animation
+  // poses lag a little. Add a tiny distance-scaled forgiveness, capped low so
+  // it still means "crosshair on the player", not "near the player".
+  const radius = Math.min(0.46, 0.30 + distToTarget * 0.003);
+  return hit.dist <= radius;
+}
+function _autoShootLeadPoint(e) {
+  const w = effectiveGunStats(currentWeapon || {});
+  const speed = Math.max(45, w.bulletSpeed || 120);
+  const dx = e.x - camera.position.x, dz = e.z - camera.position.z;
+  const travel = Math.min(0.32, Math.hypot(dx, dz) / speed);
+  const lead = Math.max(0, travel - 0.02);
+  return e.pos.clone().add(new THREE.Vector3((e.vx || 0) * lead, 0, (e.vz || 0) * lead));
+}
 function _pickAutoShootTarget(enemies) {
   _autoShootFwd.set(0, 0, -1).applyQuaternion(camera.quaternion);
   _autoShootRay.set(camera.position, _autoShootFwd);
-  _autoShootRay.far = 90;
+  _autoShootRay.far = 95;
   let best = null, bestDist = Infinity;
+  let bestCapsule = null, bestCapsuleDist = Infinity;
   for (const e of enemies) {
-    const mesh = remoteMeshes[e.id];
-    if (!mesh || !mesh.visible) continue;
     // Cheap reject before the expensive part: skip anyone nowhere near the
     // crosshair. Generous (~30°) so it never rejects someone the ray would hit.
     const to = e.pos.clone().sub(camera.position);
     const dist = to.length();
-    if (dist < 0.5 || dist > 90) continue;
-    if (_autoShootFwd.dot(to.divideScalar(dist)) < 0.86) continue;
+    if (dist < 0.5 || dist > 95) continue;
+    if (_autoShootFwd.dot(to.divideScalar(dist)) < 0.90) continue;
+    if (typeof hasLineOfSight === 'function'
+        && !hasLineOfSight(camera.position.x, camera.position.z, e.x, e.z)) continue;
+    if (_autoShootCapsuleHit(e, dist) && dist < bestCapsuleDist) {
+      bestCapsuleDist = dist; bestCapsule = e;
+    }
+    const mesh = remoteMeshes[e.id];
+    if (!mesh || !mesh.visible) continue;
     // Raycast the body parts only, never the whole group. The floating name tag
     // is a Sprite child, and pointing at someone's label is not pointing at
     // them — worse, THREE's Sprite.raycast dereferences raycaster.camera and
@@ -18518,8 +18850,6 @@ function _pickAutoShootTarget(enemies) {
     const hits = _autoShootRay.intersectObjects(parts, true);
     const hit = hits.find(h => h.object && !h.object.isSprite && h.object.visible);
     if (!hit || hit.distance >= bestDist) continue;
-    if (typeof hasLineOfSight === 'function'
-        && !hasLineOfSight(camera.position.x, camera.position.z, e.x, e.z)) continue;
     bestDist = hit.distance; best = e;
   }
   // Union, not replacement. The raycast adds the head, shoulders and arms, which
@@ -18527,7 +18857,7 @@ function _pickAutoShootTarget(enemies) {
   // the ray does not (it was hitting thighs that the ray currently misses), and
   // dropping it would trade one blind spot for another. Whichever says "on
   // target" wins, so this can only ever widen coverage, never narrow it.
-  return best || _pickAssistTarget(enemies, 2.2);
+  return best || bestCapsule || _pickAssistTarget(enemies, 3.0);
 }
 // Nearest-to-crosshair opponent within `coneDeg` of where you're looking + has LOS.
 function _pickAssistTarget(enemies, coneDeg) {
@@ -18606,7 +18936,16 @@ function updateAimAssist(dt) {
   // `tight` is now a real body hit rather than a 2.2° cone around the chest, so
   // any limb under the crosshair counts.
   const gunEquipped = (activeSlot === 'primary' || activeSlot === 'secondary');
-  if (ASSIST.autoShoot && tight && gunEquipped) { _autoShootTimer += dt; if (_autoShootTimer >= 0.01) tryShoot(); }
+  if (ASSIST.autoShoot && tight && gunEquipped) {
+    _autoShootTimer += dt;
+    if (_autoShootTimer >= 0.006) {
+      // A tiny aim settle before the trigger press makes auto-shoot feel less
+      // "late" on strafing targets, especially with slower projectiles. It is
+      // only applied while the auto-shoot detector is already on the body.
+      if (!manualAiming) _aimToward(_autoShootLeadPoint(tight), 220, dt);
+      tryShoot();
+    }
+  }
   else _autoShootTimer = 0;
 
   // AI Aim — drop a red dot where the opponent is predicted to be ~0.35s from now
@@ -21550,6 +21889,8 @@ function attachViewHands(root) {
     mag:    { x: 0,     y: gripAt.y - 0.020, z: gripAt.z - 0.055 },
     breech: { x: 0.022, y: gripAt.y + 0.078, z: gripAt.z - 0.045 },
     muzzle: { x: fl0 ? fl0.x : 0, y: fl0 ? fl0.y : gripAt.y + 0.06, z: fl0 ? fl0.z + 0.02 : full.min.z },
+    // The back of the weapon, for a glue stick, a plug or a hose.
+    rear:   { x: 0,     y: gripAt.y + 0.050, z: full.max.z - 0.010 },
   };
   root._homePos = root.position.clone();
 
@@ -21938,6 +22279,17 @@ const _baseWeaponModels = {};
 // What the equipped model skin does to the rounds, by weapon. Empty for every
 // skin that only changes the object in your hands, which is most of them.
 const _modelSkinLook = {};
+// The skin actually applied to each weapon -- not merely the one requested, since
+// a locked skin falls back to stock -- so its sound and reload match what is shown.
+const _activeModelSkin = {};
+function _skinFxFor(weaponId) {
+  // Wrapped: SKIN_FX is declared much further down the file, and a sound played
+  // before the script has finished loading must not take the game down with it.
+  try {
+    const sk = _activeModelSkin[weaponId];
+    return sk ? (SKIN_FX[sk.id] || null) : null;
+  } catch (e) { return null; }
+}
 
 function applyModelSkin(weaponId) {
   const idx = WEAPONS.findIndex(w => w.id === weaponId);
@@ -21962,6 +22314,8 @@ function applyModelSkin(weaponId) {
   }
   if (skin && skin.look) _modelSkinLook[weaponId] = skin.look;
   else delete _modelSkinLook[weaponId];
+  if (skin) _activeModelSkin[weaponId] = skin;
+  else delete _activeModelSkin[weaponId];
   const cur = weaponModels[idx];
   if (next === cur) return;
   const wasVisible = cur.visible;
@@ -23809,6 +24163,133 @@ const _rProps = [];
 const _rPropGeo = new Map();
 const _rGeo = (key, build) => { let g = _rPropGeo.get(key); if (!g) { g = build(); _rPropGeo.set(key, g); } return g; };
 
+// ── 🔋 Reload parts for things that are not guns ────────────────────────────
+// A barcode scanner takes a battery, a glue gun takes a glue stick, a crisp tube
+// takes crisps. Each is what that object genuinely runs on, sized to sit in the
+// same hand as a magazine. Builds into `g` and says whether it knew the kind.
+function _makeObjectProp(kind, M, g) {
+  const add = (key, geo, mat, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0) => {
+    const m = new THREE.Mesh(_rGeo('op_' + kind + '_' + key, geo), mat);
+    m.position.set(x, y, z); m.rotation.set(rx, ry, rz); g.add(m); return m;
+  };
+  const B = (w, h, d) => () => new THREE.BoxGeometry(w, h, d);
+  const C = (a, b, h, s = 10) => () => new THREE.CylinderGeometry(a, b, h, s);
+  const S = (r, a = 10, b = 8) => () => new THREE.SphereGeometry(r, a, b);
+  const T = (r, t, s = 12) => () => new THREE.TorusGeometry(r, t, 5, s);
+  const X = Math.PI / 2;
+  const pick = a => a[Math.floor(Math.random() * a.length)];
+  switch (kind) {
+    case 'battery':
+      add('b', B(0.050, 0.030, 0.060), M(0x1c1e22, 50));
+      add('s', B(0.052, 0.006, 0.062), M(0xd8302a, 90), 0, 0.016, 0); return true;
+    case 'cell':
+      add('b', C(0.007, 0.007, 0.050), M(0x2a2c30, 90), 0, 0, 0, X);
+      add('t', C(0.0072, 0.0072, 0.014), M(0xd8a820, 140), 0, 0, -0.018, X); return true;
+    case 'drum':        // a foam-dart drum
+      add('d', C(0.034, 0.034, 0.030, 16), M(0xf07a1a, 80), 0, 0, 0, 0, 0, X);
+      add('w', C(0.026, 0.026, 0.032, 16), M(0xe8f0f8, 180), 0, 0, 0, 0, 0, X); return true;
+    case 'balloon':
+      add('b', S(0.022), M(pick([0x3a9ad8, 0xff5566, 0x55cc66, 0xf0c020]), 120)).scale.set(1, 1.15, 1);
+      add('k', S(0.005, 6, 5), M(0xff5566, 60), 0, -0.026, 0); return true;
+    case 'leaf':
+      add('l', B(0.030, 0.003, 0.022), M(pick([0x8a6a22, 0xc85a18, 0x6a8a2a]), 30)); return true;
+    case 'ice':
+      add('c', B(0.018, 0.018, 0.018), M(0xd8f0ff, 220)); return true;
+    case 'lettuce':
+      add('l', S(0.018), M(0x8ad84a, 40)).scale.set(1, 0.5, 1); return true;
+    case 'bobber':
+      add('r', S(0.012), M(0xd8302a, 120));
+      add('w', C(0.004, 0.004, 0.016, 8), M(0xf6f6f2, 80), 0, 0.014, 0); return true;
+    case 'staples':
+      add('s', B(0.010, 0.012, 0.070), M(0xc0c8d0, 170)); return true;
+    case 'caps':
+      add('c', B(0.006, 0.004, 0.060), M(0xc8342a, 40)); return true;
+    case 'plug':
+      add('p', B(0.020, 0.024, 0.018), M(0x1c1e22, 60));
+      add('a', B(0.003, 0.008, 0.016), M(0xc0c8d0, 170), -0.005, 0, -0.016);
+      add('b', B(0.003, 0.008, 0.016), M(0xc0c8d0, 170), 0.005, 0, -0.016); return true;
+    case 'tape':
+      add('r', C(0.030, 0.030, 0.022, 16), M(0xc89a52, 150), 0, 0, 0, 0, 0, X);
+      add('c', C(0.016, 0.016, 0.024, 12), M(0x8a6a3a, 20), 0, 0, 0, 0, 0, X); return true;
+    case 'lenscap':
+      add('c', C(0.024, 0.024, 0.008, 16), M(0x14161a, 60), 0, 0, 0, X); return true;
+    case 'cork':
+      add('c', C(0.010, 0.012, 0.024), M(0xc89a62, 20));
+      add('p', C(0.013, 0.013, 0.003), M(0xc8ccd2, 160), 0, 0.013, 0); return true;
+    case 'gluestick':
+      add('s', C(0.0105, 0.0105, 0.080, 12), M(0xf4f2e6, 180), 0, 0, 0, X); return true;
+    case 'spool':
+      add('t', C(0.013, 0.013, 0.024, 12), M(0xd8304a, 40));
+      add('a', C(0.016, 0.016, 0.003, 12), M(0xf2ead8, 90), 0, 0.013, 0);
+      add('b', C(0.016, 0.016, 0.003, 12), M(0xf2ead8, 90), 0, -0.013, 0); return true;
+    case 'peel':
+      for (let i = 0; i < 3; i++) add('s' + i, B(0.012, 0.002, 0.050), M(0xf2d02a, 60), 0, 0, 0, 0, (i - 1) * 0.6, 0.4);
+      return true;
+    case 'banana':
+      add('b', C(0.013, 0.010, 0.100, 10), M(0xf2d02a, 70), 0, 0, 0, X, 0, 0.2);
+      add('t', C(0.005, 0.004, 0.012, 8), M(0x4a3218, 20), 0.010, 0, -0.054, X); return true;
+    case 'drop':
+      add('d', S(0.009), M(0x3a9ae8, 200)).scale.set(1, 1.4, 1); return true;
+    case 'hairball':
+      add('h', S(0.012), M(0x6a4a2a, 10)); return true;
+    case 'note':       // ♪ — a black head, a stem and a flag
+      add('h', S(0.010), M(0x0d0d0d, 60)).scale.set(1.3, 1, 1);
+      add('s', B(0.003, 0.040, 0.003), M(0x0d0d0d, 60), 0.011, 0.020, 0);
+      add('f', B(0.012, 0.003, 0.003), M(0x0d0d0d, 60), 0.016, 0.038, 0, 0, 0, -0.5); return true;
+    case 'carrot':
+      add('c', C(0.022, 0.0, 0.110, 12), M(0xf07a1a, 60), 0, 0, 0, -X);
+      add('l', B(0.004, 0.030, 0.012), M(0x3aa82a, 40), 0, 0.012, 0.060); return true;
+    case 'coupling':
+      add('c', C(0.016, 0.016, 0.024, 6), M(0xc8a040, 170), 0, 0, 0, X); return true;
+    case 'grain':
+      add('g', S(0.005, 6, 5), M(0x2a2622, 30)); return true;
+    case 'band':
+      add('b', T(0.018, 0.003), M(0xd84a4a, 60)); return true;
+    case 'dust':
+      add('d', S(0.020, 8, 6), M(0x9a9488, 10)).scale.set(1.3, 0.8, 1.3); return true;
+    case 'popper':
+      add('p', C(0.016, 0.006, 0.040, 10), M(0xe8c040, 150), 0, 0, 0, X); return true;
+    case 'beater':
+      add('l', T(0.012, 0.002), M(0xc8ced6, 190)).scale.set(1, 1, 2.4);
+      add('s', C(0.003, 0.003, 0.040, 6), M(0xc8ced6, 190), 0, 0, 0.036, X); return true;
+    case 'refill':
+      add('b', C(0.018, 0.020, 0.060, 12), M(0xe8f0f8, 160));
+      add('c', C(0.010, 0.010, 0.012), M(0x2a7ad8, 90), 0, 0.036, 0); return true;
+    case 'bubble':
+      add('b', S(0.012, 10, 8), M(0xd8f4ff, 230)); return true;
+    case 'puck':
+      add('p', C(0.024, 0.024, 0.018, 16), M(0x0e0e10, 40)); return true;
+    case 'crisp':
+      add('c', S(0.022, 12, 6), M(0xf0c050, 60)).scale.set(1, 0.15, 1); return true;
+    case 'pin':
+      add('r', T(0.010, 0.002), M(0xc8ced6, 180));
+      add('p', C(0.002, 0.002, 0.030, 6), M(0xc8ced6, 180), 0, -0.020, 0); return true;
+    case 'coin':
+      add('c', C(0.012, 0.012, 0.003, 16), M(0xd8a820, 200), 0, 0, 0, 0, 0, X); return true;
+    case 'gumball':
+      add('g', S(0.011), M(pick([0xff4466, 0x44cc66, 0x4488ff, 0xffdd33, 0xff8833, 0xffffff]), 120)); return true;
+    case 'comb':
+      add('c', B(0.030, 0.004, 0.024), M(0x3a8ad8, 80)); return true;
+    case 'candle':
+      add('c', C(0.010, 0.010, 0.060, 12), M(0xf6f0e0, 60));
+      add('f', S(0.006, 8, 6), M(0xffb030, 30), 0, 0.036, 0).scale.set(1, 1.8, 1); return true;
+    case 'reel':
+      add('r', C(0.036, 0.036, 0.006, 20), M(0xc8ced6, 190), 0, 0, 0, 0, 0, X);
+      add('f', C(0.030, 0.030, 0.010, 20), M(0x2a1c14, 60), 0, 0, 0, 0, 0, X); return true;
+    case 'paint':
+      add('p', S(0.014), M(0x3a8ad8, 160)).scale.set(1.3, 0.7, 1.3); return true;
+    case 'filter':
+      add('f', B(0.080, 0.004, 0.060), M(0x8a9098, 60)); return true;
+    case 'canister':
+      add('c', C(0.014, 0.014, 0.070, 12), M(0xd8302a, 110));
+      add('n', C(0.004, 0.004, 0.014, 8), M(0xc8ced6, 180), 0, 0.042, 0); return true;
+    case 'dash':       // "-" — black rim, white face, same as the guns that fire it
+      add('k', B(0.060, 0.014, 0.008), M(0x0d0d0d, 20));
+      add('w', B(0.054, 0.009, 0.010), M(0xf6f6f6, 20)); return true;
+  }
+  return false;
+}
+
 function _makeReloadProp(kind) {
   const M = (c, o) => new THREE.MeshPhongMaterial({ color: c, shininess: o === undefined ? 60 : o,
                                                     specular: 0x9aa2ac, transparent: true, opacity: 1 });
@@ -23883,7 +24364,8 @@ function _makeReloadProp(kind) {
       s.rotation.x = Math.PI / 2; g.add(s);
       break; }
     default:
-      g.add(new THREE.Mesh(_rGeo('mag', () => new THREE.BoxGeometry(0.026, 0.090, 0.044)), M(0x32373d, 66)));
+      if (!_makeObjectProp(kind, M, g))
+        g.add(new THREE.Mesh(_rGeo('mag', () => new THREE.BoxGeometry(0.026, 0.090, 0.044)), M(0x32373d, 66)));
   }
   g.traverse(o => { if (o.isMesh) { o.userData.vmHand = true; o.castShadow = false; } });
   return g;
@@ -24084,6 +24566,288 @@ const RELOAD_PROPS = {
   cream_pie:[RP(.30,'ball','arrive',1,'breech')],
 };
 
+// ── 🧰 Reloads for things that are not guns ─────────────────────────────────
+// Every model skin used to borrow its gun's reload, so the barcode scanner had
+// a rifle magazine stuffed into it. These are the motions an object is actually
+// serviced with. They use the same channels a gun's track does, and stay inside
+// the same range of tilt and lift, so the framing the harness measures for the
+// guns holds for these too.
+const _RK = {
+  // Tipped up and worked from underneath: a battery pack, a filter, a canister.
+  under: () => [
+    K(.10,{py:.05,rx:.30,rz:.22,hy:-.06}),
+    K(.26,{py:.07,rx:.42,rz:.30,hx:-.04,hy:-.20,hz:.02,hr:.6}),
+    K(.42,{py:.07,rx:.44,rz:.30,hx:.02,hy:-.26,hz:.03}),
+    K(.60,{py:.08,rx:.44,rz:.28,hy:-.12,hz:.05}),
+    K(.76,{py:.05,rx:.30,rz:.18,hy:-.03,hz:.03}),
+    K(.92,{py:.01,rx:.06,rz:.04})],
+  // Rolled onto its side so the off hand can reach the top: a hopper, a lid.
+  top: () => [
+    K(.10,{py:.05,rx:.10,rz:-.45,hy:.02}),
+    K(.26,{py:.06,rx:.12,rz:-.72,hx:.02,hy:.10,hz:-.02,hr:-.4}),
+    K(.46,{py:.06,rx:.14,rz:-.76,hy:.14,hz:-.03}),
+    K(.64,{py:.06,rx:.12,rz:-.70,hy:.06,hz:-.02}),
+    K(.80,{py:.04,rx:.06,rz:-.36,hy:.01}),
+    K(.94,{py:.01,rz:-.05})],
+  // Muzzle up, and whatever the front takes goes on the front.
+  front: () => [
+    K(.12,{py:.04,rx:.45,hz:-.03}),
+    K(.28,{py:.06,rx:.66,hx:.02,hy:.08,hz:-.09,hr:-.5}),
+    K(.46,{py:.07,rx:.70,hy:.11,hz:-.12}),
+    K(.64,{py:.07,rx:.66,hy:.06,hz:-.09}),
+    K(.80,{py:.04,rx:.34,hz:-.03}),
+    K(.94,{py:.01,rx:.05})],
+  // Swung round so the back is in reach: a glue stick, a plug, a hose.
+  rear: () => [
+    K(.12,{py:.05,rx:-.06,ry:.30,rz:.10}),
+    K(.28,{py:.06,rx:-.10,ry:.48,rz:.14,hx:.06,hy:.02,hz:.10,hr:.3}),
+    K(.48,{py:.06,rx:-.10,ry:.50,rz:.14,hx:.04,hz:.13}),
+    K(.66,{py:.06,rx:-.08,ry:.44,rz:.12,hx:.02,hz:.06}),
+    K(.82,{py:.03,ry:.18,rz:.06}),
+    K(.94,{py:.01,ry:.04})],
+  // Shaken hard, the way anything that has to fizz or mix is.
+  shake: (n = 6, a = .20) => {
+    const k = [K(.08,{py:.05,rx:.20})];
+    for (let i = 0; i < n; i++) {
+      const s = i % 2 ? 1 : -1;
+      k.push(K(.14 + i * (.64 / n), {py:.05 + (i % 2) * .03, rx:.20, rz:s * a, hy:.02 * s}));
+    }
+    k.push(K(.84,{py:.03,rx:.10}), K(.94,{py:.01}));
+    return k;
+  },
+  // Wound: the off hand turning a crank or a key in circles at the side.
+  crank: (turns = 3) => {
+    const k = [K(.08,{py:.04,rx:.10,rz:.20})];
+    const n = turns * 4;
+    for (let i = 0; i <= n; i++) {
+      const a = (i / 4) * Math.PI * 2;
+      k.push(K(.14 + i * (.70 / n), {py:.05, rx:.12, rz:.24,
+        hx:.05 + Math.cos(a) * .035, hy:.02 + Math.sin(a) * .035, hz:.04}));
+    }
+    k.push(K(.94,{py:.01,rz:.03}));
+    return k;
+  },
+  // Pumped: the off hand working fore and aft.
+  pump: (n = 3) => {
+    const k = [K(.08,{py:.04,rx:.12})];
+    for (let i = 0; i < n; i++) {
+      const t = .14 + i * (.66 / n);
+      k.push(K(t, {py:.05, rx:.14, hz:.09}), K(t + .33 / n, {py:.04, rx:.12, hz:-.02}));
+    }
+    k.push(K(.90,{py:.02,rx:.05}));
+    return k;
+  },
+  // Bounced off the floor.
+  bounce: (n = 3) => {
+    const k = [K(.08,{py:.02})];
+    for (let i = 0; i < n; i++) {
+      const t = .14 + i * (.70 / n);
+      k.push(K(t, {py:-.07, rx:-.10}), K(t + .35 / n, {py:.05, rx:.04}));
+    }
+    k.push(K(.92,{py:.01}));
+    return k;
+  },
+  // Dipped forward and down into a bucket, lifted, and shaken off.
+  dip: () => [
+    K(.12,{py:-.03,pz:-.03,rx:-.20}),
+    K(.30,{py:-.09,pz:-.06,rx:-.42,hy:-.04}),
+    K(.44,{py:-.09,pz:-.06,rx:-.44,hy:-.05}),
+    K(.58,{py:.03,pz:-.02,rx:.10,rz:.14}),
+    K(.66,{py:.04,rx:.10,rz:-.14}),
+    K(.74,{py:.04,rx:.10,rz:.12}),
+    K(.86,{py:.02,rx:.04}),
+    K(.95,{py:.00})],
+  // Raised and listened to while something is adjusted: tuning, focusing.
+  tune: () => [
+    K(.10,{py:.05,ry:.18,rz:-.12}),
+    K(.26,{py:.07,ry:.30,rz:-.20,hx:.03,hy:.06,hr:.3}),
+    K(.40,{py:.07,ry:.30,rz:-.20,hx:.03,hy:.06,hr:-.2}),
+    K(.54,{py:.07,ry:.30,rz:-.20,hx:.03,hy:.06,hr:.3}),
+    K(.68,{py:.07,ry:.28,rz:-.18,hx:.02,hy:.04,hr:-.1}),
+    K(.84,{py:.03,ry:.12,rz:-.06}),
+    K(.95,{py:.01})],
+  // Shown off: rolled over and back and lifted, a crossing guard's flourish.
+  flourish: () => [
+    K(.12,{py:.04,rz:.40}),
+    K(.30,{py:.08,rx:.10,rz:1.10}),
+    K(.48,{py:.08,rx:.10,rz:1.20}),
+    K(.66,{py:.06,rz:.50}),
+    K(.82,{py:.03,rz:-.10}),
+    K(.94,{py:.01})],
+  // Backspace, then retype: a jerk back and a patter of little taps.
+  emo: () => [
+    K(.06,{px:-.02,rz:.10}), K(.12,{px:-.04,rz:.14}), K(.18,{px:-.05,rz:.14,hy:.03}),
+    K(.30,{px:-.02,py:.02,rz:.06}),
+    K(.36,{py:.014}), K(.40,{}), K(.44,{py:.014}), K(.48,{}), K(.52,{py:.014}),
+    K(.56,{}), K(.60,{py:.014}), K(.64,{}), K(.70,{py:.02,rz:-.04}), K(.94,{})],
+};
+
+// Sound, and optionally a reload, for each model skin. A skin that is a real
+// gun (the AUG, the Dragunov, the M249) takes the same ammunition as the gun it
+// replaces, so it keeps that gun's reload -- it only gets its own voice. An
+// object gets both. `beats` are sound-only moments in the reload; `finish` is
+// what it ends on.
+function _fxS(kind, vol, dur, f1, f2, extra) {
+  return Object.assign({ kind, vol, dur, f1, f2 }, extra || {});
+}
+function _fxR(keys, props, beats, finish) {
+  return { keys, props: props || [], beats: (beats || []).map(([t, s]) => ({ t, s })), finish: finish || null };
+}
+const _emoReload = () => _fxR(_RK.emo(),
+  [RP(.18,'dash','eject',3,'muzzle'), RP(.40,'dash','arrive',1,'breech'),
+   RP(.48,'dash','arrive',1,'breech'), RP(.56,'dash','arrive',1,'breech')],
+  [[.36,'typing']], 'ding');
+const SKIN_FX = {
+  // ── Real guns: the same ammunition, so the gun's own reload, but their voice ──
+  aug:                  { sound: _fxS('auto_blast', .22, .075, 0, 0, { action:'water_smg', tail:.18 }) },
+  ak20_twin_barrel:     { sound: _fxS('auto_blast', .24, .08, 0, 0, { action:'water_rifle', double:true }) },
+  ak20_swarm_rifle:     { sound: _fxS('energy', .26, .10, 1400, 600) },
+  pistol_spy:           { sound: _fxS('pfft', .26, .06, 900, 300) },
+  ak20_ak47_wood:       { sound: _fxS('auto_blast', .27, .09, 0, 0, { action:'rifle', tail:.25 }) },
+  burst_m4a1:           { sound: _fxS('auto_blast', .21, .07, 0, 0, { action:'water_smg', tail:.18 }) },
+  flechette_bullpup:    { sound: _fxS('crack', .34, .10, 0, 0, { action:'rifle', tail:.40 }) },
+  vector_mp5:           { sound: _fxS('auto_blast', .18, .07, 0, 0, { action:'slide' }) },
+  rpd_m249:             { sound: _fxS('auto_blast_heavy', .32, .11, 0, 0, { action:'water_belt', tail:.40 }) },
+  lever_winchester94:   { sound: _fxS('rifle', .46, .10, 0, 0, { action:'bolt', tail:.70 }) },
+  pistol_m9:            { sound: _fxS('pistol', .30, .12, 0, 0, { action:'slide', tail:.15 }) },
+  sg8_remington870:     { sound: _fxS('boom', .60, .22, 0, 0, { action:'shotgun', tail:.70 }) },
+  srx_dragunov:         { sound: _fxS('crack', .62, .18, 0, 0, { action:'rifle', tail:1.10 }) },
+  revolver_python:      { sound: _fxS('heavy', .44, .14, 0, 0, { action:'revolver', tail:.50 }) },
+  grenade_launcher_mgl: { sound: _fxS('thump', .40, .24, 140, 55, { action:'single' }) },
+  flamethrower_m2:      { sound: _fxS('flamethrower', .28, .22, 80, 50) },
+
+  // ── Objects: their own sound, and a reload for what they actually run on ──
+  ak20_nerf_elite: { sound: _fxS('pop', .26, .10, 300, 120),
+    reload: _fxR(_RK.under(), [RP(.30,'drum'), RP(.58,'drum','arrive')], null, 'click') },
+  gl_water_balloon: { sound: _fxS('pop', .30, .16, 220, 90),
+    reload: _fxR(_RK.top(), [.30,.36,.42,.48,.54,.60].map(t => RP(t,'balloon','arrive',1,'breech')), null, 'click') },
+  sg8_leaf_blower: { sound: _fxS('whirr', .30, .16, 180, 90),
+    reload: _fxR(_RK.front(), [.32,.40,.48,.56].map(t => RP(t,'leaf','arrive',1,'muzzle')), [[.20,'whirr']]) },
+  freeze_slushie: { sound: _fxS('squirt', .24, .14, 900, 500),
+    reload: _fxR(_RK.top(), [RP(.32,'ice','arrive',1,'breech'), RP(.42,'ice','arrive',1,'breech'),
+      RP(.52,'ice','arrive',1,'breech'), RP(.60,'refill','arrive',1,'breech')], [[.70,'whirr']], 'click') },
+  lever_fishing_rod: { sound: _fxS('swish', .30, .20, 2600, 700),
+    reload: _fxR(_RK.crank(3), [RP(.80,'bobber','arrive',1,'muzzle')], [[.16,'dial'],[.40,'dial'],[.64,'dial']], 'click') },
+  burst_staple_gun: { sound: _fxS('clatter', .30, .05, 1300, 600),
+    reload: _fxR(_RK.under(), [RP(.56,'staples','arrive')], [[.30,'slideout']], 'snapin') },
+  minigun_salad_spinner: { sound: _fxS('whirr', .28, .09, 320, 260),
+    reload: _fxR(_RK.top(), [.30,.37,.44,.51,.58].map(t => RP(t,'lettuce','arrive',1,'breech')), null, 'whirr') },
+  revolver_cap_gun: { sound: _fxS('snap', .30, .03, 3200, 1800),
+    reload: _fxR(RELOAD_KEYS.revolver, [RP(.50,'caps','arrive',1,'breech')], [[.24,'click']], 'click') },
+  mp40_hair_dryer: { sound: _fxS('whirr', .24, .10, 520, 480),
+    reload: _fxR(_RK.rear(), [RP(.30,'plug','eject',1,'rear'), RP(.56,'plug','arrive',1,'rear')], null, 'hum') },
+  railgun_metal_detector: { sound: _fxS('beep', .24, .12, 1320, 1760),
+    reload: _fxR(_RK.under(), [RP(.30,'cell','eject',2), RP(.56,'cell','arrive',2)], null, 'beep') },
+  air_rifle_bike_pump: { sound: _fxS('hiss', .30, .12, 2600, 0),
+    reload: _fxR(_RK.pump(3), null, [[.14,'pump'],[.36,'pump'],[.58,'pump']], 'hiss') },
+  arc_rifle_jumper_cables: { sound: _fxS('arc', .30, .10, 620, 240),
+    reload: _fxR(_RK.under(), [RP(.30,'battery'), RP(.58,'battery','arrive')], [[.66,'click'],[.72,'click']], 'buzz') },
+  p90_barcode_scanner: { sound: _fxS('beep', .22, .07, 2400, 2400),
+    reload: _fxR(_RK.under(), [RP(.30,'battery'), RP(.58,'battery','arrive')], null, 'beep') },
+  vector_label_maker: { sound: _fxS('zip', .22, .06, 1800, 3400),
+    reload: _fxR(_RK.top(), [RP(.30,'tape','eject',1,'breech'), RP(.58,'tape','arrive',1,'breech')], null, 'beep') },
+  srx_telescope: { sound: _fxS('sparkle', .24, .30, 1760, 0),
+    reload: _fxR(_RK.front(), [RP(.36,'lenscap','arrive',1,'muzzle'), RP(.62,'lenscap','eject',1,'muzzle')], [[.48,'squeak']]) },
+  firework_champagne: { sound: _fxS('cork', .40, .08, 900, 120),
+    reload: _fxR(_RK.shake(8, .24), [RP(.88,'cork','arrive',1,'muzzle')], [[.40,'fizz'],[.86,'squeak']]) },
+  nail_gun_hot_glue: { sound: _fxS('splat', .22, .08, 180, 90),
+    reload: _fxR(_RK.rear(), [RP(.54,'gluestick','arrive',1,'rear')], [[.48,'squeak'],[.70,'click']]) },
+  rpd_sewing_machine: { sound: _fxS('clatter', .24, .04, 900, 500),
+    reload: _fxR(_RK.crank(2), [RP(.20,'spool','eject',1,'breech'), RP(.40,'spool','arrive',1,'breech')], [[.60,'whirr']], 'click') },
+  deagle_banana: { sound: _fxS('splat', .30, .10, 240, 110),
+    reload: _fxR(_RK.front(), [RP(.30,'peel','eject',1,'breech'), RP(.58,'banana','arrive')], [[.28,'rip']]) },
+  glock18_water_pistol: { sound: _fxS('squirt', .22, .06, 1400, 900),
+    reload: _fxR(_RK.top(), [.32,.38,.44,.50].map(t => RP(t,'drop','arrive',1,'breech')), [[.30,'glug']], 'click') },
+  m1911_hair_brush: { sound: _fxS('swish', .26, .10, 3000, 1200),
+    reload: _fxR(_RK.under(), [RP(.34,'hairball','eject')], [[.26,'brush'],[.44,'brush']]) },
+  mg42_accordion: { sound: _fxS('reed', .26, .10, 392, 494),
+    reload: _fxR(_RK.pump(2), [.40,.50,.60].map(t => RP(t,'note','arrive',1,'breech')), [[.20,'wheeze'],[.46,'wheeze']], 'chord') },
+  rpg_carrot: { sound: _fxS('thwack', .34, .12, 180, 70),
+    reload: _fxR(_RK.front(), [RP(.56,'carrot','arrive',1,'muzzle')], [[.30,'crunch']]) },
+  bazooka_tuba: { sound: _fxS('toot', .34, .22, 87, 82),
+    reload: _fxR(_RK.tune(), [RP(.50,'note','arrive',1,'breech'), RP(.62,'note','arrive',1,'breech')],
+      [[.30,'click'],[.36,'click'],[.42,'click']], 'lowchord') },
+  barrett_pressure_washer: { sound: _fxS('hiss', .36, .16, 1800, 0),
+    reload: _fxR(_RK.rear(), [RP(.30,'coupling','eject',1,'rear'), RP(.54,'coupling','arrive',1,'rear')], [[.60,'click']], 'hiss') },
+  sawed_off_salt_pepper: { sound: _fxS('grind', .30, .14, 2600, 1400),
+    reload: _fxR(_RK.top(), [RP(.40,'grain','arrive',6,'breech')], [[.40,'rattle']]) },
+  crossbow_ruler_band: { sound: _fxS('twang', .28, .12, 260, 120),
+    reload: _fxR(_RK.front(), [RP(.50,'band','arrive',1,'muzzle')], [[.56,'boing']]) },
+  mauser_broom: { sound: _fxS('swish', .30, .16, 1800, 500),
+    reload: _fxR(_RK.dip(), [RP(.40,'dust','eject',1,'muzzle')], [[.30,'brush'],[.46,'brush']]) },
+  flare_party_popper: { sound: _fxS('popper', .34, .08, 1200, 300),
+    reload: _fxR(_RK.front(), [RP(.30,'popper','eject',1,'muzzle'), RP(.56,'popper','arrive')]) },
+  taser_hand_mixer: { sound: _fxS('whirr', .26, .12, 420, 380),
+    reload: _fxR(_RK.front(), [RP(.30,'beater','eject',2,'muzzle'), RP(.54,'beater','arrive',2,'muzzle')], [[.62,'click']], 'whirr') },
+  hkmp7_power_drill: { sound: _fxS('whirr', .28, .08, 680, 520),
+    reload: _fxR(_RK.under(), [RP(.30,'battery'), RP(.58,'battery','arrive')], null, 'whirr') },
+  five_seven_soap: { sound: _fxS('squirt', .20, .07, 700, 400),
+    reload: _fxR(_RK.top(), [RP(.46,'refill','arrive',1,'breech'), RP(.60,'bubble','eject',3,'breech')], null, 'bloop') },
+  garand_hockey_stick: { sound: _fxS('thwack', .36, .08, 220, 80),
+    reload: _fxR(_RK.front(), [RP(.52,'puck','arrive',1,'muzzle')], [[.30,'tap'],[.40,'tap']]) },
+  potato_cannon_crisp_tube: { sound: _fxS('crunch', .30, .12, 2400, 1200),
+    reload: _fxR(_RK.top(), [.30,.37,.44,.51,.58].map(t => RP(t,'crisp','arrive',1,'breech')), null, 'plop') },
+  foam_cannon_extinguisher: { sound: _fxS('hiss', .30, .20, 1200, 0),
+    reload: _fxR(_RK.under(), [RP(.56,'pin','arrive',1,'breech')], [[.30,'hiss'],[.64,'click']]) },
+  paintball_gumball: { sound: _fxS('rattle', .28, .10, 1800, 1400),
+    reload: _fxR(_RK.top(), [RP(.30,'coin','arrive',1,'breech'), RP(.46,'gumball','arrive',5,'breech')], [[.36,'dial']]) },
+  harpoon_selfie_stick: { sound: _fxS('shutter', .28, .08, 2000, 1200),
+    reload: _fxR(_RK.pump(1), null, [[.30,'shutter'],[.62,'shutter']], 'beep') },
+  flamethrower_bbq_lighter: { sound: _fxS('flame', .20, .12, 140, 80),
+    reload: _fxR(_RK.under(), [RP(.52,'canister','arrive')], [[.58,'hiss']], 'click') },
+  hand_cannon_megaphone: { sound: _fxS('siren', .28, .22, 600, 1200),
+    reload: _fxR(_RK.under(), [RP(.30,'cell','eject',2), RP(.56,'cell','arrive',2)], null, 'beep') },
+  boomstick_binoculars: { sound: _fxS('zip', .26, .10, 800, 2000),
+    reload: _fxR(_RK.tune(), [RP(.56,'lenscap','arrive',2,'muzzle')], [[.30,'dial']]) },
+  dart_gun_milkshake: { sound: _fxS('pthew', .26, .08, 1600, 500),
+    reload: _fxR(_RK.top(), null, [[.30,'slurp'],[.56,'slurp']], 'bloop') },
+  signal_pistol_bike_horn: { sound: _fxS('honk', .34, .18, 370, 360),
+    reload: _fxR(_RK.pump(2), null, [[.30,'squeak'],[.56,'squeak']], 'honk') },
+  shorty_hair_clippers: { sound: _fxS('buzz', .24, .12, 120, 120),
+    reload: _fxR(_RK.front(), [RP(.30,'comb','eject',1,'muzzle'), RP(.54,'comb','arrive',1,'muzzle')], null, 'buzz') },
+  machine_pistol_tape_gun: { sound: _fxS('rip', .24, .08, 2200, 5200),
+    reload: _fxR(_RK.top(), [RP(.30,'tape','eject',1,'breech'), RP(.56,'tape','arrive',1,'breech')], null, 'rip') },
+  mk44_keytar: { sound: _fxS('synth', .24, .09, 523, 659),
+    reload: _fxR(_RK.tune(), [.40,.50,.60].map(t => RP(t,'note','arrive',1,'breech')), null, 'chord') },
+  amr_pool_net: { sound: _fxS('splash', .34, .18, 500, 200),
+    reload: _fxR(_RK.dip(), [RP(.56,'leaf','eject',2,'muzzle')], [[.36,'splat']]) },
+  laser_pointer_flashlight: { sound: _fxS('snap', .20, .02, 2600, 1400),
+    reload: _fxR(_RK.rear(), [RP(.30,'cell','eject',2,'rear'), RP(.54,'cell','arrive',2,'rear')], null, 'click') },
+  duelist_candlestick: { sound: _fxS('flame', .18, .10, 220, 120),
+    reload: _fxR(_RK.front(), [RP(.30,'candle','eject',1,'muzzle'), RP(.56,'candle','arrive',1,'muzzle')], [[.66,'strike']]) },
+  gau19_pipe_organ: { sound: _fxS('organ', .24, .14, 131, 196),
+    reload: _fxR(_RK.pump(3), [.40,.50,.60].map(t => RP(t,'note','arrive',1,'breech')), [[.20,'wheeze']], 'chord') },
+  m134_lawn_sprinkler: { sound: _fxS('sprinkle', .26, .09, 4200, 2600),
+    reload: _fxR(_RK.rear(), [RP(.54,'coupling','arrive',1,'rear')], [[.60,'hiss']], 'sprinkle') },
+  auto_revolver_rotary_phone: { sound: _fxS('ring', .24, .18, 1300, 1560),
+    reload: _fxR(RELOAD_KEYS.auto_revolver, null, [[.30,'dial'],[.52,'dial']], 'ding') },
+  snub_revolver_egg_timer: { sound: _fxS('ding', .30, .40, 2100, 0),
+    reload: _fxR(_RK.crank(2), null, [[.20,'ticking'],[.50,'ticking']], 'ding') },
+  boombow_harp: { sound: _fxS('pluck', .30, .40, 392, 588),
+    reload: _fxR(_RK.tune(), null, [[.30,'gliss']]) },
+  glassmaker_squeegee: { sound: _fxS('squeak', .24, .10, 1400, 2100),
+    reload: _fxR(_RK.dip(), [RP(.60,'drop','eject',3,'muzzle')], [[.34,'splat']]) },
+  machine_revolver_projector: { sound: _fxS('clatter', .20, .04, 700, 500),
+    reload: _fxR(RELOAD_KEYS.machine_revolver, [RP(.28,'reel','eject',1,'breech'), RP(.54,'reel','arrive',1,'breech')], null, 'whirr') },
+  painter_beam_roller: { sound: _fxS('splat', .24, .10, 200, 100),
+    reload: _fxR(_RK.dip(), [RP(.56,'paint','eject',1,'muzzle')], [[.36,'splat']]) },
+  seismic_pogo_stick: { sound: _fxS('boing', .36, .30, 180, 520),
+    reload: _fxR(_RK.bounce(3), null, [[.14,'boing'],[.37,'boing'],[.60,'boing']]) },
+  traffic_stop_sign: { sound: _fxS('whistle', .30, .16, 2800, 2600),
+    reload: _fxR(_RK.flourish(), null, [[.30,'whistle']]) },
+  switchblade_pocket_knife: { sound: _fxS('shing', .26, .12, 4200, 2400),
+    reload: _fxR(_RK.tune(), null, [[.24,'click'],[.36,'click'],[.52,'click'],[.66,'click']], 'click') },
+  frost_blaster_window_ac: { sound: _fxS('aircon', .22, .18, 900, 180),
+    reload: _fxR(_RK.top(), [RP(.30,'filter','eject',1,'breech'), RP(.56,'filter','arrive',1,'breech')], null, 'hum') },
+
+  // ── The emoticon family: typed, so they are retyped ──
+  ak20_emoticon:    { sound: _fxS('type', .30, .03, 1500, 0), reload: _emoReload() },
+  pistol_emoticon:  { sound: _fxS('type', .26, .03, 1800, 0), reload: _emoReload() },
+  srx_emoticon:     { sound: _fxS('type', .34, .03, 1100, 0, { bell:true }), reload: _emoReload() },
+  sg8_emoticon:     { sound: _fxS('type', .32, .03, 1300, 0, { n:3 }), reload: _emoReload() },
+  minigun_emoticon: { sound: _fxS('type', .22, .02, 2000, 0), reload: _emoReload() },
+};
+
 function _reloadPose(track, t) {
   let a = _RELOAD_REST, b = _RELOAD_REST;
   for (let i = 0; i < track.length; i++) {
@@ -24143,7 +24907,9 @@ function updateReloadAnim() {
   // beats the hands work. Each event fires once per reload -- and never while
   // inspecting: you are looking at the gun, not emptying it onto the floor.
   if (model._propRun !== model._reloadStart) { model._propRun = model._reloadStart; model._propFired = 0; }
-  const evs = inspecting ? null : RELOAD_PROPS[id];
+  const fx = inspecting ? null : _skinFxFor(id);
+  const skinReload = fx && fx.reload;
+  const evs = inspecting ? null : ((skinReload && skinReload.props) || RELOAD_PROPS[id]);
   if (evs) for (let i = 0; i < evs.length && i < 30; i++) {
     if (model._propFired & (1 << i)) continue;
     if (t < evs[i].t) continue;
@@ -24154,7 +24920,7 @@ function updateReloadAnim() {
   }
 
   const P = _reloadPose(
-    inspecting ? INSPECT_DEFAULT : (RELOAD_KEYS[id] || _RELOAD_DEFAULT), t);
+    inspecting ? INSPECT_DEFAULT : ((skinReload && skinReload.keys) || RELOAD_KEYS[id] || _RELOAD_DEFAULT), t);
   if (inspecting) {
     // Open whatever this weapon opens, out and back across the middle of the
     // look. Same channels the reload drives, so nothing special downstream.
@@ -33865,7 +34631,7 @@ function openAimAssistPanel() {
   }
   panel.style.display = 'block';
   const opts = [
-    { key: 'autoShoot', name: 'AUTO SHOOT',  desc: 'Crosshair on an opponent for 0.01s → fires on its own. Turn OFF if you want to pull the trigger yourself.' },
+    { key: 'autoShoot', name: 'AUTO SHOOT',  desc: 'Crosshair on an opponent → fires on its own, with a tiny lead for moving targets. Turn OFF if you want to pull the trigger yourself.' },
     { key: 'aimAssist', name: 'AIM ASSIST',  desc: 'Opponent on screen → view drifts to their body at 5°/s.' },
     { key: 'aimbot',    name: 'AIM BOT',     desc: 'Opponent on screen 0.2s → snaps to them at 50°/s.' },
     { key: 'aiAim',     name: 'AI AIM',      desc: 'Red dot predicts where the opponent moves next — your call whether to trust it.' },

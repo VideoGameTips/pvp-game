@@ -81,6 +81,10 @@ function load() {
   code += fnBlock('inspectOpenPose') + '\nconst _inspectOpenCache = {};\n';
   code += src.match(/^const RP = .*$/m)[0] + '\n';
   code += constBlock('RELOAD_PROPS') + '\n';
+  code += fnBlock('_fxS') + '\n' + fnBlock('_fxR') + '\n';
+  code += constBlock('_RK') + '\n';
+  code += src.match(/^const _emoReload = [\s\S]*?'ding'\);/m)[0] + '\n';
+  code += constBlock('SKIN_FX') + '\n';
   code += fnBlock('assemblyBeats') + '\nconst _asmBeatCache = {};\n';
   code += fnBlock('prepViewModel') + '\n';
   // Model skins replace a weapon outright, so they must satisfy everything a
@@ -115,7 +119,7 @@ function load() {
     .map(r => ({ id: r.split('//')[1].trim(), fn: r.split('//')[0].trim().split('(')[0] }));
   code += 'return { RELOAD_KEYS, RELOAD_PROPS, _RELOAD_DEFAULT, _reloadPose, attachViewHands,'
         + ' VM_GUN_SCALE, fitRestDistance, INSPECT_DEFAULT, inspectOpenPose, assemblyBeats,'
-        + ' MODEL_SKINS, prepViewModel, MELEE_MODEL_SKINS, meleeStock, blendProudSteps,'
+        + ' MODEL_SKINS, prepViewModel, MELEE_MODEL_SKINS, meleeStock, blendProudSteps, SKIN_FX,'
         + ' builders: ' + JSON.stringify(rows.map(r => r.fn)) + '.map(n => eval(n)) };';
   return { api: new Function('THREE', code)(THREE), rows };
 }
@@ -388,7 +392,19 @@ Object.entries(api.RELOAD_PROPS).forEach(([id, evs]) => {
       if (drift > 0.004) fail(skin.id, 'cylinder orbits instead of spinning (drift '
         + drift.toFixed(4) + ')');
     }
-    out.push({ id: skin.id, weapon: skin.weapon, vis, baseVis, hands });
+    // A skin with its own reload has to stay on screen through it, the same as
+    // a gun does. Sampled across the whole track, worst point kept.
+    let reloadWorst = null;
+    const fxr = api.SKIN_FX && api.SKIN_FX[skin.id] && api.SKIN_FX[skin.id].reload;
+    if (fxr) {
+      reloadWorst = 100;
+      for (let t = 0; t <= 1.0001; t += 0.02)
+        reloadWorst = Math.min(reloadWorst, visibility(g, api._reloadPose(fxr.keys, t)));
+      visibility(g, REST_POSE);
+      if (reloadWorst < 50) fail(skin.id, 'its reload swings it off screen: '
+        + reloadWorst.toFixed(0) + '% in frame at the worst point');
+    }
+    out.push({ id: skin.id, weapon: skin.weapon, vis, baseVis, hands, reloadWorst });
   });
   modelSkinReport = out;
 }
@@ -591,7 +607,8 @@ if (audioReport) {
 if (modelSkinReport && modelSkinReport.length) {
   console.log('\nmodel skins (weapons that replace a weapon):');
   modelSkinReport.forEach(m => console.log('   ' + m.id.padEnd(10) + 'replaces ' + m.weapon.padEnd(10)
-    + m.vis.toFixed(0) + '% in frame vs the stock ' + m.baseVis.toFixed(0) + '%, hands ' + m.hands));
+    + m.vis.toFixed(0) + '% in frame vs the stock ' + m.baseVis.toFixed(0) + '%, hands ' + m.hands
+    + (m.reloadWorst === null ? '' : ', own reload worst ' + m.reloadWorst.toFixed(0) + '%')));
 }
 
 if (meleeSkinReport && meleeSkinReport.length) {
