@@ -24202,6 +24202,11 @@ function dryFire() {
   updateAmmoHint();
 }
 
+// A floating number for things with no running total (destructibles). Players, bots and dummies
+// already get one number that adds up above their heads (trackTotalDamage), so they no longer
+// also spawn a number per hit — five quick hits stacked five of them in a column on the crosshair,
+// over the kill confirm (#40). It starts up and to the right of the hit and drifts up, never down
+// onto the crosshair.
 function showDamageNumber(worldPos, damage, headshot = false) {
   if (!(damage > 0)) return;
   const sc = worldToScreen(worldPos);
@@ -24210,17 +24215,16 @@ function showDamageNumber(worldPos, damage, headshot = false) {
   el.setAttribute('style', DMG_BASE_STYLE);
   el.style.color    = headshot ? '#ffd700' : dmgColor(damage);
   el.style.fontSize = Math.min(36, (headshot ? 18 : 14) + Math.floor(damage / 9)) + 'px';
-  el.style.left     = (sc.x + (Math.random() - 0.5) * 30) + 'px';
-  el.style.top      = sc.y + 'px';
+  el.style.left     = (sc.x + 30) + 'px';
+  el.style.top      = (sc.y - 26) + 'px';
   el.textContent    = damage;
   document.body.appendChild(el);
-
-  const startY = sc.y, t0 = performance.now(), dur = 1300;
+  const startY = sc.y - 26, t0 = performance.now(), dur = 1100;
   const tick = () => {
     const t = (performance.now() - t0) / dur;
     if (t >= 1) { el.remove(); return; }
-    el.style.top     = (startY + t * 70) + 'px';
-    el.style.opacity = t < 0.25 ? '1' : String(Math.max(0, 1 - (t - 0.25) / 0.75));
+    el.style.top     = (startY - t * 40) + 'px';
+    el.style.opacity = t < 0.3 ? '1' : String(Math.max(0, 1 - (t - 0.3) / 0.7));
     requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);
@@ -24339,7 +24343,6 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false) {
   const falloff = falloffMultiplier(weaponId, hitDist);
   const dmg = (headshot && instakill) ? 999 : Math.round(
     (headshot ? baseDmg * headshotMultFor(weaponId) : baseDmg) * synergy * falloff);
-  if (hitWorldPos) showDamageNumber(hitWorldPos, dmg, headshot || synergy > 1);
   showHitmarker(headshot ? 'head' : 'hit');   // a kill below turns it red
   // Briefly tint the damage number / spawn a synergy spark for player discovery
   if (synergy > 1 && hitWorldPos) {
@@ -24350,7 +24353,6 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false) {
   }
   if (mesh)        trackTotalDamage(pid, dmg, mesh);
   playSoundEvent(headshot ? 'headshot' : 'hitmarker', { volume: headshot ? 1.15 : 0.75, minGap: headshot ? 60 : 35 });
-  if (headshot)    flashHeadshot(instakill);
   // Switchblade Gun: any successful hit re-charges to the 100-dmg shot
   if (weaponId === 'switchblade_gun' || weaponId === 'switchblade_charged') {
     switchbladeCharged = true;
@@ -24441,30 +24443,6 @@ function clientRespawnBot(botId) {
   if (mesh) { mesh.position.set(sp.x, 0, sp.z); mesh.visible = true; }
 }
 
-function flashHeadshot(instakill) {
-  // Floating "HEADSHOT" label on screen
-  const el = document.createElement('div');
-  el.textContent = instakill ? '💀 HEADSHOT' : 'HEADSHOT';
-  el.setAttribute('style', [
-    'position:fixed', 'pointer-events:none', 'user-select:none', 'z-index:99999',
-    'font-family:Arial Black,Arial,sans-serif', 'font-weight:900',
-    `font-size:${instakill ? 32 : 26}px`,
-    `color:${instakill ? '#ff2222' : '#ffd700'}`,
-    'text-shadow:-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000,2px 2px 0 #000',
-    'top:28%', 'left:50%', 'transform:translate(-50%,-50%)',
-  ].join(';'));
-  document.body.appendChild(el);
-  const t0 = performance.now();
-  const tick = () => {
-    const t = (performance.now() - t0) / 900;
-    if (t >= 1) { el.remove(); return; }
-    el.style.top     = (28 - t * 6) + '%';
-    el.style.opacity = t < 0.3 ? '1' : String(1 - (t - 0.3) / 0.7);
-    requestAnimationFrame(tick);
-  };
-  requestAnimationFrame(tick);
-  flashScreen(instakill ? 'rgba(255,0,0,0.18)' : 'rgba(255,215,0,0.15)', 300);
-}
 
 // ── Training dummies ───────────────────────────────────────────────────────
 const TRAINING_DUMMIES = [
@@ -24562,7 +24540,6 @@ spawnTrainingDummies(); // safe here — TRAINING_DUMMIES const is already initi
 
 function handleDummyHit(dummy, mesh, opts, hitPos) {
   const dmg = opts.damage ?? getClientWeaponDamage(opts.weaponId);
-  if (hitPos) showDamageNumber(hitPos, dmg);
   trackTotalDamage(dummy.id, dmg, mesh);
   if (dummy.infinite) {
     flashDummyMesh(mesh);
@@ -25018,7 +24995,7 @@ function updateBullets(dt) {
             const baseDmg = getClientWeaponDamage(b.weaponId);
             const dmg = Math.round(bestHit.headshot ? baseDmg * headshotMultFor(b.weaponId) : baseDmg);
             handleDummyHit(dummy, bestHit.mesh, { damage: dmg }, _bpos.clone());
-            if (bestHit.headshot) flashHeadshot(false);
+            if (bestHit.headshot) showHitmarker('head');
           }
         } else if (b.isPaintBomb) {
           triggerPaintExplosion(_bpos.clone(), b);
@@ -26809,6 +26786,12 @@ socket.on('bulletFired', b => {
   playWeaponSound(b.weapon || w.id, { baseWeapon: w, remote: true, position: origin });
   spawnLocalBullet(origin, new THREE.Vector3(b.dx,b.dy,b.dz), b.id, false, w.bulletSpeed, w.bulletColor, w.bulletSize, w.id);
 });
+socket.on('sessionReplaced', () => {
+  alert('This account just signed in on another device, so this one has been signed out.');
+  location.reload();
+});
+socket.on('nameRefused', () => console.warn('[auth] the server refused this name — sign in again'));
+
 socket.on('playerHit', data => {
   // Range mode: player is invincible — just ignore any damage (no healSelf to avoid server loop)
   if (data.targetId === myId && match?.type === 'range') {
@@ -32393,9 +32376,9 @@ setTimeout(function tryAutoLogin() {
 // Resolved once at the top of this file — see the SERVER block. Must NOT be ''
 // on sushigamelab.com: the game is proxied under /pvp/ there.
 const AUTH_BASE = SERVER.base;
-async function authRequest(url, body) {
+async function authRequest(url, body, method = 'POST') {
   try {
-    const r = await fetch(AUTH_BASE + url, {
+    const r = await fetch(AUTH_BASE + url, method === 'GET' ? {} : {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -32434,8 +32417,8 @@ async function registerGuest(nick) {
   for (let attempt = 0; attempt < 4; attempt++) {
     const r = await authRequest('/auth/register', { username, password });
     if (r && r.ok) return { result: r, creds: { username: r.username, password, guest: true } };
-    if (r?.error !== 'username taken') return { error: r?.error || 'Login failed' };
-    username = (nick || 'Player').slice(0, 12) + randomDigits(4); // taken → same nickname + digits
+    if (r?.error !== 'username taken' || nick) return { error: r?.error || 'Login failed' };   // a typed one is never renamed (#38)
+    username = 'Player' + randomDigits(4);   // no nickname given: another random one
   }
   return { error: 'username taken' };
 }
@@ -32478,12 +32461,19 @@ async function login() {
     if (r && r.ok) { finishLogin(r, saved); return; }
     // (the server lost it — fall through and make a fresh guest with the same nickname)
   }
-  const g = await registerGuest(name || (saved && saved.guest ? saved.username : ''));
-  if (g.error) { setAuthStatus(g.error, '#ff6666'); return; }
-  if (name && g.creds.username !== name) {
-    setAuthStatus(`"${name}" was taken — you're ${g.creds.username}`, '#88ccff');
-    await new Promise(r => setTimeout(r, 1400)); // long enough to read before the lobby opens
+  // A nickname you typed is yours or nobody's: taken → say so, offer a free one, stay here. It used
+  // to become "name1234" on the way into the lobby, so two players could look alike (#38).
+  if (name && !(saved && saved.guest && name === saved.username)) {
+    const av = await authRequest('/auth/available?username=' + encodeURIComponent(name), null, 'GET');
+    if (av && av.available === false) {
+      const input = document.getElementById('name-input');
+      if (av.suggestion && input) input.value = av.suggestion;
+      setAuthStatus(av.suggestion ? `"${name}" is taken — try ${av.suggestion}, or type another` : `"${name}" is taken — pick another nickname`, '#ffcc66');
+      return;
+    }
   }
+  const g = await registerGuest(name || (saved && saved.guest ? saved.username : ''));
+  if (g.error) { setAuthStatus(g.error === 'username taken' ? `"${name}" is taken — pick another nickname` : g.error, '#ff6666'); return; }
   finishLogin(g.result, g.creds);
 }
 function finishLogin(result, creds) {
@@ -32493,7 +32483,7 @@ function finishLogin(result, creds) {
 
   const name = result.username;
   players[myId] && (players[myId].name = name);
-  socket.emit('setName', name);
+  socket.emit('setName', { username: name, password: creds.password });   // the server checks it's really this account (#38)
   emitMySkin();
   document.getElementById('overlay').style.display = 'none';
   document.body.classList.remove('login-open');
@@ -32961,12 +32951,15 @@ function openSettingsHub() {
     <div style="height:1px;background:#276b55;margin:16px 0 12px;"></div>
     <button id="settings-shoot-fx" style="display:block;width:100%;margin:8px 0;padding:12px;background:#2a1a3a;color:#cc99ff;border:1px solid #aa77ff;cursor:pointer;font-family:inherit;letter-spacing:2px;border-radius:4px;">🔊 SHOOT FX</button>
     <button id="settings-aim-assist" style="display:block;width:100%;margin:8px 0;padding:12px;background:#3a1a1a;color:#ff9988;border:1px solid #ff5544;cursor:pointer;font-family:inherit;letter-spacing:2px;border-radius:4px;">🎯 AIM ASSIST</button>
+    ${inLobby && currentUser ? `<button id="settings-logout" style="display:block;width:100%;min-height:48px;margin-top:14px;background:transparent;color:#ffb3a8;border:1px solid #7a3a34;border-radius:6px;cursor:pointer;font-family:inherit;font-size:13px;font-weight:bold;letter-spacing:2px;">🚪 LOG OUT</button>` : ''}
     ${inLiveMatch() ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px;padding-top:14px;border-top:1px solid #276b55;">
       <button id="settings-leave-mode" style="min-height:48px;background:transparent;color:#ffb3a8;border:1px solid #7a3a34;cursor:pointer;font-family:inherit;font-size:13px;letter-spacing:1px;border-radius:6px;">🔁 CHANGE MODE</button>
       <button id="settings-leave-lobby" style="min-height:48px;background:transparent;color:#ffb3a8;border:1px solid #7a3a34;cursor:pointer;font-family:inherit;font-size:13px;letter-spacing:1px;border-radius:6px;">🏠 BACK TO LOBBY 13</button>
     </div>` : ''}
   `;
   document.getElementById('settings-hub-close').addEventListener('click', () => panel.style.display = 'none');
+  const _lo = document.getElementById('settings-logout');
+  if (_lo) _lo.addEventListener('click', logOut);   // Lobby 13 had no way out but ⋯ MORE, three levels down (#39)
   panel.querySelectorAll('[data-settings-toggle]').forEach(btn => {
     btn.addEventListener('click', () => {
       GAMEPLAY_SETTINGS[btn.dataset.settingsToggle] = !GAMEPLAY_SETTINGS[btn.dataset.settingsToggle];
@@ -34043,18 +34036,17 @@ if (_bestBtn) {
   _bestBtn.addEventListener('click', () => toggleBestLoadoutsPanel(true));
   _bestBtn.addEventListener('touchstart', e => { e.preventDefault(); toggleBestLoadoutsPanel(true); }, { passive: false });
 }
-const _logoutBtn = document.getElementById('logout-btn');
-if (_logoutBtn) {
-  _logoutBtn.addEventListener('click', () => {
-    const msg = currentUser?.guest
-      ? 'Log out? This guest profile only lives on this device — you won\'t be able to get it back.'
-      : 'Log out? You\'ll have to sign in again.';
-    if (!confirm(msg)) return;
-    localStorage.removeItem('pvp_user');
-    currentUser = null;
-    location.reload();
-  });
+function logOut() {
+  const msg = currentUser?.guest
+    ? 'Log out? This guest profile only lives on this device — you won\'t be able to get it back.'
+    : 'Log out? You\'ll have to sign in again.';
+  if (!confirm(msg)) return;
+  localStorage.removeItem('pvp_user');
+  currentUser = null;
+  location.reload();
 }
+const _logoutBtn = document.getElementById('logout-btn');
+if (_logoutBtn) _logoutBtn.addEventListener('click', logOut);
 
 // Update the mode-screen user-info bar (called after login + after redeeming codes)
 function updateUserInfoBar() {

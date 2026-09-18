@@ -745,9 +745,11 @@
       -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='11' cy='14.5' r='6.3'/><rect x='9' y='5.4' width='4.4' height='3.4' rx='.6'/><path d='M13.4 6.4l3.8-2.6 1 1.4-3.8 2.6z'/></svg>");
               mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='11' cy='14.5' r='6.3'/><rect x='9' y='5.4' width='4.4' height='3.4' rx='.6'/><path d='M13.4 6.4l3.8-2.6 1 1.4-3.8 2.6z'/></svg>");
     }
-    body.touch-ui #ammo              { top: 264px; right: 8px; bottom: auto; }
+    /* Ammo sits with the gun, right above ↻ — where the eye and the thumb already are. Up in the
+       corner under the weapon icons it was, in the playtester's words, basically invisible. */
+    body.touch-ui #ammo              { top: auto; bottom: 158px; right: 18px; }
     body.touch-ui #ammo-gun          { font-size: 11px; }
-    body.touch-ui #ammo-count        { font-size: 22px; letter-spacing: 1px; }
+    body.touch-ui #ammo-count        { font-size: 26px; letter-spacing: 1px; line-height: 1; }
     body.touch-ui #ammo-reserve      { font-size: 12px; }
     body.touch-ui #spawn-shield      { top: auto !important; bottom: 112px; left: 12px; transform: none; font-size: 11px; padding: 3px 9px;
                                        letter-spacing: 1px; white-space: nowrap; max-width: 130px; overflow: hidden; text-overflow: ellipsis; }
@@ -774,7 +776,7 @@
       body.touch-ui #health-track      { width: 104px; }
       body.touch-ui #weapon-selector   { gap: 4px; }
       body.touch-ui .ws-slot           { width: 32px; height: 32px; }
-      body.touch-ui #ammo              { top: 250px; }
+      body.touch-ui #ammo              { bottom: 146px; right: 14px; }
     }
     /* Landscape (by orientation, not width — a portrait tablet is wide too): the top row
        has to share with the score strip, so it sits a little higher. */
@@ -782,7 +784,7 @@
       body.touch-ui #match-hud       { top: 6px; max-width: calc(100vw - 260px); white-space: nowrap; padding: 3px 10px; gap: 10px; }
       body.touch-ui #match-center    { font-size: 15px; }
       body.touch-ui #weapon-selector { top: 46px; flex-direction: row; }
-      body.touch-ui #ammo            { top: 86px; }
+
       body.touch-ui #msg-feed        { top: 48px; width: 240px; max-height: calc(100vh - 188px); }
       body.touch-ui #spawn-shield    { bottom: 80px; left: 146px; }   /* beside the health bar: the feed owns the upper left */
       body.touch-ui #lobby-prompt    { top: 118px !important; bottom: auto !important; }

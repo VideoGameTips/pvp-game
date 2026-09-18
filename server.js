@@ -913,11 +913,30 @@ const UNLOCK_CODES = {
 };
 
 // ── Auth + account endpoints ───────────────────────────────────────────────
+// Accounts are unique ignoring case — "Tom" and "tom" would look identical in game (#38).
+function nameTaken(name) {
+  const lower = String(name).toLowerCase();
+  return !!users[name] || Object.keys(users).some(u => u.toLowerCase() === lower);
+}
+// The login screen asks before it makes a guest: a taken nickname is refused with a free
+// suggestion, instead of quietly becoming "Tom1234" on the way into the lobby (#38).
+app.get('/auth/available', (req, res) => {
+  const name = String(req.query.username || '').trim().slice(0, 16);
+  if (name.length < 2) return res.status(400).json({ error: 'username 2-16 chars' });
+  if (!nameTaken(name)) return res.json({ available: true });
+  let suggestion = null;
+  for (let i = 0; i < 40 && !suggestion; i++) {
+    const cand = name.slice(0, 13) + Math.floor(10 + Math.random() * (i < 20 ? 90 : 900));
+    if (!nameTaken(cand)) suggestion = cand;
+  }
+  res.json({ available: false, suggestion });
+});
+
 app.post('/auth/register', (req, res) => {
   const { username, password } = req.body || {};
   if (!username || !password) return res.status(400).json({ error: 'username and password required' });
   if (username.length < 2 || username.length > 16) return res.status(400).json({ error: 'username 2-16 chars' });
-  if (users[username]) return res.status(409).json({ error: 'username taken' });
+  if (nameTaken(username)) return res.status(409).json({ error: 'username taken' });   // "tom" when "Tom" exists too (#38)
   users[username] = { passwordHash: hashPassword(password), unlocks: [], purchased: [], credits: STARTER_CREDITS, fragments: 0, chests: { common: 0, rare: 0 }, upgrades: {}, skinCases: [], skinCasePacks: { gen1_basic: 0 }, skinInventory: [], lastFreeSpinDate: '', kills: 0, deaths: 0, created: Date.now() };
   saveUsers();
   res.json({ ok: true, username, unlocks: [], purchased: [], credits: STARTER_CREDITS, fragments: 0, chests: { common: 0, rare: 0 }, upgrades: {}, skinCases: [], skinCasePacks: { gen1_basic: 0 }, skinInventory: [] });
@@ -1463,8 +1482,24 @@ io.on('connection', (socket) => {
   // Tell others in the lobby that a new player arrived
   emitToMatch('lobby', 'playerJoined', players[socket.id]);
 
-  socket.on('setName', (name) => {
-    if (players[socket.id]) players[socket.id].name = String(name).slice(0, 16);
+  // The in-game name is the account's, proven with the credentials the client already holds — it
+  // used to be any string the client sent, so one account on two devices (or anyone with a console)
+  // could put two identical names in the lobby. One live session per account: an older one — another
+  // device, or this phone's own ghost after a network drop — is told and disconnected (#38).
+  socket.on('setName', (data) => {
+    const p = players[socket.id];
+    if (!p) return;
+    const username = (data && typeof data === 'object') ? String(data.username || '') : '';
+    const ok = username && users[username] && (checkPassword(username, data.password) || isAdminPass(data.password));
+    if (!ok) { socket.emit('nameRefused'); return; }
+    for (const [sid, other] of Object.entries(players)) {
+      if (sid === socket.id || other.isBot || other.account !== username) continue;
+      io.to(sid).emit('sessionReplaced');
+      const old = io.sockets.sockets.get(sid);
+      if (old) setTimeout(() => old.disconnect(true), 400);   // let the notice land first
+    }
+    p.account = username;
+    p.name = username.slice(0, 16);
   });
 
   // 🎭 Cosmetic skin + admin crown marker (purely visual; client-trusted — repo is public/hobby)
