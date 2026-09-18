@@ -18795,14 +18795,17 @@ document.addEventListener('keyup', e => {
 document.addEventListener('mousedown', e => {
   // Spectator: any click cycles to next ally
   // Middle mouse is quick melee, which is where most shooters put it.
-  if (e.button === 1 && !isDead && gameStarted) { e.preventDefault(); quickMelee(); return; }
+  // With the cursor free, a click on UI (a loadout card, ⚙) is not a shot: only the game view, or
+  // anything while the pointer is locked (then every click lands on the canvas anyway) (#25).
+  const aimed = pointerLocked || onGameView(e.target);
+  if (e.button === 1 && !isDead && gameStarted && aimed) { e.preventDefault(); quickMelee(); return; }
   if (spectatorState && e.button === 0) { spectatorCycle(1); return; }
   // Mortar: LMB fires a grenade instead of the equipped weapon
   if (pilotedMortar && e.button === 0) { fireMortar(); return; }
   // Vehicle: LMB fires the vehicle's gun
   if (pilotedVehicle && e.button === 0) { fireVehicleGun(); return; }
   if (spectatorState && e.button === 2) { spectatorCycle(-1); return; }
-  if (e.button !== 0) return;
+  if (e.button !== 0 || !aimed) return;
   shooting = true;
   // Crossbow charge: start charging instead of shooting
   // Any weapon whose EQUIPPED ability is a charge draws instead of firing — the
@@ -26439,6 +26442,7 @@ function applyBotDamageToPlayer(weaponId, botId) {
       if (dmEl) dmEl.textContent = 'Waiting for round to end...';
       updateRoundScoreDisplay && updateRoundScoreDisplay();
       enterSpectator(); // watch live teammates while waiting
+      releasePointer(); // CHANGE LOADOUT on the waiting screen needs the cursor
     } else if (match && match.type === 'arcade') {
       // Arcade: brief death screen, scheduleArcadeRespawn handles the actual respawn
       if (ds) {
@@ -26784,6 +26788,7 @@ socket.on('playerDied', data => {
       document.getElementById('waiting-screen').style.display = 'flex';
       updateRoundScoreDisplay();
       enterSpectator(); // watch live teammates while waiting
+      releasePointer(); // CHANGE LOADOUT on the waiting screen needs the cursor
     } else if (match && match.tiebreaker) {
       document.getElementById('death-msg').textContent = 'Tiebreaker — eliminated!';
       // endMatch called via onEntityDied
@@ -28913,6 +28918,7 @@ function endMatch(winner, reason) {
     if (currentWeapon && currentWeapon.id === 'pistol') currentWeapon.damage = match._oitcOrigDmg;
   }
   const isWin  = winner === 'ally';
+  releasePointer(); // PLAY AGAIN / CHANGE MODE / BACK TO LOBBY need the cursor
   const el     = document.getElementById('match-over-screen');
   const title  = document.getElementById('match-over-title');
   title.textContent = isWin ? '🏆  VICTORY' : '💀  DEFEAT';
@@ -31525,6 +31531,7 @@ function toggleBestLoadoutsPanel(show) {
 
 function showLoadoutScreen(mode) {
   loadoutMode = mode || 'death';
+  releasePointer();
   const screen = document.getElementById('loadout-screen');
   const pList  = document.getElementById('loadout-primary-list');
   const sList  = document.getElementById('loadout-secondary-list');
@@ -32007,6 +32014,13 @@ function confirmLoadout() {
   }
 }
 
+// A screen that needs the mouse opened mid-game: give the cursor back. While the pointer is locked
+// the browser sends every click to the canvas, so on desktop the loadout, the end screen and the
+// elimination waiting screen could not be clicked until the player found Esc (#25) — not even to
+// stop the respawn countdown. READY / PLAY AGAIN re-lock as before.
+function releasePointer() {
+  if (document.pointerLockElement && document.exitPointerLock) document.exitPointerLock();
+}
 function requestPointerLockSafe() {
   if (!renderer.domElement.requestPointerLock) return;
   try {
