@@ -18878,19 +18878,26 @@ function localPlayerTeam() {
   return pvpMatch?.team === 'enemy' ? 'enemy' : 'ally';
 }
 
+// Look at a spot on the ground, with the view level. In three.js (Euler YXZ) yaw 0 looks down −Z and
+// yaw π down +Z; the spawns used to assume the opposite, so every life started facing away from the
+// fight — and kept whatever pitch the last one ended on, often a screen of sky (#33).
+function faceToward(x, z) {
+  euler.y = Math.atan2(camera.position.x - x, camera.position.z - z);
+  euler.x = 0;
+  camera.quaternion.setFromEuler(euler);
+}
+
 function teamSideSpawn(team = 'ally', spread = 36, depth = 38) {
   const side = team === 'enemy' ? -1 : 1;
-  return {
-    x: (Math.random() - 0.5) * spread,
-    z: side * (depth + Math.random() * 8),
-    yaw: team === 'enemy' ? 0 : Math.PI,
-  };
+  const x = (Math.random() - 0.5) * spread, z = side * (depth + Math.random() * 8);
+  return { x, z, yaw: Math.atan2(x, z) };   // facing the middle of the map
 }
 
 function placePlayerAtTeamSpawn(team = localPlayerTeam(), spread = 36, depth = 38) {
   const sp = teamSideSpawn(team, spread, depth);
   camera.position.set(sp.x, 1.65, sp.z);
-  euler.y = sp.yaw + (Math.random() - 0.5) * 0.6;
+  faceToward(0, 0);
+  euler.y += (Math.random() - 0.5) * 0.4;   // a little variety, never enough to lose the fight
   camera.quaternion.setFromEuler(euler);
   return sp;
 }
@@ -18908,8 +18915,7 @@ function resetPlayerForRound(x = null, z = null) {
     sp = placePlayerAtTeamSpawn();
   } else {
     camera.position.set(x, 1.65, z);
-    euler.y = z < 0 ? 0 : Math.PI;
-    camera.quaternion.setFromEuler(euler);
+    faceToward(0, 0);
     sp = { x, z };
   }
   document.getElementById('waiting-screen').style.display = 'none';
@@ -26479,7 +26485,7 @@ function applyBotDamageToPlayer(weaponId, botId) {
         if (ds) ds.style.display = 'none';
         isDead = false;
         me.hp = 300; updateHealthHUD(300);
-        camera.position.set(-22, 1.65, 22); euler.y = 0; camera.quaternion.setFromEuler(euler);
+        camera.position.set(-22, 1.65, 22); faceToward(-22, 0);
         grantSpawnShield(3000);
         requestPointerLockSafe();
       });
@@ -26808,8 +26814,7 @@ socket.on('playerDied', data => {
       ds.style.display = 'none';
       isDead = false;
       camera.position.set(0, 1.65, 38);
-      euler.y = Math.PI;
-      camera.quaternion.setFromEuler(euler);
+      faceToward(0, 0);   // down the range, at the targets
       socket.emit('readyRespawn', { x: camera.position.x, z: camera.position.z });
       requestPointerLockSafe();
     } else if (match && match.type === 'dday') {
@@ -26820,8 +26825,7 @@ socket.on('playerDied', data => {
         ds.style.display = 'none';
         isDead = false;
         camera.position.set(-22, 1.65, 22); // back to bunker 0 slit
-        euler.y = 0; // face toward enemies (-Z)
-        camera.quaternion.setFromEuler(euler);
+        faceToward(-22, 0);   // out of the slit, toward the enemies (-Z)
         socket.emit('readyRespawn', { x: camera.position.x, z: camera.position.z });
         grantSpawnShield(3000);
         requestPointerLockSafe();
@@ -26857,7 +26861,7 @@ socket.on('playerRespawned', p => {
       // Always teleport to the player's team side — never trust server's center-ish spawn.
       if (p.forcedReset || p.clientSpawn) {
         camera.position.set(p.x, 1.65, p.z);
-        euler.y = p.z < 0 ? 0 : Math.PI;
+        faceToward(0, 0);
       } else {
         placePlayerAtTeamSpawn(localPlayerTeam(), 24, 38);
       }
@@ -28418,7 +28422,7 @@ function onEntityDied(targetId, killerId) {
           const me = players[myId];
           if (me) { me.hp = 300; updateHealthHUD(300); }
           camera.position.set(Math.cos(ang) * r, 1.65, Math.sin(ang) * r);
-          euler.y = ang + Math.PI; camera.quaternion.setFromEuler(euler);
+          faceToward(0, 0);
           grantSpawnShield(3000);
           document.getElementById('death-screen').style.display = 'none';
           document.getElementById('waiting-screen').style.display = 'none';
@@ -29332,17 +29336,17 @@ function spawnGameBots() {
 
   // Move the player to their team side before the round begins
   if (selectedModeConfig && selectedModeConfig.type === 'dday') {
-    camera.position.set(-22, 1.65, 22); euler.y = 0; // D-Day: inside bunker 0, facing enemies
+    camera.position.set(-22, 1.65, 22); faceToward(-22, 0); // D-Day: inside bunker 0, facing enemies
   } else if (selectedModeConfig && selectedModeConfig.type === 'range') {
-    camera.position.set(0, 1.65, 38); euler.y = Math.PI; // Shooting range: face -z toward targets
+    camera.position.set(0, 1.65, 38); faceToward(0, 0); // Shooting range: down the range at the targets
   } else if (selectedModeConfig && selectedModeConfig.type === 'lobby') {
-    camera.position.set(0, 1.65, 18); euler.y = Math.PI; // Lobby 13: drop in the central lounge facing the sign
+    camera.position.set(0, 1.65, 18); faceToward(0, -31); // Lobby 13: drop in the central lounge facing the sign
   } else if (selectedModeConfig && selectedModeConfig.type === 'br') {
     // BR: spawn at random spot in the big map
     const ang = Math.random() * Math.PI * 2;
     const r = 80 + Math.random() * 30;
     camera.position.set(Math.cos(ang) * r, 1.65, Math.sin(ang) * r);
-    euler.y = ang + Math.PI; // face toward center
+    faceToward(0, 0); // face toward center
   } else {
     placePlayerAtTeamSpawn();
   }
