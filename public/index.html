@@ -305,6 +305,8 @@
       letter-spacing: 2px; transition: background 0.15s; flex: 0 0 auto;
     }
     #loadout-ready-btn:disabled { background: #555; cursor: default; }
+    /* "Auto in 8s · tap any item to stay" under READY while the death countdown runs (#20) */
+    #loadout-ready-btn .auto-respawn-sub { display: block; margin-top: 3px; font-size: 11px; letter-spacing: 1px; opacity: 0.85; }
     #loadout-ready-btn:not(:disabled):hover { background: #c0392b; }
 
     @media (max-width: 620px) {

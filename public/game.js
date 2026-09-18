@@ -19214,8 +19214,8 @@ function stopKillcam() {
   if (KILLCAM.banner) KILLCAM.banner.style.display = 'none';
   if (KILLCAM.savedCamPos) camera.position.copy(KILLCAM.savedCamPos);
   if (KILLCAM.savedCamQuat) camera.quaternion.copy(KILLCAM.savedCamQuat);
-  // Show the actual death screen (if still dead)
-  if (isDead) {
+  // Show the actual death screen (if still dead) — unless the loadout already replaced it
+  if (isDead && !isLoadoutOpen()) {
     const ds = document.getElementById('death-screen');
     if (ds && match?.type !== 'elim') ds.style.display = 'flex';
   }
@@ -31723,18 +31723,24 @@ function showLoadoutScreen(mode) {
 // The loadout still opens, but READY counts down and respawns you with the kit you had, so a
 // death costs a few seconds instead of a full-screen menu and a tap. Touching the screen at all
 // (to pick something else) stops the countdown and it's the old manual READY again.
-const AUTO_RESPAWN_SECS = 4;
+const AUTO_RESPAWN_SECS = 8; // long enough to read the loadout and decide to change it (#20)
 let autoRespawn = null;
 function startAutoRespawn() {
   cancelAutoRespawn();
   const btn = document.getElementById('loadout-ready-btn');
   const screen = document.getElementById('loadout-screen');
-  const st = { left: AUTO_RESPAWN_SECS, label: btn.textContent, btn, screen, stop: () => cancelAutoRespawn() };
+  const st = { left: AUTO_RESPAWN_SECS, btn, screen, stop: () => cancelAutoRespawn() };
   const tick = () => {
     if (!isLoadoutOpen() || loadoutMode !== 'death' || !match || match.over) { cancelAutoRespawn(); return; }
     if (st.left <= 0) { cancelAutoRespawn(); confirmLoadout(); return; }
-    btn.textContent = `RESPAWN ${st.left}…`;
-    st.left--;
+    // READY stays the label (tapping it still goes at once); the line under it says what happens
+    // on its own and how to stop it — nothing told players a touch stops the clock.
+    btn.textContent = 'READY';
+    const sub = document.createElement('span');
+    sub.className = 'auto-respawn-sub';
+    sub.textContent = `Auto in ${st.left}s · ${isTouchUI() ? 'tap' : 'click'} any item to stay`;
+    btn.appendChild(sub);
+    if (!KILLCAM.active) st.left--; // the clock starts once the killcam is over
   };
   for (const ev of ['pointerdown', 'touchstart', 'wheel']) screen.addEventListener(ev, st.stop, true);
   document.addEventListener('keydown', st.stop, true);
@@ -31747,7 +31753,7 @@ function cancelAutoRespawn() {
   if (!st) return;
   autoRespawn = null;
   clearInterval(st.timer);
-  st.btn.textContent = st.label;
+  st.btn.textContent = 'READY';
   for (const ev of ['pointerdown', 'touchstart', 'wheel']) st.screen.removeEventListener(ev, st.stop, true);
   document.removeEventListener('keydown', st.stop, true);
 }

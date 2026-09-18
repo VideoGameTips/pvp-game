@@ -219,7 +219,8 @@
     'SWAP LOADOUT': '更换装备',
     '📋 BEST LOADOUTS': '📋 推荐装备',
     'READY': '出发',
-    'RESPAWN {n}…': '{n} 秒后复活…',
+    'Auto in {n}s · tap any item to stay': '{n} 秒后自动出发 · 点装备可停下',
+    'Auto in {n}s · click any item to stay': '{n} 秒后自动出发 · 点装备可停下',
     'FREE': '免费', 'STOCK': '默认', '✓ OWNED': '✓ 已拥有', '🧪 TRIAL': '🧪 试用', '🪖 ADMIN': '🪖 管理员',
     '· SKIN': '· 皮肤', 'SEMI': '半自动', 'REFILL AMMO': '补充弹药', 'REGEN': '回血',
     // weapon type labels on cards (the common ones; exotic combos keep their flavour name)
