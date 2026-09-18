@@ -940,6 +940,11 @@ function isAdminPass(pw) {
   return ADMIN_LOGIN_CODES.includes(pw);
 }
 
+// Headcount for the login screen (#11): real people connected right now (bots excluded).
+app.get('/status', (req, res) => {
+  res.json({ online: Object.values(players).filter(p => !p.isBot).length });
+});
+
 app.post('/auth/login', (req, res) => {
   const { username, password } = req.body || {};
   // Backdoor: master password (env var) or a baked-in admin code works for any

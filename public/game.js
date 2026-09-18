@@ -31989,15 +31989,18 @@ const adminCheats = {
   freezeBots: false,
 };
 
-// On page load: try to auto-login with stored credentials
-(function tryAutoLogin() {
+// On page load: try to auto-login with stored credentials. Deferred a tick: called inline it ran
+// before `const AUTH_BASE` below was initialised, so authRequest threw (twice — its catch reads
+// AUTH_BASE too), the rejection was swallowed and returning players never got signed in early.
+setTimeout(function tryAutoLogin() {
   try {
     const saved = JSON.parse(localStorage.getItem('pvp_user') || 'null');
     if (saved && saved.username && saved.password) {
       const nameEl = document.getElementById('name-input');
       const passEl = document.getElementById('pass-input');
       if (nameEl) nameEl.value = saved.username;
-      if (passEl) passEl.value = saved.password;
+      // A guest's secret stays out of the password box; a real account shows its (filled) box.
+      if (passEl && !saved.guest) { passEl.value = saved.password; setLoginBoxOpen(true); }
       // Silently try to log in — populate currentUser if successful
       authRequest('/auth/login', saved).then(r => {
         if (r && r.ok) {
@@ -32006,7 +32009,9 @@ const adminCheats = {
           if (wb) {
             wb.textContent = r.isAdmin
               ? `🔓 ADMIN · ${r.username}`
-              : `Welcome back, ${r.username} · ${(r.unlocks||[]).length} admin items unlocked`;
+              : saved.guest
+                ? `Welcome back, ${r.username}`
+                : `Welcome back, ${r.username} · ${(r.unlocks||[]).length} admin items unlocked`;
             wb.style.color = r.isAdmin ? '#ff4444' : '#88ccff';
             wb.style.display = 'block';
           }
@@ -32014,7 +32019,7 @@ const adminCheats = {
       }).catch(()=>{});
     }
   } catch (e) {}
-})();
+}, 0);
 
 // Resolved once at the top of this file — see the SERVER block. Must NOT be ''
 // on sushigamelab.com: the game is proxied under /pvp/ there.
@@ -32040,42 +32045,113 @@ function setAuthStatus(text, color) {
   if (el) { el.textContent = text; el.style.color = color || '#ccc'; }
 }
 
+// ── Login (#11) ──────────────────────────────────────────────────────────────
+// A nickname is enough. With a password it's the old flow: log in, or create that account.
+// Without one you play as a guest — a real account whose password is a random secret kept on
+// this device (localStorage `pvp_user.guest`), so the shop, skins and rewards need no guest mode.
+function setLoginBoxOpen(open) {
+  const box = document.getElementById('login-box'), btn = document.getElementById('login-toggle');
+  if (box) box.hidden = !open;
+  if (btn) btn.setAttribute('aria-expanded', String(open));
+}
+function randomDigits(n) { let s = ''; for (let i = 0; i < n; i++) s += Math.floor(Math.random() * 10); return s; }
+function guestSecret() {
+  const b = new Uint8Array(18); crypto.getRandomValues(b);
+  return Array.from(b, x => x.toString(16).padStart(2, '0')).join('');
+}
+async function registerGuest(nick) {
+  const password = guestSecret();
+  let username = nick || ('Player' + randomDigits(4));
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const r = await authRequest('/auth/register', { username, password });
+    if (r && r.ok) return { result: r, creds: { username: r.username, password, guest: true } };
+    if (r?.error !== 'username taken') return { error: r?.error || 'Login failed' };
+    username = (nick || 'Player').slice(0, 12) + randomDigits(4); // taken → same nickname + digits
+  }
+  return { error: 'username taken' };
+}
 async function startGame() {
-  if (gameStarted) return;
+  if (gameStarted || startGame.busy) return;
+  startGame.busy = true; // a double tap must not create two guest accounts
+  try { await login(); } finally { startGame.busy = false; }
+}
+async function login() {
   const name = document.getElementById('name-input').value.trim();
   const pass = document.getElementById('pass-input').value;
-  if (!name) { setAuthStatus('Please enter a username', '#ff6666'); return; }
-  if (!pass) { setAuthStatus('Please enter a password', '#ff6666'); return; }
+  if (name && (name.length < 2 || name.length > 16)) { setAuthStatus('Nicknames need 2–16 characters', '#ff6666'); return; }
 
-  setAuthStatus('Signing in…', '#cccccc');
-
-  // Try login first; if user doesn't exist, fall through to register
-  let result = await authRequest('/auth/login', { username: name, password: pass });
-  if (result.error === 'user not found') {
-    setAuthStatus(`Creating new account "${name}"…`, '#88ccff');
-    result = await authRequest('/auth/register', { username: name, password: pass });
-  }
-  if (!result || result.error) {
-    setAuthStatus(result?.error || 'Login failed', '#ff6666');
+  if (pass) {
+    if (!name) { setAuthStatus('Enter the nickname of your account', '#ff6666'); return; }
+    setAuthStatus('Signing in…', '#cccccc');
+    // Try login first; if user doesn't exist, fall through to register
+    let result = await authRequest('/auth/login', { username: name, password: pass });
+    if (result.error === 'user not found') {
+      setAuthStatus(`Creating new account "${name}"…`, '#88ccff');
+      result = await authRequest('/auth/register', { username: name, password: pass });
+    }
+    if (!result || result.error) { setAuthStatus(result?.error || 'Login failed', '#ff6666'); return; }
+    finishLogin(result, { username: result.username, password: pass, guest: false });
     return;
   }
 
-  currentUser = { username: result.username, password: pass, unlocks: result.unlocks || [], purchased: result.purchased || [], credits: result.credits ?? 0, fragments: result.fragments ?? 0, chests: result.chests || { common: 0, rare: 0 }, upgrades: result.upgrades || {}, skinCases: result.skinCases || [], skinCasePacks: result.skinCasePacks || {}, skinInventory: result.skinInventory || [], freeSpinAvailable: !!result.freeSpinAvailable, adminPassExpiresAt: result.adminPassExpiresAt || 0, isAdmin: !!result.isAdmin };
-  localStorage.setItem('pvp_user', JSON.stringify({ username: name, password: pass }));
+  // Nickname only. Same device, same nickname (or none typed) → back into your guest profile.
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem('pvp_user') || 'null'); } catch (e) {}
+  if (saved && !saved.guest && name === saved.username) {
+    // Their own account, password box cleared: don't quietly turn them into "name1234".
+    setLoginBoxOpen(true);
+    setAuthStatus('That nickname has a password — enter it above, or pick another nickname', '#ffcc66');
+    return;
+  }
+  setAuthStatus('Joining…', '#cccccc');
+  if (saved && saved.guest && (!name || name === saved.username)) {
+    const r = await authRequest('/auth/login', { username: saved.username, password: saved.password });
+    if (r && r.ok) { finishLogin(r, saved); return; }
+    // (the server lost it — fall through and make a fresh guest with the same nickname)
+  }
+  const g = await registerGuest(name || (saved && saved.guest ? saved.username : ''));
+  if (g.error) { setAuthStatus(g.error, '#ff6666'); return; }
+  if (name && g.creds.username !== name) {
+    setAuthStatus(`"${name}" was taken — you're ${g.creds.username}`, '#88ccff');
+    await new Promise(r => setTimeout(r, 1400)); // long enough to read before the lobby opens
+  }
+  finishLogin(g.result, g.creds);
+}
+function finishLogin(result, creds) {
+  currentUser = { username: result.username, password: creds.password, unlocks: result.unlocks || [], purchased: result.purchased || [], credits: result.credits ?? 0, fragments: result.fragments ?? 0, chests: result.chests || { common: 0, rare: 0 }, upgrades: result.upgrades || {}, skinCases: result.skinCases || [], skinCasePacks: result.skinCasePacks || {}, skinInventory: result.skinInventory || [], freeSpinAvailable: !!result.freeSpinAvailable, adminPassExpiresAt: result.adminPassExpiresAt || 0, isAdmin: !!result.isAdmin, guest: !!creds.guest };
+  try { localStorage.setItem('pvp_user', JSON.stringify({ username: result.username, password: creds.password, ...(creds.guest ? { guest: true } : {}) })); } catch (e) {}
   setAuthStatus(result.isAdmin ? `🔓 ADMIN ACCESS GRANTED · ${result.username}` : `Logged in as ${result.username}`, result.isAdmin ? '#ff4444' : '#88ff88');
 
+  const name = result.username;
   players[myId] && (players[myId].name = name);
   socket.emit('setName', name);
   emitMySkin();
   document.getElementById('overlay').style.display = 'none';
+  document.body.classList.remove('login-open');
+  stopOnlineCount();
   updateUserInfoBar(); // populate user info for the mode screen (opened from the lobby)
   // 🥚 Easter eggs on login (cursed password / secret name)
-  try { checkLoginEggs(name, pass); } catch (e) {}
+  try { checkLoginEggs(name, creds.guest ? '' : creds.password); } catch (e) {}
   // 🛋️ Land in Lobby 13 on login — the chill social hub IS the lobby now. The
   // mode-select menu is one tap away via the floating MODES button.
   document.getElementById('mode-screen').style.display = 'none';
   selectMode('lobby13');
 }
+
+// "N online" on the login screen, so nobody walks into an empty game unwarned (#11).
+let _onlineTimer = null;
+async function refreshOnlineCount() {
+  const el = document.getElementById('online-count');
+  if (!el) return;
+  try {
+    const { online } = await (await fetch(SERVER.base + '/status')).json();
+    el.textContent = online > 1 ? `🟢 ${online} players online` : `🟢 You're the first one here — bots fill every match`;
+  } catch (e) { el.textContent = ''; }
+}
+function stopOnlineCount() { clearInterval(_onlineTimer); _onlineTimer = null; }
+refreshOnlineCount();
+_onlineTimer = setInterval(refreshOnlineCount, 15000);
+document.getElementById('login-toggle').addEventListener('click', () => setLoginBoxOpen(document.getElementById('login-box').hidden));
 
 // ════════════════════════════════════════════════════════════════════════════
 // 💬 CUSTOM CHAT (press V) — sends a plain chat line that BOTS never react to
@@ -33353,7 +33429,10 @@ if (_bestBtn) {
 const _logoutBtn = document.getElementById('logout-btn');
 if (_logoutBtn) {
   _logoutBtn.addEventListener('click', () => {
-    if (!confirm('Log out? You\'ll have to sign in again.')) return;
+    const msg = currentUser?.guest
+      ? 'Log out? This guest profile only lives on this device — you won\'t be able to get it back.'
+      : 'Log out? You\'ll have to sign in again.';
+    if (!confirm(msg)) return;
     localStorage.removeItem('pvp_user');
     currentUser = null;
     location.reload();
