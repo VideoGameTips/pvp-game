@@ -31718,6 +31718,40 @@ function showLoadoutScreen(mode) {
   if (title) title.textContent = loadoutMode === 'swap' ? 'SWAP LOADOUT' : 'SELECT LOADOUT';
 
   screen.style.display = 'flex';
+  if (loadoutMode === 'death' && gameStarted && match && !match.over && loadoutReady()) startAutoRespawn();
+}
+
+// ── After a death in a respawn mode (#20) ─────────────────────────────────────
+// The loadout still opens, but READY counts down and respawns you with the kit you had, so a
+// death costs a few seconds instead of a full-screen menu and a tap. Touching the screen at all
+// (to pick something else) stops the countdown and it's the old manual READY again.
+const AUTO_RESPAWN_SECS = 4;
+let autoRespawn = null;
+function startAutoRespawn() {
+  cancelAutoRespawn();
+  const btn = document.getElementById('loadout-ready-btn');
+  const screen = document.getElementById('loadout-screen');
+  const st = { left: AUTO_RESPAWN_SECS, label: btn.textContent, btn, screen, stop: () => cancelAutoRespawn() };
+  const tick = () => {
+    if (!isLoadoutOpen() || loadoutMode !== 'death' || !match || match.over) { cancelAutoRespawn(); return; }
+    if (st.left <= 0) { cancelAutoRespawn(); confirmLoadout(); return; }
+    btn.textContent = `RESPAWN ${st.left}…`;
+    st.left--;
+  };
+  for (const ev of ['pointerdown', 'touchstart', 'wheel']) screen.addEventListener(ev, st.stop, true);
+  document.addEventListener('keydown', st.stop, true);
+  st.timer = setInterval(tick, 1000);
+  autoRespawn = st;
+  tick();
+}
+function cancelAutoRespawn() {
+  const st = autoRespawn;
+  if (!st) return;
+  autoRespawn = null;
+  clearInterval(st.timer);
+  st.btn.textContent = st.label;
+  for (const ev of ['pointerdown', 'touchstart', 'wheel']) st.screen.removeEventListener(ev, st.stop, true);
+  document.removeEventListener('keydown', st.stop, true);
 }
 
 function pickLoadoutWeapon(idx, isPrimary, card) {
@@ -31927,6 +31961,7 @@ function renderStagingLobby() {
 }
 
 function confirmLoadout() {
+  cancelAutoRespawn();
   // Guard: both slots must be chosen (belt-and-suspenders against spurious mobile touch events)
   if (!loadoutReady()) return;
 
