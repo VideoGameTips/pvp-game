@@ -26763,6 +26763,7 @@ socket.on('playerDied', data => {
   const _alreadyDead = gameBots.find(b => b.id === data.targetId)?.dead;
   if (data.killerId===myId && !_alreadyDead) { myKills++; creditWeaponKill(currentEquippedId()); saveKillReplay(data.targetId, currentEquippedId()); const kc=document.getElementById('kill-count'); if(kc) kc.textContent=`Kills: ${myKills}`; }
   if (data.targetId===myId) {
+    if (match && !match.over) match.deaths++;
     isDead=true; isADS=false; targetFOV=75; shooting=false;
     reloading=false;
     // Clear lingering buffs so bots resume normal AI
@@ -27882,6 +27883,9 @@ function initMatch() {
     active: false,
     over: false,
     tiebreaker: false,
+    // This match's own tally for the end screen (myKills runs for the whole session)
+    killsAtStart: myKills,
+    deaths: 0,
   };
   // Init lives for BR mode
   if (cfg.type === 'br') {
@@ -28913,6 +28917,13 @@ function endMatch(winner, reason) {
     scoreText = `Your kills: ${pk}  ·  Top bot: ${topBotKills}`;
   }
   document.getElementById('match-over-score').textContent = scoreText;
+  document.getElementById('match-over-stats').textContent =
+    `Kills ${Math.max(0, myKills - match.killsAtStart)}  ·  Deaths ${match.deaths}`;
+  // Say what PLAY AGAIN will replay, so nobody has to guess.
+  const modeId = currentModeId();
+  document.getElementById('play-again-sub').textContent = modeId
+    ? modeCardLabel(modeId) + (SELF_KIT_MODES.includes(modeId) ? '' : ' · same loadout')
+    : '';
   document.getElementById('death-screen').style.display   = 'none';
   document.getElementById('waiting-screen').style.display = 'none';
   el.style.display = 'flex';
@@ -31906,8 +31917,7 @@ function confirmLoadout() {
 
   if (!gameStarted) {
     // ── Find the mode ID and decide whether to route through the staging lobby ──
-    const modeIds = Object.entries(GAME_MODE_CONFIGS).find(([id, cfg]) => cfg === selectedModeConfig);
-    const modeId  = modeIds ? modeIds[0] : null;
+    const modeId = currentModeId();
     // Lobby-eligible modes: 1v1/2v2/3v3 (elim) + 5v5/10v10 (race) + FFA + KOTH
     const lobbyEligible = ['1v1','2v2','3v3','5v5','10v10','ffa5','ffa15','koth',
                             'gungame','oitc','juggernaut','infection','sniper_only','speedrun'];
@@ -32170,13 +32180,15 @@ function checkLoginEggs(name, pass) {
   }, true);
 })();
 
-// 🛋️ Leave Lobby 13 → open the mode-select menu to pick a real match / shop.
-// Resets the "in-game" state so the normal first-match flow runs cleanly, and
-// clears the lobby cast so they don't linger behind the menu.
-function openModeMenu() {
+// Everything a finished match (or Lobby 13) leaves behind that the next start must not
+// inherit. Shared by the mode menu and the end-of-match buttons so they can't drift apart.
+function teardownMatchWorld() {
+  stopKillcam();   // restores the camera; may re-show the death screen, hidden again below
+  exitSpectator();
   gameStarted = false;
   inLobby = false;
-  match = null; // (lobby has no match anyway — belt & suspenders)
+  match = null;
+  pvpMatch = null; // else the next non-lobby mode spawns the previous lobby's bot counts
   try { document.exitPointerLock && document.exitPointerLock(); } catch (e) {}
   for (const bot of gameBots) {
     if (remoteMeshes[bot.id]) { scene.remove(remoteMeshes[bot.id]); delete remoteMeshes[bot.id]; }
@@ -32184,12 +32196,46 @@ function openModeMenu() {
     delete players[bot.id];
   }
   gameBots.length = 0;
-  const hud = document.getElementById('match-hud'); if (hud) hud.style.display = 'none';
+  for (const id of ['match-hud', 'match-over-screen', 'waiting-screen', 'death-screen']) {
+    const el = document.getElementById(id); if (el) el.style.display = 'none';
+  }
   showLobbyModesButton(false);
   showFloatingSettingsButton(false);
   showLobbyPrompt(null);
+}
+// 🛋️ Leave Lobby 13 (or a finished match) → open the mode-select menu to pick a real
+// match / shop. The teardown resets the "in-game" state so the normal first-match flow
+// runs cleanly, and clears the lobby cast so they don't linger behind the menu.
+function openModeMenu() {
+  teardownMatchWorld();
   document.getElementById('mode-screen').style.display = 'flex';
   updateUserInfoBar();
+}
+
+// Modes whose kit is built inside selectMode() (forced weapons / infinite ammo) replay
+// through it; every other mode keeps the loadout you just played with.
+const SELF_KIT_MODES = ['dday', 'range', 'lobby13'];
+// The GAME_MODE_CONFIGS key being played (configs are shared objects: match by identity).
+function currentModeId() {
+  const hit = Object.entries(GAME_MODE_CONFIGS).find(([, cfg]) => cfg === selectedModeConfig);
+  return hit ? hit[0] : null;
+}
+// The name its mode card shows ("1v1", "FFA · 5 Bots") — the config table has no labels.
+function modeCardLabel(modeId) {
+  const card = document.querySelector(`.mode-card[data-mode="${modeId}"]`);
+  const text = card && card.firstChild ? card.firstChild.textContent.trim() : '';
+  return text || modeId.toUpperCase();
+}
+// 🔁 PLAY AGAIN: same mode, same loadout, no page reload. It used to be location.reload(),
+// which sent you back through login → Lobby 13 → MODES → loadout → READY UP.
+function rematchSameMode() {
+  const modeId = currentModeId();
+  teardownMatchWorld();
+  if (!modeId || SELF_KIT_MODES.includes(modeId)) { selectMode(modeId || 'lobby13'); return; }
+  showFloatingSettingsButton(true);
+  confirmLoadout();
+  // They already asked to play again — don't make them press READY UP a second time.
+  if (stagingLobbyMode) socket.emit('setLobbyReady', { ready: true, fillBots: true });
 }
 // Floating "MODES" button — only visible while you're chilling in Lobby 13.
 function showLobbyModesButton(show) {
@@ -32811,6 +32857,17 @@ function selectMode(modeId) {
 }
 document.getElementById('play-btn').addEventListener('click', startGame);
 document.getElementById('play-btn').addEventListener('touchstart', e => { e.preventDefault(); startGame(); }, { passive: false });
+// click + touchstart. Mid-match the document touchstart handler preventDefault()s every
+// touch, which swallows the synthesized click — an onclick-only button is dead on phones.
+// stopPropagation keeps this touch from also starting a joystick / look drag.
+function bindTap(el, fn) {
+  if (!el) return;
+  el.addEventListener('click', fn);
+  el.addEventListener('touchstart', e => { e.preventDefault(); e.stopPropagation(); fn(); }, { passive: false });
+}
+bindTap(document.getElementById('play-again-btn'), rematchSameMode);
+bindTap(document.getElementById('change-mode-btn'), openModeMenu);
+bindTap(document.getElementById('back-lobby-btn'), () => { teardownMatchWorld(); selectMode('lobby13'); });
 const _ecBtn = document.getElementById('enter-code-btn');
 if (_ecBtn) {
   _ecBtn.addEventListener('click', promptUnlockCode);
