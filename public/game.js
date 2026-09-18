@@ -31848,7 +31848,8 @@ function showStagingLobby(mode) {
     el.id = 'staging-lobby';
     el.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;z-index:9800;'
       + 'background:rgba(0,0,0,0.95);color:#fff;font-family:"Courier New",monospace;'
-      + 'display:flex;flex-direction:column;align-items:center;justify-content:center;padding:30px;';
+      + 'display:flex;flex-direction:column;align-items:center;justify-content:flex-start;justify-content:safe center;'
+      + 'overflow-y:auto;padding:24px 16px;box-sizing:border-box;text-align:center;';
     document.body.appendChild(el);
   }
   el.style.display = 'flex';
@@ -31870,18 +31871,18 @@ function renderStagingLobby() {
   const enemyPlayers = s ? s.players.filter(p => p.team === 'enemy') : [];
   const me = s ? s.players.find(p => p.socketId === myId) : null;
   el.innerHTML = `
-    <div style="font-size:32px;letter-spacing:8px;color:#ffaa44;margin-bottom:6px;">🏛️ MATCH LOBBY</div>
+    <div style="font-size:clamp(22px,7vw,32px);letter-spacing:clamp(3px,1.5vw,8px);color:#ffaa44;margin-bottom:6px;">🏛️ MATCH LOBBY</div>
     <div style="font-size:14px;color:#888;letter-spacing:3px;margin-bottom:8px;">${mode.toUpperCase()} · WAITING FOR PLAYERS</div>
     <div id="lobby-map" style="font-size:13px;color:#cfd8e3;letter-spacing:2px;margin-bottom:22px;">MAP: ${mapCardLabel(s && s.map)}</div>
-    <div style="display:flex;gap:60px;margin-bottom:30px;">
-      <div style="text-align:center;min-width:200px;">
+    <div style="display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:12px 60px;margin-bottom:24px;max-width:100%;">
+      <div style="text-align:center;min-width:min(200px,100%);">
         <div style="font-size:11px;color:#88ccff;letter-spacing:3px;margin-bottom:8px;">TEAM ALLY (${allyPlayers.length}/${cfg.allies != null ? cfg.allies + 1 : '?'})</div>
         ${allyPlayers.length ? allyPlayers.map(p => `<div style="padding:6px 12px;background:rgba(68,170,255,0.15);border-left:3px solid #44aaff;margin-bottom:4px;text-align:left;">
           ${p.ready ? '✅' : '⏳'} ${p.name}${p.socketId === myId ? ' (YOU)' : ''}
         </div>`).join('') : '<div style="color:#666;font-style:italic;">empty</div>'}
       </div>
       <div style="font-size:36px;color:#666;align-self:center;">VS</div>
-      <div style="text-align:center;min-width:200px;">
+      <div style="text-align:center;min-width:min(200px,100%);">
         <div style="font-size:11px;color:#ff6666;letter-spacing:3px;margin-bottom:8px;">TEAM ENEMY (${enemyPlayers.length}/${cfg.enemies != null ? cfg.enemies : '?'})</div>
         ${enemyPlayers.length ? enemyPlayers.map(p => `<div style="padding:6px 12px;background:rgba(255,68,68,0.15);border-left:3px solid #ff4444;margin-bottom:4px;text-align:left;">
           ${p.ready ? '✅' : '⏳'} ${p.name}${p.socketId === myId ? ' (YOU)' : ''}
@@ -31892,7 +31893,7 @@ function renderStagingLobby() {
       <input type="checkbox" id="lobby-fillbots" ${me?.fillBots !== false ? 'checked' : ''}>
       Fill missing slots with bots
     </label>
-    <div style="display:flex;gap:10px;margin-top:6px;">
+    <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:10px;margin-top:6px;">
       <button id="lobby-team-switch" style="padding:10px 18px;background:#222;color:#aaa;border:1px solid #555;cursor:pointer;font-family:inherit;font-size:13px;letter-spacing:2px;border-radius:4px;">SWITCH TEAM</button>
       <button id="lobby-ready" style="padding:10px 30px;background:${me?.ready ? '#226622' : '#553311'};color:#fff;border:2px solid ${me?.ready ? '#44ff44' : '#ffaa44'};cursor:pointer;font-family:inherit;font-size:15px;font-weight:bold;letter-spacing:3px;border-radius:4px;">
         ${me?.ready ? '✅ READY!' : '⏳ READY UP'}
