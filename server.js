@@ -43,6 +43,51 @@ function saveUsers() {
   } catch (e) { console.error('saveUsers:', e); }
 }
 
+// ── 🔥 FFA Legend ───────────────────────────────────────────────────────────
+// The FFA Legend skins unlock from FFA alone, and it is meant to take forever:
+// a million damage dealt in FFA, or five thousand FFA wins -- whichever lands
+// first. Damage is counted here, where each hit is already computed from the
+// weapon table, so it cannot be claimed. Wins are decided on the client (bots
+// run there), so a win report is only counted for a player actually in an FFA
+// match that has run a while, who has landed a kill in it the server saw, and
+// once per match.
+const FFA_LEGEND_DAMAGE = 1000000;
+const FFA_LEGEND_WINS = 5000;
+const FFA_MODES = new Set(['ffa5', 'ffa15']);
+const FFA_WIN_MIN_MS = 30000;
+let _saveSoonTimer = null;
+function saveUsersSoon() {            // damage lands many times a second; the file need not
+  if (_saveSoonTimer) return;
+  _saveSoonTimer = setTimeout(() => { _saveSoonTimer = null; saveUsers(); }, 10000);
+}
+function ffaProgressOf(u) {
+  return { ffaDamage: Math.floor(u.ffaDamage || 0), ffaWins: u.ffaWins || 0, ffaLegend: !!u.ffaLegend,
+           ffaDamageGoal: FFA_LEGEND_DAMAGE, ffaWinsGoal: FFA_LEGEND_WINS };
+}
+function checkFfaLegend(u, socketId) {
+  if (u.ffaLegend) return;
+  if ((u.ffaDamage || 0) >= FFA_LEGEND_DAMAGE || (u.ffaWins || 0) >= FFA_LEGEND_WINS) {
+    u.ffaLegend = true;
+    saveUsers();
+    if (socketId) io.to(socketId).emit('ffaLegendUnlocked', ffaProgressOf(u));
+  }
+}
+// Called from the hit handlers with the damage that actually came off -- an
+// instakill on a nearly dead target is worth what it took, not 9999.
+function creditFfaDamage(p, dealt) {
+  if (!p || p.isBot || !p.account || !FFA_MODES.has(p.matchMode) || !(dealt > 0)) return;
+  const u = users[p.account];
+  if (!u) return;
+  u.ffaDamage = (u.ffaDamage || 0) + dealt;
+  saveUsersSoon();
+  const now = Date.now();
+  if (!p._ffaProgAt || now - p._ffaProgAt > 3000) {
+    p._ffaProgAt = now;
+    io.to(p.id).emit('ffaProgress', ffaProgressOf(u));
+  }
+  checkFfaLegend(u, p.id);
+}
+
 // ── Passwords ──────────────────────────────────────────────────────────────
 // bcrypt is deliberately slow, which is what makes a stolen users.json useless
 // — but that also makes it far too slow to run on every shop request, and this
@@ -980,14 +1025,14 @@ app.post('/auth/login', (req, res) => {
       for (const id of GEN1_SKIN_IDS) if (!users[username].skinInventory.includes(id)) users[username].skinInventory.push(id);
     }
     saveUsers();
-    return res.json({ ok: true, username, unlocks: users[username].unlocks, purchased: users[username].purchased, credits: users[username].credits, fragments: users[username].fragments || 999999, chests: users[username].chests || { common: 99, rare: 99 }, upgrades: users[username].upgrades || {}, skinCases: users[username].skinCases || [], skinCasePacks: users[username].skinCasePacks || { gen1_basic: 99 }, skinInventory: users[username].skinInventory || [...GEN1_SKIN_IDS], freeSpinAvailable: users[username].lastFreeSpinDate !== todayUTC(), kills: users[username].kills || 0, deaths: users[username].deaths || 0, isAdmin: true });
+    return res.json({ ok: true, username, unlocks: users[username].unlocks, purchased: users[username].purchased, credits: users[username].credits, fragments: users[username].fragments || 999999, chests: users[username].chests || { common: 99, rare: 99 }, upgrades: users[username].upgrades || {}, skinCases: users[username].skinCases || [], skinCasePacks: users[username].skinCasePacks || { gen1_basic: 99 }, skinInventory: users[username].skinInventory || [...GEN1_SKIN_IDS], freeSpinAvailable: users[username].lastFreeSpinDate !== todayUTC(), kills: users[username].kills || 0, deaths: users[username].deaths || 0, ...ffaProgressOf(users[username]), ffaLegend: true, isAdmin: true });
   }
   const u = users[username];
   if (!u) return res.status(404).json({ error: 'user not found' });
   if (!checkPassword(username, password)) return res.status(401).json({ error: 'wrong password' });
   ensureShopFields(u);
   saveUsers();
-  res.json({ ok: true, username, unlocks: u.unlocks || [], purchased: u.purchased, credits: u.credits, fragments: u.fragments || 0, chests: u.chests, upgrades: u.upgrades, skinCases: u.skinCases || [], skinCasePacks: u.skinCasePacks || {}, skinInventory: u.skinInventory || [], freeSpinAvailable: u.lastFreeSpinDate !== todayUTC(), adminPassExpiresAt: u.adminPassExpiresAt || 0, kills: u.kills || 0, deaths: u.deaths || 0, isAdmin: !!u.isAdmin });
+  res.json({ ok: true, username, unlocks: u.unlocks || [], purchased: u.purchased, credits: u.credits, fragments: u.fragments || 0, chests: u.chests, upgrades: u.upgrades, skinCases: u.skinCases || [], skinCasePacks: u.skinCasePacks || {}, skinInventory: u.skinInventory || [], freeSpinAvailable: u.lastFreeSpinDate !== todayUTC(), adminPassExpiresAt: u.adminPassExpiresAt || 0, kills: u.kills || 0, deaths: u.deaths || 0, ...ffaProgressOf(u), isAdmin: !!u.isAdmin });
 });
 
 app.post('/auth/redeem', (req, res) => {
@@ -1588,11 +1633,14 @@ io.on('connection', (socket) => {
     if (!target || !shooter || target.dead || target.isBot || shielded(target)) return;
     let dmg = Math.round((WEAPON_DAMAGE[data.weapon] || 25) * falloffMultiplier(data.weapon, dist3(shooter, target)));
     if (data.headshot) dmg = data.instakill ? target.hp : Math.round(dmg * (WEAPON_HS_MULT[data.weapon] || 2));
+    const hpBefore = target.hp;
     target.hp = Math.max(0, target.hp - dmg);
+    creditFfaDamage(shooter, hpBefore - target.hp);
     // shooterId: the victim's screen points an arc at whoever fired (#36)
     emitToMatch(target.matchId, 'playerHit', { targetId: target.id, hp: target.hp, bulletId: data.bulletId, shooterId: socket.id });
     if (target.hp <= 0) {
       target.dead = true; target.deaths++; shooter.kills++;
+      shooter.matchKills = (shooter.matchKills || 0) + 1;
       emitToMatch(target.matchId, 'playerDied', { targetId: target.id, killerId: socket.id });
       // Respawn is triggered by the client sending 'readyRespawn' after loadout selection
     }
@@ -1608,10 +1656,14 @@ io.on('connection', (socket) => {
     if (!bot || !bot.isBot || bot.dead || !shooter) return;
     let dmg = Math.round((WEAPON_DAMAGE[data.weapon] || 25) * falloffMultiplier(data.weapon, dist3(shooter, bot)));
     if (data.headshot) dmg = data.instakill ? bot.hp : Math.round(dmg * (WEAPON_HS_MULT[data.weapon] || 2));
+    const botHpBefore = bot.hp;
     bot.hp = Math.max(0, bot.hp - dmg);
+    // Only what the PLAYER dealt counts -- not a friendly bot they own.
+    if (shooter === players[socket.id]) creditFfaDamage(shooter, botHpBefore - bot.hp);
     emitToMatch(bot.matchId, 'playerHit', { targetId: bot.id, hp: bot.hp, bulletId: data.bulletId });
     if (bot.hp <= 0) {
       bot.dead = true; bot.deaths++; shooter.kills++;
+      if (shooter === players[socket.id]) shooter.matchKills = (shooter.matchKills || 0) + 1;
       emitToMatch(bot.matchId, 'playerDied', { targetId: bot.id, killerId: shooter.id });
       setTimeout(() => {
         if (!bot.dead) return; // already respawned via forceRespawnBot (elim round restart)
@@ -1704,10 +1756,27 @@ io.on('connection', (socket) => {
     // Announces the move in both directions and hands this socket a fresh
     // roster; see movePlayerToMatch.
     movePlayerToMatch(socket.id, matchId);
+    // The mode, for FFA Legend progress. Only known modes; anything else counts as none.
+    const mode = String(data?.mode || '');
+    p.matchMode = MODE_TEAM_SIZES[mode] ? mode : null;
+    p.matchStart = Date.now(); p.matchKills = 0; p.ffaWinClaimed = false;
+  });
+  socket.on('ffaWin', () => {
+    const p = players[socket.id];
+    if (!p || !p.account || p.ffaWinClaimed || !FFA_MODES.has(p.matchMode)) return;
+    if (Date.now() - (p.matchStart || 0) < FFA_WIN_MIN_MS || (p.matchKills || 0) < 1) return;
+    const u = users[p.account];
+    if (!u) return;
+    p.ffaWinClaimed = true;
+    u.ffaWins = (u.ffaWins || 0) + 1;
+    saveUsers();
+    socket.emit('ffaProgress', ffaProgressOf(u));
+    checkFfaLegend(u, socket.id);
   });
   socket.on('leaveMatch', () => {
     const p = players[socket.id];
     if (!p) return;
+    p.matchMode = null;
     // Remove this player's bots entirely when leaving (they're not needed in the
     // lobby). Tell the match they were in before deleting them, or their bodies
     // stay standing there for everyone else.

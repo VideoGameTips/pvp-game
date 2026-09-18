@@ -23052,6 +23052,24 @@ const MODEL_SKINS = [
   { id: 'sg8_portal', weapon: 'sg8', name: 'Portal SG8', rarity: 'rare',
     sw: ['#1c2230', '#ff8a22'], build: buildPortalSG8,
     blurb: 'Steps out of a portal of its own when you draw it.' },
+  { id: 'p90_quantum_scanner', weapon: 'p90', name: 'Quantum Scanner', rarity: 'rare',
+    sw: ['#e8b818', '#66ccff'], build: buildBarcodeScanner,
+    blurb: 'The scanner variant that warps into your hands with a price-check beep.' },
+  { id: 'vector_brick_labeler', weapon: 'vector', name: 'Brick Labeler', rarity: 'good',
+    sw: ['#2a5ab8', '#f0c020'], build: buildLabelMaker,
+    blurb: 'A label maker that drops together one plastic chunk at a time.' },
+  { id: 'firework_showman', weapon: 'firework_launcher', name: 'Showman Magnum', rarity: 'rare',
+    sw: ['#1c3a22', '#ff66cc'], build: buildChampagneBottle,
+    blurb: 'Champagne Magnum with a flourish: drawn, it spins before the cork points forward.' },
+  { id: 'freeze_hyperslush', weapon: 'freeze_gun', name: 'Hyperslush Machine', rarity: 'rare',
+    sw: ['#3aa8e8', '#9a6aff'], build: buildSlushieMachine,
+    blurb: 'Blue raspberry pieces hang in the air, then assemble into a frozen machine.' },
+  { id: 'railgun_portal_detector', weapon: 'railgun', name: 'Portal Detector', rarity: 'rare',
+    sw: ['#c8ccd2', '#66ccff'], build: buildMetalDetector,
+    blurb: 'A metal detector that steps out of its own scan ring when drawn.' },
+  { id: 'shorty_buzzdraw', weapon: 'shorty', name: 'Buzzdraw Shorty', rarity: 'good',
+    sw: ['#2a2c34', '#55ddff'], build: buildHairClippers,
+    blurb: 'Hair clippers that buzz into place, piece by piece, before the first shot.' },
   { id: 'shorty_outlaw', weapon: 'shorty', name: 'Outlaw Shorty', rarity: 'rare',
     sw: ['#c8a040', '#6a3a1a'], build: buildOutlawShorty,
     blurb: 'Sawn-off lever action. Drawn, it spin-cocks round the loop.' },
@@ -23075,6 +23093,30 @@ const MODEL_SKINS = [
     sw: ['#17121a', '#ff2a1a'], build: buildLegendVector, look: { projectile: 'hellfire', bulletColor: 0xff2a1a },
     blurb: 'Compact, spiked, on fire. Mostly on fire.' },
 ];
+// 🔥 FFA Legend skins unlock from FFA: a million damage or five thousand wins.
+// Wrapped because it runs while the file is still loading -- skins restored
+// from the last session are applied before currentUser has even been declared,
+// and reading it then throws and stops the game (the crash that happened once
+// already with an equipped skin). Until login, a Legend is simply locked.
+function ffaLegendUnlocked() {
+  try { return !!(currentUser && (currentUser.isAdmin || currentUser.ffaLegend)); } catch (e) { return false; }
+}
+function isLegendLocked(skin) { return !!(skin && skin.rarity === 'legend' && !ffaLegendUnlocked()); }
+function ffaLegendProgressText() {
+  let d = 0, w = 0;
+  try { d = Math.floor(currentUser?.ffaDamage || 0); w = currentUser?.ffaWins || 0; } catch (e) {}
+  return d.toLocaleString('en-US') + ' / 1,000,000 FFA damage · or · ' + w.toLocaleString('en-US') + ' / 5,000 FFA wins';
+}
+// Put every equipped Legend on or back off, as the lock changes: at login, at
+// logout, and the moment one is earned.
+function refreshLegendSkins() {
+  try {
+    for (const [wid, sid] of Object.entries(equippedModelSkins))
+      if (MODEL_SKINS.some(m => m.id === sid && m.rarity === 'legend')) applyModelSkin(wid);
+    for (const [bid, sid] of Object.entries(equippedMeleeModelSkins))
+      if (MELEE_MODEL_SKINS.some(m => m.id === sid && m.rarity === 'legend')) applyMeleeModelSkin(bid);
+  } catch (e) {}
+}
 const MODEL_SKINS_BY_WEAPON = {};
 for (const ms of MODEL_SKINS) (MODEL_SKINS_BY_WEAPON[ms.weapon] ||= []).push(ms);
 
@@ -23117,7 +23159,7 @@ function applyModelSkin(weaponId) {
   if (idx < 0 || !weaponModels[idx]) return;
   if (!(idx in _baseWeaponModels)) _baseWeaponModels[idx] = weaponModels[idx];
   const want = equippedModelSkins[weaponId];
-  const skin = MODEL_SKINS.find(m => m.id === want && m.weapon === weaponId);
+  const skin = MODEL_SKINS.find(m => m.id === want && m.weapon === weaponId && !isLegendLocked(m));
   let next;
   if (!skin) next = _baseWeaponModels[idx];
   else {
@@ -24511,7 +24553,7 @@ function applyMeleeModelSkin(baseId) {
   if (idx < 0 || !meleeModels[idx]) return;
   if (!(idx in _baseMeleeModels)) _baseMeleeModels[idx] = meleeModels[idx];
   const want = equippedMeleeModelSkins[baseId];
-  const skin = MELEE_MODEL_SKINS.find(s => s.id === want && s.melee === baseId);
+  const skin = MELEE_MODEL_SKINS.find(s => s.id === want && s.melee === baseId && !isLegendLocked(s));
   let next;
   if (!skin) next = _baseMeleeModels[idx];
   else {
@@ -25880,6 +25922,25 @@ const SKIN_FX = {
     equip: 'pixelate', equipMs: 800, equipSfx: ['blip', null] },
   sg8_portal: { sound: _fxS('warp', .34, .20, 160, 900),
     equip: 'warp', equipMs: 900, equipSfx: ['warp', 'chime'] },
+  p90_quantum_scanner: { sound: _fxS('beep', .24, .07, 2600, 1800),
+    reload: _fxR(_RK.under(), [RP(.30,'battery'), RP(.58,'battery','arrive')], null, 'beep'),
+    equip: 'warp', equipMs: 760, equipSfx: ['warp', 'beep'] },
+  vector_brick_labeler: { sound: _fxS('zip', .23, .06, 1800, 3400),
+    reload: _fxR(_RK.top(), [RP(.30,'tape','eject',1,'breech'), RP(.58,'tape','arrive',1,'breech')], null, 'beep'),
+    equip: 'build', equipMs: 820, equipSfx: ['brick', 'snapin'] },
+  firework_showman: { sound: _fxS('cork', .42, .08, 900, 120),
+    reload: _fxR(_RK.shake(8, .24), [RP(.88,'cork','arrive',1,'muzzle')], [[.40,'fizz'],[.86,'squeak']]),
+    equip: 'spin', equipMs: 780, spinTurns: 1, equipSfx: ['whoosh', 'cork'] },
+  freeze_hyperslush: { sound: _fxS('squirt', .25, .14, 1100, 520),
+    reload: _fxR(_RK.top(), [RP(.32,'ice','arrive',1,'breech'), RP(.42,'ice','arrive',1,'breech'),
+      RP(.52,'ice','arrive',1,'breech'), RP(.60,'refill','arrive',1,'breech')], [[.70,'whirr']], 'chime'),
+    equip: 'assemble', equipMs: 980, equipSfx: ['crystal', 'chime'] },
+  railgun_portal_detector: { sound: _fxS('beep', .25, .12, 1320, 1760),
+    reload: _fxR(_RK.under(), [RP(.30,'cell','eject',2), RP(.56,'cell','arrive',2)], null, 'beep'),
+    equip: 'warp', equipMs: 880, equipSfx: ['warp', 'beep'] },
+  shorty_buzzdraw: { sound: _fxS('buzz', .25, .12, 120, 120),
+    reload: _fxR(_RK.front(), [RP(.30,'comb','eject',1,'muzzle'), RP(.54,'comb','arrive',1,'muzzle')], null, 'buzz'),
+    equip: 'assemble', equipMs: 720, equipSfx: ['whirr', 'click'] },
   // Real guns, so the gun's own reload; the entrance is a spin round the point
   // the finger holds.
   shorty_outlaw: { sound: _fxS('boom', .60, .22, 0, 0, { action:'rifle', tail:.65 }),
@@ -28998,6 +29059,22 @@ socket.on('bulletFired', b => {
   playWeaponSound(b.weapon || w.id, { baseWeapon: w, remote: true, position: origin });
   spawnLocalBullet(origin, new THREE.Vector3(b.dx,b.dy,b.dz), b.id, false, w.bulletSpeed, w.bulletColor, w.bulletSize, w.id);
 });
+// 🔥 FFA Legend progress, sent as it is earned: every few seconds of FFA
+// damage, and after every FFA win the server accepts.
+socket.on('ffaProgress', data => {
+  if (!currentUser || !data) return;
+  currentUser.ffaDamage = data.ffaDamage; currentUser.ffaWins = data.ffaWins;
+  if (data.ffaLegend) currentUser.ffaLegend = true;
+});
+socket.on('ffaLegendUnlocked', data => {
+  if (!currentUser) return;
+  if (data) { currentUser.ffaDamage = data.ffaDamage; currentUser.ffaWins = data.ffaWins; }
+  currentUser.ffaLegend = true;
+  refreshLegendSkins();
+  pushFeedLine('🔥 FFA LEGEND UNLOCKED — the Legend skins are yours', '', '#ff5a2a', false);
+  playEquipSound('fireup');
+});
+
 socket.on('sessionReplaced', async () => {
   await uiAlert('This account just signed in on another device, so this one has been signed out.');
   location.reload();
@@ -31345,6 +31422,9 @@ function endMatch(winner, reason) {
   if (!match || match.over) return;
   match.over   = true;
   match.active = false;
+  // An FFA win counts toward FFA Legend. Sent before leaveMatch, while the
+  // server still knows which match this was; it checks the rest itself.
+  if (match.type === 'ffa' && winner === 'ally') socket.emit('ffaWin');
   // 🌐 Hand our match back to the server. Nothing used to send this, so a
   // finished player stayed parked in a dead private match until they closed the
   // tab — invisible to the lobby, and still occupying a match nobody was in.
@@ -31600,7 +31680,7 @@ function spawnGameBots() {
   const matchId = (pvpMatch && pvpMatch.mode)
     ? `pvp-${[myId, ...(pvpMatch.opponents || []).map(o => o.socketId)].sort().join('-')}` // shared ID for PvP-paired players
     : `match-${myId}-${Date.now()}`;
-  socket.emit('enterMatch', { matchId });
+  socket.emit('enterMatch', { matchId, mode: currentModeId() });   // the mode counts toward FFA Legend
 
   // ── Clean up bots/meshes/bubbles from any previous mode session ──────────
   // 🧹 Tell the server too. It creates a player entry per bot on spawnBots and
@@ -34577,7 +34657,8 @@ setTimeout(function tryAutoLogin() {
       // Silently try to log in — populate currentUser if successful
       authRequest('/auth/login', saved).then(r => {
         if (r && r.ok) {
-          currentUser = { username: r.username, password: saved.password, unlocks: r.unlocks || [], purchased: r.purchased || [], credits: r.credits ?? 0, fragments: r.fragments ?? 0, chests: r.chests || { common: 0, rare: 0 }, upgrades: r.upgrades || {}, skinCases: r.skinCases || [], skinCasePacks: r.skinCasePacks || {}, skinInventory: r.skinInventory || [], freeSpinAvailable: !!r.freeSpinAvailable, adminPassExpiresAt: r.adminPassExpiresAt || 0, isAdmin: !!r.isAdmin };
+          currentUser = { username: r.username, password: saved.password, unlocks: r.unlocks || [], purchased: r.purchased || [], credits: r.credits ?? 0, fragments: r.fragments ?? 0, chests: r.chests || { common: 0, rare: 0 }, upgrades: r.upgrades || {}, skinCases: r.skinCases || [], skinCasePacks: r.skinCasePacks || {}, skinInventory: r.skinInventory || [], freeSpinAvailable: !!r.freeSpinAvailable, adminPassExpiresAt: r.adminPassExpiresAt || 0, ffaDamage: r.ffaDamage || 0, ffaWins: r.ffaWins || 0, ffaLegend: !!r.ffaLegend, isAdmin: !!r.isAdmin };
+          refreshLegendSkins();
           const wb = document.getElementById('welcome-back');
           if (wb) {
             wb.textContent = r.isAdmin
@@ -34698,7 +34779,8 @@ async function login() {
   finishLogin(g.result, g.creds);
 }
 function finishLogin(result, creds) {
-  currentUser = { username: result.username, password: creds.password, unlocks: result.unlocks || [], purchased: result.purchased || [], credits: result.credits ?? 0, fragments: result.fragments ?? 0, chests: result.chests || { common: 0, rare: 0 }, upgrades: result.upgrades || {}, skinCases: result.skinCases || [], skinCasePacks: result.skinCasePacks || {}, skinInventory: result.skinInventory || [], freeSpinAvailable: !!result.freeSpinAvailable, adminPassExpiresAt: result.adminPassExpiresAt || 0, isAdmin: !!result.isAdmin, guest: !!creds.guest };
+  currentUser = { username: result.username, password: creds.password, unlocks: result.unlocks || [], purchased: result.purchased || [], credits: result.credits ?? 0, fragments: result.fragments ?? 0, chests: result.chests || { common: 0, rare: 0 }, upgrades: result.upgrades || {}, skinCases: result.skinCases || [], skinCasePacks: result.skinCasePacks || {}, skinInventory: result.skinInventory || [], freeSpinAvailable: !!result.freeSpinAvailable, adminPassExpiresAt: result.adminPassExpiresAt || 0, ffaDamage: result.ffaDamage || 0, ffaWins: result.ffaWins || 0, ffaLegend: !!result.ffaLegend, isAdmin: !!result.isAdmin, guest: !!creds.guest };
+  refreshLegendSkins();
   try { localStorage.setItem('pvp_user', JSON.stringify({ username: result.username, password: creds.password, ...(creds.guest ? { guest: true } : {}) })); } catch (e) {}
   setAuthStatus(result.isAdmin ? `🔓 ADMIN ACCESS GRANTED · ${result.username}` : `Logged in as ${result.username}`, result.isAdmin ? '#ff4444' : '#88ff88');
 
@@ -35940,13 +36022,15 @@ function openWeaponSkinsPanel() {
       if (!w) continue;
       const on = equippedModelSkins[wid];
       const cells = MODEL_SKINS_BY_WEAPON[wid].map(ms => {
-        const locked = GATED_MODEL_SKIN_IDS.has(ms.id) && !ownsSkin(ms.id);
+        const legendLocked = isLegendLocked(ms);
+        const locked = (GATED_MODEL_SKIN_IDS.has(ms.id) && !ownsSkin(ms.id)) || legendLocked;
         return `
         <div data-mskin="${ms.id}" data-mweapon="${wid}" class="ms-cell"
              style="cursor:${locked?'not-allowed':'pointer'};opacity:${locked?0.45:1};filter:${locked?'grayscale(0.8)':'none'};border:2px solid ${on===ms.id?'#88ff99':'#444'};border-radius:6px;padding:8px;background:${on===ms.id?'#162a18':'#1d1a12'};">
           <div style="height:26px;border-radius:4px;background:linear-gradient(90deg, ${ms.sw[0]} 0 50%, ${ms.sw[1]} 50% 100%);border:1px solid #000;margin-bottom:6px;"></div>
           <div style="font-size:11px;letter-spacing:1px;color:${on===ms.id?'#88ff99':'#ddd'};">${locked ? '🔒 ' + ms.name : ms.name}</div>
           <div style="font-size:9px;color:#8a8a7a;margin-top:3px;line-height:1.3;">${ms.blurb}</div>
+          ${legendLocked ? `<div style="font-size:9px;color:#ff6a4a;margin-top:4px;line-height:1.3;">${ffaLegendProgressText()}</div>` : ''}
         </div>`;
       }).join('');
       rows.push(`
@@ -35976,13 +36060,17 @@ function openWeaponSkinsPanel() {
       const base = MELEE_ITEMS.find(x => x.id === bid);
       if (!base) continue;
       const on = equippedMeleeModelSkins[bid];
-      const cells = MELEE_MODEL_SKINS_BY_BASE[bid].map(ms => `
+      const cells = MELEE_MODEL_SKINS_BY_BASE[bid].map(ms => {
+        const locked = isLegendLocked(ms);
+        return `
         <div data-mmskin="${ms.id}" data-mmbase="${bid}" class="mms-cell"
-             style="cursor:pointer;border:2px solid ${on===ms.id?"#ffcc99":"#444"};border-radius:6px;padding:8px;background:${on===ms.id?"#2a2118":"#1d1a12"};">
+             style="cursor:${locked?"not-allowed":"pointer"};opacity:${locked?0.45:1};filter:${locked?"grayscale(0.8)":"none"};border:2px solid ${on===ms.id?"#ffcc99":"#444"};border-radius:6px;padding:8px;background:${on===ms.id?"#2a2118":"#1d1a12"};">
           <div style="height:26px;border-radius:4px;background:linear-gradient(90deg, ${ms.sw[0]} 0 50%, ${ms.sw[1]} 50% 100%);border:1px solid #000;margin-bottom:6px;"></div>
-          <div style="font-size:11px;letter-spacing:1px;color:${on===ms.id?"#ffcc99":"#ddd"};">${ms.name}</div>
+          <div style="font-size:11px;letter-spacing:1px;color:${on===ms.id?"#ffcc99":"#ddd"};">${locked ? "🔒 " + ms.name : ms.name}</div>
           <div style="font-size:9px;color:#8a8a7a;margin-top:3px;line-height:1.3;">${ms.blurb}</div>
-        </div>`).join("");
+          ${locked ? `<div style="font-size:9px;color:#ff6a4a;margin-top:4px;line-height:1.3;">${ffaLegendProgressText()}</div>` : ""}
+        </div>`;
+      }).join("");
       rows.push(`
         <div style="margin-top:14px;">
           <div style="font-size:11px;letter-spacing:2px;color:#ffcc99;margin-bottom:6px;">${base.name.toUpperCase()}</div>
@@ -36098,6 +36186,8 @@ function openWeaponSkinsPanel() {
   });
   panel.querySelectorAll('.mms-cell').forEach(cell => {
     cell.addEventListener('click', () => {
+      const ms = MELEE_MODEL_SKINS.find(m => m.id === cell.dataset.mmskin);
+      if (isLegendLocked(ms)) { alert('FFA Legend skins are earned in FFA: deal 1,000,000 damage or win 5,000 FFA matches.'); return; }
       setMeleeModelSkin(cell.dataset.mmbase, cell.dataset.mmskin || null);
       openWeaponSkinsPanel();
     });
@@ -36106,6 +36196,7 @@ function openWeaponSkinsPanel() {
     cell.addEventListener('click', () => {
       const id = cell.dataset.mskin;
       if (id && GATED_MODEL_SKIN_IDS.has(id) && !ownsSkin(id)) { alert('You have not pulled that skin yet. Open Gen 1 cases in Lobby 13.'); return; }
+      if (isLegendLocked(MODEL_SKINS.find(m => m.id === id))) { alert('FFA Legend skins are earned in FFA: deal 1,000,000 damage or win 5,000 FFA matches.'); return; }
       setModelSkin(cell.dataset.mweapon, id || null);
       openWeaponSkinsPanel();      // redraw so the selection moves
     });
@@ -36276,6 +36367,7 @@ async function logOut() {
   if (!await uiConfirm(msg)) return;
   localStorage.removeItem('pvp_user');
   currentUser = null;
+  refreshLegendSkins();              // logged out: an equipped Legend goes back to stock
   location.reload();
 }
 const _logoutBtn = document.getElementById('logout-btn');
