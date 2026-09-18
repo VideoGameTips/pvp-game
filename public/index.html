@@ -229,6 +229,16 @@
     #play-again-sub { font-size: 11px; font-weight: normal; letter-spacing: 2px; color: #ffe3de; }
     .mo-secondary { min-height: 52px; background: transparent; border: 1px solid #555; font-size: 14px; }
     .mo-secondary:hover { border-color: #aaa; }
+    /* A phone on its side (~410 px tall): all three buttons on screen at once — the last one used to sit
+       half under the bottom edge. Smaller title, tighter gaps, the two secondary buttons side by side. */
+    @media (max-height: 480px) {
+      #match-over-screen { gap: 6px; padding: 10px 16px; }
+      #match-over-title { font-size: 34px; }
+      #match-over-score { margin: 0; }
+      #match-over-actions { display: grid; grid-template-columns: 1fr 1fr; width: min(480px, 100%); margin-top: 4px; }
+      #play-again-btn { grid-column: 1 / -1; min-height: 56px; }
+      .mo-secondary { min-height: 46px; }
+    }
 
     /* ── Pre-match countdown overlay ── */
     #countdown-overlay {
