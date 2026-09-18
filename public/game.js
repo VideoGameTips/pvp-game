@@ -32882,8 +32882,7 @@ bindTap(document.getElementById('change-mode-btn'), openModeMenu);
 bindTap(document.getElementById('back-lobby-btn'), () => { teardownMatchWorld(); selectMode('lobby13'); });
 const _ecBtn = document.getElementById('enter-code-btn');
 if (_ecBtn) {
-  _ecBtn.addEventListener('click', promptUnlockCode);
-  _ecBtn.addEventListener('touchstart', e => { e.preventDefault(); promptUnlockCode(); }, { passive: false });
+  _ecBtn.addEventListener('click', promptUnlockCode); // click-only: it sits in the mode screen's sideways-scrolling bar
 }
 // Tick the user-info bar each 15s so the Admin Pass timer counts down live
 setInterval(() => { if (adminPassActive() && !currentUser?.isAdmin) updateUserInfoBar(); }, 15000);
@@ -33532,9 +33531,19 @@ function updateAdminCheats(dt) {
   // Speed: handled in updateMovement
   // God mode: handled in applyBotDamageToPlayer
 }
+// Mode / difficulty / map cards are click-only on purpose. The mode screen only shows with
+// gameStarted === false, when a tap still produces a click; a touchstart handler here fired
+// on touch-DOWN and cancelled scrolling, so on a phone a swipe that began on a card launched
+// that mode instead of scrolling the list.
 document.querySelectorAll('.mode-card').forEach(card => {
   card.addEventListener('click', () => selectMode(card.dataset.mode));
-  card.addEventListener('touchstart', e => { e.preventDefault(); selectMode(card.dataset.mode); }, { passive: false });
+});
+// ← LOBBY / Esc: the mode screen had no way back except picking a mode.
+document.getElementById('mode-back-btn').addEventListener('click', () => selectMode('lobby13'));
+document.addEventListener('keydown', e => {
+  if (e.code !== 'Escape' || document.getElementById('mode-screen').style.display !== 'flex') return;
+  const top = document.elementFromPoint(innerWidth / 2, innerHeight / 2);
+  if (top && top.closest('#mode-screen')) selectMode('lobby13'); // not while a panel (shop, settings…) is open on top
 });
 // Difficulty selector
 const DIFFICULTY_DESCS = {
@@ -33562,7 +33571,6 @@ function selectDifficulty(diff) {
 }
 document.querySelectorAll('.diff-card').forEach(card => {
   card.addEventListener('click', () => selectDifficulty(card.dataset.diff));
-  card.addEventListener('touchstart', e => { e.preventDefault(); selectDifficulty(card.dataset.diff); }, { passive: false });
 });
 
 // Map selector
@@ -33616,7 +33624,6 @@ function selectMapPick(mapId) {
 }
 document.querySelectorAll('.map-card').forEach(card => {
   card.addEventListener('click', () => selectMapPick(card.dataset.map));
-  card.addEventListener('touchstart', e => { e.preventDefault(); selectMapPick(card.dataset.map); }, { passive: false });
 });
 document.getElementById('loadout-ready-btn').addEventListener('click', confirmLoadout);
 document.getElementById('loadout-ready-btn').addEventListener('touchstart', e => { e.preventDefault(); confirmLoadout(); }, { passive: false });
