@@ -20590,7 +20590,16 @@ function flashAbilityName(name) {
   pushFeedLine('\u26a1 ' + String(name || '').toUpperCase(), '', '#c9a4ff', false);
 }
 
+// The [E] box only when there is something to press E for (#37); it used to sit there as "[E] —".
 function updateAbilityHUD() {
+  _updateAbilityHUD();
+  const box = document.getElementById('ability-hud'), name = document.getElementById('ability-name');
+  if (box && name) {
+    const want = name.textContent === '—' ? 'none' : '';
+    if (box.style.display !== want) box.style.display = want;
+  }
+}
+function _updateAbilityHUD() {
   const nameEl = document.getElementById('ability-name');
   const fillEl = document.getElementById('ability-cd-fill');
   const descEl = document.getElementById('ability-desc');
@@ -24108,6 +24117,9 @@ function syncLobbyTag() {
   const el = document.getElementById('lobby-tag');
   const on = gameStarted && inLobby;
   if (el && (el.style.display === 'block') !== on) el.style.display = on ? 'block' : 'none';
+  // The key list is for learning, which happens in the lobby — not over the weapon slots mid-fight (#37).
+  const keys = document.getElementById('controls-hint');
+  if (keys && !isTouchUI()) { const want = on ? '' : 'none'; if (keys.style.display !== want) keys.style.display = want; }
 }
 
 // ── 🎯 Hit / kill / ammo at the crosshair (#34) ─────────────────────────────

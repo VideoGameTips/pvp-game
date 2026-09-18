@@ -729,19 +729,19 @@
     }
     body.touch-ui .ws-slot.active { background: rgba(255,204,85,0.2); border-color: #ffcc55; }
     body.touch-ui .ws-slot.active::before { background: #fff; }
-    body.touch-ui #ws-primary::before {
+    #ws-primary::before {
       -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M1.5 10h14.5l1.8-1.8h4.7v3.3h-3.2l-1.2 2H13l-1.3 4.5H8.6L9.9 13.5H6.5l-.8 1.2H1.5z'/></svg>");
               mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M1.5 10h14.5l1.8-1.8h4.7v3.3h-3.2l-1.2 2H13l-1.3 4.5H8.6L9.9 13.5H6.5l-.8 1.2H1.5z'/></svg>");
     }
-    body.touch-ui #ws-secondary::before {
+    #ws-secondary::before {
       -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M2.5 6.5h16v4h-4.2l-1 1.5-1.4 5.5H8.2l.8-4.6a2.8 2.8 0 0 1-2.7-2.4H2.5z'/></svg>");
               mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M2.5 6.5h16v4h-4.2l-1 1.5-1.4 5.5H8.2l.8-4.6a2.8 2.8 0 0 1-2.7-2.4H2.5z'/></svg>");
     }
-    body.touch-ui #ws-melee::before {
+    #ws-melee::before {
       -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M20.5 2.5l1 1-9.3 10.8-2-2z'/><path d='M9.2 13.3l1.5 1.5-5.3 5.3a1.1 1.1 0 0 1-1.5-1.5z'/></svg>");
               mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M20.5 2.5l1 1-9.3 10.8-2-2z'/><path d='M9.2 13.3l1.5 1.5-5.3 5.3a1.1 1.1 0 0 1-1.5-1.5z'/></svg>");
     }
-    body.touch-ui #ws-support::before {
+    #ws-support::before {
       -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='11' cy='14.5' r='6.3'/><rect x='9' y='5.4' width='4.4' height='3.4' rx='.6'/><path d='M13.4 6.4l3.8-2.6 1 1.4-3.8 2.6z'/></svg>");
               mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='11' cy='14.5' r='6.3'/><rect x='9' y='5.4' width='4.4' height='3.4' rx='.6'/><path d='M13.4 6.4l3.8-2.6 1 1.4-3.8 2.6z'/></svg>");
     }
@@ -786,6 +786,47 @@
       body.touch-ui #msg-feed        { top: 48px; width: 240px; max-height: calc(100vh - 188px); }
       body.touch-ui #spawn-shield    { bottom: 80px; left: 146px; }   /* beside the health bar: the feed owns the upper left */
       body.touch-ui #lobby-prompt    { top: 118px !important; bottom: auto !important; }
+    }
+
+    /* ── 🖥️ Desktop HUD (#37) ──────────────────────────────────────────────────────────
+       A UI font instead of Courier (numbers stay tabular), one row of chips at the top with ⚙ on the
+       right like the phone, the FPS readout out of the way, icon weapon slots, a slim health bar,
+       and the key list only in the lobby — it used to sit half under the weapon slots in #555 grey. */
+    #hud, #match-hud, #msg-feed, #match-announce, #announce-text, #lobby-tag, #kill-confirm, #ammo-hint, #controls-hint {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    #hud, #match-hud { font-variant-numeric: tabular-nums; }
+    #health-label { display: none; }
+    #health-fill { border-radius: 4px; }
+    body:not(.touch-ui) #health-bar { display: flex; align-items: center; gap: 10px; }   /* the phone keeps its stacked bar (#29) */
+    body:not(.touch-ui) #health-track { width: 220px; height: 8px; border-radius: 4px; background: rgba(0,0,0,0.55); }
+    body:not(.touch-ui) #health-num { font-size: 20px; margin-top: 0; }
+    body:not(.touch-ui) #fps-counter {
+      top: auto !important; bottom: 6px !important; left: 8px !important;
+      font-size: 10px !important; padding: 2px 5px !important; opacity: 0.7;
+    }
+    body:not(.touch-ui) #floating-settings-btn { top: 14px !important; left: auto !important; right: 14px !important; }
+    body:not(.touch-ui) #kills { top: 25px; right: 180px; }
+    body:not(.touch-ui) #weapon-selector { bottom: 26px; gap: 8px; }
+    body:not(.touch-ui) .ws-slot {
+      position: relative; min-width: 96px; padding: 9px 14px 9px 42px; border-radius: 8px; text-align: left;
+      background: rgba(10,12,18,0.62); border: 1px solid rgba(255,255,255,0.18);
+    }
+    body:not(.touch-ui) .ws-slot::before {
+      content: ''; position: absolute; left: 11px; top: 50%; width: 22px; height: 22px; transform: translateY(-50%);
+      background: rgba(255,255,255,0.72);
+      -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-position: center; mask-position: center;
+      -webkit-mask-size: 22px 22px; mask-size: 22px 22px;
+    }
+    body:not(.touch-ui) .ws-slot .ws-type { display: none; }
+    body:not(.touch-ui) .ws-slot .ws-key { position: absolute; top: 3px; right: 6px; font-size: 10px; color: #8a8f98; }
+    body:not(.touch-ui) .ws-slot .ws-name { font-size: 14px; font-weight: 700; }
+    body:not(.touch-ui) .ws-slot.active { border-color: #ffcc55; background: rgba(255,204,85,0.16); }
+    body:not(.touch-ui) .ws-slot.active::before { background: #fff; }
+    body:not(.touch-ui) #ability-hud { bottom: 110px; }
+    #controls-hint {
+      bottom: auto; top: 48px; color: #c3c8d0; background: rgba(0,0,0,0.42); padding: 5px 12px; border-radius: 8px;
+      line-height: 1.6; max-width: calc(100vw - 420px);
     }
 
     /* ── Frontlines HUD ── */
