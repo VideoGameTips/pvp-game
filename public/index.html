@@ -445,18 +445,19 @@
     #btn-jump.pressed   { background: rgba(160,255,160,0.95); transform: scale(0.92); }
     #mobile-controls.active #btn-slide, #mobile-controls.active #btn-crouch, #mobile-controls.active #btn-jump { display: flex; }
 
-    /* Dialogs built in game.js never outgrow the screen: they scroll when taller than it, and
-       on phones they take the full width instead of a fixed 340–440px (#18). */
-    #settings-hub-panel, #shoot-fx-panel, #aim-assist-panel, #weapon-skins-panel, #skins-panel, #kill-log-panel {
-      max-height: calc(100vh - 16px) !important; max-height: calc(100dvh - 16px) !important;
-      overflow-y: auto !important; box-sizing: border-box !important;
+    /* One frame for every dialog (#21) — only one is open at a time (closeOtherDialogs in game.js).
+       Same width and the same top edge, so the header and its ✕ stay put from one dialog to the next;
+       a short dialog keeps its own height instead of becoming a mostly empty box. Never taller than the
+       screen: long content scrolls inside (#18). !important because game.js sizes them inline. */
+    #settings-hub-panel, #shoot-fx-panel, #aim-assist-panel, #weapon-skins-panel, #skins-panel, #kill-log-panel, #char-chat-panel {
+      top: max(8px, 6vh) !important; left: 50% !important; transform: translateX(-50%) !important;
+      width: min(640px, calc(100vw - 16px)) !important; min-width: 0 !important; max-width: none !important;
+      max-height: calc(100vh - max(8px, 6vh) - 8px) !important; max-height: calc(100dvh - max(8px, 6vh) - 8px) !important;
+      box-sizing: border-box !important;
     }
-    @media (max-width: 460px) {
-      #settings-hub-panel, #shoot-fx-panel, #aim-assist-panel, #weapon-skins-panel, #skins-panel, #kill-log-panel {
-        width: calc(100vw - 16px) !important; min-width: 0 !important; max-width: none !important;
-      }
-      #best-loadouts-panel { width: 100vw !important; }
-    }
+    /* The chat panel scrolls inside its own columns; the others scroll as a whole. */
+    #settings-hub-panel, #shoot-fx-panel, #aim-assist-panel, #weapon-skins-panel, #skins-panel, #kill-log-panel { overflow-y: auto !important; padding: 20px !important; }
+    @media (max-width: 460px) { #best-loadouts-panel { width: 100vw !important; } }
 
     /* ── Touch layout: body.touch-ui (set together with #mobile-controls.active) ──
        The rules above mix right-anchored buttons with hard-coded `left: 200px/280px`

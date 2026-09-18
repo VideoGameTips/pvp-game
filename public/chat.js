@@ -318,7 +318,10 @@
     document.body.appendChild(panel);
     return panel;
   }
-  function open() { ensurePanel(); panel.style.display = 'flex'; view = 'select'; render(); }
+  function open() {
+    if (typeof closeOtherDialogs === 'function') closeOtherDialogs('char-chat-panel'); // one dialog at a time (#21)
+    ensurePanel(); panel.style.display = 'flex'; view = 'select'; render();
+  }
   function close() { if (panel) panel.style.display = 'none'; }
 
   function render() {
@@ -530,8 +533,7 @@
     const b = document.getElementById('char-chat-btn');
     if (b && !b._wired) {
       b._wired = true;
-      b.addEventListener('click', open);
-      b.addEventListener('touchstart', e => { e.preventDefault(); open(); }, { passive: false });
+      b.addEventListener('click', open); // click-only: it sits in the mode screen's sideways-scrolling bar (#21)
     }
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wireBtn);

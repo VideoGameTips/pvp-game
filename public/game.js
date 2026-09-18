@@ -30985,6 +30985,7 @@ function loop() {
 let shopTab = 'bundles'; // 'bundles' | 'primary' | 'secondary' | 'melee' | 'utility'
 function openShop() {
   if (!currentUser) { alert('Log in first.'); return; }
+  closeOtherDialogs();
   let scr = document.getElementById('shop-screen');
   if (!scr) {
     scr = document.createElement('div');
@@ -32415,7 +32416,19 @@ document.addEventListener('langchange', () => {
   const p = document.getElementById('settings-hub-panel');
   if (p && p.style.display === 'block') openSettingsHub();
 });
+// One dialog at a time (#21): each of these used to open on top of whatever was already open, all in
+// different sizes. Closing is only hiding — every dialog rebuilds from current state when it opens.
+// index.html gives them one shared frame.
+const DIALOG_IDS = ['settings-hub-panel', 'shoot-fx-panel', 'aim-assist-panel', 'weapon-skins-panel',
+                    'skins-panel', 'kill-log-panel', 'char-chat-panel'];
+function closeOtherDialogs(keepId) {
+  for (const id of DIALOG_IDS) {
+    const el = id !== keepId && document.getElementById(id);
+    if (el) el.style.display = 'none';
+  }
+}
 function openSettingsHub() {
+  closeOtherDialogs('settings-hub-panel');
   let panel = document.getElementById('settings-hub-panel');
   if (!panel) {
     panel = document.createElement('div');
@@ -33054,6 +33067,7 @@ setInterval(() => { if (adminPassActive() && !currentUser?.isAdmin) updateUserIn
 
 // 🎛️ Shoot-FX settings panel
 function openShootFxPanel() {
+  closeOtherDialogs('shoot-fx-panel');
   let panel = document.getElementById('shoot-fx-panel');
   if (!panel) {
     panel = document.createElement('div');
@@ -33110,14 +33124,16 @@ function openShootFxPanel() {
     openShootFxPanel(); // refresh UI
   });
 }
+// The mode screen's utility buttons are click-only, like ENTER UNLOCK CODE (#15): on a phone they sit in
+// a sideways-scrolling bar, and opening on touchstart both ate the swipe and opened the dialog (#21).
 const _sfxBtn = document.getElementById('shoot-fx-btn');
 if (_sfxBtn) {
   _sfxBtn.addEventListener('click', openShootFxPanel);
-  _sfxBtn.addEventListener('touchstart', e => { e.preventDefault(); openShootFxPanel(); }, { passive: false });
 }
 
 // 🎯 AIM ASSIST settings panel — four independent on/off toggles.
 function openAimAssistPanel() {
+  closeOtherDialogs('aim-assist-panel');
   let panel = document.getElementById('aim-assist-panel');
   if (!panel) {
     panel = document.createElement('div');
@@ -33162,11 +33178,11 @@ function openAimAssistPanel() {
 const _aaBtn = document.getElementById('aim-assist-btn');
 if (_aaBtn) {
   _aaBtn.addEventListener('click', openAimAssistPanel);
-  _aaBtn.addEventListener('touchstart', e => { e.preventDefault(); openAimAssistPanel(); }, { passive: false });
 }
 
 // 🎨 GUN SKINS picker — pick one skin that applies to every weapon.
 function openWeaponSkinsPanel() {
+  closeOtherDialogs('weapon-skins-panel');
   let panel = document.getElementById('weapon-skins-panel');
   if (!panel) {
     panel = document.createElement('div');
@@ -33367,7 +33383,6 @@ function openWeaponSkinsPanel() {
 const _wsBtn = document.getElementById('weapon-skins-btn');
 if (_wsBtn) {
   _wsBtn.addEventListener('click', openWeaponSkinsPanel);
-  _wsBtn.addEventListener('touchstart', e => { e.preventDefault(); openWeaponSkinsPanel(); }, { passive: false });
 }
 
 // 🎭 Skin picker — choose how other players see your character
@@ -33382,6 +33397,7 @@ const SKIN_SWATCH = {
   shadow:      ['#141414', '#f4f4f4'],
 };
 function openSkinsPanel() {
+  closeOtherDialogs('skins-panel');
   let panel = document.getElementById('skins-panel');
   if (!panel) {
     panel = document.createElement('div');
@@ -33424,7 +33440,6 @@ function openSkinsPanel() {
 const _skinsBtn = document.getElementById('skins-btn');
 if (_skinsBtn) {
   _skinsBtn.addEventListener('click', openSkinsPanel);
-  _skinsBtn.addEventListener('touchstart', e => { e.preventDefault(); openSkinsPanel(); }, { passive: false });
 }
 
 // 📹 Kill Log list — pick a saved kill to watch in the 6-cam theater
@@ -33455,6 +33470,7 @@ function klKillBadges(k) {
   return s;
 }
 function openKillLogList() {
+  closeOtherDialogs('kill-log-panel');
   let panel = document.getElementById('kill-log-panel');
   if (!panel) {
     panel = document.createElement('div');
@@ -33502,13 +33518,11 @@ function openKillLogList() {
 const _klBtn = document.getElementById('kill-log-btn');
 if (_klBtn) {
   _klBtn.addEventListener('click', openKillLogList);
-  _klBtn.addEventListener('touchstart', e => { e.preventDefault(); openKillLogList(); }, { passive: false });
 }
 
 const _shopBtn = document.getElementById('open-shop-btn');
 if (_shopBtn) {
   _shopBtn.addEventListener('click', openShop);
-  _shopBtn.addEventListener('touchstart', e => { e.preventDefault(); openShop(); }, { passive: false });
 }
 const _bestBtn = document.getElementById('best-loadouts-btn');
 if (_bestBtn) {
