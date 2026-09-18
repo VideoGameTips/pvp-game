@@ -87,6 +87,16 @@ built with `./tools/build-itch.sh`.
 - **Bias to action.** He often answers tersely ("y", "k", "do it", "go") or dismisses question prompts. Make the reasonable call and keep building rather than over-asking. Ask only when genuinely blocked or a decision is irreversible.
 - Requests arrive as a stream of small features; he frequently **playtests and reports bugs** in casual language ("the enemy walked through the wall", "shuriken doesn't work"). Treat those as real bug reports — investigate, don't hand-wave.
 - **New weapons: don't bother verifying they work in a live preview — Andy playtests those himself.** For a new/modified weapon, item, or skin, just `node --check` the files and confirm parallel-array alignment (gotcha #2) + client/server table mirrors (gotcha #4), then commit. (Still verify *bug fixes* and non-weapon behavior changes when practical.)
+- **Verify in proportion — Andy is on the $20 plan.** A small change must not turn into hours of
+  testing. Default to the lightest check that fits (#28):
+
+  | change | check |
+  |---|---|
+  | copy, colours, numbers, new weapons / skins | `node --check` + gotchas #2 / #4; no tests — Andy playtests |
+  | bug fix / behaviour change | one targeted check (a quick probe or preview, seconds to a minute); no mutation testing, no full regression |
+  | big UI / flow overhaul | tests + full regression + a real phone — once, before merging |
+
+  Scratch test scripts stay out of the repo unless asked.
 - Likes **balance**: P2W weapons should be *ridiculously expensive*, not cheap. Fragments/credits should require grind for top-tier items.
 - Enjoys **humor + casual banter**; sometimes writes in Chinese/English mix. Match the energy but stay focused on shipping.
 - He can't run `claude` CLI (not in PATH) and sets up Railway via dashboard manually — give click-by-click guidance, can't do dashboard steps for him.
