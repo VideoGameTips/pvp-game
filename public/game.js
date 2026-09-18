@@ -19305,6 +19305,7 @@ function stopKillcam() {
   if (km && players[KILLCAM.killerId]?.dead !== true) km.visible = true;
   if (KILLCAM.savedCamPos) camera.position.copy(KILLCAM.savedCamPos);
   if (KILLCAM.savedCamQuat) camera.quaternion.copy(KILLCAM.savedCamQuat);
+  camera.fov = targetFOV || 75; camera.updateProjectionMatrix();   // the replay zoomed
   // Show the actual death screen (if still dead) — unless the loadout already replaced it
   if (isDead && !isLoadoutOpen()) {
     const ds = document.getElementById('death-screen');
@@ -19339,29 +19340,43 @@ function updateKillcam(now) {
   const victimChest = new THREE.Vector3(V.x, Math.max(0.9, V.y - 0.4), V.z);
   const dir = victimChest.clone().sub(killerEye); dir.y = 0;
   const dist = Math.max(1, dir.length()); dir.normalize();
+  // Zoom with distance, like looking down their sights: at 40 m a body is a speck at a normal field
+  // of view — as the first phone test showed (#42).
+  const zoom = (near, min) => Math.max(min, Math.min(75, 75 * near / dist));
+  const side = new THREE.Vector3(-dir.z, 0, dir.x);
+  let fov = 75;
   if (shot === KILLCAM_SHOTS[0] && !KILLCAM.povBlocked) {
     // Through the killer's eyes: how they saw you
     KILLCAM.ghosts.killer.visible = false;
     camera.position.copy(killerEye);
     camera.lookAt(victimChest);
+    fov = zoom(9, 14);
   } else if (shot === KILLCAM_SHOTS[0]) {
     // Their eyes were against cover: just behind them instead
     KILLCAM.ghosts.killer.visible = true;
     camera.position.copy(killerEye).addScaledVector(dir, -2.5).add(new THREE.Vector3(0, 0.5, 0));
     camera.lookAt(victimChest);
-  } else if (shot === KILLCAM_SHOTS[1]) {
+    fov = zoom(12, 18);
+  } else if (shot === KILLCAM_SHOTS[1] && dist <= 15) {
     // From the side, both of you in frame
     KILLCAM.ghosts.killer.visible = true;
     const mid = killerEye.clone().add(victimChest).multiplyScalar(0.5);
-    const side = new THREE.Vector3(-dir.z, 0, dir.x);
     camera.position.copy(mid).addScaledVector(side, Math.max(4.5, dist * 0.7)).add(new THREE.Vector3(0, 2.2, 0));
     camera.lookAt(mid);
+  } else if (shot === KILLCAM_SHOTS[1]) {
+    // Too far apart to frame both: the shooter from the side, firing your way
+    KILLCAM.ghosts.killer.visible = true;
+    camera.position.copy(killerEye).addScaledVector(side, 3.2).addScaledVector(dir, 1.2).add(new THREE.Vector3(0, 0.4, 0));
+    camera.lookAt(killerEye.clone().addScaledVector(dir, 6));
+    fov = 60;
   } else {
     // Over your shoulder, slowed down: the moment they got you
     KILLCAM.ghosts.killer.visible = true;
     camera.position.copy(victimChest).addScaledVector(dir, -2.4).add(new THREE.Vector3(0, 0.9, 0));
     camera.lookAt(killerEye);
+    fov = zoom(8, 12);
   }
+  if (Math.abs(camera.fov - fov) > 0.1) { camera.fov = fov; camera.updateProjectionMatrix(); }
   const ui = KILLCAM.ui;
   const lbl = ui.querySelector('.kc-shot');
   const label = (shot === KILLCAM_SHOTS[0] && KILLCAM.povBlocked) ? 'BEHIND THE KILLER' : shot.label;
