@@ -28071,7 +28071,9 @@ function startMatchRound() {
 // The handful of announcements that still flash over the world. Everything else —
 // pickups, abilities, care packages, kills, tips — is a feed line only (#29).
 // Matched on the English text, which is what callers pass before i18n translates it.
-const MOMENT_RE = /^(MATCH START|ROUND |🏁 ROUND|ROUND WIN|ROUND LOST|VICTORY|DEFEAT|YOUR TEAM WINS|ENEMY WINS|YOU DIED|💀 ELIMINATED|ELIMINATED|⚔️ DUEL|⚔️ TIEBREAKER|WAVE |FINAL WAVE|👑 KING OF THE HILL|GET READY|GO!)/;
+// NB: plain 'ELIMINATED' is the banner for a kill YOU made — that stays a feed line.
+// '💀 ELIMINATED' is you being knocked out of the match, which is a moment.
+const MOMENT_RE = /^(MATCH START|ROUND |🏁 ROUND|ROUND WIN|ROUND LOST|VICTORY|DEFEAT|YOUR TEAM WINS|ENEMY WINS|YOU DIED|💀 ELIMINATED|⚔️ DUEL|⚔️ TIEBREAKER|WAVE |FINAL WAVE|👑 KING OF THE HILL|GET READY|GO!)/;
 function showAnnouncement(text, sub, color, duration) {
   const big = MOMENT_RE.test(String(text || ''));
   pushFeedLine(text, sub, color, big);
@@ -29242,6 +29244,7 @@ function weaponDisplayName(id) {
 function spawnGameBots() {
   if (!selectedModeConfig) return;
   resetMatchRivals();          // this match's kill exchanges start empty (#31)
+  clearFeed();                 // and the lobby's messages don't follow you into it (#29)
   // 🌐 Enter a private match BEFORE spawning bots — server will isolate this player's bots
   // from other players who aren't in the same match.
   const matchId = (pvpMatch && pvpMatch.mode)

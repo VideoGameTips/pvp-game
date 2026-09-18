@@ -687,7 +687,7 @@
 
   // ── the DOM side ─────────────────────────────────────────────────────────
   // input stays in: only its placeholder/title are touched, never its value
-  const SKIP = '[data-no-i18n], script, style, textarea, select, #err, #chat-feed, #cc-msgs';
+  const SKIP = '[data-no-i18n], script, style, textarea, select, #err, #cc-msgs';   // chat lines carry data-no-i18n now (#29)
   const ATTRS = ['placeholder', 'title', 'aria-label'];
   const textSrc = new WeakMap();   // text node → { src: English, out: what we wrote }
   const attrSrc = new WeakMap();   // element → { [attr]: { src, out } }

@@ -256,7 +256,7 @@
        is what made them "disappear too fast" (one centre banner, clearTimeout'd by
        whatever came next). Chat lines land here too — they carry data-no-i18n. */
     #msg-feed {
-      position: fixed; left: 16px; top: 44px; width: min(330px, 40vw); z-index: 80;
+      position: fixed; left: 16px; top: 64px; width: min(330px, 40vw); z-index: 80;   /* under the lobby's MODES / DUEL chips */
       display: flex; flex-direction: column; gap: 4px; pointer-events: none;
       font-family: 'Courier New', monospace;
     }
@@ -453,13 +453,6 @@
       width: 100%; height: 4px; background: #333; border-radius: 2px; overflow: hidden;
     }
     #ability-cd-fill { height: 100%; width: 0%; background: #4caf50; transition: width 0.1s, background 0.3s; border-radius: 2px; }
-    #ability-activated {
-      position: absolute; top: 38%; left: 50%; transform: translateX(-50%) scale(1);
-      font-size: 22px; font-weight: bold; color: #ffd700; letter-spacing: 3px;
-      text-shadow: 0 0 12px rgba(255,215,0,0.8); pointer-events: none;
-      opacity: 0; transition: opacity 0.4s, transform 0.3s;
-    }
-
     /* ── Mobile controls ── */
     #mobile-controls {
       display: none;
@@ -660,9 +653,13 @@
     body.touch-ui #lobby-modes-btn   { top: 6px !important; left: 8px !important; padding: 7px 14px; font-size: 13px; }
     body.touch-ui #lobby-duel-btn    { top: 6px !important; left: 116px !important; padding: 7px 14px; font-size: 13px; }
     body.touch-ui #kills             { top: 14px; right: 52px; font-size: 12px; }
-    body.touch-ui #match-hud         { top: 6px; min-width: 0; max-width: calc(100vw - 220px); padding: 4px 12px; gap: 12px; }
+    /* Portrait (the default here): ⚙ and kills on row 1 (the lobby's MODES / DUEL chips share
+       it on the left), the score strip on row 2, the weapon icons as a column down the right
+       edge with the ammo under them, and the feed on the left under the strip. Landscape
+       (below) folds this into one top row. */
+    body.touch-ui #match-hud         { top: 52px; min-width: 0; max-width: calc(100vw - 16px); padding: 4px 12px; gap: 12px; white-space: nowrap; }
     /* Weapons: four icon slots in the top-right corner, with the live weapon + ammo under them. */
-    body.touch-ui #weapon-selector   { top: 48px; right: 8px; left: auto; bottom: auto; transform: none; gap: 5px; pointer-events: auto; }
+    body.touch-ui #weapon-selector   { top: 96px; right: 8px; left: auto; bottom: auto; transform: none; gap: 5px; pointer-events: auto; flex-direction: column; }
     body.touch-ui .ws-slot           { position: relative; width: 36px; height: 36px; min-width: 0; padding: 0; border-radius: 9px; background: rgba(0,0,0,0.42); }
     body.touch-ui .ws-slot .ws-key, body.touch-ui .ws-slot .ws-type, body.touch-ui .ws-slot .ws-name { display: none; }
     body.touch-ui .ws-slot::before {
@@ -689,16 +686,18 @@
       -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='11' cy='14.5' r='6.3'/><rect x='9' y='5.4' width='4.4' height='3.4' rx='.6'/><path d='M13.4 6.4l3.8-2.6 1 1.4-3.8 2.6z'/></svg>");
               mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='11' cy='14.5' r='6.3'/><rect x='9' y='5.4' width='4.4' height='3.4' rx='.6'/><path d='M13.4 6.4l3.8-2.6 1 1.4-3.8 2.6z'/></svg>");
     }
-    body.touch-ui #ammo              { top: 88px; right: 8px; bottom: auto; }
+    body.touch-ui #ammo              { top: 264px; right: 8px; bottom: auto; }
     body.touch-ui #ammo-gun          { font-size: 11px; }
     body.touch-ui #ammo-count        { font-size: 22px; letter-spacing: 1px; }
     body.touch-ui #ammo-reserve      { font-size: 12px; }
-    body.touch-ui #spawn-shield      { top: auto !important; bottom: 108px; left: 12px; transform: none; font-size: 11px; padding: 3px 9px; }
-    body.touch-ui #lobby-prompt      { bottom: auto !important; top: 128px; max-width: calc(100vw - 32px); font-size: 13px; padding: 5px 12px; }
+    body.touch-ui #spawn-shield      { top: auto !important; bottom: 112px; left: 12px; transform: none; font-size: 11px; padding: 3px 9px;
+                                       letter-spacing: 1px; white-space: nowrap; max-width: 130px; overflow: hidden; text-overflow: ellipsis; }
+    body.touch-ui #lobby-prompt      { top: auto !important; bottom: 170px !important; max-width: calc(100vw - 32px); font-size: 13px; padding: 5px 12px; }
     body.touch-ui #interact-hint     { display: none !important; } /* the SWAP / DUEL button replaces it */
     /* On a phone the feed is tighter and lighter — it can hold four lines without
        becoming a wall of boxes down the left edge. */
-    body.touch-ui #msg-feed          { left: 12px; width: 240px; gap: 3px; }
+    body.touch-ui #msg-feed          { left: 12px; top: 96px; width: min(240px, calc(100vw - 72px)); gap: 3px;
+                                       max-height: calc(100vh - 290px); overflow: hidden; }  /* never down into the thumb zone; the oldest line is the one cut */
     body.touch-ui .mf                { font-size: 12px; line-height: 1.3; padding: 2px 7px; background: rgba(0,0,0,0.38); }
     body.touch-ui .mf-big            { font-size: 13px; }
     body.touch-ui .mf-s              { font-size: 11px; }
@@ -716,17 +715,18 @@
       body.touch-ui #health-track      { width: 104px; }
       body.touch-ui #weapon-selector   { gap: 4px; }
       body.touch-ui .ws-slot           { width: 32px; height: 32px; }
-      body.touch-ui #ammo              { top: 84px; }
+      body.touch-ui #ammo              { top: 242px; }
     }
     /* Landscape (by orientation, not width — a portrait tablet is wide too): the top row
        has to share with the score strip, so it sits a little higher. */
     @media (orientation: landscape) {
       body.touch-ui #match-hud       { top: 6px; max-width: calc(100vw - 260px); white-space: nowrap; padding: 3px 10px; gap: 10px; }
       body.touch-ui #match-center    { font-size: 15px; }
-      body.touch-ui #weapon-selector { top: 46px; }
+      body.touch-ui #weapon-selector { top: 46px; flex-direction: row; }
       body.touch-ui #ammo            { top: 86px; }
-      body.touch-ui #msg-feed        { top: 48px; }
-      body.touch-ui #lobby-prompt    { top: 118px; }
+      body.touch-ui #msg-feed        { top: 48px; width: 240px; max-height: calc(100vh - 188px); }
+      body.touch-ui #spawn-shield    { bottom: 80px; left: 146px; }   /* beside the health bar: the feed owns the upper left */
+      body.touch-ui #lobby-prompt    { top: 118px !important; bottom: auto !important; }
     }
 
     /* ── Frontlines HUD ── */
@@ -1017,7 +1017,6 @@
       <div id="ability-cd-track"><div id="ability-cd-fill"></div></div>
       <div id="ability-desc"></div>
     </div>
-    <div id="ability-activated"></div>
     <div id="reload-flash">RELOADING...</div>
     <div id="interact-hint">🗑 F · SWAP WEAPONS</div>
 
