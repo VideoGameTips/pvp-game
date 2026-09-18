@@ -71,6 +71,16 @@
     '🎭 SKINS': '🎭 角色皮肤',
     '🔑 ENTER UNLOCK CODE': '🔑 输入兑换码',
     'LOG OUT': '退出登录',
+    // vehicles and mortars on a phone (#23), and their announcements (never translated before)
+    'PILOT': '驾驶', 'EXIT': '离开',
+    '{icon} Tap PILOT to get in the {what} · HP {hp}': '{icon} 点「驾驶」上{what} · 生命 {hp}',
+    '🎯 Tap PILOT to use the mortar · {a}/{b} shells · HP {hp}': '🎯 点「驾驶」操作迫击炮 · {a}/{b} 发炮弹 · 生命 {hp}',
+    '{a}/{b} shells · FIRE to fire · EXIT to leave': '{a}/{b} 发炮弹 · 点开火发射 · 点离开下来',
+    '🚙 ENTERED JEEP': '🚙 上车了', '🚁 ENTERED HELI': '🚁 上直升机了',
+    'WASD drive · LMB fire · F exit': 'WASD 驾驶 · 左键开火 · F 下车',
+    'WASD move · Space up · Ctrl down · LMB fire · F exit': 'WASD 移动 · 空格上升 · Ctrl 下降 · 左键开火 · F 离开',
+    'Stick to drive · FIRE shoots · EXIT to leave': '摇杆驾驶 · 开火射击 · 离开下车',
+    'Stick to fly · hold JUMP up · hold CROUCH down · FIRE shoots · EXIT to leave': '摇杆飞行 · 按住跳升高 · 按住蹲下降 · 开火射击 · 离开下飞机',
     // leaving a match, the loadout's way out (#26)
     '⚙ MATCH MENU': '⚙ 对局菜单', '▶ RESUME': '▶ 继续', '🔁 CHANGE MODE': '🔁 换模式', '🏠 BACK TO LOBBY 13': '🏠 回 13 号大厅',
     "Leave this match? It won't count.": '这局还没打完，确定离开吗？这局不计分。',

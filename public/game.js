@@ -25376,7 +25376,9 @@ function updateVehiclePrompt() {
       document.body.appendChild(prompt);
     }
     const icon = near.type === 'heli' ? '🚁' : '🚙';
-    prompt.textContent = `${icon} Press F to pilot ${near.type === 'heli' ? 'helicopter' : 'jeep'} · HP ${near.hp}/${near.maxHp}`;
+    const what = near.type === 'heli' ? 'helicopter' : 'jeep';
+    prompt.textContent = isTouchUI() ? `${icon} Tap PILOT to get in the ${what} · HP ${near.hp}/${near.maxHp}`
+                                     : `${icon} Press F to pilot ${what} · HP ${near.hp}/${near.maxHp}`;
     prompt.style.display = 'block';
   } else if (prompt) prompt.style.display = 'none';
 }
@@ -25387,8 +25389,11 @@ function tryEnterVehicle() {
   if (!near) return;
   pilotedVehicle = near;
   near.pilotedBy = 'player';
+  const touch = isTouchUI();
   showAnnouncement(`${near.type === 'heli' ? '🚁' : '🚙'} ENTERED ${near.type.toUpperCase()}`,
-    near.type === 'heli' ? 'WASD move · Space up · Ctrl down · LMB fire · F exit' : 'WASD drive · LMB fire · F exit',
+    near.type === 'heli'
+      ? (touch ? 'Stick to fly · hold JUMP up · hold CROUCH down · FIRE shoots · EXIT to leave' : 'WASD move · Space up · Ctrl down · LMB fire · F exit')
+      : (touch ? 'Stick to drive · FIRE shoots · EXIT to leave' : 'WASD drive · LMB fire · F exit'),
     '#88ccff', 2400);
 }
 function exitVehicle() {
@@ -25398,13 +25403,15 @@ function exitVehicle() {
 }
 function updateVehiclePiloting(dt) {
   if (!pilotedVehicle) return;
+  window._mobileJump = false; // a JUMP tap flies the helicopter up; it must not leave a jump queued for later
   const v = pilotedVehicle;
   if (v.hp <= 0) { exitVehicle(); return; }
-  // Steering — rotate via A/D
-  if (keys['KeyA']) v.rotY += 2.0 * dt;
-  if (keys['KeyD']) v.rotY -= 2.0 * dt;
-  // Forward/back via W/S
-  const speed = (keys['KeyW'] ? 1 : 0) - (keys['KeyS'] ? 1 : 0);
+  // Steering / throttle: A/D and W/S, or the touch stick (#23) — up drives forward, sideways turns
+  const joy = a => (joyActive && Math.abs(a) > 0.15 ? a : 0);
+  const clamp1 = x => Math.max(-1, Math.min(1, x));
+  const steer = clamp1((keys['KeyA'] ? 1 : 0) - (keys['KeyD'] ? 1 : 0) - joy(joyDir.x));
+  if (steer) v.rotY += 2.0 * dt * steer;
+  const speed = clamp1((keys['KeyW'] ? 1 : 0) - (keys['KeyS'] ? 1 : 0) - joy(joyDir.y));
   if (speed !== 0) {
     const fwdX = -Math.sin(v.rotY), fwdZ = -Math.cos(v.rotY);
     v.x += fwdX * speed * v.maxSpeed * dt;
@@ -25416,8 +25423,8 @@ function updateVehiclePiloting(dt) {
   // Helicopter vertical movement
   if (v.type === 'heli') {
     v.y = v.y || 0;
-    if (keys['Space']) v.y += 12 * dt;
-    if (keys['ControlLeft'] || keys['ControlRight'] || keys['ShiftLeft']) v.y -= 12 * dt;
+    if (keys['Space'] || window._mobileUp) v.y += 12 * dt;
+    if (keys['ControlLeft'] || keys['ControlRight'] || keys['ShiftLeft'] || window._mobileCrouch) v.y -= 12 * dt;
     v.y = Math.max(0, Math.min(28, v.y));
     // Spin rotor (visual)
     if (v.rotor) v.rotor.rotation.y += 25 * dt;
@@ -25462,7 +25469,8 @@ function updateMortarPrompt() {
         + 'background:rgba(0,0,0,0.7);padding:8px 18px;border:2px solid #ffcc44;border-radius:6px;letter-spacing:2px;';
       document.body.appendChild(prompt);
     }
-    prompt.textContent = `🎯 Press F to pilot mortar · ${near.ammo}/${near.maxAmmo} shells · HP ${near.hp}/${near.maxHp}`;
+    prompt.textContent = isTouchUI() ? `🎯 Tap PILOT to use the mortar · ${near.ammo}/${near.maxAmmo} shells · HP ${near.hp}/${near.maxHp}`
+                                     : `🎯 Press F to pilot mortar · ${near.ammo}/${near.maxAmmo} shells · HP ${near.hp}/${near.maxHp}`;
     prompt.style.display = 'block';
   } else if (prompt) {
     prompt.style.display = 'none';
@@ -25475,7 +25483,8 @@ function tryEnterMortar() {
   if (!near) return;
   pilotedMortar = near;
   near.pilotedBy = 'player';
-  showAnnouncement('🎯 MORTAR ARMED', `${near.ammo}/${near.maxAmmo} shells · LMB to fire · F to exit`, '#ffcc44', 2200);
+  showAnnouncement('🎯 MORTAR ARMED', isTouchUI() ? `${near.ammo}/${near.maxAmmo} shells · FIRE to fire · EXIT to leave`
+                                                 : `${near.ammo}/${near.maxAmmo} shells · LMB to fire · F to exit`, '#ffcc44', 2200);
 }
 function exitMortar() {
   if (!pilotedMortar) return;
@@ -26964,12 +26973,24 @@ function setInteractVisible(v) {
 }
 // The on-screen stand-in for F (runs every frame; writes only on change): SWAP at a
 // trashcan, DUEL in Lobby 13 wherever F would start a duel. Phones had no way to duel.
+// A jeep, helicopter or mortar the interact button would board — or 'exit' while piloting one (#23).
+// Same ranges and maps as the F key.
+function pilotableHere() {
+  if (pilotedVehicle || pilotedMortar) return 'exit';
+  if (isDead || !gameStarted) return null;
+  const near = (list, r) => list.some(o => o.mapName === activeMapName && o.hp > 0 && !o.pilotedBy
+    && Math.hypot(o.x - camera.position.x, o.z - camera.position.z) < r);
+  if (activeMapName === 'br_arena' && near(mapVehicles, 4)) return 'vehicle';
+  if ((activeMapName === 'trenches' || activeMapName === 'br_arena') && near(mapMortars, 3.5)) return 'mortar';
+  return null;
+}
 function syncInteractButton() {
   const btn = document.getElementById('btn-interact');
   if (!btn) return;
-  const duel = inLobby && !nearTrashcan && !!(lobbyPadHere || lobbyChallengeTarget);
-  const label = I18N.t(duel ? 'DUEL' : 'SWAP'); // compare with what's shown, which may be translated
-  const display = (nearTrashcan || duel) ? 'flex' : 'none';
+  const pilot = pilotableHere();
+  const duel = !pilot && inLobby && !nearTrashcan && !!(lobbyPadHere || lobbyChallengeTarget);
+  const label = I18N.t(pilot === 'exit' ? 'EXIT' : (pilot && !nearTrashcan) ? 'PILOT' : duel ? 'DUEL' : 'SWAP'); // compare with what's shown, which may be translated
+  const display = (nearTrashcan || duel || pilot) ? 'flex' : 'none';
   if (btn.textContent !== label) btn.textContent = label;
   if (btn.style.display !== display) btn.style.display = display;
 }
@@ -34038,7 +34059,10 @@ document.addEventListener('touchcancel', e => {
 const btnFire = document.getElementById('btn-fire');
 btnFire.addEventListener('touchstart', e => {
   e.stopPropagation(); e.preventDefault();
-  shooting = true; btnFire.classList.add('pressed'); tryUseActive();
+  btnFire.classList.add('pressed');
+  if (pilotedVehicle) fireVehicleGun();           // piloting: FIRE is the vehicle's gun / the mortar, like LMB (#23)
+  else if (pilotedMortar) fireMortar();
+  else { shooting = true; tryUseActive(); }
   // 🔫 Let the firing thumb ALSO aim: register this touch as the look touch
   // (if no other finger is already looking) so the player can drag straight
   // off the fire button to track a target while holding fire. Touchmove/cancel
@@ -34103,7 +34127,11 @@ const btnInteract = document.getElementById('btn-interact');
 if (btnInteract) {
   // Same two jobs as the F key: swap loadout at a trashcan, or start / accept a lobby duel.
   const interact = () => {
-    if (nearTrashcan && !isDead && gameStarted) showLoadoutScreen('swap');
+    const pilot = pilotableHere();
+    if (pilot === 'exit') { if (pilotedVehicle) exitVehicle(); else exitMortar(); }
+    else if (nearTrashcan && !isDead && gameStarted) showLoadoutScreen('swap');
+    else if (pilot === 'vehicle') tryEnterVehicle();
+    else if (pilot === 'mortar') tryEnterMortar();
     else if (inLobby && (lobbyPadHere || lobbyChallengeTarget)) lobbyInteract();
   };
   btnInteract.addEventListener('touchstart', e => { e.stopPropagation(); e.preventDefault(); interact(); }, { passive: false });
@@ -34148,6 +34176,10 @@ if (_jumpBtn) {
   };
   _jumpBtn.addEventListener('touchstart', trigger, { passive: false });
   _jumpBtn.addEventListener('mousedown',  trigger);
+  // …and a held state: holding JUMP climbs in the helicopter (#23)
+  const hold = on => e => { window._mobileUp = on; };
+  _jumpBtn.addEventListener('touchstart', hold(true), { passive: true });
+  for (const ev of ['touchend', 'touchcancel', 'mouseup', 'mouseleave']) _jumpBtn.addEventListener(ev, hold(false));
 }
 
 document.addEventListener('contextmenu', e => e.preventDefault());
