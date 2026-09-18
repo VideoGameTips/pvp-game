@@ -24122,6 +24122,44 @@ function syncLobbyTag() {
   if (keys && !isTouchUI()) { const want = on ? '' : 'none'; if (keys.style.display !== want) keys.style.display = want; }
 }
 
+// ── 🪟 In-game dialogs (#43) ────────────────────────────────────────────────
+// The browser's own alert / confirm / prompt were grey system boxes with the site address on top —
+// a different look on every phone — and froze the game while open. One dialog in the #21 frame
+// replaces all three. confirm/prompt callers await the answer; every other alert() goes through
+// uiAlert without blocking. Text is translated as the old i18n wrappers did.
+function uiDialog({ message, okText = 'OK', cancelText = null, input = null }) {
+  return new Promise(resolve => {
+    releasePointer();                     // a locked mouse can't click it (#25)
+    const wrap = document.createElement('div');
+    wrap.className = 'ui-dialog-wrap';
+    wrap.innerHTML = `<div class="ui-dialog" role="dialog" aria-modal="true">
+      <div class="ui-dialog-msg" data-no-i18n></div>
+      ${input !== null ? '<input class="ui-dialog-input" maxlength="64" autocomplete="off">' : ''}
+      <div class="ui-dialog-btns">${cancelText ? '<button type="button" class="ui-cancel"></button>' : ''}<button type="button" class="ui-ok"></button></div>
+    </div>`;
+    wrap.querySelector('.ui-dialog-msg').textContent = I18N.t(String(message ?? ''));
+    const ok = wrap.querySelector('.ui-ok'), cancel = wrap.querySelector('.ui-cancel'), inp = wrap.querySelector('.ui-dialog-input');
+    ok.textContent = okText;
+    if (cancel) cancel.textContent = cancelText;
+    if (inp) inp.value = input || '';
+    const done = v => { document.removeEventListener('keydown', key, true); wrap.remove(); resolve(v); };
+    const key = e => {
+      if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); e.stopPropagation(); ok.click(); }
+      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); (cancel || ok).click(); }
+      else e.stopPropagation();             // typing in the dialog must not move the player
+    };
+    ok.addEventListener('click', () => done(inp ? inp.value : true));
+    if (cancel) cancel.addEventListener('click', () => done(inp ? null : false));
+    document.addEventListener('keydown', key, true);
+    document.body.appendChild(wrap);
+    (inp || ok).focus();
+  });
+}
+const uiAlert   = m => uiDialog({ message: m });
+const uiConfirm = m => uiDialog({ message: m, okText: 'OK', cancelText: 'Cancel' });
+const uiPrompt  = (m, d = '') => uiDialog({ message: m, okText: 'OK', cancelText: 'Cancel', input: d });
+window.alert = m => { uiAlert(m); };   // the ~50 fire-and-forget alerts
+
 // ── 🎯 Hit / kill / ammo at the crosshair (#34) ─────────────────────────────
 // Before this a hit showed only a small number at the target (and a sound a muted phone never
 // plays); a kill made the body vanish and left one line in the corner feed; an empty gun did
@@ -26786,8 +26824,8 @@ socket.on('bulletFired', b => {
   playWeaponSound(b.weapon || w.id, { baseWeapon: w, remote: true, position: origin });
   spawnLocalBullet(origin, new THREE.Vector3(b.dx,b.dy,b.dz), b.id, false, w.bulletSpeed, w.bulletColor, w.bulletSize, w.id);
 });
-socket.on('sessionReplaced', () => {
-  alert('This account just signed in on another device, so this one has been signed out.');
+socket.on('sessionReplaced', async () => {
+  await uiAlert('This account just signed in on another device, so this one has been signed out.');
   location.reload();
 });
 socket.on('nameRefused', () => console.warn('[auth] the server refused this name — sign in again'));
@@ -32895,8 +32933,8 @@ function closeOtherDialogs(keepId) {
 function inLiveMatch() { return gameStarted && !inLobby && !!match && !match.over; }
 // Leave before the end (#26): ask once, tell the server as endMatch does, then go to one of the two
 // places the end screen offers.
-function leaveMatch(to) {
-  if (inLiveMatch() && !confirm("Leave this match? It won't count.")) return;
+async function leaveMatch(to) {
+  if (inLiveMatch() && !await uiConfirm("Leave this match? It won't count.")) return;
   if (match && !match.over) socket.emit('leaveMatch');
   closeOtherDialogs();
   if (to === 'lobby') { teardownMatchWorld(); selectMode('lobby13'); } else openModeMenu();
@@ -33164,7 +33202,7 @@ async function promptUnlockCode() {
     alert('Please log in first.');
     return;
   }
-  const code = prompt('Enter unlock code:');
+  const code = await uiPrompt('Enter unlock code:');
   if (!code) return;
   const result = await authRequest('/auth/redeem', {
     username: currentUser.username,
@@ -33192,7 +33230,7 @@ async function buyWeapon(weaponId) {
   const cost = shopCost(weaponId);
   if (cost == null) { alert('That item is not purchasable.'); return false; }
   if ((currentUser.credits ?? 0) < cost) { alert(`Not enough donuts.\nNeed ${money(cost)} · You have ${currentUser.credits ?? 0}`); return false; }
-  if (!confirm(`Buy "${weaponId}" for ${money(cost)}?\n\nYou have ${currentUser.credits} donuts.`)) return false;
+  if (!await uiConfirm(`Buy "${weaponId}" for ${money(cost)}?\n\nYou have ${currentUser.credits} donuts.`)) return false;
   const r = await authRequest('/shop/buy', { username: currentUser.username, password: currentUser.password, weaponId });
   if (!r || r.error) { alert('❌ ' + (r?.error || 'shop error')); return false; }
   currentUser.purchased = r.purchased || currentUser.purchased;
@@ -33210,7 +33248,7 @@ async function buyBundle(bundleId) {
   if (remaining.length === 0) { alert('You already own every item in this bundle!'); return false; }
   if ((currentUser.credits ?? 0) < b.price) { alert(`Not enough donuts.\nBundle costs ${money(b.price)} · You have ${currentUser.credits ?? 0}`); return false; }
   const sumIndividual = b.items.reduce((s, id) => s + (shopCost(id) ?? 0), 0);
-  if (!confirm(`Buy "${b.name}" bundle for ${money(b.price)}?\n\nIncludes: ${b.items.join(', ')}\nValue: ${money(sumIndividual)} (saving ${money(sumIndividual - b.price)})\nNew items: ${remaining.length}`)) return false;
+  if (!await uiConfirm(`Buy "${b.name}" bundle for ${money(b.price)}?\n\nIncludes: ${b.items.join(', ')}\nValue: ${money(sumIndividual)} (saving ${money(sumIndividual - b.price)})\nNew items: ${remaining.length}`)) return false;
   const r = await authRequest('/shop/buy-bundle', { username: currentUser.username, password: currentUser.password, bundleId });
   if (!r || r.error) { alert('❌ ' + (r?.error || 'shop error')); return false; }
   currentUser.purchased = r.purchased || currentUser.purchased;
@@ -33229,7 +33267,7 @@ async function trialWeapon(weaponId) {
   const cost = shopTrialCost(weaponId);
   if (cost == null) { alert('That item is not purchasable.'); return false; }
   if ((currentUser.credits ?? 0) < cost) { alert(`Not enough donuts for trial.\nNeed ${money(cost)} · You have ${currentUser.credits ?? 0}`); return false; }
-  if (!confirm(`Trial "${weaponId}" for ${money(cost)} (one match only)?`)) return false;
+  if (!await uiConfirm(`Trial "${weaponId}" for ${money(cost)} (one match only)?`)) return false;
   const r = await authRequest('/shop/trial', { username: currentUser.username, password: currentUser.password, weaponId });
   if (!r || r.error) { alert('❌ ' + (r?.error || 'shop error')); return false; }
   currentUser.credits = r.credits ?? currentUser.credits;
@@ -33244,7 +33282,7 @@ async function buySkinCaseGen1() {
     alert(`Not enough donuts.\nNeed ${money(SKIN_CASE_GEN1_COST)} · You have ${currentUser.credits ?? 0}`);
     return false;
   }
-  if (!confirm(`Buy one Skin Case Gen 1 for ${money(SKIN_CASE_GEN1_COST)}?\n\nOpen it in Lobby 13 to reveal one basic stat-changing skin.`)) return false;
+  if (!await uiConfirm(`Buy one Skin Case Gen 1 for ${money(SKIN_CASE_GEN1_COST)}?\n\nOpen it in Lobby 13 to reveal one basic stat-changing skin.`)) return false;
   const r = await authRequest('/shop/buy-skin-case', { username: currentUser.username, password: currentUser.password, caseId: 'gen1_basic' });
   if (!r || r.error) { alert('❌ ' + (r?.error || 'shop error')); return false; }
   currentUser.credits = r.credits ?? currentUser.credits;
@@ -33369,7 +33407,7 @@ async function buyAdminPass() {
     alert(`Need ${money(ADMIN_PASS_COST)} · You have ${currentUser.credits ?? 0} donuts`);
     return false;
   }
-  if (!confirm(`Buy Admin Pass for ${money(ADMIN_PASS_COST)}?\n\nUnlocks EVERY weapon (including admin items) for 10 minutes.`)) return false;
+  if (!await uiConfirm(`Buy Admin Pass for ${money(ADMIN_PASS_COST)}?\n\nUnlocks EVERY weapon (including admin items) for 10 minutes.`)) return false;
   const r = await authRequest('/shop/admin-pass', { username: currentUser.username, password: currentUser.password });
   if (!r || r.error) { alert('❌ ' + (r?.error || 'shop error')); return false; }
   currentUser.credits = r.credits ?? currentUser.credits;
@@ -33382,7 +33420,7 @@ async function buyChest(type) {
   if (!currentUser) return false;
   const cost = CHEST_PRICES_CLIENT[type];
   if (!cost) return false;
-  if (!confirm(`Buy a ${type.toUpperCase()} chest for ${money(cost)}?`)) return false;
+  if (!await uiConfirm(`Buy a ${type.toUpperCase()} chest for ${money(cost)}?`)) return false;
   const r = await authRequest('/shop/buy-chest', { username: currentUser.username, password: currentUser.password, type });
   if (!r || r.error) { alert('❌ ' + (r?.error || 'shop error')); return false; }
   currentUser.credits = r.credits;
@@ -33412,7 +33450,7 @@ async function unlockWithFragments(weaponId) {
   const cost = fragmentUnlockCost(weaponId);
   if (cost == null) { alert('That item has no fragment cost.'); return false; }
   if ((currentUser.fragments || 0) < cost) { alert(`Need ${cost} fragments · You have ${currentUser.fragments || 0}`); return false; }
-  if (!confirm(`Unlock "${weaponId}" for ${cost} fragments?`)) return false;
+  if (!await uiConfirm(`Unlock "${weaponId}" for ${cost} fragments?`)) return false;
   const r = await authRequest('/shop/unlock-fragments', { username: currentUser.username, password: currentUser.password, weaponId });
   if (!r || r.error) { alert('❌ ' + (r?.error || 'shop error')); return false; }
   currentUser.fragments = r.fragments;
@@ -34016,9 +34054,9 @@ function openKillLogList() {
   panel.querySelectorAll('.kl-pin').forEach(b => b.addEventListener('click', e => {
     e.stopPropagation(); const k = killLog[+b.dataset.idx]; k.pinned = !k.pinned; autoCleanupKillLog(); saveKillLogToDisk(); openKillLogList();
   }));
-  panel.querySelectorAll('.kl-del').forEach(b => b.addEventListener('click', e => {
+  panel.querySelectorAll('.kl-del').forEach(b => b.addEventListener('click', async e => {
     e.stopPropagation(); const k = killLog[+b.dataset.idx];
-    if (k.favorite && !confirm('This replay is favorited. Delete anyway?')) return;
+    if (k.favorite && !await uiConfirm('This replay is favorited. Delete anyway?')) return;
     killLog.splice(+b.dataset.idx, 1); saveKillLogToDisk(); openKillLogList();
   }));
 }
@@ -34036,11 +34074,11 @@ if (_bestBtn) {
   _bestBtn.addEventListener('click', () => toggleBestLoadoutsPanel(true));
   _bestBtn.addEventListener('touchstart', e => { e.preventDefault(); toggleBestLoadoutsPanel(true); }, { passive: false });
 }
-function logOut() {
+async function logOut() {
   const msg = currentUser?.guest
     ? 'Log out? This guest profile only lives on this device — you won\'t be able to get it back.'
     : 'Log out? You\'ll have to sign in again.';
-  if (!confirm(msg)) return;
+  if (!await uiConfirm(msg)) return;
   localStorage.removeItem('pvp_user');
   currentUser = null;
   location.reload();

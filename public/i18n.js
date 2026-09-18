@@ -548,7 +548,12 @@
     'Duplicate. Emotionally devastating, mechanically harmless.': '重复了。心理打击很大，实际没影响。',
     'Mystery Skin': '神秘皮肤',
     'A thing happened.': '发生了点什么。',
-    'OK': '好的',
+    'OK': '好的', 'Cancel': '取消',
+    // names + sign-in (#38, #39)
+    '"{name}" is taken — try {s}, or type another': '「{name}」已被使用 —— 试试 {s}，或者换一个',
+    '"{name}" is taken — pick another nickname': '「{name}」已被使用，换一个昵称吧',
+    'This account just signed in on another device, so this one has been signed out.': '这个账号刚在另一台设备上登录，这里已经下线。',
+    '🚪 LOG OUT': '🚪 退出登录',
     'As admin, you always wear the crown.': '你是管理员，王冠永远戴在你头上。',
     '📹 KILL LOG ': '📹 击杀记录',
     'No kills recorded yet — go get some!': '还没有击杀记录——快去打几个！',
