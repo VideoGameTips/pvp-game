@@ -985,6 +985,8 @@ app.post('/auth/redeem', (req, res) => {
 });
 
 const PLAYER_MAX_HP  = 300;
+const SPAWN_SHIELD_MS = 1500;   // the client's grantSpawnShield cap (#22)
+const shielded = p => Date.now() < (p.shieldUntil || 0);
 const RESPAWN_DELAY  = 3000;
 const POS_BROADCAST_RATE = 50; // ms
 
@@ -1548,7 +1550,7 @@ io.on('connection', (socket) => {
   socket.on('hit', (data) => {
     const target  = players[data.targetId];
     const shooter = players[socket.id];
-    if (!target || !shooter || target.dead || target.isBot) return;
+    if (!target || !shooter || target.dead || target.isBot || shielded(target)) return;
     let dmg = Math.round((WEAPON_DAMAGE[data.weapon] || 25) * falloffMultiplier(data.weapon, dist3(shooter, target)));
     if (data.headshot) dmg = data.instakill ? target.hp : Math.round(dmg * (WEAPON_HS_MULT[data.weapon] || 2));
     target.hp = Math.max(0, target.hp - dmg);
@@ -1598,7 +1600,9 @@ io.on('connection', (socket) => {
     const s = nextSpawn();
     const x = data.x != null ? Number(data.x) : s.x;
     const z = data.z != null ? Number(data.z) : s.z;
-    Object.assign(p, { x, y: s.y, z, hp: PLAYER_MAX_HP, dead: false });
+    // The same spawn shield the client shows (grantSpawnShield caps it at 1.5 s), kept here so hits
+    // during it cost no HP — the server used to take it anyway and kill players showing full health (#22).
+    Object.assign(p, { x, y: s.y, z, hp: PLAYER_MAX_HP, dead: false, shieldUntil: Date.now() + SPAWN_SHIELD_MS });
     emitToMatch(p.matchId, 'playerRespawned', { ...p, clientSpawn: data.x != null && data.z != null });
   });
 
@@ -1726,7 +1730,7 @@ io.on('connection', (socket) => {
   socket.on('botHitMe', (data) => {
     const player = players[socket.id];
     const bot    = players[data.botId];
-    if (!player || player.dead || !bot || !bot.isBot) return;
+    if (!player || player.dead || !bot || !bot.isBot || shielded(player)) return;
     let dmg = Math.round((WEAPON_DAMAGE[data.weapon] || 25) * falloffMultiplier(data.weapon, dist3(bot, player)));
     player.hp = Math.max(0, player.hp - dmg);
     emitToMatch(player.matchId, 'playerHit', { targetId: player.id, hp: player.hp, bulletId: null });

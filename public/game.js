@@ -24724,11 +24724,10 @@ function updateBullets(dt) {
                                                  : camera.position.clone().setY(1.0);
                 emitHit(b.botId, `deflect_${myId}_${Date.now()}`, 'katana', dp);
               } else if (_mp !== 'parry') {
-                socket.emit('botHitMe', { botId: b.botId, weapon: b.weaponId });
                 applyDotToPlayer(b.weaponId);
                 // wasHead is known here, but bot damage is not scaled by
                 // location yet, so it is deliberately not passed as if it were.
-                applyBotDamageToPlayer(b.weaponId, b.botId);
+                botHitsMe(b.botId, b.weaponId);
               }
             }
             removeBullet();
@@ -26350,8 +26349,7 @@ function scheduleBotHitOnPlayer(botId, weaponId, dist, speed) {
   const flightMs = (Math.max(0, dist) / Math.max(20, speed || 120)) * 1000;
   // Point blank — no perceptible flight, don't add input lag to a knife-range hit.
   if (flightMs < 20) {
-    socket.emit('botHitMe', { botId, weapon: weaponId });
-    applyBotDamageToPlayer(weaponId, botId);
+    botHitsMe(botId, weaponId);
     return;
   }
   _botHitsInFlight.push({ botId, weaponId,
@@ -26367,11 +26365,17 @@ function resolveBotHitsInFlight() {
     // Stale — the tab was backgrounded, or bots were despawned mid-flight.
     // A bullet fired more than a second late is nobody's bullet.
     if (now - h.at > 1500) continue;
-    socket.emit('botHitMe', { botId: h.botId, weapon: h.weaponId });
-    applyBotDamageToPlayer(h.weaponId, h.botId);
+    botHitsMe(h.botId, h.weaponId);
   }
 }
 
+// A bot's hit on the local player. The server subtracts HP on botHitMe knowing nothing of the spawn
+// shield, a riot shield, a parry, Lobby 13 or the range, so it only hears of hits that land here —
+// it used to hear of every one, and killed shielded players showing full health (#22).
+function botHitsMe(botId, weaponId) {
+  if (applyBotDamageToPlayer(weaponId, botId)) socket.emit('botHitMe', { botId, weapon: weaponId });
+}
+// Returns true when the hit landed — only then is the server told (botHitsMe, #22).
 function applyBotDamageToPlayer(weaponId, botId) {
   // 🛋️ Lobby 13 is a no-combat chill zone — nobody takes damage.
   if (inLobby) return;
@@ -26404,7 +26408,7 @@ function applyBotDamageToPlayer(weaponId, botId) {
     const ds = document.getElementById('death-screen');
     if (ds) ds.style.display = 'flex';
     onEntityDied(myId, botId || null);
-    return;
+    return true;
   }
   if (isDead || isShielded() || isRiotShieldBlocking()) return;
   if (meleeAbilityBuff?.type === 'parry' || meleeAbilityBuff?.type === 'deflect') return;
@@ -26490,6 +26494,7 @@ function applyBotDamageToPlayer(weaponId, botId) {
       afterDeath(1500, () => { if (ds) ds.style.display='none'; showLoadoutScreen('death'); });
     }
   }
+  return true;
 }
 function showScoreboard(v) {
   const el = document.getElementById('scoreboard');
@@ -30299,7 +30304,7 @@ function updateBotAI(dt) {
                 emitHit(bot.id, `deflect_${myId}_${Date.now()}`, 'katana', _defPos2);
               }
             } else {
-              socket.emit('botHitMe', { botId: bot.id, weapon: 'bat' }); applyBotDamageToPlayer('bat', bot.id);
+              botHitsMe(bot.id, 'bat');
             }
           }
           const hitPos = new THREE.Vector3(bot.x + dx * 0.5, 1.3, bot.z + dz * 0.5);
