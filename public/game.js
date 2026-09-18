@@ -2618,6 +2618,7 @@ function showBotSpeech(bot, text, duration = 2200, color = '#fff') {
   // Create or reuse the bubble div
   if (!bot._bubble) {
     const div = document.createElement('div');
+    div.className = 'bot-speech';
     div.style.cssText = 'position:fixed;pointer-events:none;user-select:none;z-index:9500;'
       + 'background:rgba(20,20,20,0.85);color:#fff;font-family:Arial,sans-serif;font-size:13px;'
       + 'padding:5px 10px;border-radius:10px;border:2px solid #fff;white-space:nowrap;'
@@ -19161,20 +19162,38 @@ function currentEquippedId() {
   return null;
 }
 
-// ── 🎬 KILLCAM — record positions of all entities, play back from killer POV on death
+// ── 🎬 KILLCAM — record positions of all entities, play back your death (#42) ──
+// It used to squeeze the last 3 s into 2.2 s at 10 frames a second from one camera behind the
+// killer, with everyone left where they stand NOW — and the death loadout covered it after 1.5 s
+// (in elimination the waiting screen and the spectator camera took over at once). Now: the last
+// 3 s play over 5 s from three angles, the killer and you as replay actors moving through the
+// (interpolated) recording, who and with what big enough to read, SKIP — and nothing else opens on
+// top of it until it ends (afterDeath / runAfterKillcam wait).
 const KILLCAM = {
   buf: [],                // ring of frames { t, entities: { id: {x,y,z,rotY} } }
-  capacity: 100,          // 100 frames × 100 ms = 10 s (the 10 s before the kill)
+  capacity: 100,          // 100 frames × 100 ms = 10 s (the kill log keeps all of it)
   lastSampleAt: 0,
   active: false,
   startedAt: 0,
-  durationMs: 2200,
+  durationMs: 5000,
   killerId: null,
-  deathPos: null,         // {x,y,z} where player died
+  frames: null,           // the last 3 s, frozen when the killcam starts
+  deathPos: null,
   savedCamPos: null,
   savedCamQuat: null,
-  banner: null,
+  ghosts: null,
+  ui: null,
+  lastT: 0,
 };
+// Playback share [from, to) → the part of the recording it shows (0 = 3 s before the kill, 1 = the kill).
+const KILLCAM_SHOTS = [
+  { from: 0,    to: 0.44, r0: 0,   r1: 0.6,  label: "KILLER'S VIEW" },
+  { from: 0.44, to: 0.76, r0: 0.5, r1: 0.85, label: 'SIDE VIEW' },
+  { from: 0.76, to: 1.01, r0: 0.8, r1: 1,    label: 'SLOW MOTION' },
+];
+const _afterKillcam = [];
+function runAfterKillcam(fn) { if (KILLCAM.active) _afterKillcam.push(fn); else fn(); }
+
 function killcamSample(now) {
   if (now - KILLCAM.lastSampleAt < 100) return;
   KILLCAM.lastSampleAt = now;
@@ -19187,35 +19206,97 @@ function killcamSample(now) {
   KILLCAM.buf.push({ t: now, entities: ents });
   if (KILLCAM.buf.length > KILLCAM.capacity) KILLCAM.buf.shift();
 }
-function startKillcam(killerId) {
+// Where `id` was at share r of the frozen clip, between two samples.
+function killcamAt(id, r) {
+  const fr = KILLCAM.frames, n = fr.length;
+  const f = Math.max(0, Math.min(n - 1, r * (n - 1)));
+  const i0 = Math.floor(f), i1 = Math.min(n - 1, i0 + 1), a = f - i0;
+  const e0 = fr[i0].entities[id], e1 = fr[i1].entities[id] || e0;
+  if (!e0) return null;
+  const mix = (x, y) => x + (y - x) * a;
+  const dy = Math.atan2(Math.sin(e1.rotY - e0.rotY), Math.cos(e1.rotY - e0.rotY));
+  return { x: mix(e0.x, e1.x), y: mix(e0.y, e1.y), z: mix(e0.z, e1.z), rotY: e0.rotY + dy * a };
+}
+function makeKillcamActor(name, team, skin, armed) {
+  const body = makePlayerMesh(name, false, team, skin || 'default', {});
+  if (armed) {
+    if (body._rig) body._rig.holdsGun = true;
+    const gun = _genericGun({ bodyShape: 'classic', bodyColor: 0x222222, accentColor: 0x6a6a6a, magType: 'banana', topRail: true });
+    gun.scale.setScalar(1.25);
+    gun.position.set(0.26, 1.34, 0.34);
+    gun.rotation.y = Math.PI;
+    const flash = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffdd66 }));
+    flash.position.set(0, 0.02, -0.55);
+    flash.visible = false;
+    gun.add(flash);
+    body.add(gun);
+    body._flash = flash;
+  }
+  scene.add(body);
+  return body;
+}
+function killcamUI() {
+  if (KILLCAM.ui) return KILLCAM.ui;
+  const ui = document.createElement('div');
+  ui.id = 'killcam-ui';
+  ui.innerHTML = `<div class="kc-top"><div class="kc-title"></div><div class="kc-shot"></div></div>
+    <div class="kc-bottom"><div class="kc-bar"><div class="kc-fill"></div></div><button type="button" class="kc-skip">SKIP ▶▶</button></div>`;
+  document.body.appendChild(ui);
+  bindTap(ui.querySelector('.kc-skip'), () => stopKillcam());
+  return (KILLCAM.ui = ui);
+}
+function startKillcam(killerId, weaponId) {
   if (KILLCAM.active) return;
   if (!killerId || killerId === myId) return; // no self-kill killcam
+  if (match && match.over) return;             // the end screen is already up
   if (KILLCAM.buf.length < 4) return;          // not enough recorded frames
+  KILLCAM.frames = KILLCAM.buf.slice(-30);     // freeze: the buffer keeps recording behind us
+  if (!KILLCAM.frames[KILLCAM.frames.length - 1].entities[killerId]) return;
   KILLCAM.active = true;
-  KILLCAM.startedAt = performance.now();
+  KILLCAM.startedAt = KILLCAM.lastT = performance.now();
   KILLCAM.killerId = killerId;
   KILLCAM.deathPos = { x: camera.position.x, y: camera.position.y, z: camera.position.z };
   KILLCAM.savedCamPos = camera.position.clone();
   KILLCAM.savedCamQuat = camera.quaternion.clone();
-  // Banner
-  if (!KILLCAM.banner) {
-    KILLCAM.banner = document.createElement('div');
-    KILLCAM.banner.style.cssText = 'position:fixed;top:60px;left:50%;transform:translateX(-50%);z-index:9700;'
-      + 'background:rgba(20,0,0,0.85);color:#ff8888;border:2px solid #ff4444;padding:10px 24px;'
-      + 'font-family:"Courier New",monospace;font-size:14px;letter-spacing:3px;border-radius:6px;display:none;';
-    document.body.appendChild(KILLCAM.banner);
-  }
   const killerName = players[killerId]?.name || 'an enemy';
-  KILLCAM.banner.textContent = `🎬 KILLCAM · killed by ${killerName}`;
-  KILLCAM.banner.style.display = 'block';
-  // Hide death screen during killcam
-  const ds = document.getElementById('death-screen');
-  if (ds) ds.style.display = 'none';
+  const killerBot = gameBots.find(b => b.id === killerId);
+  const wname = weaponDisplayName(weaponId || killerBot?.weaponId);
+  KILLCAM.ghosts = {
+    killer: makeKillcamActor(killerName, 'enemy', players[killerId]?.skin, true),
+    victim: makeKillcamActor(currentUser?.username || 'You', 'ally', mySkin, false),
+  };
+  if (remoteMeshes[killerId]) remoteMeshes[killerId].visible = false;   // the actor plays them
+  // Through the killer's eyes only if they could see you from there; a wall or crate right by
+  // their head would fill the shot — then watch from behind them instead.
+  KILLCAM.povBlocked = false;
+  const K1 = killcamAt(killerId, 1), V1 = killcamAt(myId, 1);
+  const mapGroup = MAP_GROUPS[activeMapName];
+  if (K1 && V1 && mapGroup) {
+    const eye = new THREE.Vector3(K1.x, K1.y + 0.6, K1.z), chest = new THREE.Vector3(V1.x, Math.max(0.9, V1.y - 0.4), V1.z);
+    const d = chest.clone().sub(eye), len = d.length();
+    const hit = new THREE.Raycaster(eye, d.normalize(), 0.1, Math.max(0.2, len - 0.5)).intersectObject(mapGroup, true)[0];
+    KILLCAM.povBlocked = !!hit;
+  }
+  const ui = killcamUI();
+  ui.querySelector('.kc-title').textContent = wname ? `Killed by ${killerName} · ${wname}` : `Killed by ${killerName}`;
+  ui.style.display = 'flex';
+  document.body.classList.add('killcam-on');   // no crosshair / buttons over the replay
+  // Your first-person gun and its lights ride on the camera — they would sit in every shot
+  KILLCAM.hiddenKids = camera.children.filter(c => c.visible);
+  for (const c of KILLCAM.hiddenKids) c.visible = false;
+  releasePointer();   // SKIP needs the cursor (#25)
+  for (const id of ['death-screen', 'waiting-screen']) { const el = document.getElementById(id); if (el) el.style.display = 'none'; }
 }
 function stopKillcam() {
   if (!KILLCAM.active) return;
   KILLCAM.active = false;
-  if (KILLCAM.banner) KILLCAM.banner.style.display = 'none';
+  if (KILLCAM.ui) KILLCAM.ui.style.display = 'none';
+  document.body.classList.remove('killcam-on');
+  for (const c of KILLCAM.hiddenKids || []) c.visible = true;
+  KILLCAM.hiddenKids = null;
+  if (KILLCAM.ghosts) { for (const g of Object.values(KILLCAM.ghosts)) scene.remove(g); KILLCAM.ghosts = null; }
+  const km = remoteMeshes[KILLCAM.killerId];
+  if (km && players[KILLCAM.killerId]?.dead !== true) km.visible = true;
   if (KILLCAM.savedCamPos) camera.position.copy(KILLCAM.savedCamPos);
   if (KILLCAM.savedCamQuat) camera.quaternion.copy(KILLCAM.savedCamQuat);
   // Show the actual death screen (if still dead) — unless the loadout already replaced it
@@ -19223,29 +19304,63 @@ function stopKillcam() {
     const ds = document.getElementById('death-screen');
     if (ds && match?.type !== 'elim') ds.style.display = 'flex';
   }
+  for (const fn of _afterKillcam.splice(0)) fn();   // what the killcam held back: loadout, waiting screen, spectating
+  for (const job of [..._pendingDeathJobs]) job();  // and what was still counting down (afterDeath)
 }
 function updateKillcam(now) {
   if (!KILLCAM.active) return;
+  if (!isDead) { stopKillcam(); return; }   // a new round (or a respawn) brought you back: you're playing again
   const t = (now - KILLCAM.startedAt) / KILLCAM.durationMs;
   if (t >= 1) { stopKillcam(); return; }
-  // Map t (0..1) over only the last ~3 s of the buffer (the buffer now holds 10 s
-  // for the kill-log theater, but the death killcam stays a quick last-moments cam).
-  const tail = Math.min(KILLCAM.buf.length, 30);
-  const base = KILLCAM.buf.length - tail;
-  const i = base + Math.min(tail - 1, Math.floor(t * tail));
-  const frame = KILLCAM.buf[i];
-  if (!frame) return;
-  const killer = frame.entities[KILLCAM.killerId];
-  const victim = frame.entities[myId];
-  if (!killer) return;
-  // Camera ~2.5 m behind and 0.6 m above the killer, looking at the player
-  const fwd = new THREE.Vector3(-Math.sin(killer.rotY), 0, -Math.cos(killer.rotY));
-  const camPos = new THREE.Vector3(killer.x, killer.y + 0.6, killer.z).addScaledVector(fwd, -2.5);
-  camera.position.copy(camPos);
-  const look = victim
-    ? new THREE.Vector3(victim.x, victim.y, victim.z)
-    : new THREE.Vector3(KILLCAM.deathPos.x, KILLCAM.deathPos.y, KILLCAM.deathPos.z);
-  camera.lookAt(look);
+  const dt = Math.min(0.05, (now - KILLCAM.lastT) / 1000);
+  KILLCAM.lastT = now;
+  const shot = KILLCAM_SHOTS.find(sh => t < sh.to) || KILLCAM_SHOTS[KILLCAM_SHOTS.length - 1];
+  const r = shot.r0 + (shot.r1 - shot.r0) * Math.min(1, (t - shot.from) / (shot.to - shot.from));
+  const K = killcamAt(KILLCAM.killerId, r);
+  const V = killcamAt(myId, r) || KILLCAM.deathPos;
+  if (!K) return;
+  const put = (mesh, e) => {
+    mesh.position.set(e.x, Math.max(0, (e.y || 1) - 1.6), e.z);
+    mesh.rotation.y = (e.rotY || 0) + Math.PI;
+    animateCharacterMesh(mesh, dt, 0);
+  };
+  put(KILLCAM.ghosts.killer, K);
+  put(KILLCAM.ghosts.victim, V);
+  // The killer keeps firing: a muzzle flash every ~130 ms
+  const fl = KILLCAM.ghosts.killer._flash;
+  if (fl) fl.visible = Math.floor(now / 65) % 2 === 0;
+  const killerEye = new THREE.Vector3(K.x, K.y + 0.6, K.z);
+  const victimChest = new THREE.Vector3(V.x, Math.max(0.9, V.y - 0.4), V.z);
+  const dir = victimChest.clone().sub(killerEye); dir.y = 0;
+  const dist = Math.max(1, dir.length()); dir.normalize();
+  if (shot === KILLCAM_SHOTS[0] && !KILLCAM.povBlocked) {
+    // Through the killer's eyes: how they saw you
+    KILLCAM.ghosts.killer.visible = false;
+    camera.position.copy(killerEye);
+    camera.lookAt(victimChest);
+  } else if (shot === KILLCAM_SHOTS[0]) {
+    // Their eyes were against cover: just behind them instead
+    KILLCAM.ghosts.killer.visible = true;
+    camera.position.copy(killerEye).addScaledVector(dir, -2.5).add(new THREE.Vector3(0, 0.5, 0));
+    camera.lookAt(victimChest);
+  } else if (shot === KILLCAM_SHOTS[1]) {
+    // From the side, both of you in frame
+    KILLCAM.ghosts.killer.visible = true;
+    const mid = killerEye.clone().add(victimChest).multiplyScalar(0.5);
+    const side = new THREE.Vector3(-dir.z, 0, dir.x);
+    camera.position.copy(mid).addScaledVector(side, Math.max(4.5, dist * 0.7)).add(new THREE.Vector3(0, 2.2, 0));
+    camera.lookAt(mid);
+  } else {
+    // Over your shoulder, slowed down: the moment they got you
+    KILLCAM.ghosts.killer.visible = true;
+    camera.position.copy(victimChest).addScaledVector(dir, -2.4).add(new THREE.Vector3(0, 0.9, 0));
+    camera.lookAt(killerEye);
+  }
+  const ui = KILLCAM.ui;
+  const lbl = ui.querySelector('.kc-shot');
+  const label = (shot === KILLCAM_SHOTS[0] && KILLCAM.povBlocked) ? 'BEHIND THE KILLER' : shot.label;
+  if (lbl._label !== label) { lbl._label = label; lbl.textContent = label; }
+  ui.querySelector('.kc-fill').style.width = (t * 100).toFixed(1) + '%';
 }
 
 // ── 📹 KILL LOG — save your kills and replay them from 6 cameras at once ──
@@ -26604,14 +26719,20 @@ function applyBotDamageToPlayer(weaponId, botId) {
     }
     // Notify match logic (round end / kill tracking)
     onEntityDied(myId, botId || null);
+    // 🎬 Straight into the killcam — not whenever the server's echo arrives (#42)
+    startKillcam(botId, weaponId);
     if (match && match.type === 'elim' && !match.over) {
       if (ds) ds.style.display = 'none';
-      if (ws) ws.style.display = 'flex';
       const dmEl = document.getElementById('death-msg');
       if (dmEl) dmEl.textContent = 'Waiting for round to end...';
-      updateRoundScoreDisplay && updateRoundScoreDisplay();
-      enterSpectator(); // watch live teammates while waiting
-      releasePointer(); // CHANGE LOADOUT on the waiting screen needs the cursor
+      // The spectator camera would fight the killcam for the screen: after it (#42)
+      runAfterKillcam(() => {
+        if (!isDead || !match || match.over) return;
+        if (ws) ws.style.display = 'flex';
+        updateRoundScoreDisplay && updateRoundScoreDisplay();
+        enterSpectator(); // watch live teammates while waiting
+        releasePointer(); // CHANGE LOADOUT on the waiting screen needs the cursor
+      });
     } else if (match && match.type === 'arcade') {
       // Arcade: brief death screen, scheduleArcadeRespawn handles the actual respawn
       if (ds) {
@@ -26650,6 +26771,7 @@ function applyBotDamageToPlayer(weaponId, botId) {
       if (ds) { ds.style.display = 'flex'; const dm = document.getElementById('death-msg'); if (dm) dm.textContent = 'Select your loadout...'; }
       afterDeath(1500, () => { if (ds) ds.style.display='none'; showLoadoutScreen('death'); });
     }
+    if (KILLCAM.active && ds) ds.style.display = 'none';   // the killcam first; stopKillcam brings it back
   }
   return true;
 }
@@ -26955,18 +27077,21 @@ socket.on('playerDied', data => {
     abilityBuff=null; meleeAbilityBuff=null; pendingFanFire=null;
     document.getElementById('scope-overlay').style.display='none';
     // 🎬 Start killcam — overrides camera + hides death screen for ~2.2s
-    startKillcam(data.killerId);
+    startKillcam(data.killerId, resolveBot(data.killerId)?.weaponId);   // no-op if the local death started it (#42)
     const ds = document.getElementById('death-screen');
     if (!KILLCAM.active) ds.style.display='flex';
     if (match && match.type === 'elim' && !match.over) {
       // No respawn in elimination — wait for round to end
       document.getElementById('death-msg').textContent = 'Waiting for round to end...';
       ds.style.display = 'none';
-      document.getElementById('waiting-screen').style.display = 'flex';
-      showFunFact('waiting-screen');
-      updateRoundScoreDisplay();
-      enterSpectator(); // watch live teammates while waiting
-      releasePointer(); // CHANGE LOADOUT on the waiting screen needs the cursor
+      runAfterKillcam(() => {
+        if (!isDead || !match || match.over) return;
+        document.getElementById('waiting-screen').style.display = 'flex';
+        showFunFact('waiting-screen');
+        updateRoundScoreDisplay();
+        enterSpectator(); // watch live teammates while waiting
+        releasePointer(); // CHANGE LOADOUT on the waiting screen needs the cursor
+      });
     } else if (match && match.tiebreaker) {
       document.getElementById('death-msg').textContent = 'Tiebreaker — eliminated!';
       // endMatch called via onEntityDied
@@ -32673,9 +32798,20 @@ function checkLoginEggs(name, pass) {
 // PLAY AGAIN / CHANGE MODE / BACK TO LOBBY now leave a match without reloading the page, so a timer
 // from the old match must not fire into whatever comes next: every teardown starts a new epoch.
 let matchEpoch = 0;
+// …and never on top of the killcam: the loadout used to cover it after 1.5 s (#42). When the
+// killcam ends (or is skipped) whatever was still counting down runs at once — the killcam already
+// was the pause these delays gave you.
+const _pendingDeathJobs = new Set();
 function afterDeath(ms, fn) {
   const epoch = matchEpoch;
-  setTimeout(() => { if (epoch === matchEpoch) fn(); }, ms);
+  let timer = null;
+  const job = () => {
+    if (!_pendingDeathJobs.delete(job)) return;
+    clearTimeout(timer);
+    runAfterKillcam(() => { if (epoch === matchEpoch) fn(); });
+  };
+  _pendingDeathJobs.add(job);
+  timer = setTimeout(job, ms);
 }
 // Everything a finished match (or Lobby 13) leaves behind that the next start must not
 // inherit. Shared by the mode menu and the end-of-match buttons so they can't drift apart.

@@ -549,6 +549,8 @@
     'Mystery Skin': '神秘皮肤',
     'A thing happened.': '发生了点什么。',
     'OK': '好的', 'Cancel': '取消',
+    // killcam (#42)
+    "KILLER'S VIEW": '击杀者视角', 'BEHIND THE KILLER': '击杀者身后', 'SIDE VIEW': '侧面视角', 'SLOW MOTION': '慢动作', 'SKIP ▶▶': '跳过 ▶▶',
     // names + sign-in (#38, #39)
     '"{name}" is taken — try {s}, or type another': '「{name}」已被使用 —— 试试 {s}，或者换一个',
     '"{name}" is taken — pick another nickname': '「{name}」已被使用，换一个昵称吧',
