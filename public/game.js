@@ -25370,8 +25370,10 @@ function updateVehiclePrompt() {
     if (!prompt) {
       prompt = document.createElement('div');
       prompt.id = 'vehicle-prompt';
+      // z 80: under every full-screen overlay (end screen 110, loadout 95…) — at 9000 it sat on top of
+      // them and blocked their buttons (#27)
       prompt.style.cssText = 'position:fixed;bottom:200px;left:50%;transform:translateX(-50%);'
-        + 'z-index:9000;color:#88ccff;font-family:"Courier New",monospace;font-size:14px;'
+        + 'z-index:80;color:#88ccff;font-family:"Courier New",monospace;font-size:14px;'
         + 'background:rgba(0,0,0,0.7);padding:8px 18px;border:2px solid #88ccff;border-radius:6px;letter-spacing:2px;';
       document.body.appendChild(prompt);
     }
@@ -25465,7 +25467,7 @@ function updateMortarPrompt() {
       prompt = document.createElement('div');
       prompt.id = 'mortar-prompt';
       prompt.style.cssText = 'position:fixed;bottom:200px;left:50%;transform:translateX(-50%);'
-        + 'z-index:9000;color:#ffcc44;font-family:"Courier New",monospace;font-size:14px;'
+        + 'z-index:80;color:#ffcc44;font-family:"Courier New",monospace;font-size:14px;'
         + 'background:rgba(0,0,0,0.7);padding:8px 18px;border:2px solid #ffcc44;border-radius:6px;letter-spacing:2px;';
       document.body.appendChild(prompt);
     }
@@ -25958,7 +25960,7 @@ function updateSwitchbladeHUD() {
   if (!hud) {
     hud = document.createElement('div');
     hud.id = 'switchblade-hud';
-    hud.style.cssText = 'position:fixed;right:18px;top:50%;transform:translateY(-50%);z-index:9000;'
+    hud.style.cssText = 'position:fixed;right:18px;top:50%;transform:translateY(-50%);z-index:80;' // under the overlays (#27)
       + 'background:rgba(0,0,0,0.6);border:2px solid #cc66ff;color:#fff;font-family:monospace;'
       + 'padding:8px 14px;border-radius:6px;text-align:center;pointer-events:none;font-size:13px;';
     document.body.appendChild(hud);
@@ -26208,7 +26210,8 @@ function showSpectatorHUD() {
   if (!hud) {
     hud = document.createElement('div');
     hud.id = 'spectator-hud';
-    hud.style.cssText = 'position:fixed;top:18%;left:50%;transform:translateX(-50%);z-index:9000;'
+    // z 90: over the elimination waiting / death screens it belongs to, under the loadout and end screen (#27)
+    hud.style.cssText = 'position:fixed;top:18%;left:50%;transform:translateX(-50%);z-index:90;'
       + 'background:rgba(0,0,0,0.7);border:2px solid #4cf;color:#fff;font-family:monospace;'
       + 'padding:10px 18px;border-radius:6px;text-align:center;pointer-events:none;font-size:14px;';
     document.body.appendChild(hud);
