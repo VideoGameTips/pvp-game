@@ -19564,7 +19564,9 @@ function _beginEquip(model, spec, melee) {
   // A whole-object move acts on the one part the model names for it -- the
   // pivot it is tossed about, the blade that ignites, the two handles of a
   // butterfly knife. Everything else acts on every piece.
-  const targets = type === 'balisong' ? (model._bali || [])
+  // A butterfly knife also moves as a whole while its handles flip -- the
+  // wrist rolls it and tips it about -- so its pivot comes along too.
+  const targets = type === 'balisong' ? [...(model._bali || []), ...(model._pivot ? [model._pivot] : [])]
                 : type === 'flip'     ? (model._pivot ? [model._pivot] : [])
                 : type === 'ignite'   ? (model._blade ? [model._blade] : [])
                 : _equipPieces(model);
@@ -19688,6 +19690,22 @@ function _equipStep(e, t) {
         c.scale.copy(h.s);
         break; }
       case 'balisong': {
+        if (c === e.model._pivot) {
+          // The knife itself, in the hand: the wrist rolls it one way and back,
+          // tips the point up as the handles come round, and swings it a little
+          // side to side. All of it dies away to nothing by the end, so it is
+          // back in the hand exactly where it rests.
+          const env = Math.pow(1 - t, 1.5);
+          const roll  = Math.sin(t * Math.PI * 3.0) * 0.95 * env;
+          const yaw   = Math.sin(t * Math.PI * 2.0 + 0.6) * 0.55 * env;
+          const pitch = Math.sin(t * Math.PI * 4.0) * 0.40 * env;
+          c.position.copy(h.p);
+          c.position.x += Math.sin(t * Math.PI * 3.0) * 0.022 * env;
+          c.position.y += Math.abs(Math.sin(t * Math.PI * 3.0)) * 0.028 * env;
+          c.quaternion.copy(h.q).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(pitch, yaw, roll)));
+          c.scale.copy(h.s);
+          break;
+        }
         // The two handles flip round the blade on their pins, the second
         // chasing the first the other way, until they close behind it as the
         // grip. Each ends a whole number of turns round, which is open.
@@ -24246,7 +24264,7 @@ const MELEE_MODEL_SKINS = [
   { id: 'knife_butterfly', melee: 'knife', name: 'Butterfly Knife', rarity: 'rare',
     sw: ['#2a2f3a', '#d8aa3a'], build: buildButterflyKnife,
     blurb: 'Drawn, the handles flip round the blade and close as the grip.',
-    equip: 'balisong', equipMs: 950, equipSfx: ['flicks', 'snapin'] },
+    equip: 'balisong', equipMs: 1150, equipSfx: ['flicks', 'snapin'] },
   { id: 'katana_laser', melee: 'katana', name: 'Laser Katana', rarity: 'rare',
     sw: ['#16181e', '#ff3ac8'], build: buildLaserKatana,
     blurb: 'Drawn, the blade runs out of the hilt and hums.',
