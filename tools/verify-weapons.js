@@ -57,7 +57,8 @@ function load() {
                    '_throwableHolder', '_gunDetails', '_makeViewHand',
                    '_localPartBoxes', 'attachViewHands', '_reloadPose',
                    '_meleeOffset', '_collarGeometry', 'blendProudSteps',
-                   '_emoStroke', '_emoMats']) {
+                   '_emoStroke', '_emoMats', '_legendMats', '_legendize',
+                   '_mPivot', '_eqCrystalMats']) {
     const b = fnBlock(n);
     if (b) code += b + '\n';
   }

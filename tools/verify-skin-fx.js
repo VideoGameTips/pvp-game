@@ -48,6 +48,7 @@ code += cblock('PROP_SFX') + '\n';
 // That synthesis has its own tuning table and is not what is being tested here,
 // so it stands in as something that schedules a sound.
 code += "function playMuzzleBlast(ctx) { ctx.createOscillator().start(); }\n";
+code += "function playGunAction(ctx) { ctx.createOscillator().start(); }\n";
 code += src.match(/^const K = [\s\S]*?\}, o\);/m)[0] + '\n';
 code += src.match(/^const RP = .*$/m)[0] + '\n';
 code += 'const RELOAD_KEYS = ' + blockAt(/^const RELOAD_KEYS = \{/m).replace(/^const RELOAD_KEYS = /, '') + ';\n';

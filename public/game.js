@@ -3460,6 +3460,14 @@ function playObjectShot(ctx, start, out, p, m) {
     case 'warp':     // through a portal: rising, and the air rushing the other way
       playTone(ctx, start, d, out, f1, f2, v, 'sine');
       playSweptNoise(ctx, start, d, out, v * 0.4, 'bandpass', f2, f1, 1.2); return true;
+    case 'hellfire': // an FFA Legend: the gun's own report, and fire roaring out behind it
+      playMuzzleBlast(ctx, start, out, p.base || 'rifle', v);
+      if (p.action) playGunAction(ctx, start, out, p.action, v);
+      playFilteredNoise(ctx, start, d * 2.2, out, v * 0.40, 'lowpass', 520, 0.8, 0.004, 1.1);
+      for (let i = 0; i < 4; i++)
+        playFilteredNoise(ctx, start + 0.02 + i * 0.03 + Math.random() * 0.02, 0.012, out, v * 0.25,
+                          'highpass', 2600 + Math.random() * 2000, 0.8, 0.0003, 1.5);
+      return true;
     case 'aircon':   // air, and the compressor humming under it
       playFilteredNoise(ctx, start, d, out, v, 'highpass', f1, 0.5, 0.01, 1.0);
       playTone(ctx, start, d, out, 60, 60, v * 0.6, 'sine');
@@ -3572,6 +3580,13 @@ function playObjectSfx(ctx, out, name, t, v) {
     case 'warp':
       playTone(ctx, t, 0.5, out, 180, 900, v * 0.22, 'sine');
       playSweptNoise(ctx, t, 0.5, out, v * 0.16, 'bandpass', 3000, 400, 1.2); break;
+    case 'fireup':   // an FFA Legend drawn: the fire catching, all at once
+      playFilteredNoise(ctx, t, 0.55, out, v * 0.40, 'lowpass', 700, 0.8, 0.06, 1.1);
+      playTone(ctx, t, 0.45, out, 60, 110, v * 0.30, 'sine');
+      for (let i = 0; i < 6; i++)
+        playFilteredNoise(ctx, t + 0.05 + i * 0.06 + Math.random() * 0.03, 0.012, out, v * 0.18,
+                          'highpass', 2600 + Math.random() * 2400, 0.8, 0.0003, 1.5);
+      break;
     case 'flicks':   // a butterfly knife's pins, clacking as the handles go round
       for (let i = 0; i < 6; i++)
         metalClack(ctx, t + i * 0.085 + Math.random() * 0.02, out, v * 0.35, 2200 + Math.random() * 800, 0.02);
@@ -12736,34 +12751,38 @@ function buildPixelSniper() {
   // When it is drawn the pixels pop in one at a time, in no order at all.
   const g = new THREE.Group();
   const SPRITE = [
-    '............bbbbbbbbb...........',
-    '...........bggggggggcb..........',
-    '............bbbbbbbbb...........',
-    '.............b.....b............',
-    'wwwwwkkkkkkkkkkkkkkkkkkkkkkkkkkb',
-    'wwwwwwkkkkkkkkkkkkkk............',
-    'wwwwww...kk.b.kk................',
-    'wwww....kk..b.kk................',
-    'ww.....kk.......................',
-    '.......k........................',
+    '........bbbbbbbbb...........',
+    '.......bggggggggcb..........',
+    '........bbbbbbbbb...........',
+    '.........b.....b............',
+    'wwkkkkkkkkkkkkkkkkkkkkkkkkkb',
+    'wwwkkkkkkkkkkkkkkk..........',
+    'www...kk.b.kk...............',
+    'ww...kk..b.kk...............',
+    'w...kk......................',
+    '....k.......................',
   ];
   const COL = { k: 0x2a2e34, g: 0x6a7078, w: 0x8a5a2a, c: 0x55ddff, b: 0x0d0d0d };
   const mats = {};
   for (const [ch, c] of Object.entries(COL))
     mats[ch] = ch === 'c' ? new THREE.MeshBasicMaterial({ color: c })
                           : new THREE.MeshPhongMaterial({ color: c, shininess: 30, specular: 0x555555 });
-  const V = 0.020, VOX = new THREE.BoxGeometry(V * 0.98, V * 0.98, V * 0.98);
+  const V = 0.017, VOX = new THREE.BoxGeometry(V * 0.98, V * 0.98, V * 0.98);
   const VOXW = new THREE.BoxGeometry(0.030, V * 0.98, V * 0.98);
   SPRITE.forEach((row, r) => {
     for (let col = 0; col < row.length; col++) {
       const ch = row[col];
       if (!mats[ch]) continue;
       const m = new THREE.Mesh(ch === 'k' || ch === 'w' ? VOXW : VOX, mats[ch]);
-      m.position.set(0, 0.080 - r * V, 0.300 - col * V);
+      // Placed so the butt is in front of the eye and the grip rows clear the
+      // bottom of the frame. Measured, not guessed: drawn from z 0.27 the
+      // whole stock and a third of the receiver sat behind the camera, which is
+      // why neither shrinking the pixels nor lifting the sprite moved it.
+      m.position.set(0, 0.110 - r * V, 0.110 - col * V);
       g.add(m);
     }
   });
-  const flash = makeMuzzleFlash(); flash.position.set(0, 0.000, -0.345); g.add(flash);
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.042, -0.365); g.add(flash);
   g._flash = flash; g._kickZ = 0.016; g._greebled = true; g._handDetailed = true;
   g.position.set(0.12, -0.1, -0.25); return g;
 }
@@ -12866,6 +12885,131 @@ function buildGunslingerRevolver() {
   g._spinPivot = new THREE.Vector3(0, -0.024, 0.016);                  // the trigger guard
   g.position.set(0.1, -0.1, -0.22); return g;
 }
+
+// ── 🔥 FFA Legend ───────────────────────────────────────────────────────────
+// The FFA Legend skins are the real weapon, cursed. Same model underneath, so
+// every part the reload moves is still there -- turned to obsidian, its small
+// hardware glowing like embers, spikes driven out along its spine and flanks,
+// and black and red fire burning off the top. One pass does it for any weapon:
+// it reads the weapon's own shape to decide where the spikes and fire go.
+function _legendMats() {
+  const flame = (c, op, add) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: op,
+    depthWrite: false, side: THREE.DoubleSide, blending: add ? THREE.AdditiveBlending : THREE.NormalBlending });
+  return {
+    obsidian: new THREE.MeshPhongMaterial({ color: 0x17121a, shininess: 190, specular: 0x9a3a3a }),
+    ember:    new THREE.MeshPhongMaterial({ color: 0x4a0806, emissive: 0xff2010, emissiveIntensity: 0.9,
+                                            shininess: 120, specular: 0xff8a6a }),
+    tip:      new THREE.MeshBasicMaterial({ color: 0xff2a14 }),
+    black:    flame(0x0a0405, 0.78, false),   // the black fire, on the outside
+    red:      flame(0xff2a1a, 0.85, true),    // the red inside it
+    core:     flame(0xffb030, 0.90, true),    // and the hottest part
+  };
+}
+function _legendize(g, o) {
+  o = o || {};
+  const M = _legendMats();
+  const flash = g._flash;
+  const inFlash = obj => { for (let p = obj; p; p = p.parent) if (p === flash) return true; return false; };
+  // Measured at the model's own origin; the builder's resting offset goes back after.
+  const at = g.position.clone();
+  g.position.set(0, 0, 0); g.updateMatrixWorld(true);
+  const parts = [];
+  g.traverse(m => {
+    if (!m.isMesh || inFlash(m) || (m.material && m.material.transparent)) return;
+    const b = new THREE.Box3().setFromObject(m), sz = b.getSize(new THREE.Vector3());
+    if (![sz.x, sz.y, sz.z].every(Number.isFinite)) return;
+    // Big pieces go to obsidian; the small hardware -- pins, levers, rivets,
+    // sights -- glows, which is what makes it read as lit from inside.
+    m.material = Math.max(sz.x, sz.y, sz.z) < 0.022 ? M.ember : M.obsidian;
+    parts.push({ b, sz });
+  });
+  const B = new THREE.Box3();
+  parts.forEach(p => B.union(p.b));
+  const len = B.max.z - B.min.z;
+  const big = parts.filter(p => Math.max(p.sz.x, p.sz.y, p.sz.z) >= 0.03);
+  const over = (z, f, init) => { let v = init; for (const p of big) if (z >= p.b.min.z && z <= p.b.max.z) v = f(v, p); return v; };
+  const topAt  = z => over(z, (v, p) => Math.max(v, p.b.max.y), -Infinity);
+  const botAt  = z => over(z, (v, p) => Math.min(v, p.b.min.y), Infinity);
+  const sideAt = z => over(z, (v, p) => Math.min(v, p.b.min.x), Infinity);
+  const zAt = f => B.max.z - f * len;          // f runs from the back (0) to the front (1)
+  const S = o.scale || 1, from = o.from ?? 0.12, to = o.to ?? 0.88;
+  const Y = new THREE.Vector3(0, 1, 0);
+  const spike = (x, y, z, dx, dy, dz, l, r) => {
+    const s = new THREE.Group();
+    const body = new THREE.ConeGeometry(r, l, 5); body.translate(0, l / 2, 0);
+    s.add(new THREE.Mesh(body, M.obsidian));
+    const tip = new THREE.ConeGeometry(r * 0.42, l * 0.34, 5); tip.translate(0, l * 0.83, 0);
+    s.add(new THREE.Mesh(tip, M.tip));
+    s.position.set(x, y, z);
+    s.quaternion.setFromUnitVectors(Y, new THREE.Vector3(dx, dy, dz).normalize());
+    g.add(s);
+  };
+  // Down the spine, swept back like fins, long and short in turn.
+  const nTop = o.top ?? 5;
+  for (let i = 0; i < nTop; i++) {
+    const z = zAt(from + (to - from) * (nTop > 1 ? i / (nTop - 1) : 0.5)), y = topAt(z);
+    if (!Number.isFinite(y)) continue;
+    spike(0, y - 0.003, z, 0, 1, 0.45, (0.026 + (i % 2) * 0.012) * S, 0.0075 * S);
+  }
+  // Out of both flanks.
+  const nSide = o.side ?? 3;
+  for (let i = 0; i < nSide; i++) {
+    const z = zAt(from + 0.08 + (to - from - 0.16) * (nSide > 1 ? i / (nSide - 1) : 0.5));
+    const x = sideAt(z), yMid = (topAt(z) + botAt(z)) / 2;
+    if (!Number.isFinite(x) || !Number.isFinite(yMid)) continue;
+    spike(x + 0.003, yMid, z, -1, 0.35, 0.3, 0.024 * S, 0.006 * S);
+    spike(-x - 0.003, yMid, z, 1, 0.35, 0.3, 0.024 * S, 0.006 * S);
+  }
+  // Under the back of the stock, well clear of the hand on the grip.
+  const nBot = o.bottom ?? 0;
+  for (let i = 0; i < nBot; i++) {
+    const z = zAt(0.03 + i * 0.07), y = botAt(z);
+    if (Number.isFinite(y)) spike(0, y + 0.003, z, 0, -1, 0.45, 0.024 * S, 0.0065 * S);
+  }
+  // A crown of small spikes round the muzzle.
+  if (flash && o.muzzle !== false) {
+    const f = flash.position;
+    for (let i = 0; i < 4; i++) {
+      const a = Math.PI / 4 + i * Math.PI / 2, dx = Math.cos(a), dy = Math.sin(a);
+      spike(f.x + dx * 0.013, f.y + dy * 0.013, f.z + 0.035, dx, dy, 0.25, 0.018 * S, 0.0045 * S);
+    }
+  }
+  // And the fire: black outside, red inside, gold at the heart, each flame on
+  // its own flicker, with embers lifting off it.
+  const flames = [], embers = [];
+  const cone = (r, h) => { const c = new THREE.ConeGeometry(r, h, 7, 1, true); c.translate(0, h / 2, 0); return c; };
+  const FS = o.fireScale || 1, nFire = o.fires ?? 3;
+  for (let i = 0; i < nFire; i++) {
+    const z = zAt(from + (to - from) * ((i + 0.5) / nFire)), y = topAt(z);
+    if (!Number.isFinite(y)) continue;
+    [[M.black, 0.017, 0.080], [M.red, 0.012, 0.062], [M.core, 0.0065, 0.034]].forEach(([mat, r, h], li) => {
+      const m = new THREE.Mesh(cone(r * FS, h * FS), mat);
+      m.position.set((li - 1) * 0.002, y - 0.004, z);
+      m.renderOrder = 2 + li;
+      g.add(m);
+      flames.push({ mesh: m, s: m.scale.clone(), phase: Math.random() * 6.283, speed: 9 + Math.random() * 7 + li * 3 });
+    });
+    for (let k = 0; k < 3; k++) {
+      const e = new THREE.Mesh(new THREE.BoxGeometry(0.004 * FS, 0.004 * FS, 0.004 * FS), M.core);
+      g.add(e);
+      embers.push({ mesh: e, x: 0, y, z, t: Math.random(), speed: 0.8 + Math.random() * 0.8,
+                    phase: Math.random() * 6.283, h: 0.10 * FS });
+    }
+  }
+  g._flames = flames; g._embers = embers;
+  g._greebled = true; g._handDetailed = true;
+  g.position.copy(at);
+  return g;
+}
+function buildLegendAK()     { return _legendize(buildAK20(),      { top: 5, side: 3, bottom: 2, fires: 3 }); }
+function buildLegendPistol() { return _legendize(buildPistol(),    { top: 3, side: 2, fires: 2, scale: 0.8, fireScale: 0.8 }); }
+function buildLegendSG8()    { return _legendize(buildSG8(),       { top: 5, side: 3, bottom: 2, fires: 3 }); }
+function buildLegendSRX()    { return _legendize(buildSRX(),       { top: 6, side: 3, bottom: 2, fires: 3 }); }
+function buildLegendVector() { return _legendize(buildVectorSMG(), { top: 4, side: 2, bottom: 1, fires: 3, scale: 0.9 }); }
+// Blades: spikes down the spine of the blade only, never over the handle.
+function buildLegendKnife()  { return _legendize(buildKnife(),  { top: 4, side: 0, fires: 2, from: 0.45, to: 0.92, muzzle: false, scale: 0.7, fireScale: 0.7 }); }
+function buildLegendKatana() { return _legendize(buildKatana(), { top: 6, side: 0, fires: 3, from: 0.35, to: 0.95, muzzle: false, scale: 0.8, fireScale: 0.8 }); }
+function buildLegendBat()    { return _legendize(buildBat(),    { top: 5, side: 3, fires: 3, from: 0.45, to: 0.95, muzzle: false }); }
 
 function buildHairDryer() {
   // 💨 MP-40 -> hair dryer. Cream housing, a chrome barrel with the heating
@@ -18681,6 +18825,27 @@ function _buildDash(tint, r) {
   return g;
 }
 
+function _buildHellfire(tint, r) {
+  // A round from an FFA Legend: a red-hot core, a flare round it, and black
+  // smoke trailing out behind.
+  const c = tint || 0xff2a1a;
+  const P = _projCache('hell|' + c + '|' + r, () => ({
+    core: new THREE.CylinderGeometry(r * 0.55, r * 0.35, r * 5, 6),
+    coreM: new THREE.MeshBasicMaterial({ color: c }),
+    glow: new THREE.CylinderGeometry(r * 1.2, r * 0.2, r * 9, 6, 1, true),
+    glowM: new THREE.MeshBasicMaterial({ color: 0xff5a1a, transparent: true, opacity: 0.55,
+      blending: THREE.AdditiveBlending, depthWrite: false }),
+    smoke: new THREE.CylinderGeometry(r * 1.6, r * 0.4, r * 16, 6, 1, true),
+    smokeM: new THREE.MeshBasicMaterial({ color: 0x0a0405, transparent: true, opacity: 0.55, depthWrite: false }),
+  }));
+  const g = new THREE.Group();
+  const sm = new THREE.Mesh(P.smoke, P.smokeM); sm.position.y = -r * 11; g.add(sm);
+  const gl = new THREE.Mesh(P.glow, P.glowM); gl.position.y = -r * 5; g.add(gl);
+  const co = new THREE.Mesh(P.core, P.coreM); co.position.y = -r * 1.5; g.add(co);
+  g._alignToDir = true;
+  return g;
+}
+
 function _buildSlug(tint, r) {
   // Railgun / coilgun: still a metal projectile, but a fat glowing slug rather
   // than a rifle tracer — it is magnetically driven, not powder driven.
@@ -18729,6 +18894,7 @@ function makeBulletMesh(color, size, weaponId, own) {
     case 'cone':      return _buildCone(color, r);
     case 'pie':       return _buildPie(color, r);
     case 'dash':    return _buildDash(color, r);
+    case 'hellfire':return _buildHellfire(color, r);
     case 'slug':    return _buildSlug(color, r);
     case 'flare':   return _buildFlare(color, r);
     case 'nail':    return _buildNail(color, r);
@@ -19746,6 +19912,38 @@ function _equipStep(e, t) {
   if (e.glow.length) {
     const amt = t < 0.9 ? 1.2 : 2.6 * (1 - (t - 0.9) / 0.1);
     for (const [m, v] of e.glow) m.emissiveIntensity = v + amt;
+  }
+}
+
+// The Legend fire is alive: every flame flickers on its own clock and embers
+// lift off and die out. Only what is in your hands is animated. Drawing one
+// flares the fire up with a whoomph -- including picking one from the skins
+// panel, which is the best way to see it.
+var _legendLit = new Set();
+function updateLegendFire(dt) {
+  const now = performance.now() / 1000;
+  const held = [];
+  const gm = weaponModels[currentWeaponIdx];
+  if (gm && gm.visible && gm._flames) held.push(gm);
+  const mm = selectedMeleeIdx != null && selectedMeleeIdx >= 0 ? meleeModels[selectedMeleeIdx] : null;
+  if (mm && mm.visible && mm._flames) held.push(mm);
+  for (const m of _legendLit) if (!held.includes(m)) _legendLit.delete(m);
+  for (const m of held) {
+    if (!_legendLit.has(m)) { _legendLit.add(m); m._flare = now; playEquipSound('fireup'); }
+    const flare = Math.max(0, 1 - (now - m._flare) / 0.7);
+    for (const f of m._flames) {
+      const n = Math.sin(now * f.speed + f.phase) * 0.5 + Math.sin(now * f.speed * 2.3 + f.phase * 1.7) * 0.5;
+      const w = (1 - n * 0.12) * (1 + flare * 0.5), k = 1 + n * 0.28 + flare * 1.8;
+      f.mesh.scale.set(f.s.x * w, f.s.y * k, f.s.z * w);
+    }
+    for (const e of m._embers) {
+      e.t += dt * e.speed;
+      if (e.t > 1) e.t -= 1;
+      e.mesh.position.set(e.x + Math.sin(e.t * 7 + e.phase) * 0.008,
+                          e.y + e.t * e.h * (1 + flare),
+                          e.z + Math.cos(e.t * 5 + e.phase) * 0.004);
+      e.mesh.scale.setScalar(Math.max(0.001, 1 - e.t));
+    }
   }
 }
 
@@ -22860,6 +23058,22 @@ const MODEL_SKINS = [
   { id: 'snub_gunslinger', weapon: 'snub_revolver', name: 'Gunslinger', rarity: 'rare',
     sw: ['#d8dce2', '#f2ead6'], build: buildGunslingerRevolver,
     blurb: 'Nickel and ivory. Drawn, it twirls twice round the trigger finger.' },
+  // 🔥 FFA Legend: the real weapon, cursed -- obsidian, spikes, black and red fire.
+  { id: 'ak20_legend', weapon: 'ak20', name: 'FFA Legend AK', rarity: 'legend',
+    sw: ['#17121a', '#ff2a1a'], build: buildLegendAK, look: { projectile: 'hellfire', bulletColor: 0xff2a1a },
+    blurb: 'Obsidian, spiked, and burning black and red. The FFA crown, as a rifle.' },
+  { id: 'pistol_legend', weapon: 'pistol', name: 'FFA Legend Pistol', rarity: 'legend',
+    sw: ['#17121a', '#ff2a1a'], build: buildLegendPistol, look: { projectile: 'hellfire', bulletColor: 0xff2a1a },
+    blurb: 'A sidearm that has been to hell and came back for more.' },
+  { id: 'sg8_legend', weapon: 'sg8', name: 'FFA Legend SG8', rarity: 'legend',
+    sw: ['#17121a', '#ff2a1a'], build: buildLegendSG8, look: { projectile: 'hellfire', bulletColor: 0xff2a1a },
+    blurb: 'Spikes down the spine, fire off the top. Close range, closer to hell.' },
+  { id: 'srx_legend', weapon: 'srx', name: 'FFA Legend SR-X', rarity: 'legend',
+    sw: ['#17121a', '#ff2a1a'], build: buildLegendSRX, look: { projectile: 'hellfire', bulletColor: 0xff2a1a },
+    blurb: 'A long black barrel crowned in spikes. The fire gives you away. Worth it.' },
+  { id: 'vector_legend', weapon: 'vector', name: 'FFA Legend Vector', rarity: 'legend',
+    sw: ['#17121a', '#ff2a1a'], build: buildLegendVector, look: { projectile: 'hellfire', bulletColor: 0xff2a1a },
+    blurb: 'Compact, spiked, on fire. Mostly on fire.' },
 ];
 const MODEL_SKINS_BY_WEAPON = {};
 for (const ms of MODEL_SKINS) (MODEL_SKINS_BY_WEAPON[ms.weapon] ||= []).push(ms);
@@ -24273,6 +24487,16 @@ const MELEE_MODEL_SKINS = [
     sw: ['#8ae8ff', '#3a2818'], build: buildFrostAxe,
     blurb: 'Drawn, it is tossed up, turns end over end twice, and caught.',
     equip: 'flip', equipMs: 900, equipSfx: ['whoosh', 'clink'] },
+  // 🔥 FFA Legend blades: they burn, so drawing one flares the fire up.
+  { id: 'knife_legend', melee: 'knife', name: 'FFA Legend Knife', rarity: 'legend',
+    sw: ['#17121a', '#ff2a1a'], build: buildLegendKnife,
+    blurb: 'A black blade with a burning edge and a spine of spikes.' },
+  { id: 'katana_legend', melee: 'katana', name: 'FFA Legend Katana', rarity: 'legend',
+    sw: ['#17121a', '#ff2a1a'], build: buildLegendKatana,
+    blurb: 'Obsidian steel, the whole length of it burning.' },
+  { id: 'bat_legend', melee: 'bat', name: 'FFA Legend Bat', rarity: 'legend',
+    sw: ['#17121a', '#ff2a1a'], build: buildLegendBat,
+    blurb: 'Nails were not enough. Spikes, and fire.' },
 ];
 const MELEE_MODEL_SKINS_BY_BASE = {};
 for (const ms of MELEE_MODEL_SKINS) (MELEE_MODEL_SKINS_BY_BASE[ms.melee] ||= []).push(ms);
@@ -25662,6 +25886,13 @@ const SKIN_FX = {
     equip: 'spin', equipMs: 750, spinTurns: 1, equipSfx: ['whoosh', 'rack'] },
   snub_gunslinger: { sound: _fxS('heavy', .42, .14, 0, 0, { action:'revolver', tail:.70 }),
     equip: 'spin', equipMs: 900, spinTurns: 2, equipSfx: ['whoosh', 'cock'] },
+  // FFA Legends are the real guns, so the gun's reload; the voice is the gun's
+  // own report with the fire roaring behind it.
+  ak20_legend:   { sound: _fxS('hellfire', .26, .09, 0, 0, { base:'auto_blast', action:'water_rifle', tail:.30 }) },
+  pistol_legend: { sound: _fxS('hellfire', .34, .12, 0, 0, { base:'pistol', action:'slide', tail:.25 }) },
+  sg8_legend:    { sound: _fxS('hellfire', .58, .22, 0, 0, { base:'boom', action:'shotgun', tail:.70 }) },
+  srx_legend:    { sound: _fxS('hellfire', .64, .18, 0, 0, { base:'crack', action:'bolt', tail:1.20 }) },
+  vector_legend: { sound: _fxS('hellfire', .21, .07, 0, 0, { base:'auto_blast', action:'water_smg', tail:.20 }) },
 };
 
 function _reloadPose(track, t) {
@@ -33168,6 +33399,7 @@ function loop() {
   safeLoopStep('reload-anim', () => updateReloadAnim());       // the gun and the hands work the action
   safeLoopStep('reload-props', () => updateReloadProps(dt));    // and the parts they moved go on moving
   safeLoopStep('equip-anim', () => updateEquipAnim());          // a skin making its entrance
+  safeLoopStep('legend-fire', () => updateLegendFire(dt));      // FFA Legend skins burning
   safeLoopStep('cylinders', () => updateCylinders(dt));      // revolving cylinders index round as they fire
   safeLoopStep('switchblade-hud', () => updateSwitchbladeHUD()); // shows only when switchblade is active
   safeLoopStep('spectator-camera', () => updateSpectatorCamera(dt)); // follow teammates while dead
