@@ -26939,9 +26939,20 @@ function updateTrashcanProximity() {
 function setInteractVisible(v) {
   const hint = document.getElementById('interact-hint');
   if (hint) hint.style.display = v ? 'block' : 'none';
-  const btn = document.getElementById('btn-interact');
-  if (btn) btn.style.display = v ? 'flex' : 'none';
 }
+// The on-screen stand-in for F (runs every frame; writes only on change): SWAP at a
+// trashcan, DUEL in Lobby 13 wherever F would start a duel. Phones had no way to duel.
+function syncInteractButton() {
+  const btn = document.getElementById('btn-interact');
+  if (!btn) return;
+  const duel = inLobby && !nearTrashcan && !!(lobbyPadHere || lobbyChallengeTarget);
+  const label = duel ? 'DUEL' : 'SWAP';
+  const display = (nearTrashcan || duel) ? 'flex' : 'none';
+  if (btn.textContent !== label) btn.textContent = label;
+  if (btn.style.display !== display) btn.style.display = display;
+}
+const isTouchUI = () => document.body.classList.contains('touch-ui');
+const fKeyHint = cap => isTouchUI() ? (cap ? 'Tap DUEL' : 'tap DUEL') : (cap ? 'Press F' : 'press F');
 
 // ── Grenade functions ──────────────────────────────────────────────────────
 function makeWorldGrenadeMesh() {
@@ -29370,7 +29381,7 @@ function spawnGameBots() {
     match = null;
     inLobby = true;
     const hud = document.getElementById('match-hud'); if (hud) hud.style.display = 'none';
-    setTimeout(() => { try { showAnnouncement('🛋️ LOBBY 13', 'Chill zone · walk up to anyone and press F to duel', '#aaffaa', 3200); } catch (e) {} }, 600);
+    setTimeout(() => { try { showAnnouncement('🛋️ LOBBY 13', `Chill zone · walk up to anyone and ${fKeyHint(false)} to duel`, '#aaffaa', 3200); } catch (e) {} }, 600);
     grantSpawnShield(0);
     return;
   }
@@ -30870,6 +30881,7 @@ function loop() {
   safeLoopStep('weapon-skin-fx', () => updateWeaponSkinFX(dt)); // gun-skin particles/streaks
   safeLoopStep('aim-assist', () => updateAimAssist(dt));  // auto-shoot / aim assist / aimbot / AI-aim dot
   if (inLobby) safeLoopStep('lobby-interactions', () => updateLobbyInteractions()); // duel-pad / challenge prompt
+  safeLoopStep('interact-button', syncInteractButton); // every frame, so DUEL clears once you leave the lobby
   safeLoopStep('chat-feed', () => updateChatFeed());     // fade old chat lines
   safeLoopStep('admin-cheats', () => updateAdminCheats(dt));// admin cheat tick (fly, kill aura, etc.)
   safeLoopStep('uav', () => updateUAV(dt));        // Predator UAV overlay tick
@@ -32427,7 +32439,7 @@ function updateLobbyInteractions() {
     stageDuelBots(area, side);
     const s = countSeated(area, side);
     const you = side === 'blue' ? '🟦' : '🟥';
-    showLobbyPrompt(`⚔️ ${area.label}  ${you} you · 🟦 BLUE ${s.blue}/${area.perTeam}  🟥 RED ${s.red}/${area.perTeam}  · press F to start`);
+    showLobbyPrompt(`⚔️ ${area.label}  ${you} you · 🟦 BLUE ${s.blue}/${area.perTeam}  🟥 RED ${s.red}/${area.perTeam}  · ${fKeyHint(false)} to start`);
   } else {
     let best = null, bestD = 4.5;
     for (const bot of gameBots) {
@@ -32439,7 +32451,7 @@ function updateLobbyInteractions() {
     if (best) {
       const nm = (players[best.id]?.name) || 'them';
       const keen = best._wantsDuel ? ' (wants a fight!)' : '';
-      showLobbyPrompt(`⚔️ Press F to challenge ${nm} to a 1V1${keen}`);
+      showLobbyPrompt(`⚔️ ${fKeyHint(true)} to challenge ${nm} to a 1V1${keen}`);
     } else showLobbyPrompt(null);
   }
 }
@@ -33636,11 +33648,13 @@ const TOUCH_SENS = 0.006;
 // Show mobile UI immediately on touch devices
 if (navigator.maxTouchPoints > 0 || 'ontouchstart' in window) {
   document.getElementById('mobile-controls').classList.add('active');
+  document.body.classList.add('touch-ui'); // the phone HUD layout in index.html
   document.getElementById('controls-hint').style.display = 'none';
 }
 
-// Button IDs that should NOT trigger look/joystick
-const BTN_IDS = new Set(['btn-fire','btn-ads','btn-reload-mobile','btn-prev-weapon','btn-next-weapon','btn-interact']);
+// Button IDs that should NOT trigger look/joystick. Jump / slide / crouch were missing,
+// so pressing them on a phone also swung the camera.
+const BTN_IDS = new Set(['btn-fire','btn-ads','btn-reload-mobile','btn-prev-weapon','btn-next-weapon','btn-interact','btn-jump','btn-slide','btn-crouch']);
 
 let joyTouchId  = null, joyOrigin = { x: 0, y: 0 };
 let lookTouchId = null, lastLookPos = null;
@@ -33781,13 +33795,13 @@ document.getElementById('btn-next-weapon').addEventListener('touchstart', e => {
 // Trashcan interact button (mobile)
 const btnInteract = document.getElementById('btn-interact');
 if (btnInteract) {
-  btnInteract.addEventListener('touchstart', e => {
-    e.stopPropagation(); e.preventDefault();
+  // Same two jobs as the F key: swap loadout at a trashcan, or start / accept a lobby duel.
+  const interact = () => {
     if (nearTrashcan && !isDead && gameStarted) showLoadoutScreen('swap');
-  }, { passive: false });
-  btnInteract.addEventListener('click', () => {
-    if (nearTrashcan && !isDead && gameStarted) showLoadoutScreen('swap');
-  });
+    else if (inLobby && (lobbyPadHere || lobbyChallengeTarget)) lobbyInteract();
+  };
+  btnInteract.addEventListener('touchstart', e => { e.stopPropagation(); e.preventDefault(); interact(); }, { passive: false });
+  btnInteract.addEventListener('click', interact);
 }
 
 // Mobile sprint / crouch buttons — set window._mobileSprint / _mobileCrouch flags

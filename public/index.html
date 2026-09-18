@@ -122,7 +122,7 @@
       background: rgba(0,0,0,0.72); border: 1px solid #555; border-radius: 8px;
       padding: 7px 22px; align-items: center; gap: 28px;
       font-family: 'Courier New', monospace; color: #fff; z-index: 50;
-      pointer-events: none; min-width: 380px; justify-content: space-between;
+      pointer-events: none; min-width: min(380px, calc(100vw - 24px)); justify-content: space-between;
     }
     #match-left  { color: #4cff4c; font-size: 13px; font-weight: bold; }
     #match-center { font-size: 19px; font-weight: bold; letter-spacing: 3px; text-align: center; min-width: 72px; }
@@ -280,6 +280,8 @@
       position: absolute; bottom: 68px; left: 50%; transform: translateX(-50%);
       font-size: 11px; color: #555; text-align: center; letter-spacing: 1px;
     }
+    /* Below ~900px the one-line key list wraps upward into the weapon slots and health bar. */
+    @media (max-width: 900px) { #controls-hint { display: none; } }
 
     #ability-hud {
       position: absolute; bottom: 130px; right: 30px;
@@ -392,6 +394,48 @@
     #btn-jump   { left: 280px; bottom: 60px;  background: rgba(120,220,120,0.7); border: 2px solid rgba(160,255,160,0.9); }
     #btn-jump.pressed   { background: rgba(160,255,160,0.95); transform: scale(0.92); }
     #mobile-controls.active #btn-slide, #mobile-controls.active #btn-crouch, #mobile-controls.active #btn-jump { display: flex; }
+
+    /* ── Touch layout: body.touch-ui (set together with #mobile-controls.active) ──
+       The rules above mix right-anchored buttons with hard-coded `left: 200px/280px`
+       ones, which only stay apart on wide screens — on a phone JUMP sat on FIRE's
+       centre and SLIDE on ADS's. Here every control is anchored to its own edge:
+       touch targets ≥56px (FIRE 96), ≥12px apart, and the readouts moved out of the
+       thumb zone. Desktop never gets the class, so its HUD is unchanged. */
+    body.touch-ui #btn-fire          { right: 20px;  bottom: 24px;  width: 96px; height: 96px; font-size: 14px; }
+    body.touch-ui #btn-jump          { left: auto; right: 128px; bottom: 24px; width: 56px; height: 56px; }
+    body.touch-ui #btn-ads           { right: 128px; bottom: 92px;  width: 56px; height: 56px; }
+    body.touch-ui #btn-reload-mobile { right: 20px;  bottom: 132px; width: 56px; height: 56px; }
+    body.touch-ui #btn-next-weapon   { right: 128px; bottom: 160px; }
+    body.touch-ui #btn-prev-weapon   { right: 186px; bottom: 160px; }
+    body.touch-ui #btn-interact      { right: 20px;  bottom: 200px; width: 56px; height: 56px; }
+    body.touch-ui #btn-crouch        { left: 20px;   bottom: 24px;  width: 56px; height: 56px; }
+    body.touch-ui #btn-slide         { left: 88px;   bottom: 24px;  width: 56px; height: 56px; }
+    body.touch-ui #health-bar        { left: 20px;   bottom: 92px; }
+    body.touch-ui #health-track      { width: 140px; }
+    body.touch-ui #ability-hud       { right: auto; left: 20px; bottom: 214px; }
+    /* Top band: ⚙ top-right, kills beside it, score strip, then weapon slots + ammo. */
+    body.touch-ui #floating-settings-btn {
+      top: 8px !important; left: auto !important; right: 8px !important;
+      width: 40px; height: 40px; padding: 0 !important; font-size: 0 !important; line-height: 36px; text-align: center;
+    }
+    body.touch-ui #floating-settings-btn::before { content: '⚙'; font-size: 20px; }
+    body.touch-ui #lobby-modes-btn   { top: 34px !important; left: 8px !important; }
+    body.touch-ui #kills             { right: 56px; }
+    body.touch-ui #match-hud         { top: 52px; min-width: 0; max-width: calc(100vw - 16px); padding: 6px 12px; gap: 12px; }
+    body.touch-ui #weapon-selector   { bottom: auto; top: 120px; left: 8px; transform: none; gap: 6px; }
+    body.touch-ui .ws-slot           { min-width: 0; padding: 4px 8px; }
+    body.touch-ui .ws-slot .ws-key, body.touch-ui .ws-slot .ws-type { display: none; }
+    body.touch-ui #ammo              { bottom: auto; top: 116px; right: 8px; }
+    body.touch-ui #spawn-shield      { bottom: auto; top: 158px; }
+    body.touch-ui #lobby-prompt      { bottom: auto !important; top: 158px; max-width: calc(100vw - 32px); }
+    body.touch-ui #interact-hint     { display: none !important; } /* the SWAP / DUEL button replaces it */
+    /* Landscape phones have the width for one top row. */
+    @media (min-width: 600px) {
+      body.touch-ui #match-hud       { top: 8px; max-width: calc(100vw - 260px); }
+      body.touch-ui #weapon-selector { top: 56px; }
+      body.touch-ui #ammo            { top: 52px; }
+      body.touch-ui #spawn-shield, body.touch-ui #lobby-prompt { top: 96px; }
+    }
 
     /* ── Frontlines HUD ── */
     #frontline-hud {
