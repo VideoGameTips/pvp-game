@@ -33671,8 +33671,16 @@ function isButton(el) {
   return false;
 }
 
+// Only a touch that starts on the game view — the 3D canvas or the touch controls — steers and
+// has its default cancelled. One that starts on a menu, panel or dialog is left alone so the
+// tap becomes a click: cancelling every touch mid-match is what left in-match menus dead on
+// phones (the ⚙ panel couldn't even be closed, #19; the end screen, #13).
+function onGameView(el) {
+  return el === renderer.domElement || !!(el && el.closest && el.closest('#mobile-controls'));
+}
+
 document.addEventListener('touchstart', e => {
-  if (!gameStarted) return;
+  if (!gameStarted || !onGameView(e.target)) return;
   e.preventDefault();
   for (let i = 0; i < e.changedTouches.length; i++) {
     const t = e.changedTouches[i];
@@ -33693,7 +33701,7 @@ document.addEventListener('touchstart', e => {
 }, { passive: false });
 
 document.addEventListener('touchmove', e => {
-  if (!gameStarted) return;
+  if (!gameStarted || !onGameView(e.target)) return; // a drag inside a panel scrolls the panel
   e.preventDefault();
   for (let i = 0; i < e.changedTouches.length; i++) {
     const t = e.changedTouches[i];

@@ -443,18 +443,20 @@
     body.touch-ui #kills             { right: 56px; }
     body.touch-ui #match-hud         { top: 52px; min-width: 0; max-width: calc(100vw - 16px); padding: 6px 12px; gap: 12px; }
     body.touch-ui #weapon-selector   { bottom: auto; top: 120px; left: 8px; transform: none; gap: 6px; }
-    body.touch-ui .ws-slot           { min-width: 0; padding: 4px 8px; }
+    body.touch-ui .ws-slot           { min-width: 0; padding: 4px 8px; min-height: 40px; box-sizing: border-box; display: flex; align-items: center; }
+    /* The slots already have tap-to-equip handlers; #hud's pointer-events:none kept them from ever firing. */
+    body.touch-ui #weapon-selector   { pointer-events: auto; }
     body.touch-ui .ws-slot .ws-key, body.touch-ui .ws-slot .ws-type { display: none; }
     body.touch-ui #ammo              { bottom: auto; top: 116px; right: 8px; }
-    body.touch-ui #spawn-shield      { bottom: auto; top: 158px; }
-    body.touch-ui #lobby-prompt      { bottom: auto !important; top: 158px; max-width: calc(100vw - 32px); }
+    body.touch-ui #spawn-shield      { bottom: auto; top: 170px; }
+    body.touch-ui #lobby-prompt      { bottom: auto !important; top: 170px; max-width: calc(100vw - 32px); }
     body.touch-ui #interact-hint     { display: none !important; } /* the SWAP / DUEL button replaces it */
     /* Landscape phones have the width for one top row. */
     @media (min-width: 600px) {
       body.touch-ui #match-hud       { top: 8px; max-width: calc(100vw - 260px); }
       body.touch-ui #weapon-selector { top: 56px; }
       body.touch-ui #ammo            { top: 52px; }
-      body.touch-ui #spawn-shield, body.touch-ui #lobby-prompt { top: 96px; }
+      body.touch-ui #spawn-shield, body.touch-ui #lobby-prompt { top: 106px; }
     }
 
     /* ── Frontlines HUD ── */
