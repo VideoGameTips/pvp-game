@@ -318,8 +318,19 @@
     .mo-secondary:hover { border-color: #aaa; }
     /* A phone on its side (~410 px tall): all three buttons on screen at once — the last one used to sit
        half under the bottom edge. Smaller title, tighter gaps, the two secondary buttons side by side. */
+    /* The match reward, inside the card instead of floating over it (#29) */
+    #match-over-reward {
+      display: none; font-size: 14px; color: #ffdd55; background: rgba(255,221,85,0.09);
+      border-radius: 8px; padding: 5px 14px; letter-spacing: 1px;
+    }
+    /* ⚔️ JUST FOUGHT — the people worth challenging again (#31) */
+    #match-over-rivals { width: min(430px, calc(100vw - 32px)); text-align: left; }
+    .mo-rivals-head { font-size: 11px; letter-spacing: 2px; color: #ffcc55; text-align: center; margin-bottom: 6px; }
+
     @media (max-height: 480px) {
       #match-over-screen { gap: 6px; padding: 10px 16px; }
+      #match-over-rivals { width: min(520px, calc(100vw - 24px)); }
+      .mo-rivals-head { margin-bottom: 3px; }
       #match-over-title { font-size: 34px; }
       #match-over-score { margin: 0; }
       #match-over-actions { display: grid; grid-template-columns: 1fr 1fr; width: min(480px, 100%); margin-top: 4px; }
@@ -646,7 +657,8 @@
       width: 36px; height: 36px; padding: 0 !important; font-size: 0 !important; line-height: 32px; text-align: center;
     }
     body.touch-ui #floating-settings-btn::before { content: '⚙'; font-size: 19px; }
-    body.touch-ui #lobby-modes-btn   { top: 6px !important; left: 8px !important; }
+    body.touch-ui #lobby-modes-btn   { top: 6px !important; left: 8px !important; padding: 7px 14px; font-size: 13px; }
+    body.touch-ui #lobby-duel-btn    { top: 6px !important; left: 116px !important; padding: 7px 14px; font-size: 13px; }
     body.touch-ui #kills             { top: 14px; right: 52px; font-size: 12px; }
     body.touch-ui #match-hud         { top: 6px; min-width: 0; max-width: calc(100vw - 220px); padding: 4px 12px; gap: 12px; }
     /* Weapons: four icon slots in the top-right corner, with the live weapon + ammo under them. */
@@ -713,7 +725,7 @@
       body.touch-ui #match-center    { font-size: 15px; }
       body.touch-ui #weapon-selector { top: 46px; }
       body.touch-ui #ammo            { top: 86px; }
-      body.touch-ui #msg-feed        { top: 42px; }
+      body.touch-ui #msg-feed        { top: 48px; }
       body.touch-ui #lobby-prompt    { top: 118px; }
     }
 

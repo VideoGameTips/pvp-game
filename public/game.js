@@ -1175,7 +1175,6 @@ let inLobby = false;
 // pressing F starts that mode (bots fill the empty slots). Populated in buildLobby13Map.
 const LOBBY_DUEL_PADS = [];
 let lobbyPadHere = null;        // the duel area the player is currently standing on
-let lobbyChallengeTarget = null;// nearest cast member to challenge (proximity F = 1V1)
 let lobbyActiveArea = null;     // duel area currently being staged (player on one of its pads)
 let lobbyPlayerSide = null;     // which pad the player chose: 'blue' or 'red'
 let spawnShieldUntil = 0; // timestamp: player is invincible until this time
@@ -24283,7 +24282,10 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false) {
         creditWeaponKill(currentEquippedId());
         saveKillReplay(pid, currentEquippedId());
         // 🧠 The cast remembers: this character recalls you killing them with this weapon.
-        if (bot.charId) recordCharMemory(bot.charId, { youKilledThemWith: weaponDisplayName(currentEquippedId()), team: bot.team });
+        if (bot.charId) {
+          recordCharMemory(bot.charId, { youKilledThemWith: weaponDisplayName(currentEquippedId()), team: bot.team });
+          noteRival(bot, 'youKilled');
+        }
         const kc = document.getElementById('kill-count');
         if (kc) kc.textContent = `Kills: ${myKills}`;
         const botName = players[pid]?.name || 'Bot';
@@ -26431,7 +26433,10 @@ function applyBotDamageToPlayer(weaponId, botId) {
         const line = pickThought('killed_enemy');
         if (line) showBotSpeech(killerBot, line, 2500, '#44ff44');
         // 🧠 The cast remembers: this character recalls killing you with this weapon.
-        if (killerBot.charId) recordCharMemory(killerBot.charId, { killedYouWith: weaponDisplayName(weaponId), team: killerBot.team });
+        if (killerBot.charId) {
+          recordCharMemory(killerBot.charId, { killedYouWith: weaponDisplayName(weaponId), team: killerBot.team });
+          noteRival(killerBot, 'killedYou');
+        }
       }
     }
     // Notify match logic (round end / kill tracking)
@@ -26969,8 +26974,8 @@ function syncInteractButton() {
   const btn = document.getElementById('btn-interact');
   if (!btn) return;
   const pilot = pilotableHere();
-  const duel = !pilot && inLobby && !nearTrashcan && !!(lobbyPadHere || lobbyChallengeTarget);
-  const label = I18N.t(pilot === 'exit' ? 'EXIT' : (pilot && !nearTrashcan) ? 'PILOT' : duel ? 'DUEL' : 'SWAP'); // compare with what's shown, which may be translated
+  const duel = !pilot && inLobby && !nearTrashcan && !!lobbyPadHere;   // pads only now (#31)
+  const label = I18N.t(pilot === 'exit' ? 'EXIT' : (pilot && !nearTrashcan) ? 'PILOT' : duel ? 'START' : 'SWAP'); // compare with what's shown, which may be translated
   const display = (nearTrashcan || duel || pilot) ? 'flex' : 'none';
   if (btn.textContent !== label) btn.textContent = label;
   if (btn.style.display !== display) btn.style.display = display;
@@ -26995,7 +27000,7 @@ function syncAbilityButton() {
   if (ring) ring.style.setProperty('--cd', Math.round(pct * 100) + '%');
 }
 const isTouchUI = () => document.body.classList.contains('touch-ui');
-const fKeyHint = cap => isTouchUI() ? (cap ? 'Tap DUEL' : 'tap DUEL') : (cap ? 'Press F' : 'press F');
+const fKeyHint = cap => isTouchUI() ? (cap ? 'Tap START' : 'tap START') : (cap ? 'Press F' : 'press F');
 
 // ── Grenade functions ──────────────────────────────────────────────────────
 function makeWorldGrenadeMesh() {
@@ -28380,6 +28385,8 @@ function checkBrWin() {
 
 function onEntityDied(targetId, killerId) {
   if (!match || match.over) return;
+  if (killerId) matchScore[killerId]  = (matchScore[killerId]  || 0) + 1;   // #31: who is having the good match
+  if (targetId) matchDeaths[targetId] = (matchDeaths[targetId] || 0) + 1;
   if (match.tiebreaker) {
     // Whoever dies first loses the match
     if (targetId === myId) endMatch('enemy', 'TIEBREAKER — You fell first');
@@ -28999,7 +29006,11 @@ function endMatch(winner, reason) {
   const isWin  = winner === 'ally';
   releasePointer(); // PLAY AGAIN / CHANGE MODE / BACK TO LOBBY need the cursor
   const el     = document.getElementById('match-over-screen');
+  clearFeed();                                      // the fight's messages stop here (#29)
+  const rewardRow = document.getElementById('match-over-reward');
+  if (rewardRow) rewardRow.style.display = 'none';  // until this match's award lands
   showFunFact('match-over-screen');
+  renderMatchRivals();
   const title  = document.getElementById('match-over-title');
   title.textContent = isWin ? '🏆  VICTORY' : '💀  DEFEAT';
   title.style.color = isWin ? '#ffd700' : '#e74c3c';
@@ -29036,9 +29047,22 @@ function endMatch(winner, reason) {
   awardMatchCredits(playerKills, isWin);
   // 🧠 Match-memory: every comic-cast bot remembers whether THEIR team won, and
   // whether they were on your side or against you. (Ally bots win when you win.)
+  const memBefore = loadCharMemory();
   for (const b of gameBots) {
     if (!b.charId) continue;
-    recordCharMemory(b.charId, { wonLastMatch: b.team === winner, team: b.team, mode: match.type });
+    const prev = memBefore[b.charId] || {};
+    const r = matchRivals[b.charId] || {};
+    recordCharMemory(b.charId, {
+      wonLastMatch: b.team === winner, team: b.team, mode: match.type,
+      name: players[b.id]?.name || prev.name,
+      // Running record, so the lobby's duel picker can rank by 战绩 (#31)
+      matches:       (prev.matches       || 0) + 1,
+      wins:          (prev.wins          || 0) + (b.team === winner ? 1 : 0),
+      theyKilledYou: (prev.theyKilledYou || 0) + (r.killedYou || 0),
+      youKilledThem: (prev.youKilledThem || 0) + (r.youKilled || 0),
+      lastKills:     matchScore[b.id]  || 0,
+      lastDeaths:    matchDeaths[b.id] || 0,
+    });
   }
   // Trials are one-match only — clear them so they re-cost next time.
   trialingThisMatch.clear();
@@ -29185,6 +29209,30 @@ function recordCharMemory(charId, patch) {
     localStorage.setItem(CHAR_MEMORY_KEY, JSON.stringify(m));
   } catch (e) {}
 }
+// ── ⚔️ Rivalries (#31) ───────────────────────────────────────────────────────
+// Who you traded kills with this match, and who did best in it — the end screen
+// turns both into "刚才交过手 / 本局最强" rows you can challenge in one tap.
+let matchRivals = {};   // charId → { charId, name, youKilled, killedYou }
+let matchScore  = {};   // entityId → kills this match (every mode; ffaKills only counts FFA)
+let matchDeaths = {};   // entityId → deaths this match
+function resetMatchRivals() { matchRivals = {}; matchScore = {}; matchDeaths = {}; }
+function noteRival(bot, field) {
+  if (!bot || !bot.charId) return;
+  const r = matchRivals[bot.charId]
+    || (matchRivals[bot.charId] = { charId: bot.charId, name: players[bot.id]?.name || bot.charId, youKilled: 0, killedYou: 0 });
+  r.name = players[bot.id]?.name || r.name;
+  r[field]++;
+}
+// Best of the match, whichever side they were on.
+function matchTopBot() {
+  let best = null;
+  for (const b of gameBots) {
+    if (!b.charId || !(matchScore[b.id] > 0)) continue;
+    if (!best || matchScore[b.id] > matchScore[best.id]) best = b;
+  }
+  return best;
+}
+
 // Friendly weapon name for the memory blurb (falls back to the id).
 function weaponDisplayName(id) {
   const w = WEAPONS.find(ww => ww.id === id) || MELEE_ITEMS.find(mm => mm.id === id);
@@ -29193,6 +29241,7 @@ function weaponDisplayName(id) {
 
 function spawnGameBots() {
   if (!selectedModeConfig) return;
+  resetMatchRivals();          // this match's kill exchanges start empty (#31)
   // 🌐 Enter a private match BEFORE spawning bots — server will isolate this player's bots
   // from other players who aren't in the same match.
   const matchId = (pvpMatch && pvpMatch.mode)
@@ -29324,6 +29373,16 @@ function spawnGameBots() {
     enemies = 0;
   }
 
+  // ⚔️ Ordinary matches used to field "Enemy 1" and "Ally 2", so nobody in them had a
+  // name worth challenging afterwards. Any slot you did not draft now borrows an
+  // identity from the Lobby 13 cast — name, emoji and skin only. The playstyle block
+  // (aim, personality, signature loadout) stays with drafted characters, so bot
+  // difficulty is exactly what the difficulty setting says it is (#31).
+  const castPool = (selectedModeConfig.type === 'lobby' || !window.CHAT_CAST) ? []
+    : Object.keys(window.CHAT_CAST)
+        .filter(id => !draftedAllies.includes(id) && !draftedEnemies.includes(id))
+        .sort(() => Math.random() - 0.5);
+
   const makeBot = (idx, team) => {
     const isAlly   = team === 'ally';
     const count    = isAlly ? allies : enemies;
@@ -29337,14 +29396,16 @@ function spawnGameBots() {
     let _teammateChar = null;
     let _playstyle = null;
     const _draftList = isAlly ? draftedAllies : draftedEnemies;
-    const tmId = (idx < _draftList.length) ? _draftList[idx] : null;
+    const drafted = idx < _draftList.length;
+    const tmId = drafted ? _draftList[idx] : (castPool.pop() || null);
     {
       const tmChar = tmId && window.CHAT_CAST && window.CHAT_CAST[tmId];
       if (tmChar) {
         name = `${tmChar.emoji} ${tmChar.name}`; _teammateChar = tmChar;
         // Every character shares the same DEFAULT stat block (hp/speed/aim); their
-        // entry only overrides PLAY STYLE (personality + signature loadout + label).
-        _playstyle = { ...DEFAULT_TEAMMATE_PLAYSTYLE, ...(TEAMMATE_PLAYSTYLES[tmId] || {}) };
+        // entry only overrides PLAY STYLE (personality + signature loadout + label) —
+        // and only when you actually drafted them (#31).
+        if (drafted) _playstyle = { ...DEFAULT_TEAMMATE_PLAYSTYLE, ...(TEAMMATE_PLAYSTYLES[tmId] || {}) };
       }
     }
     // 🆕 Full bot loadout — secondary, melee, utility (random non-admin picks)
@@ -29471,7 +29532,7 @@ function spawnGameBots() {
     match = null;
     inLobby = true;
     const hud = document.getElementById('match-hud'); if (hud) hud.style.display = 'none';
-    setTimeout(() => { try { showAnnouncement('🛋️ LOBBY 13', `Chill zone · walk up to anyone and ${fKeyHint(false)} to duel`, '#aaffaa', 3200); } catch (e) {} }, 600);
+    setTimeout(() => { try { showAnnouncement('🛋️ LOBBY 13', 'Chill zone · ⚔️ DUEL picks your 1V1 · the blue/red pads run 2V2 and 3V3', '#aaffaa', 3200); } catch (e) {} }, 600);
     grantSpawnShield(0);
     return;
   }
@@ -32440,7 +32501,8 @@ function afterDeath(ms, fn) {
 // inherit. Shared by the mode menu and the end-of-match buttons so they can't drift apart.
 function teardownMatchWorld() {
   matchEpoch++;
-  clearFeed();     // messages from the match that just ended don't belong on the next screen (#29)
+  clearFeed();
+  resetMatchRivals();     // messages from the match that just ended don't belong on the next screen (#29)
   stopKillcam();   // restores the camera; may re-show the death screen, hidden again below
   exitSpectator();
   gameStarted = false;
@@ -32461,6 +32523,7 @@ function teardownMatchWorld() {
     const el = document.getElementById(id); if (el) el.style.display = 'none';
   }
   showLobbyModesButton(false);
+  showLobbyDuelButton(false);
   showFloatingSettingsButton(false);
   showLobbyPrompt(null);
 }
@@ -32526,6 +32589,146 @@ function showLobbyModesButton(show) {
   btn.style.display = show ? 'block' : 'none';
 }
 
+// ── ⚔️ DUEL picker (#31) ─────────────────────────────────────────────────────
+// The lobby's own button for picking a 1V1 opponent: people you have fought, the
+// ones with the best record against you, whoever is up for a fight right now, and
+// the whole cast. Deliberate, and it waits for you — unlike the old walk-up prompt.
+function showLobbyDuelButton(show) {
+  let btn = document.getElementById('lobby-duel-btn');
+  if (!btn) {
+    btn = document.createElement('button');
+    btn.id = 'lobby-duel-btn';
+    btn.textContent = '⚔️ DUEL';
+    btn.style.cssText = 'position:fixed;top:14px;left:170px;z-index:60;'
+      + 'padding:9px 18px;background:rgba(28,16,16,0.85);color:#ffcc55;border:2px solid #ffcc55;'
+      + 'border-radius:6px;font-family:inherit;font-size:14px;font-weight:bold;letter-spacing:3px;'
+      + 'cursor:pointer;box-shadow:0 2px 12px rgba(0,0,0,0.5);';
+    btn.addEventListener('click', openDuelPicker);
+    btn.addEventListener('touchstart', e => { e.preventDefault(); openDuelPicker(); }, { passive: false });
+    document.body.appendChild(btn);
+  }
+  btn.style.display = show ? 'block' : 'none';
+}
+// Characters you have met, newest first, with what happened.
+function duelRecentRivals(limit = 4) {
+  const mem = loadCharMemory();
+  return Object.entries(mem)
+    .filter(([id]) => window.CHAT_CAST && window.CHAT_CAST[id])
+    .sort((a, b) => (b[1].ts || 0) - (a[1].ts || 0))
+    .slice(0, limit)
+    .map(([id, e]) => ({ id, e }));
+}
+// 战绩最好的: ranked by how the fights actually went — their kills on you, minus yours
+// on them, then match wins.
+function duelBestRecords(limit = 4, skip = new Set()) {
+  const mem = loadCharMemory();
+  return Object.entries(mem)
+    .filter(([id, e]) => window.CHAT_CAST && window.CHAT_CAST[id] && !skip.has(id)
+      && ((e.theyKilledYou || 0) + (e.youKilledThem || 0) + (e.matches || 0)) > 0)
+    .map(([id, e]) => ({ id, e, score: (e.theyKilledYou || 0) - (e.youKilledThem || 0) + (e.wins || 0) * 2 }))
+    .sort((a, b) => b.score - a.score || (b.e.theyKilledYou || 0) - (a.e.theyKilledYou || 0))
+    .slice(0, limit);
+}
+function castName(id) {
+  const c = window.CHAT_CAST && window.CHAT_CAST[id];
+  return c ? `${c.emoji} ${c.name}` : id;
+}
+// "12 kills on you · 4 back · 3 wins" — whichever parts of it exist.
+function duelRecordLine(e) {
+  const bits = [];
+  if (e.theyKilledYou) bits.push(`${e.theyKilledYou} kills on you`);
+  if (e.youKilledThem) bits.push(`you got them ${e.youKilledThem}`);
+  if (e.wins)          bits.push(`${e.wins} wins`);
+  if (!bits.length && e.mode) bits.push('played with you');
+  return bits.join(' · ');
+}
+function startDuelWith(charId) {
+  if (!charId) return;
+  closeDialog('duel-panel');
+  startDuel('1v1', { enemies: [charId] });
+}
+function duelRow(id, line, tag) {
+  return `<div style="display:flex;align-items:center;gap:10px;padding:7px 9px;margin-bottom:6px;border-radius:8px;background:rgba(255,255,255,0.05);">
+    <div style="min-width:0;flex:1;">
+      <div style="font-size:14px;font-weight:bold;color:#fff;">${escHtml(castName(id))}${tag ? ` <span style="font-size:11px;color:#ffb3a8;border:1px solid #7a3a34;border-radius:5px;padding:0 5px;">${escHtml(tag)}</span>` : ''}</div>
+      ${line ? `<div style="font-size:12px;color:#9c9fb0;">${escHtml(line)}</div>` : ''}
+    </div>
+    <button data-duel="${escHtml(id)}" style="background:#c0392b;color:#fff;border:0;border-radius:8px;min-height:36px;padding:7px 14px;font-family:inherit;font-weight:bold;font-size:13px;cursor:pointer;">DUEL</button>
+  </div>`;
+}
+// ⚔️ "JUST FOUGHT" on the end screen (#31): the characters you traded kills with this
+// match, plus whoever had the best match, each one tap away from a 1V1. This is the
+// moment people actually want a rematch — not while a stranger walks past you in the lobby.
+function renderMatchRivals() {
+  const screen = document.getElementById('match-over-screen');
+  const actions = document.getElementById('match-over-actions');
+  if (!screen || !actions) return;
+  let box = document.getElementById('match-over-rivals');
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'match-over-rivals';
+    screen.insertBefore(box, actions);
+  }
+  const rivals = Object.values(matchRivals)
+    .filter(r => r.youKilled || r.killedYou)
+    .sort((a, b) => (b.killedYou - a.killedYou) || (b.youKilled - a.youKilled))
+    .slice(0, 3);
+  const top = matchTopBot();
+  const topId = top && top.charId;
+  const rows = rivals.map((r, i) => {
+    const bits = [];
+    if (r.killedYou) bits.push(`killed you ${r.killedYou}x`);
+    if (r.youKilled) bits.push(`you killed them ${r.youKilled}x`);
+    const tag = r.charId === topId ? 'top of the match' : (i === 0 && r.killedYou ? 'nemesis' : '');
+    return duelRow(r.charId, bits.join(' · '), tag);
+  });
+  if (topId && !rivals.some(r => r.charId === topId)) {
+    rows.push(duelRow(topId, `${matchScore[top.id] || 0} kills this match`, 'top of the match'));
+  }
+  box.innerHTML = rows.length ? `<div class="mo-rivals-head">⚔️ JUST FOUGHT · TAP TO 1V1 THEM</div>${rows.join('')}` : '';
+  box.style.display = rows.length ? 'block' : 'none';
+  box.querySelectorAll('[data-duel]').forEach(b => bindTap(b, () => {
+    const id = b.dataset.duel;
+    teardownMatchWorld();
+    startDuel('1v1', { enemies: [id] });
+  }));
+}
+
+function openDuelPicker() {
+  closeOtherDialogs('duel-panel');
+  let panel = document.getElementById('duel-panel');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'duel-panel';
+    panel.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9900;'
+      + 'background:#16121a;border:2px solid #ffcc55;border-radius:10px;padding:20px;color:#fff;'
+      + 'font-family:inherit;width:min(560px,calc(100vw - 16px));max-height:80vh;overflow-y:auto;box-shadow:0 10px 40px rgba(0,0,0,0.7);';
+    document.body.appendChild(panel);
+  }
+  const recent = duelRecentRivals();
+  const seen = new Set(recent.map(r => r.id));
+  const best = duelBestRecords(4, seen);
+  const keen = gameBots.filter(b => b.charId && b._wantsDuel && !b.dead && !seen.has(b.charId)).slice(0, 6);
+  const head = t => `<div style="font-size:11px;letter-spacing:2px;color:#ffcc55;margin:14px 0 6px;">${t}</div>`;
+  const chip = id => `<button data-duel="${escHtml(id)}" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.18);color:#fff;border-radius:8px;min-height:34px;padding:5px 10px;font-family:inherit;font-size:12.5px;cursor:pointer;">${escHtml(castName(id))}</button>`;
+  const all = Object.keys(window.CHAT_CAST || {});
+  panel.style.display = 'block';
+  panel.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #4a3a1c;padding-bottom:10px;">
+      <div style="font-size:18px;letter-spacing:3px;color:#ffcc55;">⚔️ DUEL 1V1</div>
+      <button id="duel-close" style="background:#241a1a;color:#ffaaaa;border:1px solid #ff6666;border-radius:5px;min-height:36px;padding:4px 12px;font-family:inherit;cursor:pointer;">✕</button>
+    </div>
+    ${recent.length ? head('RECENTLY FOUGHT') + recent.map(r => duelRow(r.id, duelRecordLine(r.e), r.e.wonLastMatch ? 'beat you last time' : '')).join('') : ''}
+    ${best.length ? head('BEST RECORD') + best.map(r => duelRow(r.id, duelRecordLine(r.e), '')).join('') : ''}
+    ${keen.length ? head('UP FOR A FIGHT') + `<div style="display:flex;flex-wrap:wrap;gap:6px;">${keen.map(b => chip(b.charId)).join('')}</div>` : ''}
+    ${head(`EVERYONE (${all.length})`)}
+    <div style="display:flex;flex-wrap:wrap;gap:6px;">${all.map(chip).join('')}</div>
+    <div style="font-size:11.5px;color:#8a8d9c;margin-top:12px;">1V1 · random arena · your current difficulty and loadout</div>
+  `;
+  panel.querySelector('#duel-close').addEventListener('click', () => closeDialog('duel-panel'));
+  panel.querySelectorAll('[data-duel]').forEach(b => b.addEventListener('click', () => startDuelWith(b.dataset.duel)));
+}
+
 // Switching language re-renders the settings panel (its EN/中文 buttons carry the state).
 document.addEventListener('langchange', () => {
   const p = document.getElementById('settings-hub-panel');
@@ -32535,10 +32738,11 @@ document.addEventListener('langchange', () => {
 // different sizes. Closing is only hiding — every dialog rebuilds from current state when it opens.
 // index.html gives them one shared frame.
 const DIALOG_IDS = ['settings-hub-panel', 'shoot-fx-panel', 'aim-assist-panel', 'weapon-skins-panel',
-                    'skins-panel', 'kill-log-panel', 'char-chat-panel', 'map-dialog', 'diff-dialog'];
+                    'skins-panel', 'kill-log-panel', 'char-chat-panel', 'map-dialog', 'diff-dialog', 'duel-panel'];
 function anyDialogOpen() {
   return DIALOG_IDS.some(id => { const el = document.getElementById(id); return el && getComputedStyle(el).display !== 'none'; });
 }
+function closeDialog(id) { const el = document.getElementById(id); if (el) el.style.display = 'none'; }
 function closeOtherDialogs(keepId) {
   for (const id of DIALOG_IDS) {
     const el = id !== keepId && document.getElementById(id);
@@ -32741,7 +32945,7 @@ function updateLobbyInteractions() {
   if (!inLobby) { showLobbyPrompt(null); return; }
   // Near a trashcan? Let its own "press F to change weapons" prompt take over and
   // don't offer a duel/challenge here — F swaps your loadout instead.
-  if (nearTrashcan) { releaseDuelBots(); lobbyActiveArea = null; lobbyPlayerSide = null; lobbyPadHere = null; lobbyChallengeTarget = null; showLobbyPrompt(null); return; }
+  if (nearTrashcan) { releaseDuelBots(); lobbyActiveArea = null; lobbyPlayerSide = null; lobbyPadHere = null; showLobbyPrompt(null); return; }
   const px = camera.position.x, pz = camera.position.z;
   // Which pad (blue OR red) of which area is the player standing on?
   let area = null, side = null;
@@ -32751,39 +32955,28 @@ function updateLobbyInteractions() {
   }
   // Switched area/side (or stepped off) → release previously-assigned bots.
   if (area !== lobbyActiveArea || side !== lobbyPlayerSide) { releaseDuelBots(); lobbyActiveArea = area; lobbyPlayerSide = side; }
-  lobbyPadHere = area; lobbyChallengeTarget = null;
+  lobbyPadHere = area;
 
+  // Standing on a pad is something you chose to do, so it still prompts — as one short
+  // line. Walking past a cast member no longer does: with 37 of them wandering the
+  // lounge that prompt flickered on and off (9 times in 40 s standing still, most of
+  // them under 1.5 s) and was near impossible to tap. The ⚔️ DUEL button picks who you
+  // want instead (#31).
   if (area) {
     stageDuelBots(area, side);
     const s = countSeated(area, side);
-    const you = side === 'blue' ? '🟦' : '🟥';
-    showLobbyPrompt(`⚔️ ${area.label}  ${you} you · 🟦 BLUE ${s.blue}/${area.perTeam}  🟥 RED ${s.red}/${area.perTeam}  · ${fKeyHint(false)} to start`);
-  } else {
-    let best = null, bestD = 4.5;
-    for (const bot of gameBots) {
-      if (bot.dead || !bot.charId) continue;
-      const d = Math.hypot(px - bot.x, pz - bot.z);
-      if (d < bestD) { bestD = d; best = bot; }
-    }
-    lobbyChallengeTarget = best;
-    if (best) {
-      const nm = (players[best.id]?.name) || 'them';
-      const keen = best._wantsDuel ? ' (wants a fight!)' : '';
-      showLobbyPrompt(`⚔️ ${fKeyHint(true)} to challenge ${nm} to a 1V1${keen}`);
-    } else showLobbyPrompt(null);
-  }
+    showLobbyPrompt(`⚔️ ${area.label} · 🟦 ${s.blue}/${area.perTeam} · 🟥 ${s.red}/${area.perTeam} · ${fKeyHint(false)} to start`);
+  } else showLobbyPrompt(null);
 }
 // F pressed in the lobby → start the staged duel, or challenge the nearest member.
 function lobbyInteract() {
   if (!inLobby) return;
-  if (lobbyPadHere) {
+  if (lobbyPadHere) {   // the pads are the only proximity duel left (#31)
     // Your side's bots are teammates, the other side's are opponents — regardless
     // of whether you stood on blue or red.
     const mates = gameBots.filter(b => !b.dead && b._duelTeam === 'mate').map(b => b.charId).filter(Boolean);
     const foes  = gameBots.filter(b => !b.dead && b._duelTeam === 'foe').map(b => b.charId).filter(Boolean);
     startDuel(lobbyPadHere.modeId, { allies: mates, enemies: foes });
-  } else if (lobbyChallengeTarget) {
-    startDuel('1v1', { enemies: [lobbyChallengeTarget.charId].filter(Boolean) });
   }
 }
 // Leave the lobby and start a real match (the duel itself IS a normal match on a
@@ -32794,12 +32987,18 @@ function startDuel(modeId, picks) {
   const cfg = GAME_MODE_CONFIGS[modeId];
   if (!cfg) return;
   inLobby = false;
+  gameStarted = true;      // also reached from the end screen, where the world was just torn down (#31)
+  showFloatingSettingsButton(true);
   releaseDuelBots();
-  lobbyActiveArea = null; lobbyPlayerSide = null; lobbyPadHere = null; lobbyChallengeTarget = null;
+  lobbyActiveArea = null; lobbyPlayerSide = null; lobbyPadHere = null;
   showLobbyPrompt(null);
   showLobbyModesButton(false);
+  showLobbyDuelButton(false);
   const hud = document.getElementById('match-hud'); if (hud) hud.style.display = 'flex';
   picks = picks || {};
+  // These picks belong to this duel only. They used to stay in window.PVP_* afterwards,
+  // so whoever you duelled kept turning up — with their playstyle — in every later match (#31).
+  const _prevOpponents = window.PVP_OPPONENTS, _prevTeammates = window.PVP_TEAMMATES;
   if (picks.enemies && picks.enemies.length) window.PVP_OPPONENTS = picks.enemies.slice();
   if (picks.allies  && picks.allies.length)  window.PVP_TEAMMATES = picks.allies.slice();
   selectedModeConfig = cfg;
@@ -32809,6 +33008,7 @@ function startDuel(modeId, picks) {
   const sub = oppNames.length ? `vs ${oppNames.join(', ')}` : modeId.toUpperCase();
   showAnnouncement('⚔️ DUEL', sub, '#ffcc44', 2200);
   spawnGameBots();        // tears down the lobby cast + builds the elim match
+  window.PVP_OPPONENTS = _prevOpponents; window.PVP_TEAMMATES = _prevTeammates;   // one duel, not forever
   requestPointerLockSafe();
   startLoop();
 }
@@ -32981,11 +33181,22 @@ async function awardMatchCredits(kills, won) {
       if (r.chestDrops?.common) msg += ' · 📦 +1 Common';
       if (r.chestDrops?.rare)   msg += ' · 🟣 +1 Rare';
       updateUserInfoBar();
-      const t = document.createElement('div');
-      t.textContent = msg;
-      t.style.cssText = 'position:fixed;top:80px;right:20px;background:#1a1a0a;border:2px solid #ffdd55;color:#ffdd55;padding:10px 18px;font-family:"Courier New",monospace;font-size:14px;letter-spacing:2px;z-index:9999;border-radius:4px;';
-      document.body.appendChild(t);
-      setTimeout(() => t.remove(), 4500);
+      // Used to float over the end screen in its own corner box; it belongs in the card
+      // you are already reading (#29). Outside the end screen it is a feed line.
+      const over = document.getElementById('match-over-screen');
+      if (over && getComputedStyle(over).display !== 'none') {
+        let row = document.getElementById('match-over-reward');
+        if (!row) {
+          row = document.createElement('div');
+          row.id = 'match-over-reward';
+          const stats = document.getElementById('match-over-stats');
+          stats ? stats.after(row) : over.appendChild(row);
+        }
+        row.textContent = msg;
+        row.style.display = 'block';
+      } else {
+        pushFeedLine(msg, '', '#ffdd55', false);
+      }
     }
   } catch (e) {}
 }
@@ -33179,6 +33390,7 @@ function selectMode(modeId) {
     requestPointerLockSafe();
     startLoop();
     showLobbyModesButton(true); // 🎮 floating button back to the mode menu
+    showLobbyDuelButton(true);  // ⚔️ pick who you want to 1V1 (#31)
     showFloatingSettingsButton(true);
   } else {
     showFloatingSettingsButton(true);
@@ -34202,7 +34414,7 @@ if (btnInteract) {
     else if (nearTrashcan && !isDead && gameStarted) showLoadoutScreen('swap');
     else if (pilot === 'vehicle') tryEnterVehicle();
     else if (pilot === 'mortar') tryEnterMortar();
-    else if (inLobby && (lobbyPadHere || lobbyChallengeTarget)) lobbyInteract();
+    else if (inLobby && lobbyPadHere) lobbyInteract();
   };
   btnInteract.addEventListener('touchstart', e => { e.stopPropagation(); e.preventDefault(); interact(); }, { passive: false });
   btnInteract.addEventListener('click', interact);
