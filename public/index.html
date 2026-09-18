@@ -485,12 +485,37 @@
     body.touch-ui #spawn-shield      { bottom: auto; top: 170px; }
     body.touch-ui #lobby-prompt      { bottom: auto !important; top: 170px; max-width: calc(100vw - 32px); }
     body.touch-ui #interact-hint     { display: none !important; } /* the SWAP / DUEL button replaces it */
-    /* Landscape phones have the width for one top row. */
-    @media (min-width: 600px) {
-      body.touch-ui #match-hud       { top: 8px; max-width: calc(100vw - 260px); }
+    /* Narrow phones (Galaxy S9+ class, 320px): the same layout with 50px buttons, ≥10px apart. */
+    @media (max-width: 350px) {
+      body.touch-ui #btn-fire          { right: 12px;  bottom: 20px;  width: 84px; height: 84px; }
+      body.touch-ui #btn-jump          { right: 106px; bottom: 20px;  width: 50px; height: 50px; }
+      body.touch-ui #btn-ads           { right: 106px; bottom: 82px;  width: 50px; height: 50px; }
+      body.touch-ui #btn-reload-mobile { right: 12px;  bottom: 116px; width: 50px; height: 50px; }
+      body.touch-ui #btn-interact      { right: 12px;  bottom: 178px; width: 50px; height: 50px; }
+      body.touch-ui #btn-next-weapon   { right: 106px; bottom: 144px; }
+      body.touch-ui #btn-prev-weapon   { right: 162px; bottom: 144px; }
+      body.touch-ui #btn-crouch        { left: 12px;   bottom: 20px;  width: 50px; height: 50px; }
+      body.touch-ui #btn-slide         { left: 72px;   bottom: 20px;  width: 50px; height: 50px; }
+      body.touch-ui #health-bar        { left: 12px;   bottom: 82px; }
+      body.touch-ui #health-track      { width: 120px; }
+      body.touch-ui #ability-hud       { left: 12px;   bottom: 200px; }
+      body.touch-ui #ammo              { top: 166px; }  /* the four weapon slots need the whole top row */
+    }
+    /* Landscape (by orientation, not width — a portrait tablet is wide too): one top row, a
+       one-line score strip, and SWAP/DUEL beside the cluster instead of above it. */
+    @media (orientation: landscape) {
+      body.touch-ui #match-hud       { top: 8px; max-width: calc(100vw - 260px); white-space: nowrap; padding: 4px 10px; gap: 10px; }
+      body.touch-ui #match-center    { font-size: 16px; }
       body.touch-ui #weapon-selector { top: 56px; }
       body.touch-ui #ammo            { top: 52px; }
+      body.touch-ui #btn-interact    { right: 196px; bottom: 24px; }
       body.touch-ui #spawn-shield, body.touch-ui #lobby-prompt { top: 106px; }
+    }
+    /* Landscape with the browser bars showing (~300–420px tall). */
+    @media (orientation: landscape) and (max-height: 420px) {
+      body.touch-ui #ammo-gun        { display: none; }
+      body.touch-ui #ammo-count      { font-size: 24px; }
+      body.touch-ui #ability-hud     { left: 172px; bottom: 92px; }
     }
 
     /* ── Frontlines HUD ── */
