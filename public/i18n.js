@@ -71,6 +71,13 @@
     '🎭 SKINS': '🎭 角色皮肤',
     '🔑 ENTER UNLOCK CODE': '🔑 输入兑换码',
     'LOG OUT': '退出登录',
+    // the simpler mode screen (#24)
+    'SHOP': '商店', 'SKINS': '皮肤', 'GUN SKINS': '枪械皮肤', 'CHAT': '聊天', 'MORE': '更多',
+    'QUICK START': '快速开始', 'ALL MODES': '全部模式',
+    '5 bots · all vs all': '5 个机器人 · 各自为战', 'TEAM 5v5': '团队 5v5', '1v1 DUEL': '1v1 单挑', 'GUN GAME': '枪王之路',
+    '🗺️ MAP': '🗺️ 地图', '🤖 BOT DIFFICULTY': '🤖 机器人难度',
+    'TEAM': '团队', 'FFA': '混战', 'SPECIAL': '特殊', 'ARCADE': '街机',
+    'Map': '地图', 'Bot difficulty': '机器人难度', 'Close': '关闭',
     'frags · 📦 {c}c/{r}r · 🎁 {s} skin · 🪖 {n}/24{rest}': '碎片 · 📦 普通 {c} / 稀有 {r} · 🎁 {s} 个皮肤箱 · 🪖 {n}/24{rest}',
     'MAP': '地图',
     'AUTO': '自动',   // the map picker's AUTO and a gun's full-auto — one word fits both

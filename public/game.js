@@ -32359,7 +32359,11 @@ function teardownMatchWorld() {
 function openModeMenu() {
   teardownMatchWorld();
   selectedMap = pickedMap; // a lobby match overwrote it with its own map; the picker decides again
-  document.getElementById('mode-screen').style.display = 'flex';
+  closeOtherDialogs(); setMoreMenu(false); // nothing left open from last time
+  showModeGroup(modeGroup);
+  const ms = document.getElementById('mode-screen');
+  ms.style.display = 'flex';
+  ms.scrollTop = 0; // it used to reopen wherever it had last been scrolled to
   updateUserInfoBar();
 }
 
@@ -32420,7 +32424,7 @@ document.addEventListener('langchange', () => {
 // different sizes. Closing is only hiding — every dialog rebuilds from current state when it opens.
 // index.html gives them one shared frame.
 const DIALOG_IDS = ['settings-hub-panel', 'shoot-fx-panel', 'aim-assist-panel', 'weapon-skins-panel',
-                    'skins-panel', 'kill-log-panel', 'char-chat-panel'];
+                    'skins-panel', 'kill-log-panel', 'char-chat-panel', 'map-dialog', 'diff-dialog'];
 function closeOtherDialogs(keepId) {
   for (const id of DIALOG_IDS) {
     const el = id !== keepId && document.getElementById(id);
@@ -33060,7 +33064,7 @@ bindTap(document.getElementById('change-mode-btn'), openModeMenu);
 bindTap(document.getElementById('back-lobby-btn'), () => { teardownMatchWorld(); selectMode('lobby13'); });
 const _ecBtn = document.getElementById('enter-code-btn');
 if (_ecBtn) {
-  _ecBtn.addEventListener('click', promptUnlockCode); // click-only: it sits in the mode screen's sideways-scrolling bar
+  _ecBtn.addEventListener('click', promptUnlockCode); // click-only: a swipe that starts on it must scroll, not open
 }
 // Tick the user-info bar each 15s so the Admin Pass timer counts down live
 setInterval(() => { if (adminPassActive() && !currentUser?.isAdmin) updateUserInfoBar(); }, 15000);
@@ -33124,8 +33128,8 @@ function openShootFxPanel() {
     openShootFxPanel(); // refresh UI
   });
 }
-// The mode screen's utility buttons are click-only, like ENTER UNLOCK CODE (#15): on a phone they sit in
-// a sideways-scrolling bar, and opening on touchstart both ate the swipe and opened the dialog (#21).
+// The mode screen's buttons are click-only, like ENTER UNLOCK CODE (#15): opening on touchstart ate a
+// swipe that began on them and opened the dialog instead of scrolling (#21).
 const _sfxBtn = document.getElementById('shoot-fx-btn');
 if (_sfxBtn) {
   _sfxBtn.addEventListener('click', openShootFxPanel);
@@ -33568,8 +33572,8 @@ function updateUserInfoBar() {
     adminBtn.textContent = '⚡ ADMIN PANEL [F2]';
     adminBtn.style.cssText = 'padding:6px 14px;background:#3a1a1a;color:#ff4444;border:1px solid #ff4444;cursor:pointer;font-family:"Courier New",monospace;font-size:11px;letter-spacing:2px;border-radius:4px;';
     adminBtn.addEventListener('click', toggleAdminPanel);
-    const bar = document.getElementById('user-info-bar');
-    if (bar) bar.appendChild(adminBtn);
+    const menu = document.getElementById('more-menu');
+    if (menu) menu.appendChild(adminBtn);
   }
 }
 
@@ -33717,13 +33721,51 @@ function updateAdminCheats(dt) {
 // gameStarted === false, when a tap still produces a click; a touchstart handler here fired
 // on touch-DOWN and cancelled scrolling, so on a phone a swipe that began on a card launched
 // that mode instead of scrolling the list.
-document.querySelectorAll('.mode-card').forEach(card => {
-  card.addEventListener('click', () => selectMode(card.dataset.mode));
+document.querySelectorAll('.mode-card, .quick-card').forEach(card => {
+  card.addEventListener('click', () => { rememberModeGroup(card.dataset.mode); selectMode(card.dataset.mode); });
 });
+// The modes as tabs (#24): one group on screen at a time. The screen reopens on the group of the last
+// mode picked (quick start included), so CHANGE MODE lands next to what you just played.
+let modeGroup = 'team';
+function showModeGroup(group) {
+  modeGroup = group;
+  document.querySelectorAll('.mode-tab').forEach(t => {
+    const on = t.dataset.group === group;
+    t.classList.toggle('on', on);
+    t.setAttribute('aria-selected', String(on));
+  });
+  document.querySelectorAll('.mode-group').forEach(g => { g.hidden = g.dataset.group !== group; });
+}
+function rememberModeGroup(modeId) {
+  const card = document.querySelector(`.mode-group .mode-card[data-mode="${modeId}"]`);
+  if (card) modeGroup = card.closest('.mode-group').dataset.group;
+}
+document.querySelectorAll('.mode-tab').forEach(t => t.addEventListener('click', () => showModeGroup(t.dataset.group)));
+// each tab shows how many modes it holds — counted, so a new mode card updates it by itself
+document.querySelectorAll('.mode-tab small').forEach(n => {
+  n.textContent = document.querySelectorAll(`.mode-group[data-group="${n.parentElement.dataset.group}"] .mode-card`).length;
+});
+// ⋯ MORE (#24): the less-used buttons, same ids and handlers as before. Picking one, a click
+// anywhere else or Esc closes it.
+const moreBtn = document.getElementById('more-btn'), moreMenu = document.getElementById('more-menu');
+function setMoreMenu(open) { moreMenu.hidden = !open; moreBtn.setAttribute('aria-expanded', String(open)); }
+moreBtn.addEventListener('click', () => setMoreMenu(moreMenu.hidden));
+moreMenu.addEventListener('click', () => setMoreMenu(false)); // an item was picked; its own handler runs too
+document.addEventListener('click', e => { if (!moreMenu.hidden && !e.target.closest('#more-menu, #more-btn')) setMoreMenu(false); });
+// 🗺️ MAP / 🤖 BOT DIFFICULTY (#24): the same cards as before, in a dialog behind a row that shows
+// the current pick. Picking closes it.
+function openPickDialog(id) { closeOtherDialogs(id); document.getElementById(id).style.display = 'block'; }
+function closePickDialogs() { for (const id of ['map-dialog', 'diff-dialog']) document.getElementById(id).style.display = 'none'; }
+document.getElementById('map-pick-btn').addEventListener('click', () => openPickDialog('map-dialog'));
+document.getElementById('diff-pick-btn').addEventListener('click', () => openPickDialog('diff-dialog'));
+document.querySelectorAll('.ms-dialog-close').forEach(b => b.addEventListener('click', closePickDialogs));
 // ← LOBBY / Esc: the mode screen had no way back except picking a mode.
 document.getElementById('mode-back-btn').addEventListener('click', () => selectMode('lobby13'));
 document.addEventListener('keydown', e => {
   if (e.code !== 'Escape' || document.getElementById('mode-screen').style.display !== 'flex') return;
+  // Esc closes what is open on the mode screen first: a map / difficulty dialog, then MORE.
+  if (['map-dialog', 'diff-dialog'].some(id => document.getElementById(id).style.display === 'block')) { closePickDialogs(); return; }
+  if (!moreMenu.hidden) { setMoreMenu(false); return; }
   const top = document.elementFromPoint(innerWidth / 2, innerHeight / 2);
   if (top && top.closest('#mode-screen')) selectMode('lobby13'); // not while a panel (shop, settings…) is open on top
 });
@@ -33750,9 +33792,10 @@ function selectDifficulty(diff) {
   });
   const desc = document.getElementById('difficulty-desc');
   if (desc) desc.textContent = DIFFICULTY_DESCS[diff] || '';
+  document.getElementById('diff-pick-value').textContent = diff.toUpperCase();
 }
 document.querySelectorAll('.diff-card').forEach(card => {
-  card.addEventListener('click', () => selectDifficulty(card.dataset.diff));
+  card.addEventListener('click', () => { selectDifficulty(card.dataset.diff); closePickDialogs(); });
 });
 
 // Map selector
@@ -33803,9 +33846,10 @@ function selectMapPick(mapId) {
   });
   const desc = document.getElementById('map-desc');
   if (desc) desc.textContent = MAP_DESCS[mapId] || '';
+  document.getElementById('map-pick-value').textContent = mapCardLabel(mapId);
 }
 document.querySelectorAll('.map-card').forEach(card => {
-  card.addEventListener('click', () => selectMapPick(card.dataset.map));
+  card.addEventListener('click', () => { selectMapPick(card.dataset.map); closePickDialogs(); });
 });
 document.getElementById('loadout-ready-btn').addEventListener('click', confirmLoadout);
 document.getElementById('loadout-ready-btn').addEventListener('touchstart', e => { e.preventDefault(); confirmLoadout(); }, { passive: false });

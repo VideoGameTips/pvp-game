@@ -533,7 +533,7 @@
     const b = document.getElementById('char-chat-btn');
     if (b && !b._wired) {
       b._wired = true;
-      b.addEventListener('click', open); // click-only: it sits in the mode screen's sideways-scrolling bar (#21)
+      b.addEventListener('click', open); // click-only: a swipe that starts on it must scroll, not open (#21)
     }
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wireBtn);
