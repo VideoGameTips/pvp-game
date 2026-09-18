@@ -230,23 +230,50 @@
     #match-center { font-size: 19px; font-weight: bold; letter-spacing: 3px; text-align: center; min-width: 72px; }
     #match-right { color: #ff5555; font-size: 13px; font-weight: bold; text-align: right; }
 
-    /* ── Round/match announcement overlay ── */
+    /* ── Round/match announcement (#29) ──
+       Only the big moments still appear over the world — and now as a one-line pill
+       under the score strip, not as a banner across the middle of the screen. Every
+       other message goes to #msg-feed on the left, so what you are shooting at stays
+       visible. The detail line lives in the feed, not in the pill. */
     #match-announce {
-      display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      display: none; position: fixed; top: 52px; left: 50%; transform: translateX(-50%);
       align-items: center; justify-content: center; flex-direction: column;
-      pointer-events: none; z-index: 88; transition: opacity 0.4s;
+      background: rgba(0,0,0,0.55); border-radius: 10px; padding: 2px 18px;
+      max-width: calc(100vw - 24px);
+      pointer-events: none; z-index: 84; transition: opacity 0.4s;
     }
     #announce-text {
-      font-family: 'Courier New', monospace; font-size: clamp(24px, 8.5vw, 52px); font-weight: 900;
-      letter-spacing: clamp(2px, 1.1vw, 6px); text-shadow: 0 0 30px currentColor, 2px 2px 0 #000;
-      animation: announceIn 0.3s ease-out; text-align: center; max-width: calc(100vw - 24px);
+      font-family: 'Courier New', monospace; font-size: clamp(18px, 4.6vw, 30px); font-weight: 900;
+      letter-spacing: clamp(1px, 0.5vw, 4px); text-shadow: 0 0 18px currentColor, 2px 2px 0 #000;
+      animation: announceIn 0.3s ease-out; text-align: center;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: calc(100vw - 48px);
     }
-    #announce-sub {
-      font-family: 'Courier New', monospace; font-size: clamp(12px, 3.8vw, 16px); color: #aaa;
-      letter-spacing: clamp(1px, 0.6vw, 3px); margin-top: 8px; text-align: center; line-height: 1.4;
-      max-width: calc(100vw - 32px);
-    }
+    #announce-sub { display: none; }
     @keyframes announceIn { from { transform: scale(1.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+    /* ── Message feed (#29): every in-match message, top-left, newest on top ──
+       Older lines are pushed down instead of being wiped by the next message, which
+       is what made them "disappear too fast" (one centre banner, clearTimeout'd by
+       whatever came next). Chat lines land here too — they carry data-no-i18n. */
+    #msg-feed {
+      position: fixed; left: 16px; top: 44px; width: min(330px, 40vw); z-index: 80;
+      display: flex; flex-direction: column; gap: 4px; pointer-events: none;
+      font-family: 'Courier New', monospace;
+    }
+    .mf {
+      background: rgba(0,0,0,0.42); border-left: 3px solid #fff; border-radius: 5px;
+      padding: 3px 9px; color: #fff; font-size: 13px; line-height: 1.35;
+      text-shadow: 1px 1px 0 #000; width: fit-content; max-width: 100%;
+      animation: mfIn 0.22s ease-out; transition: opacity 0.6s;
+    }
+    .mf-big { font-weight: bold; font-size: 14px; }
+    /* 💡 The fun fact, on screens where you have time to read it (#29) */
+    .fun-fact {
+      margin-top: 14px; max-width: 560px; align-self: center; text-align: center;
+      font-family: 'Courier New', monospace; font-size: 13px; line-height: 1.5; color: #ffcc66; opacity: 0.85;
+    }
+    .mf-s { color: #bbb; font-size: 12px; margin-left: 6px; }
+    @keyframes mfIn { from { transform: translateY(-8px); opacity: 0; } to { transform: none; opacity: 1; } }
 
     /* ── Elimination waiting screen (dead, waiting for round end) ── */
     #waiting-screen {
@@ -532,72 +559,162 @@
     @media (max-width: 460px) { #best-loadouts-panel { width: 100vw !important; } }
 
     /* ── Touch layout: body.touch-ui (set together with #mobile-controls.active) ──
-       The rules above mix right-anchored buttons with hard-coded `left: 200px/280px`
-       ones, which only stay apart on wide screens — on a phone JUMP sat on FIRE's
-       centre and SLIDE on ADS's. Here every control is anchored to its own edge:
-       touch targets ≥56px (FIRE 96), ≥12px apart, and the readouts moved out of the
-       thumb zone. Desktop never gets the class, so its HUD is unchanged. */
-    body.touch-ui #btn-fire          { right: 20px;  bottom: 24px;  width: 96px; height: 96px; font-size: 14px; }
-    body.touch-ui #btn-jump          { left: auto; right: 128px; bottom: 24px; width: 56px; height: 56px; }
-    body.touch-ui #btn-ads           { right: 128px; bottom: 92px;  width: 56px; height: 56px; }
-    body.touch-ui #btn-reload-mobile { right: 20px;  bottom: 132px; width: 56px; height: 56px; }
-    body.touch-ui #btn-next-weapon   { right: 128px; bottom: 160px; }
-    body.touch-ui #btn-prev-weapon   { right: 186px; bottom: 160px; }
-    body.touch-ui #btn-interact      { right: 20px;  bottom: 200px; width: 56px; height: 56px; }
-    body.touch-ui #btn-crouch        { left: 20px;   bottom: 24px;  width: 56px; height: 56px; }
-    body.touch-ui #btn-slide         { left: 88px;   bottom: 24px;  width: 56px; height: 56px; }
-    body.touch-ui #health-bar        { left: 20px;   bottom: 92px; }
-    body.touch-ui #health-track      { width: 140px; }
-    body.touch-ui #ability-hud       { right: auto; left: 20px; bottom: 214px; }
-    /* Top band: ⚙ top-right, kills beside it, score strip, then weapon slots + ammo. */
+       #14 fixed the overlaps; #29 makes it small: every button is an icon, translucent
+       and ~25% smaller, and the two clusters are anchored to their own corner so the
+       ⚙ size setting (--tbs) scales sizes and gaps together. Readouts stay out of the
+       thumb zone, the weapon slots move to the top-right as icons, and the middle of
+       the screen carries nothing but the crosshair. Desktop never gets the class. */
+    #mobile-controls .tc {
+      position: absolute; bottom: 0; width: 300px; height: 250px; pointer-events: none;
+      transform: scale(var(--tbs, 1));
+    }
+    #mobile-controls .tc-left  { left: 0;  transform-origin: 0 100%; }
+    #mobile-controls .tc-right { right: 0; transform-origin: 100% 100%; }
+    /* The word inside each button gives way to an icon drawn as a mask, so the
+       existing `.pressed` background rules keep working. */
+    body.touch-ui #btn-fire, body.touch-ui #btn-ads, body.touch-ui #btn-reload-mobile,
+    body.touch-ui #btn-jump, body.touch-ui #btn-crouch, body.touch-ui #btn-slide,
+    body.touch-ui #btn-ability { font-size: 0 !important; }
+    body.touch-ui #btn-fire::before, body.touch-ui #btn-ads::before, body.touch-ui #btn-reload-mobile::before,
+    body.touch-ui #btn-jump::before, body.touch-ui #btn-crouch::before, body.touch-ui #btn-slide::before,
+    body.touch-ui #btn-ability::before {
+      content: ''; position: absolute; inset: 0; background: #fff;
+      -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+      -webkit-mask-position: center; mask-position: center;
+      -webkit-mask-size: 50% 50%; mask-size: 50% 50%;
+    }
+    body.touch-ui #btn-fire::before {
+      -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M12 2.5c2.2 2.2 3.3 4.8 3.3 7.6V18H8.7v-7.9c0-2.8 1.1-5.4 3.3-7.6z'/><rect x='8' y='19.2' width='8' height='2.3' rx='.8'/></svg>");
+              mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M12 2.5c2.2 2.2 3.3 4.8 3.3 7.6V18H8.7v-7.9c0-2.8 1.1-5.4 3.3-7.6z'/><rect x='8' y='19.2' width='8' height='2.3' rx='.8'/></svg>");
+    }
+    body.touch-ui #btn-ads::before {
+      -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'><circle cx='12' cy='12' r='6.5'/><path d='M12 2.5v5M12 16.5v5M2.5 12h5M16.5 12h5'/><circle cx='12' cy='12' r='1.2' fill='black'/></svg>");
+              mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'><circle cx='12' cy='12' r='6.5'/><path d='M12 2.5v5M12 16.5v5M2.5 12h5M16.5 12h5'/><circle cx='12' cy='12' r='1.2' fill='black'/></svg>");
+    }
+    body.touch-ui #btn-reload-mobile::before {
+      -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><path d='M19.5 12a7.5 7.5 0 1 1-2.2-5.3'/><path d='M19.5 4v4.5H15'/></svg>");
+              mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><path d='M19.5 12a7.5 7.5 0 1 1-2.2-5.3'/><path d='M19.5 4v4.5H15'/></svg>");
+    }
+    body.touch-ui #btn-jump::before {
+      -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='M6 12l6-6 6 6M6 18.5l6-6 6 6'/></svg>");
+              mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='M6 12l6-6 6 6M6 18.5l6-6 6 6'/></svg>");
+    }
+    body.touch-ui #btn-crouch::before {
+      -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='M6 8l6 6 6-6'/><path d='M5 19.5h14'/></svg>");
+              mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='M6 8l6 6 6-6'/><path d='M5 19.5h14'/></svg>");
+    }
+    body.touch-ui #btn-slide::before {
+      -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='M5.5 6.5l5.5 5.5-5.5 5.5M12.5 6.5l5.5 5.5-5.5 5.5'/></svg>");
+              mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='M5.5 6.5l5.5 5.5-5.5 5.5M12.5 6.5l5.5 5.5-5.5 5.5'/></svg>");
+    }
+    body.touch-ui #btn-ability::before {
+      -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M13.5 2L4.5 13.5h6.5L10 22l9.5-12H13z'/></svg>");
+              mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M13.5 2L4.5 13.5h6.5L10 22l9.5-12H13z'/></svg>");
+    }
+    /* Sizes and places (same corners as before, so the thumbs keep their habits). */
+    body.touch-ui #btn-fire          { right: 20px;  bottom: 24px;  width: 72px; height: 72px; background: rgba(215,50,50,0.45); border-color: rgba(255,130,130,0.85); }
+    body.touch-ui #btn-jump          { left: auto; right: 106px; bottom: 18px; width: 48px; height: 48px; background: rgba(20,24,32,0.36); border-color: rgba(255,255,255,0.55); }
+    body.touch-ui #btn-ads           { right: 104px; bottom: 78px; width: 48px; height: 48px; background: rgba(20,24,32,0.36); border-color: rgba(255,255,255,0.55); }
+    body.touch-ui #btn-ads.active-ads { background: rgba(255,210,0,0.55); }
+    body.touch-ui #btn-reload-mobile { right: 26px;  bottom: 108px; width: 44px; height: 44px; background: rgba(20,24,32,0.36); border-color: rgba(255,255,255,0.55); }
+    body.touch-ui #btn-interact      { right: 170px; bottom: 42px;  width: 48px; height: 48px; font-size: 10px; background: rgba(40,160,70,0.5); border-color: rgba(120,240,150,0.9); }
+    body.touch-ui #btn-ability       { position: absolute; right: 168px; bottom: 104px; width: 44px; height: 44px; border-radius: 50%;
+                                       background: rgba(120,70,220,0.45); border: 2px solid rgba(190,150,255,0.9); pointer-events: all;
+                                       display: none; align-items: center; justify-content: center; touch-action: none; }
+    body.touch-ui #btn-ability.ready { display: flex; }
+    body.touch-ui #btn-ability.cooling::before { opacity: 0.45; }
+    body.touch-ui #btn-crouch        { left: 16px;   bottom: 20px;  width: 48px; height: 48px; background: rgba(170,140,80,0.4); border-color: rgba(220,180,120,0.8); }
+    body.touch-ui #btn-slide         { left: 78px;   bottom: 20px;  width: 48px; height: 48px; background: rgba(100,170,255,0.4); border-color: rgba(150,210,255,0.8); }
+    body.touch-ui #btn-prev-weapon, body.touch-ui #btn-next-weapon { display: none !important; } /* the slot icons switch weapons now */
+    body.touch-ui #ability-hud       { display: none !important; }  /* [E] is a keyboard hint; touch has the button (#30) */
+    body.touch-ui #fps-counter       { display: none; }             /* ⚙ → 显示 FPS brings it back */
+    body.show-fps #fps-counter       { display: block; }
+    /* The cooldown ring around the ability button. */
+    #ability-ring {
+      position: absolute; inset: -5px; border-radius: 50%; pointer-events: none;
+      background: conic-gradient(rgba(200,165,255,0.95) var(--cd, 100%), rgba(255,255,255,0.10) 0);
+      -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 0);
+              mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 0);
+    }
+    body.touch-ui #health-bar        { left: 16px;   bottom: 80px; }
+    body.touch-ui #health-label      { display: none; }
+    body.touch-ui #health-track      { width: 120px; height: 8px; border-radius: 4px; }
+    body.touch-ui #health-num        { font-size: 15px; margin-top: 2px; }
+    /* Top band: ⚙ top-right, kills beside it, score strip, weapon icons + ammo under them. */
     body.touch-ui #floating-settings-btn {
       top: 8px !important; left: auto !important; right: 8px !important;
-      width: 40px; height: 40px; padding: 0 !important; font-size: 0 !important; line-height: 36px; text-align: center;
+      width: 36px; height: 36px; padding: 0 !important; font-size: 0 !important; line-height: 32px; text-align: center;
     }
-    body.touch-ui #floating-settings-btn::before { content: '⚙'; font-size: 20px; }
-    body.touch-ui #lobby-modes-btn   { top: 34px !important; left: 8px !important; }
-    body.touch-ui #kills             { right: 56px; }
-    body.touch-ui #match-hud         { top: 52px; min-width: 0; max-width: calc(100vw - 16px); padding: 6px 12px; gap: 12px; }
-    body.touch-ui #weapon-selector   { bottom: auto; top: 120px; left: 8px; transform: none; gap: 6px; }
-    body.touch-ui .ws-slot           { min-width: 0; padding: 4px 8px; min-height: 40px; box-sizing: border-box; display: flex; align-items: center; }
-    /* The slots already have tap-to-equip handlers; #hud's pointer-events:none kept them from ever firing. */
-    body.touch-ui #weapon-selector   { pointer-events: auto; }
-    body.touch-ui .ws-slot .ws-key, body.touch-ui .ws-slot .ws-type { display: none; }
-    body.touch-ui #ammo              { bottom: auto; top: 116px; right: 8px; }
-    body.touch-ui #spawn-shield      { bottom: auto; top: 170px; }
-    body.touch-ui #lobby-prompt      { bottom: auto !important; top: 170px; max-width: calc(100vw - 32px); }
+    body.touch-ui #floating-settings-btn::before { content: '⚙'; font-size: 19px; }
+    body.touch-ui #lobby-modes-btn   { top: 6px !important; left: 8px !important; }
+    body.touch-ui #kills             { top: 14px; right: 52px; font-size: 12px; }
+    body.touch-ui #match-hud         { top: 6px; min-width: 0; max-width: calc(100vw - 220px); padding: 4px 12px; gap: 12px; }
+    /* Weapons: four icon slots in the top-right corner, with the live weapon + ammo under them. */
+    body.touch-ui #weapon-selector   { top: 48px; right: 8px; left: auto; bottom: auto; transform: none; gap: 5px; pointer-events: auto; }
+    body.touch-ui .ws-slot           { position: relative; width: 36px; height: 36px; min-width: 0; padding: 0; border-radius: 9px; background: rgba(0,0,0,0.42); }
+    body.touch-ui .ws-slot .ws-key, body.touch-ui .ws-slot .ws-type, body.touch-ui .ws-slot .ws-name { display: none; }
+    body.touch-ui .ws-slot::before {
+      content: ''; position: absolute; inset: 0; background: rgba(255,255,255,0.75);
+      -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+      -webkit-mask-position: center; mask-position: center;
+      -webkit-mask-size: 22px 22px; mask-size: 22px 22px;
+    }
+    body.touch-ui .ws-slot.active { background: rgba(255,204,85,0.2); border-color: #ffcc55; }
+    body.touch-ui .ws-slot.active::before { background: #fff; }
+    body.touch-ui #ws-primary::before {
+      -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M1.5 10h14.5l1.8-1.8h4.7v3.3h-3.2l-1.2 2H13l-1.3 4.5H8.6L9.9 13.5H6.5l-.8 1.2H1.5z'/></svg>");
+              mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M1.5 10h14.5l1.8-1.8h4.7v3.3h-3.2l-1.2 2H13l-1.3 4.5H8.6L9.9 13.5H6.5l-.8 1.2H1.5z'/></svg>");
+    }
+    body.touch-ui #ws-secondary::before {
+      -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M2.5 6.5h16v4h-4.2l-1 1.5-1.4 5.5H8.2l.8-4.6a2.8 2.8 0 0 1-2.7-2.4H2.5z'/></svg>");
+              mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M2.5 6.5h16v4h-4.2l-1 1.5-1.4 5.5H8.2l.8-4.6a2.8 2.8 0 0 1-2.7-2.4H2.5z'/></svg>");
+    }
+    body.touch-ui #ws-melee::before {
+      -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M20.5 2.5l1 1-9.3 10.8-2-2z'/><path d='M9.2 13.3l1.5 1.5-5.3 5.3a1.1 1.1 0 0 1-1.5-1.5z'/></svg>");
+              mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M20.5 2.5l1 1-9.3 10.8-2-2z'/><path d='M9.2 13.3l1.5 1.5-5.3 5.3a1.1 1.1 0 0 1-1.5-1.5z'/></svg>");
+    }
+    body.touch-ui #ws-support::before {
+      -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='11' cy='14.5' r='6.3'/><rect x='9' y='5.4' width='4.4' height='3.4' rx='.6'/><path d='M13.4 6.4l3.8-2.6 1 1.4-3.8 2.6z'/></svg>");
+              mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='11' cy='14.5' r='6.3'/><rect x='9' y='5.4' width='4.4' height='3.4' rx='.6'/><path d='M13.4 6.4l3.8-2.6 1 1.4-3.8 2.6z'/></svg>");
+    }
+    body.touch-ui #ammo              { top: 88px; right: 8px; bottom: auto; }
+    body.touch-ui #ammo-gun          { font-size: 11px; }
+    body.touch-ui #ammo-count        { font-size: 22px; letter-spacing: 1px; }
+    body.touch-ui #ammo-reserve      { font-size: 12px; }
+    body.touch-ui #spawn-shield      { top: auto !important; bottom: 108px; left: 12px; transform: none; font-size: 11px; padding: 3px 9px; }
+    body.touch-ui #lobby-prompt      { bottom: auto !important; top: 128px; max-width: calc(100vw - 32px); font-size: 13px; padding: 5px 12px; }
     body.touch-ui #interact-hint     { display: none !important; } /* the SWAP / DUEL button replaces it */
-    /* Narrow phones (Galaxy S9+ class, 320px): the same layout with 50px buttons, ≥10px apart. */
+    /* On a phone the feed is tighter and lighter — it can hold four lines without
+       becoming a wall of boxes down the left edge. */
+    body.touch-ui #msg-feed          { left: 12px; width: 240px; gap: 3px; }
+    body.touch-ui .mf                { font-size: 12px; line-height: 1.3; padding: 2px 7px; background: rgba(0,0,0,0.38); }
+    body.touch-ui .mf-big            { font-size: 13px; }
+    body.touch-ui .mf-s              { font-size: 11px; }
+    /* Narrow phones (Galaxy S9+ class, 320px): the same layout, one size down. */
     @media (max-width: 350px) {
-      body.touch-ui #btn-fire          { right: 12px;  bottom: 20px;  width: 84px; height: 84px; }
-      body.touch-ui #btn-jump          { right: 106px; bottom: 20px;  width: 50px; height: 50px; }
-      body.touch-ui #btn-ads           { right: 106px; bottom: 82px;  width: 50px; height: 50px; }
-      body.touch-ui #btn-reload-mobile { right: 12px;  bottom: 116px; width: 50px; height: 50px; }
-      body.touch-ui #btn-interact      { right: 12px;  bottom: 178px; width: 50px; height: 50px; }
-      body.touch-ui #btn-next-weapon   { right: 106px; bottom: 144px; }
-      body.touch-ui #btn-prev-weapon   { right: 162px; bottom: 144px; }
-      body.touch-ui #btn-crouch        { left: 12px;   bottom: 20px;  width: 50px; height: 50px; }
-      body.touch-ui #btn-slide         { left: 72px;   bottom: 20px;  width: 50px; height: 50px; }
-      body.touch-ui #health-bar        { left: 12px;   bottom: 82px; }
-      body.touch-ui #health-track      { width: 120px; }
-      body.touch-ui #ability-hud       { left: 12px;   bottom: 200px; }
-      body.touch-ui #ammo              { top: 166px; }  /* the four weapon slots need the whole top row */
+      body.touch-ui #btn-fire          { right: 14px; bottom: 20px;  width: 64px; height: 64px; }
+      body.touch-ui #btn-jump          { right: 92px; bottom: 16px;  width: 44px; height: 44px; }
+      body.touch-ui #btn-ads           { right: 90px; bottom: 72px;  width: 44px; height: 44px; }
+      body.touch-ui #btn-reload-mobile { right: 20px; bottom: 96px;  width: 44px; height: 44px; }
+      body.touch-ui #btn-interact      { right: 148px; bottom: 34px; width: 44px; height: 44px; }
+      body.touch-ui #btn-ability       { right: 146px; bottom: 94px; width: 44px; height: 44px; }
+      body.touch-ui #btn-crouch        { left: 12px;  bottom: 18px;  width: 44px; height: 44px; }
+      body.touch-ui #btn-slide         { left: 68px;  bottom: 18px;  width: 44px; height: 44px; }
+      body.touch-ui #health-bar        { left: 12px;  bottom: 72px; }
+      body.touch-ui #health-track      { width: 104px; }
+      body.touch-ui #weapon-selector   { gap: 4px; }
+      body.touch-ui .ws-slot           { width: 32px; height: 32px; }
+      body.touch-ui #ammo              { top: 84px; }
     }
-    /* Landscape (by orientation, not width — a portrait tablet is wide too): one top row, a
-       one-line score strip, and SWAP/DUEL beside the cluster instead of above it. */
+    /* Landscape (by orientation, not width — a portrait tablet is wide too): the top row
+       has to share with the score strip, so it sits a little higher. */
     @media (orientation: landscape) {
-      body.touch-ui #match-hud       { top: 8px; max-width: calc(100vw - 260px); white-space: nowrap; padding: 4px 10px; gap: 10px; }
-      body.touch-ui #match-center    { font-size: 16px; }
-      body.touch-ui #weapon-selector { top: 56px; }
-      body.touch-ui #ammo            { top: 52px; }
-      body.touch-ui #btn-interact    { right: 196px; bottom: 24px; }
-      body.touch-ui #spawn-shield, body.touch-ui #lobby-prompt { top: 106px; }
-    }
-    /* Landscape with the browser bars showing (~300–420px tall). */
-    @media (orientation: landscape) and (max-height: 420px) {
-      body.touch-ui #ammo-gun        { display: none; }
-      body.touch-ui #ammo-count      { font-size: 24px; }
-      body.touch-ui #ability-hud     { left: 172px; bottom: 92px; }
+      body.touch-ui #match-hud       { top: 6px; max-width: calc(100vw - 260px); white-space: nowrap; padding: 3px 10px; gap: 10px; }
+      body.touch-ui #match-center    { font-size: 15px; }
+      body.touch-ui #weapon-selector { top: 46px; }
+      body.touch-ui #ammo            { top: 86px; }
+      body.touch-ui #msg-feed        { top: 42px; }
+      body.touch-ui #lobby-prompt    { top: 118px; }
     }
 
     /* ── Frontlines HUD ── */
@@ -952,11 +1069,14 @@
     <button id="ls-skip-btn" onclick="lsSkipShop()">SKIP</button>
   </div>
 
-  <!-- Round/match announcement -->
+  <!-- Round/match announcement (big moments only — see #msg-feed for the rest) -->
   <div id="match-announce">
     <div id="announce-text"></div>
     <div id="announce-sub"></div>
   </div>
+
+  <!-- Message feed: kills, comms, pickups, round banners — newest on top (#29) -->
+  <div id="msg-feed"></div>
 
   <!-- Pre-match 5-second countdown -->
   <div id="countdown-overlay">
@@ -986,17 +1106,26 @@
     </div>
   </div>
 
+  <!-- Touch controls. The two .tc clusters are anchored to their own bottom corner so
+       ⚙ → button size scales each one as a whole (#29); the joystick stays outside them
+       because game.js places it wherever the thumb lands. -->
   <div id="mobile-controls">
     <div id="joystick-base"><div id="joystick-thumb"></div></div>
-    <div id="btn-fire">FIRE</div>
-    <div id="btn-ads">ADS</div>
-    <div id="btn-reload-mobile">R</div>
-    <div id="btn-prev-weapon">&#8249;</div>
-    <div id="btn-next-weapon">&#8250;</div>
-    <div id="btn-interact">SWAP</div>
-    <div id="btn-slide">SLIDE</div>
-    <div id="btn-crouch">CROUCH</div>
-    <div id="btn-jump">JUMP</div>
+    <div class="tc tc-left">
+      <div id="btn-slide">SLIDE</div>
+      <div id="btn-crouch">CROUCH</div>
+    </div>
+    <div class="tc tc-right">
+      <div id="btn-fire">FIRE</div>
+      <div id="btn-ads">ADS</div>
+      <div id="btn-reload-mobile">R</div>
+      <div id="btn-prev-weapon">&#8249;</div>
+      <div id="btn-next-weapon">&#8250;</div>
+      <div id="btn-interact">SWAP</div>
+      <div id="btn-jump">JUMP</div>
+      <!-- Only while what you hold has an ability — the E key's job, which touch never had (#30) -->
+      <div id="btn-ability"><div id="ability-ring"></div></div>
+    </div>
   </div>
 
   <!-- Loadout selection screen -->

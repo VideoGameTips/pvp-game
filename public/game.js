@@ -2563,8 +2563,6 @@ function reactAllyBotsToComms(playerSaid) {
   });
 }
 
-// Chat feed in bottom-left corner — shows last 5 lines
-const chatLog = [];
 // 🛡️ XSS defense: escape HTML before any user-controlled string hits innerHTML,
 // and only accept a real hex color (otherwise it could break out of a style attr).
 function escHtml(s) {
@@ -2573,39 +2571,10 @@ function escHtml(s) {
 function safeColor(c) {
   return (typeof c === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(c)) ? c : '#ffffff';
 }
+// Comms and character chat land in the same left-hand feed as everything else (#29).
 function pushChatLine(text, color) {
-  chatLog.push({ text, color: color || '#fff', t: Date.now() });
-  if (chatLog.length > 5) chatLog.shift();
-  renderChatFeed();
+  pushFeedLine(text, '', color || '#fff', false, true);
 }
-function renderChatFeed() {
-  let feed = document.getElementById('chat-feed');
-  if (!feed) {
-    feed = document.createElement('div');
-    feed.id = 'chat-feed';
-    feed.style.cssText = 'position:fixed;left:16px;bottom:120px;z-index:9400;'
-      + 'font-family:Arial,sans-serif;font-size:13px;display:flex;flex-direction:column;gap:3px;'
-      + 'pointer-events:none;max-width:380px;';
-    document.body.appendChild(feed);
-  }
-  feed.innerHTML = chatLog.map(line => {
-    const age = (Date.now() - line.t) / 1000;
-    const op = age > 6 ? Math.max(0, 1 - (age - 6) / 2) : 1;
-    const col = safeColor(line.color);
-    return `<div style="background:rgba(0,0,0,0.6);padding:4px 9px;border-radius:5px;border-left:3px solid ${col};color:${col};opacity:${op};text-shadow:1px 1px 0 #000;">${escHtml(line.text)}</div>`;
-  }).join('');
-}
-function updateChatFeed() {
-  // Re-render every 0.5s to fade old lines
-  if (!window._lastChatRender || Date.now() - window._lastChatRender > 500) {
-    window._lastChatRender = Date.now();
-    // Trim fully-faded
-    const now = Date.now();
-    while (chatLog.length && now - chatLog[0].t > 9000) chatLog.shift();
-    renderChatFeed();
-  }
-}
-
 // ── Bot speech bubbles: bots say what they're thinking ───────────────────
 // Lines library per reason. Each picks a random variation.
 const BOT_THOUGHTS = {
@@ -18441,11 +18410,22 @@ let GAMEPLAY_SETTINGS = {
   adsMode: 'toggle',
   cameraShake: 1,
   screenFx: 1,
+  touchScale: 1,   // ⚙ → BUTTON SIZE on phones: 0.85 / 1 / 1.2 (#29)
 };
 try {
   const saved = JSON.parse(localStorage.getItem('pvp_gameplay_settings') || 'null');
   if (saved) GAMEPLAY_SETTINGS = { ...GAMEPLAY_SETTINGS, ...saved };
+  // A phone has the least screen to spare, so the FPS readout starts off there — until
+  // someone turns it on in ⚙ (#29). Desktop keeps it on as before.
+  if (!saved || saved.showFPS === undefined) {
+    GAMEPLAY_SETTINGS.showFPS = !(navigator.maxTouchPoints > 0 || 'ontouchstart' in window);
+  }
 } catch (e) {}
+const TOUCH_SCALES = [['SMALL', 0.85], ['NORMAL', 1], ['BIG', 1.2]];
+function applyTouchScale() {
+  const v = Number(GAMEPLAY_SETTINGS.touchScale);
+  document.documentElement.style.setProperty('--tbs', Number.isFinite(v) ? Math.max(0.7, Math.min(1.4, v)) : 1);
+}
 function saveGameplaySettings() {
   try { localStorage.setItem('pvp_gameplay_settings', JSON.stringify(GAMEPLAY_SETTINGS)); } catch (e) {}
 }
@@ -20591,16 +20571,10 @@ function updateAbilityBuff(dt) {
   updateAbilityHUD();
 }
 
+// The ability you just fired used to shout its name across the middle of the screen;
+// it is a feed line now like every other message (#29).
 function flashAbilityName(name) {
-  const el = document.getElementById('ability-activated');
-  if (!el) return;
-  el.textContent = name.toUpperCase() + '!';
-  el.style.opacity = '1';
-  el.style.transform = 'translateX(-50%) scale(1.2)';
-  setTimeout(() => {
-    el.style.opacity = '0';
-    el.style.transform = 'translateX(-50%) scale(1)';
-  }, 900);
+  pushFeedLine('\u26a1 ' + String(name || '').toUpperCase(), '', '#c9a4ff', false);
 }
 
 function updateAbilityHUD() {
@@ -26814,6 +26788,7 @@ socket.on('playerDied', data => {
       document.getElementById('death-msg').textContent = 'Waiting for round to end...';
       ds.style.display = 'none';
       document.getElementById('waiting-screen').style.display = 'flex';
+      showFunFact('waiting-screen');
       updateRoundScoreDisplay();
       enterSpectator(); // watch live teammates while waiting
       releasePointer(); // CHANGE LOADOUT on the waiting screen needs the cursor
@@ -26999,6 +26974,25 @@ function syncInteractButton() {
   const display = (nearTrashcan || duel || pilot) ? 'flex' : 'none';
   if (btn.textContent !== label) btn.textContent = label;
   if (btn.style.display !== display) btn.style.display = display;
+}
+// ⚡ The ability button appears only when it has something to do, with a ring that
+// fills as the cooldown runs out — the touch counterpart of the [E] hint (#30).
+function syncAbilityButton() {
+  const btn = document.getElementById('btn-ability');
+  if (!btn) return;
+  const c4Ready = placedC4s.length > 0 && activeSlot === 'support' && SUPPORT_ITEMS[selectedSupportIdx]?.id === 'c4';
+  const held = heldItem();
+  const on = isTouchUI() && gameStarted && !isDead && (c4Ready || hasAbility(held));
+  btn.classList.toggle('ready', !!on);
+  if (!on) return;
+  let pct = 1;
+  if (!c4Ready && held) {
+    const ab = equippedAbility(held) || held.ability;
+    if (ab && ab.cd) pct = Math.min(1, (Date.now() - (abilityCDs[held.id] || 0)) / ab.cd);
+  }
+  btn.classList.toggle('cooling', pct < 1);
+  const ring = document.getElementById('ability-ring');
+  if (ring) ring.style.setProperty('--cd', Math.round(pct * 100) + '%');
 }
 const isTouchUI = () => document.body.classList.contains('touch-ui');
 const fKeyHint = cap => isTouchUI() ? (cap ? 'Tap DUEL' : 'tap DUEL') : (cap ? 'Press F' : 'press F');
@@ -28062,26 +28056,71 @@ function startMatchRound() {
       showAnnouncement('MATCH START', `Most kills in ${formatMatchTime(match.cfg.timeLimit)}`, '#ffffff', 2800);
     }
     updateMatchHUD();
-    // 💡 Show a fun fact ~3 s after the MATCH START banner clears
-    setTimeout(() => {
-      if (match && !match.over) showAnnouncement('💡 DID YOU KNOW?', pickFunFact(), '#ffcc66', 5500);
-    }, 3000);
+    // 💡 The fun fact used to land 3 s into the fight, across the middle of the screen,
+    // where nobody has time to read it. It now shows on the screens where you are
+    // waiting anyway — loadout, waiting, end (#29, showFunFact).
   };
   runCountdown(5, doStart);
 }
 
+// The handful of announcements that still flash over the world. Everything else —
+// pickups, abilities, care packages, kills, tips — is a feed line only (#29).
+// Matched on the English text, which is what callers pass before i18n translates it.
+const MOMENT_RE = /^(MATCH START|ROUND |🏁 ROUND|ROUND WIN|ROUND LOST|VICTORY|DEFEAT|YOUR TEAM WINS|ENEMY WINS|YOU DIED|💀 ELIMINATED|ELIMINATED|⚔️ DUEL|⚔️ TIEBREAKER|WAVE |FINAL WAVE|👑 KING OF THE HILL|GET READY|GO!)/;
 function showAnnouncement(text, sub, color, duration) {
+  const big = MOMENT_RE.test(String(text || ''));
+  pushFeedLine(text, sub, color, big);
+  if (!big) return;
   const el = document.getElementById('match-announce');
   const tEl = document.getElementById('announce-text');
   const sEl = document.getElementById('announce-sub');
   tEl.textContent = text; tEl.style.color = color || '#fff';
-  sEl.textContent = sub || '';
+  sEl.textContent = sub || '';                       // kept for the DOM's sake; the pill hides it
   el.style.display = 'flex'; el.style.opacity = '1';
   clearTimeout(el._t);
+  // A moment is a flash, not a read: the wording is still in the feed for 8 s.
   el._t = setTimeout(() => {
     el.style.opacity = '0';
     setTimeout(() => { el.style.display = 'none'; el.style.opacity = '1'; }, 420);
-  }, duration - 420);
+  }, Math.max(600, Math.min(duration, 1800)) - 420);
+}
+
+// ── 📜 Message feed (top-left): newest on top, older ones pushed down ──────────
+// The old centre banner showed one message at a time and cleared the previous
+// timeout, so a 3 s line could vanish after 0.3 s. Here four lines coexist and
+// each gets its full life.
+const FEED_MAX = 4;
+function pushFeedLine(text, sub, color, big, noI18n) {
+  const feed = document.getElementById('msg-feed');
+  if (!feed || !text) return;
+  const row = document.createElement('div');
+  row.className = 'mf' + (big ? ' mf-big' : '');
+  row.style.borderLeftColor = safeColor(color);
+  if (noI18n) row.setAttribute('data-no-i18n', '');   // chat: people's own words, never translated
+  const t = document.createElement('span');
+  t.textContent = text;
+  if (big) t.style.color = safeColor(color);
+  row.appendChild(t);
+  if (sub) {
+    const s = document.createElement('span');
+    s.className = 'mf-s'; s.textContent = sub;
+    row.appendChild(s);
+  }
+  feed.prepend(row);
+  while (feed.children.length > FEED_MAX) {
+    const old = feed.lastElementChild;
+    clearTimeout(old._t); old.remove();
+  }
+  row._t = setTimeout(() => {
+    row.style.opacity = '0';
+    setTimeout(() => row.remove(), 650);
+  }, big ? 8000 : 6000);
+}
+function clearFeed() {
+  const feed = document.getElementById('msg-feed');
+  if (!feed) return;
+  for (const row of [...feed.children]) clearTimeout(row._t);
+  feed.innerHTML = '';
 }
 
 function updateMatchHUD() {
@@ -28960,6 +28999,7 @@ function endMatch(winner, reason) {
   const isWin  = winner === 'ally';
   releasePointer(); // PLAY AGAIN / CHANGE MODE / BACK TO LOBBY need the cursor
   const el     = document.getElementById('match-over-screen');
+  showFunFact('match-over-screen');
   const title  = document.getElementById('match-over-title');
   title.textContent = isWin ? '🏆  VICTORY' : '💀  DEFEAT';
   title.style.color = isWin ? '#ffd700' : '#e74c3c';
@@ -30932,7 +30972,7 @@ function loop() {
   safeLoopStep('aim-assist', () => updateAimAssist(dt));  // auto-shoot / aim assist / aimbot / AI-aim dot
   if (inLobby) safeLoopStep('lobby-interactions', () => updateLobbyInteractions()); // duel-pad / challenge prompt
   safeLoopStep('interact-button', syncInteractButton); // every frame, so DUEL clears once you leave the lobby
-  safeLoopStep('chat-feed', () => updateChatFeed());     // fade old chat lines
+  safeLoopStep('ability-button', syncAbilityButton);   // shows only while what you hold has an ability (#30)
   safeLoopStep('admin-cheats', () => updateAdminCheats(dt));// admin cheat tick (fly, kill aura, etc.)
   safeLoopStep('uav', () => updateUAV(dt));        // Predator UAV overlay tick
   safeLoopStep('map-effects', () => updateMapEffects(dt)); // airport darkening, chernobyl gas, mortar prompt
@@ -31572,6 +31612,7 @@ function toggleBestLoadoutsPanel(show) {
 let loadoutBefore = null; // the picks when the loadout opened — ← BACK puts them back
 function showLoadoutScreen(mode) {
   if (!isLoadoutOpen()) loadoutBefore = { p: selectedPrimaryIdx, s: selectedSecondaryIdx, m: selectedMeleeIdx, u: selectedSupportIdx };
+  showFunFact('loadout-screen');
   loadoutMode = mode || 'death';
   releasePointer();
   // Before a match, at a trashcan and while waiting out a round there is somewhere to go back to;
@@ -31928,6 +31969,15 @@ const FUN_FACTS = [
   '😂 Fists are free. They have always been free. They will always be free.',
 ];
 function pickFunFact() { return FUN_FACTS[Math.floor(Math.random() * FUN_FACTS.length)]; }
+// 💡 Show one at the bottom of a screen you are already sitting on — loadout, waiting,
+// match over — instead of across the middle of a firefight (#29).
+function showFunFact(screenId) {
+  const host = document.getElementById(screenId);
+  if (!host) return;
+  let el = host.querySelector('.fun-fact');
+  if (!el) { el = document.createElement('div'); el.className = 'fun-fact'; host.appendChild(el); }
+  el.textContent = '\ud83d\udca1 ' + pickFunFact();
+}
 
 let stagingLobbyMode = null; // mode ID we're currently waiting in, or null
 let stagingLobbyState = null; // last received state from server
@@ -32390,6 +32440,7 @@ function afterDeath(ms, fn) {
 // inherit. Shared by the mode menu and the end-of-match buttons so they can't drift apart.
 function teardownMatchWorld() {
   matchEpoch++;
+  clearFeed();     // messages from the match that just ended don't belong on the next screen (#29)
   stopKillcam();   // restores the camera; may re-show the death screen, hidden again below
   exitSpectator();
   gameStarted = false;
@@ -32541,6 +32592,10 @@ function openSettingsHub() {
     </div>
     ${toggleRow('showFPS', 'SHOW FPS')}
     ${toggleRow('autoReload', 'AUTO RELOAD')}
+    ${isTouchUI() ? `<div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin:10px 0;padding:10px;background:rgba(255,255,255,0.035);border:1px solid #244c42;border-radius:6px;">
+      <div style="font-size:12px;letter-spacing:2px;color:#d8fff2;">BUTTON SIZE</div>
+      <div style="display:flex;gap:6px;">${TOUCH_SCALES.map(([label, v]) => `<button type="button" data-touch-scale="${v}" style="min-width:46px;min-height:36px;padding:0 8px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:bold;letter-spacing:1px;border-radius:5px;border:1px solid ${GAMEPLAY_SETTINGS.touchScale == v ? '#88ffcc' : '#2e5f52'};background:${GAMEPLAY_SETTINGS.touchScale == v ? '#1f5a3a' : '#16241f'};color:${GAMEPLAY_SETTINGS.touchScale == v ? '#aaffdd' : '#79a094'};">${label}</button>`).join('')}</div>
+    </div>` : ''}
     <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin:10px 0;padding:10px;background:rgba(255,255,255,0.035);border:1px solid #244c42;border-radius:6px;">
       <div style="font-size:12px;letter-spacing:2px;color:#d8fff2;">ADS MODE</div>
       <button id="settings-ads-mode" style="min-width:92px;padding:7px 10px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:bold;letter-spacing:2px;border-radius:4px;background:#132a24;color:#88ffcc;border:2px solid #44cc99;">${String(GAMEPLAY_SETTINGS.adsMode).toUpperCase()}</button>
@@ -32560,6 +32615,14 @@ function openSettingsHub() {
     btn.addEventListener('click', () => {
       GAMEPLAY_SETTINGS[btn.dataset.settingsToggle] = !GAMEPLAY_SETTINGS[btn.dataset.settingsToggle];
       saveGameplaySettings();
+      openSettingsHub();
+    });
+  });
+  panel.querySelectorAll('[data-touch-scale]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      GAMEPLAY_SETTINGS.touchScale = Number(btn.dataset.touchScale);
+      saveGameplaySettings();
+      applyTouchScale();
       openSettingsHub();
     });
   });
@@ -33975,11 +34038,12 @@ if (navigator.maxTouchPoints > 0 || 'ontouchstart' in window) {
   document.getElementById('mobile-controls').classList.add('active');
   document.body.classList.add('touch-ui'); // the phone HUD layout in index.html
   document.getElementById('controls-hint').style.display = 'none';
+  applyTouchScale();                       // ⚙ → BUTTON SIZE (#29)
 }
 
 // Button IDs that should NOT trigger look/joystick. Jump / slide / crouch were missing,
 // so pressing them on a phone also swung the camera.
-const BTN_IDS = new Set(['btn-fire','btn-ads','btn-reload-mobile','btn-prev-weapon','btn-next-weapon','btn-interact','btn-jump','btn-slide','btn-crouch']);
+const BTN_IDS = new Set(['btn-fire','btn-ads','btn-reload-mobile','btn-prev-weapon','btn-next-weapon','btn-interact','btn-jump','btn-slide','btn-crouch','btn-ability']);
 
 let joyTouchId  = null, joyOrigin = { x: 0, y: 0 };
 let lookTouchId = null, lastLookPos = null;
@@ -34142,6 +34206,19 @@ if (btnInteract) {
   };
   btnInteract.addEventListener('touchstart', e => { e.stopPropagation(); e.preventDefault(); interact(); }, { passive: false });
   btnInteract.addEventListener('click', interact);
+}
+
+// ⚡ The E key, as a button. Touch had no way to fire an item's ability or blow placed
+// C4 at all — 143 items carry one (#30). Same two jobs, same order as the keydown.
+const btnAbility = document.getElementById('btn-ability');
+if (btnAbility) {
+  const useAbility = () => {
+    if (!gameStarted || isDead) return;
+    if (placedC4s.length > 0 && activeSlot === 'support' && SUPPORT_ITEMS[selectedSupportIdx]?.id === 'c4') detonateAllC4();
+    else activateAbility();
+  };
+  btnAbility.addEventListener('touchstart', e => { e.stopPropagation(); e.preventDefault(); useAbility(); }, { passive: false });
+  btnAbility.addEventListener('click', useAbility);
 }
 
 // Mobile sprint / crouch buttons — set window._mobileSprint / _mobileCrouch flags
