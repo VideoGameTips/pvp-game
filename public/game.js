@@ -18225,7 +18225,15 @@ function updateFireShake(dt) {
 const ARROW_SENS = 0.03;
 
 document.addEventListener('pointerlockchange', () => {
+  const was = pointerLocked;
   pointerLocked = document.pointerLockElement === renderer.domElement;
+  // Desktop: Esc is how a player gets the cursor back. Mid-match it now opens the ⚙ match menu
+  // (RESUME / settings / leave) instead of leaving a screen that looks the same but ignores the
+  // mouse (#26). When the game lets go itself (releasePointer, the voice-chat box) the screen that
+  // needed the cursor is already up by the time this fires, and it wins.
+  const vchat = document.getElementById('vchat-box');
+  if (was && !pointerLocked && inLiveMatch() && !isDead && !isLoadoutOpen() && !anyDialogOpen()
+      && !(vchat && vchat.style.display === 'block')) openSettingsHub();
 });
 // ── 🔫 Recoil ───────────────────────────────────────────────────────────────
 // There was none, anywhere. Every weapon in the game fired perfectly flat, and
@@ -31529,9 +31537,15 @@ function toggleBestLoadoutsPanel(show) {
   });
 }
 
+let loadoutBefore = null; // the picks when the loadout opened — ← BACK puts them back
 function showLoadoutScreen(mode) {
+  if (!isLoadoutOpen()) loadoutBefore = { p: selectedPrimaryIdx, s: selectedSecondaryIdx, m: selectedMeleeIdx, u: selectedSupportIdx };
   loadoutMode = mode || 'death';
   releasePointer();
+  // Before a match, at a trashcan and while waiting out a round there is somewhere to go back to;
+  // dead in a match there is not — the way out is leaving it (#26).
+  document.getElementById('loadout-exit-btn').textContent =
+    (inLiveMatch() && loadoutMode === 'death') ? '🚪 LEAVE MATCH' : '← BACK';
   const screen = document.getElementById('loadout-screen');
   const pList  = document.getElementById('loadout-primary-list');
   const sList  = document.getElementById('loadout-secondary-list');
@@ -32439,11 +32453,24 @@ document.addEventListener('langchange', () => {
 // index.html gives them one shared frame.
 const DIALOG_IDS = ['settings-hub-panel', 'shoot-fx-panel', 'aim-assist-panel', 'weapon-skins-panel',
                     'skins-panel', 'kill-log-panel', 'char-chat-panel', 'map-dialog', 'diff-dialog'];
+function anyDialogOpen() {
+  return DIALOG_IDS.some(id => { const el = document.getElementById(id); return el && getComputedStyle(el).display !== 'none'; });
+}
 function closeOtherDialogs(keepId) {
   for (const id of DIALOG_IDS) {
     const el = id !== keepId && document.getElementById(id);
     if (el) el.style.display = 'none';
   }
+}
+// A match that is still being played (not Lobby 13, not the end screen).
+function inLiveMatch() { return gameStarted && !inLobby && !!match && !match.over; }
+// Leave before the end (#26): ask once, tell the server as endMatch does, then go to one of the two
+// places the end screen offers.
+function leaveMatch(to) {
+  if (inLiveMatch() && !confirm("Leave this match? It won't count.")) return;
+  if (match && !match.over) socket.emit('leaveMatch');
+  closeOtherDialogs();
+  if (to === 'lobby') { teardownMatchWorld(); selectMode('lobby13'); } else openModeMenu();
 }
 function openSettingsHub() {
   closeOtherDialogs('settings-hub-panel');
@@ -32469,9 +32496,10 @@ function openSettingsHub() {
   panel.style.display = 'block';
   panel.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;border-bottom:1px solid #276b55;padding-bottom:10px;">
-      <div style="font-size:18px;letter-spacing:3px;color:#88ffcc;">⚙ SETTINGS</div>
+      <div style="font-size:18px;letter-spacing:3px;color:#88ffcc;">${inLiveMatch() ? '⚙ MATCH MENU' : '⚙ SETTINGS'}</div>
       <button id="settings-hub-close" style="background:#1f2a27;color:#ffaaaa;border:1px solid #ff6666;padding:4px 10px;cursor:pointer;font-family:inherit;border-radius:3px;">✕</button>
     </div>
+    ${gameStarted ? '<button id="settings-resume" style="display:block;width:100%;min-height:52px;margin:0 0 6px;background:#1f5a3a;color:#aaffdd;border:2px solid #44cc99;cursor:pointer;font-family:inherit;font-size:16px;font-weight:bold;letter-spacing:2px;border-radius:6px;">▶ RESUME</button>' : ''}
     <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin:10px 0;padding:10px;background:rgba(255,255,255,0.035);border:1px solid #244c42;border-radius:6px;">
       <div style="font-size:12px;letter-spacing:2px;color:#d8fff2;">LANGUAGE</div>
       <div data-no-i18n style="display:flex;gap:6px;">
@@ -32490,6 +32518,10 @@ function openSettingsHub() {
     <div style="height:1px;background:#276b55;margin:16px 0 12px;"></div>
     <button id="settings-shoot-fx" style="display:block;width:100%;margin:8px 0;padding:12px;background:#2a1a3a;color:#cc99ff;border:1px solid #aa77ff;cursor:pointer;font-family:inherit;letter-spacing:2px;border-radius:4px;">🔊 SHOOT FX</button>
     <button id="settings-aim-assist" style="display:block;width:100%;margin:8px 0;padding:12px;background:#3a1a1a;color:#ff9988;border:1px solid #ff5544;cursor:pointer;font-family:inherit;letter-spacing:2px;border-radius:4px;">🎯 AIM ASSIST</button>
+    ${inLiveMatch() ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px;padding-top:14px;border-top:1px solid #276b55;">
+      <button id="settings-leave-mode" style="min-height:48px;background:transparent;color:#ffb3a8;border:1px solid #7a3a34;cursor:pointer;font-family:inherit;font-size:13px;letter-spacing:1px;border-radius:6px;">🔁 CHANGE MODE</button>
+      <button id="settings-leave-lobby" style="min-height:48px;background:transparent;color:#ffb3a8;border:1px solid #7a3a34;cursor:pointer;font-family:inherit;font-size:13px;letter-spacing:1px;border-radius:6px;">🏠 BACK TO LOBBY 13</button>
+    </div>` : ''}
   `;
   document.getElementById('settings-hub-close').addEventListener('click', () => panel.style.display = 'none');
   panel.querySelectorAll('[data-settings-toggle]').forEach(btn => {
@@ -32516,6 +32548,11 @@ function openSettingsHub() {
   });
   document.getElementById('settings-shoot-fx').addEventListener('click', () => { panel.style.display = 'none'; openShootFxPanel(); });
   document.getElementById('settings-aim-assist').addEventListener('click', () => { panel.style.display = 'none'; openAimAssistPanel(); });
+  const resume = document.getElementById('settings-resume');
+  if (resume) resume.addEventListener('click', () => { panel.style.display = 'none'; requestPointerLockSafe(); });
+  const toMode = document.getElementById('settings-leave-mode'), toLobby = document.getElementById('settings-leave-lobby');
+  if (toMode) toMode.addEventListener('click', () => leaveMatch('menu'));
+  if (toLobby) toLobby.addEventListener('click', () => leaveMatch('lobby'));
 }
 
 function showFloatingSettingsButton(show) {
@@ -32524,7 +32561,7 @@ function showFloatingSettingsButton(show) {
     btn = document.createElement('button');
     btn.id = 'floating-settings-btn';
     btn.textContent = '⚙ SETTINGS';
-    btn.style.cssText = 'position:fixed;top:58px;left:14px;z-index:60;'
+    btn.style.cssText = 'position:fixed;top:58px;left:14px;z-index:90;'
       + 'padding:9px 18px;background:rgba(10,24,22,0.88);color:#88ffcc;border:2px solid #44cc99;'
       + 'border-radius:6px;font-family:inherit;font-size:13px;font-weight:bold;letter-spacing:2px;'
       + 'cursor:pointer;box-shadow:0 2px 12px rgba(0,0,0,0.5);';
@@ -33864,6 +33901,15 @@ function selectMapPick(mapId) {
 }
 document.querySelectorAll('.map-card').forEach(card => {
   card.addEventListener('click', () => { selectMapPick(card.dataset.map); closePickDialogs(); });
+});
+document.getElementById('loadout-exit-btn').addEventListener('click', () => {
+  if (inLiveMatch() && loadoutMode === 'death') { leaveMatch('menu'); return; }
+  cancelAutoRespawn();
+  if (loadoutBefore) ({ p: selectedPrimaryIdx, s: selectedSecondaryIdx, m: selectedMeleeIdx, u: selectedSupportIdx } = loadoutBefore);
+  document.getElementById('loadout-screen').style.display = 'none';
+  if (!gameStarted) { openModeMenu(); return; }                       // before a match: back to the modes
+  if (loadoutMode === 'waiting') { document.getElementById('waiting-screen').style.display = 'flex'; return; }
+  requestPointerLockSafe();                                           // SWAP: back to the fight, kit unchanged
 });
 document.getElementById('loadout-ready-btn').addEventListener('click', confirmLoadout);
 document.getElementById('loadout-ready-btn').addEventListener('touchstart', e => { e.preventDefault(); confirmLoadout(); }, { passive: false });

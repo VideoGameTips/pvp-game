@@ -71,6 +71,10 @@
     '🎭 SKINS': '🎭 角色皮肤',
     '🔑 ENTER UNLOCK CODE': '🔑 输入兑换码',
     'LOG OUT': '退出登录',
+    // leaving a match, the loadout's way out (#26)
+    '⚙ MATCH MENU': '⚙ 对局菜单', '▶ RESUME': '▶ 继续', '🔁 CHANGE MODE': '🔁 换模式', '🏠 BACK TO LOBBY 13': '🏠 回 13 号大厅',
+    "Leave this match? It won't count.": '这局还没打完，确定离开吗？这局不计分。',
+    '← BACK': '← 返回', '🚪 LEAVE MATCH': '🚪 离开比赛',
     // the simpler mode screen (#24)
     'SHOP': '商店', 'SKINS': '皮肤', 'GUN SKINS': '枪械皮肤', 'CHAT': '聊天', 'MORE': '更多',
     'QUICK START': '快速开始', 'ALL MODES': '全部模式',
