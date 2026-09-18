@@ -32318,8 +32318,6 @@ function checkLoginEggs(name, pass) {
   }, true);
 })();
 
-// Everything a finished match (or Lobby 13) leaves behind that the next start must not
-// inherit. Shared by the mode menu and the end-of-match buttons so they can't drift apart.
 // What a death schedules — the death loadout, spectating, the D-Day respawn — runs on a timer.
 // PLAY AGAIN / CHANGE MODE / BACK TO LOBBY now leave a match without reloading the page, so a timer
 // from the old match must not fire into whatever comes next: every teardown starts a new epoch.
@@ -32328,6 +32326,8 @@ function afterDeath(ms, fn) {
   const epoch = matchEpoch;
   setTimeout(() => { if (epoch === matchEpoch) fn(); }, ms);
 }
+// Everything a finished match (or Lobby 13) leaves behind that the next start must not
+// inherit. Shared by the mode menu and the end-of-match buttons so they can't drift apart.
 function teardownMatchWorld() {
   matchEpoch++;
   stopKillcam();   // restores the camera; may re-show the death screen, hidden again below
