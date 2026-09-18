@@ -698,8 +698,9 @@
   </div>
 
   <!-- The mode screen starts at the top: its bar is sticky and the page is about one phone screen tall
-       (#24). It used to centre (`safe center`), from when the overflow was pushed above the top (#15). -->
-  <div id="mode-screen" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.93); z-index:101; color:#fff; font-family:'Courier New',monospace; flex-direction:column; align-items:center; justify-content:flex-start; overflow-y:auto; padding:0 0 40px;">
+       (#24). It used to centre (`safe center`), from when the overflow was pushed above the top (#15).
+       Opaque: at 93% the game HUD behind it (weapon slots, ammo, touch controls) showed through. -->
+  <div id="mode-screen" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:#08080c; z-index:101; color:#fff; font-family:'Courier New',monospace; flex-direction:column; align-items:center; justify-content:flex-start; overflow-y:auto; padding:0 0 40px;">
     <div id="user-info-bar">
       <div id="uib-me">
         <button id="mode-back-btn" title="Back to Lobby 13 (Esc)">← LOBBY</button>
