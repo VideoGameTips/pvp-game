@@ -1473,6 +1473,8 @@ function formatMatchTime(secs) {
 // ── Loadout state ──────────────────────────────────────────────────────────
 let selectedDifficulty = 'medium'; // 'easy' | 'medium' | 'hard' | 'expert' — gates bot AI features
 let selectedMap = 'auto'; // 'auto' = random | specific map name from MAP_GROUPS
+let pickedMap = 'auto';   // what the player chose on the picker — selectedMap is what loads next,
+                          // and a matchmade lobby overwrites it with the map it started on
 let selectedPrimaryIdx   = null;
 let selectedSecondaryIdx = null;
 let selectedMeleeIdx     = null;
@@ -31869,7 +31871,8 @@ function renderStagingLobby() {
   const me = s ? s.players.find(p => p.socketId === myId) : null;
   el.innerHTML = `
     <div style="font-size:32px;letter-spacing:8px;color:#ffaa44;margin-bottom:6px;">🏛️ MATCH LOBBY</div>
-    <div style="font-size:14px;color:#888;letter-spacing:3px;margin-bottom:24px;">${mode.toUpperCase()} · WAITING FOR PLAYERS</div>
+    <div style="font-size:14px;color:#888;letter-spacing:3px;margin-bottom:8px;">${mode.toUpperCase()} · WAITING FOR PLAYERS</div>
+    <div id="lobby-map" style="font-size:13px;color:#cfd8e3;letter-spacing:2px;margin-bottom:22px;">MAP: ${mapCardLabel(s && s.map)}</div>
     <div style="display:flex;gap:60px;margin-bottom:30px;">
       <div style="text-align:center;min-width:200px;">
         <div style="font-size:11px;color:#88ccff;letter-spacing:3px;margin-bottom:8px;">TEAM ALLY (${allyPlayers.length}/${cfg.allies != null ? cfg.allies + 1 : '?'})</div>
@@ -31938,7 +31941,7 @@ function confirmLoadout() {
     if (modeId && lobbyEligible.includes(modeId)) {
       // Route through staging lobby — wait for others to ready up
       stagingLobbyMode = modeId;
-      socket.emit('joinStagingLobby', { mode: modeId });
+      socket.emit('joinStagingLobby', { mode: modeId, map: pickedMap }); // the server honours it (#17)
       showStagingLobby(modeId);
       return;
     }
@@ -32298,6 +32301,7 @@ function teardownMatchWorld() {
 // runs cleanly, and clears the lobby cast so they don't linger behind the menu.
 function openModeMenu() {
   teardownMatchWorld();
+  selectedMap = pickedMap; // a lobby match overwrote it with its own map; the picker decides again
   document.getElementById('mode-screen').style.display = 'flex';
   updateUserInfoBar();
 }
@@ -32309,6 +32313,11 @@ const SELF_KIT_MODES = ['dday', 'range', 'lobby13'];
 function currentModeId() {
   const hit = Object.entries(GAME_MODE_CONFIGS).find(([, cfg]) => cfg === selectedModeConfig);
   return hit ? hit[0] : null;
+}
+// The name a map card shows ("VOLCANO"); 'auto' / unknown → RANDOM.
+function mapCardLabel(mapId) {
+  const card = mapId && mapId !== 'auto' && document.querySelector(`.map-card[data-map="${mapId}"]`);
+  return card ? card.textContent.trim() : 'RANDOM';
 }
 // The name its mode card shows ("1v1", "FFA · 5 Bots") — the config table has no labels.
 function modeCardLabel(modeId) {
@@ -33693,7 +33702,7 @@ const MAP_DESCS = {
   dreamscape: '🌌 Dreamscape — floating stairs + impossible shapes',
 };
 function selectMapPick(mapId) {
-  selectedMap = mapId;
+  selectedMap = pickedMap = mapId;
   document.querySelectorAll('.map-card').forEach(c => {
     const sel = c.dataset.map === mapId;
     c.classList.toggle('selected', sel);

@@ -1044,6 +1044,7 @@ function broadcastLobbyState(L) {
   // Send full lobby state to each player in this specific lobby instance
   const state = {
     mode: L.mode,
+    map: lobbyMapPick(L) || 'auto',
     players: L.players.map(p => ({
       socketId: p.socketId,
       name: players[p.socketId]?.name || '?',
@@ -1064,6 +1065,17 @@ function autoAssignTeam(L, mode) {
   if (enemyRoom) return 'enemy';
   return allies <= enemies ? 'ally' : 'enemy'; // both full (shouldn't happen): balance
 }
+// Maps a matchmade lobby can start on — mirrors the client's pool in spawnGameBots() (CLAUDE.md #4).
+const LOBBY_MAP_POOL = ['blank','urban','warehouse','forest','vietnam','volcano','cyber','desert',
+                        'tundra','space','airport','trenches','chernobyl','refinery','skydock',
+                        'sewer','gravity_lab','glassworks','carrier','overgrowth','orbital_station',
+                        'foundry','carnival','biosphere','lockdown','studio','temple','holiday',
+                        'labyrinth','arena','opera','doomsday','train','dreamscape',
+                        'pearl_harbor','titanic','supermarket','pyongyang','traffic_cone_republic','flying_moai'];
+// The lobby plays the map of the first player (in join order) who picked a specific one.
+function lobbyMapPick(L) {
+  return L.players.find(p => p.map)?.map || null;
+}
 function checkLobbyStart(L) {
   if (!L || L.players.length === 0) return;
   const mode = L.mode;
@@ -1082,15 +1094,9 @@ function checkLobbyStart(L) {
   const enemyBots = fillBots ? Math.max(0, cfg.enemy - enemyHumans) : 0;
   // Shared match ID for everyone
   const matchId = `lobby-${mode}-${Date.now()}`;
-  // 🗺️ Server picks the map ONCE so all players load the same one.
-  // (Was previously: each client picked random independently → different maps.)
-  const MAP_POOL = ['blank','urban','warehouse','forest','vietnam','volcano','cyber','desert',
-                    'tundra','space','airport','trenches','chernobyl','refinery','skydock',
-                    'sewer','gravity_lab','glassworks','carrier','overgrowth','orbital_station',
-                    'foundry','carnival','biosphere','lockdown','studio','temple','holiday',
-                    'labyrinth','arena','opera','doomsday','train','dreamscape',
-                    'pearl_harbor','titanic','supermarket','pyongyang','traffic_cone_republic','flying_moai'];
-  const mapId = MAP_POOL[Math.floor(Math.random() * MAP_POOL.length)];
+  // 🗺️ Server picks the map ONCE so all players load the same one: the lobby's pick if someone
+  // chose a map (#17 — the picker used to be ignored here), else random.
+  const mapId = lobbyMapPick(L) || LOBBY_MAP_POOL[Math.floor(Math.random() * LOBBY_MAP_POOL.length)];
   // Designate the first player as host (they spawn the bots if any)
   const host = L.players[0];
   for (const p of L.players) {
@@ -1615,7 +1621,8 @@ io.on('connection', (socket) => {
     // Already in this lobby?
     if (L.players.some(p => p.socketId === socket.id)) return;
     const team = autoAssignTeam(L, mode);
-    L.players.push({ socketId: socket.id, team, ready: false, fillBots: true });
+    const map = LOBBY_MAP_POOL.includes(data?.map) ? data.map : null; // 'auto' / unknown → no pick
+    L.players.push({ socketId: socket.id, team, ready: false, fillBots: true, map });
     broadcastLobbyState(L);
   });
   socket.on('leaveStagingLobby', () => {
