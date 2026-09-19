@@ -793,7 +793,8 @@ function falloffMultiplier(weaponId, dist) {
 }
 
 const MELEE_ITEMS = [
-  { id: 'bat',        name: 'Bat',        type: 'Melee',       damage: 38, range: 2.1, cooldown: 520,
+  { id: 'bat',        name: 'Bat',        type: 'Melee',       damage: 50, range: 2.1, cooldown: 520,
+    knockbackOnHit: 6, // every swing shoves the target back, not just the ability
     ability: { name: 'Heavy Strike', cd: 8000,  desc: 'Next hit deals 2× damage', type: 'melee_heavy' } },
   { id: 'sabre',      name: 'Sabre',      type: 'Melee',       damage: 45, range: 2.4, cooldown: 620,
     ability: { name: 'Lunge',        cd: 7000,  desc: 'Dash forward · hit all in path', type: 'melee_lunge', distance: 6 } },
@@ -22928,6 +22929,16 @@ function tryMelee() {
       const bot = resolveBot(pid);
       if (bot) { bot.yVel = launchVel; bot.y = bot.y || 0; }
     }
+    // 💨 Knockback (bat) — shove the target back along the swing direction.
+    // Bots only: there's no client authority to displace another real
+    // player's position, so a hit on a remote player just deals damage.
+    if (item.knockbackOnHit) {
+      const bot = resolveBot(pid);
+      if (bot) {
+        bot.kbVX = (bot.kbVX || 0) + dir.x * item.knockbackOnHit;
+        bot.kbVZ = (bot.kbVZ || 0) + dir.z * item.knockbackOnHit;
+      }
+    }
     // 🔗 Chain (pipe) — splash to nearby enemies in radius at reduced damage
     if (item.chainOnHit) {
       const { radius, mult } = item.chainOnHit;
@@ -33703,6 +33714,19 @@ function updateBotAI(dt) {
       bot.yVel -= GRAVITY * dt; // gravity — bots share the player's physics
       bot.y = (bot.y || 0) + bot.yVel * dt;
       if (bot.y <= 0) { bot.y = 0; bot.yVel = 0; }
+    }
+
+    // ── Horizontal knockback (bat): a decaying push, applied here so it
+    // composes with the bot's own chase movement below instead of fighting
+    // it — the AI's `nx = bot.x + moveX` picks up wherever this leaves off ──
+    if (bot.kbVX || bot.kbVZ) {
+      const botMapHalf = activeMapName === 'br_arena' ? 123 : 47;
+      bot.x = Math.max(-botMapHalf, Math.min(botMapHalf, bot.x + bot.kbVX * dt));
+      bot.z = Math.max(-botMapHalf, Math.min(botMapHalf, bot.z + bot.kbVZ * dt));
+      const kbFriction = Math.max(0, 1 - dt * 6);
+      bot.kbVX *= kbFriction; bot.kbVZ *= kbFriction;
+      if (Math.abs(bot.kbVX) < 0.05) bot.kbVX = 0;
+      if (Math.abs(bot.kbVZ) < 0.05) bot.kbVZ = 0;
     }
 
     // ── Frost slow: regen +2/sec, lethal at 0 ────────────────────────────────
