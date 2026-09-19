@@ -26741,6 +26741,19 @@ function confirmKill(id, name) {
 }
 // A kill used to make the body vanish on the spot. It tips over for a moment first, so you see it
 // go down — and is upright again before anything can show it again (respawns set visible = true).
+// Undoes dropBody's fall-over tilt (and any finisher rotation) on respawn.
+// dropBody only self-heals the tilt on its own 1600ms timeout, which a rapid
+// re-kill orphans (each dropBody call mints a fresh _drop token, so the prior
+// timeout's reset silently no-ops) — so a respawn must force it back upright
+// itself rather than trust that timeout to have run. Yaw (rotation.y) is left
+// alone; only the fall-over's x/z tilt is cleared.
+function resetDeathPose(mesh) {
+  if (!mesh) return;
+  mesh._drop = null;
+  mesh.rotation.x = 0;
+  mesh.rotation.z = 0;
+}
+
 function dropBody(id) {
   const mesh = remoteMeshes[id];
   if (!mesh || mesh._drop || !mesh.visible) return;
@@ -27233,7 +27246,7 @@ function clientRespawnBot(botId) {
   if (bot.state !== 'turret') bot.state = 'chase';
   if (players[botId]) { players[botId].hp = _rhp; players[botId].dead = false; players[botId].x = sp.x; players[botId].z = sp.z; }
   const mesh = remoteMeshes[botId];
-  if (mesh) { mesh.position.set(sp.x, 0, sp.z); mesh.visible = true; }
+  if (mesh) { mesh.position.set(sp.x, 0, sp.z); mesh.visible = true; resetDeathPose(mesh); }
 }
 
 
@@ -30054,6 +30067,7 @@ socket.on('playerRespawned', p => {
       remoteMeshes[p.id].position.set(p.x, 0, p.z);
     }
     remoteMeshes[p.id].visible = true;
+    resetDeathPose(remoteMeshes[p.id]);
     players[p.id].hp = p.hp || 300;
     players[p.id].dead = false;
   }
@@ -31608,7 +31622,7 @@ function scheduleBotArcadeRespawn(botId) {
     bot.dead = false; bot.prevHp = bot.hp; bot.stuckTimer = 0;
     if (players[bot.id]) { players[bot.id].hp = bot.hp; players[bot.id].dead = false; }
     const mesh = remoteMeshes[bot.id];
-    if (mesh) { mesh.position.set(bot.x, 0, bot.z); mesh.visible = true; }
+    if (mesh) { mesh.position.set(bot.x, 0, bot.z); mesh.visible = true; resetDeathPose(mesh); }
     socket.emit('forceRespawnBot', { botId: bot.id, x: bot.x, z: bot.z });
   }, 2500);
 }
@@ -31887,7 +31901,7 @@ function onFrontlinesKill(targetId, killerId) {
         players[targetBot.id].weaponId = targetBot.weaponId;
       }
       const mesh = remoteMeshes[targetBot.id];
-      if (mesh) { mesh.position.set(targetBot.x, 0, targetBot.z); mesh.visible = true; }
+      if (mesh) { mesh.position.set(targetBot.x, 0, targetBot.z); mesh.visible = true; resetDeathPose(mesh); }
       socket.emit('forceRespawnBot', { id: targetBot.id, x: targetBot.x, z: targetBot.z, weaponId: targetBot.weaponId });
     }, 3000);
   }
@@ -32125,7 +32139,7 @@ function restartElimRound(lastWinner) {
     bot.x = sp.x; bot.z = sp.z;
     bot.wanderAngle = Math.random() * Math.PI * 2;
     const mesh = remoteMeshes[bot.id];
-    if (mesh) { mesh.position.set(bot.x, 0, bot.z); mesh.visible = true; }
+    if (mesh) { mesh.position.set(bot.x, 0, bot.z); mesh.visible = true; resetDeathPose(mesh); }
     socket.emit('forceRespawnBot', { id: bot.id, x: bot.x, z: bot.z, weaponId: bot.weaponId });
   }
   setTimeout(() => startMatchRound(), 1200);
