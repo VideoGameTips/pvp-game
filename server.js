@@ -1151,10 +1151,11 @@ function lobbyMapPick(L) {
 // picked 1v1 next always landed in a fresh lobby and two people never met.
 const HUMAN_SEARCH_MS = 15000;
 const HUMAN_SEARCH_MODES = new Set(['1v1']);
-// People who could still pick a mode in the next few seconds: online, not in a match.
+// People who could still pick a mode in the next few seconds: signed in, not in a match.
+// (A page open on the login screen is online too, but it isn't coming.)
 function idleHumansBesides(L) {
   const here = new Set(L.players.map(p => p.socketId));
-  return Object.values(players).filter(p => !p.isBot && !here.has(p.id)
+  return Object.values(players).filter(p => !p.isBot && p.account && !here.has(p.id)
     && (p.matchId === 'lobby' || p.matchId === HUB_MATCH)).length;
 }
 function stopLobbySearch(L) {
@@ -1223,6 +1224,10 @@ function startLobbyMatch(L, extra = {}) {
 // the real people standing there. A challenge is between two players who are both
 // in the hub, lasts DUEL_INVITE_MS, and nobody is in more than one at a time.
 const DUEL_INVITE_MS = 20000;
+// Every challenge is a pop-up on the other player's screen, so after a "no" the same
+// challenger waits before asking the same player again.
+const DUEL_ASK_AGAIN_MS = 10000;
+const duelNoAt = new Map();   // `${from}>${to}` → when they said no
 const duelInvites = {};   // inviteId → { id, from, to, timer }
 let _duelSeq = 0;
 function duelInviteOf(socketId) {
@@ -1233,12 +1238,16 @@ function endDuelInvite(inv, reason) {
   if (!inv || !duelInvites[inv.id]) return;
   clearTimeout(inv.timer);
   delete duelInvites[inv.id];
+  if (reason === 'declined') duelNoAt.set(`${inv.from}>${inv.to}`, Date.now());
   for (const sid of [inv.from, inv.to]) io.to(sid).emit('duelClosed', { inviteId: inv.id, reason });
 }
 function endDuelInvitesOf(socketId, reason) {
   for (const inv of Object.values(duelInvites)) {
     if (inv.from === socketId || inv.to === socketId) endDuelInvite(inv, reason);
   }
+}
+function forgetDuelNos(socketId) {
+  for (const k of duelNoAt.keys()) if (k.startsWith(socketId + '>') || k.endsWith('>' + socketId)) duelNoAt.delete(k);
 }
 // Team sizes per mode (used to determine how many bots to fill)
 const MODE_TEAM_SIZES = {
@@ -1823,6 +1832,7 @@ io.on('connection', (socket) => {
     if (!me || !them || them.isBot || them.id === socket.id) return refuse('gone');
     if (me.matchId !== HUB_MATCH || them.matchId !== HUB_MATCH) return refuse('gone');
     if (duelInviteOf(socket.id) || duelInviteOf(them.id)) return refuse('busy');
+    if (Date.now() - (duelNoAt.get(`${socket.id}>${them.id}`) || 0) < DUEL_ASK_AGAIN_MS) return refuse('declined');
     const inv = { id: `duel-${++_duelSeq}`, from: socket.id, to: them.id };
     inv.timer = setTimeout(() => endDuelInvite(inv, 'timeout'), DUEL_INVITE_MS);
     duelInvites[inv.id] = inv;
@@ -1984,6 +1994,7 @@ io.on('connection', (socket) => {
     const _leftLobby = removeSocketFromLobbies(socket.id);
     if (_leftLobby) broadcastLobbyState(_leftLobby);
     endDuelInvitesOf(socket.id, 'gone');
+    forgetDuelNos(socket.id);
     delete players[socket.id];
     emitToMatch(leavingMatch, 'playerLeft', socket.id);
     // Remove bots owned by this client

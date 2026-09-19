@@ -29535,6 +29535,7 @@ socket.on('connect', () => {
   const el = document.getElementById('err');
   el.style.display = 'none';
   el.textContent = '';
+  endDuelUi();   // a reconnect is a new socket: any challenge in flight died with the old one (#46)
 });
 // Staging-lobby socket events
 socket.on('lobbyState', data => {
@@ -29608,7 +29609,8 @@ socket.on('playerLeft',   id => {
 // A real opponent who leaves an elimination match — quits, closes the tab, drops — used to
 // stay "alive" in it: the round could only end on its 60 s timer and every new round counted
 // them in again, so whoever was left sat through minutes of empty rounds (#46). Now they're
-// out, and with nobody left to fight (no enemy players, no bots) you win on the spot.
+// out, and with nobody left to fight (no enemy players, no bots) the match ends at once — a
+// win, but an unpaid one (below).
 function opponentLeft(id) {
   if (!pvpMatch || !(pvpMatch.opponents || []).some(o => o.socketId === id)) return;
   // playerLeft only says someone left the room *we* are in. Until our roster for the match
@@ -29621,7 +29623,14 @@ function opponentLeft(id) {
   match.aliveEnemies.delete(id);
   const enemyPlayers = pvpMatch.opponents.some(o => o.team !== pvpMatch.team);
   const anyBots = Object.values(players).some(p => p && p.isBot);
-  if (!enemyPlayers && !anyBots) { match.roundActive = false; endMatch('ally', 'Your opponent left'); return; }
+  if (!enemyPlayers && !anyBots) {
+    // A win nobody played for pays nothing — or two tabs could challenge each other, close one
+    // and collect a match win (and its chest roll) every few seconds.
+    match.roundActive = false;
+    match.forfeit = true;
+    endMatch('ally', 'Your opponent left · no reward this time');
+    return;
+  }
   checkElimRound();
 }
 // 🌐 Authoritative "who is actually in your match" list, sent whenever the
@@ -32134,7 +32143,7 @@ function endMatch(winner, reason) {
   const playerKills = (match.ffaKills?.[myId])
     ?? (players[myId]?.kills)
     ?? 0;
-  awardMatchCredits(playerKills, isWin);
+  if (!match.forfeit) awardMatchCredits(playerKills, isWin);   // see opponentLeft
   // 🧠 Match-memory: every comic-cast bot remembers whether THEIR team won, and
   // whether they were on your side or against you. (Ally bots win when you win.)
   const memBefore = loadCharMemory();
