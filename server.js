@@ -1150,7 +1150,7 @@ function lobbyMapPick(L) {
 // moment everyone *in the lobby* was ready — alone, that is just you — so whoever
 // picked 1v1 next always landed in a fresh lobby and two people never met.
 const HUMAN_SEARCH_MS = 15000;
-const HUMAN_SEARCH_MODES = new Set(['1v1']);
+const HUMAN_SEARCH_MODES = new Set(['1v1', '2v2', '3v3', '5v5', '10v10']);   // team modes too (#48)
 // People who could still pick a mode in the next few seconds: signed in, not in a match.
 // (A page open on the login screen is online too, but it isn't coming.)
 function idleHumansBesides(L) {
@@ -1210,7 +1210,7 @@ function startLobbyMatch(L, extra = {}) {
   for (const p of L.players) {
     if (players[p.socketId]) players[p.socketId].team = p.team;
     io.to(p.socketId).emit('lobbyStart', {
-      mode, matchId, mapId, team: p.team, isHost: p.socketId === host?.socketId,
+      mode, matchId, mapId, team: p.team, isHost: p.socketId === host?.socketId, hostId: host?.socketId || null,
       allyBots, enemyBots, opponents: L.players.filter(o => o.socketId !== p.socketId).map(o => ({ socketId: o.socketId, team: o.team, name: players[o.socketId]?.name || '' })),
       ...extra,
     });
@@ -1732,11 +1732,16 @@ io.on('connection', (socket) => {
     if (!bot || !bot.isBot || bot.dead || !shooter) return;
     let dmg = Math.round((WEAPON_DAMAGE[data.weapon] || 25) * falloffMultiplier(data.weapon, dist3(shooter, bot)));
     if (data.headshot) dmg = data.instakill ? bot.hp : Math.round(dmg * (WEAPON_HS_MULT[data.weapon] || 2));
+    // The shooter's client already saw this bot die (#48). Client and server work damage out
+    // differently (their own tables, zone bonuses, positions), and with other real players in
+    // the match a kill that stays on one screen leaves a frozen, unkillable bot on everyone else's.
+    if (data.fatal) dmg = bot.hp;
     const botHpBefore = bot.hp;
     bot.hp = Math.max(0, bot.hp - dmg);
     // Only what the PLAYER dealt counts -- not a friendly bot they own.
     if (shooter === players[socket.id]) creditFfaDamage(shooter, botHpBefore - bot.hp);
-    emitToMatch(bot.matchId, 'playerHit', { targetId: bot.id, hp: bot.hp, bulletId: data.bulletId });
+    // shooterId: the host must not count another player's kill of its bot as its own (#48)
+    emitToMatch(bot.matchId, 'playerHit', { targetId: bot.id, hp: bot.hp, bulletId: data.bulletId, shooterId: shooter.id });
     if (bot.hp <= 0) {
       bot.dead = true; bot.deaths++; shooter.kills++;
       if (shooter === players[socket.id]) shooter.matchKills = (shooter.matchKills || 0) + 1;
@@ -1748,6 +1753,43 @@ io.on('connection', (socket) => {
         emitToMatch(bot.matchId, 'playerRespawned', { ...bot, autoRespawn: true });
       }, RESPAWN_DELAY);
     }
+  });
+
+  // ── 👥 Several real players in a team match (#48) ─────────────────────
+  // A death the client settled itself: a bot's bullet, a hazard. The client and the server
+  // work bot damage out differently, so the server can think you're alive when your own
+  // screen already says you're dead — and then nobody else ever hears of it.
+  socket.on('iDied', (data) => {
+    const p = players[socket.id];
+    if (!p || p.dead) return;
+    const k = players[String(data?.killerId || '')];
+    const killer = k && k.id !== p.id && k.matchId === p.matchId ? k : null;
+    p.hp = 0; p.dead = true; p.deaths++;
+    if (killer) killer.kills++;
+    emitToMatch(p.matchId, 'playerDied', { targetId: p.id, killerId: killer ? killer.id : null });
+  });
+  // The host's bots' shots, for the other players' clients to fly through their own hitbox
+  // test (the one the host runs on itself) — so a dodge counts on the dodger's screen.
+  socket.on('botShots', (shots) => {
+    const me = players[socket.id];
+    if (!me || !Array.isArray(shots)) return;
+    const num = v => (Number.isFinite(+v) ? +v : null);
+    const out = [];
+    for (const s of shots.slice(0, 60)) {
+      const b = s && players[s.id];
+      if (!b || !b.isBot || b.ownerId !== socket.id || b.dead) continue;
+      const o = (s.o || []).map(num), d = (s.d || []).map(num);
+      if (o.length !== 3 || d.length !== 3 || o.includes(null) || d.includes(null)) continue;
+      out.push({ id: b.id, o, d, w: String(s.w || '').slice(0, 32), s: num(s.s) || 120 });
+    }
+    if (out.length) emitToMatchExcept(me.matchId, socket.id, 'botShots', out);
+  });
+  // The host's word on the match — a round, the team score, the end. Relayed as-is to
+  // the rest of the room with who sent it; clients only take it from their match's host.
+  socket.on('matchEvent', (evt) => {
+    const me = players[socket.id];
+    if (!me || !evt || typeof evt !== 'object' || JSON.stringify(evt).length > 2000) return;
+    emitToMatchExcept(me.matchId, socket.id, 'matchEvent', { from: socket.id, evt });
   });
 
   socket.on('healSelf', (data) => {
@@ -1915,7 +1957,7 @@ io.on('connection', (socket) => {
       const spawn = (b.spawnX != null) ? { x: b.spawnX, y: 1, z: b.spawnZ } : nextSpawn();
       players[b.id] = {
         id: b.id, name: b.name, isBot: true, team: b.team,
-        weaponId: b.weaponId, ownerId: socket.id,
+        weaponId: b.weaponId, ownerId: socket.id, skin: String(b.skin || 'default').slice(0, 24),
         x: spawn.x, y: spawn.y, z: spawn.z,
         rotY: 0, rotX: 0,
         hp: b.hp || PLAYER_MAX_HP, dead: false, kills: 0, deaths: 0, lastShot: 0,

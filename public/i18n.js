@@ -221,6 +221,10 @@
     '{name} left Lobby 13': '{name} 离开了 13 号大厅', '{name} is already in a challenge': '{name} 正在另一场约战里',
     '⚔️ CHALLENGE WITHDRAWN': '⚔️ 对方撤回了挑战',
     'Your opponent left · no reward this time': '对手离开了 · 这局不发奖励',
+    // several real players in a team match (#48)
+    'The host left · no reward this time': '房主离开了 · 这局不发奖励',
+    '🤝  MATCH OVER': '🤝  比赛结束',
+    'TIME UP · a draw': '时间到 · 平局',
     'MELEE ': '近战', 'RANGE': '射程', 'USES': '次数',
     '↑ AUTO': '↑ 自动',
     '[HOLD]': '[按住]',
@@ -306,6 +310,8 @@
     'MATCH FOUND': '匹配成功',
     '🔎 Looking for a real opponent · {n}s': '🔎 正在找真人对手 · {n} 秒',
     '🤖 PLAY A BOT NOW': '🤖 直接打机器人',
+    '🔎 Looking for more real players · {n}s': '🔎 正在找更多真人 · {n} 秒',
+    '🤖 START WITH BOTS NOW': '🤖 直接带机器人开打',
     'The first real player to pick 1v1 plays you — or a bot does': '第一个选 1v1 的真人就是你的对手——没人来就打机器人',
     '{n} player(s) · You are {team}{host}': '{n} 名玩家 · 你在{team}{host}',
 

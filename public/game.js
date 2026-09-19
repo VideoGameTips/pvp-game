@@ -27098,11 +27098,6 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false) {
   if (players[pid]?.dead) return;   // a body going down is not a target (#34)
   const isBot    = players[pid] && players[pid].isBot;
   const instakill = headshot && INSTAKILL_HS_WEAPONS.has(weaponId);
-  socket.emit(isBot ? 'hitBot' : 'hit', {
-    [isBot ? 'botId' : 'targetId']: pid,
-    bulletId, weapon: weaponId,
-    headshot, instakill,
-  });
   const baseDmg = getClientWeaponDamage(weaponId);
   // 🤫 Secret synergy: certain weapons get a damage bonus in matching map zones
   const synergy = getSecretSynergy(weaponId, hitWorldPos);
@@ -27114,6 +27109,16 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false) {
   const falloff = falloffMultiplier(weaponId, hitDist);
   const dmg = (headshot && instakill) ? 999 : Math.round(
     (headshot ? baseDmg * headshotMultFor(weaponId) : baseDmg) * synergy * falloff);
+  // With other real players in the match, a bot this hit kills on our screen is dead on
+  // everyone's (#48): the server takes `fatal` as the kill. (Guests know a bot's HP from
+  // the server's playerHit; the host from its own simulation.)
+  const botHp = isBot ? (resolveBot(pid) || players[pid] || {}).hp : null;
+  const fatal = !!(isBot && mpMatch() && botHp != null && (instakill || botHp - dmg <= 0));
+  socket.emit(isBot ? 'hitBot' : 'hit', {
+    [isBot ? 'botId' : 'targetId']: pid,
+    bulletId, weapon: weaponId,
+    headshot, instakill, fatal,
+  });
   showHitmarker(headshot ? 'head' : 'hit');   // a kill below turns it red
   // Briefly tint the damage number / spawn a synergy spark for player discovery
   if (synergy > 1 && hitWorldPos) {
@@ -29324,6 +29329,15 @@ function resolveBotHitsInFlight() {
 function botHitsMe(botId, weaponId) {
   if (applyBotDamageToPlayer(weaponId, botId)) socket.emit('botHitMe', { botId, weapon: weaponId });
 }
+// A death played out here — a bot's bullet, a hazard — told to the server when other real
+// players are in the match (#48): its own sums can still say we're alive, and then nobody
+// else ever hears of it (the host's round would never end).
+let _localDeathAt = 0;
+function tellServerIDied(killerId) {
+  if (!mpMatch()) return;
+  _localDeathAt = performance.now();
+  socket.emit('iDied', { killerId: killerId || null });
+}
 // Returns true when the hit landed — only then is the server told (botHitsMe, #22).
 function applyBotDamageToPlayer(weaponId, botId) {
   // 🛋️ Lobby 13 is a no-combat chill zone — nobody takes damage.
@@ -29353,6 +29367,7 @@ function applyBotDamageToPlayer(weaponId, botId) {
     playSoundEvent('freeze_shatter', { volume: 1.1 });
     updateHealthHUD(0);
     isDead = true;
+    tellServerIDied(botId);
     showAnnouncement('FROZEN', 'You turned to ice', '#99eeff', 1800);
     const ds = document.getElementById('death-screen');
     if (ds) ds.style.display = 'flex';
@@ -29374,6 +29389,7 @@ function applyBotDamageToPlayer(weaponId, botId) {
   if (botId) showDamageDirection(botId); else flashHitIndicator();
   if (me.hp <= 0 && !isDead) {
     isDead = true;
+    tellServerIDied(botId);
     isADS = false; targetFOV = 75; shooting = false;
     reloading = false;
     // Clear any active buffs so bots stop reacting to a dead player's lingering effects
@@ -29556,6 +29572,7 @@ socket.on('lobbyStart', data => {
     allyBotsToSpawn: data.allyBots || 0,
     enemyBotsToSpawn: data.enemyBots || 0,
     mapId: data.mapId || null, // 🗺️ server-picked map; overrides client's random pick
+    hostId: data.hostId || (data.isHost ? myId : null),   // whose word the match is (#48)
   };
   // Force every paired client to use the same map
   if (data.mapId) selectedMap = data.mapId;
@@ -29584,6 +29601,7 @@ socket.on('chatLine', data => {
   pushChatLine(`${name}: ${data.emoji || '💬'} ${I18N.exact(data.text)}`, data.color || '#fff'); // exact phrases only: canned comms lines translate, typed chat doesn't
 });
 socket.on('playerJoined', p => {
+  p = fromWire(p);
   players[p.id] = p;
   // Skip mesh creation for bots we already spawned locally (avoid duplicates)
   if (p.id !== myId && !remoteMeshes[p.id]) spawnRemotePlayer(p);
@@ -29618,7 +29636,15 @@ function opponentLeft(id) {
   // is not them leaving the duel. (Events on one socket arrive in order, so this is exact.)
   if (!pvpMatch.room || currentRoom !== pvpMatch.room) return;
   pvpMatch.opponents = pvpMatch.opponents.filter(o => o.socketId !== id);
-  if (!match || match.over || match.type !== 'elim') return;
+  if (!match || match.over) return;
+  if (id === pvpMatch.hostId && !pvpMatch.isHost && Object.values(players).some(p => p && p.isBot)) {
+    // The host ran the bots and the match; without them it's over for everyone (#48)
+    match.roundActive = false;
+    match.forfeit = true;
+    endMatch(null, 'The host left · no reward this time');
+    return;
+  }
+  if (match.type !== 'elim') return;
   match.aliveAllies.delete(id);
   match.aliveEnemies.delete(id);
   const enemyPlayers = pvpMatch.opponents.some(o => o.team !== pvpMatch.team);
@@ -29633,6 +29659,50 @@ function opponentLeft(id) {
   }
   checkElimRound();
 }
+// The host's call on an elimination round, for the other real players to play out (#48)
+function mpSendRound(winner, timeoutSub = null) {
+  if (!mpHost()) return;
+  mpSend({ t: 'round', winner: winner ? absTeam(winner) : null, wins: absPair(match.roundWins), timeoutSub,
+           final: !!winner && match.roundWins[winner] >= match.cfg.winsNeeded });
+}
+// …and a guest playing it out: the same banners and timings checkElimRound uses, from our side.
+function mpApplyRound(e) {
+  match.roundActive = false;
+  match.roundWins = relPair(e.wins);
+  updateMatchHUD(); updateRoundScoreDisplay();
+  const w = e.winner ? relTeam(e.winner) : null;
+  const win = w === 'ally', col = win ? '#4cff4c' : '#ff5555';
+  if (!w) {
+    showAnnouncement('DRAW', e.timeoutSub || 'Round replayed', '#aaaaaa', 2500);
+    setTimeout(() => restartElimRound(null), 2600);
+  } else if (e.final) {
+    showAnnouncement(win ? 'YOUR TEAM WINS!' : 'ENEMY WINS!', e.timeoutSub || `${match.roundWins.ally} – ${match.roundWins.enemy}`, col, 3000);
+    const m = match;   // the host's 'end' normally beats this — and PLAY AGAIN may have started another match by then
+    setTimeout(() => { if (match === m && !m.over) endMatch(w); }, 4000);
+  } else {
+    showAnnouncement(win ? 'ROUND WIN!' : 'ROUND LOST', e.timeoutSub || `Score ${match.roundWins.ally} – ${match.roundWins.enemy}`, col, 2500);
+    setTimeout(() => restartElimRound(w), 2600);
+  }
+}
+socket.on('matchEvent', ({ from, evt } = {}) => {
+  if (!mpGuest() || !evt || from !== pvpMatch.hostId || !match || match.over) return;
+  if (evt.t === 'score' && match.type === 'race') { match.teamKills = relPair(evt.kills); updateMatchHUD(); }
+  else if (evt.t === 'round' && match.type === 'elim') mpApplyRound(evt);
+  else if (evt.t === 'end') endMatch(evt.winner ? relTeam(evt.winner) : null, evt.reason || '');
+});
+// The host's bots' shots: flown here through our own hitbox test (updateBullets), so a
+// dodge counts on our screen and a hit is ours to report (botHitsMe) — as the host does (#48).
+socket.on('botShots', shots => {
+  if (!mpGuest() || !Array.isArray(shots)) return;
+  for (const sh of shots) {
+    const w = WEAPONS.find(x => x.id === sh.w) || WEAPONS[0];
+    const origin = new THREE.Vector3(sh.o[0], sh.o[1], sh.o[2]);
+    const dir = new THREE.Vector3(sh.d[0], sh.d[1], sh.d[2]);
+    playWeaponSound(w.id, { baseWeapon: w, remote: true, position: origin });
+    spawnLocalBullet(origin, dir, `rb_${sh.id}_${performance.now()}`, false, sh.s || w.bulletSpeed || 120,
+                     w.bulletColor, w.bulletSize, w.id, { botId: sh.id, botTeam: players[sh.id]?.team || 'enemy' });
+  }
+});
 // 🌐 Authoritative "who is actually in your match" list, sent whenever the
 // server moves you between matches. Anyone not on it gets dropped.
 //
@@ -29666,8 +29736,9 @@ socket.on('matchRoster', ({ matchId, players: roster }) => {
     delete players[pid];
   }
   // And pick up anyone already in the match we just walked into.
-  for (const [pid, p] of Object.entries(roster)) {
+  for (const [pid, wire] of Object.entries(roster)) {
     if (pid === myId) continue;
+    const p = fromWire(wire);
     players[pid] = p;
     const old = remoteMeshes[pid];
     if (!old) { spawnRemotePlayer(p); continue; }
@@ -29810,7 +29881,13 @@ socket.on('playerHit', data => {
     // local hits put us below the server's view, and a stale server message bumps us back up)
     if (data.hp < hitBot.hp) hitBot.hp = data.hp;
     hitBot.prevHp = hitBot.hp;
-    if (hitBot.hp <= 0) {
+    if (hitBot.hp <= 0 && data.shooterId && data.shooterId !== myId) {
+      // Somebody else's kill — another real player's, or one of our bots' (#48). The body
+      // falls here; the credit comes with the server's playerDied, which names the killer.
+      hitBot.dead = true;
+      if (players[data.targetId]) players[data.targetId].dead = true;
+      dropBody(data.targetId);
+    } else if (hitBot.hp <= 0) {
       hitBot.dead = true;
       if (players[data.targetId]) players[data.targetId].dead = true;
       triggerFinisher(data.targetId, currentEquippedId());
@@ -29841,7 +29918,11 @@ socket.on('playerDied', data => {
   // Only count kill if playerHit didn't already count it (check if bot.dead was already set)
   const _alreadyDead = gameBots.find(b => b.id === data.targetId)?.dead;
   if (data.killerId===myId && !_alreadyDead) { myKills++; creditWeaponKill(currentEquippedId()); saveKillReplay(data.targetId, currentEquippedId()); const kc=document.getElementById('kill-count'); if(kc) kc.textContent=`Kills: ${myKills}`; }
-  if (data.targetId===myId) {
+  // Our own death, already played out here (a bot, a hazard — tellServerIDied, #48): the
+  // server's echo only has to count it, not run the death screens a second time.
+  const echoOfMine = data.targetId === myId && isDead && performance.now() - _localDeathAt < 4000;
+  if (echoOfMine && match && !match.over) match.deaths++;
+  if (data.targetId===myId && !echoOfMine) {
     if (match && !match.over) match.deaths++;
     isDead=true; isADS=false; targetFOV=75; shooting=false;
     reloading=false;
@@ -29912,6 +29993,7 @@ socket.on('playerDied', data => {
   onEntityDied(data.targetId, data.killerId);
 });
 socket.on('playerRespawned', p => {
+  p = fromWire(p);
   // Elim modes (1v1, 2v2, 3v3): bots stay dead until the round ends. Ignore server auto-respawns.
   if (p.autoRespawn && p.isBot && match?.type === 'elim') return;
   players[p.id]=p;
@@ -29957,15 +30039,50 @@ socket.on('playerRespawned', p => {
 function humanTagKind(p) {
   if (!p || p.isBot) return null;
   if (inLobby) return 'hub';
-  if (pvpMatch && p.team) return p.team === pvpMatch.team ? 'ally' : 'enemy';
+  if (pvpMatch && p.team) return p.team === 'ally' ? 'ally' : 'enemy';   // teams arrive as my side / theirs (#48)
   return null;
 }
 function spawnRemotePlayer(p) {
   const skinId = resolveSkinId(p.skin);
   const mesh = makePlayerMesh(p.name, p.isBot, p.team || 'enemy', skinId, { crown: !!p.isAdmin, tag: humanTagKind(p) });
   mesh.position.set(p.x,0,p.z);
+  // Another player's bot: makeBot arms our own, so arm theirs here (#48)
+  if (p.isBot && p.ownerId !== myId && p.weaponId) {
+    const gun = makeBotWeaponProp(p.weaponId);
+    gun.position.set(0.38, 1.18, 0.22);
+    gun.rotation.y = Math.PI;
+    mesh.add(gun);
+    mesh._gun = gun;
+    if (mesh._rig) mesh._rig.holdsGun = true;
+  }
   scene.add(mesh); remoteMeshes[p.id]=mesh;
 }
+
+// ── 👥 Several real players in one match (#48) ──────────────────────────────
+// The host (first in the match lobby) simulates the bots and runs the match — rounds,
+// timeouts, team kills, the end — and tells everyone (matchEvent). Guests play themselves,
+// take bot fire through their own hitbox test (botShots) and follow the host's calls.
+// Teams travel absolute ('ally' = the lobby's first team) and live relative here:
+// 'ally' always means MY side, the way all the match code reads it.
+const OTHER_TEAM = t => (t === 'enemy' ? 'ally' : 'enemy');
+function relTeam(abs) {
+  if (!pvpMatch || !pvpMatch.team || !abs) return abs;
+  return abs === pvpMatch.team ? 'ally' : 'enemy';
+}
+function absTeam(rel) {
+  if (!pvpMatch || !pvpMatch.team || !rel) return rel;
+  return rel === 'ally' ? pvpMatch.team : OTHER_TEAM(pvpMatch.team);
+}
+// A player object off the network, seen from my side (a copy: never touch the server's)
+function fromWire(p) { return p && p.team ? { ...p, team: relTeam(p.team) } : p; }
+const relPair = a => ({ ally: (a && a[pvpMatch.team]) || 0, enemy: (a && a[OTHER_TEAM(pvpMatch.team)]) || 0 });
+const absPair = r => ({ [pvpMatch.team]: r.ally || 0, [OTHER_TEAM(pvpMatch.team)]: r.enemy || 0 });
+// Is another real player in this match? Every #48 path is off without one, so single-player
+// and matches against bots only run exactly as they always have.
+function mpMatch() { return !!(pvpMatch && pvpMatch.opponents && pvpMatch.opponents.length && !inLobby); }
+function mpHost()  { return mpMatch() && !!pvpMatch.isHost; }
+function mpGuest() { return mpMatch() && !pvpMatch.isHost; }
+function mpSend(evt) { if (mpHost()) socket.emit('matchEvent', evt); }
 
 // Position sync — server broadcasts all positions every 50ms
 socket.on('posUpdate', positions => {
@@ -31128,6 +31245,10 @@ function startMatchRound() {
           else                            match.aliveEnemies.add(opp.socketId);
         }
       }
+      // A guest simulates no bots — the host's live in `players` here (#48)
+      if (mpGuest()) for (const [pid, p] of Object.entries(players)) {
+        if (p && p.isBot && !p.dead) (p.team === 'ally' ? match.aliveAllies : match.aliveEnemies).add(pid);
+      }
       // Start the 60-second per-round timer
       match.roundTimeLeft = match.cfg.roundTimeLimit || 0;
       const subTxt = `First to ${match.cfg.winsNeeded} round wins`;
@@ -31481,6 +31602,13 @@ function checkBrWin() {
 
 function onEntityDied(targetId, killerId) {
   if (!match || match.over) return;
+  if (mpMatch()) {
+    // With other real players a death can reach us twice — played out here, then the
+    // server's echo of it (#48). Once is a death; twice would be two kills.
+    const now = performance.now(), seen = match._diedAt || (match._diedAt = {});
+    if (seen[targetId] && now - seen[targetId] < 2500) return;
+    seen[targetId] = now;
+  }
   if (killerId) matchScore[killerId]  = (matchScore[killerId]  || 0) + 1;   // #31: who is having the good match
   if (targetId) matchDeaths[targetId] = (matchDeaths[targetId] || 0) + 1;
   if (match.tiebreaker) {
@@ -31557,13 +31685,18 @@ function onEntityDied(targetId, killerId) {
     }
     checkElimRound();
   } else if (match.type === 'race') {
+    if (mpGuest()) return;   // the host keeps the team score and sends it (#48)
     // Credit kill to killer's team
     if (killerId === myId) {
       match.teamKills.ally++;
     } else {
       const kb = gameBots.find(g => g.id === killerId);
       if (kb) { if (kb.team === 'ally') match.teamKills.ally++; else match.teamKills.enemy++; }
+      else if (players[killerId] && !players[killerId].isBot) {   // another real player (#48)
+        if (players[killerId].team === 'ally') match.teamKills.ally++; else match.teamKills.enemy++;
+      }
     }
+    if (mpHost()) mpSend({ t: 'score', kills: absPair(match.teamKills) });
     checkRaceWin();
     updateMatchHUD();
   } else if (match.type === 'frontlines') {
@@ -31603,12 +31736,15 @@ function checkElimRound() {
   const allyAlive  = match.playerAlive || match.aliveAllies.size  > 0;
   const enemyAlive = match.aliveEnemies.size > 0;
   if (allyAlive && enemyAlive) return; // round still ongoing
+  if (mpGuest()) return;   // with other real players the host calls rounds (#48)
   match.roundActive = false;
   if (!allyAlive && !enemyAlive) {
+    mpSendRound(null);
     showAnnouncement('DRAW', 'Round replayed', '#aaaaaa', 2500);
     setTimeout(() => restartElimRound(null), 2600);
   } else if (!enemyAlive) {
     match.roundWins.ally++;
+    mpSendRound('ally');
     updateMatchHUD();
     updateRoundScoreDisplay();
     if (match.roundWins.ally >= match.cfg.winsNeeded) {
@@ -31620,6 +31756,7 @@ function checkElimRound() {
     }
   } else {
     match.roundWins.enemy++;
+    mpSendRound('enemy');
     updateMatchHUD();
     updateRoundScoreDisplay();
     if (match.roundWins.enemy >= match.cfg.winsNeeded) {
@@ -31969,6 +32106,7 @@ function restartElimRound(lastWinner) {
 
 function checkRaceWin() {
   if (!match || match.type !== 'race') return;
+  if (mpGuest()) return;   // the host calls the end (#48)
   if (match.teamKills.ally  >= match.cfg.killGoal) endMatch('ally',  'KILL GOAL REACHED');
   else if (match.teamKills.enemy >= match.cfg.killGoal) endMatch('enemy', 'KILL GOAL REACHED');
 }
@@ -31997,6 +32135,7 @@ function updateMatchTimer(dt) {
 // When the elim round timer hits 0: team with highest combined HP wins.
 function resolveElimRoundByHP() {
   if (!match || !match.roundActive) return;
+  if (mpGuest()) return;   // the host calls the timeout (#48)
   // Sum HP per side (player counts as ally team if alive)
   let allyHP = 0, enemyHP = 0;
   if (!isDead) allyHP += (players[myId]?.hp ?? 0);
@@ -32005,9 +32144,15 @@ function resolveElimRoundByHP() {
     if (bot.team === 'ally') allyHP += bot.hp;
     else if (bot.team === 'enemy') enemyHP += bot.hp;
   }
+  // …and the other real players, on their side (#48)
+  if (mpMatch()) for (const [pid, p] of Object.entries(players)) {
+    if (pid === myId || !p || p.isBot || p.dead) continue;
+    if (p.team === 'ally') allyHP += p.hp || 0; else if (p.team === 'enemy') enemyHP += p.hp || 0;
+  }
   match.roundActive = false;
   if (allyHP > enemyHP) {
     match.roundWins.ally++;
+    mpSendRound('ally', `TIMEOUT · HP ${Math.round(allyHP)} vs ${Math.round(enemyHP)}`);
     updateMatchHUD(); updateRoundScoreDisplay();
     if (match.roundWins.ally >= match.cfg.winsNeeded) {
       showAnnouncement('YOUR TEAM WINS!', `TIMEOUT · HP ${Math.round(allyHP)} vs ${Math.round(enemyHP)}`, '#4cff4c', 3000);
@@ -32018,6 +32163,7 @@ function resolveElimRoundByHP() {
     }
   } else if (enemyHP > allyHP) {
     match.roundWins.enemy++;
+    mpSendRound('enemy', `TIMEOUT · HP ${Math.round(enemyHP)} vs ${Math.round(allyHP)}`);
     updateMatchHUD(); updateRoundScoreDisplay();
     if (match.roundWins.enemy >= match.cfg.winsNeeded) {
       showAnnouncement('ENEMY WINS!', `TIMEOUT · HP ${Math.round(enemyHP)} vs ${Math.round(allyHP)}`, '#ff5555', 3000);
@@ -32028,6 +32174,7 @@ function resolveElimRoundByHP() {
     }
   } else {
     // Exact tie → replay
+    mpSendRound(null, `TIMEOUT · Both at ${Math.round(allyHP)} HP`);
     showAnnouncement('DRAW', `TIMEOUT · Both at ${Math.round(allyHP)} HP`, '#aaaaaa', 2500);
     setTimeout(() => restartElimRound(null), 2600);
   }
@@ -32035,10 +32182,13 @@ function resolveElimRoundByHP() {
 
 function onTimeUp() {
   if (!match || match.over) return;
+  if (mpGuest()) return;   // the host's clock decides (#48)
   if (match.type === 'race') {
     const a = match.teamKills.ally, e = match.teamKills.enemy;
     if (a > e)        endMatch('ally',  'TIME UP · Most kills wins');
     else if (e > a)   endMatch('enemy', 'TIME UP · Most kills wins');
+    // The tiebreaker is you against the top enemy bot — no shape for teams of real players (#48)
+    else if (mpMatch()) endMatch(null, 'TIME UP · a draw');
     else              startTiebreaker();
   } else { // ffa
     const pk = match.ffaKills[myId] || 0;
@@ -32089,6 +32239,8 @@ function endMatch(winner, reason) {
   if (!match || match.over) return;
   match.over   = true;
   match.active = false;
+  // The host's result is everyone's (#48). Not when players leaving ended it — they say so themselves.
+  if (mpHost() && !match.forfeit) mpSend({ t: 'end', winner: winner ? absTeam(winner) : null, reason: reason || '' });
   // An FFA win counts toward FFA Legend. Sent before leaveMatch, while the
   // server still knows which match this was; it checks the rest itself.
   if (match.type === 'ffa' && winner === 'ally') socket.emit('ffaWin');
@@ -32111,8 +32263,8 @@ function endMatch(winner, reason) {
   showFunFact('match-over-screen');
   renderMatchRivals();
   const title  = document.getElementById('match-over-title');
-  title.textContent = isWin ? '🏆  VICTORY' : '💀  DEFEAT';
-  title.style.color = isWin ? '#ffd700' : '#e74c3c';
+  title.textContent = winner == null ? '🤝  MATCH OVER' : isWin ? '🏆  VICTORY' : '💀  DEFEAT';   // null: nobody won (#48)
+  title.style.color = winner == null ? '#cfd8e3' : isWin ? '#ffd700' : '#e74c3c';
   document.getElementById('match-over-sub').textContent = reason || '';
   let scoreText = '';
   if (match.type === 'elim') {
@@ -32190,7 +32342,7 @@ function botSideSpawn(idx, count, team) {
     return { x: Math.cos(ang) * r, z: Math.sin(ang) * r };
   }
   // Allies at z≈+32 (behind player); enemies at z≈-20 (close enough to navigate quickly)
-  const isAlly = team === 'ally';
+  const isAlly = absTeam(team) === 'ally';   // sides are absolute: my side spawns where my team does (#48)
   // Use a wider spread floor so 1v1 / 1v2 don't stack everyone on x=0
   const spread = Math.min(36, Math.max(14, count * 4));
   const baseX  = count <= 1
@@ -32620,7 +32772,7 @@ function spawnGameBots() {
                     onLandMine: null });      // tracks which mine was triggering (prevents double-hit)
 
     // Tell server so hit-detection events work and other players see bots
-    botList.push({ id, name, team, weaponId, spawnX: sx, spawnZ: sz });
+    botList.push({ id, name, team: absTeam(team), weaponId, spawnX: sx, spawnZ: sz, skin: botSkin });   // #48
   };
 
   for (let i = 0; i < allies;   i++) makeBot(i, 'ally');
@@ -32745,6 +32897,17 @@ function updateRange(dt) {
   }
 }
 
+// The other real players, alive and in this match, as bot targets (#48). Only the host
+// simulates bots; everywhere else — and in any match without them — this is empty.
+function remoteHumanTargets() {
+  if (!mpHost()) return [];
+  const out = [];
+  for (const [pid, p] of Object.entries(players)) {
+    if (pid === myId || !p || p.isBot || p.dead || !remoteMeshes[pid] || !remoteMeshes[pid].visible) continue;
+    out.push({ id: pid, x: p.x, y: p.y, z: p.z, team: p.team });
+  }
+  return out;
+}
 function getBotTarget(bot) {
   // 🛋️ Lobby 13: nobody fights. The team-agnostic fallback below would otherwise
   // make the all-ally cast target (and shoot) each other — so bail out entirely.
@@ -32809,6 +32972,17 @@ function getBotTarget(bot) {
     }
     if (best) { bot.currentTargetId = best.id; return { x: best.x, z: best.z, isPlayer: false, botRef: best }; }
     return null;
+  }
+  // 👥 With other real players in the match (#48), bots go for the nearest real player on
+  // the other side — me or one of them — before any bot. Without them `foes` is empty and
+  // everything below runs exactly as it always has.
+  const foes = remoteHumanTargets().filter(h => h.team === oppositeTeam);
+  if (foes.length) {
+    let pick = null, pickD = Infinity;
+    if (bot.team === 'enemy' && !isDead) { pick = 'me'; pickD = Math.hypot(camera.position.x - bot.x, camera.position.z - bot.z); }
+    for (const h of foes) { const d = Math.hypot(h.x - bot.x, h.z - bot.z); if (d < pickD) { pickD = d; pick = h; } }
+    if (pick === 'me') { bot.currentTargetId = myId; return { x: camera.position.x, z: camera.position.z, isPlayer: true }; }
+    if (pick) { bot.currentTargetId = pick.id; return { x: pick.x, z: pick.z, isPlayer: false, humanRef: pick }; }
   }
   // Enemy bots always prioritise the player when alive (team-based modes only)
   if (bot.team === 'enemy' && !isDead) {
@@ -32909,7 +33083,7 @@ window._botDiag = _botDiag;   // inspect in the console after a match
 // nothing — exactly the "bot stopped taking damage" symptom.
 function resolveBot(pid) {
   const bot = gameBots.find(b => b.id === pid);
-  if (!bot && remoteMeshes[pid] && players[pid] && players[pid].isBot) {
+  if (!bot && remoteMeshes[pid] && players[pid] && players[pid].isBot && players[pid].ownerId === myId) {
     botDiag('orphaned-body', pid + ' has a mesh but no gameBots entry: not simulated, cannot take damage');
   }
   return bot;
@@ -32940,6 +33114,7 @@ function reconcileBotEntities() {
   }
 }
 
+let _botShotsOut = [];   // see botShots
 function updateBotAI(dt) {
   resolveBotHitsInFlight();   // land any bot bullets whose tracer has arrived
   if (!gameBots.length) return;
@@ -33815,6 +33990,9 @@ function updateBotAI(dt) {
               aimUpY = (pFeet + 1.25 - pCrouch * 0.55 * track) - origin.y;
             } else if (target.botRef) {
               aimUpY = 1.1 - origin.y;
+            } else if (target.humanRef) {
+              // another real player (#48): their reported eye height, less a little — the chest
+              aimUpY = ((target.humanRef.y ?? 1.65) - 0.45) - origin.y;
             }
             const vErr = (Math.random() - 0.5) * spread * 0.9;
             const dir = new THREE.Vector3(
@@ -33825,6 +34003,8 @@ function updateBotAI(dt) {
             playWeaponSound(w.id, { baseWeapon: w, remote: true, position: origin });
             spawnLocalBullet(origin, dir, `bot_${bot.id}_${now}`, false, w.bulletSpeed || 120,
                              w.bulletColor, w.bulletSize, w.id, { botId: bot.id, botTeam: bot.team });
+            if (mpHost()) _botShotsOut.push({ id: bot.id, o: [origin.x, origin.y, origin.z].map(v => +v.toFixed(2)),
+                                              d: [dir.x, dir.y, dir.z].map(v => +v.toFixed(4)), w: w.id, s: w.bulletSpeed || 120 });
           }
         }
       }
@@ -34028,6 +34208,11 @@ function updateBotAI(dt) {
     botMoveTimer = 0;
     const moves = gameBots.filter(b => !b.dead).map(b => ({ id: b.id, x: b.x, y: 1, z: b.z, rotY: b.rotY }));
     if (moves.length && !inLobby) socket.emit('botMove', moves);   // the lobby cast is local-only (#46)
+  }
+  // This frame's bot shots, for the other real players' hitbox tests (#48)
+  if (_botShotsOut.length) {
+    if (mpHost()) socket.emit('botShots', _botShotsOut);
+    _botShotsOut = [];
   }
 }
 
@@ -35183,7 +35368,8 @@ function hideStagingLobby() {
 function lobbySearchText() {
   const s = stagingLobbyState;
   const left = s && s._searchEnd ? Math.ceil((s._searchEnd - performance.now()) / 1000) : 0;
-  return left > 0 ? `🔎 Looking for a real opponent · ${left}s` : '';
+  if (left <= 0) return '';
+  return s.mode === '1v1' ? `🔎 Looking for a real opponent · ${left}s` : `🔎 Looking for more real players · ${left}s`;   // team modes too (#48)
 }
 function tickLobbySearch() {
   clearInterval(_lobbySearchTick);
@@ -35225,7 +35411,8 @@ function renderStagingLobby() {
         </div>`).join('') : '<div style="color:#666;font-style:italic;">empty</div>'}
       </div>
     </div>
-    ${solo ? `<div id="lobby-search" style="min-height:20px;margin-bottom:14px;color:#9fe8b0;font-size:14px;letter-spacing:1px;">${lobbySearchText()}</div>` : `
+    <div id="lobby-search" style="min-height:20px;margin-bottom:${solo ? 14 : 8}px;color:#9fe8b0;font-size:14px;letter-spacing:1px;">${lobbySearchText()}</div>
+    ${solo ? '' : `
     <label style="display:flex;align-items:center;gap:8px;margin-bottom:14px;color:#ccc;font-size:12px;cursor:pointer;">
       <input type="checkbox" id="lobby-fillbots" ${me?.fillBots !== false ? 'checked' : ''}>
       Fill missing slots with bots
@@ -35236,6 +35423,7 @@ function renderStagingLobby() {
       <button id="lobby-ready" style="padding:10px 30px;background:${me?.ready ? '#226622' : '#553311'};color:#fff;border:2px solid ${me?.ready ? '#44ff44' : '#ffaa44'};cursor:pointer;font-family:inherit;font-size:15px;font-weight:bold;letter-spacing:3px;border-radius:4px;">
         ${me?.ready ? '✅ READY!' : '⏳ READY UP'}
       </button>`}
+      ${!solo && lobbySearchText() ? `<button id="lobby-bot-now" style="padding:10px 18px;background:#553311;color:#fff;border:2px solid #ffaa44;cursor:pointer;font-family:inherit;font-size:13px;font-weight:bold;letter-spacing:2px;border-radius:4px;">🤖 START WITH BOTS NOW</button>` : ''}
       <button id="lobby-leave" style="padding:10px 18px;background:#222;color:#aaa;border:1px solid #555;cursor:pointer;font-family:inherit;font-size:13px;letter-spacing:2px;border-radius:4px;">LEAVE LOBBY</button>
     </div>
     <div style="font-size:11px;color:#666;margin-top:18px;letter-spacing:1px;">${solo ? 'The first real player to pick 1v1 plays you — or a bot does' : `Match starts when all players ready · ${me?.fillBots !== false ? 'Bots will fill empty slots' : 'No bots — playing as-is'}`}</div>
@@ -35257,7 +35445,7 @@ function renderStagingLobby() {
   if (switchBtn) switchBtn.addEventListener('click', () => socket.emit('switchLobbyTeam'));
   const botNowBtn = document.getElementById('lobby-bot-now');
   if (botNowBtn) botNowBtn.addEventListener('click', () => socket.emit('setLobbyReady', { ready: true, fillBots: true, now: true }));
-  if (solo) tickLobbySearch();
+  tickLobbySearch();
   if (leaveBtn) leaveBtn.addEventListener('click', () => {
     socket.emit('leaveStagingLobby');
     hideStagingLobby();
