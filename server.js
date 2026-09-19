@@ -1410,10 +1410,16 @@ event_horizon: 75,
   // MG
   mg42: 15,
   // Melee
-  bat: 38, sabre: 45, frying_pan: 32, sledge: 70, spear: 50,
+  bat: 50, sabre: 45, frying_pan: 32, sledge: 70, spear: 50,
   spear_throw: 85, pickle: 22, shield_charge: 60, knife_instakill: 9999,
   chainsaw: 45, katana: 65, knife: 28, lightsabre: 72,
-  riot_shield: 18, baguette: 16, screwdriver: 20,
+  riot_shield: 18, baguette: 28, screwdriver: 20,
+  // cane and shovel were missing here entirely — every hit with either one
+  // fell through to the (WEAPON_DAMAGE[x] || 25) fallback, dealing 25 no
+  // matter what the client showed. gravity_hammer had the same gap (its P2W
+  // buyers were quietly getting a 25-damage weapon instead of the advertised
+  // 110).
+  cane: 30, shovel: 55, gravity_hammer: 110,
   // Support
   frag: 80, smoke: 0, confetti_cannon: 8, moon_mine: 65,
   rubber_duck: 18, black_hole_seed: 105, glitch_cube: 42,

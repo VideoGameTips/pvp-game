@@ -806,7 +806,7 @@ const MELEE_ITEMS = [
     ability: { name: 'Throw Spear',  cd: 15000, desc: 'Hurl spear · 85 dmg · weapon gone until CD', type: 'melee_throw' } },
   { id: 'katana',     name: 'Katana',     type: 'Melee',       damage: 65, range: 2.8, cooldown: 480,
     ability: { name: 'Deflect',      cd: 14000, desc: '2s · reflect bullets back at enemies', type: 'melee_deflect', duration: 2000 } },
-  { id: 'baguette',   name: 'Baguette',   type: 'Melee',       damage: 16, range: 2.0, cooldown: 350,
+  { id: 'baguette',   name: 'Baguette',   type: 'Melee',       damage: 28, range: 2.0, cooldown: 300,
     ability: { name: 'Eat It',       cd: 20000, desc: 'Munch the baguette · restore 40 HP', type: 'melee_eat', heal: 40 } },
   { id: 'knife',      name: 'Knife',      type: 'Melee',       damage: 28, range: 1.6, cooldown: 260, speedMult: 2.0,
     ability: { name: 'Death Touch',  cd: 18000, desc: 'Next hit · instant kill · 9999 dmg', type: 'melee_instakill' } },
@@ -854,7 +854,7 @@ const MELEE_ITEMS = [
     bleedOnHit: { dps: 8, dur: 4000, radius: 0.8, color: 0xaa0000 },
     ability: { name: 'Slash Combo',cd: 10000, desc: '2.5 s · auto-slash · every hit bleeds', type: 'melee_revup', duration: 2500 } },
   { id: 'cane',           name: 'Walking Cane',   type: 'Reach Melee', damage: 30, range: 2.2, cooldown: 440,
-    ability: { name: 'Yank',       cd: 8000,  desc: 'Pull target 4 m toward you',         type: 'melee_pull', distance: 4 } },
+    ability: { name: 'Yank',       cd: 8000,  desc: 'Pull target 4 m toward you + 30 dmg', type: 'melee_pull', distance: 4, damage: 30 } },
   { id: 'cricket_bat',    name: 'Launching Melee', type: 'Melee', damage: 42, range: 2.3, cooldown: 540,
     launchOnHit: 8, // every hit pops target up
     ability: { name: 'Homerun',    cd: 9000,  desc: '2.5× dmg · launch target HIGH',     type: 'melee_heavy', launchMult: 2 } },
@@ -864,7 +864,7 @@ const MELEE_ITEMS = [
   { id: 'wrench',         name: 'Wrench',         type: 'Utility Melee', damage: 36, range: 1.8, cooldown: 380,
     ability: { name: 'Spanner Toss', cd: 10000, desc: 'Hurl wrench · 90 dmg · weapon gone until CD', type: 'melee_throw' } },
   { id: 'shovel',         name: 'Shovel',         type: 'AOE Melee', damage: 55, range: 2.2, cooldown: 620,
-    ability: { name: 'Ground Slam',cd: 11000, desc: 'Slam · 4 m AOE knockback',          type: 'melee_slam' } },
+    ability: { name: 'Ground Slam',cd: 11000, desc: 'Slam · 4 m AOE knockback · 65 dmg', type: 'melee_slam', radius: 4, damage: 65 } },
   { id: 'golf_club',      name: 'Golf Club',      type: 'Launching Melee', damage: 40, range: 2.4, cooldown: 500,
     launchOnHit: 6,
     ability: { name: 'Fore!',      cd: 9000,  desc: '2.5× dmg · launch target SKY-HIGH', type: 'melee_heavy', launchMult: 3 } },
@@ -3494,6 +3494,22 @@ function playObjectShot(ctx, start, out, p, m) {
       for (let i = 0; i < 3; i++) playMuzzleBlast(ctx, start + i * 0.018, out, 'pistol', v * (1 - i * 0.3));
       playFilteredNoise(ctx, start + 0.01, 0.05, out, v * 0.3, 'highpass', 5000, 0.5, 0.0003, 1.4);
       playTone(ctx, start, 0.04, out, 1200, 3200, v * 0.2, 'square'); return true;
+    case 'bubblegun':// a fishbowl firing: a bloop and a splash
+      playTone(ctx, start, d, out, f1, f2, v, 'sine');
+      playFilteredNoise(ctx, start + 0.02, d, out, v * 0.4, 'bandpass', 1400, 0.8, 0.002, 1.3); return true;
+    case 'clockwork':// steam through brass: a clack and a hiss
+      metalClack(ctx, start, out, v, f1, 0.05);
+      playFilteredNoise(ctx, start + 0.01, d, out, v * 0.5, 'highpass', f2, 0.5, 0.003, 1.1); return true;
+    case 'laser':    // neon: a falling zap and a bright blip
+      playTone(ctx, start, d, out, f1, f2, v, 'sawtooth');
+      playTone(ctx, start, 0.03, out, f1 * 2, f1 * 2, v * 0.3, 'square'); return true;
+    case 'cosmic':   // stars: a falling arpeggio over a low swell
+      [1, 0.8, 0.66, 0.5].forEach((r, i) => playTone(ctx, start + i * 0.035, d, out, f1 * r, f1 * r, v * (1 - i * 0.18), 'sine'));
+      playTone(ctx, start, d * 1.5, out, f2, f2 * 0.7, v * 0.4, 'sine'); return true;
+    case 'phantom':  // a ghost's shot: a wavering wail over a muffled report
+      playMuzzleBlast(ctx, start, out, 'heavy', v * 0.5);
+      for (let i = 0; i < 4; i++) playTone(ctx, start + i * d / 4, d / 4, out, f1 * (1 + (i % 2) * 0.06), f2, v * 0.3, 'sine');
+      return true;
     case 'aircon':   // air, and the compressor humming under it
       playFilteredNoise(ctx, start, d, out, v, 'highpass', f1, 0.5, 0.01, 1.0);
       playTone(ctx, start, d, out, 60, 60, v * 0.6, 'sine');
@@ -3640,6 +3656,26 @@ function playObjectSfx(ctx, out, name, t, v) {
         if (i % 2) playFilteredNoise(ctx, tt, 0.02, out, v * 0.15, 'highpass', 3000, 0.5, 0.0003, 1.4);
       }
       break;
+    case 'pour':     // water poured into a tank, and bubbling
+      playFilteredNoise(ctx, t, 0.7, out, v * 0.25, 'bandpass', 900, 0.8, 0.05, 1.0);
+      for (let i = 0; i < 5; i++) playTone(ctx, t + 0.1 + i * 0.1, 0.06, out, 300 + i * 60, 700 + i * 90, v * 0.14, 'sine');
+      break;
+    case 'windup':   // a key wound: ratchet clicks, quickening
+      for (let i = 0; i < 9; i++) metalClack(ctx, t + i * 0.1 - i * i * 0.004, out, v * 0.3, 1800 + i * 80, 0.015);
+      break;
+    case 'neonbuzz': // a neon sign warming up: hum and stuttering clicks
+      playTone(ctx, t, 0.8, out, 120, 120, v * 0.12, 'sawtooth');
+      for (let i = 0; i < 6; i++) playObjectSfx(ctx, out, 'tick', t + 0.1 + i * 0.1 + Math.random() * 0.04, v * 0.8);
+      break;
+    case 'starfall': // stars appearing one at a time
+      for (let i = 0; i < 8; i++) playTone(ctx, t + i * 0.05, 0.4, out, 1760 + i * 220, 1760 + i * 220, v * 0.07, 'sine');
+      break;
+    case 'boo':      // a ghost's moan, rising and wavering
+      for (let i = 0; i < 6; i++) playTone(ctx, t + i * 0.12, 0.14, out, 220 + i * 25 + (i % 2) * 18, 240 + i * 25, v * 0.14, 'sine');
+      break;
+    case 'inflate':  // a balloon blown up: squeaky, rising
+      playTone(ctx, t, 0.6, out, 300, 900, v * 0.14, 'triangle');
+      playFilteredNoise(ctx, t, 0.6, out, v * 0.1, 'bandpass', 1600, 2.0, 0.05, 1.0); break;
     case 'flicks':   // a butterfly knife's pins, clacking as the handles go round
       for (let i = 0; i < 6; i++)
         metalClack(ctx, t + i * 0.085 + Math.random() * 0.02, out, v * 0.35, 2200 + Math.random() * 800, 0.02);
@@ -13280,6 +13316,287 @@ function buildGlitchDeagle() {
   return g;
 }
 
+function buildFishbowlCarbine() {
+  // 🐠 Plasma Carbine -> Fishbowl Carbine. A clear tank on a grip, gravel on the
+  // bottom, a nozzle out the front. Drawn, it fills with water from the bottom
+  // up; held, three fish swim about in it and bubbles rise.
+  const g = new THREE.Group();
+  const inner = GUN_MATS.inner(), bright = GUN_MATS.bright();
+  const glass = new THREE.MeshPhongMaterial({ color: 0xe8f6ff, shininess: 250, specular: 0xffffff, transparent: true, opacity: 0.22, depthWrite: false });
+  const chrome = new THREE.MeshPhongMaterial({ color: 0xc8ced6, shininess: 200, specular: 0xffffff });
+  const blue = new THREE.MeshPhongMaterial({ color: 0x2a8ae8, shininess: 60, specular: 0xffffff, transparent: true, opacity: 0.45, depthWrite: false });
+  const T = { x: 0.032, y0: -0.022, y1: 0.046, z0: -0.128, z1: 0.068 };        // the tank's inside
+  gpBox(g, glass, 0.070, 0.074, 0.200, 0, 0.012, -0.030);                     // tank
+  for (const y of [-0.025, 0.049]) for (const x of [-0.035, 0.035])            // chrome frame
+    gpBox(g, chrome, 0.004, 0.004, 0.202, x, y, -0.030);
+  const waterGeo = new THREE.BoxGeometry(0.064, T.y1 - T.y0, 0.194);
+  waterGeo.translate(0, (T.y1 - T.y0) / 2, 0);                                 // base at y 0, so it fills upward
+  const water = new THREE.Mesh(waterGeo, blue); water.position.set(0, T.y0, -0.030); g.add(water);
+  g._water = water;
+  const pebbles = [0xd8b070, 0x8a6a4a, 0xf0e0c0, 0x5a8a6a];
+  for (let i = 0; i < 9; i++)
+    gpBox(g, new THREE.MeshPhongMaterial({ color: pebbles[i % 4], shininess: 40 }), 0.012, 0.008, 0.012,
+          -0.024 + (i % 5) * 0.012, T.y0 + 0.004, -0.110 + i * 0.020, 0.3 * i);
+  gpCyl(g, chrome, 0.012, 0.009, 0.060, 12, 0, 0.012, -0.160);                 // nozzle
+  gpCyl(g, inner, 0.006, 0.006, 0.004, 10, 0, 0.012, -0.191);
+  gpBox(g, chrome, 0.010, 0.020, 0.010, 0, 0.056, -0.010);                     // valve
+  gpCyl(g, chrome, 0.012, 0.012, 0.004, 10, 0, 0.068, -0.010, 0);
+  gpCyl(g, inner, 0.004, 0.004, 0.080, 8, 0.030, 0.050, 0.100, 0.9);          // air pump line
+  gpPlate(g, chrome, [
+    [0.040,-0.024],[0.070,-0.040],[0.078,-0.138],[0.050,-0.152],[0.022,-0.062],[0.018,-0.026],
+  ], 0.036, 0);
+  gpBox(g, bright, 0.006, 0.014, 0.006, 0, -0.040, 0.014, 0.22);
+  // The fish, the bubbles and the weed: all alive, none of them the gun.
+  const fishCol = [0xff7a1a, 0xffd23a, 0x3aa8ff];
+  const fish = fishCol.map((c, i) => {
+    const f = new THREE.Group(); f.userData.eqFx = true;
+    const m = new THREE.MeshPhongMaterial({ color: c, shininess: 120, specular: 0xffffff });
+    const body = new THREE.Mesh(new THREE.SphereGeometry(0.009, 10, 8), m); body.scale.set(0.8, 1, 1.6); f.add(body);
+    const tail = new THREE.Mesh(new THREE.ConeGeometry(0.007, 0.012, 6), m);
+    tail.rotation.x = -Math.PI / 2; tail.position.z = 0.017; f.add(tail);
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.0018, 6, 5), inner); eye.position.set(0.006, 0.003, -0.008); f.add(eye);
+    g.add(f);
+    return { f, tail, speed: 0.8 + i * 0.35, phase: i * 2.1, y: T.y0 + 0.018 + i * 0.016 };
+  });
+  const bubbleM = new THREE.MeshPhongMaterial({ color: 0xffffff, shininess: 250, specular: 0xffffff, transparent: true, opacity: 0.6 });
+  const bubbles = [];
+  for (let i = 0; i < 6; i++) {
+    const b = new THREE.Mesh(new THREE.SphereGeometry(0.003, 8, 6), bubbleM); b.userData.eqFx = true; g.add(b);
+    bubbles.push({ b, t: Math.random(), speed: 0.4 + Math.random() * 0.4, x: 0, z: 0 });
+  }
+  const weed = [];
+  for (let i = 0; i < 2; i++) {
+    const w = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.040, 0.004), new THREE.MeshPhongMaterial({ color: 0x3aa84a }));
+    w.geometry.translate(0, 0.020, 0); w.position.set(-0.018 + i * 0.030, T.y0 + 0.006, -0.090 + i * 0.100);
+    w.userData.eqFx = true; g.add(w); weed.push(w);
+  }
+  g._tick = (dt, now, assembling) => {
+    for (const F of fish) {
+      F.f.visible = !assembling;
+      if (assembling) continue;
+      const a = now * F.speed + F.phase, dz = Math.cos(a);
+      F.f.position.set(Math.sin(a * 1.3) * 0.018, F.y + Math.sin(now * 0.7 + F.phase) * 0.006,
+                       (T.z0 + T.z1) / 2 + Math.sin(a) * (T.z1 - T.z0) * 0.40);
+      F.f.rotation.y = dz > 0 ? Math.PI : 0;
+      F.tail.rotation.y = Math.sin(now * 20 + F.phase) * 0.5;
+    }
+    for (const B of bubbles) {
+      B.b.visible = !assembling;
+      if (assembling) continue;
+      B.t += dt * B.speed;
+      if (B.t > 1) { B.t -= 1; B.x = (Math.random() - 0.5) * 0.05; B.z = T.z0 + Math.random() * (T.z1 - T.z0); }
+      B.b.position.set(B.x + Math.sin(B.t * 12) * 0.002, T.y0 + B.t * (T.y1 - T.y0), B.z);
+    }
+    weed.forEach((w, i) => { w.visible = !assembling; w.rotation.z = Math.sin(now * 1.6 + i * 2) * 0.35; });
+  };
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.012, -0.196); g.add(flash);
+  g._flash = flash; g._kickZ = 0.010; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildClockworkCoilgun() {
+  // ⚙️ Coilgun -> Clockwork Coilgun. Brass, copper coils and three gears on its
+  // flank. Drawn, it clicks together piece by piece like something wound; held,
+  // the gears turn, the gauge needle trembles and it lets off steam.
+  const g = new THREE.Group();
+  const inner = GUN_MATS.inner();
+  const brass = new THREE.MeshPhongMaterial({ color: 0xc8a040, shininess: 180, specular: 0xfff0b0 });
+  const copper = new THREE.MeshPhongMaterial({ color: 0xb8683a, shininess: 170, specular: 0xffc8a0 });
+  const wood = new THREE.MeshPhongMaterial({ color: 0x6a3a1a, shininess: 90, specular: 0xd8a878 });
+  const iron = new THREE.MeshPhongMaterial({ color: 0x3a3a3e, shininess: 120, specular: 0x9a9aa8 });
+  const face = new THREE.MeshPhongMaterial({ color: 0xf2ead6, shininess: 100 });
+  gpBox(g, brass, 0.058, 0.060, 0.180, 0, 0.010, -0.010);                     // body
+  gpCyl(g, iron, 0.012, 0.012, 0.200, 12, 0, 0.018, -0.200);                  // barrel
+  for (let i = 0; i < 4; i++) {                                                // the coils
+    const c = new THREE.Mesh(new THREE.TorusGeometry(0.020, 0.006, 8, 20), copper);
+    c.position.set(0, 0.018, -0.130 - i * 0.034); g.add(c);
+  }
+  gpCyl(g, brass, 0.016, 0.016, 0.014, 12, 0, 0.018, -0.300);                 // muzzle crown
+  const gears = [];
+  [[0.020, 0.024, 0.020], [0.014, -0.010, -0.018], [0.011, 0.028, -0.052]].forEach(([r, y, z], i) => {
+    const G = new THREE.Group(); G.position.set(-0.031, y, z);
+    const disc = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.004, 16), brass); disc.rotation.z = Math.PI / 2; G.add(disc);
+    const n = Math.round(r * 600);
+    for (let k = 0; k < n; k++) {
+      const a = (k / n) * Math.PI * 2;
+      const tooth = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.005, 0.005), brass);
+      tooth.position.set(0, Math.cos(a) * (r + 0.002), Math.sin(a) * (r + 0.002)); tooth.rotation.x = a; G.add(tooth);
+    }
+    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.008, 8), iron); hub.rotation.z = Math.PI / 2; G.add(hub);
+    g.add(G);
+    gears.push({ G, speed: (i % 2 ? -1 : 1) * (1.6 / (r * 60)) });
+  });
+  gpCyl(g, brass, 0.016, 0.016, 0.010, 16, 0, 0.050, 0.040, 0);               // gauge
+  gpCyl(g, face, 0.013, 0.013, 0.011, 16, 0, 0.051, 0.040, 0);
+  const needle = new THREE.Mesh(new THREE.BoxGeometry(0.002, 0.001, 0.011), inner);
+  needle.geometry.translate(0, 0, -0.005); needle.position.set(0, 0.057, 0.040); g.add(needle);
+  gpCyl(g, copper, 0.005, 0.005, 0.040, 8, 0.020, 0.052, 0.070, 0);            // steam pipe
+  gpPlate(g, wood, [
+    [0.040,-0.020],[0.070,-0.036],[0.078,-0.134],[0.050,-0.148],[0.022,-0.058],[0.018,-0.022],
+  ], 0.036, 0);
+  gpBox(g, brass, 0.006, 0.014, 0.006, 0, -0.036, 0.014, 0.22);
+  const puffM = new THREE.MeshBasicMaterial({ color: 0xf6f6f6, transparent: true, opacity: 0.5, depthWrite: false });
+  const puffs = [];
+  for (let i = 0; i < 4; i++) {
+    const p = new THREE.Mesh(new THREE.SphereGeometry(0.006, 8, 6), puffM); p.userData.eqFx = true; p.visible = false; g.add(p);
+    puffs.push({ p, t: 1 });
+  }
+  let nextPuff = 0;
+  g._calm = () => { for (const G of gears) G.G.rotation.x = 0; needle.rotation.y = 0; };
+  g._tick = (dt, now, assembling) => {
+    if (assembling) { puffs.forEach(P => { P.p.visible = false; }); return; }
+    for (const G of gears) G.G.rotation.x = now * G.speed;
+    needle.rotation.y = 0.6 + Math.sin(now * 13) * 0.06 + Math.sin(now * 2.3) * 0.2;
+    if (now > nextPuff) { nextPuff = now + 1.2 + Math.random() * 1.2; puffs.forEach((P, i) => { P.t = -i * 0.08; }); }
+    for (const P of puffs) {
+      P.t += dt * 1.4;
+      P.p.visible = P.t > 0 && P.t < 1;
+      P.p.position.set(0.020 + P.t * 0.01, 0.074 + P.t * 0.05, 0.070 + P.t * 0.02);
+      P.p.scale.setScalar(Math.max(0.001, 0.6 + P.t * 2));
+    }
+  };
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.018, -0.312); g.add(flash);
+  g._flash = flash; g._kickZ = 0.016; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildNeonSMG() {
+  // 💡 Smart SMG -> Neon SMG. Matte black, outlined in neon tubes. Drawn, the
+  // tubes warm up one at a time like a sign; held, their colours drift.
+  const g = new THREE.Group();
+  const inner = GUN_MATS.inner();
+  const matte = new THREE.MeshPhongMaterial({ color: 0x14141a, shininess: 30, specular: 0x3a3a48 });
+  const neon = [0xff3ac8, 0x3ae8ff, 0x9a5aff].map(c => new THREE.MeshBasicMaterial({ color: c }));
+  gpBox(g, matte, 0.050, 0.060, 0.200, 0, 0.010, -0.010);                     // body
+  gpCyl(g, matte, 0.016, 0.016, 0.080, 12, 0, 0.016, -0.150);                 // shroud
+  gpCyl(g, inner, 0.008, 0.008, 0.050, 10, 0, 0.016, -0.210);                 // barrel
+  gpBox(g, matte, 0.030, 0.090, 0.040, 0, -0.060, -0.040, 0.10);              // magazine
+  gpPlate(g, matte, [
+    [0.040,-0.020],[0.070,-0.036],[0.078,-0.134],[0.050,-0.148],[0.022,-0.058],[0.018,-0.022],
+  ], 0.036, 0);
+  const tube = (mat, a, b) => {                                                // one neon tube, a to b
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(0.0035, 0.0035, 1, 8), mat);
+    const d = b.clone().sub(a), len = d.length();
+    m.scale.set(1, len, 1); m.position.copy(a).add(b).multiplyScalar(0.5);
+    m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize());
+    m.userData.neon = true; g.add(m); return m;
+  };
+  const V = (x, y, z) => new THREE.Vector3(x, y, z);
+  tube(neon[0], V(0, 0.042, 0.085), V(0, 0.042, -0.108));                     // along the top
+  tube(neon[1], V(-0.027, -0.018, 0.085), V(-0.027, -0.018, -0.108));          // along the flank
+  tube(neon[1], V(0.027, -0.018, 0.085), V(0.027, -0.018, -0.108));
+  [[-0.080, 0.028], [-0.050, -0.002], [-0.020, 0.028], [0.010, -0.002], [0.040, 0.028]].reduce((prev, [z, y]) => {
+    const pt = V(-0.027, y, z); if (prev) tube(neon[2], prev, pt); return pt;           // a zigzag down the side
+  }, null);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.019, 0.0035, 8, 24), neon[0]);
+  ring.position.set(0, 0.016, -0.192); ring.userData.neon = true; g.add(ring);
+  tube(neon[2], V(-0.017, -0.020, -0.060), V(-0.017, -0.098, -0.052));         // down the magazine
+  tube(neon[2], V(0.017, -0.020, -0.060), V(0.017, -0.098, -0.052));
+  gpBox(g, neon[1], 0.006, 0.014, 0.006, 0, -0.036, 0.014, 0.22);             // trigger, lit
+  const base = [0.88, 0.52, 0.74];                                             // pink, cyan, violet in hue
+  g._tick = (dt, now) => { neon.forEach((m, i) => m.color.setHSL((base[i] + now * 0.04) % 1, 1, 0.58)); };
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.016, -0.240); g.add(flash);
+  g._flash = flash; g._kickZ = 0.009; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildConstellationLauncher() {
+  // ✨ Portal Launcher -> Constellation Launcher. A deep indigo shell with gold
+  // stars and the lines between them on its surface. Drawn, the stars come
+  // first, then the lines, then the launcher behind them; held, stars twinkle
+  // inside it and three orbit the muzzle.
+  const g = new THREE.Group();
+  const inner = GUN_MATS.inner();
+  const shell = new THREE.MeshPhongMaterial({ color: 0x1c1660, shininess: 200, specular: 0x9a8aff, transparent: true, opacity: 0.7 });
+  const gold = new THREE.MeshPhongMaterial({ color: 0xe8c050, shininess: 200, specular: 0xfff0b0 });
+  const star = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const violet = new THREE.MeshBasicMaterial({ color: 0xb88aff });
+  gpCyl(g, shell, 0.040, 0.034, 0.240, 18, 0, 0.020, -0.050);                 // body
+  gpCyl(g, shell, 0.052, 0.040, 0.050, 18, 0, 0.020, -0.190);                 // bell
+  gpCyl(g, gold, 0.053, 0.053, 0.006, 18, 0, 0.020, -0.216);                  // rim
+  const portal = new THREE.Mesh(new THREE.TorusGeometry(0.040, 0.004, 8, 32), violet);
+  portal.position.set(0, 0.020, -0.218); g.add(portal);
+  // A constellation on the flank: gold studs, gold lines between them.
+  const pts = [[0.04, 0.030], [0.00, 0.048], [-0.05, 0.036], [-0.09, 0.050], [-0.13, 0.030]]
+    .map(([z, y]) => new THREE.Vector3(-0.036, y, z));
+  pts.forEach(p => { const s = new THREE.Mesh(new THREE.OctahedronGeometry(0.004, 0), gold); s.position.copy(p); g.add(s); });
+  for (let i = 1; i < pts.length; i++) {
+    const l = new THREE.Mesh(new THREE.BoxGeometry(0.0012, 0.0012, 1), gold); _eqSegment(l, pts[i - 1], pts[i]); g.add(l);
+  }
+  gpBox(g, shell, 0.034, 0.030, 0.090, 0, -0.022, 0.030);                     // under-rail
+  gpPlate(g, shell, [
+    [0.040,-0.030],[0.070,-0.046],[0.078,-0.144],[0.050,-0.158],[0.022,-0.066],[0.018,-0.032],
+  ], 0.036, 0);
+  gpBox(g, gold, 0.006, 0.014, 0.006, 0, -0.046, 0.014, 0.22);
+  // Stars inside, twinkling; three orbiting the muzzle.
+  const specks = [];
+  for (let i = 0; i < 18; i++) {
+    const s = new THREE.Mesh(new THREE.OctahedronGeometry(0.0022, 0), star); s.userData.eqFx = true;
+    s.position.set((Math.random() - 0.5) * 0.05, 0.020 + (Math.random() - 0.5) * 0.05, -0.16 + Math.random() * 0.22);
+    g.add(s); specks.push({ s, phase: Math.random() * 6, speed: 2 + Math.random() * 4 });
+  }
+  const orbit = [0, 1, 2].map(i => { const s = new THREE.Mesh(new THREE.OctahedronGeometry(0.004, 0), star); s.userData.eqFx = true; g.add(s); return s; });
+  g._tick = (dt, now, assembling) => {
+    for (const S of specks) {
+      S.s.visible = !assembling;
+      S.s.scale.setScalar(Math.max(0.001, 0.5 + 0.5 * Math.sin(now * S.speed + S.phase)));
+    }
+    orbit.forEach((s, i) => {
+      s.visible = !assembling;
+      const a = now * 1.8 + i * 2.094;
+      s.position.set(Math.cos(a) * 0.050, 0.020 + Math.sin(a) * 0.050, -0.222);
+    });
+  };
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.020, -0.230); g.add(flash);
+  g._flash = flash; g._kickZ = 0.014; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildPhantomCannon() {
+  // 👻 Burst Cannon -> Phantom Cannon. A heavy cannon made of ghost -- green,
+  // see-through, a face on its drum. Drawn, it fades up out of nothing,
+  // wavering; held, it breathes and wisps drift off it.
+  const g = new THREE.Group();
+  const body = new THREE.MeshPhongMaterial({ color: 0x6affc8, emissive: 0x1a6a4a, shininess: 120, specular: 0xffffff,
+    transparent: true, opacity: 0.38, depthWrite: false });
+  const edge = new THREE.MeshBasicMaterial({ color: 0xb8ffe8, transparent: true, opacity: 0.8 });
+  const dark = new THREE.MeshBasicMaterial({ color: 0x0a2a1c, transparent: true, opacity: 0.85 });
+  gpBox(g, body, 0.066, 0.070, 0.200, 0, 0.012, -0.010);                      // body
+  gpCyl(g, body, 0.030, 0.026, 0.220, 16, 0, 0.018, -0.200);                  // barrel
+  for (const z of [-0.120, -0.200, -0.290]) gpCyl(g, edge, 0.031, 0.031, 0.008, 16, 0, 0.018, z);
+  gpCyl(g, body, 0.046, 0.046, 0.050, 18, 0, -0.012, -0.030, 0, Math.PI / 2); // drum
+  gpBox(g, dark, 0.006, 0.012, 0.010, -0.049, -0.004, -0.040);                // the face: eyes
+  gpBox(g, dark, 0.006, 0.012, 0.010, -0.049, -0.004, -0.020);
+  gpBox(g, dark, 0.006, 0.006, 0.026, -0.049, -0.024, -0.030);                // and a mouth
+  gpBox(g, edge, 0.068, 0.004, 0.180, 0, 0.049, -0.010);                      // top edge light
+  gpPlate(g, body, [
+    [0.040,-0.024],[0.070,-0.040],[0.078,-0.138],[0.050,-0.152],[0.022,-0.062],[0.018,-0.026],
+  ], 0.036, 0);
+  gpBox(g, edge, 0.006, 0.014, 0.006, 0, -0.040, 0.014, 0.22);
+  g._ghostMats = [[body, 0.38], [edge, 0.8], [dark, 0.85]];
+  const wispM = new THREE.MeshBasicMaterial({ color: 0xb8ffe8, transparent: true, opacity: 0.5, depthWrite: false });
+  const wisps = [];
+  for (let i = 0; i < 8; i++) {
+    const w = new THREE.Mesh(new THREE.SphereGeometry(0.006, 8, 6), wispM); w.userData.eqFx = true; g.add(w);
+    wisps.push({ w, t: Math.random(), speed: 0.3 + Math.random() * 0.3, x: 0, z: 0, phase: Math.random() * 6 });
+  }
+  g._calm = () => { for (const [m, v] of g._ghostMats) m.opacity = v; };
+  g._tick = (dt, now, assembling) => {
+    if (!assembling) body.opacity = 0.38 + Math.sin(now * 2) * 0.07;
+    for (const W of wisps) {
+      W.w.visible = !assembling;
+      if (assembling) continue;
+      W.t += dt * W.speed;
+      if (W.t > 1) { W.t -= 1; W.x = (Math.random() - 0.5) * 0.06; W.z = -0.25 + Math.random() * 0.30; }
+      W.w.position.set(W.x + Math.sin(W.t * 5 + W.phase) * 0.012, 0.030 + W.t * 0.10, W.z);
+      W.w.scale.setScalar(Math.max(0.001, (1 - W.t) * 1.4));
+    }
+  };
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.018, -0.316); g.add(flash);
+  g._flash = flash; g._kickZ = 0.018; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
 function buildHairDryer() {
   // 💨 MP-40 -> hair dryer. Cream housing, a chrome barrel with the heating
   // element glowing inside, a cable coiling off the butt and two slider
@@ -20070,7 +20387,7 @@ function _eqLocalBox(model, pieces) {
 // Things an entrance brings with it and takes away again: the cube the pistol
 // comes out of, the katana's scabbard, the bat's shockwave. They are children
 // of the model while they last and are disposed of when it finishes.
-function _eqMakeProps(model, type, ctr, box) {
+function _eqMakeProps(model, type, ctr, box, targets) {
   const out = [];
   const red = () => new THREE.MeshBasicMaterial({ color: 0xff2a1a, transparent: true, opacity: 0.9,
     blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
@@ -20153,6 +20470,16 @@ function _eqMakeProps(model, type, ctr, box) {
     pl.position.set(ctr.x, (box.min.y + box.max.y) / 2, box.max.z);
     pl.userData.scan = true; model.add(pl); out.push(pl);
   }
+  if (type === 'constellation') {              // a star at each piece, a line to the next
+    const cons = new THREE.Group();
+    const starM = new THREE.MeshBasicMaterial({ color: 0xffffff }), lineM = new THREE.MeshBasicMaterial({ color: 0xe8c050 });
+    const src = targets || [], step = Math.max(1, Math.floor(src.length / 12));
+    const pts = src.filter((_, i) => i % step === 0).slice(0, 12).map(c => c.userData.eqHome.p.clone());
+    const stars = pts.map(pt => { const m = new THREE.Mesh(new THREE.OctahedronGeometry(0.005, 0), starM); m.position.copy(pt); cons.add(m); return m; });
+    const lines = pts.slice(1).map(() => { const m = new THREE.Mesh(new THREE.BoxGeometry(0.0014, 0.0014, 1), lineM); cons.add(m); return m; });
+    cons.userData.cons = { pts, stars, lines };
+    model.add(cons); out.push(cons);
+  }
   if (type === 'slam') {
     const ringM = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.008, 6, 32), red());
     ringM.rotation.x = Math.PI / 2;
@@ -20165,6 +20492,7 @@ function _eqStepProps(e, t) {
   const m = e.model, lm = m._legendMats;
   // How much of the fire shows while it arrives: most entrances keep it back
   // until the very end; the eruption and the forge are made of it.
+  if (e.type === 'haunt' && m._ghostMats) for (const [gm, v] of m._ghostMats) gm.opacity = v * _eqEase(t);
   if (e.type === 'eruption') { m._fireGate = 1; m._fireBoost = (1 - t) * 1.6; }
   else if (e.type === 'forge') { m._fireGate = 1; m._fireBoost = 0.4; }
   else { m._fireGate = t < 0.85 ? 0 : (t - 0.85) / 0.15; m._fireBoost = 0; }
@@ -20226,6 +20554,18 @@ function _eqStepProps(e, t) {
       o.visible = t >= 0.25 && f < 1;
       o.scale.setScalar(Math.max(0.001, 0.4 + f * 1.8));
       o.material.opacity = 0.9 * (1 - f);
+    }
+    if (o.userData.cons) {                       // stars pop in, lines draw between them, all fade
+      const C = o.userData.cons, n = C.stars.length, gone = _eqClamp((t - 0.75) / 0.25);
+      C.stars.forEach((m, i) => {
+        const k = _eqBack(_eqClamp((t - (i / Math.max(1, n)) * 0.35) / 0.08));
+        m.visible = k > 0; m.scale.setScalar(Math.max(0.001, k * (1 - gone)));
+      });
+      C.lines.forEach((m, i) => {
+        const k = _eqClamp((t - 0.30 - (i / Math.max(1, n)) * 0.25) / 0.08);
+        m.visible = k > 0 && gone < 1;
+        if (m.visible) _eqSegment(m, C.pts[i], C.pts[i].clone().lerp(C.pts[i + 1], k));
+      });
     }
     if (o.userData.scan) {
       const k = _eqClamp((t - 0.1) / 0.75);
@@ -20296,8 +20636,9 @@ function _beginEquip(model, spec, melee) {
   if (type === 'build')  ps.sort((a, b) => a.h.p.y - b.h.p.y);
   if (type === 'eruption') ps.sort((a, b) => b.h.p.z - a.h.p.z);   // rising back to front
   if (type === 'petals')   ps.sort((a, b) => b.h.p.z - a.h.p.z);   // blooming hilt to tip
+  if (type === 'windup' || type === 'inflate') ps.sort((a, b) => b.h.p.z - a.h.p.z);   // back to front
   if (type === 'meteor')   ps.sort((a, b) => a.h.p.z - b.h.p.z);   // raining front to back
-  if (type === 'unfold' || type === 'build' || type === 'eruption' || type === 'meteor' || type === 'petals')
+  if (type === 'unfold' || type === 'build' || type === 'eruption' || type === 'meteor' || type === 'petals' || type === 'windup' || type === 'inflate')
     ps.forEach((p, i) => { p.delay = i / Math.max(1, ps.length - 1); });
   let ring = null;
   if (type === 'warp') {
@@ -20308,7 +20649,7 @@ function _beginEquip(model, spec, melee) {
   }
   const glow = (model._equipGlow || []).map(m => [m, m.emissiveIntensity]);
   const box = _eqLocalBox(model, targets);
-  const temp = _eqMakeProps(model, type, ctr, box);
+  const temp = _eqMakeProps(model, type, ctr, box, targets);
   _equip = { model, melee, type, t0: performance.now(), dur: spec.equipMs || 900,
              ps, ctr, ring, glow, sfx: spec.equipSfx || null, box, temp,
              beats: (spec.equipBeats || []).map(([t, name]) => ({ t, name, done: false })),
@@ -20331,6 +20672,7 @@ function finishEquip() {
     o.traverse(x => { if (x.geometry) x.geometry.dispose(); if (x.material) x.material.dispose(); });
   }
   e.model._fireGate = 1; e.model._fireBoost = 0;
+  if (e.model._ghostMats) for (const [m, v] of e.model._ghostMats) m.opacity = v;
   const lm = e.model._legendMats;
   if (lm) { lm.obsidian.emissive.setHex(0x000000); lm.obsidian.emissiveIntensity = 1; }
 }
@@ -20558,6 +20900,61 @@ function _equipStep(e, t) {
         c.position.z += (hsh(step + 2) - 0.5) * 0.10 * amt;
         c.quaternion.copy(h.q);
         c.scale.set(h.s.x, h.s.y * (1 + (hsh(step + 3) - 0.5) * 0.8 * amt), h.s.z);
+        break; }
+      case 'fill': {
+        // Fishbowl Carbine: the tank and its fittings pop in, then the water
+        // rises in it from the bottom up.
+        c.position.copy(h.p); c.quaternion.copy(h.q);
+        if (c === e.model._water) {
+          const k = _eqEase(_eqClamp((t - 0.3) / 0.5));
+          c.visible = k > 0;
+          c.scale.set(h.s.x, h.s.y * Math.max(0.001, k), h.s.z);
+        } else {
+          c.scale.copy(h.s).multiplyScalar(Math.max(0.001, _eqBack(_eqClamp((t - p.delay * 0.2) / 0.3))));
+        }
+        break; }
+      case 'windup': {
+        // Clockwork Coilgun: each piece clicks into place in turn, back to
+        // front, turned a quarter too far and snapping round.
+        const k = _eqClamp((t - p.delay * 0.7) / 0.12), snap = 1 - k;
+        c.visible = k > 0;
+        c.position.copy(h.p); c.position.y += snap * 0.02;
+        c.quaternion.copy(h.q).multiply(new THREE.Quaternion().setFromAxisAngle(_EQ_Z, snap * Math.PI / 2));
+        c.scale.copy(h.s);
+        break; }
+      case 'neon': {
+        // Neon SMG: the body is simply there; the tubes warm up one at a
+        // time, stuttering the way a neon sign does.
+        c.position.copy(h.p); c.quaternion.copy(h.q); c.scale.copy(h.s);
+        if (c.userData.neon) {
+          const t0 = 0.15 + p.delay * 0.6;
+          c.visible = t > t0 + 0.12 || (t > t0 && Math.sin(now * 70 + p.phase * 10) > 0.2);
+        }
+        break; }
+      case 'constellation': {
+        // Constellation Launcher: the stars, the lines between them, and only
+        // then the launcher, filling in behind its own constellation.
+        const k = _eqEase(_eqClamp((t - 0.55 - p.delay * 0.15) / 0.3));
+        c.visible = k > 0;
+        c.position.copy(h.p); c.quaternion.copy(h.q);
+        c.scale.copy(h.s).multiplyScalar(Math.max(0.001, 0.6 + 0.4 * k));
+        break; }
+      case 'haunt': {
+        // Phantom Cannon: fading up out of nothing, wavering as it comes.
+        const w = (1 - t) * 0.02;
+        c.position.copy(h.p);
+        c.position.x += Math.sin(now * 14 + p.phase) * w;
+        c.position.y += Math.sin(now * 11 + p.phase * 2) * w;
+        c.quaternion.copy(h.q); c.scale.copy(h.s);
+        break; }
+      case 'inflate': {
+        // Balloon Sword: blown up hilt to tip, each twist stretching a little
+        // too far and wobbling back.
+        const k = _eqClamp((t - p.delay * 0.6) / 0.35);
+        const el = k <= 0 ? 0 : k >= 1 ? 1 : Math.pow(2, -8 * k) * Math.sin((k * 10 - 0.75) * 2.094) + 1;
+        c.visible = k > 0;
+        c.position.copy(h.p); c.quaternion.copy(h.q);
+        c.scale.copy(h.s).multiplyScalar(Math.max(0.001, 0.15 + 0.85 * el));
         break; }
       case 'spin': {
         // A spin-cock or a gunslinger's twirl: the gun turns about the point
@@ -21912,9 +22309,17 @@ function updateMovement(dt) {
         playSoundEvent('footstep', { volume: Math.min(1, 0.35 + landingHardness * 0.45), pitch: 0.72, minGap: 80 });
       }
       if (slamState.type === 'slam') {
-        // Slam AOE inline (can't use doAbilityAOE since it uses currentWeapon.id)
+        // Slam AOE inline (can't use doAbilityAOE since it uses currentWeapon.id).
+        // Used to hardcode 'sledge'/radius 4/80 dmg for EVERY melee_slam weapon
+        // (Fire Axe, Titan Hammer, Gravity Hammer, Shovel too) — so they all
+        // silently dealt Sledge's damage no matter what their own ability
+        // claimed. Read the actually-equipped item instead.
+        const slamItem = equippedMeleeItem();
+        const slamAb = slamItem?.ability;
         const slamOrigin = camera.position.clone();
-        const slamRadius = 4, slamColor = 0xff6600;
+        const slamRadius = slamAb?.radius || 4, slamColor = 0xff6600;
+        const slamDummyDamage = slamAb?.damage ?? slamItem?.damage ?? 80;
+        const slamWeaponId = slamItem?.id || 'sledge';
         spawnAbilityAOEFX(slamOrigin.clone().setY(0.15), slamRadius, slamColor);
         flashScreen('rgba(255,100,0,0.30)', 350);
         for (const [pid, mesh] of Object.entries(remoteMeshes)) {
@@ -21922,8 +22327,8 @@ function updateMovement(dt) {
           if (d < slamRadius) {
             const hp = mesh.position.clone().setY(1.0);
             const dummy = TRAINING_DUMMIES.find(dd => dd.id === pid);
-            if (dummy) handleDummyHit(dummy, mesh, { damage: 80 }, hp);
-            else emitHit(pid, `slam_${myId}_${Date.now()}_${pid}`, 'sledge', hp);
+            if (dummy) handleDummyHit(dummy, mesh, { damage: slamDummyDamage }, hp);
+            else emitHit(pid, `slam_${myId}_${Date.now()}_${pid}`, slamWeaponId, hp);
             spawnHitParticle(hp);
           }
         }
@@ -22175,6 +22580,14 @@ function activateMeleeAbility() {
         bot.z += (dz / d) * step;
         const mesh = remoteMeshes[bestPid];
         if (mesh) mesh.position.set(bot.x, mesh.position.y, bot.z);
+        // Yank them in, then the cane actually lands — it wasn't dealing any
+        // damage at all before, just repositioning the target.
+        if (ab.damage) {
+          const hitPos = (mesh || { position: camera.position }).position.clone().setY(1.0);
+          const dummy = TRAINING_DUMMIES.find(d => d.id === bestPid);
+          if (dummy) handleDummyHit(dummy, mesh, { damage: ab.damage }, hitPos);
+          else emitHit(bestPid, `pull_${myId}_${now}`, item.id, hitPos);
+        }
         spawnHitParticle(camera.position.clone().setY(1.0));
       } else {
         // Remote player — tell server to teleport them via emitHit hack (skip; no-op)
@@ -23885,6 +24298,21 @@ const MODEL_SKINS = [
   { id: 'deagle_glitch', weapon: 'desert_eagle', name: 'Glitch Deagle', rarity: 'rare',
     sw: ['#0a0a10', '#ff2bd6'], build: buildGlitchDeagle,
     blurb: 'Teleports together when drawn. Every so often, a piece is somewhere it should not be.' },
+  { id: 'plasma_carbine_fishbowl', weapon: 'plasma_carbine', name: 'Fishbowl Carbine', rarity: 'rare',
+    sw: ['#2a8ae8', '#ff7a1a'], build: buildFishbowlCarbine,
+    blurb: 'Fills with water when drawn. Three fish live in it.' },
+  { id: 'coilgun_clockwork', weapon: 'coilgun', name: 'Clockwork Coilgun', rarity: 'rare',
+    sw: ['#c8a040', '#b8683a'], build: buildClockworkCoilgun,
+    blurb: 'Clicks together like something wound. The gears never stop turning.' },
+  { id: 'smart_smg_neon', weapon: 'smart_smg', name: 'Neon SMG', rarity: 'rare',
+    sw: ['#14141a', '#ff3ac8'], build: buildNeonSMG,
+    blurb: 'Warms up like a sign, a tube at a time. The colours drift.' },
+  { id: 'portal_launcher_constellation', weapon: 'portal_launcher', name: 'Constellation Launcher', rarity: 'rare',
+    sw: ['#1c1660', '#e8c050'], build: buildConstellationLauncher,
+    blurb: 'Stars first, then the lines between them, then the launcher.' },
+  { id: 'burst_cannon_phantom', weapon: 'burst_cannon', name: 'Phantom Cannon', rarity: 'rare',
+    sw: ['#6affc8', '#0a2a1c'], build: buildPhantomCannon,
+    blurb: 'Fades up out of nothing. Breathes, and sheds wisps.' },
 ];
 // 🔥 FFA Legend skins unlock from FFA: a million damage or five thousand wins.
 // Wrapped because it runs while the file is still loading -- skins restored
@@ -25368,6 +25796,38 @@ function buildThunderSpear() {
   g.position.set(0.10, -0.12, -0.20); return g;
 }
 
+function buildBalloonSword() {
+  // 🎈 Sabre -> Balloon Sword. Twisted from long red balloons, a yellow loop for
+  // a guard. Drawn, it is blown up from the hilt to the tip, squeaking; held,
+  // it breathes -- a rubbery wobble that never quite settles.
+  const g = new THREE.Group();
+  const O = [0, 0.025, -0.060];
+  const red = new THREE.MeshPhongMaterial({ color: 0xff3a4a, shininess: 220, specular: 0xffffff });
+  const yel = new THREE.MeshPhongMaterial({ color: 0xffd23a, shininess: 220, specular: 0xffffff });
+  const segs = [];
+  const seg = (mat, len, r, z) => {                                            // one balloon sausage along Z
+    const m = new THREE.Mesh(new THREE.SphereGeometry(r, 14, 10), mat);
+    m.scale.set(1, 1, len / (2 * r)); m.position.set(O[0], O[1], z + O[2]); g.add(m); segs.push(m); return m;
+  };
+  for (let i = 0; i < 5; i++) seg(red, 0.056, 0.010, -0.030 - i * 0.050);     // the blade, twisted in five
+  const tip = new THREE.Mesh(new THREE.ConeGeometry(0.005, 0.014, 8), red);
+  tip.rotation.x = -Math.PI / 2; tip.position.set(O[0], O[1], -0.290 + O[2]); g.add(tip); segs.push(tip);
+  const loop = new THREE.Mesh(new THREE.TorusGeometry(0.026, 0.009, 10, 24), yel);   // the guard: a loop
+  loop.position.set(O[0], O[1], 0.004 + O[2]); g.add(loop); segs.push(loop);
+  seg(yel, 0.050, 0.010, 0.040);                                                // the grip, twisted in two
+  seg(yel, 0.050, 0.010, 0.088);
+  const knot = new THREE.Mesh(new THREE.ConeGeometry(0.005, 0.012, 8), yel);
+  knot.rotation.x = Math.PI / 2; knot.position.set(O[0], O[1], 0.120 + O[2]); g.add(knot); segs.push(knot);
+  const base = segs.map(m => m.scale.clone());
+  g._calm = () => segs.forEach((m, i) => m.scale.copy(base[i]));
+  g._tick = (dt, now, assembling) => {
+    if (assembling) return;
+    segs.forEach((m, i) => { const k = 1 + Math.sin(now * 3 + i * 0.9) * 0.025; m.scale.copy(base[i]).multiplyScalar(k); });
+  };
+  g._greebled = true; g._handDetailed = true;
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+
 const MELEE_MODEL_SKINS = [
   { id: 'knife_floss', melee: 'knife', name: 'Dental Floss', rarity: 'good',
     sw: ['#f2f4f6', '#3ab2c8'], build: buildDentalFloss,
@@ -25502,6 +25962,10 @@ const MELEE_MODEL_SKINS = [
     sw: ['#2a2e36', '#6ad0ff'], build: buildThunderSpear,
     blurb: 'Arrives on a lightning strike. Arcs crawl along the shaft.',
     equip: 'strike', equipMs: 800, equipSfx: ['thunder', null] },
+  { id: 'sabre_balloon', melee: 'sabre', name: 'Balloon Sword', rarity: 'good',
+    sw: ['#ff3a4a', '#ffd23a'], build: buildBalloonSword,
+    blurb: 'Blown up hilt to tip, squeaking. It never quite stops wobbling.',
+    equip: 'inflate', equipMs: 1000, equipSfx: ['inflate', 'squeak'] },
 ];
 const MELEE_MODEL_SKINS_BY_BASE = {};
 for (const ms of MELEE_MODEL_SKINS) (MELEE_MODEL_SKINS_BY_BASE[ms.melee] ||= []).push(ms);
@@ -26976,6 +27440,17 @@ const SKIN_FX = {
     reload: _fxR(RELOAD_KEYS.ak20, (RELOAD_PROPS.ak20 || []).map(e => e.k === 'mag' ? Object.assign({}, e, { k: 'holomag' }) : e), null, 'beep') },
   deagle_glitch: { sound: _fxS('glitch', .34, .10, 0, 0),
     equip: 'glitch', equipMs: 850, equipSfx: ['glitchsfx', 'snapin'] },
+  plasma_carbine_fishbowl: { sound: _fxS('bubblegun', .26, .10, 300, 900),
+    equip: 'fill', equipMs: 1100, equipSfx: ['pour', 'bloop'],
+    reload: _fxR(_RK.top(), [.30,.38,.46,.54].map(t => RP(t,'drop','arrive',1,'breech')), [[.28,'glug']], 'bloop') },
+  coilgun_clockwork: { sound: _fxS('clockwork', .30, .12, 900, 2800),
+    equip: 'windup', equipMs: 1000, equipSfx: ['windup', 'ding'] },
+  smart_smg_neon: { sound: _fxS('laser', .22, .07, 1800, 300),
+    equip: 'neon', equipMs: 1000, equipSfx: ['neonbuzz', 'hum'] },
+  portal_launcher_constellation: { sound: _fxS('cosmic', .26, .20, 2200, 180),
+    equip: 'constellation', equipMs: 1200, equipSfx: ['starfall', 'chime'] },
+  burst_cannon_phantom: { sound: _fxS('phantom', .34, .24, 330, 300),
+    equip: 'haunt', equipMs: 1100, equipSfx: ['boo', null] },
 };
 
 function _reloadPose(track, t) {

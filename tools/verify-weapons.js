@@ -60,7 +60,7 @@ function load() {
                    '_emoStroke', '_emoMats', '_legendMats', '_legendize',
                    '_mPivot', '_eqCrystalMats',
                    // builders that take arguments are not picked up by the build*() sweep below
-                   'buildPixelGunModel']) {
+                   'buildPixelGunModel', '_eqSegment']) {
     const b = fnBlock(n);
     if (b) code += b + '\n';
   }
