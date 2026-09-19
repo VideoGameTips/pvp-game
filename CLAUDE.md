@@ -62,7 +62,10 @@ built with `./tools/build-itch.sh`.
 - **One server process.** Logical isolation via `matchId` + `emitToMatch(matchId, event, data)`. Lobby = default room. Each private match = its own bubble (fixed the old "6v6 when a stranger joins" bug).
 - **Bots are client-side**, simulated on the match HOST. Host spawns bots; guests receive them over the network. `pvpMatch.isHost` gates this.
 - **Hits are client-authoritative** (`emitHit` → server applies). Bots always hit the player (no miss roll) EXCEPT auto-weapon burst shots now roll a hit chance.
-- **Staging lobby** (`stagingLobbies[mode]`) is the live matchmaking path (`joinStagingLobby` → `lobbyStart`). The old `pvpQueues`/`pvpResult` path is orphaned — no client listener.
+- **Staging lobby** (`stagingLobbies[mode]`) is the live matchmaking path (`joinStagingLobby` → `lobbyStart`). The old `pvpQueues`/`pvpResult` path is orphaned — no client listener. **1v1 waits up to 15 s for a human** before a bot (`HUMAN_SEARCH_MODES`); other modes start as soon as everyone in the lobby is ready.
+- **Lobby 13 is one shared room (`'hub'`)** — real players see each other there (#46). Its 37-character cast is **client-local**: never `spawnBots` / `botMove` it, or N players put N×37 bodies in the hub. ⚔️ DUEL challenges a real player there (`duelInvite` → `duelAnswer` → a no-bot 1v1 via `startLobbyMatch(…, { duel: true })`).
+- **Changing room drops your bots** (`movePlayerToMatch`): the client re-sends `spawnBots` for every match, and `teardownMatchWorld()` sends `leaveMatch`. A real opponent who leaves an elim match ends it (`opponentLeft`, scoped to `currentRoom` — `playerLeft` only means "left the room you're in").
+- Team modes with 2+ humans *and* bots are not real multiplayer yet: bots are simulated on the host and only shoot the host, each client runs its own rounds, and `team` is absolute (`'ally'` = the host's side).
 - Main render loop: `function loop()`. Single `renderer.render(scene, camera)` (the Kill Log theater intercepts this for 6-viewport rendering).
 
 ## Where things live (public/game.js, ~15k lines)
