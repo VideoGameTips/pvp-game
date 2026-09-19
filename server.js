@@ -264,10 +264,11 @@ const FREE_WEAPONS = new Set([
 // ── 💼 Bundles — ~60% off the sum of individual prices ─────────────
 // Keep in sync with public/game.js BUNDLES table.
 const BUNDLES = {
-  pitiful:      { name: 'Pitiful Pack', price: 420, items: ['ak20','sg8','revolver','bat','smoke'] },
-  retro:        { name: 'Retro Pack',   price: 145, items: ['paintball','laser_pointer','baguette','rubber_duck','confetti_cannon'] },
+  pitiful:      { name: 'Pitiful Pack', price: 380, items: ['ak20','sg8','revolver','bat'] },
+  retro:        { name: 'Retro Pack',   price: 115, items: ['paintball','laser_pointer','baguette','rubber_duck'] },
   starter_pro:  { name: 'Starter Pro',  price: 330, items: ['ak20','revolver','bat','stim'] },
-  heavy_duty:   { name: 'Heavy Duty',   price: 700, items: ['minigun','grenade_launcher','machine_revolver','crowbar','sticky_charge'] },
+  heavy_duty:   { name: 'Heavy Duty',   price: 580, items: ['minigun','grenade_launcher','machine_revolver','crowbar'] },
+  wwii:         { name: 'WWII Arsenal', price: 560, items: ['mp40','m1_garand','mauser','katana'] },
   sniper_pack:  { name: 'Sniper Pack',  price: 580, items: ['srx','revolver','knife','smoke'] },
   run_n_gun:    { name: 'Run & Gun',    price: 430, items: ['p90','machine_pistol','knife','adrenaline'] },
   melee_master: { name: 'Melee Master', price: 480, items: ['sg8','revolver','fire_axe','smoke'] },
