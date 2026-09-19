@@ -1780,7 +1780,7 @@ io.on('connection', (socket) => {
       if (!b || !b.isBot || b.ownerId !== socket.id || b.dead) continue;
       const o = (s.o || []).map(num), d = (s.d || []).map(num);
       if (o.length !== 3 || d.length !== 3 || o.includes(null) || d.includes(null)) continue;
-      out.push({ id: b.id, o, d, w: String(s.w || '').slice(0, 32), s: num(s.s) || 120 });
+      out.push({ id: b.id, o, d, w: String(s.w || '').slice(0, 32), s: Math.min(1000, Math.max(10, num(s.s) || 120)) });
     }
     if (out.length) emitToMatchExcept(me.matchId, socket.id, 'botShots', out);
   });
@@ -1788,7 +1788,8 @@ io.on('connection', (socket) => {
   // the rest of the room with who sent it; clients only take it from their match's host.
   socket.on('matchEvent', (evt) => {
     const me = players[socket.id];
-    if (!me || !evt || typeof evt !== 'object' || JSON.stringify(evt).length > 2000) return;
+    if (!me || me.matchId === 'lobby' || me.matchId === HUB_MATCH) return;   // matches only, not the menus or the hub
+    if (!evt || typeof evt !== 'object' || JSON.stringify(evt).length > 2000) return;
     emitToMatchExcept(me.matchId, socket.id, 'matchEvent', { from: socket.id, evt });
   });
 

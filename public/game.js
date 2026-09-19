@@ -29687,7 +29687,7 @@ function mpApplyRound(e) {
   }
 }
 socket.on('matchEvent', ({ from, evt } = {}) => {
-  if (!mpGuest() || !evt || from !== pvpMatch.hostId || !match || match.over) return;
+  if (!mpGuest() || !mpTeamMatch() || !evt || from !== pvpMatch.hostId || match.over) return;
   if (evt.t === 'score' && match.type === 'race') { match.teamKills = relPair(evt.kills); updateMatchHUD(); }
   else if (evt.t === 'round' && match.type === 'elim') mpApplyRound(evt);
   else if (evt.t === 'end') endMatch(evt.winner ? relTeam(evt.winner) : null, evt.reason || '');
@@ -29695,14 +29695,15 @@ socket.on('matchEvent', ({ from, evt } = {}) => {
 // The host's bots' shots: flown here through our own hitbox test (updateBullets), so a
 // dodge counts on our screen and a hit is ours to report (botHitsMe) — as the host does (#48).
 socket.on('botShots', shots => {
-  if (!mpGuest() || !Array.isArray(shots)) return;
+  if (!mpGuest() || !mpTeamMatch() || !Array.isArray(shots)) return;
   for (const sh of shots) {
+    if (!players[sh.id]) continue;   // not ours to guess at: an unknown bot could be a teammate
     const w = WEAPONS.find(x => x.id === sh.w) || WEAPONS[0];
     const origin = new THREE.Vector3(sh.o[0], sh.o[1], sh.o[2]);
     const dir = new THREE.Vector3(sh.d[0], sh.d[1], sh.d[2]);
     playWeaponSound(w.id, { baseWeapon: w, remote: true, position: origin });
     spawnLocalBullet(origin, dir, `rb_${sh.id}_${performance.now()}`, false, sh.s || w.bulletSpeed || 120,
-                     w.bulletColor, w.bulletSize, w.id, { botId: sh.id, botTeam: players[sh.id]?.team || 'enemy' });
+                     w.bulletColor, w.bulletSize, w.id, { botId: sh.id, botTeam: players[sh.id].team });
   }
 });
 // 🌐 Authoritative "who is actually in your match" list, sent whenever the
@@ -30085,6 +30086,9 @@ function mpMatch() { return !!(pvpMatch && pvpMatch.opponents && pvpMatch.oppone
 function mpHost()  { return mpMatch() && !!pvpMatch.isHost; }
 function mpGuest() { return mpMatch() && !pvpMatch.isHost; }
 function mpSend(evt) { if (mpHost()) socket.emit('matchEvent', evt); }
+// The host's word covers elimination rounds and the team kill race — 1v1 through 10v10. FFA,
+// KOTH and the arcade modes are still decided on each client, as they always were.
+function mpTeamMatch() { return mpMatch() && !!match && (match.type === 'elim' || match.type === 'race'); }
 
 // Position sync — server broadcasts all positions every 50ms
 socket.on('posUpdate', positions => {
@@ -32184,7 +32188,7 @@ function resolveElimRoundByHP() {
 
 function onTimeUp() {
   if (!match || match.over) return;
-  if (mpGuest()) return;   // the host's clock decides (#48)
+  if (mpGuest() && mpTeamMatch()) return;   // the host's clock decides (#48)
   if (match.type === 'race') {
     const a = match.teamKills.ally, e = match.teamKills.enemy;
     if (a > e)        endMatch('ally',  'TIME UP · Most kills wins');
@@ -32242,7 +32246,7 @@ function endMatch(winner, reason) {
   match.over   = true;
   match.active = false;
   // The host's result is everyone's (#48). Not when players leaving ended it — they say so themselves.
-  if (mpHost() && !match.forfeit) mpSend({ t: 'end', winner: winner ? absTeam(winner) : null, reason: reason || '' });
+  if (mpHost() && mpTeamMatch() && !match.forfeit) mpSend({ t: 'end', winner: winner ? absTeam(winner) : null, reason: reason || '' });
   // An FFA win counts toward FFA Legend. Sent before leaveMatch, while the
   // server still knows which match this was; it checks the rest itself.
   if (match.type === 'ffa' && winner === 'ally') socket.emit('ffaWin');
@@ -34005,7 +34009,7 @@ function updateBotAI(dt) {
             playWeaponSound(w.id, { baseWeapon: w, remote: true, position: origin });
             spawnLocalBullet(origin, dir, `bot_${bot.id}_${now}`, false, w.bulletSpeed || 120,
                              w.bulletColor, w.bulletSize, w.id, { botId: bot.id, botTeam: bot.team });
-            if (mpHost()) _botShotsOut.push({ id: bot.id, o: [origin.x, origin.y, origin.z].map(v => +v.toFixed(2)),
+            if (mpHost() && mpTeamMatch()) _botShotsOut.push({ id: bot.id, o: [origin.x, origin.y, origin.z].map(v => +v.toFixed(2)),
                                               d: [dir.x, dir.y, dir.z].map(v => +v.toFixed(4)), w: w.id, s: w.bulletSpeed || 120 });
           }
         }
