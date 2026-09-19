@@ -29637,8 +29637,10 @@ function opponentLeft(id) {
   if (!pvpMatch.room || currentRoom !== pvpMatch.room) return;
   pvpMatch.opponents = pvpMatch.opponents.filter(o => o.socketId !== id);
   if (!match || match.over) return;
-  if (id === pvpMatch.hostId && !pvpMatch.isHost && Object.values(players).some(p => p && p.isBot)) {
-    // The host ran the bots and the match; without them it's over for everyone (#48)
+  // The host ran the bots and the match; without them it's over for everyone (#48). Whether
+  // this match had bots comes from lobbyStart, not from what's left in `players`: leaving
+  // through the match menu removes the host's bots BEFORE the host, closing the tab after.
+  if (id === pvpMatch.hostId && !pvpMatch.isHost && (pvpMatch.allyBotsToSpawn || pvpMatch.enemyBotsToSpawn)) {
     match.roundActive = false;
     match.forfeit = true;
     endMatch(null, 'The host left · no reward this time');
