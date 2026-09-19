@@ -29603,7 +29603,27 @@ socket.on('playerJoined', p => {
 socket.on('playerLeft',   id => {
   delete players[id];
   if (remoteMeshes[id]) { scene.remove(remoteMeshes[id]); delete remoteMeshes[id]; }
+  opponentLeft(id);
 });
+// A real opponent who leaves an elimination match — quits, closes the tab, drops — used to
+// stay "alive" in it: the round could only end on its 60 s timer and every new round counted
+// them in again, so whoever was left sat through minutes of empty rounds (#46). Now they're
+// out, and with nobody left to fight (no enemy players, no bots) you win on the spot.
+function opponentLeft(id) {
+  if (!pvpMatch || !(pvpMatch.opponents || []).some(o => o.socketId === id)) return;
+  // playerLeft only says someone left the room *we* are in. Until our roster for the match
+  // arrives that room is still Lobby 13 — and the opponent walking out of it into the duel
+  // is not them leaving the duel. (Events on one socket arrive in order, so this is exact.)
+  if (!pvpMatch.room || currentRoom !== pvpMatch.room) return;
+  pvpMatch.opponents = pvpMatch.opponents.filter(o => o.socketId !== id);
+  if (!match || match.over || match.type !== 'elim') return;
+  match.aliveAllies.delete(id);
+  match.aliveEnemies.delete(id);
+  const enemyPlayers = pvpMatch.opponents.some(o => o.team !== pvpMatch.team);
+  const anyBots = Object.values(players).some(p => p && p.isBot);
+  if (!enemyPlayers && !anyBots) { match.roundActive = false; endMatch('ally', 'Your opponent left'); return; }
+  checkElimRound();
+}
 // 🌐 Authoritative "who is actually in your match" list, sent whenever the
 // server moves you between matches. Anyone not on it gets dropped.
 //
@@ -29611,8 +29631,19 @@ socket.on('playerLeft',   id => {
 // been told about, so the lobby crowd — and players from whatever match you were
 // in before — walked into your game with you and stood there frozen, because
 // position updates are match-scoped and never reached them again.
-socket.on('matchRoster', ({ players: roster }) => {
+let currentRoom = null;   // the server room we're in — every move between rooms ends with this roster
+socket.on('matchRoster', ({ matchId, players: roster }) => {
   roster = roster || {};
+  currentRoom = matchId || null;
+  // A real opponent who dropped before we got here never arrives: after 10 s, count them gone (#46)
+  const pm = pvpMatch;
+  if (pm && pm.room && pm.room === currentRoom) {
+    clearTimeout(pm._arriveT);
+    pm._arriveT = setTimeout(() => {
+      if (pvpMatch !== pm || currentRoom !== pm.room) return;
+      for (const o of pm.opponents.slice()) if (!players[o.socketId]) opponentLeft(o.socketId);
+    }, 10000);
+  }
   // Client-side-only entities are not in the server's player table and must
   // survive this pass: training dummies are purely local, and the host's own
   // bots are simulated here.
@@ -31061,6 +31092,7 @@ function startMatchRound() {
   if (!match) return;
   // Show countdown, then actually start
   const doStart = () => {
+    if (!match || match.over) return;   // it ended during the countdown (an opponent left, #46)
     // Hard guard: if loadout opened between countdown end and now, wait for confirm
     if (isLoadoutOpen()) { setTimeout(doStart, 400); return; }
     // For elim rounds: respawn the player now (after countdown)
@@ -31894,7 +31926,7 @@ function updateRoundScoreDisplay() {
 }
 
 function restartElimRound(lastWinner) {
-  if (!match) return;
+  if (!match || match.over) return;   // the match can end while this waits (an opponent left, #46)
   if (lastWinner !== null) match.round++;
   resetPlayerForRound();
   grantSpawnShield(3000);
@@ -32308,6 +32340,7 @@ function spawnGameBots() {
     : (pvpMatch && pvpMatch.mode)
     ? `pvp-${[myId, ...(pvpMatch.opponents || []).map(o => o.socketId)].sort().join('-')}` // shared ID for PvP-paired players
     : `match-${myId}-${Date.now()}`;
+  if (pvpMatch) pvpMatch.room = matchId;   // see opponentLeft
   socket.emit('enterMatch', { matchId, mode: currentModeId() });   // the mode counts toward FFA Legend
 
   // ── Clean up bots/meshes/bubbles from any previous mode session ──────────

@@ -220,6 +220,7 @@
     '{name} said no': '{name} 拒绝了', "{name} didn't answer": '{name} 没有回应',
     '{name} left Lobby 13': '{name} 离开了 13 号大厅', '{name} is already in a challenge': '{name} 正在另一场约战里',
     '⚔️ CHALLENGE WITHDRAWN': '⚔️ 对方撤回了挑战',
+    'Your opponent left': '对手离开了',
     'MELEE ': '近战', 'RANGE': '射程', 'USES': '次数',
     '↑ AUTO': '↑ 自动',
     '[HOLD]': '[按住]',
