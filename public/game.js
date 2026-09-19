@@ -3510,6 +3510,10 @@ function playObjectShot(ctx, start, out, p, m) {
       playMuzzleBlast(ctx, start, out, 'heavy', v * 0.5);
       for (let i = 0; i < 4; i++) playTone(ctx, start + i * d / 4, d / 4, out, f1 * (1 + (i % 2) * 0.06), f2, v * 0.3, 'sine');
       return true;
+    case 'rainbow':  // the AK's report, and a bright major chord ringing off it
+      playMuzzleBlast(ctx, start, out, 'auto_blast', v);
+      [1, 1.26, 1.5].forEach((r, i) => playTone(ctx, start + i * 0.012, d, out, f1 * r, f1 * r, v * 0.16, 'sine'));
+      return true;
     case 'aircon':   // air, and the compressor humming under it
       playFilteredNoise(ctx, start, d, out, v, 'highpass', f1, 0.5, 0.01, 1.0);
       playTone(ctx, start, d, out, 60, 60, v * 0.6, 'sine');
@@ -3676,6 +3680,19 @@ function playObjectSfx(ctx, out, name, t, v) {
     case 'inflate':  // a balloon blown up: squeaky, rising
       playTone(ctx, t, 0.6, out, 300, 900, v * 0.14, 'triangle');
       playFilteredNoise(ctx, t, 0.6, out, v * 0.1, 'bandpass', 1600, 2.0, 0.05, 1.0); break;
+    case 'prismbeam':// light arriving: a rising hum and a shimmer over it
+      playTone(ctx, t, 0.5, out, 220, 880, v * 0.16, 'sawtooth');
+      playTone(ctx, t, 0.5, out, 440, 1760, v * 0.08, 'sine');
+      playFilteredNoise(ctx, t, 0.5, out, v * 0.08, 'highpass', 6000, 0.5, 0.1, 1.0); break;
+    case 'shatter':  // glass breaking: a crack and a shower of small bright pieces
+      playFilteredNoise(ctx, t, 0.04, out, v * 0.5, 'highpass', 3500, 0.6, 0.0003, 1.4);
+      for (let i = 0; i < 10; i++) playTone(ctx, t + 0.02 + Math.random() * 0.25, 0.08, out,
+        2500 + Math.random() * 3500, 2500 + Math.random() * 3500, v * 0.06, 'sine');
+      break;
+    case 'rainbowburst': // the rings going out: a sweep up and a big bright chord
+      playSweptNoise(ctx, t, 0.4, out, v * 0.2, 'bandpass', 800, 5000, 1.0);
+      [523, 659, 784, 1047, 1319].forEach((f, i) => playTone(ctx, t + i * 0.03, 0.8, out, f, f, v * 0.09, 'triangle'));
+      break;
     case 'flicks':   // a butterfly knife's pins, clacking as the handles go round
       for (let i = 0; i < 6; i++)
         metalClack(ctx, t + i * 0.085 + Math.random() * 0.02, out, v * 0.35, 2200 + Math.random() * 800, 0.02);
@@ -3713,7 +3730,7 @@ const PROP_SFX = {
   filter: ['slideout', 'snapin'], canister: ['hiss', 'snapin'], dash: ['type', 'type'],
   shard: ['clink', 'clink'], paper: ['fold', 'fold'], brick: ['click', 'snapin'], pixel: ['blip', 'blip'],
   soul: ['whoosh', 'fireup'], ash: ['brush', 'brush'], coal: ['crunch', 'hiss'], magma: ['hiss', 'snapin'],
-  holomag: ['slideout', 'beep'],
+  holomag: ['slideout', 'beep'], rainbowmag: ['slideout', 'snapin'],
 };
 
 // ── 🔁 Reload audio ─────────────────────────────────────────────────────────
@@ -13597,6 +13614,65 @@ function buildPhantomCannon() {
   g.position.set(0.12, -0.1, -0.25); return g;
 }
 
+function buildRainbowAK() {
+  // 🌈 AK-20 -> Rainbow AK. The real AK, every part its own colour by where it
+  // sits along the gun -- red at the stock through to violet at the muzzle.
+  // Drawn, it comes out of a prism (the 'prism' entrance); held, the rainbow
+  // flows down it from stock to muzzle and glints of light run over it.
+  const g = buildAK20();
+  const flash = g._flash;
+  const inFlash = o => { for (let p = o; p; p = p.parent) if (p === flash) return true; return false; };
+  const at = g.position.clone(); g.position.set(0, 0, 0); g.updateMatrixWorld(true);
+  const meshes = [];
+  g.traverse(m => { if (m.isMesh && !inFlash(m)) meshes.push(m); });
+  const B = new THREE.Box3();
+  const boxes = meshes.map(m => { const b = new THREE.Box3().setFromObject(m); B.union(b); return b; });
+  const len = Math.max(0.001, B.max.z - B.min.z), hsl = {};
+  const rb = [];
+  meshes.forEach((m, i) => {
+    // Where along the gun, 0 at the back of the stock, 1 at the muzzle.
+    const u = (B.max.z - boxes[i].getCenter(new THREE.Vector3()).z) / len;
+    m.material.color.getHSL(hsl);
+    const dark = hsl.l < 0.12;                     // seams and slots stay dark, so the detail still reads
+    const mat = new THREE.MeshPhongMaterial({ shininess: 170, specular: 0xffffff, emissiveIntensity: 0.35 });
+    mat.userData.rb = { u, l: dark ? 0.18 : 0.55 };
+    mat.userData.baseEI = 0.35;
+    m.material = mat;
+    rb.push(mat);
+  });
+  const paint = off => { for (const mt of rb) {
+    const h = ((mt.userData.rb.u * 0.85 - off) % 1 + 1) % 1;
+    mt.color.setHSL(h, 0.95, mt.userData.rb.l); mt.emissive.setHSL(h, 1, 0.28);
+  } };
+  paint(0);
+  g._rbMats = rb;
+  g.position.copy(at);
+  // Glints of light running over it.
+  const glintM = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const glints = [];
+  for (let i = 0; i < 7; i++) {
+    const s = new THREE.Mesh(new THREE.OctahedronGeometry(0.0035, 0), glintM);
+    s.userData.eqFx = true; s.visible = false; g.add(s);
+    glints.push({ s, next: 0, on: false });
+  }
+  g._tick = (dt, now, assembling) => {
+    if (assembling) { glints.forEach(G => { G.s.visible = false; G.on = false; }); return; }
+    paint(now * 0.25);                              // the rainbow flowing stock to muzzle
+    for (const G of glints) {
+      if (now < G.next) continue;
+      G.on = !G.on;
+      G.next = now + (G.on ? 0.08 + Math.random() * 0.1 : 0.2 + Math.random() * 0.8);
+      if (G.on) {
+        const b = boxes[Math.floor(Math.random() * boxes.length)];
+        G.s.position.set(b.min.x + Math.random() * (b.max.x - b.min.x), b.max.y + 0.002, b.min.z + Math.random() * (b.max.z - b.min.z));
+        G.s.scale.set(1, 2.5, 1); G.s.rotation.z = Math.random() * 3;
+      }
+      G.s.visible = G.on;
+    }
+  };
+  return g;
+}
+
 function buildHairDryer() {
   // 💨 MP-40 -> hair dryer. Cream housing, a chrome barrel with the heating
   // element glowing inside, a cable coiling off the butt and two slider
@@ -19537,6 +19613,7 @@ function makeBulletMesh(color, size, weaponId, own) {
   // the server never hears about any of this.
   const look = own && typeof _modelSkinLook !== 'undefined' ? _modelSkinLook[weaponId] : null;
   if (look && look.bulletColor !== undefined) color = look.bulletColor;
+  if (look && look.rainbow) color = new THREE.Color().setHSL(Math.floor(((performance.now() / 1000) * 0.6 % 1) * 24) / 24, 1, 0.55).getHex();
   const kind = (look && look.projectile) || projectileKind(weaponId, weapon);
   switch (kind) {
     case 'solid': {
@@ -20480,6 +20557,37 @@ function _eqMakeProps(model, type, ctr, box, targets) {
     cons.userData.cons = { pts, stars, lines };
     model.add(cons); out.push(cons);
   }
+  if (type === 'prism') {
+    const G = new THREE.Group();
+    const size = box.getSize(new THREE.Vector3());
+    const pos = new THREE.Vector3(ctr.x - 0.05, box.max.y + 0.07, ctr.z + size.z * 0.15);
+    const add = (mesh) => { G.add(mesh); return mesh; };
+    const body = add(new THREE.Mesh(new THREE.CylinderGeometry(0.020, 0.020, 0.048, 3),
+      new THREE.MeshPhongMaterial({ color: 0xeef6ff, shininess: 250, specular: 0xffffff, transparent: true, opacity: 0.55 })));
+    body.add(new THREE.LineSegments(new THREE.EdgesGeometry(body.geometry), new THREE.LineBasicMaterial({ color: 0xffffff })));
+    body.position.copy(pos);
+    const glow = c => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.9,
+      blending: THREE.AdditiveBlending, depthWrite: false });
+    const beamG = new THREE.BoxGeometry(0.005, 0.005, 1);
+    const white = add(new THREE.Mesh(new THREE.BoxGeometry(0.007, 0.007, 1), glow(0xffffff)));
+    const hues = [0, 0.08, 0.16, 0.33, 0.55, 0.67, 0.8];
+    const cols = hues.map(h => new THREE.Color().setHSL(h, 1, 0.55));
+    const beams = cols.map(c => add(new THREE.Mesh(beamG, glow(c.getHex()))));
+    const targets7 = hues.map((_, i) => new THREE.Vector3(ctr.x, ctr.y, box.max.z - (i + 0.5) / 7 * size.z));
+    const sparkG = new THREE.OctahedronGeometry(0.004, 0);
+    const sparks = [];
+    for (let i = 0; i < 28; i++) {
+      const m = add(new THREE.Mesh(sparkG, glow(cols[i % 7].getHex())));
+      const d = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.3, Math.random() - 0.5).normalize();
+      sparks.push({ m, v: d.multiplyScalar(0.18 + Math.random() * 0.2) });
+    }
+    const rings = cols.map((c, i) => {
+      const r = add(new THREE.Mesh(new THREE.TorusGeometry(0.05 + i * 0.006, 0.0025, 6, 48), glow(c.getHex())));
+      r.position.copy(ctr); r.visible = false; return r;
+    });
+    G.userData.prism = { pos, src: pos.clone().add(new THREE.Vector3(-0.40, 0.14, 0.06)), body, white, beams, targets: targets7, sparks, rings };
+    model.add(G); out.push(G);
+  }
   if (type === 'slam') {
     const ringM = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.008, 6, 32), red());
     ringM.rotation.x = Math.PI / 2;
@@ -20554,6 +20662,38 @@ function _eqStepProps(e, t) {
       o.visible = t >= 0.25 && f < 1;
       o.scale.setScalar(Math.max(0.001, 0.4 + f * 1.8));
       o.material.opacity = 0.9 * (1 - f);
+    }
+    if (o.userData.prism) {
+      const P = o.userData.prism, gone = t >= 0.8;
+      // The prism itself: grows in, spins, and is gone when it shatters.
+      P.body.visible = !gone;
+      P.body.scale.setScalar(Math.max(0.001, _eqOut(_eqClamp(t / 0.12))));
+      P.body.rotation.set(0.5, t * 9, 0.3);
+      // White light arriving...
+      const w = _eqClamp(t / 0.15);
+      P.white.visible = !gone && w > 0;
+      if (P.white.visible) _eqSegment(P.white, P.src, P.src.clone().lerp(P.pos, w));
+      // ...split into seven, fanning out down the gun, then drawn back in.
+      const back = _eqClamp((t - 0.70) / 0.10);
+      P.beams.forEach((b, i) => {
+        const k = _eqEase(_eqClamp((t - 0.12 - i * 0.02) / 0.15)) * (1 - back);
+        b.visible = k > 0.001 && !gone;
+        if (b.visible) _eqSegment(b, P.pos, P.pos.clone().lerp(P.targets[i], k));
+        b.material.opacity = 0.9 * (0.75 + 0.25 * Math.sin(t * 60 + i));
+      });
+      // The prism shatters into rainbow sparks...
+      const st = _eqClamp((t - 0.8) / 0.2);
+      for (const S of P.sparks) {
+        S.m.visible = gone && st < 1;
+        if (S.m.visible) { S.m.position.copy(P.pos).addScaledVector(S.v, st); S.m.scale.setScalar(Math.max(0.001, 1.6 * (1 - st))); }
+      }
+      // ...and seven rings of rainbow blast out from the gun.
+      const rt = _eqClamp((t - 0.84) / 0.16);
+      P.rings.forEach((r, i) => {
+        r.visible = t >= 0.84 && rt < 1;
+        r.scale.setScalar(1 + rt * (3 + i * 0.4));
+        r.material.opacity = 0.9 * (1 - rt);
+      });
     }
     if (o.userData.cons) {                       // stars pop in, lines draw between them, all fade
       const C = o.userData.cons, n = C.stars.length, gone = _eqClamp((t - 0.75) / 0.25);
@@ -20650,8 +20790,14 @@ function _beginEquip(model, spec, melee) {
   const glow = (model._equipGlow || []).map(m => [m, m.emissiveIntensity]);
   const box = _eqLocalBox(model, targets);
   const temp = _eqMakeProps(model, type, ctr, box, targets);
+  // The prism entrance sends each piece along its own colour's beam: bands of
+  // seven by where the piece sits, red at the back to violet at the front.
+  const span = Math.max(0.001, box.max.z - box.min.z);
+  for (const q of ps) q.band = Math.max(0, Math.min(6, Math.floor((box.max.z - q.h.p.z) / span * 7)));
+  const prismProp = temp.find(o => o.userData.prism);
   _equip = { model, melee, type, t0: performance.now(), dur: spec.equipMs || 900,
              ps, ctr, ring, glow, sfx: spec.equipSfx || null, box, temp,
+             prismPos: prismProp ? prismProp.userData.prism.pos.clone() : ctr.clone(),
              beats: (spec.equipBeats || []).map(([t, name]) => ({ t, name, done: false })),
              turns: spec.spinTurns || 1, pivot: (model._spinPivot || ctr).clone() };
   playEquipSound(_equip.sfx && _equip.sfx[0]);
@@ -20673,6 +20819,7 @@ function finishEquip() {
   }
   e.model._fireGate = 1; e.model._fireBoost = 0;
   if (e.model._ghostMats) for (const [m, v] of e.model._ghostMats) m.opacity = v;
+  if (e.model._rbMats) for (const m of e.model._rbMats) m.emissiveIntensity = m.userData.baseEI;
   const lm = e.model._legendMats;
   if (lm) { lm.obsidian.emissive.setHex(0x000000); lm.obsidian.emissiveIntensity = 1; }
 }
@@ -20955,6 +21102,21 @@ function _equipStep(e, t) {
         c.visible = k > 0;
         c.position.copy(h.p); c.quaternion.copy(h.q);
         c.scale.copy(h.s).multiplyScalar(Math.max(0.001, 0.15 + 0.85 * el));
+        break; }
+      case 'prism': {
+        // Rainbow AK: every piece comes out of the prism along its own colour's
+        // beam -- red first, violet last -- arcing a little, tumbling, and
+        // glowing as it lands.
+        const k = _eqEase(_eqClamp((t - 0.28 - p.band * 0.055 - p.delay * 0.04) / 0.22));
+        c.visible = k > 0;
+        c.position.copy(e.prismPos).lerp(h.p, k);
+        c.position.y += Math.sin(Math.PI * k) * 0.03;
+        c.quaternion.copy(h.q).multiply(new THREE.Quaternion().setFromAxisAngle(p.spin, (1 - k) * 4));
+        c.scale.copy(h.s).multiplyScalar(0.3 + 0.7 * k);
+        const landed = k >= 1 ? _eqClamp((t - (0.50 + p.band * 0.055)) / 0.15) : 0;
+        const burst = t > 0.84 ? 1 - _eqClamp((t - 0.84) / 0.16) : 0;   // the whole gun flashes at the end
+        c.traverse(o => { const m = o.isMesh && o.material; if (m && m.userData && m.userData.rb)
+          m.emissiveIntensity = m.userData.baseEI + (k > 0 && k < 1 ? 1.2 : 1.2 * (1 - landed)) * (k > 0 ? 1 : 0) + burst * 1.8; });
         break; }
       case 'spin': {
         // A spin-cock or a gunslinger's twirl: the gun turns about the point
@@ -24313,6 +24475,9 @@ const MODEL_SKINS = [
   { id: 'burst_cannon_phantom', weapon: 'burst_cannon', name: 'Phantom Cannon', rarity: 'rare',
     sw: ['#6affc8', '#0a2a1c'], build: buildPhantomCannon,
     blurb: 'Fades up out of nothing. Breathes, and sheds wisps.' },
+  { id: 'ak20_rainbow', weapon: 'ak20', name: 'Rainbow AK', rarity: 'legendary',
+    sw: ['#ff3a3a', '#8a3aff'], build: buildRainbowAK, look: { rainbow: true },
+    blurb: 'Split out of a prism when drawn. The rainbow flows down it, and so do its rounds.' },
 ];
 // 🔥 FFA Legend skins unlock from FFA: a million damage or five thousand wins.
 // Wrapped because it runs while the file is still loading -- skins restored
@@ -26789,6 +26954,11 @@ function _makeObjectProp(kind, M, g) {
       add('m', B(0.026, 0.090, 0.044), new THREE.MeshBasicMaterial({ color: 0x1a6aa8, transparent: true, opacity: 0.35 }));
       add('e', B(0.028, 0.004, 0.046), new THREE.MeshBasicMaterial({ color: 0x8aeaff }), 0, 0.046, 0);
       return true;
+    case 'rainbowmag': // the Rainbow AK's magazine: seven stripes
+      for (let i = 0; i < 7; i++)
+        add('s' + i, B(0.026, 0.0128, 0.044), new THREE.MeshPhongMaterial({ color: new THREE.Color().setHSL(i / 7 * 0.85, 1, 0.55),
+          shininess: 150, specular: 0xffffff }), 0, 0.0384 - i * 0.0128, 0);
+      return true;
     case 'dash':       // "-" — black rim, white face, same as the guns that fire it
       add('k', B(0.060, 0.014, 0.008), M(0x0d0d0d, 20));
       add('w', B(0.054, 0.009, 0.010), M(0xf6f6f6, 20)); return true;
@@ -27451,6 +27621,10 @@ const SKIN_FX = {
     equip: 'constellation', equipMs: 1200, equipSfx: ['starfall', 'chime'] },
   burst_cannon_phantom: { sound: _fxS('phantom', .34, .24, 330, 300),
     equip: 'haunt', equipMs: 1100, equipSfx: ['boo', null] },
+  ak20_rainbow: { sound: _fxS('rainbow', .27, .10, 1047, 0),
+    equip: 'prism', equipMs: 1600, equipSfx: ['prismbeam', null],
+    equipBeats: [[.28,'chord'], [.80,'shatter'], [.84,'rainbowburst']],
+    reload: _fxR(RELOAD_KEYS.ak20, (RELOAD_PROPS.ak20 || []).map(e => e.k === 'mag' ? Object.assign({}, e, { k: 'rainbowmag' }) : e), null, 'chord') },
 };
 
 function _reloadPose(track, t) {
