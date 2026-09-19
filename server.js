@@ -211,10 +211,22 @@ const WEAPON_COSTS = {
 };
 const CURRENCY_NAME = 'donuts';
 const CURRENCY_ICON = '🍩';
-const WEAPON_PRICE_MULT = 100;
-const NORMAL_WEAPON_PRICE_MULT = Math.max(1, Math.round(WEAPON_PRICE_MULT / 50));
-const MATCH_REWARD_MULT = 400;
-const SKIN_CASE_GEN1_COST = 50000;
+// 💰 One economy, one unit. A match pays 20-250 donuts -- 5 a kill, plus 50
+// for a win or 20 for a loss, so about 85 for an ordinary game -- and every
+// price table (weapons, bundles, chests, upgrades, abilities, the wheel) is
+// written in those same units. Match rewards used to be multiplied by 400 while
+// normal weapons were only doubled, so one match bought about seventy AKs and
+// every weapon short of P2W was effectively free. Now the tables mean what they
+// say: a pistol is less than a match, an AK about three, an SR-X about six, the
+// AMR about twenty-five. P2W stays ridiculous on purpose -- about 70 to 240
+// matches each, roughly twice the grind it was.
+const WEAPON_PRICE_MULT = 0.5;          // P2W items
+const NORMAL_WEAPON_PRICE_MULT = 1;     // everything else: the table as written
+const MATCH_REWARD_MULT = 1;
+const SKIN_CASE_GEN1_COST = 150;        // about two matches; it is cosmetic
+// Balances saved under the old x400 rewards are rescaled once (ensureShopFields).
+const ECONOMY_V = 2;
+const OLD_MATCH_REWARD_MULT = 400;
 const P2W_ITEM_IDS = new Set([
   'event_horizon', 'storm_core', 'abs_zero', 'solar_lance', 'quantum_repeater',
   'magnetar', 'nebula_mortar', 'prism_engine', 'void_harvester',
@@ -276,16 +288,29 @@ const BUNDLES = {
   knockback:    { name: 'Knockback',          price: 500, items: ['shockwave_launcher','sawed_off','sledge','air_grenade'] },
   smart_tech:   { name: 'Smart Tech',         price: 610, items: ['ak20','smart_smg','hunter_drone','magnet_mine'] },
   mortar:       { name: 'Mortar Squad',       price: 550, items: ['mortar_rifle','grenade_launcher','hand_cannon','frag'] },
-  cosmic_p2w:   { name: 'Cosmic P2W',         price: 80000, items: ['event_horizon','storm_core','abs_zero','solar_lance','quantum_repeater','magnetar','nebula_mortar','prism_engine','void_harvester','pulse_needle','revolver','phase_blade','gravity_hammer','volt_whip','nano_swarm','warp_beacon','stasis_mine','specter_drone','quantum_barrier'] },
+  // 30% off the nineteen items bought one at a time (215,150 at P2W prices).
+  // It used to be priced at nearly 80% off, which made it the only sane buy.
+  cosmic_p2w:   { name: 'Cosmic P2W',         price: 300000, items: ['event_horizon','storm_core','abs_zero','solar_lance','quantum_repeater','magnetar','nebula_mortar','prism_engine','void_harvester','pulse_needle','revolver','phase_blade','gravity_hammer','volt_whip','nano_swarm','warp_beacon','stasis_mine','specter_drone','quantum_barrier'] },
 };
 for (const [id, b] of Object.entries(BUNDLES)) b.price *= id === 'cosmic_p2w' ? WEAPON_PRICE_MULT : NORMAL_WEAPON_PRICE_MULT;
 
-const STARTER_CREDITS = 20000;
+const STARTER_CREDITS = 500;       // a first weapon or two, not the shop
 const TRIAL_DIVISOR = 20; // trial costs 1/20 of buy price (min 1)
 
 function ensureShopFields(u) {
   if (!u) return;
   if (typeof u.credits !== 'number') u.credits = STARTER_CREDITS;
+  // A balance earned under the old x400 match rewards is worth 400 times what it
+  // should be now. Scaled once, so an account keeps what it had in MATCHES of
+  // earning -- never below a new player's starting purse -- and the old figure
+  // is kept beside it, so this can be undone by hand if it ever needs to be.
+  if (u.economyV !== ECONOMY_V) {
+    if (!u.isAdmin && typeof u.credits === 'number') {
+      u.creditsBeforeV2 = u.credits;
+      u.credits = Math.max(STARTER_CREDITS, Math.ceil(u.credits / OLD_MATCH_REWARD_MULT));
+    }
+    u.economyV = ECONOMY_V;
+  }
   if (!Array.isArray(u.purchased)) u.purchased = [];
   if (typeof u.fragments !== 'number') u.fragments = 0;
   if (!u.chests) u.chests = { common: 0, rare: 0 };
@@ -982,7 +1007,7 @@ app.post('/auth/register', (req, res) => {
   if (!username || !password) return res.status(400).json({ error: 'username and password required' });
   if (username.length < 2 || username.length > 16) return res.status(400).json({ error: 'username 2-16 chars' });
   if (nameTaken(username)) return res.status(409).json({ error: 'username taken' });   // "tom" when "Tom" exists too (#38)
-  users[username] = { passwordHash: hashPassword(password), unlocks: [], purchased: [], credits: STARTER_CREDITS, fragments: 0, chests: { common: 0, rare: 0 }, upgrades: {}, skinCases: [], skinCasePacks: { gen1_basic: 0 }, skinInventory: [], lastFreeSpinDate: '', kills: 0, deaths: 0, created: Date.now() };
+  users[username] = { passwordHash: hashPassword(password), unlocks: [], purchased: [], credits: STARTER_CREDITS, economyV: ECONOMY_V, fragments: 0, chests: { common: 0, rare: 0 }, upgrades: {}, skinCases: [], skinCasePacks: { gen1_basic: 0 }, skinInventory: [], lastFreeSpinDate: '', kills: 0, deaths: 0, created: Date.now() };
   saveUsers();
   res.json({ ok: true, username, unlocks: [], purchased: [], credits: STARTER_CREDITS, fragments: 0, chests: { common: 0, rare: 0 }, upgrades: {}, skinCases: [], skinCasePacks: { gen1_basic: 0 }, skinInventory: [] });
 });

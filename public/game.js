@@ -1325,9 +1325,19 @@ const WEAPON_COSTS = {
 };
 const CURRENCY_NAME = 'donuts';
 const CURRENCY_ICON = '🍩';
-const WEAPON_PRICE_MULT = 100;
-const NORMAL_WEAPON_PRICE_MULT = Math.max(1, Math.round(WEAPON_PRICE_MULT / 50));
-const SKIN_CASE_GEN1_COST = 50000;
+// 💰 One economy, one unit. A match pays 20-250 donuts -- 5 a kill, plus 50
+// for a win or 20 for a loss, so about 85 for an ordinary game -- and every
+// price table (weapons, bundles, chests, upgrades, abilities, the wheel) is
+// written in those same units. Match rewards used to be multiplied by 400 while
+// normal weapons were only doubled, so one match bought about seventy AKs and
+// every weapon short of P2W was effectively free. Now the tables mean what they
+// say: a pistol is less than a match, an AK about three, an SR-X about six, the
+// AMR about twenty-five. P2W stays ridiculous on purpose -- about 70 to 240
+// matches each, roughly twice the grind it was.
+// Mirrors server.js (gotcha #4): the server charges, this only displays.
+const WEAPON_PRICE_MULT = 0.5;          // P2W items
+const NORMAL_WEAPON_PRICE_MULT = 1;
+const SKIN_CASE_GEN1_COST = 150;
 const P2W_ITEM_IDS = new Set([
   'event_horizon', 'storm_core', 'abs_zero', 'solar_lance', 'quantum_repeater',
   'magnetar', 'nebula_mortar', 'prism_engine', 'void_harvester',
@@ -1347,18 +1357,21 @@ const trialingThisMatch = new Set(); // ids the player paid a trial for this mat
 // ── 💼 Loadout BUNDLES — ~60% off the sum of individual prices ─────────
 // Mirrors server.js BUNDLES (server is authoritative on price/contents).
 const BUNDLES = [
-  { id: 'pitiful',     name: 'Pitiful Pack', icon: '🪖', price: 420,
-    desc: 'Classic loadout: AR · shotgun · pistol · melee · smoke',
-    items: ['ak20','sg8','revolver','bat','smoke'] },
-  { id: 'retro',       name: 'Retro Pack',   icon: '🕹️', price: 145,
+  { id: 'pitiful',     name: 'Pitiful Pack', icon: '🪖', price: 380,
+    desc: 'Classic loadout: AR · shotgun · pistol · melee',
+    items: ['ak20','sg8','revolver','bat'] },
+  { id: 'retro',       name: 'Retro Pack',   icon: '🕹️', price: 115,
     desc: 'Quirky old-school weapons · 70% off',
-    items: ['paintball','laser_pointer','baguette','rubber_duck','confetti_cannon'] },
+    items: ['paintball','laser_pointer','baguette','rubber_duck'] },
   { id: 'starter_pro', name: 'Starter Pro',  icon: '🎯', price: 330,
     desc: 'Upgrade past the freebies',
     items: ['ak20','revolver','bat','stim'] },
-  { id: 'heavy_duty',  name: 'Heavy Duty',   icon: '💥', price: 700,
+  { id: 'heavy_duty',  name: 'Heavy Duty',   icon: '💥', price: 580,
     desc: 'Minigun · GL · machine revolver',
-    items: ['minigun','grenade_launcher','machine_revolver','crowbar','sticky_charge'] },
+    items: ['minigun','grenade_launcher','machine_revolver','crowbar'] },
+  { id: 'wwii',        name: 'WWII Arsenal', icon: '🎖️', price: 560,
+    desc: 'Vintage warfare: SMG · battle rifle · sidearm · blade',
+    items: ['mp40','m1_garand','mauser','katana'] },
   { id: 'sniper_pack', name: 'Sniper Pack',  icon: '🎯', price: 580,
     desc: 'Long-range duelist kit',
     items: ['srx','revolver','knife','smoke'] },
@@ -1419,7 +1432,7 @@ const BUNDLES = [
   { id: 'mortar',      name: 'Mortar Squad', icon: '🪂', price: 550,
     desc: 'Indirect fire specialists',
     items: ['mortar_rifle','grenade_launcher','hand_cannon','frag'] },
-  { id: 'cosmic_p2w',  name: 'Cosmic P2W',   icon: '🌌', price: 80000,
+  { id: 'cosmic_p2w',  name: 'Cosmic P2W',   icon: '🌌', price: 300000,   // 30% off; mirrors server.js
     desc: 'Every sci-fi P2W item · 30% off',
     items: ['event_horizon','storm_core','abs_zero','solar_lance','quantum_repeater','magnetar','nebula_mortar','prism_engine','void_harvester','pulse_needle','revolver','phase_blade','gravity_hammer','volt_whip','nano_swarm','warp_beacon','stasis_mine','specter_drone','quantum_barrier'] },
 ];
