@@ -3486,6 +3486,13 @@ function playObjectShot(ctx, start, out, p, m) {
         playFilteredNoise(ctx, start + 0.02 + i * 0.03 + Math.random() * 0.02, 0.012, out, v * 0.25,
                           'highpass', 2600 + Math.random() * 2000, 0.8, 0.0003, 1.5);
       return true;
+    case 'holo':     // a hologram firing: the report, thinned, and a digital chirp
+      playMuzzleBlast(ctx, start, out, 'auto_blast', v * 0.7);
+      playTone(ctx, start, d, out, f1, f2, v * 0.35, 'square'); return true;
+    case 'glitch':   // one shot, stuttered three times, and a burst of digital noise
+      for (let i = 0; i < 3; i++) playMuzzleBlast(ctx, start + i * 0.018, out, 'pistol', v * (1 - i * 0.3));
+      playFilteredNoise(ctx, start + 0.01, 0.05, out, v * 0.3, 'highpass', 5000, 0.5, 0.0003, 1.4);
+      playTone(ctx, start, 0.04, out, 1200, 3200, v * 0.2, 'square'); return true;
     case 'aircon':   // air, and the compressor humming under it
       playFilteredNoise(ctx, start, d, out, v, 'highpass', f1, 0.5, 0.01, 1.0);
       playTone(ctx, start, d, out, 60, 60, v * 0.6, 'sine');
@@ -3611,6 +3618,27 @@ function playObjectSfx(ctx, out, name, t, v) {
     case 'slam':     // something heavy hitting the floor, and the fire running out from it
       playTone(ctx, t, 0.25, out, 90, 40, v * 0.5, 'sine');
       playFilteredNoise(ctx, t, 0.4, out, v * 0.35, 'lowpass', 500, 0.8, 0.002, 1.2); break;
+    case 'singularity':  // a black hole opening: a sub-bass drop, and everything pulled in
+      playTone(ctx, t, 0.9, out, 120, 28, v * 0.45, 'sine');
+      playFilteredNoise(ctx, t, 0.9, out, v * 0.22, 'lowpass', 800, 0.8, 0.5, 0.6);
+      playTone(ctx, t + 0.2, 0.6, out, 3000, 5200, v * 0.05, 'sine'); break;
+    case 'bloom':    // petals gathering: soft rising chimes over a breath of air
+      [523, 587, 659, 784, 880].forEach((f, i) => playTone(ctx, t + i * 0.09, 0.5, out, f, f, v * 0.09, 'sine'));
+      playFilteredNoise(ctx, t, 0.6, out, v * 0.06, 'highpass', 4000, 0.5, 0.1, 1.0); break;
+    case 'thunder':  // the crack, then the rumble rolling away
+      playFilteredNoise(ctx, t, 0.05, out, v * 0.8, 'highpass', 2500, 0.5, 0.0003, 1.4);
+      playFilteredNoise(ctx, t + 0.03, 1.2, out, v * 0.45, 'lowpass', 300, 0.8, 0.02, 1.0);
+      playTone(ctx, t, 0.6, out, 70, 35, v * 0.35, 'sine'); break;
+    case 'scan':     // a scanner sweeping up, ticking as it goes
+      playTone(ctx, t, 0.5, out, 400, 2400, v * 0.12, 'square');
+      for (let i = 0; i < 6; i++) playObjectSfx(ctx, out, 'tick', t + i * 0.08, v * 0.6); break;
+    case 'glitchsfx':// digital garbage: random blips and bursts
+      for (let i = 0; i < 8; i++) {
+        const tt = t + i * 0.05 + Math.random() * 0.02;
+        playTone(ctx, tt, 0.03, out, 200 + Math.random() * 3000, 200 + Math.random() * 3000, v * 0.12, 'square');
+        if (i % 2) playFilteredNoise(ctx, tt, 0.02, out, v * 0.15, 'highpass', 3000, 0.5, 0.0003, 1.4);
+      }
+      break;
     case 'flicks':   // a butterfly knife's pins, clacking as the handles go round
       for (let i = 0; i < 6; i++)
         metalClack(ctx, t + i * 0.085 + Math.random() * 0.02, out, v * 0.35, 2200 + Math.random() * 800, 0.02);
@@ -3648,6 +3676,7 @@ const PROP_SFX = {
   filter: ['slideout', 'snapin'], canister: ['hiss', 'snapin'], dash: ['type', 'type'],
   shard: ['clink', 'clink'], paper: ['fold', 'fold'], brick: ['click', 'snapin'], pixel: ['blip', 'blip'],
   soul: ['whoosh', 'fireup'], ash: ['brush', 'brush'], coal: ['crunch', 'hiss'], magma: ['hiss', 'snapin'],
+  holomag: ['slideout', 'beep'],
 };
 
 // ── 🔁 Reload audio ─────────────────────────────────────────────────────────
@@ -13154,6 +13183,102 @@ function buildLegendKnife()  { return _legendize(buildKnife(),  { top: 4, side: 
 function buildLegendKatana() { return _legendize(buildKatana(), { top: 6, side: 0, fires: 3, from: 0.35, to: 0.95, muzzle: false, scale: 0.8, fireScale: 0.8 }); }
 function buildLegendBat()    { return _legendize(buildBat(),    { top: 5, side: 3, fires: 3, from: 0.45, to: 0.95, muzzle: false }); }
 
+function buildBlueprintAK() {
+  // 📐 AK-20 -> Blueprint AK. The real AK, as its own technical drawing: every
+  // part a pale blue fill with bright edges, a dimension line along the top.
+  // Drawn, a scan line runs down it and it materialises behind the line;
+  // held, it flickers like a hologram and a faint scan line roams it.
+  const g = buildAK20();
+  const flash = g._flash;
+  const inFlash = o => { for (let p = o; p; p = p.parent) if (p === flash) return true; return false; };
+  const fill = new THREE.MeshBasicMaterial({ color: 0x1a6aa8, transparent: true, opacity: 0.28, depthWrite: false });
+  const edge = new THREE.LineBasicMaterial({ color: 0x8aeaff, transparent: true, opacity: 0.9 });
+  const meshes = [];
+  g.traverse(m => { if (m.isMesh && !inFlash(m)) meshes.push(m); });
+  for (const m of meshes) { m.material = fill; m.add(new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry, 25), edge)); }
+  const at = g.position.clone(); g.position.set(0, 0, 0); g.updateMatrixWorld(true);
+  const B = new THREE.Box3();
+  for (const m of meshes) B.union(new THREE.Box3().setFromObject(m));
+  g.position.copy(at);
+  // The dimension line over the top, with its end ticks.
+  const dim = new THREE.MeshBasicMaterial({ color: 0x8aeaff });
+  const top = B.max.y + 0.022, len = B.max.z - B.min.z;
+  const bar = new THREE.Mesh(new THREE.BoxGeometry(0.0015, 0.0015, len), dim);
+  bar.position.set(0, top, (B.max.z + B.min.z) / 2); g.add(bar);
+  for (const z of [B.min.z, B.max.z]) {
+    const t = new THREE.Mesh(new THREE.BoxGeometry(0.0015, 0.016, 0.0015), dim); t.position.set(0, top, z); g.add(t);
+  }
+  // Held: a faint scan line roaming it, and a hologram's flicker.
+  const scan = new THREE.Mesh(new THREE.PlaneGeometry(0.09, 0.14), new THREE.MeshBasicMaterial({ color: 0x8aeaff,
+    transparent: true, opacity: 0.16, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }));
+  scan.userData.eqFx = true; g.add(scan);
+  g._tick = (dt, now, assembling) => {
+    scan.visible = !assembling;
+    const u = (Math.sin(now * 0.9) + 1) / 2;
+    scan.position.set(0, (B.max.y + B.min.y) / 2, B.max.z + (B.min.z - B.max.z) * u);
+    fill.opacity = 0.26 + Math.sin(now * 23) * 0.02 + (Math.random() < 0.02 ? -0.15 : 0);
+    edge.opacity = Math.random() < 0.015 ? 0.3 : 0.9;
+  };
+  return g;
+}
+
+function buildGlitchDeagle() {
+  // 👾 Desert Eagle -> Glitch Deagle. Black, with its small parts in magenta and
+  // cyan and loose pixels hanging off it. Drawn, it teleports about until it
+  // snaps together; held, every couple of seconds a few pieces jump somewhere
+  // wrong for a moment.
+  const g = buildDesertEagle();
+  const flash = g._flash;
+  const inFlash = o => { for (let p = o; p; p = p.parent) if (p === flash) return true; return false; };
+  const body = new THREE.MeshPhongMaterial({ color: 0x0a0a10, shininess: 200, specular: 0x8a8aff });
+  const mag = new THREE.MeshBasicMaterial({ color: 0xff2bd6 }), cyan = new THREE.MeshBasicMaterial({ color: 0x2bf0ff });
+  const at = g.position.clone(); g.position.set(0, 0, 0); g.updateMatrixWorld(true);
+  const B = new THREE.Box3();
+  let n = 0;
+  g.traverse(m => {
+    if (!m.isMesh || inFlash(m)) return;
+    const b = new THREE.Box3().setFromObject(m), sz = b.getSize(new THREE.Vector3());
+    B.union(b);
+    m.material = Math.max(sz.x, sz.y, sz.z) < 0.022 ? (n++ % 2 ? mag : cyan) : body;
+  });
+  g.position.copy(at);
+  // Loose pixels, hanging off the top and back of the slide.
+  for (let i = 0; i < 6; i++) {
+    const px = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.008, 0.008), i % 2 ? mag : cyan);
+    px.position.set((i % 3 - 1) * 0.012, B.max.y + 0.006 + (i % 2) * 0.012, B.max.z - 0.02 - i * 0.022);
+    g.add(px);
+  }
+  // Held: a glitch burst every second or two. Only whole top-level pieces jump,
+  // never the hands, the flash or an assembly the reload drives, and all of
+  // them are put back exactly -- by the burst ending, by a reload starting, or
+  // by _calm the moment it is put away or an entrance is about to measure it.
+  let moved = [], burstUntil = 0, nextBurst = 0, pool = null;
+  const calm = () => { for (const m of moved) m.c.position.copy(m.p); moved = []; };
+  g._calm = calm;
+  g._tick = (dt, now, assembling) => {
+    if (assembling || g._reloadStart) { calm(); return; }
+    if (!pool) pool = g.children.filter(c => {
+      if (c === flash || c._home || c.userData.eqFx) return false;
+      let hand = !!c.userData.vmHand;
+      c.traverse(o => { if (o.userData && o.userData.vmHand) hand = true; });
+      return !hand;
+    });
+    if (moved.length && now >= burstUntil) calm();
+    if (!moved.length && now >= nextBurst && pool.length) {
+      nextBurst = now + 1.2 + Math.random() * 1.8; burstUntil = now + 0.12;
+      for (let i = 0; i < 3; i++) {
+        const c = pool[Math.floor(Math.random() * pool.length)];
+        if (moved.some(m => m.c === c)) continue;
+        moved.push({ c, p: c.position.clone() });
+        c.position.x += (Math.random() - 0.5) * 0.04;
+        c.position.y += (Math.random() - 0.5) * 0.04;
+        c.position.z += (Math.random() - 0.5) * 0.05;
+      }
+    }
+  };
+  return g;
+}
+
 function buildHairDryer() {
   // 💨 MP-40 -> hair dryer. Cream housing, a chrome barrel with the heating
   // element glowing inside, a cable coiling off the butt and two slider
@@ -19898,7 +20023,7 @@ const _eqClamp = v => Math.max(0, Math.min(1, v));
 function _equipPieces(model) {
   const out = [];
   for (const c of model.children) {
-    if (c === model._flash || c.userData.legendFx) continue;
+    if (c === model._flash || c.userData.legendFx || c.userData.eqFx) continue;
     let hand = !!(c.userData && c.userData.vmHand);
     if (!hand) c.traverse(o => { if (o.userData && o.userData.vmHand) hand = true; });
     if (hand) continue;
@@ -19978,6 +20103,55 @@ function _eqMakeProps(model, type, ctr, box) {
     sc.userData.from = sc.position.clone(); sc.userData.len = len;
     model.add(sc); out.push(sc);
   }
+  if (type === 'blackhole') {                  // the black hole: core, accretion disk, photon ring
+    const bh = new THREE.Group(); bh.position.copy(ctr);
+    bh.add(new THREE.Mesh(new THREE.SphereGeometry(0.020, 20, 14), new THREE.MeshBasicMaterial({ color: 0x000000 })));
+    const disk = new THREE.Mesh(new THREE.RingGeometry(0.026, 0.060, 48), new THREE.MeshBasicMaterial({ color: 0xffffff,
+      transparent: true, opacity: 0.8, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }));
+    disk.rotation.x = 1.25; bh.add(disk);
+    bh.add(new THREE.Mesh(new THREE.TorusGeometry(0.023, 0.0018, 6, 48), new THREE.MeshBasicMaterial({ color: 0xffffff })));
+    bh.userData.bh = { disk }; bh.scale.setScalar(0.001);
+    model.add(bh); out.push(bh);
+  }
+  if (type === 'petals') {                     // thirty-six petals, spiralling in
+    const pet = new THREE.Group();
+    const geo = new THREE.CircleGeometry(0.006, 6);
+    const mats = [0xffb7d5, 0xffc9e0, 0xff9ec4].map(c => new THREE.MeshBasicMaterial({ color: c, side: THREE.DoubleSide }));
+    const list = [];
+    for (let i = 0; i < 36; i++) {
+      const m = new THREE.Mesh(geo, mats[i % 3]);
+      m.userData.pt = { a0: Math.random() * 6.283, r0: 0.14 + Math.random() * 0.09,
+                        z: box.min.z + Math.random() * (box.max.z - box.min.z), spin: Math.random() * 6 };
+      pet.add(m); list.push(m);
+    }
+    pet.userData.petals = list; model.add(pet); out.push(pet);
+  }
+  if (type === 'strike') {                     // the bolt, a core and a glow, and the flash it makes
+    const bolt = new THREE.Group(), segG = new THREE.BoxGeometry(0.004, 0.004, 1), glowG = new THREE.BoxGeometry(0.012, 0.012, 1);
+    const coreM = new THREE.MeshBasicMaterial({ color: 0xeaf8ff, transparent: true, opacity: 1 });
+    const glowM = new THREE.MeshBasicMaterial({ color: 0x4aa8ff, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false });
+    coreM.userData.base = 1; glowM.userData.base = 0.5;
+    const segs = [], glow = [];
+    for (let i = 0; i < 8; i++) {
+      const a = new THREE.Mesh(segG, coreM), b = new THREE.Mesh(glowG, glowM);
+      bolt.add(a); bolt.add(b); segs.push(a); glow.push(b);
+    }
+    bolt.userData.bolt = { segs, glow, mats: [coreM, glowM],
+      top: new THREE.Vector3(ctr.x + 0.04, ctr.y + 0.55, ctr.z - 0.10), bottom: ctr.clone() };
+    model.add(bolt); out.push(bolt);
+    const fl = new THREE.Mesh(new THREE.SphereGeometry(0.05, 14, 10), new THREE.MeshBasicMaterial({ color: 0xcfefff,
+      transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }));
+    fl.position.copy(ctr); fl.visible = false; fl.userData.flash = true;
+    model.add(fl); out.push(fl);
+  }
+  if (type === 'scan') {                       // the scan line itself
+    const size = box.getSize(new THREE.Vector3());
+    const pl = new THREE.Mesh(new THREE.PlaneGeometry(Math.max(size.x, 0.05) * 2.2, size.y * 1.4),
+      new THREE.MeshBasicMaterial({ color: 0x3ad8ff, transparent: true, opacity: 0.35, side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending, depthWrite: false }));
+    pl.position.set(ctr.x, (box.min.y + box.max.y) / 2, box.max.z);
+    pl.userData.scan = true; model.add(pl); out.push(pl);
+  }
   if (type === 'slam') {
     const ringM = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.008, 6, 32), red());
     ringM.rotation.x = Math.PI / 2;
@@ -20018,6 +20192,45 @@ function _eqStepProps(e, t) {
       o.position.y -= _eqClamp((t - 0.45) / 0.3) * 0.06;
       o.children.forEach(x => { x.material.opacity = 1 - _eqClamp((t - 0.45) / 0.25); });
     }
+    if (o.userData.bh) {                         // grows, spins, and collapses in a flash
+      const grow = _eqOut(_eqClamp(t / 0.2)), shrink = _eqClamp((t - 0.78) / 0.2);
+      o.scale.setScalar(Math.max(0.001, grow * (1 - shrink)));
+      o.userData.bh.disk.rotation.z = t * 14;
+      o.visible = shrink < 1;
+    }
+    if (o.userData.petals) {                     // the swirl tightens onto the blade
+      const k = _eqEase(_eqClamp(t / 0.75));
+      for (const m of o.userData.petals) {
+        const q = m.userData.pt, r = q.r0 * (1 - k), a = q.a0 + t * 8;
+        m.position.set(e.ctr.x + Math.cos(a) * r, e.ctr.y + Math.sin(a) * r * 0.7, q.z);
+        m.rotation.set(t * q.spin, t * q.spin * 0.7, a);
+        m.scale.set(1, 0.6, 1).multiplyScalar(Math.max(0.001, 1 - _eqClamp((t - 0.6) / 0.25)));
+      }
+    }
+    if (o.userData.bolt) {                       // a new jagged path every frame, flickering
+      const B = o.userData.bolt, fade = t < 0.25 ? 1 : 1 - _eqClamp((t - 0.25) / 0.17);
+      const pts = [];
+      for (let i = 0; i <= B.segs.length; i++) {
+        const pt = B.top.clone().lerp(B.bottom, i / B.segs.length);
+        if (i > 0 && i < B.segs.length) { pt.x += (Math.random() - 0.5) * 0.05; pt.z += (Math.random() - 0.5) * 0.05; }
+        pts.push(pt);
+      }
+      B.segs.forEach((m, i) => _eqSegment(m, pts[i], pts[i + 1]));
+      B.glow.forEach((m, i) => _eqSegment(m, pts[i], pts[i + 1]));
+      B.mats.forEach(m => { m.opacity = m.userData.base * fade; });
+      o.visible = fade > 0.01 && (t >= 0.25 || Math.sin(t * 120) > -0.3);
+    }
+    if (o.userData.flash) {
+      const f = _eqClamp((t - 0.25) / 0.2);
+      o.visible = t >= 0.25 && f < 1;
+      o.scale.setScalar(Math.max(0.001, 0.4 + f * 1.8));
+      o.material.opacity = 0.9 * (1 - f);
+    }
+    if (o.userData.scan) {
+      const k = _eqClamp((t - 0.1) / 0.75);
+      o.position.z = e.box.max.z + (e.box.min.z - e.box.max.z) * k;
+      o.visible = t > 0.08 && k < 1;
+    }
     if (o.geometry && o.geometry.type === 'TorusGeometry') {   // the shockwave
       const k = _eqClamp((t - 0.55) / 0.45);
       o.visible = t >= 0.55;
@@ -20048,6 +20261,7 @@ function startMeleeEquipAnim(idx) {
 }
 
 function _beginEquip(model, spec, melee) {
+  if (model._calm) model._calm();     // put back anything an ambient effect has moved first
   const type = spec.equip;
   // A whole-object move acts on the one part the model names for it -- the
   // pivot it is tossed about, the blade that ignites, the two handles of a
@@ -20080,8 +20294,9 @@ function _beginEquip(model, spec, melee) {
   if (type === 'unfold') ps.sort((a, b) => b.h.p.z - a.h.p.z);
   if (type === 'build')  ps.sort((a, b) => a.h.p.y - b.h.p.y);
   if (type === 'eruption') ps.sort((a, b) => b.h.p.z - a.h.p.z);   // rising back to front
+  if (type === 'petals')   ps.sort((a, b) => b.h.p.z - a.h.p.z);   // blooming hilt to tip
   if (type === 'meteor')   ps.sort((a, b) => a.h.p.z - b.h.p.z);   // raining front to back
-  if (type === 'unfold' || type === 'build' || type === 'eruption' || type === 'meteor')
+  if (type === 'unfold' || type === 'build' || type === 'eruption' || type === 'meteor' || type === 'petals')
     ps.forEach((p, i) => { p.delay = i / Math.max(1, ps.length - 1); });
   let ring = null;
   if (type === 'warp') {
@@ -20295,6 +20510,54 @@ function _equipStep(e, t) {
         c.position.y += y;
         c.quaternion.copy(q).multiply(h.q); c.scale.copy(h.s);
         break; }
+      case 'blackhole': {
+        // Singularity Knife: pulled out of a black hole -- every piece stretched
+        // thin along the blade as it comes, swirling, and let go into shape.
+        const k = _eqEase(_eqClamp((t - 0.2 - p.delay * 0.25) / 0.38)), st = 1 - k, sc = Math.max(0.001, k);
+        c.visible = t > 0.18;
+        c.position.copy(e.ctr).lerp(h.p, k);
+        c.quaternion.copy(h.q).premultiply(new THREE.Quaternion().setFromAxisAngle(_EQ_Z, st * 6));
+        c.scale.set(h.s.x * sc * (1 - 0.6 * st), h.s.y * sc * (1 - 0.6 * st), h.s.z * sc * (1 + 2.5 * st));
+        break; }
+      case 'petals': {
+        // Sakura Katana: the petals gather, and the blade blooms out of them
+        // from the hilt to the tip.
+        const k = _eqBack(_eqClamp((t - 0.25 - p.delay * 0.45) / 0.3));
+        c.visible = k > 0;
+        c.position.copy(h.p); c.quaternion.copy(h.q);
+        c.scale.copy(h.s).multiplyScalar(Math.max(0.001, k));
+        break; }
+      case 'strike': {
+        // Thunder Spear: nothing, then the bolt, then the spear is simply there,
+        // a hair too big for an instant.
+        const k = _eqClamp((t - 0.25) / 0.12);
+        c.visible = t >= 0.25;
+        c.position.copy(h.p); c.quaternion.copy(h.q);
+        c.scale.copy(h.s).multiplyScalar(1 + (1 - k) * 0.15);
+        break; }
+      case 'scan': {
+        // Blueprint AK: a scan line runs down it from the back, and each piece
+        // materialises as the line passes, flickering in.
+        const span = Math.max(0.001, e.box.max.z - e.box.min.z);
+        const scanZ = e.box.max.z - span * _eqClamp((t - 0.1) / 0.75);
+        const since = (h.p.z - scanZ) / span;
+        c.visible = since >= 0 && (since > 0.08 || Math.sin(now * 90 + p.phase) > 0);
+        c.position.copy(h.p); c.quaternion.copy(h.q);
+        c.scale.set(h.s.x, h.s.y * Math.max(0.001, _eqClamp(since * 12)), h.s.z);
+        break; }
+      case 'glitch': {
+        // Glitch Deagle: every piece teleports about, blinking in and out, a new
+        // wrong place every sixteenth of the way, calming until it snaps home.
+        const step = Math.floor(t * 16), amt = t < 0.8 ? 1 - t / 0.8 : 0;
+        const hsh = x => { const v = Math.sin(x * 12.9898 + p.phase * 78.233) * 43758.5453; return v - Math.floor(v); };
+        c.visible = amt === 0 || hsh(step + 7) > 0.3;
+        c.position.copy(h.p);
+        c.position.x += (hsh(step) - 0.5) * 0.08 * amt;
+        c.position.y += (hsh(step + 1) - 0.5) * 0.08 * amt;
+        c.position.z += (hsh(step + 2) - 0.5) * 0.10 * amt;
+        c.quaternion.copy(h.q);
+        c.scale.set(h.s.x, h.s.y * (1 + (hsh(step + 3) - 0.5) * 0.8 * amt), h.s.z);
+        break; }
       case 'spin': {
         // A spin-cock or a gunslinger's twirl: the gun turns about the point
         // the finger holds -- the lever loop, the trigger guard -- while the
@@ -20414,6 +20677,33 @@ function updateSkinReloadFx() {
     r.ring.material.opacity = 0.95 * vis; r.disc.material.opacity = (0.2 + 0.4 * k) * vis;
     glowBody(0.3 + k * 1.6 * (1 - flash) + (flash > 0 && flash < 1 ? 2.0 * (1 - flash) : 0));
   }
+}
+
+// ── ✨ Skins that are never still ─────────────────────────────────────────────
+// A model can carry _tick(dt, now, assembling), run every frame while it is in
+// your hands; and _calm(), run the moment it leaves them, to put back anything
+// its tick had moved. `assembling` is true while it is still making its
+// entrance, so an effect can wait until the weapon is whole.
+var _ambientHeld = new Set();
+function updateSkinAmbient(dt) {
+  const now = performance.now() / 1000;
+  const held = [];
+  const gm = weaponModels[currentWeaponIdx];
+  if (gm && gm.visible && gm._tick) held.push(gm);
+  const mm = selectedMeleeIdx != null && selectedMeleeIdx >= 0 ? meleeModels[selectedMeleeIdx] : null;
+  if (mm && mm.visible && mm._tick) held.push(mm);
+  for (const m of _ambientHeld) if (!held.includes(m)) { _ambientHeld.delete(m); if (m._calm) m._calm(); }
+  for (const m of held) {
+    _ambientHeld.add(m);
+    try { m._tick(dt, now, !!(_equip && _equip.model === m)); } catch (e) {}
+  }
+}
+// A thin box stretched from a to b: one segment of an arc or a lightning bolt.
+function _eqSegment(m, a, b) {
+  const d = b.clone().sub(a), len = d.length();
+  m.position.copy(a).add(b).multiplyScalar(0.5);
+  m.scale.set(1, 1, Math.max(0.0001, len));
+  if (len > 1e-6) m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), d.multiplyScalar(1 / len));
 }
 
 function switchWeapon(idx) {
@@ -23577,6 +23867,13 @@ const MODEL_SKINS = [
   { id: 'vector_legend', weapon: 'vector', name: 'FFA Legend Vector', rarity: 'legend',
     sw: ['#17121a', '#ff2a1a'], build: buildLegendVector, look: { projectile: 'hellfire', bulletColor: 0xff2a1a },
     blurb: 'Compact, spiked, on fire. Mostly on fire.' },
+  // ✨ An entrance, and something that never stops while you hold it.
+  { id: 'ak20_blueprint', weapon: 'ak20', name: 'Blueprint AK', rarity: 'rare',
+    sw: ['#1a6aa8', '#8aeaff'], build: buildBlueprintAK,
+    blurb: 'The AK as its own technical drawing. It scans itself in, and flickers.' },
+  { id: 'deagle_glitch', weapon: 'desert_eagle', name: 'Glitch Deagle', rarity: 'rare',
+    sw: ['#0a0a10', '#ff2bd6'], build: buildGlitchDeagle,
+    blurb: 'Teleports together when drawn. Every so often, a piece is somewhere it should not be.' },
 ];
 // 🔥 FFA Legend skins unlock from FFA: a million damage or five thousand wins.
 // Wrapped because it runs while the file is still loading -- skins restored
@@ -24906,6 +25203,160 @@ function buildFrostAxe() {
   g.position.set(0.10, -0.12, -0.20); return g;
 }
 
+// ── ✨ Melee skins that are never still ───────────────────────────────────────
+// Each of these carries its own _tick(dt, now, assembling), called every frame
+// while it is in your hand (updateSkinAmbient). Everything the tick moves is
+// flagged eqFx, so an entrance never mistakes a spark for a piece of the blade,
+// and while the entrance is still running the effect keeps out of the way.
+
+function buildSingularityKnife() {
+  // 🕳️ Knife -> Singularity Knife. A black blade with a white event-horizon
+  // edge and a photon ring for a guard. Drawn, it is pulled out of a black
+  // hole; held, black and white sparks flash off it and never stop.
+  const g = new THREE.Group();
+  const O = [0, 0.030, -0.070];
+  const black = new THREE.MeshPhongMaterial({ color: 0x050507, shininess: 250, specular: 0xffffff });
+  const white = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const add = (geo, mat, x, y, z, rx = 0) => {
+    const m = new THREE.Mesh(geo, mat); m.position.set(x + O[0], y + O[1], z + O[2]); m.rotation.x = rx; g.add(m); return m;
+  };
+  add(new THREE.BoxGeometry(0.006, 0.030, 0.150), black, 0, 0, -0.075);               // blade
+  add(new THREE.CylinderGeometry(0, 0.015, 0.040, 3), black, 0, 0, -0.170, -Math.PI / 2);
+  add(new THREE.BoxGeometry(0.0025, 0.004, 0.155), white, 0, -0.015, -0.075);          // the edge: the horizon
+  add(new THREE.BoxGeometry(0.0020, 0.002, 0.140), white, 0, 0.015, -0.070);           // light along the spine
+  add(new THREE.TorusGeometry(0.018, 0.0035, 8, 36), white, 0, 0, 0.004);              // photon ring guard
+  add(new THREE.CylinderGeometry(0.016, 0.016, 0.006, 24), black, 0, 0, 0.004, Math.PI / 2);
+  add(new THREE.CylinderGeometry(0.0105, 0.0105, 0.100, 12), black, 0, 0, 0.060, Math.PI / 2);   // grip
+  for (const z of [0.030, 0.060, 0.090]) add(new THREE.TorusGeometry(0.011, 0.0016, 6, 20), white, 0, 0, z);
+  add(new THREE.SphereGeometry(0.012, 14, 10), black, 0, 0, 0.115);                    // pommel
+  add(new THREE.TorusGeometry(0.0125, 0.0018, 6, 20), white, 0, 0, 0.115);
+  // The sparks: black and white, dots and streaks, each on its own flicker,
+  // jumping somewhere new along the blade every time it comes back on.
+  const K = new THREE.MeshBasicMaterial({ color: 0x000000 });
+  const dot = new THREE.OctahedronGeometry(0.0035, 0), streak = new THREE.BoxGeometry(0.0012, 0.0012, 0.016);
+  const sparks = [];
+  for (let i = 0; i < 16; i++) {
+    const m = new THREE.Mesh(i % 3 === 0 ? streak : dot, i % 2 ? white : K);
+    m.userData.eqFx = true; m.visible = false; g.add(m);
+    sparks.push({ m, next: 0, on: false });
+  }
+  g._tick = (dt, now, assembling) => {
+    for (const s of sparks) {
+      if (assembling) { s.m.visible = false; s.on = false; continue; }
+      if (now < s.next) continue;
+      s.on = !s.on;
+      s.next = now + (s.on ? 0.03 + Math.random() * 0.06 : 0.04 + Math.random() * 0.25);
+      if (s.on) {
+        s.m.position.set(O[0] + (Math.random() - 0.5) * 0.03, O[1] + (Math.random() - 0.5) * 0.05,
+                         O[2] - 0.19 + Math.random() * 0.19);
+        s.m.rotation.set(Math.random() * 6, Math.random() * 6, Math.random() * 6);
+        s.m.scale.setScalar(0.6 + Math.random() * 1.2);
+      }
+      s.m.visible = s.on;
+    }
+  };
+  g._greebled = true; g._handDetailed = true;
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+
+function buildSakuraKatana() {
+  // 🌸 Katana -> Sakura Katana. White hilt, a gold flower for a tsuba, a pink
+  // hamon along the edge. Drawn, it blooms out of a swirl of petals; held, it
+  // keeps shedding them.
+  const g = new THREE.Group();
+  const O = [0, 0.022, -0.020];
+  const steel = new THREE.MeshPhongMaterial({ color: 0xdfe6ee, shininess: 230, specular: 0xffffff });
+  const whiteW = new THREE.MeshPhongMaterial({ color: 0xf6f0f2, shininess: 40, specular: 0x999999 });
+  const pink = new THREE.MeshBasicMaterial({ color: 0xff9ec4 });
+  const gold = new THREE.MeshPhongMaterial({ color: 0xd8aa3a, shininess: 190, specular: 0xfff0b0 });
+  const add = (geo, mat, x, y, z, rx = 0, rz = 0) => {
+    const m = new THREE.Mesh(geo, mat); m.position.set(x + O[0], y + O[1], z + O[2]); m.rotation.set(rx, 0, rz); g.add(m); return m;
+  };
+  add(new THREE.CylinderGeometry(0.012, 0.012, 0.150, 12), whiteW, 0, 0, 0.078, Math.PI / 2);       // hilt
+  for (let i = 0; i < 6; i++) add(new THREE.BoxGeometry(0.026, 0.006, 0.010), pink, 0, 0, 0.020 + i * 0.022, 0, 0.785);
+  add(new THREE.CylinderGeometry(0.014, 0.013, 0.014, 12), gold, 0, 0, 0.158, Math.PI / 2);          // kashira
+  for (let i = 0; i < 5; i++) {                                                                      // the flower
+    const a = (i / 5) * Math.PI * 2;
+    add(new THREE.CylinderGeometry(0.012, 0.012, 0.006, 12), gold, Math.cos(a) * 0.016, Math.sin(a) * 0.016, 0, Math.PI / 2);
+  }
+  add(new THREE.CylinderGeometry(0.008, 0.008, 0.008, 12), pink, 0, 0, -0.002, Math.PI / 2);
+  add(new THREE.BoxGeometry(0.010, 0.022, 0.014), gold, 0, 0, -0.011);                              // habaki
+  add(new THREE.BoxGeometry(0.005, 0.020, 0.300), steel, 0, 0, -0.160);                             // blade
+  add(new THREE.BoxGeometry(0.0053, 0.004, 0.290), pink, 0, -0.006, -0.160);                        // hamon
+  add(new THREE.BoxGeometry(0.005, 0.012, 0.030), steel, 0, 0.004, -0.318, -0.6);                   // kissaki
+  const petalGeo = new THREE.CircleGeometry(0.006, 6);
+  const petalMats = [0xffb7d5, 0xffc9e0, 0xff9ec4].map(c => new THREE.MeshBasicMaterial({ color: c, side: THREE.DoubleSide }));
+  const drift = [];
+  for (let i = 0; i < 7; i++) {
+    const m = new THREE.Mesh(petalGeo, petalMats[i % 3]); m.userData.eqFx = true; g.add(m);
+    drift.push({ m, t: Math.random(), speed: 0.35 + Math.random() * 0.3, phase: Math.random() * 6 });
+  }
+  const respawn = d => { d.z = O[2] - 0.31 + Math.random() * 0.30; d.x0 = (Math.random() - 0.5) * 0.01; d.y0 = O[1] + 0.006; };
+  drift.forEach(respawn);
+  g._tick = (dt, now, assembling) => {
+    for (const d of drift) {
+      if (assembling) { d.m.visible = false; continue; }
+      d.t += dt * d.speed;
+      if (d.t > 1) { d.t -= 1; respawn(d); }
+      d.m.visible = true;
+      d.m.position.set(d.x0 + Math.sin(d.t * 6 + d.phase) * 0.02, d.y0 - d.t * 0.10, d.z + d.t * 0.03);
+      d.m.rotation.set(d.t * 5 + d.phase, d.t * 3, d.t * 4);
+      d.m.scale.set(1, 0.6, 1).multiplyScalar(Math.max(0.001, 1 - d.t));
+    }
+  };
+  g._greebled = true; g._handDetailed = true;
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+
+function buildThunderSpear() {
+  // ⚡ Spear -> Thunder Spear. Dark iron, glowing rune bands, a lightning-blue
+  // head. Drawn, it arrives on a lightning strike; held, arcs crawl the shaft.
+  const g = new THREE.Group();
+  const O = [0, 0.020, -0.060];
+  const iron = new THREE.MeshPhongMaterial({ color: 0x2a2e36, shininess: 140, specular: 0x8a9ab8 });
+  const wrap = new THREE.MeshPhongMaterial({ color: 0x1a1c20, shininess: 30, specular: 0x4a5058 });
+  const rune = new THREE.MeshBasicMaterial({ color: 0x6ad0ff });
+  const head = new THREE.MeshPhongMaterial({ color: 0xb8e4ff, emissive: 0x2a6aa8, emissiveIntensity: 0.8, shininess: 220, specular: 0xffffff });
+  const add = (geo, mat, x, y, z, rx = 0, ry = 0, rz = 0) => {
+    const m = new THREE.Mesh(geo, mat); m.position.set(x + O[0], y + O[1], z + O[2]); m.rotation.set(rx, ry, rz); g.add(m); return m;
+  };
+  add(new THREE.CylinderGeometry(0.0085, 0.0085, 0.500, 10), iron, 0, 0, 0.020, Math.PI / 2);       // shaft
+  add(new THREE.CylinderGeometry(0.0105, 0.0105, 0.100, 10), wrap, 0, 0, 0.170, Math.PI / 2);       // grip
+  for (const z of [-0.15, -0.08, 0.0, 0.08]) add(new THREE.TorusGeometry(0.0095, 0.0022, 6, 18), rune, 0, 0, z);
+  add(new THREE.CylinderGeometry(0.013, 0.010, 0.030, 10), iron, 0, 0, -0.235, Math.PI / 2);        // collar
+  const OCT = new THREE.OctahedronGeometry(0.5, 0);
+  add(OCT, head, 0, 0, -0.300).scale.set(0.012, 0.034, 0.110);                                      // the head
+  add(new THREE.ConeGeometry(0.006, 0.040, 5), head, 0.014, 0, -0.255, Math.PI / 2 + 0.5, 0, -0.9); // lightning wings
+  add(new THREE.ConeGeometry(0.006, 0.040, 5), head, -0.014, 0, -0.255, Math.PI / 2 + 0.5, 0, 0.9);
+  add(new THREE.ConeGeometry(0.007, 0.030, 6), iron, 0, 0, 0.285, -Math.PI / 2);                    // butt spike
+  // The arcs: three jagged five-segment bolts, each redrawn somewhere new
+  // along the shaft a dozen or more times a second, and not always lit.
+  const arcM = new THREE.MeshBasicMaterial({ color: 0xcfefff }), arcG = new THREE.BoxGeometry(0.0022, 0.0022, 1);
+  const arcs = [];
+  for (let a = 0; a < 3; a++) {
+    const segs = [];
+    for (let i = 0; i < 5; i++) { const m = new THREE.Mesh(arcG, arcM); m.userData.eqFx = true; m.visible = false; g.add(m); segs.push(m); }
+    arcs.push({ segs, next: 0 });
+  }
+  g._tick = (dt, now, assembling) => {
+    for (const A of arcs) {
+      if (assembling) { A.segs.forEach(m => { m.visible = false; }); continue; }
+      if (now < A.next) continue;
+      A.next = now + 0.05 + Math.random() * 0.08;
+      const on = Math.random() < 0.7;
+      const z0 = O[2] + 0.20 - Math.random() * 0.36, len = 0.05 + Math.random() * 0.06;
+      let prev = new THREE.Vector3(O[0], O[1], z0);
+      A.segs.forEach((m, i) => {
+        const next = new THREE.Vector3(O[0] + (Math.random() - 0.5) * 0.03, O[1] + (Math.random() - 0.5) * 0.03,
+                                       z0 - (i + 1) * len / A.segs.length);
+        _eqSegment(m, prev, next); prev = next; m.visible = on;
+      });
+    }
+  };
+  g._greebled = true; g._handDetailed = true;
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+
 const MELEE_MODEL_SKINS = [
   { id: 'knife_floss', melee: 'knife', name: 'Dental Floss', rarity: 'good',
     sw: ['#f2f4f6', '#3ab2c8'], build: buildDentalFloss,
@@ -25027,6 +25478,19 @@ const MELEE_MODEL_SKINS = [
     sw: ['#17121a', '#ff2a1a'], build: buildLegendBat,
     blurb: 'Nails were not enough. Spikes, and fire.',
     equip: 'slam', equipMs: 900, equipSfx: ['whoosh', null], equipBeats: [[.55,'slam']] },
+  // ✨ An entrance, and something that never stops while you hold it.
+  { id: 'knife_singularity', melee: 'knife', name: 'Singularity Knife', rarity: 'rare',
+    sw: ['#050507', '#ffffff'], build: buildSingularityKnife,
+    blurb: 'Pulled out of a black hole. Black and white sparks never stop flashing off it.',
+    equip: 'blackhole', equipMs: 1100, equipSfx: ['singularity', 'chime'] },
+  { id: 'katana_sakura', melee: 'katana', name: 'Sakura Katana', rarity: 'rare',
+    sw: ['#ffb7d5', '#f6f0f2'], build: buildSakuraKatana,
+    blurb: 'Blooms out of a swirl of petals, and keeps shedding them.',
+    equip: 'petals', equipMs: 1100, equipSfx: ['bloom', 'shing'] },
+  { id: 'spear_thunder', melee: 'spear', name: 'Thunder Spear', rarity: 'rare',
+    sw: ['#2a2e36', '#6ad0ff'], build: buildThunderSpear,
+    blurb: 'Arrives on a lightning strike. Arcs crawl along the shaft.',
+    equip: 'strike', equipMs: 800, equipSfx: ['thunder', null] },
 ];
 const MELEE_MODEL_SKINS_BY_BASE = {};
 for (const ms of MELEE_MODEL_SKINS) (MELEE_MODEL_SKINS_BY_BASE[ms.melee] ||= []).push(ms);
@@ -25846,6 +26310,10 @@ function _makeObjectProp(kind, M, g) {
       for (let i = 0; i < 3; i++)
         add('v' + i, B(0.027, 0.004, 0.030), new THREE.MeshBasicMaterial({ color: 0xff3a10 }), 0, -0.030 + i * 0.030, 0, 0, 0, 0.3 * (i - 1));
       return true;
+    case 'holomag':    // the Blueprint AK's magazine: a drawing of one
+      add('m', B(0.026, 0.090, 0.044), new THREE.MeshBasicMaterial({ color: 0x1a6aa8, transparent: true, opacity: 0.35 }));
+      add('e', B(0.028, 0.004, 0.046), new THREE.MeshBasicMaterial({ color: 0x8aeaff }), 0, 0.046, 0);
+      return true;
     case 'dash':       // "-" — black rim, white face, same as the guns that fire it
       add('k', B(0.060, 0.014, 0.008), M(0x0d0d0d, 20));
       add('w', B(0.054, 0.009, 0.010), M(0xf6f6f6, 20)); return true;
@@ -26492,6 +26960,11 @@ const SKIN_FX = {
     // the old magazine crumbles to ash; a molten one goes in
     reload: _fxR(RELOAD_KEYS.vector, (RELOAD_PROPS.vector || []).map(e => e.k === 'mag'
       ? Object.assign({}, e, { k: e.m === 'arrive' ? 'magma' : 'ash' }) : e), [[.30,'hiss']], 'snapin') },
+  ak20_blueprint: { sound: _fxS('holo', .26, .05, 1800, 900),
+    equip: 'scan', equipMs: 1000, equipSfx: ['scan', 'beep'],
+    reload: _fxR(RELOAD_KEYS.ak20, (RELOAD_PROPS.ak20 || []).map(e => e.k === 'mag' ? Object.assign({}, e, { k: 'holomag' }) : e), null, 'beep') },
+  deagle_glitch: { sound: _fxS('glitch', .34, .10, 0, 0),
+    equip: 'glitch', equipMs: 850, equipSfx: ['glitchsfx', 'snapin'] },
 };
 
 function _reloadPose(track, t) {
@@ -34383,6 +34856,7 @@ function loop() {
   safeLoopStep('equip-anim', () => updateEquipAnim());          // a skin making its entrance
   safeLoopStep('legend-fire', () => updateLegendFire(dt));      // FFA Legend skins burning
   safeLoopStep('reload-fx', () => updateSkinReloadFx());        // and reloading with light
+  safeLoopStep('skin-ambient', () => updateSkinAmbient(dt));    // sparks, petals, arcs, glitches
   safeLoopStep('cylinders', () => updateCylinders(dt));      // revolving cylinders index round as they fire
   safeLoopStep('switchblade-hud', () => updateSwitchbladeHUD()); // shows only when switchblade is active
   safeLoopStep('spectator-camera', () => updateSpectatorCamera(dt)); // follow teammates while dead

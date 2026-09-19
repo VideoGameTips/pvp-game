@@ -58,7 +58,9 @@ function load() {
                    '_localPartBoxes', 'attachViewHands', '_reloadPose',
                    '_meleeOffset', '_collarGeometry', 'blendProudSteps',
                    '_emoStroke', '_emoMats', '_legendMats', '_legendize',
-                   '_mPivot', '_eqCrystalMats']) {
+                   '_mPivot', '_eqCrystalMats',
+                   // builders that take arguments are not picked up by the build*() sweep below
+                   'buildPixelGunModel']) {
     const b = fnBlock(n);
     if (b) code += b + '\n';
   }
