@@ -84,6 +84,7 @@
     // leaving a match, the loadout's way out (#26)
     '⚙ MATCH MENU': '⚙ 对局菜单', '▶ RESUME': '▶ 继续', '🔁 CHANGE MODE': '🔁 换模式', '🏠 BACK TO LOBBY 13': '🏠 回 13 号大厅',
     "Leave this match? It won't count.": '这局还没打完，确定离开吗？这局不计分。',
+    'Leave this match? It counts as a loss.': '这局还没打完，现在离开算输。确定离开吗？',
     '← BACK': '← 返回', '🚪 LEAVE MATCH': '🚪 离开比赛',
     // the simpler mode screen (#24)
     'SHOP': '商店', 'SKINS': '皮肤', 'GUN SKINS': '枪械皮肤', 'CHAT': '聊天', 'MORE': '更多',
@@ -223,6 +224,8 @@
     'Your opponent left · no reward this time': '对手离开了 · 这局不发奖励',
     // several real players in a team match (#48)
     'The host left · no reward this time': '房主离开了 · 这局不发奖励',
+    'Your host left — your team loses · no reward this time': '房主离开了——你们队判负 · 这局不发奖励',
+    'The host left — you win · no reward this time': '房主离开了——你们队获胜 · 这局不发奖励',
     '🤝  MATCH OVER': '🤝  比赛结束',
     'TIME UP · a draw': '时间到 · 平局',
     'MELEE ': '近战', 'RANGE': '射程', 'USES': '次数',

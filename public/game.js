@@ -29635,15 +29635,20 @@ function opponentLeft(id) {
   // arrives that room is still Lobby 13 — and the opponent walking out of it into the duel
   // is not them leaving the duel. (Events on one socket arrive in order, so this is exact.)
   if (!pvpMatch.room || currentRoom !== pvpMatch.room) return;
+  const leaver = pvpMatch.opponents.find(o => o.socketId === id);
   pvpMatch.opponents = pvpMatch.opponents.filter(o => o.socketId !== id);
   if (!match || match.over) return;
-  // The host ran the bots and the match; without them it's over for everyone (#48). Whether
-  // this match had bots comes from lobbyStart, not from what's left in `players`: leaving
-  // through the match menu removes the host's bots BEFORE the host, closing the tab after.
-  if (id === pvpMatch.hostId && !pvpMatch.isHost && (pvpMatch.allyBotsToSpawn || pvpMatch.enemyBotsToSpawn)) {
+  // The host ran the match (and the bots, if any); nobody else can carry it on (#48). And
+  // leaving is losing (#49): the host's team loses, the other team wins — still unpaid.
+  // Sides come from lobbyStart (opponents' teams), not from `players`: leaving through the
+  // match menu takes the host's bots out BEFORE the host, closing the tab after.
+  if (id === pvpMatch.hostId && !pvpMatch.isHost) {
     match.roundActive = false;
     match.forfeit = true;
-    endMatch(null, 'The host left · no reward this time');
+    if (match.type !== 'elim' && match.type !== 'race') { endMatch(null, 'The host left · no reward this time'); return; }   // FFA and co. have no sides
+    if (relTeam(leaver.team) === 'ally') endMatch('enemy', 'Your host left — your team loses · no reward this time');
+    else endMatch('ally', currentModeId() === '1v1' ? 'Your opponent left · no reward this time'
+                                                   : 'The host left — you win · no reward this time');
     return;
   }
   if (match.type !== 'elim') return;
@@ -36202,7 +36207,8 @@ function inLiveMatch() { return gameStarted && !inLobby && !!match && !match.ove
 // Leave before the end (#26): ask once, tell the server as endMatch does, then go to one of the two
 // places the end screen offers.
 async function leaveMatch(to) {
-  if (inLiveMatch() && !await uiConfirm("Leave this match? It won't count.")) return;
+  // With other real players leaving is losing (#49); against bots nothing is recorded either way.
+  if (inLiveMatch() && !await uiConfirm(mpMatch() ? 'Leave this match? It counts as a loss.' : "Leave this match? It won't count.")) return;
   if (match && !match.over) socket.emit('leaveMatch');
   closeOtherDialogs();
   if (to === 'lobby') { teardownMatchWorld(); selectMode('lobby13'); } else openModeMenu();
