@@ -17067,17 +17067,82 @@ supportModels.forEach(m => { m.visible = false; camera.add(m); });
 const SHIRT_COLORS = [0xe03131,0x1971c2,0x2f9e44,0xf08c00,0x9c36b5,0x0c8599,0xd6336c];
 let colorIndex = 0;
 
+// The default face (#47): pixel art — brows, eyes that catch the light, a nose, a smile —
+// drawn at 32×32 and magnified without smoothing, so it stays sharp up close. It was four
+// rectangles on a 64×64 canvas, smeared by linear filtering. Every real player on the
+// default skin wears it.
 function makeFaceTexture() {
-  const c = document.createElement('canvas'); c.width = 64; c.height = 64;
+  const c = document.createElement('canvas'); c.width = 32; c.height = 32;
   const ctx = c.getContext('2d');
-  ctx.fillStyle = '#ffcc99'; ctx.fillRect(0,0,64,64);
-  ctx.fillStyle = '#1a1a1a';
-  ctx.fillRect(14,22,10,10); ctx.fillRect(40,22,10,10);
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(15,23,4,4); ctx.fillRect(41,23,4,4);
-  ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 3;
-  ctx.beginPath(); ctx.arc(32,42,10,0.1,Math.PI-0.1); ctx.stroke();
-  return new THREE.CanvasTexture(c);
+  const px = (col, x, y, w = 1, h = 1) => { ctx.fillStyle = col; ctx.fillRect(x, y, w, h); };
+  px('#ffcc99', 0, 0, 32, 32);                                  // skin
+  px('#f3bb8c', 0, 27, 32, 5);                                  // jaw shade
+  px('#5a3a22', 7, 9, 6, 2);   px('#5a3a22', 19, 9, 6, 2);      // brows
+  px('#ffffff', 7, 12, 6, 5);  px('#ffffff', 19, 12, 6, 5);     // eye whites
+  px('#2a1d14', 10, 12, 3, 5); px('#2a1d14', 19, 12, 3, 5);     // pupils, looking a touch inward
+  px('#ffffff', 11, 13, 1, 1); px('#ffffff', 20, 13, 1, 1);     // catch-lights
+  px('#e8a878', 15, 16, 2, 4);                                  // nose
+  px('#f4a5a0', 5, 19, 3, 2);  px('#f4a5a0', 24, 19, 3, 2);     // cheeks
+  px('#7a2e2e', 11, 22, 10, 2);                                 // mouth
+  px('#7a2e2e', 10, 21, 1, 1); px('#7a2e2e', 21, 21, 1, 1);     // …smiling
+  const tex = new THREE.CanvasTexture(c);
+  tex.magFilter = THREE.NearestFilter;
+  return tex;
+}
+let _defaultFaceTex = null;   // one for everybody — skins swap faceMat.map, they never draw on it
+
+// ── Smooth blocks (#47) ─────────────────────────────────────────────────────
+// Body parts were plain boxes, built again for every character. Now: the same outer size
+// (42 skins hang helmets, visors and hair at fixed coordinates, so nothing may move) with
+// bevelled edges and rounded normals, and one shared geometry per size.
+// `seg` (odd): 3 = one bevel step per edge (108 triangles), 5 = two (the head, seen up
+// close; 300), 1 = only the corners pulled in — a soft 12-triangle block for hands and boots.
+const _roundBoxCache = new Map();
+function roundedBoxGeo(w, h, d, r = 0.05, seg = 3) {
+  const key = `${w},${h},${d},${r},${seg}`;
+  let geo = _roundBoxCache.get(key);
+  if (geo) return geo;
+  geo = new THREE.BoxGeometry(w, h, d, seg, seg, seg);
+  const half = [w / 2, h / 2, d / 2];
+  const rad = Math.min(r, ...half.map(x => x * 0.45));
+  // Uniform grid → bevelled grid: the outermost step(s) of each face become the bevel.
+  const bevelAt = seg >= 5 ? [0, rad * 0.5, rad] : [0, rad];    // inset of each grid line from the edge
+  const remap = (p, hf) => {
+    const k = Math.round((1 - Math.abs(p) / hf) * seg / 2);      // grid lines in from the edge
+    const q = k < bevelAt.length ? hf - bevelAt[k] : hf * (1 - (2 * k) / seg);
+    return Math.sign(p) * Math.max(0, q);
+  };
+  const pos = geo.attributes.position, nor = geo.attributes.normal, uv = geo.attributes.uv;
+  const perFace = (seg + 1) * (seg + 1);
+  const UV_AXES = [[2, 1], [2, 1], [0, 2], [0, 2], [0, 1], [0, 1]];   // BoxGeometry face order: px nx py ny pz nz
+  const v = new THREE.Vector3(), inner = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    const o = [pos.getX(i), pos.getY(i), pos.getZ(i)];
+    const p = [remap(o[0], half[0]), remap(o[1], half[1]), remap(o[2], half[2])];
+    // UVs follow the new grid (they're linear in position, centred on 0.5), so a face
+    // texture keeps its proportions instead of a third of it folding into the bevel
+    const [ua, va] = UV_AXES[Math.floor(i / perFace)];
+    const k = a => (o[a] ? p[a] / o[a] : 1);
+    uv.setXY(i, 0.5 + (uv.getX(i) - 0.5) * k(ua), 0.5 + (uv.getY(i) - 0.5) * k(va));
+    // round: push anything outside the inner box onto a radius-`rad` shell around it
+    v.set(p[0], p[1], p[2]);
+    inner.set(Math.max(-half[0] + rad, Math.min(half[0] - rad, v.x)),
+              Math.max(-half[1] + rad, Math.min(half[1] - rad, v.y)),
+              Math.max(-half[2] + rad, Math.min(half[2] - rad, v.z)));
+    v.sub(inner);
+    const len = v.length();
+    if (len > 1e-6) {
+      v.multiplyScalar(1 / len);
+      nor.setXYZ(i, v.x, v.y, v.z);
+      v.multiplyScalar(rad).add(inner);
+    } else v.add(inner);
+    // seg 1 is all corners, so rounding pulls every face in: scale back out to the real size
+    if (seg === 1) v.set(v.x * half[0] / (half[0] - rad * 0.4226), v.y * half[1] / (half[1] - rad * 0.4226), v.z * half[2] / (half[2] - rad * 0.4226));
+    pos.setXYZ(i, v.x, v.y, v.z);
+  }
+  geo.computeBoundingBox(); geo.computeBoundingSphere();
+  _roundBoxCache.set(key, geo);
+  return geo;
 }
 
 function darkenColor(hex, f) {
@@ -18060,9 +18125,10 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
 
   const mkMat = c => new THREE.MeshLambertMaterial({ color: c });
 
-  // Head with face — keep the material array so skins can recolor / reface it
-  const headGeo = new THREE.BoxGeometry(0.5,0.5,0.5);
-  const ft = makeFaceTexture();
+  // Head with face — keep the material array so skins can recolor / reface it.
+  // Parts are smooth shared blocks of the old sizes (#47); see roundedBoxGeo.
+  const headGeo = roundedBoxGeo(0.5, 0.5, 0.5, 0.06, 5);
+  const ft = _defaultFaceTex || (_defaultFaceTex = makeFaceTexture());
   const faceMat = new THREE.MeshLambertMaterial({ map: ft });
   const headMats = [ mkMat(skin), mkMat(skin), mkMat(skin), mkMat(skin), faceMat, mkMat(skin) ];
   const head = new THREE.Mesh(headGeo, headMats);
@@ -18070,7 +18136,7 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
 
   // Torso
   const torsoMat = mkMat(shirt);
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.55,0.65,0.3), torsoMat);
+  const torso = new THREE.Mesh(roundedBoxGeo(0.55, 0.65, 0.3, 0.06), torsoMat);
   torso.position.set(0,1.2,0); torso.castShadow = true; group.add(torso);
 
   // Arms — shoulder pivot → upper arm → ELBOW pivot → forearm.
@@ -18082,18 +18148,23 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
   const armElbows = [];   // elbow pivots
   const armLimbs = [];    // limb meshes (for recolor — BOTH segments, so skins
                           // keep tinting the whole arm the way they always did)
+  const hands = [];       // #47: arms used to end in a sleeve; coloured after the skin, below
   [-0.39,0.39].forEach(x => {
     const pivot = new THREE.Group();
     pivot.position.set(x, 1.5, 0);            // shoulder joint (top of arm)
-    const upper = new THREE.Mesh(new THREE.BoxGeometry(0.22,0.32,0.22), mkMat(shirt));
+    const upper = new THREE.Mesh(roundedBoxGeo(0.22, 0.32, 0.22, 0.05), mkMat(shirt));
     upper.position.set(0, -0.16, 0);
     upper.castShadow = true; pivot.add(upper);
     const elbow = new THREE.Group();
     elbow.position.set(0, -0.32, 0);          // elbow joint
     pivot.add(elbow);
-    const fore = new THREE.Mesh(new THREE.BoxGeometry(0.205,0.28,0.205), mkMat(shirt));
+    const fore = new THREE.Mesh(roundedBoxGeo(0.205, 0.28, 0.205, 0.05), mkMat(shirt));
     fore.position.set(0, -0.14, 0);
     fore.castShadow = true; elbow.add(fore);
+    const hand = new THREE.Mesh(roundedBoxGeo(0.15, 0.13, 0.15, 0.045, 1), mkMat(skin));
+    hand.position.set(0, -0.30, 0);           // out of the cuff, a little past the sleeve
+    elbow.add(hand);                          // too small to cast a shadow worth a draw call
+    hands.push(hand);
     group.add(pivot);
     armMeshes.push(pivot); armElbows.push(elbow); armLimbs.push(upper, fore);
   });
@@ -18107,19 +18178,19 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
   [-0.155,0.155].forEach(x => {
     const pivot = new THREE.Group();
     pivot.position.set(x, 0.875, 0);          // hip joint (top of leg)
-    const thigh = new THREE.Mesh(new THREE.BoxGeometry(0.24,0.32,0.26), mkMat(pant));
+    const thigh = new THREE.Mesh(roundedBoxGeo(0.24, 0.32, 0.26, 0.05), mkMat(pant));
     thigh.position.set(0, -0.16, 0);
     thigh.castShadow = true; pivot.add(thigh);
     const knee = new THREE.Group();
     knee.position.set(0, -0.32, 0);           // knee joint
     pivot.add(knee);
-    const shin = new THREE.Mesh(new THREE.BoxGeometry(0.225,0.24,0.245), mkMat(pant));
+    const shin = new THREE.Mesh(roundedBoxGeo(0.225, 0.24, 0.245, 0.05), mkMat(pant));
     shin.position.set(0, -0.12, 0);
     shin.castShadow = true; knee.add(shin);
     // Boots stay dark on every skin, so they are deliberately NOT in legLimbs.
-    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.235,0.09,0.33), mkMat(0x241c18));
+    const foot = new THREE.Mesh(roundedBoxGeo(0.235, 0.09, 0.33, 0.035, 1), mkMat(0x241c18));
     foot.position.set(0, -0.285, 0.04);       // toe sticks forward a little
-    foot.castShadow = true; knee.add(foot);
+    knee.add(foot);   // no shadow: it hid under the leg's anyway, and pays for the hands' draw calls (#47)
     group.add(pivot);
     legMeshes.push(pivot); legKnees.push(knee); legFeet.push(foot);
     legLimbs.push(thigh, shin);
@@ -18128,16 +18199,25 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
   // ── Apply skin (recolor + accessories) ────────────────────────────────────
   applyCharacterSkin(skinId, { group, head, headMats, faceMat, torso, torsoMat, armLimbs, legLimbs });
   if (opts.crown) setMeshCrown(group, true);
+  // Hands take the head's colour: skin on most skins, gloves on the armoured ones.
+  for (const h of hands) h.material.color.copy(headMats[0].color);
 
-  // Name tag
+  // Name tag. Bots: 🤖, blue with you / red against. Real players (#47) used to be plain
+  // black everywhere; opts.tag says where they stand — 'hub' (green, Lobby 13), 'ally' or
+  // 'enemy' in a match — and anything else keeps the old neutral tag.
   const cv = document.createElement('canvas'); cv.width=256; cv.height=64;
   const ctx = cv.getContext('2d');
   const isAlly = isBot && team === 'ally';
-  ctx.fillStyle = isBot ? (isAlly ? 'rgba(0,80,180,0.75)' : 'rgba(160,0,0,0.75)') : 'rgba(0,0,0,0.65)';
+  const tag = isBot ? null : opts.tag;
+  const TAG_BG = { hub: 'rgba(24,120,64,0.82)', ally: 'rgba(0,80,180,0.75)', enemy: 'rgba(160,0,0,0.75)' };
+  const TAG_FG = { hub: '#d4ffe0', ally: '#aaccff', enemy: '#ffaaaa' };
+  ctx.fillStyle = isBot ? (isAlly ? 'rgba(0,80,180,0.75)' : 'rgba(160,0,0,0.75)') : (TAG_BG[tag] || 'rgba(0,0,0,0.65)');
   ctx.roundRect(4,8,248,48,8); ctx.fill();
-  ctx.fillStyle = isBot ? (isAlly ? '#aaccff' : '#ffaaaa') : '#fff';
+  ctx.fillStyle = isBot ? (isAlly ? '#aaccff' : '#ffaaaa') : (TAG_FG[tag] || '#fff');
   ctx.font='bold 26px Arial'; ctx.textAlign='center';
-  ctx.fillText(isBot ? `🤖 ${name}` : name, 128, 44);
+  const label = isBot ? (String(name).startsWith('🤖') ? name : `🤖 ${name}`)   // Bot-47 is already a 🤖
+              : tag === 'hub' ? `🎮 ${name}` : name;
+  ctx.fillText(label, 128, 44);
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), depthTest: false }));
   sprite.scale.set(1.5,0.37,1); sprite.position.y = 2.35; group.add(sprite);
 
@@ -18167,6 +18247,7 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
     gaitLean:   0.85 + Math.random() * 0.30,   // torso twist / roll amount
   };
   group._skinId = skinId;
+  group._tagKind = tag || null;
   group._head = head; // crown attaches here
 
   return group;
@@ -29548,7 +29629,14 @@ socket.on('matchRoster', ({ players: roster }) => {
   for (const [pid, p] of Object.entries(roster)) {
     if (pid === myId) continue;
     players[pid] = p;
-    if (!remoteMeshes[pid]) spawnRemotePlayer(p);
+    const old = remoteMeshes[pid];
+    if (!old) { spawnRemotePlayer(p); continue; }
+    // Someone who came along from Lobby 13 still wears the hub's green tag (#47)
+    if (!p.isBot && old._tagKind !== humanTagKind(p)) {
+      scene.remove(old);
+      spawnRemotePlayer(p);
+      remoteMeshes[pid].position.copy(old.position); remoteMeshes[pid].rotation.y = old.rotation.y;
+    }
   }
 });
 // 🎭 A player changed skin (or their admin flag arrived) — rebuild their mesh
@@ -29561,7 +29649,7 @@ socket.on('skinChanged', ({ id, skin, isAdmin }) => {
   scene.remove(old);
   const p = players[id] || { name: '', isBot: false, team: 'enemy', x: old.position.x, z: old.position.z };
   const mesh = makePlayerMesh(p.name, p.isBot, p.team || 'enemy',
-                              SKIN_IDS.includes(skin) ? skin : 'default', { crown: !!isAdmin });
+                              SKIN_IDS.includes(skin) ? skin : 'default', { crown: !!isAdmin, tag: humanTagKind(p) });
   mesh.position.copy(old.position); mesh.rotation.y = old.rotation.y; mesh.visible = wasVisible;
   scene.add(mesh); remoteMeshes[id] = mesh;
 });
@@ -29825,9 +29913,16 @@ socket.on('playerRespawned', p => {
   }
 });
 
+// Where a real player stands, for their name tag (#47): in Lobby 13, or with / against you.
+function humanTagKind(p) {
+  if (!p || p.isBot) return null;
+  if (inLobby) return 'hub';
+  if (pvpMatch && p.team) return p.team === pvpMatch.team ? 'ally' : 'enemy';
+  return null;
+}
 function spawnRemotePlayer(p) {
   const skinId = resolveSkinId(p.skin);
-  const mesh = makePlayerMesh(p.name, p.isBot, p.team || 'enemy', skinId, { crown: !!p.isAdmin });
+  const mesh = makePlayerMesh(p.name, p.isBot, p.team || 'enemy', skinId, { crown: !!p.isAdmin, tag: humanTagKind(p) });
   mesh.position.set(p.x,0,p.z);
   scene.add(mesh); remoteMeshes[p.id]=mesh;
 }
