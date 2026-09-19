@@ -32512,7 +32512,9 @@ function spawnGameBots() {
     : (pvpMatch && pvpMatch.mode)
     ? `pvp-${[myId, ...(pvpMatch.opponents || []).map(o => o.socketId)].sort().join('-')}` // shared ID for PvP-paired players
     : `match-${myId}-${Date.now()}`;
-  if (pvpMatch) pvpMatch.room = matchId;   // see opponentLeft
+  // see opponentLeft — and the server keeps only the first 64 characters of a match id
+  // (enterMatch), which three or more players' ids run past; compare what it will send back
+  if (pvpMatch) pvpMatch.room = matchId.slice(0, 64);
   socket.emit('enterMatch', { matchId, mode: currentModeId() });   // the mode counts toward FFA Legend
 
   // ── Clean up bots/meshes/bubbles from any previous mode session ──────────
