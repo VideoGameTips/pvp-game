@@ -1056,6 +1056,8 @@ const POS_BROADCAST_RATE = 50; // ms
 
 // ── 🌐 PVP MATCHMAKING — pair up humans when they pick the same elim mode ──
 // Each queue entry: { socketId, mode, joinedAt, timeoutId }
+// Lobby 13 is one room for everybody in it (#46) — it used to be a private match per player.
+const HUB_MATCH = 'hub';
 const pvpQueues = { '1v1': [], '2v2': [], '3v3': [] };
 const PVP_WAIT_MS = 3000; // how long a player waits for a match before falling back to solo
 const TEAM_SIZES   = { '1v1': 1, '2v2': 2, '3v3': 3 };
@@ -1111,6 +1113,8 @@ function broadcastLobbyState(L) {
   const state = {
     mode: L.mode,
     map: lobbyMapPick(L) || 'auto',
+    // ms left looking for a human opponent (#46); relative, so client clocks don't matter
+    searchLeft: L.searchUntil ? Math.max(0, L.searchUntil - Date.now()) : 0,
     players: L.players.map(p => ({
       socketId: p.socketId,
       name: players[p.socketId]?.name || '?',
@@ -1142,14 +1146,51 @@ const LOBBY_MAP_POOL = ['blank','urban','warehouse','forest','vietnam','volcano'
 function lobbyMapPick(L) {
   return L.players.find(p => p.map)?.map || null;
 }
-function checkLobbyStart(L) {
+// 🔎 1v1 looks for a person before it settles for a bot (#46). It used to start the
+// moment everyone *in the lobby* was ready — alone, that is just you — so whoever
+// picked 1v1 next always landed in a fresh lobby and two people never met.
+const HUMAN_SEARCH_MS = 15000;
+const HUMAN_SEARCH_MODES = new Set(['1v1']);
+// People who could still pick a mode in the next few seconds: online, not in a match.
+function idleHumansBesides(L) {
+  const here = new Set(L.players.map(p => p.socketId));
+  return Object.values(players).filter(p => !p.isBot && !here.has(p.id)
+    && (p.matchId === 'lobby' || p.matchId === HUB_MATCH)).length;
+}
+function stopLobbySearch(L) {
+  if (L.searchTimer) clearTimeout(L.searchTimer);
+  L.searchTimer = null;
+  L.searchUntil = 0;
+}
+// `now`: stop looking and start with bots (the PLAY A BOT NOW button, or the search ran out).
+function checkLobbyStart(L, { now = false } = {}) {
   if (!L || L.players.length === 0) return;
   const mode = L.mode;
   // Hard cap: never start a match with more humans than the mode allows.
   if (L.players.length > lobbyMax(mode)) L.players = L.players.slice(0, lobbyMax(mode));
   const allReady = L.players.every(p => p.ready);
-  if (!allReady) return;
-  // Everyone is ready — start the match
+  if (!allReady) {
+    if (L.searchUntil) { stopLobbySearch(L); broadcastLobbyState(L); }
+    return;
+  }
+  const short = L.players.length < lobbyMax(mode);
+  if (short && !now && HUMAN_SEARCH_MODES.has(mode) && L.players.every(p => p.fillBots) && idleHumansBesides(L) > 0) {
+    if (!L.searchUntil) {
+      L.searchUntil = Date.now() + HUMAN_SEARCH_MS;
+      L.searchTimer = setTimeout(() => {
+        L.searchTimer = null;
+        if ((stagingLobbies[mode] || []).includes(L)) checkLobbyStart(L, { now: true });
+      }, HUMAN_SEARCH_MS);
+      broadcastLobbyState(L);
+    }
+    return;
+  }
+  stopLobbySearch(L);
+  startLobbyMatch(L);
+}
+// Everyone is ready — start the match. `extra` rides along on lobbyStart.
+function startLobbyMatch(L, extra = {}) {
+  const mode = L.mode;
   const fillBots = L.players.every(p => p.fillBots);
   const cfg = MODE_TEAM_SIZES[mode] || { ally: 1, enemy: 1 };
   // Count humans per team
@@ -1169,11 +1210,35 @@ function checkLobbyStart(L) {
     if (players[p.socketId]) players[p.socketId].team = p.team;
     io.to(p.socketId).emit('lobbyStart', {
       mode, matchId, mapId, team: p.team, isHost: p.socketId === host?.socketId,
-      allyBots, enemyBots, opponents: L.players.filter(o => o.socketId !== p.socketId).map(o => ({ socketId: o.socketId, team: o.team })),
+      allyBots, enemyBots, opponents: L.players.filter(o => o.socketId !== p.socketId).map(o => ({ socketId: o.socketId, team: o.team, name: players[o.socketId]?.name || '' })),
+      ...extra,
     });
   }
   // Remove this lobby instance now that it has launched
   stagingLobbies[mode] = (stagingLobbies[mode] || []).filter(x => x !== L);
+}
+
+// ── ⚔️ Challenge a real player from Lobby 13 (#46) ──────────────────────────
+// Everyone in Lobby 13 shares the HUB_MATCH room, so the ⚔️ DUEL panel can list
+// the real people standing there. A challenge is between two players who are both
+// in the hub, lasts DUEL_INVITE_MS, and nobody is in more than one at a time.
+const DUEL_INVITE_MS = 20000;
+const duelInvites = {};   // inviteId → { id, from, to, timer }
+let _duelSeq = 0;
+function duelInviteOf(socketId) {
+  return Object.values(duelInvites).find(i => i.from === socketId || i.to === socketId) || null;
+}
+// reason: declined | timeout | cancelled | gone | busy — both sides are told.
+function endDuelInvite(inv, reason) {
+  if (!inv || !duelInvites[inv.id]) return;
+  clearTimeout(inv.timer);
+  delete duelInvites[inv.id];
+  for (const sid of [inv.from, inv.to]) io.to(sid).emit('duelClosed', { inviteId: inv.id, reason });
+}
+function endDuelInvitesOf(socketId, reason) {
+  for (const inv of Object.values(duelInvites)) {
+    if (inv.from === socketId || inv.to === socketId) endDuelInvite(inv, reason);
+  }
 }
 // Team sizes per mode (used to determine how many bots to fill)
 const MODE_TEAM_SIZES = {
@@ -1470,25 +1535,27 @@ function sendMatchRoster(socketId) {
   }
   io.to(socketId).emit('matchRoster', { matchId: p.matchId, players: roster });
 }
-// Move a player (and the bots they own) between matches, telling everyone who
-// needs to know. Both sides matter: the match being left has to be told this
-// player is gone or their body stands there forever, and the match being joined
-// has to be told they arrived.
+// Move a player between matches, telling everyone who needs to know. Both sides
+// matter: the match being left has to be told this player is gone or their body
+// stands there forever, and the match being joined has to be told they arrived.
 function movePlayerToMatch(socketId, newMatchId) {
   const p = players[socketId];
   if (!p) return;
   const prev = p.matchId;
   if (prev === newMatchId) { sendMatchRoster(socketId); return; }
-  const ownedBots = Object.values(players).filter(b => b.isBot && b.ownerId === socketId);
-  // 1. Everyone left behind loses sight of this player and their bots.
+  // 1. Their bots stay behind — deleted, not carried. Bots belong to the match they
+  //    were spawned for and the client sends spawnBots again for every match it
+  //    starts, so carrying them only ever brought frozen bodies along: Lobby 13's
+  //    37-strong cast stood around in every match after it (#46).
+  for (const [id, b] of Object.entries(players)) {
+    if (b.isBot && b.ownerId === socketId) { emitToMatch(b.matchId, 'playerLeft', id); delete players[id]; }
+  }
+  // 2. Everyone left behind loses sight of this player.
   emitToMatchExcept(prev, socketId, 'playerLeft', socketId);
-  for (const b of ownedBots) emitToMatch(prev, 'playerLeft', b.id);
-  // 2. Actually move.
+  if (prev === HUB_MATCH) endDuelInvitesOf(socketId, 'gone');   // a challenge only stands inside the hub
+  // 3. Actually move, and the match being joined gains them.
   p.matchId = newMatchId;
-  for (const b of ownedBots) b.matchId = newMatchId;
-  // 3. The match being joined gains them.
   emitToMatchExcept(newMatchId, socketId, 'playerJoined', p);
-  for (const b of ownedBots) emitToMatchExcept(newMatchId, socketId, 'playerJoined', b);
   // 4. And the mover gets a clean slate of who is actually here.
   sendMatchRoster(socketId);
 }
@@ -1731,7 +1798,7 @@ io.on('connection', (socket) => {
     p.ready = ready;
     p.fillBots = fillBots;
     broadcastLobbyState(L);
-    checkLobbyStart(L);
+    checkLobbyStart(L, { now: !!data?.now });   // now: PLAY A BOT NOW — stop looking for a person
   });
   socket.on('switchLobbyTeam', () => {
     const L = findLobbyOfSocket(socket.id);
@@ -1746,6 +1813,47 @@ io.on('connection', (socket) => {
       p.team = target;
       broadcastLobbyState(L);
     }
+  });
+
+  // ── ⚔️ Challenge a real player in Lobby 13 (#46) ──────────────────────
+  socket.on('duelInvite', (data) => {
+    const me = players[socket.id];
+    const them = players[String(data?.targetId || '')];
+    const refuse = reason => socket.emit('duelClosed', { inviteId: null, reason });
+    if (!me || !them || them.isBot || them.id === socket.id) return refuse('gone');
+    if (me.matchId !== HUB_MATCH || them.matchId !== HUB_MATCH) return refuse('gone');
+    if (duelInviteOf(socket.id) || duelInviteOf(them.id)) return refuse('busy');
+    const inv = { id: `duel-${++_duelSeq}`, from: socket.id, to: them.id };
+    inv.timer = setTimeout(() => endDuelInvite(inv, 'timeout'), DUEL_INVITE_MS);
+    duelInvites[inv.id] = inv;
+    socket.emit('duelPending', { inviteId: inv.id, toName: them.name, expiresIn: DUEL_INVITE_MS });
+    io.to(them.id).emit('duelInvited', { inviteId: inv.id, fromName: me.name, expiresIn: DUEL_INVITE_MS });
+  });
+  socket.on('duelCancel', () => {
+    const inv = duelInviteOf(socket.id);
+    if (inv && inv.from === socket.id) endDuelInvite(inv, 'cancelled');
+  });
+  socket.on('duelAnswer', (data) => {
+    const inv = duelInvites[String(data?.inviteId || '')];
+    if (!inv || inv.to !== socket.id) {
+      socket.emit('duelClosed', { inviteId: data?.inviteId || null, reason: 'timeout' });
+      return;
+    }
+    if (!data.accept) { endDuelInvite(inv, 'declined'); return; }
+    const a = players[inv.from], b = players[inv.to];
+    if (!a || !b || a.matchId !== HUB_MATCH || b.matchId !== HUB_MATCH) { endDuelInvite(inv, 'gone'); return; }
+    clearTimeout(inv.timer);
+    delete duelInvites[inv.id];
+    // Straight into a 1v1 of their own: both ready, no bots, never in the lobby list, so
+    // nobody else can walk into it.
+    for (const sid of [a.id, b.id]) { const left = removeSocketFromLobbies(sid); if (left) broadcastLobbyState(left); }
+    startLobbyMatch({
+      id: `1v1-duel-${++_lobbySeq}`, mode: '1v1', createdAt: Date.now(),
+      players: [
+        { socketId: a.id, team: 'ally',  ready: true, fillBots: false, map: null },
+        { socketId: b.id, team: 'enemy', ready: true, fillBots: false, map: null },
+      ],
+    }, { duel: true });
   });
 
   // ── 🌐 Match isolation: enter/leave a private match ─────────────────────
@@ -1875,6 +1983,7 @@ io.on('connection', (socket) => {
     // Clean up any staging lobby memberships
     const _leftLobby = removeSocketFromLobbies(socket.id);
     if (_leftLobby) broadcastLobbyState(_leftLobby);
+    endDuelInvitesOf(socket.id, 'gone');
     delete players[socket.id];
     emitToMatch(leavingMatch, 'playerLeft', socket.id);
     // Remove bots owned by this client

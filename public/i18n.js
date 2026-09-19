@@ -210,6 +210,16 @@
       '休闲区 · 点「⚔️ 约战」挑人单挑 · 站上红蓝台子打 2V2 / 3V3',
     '⚔️ {area} · 🟦 {b}/{n} · 🟥 {r}/{n} · press F to start': '⚔️ {area} · 🟦 {b}/{n} · 🟥 {r}/{n} · 按 F 开打',
     '⚔️ {area} · 🟦 {b}/{n} · 🟥 {r}/{n} · tap START to start': '⚔️ {area} · 🟦 {b}/{n} · 🟥 {r}/{n} · 点「开打」',
+    // ⚔️ challenging a real player in Lobby 13 (#46)
+    'REAL PLAYERS HERE ({n})': '大厅里的真人玩家（{n}）',
+    'Nobody else is in Lobby 13 right now — send a friend the link.': '13 号大厅现在只有你——把链接发给朋友一起玩。',
+    'CHALLENGE': '挑战', 'ACCEPT': '接受', 'DECLINE': '拒绝', 'CANCEL': '取消',
+    '⚔️ Waiting for {name} · {n}s': '⚔️ 等 {name} 回应 · {n} 秒',
+    '⚔️ {name} challenges you to a 1V1': '⚔️ {name} 向你发起 1V1 挑战',
+    '⚔️ NO DUEL': '⚔️ 约战没成',
+    '{name} said no': '{name} 拒绝了', "{name} didn't answer": '{name} 没有回应',
+    '{name} left Lobby 13': '{name} 离开了 13 号大厅', '{name} is already in a challenge': '{name} 正在另一场约战里',
+    '⚔️ CHALLENGE WITHDRAWN': '⚔️ 对方撤回了挑战',
     'MELEE ': '近战', 'RANGE': '射程', 'USES': '次数',
     '↑ AUTO': '↑ 自动',
     '[HOLD]': '[按住]',
@@ -293,6 +303,9 @@
     'Match starts when all players ready · Bots will fill empty slots': '所有人准备好就开始 · 空位由机器人补齐',
     'Match starts when all players ready · No bots — playing as-is': '所有人准备好就开始 · 不加机器人',
     'MATCH FOUND': '匹配成功',
+    '🔎 Looking for a real opponent · {n}s': '🔎 正在找真人对手 · {n} 秒',
+    '🤖 PLAY A BOT NOW': '🤖 直接打机器人',
+    'The first real player to pick 1v1 plays you — or a bot does': '第一个选 1v1 的真人就是你的对手——没人来就打机器人',
     '{n} player(s) · You are {team}{host}': '{n} 名玩家 · 你在{team}{host}',
 
     // ── End of match ─────────────────────────────────────────────────────────

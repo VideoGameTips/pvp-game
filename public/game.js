@@ -26578,7 +26578,9 @@ function syncLobbyTag() {
 // a different look on every phone — and froze the game while open. One dialog in the #21 frame
 // replaces all three. confirm/prompt callers await the answer; every other alert() goes through
 // uiAlert without blocking. Text is translated as the old i18n wrappers did.
-function uiDialog({ message, okText = 'OK', cancelText = null, input = null }) {
+// control: optional object that gets control.close(value) — for a dialog that can be taken
+// back from outside, like a duel challenge that expired (#46).
+function uiDialog({ message, okText = 'OK', cancelText = null, input = null, control = null }) {
   return new Promise(resolve => {
     releasePointer();                     // a locked mouse can't click it (#25)
     const wrap = document.createElement('div');
@@ -26593,7 +26595,8 @@ function uiDialog({ message, okText = 'OK', cancelText = null, input = null }) {
     ok.textContent = okText;
     if (cancel) cancel.textContent = cancelText;
     if (inp) inp.value = input || '';
-    const done = v => { document.removeEventListener('keydown', key, true); wrap.remove(); resolve(v); };
+    const done = v => { if (!wrap.isConnected) return; document.removeEventListener('keydown', key, true); wrap.remove(); resolve(v); };
+    if (control) control.close = done;
     const key = e => {
       if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); e.stopPropagation(); ok.click(); }
       else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); (cancel || ok).click(); }
@@ -29455,6 +29458,7 @@ socket.on('connect', () => {
 // Staging-lobby socket events
 socket.on('lobbyState', data => {
   stagingLobbyState = data;
+  data._searchEnd = data.searchLeft ? performance.now() + data.searchLeft : 0;   // 1v1 search (#46)
   if (stagingLobbyMode === data.mode) renderStagingLobby();
 });
 socket.on('lobbyStart', data => {
@@ -29473,6 +29477,13 @@ socket.on('lobbyStart', data => {
   };
   // Force every paired client to use the same map
   if (data.mapId) selectedMap = data.mapId;
+  endDuelUi();
+  // A challenge accepted in Lobby 13 (#46): the hub world is still running, so this goes
+  // through the duel start rather than the first-match start below.
+  if (data.duel) {
+    startDuel('1v1', null, { map: data.mapId, vs: (data.opponents || []).map(o => o.name).filter(Boolean) });
+    return;
+  }
   showAnnouncement('MATCH FOUND',
     `${data.opponents.length + 1} player(s) · You are ${data.team.toUpperCase()}${pvpMatch.isHost ? ' (HOST)' : ''}`,
     '#44ff66', 2200);
@@ -32196,8 +32207,10 @@ function spawnGameBots() {
   resetMatchRivals();          // this match's kill exchanges start empty (#31)
   clearFeed();                 // and the lobby's messages don't follow you into it (#29)
   // 🌐 Enter a private match BEFORE spawning bots — server will isolate this player's bots
-  // from other players who aren't in the same match.
-  const matchId = (pvpMatch && pvpMatch.mode)
+  // from other players who aren't in the same match. Lobby 13 is the exception: one room
+  // for everybody in it, so real players can find each other there (#46).
+  const matchId = selectedModeConfig.type === 'lobby' ? 'hub'
+    : (pvpMatch && pvpMatch.mode)
     ? `pvp-${[myId, ...(pvpMatch.opponents || []).map(o => o.socketId)].sort().join('-')}` // shared ID for PvP-paired players
     : `match-${myId}-${Date.now()}`;
   socket.emit('enterMatch', { matchId, mode: currentModeId() });   // the mode counts toward FFA Legend
@@ -32476,7 +32489,9 @@ function spawnGameBots() {
   for (let i = 0; i < allies;   i++) makeBot(i, 'ally');
   for (let i = 0; i < enemies;  i++) makeBot(i, 'enemy');
 
-  socket.emit('spawnBots', botList);
+  // Lobby 13's cast stays on this client (#46): the hub is shared now, and every player
+  // sending their 37 would fill it with N×37 bodies. It's no-damage, so nobody else needs them.
+  if (selectedModeConfig.type !== 'lobby') socket.emit('spawnBots', botList);
 
   // 🛋️ Lobby 13 is NOT a match — skip the entire match system (no initMatch /
   // startMatchRound, no `match` object, no scoring/rounds/win logic). It's a
@@ -33875,7 +33890,7 @@ function updateBotAI(dt) {
   if (botMoveTimer >= BOT_MOVE_INTERVAL) {
     botMoveTimer = 0;
     const moves = gameBots.filter(b => !b.dead).map(b => ({ id: b.id, x: b.x, y: 1, z: b.z, rotY: b.rotY }));
-    if (moves.length) socket.emit('botMove', moves);
+    if (moves.length && !inLobby) socket.emit('botMove', moves);   // the lobby cast is local-only (#46)
   }
 }
 
@@ -35021,9 +35036,24 @@ function showStagingLobby(mode) {
   el.style.display = 'flex';
   renderStagingLobby();
 }
+// 🔎 The 1v1 search countdown (#46). The server sends how long is left; this only counts it down.
+let _lobbySearchTick = null;
 function hideStagingLobby() {
   const el = document.getElementById('staging-lobby');
   if (el) el.style.display = 'none';
+  clearInterval(_lobbySearchTick); _lobbySearchTick = null;
+}
+function lobbySearchText() {
+  const s = stagingLobbyState;
+  const left = s && s._searchEnd ? Math.ceil((s._searchEnd - performance.now()) / 1000) : 0;
+  return left > 0 ? `🔎 Looking for a real opponent · ${left}s` : '';
+}
+function tickLobbySearch() {
+  clearInterval(_lobbySearchTick);
+  _lobbySearchTick = setInterval(() => {
+    const el = document.getElementById('lobby-search');
+    if (el) el.textContent = lobbySearchText();
+  }, 500);
 }
 function renderStagingLobby() {
   const el = document.getElementById('staging-lobby');
@@ -35036,6 +35066,9 @@ function renderStagingLobby() {
   const allyPlayers = s ? s.players.filter(p => p.team === 'ally') : [];
   const enemyPlayers = s ? s.players.filter(p => p.team === 'enemy') : [];
   const me = s ? s.players.find(p => p.socketId === myId) : null;
+  // 1v1: one a side, so no team switch or bot toggle — it looks for a real opponent and
+  // offers the bot straight away instead (#46).
+  const solo = mode === '1v1';
   el.innerHTML = `
     <div style="font-size:clamp(22px,7vw,32px);letter-spacing:clamp(3px,1.5vw,8px);color:#ffaa44;margin-bottom:6px;">🏛️ MATCH LOBBY</div>
     <div style="font-size:14px;color:#888;letter-spacing:3px;margin-bottom:8px;">${modeCardLabel(mode)} · WAITING FOR PLAYERS</div>
@@ -35055,18 +35088,20 @@ function renderStagingLobby() {
         </div>`).join('') : '<div style="color:#666;font-style:italic;">empty</div>'}
       </div>
     </div>
+    ${solo ? `<div id="lobby-search" style="min-height:20px;margin-bottom:14px;color:#9fe8b0;font-size:14px;letter-spacing:1px;">${lobbySearchText()}</div>` : `
     <label style="display:flex;align-items:center;gap:8px;margin-bottom:14px;color:#ccc;font-size:12px;cursor:pointer;">
       <input type="checkbox" id="lobby-fillbots" ${me?.fillBots !== false ? 'checked' : ''}>
       Fill missing slots with bots
-    </label>
+    </label>`}
     <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:10px;margin-top:6px;">
-      <button id="lobby-team-switch" style="padding:10px 18px;background:#222;color:#aaa;border:1px solid #555;cursor:pointer;font-family:inherit;font-size:13px;letter-spacing:2px;border-radius:4px;">SWITCH TEAM</button>
+      ${solo ? '' : `<button id="lobby-team-switch" style="padding:10px 18px;background:#222;color:#aaa;border:1px solid #555;cursor:pointer;font-family:inherit;font-size:13px;letter-spacing:2px;border-radius:4px;">SWITCH TEAM</button>`}
+      ${solo && me?.ready ? `<button id="lobby-bot-now" style="padding:10px 24px;background:#553311;color:#fff;border:2px solid #ffaa44;cursor:pointer;font-family:inherit;font-size:15px;font-weight:bold;letter-spacing:2px;border-radius:4px;">🤖 PLAY A BOT NOW</button>` : `
       <button id="lobby-ready" style="padding:10px 30px;background:${me?.ready ? '#226622' : '#553311'};color:#fff;border:2px solid ${me?.ready ? '#44ff44' : '#ffaa44'};cursor:pointer;font-family:inherit;font-size:15px;font-weight:bold;letter-spacing:3px;border-radius:4px;">
         ${me?.ready ? '✅ READY!' : '⏳ READY UP'}
-      </button>
+      </button>`}
       <button id="lobby-leave" style="padding:10px 18px;background:#222;color:#aaa;border:1px solid #555;cursor:pointer;font-family:inherit;font-size:13px;letter-spacing:2px;border-radius:4px;">LEAVE LOBBY</button>
     </div>
-    <div style="font-size:11px;color:#666;margin-top:18px;letter-spacing:1px;">Match starts when all players ready · ${me?.fillBots !== false ? 'Bots will fill empty slots' : 'No bots — playing as-is'}</div>
+    <div style="font-size:11px;color:#666;margin-top:18px;letter-spacing:1px;">${solo ? 'The first real player to pick 1v1 plays you — or a bot does' : `Match starts when all players ready · ${me?.fillBots !== false ? 'Bots will fill empty slots' : 'No bots — playing as-is'}`}</div>
     <div style="margin-top:28px;padding:10px 18px;background:rgba(255,200,80,0.10);border:1px solid #aa8844;border-radius:6px;max-width:580px;text-align:center;font-size:12px;color:#ffcc66;letter-spacing:1px;font-style:italic;">
       ${pickFunFact()}
     </div>
@@ -35083,6 +35118,9 @@ function renderStagingLobby() {
     socket.emit('setLobbyReady', { ready: !me?.ready, fillBots: fbox?.checked !== false });
   });
   if (switchBtn) switchBtn.addEventListener('click', () => socket.emit('switchLobbyTeam'));
+  const botNowBtn = document.getElementById('lobby-bot-now');
+  if (botNowBtn) botNowBtn.addEventListener('click', () => socket.emit('setLobbyReady', { ready: true, fillBots: true, now: true }));
+  if (solo) tickLobbySearch();
   if (leaveBtn) leaveBtn.addEventListener('click', () => {
     socket.emit('leaveStagingLobby');
     hideStagingLobby();
@@ -35110,6 +35148,9 @@ function confirmLoadout() {
       // Route through staging lobby — wait for others to ready up
       stagingLobbyMode = modeId;
       socket.emit('joinStagingLobby', { mode: modeId, map: pickedMap }); // the server honours it (#17)
+      // 1v1 has no teams to sort out, so READY on the loadout is the ready (#46): the server
+      // looks for a real opponent for a few seconds, then gives you a bot.
+      if (modeId === '1v1') socket.emit('setLobbyReady', { ready: true, fillBots: true });
       showStagingLobby(modeId);
       return;
     }
@@ -35484,6 +35525,11 @@ function afterDeath(ms, fn) {
 // inherit. Shared by the mode menu and the end-of-match buttons so they can't drift apart.
 function teardownMatchWorld() {
   matchEpoch++;
+  // Tell the server too (#46). This only ever cleared the bots here, so the server kept
+  // them — and moved them into the next match, where they stood frozen for everyone. It
+  // also takes you out of the shared Lobby 13, where your body would otherwise stay put.
+  if (socket.connected) socket.emit('leaveMatch');
+  endDuelUi();
   clearFeed();
   resetMatchRivals();     // messages from the match that just ended don't belong on the next screen (#29)
   stopKillcam();   // restores the camera; may re-show the death screen, hidden again below
@@ -35695,12 +35741,17 @@ function openDuelPicker() {
   const head = t => `<div style="font-size:11px;letter-spacing:2px;color:#ffcc55;margin:14px 0 6px;">${t}</div>`;
   const chip = id => `<button data-duel="${escHtml(id)}" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.18);color:#fff;border-radius:8px;min-height:34px;padding:5px 10px;font-family:inherit;font-size:12.5px;cursor:pointer;">${escHtml(castName(id))}</button>`;
   const all = Object.keys(window.CHAT_CAST || {});
+  // The real people in Lobby 13 with you (#46) — the hub is one room now, so they're in `players`.
+  const humans = inLobby ? Object.values(players).filter(p => p && !p.isBot && p.id !== myId && remoteMeshes[p.id]) : [];
   panel.style.display = 'block';
   panel.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #4a3a1c;padding-bottom:10px;">
       <div style="font-size:18px;letter-spacing:3px;color:#ffcc55;">⚔️ DUEL 1V1</div>
       <button id="duel-close" style="background:#241a1a;color:#ffaaaa;border:1px solid #ff6666;border-radius:5px;min-height:36px;padding:4px 12px;font-family:inherit;cursor:pointer;">✕</button>
     </div>
+    ${head(`REAL PLAYERS HERE (${humans.length})`)}
+    ${humans.length ? humans.map(humanDuelRow).join('')
+      : '<div style="font-size:12.5px;color:#8a8d9c;">Nobody else is in Lobby 13 right now — send a friend the link.</div>'}
     ${recent.length ? head('RECENTLY FOUGHT') + recent.map(r => duelRow(r.id, duelRecordLine(r.e), r.e.wonLastMatch ? 'beat you last time' : '')).join('') : ''}
     ${best.length ? head('BEST RECORD') + best.map(r => duelRow(r.id, duelRecordLine(r.e), '')).join('') : ''}
     ${keen.length ? head('UP FOR A FIGHT') + `<div style="display:flex;flex-wrap:wrap;gap:6px;">${keen.map(b => chip(b.charId)).join('')}</div>` : ''}
@@ -35710,7 +35761,90 @@ function openDuelPicker() {
   `;
   panel.querySelector('#duel-close').addEventListener('click', () => closeDialog('duel-panel'));
   panel.querySelectorAll('[data-duel]').forEach(b => b.addEventListener('click', () => startDuelWith(b.dataset.duel)));
+  panel.querySelectorAll('[data-challenge]').forEach(b => b.addEventListener('click', () => challengePlayer(b.dataset.challenge)));
 }
+
+// ── ⚔️ Challenging a real player (#46) ──────────────────────────────────────
+// The server holds the challenge; these just show it. One out and one in at a time.
+let duelOut = null;   // { inviteId, toName } — ours, waiting for an answer
+let duelIn  = null;   // { inviteId, control } — theirs, on our screen
+function humanDuelRow(p) {
+  return `<div style="display:flex;align-items:center;gap:10px;padding:7px 9px;margin-bottom:6px;border-radius:8px;background:rgba(64,192,112,0.10);border:1px solid rgba(64,192,112,0.35);">
+    <div style="min-width:0;flex:1;font-size:14px;font-weight:bold;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" data-no-i18n>🎮 ${escHtml(p.name || 'Player')}</div>
+    <button data-challenge="${escHtml(p.id)}" style="background:#2f9e44;color:#fff;border:0;border-radius:8px;min-height:36px;padding:7px 14px;font-family:inherit;font-weight:bold;font-size:13px;cursor:pointer;">CHALLENGE</button>
+  </div>`;
+}
+function challengePlayer(id) {
+  if (duelOut || !players[id]) return;
+  closeDialog('duel-panel');
+  duelOut = { inviteId: null, toName: players[id].name || 'Player' };
+  socket.emit('duelInvite', { targetId: id });
+}
+// "Waiting for Tom… 18s  [CANCEL]" across the top while ours is out.
+function showDuelWait(name, ms) {
+  let el = document.getElementById('duel-wait');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'duel-wait';
+    el.style.cssText = 'position:fixed;top:118px;left:50%;transform:translateX(-50%);z-index:9500;display:flex;align-items:center;gap:12px;'   // below the controls hint
+      + 'max-width:calc(100vw - 24px);padding:8px 10px 8px 16px;background:rgba(22,18,26,0.94);border:2px solid #ffcc55;border-radius:10px;'
+      + 'color:#fff;font-family:inherit;font-size:14px;box-shadow:0 6px 24px rgba(0,0,0,0.6);';
+    el.innerHTML = '<span class="dw-text" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>'
+      + '<button type="button" class="dw-cancel" style="background:#241a1a;color:#ffaaaa;border:1px solid #ff6666;border-radius:6px;min-height:36px;padding:4px 12px;font-family:inherit;cursor:pointer;">CANCEL</button>';
+    bindTap(el.querySelector('.dw-cancel'), () => socket.emit('duelCancel'));
+    document.body.appendChild(el);
+  }
+  const end = performance.now() + ms;
+  const text = el.querySelector('.dw-text');
+  const tick = () => { text.textContent = `⚔️ Waiting for ${name} · ${Math.max(0, Math.ceil((end - performance.now()) / 1000))}s`; };
+  tick();
+  clearInterval(el._t); el._t = setInterval(tick, 500);
+  el.style.display = 'flex';
+}
+function hideDuelWait() {
+  const el = document.getElementById('duel-wait');
+  if (el) { clearInterval(el._t); el.style.display = 'none'; }
+}
+// Everything challenge-shaped off the screen: a match is starting, or the world is being torn down.
+function endDuelUi() {
+  duelOut = null;
+  hideDuelWait();
+  if (duelIn) { const c = duelIn.control; duelIn = null; if (c.close) c.close(false); }
+}
+socket.on('duelPending', ({ inviteId, toName, expiresIn }) => {
+  duelOut = { inviteId, toName: toName || (duelOut && duelOut.toName) || 'Player' };
+  showDuelWait(duelOut.toName, expiresIn || 20000);
+});
+socket.on('duelInvited', async ({ inviteId, fromName, expiresIn }) => {
+  if (duelIn || duelOut || !inLobby) { socket.emit('duelAnswer', { inviteId, accept: false }); return; }
+  const control = {};
+  duelIn = { inviteId, control };
+  const timer = setTimeout(() => { if (control.close) control.close(false); }, expiresIn || 20000);
+  const yes = await uiDialog({ message: `⚔️ ${fromName || 'Player'} challenges you to a 1V1`, okText: 'ACCEPT', cancelText: 'DECLINE', control });
+  clearTimeout(timer);
+  if (!duelIn || duelIn.inviteId !== inviteId) return;    // withdrawn while it was open
+  duelIn = null;
+  socket.emit('duelAnswer', { inviteId, accept: !!yes });
+});
+socket.on('duelClosed', ({ inviteId, reason }) => {
+  // Ours: refused before it existed (inviteId null), or answered / expired / withdrawn.
+  if (duelOut && (inviteId == null || duelOut.inviteId === inviteId)) {
+    const name = duelOut.toName;
+    duelOut = null;
+    hideDuelWait();
+    const why = { declined: `${name} said no`, timeout: `${name} didn't answer`,
+                  gone: `${name} left Lobby 13`, busy: `${name} is already in a challenge` }[reason];
+    if (why) showAnnouncement('⚔️ NO DUEL', why, '#ffaa66', 2400);
+    return;
+  }
+  // Theirs, taken back before we answered.
+  if (duelIn && duelIn.inviteId === inviteId) {
+    const c = duelIn.control;
+    duelIn = null;
+    if (c.close) c.close(false);
+    if (reason === 'cancelled' || reason === 'gone') showAnnouncement('⚔️ CHALLENGE WITHDRAWN', '', '#aaaaaa', 1600);
+  }
+});
 
 // Switching language re-renders the settings panel (its EN/中文 buttons carry the state).
 document.addEventListener('langchange', () => {
@@ -35970,11 +36104,13 @@ function lobbyInteract() {
 // real arena — the lobby stays a separate, match-free hub). The staged BLUE bots
 // become your teammates and RED bots your opponents; spawnGameBots fills any
 // still-empty slots with generic bots.
-function startDuel(modeId, picks) {
+// opts.map: the arena the server picked (a duel with a real player, #46); opts.vs: their names.
+function startDuel(modeId, picks, opts = {}) {
   const cfg = GAME_MODE_CONFIGS[modeId];
   if (!cfg) return;
   inLobby = false;
   gameStarted = true;      // also reached from the end screen, where the world was just torn down (#31)
+  closeOtherDialogs();
   showFloatingSettingsButton(true);
   releaseDuelBots();
   lobbyActiveArea = null; lobbyPlayerSide = null; lobbyPadHere = null;
@@ -35989,9 +36125,10 @@ function startDuel(modeId, picks) {
   if (picks.enemies && picks.enemies.length) window.PVP_OPPONENTS = picks.enemies.slice();
   if (picks.allies  && picks.allies.length)  window.PVP_TEAMMATES = picks.allies.slice();
   selectedModeConfig = cfg;
-  selectedMap = 'auto'; // random combat arena (NOT the lobby map)
+  selectedMap = opts.map || 'auto'; // random combat arena (NOT the lobby map)
   resetCombatResources(); // normal mags/reserves (lobby gave infinite ammo)
-  const oppNames = (picks.enemies || []).map(id => window.CHAT_CAST?.[id]?.name).filter(Boolean);
+  const oppNames = opts.vs && opts.vs.length ? opts.vs
+    : (picks.enemies || []).map(id => window.CHAT_CAST?.[id]?.name).filter(Boolean);
   const sub = oppNames.length ? `vs ${oppNames.join(', ')}` : modeId.toUpperCase();
   showAnnouncement('⚔️ DUEL', sub, '#ffcc44', 2200);
   spawnGameBots();        // tears down the lobby cast + builds the elim match
