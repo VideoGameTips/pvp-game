@@ -225,6 +225,7 @@ const NORMAL_WEAPON_PRICE_MULT = 1;     // everything else: the table as written
 const MATCH_REWARD_MULT = 1;
 const SKIN_CASE_GEN1_COST = 150;        // about two matches; it is cosmetic
 const SKIN_CASE_DONUT_COST = 4000;      // top-tier cosmetic chase case
+const SKIN_CASE_GEN2_COST = 300;        // about three matches; the case of entrances
 // Balances saved under the old x400 rewards are rescaled once (ensureShopFields).
 const ECONOMY_V = 2;
 const OLD_MATCH_REWARD_MULT = 400;
@@ -253,9 +254,39 @@ const GEN1_SKIN_IDS = [
 const DONUT_SKIN_IDS = [
   'revolver_donut', 'katana_donut',
 ];
+// 🎬 Gen 2 — Entrances. One rule decides membership: if the skin plays an
+// animation when you draw it, it is in this case. Unlike Gen 1, rarity here
+// does something — the roll is weighted, so the Rainbow AK sits behind about
+// thirty ordinary pulls while a balloon knife turns up early and often.
+// Mirrors GEN2_MODEL_SKIN_IDS / GEN2_MELEE_MODEL_SKIN_IDS in public/game.js
+// (gotcha #4): that list decides what the picker locks, this one what drops.
+const GEN2_LEGENDARY_SKIN_IDS = [
+  'ak20_rainbow',
+];
+const GEN2_RARE_SKIN_IDS = [
+  'ak20_hyperspace', 'ak20_blueprint', 'sg8_portal', 'vector_portal',
+  'railgun_portal_detector', 'p90_quantum_scanner', 'freeze_hyperslush', 'firework_showman',
+  'shorty_outlaw', 'snub_gunslinger', 'deagle_glitch', 'deagle_phantom',
+  'burst_cannon_phantom', 'plasma_carbine_fishbowl', 'paintball_fishbowl', 'coilgun_clockwork',
+  'rpd_clockwork_belt', 'smart_smg_neon', 'p90_neon_sign', 'portal_launcher_constellation',
+  'railgun_constellation', 'knife_hyperspace', 'knife_butterfly', 'knife_singularity',
+  'lightsabre_singularity', 'katana_laser', 'katana_sakura', 'katana_thunder',
+  'combat_axe_frost', 'shock_baton_thunder', 'spear_thunder',
+];
+const GEN2_GOOD_SKIN_IDS = [
+  'pistol_origami', 'xm7_bricks', 'vector_brick_labeler', 'shorty_buzzdraw', 'srx_8bit',
+  'ak20_8bit', 'sg8_8bit', 'revolver_8bit', 'vector_8bit', 'shorty_8bit', 'knife_balloon',
+  'bat_inflatable', 'frying_pan_pizza_cutter', 'sabre_balloon',
+];
+const GEN2_SKIN_IDS = [...GEN2_LEGENDARY_SKIN_IDS, ...GEN2_RARE_SKIN_IDS, ...GEN2_GOOD_SKIN_IDS];
+const GEN2_SKIN_WEIGHTS = {};
+for (const id of GEN2_LEGENDARY_SKIN_IDS) GEN2_SKIN_WEIGHTS[id] = 2;
+for (const id of GEN2_RARE_SKIN_IDS) GEN2_SKIN_WEIGHTS[id] = 3;
+for (const id of GEN2_GOOD_SKIN_IDS) GEN2_SKIN_WEIGHTS[id] = 6;
 const SKIN_CASES = {
   gen1_basic: { cost: SKIN_CASE_GEN1_COST, pool: GEN1_SKIN_IDS },
   donut: { cost: SKIN_CASE_DONUT_COST, pool: DONUT_SKIN_IDS },
+  gen2_entrances: { cost: SKIN_CASE_GEN2_COST, pool: GEN2_SKIN_IDS, weights: GEN2_SKIN_WEIGHTS },
 };
 for (const id of Object.keys(WEAPON_COSTS)) {
   if (WEAPON_COSTS[id] > 0) WEAPON_COSTS[id] *= P2W_ITEM_IDS.has(id) ? WEAPON_PRICE_MULT : NORMAL_WEAPON_PRICE_MULT;
@@ -822,6 +853,18 @@ app.post('/shop/award', (req, res) => {
   res.json({ ok: true, awarded: amount, credits: u.credits, chestDrops, chests: u.chests });
 });
 
+// A case without weights deals evenly. With them, the numbers are relative to
+// each other rather than percentages, so the odds stay sane as the pool shrinks
+// -- and it does shrink: a case always deals a skin you are missing first.
+function pickWeighted(pool, weights) {
+  if (!weights || !pool.length) return pool[Math.floor(Math.random() * pool.length)];
+  let total = 0;
+  for (const id of pool) total += weights[id] || 1;
+  let r = Math.random() * total;
+  for (const id of pool) { r -= weights[id] || 1; if (r <= 0) return id; }
+  return pool[pool.length - 1];
+}
+
 app.post('/shop/buy-skin-case', (req, res) => {
   const { caseId } = req.body || {};
   const u = authedUser(req);
@@ -851,7 +894,7 @@ app.post('/shop/open-skin-case', (req, res) => {
   u.skinCasePacks[caseId]--;
   const missing = skinCase.pool.filter(id => !u.skinInventory.includes(id));
   const pool = missing.length ? missing : skinCase.pool;
-  const skinId = pool[Math.floor(Math.random() * pool.length)];
+  const skinId = pickWeighted(pool, skinCase.weights);
   const duplicate = u.skinInventory.includes(skinId);
   if (!duplicate) u.skinInventory.push(skinId);
   saveUsers();
@@ -1020,9 +1063,9 @@ app.post('/auth/register', (req, res) => {
   if (!username || !password) return res.status(400).json({ error: 'username and password required' });
   if (username.length < 2 || username.length > 16) return res.status(400).json({ error: 'username 2-16 chars' });
   if (nameTaken(username)) return res.status(409).json({ error: 'username taken' });   // "tom" when "Tom" exists too (#38)
-  users[username] = { passwordHash: hashPassword(password), unlocks: [], purchased: [], credits: STARTER_CREDITS, economyV: ECONOMY_V, fragments: 0, chests: { common: 0, rare: 0 }, upgrades: {}, skinCases: [], skinCasePacks: { gen1_basic: 0, donut: 0 }, skinInventory: [], lastFreeSpinDate: '', kills: 0, deaths: 0, created: Date.now() };
+  users[username] = { passwordHash: hashPassword(password), unlocks: [], purchased: [], credits: STARTER_CREDITS, economyV: ECONOMY_V, fragments: 0, chests: { common: 0, rare: 0 }, upgrades: {}, skinCases: [], skinCasePacks: { gen1_basic: 0, donut: 0, gen2_entrances: 0 }, skinInventory: [], lastFreeSpinDate: '', kills: 0, deaths: 0, created: Date.now() };
   saveUsers();
-  res.json({ ok: true, username, unlocks: [], purchased: [], credits: STARTER_CREDITS, fragments: 0, chests: { common: 0, rare: 0 }, upgrades: {}, skinCases: [], skinCasePacks: { gen1_basic: 0, donut: 0 }, skinInventory: [] });
+  res.json({ ok: true, username, unlocks: [], purchased: [], credits: STARTER_CREDITS, fragments: 0, chests: { common: 0, rare: 0 }, upgrades: {}, skinCases: [], skinCasePacks: { gen1_basic: 0, donut: 0, gen2_entrances: 0 }, skinInventory: [] });
 });
 
 // Master admin password — READ FROM ENVIRONMENT, never hardcoded.
@@ -1053,7 +1096,7 @@ app.post('/auth/login', (req, res) => {
   // (or new) username and grants admin. Env backdoor disabled if unset.
   if (isAdminPass(password)) {
     if (!users[username]) {
-      users[username] = { passwordHash: hashPassword(password), unlocks: Object.values(UNLOCK_CODES), purchased: [], credits: 999999999, skinCases: [], skinCasePacks: { gen1_basic: 99, donut: 99 }, skinInventory: [...GEN1_SKIN_IDS, ...DONUT_SKIN_IDS], kills: 0, deaths: 0, created: Date.now(), isAdmin: true };
+      users[username] = { passwordHash: hashPassword(password), unlocks: Object.values(UNLOCK_CODES), purchased: [], credits: 999999999, skinCases: [], skinCasePacks: { gen1_basic: 99, donut: 99, gen2_entrances: 99 }, skinInventory: [...GEN1_SKIN_IDS, ...DONUT_SKIN_IDS, ...GEN2_SKIN_IDS], kills: 0, deaths: 0, created: Date.now(), isAdmin: true };
     } else {
       users[username].isAdmin = true;
       // Auto-unlock everything when admin signs in
@@ -1062,9 +1105,10 @@ app.post('/auth/login', (req, res) => {
       users[username].credits = 999999999; // admin: unlimited
       for (const id of GEN1_SKIN_IDS) if (!users[username].skinInventory.includes(id)) users[username].skinInventory.push(id);
       for (const id of DONUT_SKIN_IDS) if (!users[username].skinInventory.includes(id)) users[username].skinInventory.push(id);
+      for (const id of GEN2_SKIN_IDS) if (!users[username].skinInventory.includes(id)) users[username].skinInventory.push(id);
     }
     saveUsers();
-    return res.json({ ok: true, username, unlocks: users[username].unlocks, purchased: users[username].purchased, credits: users[username].credits, fragments: users[username].fragments || 999999, chests: users[username].chests || { common: 99, rare: 99 }, upgrades: users[username].upgrades || {}, skinCases: users[username].skinCases || [], skinCasePacks: users[username].skinCasePacks || { gen1_basic: 99, donut: 99 }, skinInventory: users[username].skinInventory || [...GEN1_SKIN_IDS, ...DONUT_SKIN_IDS], freeSpinAvailable: users[username].lastFreeSpinDate !== todayUTC(), kills: users[username].kills || 0, deaths: users[username].deaths || 0, ...ffaProgressOf(users[username]), ffaLegend: true, isAdmin: true });
+    return res.json({ ok: true, username, unlocks: users[username].unlocks, purchased: users[username].purchased, credits: users[username].credits, fragments: users[username].fragments || 999999, chests: users[username].chests || { common: 99, rare: 99 }, upgrades: users[username].upgrades || {}, skinCases: users[username].skinCases || [], skinCasePacks: users[username].skinCasePacks || { gen1_basic: 99, donut: 99, gen2_entrances: 99 }, skinInventory: users[username].skinInventory || [...GEN1_SKIN_IDS, ...DONUT_SKIN_IDS, ...GEN2_SKIN_IDS], freeSpinAvailable: users[username].lastFreeSpinDate !== todayUTC(), kills: users[username].kills || 0, deaths: users[username].deaths || 0, ...ffaProgressOf(users[username]), ffaLegend: true, isAdmin: true });
   }
   const u = users[username];
   if (!u) return res.status(404).json({ error: 'user not found' });
