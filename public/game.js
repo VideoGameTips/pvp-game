@@ -20574,6 +20574,10 @@ function _eqBounce(x) {
   return n1 * (x -= 2.625 / d1) * x + 0.984375;
 }
 const _eqClamp = v => Math.max(0, Math.min(1, v));
+// The comet entrance's side-to-side swing (left, then right, one and a
+// half cycles) -- one formula, shared by the motion itself and by its
+// trail, so the trail always traces exactly the path the piece took.
+function _eqCometSway(t) { return Math.sin(t * Math.PI * 3) * 0.09; }
 
 // The pieces are the model's own top-level parts -- never the hands (they wait
 // where the gun will be) and never the muzzle flash. Each one's resting
@@ -20763,8 +20767,8 @@ function _eqMakeProps(model, type, ctr, box, targets) {
       blending: THREE.AdditiveBlending, depthWrite: false });
     const outer = new THREE.Mesh(new THREE.BoxGeometry(0.020, 0.020, 1), glow(0xff9bd0, 0.75));
     const inner = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.008, 1), glow(0xffffff, 0.95));
-    outer.userData.comet = { len: 0.42, op: 0.75 };
-    inner.userData.comet = { len: 0.26, op: 0.95 };
+    outer.userData.comet = { look: 0.10, op: 0.75 };
+    inner.userData.comet = { look: 0.06, op: 0.95 };
     model.add(outer); model.add(inner); out.push(outer); out.push(inner);
   }
   return out;
@@ -20881,12 +20885,18 @@ function _eqStepProps(e, t) {
       });
     }
     if (o.userData.comet) {                      // the glow trail chasing the comet in
-      const arrive = _eqEase(_eqClamp(t / 0.80));
-      const dist = e.cometDist * (1 - arrive);
-      const head = e.ctr.clone().addScaledVector(e.cometFrom, dist);
-      const tail = head.clone().addScaledVector(e.cometFrom, o.userData.comet.len);
+      // A real velocity trail, not a fixed length: sample the same sway a
+      // beat earlier, so the streak is long while it's swinging fast
+      // through the middle and pinches to nothing at the turnarounds.
+      const look = o.userData.comet.look;
+      const arrive = _eqEase(_eqClamp(t / 0.78));
+      const arrivePrev = _eqEase(_eqClamp(Math.max(0, t - look) / 0.78));
+      const headX = _eqCometSway(t) * (1 - arrive);
+      const tailX = _eqCometSway(Math.max(0, t - look)) * (1 - arrivePrev);
+      const head = e.ctr.clone(); head.x += headX;
+      const tail = e.ctr.clone(); tail.x += tailX;
       _eqSegment(o, tail, head);
-      const fade = Math.min(1, dist * 3);
+      const fade = Math.min(1, Math.abs(headX - tailX) * 10);
       o.visible = fade > 0.01;
       o.material.opacity = o.userData.comet.op * fade;
     }
@@ -20978,17 +20988,11 @@ function _beginEquip(model, spec, melee) {
   const span = Math.max(0.001, box.max.z - box.min.z);
   for (const q of ps) q.band = Math.max(0, Math.min(6, Math.floor((box.max.z - q.h.p.z) / span * 7)));
   const prismProp = temp.find(o => o.userData.prism);
-  // Comet entrance: one shared "from" direction and spin axis for every
-  // piece, so the whole thing flies in and tumbles as one rigid object
-  // instead of each piece choosing its own.
-  const cometFrom = new THREE.Vector3(Math.random() - 0.5, Math.random() * 0.5 + 0.25, Math.random() - 0.5).normalize();
-  const cometAxis = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
   _equip = { model, melee, type, t0: performance.now(), dur: spec.equipMs || 900,
              ps, ctr, ring, glow, sfx: spec.equipSfx || null, box, temp,
              prismPos: prismProp ? prismProp.userData.prism.pos.clone() : ctr.clone(),
              beats: (spec.equipBeats || []).map(([t, name]) => ({ t, name, done: false })),
-             turns: spec.spinTurns || 1, pivot: (model._spinPivot || ctr).clone(),
-             cometFrom, cometAxis, cometDist: melee ? 1.1 : 0.85 };
+             turns: spec.spinTurns || 1, pivot: (model._spinPivot || ctr).clone() };
   playEquipSound(_equip.sfx && _equip.sfx[0]);
   _equipStep(_equip, 0);
 }
@@ -21046,17 +21050,18 @@ function _equipStep(e, t) {
         c.scale.copy(h.s).multiplyScalar(0.55 + 0.45 * k);
         break; }
       case 'comet': {
-        // Donut weapons: the WHOLE thing flies in from a distance as one
-        // rigid piece -- every piece keeps its fixed offset from the
-        // gun's own centre and gets the exact same spin and the exact
-        // same flight-in, so it never looks like separate parts drifting
-        // apart. Fast, not a float: most of the trip happens early, then
-        // it locks straight into the held pose. The glow trail chasing it
-        // is a separate prop, built in _eqMakeProps / driven in _eqStepProps.
-        const arrive = _eqEase(_eqClamp(t / 0.80));
-        const dist = e.cometDist * (1 - arrive);
-        const flyCtr = e.ctr.clone().addScaledVector(e.cometFrom, dist);
-        const q = new THREE.Quaternion().setFromAxisAngle(e.cometAxis, (1 - arrive) * Math.PI * 2 * (e.turns || 4));
+        // Donut weapons: the WHOLE thing swings in close to where it's
+        // held -- left, then right -- turning exactly once as it comes,
+        // and settles straight into the hand. Every piece keeps its
+        // fixed offset from the gun's own centre and gets the exact same
+        // sway and the exact same turn, so it moves as one rigid object,
+        // never as separate parts drifting apart. Deliberately fixed, not
+        // randomised, so it reads the same clear way every time. The glow
+        // trail chasing it is a separate prop (_eqMakeProps/_eqStepProps).
+        const arrive = _eqEase(_eqClamp(t / 0.78));
+        const sway = _eqCometSway(t) * (1 - arrive);
+        const flyCtr = e.ctr.clone(); flyCtr.x += sway;
+        const q = new THREE.Quaternion().setFromAxisAngle(_EQ_Z, (1 - arrive) * Math.PI * 2);
         c.position.copy(h.p).sub(e.ctr).applyQuaternion(q).add(flyCtr);
         c.quaternion.copy(q).multiply(h.q);
         c.scale.copy(h.s);
@@ -26421,7 +26426,7 @@ const MELEE_MODEL_SKINS = [
   { id: 'katana_donut', melee: 'katana', name: 'Ring King', rarity: 'donut',
     sw: ['#ff78bd', '#ffe7f3'], build: buildDonutKatana,
     blurb: 'A frosted ring guard, icing down the blade, and sprinkles circling the swing.',
-    equip: 'comet', equipMs: 800, spinTurns: 5, equipSfx: ['whoosh', 'chime'] },
+    equip: 'comet', equipMs: 1000, equipSfx: ['whoosh', 'chime'] },
   { id: 'spear_thunder', melee: 'spear', name: 'Thunder Spear', rarity: 'rare',
     sw: ['#2a2e36', '#6ad0ff'], build: buildThunderSpear,
     blurb: 'Arrives on a lightning strike. Arcs crawl along the shaft.',
@@ -27952,7 +27957,7 @@ const SKIN_FX = {
     equipBeats: [[.28,'chord'], [.80,'shatter'], [.84,'rainbowburst']],
     reload: _fxR(RELOAD_KEYS.ak20, (RELOAD_PROPS.ak20 || []).map(e => e.k === 'mag' ? Object.assign({}, e, { k: 'rainbowmag' }) : e), null, 'chord') },
   revolver_donut: { sound: _fxS('splat', .30, .10, 620, 1180),
-    equip: 'comet', equipMs: 850, spinTurns: 5, equipSfx: ['whoosh', 'chime'] },
+    equip: 'comet', equipMs: 1000, equipSfx: ['whoosh', 'chime'] },
 };
 
 function _reloadPose(track, t) {
