@@ -58,6 +58,13 @@ const WEAPONS = [
     id: 'srx',   name: 'SR-X',  type: 'Sniper', slot: 'primary',
     mag: 5,   reserve: 20,  damage: 95, fireRate: 1200, reloadTime: 3000,
     auto: false, pellets: 1, spread: 0,    adsZoom: 15, bulletSpeed: 200, noReload: false,
+    // spread:0 and no recoil object already meant no random scatter and no
+    // aim climb — but every gun still gets a camera-shake "kick" on fire
+    // regardless of those fields (kickWeaponVisual/addFireShake), and SR-X's
+    // high damage+speed put it near the top of that scale. perfectAccuracy
+    // skips it entirely, so the shot leaves exactly where the scope's green
+    // dot was aimed, not wherever the shake had nudged the camera to.
+    perfectAccuracy: true,
     ability: { name: 'Light Speed', cd: 16000, desc: 'Next bullet at 10× speed', type: 'powershot', pellets: 1, spreadMult: 0, speedMult: 10 },
   },
   {
@@ -3157,6 +3164,20 @@ function playMuzzleBlast(ctx, start, outNode, kind, volume) {
     TAIL(volume * 0.32, 0.40, 780);
   }
 }
+
+function playGunViolenceLayer(ctx, start, outNode, profile, mult, opts = {}) {
+  if (!ctx || !outNode || !profile) return;
+  const local = !opts.remote;
+  const violence = Math.max(0.75, Math.min(2.2, opts.violence || 1));
+  const vol = (profile.vol || 1) * mult * (local ? 1 : 0.55);
+  // A close gunshot needs a pressure snap before the musical/body layers.
+  // This is deliberately short so autos get bite without turning into mush.
+  playFilteredNoise(ctx, start - 0.001, 0.004, outNode, vol * 0.42 * violence,
+                    'bandpass', 4200, 0.38, 0.0001, 0);
+  playSweptNoise(ctx, start, 0.026, outNode, vol * 0.28 * violence,
+                 'lowpass', 7800, 420, 0.85, 1.05);
+  playTone(ctx, start + 0.001, 0.030, outNode, 92, 42, vol * 0.18 * violence, 'triangle');
+}
 // 🔧 The gun working. Every action in here was a couple of soft bandpassed
 // noise blips at a fifth of the shot's volume, which is not a mechanism -- it
 // is a tap. Steel moving under spring pressure rings, so these are built from
@@ -3291,6 +3312,10 @@ function playWeaponSound(idOrWeapon, opts = {}) {
     const indoorNow = INDOOR_MAPS.has(typeof activeMapName !== 'undefined' ? activeMapName : '');
     longReport(ctx, start, mainGain, p.vol * mult, p.tail * (indoorNow ? 0.35 : 1));
   }
+  playGunViolenceLayer(ctx, start, mainGain, p, mult, {
+    remote: opts.remote,
+    violence: opts.violence || (base ? weaponKickStrength(base, base.pellets || 1) : 1)
+  });
 
   if (playObjectShot(ctx, start, mainGain, p, mult)) {
     // an object's own voice -- see playObjectShot
@@ -6752,7 +6777,7 @@ function triggerMuzzleBlast(model, opts = {}) {
   const flash = model._flash;
   const tint = opts.color || (flash.material && flash.material.color ? flash.material.color.getHex() : 0xffcc66);
   // No two shots look alike: random roll and a size jitter.
-  const s0 = (opts.scale || 1) * (0.85 + Math.random() * 0.55);
+  const s0 = (opts.scale || 1) * (1.05 + Math.random() * 0.70);
   flash.visible = true;
   flash.rotation.z = Math.random() * Math.PI * 2;
   flash.scale.setScalar(s0);
@@ -6767,7 +6792,7 @@ function triggerMuzzleBlast(model, opts = {}) {
   puff.visible = true;
   puff.position.copy(world).addScaledVector(fwd, 0.05);
   puff.scale.setScalar(0.02);
-  puff.material.opacity = 0.32;
+  puff.material.opacity = 0.42;
 
   const dur = opts.duration || 95;
   const start = performance.now();
@@ -6780,7 +6805,7 @@ function triggerMuzzleBlast(model, opts = {}) {
       // The flash blooms outward and the light falls off fast — a blast is a
       // spike, not a lamp being switched on.
       flash.scale.setScalar(s0 * (1 + t * 2.1));
-      light.intensity = 3.2 * s0 * (1 - t) * (1 - t);
+      light.intensity = 5.4 * s0 * (1 - t) * (1 - t);
       requestAnimationFrame(step);
     }
   };
@@ -6791,9 +6816,9 @@ function triggerMuzzleBlast(model, opts = {}) {
   const smoke = () => {
     const t = (performance.now() - sStart) / sDur;
     if (t >= 1) { puff.visible = false; puff.material.opacity = 0; return; }
-    puff.scale.setScalar(0.02 + t * 0.16);
-    puff.position.addScaledVector(fwd, 0.004);
-    puff.material.opacity = 0.32 * (1 - t);
+    puff.scale.setScalar(0.025 + t * 0.22 * (opts.scale || 1));
+    puff.position.addScaledVector(fwd, 0.006);
+    puff.material.opacity = 0.42 * (1 - t);
     requestAnimationFrame(smoke);
   };
   requestAnimationFrame(smoke);
@@ -19797,9 +19822,9 @@ let _shakePitch = 0, _shakeYaw = 0;
 function addFireShake(strength) {
   const mult = gameplaySettingMult('cameraShake');
   if (mult <= 0) return;
-  const mag = (strength || 1) * mult * 0.006;
-  const dp = mag * (0.6 + Math.random() * 0.5);
-  const dy = (Math.random() - 0.5) * mag * 0.8;
+  const mag = Math.min(0.026, (strength || 1) * mult * 0.0088);
+  const dp = mag * (0.72 + Math.random() * 0.62);
+  const dy = (Math.random() - 0.5) * mag * 1.05;
   euler.x += dp; euler.y += dy;
   euler.x = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, euler.x));
   camera.quaternion.setFromEuler(euler);
@@ -19912,23 +19937,31 @@ function registerNearMiss(pos, speed = 120) {
 
 function spawnImpactDebris(pos, normal, weaponId) {
   const kind = projectileKind(weaponId, WEAPONS.find(w => w.id === weaponId));
-  const count = kind === 'slug' || kind === 'rocket' || kind === 'grenade' ? 8 : 4;
+  const hardHit = kind === 'slug' || kind === 'rocket' || kind === 'grenade';
+  const count = hardHit ? 16 : 8;
   const color = normal.y > 0.65 ? 0x8a7861 : 0xc6b18a;
   for (let i = 0; i < count; i++) {
-    const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.75 });
-    const p = new THREE.Mesh(new THREE.SphereGeometry(0.018 + Math.random() * 0.018, 5, 4), mat);
+    const spark = i < count * 0.45;
+    const mat = new THREE.MeshBasicMaterial({ color: spark ? 0xffbb55 : color, transparent: true, opacity: spark ? 0.95 : 0.78 });
+    const geo = spark
+      ? new THREE.BoxGeometry(0.010, 0.010, 0.050 + Math.random() * 0.060)
+      : new THREE.SphereGeometry(0.018 + Math.random() * 0.022, 5, 4);
+    const p = new THREE.Mesh(geo, mat);
     p.position.copy(pos).addScaledVector(normal, 0.035);
+    p.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
     scene.add(p);
     const side = new THREE.Vector3(Math.random() - 0.5, Math.random() * 0.9, Math.random() - 0.5).normalize();
     side.addScaledVector(normal, 0.8).normalize();
-    const speed = 1.5 + Math.random() * 3.4;
+    const speed = (spark ? 4.2 : 2.2) + Math.random() * (hardHit ? 5.8 : 3.8);
     let age = 0;
     const tick = () => {
       age += 0.016;
       p.position.addScaledVector(side, speed * 0.016);
       side.y -= 4.8 * 0.016;
-      mat.opacity = Math.max(0, 0.75 * (1 - age / 0.42));
-      if (age < 0.42) requestAnimationFrame(tick);
+      p.rotation.x += 13 * 0.016; p.rotation.z += 9 * 0.016;
+      const life = spark ? 0.22 : 0.48;
+      mat.opacity = Math.max(0, (spark ? 0.95 : 0.78) * (1 - age / life));
+      if (age < life) requestAnimationFrame(tick);
       else { scene.remove(p); p.geometry.dispose(); p.material.dispose(); }
     };
     requestAnimationFrame(tick);
@@ -19980,8 +20013,15 @@ function weaponKickStrength(w, pellets = 1) {
 // system) the player can do to fight it. Clamp the ACCUMULATED total, not
 // just each shot's contribution, so sustained fire settles at a fixed kick
 // instead of walking off the top of the screen.
-const _GUN_KICK_MAX = { x: 0.05, y: 0.05, z: 0.14, rx: 0.09, ry: 0.06, rz: 0.06 };
+const _GUN_KICK_MAX = { x: 0.065, y: 0.060, z: 0.18, rx: 0.13, ry: 0.08, rz: 0.09 };
 function kickWeaponVisual(w, pellets = 1) {
+  // perfectAccuracy (SR-X): skip camera shake AND the viewmodel wobble. This
+  // matters more than the weapon's own spread/recoil fields being zero —
+  // addFireShake() below nudges euler.x/y (the actual camera aim) BEFORE
+  // tryShoot() reads it back out for the bullet's direction, so even a gun
+  // with spread:0 and no recoil object was still firing slightly off from
+  // wherever the reticle sat the instant the trigger was pulled.
+  if (w?.perfectAccuracy) return;
   const strength = weaponKickStrength(w, pellets);
   // Real camera shake — every gun gets this, not just the viewmodel wobble
   // below. Doesn't need the weapon model to exist, so it runs first.
@@ -19992,12 +20032,12 @@ function kickWeaponVisual(w, pellets = 1) {
   if (shake <= 0) return;
   const s = strength * shake;
   const side = Math.random() < 0.5 ? -1 : 1;
-  _gunKick.z += Math.min(0.11, (model._kickZ || 0.015) * (2.3 + s * 0.65));
-  _gunKick.y += Math.min(0.040, 0.006 + s * 0.010);
-  _gunKick.x += side * Math.min(0.036, 0.005 + s * 0.007);
-  _gunKick.rx += Math.min(0.20, 0.030 + s * 0.040);
-  _gunKick.ry += side * Math.min(0.050, 0.008 + s * 0.010);
-  _gunKick.rz += -side * Math.min(0.075, 0.012 + s * 0.014);
+  _gunKick.z += Math.min(0.15, (model._kickZ || 0.015) * (3.2 + s * 0.85));
+  _gunKick.y += Math.min(0.052, 0.009 + s * 0.014);
+  _gunKick.x += side * Math.min(0.050, 0.007 + s * 0.010);
+  _gunKick.rx += Math.min(0.25, 0.044 + s * 0.058);
+  _gunKick.ry += side * Math.min(0.070, 0.010 + s * 0.014);
+  _gunKick.rz += -side * Math.min(0.095, 0.016 + s * 0.019);
   for (const key of ['x', 'y', 'z', 'rx', 'ry', 'rz']) {
     const max = _GUN_KICK_MAX[key];
     _gunKick[key] = Math.max(-max, Math.min(max, _gunKick[key]));
@@ -23320,10 +23360,12 @@ function updatePendingFanFire(dt) {
     const now2 = Date.now();
     const bid = `fan_${myId}_${now2}_${pendingFanFire.count}`;
     socket.emit('shoot', { x: origin.x, y: origin.y, z: origin.z, dx: d.x, dy: d.y, dz: d.z, weapon: w.id });
-    playWeaponSound(w.id, { baseWeapon: w, minGap: 25 });
+    const violence = weaponKickStrength(w, w.pellets || 1);
+    playWeaponSound(w.id, { baseWeapon: w, minGap: 25, violence });
     spawnLocalBullet(origin, d, bid, true, w.bulletSpeed, w.bulletColor, w.bulletSize, w.id);
     const model = weaponModels[currentWeaponIdx];
-    if (model) triggerMuzzleBlast(model, { duration: 70 });
+    if (model) triggerMuzzleBlast(model, { duration: 78 + violence * 18, scale: Math.min(1.9, 0.92 + violence * 0.28) });
+    kickWeaponVisual(w, w.pellets || 1);
     pool.ammo--; ammo = pool.ammo; updateAmmoHUD();
     pendingFanFire.count--;
     pendingFanFire.timer = pendingFanFire.delay;
@@ -23499,8 +23541,9 @@ function tryShoot() {
   expireSpawnShield(); // firing breaks the spawn shield
   if (match?.type === 'range') { rangeStats.shots++; updateRangeHUD(); updateMatchHUD(); }
 
+  const shotViolence = weaponKickStrength(wStats, wStats.pellets || 1);
   const model = weaponModels[currentWeaponIdx];
-  triggerMuzzleBlast(model);
+  triggerMuzzleBlast(model, { duration: 86 + shotViolence * 20, scale: Math.min(2.05, 0.95 + shotViolence * 0.30) });
   kickWeaponVisual(wStats, wStats.pellets || 1);
 
   const muzzleWorld = new THREE.Vector3();
@@ -23549,7 +23592,10 @@ function tryShoot() {
     }, 300);
   }
 
-  playWeaponSound(shotWeaponId, { baseWeapon: wStats, volume: Math.min(1.2, 0.9 + shotPellets * 0.03) });
+  playWeaponSound(shotWeaponId, { baseWeapon: wStats, volume: Math.min(1.35, 0.98 + shotPellets * 0.04), violence: shotViolence });
+  if (shotViolence > 1.45 && gameplaySettingMult('screenFx') > 0) {
+    flashScreen('rgba(255,238,190,0.045)', Math.min(95, 44 + shotViolence * 18));
+  }
 
   for (let p = 0; p < shotPellets; p++) {
     const spreadDir = baseDir.clone();
@@ -30390,9 +30436,41 @@ function triggerPaintExplosion(pos, b) {
 }
 
 function spawnHitParticle(pos) {
-  const m = new THREE.Mesh(new THREE.SphereGeometry(0.08,4,4), new THREE.MeshBasicMaterial({ color: 0xff4400 }));
-  m.position.copy(pos); scene.add(m);
-  setTimeout(() => scene.remove(m), 200);
+  const core = new THREE.Mesh(new THREE.SphereGeometry(0.11,5,4), new THREE.MeshBasicMaterial({ color: 0xfff0aa, transparent: true, opacity: 0.95 }));
+  core.position.copy(pos); scene.add(core);
+  const shards = [];
+  for (let i = 0; i < 9; i++) {
+    const mat = new THREE.MeshBasicMaterial({ color: i % 3 ? 0xff4400 : 0xffcc55, transparent: true, opacity: 0.9 });
+    const shard = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.018, 0.11 + Math.random() * 0.08), mat);
+    shard.position.copy(pos);
+    shard.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+    scene.add(shard);
+    shards.push({
+      mesh: shard,
+      mat,
+      vel: new THREE.Vector3(Math.random() - 0.5, Math.random() * 0.7 + 0.15, Math.random() - 0.5).normalize().multiplyScalar(2.5 + Math.random() * 4.0)
+    });
+  }
+  const born = performance.now();
+  const tick = () => {
+    const t = (performance.now() - born) / 260;
+    if (t >= 1) {
+      scene.remove(core); core.geometry.dispose(); core.material.dispose();
+      for (const s of shards) { scene.remove(s.mesh); s.mesh.geometry.dispose(); s.mat.dispose(); }
+      return;
+    }
+    core.scale.setScalar(1 + t * 2.4);
+    core.material.opacity = 0.95 * (1 - t);
+    for (const s of shards) {
+      s.mesh.position.addScaledVector(s.vel, 0.016);
+      s.vel.y -= 5.6 * 0.016;
+      s.mesh.rotation.x += 12 * 0.016;
+      s.mesh.rotation.z += 9 * 0.016;
+      s.mat.opacity = 0.9 * (1 - t);
+    }
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
 }
 
 function _fallbackDeflectWorldPos() {
