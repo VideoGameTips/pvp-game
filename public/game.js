@@ -850,10 +850,12 @@ const MELEE_ITEMS = [
     ability: { name: 'Blood Frenzy', cd: 12000, desc: '4 s · double lifesteal (40/hit)', type: 'melee_revup', duration: 4000, lifestealMult: 2 } },
   // ── The Classic ──────────────────────────────────────────────────────────
   { id: 'fists',      name: 'Fists',      type: 'Brass Knuckles', damage: 24, range: 1.4, cooldown: 220, speedMult: 1.6,
+    dual: true, // two separate fists, thrown alternately — not one box sliding sideways
     ability: { name: 'Haymaker',     cd: 8000,  desc: 'Wind-up · next punch · 90 dmg + knockback', type: 'melee_heavy' } },
   // ── 🪖 ADMIN MELEES (locked behind unlock codes) ─────────────────────────
   // ── 🆕 More melees — batch 4 ─────────────────────────────────────────────
   { id: 'brass_knuckles', name: 'Brass Knuckles', type: 'Punch',     damage: 28, range: 1.5, cooldown: 200, speedMult: 1.6,
+    dual: true,
     ability: { name: 'Haymaker', cd: 8000, desc: '2× damage on next hit', type: 'melee_heavy' } },
   { id: 'hatchet',        name: 'Hatchet',        type: 'Throwable Melee', damage: 50, range: 1.9, cooldown: 480,
     ability: { name: 'Throw Hatchet', cd: 11000, desc: 'Hurl · 90 dmg · weapon gone until CD', type: 'melee_throw' } },
@@ -3315,7 +3317,7 @@ function playWeaponSound(idOrWeapon, opts = {}) {
   }
   playGunViolenceLayer(ctx, start, mainGain, p, mult, {
     remote: opts.remote,
-    violence: opts.violence || (base ? weaponKickStrength(base, base.pellets || 1) : 1)
+    violence: (opts.violence || (base ? weaponKickStrength(base, base.pellets || 1) : 1)) * hyperrealismFactor('audio')
   });
 
   if (playObjectShot(ctx, start, mainGain, p, mult)) {
@@ -6778,7 +6780,7 @@ function triggerMuzzleBlast(model, opts = {}) {
   const flash = model._flash;
   const tint = opts.color || (flash.material && flash.material.color ? flash.material.color.getHex() : 0xffcc66);
   // No two shots look alike: random roll and a size jitter.
-  const s0 = (opts.scale || 1) * (1.05 + Math.random() * 0.70);
+  const s0 = (opts.scale || 1) * hyperrealismFactor('muzzle') * (1.05 + Math.random() * 0.70);
   flash.visible = true;
   flash.rotation.z = Math.random() * Math.PI * 2;
   flash.scale.setScalar(s0);
@@ -17206,6 +17208,22 @@ const meleeModels = [
 ];
 meleeModels.forEach(m => { m.visible = false; camera.add(m); });
 
+// Dual-wield companion: weapons flagged `dual` in MELEE_ITEMS (fists, brass
+// knuckles) get a second, cloned hand attached alongside the first, so
+// "alternating punches" is two real objects taking turns rather than one
+// box sliding side to side. Object3D.clone() shares geometry/material by
+// reference and only duplicates the transform node, so this doesn't double
+// any memory. Kept in sync every frame in updateMeleeSwing().
+const MELEE_OFFHAND_REST_POS = new THREE.Vector3(-0.115, -0.11, -0.235);
+meleeModels.forEach((m, i) => {
+  if (!MELEE_ITEMS[i]?.dual) return;
+  const off = m.clone();
+  off.visible = false;
+  off.position.copy(MELEE_OFFHAND_REST_POS);
+  camera.add(off);
+  m._offHand = off;
+});
+
 // ── Support item model builders ───────────────────────────────────────────
 
 function buildFragGrenade() {
@@ -19823,7 +19841,7 @@ let _shakePitch = 0, _shakeYaw = 0;
 function addFireShake(strength) {
   const mult = gameplaySettingMult('cameraShake');
   if (mult <= 0) return;
-  const mag = Math.min(0.026, (strength || 1) * mult * 0.0088);
+  const mag = Math.min(hyperrealisticOn() ? 0.058 : 0.026, (strength || 1) * mult * 0.0088);
   const dp = mag * (0.72 + Math.random() * 0.62);
   const dy = (Math.random() - 0.5) * mag * 1.05;
   euler.x += dp; euler.y += dy;
@@ -19939,7 +19957,8 @@ function registerNearMiss(pos, speed = 120) {
 function spawnImpactDebris(pos, normal, weaponId) {
   const kind = projectileKind(weaponId, WEAPONS.find(w => w.id === weaponId));
   const hardHit = kind === 'slug' || kind === 'rocket' || kind === 'grenade';
-  const count = hardHit ? 16 : 8;
+  const impactMul = hyperrealismFactor('impact');
+  const count = Math.round((hardHit ? 16 : 8) * impactMul);
   const color = normal.y > 0.65 ? 0x8a7861 : 0xc6b18a;
   for (let i = 0; i < count; i++) {
     const spark = i < count * 0.45;
@@ -19953,14 +19972,14 @@ function spawnImpactDebris(pos, normal, weaponId) {
     scene.add(p);
     const side = new THREE.Vector3(Math.random() - 0.5, Math.random() * 0.9, Math.random() - 0.5).normalize();
     side.addScaledVector(normal, 0.8).normalize();
-    const speed = (spark ? 4.2 : 2.2) + Math.random() * (hardHit ? 5.8 : 3.8);
+    const speed = ((spark ? 4.2 : 2.2) + Math.random() * (hardHit ? 5.8 : 3.8)) * (0.9 + impactMul * 0.16);
     let age = 0;
     const tick = () => {
       age += 0.016;
       p.position.addScaledVector(side, speed * 0.016);
       side.y -= 4.8 * 0.016;
       p.rotation.x += 13 * 0.016; p.rotation.z += 9 * 0.016;
-      const life = spark ? 0.22 : 0.48;
+      const life = (spark ? 0.22 : 0.48) * (hyperrealisticOn() ? 1.2 : 1);
       mat.opacity = Math.max(0, (spark ? 0.95 : 0.78) * (1 - age / life));
       if (age < life) requestAnimationFrame(tick);
       else { scene.remove(p); p.geometry.dispose(); p.material.dispose(); }
@@ -20015,6 +20034,7 @@ function weaponKickStrength(w, pellets = 1) {
 // just each shot's contribution, so sustained fire settles at a fixed kick
 // instead of walking off the top of the screen.
 const _GUN_KICK_MAX = { x: 0.065, y: 0.060, z: 0.18, rx: 0.13, ry: 0.08, rz: 0.09 };
+const _GUN_KICK_HYPER_MAX = { x: 0.105, y: 0.095, z: 0.29, rx: 0.24, ry: 0.14, rz: 0.16 };
 function kickWeaponVisual(w, pellets = 1) {
   // perfectAccuracy (SR-X): skip camera shake AND the viewmodel wobble. This
   // matters more than the weapon's own spread/recoil fields being zero —
@@ -20031,7 +20051,8 @@ function kickWeaponVisual(w, pellets = 1) {
   if (!model || !model._homePos) return;
   const shake = gameplaySettingMult('cameraShake');
   if (shake <= 0) return;
-  const s = strength * shake;
+  const hyperKick = hyperrealismFactor('kick');
+  const s = strength * shake * hyperKick;
   const side = Math.random() < 0.5 ? -1 : 1;
   _gunKick.z += Math.min(0.15, (model._kickZ || 0.015) * (3.2 + s * 0.85));
   _gunKick.y += Math.min(0.052, 0.009 + s * 0.014);
@@ -20040,7 +20061,7 @@ function kickWeaponVisual(w, pellets = 1) {
   _gunKick.ry += side * Math.min(0.070, 0.010 + s * 0.014);
   _gunKick.rz += -side * Math.min(0.095, 0.016 + s * 0.019);
   for (const key of ['x', 'y', 'z', 'rx', 'ry', 'rz']) {
-    const max = _GUN_KICK_MAX[key];
+    const max = (hyperrealisticOn() ? _GUN_KICK_HYPER_MAX : _GUN_KICK_MAX)[key];
     _gunKick[key] = Math.max(-max, Math.min(max, _gunKick[key]));
   }
 }
@@ -20073,6 +20094,7 @@ function saveAssist() { try { localStorage.setItem('pvp_assist', JSON.stringify(
 let GAMEPLAY_SETTINGS = {
   showFPS: true,
   autoReload: false,
+  hyperrealistic: false,
   adsMode: 'toggle',
   cameraShake: 1,
   screenFx: 1,
@@ -20105,9 +20127,24 @@ function applyTouchScale() {
 function saveGameplaySettings() {
   try { localStorage.setItem('pvp_gameplay_settings', JSON.stringify(GAMEPLAY_SETTINGS)); } catch (e) {}
 }
+function hyperrealisticOn() {
+  return !!GAMEPLAY_SETTINGS.hyperrealistic;
+}
+function hyperrealismFactor(key = 'all') {
+  if (!hyperrealisticOn()) return 1;
+  if (key === 'cameraShake') return 2.55;
+  if (key === 'screenFx') return 1.85;
+  if (key === 'impact') return 1.9;
+  if (key === 'audio') return 1.45;
+  if (key === 'muzzle') return 1.55;
+  if (key === 'kick') return 1.65;
+  return 1.6;
+}
 function gameplaySettingMult(key) {
   const v = Number(GAMEPLAY_SETTINGS[key]);
-  return Number.isFinite(v) ? Math.max(0, Math.min(1.5, v)) : 1;
+  const base = Number.isFinite(v) ? Math.max(0, Math.min(1.5, v)) : 1;
+  if (key === 'cameraShake' || key === 'screenFx') return base * hyperrealismFactor(key);
+  return base;
 }
 function scaleCssAlpha(cssColor, mult) {
   if (mult >= 0.99) return cssColor;
@@ -21641,7 +21678,10 @@ function equipActiveSlot() {
   finishEquip();   // whatever was assembling is put back together before it is hidden
   // Reset any in-progress melee swing before hiding
   meleeSwingT = 1;
-  meleeModels.forEach(m => { m.position.copy(MELEE_REST_POS); m.rotation.set(0, 0, 0); });
+  meleeModels.forEach(m => {
+    m.position.copy(MELEE_REST_POS); m.rotation.set(0, 0, 0);
+    if (m._offHand) { m._offHand.position.copy(MELEE_OFFHAND_REST_POS); m._offHand.rotation.set(0, 0, 0); }
+  });
   // Reset grenade windup
   grenadeWindupT = 1;
   cancelInspect();
@@ -23370,7 +23410,7 @@ function updatePendingFanFire(dt) {
     playWeaponSound(w.id, { baseWeapon: w, minGap: 25, violence });
     spawnLocalBullet(origin, d, bid, true, w.bulletSpeed, w.bulletColor, w.bulletSize, w.id);
     const model = weaponModels[currentWeaponIdx];
-    if (model) triggerMuzzleBlast(model, { duration: 78 + violence * 18, scale: Math.min(1.9, 0.92 + violence * 0.28) });
+    if (model) triggerMuzzleBlast(model, { duration: 78 + violence * 18 * hyperrealismFactor('muzzle'), scale: Math.min(hyperrealisticOn() ? 3.1 : 1.9, 0.92 + violence * 0.28 * hyperrealismFactor('muzzle')) });
     kickWeaponVisual(w, w.pellets || 1);
     pool.ammo--; ammo = pool.ammo; updateAmmoHUD();
     pendingFanFire.count--;
@@ -23549,7 +23589,7 @@ function tryShoot() {
 
   const shotViolence = weaponKickStrength(wStats, wStats.pellets || 1);
   const model = weaponModels[currentWeaponIdx];
-  triggerMuzzleBlast(model, { duration: 86 + shotViolence * 20, scale: Math.min(2.05, 0.95 + shotViolence * 0.30) });
+  triggerMuzzleBlast(model, { duration: 86 + shotViolence * 20 * hyperrealismFactor('muzzle'), scale: Math.min(hyperrealisticOn() ? 3.25 : 2.05, 0.95 + shotViolence * 0.30 * hyperrealismFactor('muzzle')) });
   kickWeaponVisual(wStats, wStats.pellets || 1);
 
   const muzzleWorld = new THREE.Vector3();
@@ -23659,6 +23699,16 @@ function tryMelee() {
                 : meleeSwingType === 'spin'   ? Math.min(cd * 0.85, 500)   // full rotation needs more time
                 : Math.min(cd * 0.65, 440);                                // slash default
   meleeSwingT = 0;
+  // Which side/direction this swing uses — decided ONCE here, at swing
+  // start, not per-frame in updateMeleeSwing(). It used to toggle
+  // _punchLeft on every frame the swing played, so the "active" hand
+  // flickered mid-punch instead of picking one side for the whole swing.
+  const swingModel = meleeModels[selectedMeleeIdx];
+  if (swingModel) {
+    if (meleeSwingType === 'punch') swingModel._punchLeft = !swingModel._punchLeft;
+    else if (meleeSwingType === 'slash') swingModel._slashDir = (swingModel._slashDir || 1) * -1;
+    else if (meleeSwingType === 'thrust') swingModel._thrustDir = (swingModel._thrustDir || 1) * -1;
+  }
 
   const forward = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion).normalize();
   let hitPos = null;
@@ -32263,6 +32313,11 @@ function applyMeleeDeflectPose(model) {
 }
 
 function updateMeleeSwing(dt) {
+  // Dual-wield companions (fists, brass knuckles) track their main hand's
+  // visibility every frame, rather than touching every equip/switch/reset
+  // call site individually.
+  for (const m of meleeModels) if (m._offHand) m._offHand.visible = m.visible;
+
   if (meleeAbilityBuff?.type === 'deflect' && activeSlot === 'melee' && selectedMeleeIdx !== null) {
     const model = meleeModels[selectedMeleeIdx];
     if (model && model.visible && meleeSwingT >= 1) applyMeleeDeflectPose(model);
@@ -32277,28 +32332,70 @@ function updateMeleeSwing(dt) {
   const lerp = (a, b, s) => a + (b - a) * s;
   let px, py, pz, rx, rz;
 
-  if (meleeSwingType === 'thrust') {
-    // Pull back, then fast lunge forward, then return
-    if (t < 0.28) {
-      const s = t / 0.28;
-      px = lerp(0.10, 0.13, s);
-      py = lerp(-0.12, -0.10, s);
-      pz = lerp(-0.20, -0.09, s); // pull back
-      rx = lerp(0, 0.18, s);  rz = 0;
-    } else if (t < 0.58) {
-      const s = (t - 0.28) / 0.30;
-      const e = 1 - Math.pow(1 - s, 3); // cubic ease-out: fast lunge
-      px = lerp(0.13, 0.10, e);
-      py = lerp(-0.10, -0.13, e);
-      pz = lerp(-0.09, -0.44, e); // lunge forward
-      rx = lerp(0.18, -0.08, e); rz = 0;
+  if (meleeSwingType === 'punch' && MELEE_ITEMS[selectedMeleeIdx]?.dual && model._offHand) {
+    // DUAL PUNCH — two real objects, not one box sliding sideways. Whichever
+    // side threw last time's punch (decided once in tryMelee) sits back as
+    // the active hand; the other holds a guard pose with a small idle bob.
+    const left = !!model._punchLeft;
+    const side = left ? -1 : 1;
+    const active = left ? model._offHand : model;
+    const guard   = left ? model : model._offHand;
+    guard.position.set(-side * 0.115, -0.11 + Math.sin(t * Math.PI * 2) * 0.006, -0.235);
+    guard.rotation.set(0.05, 0, -side * 0.12);
+    if (t < 0.18) {
+      const s = t / 0.18, e = s * s;
+      px = lerp(side * 0.115, side * 0.05, e);
+      py = lerp(-0.11, -0.07, e);
+      pz = lerp(-0.235, -0.10, e);
+      rx = lerp(0.05, 0.10, e); rz = 0;
+    } else if (t < 0.40) {
+      const s = (t - 0.18) / 0.22, e = 1 - Math.pow(1 - s, 3); // explosive forward jab
+      px = lerp(side * 0.05, side * 0.09, e);
+      py = lerp(-0.07, -0.12, e);
+      pz = lerp(-0.10, -0.44, e);
+      rx = lerp(0.10, -0.05, e); rz = 0;
     } else {
-      const s = (t - 0.58) / 0.42;
+      const s = (t - 0.40) / 0.60, e = s * (2 - s);
+      px = lerp(side * 0.09, side * 0.115, e);
+      py = lerp(-0.12, -0.11, e);
+      pz = lerp(-0.44, -0.235, e);
+      rx = lerp(-0.05, 0.05, e); rz = 0;
+    }
+    active.position.set(px, py, pz);
+    active.rotation.set(rx, 0, rz);
+    if (t >= 1) { active.position.set(side * 0.115, -0.11, -0.235); active.rotation.set(0.05, 0, 0); }
+    return; // both hands fully positioned already — skip the shared setter below
+
+  } else if (meleeSwingType === 'thrust') {
+    // THRUST — a lunge with real body weight behind it: winds up with a
+    // shoulder twist and a downward dip (loading the back leg), untwists
+    // through the strike, settles with a small counter-sway. Alternates the
+    // twist direction each swing so repeated thrusts don't look robotic.
+    const dir = model._thrustDir || 1;
+    if (t < 0.24) {
+      const s = t / 0.24;
+      const e = s * s;
+      px = lerp(0.10, 0.10 + 0.05 * dir, e);
+      py = lerp(-0.12, -0.15, e);            // dip — loading the strike
+      pz = lerp(-0.20, -0.07, e);            // pull back
+      rx = lerp(0, 0.20, e);
+      rz = lerp(0, 0.10 * dir, e);           // shoulder winds up
+    } else if (t < 0.55) {
+      const s = (t - 0.24) / 0.31;
+      const e = 1 - Math.pow(1 - s, 3); // cubic ease-out: fast lunge
+      px = lerp(0.10 + 0.05 * dir, 0.10 - 0.04 * dir, e); // body rotates through the thrust
+      py = lerp(-0.15, -0.10, e);            // rises as the body extends
+      pz = lerp(-0.07, -0.46, e);            // lunge forward
+      rx = lerp(0.20, -0.10, e);
+      rz = lerp(0.10 * dir, -0.08 * dir, e); // untwisting through the strike
+    } else {
+      const s = (t - 0.55) / 0.45;
       const e = s * (2 - s); // ease in-out: smooth pull back to rest
-      px = lerp(0.10, 0.10, e);
-      py = lerp(-0.13, -0.12, e);
-      pz = lerp(-0.44, -0.20, e);
-      rx = lerp(-0.08, 0, e); rz = 0;
+      px = lerp(0.10 - 0.04 * dir, 0.10, e);
+      py = lerp(-0.10, -0.12, e);
+      pz = lerp(-0.46, -0.20, e);
+      rx = lerp(-0.10, 0, e);
+      rz = lerp(-0.08 * dir, 0, e);
     }
 
   } else if (meleeSwingType === 'slam') {
@@ -32329,9 +32426,9 @@ function updateMeleeSwing(dt) {
     }
 
   } else if (meleeSwingType === 'punch') {
-    // PUNCH — fast straight jab. Alternates left/right hand each swing.
-    const left = (model._punchLeft = !(model._punchLeft || false));
-    const side = left ? -1 : 1;
+    // PUNCH (non-dual fallback) — fast straight jab, side alternates each
+    // swing (decided once in tryMelee, not re-toggled every frame here).
+    const side = model._punchLeft ? -1 : 1;
     if (t < 0.18) {
       const s = t / 0.18;
       const e = s * s;
@@ -32444,31 +32541,53 @@ function updateMeleeSwing(dt) {
     }
 
   } else {
-    // SLASH — wide horizontal arc, right shoulder → forward → left
-    if (t < 0.27) {
-      const s = t / 0.27;
-      const e = s * s; // ease-in: wind up
-      px = lerp(0.10, 0.18, e);   // shift right
-      py = lerp(-0.12, -0.05, e); // raise
-      pz = lerp(-0.20, -0.16, e);
-      rx = lerp(0, -0.38, e);     // tilt back
-      rz = lerp(0, -0.60, e);     // rotate to right-up
-    } else if (t < 0.60) {
-      const s = (t - 0.27) / 0.33;
-      const e = 1 - Math.pow(1 - s, 2); // ease-out: fast swing
-      px = lerp(0.18, 0.01, e);   // sweep left
-      py = lerp(-0.05, -0.20, e); // arc down
-      pz = lerp(-0.16, -0.32, e); // push forward
-      rx = lerp(-0.38, 0.32, e);
-      rz = lerp(-0.60, 0.70, e);  // big arc
+    // SLASH — the default type, so this is most of the roster (bat, sabre,
+    // katana, cricket bat, golf club, and anything else not explicitly
+    // assigned one of the other types above). A wide horizontal side-to-side
+    // sweep that ALTERNATES direction every swing (left, right, left,
+    // right — dir flipped once in tryMelee) so repeated swings actually read
+    // as cutting side to side rather than the same stroke over and over, or
+    // worse, a forward stab. Deliberately light on pz (forward push) — the
+    // travel is almost all px/rz, which is what makes it a swing. A brief
+    // sine-eased overshoot after the cut sells the weapon "biting" into
+    // something instead of passing through empty air. Windup/recovery were
+    // trimmed and the cut phase widened versus the old curve so the whole
+    // thing reads snappier — this is what "the bat feels slow" was about.
+    const dir = model._slashDir || 1;
+    if (t < 0.16) {
+      const s = t / 0.16;
+      const e = s * s; // ease-in: quick wind-up
+      px = lerp(0.10, 0.10 + 0.15 * dir, e);
+      py = lerp(-0.12, -0.06, e);
+      pz = lerp(-0.20, -0.17, e);
+      rx = lerp(0, -0.20, e);
+      rz = lerp(0, -0.78 * dir, e);   // blade cocked back
+    } else if (t < 0.52) {
+      const s = (t - 0.16) / 0.36;
+      const e = 1 - Math.pow(1 - s, 2.2); // ease-out: the actual cut
+      px = lerp(0.10 + 0.15 * dir, 0.10 - 0.15 * dir, e); // travels all the way across
+      py = lerp(-0.06, -0.19, e);
+      pz = lerp(-0.17, -0.23, e);     // modest push — a cut, not a lunge
+      rx = lerp(-0.20, 0.22, e);
+      rz = lerp(-0.78 * dir, 0.95 * dir, e); // the big arc that sells the swing
+    } else if (t < 0.65) {
+      // Impact micro-bounce: a small overshoot past the swing's end then
+      // settle back, the way a real blade "bites" and rebounds a touch.
+      const s = (t - 0.52) / 0.13;
+      const e = Math.sin(s * Math.PI); // 0 → 1 → 0
+      px = 0.10 - 0.15 * dir;
+      py = -0.19;
+      pz = -0.23;
+      rx = 0.22 - 0.05 * e;
+      rz = 0.95 * dir + 0.08 * dir * e;
     } else {
-      const s = (t - 0.60) / 0.40;
+      const s = (t - 0.65) / 0.35;
       const e = s * (2 - s);
-      px = lerp(0.01, 0.10, e);
-      py = lerp(-0.20, -0.12, e);
-      pz = lerp(-0.32, -0.20, e);
-      rx = lerp(0.32, 0, e);
-      rz = lerp(0.70, 0, e);
+      px = lerp(0.10 - 0.15 * dir, 0.10, e);
+      py = lerp(-0.19, -0.12, e);
+      pz = lerp(-0.23, -0.20, e);
+      rx = lerp(0.22, 0, e);
+      rz = lerp(0.95 * dir, 0, e);
     }
   }
 
@@ -37766,9 +37885,12 @@ function openSettingsHub() {
     panel.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9900;background:#0f1a18;border:2px solid #44cc99;border-radius:8px;padding:22px;color:#fff;font-family:"Courier New",monospace;min-width:380px;max-width:520px;box-shadow:0 4px 30px rgba(0,0,0,0.6);';
     document.body.appendChild(panel);
   }
-  const toggleRow = (key, label) => `
+  const toggleRow = (key, label, note = '') => `
     <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin:10px 0;padding:10px;background:rgba(255,255,255,0.035);border:1px solid #244c42;border-radius:6px;">
-      <div style="font-size:12px;letter-spacing:2px;color:#d8fff2;">${label}</div>
+      <div>
+        <div style="font-size:12px;letter-spacing:2px;color:#d8fff2;">${label}</div>
+        ${note ? `<div style="font-size:10px;letter-spacing:1px;color:#89b5a8;margin-top:4px;max-width:285px;line-height:1.35;">${note}</div>` : ''}
+      </div>
       <button data-settings-toggle="${key}" style="min-width:66px;padding:7px 10px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:bold;letter-spacing:2px;border-radius:4px;background:${GAMEPLAY_SETTINGS[key] ? '#1f5a3a' : '#1f2422'};color:${GAMEPLAY_SETTINGS[key] ? '#88ffcc' : '#a0aaa6'};border:2px solid ${GAMEPLAY_SETTINGS[key] ? '#44cc99' : '#46544f'};">${GAMEPLAY_SETTINGS[key] ? 'ON' : 'OFF'}</button>
     </div>`;
   const rangeRow = (key, label, min = 0, max = 1.5, step = 0.05) => `
@@ -37794,6 +37916,7 @@ function openSettingsHub() {
     </div>
     ${toggleRow('showFPS', 'SHOW FPS')}
     ${toggleRow('autoReload', 'AUTO RELOAD')}
+    ${toggleRow('hyperrealistic', 'HYPERREALISTIC', 'For fun: huge shake, flash, smoke, impacts, and pressure. Not recommended for competitive play.')}
     ${isTouchUI() ? `<div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin:10px 0;padding:10px;background:rgba(255,255,255,0.035);border:1px solid #244c42;border-radius:6px;">
       <div style="font-size:12px;letter-spacing:2px;color:#d8fff2;">BUTTON SIZE</div>
       <div style="display:flex;gap:6px;">${TOUCH_SCALES.map(([label, v]) => `<button type="button" data-touch-scale="${v}" style="min-width:46px;min-height:36px;padding:0 8px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:bold;letter-spacing:1px;border-radius:5px;border:1px solid ${GAMEPLAY_SETTINGS.touchScale == v ? '#88ffcc' : '#2e5f52'};background:${GAMEPLAY_SETTINGS.touchScale == v ? '#1f5a3a' : '#16241f'};color:${GAMEPLAY_SETTINGS.touchScale == v ? '#aaffdd' : '#79a094'};">${label}</button>`).join('')}</div>
