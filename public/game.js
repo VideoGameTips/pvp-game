@@ -1352,7 +1352,7 @@ const CURRENCY_ICON = '🍩';
 // Mirrors server.js (gotcha #4): the server charges, this only displays.
 const WEAPON_PRICE_MULT = 0.5;          // P2W items
 const NORMAL_WEAPON_PRICE_MULT = 1;
-const SKIN_CASE_GEN1_COST = 150;
+const SKIN_CASE_GEN1_COST = 1500;
 const SKIN_CASE_DONUT_COST = 4000;
 const SKIN_CASE_GEN2_COST = 5000;       // just under the cheapest P2W weapon (6,000)
 const P2W_ITEM_IDS = new Set([
