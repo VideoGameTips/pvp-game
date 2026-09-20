@@ -17773,9 +17773,15 @@ supportModels.forEach(m => { m.visible = false; camera.add(m); });
 // shirt, hair, cut, skin tone — is dealt from a hash of the name. Same player,
 // same look, on every client and in every session.
 const SHIRT_COLORS = [0xb03a2e, 0x1f4e79, 0x4a5d23, 0xc1720b, 0x37474f, 0x146356, 0x6b4423];
-const HAIR_COLORS  = [0x241a12, 0x2a2622, 0x6b4423, 0xa9762e, 0xc9a227, 0x8a3a1c, 0x8e9098];
+// Two near-blacks 21 apart in RGB wastes a slot; charcoal fills the gap
+// between black and silver instead. Hair landing close to a skin tone is fine
+// and true to life — the cut has a brim, sideburns and a shell, so it reads.
+const HAIR_COLORS  = [0x241a12, 0x4a4640, 0x553318, 0xa9762e, 0xc9a227, 0x8f2f10, 0x8e9098];
 const SKIN_TONES   = [0xffcc99, 0xeab183, 0xc2895a, 0x8a5a36];
 const HAIR_STYLES  = ['crop', 'buzz', 'messy', 'swoop', 'curls', 'tail'];
+// 'none' twice on purpose: about a third of people carry nothing, so the ones
+// who do read as carrying something rather than as the uniform.
+const KITS         = ['none', 'none', 'pack', 'pauldrons', 'vest', 'belt', 'bandolier'];
 
 const _cssHex = n => '#' + (n >>> 0).toString(16).padStart(6, '0');
 function _mixColor(a, b, t) {
@@ -17785,6 +17791,15 @@ function _mixColor(a, b, t) {
 
 // FNV-1a over the name. The name is already on the wire for everyone (bots ride
 // along in botList), so this needs no new network field and no signature change.
+// Webbing that has to stay readable against whatever it is worn over. Dark
+// uniforms (SWAT, riot) get LIGHTER gear — going darker on an already-dark body
+// is how the SWAT vest ended up 27 apart in RGB from the shirt under it.
+function _gearFor(body) {
+  const l = ((body >> 16 & 255) * 0.299 + (body >> 8 & 255) * 0.587 + (body & 255) * 0.114) / 255;
+  return l < 0.22 ? _mixColor(body, 0x8a8f96, 0.34)
+                  : _mixColor(darkenColor(body, 0.45), 0x3a352c, 0.55);
+}
+
 function _nameHash(str) {
   let h = 0x811c9dc5;
   const s = String(str == null ? '' : str);
@@ -17806,6 +17821,8 @@ function appearanceFor(name) {
     hair:  HAIR_COLORS[(h >>> 5) % HAIR_COLORS.length],
     tone:  SKIN_TONES[(h >>> 11) % SKIN_TONES.length],
     style: HAIR_STYLES[(h >>> 17) % HAIR_STYLES.length],
+    kit:   KITS[(h >>> 22) % KITS.length],
+    gear:  _gearFor(SHIRT_COLORS[h % SHIRT_COLORS.length]),
   };
 }
 
@@ -18387,6 +18404,7 @@ function applyCharacterSkin(skinId, parts) {
         new THREE.MeshLambertMaterial({ color: 0x0a0d12, emissive: 0x2f7dff, emissiveIntensity: 1.2 }));
       visor.position.set(0, 1.87, 0.255); group.add(visor);
       _addHelmet(group, 0x14171c);
+      _addKit(group, 'vest', _gearFor(0x23272e));   // #50 phase 2
       break;
     }
     case 'swat_shades': {
@@ -18396,6 +18414,7 @@ function applyCharacterSkin(skinId, parts) {
         new THREE.MeshLambertMaterial({ color: 0x080808 }));
       shades.position.set(0, 1.90, 0.255); group.add(shades);
       _addHelmet(group, 0x14171c);
+      _addKit(group, 'vest', _gearFor(0x2a2e35));   // #50 phase 2
       break;
     }
     case 'riot_chad': {
@@ -18405,11 +18424,13 @@ function applyCharacterSkin(skinId, parts) {
         new THREE.MeshLambertMaterial({ color: 0xc62828 }));
       bandana.position.set(0, 1.66, 0); group.add(bandana);
       _addSeedHair(group, 'crop', 0x1a1208);   // was a bare scalp (#50)
+      _addKit(group, 'bandolier', _gearFor(0x33271f));  // #50 phase 2
       break;
     }
     case 'soldier': {
       setBody(0x4b5320); setLegs(0x3a4019); setHeadAll(tone);
       _addHelmet(group, 0x3d4a24);
+      _addKit(group, 'pack', _gearFor(0x4b5320));   // #50 phase 2
       break;
     }
     case 'spiky': {
@@ -18420,6 +18441,7 @@ function applyCharacterSkin(skinId, parts) {
     case 'green_cap': {
       setBody(0x6b5d3a); setLegs(0x4a4327); setHeadAll(tone);
       _addCap(group, 0x3f6b2f);
+      _addKit(group, 'belt', _gearFor(0x6b5d3a));   // #50 phase 2
       break;
     }
     case 'shadow': {
@@ -18685,7 +18707,7 @@ function applyCharacterSkin(skinId, parts) {
     default: {
       // Recruit. The shirt is already seeded in makePlayerMesh; the hair is what
       // stops Lobby 13 being a row of identical bald heads (#50).
-      if (look) _addSeedHair(group, look.style, look.hair);
+      if (look) { _addSeedHair(group, look.style, look.hair); _addKit(group, look.kit, look.gear); }
       break;
     }
   }
@@ -18781,6 +18803,65 @@ function _addSeedHair(group, style, color) {
       // the front instead. Proud of the back, stopping at the jaw, does both.
       put(roundedBoxGeo(0.19, 0.09, 0.10, 0.035, 3), 0, 1.99, -0.29);   // the tie
       put(roundedBoxGeo(0.16, 0.34, 0.16, 0.06, 3), 0, 1.76, -0.36);
+      break;
+  }
+}
+
+// ── 🎒 Silhouette kit (#50 phase 2) ─────────────────────────────────────────
+// Every character is the same eight hard-coded body sizes, so at any distance
+// the only thing separating two of them is colour — which is exactly what a
+// dark map takes away. These hang off the torso and change the OUTLINE.
+//
+// Pure addition: no existing size moves, no head attachment point moves, and
+// the hitbox never looked at the model to begin with.
+//
+// The one real constraint is the animation rig. Arms pivot at y 1.5 and legs
+// at y 0.875, and anything parented to the GROUP does not swing with them — so
+// a shoulder piece has to sit at or above the pivot (the upper arm's top end
+// stays at the pivot through the whole swing) and nothing may sit in the arc
+// the thighs sweep. Torso runs y 0.875–1.525, x ±0.275, z ±0.15.
+function _addKit(group, kit, color) {
+  if (!kit || kit === 'none') return;
+  const mat = new THREE.MeshLambertMaterial({ color });
+  const put = (geo, x, y, z, rz) => {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(x, y, z);
+    if (rz) m.rotation.z = rz;
+    m.castShadow = true; group.add(m); return m;
+  };
+  switch (kit) {
+    case 'pack':                                   // reads from the side and from behind
+      put(roundedBoxGeo(0.36, 0.42, 0.20, 0.05, 3), 0, 1.24, -0.245);
+      put(roundedBoxGeo(0.38, 0.08, 0.22, 0.03, 3), 0, 1.47, -0.245);   // top flap
+      break;
+    case 'pauldrons':                              // at 1.555: clear of the arm swing
+      [-0.33, 0.33].forEach(x => put(roundedBoxGeo(0.30, 0.13, 0.30, 0.055, 3), x, 1.555, 0));
+      break;
+    case 'vest':
+      // Plate high on the chest, two short straps from its top edge over the
+      // shoulder (breaking the shoulder line is the point), pouches low. Get
+      // the order wrong and it reads as dungarees: a wide panel LOW with
+      // straps above it is a bib, and a full-width slab is a hole in the torso.
+      put(roundedBoxGeo(0.36, 0.24, 0.07, 0.03, 3), 0, 1.30, 0.16);
+      [-0.17, 0.17].forEach(x => put(roundedBoxGeo(0.10, 0.22, 0.08, 0.03, 3), x, 1.47, 0.155));
+      [-0.14, 0.14].forEach(x => put(roundedBoxGeo(0.12, 0.13, 0.09, 0.03, 3), x, 1.05, 0.175));
+      break;
+    case 'belt':
+      put(roundedBoxGeo(0.58, 0.09, 0.33, 0.03, 3), 0, 0.915, 0);
+      // The pouch has to clear three moving parts: thighs sweep to z ±0.29 and
+      // their top corner rises to ~0.95, and the hands hang at y 0.805–0.955.
+      // Above the swing, on the small of the back, is the only spot that is
+      // clear of all of them.
+      put(roundedBoxGeo(0.15, 0.17, 0.12, 0.04, 3), 0, 1.05, -0.21);
+      break;
+    case 'bandolier':                              // strap low-right to high-left
+      // Stops at y 1.00, not at the waist: a thigh swung forward reaches z 0.29
+      // and y 0.95, which is straight through where the bottom of the strap
+      // would otherwise hang.
+      put(roundedBoxGeo(0.12, 0.52, 0.07, 0.03, 3), 0, 1.23, 0.155, 0.52);
+      // Pouches proud of the strap and wider than it: a bare strap is a stick.
+      [[0.071, 1.106], [0, 1.23], [-0.071, 1.354]].forEach(([x, y]) =>
+        put(roundedBoxGeo(0.15, 0.12, 0.09, 0.03, 3), x, y, 0.20, 0.52));
       break;
   }
 }
