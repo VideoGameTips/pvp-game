@@ -17766,32 +17766,87 @@ const supportModels = [buildFragGrenade(), buildMedkit(), buildStimShot(), build
 supportModels.forEach(m => { m.visible = false; camera.add(m); });
 
 // ── Roblox-style player mesh factory ──────────────────────────────────────
-const SHIRT_COLORS = [0xe03131,0x1971c2,0x2f9e44,0xf08c00,0x9c36b5,0x0c8599,0xd6336c];
-let colorIndex = 0;
+// Shirts were seven poster colours dealt by a counter, which was wrong twice
+// over (#50): the palette put a magenta and a purple on every seventh
+// character, and the counter was client-LOCAL, so one player wore a different
+// colour on every screen. Now a tactical palette, and EVERY part of a look —
+// shirt, hair, cut, skin tone — is dealt from a hash of the name. Same player,
+// same look, on every client and in every session.
+const SHIRT_COLORS = [0xb03a2e, 0x1f4e79, 0x4a5d23, 0xc1720b, 0x37474f, 0x146356, 0x6b4423];
+const HAIR_COLORS  = [0x241a12, 0x2a2622, 0x6b4423, 0xa9762e, 0xc9a227, 0x8a3a1c, 0x8e9098];
+const SKIN_TONES   = [0xffcc99, 0xeab183, 0xc2895a, 0x8a5a36];
+const HAIR_STYLES  = ['crop', 'buzz', 'messy', 'swoop', 'curls', 'tail'];
+
+const _cssHex = n => '#' + (n >>> 0).toString(16).padStart(6, '0');
+function _mixColor(a, b, t) {
+  const ch = s => Math.round((((a >> s) & 255) * (1 - t)) + (((b >> s) & 255) * t));
+  return (ch(16) << 16) | (ch(8) << 8) | ch(0);
+}
+
+// FNV-1a over the name. The name is already on the wire for everyone (bots ride
+// along in botList), so this needs no new network field and no signature change.
+function _nameHash(str) {
+  let h = 0x811c9dc5;
+  const s = String(str == null ? '' : str);
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+  // FNV's low bits barely move for a one-character change, and every trait below
+  // is a modulo of a low bit range — without a finalizer, aaa/aab/aac all come
+  // out the same skin tone. MurmurHash3's fmix32 folds the high bits back down.
+  h ^= h >>> 16; h = Math.imul(h, 0x85ebca6b);
+  h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35);
+  h ^= h >>> 16;
+  return h >>> 0;
+}
+// A different bit range per trait, so a name that lands on brick doesn't also
+// always land on the same haircut.
+function appearanceFor(name) {
+  const h = _nameHash(name);
+  return {
+    shirt: SHIRT_COLORS[h % SHIRT_COLORS.length],
+    hair:  HAIR_COLORS[(h >>> 5) % HAIR_COLORS.length],
+    tone:  SKIN_TONES[(h >>> 11) % SKIN_TONES.length],
+    style: HAIR_STYLES[(h >>> 17) % HAIR_STYLES.length],
+  };
+}
 
 // The default face (#47): pixel art — brows, eyes that catch the light, a nose, a smile —
 // drawn at 32×32 and magnified without smoothing, so it stays sharp up close. It was four
 // rectangles on a 64×64 canvas, smeared by linear filtering. Every real player on the
 // default skin wears it.
-function makeFaceTexture() {
+// Every tint that used to be a fixed peach value is derived from the tone now,
+// so a darker recruit doesn't get pale cheeks and invisible brows (#50).
+function makeFaceTexture(tone = 0xffcc99) {
   const c = document.createElement('canvas'); c.width = 32; c.height = 32;
   const ctx = c.getContext('2d');
   const px = (col, x, y, w = 1, h = 1) => { ctx.fillStyle = col; ctx.fillRect(x, y, w, h); };
-  px('#ffcc99', 0, 0, 32, 32);                                  // skin
-  px('#f3bb8c', 0, 27, 32, 5);                                  // jaw shade
-  px('#5a3a22', 7, 9, 6, 2);   px('#5a3a22', 19, 9, 6, 2);      // brows
+  const sk    = _cssHex(tone);
+  const jaw   = _cssHex(darkenColor(tone, 0.93));
+  const nose  = _cssHex(darkenColor(tone, 0.86));
+  const brow  = _cssHex(darkenColor(tone, 0.35));
+  const cheek = _cssHex(_mixColor(tone, 0xc05038, 0.17));   // a hint of blood, not rouge (#50)
+  const mouth = _cssHex(_mixColor(tone, 0x6a1f1f, 0.80));
+  px(sk, 0, 0, 32, 32);                                         // skin
+  px(jaw, 0, 27, 32, 5);                                        // jaw shade
+  px(brow, 7, 9, 6, 2);        px(brow, 19, 9, 6, 2);           // brows
   px('#ffffff', 7, 12, 6, 5);  px('#ffffff', 19, 12, 6, 5);     // eye whites
   px('#2a1d14', 10, 12, 3, 5); px('#2a1d14', 19, 12, 3, 5);     // pupils, looking a touch inward
   px('#ffffff', 11, 13, 1, 1); px('#ffffff', 20, 13, 1, 1);     // catch-lights
-  px('#e8a878', 15, 16, 2, 4);                                  // nose
-  px('#f4a5a0', 5, 19, 3, 2);  px('#f4a5a0', 24, 19, 3, 2);     // cheeks
-  px('#7a2e2e', 11, 22, 10, 2);                                 // mouth
-  px('#7a2e2e', 10, 21, 1, 1); px('#7a2e2e', 21, 21, 1, 1);     // …smiling
+  px(nose, 15, 16, 2, 4);                                       // nose
+  px(cheek, 5, 19, 3, 2);      px(cheek, 24, 19, 3, 2);         // cheeks
+  px(mouth, 11, 22, 10, 2);                                     // mouth
+  px(mouth, 10, 21, 1, 1);     px(mouth, 21, 21, 1, 1);         // …smiling
   const tex = new THREE.CanvasTexture(c);
   tex.magFilter = THREE.NearestFilter;
   return tex;
 }
-let _defaultFaceTex = null;   // one for everybody — skins swap faceMat.map, they never draw on it
+// One texture per TONE, not per character — skins swap faceMat.map, they never
+// draw on it, so four of these cover everybody.
+const _faceTexCache = new Map();
+function faceTextureFor(tone) {
+  let t = _faceTexCache.get(tone);
+  if (!t) { t = makeFaceTexture(tone); _faceTexCache.set(tone, t); }
+  return t;
+}
 
 // ── Smooth blocks (#47) ─────────────────────────────────────────────────────
 // Body parts were plain boxes, built again for every character. Now: the same outer size
@@ -18297,8 +18352,25 @@ function makeShadowFaceTexture() {
   return new THREE.CanvasTexture(c);
 }
 
+// A cast face with no skin colour of its own follows the seeded tone, so the
+// front of the head matches the other five sides. Cached: this used to build a
+// fresh 64x64 canvas and texture for every single character (#50).
+const _charFaceCache = new Map();
+function charFaceFor(skinId, tone) {
+  const key = skinId + ':' + tone;
+  let t = _charFaceCache.get(key);
+  if (!t) {
+    t = makeCharFace(Object.assign({ skin: _cssHex(tone) }, CHAR_FACES[skinId]));
+    _charFaceCache.set(key, t);
+  }
+  return t;
+}
+
 function applyCharacterSkin(skinId, parts) {
-  const { group, head, headMats, faceMat, torso, torsoMat, armLimbs, legLimbs } = parts;
+  const { group, head, headMats, faceMat, torso, torsoMat, armLimbs, legLimbs, look } = parts;
+  // Human-faced skins take the seeded tone; the cast members with a colour of
+  // their own (panda white, duck yellow, Pyro's soot) keep theirs (#50).
+  const tone = (look && look.tone) || 0xffcc99;
   const setBody = (hex) => {
     torsoMat.color.setHex(hex);
     armLimbs.forEach(m => m.material.color.setHex(hex));
@@ -18318,7 +18390,7 @@ function applyCharacterSkin(skinId, parts) {
       break;
     }
     case 'swat_shades': {
-      setBody(0x2a2e35); setLegs(0x1a1d22); setHeadAll(0xffcc99);
+      setBody(0x2a2e35); setLegs(0x1a1d22); setHeadAll(tone);
       // Keep the skin-tone face, add black sunglasses across the eyes
       const shades = new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.10, 0.04),
         new THREE.MeshLambertMaterial({ color: 0x080808 }));
@@ -18327,25 +18399,26 @@ function applyCharacterSkin(skinId, parts) {
       break;
     }
     case 'riot_chad': {
-      setBody(0x33271f); setLegs(0x20272e); setHeadAll(0xffcc99);
+      setBody(0x33271f); setLegs(0x20272e); setHeadAll(tone);
       // Red bandana around the neck / lower face
       const bandana = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.16, 0.34),
         new THREE.MeshLambertMaterial({ color: 0xc62828 }));
       bandana.position.set(0, 1.66, 0); group.add(bandana);
+      _addSeedHair(group, 'crop', 0x1a1208);   // was a bare scalp (#50)
       break;
     }
     case 'soldier': {
-      setBody(0x4b5320); setLegs(0x3a4019); setHeadAll(0xffcc99);
+      setBody(0x4b5320); setLegs(0x3a4019); setHeadAll(tone);
       _addHelmet(group, 0x3d4a24);
       break;
     }
     case 'spiky': {
-      setBody(0x5a2a2a); setLegs(0x222831); setHeadAll(0xffcc99);
+      setBody(0x5a2a2a); setLegs(0x222831); setHeadAll(tone);
       _addSpikyHair(group, 0x2b1a10);
       break;
     }
     case 'green_cap': {
-      setBody(0x6b5d3a); setLegs(0x4a4327); setHeadAll(0xffcc99);
+      setBody(0x6b5d3a); setLegs(0x4a4327); setHeadAll(tone);
       _addCap(group, 0x3f6b2f);
       break;
     }
@@ -18379,14 +18452,14 @@ function applyCharacterSkin(skinId, parts) {
       break;
     }
     case 'cc_mirage': {                          // sleek purple ninja + shades + ears
-      setBody(0x5a2a8a); setLegs(0x2a123f); setHeadAll(0xffcc99);
+      setBody(0x5a2a8a); setLegs(0x2a123f); setHeadAll(tone);
       _addShades(group);
       _addSpikyHair(group, 0xcfc4e0);            // silver-lilac hair (poster look)
       _addEars(group, 0xcfc4e0);
       break;
     }
     case 'cc_grandmaster': {                     // ♀ navy strategist + long ponytail + glasses
-      setBody(0x1b2a4a); setLegs(0x10182c); setHeadAll(0xffcc99);
+      setBody(0x1b2a4a); setLegs(0x10182c); setHeadAll(tone);
       _addPonytail(group, 0x2a1840);             // long dark-purple hair
       const g = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.08, 0.03),
         new THREE.MeshLambertMaterial({ color: 0x222222 }));
@@ -18394,12 +18467,12 @@ function applyCharacterSkin(skinId, parts) {
       break;
     }
     case 'cc_lucky': {                           // green leprechaun + green hat
-      setBody(0x1f7a1f); setLegs(0x144a14); setHeadAll(0xffcc99);
+      setBody(0x1f7a1f); setLegs(0x144a14); setHeadAll(tone);
       _addCap(group, 0x0f5a0f);
       break;
     }
     case 'cc_medic': {                           // white medic + helmet + red cross
-      setBody(0xf2f2f2); setLegs(0xcfcfcf); setHeadAll(0xffcc99);
+      setBody(0xf2f2f2); setLegs(0xcfcfcf); setHeadAll(tone);
       _addHelmet(group, 0xffffff);
       const crossMat = new THREE.MeshLambertMaterial({ color: 0xcc1111 });
       const c1 = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.22, 0.02), crossMat);
@@ -18409,8 +18482,9 @@ function applyCharacterSkin(skinId, parts) {
       break;
     }
     case 'cc_goat': {                            // white tee + black shades GOAT
-      setBody(0xf0f0f0); setLegs(0x222831); setHeadAll(0xffcc99);
+      setBody(0xf0f0f0); setLegs(0x222831); setHeadAll(tone);
       _addShades(group);
+      _addSeedHair(group, 'buzz', 0x161616);   // was a bare scalp (#50)
       break;
     }
     case 'cc_pyro': {                            // orange/black pyro + fiery optic
@@ -18445,7 +18519,7 @@ function applyCharacterSkin(skinId, parts) {
     }
     // ── 🎭 Girls Squad ──────────────────────────────────────────────────────
     case 'cc_sharpshooter': {                    // military cap, dark ponytail, scope glint
-      setBody(0x2e3a2a); setLegs(0x1c241a); setHeadAll(0xffcc99);
+      setBody(0x2e3a2a); setLegs(0x1c241a); setHeadAll(tone);
       _addCap(group, 0x202820);
       const pt = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.30, 0.14),
         new THREE.MeshLambertMaterial({ color: 0x140f0a }));
@@ -18456,28 +18530,28 @@ function applyCharacterSkin(skinId, parts) {
       break;
     }
     case 'cc_ladymayhem': {                      // pink/purple jester
-      setBody(0xc81e8c); setLegs(0x5a1240); setHeadAll(0xffcc99);
+      setBody(0xc81e8c); setLegs(0x5a1240); setHeadAll(tone);
       _addJesterHat(group, 0xc81e8c, 0x6a1ea0);
       break;
     }
     case 'cc_jinx': {                            // teal mischief + cyan pigtails
-      setBody(0x14808a); setLegs(0x0c4a50); setHeadAll(0xffcc99);
+      setBody(0x14808a); setLegs(0x0c4a50); setHeadAll(tone);
       _addPigtails(group, 0x1ad6e0);
       break;
     }
     case 'cc_pandora': {                         // lavender witch + light hair
-      setBody(0x6a3aa5); setLegs(0x2a1240); setHeadAll(0xffcc99);
+      setBody(0x6a3aa5); setLegs(0x2a1240); setHeadAll(tone);
       _addPonytail(group, 0xe0d0ff);
       _addWitchHat(group, 0x3a1255);
       break;
     }
     case 'cc_wildfire': {                        // red body + literal flame hair
-      setBody(0xb01818); setLegs(0x401010); setHeadAll(0xffcc99);
+      setBody(0xb01818); setLegs(0x401010); setHeadAll(tone);
       _addFlameHair(group);
       break;
     }
     case 'cc_anarchy': {                         // purple punk mohawk + red bandana
-      setBody(0x4a2a6a); setLegs(0x201233); setHeadAll(0xffcc99);
+      setBody(0x4a2a6a); setLegs(0x201233); setHeadAll(tone);
       _addMohawk(group, 0x9a2ad0);
       const band = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.12, 0.34),
         new THREE.MeshLambertMaterial({ color: 0xc0142a }));
@@ -18486,7 +18560,7 @@ function applyCharacterSkin(skinId, parts) {
     }
     // ── 🕶️ Specialists ──────────────────────────────────────────────────────
     case 'cc_professional': {                    // grey suit, silver hair, shades
-      setBody(0x3a3f47); setLegs(0x232830); setHeadAll(0xffcc99);
+      setBody(0x3a3f47); setLegs(0x232830); setHeadAll(tone);
       const hair = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.14, 0.54),
         new THREE.MeshLambertMaterial({ color: 0xcfcfd6 }));
       hair.position.set(0, 2.07, 0); group.add(hair);
@@ -18494,7 +18568,7 @@ function applyCharacterSkin(skinId, parts) {
       break;
     }
     case 'cc_afk': {                             // hoodie + big headphones
-      setBody(0x55606a); setLegs(0x30373e); setHeadAll(0xffcc99);
+      setBody(0x55606a); setLegs(0x30373e); setHeadAll(tone);
       _addHelmet(group, 0x55606a);               // hood
       _addHeadphones(group, 0x222831);
       break;
@@ -18507,12 +18581,12 @@ function applyCharacterSkin(skinId, parts) {
       break;
     }
     case 'cc_noskill': {                         // tan body + red cap (spray'n'pray)
-      setBody(0x8a5a2a); setLegs(0x4a3418); setHeadAll(0xffcc99);
+      setBody(0x8a5a2a); setLegs(0x4a3418); setHeadAll(tone);
       _addCap(group, 0xb01818);
       break;
     }
     case 'cc_engineer': {                        // orange vest + hard hat + goggles
-      setBody(0xd47a14); setLegs(0x3a2a14); setHeadAll(0xffcc99);
+      setBody(0xd47a14); setLegs(0x3a2a14); setHeadAll(tone);
       const hat = new THREE.Mesh(new THREE.SphereGeometry(0.30, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2),
         new THREE.MeshLambertMaterial({ color: 0xffcc00 }));
       hat.position.set(0, 2.04, 0); hat.castShadow = true; group.add(hat);
@@ -18552,19 +18626,19 @@ function applyCharacterSkin(skinId, parts) {
       break;
     }
     case 'cc_casual': {                          // blue tee + ball cap
-      setBody(0x2f6db0); setLegs(0x223a55); setHeadAll(0xffcc99);
+      setBody(0x2f6db0); setLegs(0x223a55); setHeadAll(tone);
       _addCap(group, 0x224488);
       break;
     }
     case 'cc_suspicious': {                      // black trenchcoat + fedora + shades
-      setBody(0x1a1a1f); setLegs(0x101012); setHeadAll(0xffcc99);
+      setBody(0x1a1a1f); setLegs(0x101012); setHeadAll(tone);
       _addFedora(group, 0x121214);
       _addShades(group);
       _addCape(group, 0x141418);                 // coat tail
       break;
     }
     case 'cc_sweat': {                           // tryhard gamer: VR visor + headset
-      setBody(0x202830); setLegs(0x141a20); setHeadAll(0xffcc99);
+      setBody(0x202830); setLegs(0x141a20); setHeadAll(tone);
       faceMat.map = null; faceMat.color.setHex(0x10131a); faceMat.needsUpdate = true;
       _addVisor(group, 0x00e0ff, 1.4);
       _addHeadphones(group, 0x222831);
@@ -18572,7 +18646,7 @@ function applyCharacterSkin(skinId, parts) {
     }
     // ── 🧹 Miscellaneous ─────────────────────────────────────────────────────
     case 'cc_janitor': {                         // blue jumpsuit + cap + grey 'stache
-      setBody(0x2f5a8a); setLegs(0x203a5a); setHeadAll(0xffcc99);
+      setBody(0x2f5a8a); setLegs(0x203a5a); setHeadAll(tone);
       _addCap(group, 0x1f4a6a);
       const beard = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.08, 0.06),
         new THREE.MeshLambertMaterial({ color: 0xcccccc }));
@@ -18580,19 +18654,19 @@ function applyCharacterSkin(skinId, parts) {
       break;
     }
     case 'cc_timekeeper': {                      // brown coat + top hat + clock emblem
-      setBody(0x5a4632); setLegs(0x3a2e20); setHeadAll(0xffcc99);
+      setBody(0x5a4632); setLegs(0x3a2e20); setHeadAll(tone);
       _addTopHat(group, 0x3a2e20);
       _addChestEmblem(group, 0xffcc44, 'clock');
       break;
     }
     case 'cc_wildcard': {                         // purple harlequin + ? emblem
-      setBody(0x7a1ea0); setLegs(0x3a0f50); setHeadAll(0xffcc99);
+      setBody(0x7a1ea0); setLegs(0x3a0f50); setHeadAll(tone);
       _addJesterHat(group, 0x7a1ea0, 0xffcc00);
       _addChestEmblem(group, 0xffcc00, 'q');
       break;
     }
     case 'cc_drama': {                           // pink + pigtails + teary eyes
-      setBody(0xe0418c); setLegs(0x7a1f50); setHeadAll(0xffcc99);
+      setBody(0xe0418c); setLegs(0x7a1f50); setHeadAll(tone);
       _addPigtails(group, 0xff8cc0);
       [-0.1, 0.1].forEach(x => {
         const t = new THREE.Mesh(new THREE.SphereGeometry(0.03, 6, 6),
@@ -18602,18 +18676,23 @@ function applyCharacterSkin(skinId, parts) {
       break;
     }
     case 'cc_pixel': {                            // retro green + pixel visor + cap
-      setBody(0x2faa3a); setLegs(0x1c6a26); setHeadAll(0xffcc99);
+      setBody(0x2faa3a); setLegs(0x1c6a26); setHeadAll(tone);
       faceMat.map = null; faceMat.color.setHex(0x10131a); faceMat.needsUpdate = true;
       _addVisor(group, 0x66ff66, 1.2);
       _addCap(group, 0x1c6a26);
       break;
     }
-    // 'default' → leave the randomly-colored recruit as-is
+    default: {
+      // Recruit. The shirt is already seeded in makePlayerMesh; the hair is what
+      // stops Lobby 13 being a row of identical bald heads (#50).
+      if (look) _addSeedHair(group, look.style, look.hair);
+      break;
+    }
   }
   // 🎭 Layer on the character's facial expression (eyes/mouth) for human-faced
   // skins. Visor/mask skins aren't in CHAR_FACES, so their face stays as set above.
   if (CHAR_FACES[skinId]) {
-    faceMat.map = makeCharFace(CHAR_FACES[skinId]);
+    faceMat.map = charFaceFor(skinId, tone);
     faceMat.color.setHex(0xffffff);
     faceMat.needsUpdate = true;
   }
@@ -18646,6 +18725,64 @@ function _addSpikyHair(group, color) {
     s.rotation.z = (x) * 0.8; s.rotation.x = (-z) * 0.8; // fan outward
     s.castShadow = true; group.add(s);
   });
+}
+
+// ── 💇 Seeded hair (#50) ────────────────────────────────────────────────────
+// The Recruit's head was a bare skin-coloured box, so thirty-seven of them in
+// Lobby 13 read as a room of bald clones. Every cut here sits on the same 2.02
+// shelf the helmets and caps already use, sunk 0.08 into the head box so no
+// seam of scalp shows at the join — nothing else has to move.
+let _hairSphereGeo = null;
+function _addSeedHair(group, style, color) {
+  const mat = new THREE.MeshLambertMaterial({ color });
+  const put = (geo, x, y, z) => {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(x, y, z); m.castShadow = true; group.add(m); return m;
+  };
+  // Every cut starts from a slab over the scalp, plus a thin shell down the
+  // sides and back. Without the shell it reads as a hat balanced on a bald head
+  // rather than hair on a head — the scalp slab alone leaves bare skin in the
+  // whole silhouette below it.
+  const capH = style === 'buzz' ? 0.07 : 0.11;
+  put(roundedBoxGeo(0.53, capH, 0.53, 0.035, 3), 0, 2.02 + capH / 2, 0);
+  // The back comes down further than the sides: sideburns should stop about
+  // ear height, but anything short of the jaw at the BACK leaves a bare patch of
+  // scalp that is the whole silhouette when a character is running away from you.
+  const backH = style === 'buzz' ? 0.34 : 0.42;       // head box runs 1.60 → 2.10
+  const sideH = style === 'buzz' ? 0.15 : 0.24;
+  put(roundedBoxGeo(0.53, backH, 0.045, 0.02, 3), 0, 2.03 - backH / 2, -0.247);     // back
+  [-0.247, 0.247].forEach(x =>
+    put(roundedBoxGeo(0.045, sideH, 0.50, 0.02, 3), x, 2.03 - sideH / 2, 0));       // sideburns
+  switch (style) {
+    case 'buzz':                                            // that IS the whole cut
+      break;
+    case 'crop':                                            // short, with a fringe
+      put(roundedBoxGeo(0.50, 0.07, 0.10, 0.03, 3), 0, 2.04, 0.23);
+      break;
+    case 'messy':
+      [[-0.14, 0.05, -0.09], [0.15, 0.07, -0.13], [0.02, 0.09, 0.02],
+       [-0.10, 0.06, 0.15], [0.13, 0.05, 0.14]]
+        .forEach(([x, y, z]) => put(roundedBoxGeo(0.13, 0.13, 0.13, 0.05, 1), x, 2.09 + y, z));
+      break;
+    case 'swoop':                                           // side part over the brow
+      put(roundedBoxGeo(0.34, 0.10, 0.14, 0.04, 3), -0.08, 2.11, 0.20);
+      put(roundedBoxGeo(0.14, 0.13, 0.12, 0.04, 3), 0.19, 2.13, 0.13);
+      break;
+    case 'curls':
+      if (!_hairSphereGeo) _hairSphereGeo = new THREE.SphereGeometry(0.11, 7, 5);
+      [[-0.17, 0.02, -0.06], [-0.05, 0.05, 0.10], [0.09, 0.04, -0.11],
+       [0.17, 0.01, 0.07], [0.00, 0.06, -0.17]]
+        .forEach(([x, y, z]) => put(_hairSphereGeo, x, 2.10 + y, z));
+      break;
+    case 'tail':                                            // gathered at the back
+      // Stands well CLEAR of the shell rather than hanging below it. Flush
+      // against same-coloured hair it is invisible from behind (same normal,
+      // same light); hanging past the head it shows through the neck gap from
+      // the front instead. Proud of the back, stopping at the jaw, does both.
+      put(roundedBoxGeo(0.19, 0.09, 0.10, 0.035, 3), 0, 1.99, -0.29);   // the tie
+      put(roundedBoxGeo(0.16, 0.34, 0.16, 0.06, 3), 0, 1.76, -0.36);
+      break;
+  }
 }
 
 // Glowing eye-visor strip (robots / villains). intensity drives the glow.
@@ -18821,16 +18958,17 @@ function setMeshCrown(group, on) {
 
 function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default', opts = {}) {
   const group = new THREE.Group();
-  const shirt = SHIRT_COLORS[colorIndex % SHIRT_COLORS.length]; colorIndex++;
+  const look  = appearanceFor(name);            // #50: dealt from the name, not a local counter
+  const shirt = look.shirt;
   const pant  = darkenColor(shirt, 0.55);
-  const skin  = 0xffcc99;
+  const skin  = look.tone;
 
   const mkMat = c => new THREE.MeshLambertMaterial({ color: c });
 
   // Head with face — keep the material array so skins can recolor / reface it.
   // Parts are smooth shared blocks of the old sizes (#47); see roundedBoxGeo.
   const headGeo = roundedBoxGeo(0.5, 0.5, 0.5, 0.06, 5);
-  const ft = _defaultFaceTex || (_defaultFaceTex = makeFaceTexture());
+  const ft = faceTextureFor(look.tone);
   const faceMat = new THREE.MeshLambertMaterial({ map: ft });
   const headMats = [ mkMat(skin), mkMat(skin), mkMat(skin), mkMat(skin), faceMat, mkMat(skin) ];
   const head = new THREE.Mesh(headGeo, headMats);
@@ -18899,7 +19037,7 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
   });
 
   // ── Apply skin (recolor + accessories) ────────────────────────────────────
-  applyCharacterSkin(skinId, { group, head, headMats, faceMat, torso, torsoMat, armLimbs, legLimbs });
+  applyCharacterSkin(skinId, { group, head, headMats, faceMat, torso, torsoMat, armLimbs, legLimbs, look });
   if (opts.crown) setMeshCrown(group, true);
   // Hands take the head's colour: skin on most skins, gloves on the armoured ones.
   for (const h of hands) h.material.color.copy(headMats[0].color);
