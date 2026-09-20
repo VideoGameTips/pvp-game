@@ -1354,7 +1354,7 @@ const WEAPON_PRICE_MULT = 0.5;          // P2W items
 const NORMAL_WEAPON_PRICE_MULT = 1;
 const SKIN_CASE_GEN1_COST = 150;
 const SKIN_CASE_DONUT_COST = 4000;
-const SKIN_CASE_GEN2_COST = 300;        // about three matches; the case of entrances
+const SKIN_CASE_GEN2_COST = 5000;       // just under the cheapest P2W weapon (6,000)
 const P2W_ITEM_IDS = new Set([
   'event_horizon', 'storm_core', 'abs_zero', 'solar_lance', 'quantum_repeater',
   'magnetar', 'nebula_mortar', 'prism_engine', 'void_harvester',
@@ -38931,7 +38931,7 @@ function openWeaponSkinsPanel() {
           <button id="buy-skin-case-gen2" style="padding:6px 10px;background:#1c1830;color:#c9a6ff;border:1px solid #a37aff;border-radius:4px;font-family:inherit;font-size:10px;letter-spacing:1px;cursor:pointer;">BUY · ${money(SKIN_CASE_GEN2_COST)}</button>
         </div>
       </div>
-      <div style="font-size:10px;color:#a094bb;margin:5px 0 2px;line-height:1.4;">Every skin that plays an animation when you draw it: crystals assembling into an AK, a balisong flipping open, a knife falling out of a black hole. Cases always deal a skin you do not own yet — the Rainbow AK is the one that almost never comes.</div>
+      <div style="font-size:10px;color:#a094bb;margin:5px 0 2px;line-height:1.4;">Every skin that plays an animation when you draw it: crystals assembling into an AK, a balisong flipping open, a knife falling out of a black hole. A case costs about as much as a P2W weapon, so these are a chase, not pocket change. Each one deals a skin you do not own yet — the Rainbow AK is the one that almost never comes.</div>
     </div>`;
   };
   panel.innerHTML = `

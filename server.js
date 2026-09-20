@@ -225,7 +225,7 @@ const NORMAL_WEAPON_PRICE_MULT = 1;     // everything else: the table as written
 const MATCH_REWARD_MULT = 1;
 const SKIN_CASE_GEN1_COST = 150;        // about two matches; it is cosmetic
 const SKIN_CASE_DONUT_COST = 4000;      // top-tier cosmetic chase case
-const SKIN_CASE_GEN2_COST = 300;        // about three matches; the case of entrances
+const SKIN_CASE_GEN2_COST = 5000;       // just under the cheapest P2W weapon (6,000)
 // Balances saved under the old x400 rewards are rescaled once (ensureShopFields).
 const ECONOMY_V = 2;
 const OLD_MATCH_REWARD_MULT = 400;
