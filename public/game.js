@@ -38751,7 +38751,6 @@ function openWeaponSkinsPanel() {
   const gen2CaseSection = () => {
     const unopened = currentUser?.isAdmin ? 99 : (currentUser?.skinCasePacks?.gen2_entrances || 0);
     const ownedCount = ownedSkinCountFor(GEN2_SKIN_DEFS);
-    const guns = GEN2_SKIN_DEFS.filter(s => s.weapon).length;
     return `<div style="margin-top:18px;border-top:1px solid #6a5520;padding-top:12px;">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
         <div style="font-size:14px;letter-spacing:2px;color:#c9a6ff;">🎬 SKIN CASE GEN 2 · ENTRANCES</div>
@@ -38761,7 +38760,7 @@ function openWeaponSkinsPanel() {
           <button id="buy-skin-case-gen2" style="padding:6px 10px;background:#1c1830;color:#c9a6ff;border:1px solid #a37aff;border-radius:4px;font-family:inherit;font-size:10px;letter-spacing:1px;cursor:pointer;">BUY · ${money(SKIN_CASE_GEN2_COST)}</button>
         </div>
       </div>
-      <div style="font-size:10px;color:#a094bb;margin:5px 0 2px;line-height:1.4;">Every skin that plays an animation when you draw it: ${guns} guns and ${GEN2_SKIN_DEFS.length - guns} melee. Crystals assembling, a balisong flipping open, a knife falling out of a black hole. You are dealt a skin you do not own yet first — the Rainbow AK is the one that almost never comes.</div>
+      <div style="font-size:10px;color:#a094bb;margin:5px 0 2px;line-height:1.4;">Every skin that plays an animation when you draw it: crystals assembling into an AK, a balisong flipping open, a knife falling out of a black hole. Cases always deal a skin you do not own yet — the Rainbow AK is the one that almost never comes.</div>
     </div>`;
   };
   panel.innerHTML = `
@@ -38821,6 +38820,7 @@ function openWeaponSkinsPanel() {
       const ms = MELEE_MODEL_SKINS.find(m => m.id === cell.dataset.mmskin);
       if (isLegendLocked(ms)) { alert('FFA Legend skins are earned in FFA: deal 1,000,000 damage or win 5,000 FFA matches.'); return; }
       if (ms && DONUT_MELEE_MODEL_SKIN_IDS.has(ms.id) && !ownsSkin(ms.id)) { alert('You have not pulled that skin yet. Open Donut Cases in Lobby 13.'); return; }
+      if (ms && GEN2_MELEE_MODEL_SKIN_IDS.has(ms.id) && !ownsSkin(ms.id)) { alert('You have not pulled that skin yet. Open Gen 2 cases in Lobby 13.'); return; }
       setMeleeModelSkin(cell.dataset.mmbase, cell.dataset.mmskin || null);
       openWeaponSkinsPanel();
     });
@@ -38830,6 +38830,7 @@ function openWeaponSkinsPanel() {
       const id = cell.dataset.mskin;
       if (id && DONUT_MODEL_SKIN_IDS.has(id) && !ownsSkin(id)) { alert('You have not pulled that skin yet. Open Donut Cases in Lobby 13.'); return; }
       if (id && GEN1_GATED_MODEL_SKIN_IDS.has(id) && !ownsSkin(id)) { alert('You have not pulled that skin yet. Open Gen 1 cases in Lobby 13.'); return; }
+      if (id && GEN2_MODEL_SKIN_IDS.has(id) && !ownsSkin(id)) { alert('You have not pulled that skin yet. Open Gen 2 cases in Lobby 13.'); return; }
       if (isLegendLocked(MODEL_SKINS.find(m => m.id === id))) { alert('FFA Legend skins are earned in FFA: deal 1,000,000 damage or win 5,000 FFA matches.'); return; }
       setModelSkin(cell.dataset.mweapon, id || null);
       openWeaponSkinsPanel();      // redraw so the selection moves
