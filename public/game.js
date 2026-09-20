@@ -23749,7 +23749,7 @@ function tryMelee() {
   const swingModel = meleeModels[selectedMeleeIdx];
   if (swingModel) {
     if (meleeSwingType === 'punch') swingModel._punchLeft = !swingModel._punchLeft;
-    else if (meleeSwingType === 'slash') swingModel._slashDir = (swingModel._slashDir || 1) * -1;
+    else if (meleeSwingType === 'slash') swingModel._slashSide = (swingModel._slashSide || 1) * -1;
     else if (meleeSwingType === 'thrust') swingModel._thrustDir = (swingModel._thrustDir || 1) * -1;
   }
 
@@ -32586,52 +32586,53 @@ function updateMeleeSwing(dt) {
   } else {
     // SLASH — the default type, so this is most of the roster (bat, sabre,
     // katana, cricket bat, golf club, and anything else not explicitly
-    // assigned one of the other types above). A wide horizontal side-to-side
-    // sweep that ALTERNATES direction every swing (left, right, left,
-    // right — dir flipped once in tryMelee) so repeated swings actually read
-    // as cutting side to side rather than the same stroke over and over, or
-    // worse, a forward stab. Deliberately light on pz (forward push) — the
-    // travel is almost all px/rz, which is what makes it a swing. A brief
-    // sine-eased overshoot after the cut sells the weapon "biting" into
-    // something instead of passing through empty air. Windup/recovery were
-    // trimmed and the cut phase widened versus the old curve so the whole
-    // thing reads snappier — this is what "the bat feels slow" was about.
-    const dir = model._slashDir || 1;
-    if (t < 0.16) {
-      const s = t / 0.16;
-      const e = s * s; // ease-in: quick wind-up
-      px = lerp(0.10, 0.10 + 0.15 * dir, e);
-      py = lerp(-0.12, -0.06, e);
-      pz = lerp(-0.20, -0.17, e);
-      rx = lerp(0, -0.20, e);
-      rz = lerp(0, -0.78 * dir, e);   // blade cocked back
-    } else if (t < 0.52) {
-      const s = (t - 0.16) / 0.36;
-      const e = 1 - Math.pow(1 - s, 2.2); // ease-out: the actual cut
-      px = lerp(0.10 + 0.15 * dir, 0.10 - 0.15 * dir, e); // travels all the way across
-      py = lerp(-0.06, -0.19, e);
-      pz = lerp(-0.17, -0.23, e);     // modest push — a cut, not a lunge
-      rx = lerp(-0.20, 0.22, e);
-      rz = lerp(-0.78 * dir, 0.95 * dir, e); // the big arc that sells the swing
-    } else if (t < 0.65) {
-      // Impact micro-bounce: a small overshoot past the swing's end then
-      // settle back, the way a real blade "bites" and rebounds a touch.
-      const s = (t - 0.52) / 0.13;
-      const e = Math.sin(s * Math.PI); // 0 → 1 → 0
-      px = 0.10 - 0.15 * dir;
-      py = -0.19;
-      pz = -0.23;
-      rx = 0.22 - 0.05 * e;
-      rz = 0.95 * dir + 0.08 * dir * e;
+    // assigned one of the other types above).
+    //
+    // A diagonal wind-up-and-whack, not a flat horizontal slice: cock the
+    // weapon UP on whichever side it's currently parked, then chop diagonally
+    // DOWN and across to the other side — and STAY there. No snap back to a
+    // neutral center between swings. So a combo reads as a continuous
+    // alternating weave (parked left -> whack -> parked right -> whack ->
+    // parked left...), the way someone actually swings a bat or blade,
+    // instead of a sawtooth that resets to dead-center every single hit.
+    const side = model._slashSide || 1; // the side THIS swing ends parked on
+    const from = -side;                  // the side it starts cocked on
+    if (t < 0.22) {
+      // Wind-up: raise and cock further back on the starting side. Starts
+      // from the exact values the PREVIOUS swing's settle phase ends on
+      // (py -0.22, pz -0.26, rx 0.22) so back-to-back swings connect with
+      // zero pop — on the very first swing after equipping, that's just a
+      // hair off MELEE_REST_POS, not worth special-casing.
+      const s = t / 0.22;
+      const e = s * s;
+      px = lerp(0.10 + 0.15 * from, 0.10 + 0.18 * from, e);
+      py = lerp(-0.22, -0.01, e);   // raise up high
+      pz = lerp(-0.26, -0.15, e);
+      rx = lerp(0.22, -0.32, e);    // tilt back over the shoulder
+      rz = lerp(0.82 * from, 1.05 * from, e);
+    } else if (t < 0.58) {
+      // The whack: a real diagonal chop down and across, not a lateral pass.
+      const s = (t - 0.22) / 0.36;
+      const e = 1 - Math.pow(1 - s, 2.4); // ease-out: fast, decisive
+      px = lerp(0.10 + 0.18 * from, 0.10 + 0.15 * side, e);
+      py = lerp(-0.01, -0.22, e);   // the actual downward whack
+      pz = lerp(-0.15, -0.26, e);
+      rx = lerp(-0.32, 0.22, e);
+      rz = lerp(1.05 * from, 0.82 * side, e);
     } else {
-      const s = (t - 0.65) / 0.35;
-      const e = s * (2 - s);
-      px = lerp(0.10 - 0.15 * dir, 0.10, e);
-      py = lerp(-0.19, -0.12, e);
-      pz = lerp(-0.23, -0.20, e);
-      rx = lerp(0.22, 0, e);
-      rz = lerp(0.95 * dir, 0, e);
+      // Settle: a small bounce, then HOLD parked on `side` — no return to
+      // center. The next swing's wind-up picks up from exactly here.
+      const s = (t - 0.58) / 0.42;
+      const bump = s < 0.3 ? Math.sin((s / 0.3) * Math.PI) * 0.05 : 0;
+      px = 0.10 + 0.15 * side;
+      py = -0.22 + bump;
+      pz = -0.26 + bump * 0.4;
+      rx = 0.22 - bump * 0.5;
+      rz = 0.82 * side;
     }
+    model.position.set(px, py, pz);
+    model.rotation.set(rx, 0, rz);
+    return; // parked pose is the resting pose now — skip the rest-snap below
   }
 
   model.position.set(px, py, pz);
