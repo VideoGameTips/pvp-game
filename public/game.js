@@ -1015,6 +1015,11 @@ function ownedSkinIds() {
   if (currentUser?.isAdmin) return new Set(GEN1_SKIN_DEFS.map(s => s.id));
   return new Set(currentUser?.skinInventory || []);
 }
+function ownedSkinCountFor(defs) {
+  if (currentUser?.isAdmin) return defs.length;
+  const owned = ownedSkinIds();
+  return defs.filter(s => owned.has(s.id)).length;
+}
 function ownsSkin(id) {
   return !id || id === 'stock' || currentUser?.isAdmin || ownedSkinIds().has(id);
 }
@@ -1339,6 +1344,7 @@ const CURRENCY_ICON = '🍩';
 const WEAPON_PRICE_MULT = 0.5;          // P2W items
 const NORMAL_WEAPON_PRICE_MULT = 1;
 const SKIN_CASE_GEN1_COST = 150;
+const SKIN_CASE_DONUT_COST = 4000;
 const P2W_ITEM_IDS = new Set([
   'event_horizon', 'storm_core', 'abs_zero', 'solar_lance', 'quantum_repeater',
   'magnetar', 'nebula_mortar', 'prism_engine', 'void_harvester',
@@ -13673,6 +13679,123 @@ function buildRainbowAK() {
   return g;
 }
 
+function _donutMats() {
+  return {
+    dough: new THREE.MeshPhongMaterial({ color: 0xc8844a, shininess: 58, specular: 0xffd6a0 }),
+    glaze: new THREE.MeshPhongMaterial({ color: 0xff78bd, shininess: 150, specular: 0xffffff, emissive: 0x2a0612, emissiveIntensity: 0.12 }),
+    cream: new THREE.MeshPhongMaterial({ color: 0xffe7f3, shininess: 130, specular: 0xffffff }),
+    choc: new THREE.MeshPhongMaterial({ color: 0x5a2d18, shininess: 95, specular: 0xa07858 }),
+    steel: GUN_MATS.steel(),
+    dark: GUN_MATS.inner(),
+    grip: GUN_MATS.grip(),
+  };
+}
+
+function _donutSprinkleMat(i) {
+  const colors = [0xff4a7a, 0x66ddff, 0xffee55, 0x7cff77, 0xba7cff, 0xffffff];
+  return new THREE.MeshBasicMaterial({ color: colors[i % colors.length] });
+}
+
+function _buildDonutRing(radius = 0.038, tube = 0.010, glazeScale = 0.92) {
+  const mats = _donutMats();
+  const ring = new THREE.Group();
+  const dough = new THREE.Mesh(new THREE.TorusGeometry(radius, tube, 16, 36), mats.dough);
+  dough.castShadow = true; ring.add(dough);
+  const glaze = new THREE.Mesh(new THREE.TorusGeometry(radius, tube * 0.42, 10, 36, Math.PI * 2), mats.glaze);
+  glaze.scale.set(glazeScale, glazeScale, 1.03);
+  glaze.position.z = tube * 0.36;
+  glaze.castShadow = true; ring.add(glaze);
+  for (let i = 0; i < 12; i++) {
+    const a = i / 12 * Math.PI * 2;
+    const r = radius + (i % 3 - 1) * tube * 0.26;
+    const s = new THREE.Mesh(new THREE.BoxGeometry(tube * 0.62, tube * 0.16, tube * 0.18), _donutSprinkleMat(i));
+    s.position.set(Math.cos(a) * r, Math.sin(a) * r, tube * 0.84);
+    s.rotation.z = a + (i % 2 ? 0.9 : -0.45);
+    s.userData.eqFx = true;
+    ring.add(s);
+  }
+  return ring;
+}
+
+function _addDonutOrbit(g, radius = 0.075, z = -0.060) {
+  const orbit = [];
+  for (let i = 0; i < 8; i++) {
+    const s = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.003, 0.004), _donutSprinkleMat(i));
+    s.userData.eqFx = true;
+    g.add(s);
+    orbit.push(s);
+  }
+  g._calm = () => orbit.forEach(s => { s.visible = false; });
+  g._tick = (dt, now, assembling) => {
+    orbit.forEach((s, i) => {
+      s.visible = !assembling;
+      const a = now * 1.9 + i * (Math.PI * 2 / orbit.length);
+      s.position.set(Math.cos(a) * radius, 0.018 + Math.sin(a * 1.4) * 0.028, z + Math.sin(a) * radius * 0.55);
+      s.rotation.set(now * 2 + i, 0, -a);
+    });
+  };
+}
+
+function buildDonutRevolver() {
+  const g = new THREE.Group();
+  const M = _donutMats();
+  gpBox(g, M.choc, 0.034, 0.050, 0.088, 0, 0.018, 0.036);           // chocolate frame
+  gpBox(g, M.dark, 0.035, 0.006, 0.070, 0, 0.044, 0.038);           // rear sight groove
+  gpPart(g, 'main', () => {
+    const ring = _buildDonutRing(0.033, 0.010, 0.94);
+    ring.position.set(0, 0.018, -0.030);
+    g.add(ring);
+    for (let i = 0; i < 6; i++) {
+      const a = i / 6 * Math.PI * 2;
+      gpCyl(g, M.dark, 0.0048, 0.0048, 0.044, 8, Math.cos(a) * 0.020, 0.018 + Math.sin(a) * 0.020, -0.030);
+    }
+    gpCyl(g, M.cream, 0.0060, 0.0060, 0.052, 10, 0, 0.018, -0.030);
+  }, { x: 0, y: 0.018, z: -0.030 });
+  g._parts.main._chambers = 6;
+  gpCyl(g, M.steel, 0.0105, 0.0105, 0.126, 14, 0, 0.021, -0.126);
+  gpCyl(g, M.dark, 0.0060, 0.0060, 0.010, 10, 0, 0.021, -0.188);
+  gpBox(g, M.choc, 0.020, 0.014, 0.118, 0, 0.004, -0.122);          // frosting-smeared underlug
+  gpBox(g, M.cream, 0.016, 0.006, 0.080, 0, 0.036, -0.128);         // vanilla sight rib
+  gpBox(g, M.cream, 0.005, 0.012, 0.007, 0, 0.044, -0.180);         // front sight
+  gpPlate(g, M.grip, [[0.040,-0.006],[0.070,-0.020],[0.074,-0.096],[0.044,-0.112],[0.020,-0.052],[0.018,-0.012]], 0.038, 0);
+  for (let i = 0; i < 4; i++) gpBox(g, M.choc, 0.040, 0.004, 0.024, 0, -0.030 - i * 0.018, 0.040 + i * 0.006, 0.27);
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.018, 0.0034, 6, 12, Math.PI * 1.05), M.steel);
+  guard.rotation.set(0, Math.PI/2, -0.4); guard.position.set(0, -0.024, 0.018); g.add(guard);
+  gpBox(g, M.cream, 0.005, 0.014, 0.005, 0, -0.016, 0.018, 0.2);
+  gpBox(g, M.steel, 0.010, 0.014, 0.012, 0, 0.056, 0.076, -0.40);
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.021, -0.196); g.add(flash);
+  _addDonutOrbit(g, 0.070, -0.040);
+  g._flash = flash; g._kickZ = 0.022; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.1, -0.1, -0.22); return g;
+}
+
+function buildDonutKatana() {
+  const g = new THREE.Group();
+  const M = _donutMats();
+  const guard = _buildDonutRing(0.036, 0.010, 0.96);
+  guard.rotation.z = Math.PI / 2;
+  guard.position.set(0, 0.006, 0.050);
+  g.add(guard);
+  gpBox(g, M.choc, 0.026, 0.038, 0.135, 0, -0.055, 0.095, 0.10);    // chocolate grip
+  for (let i = 0; i < 5; i++) gpBox(g, M.cream, 0.028, 0.005, 0.018, 0, -0.022 - i * 0.020, 0.076 + i * 0.010, 0.10);
+  gpBox(g, M.cream, 0.022, 0.028, 0.020, 0, -0.130, 0.142, 0.10);   // pommel icing
+  gpBox(g, M.steel, 0.018, 0.020, 0.385, 0, 0.036, -0.170, -0.06);  // blade core
+  gpBox(g, M.glaze, 0.020, 0.006, 0.350, 0, 0.051, -0.185, -0.06);  // frosting ridge
+  gpBox(g, M.dark, 0.004, 0.024, 0.370, -0.012, 0.037, -0.175, -0.06);
+  for (let i = 0; i < 14; i++) {
+    const s = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.003, 0.004), _donutSprinkleMat(i));
+    s.position.set((i % 2 ? 0.006 : -0.006), 0.057, -0.025 - i * 0.023);
+    s.rotation.z = (i % 3 - 1) * 0.7;
+    s.userData.eqFx = true;
+    g.add(s);
+  }
+  const tip = new THREE.Mesh(new THREE.ConeGeometry(0.015, 0.046, 4), M.steel);
+  tip.rotation.x = -Math.PI / 2 - 0.06; tip.position.set(0, 0.036, -0.392); g.add(tip);
+  _addDonutOrbit(g, 0.082, -0.135);
+  g._greebled = true; g._handDetailed = true;
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+
 function buildHairDryer() {
   // 💨 MP-40 -> hair dryer. Cream housing, a chrome barrel with the heating
   // element glowing inside, a cable coiling off the butt and two slider
@@ -20856,6 +20979,23 @@ function _equipStep(e, t) {
         c.quaternion.copy(p.rq).multiply(drift).slerp(h.q, k);
         c.scale.copy(h.s).multiplyScalar(0.55 + 0.45 * k);
         break; }
+      case 'hover': {
+        // Donut weapons: every piece hangs in the air on its own loose,
+        // wobbling circle, spinning the whole time -- properly floating,
+        // not just drifting -- then in the last stretch it settles down
+        // out of the orbit and locks into the hand.
+        const r = (e.melee ? 0.10 : 0.15) + p.delay * 0.035;
+        const a = now * 1.35 + p.phase;
+        const orbit = h.p.clone();
+        orbit.x += Math.cos(a) * r;
+        orbit.y += Math.sin(a * 0.8 + p.phase) * r * 0.6;
+        orbit.z += Math.sin(a) * r * 0.55;
+        const settle = _eqEase(_eqClamp((t - 0.55 - p.delay * 0.15) / 0.40));
+        c.position.copy(orbit).lerp(h.p, settle);
+        const spin = new THREE.Quaternion().setFromAxisAngle(p.spin, now * 4.4 + p.phase);
+        c.quaternion.copy(p.rq).multiply(spin).slerp(h.q, settle);
+        c.scale.copy(h.s).multiplyScalar(0.65 + 0.35 * settle);
+        break; }
       case 'unfold': {
         // Folded flat, then opened out a panel at a time, back to front.
         const k = _eqEase(_eqClamp((t - p.delay * 0.6) / 0.4));
@@ -24475,9 +24615,33 @@ const MODEL_SKINS = [
   { id: 'burst_cannon_phantom', weapon: 'burst_cannon', name: 'Phantom Cannon', rarity: 'rare',
     sw: ['#6affc8', '#0a2a1c'], build: buildPhantomCannon,
     blurb: 'Fades up out of nothing. Breathes, and sheds wisps.' },
+  { id: 'p90_neon_sign', weapon: 'p90', name: 'Neon P90', rarity: 'rare',
+    sw: ['#14141a', '#3ae8ff'], build: buildNeonSMG,
+    blurb: 'A compact signboard with drifting neon tubes. It warms up when drawn.' },
+  { id: 'rpd_clockwork_belt', weapon: 'rpd', name: 'Clockwork RPD', rarity: 'rare',
+    sw: ['#c8a040', '#b8683a'], build: buildClockworkCoilgun,
+    blurb: 'A belt-fed machine that ticks like a wound-up brass watch.' },
+  { id: 'railgun_constellation', weapon: 'railgun', name: 'Constellation Railgun', rarity: 'rare',
+    sw: ['#1c1660', '#e8c050'], build: buildConstellationLauncher,
+    blurb: 'Stars sketch the barrel first. The rails arrive after the sky map.' },
+  { id: 'deagle_phantom', weapon: 'desert_eagle', name: 'Phantom Deagle', rarity: 'rare',
+    sw: ['#6affc8', '#0a2a1c'], build: buildPhantomCannon,
+    blurb: 'A hand cannon that fades into your grip and keeps shedding ghostlight.' },
+  { id: 'paintball_fishbowl', weapon: 'paintball', name: 'Fishbowl Paintball', rarity: 'rare',
+    sw: ['#2a8ae8', '#ff7a1a'], build: buildFishbowlCarbine,
+    blurb: 'A sloshing hopper, glass belly, and three fish who did not sign up for this.' },
+  { id: 'shorty_8bit', weapon: 'shorty', name: '8-Bit Shorty', rarity: 'good',
+    sw: ['#2a2e34', '#dd3333'], build: buildPixelSG8,
+    blurb: 'A tiny pixel shotgun. Loads in block by block, then barks in chiptune.' },
+  { id: 'vector_portal', weapon: 'vector', name: 'Portal Vector', rarity: 'rare',
+    sw: ['#1c2230', '#ff8a22'], build: buildPortalSG8,
+    blurb: 'Steps through a ring of orange light and lands already pointed forward.' },
   { id: 'ak20_rainbow', weapon: 'ak20', name: 'Rainbow AK', rarity: 'legendary',
     sw: ['#ff3a3a', '#8a3aff'], build: buildRainbowAK, look: { rainbow: true },
     blurb: 'Split out of a prism when drawn. The rainbow flows down it, and so do its rounds.' },
+  { id: 'revolver_donut', weapon: 'revolver', name: 'The Glazer', rarity: 'donut',
+    sw: ['#ff78bd', '#c8844a'], build: buildDonutRevolver, look: { bulletColor: 0xff78bd, bulletSize: 0.075 },
+    blurb: 'The cylinder is a frosted donut. Sprinkles orbit it because subtlety lost.' },
 ];
 // 🔥 FFA Legend skins unlock from FFA: a million damage or five thousand wins.
 // Wrapped because it runs while the file is still loading -- skins restored
@@ -24488,6 +24652,13 @@ function ffaLegendUnlocked() {
   try { return !!(currentUser && (currentUser.isAdmin || currentUser.ffaLegend)); } catch (e) { return false; }
 }
 function isLegendLocked(skin) { return !!(skin && skin.rarity === 'legend' && !ffaLegendUnlocked()); }
+function isCaseSkinLocked(skin) {
+  if (!skin) return false;
+  const caseLocked = (typeof GATED_MODEL_SKIN_IDS !== 'undefined' && GATED_MODEL_SKIN_IDS.has(skin.id)) ||
+    (typeof DONUT_MELEE_MODEL_SKIN_IDS !== 'undefined' && DONUT_MELEE_MODEL_SKIN_IDS.has(skin.id));
+  if (!caseLocked) return false;
+  try { return !ownsSkin(skin.id); } catch (e) { return true; }
+}
 function ffaLegendProgressText() {
   let d = 0, w = 0;
   try { d = Math.floor(currentUser?.ffaDamage || 0); w = currentUser?.ffaWins || 0; } catch (e) {}
@@ -24498,9 +24669,9 @@ function ffaLegendProgressText() {
 function refreshLegendSkins() {
   try {
     for (const [wid, sid] of Object.entries(equippedModelSkins))
-      if (MODEL_SKINS.some(m => m.id === sid && m.rarity === 'legend')) applyModelSkin(wid);
+      if (MODEL_SKINS.some(m => m.id === sid && (m.rarity === 'legend' || GATED_MODEL_SKIN_IDS.has(m.id)))) applyModelSkin(wid);
     for (const [bid, sid] of Object.entries(equippedMeleeModelSkins))
-      if (MELEE_MODEL_SKINS.some(m => m.id === sid && m.rarity === 'legend')) applyMeleeModelSkin(bid);
+      if (MELEE_MODEL_SKINS.some(m => m.id === sid && (m.rarity === 'legend' || DONUT_MELEE_MODEL_SKIN_IDS.has(m.id)))) applyMeleeModelSkin(bid);
   } catch (e) {}
 }
 const MODEL_SKINS_BY_WEAPON = {};
@@ -24511,12 +24682,16 @@ for (const ms of MODEL_SKINS) (MODEL_SKINS_BY_WEAPON[ms.weapon] ||= []).push(ms)
 // They still live in MODEL_SKINS itself — same picker, same build-fn model
 // swap — this only adds them to the unlock pool and to the picker's lock
 // check below.
-const GATED_MODEL_SKIN_IDS = new Set([
+const GEN1_GATED_MODEL_SKIN_IDS = new Set([
   'ak20_ak47_wood', 'burst_m4a1', 'flechette_bullpup', 'vector_mp5',
   'rpd_m249', 'lever_winchester94', 'pistol_m9', 'sg8_remington870',
   'srx_dragunov', 'revolver_python', 'grenade_launcher_mgl', 'flamethrower_m2',
 ]);
-for (const id of GATED_MODEL_SKIN_IDS) {
+const DONUT_SKIN_IDS = ['revolver_donut', 'katana_donut'];
+const DONUT_MODEL_SKIN_IDS = new Set(['revolver_donut']);
+const DONUT_MELEE_MODEL_SKIN_IDS = new Set(['katana_donut']);
+const GATED_MODEL_SKIN_IDS = new Set([...GEN1_GATED_MODEL_SKIN_IDS, ...DONUT_MODEL_SKIN_IDS]);
+for (const id of GEN1_GATED_MODEL_SKIN_IDS) {
   const ms = MODEL_SKINS.find(m => m.id === id);
   if (ms && !GEN1_SKIN_BY_ID[id]) { GEN1_SKIN_DEFS.push(ms); GEN1_SKIN_BY_ID[id] = ms; }
 }
@@ -24545,7 +24720,7 @@ function applyModelSkin(weaponId) {
   if (idx < 0 || !weaponModels[idx]) return;
   if (!(idx in _baseWeaponModels)) _baseWeaponModels[idx] = weaponModels[idx];
   const want = equippedModelSkins[weaponId];
-  const skin = MODEL_SKINS.find(m => m.id === want && m.weapon === weaponId && !isLegendLocked(m));
+  const skin = MODEL_SKINS.find(m => m.id === want && m.weapon === weaponId && !isLegendLocked(m) && !isCaseSkinLocked(m));
   let next;
   if (!skin) next = _baseWeaponModels[idx];
   else {
@@ -26123,6 +26298,34 @@ const MELEE_MODEL_SKINS = [
     sw: ['#ffb7d5', '#f6f0f2'], build: buildSakuraKatana,
     blurb: 'Blooms out of a swirl of petals, and keeps shedding them.',
     equip: 'petals', equipMs: 1100, equipSfx: ['bloom', 'shing'] },
+  { id: 'lightsabre_singularity', melee: 'lightsabre', name: 'Singularity Saber', rarity: 'rare',
+    sw: ['#050507', '#ffffff'], build: buildSingularityKnife,
+    blurb: 'A lightsabre compressed into a black hole. Sparks orbit the edge.',
+    equip: 'blackhole', equipMs: 1100, equipSfx: ['singularity', 'chime'] },
+  { id: 'katana_thunder', melee: 'katana', name: 'Thunder Katana', rarity: 'rare',
+    sw: ['#2a2e36', '#6ad0ff'], build: buildThunderSpear,
+    blurb: 'A long storm blade that arrives on a strike and crackles while held.',
+    equip: 'strike', equipMs: 800, equipSfx: ['thunder', null] },
+  { id: 'knife_balloon', melee: 'knife', name: 'Balloon Knife', rarity: 'good',
+    sw: ['#ff3a4a', '#ffd23a'], build: buildBalloonSword,
+    blurb: 'Inflates into a squeaky little blade and wobbles like it knows.',
+    equip: 'inflate', equipMs: 1000, equipSfx: ['inflate', 'squeak'] },
+  { id: 'bat_inflatable', melee: 'bat', name: 'Inflatable Bat', rarity: 'good',
+    sw: ['#e03a44', '#f0c020'], build: buildInflatableHammer,
+    blurb: 'Soft plastic, loud squeak, suspiciously real knockback.',
+    equip: 'inflate', equipMs: 1000, equipSfx: ['inflate', 'squeak'] },
+  { id: 'frying_pan_pizza_cutter', melee: 'frying_pan', name: 'Pizza Pan', rarity: 'good',
+    sw: ['#c2c8d0', '#c8342a'], build: buildPizzaCutter,
+    blurb: 'The pan became a cutter. The handle stayed brave.',
+    equip: 'flip', equipMs: 850, equipSfx: ['whoosh', 'clink'] },
+  { id: 'shock_baton_thunder', melee: 'shock_baton', name: 'Thunder Baton', rarity: 'rare',
+    sw: ['#2a2e36', '#6ad0ff'], build: buildThunderSpear,
+    blurb: 'The baton traded sparks for lightning and got carried away.',
+    equip: 'strike', equipMs: 800, equipSfx: ['thunder', null] },
+  { id: 'katana_donut', melee: 'katana', name: 'Ring King', rarity: 'donut',
+    sw: ['#ff78bd', '#ffe7f3'], build: buildDonutKatana,
+    blurb: 'A frosted ring guard, icing down the blade, and sprinkles circling the swing.',
+    equip: 'hover', equipMs: 1300, equipSfx: ['whoosh', 'chime'] },
   { id: 'spear_thunder', melee: 'spear', name: 'Thunder Spear', rarity: 'rare',
     sw: ['#2a2e36', '#6ad0ff'], build: buildThunderSpear,
     blurb: 'Arrives on a lightning strike. Arcs crawl along the shaft.',
@@ -26134,6 +26337,11 @@ const MELEE_MODEL_SKINS = [
 ];
 const MELEE_MODEL_SKINS_BY_BASE = {};
 for (const ms of MELEE_MODEL_SKINS) (MELEE_MODEL_SKINS_BY_BASE[ms.melee] ||= []).push(ms);
+const DONUT_SKIN_DEFS = [
+  ...MODEL_SKINS.filter(s => DONUT_MODEL_SKIN_IDS.has(s.id)),
+  ...MELEE_MODEL_SKINS.filter(s => DONUT_MELEE_MODEL_SKIN_IDS.has(s.id)),
+];
+const DONUT_SKIN_BY_ID = Object.fromEntries(DONUT_SKIN_DEFS.map(s => [s.id, s]));
 
 let equippedMeleeModelSkins = (() => {
   try { return JSON.parse(localStorage.getItem('pvp_melee_model_skins')) || {}; } catch (e) { return {}; }
@@ -26145,7 +26353,7 @@ function applyMeleeModelSkin(baseId) {
   if (idx < 0 || !meleeModels[idx]) return;
   if (!(idx in _baseMeleeModels)) _baseMeleeModels[idx] = meleeModels[idx];
   const want = equippedMeleeModelSkins[baseId];
-  const skin = MELEE_MODEL_SKINS.find(s => s.id === want && s.melee === baseId && !isLegendLocked(s));
+  const skin = MELEE_MODEL_SKINS.find(s => s.id === want && s.melee === baseId && !isLegendLocked(s) && !isCaseSkinLocked(s));
   let next;
   if (!skin) next = _baseMeleeModels[idx];
   else {
@@ -27621,10 +27829,28 @@ const SKIN_FX = {
     equip: 'constellation', equipMs: 1200, equipSfx: ['starfall', 'chime'] },
   burst_cannon_phantom: { sound: _fxS('phantom', .34, .24, 330, 300),
     equip: 'haunt', equipMs: 1100, equipSfx: ['boo', null] },
+  p90_neon_sign: { sound: _fxS('laser', .22, .07, 1800, 300),
+    equip: 'neon', equipMs: 1000, equipSfx: ['neonbuzz', 'hum'] },
+  rpd_clockwork_belt: { sound: _fxS('clockwork', .30, .12, 900, 2800),
+    equip: 'windup', equipMs: 1000, equipSfx: ['windup', 'ding'] },
+  railgun_constellation: { sound: _fxS('cosmic', .26, .20, 2200, 180),
+    equip: 'constellation', equipMs: 1200, equipSfx: ['starfall', 'chime'] },
+  deagle_phantom: { sound: _fxS('phantom', .34, .24, 330, 300),
+    equip: 'haunt', equipMs: 1100, equipSfx: ['boo', null] },
+  paintball_fishbowl: { sound: _fxS('bubblegun', .26, .10, 300, 900),
+    equip: 'fill', equipMs: 1100, equipSfx: ['pour', 'bloop'],
+    reload: _fxR(_RK.top(), [.30,.38,.46,.54].map(t => RP(t,'drop','arrive',1,'breech')), [[.28,'glug']], 'bloop') },
+  shorty_8bit: { sound: _fxS('chip', .40, .22, 300, 60),
+    reload: _fxR(RELOAD_KEYS.shorty || RELOAD_KEYS.sg8, [RP(.30,'pixel','eject',2), RP(.56,'pixel','arrive',2)], null, 'blip'),
+    equip: 'pixelate', equipMs: 800, equipSfx: ['blip', null] },
+  vector_portal: { sound: _fxS('warp', .30, .18, 180, 1100),
+    equip: 'warp', equipMs: 900, equipSfx: ['warp', 'chime'] },
   ak20_rainbow: { sound: _fxS('rainbow', .27, .10, 1047, 0),
     equip: 'prism', equipMs: 1600, equipSfx: ['prismbeam', null],
     equipBeats: [[.28,'chord'], [.80,'shatter'], [.84,'rainbowburst']],
     reload: _fxR(RELOAD_KEYS.ak20, (RELOAD_PROPS.ak20 || []).map(e => e.k === 'mag' ? Object.assign({}, e, { k: 'rainbowmag' }) : e), null, 'chord') },
+  revolver_donut: { sound: _fxS('splat', .30, .10, 620, 1180),
+    equip: 'hover', equipMs: 1300, equipSfx: ['whoosh', 'chime'] },
 };
 
 function _reloadPose(track, t) {
@@ -37733,14 +37959,26 @@ async function trialWeapon(weaponId) {
   return true;
 }
 
-async function buySkinCaseGen1() {
+const CLIENT_SKIN_CASES = {
+  gen1_basic: { name: 'Skin Case Gen 1', shortName: 'GEN 1', cost: SKIN_CASE_GEN1_COST, defs: () => GEN1_SKIN_DEFS },
+  donut: { name: 'Donut Case', shortName: 'DONUT', cost: SKIN_CASE_DONUT_COST, defs: () => DONUT_SKIN_DEFS },
+};
+function skinCaseDef(caseId) { return CLIENT_SKIN_CASES[caseId] || CLIENT_SKIN_CASES.gen1_basic; }
+function skinDefById(skinId) {
+  return GEN1_SKIN_BY_ID[skinId] || DONUT_SKIN_BY_ID[skinId] ||
+    MODEL_SKINS.find(s => s.id === skinId) || MELEE_MODEL_SKINS.find(s => s.id === skinId) ||
+    { name: skinId || 'Mystery Skin', rarity: 'basic', blurb: 'A thing happened.' };
+}
+
+async function buySkinCase(caseId = 'gen1_basic') {
   if (!currentUser) { alert('Log in first.'); return false; }
-  if ((currentUser.credits ?? 0) < SKIN_CASE_GEN1_COST) {
-    alert(`Not enough donuts.\nNeed ${money(SKIN_CASE_GEN1_COST)} · You have ${currentUser.credits ?? 0}`);
+  const c = skinCaseDef(caseId);
+  if ((currentUser.credits ?? 0) < c.cost) {
+    alert(`Not enough donuts.\nNeed ${money(c.cost)} · You have ${currentUser.credits ?? 0}`);
     return false;
   }
-  if (!await uiConfirm(`Buy one Skin Case Gen 1 for ${money(SKIN_CASE_GEN1_COST)}?\n\nOpen it in Lobby 13 to reveal one basic stat-changing skin.`)) return false;
-  const r = await authRequest('/shop/buy-skin-case', { username: currentUser.username, password: currentUser.password, caseId: 'gen1_basic' });
+  if (!await uiConfirm(`Buy one ${c.name} for ${money(c.cost)}?\n\nOpen it in Lobby 13 to reveal one cosmetic skin.`)) return false;
+  const r = await authRequest('/shop/buy-skin-case', { username: currentUser.username, password: currentUser.password, caseId });
   if (!r || r.error) { alert('❌ ' + (r?.error || 'shop error')); return false; }
   currentUser.credits = r.credits ?? currentUser.credits;
   currentUser.skinCasePacks = r.skinCasePacks || currentUser.skinCasePacks || {};
@@ -37748,32 +37986,37 @@ async function buySkinCaseGen1() {
   updateUserInfoBar();
   return true;
 }
+async function buySkinCaseGen1() { return buySkinCase('gen1_basic'); }
 
-async function openSkinCaseGen1() {
+async function openSkinCase(caseId = 'gen1_basic') {
   if (!currentUser) { alert('Log in first.'); return false; }
   if (!inLobby) { alert('Open skin cases in Lobby 13. It is more dramatic there.'); return false; }
-  const count = currentUser.isAdmin ? 99 : (currentUser.skinCasePacks?.gen1_basic || 0);
-  if (count <= 0) { alert(`No unopened Gen 1 cases. Buy one for ${money(SKIN_CASE_GEN1_COST)}.`); return false; }
+  const c = skinCaseDef(caseId);
+  const defs = c.defs();
+  const count = currentUser.isAdmin ? 99 : (currentUser.skinCasePacks?.[caseId] || 0);
+  if (count <= 0) { alert(`No unopened ${c.name}s. Buy one for ${money(c.cost)}.`); return false; }
   const r = currentUser.isAdmin
     ? (() => {
-        const missing = GEN1_SKIN_DEFS.filter(s => !ownedSkinIds().has(s.id));
-        const pool = missing.length ? missing : GEN1_SKIN_DEFS;
+        const missing = defs.filter(s => !ownedSkinIds().has(s.id));
+        const pool = missing.length ? missing : defs;
         const skin = pool[Math.floor(Math.random() * pool.length)];
         currentUser.skinInventory = [...new Set([...(currentUser.skinInventory || []), skin.id])];
-        return { ok: true, skinId: skin.id, duplicate: false, skinCasePacks: currentUser.skinCasePacks || { gen1_basic: 99 }, skinInventory: currentUser.skinInventory };
+        return { ok: true, caseId, skinId: skin.id, duplicate: false, skinCasePacks: currentUser.skinCasePacks || { gen1_basic: 99, donut: 99 }, skinInventory: currentUser.skinInventory };
       })()
-    : await authRequest('/shop/open-skin-case', { username: currentUser.username, password: currentUser.password, caseId: 'gen1_basic' });
+    : await authRequest('/shop/open-skin-case', { username: currentUser.username, password: currentUser.password, caseId });
   if (!r || r.error) { alert('❌ ' + (r?.error || 'case error')); return false; }
   currentUser.skinCasePacks = r.skinCasePacks || currentUser.skinCasePacks || {};
   currentUser.skinInventory = r.skinInventory || currentUser.skinInventory || [];
-  showSkinCaseOpening(r.skinId, !!r.duplicate);
+  showSkinCaseOpening(r.skinId, !!r.duplicate, caseId);
   updateUserInfoBar();
   return true;
 }
+async function openSkinCaseGen1() { return openSkinCase('gen1_basic'); }
 
-function showSkinCaseOpening(skinId, duplicate) {
-  const skin = GEN1_SKIN_BY_ID[skinId] || { name: skinId || 'Mystery Skin', rarity: 'basic', blurb: 'A thing happened.' };
-  const roll = [...GEN1_SKIN_DEFS].sort(() => Math.random() - 0.5).slice(0, 9);
+function showSkinCaseOpening(skinId, duplicate, caseId = 'gen1_basic') {
+  const c = skinCaseDef(caseId);
+  const skin = skinDefById(skinId);
+  const roll = [...c.defs()].sort(() => Math.random() - 0.5).slice(0, 9);
   roll.push(skin);
   const old = document.getElementById('skin-case-opening');
   if (old) old.remove();
@@ -37782,7 +38025,7 @@ function showSkinCaseOpening(skinId, duplicate) {
   el.style.cssText = 'position:fixed;inset:0;z-index:12000;background:rgba(0,0,0,0.82);display:flex;align-items:center;justify-content:center;font-family:"Courier New",monospace;color:#fff;';
   el.innerHTML = `
     <div style="width:min(720px,92vw);background:#100f16;border:2px solid #88ccff;border-radius:8px;padding:22px;box-shadow:0 0 40px rgba(136,204,255,0.35);text-align:center;overflow:hidden;">
-      <div style="font-size:13px;letter-spacing:4px;color:#88ccff;margin-bottom:12px;">📦 SKIN CASE GEN 1</div>
+      <div style="font-size:13px;letter-spacing:4px;color:#88ccff;margin-bottom:12px;">📦 ${c.shortName} CASE</div>
       <div id="case-reel" style="display:flex;gap:8px;transform:translateX(0);transition:transform 2.4s cubic-bezier(.12,.8,.08,1);margin:18px 0 20px;">
         ${roll.map(s => `<div style="flex:0 0 150px;height:92px;background:#171923;border:1px solid ${s.id===skin.id?'#ffdd66':'#444'};border-radius:6px;padding:10px;display:flex;flex-direction:column;justify-content:center;">
           <div style="font-size:10px;color:#8aa;letter-spacing:1px;">${(s.rarity || 'basic').toUpperCase()}</div>
@@ -38203,6 +38446,7 @@ function openWeaponSkinsPanel() {
       const on = equippedModelSkins[wid];
       const cells = MODEL_SKINS_BY_WEAPON[wid].map(ms => {
         const legendLocked = isLegendLocked(ms);
+        const donutLocked = DONUT_MODEL_SKIN_IDS.has(ms.id) && !ownsSkin(ms.id);
         const locked = (GATED_MODEL_SKIN_IDS.has(ms.id) && !ownsSkin(ms.id)) || legendLocked;
         return `
         <div data-mskin="${ms.id}" data-mweapon="${wid}" class="ms-cell"
@@ -38211,6 +38455,7 @@ function openWeaponSkinsPanel() {
           <div style="font-size:11px;letter-spacing:1px;color:${on===ms.id?'#88ff99':'#ddd'};">${locked ? '🔒 ' + ms.name : ms.name}</div>
           <div style="font-size:9px;color:#8a8a7a;margin-top:3px;line-height:1.3;">${ms.blurb}</div>
           ${legendLocked ? `<div style="font-size:9px;color:#ff6a4a;margin-top:4px;line-height:1.3;">${ffaLegendProgressText()}</div>` : ''}
+          ${donutLocked ? `<div style="font-size:9px;color:#ff9bd0;margin-top:4px;line-height:1.3;">Pull from the Donut Case.</div>` : ''}
         </div>`;
       }).join('');
       rows.push(`
@@ -38241,14 +38486,16 @@ function openWeaponSkinsPanel() {
       if (!base) continue;
       const on = equippedMeleeModelSkins[bid];
       const cells = MELEE_MODEL_SKINS_BY_BASE[bid].map(ms => {
-        const locked = isLegendLocked(ms);
+        const donutLocked = DONUT_MELEE_MODEL_SKIN_IDS.has(ms.id) && !ownsSkin(ms.id);
+        const locked = isLegendLocked(ms) || donutLocked;
         return `
         <div data-mmskin="${ms.id}" data-mmbase="${bid}" class="mms-cell"
              style="cursor:${locked?"not-allowed":"pointer"};opacity:${locked?0.45:1};filter:${locked?"grayscale(0.8)":"none"};border:2px solid ${on===ms.id?"#ffcc99":"#444"};border-radius:6px;padding:8px;background:${on===ms.id?"#2a2118":"#1d1a12"};">
           <div style="height:26px;border-radius:4px;background:linear-gradient(90deg, ${ms.sw[0]} 0 50%, ${ms.sw[1]} 50% 100%);border:1px solid #000;margin-bottom:6px;"></div>
           <div style="font-size:11px;letter-spacing:1px;color:${on===ms.id?"#ffcc99":"#ddd"};">${locked ? "🔒 " + ms.name : ms.name}</div>
           <div style="font-size:9px;color:#8a8a7a;margin-top:3px;line-height:1.3;">${ms.blurb}</div>
-          ${locked ? `<div style="font-size:9px;color:#ff6a4a;margin-top:4px;line-height:1.3;">${ffaLegendProgressText()}</div>` : ""}
+          ${isLegendLocked(ms) ? `<div style="font-size:9px;color:#ff6a4a;margin-top:4px;line-height:1.3;">${ffaLegendProgressText()}</div>` : ""}
+          ${donutLocked ? `<div style="font-size:9px;color:#ff9bd0;margin-top:4px;line-height:1.3;">Pull from the Donut Case.</div>` : ""}
         </div>`;
       }).join("");
       rows.push(`
@@ -38277,7 +38524,7 @@ function openWeaponSkinsPanel() {
     </div>`;
   const basicCaseSection = () => {
     const unopened = currentUser?.isAdmin ? 99 : (currentUser?.skinCasePacks?.gen1_basic || 0);
-    const ownedCount = currentUser?.isAdmin ? GEN1_SKIN_DEFS.length : ownedSkinIds().size;
+    const ownedCount = ownedSkinCountFor(GEN1_SKIN_DEFS);
     const gunRows = Object.entries(GUN_STAT_SKINS_BY_WEAPON).map(([wid, skins]) => {
       const w = WEAPONS.find(x => x.id === wid);
       if (!w) return '';
@@ -38330,6 +38577,21 @@ function openWeaponSkinsPanel() {
       ${meleeRows}
     </div>`;
   };
+  const donutCaseSection = () => {
+    const unopened = currentUser?.isAdmin ? 99 : (currentUser?.skinCasePacks?.donut || 0);
+    const ownedCount = ownedSkinCountFor(DONUT_SKIN_DEFS);
+    return `<div style="margin-top:18px;border-top:1px solid #6a5520;padding-top:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+        <div style="font-size:14px;letter-spacing:2px;color:#ff9bd0;">🍩 DONUT CASE</div>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
+          <div style="font-size:10px;color:#ffd1e8;letter-spacing:1px;">${ownedCount}/${DONUT_SKIN_DEFS.length} SKINS · ${unopened} CASES</div>
+          <button id="open-skin-case-donut" ${unopened<=0?'disabled':''} style="padding:6px 10px;background:${unopened>0?'#3a1830':'#222'};color:${unopened>0?'#ffd1e8':'#666'};border:1px solid ${unopened>0?'#ff9bd0':'#444'};border-radius:4px;font-family:inherit;font-size:10px;letter-spacing:1px;cursor:${unopened>0?'pointer':'not-allowed'};">OPEN</button>
+          <button id="buy-skin-case-donut" style="padding:6px 10px;background:#382018;color:#ffdd88;border:1px solid #ffbb55;border-radius:4px;font-family:inherit;font-size:10px;letter-spacing:1px;cursor:pointer;">BUY · ${money(SKIN_CASE_DONUT_COST)}</button>
+        </div>
+      </div>
+      <div style="font-size:10px;color:#c69ab1;margin:5px 0 2px;line-height:1.4;">Top-tier cosmetic case. Tiny pool: The Glazer revolver and Ring King katana.</div>
+    </div>`;
+  };
   panel.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;border-bottom:1px solid #6a5520;padding-bottom:10px;">
       <div style="font-size:18px;letter-spacing:3px;color:#ffdd88;">🎨 GUN SKINS</div>
@@ -38340,6 +38602,7 @@ function openWeaponSkinsPanel() {
     <div style="font-size:12px;letter-spacing:2px;color:#ffdd88;margin:20px 0 6px;border-top:1px solid #6a5520;padding-top:14px;">🎨 COLOUR THEMES</div>
     <div style="font-size:10px;color:#aa9966;margin-bottom:12px;line-height:1.4;">One pick applies to every gun. Country themes use real national flags; the German theme is the Iron Cross military mark (no Nazi imagery).</div>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">${WEAPON_SKINS.map(swatch).join('')}</div>
+    ${donutCaseSection()}
     ${basicCaseSection()}
   `;
   const buyCaseBtn = panel.querySelector('#buy-skin-case-gen1');
@@ -38349,6 +38612,14 @@ function openWeaponSkinsPanel() {
   const openCaseBtn = panel.querySelector('#open-skin-case-gen1');
   if (openCaseBtn) openCaseBtn.addEventListener('click', async () => {
     await openSkinCaseGen1();
+  });
+  const buyDonutCaseBtn = panel.querySelector('#buy-skin-case-donut');
+  if (buyDonutCaseBtn) buyDonutCaseBtn.addEventListener('click', async () => {
+    if (await buySkinCase('donut')) openWeaponSkinsPanel();
+  });
+  const openDonutCaseBtn = panel.querySelector('#open-skin-case-donut');
+  if (openDonutCaseBtn) openDonutCaseBtn.addEventListener('click', async () => {
+    await openSkinCase('donut');
   });
   panel.querySelectorAll('.gs-cell').forEach(cell => {
     cell.addEventListener('click', () => {
@@ -38368,6 +38639,7 @@ function openWeaponSkinsPanel() {
     cell.addEventListener('click', () => {
       const ms = MELEE_MODEL_SKINS.find(m => m.id === cell.dataset.mmskin);
       if (isLegendLocked(ms)) { alert('FFA Legend skins are earned in FFA: deal 1,000,000 damage or win 5,000 FFA matches.'); return; }
+      if (ms && DONUT_MELEE_MODEL_SKIN_IDS.has(ms.id) && !ownsSkin(ms.id)) { alert('You have not pulled that skin yet. Open Donut Cases in Lobby 13.'); return; }
       setMeleeModelSkin(cell.dataset.mmbase, cell.dataset.mmskin || null);
       openWeaponSkinsPanel();
     });
@@ -38375,7 +38647,8 @@ function openWeaponSkinsPanel() {
   panel.querySelectorAll('.ms-cell').forEach(cell => {
     cell.addEventListener('click', () => {
       const id = cell.dataset.mskin;
-      if (id && GATED_MODEL_SKIN_IDS.has(id) && !ownsSkin(id)) { alert('You have not pulled that skin yet. Open Gen 1 cases in Lobby 13.'); return; }
+      if (id && DONUT_MODEL_SKIN_IDS.has(id) && !ownsSkin(id)) { alert('You have not pulled that skin yet. Open Donut Cases in Lobby 13.'); return; }
+      if (id && GEN1_GATED_MODEL_SKIN_IDS.has(id) && !ownsSkin(id)) { alert('You have not pulled that skin yet. Open Gen 1 cases in Lobby 13.'); return; }
       if (isLegendLocked(MODEL_SKINS.find(m => m.id === id))) { alert('FFA Legend skins are earned in FFA: deal 1,000,000 damage or win 5,000 FFA matches.'); return; }
       setModelSkin(cell.dataset.mweapon, id || null);
       openWeaponSkinsPanel();      // redraw so the selection moves
@@ -38566,10 +38839,11 @@ function updateUserInfoBar() {
     const frags    = currentUser.isAdmin ? '∞' : (currentUser.fragments ?? 0);
     const ch = currentUser.chests || { common: 0, rare: 0 };
     const cases = currentUser.isAdmin ? '∞' : (currentUser.skinCasePacks?.gen1_basic || 0);
+    const donutCases = currentUser.isAdmin ? '∞' : (currentUser.skinCasePacks?.donut || 0);
     const passTag = adminPassActive() && !currentUser.isAdmin
       ? ` · <b style="color:#ffcc88">🪖 PASS ${Math.ceil(adminPassMsLeft()/60000)}m</b>`
       : '';
-    unlocksEl.innerHTML = `${CURRENCY_ICON} <b style="color:#ffdd55">${credits}</b> · 🧩 <b style="color:#aaccff">${frags}</b> frags · 📦 ${ch.common}c/${ch.rare}r · 🎁 ${cases} skin · 🪖 ${n}/24${passTag}`;
+    unlocksEl.innerHTML = `${CURRENCY_ICON} <b style="color:#ffdd55">${credits}</b> · 🧩 <b style="color:#aaccff">${frags}</b> frags · 📦 ${ch.common}c/${ch.rare}r · 🎁 ${cases} skin · 🍩 ${donutCases} donut · 🪖 ${n}/24${passTag}`;
   }
   // Show admin panel button if admin
   let adminBtn = document.getElementById('admin-panel-btn');

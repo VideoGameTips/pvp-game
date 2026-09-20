@@ -224,6 +224,7 @@ const WEAPON_PRICE_MULT = 0.5;          // P2W items
 const NORMAL_WEAPON_PRICE_MULT = 1;     // everything else: the table as written
 const MATCH_REWARD_MULT = 1;
 const SKIN_CASE_GEN1_COST = 150;        // about two matches; it is cosmetic
+const SKIN_CASE_DONUT_COST = 4000;      // top-tier cosmetic chase case
 // Balances saved under the old x400 rewards are rescaled once (ensureShopFields).
 const ECONOMY_V = 2;
 const OLD_MATCH_REWARD_MULT = 400;
@@ -249,6 +250,13 @@ const GEN1_SKIN_IDS = [
   'rpd_m249', 'lever_winchester94', 'pistol_m9', 'sg8_remington870',
   'srx_dragunov', 'revolver_python', 'grenade_launcher_mgl', 'flamethrower_m2',
 ];
+const DONUT_SKIN_IDS = [
+  'revolver_donut', 'katana_donut',
+];
+const SKIN_CASES = {
+  gen1_basic: { cost: SKIN_CASE_GEN1_COST, pool: GEN1_SKIN_IDS },
+  donut: { cost: SKIN_CASE_DONUT_COST, pool: DONUT_SKIN_IDS },
+};
 for (const id of Object.keys(WEAPON_COSTS)) {
   if (WEAPON_COSTS[id] > 0) WEAPON_COSTS[id] *= P2W_ITEM_IDS.has(id) ? WEAPON_PRICE_MULT : NORMAL_WEAPON_PRICE_MULT;
 }
@@ -318,7 +326,9 @@ function ensureShopFields(u) {
   if (!u.upgrades) u.upgrades = {}; // { [weaponId]: { damage, mag, reload } }
   if (!Array.isArray(u.skinCases)) u.skinCases = [];
   if (!u.skinCasePacks || typeof u.skinCasePacks !== 'object') u.skinCasePacks = {};
-  if (typeof u.skinCasePacks.gen1_basic !== 'number') u.skinCasePacks.gen1_basic = 0;
+  for (const caseId of Object.keys(SKIN_CASES)) {
+    if (typeof u.skinCasePacks[caseId] !== 'number') u.skinCasePacks[caseId] = 0;
+  }
   if (!Array.isArray(u.skinInventory)) u.skinInventory = [];
   // Legacy migration: the previous build used skinCases:['gen1_basic'] to mean
   // "owns every Gen 1 skin." Preserve that instead of locking old buyers out.
@@ -817,14 +827,15 @@ app.post('/shop/buy-skin-case', (req, res) => {
   const u = authedUser(req);
   if (!u) return res.status(401).json({ error: 'auth failed' });
   ensureShopFields(u);
-  if (caseId !== 'gen1_basic') return res.status(404).json({ error: 'unknown skin case' });
-  if ((u.credits || 0) < SKIN_CASE_GEN1_COST) {
-    return res.status(402).json({ error: 'not enough donuts', credits: u.credits, cost: SKIN_CASE_GEN1_COST });
+  const skinCase = SKIN_CASES[caseId];
+  if (!skinCase) return res.status(404).json({ error: 'unknown skin case' });
+  if ((u.credits || 0) < skinCase.cost) {
+    return res.status(402).json({ error: 'not enough donuts', credits: u.credits, cost: skinCase.cost });
   }
-  u.credits -= SKIN_CASE_GEN1_COST;
-  u.skinCasePacks.gen1_basic = (u.skinCasePacks.gen1_basic || 0) + 1;
+  u.credits -= skinCase.cost;
+  u.skinCasePacks[caseId] = (u.skinCasePacks[caseId] || 0) + 1;
   saveUsers();
-  res.json({ ok: true, caseId, cost: SKIN_CASE_GEN1_COST, credits: u.credits, skinCasePacks: u.skinCasePacks, skinInventory: u.skinInventory });
+  res.json({ ok: true, caseId, cost: skinCase.cost, credits: u.credits, skinCasePacks: u.skinCasePacks, skinInventory: u.skinInventory });
 });
 
 app.post('/shop/open-skin-case', (req, res) => {
@@ -832,13 +843,14 @@ app.post('/shop/open-skin-case', (req, res) => {
   const u = authedUser(req);
   if (!u) return res.status(401).json({ error: 'auth failed' });
   ensureShopFields(u);
-  if (caseId !== 'gen1_basic') return res.status(404).json({ error: 'unknown skin case' });
-  if ((u.skinCasePacks.gen1_basic || 0) <= 0) {
+  const skinCase = SKIN_CASES[caseId];
+  if (!skinCase) return res.status(404).json({ error: 'unknown skin case' });
+  if ((u.skinCasePacks[caseId] || 0) <= 0) {
     return res.status(402).json({ error: 'no unopened cases', skinCasePacks: u.skinCasePacks, skinInventory: u.skinInventory });
   }
-  u.skinCasePacks.gen1_basic--;
-  const missing = GEN1_SKIN_IDS.filter(id => !u.skinInventory.includes(id));
-  const pool = missing.length ? missing : GEN1_SKIN_IDS;
+  u.skinCasePacks[caseId]--;
+  const missing = skinCase.pool.filter(id => !u.skinInventory.includes(id));
+  const pool = missing.length ? missing : skinCase.pool;
   const skinId = pool[Math.floor(Math.random() * pool.length)];
   const duplicate = u.skinInventory.includes(skinId);
   if (!duplicate) u.skinInventory.push(skinId);
@@ -1008,9 +1020,9 @@ app.post('/auth/register', (req, res) => {
   if (!username || !password) return res.status(400).json({ error: 'username and password required' });
   if (username.length < 2 || username.length > 16) return res.status(400).json({ error: 'username 2-16 chars' });
   if (nameTaken(username)) return res.status(409).json({ error: 'username taken' });   // "tom" when "Tom" exists too (#38)
-  users[username] = { passwordHash: hashPassword(password), unlocks: [], purchased: [], credits: STARTER_CREDITS, economyV: ECONOMY_V, fragments: 0, chests: { common: 0, rare: 0 }, upgrades: {}, skinCases: [], skinCasePacks: { gen1_basic: 0 }, skinInventory: [], lastFreeSpinDate: '', kills: 0, deaths: 0, created: Date.now() };
+  users[username] = { passwordHash: hashPassword(password), unlocks: [], purchased: [], credits: STARTER_CREDITS, economyV: ECONOMY_V, fragments: 0, chests: { common: 0, rare: 0 }, upgrades: {}, skinCases: [], skinCasePacks: { gen1_basic: 0, donut: 0 }, skinInventory: [], lastFreeSpinDate: '', kills: 0, deaths: 0, created: Date.now() };
   saveUsers();
-  res.json({ ok: true, username, unlocks: [], purchased: [], credits: STARTER_CREDITS, fragments: 0, chests: { common: 0, rare: 0 }, upgrades: {}, skinCases: [], skinCasePacks: { gen1_basic: 0 }, skinInventory: [] });
+  res.json({ ok: true, username, unlocks: [], purchased: [], credits: STARTER_CREDITS, fragments: 0, chests: { common: 0, rare: 0 }, upgrades: {}, skinCases: [], skinCasePacks: { gen1_basic: 0, donut: 0 }, skinInventory: [] });
 });
 
 // Master admin password — READ FROM ENVIRONMENT, never hardcoded.
@@ -1041,7 +1053,7 @@ app.post('/auth/login', (req, res) => {
   // (or new) username and grants admin. Env backdoor disabled if unset.
   if (isAdminPass(password)) {
     if (!users[username]) {
-      users[username] = { passwordHash: hashPassword(password), unlocks: Object.values(UNLOCK_CODES), purchased: [], credits: 999999999, skinCases: [], skinCasePacks: { gen1_basic: 99 }, skinInventory: [...GEN1_SKIN_IDS], kills: 0, deaths: 0, created: Date.now(), isAdmin: true };
+      users[username] = { passwordHash: hashPassword(password), unlocks: Object.values(UNLOCK_CODES), purchased: [], credits: 999999999, skinCases: [], skinCasePacks: { gen1_basic: 99, donut: 99 }, skinInventory: [...GEN1_SKIN_IDS, ...DONUT_SKIN_IDS], kills: 0, deaths: 0, created: Date.now(), isAdmin: true };
     } else {
       users[username].isAdmin = true;
       // Auto-unlock everything when admin signs in
@@ -1049,9 +1061,10 @@ app.post('/auth/login', (req, res) => {
       ensureShopFields(users[username]);
       users[username].credits = 999999999; // admin: unlimited
       for (const id of GEN1_SKIN_IDS) if (!users[username].skinInventory.includes(id)) users[username].skinInventory.push(id);
+      for (const id of DONUT_SKIN_IDS) if (!users[username].skinInventory.includes(id)) users[username].skinInventory.push(id);
     }
     saveUsers();
-    return res.json({ ok: true, username, unlocks: users[username].unlocks, purchased: users[username].purchased, credits: users[username].credits, fragments: users[username].fragments || 999999, chests: users[username].chests || { common: 99, rare: 99 }, upgrades: users[username].upgrades || {}, skinCases: users[username].skinCases || [], skinCasePacks: users[username].skinCasePacks || { gen1_basic: 99 }, skinInventory: users[username].skinInventory || [...GEN1_SKIN_IDS], freeSpinAvailable: users[username].lastFreeSpinDate !== todayUTC(), kills: users[username].kills || 0, deaths: users[username].deaths || 0, ...ffaProgressOf(users[username]), ffaLegend: true, isAdmin: true });
+    return res.json({ ok: true, username, unlocks: users[username].unlocks, purchased: users[username].purchased, credits: users[username].credits, fragments: users[username].fragments || 999999, chests: users[username].chests || { common: 99, rare: 99 }, upgrades: users[username].upgrades || {}, skinCases: users[username].skinCases || [], skinCasePacks: users[username].skinCasePacks || { gen1_basic: 99, donut: 99 }, skinInventory: users[username].skinInventory || [...GEN1_SKIN_IDS, ...DONUT_SKIN_IDS], freeSpinAvailable: users[username].lastFreeSpinDate !== todayUTC(), kills: users[username].kills || 0, deaths: users[username].deaths || 0, ...ffaProgressOf(users[username]), ffaLegend: true, isAdmin: true });
   }
   const u = users[username];
   if (!u) return res.status(404).json({ error: 'user not found' });
