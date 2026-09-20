@@ -20615,6 +20615,13 @@ const _eqClamp = v => Math.max(0, Math.min(1, v));
 // half cycles) -- one formula, shared by the motion itself and by its
 // trail, so the trail always traces exactly the path the piece took.
 function _eqCometSway(t) { return Math.sin(t * Math.PI * 3) * 0.09; }
+// The twirl entrance's spin: several fast turns about the trigger guard,
+// easing to a dead stop -- a gunslinger twirl, not a wag. Shared by the
+// motion itself and by its trail, same reason as the comet sway above.
+function _eqTwirlQuat(t) {
+  const arrive = _eqEase(_eqClamp(t / 0.78));
+  return new THREE.Quaternion().setFromAxisAngle(_EQ_X, (1 - arrive) * Math.PI * 2 * 2.5);
+}
 
 // The pieces are the model's own top-level parts -- never the hands (they wait
 // where the gun will be) and never the muzzle flash. Each one's resting
@@ -20808,6 +20815,18 @@ function _eqMakeProps(model, type, ctr, box, targets) {
     inner.userData.comet = { look: 0.06, op: 0.95 };
     model.add(outer); model.add(inner); out.push(outer); out.push(inner);
   }
+  if (type === 'twirl') {                       // the glow trail chasing the spinning muzzle
+    const glow = (c, o) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o,
+      blending: THREE.AdditiveBlending, depthWrite: false });
+    const outer = new THREE.Mesh(new THREE.BoxGeometry(0.020, 0.020, 1), glow(0xff9bd0, 0.75));
+    const inner = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.008, 1), glow(0xffffff, 0.95));
+    // The muzzle's own tip, relative to centre -- what actually traces the
+    // circle as the gun spins about it.
+    const tip = new THREE.Vector3(ctr.x, ctr.y, box.min.z).sub(ctr);
+    outer.userData.twirl = { tip, look: 0.09, op: 0.75 };
+    inner.userData.twirl = { tip, look: 0.05, op: 0.95 };
+    model.add(outer); model.add(inner); out.push(outer); out.push(inner);
+  }
   return out;
 }
 function _eqStepProps(e, t) {
@@ -20936,6 +20955,18 @@ function _eqStepProps(e, t) {
       const fade = Math.min(1, Math.abs(headX - tailX) * 10);
       o.visible = fade > 0.01;
       o.material.opacity = o.userData.comet.op * fade;
+    }
+    if (o.userData.twirl) {                      // the glow trail chasing the spinning muzzle
+      // Same idea as the comet's trail, but the muzzle is moving on a
+      // circle, not a line: sample the tip's own rotated position a beat
+      // earlier and draw the chord between the two.
+      const T = o.userData.twirl;
+      const head = e.ctr.clone().add(T.tip.clone().applyQuaternion(_eqTwirlQuat(t)));
+      const tail = e.ctr.clone().add(T.tip.clone().applyQuaternion(_eqTwirlQuat(Math.max(0, t - T.look))));
+      _eqSegment(o, tail, head);
+      const fade = Math.min(1, head.distanceTo(tail) * 10);
+      o.visible = fade > 0.01;
+      o.material.opacity = T.op * fade;
     }
     if (o.userData.scan) {
       const k = _eqClamp((t - 0.1) / 0.75);
@@ -21100,6 +21131,18 @@ function _equipStep(e, t) {
         const flyCtr = e.ctr.clone(); flyCtr.x += sway;
         const q = new THREE.Quaternion().setFromAxisAngle(_EQ_Z, (1 - arrive) * Math.PI * 2);
         c.position.copy(h.p).sub(e.ctr).applyQuaternion(q).add(flyCtr);
+        c.quaternion.copy(q).multiply(h.q);
+        c.scale.copy(h.s);
+        break; }
+      case 'twirl': {
+        // The Glazer: a gunslinger's twirl -- several fast turns about the
+        // trigger guard, easing to a dead stop right in the grip. No
+        // side-sway; a gun twirls in place, it doesn't wag left and
+        // right like the katana's 'comet' swing. The trail chasing the
+        // muzzle round its own circle is a separate prop (_eqMakeProps/
+        // _eqStepProps), since it traces an arc, not a straight line.
+        const q = _eqTwirlQuat(t);
+        c.position.copy(h.p).sub(e.ctr).applyQuaternion(q).add(e.ctr);
         c.quaternion.copy(q).multiply(h.q);
         c.scale.copy(h.s);
         break; }
@@ -28007,7 +28050,7 @@ const SKIN_FX = {
     equipBeats: [[.28,'chord'], [.80,'shatter'], [.84,'rainbowburst']],
     reload: _fxR(RELOAD_KEYS.ak20, (RELOAD_PROPS.ak20 || []).map(e => e.k === 'mag' ? Object.assign({}, e, { k: 'rainbowmag' }) : e), null, 'chord') },
   revolver_donut: { sound: _fxS('splat', .30, .10, 620, 1180),
-    equip: 'comet', equipMs: 1000, equipSfx: ['whoosh', 'chime'] },
+    equip: 'twirl', equipMs: 1000, equipSfx: ['whoosh', 'chime'] },
 };
 
 function _reloadPose(track, t) {
