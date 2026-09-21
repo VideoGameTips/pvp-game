@@ -127,12 +127,12 @@ function currentFinisher(id, weapon) {
   return '(random)';
 }
 
-// game.js: the melee swing-sound branch in the melee fire path
+// game.js: MELEE_SWING_SOUND, the table the melee fire path reads. Lifted from
+// the source rather than retyped, for the same reason as the words above.
+const MELEE_SWING_SOUND = objectLiteral('MELEE_SWING_SOUND');
 function currentSwingSound(item) {
   if (item.id === 'chainsaw') return '(chainsaw)';
-  const isBlade = /blade|sabre|katana|machete|spear|hatchet|axe|cleaver|knife|karambit|bayonet|poker|fire_axe|garrote|lightsabre|machete|tomahawk/.test(item.id);
-  const isHeavy = item.type && (item.type.toLowerCase().includes('heavy') || /sledge|hammer|shovel|bat|pipe|wrench|cricket|brass_knuckles|fists|nunchucks/.test(item.id));
-  return isHeavy ? 'heavy' : isBlade ? 'blade' : 'generic';
+  return MELEE_SWING_SOUND[item.id] || 'generic';
 }
 
 // game.js: isExplosiveKill(), which the Kill Log writer uses to pick a graphic.
@@ -578,7 +578,7 @@ async function main() {
   };
 
   printGroup('melee swing sound', byField('swing_sound'),
-    'the shipped regex only looks at item.id, so a blade named in item.type is invisible to it');
+    'against MELEE_SWING_SOUND in game.js — entries there carry a comment when the call was deliberate');
   printGroup('melee swing animation', byField('swing_animation'),
     'a "gap" here is an item past the end of MELEE_SWING_TYPES, defaulting to slash');
   printGroup('projectile kind', byField('projectile_kind').filter(d => d.guessed),

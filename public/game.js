@@ -1577,6 +1577,64 @@ const MELEE_SWING_TYPES = [
              //                    reach is the least wrong. Change it if it feels off.
 ];
 
+// ── Which swing sound each melee makes ─────────────────────────────────────
+// This used to be two regexes over item.id — one listing every word that sounds
+// like a blade, one every word that sounds heavy. Reading only the id meant the
+// OTs-04 Bayonet, whose type is literally "Spetsnaz Blade", swung with the blunt
+// sound, while the Fire Poker counted as a blade because "poker" happened to sit
+// in the blade list. Every new melee was a coin flip on whether some substring
+// happened to catch it.
+//
+// Keyed by id rather than by index on purpose: MELEE_SWING_TYPES above is an
+// index-parallel array and it silently drifted five entries out of step. A map
+// cannot do that, and verify-weapons.js fails the build if an item is missing
+// from here.
+const MELEE_SWING_SOUND = {
+  bat:             'heavy',
+  sabre:           'blade',
+  frying_pan:      'heavy',   // cast iron, and it already slams
+  sledge:          'heavy',
+  spear:           'blade',
+  katana:          'blade',
+  baguette:        'generic',
+  knife:           'blade',
+  chainsaw:        'heavy',   // has its own engine sound; this entry is never reached
+  lightsabre:      'blade',
+  riot_shield:     'heavy',   // a slab of steel, swung as a bash
+  screwdriver:     'generic',
+  crowbar:         'heavy',   // solid bar; was generic only because no rule named it
+  fire_axe:        'heavy',   // an axe cuts, but the author typed it Heavy Melee — kept heavy
+  nunchucks:       'heavy',   // inherited from the old name match; light wood, probably generic
+  umbrella:        'generic',
+  yoyo:            'generic',
+  combat_axe:      'heavy',   // same call as fire_axe
+  shock_baton:     'heavy',
+  titan_hammer:    'heavy',
+  vampire_blade:   'blade',
+  fists:           'heavy',
+  brass_knuckles:  'heavy',
+  hatchet:         'blade',
+  machete:         'blade',
+  cane:            'generic',
+  cricket_bat:     'heavy',
+  pipe:            'heavy',
+  wrench:          'heavy',
+  shovel:          'heavy',
+  golf_club:       'generic', // a driver whooshes; kept light despite reading as a big swing
+  tennis_racket:   'generic',
+  fire_poker:      'heavy',   // an iron rod with no edge; was blade only because of its name
+  meat_cleaver:    'blade',
+  phase_blade:     'blade',
+  gravity_hammer:  'heavy',
+  volt_whip:       'generic',
+  karambit:        'blade',
+  bayonet:         'blade',
+  tomahawk:        'blade',
+  ots04:           'blade',   // its own type says Blade; the old test read only the id
+  garrote:         'blade',   // inherited from the old name match; a wire has no edge — worth an ear
+};
+const MELEE_SWING_EVENT = { blade: 'melee_blade', heavy: 'melee_heavy', generic: 'melee_swing' };
+
 // ── Weapon ability system ──────────────────────────────────────────────────
 const abilityCDs = {};           // weaponId → timestamp of last use
 let abilityBuff = null;          // active stat-override buff
@@ -24019,10 +24077,7 @@ function tryMelee() {
     playSoundEvent(meleeAbilityBuff?.type === 'revup' ? 'chainsaw_rev' : 'chainsaw_idle', { volume: 1.25, minGap: 120 });
   } else {
     // Per-type swing sound for every other melee
-    const isBlade = /blade|sabre|katana|machete|spear|hatchet|axe|cleaver|knife|karambit|bayonet|poker|fire_axe|garrote|lightsabre|machete|tomahawk/.test(item.id);
-    const isHeavy = item.type && (item.type.toLowerCase().includes('heavy') || /sledge|hammer|shovel|bat|pipe|wrench|cricket|brass_knuckles|fists|nunchucks/.test(item.id));
-    const ev = isHeavy ? 'melee_heavy' : isBlade ? 'melee_blade' : 'melee_swing';
-    playSoundEvent(ev, { volume: 0.85, minGap: 80 });
+    playSoundEvent(MELEE_SWING_EVENT[MELEE_SWING_SOUND[item.id]] || 'melee_swing', { volume: 0.85, minGap: 80 });
   }
 
   // Trigger swing animation — each swing type has its own characteristic duration

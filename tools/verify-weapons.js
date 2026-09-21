@@ -154,6 +154,46 @@ const problems = [];
     if (drift.length) problems.push('PARALLEL ARRAYS'.padEnd(20) + drift.length
       + ' index mismatch(es), first at ' + drift[0]);
   }
+
+  // The same check for the melee side, which never had one. MELEE_SWING_TYPES
+  // sat five entries short of MELEE_ITEMS for as long as the Admin melees have
+  // existed, and nothing said so: the read site is `[idx] || 'slash'`, so the
+  // last five silently swung like a baseball bat. A short array is not a crash
+  // here, it is a wrong animation, which is exactly the kind of thing that
+  // survives a playtest.
+  const mm = tbl.match(/^const MELEE_ITEMS = \[[\s\S]*?\n\];/m);
+  const ms = tbl.match(/^const MELEE_SWING_TYPES = \[[\s\S]*?\n\];/m);
+  const mo = tbl.match(/^const MELEE_SWING_SOUND = \{[\s\S]*?\n\};/m);
+  if (!mm) problems.push('MELEE_ITEMS'.padEnd(20) + 'table not found');
+  else {
+    const MELEE_ITEMS = new Function('return ' + mm[0].replace('const MELEE_ITEMS = ', '') + ';')();
+    if (!ms) problems.push('MELEE_SWING_TYPES'.padEnd(20) + 'table not found');
+    else {
+      const T = new Function('return ' + ms[0].replace('const MELEE_SWING_TYPES = ', '') + ';')();
+      if (T.length !== MELEE_ITEMS.length) {
+        problems.push('PARALLEL ARRAYS'.padEnd(20) + 'MELEE_ITEMS has ' + MELEE_ITEMS.length
+          + ' entries but MELEE_SWING_TYPES has ' + T.length + ' — '
+          + MELEE_ITEMS.slice(T.length).map(m => m.id).join(', ')
+          + ' fall off the end and take the default swing');
+      }
+    }
+    // MELEE_SWING_SOUND is keyed by id, so it cannot drift out of step — but it
+    // can still be forgotten when a melee is added, and a missing key is a
+    // silent fallback to the generic swish.
+    if (!mo) problems.push('MELEE_SWING_SOUND'.padEnd(20) + 'table not found');
+    else {
+      const S = new Function('return ' + mo[0].replace('const MELEE_SWING_SOUND = ', '') + ';')();
+      const missing = MELEE_ITEMS.filter(m => !S[m.id]).map(m => m.id);
+      if (missing.length) problems.push('MELEE_SWING_SOUND'.padEnd(20) + missing.length
+        + ' melee(s) with no swing sound: ' + missing.join(', '));
+      const stray = Object.keys(S).filter(id => !MELEE_ITEMS.some(m => m.id === id));
+      if (stray.length) problems.push('MELEE_SWING_SOUND'.padEnd(20)
+        + 'entries for melees that no longer exist: ' + stray.join(', '));
+      const bad = Object.entries(S).filter(([, v]) => !['blade', 'heavy', 'generic'].includes(v));
+      if (bad.length) problems.push('MELEE_SWING_SOUND'.padEnd(20)
+        + 'unknown sound value(s): ' + bad.map(([k, v]) => k + '=' + v).join(', '));
+    }
+  }
 }
 let inspectReport = null;
 let audioReport = null;
