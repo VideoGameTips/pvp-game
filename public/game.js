@@ -20970,9 +20970,26 @@ function _eqCometSway(t) { return Math.sin(t * Math.PI * 3) * 0.09; }
 // The twirl entrance's spin: several fast turns about the trigger guard,
 // easing to a dead stop -- a gunslinger twirl, not a wag. Shared by the
 // motion itself and by its trail, same reason as the comet sway above.
+// Bumped from 2.5 turns to 4.5 -- "not enough vertical spin energy" -- so
+// it reads as an actual baton-style twirl, not a couple of lazy turns.
+// _EQ_X (world-position-tracked on the katana's identical comet math)
+// sweeps Y/Z while X barely moves -- reads as "spinning around Y" to
+// someone watching, not vertically. _EQ_Y is the real vertical/up axis:
+// sweeps X/Z, stays level. Same fix as the comet case, same reasoning.
 function _eqTwirlQuat(t) {
   const arrive = _eqEase(_eqClamp(t / 0.78));
-  return new THREE.Quaternion().setFromAxisAngle(_EQ_X, (1 - arrive) * Math.PI * 2 * 2.5);
+  return new THREE.Quaternion().setFromAxisAngle(_EQ_Y, (1 - arrive) * Math.PI * 2 * 4.5);
+}
+// The twirl used to spin entirely in place at its landing spot -- no travel
+// at all, so there was nothing to actually watch fly across the screen.
+// This is the shared fly-in offset (used by the motion and by its trail,
+// same reason as the comet sway above): a big lateral throw-in from off to
+// the right, with a small rise-then-settle arc, both shrinking to zero
+// right as it lands in the grip.
+function _eqTwirlFlyOffset(t) {
+  const arrive = _eqEase(_eqClamp(t / 0.78));
+  const k = 1 - arrive;
+  return { x: 0.62 * k, y: 0.16 * Math.sin(k * Math.PI * 0.5) * k };
 }
 
 // The pieces are the model's own top-level parts -- never the hands (they wait
@@ -21005,7 +21022,7 @@ function playEquipSound(name) {
   } catch (e) {}
 }
 
-var _EQ_X = new THREE.Vector3(1, 0, 0), _EQ_Z = new THREE.Vector3(0, 0, 1);
+var _EQ_X = new THREE.Vector3(1, 0, 0), _EQ_Y = new THREE.Vector3(0, 1, 0), _EQ_Z = new THREE.Vector3(0, 0, 1);
 function _eqOut(t) { return 1 - Math.pow(1 - t, 3); }
 function _eqHomeOf(c) {
   if (!c.userData.eqHome) c.userData.eqHome = {
@@ -21311,10 +21328,17 @@ function _eqStepProps(e, t) {
     if (o.userData.twirl) {                      // the glow trail chasing the spinning muzzle
       // Same idea as the comet's trail, but the muzzle is moving on a
       // circle, not a line: sample the tip's own rotated position a beat
-      // earlier and draw the chord between the two.
+      // earlier and draw the chord between the two. Also has to carry the
+      // same fly-in travel as the gun itself (_eqTwirlFlyOffset), sampled
+      // at the same two times, or the trail stays parked at the old fixed
+      // landing spot while the gun flies away from it.
       const T = o.userData.twirl;
+      const tEarlier = Math.max(0, t - T.look);
+      const offHead = _eqTwirlFlyOffset(t), offTail = _eqTwirlFlyOffset(tEarlier);
       const head = e.ctr.clone().add(T.tip.clone().applyQuaternion(_eqTwirlQuat(t)));
-      const tail = e.ctr.clone().add(T.tip.clone().applyQuaternion(_eqTwirlQuat(Math.max(0, t - T.look))));
+      head.x += offHead.x; head.y += offHead.y;
+      const tail = e.ctr.clone().add(T.tip.clone().applyQuaternion(_eqTwirlQuat(tEarlier)));
+      tail.x += offTail.x; tail.y += offTail.y;
       _eqSegment(o, tail, head);
       const fade = Math.min(1, head.distanceTo(tail) * 10);
       o.visible = fade > 0.01;
@@ -21471,39 +21495,47 @@ function _equipStep(e, t) {
         break; }
       case 'comet': {
         // Donut weapons: the WHOLE thing swings in close to where it's
-        // held -- left, then right -- tumbling end-over-end as it comes
-        // like a thrown weapon caught out of the air, and settles straight
-        // into the hand. Every piece keeps its fixed offset from the gun's
-        // own centre and gets the exact same sway and the exact same
-        // tumble, so it moves as one rigid object, never as separate parts
-        // drifting apart. Deliberately fixed, not randomised, so it reads
-        // the same clear way every time. The glow trail chasing it is a
-        // separate prop (_eqMakeProps/_eqStepProps).
+        // held -- left, then right -- turning about the vertical axis as it
+        // comes like a thrown weapon caught out of the air, and settles
+        // straight into the hand. Every piece keeps its fixed offset from
+        // the gun's own centre and gets the exact same sway and the exact
+        // same turn, so it moves as one rigid object, never as separate
+        // parts drifting apart. Deliberately fixed, not randomised, so it
+        // reads the same clear way every time. The glow trail chasing it is
+        // a separate prop (_eqMakeProps/_eqStepProps).
         //
-        // Was spinning about _EQ_Z (the blade's own hole/depth axis) --
-        // a torus is rotationally symmetric about that axis, so the ring
-        // barely read as moving at all, just a flat pirouette. _EQ_X tips
-        // it end over end instead, which actually shows the blade turning.
-        // Also bumped from one turn to 1.75 so it's clearly a *tumble*, not
-        // a slow wobble -- the ease curve in _eqEase is already slow-fast-
-        // slow, so more turns doesn't mean a blur, just a livelier middle.
+        // Was _EQ_Z (the blade's own hole/depth axis) -- a torus is
+        // rotationally symmetric about that axis, so the ring barely read
+        // as moving at all, just a flat pirouette. Tried _EQ_X next, but
+        // that tumbles it through Y/Z (checked by tracking a world-space
+        // point through the animation: Y swung -0.33..+0.07, Z swung
+        // -0.34..+0.01, X barely moved 0.08..0.19) -- i.e. it reads as
+        // spinning "around Y" to someone watching, not "vertically" the
+        // way a turntable/baton spin is vertical. _EQ_Y is the actual
+        // vertical/up axis: the blade sweeps left-right (X) and toward/
+        // away (Z) while staying level, a proper vertical-axis spin.
         const arrive = _eqEase(_eqClamp(t / 0.78));
         const sway = _eqCometSway(t) * (1 - arrive);
         const flyCtr = e.ctr.clone(); flyCtr.x += sway;
-        const q = new THREE.Quaternion().setFromAxisAngle(_EQ_X, (1 - arrive) * Math.PI * 2 * 1.75);
+        const q = new THREE.Quaternion().setFromAxisAngle(_EQ_Y, (1 - arrive) * Math.PI * 2 * 1.75);
         c.position.copy(h.p).sub(e.ctr).applyQuaternion(q).add(flyCtr);
         c.quaternion.copy(q).multiply(h.q);
         c.scale.copy(h.s);
         break; }
       case 'twirl': {
-        // The Glazer: a gunslinger's twirl -- several fast turns about the
-        // trigger guard, easing to a dead stop right in the grip. No
-        // side-sway; a gun twirls in place, it doesn't wag left and
-        // right like the katana's 'comet' swing. The trail chasing the
-        // muzzle round its own circle is a separate prop (_eqMakeProps/
-        // _eqStepProps), since it traces an arc, not a straight line.
+        // The Glazer: thrown in from off to the side, spinning hard about
+        // the trigger guard the whole way across, and caught with a dead
+        // stop right in the grip. Used to spin in place at its landing
+        // spot with no travel at all -- nothing to actually watch fly
+        // across the screen. The trail chasing the muzzle round its own
+        // circle is a separate prop (_eqMakeProps/_eqStepProps), since it
+        // traces an arc, not a straight line — it uses the same
+        // _eqTwirlFlyOffset() so it follows the gun instead of staying
+        // anchored at the old fixed landing spot.
         const q = _eqTwirlQuat(t);
-        c.position.copy(h.p).sub(e.ctr).applyQuaternion(q).add(e.ctr);
+        const off = _eqTwirlFlyOffset(t);
+        const flyCtr = e.ctr.clone(); flyCtr.x += off.x; flyCtr.y += off.y;
+        c.position.copy(h.p).sub(e.ctr).applyQuaternion(q).add(flyCtr);
         c.quaternion.copy(q).multiply(h.q);
         c.scale.copy(h.s);
         break; }
