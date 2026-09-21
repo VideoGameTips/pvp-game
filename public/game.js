@@ -24151,7 +24151,7 @@ function tryMelee() {
     }
 
     const dummy = TRAINING_DUMMIES.find(d => d.id === pid);
-    if (item.id === 'chainsaw') playSoundEvent('chainsaw_hit', { volume: 1.35, minGap: 80 });
+    if (soundId === 'chainsaw') playSoundEvent('chainsaw_hit', { volume: 1.35, minGap: 80 });
     if (dummy) handleDummyHit(dummy, mesh, { weaponId: effectiveWeaponId }, hitPos.clone());
     else emitHit(pid, `melee_${myId}_${now}`, effectiveWeaponId, hitPos.clone());
     // Vampire Blade / Meat Cleaver: heal on hit

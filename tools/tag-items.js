@@ -66,16 +66,30 @@ const numFlag = (name, fallback) => {
   if (!Number.isFinite(n)) { console.error(`--${name} needs a number (got ${v})`); process.exit(2); }
   return n;
 };
+const enumFlag = (name, fallback, allowed) => {
+  const v = String(valueFlag(name, fallback, 'one of: ' + allowed.join(', ')));
+  if (!allowed.includes(v)) {
+    console.error(`--${name} must be one of: ${allowed.join(', ')} (got ${v})`);
+    process.exit(2);
+  }
+  return v;
+};
 const OPTS = {
-  kind: String(valueFlag('kind', 'all', 'one of: all, weapons, melee')),
+  // The error string used to advertise three legal values without checking for
+  // them, so `--kind weapon` — the natural typo, and the singular the header
+  // documents — silently tagged all 141 items at full cost.
+  kind: enumFlag('kind', 'all', ['all', 'weapons', 'melee']),
   only: valueFlag('only', null, 'an item id'),
-  limit: Math.max(0, numFlag('limit', 0)),
+  // A negative limit used to clamp to 0, which means "no limit" — the opposite
+  // of what someone typing `--limit -5` is asking for.
+  limit: numFlag('limit', 0),
   json: valueFlag('json', null, 'a file path'),
   concurrency: Math.max(1, numFlag('concurrency', 6)),
   verbose: argv.includes('--verbose'),
   minConfidence: numFlag('min-confidence', 0.75),
   dryRun: argv.includes('--dry-run'),
 };
+if (OPTS.limit < 0) { console.error('--limit cannot be negative'); process.exit(2); }
 
 // ── Lifting the catalogue out of game.js ───────────────────────────────────
 // Same approach as verify-weapons.js: game.js is one flat script meant for a
@@ -427,7 +441,8 @@ async function ask(state, questions, label) {
         body,
       });
       usage.requests++;   // count what was sent, not what came back
-      if (r.status === 429 || r.status >= 500) {
+      // 408 and 425 are transient by definition, like 429 and the 5xx family.
+      if (r.status === 408 || r.status === 425 || r.status === 429 || r.status >= 500) {
         lastErr = new Error(`${r.status} ${(await r.text()).slice(0, 160)}`);
         if (attempt === LAST) break;
         // Honour Retry-After when the service sends one, otherwise back off. Capped:
@@ -446,7 +461,7 @@ async function ask(state, questions, label) {
     } catch (e) {
       lastErr = e;
       // A non-OK status we decided not to retry rethrows straight out.
-      if (/^\d{3} /.test(e.message) && !/^(429|5\d\d) /.test(e.message)) break;
+      if (/^\d{3} /.test(e.message) && !/^(408|425|429|5\d\d) /.test(e.message)) break;
       if (attempt === LAST) break;
       await new Promise(res => setTimeout(res, 500 * 2 ** attempt));
     }
@@ -512,6 +527,12 @@ async function main() {
   if (OPTS.only) {
     weapons = weapons.filter(w => w.id === OPTS.only);
     melees = melees.filter(m => m.id === OPTS.only);
+    // Otherwise a typo'd id printed "tagging 0 weapons + 0 melees" and exited 0,
+    // which reads to a wrapper script as a clean pass over the whole catalogue.
+    if (!weapons.length && !melees.length) {
+      console.error(`--only ${OPTS.only} matches no weapon or melee`);
+      return 2;
+    }
   }
   if (OPTS.limit) { weapons = weapons.slice(0, OPTS.limit); melees = melees.slice(0, OPTS.limit); }
 
