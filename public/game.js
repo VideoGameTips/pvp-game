@@ -36546,6 +36546,9 @@ function openShop() {
   }
   scr.style.display = 'block';
   renderShop();
+  // The donut store's tab cannot be drawn until the server has said whether it
+  // exists at all, so the first open draws without it and redraws when it knows.
+  if (PAYMENT_STATE === null) loadPaymentState().then(() => { if (document.getElementById('shop-screen')?.style.display === 'block') renderShop(); });
 }
 function closeShop() {
   const scr = document.getElementById('shop-screen');
@@ -36559,6 +36562,7 @@ function renderShop() {
   const frags   = currentUser.isAdmin ? '∞' : (currentUser.fragments ?? 0);
   const ch = currentUser.chests || { common: 0, rare: 0 };
   const tabs = [
+    ...(PAYMENT_STATE && PAYMENT_STATE.enabled ? [['donuts', '💳 GET DONUTS']] : []),
     ['bundles',   '💼 BUNDLES'],
     ['abilities', '🎛️ ABILITIES'],
     ['primary',   '🔫 PRIMARY'],
@@ -36593,12 +36597,100 @@ function renderShop() {
   }
   scr.querySelector('#shop-close').addEventListener('click', closeShop);
   const body = scr.querySelector('#shop-body');
-  if (shopTab === 'bundles')      renderShopBundles(body);
+  if (shopTab === 'donuts')       renderShopDonuts(body);
+  else if (shopTab === 'bundles') renderShopBundles(body);
   else if (shopTab === 'abilities') renderShopAbilities(body);
   else if (shopTab === 'chests')  renderShopChests(body);
   else if (shopTab === 'wheel')   renderShopWheel(body);
   else if (shopTab === 'upgrade') renderShopUpgrades(body);
   else                            renderShopItems(body, shopTab);
+}
+
+// ── 💳 Donuts for real money ───────────────────────────────────────────────
+// The browser never credits anything: it asks the server for a Stripe Checkout
+// link, the player pays on Stripe's own page, and a signed webhook tells the
+// server to add the donuts. Coming back to the game with ?paid=... in the URL
+// proves nothing, so all it does is re-ask the server for the balance.
+let PAYMENT_STATE = null;   // null = not asked yet, then { enabled, packs }
+async function loadPaymentState() {
+  try {
+    const r = await fetch(SERVER.base + '/shop/payments');
+    PAYMENT_STATE = await r.json();
+  } catch (e) { PAYMENT_STATE = { enabled: false, packs: [] }; }
+  return PAYMENT_STATE;
+}
+async function refreshBalance() {
+  if (!currentUser || currentUser.guest) return false;
+  const r = await authRequest('/shop/inventory', { username: currentUser.username, password: currentUser.password });
+  if (!r || r.error) return false;
+  currentUser.credits = r.credits ?? currentUser.credits;
+  currentUser.fragments = r.fragments ?? currentUser.fragments;
+  currentUser.chests = r.chests || currentUser.chests;
+  currentUser.purchased = r.purchased || currentUser.purchased;
+  currentUser.skinCasePacks = r.skinCasePacks || currentUser.skinCasePacks;
+  currentUser.skinInventory = r.skinInventory || currentUser.skinInventory;
+  updateUserInfoBar();
+  if (document.getElementById('shop-screen')?.style.display === 'block') renderShop();
+  return true;
+}
+async function buyDonutPack(packId) {
+  if (!currentUser) { uiAlert('Log in first.'); return; }
+  if (currentUser.guest) { uiAlert('Guest profiles live on this device only. Make an account with a nickname and password first, or the donuts go nowhere.'); return; }
+  const pack = (PAYMENT_STATE?.packs || []).find(p => p.id === packId);
+  if (!pack) return;
+  const ok = await uiConfirm(
+    'Buy ' + pack.donuts.toLocaleString('en-US') + ' donuts for ' + pack.price + '?\n\n' +
+    'Ask whoever owns the card first — this is real money, and it is spent the moment you pay.\n\n' +
+    'You will be sent to Stripe to pay. Donuts land in your account a few seconds later.');
+  if (!ok) return;
+  const r = await authRequest('/shop/checkout', { username: currentUser.username, password: currentUser.password, packId });
+  if (!r || r.error || !r.url) { uiAlert('❌ ' + (r?.error || 'could not start the payment')); return; }
+  const w = window.open(r.url, '_blank', 'noopener');
+  if (!w) location.href = r.url;            // popup blocked: go there in this tab
+}
+// Back from Stripe. The webhook may land a second or two after the player does,
+// so ask a few times before giving up rather than showing a stale balance.
+async function collectPaidDonuts() {
+  let params;
+  try { params = new URLSearchParams(location.search); } catch (e) { return; }
+  const paid = params.get('paid');
+  if (!paid) return;
+  try { history.replaceState(null, '', location.pathname + location.hash); } catch (e) {}
+  if (paid === 'cancelled') { uiAlert('Payment cancelled. Nothing was charged.'); return; }
+  const before = currentUser?.credits ?? 0;
+  for (let i = 0; i < 6; i++) {
+    await refreshBalance();
+    if ((currentUser?.credits ?? 0) > before) {
+      uiAlert('✅ Thank you! ' + ((currentUser.credits - before).toLocaleString('en-US')) + ' donuts added.');
+      return;
+    }
+    await new Promise(r => setTimeout(r, 1500));
+  }
+  uiAlert('Payment received, but the donuts have not shown up yet. They will — check your balance in a minute.');
+}
+function renderShopDonuts(body) {
+  const packs = PAYMENT_STATE?.packs || [];
+  body.innerHTML = `
+    <div style="width:100%;font-size:11px;color:#aaa;margin-bottom:14px;letter-spacing:1px;line-height:1.6;">
+      Donuts for real money. Everything they buy is cosmetic or a weapon unlock — nothing here
+      makes you harder to kill.<br>
+      <span style="color:#ff9966;">Ask whoever owns the card before you buy anything.</span>
+      Payment is handled by Stripe; this game never sees your card.
+    </div>
+    ${packs.map(p => `
+      <div style="width:190px;background:#141822;border:1px solid #33506a;border-radius:8px;padding:14px;text-align:center;">
+        <div style="font-size:26px;">🍩</div>
+        <div style="font-size:15px;color:#ffdd55;font-weight:bold;margin-top:4px;">${p.donuts.toLocaleString('en-US')}</div>
+        <div style="font-size:10px;color:#8899aa;letter-spacing:1px;margin:2px 0 10px;">${p.name.toUpperCase()}</div>
+        <button data-pack="${p.id}" class="donut-pack-btn" style="width:100%;padding:8px;background:#1d3a24;color:#88ff99;border:1px solid #55cc77;border-radius:4px;font-family:inherit;font-size:12px;letter-spacing:1px;cursor:pointer;">${p.price}</button>
+      </div>`).join('')}
+    <div style="width:100%;font-size:10px;color:#667;margin-top:16px;line-height:1.6;">
+      Paid and nothing arrived? <button id="donut-refresh" style="padding:4px 10px;background:#182438;color:#88ccff;border:1px solid #66aaff;border-radius:4px;font-family:inherit;font-size:10px;cursor:pointer;">REFRESH BALANCE</button>
+    </div>`;
+  body.querySelectorAll('.donut-pack-btn').forEach(b =>
+    b.addEventListener('click', () => buyDonutPack(b.dataset.pack)));
+  const rb = body.querySelector('#donut-refresh');
+  if (rb) rb.addEventListener('click', () => refreshBalance());
 }
 
 function renderShopChests(body) {
@@ -37811,6 +37903,7 @@ function finishLogin(result, creds) {
   refreshLegendSkins();
   try { localStorage.setItem('pvp_user', JSON.stringify({ username: result.username, password: creds.password, ...(creds.guest ? { guest: true } : {}) })); } catch (e) {}
   if (result.weakPassword && !creds.guest) nudgeWeakPassword();
+  collectPaidDonuts();                       // came back from Stripe? pick up the donuts
   setAuthStatus(result.isAdmin ? `🔓 ADMIN ACCESS GRANTED · ${result.username}` : `Logged in as ${result.username}`, result.isAdmin ? '#ff4444' : '#88ff88');
 
   const name = result.username;

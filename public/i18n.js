@@ -591,6 +591,17 @@
     'Mystery Skin': '神秘皮肤',
     'A thing happened.': '发生了点什么。',
     'OK': '好的', 'Cancel': '取消',
+    // ── the donut store (real money) ──
+    '💳 GET DONUTS': '💳 买甜甜圈',
+    'Donuts for real money. Everything they buy is cosmetic or a weapon unlock — nothing here makes you harder to kill.': '用真钱买甜甜圈。买到的都是外观或武器解锁——没有任何一样能让你更难被打死。',
+    'Ask whoever owns the card before you buy anything.': '买之前先问过卡的主人。',
+    'Payment is handled by Stripe; this game never sees your card.': '付款由 Stripe 处理，这个游戏看不到你的卡。',
+    'REFRESH BALANCE': '刷新余额',
+    'Payment cancelled. Nothing was charged.': '付款已取消，没有扣钱。',
+    'the donut store is not switched on': '甜甜圈商店还没开',
+    'could not start the payment': '没能开始付款',
+    'payment provider refused': '支付服务拒绝了这笔交易',
+    'could not reach the payment provider': '连不上支付服务',
     // ── passwords ──
     'Password needs at least 8 characters.': '密码至少要 8 个字符。',
     'Password is too long (200 characters max).': '密码太长了（最多 200 个字符）。',

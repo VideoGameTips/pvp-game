@@ -9,7 +9,7 @@ const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
 app.use(express.static('public'));
-app.use(express.json());
+app.use(express.json({ verify: (req, res, buf) => { req.rawBody = buf; } }));   // Stripe signs raw bytes
 
 // CORS for /auth/* endpoints (allows file:// page to reach the server)
 app.use((req, res, next) => {
@@ -401,6 +401,7 @@ function ensureShopFields(u) {
     if (typeof u.skinCasePacks[caseId] !== 'number') u.skinCasePacks[caseId] = 0;
   }
   if (!Array.isArray(u.skinInventory)) u.skinInventory = [];
+  if (!Array.isArray(u.paidOrders)) u.paidOrders = [];   // real-money receipts, for idempotency
   // Legacy migration: the previous build used skinCases:['gen1_basic'] to mean
   // "owns every Gen 1 skin." Preserve that instead of locking old buyers out.
   if (u.skinCases.includes('gen1_basic')) {
@@ -939,6 +940,134 @@ app.post('/shop/open-skin-case', (req, res) => {
   if (!duplicate) u.skinInventory.push(skinId);
   saveUsers();
   res.json({ ok: true, caseId, skinId, duplicate, skinCasePacks: u.skinCasePacks, skinInventory: u.skinInventory });
+});
+
+// ── 💳 Donut packs, for real money ─────────────────────────────────────────
+// The whole store is OFF unless three env vars are set, so a fork, a laptop
+// and the offline itch build all run with it simply absent. No key is ever
+// written into this repo -- it is public.
+//   STRIPE_SECRET_KEY      sk_test_... while you are trying it, sk_live_... after
+//   STRIPE_WEBHOOK_SECRET  whsec_..., from the webhook endpoint you create in Stripe
+//   PUBLIC_BASE_URL        https://your.site -- where Stripe sends the player back
+// Donuts are credited by the signed webhook and never by the browser: the page
+// that comes back from a payment can be faked by anyone with the URL; a webhook
+// signed with a secret only Stripe and this server know cannot.
+const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || '';
+const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || '';
+const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || '').replace(/\/+$/, '');
+const PAYMENTS_ON = !!(STRIPE_SECRET_KEY && STRIPE_WEBHOOK_SECRET && PUBLIC_BASE_URL);
+if (!PAYMENTS_ON) console.log('[pay] donut store OFF (set STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET and PUBLIC_BASE_URL to switch it on)');
+
+// Roughly 1,000 donuts a dollar at the bottom, 2,000 at the top -- so the
+// biggest pack is worth twice the smallest and nobody has to do the sums. A
+// match pays about 85, so the small pack is around twenty matches of play.
+const DONUT_PACKS = [
+  { id: 'pocket', name: 'Pocketful',  donuts: 2000,  cents: 199 },
+  { id: 'bag',    name: 'Paper Bag',  donuts: 6000,  cents: 499 },
+  { id: 'box',    name: 'Dozen Box',  donuts: 15000, cents: 999 },
+  { id: 'truck',  name: 'Whole Truck', donuts: 40000, cents: 1999 },
+];
+const usd = cents => '$' + (cents / 100).toFixed(2);
+
+// Stripe may send several v1 signatures during a secret rollover; any one
+// matching is enough. The timestamp check is what stops a captured webhook
+// being replayed tomorrow to mint donuts.
+function stripeSignatureOk(rawBody, header) {
+  if (!rawBody || !header) return false;
+  let t = null; const sigs = [];
+  for (const part of String(header).split(',')) {
+    const i = part.indexOf('=');
+    if (i < 0) continue;
+    const k = part.slice(0, i).trim(), v = part.slice(i + 1).trim();
+    if (k === 't') t = v; else if (k === 'v1') sigs.push(v);
+  }
+  if (!t || !sigs.length) return false;
+  if (Math.abs(Date.now() / 1000 - Number(t)) > 300) return false;
+  const expect = crypto.createHmac('sha256', STRIPE_WEBHOOK_SECRET)
+    .update(t + '.' + rawBody.toString('utf8')).digest('hex');
+  const a = Buffer.from(expect, 'utf8');
+  return sigs.some(sig => {
+    const b = Buffer.from(sig, 'utf8');
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
+  });
+}
+
+// Stripe retries a webhook until it gets a 200, so this has to be safe to run
+// twice with the same session id -- the receipt list is what makes it so.
+function creditDonutPack(username, packId, sessionId, centsPaid) {
+  const u = users[username];
+  if (!u || !sessionId) return false;
+  ensureShopFields(u);
+  if (u.paidOrders.some(o => o.id === sessionId)) return true;   // already paid out
+  const pack = DONUT_PACKS.find(p => p.id === packId);
+  if (!pack) { console.error('[pay] unknown pack', packId, 'for', username); return false; }
+  u.credits = (u.credits || 0) + pack.donuts;
+  u.paidOrders.push({ id: sessionId, packId, donuts: pack.donuts, cents: centsPaid || pack.cents, at: Date.now() });
+  saveUsers();
+  console.log('[pay] credited', pack.donuts, 'donuts to', username, '(' + sessionId + ')');
+  return true;
+}
+
+app.get('/shop/payments', (req, res) => {
+  res.json({
+    enabled: PAYMENTS_ON,
+    packs: DONUT_PACKS.map(p => ({ id: p.id, name: p.name, donuts: p.donuts, cents: p.cents, price: usd(p.cents) })),
+  });
+});
+
+app.post('/shop/checkout', async (req, res) => {
+  if (!PAYMENTS_ON) return res.status(503).json({ error: 'the donut store is not switched on' });
+  const u = authedUser(req);
+  if (!u) return res.status(401).json({ error: 'auth failed' });
+  const { username, packId } = req.body || {};
+  const pack = DONUT_PACKS.find(p => p.id === packId);
+  if (!pack) return res.status(404).json({ error: 'unknown pack' });
+  const form = new URLSearchParams({
+    mode: 'payment',
+    success_url: PUBLIC_BASE_URL + '/?paid=' + encodeURIComponent(pack.id),
+    cancel_url: PUBLIC_BASE_URL + '/?paid=cancelled',
+    client_reference_id: String(username),
+    'metadata[username]': String(username),
+    'metadata[packId]': pack.id,
+    'line_items[0][quantity]': '1',
+    'line_items[0][price_data][currency]': 'usd',
+    'line_items[0][price_data][unit_amount]': String(pack.cents),
+    'line_items[0][price_data][product_data][name]': pack.donuts.toLocaleString('en-US') + ' donuts — ' + pack.name,
+    'line_items[0][price_data][product_data][description]': 'In-game currency for TABS PvP. Cosmetic and weapon unlocks only.',
+  });
+  try {
+    const r = await fetch('https://api.stripe.com/v1/checkout/sessions', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + STRIPE_SECRET_KEY, 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: form,
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.url) {
+      console.error('[pay] stripe refused the session:', j.error && j.error.message);
+      return res.status(502).json({ error: 'payment provider refused' });
+    }
+    res.json({ ok: true, url: j.url });
+  } catch (e) {
+    console.error('[pay] could not reach stripe:', e.message);
+    res.status(502).json({ error: 'could not reach the payment provider' });
+  }
+});
+
+app.post('/stripe/webhook', (req, res) => {
+  if (!PAYMENTS_ON) return res.status(404).end();
+  if (!stripeSignatureOk(req.rawBody, req.get('stripe-signature'))) {
+    console.warn('[pay] webhook with a bad signature, ignored');
+    return res.status(400).json({ error: 'bad signature' });
+  }
+  let evt;
+  try { evt = JSON.parse(req.rawBody.toString('utf8')); } catch (e) { return res.status(400).end(); }
+  if (evt.type === 'checkout.session.completed') {
+    const s = (evt.data && evt.data.object) || {};
+    if (s.payment_status === 'paid') {
+      creditDonutPack(s.metadata && s.metadata.username, s.metadata && s.metadata.packId, s.id, s.amount_total);
+    }
+  }
+  res.json({ received: true });   // answer fast, or Stripe keeps retrying
 });
 
 app.post('/shop/buy-bundle', (req, res) => {
