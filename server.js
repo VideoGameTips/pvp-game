@@ -129,6 +129,44 @@ function checkPassword(username, pw) {
   return ok;
 }
 
+// ── 🔐 How weak is too weak ────────────────────────────────────────────────
+// Short rules a ten-year-old passes on the second try: eight characters, not
+// one of the handful everyone picks, not your own name, not one key held down
+// and not a straight run off the keyboard. No capital/symbol gymnastics --
+// those produce Password1! written on a sticky note, which is worse than a
+// long silly sentence. Guest accounts get 36 hex characters and sail through.
+// Mirrors passwordProblem() in public/game.js (gotcha #4): that copy is for
+// instant feedback in the form, this one is the rule that actually decides.
+const WORST_PASSWORDS = new Set([
+  'password', 'password1', 'password123', '12345678', '123456789', '1234567890',
+  'qwertyui', 'qwerty123', 'iloveyou', 'princess', 'football', 'baseball',
+  'letmein1', 'welcome1', 'monkey12', 'dragon12', 'sunshine', 'superman',
+  'trustno1', 'starwars', 'whatever', 'computer', 'minecraft', 'fortnite',
+  'roblox12', 'pokemon1', 'abcd1234', 'abc12345', 'admin123', 'administrator',
+]);
+function isKeyboardRun(p) {
+  if (p.length < 4) return false;
+  const step = p.charCodeAt(1) - p.charCodeAt(0);
+  if (step !== 1 && step !== -1) return false;
+  for (let i = 2; i < p.length; i++) if (p.charCodeAt(i) - p.charCodeAt(i - 1) !== step) return false;
+  return true;
+}
+// Returns a sentence to show the player, or null when the password is fine.
+function passwordProblem(pw, username) {
+  const p = String(pw == null ? '' : pw);
+  if (p.length < 8) return 'Password needs at least 8 characters.';
+  if (p.length > 200) return 'Password is too long (200 characters max).';
+  if (/^\s|\s$/.test(p)) return 'Password cannot start or end with a space.';
+  if (WORST_PASSWORDS.has(p.toLowerCase())) return 'That is one of the most guessed passwords in the world. Pick another.';
+  if (/^(.)\1+$/.test(p)) return 'That is one character held down. Pick something else.';
+  if (isKeyboardRun(p)) return 'That is a straight run across the keyboard. Pick something else.';
+  if (username && p.toLowerCase().includes(String(username).toLowerCase())) return 'Password cannot contain your username.';
+  return null;
+}
+// Existing accounts are never locked out over this -- they are told, once, at
+// login, and can change it from the menu whenever they like.
+function isWeakPassword(pw, username) { return passwordProblem(pw, username) !== null; }
+
 // ── 🛒 Shop: weapon costs + per-account credit balance ─────────────────────
 // Authoritative cost table (server-side so clients can't cheat their balance).
 // Mirrors the client-side WEAPON_COSTS table in game.js — keep them in sync.
@@ -218,9 +256,11 @@ const CURRENCY_ICON = '🍩';
 // normal weapons were only doubled, so one match bought about seventy AKs and
 // every weapon short of P2W was effectively free. Now the tables mean what they
 // say: a pistol is less than a match, an AK about three, an SR-X about six, the
-// AMR about twenty-five. P2W stays ridiculous on purpose -- about 70 to 240
-// matches each, roughly twice the grind it was.
-const WEAPON_PRICE_MULT = 0.5;          // P2W items
+// AMR about twenty-five. P2W was only 70-240 matches each at first -- still
+// "ridiculous" by every normal-item standard, but Andy: that's not legitimately
+// out of reach, that's a bad weekend. Bumped 10x so a single P2W item costs
+// roughly 700-2,350 matches -- a real grind, not a long one.
+const WEAPON_PRICE_MULT = 5;            // P2W items
 const NORMAL_WEAPON_PRICE_MULT = 1;     // everything else: the table as written
 const MATCH_REWARD_MULT = 1;
 const SKIN_CASE_GEN1_COST = 1500;       // ~18 matches; the cheap rung under Gen 2
@@ -1062,6 +1102,8 @@ app.post('/auth/register', (req, res) => {
   const { username, password } = req.body || {};
   if (!username || !password) return res.status(400).json({ error: 'username and password required' });
   if (username.length < 2 || username.length > 16) return res.status(400).json({ error: 'username 2-16 chars' });
+  const weak = passwordProblem(password, username);
+  if (weak) return res.status(400).json({ error: weak });
   if (nameTaken(username)) return res.status(409).json({ error: 'username taken' });   // "tom" when "Tom" exists too (#38)
   users[username] = { passwordHash: hashPassword(password), unlocks: [], purchased: [], credits: STARTER_CREDITS, economyV: ECONOMY_V, fragments: 0, chests: { common: 0, rare: 0 }, upgrades: {}, skinCases: [], skinCasePacks: { gen1_basic: 0, donut: 0, gen2_entrances: 0 }, skinInventory: [], lastFreeSpinDate: '', kills: 0, deaths: 0, created: Date.now() };
   saveUsers();
@@ -1115,7 +1157,24 @@ app.post('/auth/login', (req, res) => {
   if (!checkPassword(username, password)) return res.status(401).json({ error: 'wrong password' });
   ensureShopFields(u);
   saveUsers();
-  res.json({ ok: true, username, unlocks: u.unlocks || [], purchased: u.purchased, credits: u.credits, fragments: u.fragments || 0, chests: u.chests, upgrades: u.upgrades, skinCases: u.skinCases || [], skinCasePacks: u.skinCasePacks || {}, skinInventory: u.skinInventory || [], freeSpinAvailable: u.lastFreeSpinDate !== todayUTC(), adminPassExpiresAt: u.adminPassExpiresAt || 0, kills: u.kills || 0, deaths: u.deaths || 0, ...ffaProgressOf(u), isAdmin: !!u.isAdmin });
+  res.json({ ok: true, username, unlocks: u.unlocks || [], purchased: u.purchased, credits: u.credits, fragments: u.fragments || 0, chests: u.chests, upgrades: u.upgrades, skinCases: u.skinCases || [], skinCasePacks: u.skinCasePacks || {}, skinInventory: u.skinInventory || [], freeSpinAvailable: u.lastFreeSpinDate !== todayUTC(), adminPassExpiresAt: u.adminPassExpiresAt || 0, kills: u.kills || 0, deaths: u.deaths || 0, ...ffaProgressOf(u), isAdmin: !!u.isAdmin, weakPassword: isWeakPassword(password, username) });
+});
+
+// Change your own password. Needs the current one, so a borrowed session on a
+// shared computer cannot lock the owner out of their own account.
+app.post('/auth/change-password', (req, res) => {
+  const { username, password, newPassword } = req.body || {};
+  const u = users[username];
+  if (!u || !checkPassword(username, password)) return res.status(401).json({ error: 'auth failed' });
+  const weak = passwordProblem(newPassword, username);
+  if (weak) return res.status(400).json({ error: weak });
+  if (String(newPassword) === String(password)) return res.status(400).json({ error: 'That is the password you already have.' });
+  u.passwordHash = hashPassword(newPassword);
+  delete u.password;                       // in case a legacy record still carried one
+  verifiedPasswords.delete(username);      // the cached hash is for the old password
+  saveUsers();
+  console.log('[auth] password changed for', username);
+  res.json({ ok: true, username });
 });
 
 app.post('/auth/redeem', (req, res) => {

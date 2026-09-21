@@ -591,6 +591,21 @@
     'Mystery Skin': '神秘皮肤',
     'A thing happened.': '发生了点什么。',
     'OK': '好的', 'Cancel': '取消',
+    // ── passwords ──
+    'Password needs at least 8 characters.': '密码至少要 8 个字符。',
+    'Password is too long (200 characters max).': '密码太长了（最多 200 个字符）。',
+    'Password cannot start or end with a space.': '密码开头和结尾不能是空格。',
+    'That is one of the most guessed passwords in the world. Pick another.': '这是全世界最常被猜到的密码之一，换一个吧。',
+    'That is one character held down. Pick something else.': '这是一个键按住不放，换一个吧。',
+    'That is a straight run across the keyboard. Pick something else.': '这是键盘上连着的一串，换一个吧。',
+    'Password cannot contain your username.': '密码里不能包含你的用户名。',
+    'That is the password you already have.': '这就是你现在的密码。',
+    '🔐 CHANGE PASSWORD': '🔐 修改密码',
+    'New password (8+ characters, not your name):': '新密码（至少 8 个字符，不能包含你的名字）：',
+    'Type it once more:': '再输入一次：',
+    'Those two did not match.': '两次输入不一样。',
+    '✅ Password changed. This device is signed in with the new one.': '✅ 密码已修改，这台设备已用新密码登录。',
+    'Guest profiles have a random password this device keeps for you — there is nothing to change. Sign in with a nickname and a password to get a real account.': '游客档案用的是这台设备帮你保管的随机密码，没什么可改的。用昵称加密码登录才能拿到正式账号。',
     // killcam (#42)
     "KILLER'S VIEW": '击杀者视角', 'BEHIND THE KILLER': '击杀者身后', 'SIDE VIEW': '侧面视角', 'SLOW MOTION': '慢动作', 'SKIP ▶▶': '跳过 ▶▶',
     // names + sign-in (#38, #39)

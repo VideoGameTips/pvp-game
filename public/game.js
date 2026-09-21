@@ -28604,14 +28604,14 @@ function syncLobbyTag() {
 // uiAlert without blocking. Text is translated as the old i18n wrappers did.
 // control: optional object that gets control.close(value) — for a dialog that can be taken
 // back from outside, like a duel challenge that expired (#46).
-function uiDialog({ message, okText = 'OK', cancelText = null, input = null, control = null }) {
+function uiDialog({ message, okText = 'OK', cancelText = null, input = null, control = null, password = false }) {
   return new Promise(resolve => {
     releasePointer();                     // a locked mouse can't click it (#25)
     const wrap = document.createElement('div');
     wrap.className = 'ui-dialog-wrap';
     wrap.innerHTML = `<div class="ui-dialog" role="dialog" aria-modal="true">
       <div class="ui-dialog-msg" data-no-i18n></div>
-      ${input !== null ? '<input class="ui-dialog-input" maxlength="64" autocomplete="off">' : ''}
+      ${input !== null ? '<input class="ui-dialog-input" maxlength="64" autocomplete="off"' + (password ? ' type="password"' : '') + '>' : ''}
       <div class="ui-dialog-btns">${cancelText ? '<button type="button" class="ui-cancel"></button>' : ''}<button type="button" class="ui-ok"></button></div>
     </div>`;
     wrap.querySelector('.ui-dialog-msg').textContent = I18N.t(String(message ?? ''));
@@ -28636,6 +28636,7 @@ function uiDialog({ message, okText = 'OK', cancelText = null, input = null, con
 const uiAlert   = m => uiDialog({ message: m });
 const uiConfirm = m => uiDialog({ message: m, okText: 'OK', cancelText: 'Cancel' });
 const uiPrompt  = (m, d = '') => uiDialog({ message: m, okText: 'OK', cancelText: 'Cancel', input: d });
+const uiPassPrompt = m => uiDialog({ message: m, okText: 'OK', cancelText: 'Cancel', input: '', password: true });
 window.alert = m => { uiAlert(m); };   // the ~50 fire-and-forget alerts
 
 // ── 🎯 Hit / kill / ammo at the crosshair (#34) ─────────────────────────────
@@ -37658,6 +37659,35 @@ setTimeout(function tryAutoLogin() {
 
 // Resolved once at the top of this file — see the SERVER block. Must NOT be ''
 // on sushigamelab.com: the game is proxied under /pvp/ there.
+// 🔐 Mirrors passwordProblem() in server.js (gotcha #4). The server decides;
+// this copy only means the form can answer before the round trip. Keep the
+// two lists the same or a password accepted here is refused there.
+const WORST_PASSWORDS = new Set([
+  'password', 'password1', 'password123', '12345678', '123456789', '1234567890',
+  'qwertyui', 'qwerty123', 'iloveyou', 'princess', 'football', 'baseball',
+  'letmein1', 'welcome1', 'monkey12', 'dragon12', 'sunshine', 'superman',
+  'trustno1', 'starwars', 'whatever', 'computer', 'minecraft', 'fortnite',
+  'roblox12', 'pokemon1', 'abcd1234', 'abc12345', 'admin123', 'administrator',
+]);
+function isKeyboardRun(p) {
+  if (p.length < 4) return false;
+  const step = p.charCodeAt(1) - p.charCodeAt(0);
+  if (step !== 1 && step !== -1) return false;
+  for (let i = 2; i < p.length; i++) if (p.charCodeAt(i) - p.charCodeAt(i - 1) !== step) return false;
+  return true;
+}
+function passwordProblem(pw, username) {
+  const p = String(pw == null ? '' : pw);
+  if (p.length < 8) return 'Password needs at least 8 characters.';
+  if (p.length > 200) return 'Password is too long (200 characters max).';
+  if (/^\s|\s$/.test(p)) return 'Password cannot start or end with a space.';
+  if (WORST_PASSWORDS.has(p.toLowerCase())) return 'That is one of the most guessed passwords in the world. Pick another.';
+  if (/^(.)\1+$/.test(p)) return 'That is one character held down. Pick something else.';
+  if (isKeyboardRun(p)) return 'That is a straight run across the keyboard. Pick something else.';
+  if (username && p.toLowerCase().includes(String(username).toLowerCase())) return 'Password cannot contain your username.';
+  return null;
+}
+
 const AUTH_BASE = SERVER.base;
 async function authRequest(url, body, method = 'POST') {
   try {
@@ -37721,6 +37751,8 @@ async function login() {
     // Try login first; if user doesn't exist, fall through to register
     let result = await authRequest('/auth/login', { username: name, password: pass });
     if (result.error === 'user not found') {
+      const weak = passwordProblem(pass, name);
+      if (weak) { setLoginBoxOpen(true); setAuthStatus(weak, '#ff6666'); return; }
       setAuthStatus(`Creating new account "${name}"…`, '#88ccff');
       result = await authRequest('/auth/register', { username: name, password: pass });
     }
@@ -37763,6 +37795,7 @@ function finishLogin(result, creds) {
   currentUser = { username: result.username, password: creds.password, unlocks: result.unlocks || [], purchased: result.purchased || [], credits: result.credits ?? 0, fragments: result.fragments ?? 0, chests: result.chests || { common: 0, rare: 0 }, upgrades: result.upgrades || {}, skinCases: result.skinCases || [], skinCasePacks: result.skinCasePacks || {}, skinInventory: result.skinInventory || [], freeSpinAvailable: !!result.freeSpinAvailable, adminPassExpiresAt: result.adminPassExpiresAt || 0, ffaDamage: result.ffaDamage || 0, ffaWins: result.ffaWins || 0, ffaLegend: !!result.ffaLegend, isAdmin: !!result.isAdmin, guest: !!creds.guest };
   refreshLegendSkins();
   try { localStorage.setItem('pvp_user', JSON.stringify({ username: result.username, password: creds.password, ...(creds.guest ? { guest: true } : {}) })); } catch (e) {}
+  if (result.weakPassword && !creds.guest) nudgeWeakPassword();
   setAuthStatus(result.isAdmin ? `🔓 ADMIN ACCESS GRANTED · ${result.username}` : `Logged in as ${result.username}`, result.isAdmin ? '#ff4444' : '#88ff88');
 
   const name = result.username;
@@ -39537,6 +39570,35 @@ if (_bestBtn) {
   _bestBtn.addEventListener('click', () => toggleBestLoadoutsPanel(true));
   _bestBtn.addEventListener('touchstart', e => { e.preventDefault(); toggleBestLoadoutsPanel(true); }, { passive: false });
 }
+// Accounts made before the rules existed keep working. They are told once per
+// session, and can change it from the menu whenever they like -- never forced,
+// because locking a ten-year-old out of their own skins is not security.
+let _weakPassTold = false;
+function nudgeWeakPassword() {
+  if (_weakPassTold) return;
+  _weakPassTold = true;
+  setTimeout(async () => {
+    const why = passwordProblem(currentUser?.password, currentUser?.username) || 'It is an easy one to guess.';
+    if (await uiConfirm('🔐 Your password is weak.\n\n' + why + '\n\nChange it now?')) changePassword();
+  }, 1500);
+}
+async function changePassword() {
+  if (!currentUser) { uiAlert('Log in first.'); return; }
+  if (currentUser.guest) { uiAlert('Guest profiles have a random password this device keeps for you — there is nothing to change. Sign in with a nickname and a password to get a real account.'); return; }
+  const next = await uiPassPrompt('New password (8+ characters, not your name):');
+  if (typeof next !== 'string') return;
+  const why = passwordProblem(next, currentUser.username);
+  if (why) { await uiAlert(why); return changePassword(); }
+  const again = await uiPassPrompt('Type it once more:');
+  if (typeof again !== 'string') return;
+  if (again !== next) { await uiAlert('Those two did not match.'); return changePassword(); }
+  const r = await authRequest('/auth/change-password', { username: currentUser.username, password: currentUser.password, newPassword: next });
+  if (!r || r.error) { uiAlert('❌ ' + (r?.error || 'could not change it')); return; }
+  currentUser.password = next;
+  try { localStorage.setItem('pvp_user', JSON.stringify({ username: currentUser.username, password: next })); } catch (e) {}
+  uiAlert('✅ Password changed. This device is signed in with the new one.');
+}
+
 async function logOut() {
   const msg = currentUser?.guest
     ? 'Log out? This guest profile only lives on this device — you won\'t be able to get it back.'
@@ -39547,6 +39609,8 @@ async function logOut() {
   refreshLegendSkins();              // logged out: an equipped Legend goes back to stock
   location.reload();
 }
+const _changePassBtn = document.getElementById('change-pass-btn');
+if (_changePassBtn) _changePassBtn.addEventListener('click', changePassword);
 const _logoutBtn = document.getElementById('logout-btn');
 if (_logoutBtn) _logoutBtn.addEventListener('click', logOut);
 
