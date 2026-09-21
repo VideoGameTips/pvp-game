@@ -1355,7 +1355,6 @@ const CURRENCY_ICON = '🍩';
 const WEAPON_PRICE_MULT = 5;            // P2W items
 const NORMAL_WEAPON_PRICE_MULT = 1;
 const SKIN_CASE_GEN1_COST = 1500;
-const SKIN_CASE_DONUT_COST = 4000;
 const SKIN_CASE_GEN2_COST = 5000;       // cosmetic gacha, well under any P2W weapon now
 const P2W_ITEM_IDS = new Set([
   'event_horizon', 'storm_core', 'abs_zero', 'solar_lance', 'quantum_repeater',
@@ -25259,8 +25258,6 @@ const GEN1_GATED_MODEL_SKIN_IDS = new Set([
   'srx_dragunov', 'revolver_python', 'grenade_launcher_mgl', 'flamethrower_m2',
 ]);
 const DONUT_SKIN_IDS = ['revolver_donut', 'katana_donut'];
-const DONUT_MODEL_SKIN_IDS = new Set(['revolver_donut']);
-const DONUT_MELEE_MODEL_SKIN_IDS = new Set(['katana_donut']);
 // 🎬 Skin Case Gen 2 — Entrances. One rule decides what is in it: if the skin
 // plays an animation when you draw it, it comes from this case. Crystals
 // assembling into an AK, a balisong flipping open, a knife falling out of a
@@ -25270,7 +25267,7 @@ const DONUT_MELEE_MODEL_SKIN_IDS = new Set(['katana_donut']);
 // Mirrors GEN2_SKIN_IDS in server.js (gotcha #4): the server owns the roll and
 // the ownership record, this list only decides what the picker locks.
 const GEN2_MODEL_SKIN_IDS = new Set([
-  'ak20_rainbow', 'ak20_hyperspace', 'ak20_blueprint', 'sg8_portal', 'vector_portal',
+  'revolver_donut', 'ak20_rainbow', 'ak20_hyperspace', 'ak20_blueprint', 'sg8_portal', 'vector_portal',
   'railgun_portal_detector', 'p90_quantum_scanner', 'freeze_hyperslush', 'firework_showman',
   'shorty_outlaw', 'snub_gunslinger', 'deagle_glitch', 'deagle_phantom',
   'burst_cannon_phantom', 'plasma_carbine_fishbowl', 'paintball_fishbowl', 'coilgun_clockwork',
@@ -25280,13 +25277,13 @@ const GEN2_MODEL_SKIN_IDS = new Set([
   'shorty_8bit',
 ]);
 const GEN2_MELEE_MODEL_SKIN_IDS = new Set([
-  'knife_hyperspace', 'knife_butterfly', 'knife_singularity', 'lightsabre_singularity',
+  'katana_donut', 'knife_hyperspace', 'knife_butterfly', 'knife_singularity', 'lightsabre_singularity',
   'katana_laser', 'katana_sakura', 'katana_thunder', 'combat_axe_frost', 'shock_baton_thunder',
   'spear_thunder', 'knife_balloon', 'bat_inflatable', 'frying_pan_pizza_cutter',
   'sabre_balloon',
 ]);
-const GATED_MODEL_SKIN_IDS = new Set([...GEN1_GATED_MODEL_SKIN_IDS, ...DONUT_MODEL_SKIN_IDS, ...GEN2_MODEL_SKIN_IDS]);
-const GATED_MELEE_MODEL_SKIN_IDS = new Set([...DONUT_MELEE_MODEL_SKIN_IDS, ...GEN2_MELEE_MODEL_SKIN_IDS]);
+const GATED_MODEL_SKIN_IDS = new Set([...GEN1_GATED_MODEL_SKIN_IDS, ...GEN2_MODEL_SKIN_IDS]);
+const GATED_MELEE_MODEL_SKIN_IDS = new Set([...GEN2_MELEE_MODEL_SKIN_IDS]);
 for (const id of GEN1_GATED_MODEL_SKIN_IDS) {
   const ms = MODEL_SKINS.find(m => m.id === id);
   if (ms && !GEN1_SKIN_BY_ID[id]) { GEN1_SKIN_DEFS.push(ms); GEN1_SKIN_BY_ID[id] = ms; }
@@ -26933,11 +26930,6 @@ const MELEE_MODEL_SKINS = [
 ];
 const MELEE_MODEL_SKINS_BY_BASE = {};
 for (const ms of MELEE_MODEL_SKINS) (MELEE_MODEL_SKINS_BY_BASE[ms.melee] ||= []).push(ms);
-const DONUT_SKIN_DEFS = [
-  ...MODEL_SKINS.filter(s => DONUT_MODEL_SKIN_IDS.has(s.id)),
-  ...MELEE_MODEL_SKINS.filter(s => DONUT_MELEE_MODEL_SKIN_IDS.has(s.id)),
-];
-const DONUT_SKIN_BY_ID = Object.fromEntries(DONUT_SKIN_DEFS.map(s => [s.id, s]));
 // Guns first, then melee — the same order the case's reel and its counter use.
 const GEN2_SKIN_DEFS = [
   ...MODEL_SKINS.filter(s => GEN2_MODEL_SKIN_IDS.has(s.id)),
@@ -38871,12 +38863,11 @@ async function trialWeapon(weaponId) {
 
 const CLIENT_SKIN_CASES = {
   gen1_basic: { name: 'Skin Case Gen 1', shortName: 'GEN 1', cost: SKIN_CASE_GEN1_COST, defs: () => GEN1_SKIN_DEFS, accent: '#88ccff' },
-  donut: { name: 'Donut Case', shortName: 'DONUT', cost: SKIN_CASE_DONUT_COST, defs: () => DONUT_SKIN_DEFS, accent: '#ff9bd0' },
   gen2_entrances: { name: 'Skin Case Gen 2', shortName: 'GEN 2', cost: SKIN_CASE_GEN2_COST, defs: () => GEN2_SKIN_DEFS, accent: '#c9a6ff' },
 };
 function skinCaseDef(caseId) { return CLIENT_SKIN_CASES[caseId] || CLIENT_SKIN_CASES.gen1_basic; }
 function skinDefById(skinId) {
-  return GEN1_SKIN_BY_ID[skinId] || DONUT_SKIN_BY_ID[skinId] || GEN2_SKIN_BY_ID[skinId] ||
+  return GEN1_SKIN_BY_ID[skinId] || GEN2_SKIN_BY_ID[skinId] ||
     MODEL_SKINS.find(s => s.id === skinId) || MELEE_MODEL_SKINS.find(s => s.id === skinId) ||
     { name: skinId || 'Mystery Skin', rarity: 'basic', blurb: 'A thing happened.' };
 }
@@ -38912,7 +38903,7 @@ async function openSkinCase(caseId = 'gen1_basic') {
         const pool = missing.length ? missing : defs;
         const skin = pool[Math.floor(Math.random() * pool.length)];
         currentUser.skinInventory = [...new Set([...(currentUser.skinInventory || []), skin.id])];
-        return { ok: true, caseId, skinId: skin.id, duplicate: false, skinCasePacks: currentUser.skinCasePacks || { gen1_basic: 99, donut: 99, gen2_entrances: 99 }, skinInventory: currentUser.skinInventory };
+        return { ok: true, caseId, skinId: skin.id, duplicate: false, skinCasePacks: currentUser.skinCasePacks || { gen1_basic: 99, gen2_entrances: 99 }, skinInventory: currentUser.skinInventory };
       })()
     : await authRequest('/shop/open-skin-case', { username: currentUser.username, password: currentUser.password, caseId });
   if (!r || r.error) { alert('❌ ' + (r?.error || 'case error')); return false; }
@@ -39376,7 +39367,6 @@ function openWeaponSkinsPanel() {
       const on = equippedModelSkins[wid];
       const cells = MODEL_SKINS_BY_WEAPON[wid].map(ms => {
         const legendLocked = isLegendLocked(ms);
-        const donutLocked = DONUT_MODEL_SKIN_IDS.has(ms.id) && !ownsSkin(ms.id);
         const gen2Locked = GEN2_MODEL_SKIN_IDS.has(ms.id) && !ownsSkin(ms.id);
         const locked = (GATED_MODEL_SKIN_IDS.has(ms.id) && !ownsSkin(ms.id)) || legendLocked;
         return `
@@ -39386,7 +39376,6 @@ function openWeaponSkinsPanel() {
           <div style="font-size:11px;letter-spacing:1px;color:${on===ms.id?'#88ff99':'#ddd'};">${locked ? '🔒 ' + ms.name : ms.name}</div>
           <div style="font-size:9px;color:#8a8a7a;margin-top:3px;line-height:1.3;">${ms.blurb}</div>
           ${legendLocked ? `<div style="font-size:9px;color:#ff6a4a;margin-top:4px;line-height:1.3;">${ffaLegendProgressText()}</div>` : ''}
-          ${donutLocked ? `<div style="font-size:9px;color:#ff9bd0;margin-top:4px;line-height:1.3;">Pull from the Donut Case.</div>` : ''}
           ${gen2Locked ? `<div style="font-size:9px;color:#c9a6ff;margin-top:4px;line-height:1.3;">Pull from Gen 2 — it makes an entrance.</div>` : ''}
         </div>`;
       }).join('');
@@ -39419,9 +39408,8 @@ function openWeaponSkinsPanel() {
       if (!base) continue;
       const on = equippedMeleeModelSkins[bid];
       const cells = MELEE_MODEL_SKINS_BY_BASE[bid].map(ms => {
-        const donutLocked = DONUT_MELEE_MODEL_SKIN_IDS.has(ms.id) && !ownsSkin(ms.id);
         const gen2Locked = GEN2_MELEE_MODEL_SKIN_IDS.has(ms.id) && !ownsSkin(ms.id);
-        const locked = isLegendLocked(ms) || donutLocked || gen2Locked;
+        const locked = isLegendLocked(ms) || gen2Locked;
         return `
         <div data-mmskin="${ms.id}" data-mmbase="${bid}" class="mms-cell"
              style="cursor:${locked?"not-allowed":"pointer"};opacity:${locked?0.45:1};filter:${locked?"grayscale(0.8)":"none"};border:2px solid ${on===ms.id?"#ffcc99":"#444"};border-radius:6px;padding:8px;background:${on===ms.id?"#2a2118":"#1d1a12"};">
@@ -39429,7 +39417,6 @@ function openWeaponSkinsPanel() {
           <div style="font-size:11px;letter-spacing:1px;color:${on===ms.id?"#ffcc99":"#ddd"};">${locked ? "🔒 " + ms.name : ms.name}</div>
           <div style="font-size:9px;color:#8a8a7a;margin-top:3px;line-height:1.3;">${ms.blurb}</div>
           ${isLegendLocked(ms) ? `<div style="font-size:9px;color:#ff6a4a;margin-top:4px;line-height:1.3;">${ffaLegendProgressText()}</div>` : ""}
-          ${donutLocked ? `<div style="font-size:9px;color:#ff9bd0;margin-top:4px;line-height:1.3;">Pull from the Donut Case.</div>` : ""}
           ${gen2Locked ? `<div style="font-size:9px;color:#c9a6ff;margin-top:4px;line-height:1.3;">Pull from Gen 2 — it makes an entrance.</div>` : ""}
         </div>`;
       }).join("");
@@ -39512,21 +39499,6 @@ function openWeaponSkinsPanel() {
       ${meleeRows}
     </div>`;
   };
-  const donutCaseSection = () => {
-    const unopened = currentUser?.isAdmin ? 99 : (currentUser?.skinCasePacks?.donut || 0);
-    const ownedCount = ownedSkinCountFor(DONUT_SKIN_DEFS);
-    return `<div style="margin-top:18px;border-top:1px solid #6a5520;padding-top:12px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
-        <div style="font-size:14px;letter-spacing:2px;color:#ff9bd0;">🍩 DONUT CASE</div>
-        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
-          <div style="font-size:10px;color:#ffd1e8;letter-spacing:1px;">${ownedCount}/${DONUT_SKIN_DEFS.length} SKINS · ${unopened} CASES</div>
-          <button id="open-skin-case-donut" ${unopened<=0?'disabled':''} style="padding:6px 10px;background:${unopened>0?'#3a1830':'#222'};color:${unopened>0?'#ffd1e8':'#666'};border:1px solid ${unopened>0?'#ff9bd0':'#444'};border-radius:4px;font-family:inherit;font-size:10px;letter-spacing:1px;cursor:${unopened>0?'pointer':'not-allowed'};">OPEN</button>
-          <button id="buy-skin-case-donut" style="padding:6px 10px;background:#382018;color:#ffdd88;border:1px solid #ffbb55;border-radius:4px;font-family:inherit;font-size:10px;letter-spacing:1px;cursor:pointer;">BUY · ${money(SKIN_CASE_DONUT_COST)}</button>
-        </div>
-      </div>
-      <div style="font-size:10px;color:#c69ab1;margin:5px 0 2px;line-height:1.4;">Top-tier cosmetic case. Tiny pool: The Glazer revolver and Ring King katana.</div>
-    </div>`;
-  };
   const gen2CaseSection = () => {
     const unopened = currentUser?.isAdmin ? 99 : (currentUser?.skinCasePacks?.gen2_entrances || 0);
     const ownedCount = ownedSkinCountFor(GEN2_SKIN_DEFS);
@@ -39553,7 +39525,6 @@ function openWeaponSkinsPanel() {
     <div style="font-size:10px;color:#aa9966;margin-bottom:12px;line-height:1.4;">One pick applies to every gun. Country themes use real national flags; the German theme is the Iron Cross military mark (no Nazi imagery).</div>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">${WEAPON_SKINS.map(swatch).join('')}</div>
     ${gen2CaseSection()}
-    ${donutCaseSection()}
     ${basicCaseSection()}
   `;
   const buyCaseBtn = panel.querySelector('#buy-skin-case-gen1');
@@ -39571,14 +39542,6 @@ function openWeaponSkinsPanel() {
   const openGen2CaseBtn = panel.querySelector('#open-skin-case-gen2');
   if (openGen2CaseBtn) openGen2CaseBtn.addEventListener('click', async () => {
     await openSkinCase('gen2_entrances');
-  });
-  const buyDonutCaseBtn = panel.querySelector('#buy-skin-case-donut');
-  if (buyDonutCaseBtn) buyDonutCaseBtn.addEventListener('click', async () => {
-    if (await buySkinCase('donut')) openWeaponSkinsPanel();
-  });
-  const openDonutCaseBtn = panel.querySelector('#open-skin-case-donut');
-  if (openDonutCaseBtn) openDonutCaseBtn.addEventListener('click', async () => {
-    await openSkinCase('donut');
   });
   panel.querySelectorAll('.gs-cell').forEach(cell => {
     cell.addEventListener('click', () => {
@@ -39598,7 +39561,6 @@ function openWeaponSkinsPanel() {
     cell.addEventListener('click', () => {
       const ms = MELEE_MODEL_SKINS.find(m => m.id === cell.dataset.mmskin);
       if (isLegendLocked(ms)) { alert('FFA Legend skins are earned in FFA: deal 1,000,000 damage or win 5,000 FFA matches.'); return; }
-      if (ms && DONUT_MELEE_MODEL_SKIN_IDS.has(ms.id) && !ownsSkin(ms.id)) { alert('You have not pulled that skin yet. Open Donut Cases in Lobby 13.'); return; }
       if (ms && GEN2_MELEE_MODEL_SKIN_IDS.has(ms.id) && !ownsSkin(ms.id)) { alert('You have not pulled that skin yet. Open Gen 2 cases in Lobby 13.'); return; }
       setMeleeModelSkin(cell.dataset.mmbase, cell.dataset.mmskin || null);
       openWeaponSkinsPanel();
@@ -39607,7 +39569,6 @@ function openWeaponSkinsPanel() {
   panel.querySelectorAll('.ms-cell').forEach(cell => {
     cell.addEventListener('click', () => {
       const id = cell.dataset.mskin;
-      if (id && DONUT_MODEL_SKIN_IDS.has(id) && !ownsSkin(id)) { alert('You have not pulled that skin yet. Open Donut Cases in Lobby 13.'); return; }
       if (id && GEN1_GATED_MODEL_SKIN_IDS.has(id) && !ownsSkin(id)) { alert('You have not pulled that skin yet. Open Gen 1 cases in Lobby 13.'); return; }
       if (id && GEN2_MODEL_SKIN_IDS.has(id) && !ownsSkin(id)) { alert('You have not pulled that skin yet. Open Gen 2 cases in Lobby 13.'); return; }
       if (isLegendLocked(MODEL_SKINS.find(m => m.id === id))) { alert('FFA Legend skins are earned in FFA: deal 1,000,000 damage or win 5,000 FFA matches.'); return; }
@@ -39831,12 +39792,11 @@ function updateUserInfoBar() {
     const frags    = currentUser.isAdmin ? '∞' : (currentUser.fragments ?? 0);
     const ch = currentUser.chests || { common: 0, rare: 0 };
     const cases = currentUser.isAdmin ? '∞' : (currentUser.skinCasePacks?.gen1_basic || 0);
-    const donutCases = currentUser.isAdmin ? '∞' : (currentUser.skinCasePacks?.donut || 0);
     const gen2Cases = currentUser.isAdmin ? '∞' : (currentUser.skinCasePacks?.gen2_entrances || 0);
     const passTag = adminPassActive() && !currentUser.isAdmin
       ? ` · <b style="color:#ffcc88">🪖 PASS ${Math.ceil(adminPassMsLeft()/60000)}m</b>`
       : '';
-    unlocksEl.innerHTML = `${CURRENCY_ICON} <b style="color:#ffdd55">${credits}</b> · 🧩 <b style="color:#aaccff">${frags}</b> frags · 📦 ${ch.common}c/${ch.rare}r · 🎁 ${cases} skin · 🎬 ${gen2Cases} gen2 · 🍩 ${donutCases} donut · 🪖 ${n}/24${passTag}`;
+    unlocksEl.innerHTML = `${CURRENCY_ICON} <b style="color:#ffdd55">${credits}</b> · 🧩 <b style="color:#aaccff">${frags}</b> frags · 📦 ${ch.common}c/${ch.rare}r · 🎁 ${cases} skin · 🎬 ${gen2Cases} gen2 · 🪖 ${n}/24${passTag}`;
   }
   // Show admin panel button if admin
   let adminBtn = document.getElementById('admin-panel-btn');

@@ -252,20 +252,25 @@ const CURRENCY_ICON = '🍩';
 // 💰 One economy, one unit. A match pays 20-250 donuts -- 5 a kill, plus 50
 // for a win or 20 for a loss, so about 85 for an ordinary game -- and every
 // price table (weapons, bundles, chests, upgrades, abilities, the wheel) is
-// written in those same units. Match rewards used to be multiplied by 400 while
-// normal weapons were only doubled, so one match bought about seventy AKs and
-// every weapon short of P2W was effectively free. Now the tables mean what they
-// say: a pistol is less than a match, an AK about three, an SR-X about six, the
-// AMR about twenty-five. P2W was only 70-240 matches each at first -- still
-// "ridiculous" by every normal-item standard, but Andy: that's not legitimately
-// out of reach, that's a bad weekend. Bumped 10x so a single P2W item costs
-// roughly 700-2,350 matches -- a real grind, not a long one.
-const WEAPON_PRICE_MULT = 5;            // P2W items
-const NORMAL_WEAPON_PRICE_MULT = 1;     // everything else: the table as written
+// written in those same units, then scaled by the two multipliers below.
+// Both apply to WEAPON_COSTS (in place, once, right after the table) and to
+// BUNDLES (same split by id), so a bundle's discount off its parts' sum
+// never drifts even as these two numbers move.
+// Andy's target, in matches of an ordinary game (~85 donuts each):
+//   ez weapons (AK-20, SG8, ...)         ~10 matches
+//   mid-grind (Chainsaw, AMR, Titan Hammer)  50-200 matches
+//   P2W                                  1,000-3,000 matches, legitimately out of reach
+// NORMAL_WEAPON_PRICE_MULT 1 -> 4 gets the AK to ~12 and the AMR to ~94 --
+// one knob for the whole normal tier, so ez and mid-grind move together.
+// WEAPON_PRICE_MULT 5 -> 7 puts every P2W item between 988 and 3,294.
+const WEAPON_PRICE_MULT = 7;            // P2W items
+const NORMAL_WEAPON_PRICE_MULT = 4;     // everything else: the table as written
 const MATCH_REWARD_MULT = 1;
 const SKIN_CASE_GEN1_COST = 1500;       // ~18 matches; the cheap rung under Gen 2
-const SKIN_CASE_DONUT_COST = 4000;      // top-tier cosmetic chase case
-const SKIN_CASE_GEN2_COST = 5000;       // just under the cheapest P2W weapon (6,000)
+// The Donut Case is gone: a case with a pool of two is a vending machine, not a
+// case. Both its skins draw with an animation, which is Gen 2's whole rule, so
+// they moved there as its rarest tier (see GEN2_MYTHIC_SKIN_IDS).
+const SKIN_CASE_GEN2_COST = 5000;       // ~59 matches. P2W is the absurd tier, not this
 // Balances saved under the old x400 rewards are rescaled once (ensureShopFields).
 const ECONOMY_V = 2;
 const OLD_MATCH_REWARD_MULT = 400;
@@ -291,6 +296,8 @@ const GEN1_SKIN_IDS = [
   'rpd_m249', 'lever_winchester94', 'pistol_m9', 'sg8_remington870',
   'srx_dragunov', 'revolver_python', 'grenade_launcher_mgl', 'flamethrower_m2',
 ];
+// The two donut weapons. No longer a case of their own -- kept as a list only
+// so an admin login still grants them; the pool that deals them is Gen 2's.
 const DONUT_SKIN_IDS = [
   'revolver_donut', 'katana_donut',
 ];
@@ -300,6 +307,7 @@ const DONUT_SKIN_IDS = [
 // thirty ordinary pulls while a balloon knife turns up early and often.
 // Mirrors GEN2_MODEL_SKIN_IDS / GEN2_MELEE_MODEL_SKIN_IDS in public/game.js
 // (gotcha #4): that list decides what the picker locks, this one what drops.
+const GEN2_MYTHIC_SKIN_IDS = DONUT_SKIN_IDS;   // one list, so the two cannot drift apart
 const GEN2_LEGENDARY_SKIN_IDS = [
   'ak20_rainbow',
 ];
@@ -318,14 +326,14 @@ const GEN2_GOOD_SKIN_IDS = [
   'ak20_8bit', 'sg8_8bit', 'revolver_8bit', 'vector_8bit', 'shorty_8bit', 'knife_balloon',
   'bat_inflatable', 'frying_pan_pizza_cutter', 'sabre_balloon',
 ];
-const GEN2_SKIN_IDS = [...GEN2_LEGENDARY_SKIN_IDS, ...GEN2_RARE_SKIN_IDS, ...GEN2_GOOD_SKIN_IDS];
+const GEN2_SKIN_IDS = [...GEN2_MYTHIC_SKIN_IDS, ...GEN2_LEGENDARY_SKIN_IDS, ...GEN2_RARE_SKIN_IDS, ...GEN2_GOOD_SKIN_IDS];
 const GEN2_SKIN_WEIGHTS = {};
+for (const id of GEN2_MYTHIC_SKIN_IDS) GEN2_SKIN_WEIGHTS[id] = 1;
 for (const id of GEN2_LEGENDARY_SKIN_IDS) GEN2_SKIN_WEIGHTS[id] = 2;
 for (const id of GEN2_RARE_SKIN_IDS) GEN2_SKIN_WEIGHTS[id] = 3;
 for (const id of GEN2_GOOD_SKIN_IDS) GEN2_SKIN_WEIGHTS[id] = 6;
 const SKIN_CASES = {
   gen1_basic: { cost: SKIN_CASE_GEN1_COST, pool: GEN1_SKIN_IDS },
-  donut: { cost: SKIN_CASE_DONUT_COST, pool: DONUT_SKIN_IDS },
   gen2_entrances: { cost: SKIN_CASE_GEN2_COST, pool: GEN2_SKIN_IDS, weights: GEN2_SKIN_WEIGHTS },
 };
 for (const id of Object.keys(WEAPON_COSTS)) {
@@ -402,6 +410,12 @@ function ensureShopFields(u) {
   }
   if (!Array.isArray(u.skinInventory)) u.skinInventory = [];
   if (!Array.isArray(u.paidOrders)) u.paidOrders = [];   // real-money receipts, for idempotency
+  // The Donut Case was retired. Nobody loses a case they paid for: an unopened
+  // one becomes a Gen 2 case, which is where its two skins live now.
+  if (u.skinCasePacks.donut > 0) {
+    u.skinCasePacks.gen2_entrances = (u.skinCasePacks.gen2_entrances || 0) + u.skinCasePacks.donut;
+    u.skinCasePacks.donut = 0;
+  }
   // Legacy migration: the previous build used skinCases:['gen1_basic'] to mean
   // "owns every Gen 1 skin." Preserve that instead of locking old buyers out.
   if (u.skinCases.includes('gen1_basic')) {
@@ -1234,9 +1248,9 @@ app.post('/auth/register', (req, res) => {
   const weak = passwordProblem(password, username);
   if (weak) return res.status(400).json({ error: weak });
   if (nameTaken(username)) return res.status(409).json({ error: 'username taken' });   // "tom" when "Tom" exists too (#38)
-  users[username] = { passwordHash: hashPassword(password), unlocks: [], purchased: [], credits: STARTER_CREDITS, economyV: ECONOMY_V, fragments: 0, chests: { common: 0, rare: 0 }, upgrades: {}, skinCases: [], skinCasePacks: { gen1_basic: 0, donut: 0, gen2_entrances: 0 }, skinInventory: [], lastFreeSpinDate: '', kills: 0, deaths: 0, created: Date.now() };
+  users[username] = { passwordHash: hashPassword(password), unlocks: [], purchased: [], credits: STARTER_CREDITS, economyV: ECONOMY_V, fragments: 0, chests: { common: 0, rare: 0 }, upgrades: {}, skinCases: [], skinCasePacks: { gen1_basic: 0, gen2_entrances: 0 }, skinInventory: [], lastFreeSpinDate: '', kills: 0, deaths: 0, created: Date.now() };
   saveUsers();
-  res.json({ ok: true, username, unlocks: [], purchased: [], credits: STARTER_CREDITS, fragments: 0, chests: { common: 0, rare: 0 }, upgrades: {}, skinCases: [], skinCasePacks: { gen1_basic: 0, donut: 0, gen2_entrances: 0 }, skinInventory: [] });
+  res.json({ ok: true, username, unlocks: [], purchased: [], credits: STARTER_CREDITS, fragments: 0, chests: { common: 0, rare: 0 }, upgrades: {}, skinCases: [], skinCasePacks: { gen1_basic: 0, gen2_entrances: 0 }, skinInventory: [] });
 });
 
 // Master admin password — READ FROM ENVIRONMENT, never hardcoded.
@@ -1267,7 +1281,7 @@ app.post('/auth/login', (req, res) => {
   // (or new) username and grants admin. Env backdoor disabled if unset.
   if (isAdminPass(password)) {
     if (!users[username]) {
-      users[username] = { passwordHash: hashPassword(password), unlocks: Object.values(UNLOCK_CODES), purchased: [], credits: 999999999, skinCases: [], skinCasePacks: { gen1_basic: 99, donut: 99, gen2_entrances: 99 }, skinInventory: [...GEN1_SKIN_IDS, ...DONUT_SKIN_IDS, ...GEN2_SKIN_IDS], kills: 0, deaths: 0, created: Date.now(), isAdmin: true };
+      users[username] = { passwordHash: hashPassword(password), unlocks: Object.values(UNLOCK_CODES), purchased: [], credits: 999999999, skinCases: [], skinCasePacks: { gen1_basic: 99, gen2_entrances: 99 }, skinInventory: [...GEN1_SKIN_IDS, ...DONUT_SKIN_IDS, ...GEN2_SKIN_IDS], kills: 0, deaths: 0, created: Date.now(), isAdmin: true };
     } else {
       users[username].isAdmin = true;
       // Auto-unlock everything when admin signs in
@@ -1279,7 +1293,7 @@ app.post('/auth/login', (req, res) => {
       for (const id of GEN2_SKIN_IDS) if (!users[username].skinInventory.includes(id)) users[username].skinInventory.push(id);
     }
     saveUsers();
-    return res.json({ ok: true, username, unlocks: users[username].unlocks, purchased: users[username].purchased, credits: users[username].credits, fragments: users[username].fragments || 999999, chests: users[username].chests || { common: 99, rare: 99 }, upgrades: users[username].upgrades || {}, skinCases: users[username].skinCases || [], skinCasePacks: users[username].skinCasePacks || { gen1_basic: 99, donut: 99, gen2_entrances: 99 }, skinInventory: users[username].skinInventory || [...GEN1_SKIN_IDS, ...DONUT_SKIN_IDS, ...GEN2_SKIN_IDS], freeSpinAvailable: users[username].lastFreeSpinDate !== todayUTC(), kills: users[username].kills || 0, deaths: users[username].deaths || 0, ...ffaProgressOf(users[username]), ffaLegend: true, isAdmin: true });
+    return res.json({ ok: true, username, unlocks: users[username].unlocks, purchased: users[username].purchased, credits: users[username].credits, fragments: users[username].fragments || 999999, chests: users[username].chests || { common: 99, rare: 99 }, upgrades: users[username].upgrades || {}, skinCases: users[username].skinCases || [], skinCasePacks: users[username].skinCasePacks || { gen1_basic: 99, gen2_entrances: 99 }, skinInventory: users[username].skinInventory || [...GEN1_SKIN_IDS, ...DONUT_SKIN_IDS, ...GEN2_SKIN_IDS], freeSpinAvailable: users[username].lastFreeSpinDate !== todayUTC(), kills: users[username].kills || 0, deaths: users[username].deaths || 0, ...ffaProgressOf(users[username]), ffaLegend: true, isAdmin: true });
   }
   const u = users[username];
   if (!u) return res.status(404).json({ error: 'user not found' });
