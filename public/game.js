@@ -1343,17 +1343,20 @@ const CURRENCY_ICON = '🍩';
 // 💰 One economy, one unit. A match pays 20-250 donuts -- 5 a kill, plus 50
 // for a win or 20 for a loss, so about 85 for an ordinary game -- and every
 // price table (weapons, bundles, chests, upgrades, abilities, the wheel) is
-// written in those same units. Match rewards used to be multiplied by 400 while
-// normal weapons were only doubled, so one match bought about seventy AKs and
-// every weapon short of P2W was effectively free. Now the tables mean what they
-// say: a pistol is less than a match, an AK about three, an SR-X about six, the
-// AMR about twenty-five. P2W was only 70-240 matches each at first -- still
-// "ridiculous" by every normal-item standard, but Andy: that's not legitimately
-// out of reach, that's a bad weekend. Bumped 10x so a single P2W item costs
-// roughly 700-2,350 matches -- a real grind, not a long one.
+// written in those same units, then scaled by the two multipliers below.
+// Both apply to WEAPON_COSTS (in place, once, right after the table) and to
+// BUNDLES (same split by id), so a bundle's discount off its parts' sum
+// never drifts even as these two numbers move.
+// Andy's target, in matches of an ordinary game (~85 donuts each):
+//   ez weapons (AK-20, SG8, ...)         ~10 matches
+//   mid-grind (Chainsaw, AMR, Titan Hammer)  50-200 matches
+//   P2W                                  1,000-3,000 matches, legitimately out of reach
+// NORMAL_WEAPON_PRICE_MULT 1 -> 4 gets the AK to ~12 and the AMR to ~94 --
+// one knob for the whole normal tier, so ez and mid-grind move together.
+// WEAPON_PRICE_MULT 5 -> 7 puts every P2W item between 988 and 3,294.
 // Mirrors server.js (gotcha #4): the server charges, this only displays.
-const WEAPON_PRICE_MULT = 5;            // P2W items
-const NORMAL_WEAPON_PRICE_MULT = 1;
+const WEAPON_PRICE_MULT = 7;            // P2W items
+const NORMAL_WEAPON_PRICE_MULT = 4;
 const SKIN_CASE_GEN1_COST = 1500;
 const SKIN_CASE_GEN2_COST = 5000;       // cosmetic gacha, well under any P2W weapon now
 const P2W_ITEM_IDS = new Set([
