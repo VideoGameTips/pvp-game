@@ -1565,6 +1565,16 @@ const MELEE_SWING_TYPES = [
   'slash',   // 34 phase_blade
   'slam',    // 35 gravity_hammer
   'spin',    // 36 volt_whip
+  // ── Admin melees ──────────────────────────────────────────────────
+  // These five were missing: the array stopped at 36 while MELEE_ITEMS went on
+  // to 41, so `MELEE_SWING_TYPES[idx] || 'slash'` quietly gave all of them a
+  // baseball swing. A garrote was doing a baseball swing.
+  'stab',    // 37 karambit      → short curved blade, fast jab
+  'thrust',  // 38 bayonet       → 3 m reach, same lunge as the spear
+  'chop',    // 39 tomahawk      → axe head, downward cut
+  'stab',    // 40 ots04         → bayonet profile, but 1.8 m and a 240 ms cooldown: a jab
+  'thrust',  // 41 garrote       → nothing here really fits a strangle; a forward
+             //                    reach is the least wrong. Change it if it feels off.
 ];
 
 // ── Weapon ability system ──────────────────────────────────────────────────
@@ -22382,6 +22392,42 @@ function saveKillLogToDisk() {
   }
 }
 function rd(n) { return Math.round(n * 100) / 100; } // round to 2dp to shrink storage
+
+// ── Was this an explosion, or a shot? ──────────────────────────────────────
+// This used to be one substring test over the id and type glued together, which
+// meant any name containing "cannon" or "launcher" was an explosive: the Desert
+// Eagle, the Hand Cannon, the Burst Cannon, the Foam Cannon, the Prism Launcher
+// and the Portal Launcher all bragged with a blast graphic, and the Confetti
+// Cannon fired confetti explosively. Meanwhile the Airburst Projector — which
+// genuinely is an airburst — matched nothing, and neither did any land mine.
+//
+// A weapon does not need guessing at: PROJECTILE_KIND_BY_ID already records
+// what each one fires, and splashRadius says outright that it detonates. Only
+// support items have no such table, and for those the name is tested a word at
+// a time instead of as a substring, so "confetti_cannon" no longer contains a
+// cannon. The word list deliberately has no "cannon" or "launcher" in it —
+// those describe a shape of tube, not a way of dying.
+const EXPLOSIVE_KILL_WORDS = new Set([
+  'explosive', 'explosives', 'grenade', 'grenades', 'bomb', 'bombs', 'nuke',
+  'dynamite', 'mine', 'rocket', 'missile', 'frag', 'c4', 'mortar', 'artillery',
+  'firework', 'fireworks', 'claymore',
+]);
+function namedAsExplosive(id, type) {
+  return (String(id || '') + ' ' + String(type || '')).toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .some(w => EXPLOSIVE_KILL_WORDS.has(w));
+}
+function isExplosiveKill(weaponId, wpn, sup) {
+  if (wpn) {
+    const k = projectileKind(weaponId, wpn);
+    if (k === 'grenade' || k === 'rocket' || wpn.splashRadius) return true;
+    // The Boombow fires a bolt that detonates: the projectile is not the blast.
+    return namedAsExplosive(weaponId, wpn.type);
+  }
+  if (sup) return namedAsExplosive(weaponId, sup.type);
+  return false;
+}
+
 function saveKillReplay(victimId, weaponId) {
   if (!KILLCAM.buf.length) return;
   // Deep-copy + round the recent frames so storage stays compact
@@ -22395,11 +22441,9 @@ function saveKillReplay(victimId, weaponId) {
   const sup = SUPPORT_ITEMS.find(s => s.id === weaponId);
   const wname = wpn?.name || melee?.name || sup?.name || (weaponId || 'weapon');
   // 🏷️ Classify the kill so the Kill Log can flex distinctive bragging graphics.
-  const typeStr = ((wpn?.type || sup?.type || '') + '').toLowerCase();
-  const idStr = (weaponId || '').toLowerCase();
   let kind = 'gun';
   if (melee) kind = 'melee';
-  else if (/explos|launcher|mortar|firework|grenade|rocket|bomb|nuke|missile|boombow|cannon|artillery/.test(typeStr + ' ' + idStr)) kind = 'explosive';
+  else if (isExplosiveKill(weaponId, wpn, sup)) kind = 'explosive';
   // Slide-kill = the player was mid-slide when the kill landed. Pure swagger.
   const slide = !!(window._slideUntil && Date.now() < window._slideUntil);
   // Simple "score" heuristic: # of frames where target was alive (longer chase = higher)

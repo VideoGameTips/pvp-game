@@ -135,13 +135,24 @@ function currentSwingSound(item) {
   return isHeavy ? 'heavy' : isBlade ? 'blade' : 'generic';
 }
 
-// game.js: the killcam classifier in the Kill Log writer
+// game.js: isExplosiveKill(), which the Kill Log writer uses to pick a graphic.
+// Kept in step with game.js by lifting its word list straight out of the source
+// rather than retyping it — this mirror went stale once already, within an hour
+// of being written, and a stale mirror turns the whole report into fiction.
+const EXPLOSIVE_KILL_WORDS = new Set(
+  eval(src.match(/^const EXPLOSIVE_KILL_WORDS = new Set\((\[[\s\S]*?\n\])\);/m)[1])
+);
+function namedAsExplosive(id, type) {
+  return (String(id || '') + ' ' + String(type || '')).toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .some(w => EXPLOSIVE_KILL_WORDS.has(w));
+}
 function currentKillLogKind(id, weapon, isMelee) {
   if (isMelee) return 'melee';
-  const typeStr = ((weapon && weapon.type) || '').toLowerCase();
-  const idStr = (id || '').toLowerCase();
-  if (/explos|launcher|mortar|firework|grenade|rocket|bomb|nuke|missile|boombow|cannon|artillery/.test(typeStr + ' ' + idStr)) return 'explosive';
-  return 'gun';
+  if (!weapon) return namedAsExplosive(id, null) ? 'explosive' : 'gun';
+  const k = currentProjectileKind(id, weapon);
+  if (k === 'grenade' || k === 'rocket' || weapon.splashRadius) return 'explosive';
+  return namedAsExplosive(id, weapon.type) ? 'explosive' : 'gun';
 }
 
 // ── Question vocabularies, derived from the game's own tables ──────────────
