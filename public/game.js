@@ -17789,8 +17789,6 @@ function _mixColor(a, b, t) {
   return (ch(16) << 16) | (ch(8) << 8) | ch(0);
 }
 
-// FNV-1a over the name. The name is already on the wire for everyone (bots ride
-// along in botList), so this needs no new network field and no signature change.
 // Webbing that has to stay readable against whatever it is worn over. Dark
 // uniforms (SWAT, riot) get LIGHTER gear — going darker on an already-dark body
 // is how the SWAT vest ended up 27 apart in RGB from the shirt under it.
@@ -17800,6 +17798,8 @@ function _gearFor(body) {
                   : _mixColor(darkenColor(body, 0.45), 0x3a352c, 0.55);
 }
 
+// FNV-1a over the name. The name is already on the wire for everyone (bots ride
+// along in botList), so this needs no new network field and no signature change.
 function _nameHash(str) {
   let h = 0x811c9dc5;
   const s = String(str == null ? '' : str);
@@ -17816,13 +17816,14 @@ function _nameHash(str) {
 // always land on the same haircut.
 function appearanceFor(name) {
   const h = _nameHash(name);
+  const shirt = SHIRT_COLORS[h % SHIRT_COLORS.length];
   return {
-    shirt: SHIRT_COLORS[h % SHIRT_COLORS.length],
+    shirt,
     hair:  HAIR_COLORS[(h >>> 5) % HAIR_COLORS.length],
     tone:  SKIN_TONES[(h >>> 11) % SKIN_TONES.length],
     style: HAIR_STYLES[(h >>> 17) % HAIR_STYLES.length],
     kit:   KITS[(h >>> 22) % KITS.length],
-    gear:  _gearFor(SHIRT_COLORS[h % SHIRT_COLORS.length]),
+    gear:  _gearFor(shirt),
   };
 }
 
@@ -18404,7 +18405,7 @@ function applyCharacterSkin(skinId, parts) {
         new THREE.MeshLambertMaterial({ color: 0x0a0d12, emissive: 0x2f7dff, emissiveIntensity: 1.2 }));
       visor.position.set(0, 1.87, 0.255); group.add(visor);
       _addHelmet(group, 0x14171c);
-      _addKit(group, 'vest', _gearFor(0x23272e));   // #50 phase 2
+      _addKit(torso, 'vest', _gearFor(0x23272e));   // #50 phase 2
       break;
     }
     case 'swat_shades': {
@@ -18414,7 +18415,7 @@ function applyCharacterSkin(skinId, parts) {
         new THREE.MeshLambertMaterial({ color: 0x080808 }));
       shades.position.set(0, 1.90, 0.255); group.add(shades);
       _addHelmet(group, 0x14171c);
-      _addKit(group, 'vest', _gearFor(0x2a2e35));   // #50 phase 2
+      _addKit(torso, 'vest', _gearFor(0x2a2e35));   // #50 phase 2
       break;
     }
     case 'riot_chad': {
@@ -18423,14 +18424,14 @@ function applyCharacterSkin(skinId, parts) {
       const bandana = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.16, 0.34),
         new THREE.MeshLambertMaterial({ color: 0xc62828 }));
       bandana.position.set(0, 1.66, 0); group.add(bandana);
-      _addSeedHair(group, 'crop', 0x1a1208);   // was a bare scalp (#50)
-      _addKit(group, 'bandolier', _gearFor(0x33271f));  // #50 phase 2
+      _addSeedHair(head, 'crop', 0x1a1208);    // was a bare scalp (#50)
+      _addKit(torso, 'bandolier', _gearFor(0x33271f));  // #50 phase 2
       break;
     }
     case 'soldier': {
       setBody(0x4b5320); setLegs(0x3a4019); setHeadAll(tone);
       _addHelmet(group, 0x3d4a24);
-      _addKit(group, 'pack', _gearFor(0x4b5320));   // #50 phase 2
+      _addKit(torso, 'pack', _gearFor(0x4b5320));   // #50 phase 2
       break;
     }
     case 'spiky': {
@@ -18441,7 +18442,7 @@ function applyCharacterSkin(skinId, parts) {
     case 'green_cap': {
       setBody(0x6b5d3a); setLegs(0x4a4327); setHeadAll(tone);
       _addCap(group, 0x3f6b2f);
-      _addKit(group, 'belt', _gearFor(0x6b5d3a));   // #50 phase 2
+      _addKit(torso, 'belt', _gearFor(0x6b5d3a));   // #50 phase 2
       break;
     }
     case 'shadow': {
@@ -18506,7 +18507,7 @@ function applyCharacterSkin(skinId, parts) {
     case 'cc_goat': {                            // white tee + black shades GOAT
       setBody(0xf0f0f0); setLegs(0x222831); setHeadAll(tone);
       _addShades(group);
-      _addSeedHair(group, 'buzz', 0x161616);   // was a bare scalp (#50)
+      _addSeedHair(head, 'buzz', 0x161616);    // was a bare scalp (#50)
       break;
     }
     case 'cc_pyro': {                            // orange/black pyro + fiery optic
@@ -18707,7 +18708,7 @@ function applyCharacterSkin(skinId, parts) {
     default: {
       // Recruit. The shirt is already seeded in makePlayerMesh; the hair is what
       // stops Lobby 13 being a row of identical bald heads (#50).
-      if (look) { _addSeedHair(group, look.style, look.hair); _addKit(group, look.kit, look.gear); }
+      if (look) { _addSeedHair(head, look.style, look.hair); _addKit(torso, look.kit, look.gear); }
       break;
     }
   }
@@ -18751,58 +18752,65 @@ function _addSpikyHair(group, color) {
 
 // ── 💇 Seeded hair (#50) ────────────────────────────────────────────────────
 // The Recruit's head was a bare skin-coloured box, so thirty-seven of them in
-// Lobby 13 read as a room of bald clones. Every cut here sits on the same 2.02
-// shelf the helmets and caps already use, sunk 0.08 into the head box so no
-// seam of scalp shows at the join — nothing else has to move.
+// Lobby 13 read as a room of bald clones.
+//
+// Parented to the HEAD, not to the group, so coordinates here are relative to
+// the head box (which sits at y 1.85, 0.5 on a side: its top is +0.25, the
+// 2.02 shelf the helmets use is +0.17). The existing helmets and caps DO hang
+// off the group, and the walk rig turns the head — torso.rotation.y up to 0.18
+// and the head counter-rotating, plus a 0.30 pitch in the slide — so they slide
+// around on the scalp. A cap only covers the crown and gets away with it; this
+// hugs the sides and back, and at a 0.13 turn the head corner comes straight
+// out through a 0.045 shell. Parenting fixes it for good rather than by luck.
 let _hairSphereGeo = null;
-function _addSeedHair(group, style, color) {
+function _addSeedHair(head, style, color) {
   const mat = new THREE.MeshLambertMaterial({ color });
   const put = (geo, x, y, z) => {
     const m = new THREE.Mesh(geo, mat);
-    m.position.set(x, y, z); m.castShadow = true; group.add(m); return m;
+    m.position.set(x, y, z); m.castShadow = true; head.add(m); return m;
   };
   // Every cut starts from a slab over the scalp, plus a thin shell down the
   // sides and back. Without the shell it reads as a hat balanced on a bald head
   // rather than hair on a head — the scalp slab alone leaves bare skin in the
   // whole silhouette below it.
   const capH = style === 'buzz' ? 0.07 : 0.11;
-  put(roundedBoxGeo(0.53, capH, 0.53, 0.035, 3), 0, 2.02 + capH / 2, 0);
+  put(roundedBoxGeo(0.53, capH, 0.53, 0.035, 3), 0, 0.17 + capH / 2, 0);
   // The back comes down further than the sides: sideburns should stop about
   // ear height, but anything short of the jaw at the BACK leaves a bare patch of
   // scalp that is the whole silhouette when a character is running away from you.
-  const backH = style === 'buzz' ? 0.34 : 0.42;       // head box runs 1.60 → 2.10
+  const backH = style === 'buzz' ? 0.34 : 0.42;       // head box runs -0.25 → +0.25
   const sideH = style === 'buzz' ? 0.15 : 0.24;
-  put(roundedBoxGeo(0.53, backH, 0.045, 0.02, 3), 0, 2.03 - backH / 2, -0.247);     // back
+  put(roundedBoxGeo(0.53, backH, 0.045, 0.02, 3), 0, 0.18 - backH / 2, -0.247);     // back
   [-0.247, 0.247].forEach(x =>
-    put(roundedBoxGeo(0.045, sideH, 0.50, 0.02, 3), x, 2.03 - sideH / 2, 0));       // sideburns
+    put(roundedBoxGeo(0.045, sideH, 0.50, 0.02, 3), x, 0.18 - sideH / 2, 0));       // sideburns
   switch (style) {
     case 'buzz':                                            // that IS the whole cut
       break;
     case 'crop':                                            // short, with a fringe
-      put(roundedBoxGeo(0.50, 0.07, 0.10, 0.03, 3), 0, 2.04, 0.23);
+      put(roundedBoxGeo(0.50, 0.07, 0.10, 0.03, 3), 0, 0.19, 0.23);
       break;
     case 'messy':
       [[-0.14, 0.05, -0.09], [0.15, 0.07, -0.13], [0.02, 0.09, 0.02],
        [-0.10, 0.06, 0.15], [0.13, 0.05, 0.14]]
-        .forEach(([x, y, z]) => put(roundedBoxGeo(0.13, 0.13, 0.13, 0.05, 1), x, 2.09 + y, z));
+        .forEach(([x, y, z]) => put(roundedBoxGeo(0.13, 0.13, 0.13, 0.05, 1), x, 0.24 + y, z));
       break;
     case 'swoop':                                           // side part over the brow
-      put(roundedBoxGeo(0.34, 0.10, 0.14, 0.04, 3), -0.08, 2.11, 0.20);
-      put(roundedBoxGeo(0.14, 0.13, 0.12, 0.04, 3), 0.19, 2.13, 0.13);
+      put(roundedBoxGeo(0.34, 0.10, 0.14, 0.04, 3), -0.08, 0.26, 0.20);
+      put(roundedBoxGeo(0.14, 0.13, 0.12, 0.04, 3), 0.19, 0.28, 0.13);
       break;
     case 'curls':
       if (!_hairSphereGeo) _hairSphereGeo = new THREE.SphereGeometry(0.11, 7, 5);
       [[-0.17, 0.02, -0.06], [-0.05, 0.05, 0.10], [0.09, 0.04, -0.11],
        [0.17, 0.01, 0.07], [0.00, 0.06, -0.17]]
-        .forEach(([x, y, z]) => put(_hairSphereGeo, x, 2.10 + y, z));
+        .forEach(([x, y, z]) => put(_hairSphereGeo, x, 0.25 + y, z));
       break;
     case 'tail':                                            // gathered at the back
       // Stands well CLEAR of the shell rather than hanging below it. Flush
       // against same-coloured hair it is invisible from behind (same normal,
       // same light); hanging past the head it shows through the neck gap from
       // the front instead. Proud of the back, stopping at the jaw, does both.
-      put(roundedBoxGeo(0.19, 0.09, 0.10, 0.035, 3), 0, 1.99, -0.29);   // the tie
-      put(roundedBoxGeo(0.16, 0.34, 0.16, 0.06, 3), 0, 1.76, -0.36);
+      put(roundedBoxGeo(0.19, 0.09, 0.10, 0.035, 3), 0, 0.14, -0.29);   // the tie
+      put(roundedBoxGeo(0.16, 0.34, 0.16, 0.06, 3), 0, -0.09, -0.36);
       break;
   }
 }
@@ -18815,52 +18823,58 @@ function _addSeedHair(group, style, color) {
 // Pure addition: no existing size moves, no head attachment point moves, and
 // the hitbox never looked at the model to begin with.
 //
-// The one real constraint is the animation rig. Arms pivot at y 1.5 and legs
-// at y 0.875, and anything parented to the GROUP does not swing with them — so
-// a shoulder piece has to sit at or above the pivot (the upper arm's top end
-// stays at the pivot through the whole swing) and nothing may sit in the arc
-// the thighs sweep. Torso runs y 0.875–1.525, x ±0.275, z ±0.15.
-function _addKit(group, kit, color) {
+// Parented to the TORSO, so coordinates are relative to it (it sits at y 1.2
+// and is 0.55 x 0.65 x 0.3: ±0.275 across, ±0.325 tall, ±0.15 deep). The rig
+// twists the torso by up to 0.18 and pitches it back 0.45 in a slide — gear
+// hung off the group instead just floats away from the body, which in the
+// slide pose is a 26° mismatch.
+//
+// The rest of the rig still constrains placement, because arms and legs are
+// NOT children of the torso. Arms pivot at y 1.5 (group space) and legs at
+// 0.875, so a shoulder piece has to sit at or above the arm pivot — the upper
+// arm's top end stays there through the whole swing — and nothing may sit in
+// the arc the thighs sweep.
+function _addKit(torso, kit, color) {
   if (!kit || kit === 'none') return;
   const mat = new THREE.MeshLambertMaterial({ color });
   const put = (geo, x, y, z, rz) => {
     const m = new THREE.Mesh(geo, mat);
     m.position.set(x, y, z);
     if (rz) m.rotation.z = rz;
-    m.castShadow = true; group.add(m); return m;
+    m.castShadow = true; torso.add(m); return m;
   };
   switch (kit) {
     case 'pack':                                   // reads from the side and from behind
-      put(roundedBoxGeo(0.36, 0.42, 0.20, 0.05, 3), 0, 1.24, -0.245);
-      put(roundedBoxGeo(0.38, 0.08, 0.22, 0.03, 3), 0, 1.47, -0.245);   // top flap
+      put(roundedBoxGeo(0.36, 0.42, 0.20, 0.05, 3), 0, 0.04, -0.245);
+      put(roundedBoxGeo(0.38, 0.08, 0.22, 0.03, 3), 0, 0.27, -0.245);   // top flap
       break;
-    case 'pauldrons':                              // at 1.555: clear of the arm swing
-      [-0.33, 0.33].forEach(x => put(roundedBoxGeo(0.30, 0.13, 0.30, 0.055, 3), x, 1.555, 0));
+    case 'pauldrons':                              // group y 1.555: clear of the arm swing
+      [-0.33, 0.33].forEach(x => put(roundedBoxGeo(0.30, 0.13, 0.30, 0.055, 3), x, 0.355, 0));
       break;
     case 'vest':
       // Plate high on the chest, two short straps from its top edge over the
       // shoulder (breaking the shoulder line is the point), pouches low. Get
       // the order wrong and it reads as dungarees: a wide panel LOW with
       // straps above it is a bib, and a full-width slab is a hole in the torso.
-      put(roundedBoxGeo(0.36, 0.24, 0.07, 0.03, 3), 0, 1.30, 0.16);
-      [-0.17, 0.17].forEach(x => put(roundedBoxGeo(0.10, 0.22, 0.08, 0.03, 3), x, 1.47, 0.155));
-      [-0.14, 0.14].forEach(x => put(roundedBoxGeo(0.12, 0.13, 0.09, 0.03, 3), x, 1.05, 0.175));
+      put(roundedBoxGeo(0.36, 0.24, 0.07, 0.03, 3), 0, 0.10, 0.16);
+      [-0.17, 0.17].forEach(x => put(roundedBoxGeo(0.10, 0.22, 0.08, 0.03, 3), x, 0.27, 0.155));
+      [-0.14, 0.14].forEach(x => put(roundedBoxGeo(0.12, 0.13, 0.09, 0.03, 3), x, -0.15, 0.175));
       break;
     case 'belt':
-      put(roundedBoxGeo(0.58, 0.09, 0.33, 0.03, 3), 0, 0.915, 0);
+      put(roundedBoxGeo(0.58, 0.09, 0.33, 0.03, 3), 0, -0.285, 0);
       // The pouch has to clear three moving parts: thighs sweep to z ±0.29 and
       // their top corner rises to ~0.95, and the hands hang at y 0.805–0.955.
       // Above the swing, on the small of the back, is the only spot that is
       // clear of all of them.
-      put(roundedBoxGeo(0.15, 0.17, 0.12, 0.04, 3), 0, 1.05, -0.21);
+      put(roundedBoxGeo(0.15, 0.17, 0.12, 0.04, 3), 0, -0.15, -0.21);
       break;
     case 'bandolier':                              // strap low-right to high-left
       // Stops at y 1.00, not at the waist: a thigh swung forward reaches z 0.29
       // and y 0.95, which is straight through where the bottom of the strap
       // would otherwise hang.
-      put(roundedBoxGeo(0.12, 0.52, 0.07, 0.03, 3), 0, 1.23, 0.155, 0.52);
+      put(roundedBoxGeo(0.12, 0.52, 0.07, 0.03, 3), 0, 0.03, 0.155, 0.52);
       // Pouches proud of the strap and wider than it: a bare strap is a stick.
-      [[0.071, 1.106], [0, 1.23], [-0.071, 1.354]].forEach(([x, y]) =>
+      [[0.071, -0.094], [0, 0.03], [-0.071, 0.154]].forEach(([x, y]) =>
         put(roundedBoxGeo(0.15, 0.12, 0.09, 0.03, 3), x, y, 0.20, 0.52));
       break;
   }
