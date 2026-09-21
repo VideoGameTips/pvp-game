@@ -17928,7 +17928,7 @@ function darkenColor(hex, f) {
 // Each skin recolors the blocky body and/or adds accessories. 'crown' is NOT a
 // skin — it's an overlay added on top of any skin for the admin / match leader.
 const SKINS = [
-  { id: 'default',     name: 'Recruit',       desc: 'Standard issue. Random shirt color.' },
+  { id: 'default',     name: 'Recruit',       desc: 'Standard issue. Your look comes from your name.' },
   { id: 'swat',        name: 'SWAT',          desc: 'Black tactical armor + glowing blue visor.' },
   { id: 'swat_shades', name: 'SWAT · Shades', desc: 'Tactical armor with cool sunglasses.' },
   { id: 'riot_chad',   name: 'Riot Chad',     desc: 'Dark jacket + red bandana. Has patience.' },
@@ -18476,7 +18476,7 @@ function applyCharacterSkin(skinId, parts) {
     }
     case 'cc_mirage': {                          // sleek purple ninja + shades + ears
       setBody(0x5a2a8a); setLegs(0x2a123f); setHeadAll(tone);
-      _addShades(group);
+      _addShades(head);
       _addSpikyHair(group, 0xcfc4e0);            // silver-lilac hair (poster look)
       _addEars(group, 0xcfc4e0);
       break;
@@ -18506,7 +18506,7 @@ function applyCharacterSkin(skinId, parts) {
     }
     case 'cc_goat': {                            // white tee + black shades GOAT
       setBody(0xf0f0f0); setLegs(0x222831); setHeadAll(tone);
-      _addShades(group);
+      _addShades(head);
       _addSeedHair(head, 'buzz', 0x161616);    // was a bare scalp (#50)
       break;
     }
@@ -18587,7 +18587,7 @@ function applyCharacterSkin(skinId, parts) {
       const hair = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.14, 0.54),
         new THREE.MeshLambertMaterial({ color: 0xcfcfd6 }));
       hair.position.set(0, 2.07, 0); group.add(hair);
-      _addShades(group);
+      _addShades(head);
       break;
     }
     case 'cc_afk': {                             // hoodie + big headphones
@@ -18656,7 +18656,7 @@ function applyCharacterSkin(skinId, parts) {
     case 'cc_suspicious': {                      // black trenchcoat + fedora + shades
       setBody(0x1a1a1f); setLegs(0x101012); setHeadAll(tone);
       _addFedora(group, 0x121214);
-      _addShades(group);
+      _addShades(head);
       _addCape(group, 0x141418);                 // coat tail
       break;
     }
@@ -18708,7 +18708,7 @@ function applyCharacterSkin(skinId, parts) {
     default: {
       // Recruit. The shirt is already seeded in makePlayerMesh; the hair is what
       // stops Lobby 13 being a row of identical bald heads (#50).
-      if (look) { _addSeedHair(head, look.style, look.hair); _addKit(torso, look.kit, look.gear); }
+      if (look) { _addSeedHair(head, look.style, look.hair); _addKit(torso, look.kit, look.gear, group); }
       break;
     }
   }
@@ -18834,22 +18834,32 @@ function _addSeedHair(head, style, color) {
 // 0.875, so a shoulder piece has to sit at or above the arm pivot — the upper
 // arm's top end stays there through the whole swing — and nothing may sit in
 // the arc the thighs sweep.
-function _addKit(torso, kit, color) {
+function _addKit(torso, kit, color, group) {
   if (!kit || kit === 'none') return;
   const mat = new THREE.MeshLambertMaterial({ color });
+  // Shoulder pieces are the exception, and they have to hang off the GROUP.
+  // The arm pivots are children of the group, not of the torso, and they only
+  // ever rotate in place — so a pauldron on the group stays welded to the
+  // joint it is covering. On the torso, a slide (-0.45 pitch) swings it 15cm
+  // back and 3.5cm down off a shoulder that has not moved at all, and the
+  // joint ends up outside the pauldron entirely.
+  const host = (kit === 'pauldrons' && group) ? group : torso;
   const put = (geo, x, y, z, rz) => {
     const m = new THREE.Mesh(geo, mat);
     m.position.set(x, y, z);
     if (rz) m.rotation.z = rz;
-    m.castShadow = true; torso.add(m); return m;
+    m.castShadow = true; host.add(m); return m;
   };
   switch (kit) {
     case 'pack':                                   // reads from the side and from behind
       put(roundedBoxGeo(0.36, 0.42, 0.20, 0.05, 3), 0, 0.04, -0.245);
       put(roundedBoxGeo(0.38, 0.08, 0.22, 0.03, 3), 0, 0.27, -0.245);   // top flap
       break;
-    case 'pauldrons':                              // group y 1.555: clear of the arm swing
-      [-0.33, 0.33].forEach(x => put(roundedBoxGeo(0.30, 0.13, 0.30, 0.055, 3), x, 0.355, 0));
+    case 'pauldrons':                              // GROUP space (see host above);
+      // 1.555 is just clear of the arm pivot at 1.5, and the upper arm's top
+      // end stays at that pivot through the whole swing, so the arm turns
+      // under the pauldron instead of through it.
+      [-0.33, 0.33].forEach(x => put(roundedBoxGeo(0.30, 0.13, 0.30, 0.055, 3), x, 1.555, 0));
       break;
     case 'vest':
       // Plate high on the chest, two short straps from its top edge over the
@@ -18902,10 +18912,12 @@ function _addAntenna(group, color) {
   tip.position.set(0.13, 2.41, 0); group.add(tip);
 }
 // Flat black sunglasses across the eyes.
-function _addShades(group) {
+// On the HEAD, not the group: cc_goat now has hair that turns with the head,
+// and shades left behind on the group come off the face in a slide.
+function _addShades(head) {
   const shades = new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.10, 0.04),
     new THREE.MeshLambertMaterial({ color: 0x080808 }));
-  shades.position.set(0, 1.90, 0.255); group.add(shades);
+  shades.position.set(0, 0.05, 0.255); head.add(shades);
 }
 
 // Soft cap with a forward brim (the green-cap "default loadout" guy)
@@ -19053,7 +19065,10 @@ function setMeshCrown(group, on) {
 
 function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default', opts = {}) {
   const group = new THREE.Group();
-  const look  = appearanceFor(name);            // #50: dealt from the name, not a local counter
+  // #50: dealt from the name, not from a local counter. `lookSeed` is for
+  // callers with a better seed than the name they display — the Kill Log
+  // theater labels every extra 'Player', and they would all be one person.
+  const look  = appearanceFor(opts.lookSeed != null ? opts.lookSeed : name);
   const shirt = look.shirt;
   const pant  = darkenColor(shirt, 0.55);
   const skin  = look.tone;
@@ -22488,7 +22503,10 @@ function openKillTheater(index) {
     const name = isKiller ? (id === replay.killerId && replay.killer ? replay.killer : (id === myId ? (currentUser?.username || 'You') : 'Killer'))
                : isVictim ? (replay.victim || 'Victim') : 'Player';
     const team = isKiller ? 'ally' : 'enemy';
-    const body = makePlayerMesh(name, false, team, 'default', {});
+    // Extras are all called 'Player', so seed their looks off the id instead —
+    // the tag still reads 'Player', but they are not all the same person (#50).
+    const body = makePlayerMesh(name, false, team, 'default',
+                                (isKiller || isVictim) ? {} : { lookSeed: id });
     // Tint shirt + arms to the team color for at-a-glance identification.
     const tint = isKiller ? 0x3a72d6 : isVictim ? 0xd63a3a : 0x9a9a9a;
     if (body._rig) {
@@ -33907,7 +33925,9 @@ function spawnDDayWave(count, waveNum) {
       wanderTimer: 0, lastShot: Date.now() + Math.random() * 1500,
       stuckTimer: 0,
     });
-    botList.push({ id, name: pData.name, team: 'enemy', weaponId, spawnX: xPos, spawnZ: zPos });
+    // skin was missing here while pData has one, so other clients rendered
+    // Troopers as Recruits — now visibly so, with seeded hair and a kit (#50).
+    botList.push({ id, name: pData.name, team: 'enemy', weaponId, spawnX: xPos, spawnZ: zPos, skin: pData.skin });
     ddayState.enemiesAlive++;
   }
   socket.emit('spawnBots', botList);

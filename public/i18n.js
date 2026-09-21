@@ -556,7 +556,7 @@
     'These replace the gun, not its colour. Same stats, same reload — different weapon in your hands. Press T in game to look it over. 🔒 realistic military skins pull from Gen 1 cases below; the ones that play an animation as you draw them pull from Gen 2.': '这些换的是枪本身，不是颜色。属性一样、换弹一样——只是手里换了一把枪。游戏里按 T 可以仔细看。🔒 写实军用皮肤要从下面的第一代皮肤箱里抽；拔枪时会演一段动画的，要从第二代箱里抽。',
     'These replace the weapon itself, not its colour. Same damage, same reach, same ability — a different object in your hand. 🔒 ones draw with an animation and pull from Gen 2.': '这些换的是武器本身，不是颜色。伤害、攻击距离、技能都一样——只是手里换了个东西。🔒 的那几把拔出来时会演一段动画，要从第二代箱里抽。',
     // character skins (names stay)
-    'Standard issue. Random shirt color.': '标准配置，衣服颜色随机。',
+    'Standard issue. Your look comes from your name.': '标准配置，外观由名字决定。',
     'Black tactical armor + glowing blue visor.': '黑色战术护甲 + 发蓝光的面罩。',
     'Tactical armor with cool sunglasses.': '战术护甲配一副酷墨镜。',
     'Dark jacket + red bandana. Has patience.': '深色夹克 + 红头巾。很有耐心。',
