@@ -21471,17 +21471,26 @@ function _equipStep(e, t) {
         break; }
       case 'comet': {
         // Donut weapons: the WHOLE thing swings in close to where it's
-        // held -- left, then right -- turning exactly once as it comes,
-        // and settles straight into the hand. Every piece keeps its
-        // fixed offset from the gun's own centre and gets the exact same
-        // sway and the exact same turn, so it moves as one rigid object,
-        // never as separate parts drifting apart. Deliberately fixed, not
-        // randomised, so it reads the same clear way every time. The glow
-        // trail chasing it is a separate prop (_eqMakeProps/_eqStepProps).
+        // held -- left, then right -- tumbling end-over-end as it comes
+        // like a thrown weapon caught out of the air, and settles straight
+        // into the hand. Every piece keeps its fixed offset from the gun's
+        // own centre and gets the exact same sway and the exact same
+        // tumble, so it moves as one rigid object, never as separate parts
+        // drifting apart. Deliberately fixed, not randomised, so it reads
+        // the same clear way every time. The glow trail chasing it is a
+        // separate prop (_eqMakeProps/_eqStepProps).
+        //
+        // Was spinning about _EQ_Z (the blade's own hole/depth axis) --
+        // a torus is rotationally symmetric about that axis, so the ring
+        // barely read as moving at all, just a flat pirouette. _EQ_X tips
+        // it end over end instead, which actually shows the blade turning.
+        // Also bumped from one turn to 1.75 so it's clearly a *tumble*, not
+        // a slow wobble -- the ease curve in _eqEase is already slow-fast-
+        // slow, so more turns doesn't mean a blur, just a livelier middle.
         const arrive = _eqEase(_eqClamp(t / 0.78));
         const sway = _eqCometSway(t) * (1 - arrive);
         const flyCtr = e.ctr.clone(); flyCtr.x += sway;
-        const q = new THREE.Quaternion().setFromAxisAngle(_EQ_Z, (1 - arrive) * Math.PI * 2);
+        const q = new THREE.Quaternion().setFromAxisAngle(_EQ_X, (1 - arrive) * Math.PI * 2 * 1.75);
         c.position.copy(h.p).sub(e.ctr).applyQuaternion(q).add(flyCtr);
         c.quaternion.copy(q).multiply(h.q);
         c.scale.copy(h.s);
