@@ -123,7 +123,7 @@ const WEAPONS = [
     id: 'crossbow', name: 'Crossbow', type: 'Projectile', slot: 'primary',
     mag: 1, reserve: 18, damage: 80, fireRate: 650, reloadTime: 1200,
     auto: false, pellets: 1, spread: 0.001, adsZoom: 42, bulletSpeed: 72, noReload: false,
-    bulletColor: 0x8b5a2b, bulletSize: 0.09,
+    bulletColor: 0x8b5a2b, bulletSize: 0.09, arcShot: true,
     ability: { name: 'Power Charge', cd: 0, type: 'charge', desc: 'Hold fire · release to shoot · longer = more dmg' },
   },
   {
@@ -174,7 +174,7 @@ const WEAPONS = [
     id: 'boombow', name: 'Boombow', type: 'Explosive Bow', slot: 'primary',
     mag: 1, reserve: 14, damage: 95, fireRate: 750, reloadTime: 1400,
     auto: false, pellets: 1, spread: 0.004, adsZoom: 42, bulletSpeed: 68, noReload: false,
-    bulletColor: 0xffaa22, bulletSize: 0.10,
+    bulletColor: 0xffaa22, bulletSize: 0.10, splashRadius: 4.5, arcShot: true,
     ability: { name: 'Power Draw', cd: 17000, desc: 'Next arrow · 190 dmg', type: 'powershot', pellets: 1, spreadMult: 0, weaponAbId: 'boombow_ab' },
   },
   {
@@ -1347,14 +1347,16 @@ const CURRENCY_ICON = '🍩';
 // normal weapons were only doubled, so one match bought about seventy AKs and
 // every weapon short of P2W was effectively free. Now the tables mean what they
 // say: a pistol is less than a match, an AK about three, an SR-X about six, the
-// AMR about twenty-five. P2W stays ridiculous on purpose -- about 70 to 240
-// matches each, roughly twice the grind it was.
+// AMR about twenty-five. P2W was only 70-240 matches each at first -- still
+// "ridiculous" by every normal-item standard, but Andy: that's not legitimately
+// out of reach, that's a bad weekend. Bumped 10x so a single P2W item costs
+// roughly 700-2,350 matches -- a real grind, not a long one.
 // Mirrors server.js (gotcha #4): the server charges, this only displays.
-const WEAPON_PRICE_MULT = 0.5;          // P2W items
+const WEAPON_PRICE_MULT = 5;            // P2W items
 const NORMAL_WEAPON_PRICE_MULT = 1;
 const SKIN_CASE_GEN1_COST = 1500;
 const SKIN_CASE_DONUT_COST = 4000;
-const SKIN_CASE_GEN2_COST = 5000;       // just under the cheapest P2W weapon (6,000)
+const SKIN_CASE_GEN2_COST = 5000;       // cosmetic gacha, well under any P2W weapon now
 const P2W_ITEM_IDS = new Set([
   'event_horizon', 'storm_core', 'abs_zero', 'solar_lance', 'quantum_repeater',
   'magnetar', 'nebula_mortar', 'prism_engine', 'void_harvester',
@@ -19637,7 +19639,14 @@ function projectileBaseSpeed(weaponId, weapon, declaredSpeed) {
   if (rel != null) return BULLET_REF_SPEED * rel;
   return (declaredSpeed || 120) * (PROJECTILE_SPEED_SCALE[kind] ?? 1);
 }
+function projectileWeaponSpec(weaponId) {
+  if (!weaponId) return null;
+  return WEAPONS.find(w => w.id === weaponId)
+      || WEAPONS.find(w => weaponId === `${w.id}_ab` || weaponId === `${w.id}_c1` || weaponId === `${w.id}_splash`)
+      || null;
+}
 function projectileKind(weaponId, weapon) {
+  weapon = weapon || projectileWeaponSpec(weaponId);
   if (SOLID_PROJECTILES.has(weaponId)) return 'solid';
   const k = PROJECTILE_KIND_BY_ID[weaponId];
   if (k) return k;
@@ -29407,23 +29416,26 @@ function boxFaceNormal(box, p) {
 }
 
 // 🚀 Rocket detonation — direct hit aside, splash everyone else in radius.
-function rocketExplode(pos, weaponId, excludePid) {
-  const w = WEAPONS.find(x => x.id === weaponId) || {};
+function rocketExplode(pos, weaponId, excludePid, opts = {}) {
+  const w = projectileWeaponSpec(weaponId) || {};
   const radius = w.splashRadius || 5;
   spawnExplosion(pos);
   spawnAbilityAOEFX(pos.clone().setY(0.2), radius, 0xff7722);
   playSoundEvent('explosion', { position: pos, volume: 1.1, minGap: 60 });
   const splashId = weaponId + '_splash';
-  for (const [pid, mesh] of Object.entries(remoteMeshes)) {
-    if (pid === excludePid) continue;
-    const target = mesh.position.clone(); target.y += 1.0;
-    if (pos.distanceTo(target) <= radius) {
-      emitHit(pid, `rocket_${myId}_${Date.now()}_${pid}`, splashId, target);
-      spawnHitParticle(target);
+  const damageRemotes = opts.damageRemotes !== false;
+  const damagePlayer = !!opts.damagePlayer;
+  if (damageRemotes) {
+    for (const [pid, mesh] of Object.entries(remoteMeshes)) {
+      if (pid === excludePid) continue;
+      const target = mesh.position.clone(); target.y += 1.0;
+      if (pos.distanceTo(target) <= radius) {
+        emitHit(pid, `rocket_${myId}_${Date.now()}_${pid}`, splashId, target);
+        spawnHitParticle(target);
+      }
     }
   }
-  // Self-splash (own rocket too close)
-  if (excludePid !== myId && camera.position.distanceTo(pos.clone().setY(camera.position.y)) <= radius) {
+  if (damagePlayer && camera.position.distanceTo(pos.clone().setY(camera.position.y)) <= radius) {
     applyBotDamageToPlayer(splashId, null);
   }
 }
@@ -29442,6 +29454,14 @@ function updateBullets(dt) {
     }
     // Save start position for swept (CCD) hit detection
     const px0 = b.mesh.position.x, py0 = b.mesh.position.y, pz0 = b.mesh.position.z;
+    // Projectiles that fall. Apply before moving so the swept collision segment
+    // includes this frame's drop instead of letting arcing shots skim through
+    // the floor for one frame.
+    const _wArc = b._arc !== undefined ? b._arc : (b._arc =
+      (projectileWeaponSpec(b.weaponId)?.arcShot ? 1 : 0));
+    if (_wArc && !b.isPaintBomb) {
+      b.dir.y -= (BULLET_GRAVITY / Math.max(20, b.speed)) * dt;
+    }
     b.mesh.position.addScaledVector(b.dir, b.speed * dt);
     // Grenades, blobs and shards tumble; tracers and rockets hold their line.
     if (b.mesh._spin) {
@@ -29550,12 +29570,8 @@ function updateBullets(dt) {
         }
         if (wallHit && !b.isOwn) {
           spawnHitParticle(wallHitPt);
-          // Somebody else's rocket landing in the dirt should still go off to
-          // look at. Only the visual: damage for a remote shot is decided by
-          // whoever fired it, and calling rocketExplode here would apply it a
-          // second time.
           if (EXPLOSIVE_KINDS.has(projectileKind(b.weaponId, WEAPONS.find(w => w.id === b.weaponId)))) {
-            spawnExplosion(wallHitPt);
+            rocketExplode(wallHitPt, b.weaponId, null, { damageRemotes: false, damagePlayer: true });
           } else {
             spawnImpactMark(wallHitPt, wallHitNormal, b.weaponId);
           }
@@ -29563,16 +29579,6 @@ function updateBullets(dt) {
           continue;
         }
       }
-    }
-
-    // Projectiles that fall. arcShot has been in the weapon table since the
-    // Mortar Rifle was added and was never read by anything, so nothing in the
-    // game actually arced. A pellet that drops has to be aimed high and led,
-    // which is what makes a slow lobbed weapon feel different to a rifle.
-    const _wArc = b._arc !== undefined ? b._arc : (b._arc =
-      (WEAPONS.find(w => w.id === b.weaponId)?.arcShot ? 1 : 0));
-    if (_wArc && !b.isPaintBomb) {
-      b.dir.y -= (BULLET_GRAVITY / Math.max(20, b.speed)) * dt;
     }
 
     // Paint bomb: gravity + ground impact
@@ -29680,7 +29686,7 @@ function updateBullets(dt) {
         // projectile kind rather than two hardcoded ids, so every launcher in
         // the roster explodes instead of only the two rockets.
         if (EXPLOSIVE_KINDS.has(projectileKind(b.weaponId, WEAPONS.find(w => w.id === b.weaponId)))) {
-          rocketExplode(wallHitPt, b.weaponId, null);
+          rocketExplode(wallHitPt, b.weaponId, null, { damagePlayer: false });
           removeBullet(); continue;
         }
         // Bouncing weapons (prism, pulse disc, pinball): reflect off wall and speed up
@@ -29744,7 +29750,7 @@ function updateBullets(dt) {
         }
         // 🚀💣 Direct target took the main hit; splash everyone else nearby.
         if (EXPLOSIVE_KINDS.has(projectileKind(b.weaponId, WEAPONS.find(w => w.id === b.weaponId)))) {
-          rocketExplode(_bpos.clone(), b.weaponId, bestHit.pid);
+          rocketExplode(_bpos.clone(), b.weaponId, bestHit.pid, { damagePlayer: false });
         }
         removeBullet();
         spawnHitParticle(_bpos);
@@ -32310,18 +32316,20 @@ function updateGrenades(dt) {
 function explodeGrenade(g) {
   const pos = g.mesh.position.clone();
   spawnExplosion(pos);
-  if (!g.isOwn) return;
   const RADIUS = 5.5;
-  for (const [pid, mesh] of Object.entries(remoteMeshes)) {
-    const target = mesh.position.clone(); target.y += 1.0;
-    const dist = pos.distanceTo(target);
-    if (dist < RADIUS) {
-      // Route through emitHit so damage applies locally + shows numbers + handles death
-      emitHit(pid, g.id + '_x', 'frag', target);
-      spawnHitParticle(target);
+  if (g.isOwn) {
+    for (const [pid, mesh] of Object.entries(remoteMeshes)) {
+      const target = mesh.position.clone(); target.y += 1.0;
+      const dist = pos.distanceTo(target);
+      if (dist < RADIUS) {
+        // Route through emitHit so damage applies locally + shows numbers + handles death
+        emitHit(pid, g.id + '_x', 'frag', target);
+        spawnHitParticle(target);
+      }
     }
+    return;
   }
-  // Also damage the player if they're in range
+  // Someone else's grenade hurts you; yours does not self-damage.
   if (camera.position.distanceTo(pos.clone().setY(camera.position.y)) < RADIUS) {
     applyBotDamageToPlayer('frag', null);
   }
@@ -32382,9 +32390,21 @@ function explodeSupport(g) {
     spawnExplosion(pos);
   }
 
-  if (!g.isOwn || !item.damage) return;
+  if (!item.damage) return;
 
   const radius = getSupportRadius(item);
+  if (!g.isOwn) {
+    if (camera.position.distanceTo(pos.clone().setY(camera.position.y)) < radius) {
+      if (item.id === 'air_grenade') {
+        slamState = { vel: item.launchVel || 14 };
+        playSoundEvent('air_launch', { volume: 1.0, minGap: 90 });
+        flashScreen('rgba(170,204,255,0.2)', 250);
+      }
+      applyBotDamageToPlayer(item.id, null);
+    }
+    return;
+  }
+
   // Burst items: fire projectiles radially from explosion point
   if (item.burst && item.burst > 1) {
     const now2 = Date.now();
@@ -32417,18 +32437,6 @@ function explodeSupport(g) {
         playSoundEvent('air_launch', { position: target, remote: true, volume: 0.9, minGap: 90 });
       }
       spawnHitParticle(target);
-    }
-  }
-  // Also affect the player if they're in range
-  if (camera.position.distanceTo(pos.clone().setY(camera.position.y)) < radius) {
-    if (item.id === 'air_grenade') {
-      // Launch self upward (reuse slam-state vertical physics)
-      slamState = { vel: item.launchVel || 14 };
-      playSoundEvent('air_launch', { volume: 1.0, minGap: 90 });
-      flashScreen('rgba(170,204,255,0.2)', 250);
-      applyBotDamageToPlayer(item.id, null); // also do the small damage
-    } else {
-      applyBotDamageToPlayer(item.id, null);
     }
   }
 }
@@ -32966,38 +32974,45 @@ function updateMeleeSwing(dt) {
     // instead of a sawtooth that resets to dead-center every single hit.
     const side = model._slashSide || 1; // the side THIS swing ends parked on
     const from = -side;                  // the side it starts cocked on
+    // Bigger than the first pass on every axis — wider sweep, more raise,
+    // and a much bigger blade-angle change both mid-swing and at rest.
+    const PARK_X = 0.24, COCK_X = 0.36;
+    const PARK_Y = -0.28, COCK_Y = 0.05;
+    const PARK_Z = -0.29, COCK_Z = -0.12;
+    const PARK_RX = 0.36, COCK_RX = -0.52;
+    const PARK_RZ = 1.20, COCK_RZ = 1.60;   // ~69° parked, ~92° cocked — was 47°/60°
     if (t < 0.22) {
       // Wind-up: raise and cock further back on the starting side. Starts
       // from the exact values the PREVIOUS swing's settle phase ends on
-      // (py -0.22, pz -0.26, rx 0.22) so back-to-back swings connect with
-      // zero pop — on the very first swing after equipping, that's just a
-      // hair off MELEE_REST_POS, not worth special-casing.
+      // so back-to-back swings connect with zero pop — on the very first
+      // swing after equipping, that's just a hair off MELEE_REST_POS, not
+      // worth special-casing.
       const s = t / 0.22;
       const e = s * s;
-      px = lerp(0.10 + 0.15 * from, 0.10 + 0.18 * from, e);
-      py = lerp(-0.22, -0.01, e);   // raise up high
-      pz = lerp(-0.26, -0.15, e);
-      rx = lerp(0.22, -0.32, e);    // tilt back over the shoulder
-      rz = lerp(0.82 * from, 1.05 * from, e);
+      px = lerp(0.10 + PARK_X * from, 0.10 + COCK_X * from, e);
+      py = lerp(PARK_Y, COCK_Y, e);   // raise up high
+      pz = lerp(PARK_Z, COCK_Z, e);
+      rx = lerp(PARK_RX, COCK_RX, e); // tilt back over the shoulder
+      rz = lerp(PARK_RZ * from, COCK_RZ * from, e);
     } else if (t < 0.58) {
       // The whack: a real diagonal chop down and across, not a lateral pass.
       const s = (t - 0.22) / 0.36;
       const e = 1 - Math.pow(1 - s, 2.4); // ease-out: fast, decisive
-      px = lerp(0.10 + 0.18 * from, 0.10 + 0.15 * side, e);
-      py = lerp(-0.01, -0.22, e);   // the actual downward whack
-      pz = lerp(-0.15, -0.26, e);
-      rx = lerp(-0.32, 0.22, e);
-      rz = lerp(1.05 * from, 0.82 * side, e);
+      px = lerp(0.10 + COCK_X * from, 0.10 + PARK_X * side, e);
+      py = lerp(COCK_Y, PARK_Y, e);   // the actual downward whack
+      pz = lerp(COCK_Z, PARK_Z, e);
+      rx = lerp(COCK_RX, PARK_RX, e);
+      rz = lerp(COCK_RZ * from, PARK_RZ * side, e);
     } else {
       // Settle: a small bounce, then HOLD parked on `side` — no return to
       // center. The next swing's wind-up picks up from exactly here.
       const s = (t - 0.58) / 0.42;
-      const bump = s < 0.3 ? Math.sin((s / 0.3) * Math.PI) * 0.05 : 0;
-      px = 0.10 + 0.15 * side;
-      py = -0.22 + bump;
-      pz = -0.26 + bump * 0.4;
-      rx = 0.22 - bump * 0.5;
-      rz = 0.82 * side;
+      const bump = s < 0.3 ? Math.sin((s / 0.3) * Math.PI) * 0.06 : 0;
+      px = 0.10 + PARK_X * side;
+      py = PARK_Y + bump;
+      pz = PARK_Z + bump * 0.4;
+      rx = PARK_RX - bump * 0.6;
+      rz = PARK_RZ * side;
     }
     model.position.set(px, py, pz);
     model.rotation.set(rx, 0, rz);
@@ -38980,11 +38995,14 @@ function selectMode(modeId) {
     showFloatingSettingsButton(true);
   } else if (modeId === 'lobby13') {
     // 🛋️ Lobby 13: skip loadout, give a full kit with infinite ammo so people
-    // can mess around / duel freely. No enemies, no scoring.
-    selectedPrimaryIdx   = 0;
-    selectedSecondaryIdx = 1;
-    selectedMeleeIdx     = 0;
-    selectedSupportIdx   = 0;
+    // can mess around / duel freely. No enemies, no scoring. Keep a picked kit
+    // when returning from loadout/trashcan so lobby duels use what you chose.
+    if (!loadoutReady()) {
+      selectedPrimaryIdx   = 0;
+      selectedSecondaryIdx = 1;
+      selectedMeleeIdx     = 0;
+      selectedSupportIdx   = 0;
+    }
     weaponAmmo.forEach((_, idx) => { weaponAmmo[idx] = { ammo: 999999, reserve: 999999 }; });
     activeSlot = 'primary';
     weaponModels.forEach(m => m.visible = false);
