@@ -41,18 +41,39 @@ const MODEL = process.env.TYPESAFE_MODEL || 'jev-latest';
 
 // ── CLI ────────────────────────────────────────────────────────────────────
 const argv = process.argv.slice(2);
+// `--json` with nothing after it used to yield `true`, and writeFileSync(String(true))
+// then created a file called "true"; `--min-confidence --verbose` yielded NaN, which
+// made every comparison false and printed "0 confident disagreements" over a
+// catalogue full of them. A flag followed by another flag has no value.
 const flag = (name, fallback) => {
   const i = argv.indexOf('--' + name);
-  return i < 0 ? fallback : (argv[i + 1] ?? true);
+  if (i < 0) return fallback;
+  const v = argv[i + 1];
+  return (v === undefined || v.startsWith('--')) ? true : v;
+};
+// `true` is what flag() returns when a flag has no value, and Number(true) is 1 —
+// which is finite, so checking only isFinite let `--min-confidence --verbose`
+// quietly set the bar to 100% and hide every disagreement. Reject the sentinel
+// itself, not just the arithmetic.
+const valueFlag = (name, fallback, what) => {
+  const v = flag(name, fallback);
+  if (v === true) { console.error(`--${name} needs ${what}`); process.exit(2); }
+  return v;
+};
+const numFlag = (name, fallback) => {
+  const v = valueFlag(name, fallback, 'a number');
+  const n = Number(v);
+  if (!Number.isFinite(n)) { console.error(`--${name} needs a number (got ${v})`); process.exit(2); }
+  return n;
 };
 const OPTS = {
-  kind: String(flag('kind', 'all')),
-  only: flag('only', null),
-  limit: Number(flag('limit', 0)) || 0,
-  json: flag('json', null),
-  concurrency: Number(flag('concurrency', 6)) || 6,
+  kind: String(valueFlag('kind', 'all', 'one of: all, weapons, melee')),
+  only: valueFlag('only', null, 'an item id'),
+  limit: Math.max(0, numFlag('limit', 0)),
+  json: valueFlag('json', null, 'a file path'),
+  concurrency: Math.max(1, numFlag('concurrency', 6)),
   verbose: argv.includes('--verbose'),
-  minConfidence: Number(flag('min-confidence', 0.75)),
+  minConfidence: numFlag('min-confidence', 0.75),
   dryRun: argv.includes('--dry-run'),
 };
 
@@ -397,29 +418,36 @@ const usage = { input_tokens: 0, output_tokens: 0, requests: 0 };
 async function ask(state, questions, label) {
   const body = JSON.stringify({ state, model: MODEL, questions });
   let lastErr;
-  for (let attempt = 0; attempt < 4; attempt++) {
+  const LAST = 3;
+  for (let attempt = 0; attempt <= LAST; attempt++) {
     try {
       const r = await fetch(API, {
         method: 'POST',
         headers: { 'content-type': 'application/json', authorization: `Bearer ${KEY}` },
         body,
       });
+      usage.requests++;   // count what was sent, not what came back
       if (r.status === 429 || r.status >= 500) {
-        // Honour Retry-After when the service sends one, otherwise back off.
-        const wait = Number(r.headers.get('retry-after')) * 1000 || 500 * 2 ** attempt;
         lastErr = new Error(`${r.status} ${(await r.text()).slice(0, 160)}`);
-        await new Promise(res => setTimeout(res, wait));
+        if (attempt === LAST) break;
+        // Honour Retry-After when the service sends one, otherwise back off. Capped:
+        // an uncapped Retry-After on a 141-item run is a very long, very quiet stall.
+        const after = Number(r.headers.get('retry-after')) * 1000;
+        await new Promise(res => setTimeout(res, Math.min(after || 500 * 2 ** attempt, 30000)));
         continue;
       }
+      // Anything else — 400, 401, 403, 404 — will say exactly the same thing next
+      // time. Retrying a bad API key four times per item sent 564 doomed requests.
       if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 300)}`);
       const data = await r.json();
-      usage.requests++;
       usage.input_tokens += data.usage?.input_tokens || 0;
       usage.output_tokens += data.usage?.output_tokens || 0;
       return data.answers;
     } catch (e) {
       lastErr = e;
-      if (attempt === 3) break;
+      // A non-OK status we decided not to retry rethrows straight out.
+      if (/^\d{3} /.test(e.message) && !/^(429|5\d\d) /.test(e.message)) break;
+      if (attempt === LAST) break;
       await new Promise(res => setTimeout(res, 500 * 2 ** attempt));
     }
   }
@@ -440,7 +468,7 @@ async function mapLimit(items, limit, fn, label) {
       if (!OPTS.verbose) process.stderr.write(`\r  ${label}: ${done}/${items.length}   `);
     }
   }));
-  if (!OPTS.verbose) process.stderr.write(`\r  ${label}: ${items.length}/${items.length} done\n`);
+  if (!OPTS.verbose) process.stderr.write(`\r  ${label}: ${done}/${items.length} done\n`);
   return out;
 }
 
@@ -625,6 +653,10 @@ async function main() {
     console.log(`  full answers written to ${OPTS.json}`);
   }
   console.log('');
+  return failures.length ? 1 : 0;
 }
 
-main().catch(e => { console.error('\n' + (e && e.stack || e)); process.exit(1); });
+// A run that could not tag everything has not answered the question it was asked,
+// so it must not look like a clean pass to whatever called it.
+main().then(code => process.exit(code || 0))
+      .catch(e => { console.error('\n' + (e && e.stack || e)); process.exit(1); });

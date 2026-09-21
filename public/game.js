@@ -22494,10 +22494,19 @@ function saveKillReplay(victimId, weaponId) {
       [id, { x: rd(e.x), y: rd(e.y), z: rd(e.z), rotY: rd(e.rotY||0), rotX: rd(e.rotX||0) }])),
   }));
   const victimName = players[victimId]?.name || 'Enemy';
-  const melee = MELEE_ITEMS.find(m => m.id === weaponId);
+  // weaponId comes from currentEquippedId(), which for a skinned melee hands back
+  // the SKIN's id — and a skin id is in none of the three tables, so a Katana kill
+  // wearing the School Ruler used to be filed as a gun named "katana_ruler".
+  // Resolve it back to the melee it really is, keeping the skin's name for the
+  // label. A base id always wins the lookup: several skins share an id with a real
+  // melee ('hatchet' is both a melee and a skin worn on the combat axe), and
+  // matching the skin first would relabel genuine Hatchet kills as Combat Axe.
+  let melee = MELEE_ITEMS.find(m => m.id === weaponId);
+  const mskin = melee ? null : BASIC_MELEE_SKINS.find(s => s.id === weaponId);
+  if (mskin) melee = MELEE_ITEMS.find(m => m.id === mskin.skinFor);
   const wpn = WEAPONS.find(w => w.id === weaponId);
   const sup = SUPPORT_ITEMS.find(s => s.id === weaponId);
-  const wname = wpn?.name || melee?.name || sup?.name || (weaponId || 'weapon');
+  const wname = wpn?.name || mskin?.name || melee?.name || sup?.name || (weaponId || 'weapon');
   // 🏷️ Classify the kill so the Kill Log can flex distinctive bragging graphics.
   let kind = 'gun';
   if (melee) kind = 'melee';
@@ -24073,11 +24082,20 @@ function tryMelee() {
   const effectiveCooldown = meleeAbilityBuff?.type === 'revup' ? 15 : item.cooldown;
   if (now - lastMelee < effectiveCooldown) return;
   lastMelee = now;
-  if (item.id === 'chainsaw') {
+  // A skin renames the item — equippedMeleeItem() hands back the SKIN's id, with
+  // the base one under `baseId`. The sound follows the base, exactly as the swing
+  // animation below already does (it indexes MELEE_SWING_TYPES by selectedMeleeIdx
+  // and never looks at the skin), because a melee skin is a new coat of paint and
+  // not a new weapon — effectiveMeleeItem() keeps the base's reach, cooldown and
+  // ability for the same reason. Reading item.id here instead made the Pruning
+  // Chainsaw stop sounding like a chainsaw and left every skinned melee on the
+  // generic swish.
+  const soundId = item.baseId || item.id;
+  if (soundId === 'chainsaw') {
     playSoundEvent(meleeAbilityBuff?.type === 'revup' ? 'chainsaw_rev' : 'chainsaw_idle', { volume: 1.25, minGap: 120 });
   } else {
     // Per-type swing sound for every other melee
-    playSoundEvent(MELEE_SWING_EVENT[MELEE_SWING_SOUND[item.id]] || 'melee_swing', { volume: 0.85, minGap: 80 });
+    playSoundEvent(MELEE_SWING_EVENT[MELEE_SWING_SOUND[soundId]] || 'melee_swing', { volume: 0.85, minGap: 80 });
   }
 
   // Trigger swing animation — each swing type has its own characteristic duration

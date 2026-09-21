@@ -192,6 +192,19 @@ const problems = [];
       const bad = Object.entries(S).filter(([, v]) => !['blade', 'heavy', 'generic'].includes(v));
       if (bad.length) problems.push('MELEE_SWING_SOUND'.padEnd(20)
         + 'unknown sound value(s): ' + bad.map(([k, v]) => k + '=' + v).join(', '));
+      // A skin renames the melee, so equippedMeleeItem() reports the skin's id and
+      // the base one as baseId. The swing sound is looked up by baseId, which only
+      // works while every skin points at a melee that exists — a skin left behind
+      // by a renamed base would fall back to the generic swish in silence.
+      const sk = tbl.match(/^const BASIC_MELEE_SKINS = \[[\s\S]*?\n\];/m);
+      if (!sk) problems.push('BASIC_MELEE_SKINS'.padEnd(20) + 'table not found');
+      else {
+        const SKINS = new Function('return ' + sk[0].replace('const BASIC_MELEE_SKINS = ', '') + ';')();
+        const orphan = SKINS.filter(s => !MELEE_ITEMS.some(m => m.id === s.skinFor));
+        if (orphan.length) problems.push('BASIC_MELEE_SKINS'.padEnd(20) + orphan.length
+          + ' skin(s) whose skinFor names no melee: '
+          + orphan.map(s => s.id + '→' + s.skinFor).join(', '));
+      }
     }
   }
 }
