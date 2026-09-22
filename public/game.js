@@ -18199,25 +18199,29 @@ const _P = {
   strapGy: '#575d66', pouch: '#2a2e35', amber: '#e0902a', visorTeal: '#3fe0b0',
 };
 const _solid = col => (p => p(col, 0, 0, 16, 16));
-// A big anime-ish eye: four wide, six tall. HALF of it is the white of the eye
-// and half is the iris, the way the reference skins draw them — a solid block
-// of colour reads as a painted-on dot rather than an eye. `dir` mirrors the
-// pair so the iris sits on the inner half of each, and the two of them look at
-// whoever is standing in front.
-function _bigEye(p, x, iris, deep, dir) {
-  p(_P.eyeW, x, 7, 3, 3);                          // white — the outer edge
-  p(iris, dir > 0 ? x + 1 : x, 7, 2, 3);           // iris — the inner two thirds
-  p(deep, dir > 0 ? x + 1 : x, 9, 2, 1);           // …deeper along the bottom
+// ── ✏️ A face is a picture, not a list of rectangles ──────────────────────
+// Sixteen rows of sixteen characters, plus a key saying what each letter is.
+// Edit the picture and the skin changes — there are no coordinates to count
+// and nothing to keep in step. A space leaves that pixel alone, so a grid can
+// be laid over something already painted underneath.
+//
+// Letters are conventions, not rules: '.' skin · 's' jaw shade · 'H' hair
+// 'W' white of the eye · 'I' iris · 'D' deeper iris · 'K' black · 'G' webbing.
+function gridFace(key, rows) {
+  return p => {
+    for (let y = 0; y < rows.length; y++) {
+      const row = rows[y];
+      for (let x = 0; x < row.length; x++) {
+        const col = key[row[x]];
+        if (col) p(col, x, y, 1, 1);
+      }
+    }
+  };
 }
-// Hair that sits ON the head texture rather than as extra geometry: no second
-// surface to z-fight with the scalp, and the fringe can be jagged for free.
-function _hairFront(p, H) {
-  p(H, 0, 0, 16, 6);                                   // the cap, down to the eye line
-  p(H, 0, 6, 5, 1); p(H, 6, 6, 4, 1); p(H, 11, 6, 5, 1);
-  p(H, 0, 7, 2, 4); p(H, 14, 7, 2, 4);                 // temples run past the eyes
-  p(H, 7, 7, 2, 1);                                    // a strand between them
-  p(H, 0, 11, 2, 2); p(H, 14, 11, 2, 2);               // sideburns
-}
+
+// Hair on the head texture rather than as extra geometry: no second surface to
+// z-fight with the scalp. The FRONT of each head is a grid (below); these draw
+// the sides and back, where a full picture would be six identical rows.
 function _headSide(p, H, rows) {
   p(_P.skin, 0, 0, 16, 16);
   p(_P.skinSh, 0, 14, 16, 2);
@@ -18235,9 +18239,24 @@ const PIXEL_SKINS = {
   default: {
     hand: 0xf0c8a0, foot: 0x1b56b8,
     head: {
-      front: p => { p(_P.skin, 0, 0, 16, 16); p(_P.skinSh, 0, 15, 16, 1);
-                    _hairFront(p, _P.hairBr);
-                    _bigEye(p, 2, _P.eyeBlue, _P.eyeDeep, 1); _bigEye(p, 11, _P.eyeBlue, _P.eyeDeep, -1); },
+      front: gridFace({ '.': _P.skin, 's': _P.skinSh, 'H': _P.hairBr, 'W': _P.eyeW, 'I': _P.eyeBlue, 'D': _P.eyeDeep }, [
+        'HHHHHHHHHHHHHHHH',
+        'HHHHHHHHHHHHHHHH',
+        'HHHHHHHHHHHHHHHH',
+        'HHHHHHHHHHHHHHHH',
+        'HHHHHHHHHHHHHHHH',
+        'HHHHHHHHHHHHHHHH',
+        'HHHHH.HHHH.HHHHH',
+        'HHWII..HH..IIWHH',
+        'HHWII......IIWHH',
+        'HHWDD......DDWHH',
+        'HH............HH',
+        'HH............HH',
+        'HH............HH',
+        '................',
+        '................',
+        'ssssssssssssssss',
+      ]),
       back:  p => _headBack(p, _P.hairBr, 12),
       side:  p => _headSide(p, _P.hairBr, 10),
       top:   _solid(_P.hairBr),
@@ -18265,10 +18284,24 @@ const PIXEL_SKINS = {
   boy: {
     hand: 0xf0c8a0, foot: 0x2a2e35,
     head: {
-      front: p => { p(_P.skin, 0, 0, 16, 16); p(_P.skinSh, 0, 15, 16, 1);
-                    p(_P.hairBr, 0, 0, 16, 6); p(_P.hairBr, 0, 6, 2, 5); p(_P.hairBr, 14, 6, 2, 5);
-                    p(_P.hairBr, 3, 6, 10, 1);
-                    _bigEye(p, 2, '#4a6fa5', '#2f4f7a', 1); _bigEye(p, 11, '#4a6fa5', '#2f4f7a', -1); },
+      front: gridFace({ '.': _P.skin, 's': _P.skinSh, 'H': _P.hairBr, 'W': _P.eyeW, 'I': '#4a6fa5', 'D': '#2f4f7a' }, [
+        'HHHHHHHHHHHHHHHH',
+        'HHHHHHHHHHHHHHHH',
+        'HHHHHHHHHHHHHHHH',
+        'HHHHHHHHHHHHHHHH',
+        'HHHHHHHHHHHHHHHH',
+        'HHHHHHHHHHHHHHHH',
+        'HH.HHHHHHHHHH.HH',
+        'HHWII......IIWHH',
+        'HHWII......IIWHH',
+        'HHWDD......DDWHH',
+        'HH............HH',
+        '................',
+        '................',
+        '................',
+        '................',
+        'ssssssssssssssss',
+      ]),
       back:  p => _headBack(p, _P.hairBr, 11),
       side:  p => _headSide(p, _P.hairBr, 10),
       top:   _solid(_P.hairBr), bottom: _solid(_P.skinSh),
@@ -18291,10 +18324,24 @@ const PIXEL_SKINS = {
   girl: {
     hand: 0xf0c8a0, foot: '#e8eef5',
     head: {
-      front: p => { p(_P.skin, 0, 0, 16, 16); p(_P.skinSh, 0, 15, 16, 1);
-                    p(_P.hairGn, 0, 0, 16, 6); p(_P.hairGn, 0, 6, 2, 7); p(_P.hairGn, 14, 6, 2, 7);
-                    p(_P.hairGn, 3, 6, 10, 1); p(_P.hairGn, 7, 7, 2, 1);
-                    _bigEye(p, 2, '#6a4bb8', '#46307e', 1); _bigEye(p, 11, '#6a4bb8', '#46307e', -1); },
+      front: gridFace({ '.': _P.skin, 's': _P.skinSh, 'H': _P.hairGn, 'W': _P.eyeW, 'I': '#6a4bb8', 'D': '#46307e' }, [
+        'HHHHHHHHHHHHHHHH',
+        'HHHHHHHHHHHHHHHH',
+        'HHHHHHHHHHHHHHHH',
+        'HHHHHHHHHHHHHHHH',
+        'HHHHHHHHHHHHHHHH',
+        'HHHHHHHHHHHHHHHH',
+        'HH.HHHHHHHHHH.HH',
+        'HHWII..HH..IIWHH',
+        'HHWII......IIWHH',
+        'HHWDD......DDWHH',
+        'HH............HH',
+        'HH............HH',
+        'HH............HH',
+        '................',
+        '................',
+        'ssssssssssssssss',
+      ]),
       back:  p => _headBack(p, _P.hairGn, 16),
       side:  p => { p(_P.skin, 0, 0, 16, 16); p(_P.hairGn, 0, 0, 16, 8);
                     p(_P.hairGn, 0, 8, 3, 8); p(_P.hairGn, 10, 8, 6, 8); },
@@ -18317,10 +18364,24 @@ const PIXEL_SKINS = {
   police: {
     hand: 0xf0c8a0, foot: '#14161a',
     head: {
-      front: p => { p(_P.skin, 0, 0, 16, 16); p(_P.skinSh, 0, 15, 16, 1);
-                    p(_P.hairBlk, 0, 0, 16, 6); p(_P.hairBlk, 0, 6, 2, 5); p(_P.hairBlk, 14, 6, 2, 5);
-                    p(_P.hairBlk, 3, 6, 10, 1);
-                    _bigEye(p, 2, '#3f6b4a', '#2a4a33', 1); _bigEye(p, 11, '#3f6b4a', '#2a4a33', -1); },
+      front: gridFace({ '.': _P.skin, 's': _P.skinSh, 'H': _P.hairBlk, 'W': _P.eyeW, 'I': '#3f6b4a', 'D': '#2a4a33' }, [
+        'HHHHHHHHHHHHHHHH',
+        'HHHHHHHHHHHHHHHH',
+        'HHHHHHHHHHHHHHHH',
+        'HHHHHHHHHHHHHHHH',
+        'HHHHHHHHHHHHHHHH',
+        'HHHHHHHHHHHHHHHH',
+        'HH.HHHHHHHHHH.HH',
+        'HHWII......IIWHH',
+        'HHWII......IIWHH',
+        'HHWDD......DDWHH',
+        'HH............HH',
+        '................',
+        '................',
+        '................',
+        '................',
+        'ssssssssssssssss',
+      ]),
       back:  p => _headBack(p, _P.hairBlk, 11),
       side:  p => _headSide(p, _P.hairBlk, 10),
       top:   _solid(_P.hairBlk), bottom: _solid(_P.skinSh),
@@ -18347,13 +18408,24 @@ const PIXEL_SKINS = {
   swat: {
     hand: 0x14161a, foot: '#14161a',
     head: {
-      front: p => { p(_P.blk, 0, 0, 16, 16);
-                    p(_P.strapGy, 0, 6, 16, 5);              // goggle band across the eyes
-                    p(_P.line, 1, 7, 14, 3);                 // the lens slot
-                    p(_P.skin, 2, 7, 3, 3); p(_P.skin, 11, 7, 3, 3);
-                    p(_P.eyeW, 2, 7, 3, 1); p(_P.eyeW, 11, 7, 3, 1);
-                    p(_P.blkHi, 0, 11, 16, 1);               // the band's lower lip
-                    p(_P.blkHi, 5, 13, 6, 1); },             // mask seam
+      front: gridFace({ '.': _P.skin, 'W': _P.eyeW, 'L': _P.line, 'K': _P.blk, 'k': _P.blkHi, 'G': _P.strapGy }, [
+        'KKKKKKKKKKKKKKKK',
+        'KKKKKKKKKKKKKKKK',
+        'KKKKKKKKKKKKKKKK',
+        'KKKKKKKKKKKKKKKK',
+        'KKKKKKKKKKKKKKKK',
+        'KKKKKKKKKKKKKKKK',
+        'GGGGGGGGGGGGGGGG',
+        'GLWWWLLLLLLWWWLG',
+        'GL...LLLLLL...LG',
+        'GL...LLLLLL...LG',
+        'GGGGGGGGGGGGGGGG',
+        'kkkkkkkkkkkkkkkk',
+        'KKKKKKKKKKKKKKKK',
+        'KKKKKkkkkkkKKKKK',
+        'KKKKKKKKKKKKKKKK',
+        'KKKKKKKKKKKKKKKK',
+      ]),
       back:  p => { p(_P.blk, 0, 0, 16, 16); p(_P.strapGy, 0, 6, 16, 2); },
       side:  p => { p(_P.blk, 0, 0, 16, 16); p(_P.strapGy, 0, 6, 16, 3); p(_P.blkHi, 0, 10, 16, 1); },
       top:   _solid(_P.blk), bottom: _solid(_P.blk),
