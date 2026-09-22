@@ -18062,10 +18062,10 @@ function makeFaceTexture(tone = 0xffcc99) {
   px(sk, 0, 0, 32, 32);                                         // skin
   px(jaw, 0, 28, 32, 4);                                        // jaw shade
   px('#14161c', 6, 14, 6, 2);   px('#14161c', 20, 14, 6, 2);    // lashes
-  px('#ffffff', 6, 16, 6, 6);   px('#ffffff', 20, 16, 6, 6);    // eye whites
-  px(iris, 6, 16, 6, 4);        px(iris, 20, 16, 6, 4);         // iris
-  px(deep, 6, 18, 6, 2);        px(deep, 20, 18, 6, 2);         // …darker below
-  px('#ffffff', 6, 16, 2, 2);   px('#ffffff', 20, 16, 2, 2);    // catch-lights
+  px('#ffffff', 6, 16, 6, 6);   px('#ffffff', 20, 16, 6, 6);    // whites — half of each eye
+  px(iris, 9, 16, 3, 6);        px(iris, 20, 16, 3, 6);         // iris, on the inner half
+  px(deep, 9, 20, 3, 2);        px(deep, 20, 20, 3, 2);         // …darker below
+  px('#ffffff', 9, 16, 1, 1);   px('#ffffff', 22, 16, 1, 1);    // catch-lights
   px('#14161c', 6, 22, 6, 2);   px('#14161c', 20, 22, 6, 2);    // lower lashes
   px(mouth, 14, 26, 4, 2);                                      // mouth
   const tex = new THREE.CanvasTexture(c);
@@ -18204,15 +18204,19 @@ const _P = {
   strapGy: '#575d66', pouch: '#2a2e35', amber: '#e0902a', visorTeal: '#3fe0b0',
 };
 const _solid = col => (p => p(col, 0, 0, 16, 16));
-// A big anime-ish eye: four wide, six tall, mostly iris with a lash above and
-// a band of white below. The first pass drew them three wide with two lash rows
-// and they read as slits -- at this size the eye has to be most of the face or
-// it disappears the moment the character is more than a few metres away.
-function _bigEye(p, x, iris, deep) {
-  p(_P.line,  x, 6, 4, 1);          // lash
-  p(iris,     x, 7, 4, 5);          // iris — almost the whole eye, as in the reference
-  p(deep,     x, 10, 4, 2);         // …deeper at the bottom
-  p('#ffffff', x, 7, 1, 1);         // one-pixel catch-light
+// A big anime-ish eye: four wide, six tall. HALF of it is the white of the eye
+// and half is the iris, the way the reference skins draw them — a solid block
+// of colour reads as a painted-on dot rather than an eye. `dir` mirrors the
+// pair so the iris sits on the inner half of each, and the two of them look at
+// whoever is standing in front.
+function _bigEye(p, x, iris, deep, dir) {
+  const ix = dir > 0 ? x + 2 : x;                  // the inner half
+  p(_P.line,  x, 6, 4, 1);                         // lash
+  p(_P.eyeW,  x, 7, 4, 5);                         // white of the eye
+  p(iris,     ix, 7, 2, 5);                        // iris
+  p(deep,     ix, 10, 2, 2);                       // …deeper at the bottom
+  p('#ffffff', ix + (dir > 0 ? 0 : 1), 7, 1, 1);   // catch-light on the iris
+  p(_P.line,  x, 12, 4, 1);                        // lower lash
 }
 // Hair that sits ON the head texture rather than as extra geometry: no second
 // surface to z-fight with the scalp, and the fringe can be jagged for free.
@@ -18242,7 +18246,7 @@ const PIXEL_SKINS = {
     head: {
       front: p => { p(_P.skin, 0, 0, 16, 16); p(_P.skinSh, 0, 15, 16, 1);
                     _hairFront(p, _P.hairBr);
-                    _bigEye(p, 2, _P.eyeBlue, _P.eyeDeep); _bigEye(p, 10, _P.eyeBlue, _P.eyeDeep); },
+                    _bigEye(p, 2, _P.eyeBlue, _P.eyeDeep, 1); _bigEye(p, 10, _P.eyeBlue, _P.eyeDeep, -1); },
       back:  p => _headBack(p, _P.hairBr, 12),
       side:  p => _headSide(p, _P.hairBr, 8),
       top:   _solid(_P.hairBr),
@@ -18273,7 +18277,7 @@ const PIXEL_SKINS = {
       front: p => { p(_P.skin, 0, 0, 16, 16); p(_P.skinSh, 0, 15, 16, 1);
                     p(_P.hairBr, 0, 0, 16, 5); p(_P.hairBr, 0, 5, 4, 4); p(_P.hairBr, 12, 5, 4, 4);
                     p(_P.hairBr, 4, 5, 8, 1);
-                    _bigEye(p, 2, '#4a6fa5', '#2f4f7a'); _bigEye(p, 10, '#4a6fa5', '#2f4f7a');
+                    _bigEye(p, 2, '#4a6fa5', '#2f4f7a', 1); _bigEye(p, 10, '#4a6fa5', '#2f4f7a', -1);
                     p(_P.mouth, 7, 14, 2, 1); },
       back:  p => _headBack(p, _P.hairBr, 11),
       side:  p => _headSide(p, _P.hairBr, 7),
@@ -18300,7 +18304,7 @@ const PIXEL_SKINS = {
       front: p => { p(_P.skin, 0, 0, 16, 16); p(_P.skinSh, 0, 15, 16, 1);
                     p(_P.hairGn, 0, 0, 16, 5); p(_P.hairGn, 0, 5, 3, 6); p(_P.hairGn, 13, 5, 3, 6);
                     p(_P.hairGn, 3, 5, 10, 1); p(_P.hairGn, 7, 6, 2, 1);
-                    _bigEye(p, 2, '#6a4bb8', '#46307e'); _bigEye(p, 10, '#6a4bb8', '#46307e');
+                    _bigEye(p, 2, '#6a4bb8', '#46307e', 1); _bigEye(p, 10, '#6a4bb8', '#46307e', -1);
                     p(_P.mouth, 7, 14, 2, 1); },
       back:  p => _headBack(p, _P.hairGn, 16),
       side:  p => { p(_P.skin, 0, 0, 16, 16); p(_P.hairGn, 0, 0, 16, 8);
@@ -18327,7 +18331,7 @@ const PIXEL_SKINS = {
       front: p => { p(_P.skin, 0, 0, 16, 16); p(_P.skinSh, 0, 15, 16, 1);
                     p(_P.hairBlk, 0, 0, 16, 5); p(_P.hairBlk, 0, 5, 3, 4); p(_P.hairBlk, 13, 5, 3, 4);
                     p(_P.hairBlk, 3, 5, 10, 1);
-                    _bigEye(p, 2, '#3f6b4a', '#2a4a33'); _bigEye(p, 10, '#3f6b4a', '#2a4a33');
+                    _bigEye(p, 2, '#3f6b4a', '#2a4a33', 1); _bigEye(p, 10, '#3f6b4a', '#2a4a33', -1);
                     p(_P.mouth, 7, 14, 2, 1); },
       back:  p => _headBack(p, _P.hairBlk, 11),
       side:  p => _headSide(p, _P.hairBlk, 7),
