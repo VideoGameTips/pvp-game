@@ -802,11 +802,11 @@ function falloffMultiplier(weaponId, dist) {
 const MELEE_ITEMS = [
   { id: 'bat',        name: 'Bat',        type: 'Melee',       damage: 50, range: 2.1, cooldown: 520,
     knockbackOnHit: 6, // every swing shoves the target back, not just the ability
-    ability: { name: 'Heavy Strike', cd: 8000,  desc: 'Next hit deals 2× damage', type: 'melee_heavy' } },
+    ability: { name: 'Crowd Clear', cd: 9000,  desc: 'AOE swing · 3.2 m · 45 dmg · knockback', type: 'melee_pulse', radius: 3.2, damage: 45, knockback: 3.2, launchVel: 5, color: 0xffcc66 } },
   { id: 'sabre',      name: 'Sabre',      type: 'Melee',       damage: 45, range: 2.4, cooldown: 620,
     ability: { name: 'Lunge',        cd: 7000,  desc: 'Dash forward · hit all in path', type: 'melee_lunge', distance: 6 } },
   { id: 'frying_pan', name: 'Frying Pan', type: 'Melee',       damage: 32, range: 1.8, cooldown: 420,
-    ability: { name: 'Pickle Throw', cd: 9000,  desc: 'Hurl 3 fried pickles · 22 dmg each', type: 'melee_pickle' } },
+    ability: { name: 'Pan Clang', cd: 8500,  desc: 'AOE clang · 3 m · 28 dmg · pop-up', type: 'melee_pulse', radius: 3.0, damage: 28, knockback: 2.2, launchVel: 7, color: 0xffffaa } },
   { id: 'sledge',     name: 'Sledge',     type: 'Heavy Melee', damage: 70, range: 1.9, cooldown: 900,
     ability: { name: 'Ground Slam',  cd: 12000, desc: 'Leap up · slam · AOE 4m · 80 dmg', type: 'melee_slam', radius: 4, damage: 80 } },
   { id: 'spear',      name: 'Spear',      type: 'Reach Melee', damage: 50, range: 3.0, cooldown: 760,
@@ -816,7 +816,7 @@ const MELEE_ITEMS = [
   { id: 'baguette',   name: 'Baguette',   type: 'Melee',       damage: 28, range: 2.0, cooldown: 300,
     ability: { name: 'Eat It',       cd: 20000, desc: 'Munch the baguette · restore 40 HP', type: 'melee_eat', heal: 40 } },
   { id: 'knife',      name: 'Knife',      type: 'Melee',       damage: 28, range: 1.6, cooldown: 260, speedMult: 2.0,
-    ability: { name: 'Death Touch',  cd: 18000, desc: 'Next hit · instant kill · 9999 dmg', type: 'melee_instakill' } },
+    ability: { name: 'Shadow Step',  cd: 7500, desc: 'Movement only · fast forward dash', type: 'melee_mobility', speed: 24, up: 1.5, color: 0x99ccff } },
   { id: 'chainsaw',   name: 'Chainsaw',   type: 'Heavy Melee', damage: 45, range: 1.9, cooldown: 150,
     ability: { name: 'Rev Up',       cd: 12000, desc: '2s · 10× swing speed · 3× move speed', type: 'melee_revup', duration: 2000 } },
   { id: 'lightsabre', name: 'Lightsabre', type: 'Melee · Jedi',  damage: 72, range: 2.5, cooldown: 420, doubleJump: true,
@@ -827,20 +827,20 @@ const MELEE_ITEMS = [
     ability: { name: 'Spin Mode',    cd: 15000, desc: '3s · auto-damage nearby foes · 180 dmg/s', type: 'melee_spin', duration: 3000 } },
   // ── New melees ───────────────────────────────────────────────────────────
   { id: 'crowbar',    name: 'Crowbar',    type: 'Utility Melee', damage: 32, range: 1.8, cooldown: 320,
-    ability: { name: 'Pry',          cd: 7000,  desc: 'Knock target back 4 m + 50 dmg', type: 'melee_charge', distance: 4, damage: 50 } },
+    ability: { name: 'Vault Pry',    cd: 7000,  desc: 'Movement only · vault forward and up', type: 'melee_mobility', speed: 18, up: 8, color: 0xccaa66 } },
   { id: 'fire_axe',   name: 'Fire Axe',   type: 'Heavy Melee',   damage: 85, range: 2.0, cooldown: 950,
     ability: { name: 'Hellfire Swing', cd: 13000, desc: 'AOE flame swing · 4 m · 90 dmg + burn', type: 'melee_slam', radius: 4, damage: 90 } },
   { id: 'nunchucks',  name: 'Nunchucks',  type: 'Melee',         damage: 22, range: 1.9, cooldown: 180, speedMult: 1.7,
     ability: { name: 'Combo Frenzy', cd: 10000, desc: '2 s · ×2 swing speed · ×1.5 dmg', type: 'melee_revup', duration: 2000 } },
   { id: 'umbrella',   name: 'Umbrella',   type: 'Shield',        damage: 18, range: 1.8, cooldown: 600, shield: true,
-    ability: { name: 'Bumbershoot', cd: 9000,  desc: '2 s · block all incoming bullets', type: 'melee_parry', duration: 2000 } },
+    ability: { name: 'Gust Hop', cd: 9000,  desc: 'Movement only · floaty hop + side drift', type: 'melee_mobility', speed: 12, side: 8, up: 10, color: 0xaaccff } },
   { id: 'yoyo',       name: 'Yo-Yo',      type: 'Reach Melee',   damage: 30, range: 3.5, cooldown: 500,
     ability: { name: 'Loop the World', cd: 11000, desc: '3 m spin · auto-hit nearby foes · 150 dmg/s', type: 'melee_spin', duration: 2500 } },
   // ── 3rd-batch melees ─────────────────────────────────────────────────────
   { id: 'combat_axe', name: 'Combat Axe', type: 'Heavy Melee',   damage: 78, range: 2.2, cooldown: 820,
     ability: { name: 'Throw Axe',    cd: 14000, desc: 'Hurl axe · 120 dmg · weapon gone until CD', type: 'melee_throw' } },
   { id: 'shock_baton',name: 'Shock Baton',type: 'Melee',         damage: 32, range: 2.0, cooldown: 300,
-    ability: { name: 'Static Shock', cd: 9000,  desc: 'Hit · slows enemy fire rate briefly', type: 'melee_charge', distance: 3, damage: 40 } },
+    ability: { name: 'Static Burst', cd: 9000,  desc: 'AOE zap · 3.4 m · 30 dmg · pop-up', type: 'melee_pulse', radius: 3.4, damage: 30, knockback: 1.8, launchVel: 5, color: 0xffff44 } },
   // ── 😈 P2W melees ────────────────────────────────────────────────────────
   { id: 'titan_hammer', name: 'Titan Hammer', type: 'Heavy AOE',  damage: 95, range: 2.3, cooldown: 700,
     aoeOnSwing: 3, // every swing hits in 3m AOE
@@ -851,12 +851,12 @@ const MELEE_ITEMS = [
   // ── The Classic ──────────────────────────────────────────────────────────
   { id: 'fists',      name: 'Fists',      type: 'Brass Knuckles', damage: 24, range: 1.4, cooldown: 220, speedMult: 1.6,
     dual: true, // two separate fists, thrown alternately — not one box sliding sideways
-    ability: { name: 'Haymaker',     cd: 8000,  desc: 'Wind-up · next punch · 90 dmg + knockback', type: 'melee_heavy' } },
+    ability: { name: 'Slip Step',    cd: 6000,  desc: 'Movement only · burst dash + hop', type: 'melee_mobility', speed: 21, up: 4, color: 0xffffff } },
   // ── 🪖 ADMIN MELEES (locked behind unlock codes) ─────────────────────────
   // ── 🆕 More melees — batch 4 ─────────────────────────────────────────────
   { id: 'brass_knuckles', name: 'Brass Knuckles', type: 'Punch',     damage: 28, range: 1.5, cooldown: 200, speedMult: 1.6,
     dual: true,
-    ability: { name: 'Haymaker', cd: 8000, desc: '2× damage on next hit', type: 'melee_heavy' } },
+    ability: { name: 'Shoulder Rush', cd: 8000, desc: 'Dash ram · 4.5 m · 45 dmg', type: 'melee_charge', distance: 4.5, damage: 45 } },
   { id: 'hatchet',        name: 'Hatchet',        type: 'Throwable Melee', damage: 50, range: 1.9, cooldown: 480,
     ability: { name: 'Throw Hatchet', cd: 11000, desc: 'Hurl · 90 dmg · weapon gone until CD', type: 'melee_throw' } },
   { id: 'machete',        name: 'Machete',        type: 'Bleed Melee', damage: 56, range: 2.4, cooldown: 520,
@@ -866,22 +866,22 @@ const MELEE_ITEMS = [
     ability: { name: 'Yank',       cd: 8000,  desc: 'Pull target 4 m toward you + 30 dmg', type: 'melee_pull', distance: 4, damage: 30 } },
   { id: 'cricket_bat',    name: 'Launching Melee', type: 'Melee', damage: 42, range: 2.3, cooldown: 540,
     launchOnHit: 8, // every hit pops target up
-    ability: { name: 'Homerun',    cd: 9000,  desc: '2.5× dmg · launch target HIGH',     type: 'melee_heavy', launchMult: 2 } },
+    ability: { name: 'Homerun',    cd: 9500,  desc: 'AOE launch · 3.6 m · 42 dmg', type: 'melee_pulse', radius: 3.6, damage: 42, knockback: 3.5, launchVel: 12, color: 0xffee88 } },
   { id: 'pipe',           name: 'Lead Pipe',      type: 'Chain Melee', damage: 44, range: 2.0, cooldown: 500,
     chainOnHit: { radius: 2.5, mult: 0.5 }, // splash damages nearby
     ability: { name: 'Bonk',       cd: 8000,  desc: 'Next hit deals 2× dmg + chains',    type: 'melee_heavy' } },
   { id: 'wrench',         name: 'Wrench',         type: 'Utility Melee', damage: 36, range: 1.8, cooldown: 380,
-    ability: { name: 'Spanner Toss', cd: 10000, desc: 'Hurl wrench · 90 dmg · weapon gone until CD', type: 'melee_throw' } },
+    ability: { name: 'Quick Fix', cd: 8000, desc: 'Movement only · repair-hop backward', type: 'melee_mobility', speed: -14, up: 7, color: 0xffdd88 } },
   { id: 'shovel',         name: 'Shovel',         type: 'AOE Melee', damage: 55, range: 2.2, cooldown: 620,
     ability: { name: 'Ground Slam',cd: 11000, desc: 'Slam · 4 m AOE knockback · 65 dmg', type: 'melee_slam', radius: 4, damage: 65 } },
   { id: 'golf_club',      name: 'Golf Club',      type: 'Launching Melee', damage: 40, range: 2.4, cooldown: 500,
     launchOnHit: 6,
-    ability: { name: 'Fore!',      cd: 9000,  desc: '2.5× dmg · launch target SKY-HIGH', type: 'melee_heavy', launchMult: 3 } },
+    ability: { name: 'Fore!',      cd: 9000,  desc: 'AOE drive · 3.4 m · 40 dmg · huge launch', type: 'melee_pulse', radius: 3.4, damage: 40, knockback: 4.5, launchVel: 15, color: 0xffffff } },
   { id: 'tennis_racket',  name: 'Tennis Racket',  type: 'Reflect Melee', damage: 26, range: 2.2, cooldown: 360,
     ability: { name: 'Backhand',   cd: 8000,  desc: '2 s · deflect incoming bullets',    type: 'melee_deflect', duration: 2000 } },
   { id: 'fire_poker',     name: 'Fire Poker',     type: 'Burn Melee', damage: 38, range: 2.6, cooldown: 460,
     burnOnHit: { dps: 7, dur: 4000, radius: 1.2, color: 0xff6622 },
-    ability: { name: 'Hot Brand',  cd: 9000,  desc: 'Next hit deals 2× dmg + ignites',   type: 'melee_heavy' } },
+    ability: { name: 'Fire Sweep', cd: 9500,  desc: 'AOE flame sweep · 3.5 m · 38 dmg', type: 'melee_pulse', radius: 3.5, damage: 38, knockback: 2.4, launchVel: 4, color: 0xff6622 } },
   { id: 'meat_cleaver',   name: 'Meat Cleaver',   type: 'Vampiric Melee', damage: 60, range: 1.7, cooldown: 540,
     lifestealOnHit: 10,
     ability: { name: 'Butcher',    cd: 10000, desc: '3 s · auto-chop · double lifesteal', type: 'melee_revup', duration: 3000, lifestealMult: 2 } },
@@ -890,7 +890,7 @@ const MELEE_ITEMS = [
     ability: { name: 'Ghost Dash', cd: 9000,  desc: 'Dash 7 m through enemies · 110 dmg', type: 'melee_lunge', distance: 7, damage: 110 } },
   { id: 'gravity_hammer',name: 'Gravity Hammer',  type: 'Heavy AOE',      damage: 110, range: 2.3, cooldown: 700, doubleJump: true,
     aoeOnSwing: 3.5,
-    ability: { name: 'Singularity Slam', cd: 14000, desc: 'Slam · 6 m AOE knockback', type: 'melee_slam' } },
+    ability: { name: 'Singularity Slam', cd: 14000, desc: 'Slam · 6 m AOE · 130 dmg · huge launch', type: 'melee_slam', radius: 6, damage: 130, knockback: 5, launchVel: 14, color: 0xaa88ff } },
   { id: 'volt_whip',     name: 'Volt Whip',       type: 'Long Electric',  damage: 50, range: 4.0, cooldown: 420,
     chainOnHit: { radius: 3.0, mult: 0.6 },
     ability: { name: 'Thunder Lash', cd: 11000, desc: '3 s spin · chain electric hits', type: 'melee_spin', duration: 3000 } },
@@ -4777,6 +4777,144 @@ function addOuterWalls(mapName, color) {
     addMapBox(mapName, x, y, z, w, h, d, color);
   });
 }
+
+const ADMIN_CUSTOM_MAP_PREFIX = 'admin_map_';
+const ADMIN_CUSTOM_MAP_STORE = 'pvpArena.adminCustomMaps.v1';
+let adminCustomMaps = [];
+
+function defaultAdminMapDoc(name = 'Admin Build') {
+  return {
+    id: `${ADMIN_CUSTOM_MAP_PREFIX}${Date.now().toString(36)}`,
+    name,
+    groundColor: 0x5f6f58,
+    gridColor: 0x3f4f38,
+    skyColor: 0x9eaab8,
+    baseMap: 'empty',
+    outerWalls: true,
+    boxes: [],
+  };
+}
+
+function safeAdminMapDoc(doc) {
+  const clean = doc && typeof doc === 'object' ? doc : defaultAdminMapDoc();
+  const rawId = String(clean.id || '').toLowerCase().replace(/[^a-z0-9_]/g, '_');
+  const id = rawId.startsWith(ADMIN_CUSTOM_MAP_PREFIX) ? rawId : `${ADMIN_CUSTOM_MAP_PREFIX}${rawId || Date.now().toString(36)}`;
+  return {
+    id,
+    name: String(clean.name || id.replace(ADMIN_CUSTOM_MAP_PREFIX, '')).slice(0, 40),
+    groundColor: Number(clean.groundColor ?? 0x5f6f58) & 0xffffff,
+    gridColor: Number(clean.gridColor ?? 0x3f4f38) & 0xffffff,
+    skyColor: Number(clean.skyColor ?? 0x9eaab8) & 0xffffff,
+    baseMap: String(clean.baseMap || 'empty').replace(/[^a-z0-9_]/gi, '_'),
+    outerWalls: clean.outerWalls !== false,
+    boxes: Array.isArray(clean.boxes) ? clean.boxes.slice(0, 220).map(b => ({
+      shape: ['box', 'sphere', 'cylinder'].includes(b.shape) ? b.shape : 'box',
+      x: Number(b.x) || 0,
+      y: Number(b.y) || 0.5,
+      z: Number(b.z) || 0,
+      w: Math.max(0.1, Number(b.w) || 2),
+      h: Math.max(0.1, Number(b.h) || 1),
+      d: Math.max(0.1, Number(b.d) || 2),
+      color: Number(b.color ?? 0x888888) & 0xffffff,
+      rotY: Number(b.rotY) || 0,
+      collide: b.collide !== false,
+      opacity: Math.max(0.1, Math.min(1, Number(b.opacity ?? 1))),
+    })) : [],
+  };
+}
+
+function clearMapGroup(name) {
+  const group = MAP_GROUPS[name];
+  if (!group) return;
+  while (group.children.length) group.remove(group.children[0]);
+  MAP_COLLIDERS[name] = [];
+  MAP_GIMMICKS[name] = { damageZones: [], jumpPads: [], iceZones: [], oilZones: [], lowGravZones: [] };
+}
+
+function addAdminMapShape(mapName, b) {
+  const mat = new THREE.MeshLambertMaterial({ color: b.color, transparent: b.opacity < 1, opacity: b.opacity });
+  let mesh;
+  if (b.shape === 'sphere') {
+    mesh = new THREE.Mesh(new THREE.SphereGeometry(Math.max(b.w, b.h, b.d) / 2, 18, 12), mat);
+    mesh.scale.set(b.w / Math.max(b.w, b.h, b.d), b.h / Math.max(b.w, b.h, b.d), b.d / Math.max(b.w, b.h, b.d));
+  } else if (b.shape === 'cylinder') {
+    mesh = new THREE.Mesh(new THREE.CylinderGeometry(b.w / 2, b.w / 2, b.h, 20), mat);
+    mesh.scale.z = b.d / Math.max(0.1, b.w);
+  } else {
+    mesh = new THREE.Mesh(new THREE.BoxGeometry(b.w, b.h, b.d), mat);
+  }
+  mesh.position.set(b.x, b.y, b.z);
+  if (b.rotY) mesh.rotation.y = b.rotY;
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  MAP_GROUPS[mapName].add(mesh);
+  if (b.collide !== false) {
+    mesh.updateMatrixWorld(true);
+    MAP_COLLIDERS[mapName].push(new THREE.Box3().setFromObject(mesh));
+  }
+  return mesh;
+}
+
+function buildAdminCustomMap(docLike) {
+  const doc = safeAdminMapDoc(docLike);
+  if (!MAP_GROUPS[doc.id]) registerMap(doc.id);
+  clearMapGroup(doc.id);
+  if (doc.baseMap && doc.baseMap !== 'empty' && MAP_GROUPS[doc.baseMap]) {
+    for (const child of MAP_GROUPS[doc.baseMap].children) MAP_GROUPS[doc.id].add(child.clone(true));
+    MAP_COLLIDERS[doc.id].push(...(MAP_COLLIDERS[doc.baseMap] || []).map(c => c.clone()));
+    MAP_GIMMICKS[doc.id] = JSON.parse(JSON.stringify(MAP_GIMMICKS[doc.baseMap] || { damageZones: [], jumpPads: [], iceZones: [], oilZones: [], lowGravZones: [] }));
+    MAP_GROUPS[doc.id]._skyColor = MAP_GROUPS[doc.baseMap]._skyColor ?? doc.skyColor;
+  } else {
+    addMapGround(doc.id, doc.groundColor, doc.gridColor);
+    if (doc.outerWalls) addOuterWalls(doc.id, 0x464646);
+  }
+  for (const b of doc.boxes) addAdminMapShape(doc.id, b);
+  if (doc.baseMap === 'empty' || !MAP_GROUPS[doc.id]._skyColor) MAP_GROUPS[doc.id]._skyColor = doc.skyColor;
+  MAP_GROUPS[doc.id]._customLabel = doc.name;
+  return doc;
+}
+
+function loadAdminCustomMaps() {
+  try {
+    const docs = JSON.parse(localStorage.getItem(ADMIN_CUSTOM_MAP_STORE) || '[]');
+    adminCustomMaps = Array.isArray(docs) ? docs.map(safeAdminMapDoc) : [];
+  } catch (e) {
+    adminCustomMaps = [];
+  }
+  for (const doc of adminCustomMaps) buildAdminCustomMap(doc);
+}
+
+function saveAdminCustomMaps() {
+  try { localStorage.setItem(ADMIN_CUSTOM_MAP_STORE, JSON.stringify(adminCustomMaps)); } catch (e) {}
+}
+
+function upsertAdminCustomMap(docLike) {
+  const doc = buildAdminCustomMap(docLike);
+  const i = adminCustomMaps.findIndex(m => m.id === doc.id);
+  if (i >= 0) adminCustomMaps[i] = doc;
+  else adminCustomMaps.push(doc);
+  saveAdminCustomMaps();
+  if (typeof syncAdminCustomMapCards === 'function') syncAdminCustomMapCards();
+  return doc;
+}
+
+function adminMapToBuildCode(docLike) {
+  const doc = safeAdminMapDoc(docLike);
+  const fn = `build${doc.id.replace(/(^|_)([a-z0-9])/g, (_, __, c) => c.toUpperCase())}Map`;
+  const rows = doc.boxes.map(b => {
+    const line = `  addMapBox(m, ${b.x.toFixed(2)}, ${b.y.toFixed(2)}, ${b.z.toFixed(2)}, ${b.w.toFixed(2)}, ${b.h.toFixed(2)}, ${b.d.toFixed(2)}, 0x${b.color.toString(16).padStart(6, '0')}, ${b.rotY.toFixed(3)}, ${b.opacity.toFixed(2)});`;
+    return b.collide === false ? `${line}\n  MAP_COLLIDERS[m].pop();` : line;
+  }).join('\n');
+  return `function ${fn}() {
+  const m = '${doc.id}';
+  registerMap(m);
+  addMapGround(m, 0x${doc.groundColor.toString(16).padStart(6, '0')}, 0x${doc.gridColor.toString(16).padStart(6, '0')});
+  ${doc.outerWalls ? `addOuterWalls(m, 0x464646);` : ''}
+${rows}
+  MAP_GROUPS[m]._skyColor = 0x${doc.skyColor.toString(16).padStart(6, '0')};
+}
+${fn}();`;
+}
 function addJumpPad(mapName, x, z, r = 1.5, vel = 14, color = 0xffcc22) {
   const pad = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.9, r * 0.9, 0.15, 16), new THREE.MeshBasicMaterial({ color }));
   pad.position.set(x, 0.08, z);
@@ -6641,6 +6779,7 @@ buildBlankMap();
 buildBattlefieldMap();
 buildRangeMap();
 buildLobby13Map();
+loadAdminCustomMaps();
 
 // ══════════════════════════════════════════════════════════════════════════
 // 🏚️ MAP SURFACE PASS — reflective, and not perfectly clean
@@ -20745,6 +20884,7 @@ document.addEventListener('keydown', e => {
   // Spacebar — jump (only when on the ground)
   if (e.code === 'Space') {
     e.preventDefault();
+    if (adminMapBuilderOpen && selectedModeConfig?.type === 'builder') return;
     if (!isDead && isPlayerGrounded()) {
       // 🛹 Slide jump: leaving the ground out of a slide trades a little height
       // for the slide's speed carried into the air. The slide ends on the jump,
@@ -20967,29 +21107,65 @@ const _eqClamp = v => Math.max(0, Math.min(1, v));
 // half cycles) -- one formula, shared by the motion itself and by its
 // trail, so the trail always traces exactly the path the piece took.
 function _eqCometSway(t) { return Math.sin(t * Math.PI * 3) * 0.09; }
+// t=0 in this whole equip system means "the FULL rotation offset, not yet
+// unwound" (see _eqTwirlFlyOffset for the long version of this) -- so at
+// t=0 the comet's own pieces, swung out by the tumble at their own radius
+// from the pivot (up to ~0.2-0.3 units), can pass close enough to a pivot
+// that's only ~0.15-0.2 units from the camera to blow the projection up
+// (checked per-piece, worst case ndcX past 50). Same fix as the twirl:
+// push the whole assembly back in depth while it's still tumbling wildly,
+// shrinking to zero right as it arrives.
+function _eqCometDepthPush(t) {
+  const arrive = _eqEase(_eqClamp(t / 0.78));
+  return -0.8 * (1 - arrive);
+}
 // The twirl entrance's spin: several fast turns about the trigger guard,
 // easing to a dead stop -- a gunslinger twirl, not a wag. Shared by the
 // motion itself and by its trail, same reason as the comet sway above.
-// Bumped from 2.5 turns to 4.5 -- "not enough vertical spin energy" -- so
-// it reads as an actual baton-style twirl, not a couple of lazy turns.
-// _EQ_X (world-position-tracked on the katana's identical comet math)
-// sweeps Y/Z while X barely moves -- reads as "spinning around Y" to
-// someone watching, not vertically. _EQ_Y is the real vertical/up axis:
-// sweeps X/Z, stays level. Same fix as the comet case, same reasoning.
+// Bumped from 2.5 turns to 3 -- "not enough vertical spin energy" -- so it
+// reads as an actual baton-style twirl, not a couple of lazy turns. (Tried
+// 4.5 first; see _eqTwirlFlyOffset for why that made the off-screen problem
+// worse, not better.)
+// Axis history: _EQ_X sweeps Y/Z only (read as "spinning around Y" to a
+// viewer); _EQ_Y sweeps X/Z only and stays level (read as a flat
+// helicopter-blade sweep, "spinning around Z"). _EQ_DIAG sweeps all three
+// -- see its own comment where it's defined, same fix as the comet case.
 function _eqTwirlQuat(t) {
   const arrive = _eqEase(_eqClamp(t / 0.78));
-  return new THREE.Quaternion().setFromAxisAngle(_EQ_Y, (1 - arrive) * Math.PI * 2 * 4.5);
+  return new THREE.Quaternion().setFromAxisAngle(_EQ_DIAG, (1 - arrive) * Math.PI * 2 * 3);
 }
 // The twirl used to spin entirely in place at its landing spot -- no travel
 // at all, so there was nothing to actually watch fly across the screen.
 // This is the shared fly-in offset (used by the motion and by its trail,
-// same reason as the comet sway above): a big lateral throw-in from off to
-// the right, with a small rise-then-settle arc, both shrinking to zero
-// right as it lands in the grip.
+// same reason as the comet sway above): a lateral throw-in with a small
+// rise-then-settle arc, AND a depth push-back (z), all three shrinking to
+// zero right as it lands in the grip.
+//
+// The x/y alone (no z) was not enough, and made a bigger mistake obvious:
+// `t` here doesn't mean "just starting to spin" -- _eqTwirlQuat(0) is
+// already the FULL rotation offset, unwinding as arrive climbs toward 1.
+// So at t=0 every piece is already scattered through whatever a 3+ turn
+// rotation happens to put it at, for that piece's own radius from the
+// pivot (measured up to ~0.27 units on the revolver's 31 pieces). With the
+// pivot sitting only ~0.2 units from the camera to begin with, that swing
+// radius alone was enough to carry some pieces to within 0.03-0.06 units
+// of the camera -- almost on top of the 0.05 near-clip plane -- which is
+// what actually blew the projection up (checked per-piece with
+// camera.project(): ndcX as high as 7, not just past 1), not really "off
+// to the side" so much as "too close to the lens to render sanely."
+// Bumping the spin from 2.5 to 4.5 turns made this WORSE (more rotation
+// means more chances to pass through a near-camera configuration), which
+// is why turn count came back down to 3 above.
+// The real fix is depth, not lateral offset: push the whole assembly
+// further from the camera while it's still spinning wildly (z), so even a
+// piece at the full ~0.27 radius stays well past the near-clip plane and
+// within a sane field of view, then bring it back to normal depth as it
+// lands. Verified per-piece, every t: nothing exceeds |ndcX| or |ndcY| > 1
+// any more.
 function _eqTwirlFlyOffset(t) {
   const arrive = _eqEase(_eqClamp(t / 0.78));
   const k = 1 - arrive;
-  return { x: 0.62 * k, y: 0.16 * Math.sin(k * Math.PI * 0.5) * k };
+  return { x: 0.12 * k, y: 0.05 * Math.sin(k * Math.PI * 0.5) * k, z: -0.85 * k };
 }
 
 // The pieces are the model's own top-level parts -- never the hands (they wait
@@ -21023,6 +21199,15 @@ function playEquipSound(name) {
 }
 
 var _EQ_X = new THREE.Vector3(1, 0, 0), _EQ_Y = new THREE.Vector3(0, 1, 0), _EQ_Z = new THREE.Vector3(0, 0, 1);
+// The donut equip pieces sit offset from their pivot almost entirely along Z
+// (a blade/barrel extends forward, not sideways), so a pure-X spin sweeps
+// only Y/Z (reads as "rotating around Y" to a viewer) and a pure-Y spin
+// sweeps only X/Z and stays level the whole time (reads as a flat
+// helicopter-blade sweep). Neither is the tumbling 3D spin a thrown/twirled
+// weapon actually has. A diagonal blend of X and Y sweeps all three axes at
+// once (verified: X/Y/Z ranges of 0.29/0.29/0.41 on the katana, vs. 0/0.29
+// for a pure axis) — an actual tumble, not flat in any single plane.
+var _EQ_DIAG = new THREE.Vector3(1, 1, 0).normalize();
 function _eqOut(t) { return 1 - Math.pow(1 - t, 3); }
 function _eqHomeOf(c) {
   if (!c.userData.eqHome) c.userData.eqHome = {
@@ -21314,12 +21499,13 @@ function _eqStepProps(e, t) {
       // beat earlier, so the streak is long while it's swinging fast
       // through the middle and pinches to nothing at the turnarounds.
       const look = o.userData.comet.look;
+      const tPrev = Math.max(0, t - look);
       const arrive = _eqEase(_eqClamp(t / 0.78));
-      const arrivePrev = _eqEase(_eqClamp(Math.max(0, t - look) / 0.78));
+      const arrivePrev = _eqEase(_eqClamp(tPrev / 0.78));
       const headX = _eqCometSway(t) * (1 - arrive);
-      const tailX = _eqCometSway(Math.max(0, t - look)) * (1 - arrivePrev);
-      const head = e.ctr.clone(); head.x += headX;
-      const tail = e.ctr.clone(); tail.x += tailX;
+      const tailX = _eqCometSway(tPrev) * (1 - arrivePrev);
+      const head = e.ctr.clone(); head.x += headX; head.z += _eqCometDepthPush(t);
+      const tail = e.ctr.clone(); tail.x += tailX; tail.z += _eqCometDepthPush(tPrev);
       _eqSegment(o, tail, head);
       const fade = Math.min(1, Math.abs(headX - tailX) * 10);
       o.visible = fade > 0.01;
@@ -21336,9 +21522,9 @@ function _eqStepProps(e, t) {
       const tEarlier = Math.max(0, t - T.look);
       const offHead = _eqTwirlFlyOffset(t), offTail = _eqTwirlFlyOffset(tEarlier);
       const head = e.ctr.clone().add(T.tip.clone().applyQuaternion(_eqTwirlQuat(t)));
-      head.x += offHead.x; head.y += offHead.y;
+      head.x += offHead.x; head.y += offHead.y; head.z += offHead.z;
       const tail = e.ctr.clone().add(T.tip.clone().applyQuaternion(_eqTwirlQuat(tEarlier)));
-      tail.x += offTail.x; tail.y += offTail.y;
+      tail.x += offTail.x; tail.y += offTail.y; tail.z += offTail.z;
       _eqSegment(o, tail, head);
       const fade = Math.min(1, head.distanceTo(tail) * 10);
       o.visible = fade > 0.01;
@@ -21495,29 +21681,30 @@ function _equipStep(e, t) {
         break; }
       case 'comet': {
         // Donut weapons: the WHOLE thing swings in close to where it's
-        // held -- left, then right -- turning about the vertical axis as it
-        // comes like a thrown weapon caught out of the air, and settles
-        // straight into the hand. Every piece keeps its fixed offset from
-        // the gun's own centre and gets the exact same sway and the exact
-        // same turn, so it moves as one rigid object, never as separate
-        // parts drifting apart. Deliberately fixed, not randomised, so it
-        // reads the same clear way every time. The glow trail chasing it is
-        // a separate prop (_eqMakeProps/_eqStepProps).
+        // held -- left, then right -- tumbling through the air as it comes
+        // like a thrown weapon caught out of the air, and settles straight
+        // into the hand. Every piece keeps its fixed offset from the gun's
+        // own centre and gets the exact same sway and the exact same
+        // tumble, so it moves as one rigid object, never as separate parts
+        // drifting apart. Deliberately fixed, not randomised, so it reads
+        // the same clear way every time. The glow trail chasing it is a
+        // separate prop (_eqMakeProps/_eqStepProps).
         //
-        // Was _EQ_Z (the blade's own hole/depth axis) -- a torus is
-        // rotationally symmetric about that axis, so the ring barely read
-        // as moving at all, just a flat pirouette. Tried _EQ_X next, but
-        // that tumbles it through Y/Z (checked by tracking a world-space
-        // point through the animation: Y swung -0.33..+0.07, Z swung
-        // -0.34..+0.01, X barely moved 0.08..0.19) -- i.e. it reads as
-        // spinning "around Y" to someone watching, not "vertically" the
-        // way a turntable/baton spin is vertical. _EQ_Y is the actual
-        // vertical/up axis: the blade sweeps left-right (X) and toward/
-        // away (Z) while staying level, a proper vertical-axis spin.
+        // Axis history, all checked by tracking a world-space point through
+        // the animation: _EQ_Z (the blade's own hole/depth axis) barely
+        // moved the ring at all -- a torus is rotationally symmetric about
+        // its own hole axis, and the pieces themselves sit offset from the
+        // pivot almost entirely along Z too, so a Z spin is nearly a no-op
+        // for the whole assembly, not just the ring. _EQ_X swept Y/Z only
+        // (read as "spinning around Y"). _EQ_Y swept X/Z only, staying
+        // level (read as a flat helicopter-blade sweep, "spinning around
+        // Z"). _EQ_DIAG (defined above, a 45 degree blend of X and Y)
+        // sweeps all three axes at once -- an actual tumble, not flat in
+        // any single plane.
         const arrive = _eqEase(_eqClamp(t / 0.78));
         const sway = _eqCometSway(t) * (1 - arrive);
-        const flyCtr = e.ctr.clone(); flyCtr.x += sway;
-        const q = new THREE.Quaternion().setFromAxisAngle(_EQ_Y, (1 - arrive) * Math.PI * 2 * 1.75);
+        const flyCtr = e.ctr.clone(); flyCtr.x += sway; flyCtr.z += _eqCometDepthPush(t);
+        const q = new THREE.Quaternion().setFromAxisAngle(_EQ_DIAG, (1 - arrive) * Math.PI * 2 * 1.75);
         c.position.copy(h.p).sub(e.ctr).applyQuaternion(q).add(flyCtr);
         c.quaternion.copy(q).multiply(h.q);
         c.scale.copy(h.s);
@@ -21534,7 +21721,7 @@ function _equipStep(e, t) {
         // anchored at the old fixed landing spot.
         const q = _eqTwirlQuat(t);
         const off = _eqTwirlFlyOffset(t);
-        const flyCtr = e.ctr.clone(); flyCtr.x += off.x; flyCtr.y += off.y;
+        const flyCtr = e.ctr.clone(); flyCtr.x += off.x; flyCtr.y += off.y; flyCtr.z += off.z;
         c.position.copy(h.p).sub(e.ctr).applyQuaternion(q).add(flyCtr);
         c.quaternion.copy(q).multiply(h.q);
         c.scale.copy(h.s);
@@ -22955,6 +23142,31 @@ const BOUNDS = 48;
 // Map-aware boundary (BR arena is 6× larger). 123 lets player reach the actual wall surface (walls at ±125, 3 thick).
 function getMapBounds() { return activeMapName === 'br_arena' ? 123 : BOUNDS; }
 
+function updateAdminBuilderFreeCam(dt) {
+  const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+  const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+  const up = new THREE.Vector3(0, 1, 0);
+  dir.set(0, 0, 0);
+  if (keys['KeyW'] || joyDir.y < -0.15) dir.add(fwd);
+  if (keys['KeyS'] || joyDir.y >  0.15) dir.sub(fwd);
+  if (keys['KeyA'] || joyDir.x < -0.15) dir.sub(right);
+  if (keys['KeyD'] || joyDir.x >  0.15) dir.add(right);
+  if (keys['Space'] || window._mobileJump) dir.add(up);
+  if (keys['ShiftLeft'] || keys['ShiftRight'] || keys['ControlLeft'] || keys['ControlRight'] || window._mobileCrouch) dir.sub(up);
+  if (dir.lengthSq() > 0.001) {
+    dir.normalize();
+    const fast = keys['AltLeft'] || keys['AltRight'] ? 2.2 : 1;
+    const speed = 18 * fast;
+    camera.position.addScaledVector(dir, speed * dt);
+    const bound = getMapBounds() + 40;
+    camera.position.x = Math.max(-bound, Math.min(bound, camera.position.x));
+    camera.position.y = Math.max(0.25, Math.min(80, camera.position.y));
+    camera.position.z = Math.max(-bound, Math.min(bound, camera.position.z));
+  }
+  playerYVel = 0;
+  slamState = null;
+}
+
 function updateMovement(dt) {
   if (isDead) return;
   if (match && !match.roundActive) return; // frozen during countdown
@@ -22965,6 +23177,11 @@ function updateMovement(dt) {
   if (keys['ArrowRight']) { euler.y -= ARROW_SENS; camera.quaternion.setFromEuler(euler); }
   if (keys['ArrowUp'])    { euler.x = Math.min(Math.PI/2.2, euler.x + ARROW_SENS); camera.quaternion.setFromEuler(euler); }
   if (keys['ArrowDown'])  { euler.x = Math.max(-Math.PI/2.2, euler.x - ARROW_SENS); camera.quaternion.setFromEuler(euler); }
+
+  if (adminMapBuilderOpen && selectedModeConfig?.type === 'builder') {
+    updateAdminBuilderFreeCam(dt);
+    return;
+  }
 
   // WASD movement
   const fwd   = new THREE.Vector3(-Math.sin(euler.y), 0, -Math.cos(euler.y));
@@ -23211,7 +23428,7 @@ function updateMovement(dt) {
         const slamItem = equippedMeleeItem();
         const slamAb = slamItem?.ability;
         const slamOrigin = camera.position.clone();
-        const slamRadius = slamAb?.radius || 4, slamColor = 0xff6600;
+        const slamRadius = slamAb?.radius || 4, slamColor = slamAb?.color || 0xff6600;
         const slamDummyDamage = slamAb?.damage ?? slamItem?.damage ?? 80;
         const slamWeaponId = slamItem?.id || 'sledge';
         spawnAbilityAOEFX(slamOrigin.clone().setY(0.15), slamRadius, slamColor);
@@ -23223,6 +23440,7 @@ function updateMovement(dt) {
             const dummy = TRAINING_DUMMIES.find(dd => dd.id === pid);
             if (dummy) handleDummyHit(dummy, mesh, { damage: slamDummyDamage }, hp);
             else emitHit(pid, `slam_${myId}_${Date.now()}_${pid}`, slamWeaponId, hp);
+            _nudgeBotFromPoint(pid, mesh, slamOrigin, slamAb?.knockback || 0, slamAb?.launchVel || 0);
             spawnHitParticle(hp);
           }
         }
@@ -23297,6 +23515,76 @@ function abilityReady(w) {
   return Date.now() - (abilityCDs[w.id] || 0) >= (ab.cd || 10000);
 }
 
+function _meleeForwardXZ() {
+  const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+  fwd.y = 0;
+  if (fwd.lengthSq() < 0.0001) fwd.set(0, 0, -1);
+  return fwd.normalize();
+}
+
+function _nudgeBotFromPoint(pid, mesh, origin, knockback = 0, launchVel = 0) {
+  const bot = resolveBot(pid);
+  if (!bot) return;
+  if (knockback) {
+    const dx = bot.x - origin.x;
+    const dz = bot.z - origin.z;
+    const d = Math.hypot(dx, dz) || 1;
+    bot.x += (dx / d) * knockback;
+    bot.z += (dz / d) * knockback;
+    if (mesh) mesh.position.set(bot.x, mesh.position.y, bot.z);
+  }
+  if (launchVel) {
+    bot.y = Math.max(0, bot.y || 0);
+    bot.yVel = Math.max(bot.yVel || 0, launchVel);
+  }
+}
+
+function doMeleeMovementAbility(item, ab) {
+  const fwd = _meleeForwardXZ();
+  const side = new THREE.Vector3(fwd.z, 0, -fwd.x);
+  const speed = ab.speed ?? 18;
+  const sideSpeed = ab.side || 0;
+  _extVel.x += fwd.x * speed + side.x * sideSpeed;
+  _extVel.z += fwd.z * speed + side.z * sideSpeed;
+  const hz = Math.hypot(_extVel.x, _extVel.z);
+  if (hz > BLAST_MAX_HORIZ) {
+    const k = BLAST_MAX_HORIZ / hz;
+    _extVel.x *= k;
+    _extVel.z *= k;
+  }
+  if (ab.up) {
+    const lift = Math.max(slamState?.vel || 0, ab.up);
+    if (slamState) { slamState.vel = lift; slamState.type = 'jump'; }
+    else slamState = { vel: lift, type: 'jump' };
+  }
+  spawnAbilityAOEFX(camera.position.clone().setY(0.15), 1.2, ab.color || 0xaaccff);
+  flashScreen('rgba(180,230,255,0.18)', 180);
+  playSoundEvent(item.id === 'knife' ? 'instakill_zip' : 'footstep', { volume: 0.75, pitch: 1.55, minGap: 40 });
+}
+
+function doMeleePulseAbility(item, ab, now) {
+  const origin = camera.position.clone();
+  const radius = ab.radius || 3.5;
+  const damage = ab.damage ?? item.damage;
+  const color = ab.color || 0xffcc66;
+  spawnAbilityAOEFX(origin.clone().setY(0.15), radius, color);
+  flashScreen('rgba(255,220,120,0.24)', 240);
+  playSoundEvent(item.id === 'shock_baton' ? 'deflect_ping' : item.id === 'frying_pan' ? 'parry_deflect' : 'melee_heavy', { volume: 1.0 });
+  for (const [pid, mesh] of Object.entries(remoteMeshes)) {
+    const targetPos = mesh.position.clone().setY(camera.position.y);
+    const d = origin.distanceTo(targetPos);
+    if (d > radius) continue;
+    const p = players[pid];
+    const dummy = TRAINING_DUMMIES.find(dd => dd.id === pid);
+    if (!dummy && p && p.team && players[myId]?.team && p.team === players[myId].team) continue;
+    const hp = mesh.position.clone().setY(1.0);
+    if (dummy) handleDummyHit(dummy, mesh, { damage }, hp);
+    else emitHit(pid, `mpulse_${myId}_${now}_${pid}`, item.id, hp);
+    _nudgeBotFromPoint(pid, mesh, origin, ab.knockback || 0, ab.launchVel || 0);
+    spawnHitParticle(hp);
+  }
+}
+
 function activateMeleeAbility() {
   const item = equippedMeleeItem();
   if (!item?.ability) return;
@@ -23352,6 +23640,14 @@ function activateMeleeAbility() {
       socket.emit('shoot', { x: origin.x, y: origin.y, z: origin.z, dx: dir.x, dy: dir.y, dz: dir.z, weapon: 'pickle' });
       spawnLocalBullet(origin.clone(), dir, pid, true, 55, 0x88cc44, 0.10, 'pickle');
     });
+    flashAbilityName(ab.name);
+  }
+  else if (ab.type === 'melee_mobility') {
+    doMeleeMovementAbility(item, ab);
+    flashAbilityName(ab.name);
+  }
+  else if (ab.type === 'melee_pulse') {
+    doMeleePulseAbility(item, ab, now);
     flashAbilityName(ab.name);
   }
   else if (ab.type === 'melee_slam') {
@@ -36560,6 +36856,7 @@ function loop() {
   safeLoopStep('ability-button', syncAbilityButton);   // shows only while what you hold has an ability (#30)
   safeLoopStep('lobby-tag', syncLobbyTag);             // "LOBBY 13 · CHILL ZONE · NO DAMAGE" (#35)
   safeLoopStep('admin-cheats', () => updateAdminCheats(dt));// admin cheat tick (fly, kill aura, etc.)
+  safeLoopStep('admin-map-preview', updateAdminMapPreview); // green ghost where PLACE IN FRONT will drop
   safeLoopStep('uav', () => updateUAV(dt));        // Predator UAV overlay tick
   safeLoopStep('map-effects', () => updateMapEffects(dt)); // airport darkening, chernobyl gas, mortar prompt
   safeLoopStep('batch5', () => updateBatch5(dt));     // train scroll, vacuum, weather, lights-out, chandelier, debris
@@ -39857,6 +40154,305 @@ function updateUserInfoBar() {
 
 // ── 🔓 ADMIN CHEAT PANEL ──────────────────────────────────────────────────
 let adminPanelOpen = false;
+let adminMapBuilderDoc = null;
+let adminMapBuilderOpen = false;
+let adminMapPreview = null;
+let adminMapPreviewKey = '';
+
+function escapeHTML(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+}
+
+function syncAdminCustomMapCards() {
+  const row = document.getElementById('map-row');
+  if (!row) return;
+  row.querySelectorAll('.map-card[data-admin-custom="1"]').forEach(el => el.remove());
+  for (const doc of adminCustomMaps) {
+    MAP_DESCS[doc.id] = `Admin custom — ${doc.boxes.length} placed blocks`;
+    const card = document.createElement('div');
+    card.className = 'map-card';
+    card.dataset.map = doc.id;
+    card.dataset.adminCustom = '1';
+    card.textContent = doc.name.toUpperCase();
+    card.style.cssText = 'padding:6px 14px;border:2px solid #ff4444;color:#ff7777;cursor:pointer;font-size:11px;letter-spacing:2px;border-radius:4px;';
+    card.addEventListener('click', () => { selectMapPick(doc.id); closePickDialogs(); });
+    row.appendChild(card);
+  }
+  selectMapPick(pickedMap && MAP_GROUPS[pickedMap] ? pickedMap : 'auto');
+}
+
+function adminBuilderCurrentBox() {
+  const panel = document.getElementById('admin-map-builder');
+  const num = id => Number(panel?.querySelector(`#${id}`)?.value) || 0;
+  const color = String(panel?.querySelector('#amb-color')?.value || '#888888').replace('#', '');
+  const fwd = _meleeForwardXZ ? _meleeForwardXZ() : new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).setY(0).normalize();
+  const px = camera.position.x + fwd.x * 3.0;
+  const pz = camera.position.z + fwd.z * 3.0;
+  return {
+    shape: panel?.querySelector('#amb-shape')?.value || 'box',
+    x: Math.round(px * 2) / 2,
+    y: Math.max(0.05, num('amb-h') / 2),
+    z: Math.round(pz * 2) / 2,
+    w: Math.max(0.1, num('amb-w') || 2),
+    h: Math.max(0.1, num('amb-h') || 1),
+    d: Math.max(0.1, num('amb-d') || 2),
+    color: parseInt(color, 16) || 0x888888,
+    rotY: (num('amb-rot') || 0) * Math.PI / 180,
+    collide: !!panel?.querySelector('#amb-collide')?.checked,
+    opacity: Math.max(0.1, Math.min(1, num('amb-opacity') || 1)),
+  };
+}
+
+function makeAdminPreviewMesh(shape, w, h, d) {
+  const mat = new THREE.MeshBasicMaterial({
+    color: 0x35ff65,
+    transparent: true,
+    opacity: 0.26,
+    wireframe: true,
+    depthWrite: false,
+  });
+  let mesh;
+  if (shape === 'sphere') {
+    const s = Math.max(w, h, d);
+    mesh = new THREE.Mesh(new THREE.SphereGeometry(s / 2, 18, 12), mat);
+    mesh.scale.set(w / s, h / s, d / s);
+  } else if (shape === 'cylinder') {
+    mesh = new THREE.Mesh(new THREE.CylinderGeometry(w / 2, w / 2, h, 24), mat);
+    mesh.scale.z = d / Math.max(0.1, w);
+  } else {
+    mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+  }
+  mesh.renderOrder = 900;
+  mesh.name = 'admin_place_preview';
+  return mesh;
+}
+
+function updateAdminMapPreview() {
+  if (!adminMapBuilderOpen || !currentUser?.isAdmin || !adminMapBuilderDoc) {
+    if (adminMapPreview) adminMapPreview.visible = false;
+    return;
+  }
+  const spec = adminBuilderCurrentBox();
+  const key = `${spec.shape}:${spec.w}:${spec.h}:${spec.d}`;
+  if (!adminMapPreview || key !== adminMapPreviewKey) {
+    if (adminMapPreview) scene.remove(adminMapPreview);
+    adminMapPreview = makeAdminPreviewMesh(spec.shape, spec.w, spec.h, spec.d);
+    adminMapPreviewKey = key;
+    scene.add(adminMapPreview);
+  }
+  adminMapPreview.visible = true;
+  adminMapPreview.position.set(spec.x, spec.y, spec.z);
+  adminMapPreview.rotation.set(0, spec.rotY, 0);
+  const mat = adminMapPreview.material;
+  if (mat) {
+    mat.color.setHex(0x35ff65);
+    mat.opacity = spec.collide ? 0.32 : 0.18;
+  }
+}
+
+function adminBuilderMapOptions() {
+  const skip = new Set(['range', 'lobby13']);
+  const names = Object.keys(MAP_GROUPS).filter(id => !id.startsWith(ADMIN_CUSTOM_MAP_PREFIX) && !skip.has(id)).sort();
+  return ['empty', ...names].map(id => `<option value="${id}">${id === 'empty' ? 'EMPTY MAP' : mapCardLabel(id).toUpperCase()}</option>`).join('');
+}
+
+function enterAdminMapBuildMode(mapId) {
+  if (!currentUser?.isAdmin || !MAP_GROUPS[mapId]) return;
+  gameStarted = true;
+  isDead = false;
+  match = null;
+  selectedModeConfig = { type: 'builder', allies: 0, enemies: 0 };
+  selectedMap = pickedMap = mapId;
+  activateMap(mapId);
+  const sky = MAP_GROUPS[mapId]?._skyColor;
+  if (sky != null && scene.background?.setHex) scene.background.setHex(sky);
+  camera.position.set(0, getGroundEyeY ? getGroundEyeY() : 1.65, 14);
+  euler.set(0, Math.PI, 0);
+  camera.quaternion.setFromEuler(euler);
+  wallColliders.length = 0;
+  if (MAP_COLLIDERS[mapId]) wallColliders.push(...MAP_COLLIDERS[mapId]);
+  for (const id of ['mode-screen', 'shop-screen', 'loadout-screen', 'waiting-screen', 'death-screen', 'match-over-screen', 'login-screen', 'overlay']) {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  }
+  const hud = document.getElementById('match-hud');
+  if (hud) hud.style.display = 'none';
+  const cross = document.getElementById('crosshair');
+  if (cross) cross.style.display = 'block';
+  updateAmmoHUD();
+  updateAbilityHUD();
+  releasePointer();
+}
+
+function renderAdminMapBuilder() {
+  if (!currentUser?.isAdmin) return;
+  let panel = document.getElementById('admin-map-builder');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'admin-map-builder';
+    panel.style.cssText = 'position:fixed;left:18px;top:76px;width:340px;max-height:calc(100vh - 100px);overflow:auto;z-index:9800;'
+      + 'background:rgba(5,8,10,0.96);border:2px solid #ff4444;border-radius:8px;padding:12px;'
+      + 'font-family:"Courier New",monospace;color:#fff;font-size:12px;box-shadow:0 8px 24px rgba(0,0,0,0.55);';
+    document.body.appendChild(panel);
+  }
+  const doc = adminMapBuilderDoc || defaultAdminMapDoc();
+  adminMapBuilderDoc = doc;
+  panel.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;">
+      <b style="color:#ff7777;letter-spacing:2px;">ADMIN MAP BUILDER</b>
+      <button data-amb="close" style="background:#211;color:#ffaaa0;border:1px solid #833;padding:4px 8px;cursor:pointer;">X</button>
+    </div>
+    <input id="amb-name" value="${escapeHTML(doc.name)}" style="width:100%;box-sizing:border-box;margin-bottom:6px;background:#111;color:#fff;border:1px solid #555;padding:7px;font-family:inherit;">
+    <div style="display:grid;grid-template-columns:1fr auto;gap:6px;margin-bottom:8px;">
+      <select id="amb-base" style="background:#111;color:#fff;border:1px solid #555;padding:7px;font-family:inherit;">${adminBuilderMapOptions()}</select>
+      <button data-amb="loadBase" style="padding:7px 10px;background:#142842;color:#aacfff;border:1px solid #66aaff;cursor:pointer;font-family:inherit;">LOAD</button>
+    </div>
+    <select id="amb-shape" style="width:100%;box-sizing:border-box;margin-bottom:6px;background:#111;color:#fff;border:1px solid #555;padding:7px;font-family:inherit;">
+      <option value="box">BLOCK / WALL</option>
+      <option value="sphere">SPHERE / BOULDER</option>
+      <option value="cylinder">CYLINDER / PILLAR</option>
+    </select>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:6px;">
+      <label>W<input id="amb-w" type="number" step="0.5" value="4" style="width:100%;box-sizing:border-box;background:#111;color:#fff;border:1px solid #555;padding:5px;"></label>
+      <label>H<input id="amb-h" type="number" step="0.5" value="2" style="width:100%;box-sizing:border-box;background:#111;color:#fff;border:1px solid #555;padding:5px;"></label>
+      <label>D<input id="amb-d" type="number" step="0.5" value="4" style="width:100%;box-sizing:border-box;background:#111;color:#fff;border:1px solid #555;padding:5px;"></label>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px;align-items:end;">
+      <label>ROT<input id="amb-rot" type="number" step="15" value="0" style="width:100%;box-sizing:border-box;background:#111;color:#fff;border:1px solid #555;padding:5px;"></label>
+      <label>ALPHA<input id="amb-opacity" type="number" step="0.1" min="0.1" max="1" value="1" style="width:100%;box-sizing:border-box;background:#111;color:#fff;border:1px solid #555;padding:5px;"></label>
+      <label>COLOR<input id="amb-color" type="color" value="#888888" style="width:100%;height:31px;background:#111;border:1px solid #555;"></label>
+    </div>
+    <label style="display:flex;gap:8px;align-items:center;margin-bottom:8px;"><input id="amb-collide" type="checkbox" checked> COLLIDER</label>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px;">
+      <button data-amb="place" style="padding:8px;background:#3a1a1a;color:#fff;border:1px solid #ff4444;cursor:pointer;font-family:inherit;">PLACE IN FRONT</button>
+      <button data-amb="undo" style="padding:8px;background:#221;color:#ffdd88;border:1px solid #aa8844;cursor:pointer;font-family:inherit;">UNDO</button>
+      <button data-amb="save" style="padding:8px;background:#163216;color:#aaffaa;border:1px solid #55aa55;cursor:pointer;font-family:inherit;">SAVE MAP</button>
+      <button data-amb="test" style="padding:8px;background:#142842;color:#aacfff;border:1px solid #66aaff;cursor:pointer;font-family:inherit;">PLAY / TEST</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px;">
+      <button data-amb="newMap" style="padding:8px;background:#222;color:#eee;border:1px solid #888;cursor:pointer;font-family:inherit;">NEW EMPTY</button>
+      <button data-amb="duplicate" style="padding:8px;background:#222;color:#eee;border:1px solid #888;cursor:pointer;font-family:inherit;">DUPLICATE</button>
+    </div>
+    <details style="border-top:1px solid #333;padding-top:7px;">
+      <summary style="cursor:pointer;color:#aaa;">advanced sharing</summary>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:7px 0;">
+        <button data-amb="export" style="padding:7px;background:#222;color:#eee;border:1px solid #888;cursor:pointer;font-family:inherit;">COPY MAP DATA</button>
+        <button data-amb="import" style="padding:7px;background:#222;color:#eee;border:1px solid #888;cursor:pointer;font-family:inherit;">IMPORT DATA</button>
+      </div>
+      <textarea id="amb-json" spellcheck="false" style="width:100%;height:90px;box-sizing:border-box;background:#080808;color:#cfe;border:1px solid #444;padding:7px;font-family:inherit;">${escapeHTML(JSON.stringify(doc, null, 2))}</textarea>
+    </details>
+    <div style="margin-top:7px;color:#aaa;font-size:11px;">${doc.boxes.length} placed shapes · editing ${escapeHTML(doc.baseMap === 'empty' ? 'empty map' : mapCardLabel(doc.baseMap))} · P place · O undo</div>
+  `;
+  panel.style.display = 'block';
+  const baseSel = panel.querySelector('#amb-base');
+  if (baseSel) baseSel.value = doc.baseMap || 'empty';
+  panel.querySelectorAll('button[data-amb]').forEach(btn => btn.addEventListener('click', () => adminMapBuilderAction(btn.dataset.amb)));
+  adminMapBuilderOpen = true;
+}
+
+function openAdminMapBuilder() {
+  if (!currentUser?.isAdmin) return;
+  adminMapBuilderDoc = adminCustomMaps[adminCustomMaps.length - 1] || defaultAdminMapDoc();
+  const doc = upsertAdminCustomMap(adminMapBuilderDoc);
+  enterAdminMapBuildMode(doc.id);
+  renderAdminMapBuilder();
+}
+
+function closeAdminMapBuilder() {
+  const panel = document.getElementById('admin-map-builder');
+  if (panel) panel.style.display = 'none';
+  adminMapBuilderOpen = false;
+  if (adminMapPreview) adminMapPreview.visible = false;
+}
+
+async function adminMapBuilderAction(action) {
+  if (!currentUser?.isAdmin || !adminMapBuilderDoc) return;
+  const panel = document.getElementById('admin-map-builder');
+  if (panel?.querySelector('#amb-name')) adminMapBuilderDoc.name = panel.querySelector('#amb-name').value || adminMapBuilderDoc.name;
+  if (action === 'close') { closeAdminMapBuilder(); return; }
+  if (action === 'newMap') {
+    adminMapBuilderDoc = upsertAdminCustomMap(defaultAdminMapDoc(panel?.querySelector('#amb-name')?.value || 'Admin Build'));
+    enterAdminMapBuildMode(adminMapBuilderDoc.id);
+    renderAdminMapBuilder();
+    return;
+  }
+  if (action === 'duplicate') {
+    adminMapBuilderDoc = upsertAdminCustomMap({ ...adminMapBuilderDoc, id: `${ADMIN_CUSTOM_MAP_PREFIX}${Date.now().toString(36)}`, name: `${adminMapBuilderDoc.name} Copy`, boxes: adminMapBuilderDoc.boxes.map(b => ({ ...b })) });
+    enterAdminMapBuildMode(adminMapBuilderDoc.id);
+    renderAdminMapBuilder();
+    return;
+  }
+  if (action === 'loadBase') {
+    const base = panel?.querySelector('#amb-base')?.value || 'empty';
+    adminMapBuilderDoc.baseMap = base;
+    if (base !== 'empty' && MAP_GROUPS[base]) {
+      adminMapBuilderDoc.skyColor = MAP_GROUPS[base]._skyColor ?? adminMapBuilderDoc.skyColor;
+      adminMapBuilderDoc.outerWalls = false;
+    }
+    adminMapBuilderDoc = upsertAdminCustomMap(adminMapBuilderDoc);
+    enterAdminMapBuildMode(adminMapBuilderDoc.id);
+    renderAdminMapBuilder();
+    showAnnouncement('MAP LOADED', base === 'empty' ? 'Empty build map' : mapCardLabel(base), '#88ccff', 1200);
+    return;
+  }
+  if (action === 'place') {
+    const keepPos = camera.position.clone(), keepQuat = camera.quaternion.clone();
+    adminMapBuilderDoc.boxes.push(adminBuilderCurrentBox());
+    upsertAdminCustomMap(adminMapBuilderDoc);
+    if (activeMapName === adminMapBuilderDoc.id) activateMap(adminMapBuilderDoc.id);
+    camera.position.copy(keepPos); camera.quaternion.copy(keepQuat);
+    if (MAP_GROUPS[adminMapBuilderDoc.id]?._skyColor != null && scene.background?.setHex) scene.background.setHex(MAP_GROUPS[adminMapBuilderDoc.id]._skyColor);
+    renderAdminMapBuilder();
+    return;
+  }
+  if (action === 'undo') {
+    const keepPos = camera.position.clone(), keepQuat = camera.quaternion.clone();
+    adminMapBuilderDoc.boxes.pop();
+    upsertAdminCustomMap(adminMapBuilderDoc);
+    if (activeMapName === adminMapBuilderDoc.id) activateMap(adminMapBuilderDoc.id);
+    camera.position.copy(keepPos); camera.quaternion.copy(keepQuat);
+    renderAdminMapBuilder();
+    return;
+  }
+  if (action === 'save') {
+    upsertAdminCustomMap(adminMapBuilderDoc);
+    const ta = document.getElementById('amb-json');
+    if (ta) ta.value = JSON.stringify(adminMapBuilderDoc, null, 2);
+    showAnnouncement('MAP SAVED', adminMapBuilderDoc.name, '#88ff88', 1200);
+    return;
+  }
+  if (action === 'test') {
+    const doc = upsertAdminCustomMap(adminMapBuilderDoc);
+    enterAdminMapBuildMode(doc.id);
+    showAnnouncement('TESTING MAP', doc.name, '#88ccff', 1200);
+    return;
+  }
+  if (action === 'export') {
+    const data = JSON.stringify(safeAdminMapDoc(adminMapBuilderDoc), null, 2);
+    try { await navigator.clipboard.writeText(data); showAnnouncement('MAP DATA COPIED', '', '#ffdd88', 1200); }
+    catch (e) { const ta = document.getElementById('amb-json'); if (ta) ta.value = data; }
+    return;
+  }
+  if (action === 'import') {
+    try {
+      const ta = document.getElementById('amb-json');
+      adminMapBuilderDoc = upsertAdminCustomMap(JSON.parse(ta?.value || '{}'));
+      renderAdminMapBuilder();
+      showAnnouncement('MAP IMPORTED', adminMapBuilderDoc.name, '#88ff88', 1200);
+    } catch (e) {
+      showAnnouncement('IMPORT FAILED', 'JSON did not parse', '#ff7777', 1200);
+    }
+  }
+}
+
+document.addEventListener('keydown', e => {
+  if (!adminMapBuilderOpen || !currentUser?.isAdmin) return;
+  const tag = document.activeElement?.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+  if (e.code === 'KeyP') { e.preventDefault(); adminMapBuilderAction('place'); }
+  if (e.code === 'KeyO') { e.preventDefault(); adminMapBuilderAction('undo'); }
+});
+
 function toggleAdminPanel() {
   if (!currentUser?.isAdmin) return;
   if (adminPanelOpen) { closeAdminPanel(); return; }
@@ -39898,7 +40494,8 @@ function openAdminPanel() {
     <button data-action="nuke"     style="width:100%;padding:8px;margin-bottom:4px;background:#661111;color:#fff;border:1px solid #ff4444;cursor:pointer;font-family:inherit;font-size:12px;border-radius:4px;">💀 NUKE EVERYBODY</button>
     <button data-action="heal"     style="width:100%;padding:8px;margin-bottom:4px;background:#116611;color:#fff;border:1px solid #44ff44;cursor:pointer;font-family:inherit;font-size:12px;border-radius:4px;">❤️ FULL HEAL</button>
     <button data-action="ammo"     style="width:100%;padding:8px;margin-bottom:4px;background:#222288;color:#fff;border:1px solid #88aaff;cursor:pointer;font-family:inherit;font-size:12px;border-radius:4px;">📦 REFILL AMMO</button>
-    <button data-action="endRound" style="width:100%;padding:8px;background:#444411;color:#ffcc44;border:1px solid #ffcc44;cursor:pointer;font-family:inherit;font-size:12px;border-radius:4px;">🏁 INSTANT WIN ROUND</button>
+    <button data-action="endRound" style="width:100%;padding:8px;margin-bottom:4px;background:#444411;color:#ffcc44;border:1px solid #ffcc44;cursor:pointer;font-family:inherit;font-size:12px;border-radius:4px;">🏁 INSTANT WIN ROUND</button>
+    <button data-action="mapBuilder" style="width:100%;padding:8px;background:#1f1018;color:#ff99bb;border:1px solid #ff6688;cursor:pointer;font-family:inherit;font-size:12px;border-radius:4px;">🧱 MAP LOADER / BUILDER</button>
   `;
   panel.style.display = 'block';
   // Bind checkboxes
@@ -39958,6 +40555,10 @@ function adminAction(act) {
         emitHit(bot.id, `admin_kill_${Date.now()}_${bot.id}`, 'tac_nuke', hp);
       }
       showAnnouncement('🏁 ROUND WON', 'All enemies eliminated', '#ffcc44', 1500);
+      break;
+    }
+    case 'mapBuilder': {
+      openAdminMapBuilder();
       break;
     }
   }
@@ -40129,6 +40730,7 @@ function selectMapPick(mapId) {
 document.querySelectorAll('.map-card').forEach(card => {
   card.addEventListener('click', () => { selectMapPick(card.dataset.map); closePickDialogs(); });
 });
+syncAdminCustomMapCards();
 document.getElementById('loadout-exit-btn').addEventListener('click', () => {
   if (inLiveMatch() && loadoutMode === 'death') { leaveMatch('menu'); return; }
   cancelAutoRespawn();
@@ -40151,7 +40753,7 @@ if (_changeBtn) {
   _changeBtn.addEventListener('touchstart', e => { e.preventDefault(); openLoadoutFromWaiting(); }, { passive: false });
 }
 renderer.domElement.addEventListener('click', ()=>{
-  if (gameStarted) requestPointerLockSafe();
+  if (gameStarted && !(adminMapBuilderOpen && selectedModeConfig?.type === 'builder')) requestPointerLockSafe();
 });
 window.addEventListener('resize', ()=>{
   camera.aspect=window.innerWidth/window.innerHeight;
