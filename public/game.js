@@ -18054,16 +18054,20 @@ function makeFaceTexture(tone = 0xffcc99) {
   const brow  = _cssHex(darkenColor(tone, 0.35));
   const cheek = _cssHex(_mixColor(tone, 0xc05038, 0.17));   // a hint of blood, not rouge (#50)
   const mouth = _cssHex(_mixColor(tone, 0x6a1f1f, 0.80));
+  const iris  = _cssHex(_mixColor(tone, 0x2f7fd6, 0.92));       // blue, faintly warmed by the tone
+  const deep  = _cssHex(_mixColor(tone, 0x17539c, 0.94));
+  // Same rules as the drawn skins: flat blocks on a coarse grid, big eyes low
+  // on the face, no nose and no cheeks. A modelled nose at this size is three
+  // brown pixels that read as damage, and the smile made everyone a doll.
   px(sk, 0, 0, 32, 32);                                         // skin
-  px(jaw, 0, 27, 32, 5);                                        // jaw shade
-  px(brow, 7, 9, 6, 2);        px(brow, 19, 9, 6, 2);           // brows
-  px('#ffffff', 7, 12, 6, 5);  px('#ffffff', 19, 12, 6, 5);     // eye whites
-  px('#2a1d14', 10, 12, 3, 5); px('#2a1d14', 19, 12, 3, 5);     // pupils, looking a touch inward
-  px('#ffffff', 11, 13, 1, 1); px('#ffffff', 20, 13, 1, 1);     // catch-lights
-  px(nose, 15, 16, 2, 4);                                       // nose
-  px(cheek, 5, 19, 3, 2);      px(cheek, 24, 19, 3, 2);         // cheeks
-  px(mouth, 11, 22, 10, 2);                                     // mouth
-  px(mouth, 10, 21, 1, 1);     px(mouth, 21, 21, 1, 1);         // …smiling
+  px(jaw, 0, 28, 32, 4);                                        // jaw shade
+  px('#14161c', 6, 14, 6, 2);   px('#14161c', 20, 14, 6, 2);    // lashes
+  px('#ffffff', 6, 16, 6, 6);   px('#ffffff', 20, 16, 6, 6);    // eye whites
+  px(iris, 6, 16, 6, 4);        px(iris, 20, 16, 6, 4);         // iris
+  px(deep, 6, 18, 6, 2);        px(deep, 20, 18, 6, 2);         // …darker below
+  px('#ffffff', 6, 16, 2, 2);   px('#ffffff', 20, 16, 2, 2);    // catch-lights
+  px('#14161c', 6, 22, 6, 2);   px('#14161c', 20, 22, 6, 2);    // lower lashes
+  px(mouth, 14, 26, 4, 2);                                      // mouth
   const tex = new THREE.CanvasTexture(c);
   tex.magFilter = THREE.NearestFilter;
   return tex;
@@ -18138,9 +18142,298 @@ function darkenColor(hex, f) {
 // ── 🎭 Character skins (inspired by the comic crew) ─────────────────────────
 // Each skin recolors the blocky body and/or adds accessories. 'crown' is NOT a
 // skin — it's an overlay added on top of any skin for the admin / match leader.
+// ── 🧱 Minecraft-style character blocks ─────────────────────────────────────
+// The bodies were bevelled boxes wearing a drawn-on face: soft edges, a nose,
+// brows, cheeks and a smile. At character scale that reads as a plush toy. A
+// Minecraft character is hard-edged blocks wearing a PIXEL texture, so that is
+// what these are now — same sizes, same joints, same hitboxes, no bevel.
+const _mcBoxCache = new Map();
+function mcBoxGeo(w, h, d) {
+  const key = w + ',' + h + ',' + d;
+  let geo = _mcBoxCache.get(key);
+  if (!geo) { geo = new THREE.BoxGeometry(w, h, d); _mcBoxCache.set(key, geo); }
+  return geo;
+}
+
+// Every character texture is a 16×16 grid of whole pixels, magnified with
+// NearestFilter and no mipmaps. That rule is the whole look: one gradient, one
+// curve or one half-pixel edge in here and the character stops reading as pixel
+// art and starts reading as a small drawing, which is worse than either.
+const _charTexCache = new Map();
+function charTex(key, draw) {
+  let t = _charTexCache.get(key);
+  if (t) return t;
+  const c = document.createElement('canvas'); c.width = 16; c.height = 16;
+  const ctx = c.getContext('2d');
+  const p = (col, x, y, w = 1, h = 1) => { ctx.fillStyle = col; ctx.fillRect(x | 0, y | 0, w | 0, h | 0); };
+  draw(p);
+  t = new THREE.CanvasTexture(c);
+  t.magFilter = THREE.NearestFilter;
+  t.minFilter = THREE.NearestFilter;     // no mip smear at range either
+  t.generateMipmaps = false;
+  _charTexCache.set(key, t);
+  return t;
+}
+function charMat(key, draw) { return new THREE.MeshLambertMaterial({ map: charTex(key, draw) }); }
+// BoxGeometry material order is +X −X +Y −Y +Z −Z: right, left, top, bottom,
+// front, back. A face left out falls back to the part's plain colour.
+function charFaceMats(id, f) {
+  return [
+    charMat(id + ':r', f.right || f.side), charMat(id + ':l', f.left || f.side),
+    charMat(id + ':t', f.top),             charMat(id + ':b', f.bottom),
+    charMat(id + ':f', f.front),           charMat(id + ':k', f.back),
+  ];
+}
+
+// ── 🎨 The pixel skins ──────────────────────────────────────────────────────
+// Each one is a set of face painters. Nothing here is procedural or seeded:
+// these are drawn skins, the same on every player wearing them, exactly like
+// a Minecraft skin file.
+const _P = {
+  skin:    '#f0c8a0', skinSh: '#d9a884', skinDk: '#b07f5e',
+  hairBr:  '#3a2a1c', hairBrHi: '#4d3826', hairBlk: '#1b1712', hairGn: '#8a6a34',
+  eyeW:    '#ffffff', eyeBlue: '#2f7fd6', eyeDeep: '#17539c', line: '#14161c',
+  mouth:   '#9a6252',
+  jacket:  '#1b56b8', jacketD: '#123f8c', shirtW: '#f2f2f2', collar: '#14161c',
+  string:  '#9aa3ad', green: '#4cd137', pants: '#16181f', pantsHi: '#1f222b',
+  shoe:    '#1b56b8',
+  tee:     '#2e8b57', teeD: '#23694180', jeans: '#35507a', jeansD: '#2a3f61',
+  pink:    '#d94f8a', pinkD: '#ad3d6d', white: '#e8eef5',
+  navy:    '#1e2a4a', navyD: '#151d35', copBlue: '#5b8fd6', gold: '#ffd24a',
+  blk:     '#14161a', blkHi: '#23262c', vest: '#1a1d22', vestHi: '#2c3037',
+  strapGy: '#575d66', pouch: '#2a2e35', amber: '#e0902a', visorTeal: '#3fe0b0',
+};
+const _solid = col => (p => p(col, 0, 0, 16, 16));
+// A big anime-ish eye: four wide, six tall, mostly iris with a lash above and
+// a band of white below. The first pass drew them three wide with two lash rows
+// and they read as slits -- at this size the eye has to be most of the face or
+// it disappears the moment the character is more than a few metres away.
+function _bigEye(p, x, iris, deep) {
+  p(_P.line,  x, 6, 4, 1);          // lash
+  p(iris,     x, 7, 4, 5);          // iris — almost the whole eye, as in the reference
+  p(deep,     x, 10, 4, 2);         // …deeper at the bottom
+  p('#ffffff', x, 7, 1, 1);         // one-pixel catch-light
+}
+// Hair that sits ON the head texture rather than as extra geometry: no second
+// surface to z-fight with the scalp, and the fringe can be jagged for free.
+function _hairFront(p, H) {
+  p(H, 0, 0, 16, 5);                                   // the cap
+  p(H, 0, 5, 5, 1); p(H, 6, 5, 3, 1); p(H, 10, 5, 6, 1);
+  p(H, 0, 6, 3, 3); p(H, 13, 6, 3, 3);                 // temples down past the eye line
+  p(H, 7, 5, 2, 1);                                    // one point down the middle
+  p(H, 0, 9, 2, 2); p(H, 14, 9, 2, 2);                 // sideburns
+}
+function _headSide(p, H, rows) {
+  p(_P.skin, 0, 0, 16, 16);
+  p(_P.skinSh, 0, 14, 16, 2);
+  p(H, 0, 0, 16, rows);
+  p(H, 0, rows, 4, 3);                       // sideburn down the front edge
+}
+function _headBack(p, H, rows) {
+  p(_P.skin, 0, 0, 16, 16);
+  p(H, 0, 0, 16, rows);
+}
+
+const PIXEL_SKINS = {
+  // 🙂 The default everyone starts in: brown fringe, big blue eyes low on the
+  // face, blue jacket open over a white tee. Deliberately no emblem on the back.
+  default: {
+    hand: 0xf0c8a0, foot: 0x1b56b8,
+    head: {
+      front: p => { p(_P.skin, 0, 0, 16, 16); p(_P.skinSh, 0, 15, 16, 1);
+                    _hairFront(p, _P.hairBr);
+                    _bigEye(p, 2, _P.eyeBlue, _P.eyeDeep); _bigEye(p, 10, _P.eyeBlue, _P.eyeDeep); },
+      back:  p => _headBack(p, _P.hairBr, 12),
+      side:  p => _headSide(p, _P.hairBr, 8),
+      top:   _solid(_P.hairBr),
+      bottom: _solid(_P.skinSh),
+    },
+    torso: {
+      front: p => { p(_P.jacket, 0, 0, 16, 16); p(_P.shirtW, 5, 0, 6, 16);
+                    p(_P.collar, 4, 0, 8, 2); p(_P.collar, 5, 2, 1, 2); p(_P.collar, 10, 2, 1, 2);
+                    p(_P.string, 6, 2, 1, 5); p(_P.string, 9, 2, 1, 5);
+                    p(_P.jacketD, 0, 0, 2, 16); p(_P.jacketD, 14, 0, 2, 16);
+                    p(_P.jacketD, 2, 12, 12, 1); },
+      back:  p => { p(_P.jacket, 0, 0, 16, 16); p(_P.jacketD, 0, 0, 16, 2);
+                    p(_P.jacketD, 0, 5, 16, 1); p(_P.jacketD, 0, 14, 16, 2); },
+      side:  p => { p(_P.jacket, 0, 0, 16, 16); p(_P.jacketD, 0, 0, 3, 16); },
+      top:   _solid(_P.collar), bottom: _solid(_P.jacketD),
+    },
+    armU: _solid(_P.jacket),
+    armF: p => { p(_P.jacket, 0, 0, 16, 16); p(_P.white, 0, 9, 16, 3); p(_P.green, 0, 12, 16, 2); },
+    leg:  p => { p(_P.pants, 0, 0, 16, 16); p(_P.pantsHi, 0, 13, 16, 1); },
+    shin: p => { p(_P.pants, 0, 0, 16, 16); p(_P.pantsHi, 3, 2, 10, 2); },
+  },
+
+  // 👦 Plain t-shirt and jeans: the skin for people who want to look like a
+  // person rather than a costume.
+  boy: {
+    hand: 0xf0c8a0, foot: 0x2a2e35,
+    head: {
+      front: p => { p(_P.skin, 0, 0, 16, 16); p(_P.skinSh, 0, 15, 16, 1);
+                    p(_P.hairBr, 0, 0, 16, 5); p(_P.hairBr, 0, 5, 4, 4); p(_P.hairBr, 12, 5, 4, 4);
+                    p(_P.hairBr, 4, 5, 8, 1);
+                    _bigEye(p, 2, '#4a6fa5', '#2f4f7a'); _bigEye(p, 10, '#4a6fa5', '#2f4f7a');
+                    p(_P.mouth, 7, 14, 2, 1); },
+      back:  p => _headBack(p, _P.hairBr, 11),
+      side:  p => _headSide(p, _P.hairBr, 7),
+      top:   _solid(_P.hairBr), bottom: _solid(_P.skinSh),
+    },
+    torso: {
+      front: p => { p(_P.tee, 0, 0, 16, 16); p(_P.skin, 5, 0, 6, 2); p('#236941', 0, 14, 16, 2); },
+      back:  p => { p(_P.tee, 0, 0, 16, 16); p('#236941', 0, 14, 16, 2); },
+      side:  p => { p(_P.tee, 0, 0, 16, 16); p('#236941', 0, 0, 2, 16); },
+      top:   _solid(_P.tee), bottom: _solid('#236941'),
+    },
+    armU: p => { p(_P.tee, 0, 0, 16, 16); p(_P.skin, 0, 10, 16, 6); },
+    armF: _solid(_P.skin),
+    leg:  _solid(_P.jeans),
+    shin: p => { p(_P.jeans, 0, 0, 16, 16); p(_P.jeansD, 0, 11, 16, 5); },
+  },
+
+  // 👧 Same build, long hair down the back and a different kit. The long hair
+  // is the one piece of extra geometry in the set: it hangs below the head box,
+  // which a texture on that box cannot do.
+  girl: {
+    hand: 0xf0c8a0, foot: '#e8eef5',
+    head: {
+      front: p => { p(_P.skin, 0, 0, 16, 16); p(_P.skinSh, 0, 15, 16, 1);
+                    p(_P.hairGn, 0, 0, 16, 5); p(_P.hairGn, 0, 5, 3, 6); p(_P.hairGn, 13, 5, 3, 6);
+                    p(_P.hairGn, 3, 5, 10, 1); p(_P.hairGn, 7, 6, 2, 1);
+                    _bigEye(p, 2, '#6a4bb8', '#46307e'); _bigEye(p, 10, '#6a4bb8', '#46307e');
+                    p(_P.mouth, 7, 14, 2, 1); },
+      back:  p => _headBack(p, _P.hairGn, 16),
+      side:  p => { p(_P.skin, 0, 0, 16, 16); p(_P.hairGn, 0, 0, 16, 8);
+                    p(_P.hairGn, 0, 8, 3, 8); p(_P.hairGn, 10, 8, 6, 8); },
+      top:   _solid(_P.hairGn), bottom: _solid(_P.skinSh),
+    },
+    torso: {
+      front: p => { p(_P.pink, 0, 0, 16, 16); p(_P.skin, 5, 0, 6, 2); p(_P.pinkD, 0, 13, 16, 3); },
+      back:  p => { p(_P.pink, 0, 0, 16, 16); p(_P.pinkD, 0, 13, 16, 3); },
+      side:  p => { p(_P.pink, 0, 0, 16, 16); p(_P.pinkD, 0, 0, 2, 16); },
+      top:   _solid(_P.pink), bottom: _solid(_P.pinkD),
+    },
+    armU: p => { p(_P.pink, 0, 0, 16, 16); p(_P.skin, 0, 11, 16, 5); },
+    armF: _solid(_P.skin),
+    leg:  _solid(_P.jeans),
+    shin: p => { p(_P.jeans, 0, 0, 16, 16); p(_P.white, 0, 12, 16, 4); },
+    hair: { color: 0x8a6a34, long: true },
+  },
+
+  // 👮 Navy uniform, light shirt, gold badge, peaked cap.
+  police: {
+    hand: 0xf0c8a0, foot: '#14161a',
+    head: {
+      front: p => { p(_P.skin, 0, 0, 16, 16); p(_P.skinSh, 0, 15, 16, 1);
+                    p(_P.hairBlk, 0, 0, 16, 5); p(_P.hairBlk, 0, 5, 3, 4); p(_P.hairBlk, 13, 5, 3, 4);
+                    p(_P.hairBlk, 3, 5, 10, 1);
+                    _bigEye(p, 2, '#3f6b4a', '#2a4a33'); _bigEye(p, 10, '#3f6b4a', '#2a4a33');
+                    p(_P.mouth, 7, 14, 2, 1); },
+      back:  p => _headBack(p, _P.hairBlk, 11),
+      side:  p => _headSide(p, _P.hairBlk, 7),
+      top:   _solid(_P.hairBlk), bottom: _solid(_P.skinSh),
+    },
+    torso: {
+      front: p => { p(_P.navy, 0, 0, 16, 16); p(_P.copBlue, 5, 2, 6, 14);
+                    p(_P.navyD, 4, 0, 8, 2); p(_P.line, 7, 2, 2, 9);
+                    p(_P.gold, 3, 4, 2, 2); p(_P.white, 11, 4, 2, 1);
+                    p(_P.navyD, 0, 12, 16, 1); },
+      back:  p => { p(_P.navy, 0, 0, 16, 16); p(_P.navyD, 0, 0, 16, 2); },
+      side:  p => { p(_P.navy, 0, 0, 16, 16); p(_P.navyD, 0, 0, 2, 16); },
+      top:   _solid(_P.navyD), bottom: _solid(_P.navyD),
+    },
+    armU: p => { p(_P.navy, 0, 0, 16, 16); p(_P.white, 0, 6, 16, 1); },
+    armF: p => { p(_P.navy, 0, 0, 16, 16); p(_P.line, 0, 12, 16, 4); },
+    leg:  _solid(_P.navyD),
+    shin: p => { p(_P.navyD, 0, 0, 16, 16); p(_P.line, 0, 12, 16, 4); },
+    cap:  { color: 0x1e2a4a, brim: 0x14161a, badge: 0xffd24a },
+  },
+
+  // 🛡️ SWAT: balaclava under a helmet, goggle band across the eyes, plate
+  // carrier with pouches, knee pads. Black on black, so the grey webbing and
+  // the amber magazine tips are what keep it readable at a distance.
+  swat: {
+    hand: 0x14161a, foot: '#14161a',
+    head: {
+      front: p => { p(_P.blk, 0, 0, 16, 16);
+                    p(_P.strapGy, 0, 5, 16, 5);              // goggle band across the eyes
+                    p(_P.line, 1, 6, 14, 3);                 // the lens slot
+                    p(_P.skin, 2, 6, 4, 3); p(_P.skin, 10, 6, 4, 3);
+                    p(_P.eyeW, 2, 6, 4, 1); p(_P.eyeW, 10, 6, 4, 1);
+                    p(_P.line, 2, 8, 4, 1); p(_P.line, 10, 8, 4, 1);
+                    p(_P.blkHi, 0, 10, 16, 1);               // the band's lower lip
+                    p(_P.blkHi, 5, 13, 6, 1); },             // mask seam
+      back:  p => { p(_P.blk, 0, 0, 16, 16); p(_P.strapGy, 0, 6, 16, 2); },
+      side:  p => { p(_P.blk, 0, 0, 16, 16); p(_P.strapGy, 0, 6, 16, 3); p(_P.blkHi, 0, 10, 16, 1); },
+      top:   _solid(_P.blk), bottom: _solid(_P.blk),
+    },
+    torso: {
+      front: p => { p(_P.vest, 0, 0, 16, 16);
+                    p(_P.vestHi, 2, 1, 12, 13);              // plate carrier face
+                    p(_P.strapGy, 2, 0, 3, 2); p(_P.strapGy, 11, 0, 3, 2);
+                    p(_P.pouch, 3, 6, 3, 5); p(_P.pouch, 7, 6, 3, 5); p(_P.pouch, 11, 6, 2, 5);
+                    p(_P.amber, 3, 6, 3, 1); p(_P.amber, 7, 6, 3, 1); p(_P.amber, 11, 6, 2, 1);
+                    p(_P.strapGy, 2, 12, 12, 1);
+                    p(_P.blk, 0, 14, 16, 2); },
+      back:  p => { p(_P.vest, 0, 0, 16, 16); p(_P.vestHi, 2, 1, 12, 12);
+                    p(_P.strapGy, 2, 0, 3, 2); p(_P.strapGy, 11, 0, 3, 2);
+                    p(_P.strapGy, 2, 7, 12, 1); },
+      side:  p => { p(_P.vest, 0, 0, 16, 16); p(_P.strapGy, 0, 4, 16, 1); p(_P.strapGy, 0, 9, 16, 1); },
+      top:   _solid(_P.blk), bottom: _solid(_P.blk),
+    },
+    armU: p => { p(_P.vest, 0, 0, 16, 16); p(_P.vestHi, 0, 0, 16, 4); p(_P.strapGy, 0, 5, 16, 1); },
+    armF: p => { p(_P.blk, 0, 0, 16, 16); p(_P.blkHi, 0, 2, 16, 2); },
+    leg:  p => { p(_P.blk, 0, 0, 16, 16); p(_P.pouch, 2, 4, 5, 6); },
+    shin: p => { p(_P.blk, 0, 0, 16, 16); p(_P.strapGy, 3, 1, 10, 4); p(_P.blkHi, 0, 11, 16, 2); },
+    helmet: { color: 0x14161a },
+  },
+};
+
+// Swap a built body over to a drawn skin. Everything below only replaces
+// materials and, for two skins, adds one block of geometry — the rig, the
+// joints and the hitboxes are untouched, so animation and shooting cannot
+// notice which skin is on.
+function applyPixelSkin(art, parts) {
+  const { group, head, torso, armLimbs, legLimbs, hands, feet } = parts;
+  head.material = charFaceMats('h:' + art._id, art.head);
+  torso.material = charFaceMats('t:' + art._id, art.torso);
+  // armLimbs is [upperL, foreL, upperR, foreR]; legLimbs is [thighL, shinL, …]
+  armLimbs.forEach((m, i) => { m.material = charMat('a' + (i % 2) + ':' + art._id, i % 2 ? art.armF : art.armU); });
+  legLimbs.forEach((m, i) => { m.material = charMat('g' + (i % 2) + ':' + art._id, i % 2 ? art.shin : art.leg); });
+  for (const h of hands) h.material = new THREE.MeshLambertMaterial({ color: art.hand });
+  if (art.foot) for (const f of feet) f.material = new THREE.MeshLambertMaterial({ color: new THREE.Color(art.foot) });
+  if (art.hair && art.hair.long) {
+    const mat = new THREE.MeshLambertMaterial({ color: art.hair.color });
+    const back = new THREE.Mesh(mcBoxGeo(0.46, 0.55, 0.10), mat);
+    back.position.set(0, 1.60, -0.21); back.castShadow = true; group.add(back);
+    [-0.22, 0.22].forEach(x => {
+      const side = new THREE.Mesh(mcBoxGeo(0.10, 0.34, 0.34), mat);
+      side.position.set(x, 1.72, -0.02); side.castShadow = true; group.add(side);
+    });
+  }
+  if (art.cap) {
+    const crown = new THREE.Mesh(mcBoxGeo(0.54, 0.16, 0.54), new THREE.MeshLambertMaterial({ color: art.cap.color }));
+    crown.position.set(0, 2.16, 0); crown.castShadow = true; group.add(crown);
+    const brim = new THREE.Mesh(mcBoxGeo(0.54, 0.05, 0.20), new THREE.MeshLambertMaterial({ color: art.cap.brim }));
+    brim.position.set(0, 2.08, 0.30); group.add(brim);
+    const badge = new THREE.Mesh(mcBoxGeo(0.10, 0.08, 0.03), new THREE.MeshLambertMaterial({ color: art.cap.badge }));
+    badge.position.set(0, 2.16, 0.275); group.add(badge);
+  }
+  if (art.helmet) {
+    const helm = new THREE.Mesh(mcBoxGeo(0.58, 0.26, 0.58), new THREE.MeshLambertMaterial({ color: art.helmet.color }));
+    helm.position.set(0, 2.15, 0); helm.castShadow = true; group.add(helm);
+  }
+}
+
+for (const k of Object.keys(PIXEL_SKINS)) PIXEL_SKINS[k]._id = k;
+
 const SKINS = [
-  { id: 'default',     name: 'Recruit',       desc: 'Standard issue. Your look comes from your name.' },
-  { id: 'swat',        name: 'SWAT',          desc: 'Black tactical armor + glowing blue visor.' },
+  { id: 'default',     name: 'Rookie',        desc: 'Brown fringe, blue jacket over a white tee.' },
+  { id: 'boy',         name: 'Boy',           desc: 'Green tee, jeans, short hair. A person, not a costume.' },
+  { id: 'girl',        name: 'Girl',          desc: 'Long hair down the back, pink top, white trainers.' },
+  { id: 'police',      name: 'Police',        desc: 'Navy uniform, gold badge, peaked cap.' },
+  { id: 'recruit',     name: 'Recruit',       desc: 'The old seeded look — shirt and hair dealt from your name.' },
+  { id: 'swat',        name: 'SWAT',          desc: 'Balaclava, goggle band, plate carrier with mag pouches.' },
   { id: 'swat_shades', name: 'SWAT · Shades', desc: 'Tactical armor with cool sunglasses.' },
   { id: 'riot_chad',   name: 'Riot Chad',     desc: 'Dark jacket + red bandana. Has patience.' },
   { id: 'soldier',     name: 'Soldier',       desc: 'Olive fatigues + combat helmet.' },
@@ -18596,6 +18889,9 @@ function charFaceFor(skinId, tone) {
 }
 
 function applyCharacterSkin(skinId, parts) {
+  // Drawn skins replace the textures outright and share none of the recolour
+  // machinery below — no seeded shirt, no accessory library, no face overlay.
+  if (PIXEL_SKINS[skinId]) { applyPixelSkin(PIXEL_SKINS[skinId], parts); return; }
   const { group, head, headMats, faceMat, torso, torsoMat, armLimbs, legLimbs, look } = parts;
   // Human-faced skins take the seeded tone; the cast members with a colour of
   // their own (panda white, duck yellow, Pyro's soot) keep theirs (#50).
@@ -19288,7 +19584,7 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
 
   // Head with face — keep the material array so skins can recolor / reface it.
   // Parts are smooth shared blocks of the old sizes (#47); see roundedBoxGeo.
-  const headGeo = roundedBoxGeo(0.5, 0.5, 0.5, 0.06, 5);
+  const headGeo = mcBoxGeo(0.5, 0.5, 0.5);
   const ft = faceTextureFor(look.tone);
   const faceMat = new THREE.MeshLambertMaterial({ map: ft });
   const headMats = [ mkMat(skin), mkMat(skin), mkMat(skin), mkMat(skin), faceMat, mkMat(skin) ];
@@ -19297,7 +19593,7 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
 
   // Torso
   const torsoMat = mkMat(shirt);
-  const torso = new THREE.Mesh(roundedBoxGeo(0.55, 0.65, 0.3, 0.06), torsoMat);
+  const torso = new THREE.Mesh(mcBoxGeo(0.55, 0.65, 0.3), torsoMat);
   torso.position.set(0,1.2,0); torso.castShadow = true; group.add(torso);
 
   // Arms — shoulder pivot → upper arm → ELBOW pivot → forearm.
@@ -19313,16 +19609,16 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
   [-0.39,0.39].forEach(x => {
     const pivot = new THREE.Group();
     pivot.position.set(x, 1.5, 0);            // shoulder joint (top of arm)
-    const upper = new THREE.Mesh(roundedBoxGeo(0.22, 0.32, 0.22, 0.05), mkMat(shirt));
+    const upper = new THREE.Mesh(mcBoxGeo(0.22, 0.32, 0.22), mkMat(shirt));
     upper.position.set(0, -0.16, 0);
     upper.castShadow = true; pivot.add(upper);
     const elbow = new THREE.Group();
     elbow.position.set(0, -0.32, 0);          // elbow joint
     pivot.add(elbow);
-    const fore = new THREE.Mesh(roundedBoxGeo(0.205, 0.28, 0.205, 0.05), mkMat(shirt));
+    const fore = new THREE.Mesh(mcBoxGeo(0.205, 0.28, 0.205), mkMat(shirt));
     fore.position.set(0, -0.14, 0);
     fore.castShadow = true; elbow.add(fore);
-    const hand = new THREE.Mesh(roundedBoxGeo(0.15, 0.13, 0.15, 0.045, 1), mkMat(skin));
+    const hand = new THREE.Mesh(mcBoxGeo(0.15, 0.13, 0.15), mkMat(skin));
     hand.position.set(0, -0.30, 0);           // out of the cuff, a little past the sleeve
     elbow.add(hand);                          // too small to cast a shadow worth a draw call
     hands.push(hand);
@@ -19339,17 +19635,17 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
   [-0.155,0.155].forEach(x => {
     const pivot = new THREE.Group();
     pivot.position.set(x, 0.875, 0);          // hip joint (top of leg)
-    const thigh = new THREE.Mesh(roundedBoxGeo(0.24, 0.32, 0.26, 0.05), mkMat(pant));
+    const thigh = new THREE.Mesh(mcBoxGeo(0.24, 0.32, 0.26), mkMat(pant));
     thigh.position.set(0, -0.16, 0);
     thigh.castShadow = true; pivot.add(thigh);
     const knee = new THREE.Group();
     knee.position.set(0, -0.32, 0);           // knee joint
     pivot.add(knee);
-    const shin = new THREE.Mesh(roundedBoxGeo(0.225, 0.24, 0.245, 0.05), mkMat(pant));
+    const shin = new THREE.Mesh(mcBoxGeo(0.225, 0.24, 0.245), mkMat(pant));
     shin.position.set(0, -0.12, 0);
     shin.castShadow = true; knee.add(shin);
     // Boots stay dark on every skin, so they are deliberately NOT in legLimbs.
-    const foot = new THREE.Mesh(roundedBoxGeo(0.235, 0.09, 0.33, 0.035, 1), mkMat(0x241c18));
+    const foot = new THREE.Mesh(mcBoxGeo(0.235, 0.09, 0.33), mkMat(0x241c18));
     foot.position.set(0, -0.285, 0.04);       // toe sticks forward a little
     knee.add(foot);   // no shadow: it hid under the leg's anyway, and pays for the hands' draw calls (#47)
     group.add(pivot);
@@ -19358,10 +19654,12 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
   });
 
   // ── Apply skin (recolor + accessories) ────────────────────────────────────
-  applyCharacterSkin(skinId, { group, head, headMats, faceMat, torso, torsoMat, armLimbs, legLimbs, look });
+  applyCharacterSkin(skinId, { group, head, headMats, faceMat, torso, torsoMat, armLimbs, legLimbs, look, hands, feet: legFeet });
   if (opts.crown) setMeshCrown(group, true);
   // Hands take the head's colour: skin on most skins, gloves on the armoured ones.
-  for (const h of hands) h.material.color.copy(headMats[0].color);
+  // A drawn skin has already said what its hands are; only the recoloured ones
+  // take the head's colour.
+  if (!PIXEL_SKINS[skinId]) for (const h of hands) h.material.color.copy(headMats[0].color);
 
   // Name tag. Bots: 🤖, blue with you / red against. Real players (#47) used to be plain
   // black everywhere; opts.tag says where they stand — 'hub' (green, Lobby 13), 'ally' or
