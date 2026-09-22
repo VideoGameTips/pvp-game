@@ -18222,234 +18222,204 @@ function gridFace(key, rows) {
 // Hair on the head texture rather than as extra geometry: no second surface to
 // z-fight with the scalp. The FRONT of each head is a grid (below); these draw
 // the sides and back, where a full picture would be six identical rows.
-function _headSide(p, H, rows) {
-  p(_P.skin, 0, 0, 16, 16);
-  p(_P.skinSh, 0, 14, 16, 2);
-  p(H, 0, 0, 16, rows);
-  p(H, 0, rows, 4, 3);                       // sideburn down the front edge
+// ── 🛡️ One kit, six issues ─────────────────────────────────────────────────
+// The SWAT skin is the shape that worked, so every skin is now that soldier in
+// different colours. The body is identical between them — plate carrier, straps,
+// pouches, knee pads — and what tells them apart is the head: what is covering
+// the face, and what colour the lens is. That is also how real kit reads at a
+// distance, which is the only distance anyone sees another player from.
+function tacticalSkin(c, headFront) {
+  const hex = s => parseInt(String(s).slice(1), 16);
+  return {
+    hand: hex(c.glove), foot: c.boot,
+    head: {
+      front: headFront,
+      back:  p => { p(c.shell, 0, 0, 16, 16); p(c.band, 0, 6, 16, 2); },
+      side:  p => { p(c.shell, 0, 0, 16, 16); p(c.band, 0, 6, 16, 3); p(c.shellHi, 0, 10, 16, 1); },
+      top:   _solid(c.shell), bottom: _solid(c.shell),
+    },
+    torso: {
+      front: p => { p(c.vest, 0, 0, 16, 16);
+                    p(c.vestHi, 2, 1, 12, 13);                 // plate carrier face
+                    p(c.strap, 2, 0, 3, 2); p(c.strap, 11, 0, 3, 2);
+                    p(c.pouch, 3, 6, 3, 5); p(c.pouch, 7, 6, 3, 5); p(c.pouch, 11, 6, 2, 5);
+                    p(c.tip, 3, 6, 3, 1); p(c.tip, 7, 6, 3, 1); p(c.tip, 11, 6, 2, 1);
+                    p(c.strap, 2, 12, 12, 1);
+                    p(c.shell, 0, 14, 16, 2); },
+      back:  p => { p(c.vest, 0, 0, 16, 16); p(c.vestHi, 2, 1, 12, 12);
+                    p(c.strap, 2, 0, 3, 2); p(c.strap, 11, 0, 3, 2);
+                    p(c.strap, 2, 7, 12, 1); },
+      side:  p => { p(c.vest, 0, 0, 16, 16); p(c.strap, 0, 4, 16, 1); p(c.strap, 0, 9, 16, 1); },
+      top:   _solid(c.shell), bottom: _solid(c.shell),
+    },
+    armU: p => { p(c.vest, 0, 0, 16, 16); p(c.vestHi, 0, 0, 16, 4); p(c.strap, 0, 5, 16, 1); },
+    armF: p => { p(c.glove, 0, 0, 16, 16); p(c.shellHi, 0, 2, 16, 2); },
+    leg:  p => { p(c.trouser, 0, 0, 16, 16); p(c.pouch, 2, 4, 5, 6); },
+    shin: p => { p(c.trouser, 0, 0, 16, 16); p(c.strap, 3, 1, 10, 4); p(c.shellHi, 0, 11, 16, 2); },
+    helmet: { color: hex(c.shell) },
+  };
 }
-function _headBack(p, H, rows) {
-  p(_P.skin, 0, 0, 16, 16);
-  p(H, 0, 0, 16, rows);
-}
+
+// Six colourways. Every field is a colour you can change on its own; the head
+// grid below each one is the picture that makes it that soldier.
+const _KIT = {
+  operator: { shell: '#14161a', shellHi: '#23262c', band: '#575d66', vest: '#1a1d22', vestHi: '#2c3037',
+              pouch: '#2a2e35', tip: '#e0902a', strap: '#575d66', glove: '#14161a', boot: '#14161a',
+              trouser: '#14161a' },
+  soldier:  { shell: '#3d4a24', shellHi: '#4d5c2e', band: '#6b5d3a', vest: '#4b5320', vestHi: '#57602a',
+              pouch: '#3a4019', tip: '#c9a227', strap: '#6b5d3a', glove: '#2b2416', boot: '#241c18',
+              trouser: '#3a4019' },
+  riot:     { shell: '#1e2a4a', shellHi: '#2b3a60', band: '#0f1526', vest: '#151d35', vestHi: '#22304f',
+              pouch: '#101728', tip: '#8fa6c8', strap: '#3a4a68', glove: '#0f1526', boot: '#0f1526',
+              trouser: '#151d35' },
+  ranger:   { shell: '#a8905e', shellHi: '#c2a273', band: '#6f5c38', vest: '#8a7448', vestHi: '#9c8454',
+              pouch: '#6f5c38', tip: '#e0902a', strap: '#d8c9a3', glove: '#4a3f28', boot: '#3a3120',
+              trouser: '#8a7448' },
+  nightops: { shell: '#0e1013', shellHi: '#191d22', band: '#0a0c0f', vest: '#101216', vestHi: '#1a1e24',
+              pouch: '#0a0c0f', tip: '#4cd137', strap: '#2a2e35', glove: '#0a0c0f', boot: '#0a0c0f',
+              trouser: '#0e1013' },
+  jugger:   { shell: '#4a5058', shellHi: '#5d646e', band: '#31363c', vest: '#3a4047', vestHi: '#4d545d',
+              pouch: '#2a2e35', tip: '#c0392b', strap: '#6a727c', glove: '#2a2e35', boot: '#2a2e35',
+              trouser: '#3a4047' },
+};
 
 const PIXEL_SKINS = {
-  // 🙂 The default everyone starts in: brown fringe, big blue eyes low on the
-  // face, blue jacket open over a white tee. Deliberately no emblem on the back.
-  default: {
-    hand: 0xf0c8a0, foot: 0x1b56b8,
-    head: {
-      front: gridFace({ '.': _P.skin, 's': _P.skinSh, 'H': _P.hairBr, 'W': _P.eyeW, 'I': _P.eyeBlue, 'D': _P.eyeDeep }, [
-        'HHHHHHHHHHHHHHHH',
-        'HHHHHHHHHHHHHHHH',
-        'HHHHHHHHHHHHHHHH',
-        'HHHHHHHHHHHHHHHH',
-        'HHHHHHHHHHHHHHHH',
-        'HHHHHHHHHHHHHHHH',
-        'HHHHH.HHHH.HHHHH',
-        'HHWII..HH..IIWHH',
-        'HHWII......IIWHH',
-        'HHWDD......DDWHH',
-        'HH............HH',
-        'HH............HH',
-        'HH............HH',
-        '................',
-        '................',
-        'ssssssssssssssss',
-      ]),
-      back:  p => _headBack(p, _P.hairBr, 12),
-      side:  p => _headSide(p, _P.hairBr, 10),
-      top:   _solid(_P.hairBr),
-      bottom: _solid(_P.skinSh),
-    },
-    torso: {
-      front: p => { p(_P.jacket, 0, 0, 16, 16); p(_P.shirtW, 5, 0, 6, 16);
-                    p(_P.collar, 4, 0, 8, 2); p(_P.collar, 5, 2, 1, 2); p(_P.collar, 10, 2, 1, 2);
-                    p(_P.string, 6, 2, 1, 5); p(_P.string, 9, 2, 1, 5);
-                    p(_P.jacketD, 0, 0, 2, 16); p(_P.jacketD, 14, 0, 2, 16);
-                    p(_P.jacketD, 2, 12, 12, 1); },
-      back:  p => { p(_P.jacket, 0, 0, 16, 16); p(_P.jacketD, 0, 0, 16, 2);
-                    p(_P.jacketD, 0, 5, 16, 1); p(_P.jacketD, 0, 14, 16, 2); },
-      side:  p => { p(_P.jacket, 0, 0, 16, 16); p(_P.jacketD, 0, 0, 3, 16); },
-      top:   _solid(_P.collar), bottom: _solid(_P.jacketD),
-    },
-    armU: _solid(_P.jacket),
-    armF: p => { p(_P.jacket, 0, 0, 16, 16); p(_P.white, 0, 9, 16, 3); p(_P.green, 0, 12, 16, 2); },
-    leg:  p => { p(_P.pants, 0, 0, 16, 16); p(_P.pantsHi, 0, 13, 16, 1); },
-    shin: p => { p(_P.pants, 0, 0, 16, 16); p(_P.pantsHi, 3, 2, 10, 2); },
-  },
+  // 🖤 The default. Balaclava under the helmet, goggle band across the eyes,
+  // plate carrier with amber-tipped mag pouches. Black on black, so the grey
+  // webbing and those amber tips are what carry at a distance.
+  default: tacticalSkin(_KIT.operator, gridFace(
+    { '.': _P.skin, 'W': _P.eyeW, 'L': _P.line, 'K': '#14161a', 'k': '#23262c', 'G': '#575d66' }, [
+      'KKKKKKKKKKKKKKKK',
+      'KKKKKKKKKKKKKKKK',
+      'KKKKKKKKKKKKKKKK',
+      'KKKKKKKKKKKKKKKK',
+      'KKKKKKKKKKKKKKKK',
+      'KKKKKKKKKKKKKKKK',
+      'GGGGGGGGGGGGGGGG',
+      'GLWWWLLLLLLWWWLG',
+      'GL...LLLLLL...LG',
+      'GL...LLLLLL...LG',
+      'GGGGGGGGGGGGGGGG',
+      'kkkkkkkkkkkkkkkk',
+      'KKKKKKKKKKKKKKKK',
+      'KKKKKkkkkkkKKKKK',
+      'KKKKKKKKKKKKKKKK',
+      'KKKKKKKKKKKKKKKK',
+    ])),
 
-  // 👦 Plain t-shirt and jeans: the skin for people who want to look like a
-  // person rather than a costume.
-  boy: {
-    hand: 0xf0c8a0, foot: 0x2a2e35,
-    head: {
-      front: gridFace({ '.': _P.skin, 's': _P.skinSh, 'H': _P.hairBr, 'W': _P.eyeW, 'I': '#4a6fa5', 'D': '#2f4f7a' }, [
-        'HHHHHHHHHHHHHHHH',
-        'HHHHHHHHHHHHHHHH',
-        'HHHHHHHHHHHHHHHH',
-        'HHHHHHHHHHHHHHHH',
-        'HHHHHHHHHHHHHHHH',
-        'HHHHHHHHHHHHHHHH',
-        'HH.HHHHHHHHHH.HH',
-        'HHWII......IIWHH',
-        'HHWII......IIWHH',
-        'HHWDD......DDWHH',
-        'HH............HH',
-        '................',
-        '................',
-        '................',
-        '................',
-        'ssssssssssssssss',
-      ]),
-      back:  p => _headBack(p, _P.hairBr, 11),
-      side:  p => _headSide(p, _P.hairBr, 10),
-      top:   _solid(_P.hairBr), bottom: _solid(_P.skinSh),
-    },
-    torso: {
-      front: p => { p(_P.tee, 0, 0, 16, 16); p(_P.skin, 5, 0, 6, 2); p('#236941', 0, 14, 16, 2); },
-      back:  p => { p(_P.tee, 0, 0, 16, 16); p('#236941', 0, 14, 16, 2); },
-      side:  p => { p(_P.tee, 0, 0, 16, 16); p('#236941', 0, 0, 2, 16); },
-      top:   _solid(_P.tee), bottom: _solid('#236941'),
-    },
-    armU: p => { p(_P.tee, 0, 0, 16, 16); p(_P.skin, 0, 10, 16, 6); },
-    armF: _solid(_P.skin),
-    leg:  _solid(_P.jeans),
-    shin: p => { p(_P.jeans, 0, 0, 16, 16); p(_P.jeansD, 0, 11, 16, 5); },
-  },
+  // 🪖 Goggles pushed up onto the helmet and an uncovered face — the one in the
+  // set you can actually see is a person.
+  soldier: tacticalSkin(_KIT.soldier, gridFace(
+    { '.': _P.skin, 's': _P.skinSh, 'W': _P.eyeW, 'I': '#4a6fa5', 'D': '#2f4f7a',
+      'H': '#3d4a24', 'G': '#6b5d3a', 'L': '#2b2416', 'C': '#4a4230' }, [
+      'HHHHHHHHHHHHHHHH',
+      'HHHHHHHHHHHHHHHH',
+      'HHHHHHHHHHHHHHHH',
+      'GGGGGGGGGGGGGGGG',
+      'GLLLLLLLLLLLLLLG',
+      'HHHHHHHHHHHHHHHH',
+      'C..............C',
+      'C.WII......IIW.C',
+      'C.WII......IIW.C',
+      'C.WDD......DDW.C',
+      'C..............C',
+      'C..............C',
+      '................',
+      '.....CCCCCC.....',
+      '................',
+      'ssssssssssssssss',
+    ])),
 
-  // 👧 Same build, long hair down the back and a different kit. The long hair
-  // is the one piece of extra geometry in the set: it hangs below the head box,
-  // which a texture on that box cannot do.
-  girl: {
-    hand: 0xf0c8a0, foot: '#e8eef5',
-    head: {
-      front: gridFace({ '.': _P.skin, 's': _P.skinSh, 'H': _P.hairGn, 'W': _P.eyeW, 'I': '#6a4bb8', 'D': '#46307e' }, [
-        'HHHHHHHHHHHHHHHH',
-        'HHHHHHHHHHHHHHHH',
-        'HHHHHHHHHHHHHHHH',
-        'HHHHHHHHHHHHHHHH',
-        'HHHHHHHHHHHHHHHH',
-        'HHHHHHHHHHHHHHHH',
-        'HH.HHHHHHHHHH.HH',
-        'HHWII..HH..IIWHH',
-        'HHWII......IIWHH',
-        'HHWDD......DDWHH',
-        'HH............HH',
-        'HH............HH',
-        'HH............HH',
-        '................',
-        '................',
-        'ssssssssssssssss',
-      ]),
-      back:  p => _headBack(p, _P.hairGn, 16),
-      side:  p => { p(_P.skin, 0, 0, 16, 16); p(_P.hairGn, 0, 0, 16, 8);
-                    p(_P.hairGn, 0, 8, 3, 8); p(_P.hairGn, 10, 8, 6, 8); },
-      top:   _solid(_P.hairGn), bottom: _solid(_P.skinSh),
-    },
-    torso: {
-      front: p => { p(_P.pink, 0, 0, 16, 16); p(_P.skin, 5, 0, 6, 2); p(_P.pinkD, 0, 13, 16, 3); },
-      back:  p => { p(_P.pink, 0, 0, 16, 16); p(_P.pinkD, 0, 13, 16, 3); },
-      side:  p => { p(_P.pink, 0, 0, 16, 16); p(_P.pinkD, 0, 0, 2, 16); },
-      top:   _solid(_P.pink), bottom: _solid(_P.pinkD),
-    },
-    armU: p => { p(_P.pink, 0, 0, 16, 16); p(_P.skin, 0, 11, 16, 5); },
-    armF: _solid(_P.skin),
-    leg:  _solid(_P.jeans),
-    shin: p => { p(_P.jeans, 0, 0, 16, 16); p(_P.white, 0, 12, 16, 4); },
-    hair: { color: 0x8a6a34, long: true },
-  },
+  // 🛡️ Riot: a clear shield over the whole face. The face behind it is drawn
+  // dimmer than an uncovered one, which is what a scratched polycarbonate
+  // visor actually does to it.
+  riot: tacticalSkin(_KIT.riot, gridFace(
+    { '.': '#9fb4cf', 'W': '#d8e4f2', 'I': '#4f6f9c', 'D': '#36527a',
+      'N': '#1e2a4a', 'S': '#7fa3cc', 'F': '#0f1526' }, [
+      'NNNNNNNNNNNNNNNN',
+      'NNNNNNNNNNNNNNNN',
+      'NNNNNNNNNNNNNNNN',
+      'NNNNNNNNNNNNNNNN',
+      'FFFFFFFFFFFFFFFF',
+      'FSSSSSSSSSSSSSSF',
+      'FS............SF',
+      'FS.WII....IIW.SF',
+      'FS.WII....IIW.SF',
+      'FS.WDD....DDW.SF',
+      'FS............SF',
+      'FSSSSSSSSSSSSSSF',
+      'FFFFFFFFFFFFFFFF',
+      'NNNNNNNNNNNNNNNN',
+      'NNNNNNNNNNNNNNNN',
+      'NNNNNNNNNNNNNNNN',
+    ])),
 
-  // 👮 Navy uniform, light shirt, gold badge, peaked cap.
-  police: {
-    hand: 0xf0c8a0, foot: '#14161a',
-    head: {
-      front: gridFace({ '.': _P.skin, 's': _P.skinSh, 'H': _P.hairBlk, 'W': _P.eyeW, 'I': '#3f6b4a', 'D': '#2a4a33' }, [
-        'HHHHHHHHHHHHHHHH',
-        'HHHHHHHHHHHHHHHH',
-        'HHHHHHHHHHHHHHHH',
-        'HHHHHHHHHHHHHHHH',
-        'HHHHHHHHHHHHHHHH',
-        'HHHHHHHHHHHHHHHH',
-        'HH.HHHHHHHHHH.HH',
-        'HHWII......IIWHH',
-        'HHWII......IIWHH',
-        'HHWDD......DDWHH',
-        'HH............HH',
-        '................',
-        '................',
-        '................',
-        '................',
-        'ssssssssssssssss',
-      ]),
-      back:  p => _headBack(p, _P.hairBlk, 11),
-      side:  p => _headSide(p, _P.hairBlk, 10),
-      top:   _solid(_P.hairBlk), bottom: _solid(_P.skinSh),
-    },
-    torso: {
-      front: p => { p(_P.navy, 0, 0, 16, 16); p(_P.copBlue, 5, 2, 6, 14);
-                    p(_P.navyD, 4, 0, 8, 2); p(_P.line, 7, 2, 2, 9);
-                    p(_P.gold, 3, 4, 2, 2); p(_P.white, 11, 4, 2, 1);
-                    p(_P.navyD, 0, 12, 16, 1); },
-      back:  p => { p(_P.navy, 0, 0, 16, 16); p(_P.navyD, 0, 0, 16, 2); },
-      side:  p => { p(_P.navy, 0, 0, 16, 16); p(_P.navyD, 0, 0, 2, 16); },
-      top:   _solid(_P.navyD), bottom: _solid(_P.navyD),
-    },
-    armU: p => { p(_P.navy, 0, 0, 16, 16); p(_P.white, 0, 6, 16, 1); },
-    armF: p => { p(_P.navy, 0, 0, 16, 16); p(_P.line, 0, 12, 16, 4); },
-    leg:  _solid(_P.navyD),
-    shin: p => { p(_P.navyD, 0, 0, 16, 16); p(_P.line, 0, 12, 16, 4); },
-    cap:  { color: 0x1e2a4a, brim: 0x14161a, badge: 0xffd24a },
-  },
+  // 🏜️ Desert recon: sand helmet, amber goggles, and a shemagh wrapped over
+  // the nose and mouth. No skin shows at all.
+  ranger: tacticalSkin(_KIT.ranger, gridFace(
+    { 'H': '#a8905e', 'h': '#c2a273', 'A': '#e0902a', 'a': '#f0b45e', 'F': '#6f5c38',
+      'S': '#d8c9a3', 's': '#bdae88' }, [
+      'HHHHHHHHHHHHHHHH',
+      'HHHHHHHHHHHHHHHH',
+      'hhhhhhhhhhhhhhhh',
+      'HHHHHHHHHHHHHHHH',
+      'FFFFFFFFFFFFFFFF',
+      'FAAAAAAAAAAAAAAF',
+      'FAaaAAAAAAAAaaAF',
+      'FAAAAAAAAAAAAAAF',
+      'FFFFFFFFFFFFFFFF',
+      'SSSSSSSSSSSSSSSS',
+      'SsssSSSSSSSSsssS',
+      'SSSSSSSSSSSSSSSS',
+      'SSSSssssssssSSSS',
+      'SSSSSSSSSSSSSSSS',
+      'ssssssssssssssss',
+      'SSSSSSSSSSSSSSSS',
+    ])),
 
-  // 🛡️ SWAT: balaclava under a helmet, goggle band across the eyes, plate
-  // carrier with pouches, knee pads. Black on black, so the grey webbing and
-  // the amber magazine tips are what keep it readable at a distance.
-  swat: {
-    hand: 0x14161a, foot: '#14161a',
-    head: {
-      front: gridFace({ '.': _P.skin, 'W': _P.eyeW, 'L': _P.line, 'K': _P.blk, 'k': _P.blkHi, 'G': _P.strapGy }, [
-        'KKKKKKKKKKKKKKKK',
-        'KKKKKKKKKKKKKKKK',
-        'KKKKKKKKKKKKKKKK',
-        'KKKKKKKKKKKKKKKK',
-        'KKKKKKKKKKKKKKKK',
-        'KKKKKKKKKKKKKKKK',
-        'GGGGGGGGGGGGGGGG',
-        'GLWWWLLLLLLWWWLG',
-        'GL...LLLLLL...LG',
-        'GL...LLLLLL...LG',
-        'GGGGGGGGGGGGGGGG',
-        'kkkkkkkkkkkkkkkk',
-        'KKKKKKKKKKKKKKKK',
-        'KKKKKkkkkkkKKKKK',
-        'KKKKKKKKKKKKKKKK',
-        'KKKKKKKKKKKKKKKK',
-      ]),
-      back:  p => { p(_P.blk, 0, 0, 16, 16); p(_P.strapGy, 0, 6, 16, 2); },
-      side:  p => { p(_P.blk, 0, 0, 16, 16); p(_P.strapGy, 0, 6, 16, 3); p(_P.blkHi, 0, 10, 16, 1); },
-      top:   _solid(_P.blk), bottom: _solid(_P.blk),
-    },
-    torso: {
-      front: p => { p(_P.vest, 0, 0, 16, 16);
-                    p(_P.vestHi, 2, 1, 12, 13);              // plate carrier face
-                    p(_P.strapGy, 2, 0, 3, 2); p(_P.strapGy, 11, 0, 3, 2);
-                    p(_P.pouch, 3, 6, 3, 5); p(_P.pouch, 7, 6, 3, 5); p(_P.pouch, 11, 6, 2, 5);
-                    p(_P.amber, 3, 6, 3, 1); p(_P.amber, 7, 6, 3, 1); p(_P.amber, 11, 6, 2, 1);
-                    p(_P.strapGy, 2, 12, 12, 1);
-                    p(_P.blk, 0, 14, 16, 2); },
-      back:  p => { p(_P.vest, 0, 0, 16, 16); p(_P.vestHi, 2, 1, 12, 12);
-                    p(_P.strapGy, 2, 0, 3, 2); p(_P.strapGy, 11, 0, 3, 2);
-                    p(_P.strapGy, 2, 7, 12, 1); },
-      side:  p => { p(_P.vest, 0, 0, 16, 16); p(_P.strapGy, 0, 4, 16, 1); p(_P.strapGy, 0, 9, 16, 1); },
-      top:   _solid(_P.blk), bottom: _solid(_P.blk),
-    },
-    armU: p => { p(_P.vest, 0, 0, 16, 16); p(_P.vestHi, 0, 0, 16, 4); p(_P.strapGy, 0, 5, 16, 1); },
-    armF: p => { p(_P.blk, 0, 0, 16, 16); p(_P.blkHi, 0, 2, 16, 2); },
-    leg:  p => { p(_P.blk, 0, 0, 16, 16); p(_P.pouch, 2, 4, 5, 6); },
-    shin: p => { p(_P.blk, 0, 0, 16, 16); p(_P.strapGy, 3, 1, 10, 4); p(_P.blkHi, 0, 11, 16, 2); },
-    helmet: { color: 0x14161a },
-  },
+  // 🌙 Night ops: no colour anywhere except the two green tubes. Everything
+  // else on this skin is one of three blacks.
+  nightops: tacticalSkin(_KIT.nightops, gridFace(
+    { 'K': '#0e1013', 'k': '#191d22', 'M': '#2a2e35', 'N': '#4cd137', 'n': '#2e7d22' }, [
+      'KKKKKKKKKKKKKKKK',
+      'KKKKKKKKKKKKKKKK',
+      'KKKKKKKKKKKKKKKK',
+      'KKKKMMMMMMMMKKKK',
+      'KKKMNNNNNNNNMKKK',
+      'KKKMNnnNNNNnnNMK',
+      'KKKMNnnNNNNnnNMK',
+      'KKKMNNNNNNNNMKKK',
+      'KKKKMMMMMMMMKKKK',
+      'kkkkkkkkkkkkkkkk',
+      'KKKKKKKKKKKKKKKK',
+      'KKKKKKKKKKKKKKKK',
+      'KKKKkkkkkkkkKKKK',
+      'KKKKKKKKKKKKKKKK',
+      'KKKKKKKKKKKKKKKK',
+      'KKKKKKKKKKKKKKKK',
+    ])),
+
+  // ⛑️ Juggernaut: a welded plate with a slit to see through, lit red from
+  // inside. The heaviest thing in the set and the only one with no fabric.
+  jugger: tacticalSkin(_KIT.jugger, gridFace(
+    { 'P': '#4a5058', 'p': '#5d646e', 'd': '#31363c', 'R': '#c0392b', 'r': '#e05c4a' }, [
+      'pppppppppppppppp',
+      'PPPPPPPPPPPPPPPP',
+      'PPPPPPPPPPPPPPPP',
+      'PPPPPPPPPPPPPPPP',
+      'PddddddddddddddP',
+      'PdPPPPPPPPPPPPdP',
+      'PdPPPPPPPPPPPPdP',
+      'PdRRRRRRRRRRRRdP',
+      'PdrrRRRRRRRRrrdP',
+      'PdPPPPPPPPPPPPdP',
+      'PddddddddddddddP',
+      'PPPPPPPPPPPPPPPP',
+      'PPPPPdddddddPPPP',
+      'PPPPPPPPPPPPPPPP',
+      'PPPPPPPPPPPPPPPP',
+      'dddddddddddddddd',
+    ])),
 };
 
 // Swap a built body over to a drawn skin. Everything below only replaces
@@ -18491,12 +18461,13 @@ function applyPixelSkin(art, parts) {
 for (const k of Object.keys(PIXEL_SKINS)) PIXEL_SKINS[k]._id = k;
 
 const SKINS = [
-  { id: 'default',     name: 'Rookie',        desc: 'Brown fringe, blue jacket over a white tee.' },
-  { id: 'boy',         name: 'Boy',           desc: 'Green tee, jeans, short hair. A person, not a costume.' },
-  { id: 'girl',        name: 'Girl',          desc: 'Long hair down the back, pink top, white trainers.' },
-  { id: 'police',      name: 'Police',        desc: 'Navy uniform, gold badge, peaked cap.' },
+  { id: 'default',     name: 'Operator',      desc: 'Balaclava, goggle band, amber-tipped mag pouches.' },
+  { id: 'soldier',     name: 'Soldier',       desc: 'Olive kit, goggles pushed up, face uncovered.' },
+  { id: 'riot',        name: 'Riot',          desc: 'Navy armour behind a full clear face shield.' },
+  { id: 'ranger',      name: 'Desert Recon',  desc: 'Sand helmet, amber goggles, shemagh over the face.' },
+  { id: 'nightops',    name: 'Night Ops',     desc: 'Three blacks and two green tubes. Nothing else.' },
+  { id: 'jugger',      name: 'Juggernaut',    desc: 'Welded plate with a slit, lit red from inside.' },
   { id: 'recruit',     name: 'Recruit',       desc: 'The old seeded look — shirt and hair dealt from your name.' },
-  { id: 'swat',        name: 'SWAT',          desc: 'Balaclava, goggle band, plate carrier with mag pouches.' },
   { id: 'swat_shades', name: 'SWAT · Shades', desc: 'Tactical armor with cool sunglasses.' },
   { id: 'riot_chad',   name: 'Riot Chad',     desc: 'Dark jacket + red bandana. Has patience.' },
   { id: 'soldier',     name: 'Soldier',       desc: 'Olive fatigues + combat helmet.' },
@@ -18996,12 +18967,6 @@ function applyCharacterSkin(skinId, parts) {
       bandana.position.set(0, 1.66, 0); group.add(bandana);
       _addSeedHair(head, 'crop', 0x1a1208);    // was a bare scalp (#50)
       _addKit(torso, 'bandolier', _gearFor(0x33271f));  // #50 phase 2
-      break;
-    }
-    case 'soldier': {
-      setBody(0x4b5320); setLegs(0x3a4019); setHeadAll(tone);
-      _addHelmet(group, 0x3d4a24);
-      _addKit(torso, 'pack', _gearFor(0x4b5320));   // #50 phase 2
       break;
     }
     case 'spiky': {
