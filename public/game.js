@@ -21408,26 +21408,12 @@ const _eqClamp = v => Math.max(0, Math.min(1, v));
 // The comet entrance's side-to-side swing (left, then right, one and a
 // half cycles) -- one formula, shared by the motion itself and by its
 // trail, so the trail always traces exactly the path the piece took.
-function _eqCometSway(t) { return Math.sin(t * Math.PI * 3) * 0.09; }
-// t=0 in this whole equip system means "the FULL rotation offset, not yet
-// unwound" (see _eqTwirlFlyOffset for the long version of this) -- so at
-// t=0 the comet's own pieces, swung out by the tumble at their own radius
-// from the pivot (up to ~0.2-0.3 units), can pass close enough to a pivot
-// that's only ~0.15-0.2 units from the camera to blow the projection up
-// (checked per-piece, worst case ndcX past 50). Same fix as the twirl:
-// push the whole assembly back in depth while it's still tumbling wildly,
-// shrinking to zero right as it arrives.
-function _eqCometDepthPush(t) {
-  const arrive = _eqEase(_eqClamp(t / 0.78));
-  return -0.8 * (1 - arrive);
-}
 // The twirl entrance's spin: several fast turns about the trigger guard,
 // easing to a dead stop -- a gunslinger twirl, not a wag. Shared by the
 // motion itself and by its trail, same reason as the comet sway above.
 // Bumped from 2.5 turns to 3 -- "not enough vertical spin energy" -- so it
 // reads as an actual baton-style twirl, not a couple of lazy turns. (Tried
-// 4.5 first; see _eqTwirlFlyOffset for why that made the off-screen problem
-// worse, not better.)
+// 4.5 first; see _eqOrbitOffset for why more turns fights the off-screen fix.)
 // Axis history: _EQ_X sweeps Y/Z only (read as "spinning around Y" to a
 // viewer); _EQ_Y sweeps X/Z only and stays level (read as a flat
 // helicopter-blade sweep, "spinning around Z"). _EQ_DIAG sweeps all three
@@ -21436,38 +21422,37 @@ function _eqTwirlQuat(t) {
   const arrive = _eqEase(_eqClamp(t / 0.78));
   return new THREE.Quaternion().setFromAxisAngle(_EQ_DIAG, (1 - arrive) * Math.PI * 2 * 3);
 }
-// The twirl used to spin entirely in place at its landing spot -- no travel
-// at all, so there was nothing to actually watch fly across the screen.
-// This is the shared fly-in offset (used by the motion and by its trail,
-// same reason as the comet sway above): a lateral throw-in with a small
-// rise-then-settle arc, AND a depth push-back (z), all three shrinking to
-// zero right as it lands in the grip.
+// "Fly around the hand at intense speed, in different directions, not just
+// fly towards it" -- the old comet sway (a single sine wave on X) and twirl
+// fly-in (one straight lateral throw) both just converged on the landing
+// point along one path. This is a real orbit around it instead: two
+// frequencies on X and Y with a non-integer ratio (9 : 6.35), so it's a
+// Lissajous figure, not one flat circle or ellipse -- the path keeps
+// changing direction rather than repeating the same loop. Shared by the
+// motion and by the trail (same reason as everything else in this system
+// shares its formula with its trail), so the trail always traces exactly
+// the path the piece took.
 //
-// The x/y alone (no z) was not enough, and made a bigger mistake obvious:
-// `t` here doesn't mean "just starting to spin" -- _eqTwirlQuat(0) is
-// already the FULL rotation offset, unwinding as arrive climbs toward 1.
-// So at t=0 every piece is already scattered through whatever a 3+ turn
-// rotation happens to put it at, for that piece's own radius from the
-// pivot (measured up to ~0.27 units on the revolver's 31 pieces). With the
-// pivot sitting only ~0.2 units from the camera to begin with, that swing
-// radius alone was enough to carry some pieces to within 0.03-0.06 units
-// of the camera -- almost on top of the 0.05 near-clip plane -- which is
-// what actually blew the projection up (checked per-piece with
-// camera.project(): ndcX as high as 7, not just past 1), not really "off
-// to the side" so much as "too close to the lens to render sanely."
-// Bumping the spin from 2.5 to 4.5 turns made this WORSE (more rotation
-// means more chances to pass through a near-camera configuration), which
-// is why turn count came back down to 3 above.
-// The real fix is depth, not lateral offset: push the whole assembly
-// further from the camera while it's still spinning wildly (z), so even a
-// piece at the full ~0.27 radius stays well past the near-clip plane and
-// within a sane field of view, then bring it back to normal depth as it
-// lands. Verified per-piece, every t: nothing exceeds |ndcX| or |ndcY| > 1
-// any more.
-function _eqTwirlFlyOffset(t) {
+// z is a depth push-back, same fix and same reason as the earlier
+// _eqCometDepthPush/_eqTwirlFlyOffset it replaces: t=0 here means "the
+// FULL rotation offset, not yet unwound" (see _eqTwirlQuat), so at t=0 a
+// piece already sits wherever that rotation put it, at that piece's own
+// radius from a pivot only ~0.2 units from the camera -- and now there's
+// also a real orbit radius on top of that. Without pushing the whole
+// assembly back in depth while radius is biggest, this is exactly the
+// "some piece ends up 0.03 units from the lens, ndcX past 50" bug from
+// last time, just with a new cause. Verified per-piece with
+// camera.project() across the whole animation before shipping this: none
+// of it happens any more.
+function _eqOrbitOffset(t) {
   const arrive = _eqEase(_eqClamp(t / 0.78));
   const k = 1 - arrive;
-  return { x: 0.12 * k, y: 0.05 * Math.sin(k * Math.PI * 0.5) * k, z: -0.85 * k };
+  const radius = 0.27 * k;
+  return {
+    x: Math.cos(t * Math.PI * 2 * 9) * radius,
+    y: Math.sin(t * Math.PI * 2 * 6.35) * radius * 0.85,
+    z: -0.9 * k,
+  };
 }
 
 // The pieces are the model's own top-level parts -- never the hands (they wait
@@ -21797,19 +21782,16 @@ function _eqStepProps(e, t) {
       });
     }
     if (o.userData.comet) {                      // the glow trail chasing the comet in
-      // A real velocity trail, not a fixed length: sample the same sway a
-      // beat earlier, so the streak is long while it's swinging fast
-      // through the middle and pinches to nothing at the turnarounds.
+      // A real velocity trail, not a fixed length: sample the same orbit a
+      // beat earlier, so the streak is long while it's whipping around fast
+      // and pinches to nothing wherever the path briefly slows.
       const look = o.userData.comet.look;
       const tPrev = Math.max(0, t - look);
-      const arrive = _eqEase(_eqClamp(t / 0.78));
-      const arrivePrev = _eqEase(_eqClamp(tPrev / 0.78));
-      const headX = _eqCometSway(t) * (1 - arrive);
-      const tailX = _eqCometSway(tPrev) * (1 - arrivePrev);
-      const head = e.ctr.clone(); head.x += headX; head.z += _eqCometDepthPush(t);
-      const tail = e.ctr.clone(); tail.x += tailX; tail.z += _eqCometDepthPush(tPrev);
+      const offHead = _eqOrbitOffset(t), offTail = _eqOrbitOffset(tPrev);
+      const head = e.ctr.clone(); head.x += offHead.x; head.y += offHead.y; head.z += offHead.z;
+      const tail = e.ctr.clone(); tail.x += offTail.x; tail.y += offTail.y; tail.z += offTail.z;
       _eqSegment(o, tail, head);
-      const fade = Math.min(1, Math.abs(headX - tailX) * 10);
+      const fade = Math.min(1, head.distanceTo(tail) * 10);
       o.visible = fade > 0.01;
       o.material.opacity = o.userData.comet.op * fade;
     }
@@ -21817,12 +21799,12 @@ function _eqStepProps(e, t) {
       // Same idea as the comet's trail, but the muzzle is moving on a
       // circle, not a line: sample the tip's own rotated position a beat
       // earlier and draw the chord between the two. Also has to carry the
-      // same fly-in travel as the gun itself (_eqTwirlFlyOffset), sampled
-      // at the same two times, or the trail stays parked at the old fixed
+      // same orbit travel as the gun itself (_eqOrbitOffset), sampled at
+      // the same two times, or the trail stays parked at the old fixed
       // landing spot while the gun flies away from it.
       const T = o.userData.twirl;
       const tEarlier = Math.max(0, t - T.look);
-      const offHead = _eqTwirlFlyOffset(t), offTail = _eqTwirlFlyOffset(tEarlier);
+      const offHead = _eqOrbitOffset(t), offTail = _eqOrbitOffset(tEarlier);
       const head = e.ctr.clone().add(T.tip.clone().applyQuaternion(_eqTwirlQuat(t)));
       head.x += offHead.x; head.y += offHead.y; head.z += offHead.z;
       const tail = e.ctr.clone().add(T.tip.clone().applyQuaternion(_eqTwirlQuat(tEarlier)));
@@ -21982,15 +21964,14 @@ function _equipStep(e, t) {
         c.scale.copy(h.s).multiplyScalar(0.55 + 0.45 * k);
         break; }
       case 'comet': {
-        // Donut weapons: the WHOLE thing swings in close to where it's
-        // held -- left, then right -- tumbling through the air as it comes
-        // like a thrown weapon caught out of the air, and settles straight
-        // into the hand. Every piece keeps its fixed offset from the gun's
-        // own centre and gets the exact same sway and the exact same
-        // tumble, so it moves as one rigid object, never as separate parts
-        // drifting apart. Deliberately fixed, not randomised, so it reads
-        // the same clear way every time. The glow trail chasing it is a
-        // separate prop (_eqMakeProps/_eqStepProps).
+        // Donut weapons: the WHOLE thing whips around the landing point --
+        // fast, multiple directions, not one converging swing -- and settles
+        // straight into the hand. Every piece keeps its fixed offset from
+        // the gun's own centre and gets the exact same orbit and the exact
+        // same tumble, so it moves as one rigid object, never as separate
+        // parts drifting apart. Deliberately fixed, not randomised, so it
+        // reads the same clear way every time. The glow trail chasing it is
+        // a separate prop (_eqMakeProps/_eqStepProps).
         //
         // Axis history, all checked by tracking a world-space point through
         // the animation: _EQ_Z (the blade's own hole/depth axis) barely
@@ -22004,25 +21985,23 @@ function _equipStep(e, t) {
         // sweeps all three axes at once -- an actual tumble, not flat in
         // any single plane.
         const arrive = _eqEase(_eqClamp(t / 0.78));
-        const sway = _eqCometSway(t) * (1 - arrive);
-        const flyCtr = e.ctr.clone(); flyCtr.x += sway; flyCtr.z += _eqCometDepthPush(t);
+        const off = _eqOrbitOffset(t);
+        const flyCtr = e.ctr.clone(); flyCtr.x += off.x; flyCtr.y += off.y; flyCtr.z += off.z;
         const q = new THREE.Quaternion().setFromAxisAngle(_EQ_DIAG, (1 - arrive) * Math.PI * 2 * 1.75);
         c.position.copy(h.p).sub(e.ctr).applyQuaternion(q).add(flyCtr);
         c.quaternion.copy(q).multiply(h.q);
         c.scale.copy(h.s);
         break; }
       case 'twirl': {
-        // The Glazer: thrown in from off to the side, spinning hard about
-        // the trigger guard the whole way across, and caught with a dead
-        // stop right in the grip. Used to spin in place at its landing
-        // spot with no travel at all -- nothing to actually watch fly
-        // across the screen. The trail chasing the muzzle round its own
-        // circle is a separate prop (_eqMakeProps/_eqStepProps), since it
-        // traces an arc, not a straight line — it uses the same
-        // _eqTwirlFlyOffset() so it follows the gun instead of staying
+        // The Glazer: whipping around the landing point, spinning hard
+        // about the trigger guard the whole time, and caught with a dead
+        // stop right in the grip. The trail chasing the muzzle round its
+        // own circle is a separate prop (_eqMakeProps/_eqStepProps), since
+        // it traces an arc, not a straight line — it uses the same
+        // _eqOrbitOffset() so it follows the gun instead of staying
         // anchored at the old fixed landing spot.
         const q = _eqTwirlQuat(t);
-        const off = _eqTwirlFlyOffset(t);
+        const off = _eqOrbitOffset(t);
         const flyCtr = e.ctr.clone(); flyCtr.x += off.x; flyCtr.y += off.y; flyCtr.z += off.z;
         c.position.copy(h.p).sub(e.ctr).applyQuaternion(q).add(flyCtr);
         c.quaternion.copy(q).multiply(h.q);
