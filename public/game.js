@@ -22335,7 +22335,10 @@ function _eqStepProps(e, t) {
 // fifth of a second; an M134 takes the better part of one. Measuring the model
 // instead was tried and is wrong: bounding length makes a sniper the heaviest
 // thing in the game, and bounding volume makes it the crossbow.
-const DRAW_MS_MIN = 200, DRAW_MS_MAX = 900, DRAW_WEIGHT_MAX = 0.55;
+// Three times quicker than the first pass. 0.2-0.9s sounds right written down
+// and is far too slow in the hand: you switch weapons to shoot something, and
+// anything you can still see moving when you want to fire reads as lag.
+const DRAW_MS_MIN = 67, DRAW_MS_MAX = 300, DRAW_WEIGHT_MAX = 0.55;
 function drawMsFor(item) {
   let w = 0.15;
   try { w = (item && item.weight != null) ? item.weight : getDefaultWeaponWeight(item); } catch (e) {}
@@ -22446,7 +22449,7 @@ function _beginEquip(model, spec, melee) {
   let dur = spec.equipMs || 900;
   if (type === 'draw' && !melee) {
     const L = box.max.z - box.min.z;
-    dur = Math.max(dur, Math.round(200 + _eqClamp((L - 0.18) / 0.67) * 400));
+    dur = Math.max(dur, Math.round(67 + _eqClamp((L - 0.18) / 0.67) * 133));
   }
   _equip = { model, melee, type, t0: performance.now(), dur,
              ps, ctr, ring, glow, sfx: spec.equipSfx || null, box, temp,
