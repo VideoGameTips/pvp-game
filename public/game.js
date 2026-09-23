@@ -107,6 +107,15 @@ const WEAPONS = [
     ability: { name: 'Triple Burst', cd: 9000, desc: 'Fire 3 rapid bursts instantly', type: 'fanfire', count: 9, delay: 40, noADS: true },
   },
   {
+    id: 'm4a1_arena', name: 'M4A1', type: 'Arena AR', slot: 'primary',
+    mag: 250, reserve: 250, damage: 50, fireRate: 82, reloadTime: 1900,
+    headshotMult: 1,
+    modeOnly: true,
+    auto: true, pellets: 1, spread: 0.003, adsZoom: 44, bulletSpeed: 150, noReload: false,
+    bulletColor: 0xffe0aa, bulletSize: 0.055, falloffLift: 0.22,
+    recoil: { up: 0.004, side: 0.002, climb: 0.065, max: 1.8, recover: 9, adsMult: 0.58 },
+  },
+  {
     id: 'lever', name: 'Lever Rifle', type: 'Marksman', slot: 'primary',
     mag: 8, reserve: 40, damage: 93, fireRate: 520, reloadTime: 2300,
     auto: false, pellets: 1, spread: 0.002, adsZoom: 32, bulletSpeed: 184, noReload: false,
@@ -1228,6 +1237,8 @@ const GAME_MODE_CONFIGS = {
   // Race: respawn, first to killGoal wins or most kills when timer ends
   '5v5':   { type: 'race', allies: 4, enemies: 5,  killGoal: 100, timeLimit: 120 },
   '10v10': { type: 'race', allies: 9, enemies: 10, killGoal: 100, timeLimit: 180 },
+  'm4_tower': { type: 'race', allies: 4, enemies: 5, killGoal: 99, timeLimit: 300,
+    fixedKit: 'm4_tower', forcedMap: 'm4_tower', playerHp: 100, botHp: 100, autoRespawn: true },
   // FFA: respawn, most kills when timer ends
   'ffa5':  { type: 'ffa',  allies: 0, enemies: 5,  timeLimit: 300 },
   'ffa15': { type: 'ffa',  allies: 0, enemies: 15, timeLimit: 300 },
@@ -1485,7 +1496,7 @@ function adminPassMsLeft() {
   return Math.max(0, (currentUser.adminPassExpiresAt || 0) - Date.now());
 }
 
-const PRIMARY_WEAPON_IDS = WEAPONS.filter(w => w.slot === 'primary' && !w.ddayOnly).map(w => w.id);
+const PRIMARY_WEAPON_IDS = WEAPONS.filter(w => w.slot === 'primary' && !w.ddayOnly && !w.modeOnly).map(w => w.id);
 function randomPrimaryId() { return PRIMARY_WEAPON_IDS[Math.floor(Math.random() * PRIMARY_WEAPON_IDS.length)]; }
 
 let match = null; // active match state (see initMatch)
@@ -3722,6 +3733,13 @@ function playObjectSfx(ctx, out, name, t, v) {
     case 'brush':    playSweptNoise(ctx, t, 0.16, out, v * 0.22, 'bandpass', 3800, 1600, 1.4); break;
     case 'clink':    playTone(ctx, t, 0.16, out, 2600, 2590, v * 0.20, 'sine');
       playTone(ctx, t, 0.10, out, 2600 * 2.7, 2600 * 2.7, v * 0.06, 'sine'); break;
+    case 'cling': {  // a hard metal-on-metal strike that rings: a piece slamming into the core
+      const f = 1500 + Math.random() * 1500;      // a different pitch every hit, so a cascade sounds like real metal
+      playFilteredNoise(ctx, t, 0.012, out, v * 0.55, 'highpass', 3200, 0.6, 0.0002, 1.6);   // the strike
+      metalClack(ctx, t, out, v * 0.45, f * 0.6, 0.030);                                     // the body knock
+      // inharmonic partials: it rings like struck metal rather than a sine ping
+      [1, 2.76, 5.4, 8.93].forEach((m, i) => playTone(ctx, t, 0.30 - i * 0.05, out, f * m, f * m * 0.998, v * (0.20 / (1 + i * 0.9)), 'sine'));
+      break; }
     case 'plop':     playTone(ctx, t, 0.07, out, 520, 180, v * 0.40, 'sine'); break;
     case 'bloop':    playTone(ctx, t, 0.08, out, 300, 900, v * 0.35, 'sine'); break;
     case 'glug':
@@ -4513,71 +4531,91 @@ function activateMap(name) {
 }
 
 function buildBlankMap() {
+  const SIZE = 140;
+  const HALF = SIZE / 2;
   const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(100, 100),
-    new THREE.MeshLambertMaterial({ color: 0x7a9e5f })
+    new THREE.PlaneGeometry(SIZE, SIZE),
+    new THREE.MeshLambertMaterial({ color: 0x667d58 })
   );
   ground.rotation.x = -Math.PI / 2;
   ground.receiveShadow = true;
   blankMapGroup.add(ground);
 
-  const grid = new THREE.GridHelper(100, 50, 0x4a7a3f, 0x4a7a3f);
+  const grid = new THREE.GridHelper(SIZE, 70, 0x3f5f3d, 0x3f5f3d);
   grid.position.y = 0.01;
   blankMapGroup.add(grid);
 
-  const wallMat = new THREE.MeshLambertMaterial({ color: 0x8b7355 });
-  [
-    [100,4,1, 0,2,-50], [100,4,1, 0,2,50],
-    [1,4,100,-50,2,0],  [1,4,100, 50,2,0],
-  ].forEach(([w,h,d,x,y,z]) => {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), wallMat);
-    m.position.set(x,y,z); m.castShadow = true; m.receiveShadow = true;
-    blankMapGroup.add(m);
-    m.updateMatrixWorld(true);
-    blankMapColliders.push(new THREE.Box3().setFromObject(m));
-  });
-
-  const cMat     = new THREE.MeshLambertMaterial({ color: 0xa0522d });
-  const cMatDark = new THREE.MeshLambertMaterial({ color: 0x5c3317 });
-
-  const wallDefs = [
-    [  0, 1.5,  -8,  12, 3, 1.5, 0,            cMat ],
-    [  0, 1.5,   8,  12, 3, 1.5, 0,            cMat ],
-    [ -8, 1.5,   0, 1.5, 3,  12, 0,            cMat ],
-    [  8, 1.5,   0, 1.5, 3,  12, 0,            cMat ],
-    [-16, 1.5,   0,   8, 3,   2, 0,            cMatDark ],
-    [ 16, 1.5,   0,   8, 3,   2, 0,            cMatDark ],
-    [  0, 1.5, -16,   2, 3,   8, 0,            cMatDark ],
-    [  0, 1.5,  16,   2, 3,   8, 0,            cMatDark ],
-    [-22, 1.5, -22,  10, 3,   2, 0,            cMat ],
-    [-22, 1.5,  22,  10, 3,   2, 0,            cMat ],
-    [ 22, 1.5, -22,  10, 3,   2, 0,            cMat ],
-    [ 22, 1.5,  22,  10, 3,   2, 0,            cMat ],
-    [-25, 1.5, -19,   2, 3,   8, 0,            cMat ],
-    [-25, 1.5,  19,   2, 3,   8, 0,            cMat ],
-    [ 25, 1.5, -19,   2, 3,   8, 0,            cMat ],
-    [ 25, 1.5,  19,   2, 3,   8, 0,            cMat ],
-    [-12, 1.5,  12,   6, 3,   2,  Math.PI/4,   cMatDark ],
-    [ 12, 1.5, -12,   6, 3,   2,  Math.PI/4,   cMatDark ],
-    [-12, 1.5, -12,   6, 3,   2, -Math.PI/4,   cMatDark ],
-    [ 12, 1.5,  12,   6, 3,   2, -Math.PI/4,   cMatDark ],
-  ];
-
-  wallDefs.forEach(([x,y,z,w,h,d,rot,mat]) => {
+  const addBlankBox = (x, y, z, w, h, d, mat, rotY = 0, collide = true) => {
     const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
     m.position.set(x, y, z);
-    m.rotation.y = rot;
+    if (rotY) m.rotation.y = rotY;
     m.castShadow = true; m.receiveShadow = true;
     blankMapGroup.add(m);
-    m.updateMatrixWorld(true);
-    blankMapColliders.push(new THREE.Box3().setFromObject(m));
-  });
+    if (collide) { m.updateMatrixWorld(true); blankMapColliders.push(new THREE.Box3().setFromObject(m)); }
+    return m;
+  };
 
-  const markerMat = new THREE.MeshLambertMaterial({ color: 0xdddddd });
-  [[0,0],[10,10],[-10,-10],[10,-10],[-10,10]].forEach(([x,z]) => {
+  const wallMat    = new THREE.MeshLambertMaterial({ color: 0x78624a });
+  const coverMat   = new THREE.MeshLambertMaterial({ color: 0x9a6a42 });
+  const darkMat    = new THREE.MeshLambertMaterial({ color: 0x5a4633 });
+  const floorMat   = new THREE.MeshLambertMaterial({ color: 0x7a765f });
+  const rampMat    = new THREE.MeshLambertMaterial({ color: 0xa88a5c, transparent: true, opacity: 0.82 });
+  const trimMat    = new THREE.MeshLambertMaterial({ color: 0xc9b26e });
+
+  // Taller, wider perimeter. The 3.2 m thickness makes the top wall-walk usable.
+  addBlankBox(0, 3.2, -HALF, SIZE, 6.4, 3.2, wallMat);
+  addBlankBox(0, 3.2,  HALF, SIZE, 6.4, 3.2, wallMat);
+  addBlankBox(-HALF, 3.2, 0, 3.2, 6.4, SIZE, wallMat);
+  addBlankBox( HALF, 3.2, 0, 3.2, 6.4, SIZE, wallMat);
+
+  const makeRampSteps = (x, z, dir, width = 8, length = 28, height = 6.4) => {
+    const steps = 20;
+    const stepLen = length / steps;
+    for (let i = 1; i <= steps; i++) {
+      const h = height * i / steps;
+      const cx = x + dir.x * (i - 0.5) * stepLen;
+      const cz = z + dir.z * (i - 0.5) * stepLen;
+      const w = dir.z ? width : stepLen;
+      const d = dir.x ? width : stepLen;
+      addBlankBox(cx, h / 2, cz, w, h, d, floorMat);
+    }
+    const face = addBlankBox(x + dir.x * length / 2, height / 2, z + dir.z * length / 2,
+      dir.z ? width + 0.2 : length, 0.18, dir.x ? width + 0.2 : length, rampMat, 0, false);
+    face.rotation.x = dir.z ? Math.atan2(height, length) * -Math.sign(dir.z) : 0;
+    face.rotation.z = dir.x ? Math.atan2(height, length) * Math.sign(dir.x) : 0;
+  };
+
+  // Four predictable routes onto the wall-walks. They are wide enough to fight on,
+  // not decorative ladders.
+  makeRampSteps(-36, -HALF + 4, { x: 0, z: 1 });
+  makeRampSteps( 36,  HALF - 4, { x: 0, z: -1 });
+  makeRampSteps(-HALF + 4, 36, { x: 1, z: 0 });
+  makeRampSteps( HALF - 4,-36, { x: -1, z: 0 });
+
+  // Mid is open enough for aim fights, but not a flat death field. The cover is
+  // staggered so every lane has a counter-lane instead of one dominant headglitch.
+  [
+    [  0, 0, 12, 1.8, 0], [  0, 18, 18, 2.0, 0], [  0,-18, 18, 2.0, 0],
+    [-22, 0, 3, 18, 0],   [ 22,  0, 3, 18, 0],
+    [-34,-18, 14, 2.2, 0], [34,18,14,2.2,0],
+    [-34, 18, 14, 2.2, 0], [34,-18,14,2.2,0],
+    [-14,-34, 3, 14, 0],   [14,34,3,14,0],
+    [-14, 34, 3, 14, 0],   [14,-34,3,14,0],
+  ].forEach(([x, z, w, d, rot]) => addBlankBox(x, 1.15, z, w, 2.3, d, coverMat, rot));
+
+  // Low bridge/deck pieces give safe rotation paths across middle without
+  // creating maze corners.
+  addBlankBox(-28, 0.75, 0, 12, 1.5, 5, darkMat);
+  addBlankBox( 28, 0.75, 0, 12, 1.5, 5, darkMat);
+  addBlankBox(0, 0.18, 0, 14, 0.16, 14, trimMat, 0, false);
+
+  const markerMat = new THREE.MeshLambertMaterial({ color: 0xd8d8d8 });
+  [[0,0],[22,22],[-22,-22],[22,-22],[-22,22],[0,42],[0,-42]].forEach(([x,z]) => {
     const m = new THREE.Mesh(new THREE.CylinderGeometry(1.2,1.2,0.05,16), markerMat);
     m.position.set(x,0.03,z); blankMapGroup.add(m);
   });
+
+  MAP_GROUPS.blank._skyColor = 0xa5b6c4;
 }
 
 // ── Battlefield Map ──────────────────────────────────────────────────────────
@@ -4849,6 +4887,93 @@ function addOuterWalls(mapName, color) {
     addMapBox(mapName, x, y, z, w, h, d, color);
   });
 }
+
+function addLowPolyArenaCover(mapName, color = 0x777064) {
+  const group = MAP_GROUPS[mapName];
+  if (!group || group._arenaCoverAdded) return;
+  group._arenaCoverAdded = true;
+  const matA = color;
+  const matB = Math.max(0, color - 0x181818);
+  [
+    [-18, -10, 8, 2.2, 2.4,  0.15],
+    [ 18,  10, 8, 2.2, 2.4, -0.15],
+    [-10,  20, 2.4, 2.2, 8, 0],
+    [ 10, -20, 2.4, 2.2, 8, 0],
+  ].forEach(([x, z, w, h, d, rot], i) => {
+    addMapBox(mapName, x, h / 2, z, w, h, d, i % 2 ? matA : matB, rot);
+  });
+}
+
+function addLowPolyArenaWalls(mapName, color = 0x3a3a34) {
+  const group = MAP_GROUPS[mapName];
+  if (!group || group._arenaWallsAdded) return;
+  group._arenaWallsAdded = true;
+  addOuterWalls(mapName, color);
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// M4 TOWER — tight two-story kill-race arena. Corners are deliberately built
+// as stacked ledges/stairs so players can scramble up and trade vertical routes.
+// ──────────────────────────────────────────────────────────────────────────
+registerMap('m4_tower');
+function buildM4TowerMap() {
+  const m = 'm4_tower';
+  addMapGround(m, 0x51585c, 0x3c4246);
+  addOuterWalls(m, 0x30343a);
+  const deck = 0x747b80, wall = 0x454a50, trim = 0xa98d55, cover = 0x5b635f;
+  // Low roof makes the whole arena feel like a dark indoor CQB tower instead
+  // of an outdoor platform map. It is high enough for the upper floor fights.
+  addMapBox(m, 0, 8.35, 0, 100, 0.7, 100, 0x111316);
+  addMapBox(m, 0, 7.85, 0, 88, 0.08, 88, 0x070809, 0, 0.78);
+  [[-38,-38], [38,-38], [-38,38], [38,38], [0,-44], [0,44], [-44,0], [44,0]].forEach(([x,z]) => {
+    addMapBox(m, x, 4.1, z, 2.2, 8.2, 2.2, 0x25282d);
+  });
+
+  // Upper floor: four decks around a center atrium, so downstairs can shoot up
+  // and upstairs has flank routes without one perfect camping perch.
+  [[0,-30,34,12], [0,30,34,12], [-30,0,12,34], [30,0,12,34]].forEach(([x,z,w,d]) => {
+    addMapBox(m, x, 4.15, z, w, 0.35, d, deck);
+  });
+  [[0,-30,30,0.5], [0,30,30,0.5], [-30,0,0.5,30], [30,0,0.5,30]].forEach(([x,z,w,d]) => {
+    addMapBox(m, x, 5.0, z, w, 1.7, d, wall);
+  });
+
+  // Four climb/stair corners. Step height stays small enough for movement code
+  // to walk up, but the tight turns make it feel like corner climbing.
+  const makeCornerClimb = (sx, sz) => {
+    const dirX = sx < 0 ? 1 : -1;
+    const dirZ = sz < 0 ? 1 : -1;
+    for (let i = 0; i < 12; i++) {
+      const h = 0.38 + i * 0.32;
+      const x = sx + dirX * (1.4 + (i % 6) * 1.25);
+      const z = sz + dirZ * (1.4 + Math.floor(i / 6) * 4.2);
+      addMapBox(m, x, h / 2, z, 3.2, h, 2.4, trim);
+    }
+    addMapBox(m, sx + dirX * 4.8, 4.25, sz + dirZ * 7.5, 8, 0.35, 5, deck);
+  };
+  [[-43,-43], [43,-43], [-43,43], [43,43]].forEach(([x,z]) => makeCornerClimb(x,z));
+
+  // Lower-floor lane cover.
+  [
+    [0, 0, 10, 2.1, 2.2, 0],
+    [-18, 0, 2.2, 2.0, 10, 0],
+    [18, 0, 2.2, 2.0, 10, 0],
+    [0, -18, 12, 1.8, 2.2, 0],
+    [0, 18, 12, 1.8, 2.2, 0],
+    [-16, -16, 7, 1.8, 2.2, Math.PI / 4],
+    [16, 16, 7, 1.8, 2.2, Math.PI / 4],
+    [-16, 16, 7, 1.8, 2.2, -Math.PI / 4],
+    [16, -16, 7, 1.8, 2.2, -Math.PI / 4],
+  ].forEach(([x,z,w,h,d,rot]) => addMapBox(m, x, h / 2, z, w, h, d, cover, rot));
+
+  // Upper-floor cover and sightline breaks.
+  [[-30,-30], [30,-30], [-30,30], [30,30], [0,-30], [0,30], [-30,0], [30,0]].forEach(([x,z], i) => {
+    addMapBox(m, x, 5.0, z, i % 2 ? 7 : 2.4, 1.7, i % 2 ? 2.4 : 7, cover);
+  });
+  addMapBox(m, 0, 0.06, 0, 13, 0.04, 13, 0x24282b, 0, 0.9);
+  MAP_GROUPS[m]._skyColor = 0x070809;
+}
+buildM4TowerMap();
 
 const ADMIN_CUSTOM_MAP_PREFIX = 'admin_map_';
 const ADMIN_CUSTOM_MAP_STORE = 'pvpArena.adminCustomMaps.v1';
@@ -6853,6 +6978,55 @@ buildRangeMap();
 buildLobby13Map();
 loadAdminCustomMaps();
 
+// Keep every map in the same readable, low-poly arena language. Individual
+// builders keep their theme; this pass fixes the common problems: missing
+// visible boundaries, over-round props, and open midfields with no fair rotate.
+const LOW_POLY_BOUNDARY_MAPS = [
+  'carrier', 'overgrowth', 'orbital_station', 'foundry', 'carnival',
+  'biosphere', 'lockdown', 'studio', 'temple', 'holiday', 'labyrinth',
+  'arena', 'opera', 'doomsday', 'dreamscape',
+];
+const LOW_POLY_COVER_COLORS = {
+  urban: 0x6a6258, warehouse: 0x7a5a38, forest: 0x536b34, vietnam: 0x4a5b2d,
+  volcano: 0x2a1a12, cyber: 0x243052, desert: 0x9a7652, tundra: 0x9fb4c4,
+  space: 0x3a4860, airport: 0xb4b7ba, trenches: 0x7a623a, chernobyl: 0x596452,
+  refinery: 0x4f493e, skydock: 0x4e6678, sewer: 0x40493c, gravity_lab: 0x3e4568,
+  glassworks: 0xb8c7cc, carrier: 0x5f676f, overgrowth: 0x56634b,
+  orbital_station: 0x8090a0, foundry: 0x5e5040, carnival: 0x80506a,
+  biosphere: 0x5f7458, lockdown: 0x5b5b54, studio: 0x665846, temple: 0x8a7a54,
+  holiday: 0xb9c5d0, labyrinth: 0x555555, arena: 0x4e6b4e, opera: 0x6b4450,
+  doomsday: 0x5a4a3a, dreamscape: 0x724f86, train: 0x666a6e,
+  pearl_harbor: 0x8a6a3a, titanic: 0xbfa36f, supermarket: 0x94a2ad,
+  pyongyang: 0x7c7c74, traffic_cone_republic: 0xc0b8a8, flying_moai: 0x7d756a,
+};
+function applyLowPolyMapPlayabilityPass() {
+  LOW_POLY_BOUNDARY_MAPS.forEach(name => addLowPolyArenaWalls(name, 0x343434));
+  Object.keys(MAP_GROUPS).forEach(name => {
+    if (name === 'blank' || name === 'range' || name === 'battlefield' || name === 'lobby13' || name === 'br_arena') return;
+    if (name.startsWith(ADMIN_CUSTOM_MAP_PREFIX)) return;
+    addLowPolyArenaCover(name, LOW_POLY_COVER_COLORS[name] || 0x6f6a60);
+  });
+  Object.values(MAP_GROUPS).forEach(group => {
+    group.traverse(o => {
+      if (!o.isMesh) return;
+      if (o.geometry) {
+        if (o.geometry.index) o.geometry = o.geometry.toNonIndexed();
+        if (o.geometry.attributes?.normal) o.geometry.deleteAttribute('normal');
+        o.geometry.computeVertexNormals();
+      }
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      mats.forEach(mat => {
+        if (!mat || mat.isSpriteMaterial) return;
+        if ('flatShading' in mat) {
+          mat.flatShading = true;
+          mat.needsUpdate = true;
+        }
+      });
+    });
+  });
+}
+applyLowPolyMapPlayabilityPass();
+
 // ══════════════════════════════════════════════════════════════════════════
 // 🏚️ MAP SURFACE PASS — reflective, and not perfectly clean
 // Map geometry was MeshLambertMaterial in flat single colours: no specular
@@ -6903,6 +7077,7 @@ function weatherMapGroup(group) {
         shininess: isGround ? 26 : 12,
         specular: isGround ? 0x55585c : 0x2e3033,
         vertexColors: true,
+        flatShading: true,
         side: m.side,
       });
       _mapMatCache.set(key, weathered);
@@ -11465,6 +11640,216 @@ function buildPartyPopper() {
   g.position.set(0.12, -0.1, -0.25); return g;
 }
 
+// ── Everyday-object model skins, batch 3 (no entrance animation) ────────────
+// Small helpers so ten builders don't each re-declare the same three things.
+function _skM(c, sh = 90, sp = 0xffffff) { return new THREE.MeshPhongMaterial({ color: c, shininess: sh, specular: sp }); }
+function _skGlass(c) { return new THREE.MeshPhongMaterial({ color: c, shininess: 200, specular: 0xffffff, transparent: true, opacity: 0.5 }); }
+function _skGrip(g, mat, dy = 0) {
+  gpPlate(g, mat, [
+    [0.030,-0.010+dy],[0.060,-0.028+dy],[0.068,-0.130+dy],[0.040,-0.144+dy],[0.012,-0.054+dy],[0.008,-0.014+dy],
+  ], 0.034, 0);
+  gpBox(g, GUN_MATS.bright(), 0.006, 0.014, 0.006, 0, -0.026 + dy, 0.020, 0.22);
+}
+function _skFinish(g, fz, fy, kick) {
+  const flash = makeMuzzleFlash(); flash.position.set(0, fy, fz); g.add(flash);
+  g._flash = flash; g._kickZ = kick; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildWalkieTalkie() {
+  // 📻 Cycler -> walkie-talkie. A slab body, stubby antenna out the front and
+  // the push-to-talk bar down the side.
+  const g = new THREE.Group();
+  const shell = _skM(0x2a2e34, 60, 0x6a7078), grille = _skM(0x14161a, 20, 0x30343a);
+  const orange = _skM(0xe8781c, 110, 0xffc890), rubber = _skM(0x1c1e22, 30, 0x444850);
+  const led = new THREE.MeshBasicMaterial({ color: 0x3aff6a });
+  gpBox(g, shell, 0.046, 0.066, 0.150, 0, 0.012, -0.010);              // body
+  gpBox(g, orange, 0.048, 0.008, 0.150, 0, 0.048, -0.010);             // top band
+  for (let i = 0; i < 5; i++) gpBox(g, grille, 0.048, 0.003, 0.070, 0, 0.034 - i * 0.008, -0.035); // speaker slats
+  gpCyl(g, rubber, 0.006, 0.004, 0.110, 8, 0, 0.040, -0.130);         // antenna
+  gpCyl(g, orange, 0.010, 0.010, 0.014, 10, -0.012, 0.055, 0.030, 0);  // channel knob
+  gpCyl(g, rubber, 0.008, 0.008, 0.012, 10, 0.012, 0.055, 0.030, 0);   // volume knob
+  gpBox(g, rubber, 0.006, 0.036, 0.022, 0.026, 0.012, 0.012);          // push-to-talk
+  gpBox(g, led, 0.006, 0.004, 0.006, 0, 0.053, -0.050);                // status LED
+  gpBox(g, shell, 0.020, 0.050, 0.004, 0, 0.012, 0.068);               // belt clip
+  _skGrip(g, shell, -0.010);
+  return _skFinish(g, -0.198, 0.040, 0.008);
+}
+
+function buildFencingFoil() {
+  // 🤺 Lancer -> fencing foil. A whip-thin blade, a bell guard, a pistol grip
+  // and a pommel, with the body wire trailing behind. The blade rifle finally
+  // admits what it is.
+  const g = new THREE.Group();
+  const steel = _skM(0xd8dee6, 200, 0xffffff), bell = _skM(0xc8ccd2, 180, 0xffffff);
+  const grip = _skM(0x1c1c1e, 30, 0x444444), brass = _skM(0xd8b040, 180, 0xfff0a0);
+  const red = _skM(0xd8302a, 100, 0xffa098);
+  gpCyl(g, steel, 0.0045, 0.0018, 0.300, 8, 0, 0.012, -0.100);         // blade
+  gpCyl(g, red, 0.0035, 0.0035, 0.008, 8, 0, 0.012, -0.254);           // button tip
+  gpCyl(g, bell, 0.010, 0.030, 0.034, 16, 0, 0.012, 0.062);            // bell guard
+  gpCyl(g, bell, 0.031, 0.031, 0.004, 16, 0, 0.012, 0.046);            // guard rim
+  gpCyl(g, grip, 0.009, 0.008, 0.090, 10, 0, 0.012, 0.125);            // grip
+  gpCyl(g, brass, 0.013, 0.013, 0.020, 10, 0, 0.012, 0.180);           // pommel
+  gpCyl(g, _skM(0x2a2c30, 20), 0.0025, 0.0025, 0.080, 6, 0, -0.020, 0.200, 1.0); // body wire
+  _skGrip(g, grip, -0.004);
+  return _skFinish(g, -0.262, 0.012, 0.010);
+}
+
+function buildCordReel() {
+  // 🔌 Arc Torrent -> extension cord reel. Yellow cord on an orange drum, the
+  // outlet block out the front where the current would come out.
+  const g = new THREE.Group();
+  const orange = _skM(0xe86a1c, 90, 0xffc090), dark = _skM(0x1c1e22, 40, 0x444850);
+  const yellow = _skM(0xe8c828, 60, 0xfff0a0), cord = _skM(0x2a2c30, 20, 0x4a4e54);
+  gpCyl(g, orange, 0.056, 0.056, 0.012, 20, 0, 0, -0.036);            // front flange
+  gpCyl(g, orange, 0.056, 0.056, 0.012, 20, 0, 0, 0.008);             // rear flange
+  gpCyl(g, yellow, 0.048, 0.048, 0.032, 20, 0, 0, -0.014);            // wound cord
+  gpCyl(g, dark, 0.020, 0.020, 0.070, 12, 0, 0, -0.014);              // hub
+  gpBox(g, orange, 0.056, 0.046, 0.060, 0, 0, -0.098);                 // outlet block
+  [-0.016, 0, 0.016].forEach(x => gpBox(g, dark, 0.010, 0.016, 0.004, x, 0, -0.129)); // sockets
+  gpBox(g, dark, 0.008, 0.024, 0.008, -0.022, 0.070, -0.050);          // carry handle
+  gpBox(g, dark, 0.008, 0.024, 0.008, 0.022, 0.070, -0.050);
+  gpBox(g, dark, 0.052, 0.008, 0.008, 0, 0.084, -0.050);
+  gpCyl(g, cord, 0.004, 0.004, 0.090, 6, 0, -0.040, 0.070, 1.2);       // trailing cord
+  _skGrip(g, dark, -0.030);
+  return _skFinish(g, -0.142, 0, 0.014);
+}
+
+function buildMailingTube() {
+  // 📮 Mortar Rifle -> cardboard mailing tube. Plastic end caps, a shipping
+  // label with a barcode, and a strip of tape that has seen things.
+  const g = new THREE.Group();
+  const kraft = _skM(0xb8946a, 30, 0xd8c8a8), cap = _skM(0xd8302a, 80, 0xffa098);
+  const label = _skM(0xf4f2ea, 20, 0xffffff), ink = _skM(0x2a2a2a, 20, 0x444444);
+  const tape = _skM(0xc8a468, 60, 0xe8d0a0);
+  gpCyl(g, kraft, 0.036, 0.036, 0.380, 16, 0, 0.014, -0.040);         // the tube
+  gpCyl(g, cap, 0.039, 0.039, 0.020, 16, 0, 0.014, -0.238);           // front cap
+  gpCyl(g, cap, 0.039, 0.039, 0.020, 16, 0, 0.014, 0.158);            // rear cap
+  gpCyl(g, tape, 0.0375, 0.0375, 0.024, 16, 0, 0.014, 0.080);         // tape wrap
+  gpBox(g, label, 0.003, 0.042, 0.090, -0.0365, 0.018, -0.030);        // label
+  for (let i = 0; i < 6; i++) gpBox(g, ink, 0.0035, 0.022, i % 2 ? 0.003 : 0.005, -0.038, 0.010, -0.058 + i * 0.011); // barcode
+  gpBox(g, cap, 0.003, 0.008, 0.070, -0.0365, 0.040, -0.030);          // FRAGILE stripe
+  _skGrip(g, tape, -0.020);
+  return _skFinish(g, -0.252, 0.014, 0.018);
+}
+
+function buildKaleidoscope() {
+  // 🔮 Prism Launcher -> kaleidoscope. A brass tube, an eyepiece at the back
+  // and a cell of loose coloured glass at the front.
+  const g = new THREE.Group();
+  const brass = _skM(0xc89a3c, 150, 0xffe0a0), dark = _skM(0x3a2a1c, 60, 0x8a7050);
+  const gems = [0xff4a6a, 0x4aa8ff, 0x6aff8a, 0xffd23a, 0xc86aff, 0xff8a3a]
+    .map(c => new THREE.MeshPhongMaterial({ color: c, shininess: 200, specular: 0xffffff }));
+  gpCyl(g, brass, 0.024, 0.026, 0.250, 14, 0, 0.014, -0.050);         // tube
+  [-0.150, -0.060, 0.030].forEach(z => gpCyl(g, dark, 0.0275, 0.0275, 0.008, 14, 0, 0.014, z)); // bands
+  gpCyl(g, brass, 0.032, 0.034, 0.030, 14, 0, 0.014, -0.190);         // object cell
+  gpCyl(g, _skGlass(0x88ddff), 0.030, 0.030, 0.022, 14, 0, 0.014, -0.200); // glass
+  for (let i = 0; i < 6; i++) {                                         // the loose glass
+    const a = (i / 6) * Math.PI * 2;
+    gpBox(g, gems[i], 0.008, 0.008, 0.004, Math.cos(a) * 0.017, 0.014 + Math.sin(a) * 0.017, -0.2135, 0, 0, a * 2);
+  }
+  gpCyl(g, dark, 0.022, 0.016, 0.040, 12, 0, 0.014, 0.095);           // eyepiece
+  gpCyl(g, dark, 0.026, 0.026, 0.010, 12, 0, 0.014, 0.120);           // eye cup
+  _skGrip(g, brass, 0);
+  return _skFinish(g, -0.222, 0.014, 0.010);
+}
+
+function buildBoombox() {
+  // 📻 Shockwave Launcher -> boombox. Twin woofers on the side, a cassette
+  // door on top and a handle you would carry it on your shoulder by.
+  const g = new THREE.Group();
+  const body = _skM(0x2a2c30, 50, 0x5a5e66), silver = _skM(0xc0c6ce, 160, 0xffffff);
+  const red = _skM(0xd8302a, 100, 0xffa098), cone = _skM(0x121416, 20, 0x30343a);
+  gpBox(g, body, 0.064, 0.058, 0.190, 0, 0.010, -0.030);               // body
+  [-0.070, 0.005].forEach(z => {
+    gpCyl(g, silver, 0.021, 0.021, 0.004, 16, -0.033, 0.010, z, 0, Math.PI / 2); // woofer ring
+    gpCyl(g, cone, 0.015, 0.015, 0.006, 16, -0.034, 0.010, z, 0, Math.PI / 2);   // cone
+    gpCyl(g, silver, 0.005, 0.005, 0.008, 8, -0.035, 0.010, z, 0, Math.PI / 2);  // dust cap
+  });
+  gpBox(g, cone, 0.032, 0.004, 0.070, 0, 0.040, -0.010);               // cassette door
+  [0xd8302a, 0xe8c828, 0x3ad86a, 0x3a8ad8].forEach((c, i) =>
+    gpBox(g, _skM(c, 80), 0.008, 0.004, 0.010, -0.018 + i * 0.012, 0.040, 0.050)); // buttons
+  gpBox(g, silver, 0.006, 0.026, 0.006, 0, 0.052, -0.090);             // handle posts
+  gpBox(g, silver, 0.006, 0.026, 0.006, 0, 0.052, 0.030);
+  gpBox(g, silver, 0.006, 0.006, 0.130, 0, 0.067, -0.030);
+  gpBox(g, red, 0.060, 0.008, 0.004, 0, 0.030, -0.126);                // front stripe
+  _skGrip(g, body, -0.010);
+  return _skFinish(g, -0.140, 0.010, 0.020);
+}
+
+function buildToaster() {
+  // 🍞 Twin Barrel AR -> toaster. Two slots, two slices of toast, a lever
+  // and a browning dial. Twin barrel, as promised.
+  const g = new THREE.Group();
+  const chrome = _skM(0xd8dce2, 200, 0xffffff), black = _skM(0x1c1e22, 60, 0x5a6068);
+  const toast = _skM(0xe0b070, 20, 0xf0d0a0);
+  gpBox(g, chrome, 0.064, 0.062, 0.180, 0, 0.012, -0.030);             // body
+  [-0.018, 0.018].forEach(x => {
+    gpBox(g, black, 0.014, 0.003, 0.140, x, 0.0435, -0.030);           // slot
+    gpBox(g, toast, 0.011, 0.026, 0.110, x, 0.056, -0.030);            // slice
+  });
+  gpBox(g, black, 0.014, 0.006, 0.020, -0.036, 0.030, -0.010);         // lever
+  gpBox(g, chrome, 0.066, 0.004, 0.182, 0, -0.019, -0.030);            // base rim
+  gpCyl(g, black, 0.010, 0.010, 0.006, 10, 0, 0.012, -0.123);         // browning dial
+  gpCyl(g, black, 0.004, 0.004, 0.100, 6, 0, -0.010, 0.080, 1.3);      // cord
+  _skGrip(g, chrome, -0.010);
+  return _skFinish(g, -0.136, 0.012, 0.012);
+}
+
+function buildVacuumCleaner() {
+  // 🧹 Storm Cannon -> handheld vacuum. Red body, a see-through dust cup with
+  // last week in it and a crevice tool where the muzzle goes.
+  const g = new THREE.Group();
+  const red = _skM(0xd8302a, 100, 0xffa098), grey = _skM(0x8a9096, 60, 0xd0d4d8);
+  const black = _skM(0x1c1e22, 40, 0x444850), dust = _skM(0x8a7a5a, 10, 0x9a8a6a);
+  gpCyl(g, red, 0.040, 0.040, 0.170, 14, 0, 0.014, -0.010);           // motor body
+  gpCyl(g, _skGlass(0xcfe8f4), 0.038, 0.038, 0.070, 14, 0, 0.014, -0.125); // dust cup
+  gpCyl(g, dust, 0.030, 0.030, 0.050, 10, 0, 0.014, -0.125);          // what's in it
+  gpCyl(g, grey, 0.042, 0.042, 0.010, 14, 0, 0.014, -0.092);          // filter ring
+  gpCyl(g, black, 0.018, 0.010, 0.070, 10, 0, 0.014, -0.195);         // crevice tool
+  gpBox(g, black, 0.010, 0.006, 0.024, 0, 0.056, 0.010);               // power switch
+  for (let i = 0; i < 4; i++) gpBox(g, black, 0.030, 0.003, 0.004, 0, 0.000 + i * 0.008, 0.078); // exhaust vents
+  _skGrip(g, red, 0);
+  return _skFinish(g, -0.234, 0.014, 0.014);
+}
+
+function buildHolePunch() {
+  // 📎 Sticker Blaster -> two-hole punch. Steel pins at the front, a lever
+  // that pivots down, and a reservoir of confetti for the holes.
+  const g = new THREE.Group();
+  const blue = _skM(0x2a5ab8, 110, 0x9ac0ff), steel = _skM(0xc8ced6, 180, 0xffffff);
+  const black = _skM(0x1c1e22, 40, 0x444850);
+  const bits = [0xff4a6a, 0xffd23a, 0x4aa8ff, 0x6aff8a, 0xffffff].map(c => _skM(c, 30));
+  gpBox(g, black, 0.050, 0.014, 0.170, 0, 0.000, -0.010);              // base plate
+  gpBox(g, blue, 0.046, 0.016, 0.150, 0, 0.018, -0.010, -0.03);        // lever arm
+  gpBox(g, blue, 0.046, 0.020, 0.060, 0, 0.024, 0.060, -0.10);         // lever handle
+  [-0.012, 0.012].forEach(x => gpCyl(g, steel, 0.006, 0.006, 0.020, 8, x, 0.014, -0.070, 0)); // punch pins
+  gpBox(g, steel, 0.052, 0.010, 0.006, 0, 0.002, -0.100);              // paper guide
+  gpBox(g, _skGlass(0xdfeaf2), 0.040, 0.020, 0.070, 0, -0.016, 0.040); // confetti reservoir
+  for (let i = 0; i < 8; i++)
+    gpBox(g, bits[i % 5], 0.006, 0.003, 0.006, ((i % 3) - 1) * 0.011, -0.021 + (i % 2) * 0.008, 0.022 + i * 0.008, 0, i, 0);
+  _skGrip(g, blue, -0.010);
+  return _skFinish(g, -0.112, 0.008, 0.010);
+}
+
+function buildBeeSmoker() {
+  // 🐝 Swarm Rifle -> beekeeper's smoker. A tin can with a spout, a leather
+  // bellows behind it to pump the smoke, and a bee-flavoured lack of trust.
+  const g = new THREE.Group();
+  const tin = _skM(0xb8bcc2, 160, 0xffffff), leather = _skM(0x8a4a22, 40, 0xc08050);
+  const dark = _skM(0x2a2622, 30, 0x4a4440), wood = _skM(0xc89a5a, 80, 0xe8d0a8);
+  gpCyl(g, tin, 0.030, 0.032, 0.130, 14, 0, 0.014, -0.030);           // can
+  gpCyl(g, tin, 0.030, 0.010, 0.070, 12, 0, 0.014, -0.130);           // spout cone
+  gpCyl(g, dark, 0.012, 0.012, 0.008, 10, 0, 0.014, -0.169);          // scorched rim
+  gpCyl(g, dark, 0.033, 0.033, 0.008, 14, 0, 0.014, -0.080);          // heat band
+  gpCyl(g, tin, 0.008, 0.008, 0.030, 8, 0, 0.014, 0.045);             // air pipe
+  gpBox(g, wood, 0.050, 0.006, 0.070, 0, 0.006, 0.085);                // bellows top board
+  gpBox(g, wood, 0.050, 0.006, 0.070, 0, -0.030, 0.092, 0.15);         // bellows bottom board
+  gpBox(g, leather, 0.046, 0.026, 0.055, 0, -0.012, 0.088);            // folded leather
+  _skGrip(g, leather, -0.020);
+  return _skFinish(g, -0.182, 0.014, 0.010);
+}
+
 function buildHandMixer() {
   // 🍰 Taser -> hand mixer. Two wire beaters out the front, the speed slider on
   // top, the handle over the body the way a mixer is actually held.
@@ -13993,21 +14378,28 @@ function buildRainbowAK() {
   return g;
 }
 
+// Everything donut is metallic pink -- no brown anywhere. "Metallic" in this
+// game is Phong with a high shininess and a white specular (there is no
+// environment map for a PBR metal to reflect, so a StandardMaterial with
+// metalness would just render dark).
 function _donutMats() {
+  const metal = (color, shininess, emissive, ei) => new THREE.MeshPhongMaterial({
+    color, shininess, specular: 0xffffff, emissive: emissive || 0x000000, emissiveIntensity: ei || 0 });
   return {
-    dough: new THREE.MeshPhongMaterial({ color: 0xc8844a, shininess: 58, specular: 0xffd6a0 }),
-    glaze: new THREE.MeshPhongMaterial({ color: 0xff78bd, shininess: 150, specular: 0xffffff, emissive: 0x2a0612, emissiveIntensity: 0.12 }),
-    cream: new THREE.MeshPhongMaterial({ color: 0xffe7f3, shininess: 130, specular: 0xffffff }),
-    choc: new THREE.MeshPhongMaterial({ color: 0x5a2d18, shininess: 95, specular: 0xa07858 }),
-    steel: GUN_MATS.steel(),
-    dark: GUN_MATS.inner(),
-    grip: GUN_MATS.grip(),
+    dough: metal(0xff9ccf, 190),                  // rose -- the dough, no longer brown
+    glaze: metal(0xff5cae, 230, 0x40092a, 0.20),  // hot pink glaze
+    cream: metal(0xfff1f9, 240),                  // pearl icing
+    deep:  metal(0xc4368a, 200, 0x2c0620, 0.12),  // deep magenta: the shading colour where there used to be chocolate
+    steel: metal(0xffc4e4, 250),                  // pink chrome for barrel / blade / tip
+    dark:  metal(0x6a2456, 170),                  // dark plum for grooves
+    grip:  metal(0xa02a70, 160),                  // magenta grip
   };
 }
 
 function _donutSprinkleMat(i) {
   const colors = [0xff4a7a, 0x66ddff, 0xffee55, 0x7cff77, 0xba7cff, 0xffffff];
-  return new THREE.MeshBasicMaterial({ color: colors[i % colors.length] });
+  const c = colors[i % colors.length];
+  return new THREE.MeshPhongMaterial({ color: c, shininess: 240, specular: 0xffffff, emissive: c, emissiveIntensity: 0.22 });
 }
 
 function _buildDonutRing(radius = 0.038, tube = 0.010, glazeScale = 0.92) {
@@ -14053,9 +14445,9 @@ function _addDonutOrbit(g, radius = 0.075, z = -0.060) {
 function buildDonutRevolver() {
   const g = new THREE.Group();
   const M = _donutMats();
-  gpBox(g, M.choc, 0.034, 0.050, 0.088, 0, 0.018, 0.036);           // chocolate frame
+  gpBox(g, M.deep, 0.034, 0.050, 0.088, 0, 0.018, 0.036);           // magenta frame
   gpBox(g, M.dark, 0.035, 0.006, 0.070, 0, 0.044, 0.038);           // rear sight groove
-  gpPart(g, 'main', () => {
+  const drum = gpPart(g, 'main', () => {
     const ring = _buildDonutRing(0.033, 0.010, 0.94);
     ring.position.set(0, 0.018, -0.030);
     g.add(ring);
@@ -14066,13 +14458,14 @@ function buildDonutRevolver() {
     gpCyl(g, M.cream, 0.0060, 0.0060, 0.052, 10, 0, 0.018, -0.030);
   }, { x: 0, y: 0.018, z: -0.030 });
   g._parts.main._chambers = 6;
+  drum.userData.donutMain = true;   // the donut the equip entrance threads on
   gpCyl(g, M.steel, 0.0105, 0.0105, 0.126, 14, 0, 0.021, -0.126);
   gpCyl(g, M.dark, 0.0060, 0.0060, 0.010, 10, 0, 0.021, -0.188);
-  gpBox(g, M.choc, 0.020, 0.014, 0.118, 0, 0.004, -0.122);          // frosting-smeared underlug
+  gpBox(g, M.deep, 0.020, 0.014, 0.118, 0, 0.004, -0.122);          // frosting-smeared underlug
   gpBox(g, M.cream, 0.016, 0.006, 0.080, 0, 0.036, -0.128);         // vanilla sight rib
   gpBox(g, M.cream, 0.005, 0.012, 0.007, 0, 0.044, -0.180);         // front sight
   gpPlate(g, M.grip, [[0.040,-0.006],[0.070,-0.020],[0.074,-0.096],[0.044,-0.112],[0.020,-0.052],[0.018,-0.012]], 0.038, 0);
-  for (let i = 0; i < 4; i++) gpBox(g, M.choc, 0.040, 0.004, 0.024, 0, -0.030 - i * 0.018, 0.040 + i * 0.006, 0.27);
+  for (let i = 0; i < 4; i++) gpBox(g, M.deep, 0.040, 0.004, 0.024, 0, -0.030 - i * 0.018, 0.040 + i * 0.006, 0.27);
   const guard = new THREE.Mesh(new THREE.TorusGeometry(0.018, 0.0034, 6, 12, Math.PI * 1.05), M.steel);
   guard.rotation.set(0, Math.PI/2, -0.4); guard.position.set(0, -0.024, 0.018); g.add(guard);
   gpBox(g, M.cream, 0.005, 0.014, 0.005, 0, -0.016, 0.018, 0.2);
@@ -14089,8 +14482,9 @@ function buildDonutKatana() {
   const guard = _buildDonutRing(0.036, 0.010, 0.96);
   guard.rotation.z = Math.PI / 2;
   guard.position.set(0, 0.006, 0.050);
+  guard.userData.donutMain = true;   // the donut the equip entrance threads on
   g.add(guard);
-  gpBox(g, M.choc, 0.026, 0.038, 0.135, 0, -0.055, 0.095, 0.10);    // chocolate grip
+  gpBox(g, M.deep, 0.026, 0.038, 0.135, 0, -0.055, 0.095, 0.10);    // magenta grip
   for (let i = 0; i < 5; i++) gpBox(g, M.cream, 0.028, 0.005, 0.018, 0, -0.022 - i * 0.020, 0.076 + i * 0.010, 0.10);
   gpBox(g, M.cream, 0.022, 0.028, 0.020, 0, -0.130, 0.142, 0.10);   // pommel icing
   gpBox(g, M.steel, 0.018, 0.020, 0.385, 0, 0.036, -0.170, -0.06);  // blade core
@@ -14100,8 +14494,7 @@ function buildDonutKatana() {
     const s = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.003, 0.004), _donutSprinkleMat(i));
     s.position.set((i % 2 ? 0.006 : -0.006), 0.057, -0.025 - i * 0.023);
     s.rotation.z = (i % 3 - 1) * 0.7;
-    s.userData.eqFx = true;
-    g.add(s);
+    g.add(s);   // an ordinary piece (no eqFx) so it flies in with the blade instead of hanging in mid-air
   }
   const tip = new THREE.Mesh(new THREE.ConeGeometry(0.015, 0.046, 4), M.steel);
   tip.rotation.x = -Math.PI / 2 - 0.06; tip.position.set(0, 0.036, -0.392); g.add(tip);
@@ -16709,6 +17102,7 @@ const weaponModels = [
   buildP90(),  // p90
   buildPaintball(),  // paintball
   buildBurstRifle(),  // burst
+  buildM4A1(),  // m4a1_arena
   buildLeverRifle(),  // lever
   buildVectorSMG(),  // vector
   buildCrossbow(),  // crossbow
@@ -21019,8 +21413,11 @@ function applyTouchScale() {
 function saveGameplaySettings() {
   try { localStorage.setItem('pvp_gameplay_settings', JSON.stringify(GAMEPLAY_SETTINGS)); } catch (e) {}
 }
+function fixedKitModeActive() {
+  return selectedModeConfig?.fixedKit === 'm4_tower' || match?.cfg?.fixedKit === 'm4_tower';
+}
 function hyperrealisticOn() {
-  return !!GAMEPLAY_SETTINGS.hyperrealistic;
+  return fixedKitModeActive() || !!GAMEPLAY_SETTINGS.hyperrealistic;
 }
 function hyperrealismFactor(key = 'all') {
   if (!hyperrealisticOn()) return 1;
@@ -21393,7 +21790,7 @@ document.addEventListener('keydown', e => {
   // 🛋️ F in the lobby: start the duel pad you're on, or challenge the nearest cast
   // member to a 1V1 — BUT the trashcan (weapon swap) always takes priority when near it.
   if (e.code==='KeyF' && inLobby && !nearTrashcan && !e.repeat) { e.preventDefault(); lobbyInteract(); return; }
-  if (e.code==='KeyF' && nearTrashcan && !isDead) { showLoadoutScreen('swap'); }
+  if (e.code==='KeyF' && nearTrashcan && !isDead && !fixedKitModeActive()) { showLoadoutScreen('swap'); }
   // F = enter/exit a mortar (trench map)
   if (e.code==='KeyF' && !nearTrashcan && !isDead && activeMapName === 'trenches' && !e.repeat) {
     e.preventDefault();
@@ -21430,8 +21827,8 @@ document.addEventListener('keydown', e => {
     if (!loadoutReady()) return;
     if (e.code==='KeyQ') cycleActiveSlot();
     if (e.code==='Digit1') activeSlot = 'primary';
-    if (e.code==='Digit2') activeSlot = 'secondary';
-    if (e.code==='Digit3') activeSlot = 'melee';
+    if (e.code==='Digit2' && !fixedKitModeActive()) activeSlot = 'secondary';
+    if (e.code==='Digit3' && !fixedKitModeActive()) activeSlot = 'melee';
     if (e.code==='Digit4') activeSlot = 'support';
     equipActiveSlot();
   }
@@ -21504,54 +21901,85 @@ function _eqBounce(x) {
   return n1 * (x -= 2.625 / d1) * x + 0.984375;
 }
 const _eqClamp = v => Math.max(0, Math.min(1, v));
-// The comet entrance's side-to-side swing (left, then right, one and a
-// half cycles) -- one formula, shared by the motion itself and by its
-// trail, so the trail always traces exactly the path the piece took.
-// The twirl entrance's spin: several fast turns about the trigger guard,
-// easing to a dead stop -- a gunslinger twirl, not a wag. Shared by the
-// motion itself and by its trail, same reason as the comet sway above.
-// Bumped from 2.5 turns to 3 -- "not enough vertical spin energy" -- so it
-// reads as an actual baton-style twirl, not a couple of lazy turns. (Tried
-// 4.5 first; see _eqOrbitOffset for why more turns fights the off-screen fix.)
-// Axis history: _EQ_X sweeps Y/Z only (read as "spinning around Y" to a
-// viewer); _EQ_Y sweeps X/Z only and stays level (read as a flat
-// helicopter-blade sweep, "spinning around Z"). _EQ_DIAG sweeps all three
-// -- see its own comment where it's defined, same fix as the comet case.
-function _eqTwirlQuat(t) {
-  const arrive = _eqEase(_eqClamp(t / 0.78));
-  return new THREE.Quaternion().setFromAxisAngle(_EQ_DIAG, (1 - arrive) * Math.PI * 2 * 3);
-}
-// "Fly around the hand at intense speed, in different directions, not just
-// fly towards it" -- the old comet sway (a single sine wave on X) and twirl
-// fly-in (one straight lateral throw) both just converged on the landing
-// point along one path. This is a real orbit around it instead: two
-// frequencies on X and Y with a non-integer ratio (9 : 6.35), so it's a
-// Lissajous figure, not one flat circle or ellipse -- the path keeps
-// changing direction rather than repeating the same loop. Shared by the
-// motion and by the trail (same reason as everything else in this system
-// shares its formula with its trail), so the trail always traces exactly
-// the path the piece took.
+// The donut entrance ('donutbuild'): two beats, in this order.
+//   1. The plain pieces come screaming in from every direction at once, each
+//      on its own curved path with its own comet trail, ACCELERATING the whole
+//      way so they hit the core at full speed. Every hit rings, kicks the
+//      whole assembly and throws a spark; the weapon hangs tilted down.
+//   2. The weapon tilts up into the ready pose while the donut -- the ring --
+//      is threaded on: it appears out past the muzzle/tip, circles the
+//      weapon's own axis and slides back down it to its seat, trailing glow.
+// Every position below is a pure function of (piece, t), shared by the motion
+// and by its trail, so a trail always traces exactly the path the piece took.
 //
-// z is a depth push-back, same fix and same reason as the earlier
-// _eqCometDepthPush/_eqTwirlFlyOffset it replaces: t=0 here means "the
-// FULL rotation offset, not yet unwound" (see _eqTwirlQuat), so at t=0 a
-// piece already sits wherever that rotation put it, at that piece's own
-// radius from a pivot only ~0.2 units from the camera -- and now there's
-// also a real orbit radius on top of that. Without pushing the whole
-// assembly back in depth while radius is biggest, this is exactly the
-// "some piece ends up 0.03 units from the lens, ndcX past 50" bug from
-// last time, just with a new cause. Verified per-piece with
-// camera.project() across the whole animation before shipping this: none
-// of it happens any more.
-function _eqOrbitOffset(t) {
-  const arrive = _eqEase(_eqClamp(t / 0.78));
-  const k = 1 - arrive;
-  const radius = 0.27 * k;
-  return {
-    x: Math.cos(t * Math.PI * 2 * 9) * radius,
-    y: Math.sin(t * Math.PI * 2 * 6.35) * radius * 0.85,
-    z: -0.9 * k,
-  };
+// Depth matters more than it looks: a piece flung sideways from the weapon's
+// own ~0.2 units in front of the lens is instantly off screen or on top of the
+// near-clip plane (checked per piece with camera.project() on an earlier
+// version of this entrance -- ndcX in the tens). So every piece is thrown from
+// out AHEAD as well as from the side: the same lateral spread is a much
+// smaller angle out there, which is what keeps "from all directions" on screen.
+const _EQ_DONUT = {
+  tiltDown: 0.5,      // radians the weapon hangs tilted down at the start
+  tiltStart: 0.42,    // when it starts tilting up (fraction of the entrance)
+  tiltLen: 0.48,
+  ringPop: 0.28,      // the ring pops into being out past the tip...
+  ringStart: 0.36,    // ...and starts its flight here
+  ringLen: 0.52,
+  coreStart: 0.03,    // the plain pieces start at random times in
+  coreStagger: 0.24,  //   [coreStart, coreStart + coreStagger]...
+  coreLen: 0.24,      //   ...and each takes this long to arrive
+  hit: 2.3,           // ease-IN power: they arrive at full speed, not settling
+  kick: 0.006,        // how hard each hit shoves the assembly
+};
+function _eqDonutTiltQuat(t) {
+  const D = _EQ_DONUT;
+  const k = _eqEase(_eqClamp((t - D.tiltStart) / D.tiltLen));
+  // Negative about X = the muzzle/tip points down; the tilt-up brings it level.
+  return new THREE.Quaternion().setFromAxisAngle(_EQ_X, -D.tiltDown * (1 - k));
+}
+// A piece's resting spot while the weapon is tilted: home swung about the grip.
+function _eqDonutHome(e, h, tiltQ) {
+  return h.p.clone().sub(e.grip).applyQuaternion(tiltQ).add(e.grip);
+}
+// The ring's centre on its way on: out past the tip, circling the weapon's
+// axis (radius shrinking to nothing) and sliding back down it. The offset is
+// turned by the same tilt as the weapon, so it slides along the weapon as it
+// actually points at that moment.
+function _eqDonutRingPos(e, h, t) {
+  const D = _EQ_DONUT;
+  const tiltQ = _eqDonutTiltQuat(t);
+  const r = 1 - _eqEase(_eqClamp((t - D.ringStart) / D.ringLen));
+  const ang = r * Math.PI * 2 * 1.5 + 0.6;
+  const off = new THREE.Vector3(Math.cos(ang) * 0.11 * r, Math.sin(ang) * 0.09 * r, -0.5 * r).applyQuaternion(tiltQ);
+  return _eqDonutHome(e, h, tiltQ).add(off);
+}
+// The whole assembly's recoil: every plain piece that has landed shoves it
+// along the way that piece was travelling, and the shove dies away fast; the
+// ring's seating is one heavier thump back toward the hand.
+function _eqDonutJolt(e, t) {
+  const D = _EQ_DONUT, out = new THREE.Vector3();
+  for (const q of e.ps) {
+    if (q.ring) continue;
+    const since = t - q.land;
+    if (since < 0 || since > 0.25) continue;
+    out.addScaledVector(q.kickV, Math.exp(-since / 0.035));
+  }
+  const rs = t - (D.ringStart + D.ringLen);
+  if (rs >= 0 && rs < 0.25) out.z += 0.014 * Math.exp(-rs / 0.05);
+  // Fully gone by t=1, so the entrance ends on the exact resting pose instead
+  // of leaving a hair of recoil for finishEquip to snap away.
+  return out.multiplyScalar(1 - _eqClamp((t - 0.92) / 0.08));
+}
+// Where a piece is at t, jolt included.
+function _eqDonutPiecePos(e, p, t) {
+  const D = _EQ_DONUT;
+  if (p.ring) return _eqDonutRingPos(e, p.h, t).add(_eqDonutJolt(e, t));
+  const home = _eqDonutHome(e, p.h, _eqDonutTiltQuat(t));
+  const k = _eqClamp((t - p.t0) / D.coreLen);
+  // Curved, not straight: the offset swings round in the screen plane as it
+  // closes, and shrinks on an ease-IN curve so speed peaks at the impact.
+  const off = p.fly.clone().applyAxisAngle(_EQ_Z, (1 - k) * 0.9 * p.swirl).multiplyScalar(1 - Math.pow(k, D.hit));
+  return home.add(off).add(_eqDonutJolt(e, t));
 }
 
 // The pieces are the model's own top-level parts -- never the hands (they wait
@@ -21584,16 +22012,7 @@ function playEquipSound(name) {
   } catch (e) {}
 }
 
-var _EQ_X = new THREE.Vector3(1, 0, 0), _EQ_Y = new THREE.Vector3(0, 1, 0), _EQ_Z = new THREE.Vector3(0, 0, 1);
-// The donut equip pieces sit offset from their pivot almost entirely along Z
-// (a blade/barrel extends forward, not sideways), so a pure-X spin sweeps
-// only Y/Z (reads as "rotating around Y" to a viewer) and a pure-Y spin
-// sweeps only X/Z and stays level the whole time (reads as a flat
-// helicopter-blade sweep). Neither is the tumbling 3D spin a thrown/twirled
-// weapon actually has. A diagonal blend of X and Y sweeps all three axes at
-// once (verified: X/Y/Z ranges of 0.29/0.29/0.41 on the katana, vs. 0/0.29
-// for a pure axis) — an actual tumble, not flat in any single plane.
-var _EQ_DIAG = new THREE.Vector3(1, 1, 0).normalize();
+var _EQ_X = new THREE.Vector3(1, 0, 0), _EQ_Z = new THREE.Vector3(0, 0, 1);
 function _eqOut(t) { return 1 - Math.pow(1 - t, 3); }
 function _eqHomeOf(c) {
   if (!c.userData.eqHome) c.userData.eqHome = {
@@ -21746,26 +22165,19 @@ function _eqMakeProps(model, type, ctr, box, targets) {
     ringM.position.set(ctr.x, box.min.y, ctr.z); ringM.visible = false;
     model.add(ringM); out.push(ringM);
   }
-  if (type === 'comet') {                      // the glow trail chasing it in
+  if (type === 'donutbuild') {                 // a comet trail behind every piece
     const glow = (c, o) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o,
       blending: THREE.AdditiveBlending, depthWrite: false });
-    const outer = new THREE.Mesh(new THREE.BoxGeometry(0.020, 0.020, 1), glow(0xff9bd0, 0.75));
-    const inner = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.008, 1), glow(0xffffff, 0.95));
-    outer.userData.comet = { look: 0.10, op: 0.75 };
-    inner.userData.comet = { look: 0.06, op: 0.95 };
-    model.add(outer); model.add(inner); out.push(outer); out.push(inner);
-  }
-  if (type === 'twirl') {                       // the glow trail chasing the spinning muzzle
-    const glow = (c, o) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o,
-      blending: THREE.AdditiveBlending, depthWrite: false });
-    const outer = new THREE.Mesh(new THREE.BoxGeometry(0.020, 0.020, 1), glow(0xff9bd0, 0.75));
-    const inner = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.008, 1), glow(0xffffff, 0.95));
-    // The muzzle's own tip, relative to centre -- what actually traces the
-    // circle as the gun spins about it.
-    const tip = new THREE.Vector3(ctr.x, ctr.y, box.min.z).sub(ctr);
-    outer.userData.twirl = { tip, look: 0.09, op: 0.75 };
-    inner.userData.twirl = { tip, look: 0.05, op: 0.95 };
-    model.add(outer); model.add(inner); out.push(outer); out.push(inner);
+    const outerM = glow(0xff8fcf, 0.85), innerM = glow(0xffffff, 0.95);
+    const outerG = new THREE.BoxGeometry(0.014, 0.014, 1), innerG = new THREE.BoxGeometry(0.0055, 0.0055, 1);
+    (targets || []).forEach((_, i) => {
+      // The ring's trail is longer -- it's the slow, showy one; the plain
+      // pieces' trails are short and hard, since they're moving far faster.
+      const look = (targets[i].userData && targets[i].userData.donutMain) ? 0.075 : 0.05;
+      const outer = new THREE.Mesh(outerG, outerM), inner = new THREE.Mesh(innerG, innerM);
+      outer.userData.dtrail = { i, look }; inner.userData.dtrail = { i, look };
+      model.add(outer); model.add(inner); out.push(outer); out.push(inner);
+    });
   }
   return out;
 }
@@ -21880,38 +22292,28 @@ function _eqStepProps(e, t) {
         if (m.visible) _eqSegment(m, C.pts[i], C.pts[i].clone().lerp(C.pts[i + 1], k));
       });
     }
-    if (o.userData.comet) {                      // the glow trail chasing the comet in
-      // A real velocity trail, not a fixed length: sample the same orbit a
-      // beat earlier, so the streak is long while it's whipping around fast
-      // and pinches to nothing wherever the path briefly slows.
-      const look = o.userData.comet.look;
-      const tPrev = Math.max(0, t - look);
-      const offHead = _eqOrbitOffset(t), offTail = _eqOrbitOffset(tPrev);
-      const head = e.ctr.clone(); head.x += offHead.x; head.y += offHead.y; head.z += offHead.z;
-      const tail = e.ctr.clone(); tail.x += offTail.x; tail.y += offTail.y; tail.z += offTail.z;
-      _eqSegment(o, tail, head);
-      const fade = Math.min(1, head.distanceTo(tail) * 10);
-      o.visible = fade > 0.01;
-      o.material.opacity = o.userData.comet.op * fade;
-    }
-    if (o.userData.twirl) {                      // the glow trail chasing the spinning muzzle
-      // Same idea as the comet's trail, but the muzzle is moving on a
-      // circle, not a line: sample the tip's own rotated position a beat
-      // earlier and draw the chord between the two. Also has to carry the
-      // same orbit travel as the gun itself (_eqOrbitOffset), sampled at
-      // the same two times, or the trail stays parked at the old fixed
-      // landing spot while the gun flies away from it.
-      const T = o.userData.twirl;
-      const tEarlier = Math.max(0, t - T.look);
-      const offHead = _eqOrbitOffset(t), offTail = _eqOrbitOffset(tEarlier);
-      const head = e.ctr.clone().add(T.tip.clone().applyQuaternion(_eqTwirlQuat(t)));
-      head.x += offHead.x; head.y += offHead.y; head.z += offHead.z;
-      const tail = e.ctr.clone().add(T.tip.clone().applyQuaternion(_eqTwirlQuat(tEarlier)));
-      tail.x += offTail.x; tail.y += offTail.y; tail.z += offTail.z;
-      _eqSegment(o, tail, head);
-      const fade = Math.min(1, head.distanceTo(tail) * 10);
-      o.visible = fade > 0.01;
-      o.material.opacity = T.op * fade;
+    if (o.userData.dtrail) {                     // a comet trail behind every piece
+      // A real velocity trail: where the piece is now, back to where it was a
+      // beat earlier -- long while it's screaming in, and pinching to nothing
+      // as it stops. Where a plain piece lands the trail becomes a short,
+      // fat, bright spark thrown back out along the way it came, then dies.
+      const T = o.userData.dtrail, p = e.ps[T.i];
+      if (!p) { o.visible = false; }
+      else {
+        const head = _eqDonutPiecePos(e, p, t);
+        const tail = _eqDonutPiecePos(e, p, Math.max(0, t - T.look));
+        let thick = 1, len = head.distanceTo(tail);
+        if (!p.ring && t >= p.land) {
+          const since = t - p.land, flare = since < 0.12 ? Math.exp(-since / 0.03) : 0;
+          tail.copy(head).addScaledVector(p.fly.clone().normalize(), 0.05 * flare);
+          len = 0.05 * flare; thick = 1 + 1.8 * flare;
+        }
+        if (p.ring && t < _EQ_DONUT.ringPop) len = 0;
+        _eqSegment(o, tail, head);
+        const w = Math.min(1, len * 12) * thick;
+        o.scale.x = o.scale.y = w;
+        o.visible = w > 0.03;
+      }
     }
     if (o.userData.scan) {
       const k = _eqClamp((t - 0.1) / 0.75);
@@ -21993,8 +22395,23 @@ function _beginEquip(model, spec, melee) {
       dir: new THREE.Vector3(out.x + R() * 0.6, out.y + R() * 0.6, out.z + R() * 0.6).normalize(),
       spin: new THREE.Vector3(R(), R(), R()).normalize(),
       rq: new THREE.Quaternion().setFromEuler(new THREE.Euler(R() * 2.5, R() * 2.5, R() * 2.5)),
-      phase: Math.random() * 6.283, delay: Math.random() };
+      phase: Math.random() * 6.283, delay: Math.random(), ring: !!c.userData.donutMain };
   });
+  // The donut entrance throws every plain piece in from a different angle:
+  // golden-ratio spacing round the screen plane so no direction is left
+  // empty, thrown from out ahead too (see _EQ_DONUT for why).
+  if (type === 'donutbuild') {
+    const D = _EQ_DONUT;
+    ps.forEach((q, i) => {
+      const a = ((i * 0.618034) % 1) * Math.PI * 2 + Math.random() * 0.4;
+      const rr = 0.6 + Math.random() * 0.4;
+      q.fly = new THREE.Vector3(Math.cos(a) * rr * 0.30, Math.sin(a) * rr * 0.20 + 0.02, -(0.36 + Math.random() * 0.34));
+      q.swirl = Math.random() < 0.5 ? -1 : 1;
+      q.t0 = D.coreStart + q.delay * D.coreStagger;
+      q.land = q.t0 + D.coreLen;
+      q.kickV = q.fly.clone().normalize().multiplyScalar(-D.kick);   // shoves the core the way the piece was travelling
+    });
+  }
   // The orderly ones need an order: paper opens back to front, bricks stack
   // from the bottom up.
   if (type === 'unfold') ps.sort((a, b) => b.h.p.z - a.h.p.z);
@@ -22035,7 +22452,18 @@ function _beginEquip(model, spec, melee) {
              ps, ctr, ring, glow, sfx: spec.equipSfx || null, box, temp,
              prismPos: prismProp ? prismProp.userData.prism.pos.clone() : ctr.clone(),
              beats: (spec.equipBeats || []).map(([t, name]) => ({ t, name, done: false })),
-             turns: spec.spinTurns || 1, pivot: (model._spinPivot || ctr).clone() };
+             turns: spec.spinTurns || 1, pivot: (model._spinPivot || ctr).clone(),
+             grip: new THREE.Vector3(ctr.x, ctr.y - 0.02, ctr.z + (box.max.z - ctr.z) * 0.65) };
+  // One metallic cling per landing -- thinned to no more than one every ~18ms
+  // so a fast cascade still reads as individual hits, not a smear.
+  if (type === 'donutbuild') {
+    let last = -1;
+    for (const q of [..._equip.ps].filter(x => !x.ring).sort((a, b) => a.land - b.land)) {
+      if (q.land - last < 0.011) continue;
+      last = q.land;
+      _equip.beats.push({ t: q.land, name: 'cling', done: false });
+    }
+  }
   playEquipSound(_equip.sfx && _equip.sfx[0]);
   _equipStep(_equip, 0);
 }
@@ -22113,49 +22541,33 @@ function _equipStep(e, t) {
         c.quaternion.copy(p.rq).multiply(drift).slerp(h.q, k);
         c.scale.copy(h.s).multiplyScalar(0.55 + 0.45 * k);
         break; }
-      case 'comet': {
-        // Donut weapons: the WHOLE thing whips around the landing point --
-        // fast, multiple directions, not one converging swing -- and settles
-        // straight into the hand. Every piece keeps its fixed offset from
-        // the gun's own centre and gets the exact same orbit and the exact
-        // same tumble, so it moves as one rigid object, never as separate
-        // parts drifting apart. Deliberately fixed, not randomised, so it
-        // reads the same clear way every time. The glow trail chasing it is
-        // a separate prop (_eqMakeProps/_eqStepProps).
-        //
-        // Axis history, all checked by tracking a world-space point through
-        // the animation: _EQ_Z (the blade's own hole/depth axis) barely
-        // moved the ring at all -- a torus is rotationally symmetric about
-        // its own hole axis, and the pieces themselves sit offset from the
-        // pivot almost entirely along Z too, so a Z spin is nearly a no-op
-        // for the whole assembly, not just the ring. _EQ_X swept Y/Z only
-        // (read as "spinning around Y"). _EQ_Y swept X/Z only, staying
-        // level (read as a flat helicopter-blade sweep, "spinning around
-        // Z"). _EQ_DIAG (defined above, a 45 degree blend of X and Y)
-        // sweeps all three axes at once -- an actual tumble, not flat in
-        // any single plane.
-        const arrive = _eqEase(_eqClamp(t / 0.78));
-        const off = _eqOrbitOffset(t);
-        const flyCtr = e.ctr.clone(); flyCtr.x += off.x; flyCtr.y += off.y; flyCtr.z += off.z;
-        const q = new THREE.Quaternion().setFromAxisAngle(_EQ_DIAG, (1 - arrive) * Math.PI * 2 * 1.75);
-        c.position.copy(h.p).sub(e.ctr).applyQuaternion(q).add(flyCtr);
-        c.quaternion.copy(q).multiply(h.q);
-        c.scale.copy(h.s);
-        break; }
-      case 'twirl': {
-        // The Glazer: whipping around the landing point, spinning hard
-        // about the trigger guard the whole time, and caught with a dead
-        // stop right in the grip. The trail chasing the muzzle round its
-        // own circle is a separate prop (_eqMakeProps/_eqStepProps), since
-        // it traces an arc, not a straight line — it uses the same
-        // _eqOrbitOffset() so it follows the gun instead of staying
-        // anchored at the old fixed landing spot.
-        const q = _eqTwirlQuat(t);
-        const off = _eqOrbitOffset(t);
-        const flyCtr = e.ctr.clone(); flyCtr.x += off.x; flyCtr.y += off.y; flyCtr.z += off.z;
-        c.position.copy(h.p).sub(e.ctr).applyQuaternion(q).add(flyCtr);
-        c.quaternion.copy(q).multiply(h.q);
-        c.scale.copy(h.s);
+      case 'donutbuild': {
+        // The Glazer / Ring King. Beat 1: the plain pieces slam in from every
+        // direction, each landing on the core with a kick, a spark and a ring
+        // (see _eqDonutPiecePos / _eqDonutJolt / the per-landing 'cling' beats
+        // queued in _beginEquip). Beat 2: the weapon tilts up while the donut
+        // is threaded onto it. Everything lands exactly on its resting
+        // transform at t=1, so finishEquip has nothing left to snap.
+        const D = _EQ_DONUT;
+        const tiltQ = _eqDonutTiltQuat(t);
+        c.position.copy(_eqDonutPiecePos(e, p, t));
+        if (p.ring) {
+          const k = _eqEase(_eqClamp((t - D.ringStart) / D.ringLen));
+          const pop = _eqBack(_eqClamp((t - D.ringPop) / 0.10));
+          const seat = 1 + 0.16 * Math.sin(_eqClamp((t - 0.80) / 0.14) * Math.PI);   // a little thump as it lands
+          const spin = new THREE.Quaternion().setFromAxisAngle(_EQ_Z, (1 - k) * Math.PI * 2 * 2.5);
+          const wob = new THREE.Quaternion().setFromAxisAngle(_EQ_X, Math.sin(k * Math.PI * 3) * (1 - k) * 0.7);
+          c.quaternion.copy(tiltQ).multiply(wob).multiply(spin).multiply(h.q);
+          c.scale.copy(h.s).multiplyScalar(Math.max(0.001, pop) * seat);
+        } else {
+          const k = _eqClamp((t - p.t0) / D.coreLen);
+          const since = t - p.land;
+          // Tumbling hard the whole way in, and only snapping true at the hit.
+          const drift = new THREE.Quaternion().setFromAxisAngle(p.spin, (1 - k) * (7 + p.phase));
+          c.quaternion.copy(p.rq).multiply(drift).slerp(tiltQ.clone().multiply(h.q), k * k);
+          // A squash on impact: swells past size and snaps back.
+          c.scale.copy(h.s).multiplyScalar((0.55 + 0.45 * k) * (since >= 0 ? 1 + 0.35 * Math.exp(-since / 0.045) : 1));
+        }
         break; }
       case 'unfold': {
         // Folded flat, then opened out a panel at a time, back to front.
@@ -22603,11 +23015,15 @@ function resetCombatResources() {
   activeGrenades.length = 0;
   const isRange = match?.type === 'range';
   const isDDay = match?.type === 'dday';
+  const isM4Tower = match?.cfg?.fixedKit === 'm4_tower';
   if (isRange) {
     weaponAmmo.forEach((_, idx) => { weaponAmmo[idx] = { ammo: 999999, reserve: 999999 }; });
   } else if (isDDay) {
     weaponAmmo[selectedPrimaryIdx] = { ammo: 5000, reserve: 0 };
     weaponAmmo[selectedSecondaryIdx] = { ammo: 30, reserve: 999999 };
+  } else if (isM4Tower) {
+    weaponAmmo[selectedPrimaryIdx] = { ammo: 250, reserve: 250 };
+    weaponAmmo[selectedSecondaryIdx] = { ammo: 0, reserve: 0 };
   } else {
     const pw = applyUpgrades(WEAPONS[selectedPrimaryIdx]);
     const sw = applyUpgrades(WEAPONS[selectedSecondaryIdx]);
@@ -22624,6 +23040,35 @@ function resetCombatResources() {
   if (reloadEl) reloadEl.style.display = 'none';
   activeSlot = 'primary';
   equipActiveSlot();
+}
+
+function applyM4TowerKit() {
+  const m4Idx = WEAPONS.findIndex(w => w.id === 'm4a1_arena');
+  const pistolIdx = WEAPONS.findIndex(w => w.id === 'pistol');
+  const fistsIdx = MELEE_ITEMS.findIndex(m => m.id === 'fists');
+  const fragIdx = SUPPORT_ITEMS.findIndex(s => s.id === 'frag');
+  selectedPrimaryIdx = m4Idx >= 0 ? m4Idx : 0;
+  selectedSecondaryIdx = pistolIdx >= 0 ? pistolIdx : 1;
+  selectedMeleeIdx = fistsIdx >= 0 ? fistsIdx : 0;
+  selectedSupportIdx = fragIdx >= 0 ? fragIdx : 0;
+  weaponAmmo[selectedPrimaryIdx] = { ammo: 250, reserve: 250 };
+  weaponAmmo[selectedSecondaryIdx] = { ammo: 0, reserve: 0 };
+  supportUses[selectedSupportIdx] = SUPPORT_ITEMS[selectedSupportIdx]?.uses || 2;
+  reloading = false; shooting = false; isADS = false; targetFOV = 75;
+  activeSlot = 'primary';
+  weaponModels.forEach(m => m.visible = false);
+  meleeModels.forEach(m => m.visible = false);
+  supportModels.forEach(m => m.visible = false);
+  currentWeaponIdx = selectedPrimaryIdx;
+  currentWeapon = WEAPONS[selectedPrimaryIdx];
+  if (weaponModels[selectedPrimaryIdx]) weaponModels[selectedPrimaryIdx].visible = true;
+  ammo = weaponAmmo[selectedPrimaryIdx].ammo;
+  reserve = weaponAmmo[selectedPrimaryIdx].reserve;
+  updateAmmoHUD(); updateWeaponHUD(); updateWeaponSelector(); updateAbilityHUD();
+}
+
+function matchMaxHp() {
+  return match?.cfg?.playerHp || 300;
 }
 
 function localPlayerTeam() {
@@ -22657,10 +23102,10 @@ function placePlayerAtTeamSpawn(team = localPlayerTeam(), spread = 36, depth = 3
 function resetPlayerForRound(x = null, z = null) {
   isDead = false;
   if (players[myId]) {
-    players[myId].hp = 300;
+    players[myId].hp = matchMaxHp();
     players[myId].dead = false;
   }
-  updateHealthHUD(300);
+  updateHealthHUD(matchMaxHp());
   resetCombatResources();
   let sp;
   if (x == null || z == null) {
@@ -22672,10 +23117,14 @@ function resetPlayerForRound(x = null, z = null) {
   }
   document.getElementById('waiting-screen').style.display = 'none';
   document.getElementById('death-screen').style.display = 'none';
-  socket.emit('resetSelf', { x: sp.x, z: sp.z });
+  socket.emit('resetSelf', { x: sp.x, z: sp.z, mode: currentModeId() });
 }
 
 function cycleActiveSlot() {
+  if (fixedKitModeActive()) {
+    activeSlot = 'primary';
+    return;
+  }
   const slots = ['primary', 'secondary', 'melee', 'support'];
   activeSlot = slots[(slots.indexOf(activeSlot) + 1) % slots.length];
 }
@@ -22691,6 +23140,7 @@ let _quickMeleeReturn = null;      // slot to go back to
 let _quickMeleeUntil  = 0;         // hard stop, so a held buff cannot strand you
 
 function quickMelee() {
+  if (fixedKitModeActive()) return;
   if (isDead || !gameStarted || activeSlot === 'melee' || _quickMeleeReturn) return;
   const m = equippedMeleeItem();
   if (!m) return;
@@ -23571,7 +24021,11 @@ function getDefaultWeaponWeight(item) {
 const dir = new THREE.Vector3();
 const BOUNDS = 48;
 // Map-aware boundary (BR arena is 6× larger). 123 lets player reach the actual wall surface (walls at ±125, 3 thick).
-function getMapBounds() { return activeMapName === 'br_arena' ? 123 : BOUNDS; }
+function getMapBounds() {
+  if (activeMapName === 'br_arena') return 123;
+  if (activeMapName === 'blank') return 68;
+  return BOUNDS;
+}
 
 function updateAdminBuilderFreeCam(dt) {
   const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
@@ -24036,10 +24490,11 @@ function activateMeleeAbility() {
     const fwd     = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
     fwd.y = 0; fwd.normalize();
     // Dash forward in small steps (collision-safe)
+    const lungeBounds = getMapBounds();
     for (let step = 0; step < 14; step++) {
       camera.position.addScaledVector(fwd, dist / 14);
-      camera.position.x = Math.max(-BOUNDS, Math.min(BOUNDS, camera.position.x));
-      camera.position.z = Math.max(-BOUNDS, Math.min(BOUNDS, camera.position.z));
+      camera.position.x = Math.max(-lungeBounds, Math.min(lungeBounds, camera.position.x));
+      camera.position.z = Math.max(-lungeBounds, Math.min(lungeBounds, camera.position.z));
       resolveWallCollisions();
     }
     // Check for enemies within 2.2 units after dash
@@ -25982,8 +26437,39 @@ const MODEL_SKINS = [
     sw: ['#ff3a3a', '#8a3aff'], build: buildRainbowAK, look: { rainbow: true },
     blurb: 'Split out of a prism when drawn. The rainbow flows down it, and so do its rounds.' },
   { id: 'revolver_donut', weapon: 'revolver', name: 'The Glazer', rarity: 'donut',
-    sw: ['#ff78bd', '#c8844a'], build: buildDonutRevolver, look: { bulletColor: 0xff78bd, bulletSize: 0.075 },
+    sw: ['#ff5cae', '#fff1f9'], build: buildDonutRevolver, look: { bulletColor: 0xff78bd, bulletSize: 0.075 },
     blurb: 'The cylinder is a frosted donut. Sprinkles orbit it because subtlety lost.' },
+  // Plain model skins: no entrance animation, no case, free to equip.
+  { id: 'cycler_walkie_talkie', weapon: 'cycler', name: 'Walkie-Talkie', rarity: 'good',
+    sw: ['#2a2e34', '#e8781c'], build: buildWalkieTalkie,
+    blurb: 'Over. Roger. Static. Push the big side button to talk, or to fire.' },
+  { id: 'lancer_fencing_foil', weapon: 'lancer', name: 'Fencing Foil', rarity: 'good',
+    sw: ['#d8dee6', '#d8302a'], build: buildFencingFoil,
+    blurb: 'Bell guard, button tip, a body wire trailing behind. En garde.' },
+  { id: 'arc_torrent_cord_reel', weapon: 'arc_torrent', name: 'Extension Cord Reel', rarity: 'good',
+    sw: ['#e86a1c', '#e8c828'], build: buildCordReel,
+    blurb: 'Fifty metres of yellow cord and a three-way outlet. Do not plug in the kettle.' },
+  { id: 'mortar_rifle_mailing_tube', weapon: 'mortar_rifle', name: 'Mailing Tube', rarity: 'basic',
+    sw: ['#b8946a', '#d8302a'], build: buildMailingTube,
+    blurb: 'Fragile. Return to sender. Please do not return to sender.' },
+  { id: 'prism_launcher_kaleidoscope', weapon: 'prism_launcher', name: 'Kaleidoscope', rarity: 'rare',
+    sw: ['#c89a3c', '#88ddff'], build: buildKaleidoscope,
+    blurb: 'Six pieces of loose glass, arranged differently every time you look.' },
+  { id: 'shockwave_launcher_boombox', weapon: 'shockwave_launcher', name: 'Boombox', rarity: 'good',
+    sw: ['#2a2c30', '#c0c6ce'], build: buildBoombox,
+    blurb: 'Twin woofers, cassette door, one handle. The shockwave is the bass.' },
+  { id: 'twin_ar_toaster', weapon: 'twin_ar', name: 'Toaster', rarity: 'good',
+    sw: ['#d8dce2', '#e0b070'], build: buildToaster,
+    blurb: 'Two slots, two slices, one lever. Twin barrel, as advertised.' },
+  { id: 'storm_cannon_vacuum', weapon: 'storm_cannon', name: 'Handheld Vacuum', rarity: 'good',
+    sw: ['#d8302a', '#8a9096'], build: buildVacuumCleaner,
+    blurb: 'Clear dust cup, crevice tool. Sucks in the storm, spits it back out.' },
+  { id: 'sticker_blaster_hole_punch', weapon: 'sticker_blaster', name: 'Hole Punch', rarity: 'good',
+    sw: ['#2a5ab8', '#c8ced6'], build: buildHolePunch,
+    blurb: 'Two steel pins and a reservoir of confetti. Nobody empties it.' },
+  { id: 'swarm_rifle_bee_smoker', weapon: 'swarm_rifle', name: 'Bee Smoker', rarity: 'rare',
+    sw: ['#b8bcc2', '#8a4a22'], build: buildBeeSmoker,
+    blurb: 'Tin can, leather bellows. It calms the swarm. Allegedly.' },
 ];
 // 🔥 FFA Legend skins unlock from FFA: a million damage or five thousand wins.
 // Wrapped because it runs while the file is still loading -- skins restored
@@ -27690,7 +28176,7 @@ const MELEE_MODEL_SKINS = [
   { id: 'katana_donut', melee: 'katana', name: 'Ring King', rarity: 'donut',
     sw: ['#ff78bd', '#ffe7f3'], build: buildDonutKatana,
     blurb: 'A frosted ring guard, icing down the blade, and sprinkles circling the swing.',
-    equip: 'comet', equipMs: 1000, equipSfx: ['whoosh', 'chime'] },
+    equip: 'donutbuild', equipMs: 1600, equipSfx: ['whoosh', 'chime'], equipBeats: [[.88,'snapin'],[.88,'cling']] },
   { id: 'spear_thunder', melee: 'spear', name: 'Thunder Spear', rarity: 'rare',
     sw: ['#2a2e36', '#6ad0ff'], build: buildThunderSpear,
     blurb: 'Arrives on a lightning strike. Arcs crawl along the shaft.',
@@ -29027,6 +29513,16 @@ const SKIN_FX = {
     reload: _fxR(_RK.dip(), [RP(.40,'dust','eject',1,'muzzle')], [[.30,'brush'],[.46,'brush']]) },
   flare_party_popper: { sound: _fxS('popper', .34, .08, 1200, 300),
     reload: _fxR(_RK.front(), [RP(.30,'popper','eject',1,'muzzle'), RP(.56,'popper','arrive')]) },
+  cycler_walkie_talkie:        { sound: _fxS('beep', .22, .06, 1800, 1200) },
+  lancer_fencing_foil:         { sound: _fxS('shing', .28, .12, 3200, 1800) },
+  arc_torrent_cord_reel:       { sound: _fxS('arc', .28, .10, 700, 260) },
+  mortar_rifle_mailing_tube:   { sound: _fxS('pop', .32, .14, 260, 100) },
+  prism_launcher_kaleidoscope: { sound: _fxS('sparkle', .24, .30, 1760, 0) },
+  shockwave_launcher_boombox:  { sound: _fxS('thump', .40, .20, 120, 50, { action:'single' }) },
+  twin_ar_toaster:             { sound: _fxS('pop', .28, .10, 400, 160) },
+  storm_cannon_vacuum:         { sound: _fxS('whirr', .30, .14, 260, 200) },
+  sticker_blaster_hole_punch:  { sound: _fxS('snap', .26, .04, 2400, 1200) },
+  swarm_rifle_bee_smoker:      { sound: _fxS('pfft', .24, .09, 800, 300) },
   taser_hand_mixer: { sound: _fxS('whirr', .26, .12, 420, 380),
     reload: _fxR(_RK.front(), [RP(.30,'beater','eject',2,'muzzle'), RP(.54,'beater','arrive',2,'muzzle')], [[.62,'click']], 'whirr') },
   hkmp7_power_drill: { sound: _fxS('whirr', .28, .08, 680, 520),
@@ -29216,7 +29712,7 @@ const SKIN_FX = {
     equipBeats: [[.28,'chord'], [.80,'shatter'], [.84,'rainbowburst']],
     reload: _fxR(RELOAD_KEYS.ak20, (RELOAD_PROPS.ak20 || []).map(e => e.k === 'mag' ? Object.assign({}, e, { k: 'rainbowmag' }) : e), null, 'chord') },
   revolver_donut: { sound: _fxS('splat', .30, .10, 620, 1180),
-    equip: 'twirl', equipMs: 1000, equipSfx: ['whoosh', 'chime'] },
+    equip: 'donutbuild', equipMs: 1600, equipSfx: ['whoosh', 'chime'], equipBeats: [[.88,'snapin'],[.88,'cling']] },
 };
 
 function _reloadPose(track, t) {
@@ -32816,7 +33312,7 @@ socket.on('playerDied', data => {
       isDead = false;
       camera.position.set(0, 1.65, 38);
       faceToward(0, 0);   // down the range, at the targets
-      socket.emit('readyRespawn', { x: camera.position.x, z: camera.position.z });
+      socket.emit('readyRespawn', { x: camera.position.x, z: camera.position.z, mode: currentModeId() });
       requestPointerLockSafe();
     } else if (match && match.type === 'dday') {
       // D-Day: auto-respawn at bunker 0 after 3 seconds, same weapons
@@ -32827,8 +33323,22 @@ socket.on('playerDied', data => {
         isDead = false;
         camera.position.set(-22, 1.65, 22); // back to bunker 0 slit
         faceToward(-22, 0);   // out of the slit, toward the enemies (-Z)
-        socket.emit('readyRespawn', { x: camera.position.x, z: camera.position.z });
+        socket.emit('readyRespawn', { x: camera.position.x, z: camera.position.z, mode: currentModeId() });
         grantSpawnShield(3000);
+        requestPointerLockSafe();
+      });
+    } else if (match?.cfg?.autoRespawn) {
+      document.getElementById('death-msg').textContent = 'Respawning...';
+      afterDeath(1600, () => {
+        if (!match || match.over || !isDead) return;
+        ds.style.display = 'none';
+        isDead = false;
+        if (players[myId]) { players[myId].hp = matchMaxHp(); players[myId].dead = false; }
+        updateHealthHUD(matchMaxHp());
+        if (match.cfg.fixedKit === 'm4_tower') applyM4TowerKit();
+        const sp = placePlayerAtTeamSpawn(localPlayerTeam(), 28, 40);
+        socket.emit('readyRespawn', { x: sp.x, z: sp.z, mode: currentModeId() });
+        grantSpawnShield(1800);
         requestPointerLockSafe();
       });
     } else if (!match || match.cfg?.type !== 'elim') {
@@ -34167,7 +34677,7 @@ function startMatchRound() {
     if (isDead) {
       isDead = false;
       placePlayerAtTeamSpawn(localPlayerTeam(), 24, 38);
-      socket.emit('readyRespawn', { x: camera.position.x, z: camera.position.z });
+      socket.emit('readyRespawn', { x: camera.position.x, z: camera.position.z, mode: currentModeId() });
       requestPointerLockSafe();
     }
     match.roundActive = true;
@@ -34507,7 +35017,7 @@ function scheduleArcadeRespawn() {
     grantSpawnShield(2000);
     document.getElementById('death-screen').style.display = 'none';
     document.getElementById('waiting-screen').style.display = 'none';
-    socket.emit('readyRespawn', { x: camera.position.x, z: camera.position.z });
+    socket.emit('readyRespawn', { x: camera.position.x, z: camera.position.z, mode: currentModeId() });
     requestPointerLockSafe();
   }, 2500);
 }
@@ -34586,7 +35096,7 @@ function onEntityDied(targetId, killerId) {
           grantSpawnShield(3000);
           document.getElementById('death-screen').style.display = 'none';
           document.getElementById('waiting-screen').style.display = 'none';
-          socket.emit('readyRespawn', { x: camera.position.x, z: camera.position.z });
+          socket.emit('readyRespawn', { x: camera.position.x, z: camera.position.z, mode: currentModeId() });
           requestPointerLockSafe();
         }, 4000);
       } else {
@@ -34813,7 +35323,7 @@ function onFrontlinesKill(targetId, killerId) {
       if (!match || match.over || !isDead) return;
       isDead = false;
       placePlayerAtTeamSpawn(localPlayerTeam(), 24, 38);
-      socket.emit('readyRespawn', { x: camera.position.x, z: camera.position.z });
+      socket.emit('readyRespawn', { x: camera.position.x, z: camera.position.z, mode: currentModeId() });
       grantSpawnShield(3000);
       requestPointerLockSafe();
     }, 3000);
@@ -35172,7 +35682,7 @@ function startTiebreaker() {
       document.getElementById('waiting-screen').style.display = 'none';
       document.getElementById('death-screen').style.display   = 'none';
       placePlayerAtTeamSpawn(localPlayerTeam(), 24, 38);
-      socket.emit('readyRespawn', { x: camera.position.x, z: camera.position.z });
+      socket.emit('readyRespawn', { x: camera.position.x, z: camera.position.z, mode: currentModeId() });
       requestPointerLockSafe();
     }
     if (topEnemy) { topEnemy.dead = false; const m = remoteMeshes[topEnemy.id]; if (m) m.visible = true; }
@@ -35499,6 +36009,10 @@ function spawnGameBots() {
     // 🛋️ Lobby 13: the chill social hub
     activateMap('lobby13');
     if (MAP_GROUPS.lobby13?._skyColor != null && scene.background?.setHex) scene.background.setHex(MAP_GROUPS.lobby13._skyColor);
+  } else if (selectedModeConfig.forcedMap && MAP_GROUPS[selectedModeConfig.forcedMap]) {
+    activateMap(selectedModeConfig.forcedMap);
+    const sky = MAP_GROUPS[selectedModeConfig.forcedMap]?._skyColor;
+    if (sky != null && scene.background?.setHex) scene.background.setHex(sky);
   } else if (selectedModeConfig.type !== 'dday' && selectedModeConfig.type !== 'range') {
     const pool = ['blank','urban','warehouse','forest','vietnam','volcano','cyber','desert','tundra','space','airport','trenches','chernobyl','refinery','skydock','sewer','gravity_lab','glassworks','carrier','overgrowth','orbital_station','foundry','carnival','biosphere','lockdown','studio','temple','holiday','labyrinth','arena','opera','doomsday','train','dreamscape','pearl_harbor','titanic','supermarket','pyongyang','traffic_cone_republic','flying_moai'];
     const chosen = (selectedMap === 'auto' || !MAP_GROUPS[selectedMap]) ? pool[Math.floor(Math.random()*pool.length)] : selectedMap;
@@ -35544,7 +36058,12 @@ function spawnGameBots() {
   } else {
     placePlayerAtTeamSpawn();
   }
-  socket.emit('resetSelf', { x: camera.position.x, z: camera.position.z });
+  socket.emit('resetSelf', { x: camera.position.x, z: camera.position.z, mode: currentModeId() });
+  if (selectedModeConfig.playerHp && players[myId]) {
+    players[myId].hp = selectedModeConfig.playerHp;
+    players[myId].dead = false;
+    updateHealthHUD(selectedModeConfig.playerHp);
+  }
 
   // 🎭 Drafted comic-cast rosters: you can pick MULTIPLE teammates AND MULTIPLE
   // opponents in Character Chat. They fill the first slots of their team (ally
@@ -35614,13 +36133,15 @@ function spawnGameBots() {
     const MELEES_NONADMIN = MELEE_ITEMS.filter(m => !m.adminItem);
     const UTILS_NONADMIN  = SUPPORT_ITEMS.filter(s => !s.adminItem);
     // 🎭 Drafted teammate uses their signature loadout; everyone else rolls random.
-    const weaponId = (_playstyle && _playstyle.primary && WEAPONS.some(w => w.id === _playstyle.primary))
+    const fixedM4Tower = selectedModeConfig.fixedKit === 'm4_tower';
+    let weaponId = (_playstyle && _playstyle.primary && WEAPONS.some(w => w.id === _playstyle.primary))
       ? _playstyle.primary : randomPrimaryId();
-    const botSecondaryId = (_playstyle && _playstyle.secondary && WEAPONS.some(w => w.id === _playstyle.secondary))
+    if (fixedM4Tower) weaponId = 'm4a1_arena';
+    const botSecondaryId = fixedM4Tower ? null : (_playstyle && _playstyle.secondary && WEAPONS.some(w => w.id === _playstyle.secondary))
       ? _playstyle.secondary : (SECONDARIES[Math.floor(Math.random() * SECONDARIES.length)]?.id || 'pistol');
-    const botMeleeId     = (_playstyle && _playstyle.melee && MELEE_ITEMS.some(m => m.id === _playstyle.melee))
+    const botMeleeId     = fixedM4Tower ? null : (_playstyle && _playstyle.melee && MELEE_ITEMS.some(m => m.id === _playstyle.melee))
       ? _playstyle.melee : (MELEES_NONADMIN[Math.floor(Math.random() * MELEES_NONADMIN.length)]?.id || 'bat');
-    const botUtilityId   = UTILS_NONADMIN[Math.floor(Math.random() * UTILS_NONADMIN.length)]?.id || 'frag';
+    const botUtilityId   = fixedM4Tower ? 'frag' : (UTILS_NONADMIN[Math.floor(Math.random() * UTILS_NONADMIN.length)]?.id || 'frag');
 
     // ── Create locally RIGHT NOW (no network round-trip needed) ──────────
     // Drafted teammate wears their character's signature skin; everyone else
@@ -35637,7 +36158,7 @@ function spawnGameBots() {
       if (pick === mySkin) pick = pool[(pool.indexOf(pick) + 1) % pool.length];
       botSkin = pick;
     }
-    const startHp = (_playstyle && _playstyle.hp) || 300;
+    const startHp = selectedModeConfig.botHp || (_playstyle && _playstyle.hp) || 300;
     const pData = { id, name, isBot: true, team, weaponId, ownerId: myId, skin: botSkin,
                     x: sx, y: 1, z: sz, rotY: 0, rotX: 0,
                     hp: startHp, maxHp: startHp, dead: false, kills: 0, deaths: 0 };
@@ -35718,7 +36239,7 @@ function spawnGameBots() {
                     onLandMine: null });      // tracks which mine was triggering (prevents double-hit)
 
     // Tell server so hit-detection events work and other players see bots
-    botList.push({ id, name, team: absTeam(team), weaponId, spawnX: sx, spawnZ: sz, skin: botSkin });   // #48
+    botList.push({ id, name, team: absTeam(team), weaponId, spawnX: sx, spawnZ: sz, hp: startHp, skin: botSkin });   // #48
   };
 
   for (let i = 0; i < allies;   i++) makeBot(i, 'ally');
@@ -36139,7 +36660,7 @@ function updateBotAI(dt) {
     // composes with the bot's own chase movement below instead of fighting
     // it — the AI's `nx = bot.x + moveX` picks up wherever this leaves off ──
     if (bot.kbVX || bot.kbVZ) {
-      const botMapHalf = activeMapName === 'br_arena' ? 123 : 47;
+      const botMapHalf = getMapBounds();
       bot.x = Math.max(-botMapHalf, Math.min(botMapHalf, bot.x + bot.kbVX * dt));
       bot.z = Math.max(-botMapHalf, Math.min(botMapHalf, bot.z + bot.kbVZ * dt));
       const kbFriction = Math.max(0, 1 - dt * 6);
@@ -37044,8 +37565,7 @@ function updateBotAI(dt) {
     // Apply movement + wall collision
     const prevBotX = bot.x, prevBotZ = bot.z;
     let nx = bot.x + moveX, nz = bot.z + moveZ;
-    // Map boundary varies — BR arena is 250×250, standard maps are 100×100
-    const mapHalf = activeMapName === 'br_arena' ? 123 : 47;
+    const mapHalf = getMapBounds();
     nx = Math.max(-mapHalf, Math.min(mapHalf, nx));
     nz = Math.max(-mapHalf, Math.min(mapHalf, nz));
     [nx, nz] = resolvePosCollisions(nx, nz, bot.y || 0);
@@ -37775,11 +38295,11 @@ function renderShopItems(body, slot) {
   // Decide which source list + how each card describes itself
   let source, descFn, pickIsAdmin;
   if (slot === 'primary') {
-    source = WEAPONS.filter(w => w.slot !== 'secondary' && !w.ddayOnly && !w.skinOnly);
+    source = WEAPONS.filter(w => w.slot !== 'secondary' && !w.ddayOnly && !w.skinOnly && !w.modeOnly);
     descFn = w => `DMG ${w.damage} · MAG ${w.mag} · ${w.auto ? 'AUTO' : 'SEMI'}`;
     pickIsAdmin = w => !!w.adminItem;
   } else if (slot === 'secondary') {
-    source = WEAPONS.filter(w => w.slot === 'secondary' && !w.ddayOnly && !w.skinOnly);
+    source = WEAPONS.filter(w => w.slot === 'secondary' && !w.ddayOnly && !w.skinOnly && !w.modeOnly);
     descFn = w => `DMG ${w.damage} · MAG ${w.mag}`;
     pickIsAdmin = w => !!w.adminItem;
   } else if (slot === 'melee') {
@@ -37883,8 +38403,8 @@ function balancedUtilityScore(u) {
 }
 function rankedItems(kind, limit = 10) {
   let items;
-  if (kind === 'primary') items = WEAPONS.filter(w => w.slot !== 'secondary' && !w.ddayOnly && !w.adminItem && !w.skinOnly);
-  else if (kind === 'secondary') items = WEAPONS.filter(w => w.slot === 'secondary' && !w.ddayOnly && !w.adminItem && !w.skinOnly);
+  if (kind === 'primary') items = WEAPONS.filter(w => w.slot !== 'secondary' && !w.ddayOnly && !w.adminItem && !w.skinOnly && !w.modeOnly);
+  else if (kind === 'secondary') items = WEAPONS.filter(w => w.slot === 'secondary' && !w.ddayOnly && !w.adminItem && !w.skinOnly && !w.modeOnly);
   else if (kind === 'melee') items = MELEE_ITEMS.filter(m => !m.adminItem && !m.skinOnly);
   else items = SUPPORT_ITEMS.filter(u => !u.adminItem);
   const scoreFn = kind === 'melee' ? balancedMeleeScore : kind === 'utility' ? balancedUtilityScore : balancedGunScore;
@@ -38026,6 +38546,12 @@ function toggleBestLoadoutsPanel(show) {
 
 let loadoutBefore = null; // the picks when the loadout opened — ← BACK puts them back
 function showLoadoutScreen(mode) {
+  if (fixedKitModeActive()) {
+    applyM4TowerKit();
+    showAnnouncement('FIXED KIT', 'M4 Tower locks M4A1 + grenades', '#ffcc88', 1200);
+    requestPointerLockSafe();
+    return;
+  }
   if (!isLoadoutOpen()) loadoutBefore = { p: selectedPrimaryIdx, s: selectedSecondaryIdx, m: selectedMeleeIdx, u: selectedSupportIdx };
   showFunFact('loadout-screen');
   loadoutMode = mode || 'death';
@@ -38118,6 +38644,7 @@ function showLoadoutScreen(mode) {
 
   WEAPONS.forEach((w, i) => {
     if (w.ddayOnly) return; // skip D-Day exclusive weapons
+    if (w.modeOnly) return; // fixed-mode weapons never appear in normal loadouts
     if (w.skinOnly) return; // generated as a skin now, not a standalone weapon
     if (w.adminItem && !isUnlocked(w.id)) return; // hide locked admin weapons
     const isPrimary = w.slot !== 'secondary';
@@ -38189,6 +38716,7 @@ function showLoadoutScreen(mode) {
     selectedPrimaryIdx = findWeaponIdx(r.id);
     if (r.skin) setGunStatSkin(r.id, r.skin);
   }
+  if (selectedPrimaryIdx != null && WEAPONS[selectedPrimaryIdx]?.modeOnly) selectedPrimaryIdx = null;
   if (selectedMeleeIdx != null && MELEE_ITEMS[selectedMeleeIdx]?.skinOnly) {
     const r = resolveMeleeLoadoutId(MELEE_ITEMS[selectedMeleeIdx].id);
     selectedMeleeIdx = findMeleeIdx(r.id);
@@ -38205,7 +38733,7 @@ function showLoadoutScreen(mode) {
   } else {
     // First-time entry: apply defaults — pick first OWNED item per slot so
     // we don't auto-select something the user can't actually afford.
-    selectedPrimaryIdx   = WEAPONS.findIndex(w => w.slot !== 'secondary' && !w.ddayOnly && !w.skinOnly && isOwned(w.id));
+    selectedPrimaryIdx   = WEAPONS.findIndex(w => w.slot !== 'secondary' && !w.ddayOnly && !w.skinOnly && !w.modeOnly && isOwned(w.id));
     selectedSecondaryIdx = WEAPONS.findIndex(w => w.slot === 'secondary' && isOwned(w.id));
     selectedMeleeIdx     = MELEE_ITEMS.findIndex(m => !m.skinOnly && isOwned(m.id));
     selectedSupportIdx   = SUPPORT_ITEMS.findIndex(s => isOwned(s.id));
@@ -38984,7 +39512,7 @@ function openModeMenu() {
 
 // Modes whose kit is built inside selectMode() (forced weapons / infinite ammo) replay
 // through it; every other mode keeps the loadout you just played with.
-const SELF_KIT_MODES = ['dday', 'range', 'lobby13'];
+const SELF_KIT_MODES = ['dday', 'range', 'lobby13', 'm4_tower'];
 // The GAME_MODE_CONFIGS key being played (configs are shared objects: match by identity).
 function currentModeId() {
   const hit = Object.entries(GAME_MODE_CONFIGS).find(([, cfg]) => cfg === selectedModeConfig);
@@ -39968,6 +40496,13 @@ function selectMode(modeId) {
     startLoop();
     showLobbyModesButton(true); // 🎮 floating button back to the mode menu
     showLobbyDuelButton(true);  // ⚔️ pick who you want to 1V1 (#31)
+    showFloatingSettingsButton(true);
+  } else if (modeId === 'm4_tower') {
+    applyM4TowerKit();
+    gameStarted = true;
+    spawnGameBots();
+    requestPointerLockSafe();
+    startLoop();
     showFloatingSettingsButton(true);
   } else {
     showFloatingSettingsButton(true);
@@ -41112,7 +41647,8 @@ document.querySelectorAll('.diff-card').forEach(card => {
 // Map selector
 const MAP_DESCS = {
   auto:       'Random — game picks one for you each match',
-  blank:      'Classic — open arena with crosshatch walls (original)',
+  blank:      'Classic Arena — wider lanes, taller wall-walks, ramp routes, clean cover',
+  m4_tower:   'M4 Tower — tight two-story arena with climbable corners and upper catwalks',
   urban:      'Urban Plaza — corner buildings, cars as low cover',
   warehouse:  'Warehouse — stacked crates, pipes, narrow lanes',
   forest:     'Forest Clearing — trees + rocks, mostly open',
@@ -41365,7 +41901,7 @@ if (btnInteract) {
   const interact = () => {
     const pilot = pilotableHere();
     if (pilot === 'exit') { if (pilotedVehicle) exitVehicle(); else exitMortar(); }
-    else if (nearTrashcan && !isDead && gameStarted) showLoadoutScreen('swap');
+    else if (nearTrashcan && !isDead && gameStarted && !fixedKitModeActive()) showLoadoutScreen('swap');
     else if (pilot === 'vehicle') tryEnterVehicle();
     else if (pilot === 'mortar') tryEnterMortar();
     else if (inLobby && lobbyPadHere) lobbyInteract();
