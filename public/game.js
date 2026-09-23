@@ -21927,12 +21927,30 @@ function _eqStepProps(e, t) {
   }
 }
 
+// 🫱 How long a weapon takes to come up. The game already has an authored
+// opinion about heft — the movement penalty each item carries — so the draw
+// borrows it instead of inventing a second one. Fists and a knife snap up in a
+// fifth of a second; an M134 takes the better part of one. Measuring the model
+// instead was tried and is wrong: bounding length makes a sniper the heaviest
+// thing in the game, and bounding volume makes it the crossbow.
+const DRAW_MS_MIN = 200, DRAW_MS_MAX = 900, DRAW_WEIGHT_MAX = 0.55;
+function drawMsFor(item) {
+  let w = 0.15;
+  try { w = (item && item.weight != null) ? item.weight : getDefaultWeaponWeight(item); } catch (e) {}
+  const k = Math.max(0, Math.min(1, w / DRAW_WEIGHT_MAX));
+  return Math.round(DRAW_MS_MIN + k * (DRAW_MS_MAX - DRAW_MS_MIN));
+}
+
 function startEquipAnim(idx) {
   finishEquip();
   try {
     const model = weaponModels[idx], w = WEAPONS[idx];
-    const fx = model && w && _skinFxFor(w.id);
+    if (!model || !w) return;
+    const fx = _skinFxFor(w.id);
+    // A skin with an entrance of its own plays that; everything else is drawn
+    // from the hip, which is most of the roster.
     if (fx && fx.equip) _beginEquip(model, fx, false);
+    else _beginEquip(model, { equip: 'draw', equipMs: drawMsFor(w) }, false);
   } catch (e) { finishEquip(); }
 }
 // Melee skins carry their entrance on their own table entry. Only the skin
@@ -21944,6 +21962,7 @@ function startMeleeEquipAnim(idx) {
     const want = base && equippedMeleeModelSkins[base.id];
     const skin = want && MELEE_MODEL_SKINS.find(s => s.id === want && s.melee === base.id);
     if (skin && skin.equip && skin._model === model) _beginEquip(model, skin, true);
+    else if (model && base) _beginEquip(model, { equip: 'draw', equipMs: drawMsFor(base) }, true);
   } catch (e) { finishEquip(); }
 }
 
@@ -22001,7 +22020,18 @@ function _beginEquip(model, spec, melee) {
   const span = Math.max(0.001, box.max.z - box.min.z);
   for (const q of ps) q.band = Math.max(0, Math.min(6, Math.floor((box.max.z - q.h.p.z) / span * 7)));
   const prismProp = temp.find(o => o.userData.prism);
-  _equip = { model, melee, type, t0: performance.now(), dur: spec.equipMs || 900,
+  // A draw also has a floor set by how long the weapon actually is. The shared
+  // weight table is damage x magazine, which is about movement penalty, not
+  // heft — by it a sniper is lighter than an AK and an RPG is lighter than a
+  // pistol, so both would come up in a quarter of a second. Length is the
+  // honest tie-breaker, and only for guns: melee models are scaled differently
+  // and their weights are hand-set anyway.
+  let dur = spec.equipMs || 900;
+  if (type === 'draw' && !melee) {
+    const L = box.max.z - box.min.z;
+    dur = Math.max(dur, Math.round(200 + _eqClamp((L - 0.18) / 0.67) * 400));
+  }
+  _equip = { model, melee, type, t0: performance.now(), dur,
              ps, ctr, ring, glow, sfx: spec.equipSfx || null, box, temp,
              prismPos: prismProp ? prismProp.userData.prism.pos.clone() : ctr.clone(),
              beats: (spec.equipBeats || []).map(([t, name]) => ({ t, name, done: false })),
@@ -22051,6 +22081,27 @@ function _equipStep(e, t) {
     const { c, h } = p;
     c.visible = true;
     switch (e.type) {
+      case 'draw': {
+        // Pulled up from off-screen bottom-right into the hand. The whole
+        // weapon moves as ONE rigid object — every piece keeps its exact offset
+        // from the centre and takes the same rotation — which is what separates
+        // a draw from the assemble/unfold entrances, and why it can be this
+        // short without looking like the gun is falling apart.
+        // The throw is measured in gun-lengths rather than metres, so a pistol
+        // and an AMR swing through the same arc instead of the pistol barely
+        // moving and the AMR starting somewhere behind you.
+        const L = Math.max(0.05, e.box.max.z - e.box.min.z);
+        const k = _eqEase(_eqClamp(t));
+        const back = 1 - k;
+        const rot = new THREE.Quaternion().setFromEuler(
+          new THREE.Euler(-0.85 * back, 0.45 * back, 0.60 * back));
+        c.position.copy(h.p).sub(e.ctr).applyQuaternion(rot).add(e.ctr);
+        c.position.x += 0.34 * L * back;
+        c.position.y -= 1.15 * L * back;
+        c.position.z += 0.20 * L * back;
+        c.quaternion.copy(rot).multiply(h.q);
+        c.scale.copy(h.s);
+        break; }
       case 'assemble': {
         // Drift, then fuse: every shard hangs in space around where the weapon
         // will be, turning slowly, then they come in one after another and lock.
