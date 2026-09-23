@@ -2912,6 +2912,78 @@ scene.fog = new THREE.Fog(0x87ceeb, 40, 120);
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.05, 200);
 camera.position.set(0, 1.65, 0);
 
+// ── 🔩 Metal pass ────────────────────────────────────────────────────────────
+// Phong alone gives a metal a highlight and nothing else, and a highlight with
+// nothing to reflect reads as glossy plastic. Every metallic-looking weapon
+// material gets a reflection of a small studio environment (bright window
+// strips, a pale sky, a dark floor) mixed over its own colour, so barrels and
+// slides catch long streaks that slide across them as you turn -- the viewmodel
+// is parented to the camera, so the reflection moves with your aim.
+// Hooked on camera.add because every viewmodel (guns, melee, throwables, and
+// skins built lazily on first equip) is added there, so nothing is missed.
+let _metalEnvTex = null;
+function _metalEnv() {
+  if (_metalEnvTex) return _metalEnvTex;
+  const W = 512, H = 256, c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const x = c.getContext('2d');
+  const g = x.createLinearGradient(0, 0, 0, H);            // equirect: top of the map is straight up
+  g.addColorStop(0.00, '#f1f7ff'); g.addColorStop(0.28, '#a9bdd3'); g.addColorStop(0.46, '#c9d4e0');
+  g.addColorStop(0.50, '#8f99a4'); g.addColorStop(0.56, '#726c65'); g.addColorStop(0.75, '#413d38'); g.addColorStop(1.00, '#1e1c1a');
+  x.fillStyle = g; x.fillRect(0, 0, W, H);
+  // The sides of a barrel reflect the horizon, so the banding that reads as
+  // "metal" has to cross it: tall bright window strips and dark cabinet bars,
+  // alternating around the whole 360 so something new slides over the steel as you turn.
+  x.fillStyle = 'rgba(255,255,255,0.95)';
+  for (const [px, w] of [[14, 26], [84, 14], [150, 38], [226, 16], [292, 30], [362, 12], [430, 34], [488, 14]]) x.fillRect(px, 34, w, 150);
+  x.fillStyle = 'rgba(8,8,10,0.62)';
+  for (const [px, w] of [[52, 18], [118, 20], [196, 22], [262, 18], [332, 24], [398, 18], [464, 16]]) x.fillRect(px, 70, w, 120);
+  x.fillStyle = 'rgba(255,255,255,0.96)';                   // overhead softboxes: streaks on top planes
+  for (const [px, py, w, h] of [[36, 20, 76, 30], [186, 14, 128, 20], [348, 24, 60, 34], [446, 18, 52, 24]]) x.fillRect(px, py, w, h);
+  x.fillStyle = 'rgba(255,196,128,0.5)';                    // warm bounce off a floor
+  x.fillRect(118, 150, 96, 30); x.fillRect(378, 142, 74, 34);
+  const t = new THREE.CanvasTexture(c);
+  t.mapping = THREE.EquirectangularReflectionMapping;
+  if (THREE.SRGBColorSpace !== undefined && 'colorSpace' in t) t.colorSpace = THREE.SRGBColorSpace;
+  else if (THREE.sRGBEncoding !== undefined) t.encoding = THREE.sRGBEncoding;
+  t.needsUpdate = true;
+  return (_metalEnvTex = t);
+}
+const _mHSL = { h: 0, s: 0, l: 0 }, _mSpec = { h: 0, s: 0, l: 0 };
+function _metalizeMat(m) {
+  if (!m || !m.isMeshPhongMaterial || (m.userData && m.userData.metalDone)) return m;
+  m.userData = m.userData || {};
+  m.userData.metalDone = true;
+  if (m.transparent || m.map || (m.emissive && m.emissive.getHex() !== 0)) return m;   // glass, decals, glowing bits
+  m.color.getHSL(_mHSL, THREE.SRGBColorSpace);        // sRGB, not the linear working space: thresholds below are the hex values you see
+  m.specular.getHSL(_mSpec, THREE.SRGBColorSpace);
+  // Metal is bright-specular and glossy; grey/steel any tint, or a warm gold/brass/copper.
+  // Plastic and rubber (low shine, dull specular) and saturated coloured plastics stay as they are.
+  const glossy = m.shininess >= 60 && _mSpec.l >= 0.55;
+  const warmMetal = _mHSL.h > 0.03 && _mHSL.h < 0.17 && _mHSL.s < 0.75;
+  if (!glossy || !(_mHSL.s < 0.45 || warmMetal)) return m;
+  m.envMap = _metalEnv();
+  m.combine = THREE.MixOperation;
+  m.reflectivity = Math.min(0.74, 0.38 + (m.shininess - 60) / 220);
+  m.shininess = Math.min(320, m.shininess * 1.4);
+  m.needsUpdate = true;
+  return m;
+}
+function metalizeModel(root) {
+  if (!root || !root.traverse) return;
+  root.traverse(o => {
+    if (!o.isMesh || (o.userData && o.userData.vmHand)) return;
+    if (Array.isArray(o.material)) o.material.forEach(_metalizeMat); else _metalizeMat(o.material);
+  });
+}
+{
+  const _camAdd = camera.add;
+  camera.add = function (...objs) {
+    for (const o of objs) { try { metalizeModel(o); } catch (e) { console.warn('[metal]', e); } }
+    return _camAdd.apply(this, objs);
+  };
+}
+
 // Procedural weapon audio: no asset files needed, unlocked by the first player gesture.
 let audioCtx = null;
 let weaponSoundLastAt = {};
@@ -7143,6 +7215,9 @@ const GUN_MATS = {
   wood:    () => new THREE.MeshPhongMaterial({ color: 0x6b4a2c, shininess: 46,  specular: 0x8a7256 }),
   inner:   () => new THREE.MeshPhongMaterial({ color: 0x1c1f23, shininess: 20,  specular: 0x33373c }),
 };
+// Detail passes (greebles, collars, fittings) build parts with these AFTER the
+// model has already been added to the camera, so metalize at creation too.
+for (const _k of Object.keys(GUN_MATS)) { const _f = GUN_MATS[_k]; GUN_MATS[_k] = () => _metalizeMat(_f()); }
 
 function buildBarrett() {
   // 🔫 Barrett M82: the long arrowhead muzzle brake, the big square receiver
@@ -25486,6 +25561,7 @@ function prepViewModel(m) {
   // A bullpup puts its magazine behind the grip, so the generic magwell anchor
   // lands in front of the trigger at nothing. A builder can say otherwise.
   if (m._anchorOverride && m._anchors) Object.assign(m._anchors, m._anchorOverride);
+  try { metalizeModel(m); } catch (e) {}       // parts added by the passes above
   return m;
 }
 weaponModels.forEach(prepViewModel);
