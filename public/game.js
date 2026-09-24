@@ -14990,6 +14990,14 @@ function buildP90() {
   const guard = new THREE.Mesh(new THREE.TorusGeometry(0.020, 0.0034, 6, 12, Math.PI * 1.0), poly);
   guard.rotation.set(0, Math.PI/2, -0.5); guard.position.set(0, -0.038, -0.028); g.add(guard);
   gpBox(g, poly, 0.046, 0.040, 0.012, 0, 0.008, 0.140, 0.08);          // shoulder pad
+  // One painted stripe down each flank. The shell is a single plate 0.048 wide,
+  // which leaves the biggest unbroken face on any primary in the game and reads
+  // as an unfinished blockout next to guns with rails and vents. A stripe is
+  // also what a real polymer shell gets, being the one part of a gun you can
+  // paint without touching anything that moves. It sinks 1 mm into the shell
+  // (x 0.023..0.026 against a face at 0.024) so it is bonded, not floating.
+  const stripe = new THREE.MeshPhongMaterial({ color: 0x6f7a86, shininess: 40, specular: 0x30363c });
+  [-0.0245, 0.0245].forEach(x => gpBox(g, stripe, 0.003, 0.008, 0.180, x, 0.018, -0.050));
   const flash = makeMuzzleFlash(); flash.position.set(0, 0.006, -0.258); g.add(flash);
   g._flash = flash; g._kickZ = 0.006; g._greebled = true; g._handDetailed = true;
   g.position.set(0.12, -0.1, -0.25); return g;
