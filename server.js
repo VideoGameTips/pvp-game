@@ -296,10 +296,14 @@ const GEN1_SKIN_IDS = [
   'rpd_m249', 'lever_winchester94', 'pistol_m9', 'sg8_remington870',
   'srx_dragunov', 'revolver_python', 'grenade_launcher_mgl', 'flamethrower_m2',
 ];
-// The two donut weapons. No longer a case of their own -- kept as a list only
-// so an admin login still grants them; the pool that deals them is Gen 2's.
+// The donut weapons: the Glazer, Ring King, and twelve donut guns. No longer a
+// case of their own -- this is Gen 2's rarest tier (GEN2_MYTHIC_SKIN_IDS), and an
+// admin login grants them all. Mirrors DONUT_SKIN_IDS in public/game.js.
 const DONUT_SKIN_IDS = [
   'revolver_donut', 'katana_donut',
+  'ak20_donut', 'rpg_donut', 'machine_pistol_donut', 'pistol_donut',
+  'sg8_donut', 'srx_donut', 'vector_donut', 'grenade_launcher_donut',
+  'minigun_donut', 'mp40_donut', 'deagle_donut', 'shorty_donut',
 ];
 // 🎬 Gen 2 — Entrances. One rule decides membership: if the skin plays an
 // animation when you draw it, it is in this case. Unlike Gen 1, rarity here

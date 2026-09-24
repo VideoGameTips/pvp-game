@@ -14518,21 +14518,34 @@ function buildRainbowAK() {
   return g;
 }
 
-// Everything donut is metallic pink -- no brown anywhere. "Metallic" in this
-// game is Phong with a high shininess and a white specular (there is no
+// Donut skins are candy-metal, not one flat frosting colour. "Metallic" in
+// this game is Phong with a high shininess and a white specular (there is no
 // environment map for a PBR metal to reflect, so a StandardMaterial with
 // metalness would just render dark).
-function _donutMats() {
+function _donutMats(flavor = 'strawberry') {
+  const palettes = {
+    strawberry: { dough:0xff9ccf, glaze:0xff5cae, cream:0xfff1f9, deep:0xc4368a, steel:0xffc4e4, dark:0x6a2456, grip:0xa02a70, glow:0x40092a },
+    blueberry:  { dough:0x9ed2ff, glaze:0x4aa8ff, cream:0xe8f6ff, deep:0x2d62c8, steel:0xbde7ff, dark:0x1c3f86, grip:0x315bc0, glow:0x062850 },
+    lime:       { dough:0xc8ff9c, glaze:0x72e85a, cream:0xf2ffe8, deep:0x42aa3c, steel:0xd6ffc4, dark:0x246a30, grip:0x3a9a44, glow:0x0b4016 },
+    lemon:      { dough:0xfff49c, glaze:0xffdd3a, cream:0xffffee, deep:0xd4a72e, steel:0xfff2b8, dark:0x80642a, grip:0xb88628, glow:0x554000 },
+    grape:      { dough:0xd7a6ff, glaze:0xa85cff, cream:0xf6eaff, deep:0x7334c8, steel:0xe4c5ff, dark:0x46206f, grip:0x6930a0, glow:0x250640 },
+    mint:       { dough:0xa9ffe8, glaze:0x44e6bd, cream:0xf0fff9, deep:0x25a082, steel:0xc7fff2, dark:0x126656, grip:0x209078, glow:0x064032 },
+    orange:     { dough:0xffc38a, glaze:0xff8a2a, cream:0xfff3e6, deep:0xd86422, steel:0xffd3aa, dark:0x7a3216, grip:0xa84a1e, glow:0x4a1705 },
+    cherry:     { dough:0xff9caa, glaze:0xff3358, cream:0xffedf1, deep:0xc52044, steel:0xffbfcb, dark:0x6f1530, grip:0xa02040, glow:0x460616 },
+    vanilla:    { dough:0xffe7b0, glaze:0xfff4cc, cream:0xffffff, deep:0xd6b66a, steel:0xfff7dc, dark:0x7a663a, grip:0xb89654, glow:0x5a4312 },
+    cosmic:     { dough:0x8ad8ff, glaze:0xff66e8, cream:0xf5f0ff, deep:0x5b44d8, steel:0xc7f0ff, dark:0x2b237a, grip:0x8a30b8, glow:0x260650 },
+  };
+  const P = palettes[flavor] || palettes.strawberry;
   const metal = (color, shininess, emissive, ei) => new THREE.MeshPhongMaterial({
     color, shininess, specular: 0xffffff, emissive: emissive || 0x000000, emissiveIntensity: ei || 0 });
   return {
-    dough: metal(0xff9ccf, 190),                  // rose -- the dough, no longer brown
-    glaze: metal(0xff5cae, 230, 0x40092a, 0.20),  // hot pink glaze
-    cream: metal(0xfff1f9, 240),                  // pearl icing
-    deep:  metal(0xc4368a, 200, 0x2c0620, 0.12),  // deep magenta: the shading colour where there used to be chocolate
-    steel: metal(0xffc4e4, 250),                  // pink chrome for barrel / blade / tip
-    dark:  metal(0x6a2456, 170),                  // dark plum for grooves
-    grip:  metal(0xa02a70, 160),                  // magenta grip
+    dough: metal(P.dough, 190),
+    glaze: metal(P.glaze, 230, P.glow, 0.20),
+    cream: metal(P.cream, 240),
+    deep:  metal(P.deep, 200, P.glow, 0.12),
+    steel: metal(P.steel, 250),
+    dark:  metal(P.dark, 170),
+    grip:  metal(P.grip, 160),
   };
 }
 
@@ -14542,8 +14555,8 @@ function _donutSprinkleMat(i) {
   return new THREE.MeshPhongMaterial({ color: c, shininess: 240, specular: 0xffffff, emissive: c, emissiveIntensity: 0.22 });
 }
 
-function _buildDonutRing(radius = 0.038, tube = 0.010, glazeScale = 0.92) {
-  const mats = _donutMats();
+function _buildDonutRing(radius = 0.038, tube = 0.010, glazeScale = 0.92, flavor = 'strawberry') {
+  const mats = _donutMats(flavor);
   const ring = new THREE.Group();
   const dough = new THREE.Mesh(new THREE.TorusGeometry(radius, tube, 16, 36), mats.dough);
   dough.castShadow = true; ring.add(dough);
@@ -14584,11 +14597,11 @@ function _addDonutOrbit(g, radius = 0.075, z = -0.060) {
 
 function buildDonutRevolver() {
   const g = new THREE.Group();
-  const M = _donutMats();
+  const M = _donutMats('strawberry');
   gpBox(g, M.deep, 0.034, 0.050, 0.088, 0, 0.018, 0.036);           // magenta frame
   gpBox(g, M.dark, 0.035, 0.006, 0.070, 0, 0.044, 0.038);           // rear sight groove
   const drum = gpPart(g, 'main', () => {
-    const ring = _buildDonutRing(0.033, 0.010, 0.94);
+    const ring = _buildDonutRing(0.033, 0.010, 0.94, 'strawberry');
     ring.position.set(0, 0.018, -0.030);
     g.add(ring);
     for (let i = 0; i < 6; i++) {
@@ -14618,8 +14631,8 @@ function buildDonutRevolver() {
 
 function buildDonutKatana() {
   const g = new THREE.Group();
-  const M = _donutMats();
-  const guard = _buildDonutRing(0.036, 0.010, 0.96);
+  const M = _donutMats('grape');
+  const guard = _buildDonutRing(0.036, 0.010, 0.96, 'grape');
   guard.rotation.z = Math.PI / 2;
   guard.position.set(0, 0.006, 0.050);
   guard.userData.donutMain = true;   // the donut the equip entrance threads on
@@ -14641,6 +14654,90 @@ function buildDonutKatana() {
   _addDonutOrbit(g, 0.082, -0.135);
   g._greebled = true; g._handDetailed = true;
   g.position.set(0.10, -0.12, -0.20); return g;
+}
+
+function buildDonutClassicGun(kind = 'rifle', flavor = 'strawberry') {
+  const g = new THREE.Group();
+  const M = _donutMats(flavor);
+  const cfg = {
+    rifle:   { body:[0.050,0.074,0.300,0,0.014,-0.030], barrel:[0.010,0.190,-0.255], stock:true,  mag:true,  ring:[0.038,0.011,0,0.019,-0.040], orbit:[0.078,-0.055], flash:-0.360 },
+    smg:     { body:[0.050,0.064,0.180,0,0.012,-0.040], barrel:[0.010,0.105,-0.180], stock:false, mag:true,  ring:[0.032,0.010,0,0.018,-0.048], orbit:[0.068,-0.040], flash:-0.245 },
+    pistol:  { body:[0.048,0.052,0.150,0,0.018,-0.060], barrel:[0.010,0.100,-0.165], stock:false, mag:false, ring:[0.028,0.009,0,0.020,-0.050], orbit:[0.060,-0.035], flash:-0.225 },
+    shotgun: { body:[0.056,0.070,0.260,0,0.012,-0.060], barrel:[0.014,0.220,-0.250], stock:true,  mag:false, ring:[0.040,0.012,0,0.019,-0.065], orbit:[0.080,-0.060], flash:-0.370 },
+    sniper:  { body:[0.048,0.068,0.360,0,0.016,-0.050], barrel:[0.008,0.320,-0.350], stock:true,  mag:true,  ring:[0.036,0.010,0,0.020,-0.070], orbit:[0.082,-0.080], flash:-0.525 },
+    launcher:{ body:[0.086,0.086,0.360,0,0.016,-0.100], barrel:[0.034,0.500,-0.125], stock:false, mag:false, ring:[0.050,0.014,0,0.016,-0.100], orbit:[0.090,-0.100], flash:-0.400 },
+    heavy:   { body:[0.076,0.090,0.340,0,0.016,-0.070], barrel:[0.016,0.300,-0.330], stock:true,  mag:true,  ring:[0.044,0.013,0,0.020,-0.075], orbit:[0.090,-0.075], flash:-0.500 },
+  }[kind] || {};
+  const [bw,bh,bd,bx,by,bz] = cfg.body;
+  const [br, bl, bz2] = cfg.barrel;
+  gpBox(g, M.deep, bw, bh, bd, bx, by, bz);
+  gpBox(g, M.cream, bw * 0.82, 0.010, bd * 0.82, bx, by + bh * 0.53, bz - 0.006);
+  gpBox(g, M.dark, bw * 1.02, 0.008, bd * 0.65, bx, by - bh * 0.50, bz + 0.006);
+  gpCyl(g, M.steel, br, br, bl, 16, 0, by + bh * 0.03, bz2);
+  gpCyl(g, M.dark, br * 0.58, br * 0.58, 0.016, 12, 0, by + bh * 0.03, bz2 - bl * 0.52 - 0.008);
+  if (kind === 'launcher') {
+    gpCyl(g, M.glaze, 0.060, 0.032, 0.090, 16, 0, by + 0.002, bz2 - bl * 0.54);
+    gpCyl(g, M.dark, 0.052, 0.052, 0.016, 16, 0, by + 0.002, bz2 + bl * 0.50);
+  }
+  if (cfg.stock) {
+    gpBox(g, M.grip, bw * 0.95, bh * 0.55, 0.140, 0, by - 0.004, bz + bd * 0.58);
+    gpBox(g, M.cream, bw * 0.70, 0.012, 0.110, 0, by + bh * 0.31, bz + bd * 0.58);
+  }
+  gpPlate(g, M.grip, [[0.020,-0.020],[0.052,-0.034],[0.056,-0.108],[0.028,-0.122],[0.004,-0.070],[0.000,-0.026]], 0.038, 0);
+  if (cfg.mag) {
+    gpBox(g, M.deep, 0.036, 0.095, 0.040, 0, -0.074, bz + bd * 0.04, -0.16);
+    gpBox(g, M.cream, 0.038, 0.010, 0.042, 0, -0.124, bz + bd * 0.045, -0.16);
+  }
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.019, 0.0038, 6, 12, Math.PI * 1.05), M.steel);
+  guard.rotation.set(0, Math.PI/2, -0.4); guard.position.set(0, -0.032, bz + bd * 0.22); g.add(guard);
+  gpBox(g, M.steel, 0.006, 0.018, 0.006, 0, -0.023, bz + bd * 0.22, 0.2);
+  for (let i = 0; i < 9; i++) {
+    const s = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.003, 0.004), _donutSprinkleMat(i));
+    s.position.set((i % 3 - 1) * bw * 0.22, by + bh * 0.62, bz - bd * 0.32 + i * bd * 0.07);
+    s.rotation.z = (i % 4 - 1.5) * 0.55;
+    g.add(s);
+  }
+  const ring = _buildDonutRing(cfg.ring[0], cfg.ring[1], 0.94, flavor);
+  ring.position.set(cfg.ring[2], cfg.ring[3], cfg.ring[4]);
+  ring.userData.donutMain = true;
+  g.add(ring);
+  _addDonutOrbit(g, cfg.orbit[0], cfg.orbit[1]);
+  const flash = makeMuzzleFlash(); flash.position.set(0, by + bh * 0.03, cfg.flash); g.add(flash);
+  g._flash = flash; g._kickZ = kind === 'launcher' ? 0.030 : 0.016;
+  g._greebled = true; g._handDetailed = true;
+  g.position.set(0.1, -0.1, -0.22);
+  return g;
+}
+function buildDonutAK20() { return buildDonutClassicGun('rifle', 'blueberry'); }
+function buildDonutRPG() { return buildDonutClassicGun('launcher', 'lime'); }
+function buildDonutMachinePistol() { return buildDonutClassicGun('smg', 'orange'); }
+function buildDonutPistol() { return buildDonutClassicGun('pistol', 'vanilla'); }
+function buildDonutSG8() { return buildDonutClassicGun('shotgun', 'cherry'); }
+function buildDonutSRX() { return buildDonutClassicGun('sniper', 'mint'); }
+function buildDonutVector() { return buildDonutClassicGun('smg', 'cosmic'); }
+function buildDonutGrenadeLauncher() { return buildDonutClassicGun('launcher', 'lemon'); }
+function buildDonutMinigun() { return buildDonutClassicGun('heavy', 'grape'); }
+function buildDonutMP40() { return buildDonutClassicGun('smg', 'blueberry'); }
+function buildDonutDeagle() { return buildDonutClassicGun('pistol', 'orange'); }
+function buildDonutShorty() { return buildDonutClassicGun('shotgun', 'mint'); }
+
+function buildDonutFragGrenade() {
+  const g = new THREE.Group();
+  const M = _donutMats('lime');
+  const body = _buildDonutRing(0.043, 0.014, 0.95, 'lime');
+  body.rotation.x = Math.PI / 2;
+  body.userData.donutMain = true;
+  g.add(body);
+  gpCyl(g, M.dark, 0.016, 0.018, 0.020, 10, 0, 0.053, 0, 0);
+  gpBox(g, M.steel, 0.030, 0.006, 0.014, 0.012, 0.061, 0);
+  gpBox(g, M.steel, 0.007, 0.066, 0.014, 0.031, 0.026, 0, 0, 0, 0.24);
+  gpCyl(g, M.steel, 0.0022, 0.0022, 0.036, 6, -0.010, 0.059, 0, 0, Math.PI / 2);
+  const pull = new THREE.Mesh(new THREE.TorusGeometry(0.014, 0.0025, 6, 14), M.steel);
+  pull.rotation.y = Math.PI / 2; pull.position.set(-0.030, 0.059, 0); g.add(pull);
+  _addDonutOrbit(g, 0.064, 0);
+  g._supportEquip = 'donutbuild';
+  g.position.set(0.10, -0.12, -0.20);
+  return g;
 }
 
 function buildHairDryer() {
@@ -26737,6 +26834,42 @@ const MODEL_SKINS = [
   { id: 'revolver_donut', weapon: 'revolver', name: 'The Glazer', rarity: 'donut',
     sw: ['#ff5cae', '#fff1f9'], build: buildDonutRevolver, look: { projectile: 'donut', bulletColor: 0xff78bd, bulletSize: 0.075 },
     blurb: 'The cylinder is a frosted donut. Sprinkles orbit it because subtlety lost.' },
+  { id: 'ak20_donut', weapon: 'ak20', name: 'Glazed AK', rarity: 'donut',
+    sw: ['#ff5cae', '#fff1f9'], build: buildDonutAK20, look: { projectile: 'donut', bulletColor: 0xff78bd },
+    blurb: 'Pink chrome receiver, frosted donut core, and sprinkles orbiting the muzzle.' },
+  { id: 'rpg_donut', weapon: 'rpg', name: 'Rocket Cruller', rarity: 'donut',
+    sw: ['#ff5cae', '#fff1f9'], build: buildDonutRPG, look: { projectile: 'donut', bulletColor: 0xff78bd, bulletSize: 0.15 },
+    blurb: 'A launcher built around a donut ring. The rocket leaves with dessert-level disrespect.' },
+  { id: 'machine_pistol_donut', weapon: 'machine_pistol', name: 'Glazed Uzi', rarity: 'donut',
+    sw: ['#ff5cae', '#fff1f9'], build: buildDonutMachinePistol, look: { projectile: 'donut', bulletColor: 0xff78bd },
+    blurb: 'A tiny pink-metal bullet hose with a donut threaded through the receiver.' },
+  { id: 'pistol_donut', weapon: 'pistol', name: 'Snack Sidearm', rarity: 'donut',
+    sw: ['#ff5cae', '#fff1f9'], build: buildDonutPistol, look: { projectile: 'donut', bulletColor: 0xff78bd },
+    blurb: 'A compact donut pistol that snaps together like flying jewelry.' },
+  { id: 'sg8_donut', weapon: 'sg8', name: 'Powdered Pump', rarity: 'donut',
+    sw: ['#ff5cae', '#fff1f9'], build: buildDonutSG8, look: { projectile: 'donut', bulletColor: 0xff78bd },
+    blurb: 'A donut shotgun: loud, frosted, and absolutely not breakfast-safe.' },
+  { id: 'srx_donut', weapon: 'srx', name: 'Long John SR-X', rarity: 'donut',
+    sw: ['#ff5cae', '#fff1f9'], build: buildDonutSRX, look: { projectile: 'donut', bulletColor: 0xff78bd },
+    blurb: 'A sniper skin with a donut core and a suspicious amount of sparkle.' },
+  { id: 'vector_donut', weapon: 'vector', name: 'Sprinkle Vector', rarity: 'donut',
+    sw: ['#ff5cae', '#fff1f9'], build: buildDonutVector, look: { projectile: 'donut', bulletColor: 0xff78bd },
+    blurb: 'Fast metal bits slam together, then the donut seats itself with a cling.' },
+  { id: 'grenade_launcher_donut', weapon: 'grenade_launcher', name: 'Glaze Launcher', rarity: 'donut',
+    sw: ['#ff5cae', '#fff1f9'], build: buildDonutGrenadeLauncher, look: { projectile: 'donut', bulletColor: 0xff78bd, bulletSize: 0.13 },
+    blurb: 'A frosted launcher with orbiting sprinkles and a ring that threads itself on draw.' },
+  { id: 'minigun_donut', weapon: 'minigun', name: 'Sprinkle Spinner', rarity: 'donut',
+    sw: ['#ff5cae', '#fff1f9'], build: buildDonutMinigun, look: { projectile: 'donut', bulletColor: 0xff78bd },
+    blurb: 'A heavy donut machine that should probably come with a napkin.' },
+  { id: 'mp40_donut', weapon: 'mp40', name: 'Creamline MP40', rarity: 'donut',
+    sw: ['#ff5cae', '#fff1f9'], build: buildDonutMP40, look: { projectile: 'donut', bulletColor: 0xff78bd },
+    blurb: 'A compact classic SMG, rebuilt in pink chrome and icing.' },
+  { id: 'deagle_donut', weapon: 'desert_eagle', name: 'Dessert Eagle', rarity: 'donut',
+    sw: ['#ff5cae', '#fff1f9'], build: buildDonutDeagle, look: { projectile: 'donut', bulletColor: 0xff78bd },
+    blurb: 'Big pistol, bigger frosting. Yes, the pun was mandatory.' },
+  { id: 'shorty_donut', weapon: 'shorty', name: 'Doughboy Shorty', rarity: 'donut',
+    sw: ['#ff5cae', '#fff1f9'], build: buildDonutShorty, look: { projectile: 'donut', bulletColor: 0xff78bd },
+    blurb: 'A sawed-off donut shotgun that enters like expensive kitchenware.' },
   // Plain model skins: no entrance animation, no case, free to equip.
   { id: 'cycler_walkie_talkie', weapon: 'cycler', name: 'Walkie-Talkie', rarity: 'good',
     sw: ['#2a2e34', '#e8781c'], build: buildWalkieTalkie,
@@ -26813,7 +26946,12 @@ const GEN1_GATED_MODEL_SKIN_IDS = new Set([
   'rpd_m249', 'lever_winchester94', 'pistol_m9', 'sg8_remington870',
   'srx_dragunov', 'revolver_python', 'grenade_launcher_mgl', 'flamethrower_m2',
 ]);
-const DONUT_SKIN_IDS = ['revolver_donut', 'katana_donut'];
+const DONUT_SKIN_IDS = [
+  'revolver_donut', 'katana_donut',
+  'ak20_donut', 'rpg_donut', 'machine_pistol_donut', 'pistol_donut',
+  'sg8_donut', 'srx_donut', 'vector_donut', 'grenade_launcher_donut',
+  'minigun_donut', 'mp40_donut', 'deagle_donut', 'shorty_donut',
+];
 // 🎬 Skin Case Gen 2 — Entrances. One rule decides what is in it: if the skin
 // plays an animation when you draw it, it comes from this case. Crystals
 // assembling into an AK, a balisong flipping open, a knife falling out of a
@@ -26823,7 +26961,10 @@ const DONUT_SKIN_IDS = ['revolver_donut', 'katana_donut'];
 // Mirrors GEN2_SKIN_IDS in server.js (gotcha #4): the server owns the roll and
 // the ownership record, this list only decides what the picker locks.
 const GEN2_MODEL_SKIN_IDS = new Set([
-  'revolver_donut', 'ak20_rainbow', 'ak20_hyperspace', 'ak20_blueprint', 'sg8_portal', 'vector_portal',
+  'revolver_donut', 'ak20_donut', 'rpg_donut', 'machine_pistol_donut', 'pistol_donut',
+  'sg8_donut', 'srx_donut', 'vector_donut', 'grenade_launcher_donut', 'minigun_donut',
+  'mp40_donut', 'deagle_donut', 'shorty_donut',
+  'ak20_rainbow', 'ak20_hyperspace', 'ak20_blueprint', 'sg8_portal', 'vector_portal',
   'railgun_portal_detector', 'p90_quantum_scanner', 'freeze_hyperslush', 'firework_showman',
   'shorty_outlaw', 'snub_gunslinger', 'deagle_glitch', 'deagle_phantom',
   'burst_cannon_phantom', 'plasma_carbine_fishbowl', 'paintball_fishbowl', 'coilgun_clockwork',
@@ -30011,6 +30152,30 @@ const SKIN_FX = {
     reload: _fxR(RELOAD_KEYS.ak20, (RELOAD_PROPS.ak20 || []).map(e => e.k === 'mag' ? Object.assign({}, e, { k: 'rainbowmag' }) : e), null, 'chord') },
   revolver_donut: { sound: _fxS('glazeshot', 0.44, 0.14, 1500, 2400, { base:'crack', action:'revolver', tail:0.45 }),
     equip: 'donutbuild', equipMs: 1600, equipSfx: ['whoosh', 'chime'], equipBeats: [[.88,'snapin'],[.88,'cling']] },
+  ak20_donut: { sound: _fxS('glazeshot', 0.27, 0.09, 1700, 2900, { base:'auto_blast', action:'rifle', tail:0.25 }),
+    equip: 'donutbuild', equipMs: 1600, equipSfx: ['whoosh', 'chime'], equipBeats: [[.88,'snapin'],[.88,'cling']] },
+  rpg_donut: { sound: _fxS('glazeshot', 0.4, 0.2, 900, 1600, { base:'boom', action:'single', tail:0.5 }),
+    equip: 'donutbuild', equipMs: 1700, equipSfx: ['whoosh', 'chime'], equipBeats: [[.88,'snapin'],[.88,'cling']] },
+  machine_pistol_donut: { sound: _fxS('glazeshot', 0.22, 0.06, 2000, 3300, { base:'auto_blast', action:'slide', tail:0.1 }),
+    equip: 'donutbuild', equipMs: 1500, equipSfx: ['whoosh', 'chime'], equipBeats: [[.88,'snapin'],[.88,'cling']] },
+  pistol_donut: { sound: _fxS('glazeshot', 0.28, 0.08, 1900, 3100, { base:'pistol', action:'slide', tail:0.15 }),
+    equip: 'donutbuild', equipMs: 1450, equipSfx: ['whoosh', 'chime'], equipBeats: [[.88,'snapin'],[.88,'cling']] },
+  sg8_donut: { sound: _fxS('glazeshot', 0.58, 0.2, 1300, 2200, { base:'boom', action:'shotgun', tail:0.6 }),
+    equip: 'donutbuild', equipMs: 1650, equipSfx: ['whoosh', 'chime'], equipBeats: [[.88,'snapin'],[.88,'cling']] },
+  srx_donut: { sound: _fxS('glazeshot', 0.6, 0.18, 1500, 2600, { base:'crack', action:'bolt', tail:1.0 }),
+    equip: 'donutbuild', equipMs: 1700, equipSfx: ['whoosh', 'chime'], equipBeats: [[.88,'snapin'],[.88,'cling']] },
+  vector_donut: { sound: _fxS('glazeshot', 0.2, 0.06, 2100, 3400, { base:'auto_blast', action:'slide' }),
+    equip: 'donutbuild', equipMs: 1500, equipSfx: ['whoosh', 'chime'], equipBeats: [[.88,'snapin'],[.88,'cling']] },
+  grenade_launcher_donut: { sound: _fxS('glazeshot', 0.4, 0.2, 900, 1500, { base:'boom', action:'single', tail:0.4 }),
+    equip: 'donutbuild', equipMs: 1700, equipSfx: ['whoosh', 'chime'], equipBeats: [[.88,'snapin'],[.88,'cling']] },
+  minigun_donut: { sound: _fxS('glazeshot', 0.24, 0.06, 1600, 2700, { base:'auto_blast_heavy', action:'water_belt', tail:0.3 }),
+    equip: 'donutbuild', equipMs: 1750, equipSfx: ['whoosh', 'chime'], equipBeats: [[.88,'snapin'],[.88,'cling']] },
+  mp40_donut: { sound: _fxS('glazeshot', 0.22, 0.06, 1800, 3000, { base:'auto_blast', action:'slide' }),
+    equip: 'donutbuild', equipMs: 1500, equipSfx: ['whoosh', 'chime'], equipBeats: [[.88,'snapin'],[.88,'cling']] },
+  deagle_donut: { sound: _fxS('glazeshot', 0.4, 0.12, 1500, 2500, { base:'crack', action:'slide', tail:0.4 }),
+    equip: 'donutbuild', equipMs: 1500, equipSfx: ['whoosh', 'chime'], equipBeats: [[.88,'snapin'],[.88,'cling']] },
+  shorty_donut: { sound: _fxS('glazeshot', 0.52, 0.16, 1300, 2200, { base:'boom', action:'shotgun', tail:0.5 }),
+    equip: 'donutbuild', equipMs: 1550, equipSfx: ['whoosh', 'chime'], equipBeats: [[.88,'snapin'],[.88,'cling']] },
 };
 
 function _reloadPose(track, t) {

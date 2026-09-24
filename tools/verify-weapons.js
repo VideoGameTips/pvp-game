@@ -60,7 +60,7 @@ function load() {
                    '_meleeOffset', '_collarGeometry', 'blendProudSteps',
                    '_emoStroke', '_emoMats', '_legendMats', '_legendize',
                    '_mPivot', '_eqCrystalMats', '_donutMats', '_donutSprinkleMat',
-                   '_buildDonutRing', '_addDonutOrbit',
+                   '_buildDonutRing', '_addDonutOrbit', 'buildDonutClassicGun',
                    // builders that take arguments are not picked up by the build*() sweep below
                    'buildPixelGunModel', '_eqSegment']) {
     const b = fnBlock(n);
