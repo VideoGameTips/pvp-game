@@ -3718,6 +3718,13 @@ function playObjectShot(ctx, start, out, p, m) {
       playMuzzleBlast(ctx, start, out, 'auto_blast', v);
       [1, 1.26, 1.5].forEach((r, i) => playTone(ctx, start + i * 0.012, d, out, f1 * r, f1 * r, v * 0.16, 'sine'));
       return true;
+    case 'glazeshot':// a donut gun: the real gun's report, then the steel ringing on after it
+      playMuzzleBlast(ctx, start, out, p.base || 'rifle', v);
+      if (p.action) playGunAction(ctx, start, out, p.action, v);
+      metalClack(ctx, start + 0.003, out, v * 0.6, f1, 0.06);
+      playTone(ctx, start + 0.004, d * 1.8, out, f2, f2 * 0.996, v * 0.16, 'sine');            // the ring
+      playTone(ctx, start + 0.004, d * 1.1, out, f2 * 2.76, f2 * 2.72, v * 0.07, 'sine');      // its inharmonic partial: a bell, not a whistle
+      return true;
     case 'aircon':   // air, and the compressor humming under it
       playFilteredNoise(ctx, start, d, out, v, 'highpass', f1, 0.5, 0.01, 1.0);
       playTone(ctx, start, d, out, 60, 60, v * 0.6, 'sine');
@@ -21247,6 +21254,35 @@ function _buildSlug(tint, r) {
   return g;
 }
 
+function _buildDonutShot(tint, r) {
+  // A donut gun's round IS a donut: a small glazed ring flying hole-first, so
+  // from behind the gun you watch a pink donut with sprinkles fly away, and a
+  // pink glaze streak trails it. Kept to six meshes on shared geometry --
+  // a minigun makes a lot of these.
+  const c = tint || 0xff78bd, R = r * 1.25;
+  const P = _projCache('donut|'+c+'|'+r, () => ({
+    dough: new THREE.TorusGeometry(R, r * 0.55, 8, 16),
+    doughM: new THREE.MeshPhongMaterial({ color: 0xc8844a, shininess: 40, specular: 0xffd6a0 }),
+    glaze: new THREE.TorusGeometry(R, r * 0.42, 8, 16),
+    glazeM: new THREE.MeshPhongMaterial({ color: c, shininess: 120, specular: 0xffffff }),
+    spr: new THREE.BoxGeometry(r * 0.55, r * 0.14, r * 0.14),
+    sprM: [0xffee55, 0x66ddff, 0x7cff77, 0xffffff].map(col => new THREE.MeshBasicMaterial({ color: col })),
+    wake: new THREE.CylinderGeometry(R * 0.9, r * 0.1, r * 12, 8, 1, true), wakeM: _glow(c),
+  }));
+  const g = new THREE.Group();
+  const ring = new THREE.Group(); ring.rotation.x = Math.PI / 2;      // ring axis along the flight direction
+  ring.add(new THREE.Mesh(P.dough, P.doughM));
+  const gl = new THREE.Mesh(P.glaze, P.glazeM); gl.position.z = r * 0.28; ring.add(gl);
+  for (let i = 0; i < 4; i++) {
+    const a = i * Math.PI / 2 + 0.5, sp = new THREE.Mesh(P.spr, P.sprM[i]);
+    sp.position.set(Math.cos(a) * R, Math.sin(a) * R, r * 0.72); sp.rotation.z = a + 0.9; ring.add(sp);
+  }
+  g.add(ring);
+  const w = new THREE.Mesh(P.wake, P.wakeM); w.position.y = -r * 6.8; g.add(w);
+  g._alignToDir = true;
+  return g;
+}
+
 function makeBulletMesh(color, size, weaponId, own) {
   const r = size || 0.04;
   const weapon = (typeof WEAPONS !== 'undefined') ? WEAPONS.find(w => w.id === weaponId) : null;
@@ -21289,6 +21325,7 @@ function makeBulletMesh(color, size, weaponId, own) {
     case 'shock':   return _buildShock(color, r);
     case 'void':    return _buildVoid(color, r);
     case 'phase':   return _buildPhase(color, r);
+    case 'donut':   return _buildDonutShot(color, r);
   }
   // 'bullet' — a solid metal round. Orange/white tracer stretched along the path.
   const tint = color || 0xff8a1e;
@@ -26630,7 +26667,7 @@ const MODEL_SKINS = [
     sw: ['#ff3a3a', '#8a3aff'], build: buildRainbowAK, look: { rainbow: true },
     blurb: 'Split out of a prism when drawn. The rainbow flows down it, and so do its rounds.' },
   { id: 'revolver_donut', weapon: 'revolver', name: 'The Glazer', rarity: 'donut',
-    sw: ['#ff5cae', '#fff1f9'], build: buildDonutRevolver, look: { bulletColor: 0xff78bd, bulletSize: 0.075 },
+    sw: ['#ff5cae', '#fff1f9'], build: buildDonutRevolver, look: { projectile: 'donut', bulletColor: 0xff78bd, bulletSize: 0.075 },
     blurb: 'The cylinder is a frosted donut. Sprinkles orbit it because subtlety lost.' },
   // Plain model skins: no entrance animation, no case, free to equip.
   { id: 'cycler_walkie_talkie', weapon: 'cycler', name: 'Walkie-Talkie', rarity: 'good',
@@ -29904,7 +29941,7 @@ const SKIN_FX = {
     equip: 'prism', equipMs: 1600, equipSfx: ['prismbeam', null],
     equipBeats: [[.28,'chord'], [.80,'shatter'], [.84,'rainbowburst']],
     reload: _fxR(RELOAD_KEYS.ak20, (RELOAD_PROPS.ak20 || []).map(e => e.k === 'mag' ? Object.assign({}, e, { k: 'rainbowmag' }) : e), null, 'chord') },
-  revolver_donut: { sound: _fxS('splat', .30, .10, 620, 1180),
+  revolver_donut: { sound: _fxS('glazeshot', 0.44, 0.14, 1500, 2400, { base:'crack', action:'revolver', tail:0.45 }),
     equip: 'donutbuild', equipMs: 1600, equipSfx: ['whoosh', 'chime'], equipBeats: [[.88,'snapin'],[.88,'cling']] },
 };
 
