@@ -21271,11 +21271,61 @@ function _buildSlug(tint, r) {
   return g;
 }
 
+// ── 🍩 Donut trail ─────────────────────────────────────────────────────────
+// The glow streak behind a donut round lies along the flight path, which is
+// exactly the line you are looking down when you fire it -- so from behind the
+// gun it collapsed to a dot. A trail you can see from behind has to be left in
+// the WORLD: soft glowing puffs dropped along the path that fade where they
+// were left, so the round paints a line you can watch it draw.
+let _glowPuffTex = null;
+function _getGlowPuffTex() {
+  if (_glowPuffTex) return _glowPuffTex;
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const x = c.getContext('2d'), g = x.createRadialGradient(32, 32, 1, 32, 32, 31);
+  g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.35, 'rgba(255,255,255,0.55)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+  x.fillStyle = g; x.fillRect(0, 0, 64, 64);
+  return (_glowPuffTex = new THREE.CanvasTexture(c));
+}
+const _donutPuffs = [];
+const _DONUT_PUFF_COLORS = [0xff78bd, 0xff78bd, 0xffee55, 0xff78bd, 0x66ddff, 0xff78bd, 0x7cff77];
+let _donutPuffN = 0;
+const _bulletPrevTrail = new THREE.Vector3();
+function _emitDonutTrail(tint, r, from, to) {
+  const dx = to.x - from.x, dy = to.y - from.y, dz = to.z - from.z;
+  const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+  if (dist < 0.001) return;
+  const step = Math.max(0.16, r * 2.4), n = Math.min(14, Math.floor(dist / step) + 1);
+  for (let i = 0; i < n; i++) {
+    const t = (i + 1) / n, sprinkle = (_donutPuffN++ % 3) === 2;
+    const col = sprinkle ? _DONUT_PUFF_COLORS[(_donutPuffN >> 1) % _DONUT_PUFF_COLORS.length] : tint;
+    const mat = new THREE.SpriteMaterial({ map: _getGlowPuffTex(), color: col, transparent: true, opacity: 0.9,
+      blending: THREE.AdditiveBlending, depthWrite: false });
+    const sp = new THREE.Sprite(mat);
+    const s0 = (sprinkle ? 0.7 : 1.5) * r * 2.6;
+    sp.position.set(from.x + dx * t, from.y + dy * t, from.z + dz * t);
+    sp.scale.setScalar(s0);
+    sp.renderOrder = 997;
+    scene.add(sp);
+    _donutPuffs.push({ sp, mat, life: 0, max: sprinkle ? 0.7 : 0.5, s0 });
+    if (_donutPuffs.length > 320) { const o = _donutPuffs.shift(); scene.remove(o.sp); o.mat.dispose(); }
+  }
+}
+function _updateDonutPuffs(dt) {
+  for (let i = _donutPuffs.length - 1; i >= 0; i--) {
+    const p = _donutPuffs[i]; p.life += dt;
+    const t = p.life / p.max;
+    if (t >= 1) { scene.remove(p.sp); p.mat.dispose(); _donutPuffs.splice(i, 1); continue; }
+    p.mat.opacity = 0.9 * (1 - t) * (1 - t);
+    p.sp.scale.setScalar(p.s0 * (1 - 0.55 * t));
+  }
+}
+
 function _buildDonutShot(tint, r) {
   // A donut gun's round IS a donut: a small glazed ring flying hole-first, so
   // from behind the gun you watch a pink donut with sprinkles fly away, and a
   // pink glaze streak trails it. Kept to six meshes on shared geometry --
   // a minigun makes a lot of these.
+  r = Math.max(r, 0.06);      // a stock bullet size makes a donut too small to see at bullet speed
   const c = tint || 0xff78bd, R = r * 1.25;
   const P = _projCache('donut|'+c+'|'+r, () => ({
     dough: new THREE.TorusGeometry(R, r * 0.55, 8, 16),
@@ -21297,6 +21347,7 @@ function _buildDonutShot(tint, r) {
   g.add(ring);
   const w = new THREE.Mesh(P.wake, P.wakeM); w.position.y = -r * 6.8; g.add(w);
   g._alignToDir = true;
+  g._donutTrail = { tint: c, r };
   return g;
 }
 
@@ -30973,6 +31024,7 @@ function rocketExplode(pos, weaponId, excludePid, opts = {}) {
 }
 function updateBullets(dt) {
   const now = Date.now();
+  _updateDonutPuffs(dt);
   for (let i = localBullets.length-1; i>=0; i--) {
     const b = localBullets[i];
     const removeBullet = () => {
@@ -30995,6 +31047,7 @@ function updateBullets(dt) {
       b.dir.y -= (BULLET_GRAVITY / Math.max(20, b.speed)) * dt;
     }
     b.mesh.position.addScaledVector(b.dir, b.speed * dt);
+    if (b.mesh._donutTrail) _emitDonutTrail(b.mesh._donutTrail.tint, b.mesh._donutTrail.r, _bulletPrevTrail.set(px0, py0, pz0), b.mesh.position);
     // Grenades, blobs and shards tumble; tracers and rockets hold their line.
     if (b.mesh._spin) {
       b.mesh.rotation.x += b.mesh._spin.x * dt;
