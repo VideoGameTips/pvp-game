@@ -4405,8 +4405,6 @@ scene.add(sun);
 // ── Wall collision boxes ────────────────────────────────────────────────────
 // Populated by buildMap(); used by resolveWallCollisions() each frame.
 const wallColliders = []; // Array of THREE.Box3
-const PLAYER_EYE_HEIGHT = 1.65;
-const PLAYER_RADIUS = 0.38;
 // 🧱 Every collider in the game is an axis-aligned Box3, and Box3.setFromObject
 // on a wall turned 45 degrees returns the box around its whole diagonal: an
 // 18x4.5 wall got a 3x larger invisible footprint, a 14x14 diamond a hitbox
@@ -4463,10 +4461,18 @@ function pushMeshColliders(list, mesh) {
   } else list.push(new THREE.Box3().setFromObject(mesh));
 }
 
+const PLAYER_EYE_HEIGHT = 1.65;
+const PLAYER_RADIUS = 0.38;
 
-function getGroundEyeY(px = camera.position.x, pz = camera.position.z, eyeY = camera.position.y) {
+// Where the player's feet are. The eye sits lower while crouched or sliding
+// (window._crouchEye), and measuring from the standing height instead put a
+// crouched player's feet up to 0.95m BELOW the floor: every step and ramp then
+// read as a wall to slide into, and a box you crouched on stopped counting as
+// ground.
+function playerFeetY() { return camera.position.y - (window._crouchEye || PLAYER_EYE_HEIGHT); }
+function getGroundEyeY(px = camera.position.x, pz = camera.position.z, eyeY) {
   let groundY = PLAYER_EYE_HEIGHT;
-  const feetY = eyeY - PLAYER_EYE_HEIGHT;
+  const feetY = eyeY === undefined ? playerFeetY() : eyeY - PLAYER_EYE_HEIGHT;
   for (const box of wallColliders) {
     if (box.max.y <= 0.05 || box.max.y > 14) continue;
     if (feetY + 0.35 < box.max.y) continue;
@@ -4501,8 +4507,6 @@ function nearClimbableWall() {
   return null;
 }
 
-function resolveWallCollisions() {
-  const RADIUS = PLAYER_RADIUS; // player footprint radius
 // 🧱 Move the player along a direction in small steps, resolving walls after
 // each one. A wall push-out only works if the step has not already carried you
 // past the wall's middle -- then the "shortest way out" is the far side and you
@@ -4510,6 +4514,7 @@ function resolveWallCollisions() {
 // speeds, on a slow frame, or for a 5-20m dash or blink. Steps of at most
 // 0.25m are well under half of the thinnest wall (plus the player's radius).
 const MAX_MOVE_STEP = 0.25;
+const RAMP_LAUNCH_MAX = 6;    // extra m/s up from a ramp slide-jump, however fast the slide
 function moveWithWalls(dir, dist) {
   if (!(dist > 0)) return;
   const n = Math.min(120, Math.max(1, Math.ceil(dist / MAX_MOVE_STEP)));
@@ -4520,10 +4525,12 @@ function moveWithWalls(dir, dist) {
   }
 }
 
+function resolveWallCollisions() {
+  const RADIUS = PLAYER_RADIUS; // player footprint radius
   let px = camera.position.x;
   let pz = camera.position.z;
   const py = camera.position.y;
-  let feetY = py - PLAYER_EYE_HEIGHT;
+  let feetY = playerFeetY();
   for (const box of wallColliders) {
     if (feetY >= box.max.y - 0.08) continue;
     // Quick vertical cull — player occupies y ∈ [0.65, 2.65]
@@ -4535,7 +4542,7 @@ function moveWithWalls(dir, dist) {
     const exMaxZ = box.max.z + RADIUS;
     if (px <= exMinX || px >= exMaxX || pz <= exMinZ || pz >= exMaxZ) continue;
     if (box.max.y > feetY && box.max.y <= feetY + 0.65) {
-      camera.position.y = box.max.y + PLAYER_EYE_HEIGHT;
+      camera.position.y = box.max.y + (window._crouchEye || PLAYER_EYE_HEIGHT);
       feetY = box.max.y;
       continue;
     }
@@ -4576,6 +4583,38 @@ function resolvePosCollisions(px, pz, feetY = 0) {
 // ── Map Groups ──────────────────────────────────────────────────────────────
 const MAP_GROUPS = {};
 const MAP_COLLIDERS = {};
+// 📐 Ramps. Floors are all axis-aligned boxes, so a slope is a smooth wedge over
+// a staircase of hidden steps -- and the movement code has no way to know it is
+// standing on one. A map registers each slope here: its footprint, the way it
+// climbs (ux, uz: unit vector, uphill) and its rise/run. That is what lets a
+// slide gain speed going down one, and a slide-jump launch you up one.
+const MAP_RAMPS = {};
+function registerRamp(mapName, r) {
+  const len = Math.hypot(r.ux, r.uz) || 1;
+  (MAP_RAMPS[mapName] ||= []).push({ ...r, ux: r.ux / len, uz: r.uz / len, tan: r.rise / r.run });
+}
+// Height of a ramp's surface at (x, z), or null when that point is off the ramp.
+function rampSurfaceAt(r, x, z) {
+  const along = (x - r.x0) * r.ux + (z - r.z0) * r.uz;
+  const side = Math.abs((x - r.x0) * -r.uz + (z - r.z0) * r.ux);
+  if (along < -0.1 || along > r.run + 0.1 || side > r.halfW) return null;
+  return Math.max(0, Math.min(r.rise, along * r.tan));
+}
+// The ramp the player is standing on (feet on its surface), or null.
+function rampUnderPlayer() {
+  const list = MAP_RAMPS[activeMapName];
+  if (!list) return null;
+  const px = camera.position.x, pz = camera.position.z;
+  const feet = camera.position.y - (window._crouchEye || PLAYER_EYE_HEIGHT);
+  for (const r of list) {
+    const along = (px - r.x0) * r.ux + (pz - r.z0) * r.uz;                 // metres up the ramp from its foot
+    const side = Math.abs((px - r.x0) * -r.uz + (pz - r.z0) * r.ux);        // metres off the ramp's centre line
+    if (along < -0.2 || along > r.run + 0.2 || side > r.halfW + 0.2) continue;
+    const surface = Math.max(0, Math.min(r.rise, along * r.tan));
+    if (Math.abs(feet - surface) < 0.45) return r;
+  }
+  return null;
+}
 // Per-map gimmicks — { damageZones, jumpPads, iceZones, oilZones, lowGravZones } (each is array of {x,z,r})
 const MAP_GIMMICKS = {};
 let activeMapName = 'blank';
@@ -5294,6 +5333,36 @@ function buildLobby13Map() {
   addMapBox(m, 0, 0.4, 0, 4, 0.8, 4, table);     // central coffee table
   addMapBox(m, 0, 1.1, 0, 1.4, 0.6, 1.4, 0xffcc55); // glowy lamp on the table
 
+  // ── 45° test ramp (middle lane, just past the coffee table) ─────────────
+  // Rise = run = 3m, so exactly 45°, with a landing on top to stand on and
+  // test slides/jumps off. The game's floors are all axis-aligned boxes, so
+  // the slope you see is a smooth wedge and the slope you walk on is a
+  // staircase of 0.25m hidden colliders under it -- the same trick as the
+  // stairs, just fine enough that it feels like a ramp, not steps.
+  {
+    const RW = 5, RISE = 3, RUN = 3, Z0 = 4, STEP = 0.25;
+    const wedge = new THREE.Shape();
+    wedge.moveTo(0, 0); wedge.lineTo(RUN, 0); wedge.lineTo(RUN, RISE); wedge.closePath();
+    const geo = new THREE.ExtrudeGeometry(wedge, { depth: RW, bevelEnabled: false });
+    const rampMesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: 0xff9933 }));
+    rampMesh.rotation.y = -Math.PI / 2;            // shape x -> world +Z, extrusion -> world -X
+    rampMesh.position.set(RW / 2, 0, Z0);
+    MAP_GROUPS[m].add(rampMesh);
+    // The ground height under you is taken from every box within your radius
+    // (PLAYER_RADIUS), i.e. from the step half a body AHEAD -- at 45 degrees that
+    // alone would float your feet 0.38m over the wedge. So the hidden steps sit
+    // one radius further along, and half a step lower, which centres the error.
+    const n = Math.round(RISE / STEP);
+    for (let i = 0; i < n; i++) {
+      const h = (i + 0.5) * STEP, d = RUN / n;
+      const step = addMapBox(m, 0, h / 2, Z0 + PLAYER_RADIUS + (i + 0.5) * d, RW, h, d, 0xff9933);
+      step.visible = false;                        // collision only; the wedge is what you see
+    }
+    registerRamp(m, { x0: 0, z0: Z0, ux: 0, uz: 1, run: RUN, rise: RISE, halfW: RW / 2 });
+    addMapBox(m, 0, RISE / 2, Z0 + RUN + 1.25, RW, RISE, 2.5, 0xffb866);       // landing on top
+    addMapBox(m, 0, RISE + 0.05, Z0 + RUN + 2.45, RW, 0.1, 0.1, 0xffee88);     // lip stripe
+  }
+
   // ── A few bar stools / pillars around the edges to break sightlines ──
   [[-20, 14], [20, 14], [-20, -14], [20, -14], [-26, 0], [26, 0]].forEach(([x, z]) => {
     addMapBox(m, x, 1.5, z, 1.4, 3, 1.4, 0x4a3c30);
@@ -5545,35 +5614,6 @@ function buildForestMap() {
     const cx = (Math.random() - 0.5) * 80, cz = (Math.random() - 0.5) * 80;
     if (Math.hypot(cx, cz) < 8) continue;
     for (let s = 0; s < 4; s++) {
-  // ── 45° test ramp (middle lane, just past the coffee table) ─────────────
-  // Rise = run = 3m, so exactly 45°, with a landing on top to stand on and
-  // test slides/jumps off. The game's floors are all axis-aligned boxes, so
-  // the slope you see is a smooth wedge and the slope you walk on is a
-  // staircase of 0.25m hidden colliders under it -- the same trick as the
-  // stairs, just fine enough that it feels like a ramp, not steps.
-  {
-    const RW = 5, RISE = 3, RUN = 3, Z0 = 4, STEP = 0.25;
-    const wedge = new THREE.Shape();
-    wedge.moveTo(0, 0); wedge.lineTo(RUN, 0); wedge.lineTo(RUN, RISE); wedge.closePath();
-    const geo = new THREE.ExtrudeGeometry(wedge, { depth: RW, bevelEnabled: false });
-    const rampMesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: 0xff9933 }));
-    rampMesh.rotation.y = -Math.PI / 2;            // shape x -> world +Z, extrusion -> world -X
-    rampMesh.position.set(RW / 2, 0, Z0);
-    MAP_GROUPS[m].add(rampMesh);
-    // The ground height under you is taken from every box within your radius
-    // (PLAYER_RADIUS), i.e. from the step half a body AHEAD -- at 45 degrees that
-    // alone would float your feet 0.38m over the wedge. So the hidden steps sit
-    // one radius further along, and half a step lower, which centres the error.
-    const n = Math.round(RISE / STEP);
-    for (let i = 0; i < n; i++) {
-      const h = (i + 0.5) * STEP, d = RUN / n;
-      const step = addMapBox(m, 0, h / 2, Z0 + PLAYER_RADIUS + (i + 0.5) * d, RW, h, d, 0xff9933);
-      step.visible = false;                        // collision only; the wedge is what you see
-    }
-    addMapBox(m, 0, RISE / 2, Z0 + RUN + 1.25, RW, RISE, 2.5, 0xffb866);       // landing on top
-    addMapBox(m, 0, RISE + 0.05, Z0 + RUN + 2.45, RW, 0.1, 0.1, 0xffee88);     // lip stripe
-  }
-
       const bh = 5 + Math.random() * 2;
       const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.14, bh, 6), bambooMat);
       stalk.position.set(cx + (Math.random() - 0.5) * 1.4, bh / 2, cz + (Math.random() - 0.5) * 1.4);
@@ -22125,6 +22165,17 @@ document.addEventListener('keydown', e => {
         const standGap = Math.max(0, 1.65 - (window._crouchEye ?? 1.65));
         const base = JUMP_VEL * SLIDE_JUMP_LIFT;
         slamState = { vel: Math.sqrt(base * base + 2 * GRAVITY * standGap), type: 'jump' };
+        // 🚀 Climbing a ramp when you jump out of the slide turns the slide's
+        // speed into height, as if launched off it: the faster the slide and the
+        // steeper the slope, the higher. Downhill, or off a ramp, nothing changes.
+        const ramp = rampUnderPlayer();
+        const up = ramp ? window._slideDir.x * ramp.ux + window._slideDir.z * ramp.uz : 0;
+        if (ramp && up > 0.25) {
+          const h = Math.hypot(playerVelocity.x, playerVelocity.z);
+          slamState.vel += Math.min(RAMP_LAUNCH_MAX, h * ramp.tan * up * 0.3);
+          spawnAbilityAOEFX(camera.position.clone().setY(camera.position.y - 1.4), 1.6, 0xffcc66);
+          playEquipSound('whoosh');
+        }
         window._crouchEye = 1.65;          // you stand up as you leave the ground
         playSoundEvent('footstep', { volume: 0.5, pitch: 1.3, minGap: 60 });
       } else {
@@ -24580,6 +24631,19 @@ function updateMovement(dt) {
     const t = (window._slideUntil - nowMs) / SLIDE_MS; // 1 → 0
     slideMult = 1.0 + (SLIDE_BOOST - 1.0) * t;
   }
+  // 📐 On a ramp a slide follows the slope: downhill it gains speed and does not
+  // run out (you keep sliding for as long as it goes down), uphill it costs you
+  // speed. rampUp > 0 means the slide is climbing.
+  const ramp = rampUnderPlayer();
+  const rampUp = ramp ? dir.x * ramp.ux + dir.z * ramp.uz : 0;
+  if (sliding && ramp) {
+    if (rampUp < -0.2) {
+      slideMult = Math.max(slideMult, 1 + (SLIDE_BOOST - 1) * 0.5) * (1 + 0.8 * -rampUp * ramp.tan);
+      window._slideUntil = Math.max(window._slideUntil, nowMs + 200);
+    } else if (rampUp > 0.2) {
+      slideMult *= 1 - 0.3 * rampUp * ramp.tan;
+    }
+  }
   // A weapon can make you quicker while you are actually firing it — the
   // flamethrower wants you closing the distance, not backing off.
   const fireBoost = (shooting && currentWeapon && currentWeapon.moveBoost
@@ -24691,6 +24755,20 @@ function updateMovement(dt) {
   lastPlayerPos.copy(camera.position);
   const moveDist = SPEED * speedMult * joyMag * dt;
   moveWithWalls(dir, moveDist);
+  // 📐 Stay on the slope. Ground height is looked up once a frame, from where you
+  // were, so going down a ramp left you hanging in the air (a 50 m/s slide drops
+  // 0.9m a frame) and stepping off the top of one arced you over it like a cliff.
+  // A grounded or just-walked-off player within reach of the ramp surface at the
+  // new spot is put back on it, going up or down. A jump (slamState 'jump', or
+  // any upward speed) is left alone.
+  if (playerYVel <= 0.01 && (!slamState || slamState.type === 'fall')) {
+    for (const r of MAP_RAMPS[activeMapName] || []) {
+      const sfc = rampSurfaceAt(r, camera.position.x, camera.position.z);
+      if (sfc == null) continue;
+      const want = sfc + (window._crouchEye || PLAYER_EYE_HEIGHT), gap = camera.position.y - want;
+      if (gap > 0 && gap < (ramp === r ? 1.6 : 0.6)) { camera.position.y = want; slamState = null; break; }
+    }
+  }
   const _mb = getMapBounds();
   camera.position.x = Math.max(-_mb, Math.min(_mb, camera.position.x));
   camera.position.z = Math.max(-_mb, Math.min(_mb, camera.position.z));
@@ -30843,6 +30921,7 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false) {
   if (inLobby) { showHitmarker('lobby'); noteLobbyHit(); return; }
   if (players[pid]?.dead) return;   // a body going down is not a target (#34)
   const isBot    = players[pid] && players[pid].isBot;
+  noteKillInfo(pid, myId, weaponId, headshot);
   const instakill = headshot && INSTAKILL_HS_WEAPONS.has(weaponId);
   const baseDmg = getClientWeaponDamage(weaponId);
   // 🤫 Secret synergy: certain weapons get a damage bonus in matching map zones
@@ -31556,7 +31635,6 @@ function updateBullets(dt) {
     }
   }
 }
-  noteKillInfo(pid, myId, weaponId, headshot);
 
 // ── New support items ─────────────────────────────────────────────────────
 function applyAdrenaline(item) {
@@ -33132,6 +33210,7 @@ function botShotHitsPlayer(bot, dist) {
   const offH = Math.abs(aimOffH);
   const inHead = offH < headRH && Math.abs(aimY - headY) < headR;
   const inBody = !inHead && offH < bodyRH && Math.abs(aimY - bodyY) < bodyR;
+  _lastBotShotHead = inHead;
   return { hit: inHead || inBody, headshot: inHead };
 }
 
@@ -33188,6 +33267,7 @@ function tellServerIDied(killerId) {
 }
 // Returns true when the hit landed — only then is the server told (botHitsMe, #22).
 function applyBotDamageToPlayer(weaponId, botId) {
+  noteKillInfo(myId, botId, weaponId, _botHitHead);   // for the kill feed, should this be the one that kills
   // 🛋️ Lobby 13 is a no-combat chill zone — nobody takes damage.
   if (inLobby) return;
   // ⚡ Admin god mode: no damage taken
@@ -33650,6 +33730,7 @@ socket.on('sessionReplaced', async () => {
 socket.on('nameRefused', () => console.warn('[auth] the server refused this name — sign in again'));
 
 socket.on('playerHit', data => {
+  if (data.shooterId && data.weapon) noteKillInfo(data.targetId, data.shooterId, data.weapon, data.headshot);   // for the kill feed
   // Range mode: player is invincible — just ignore any damage (no healSelf to avoid server loop)
   if (data.targetId === myId && match?.type === 'range') {
     updateHealthHUD(300);
@@ -33846,7 +33927,6 @@ socket.on('playerDied', data => {
       document.getElementById('death-msg').textContent = 'Select your loadout...';
       afterDeath(1500, () => { ds.style.display='none'; showLoadoutScreen('death'); });
     }
-  _lastBotShotHead = inHead;
   }
   if (remoteMeshes[data.targetId]) {
     if (data.killerId === myId && data.targetId !== myId) triggerFinisher(data.targetId, currentEquippedId());
@@ -33900,7 +33980,6 @@ socket.on('playerRespawned', p => {
     } else {
       remoteMeshes[p.id].position.set(p.x, 0, p.z);
     }
-  noteKillInfo(myId, botId, weaponId, _botHitHead);   // for the kill feed, should this be the one that kills
     remoteMeshes[p.id].visible = true;
     resetDeathPose(remoteMeshes[p.id]);
     players[p.id].hp = p.hp || 300;
@@ -34363,7 +34442,6 @@ function spawnSmokeCloud(pos) {
         const k = elapsed / GROW_MS;
         scale   = 0.3 + k * 0.7;
         opacity = k * maxOp;
-  if (data.shooterId && data.weapon) noteKillInfo(data.targetId, data.shooterId, data.weapon, data.headshot);   // for the kill feed
       } else if (elapsed < GROW_MS + HOLD_MS) {
         // Hold: slight gentle drift upward, full opacity
         scale   = 1.0 + ((elapsed - GROW_MS) / HOLD_MS) * 0.18;
@@ -35556,6 +35634,162 @@ function checkBrWin() {
   }
 }
 
+// 📰 Live kill feed (top right): "killer [weapon icon] [head] victim", newest on
+// top, gone after a few seconds. Fed from onEntityDied, the one place every kind
+// of death in every mode goes through, so bots, players, hazards and self-kills
+// all show up. Names go in as text nodes -- a nickname is user input.
+const KILLFEED_MAX = 5, KILLFEED_MS = 5500;
+
+// How each victim was last hit -- who, with what, and whether it was the head --
+// noted where the hit is dealt (emitHit, a bot's hit on us, the server's
+// playerHit for other real players) so the feed can say more than "X died".
+const _killInfo = {};
+function noteKillInfo(targetId, killerId, weaponId, head) {
+  if (targetId) _killInfo[targetId] = { killer: killerId || null, weapon: weaponId || null, head: !!head, t: performance.now() };
+}
+let _botHitHead = false;        // did the bot's shot being resolved right now take our head?
+let _lastBotShotHead = false;   // set by botShotHitsPlayer, picked up when the hit is scheduled
+
+// 🖼️ Weapon icons. The game has no per-weapon art (just four generic slot
+// glyphs), so the icon is the weapon itself: its real viewmodel, drawn once side
+// on into a small transparent picture and cached. Rendered with the game's own
+// renderer into a render target because the models' materials carry an
+// environment map that belongs to that GL context.
+const _iconCache = {};
+let _iconRT = null, _iconScene = null, _iconCam = null;
+const ICON_W = 240, ICON_H = 96;
+function _iconModelFor(id, mine) {
+  let i = WEAPONS.findIndex(w => w.id === id);
+  if (i >= 0) return { model: mine ? weaponModels[i] : (_baseWeaponModels[i] || weaponModels[i]) };
+  i = MELEE_ITEMS.findIndex(w => w.id === id);
+  if (i >= 0) return { model: mine ? meleeModels[i] : (_baseMeleeModels[i] || meleeModels[i]) };
+  i = SUPPORT_ITEMS.findIndex(w => w.id === id);
+  if (i >= 0) return { model: supportModels[i] };
+  return null;
+}
+function weaponIconURL(id, mine) {
+  const found = id && _iconModelFor(id, mine);
+  if (!found || !found.model) return null;
+  const key = id + ':' + found.model.uuid;
+  if (key in _iconCache) return _iconCache[key];
+  let url = null;
+  try { url = _renderWeaponIcon(found.model); } catch (e) { console.warn('[killfeed icon]', id, e); }
+  return (_iconCache[key] = url);
+}
+function _renderWeaponIcon(model) {
+  if (!_iconScene) {
+    _iconScene = new THREE.Scene();
+    _iconScene.add(new THREE.AmbientLight(0xffffff, 2.4));
+    const sun = new THREE.DirectionalLight(0xffffff, 2.6); sun.position.set(3, 4, 2); _iconScene.add(sun);
+    const back = new THREE.DirectionalLight(0xbfd4ff, 1.1); back.position.set(-3, 1, -2); _iconScene.add(back);
+    _iconCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.01, 50);
+    _iconRT = new THREE.WebGLRenderTarget(ICON_W, ICON_H, { samples: 4 });
+  }
+  const clone = model.clone(true);
+  clone.position.set(0, 0, 0); clone.rotation.set(0, 0, 0); clone.scale.set(1, 1, 1); clone.visible = true;
+  clone.traverse(o => {                      // hands, effects and the muzzle flash are not the weapon
+    if (o.userData && (o.userData.vmHand || o.userData.eqFx || o.userData.legendFx)) o.visible = false;
+    if (model._flash && o.name && o.name === model._flash.name && o !== clone && o.material && o.material.transparent) o.visible = false;
+  });
+  _iconScene.add(clone);
+  clone.updateMatrixWorld(true);
+  const box = new THREE.Box3();
+  clone.traverse(o => { if (o.isMesh && o.visible && o.geometry) box.expandByObject(o); });
+  if (box.isEmpty()) { _iconScene.remove(clone); return null; }
+  const c = box.getCenter(new THREE.Vector3()), sz = box.getSize(new THREE.Vector3());
+  // Viewed from the right, muzzle pointing right (weapons point down -Z).
+  // A fixed minimum width keeps a grenade from filling the picture like a rifle.
+  const aspect = ICON_W / ICON_H;
+  let halfW = Math.max(sz.z * 0.5, 0.17) * 1.1;
+  halfW = Math.max(halfW, sz.y * 0.5 * aspect * 1.1);
+  const halfH = halfW / aspect;
+  _iconCam.left = -halfW; _iconCam.right = halfW; _iconCam.top = halfH; _iconCam.bottom = -halfH;
+  _iconCam.position.set(c.x + 5, c.y, c.z); _iconCam.up.set(0, 1, 0); _iconCam.lookAt(c);
+  _iconCam.updateProjectionMatrix();
+  const prevRT = renderer.getRenderTarget(), prevColor = renderer.getClearColor(new THREE.Color()), prevAlpha = renderer.getClearAlpha();
+  const buf = new Uint8Array(ICON_W * ICON_H * 4);
+  try {
+    renderer.setRenderTarget(_iconRT);
+    renderer.setClearColor(0x000000, 0);
+    renderer.clear();
+    renderer.render(_iconScene, _iconCam);
+    renderer.readRenderTargetPixels(_iconRT, 0, 0, ICON_W, ICON_H, buf);
+  } finally {
+    renderer.setRenderTarget(prevRT); renderer.setClearColor(prevColor, prevAlpha);
+    _iconScene.remove(clone);
+  }
+  // Rendering into a target leaves the pixels linear and premultiplied: undo
+  // both, flip (rows come bottom-up) and hand back a PNG.
+  const cv = document.createElement('canvas'); cv.width = ICON_W; cv.height = ICON_H;
+  const g = cv.getContext('2d'), img = g.createImageData(ICON_W, ICON_H);
+  const enc = (v) => Math.round(255 * (v <= 0.0031308 ? 12.92 * v : 1.055 * Math.pow(v, 1 / 2.4) - 0.055));
+  let seen = 0;
+  for (let y = 0; y < ICON_H; y++) for (let x = 0; x < ICON_W; x++) {
+    const s = ((ICON_H - 1 - y) * ICON_W + x) * 4, d = (y * ICON_W + x) * 4, a = buf[s + 3];
+    if (a) { seen++; for (let k = 0; k < 3; k++) img.data[d + k] = Math.min(255, enc(Math.min(1, (buf[s + k] / 255) / (a / 255)))); }
+    img.data[d + 3] = a;
+  }
+  if (!seen) return null;
+  g.putImageData(img, 0, 0);
+  return cv.toDataURL('image/png');
+}
+// Damage-over-time ids that are not items of their own borrow their gun's icon.
+const _KILLFEED_ICON_ALIAS = { flame_burn: 'flamethrower', caustic_burn: 'glassmaker', flame: 'flamethrower' };
+// A small head with a red target on it: this kill was a headshot.
+const _HEAD_ICON = 'data:image/svg+xml;utf8,' + encodeURIComponent(
+  "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M4 23c0-5 3.5-7.5 8-7.5s8 2.500 8 7.500z' fill='#7d838c'/>" +
+  "<circle cx='12' cy='9' r='6.500' fill='#e8ebef' stroke='#000' stroke-opacity='.6'/>" +
+  "<circle cx='12' cy='9' r='4.300' fill='none' stroke='#ff3b3b' stroke-width='1.500'/><circle cx='12' cy='9' r='1.600' fill='#ff3b3b'/></svg>");
+
+function _killfeedWho(id) {
+  if (id === myId) return { name: 'You', color: '#ffd23f' };
+  const p = players[id], mine = players[myId];
+  const ally = p && mine && p.team && p.team === mine.team;
+  return { name: (p && p.name) || 'Bot', color: ally ? '#6bff8a' : '#ff6b6b' };
+}
+function _itemName(id) {
+  const it = WEAPONS.find(w => w.id === id) || MELEE_ITEMS.find(w => w.id === id) || SUPPORT_ITEMS.find(w => w.id === id);
+  return it ? it.name : '';
+}
+function pushKillfeed(targetId, killerId) {
+  try {
+    const box = document.getElementById('killfeed');
+    if (!box || !targetId) return;
+    const now = performance.now();
+    if (box._last && box._last[0] === targetId && now - box._last[1] < 1500) return;   // the echo of a death already shown
+    box._last = [targetId, now];
+    const row = document.createElement('div');
+    row.className = 'kf-row' + (killerId === myId || targetId === myId ? ' mine' : '');
+    const part = (cls, text, color) => {
+      const s = document.createElement('span'); s.className = cls; s.textContent = text;
+      if (color) s.style.color = color; row.appendChild(s);
+    };
+    const icon = (src, cls, title) => {
+      const im = document.createElement('img'); im.className = cls; im.src = src; im.alt = title || ''; if (title) im.title = title; row.appendChild(im);
+    };
+    const v = _killfeedWho(targetId);
+    const info = _killInfo[targetId];
+    const known = info && now - info.t < 4000 && (info.killer === killerId || !killerId) ? info : null;
+    if (!killerId || killerId === targetId) {
+      part('kf-wpn', killerId ? '☠' : '☠ fell');
+      part('kf-name', v.name, v.color);
+    } else {
+      const k = _killfeedWho(killerId);
+      let wid = (known && known.weapon) || (killerId === myId ? currentEquippedId() : (resolveBot(killerId)?.weaponId || players[killerId]?.weaponId));
+      wid = _KILLFEED_ICON_ALIAS[wid] || wid;
+      part('kf-name', k.name, k.color);
+      const url = weaponIconURL(wid, killerId === myId);
+      if (url) icon(url, 'kf-icon', _itemName(wid));
+      else part('kf-wpn', _itemName(wid) ? '[' + _itemName(wid) + ']' : '✖');
+      if (known && known.head) icon(_HEAD_ICON, 'kf-head', 'Headshot');
+      part('kf-name', v.name, v.color);
+    }
+    box.insertBefore(row, box.firstChild);
+    while (box.children.length > KILLFEED_MAX) box.lastChild.remove();
+    setTimeout(() => { row.classList.add('out'); setTimeout(() => row.remove(), 550); }, KILLFEED_MS);
+  } catch (e) {}
+}
+
 function onEntityDied(targetId, killerId) {
   if (!match || match.over) return;
   if (mpMatch()) {
@@ -35565,6 +35799,7 @@ function onEntityDied(targetId, killerId) {
     if (seen[targetId] && now - seen[targetId] < 2500) return;
     seen[targetId] = now;
   }
+  pushKillfeed(targetId, killerId);
   if (killerId) matchScore[killerId]  = (matchScore[killerId]  || 0) + 1;   // #31: who is having the good match
   if (targetId) matchDeaths[targetId] = (matchDeaths[targetId] || 0) + 1;
   if (match.tiebreaker) {
@@ -36228,162 +36463,6 @@ function endMatch(winner, reason) {
   if (match.type === 'elim') {
     scoreText = `Rounds  ${match.roundWins.ally} – ${match.roundWins.enemy}`;
   } else if (match.type === 'race') {
-// 📰 Live kill feed (top right): "killer [weapon icon] [head] victim", newest on
-// top, gone after a few seconds. Fed from onEntityDied, the one place every kind
-// of death in every mode goes through, so bots, players, hazards and self-kills
-// all show up. Names go in as text nodes -- a nickname is user input.
-const KILLFEED_MAX = 5, KILLFEED_MS = 5500;
-
-// How each victim was last hit -- who, with what, and whether it was the head --
-// noted where the hit is dealt (emitHit, a bot's hit on us, the server's
-// playerHit for other real players) so the feed can say more than "X died".
-const _killInfo = {};
-function noteKillInfo(targetId, killerId, weaponId, head) {
-  if (targetId) _killInfo[targetId] = { killer: killerId || null, weapon: weaponId || null, head: !!head, t: performance.now() };
-}
-let _botHitHead = false;        // did the bot's shot being resolved right now take our head?
-let _lastBotShotHead = false;   // set by botShotHitsPlayer, picked up when the hit is scheduled
-
-// 🖼️ Weapon icons. The game has no per-weapon art (just four generic slot
-// glyphs), so the icon is the weapon itself: its real viewmodel, drawn once side
-// on into a small transparent picture and cached. Rendered with the game's own
-// renderer into a render target because the models' materials carry an
-// environment map that belongs to that GL context.
-const _iconCache = {};
-let _iconRT = null, _iconScene = null, _iconCam = null;
-const ICON_W = 240, ICON_H = 96;
-function _iconModelFor(id, mine) {
-  let i = WEAPONS.findIndex(w => w.id === id);
-  if (i >= 0) return { model: mine ? weaponModels[i] : (_baseWeaponModels[i] || weaponModels[i]) };
-  i = MELEE_ITEMS.findIndex(w => w.id === id);
-  if (i >= 0) return { model: mine ? meleeModels[i] : (_baseMeleeModels[i] || meleeModels[i]) };
-  i = SUPPORT_ITEMS.findIndex(w => w.id === id);
-  if (i >= 0) return { model: supportModels[i] };
-  return null;
-}
-function weaponIconURL(id, mine) {
-  const found = id && _iconModelFor(id, mine);
-  if (!found || !found.model) return null;
-  const key = id + ':' + found.model.uuid;
-  if (key in _iconCache) return _iconCache[key];
-  let url = null;
-  try { url = _renderWeaponIcon(found.model); } catch (e) { console.warn('[killfeed icon]', id, e); }
-  return (_iconCache[key] = url);
-}
-function _renderWeaponIcon(model) {
-  if (!_iconScene) {
-    _iconScene = new THREE.Scene();
-    _iconScene.add(new THREE.AmbientLight(0xffffff, 2.4));
-    const sun = new THREE.DirectionalLight(0xffffff, 2.6); sun.position.set(3, 4, 2); _iconScene.add(sun);
-    const back = new THREE.DirectionalLight(0xbfd4ff, 1.1); back.position.set(-3, 1, -2); _iconScene.add(back);
-    _iconCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.01, 50);
-    _iconRT = new THREE.WebGLRenderTarget(ICON_W, ICON_H, { samples: 4 });
-  }
-  const clone = model.clone(true);
-  clone.position.set(0, 0, 0); clone.rotation.set(0, 0, 0); clone.scale.set(1, 1, 1); clone.visible = true;
-  clone.traverse(o => {                      // hands, effects and the muzzle flash are not the weapon
-    if (o.userData && (o.userData.vmHand || o.userData.eqFx || o.userData.legendFx)) o.visible = false;
-    if (model._flash && o.name && o.name === model._flash.name && o !== clone && o.material && o.material.transparent) o.visible = false;
-  });
-  _iconScene.add(clone);
-  clone.updateMatrixWorld(true);
-  const box = new THREE.Box3();
-  clone.traverse(o => { if (o.isMesh && o.visible && o.geometry) box.expandByObject(o); });
-  if (box.isEmpty()) { _iconScene.remove(clone); return null; }
-  const c = box.getCenter(new THREE.Vector3()), sz = box.getSize(new THREE.Vector3());
-  // Viewed from the right, muzzle pointing right (weapons point down -Z).
-  // A fixed minimum width keeps a grenade from filling the picture like a rifle.
-  const aspect = ICON_W / ICON_H;
-  let halfW = Math.max(sz.z * 0.5, 0.17) * 1.1;
-  halfW = Math.max(halfW, sz.y * 0.5 * aspect * 1.1);
-  const halfH = halfW / aspect;
-  _iconCam.left = -halfW; _iconCam.right = halfW; _iconCam.top = halfH; _iconCam.bottom = -halfH;
-  _iconCam.position.set(c.x + 5, c.y, c.z); _iconCam.up.set(0, 1, 0); _iconCam.lookAt(c);
-  _iconCam.updateProjectionMatrix();
-  const prevRT = renderer.getRenderTarget(), prevColor = renderer.getClearColor(new THREE.Color()), prevAlpha = renderer.getClearAlpha();
-  const buf = new Uint8Array(ICON_W * ICON_H * 4);
-  try {
-    renderer.setRenderTarget(_iconRT);
-    renderer.setClearColor(0x000000, 0);
-    renderer.clear();
-    renderer.render(_iconScene, _iconCam);
-    renderer.readRenderTargetPixels(_iconRT, 0, 0, ICON_W, ICON_H, buf);
-  } finally {
-    renderer.setRenderTarget(prevRT); renderer.setClearColor(prevColor, prevAlpha);
-    _iconScene.remove(clone);
-  }
-  // Rendering into a target leaves the pixels linear and premultiplied: undo
-  // both, flip (rows come bottom-up) and hand back a PNG.
-  const cv = document.createElement('canvas'); cv.width = ICON_W; cv.height = ICON_H;
-  const g = cv.getContext('2d'), img = g.createImageData(ICON_W, ICON_H);
-  const enc = (v) => Math.round(255 * (v <= 0.0031308 ? 12.92 * v : 1.055 * Math.pow(v, 1 / 2.4) - 0.055));
-  let seen = 0;
-  for (let y = 0; y < ICON_H; y++) for (let x = 0; x < ICON_W; x++) {
-    const s = ((ICON_H - 1 - y) * ICON_W + x) * 4, d = (y * ICON_W + x) * 4, a = buf[s + 3];
-    if (a) { seen++; for (let k = 0; k < 3; k++) img.data[d + k] = Math.min(255, enc(Math.min(1, (buf[s + k] / 255) / (a / 255)))); }
-    img.data[d + 3] = a;
-  }
-  if (!seen) return null;
-  g.putImageData(img, 0, 0);
-  return cv.toDataURL('image/png');
-}
-// Damage-over-time ids that are not items of their own borrow their gun's icon.
-const _KILLFEED_ICON_ALIAS = { flame_burn: 'flamethrower', caustic_burn: 'glassmaker', flame: 'flamethrower' };
-// A small head with a red target on it: this kill was a headshot.
-const _HEAD_ICON = 'data:image/svg+xml;utf8,' + encodeURIComponent(
-  "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M4 23c0-5 3.5-7.5 8-7.5s8 2.500 8 7.500z' fill='#7d838c'/>" +
-  "<circle cx='12' cy='9' r='6.500' fill='#e8ebef' stroke='#000' stroke-opacity='.6'/>" +
-  "<circle cx='12' cy='9' r='4.300' fill='none' stroke='#ff3b3b' stroke-width='1.500'/><circle cx='12' cy='9' r='1.600' fill='#ff3b3b'/></svg>");
-
-function _killfeedWho(id) {
-  if (id === myId) return { name: 'You', color: '#ffd23f' };
-  const p = players[id], mine = players[myId];
-  const ally = p && mine && p.team && p.team === mine.team;
-  return { name: (p && p.name) || 'Bot', color: ally ? '#6bff8a' : '#ff6b6b' };
-}
-function _itemName(id) {
-  const it = WEAPONS.find(w => w.id === id) || MELEE_ITEMS.find(w => w.id === id) || SUPPORT_ITEMS.find(w => w.id === id);
-  return it ? it.name : '';
-}
-function pushKillfeed(targetId, killerId) {
-  try {
-    const box = document.getElementById('killfeed');
-    if (!box || !targetId) return;
-    const now = performance.now();
-    if (box._last && box._last[0] === targetId && now - box._last[1] < 1500) return;   // the echo of a death already shown
-    box._last = [targetId, now];
-    const row = document.createElement('div');
-    row.className = 'kf-row' + (killerId === myId || targetId === myId ? ' mine' : '');
-    const part = (cls, text, color) => {
-      const s = document.createElement('span'); s.className = cls; s.textContent = text;
-      if (color) s.style.color = color; row.appendChild(s);
-    };
-    const icon = (src, cls, title) => {
-      const im = document.createElement('img'); im.className = cls; im.src = src; im.alt = title || ''; if (title) im.title = title; row.appendChild(im);
-    };
-    const v = _killfeedWho(targetId);
-    const info = _killInfo[targetId];
-    const known = info && now - info.t < 4000 && (info.killer === killerId || !killerId) ? info : null;
-    if (!killerId || killerId === targetId) {
-      part('kf-wpn', killerId ? '☠' : '☠ fell');
-      part('kf-name', v.name, v.color);
-    } else {
-      const k = _killfeedWho(killerId);
-      let wid = (known && known.weapon) || (killerId === myId ? currentEquippedId() : (resolveBot(killerId)?.weaponId || players[killerId]?.weaponId));
-      wid = _KILLFEED_ICON_ALIAS[wid] || wid;
-      part('kf-name', k.name, k.color);
-      const url = weaponIconURL(wid, killerId === myId);
-      if (url) icon(url, 'kf-icon', _itemName(wid));
-      else part('kf-wpn', _itemName(wid) ? '[' + _itemName(wid) + ']' : '✖');
-      if (known && known.head) icon(_HEAD_ICON, 'kf-head', 'Headshot');
-      part('kf-name', v.name, v.color);
-    }
-    box.insertBefore(row, box.firstChild);
-    while (box.children.length > KILLFEED_MAX) box.lastChild.remove();
-    setTimeout(() => { row.classList.add('out'); setTimeout(() => row.remove(), 550); }, KILLFEED_MS);
-  } catch (e) {}
-}
-
     scoreText = `Kills  Your Team ${match.teamKills.ally}  ·  Enemy ${match.teamKills.enemy}  (goal ${match.cfg.killGoal})`;
   } else if (match.type === 'dday') {
     const dd = ddayState;
@@ -36393,7 +36472,6 @@ function pushKillfeed(targetId, killerId) {
     const topBotKills = Math.max(0, ...gameBots.map(b => match.ffaKills[b.id] || 0));
     scoreText = `Your kills: ${pk}  ·  Top bot: ${topBotKills}`;
   }
-  pushKillfeed(targetId, killerId);
   document.getElementById('match-over-score').textContent = scoreText;
   document.getElementById('match-over-stats').textContent =
     `Kills ${Math.max(0, myKills - match.killsAtStart)}  ·  Deaths ${match.deaths}`;
