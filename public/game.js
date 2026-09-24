@@ -7325,7 +7325,7 @@ function triggerMuzzleBlast(model, opts = {}) {
   puff.scale.setScalar(0.02);
   puff.material.opacity = 0.42;
 
-  const dur = opts.duration || 95;
+  const dur = opts.duration || 62;
   const start = performance.now();
   const step = () => {
     const t = (performance.now() - start) / dur;
@@ -7333,10 +7333,12 @@ function triggerMuzzleBlast(model, opts = {}) {
       flash.visible = false; flash.scale.setScalar(1);
       light.intensity = 0;
     } else {
-      // The flash blooms outward and the light falls off fast — a blast is a
-      // spike, not a lamp being switched on.
-      flash.scale.setScalar(s0 * (1 + t * 2.1));
-      light.intensity = 5.4 * s0 * (1 - t) * (1 - t);
+      // A blast is a spike: full size almost at once, then gone. The old curve
+      // grew the flash to triple size across the whole 95 ms, which is a bubble
+      // inflating on the end of the barrel rather than a shot going off.
+      const k = t < 0.16 ? t / 0.16 : 1 - (t - 0.16) / 0.84;
+      flash.scale.setScalar(s0 * (0.45 + 0.85 * k));
+      light.intensity = 6.4 * s0 * (1 - t) * (1 - t) * (1 - t);
       requestAnimationFrame(step);
     }
   };
@@ -7355,32 +7357,47 @@ function triggerMuzzleBlast(model, opts = {}) {
   requestAnimationFrame(smoke);
 }
 function makeMuzzleFlash() {
-  // Composite muzzle flash: inner bright core + outer flare + 4 spike rays for character
+  // 💥 A muzzle flash is burning propellant leaving the bore, so it is a jet
+  // pointed FORWARD, white where it leaves the crown and orange by the time it
+  // has spread. The old one was two spheres centred on the muzzle with four
+  // cones at exactly 90 degrees: a cartoon star stuck on the end of the barrel,
+  // the same shape and the same brightness all the way through.
+  //
+  // Everything here is additive and writes no depth, which is what makes it
+  // read as light rather than as orange plastic: overlapping parts add up, so
+  // the middle goes white on its own instead of being painted white.
   const g = new THREE.Group();
-  const core = new THREE.Mesh(
-    new THREE.SphereGeometry(0.022, 6, 5),
-    new THREE.MeshBasicMaterial({ color: 0xffffaa })
-  );
-  g.add(core);
-  const flare = new THREE.Mesh(
-    new THREE.SphereGeometry(0.045, 8, 6),
-    new THREE.MeshBasicMaterial({ color: 0xffcc00, transparent: true, opacity: 0.55 })
-  );
-  g.add(flare);
-  // 4 radial spikes (small flattened cones) — the "star" shape
-  const spikeMat = new THREE.MeshBasicMaterial({ color: 0xffdd44, transparent: true, opacity: 0.7 });
-  for (let i = 0; i < 4; i++) {
-    const sp = new THREE.Mesh(new THREE.ConeGeometry(0.014, 0.06, 4), spikeMat);
-    sp.rotation.z = (i * Math.PI) / 2;
-    sp.position.set(Math.cos(i * Math.PI/2) * 0.045, Math.sin(i * Math.PI/2) * 0.045, 0);
-    g.add(sp);
+  const glow = (hex, op) => new THREE.MeshBasicMaterial({ color: hex, transparent: true, opacity: op,
+    blending: THREE.AdditiveBlending, depthWrite: false });
+  // The jet: a cone with its apex at the crown, opening as it goes forward.
+  // Rotating +90 degrees about X sends the cone's apex to +z (back at the gun)
+  // and its base to -z (downrange), which is the way round a real one sits;
+  // -90 would give a funnel pointing back at the shooter.
+  const jet = new THREE.Mesh(new THREE.ConeGeometry(0.032, 0.090, 7, 1, true), glow(0xffa83a, 0.80));
+  jet.rotation.x = Math.PI / 2; jet.position.z = -0.045;
+  g.add(jet);
+  // The gas is white where it is hottest, in the first centimetre.
+  const core = new THREE.Mesh(new THREE.SphereGeometry(0.016, 7, 5), glow(0xfff4d8, 0.95));
+  core.position.z = -0.006; g.add(core);
+  // Three uneven petals. Real flashes are lopsided — the old four at 90 degrees
+  // apart were the single most cartoon thing about it. Each arm is rotated
+  // around the bore, and the petal inside it is tilted out of the axis by one
+  // angle only, so the splay is predictable rather than an Euler surprise.
+  const PETALS = [[0.4, 1.00], [2.5, 0.74], [4.3, 0.88]];
+  for (const [ang, k] of PETALS) {
+    const arm = new THREE.Group();
+    arm.rotation.z = ang;
+    const p = new THREE.Mesh(new THREE.ConeGeometry(0.010 * k, 0.075 * k, 4), glow(0xff7a22, 0.55));
+    p.rotation.x = Math.PI / 2 - 0.30;              // forward, splayed off the axis
+    p.position.set(0.016, 0, -0.030 * k);
+    arm.add(p);
+    g.add(arm);
   }
-  // Expose material so callers can recolor (e.g. green plasma → green flash)
+  // Exposed so callers can recolour the whole flash (plasma green, and so on).
   g.material = core.material;
   g.visible = false;
   return g;
 }
-
 // AK20
 
 // ── Shared gun-building helpers ────────────────────────────────────────────
