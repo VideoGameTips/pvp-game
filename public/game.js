@@ -4400,6 +4400,62 @@ scene.add(sun);
 const wallColliders = []; // Array of THREE.Box3
 const PLAYER_EYE_HEIGHT = 1.65;
 const PLAYER_RADIUS = 0.38;
+// 🧱 Every collider in the game is an axis-aligned Box3, and Box3.setFromObject
+// on a wall turned 45 degrees returns the box around its whole diagonal: an
+// 18x4.5 wall got a 3x larger invisible footprint, a 14x14 diamond a hitbox
+// 20 wide with empty corners you bounced off (and shots stopped in). So a
+// box that is turned gets a run of thin strips that follow its real outline
+// instead -- still plain Box3es, so movement, line of sight and bullets all
+// keep working untouched. A strip is as wide as the turn allows the box to
+// overshoot by ~0.6m; a wall that is nearly square-on stays a single box.
+const TURNED_BOX_SLACK = 0.6;
+function turnedBoxColliders(x, y, z, w, h, d, rotY) {
+  const half = Math.PI / 2;
+  const r = ((rotY % half) + half) % half, fold = Math.min(r, half - r);
+  const c = Math.cos(rotY), sn = Math.sin(rotY);
+  const corners = [[-w / 2, -d / 2], [w / 2, -d / 2], [w / 2, d / 2], [-w / 2, d / 2]]
+    .map(([lx, lz]) => [x + lx * c + lz * sn, z - lx * sn + lz * c]);
+  const xs = corners.map(q => q[0]), zs = corners.map(q => q[1]);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs);
+  const whole = () => new THREE.Box3(new THREE.Vector3(x0, y - h / 2, Math.min(...zs)),
+                                     new THREE.Vector3(x1, y + h / 2, Math.max(...zs)));
+  if (fold < 0.03) return [whole()];
+  const step = Math.max(0.6, Math.min(4, TURNED_BOX_SLACK / Math.tan(fold)));
+  const n = Math.min(48, Math.max(1, Math.ceil((x1 - x0) / step)));
+  if (n === 1) return [whole()];
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const a = x0 + (x1 - x0) * i / n, b = x0 + (x1 - x0) * (i + 1) / n;
+    // z-range of the (convex) footprint inside the strip [a, b]: the corners
+    // that fall inside it, plus where each edge crosses the two strip edges.
+    let lo = Infinity, hi = -Infinity;
+    const take = (zz) => { if (zz < lo) lo = zz; if (zz > hi) hi = zz; };
+    for (const q of corners) if (q[0] >= a && q[0] <= b) take(q[1]);
+    for (let k = 0; k < 4; k++) {
+      const p = corners[k], q = corners[(k + 1) % 4];
+      for (const X of [a, b]) {
+        if ((p[0] - X) * (q[0] - X) > 0 || p[0] === q[0]) continue;
+        take(p[1] + (q[1] - p[1]) * (X - p[0]) / (q[0] - p[0]));
+      }
+    }
+    if (lo > hi) continue;
+    out.push(new THREE.Box3(new THREE.Vector3(a, y - h / 2, lo), new THREE.Vector3(b, y + h / 2, hi)));
+  }
+  return out.length ? out : [whole()];
+}
+// Register a mesh's collider(s): a box turned about Y gets the strips above,
+// anything else (props, cylinders, upright boxes) the single Box3 it always had.
+function pushMeshColliders(list, mesh) {
+  mesh.updateMatrixWorld(true);
+  const g = mesh.geometry, p = g && g.parameters;
+  if (g && g.type === 'BoxGeometry' && p && mesh.rotation.y &&
+      !mesh.rotation.x && !mesh.rotation.z && mesh.scale.x === 1 && mesh.scale.y === 1 && mesh.scale.z === 1 &&
+      (!mesh.parent || (!mesh.parent.rotation.y && mesh.parent.scale.x === 1 && mesh.parent.scale.z === 1))) {
+    const wp = new THREE.Vector3(); mesh.getWorldPosition(wp);
+    list.push(...turnedBoxColliders(wp.x, wp.y, wp.z, p.width, p.height, p.depth, mesh.rotation.y));
+  } else list.push(new THREE.Box3().setFromObject(mesh));
+}
+
 
 function getGroundEyeY(px = camera.position.x, pz = camera.position.z, eyeY = camera.position.y) {
   let groundY = PLAYER_EYE_HEIGHT;
@@ -4566,7 +4622,7 @@ function buildBlankMap() {
     if (rotY) m.rotation.y = rotY;
     m.castShadow = true; m.receiveShadow = true;
     blankMapGroup.add(m);
-    if (collide) { m.updateMatrixWorld(true); blankMapColliders.push(new THREE.Box3().setFromObject(m)); }
+    if (collide) { m.updateMatrixWorld(true); pushMeshColliders(blankMapColliders, m); }
     return m;
   };
 
@@ -4643,7 +4699,7 @@ function buildBattlefieldMap() {
     m.position.set(x, y, z);
     if (rotY) m.rotation.y = rotY;
     battlefieldMapGroup.add(m);
-    if (collide) { m.updateMatrixWorld(true); battlefieldMapColliders.push(new THREE.Box3().setFromObject(m)); }
+    if (collide) { m.updateMatrixWorld(true); pushMeshColliders(battlefieldMapColliders, m); }
   };
 
   // Ground (muddy green)
@@ -4770,7 +4826,7 @@ function buildRangeMap() {
     m.position.set(x, y, z);
     rangeMapGroup.add(m);
     m.castShadow = true; m.receiveShadow = true;
-    if (collide) { m.updateMatrixWorld(true); rangeMapColliders.push(new THREE.Box3().setFromObject(m)); }
+    if (collide) { m.updateMatrixWorld(true); pushMeshColliders(rangeMapColliders, m); }
   };
 
   // Floor — concrete/tan
@@ -4877,14 +4933,14 @@ function addMapBox(mapName, x, y, z, w, h, d, color, rotY = 0, opacity = 1) {
   if (rotY) m.rotation.y = rotY;
   MAP_GROUPS[mapName].add(m);
   m.updateMatrixWorld(true);
-  MAP_COLLIDERS[mapName].push(new THREE.Box3().setFromObject(m));
+  pushMeshColliders(MAP_COLLIDERS[mapName], m);
   return m;
 }
 function addMapMesh(mapName, mesh, collide = false) {
   MAP_GROUPS[mapName].add(mesh);
   if (collide) {
     mesh.updateMatrixWorld(true);
-    MAP_COLLIDERS[mapName].push(new THREE.Box3().setFromObject(mesh));
+    pushMeshColliders(MAP_COLLIDERS[mapName], mesh);
   }
 }
 function addMapGround(mapName, color, gridColor) {
@@ -5061,8 +5117,7 @@ function addAdminMapShape(mapName, b) {
   mesh.receiveShadow = true;
   MAP_GROUPS[mapName].add(mesh);
   if (b.collide !== false) {
-    mesh.updateMatrixWorld(true);
-    MAP_COLLIDERS[mapName].push(new THREE.Box3().setFromObject(mesh));
+    pushMeshColliders(MAP_COLLIDERS[mapName], mesh);
   }
   return mesh;
 }
