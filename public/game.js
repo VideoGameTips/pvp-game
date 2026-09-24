@@ -7302,11 +7302,32 @@ function _getMuzzleLight() {
 }
 const _smokePool = [];
 let _smokeIdx = 0;
+// 💨 One soft texture, shared by every puff. Smoke was a 7x6 sphere: a hard
+// round silhouette that turns with the camera and is exactly as opaque at its
+// edge as at its middle, which is a grey ball, not smoke. The edge has to fall
+// off to nothing, and the shape has to be lopsided — so this is three offset
+// blobs of falloff rather than one clean circle.
+let _puffTex = null;
+function _getPuffTexture() {
+  if (_puffTex) return _puffTex;
+  const c = document.createElement('canvas'); c.width = 64; c.height = 64;
+  const x = c.getContext('2d');
+  for (const [cx, cy, r, a] of [[32, 32, 30, 0.85], [24, 27, 20, 0.50], [41, 38, 17, 0.45]]) {
+    const gr = x.createRadialGradient(cx, cy, 0, cx, cy, r);
+    gr.addColorStop(0, 'rgba(255,255,255,' + a + ')');
+    gr.addColorStop(0.55, 'rgba(255,255,255,' + (a * 0.35) + ')');
+    gr.addColorStop(1, 'rgba(255,255,255,0)');
+    x.fillStyle = gr; x.beginPath(); x.arc(cx, cy, r, 0, Math.PI * 2); x.fill();
+  }
+  _puffTex = new THREE.CanvasTexture(c);
+  return _puffTex;
+}
 function _getSmokePuff() {
-  if (_smokePool.length < 10) {
-    const m = new THREE.Mesh(
-      new THREE.SphereGeometry(1, 7, 6),
-      new THREE.MeshBasicMaterial({ color: 0x9a9a9a, transparent: true, opacity: 0, depthWrite: false }));
+  // Pool is bigger than it was because each puff now lives longer; at a
+  // minigun's fire rate the old ten were being stolen back mid-fade.
+  if (_smokePool.length < 14) {
+    const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: _getPuffTexture(), color: 0x9a9a9a,
+      transparent: true, opacity: 0, depthWrite: false }));
     m.visible = false; scene.add(m); _smokePool.push(m);
     return m;
   }
@@ -7377,6 +7398,7 @@ function triggerMuzzleBlast(model, opts = {}) {
   puff.position.copy(world).addScaledVector(fwd, 0.05);
   puff.scale.setScalar(0.02);
   puff.material.opacity = 0.42;
+  puff.material.rotation = Math.random() * Math.PI * 2;   // no two puffs the same way up
 
   const dur = opts.duration || 62;
   const start = performance.now();
@@ -7398,13 +7420,23 @@ function triggerMuzzleBlast(model, opts = {}) {
   requestAnimationFrame(step);
 
   // Smoke outlives the flash: it keeps expanding and drifting as it thins.
-  const sStart = performance.now(), sDur = 320;
+  const sStart = performance.now(), sDur = 520;
+  const spin = (Math.random() * 2 - 1) * 0.9;
   const smoke = () => {
     const t = (performance.now() - sStart) / sDur;
     if (t >= 1) { puff.visible = false; puff.material.opacity = 0; return; }
-    puff.scale.setScalar(0.025 + t * 0.22 * (opts.scale || 1));
-    puff.position.addScaledVector(fwd, 0.006);
-    puff.material.opacity = 0.42 * (1 - t);
+    // Gas leaves the bore fast and the air stops it almost at once, so the
+    // puff grows quickly and then barely at all, and its drift decays to
+    // nothing instead of continuing at a constant speed. Once it has slowed it
+    // starts to rise, because it is hotter than the air around it. The old
+    // version grew and travelled at a fixed rate for its whole life, which is
+    // a ball being pushed along a rail.
+    const e = Math.sqrt(t);
+    puff.scale.setScalar((0.03 + e * 0.26) * (opts.scale || 1));
+    puff.position.addScaledVector(fwd, 0.011 * (1 - t) * (1 - t));
+    puff.position.y += 0.0018 * t;
+    puff.material.rotation += spin * 0.016;
+    puff.material.opacity = 0.40 * (1 - t) * (1 - t) * (1 + t * 0.6);
     requestAnimationFrame(smoke);
   };
   requestAnimationFrame(smoke);
