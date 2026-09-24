@@ -61,6 +61,26 @@
     }
     #kills span { font-size: 14px; color: #ffd700; }
 
+    /* Live kill feed: newest on top, fades after a few seconds. Below the
+       settings button; on phones it is shorter so the weapon icons stay clear. */
+    #killfeed {
+      position: absolute; top: 64px; right: 14px; z-index: 40; pointer-events: none;
+      display: flex; flex-direction: column; align-items: flex-end; gap: 3px;
+      font-family: 'Courier New', monospace; font-size: 13px; max-width: 46vw;
+    }
+    #killfeed .kf-row {
+      display: flex; align-items: center; gap: 7px; padding: 3px 9px; white-space: nowrap;
+      background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.14); border-radius: 5px;
+      color: #fff; text-shadow: 0 1px 2px #000; animation: kfIn 0.18s ease-out; transition: opacity 0.5s, transform 0.5s;
+    }
+    #killfeed .kf-row.mine { border-color: #ffd23f; background: rgba(60,45,0,0.62); }
+    #killfeed .kf-row.out  { opacity: 0; transform: translateX(14px); }
+    #killfeed .kf-wpn { color: #b9bfc8; font-size: 11px; letter-spacing: 1px; }
+    #killfeed .kf-name { overflow: hidden; text-overflow: ellipsis; max-width: 130px; }
+    @keyframes kfIn { from { opacity: 0; transform: translateX(18px); } to { opacity: 1; transform: none; } }
+    body.touch-ui #killfeed { top: 44px; right: 8px; font-size: 11px; }
+    body.touch-ui #killfeed .kf-row:nth-child(n+3) { display: none; }
+
     #scoreboard {
       position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
       background: rgba(0,0,0,0.85); border: 1px solid #444; border-radius: 8px;
@@ -1149,6 +1169,8 @@
     <div id="weapon-selector">
       <div class="ws-slot active" id="ws-primary">
         <div class="ws-key">[1]</div>
+    <div id="killfeed" data-no-i18n></div>
+
         <div class="ws-name">—</div>
         <div class="ws-type">PRIMARY</div>
       </div>

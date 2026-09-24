@@ -35784,6 +35784,52 @@ function endMatch(winner, reason) {
   const isWin  = winner === 'ally';
   releasePointer(); // PLAY AGAIN / CHANGE MODE / BACK TO LOBBY need the cursor
   const el     = document.getElementById('match-over-screen');
+// 📰 Live kill feed (top right): "killer  [weapon]  victim", newest on top,
+// gone after a few seconds. Fed from onEntityDied, the one place every kind of
+// death in every mode goes through, so bots, players, hazards and self-kills
+// all show up. Names go in as text nodes -- a nickname is user input.
+const KILLFEED_MAX = 5, KILLFEED_MS = 5500;
+function _killfeedWeaponName(id) {
+  if (!id) return '';
+  const it = WEAPONS.find(w => w.id === id) || MELEE_ITEMS.find(w => w.id === id) || SUPPORT_ITEMS.find(w => w.id === id);
+  return it ? it.name : '';
+}
+function _killfeedWho(id) {
+  if (id === myId) return { name: 'You', color: '#ffd23f' };
+  const p = players[id], mine = players[myId];
+  const ally = p && mine && p.team && p.team === mine.team;
+  return { name: (p && p.name) || 'Bot', color: ally ? '#6bff8a' : '#ff6b6b' };
+}
+function pushKillfeed(targetId, killerId) {
+  try {
+    const box = document.getElementById('killfeed');
+    if (!box || !targetId) return;
+    const now = performance.now();
+    if (box._last && box._last[0] === targetId && now - box._last[1] < 1500) return;   // the echo of a death already shown
+    box._last = [targetId, now];
+    const row = document.createElement('div');
+    row.className = 'kf-row' + (killerId === myId || targetId === myId ? ' mine' : '');
+    const part = (cls, text, color) => {
+      const s = document.createElement('span'); s.className = cls; s.textContent = text;
+      if (color) s.style.color = color; row.appendChild(s);
+    };
+    const v = _killfeedWho(targetId);
+    if (!killerId || killerId === targetId) {
+      part('kf-wpn', killerId ? '☠' : '☠ fell');
+      part('kf-name', v.name, v.color);
+    } else {
+      const k = _killfeedWho(killerId);
+      const wid = killerId === myId ? currentEquippedId() : (resolveBot(killerId)?.weaponId || players[killerId]?.weaponId);
+      part('kf-name', k.name, k.color);
+      part('kf-wpn', '[' + (_killfeedWeaponName(wid) || '✖') + ']');
+      part('kf-name', v.name, v.color);
+    }
+    box.insertBefore(row, box.firstChild);
+    while (box.children.length > KILLFEED_MAX) box.lastChild.remove();
+    setTimeout(() => { row.classList.add('out'); setTimeout(() => row.remove(), 550); }, KILLFEED_MS);
+  } catch (e) {}
+}
+
   clearFeed();                                      // the fight's messages stop here (#29)
   const rewardRow = document.getElementById('match-over-reward');
   if (rewardRow) rewardRow.style.display = 'none';  // until this match's award lands
@@ -35793,6 +35839,7 @@ function endMatch(winner, reason) {
   title.textContent = winner == null ? '🤝  MATCH OVER' : isWin ? '🏆  VICTORY' : '💀  DEFEAT';   // null: nobody won (#48)
   title.style.color = winner == null ? '#cfd8e3' : isWin ? '#ffd700' : '#e74c3c';
   document.getElementById('match-over-sub').textContent = reason || '';
+  pushKillfeed(targetId, killerId);
   let scoreText = '';
   if (match.type === 'elim') {
     scoreText = `Rounds  ${match.roundWins.ally} – ${match.roundWins.enemy}`;
