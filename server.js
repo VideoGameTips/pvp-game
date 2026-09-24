@@ -430,11 +430,11 @@ function ensureShopFields(u) {
   if (typeof u.adminPassExpiresAt !== 'number') u.adminPassExpiresAt = 0; // 10-min trial of all admin items
 }
 
-const ADMIN_PASS_COST   = 300;
+const ADMIN_PASS_COST   = 30000;      // was 300; prices x100 (Andy)
 const ADMIN_PASS_LENGTH_MS = 10 * 60 * 1000; // 10 minutes
 
 // ── 📦 Chests, 🎡 wheel, ✨ upgrades ───────────────────────────────────
-const CHEST_PRICES = { common: 120, rare: 400 };
+const CHEST_PRICES = { common: 12000, rare: 40000 };   // was 120 / 400; prices x100, rewards x75 (Andy)
 // Fragment unlock = credit_price / 4, floor, with a 100-fragment minimum.
 // So cheap weapons still cost ~100 frags but a 40k P2W item costs 10k.
 const FRAGMENT_UNLOCK_MIN = 100;
@@ -454,10 +454,10 @@ function ri(min, max) { return Math.floor(rand(min, max + 1)); }
 function todayUTC() { return new Date().toISOString().slice(0, 10); }
 function rollChestDrops(type) {
   if (type === 'common') {
-    return { fragments: ri(10, 25), credits: ri(0, 30), weapon: null };
+    return { fragments: ri(750, 1875), credits: ri(0, 2250), weapon: null };
   }
   // rare
-  const drops = { fragments: ri(35, 80), credits: ri(30, 100), weapon: null };
+  const drops = { fragments: ri(2625, 6000), credits: ri(2250, 7500), weapon: null };
   if (Math.random() < 0.05) {
     const pool = Object.keys(WEAPON_COSTS).filter(id => !FREE_WEAPONS.has(id));
     drops.weapon = pool[Math.floor(Math.random() * pool.length)];

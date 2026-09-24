@@ -38764,7 +38764,7 @@ function renderShopChests(body) {
     card.innerHTML = `
       <div style="font-size:22px;font-weight:bold;color:${isRare ? '#cc99ff' : '#ccc'};">${isRare ? '🟣 RARE' : '📦 COMMON'} CHEST</div>
       <div style="font-size:11px;color:#aaa;margin:6px 0 10px;line-height:1.5;">
-        ${isRare ? `35-80 frags · 30-100 ${CURRENCY_NAME} · 5% chance of a free weapon` : `10-25 frags · 0-30 ${CURRENCY_NAME}`}
+        ${isRare ? `2,625-6,000 frags · 2,250-7,500 ${CURRENCY_NAME} · 5% chance of a free weapon` : `750-1,875 frags · 0-2,250 ${CURRENCY_NAME}`}
       </div>
       <div style="font-size:13px;margin-bottom:10px;">You have: <b style="color:${isRare ? '#cc99ff' : '#ccc'};">${have}</b></div>
       <div style="display:flex;gap:6px;">
@@ -40965,7 +40965,7 @@ async function awardMatchCredits(kills, won) {
 }
 
 // ── 📦 Chest, 🧩 fragment, ✨ upgrade, 🎡 wheel actions ────────────────
-const CHEST_PRICES_CLIENT = { common: 120, rare: 400 };
+const CHEST_PRICES_CLIENT = { common: 12000, rare: 40000 };
 const FRAGMENT_UNLOCK_MIN = 100;
 function fragmentUnlockCost(weaponId) {
   const price = WEAPON_COSTS[weaponId];
@@ -40976,7 +40976,7 @@ const UPGRADE_COSTS_CLIENT = [30, 60, 120, 240, 480, 800, 1200, 1800, 2500, 3500
 const MAX_LEVELS_PER_STAT = 10;
 const UPGRADE_STAT_LABELS = { damage: '+12% Damage', mag: '+25% Magazine', reload: '-15% Reload Time' };
 
-const ADMIN_PASS_COST = 300;
+const ADMIN_PASS_COST = 30000;
 async function buyAdminPass() {
   if (!currentUser) return false;
   if (adminPassActive()) {
