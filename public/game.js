@@ -4503,6 +4503,23 @@ function nearClimbableWall() {
 
 function resolveWallCollisions() {
   const RADIUS = PLAYER_RADIUS; // player footprint radius
+// 🧱 Move the player along a direction in small steps, resolving walls after
+// each one. A wall push-out only works if the step has not already carried you
+// past the wall's middle -- then the "shortest way out" is the far side and you
+// are simply through it. A single per-frame move does that at slide/boost
+// speeds, on a slow frame, or for a 5-20m dash or blink. Steps of at most
+// 0.25m are well under half of the thinnest wall (plus the player's radius).
+const MAX_MOVE_STEP = 0.25;
+function moveWithWalls(dir, dist) {
+  if (!(dist > 0)) return;
+  const n = Math.min(120, Math.max(1, Math.ceil(dist / MAX_MOVE_STEP)));
+  const d = dist / n;
+  for (let i = 0; i < n; i++) {
+    camera.position.addScaledVector(dir, d);
+    if (n > 1) resolveWallCollisions();
+  }
+}
+
   let px = camera.position.x;
   let pz = camera.position.z;
   const py = camera.position.y;
@@ -24493,7 +24510,7 @@ function updateMovement(dt) {
   if (playerPosHistory.length > 8) playerPosHistory.shift();
   lastPlayerPos.copy(camera.position);
   const moveDist = SPEED * speedMult * joyMag * dt;
-  camera.position.addScaledVector(dir, moveDist);
+  moveWithWalls(dir, moveDist);
   const _mb = getMapBounds();
   camera.position.x = Math.max(-_mb, Math.min(_mb, camera.position.x));
   camera.position.z = Math.max(-_mb, Math.min(_mb, camera.position.z));
@@ -24985,7 +25002,7 @@ function activateAbility() {
   else if (ab.type === 'dash') {
     const right = new THREE.Vector3(Math.cos(euler.y), 0, -Math.sin(euler.y));
     const side = (Math.random() > 0.5 ? 1 : -1);
-    camera.position.addScaledVector(right, side * (ab.distance || 5));
+    moveWithWalls(right.clone().multiplyScalar(side), ab.distance || 5);
     camera.position.x = Math.max(-48, Math.min(48, camera.position.x));
     camera.position.z = Math.max(-48, Math.min(48, camera.position.z));
     resolveWallCollisions();
@@ -25026,7 +25043,7 @@ function doBladeCharge(ab) {
 
   // Lunge: stop just short of the target, else charge the full distance.
   const moveDist = best ? Math.max(0, Math.min(dist, bestD - 1.1)) : dist;
-  camera.position.addScaledVector(fwd, moveDist);
+  moveWithWalls(fwd, moveDist);
   camera.position.x = Math.max(-48, Math.min(48, camera.position.x));
   camera.position.z = Math.max(-48, Math.min(48, camera.position.z));
   resolveWallCollisions();
@@ -25803,7 +25820,7 @@ function trySupport() {
   if (item.blink) {
     playSoundEvent('blink', { volume: 1.15 });
     const dir = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion).normalize();
-    camera.position.addScaledVector(dir, item.blink);
+    moveWithWalls(dir, item.blink);
     camera.position.x = Math.max(-48, Math.min(48, camera.position.x));
     camera.position.z = Math.max(-48, Math.min(48, camera.position.z));
     resolveWallCollisions();
