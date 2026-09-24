@@ -2945,9 +2945,9 @@ function _metalEnv() {
   // The sides of a barrel reflect the horizon, so the banding that reads as
   // "metal" has to cross it: tall bright window strips and dark cabinet bars,
   // alternating around the whole 360 so something new slides over the steel as you turn.
-  x.fillStyle = 'rgba(255,255,255,0.95)';
+  x.fillStyle = 'rgba(255,255,255,0.7)';
   for (const [px, w] of [[14, 26], [84, 14], [150, 38], [226, 16], [292, 30], [362, 12], [430, 34], [488, 14]]) x.fillRect(px, 34, w, 150);
-  x.fillStyle = 'rgba(8,8,10,0.62)';
+  x.fillStyle = 'rgba(8,8,10,0.3)';
   for (const [px, w] of [[52, 18], [118, 20], [196, 22], [262, 18], [332, 24], [398, 18], [464, 16]]) x.fillRect(px, 70, w, 120);
   x.fillStyle = 'rgba(255,255,255,0.96)';                   // overhead softboxes: streaks on top planes
   for (const [px, py, w, h] of [[36, 20, 76, 30], [186, 14, 128, 20], [348, 24, 60, 34], [446, 18, 52, 24]]) x.fillRect(px, py, w, h);
@@ -2975,8 +2975,8 @@ function _metalizeMat(m) {
   if (!glossy || !(_mHSL.s < 0.45 || warmMetal)) return m;
   m.envMap = _metalEnv();
   m.combine = THREE.MixOperation;
-  m.reflectivity = Math.min(0.74, 0.38 + (m.shininess - 60) / 220);
-  m.shininess = Math.min(320, m.shininess * 1.4);
+  m.reflectivity = Math.min(0.36, 0.16 + (m.shininess - 60) / 500);   // was up to 0.74: too chrome
+  m.shininess = Math.min(240, m.shininess * 1.15);
   m.needsUpdate = true;
   return m;
 }
