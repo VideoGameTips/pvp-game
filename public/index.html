@@ -77,8 +77,11 @@
     #killfeed .kf-row.out  { opacity: 0; transform: translateX(14px); }
     #killfeed .kf-wpn { color: #b9bfc8; font-size: 11px; letter-spacing: 1px; }
     #killfeed .kf-name { overflow: hidden; text-overflow: ellipsis; max-width: 130px; }
+    #killfeed .kf-icon { height: 24px; width: auto; filter: drop-shadow(0 1px 1px rgba(0,0,0,0.8)); }
+    #killfeed .kf-head { height: 16px; width: 16px; }
     @keyframes kfIn { from { opacity: 0; transform: translateX(18px); } to { opacity: 1; transform: none; } }
     body.touch-ui #killfeed { top: 44px; right: 8px; font-size: 11px; }
+    body.touch-ui #killfeed .kf-icon { height: 18px; }
     body.touch-ui #killfeed .kf-row:nth-child(n+3) { display: none; }
 
     #scoreboard {

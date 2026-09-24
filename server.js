@@ -2004,7 +2004,7 @@ io.on('connection', (socket) => {
     target.hp = Math.max(0, target.hp - dmg);
     creditFfaDamage(shooter, hpBefore - target.hp);
     // shooterId: the victim's screen points an arc at whoever fired (#36)
-    emitToMatch(target.matchId, 'playerHit', { targetId: target.id, hp: target.hp, bulletId: data.bulletId, shooterId: socket.id });
+    emitToMatch(target.matchId, 'playerHit', { targetId: target.id, hp: target.hp, bulletId: data.bulletId, shooterId: socket.id, weapon: data.weapon, headshot: !!data.headshot });
     if (target.hp <= 0) {
       target.dead = true; target.deaths++; shooter.kills++;
       shooter.matchKills = (shooter.matchKills || 0) + 1;
@@ -2032,7 +2032,7 @@ io.on('connection', (socket) => {
     // Only what the PLAYER dealt counts -- not a friendly bot they own.
     if (shooter === players[socket.id]) creditFfaDamage(shooter, botHpBefore - bot.hp);
     // shooterId: the host must not count another player's kill of its bot as its own (#48)
-    emitToMatch(bot.matchId, 'playerHit', { targetId: bot.id, hp: bot.hp, bulletId: data.bulletId, shooterId: shooter.id });
+    emitToMatch(bot.matchId, 'playerHit', { targetId: bot.id, hp: bot.hp, bulletId: data.bulletId, shooterId: shooter.id, weapon: data.weapon, headshot: !!data.headshot });
     if (bot.hp <= 0) {
       bot.dead = true; bot.deaths++; shooter.kills++;
       if (shooter === players[socket.id]) shooter.matchKills = (shooter.matchKills || 0) + 1;

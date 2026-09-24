@@ -31140,6 +31140,7 @@ function updateBullets(dt) {
     }
   }
 }
+  noteKillInfo(pid, myId, weaponId, headshot);
 
 // ── New support items ─────────────────────────────────────────────────────
 function applyAdrenaline(item) {
@@ -32731,10 +32732,10 @@ function scheduleBotHitOnPlayer(botId, weaponId, dist, speed) {
   const flightMs = (Math.max(0, dist) / Math.max(20, speed || 120)) * 1000;
   // Point blank — no perceptible flight, don't add input lag to a knife-range hit.
   if (flightMs < 20) {
-    botHitsMe(botId, weaponId);
+    botHitsMe(botId, weaponId, _lastBotShotHead);
     return;
   }
-  _botHitsInFlight.push({ botId, weaponId,
+  _botHitsInFlight.push({ botId, weaponId, head: _lastBotShotHead,
                           at: performance.now() + Math.min(900, flightMs) });
 }
 function resolveBotHitsInFlight() {
@@ -32747,15 +32748,18 @@ function resolveBotHitsInFlight() {
     // Stale — the tab was backgrounded, or bots were despawned mid-flight.
     // A bullet fired more than a second late is nobody's bullet.
     if (now - h.at > 1500) continue;
-    botHitsMe(h.botId, h.weaponId);
+    botHitsMe(h.botId, h.weaponId, h.head);
   }
 }
 
 // A bot's hit on the local player. The server subtracts HP on botHitMe knowing nothing of the spawn
 // shield, a riot shield, a parry, Lobby 13 or the range, so it only hears of hits that land here —
 // it used to hear of every one, and killed shielded players showing full health (#22).
-function botHitsMe(botId, weaponId) {
-  if (applyBotDamageToPlayer(weaponId, botId)) socket.emit('botHitMe', { botId, weapon: weaponId });
+function botHitsMe(botId, weaponId, head) {
+  _botHitHead = !!head;
+  const landed = applyBotDamageToPlayer(weaponId, botId);
+  _botHitHead = false;
+  if (landed) socket.emit('botHitMe', { botId, weapon: weaponId });
 }
 // A death played out here — a bot's bullet, a hazard — told to the server when other real
 // players are in the match (#48): its own sums can still say we're alive, and then nobody
@@ -33426,6 +33430,7 @@ socket.on('playerDied', data => {
       document.getElementById('death-msg').textContent = 'Select your loadout...';
       afterDeath(1500, () => { ds.style.display='none'; showLoadoutScreen('death'); });
     }
+  _lastBotShotHead = inHead;
   }
   if (remoteMeshes[data.targetId]) {
     if (data.killerId === myId && data.targetId !== myId) triggerFinisher(data.targetId, currentEquippedId());
@@ -33479,6 +33484,7 @@ socket.on('playerRespawned', p => {
     } else {
       remoteMeshes[p.id].position.set(p.x, 0, p.z);
     }
+  noteKillInfo(myId, botId, weaponId, _botHitHead);   // for the kill feed, should this be the one that kills
     remoteMeshes[p.id].visible = true;
     resetDeathPose(remoteMeshes[p.id]);
     players[p.id].hp = p.hp || 300;
@@ -33941,6 +33947,7 @@ function spawnSmokeCloud(pos) {
         const k = elapsed / GROW_MS;
         scale   = 0.3 + k * 0.7;
         opacity = k * maxOp;
+  if (data.shooterId && data.weapon) noteKillInfo(data.targetId, data.shooterId, data.weapon, data.headshot);   // for the kill feed
       } else if (elapsed < GROW_MS + HOLD_MS) {
         // Hold: slight gentle drift upward, full opacity
         scale   = 1.0 + ((elapsed - GROW_MS) / HOLD_MS) * 0.18;
@@ -35792,21 +35799,135 @@ function endMatch(winner, reason) {
   const isWin  = winner === 'ally';
   releasePointer(); // PLAY AGAIN / CHANGE MODE / BACK TO LOBBY need the cursor
   const el     = document.getElementById('match-over-screen');
-// 📰 Live kill feed (top right): "killer  [weapon]  victim", newest on top,
-// gone after a few seconds. Fed from onEntityDied, the one place every kind of
-// death in every mode goes through, so bots, players, hazards and self-kills
+  clearFeed();                                      // the fight's messages stop here (#29)
+  const rewardRow = document.getElementById('match-over-reward');
+  if (rewardRow) rewardRow.style.display = 'none';  // until this match's award lands
+  showFunFact('match-over-screen');
+  renderMatchRivals();
+  const title  = document.getElementById('match-over-title');
+  title.textContent = winner == null ? '🤝  MATCH OVER' : isWin ? '🏆  VICTORY' : '💀  DEFEAT';   // null: nobody won (#48)
+  title.style.color = winner == null ? '#cfd8e3' : isWin ? '#ffd700' : '#e74c3c';
+  document.getElementById('match-over-sub').textContent = reason || '';
+  let scoreText = '';
+  if (match.type === 'elim') {
+    scoreText = `Rounds  ${match.roundWins.ally} – ${match.roundWins.enemy}`;
+  } else if (match.type === 'race') {
+// 📰 Live kill feed (top right): "killer [weapon icon] [head] victim", newest on
+// top, gone after a few seconds. Fed from onEntityDied, the one place every kind
+// of death in every mode goes through, so bots, players, hazards and self-kills
 // all show up. Names go in as text nodes -- a nickname is user input.
 const KILLFEED_MAX = 5, KILLFEED_MS = 5500;
-function _killfeedWeaponName(id) {
-  if (!id) return '';
-  const it = WEAPONS.find(w => w.id === id) || MELEE_ITEMS.find(w => w.id === id) || SUPPORT_ITEMS.find(w => w.id === id);
-  return it ? it.name : '';
+
+// How each victim was last hit -- who, with what, and whether it was the head --
+// noted where the hit is dealt (emitHit, a bot's hit on us, the server's
+// playerHit for other real players) so the feed can say more than "X died".
+const _killInfo = {};
+function noteKillInfo(targetId, killerId, weaponId, head) {
+  if (targetId) _killInfo[targetId] = { killer: killerId || null, weapon: weaponId || null, head: !!head, t: performance.now() };
 }
+let _botHitHead = false;        // did the bot's shot being resolved right now take our head?
+let _lastBotShotHead = false;   // set by botShotHitsPlayer, picked up when the hit is scheduled
+
+// 🖼️ Weapon icons. The game has no per-weapon art (just four generic slot
+// glyphs), so the icon is the weapon itself: its real viewmodel, drawn once side
+// on into a small transparent picture and cached. Rendered with the game's own
+// renderer into a render target because the models' materials carry an
+// environment map that belongs to that GL context.
+const _iconCache = {};
+let _iconRT = null, _iconScene = null, _iconCam = null;
+const ICON_W = 240, ICON_H = 96;
+function _iconModelFor(id, mine) {
+  let i = WEAPONS.findIndex(w => w.id === id);
+  if (i >= 0) return { model: mine ? weaponModels[i] : (_baseWeaponModels[i] || weaponModels[i]) };
+  i = MELEE_ITEMS.findIndex(w => w.id === id);
+  if (i >= 0) return { model: mine ? meleeModels[i] : (_baseMeleeModels[i] || meleeModels[i]) };
+  i = SUPPORT_ITEMS.findIndex(w => w.id === id);
+  if (i >= 0) return { model: supportModels[i] };
+  return null;
+}
+function weaponIconURL(id, mine) {
+  const found = id && _iconModelFor(id, mine);
+  if (!found || !found.model) return null;
+  const key = id + ':' + found.model.uuid;
+  if (key in _iconCache) return _iconCache[key];
+  let url = null;
+  try { url = _renderWeaponIcon(found.model); } catch (e) { console.warn('[killfeed icon]', id, e); }
+  return (_iconCache[key] = url);
+}
+function _renderWeaponIcon(model) {
+  if (!_iconScene) {
+    _iconScene = new THREE.Scene();
+    _iconScene.add(new THREE.AmbientLight(0xffffff, 2.4));
+    const sun = new THREE.DirectionalLight(0xffffff, 2.6); sun.position.set(3, 4, 2); _iconScene.add(sun);
+    const back = new THREE.DirectionalLight(0xbfd4ff, 1.1); back.position.set(-3, 1, -2); _iconScene.add(back);
+    _iconCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.01, 50);
+    _iconRT = new THREE.WebGLRenderTarget(ICON_W, ICON_H, { samples: 4 });
+  }
+  const clone = model.clone(true);
+  clone.position.set(0, 0, 0); clone.rotation.set(0, 0, 0); clone.scale.set(1, 1, 1); clone.visible = true;
+  clone.traverse(o => {                      // hands, effects and the muzzle flash are not the weapon
+    if (o.userData && (o.userData.vmHand || o.userData.eqFx || o.userData.legendFx)) o.visible = false;
+    if (model._flash && o.name && o.name === model._flash.name && o !== clone && o.material && o.material.transparent) o.visible = false;
+  });
+  _iconScene.add(clone);
+  clone.updateMatrixWorld(true);
+  const box = new THREE.Box3();
+  clone.traverse(o => { if (o.isMesh && o.visible && o.geometry) box.expandByObject(o); });
+  if (box.isEmpty()) { _iconScene.remove(clone); return null; }
+  const c = box.getCenter(new THREE.Vector3()), sz = box.getSize(new THREE.Vector3());
+  // Viewed from the right, muzzle pointing right (weapons point down -Z).
+  // A fixed minimum width keeps a grenade from filling the picture like a rifle.
+  const aspect = ICON_W / ICON_H;
+  let halfW = Math.max(sz.z * 0.5, 0.17) * 1.1;
+  halfW = Math.max(halfW, sz.y * 0.5 * aspect * 1.1);
+  const halfH = halfW / aspect;
+  _iconCam.left = -halfW; _iconCam.right = halfW; _iconCam.top = halfH; _iconCam.bottom = -halfH;
+  _iconCam.position.set(c.x + 5, c.y, c.z); _iconCam.up.set(0, 1, 0); _iconCam.lookAt(c);
+  _iconCam.updateProjectionMatrix();
+  const prevRT = renderer.getRenderTarget(), prevColor = renderer.getClearColor(new THREE.Color()), prevAlpha = renderer.getClearAlpha();
+  const buf = new Uint8Array(ICON_W * ICON_H * 4);
+  try {
+    renderer.setRenderTarget(_iconRT);
+    renderer.setClearColor(0x000000, 0);
+    renderer.clear();
+    renderer.render(_iconScene, _iconCam);
+    renderer.readRenderTargetPixels(_iconRT, 0, 0, ICON_W, ICON_H, buf);
+  } finally {
+    renderer.setRenderTarget(prevRT); renderer.setClearColor(prevColor, prevAlpha);
+    _iconScene.remove(clone);
+  }
+  // Rendering into a target leaves the pixels linear and premultiplied: undo
+  // both, flip (rows come bottom-up) and hand back a PNG.
+  const cv = document.createElement('canvas'); cv.width = ICON_W; cv.height = ICON_H;
+  const g = cv.getContext('2d'), img = g.createImageData(ICON_W, ICON_H);
+  const enc = (v) => Math.round(255 * (v <= 0.0031308 ? 12.92 * v : 1.055 * Math.pow(v, 1 / 2.4) - 0.055));
+  let seen = 0;
+  for (let y = 0; y < ICON_H; y++) for (let x = 0; x < ICON_W; x++) {
+    const s = ((ICON_H - 1 - y) * ICON_W + x) * 4, d = (y * ICON_W + x) * 4, a = buf[s + 3];
+    if (a) { seen++; for (let k = 0; k < 3; k++) img.data[d + k] = Math.min(255, enc(Math.min(1, (buf[s + k] / 255) / (a / 255)))); }
+    img.data[d + 3] = a;
+  }
+  if (!seen) return null;
+  g.putImageData(img, 0, 0);
+  return cv.toDataURL('image/png');
+}
+// Damage-over-time ids that are not items of their own borrow their gun's icon.
+const _KILLFEED_ICON_ALIAS = { flame_burn: 'flamethrower', caustic_burn: 'glassmaker', flame: 'flamethrower' };
+// A small head with a red target on it: this kill was a headshot.
+const _HEAD_ICON = 'data:image/svg+xml;utf8,' + encodeURIComponent(
+  "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M4 23c0-5 3.5-7.5 8-7.5s8 2.500 8 7.500z' fill='#7d838c'/>" +
+  "<circle cx='12' cy='9' r='6.500' fill='#e8ebef' stroke='#000' stroke-opacity='.6'/>" +
+  "<circle cx='12' cy='9' r='4.300' fill='none' stroke='#ff3b3b' stroke-width='1.500'/><circle cx='12' cy='9' r='1.600' fill='#ff3b3b'/></svg>");
+
 function _killfeedWho(id) {
   if (id === myId) return { name: 'You', color: '#ffd23f' };
   const p = players[id], mine = players[myId];
   const ally = p && mine && p.team && p.team === mine.team;
   return { name: (p && p.name) || 'Bot', color: ally ? '#6bff8a' : '#ff6b6b' };
+}
+function _itemName(id) {
+  const it = WEAPONS.find(w => w.id === id) || MELEE_ITEMS.find(w => w.id === id) || SUPPORT_ITEMS.find(w => w.id === id);
+  return it ? it.name : '';
 }
 function pushKillfeed(targetId, killerId) {
   try {
@@ -35821,15 +35942,24 @@ function pushKillfeed(targetId, killerId) {
       const s = document.createElement('span'); s.className = cls; s.textContent = text;
       if (color) s.style.color = color; row.appendChild(s);
     };
+    const icon = (src, cls, title) => {
+      const im = document.createElement('img'); im.className = cls; im.src = src; im.alt = title || ''; if (title) im.title = title; row.appendChild(im);
+    };
     const v = _killfeedWho(targetId);
+    const info = _killInfo[targetId];
+    const known = info && now - info.t < 4000 && (info.killer === killerId || !killerId) ? info : null;
     if (!killerId || killerId === targetId) {
       part('kf-wpn', killerId ? '☠' : '☠ fell');
       part('kf-name', v.name, v.color);
     } else {
       const k = _killfeedWho(killerId);
-      const wid = killerId === myId ? currentEquippedId() : (resolveBot(killerId)?.weaponId || players[killerId]?.weaponId);
+      let wid = (known && known.weapon) || (killerId === myId ? currentEquippedId() : (resolveBot(killerId)?.weaponId || players[killerId]?.weaponId));
+      wid = _KILLFEED_ICON_ALIAS[wid] || wid;
       part('kf-name', k.name, k.color);
-      part('kf-wpn', '[' + (_killfeedWeaponName(wid) || '✖') + ']');
+      const url = weaponIconURL(wid, killerId === myId);
+      if (url) icon(url, 'kf-icon', _itemName(wid));
+      else part('kf-wpn', _itemName(wid) ? '[' + _itemName(wid) + ']' : '✖');
+      if (known && known.head) icon(_HEAD_ICON, 'kf-head', 'Headshot');
       part('kf-name', v.name, v.color);
     }
     box.insertBefore(row, box.firstChild);
@@ -35838,20 +35968,6 @@ function pushKillfeed(targetId, killerId) {
   } catch (e) {}
 }
 
-  clearFeed();                                      // the fight's messages stop here (#29)
-  const rewardRow = document.getElementById('match-over-reward');
-  if (rewardRow) rewardRow.style.display = 'none';  // until this match's award lands
-  showFunFact('match-over-screen');
-  renderMatchRivals();
-  const title  = document.getElementById('match-over-title');
-  title.textContent = winner == null ? '🤝  MATCH OVER' : isWin ? '🏆  VICTORY' : '💀  DEFEAT';   // null: nobody won (#48)
-  title.style.color = winner == null ? '#cfd8e3' : isWin ? '#ffd700' : '#e74c3c';
-  document.getElementById('match-over-sub').textContent = reason || '';
-  pushKillfeed(targetId, killerId);
-  let scoreText = '';
-  if (match.type === 'elim') {
-    scoreText = `Rounds  ${match.roundWins.ally} – ${match.roundWins.enemy}`;
-  } else if (match.type === 'race') {
     scoreText = `Kills  Your Team ${match.teamKills.ally}  ·  Enemy ${match.teamKills.enemy}  (goal ${match.cfg.killGoal})`;
   } else if (match.type === 'dday') {
     const dd = ddayState;
@@ -35861,6 +35977,7 @@ function pushKillfeed(targetId, killerId) {
     const topBotKills = Math.max(0, ...gameBots.map(b => match.ffaKills[b.id] || 0));
     scoreText = `Your kills: ${pk}  ·  Top bot: ${topBotKills}`;
   }
+  pushKillfeed(targetId, killerId);
   document.getElementById('match-over-score').textContent = scoreText;
   document.getElementById('match-over-stats').textContent =
     `Kills ${Math.max(0, myKills - match.killsAtStart)}  ·  Deaths ${match.deaths}`;
