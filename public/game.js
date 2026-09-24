@@ -5521,6 +5521,35 @@ function buildForestMap() {
     const cx = (Math.random() - 0.5) * 80, cz = (Math.random() - 0.5) * 80;
     if (Math.hypot(cx, cz) < 8) continue;
     for (let s = 0; s < 4; s++) {
+  // ── 45° test ramp (middle lane, just past the coffee table) ─────────────
+  // Rise = run = 3m, so exactly 45°, with a landing on top to stand on and
+  // test slides/jumps off. The game's floors are all axis-aligned boxes, so
+  // the slope you see is a smooth wedge and the slope you walk on is a
+  // staircase of 0.25m hidden colliders under it -- the same trick as the
+  // stairs, just fine enough that it feels like a ramp, not steps.
+  {
+    const RW = 5, RISE = 3, RUN = 3, Z0 = 4, STEP = 0.25;
+    const wedge = new THREE.Shape();
+    wedge.moveTo(0, 0); wedge.lineTo(RUN, 0); wedge.lineTo(RUN, RISE); wedge.closePath();
+    const geo = new THREE.ExtrudeGeometry(wedge, { depth: RW, bevelEnabled: false });
+    const rampMesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: 0xff9933 }));
+    rampMesh.rotation.y = -Math.PI / 2;            // shape x -> world +Z, extrusion -> world -X
+    rampMesh.position.set(RW / 2, 0, Z0);
+    MAP_GROUPS[m].add(rampMesh);
+    // The ground height under you is taken from every box within your radius
+    // (PLAYER_RADIUS), i.e. from the step half a body AHEAD -- at 45 degrees that
+    // alone would float your feet 0.38m over the wedge. So the hidden steps sit
+    // one radius further along, and half a step lower, which centres the error.
+    const n = Math.round(RISE / STEP);
+    for (let i = 0; i < n; i++) {
+      const h = (i + 0.5) * STEP, d = RUN / n;
+      const step = addMapBox(m, 0, h / 2, Z0 + PLAYER_RADIUS + (i + 0.5) * d, RW, h, d, 0xff9933);
+      step.visible = false;                        // collision only; the wedge is what you see
+    }
+    addMapBox(m, 0, RISE / 2, Z0 + RUN + 1.25, RW, RISE, 2.5, 0xffb866);       // landing on top
+    addMapBox(m, 0, RISE + 0.05, Z0 + RUN + 2.45, RW, 0.1, 0.1, 0xffee88);     // lip stripe
+  }
+
       const bh = 5 + Math.random() * 2;
       const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.14, bh, 6), bambooMat);
       stalk.position.set(cx + (Math.random() - 0.5) * 1.4, bh / 2, cz + (Math.random() - 0.5) * 1.4);
