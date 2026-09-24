@@ -19347,6 +19347,72 @@ function greebleModel(root, opts = {}) {
     }
   });
 }
+// ── 🎽 Flank stripes ───────────────────────────────────────────────────────
+// A handful of guns are built from very few parts around one big slab of a
+// body, which leaves a whole face with nothing on it. Next to a gun carrying
+// rails, vents and a handguard they read as unfinished blockouts rather than
+// as clean designs. Two painted stripes — one per flank, never more — is the
+// smallest thing that fixes that, and it is what a real polymer or sheet-metal
+// body gets: the one surface you can paint without touching anything that moves.
+//
+// Placed off the model instead of by hand in each builder, because the same
+// three numbers would have to be re-derived for every gun. The body is the
+// largest part in the model; its thinnest axis is the flank normal (a gun body
+// is thin side to side), its longest is the run. Every size is a fraction of
+// the body, so this works the same on a derringer and on a shotgun. The stripe
+// sinks into the face rather than resting on it, so weldModelParts sees it
+// bonded instead of floating beside the gun.
+const STRIPE_GUNS = {
+  signal_pistol: 0xe08a2a, sawed_off: 0x6f7a86, lever: 0x8a6a3a, dart_gun: 0x4a8a7a,
+  duelist_pistol: 0xb08a4a, boomstick: 0x6f7a86, nail_gun: 0xd08a3a, taser: 0x3a7ab0,
+  snub_revolver: 0x6f7a86,
+};
+function addFlankStripes(model, colour) {
+  // "Largest part" is not enough on its own: the muzzle flash is a 0.09 sphere,
+  // which dwarfs every real part on a pistol, so the first cut of this put
+  // stripes around barrels and skipped five guns whose flash was picked and
+  // then rejected for being a cube. The body is the largest SOLID SLAB —
+  // boxes and extruded profiles only, nothing see-through, and never the flash.
+  let body = null, best = 0;
+  const skip = new Set();
+  if (model._flash) model._flash.traverse(o => skip.add(o));
+  model.traverse(o => {
+    if (!o.isMesh || !o.geometry || skip.has(o)) return;
+    const mat = Array.isArray(o.material) ? o.material[0] : o.material;
+    if (!mat || mat.transparent || mat.isMeshBasicMaterial) return;
+    const t = o.geometry.type;
+    if (t !== 'BoxGeometry' && t !== 'ExtrudeGeometry') return;
+    o.geometry.computeBoundingBox();
+    const bb = o.geometry.boundingBox;
+    if (!bb) return;
+    const v = (bb.max.x - bb.min.x) * (bb.max.y - bb.min.y) * (bb.max.z - bb.min.z);
+    if (v > best) { best = v; body = o; }
+  });
+  if (!body) return 0;
+  const bb = body.geometry.boundingBox;
+  const sx = bb.max.x - bb.min.x, sy = bb.max.y - bb.min.y, sz = bb.max.z - bb.min.z;
+  const cx = (bb.max.x + bb.min.x) / 2, cy = (bb.max.y + bb.min.y) / 2, cz = (bb.max.z + bb.min.z) / 2;
+  // The axes are not inferred. Every gun in this file is built with z down the
+  // barrel and x across, so the stripe runs along z on the +/-x faces, full
+  // stop. Picking the body's own longest axis instead ran them vertically down
+  // the grip of every pistol, because a pistol frame is taller than it is long.
+  if (sx < 0.004 || sz < 0.02) return 0;
+  const th = Math.max(0.002, sx * 0.09);
+  const h  = Math.max(0.004, Math.min(0.012, sy * 0.16));
+  const mat = new THREE.MeshPhongMaterial({ color: colour, shininess: 40, specular: 0x30363c });
+  let n = 0;
+  for (const sign of [-1, 1]) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(th, h, sz * 0.55), mat);
+    m.position.set(cx + sign * (sx / 2 - th * 0.35), cy + sy * 0.10, cz);   // sunk into the face
+    body.add(m); n++;
+  }
+  return n;
+}
+for (let i = 0; i < WEAPONS.length; i++) {
+  const c = STRIPE_GUNS[WEAPONS[i].id];
+  if (c != null && weaponModels[i]) { try { addFlankStripes(weaponModels[i], c); } catch (e) {} }
+}
+
 // Finish every model the player can see: welded together, and shiny.
 [weaponModels, meleeModels, supportModels].forEach(arr => {
   arr.forEach(m => { if (!m) return; try { greebleModel(m); weldModelParts(m); blendProudSteps(m); shinifyModel(m); } catch (e) {} });
