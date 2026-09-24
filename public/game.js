@@ -2961,6 +2961,7 @@ function _metalEnv() {
   return (_metalEnvTex = t);
 }
 const _mHSL = { h: 0, s: 0, l: 0 }, _mSpec = { h: 0, s: 0, l: 0 };
+const _glazeWhite = new THREE.Color(0xffffff);
 function _metalizeMat(m) {
   if (!m || !m.isMeshPhongMaterial || (m.userData && m.userData.metalDone)) return m;
   m.userData = m.userData || {};
@@ -2972,7 +2973,21 @@ function _metalizeMat(m) {
   // Plastic and rubber (low shine, dull specular) and saturated coloured plastics stay as they are.
   const glossy = m.shininess >= 60 && _mSpec.l >= 0.55;
   const warmMetal = _mHSL.h > 0.03 && _mHSL.h < 0.17 && _mHSL.s < 0.75;
-  if (!glossy || !(_mHSL.s < 0.45 || warmMetal)) return m;
+  if (!glossy || !(_mHSL.s < 0.45 || warmMetal)) {
+    // 🍯 Glaze: everything that is not metal -- wood, polymer, grips, rubber,
+    // coloured plastic -- gets a wet clear-coat instead: a faint reflection of the
+    // same environment, a tighter, whiter highlight. Far lighter than the metal
+    // (a lacquer, not a mirror). Near-black parts (bores, gaps) are left dark.
+    if (_mHSL.l >= 0.15) {
+      m.envMap = _metalEnv();
+      m.combine = THREE.MixOperation;
+      m.reflectivity = 0.022;
+      m.shininess = Math.min(100, Math.max(50, m.shininess * 1.35));
+      m.specular.lerp(_glazeWhite, 0.06);
+      m.needsUpdate = true;
+    }
+    return m;
+  }
   m.envMap = _metalEnv();
   m.combine = THREE.MixOperation;
   m.reflectivity = Math.min(0.36, 0.16 + (m.shininess - 60) / 500);   // was up to 0.74: too chrome
