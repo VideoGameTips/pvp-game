@@ -23748,10 +23748,13 @@ function equipActiveSlot() {
       startMeleeEquipAnim(selectedMeleeIdx);
     }
   } else if (activeSlot === 'support') {
-    if (selectedSupportIdx !== null && selectedSupportIdx >= 0)
+    if (selectedSupportIdx !== null && selectedSupportIdx >= 0) {
       supportModels[selectedSupportIdx].visible = true;
+      startSupportEquipAnim(selectedSupportIdx);
+    }
   }
   updateAmmoHUD(); updateWeaponHUD(); updateWeaponSelector();
+  try { prewarmKillfeedIcons(); } catch (e) {}
 }
 
 // ── ADS ────────────────────────────────────────────────────────────────────
@@ -36000,6 +36003,30 @@ const _HEAD_ICON = 'data:image/svg+xml;utf8,' + encodeURIComponent(
   "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M4 23c0-5 3.5-7.5 8-7.5s8 2.500 8 7.500z' fill='#7d838c'/>" +
   "<circle cx='12' cy='9' r='6.500' fill='#e8ebef' stroke='#000' stroke-opacity='.6'/>" +
   "<circle cx='12' cy='9' r='4.300' fill='none' stroke='#ff3b3b' stroke-width='1.500'/><circle cx='12' cy='9' r='1.600' fill='#ff3b3b'/></svg>");
+
+// The first icon of each weapon costs ~65ms to draw (shader compile + render),
+// which is a visible hitch on the kill that needs it. So the loadout's icons --
+// yours, plus the guns bots and other players carry most -- are drawn one at a
+// time in idle moments after a weapon is equipped, and every kill after that
+// finds its picture already cached.
+const _iconWarmed = new Set();
+let _iconWarmTimer = null;
+function prewarmKillfeedIcons() {
+  if (_iconWarmTimer) return;
+  const ids = [WEAPONS[selectedPrimaryIdx] && WEAPONS[selectedPrimaryIdx].id, WEAPONS[selectedSecondaryIdx] && WEAPONS[selectedSecondaryIdx].id,
+               equippedMeleeItem() && equippedMeleeItem().id, SUPPORT_ITEMS[selectedSupportIdx] && SUPPORT_ITEMS[selectedSupportIdx].id,
+               'ak20', 'sg8', 'srx', 'pistol', 'katana'].filter(id => id && !_iconWarmed.has(id));
+  if (!ids.length) return;
+  const step = () => {
+    _iconWarmTimer = null;
+    const id = ids.shift();
+    if (!id) return;
+    _iconWarmed.add(id);
+    try { weaponIconURL(id, true); } catch (e) {}
+    if (ids.length) _iconWarmTimer = setTimeout(step, 250);
+  };
+  _iconWarmTimer = setTimeout(step, 1500);
+}
 
 function _killfeedWho(id) {
   if (id === myId) return { name: 'You', color: '#ffd23f' };
