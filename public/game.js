@@ -21839,6 +21839,7 @@ function weaponKickStrength(w, pellets = 1) {
 const _GUN_KICK_MAX = { x: 0.065, y: 0.060, z: 0.18, rx: 0.13, ry: 0.08, rz: 0.09 };
 const _GUN_KICK_HYPER_MAX = { x: 0.105, y: 0.095, z: 0.29, rx: 0.24, ry: 0.14, rz: 0.16 };
 function kickWeaponVisual(w, pellets = 1) {
+  { const mm = weaponModels[currentWeaponIdx]; if (mm && mm._mech) mm._mech.kick = 1; }   // bolt / slide cycles
   // perfectAccuracy (SR-X): skip camera shake AND the viewmodel wobble. This
   // matters more than the weapon's own spread/recoil fields being zero —
   // addFireShake() below nudges euler.x/y (the actual camera aim) BEFORE
@@ -24825,10 +24826,10 @@ function updateMovement(dt) {
   const _mb = getMapBounds();
   camera.position.x = Math.max(-_mb, Math.min(_mb, camera.position.x));
   camera.position.z = Math.max(-_mb, Math.min(_mb, camera.position.z));
-  // 🦶 Footsteps — accumulate distance, fire on every ~1.5 m of grounded travel
+  // 🦶 Footsteps — accumulate distance, fire on every ~2.8 m of grounded travel
   if (dir.lengthSq() > 0.001 && !slamState && !pilotedVehicle && !pilotedMortar && !isDead) {
     window._stepDist = (window._stepDist || 0) + moveDist;
-    const stride = sliding ? 0.0 : (crouchHeld ? 1.8 : 1.4); // no steps during slide
+    const stride = sliding ? 0.0 : (crouchHeld ? 3.6 : 2.8); // no steps during slide (twice the old 1.8 / 1.4 m: half as many)
     if (stride > 0 && window._stepDist >= stride) {
       window._stepDist = 0;
       window._stepAlt = !window._stepAlt;
@@ -26617,7 +26618,202 @@ function fitRestDistance(m) {
   m.position.z = Math.max(VM_MAX_Z, Math.min(VM_MIN_Z, want));
 }
 
-function prepViewModel(m) {
+// ── ⚙️ Gun mechanics ─────────────────────────────────────────────────────────
+// The reload tracks move the gun and the hands, and throw props about -- but the
+// gun itself never changed: the magazine you "pulled" was still in the well, a
+// fresh one flew up and vanished, and a rocket launcher kept a rocket that was
+// never there to begin with. This finds the working parts on each model (from
+// where the magwell is, since every model has an anchor for it) and makes them
+// do what the action says:
+//   mag     the real magazine leaves the well when the old one is thrown and
+//           slides back in when the new one arrives
+//   knob    a charging handle on rifles and SMGs: hauled back on the rack, and
+//           kicks with every shot
+//   slide   a pistol's slide: blows back on each shot, locks open on an empty
+//           gun, and is racked shut when the reload finishes
+//   loaded  a launcher's projectile (rocket, shell, bolt, arrow...) sits in the
+//           front of the gun until it is fired, and stays gone until a fresh
+//           one has been loaded
+// Everything is derived per frame from ammo and reload progress, so a cancelled
+// reload or a weapon swap leaves nothing stuck half way.
+function _mechPartsOf(model) {
+  return _localPartBoxes(model).filter(p => {
+    if (p.obj.parent !== model) return false;          // only pieces we can lift out whole
+    for (let o = p.obj; o && o !== model; o = o.parent) if (o.userData && o.userData.vmHand) return false;
+    return !p.obj.userData.eqFx && !p.obj.userData.legendFx && p.obj !== model._flash;
+  });
+}
+function _mechAllParts(model) {
+  return _localPartBoxes(model).filter(p => {
+    for (let o = p.obj; o && o !== model; o = o.parent) {
+      if (o === model._flash || (o.userData && (o.userData.vmHand || o.userData.eqFx || o.userData.legendFx))) return false;
+    }
+    return true;
+  });
+}
+function _mechWrap(model, parts, pivot) {
+  const g = new THREE.Group();
+  g.position.copy(pivot);
+  for (const p of parts) { p.obj.position.sub(pivot); g.add(p.obj); }   // add() re-parents
+  model.add(g);
+  return g;
+}
+const _mechMat = (c, sh) => new THREE.MeshPhongMaterial({ color: c, shininess: sh == null ? 70 : sh, specular: 0x9aa2ac });
+function _mechRound(kind, s = 1) {   // built pointing down -Z, origin at its rear
+  const g = new THREE.Group();
+  const cyl = (r, len, z, c) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 12), _mechMat(c)); m.rotation.x = Math.PI / 2; m.position.z = z; g.add(m); return m; };
+  const cone = (r, len, z, c) => { const m = new THREE.Mesh(new THREE.ConeGeometry(r, len, 12), _mechMat(c, 90)); m.rotation.x = -Math.PI / 2; m.position.z = z; g.add(m); return m; };
+  if (kind === 'rocket') { cyl(0.020 * s, 0.070 * s, -0.035 * s, 0x4a5334); cone(0.024 * s, 0.085 * s, -0.1125 * s, 0x7a4a2a); cyl(0.0225 * s, 0.008 * s, -0.070 * s, 0x2a2e26); }
+  else if (kind === 'shell') { cyl(0.0165, 0.050, -0.025, 0x6d6a3a); cone(0.0165, 0.030, -0.065, 0x8a6a30); }
+  else if (kind === 'potato') { const m = new THREE.Mesh(new THREE.SphereGeometry(0.019, 12, 10), _mechMat(0xc9a86a, 20)); m.scale.set(1, 0.9, 1.15); m.position.z = -0.006; g.add(m); }
+  else if (kind === 'bolt') {
+    cyl(0.0042, 0.300, -0.150, 0xb08a55); cone(0.0085, 0.032, -0.316, 0xc9d0d8);
+    for (let i = 0; i < 3; i++) { const f = new THREE.Mesh(new THREE.BoxGeometry(0.003, 0.020, 0.040), _mechMat(0xd83a3a, 30)); f.position.z = -0.012; f.rotation.z = i * Math.PI / 3; g.add(f); }
+  }
+  g.traverse(o => { if (o.isMesh) o.castShadow = false; });
+  return g;
+}
+// Launchers whose projectile is a piece of the gun's own model, found by shape.
+const _MECH_FIND = {
+  boombow: (P) => P.filter(p => { const c = p.box.getCenter(new THREE.Vector3()); return p.obj.geometry.type === 'CylinderGeometry' && Math.abs(c.x) < 0.003 && Math.abs(c.y) < 0.003 && c.z < 0.0 && c.z > -0.215; }),
+  // the harpoon: its shaft, head and barbs are all the same bright steel, sitting on the rail
+  harpoon_gun: (P) => P.filter(p => { const c = p.box.getCenter(new THREE.Vector3()), s = p.box.getSize(new THREE.Vector3()); const col = p.obj.material && p.obj.material.color && p.obj.material.color.getHex(); return col === 0x8d959d && Math.abs(c.y - 0.044) < 0.005 && Math.abs(c.x) < 0.012 && (c.z < -0.32 || s.z > 0.3); }),
+  // the model's own potato (and its three eyes) in the muzzle
+  potato_cannon: (P) => P.filter(p => { const c = p.box.getCenter(new THREE.Vector3()); const col = p.obj.material && p.obj.material.color && p.obj.material.color.getHex(); return p.obj.geometry.type === 'SphereGeometry' && c.z < -0.27 && (col === 0xa98a56 || col === 0x1c1f23); }),
+  // seven barrels, five of them loaded: the coloured caps
+  firework_launcher: (P) => P.filter(p => { const s = p.box.getSize(new THREE.Vector3()), c = p.box.getCenter(new THREE.Vector3()); return p.obj.geometry.type === 'CylinderGeometry' && s.z < 0.02 && s.z > 0.01 && s.x > 0.03 && c.z < -0.17; }),
+};
+const _MECH_ROUND = {   // synthesized projectile, placed on the muzzle anchor
+  rpg: { kind: 'rocket', s: 1.0, dz: 0.03 }, bazooka: { kind: 'rocket', s: 1.25, dz: 0.03 },
+  mortar_rifle: { kind: 'shell', s: 1, dz: 0.02 },
+};
+function _buildMech(model, id, evs) {
+  const A = model._anchors, w = WEAPONS.find(x => x.id === id);
+  if (!A || !w || model._throwable) return null;
+  const P = _mechPartsOf(model);
+  const M = { kick: 0, kickAt: performance.now() };
+  // ── magazine
+  if (evs.some(e => e.k === 'mag' && e.m === 'eject')) {
+    const cand = P.filter(p => {
+      const c = p.box.getCenter(new THREE.Vector3()), sz = p.box.getSize(new THREE.Vector3());
+      return p.obj.geometry.type !== 'TorusGeometry' && p.obj.geometry.type !== 'SphereGeometry'
+        && Math.abs(c.x) <= 0.02 && c.z >= A.mag.z - 0.10 && c.z <= A.mag.z + 0.06
+        && c.y <= A.mag.y + 0.05 && p.box.max.y <= A.mag.y + 0.075 && p.box.min.y <= A.mag.y + 0.02
+        && sz.z <= 0.10 && sz.y <= 0.20;
+    });
+    if (cand.length) {
+      const u = new THREE.Box3(); cand.forEach(p => u.union(p.box));
+      if (u.max.y - u.min.y >= 0.05 && u.min.y < A.mag.y + 0.005) {
+        const top = new THREE.Vector3((u.min.x + u.max.x) / 2, u.max.y, (u.min.z + u.max.z) / 2);
+        M.mag = { g: _mechWrap(model, cand, top), home: top.clone(), n: cand.length };
+      }
+    }
+  }
+  // ── pistol slide / rifle charging handle
+  const evsKinds = evs.map(e => e.k);
+  const fullB = new THREE.Box3(); P.forEach(p => fullB.union(p.box));
+  if (w.slot === 'secondary' && evsKinds.includes('mag') && /Secondary|Pistol|Hand Cannon|Armor Piercer/.test(w.type)) {
+    // the slide: the highest long box, plus the small fittings sitting on it
+    const top = P.filter(p => { const sz = p.box.getSize(new THREE.Vector3()), c = p.box.getCenter(new THREE.Vector3()); return p.obj.geometry.type === 'BoxGeometry' && sz.z >= 0.09 && sz.y >= 0.022 && Math.abs(c.x) < 0.02 && c.y > A.mag.y + 0.03; })
+                  .sort((a, b) => b.box.max.y - a.box.max.y)[0];
+    if (top) {
+      const tc = top.box.getCenter(new THREE.Vector3());
+      const fit = P.filter(p => { if (p === top) return true; const c = p.box.getCenter(new THREE.Vector3()), sz = p.box.getSize(new THREE.Vector3());
+        return p.obj.geometry.type !== 'TorusGeometry' && Math.abs(c.x) < 0.02 && c.y >= tc.y - 0.004 && c.y <= top.box.max.y + 0.02 && p.box.min.z >= top.box.min.z - 0.01 && p.box.max.z <= top.box.max.z + 0.02 && sz.z < 0.09; });
+      {
+        const sg = _mechWrap(model, fit, new THREE.Vector3(tc.x, tc.y, tc.z));
+        M.slide = { g: sg, z0: sg.position.z, n: fit.length };
+      }
+    }
+  } else if (evsKinds.includes('mag') && !model._parts) {
+    const knob = new THREE.Group();
+    const stem = new THREE.Mesh(new THREE.BoxGeometry(0.010, 0.006, 0.016), _mechMat(0x2b2f35, 60)); knob.add(stem);
+    const grip = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.011, 0.022), _mechMat(0x454b53, 90)); grip.position.set(0.008, 0, 0.004); knob.add(grip);
+    knob.position.set(0.030, A.breech.y - 0.006, A.breech.z);
+    model.add(knob); M.knob = { g: knob, home: knob.position.clone() };
+  }
+  // ── the projectile that sits in the front of a launcher
+  const find = _MECH_FIND[id], make = _MECH_ROUND[id] || (id === 'crossbow' ? { kind: 'bolt' } : null);
+  if (find) {
+    const hit = find(_mechAllParts(model));
+    if (hit.length) M.loaded = { objs: hit.map(p => p.obj), stacked: id === 'firework_launcher', n: hit.length };
+  } else if (make) {
+    const r = _mechRound(make.kind, make.s || 1);
+    if (id === 'crossbow') r.position.set(0, 0.0385, 0.06);
+    else r.position.set(A.muzzle.x, A.muzzle.y, A.muzzle.z + (make.dz || 0));
+    model.add(r); M.loaded = { objs: [r], n: 1 };
+  }
+  M.loadedKind = evs.filter(e => e.m === 'arrive' && e.k !== 'mag').map(e => e.t);
+  return (M.mag || M.knob || M.slide || M.loaded) ? M : null;
+}
+function ensureMech(model, id) {
+  if (model._mech !== undefined) return model._mech;
+  let evs;
+  try { evs = RELOAD_PROPS[id] || []; }
+  catch (e) { return null; }     // too early: RELOAD_PROPS is declared further down, and a pass after it builds these
+  try { model._mech = _buildMech(model, id, evs); } catch (e) { model._mech = null; console.warn('[mech]', id, e); }
+  return model._mech;
+}
+const _eqSm = (k) => { k = Math.max(0, Math.min(1, k)); return k * k * (3 - 2 * k); };
+// tR: reload progress 0..1 while reloading (null otherwise); evs: this reload's prop beats.
+function updateGunMech(model, id, tR, evs, durMs) {
+  const M = model._mech;
+  if (!M) return;
+  const now = performance.now(), dt = Math.min(0.1, (now - M.kickAt) / 1000); M.kickAt = now;
+  M.kick *= Math.exp(-dt * 22);
+  if (_equip && _equip.model === model) return;          // the entrance is moving every piece itself
+  const idx = weaponModels.indexOf(model);
+  const ammo = idx >= 0 && weaponAmmo[idx] ? weaponAmmo[idx].ammo : 1;
+  const magSize = idx >= 0 ? WEAPONS[idx].mag : 1;
+  const beat = (kind, mode) => (evs || []).filter(e => e.k === kind && e.m === mode);
+  // magazine
+  if (M.mag) {
+    let vis = true, k = 1;
+    if (tR != null) {
+      const out = beat('mag', 'eject')[0], inn = beat('mag', 'arrive')[0];
+      if (out && tR >= out.t) {
+        vis = false;
+        if (inn && tR >= inn.t - 0.02) { k = _eqSm((tR - (inn.t - 0.02)) * durMs / 300); vis = true; }
+      }
+    }
+    const g = M.mag.g;
+    g.visible = vis;
+    g.position.set(M.mag.home.x, M.mag.home.y - 0.14 * (1 - k), M.mag.home.z + 0.035 * (1 - k));
+    g.rotation.set(0.45 * (1 - k), 0, 0);
+  }
+  // charging handle
+  if (M.knob) {
+    let back = 0.030 * M.kick;
+    if (tR != null) {
+      if (tR > 0.80 && tR <= 0.88) back = Math.max(back, 0.040 * _eqSm((tR - 0.80) / 0.08));
+      else if (tR > 0.88 && tR < 0.92) back = Math.max(back, 0.040 * (1 - _eqSm((tR - 0.88) / 0.04)));
+    }
+    M.knob.g.position.set(M.knob.home.x, M.knob.home.y, M.knob.home.z + back);
+  }
+  // pistol slide
+  if (M.slide) {
+    let back = 0.026 * M.kick;
+    const locked = ammo <= 0 ? 0.030 : 0;
+    if (tR == null) back = Math.max(back, locked);
+    else if (tR <= 0.80) back = Math.max(back, locked);
+    else if (tR <= 0.88) back = Math.max(locked, 0.045 * _eqSm((tR - 0.80) / 0.08));
+    else if (tR < 0.92) back = 0.045 * (1 - _eqSm((tR - 0.88) / 0.04));
+    M.slide.g.position.z = M.slide.z0 + back;
+  }
+  // projectile in the launcher
+  if (M.loaded) {
+    const objs = M.loaded.objs, n = objs.length;
+    let shown;
+    if (tR != null && M.loadedKind.length) {
+      const landed = M.loadedKind.filter(t => tR >= t + 300 / durMs).length;
+      shown = M.loadedKind.length > 1 ? landed / M.loadedKind.length : (landed ? 1 : 0);
+    } else shown = Math.max(0, Math.min(1, ammo / Math.max(1, magSize)));
+    if (M.loaded.stacked) { const c = Math.round(shown * n); objs.forEach((o, i) => { o.visible = i < c; }); }
+    else objs.forEach(o => { o.visible = shown > 0.001; });
+  }
+}
+
+function prepViewModel(m, weaponId) {
   if (!m) return m;
   m.scale.setScalar(VM_GUN_SCALE);
   fitRestDistance(m);                          // before hands: attachViewHands captures _homePos
@@ -26626,9 +26822,10 @@ function prepViewModel(m) {
   // lands in front of the trigger at nothing. A builder can say otherwise.
   if (m._anchorOverride && m._anchors) Object.assign(m._anchors, m._anchorOverride);
   try { metalizeModel(m); } catch (e) {}       // parts added by the passes above
+  if (weaponId) ensureMech(m, weaponId);       // working parts, once the finished model is final
   return m;
 }
-weaponModels.forEach(prepViewModel);
+weaponModels.forEach((m, i) => prepViewModel(m, WEAPONS[i] && WEAPONS[i].id));
 
 // ── 🔫 Model skins ──────────────────────────────────────────────────────────
 // A skin that is a different GUN, not a different colour. The weapon keeps its
@@ -27181,7 +27378,7 @@ function applyModelSkin(weaponId) {
     // opened a menu would leak geometry into the scene graph.
     if (!skin._model) {
       try {
-        skin._model = prepViewModel(skin.build());
+        skin._model = prepViewModel(skin.build(), weaponId);
         try { blendProudSteps(skin._model); } catch (e) {}   // same fittings as the gun it replaces
         skin._model.visible = false;
         camera.add(skin._model);
@@ -29903,6 +30100,9 @@ const RELOAD_PROPS = {
   traffic_cone:[RP(.30,'bottle','arrive',1,'breech')],
   cream_pie:[RP(.30,'ball','arrive',1,'breech')],
 };
+// Working parts (magazine, bolt, slide, loaded round) now that the reload beats they follow exist.
+weaponModels.forEach((m, i) => ensureMech(m, WEAPONS[i] && WEAPONS[i].id));
+for (const _sk of MODEL_SKINS) if (_sk._model) ensureMech(_sk._model, _sk.weapon);
 
 // ── 🧰 Reloads for things that are not guns ─────────────────────────────────
 // Every model skin used to borrow its gun's reload, so the barcode scanner had
@@ -30362,6 +30562,12 @@ function _reloadPose(track, t) {
 function updateReloadAnim() {
   const model = weaponModels[currentWeaponIdx];
   if (!model) return;
+  if (model._mech) {
+    const wid = WEAPONS[currentWeaponIdx]?.id || '';
+    const fx0 = _skinFxFor(wid), evs0 = (fx0 && fx0.reload && fx0.reload.props) || RELOAD_PROPS[wid];
+    const on = model._reloadStart && model._reloadDur && !model._inspectMode;
+    updateGunMech(model, wid, on ? Math.min(1, (Date.now() - model._reloadStart) / model._reloadDur) : null, evs0, model._reloadDur || 1000);
+  }
   const H = model._hands;
   const rest = () => {
     if (model._homePos) model.position.copy(model._homePos);
@@ -30407,6 +30613,7 @@ function updateReloadAnim() {
     if (model._propFired & (1 << i)) continue;
     if (t < evs[i].t) continue;
     model._propFired |= (1 << i);
+    if (evs[i].k === 'mag' && evs[i].m === 'arrive' && model._mech && model._mech.mag) continue;   // the gun's own magazine slides in instead
     for (let n = 0; n < evs[i].n; n++) {
       try { spawnReloadProp(model, evs[i].k, evs[i].m, evs[i].w); } catch (e) {}
     }
