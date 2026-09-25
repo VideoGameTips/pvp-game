@@ -26749,6 +26749,14 @@ function _buildMech(model, id, evs) {
   M.loadedKind = evs.filter(e => e.m === 'arrive' && e.k !== 'mag').map(e => e.t);
   return (M.mag || M.knob || M.slide || M.loaded) ? M : null;
 }
+// Skins that ARE guns get working parts. The everyday-object skins (a hair dryer
+// for an MP-40, a tuba for a bazooka) must not: a charging handle on a hair
+// dryer or a rocket in a tuba is the joke ruined.
+function _skinHasMechanics(skin) {
+  if (!skin) return true;                                   // the stock gun
+  if (skin.rarity === 'donut' || skin.rarity === 'legend' || skin.id === 'aug') return true;
+  try { return GEN1_GATED_MODEL_SKIN_IDS.has(skin.id); } catch (e) { return false; }   // the realistic military set
+}
 function ensureMech(model, id) {
   if (model._mech !== undefined) return model._mech;
   let evs;
@@ -27381,7 +27389,7 @@ function applyModelSkin(weaponId) {
     // opened a menu would leak geometry into the scene graph.
     if (!skin._model) {
       try {
-        skin._model = prepViewModel(skin.build(), weaponId);
+        skin._model = prepViewModel(skin.build(), _skinHasMechanics(skin) ? weaponId : null);
         try { blendProudSteps(skin._model); } catch (e) {}   // same fittings as the gun it replaces
         skin._model.visible = false;
         camera.add(skin._model);
@@ -30105,7 +30113,7 @@ const RELOAD_PROPS = {
 };
 // Working parts (magazine, bolt, slide, loaded round) now that the reload beats they follow exist.
 weaponModels.forEach((m, i) => ensureMech(m, WEAPONS[i] && WEAPONS[i].id));
-for (const _sk of MODEL_SKINS) if (_sk._model) ensureMech(_sk._model, _sk.weapon);
+for (const _sk of MODEL_SKINS) if (_sk._model && _skinHasMechanics(_sk)) ensureMech(_sk._model, _sk.weapon);
 
 // ── 🧰 Reloads for things that are not guns ─────────────────────────────────
 // Every model skin used to borrow its gun's reload, so the barcode scanner had
