@@ -4593,6 +4593,49 @@ function registerRamp(mapName, r) {
   const len = Math.hypot(r.ux, r.uz) || 1;
   (MAP_RAMPS[mapName] ||= []).push({ ...r, ux: r.ux / len, uz: r.uz / len, tan: r.rise / r.run });
 }
+// 📐 Build a 45-degree ramp with a landing on top: rise = run, so exactly 45 degrees.
+// (x0, z0) is the middle of the foot edge and (ux, uz) the way it climbs -- one of
+// (0,1) (0,-1) (1,0) (-1,0). The game's floors are axis-aligned boxes, so the slope
+// you see is a smooth wedge and the slope you walk on is a staircase of 0.25m
+// hidden colliders under it: the same trick as the stairs, fine enough to feel
+// like a ramp. Returns the AABB the whole thing covers, foot to far lip.
+function addRamp(mapName, x0, z0, ux, uz, o = {}) {
+  const RW = o.width || 5, RISE = o.rise || 3, RUN = o.run || RISE, LAND = o.landing == null ? 2.5 : o.landing, STEP = 0.25;
+  const cMain = o.color != null ? o.color : 0xff9933, cLand = o.landColor != null ? o.landColor : 0xffb866, cLip = o.lipColor != null ? o.lipColor : 0xffee88;
+  const th = Math.atan2(-uz, ux);                                   // turns shape-x onto (ux, uz)
+  const zx = Math.sin(th), zz = Math.cos(th);                       // the extrusion's own direction
+  const wedge = new THREE.Shape();
+  wedge.moveTo(0, 0); wedge.lineTo(RUN, 0); wedge.lineTo(RUN, RISE); wedge.closePath();
+  const mesh = new THREE.Mesh(new THREE.ExtrudeGeometry(wedge, { depth: RW, bevelEnabled: false }), new THREE.MeshLambertMaterial({ color: cMain }));
+  mesh.rotation.y = th;
+  mesh.position.set(x0 - zx * RW / 2, 0, z0 - zz * RW / 2);
+  MAP_GROUPS[mapName].add(mesh);
+  const alongX = Math.abs(ux) > 0.5;
+  const at = (dist) => [x0 + ux * dist, z0 + uz * dist];
+  const box = (dist0, len, y, h, color) => {                        // a slab from dist0, len long along the ramp
+    const [cx, cz] = at(dist0 + len / 2);
+    return addMapBox(mapName, cx, y, cz, alongX ? len : RW, h, alongX ? RW : len, color);
+  };
+  // The ground height under you comes from every box within your radius, i.e. from
+  // the step half a body AHEAD -- at 45 degrees that alone would float your feet
+  // 0.38m over the wedge. So the hidden steps sit one radius further along and half
+  // a step lower, which centres the error.
+  const n = Math.round(RISE / STEP), d = RUN / n;
+  for (let i = 0; i < n; i++) {
+    const h = (i + 0.5) * STEP;
+    box(PLAYER_RADIUS + i * d, d, h / 2, h, cMain).visible = false;   // collision only
+  }
+  registerRamp(mapName, { x0, z0, ux, uz, run: RUN, rise: RISE, halfW: RW / 2 });
+  if (LAND > 0) {
+    box(RUN, LAND, RISE / 2, RISE, cLand);                          // the landing on top
+    box(RUN + LAND - 0.1, 0.1, RISE + 0.05, 0.1, cLip);             // lip stripe
+  }
+  const [ex, ez] = at(RUN + Math.max(0, LAND));
+  const half = RW / 2;
+  return alongX
+    ? { minX: Math.min(x0, ex), maxX: Math.max(x0, ex), minZ: z0 - half, maxZ: z0 + half }
+    : { minX: x0 - half, maxX: x0 + half, minZ: Math.min(z0, ez), maxZ: Math.max(z0, ez) };
+}
 // Height of a ramp's surface at (x, z), or null when that point is off the ramp.
 function rampSurfaceAt(r, x, z) {
   const along = (x - r.x0) * r.ux + (z - r.z0) * r.uz;
@@ -5334,34 +5377,8 @@ function buildLobby13Map() {
   addMapBox(m, 0, 1.1, 0, 1.4, 0.6, 1.4, 0xffcc55); // glowy lamp on the table
 
   // ── 45° test ramp (middle lane, just past the coffee table) ─────────────
-  // Rise = run = 3m, so exactly 45°, with a landing on top to stand on and
-  // test slides/jumps off. The game's floors are all axis-aligned boxes, so
-  // the slope you see is a smooth wedge and the slope you walk on is a
-  // staircase of 0.25m hidden colliders under it -- the same trick as the
-  // stairs, just fine enough that it feels like a ramp, not steps.
-  {
-    const RW = 5, RISE = 3, RUN = 3, Z0 = 4, STEP = 0.25;
-    const wedge = new THREE.Shape();
-    wedge.moveTo(0, 0); wedge.lineTo(RUN, 0); wedge.lineTo(RUN, RISE); wedge.closePath();
-    const geo = new THREE.ExtrudeGeometry(wedge, { depth: RW, bevelEnabled: false });
-    const rampMesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: 0xff9933 }));
-    rampMesh.rotation.y = -Math.PI / 2;            // shape x -> world +Z, extrusion -> world -X
-    rampMesh.position.set(RW / 2, 0, Z0);
-    MAP_GROUPS[m].add(rampMesh);
-    // The ground height under you is taken from every box within your radius
-    // (PLAYER_RADIUS), i.e. from the step half a body AHEAD -- at 45 degrees that
-    // alone would float your feet 0.38m over the wedge. So the hidden steps sit
-    // one radius further along, and half a step lower, which centres the error.
-    const n = Math.round(RISE / STEP);
-    for (let i = 0; i < n; i++) {
-      const h = (i + 0.5) * STEP, d = RUN / n;
-      const step = addMapBox(m, 0, h / 2, Z0 + PLAYER_RADIUS + (i + 0.5) * d, RW, h, d, 0xff9933);
-      step.visible = false;                        // collision only; the wedge is what you see
-    }
-    registerRamp(m, { x0: 0, z0: Z0, ux: 0, uz: 1, run: RUN, rise: RISE, halfW: RW / 2 });
-    addMapBox(m, 0, RISE / 2, Z0 + RUN + 1.25, RW, RISE, 2.5, 0xffb866);       // landing on top
-    addMapBox(m, 0, RISE + 0.05, Z0 + RUN + 2.45, RW, 0.1, 0.1, 0xffee88);     // lip stripe
-  }
+  // For testing slides and slide-jumps: see addRamp() for how it is built.
+  addRamp(m, 0, 4, 0, 1, { width: 5, rise: 3, landing: 2.5 });
 
   // ── A few bar stools / pillars around the edges to break sightlines ──
   [[-20, 14], [20, 14], [-20, -14], [20, -14], [-26, 0], [26, 0]].forEach(([x, z]) => {
