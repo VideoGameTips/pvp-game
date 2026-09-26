@@ -3291,24 +3291,28 @@ function playMuzzleBlast(ctx, start, outNode, kind, volume) {
   } else if (kind === 'crack') {               // rifles, snipers
     CRACK(volume * 1.50, 3500, 0.005);
     BLAST(volume * 1.05, 7080, 555, 0.062);
+    PT(start, 0.085, 122, 46, volume * 0.42, 'sine');   // chest thump: weight under the crack
     PFN(start, 0.038, volume * 0.78, 'bandpass', 1120, 0.7);
     PT(start, 0.056, 276, 83, volume * 0.50, 'triangle');
     TAIL(volume * 0.34, 0.52, 760);
   } else if (kind === 'pistol') {
     CRACK(volume * 1.28, 3200, 0.005);
     BLAST(volume * 0.95, 6372, 637, 0.047);
+    PT(start, 0.085, 122, 46, volume * 0.28, 'sine');   // chest thump: weight under the crack
     PFN(start, 0.032, volume * 0.76, 'bandpass', 1300, 0.7);
     PT(start, 0.044, 264, 85, volume * 0.44, 'triangle');
     TAIL(volume * 0.26, 0.30, 880);
   } else if (kind === 'auto_blast') {          // SMGs and autos
     CRACK(volume * 1.32, 3100, 0.004);
     BLAST(volume * 1.00, 6490, 590, 0.042);
+    PT(start, 0.085, 122, 46, volume * 0.38, 'sine');   // chest thump: weight under the crack
     PFN(start, 0.028, volume * 0.72, 'bandpass', 1220, 0.5);
     PT(start, 0.040, 259, 80, volume * 0.40, 'triangle');
     TAIL(volume * 0.21, 0.24, 800);
   } else if (kind === 'auto_blast_heavy') {    // LMGs, miniguns
     CRACK(volume * 1.28, 2750, 0.006);
     BLAST(volume * 1.10, 5546, 448, 0.068);
+    PT(start, 0.085, 122, 46, volume * 0.48, 'sine');   // chest thump: weight under the crack
     PFN(start, 0.038, volume * 0.76, 'bandpass', 960, 0.55);
     PT(start, 0.060, 239, 71, volume * 0.58, 'triangle');
     TAIL(volume * 0.28, 0.36, 600);
@@ -3332,6 +3336,7 @@ function playMuzzleBlast(ctx, start, outNode, kind, volume) {
   } else {                                     // the default rifle
     CRACK(volume * 1.40, 3400, 0.005);
     BLAST(volume * 1.05, 6608, 519, 0.057);
+    PT(start, 0.085, 122, 46, volume * 0.40, 'sine');   // chest thump: weight under the crack
     PFN(start, 0.034, volume * 0.75, 'bandpass', 1180, 0.6);
     PT(start, 0.052, 270, 80, volume * 0.48, 'triangle');
     TAIL(volume * 0.32, 0.40, 780);
@@ -3380,6 +3385,19 @@ function brassDrop(ctx, at, outNode, vol) {
     playFilteredNoise(ctx, t, 0.030, outNode, vol * (i ? 0.45 : 1), 'bandpass', f, 13, 0.0003, 1.6);
   }
 }
+// ⛓️ The feed. A chain gun is a mechanism you can HEAR working: a hard chunk as
+// the bolt slams, then a run of small metal links knocking together, each a touch
+// brighter and shorter than the one before. Three or four ticks inside the first
+// 50 ms, on top of the bang, is what turns a shot into a machine.
+function chainRattle(ctx, at, outNode, vol, links) {
+  playTone(ctx, at + 0.002, 0.055, outNode, 98, 50, vol * 0.60, 'sine');            // the chunk
+  for (let i = 0; i < links; i++) {
+    const t = at + 0.011 + i * 0.0105 + Math.random() * 0.0015;
+    const f = 2200 + i * 430 + Math.random() * 220;
+    playFilteredNoise(ctx, t, 0.0075, outNode, vol * (0.85 - i * 0.10), 'bandpass', f, 3.0, 0.0002, 0);
+    playFilteredNoise(ctx, t + 0.0008, 0.014, outNode, vol * 0.32, 'bandpass', f * 0.5, 2.0, 0.0003, 1.8);
+  }
+}
 function playGunAction(ctx, start, outNode, action, volume) {
   if (!action) return;
   const waterAction = action === 'water_smg' || action === 'water_rifle' || action === 'water_belt';
@@ -3410,6 +3428,7 @@ function playGunAction(ctx, start, outNode, action, volume) {
   } else if (action === 'belt') {
     metalClack(ctx, start + 0.003, outNode, V * 0.95, 540, 0.055);   // bolt back
     metalClack(ctx, start + 0.024, outNode, V * 0.65, 760, 0.040);   // feed pawl
+    chainRattle(ctx, start, outNode, V * 0.42, 5);                   // the belt running through
     brassDrop(ctx, start + 0.03, outNode, V * 0.18);
   } else if (waterAction) {
     const delay = action === 'water_smg' ? 0.030 : action === 'water_belt' ? 0.040 : 0.052;
@@ -3419,11 +3438,13 @@ function playGunAction(ctx, start, outNode, action, volume) {
   } else if (action === 'slide') {                                    // pistols
     metalClack(ctx, start + 0.004, outNode, V * 0.90, 980, 0.048);   // slide to the rear
     metalClack(ctx, start + 0.030, outNode, V * 1.05, 680, 0.062);   // slide slams shut
+    chainRattle(ctx, start + 0.004, outNode, V * 0.20, 2);
     brassDrop(ctx, start + 0.04, outNode, V * 0.26);
   } else {                                                            // rifle, smg
     const fast = action === 'smg';
     metalClack(ctx, start + 0.003, outNode, V * 0.85, 870, 0.044);   // bolt back
     metalClack(ctx, start + (fast ? 0.022 : 0.030), outNode, V * 1.00, 600, 0.060); // into battery
+    chainRattle(ctx, start, outNode, V * 0.34, fast ? 3 : 4);        // links knocking down the feed
     brassDrop(ctx, start + 0.03, outNode, V * 0.24);
   }
 }
@@ -7439,7 +7460,7 @@ function triggerMuzzleBlast(model, opts = {}) {
   const flash = model._flash;
   const tint = opts.color || (flash.material && flash.material.color ? flash.material.color.getHex() : 0xffcc66);
   // No two shots look alike: random roll and a size jitter.
-  const s0 = (opts.scale || 1) * hyperrealismFactor('muzzle') * (1.05 + Math.random() * 0.70);
+  const s0 = (opts.scale || 1) * hyperrealismFactor('muzzle') * (1.12 + Math.random() * 0.46);   // steadier, harder: less size lottery
   flash.visible = true;
   flash.rotation.z = Math.random() * Math.PI * 2;
   flash.scale.setScalar(s0);
@@ -7457,7 +7478,7 @@ function triggerMuzzleBlast(model, opts = {}) {
   puff.material.opacity = 0.42;
   puff.material.rotation = Math.random() * Math.PI * 2;   // no two puffs the same way up
 
-  const dur = opts.duration || 62;
+  const dur = opts.duration || 46;   // a spike: shorter than it was (62) so it reads as a flash, not a glow
   const start = performance.now();
   const step = () => {
     const t = (performance.now() - start) / dur;
@@ -7468,9 +7489,9 @@ function triggerMuzzleBlast(model, opts = {}) {
       // A blast is a spike: full size almost at once, then gone. The old curve
       // grew the flash to triple size across the whole 95 ms, which is a bubble
       // inflating on the end of the barrel rather than a shot going off.
-      const k = t < 0.16 ? t / 0.16 : 1 - (t - 0.16) / 0.84;
-      flash.scale.setScalar(s0 * (0.45 + 0.85 * k));
-      light.intensity = 6.4 * s0 * (1 - t) * (1 - t) * (1 - t);
+      const k = t < 0.10 ? t / 0.10 : 1 - (t - 0.10) / 0.90;
+      flash.scale.setScalar(s0 * (0.32 + 1.08 * k));
+      light.intensity = 8.6 * s0 * (1 - t) * (1 - t) * (1 - t) * (1 - t);
       requestAnimationFrame(step);
     }
   };
@@ -7515,23 +7536,28 @@ function makeMuzzleFlash() {
   // Rotating +90 degrees about X sends the cone's apex to +z (back at the gun)
   // and its base to -z (downrange), which is the way round a real one sits;
   // -90 would give a funnel pointing back at the shooter.
-  const jet = new THREE.Mesh(new THREE.ConeGeometry(0.032, 0.090, 7, 1, true), glow(0xffa83a, 0.80));
-  jet.rotation.x = Math.PI / 2; jet.position.z = -0.045;
+  // Tense, not puffy: a narrow long jet and a needle straight down the bore, with a
+  // hot white heart. Hard edges, few parts, every one of them bright -- the shape
+  // of a spike rather than a bloom.
+  const jet = new THREE.Mesh(new THREE.ConeGeometry(0.022, 0.125, 6, 1, true), glow(0xffb040, 0.92));
+  jet.rotation.x = Math.PI / 2; jet.position.z = -0.062;
   g.add(jet);
   // The gas is white where it is hottest, in the first centimetre.
-  const core = new THREE.Mesh(new THREE.SphereGeometry(0.016, 7, 5), glow(0xfff4d8, 0.95));
+  const core = new THREE.Mesh(new THREE.SphereGeometry(0.014, 7, 5), glow(0xfffaf0, 1.0));
   core.position.z = -0.006; g.add(core);
-  // Three uneven petals. Real flashes are lopsided — the old four at 90 degrees
-  // apart were the single most cartoon thing about it. Each arm is rotated
-  // around the bore, and the petal inside it is tilted out of the axis by one
-  // angle only, so the splay is predictable rather than an Euler surprise.
-  const PETALS = [[0.4, 1.00], [2.5, 0.74], [4.3, 0.88]];
+  // The needle: thin, long, blinding white, dead along the bore.
+  const needle = new THREE.Mesh(new THREE.ConeGeometry(0.0062, 0.150, 4), glow(0xffffff, 0.95));
+  needle.rotation.x = Math.PI / 2; needle.position.z = -0.075;
+  g.add(needle);
+  // Five thin, uneven spikes thrown off the crown. Real flashes are lopsided; the
+  // splay is one fixed angle so it stays predictable rather than an Euler surprise.
+  const PETALS = [[0.3, 1.00], [1.45, 0.66], [2.6, 0.90], [3.85, 0.62], [5.1, 0.84]];
   for (const [ang, k] of PETALS) {
     const arm = new THREE.Group();
     arm.rotation.z = ang;
-    const p = new THREE.Mesh(new THREE.ConeGeometry(0.010 * k, 0.075 * k, 4), glow(0xff7a22, 0.55));
-    p.rotation.x = Math.PI / 2 - 0.30;              // forward, splayed off the axis
-    p.position.set(0.016, 0, -0.030 * k);
+    const p = new THREE.Mesh(new THREE.ConeGeometry(0.0062 * k, 0.108 * k, 4), glow(0xff8a26, 0.78));
+    p.rotation.x = Math.PI / 2 - 0.17;              // forward, only slightly off the axis
+    p.position.set(0.012, 0, -0.040 * k);
     arm.add(p);
     g.add(arm);
   }
@@ -21662,7 +21688,10 @@ function addFireShake(strength) {
   const mult = gameplaySettingMult('cameraShake');
   if (mult <= 0) return;
   const mag = Math.min(hyperrealisticOn() ? 0.058 : 0.026, (strength || 1) * mult * 0.0088);
-  const dp = mag * (0.72 + Math.random() * 0.62);
+  // Less of the shot goes UP (was 0.72-1.34 of mag): a real gun shoves back into the
+  // shoulder first, and a camera that jumps upward on every round reads as a toy.
+  // The push-back itself is the viewmodel's z kick and the small FOV punch.
+  const dp = mag * (0.38 + Math.random() * 0.34);
   const dy = (Math.random() - 0.5) * mag * 1.05;
   euler.x += dp; euler.y += dy;
   euler.x = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, euler.x));
@@ -21853,8 +21882,9 @@ function weaponKickStrength(w, pellets = 1) {
 // system) the player can do to fight it. Clamp the ACCUMULATED total, not
 // just each shot's contribution, so sustained fire settles at a fixed kick
 // instead of walking off the top of the screen.
-const _GUN_KICK_MAX = { x: 0.065, y: 0.060, z: 0.18, rx: 0.13, ry: 0.08, rz: 0.09 };
-const _GUN_KICK_HYPER_MAX = { x: 0.105, y: 0.095, z: 0.29, rx: 0.24, ry: 0.14, rz: 0.16 };
+const _GUN_KICK_MAX = { x: 0.055, y: 0.032, z: 0.26, rx: 0.075, ry: 0.07, rz: 0.08 };
+const _GUN_KICK_HYPER_MAX = { x: 0.09, y: 0.055, z: 0.40, rx: 0.14, ry: 0.12, rz: 0.14 };
+let _fovPunch = 0;   // degrees of momentary FOV widening per shot: the camera being shoved back
 function kickWeaponVisual(w, pellets = 1) {
   { const mm = weaponModels[currentWeaponIdx]; if (mm && mm._mech) mm._mech.kick = 1; }   // bolt / slide cycles
   // perfectAccuracy (SR-X): skip camera shake AND the viewmodel wobble. This
@@ -21875,10 +21905,13 @@ function kickWeaponVisual(w, pellets = 1) {
   const hyperKick = hyperrealismFactor('kick');
   const s = strength * shake * hyperKick;
   const side = Math.random() < 0.5 ? -1 : 1;
-  _gunKick.z += Math.min(0.15, (model._kickZ || 0.015) * (3.2 + s * 0.85));
-  _gunKick.y += Math.min(0.052, 0.009 + s * 0.014);
-  _gunKick.x += side * Math.min(0.050, 0.007 + s * 0.010);
-  _gunKick.rx += Math.min(0.25, 0.044 + s * 0.058);
+  // Backwards, not upwards: the gun is driven into your shoulder (z, toward the
+  // camera) much harder than before, and climbs (y) and muzzle-flips (rx) much less.
+  _gunKick.z += Math.min(0.21, (model._kickZ || 0.015) * (5.6 + s * 2.1));
+  _gunKick.y += Math.min(0.026, 0.004 + s * 0.0075);
+  _gunKick.x += side * Math.min(0.045, 0.006 + s * 0.009);
+  _gunKick.rx += Math.min(0.12, 0.020 + s * 0.030);
+  _fovPunch = Math.min(2.4, _fovPunch + (isADS ? 0.25 : 0.85) * Math.sqrt(Math.max(0.3, s)));
   _gunKick.ry += side * Math.min(0.070, 0.010 + s * 0.014);
   _gunKick.rz += -side * Math.min(0.095, 0.016 + s * 0.019);
   for (const key of ['x', 'y', 'z', 'rx', 'ry', 'rz']) {
@@ -24964,9 +24997,14 @@ function updateMovement(dt) {
     if (!isADS) targetFOV = sliding ? 84 : 75;
   }
 
-  // Smooth FOV for ADS / slide kick
-  if (Math.abs(camera.fov - targetFOV) > 0.5) {
-    camera.fov += (targetFOV - camera.fov) * 0.18;
+  // Smooth FOV for ADS / slide kick, plus the little widening each shot adds (the
+  // camera being pushed back). Eased by elapsed time, not by a fixed fraction per
+  // frame, so it takes as long on a 144 Hz screen as on a 30 fps one.
+  _fovPunch *= Math.exp(-dt * 13);
+  if (_fovPunch < 0.01) _fovPunch = 0;
+  const wantFOV = targetFOV + _fovPunch;
+  if (Math.abs(camera.fov - wantFOV) > (_fovPunch ? 0.02 : 0.5)) {
+    camera.fov += (wantFOV - camera.fov) * (1 - Math.exp(-dt * 11));
     camera.updateProjectionMatrix();
   }
 }
