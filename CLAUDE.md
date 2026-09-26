@@ -3,8 +3,8 @@
 Multiplayer browser FPS. Three.js + Socket.IO + Express. Repo `VideoGameTips/pvp-game`.
 
 **Live at https://sushigamelab.com/pvp/** (was Railway; the old
-`pvp-game-production.up.railway.app` is dead and 404s). Deployed via the VPS's
-shared `update-games.sh` — see the root `TABS/CLAUDE.md` for that.
+`pvp-game-production.up.railway.app` is dead and 404s). To put a change live,
+see **上线 / Deploy** below — Andy just says "上线".
 **Also shipped on itch.io** as a static bundle — see [`docs/ITCH.md`](docs/ITCH.md),
 built with `./tools/build-itch.sh`.
 
@@ -39,7 +39,7 @@ built with `./tools/build-itch.sh`.
    the top of `public/game.js`) for requests, and keep asset paths relative.
    `tools/build-itch.sh` fails the build if `index.html` regresses on this.
 
-7. **Verify before claiming done.** Several "bugs" were actually just Railway serving a stale build, or the page loaded from `file://` instead of `http://localhost:3001`. Check `curl -s <railway>/game.js | wc -c` vs local size when prod looks wrong.
+7. **Verify before claiming done.** Several "bugs" were actually just a stale build still being served (pushed but not deployed), or the page loaded from `file://` instead of `http://localhost:3001`. When prod looks wrong, compare `curl -s https://sushigamelab.com/pvp/game.js | shasum -a 256` with `shasum -a 256 public/game.js`.
 
 8. **The UI is bilingual (EN / 中文, `public/i18n.js`).** English is the key: a
    MutationObserver translates text nodes and placeholder/title/aria-label as the
@@ -56,6 +56,33 @@ built with `./tools/build-itch.sh`.
 - `.claude/launch.json` defines server `pvp-game` on port 3001 (`node server.js`).
 - Use `mcp__Claude_Preview__preview_start` with name `pvp-game`. If port busy: `lsof -ti :3001 | xargs kill -9`, then retry. A launchd agent (`com.tabs.pvp`) may auto-respawn it — `launchctl unload ~/Library/LaunchAgents/com.tabs.pvp.plist` to free it.
 - Server reads `process.env.PORT || 3001`.
+
+## 上线 / Deploy — when Andy says "上线", "deploy", "ship it" or "go live"
+
+The live game is a separate clone on the server plus a Node backend. Pushing to GitHub changes
+nothing there — only the deploy script does. Since the 2026-09-26 server move this section is the
+source of truth; older notes elsewhere (e.g. `TABS/CLAUDE.md`) may point at the old server.
+
+1. **Push.** Only `main` goes live: commit, then `git push origin HEAD:main`.
+2. **See what will ship.** Live commit: `ssh irontide-vps 'git -C /opt/games/sushigamelab/pvp log --oneline -1'`,
+   then `git log --oneline <live>..origin/main`. If that's more than Andy's latest change, show him the list.
+3. **Stop and ask Andy to check with his dad first** if that range
+   - changes `package.json` — the script never runs `npm install`, so the server would crash on start;
+   - removes or renames anything players can buy — real accounts own it, so the live accounts get checked first;
+   - touches real-money payments, or needs a new secret / env var on the server.
+4. **Who's playing?** A deploy *always* restarts the backend and drops everyone mid-match:
+   `ssh irontide-vps "ss -tn state established '( sport = :7780 )' | tail -n +2 | wc -l"` — `0` = nobody. Otherwise ask.
+5. **Deploy:** `ssh irontide-vps '/opt/games/sushigamelab/deploy-pvp.sh'`. Expect `pvp ⬆️ <old> → <new>`,
+   `→ 重启 pvp 服务端`, `active`. Anything but `active` means the game is down — read
+   `ssh irontide-vps 'sudo journalctl -u sushigamelab-pvp -n 40 --no-pager -o cat'` and tell Andy.
+6. **Verify — a successful push is not a deploy:** the live commit (step 2) now equals your HEAD;
+   `curl -s https://sushigamelab.com/pvp/game.js | shasum -a 256` equals `shasum -a 256 public/game.js`;
+   `ssh irontide-vps 'sudo systemctl status sushigamelab-pvp --no-pager | grep Active:'` shows a time after the deploy.
+7. **Report** the commit range that went live and those three checks, briefly (see "Verify in proportion").
+
+`irontide-vps` is an SSH alias in `~/.ssh/config`. This repo is public, so the server's address and
+username are deliberately **not** written here. If the alias is missing, stop and tell Andy — setting
+it up is Job 4 in his server-move doc. Full runbook: `docs/DEPLOY.md` in the private sushigamelab repo (Parts 3–5).
 
 ## Architecture
 
@@ -82,7 +109,7 @@ built with `./tools/build-itch.sh`.
 
 - `users.json` = **plaintext passwords**, MUST stay gitignored. Never commit it.
 - `ADMIN_MASTER_PASS` is now an **env var** (was hardcoded `A6D7m1n` — that's compromised, public repo). Don't hardcode it again.
-- Railway needs a **persistent volume at `/data`** + `DATA_DIR=/data` env var or accounts wipe on redeploy. `DATA_DIR` controls `users.json` path.
+- `DATA_DIR` controls the `users.json` path. On the live server it points outside the checkout, so a deploy never touches accounts (the old Railway volume note no longer applies).
 - Repo is **public** — admin unlock codes are visible in server.js (user accepts this).
 
 ## Working with Andy (work habits)
