@@ -21746,8 +21746,33 @@ let _nearMissUntil = 0;
 let _lastNearMissAt = 0;
 const _gunKick = { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 };
 
+function realisticRecoilProfile(w) {
+  if (!w || w.perfectAccuracy || w.slot === 'support') return null;
+  const base = w.recoil;
+  const strength = weaponKickStrength(w, w.pellets || 1);
+  const auto = !!w.auto;
+  const derived = base || {
+    up: 0.0028 + strength * 0.0038,
+    side: 0.0016 + strength * 0.0018,
+    climb: auto ? 0.030 + strength * 0.014 : 0.075 + strength * 0.024,
+    max: auto ? 1.55 + Math.min(0.45, strength * 0.18) : 1.35 + Math.min(0.35, strength * 0.14),
+    recover: auto ? 8.5 : 9.5,
+    adsMult: auto ? 0.58 : 0.62,
+  };
+  const realism = hyperrealisticOn() ? 1.16 : 1;
+  const playableUp = auto ? 0.010 : 0.019;
+  return {
+    up: Math.min(playableUp, (derived.up || 0) * realism),
+    side: Math.min(auto ? 0.0065 : 0.010, (derived.side || 0) * (hyperrealisticOn() ? 1.20 : 1.05)),
+    climb: Math.min(auto ? 0.075 : 0.18, (derived.climb || 0.05) * (hyperrealisticOn() ? 1.08 : 1)),
+    max: Math.min(auto ? 2.05 : 2.15, derived.max || 1.7),
+    recover: Math.max(6.8, derived.recover || (auto ? 8.5 : 9.5)),
+    adsMult: derived.adsMult != null ? derived.adsMult : (auto ? 0.58 : 0.62),
+  };
+}
+
 function addRecoil(w) {
-  const rc = w && w.recoil;
+  const rc = realisticRecoilProfile(w);
   if (!rc) return;
   const now = performance.now();
   // A pause lets the muzzle settle: the walk restarts rather than continuing
@@ -21882,8 +21907,8 @@ function weaponKickStrength(w, pellets = 1) {
 // system) the player can do to fight it. Clamp the ACCUMULATED total, not
 // just each shot's contribution, so sustained fire settles at a fixed kick
 // instead of walking off the top of the screen.
-const _GUN_KICK_MAX = { x: 0.055, y: 0.032, z: 0.26, rx: 0.075, ry: 0.07, rz: 0.08 };
-const _GUN_KICK_HYPER_MAX = { x: 0.09, y: 0.055, z: 0.40, rx: 0.14, ry: 0.12, rz: 0.14 };
+const _GUN_KICK_MAX = { x: 0.066, y: 0.030, z: 0.32, rx: 0.082, ry: 0.086, rz: 0.10 };
+const _GUN_KICK_HYPER_MAX = { x: 0.105, y: 0.050, z: 0.50, rx: 0.15, ry: 0.145, rz: 0.17 };
 let _fovPunch = 0;   // degrees of momentary FOV widening per shot: the camera being shoved back
 function kickWeaponVisual(w, pellets = 1) {
   { const mm = weaponModels[currentWeaponIdx]; if (mm && mm._mech) mm._mech.kick = 1; }   // bolt / slide cycles
@@ -21907,13 +21932,13 @@ function kickWeaponVisual(w, pellets = 1) {
   const side = Math.random() < 0.5 ? -1 : 1;
   // Backwards, not upwards: the gun is driven into your shoulder (z, toward the
   // camera) much harder than before, and climbs (y) and muzzle-flips (rx) much less.
-  _gunKick.z += Math.min(0.21, (model._kickZ || 0.015) * (5.6 + s * 2.1));
-  _gunKick.y += Math.min(0.026, 0.004 + s * 0.0075);
-  _gunKick.x += side * Math.min(0.045, 0.006 + s * 0.009);
-  _gunKick.rx += Math.min(0.12, 0.020 + s * 0.030);
-  _fovPunch = Math.min(2.4, _fovPunch + (isADS ? 0.25 : 0.85) * Math.sqrt(Math.max(0.3, s)));
-  _gunKick.ry += side * Math.min(0.070, 0.010 + s * 0.014);
-  _gunKick.rz += -side * Math.min(0.095, 0.016 + s * 0.019);
+  _gunKick.z += Math.min(0.28, (model._kickZ || 0.015) * (6.8 + s * 2.6));
+  _gunKick.y += Math.min(0.024, 0.0035 + s * 0.0065);
+  _gunKick.x += side * Math.min(0.058, 0.007 + s * 0.011);
+  _gunKick.rx += Math.min(0.13, 0.019 + s * 0.032);
+  _fovPunch = Math.min(3.1, _fovPunch + (isADS ? 0.32 : 1.05) * Math.sqrt(Math.max(0.3, s)));
+  _gunKick.ry += side * Math.min(0.088, 0.012 + s * 0.018);
+  _gunKick.rz += -side * Math.min(0.118, 0.018 + s * 0.024);
   for (const key of ['x', 'y', 'z', 'rx', 'ry', 'rz']) {
     const max = (hyperrealisticOn() ? _GUN_KICK_HYPER_MAX : _GUN_KICK_MAX)[key];
     _gunKick[key] = Math.max(-max, Math.min(max, _gunKick[key]));
@@ -25775,7 +25800,16 @@ function _updateAbilityHUD() {
 }
 
 function tryShoot() {
-  if ((!pointerLocked && !gameStarted) || isDead || reloading) return;
+  if ((!pointerLocked && !gameStarted) || isDead) return;
+  if (reloading) {
+    const pool = weaponAmmo[currentWeaponIdx];
+    if (pool && pool.ammo > 0) {
+      cancelReload();
+      playSoundEvent('click', { volume: 0.28, pitch: 1.25, minGap: 45 });
+    } else {
+      return;
+    }
+  }
   cancelInspect();
   if (countdownActive) return; // can't fire during pre-round countdown
   if (KILLCAM.active) return;  // killcam playback is locked
@@ -25870,7 +25904,7 @@ function tryShoot() {
 
   const shotViolence = weaponKickStrength(wStats, wStats.pellets || 1);
   const model = weaponModels[currentWeaponIdx];
-  triggerMuzzleBlast(model, { duration: 86 + shotViolence * 20 * hyperrealismFactor('muzzle'), scale: Math.min(hyperrealisticOn() ? 3.25 : 2.05, 0.95 + shotViolence * 0.30 * hyperrealismFactor('muzzle')) });
+  triggerMuzzleBlast(model, { duration: 92 + shotViolence * 24 * hyperrealismFactor('muzzle'), scale: Math.min(hyperrealisticOn() ? 3.55 : 2.25, 1.05 + shotViolence * 0.34 * hyperrealismFactor('muzzle')) });
   kickWeaponVisual(wStats, wStats.pellets || 1);
 
   const muzzleWorld = new THREE.Vector3();
@@ -25919,9 +25953,9 @@ function tryShoot() {
     }, 300);
   }
 
-  playWeaponSound(shotWeaponId, { baseWeapon: wStats, volume: Math.min(1.35, 0.98 + shotPellets * 0.04), violence: shotViolence });
+  playWeaponSound(shotWeaponId, { baseWeapon: wStats, volume: Math.min(1.55, 1.04 + shotPellets * 0.045), violence: shotViolence * 1.12 });
   if (shotViolence > 1.45 && gameplaySettingMult('screenFx') > 0) {
-    flashScreen('rgba(255,238,190,0.045)', Math.min(95, 44 + shotViolence * 18));
+    flashScreen('rgba(255,238,190,0.055)', Math.min(115, 52 + shotViolence * 22));
   }
 
   for (let p = 0; p < shotPellets; p++) {
