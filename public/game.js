@@ -3468,6 +3468,33 @@ function longReport(ctx, start, outNode, volume, scale) {
   }
 }
 
+// 🔊 The gun bus. Measured against a compilation of gunfire from major games (329
+// shots), a real shot peaks at about -5 dBFS with its loudest 20 ms at about -12 dB
+// and its first 300 ms averaging about -18 dB -- a compressed, mastered sound, only
+// ~7 dB between peak and level. This game's guns were peaking at -14 and averaging
+// -38: 17-20 dB quieter, and spiky. So every real gun goes through one shared bus
+// (shared across shots, so overlapping full-auto fire is limited as a whole, not per
+// shot): makeup gain up to that level, a glue compressor, then a soft clipper that
+// holds the ceiling at the reference peak. Whole-shot level only -- the sounds
+// themselves are unchanged. GUN_BUS_GAIN is the one number that sets the level.
+const GUN_BUS_KINDS = new Set(['rifle', 'auto_blast', 'auto_blast_heavy', 'pistol', 'crack', 'boom']);
+const GUN_BUS_GAIN = 25, GUN_BUS_CEIL = 0.56;
+function gunBus(ctx) {
+  if (ctx._gunBus) return ctx._gunBus;
+  const input = ctx.createGain(); input.gain.value = GUN_BUS_GAIN;
+  const glue = ctx.createDynamicsCompressor();
+  glue.threshold.value = -22; glue.knee.value = 8; glue.ratio.value = 6; glue.attack.value = 0.002; glue.release.value = 0.09;
+  const clip = ctx.createWaveShaper(), n = 2048, curve = new Float32Array(n), knee = 0.34;
+  for (let i = 0; i < n; i++) {
+    const x = i / (n - 1) * 2 - 1, ax = Math.abs(x);
+    const y = ax < knee ? ax : knee + (GUN_BUS_CEIL - knee) * Math.tanh((ax - knee) / (GUN_BUS_CEIL - knee));
+    curve[i] = x < 0 ? -y : y;
+  }
+  clip.curve = curve; clip.oversample = '2x';
+  input.connect(glue).connect(clip).connect(ctx.destination);
+  return (ctx._gunBus = input);
+}
+
 function playWeaponSound(idOrWeapon, opts = {}) {
   const ctx = getAudioCtx();
   if (!ctx) return;
@@ -3489,8 +3516,10 @@ function playWeaponSound(idOrWeapon, opts = {}) {
   const mult = (opts.volume ?? 1) * distGain * (opts.remote ? 0.75 : 1) * SOUND_MIX;
   const start = ctx.currentTime + 0.002;
   const mainGain = ctx.createGain();
-  const comp = ctx.createDynamicsCompressor();
-  mainGain.connect(comp).connect(ctx.destination);
+  // Real guns go through the shared gun bus (see gunBus): mastered to the level of
+  // real game gunfire. Everything else keeps its own compressor and level.
+  if (GUN_BUS_KINDS.has(p.kind)) mainGain.connect(gunBus(ctx));
+  else { const comp = ctx.createDynamicsCompressor(); mainGain.connect(comp).connect(ctx.destination); }
   // Send to the shared echo bus. Someone else's shot across the map gets more
   // of it than your own does, because that is what distance sounds like.
   try {
