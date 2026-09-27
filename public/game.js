@@ -3141,7 +3141,7 @@ function getReverbBus(ctx, indoor) {
   const key = indoor ? 'indoor' : 'outdoor';
   if (_revBus[key]) return _revBus[key];
   const input = ctx.createGain();
-  const secs = indoor ? 1.1 : 2.0;
+  const secs = indoor ? 2.0 : 3.6;
   const len = Math.floor(ctx.sampleRate * secs);
   const ir = ctx.createBuffer(2, len, ctx.sampleRate);
   for (let ch = 0; ch < 2; ch++) {
@@ -3172,8 +3172,8 @@ function getReverbBus(ctx, indoor) {
   // walls; outdoors they are the crack returning off buildings across the map,
   // later, darker and further apart. These are what actually place the shot.
   const slaps = indoor
-    ? [[0.085, 0.34, 1700], [0.185, 0.17, 1100]]
-    : [[0.165, 0.30, 1150], [0.315, 0.19, 820], [0.520, 0.10, 620]];
+    ? [[0.085, 0.34, 1700], [0.185, 0.17, 1100], [0.340, 0.09, 800]]
+    : [[0.165, 0.30, 1150], [0.315, 0.20, 820], [0.520, 0.13, 620], [0.820, 0.075, 480]];
   slaps.forEach(([time, gain, cut]) => {
     const dl = ctx.createDelay(1.0); dl.delayTime.value = time;
     const g = ctx.createGain(); g.gain.value = gain;
@@ -3291,28 +3291,28 @@ function playMuzzleBlast(ctx, start, outNode, kind, volume) {
   } else if (kind === 'crack') {               // rifles, snipers
     CRACK(volume * 1.50, 3500, 0.005);
     BLAST(volume * 1.05, 7080, 555, 0.062);
-    PT(start, 0.085, 122, 46, volume * 0.42, 'sine');   // chest thump: weight under the crack
+    PT(start, 0.075, 150, 92, volume * 0.30, 'sine');  // chest thump: a felt low note, not sub-bass rumble
     PFN(start, 0.038, volume * 0.78, 'bandpass', 1120, 0.7);
     PT(start, 0.056, 276, 83, volume * 0.50, 'triangle');
     TAIL(volume * 0.34, 0.52, 760);
   } else if (kind === 'pistol') {
     CRACK(volume * 1.28, 3200, 0.005);
     BLAST(volume * 0.95, 6372, 637, 0.047);
-    PT(start, 0.085, 122, 46, volume * 0.28, 'sine');   // chest thump: weight under the crack
+    PT(start, 0.075, 150, 92, volume * 0.20, 'sine');  // chest thump: a felt low note, not sub-bass rumble
     PFN(start, 0.032, volume * 0.76, 'bandpass', 1300, 0.7);
     PT(start, 0.044, 264, 85, volume * 0.44, 'triangle');
     TAIL(volume * 0.26, 0.30, 880);
   } else if (kind === 'auto_blast') {          // SMGs and autos
     CRACK(volume * 1.32, 3100, 0.004);
     BLAST(volume * 1.00, 6490, 590, 0.042);
-    PT(start, 0.085, 122, 46, volume * 0.38, 'sine');   // chest thump: weight under the crack
+    PT(start, 0.075, 150, 92, volume * 0.27, 'sine');  // chest thump: a felt low note, not sub-bass rumble
     PFN(start, 0.028, volume * 0.72, 'bandpass', 1220, 0.5);
     PT(start, 0.040, 259, 80, volume * 0.40, 'triangle');
     TAIL(volume * 0.21, 0.24, 800);
   } else if (kind === 'auto_blast_heavy') {    // LMGs, miniguns
     CRACK(volume * 1.28, 2750, 0.006);
     BLAST(volume * 1.10, 5546, 448, 0.068);
-    PT(start, 0.085, 122, 46, volume * 0.48, 'sine');   // chest thump: weight under the crack
+    PT(start, 0.075, 150, 92, volume * 0.34, 'sine');  // chest thump: a felt low note, not sub-bass rumble
     PFN(start, 0.038, volume * 0.76, 'bandpass', 960, 0.55);
     PT(start, 0.060, 239, 71, volume * 0.58, 'triangle');
     TAIL(volume * 0.28, 0.36, 600);
@@ -3336,7 +3336,7 @@ function playMuzzleBlast(ctx, start, outNode, kind, volume) {
   } else {                                     // the default rifle
     CRACK(volume * 1.40, 3400, 0.005);
     BLAST(volume * 1.05, 6608, 519, 0.057);
-    PT(start, 0.085, 122, 46, volume * 0.40, 'sine');   // chest thump: weight under the crack
+    PT(start, 0.075, 150, 92, volume * 0.28, 'sine');  // chest thump: a felt low note, not sub-bass rumble
     PFN(start, 0.034, volume * 0.75, 'bandpass', 1180, 0.6);
     PT(start, 0.052, 270, 80, volume * 0.48, 'triangle');
     TAIL(volume * 0.32, 0.40, 780);
@@ -3435,6 +3435,11 @@ function playGunAction(ctx, start, outNode, action, volume) {
     playTone(ctx, start + 0.006, 0.070, outNode, 155, 190, V * 0.75, 'triangle');
     playFilteredNoise(ctx, start + delay, 0.026, outNode, V, 'bandpass', 980, 0.75);
     playFilteredNoise(ctx, start + delay + 0.030, 0.018, outNode, V * 0.52, 'bandpass', 1450, 0.55);
+    // A hair more "machine," not more blast: one quiet, tight metal tick right
+    // on the shot, under everything above rather than added on top of it in
+    // volume. High-Q, gone in under 10ms -- a small steel part clicking, not a
+    // clack -- so it reads as an extra edge of mechanism, never as more bang.
+    playFilteredNoise(ctx, start + 0.004, 0.006, outNode, V * 0.30, 'bandpass', 3400, 4.0, 0.0002, 0.6);
   } else if (action === 'slide') {                                    // pistols
     metalClack(ctx, start + 0.004, outNode, V * 0.90, 980, 0.048);   // slide to the rear
     metalClack(ctx, start + 0.030, outNode, V * 1.05, 680, 0.062);   // slide slams shut
@@ -3456,14 +3461,20 @@ function playGunAction(ctx, start, outNode, action, volume) {
 // duller, which a single reverb tail cannot do.
 function longReport(ctx, start, outNode, volume, scale) {
   if (!scale) return;
+  // Used to be gone by 1.7s and fading fast even by the second tap. Two more
+  // distant returns added, each tap runs longer, and the far ones don't drop
+  // off nearly as hard -- the report now audibly rolls on for 3+ seconds
+  // instead of reading as two claps and done.
   //      delay      level   how dark it has gone by then
   const R = [[0.30, 0.34, 1500],
-             [0.62, 0.21,  950],
-             [1.05, 0.13,  620],
-             [1.55, 0.075, 430]];
+             [0.62, 0.23,  980],
+             [1.05, 0.16,  680],
+             [1.60, 0.11,  480],
+             [2.25, 0.075, 350],
+             [3.05, 0.05,  260]];
   for (const [t, g, cut] of R) {
     const at = start + t * (0.7 + scale * 0.5);
-    playFilteredNoise(ctx, at, 0.22 + t * 0.35, outNode, volume * g * scale,
+    playFilteredNoise(ctx, at, 0.34 + t * 0.42, outNode, volume * g * scale,
                       'lowpass', cut, 0.6, 0.02, 1.0);
   }
 }
@@ -4055,11 +4066,16 @@ function playReloadSound(w, durMs) {
   // A box magazine dropping free: the catch, then the magazine itself hitting
   // the floor a good while later, which is the part that sells the weight.
   const magOut = (t) => {
-    playFilteredNoise(ctx, t, 0.018, g, V * 0.55, 'bandpass', 2300, 6, 0.0003, 1.4);  // catch
+    // The catch used to be a bare high-Q noise ping -- all edge, no body,
+    // which is what reads as plastic rather than steel. metalClack's chunk
+    // has an impact and a ring under the edge; pitched up and quieted, it is
+    // the small click of a catch rather than the big one of a bolt.
+    metalClack(ctx, t, g, V * 0.40, 1900, 0.026);                                     // catch
     metalClack(ctx, t + 0.02, g, V * 0.50, 430, 0.070);                               // mag free
     const land = t + 0.34 + Math.random() * 0.12;
     playFilteredNoise(ctx, land, 0.060, g, V * 0.34, 'bandpass', 320, 3.5, 0.0005, 1.7);
     playFilteredNoise(ctx, land + 0.045, 0.040, g, V * 0.18, 'bandpass', 520, 4, 0.0005, 1.8);
+    metalClack(ctx, land + 0.006, g, V * 0.22, 240, 0.05);                            // the mag's OWN metal, not just a thud
   };
   const magIn  = (t) => {                       // seated, and it is a solid hit
     playFilteredNoise(ctx, t, 0.030, g, V * 0.40, 'lowpass', 700, 0.9, 0.0004, 1.5);
@@ -4074,9 +4090,13 @@ function playReloadSound(w, durMs) {
     metalClack(ctx, t + 0.010, g, V * 0.30, 620, 0.038);
   };
   const heavyIn = (t) => metalClack(ctx, t, g, V * 0.85, 300, 0.110);   // a grenade
+  // Cases, links and clips landing: was pure high-Q noise (a glassy ping,
+  // the plastic complaint's other half) with nothing under it. Each one now
+  // gets a small metalClack -- a real, if tiny, piece of brass or steel
+  // hitting something, not a synth chime.
   const tinkle  = (t, n) => { for (let i = 0; i < n; i++)
-    playFilteredNoise(ctx, t + i * 0.045 + Math.random() * 0.05, 0.028, g,
-                      V * 0.22, 'bandpass', 2600 + Math.random() * 1600, 11, 0.0004, 1.6); };
+    metalClack(ctx, t + i * 0.045 + Math.random() * 0.05, g,
+               V * 0.30, 2400 + Math.random() * 1400, 0.022); };
 
   // ── Everything the reload actually does, in the order it does it ──────────
   const fx = _skinFxFor(id);
