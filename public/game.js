@@ -17602,23 +17602,22 @@ function addWeaponRealismDetails(model, weapon) {
   model.userData = model.userData || {};
   model.userData.realismDetailed = true;
 
-  const rootInv = new THREE.Matrix4();
-  model.updateMatrixWorld(true);
-  rootInv.copy(model.matrixWorld).invert();
-  const box = new THREE.Box3();
-  let hasMesh = false;
+  let body = null, best = 0;
   model.traverse(o => {
     if (!o || !o.isMesh || o === model._flash || o.userData?.realismDetail) return;
     if (!o.geometry) return;
+    const type = o.geometry.type || '';
+    if (type !== 'BoxGeometry' && type !== 'ExtrudeGeometry') return;
     if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
     if (!o.geometry.boundingBox) return;
-    const b = o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld).applyMatrix4(rootInv);
-    box.union(b);
-    hasMesh = true;
+    const b = o.geometry.boundingBox;
+    const vol = (b.max.x - b.min.x) * (b.max.y - b.min.y) * (b.max.z - b.min.z);
+    if (vol > best) { best = vol; body = o; }
   });
-  if (!hasMesh) return;
+  if (!body || !body.geometry || !body.geometry.boundingBox) return;
 
   const size = new THREE.Vector3();
+  const box = body.geometry.boundingBox;
   box.getSize(size);
   if (!Number.isFinite(size.x + size.y + size.z) || size.z < 0.09 || size.y < 0.025) return;
 
@@ -17627,12 +17626,13 @@ function addWeaponRealismDetails(model, weapon) {
   const front = box.min.z;
   const rear = box.max.z;
   const top = box.max.y;
+  const right = box.max.x;
+  const left = box.min.x;
   const depth = Math.max(0.12, size.z);
   const width = Math.max(0.024, size.x);
   const height = Math.max(0.04, size.y);
-  const sideX = Math.max(Math.abs(box.min.x - cx), Math.abs(box.max.x - cx)) + 0.003;
   const text = ((weapon && (weapon.id + ' ' + weapon.name + ' ' + weapon.type)) || '').toLowerCase();
-  const toyish = /cream|pie|cone|traffic|paintball|sticker|slingshot|throwing|boomerang|foam|potato/.test(text);
+  const toyish = /cream|pie|cone|traffic|paintball|sticker|slingshot|throwing|boomerang|foam|potato|portal|gravity|prism|void|solar|quantum|magnetar|nebula/.test(text);
   const launcher = /launcher|rpg|bazooka|mortar|grenade|cannon|rocket/.test(text);
 
   const steel = _metalizeMat(new THREE.MeshPhongMaterial({ color: 0x293039, shininess: 115, specular: 0xb8c1ca }));
@@ -17644,7 +17644,7 @@ function addWeaponRealismDetails(model, weapon) {
     part.userData.realismDetail = true;
     part.castShadow = true;
     part.receiveShadow = true;
-    model.add(part);
+    body.add(part);
     return part;
   }
   function addBox(mat, w, h, d, x, y, z, rx = 0, ry = 0, rz = 0) {
@@ -17663,23 +17663,28 @@ function addWeaponRealismDetails(model, weapon) {
   const railStart = front + depth * 0.22;
   const railEnd = rear - depth * 0.15;
   const railLen = Math.max(0.05, railEnd - railStart);
-  if (!toyish && depth > 0.18 && width < 0.34) {
-    addBox(steel, Math.min(width * 0.5, 0.042), 0.006, railLen, cx, top + 0.004, railStart + railLen * 0.5);
+  if (!toyish && !launcher && depth > 0.18 && width < 0.34) {
+    const railH = Math.min(0.008, height * 0.12);
+    addBox(steel, Math.min(width * 0.5, 0.042), railH, railLen, cx, top - railH * 0.35, railStart + railLen * 0.5);
     const teeth = Math.min(11, Math.max(4, Math.floor(railLen / 0.035)));
     for (let i = 0; i < teeth; i++) {
       const z = railStart + railLen * (i + 0.5) / teeth;
-      addBox(edge, Math.min(width * 0.6, 0.052), 0.008, Math.max(0.006, railLen / teeth * 0.36), cx, top + 0.011, z);
+      addBox(edge, Math.min(width * 0.6, 0.052), railH * 0.9, Math.max(0.006, railLen / teeth * 0.36), cx, top - railH * 0.02, z);
     }
   }
 
   if (!toyish && depth > 0.16) {
     const plateLen = Math.min(depth * 0.34, 0.18);
+    const plateTh = Math.min(0.004, Math.max(0.002, width * 0.05));
     const plateY = cy + height * 0.12;
-    [-1, 1].forEach(sd => {
-      addBox(dark, 0.0035, Math.min(height * 0.34, 0.045), plateLen, cx + sd * sideX, plateY, front + depth * 0.5, 0, 0, 0);
+    [
+      { x: left + plateTh * 0.45, sd: -1 },
+      { x: right - plateTh * 0.45, sd: 1 },
+    ].forEach(({ x, sd }) => {
+      addBox(dark, plateTh, Math.min(height * 0.34, 0.045), plateLen, x, plateY, front + depth * 0.5, 0, 0, 0);
       for (let i = 0; i < 3; i++) {
         const z = front + depth * (0.36 + i * 0.11);
-        addCyl(edge, Math.min(0.006, height * 0.045), 0.0035, cx + sd * (sideX + 0.002), plateY + (i % 2 ? -0.012 : 0.012), z, Math.PI / 2, 0, Math.PI / 2, 12);
+        addCyl(edge, Math.min(0.006, height * 0.045), plateTh, x + sd * plateTh * 0.1, plateY + (i % 2 ? -0.012 : 0.012), z, Math.PI / 2, 0, Math.PI / 2, 12);
       }
     });
   }
@@ -17687,8 +17692,8 @@ function addWeaponRealismDetails(model, weapon) {
   const muzzleR = Math.min(Math.max(width * (launcher ? 0.22 : 0.13), 0.009), launcher ? 0.045 : 0.024);
   const muzzleLen = Math.min(Math.max(depth * 0.045, 0.012), 0.035);
   if (!toyish && depth > 0.14) {
-    addCyl(steel, muzzleR * 1.18, muzzleLen, cx, cy + height * 0.12, front - muzzleLen * 0.18);
-    addCyl(dark, muzzleR * 0.74, muzzleLen + 0.003, cx, cy + height * 0.12, front - muzzleLen * 0.26);
+    addCyl(steel, muzzleR * 1.18, muzzleLen, cx, cy + height * 0.12, front + muzzleLen * 0.34);
+    addCyl(dark, muzzleR * 0.74, muzzleLen * 0.6, cx, cy + height * 0.12, front + muzzleLen * 0.08);
   }
 
   if (!toyish && height > 0.055 && depth > 0.18) {
