@@ -21788,15 +21788,15 @@ function realisticRecoilProfile(w) {
     recover: auto ? 8.5 : 9.5,
     adsMult: auto ? 0.58 : 0.62,
   };
-  const realism = hyperrealisticOn() ? 1.16 : 1;
-  const playableUp = auto ? 0.010 : 0.019;
+  const realism = hyperrealisticOn() ? 1.08 : 0.92;
+  const playableUp = auto ? 0.0075 : 0.014;
   return {
     up: Math.min(playableUp, (derived.up || 0) * realism),
     side: Math.min(auto ? 0.0065 : 0.010, (derived.side || 0) * (hyperrealisticOn() ? 1.20 : 1.05)),
-    climb: Math.min(auto ? 0.075 : 0.18, (derived.climb || 0.05) * (hyperrealisticOn() ? 1.08 : 1)),
-    max: Math.min(auto ? 2.05 : 2.15, derived.max || 1.7),
+    climb: Math.min(auto ? 0.058 : 0.135, (derived.climb || 0.05) * (hyperrealisticOn() ? 0.92 : 0.82)),
+    max: Math.min(auto ? 1.85 : 1.95, derived.max || 1.7),
     recover: Math.max(6.8, derived.recover || (auto ? 8.5 : 9.5)),
-    adsMult: derived.adsMult != null ? derived.adsMult : (auto ? 0.58 : 0.62),
+    adsMult: Math.min(derived.adsMult != null ? derived.adsMult : (auto ? 0.58 : 0.62), auto ? 0.52 : 0.56),
   };
 }
 
@@ -21936,8 +21936,8 @@ function weaponKickStrength(w, pellets = 1) {
 // system) the player can do to fight it. Clamp the ACCUMULATED total, not
 // just each shot's contribution, so sustained fire settles at a fixed kick
 // instead of walking off the top of the screen.
-const _GUN_KICK_MAX = { x: 0.066, y: 0.030, z: 0.32, rx: 0.082, ry: 0.086, rz: 0.10 };
-const _GUN_KICK_HYPER_MAX = { x: 0.105, y: 0.050, z: 0.50, rx: 0.15, ry: 0.145, rz: 0.17 };
+const _GUN_KICK_MAX = { x: 0.074, y: 0.021, z: 0.42, rx: 0.060, ry: 0.096, rz: 0.115 };
+const _GUN_KICK_HYPER_MAX = { x: 0.120, y: 0.036, z: 0.66, rx: 0.105, ry: 0.165, rz: 0.190 };
 let _fovPunch = 0;   // degrees of momentary FOV widening per shot: the camera being shoved back
 function kickWeaponVisual(w, pellets = 1) {
   { const mm = weaponModels[currentWeaponIdx]; if (mm && mm._mech) mm._mech.kick = 1; }   // bolt / slide cycles
@@ -21961,13 +21961,13 @@ function kickWeaponVisual(w, pellets = 1) {
   const side = Math.random() < 0.5 ? -1 : 1;
   // Backwards, not upwards: the gun is driven into your shoulder (z, toward the
   // camera) much harder than before, and climbs (y) and muzzle-flips (rx) much less.
-  _gunKick.z += Math.min(0.28, (model._kickZ || 0.015) * (6.8 + s * 2.6));
-  _gunKick.y += Math.min(0.024, 0.0035 + s * 0.0065);
-  _gunKick.x += side * Math.min(0.058, 0.007 + s * 0.011);
-  _gunKick.rx += Math.min(0.13, 0.019 + s * 0.032);
-  _fovPunch = Math.min(3.1, _fovPunch + (isADS ? 0.32 : 1.05) * Math.sqrt(Math.max(0.3, s)));
-  _gunKick.ry += side * Math.min(0.088, 0.012 + s * 0.018);
-  _gunKick.rz += -side * Math.min(0.118, 0.018 + s * 0.024);
+  _gunKick.z += Math.min(0.39, (model._kickZ || 0.015) * (9.2 + s * 3.3));
+  _gunKick.y += Math.min(0.017, 0.0022 + s * 0.0044);
+  _gunKick.x += side * Math.min(0.066, 0.008 + s * 0.012);
+  _gunKick.rx += Math.min(0.092, 0.012 + s * 0.021);
+  _fovPunch = Math.min(3.6, _fovPunch + (isADS ? 0.38 : 1.22) * Math.sqrt(Math.max(0.3, s)));
+  _gunKick.ry += side * Math.min(0.102, 0.014 + s * 0.020);
+  _gunKick.rz += -side * Math.min(0.136, 0.020 + s * 0.026);
   for (const key of ['x', 'y', 'z', 'rx', 'ry', 'rz']) {
     const max = (hyperrealisticOn() ? _GUN_KICK_HYPER_MAX : _GUN_KICK_MAX)[key];
     _gunKick[key] = Math.max(-max, Math.min(max, _gunKick[key]));
