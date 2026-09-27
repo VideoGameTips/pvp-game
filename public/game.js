@@ -17597,7 +17597,115 @@ const weaponModels = [
   buildTrafficCone(),  // traffic_cone
   buildCreamPie(),  // cream_pie
 ];
-weaponModels.forEach((m,i) => { m.visible = i === 0; camera.add(m); });
+function addWeaponRealismDetails(model, weapon) {
+  if (!model || !model.add || (model.userData && model.userData.realismDetailed)) return;
+  model.userData = model.userData || {};
+  model.userData.realismDetailed = true;
+
+  const rootInv = new THREE.Matrix4();
+  model.updateMatrixWorld(true);
+  rootInv.copy(model.matrixWorld).invert();
+  const box = new THREE.Box3();
+  let hasMesh = false;
+  model.traverse(o => {
+    if (!o || !o.isMesh || o === model._flash || o.userData?.realismDetail) return;
+    if (!o.geometry) return;
+    if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+    if (!o.geometry.boundingBox) return;
+    const b = o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld).applyMatrix4(rootInv);
+    box.union(b);
+    hasMesh = true;
+  });
+  if (!hasMesh) return;
+
+  const size = new THREE.Vector3();
+  box.getSize(size);
+  if (!Number.isFinite(size.x + size.y + size.z) || size.z < 0.09 || size.y < 0.025) return;
+
+  const cx = (box.min.x + box.max.x) * 0.5;
+  const cy = (box.min.y + box.max.y) * 0.5;
+  const front = box.min.z;
+  const rear = box.max.z;
+  const top = box.max.y;
+  const depth = Math.max(0.12, size.z);
+  const width = Math.max(0.024, size.x);
+  const height = Math.max(0.04, size.y);
+  const sideX = Math.max(Math.abs(box.min.x - cx), Math.abs(box.max.x - cx)) + 0.003;
+  const text = ((weapon && (weapon.id + ' ' + weapon.name + ' ' + weapon.type)) || '').toLowerCase();
+  const toyish = /cream|pie|cone|traffic|paintball|sticker|slingshot|throwing|boomerang|foam|potato/.test(text);
+  const launcher = /launcher|rpg|bazooka|mortar|grenade|cannon|rocket/.test(text);
+
+  const steel = _metalizeMat(new THREE.MeshPhongMaterial({ color: 0x293039, shininess: 115, specular: 0xb8c1ca }));
+  const dark = _metalizeMat(new THREE.MeshPhongMaterial({ color: 0x08090b, shininess: 42, specular: 0x25292e }));
+  const edge = _metalizeMat(new THREE.MeshPhongMaterial({ color: 0x6f7882, shininess: 150, specular: 0xffffff }));
+  const groove = new THREE.MeshBasicMaterial({ color: 0x050607 });
+
+  function mark(part) {
+    part.userData.realismDetail = true;
+    part.castShadow = true;
+    part.receiveShadow = true;
+    model.add(part);
+    return part;
+  }
+  function addBox(mat, w, h, d, x, y, z, rx = 0, ry = 0, rz = 0) {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+    mesh.position.set(x, y, z);
+    mesh.rotation.set(rx, ry, rz);
+    return mark(mesh);
+  }
+  function addCyl(mat, r, len, x, y, z, rx = Math.PI / 2, ry = 0, rz = 0, seg = 18) {
+    const mesh = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, seg), mat);
+    mesh.position.set(x, y, z);
+    mesh.rotation.set(rx, ry, rz);
+    return mark(mesh);
+  }
+
+  const railStart = front + depth * 0.22;
+  const railEnd = rear - depth * 0.15;
+  const railLen = Math.max(0.05, railEnd - railStart);
+  if (!toyish && depth > 0.18 && width < 0.34) {
+    addBox(steel, Math.min(width * 0.5, 0.042), 0.006, railLen, cx, top + 0.004, railStart + railLen * 0.5);
+    const teeth = Math.min(11, Math.max(4, Math.floor(railLen / 0.035)));
+    for (let i = 0; i < teeth; i++) {
+      const z = railStart + railLen * (i + 0.5) / teeth;
+      addBox(edge, Math.min(width * 0.6, 0.052), 0.008, Math.max(0.006, railLen / teeth * 0.36), cx, top + 0.011, z);
+    }
+  }
+
+  if (!toyish && depth > 0.16) {
+    const plateLen = Math.min(depth * 0.34, 0.18);
+    const plateY = cy + height * 0.12;
+    [-1, 1].forEach(sd => {
+      addBox(dark, 0.0035, Math.min(height * 0.34, 0.045), plateLen, cx + sd * sideX, plateY, front + depth * 0.5, 0, 0, 0);
+      for (let i = 0; i < 3; i++) {
+        const z = front + depth * (0.36 + i * 0.11);
+        addCyl(edge, Math.min(0.006, height * 0.045), 0.0035, cx + sd * (sideX + 0.002), plateY + (i % 2 ? -0.012 : 0.012), z, Math.PI / 2, 0, Math.PI / 2, 12);
+      }
+    });
+  }
+
+  const muzzleR = Math.min(Math.max(width * (launcher ? 0.22 : 0.13), 0.009), launcher ? 0.045 : 0.024);
+  const muzzleLen = Math.min(Math.max(depth * 0.045, 0.012), 0.035);
+  if (!toyish && depth > 0.14) {
+    addCyl(steel, muzzleR * 1.18, muzzleLen, cx, cy + height * 0.12, front - muzzleLen * 0.18);
+    addCyl(dark, muzzleR * 0.74, muzzleLen + 0.003, cx, cy + height * 0.12, front - muzzleLen * 0.26);
+  }
+
+  if (!toyish && height > 0.055 && depth > 0.18) {
+    const gripZ = rear - depth * 0.18;
+    const gripY = box.min.y + height * 0.24;
+    for (let i = 0; i < 5; i++) {
+      addBox(groove, Math.min(width * 0.55, 0.045), 0.002, 0.006, cx, gripY + i * Math.min(0.012, height * 0.075), gripZ + i * 0.003, 0.35);
+    }
+  }
+
+  if (!toyish && depth > 0.2) {
+    const stripLen = Math.min(depth * 0.2, 0.11);
+    addBox(edge, Math.min(width * 0.42, 0.034), 0.003, stripLen, cx, cy + height * 0.28, rear - depth * 0.33);
+    addBox(groove, Math.min(width * 0.32, 0.026), 0.002, stripLen * 0.72, cx, cy + height * 0.305, rear - depth * 0.33);
+  }
+}
+weaponModels.forEach((m,i) => { addWeaponRealismDetails(m, WEAPONS[i]); m.visible = i === 0; camera.add(m); });
 
 // ════════════════════════════════════════════════════════════════════════════
 // 🎨 WEAPON SKINS — recolor your gun + an optional flag/emblem decal. One global
