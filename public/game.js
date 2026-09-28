@@ -1247,6 +1247,8 @@ const GAME_MODE_CONFIGS = {
   'frontlines': { type: 'frontlines', allies: 4, enemies: 5 },
   'laststand':  { type: 'laststand',  allies: 0, enemies: 0 },
   'dday':       { type: 'dday',       allies: 3, enemies: 0 },
+  'base_raid':  { type: 'race',       allies: 4, enemies: 16, killGoal: 16, timeLimit: 420,
+    forcedMap: 'base_raid', botHp: 220, playerHp: 300 },
   'range':      { type: 'range',      allies: 0, enemies: 0 },
   // 🛋️ Lobby 13: a chill social hub (no enemies, no scoring) where players hang
   // out and organize their own 1v1s instead of jumping straight into a map.
@@ -5225,6 +5227,60 @@ function buildM4TowerMap() {
   MAP_GROUPS[m]._skyColor = 0x070809;
 }
 buildM4TowerMap();
+
+// ──────────────────────────────────────────────────────────────────────────
+// BASE RAID — PvE compound assault. Player and allies start outside the south
+// breach; guards fill the courtyard, towers, barracks and command building.
+// ──────────────────────────────────────────────────────────────────────────
+registerMap('base_raid');
+function buildBaseRaidMap() {
+  const m = 'base_raid';
+  addMapGround(m, 0x4b5146, 0x30382f);
+  const wall = 0x575b56, dark = 0x252b2b, trim = 0x9a8b5d, cover = 0x6f684f, roof = 0x171b1d;
+
+  addMapBox(m, 0, 3.0, -44, 86, 6, 3, wall);
+  addMapBox(m, -44, 3.0, 0, 3, 6, 88, wall);
+  addMapBox(m, 44, 3.0, 0, 3, 6, 88, wall);
+  addMapBox(m, -27, 3.0, 44, 34, 6, 3, wall);
+  addMapBox(m, 27, 3.0, 44, 34, 6, 3, wall);
+  addMapBox(m, -8, 1.2, 44, 3, 2.4, 3, dark);
+  addMapBox(m, 8, 1.2, 44, 3, 2.4, 3, dark);
+
+  [[-38,-38],[38,-38],[-38,38],[38,38]].forEach(([x,z]) => {
+    addMapBox(m, x, 4.5, z, 8, 9, 8, dark);
+    addMapBox(m, x, 9.2, z, 9, 0.8, 9, trim);
+    addMapBox(m, x, 10.0, z, 5, 1.0, 5, wall);
+  });
+  addMapBox(m, 0, 6.3, -41, 58, 1.0, 5, trim);
+  addMapBox(m, -41, 6.3, 0, 5, 1.0, 58, trim);
+  addMapBox(m, 41, 6.3, 0, 5, 1.0, 58, trim);
+
+  addMapBox(m, 0, 2.7, 31, 18, 5.4, 10, 0x343a3b);
+  addMapBox(m, 0, 5.7, 31, 20, 0.7, 12, roof);
+  addMapBox(m, -23, 2.4, 10, 18, 4.8, 13, 0x3f433d);
+  addMapBox(m, 23, 2.4, 10, 18, 4.8, 13, 0x3f433d);
+  addMapBox(m, -23, 5.1, 10, 20, 0.6, 15, roof);
+  addMapBox(m, 23, 5.1, 10, 20, 0.6, 15, roof);
+  addMapBox(m, 0, 3.0, -20, 24, 6.0, 18, 0x303437);
+  addMapBox(m, 0, 6.35, -20, 26, 0.7, 20, roof);
+  addMapBox(m, 0, 7.4, -20, 10, 1.6, 8, 0x1a1e22);
+
+  [[-14,30],[14,30],[-17,-4],[17,-4],[-8,-31],[8,-31],[0,12]].forEach(([x,z], i) => {
+    addMapBox(m, x, 1.0, z, i === 6 ? 18 : 8, 2.0, i === 6 ? 3 : 4, i % 2 ? cover : 0x7c7357, i % 3 * 0.22);
+  });
+  for (let i = 0; i < 9; i++) {
+    const x = -28 + i * 7;
+    addMapBox(m, x, 0.65, 52 + (i % 2) * 3, 4.8, 1.3, 2.2, 0x5e5846, (i % 2 ? .18 : -.18));
+  }
+  addRamp(m, -34, 28, 0, -1, { width: 5, rise: 5.8, run: 8, landing: 3, color: 0x6c6f68, landColor: 0x83866f });
+  addRamp(m, 34, 28, 0, -1, { width: 5, rise: 5.8, run: 8, landing: 3, color: 0x6c6f68, landColor: 0x83866f });
+
+  const beacon = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 3.8, 18), new THREE.MeshBasicMaterial({ color: 0x55ffaa, transparent: true, opacity: 0.38 }));
+  beacon.position.set(0, 3.2, -20);
+  MAP_GROUPS[m].add(beacon);
+  MAP_GROUPS[m]._skyColor = 0x5c6670;
+}
+buildBaseRaidMap();
 
 const ADMIN_CUSTOM_MAP_PREFIX = 'admin_map_';
 const ADMIN_CUSTOM_MAP_STORE = 'pvpArena.adminCustomMaps.v1';
@@ -23829,6 +23885,10 @@ function faceToward(x, z) {
 }
 
 function teamSideSpawn(team = 'ally', spread = 36, depth = 38) {
+  if (selectedModeConfig && selectedModeConfig.type === 'race' && selectedModeConfig.forcedMap === 'base_raid') {
+    const x = (Math.random() - 0.5) * 16;
+    return { x, z: 58 + Math.random() * 6, yaw: 0 };
+  }
   const side = team === 'enemy' ? -1 : 1;
   const x = (Math.random() - 0.5) * spread, z = side * (depth + Math.random() * 8);
   return { x, z, yaw: Math.atan2(x, z) };   // facing the middle of the map
@@ -35785,7 +35845,11 @@ function startMatchRound() {
       const subTxt = `First to ${match.cfg.winsNeeded} round wins`;
       showAnnouncement(`ROUND ${match.round}`, subTxt, '#ffffff', 2800);
     } else if (match.type === 'race') {
-      showAnnouncement('MATCH START', `First to ${match.cfg.killGoal} kills · ${formatMatchTime(match.cfg.timeLimit)}`, '#ffffff', 2800);
+      if (match.cfg.forcedMap === 'base_raid') {
+        showAnnouncement('BASE RAID', `Storm the compound · clear ${match.cfg.killGoal} guards`, '#55ffaa', 3200);
+      } else {
+        showAnnouncement('MATCH START', `First to ${match.cfg.killGoal} kills · ${formatMatchTime(match.cfg.timeLimit)}`, '#ffffff', 2800);
+      }
     } else if (match.type === 'frontlines') {
       showAnnouncement('FRONTLINES', 'Push the battle line to their base!', '#4cff4c', 2800);
     } else if (match.type === 'dday') {
@@ -36984,7 +37048,9 @@ function endMatch(winner, reason) {
   if (match.type === 'elim') {
     scoreText = `Rounds  ${match.roundWins.ally} – ${match.roundWins.enemy}`;
   } else if (match.type === 'race') {
-    scoreText = `Kills  Your Team ${match.teamKills.ally}  ·  Enemy ${match.teamKills.enemy}  (goal ${match.cfg.killGoal})`;
+    scoreText = match.cfg.forcedMap === 'base_raid'
+      ? `Raid progress  Guards cleared ${match.teamKills.ally}/${match.cfg.killGoal}  ·  Team losses ${match.teamKills.enemy}`
+      : `Kills  Your Team ${match.teamKills.ally}  ·  Enemy ${match.teamKills.enemy}  (goal ${match.cfg.killGoal})`;
   } else if (match.type === 'dday') {
     const dd = ddayState;
     scoreText = dd ? `Waves survived: ${dd.wavesSent}/3  ·  Enemies killed: ${dd.totalKills || 0}` : '';
@@ -37035,6 +37101,20 @@ function endMatch(winner, reason) {
 
 // ── Bot AI ─────────────────────────────────────────────────────────────────
 function botSideSpawn(idx, count, team) {
+  if (selectedModeConfig && selectedModeConfig.forcedMap === 'base_raid') {
+    if (absTeam(team) === 'ally') {
+      const xs = [-16, -8, 8, 16, 0, -22, 22];
+      return { x: xs[idx % xs.length] + (Math.random() - 0.5) * 3, z: 50 + Math.random() * 10 };
+    }
+    const guardPosts = [
+      [-32,-34], [-18,-34], [0,-34], [18,-34], [32,-34],
+      [-34,-12], [34,-12], [-33,18], [33,18],
+      [-20,10], [20,10], [-14,28], [14,28],
+      [-8,-20], [8,-20], [0,-8], [0,22], [-36,35], [36,35],
+    ];
+    const p = guardPosts[idx % guardPosts.length];
+    return { x: p[0] + (Math.random() - 0.5) * 4, z: p[1] + (Math.random() - 0.5) * 4 };
+  }
   // D-Day ally bots: place in bunkers 1, 2, 3 (player is in bunker 0)
   if (selectedModeConfig && selectedModeConfig.type === 'dday' && team === 'ally') {
     const bunkerXs = [-7, 7, 22]; // bunkers 1, 2, 3
@@ -42909,6 +42989,7 @@ const MAP_DESCS = {
   auto:       'Random — game picks one for you each match',
   blank:      'Classic Arena — wider lanes, taller wall-walks, ramp routes, clean cover',
   m4_tower:   'M4 Tower — tight two-story arena with climbable corners and upper catwalks',
+  base_raid:  'Base Raid — storm a guarded compound with allied bots',
   urban:      'Urban Plaza — corner buildings, cars as low cover',
   warehouse:  'Warehouse — stacked crates, pipes, narrow lanes',
   forest:     'Forest Clearing — trees + rocks, mostly open',
