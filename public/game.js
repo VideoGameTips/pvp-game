@@ -10796,152 +10796,72 @@ function buildAK20() {
     m.castShadow = true; g.add(m); return m;
   };
 
-  // ── Receiver ────────────────────────────────────────────────────────────
-  // This used to be a single 41-point extruded plate carrying the WHOLE rifle
-  // silhouette — receiver, magazine, grip and barrel in one outline. Every part
-  // modelled below was therefore a duplicate sitting slightly off it, and the
-  // profile's thin magazine spike is what read as a stray spindle hanging under
-  // the gun. The monolith is gone; each component is its own solid now.
-  box(steel, 0.048, 0.100, 0.320, 0, 0.005, -0.010);                 // receiver box
-  box(steel, 0.050, 0.030, 0.030, 0, -0.030, -0.156);                // front trunnion
-  box(inner, 0.049, 0.010, 0.300, 0, -0.046, -0.010);                // lower rail seam
-  // The receiver narrows at the top where the dust cover seats.
-  box(steel, 0.044, 0.014, 0.310, 0, 0.052, -0.014);
+  // ── Simplified pass ───────────────────────────────────────────────────
+  // Every part below used to be several: a dust cover with 5 stamped ribs, six
+  // receiver rivets, a 5-piece front sight tower, a magazine with a rib and a
+  // seam box per segment, finger grooves in the grip and handguard, a separate
+  // butt plate/sling loop/comb seam/rear trunnion behind the stock. Up close,
+  // in first person, that many small edges catch the light at slightly
+  // different angles and read as a lumpy, uneven surface rather than a clean
+  // gun -- which is what was flagged. This keeps one shape per real part:
+  // receiver, ejection port, selector, magazine, grip, stock (+ the wrist
+  // bridge that closes the gap to the receiver), handguard, gas tube, barrel,
+  // front sight, muzzle brake.
+  box(steel, 0.048, 0.100, 0.320, 0, 0.005, -0.010);                 // receiver
+  box(inner, 0.044, 0.014, 0.080, 0, 0.053, -0.060);                 // dust cover / ejection port, one flat inset
+  box(bright, 0.006, 0.052, 0.010, 0.028, 0.014, 0.010, 0, 0, 0.20);  // selector lever
 
-  // Dust cover, sitting proud of the receiver with its stamped ribs.
-  box(steel, 0.050, 0.010, 0.196, 0, 0.063, -0.020);
-  for (let i = 0; i < 5; i++) box(blued, 0.044, 0.0035, 0.008, 0, 0.0685, -0.086 + i * 0.032);
-  // Rear sight leaf + notch, on its block.
-  box(steel, 0.030, 0.012, 0.040, 0, 0.070, -0.070);
-  box(inner,  0.008, 0.006, 0.010, 0, 0.076, -0.070);
+  gpPart(g, 'main', () => { box(bright, 0.014, 0.011, 0.030, 0.030, 0.046, -0.030); });
 
-  // ── Right-side furniture: the AK's most recognisable face ───────────────
-  // Selector lever — the long stamped bar with its two detent stops.
-  box(bright, 0.006, 0.052, 0.010, 0.028, 0.014, 0.010, 0, 0, 0.20);
-  box(bright, 0.007, 0.010, 0.044, 0.028, 0.034, -0.008);
-  box(inner,  0.003, 0.005, 0.006, 0.030, 0.044, 0.004);   // SAFE stop
-  box(inner,  0.003, 0.005, 0.006, 0.030, 0.044, -0.026);  // AUTO stop
-  // Ejection port, cut into the flank, with the charging handle above it.
-  box(inner,  0.004, 0.024, 0.062, 0.026, 0.030, -0.036);
-  // The handle is its own assembly so the reload can actually cock the gun.
-  // Everything else about the AK is welded to the receiver; this one piece runs.
-  gpPart(g, 'main', () => {
-    box(bright, 0.014, 0.011, 0.030, 0.030, 0.046, -0.030);
-    cyl(bright, 0.006, 0.006, 0.016, 10, 0.036, 0.046, -0.018, Math.PI / 2, Math.PI / 2);
-  });
-  // Receiver rivets — six a side, the giveaway of a stamped AK receiver.
-  [-0.150, -0.090, -0.020, 0.040, 0.090, 0.128].forEach(z => {
-    cyl(bright, 0.0032, 0.0032, 0.056, 8, 0, -0.020, z, 0, Math.PI / 2);
-  });
-
-  // ── Fire control ────────────────────────────────────────────────────────
   const guard = new THREE.Mesh(new THREE.TorusGeometry(0.021, 0.0038, 6, 12, Math.PI * 1.1), steel);
   guard.rotation.set(0, Math.PI / 2, -0.45); guard.position.set(0, -0.078, 0.020); g.add(guard);
   box(bright, 0.005, 0.017, 0.006, 0, -0.068, 0.020, 0.22);          // trigger
-  box(steel,  0.010, 0.012, 0.014, 0, -0.070, -0.014);               // mag catch paddle
 
-  // ── Magazine: the banana curve, built from segments that follow it ──────
-  // A 30-round AK magazine curves about 25 degrees end to end. The first pass
-  // advanced 0.14 rad per segment over six segments — 57 degrees — which swung
-  // the bottom of the mag out into a thin forward-pointing spindle instead of
-  // the familiar banana.
-  // A 30-round AK magazine is about a quarter of the rifle's length and curves
-  // roughly 25-30 degrees end to end. The old one dropped 192 mm -- nearly
-  // twice the receiver's height -- over only 21 degrees, so it read as a long
-  // straight spike rather than a banana. Five segments, 140 mm, 27 degrees.
-  // The magwell belongs well FORWARD of the trigger. It used to start at
-  // z -0.012, so the magazine's rear face (+0.012) overlapped the trigger
-  // guard (-0.001 to 0.041) and butted straight up against the firing hand --
-  // which is why it read as being where the pistol grip should be. On a real
-  // AK the trigger-to-magwell distance is about 90 mm, which at this model's
-  // scale is 0.106, putting the well at z -0.086 and leaving an open gap back
-  // to the handguard at -0.164, exactly as the real rifle has.
+  // Magazine: the banana curve, one smooth segment per step -- see the git
+  // history if the rib/seam detailing is ever wanted back.
   let my = -0.056, mz = -0.060, ang = 0.10;
   for (let i = 0; i < 5; i++) {
     box(magMat, 0.030, 0.034, 0.048, 0, my, mz, ang);
-    box(inner,  0.031, 0.004, 0.012, 0, my, mz, ang);                // stamped rib
-    box(inner,  0.031, 0.010, 0.004, 0, my, mz + 0.020, ang);        // spine seam
     my -= Math.cos(ang) * 0.028;
     mz -= Math.sin(ang) * 0.028;
     ang += 0.085;
   }
   box(magMat, 0.032, 0.012, 0.050, 0, my + 0.012, mz - 0.004, ang);  // floorplate
-  box(inner,  0.033, 0.004, 0.016, 0, my + 0.018, mz - 0.004, ang);  // floorplate lip
 
-  // ── Pistol grip ─────────────────────────────────────────────────────────
-  // Lifted 0.024 so the grip tang actually meets the receiver — it used to top
-  // out at -0.064 against a receiver bottom of -0.045 and hang in the air.
-  // It was there, but it bottomed out at y -0.144 while the firing fist covers
-  // down to -0.135 -- so only 9 mm of grip showed past the hand and the gun
-  // looked like it had no handle at all. It now runs to -0.170, is a little
-  // wider, and wears a grip cap, so a clear handle sits below the fist.
+  // Pistol grip: reaches the receiver, runs far enough past the firing hand
+  // to read as a handle. See earlier history for exactly how those numbers
+  // were arrived at.
   sidePlate(grip, [
     [0.078,-0.038],[0.114,-0.064],[0.122,-0.150],[0.098,-0.170],[0.068,-0.088],[0.062,-0.044],
   ], 0.038, 0);
-  for (let i = 0; i < 6; i++) box(inner, 0.040, 0.0035, 0.009, 0, -0.070 - i * 0.017, 0.092 + i * 0.005, 0.35);
   box(grip,  0.042, 0.012, 0.040, 0, -0.172, 0.108, 0.30);           // grip cap
-  box(inner, 0.043, 0.004, 0.014, 0, -0.178, 0.108, 0.30);           // cap seam
 
-  // ── Stock: comb, toe, butt plate, sling loop ────────────────────────────
+  // Stock, and the wrist that bridges it to the receiver (full receiver
+  // height where it meets the receiver, falling to the comb line where the
+  // stock picks it up).
   sidePlate(polymer, [
     [0.154,-0.038],[0.214,0.012],[0.326,0.014],[0.392,-0.012],[0.386,-0.030],[0.220,-0.048],[0.166,-0.052],
   ], 0.047, 0);
-  box(inner,  0.048, 0.052, 0.008, 0, -0.002, 0.404, 0.10);          // butt plate
-  box(bright, 0.030, 0.006, 0.004, 0, -0.040, 0.250);                // sling loop
-  box(inner,  0.049, 0.004, 0.070, 0, 0.010, 0.300);                 // comb seam
-  box(steel,  0.044, 0.040, 0.026, 0, -0.014, 0.160);                // rear trunnion
-  // The wrist used to be a plain 56 mm box parked between the receiver and the
-  // stock. The receiver is 100 mm deep there and the stock's comb has already
-  // fallen away to y -0.03, so a full-height rectangle stood proud of BOTH and
-  // read as a bulge behind the receiver. It is a ramp now: full receiver height
-  // where it meets the receiver, falling to the comb line where the stock picks
-  // it up, which is the shape the real rifle's wrist actually has.
+  box(inner, 0.048, 0.052, 0.008, 0, -0.002, 0.404, 0.10);           // butt plate
   sidePlate(polymer, [
     [0.142,-0.046],[0.142,0.050],[0.170,0.042],[0.200,0.024],[0.222,0.011],[0.224,-0.046],
   ], 0.046, 0);
 
-  // ── Handguards + gas system ─────────────────────────────────────────────
+  // Handguard, one piece covering the gas tube instead of stacked halves.
   sidePlate(polymer, [
-    [-0.336,0.010],[-0.306,0.034],[-0.186,0.034],[-0.164,0.012],[-0.190,-0.008],[-0.320,-0.006],
+    [-0.336,0.012],[-0.310,0.052],[-0.186,0.052],[-0.164,0.012],[-0.190,-0.008],[-0.320,-0.006],
   ], 0.050, 0);
-  // Finger grooves in the lower handguard.
-  for (let i = 0; i < 4; i++) box(inner, 0.052, 0.006, 0.007, 0, 0.002, -0.310 + i * 0.038);
-  // Upper handguard over the gas tube, with its cooling vents.
-  sidePlate(polymer, [
-    [-0.332,0.038],[-0.310,0.056],[-0.196,0.056],[-0.176,0.038],
-  ], 0.044, 0);
-  for (let i = 0; i < 3; i++) box(inner, 0.046, 0.004, 0.009, 0, 0.056, -0.300 + i * 0.042);
   cyl(blued, 0.0052, 0.0052, 0.180, 14, 0, 0.046, -0.256);           // gas tube
-  // Gas block, canted port, bayonet lug.
-  box(steel, 0.020, 0.030, 0.022, 0, 0.032, -0.418);
-  cyl(blued, 0.007, 0.007, 0.026, 10, 0, 0.048, -0.418, 0.5);
-  box(steel, 0.010, 0.008, 0.030, 0, -0.002, -0.430);
 
-  // ── Barrel, front sight, slant brake ────────────────────────────────────
+  // Barrel, front sight, slant brake -- the AKM's signature angled cut.
   cyl(blued, 0.0064, 0.0064, 0.330, 20, 0, 0.018, -0.396);
-  cyl(bright, 0.0038, 0.0038, 0.120, 10, 0, 0.002, -0.372);          // cleaning rod, tucked under the barrel
-  // Front sight tower — tall, hooded, and the tallest thing on the rifle. On the
-  // real gun this dominates the muzzle end; scaled down it was disappearing.
-  box(steel, 0.022, 0.040, 0.024, 0, 0.040, -0.505);
-  box(steel, 0.006, 0.034, 0.020, -0.010, 0.058, -0.505);
-  box(steel, 0.006, 0.034, 0.020,  0.010, 0.058, -0.505);
-  box(steel, 0.026, 0.006, 0.020, 0, 0.074, -0.505);                 // hood bridge
+  box(steel, 0.022, 0.040, 0.024, 0, 0.040, -0.505);                 // front sight block
   box(bright, 0.0035, 0.022, 0.0035, 0, 0.058, -0.505);              // post
-  // Front trunnion band the barrel passes through, so the barrel doesn't just
-  // emerge from nothing.
-  cyl(steel, 0.0115, 0.0115, 0.016, 14, 0, 0.018, -0.455);
-  // AKM slant compensator: cut at an angle, which is why it is unmistakable.
   const brake = cyl(steel, 0.0118, 0.0104, 0.046, 18, 0, 0.018, -0.556);
   brake.rotation.x = Math.PI / 2 - 0.13;
-  cyl(inner, 0.0080, 0.0080, 0.014, 14, 0, 0.0235, -0.575, Math.PI / 2 - 0.13);
-  box(bright, 0.0075, 0.0075, 0.020, 0.005, 0.026, -0.548, 0, 0, 0.3);  // brake port
-  box(bright, 0.020, 0.005, 0.006, 0, 0.006, -0.300);                // front sling loop
 
   const flash = makeMuzzleFlash(); flash.position.set(0, 0.020, -0.585); g.add(flash);
   g._flash = flash; g._kickZ = 0.015;
-  // Hand-detailed: the procedural greeble pass would stamp generic seams and
-  // pins on top of real hardware, and welding would shove the deliberately
-  // proud parts (selector, charging handle, sling loops) back into the body.
   g._greebled = true; g._handDetailed = true;
   g.position.set(0.12, -0.1, -0.25);
   return g;
