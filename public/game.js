@@ -3466,12 +3466,14 @@ function longReport(ctx, start, outNode, volume, scale) {
   // off nearly as hard -- the report now audibly rolls on for 3+ seconds
   // instead of reading as two claps and done.
   //      delay      level   how dark it has gone by then
-  const R = [[0.30, 0.34, 1500],
-             [0.62, 0.23,  980],
-             [1.05, 0.16,  680],
-             [1.60, 0.11,  480],
-             [2.25, 0.075, 350],
-             [3.05, 0.05,  260]];
+  // Weak on purpose -- same timing as before, levels cut hard so this reads as
+  // a faint trailing detail, not another bang.
+  const R = [[0.30, 0.055, 1500],
+             [0.62, 0.037,  980],
+             [1.05, 0.026,  680],
+             [1.60, 0.018,  480],
+             [2.25, 0.012, 350],
+             [3.05, 0.008,  260]];
   for (const [t, g, cut] of R) {
     const at = start + t * (0.7 + scale * 0.5);
     playFilteredNoise(ctx, at, 0.34 + t * 0.42, outNode, volume * g * scale,
@@ -3538,7 +3540,8 @@ function playWeaponSound(idOrWeapon, opts = {}) {
     const send = ctx.createGain();
     // A gun with a long report also puts far more into the room.
     const tailBoost = 1 + (p.tail || 0) * 1.1;
-    send.gain.value = (opts.remote ? 0.42 : 0.22) * distGain * (indoor ? 1 : 1.15) * tailBoost;
+    // Weak on purpose -- a whisper of the room, not a second copy of the shot.
+    send.gain.value = (opts.remote ? 0.070 : 0.037) * distGain * (indoor ? 1 : 1.15) * tailBoost;
     mainGain.connect(send).connect(getReverbBus(ctx, indoor));
   } catch (e) {}
   // Outdoors the crack keeps going. Indoors there is nowhere for it to go.
