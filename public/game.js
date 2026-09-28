@@ -7285,8 +7285,268 @@ buildBrArenaMap();
 buildBlankMap();
 buildBattlefieldMap();
 buildRangeMap();
+buildObbyMap();
 buildLobby13Map();
 loadAdminCustomMaps();
+
+// ── White Grid Concepts ────────────────────────────────────────────────────
+// The original themed maps are archived in docs/archive. Active maps now use a
+// TABS-style prototype language: white grid floors, grounded blockout shapes,
+// clear lanes, and no decorative floating pieces.
+const GRID_MAP_ARCHETYPES = [
+  'blank_slate', 'three_lane', 'courtyard', 'stairs', 'tower_corners',
+  'crossroads', 'trenches', 'warehouse_lanes', 'ring', 'bridge',
+];
+const GRID_CONCEPT_MAPS_ACTIVE = true;
+function clearMapForGridConcept(name) {
+  const group = MAP_GROUPS[name];
+  if (!group) return;
+  while (group.children.length) {
+    const child = group.children.pop();
+    if (child.parent) child.parent.remove(child);
+  }
+  MAP_COLLIDERS[name] = [];
+  MAP_GIMMICKS[name] = { damageZones: [], jumpPads: [], iceZones: [], oilZones: [], lowGravZones: [] };
+}
+function addGridConceptGround(name, size = 140) {
+  const group = MAP_GROUPS[name];
+  const ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(size, size),
+    new THREE.MeshLambertMaterial({ color: 0xffffff })
+  );
+  ground.rotation.x = -Math.PI / 2;
+  ground.receiveShadow = true;
+  group.add(ground);
+  const grid = new THREE.GridHelper(size, size / 2, 0xb8c0c8, 0xd5dbe2);
+  grid.position.y = 0.012;
+  group.add(grid);
+}
+function addGridStairs(name, x0, z0, dirX, dirZ, steps = 5, width = 8, depth = 2.2, stepH = 0.38) {
+  for (let i = 0; i < steps; i++) {
+    const h = (i + 1) * stepH;
+    addMapBox(name, x0 + dirX * i * depth, h / 2, z0 + dirZ * i * depth,
+      dirZ ? width : depth, h, dirX ? width : depth, 0xf7f7f7);
+  }
+}
+function addGridPerimeter(name, half = 64, height = 5.2) {
+  const wall = 0xf4f4f4;
+  addMapBox(name, 0, height / 2, -half, half * 2 + 4, height, 2.8, wall);
+  addMapBox(name, 0, height / 2,  half, half * 2 + 4, height, 2.8, wall);
+  addMapBox(name, -half, height / 2, 0, 2.8, height, half * 2 + 4, wall);
+  addMapBox(name,  half, height / 2, 0, 2.8, height, half * 2 + 4, wall);
+}
+// 🛝 Every grid map gets a pair of 45-degree ramps, 180 degrees apart so neither
+// team has the better one. Each archetype fills its middle differently, so the
+// spot is searched for rather than fixed: the first place in a fixed order of
+// candidates where the ramp, its landing and a body's width around them are
+// clear of every wall, and the mirrored twin is too.
+// A rectangle clear check shared by the ramp and ledge placers below: no
+// collider taller than a curb anywhere inside it.
+function _gridSpotFree(name, r) {
+  return !MAP_COLLIDERS[name].some(b => b.max.y > 0.2 && b.max.x > r.minX && b.min.x < r.maxX && b.max.z > r.minZ && b.min.z < r.maxZ);
+}
+const _GRID_SPOTS = [[-24, -12], [-24, 12], [-14, -30], [-14, 30], [-34, -8], [-34, 8], [-8, -24], [-8, 24],
+                     [-40, -18], [-40, 18], [-20, -40], [-20, 40], [-30, -30], [-30, 30], [-12, -12], [-12, 12]];
+const _GRID_DIRS = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+function addGridRamps(name, s, large) {
+  // Bigger than the first pass: a proper rooftop-height climb, wide enough that
+  // a fight can happen ON the ramp, not just cross it.
+  const rise = large ? 6 : 4.5, width = large ? 7 : 6, land = 3.5, clear = 1.6;
+  const rectFor = (x, z, ux, uz) => {
+    const a0 = -clear, a1 = rise + land + clear, half = width / 2 + clear;
+    const p = [x + ux * a0, z + uz * a0], q = [x + ux * a1, z + uz * a1];
+    return Math.abs(ux) > 0.5
+      ? { minX: Math.min(p[0], q[0]), maxX: Math.max(p[0], q[0]), minZ: z - half, maxZ: z + half }
+      : { minX: x - half, maxX: x + half, minZ: Math.min(p[1], q[1]), maxZ: Math.max(p[1], q[1]) };
+  };
+  const free = (r) => _gridSpotFree(name, r);
+  for (const [sx, sz] of _GRID_SPOTS) for (const [ux, uz] of _GRID_DIRS) {
+    const x = sx * s, z = sz * s;
+    if (!free(rectFor(x, z, ux, uz)) || !free(rectFor(-x, -z, -ux, -uz))) continue;
+    const opts = { width, rise, landing: land, color: 0xe9cfa6, landColor: 0xf3e3c6, lipColor: 0xffd76a };
+    addRamp(name, x, z, ux, uz, opts);
+    addRamp(name, -x, -z, -ux, -uz, opts);
+    return true;
+  }
+  return false;
+}
+// 🧗 A staircase of short, DISCRETE platforms -- not a ramp you walk up, a
+// climb you jump: each one is taller than the last by less than a jump's
+// apex, spaced a short hop apart, so clearing the whole thing takes as many
+// jumps as steps. Ends on a proper landing, elevated well above the map.
+function addGridLedges(name, s, large) {
+  const steps = large ? 5 : 4, stepH = 1.15, gap = 2.4, w = 3.2, depth = 2.4, clear = 1.4;
+  const total = gap * (steps + 1);
+  const rectFor = (x, z, ux, uz) => {
+    const half = w / 2 + clear;
+    const p = [x, z], q = [x + ux * total, z + uz * total];
+    return Math.abs(ux) > 0.5
+      ? { minX: Math.min(p[0], q[0]) - clear, maxX: Math.max(p[0], q[0]) + clear, minZ: z - half, maxZ: z + half }
+      : { minX: x - half, maxX: x + half, minZ: Math.min(p[1], q[1]) - clear, maxZ: Math.max(p[1], q[1]) + clear };
+  };
+  const free = (r) => _gridSpotFree(name, r);
+  for (const [sx, sz] of _GRID_SPOTS) for (const [ux, uz] of _GRID_DIRS) {
+    const x = sx * s, z = sz * s;
+    if (!free(rectFor(x, z, ux, uz)) || !free(rectFor(-x, -z, -ux, -uz))) continue;
+    const place = (px, pz, pux, puz) => {
+      let h = stepH;
+      for (let i = 0; i < steps; i++) {
+        const cx = px + pux * gap * (i + 1), cz = pz + puz * gap * (i + 1);
+        const top = i === steps - 1;
+        addMapBox(name, cx, h / 2, cz, top ? w * 1.4 : w, h, top ? depth * 1.6 : depth,
+                  top ? 0xffd76a : 0xe9cfa6);
+        h += stepH;
+      }
+    };
+    place(x, z, ux, uz);
+    place(-x, -z, -ux, -uz);
+    return true;
+  }
+  return false;
+}
+// 🧱 The archetypes above give a map its SHAPE; this gives it its CLUTTER.
+// They were open floors with a handful of set-piece walls -- everywhere else
+// was bare. Scatters a wide grid of candidate cover across the WHOLE play
+// area (skipping the middle, where the archetype's own centrepiece and the
+// ramp/ledge climb live) and drops a wall wherever the spot is actually clear,
+// varying size so some pieces are full walls and some are low enough to see
+// and shoot over. Built once at boot like the rest of the map, so the layout
+// is fixed for that server run, not re-rolled mid-match.
+function addGridClutter(name, half, s) {
+  const sizes = [[3.2, 3.4, 3.0], [4.6, 5.4, 3.6], [2.4, 2.0, 2.4], [6.2, 6.6, 3.2], [3.6, 4.6, 5.2], [2.8, 3.0, 2.8]];
+  const tints = [0xf7f7f7, 0xeef1f4, 0xffffff, 0xe4e9ee];
+  const step = 12.5 * s, margin = 9 * s, centerClear = 15 * s;
+  let placed = 0;
+  for (let gx = -half + margin; gx <= half - margin; gx += step) {
+    for (let gz = -half + margin; gz <= half - margin; gz += step) {
+      if (Math.hypot(gx, gz) < centerClear) continue;           // leave the archetype's own centrepiece alone
+      if (Math.random() < 0.26) continue;                       // some open lanes, or this reads as a maze
+      const x = gx + (Math.random() * 2 - 1) * step * 0.32;
+      const z = gz + (Math.random() * 2 - 1) * step * 0.32;
+      const [w, hh, d] = sizes[Math.floor(Math.random() * sizes.length)];
+      const rSel = Math.random();
+      const rot = rSel < 0.34 ? 0 : rSel < 0.67 ? Math.PI / 2 : Math.PI / 4;
+      const ww = w * s, dd = d * s;
+      const rect = { minX: x - ww / 2 - 1, maxX: x + ww / 2 + 1, minZ: z - dd / 2 - 1, maxZ: z + dd / 2 + 1 };
+      if (!_gridSpotFree(name, rect)) continue;
+      addMapBox(name, x, hh / 2, z, ww, hh, dd, tints[Math.floor(Math.random() * tints.length)], rot);
+      placed++;
+    }
+  }
+  return placed;
+}
+function addGridConceptMap(name, index) {
+  if (name === 'lobby13') return;
+  if (name.startsWith(ADMIN_CUSTOM_MAP_PREFIX)) return;
+  clearMapForGridConcept(name);
+  const large = name === 'br_arena';
+  const compact = name === 'range';
+  const size = large ? 220 : compact ? 92 : 140;
+  const half = size / 2 - 6;
+  const h = large ? 10.2 : 8.4;
+  addGridConceptGround(name, size);
+  addGridPerimeter(name, half, h);
+
+  const solid = 0xffffff, soft = 0xf7f7f7, marker = 0xe8edf2;
+  const arch = GRID_MAP_ARCHETYPES[index % GRID_MAP_ARCHETYPES.length];
+  const s = large ? 1.45 : compact ? 0.72 : 1;
+  const B = (x, y, z, w, hh, d, rot = 0, color = solid) =>
+    addMapBox(name, x * s, y, z * s, w * s, hh, d * s, color, rot);
+  const W = (x, z, w, d, rot = 0, hh = 7.2, color = solid) => B(x, hh / 2, z, w, hh, d, rot, color);
+  const P = (x, z, w, d, y = 3.3, hh = 0.38, color = marker) => B(x, y, z, w, hh, d, 0, color);
+  const spawnX = half / s - 14;
+  const addSpawnBaffles = () => {
+    // U-shaped spawn pockets stop instant spawn-to-spawn line of sight while
+    // leaving two exits, so players are protected but not trapped.
+    [[-spawnX, -1], [spawnX, 1]].forEach(([x, side]) => {
+      W(x, 0, 3.4, 32, 0, 8.4, soft);
+      W(x + side * 9, -15, 18, 3.2, 0, 7.6, soft);
+      W(x + side * 9,  15, 18, 3.2, 0, 7.6, soft);
+      W(x - side * 12, 0, 3.2, 18, 0, 6.8, solid);
+    });
+  };
+  addSpawnBaffles();
+
+  if (arch === 'blank_slate') {
+    W(0, 0, 14, 14, Math.PI / 4, 5.8, marker);
+    [[-30,-24], [30,24], [-30,24], [30,-24]].forEach(([x,z]) => W(x, z, 17, 5.5, 0, 4.8));
+    [[0,-38], [0,38], [-44,0], [44,0]].forEach(([x,z]) => W(x, z, z ? 28 : 4.5, z ? 4.5 : 28, 0, 4.2, soft));
+    [[-18,0], [18,0], [0,-18], [0,18]].forEach(([x,z]) => W(x, z, z ? 18 : 4, z ? 4 : 18, 0, 6.6));
+  } else if (arch === 'three_lane') {
+    [-24, 24].forEach(x => W(x, 0, 4.2, 84, 0, 7.8));
+    [-40, 0, 40].forEach(x => { W(x, -30, 16, 5, 0, 4.2, soft); W(x, 30, 16, 5, 0, 4.2, soft); });
+    [[-12,0], [12,0], [0,-44], [0,44]].forEach(([x,z]) => W(x, z, 12, 4.5, Math.PI / 4, 5.4));
+    P(-36, 0, 14, 18); P(36, 0, 14, 18);
+  } else if (arch === 'courtyard') {
+    W(0, 0, 20, 20, Math.PI / 4, 6.4, marker);
+    [[-34,-34], [34,-34], [-34,34], [34,34]].forEach(([x,z]) => { W(x, z, 17, 17, 0, 6.8); P(x, z, 19, 19, 6.95); });
+    [[0,-25,42,4], [0,25,42,4], [-25,0,4,42], [25,0,4,42]].forEach(([x,z,w,d]) => W(x, z, w, d, 0, 5.8, soft));
+    [[-50,0], [50,0], [0,-50], [0,50]].forEach(([x,z]) => W(x, z, z ? 22 : 4, z ? 4 : 22, 0, 6.8));
+  } else if (arch === 'stairs') {
+    W(0, 0, 24, 24, 0, 5.2, marker);
+    P(0, 0, 28, 28, 5.45);
+    addGridStairs(name, -8*s, -28*s, 0, 1, 9, 16*s, 2.2*s, 0.48);
+    addGridStairs(name,  8*s,  28*s, 0, -1, 9, 16*s, 2.2*s, 0.48);
+    addGridStairs(name, -28*s, 8*s, 1, 0, 9, 16*s, 2.2*s, 0.48);
+    addGridStairs(name,  28*s,-8*s, -1, 0, 9, 16*s, 2.2*s, 0.48);
+    [[-38,-38], [38,38], [-38,38], [38,-38]].forEach(([x,z]) => W(x, z, 12, 12, 0, 5.8));
+  } else if (arch === 'tower_corners') {
+    [[-38,-38], [38,-38], [-38,38], [38,38]].forEach(([x,z]) => {
+      W(x, z, 15, 15, 0, 7.4);
+      P(x, z, 20, 20, 7.6);
+    });
+    [[0,-38,46,4], [0,38,46,4], [-38,0,4,46], [38,0,4,46]].forEach(([x,z,w,d]) => W(x, z, w, d, 0, 5.2));
+    W(0, 0, 20, 20, Math.PI / 4, 5.6, soft);
+  } else if (arch === 'crossroads') {
+    B(0, 0.25, 0, 88, 0.5, 12, 0, marker);
+    B(0, 0.25, 0, 12, 0.5, 88, 0, marker);
+    [[-29,-29], [29,-29], [-29,29], [29,29]].forEach(([x,z]) => W(x, z, 20, 9, Math.PI / 4, 6.2));
+    [[0,-45], [0,45], [-45,0], [45,0]].forEach(([x,z]) => W(x, z, z ? 30 : 5, z ? 5 : 30, 0, 5.4));
+    W(0, 0, 18, 18, Math.PI / 4, 7.2, soft);
+  } else if (arch === 'trenches') {
+    [-30, 0, 30].forEach(x => W(x, 0, 8, 88, 0, 4.6, soft));
+    [-44, 44].forEach(z => W(0, z, 78, 6, 0, 5.8));
+    [[-15,-25], [15,25], [-44,18], [44,-18], [-15,25], [15,-25]].forEach(([x,z]) => W(x, z, 18, 4.5, Math.PI / 4, 4.6));
+    [[-48,-30], [48,30]].forEach(([x,z]) => P(x, z, 18, 16, 4.9));
+  } else if (arch === 'warehouse_lanes') {
+    for (let z = -42; z <= 42; z += 21) {
+      for (let x = -36; x <= 36; x += 24) W(x, z, 12, 8, (x + z) % 2 ? 0 : Math.PI / 2, 5.2);
+    }
+    W(-12, 0, 8, 34, 0, 7.4, marker);
+    W(12, 0, 8, 34, 0, 7.4, marker);
+    P(-36, 0, 18, 14, 5.45); P(36, 0, 18, 14, 5.45);
+  } else if (arch === 'ring') {
+    [[0,-42,46,5], [0,42,46,5], [-42,0,5,46], [42,0,5,46]].forEach(([x,z,w,d]) => W(x, z, w, d, 0, 6.8));
+    [[0,-19,24,4], [0,19,24,4], [-19,0,4,24], [19,0,4,24]].forEach(([x,z,w,d]) => W(x, z, w, d, 0, 5.0, soft));
+    W(0, 0, 14, 14, Math.PI / 4, 7.4, marker);
+    [[-44,-44], [44,44], [-44,44], [44,-44]].forEach(([x,z]) => P(x, z, 15, 15, 5.2));
+  } else if (arch === 'bridge') {
+    P(0, 0, 78, 14, 4.2, 0.55);
+    W(-43, 0, 18, 24, 0, 5.4);
+    W(43, 0, 18, 24, 0, 5.4);
+    addGridStairs(name, -31*s, -8*s, 1, 0, 8, 13*s, 2.2*s, 0.42);
+    addGridStairs(name,  31*s,  8*s, -1, 0, 8, 13*s, 2.2*s, 0.42);
+    [[-20,-30], [20,30], [-20,30], [20,-30]].forEach(([x,z]) => W(x, z, 14, 5, 0, 5.2));
+    W(0, 0, 5, 34, 0, 7.4, soft);
+  }
+
+  try { addGridRamps(name, s, large); } catch (e) { console.warn('[ramps]', name, e); }
+  try { addGridLedges(name, s, large); } catch (e) { console.warn('[ledges]', name, e); }
+  try { addGridClutter(name, half, s); } catch (e) { console.warn('[clutter]', name, e); }
+
+  // Small spawn-side anchors make orientation obvious without breaking the all-white look.
+  B(-half / s + 10, 0.04, 0, 7, 0.08, 24, 0, 0xe9f2ff);
+  B( half / s - 10, 0.04, 0, 7, 0.08, 24, 0, 0xffeeee);
+}
+function replaceBuiltMapsWithGridConcepts() {
+  mapDestructibles.length = 0;
+  mapMortars.length = 0;
+  mapVehicles.length = 0;
+  Object.keys(MAP_GROUPS).forEach((name, index) => {
+    if (name !== 'lobby13' && name !== 'obby') addGridConceptMap(name, index);
+  });
+}
+replaceBuiltMapsWithGridConcepts();
 
 // Keep every map in the same readable, low-poly arena language. Individual
 // builders keep their theme; this pass fixes the common problems: missing
@@ -7310,12 +7570,14 @@ const LOW_POLY_COVER_COLORS = {
   pyongyang: 0x7c7c74, traffic_cone_republic: 0xc0b8a8, flying_moai: 0x7d756a,
 };
 function applyLowPolyMapPlayabilityPass() {
-  LOW_POLY_BOUNDARY_MAPS.forEach(name => addLowPolyArenaWalls(name, 0x343434));
-  Object.keys(MAP_GROUPS).forEach(name => {
-    if (name === 'blank' || name === 'range' || name === 'battlefield' || name === 'lobby13' || name === 'br_arena') return;
-    if (name.startsWith(ADMIN_CUSTOM_MAP_PREFIX)) return;
-    addLowPolyArenaCover(name, LOW_POLY_COVER_COLORS[name] || 0x6f6a60);
-  });
+  if (!GRID_CONCEPT_MAPS_ACTIVE) {
+    LOW_POLY_BOUNDARY_MAPS.forEach(name => addLowPolyArenaWalls(name, 0x343434));
+    Object.keys(MAP_GROUPS).forEach(name => {
+      if (name === 'blank' || name === 'range' || name === 'battlefield' || name === 'lobby13' || name === 'br_arena') return;
+      if (name.startsWith(ADMIN_CUSTOM_MAP_PREFIX)) return;
+      addLowPolyArenaCover(name, LOW_POLY_COVER_COLORS[name] || 0x6f6a60);
+    });
+  }
   Object.values(MAP_GROUPS).forEach(group => {
     group.traverse(o => {
       if (!o.isMesh) return;
