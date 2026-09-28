@@ -344,6 +344,99 @@ for (const id of Object.keys(WEAPON_COSTS)) {
   if (WEAPON_COSTS[id] > 0) WEAPON_COSTS[id] *= P2W_ITEM_IDS.has(id) ? WEAPON_PRICE_MULT : NORMAL_WEAPON_PRICE_MULT;
 }
 
+// Mirrors the `archived: true` flags on the same ids in public/game.js
+// (gotcha #4) -- pulled from the shop, and from chest/wheel reward pools
+// below, but still a valid purchase for anyone who already owns one.
+const ARCHIVED_ITEM_IDS = new Set([
+  'shockwave_launcher',
+  'storm_cannon',
+  'prism_launcher',
+  'foam_cannon',
+  'airburst_projector',
+  'glassmaker',
+  'seismic_hammer',
+  'painter_beam',
+  'portal_launcher',
+  'gravity_paint',
+  'traffic_controller',
+  'pinball_launcher',
+  'event_horizon',
+  'storm_core',
+  'abs_zero',
+  'solar_lance',
+  'quantum_repeater',
+  'magnetar',
+  'nebula_mortar',
+  'prism_engine',
+  'void_harvester',
+  'arc_torrent',
+  'firework_launcher',
+  'switchblade_gun',
+  'flechette',
+  'burst_cannon',
+  'coilgun',
+  'smart_smg',
+  'plasma_carbine',
+  'arc_rifle',
+  'gravity_launcher',
+  'potato_cannon',
+  'sticker_blaster',
+  'harpoon_gun',
+  'boomstick',
+  'signal_pistol',
+  'throwing_axes',
+  'boomerang',
+  'pulse_needle',
+  'lightsabre',
+  'screwdriver',
+  'crowbar',
+  'fire_axe',
+  'nunchucks',
+  'umbrella',
+  'yoyo',
+  'combat_axe',
+  'shock_baton',
+  'titan_hammer',
+  'vampire_blade',
+  'phase_blade',
+  'gravity_hammer',
+  'volt_whip',
+  'glitch_cube',
+  'vampire_syringe',
+  'adrenaline',
+  'tripwire',
+  'hologram',
+  'magnet_mine',
+  'bounce_pad',
+  'hunter_drone',
+  'emp_grenade',
+  'sticky_charge',
+  'orbital_strike',
+  'guardian_drone',
+  'nano_shield',
+  'air_grenade',
+  'flashbang_basic',
+  'proximity_mine',
+  'dynamite',
+  'drone_strike',
+  'healing_pulse',
+  'teleport_beacon',
+  'cloak',
+  'berserker_serum',
+  'taser_grenade',
+  'ink_bomb',
+  'siren',
+  'caltrops',
+  'nano_swarm',
+  'warp_beacon',
+  'stasis_mine',
+  'specter_drone',
+  'quantum_barrier',
+  'hamburger',
+  'heal_gun',
+  'tesla_coil',
+]);
+
 // Free starter loadout — every account has these unlocked from day 1.
 const FREE_WEAPONS = new Set([
   'ak20', 'sg8',          // primaries
@@ -459,7 +552,7 @@ function rollChestDrops(type) {
   // rare
   const drops = { fragments: ri(2625, 6000), credits: ri(2250, 7500), weapon: null };
   if (Math.random() < 0.05) {
-    const pool = Object.keys(WEAPON_COSTS).filter(id => !FREE_WEAPONS.has(id));
+    const pool = Object.keys(WEAPON_COSTS).filter(id => !FREE_WEAPONS.has(id) && !ARCHIVED_ITEM_IDS.has(id));
     drops.weapon = pool[Math.floor(Math.random() * pool.length)];
   }
   return drops;
@@ -561,7 +654,7 @@ app.post('/shop/spin-wheel', (req, res) => {
       break;
     case 'bigBundle':     result.credits = 400; result.fragments = 150; u.credits += 400; u.fragments += 150; break;
     case 'jackpot': {
-      const pool = Object.keys(WEAPON_COSTS).filter(id => WEAPON_COSTS[id] >= 400 && !u.purchased.includes(id) && !FREE_WEAPONS.has(id));
+      const pool = Object.keys(WEAPON_COSTS).filter(id => WEAPON_COSTS[id] >= 400 && !u.purchased.includes(id) && !FREE_WEAPONS.has(id) && !ARCHIVED_ITEM_IDS.has(id));
       if (pool.length > 0) {
         const pick = pool[Math.floor(Math.random() * pool.length)];
         u.purchased.push(pick);
@@ -615,7 +708,7 @@ app.get('/shop/inventory', (req, res) => {
   res.status(405).json({ error: 'use POST /shop/inventory with {username, password} in the body — a password in a URL ends up in server logs' });
 });
 
-function canPurchase(id) { return Object.prototype.hasOwnProperty.call(WEAPON_COSTS, id); }
+function canPurchase(id) { return Object.prototype.hasOwnProperty.call(WEAPON_COSTS, id) && !ARCHIVED_ITEM_IDS.has(id); }
 function trialCost(id) {
   const c = WEAPON_COSTS[id];
   return c == null ? null : Math.max(1, Math.ceil(c / TRIAL_DIVISOR));
