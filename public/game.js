@@ -37404,13 +37404,9 @@ function spawnGameBots() {
     if (_teammateChar && tmId) {
       botSkin = TEAMMATE_SKINS[tmId] || (isAlly ? 'soldier' : 'swat');
     } else {
-      const pool = isAlly
-        ? ['soldier','green_cap','riot_chad','default','spiky','swat_shades']
-        : ['swat','swat_shades','soldier','shadow','riot_chad','spiky'];
-      // spread choices across the team by index, then jitter, and never == player's skin
-      let pick = pool[(idx + Math.floor(Math.random() * pool.length)) % pool.length];
-      if (pick === mySkin) pick = pool[(pool.indexOf(pick) + 1) % pool.length];
-      botSkin = pick;
+      // Matchmaking fill-bots all wear the plain default skin now, not a
+      // varied pool -- drafted Lobby 13 characters above keep their own look.
+      botSkin = 'default';
     }
     const startHp = selectedModeConfig.botHp || (_playstyle && _playstyle.hp) || 300;
     const pData = { id, name, isBot: true, team, weaponId, ownerId: myId, skin: botSkin,
