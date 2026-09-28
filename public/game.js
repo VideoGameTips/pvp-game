@@ -12967,17 +12967,29 @@ function buildAK47Wood() {
     my -= Math.cos(ang) * 0.028; mz -= Math.sin(ang) * 0.028; ang += 0.085;
   }
   gpBox(g, magMat, 0.032, 0.012, 0.050, 0, my + 0.012, mz - 0.004, ang);
-  // Wood pistol grip — the AK's original triangular profile.
+  // Wood pistol grip — the AK's original triangular profile. Same outline
+  // AK20's grip settled on, so the same fixes apply: it reaches the receiver
+  // and runs far enough past the firing hand to read as a handle.
   gpPlate(g, wood, [
     [0.078,-0.038],[0.114,-0.064],[0.122,-0.150],[0.098,-0.170],[0.068,-0.088],[0.062,-0.044],
   ], 0.038, 0);
+  for (let i = 0; i < 6; i++) gpBox(g, inner, 0.040, 0.0035, 0.009, 0, -0.070 - i * 0.017, 0.092 + i * 0.005, 0.35);
   gpBox(g, wood, 0.042, 0.012, 0.040, 0, -0.172, 0.108, 0.30);         // grip cap
-  // Wood stock, straight-line profile — no polymer pistol-grip wrist.
+  gpBox(g, inner, 0.043, 0.004, 0.014, 0, -0.178, 0.108, 0.30);        // cap seam
+  // Wood stock, AK20's fixed profile (this one used to run its own, slightly
+  // older points -- close enough to look right alone, off enough that the comb
+  // didn't line up with the wrist bridge below).
   gpPlate(g, wood, [
-    [0.140,-0.046],[0.150,0.038],[0.214,0.044],[0.326,0.014],[0.392,-0.012],[0.386,-0.030],[0.220,-0.048],[0.166,-0.052],
+    [0.154,-0.038],[0.214,0.012],[0.326,0.014],[0.392,-0.012],[0.386,-0.030],[0.220,-0.048],[0.166,-0.052],
   ], 0.047, 0);
   gpBox(g, inner, 0.048, 0.052, 0.008, 0, -0.002, 0.404, 0.10);        // butt plate
   gpBox(g, bright, 0.030, 0.006, 0.004, 0, -0.040, 0.250);             // sling loop
+  // The wrist: this piece was missing entirely, which is what left a gap
+  // between the receiver and the stock -- full receiver height where it meets
+  // the receiver, falling to the comb line where the stock picks it up.
+  gpPlate(g, wood, [
+    [0.142,-0.046],[0.142,0.050],[0.170,0.042],[0.200,0.024],[0.222,0.011],[0.224,-0.046],
+  ], 0.046, 0);
   // Wood handguards, lower and upper.
   gpPlate(g, wood, [
     [-0.336,0.010],[-0.306,0.034],[-0.186,0.034],[-0.164,0.012],[-0.190,-0.008],[-0.320,-0.006],
@@ -15157,48 +15169,73 @@ function buildSG100() {
 
 // SR-X sniper
 function buildSRX() {
-  // 🔫 SVD-pattern marksman rifle: long fluted barrel, slotted brake, thumbhole
-  // stock with cheek riser, big glass on side mounts, bipod.
+  // 🔫 SVD-pattern marksman rifle. Rebuilt for one continuous silhouette instead
+  // of a scatter of separate islands: the stock and its grip are ONE wood plate
+  // (a target stock's "grip" is just its own wrist, not a bolted-on AK handle),
+  // the bipod is a visible two-leg V hung off a yoke at the handguard, and the
+  // top-mounted scope reads as one clean assembly instead of an offset side
+  // mount. Muzzle rings + a gold barrel band echo the AK family's accents.
   const g = new THREE.Group();
   const steel = GUN_MATS.steel(), blued = GUN_MATS.blued(), bright = GUN_MATS.bright();
   const wood = GUN_MATS.wood(), inner = GUN_MATS.inner(), poly = GUN_MATS.polymer();
-  gpBox(g, steel, 0.038, 0.062, 0.230, 0, 0.006, 0.010);               // receiver
-  gpBox(g, inner, 0.039, 0.008, 0.210, 0, 0.036, 0.010);               // top flat
-  gpBox(g, inner, 0.004, 0.020, 0.060, 0.020, 0.014, -0.030);          // ejection port
-  gpBox(g, bright, 0.012, 0.010, 0.026, 0.024, 0.026, -0.006);         // charging handle
-  gpCyl(g, blued, 0.0070, 0.0070, 0.360, 20, 0, 0.014, -0.290);        // barrel
-  for (let i = 0; i < 4; i++) gpCyl(g, inner, 0.0074, 0.0074, 0.030, 12, 0, 0.014, -0.200 - i * 0.050); // flutes
-  gpCyl(g, steel, 0.0115, 0.0115, 0.048, 16, 0, 0.014, -0.464);        // muzzle brake
-  [0, 1, 2].forEach(i => gpBox(g, inner, 0.024, 0.004, 0.008, 0, 0.014, -0.450 - i * 0.014)); // brake slots
-  // Handguard halves with vents.
-  gpPlate(g, wood, [[-0.110,0.034],[-0.086,0.048],[-0.230,0.048],[-0.252,0.030],[-0.230,0.016],[-0.108,0.016]], 0.044, 0);
-  for (let i = 0; i < 4; i++) gpBox(g, inner, 0.046, 0.008, 0.010, 0, 0.038, -0.130 - i * 0.032);
-  // Thumbhole stock + cheek riser.
-  gpPlate(g, wood, [[0.126,-0.024],[0.150,0.010],[0.290,0.014],[0.320,-0.010],[0.316,-0.048],[0.230,-0.052],[0.196,-0.086],[0.168,-0.086],[0.150,-0.050]], 0.040, 0);
-  gpBox(g, inner, 0.041, 0.026, 0.042, 0, -0.014, 0.232);              // thumbhole void
-  gpBox(g, wood, 0.042, 0.020, 0.090, 0, 0.026, 0.242);                // cheek riser
-  gpBox(g, poly, 0.044, 0.048, 0.010, 0, -0.014, 0.326, 0.10);         // butt pad
-  // Optic on its side mount.
-  gpBox(g, steel, 0.014, 0.026, 0.030, -0.022, 0.036, 0.020);          // mount rail
-  gpCyl(g, blued, 0.0155, 0.0155, 0.150, 18, 0, 0.070, -0.030);        // scope tube
-  gpCyl(g, blued, 0.0215, 0.0215, 0.030, 18, 0, 0.070, -0.098);        // objective bell
-  gpCyl(g, blued, 0.0195, 0.0195, 0.026, 18, 0, 0.070, 0.036);         // ocular bell
-  gpCyl(g, inner, 0.0180, 0.0180, 0.006, 16, 0, 0.070, -0.112);        // lens
-  [(-0.040), 0.010].forEach(z => gpBox(g, steel, 0.026, 0.026, 0.014, 0, 0.052, z)); // rings
-  gpCyl(g, bright, 0.0075, 0.0075, 0.012, 10, 0.017, 0.078, -0.020, 0, Math.PI/2);   // turret
-  // Magazine + fire control + bipod.
-  gpBox(g, blued, 0.024, 0.070, 0.048, 0, -0.058, -0.020, 0.12);
-  for (let i = 0; i < 3; i++) gpBox(g, inner, 0.025, 0.004, 0.012, 0, -0.038 - i * 0.022, -0.020, 0.12);
-  gpPlate(g, wood, [[0.062,-0.028],[0.086,-0.048],[0.088,-0.104],[0.064,-0.114],[0.046,-0.062],[0.044,-0.032]], 0.030, 0);
-  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.019, 0.0034, 6, 12, Math.PI * 1.05), steel);
-  guard.rotation.set(0, Math.PI/2, -0.4); guard.position.set(0, -0.038, 0.012); g.add(guard);
-  gpBox(g, bright, 0.005, 0.015, 0.005, 0, -0.030, 0.012, 0.2);
-  // Bipod: legs hung at y -0.103..-0.013 against a barrel bottom of 0.007, so
-  // they floated. A yoke clamped round the barrel now carries them.
-  gpBox(g, steel, 0.030, 0.022, 0.026, 0, 0.000, -0.240);              // bipod yoke
-  [-1, 1].forEach(sd => gpBox(g, steel, 0.005, 0.086, 0.005, sd * 0.018, -0.048, -0.240, 0, 0, sd * 0.30));
-  [-1, 1].forEach(sd => gpBox(g, GUN_MATS.inner(), 0.010, 0.006, 0.014, sd * 0.030, -0.088, -0.240)); // feet
-  const flash = makeMuzzleFlash(); flash.position.set(0, 0.014, -0.500); g.add(flash);
+  const gold = new THREE.MeshPhongMaterial({ color: 0xd6a53c, shininess: 150, specular: 0xffe9b0 });
+  const glass = new THREE.MeshPhongMaterial({ color: 0x6ad4e6, shininess: 200, specular: 0xffffff, emissive: 0x1a4a52, emissiveIntensity: 0.5 });
+
+  // ── Receiver ──────────────────────────────────────────────────────────
+  gpBox(g, steel, 0.038, 0.058, 0.230, 0, 0.010, 0.010);                // receiver
+  gpBox(g, inner, 0.039, 0.006, 0.210, 0, 0.038, 0.010);                // top flat (rail seam)
+  gpBox(g, inner, 0.004, 0.020, 0.060, 0.020, 0.016, -0.030);           // ejection port
+  gpBox(g, bright, 0.012, 0.010, 0.026, 0.024, 0.028, -0.006);          // charging handle
+
+  // ── Barrel: smooth, one gold band, plain tip rings (no fluting barcode) ──
+  gpCyl(g, blued, 0.0068, 0.0068, 0.360, 20, 0, 0.016, -0.290);         // barrel
+  gpCyl(g, gold,  0.0080, 0.0080, 0.014, 16, 0, 0.016, -0.360);         // gold band
+  gpCyl(g, steel, 0.0092, 0.0092, 0.040, 16, 0, 0.016, -0.470);         // muzzle device
+  gpCyl(g, gold,  0.0096, 0.0096, 0.005, 16, 0, 0.016, -0.492);         // one gold ring at the tip, not a cluster
+
+  // ── Handguard, forward of the receiver ───────────────────────────────
+  gpPlate(g, wood, [[-0.110,0.030],[-0.088,0.044],[-0.234,0.044],[-0.254,0.028],[-0.234,0.014],[-0.108,0.014]], 0.044, 0);
+  for (let i = 0; i < 3; i++) gpBox(g, inner, 0.046, 0.006, 0.008, 0, 0.036, -0.135 - i * 0.036);
+
+  // ── Bipod: a yoke on the handguard, two legs in a clear V, feet visible ──
+  gpBox(g, steel, 0.032, 0.016, 0.024, 0, -0.002, -0.300);              // yoke, clamped under the handguard
+  [-1, 1].forEach(sd => gpBox(g, steel, 0.005, 0.090, 0.005, sd * 0.020, -0.052, -0.300, 0, 0, sd * 0.34));
+  [-1, 1].forEach(sd => gpBox(g, inner, 0.012, 0.006, 0.016, sd * 0.036, -0.094, -0.300));
+
+  // ── Stock: ONE continuous wood plate, thumbhole cut into it, the "grip"
+  //    is the wrist of this same piece -- not a separate floating part. ──
+  // One simple loop, traced around the perimeter: wrist -> comb -> stock top ->
+  // butt -> stock belly -> throat -> down into the grip -> round its bottom ->
+  // up its back -> receiver underside -> close. No separate second piece.
+  gpPlate(g, wood, [
+    [0.126,0.012],[0.150,0.034],[0.290,0.038],[0.320,0.012],
+    [0.316,-0.046],[0.230,-0.052],[0.170,-0.052],[0.150,-0.020],[0.118,-0.024],
+    [0.078,-0.058],[0.058,-0.106],[0.034,-0.118],[0.016,-0.084],[0.010,-0.030],
+  ], 0.040, 0);
+  gpBox(g, inner, 0.041, 0.026, 0.042, 0, -0.012, 0.232);                // thumbhole void
+  gpBox(g, wood, 0.042, 0.020, 0.090, 0, 0.028, 0.242);                  // cheek riser
+  gpBox(g, poly, 0.044, 0.046, 0.010, 0, -0.012, 0.326, 0.10);           // butt pad
+  // Gold accent dashes on the stock, the family's signature diagonal marks.
+  for (let i = 0; i < 4; i++) gpBox(g, gold, 0.041, 0.005, 0.018, 0, 0.006 - i * 0.020, 0.150 + i * 0.028, 0, 0, 0.5);
+
+  // Trigger guard sits right under the wrist this stock already has.
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.017, 0.0032, 6, 12, Math.PI * 1.05), steel);
+  guard.rotation.set(0, Math.PI/2, -0.4); guard.position.set(0, -0.082, 0.018); g.add(guard);
+  gpBox(g, bright, 0.005, 0.014, 0.005, 0, -0.074, 0.018, 0.2);          // trigger
+
+  // ── Scope: top rail, centred, one clean tube -- orange objective rim up
+  //    front, cyan ocular lens at the eye, matching the family's accent glass. ──
+  gpBox(g, steel, 0.020, 0.010, 0.180, 0, 0.044, -0.020);                // rail
+  [-0.086, 0.052].forEach(z => gpBox(g, steel, 0.024, 0.020, 0.012, 0, 0.052, z)); // mount rings
+  gpCyl(g, blued, 0.0150, 0.0150, 0.150, 18, 0, 0.076, -0.030);          // scope tube
+  gpCyl(g, blued, 0.0100, 0.0100, 0.026, 18, 0, 0.076, 0.036);           // turret housing
+  gpCyl(g, bright, 0.0060, 0.0060, 0.014, 10, 0.020, 0.088, -0.020, 0, Math.PI/2); // turret knob
+  gpCyl(g, blued, 0.0205, 0.0205, 0.028, 18, 0, 0.076, -0.098);          // objective bell
+  gpCyl(g, gold,  0.0210, 0.0210, 0.004, 18, 0, 0.076, -0.113);          // objective rim, gold
+  gpCyl(g, blued, 0.0185, 0.0185, 0.024, 18, 0, 0.076, 0.050);           // ocular bell
+  gpCyl(g, glass, 0.0170, 0.0170, 0.004, 16, 0, 0.076, 0.063);           // ocular lens, cyan glow
+
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.016, -0.500); g.add(flash);
   g._flash = flash; g._kickZ = 0.010; g._greebled = true; g._handDetailed = true;
   g.position.set(0.12, -0.1, -0.25); return g;
 }
@@ -17730,7 +17767,17 @@ function addWeaponRealismDetails(model, weapon) {
     addBox(groove, Math.min(width * 0.32, 0.026), 0.002, stripLen * 0.72, cx, cy + height * 0.305, rear - depth * 0.33);
   }
 }
-weaponModels.forEach((m,i) => { addWeaponRealismDetails(m, WEAPONS[i]); m.visible = i === 0; camera.add(m); });
+// addWeaponRealismDetails is disabled: it picks ONE arbitrary box/extrude mesh
+// per gun (whichever has the largest LOCAL bounding volume -- for a hand-built
+// gun that is as likely to be the stock or a wood panel as the receiver) and
+// bolts a rail, two side plates, a muzzle ring and a strip of "grip groove"
+// boxes onto it at fixed fractions of THAT mesh's own bounds. It never checks
+// _handDetailed/_greebled, the flag every other detail pass respects, so it
+// ran on every hand-built gun too -- a second, unrelated grip pattern welded
+// on wherever that heuristic happened to land, nowhere near the real one.
+// Left defined below in case a future pass wants to rebuild it properly
+// (anchored to the gun's own anchors/parts, and gated on _handDetailed).
+weaponModels.forEach((m,i) => { m.visible = i === 0; camera.add(m); });
 
 // ════════════════════════════════════════════════════════════════════════════
 // 🎨 WEAPON SKINS — recolor your gun + an optional flag/emblem decal. One global
