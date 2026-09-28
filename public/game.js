@@ -10810,6 +10810,10 @@ function buildAK20() {
   box(steel, 0.048, 0.100, 0.320, 0, 0.005, -0.010);                 // receiver
   box(inner, 0.044, 0.014, 0.080, 0, 0.053, -0.060);                 // dust cover / ejection port, one flat inset
   box(bright, 0.006, 0.052, 0.010, 0.028, 0.014, 0.010, 0, 0, 0.20);  // selector lever
+  // Rear sight -- an aiming reference so the top of the receiver isn't bare.
+  // A block with a notch cut into it, sitting behind the dust cover.
+  box(steel, 0.028, 0.012, 0.020, 0, 0.070, -0.086);
+  box(inner,  0.007, 0.006, 0.008, 0, 0.076, -0.086);                // notch
 
   gpPart(g, 'main', () => { box(bright, 0.014, 0.011, 0.030, 0.030, 0.046, -0.030); });
 
@@ -10836,16 +10840,14 @@ function buildAK20() {
   ], 0.038, 0);
   box(grip,  0.042, 0.012, 0.040, 0, -0.172, 0.108, 0.30);           // grip cap
 
-  // Stock, and the wrist that bridges it to the receiver (full receiver
-  // height where it meets the receiver, falling to the comb line where the
-  // stock picks it up).
+  // Stock: ONE piece, wrist through to the butt, instead of two separate
+  // plates (a "bridge" bolted to a "stock") that read as floating apart from
+  // each other where they met. Same silhouette, one continuous outline now.
   sidePlate(polymer, [
-    [0.154,-0.038],[0.214,0.012],[0.326,0.014],[0.392,-0.012],[0.386,-0.030],[0.220,-0.048],[0.166,-0.052],
+    [0.142,0.052],[0.170,0.042],[0.200,0.024],[0.222,0.011],
+    [0.326,0.014],[0.392,-0.012],[0.386,-0.030],[0.220,-0.048],[0.166,-0.052],[0.142,-0.046],
   ], 0.047, 0);
   box(inner, 0.048, 0.052, 0.008, 0, -0.002, 0.404, 0.10);           // butt plate
-  sidePlate(polymer, [
-    [0.142,-0.046],[0.142,0.050],[0.170,0.042],[0.200,0.024],[0.222,0.011],[0.224,-0.046],
-  ], 0.046, 0);
 
   // Handguard, one piece covering the gas tube instead of stacked halves.
   sidePlate(polymer, [
