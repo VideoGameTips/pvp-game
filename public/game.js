@@ -10836,13 +10836,15 @@ function buildAK20() {
   }
   box(magMat, 0.032, 0.012, 0.050, 0, my + 0.012, mz - 0.004, ang);  // floorplate
 
-  // Pistol grip: reaches the receiver, runs far enough past the firing hand
-  // to read as a handle. See earlier history for exactly how those numbers
-  // were arrived at.
+  // Pistol grip: ONE piece, the cap flared into the same outline instead of a
+  // second box stuck on the bottom at its own angle (which is exactly the
+  // "two pieces, floating" look that was flagged -- same fix as the stock).
+  // Still reaches the receiver and runs far enough past the firing hand to
+  // read as a handle.
   sidePlate(grip, [
-    [0.078,-0.038],[0.114,-0.064],[0.122,-0.150],[0.098,-0.170],[0.068,-0.088],[0.062,-0.044],
+    [0.078,-0.038],[0.114,-0.064],[0.124,-0.148],[0.130,-0.172],[0.106,-0.184],
+    [0.070,-0.180],[0.056,-0.148],[0.068,-0.088],[0.062,-0.044],
   ], 0.038, 0);
-  box(grip,  0.042, 0.012, 0.040, 0, -0.172, 0.108, 0.30);           // grip cap
 
   // Stock: ONE piece, wrist through to the butt, instead of two separate
   // plates (a "bridge" bolted to a "stock") that read as floating apart from
