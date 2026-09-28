@@ -251,7 +251,7 @@ const WEAPONS = [
     ability: { name: 'Last Ping', cd: 14000, desc: 'Instantly empty to last round · 150 dmg', type: 'powershot', pellets: 1, spreadMult: 0, weaponAbId: 'm1_garand_ab' },
   },
   {
-    id: 'plasma_carbine', name: 'Plasma Carbine', type: 'Energy Rifle', slot: 'primary',
+    id: 'plasma_carbine', archived: true, name: 'Plasma Carbine', type: 'Energy Rifle', slot: 'primary',
     mag: 25, reserve: 100, damage: 18, fireRate: 140, reloadTime: 2300,
     auto: true, pellets: 1, spread: 0.008, adsZoom: 46, bulletSpeed: 96, noReload: false,
     bulletColor: 0x66ff99, bulletSize: 0.07,
@@ -259,7 +259,7 @@ const WEAPONS = [
     ability: { name: 'Plasma Storm', cd: 13000, desc: 'Fire 8 exploding plasma bolts', type: 'multishot', count: 8, spread: 0.10, noADS: true, weaponAbId: 'plasma_storm' },
   },
   {
-    id: 'arc_rifle', name: 'Arc Rifle', type: 'Lightning', slot: 'primary',
+    id: 'arc_rifle', archived: true, name: 'Arc Rifle', type: 'Lightning', slot: 'primary',
     mag: 20, reserve: 80, damage: 22, fireRate: 220, reloadTime: 2400,
     auto: true, pellets: 1, spread: 0.005, adsZoom: 48, bulletSpeed: 200, noReload: false,
     bulletColor: 0xaaeeff, bulletSize: 0.06,
@@ -267,7 +267,7 @@ const WEAPONS = [
     ability: { name: 'Overload', cd: 16000, desc: 'Massive chain lightning · all enemies in 12 m', type: 'aoe', radius: 12, damage: 70, color: 0xaaeeff, weaponAbId: 'arc_overload' },
   },
   {
-    id: 'gravity_launcher', name: 'Gravity Launcher', type: 'Heavy', slot: 'primary',
+    id: 'gravity_launcher', archived: true, name: 'Gravity Launcher', type: 'Heavy', slot: 'primary',
     mag: 2, reserve: 10, damage: 75, fireRate: 850, reloadTime: 2800,
     auto: false, pellets: 1, spread: 0.005, adsZoom: 50, bulletSpeed: 60, noReload: false,
     bulletColor: 0x7744cc, bulletSize: 0.16, doubleJump: true,
@@ -275,7 +275,7 @@ const WEAPONS = [
     ability: { name: 'Singularity', cd: 20000, desc: 'Mini black hole · 8 m pull · 90 dmg', type: 'aoe', radius: 8, damage: 90, color: 0x4400aa, weaponAbId: 'singularity' },
   },
   {
-    id: 'potato_cannon', name: 'Potato Cannon', type: 'Joke Launcher', slot: 'primary',
+    id: 'potato_cannon', archived: true, name: 'Potato Cannon', type: 'Joke Launcher', slot: 'primary',
     mag: 1, reserve: 10, damage: 60, fireRate: 750, reloadTime: 1800,
     auto: false, pellets: 1, spread: 0.012, adsZoom: 50, bulletSpeed: 70, noReload: false,
     bulletColor: 0xc89060, bulletSize: 0.14,
@@ -283,7 +283,7 @@ const WEAPONS = [
     ability: { name: 'Rotten Potato', cd: 12000, desc: 'Toxic cloud · 5 m · 40 dmg', type: 'aoe', radius: 5, damage: 40, color: 0x88aa44, weaponAbId: 'rotten_potato' },
   },
   {
-    id: 'sticker_blaster', name: 'Sticker Blaster', type: 'SMG', slot: 'primary',
+    id: 'sticker_blaster', archived: true, name: 'Sticker Blaster', type: 'SMG', slot: 'primary',
     mag: 50, reserve: 200, damage: 8, fireRate: 60, reloadTime: 1700,
     auto: true, pellets: 1, spread: 0.018, adsZoom: 52, bulletSpeed: 110, noReload: false,
     randomBulletColor: true, bulletSize: 0.055,
@@ -291,7 +291,7 @@ const WEAPONS = [
     ability: { name: 'Sticker Bomb', cd: 11000, desc: 'Throw sticker · 1 s immobilize · 35 dmg', type: 'throwbomb', radius: 3, color: 0xff44ff, weaponAbId: 'sticker_bomb' },
   },
   {
-    id: 'harpoon_gun', name: 'Harpoon Gun', type: 'Heavy Projectile', slot: 'primary',
+    id: 'harpoon_gun', archived: true, name: 'Harpoon Gun', type: 'Heavy Projectile', slot: 'primary',
     mag: 1, reserve: 6, damage: 95, fireRate: 1100, reloadTime: 2400,
     auto: false, pellets: 1, spread: 0.002, adsZoom: 40, bulletSpeed: 110, noReload: false,
     bulletColor: 0xb8b8b8, bulletSize: 0.08,
@@ -307,7 +307,7 @@ const WEAPONS = [
     ability: { name: 'Airburst', cd: 14000, desc: 'Shell explodes above target · 5 m AOE · 95 dmg', type: 'aoe', radius: 5, damage: 95, color: 0xffaa55, weaponAbId: 'airburst' },
   },
   {
-    id: 'arc_torrent', name: 'Arc Torrent', type: 'Beam', slot: 'primary',
+    id: 'arc_torrent', archived: true, name: 'Arc Torrent', type: 'Beam', slot: 'primary',
     mag: 100, reserve: 200, damage: 5, fireRate: 100, reloadTime: 2400,
     auto: true, pellets: 1, spread: 0.006, adsZoom: 50, bulletSpeed: 240, noReload: false,
     bulletColor: 0xaaeeff, bulletSize: 0.045,
@@ -316,7 +316,7 @@ const WEAPONS = [
     ability: { name: 'Surge', cd: 12000, desc: '5 m AOE shock · 80 dmg · 3 s disable', type: 'aoe', radius: 5, damage: 80, color: 0xaaeeff },
   },
   {
-    id: 'firework_launcher', name: 'Firework Launcher', type: 'Explosive', slot: 'primary',
+    id: 'firework_launcher', archived: true, name: 'Firework Launcher', type: 'Explosive', slot: 'primary',
     mag: 2, reserve: 10, damage: 50, fireRate: 850, reloadTime: 2400,
     auto: false, pellets: 1, spread: 0.008, adsZoom: 48, bulletSpeed: 58, noReload: false,
     bulletColor: 0xff44aa, bulletSize: 0.13,
@@ -324,7 +324,7 @@ const WEAPONS = [
     ability: { name: 'Grand Finale', cd: 14000, desc: 'Fire 5 fireworks in a spread', type: 'multishot', count: 5, spread: 0.14, noADS: true },
   },
   {
-    id: 'switchblade_gun', name: 'Switchblade Gun', type: 'Adaptive', slot: 'primary',
+    id: 'switchblade_gun', archived: true, name: 'Switchblade Gun', type: 'Adaptive', slot: 'primary',
     mag: 12, reserve: 36, damage: 50, fireRate: 350, reloadTime: 2000,
     auto: false, pellets: 1, spread: 0.004, adsZoom: 48, bulletSpeed: 160, noReload: false,
     bulletColor: 0xcc66ff, bulletSize: 0.06,
@@ -332,7 +332,7 @@ const WEAPONS = [
     ability: { name: 'Recombine', cd: 9000, desc: 'Instantly reset to charged form', type: 'switchblade_reset' },
   },
   {
-    id: 'flechette', name: 'Flechette Rifle', type: 'Precision AR', slot: 'primary',
+    id: 'flechette', archived: true, name: 'Flechette Rifle', type: 'Precision AR', slot: 'primary',
     mag: 40, reserve: 120, damage: 16, fireRate: 70, reloadTime: 2000,
     auto: true, pellets: 1, spread: 0.003, adsZoom: 44, bulletSpeed: 175, noReload: false,
     bulletColor: 0xcccccc, bulletSize: 0.04,
@@ -340,7 +340,7 @@ const WEAPONS = [
     ability: { name: 'Needle Storm', cd: 9000, desc: 'Fire 12 flechettes instantly', type: 'fanfire', count: 12, delay: 22 },
   },
   {
-    id: 'burst_cannon', name: 'Burst Cannon', type: 'Heavy Burst Rifle', slot: 'primary',
+    id: 'burst_cannon', archived: true, name: 'Burst Cannon', type: 'Heavy Burst Rifle', slot: 'primary',
     mag: 24, reserve: 72, damage: 40, fireRate: 420, reloadTime: 2200,
     auto: true, pellets: 1, spread: 0.007, adsZoom: 42, bulletSpeed: 155, noReload: false,
     bulletColor: 0xffaa22, bulletSize: 0.05,
@@ -348,14 +348,14 @@ const WEAPONS = [
     ability: { name: 'Stabilizer', cd: 10000, desc: '4 s · zero recoil + tight spread', type: 'buff', duration: 4000, spreadMult: 0.1 },
   },
   {
-    id: 'coilgun', name: 'Coilgun', type: 'Electromagnetic Rifle', slot: 'primary',
+    id: 'coilgun', archived: true, name: 'Coilgun', type: 'Electromagnetic Rifle', slot: 'primary',
     mag: 5, reserve: 20, damage: 92, fireRate: 900, reloadTime: 2800,
     auto: false, pellets: 1, spread: 0, adsZoom: 30, bulletSpeed: 320, noReload: false,
     bulletColor: 0x66ddff, bulletSize: 0.055,
     ability: { name: 'Overcharge', cd: 17000, desc: 'Piercing 220 dmg shot', type: 'powershot', pellets: 1, spreadMult: 0, weaponAbId: 'coilgun_ab' },
   },
   {
-    id: 'smart_smg', name: 'Smart SMG', type: 'Tracking SMG', slot: 'primary',
+    id: 'smart_smg', archived: true, name: 'Smart SMG', type: 'Tracking SMG', slot: 'primary',
     mag: 36, reserve: 144, damage: 9, fireRate: 45, reloadTime: 1700,
     auto: true, pellets: 1, spread: 0.015, adsZoom: 50, bulletSpeed: 140, noReload: false,
     bulletColor: 0x99ff99, bulletSize: 0.05,
@@ -380,7 +380,7 @@ const WEAPONS = [
     ability: { name: 'Silent Step', cd: 11000, desc: '5 s · reduced footstep noise', type: 'buff', duration: 5000, stealth: true },
   },
   {
-    id: 'shockwave_launcher', name: 'Shockwave Launcher', type: 'Knockback Heavy', slot: 'primary',
+    id: 'shockwave_launcher', archived: true, name: 'Shockwave Launcher', type: 'Knockback Heavy', slot: 'primary',
     mag: 4, reserve: 16, damage: 48, fireRate: 950, reloadTime: 2600,
     auto: false, pellets: 1, spread: 0.005, adsZoom: 48, bulletSpeed: 80, noReload: false,
     bulletColor: 0xddddff, bulletSize: 0.13,
@@ -403,7 +403,7 @@ const WEAPONS = [
     ability: { name: 'Hive Mode', cd: 11000, desc: 'Bullets split into 3 tracking rounds for 3 s', type: 'buff', duration: 3000, pelletsAdd: 2, trackingBoost: true },
   },
   {
-    id: 'storm_cannon', name: 'Storm Cannon', type: 'Lightning Explosive', slot: 'primary',
+    id: 'storm_cannon', archived: true, name: 'Storm Cannon', type: 'Lightning Explosive', slot: 'primary',
     mag: 4, reserve: 16, damage: 70, fireRate: 600, reloadTime: 2400,
     auto: false, pellets: 1, spread: 0.005, adsZoom: 46, bulletSpeed: 90, noReload: false,
     bulletColor: 0xaaeeff, bulletSize: 0.14,
@@ -411,7 +411,7 @@ const WEAPONS = [
     ability: { name: 'Thunderstorm', cd: 15000, desc: 'Random lightning strikes · 5 bolts · 60 dmg ea.', type: 'aoe', radius: 10, damage: 60, color: 0xaaeeff, weaponAbId: 'thunderstorm' },
   },
   {
-    id: 'prism_launcher', name: 'Prism Launcher', type: 'Bouncing Light', slot: 'primary',
+    id: 'prism_launcher', archived: true, name: 'Prism Launcher', type: 'Bouncing Light', slot: 'primary',
     mag: 12, reserve: 36, damage: 38, fireRate: 380, reloadTime: 2200,
     auto: false, pellets: 1, spread: 0.004, adsZoom: 46, bulletSpeed: 100, noReload: false,
     bulletColor: 0xffaaff, bulletSize: 0.08,
@@ -419,7 +419,7 @@ const WEAPONS = [
     ability: { name: 'Rainbow Split', cd: 12000, desc: 'Fire 5 prisms in a spread', type: 'multishot', count: 5, spread: 0.18, noADS: true },
   },
   {
-    id: 'foam_cannon', name: 'Foam Cannon', type: 'Industrial Utility', slot: 'primary',
+    id: 'foam_cannon', archived: true, name: 'Foam Cannon', type: 'Industrial Utility', slot: 'primary',
     mag: 6, reserve: 24, damage: 18, fireRate: 700, reloadTime: 2200,
     auto: false, pellets: 1, spread: 0.008, adsZoom: 50, bulletSpeed: 70, noReload: false,
     bulletColor: 0xddddee, bulletSize: 0.12,
@@ -427,7 +427,7 @@ const WEAPONS = [
     ability: { name: 'Foam Fortress', cd: 14000, desc: 'Wall of foam in front · blocks shots', type: 'aoe', radius: 4, damage: 0, color: 0xddddee, foamFortress: true },
   },
   {
-    id: 'airburst_projector', name: 'Airburst Projector', type: 'Knockback Tech', slot: 'primary',
+    id: 'airburst_projector', archived: true, name: 'Airburst Projector', type: 'Knockback Tech', slot: 'primary',
     mag: 8, reserve: 32, damage: 22, fireRate: 500, reloadTime: 2000,
     auto: true, pellets: 1, spread: 0.006, adsZoom: 48, bulletSpeed: 200, noReload: false,
     bulletColor: 0xaaffff, bulletSize: 0.07,
@@ -435,7 +435,7 @@ const WEAPONS = [
     ability: { name: 'Cyclone Pulse', cd: 11000, desc: 'AOE 5 m · launch all hit enemies up', type: 'aoe', radius: 5, damage: 30, color: 0xaaffff, launchVel: 12 },
   },
   {
-    id: 'glassmaker', name: 'Glassmaker', type: 'Caustic Projectile', slot: 'primary',
+    id: 'glassmaker', archived: true, name: 'Glassmaker', type: 'Caustic Projectile', slot: 'primary',
     mag: 10, reserve: 40, damage: 28, fireRate: 320, reloadTime: 2200,
     auto: true, pellets: 1, spread: 0.005, adsZoom: 48, bulletSpeed: 95, noReload: false,
     bulletColor: 0xccffee, bulletSize: 0.07,
@@ -443,7 +443,7 @@ const WEAPONS = [
     ability: { name: 'Crystal Rain', cd: 13000, desc: 'Fire 6 glass blobs · sharp field everywhere', type: 'multishot', count: 6, spread: 0.14, noADS: true },
   },
   {
-    id: 'seismic_hammer', name: 'Seismic Hammer', type: 'Ground Shockwave', slot: 'primary',
+    id: 'seismic_hammer', archived: true, name: 'Seismic Hammer', type: 'Ground Shockwave', slot: 'primary',
     mag: 4, reserve: 16, damage: 70, fireRate: 950, reloadTime: 2600,
     auto: false, pellets: 1, spread: 0.003, adsZoom: 46, bulletSpeed: 65, noReload: false,
     bulletColor: 0x885522, bulletSize: 0.12,
@@ -451,7 +451,7 @@ const WEAPONS = [
     ability: { name: 'Earthbreaker', cd: 16000, desc: 'Massive ground slam · 8 m · launch all', type: 'aoe', radius: 8, damage: 80, color: 0x885522, launchVel: 14 },
   },
   {
-    id: 'painter_beam', name: 'Painter Beam', type: 'Effect Painter', slot: 'primary',
+    id: 'painter_beam', archived: true, name: 'Painter Beam', type: 'Effect Painter', slot: 'primary',
     mag: 60, reserve: 180, damage: 6, fireRate: 80, reloadTime: 2400,
     auto: true, pellets: 1, spread: 0.012, adsZoom: 50, bulletSpeed: 145, noReload: false,
     bulletColor: 0xffff44, bulletSize: 0.06,
@@ -459,7 +459,7 @@ const WEAPONS = [
     ability: { name: 'Spectrum Blast', cd: 12000, desc: 'All 4 paint effects at once · 6 m AOE', type: 'aoe', radius: 6, damage: 0, color: 0xffff44, spectrumBlast: true },
   },
   {
-    id: 'portal_launcher', name: 'Portal Launcher', type: 'Spatial', slot: 'primary',
+    id: 'portal_launcher', archived: true, name: 'Portal Launcher', type: 'Spatial', slot: 'primary',
     mag: 6, reserve: 12, damage: 10, fireRate: 500, reloadTime: 2400,
     auto: false, pellets: 1, spread: 0.005, adsZoom: 50, bulletSpeed: 95, noReload: false,
     bulletColor: 0x66ccff, bulletSize: 0.10,
@@ -467,7 +467,7 @@ const WEAPONS = [
     ability: { name: 'Portal Storm', cd: 18000, desc: '3 portals at random spots', type: 'multishot', count: 3, spread: 0.20, noADS: true },
   },
   {
-    id: 'gravity_paint', name: 'Gravity Paint', type: 'Reality Paint', slot: 'primary',
+    id: 'gravity_paint', archived: true, name: 'Gravity Paint', type: 'Reality Paint', slot: 'primary',
     mag: 30, reserve: 90, damage: 4, fireRate: 120, reloadTime: 2500,
     auto: true, pellets: 1, spread: 0.01, adsZoom: 50, bulletSpeed: 110, noReload: false,
     bulletColor: 0xaa44ff, bulletSize: 0.06,
@@ -475,7 +475,7 @@ const WEAPONS = [
     ability: { name: 'Anti-Grav Field', cd: 15000, desc: '5 m zone · low gravity · 8 s', type: 'aoe', radius: 5, damage: 0, color: 0xaa44ff, antiGrav: true },
   },
   {
-    id: 'traffic_controller', name: 'Traffic Controller', type: 'Signal Painter', slot: 'primary',
+    id: 'traffic_controller', archived: true, name: 'Traffic Controller', type: 'Signal Painter', slot: 'primary',
     mag: 18, reserve: 54, damage: 4, fireRate: 200, reloadTime: 2000,
     auto: false, pellets: 1, spread: 0.005, adsZoom: 50, bulletSpeed: 130, noReload: false,
     bulletColor: 0xff2200, bulletSize: 0.07,
@@ -483,7 +483,7 @@ const WEAPONS = [
     ability: { name: 'Gridlock', cd: 13000, desc: 'AOE red sign · 4 m · freeze 2 s', type: 'aoe', radius: 4, damage: 0, color: 0xff2200, trafficStop: true },
   },
   {
-    id: 'pinball_launcher', name: 'Pinball Launcher', type: 'Chaos Heavy', slot: 'primary',
+    id: 'pinball_launcher', archived: true, name: 'Pinball Launcher', type: 'Chaos Heavy', slot: 'primary',
     mag: 3, reserve: 12, damage: 60, fireRate: 900, reloadTime: 2800,
     auto: false, pellets: 1, spread: 0.004, adsZoom: 46, bulletSpeed: 90, noReload: false,
     bulletColor: 0xffaa44, bulletSize: 0.14,
@@ -564,21 +564,21 @@ const WEAPONS = [
     recoil: { up: 0.007, side: 0.004, climb: 0.06, max: 2.0, recover: 8, adsMult: 0.55 },
     bulletColor: 0xccccaa, bulletSize: 0.03,
     ability: { name: 'Pin Down', cd: 8000, desc: 'Next shot deals 3× damage', type: 'powershot', pellets: 1, spreadMult: 0, dmgMult: 3 } },
-  { id: 'boomstick', name: 'Boomstick', type: 'Secondary', slot: 'secondary',
+  { id: 'boomstick', archived: true, name: 'Boomstick', type: 'Secondary', slot: 'secondary',
     mag: 2, reserve: 12, damage: 35, fireRate: 600, reloadTime: 2000,
     auto: false, pellets: 5, spread: 0.12, adsZoom: 56, bulletSpeed: 100, noReload: false,
     ability: { name: 'Both Barrels', cd: 11000, desc: 'Empty both at once', type: 'fanfire', count: 2, delay: 40 } },
-  { id: 'signal_pistol', name: 'Signal Pistol', type: 'Secondary', slot: 'secondary',
+  { id: 'signal_pistol', archived: true, name: 'Signal Pistol', type: 'Secondary', slot: 'secondary',
     mag: 1, reserve: 5, damage: 70, fireRate: 250, reloadTime: 2400,
     auto: false, pellets: 1, spread: 0, adsZoom: 54, bulletSpeed: 60, noReload: false,
     bulletColor: 0xffaa44, arcShot: true, // lobs and falls, doesn't fly flat like a bullet
     ability: { name: 'Beacon', cd: 18000, desc: 'Reveal enemies 3 s + 40 dmg AOE', type: 'aoe', radius: 6, damage: 40, color: 0xffaa44, reveal: true, revealDur: 3000 } },
-  { id: 'throwing_axes', name: 'Throwing Axes', type: 'Thrown', slot: 'secondary',
+  { id: 'throwing_axes', archived: true, name: 'Throwing Axes', type: 'Thrown', slot: 'secondary',
     mag: 1, reserve: 5, damage: 70, fireRate: 700, reloadTime: 1400,
     auto: false, pellets: 1, spread: 0.01, adsZoom: 50, bulletSpeed: 70, noReload: false,
     bulletColor: 0x8a5a2a, bulletSize: 0.10,
     ability: { name: 'Triple Toss', cd: 11000, desc: 'Throw 3 axes in a spread', type: 'multishot', count: 3, spread: 0.12 } },
-  { id: 'boomerang', name: 'Boomerang', type: 'Thrown', slot: 'secondary',
+  { id: 'boomerang', archived: true, name: 'Boomerang', type: 'Thrown', slot: 'secondary',
     mag: 1, reserve: 4, damage: 35, fireRate: 800, reloadTime: 1200,
     auto: false, pellets: 1, spread: 0, adsZoom: 50, bulletSpeed: 80, noReload: false,
     bulletColor: 0xcc8855,
@@ -596,52 +596,52 @@ const WEAPONS = [
     bulletColor: 0x9a8c72, bulletSize: 0.045,
     ability: { name: 'Volley', cd: 8000, desc: 'Loose 5 pellets in a spread', type: 'multishot', count: 5, spread: 0.18 },
   },
-  { id: 'event_horizon', name: 'Event Horizon Rifle', type: 'Gravity AR', slot: 'primary',
+  { id: 'event_horizon', archived: true, name: 'Event Horizon Rifle', type: 'Gravity AR', slot: 'primary',
     mag: 18, reserve: 54, damage: 75, fireRate: 280, reloadTime: 2400,
     auto: true, pellets: 1, spread: 0.005, adsZoom: 46, bulletSpeed: 140, noReload: false,
     bulletColor: 0x6633ff, bulletSize: 0.07,
     ability: { name: 'Collapse', cd: 14000, desc: 'Gravity field · 8 m AOE 80 dmg · slows', type: 'aoe', radius: 8, damage: 80, color: 0x6633ff, frostBurst: 30 } },
-  { id: 'storm_core', name: 'Storm Core', type: 'Plasma Heavy', slot: 'primary',
+  { id: 'storm_core', archived: true, name: 'Storm Core', type: 'Plasma Heavy', slot: 'primary',
     mag: 24, reserve: 72, damage: 55, fireRate: 220, reloadTime: 2300,
     auto: true, pellets: 1, spread: 0.008, adsZoom: 50, bulletSpeed: 130, noReload: false,
     bulletColor: 0x88ddff, bulletSize: 0.08, emissive: true,
     ability: { name: 'Supercell', cd: 16000, desc: 'Lightning storm · 10 m AOE 100 dmg', type: 'aoe', radius: 10, damage: 100, color: 0xaaeeff, launchVel: 6 } },
-  { id: 'abs_zero', name: 'Absolute Zero Projector', type: 'Cryo', slot: 'primary',
+  { id: 'abs_zero', archived: true, name: 'Absolute Zero Projector', type: 'Cryo', slot: 'primary',
     mag: 30, reserve: 90, damage: 35, fireRate: 100, reloadTime: 2400,
     auto: true, pellets: 1, spread: 0.010, adsZoom: 48, bulletSpeed: 120, noReload: false,
     bulletColor: 0x99eeff, bulletSize: 0.06,
     ability: { name: 'Cryostasis', cd: 18000, desc: 'Freeze 9 m AOE · slows all', type: 'aoe', radius: 9, damage: 30, color: 0x99eeff, frostBurst: 60 } },
-  { id: 'solar_lance', name: 'Solar Lance', type: 'Beam', slot: 'primary',
+  { id: 'solar_lance', archived: true, name: 'Solar Lance', type: 'Beam', slot: 'primary',
     mag: 200, reserve: 0, damage: 12, fireRate: 40, reloadTime: 99999,
     auto: true, pellets: 1, spread: 0.002, adsZoom: 44, bulletSpeed: 220, noReload: true, ammoRegen: 2,
     bulletColor: 0xffee44, bulletSize: 0.05, emissive: true,
     ability: { name: 'Solar Flare', cd: 14000, desc: 'Blinding beam burst · 7 m AOE 90 dmg', type: 'aoe', radius: 7, damage: 90, color: 0xffee44, reveal: true, revealDur: 3000 } },
-  { id: 'quantum_repeater', name: 'Quantum Repeater', type: 'Time-Shift AR', slot: 'primary',
+  { id: 'quantum_repeater', archived: true, name: 'Quantum Repeater', type: 'Time-Shift AR', slot: 'primary',
     mag: 22, reserve: 66, damage: 50, fireRate: 200, reloadTime: 2300,
     auto: true, pellets: 1, spread: 0.005, adsZoom: 48, bulletSpeed: 150, noReload: false,
     bulletColor: 0x66ffcc, bulletSize: 0.06,
     ability: { name: 'Timeline Break', cd: 15000, desc: 'Replay last mag instantly · 12 shots fast', type: 'fanfire', count: 12, delay: 40 } },
-  { id: 'magnetar', name: 'Magnetar Cannon', type: 'Magnetic Heavy', slot: 'primary',
+  { id: 'magnetar', archived: true, name: 'Magnetar Cannon', type: 'Magnetic Heavy', slot: 'primary',
     mag: 12, reserve: 36, damage: 90, fireRate: 500, reloadTime: 2600,
     auto: false, pellets: 1, spread: 0.003, adsZoom: 44, bulletSpeed: 140, noReload: false,
     bulletColor: 0xff77cc, bulletSize: 0.09,
     ability: { name: 'Polar Collapse', cd: 16000, desc: 'Magnetic implosion · 8 m AOE 120 dmg', type: 'aoe', radius: 8, damage: 120, color: 0xff77cc, launchVel: 14 } },
-  { id: 'nebula_mortar', name: 'Nebula Mortar', type: 'Cosmic Indirect', slot: 'primary',
+  { id: 'nebula_mortar', archived: true, name: 'Nebula Mortar', type: 'Cosmic Indirect', slot: 'primary',
     mag: 4, reserve: 16, damage: 110, fireRate: 800, reloadTime: 3000,
     auto: false, pellets: 1, spread: 0.002, adsZoom: 38, bulletSpeed: 70, noReload: false,
     bulletColor: 0x9966ff, bulletSize: 0.14,
     ability: { name: 'Starfall', cd: 20000, desc: 'Meteor shower · 12 m AOE 180 dmg', type: 'aoe', radius: 12, damage: 180, color: 0xaa88ff, launchVel: 8 } },
-  { id: 'prism_engine', name: 'Prism Engine', type: 'Refractive Beam', slot: 'primary',
+  { id: 'prism_engine', archived: true, name: 'Prism Engine', type: 'Refractive Beam', slot: 'primary',
     mag: 50, reserve: 150, damage: 22, fireRate: 70, reloadTime: 2200,
     auto: true, pellets: 1, spread: 0.004, adsZoom: 48, bulletSpeed: 160, noReload: false,
     bulletColor: 0xffaaff, bulletSize: 0.05, emissive: true,
     ability: { name: 'Refraction Overload', cd: 14000, desc: 'Fire 14 split-beams', type: 'multishot', count: 14, spread: 0.20 } },
-  { id: 'void_harvester', name: 'Void Harvester', type: 'Void Heavy', slot: 'primary',
+  { id: 'void_harvester', archived: true, name: 'Void Harvester', type: 'Void Heavy', slot: 'primary',
     mag: 6, reserve: 24, damage: 130, fireRate: 700, reloadTime: 3000,
     auto: false, pellets: 1, spread: 0.002, adsZoom: 42, bulletSpeed: 120, noReload: false,
     bulletColor: 0x220033, bulletSize: 0.11, emissive: true,
     ability: { name: 'Consume', cd: 22000, desc: 'Detonate all remnants · 15 m AOE 250 dmg', type: 'aoe', radius: 15, damage: 250, color: 0x440066, frostBurst: 40 } },
-  { id: 'pulse_needle', name: 'Pulse Needle', type: 'Tracking Secondary', slot: 'secondary',
+  { id: 'pulse_needle', archived: true, name: 'Pulse Needle', type: 'Tracking Secondary', slot: 'secondary',
     mag: 12, reserve: 36, damage: 14, fireRate: 110, reloadTime: 1500,
     auto: true, pellets: 1, spread: 0.003, adsZoom: 50, bulletSpeed: 160, noReload: false,
     bulletColor: 0xff66cc, bulletSize: 0.03,
@@ -825,36 +825,36 @@ const MELEE_ITEMS = [
   { id: 'baguette',   name: 'Baguette',   type: 'Melee',       damage: 28, range: 2.0, cooldown: 300,
     ability: { name: 'Eat It',       cd: 20000, desc: 'Munch the baguette · restore 40 HP', type: 'melee_eat', heal: 40 } },
   { id: 'knife',      name: 'Knife',      type: 'Melee',       damage: 28, range: 1.6, cooldown: 260, speedMult: 2.0,
-    ability: { name: 'Shadow Step',  cd: 7500, desc: 'Movement only · fast forward dash', type: 'melee_mobility', speed: 24, up: 1.5, color: 0x99ccff } },
+    ability: { name: 'Backstab',  cd: 7500, desc: 'Lunge at a target · instant kill if it lands', type: 'melee_instakill' } },
   { id: 'chainsaw',   name: 'Chainsaw',   type: 'Heavy Melee', damage: 45, range: 1.9, cooldown: 150,
     ability: { name: 'Rev Up',       cd: 12000, desc: '2s · 10× swing speed · 3× move speed', type: 'melee_revup', duration: 2000 } },
-  { id: 'lightsabre', name: 'Lightsabre', type: 'Melee · Jedi',  damage: 72, range: 2.5, cooldown: 420, doubleJump: true,
+  { id: 'lightsabre', archived: true, name: 'Lightsabre', type: 'Melee · Jedi',  damage: 72, range: 2.5, cooldown: 420, doubleJump: true,
     ability: { name: 'Parry',        cd: 10000, desc: '1.5s · absorb all incoming bullets · DOUBLE JUMP', type: 'melee_parry', duration: 1500 } },
   { id: 'riot_shield',name: 'Riot Shield',type: 'Shield',      damage: 18, range: 1.7, cooldown: 700, shield: true,
     ability: { name: 'Shield Charge',cd: 9000,  desc: 'Charge forward · ram enemies · 60 dmg', type: 'melee_charge', distance: 7, damage: 60 } },
-  { id: 'screwdriver',name: 'Screwdriver',type: 'Melee',       damage: 20, range: 1.5, cooldown: 220,
+  { id: 'screwdriver', archived: true,name: 'Screwdriver',type: 'Melee',       damage: 20, range: 1.5, cooldown: 220,
     ability: { name: 'Spin Mode',    cd: 15000, desc: '3s · auto-damage nearby foes · 180 dmg/s', type: 'melee_spin', duration: 3000 } },
   // ── New melees ───────────────────────────────────────────────────────────
-  { id: 'crowbar',    name: 'Crowbar',    type: 'Utility Melee', damage: 32, range: 1.8, cooldown: 320,
+  { id: 'crowbar', archived: true,    name: 'Crowbar',    type: 'Utility Melee', damage: 32, range: 1.8, cooldown: 320,
     ability: { name: 'Vault Pry',    cd: 7000,  desc: 'Movement only · vault forward and up', type: 'melee_mobility', speed: 18, up: 8, color: 0xccaa66 } },
-  { id: 'fire_axe',   name: 'Fire Axe',   type: 'Heavy Melee',   damage: 85, range: 2.0, cooldown: 950,
+  { id: 'fire_axe', archived: true,   name: 'Fire Axe',   type: 'Heavy Melee',   damage: 85, range: 2.0, cooldown: 950,
     ability: { name: 'Hellfire Swing', cd: 13000, desc: 'AOE flame swing · 4 m · 90 dmg + burn', type: 'melee_slam', radius: 4, damage: 90 } },
-  { id: 'nunchucks',  name: 'Nunchucks',  type: 'Melee',         damage: 22, range: 1.9, cooldown: 180, speedMult: 1.7,
+  { id: 'nunchucks', archived: true,  name: 'Nunchucks',  type: 'Melee',         damage: 22, range: 1.9, cooldown: 180, speedMult: 1.7,
     ability: { name: 'Combo Frenzy', cd: 10000, desc: '2 s · ×2 swing speed · ×1.5 dmg', type: 'melee_revup', duration: 2000 } },
-  { id: 'umbrella',   name: 'Umbrella',   type: 'Shield',        damage: 18, range: 1.8, cooldown: 600, shield: true,
+  { id: 'umbrella', archived: true,   name: 'Umbrella',   type: 'Shield',        damage: 18, range: 1.8, cooldown: 600, shield: true,
     ability: { name: 'Gust Hop', cd: 9000,  desc: 'Movement only · floaty hop + side drift', type: 'melee_mobility', speed: 12, side: 8, up: 10, color: 0xaaccff } },
-  { id: 'yoyo',       name: 'Yo-Yo',      type: 'Reach Melee',   damage: 30, range: 3.5, cooldown: 500,
+  { id: 'yoyo', archived: true,       name: 'Yo-Yo',      type: 'Reach Melee',   damage: 30, range: 3.5, cooldown: 500,
     ability: { name: 'Loop the World', cd: 11000, desc: '3 m spin · auto-hit nearby foes · 150 dmg/s', type: 'melee_spin', duration: 2500 } },
   // ── 3rd-batch melees ─────────────────────────────────────────────────────
-  { id: 'combat_axe', name: 'Combat Axe', type: 'Heavy Melee',   damage: 78, range: 2.2, cooldown: 820,
+  { id: 'combat_axe', archived: true, name: 'Combat Axe', type: 'Heavy Melee',   damage: 78, range: 2.2, cooldown: 820,
     ability: { name: 'Throw Axe',    cd: 14000, desc: 'Hurl axe · 120 dmg · weapon gone until CD', type: 'melee_throw' } },
-  { id: 'shock_baton',name: 'Shock Baton',type: 'Melee',         damage: 32, range: 2.0, cooldown: 300,
+  { id: 'shock_baton', archived: true,name: 'Shock Baton',type: 'Melee',         damage: 32, range: 2.0, cooldown: 300,
     ability: { name: 'Static Burst', cd: 9000,  desc: 'AOE zap · 3.4 m · 30 dmg · pop-up', type: 'melee_pulse', radius: 3.4, damage: 30, knockback: 1.8, launchVel: 5, color: 0xffff44 } },
   // ── 😈 P2W melees ────────────────────────────────────────────────────────
-  { id: 'titan_hammer', name: 'Titan Hammer', type: 'Heavy AOE',  damage: 95, range: 2.3, cooldown: 700,
+  { id: 'titan_hammer', archived: true, name: 'Titan Hammer', type: 'Heavy AOE',  damage: 95, range: 2.3, cooldown: 700,
     aoeOnSwing: 3, // every swing hits in 3m AOE
     ability: { name: 'Earthquake',   cd: 14000, desc: 'Knock down all enemies in 6 m · 120 dmg', type: 'melee_slam', radius: 6, damage: 120 } },
-  { id: 'vampire_blade',name: 'Vampire Blade', type: 'Lifesteal Melee', damage: 52, range: 2.2, cooldown: 480,
+  { id: 'vampire_blade', archived: true,name: 'Vampire Blade', type: 'Lifesteal Melee', damage: 52, range: 2.2, cooldown: 480,
     healOnHit: 20, // heals 20 HP per landed swing
     ability: { name: 'Blood Frenzy', cd: 12000, desc: '4 s · double lifesteal (40/hit)', type: 'melee_revup', duration: 4000, lifestealMult: 2 } },
   // ── The Classic ──────────────────────────────────────────────────────────
@@ -895,12 +895,12 @@ const MELEE_ITEMS = [
     lifestealOnHit: 10,
     ability: { name: 'Butcher',    cd: 10000, desc: '3 s · auto-chop · double lifesteal', type: 'melee_revup', duration: 3000, lifestealMult: 2 } },
   // ── 🌌 SCI-FI P2W MELEES ──────────────────────────────────────────────────
-  { id: 'phase_blade',   name: 'Phase Blade',     type: 'Phasing Melee',  damage: 90, range: 2.6, cooldown: 380, speedMult: 1.4, doubleJump: true,
+  { id: 'phase_blade', archived: true,   name: 'Phase Blade',     type: 'Phasing Melee',  damage: 90, range: 2.6, cooldown: 380, speedMult: 1.4, doubleJump: true,
     ability: { name: 'Ghost Dash', cd: 9000,  desc: 'Dash 7 m through enemies · 110 dmg', type: 'melee_lunge', distance: 7, damage: 110 } },
-  { id: 'gravity_hammer',name: 'Gravity Hammer',  type: 'Heavy AOE',      damage: 110, range: 2.3, cooldown: 700, doubleJump: true,
+  { id: 'gravity_hammer', archived: true,name: 'Gravity Hammer',  type: 'Heavy AOE',      damage: 110, range: 2.3, cooldown: 700, doubleJump: true,
     aoeOnSwing: 3.5,
     ability: { name: 'Singularity Slam', cd: 14000, desc: 'Slam · 6 m AOE · 130 dmg · huge launch', type: 'melee_slam', radius: 6, damage: 130, knockback: 5, launchVel: 14, color: 0xaa88ff } },
-  { id: 'volt_whip',     name: 'Volt Whip',       type: 'Long Electric',  damage: 50, range: 4.0, cooldown: 420,
+  { id: 'volt_whip', archived: true,     name: 'Volt Whip',       type: 'Long Electric',  damage: 50, range: 4.0, cooldown: 420,
     chainOnHit: { radius: 3.0, mult: 0.6 },
     ability: { name: 'Thunder Lash', cd: 11000, desc: '3 s spin · chain electric hits', type: 'melee_spin', duration: 3000 } },
   { id: 'karambit',   name: 'Karambit',     type: 'Admin · Combat Knife', damage: 80, range: 1.6, cooldown: 200, speedMult: 1.8,
@@ -1110,56 +1110,56 @@ const SUPPORT_ITEMS = [
   { id: 'moon_mine', name: 'Moon Mine', type: 'Floaty Bomb', uses: 2, damage: 65, cooldown: 800, bulletSpeed: 32, bulletColor: 0xbca7ff, bulletSize: 0.16 },
   { id: 'rubber_duck', name: 'Rubber Duck', type: 'Bouncer', uses: 4, damage: 18, cooldown: 360, bulletSpeed: 68, bulletColor: 0xffe55c, bulletSize: 0.12 },
   { id: 'black_hole_seed', name: 'Black Hole Seed', type: 'Void', uses: 1, damage: 105, burst: 6, spread: 0.35, cooldown: 1300, bulletSpeed: 36, bulletColor: 0x4b0082, bulletSize: 0.20 },
-  { id: 'glitch_cube', name: 'Glitch Cube', type: 'Wild Card', uses: 2, damage: 42, burst: 5, spread: 0.55, cooldown: 780, bulletSpeed: 92, randomBulletColor: true, bulletSize: 0.10 },
-  { id: 'vampire_syringe', name: 'Vampire Syringe', type: 'Risk Heal', uses: 2, heal: 35, selfDamage: 10, cooldown: 700 },
+  { id: 'glitch_cube', archived: true, name: 'Glitch Cube', type: 'Wild Card', uses: 2, damage: 42, burst: 5, spread: 0.55, cooldown: 780, bulletSpeed: 92, randomBulletColor: true, bulletSize: 0.10 },
+  { id: 'vampire_syringe', archived: true, name: 'Vampire Syringe', type: 'Risk Heal', uses: 2, heal: 35, selfDamage: 10, cooldown: 700 },
   // ── New supports ─────────────────────────────────────────────────────────
-  { id: 'adrenaline', name: 'Adrenaline Pack', type: 'Buff', uses: 1, cooldown: 1500, speedBuff: 1.6, reloadBuff: 0.5, buffDur: 5000 },
-  { id: 'tripwire', name: 'Tripwire', type: 'Trap', uses: 2, damage: 60, cooldown: 1100, bulletSpeed: 30, bulletColor: 0xff3344, bulletSize: 0.05, isTripwire: true },
-  { id: 'hologram', name: 'Hologram Decoy', type: 'Decoy', uses: 1, cooldown: 2000, decoyDur: 8000 },
-  { id: 'magnet_mine', name: 'Magnet Mine', type: 'Magnet', uses: 2, damage: 40, cooldown: 900, bulletSpeed: 36, bulletColor: 0xff8844, bulletSize: 0.12, magnetRadius: 5 },
-  { id: 'bounce_pad', name: 'Bounce Pad', type: 'Mobility', uses: 2, cooldown: 900, bounceVel: 14 },
+  { id: 'adrenaline', archived: true, name: 'Adrenaline Pack', type: 'Buff', uses: 1, cooldown: 1500, speedBuff: 1.6, reloadBuff: 0.5, buffDur: 5000 },
+  { id: 'tripwire', archived: true, name: 'Tripwire', type: 'Trap', uses: 2, damage: 60, cooldown: 1100, bulletSpeed: 30, bulletColor: 0xff3344, bulletSize: 0.05, isTripwire: true },
+  { id: 'hologram', archived: true, name: 'Hologram Decoy', type: 'Decoy', uses: 1, cooldown: 2000, decoyDur: 8000 },
+  { id: 'magnet_mine', archived: true, name: 'Magnet Mine', type: 'Magnet', uses: 2, damage: 40, cooldown: 900, bulletSpeed: 36, bulletColor: 0xff8844, bulletSize: 0.12, magnetRadius: 5 },
+  { id: 'bounce_pad', archived: true, name: 'Bounce Pad', type: 'Mobility', uses: 2, cooldown: 900, bounceVel: 14 },
   // ── 3rd-batch supports ───────────────────────────────────────────────────
-  { id: 'hunter_drone', name: 'Hunter Drone', type: 'Drone', uses: 1, damage: 100, cooldown: 1200, droneDur: 10000, droneRange: 25 },
-  { id: 'emp_grenade', name: 'EMP Grenade', type: 'Disable', uses: 2, damage: 25, cooldown: 950, bulletSpeed: 50, bulletColor: 0x66ccff, bulletSize: 0.12, empRadius: 6, empDur: 4000 },
-  { id: 'sticky_charge', name: 'Sticky Charge', type: 'Explosive', uses: 2, damage: 120, cooldown: 850, bulletSpeed: 40, bulletColor: 0xff5555, bulletSize: 0.10, stickyFuse: 1500 },
+  { id: 'hunter_drone', archived: true, name: 'Hunter Drone', type: 'Drone', uses: 1, damage: 100, cooldown: 1200, droneDur: 10000, droneRange: 25 },
+  { id: 'emp_grenade', archived: true, name: 'EMP Grenade', type: 'Disable', uses: 2, damage: 25, cooldown: 950, bulletSpeed: 50, bulletColor: 0x66ccff, bulletSize: 0.12, empRadius: 6, empDur: 4000 },
+  { id: 'sticky_charge', archived: true, name: 'Sticky Charge', type: 'Explosive', uses: 2, damage: 120, cooldown: 850, bulletSpeed: 40, bulletColor: 0xff5555, bulletSize: 0.10, stickyFuse: 1500 },
   // ── 😈 P2W supports ──────────────────────────────────────────────────────
-  { id: 'orbital_strike', name: 'Orbital Strike', type: 'Doom', uses: 1, damage: 250, radius: 8, cooldown: 2000, delay: 2000 },
-  { id: 'guardian_drone', name: 'Guardian Drone', type: 'Auto Turret', uses: 1, damage: 14, fireRate: 100, droneDur: 10000, cooldown: 1500 },
-  { id: 'nano_shield', name: 'Nano Shield', type: 'Auto Heal', uses: 1, healPerSec: 20, shieldDur: 6000, cooldown: 1800 },
+  { id: 'orbital_strike', archived: true, name: 'Orbital Strike', type: 'Doom', uses: 1, damage: 250, radius: 8, cooldown: 2000, delay: 2000 },
+  { id: 'guardian_drone', archived: true, name: 'Guardian Drone', type: 'Auto Turret', uses: 1, damage: 14, fireRate: 100, droneDur: 10000, cooldown: 1500 },
+  { id: 'nano_shield', archived: true, name: 'Nano Shield', type: 'Auto Heal', uses: 1, healPerSec: 20, shieldDur: 6000, cooldown: 1800 },
   // ── 😈 Lazy weapons batch ─────────────────────────────────────────────────
-  { id: 'air_grenade', name: 'Air Grenade', type: 'Launch', uses: 2, damage: 15, cooldown: 950, bulletSpeed: 50, bulletColor: 0xaaccff, bulletSize: 0.11, launchVel: 14, launchRadius: 4 },
+  { id: 'air_grenade', archived: true, name: 'Air Grenade', type: 'Launch', uses: 2, damage: 15, cooldown: 950, bulletSpeed: 50, bulletColor: 0xaaccff, bulletSize: 0.11, launchVel: 14, launchRadius: 4 },
   { id: 'land_mine', name: 'Land Mine', type: 'Trap', uses: 2, damage: 298, cooldown: 1100, mineRadius: 1.8, launchVel: 16 },
   // ── 🪖 ADMIN UTILITIES (locked behind unlock codes) ──────────────────────
   // ── 🆕 More utilities — batch 4 ──────────────────────────────────────────
-  { id: 'flashbang_basic', name: 'Flashbang',    type: 'Stun',       uses: 2, damage: 5,  cooldown: 900, bulletSpeed: 50, bulletColor: 0xffffff, bulletSize: 0.10, stunDur: 2500, stunRadius: 6 },
-  { id: 'proximity_mine',  name: 'Proximity Mine', type: 'Trap',     uses: 2, damage: 70, cooldown: 1100, bulletSpeed: 30, bulletColor: 0xff5555, bulletSize: 0.06, isTripwire: true },
-  { id: 'dynamite',        name: 'Dynamite Bundle', type: 'Explosive', uses: 2, damage: 120, cooldown: 1200, bulletSpeed: 48, bulletColor: 0xdd4422, bulletSize: 0.13 },
-  { id: 'drone_strike',    name: 'Mini Drone Strike', type: 'Doom',  uses: 1, damage: 140, radius: 5, cooldown: 1800, delay: 1500 },
-  { id: 'healing_pulse',   name: 'Healing Pulse', type: 'Heal',      uses: 1, heal: 60, cooldown: 1500 },
-  { id: 'teleport_beacon', name: 'Teleport Beacon', type: 'Teleport', uses: 1, blink: 12, cooldown: 1200 },
-  { id: 'cloak',           name: 'Cloak',         type: 'Buff',      uses: 1, cooldown: 1800, speedBuff: 1.3, buffDur: 4000 },
-  { id: 'berserker_serum', name: 'Berserker Serum', type: 'Buff',    uses: 1, cooldown: 1800, speedBuff: 1.4, reloadBuff: 0.6, buffDur: 4000 },
-  { id: 'taser_grenade',   name: 'Taser Grenade', type: 'Disable',   uses: 2, damage: 15, cooldown: 950, bulletSpeed: 50, bulletColor: 0x66ccff, bulletSize: 0.10, empRadius: 5, empDur: 3000 },
-  { id: 'ink_bomb',        name: 'Ink Bomb',      type: 'Utility',   uses: 2, damage: 0, cooldown: 800, bulletSpeed: 48, bulletColor: 0x111111, bulletSize: 0.18 },
-  { id: 'siren',           name: 'Distraction Siren', type: 'Decoy', uses: 1, cooldown: 2000, decoyDur: 6000 },
-  { id: 'caltrops',        name: 'Caltrops',      type: 'Trap',      uses: 3, damage: 30, cooldown: 700, bulletSpeed: 28, bulletColor: 0x888888, bulletSize: 0.05, isTripwire: true },
+  { id: 'flashbang_basic', archived: true, name: 'Flashbang',    type: 'Stun',       uses: 2, damage: 5,  cooldown: 900, bulletSpeed: 50, bulletColor: 0xffffff, bulletSize: 0.10, stunDur: 2500, stunRadius: 6 },
+  { id: 'proximity_mine', archived: true,  name: 'Proximity Mine', type: 'Trap',     uses: 2, damage: 70, cooldown: 1100, bulletSpeed: 30, bulletColor: 0xff5555, bulletSize: 0.06, isTripwire: true },
+  { id: 'dynamite', archived: true,        name: 'Dynamite Bundle', type: 'Explosive', uses: 2, damage: 120, cooldown: 1200, bulletSpeed: 48, bulletColor: 0xdd4422, bulletSize: 0.13 },
+  { id: 'drone_strike', archived: true,    name: 'Mini Drone Strike', type: 'Doom',  uses: 1, damage: 140, radius: 5, cooldown: 1800, delay: 1500 },
+  { id: 'healing_pulse', archived: true,   name: 'Healing Pulse', type: 'Heal',      uses: 1, heal: 60, cooldown: 1500 },
+  { id: 'teleport_beacon', archived: true, name: 'Teleport Beacon', type: 'Teleport', uses: 1, blink: 12, cooldown: 1200 },
+  { id: 'cloak', archived: true,           name: 'Cloak',         type: 'Buff',      uses: 1, cooldown: 1800, speedBuff: 1.3, buffDur: 4000 },
+  { id: 'berserker_serum', archived: true, name: 'Berserker Serum', type: 'Buff',    uses: 1, cooldown: 1800, speedBuff: 1.4, reloadBuff: 0.6, buffDur: 4000 },
+  { id: 'taser_grenade', archived: true,   name: 'Taser Grenade', type: 'Disable',   uses: 2, damage: 15, cooldown: 950, bulletSpeed: 50, bulletColor: 0x66ccff, bulletSize: 0.10, empRadius: 5, empDur: 3000 },
+  { id: 'ink_bomb', archived: true,        name: 'Ink Bomb',      type: 'Utility',   uses: 2, damage: 0, cooldown: 800, bulletSpeed: 48, bulletColor: 0x111111, bulletSize: 0.18 },
+  { id: 'siren', archived: true,           name: 'Distraction Siren', type: 'Decoy', uses: 1, cooldown: 2000, decoyDur: 6000 },
+  { id: 'caltrops', archived: true,        name: 'Caltrops',      type: 'Trap',      uses: 3, damage: 30, cooldown: 700, bulletSpeed: 28, bulletColor: 0x888888, bulletSize: 0.05, isTripwire: true },
 
   // ── 🌌 SCI-FI P2W UTILITIES ─────────────────────────────────────────────
-  { id: 'nano_swarm',     name: 'Nano Swarm',     type: 'Heal Drone',   uses: 1, heal: 120, cooldown: 1800 },
-  { id: 'warp_beacon',    name: 'Warp Beacon',    type: 'Teleport',     uses: 2, blink: 20, cooldown: 1500 },
-  { id: 'stasis_mine',    name: 'Stasis Mine',    type: 'Time Trap',    uses: 2, damage: 20, cooldown: 1200, bulletSpeed: 30, bulletColor: 0x66ccff, bulletSize: 0.07, isTripwire: true, stunDur: 4000 },
-  { id: 'specter_drone',  name: 'Specter Drone',  type: 'Stealth Drone', uses: 1, damage: 160, cooldown: 1800, droneDur: 14000, droneRange: 32 },
-  { id: 'quantum_barrier',name: 'Quantum Barrier',type: 'Shield',       uses: 1, healPerSec: 12, shieldDur: 9000, cooldown: 2000 },
+  { id: 'nano_swarm', archived: true,     name: 'Nano Swarm',     type: 'Heal Drone',   uses: 1, heal: 120, cooldown: 1800 },
+  { id: 'warp_beacon', archived: true,    name: 'Warp Beacon',    type: 'Teleport',     uses: 2, blink: 20, cooldown: 1500 },
+  { id: 'stasis_mine', archived: true,    name: 'Stasis Mine',    type: 'Time Trap',    uses: 2, damage: 20, cooldown: 1200, bulletSpeed: 30, bulletColor: 0x66ccff, bulletSize: 0.07, isTripwire: true, stunDur: 4000 },
+  { id: 'specter_drone', archived: true,  name: 'Specter Drone',  type: 'Stealth Drone', uses: 1, damage: 160, cooldown: 1800, droneDur: 14000, droneRange: 32 },
+  { id: 'quantum_barrier', archived: true,name: 'Quantum Barrier',type: 'Shield',       uses: 1, healPerSec: 12, shieldDur: 9000, cooldown: 2000 },
 
   // 🍔🇺🇸 Tasty heal
-  { id: 'hamburger',      name: 'All-American Burger', type: 'Heal · Tasty', uses: 2, heal: 75, cooldown: 1300 },
+  { id: 'hamburger', archived: true,      name: 'All-American Burger', type: 'Heal · Tasty', uses: 2, heal: 75, cooldown: 1300 },
 
   // 🔥 Molotov — shatters into a lingering fire pool (reuses the burn-zone DOT)
   { id: 'molotov', name: 'Molotov Cocktail', type: 'Fire · Burn Zone', uses: 2, damage: 0, cooldown: 1100, bulletSpeed: 36, bulletColor: 0xff7722, bulletSize: 0.11, burnDps: 12, burnDur: 5000, burnRadius: 3.2 },
   // 💚 Heal Gun — heals you + mends nearby allies
-  { id: 'heal_gun', name: 'Heal Gun', type: 'Heal · Beam', uses: 2, heal: 70, cooldown: 1200, allyHeal: 50, allyHealRadius: 12 },
+  { id: 'heal_gun', archived: true, name: 'Heal Gun', type: 'Heal · Beam', uses: 2, heal: 70, cooldown: 1200, allyHeal: 50, allyHealRadius: 12 },
   // ⚡ Tesla Coil — stationary coil that zaps the nearest enemy on a timer
-  { id: 'tesla_coil', name: 'Tesla Coil', type: 'Deployable · Shock', uses: 1, damage: 16, cooldown: 1800, coilDur: 10000, coilRange: 8, fireRate: 450 },
+  { id: 'tesla_coil', archived: true, name: 'Tesla Coil', type: 'Deployable · Shock', uses: 1, damage: 16, cooldown: 1800, coilDur: 10000, coilRange: 8, fireRate: 450 },
   // 🧪 Acid Grenade — green goo pool that slows + lightly damages whoever stands in it
   { id: 'acid_grenade', name: 'Acid Grenade', type: 'Goo · Slow Pool', uses: 2, damage: 0, cooldown: 1100, bulletSpeed: 38, bulletColor: 0x88dd33, bulletSize: 0.12, burnDur: 6000, burnRadius: 3.2 },
   // 🐝 Bee Jar — release a swarm that homes the nearest enemy and stings repeatedly
@@ -1173,6 +1173,7 @@ const SUPPORT_ITEMS = [
   { id: 'care_package', name: 'Care Package', type: 'Admin · Random Drop', uses: 1, cooldown: 1500, adminItem: true },
   { id: 'tac_nuke', name: 'Tactical Nuke', type: 'Admin · End the Match', uses: 1, damage: 500, cooldown: 3000, nukeRadius: 25, nukeDelay: 5000, adminItem: true },
 ];
+const ARCHIVED_ITEM_IDS = new Set([...WEAPONS, ...MELEE_ITEMS, ...SUPPORT_ITEMS].filter(x => x.archived).map(x => x.id));
 
 // ── State ──────────────────────────────────────────────────────────────────
 let myId = null;
@@ -1496,7 +1497,7 @@ function adminPassMsLeft() {
   return Math.max(0, (currentUser.adminPassExpiresAt || 0) - Date.now());
 }
 
-const PRIMARY_WEAPON_IDS = WEAPONS.filter(w => w.slot === 'primary' && !w.ddayOnly && !w.modeOnly).map(w => w.id);
+const PRIMARY_WEAPON_IDS = WEAPONS.filter(w => w.slot === 'primary' && !w.ddayOnly && !w.modeOnly && !w.archived).map(w => w.id);
 function randomPrimaryId() { return PRIMARY_WEAPON_IDS[Math.floor(Math.random() * PRIMARY_WEAPON_IDS.length)]; }
 
 let match = null; // active match state (see initMatch)
@@ -37386,9 +37387,9 @@ function spawnGameBots() {
       }
     }
     // 🆕 Full bot loadout — secondary, melee, utility (random non-admin picks)
-    const SECONDARIES = WEAPONS.filter(w => w.slot === 'secondary' && !w.adminItem && !w.ddayOnly);
-    const MELEES_NONADMIN = MELEE_ITEMS.filter(m => !m.adminItem);
-    const UTILS_NONADMIN  = SUPPORT_ITEMS.filter(s => !s.adminItem);
+    const SECONDARIES = WEAPONS.filter(w => w.slot === 'secondary' && !w.adminItem && !w.ddayOnly && !w.archived);
+    const MELEES_NONADMIN = MELEE_ITEMS.filter(m => !m.adminItem && !m.archived);
+    const UTILS_NONADMIN  = SUPPORT_ITEMS.filter(s => !s.adminItem && !s.archived);
     // 🎭 Drafted teammate uses their signature loadout; everyone else rolls random.
     const fixedM4Tower = selectedModeConfig.fixedKit === 'm4_tower';
     let weaponId = (_playstyle && _playstyle.primary && WEAPONS.some(w => w.id === _playstyle.primary))
@@ -39549,19 +39550,19 @@ function renderShopItems(body, slot) {
   // Decide which source list + how each card describes itself
   let source, descFn, pickIsAdmin;
   if (slot === 'primary') {
-    source = WEAPONS.filter(w => w.slot !== 'secondary' && !w.ddayOnly && !w.skinOnly && !w.modeOnly);
+    source = WEAPONS.filter(w => w.slot !== 'secondary' && !w.ddayOnly && !w.skinOnly && !w.modeOnly && !w.archived);
     descFn = w => `DMG ${w.damage} · MAG ${w.mag} · ${w.auto ? 'AUTO' : 'SEMI'}`;
     pickIsAdmin = w => !!w.adminItem;
   } else if (slot === 'secondary') {
-    source = WEAPONS.filter(w => w.slot === 'secondary' && !w.ddayOnly && !w.skinOnly && !w.modeOnly);
+    source = WEAPONS.filter(w => w.slot === 'secondary' && !w.ddayOnly && !w.skinOnly && !w.modeOnly && !w.archived);
     descFn = w => `DMG ${w.damage} · MAG ${w.mag}`;
     pickIsAdmin = w => !!w.adminItem;
   } else if (slot === 'melee') {
-    source = MELEE_ITEMS.filter(m => !m.skinOnly);
+    source = MELEE_ITEMS.filter(m => !m.skinOnly && !m.archived);
     descFn = m => `DMG ${m.damage} · RANGE ${m.range}`;
     pickIsAdmin = m => !!m.adminItem;
   } else {
-    source = SUPPORT_ITEMS;
+    source = SUPPORT_ITEMS.filter(s => !s.archived);
     descFn = s => `${s.heal ? 'HEAL ' + s.heal : 'DMG ' + (s.damage || 0)} · USES ${s.uses}`;
     pickIsAdmin = s => !!s.adminItem;
   }
@@ -39657,10 +39658,10 @@ function balancedUtilityScore(u) {
 }
 function rankedItems(kind, limit = 10) {
   let items;
-  if (kind === 'primary') items = WEAPONS.filter(w => w.slot !== 'secondary' && !w.ddayOnly && !w.adminItem && !w.skinOnly && !w.modeOnly);
-  else if (kind === 'secondary') items = WEAPONS.filter(w => w.slot === 'secondary' && !w.ddayOnly && !w.adminItem && !w.skinOnly && !w.modeOnly);
-  else if (kind === 'melee') items = MELEE_ITEMS.filter(m => !m.adminItem && !m.skinOnly);
-  else items = SUPPORT_ITEMS.filter(u => !u.adminItem);
+  if (kind === 'primary') items = WEAPONS.filter(w => w.slot !== 'secondary' && !w.ddayOnly && !w.adminItem && !w.skinOnly && !w.modeOnly && !w.archived);
+  else if (kind === 'secondary') items = WEAPONS.filter(w => w.slot === 'secondary' && !w.ddayOnly && !w.adminItem && !w.skinOnly && !w.modeOnly && !w.archived);
+  else if (kind === 'melee') items = MELEE_ITEMS.filter(m => !m.adminItem && !m.skinOnly && !m.archived);
+  else items = SUPPORT_ITEMS.filter(u => !u.adminItem && !u.archived);
   const scoreFn = kind === 'melee' ? balancedMeleeScore : kind === 'utility' ? balancedUtilityScore : balancedGunScore;
   return items.map(item => ({ item, score: scoreFn(item) }))
     .sort((a, b) => b.score - a.score)
@@ -39900,6 +39901,7 @@ function showLoadoutScreen(mode) {
     if (w.ddayOnly) return; // skip D-Day exclusive weapons
     if (w.modeOnly) return; // fixed-mode weapons never appear in normal loadouts
     if (w.skinOnly) return; // generated as a skin now, not a standalone weapon
+    if (w.archived) return; // pulled from the shop/loadout; still owned by whoever had it
     if (w.adminItem && !isUnlocked(w.id)) return; // hide locked admin weapons
     const isPrimary = w.slot !== 'secondary';
     const dw = effectiveGunStats(w);
@@ -39924,6 +39926,7 @@ function showLoadoutScreen(mode) {
   });
   MELEE_ITEMS.forEach((m, i) => {
     if (m.skinOnly) return; // generated as a skin now, not a standalone melee
+    if (m.archived) return; // pulled from the shop/loadout; still owned by whoever had it
     if (m.adminItem && !isUnlocked(m.id)) return;
     const dm = effectiveMeleeItem(m);
     const card = document.createElement('div');
@@ -39944,6 +39947,7 @@ function showLoadoutScreen(mode) {
     meleeEls[i] = card;
   });
   SUPPORT_ITEMS.forEach((s, i) => {
+    if (s.archived) return; // pulled from the shop/loadout; still owned by whoever had it
     if (s.adminItem && !isUnlocked(s.id)) return;
     const card = document.createElement('div');
     card.className = 'loadout-card';
@@ -39987,9 +39991,9 @@ function showLoadoutScreen(mode) {
   } else {
     // First-time entry: apply defaults — pick first OWNED item per slot so
     // we don't auto-select something the user can't actually afford.
-    selectedPrimaryIdx   = WEAPONS.findIndex(w => w.slot !== 'secondary' && !w.ddayOnly && !w.skinOnly && !w.modeOnly && isOwned(w.id));
+    selectedPrimaryIdx   = WEAPONS.findIndex(w => w.slot !== 'secondary' && !w.ddayOnly && !w.skinOnly && !w.modeOnly && !w.archived && isOwned(w.id));
     selectedSecondaryIdx = WEAPONS.findIndex(w => w.slot === 'secondary' && isOwned(w.id));
-    selectedMeleeIdx     = MELEE_ITEMS.findIndex(m => !m.skinOnly && isOwned(m.id));
+    selectedMeleeIdx     = MELEE_ITEMS.findIndex(m => !m.skinOnly && !m.archived && isOwned(m.id));
     selectedSupportIdx   = SUPPORT_ITEMS.findIndex(s => isOwned(s.id));
     if (selectedPrimaryIdx   < 0) selectedPrimaryIdx   = 0;
     if (selectedSecondaryIdx < 0) selectedSecondaryIdx = WEAPONS.findIndex(w => w.slot === 'secondary');
