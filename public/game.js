@@ -21071,6 +21071,7 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
     blend: 0,            // 0 = standing, 1 = full walk (eased, so limbs don't snap)
     crouch: 0,           // 0 = standing, 1 = fully crouched/sliding
     prevX: null, prevZ: null,
+    tacticalAdvance: !!isBot,
     // ── Per-character gait ──────────────────────────────────────────────────
     // Identical bots stepping in perfect unison is the single loudest "these
     // are machines" tell — louder than any missing joint. Give everyone their
@@ -21129,7 +21130,8 @@ function animateCharacterMesh(mesh, dt, crouchTarget) {
   // Crouch / slide blend. Characters also crouch SLIGHTLY while moving (a tactical
   // low walk) — blend a small movement-crouch in on top of any explicit crouch.
   const baseCrouch = (crouchTarget !== null && crouchTarget !== undefined) ? crouchTarget : 0;
-  const moveCrouch = moving ? 0.2 : 0;
+  const tacticalAdvance = !!(rig.tacticalAdvance && rig.holdsGun);
+  const moveCrouch = tacticalAdvance ? (moving ? 0.45 : 0.28) : (moving ? 0.2 : 0);
   const effCrouch  = Math.max(baseCrouch, moveCrouch);
   rig.crouch += (effCrouch - rig.crouch) * Math.min(1, dt * 8);
   const crouch = rig.crouch;
@@ -21195,19 +21197,20 @@ function animateCharacterMesh(mesh, dt, crouchTarget) {
   // Slide / crouch pose: tuck legs forward, lean torso back, arms back
   if (crouch > 0.01) {
     const c = crouch;
-    rig.legL.rotation.x = THREE.MathUtils.lerp(rig.legL.rotation.x,  1.1, c);
-    rig.legR.rotation.x = THREE.MathUtils.lerp(rig.legR.rotation.x,  0.4, c);
-    rig.armL.rotation.x = THREE.MathUtils.lerp(rig.armL.rotation.x, -0.8, c);
-    rig.armR.rotation.x = THREE.MathUtils.lerp(rig.armR.rotation.x, -0.8, c);
-    rig.torso.rotation.x = THREE.MathUtils.lerp(0, -0.45, c);
-    rig.head.rotation.x  = THREE.MathUtils.lerp(0,  0.45, c);
+    const advancePose = tacticalAdvance && baseCrouch < 0.5;
+    rig.legL.rotation.x = THREE.MathUtils.lerp(rig.legL.rotation.x, advancePose ? 0.55 : 1.1, c);
+    rig.legR.rotation.x = THREE.MathUtils.lerp(rig.legR.rotation.x, advancePose ? 0.25 : 0.4, c);
+    rig.armL.rotation.x = THREE.MathUtils.lerp(rig.armL.rotation.x, advancePose ? -1.05 : -0.8, c);
+    rig.armR.rotation.x = THREE.MathUtils.lerp(rig.armR.rotation.x, advancePose ? -1.38 : -0.8, c);
+    rig.torso.rotation.x = THREE.MathUtils.lerp(0, advancePose ? 0.24 : -0.45, c);
+    rig.head.rotation.x  = THREE.MathUtils.lerp(0, advancePose ? -0.12 : 0.45, c);
     // Knees have to fold hard here or a tucked slide looks like a plank.
-    if (rig.kneeL) rig.kneeL.rotation.x = THREE.MathUtils.lerp(rig.kneeL.rotation.x, -1.35, c);
-    if (rig.kneeR) rig.kneeR.rotation.x = THREE.MathUtils.lerp(rig.kneeR.rotation.x, -0.75, c);
-    if (rig.elbowL) rig.elbowL.rotation.x = THREE.MathUtils.lerp(rig.elbowL.rotation.x, 0.7, c);
-    if (rig.elbowR) rig.elbowR.rotation.x = THREE.MathUtils.lerp(rig.elbowR.rotation.x, 0.7, c);
-    if (rig.footL) rig.footL.rotation.x = THREE.MathUtils.lerp(rig.footL.rotation.x, 0.5, c);
-    if (rig.footR) rig.footR.rotation.x = THREE.MathUtils.lerp(rig.footR.rotation.x, 0.5, c);
+    if (rig.kneeL) rig.kneeL.rotation.x = THREE.MathUtils.lerp(rig.kneeL.rotation.x, advancePose ? -0.85 : -1.35, c);
+    if (rig.kneeR) rig.kneeR.rotation.x = THREE.MathUtils.lerp(rig.kneeR.rotation.x, advancePose ? -0.65 : -0.75, c);
+    if (rig.elbowL) rig.elbowL.rotation.x = THREE.MathUtils.lerp(rig.elbowL.rotation.x, advancePose ? 0.85 : 0.7, c);
+    if (rig.elbowR) rig.elbowR.rotation.x = THREE.MathUtils.lerp(rig.elbowR.rotation.x, advancePose ? 0.9 : 0.7, c);
+    if (rig.footL) rig.footL.rotation.x = THREE.MathUtils.lerp(rig.footL.rotation.x, advancePose ? 0.18 : 0.5, c);
+    if (rig.footR) rig.footR.rotation.x = THREE.MathUtils.lerp(rig.footR.rotation.x, advancePose ? 0.14 : 0.5, c);
     // Twist/roll don't belong in a slide — unwind them.
     rig.torso.rotation.y = THREE.MathUtils.lerp(rig.torso.rotation.y, 0, c);
     rig.torso.rotation.z = THREE.MathUtils.lerp(rig.torso.rotation.z, 0, c);
@@ -36986,7 +36989,7 @@ function spawnDDayWave(count, waveNum) {
     const weaponId = randomPrimaryId();
     const pData = {
       id, name: `Trooper ${waveNum}-${i+1}`, isBot: true, team: 'enemy',
-      weaponId, ownerId: myId, skin: ['swat','swat_shades','soldier'][Math.floor(Math.random()*3)],
+      weaponId, ownerId: myId, skin: 'default',
       x: xPos, y: 1, z: zPos, rotY: 0, rotX: 0,
       hp: 300, dead: false, kills: 0, deaths: 0,
     };
