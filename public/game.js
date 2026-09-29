@@ -7436,7 +7436,7 @@ function addGridClutter(name, half, s) {
   return placed;
 }
 function addGridConceptMap(name, index) {
-  if (name === 'lobby13') return;
+  if (name === 'lobby13' || name === 'base_raid') return;
   if (name.startsWith(ADMIN_CUSTOM_MAP_PREFIX)) return;
   clearMapForGridConcept(name);
   const large = name === 'br_arena';
