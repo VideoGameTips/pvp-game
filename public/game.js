@@ -34579,7 +34579,7 @@ socket.on('skinChanged', ({ id, skin, isAdmin }) => {
   scene.remove(old);
   const p = players[id] || { name: '', isBot: false, team: 'enemy', x: old.position.x, z: old.position.z };
   const mesh = makePlayerMesh(p.name, p.isBot, p.team || 'enemy',
-                              SKIN_IDS.includes(skin) ? skin : 'default', { crown: !!isAdmin, tag: humanTagKind(p) });
+                              renderedSkinForPlayer(p, skin), { crown: !!isAdmin, tag: humanTagKind(p) });
   mesh.position.copy(old.position); mesh.rotation.y = old.rotation.y; mesh.visible = wasVisible;
   scene.add(mesh); remoteMeshes[id] = mesh;
 });
@@ -34877,8 +34877,12 @@ function humanTagKind(p) {
   if (pvpMatch && p.team) return p.team === 'ally' ? 'ally' : 'enemy';   // teams arrive as my side / theirs (#48)
   return null;
 }
+function renderedSkinForPlayer(p, skin = p && p.skin) {
+  if (p && p.isBot && selectedModeConfig?.type !== 'lobby') return 'default';
+  return resolveSkinId(skin);
+}
 function spawnRemotePlayer(p) {
-  const skinId = resolveSkinId(p.skin);
+  const skinId = renderedSkinForPlayer(p);
   const mesh = makePlayerMesh(p.name, p.isBot, p.team || 'enemy', skinId, { crown: !!p.isAdmin, tag: humanTagKind(p) });
   mesh.position.set(p.x,0,p.z);
   // Another player's bot: makeBot arms our own, so arm theirs here (#48)
@@ -37810,14 +37814,12 @@ function spawnGameBots() {
     const botUtilityId   = fixedM4Tower ? 'frag' : (UTILS_NONADMIN[Math.floor(Math.random() * UTILS_NONADMIN.length)]?.id || 'frag');
 
     // ── Create locally RIGHT NOW (no network round-trip needed) ──────────
-    // Drafted teammate wears their character's signature skin; everyone else
-    // gets a VARIED stock skin (per team flavor) that never copies the player's.
+    // Lobby 13 keeps the named cast's looks. Actual match bots all wear the
+    // default tactical Operator skin so the battlefield reads like a squad.
     let botSkin;
-    if (_teammateChar && tmId) {
+    if (selectedModeConfig.type === 'lobby' && _teammateChar && tmId) {
       botSkin = TEAMMATE_SKINS[tmId] || (isAlly ? 'soldier' : 'swat');
     } else {
-      // Matchmaking fill-bots all wear the plain default skin now, not a
-      // varied pool -- drafted Lobby 13 characters above keep their own look.
       botSkin = 'default';
     }
     const startHp = selectedModeConfig.botHp || (_playstyle && _playstyle.hp) || 300;
