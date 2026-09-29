@@ -7296,6 +7296,7 @@ loadAdminCustomMaps();
 const GRID_MAP_ARCHETYPES = [
   'blank_slate', 'three_lane', 'courtyard', 'stairs', 'tower_corners',
   'crossroads', 'trenches', 'warehouse_lanes', 'ring', 'bridge',
+  'outpost', 'block_row',
 ];
 const GRID_CONCEPT_MAPS_ACTIVE = true;
 function clearMapForGridConcept(name) {
@@ -7435,13 +7436,64 @@ function addGridClutter(name, half, s) {
   }
   return placed;
 }
+// 🪜 A wall-mounted ladder: a safety-yellow climb strip (the actual collider —
+// any tall wall is already climbable via the wall-scramble move, this just
+// marks WHERE so it reads as a real route instead of an accidental exploit)
+// plus dark rung lines purely for silhouette. x/z/fromY/toY are world units
+// (already s-scaled by the caller, matching addGridStairs' convention).
+function addGridLadder(name, x, z, rotY, fromY, toY, width = 1.15) {
+  const height = toY - fromY;
+  if (height <= 0.5) return;
+  addMapBox(name, x, fromY + height / 2, z, width, height, 0.14, 0xffcc33, rotY);
+  const sinR = Math.sin(rotY), cosR = Math.cos(rotY);
+  const rungCount = Math.max(3, Math.floor(height / 0.5));
+  for (let i = 1; i < rungCount; i++) {
+    const ry = fromY + i * (height / rungCount);
+    const mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(width * 0.82, 0.06, 0.05),
+      new THREE.MeshLambertMaterial({ color: 0x2a2a2a })
+    );
+    mesh.position.set(x + sinR * 0.1, ry, z + cosR * 0.1);
+    mesh.rotation.y = rotY;
+    addMapMesh(name, mesh, false);
+  }
+}
+// 🏢 A grounded 2-story block: an open ground-floor colonnade (corner posts
+// only, nothing solid to get stuck behind, so bots never dead-end under it),
+// a solid-walled room on top with a run-through gap on the front AND back,
+// and a flat roof with a parapet lip. Two ways up: a front stairway to the
+// 2nd-floor deck, and a side ladder that runs the whole height for a faster,
+// more exposed route straight to the roof. Axis-aligned; `flip` mirrors which
+// side the stair/ladder sit on so two facing blocks don't collide. All of
+// cx/cz/sizeX/sizeZ arrive already s-scaled (matches addGridStairs' callers);
+// groundH/roofH stay in real meters like every other height in this file.
+function addGridBlock(name, cx, cz, sizeX, sizeZ, groundH, roofH, flip = false) {
+  const structColor = 0xe6e6e6, roomColor = 0xf2f2f2, roofColor = 0xd6dbe0, trim = 0xffd76a;
+  const hx = sizeX / 2 - 0.7, hz = sizeZ / 2 - 0.7;
+  [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([sx, sz]) =>
+    addMapBox(name, cx + sx * hx, groundH / 2, cz + sz * hz, 1.3, groundH, 1.3, structColor));
+  addMapBox(name, cx, groundH, cz, sizeX, 0.4, sizeZ, roomColor);
+  const wallH = roofH - groundH - 0.4, wallY = groundH + 0.4 + wallH / 2;
+  const gap = Math.min(3.4, sizeX * 0.4), sideLen = (sizeX - gap) / 2;
+  [-1, 1].forEach(side => addMapBox(name, cx + side * (sizeX / 2 - 0.1), wallY, cz, 0.22, wallH, sizeZ, roomColor));
+  [-1, 1].forEach(side => [-1, 1].forEach(seg =>
+    addMapBox(name, cx + seg * (gap / 2 + sideLen / 2), wallY, cz + side * (sizeZ / 2 - 0.1), sideLen, wallH, 0.22, roomColor)));
+  addMapBox(name, cx, roofH, cz, sizeX + 0.6, 0.4, sizeZ + 0.6, roofColor);
+  const lipY = roofH + 0.4 + 0.45;
+  [-1, 1].forEach(side => addMapBox(name, cx, lipY, cz + side * (sizeZ / 2 - 0.1), sizeX + 0.6, 0.9, 0.22, trim));
+  [-1, 1].forEach(side => addMapBox(name, cx + side * (sizeX / 2 - 0.1), lipY, cz, 0.22, 0.9, sizeZ + 0.6, trim));
+  const dir = flip ? -1 : 1;
+  const steps = Math.max(6, Math.round(groundH / 0.42)), stepDepth = 2.0;
+  addGridStairs(name, cx, cz - dir * (sizeZ / 2 + (steps - 0.5) * stepDepth), 0, dir, steps, 2.6, stepDepth, groundH / steps);
+  addGridLadder(name, cx + dir * (sizeX / 2 + 0.16), cz, Math.PI / 2, 0, roofH);
+}
 function addGridConceptMap(name, index) {
   if (name === 'lobby13' || name === 'base_raid') return;
   if (name.startsWith(ADMIN_CUSTOM_MAP_PREFIX)) return;
   clearMapForGridConcept(name);
   const large = name === 'br_arena';
   const compact = name === 'range';
-  const size = large ? 220 : compact ? 92 : 140;
+  const size = large ? 260 : compact ? 100 : 172;
   const half = size / 2 - 6;
   const h = large ? 10.2 : 8.4;
   addGridConceptGround(name, size);
@@ -7449,7 +7501,7 @@ function addGridConceptMap(name, index) {
 
   const solid = 0xffffff, soft = 0xf7f7f7, marker = 0xe8edf2;
   const arch = GRID_MAP_ARCHETYPES[index % GRID_MAP_ARCHETYPES.length];
-  const s = large ? 1.45 : compact ? 0.72 : 1;
+  const s = large ? 1.6 : compact ? 0.8 : 1.15;
   const B = (x, y, z, w, hh, d, rot = 0, color = solid) =>
     addMapBox(name, x * s, y, z * s, w * s, hh, d * s, color, rot);
   const W = (x, z, w, d, rot = 0, hh = 7.2, color = solid) => B(x, hh / 2, z, w, hh, d, rot, color);
@@ -7528,6 +7580,15 @@ function addGridConceptMap(name, index) {
     addGridStairs(name,  31*s,  8*s, -1, 0, 8, 13*s, 2.2*s, 0.42);
     [[-20,-30], [20,30], [-20,30], [20,-30]].forEach(([x,z]) => W(x, z, 14, 5, 0, 5.2));
     W(0, 0, 5, 34, 0, 7.4, soft);
+  } else if (arch === 'outpost') {
+    addGridBlock(name, -38 * s, 0, 20 * s, 16 * s, 4.2, 8.8, false);
+    addGridBlock(name,  38 * s, 0, 20 * s, 16 * s, 4.2, 8.8, true);
+    [[-10,-22], [10,22], [-10,22], [10,-22]].forEach(([x,z]) => W(x, z, 10, 4, Math.PI / 4, 3.6, soft));
+    W(0, 0, 9, 9, Math.PI / 4, 4.4, marker);
+  } else if (arch === 'block_row') {
+    [[-42, false], [0, true], [42, false]].forEach(([cx, flip]) =>
+      addGridBlock(name, cx * s, 0, 17 * s, 13 * s, 4.0, 8.2, flip));
+    [[-20,-16], [20,16], [-20,16], [20,-16]].forEach(([x,z]) => W(x, z, 9, 3.4, 0, 3.2, soft));
   }
 
   try { addGridRamps(name, s, large); } catch (e) { console.warn('[ramps]', name, e); }
