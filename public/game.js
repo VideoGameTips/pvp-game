@@ -20102,7 +20102,7 @@ function greebleModel(root, opts = {}) {
 const STRIPE_GUNS = {
   signal_pistol: 0xe08a2a, sawed_off: 0x6f7a86, lever: 0x8a6a3a, dart_gun: 0x4a8a7a,
   duelist_pistol: 0xb08a4a, boomstick: 0x6f7a86, nail_gun: 0xd08a3a, taser: 0x3a7ab0,
-  snub_revolver: 0x6f7a86,
+  snub_revolver: 0x6f7a86, ak20: 0x6f7a86,
 };
 function addFlankStripes(model, colour) {
   // "Largest part" is not enough on its own: the muzzle flash is a 0.09 sphere,
