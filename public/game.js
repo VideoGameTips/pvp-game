@@ -21100,24 +21100,7 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
   // take the head's colour.
   if (!PIXEL_SKINS[skinId]) for (const h of hands) h.material.color.copy(headMats[0].color);
 
-  // Name tag. Bots: 🤖, blue with you / red against. Real players (#47) used to be plain
-  // black everywhere; opts.tag says where they stand — 'hub' (green, Lobby 13), 'ally' or
-  // 'enemy' in a match — and anything else keeps the old neutral tag.
-  const cv = document.createElement('canvas'); cv.width=256; cv.height=64;
-  const ctx = cv.getContext('2d');
-  const isAlly = isBot && team === 'ally';
   const tag = isBot ? null : opts.tag;
-  const TAG_BG = { hub: 'rgba(24,120,64,0.82)', ally: 'rgba(0,80,180,0.75)', enemy: 'rgba(160,0,0,0.75)' };
-  const TAG_FG = { hub: '#d4ffe0', ally: '#aaccff', enemy: '#ffaaaa' };
-  ctx.fillStyle = isBot ? (isAlly ? 'rgba(0,80,180,0.75)' : 'rgba(160,0,0,0.75)') : (TAG_BG[tag] || 'rgba(0,0,0,0.65)');
-  ctx.roundRect(4,8,248,48,8); ctx.fill();
-  ctx.fillStyle = isBot ? (isAlly ? '#aaccff' : '#ffaaaa') : (TAG_FG[tag] || '#fff');
-  ctx.font='bold 26px Arial'; ctx.textAlign='center';
-  const label = isBot ? (String(name).startsWith('🤖') ? name : `🤖 ${name}`)   // Bot-47 is already a 🤖
-              : tag === 'hub' ? `🎮 ${name}` : name;
-  ctx.fillText(label, 128, 44);
-  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), depthTest: false }));
-  sprite.scale.set(1.5,0.37,1); sprite.position.y = 2.35; group.add(sprite);
 
   // ── Animation rig: store limb pivots + per-character walk state ───────────
   group._rig = {
@@ -37839,8 +37822,6 @@ function spawnGameBots() {
       if (selectedModeConfig.type !== 'lobby') {
         setTimeout(() => { try { showAnnouncement(`${_tc.emoji} ${_tc.name} ${_tag}`, _sub, _col, 2400); } catch (e) {} }, 1200 + idx * 700);
       }
-      // 🖼️ Float the semi-pixel comic avatar over the drafted character (ally or enemy).
-      try { attachTeammateAvatar(remoteMeshes[id], _tc); } catch (e) {}
     }
 
     // ── Attach weapon prop to bot mesh ────────────────────────────────────
