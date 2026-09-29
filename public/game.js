@@ -4559,6 +4559,42 @@ function getGroundEyeY(px = camera.position.x, pz = camera.position.z, eyeY) {
   return groundY;
 }
 
+function getLandingEyeY(prevEyeY, px = camera.position.x, pz = camera.position.z, currEyeY = camera.position.y) {
+  const eye = window._crouchEye || PLAYER_EYE_HEIGHT;
+  const prevFeetY = prevEyeY - eye;
+  const currFeetY = currEyeY - eye;
+  let groundY = getGroundEyeY(px, pz, currEyeY);
+  for (const box of wallColliders) {
+    if (box.max.y <= 0.05 || box.max.y > 14) continue;
+    if (px < box.min.x - PLAYER_RADIUS || px > box.max.x + PLAYER_RADIUS) continue;
+    if (pz < box.min.z - PLAYER_RADIUS || pz > box.max.z + PLAYER_RADIUS) continue;
+    const top = box.max.y;
+    if (prevFeetY >= top - 0.30 && currFeetY <= top + 0.45) {
+      groundY = Math.max(groundY, top + PLAYER_EYE_HEIGHT);
+    }
+  }
+  return groundY;
+}
+
+function tryWallClimbMove(dt, dir) {
+  if (!window._climbArmed || (window._climbBudget || 0) <= 0 || !dir || dir.lengthSq() <= 0.01) return false;
+  const wall = nearClimbableWall();
+  if (!wall) return false;
+  const cx = Math.max(wall.min.x, Math.min(camera.position.x, wall.max.x));
+  const cz = Math.max(wall.min.z, Math.min(camera.position.z, wall.max.z));
+  const intoWall = (dir.x * (cx - camera.position.x) + dir.z * (cz - camera.position.z)) > -0.12;
+  if (!intoWall) return false;
+  window._climbing = true;
+  window._climbBudget -= dt;
+  window._climbFxT = (window._climbFxT || 0) + dt;
+  if (window._climbFxT > 0.16) {
+    window._climbFxT = 0;
+    spawnHitParticle(camera.position.clone().setY(camera.position.y - 1.2));
+    playSoundEvent('footstep', { volume: 0.32, pitch: 1.5, minGap: 100 });
+  }
+  return true;
+}
+
 function isPlayerGrounded() {
   return camera.position.y <= getGroundEyeY() + 0.04 && (!slamState || slamState.vel <= 0);
 }
@@ -25332,32 +25368,21 @@ function updateMovement(dt) {
     // 🧗 Wall-climb — airborne, you jumped (armed), you're pressing into a tall
     // wall, and you still have climb stamina. Negates gravity and scrambles up.
     let climbing = false;
-    if (!isGrounded && window._climbArmed && (window._climbBudget || 0) > 0 && dir.lengthSq() > 0.01) {
-      const wall = nearClimbableWall();
-      // Must be pushing roughly INTO the wall, not along/away from it
-      const cx = Math.max(wall ? wall.min.x : 0, Math.min(camera.position.x, wall ? wall.max.x : 0));
-      const cz = Math.max(wall ? wall.min.z : 0, Math.min(camera.position.z, wall ? wall.max.z : 0));
-      const intoWall = wall && (dir.x * (cx - camera.position.x) + dir.z * (cz - camera.position.z)) > -0.05;
-      if (wall && intoWall) {
-        climbing = true;
-        window._climbing = true;
-        window._climbBudget -= dt;
-        playerYVel = 5.4;           // steady upward scramble
-        window._climbFxT = (window._climbFxT || 0) + dt;
-        if (window._climbFxT > 0.16) {
-          window._climbFxT = 0;
-          spawnHitParticle(camera.position.clone().setY(camera.position.y - 1.2));
-          playSoundEvent('footstep', { volume: 0.32, pitch: 1.5, minGap: 100 });
-        }
-      }
+    if (!isGrounded && tryWallClimbMove(dt, dir)) {
+      climbing = true;
+      playerYVel = 5.4;           // steady upward scramble
     }
     if (!climbing) window._climbing = false;
     if (!isGrounded) {
+      const prevEyeY = camera.position.y;
       if (!climbing) playerYVel -= GRAVITY * dt; // gravity (suspended while climbing)
       camera.position.y += playerYVel * dt;
-      if (camera.position.y <= groundEyeY) {
-        camera.position.y = groundEyeY;
+      const landingEyeY = getLandingEyeY(prevEyeY) + (window._crouchEye - 1.65);
+      if (camera.position.y <= Math.max(groundEyeY, landingEyeY)) {
+        camera.position.y = Math.max(groundEyeY, landingEyeY);
         playerYVel = 0;
+        window._slideUntil = 0;
+        _extVel.x *= 0.2; _extVel.z *= 0.2;
       }
     } else {
       // glue to ground when not jumping
@@ -25425,14 +25450,19 @@ function updateMovement(dt) {
   if (slamState) {
     // Low-grav zones reduce gravity to 1/3
     const gravMult = (typeof _playerInLowGrav !== 'undefined' && _playerInLowGrav) ? 0.33 : 1;
+    const prevEyeY = camera.position.y;
     slamState.vel -= GRAVITY * dt * gravMult; // gravity
+    if (slamState.vel < 2.5 && tryWallClimbMove(dt, dir)) {
+      slamState.vel = 5.4;
+      slamState.type = 'jump';
+    }
     camera.position.y += slamState.vel * dt;
     // Land at the eye height you are actually going to stand at. This branch
     // used to ignore the crouch/slide offset the grounded branch applies, so
     // touching down mid-slide snapped the camera from 0.70 up to 1.65 and then
     // dropped it back the next frame.
     const airCrouchDelta = (window._crouchEye != null) ? (window._crouchEye - 1.65) : 0;
-    const groundEyeY = getGroundEyeY() + airCrouchDelta;
+    const groundEyeY = Math.max(getLandingEyeY(prevEyeY) + airCrouchDelta, getGroundEyeY() + airCrouchDelta);
     // ...and only while you are on the way DOWN. Leaving the ground out of a
     // slide starts the eye at 0.70 while this reference races back up to 1.65 at
     // 12/s, and the eye ease runs earlier in the frame than this does. At 60 fps
@@ -25443,6 +25473,8 @@ function updateMovement(dt) {
     if (camera.position.y <= groundEyeY && slamState.vel <= 0) {
       const landingHardness = Math.min(1.2, Math.abs(slamState.vel || 0) / 12);
       camera.position.y = groundEyeY;
+      window._slideUntil = 0;
+      _extVel.x *= 0.2; _extVel.z *= 0.2;
       if (landingHardness > 0.18) {
         _realismLandKick = Math.max(_realismLandKick, landingHardness);
         playSoundEvent('footstep', { volume: Math.min(1, 0.35 + landingHardness * 0.45), pitch: 0.72, minGap: 80 });
@@ -38444,10 +38476,7 @@ function updateBotAI(dt) {
       const meleeChargeMaxStart = bot.difficulty && bot.difficulty !== 'easy' ? 12 : 999;
       // HARD/EXPERT: NEVER charge into someone with a close-range demolition weapon — keep distance instead
       const skipMeleeCharge = (bot.difficulty === 'hard' || bot.difficulty === 'expert') && playerHasScaryCloseWeapon();
-      if (bot.team === 'enemy' && playerLow && target.isPlayer && bot.state !== 'melee_charge' && dist < meleeChargeMaxStart && !skipMeleeCharge) {
-        bot.state = 'melee_charge';
-        bot.tacTimer = 6;
-      }
+      if (bot.state === 'melee_charge') bot.state = 'chase';
       // HARD/EXPERT: if already charging and player has a scary weapon, abort immediately
       if ((bot.difficulty === 'hard' || bot.difficulty === 'expert') && bot.state === 'melee_charge' && playerHasScaryCloseWeapon()) {
         bot.state = 'flank'; bot.tacTimer = 0;
@@ -38502,11 +38531,6 @@ function updateBotAI(dt) {
             bot.state = 'chase';
             bot.coverPt = null;
             bot.hitAndRunUntil = 0; bot.hitAndRunTarget = null;
-            // If close enough, melee_charge
-            if (dist < 8 && bot.hp >= 100) {
-              bot.state = 'melee_charge';
-              bot.tacTimer = 4;
-            }
             break;
           }
           case 'cover_player': {
@@ -38679,15 +38703,6 @@ function updateBotAI(dt) {
         bot.state = 'chase';
         bot.coverPt = null;
         bot.tacTimer = 0;
-        // If close enough, escalate to melee_charge for the finish
-        if (dist < 10 && (chargeReason === 'finisher' || chargeReason === 'airborne' || chargeReason === 'slowed_target')) {
-          if (bot.state !== 'melee_charge') {
-            const meleeline = pickThought('melee_charge');
-            if (meleeline) showBotSpeech(bot, meleeline, 1800, '#ff4444');
-          }
-          bot.state = 'melee_charge';
-          bot.tacTimer = 5;
-        }
       }
 
       // EXPERT: hit-and-run — after firing, periodically reposition to a new flanking spot
@@ -39028,7 +39043,7 @@ function updateBotAI(dt) {
             bot.lastShot = now;
             // 🔫 Burst bookkeeping: start a new 4-8 round burst when empty
             if (w.auto) {
-              if ((bot.burstLeft || 0) <= 0) bot.burstLeft = 2 + Math.floor(Math.random() * 4);
+              if ((bot.burstLeft || 0) <= 0) bot.burstLeft = 8 + Math.floor(Math.random() * 9);
               bot.burstLeft--;
             }
             // 🛹 Raycast the shot against the player's (crouch-adjusted) hitbox
