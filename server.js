@@ -1536,7 +1536,7 @@ const LOBBY_MAP_POOL = ['blank','urban','warehouse','forest','vietnam','volcano'
                         'sewer','gravity_lab','glassworks','carrier','overgrowth','orbital_station',
                         'foundry','carnival','biosphere','lockdown','studio','temple','holiday',
                         'labyrinth','arena','opera','doomsday','train','dreamscape',
-                        'pearl_harbor','titanic','supermarket','pyongyang','traffic_cone_republic','flying_moai','big_arena','super_arena'];
+                        'pearl_harbor','titanic','supermarket','pyongyang','traffic_cone_republic','flying_moai'];
 // The lobby plays the map of the first player (in join order) who picked a specific one.
 function lobbyMapPick(L) {
   return L.players.find(p => p.map)?.map || null;
@@ -1545,7 +1545,7 @@ function lobbyMapPick(L) {
 // moment everyone *in the lobby* was ready — alone, that is just you — so whoever
 // picked 1v1 next always landed in a fresh lobby and two people never met.
 const HUMAN_SEARCH_MS = 15000;
-const HUMAN_SEARCH_MODES = new Set(['1v1', '2v2', '3v3', '5v5', '10v10']);   // team modes too (#48)
+const HUMAN_SEARCH_MODES = new Set(['1v1', '2v2', '3v3', '5v5', '10v10', 'm4_tower']);   // team modes too (#48)
 // People who could still pick a mode in the next few seconds: signed in, not in a match.
 // (A page open on the login screen is online too, but it isn't coming.)
 function idleHumansBesides(L) {
@@ -1599,7 +1599,9 @@ function startLobbyMatch(L, extra = {}) {
   const matchId = `lobby-${mode}-${Date.now()}`;
   // 🗺️ Server picks the map ONCE so all players load the same one: the lobby's pick if someone
   // chose a map (#17 — the picker used to be ignored here), else random.
-  const mapId = lobbyMapPick(L) || LOBBY_MAP_POOL[Math.floor(Math.random() * LOBBY_MAP_POOL.length)];
+  const mapId = mode === 'm4_tower'
+    ? 'm4_tower'
+    : (lobbyMapPick(L) || LOBBY_MAP_POOL[Math.floor(Math.random() * LOBBY_MAP_POOL.length)]);
   // Designate the first player as host (they spawn the bots if any)
   const host = L.players[0];
   for (const p of L.players) {
@@ -1651,6 +1653,7 @@ const MODE_TEAM_SIZES = {
   '3v3': { ally: 3, enemy: 3 },
   '5v5': { ally: 5, enemy: 5 },
   '10v10': { ally: 10, enemy: 10 },
+  'm4_tower': { ally: 5, enemy: 5 },
   'ffa5':  { ally: 1, enemy: 5 },
   'ffa15': { ally: 1, enemy: 15 },
   'koth':  { ally: 1, enemy: 9 },
@@ -1700,7 +1703,7 @@ function tryPairPvpQueue(mode) {
                     'sewer','gravity_lab','glassworks','carrier','overgrowth','orbital_station',
                     'foundry','carnival','biosphere','lockdown','studio','temple','holiday',
                     'labyrinth','arena','opera','doomsday','train','dreamscape',
-                    'pearl_harbor','titanic','supermarket','pyongyang','traffic_cone_republic','flying_moai','big_arena','super_arena'];
+                    'pearl_harbor','titanic','supermarket','pyongyang','traffic_cone_republic','flying_moai'];
   const mapId = MAP_POOL[Math.floor(Math.random() * MAP_POOL.length)];
   io.to(a.socketId).emit('pvpResult', {
     mode, paired: true, team: teamA, mapId,
@@ -1759,7 +1762,8 @@ event_horizon: 75,
   // Secondaries
   revolver: 83, flare: 85, pistol: 20, shorty: 30, cycler: 8,
   hand_cannon: 105, throwing_knives: 45, taser: 53,
-  gatecrasher: 5, gatecrasher_slug: 40, gatecrasher_beam: 40, cyroclasm: 10, cyroclasm_laser: 10, continuum: 30,
+  gatecrasher: 5, gatecrasher_slug: 40, gatecrasher_beam: 40,
+  cyroclasm: 10, cyroclasm_laser: 10, continuum: 30,
   storm_bloom: 5, storm_bloom_ball: 100, storm_bloom_aura: 10,
   // Ability shots
   sg100_ab: 140, lever_ab: 150, crossbow_ab: 220, crossbow_c1: 140,
@@ -1860,7 +1864,7 @@ const FALLOFF_NONE    = { near: 9999, far: 9999, min: 1 };
 const FALLOFF_SIDEARM = { near: 19, far: 40, min: 0.52 };
 const FALLOFF_AR      = { near: 25, far: 52, min: 0.67 };
 const WEAPON_FALLOFF = {
-  sg8: FALLOFF_SHOTGUN, storm_bloom: FALLOFF_SHOTGUN, flamethrower: FALLOFF_SHOTGUN, shorty: FALLOFF_SHOTGUN, sawed_off: FALLOFF_SHOTGUN, boomstick: FALLOFF_SHOTGUN,
+  sg8: FALLOFF_SHOTGUN, flamethrower: FALLOFF_SHOTGUN, shorty: FALLOFF_SHOTGUN, sawed_off: FALLOFF_SHOTGUN, boomstick: FALLOFF_SHOTGUN,
   srx: FALLOFF_SNIPER, lever: FALLOFF_SNIPER, railgun: FALLOFF_SNIPER, revolver: FALLOFF_SNIPER, hand_cannon: FALLOFF_SNIPER, m1_garand: FALLOFF_SNIPER, coilgun: FALLOFF_SNIPER, amr: FALLOFF_SNIPER, duelist_pistol: FALLOFF_SNIPER, barrett: FALLOFF_SNIPER, desert_eagle: FALLOFF_SNIPER, m1911: FALLOFF_SNIPER,
   rpd: FALLOFF_LMG, minigun: FALLOFF_LMG, cycler: FALLOFF_LMG, arc_torrent: FALLOFF_LMG, slingshot: FALLOFF_LMG, solar_lance: FALLOFF_LMG, gau19: FALLOFF_LMG, mk44: FALLOFF_LMG, m134: FALLOFF_LMG, mg42: FALLOFF_LMG,
   mp40: FALLOFF_SMG, p90: FALLOFF_SMG, burst: FALLOFF_BURST, vector: FALLOFF_SMG, sticker_blaster: FALLOFF_SMG, smart_smg: FALLOFF_SMG, swarm_rifle: FALLOFF_SMG, painter_beam: FALLOFF_SMG, machine_pistol: FALLOFF_SMG, machine_revolver: FALLOFF_SMG, prism_engine: FALLOFF_SMG, p90_spec: FALLOFF_SMG, glock18: FALLOFF_SMG,
@@ -1880,13 +1884,6 @@ function falloffMultiplier(weaponId, dist) {
   const t = (dist - f.near) / (f.far - f.near);
   return 1 - t * (1 - f.min);
 }
-function weaponDamageForHit(data, dist) {
-  if (data && data.weapon === 'cyroclasm_laser') {
-    const raw = Math.round(Number(data.damage) || 0);
-    return Math.max(0, Math.min(300, raw));
-  }
-  return Math.round((WEAPON_DAMAGE[data.weapon] || 25) * falloffMultiplier(data.weapon, dist));
-}
 
 const players = {};
 
@@ -1900,6 +1897,10 @@ function nextSpawn() {
   const s = SPAWN_POINTS[spawnIdx % SPAWN_POINTS.length];
   spawnIdx++;
   return { x: s.x, y: 1, z: s.z };
+}
+
+function maxHpForMode(mode) {
+  return mode === 'm4_tower' ? 100 : PLAYER_MAX_HP;
 }
 
 function createPlayer(id, name) {
@@ -1996,7 +1997,7 @@ setInterval(() => {
 
 function respawnBot(bot) {
   const s = nextSpawn();
-  Object.assign(bot, { x: s.x, y: s.y, z: s.z, hp: PLAYER_MAX_HP, dead: false });
+  Object.assign(bot, { x: s.x, y: s.y, z: s.z, hp: maxHpForMode(bot.matchMode), dead: false });
 }
 
 // ── Socket connections ─────────────────────────────────────────────────────
@@ -2118,7 +2119,7 @@ io.on('connection', (socket) => {
     const shooter = players[socket.id];
     if (!target || !shooter || target.dead || target.isBot || shielded(target)) return;
     if (blocksFriendlyFire(shooter, target)) return;
-    let dmg = weaponDamageForHit(data, dist3(shooter, target));
+    let dmg = Math.round((WEAPON_DAMAGE[data.weapon] || 25) * falloffMultiplier(data.weapon, dist3(shooter, target)));
     if (data.headshot) dmg = data.instakill ? target.hp : Math.round(dmg * (WEAPON_HS_MULT[data.weapon] || 2));
     const hpBefore = target.hp;
     target.hp = Math.max(0, target.hp - dmg);
@@ -2142,7 +2143,7 @@ io.on('connection', (socket) => {
       : players[socket.id];
     if (!bot || !bot.isBot || bot.dead || !shooter) return;
     if (blocksFriendlyFire(shooter, bot)) return;
-    let dmg = weaponDamageForHit(data, dist3(shooter, bot));
+    let dmg = Math.round((WEAPON_DAMAGE[data.weapon] || 25) * falloffMultiplier(data.weapon, dist3(shooter, bot)));
     if (data.headshot) dmg = data.instakill ? bot.hp : Math.round(dmg * (WEAPON_HS_MULT[data.weapon] || 2));
     // The shooter's client already saw this bot die (#48). Client and server work damage out
     // differently (their own tables, zone bonuses, positions), and with other real players in
@@ -2209,7 +2210,7 @@ io.on('connection', (socket) => {
     const p = players[socket.id];
     if (!p || p.dead) return;
     const amount = Math.max(0, Math.min(150, Number(data.amount) || 0));
-    p.hp = Math.min(PLAYER_MAX_HP, p.hp + amount);
+    p.hp = Math.min(maxHpForMode(p.matchMode), p.hp + amount);
     emitToMatch(p.matchId, 'playerHit', { targetId: p.id, hp: p.hp, bulletId: null });
   });
 
@@ -2221,7 +2222,7 @@ io.on('connection', (socket) => {
     const z = data.z != null ? Number(data.z) : s.z;
     // The same spawn shield the client shows (grantSpawnShield caps it at 1.5 s), kept here so hits
     // during it cost no HP — the server used to take it anyway and kill players showing full health (#22).
-    Object.assign(p, { x, y: s.y, z, hp: PLAYER_MAX_HP, dead: false, shieldUntil: Date.now() + SPAWN_SHIELD_MS });
+    Object.assign(p, { x, y: s.y, z, hp: maxHpForMode(p.matchMode), dead: false, shieldUntil: Date.now() + SPAWN_SHIELD_MS });
     emitToMatch(p.matchId, 'playerRespawned', { ...p, clientSpawn: data.x != null && data.z != null });
   });
 
@@ -2230,7 +2231,7 @@ io.on('connection', (socket) => {
     if (!p) return;
     const x = data.x != null ? Number(data.x) : p.x;
     const z = data.z != null ? Number(data.z) : p.z;
-    Object.assign(p, { x, y: 1, z, hp: PLAYER_MAX_HP, dead: false });
+    Object.assign(p, { x, y: 1, z, hp: maxHpForMode(p.matchMode), dead: false });
     emitToMatch(p.matchId, 'playerRespawned', { ...p, forcedReset: true });
   });
 
@@ -2365,16 +2366,20 @@ io.on('connection', (socket) => {
   socket.on('spawnBots', (botList) => {
     const ownerPlayer = players[socket.id];
     const ownerMatchId = ownerPlayer ? ownerPlayer.matchId : 'lobby';
+    const ownerMode = ownerPlayer?.matchMode || '';
     for (const b of botList) {
       // Use client-provided spawn position if given, otherwise fall back to nextSpawn
       const spawn = (b.spawnX != null) ? { x: b.spawnX, y: 1, z: b.spawnZ } : nextSpawn();
+      const botWeaponId = ownerMode === 'm4_tower' ? 'm4a1_arena' : b.weaponId;
+      const botHp = ownerMode === 'm4_tower' ? 100 : (b.hp || PLAYER_MAX_HP);
       players[b.id] = {
         id: b.id, name: b.name, isBot: true, team: b.team,
-        weaponId: b.weaponId, ownerId: socket.id, skin: String(b.skin || 'default').slice(0, 24),
+        weaponId: botWeaponId, ownerId: socket.id, skin: String(b.skin || 'default').slice(0, 24),
         x: spawn.x, y: spawn.y, z: spawn.z,
         rotY: 0, rotX: 0,
-        hp: b.hp || PLAYER_MAX_HP, dead: false, kills: 0, deaths: 0, lastShot: 0,
+        hp: botHp, dead: false, kills: 0, deaths: 0, lastShot: 0,
         matchId: ownerMatchId, // bots inherit their owner's match
+        matchMode: ownerMode,
       };
       emitToMatch(ownerMatchId, 'playerJoined', players[b.id]);
     }
@@ -2410,7 +2415,7 @@ io.on('connection', (socket) => {
     const bot    = players[data.botId];
     if (!player || player.dead || !bot || !bot.isBot || shielded(player)) return;
     if (blocksFriendlyFire(bot, player)) return;
-    let dmg = weaponDamageForHit(data, dist3(bot, player));
+    let dmg = Math.round((WEAPON_DAMAGE[data.weapon] || 25) * falloffMultiplier(data.weapon, dist3(bot, player)));
     player.hp = Math.max(0, player.hp - dmg);
     emitToMatch(player.matchId, 'playerHit', { targetId: player.id, hp: player.hp, bulletId: null });
     if (player.hp <= 0) {
@@ -2423,14 +2428,14 @@ io.on('connection', (socket) => {
   socket.on('forceRespawnBot', (data) => {
     const bot = players[data.id || data.botId];
     if (!bot || !bot.isBot || bot.ownerId !== socket.id) return;
-    const hp = data.hp || PLAYER_MAX_HP;
+    const hp = bot.matchMode === 'm4_tower' ? 100 : (data.hp || PLAYER_MAX_HP);
     if (data.x != null && data.z != null) {
       Object.assign(bot, { x: data.x, y: 1, z: data.z, hp, dead: false });
     } else {
       respawnBot(bot);
       bot.hp = hp;
     }
-    if (data.weaponId) bot.weaponId = data.weaponId;
+    if (data.weaponId) bot.weaponId = bot.matchMode === 'm4_tower' ? 'm4a1_arena' : data.weaponId;
     emitToMatch(bot.matchId, 'playerRespawned', bot);
   });
 
