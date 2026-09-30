@@ -4790,6 +4790,8 @@ function rampUnderPlayer() {
 const MAP_GIMMICKS = {};
 let activeMapName = 'blank';
 let activeMapGimmicks = { damageZones: [], jumpPads: [], iceZones: [], oilZones: [], lowGravZones: [] };
+const ARCHIVED_LOBBY_MAPS = new Set(['lobby13']);
+function isArchivedLobbyMap(name) { return ARCHIVED_LOBBY_MAPS.has(String(name || '')); }
 
 function registerMap(name) {
   const group = new THREE.Group();
@@ -5355,13 +5357,14 @@ function safeAdminMapDoc(doc) {
   const clean = doc && typeof doc === 'object' ? doc : defaultAdminMapDoc();
   const rawId = String(clean.id || '').toLowerCase().replace(/[^a-z0-9_]/g, '_');
   const id = rawId.startsWith(ADMIN_CUSTOM_MAP_PREFIX) ? rawId : `${ADMIN_CUSTOM_MAP_PREFIX}${rawId || Date.now().toString(36)}`;
+  const baseMap = String(clean.baseMap || 'empty').replace(/[^a-z0-9_]/gi, '_');
   return {
     id,
     name: String(clean.name || id.replace(ADMIN_CUSTOM_MAP_PREFIX, '')).slice(0, 40),
     groundColor: Number(clean.groundColor ?? 0x5f6f58) & 0xffffff,
     gridColor: Number(clean.gridColor ?? 0x3f4f38) & 0xffffff,
     skyColor: Number(clean.skyColor ?? 0x9eaab8) & 0xffffff,
-    baseMap: String(clean.baseMap || 'empty').replace(/[^a-z0-9_]/gi, '_'),
+    baseMap: isArchivedLobbyMap(baseMap) ? 'empty' : baseMap,
     outerWalls: clean.outerWalls !== false,
     boxes: Array.isArray(clean.boxes) ? clean.boxes.slice(0, 220).map(b => ({
       shape: ['box', 'sphere', 'cylinder'].includes(b.shape) ? b.shape : 'box',
@@ -5380,6 +5383,7 @@ function safeAdminMapDoc(doc) {
 }
 
 function clearMapGroup(name) {
+  if (isArchivedLobbyMap(name)) return;
   const group = MAP_GROUPS[name];
   if (!group) return;
   while (group.children.length) group.remove(group.children[0]);
@@ -7352,6 +7356,7 @@ const GRID_MAP_ARCHETYPES = [
 ];
 const GRID_CONCEPT_MAPS_ACTIVE = true;
 function clearMapForGridConcept(name) {
+  if (isArchivedLobbyMap(name)) return;
   const group = MAP_GROUPS[name];
   if (!group) return;
   while (group.children.length) {
@@ -7540,7 +7545,7 @@ function addGridBlock(name, cx, cz, sizeX, sizeZ, groundH, roofH, flip = false) 
   addGridLadder(name, cx + dir * (sizeX / 2 + 0.16), cz, Math.PI / 2, 0, roofH);
 }
 function addGridConceptMap(name, index) {
-  if (name === 'lobby13' || name === 'base_raid') return;
+  if (isArchivedLobbyMap(name) || name === 'base_raid') return;
   if (name.startsWith(ADMIN_CUSTOM_MAP_PREFIX)) return;
   clearMapForGridConcept(name);
   const large = name === 'br_arena';
@@ -7656,7 +7661,7 @@ function replaceBuiltMapsWithGridConcepts() {
   mapMortars.length = 0;
   mapVehicles.length = 0;
   Object.keys(MAP_GROUPS).forEach((name, index) => {
-    if (name !== 'lobby13' && name !== 'obby') addGridConceptMap(name, index);
+    if (!isArchivedLobbyMap(name) && name !== 'obby') addGridConceptMap(name, index);
   });
 }
 replaceBuiltMapsWithGridConcepts();
@@ -42974,8 +42979,8 @@ function updateAdminMapPreview() {
 }
 
 function adminBuilderMapOptions() {
-  const skip = new Set(['range', 'lobby13']);
-  const names = Object.keys(MAP_GROUPS).filter(id => !id.startsWith(ADMIN_CUSTOM_MAP_PREFIX) && !skip.has(id)).sort();
+  const skip = new Set(['range']);
+  const names = Object.keys(MAP_GROUPS).filter(id => !id.startsWith(ADMIN_CUSTOM_MAP_PREFIX) && !skip.has(id) && !isArchivedLobbyMap(id)).sort();
   return ['empty', ...names].map(id => `<option value="${id}">${id === 'empty' ? 'EMPTY MAP' : mapCardLabel(id).toUpperCase()}</option>`).join('');
 }
 
