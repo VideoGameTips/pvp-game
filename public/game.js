@@ -2374,14 +2374,50 @@ function rollPersonality(weaponId, difficulty) {
 const SCARY_CLOSE_WEAPONS = new Set(['sg8','shorty','sawed_off','flamethrower','arc_torrent','chainsaw','lightsabre','katana','fire_axe','sledge','knife']);
 
 const BOT_DIFFICULTY_TUNING = {
-  easy:   { aimMin: 0.42, aimRand: 0.18, reactMin: 520, reactRand: 420, fireMin: 1450, fireRand: 850, reloadMin: 2400, reloadRand: 900, hitRunChance: 0.00, initialShotDelay: 2200 },
-  medium: { aimMin: 0.55, aimRand: 0.22, reactMin: 420, reactRand: 360, fireMin: 1220, fireRand: 780, reloadMin: 2050, reloadRand: 800, hitRunChance: 0.00, initialShotDelay: 1700 },
-  hard:   { aimMin: 0.78, aimRand: 0.28, reactMin: 250, reactRand: 300, fireMin: 900,  fireRand: 520, reloadMin: 1450, reloadRand: 550, hitRunChance: 0.14, initialShotDelay: 1150 },
-  expert: { aimMin: 1.02, aimRand: 0.28, reactMin: 140, reactRand: 180, fireMin: 640,  fireRand: 340, reloadMin: 900,  reloadRand: 330, hitRunChance: 0.16, initialShotDelay: 700 },
+  easy:   { aimMin: 0.50, aimRand: 0.18, reactMin: 500, reactRand: 380, fireMin: 1380, fireRand: 780, reloadMin: 2400, reloadRand: 900, hitRunChance: 0.00, initialShotDelay: 2000 },
+  medium: { aimMin: 0.68, aimRand: 0.24, reactMin: 360, reactRand: 320, fireMin: 1080, fireRand: 680, reloadMin: 2050, reloadRand: 800, hitRunChance: 0.00, initialShotDelay: 1450 },
+  hard:   { aimMin: 0.92, aimRand: 0.30, reactMin: 220, reactRand: 260, fireMin: 780,  fireRand: 460, reloadMin: 1450, reloadRand: 550, hitRunChance: 0.14, initialShotDelay: 950 },
+  expert: { aimMin: 1.14, aimRand: 0.30, reactMin: 130, reactRand: 160, fireMin: 560,  fireRand: 300, reloadMin: 900,  reloadRand: 330, hitRunChance: 0.16, initialShotDelay: 560 },
 };
 
 function botTuning(diff) {
   return BOT_DIFFICULTY_TUNING[diff] || BOT_DIFFICULTY_TUNING.medium;
+}
+
+function botAimProfile(diff) {
+  if (diff === 'expert') return { follow: 11.5, drift: 0.16, settle: 0.88 };
+  if (diff === 'hard') return { follow: 8.8, drift: 0.24, settle: 1.05 };
+  if (diff === 'medium') return { follow: 6.6, drift: 0.34, settle: 1.28 };
+  return { follow: 4.5, drift: 0.48, settle: 1.55 };
+}
+
+function updateBotAimCrosshair(bot, target, tx, tz, dist, weapon, dt, hasLOS) {
+  const skill = bot.aimSkill || 1;
+  let goalX = tx, goalZ = tz;
+  if (target.isPlayer && bot.difficulty && bot.difficulty !== 'easy') {
+    const bulletSpeed = weapon.bulletSpeed || 120;
+    const travelTime = dist / bulletSpeed;
+    const leadScale = Math.min(0.58, 0.16 + skill * 0.34);
+    goalX = tx + playerVelocity.x * travelTime * leadScale;
+    goalZ = tz + playerVelocity.z * travelTime * leadScale;
+    if (bot.difficulty === 'expert' && playerPosHistory.length >= 4) {
+      const recent = playerPosHistory.slice(-4);
+      const oldest = recent[0], newest = recent[recent.length - 1];
+      const dtH = Math.max(0.05, (newest.t - oldest.t) / 1000);
+      goalX = tx + ((newest.x - oldest.x) / dtH) * travelTime * 0.55;
+      goalZ = tz + ((newest.z - oldest.z) / dtH) * travelTime * 0.55;
+    }
+  }
+  const prof = botAimProfile(bot.difficulty);
+  if (!bot._aimCrosshair || !hasLOS) bot._aimCrosshair = { x: goalX, z: goalZ, err: Infinity };
+  const follow = 1 - Math.exp(-prof.follow * Math.max(0, dt));
+  bot._aimCrosshair.x += (goalX - bot._aimCrosshair.x) * follow;
+  bot._aimCrosshair.z += (goalZ - bot._aimCrosshair.z) * follow;
+  bot._aimCrosshair.err = Math.hypot(goalX - bot._aimCrosshair.x, goalZ - bot._aimCrosshair.z);
+  bot._aimCrosshair.settled = bot._aimCrosshair.err <= prof.settle || dist < 7;
+  bot._aimCrosshair.goalX = goalX;
+  bot._aimCrosshair.goalZ = goalZ;
+  return bot._aimCrosshair;
 }
 
 // Returns true if the player currently has a scary close-range weapon equipped/active OR a chainsaw-tier melee selected.
@@ -39168,13 +39204,17 @@ function updateBotAI(dt) {
           bot.firstSeenAt = 0; // reset reaction timer on LOS break
         }
         const reactionDone = !bot.reactionMs || (hasLOS && now - bot.firstSeenAt >= bot.reactionMs);
+        const skill = bot.aimSkill || 1;
+        const aimCross = updateBotAimCrosshair(bot, target, tx, tz, dist, w, dt, hasLOS);
+        const aimReady = !target.isPlayer || (aimCross && aimCross.settled);
+        if (hasLOS && aimCross) bot.rotY = Math.atan2(-(aimCross.x - bot.x), -(aimCross.z - bot.z));
 
         // HARD/EXPERT: weapon ability — fire a high-damage powershot on cooldown
         const useAbilities = bot.difficulty === 'hard' || bot.difficulty === 'expert';
         // EXPERT: shorter ability CD + always fires opportunistically while player is reloading
         const expertAbilityReady = bot.difficulty === 'expert' && (typeof reloading !== 'undefined' && reloading)
                                   && now >= (bot.nextAbilityAt || 0) - 6000;
-        if (useAbilities && hasLOS && reactionDone && roundLive && dist < 28
+        if (useAbilities && hasLOS && reactionDone && aimReady && roundLive && dist < 28
             && (now >= (bot.nextAbilityAt || 0) || expertAbilityReady)
             && !isReloading && target.isPlayer && bot.team === 'enemy'
             && !isShielded() && !isRiotShieldBlocking()) {
@@ -39194,7 +39234,7 @@ function updateBotAI(dt) {
         // While kiting (retreating from scary close weapon), reduce fire interval so they shoot while running
         const kiteFireInterval = bot._kiting ? Math.max(w.fireRate, Math.min(520, tune.fireMin)) + Math.random() * Math.min(260, tune.fireRand) : fireInterval;
         const shootRange = bot.difficulty === 'expert' ? 46 : bot.difficulty === 'hard' ? 40 : 35;
-        if (canShoot && reactionDone && roundLive && dist < shootRange && now - bot.lastShot > kiteFireInterval) {
+        if (canShoot && reactionDone && aimReady && roundLive && dist < shootRange && now - bot.lastShot > kiteFireInterval) {
           if (hasLOS) {
             bot.lastShot = now;
             // 🔫 Burst bookkeeping: start a new 4-8 round burst when empty
@@ -39232,7 +39272,6 @@ function updateBotAI(dt) {
             }
             const origin = new THREE.Vector3(bot.x, 1.5, bot.z);
             // MEDIUM/HARD: skill-based spread reduction (higher aimSkill = tighter shots)
-            const skill = bot.aimSkill || 1;
             // This is the bot's real accuracy now, not decoration on a tracer
             // nobody measured. It was 0.06 + (dist-8)/100, which comes to 0.18
             // at 20 m -- the round landing 1.8 m wide of a target 0.8 m across,
@@ -39242,41 +39281,18 @@ function updateBotAI(dt) {
             // range is lethal, long range is survivable, and crossing the bot's
             // line of fire beats it because the lead is only half-compensated.
             const botMoving = Math.hypot(moveX, moveZ) > 0.015;
-            const spreadBase = bot.state === 'cover' ? 0.095 : 0.070;
-            const movementSpread = botMoving ? 0.028 : 0;
+            const spreadBase = bot.state === 'cover' ? 0.072 : 0.050;
+            const movementSpread = botMoving ? 0.018 : 0;
             const jumpSpread = (bot.y || 0) > 0.08 ? 0.060 : 0;
             const slideSpread = now < (bot._slideUntil || 0) ? 0.035 : 0;
-            const spread = (spreadBase + movementSpread + jumpSpread + slideSpread + Math.max(0, dist - 24) / 850) / Math.max(0.45, skill);
+            const spread = (spreadBase + movementSpread + jumpSpread + slideSpread + Math.max(0, dist - 28) / 1200) / Math.max(0.55, skill);
             // MEDIUM/HARD: bullet leading for player targets
-            let aimX = tx, aimZ = tz;
-            if (target.isPlayer && bot.difficulty && bot.difficulty !== 'easy') {
-              const bulletSpeed = w.bulletSpeed || 120;
-              const travelTime = dist / bulletSpeed;
-              // Lead by predicted player movement, dampened by skill (better aim = more accurate lead)
-              const leadScale = Math.min(0.45, 0.10 + skill * 0.28);
-              aimX = tx + playerVelocity.x * travelTime * leadScale;
-              aimZ = tz + playerVelocity.z * travelTime * leadScale;
-              // EXPERT: trajectory prediction — still imperfect, with intentional
-              // under-lead so dodging and direction changes beat it.
-              if (bot.difficulty === 'expert' && playerPosHistory.length >= 4) {
-                const recent = playerPosHistory.slice(-4);
-                const oldest = recent[0], newest = recent[recent.length - 1];
-                const dtH = Math.max(0.05, (newest.t - oldest.t) / 1000);
-                const trendVx = (newest.x - oldest.x) / dtH;
-                const trendVz = (newest.z - oldest.z) / dtH;
-                aimX = tx + trendVx * travelTime * 0.48;
-                aimZ = tz + trendVz * travelTime * 0.48;
-              }
-            }
+            let aimX = target.isPlayer && aimCross ? aimCross.x : tx;
+            let aimZ = target.isPlayer && aimCross ? aimCross.z : tz;
             if (target.isPlayer) {
-              if (!bot._aimMemory) bot._aimMemory = { x: aimX, z: aimZ };
-              const trackingRate = bot.difficulty === 'expert' ? 0.46 : bot.difficulty === 'hard' ? 0.36 : bot.difficulty === 'medium' ? 0.26 : 0.18;
-              bot._aimMemory.x += (aimX - bot._aimMemory.x) * trackingRate;
-              bot._aimMemory.z += (aimZ - bot._aimMemory.z) * trackingRate;
-              const jitter = (bot.difficulty === 'expert' ? 0.22 : bot.difficulty === 'hard' ? 0.34 : bot.difficulty === 'medium' ? 0.48 : 0.65)
-                * (0.55 + Math.min(1.4, dist / 28));
-              aimX = bot._aimMemory.x + (Math.random() - 0.5) * jitter;
-              aimZ = bot._aimMemory.z + (Math.random() - 0.5) * jitter;
+              const drift = botAimProfile(bot.difficulty).drift * (0.55 + Math.min(1.25, dist / 34));
+              aimX += (Math.random() - 0.5) * drift;
+              aimZ += (Math.random() - 0.5) * drift;
             }
             const aimDx = aimX - bot.x, aimDz = aimZ - bot.z;
             const aimLen = Math.max(Math.hypot(aimDx, aimDz), 0.01);
