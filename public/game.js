@@ -502,7 +502,7 @@ const WEAPONS = [
     auto: false, pellets: 1, spread: 0.007, adsZoom: 50, bulletSpeed: 168, noReload: false,
     bulletColor: 0x9fd7ff, bulletSize: 0.036,
     recoil: { up: 0.005, side: 0.003, climb: 0.06, max: 1.45, recover: 10, adsMult: 0.45 },
-    cycleBurst: { shots: 5, delay: 45, finisherDelay: 70, finisherWeaponId: 'gatecrasher_slug', finisherSpreadMult: 0.2 },
+    cycleBurst: { shots: 5, delay: 45, finisherDelay: 70, finisherWeaponId: 'gatecrasher_beam', finisherSpreadMult: 0, finisherColor: 0x88ccff, finisherSize: 0.07 },
   },
   {
     id: 'sawed_off', name: 'Sawed-Off', type: 'Secondary', slot: 'secondary',
@@ -836,6 +836,7 @@ function computeWeaponFalloff(w) {
 }
 const WEAPON_FALLOFF = Object.fromEntries(WEAPONS.map(w => [w.id, computeWeaponFalloff(w)]));
 WEAPON_FALLOFF.gatecrasher_slug = computeWeaponFalloff({ auto: false, pellets: 1, mag: 6, damage: 40, bulletSpeed: 168, fireRate: 260 });
+WEAPON_FALLOFF.gatecrasher_beam = computeWeaponFalloff({ auto: false, pellets: 1, mag: 6, damage: 40, bulletSpeed: 220, fireRate: 260 });
 function falloffMultiplier(weaponId, dist) {
   const f = WEAPON_FALLOFF[weaponId];
   if (!f || dist == null) return 1;
@@ -16901,26 +16902,32 @@ function buildMachinePistol() {
 }
 
 function buildGatecrasher() {
-  const g = _genericGun({
-    bodyShape: 'compact',
-    bodyColor: 0x18212a,
-    accentColor: 0x68c9ff,
-    barrelColor: 0xaeb8c5,
-    magType: 'stick',
-    topRail: true,
-    emissive: true,
-    bodyLen: 0.23,
-  });
+  const g = new THREE.Group();
   const steel = GUN_MATS.steel();
   const blue = new THREE.MeshBasicMaterial({ color: 0x72d7ff });
   const dark = GUN_MATS.inner();
+  const body = new THREE.MeshPhongMaterial({ color: 0x18212a, shininess: 95, specular: 0x6aa6c8 });
+  const grip = GUN_MATS.grip();
+  gpBox(g, body, 0.050, 0.046, 0.190, 0, 0.018, -0.040);
+  gpBox(g, dark, 0.052, 0.007, 0.155, 0, 0.041, -0.040);
+  gpBox(g, steel, 0.016, 0.014, 0.150, 0, 0.010, -0.145);
+  gpCyl(g, steel, 0.015, 0.015, 0.060, 14, 0, 0.010, -0.250);
+  gpCyl(g, dark, 0.0075, 0.0075, 0.014, 12, 0, 0.010, -0.286);
+  gpBox(g, grip, 0.036, 0.086, 0.032, 0, -0.034, 0.032, -0.20);
+  gpBox(g, steel, 0.024, 0.014, 0.040, 0, -0.020, -0.020);
+  gpBox(g, dark, 0.018, 0.009, 0.012, 0, -0.014, -0.024, 0.20);
+  gpBox(g, steel, 0.024, 0.008, 0.150, 0, 0.050, -0.042);
+  for (let i = 0; i < 6; i++) gpBox(g, dark, 0.026, 0.004, 0.007, 0, 0.055, -0.102 + i * 0.022);
+  gpBox(g, steel, 0.014, 0.010, 0.012, 0, 0.057, 0.036);
+  gpBox(g, steel, 0.012, 0.012, 0.010, 0, 0.056, -0.126);
   gpBox(g, dark, 0.030, 0.020, 0.050, 0, 0.030, -0.155);
   for (let i = 0; i < 5; i++) {
     gpCyl(g, blue, 0.0045, 0.0045, 0.038, 8, -0.022 + i * 0.011, 0.056, -0.160);
   }
-  gpCyl(g, steel, 0.015, 0.015, 0.060, 14, 0, 0.010, -0.250);
-  gpCyl(g, dark, 0.0075, 0.0075, 0.014, 12, 0, 0.010, -0.286);
-  if (g._flash) g._flash.position.set(0, 0.010, -0.292);
+  const flash = makeMuzzleFlash();
+  flash.position.set(0, 0.010, -0.292);
+  g.add(flash);
+  g._flash = flash;
   g._kickZ = 0.018;
   g._greebled = true;
   g._handDetailed = true;
@@ -21917,8 +21924,11 @@ const PROJECTILE_KIND_BY_ID = {
   seismic_hammer:'shock',
   event_horizon:'void',
   quantum_repeater:'phase',
-  cycler:'energy', laser_pointer:'energy',
+  cycler:'energy', laser_pointer:'energy', gatecrasher_beam:'energy',
   airburst_projector:'grenade',
+};
+const SPECIAL_PROJECTILE_SPECS = {
+  gatecrasher_beam: { id: 'gatecrasher_beam', type: 'Beam', bulletSpeed: 220, bulletColor: 0x88ccff, bulletSize: 0.07, bounce: { maxBounces: 1, speedMult: 1.0 } },
 };
 // How fast each kind flies, relative to a metal round. A bullet is supersonic;
 // a lobbed grenade, a rocket building thrust and a gout of flame are not, and
@@ -21968,7 +21978,8 @@ function projectileBaseSpeed(weaponId, weapon, declaredSpeed) {
 }
 function projectileWeaponSpec(weaponId) {
   if (!weaponId) return null;
-  return WEAPONS.find(w => w.id === weaponId)
+  return SPECIAL_PROJECTILE_SPECS[weaponId]
+      || WEAPONS.find(w => w.id === weaponId)
       || WEAPONS.find(w => weaponId === `${w.id}_ab` || weaponId === `${w.id}_c1` || weaponId === `${w.id}_splash`)
       || null;
 }
@@ -31862,7 +31873,7 @@ function spawnLocalBullet(origin, dir, id, isOwn, speed, color, size, weaponId, 
   }
   scene.add(mesh);
   // Track origin and max range for short-range weapons (arc torrent)
-  const wSpec = WEAPONS.find(w => w.id === weaponId);
+  const wSpec = projectileWeaponSpec(weaponId);
   const maxRange = opts.maxRange || wSpec?.maxRange;
   localBullets.push({ mesh, dir: flightDir, createdAt: Date.now(), id, isOwn,
     speed: projectileBaseSpeed(weaponId, wSpec, speed) * BULLET_SPEED_MULTIPLIER, weaponId, size,
@@ -32561,7 +32572,7 @@ function getClientWeaponDamage(weaponId) {
 }
 
 function weaponPiercesDefenses(weaponId) {
-  if (weaponId === 'gatecrasher_slug') return true;
+  if (weaponId === 'gatecrasher_slug' || weaponId === 'gatecrasher_beam') return true;
   const w = WEAPONS.find(x => x.id === weaponId);
   return !!w?.ignoreDefenses;
 }
@@ -33042,7 +33053,7 @@ function updateBullets(dt) {
           removeBullet(); continue;
         }
         // Bouncing weapons (prism, pulse disc, pinball): reflect off wall and speed up
-        const wSpec = WEAPONS.find(w => w.id === b.weaponId);
+        const wSpec = projectileWeaponSpec(b.weaponId);
         if (wSpec?.bounce && (b.bouncesLeft == null ? wSpec.bounce.maxBounces : b.bouncesLeft) > 0) {
           // Initialize bounces remaining
           if (b.bouncesLeft == null) b.bouncesLeft = wSpec.bounce.maxBounces;
@@ -34600,7 +34611,7 @@ const CLIENT_WEAPON_DAMAGE = Object.fromEntries([
   ['m1_garand_ab', 150], ['plasma_storm', 35], ['arc_overload', 70],
   ['singularity', 90], ['rotten_potato', 40], ['sticker_bomb', 35],
   ['chain_pull', 60], ['airburst', 95], ['toxin_dart', 30], ['blind_flash', 0],
-  ['gatecrasher_slug', 40], ['storm_bloom_ball', 100], ['storm_bloom_aura', 10],
+  ['gatecrasher_slug', 40], ['gatecrasher_beam', 40], ['storm_bloom_ball', 100], ['storm_bloom_aura', 10],
   ['arc_torrent', 5], ['firework_launcher', 50], ['switchblade_gun', 50], ['switchblade_charged', 100],
   ['lancer_blade', 50],   // ⚔️ Lancer bayonet-charge hit (main shot uses the WEAPONS 'lancer' damage)
   ['molotov_burn', 10], ['molotov_fire', 5],  // 🔥 inside-the-flames tick / lingering on-fire DOT
@@ -35193,10 +35204,10 @@ socket.on('skinChanged', ({ id, skin, isAdmin }) => {
 });
 socket.on('bulletFired', b => {
   if (b.ownerId===myId) return;
-  const w = WEAPONS.find(x=>x.id===b.weapon)||WEAPONS[0];
+  const w = projectileWeaponSpec(b.weapon) || WEAPONS[0];
   const origin = new THREE.Vector3(b.x,b.y,b.z);
   playWeaponSound(b.weapon || w.id, { baseWeapon: w, remote: true, position: origin });
-  spawnLocalBullet(origin, new THREE.Vector3(b.dx,b.dy,b.dz), b.id, false, w.bulletSpeed, w.bulletColor, w.bulletSize, w.id);
+  spawnLocalBullet(origin, new THREE.Vector3(b.dx,b.dy,b.dz), b.id, false, w.bulletSpeed, w.bulletColor, w.bulletSize, b.weapon || w.id);
 });
 // 🔥 FFA Legend progress, sent as it is earned: every few seconds of FFA
 // damage, and after every FFA win the server accepts.
