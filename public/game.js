@@ -795,7 +795,7 @@ const WEAPONS = [
     auto: false, pellets: 10, spread: 0.052, fixedPelletPattern: 'ring',
     adsZoom: 48, bulletSpeed: 138, noReload: false,
     bulletColor: 0x9fe8ff, bulletSize: 0.038,
-    ability: { name: 'Ball Lightning', cd: 12000, desc: 'Slow orb · aura roots 1s · direct roots 3s', type: 'ball_lightning', noADS: true },
+    ability: { name: 'Ball Lightning', cd: 15000, desc: 'Slow orb · aura roots 1s · direct roots 3s', type: 'ball_lightning', noADS: true },
   },
 ];
 
@@ -27544,6 +27544,7 @@ function abilityCooldownFor(item, ab = equippedAbility(item) || item?.ability) {
   if (item?.id === 'katana') return 7000;
   if (item?.id === 'lightsabre') return 6200;
   if (isMelee) return 1500;
+  if (item?.id === 'storm_bloom') return ab.cd || 15000;
   return 0;
 }
 
