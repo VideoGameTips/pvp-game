@@ -1228,6 +1228,7 @@ let currentWeapon = WEAPONS[0];
 let ammo = currentWeapon.mag;
 let reserve = currentWeapon.reserve;
 let reloading = false, lastShot = 0, shooting = false;
+let minigunTriggerStartedAt = 0, minigunBraceHeld = false, minigunLastSpoolNotice = 0;
 const weaponHeatState = {}; // per-weapon-id { shotCount, cooldownUntil } for heatShots, or { windowStart, lastFireAt, cooldownUntil } for heatWindow weapons
 const spreadBloomState = {}; // per-weapon-id { amount, lastShotAt } for spreadBloom weapons
 let isADS = false, adsFOV = 75, targetFOV = 75;
@@ -24787,6 +24788,12 @@ document.addEventListener('keydown', e => {
   }
   if (e.code==='Tab') { e.preventDefault(); showScoreboard(true); }
   if (e.code==='KeyE') {
+    if (isMinigunHeld() && !isDead) {
+      e.preventDefault();
+      minigunBraceHeld = true;
+      resetMinigunSpool();
+      return;
+    }
     // 🅴 One key, two jobs, and they never collide: if what you're holding has an
     // ability it fires that, otherwise E aims down sights as it always did.
     // Abilities only exist on things that can't aim anyway (see hasAbility), so
@@ -24863,6 +24870,7 @@ document.addEventListener('keydown', e => {
 document.addEventListener('keyup', e => {
   keys[e.code] = false;
   if (e.code==='Tab') showScoreboard(false);
+  if (e.code === 'KeyE') minigunBraceHeld = false;
   if (e.code === 'KeyE' && GAMEPLAY_SETTINGS.adsMode === 'hold'
       && isADS && activeSlot !== 'melee' && activeSlot !== 'support') {
     setADS(false);
@@ -24898,6 +24906,7 @@ document.addEventListener('mousedown', e => {
 document.addEventListener('mouseup', e => {
   if (e.button !== 0) return;
   shooting = false;
+  resetMinigunSpool();
   if (crossbowCharging) {
     crossbowCharging = false;
     fireCrossbowCharge();
@@ -26031,6 +26040,7 @@ function switchWeapon(idx) {
   // their lengths), and a stray index used to crash on weaponModels[idx].visible (#4).
   if (idx === null || idx === undefined || idx < 0 || idx >= WEAPONS.length || !weaponModels[idx]) return;
   if (idx === currentWeaponIdx) return;
+  minigunBraceHeld = false; resetMinigunSpool();
   cancelInspect();
   cancelReload();                      // you can always swap out of a reload
   meleeModels.forEach(m => m.visible = false);
@@ -26103,6 +26113,7 @@ function resetCombatResources() {
   supportUses[selectedSupportIdx] = isObby ? 0 : SUPPORT_ITEMS[selectedSupportIdx].uses;
   reloading = false; shooting = false; isADS = false; targetFOV = 75;
   abilityBuff = null; meleeAbilityBuff = null; pendingFanFire = null;
+  minigunBraceHeld = false; resetMinigunSpool();
   playerRootedUntil = 0;
   crossbowCharging = false; crossbowChargeStart = 0;
   spearThrown = false; revealActive = false; revealEndTime = 0;
@@ -26284,6 +26295,7 @@ function updateQuickMelee() {
 
 function equipActiveSlot() {
   finishEquip();   // whatever was assembling is put back together before it is hidden
+  minigunBraceHeld = false; resetMinigunSpool();
   // Reset any in-progress melee swing before hiding
   meleeSwingT = 1;
   meleeModels.forEach(m => {
@@ -27280,7 +27292,8 @@ function updateMovement(dt) {
                      && (activeSlot === 'primary' || activeSlot === 'secondary'))
                     ? currentWeapon.moveBoost : 1;
   const rootMult = Date.now() < playerRootedUntil ? 0 : 1;
-  const speedMult = baseSpeedMult * (adrenalineActive ? 1.6 : 1) * frostMult * rootMult * adminSpeedMult * crouchMult * slideMult * fireBoost;
+  const minigunBraceMult = minigunBraced() ? 0.04 : 1;
+  const speedMult = baseSpeedMult * (adrenalineActive ? 1.6 : 1) * frostMult * rootMult * minigunBraceMult * adminSpeedMult * crouchMult * slideMult * fireBoost;
   // Drop the camera when crouching / sliding (eased)
   if (!window._crouchEye) window._crouchEye = 1.65;
   // Slide drops the eye to 0.70 m so the view clearly dips below normal
@@ -27546,6 +27559,29 @@ function abilityCooldownFor(item, ab = equippedAbility(item) || item?.ability) {
   if (isMelee) return 1500;
   if (item?.id === 'storm_bloom') return ab.cd || 15000;
   return 0;
+}
+
+function isMinigunHeld() {
+  return (activeSlot === 'primary' || activeSlot === 'secondary') && currentWeapon?.id === 'minigun';
+}
+function minigunBraced() {
+  return isMinigunHeld() && minigunBraceHeld;
+}
+function resetMinigunSpool() {
+  minigunTriggerStartedAt = 0;
+  minigunLastSpoolNotice = 0;
+}
+function minigunReadyToFire(now = Date.now()) {
+  if (!isMinigunHeld()) return true;
+  if (minigunBraced()) return true;
+  if (!shooting) return false;
+  if (!minigunTriggerStartedAt) minigunTriggerStartedAt = now;
+  const ready = now - minigunTriggerStartedAt >= 2000;
+  if (!ready && now - minigunLastSpoolNotice > 650) {
+    minigunLastSpoolNotice = now;
+    flashAbilityName('SPINNING UP');
+  }
+  return ready;
 }
 
 function _meleeForwardXZ() {
@@ -28482,6 +28518,7 @@ function tryShoot() {
   const activeRateMult = (abilityBuff?.weaponId === currentWeapon.id && abilityBuff.rateMult) ? abilityBuff.rateMult : 1;
   const forcedShot = forcedCycleShot;
   if (!forcedShot && now - lastShot < wStats.fireRate * activeRateMult) return;
+  if (!forcedShot && wStats.id === 'minigun' && !minigunReadyToFire(now)) return;
   if (!forcedShot && wStats.cycleBurst && startCycleBurst(wStats)) return;
   let heat = null;
   if (wStats.heatShots) {
@@ -41930,10 +41967,19 @@ function loop() {
   updateWeaponSelector();
   updateTrashcanProximity();
   updateDamageNumbers();
-  // Spin minigun barrel cluster around the forward (Z) axis
-  if (currentWeaponIdx !== null && weaponModels[currentWeaponIdx]?._barrelCluster && shooting) {
-    weaponModels[currentWeaponIdx]._barrelCluster.rotation.z +=
-      (weaponModels[currentWeaponIdx]._spinRate || 10) * dt;
+  // Spin barrel clusters around the forward (Z) axis. The minigun now visibly
+  // spools before it fires, and E-bracing holds it at full speed.
+  if (currentWeaponIdx !== null && weaponModels[currentWeaponIdx]?._barrelCluster) {
+    const model = weaponModels[currentWeaponIdx];
+    if (currentWeapon?.id === 'minigun') {
+      const spooling = shooting || minigunBraced();
+      if (spooling) {
+        const warm = minigunBraced() ? 1 : Math.min(1, Math.max(0, (Date.now() - (minigunTriggerStartedAt || Date.now())) / 2000));
+        model._barrelCluster.rotation.z += (4 + (model._spinRate || 10) * 1.8 * warm) * dt;
+      }
+    } else if (shooting) {
+      model._barrelCluster.rotation.z += (model._spinRate || 10) * dt;
+    }
   }
   // While the theater is active, theaterTick() owns rendering (it runs even when
   // loop() isn't, e.g. opened from the cold menu). Don't double-render here.
@@ -45915,6 +45961,7 @@ btnFire.addEventListener('touchstart', e => {
 btnFire.addEventListener('touchend', e => {
   e.stopPropagation();
   shooting = false; btnFire.classList.remove('pressed');
+  resetMinigunSpool();
   // Release the look touch if it was the firing thumb (document touchend never
   // sees this touch because of stopPropagation, so clear it here).
   for (let i = 0; i < e.changedTouches.length; i++) {
