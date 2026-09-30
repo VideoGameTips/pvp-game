@@ -41064,13 +41064,12 @@ function finishLogin(result, creds) {
   // switches off the V / T / melee keys on desktop.
   if (document.activeElement) document.activeElement.blur();
   stopOnlineCount();
-  updateUserInfoBar(); // populate user info for the mode screen (opened from the lobby)
+  updateUserInfoBar(); // populate user info for the mode screen
   // 🥚 Easter eggs on login (cursed password / secret name)
   try { checkLoginEggs(name, creds.guest ? '' : creds.password); } catch (e) {}
-  // 🛋️ Land in Lobby 13 on login — the chill social hub IS the lobby now. The
-  // mode-select menu is one tap away via the floating MODES button.
-  document.getElementById('mode-screen').style.display = 'none';
-  selectMode('lobby13');
+  // Go straight to the mode page on login. Lobby 13 is still available from
+  // the mode screen, but login should not spawn you there first.
+  openModeMenu();
 }
 
 // "N online" on the login screen, so nobody walks into an empty game unwarned (#11).
