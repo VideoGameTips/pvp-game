@@ -219,7 +219,7 @@ const WEAPON_COSTS = {
   nebula_mortar: 35000, prism_engine: 27000, void_harvester: 40000,
   // Secondaries
   revolver: 150, flare: 80, pistol: 60, shorty: 180, cycler: 140,
-  hand_cannon: 260, throwing_knives: 120, taser: 200, traffic_cone: 160, cream_pie: 140,
+  hand_cannon: 260, throwing_knives: 120, taser: 200, traffic_cone: 160, cream_pie: 140, gunslinger: 220,
   machine_pistol: 220, gatecrasher: 280, sawed_off: 260, machine_revolver: 240,
   dart_gun: 160, laser_pointer: 120, continuum: 600,
   auto_revolver: 220, frost_blaster: 240,
@@ -247,7 +247,7 @@ const WEAPON_COSTS = {
   black_hole_seed: 2200, glitch_cube: 240, vampire_syringe: 200,
   adrenaline: 220, tripwire: 200, hologram: 240, magnet_mine: 220,
   bounce_pad: 140, hunter_drone: 460, emp_grenade: 240, sticky_charge: 320,
-  orbital_strike: 2500, guardian_drone: 380, nano_shield: 320,
+  orbital_strike: 2500, guardian_drone: 380, nano_shield: 320, mini_turret: 340,
   air_grenade: 160, land_mine: 380,
   // Batch-4 utilities
   flashbang_basic: 200, proximity_mine: 220, dynamite: 280, drone_strike: 340,
@@ -1781,7 +1781,7 @@ event_horizon: 75,
   // 🪖 M4A1
 
   // ⚡ Tesla Coil zap · 🧪 acid pool · 🐝 bee sting
-  tesla_coil: 16, acid_pool: 8, bee_sting: 5,
+  tesla_coil: 16, acid_pool: 8, bee_sting: 5, mini_turret: 15, gunslinger: 83,
   // MG
   mg42: 15,
   // Melee

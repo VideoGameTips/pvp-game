@@ -97,6 +97,7 @@ const WEAPONS = [
     mag: 8,   reserve: 48,  damage: 40, fireRate: 200,  reloadTime: 1600,
     auto: true,  pellets: 1, spread: 0.018, adsZoom: 52, bulletSpeed: 50, noReload: false,
     randomBulletColor: true, bulletSize: 0.2,
+    visionHit: { color: 'rgba(255,68,255,0.30)', blur: 4, duration: 1500 }, // splat on the lens
     ability: { name: 'Splat Bomb', cd: 10000, desc: 'Launch a paint bomb · explodes on impact · 4m AOE', type: 'throwbomb', radius: 4, color: 0xff44ff, noADS: true },
   },
   {
@@ -810,6 +811,16 @@ const WEAPONS = [
     spinUp: { minInterval: 1000, maxInterval: 100, spinPerShot: 0.35, idleDecayPerSec: 1.2,
               jitterStart: 0.72, maxJitter: 0.65 },
   },
+  {
+    // 🤠 Gunslinger: a trick-shot pistol that only fires while airborne — jump,
+    // double-jump, fall off a ledge, whatever gets your feet off the ground.
+    // Same punch as a revolver (83 dmg), just gated by isPlayerGrounded().
+    id: 'gunslinger', name: 'Gunslinger', type: 'Secondary', slot: 'secondary',
+    mag: 30, reserve: 45, damage: 83, fireRate: 280, reloadTime: 1800,
+    auto: false, pellets: 1, spread: 0.01, adsZoom: 50, bulletSpeed: 170, noReload: false,
+    bulletColor: 0xffcc44, bulletSize: 0.05,
+    airborneOnly: true,
+  },
 ];
 
 // ── Damage drop-off by range ────────────────────────────────────────────────
@@ -1218,6 +1229,10 @@ const SUPPORT_ITEMS = [
   { id: 'acid_grenade', name: 'Acid Grenade', type: 'Goo · Slow Pool', uses: 2, damage: 0, cooldown: 1100, bulletSpeed: 38, bulletColor: 0x88dd33, bulletSize: 0.12, burnDur: 6000, burnRadius: 3.2 },
   // 🐝 Bee Jar — release a swarm that homes the nearest enemy and stings repeatedly
   { id: 'bee_jar', name: 'Bee Jar', type: 'Swarm', uses: 1, damage: 5, cooldown: 1400, swarmDur: 8000, swarmRange: 30, fireRate: 320 },
+  // 🔧 Mini Turret: a placed sentry that auto-zaps any enemy that wanders into range
+  // (30 dps: 15 dmg every 500ms). It has its own HP and can be shot down — see
+  // updateMiniTurrets, which checks the player's own bullets against it each frame.
+  { id: 'mini_turret', name: 'Mini Turret', type: 'Deployable · Sentry', uses: 1, damage: 15, cooldown: 1800, turretDur: 30000, turretRange: 7, fireRate: 500, turretHp: 100 },
 
   { id: 'c4', name: 'C4 Charge', type: 'Admin · Explosive', uses: 2, damage: 200, cooldown: 1200, bulletSpeed: 40, bulletColor: 0x664433, bulletSize: 0.11, c4Detonate: true, adminItem: true },
   { id: 'claymore', name: 'Claymore Mine', type: 'Admin · Directional Mine', uses: 2, damage: 250, cooldown: 1100, claymoreRadius: 4, claymoreArc: 1.2, adminItem: true },
@@ -1368,7 +1383,7 @@ const WEAPON_COSTS = {
   nebula_mortar: 35000, prism_engine: 27000, void_harvester: 40000,
   // Secondaries
   revolver: 150, flare: 80, pistol: 60, shorty: 180, cycler: 140,
-  hand_cannon: 260, throwing_knives: 120, taser: 200, traffic_cone: 160, cream_pie: 140,
+  hand_cannon: 260, throwing_knives: 120, taser: 200, traffic_cone: 160, cream_pie: 140, gunslinger: 220,
   machine_pistol: 220, gatecrasher: 280, sawed_off: 260, machine_revolver: 240,
   dart_gun: 160, laser_pointer: 120, continuum: 600,
   auto_revolver: 220, frost_blaster: 240,
@@ -1396,7 +1411,7 @@ const WEAPON_COSTS = {
   black_hole_seed: 2200, glitch_cube: 240, vampire_syringe: 200,
   adrenaline: 220, tripwire: 200, hologram: 240, magnet_mine: 220,
   bounce_pad: 140, hunter_drone: 460, emp_grenade: 240, sticky_charge: 320,
-  orbital_strike: 2500, guardian_drone: 380, nano_shield: 320,
+  orbital_strike: 2500, guardian_drone: 380, nano_shield: 320, mini_turret: 340,
   air_grenade: 160, land_mine: 380,
   // Batch-4 utilities
   flashbang_basic: 200, proximity_mine: 220, dynamite: 280, drone_strike: 340,
@@ -1738,6 +1753,7 @@ let adrenalineUntil = 0;          // timestamp player adrenaline buff expires
 let nanoShieldUntil = 0;          // timestamp Nano Shield expires (heal-over-time)
 const guardianDrones = [];        // {mesh, until, lastShot}
 const teslaCoils     = [];        // ⚡ {mesh, x, z, until, lastShot, fireRate, damage, range, orb}
+const miniTurrets    = [];        // 🔧 {mesh, lens, x, z, until, lastShot, fireRate, damage, range, hp, maxHp}
 const beeSwarms      = [];        // 🐝 {mesh, x, y, z, until, lastSting, fireRate, damage, range, targetId}
 const orbitalMarkers = [];        // {mesh, x, z, fireAt, damage, radius}
 let playerFrostSlow = 100;        // 100 = full speed, 0 = frozen + dead. Frost Blaster reduces this on hit.
@@ -3163,6 +3179,7 @@ function weaponAudioProfile(id, baseWeapon) {
   if (lowerId === 'arc_torrent') return { kind:'arc', vol:0.26, dur:0.11, f1:980, f2:320 };
   if (lowerId === 'arc_rifle')   return { kind:'arc', vol:0.30, dur:0.13, f1:1240, f2:380 };
   if (lowerId === 'freeze_gun' || lowerId === 'frost_blaster') return { kind:'freeze', vol:0.24, dur:0.16, f1:680, f2:420 };
+  if (lowerId === 'gunslinger') return { kind:'pistol', vol:0.34, dur:0.12, f1:540, f2:120, action:'revolver' };
   if (lowerId === 'flamethrower') return { kind:'flamethrower', vol:0.24, dur:0.18, f1:95, f2:58 };
   if (lowerId === 'plasma_carbine') return { kind:'energy', vol:0.30, dur:0.14, f1:880, f2:540 };
   if (lowerId === 'railgun')        return { kind:'energy', vol:0.42, dur:0.32, f1:1620, f2:120 };
@@ -19990,6 +20007,7 @@ const weaponModels = [
   buildContinuum(),  // continuum
   buildStormBloom(),  // storm_bloom
   buildChainGun(),  // chain_gun
+  buildRevolver(),  // gunslinger
 ];
 function addWeaponRealismDetails(model, weapon) {
   if (!model || !model.add || (model.userData && model.userData.realismDetailed)) return;
@@ -20939,6 +20957,24 @@ function buildHealGun() {
   return g;
 }
 // ⚡ Tesla Coil — a deploy puck with a copper coil + glowing top orb.
+// 🔧 Mini Turret — small sentry base with a swiveling barrel and a lens that
+// blinks when it's live. Same model doubles as the held-item icon (small,
+// hand-anchored) and the deployed world object (scaled up, see deployMiniTurret).
+function buildMiniTurret() {
+  const g = new THREE.Group();
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.03, 10), new THREE.MeshLambertMaterial({ color: 0x3a3f47 }));
+  base.position.y = -0.05; g.add(base);
+  const swivel = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.035, 0.05), new THREE.MeshLambertMaterial({ color: 0x555b63 }));
+  swivel.position.y = -0.02; g.add(swivel);
+  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.07, 8), new THREE.MeshLambertMaterial({ color: 0x1c1e22 }));
+  barrel.rotation.x = Math.PI / 2; barrel.position.set(0, -0.01, -0.045); g.add(barrel);
+  const lens = new THREE.Mesh(new THREE.SphereGeometry(0.014, 8, 6), new THREE.MeshBasicMaterial({ color: 0xff3322 }));
+  lens.position.set(0, 0.005, -0.03); g.add(lens);
+  g._lens = lens;
+  g.scale.set(0.8, 0.8, 0.8);
+  g.position.set(0.10, -0.12, -0.18);
+  return g;
+}
 function buildTeslaCoil() {
   const g = new THREE.Group();
   const base = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.08, 0.03, 12), new THREE.MeshLambertMaterial({ color: 0x333740 }));
@@ -21347,6 +21383,7 @@ const supportModels = [buildDonutFragGrenade(), buildMedkit(), buildStimShot(), 
   buildTeslaCoil(),                          // tesla_coil
   buildAcidGrenade(),                        // acid_grenade
   buildBeeJar(),                             // bee_jar
+  buildMiniTurret(),                         // mini_turret
   // 🪖 ADMIN supports
   buildC4(), buildClaymore(), buildStunGrenade(), buildThermite(),
   buildPredatorUAV(), buildCarePackage(), buildTacNuke()];
@@ -28510,6 +28547,26 @@ function flashScreen(cssColor, durationMs) {
   setTimeout(() => div.remove(), durationMs + 60);
 }
 
+// Weapon-specific vision impairment on getting hit (paintball splatter, and
+// anything else that opts in via a `visionHit: {color, blur, duration}` field) —
+// distinct from flashDamageScreen's plain red vignette, which still also fires.
+function applyVisionHitEffect(vfx) {
+  const fx = gameplaySettingMult('screenFx');
+  if (fx <= 0 || !vfx) return;
+  const dur = vfx.duration || 1200;
+  const blur = (vfx.blur ?? 3) * fx;
+  const div = document.createElement('div');
+  div.style.cssText = [
+    'position:fixed', 'inset:0', 'pointer-events:none', 'z-index:1001',
+    `background:${vfx.color || 'rgba(200,60,200,0.30)'}`,
+    `backdrop-filter:blur(${blur}px)`, `-webkit-backdrop-filter:blur(${blur}px)`,
+    `transition:opacity ${dur}ms ease-out`,
+  ].join(';');
+  div.style.opacity = '1';
+  document.body.appendChild(div);
+  requestAnimationFrame(() => requestAnimationFrame(() => { div.style.opacity = '0'; }));
+  setTimeout(() => div.remove(), dur + 80);
+}
 function flashDamageScreen(amount = 20) {
   const fx = gameplaySettingMult('screenFx');
   if (fx <= 0) return;
@@ -28760,6 +28817,12 @@ function tryShoot() {
     if (now - lastShot < 280) return; // knife swing CD
     lastShot = now;
     doSwitchbladeKnifeSwing();
+    return;
+  }
+  // Gunslinger: grounded feet don't get to use this gun. lastShot also throttles the
+  // rejection message so holding the trigger while grounded doesn't spam the feed.
+  if (wStats.airborneOnly && isPlayerGrounded()) {
+    if (now - lastShot > 260) { flashAbilityName('AIRBORNE ONLY'); lastShot = now; }
     return;
   }
   const activeRateMult = (abilityBuff?.weaponId === currentWeapon.id && abilityBuff.rateMult) ? abilityBuff.rateMult : 1;
@@ -29096,7 +29159,7 @@ const SUPPORT_SOUND = {
   bounce_pad: 'bounce', rubber_duck: 'quack',
   ammo_fountain: 'ammo_refill',
   tripwire: 'mine_arm', magnet_mine: 'mine_arm', proximity_mine: 'mine_arm', land_mine: 'mine_arm',
-  stasis_mine: 'mine_arm', caltrops: 'mine_arm', claymore: 'mine_arm', sticky_charge: 'c4_place', c4: 'c4_place',
+  stasis_mine: 'mine_arm', caltrops: 'mine_arm', claymore: 'mine_arm', sticky_charge: 'c4_place', c4: 'c4_place', mini_turret: 'mine_arm',
   hunter_drone: 'drone_launch', guardian_drone: 'drone_launch', specter_drone: 'drone_launch',
   emp_grenade: 'emp_zap', taser_grenade: 'emp_zap',
   nano_shield: 'shield_up', quantum_barrier: 'shield_up',
@@ -29238,6 +29301,10 @@ function trySupport() {
   }
   if (item.id === 'tesla_coil') {         // ⚡ deploy a stationary zapping coil
     deployTeslaCoil(item);
+    return;
+  }
+  if (item.id === 'mini_turret') {         // 🔧 place a destructible auto-turret
+    deployMiniTurret(item);
     return;
   }
   if (item.id === 'acid_grenade') {       // 🧪 thrown vial → green slow pool
@@ -35103,6 +35170,65 @@ function deployTeslaCoil(item) {
     lastShot: 0, fireRate: item.fireRate || 450, damage: item.damage || 16, range: item.coilRange || 8, orb });
   showAnnouncement('⚡ TESLA COIL', `${(item.coilDur || 10000) / 1000}s · zaps nearby enemies`, '#66ccff', 1200);
 }
+// 🔧 Deploy a stationary Mini Turret at the player's feet — auto-zaps the nearest
+// enemy in range, and can be shot down (see updateMiniTurrets).
+function deployMiniTurret(item) {
+  const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion); fwd.y = 0; fwd.normalize();
+  const px = camera.position.x + fwd.x * 1.5, pz = camera.position.z + fwd.z * 1.5;
+  const g = buildMiniTurret ? buildMiniTurret() : new THREE.Group();
+  g.scale.set(2.2, 2.2, 2.2);
+  g.position.set(px, 0.10, pz);
+  scene.add(g);
+  miniTurrets.push({ mesh: g, lens: g._lens || null, x: px, z: pz, until: Date.now() + (item.turretDur || 30000),
+    lastShot: 0, fireRate: item.fireRate || 500, damage: item.damage || 15, range: item.turretRange || 7,
+    hp: item.turretHp || 100, maxHp: item.turretHp || 100 });
+  showAnnouncement('🔧 MINI TURRET', `${item.turretHp || 100} HP · zaps nearby enemies`, '#ffaa44', 1200);
+}
+function updateMiniTurrets(dt) {
+  const now = Date.now();
+  for (let i = miniTurrets.length - 1; i >= 0; i--) {
+    const t = miniTurrets[i];
+    // Incoming fire: the player's own bullets passing close by chip its HP — a
+    // simple, self-contained check rather than wiring into the shared bot/player
+    // hit-detection pipeline, which knows nothing about placed objects.
+    for (let j = localBullets.length - 1; j >= 0; j--) {
+      const b = localBullets[j];
+      if (!b.isOwn) continue;
+      if (Math.hypot(b.mesh.position.x - t.x, b.mesh.position.z - t.z) > 0.9) continue;
+      if (Math.abs(b.mesh.position.y - t.mesh.position.y) > 0.9) continue;
+      t.hp -= getClientWeaponDamage(b.weaponId) || 10;
+      spawnHitParticle(b.mesh.position.clone());
+      scene.remove(b.mesh);
+      localBullets.splice(j, 1);
+      break;
+    }
+    if (t.hp <= 0) {
+      spawnAbilityAOEFX(t.mesh.position.clone(), 1.2, 0xff6622);
+      playSoundEvent('explosion', { position: t.mesh.position, volume: 0.7 });
+      scene.remove(t.mesh);
+      miniTurrets.splice(i, 1);
+      continue;
+    }
+    if (now >= t.until) { scene.remove(t.mesh); miniTurrets.splice(i, 1); continue; }
+    if (t.lens) t.lens.material.color.setHex((Math.sin(now * 0.01) > 0) ? 0xff3322 : 0x991a11);
+    if (now - t.lastShot < t.fireRate) continue;
+    let nearest = null, nd = Infinity;
+    for (const bot of gameBots) {
+      if (bot.dead || bot.team !== 'enemy') continue;
+      const d = Math.hypot(bot.x - t.x, bot.z - t.z);
+      if (d < nd && d < t.range) { nd = d; nearest = bot; }
+    }
+    if (!nearest) continue;
+    t.lastShot = now;
+    const mesh = remoteMeshes[nearest.id];
+    const hp = mesh ? mesh.position.clone().setY(1.0) : new THREE.Vector3(nearest.x, 1, nearest.z);
+    emitHit(nearest.id, `turret_${myId}_${now}`, 'mini_turret', hp);
+    const origin = new THREE.Vector3(t.x, 0.5, t.z);
+    spawnLocalBullet(origin, hp.clone().sub(origin).normalize(), `turret_b_${now}`, false, 220, 0xff5533, 0.045, 'mini_turret');
+    spawnHitParticle(hp);
+    playSoundEvent('emp_zap', { position: origin, volume: 0.55, minGap: 100 });
+  }
+}
 function updateTeslaCoils(dt) {
   const now = Date.now();
   for (let i = teslaCoils.length - 1; i >= 0; i--) {
@@ -36681,6 +36807,11 @@ function applyBotDamageToPlayer(weaponId, botId) {
     if (k === 'ice' && !isDead) playerFrostSlow = Math.max(0, playerFrostSlow - 8);
     if (k === 'energy' && !isDead) flashScreen('rgba(255,255,255,0.55)', 260);
   }
+  // 🎨 Weapon-specific vision effect (paintball splatter, etc.) on top of the normal flash.
+  {
+    const _vfx = WEAPONS.find(w => w.id === weaponId)?.visionHit;
+    if (_vfx && !isDead) applyVisionHitEffect(_vfx);
+  }
   if (weaponId === 'storm_bloom_ball') playerRootedUntil = Math.max(playerRootedUntil, Date.now() + 3000);
   else if (weaponId === 'storm_bloom_aura') playerRootedUntil = Math.max(playerRootedUntil, Date.now() + 1000);
   else if (weaponId === 'cyroclasm_laser') {
@@ -37257,6 +37388,8 @@ socket.on('playerHit', data => {
     updateHealthHUD(data.hp);
     if (hpBeforeServerHit != null && data.hp < hpBeforeServerHit) flashDamageScreen(hpBeforeServerHit - data.hp);
     if (data.shooterId) showDamageDirection(data.shooterId); else flashHitIndicator();
+    const _vfx = WEAPONS.find(w => w.id === data.weapon)?.visionHit;
+    if (_vfx) applyVisionHitEffect(_vfx);
   }
   if (data.bulletId) {
     for (let i=localBullets.length-1; i>=0; i--) {
@@ -42113,6 +42246,7 @@ function loop() {
   safeLoopStep('traps', () => updateTraps(dt)); // tripwires, magnet mines, bounce pads, hologram decoys
   safeLoopStep('p2w-systems', () => updateP2WSystems(dt)); // orbital strikes, guardian drones, nano shield
   safeLoopStep('tesla-coils', () => updateTeslaCoils(dt)); // deployed tesla coils zap nearby enemies
+  safeLoopStep('mini-turrets', () => updateMiniTurrets(dt)); // deployed mini turrets zap nearby enemies + take fire
   safeLoopStep('bee-swarms', () => updateBeeSwarms(dt));  // bee swarms home + sting the nearest enemy
   safeLoopStep('map-gimmicks', () => updateMapGimmicks(dt)); // lava DOT, jump pads, low-grav zones, ice friction
   safeLoopStep('obby', () => updateObby(dt));              // floor reset + finish pads for Obby stages
