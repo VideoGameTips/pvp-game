@@ -954,6 +954,7 @@ const MELEE_ITEMS = [
   { id: 'twin_knife', name: 'Twin Knife', type: 'Dual Blade', damage: 50, range: 1.6, cooldown: 240, speedMult: 1.7,
     dual: true,    // two real knives, alternating — see the dual-wield companion system
     dualHit: true, // every swing lands BOTH blades (50 + 50), not one flat number
+    doubleJump: true, // light and quick — an extra jump mid-air, no new code needed (grantsDoubleJump)
     ability: { name: 'Throw Knife', cd: 350, desc: 'Hurl a knife · 30 dmg · 10 in reserve', type: 'melee_multithrow', damage: 30, maxCharges: 10 } },
 ];
 
