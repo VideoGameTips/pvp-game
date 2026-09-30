@@ -26596,7 +26596,7 @@ function startCycleBurst(wStats) {
     const isFinisher = i === smallShots;
     const shotAt = isFinisher ? finisherAt : i * delay;
     setTimeout(() => {
-      if (currentWeaponIdx !== burstIdx || currentWeapon.id !== weaponId || activeSlot !== 'primary' && activeSlot !== 'secondary') return;
+      if (currentWeaponIdx !== burstIdx || currentWeapon.id !== weaponId || (activeSlot !== 'primary' && activeSlot !== 'secondary')) return;
       if (isDead || countdownActive || KILLCAM.active) return;
       forcedCycleShot = {
         weaponId: isFinisher ? (cfg.finisherWeaponId || weaponId) : weaponId,
