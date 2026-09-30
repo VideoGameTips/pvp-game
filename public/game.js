@@ -18335,6 +18335,149 @@ function buildFreezeGun() {
   g.position.set(0.12, -0.1, -0.25); return g;
 }
 
+function buildCyroclasm() {
+  // Cyroclasm: a colder, harsher burst carbine than the Freeze Gun, built
+  // around a faceted ice prism and twin pressure bottles instead of a dewar.
+  const g = new THREE.Group();
+  const steel = GUN_MATS.steel(), bright = GUN_MATS.bright(), inner = GUN_MATS.inner();
+  const grip = GUN_MATS.grip();
+  const shell = new THREE.MeshPhongMaterial({ color: 0x263d4f, shininess: 108, specular: 0x9fc7df });
+  const frost = new THREE.MeshPhongMaterial({ color: 0xb9f2ff, shininess: 170, specular: 0xffffff,
+                                              transparent: true, opacity: 0.72 });
+  const ice = new THREE.MeshBasicMaterial({ color: 0x87eaff });
+  const rime = new THREE.MeshPhongMaterial({ color: 0xe8f9ff, shininess: 34, specular: 0xb5d6e8 });
+  gpPlate(g, shell, [
+    [0.112,-0.020],[0.128,0.012],[0.074,0.034],[-0.070,0.032],[-0.102,0.014],
+    [-0.122,-0.014],[-0.078,-0.034],[0.068,-0.036],
+  ], 0.046, 0);
+  gpBox(g, inner, 0.047, 0.006, 0.206, 0, 0.036, 0.012);
+  gpBox(g, inner, 0.006, 0.024, 0.058, 0.023, 0.012, 0.012);
+  gpBox(g, frost, 0.030, 0.038, 0.070, 0, 0.012, -0.030, 0, 0, Math.PI / 4);
+  gpCyl(g, ice, 0.006, 0.006, 0.076, 8, 0, 0.012, -0.030);
+  [-1, 1].forEach(sd => {
+    gpCyl(g, steel, 0.016, 0.016, 0.154, 14, sd * 0.034, -0.016, 0.006);
+    gpCyl(g, frost, 0.012, 0.012, 0.124, 12, sd * 0.034, -0.016, 0.006);
+    gpCyl(g, bright, 0.017, 0.017, 0.010, 14, sd * 0.034, -0.016, -0.068);
+    gpCyl(g, bright, 0.017, 0.017, 0.010, 14, sd * 0.034, -0.016, 0.080);
+    gpCyl(g, bright, 0.0048, 0.0048, 0.120, 8, sd * 0.024, 0.020, -0.092, 0.46, 0);
+  });
+  gpBox(g, shell, 0.044, 0.032, 0.130, 0, 0.008, -0.120);
+  for (let i = 0; i < 7; i++) gpBox(g, rime, 0.046, 0.006, 0.010, 0, -0.014, -0.070 - i * 0.018, 0, 0, i * 0.22);
+  gpCyl(g, steel, 0.016, 0.020, 0.120, 16, 0, 0.012, -0.224);
+  gpCyl(g, inner, 0.010, 0.010, 0.132, 12, 0, 0.012, -0.230);
+  gpCyl(g, frost, 0.026, 0.017, 0.040, 6, 0, 0.012, -0.302);
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    gpBox(g, rime, 0.006, 0.022, 0.032, Math.cos(a) * 0.023, 0.012 + Math.sin(a) * 0.023, -0.300, 0, 0, a);
+  }
+  gpPlate(g, grip, [[0.060,-0.020],[0.090,-0.034],[0.096,-0.110],[0.064,-0.126],[0.040,-0.060],[0.038,-0.026]], 0.036, 0);
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.020, 0.0038, 6, 12, Math.PI * 1.05), shell);
+  guard.rotation.set(0, Math.PI/2, -0.4); guard.position.set(0, -0.032, 0.032); g.add(guard);
+  gpBox(g, bright, 0.005, 0.016, 0.005, 0, -0.022, 0.032, 0.2);
+  gpBox(g, shell, 0.038, 0.040, 0.080, 0, 0.008, 0.136);
+  gpBox(g, inner, 0.040, 0.042, 0.010, 0, 0.008, 0.184, 0.08);
+  const flash = new THREE.Mesh(new THREE.SphereGeometry(0.030, 8, 7), ice);
+  flash.visible = false; flash.position.set(0, 0.012, -0.326); g.add(flash);
+  g._flash = flash; g._kickZ = 0.012; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildContinuum() {
+  // Continuum: a phase pistol with a visible chronometer ring and hourglass
+  // cell, so it reads as its own time weapon instead of a Cycler repaint.
+  const g = new THREE.Group();
+  const bright = GUN_MATS.bright(), inner = GUN_MATS.inner(), grip = GUN_MATS.grip();
+  const shell = new THREE.MeshPhongMaterial({ color: 0x28204f, shininess: 130, specular: 0xb3a6ff });
+  const violet = new THREE.MeshPhongMaterial({ color: 0x715cff, shininess: 170, specular: 0xffffff });
+  const gold = new THREE.MeshPhongMaterial({ color: 0xc9a24c, shininess: 150, specular: 0xffe2a0 });
+  const glow = new THREE.MeshBasicMaterial({ color: 0xb88cff });
+  gpPlate(g, shell, [
+    [0.114,-0.020],[0.122,0.010],[0.074,0.030],[-0.110,0.028],[-0.136,0.006],
+    [-0.116,-0.026],[0.062,-0.034],
+  ], 0.036, 0);
+  gpBox(g, inner, 0.037, 0.006, 0.188, 0, 0.032, -0.004);
+  gpBox(g, violet, 0.024, 0.010, 0.126, 0, 0.042, -0.048);
+  const clock = new THREE.Mesh(new THREE.TorusGeometry(0.044, 0.0055, 8, 18), gold);
+  clock.rotation.y = Math.PI / 2; clock.position.set(0, 0.010, 0.096); g.add(clock);
+  gpCyl(g, glow, 0.004, 0.004, 0.038, 8, 0, 0.010, 0.096, 0, 0);
+  gpCyl(g, bright, 0.003, 0.003, 0.030, 8, 0.012, 0.010, 0.096, 0, Math.PI / 2);
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    gpBox(g, bright, 0.004, 0.009, 0.004, Math.cos(a) * 0.044, 0.010 + Math.sin(a) * 0.044, 0.096, 0, 0, a);
+  }
+  gpCyl(g, violet, 0.010, 0.010, 0.185, 12, 0, 0.012, -0.176);
+  gpCyl(g, glow, 0.0055, 0.0055, 0.210, 10, 0, 0.012, -0.172);
+  for (let i = 0; i < 5; i++) {
+    const z = -0.088 - i * 0.042;
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.017, 0.0032, 5, 14), i % 2 ? gold : bright);
+    ring.rotation.y = Math.PI / 2; ring.position.set(0, 0.012, z); g.add(ring);
+  }
+  gpCyl(g, shell, 0.018, 0.018, 0.022, 14, 0, 0.012, -0.292);
+  gpCyl(g, glow, 0.007, 0.007, 0.008, 12, 0, 0.012, -0.304);
+  gpCyl(g, gold, 0.018, 0.010, 0.050, 12, 0, -0.046, 0.006);
+  gpCyl(g, gold, 0.010, 0.018, 0.050, 12, 0, -0.092, 0.006);
+  gpCyl(g, glow, 0.006, 0.006, 0.040, 8, 0, -0.069, 0.006);
+  [-0.024, 0.036].forEach(z => gpCyl(g, bright, 0.019, 0.019, 0.008, 12, 0, -0.046, z));
+  gpPlate(g, grip, [[0.068,-0.026],[0.100,-0.038],[0.106,-0.104],[0.076,-0.120],[0.052,-0.058],[0.050,-0.030]], 0.032, 0);
+  for (let i = 0; i < 4; i++) gpBox(g, inner, 0.030, 0.004, 0.022, 0, -0.048 - i * 0.016, 0.070 + i * 0.004, 0.12);
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.018, 0.0034, 6, 12, Math.PI * 1.05), shell);
+  guard.rotation.set(0, Math.PI/2, -0.4); guard.position.set(0, -0.038, 0.048); g.add(guard);
+  gpBox(g, bright, 0.005, 0.014, 0.005, 0, -0.030, 0.048, 0.2);
+  const flash = new THREE.Mesh(new THREE.SphereGeometry(0.018, 8, 7), glow);
+  flash.visible = false; flash.position.set(0, 0.012, -0.312); g.add(flash);
+  g._flash = flash; g._kickZ = 0.006; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.1, -0.1, -0.22); return g;
+}
+
+function buildStormBloom() {
+  // Storm Bloom: a lightning shotgun with a flower-shaped emitter crown and
+  // capacitor pod, matching its pellet spread plus ball-lightning ability.
+  const g = new THREE.Group();
+  const steel = GUN_MATS.steel(), bright = GUN_MATS.bright(), inner = GUN_MATS.inner();
+  const grip = GUN_MATS.grip();
+  const shell = new THREE.MeshPhongMaterial({ color: 0x24323f, shininess: 115, specular: 0xa7bed4 });
+  const petal = new THREE.MeshPhongMaterial({ color: 0x2f7f92, shininess: 145, specular: 0xc7faff });
+  const brass = new THREE.MeshPhongMaterial({ color: 0xc29136, shininess: 130, specular: 0xffda85 });
+  const glow = new THREE.MeshBasicMaterial({ color: 0x9ffcff });
+  gpPlate(g, shell, [
+    [0.132,-0.024],[0.140,0.014],[0.090,0.040],[-0.074,0.038],[-0.126,0.020],
+    [-0.142,-0.014],[-0.094,-0.042],[0.090,-0.044],
+  ], 0.054, 0);
+  gpBox(g, inner, 0.055, 0.007, 0.220, 0, 0.044, 0.014);
+  gpBox(g, inner, 0.006, 0.028, 0.064, 0.028, 0.014, -0.006);
+  gpCyl(g, steel, 0.022, 0.022, 0.162, 16, 0, 0.014, -0.126);
+  gpCyl(g, inner, 0.011, 0.011, 0.182, 12, 0, 0.014, -0.136);
+  for (let i = 0; i < 6; i++) gpCyl(g, brass, 0.025, 0.025, 0.006, 16, 0, 0.014, -0.062 - i * 0.024);
+  const crown = new THREE.Mesh(new THREE.TorusGeometry(0.035, 0.0055, 6, 18), petal);
+  crown.rotation.y = Math.PI / 2; crown.position.set(0, 0.014, -0.246); g.add(crown);
+  for (let i = 0; i < 10; i++) {
+    const a = (i / 10) * Math.PI * 2;
+    gpBox(g, petal, 0.008, 0.026, 0.048, Math.cos(a) * 0.034, 0.014 + Math.sin(a) * 0.034, -0.260, 0, 0, a);
+    gpCyl(g, glow, 0.0048, 0.0048, 0.030, 8, Math.cos(a) * 0.024, 0.014 + Math.sin(a) * 0.024, -0.292);
+  }
+  gpCyl(g, brass, 0.030, 0.030, 0.092, 16, 0, -0.054, -0.014);
+  gpCyl(g, glow, 0.020, 0.020, 0.078, 12, 0, -0.054, -0.014);
+  [-0.064, 0.036].forEach(z => gpCyl(g, bright, 0.032, 0.032, 0.010, 16, 0, -0.054, z));
+  gpBox(g, shell, 0.032, 0.022, 0.056, 0, -0.028, -0.014);
+  for (let i = 0; i < 5; i++) {
+    const z = -0.068 - i * 0.034;
+    gpBox(g, glow, 0.006, 0.006, 0.044, -0.026, 0.034, z, 0, 0, 0.28);
+    gpBox(g, glow, 0.006, 0.006, 0.044, 0.026, 0.034, z, 0, 0, -0.28);
+  }
+  gpBox(g, brass, 0.018, 0.014, 0.108, 0, 0.066, -0.034);
+  for (let i = 0; i < 5; i++) gpBox(g, inner, 0.020, 0.005, 0.006, 0, 0.074, -0.080 + i * 0.020);
+  gpPlate(g, grip, [[0.070,-0.026],[0.102,-0.042],[0.108,-0.118],[0.074,-0.136],[0.050,-0.064],[0.048,-0.032]], 0.038, 0);
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.021, 0.0038, 6, 12, Math.PI * 1.05), shell);
+  guard.rotation.set(0, Math.PI/2, -0.4); guard.position.set(0, -0.040, 0.044); g.add(guard);
+  gpBox(g, bright, 0.005, 0.017, 0.005, 0, -0.030, 0.044, 0.2);
+  gpBox(g, shell, 0.040, 0.042, 0.090, 0, 0.006, 0.152);
+  gpBox(g, inner, 0.042, 0.044, 0.012, 0, 0.006, 0.206, 0.08);
+  const flash = new THREE.Mesh(new THREE.SphereGeometry(0.034, 8, 7), glow);
+  flash.visible = false; flash.position.set(0, 0.014, -0.314); g.add(flash);
+  g._flash = flash; g._kickZ = 0.018; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
 function buildBoombow() {
   // 🏹 Boombow: a compound bow with eccentric cams top and bottom, real cable
   // runs beside the string, a machined riser with a stabiliser, and an arrow
@@ -19843,9 +19986,9 @@ const weaponModels = [
   // ── 🚧 / 🥧 must mirror the two trailing WEAPONS entries ──
   buildTrafficCone(),  // traffic_cone
   buildCreamPie(),  // cream_pie
-  buildFreezeGun(),  // cyroclasm
-  buildCycler(),  // continuum
-  buildArcRifle(),  // storm_bloom
+  buildCyroclasm(),  // cyroclasm
+  buildContinuum(),  // continuum
+  buildStormBloom(),  // storm_bloom
   buildChainGun(),  // chain_gun
 ];
 function addWeaponRealismDetails(model, weapon) {
