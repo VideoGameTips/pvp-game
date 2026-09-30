@@ -27827,11 +27827,6 @@ function abilityCooldownFor(item, ab = equippedAbility(item) || item?.ability) {
 
 function chainGunFireInterval() {
   const spec = WEAPONS.find(w => w.id === 'chain_gun').spinUp;
-  const now = Date.now();
-  if (chainGunLastShotAt) {
-    const idleMs = now - chainGunLastShotAt;
-    if (idleMs > 150) chainGunSpin = Math.max(0, chainGunSpin - spec.idleDecayPerSec * (idleMs / 1000));
-  }
   const t = chainGunSpin;
   let interval = spec.minInterval + (spec.maxInterval - spec.minInterval) * t;
   if (t > spec.jitterStart) {
@@ -27839,6 +27834,18 @@ function chainGunFireInterval() {
     interval *= 1 + (Math.random() * 2 - 1) * jitter;
   }
   return Math.max(30, interval);
+}
+// Decay is real-time and runs every frame (see loop()), gated on NOT currently firing —
+// not on time-since-last-shot. That gap grows every frame while the trigger is held and
+// the gun is just waiting out its own fire-rate interval, so decaying off of it was
+// undoing almost the whole ramp-up between every single shot (#chaingun-warmup).
+function updateChainGunSpin(dt) {
+  if (chainGunSpin <= 0) return;
+  const firing = shooting && currentWeapon?.id === 'chain_gun' && (activeSlot === 'primary' || activeSlot === 'secondary');
+  if (firing) return;
+  const spec = WEAPONS.find(w => w.id === 'chain_gun')?.spinUp;
+  if (!spec) return;
+  chainGunSpin = Math.max(0, chainGunSpin - spec.idleDecayPerSec * dt);
 }
 function chainGunAdvanceSpin() {
   const spec = WEAPONS.find(w => w.id === 'chain_gun').spinUp;
@@ -42247,6 +42254,7 @@ function loop() {
   safeLoopStep('p2w-systems', () => updateP2WSystems(dt)); // orbital strikes, guardian drones, nano shield
   safeLoopStep('tesla-coils', () => updateTeslaCoils(dt)); // deployed tesla coils zap nearby enemies
   safeLoopStep('mini-turrets', () => updateMiniTurrets(dt)); // deployed mini turrets zap nearby enemies + take fire
+  safeLoopStep('chain-gun-spin', () => updateChainGunSpin(dt)); // spins back down in real time once you let off the trigger
   safeLoopStep('bee-swarms', () => updateBeeSwarms(dt));  // bee swarms home + sting the nearest enemy
   safeLoopStep('map-gimmicks', () => updateMapGimmicks(dt)); // lava DOT, jump pads, low-grav zones, ice friction
   safeLoopStep('obby', () => updateObby(dt));              // floor reset + finish pads for Obby stages
