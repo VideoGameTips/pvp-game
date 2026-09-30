@@ -950,6 +950,10 @@ const MELEE_ITEMS = [
   { id: 'garrote',    name: 'Spec-Ops Garrote', type: 'Admin · Silent Kill', damage: 9999, range: 1.5, cooldown: 1200,
     adminItem: true,
     ability: { name: 'Lights Out',   cd: 16000, desc: '5 s · all hits instakill', type: 'melee_revup', duration: 5000 } },
+  { id: 'twin_knife', name: 'Twin Knife', type: 'Dual Blade', damage: 50, range: 1.6, cooldown: 240, speedMult: 1.7,
+    dual: true,    // two real knives, alternating — see the dual-wield companion system
+    dualHit: true, // every swing lands BOTH blades (50 + 50), not one flat number
+    ability: { name: 'Throw Knife', cd: 350, desc: 'Hurl a knife · 30 dmg · 10 in reserve', type: 'melee_multithrow', damage: 30, maxCharges: 10 } },
 ];
 
 // ── 📦 Basic Skin Case generation ──────────────────────────────────────────
@@ -1366,7 +1370,7 @@ const WEAPON_COSTS = {
   // Batch-4 melees
   brass_knuckles: 200, hatchet: 220, machete: 260, cane: 140, cricket_bat: 200,
   pipe: 160, wrench: 180, shovel: 280, golf_club: 200, tennis_racket: 100,
-  fire_poker: 200, meat_cleaver: 260,
+  fire_poker: 200, meat_cleaver: 260, twin_knife: 480,
   // 🌌 Sci-fi P2W melees
   phase_blade: 18000, gravity_hammer: 22000, volt_whip: 17000,
   // Support / Utility
@@ -1577,6 +1581,7 @@ let meleeSwingT    = 1;       // 1 = idle/done, 0 = just started
 let meleeAbilityBuff = null; // { type, endTime?, usesLeft?, lastSpinHits? }
 let slamState = null;        // { vel } — for sledge ground slam animation
 let spearThrown = false;     // true while spear weapon is "in the air"
+let twinKnifeCharges = 10;   // Twin Knife: thrown knives left this life, see melee_multithrow
 let meleeSwingDur  = 400;     // ms for full swing arc
 let meleeDeflectDir = 1;      // alternates the katana guard each time it catches a round
 let meleeDeflectPulseAt = 0;  // short extra twitch layered on the held deflect pose
@@ -1632,6 +1637,7 @@ const MELEE_SWING_TYPES = [
   'stab',    // 40 ots04         → bayonet profile, but 1.8 m and a 240 ms cooldown: a jab
   'thrust',  // 41 garrote       → nothing here really fits a strangle; a forward
              //                    reach is the least wrong. Change it if it feels off.
+  'punch',   // 42 twin_knife    → alternating dual-hand jabs (dual:true reuses this rig)
 ];
 
 // ── Which swing sound each melee makes ─────────────────────────────────────
@@ -1689,6 +1695,7 @@ const MELEE_SWING_SOUND = {
   tomahawk:        'blade',
   ots04:           'blade',   // its own type says Blade; the old test read only the id
   garrote:         'blade',   // inherited from the old name match; a wire has no edge — worth an ear
+  twin_knife:      'blade',
 };
 const MELEE_SWING_EVENT = { blade: 'melee_blade', heavy: 'melee_heavy', generic: 'melee_swing' };
 
@@ -3167,7 +3174,7 @@ function weaponAudioProfile(id, baseWeapon) {
   // Throwables
   if (lowerId.includes('crossbow') || lowerId.includes('bow') || lowerId.includes('harpoon') || lowerId === 'slingshot') return { kind:'twang', vol:0.34, dur:0.18, f1:420, f2:130 };
   if (lowerId === 'boomerang')      return { kind:'twang', vol:0.20, dur:0.16, f1:380, f2:180 };
-  if (lowerId === 'throwing_axes' || lowerId === 'throwing_knives' || lowerId === 'spear_throw') return { kind:'throw', vol:0.23, dur:0.12, f1:780, f2:260 };
+  if (lowerId === 'throwing_axes' || lowerId === 'throwing_knives' || lowerId === 'spear_throw' || lowerId === 'twin_knife_throw') return { kind:'throw', vol:0.23, dur:0.12, f1:780, f2:260 };
   // Pattern fallbacks
   if (lowerId.includes('rail') || lowerId.includes('coil') || lowerId.includes('laser')) return { kind:'energy', vol:0.32, dur:0.20, f1:920, f2:170 };
   if (lowerId.includes('freeze') || lowerId.includes('cryo')) return { kind:'energy', vol:0.26, dur:0.22, f1:740, f2:260 };
@@ -20556,6 +20563,7 @@ const meleeModels = [
   // 🪖 ADMIN melees
   handcraftedMelee('karambit'), handcraftedMelee('bayonet'),
   handcraftedMelee('tomahawk'), handcraftedMelee('ots04'), buildGarrote(),
+  buildKnife(),  // twin_knife — same blade, dual-wielded via MELEE_ITEMS.dual
 ];
 meleeModels.forEach(m => { m.visible = false; camera.add(m); });
 
@@ -23275,7 +23283,7 @@ const PROJECTILE_KIND_BY_ID = {
   slingshot:'stone', air_rifle:'bullet',
   // These five used to share the generic 'solid' ball, so a thrown knife flew
   // as a sphere. Each has its own shape and its own tumble now.
-  throwing_knives:'knife', throwing_axes:'axe', boomerang:'boomerang',
+  throwing_knives:'knife', throwing_axes:'axe', boomerang:'boomerang', twin_knife_throw:'knife',
   traffic_cone:'cone', cream_pie:'pie',
   flamethrower:'flame',
   freeze_gun:'ice', abs_zero:'ice', frost_blaster:'ice',
@@ -26047,6 +26055,7 @@ function resetCombatResources() {
   abilityBuff = null; meleeAbilityBuff = null; pendingFanFire = null;
   crossbowCharging = false; crossbowChargeStart = 0;
   spearThrown = false; revealActive = false; revealEndTime = 0;
+  twinKnifeCharges = 10;
   meleeSwingT = 1; grenadeWindupT = 1; grenadeThrowFired = false;
   const reloadEl = document.getElementById('reload-flash');
   if (reloadEl) reloadEl.style.display = 'none';
@@ -27650,6 +27659,18 @@ function activateMeleeAbility() {
     if (meleeModels[selectedMeleeIdx]) meleeModels[selectedMeleeIdx].visible = false;
     flashAbilityName(ab.name);
   }
+  else if (ab.type === 'melee_multithrow') {
+    if (twinKnifeCharges <= 0) { flashAbilityName('OUT OF KNIVES'); return; }
+    twinKnifeCharges--;
+    const origin = new THREE.Vector3();
+    camera.getWorldPosition(origin);
+    origin.add(new THREE.Vector3(0.10, -0.10, -0.35).applyQuaternion(camera.quaternion));
+    const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+    const tid = `twin_knife_throw_${myId}_${now}`;
+    socket.emit('shoot', { x: origin.x, y: origin.y, z: origin.z, dx: dir.x, dy: dir.y, dz: dir.z, weapon: 'twin_knife_throw' });
+    spawnLocalBullet(origin, dir, tid, true, 130, 0xd8d8d8, 0.045, 'twin_knife_throw');
+    flashAbilityName(`${ab.name} \u00b7 ${twinKnifeCharges} left`);
+  }
   else if (ab.type === 'melee_deflect') {
     meleeAbilityBuff = { type: 'deflect', endTime: now + (ab.duration || 2000) };
     meleeDeflectDir = 1;
@@ -28554,7 +28575,11 @@ function tryMelee() {
 
     const dummy = TRAINING_DUMMIES.find(d => d.id === pid);
     if (soundId === 'chainsaw') playSoundEvent('chainsaw_hit', { volume: 1.35, minGap: 80 });
-    if (dummy) handleDummyHit(dummy, mesh, { weaponId: effectiveWeaponId }, hitPos.clone());
+    if (item.dualHit) {
+      // Twin Knife: two real blades, two real hits (50 + 50), not one flat 100.
+      if (dummy) { handleDummyHit(dummy, mesh, { weaponId: effectiveWeaponId }, hitPos.clone()); handleDummyHit(dummy, mesh, { weaponId: effectiveWeaponId }, hitPos.clone()); }
+      else { emitHit(pid, `melee_${myId}_${now}_a`, effectiveWeaponId, hitPos.clone()); emitHit(pid, `melee_${myId}_${now}_b`, effectiveWeaponId, hitPos.clone()); }
+    } else if (dummy) handleDummyHit(dummy, mesh, { weaponId: effectiveWeaponId }, hitPos.clone());
     else emitHit(pid, `melee_${myId}_${now}`, effectiveWeaponId, hitPos.clone());
     // Vampire Blade / Meat Cleaver: heal on hit
     const healPerHit = item.healOnHit || (item.lifestealOnHit && meleeAbilityBuff?.type === 'revup' ? item.lifestealOnHit : 0);
@@ -35995,6 +36020,7 @@ const CLIENT_WEAPON_DAMAGE = Object.fromEntries([
   ['rpg_skin_soda', 118],
   ['mg42', 15], ['bat', 38], ['sabre', 45], ['frying_pan', 32], ['sledge', 70],
   ['spear', 50], ['spear_throw', 85], ['pickle', 22], ['shield_charge', 60],
+  ['twin_knife_throw', 30],
   ['knife_instakill', 9999], ['chainsaw', 45], ['katana', 65], ['knife', 28],
   ['lightsabre', 72], ['riot_shield', 18], ['baguette', 16], ['screwdriver', 20],
   // New ability-shot weapon ids

@@ -238,7 +238,7 @@ const WEAPON_COSTS = {
   // Batch-4 melees
   brass_knuckles: 200, hatchet: 220, machete: 260, cane: 140, cricket_bat: 200,
   pipe: 160, wrench: 180, shovel: 280, golf_club: 200, tennis_racket: 100,
-  fire_poker: 200, meat_cleaver: 260,
+  fire_poker: 200, meat_cleaver: 260, twin_knife: 480,
   // 🌌 Sci-fi P2W melees
   phase_blade: 18000, gravity_hammer: 22000, volt_whip: 17000,
   // Support / Utility
@@ -1787,7 +1787,7 @@ event_horizon: 75,
   // Melee
   bat: 50, sabre: 45, frying_pan: 32, sledge: 70, spear: 50,
   spear_throw: 85, pickle: 22, shield_charge: 60, knife_instakill: 9999,
-  chainsaw: 45, katana: 65, knife: 28, lightsabre: 72,
+  chainsaw: 45, katana: 65, knife: 28, lightsabre: 72, twin_knife: 50,
   riot_shield: 18, baguette: 28, screwdriver: 20,
   // cane and shovel were missing here entirely — every hit with either one
   // fell through to the (WEAPON_DAMAGE[x] || 25) fallback, dealing 25 no
@@ -1846,6 +1846,8 @@ event_horizon: 75,
   chain_pull: 60, airburst: 95, toxin_dart: 30, blind_flash: 0,
   // NEW SUPPORTS
   tripwire: 60, magnet_mine: 40,
+  // Twin Knife's thrown alt-fire — mirrors public/game.js CLIENT_WEAPON_DAMAGE
+  twin_knife_throw: 30,
 };
 
 // Damage drop-off by range — the server is authoritative for real PvP hits,
