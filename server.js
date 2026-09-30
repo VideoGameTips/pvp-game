@@ -54,6 +54,9 @@ function saveUsers() {
 const FFA_LEGEND_DAMAGE = 1000000;
 const FFA_LEGEND_WINS = 5000;
 const FFA_MODES = new Set(['ffa5', 'ffa15']);
+const FRIENDLY_FIRE_FREE_FOR_ALL_MODES = new Set([
+  'ffa5', 'ffa15', 'gungame', 'oitc', 'juggernaut', 'infection', 'sniper_only', 'speedrun', 'piefight',
+]);
 const FFA_WIN_MIN_MS = 30000;
 let _saveSoonTimer = null;
 function saveUsersSoon() {            // damage lands many times a second; the file need not
@@ -86,6 +89,15 @@ function creditFfaDamage(p, dealt) {
     io.to(p.id).emit('ffaProgress', ffaProgressOf(u));
   }
   checkFfaLegend(u, p.id);
+}
+
+function blocksFriendlyFire(shooter, target) {
+  if (!shooter || !target || shooter.id === target.id) return false;
+  if (!shooter.team || !target.team || shooter.team !== target.team) return false;
+  if (!shooter.matchId || shooter.matchId !== target.matchId) return false;
+  if (shooter.matchId === 'lobby' || shooter.matchId === HUB_MATCH) return true;
+  const mode = shooter.matchMode || target.matchMode || '';
+  return !FRIENDLY_FIRE_FREE_FOR_ALL_MODES.has(mode);
 }
 
 // ── Passwords ──────────────────────────────────────────────────────────────
@@ -2095,6 +2107,7 @@ io.on('connection', (socket) => {
     const target  = players[data.targetId];
     const shooter = players[socket.id];
     if (!target || !shooter || target.dead || target.isBot || shielded(target)) return;
+    if (blocksFriendlyFire(shooter, target)) return;
     let dmg = Math.round((WEAPON_DAMAGE[data.weapon] || 25) * falloffMultiplier(data.weapon, dist3(shooter, target)));
     if (data.headshot) dmg = data.instakill ? target.hp : Math.round(dmg * (WEAPON_HS_MULT[data.weapon] || 2));
     const hpBefore = target.hp;
@@ -2118,6 +2131,7 @@ io.on('connection', (socket) => {
       ? requestedKiller
       : players[socket.id];
     if (!bot || !bot.isBot || bot.dead || !shooter) return;
+    if (blocksFriendlyFire(shooter, bot)) return;
     let dmg = Math.round((WEAPON_DAMAGE[data.weapon] || 25) * falloffMultiplier(data.weapon, dist3(shooter, bot)));
     if (data.headshot) dmg = data.instakill ? bot.hp : Math.round(dmg * (WEAPON_HS_MULT[data.weapon] || 2));
     // The shooter's client already saw this bot die (#48). Client and server work damage out
@@ -2385,6 +2399,7 @@ io.on('connection', (socket) => {
     const player = players[socket.id];
     const bot    = players[data.botId];
     if (!player || player.dead || !bot || !bot.isBot || shielded(player)) return;
+    if (blocksFriendlyFire(bot, player)) return;
     let dmg = Math.round((WEAPON_DAMAGE[data.weapon] || 25) * falloffMultiplier(data.weapon, dist3(bot, player)));
     player.hp = Math.max(0, player.hp - dmg);
     emitToMatch(player.matchId, 'playerHit', { targetId: player.id, hp: player.hp, bulletId: null });

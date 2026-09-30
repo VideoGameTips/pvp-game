@@ -31886,6 +31886,24 @@ function getSecretSynergy(weaponId, hitPos) {
   return 1;
 }
 
+function localEntityTeam(id) {
+  if (!id) return null;
+  if (id === myId) return (players[myId] && players[myId].team) || 'ally';
+  const p = players[id];
+  if (p && p.team) return p.team;
+  const bot = gameBots.find(b => b.id === id);
+  return bot && bot.team ? bot.team : null;
+}
+
+function friendlyFireBlocked(targetId, shooterId = myId) {
+  if (!targetId || !shooterId || targetId === shooterId || inLobby) return false;
+  const modeType = (match && match.type) || (selectedModeConfig && selectedModeConfig.type) || '';
+  if (modeType === 'ffa' || modeType === 'arcade' || modeType === 'br' || modeType === 'range') return false;
+  const shooterTeam = localEntityTeam(shooterId);
+  const targetTeam = localEntityTeam(targetId);
+  return !!(shooterTeam && targetTeam && shooterTeam === targetTeam);
+}
+
 // Helper: emit hit to server AND show damage numbers AND apply damage client-authoritatively
 function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false) {
   // 🛋️ Lobby 13 is a no-combat chill zone — the cast is neutral and can't be hurt. The hit still
@@ -31894,6 +31912,7 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false) {
   if (inLobby) { showHitmarker('lobby'); noteLobbyHit(); return; }
   if (players[pid]?.dead) return;   // a body going down is not a target (#34)
   const isBot    = players[pid] && players[pid].isBot;
+  if (friendlyFireBlocked(pid, myId)) return;
   noteKillInfo(pid, myId, weaponId, headshot);
   const instakill = headshot && INSTAKILL_HS_WEAPONS.has(weaponId);
   const baseDmg = getClientWeaponDamage(weaponId);
@@ -34243,6 +34262,7 @@ function applyBotDamageToPlayer(weaponId, botId) {
   noteKillInfo(myId, botId, weaponId, _botHitHead);   // for the kill feed, should this be the one that kills
   // 🛋️ Lobby 13 is a no-combat chill zone — nobody takes damage.
   if (inLobby) return;
+  if (botId && friendlyFireBlocked(myId, botId)) return;
   // ⚡ Admin god mode: no damage taken
   if (adminCheats.godMode && currentUser?.isAdmin) { flashHitIndicator(); return; }
   // Frost Blaster: doesn't deal HP damage, just reduces speed (lethal at 0)
@@ -38541,7 +38561,7 @@ function updateBotAI(dt) {
                 const _defPos1 = remoteMeshes[bot.id] ? remoteMeshes[bot.id].position.clone().setY(1.0) : camera.position.clone().setY(1.0);
                 emitHit(bot.id, `deflect_${myId}_${Date.now()}`, 'katana', _defPos1);
               }
-            } else if (target.botRef) {
+            } else if (target.botRef && !friendlyFireBlocked(target.botRef.id, bot.id)) {
               const dmg = 15;
               target.botRef.hp = Math.max(0, target.botRef.hp - dmg);
               if (target.botRef.hp <= 0 && !target.botRef.dead) {
@@ -39202,7 +39222,7 @@ function updateBotAI(dt) {
             }
             if (target.isPlayer) {
               /* damage happens when the bullet arrives — see updateBullets */
-            } else if (target.botRef) {
+            } else if (target.botRef && !friendlyFireBlocked(target.botRef.id, bot.id)) {
               target.botRef.hp = Math.max(0, target.botRef.hp - (w.damage || 25));
               if (target.botRef.hp <= 0 && !target.botRef.dead) {
                 target.botRef.dead = true;
