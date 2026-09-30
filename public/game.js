@@ -7215,6 +7215,14 @@ buildFlyingMoaiMap();
 // 17. KING OF THE HILL / BR ARENA — massive map with vehicles + helicopters
 // ──────────────────────────────────────────────────────────────────────────
 registerMap('br_arena');
+// 🗺️ Two dedicated big-footprint arenas for 2v2/3v3 -- a bigger, denser step
+// up from the standard 172 map, and a bigger one again. Both ride the grid
+// concept system below (addGridConceptMap): no hand-built content of their
+// own, just a bigger size, a forced archetype (never each other's, and never
+// br_arena's -- a fresh footprint each), and extra addGridClutter density so
+// a wider map doesn't read as emptier, just as more of one.
+registerMap('big_arena');
+registerMap('super_arena');
 function buildBrArenaMap() {
   const m = 'br_arena';
   const SIZE = 250; // 250x250 — 6x bigger than standard maps
@@ -7470,15 +7478,17 @@ function addGridLedges(name, s, large) {
 // varying size so some pieces are full walls and some are low enough to see
 // and shoot over. Built once at boot like the rest of the map, so the layout
 // is fixed for that server run, not re-rolled mid-match.
-function addGridClutter(name, half, s) {
+function addGridClutter(name, half, s, boost = 0) {
   const sizes = [[3.2, 3.4, 3.0], [4.6, 5.4, 3.6], [2.4, 2.0, 2.4], [6.2, 6.6, 3.2], [3.6, 4.6, 5.2], [2.8, 3.0, 2.8]];
   const tints = [0xf7f7f7, 0xeef1f4, 0xffffff, 0xe4e9ee];
-  const step = 12.5 * s, margin = 9 * s, centerClear = 15 * s;
+  // boost (0-1.5, the big/super-big arenas) packs the grid tighter and skips
+  // fewer slots, so a bigger footprint reads as MORE cover, not thinner cover.
+  const step = Math.max(7, 12.5 - boost * 2.6) * s, margin = 9 * s, centerClear = 15 * s;
   let placed = 0;
   for (let gx = -half + margin; gx <= half - margin; gx += step) {
     for (let gz = -half + margin; gz <= half - margin; gz += step) {
       if (Math.hypot(gx, gz) < centerClear) continue;           // leave the archetype's own centrepiece alone
-      if (Math.random() < 0.26) continue;                       // some open lanes, or this reads as a maze
+      if (Math.random() < Math.max(0.05, 0.26 - boost * 0.14)) continue; // some open lanes, or this reads as a maze
       const x = gx + (Math.random() * 2 - 1) * step * 0.32;
       const z = gz + (Math.random() * 2 - 1) * step * 0.32;
       const [w, hh, d] = sizes[Math.floor(Math.random() * sizes.length)];
@@ -7550,15 +7560,21 @@ function addGridConceptMap(name, index) {
   clearMapForGridConcept(name);
   const large = name === 'br_arena';
   const compact = name === 'range';
-  const size = large ? 260 : compact ? 100 : 172;
+  const big = name === 'big_arena';
+  const superBig = name === 'super_arena';
+  const size = superBig ? 300 : big ? 220 : large ? 260 : compact ? 100 : 172;
   const half = size / 2 - 6;
-  const h = large ? 10.2 : 8.4;
+  const h = superBig ? 11.4 : big ? 9.4 : large ? 10.2 : 8.4;
   addGridConceptGround(name, size);
   addGridPerimeter(name, half, h);
 
   const solid = 0xffffff, soft = 0xf7f7f7, marker = 0xe8edf2;
-  const arch = GRID_MAP_ARCHETYPES[index % GRID_MAP_ARCHETYPES.length];
-  const s = large ? 1.6 : compact ? 0.8 : 1.15;
+  // Forced, not indexed: big_arena and super_arena always land on different
+  // archetypes from each other (and from br_arena's own layout), rather than
+  // leaving it to index % 12 luck.
+  const arch = big ? 'tower_corners' : superBig ? 'outpost'
+             : GRID_MAP_ARCHETYPES[index % GRID_MAP_ARCHETYPES.length];
+  const s = superBig ? 1.9 : big ? 1.4 : large ? 1.6 : compact ? 0.8 : 1.15;
   const B = (x, y, z, w, hh, d, rot = 0, color = solid) =>
     addMapBox(name, x * s, y, z * s, w * s, hh, d * s, color, rot);
   const W = (x, z, w, d, rot = 0, hh = 7.2, color = solid) => B(x, hh / 2, z, w, hh, d, rot, color);
@@ -7648,9 +7664,10 @@ function addGridConceptMap(name, index) {
     [[-20,-16], [20,16], [-20,16], [20,-16]].forEach(([x,z]) => W(x, z, 9, 3.4, 0, 3.2, soft));
   }
 
-  try { addGridRamps(name, s, large); } catch (e) { console.warn('[ramps]', name, e); }
-  try { addGridLedges(name, s, large); } catch (e) { console.warn('[ledges]', name, e); }
-  try { addGridClutter(name, half, s); } catch (e) { console.warn('[clutter]', name, e); }
+  const bigScaleRoutes = large || big || superBig;
+  try { addGridRamps(name, s, bigScaleRoutes); } catch (e) { console.warn('[ramps]', name, e); }
+  try { addGridLedges(name, s, bigScaleRoutes); } catch (e) { console.warn('[ledges]', name, e); }
+  try { addGridClutter(name, half, s, superBig ? 1.4 : big ? 1 : 0); } catch (e) { console.warn('[clutter]', name, e); }
 
   // Small spawn-side anchors make orientation obvious without breaking the all-white look.
   B(-half / s + 10, 0.04, 0, 7, 0.08, 24, 0, 0xe9f2ff);
@@ -37785,7 +37802,7 @@ function spawnGameBots() {
     const sky = MAP_GROUPS[selectedModeConfig.forcedMap]?._skyColor;
     if (sky != null && scene.background?.setHex) scene.background.setHex(sky);
   } else if (selectedModeConfig.type !== 'dday' && selectedModeConfig.type !== 'range') {
-    const pool = ['blank','urban','warehouse','forest','vietnam','volcano','cyber','desert','tundra','space','airport','trenches','chernobyl','refinery','skydock','sewer','gravity_lab','glassworks','carrier','overgrowth','orbital_station','foundry','carnival','biosphere','lockdown','studio','temple','holiday','labyrinth','arena','opera','doomsday','train','dreamscape','pearl_harbor','titanic','supermarket','pyongyang','traffic_cone_republic','flying_moai'];
+    const pool = ['blank','urban','warehouse','forest','vietnam','volcano','cyber','desert','tundra','space','airport','trenches','chernobyl','refinery','skydock','sewer','gravity_lab','glassworks','carrier','overgrowth','orbital_station','foundry','carnival','biosphere','lockdown','studio','temple','holiday','labyrinth','arena','opera','doomsday','train','dreamscape','pearl_harbor','titanic','supermarket','pyongyang','traffic_cone_republic','flying_moai','big_arena','super_arena'];
     const chosen = (selectedMap === 'auto' || !MAP_GROUPS[selectedMap]) ? pool[Math.floor(Math.random()*pool.length)] : selectedMap;
     activateMap(chosen);
     // Update sky color if the map specifies one
@@ -43541,6 +43558,8 @@ const MAP_DESCS = {
   doomsday:   '🌋 Doomsday — collapsing city, fire pillars, abandoned heli',
   train:      '🚂 Train Terminal — 3 tracks, platforms + canopy, footbridge, level crossing',
   dreamscape: '🌌 Dreamscape — floating stairs + impossible shapes',
+  big_arena:   '🗺️ Big Arena — bigger footprint, four fortified corners, denser cover — built for 2v2/3v3',
+  super_arena: '🗺️ Super Big Arena — biggest non-BR map, two full compounds face off, densest cover — 2v2/3v3',
 };
 function selectMapPick(mapId) {
   selectedMap = pickedMap = mapId;
