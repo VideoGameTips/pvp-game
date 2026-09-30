@@ -2156,7 +2156,7 @@ io.on('connection', (socket) => {
     // The shooter's client already saw this bot die (#48). Client and server work damage out
     // differently (their own tables, zone bonuses, positions), and with other real players in
     // the match a kill that stays on one screen leaves a frozen, unkillable bot on everyone else's.
-    if (data.fatal) dmg = bot.hp;
+    if (data.fatal && data.instakill) dmg = bot.hp;
     const botHpBefore = bot.hp;
     bot.hp = Math.max(0, bot.hp - dmg);
     // Only what the PLAYER dealt counts -- not a friendly bot they own.

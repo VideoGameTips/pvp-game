@@ -34031,7 +34031,7 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false, opts = 
   // everyone's (#48): the server takes `fatal` as the kill. (Guests know a bot's HP from
   // the server's playerHit; the host from its own simulation.)
   const botHp = isBot ? (resolveBot(pid) || players[pid] || {}).hp : null;
-  const fatal = !!(isBot && mpMatch() && botHp != null && (instakill || botHp - dmg <= 0));
+  const fatal = !!(isBot && mpMatch() && botHp != null && instakill);
   socket.emit(isBot ? 'hitBot' : 'hit', {
     [isBot ? 'botId' : 'targetId']: pid,
     bulletId, weapon: weaponId,
