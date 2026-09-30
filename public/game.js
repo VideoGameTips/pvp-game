@@ -774,6 +774,26 @@ const WEAPONS = [
     bulletColor: 0xfff4d8, bulletSize: 0.13,
     ability: { name: 'Pie Platter', cd: 8000, desc: 'Fling 5 pies at once', type: 'multishot', count: 5, spread: 0.14 },
   },
+  {
+    // 🥶 Cyroclasm: a 5-round freeze burst. Aiming down sights doesn't zoom —
+    // it dumps whatever's left in the mag into one ice laser instead (see
+    // fireCyroclasmLaser), so emptying a full mag for the laser hits far
+    // harder than firing off a half-spent one.
+    id: 'cyroclasm', name: 'Cyroclasm', type: 'Cryo Burst', slot: 'primary',
+    mag: 30, reserve: 150, damage: 10, fireRate: 60, reloadTime: 3000,
+    auto: true, pellets: 1, spread: 0.012, adsZoom: 45, bulletSpeed: 130, noReload: false,
+    bulletColor: 0xbdf3ff, bulletSize: 0.05,
+    heatShots: 5, heatCooldown: 200,   // 5-round burst, 0.2s forced cooldown after each
+  },
+  {
+    // ♾️ Continuum: an "OP by design" sidearm — infinite reserve, so you can
+    // hold the trigger down forever. Balanced by a tiny 5-round mag instead.
+    id: 'continuum', name: 'Continuum', type: 'Secondary', slot: 'secondary',
+    mag: 5, reserve: 999999, damage: 30, fireRate: 250, reloadTime: 500,
+    auto: true, pellets: 1, spread: 0.008, adsZoom: 50, bulletSpeed: 150, noReload: false,
+    bulletColor: 0x8a5cff, bulletSize: 0.05,
+    ability: { name: 'Overcharge', cd: 10000, desc: '3s · fire rate doubled', type: 'buff', duration: 3000, rateMult: 0.5 },
+  },
 ];
 
 // ── Damage drop-off by range ────────────────────────────────────────────────
@@ -1303,7 +1323,7 @@ const WEAPON_COSTS = {
   minigun: 600, grenade_launcher: 500, flamethrower: 420,
   // Primaries — Sci-fi / energy
   railgun: 600, freeze_gun: 350, plasma_carbine: 420, arc_rifle: 400,
-  arc_torrent: 460, prism_launcher: 420,  storm_cannon: 540,
+  arc_torrent: 460, prism_launcher: 420,  storm_cannon: 540, cyroclasm: 480,
   coilgun: 460,  painter_beam: 300, gravity_paint: 400,
   portal_launcher: 460,  traffic_controller: 320,
   // Primaries — Explosive / projectile
@@ -1326,7 +1346,7 @@ const WEAPON_COSTS = {
   revolver: 150, flare: 80, pistol: 60, shorty: 180, cycler: 140,
   hand_cannon: 260, throwing_knives: 120, taser: 200, traffic_cone: 160, cream_pie: 140,
   machine_pistol: 220, gatecrasher: 280, sawed_off: 260, machine_revolver: 240,
-  dart_gun: 160, laser_pointer: 120,
+  dart_gun: 160, laser_pointer: 120, continuum: 600,
   auto_revolver: 220, frost_blaster: 240,
   // Batch-4 secondaries
   snub_revolver: 140, duelist_pistol: 280, mauser: 200,
@@ -1694,6 +1714,8 @@ const teslaCoils     = [];        // ⚡ {mesh, x, z, until, lastShot, fireRate,
 const beeSwarms      = [];        // 🐝 {mesh, x, y, z, until, lastSting, fireRate, damage, range, targetId}
 const orbitalMarkers = [];        // {mesh, x, z, fireAt, damage, radius}
 let playerFrostSlow = 100;        // 100 = full speed, 0 = frozen + dead. Frost Blaster reduces this on hit.
+let playerSlowOnHitUntil = 0;     // Cyroclasm laser etc: timed flat-% slow, see SLOW_ON_HIT
+let playerSlowOnHitMult = 1;
 let playerYVel = 0;               // Player vertical velocity (for air grenades launching the player)
 
 // ── 🏃 Movement tuning ──────────────────────────────────────────────────────
@@ -3115,6 +3137,8 @@ function weaponAudioProfile(id, baseWeapon) {
   if (lowerId === 'arc_torrent') return { kind:'arc', vol:0.26, dur:0.11, f1:980, f2:320 };
   if (lowerId === 'arc_rifle')   return { kind:'arc', vol:0.30, dur:0.13, f1:1240, f2:380 };
   if (lowerId === 'freeze_gun' || lowerId === 'frost_blaster') return { kind:'freeze', vol:0.24, dur:0.16, f1:680, f2:420 };
+  if (lowerId === 'cyroclasm') return { kind:'freeze', vol:0.22, dur:0.09, f1:900, f2:560 };
+  if (lowerId === 'continuum') return { kind:'energy', vol:0.22, dur:0.09, f1:1020, f2:620 };
   if (lowerId === 'flamethrower') return { kind:'flamethrower', vol:0.24, dur:0.18, f1:95, f2:58 };
   if (lowerId === 'plasma_carbine') return { kind:'energy', vol:0.30, dur:0.14, f1:880, f2:540 };
   if (lowerId === 'railgun')        return { kind:'energy', vol:0.42, dur:0.32, f1:1620, f2:120 };
@@ -17987,6 +18011,90 @@ function buildTrafficCone() {
   g._greebled = true; g._handDetailed = true; return g;
 }
 // 🥧 Cream Pie — the weapon of the Pie Fight (splat on impact)
+function buildCyroclasm() {
+  // 🧊⚡ Cyroclasm: a burst freeze rifle built around a focusing crystal — the same
+  // crystal that dumps the whole mag as a laser when you aim instead of firing.
+  // Five cryo cells ride the top rail, one per round of the burst.
+  const g = new THREE.Group();
+  const steel = GUN_MATS.steel(), bright = GUN_MATS.bright(), inner = GUN_MATS.inner();
+  const grip = GUN_MATS.grip();
+  const shell = new THREE.MeshPhongMaterial({ color: 0x2c4a56, shininess: 110, specular: 0xa8d8e6 });
+  const cryo  = new THREE.MeshPhongMaterial({ color: 0xbdf3ff, shininess: 160, specular: 0xffffff,
+                                              transparent: true, opacity: 0.68 });
+  const rime  = new THREE.MeshPhongMaterial({ color: 0xe4f6fb, shininess: 20, specular: 0x9fb8c2 });
+  gpBox(g, shell, 0.044, 0.052, 0.190, 0, 0.020, 0.020);            // receiver
+  gpBox(g, inner, 0.045, 0.006, 0.170, 0, 0.044, 0.020);
+  // Five cryo cells along the top rail — one lights up per round left in the burst.
+  for (let i = 0; i < 5; i++) {
+    gpCyl(g, steel, 0.0095, 0.0095, 0.030, 10, 0, 0.056, 0.072 - i * 0.034);
+    gpCyl(g, cryo, 0.0065, 0.0065, 0.022, 10, 0, 0.056, 0.072 - i * 0.034);
+  }
+  // Vented barrel shroud, crusted with rime near the muzzle.
+  gpCyl(g, shell, 0.020, 0.020, 0.150, 14, 0, 0.018, -0.120);
+  for (let i = 0; i < 5; i++) gpBox(g, inner, 0.006, 0.024, 0.014, 0, 0.018, -0.062 - i * 0.020);
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    const ic = new THREE.Mesh(new THREE.ConeGeometry(0.005 + (i % 2) * 0.0025, 0.018 + (i % 3) * 0.006, 5), rime);
+    ic.position.set(Math.cos(a) * 0.022, 0.018 + Math.sin(a) * 0.022, -0.186);
+    ic.rotation.set(Math.PI / 2 + (i % 3 - 1) * 0.4, 0, a); g.add(ic);
+  }
+  // Focusing crystal at the muzzle — the laser's aperture.
+  const crystalMat = new THREE.MeshPhongMaterial({ color: 0xaef2ff, shininess: 180, specular: 0xffffff,
+                                                    transparent: true, opacity: 0.75 });
+  const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(0.026, 0), crystalMat);
+  crystal.scale.set(1, 1, 1.6);
+  crystal.position.set(0, 0.018, -0.206); g.add(crystal);
+  gpCyl(g, steel, 0.026, 0.022, 0.020, 12, 0, 0.018, -0.188);        // crystal collar
+  // Grip, trigger, sights.
+  gpPlate(g, grip, [[0.040,-0.012],[0.070,-0.026],[0.074,-0.100],[0.044,-0.114],[0.020,-0.052],[0.018,-0.016]], 0.036, 0);
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.019, 0.0034, 6, 12, Math.PI * 1.05), shell);
+  guard.rotation.set(0, Math.PI/2, -0.4); guard.position.set(0, -0.018, 0.024); g.add(guard);
+  gpBox(g, bright, 0.005, 0.014, 0.005, 0, -0.010, 0.024, 0.2);
+  gpBox(g, inner, 0.018, 0.008, 0.010, 0, 0.048, 0.062);             // rear sight
+  const flash = new THREE.Mesh(new THREE.SphereGeometry(0.024, 8, 7),
+    new THREE.MeshBasicMaterial({ color: 0xbdeeff }));
+  flash.visible = false; flash.position.set(0, 0.018, -0.220); g.add(flash);
+  g._flash = flash; g._kickZ = 0.009; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.1, -0.1, -0.23); return g;
+}
+
+function buildContinuum() {
+  // ♾️ Continuum: a sidearm with no magazine to speak of — a capacitor loop
+  // keeps feeding itself, visibly recirculating through the frame. That loop
+  // is the whole joke: there's nothing in this gun to run out of.
+  const g = new THREE.Group();
+  const steel = GUN_MATS.steel(), bright = GUN_MATS.bright(), inner = GUN_MATS.inner();
+  const grip = GUN_MATS.grip();
+  const shell = new THREE.MeshPhongMaterial({ color: 0x3a3450, shininess: 110, specular: 0xb0a0e0 });
+  const plasma = new THREE.MeshPhongMaterial({ color: 0x8a5cff, shininess: 160, specular: 0xffffff,
+                                                transparent: true, opacity: 0.65 });
+  const glow  = new THREE.MeshBasicMaterial({ color: 0xb08cff });
+  gpBox(g, shell, 0.036, 0.046, 0.130, 0, 0.020, -0.010);           // body
+  gpBox(g, inner, 0.037, 0.006, 0.110, 0, 0.040, -0.010);
+  // The recirculating capacitor loop, set into the frame like a window.
+  const loop = new THREE.Mesh(new THREE.TorusGeometry(0.020, 0.005, 8, 20), plasma);
+  loop.rotation.set(Math.PI/2, 0, 0); loop.position.set(0, 0.020, 0.010); g.add(loop);
+  const loopGlow = new THREE.Mesh(new THREE.TorusGeometry(0.020, 0.0018, 6, 20), glow);
+  loopGlow.rotation.copy(loop.rotation); loopGlow.position.copy(loop.position); g.add(loopGlow);
+  gpCyl(g, steel, 0.024, 0.024, 0.010, 16, 0, 0.020, 0.010);        // loop housing rim
+  // Single barrel, capped with a small emitter ring.
+  gpCyl(g, shell, 0.013, 0.013, 0.120, 12, 0, 0.020, -0.098);
+  gpCyl(g, inner, 0.0075, 0.0075, 0.100, 12, 0, 0.020, -0.098);
+  gpCyl(g, bright, 0.017, 0.017, 0.012, 14, 0, 0.020, -0.158);
+  gpCyl(g, plasma, 0.009, 0.009, 0.006, 14, 0, 0.020, -0.162);
+  // Grip, trigger, sights.
+  gpPlate(g, grip, [[0.038,-0.012],[0.066,-0.026],[0.070,-0.100],[0.040,-0.112],[0.018,-0.050],[0.016,-0.016]], 0.034, 0);
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.018, 0.0034, 6, 12, Math.PI * 1.05), shell);
+  guard.rotation.set(0, Math.PI/2, -0.4); guard.position.set(0, -0.018, -0.010); g.add(guard);
+  gpBox(g, bright, 0.005, 0.014, 0.005, 0, -0.010, -0.010, 0.2);
+  gpBox(g, inner, 0.016, 0.008, 0.010, 0, 0.044, 0.038);            // rear sight
+  const flash = new THREE.Mesh(new THREE.SphereGeometry(0.018, 8, 7),
+    new THREE.MeshBasicMaterial({ color: 0xc8a8ff }));
+  flash.visible = false; flash.position.set(0, 0.020, -0.166); g.add(flash);
+  g._flash = flash; g._kickZ = 0.007; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.1, -0.1, -0.22); return g;
+}
+
 function buildCreamPie() {
   // 🥧 Cream pie: a foil dish with a real crimped rim, a mound of whipped
   // cream built from overlapping swirls rather than one dome, a glacé cherry
@@ -18203,6 +18311,9 @@ const weaponModels = [
   // ── 🚧 / 🥧 must mirror the two trailing WEAPONS entries ──
   buildTrafficCone(),  // traffic_cone
   buildCreamPie(),  // cream_pie
+  // ── 🥶 / ♾️ must mirror the two trailing WEAPONS entries ──
+  buildCyroclasm(),  // cyroclasm
+  buildContinuum(),  // continuum
 ];
 function addWeaponRealismDetails(model, weapon) {
   if (!model || !model.add || (model.userData && model.userData.realismDetailed)) return;
@@ -21721,7 +21832,7 @@ const PROJECTILE_KIND_BY_ID = {
   throwing_knives:'knife', throwing_axes:'axe', boomerang:'boomerang',
   traffic_cone:'cone', cream_pie:'pie',
   flamethrower:'flame',
-  freeze_gun:'ice', abs_zero:'ice', frost_blaster:'ice',
+  freeze_gun:'ice', abs_zero:'ice', frost_blaster:'ice', cyroclasm:'ice',
   paintball:'paintball', glassmaker:'blob', gravity_paint:'blob',
   foam_cannon:'blob', sticker_blaster:'blob',
   taser:'spark', arc_rifle:'spark', arc_torrent:'spark', storm_core:'spark',
@@ -24625,6 +24736,11 @@ function toggleADS() {
 
 function setADS(on) {
   if (isDead) return;
+  // 🥶 Cyroclasm has no scope — "aiming" it fires the ice laser instead.
+  if (on && activeSlot === 'primary' && currentWeapon?.id === 'cyroclasm') {
+    fireCyroclasmLaser();
+    return;
+  }
   // Aiming is a GUN action. This function ends by forcing
   // weaponModels[currentWeaponIdx].visible = true, so calling it with a knife or
   // a utility in hand flipped the GUN's viewmodel on over whatever you were
@@ -25490,6 +25606,7 @@ function updateMovement(dt) {
   const adrenalineActive = Date.now() < adrenalineUntil;
   // Frost slow: 100 = normal, 0 = frozen. Linear scale.
   const frostMult = Math.max(0, playerFrostSlow) / 100;
+  const slowOnHitMult = Date.now() < playerSlowOnHitUntil ? playerSlowOnHitMult : 1;
   // ⚡ Admin speed boost: 3× speed
   const adminSpeedMult = (adminCheats.speed && currentUser?.isAdmin) ? 3 : 1;
   // 🏃 Sprint (Shift): +50% speed.  🦆 Crouch (Ctrl/C): -45% speed.
@@ -25567,7 +25684,7 @@ function updateMovement(dt) {
   const fireBoost = (shooting && currentWeapon && currentWeapon.moveBoost
                      && (activeSlot === 'primary' || activeSlot === 'secondary'))
                     ? currentWeapon.moveBoost : 1;
-  const speedMult = baseSpeedMult * (adrenalineActive ? 1.6 : 1) * frostMult * adminSpeedMult * crouchMult * slideMult * fireBoost;
+  const speedMult = baseSpeedMult * (adrenalineActive ? 1.6 : 1) * frostMult * slowOnHitMult * adminSpeedMult * crouchMult * slideMult * fireBoost;
   // Drop the camera when crouching / sliding (eased)
   if (!window._crouchEye) window._crouchEye = 1.65;
   // Slide drops the eye to 0.70 m so the view clearly dips below normal
@@ -26795,6 +26912,38 @@ function tryUseActive() {
   if (activeSlot === 'melee') return tryMelee();
   if (activeSlot === 'support') return trySupport();
   return tryShoot();
+}
+
+// 🥶 Cyroclasm's alt-fire: instead of aiming, dump the whole magazine into one
+// hitscan ice bolt. Damage scales with rounds left (10 per round) — a full
+// 30-round dump hits for 300, a near-empty mag barely tickles. Whatever it
+// lands on also gets SLOW_ON_HIT's timed movement slow, same as a normal hit.
+function fireCyroclasmLaser() {
+  if (isDead || !gameStarted || reloading || countdownActive) return;
+  const pool = weaponAmmo[currentWeaponIdx];
+  if (!pool || pool.ammo <= 0) { dryFire(); return; }
+  const shots = pool.ammo;
+  pool.ammo = 0; ammo = 0;
+  updateAmmoHUD();
+  _cyroclasmLaserDmg = shots * 10;
+  playSoundEvent('freeze_shatter', { volume: 1.0 });
+  const model = weaponModels[currentWeaponIdx];
+  triggerMuzzleBlast(model, { duration: 220, scale: 3.2 });
+  const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+  for (const [pid, mesh] of Object.entries(remoteMeshes)) {
+    if (players[pid]?.dead || friendlyFireBlocked(pid, myId)) continue;
+    const toTarget = mesh.position.clone().sub(camera.position);
+    const dist = toTarget.length();
+    if (dist > 70 || dist < 0.1) continue;
+    if (forward.dot(toTarget.clone().normalize()) < 0.97) continue;   // tight forward cone
+    const hitPos = mesh.position.clone(); hitPos.y += 1.0;
+    const dummy = TRAINING_DUMMIES.find(d => d.id === pid);
+    if (dummy) handleDummyHit(dummy, mesh, { weaponId: 'cyroclasm_laser' }, hitPos);
+    else emitHit(pid, `cyroclasm_laser_${myId}_${Date.now()}`, 'cyroclasm_laser', hitPos);
+    spawnAbilityAOEFX(hitPos, 1.1, 0x9fe8ff);
+    spawnHitParticle(hitPos);
+    break;
+  }
 }
 
 function tryMelee() {
@@ -32046,7 +32195,11 @@ const INSTAKILL_HS_WEAPONS = new Set(['srx', 'railgun', 'lever', 'boombow', 'boo
 const ELECTRIC_WEAPONS = new Set(['arc_rifle','arc_torrent','taser','pistol','shock_baton','storm_core','revolver','freeze_gun','coilgun','plasma_carbine']);
 const FIRE_WEAPONS     = new Set(['flamethrower','firework_launcher','sg8','fire_axe','fire_poker','thermite','molotov']);
 const GRAVITY_WEAPONS  = new Set(['gravity_launcher','gravity_hammer','gravity_paint','event_horizon','magnetar','void_harvester','black_hole_seed']);
-const FROST_WEAPONS    = new Set(['freeze_gun','frost_blaster','abs_zero']);
+const FROST_WEAPONS    = new Set(['freeze_gun','frost_blaster','abs_zero','cyroclasm','cyroclasm_laser']);
+// 🥶 Cyroclasm's ice-laser alt-fire: id → { factor, dur }. A flat % movement slow for a
+// fixed duration — the frostSlow bleed above is a gradual drain/regen, not a timed debuff,
+// so this is its own small table rather than overloading that mechanic.
+const SLOW_ON_HIT = { cyroclasm_laser: { factor: 0.5, dur: 3000 } };
 const BOT_STUN_ON_HIT_WEAPONS = new Set(['arc_torrent', 'taser']);
 
 // Returns a synergy multiplier for damage based on map zones + weapon category.
@@ -32136,6 +32289,7 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false) {
     [isBot ? 'botId' : 'targetId']: pid,
     bulletId, weapon: weaponId,
     headshot, instakill, fatal,
+    damage: weaponId === 'cyroclasm_laser' ? dmg : undefined,
   });
   showHitmarker(headshot ? 'head' : 'hit');   // a kill below turns it red
   // Briefly tint the damage number / spawn a synergy spark for player discovery
@@ -32163,6 +32317,16 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false) {
       const chill = weaponId === 'frost_blaster' ? 3 : 8;   // the dedicated chiller ticks
       bot.frostSlow = Math.max(0, (bot.frostSlow || 100) - chill);
       spawnAbilityAOEFX(hitWorldPos ? hitWorldPos.clone() : mesh.position.clone(), 0.5, 0x9fe8ff);
+    }
+  }
+  // 🥶 Cyroclasm's laser: a flat, timed movement slow on the target (bots only here —
+  // a hit real player gets the same slow client-side, off the playerHit relay below).
+  const _slowFx = SLOW_ON_HIT[weaponId];
+  if (_slowFx) {
+    const bot = resolveBot(pid);
+    if (bot && !bot.dead) {
+      bot.slowOnHitMult = _slowFx.factor;
+      bot.slowOnHitUntil = Date.now() + _slowFx.dur;
     }
   }
   // ⚡ Only explicit stun weapons should interrupt bot AI. Cycler and Laser
@@ -32253,7 +32417,9 @@ function headshotMultFor(weaponId) {
   return (w && w.headshotMult) ? w.headshotMult : 2;
 }
 
+let _cyroclasmLaserDmg = 0;   // set by fireCyroclasmLaser() just before the hit call
 function getClientWeaponDamage(weaponId) {
+  if (weaponId === 'cyroclasm_laser') return _cyroclasmLaserDmg;
   const w = WEAPONS.find(x => x.id === weaponId);
   if (w) return w.damage;
   const m = MELEE_ITEMS.find(x => x.id === weaponId);
@@ -35048,6 +35214,8 @@ socket.on('playerHit', data => {
     updateHealthHUD(data.hp);
     if (hpBeforeServerHit != null && data.hp < hpBeforeServerHit) flashDamageScreen(hpBeforeServerHit - data.hp);
     if (data.shooterId) showDamageDirection(data.shooterId); else flashHitIndicator();
+    const slowFx = SLOW_ON_HIT[data.weapon];
+    if (slowFx) { playerSlowOnHitMult = slowFx.factor; playerSlowOnHitUntil = Date.now() + slowFx.dur; }
   }
   if (data.bulletId) {
     for (let i=localBullets.length-1; i>=0; i--) {
@@ -39733,7 +39901,8 @@ function updateBotAI(dt) {
     // above run on the UNSCALED movement, which is what we want: they measure
     // intent (am I stuck, am I kiting), not ground actually covered.
     const frostMult = (bot.frostSlow || 100) / 100;
-    const moveScale = BOT_SPEED_MULT * frostMult;
+    const botSlowOnHitMult = (bot.slowOnHitUntil || 0) > Date.now() ? (bot.slowOnHitMult || 1) : 1;
+    const moveScale = BOT_SPEED_MULT * frostMult * botSlowOnHitMult;
     if (moveScale !== 1) {
       bot.x = prevBotX + (bot.x - prevBotX) * moveScale;
       bot.z = prevBotZ + (bot.z - prevBotZ) * moveScale;

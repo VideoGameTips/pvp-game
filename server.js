@@ -197,7 +197,7 @@ const WEAPON_COSTS = {
   minigun: 600, grenade_launcher: 500, flamethrower: 420,
   // Primaries — Sci-fi / energy
   railgun: 600, freeze_gun: 350, plasma_carbine: 420, arc_rifle: 400,
-  arc_torrent: 460, prism_launcher: 420,  storm_cannon: 540,
+  arc_torrent: 460, prism_launcher: 420,  storm_cannon: 540, cyroclasm: 480,
   coilgun: 460,  painter_beam: 300, gravity_paint: 400,
   portal_launcher: 460,  traffic_controller: 320,
   // Primaries — Explosive / projectile
@@ -220,7 +220,7 @@ const WEAPON_COSTS = {
   revolver: 150, flare: 80, pistol: 60, shorty: 180, cycler: 140,
   hand_cannon: 260, throwing_knives: 120, taser: 200, traffic_cone: 160, cream_pie: 140,
   machine_pistol: 220, gatecrasher: 280, sawed_off: 260, machine_revolver: 240,
-  dart_gun: 160, laser_pointer: 120,
+  dart_gun: 160, laser_pointer: 120, continuum: 600,
   auto_revolver: 220, frost_blaster: 240,
   // Batch-4 secondaries
   snub_revolver: 140, duelist_pistol: 280, mauser: 200,
@@ -1758,7 +1758,7 @@ event_horizon: 75,
   // Secondaries
   revolver: 83, flare: 85, pistol: 20, shorty: 30, cycler: 8,
   hand_cannon: 105, throwing_knives: 45, taser: 53,
-  gatecrasher: 5, gatecrasher_slug: 40,
+  gatecrasher: 5, gatecrasher_slug: 40, cyroclasm: 10, cyroclasm_laser: 10, continuum: 30,
   // Ability shots
   sg100_ab: 140, lever_ab: 150, crossbow_ab: 220, crossbow_c1: 140,
   sg8_wave: 20,
@@ -1862,9 +1862,9 @@ const WEAPON_FALLOFF = {
   srx: FALLOFF_SNIPER, lever: FALLOFF_SNIPER, railgun: FALLOFF_SNIPER, revolver: FALLOFF_SNIPER, hand_cannon: FALLOFF_SNIPER, m1_garand: FALLOFF_SNIPER, coilgun: FALLOFF_SNIPER, amr: FALLOFF_SNIPER, duelist_pistol: FALLOFF_SNIPER, barrett: FALLOFF_SNIPER, desert_eagle: FALLOFF_SNIPER, m1911: FALLOFF_SNIPER,
   rpd: FALLOFF_LMG, minigun: FALLOFF_LMG, cycler: FALLOFF_LMG, arc_torrent: FALLOFF_LMG, slingshot: FALLOFF_LMG, solar_lance: FALLOFF_LMG, gau19: FALLOFF_LMG, mk44: FALLOFF_LMG, m134: FALLOFF_LMG, mg42: FALLOFF_LMG,
   mp40: FALLOFF_SMG, p90: FALLOFF_SMG, burst: FALLOFF_BURST, vector: FALLOFF_SMG, sticker_blaster: FALLOFF_SMG, smart_smg: FALLOFF_SMG, swarm_rifle: FALLOFF_SMG, painter_beam: FALLOFF_SMG, machine_pistol: FALLOFF_SMG, machine_revolver: FALLOFF_SMG, prism_engine: FALLOFF_SMG, p90_spec: FALLOFF_SMG, glock18: FALLOFF_SMG,
-  crossbow: FALLOFF_NONE, grenade_launcher: FALLOFF_NONE, boombow: FALLOFF_NONE, flare: FALLOFF_NONE, gravity_launcher: FALLOFF_NONE, potato_cannon: FALLOFF_NONE, mortar_rifle: FALLOFF_NONE, firework_launcher: FALLOFF_NONE, seismic_hammer: FALLOFF_NONE, signal_pistol: FALLOFF_NONE, throwing_axes: FALLOFF_NONE, nebula_mortar: FALLOFF_NONE, rpg: FALLOFF_NONE, bazooka: FALLOFF_NONE,
-  pistol: FALLOFF_SIDEARM, throwing_knives: FALLOFF_SIDEARM, taser: FALLOFF_SIDEARM, harpoon_gun: FALLOFF_SIDEARM, switchblade_gun: FALLOFF_SIDEARM, air_rifle: FALLOFF_SIDEARM, shockwave_launcher: FALLOFF_SIDEARM, storm_cannon: FALLOFF_SIDEARM, prism_launcher: FALLOFF_SIDEARM, foam_cannon: FALLOFF_SIDEARM, portal_launcher: FALLOFF_SIDEARM, traffic_controller: FALLOFF_SIDEARM, pinball_launcher: FALLOFF_SIDEARM, dart_gun: FALLOFF_SIDEARM, gatecrasher: FALLOFF_SIDEARM, gatecrasher_slug: FALLOFF_SIDEARM, snub_revolver: FALLOFF_SIDEARM, mauser: FALLOFF_SIDEARM, boomerang: FALLOFF_SIDEARM, magnetar: FALLOFF_SIDEARM, void_harvester: FALLOFF_SIDEARM, five_seven: FALLOFF_SIDEARM, lancer: FALLOFF_SIDEARM, traffic_cone: FALLOFF_SIDEARM, cream_pie: FALLOFF_SIDEARM,
-  ak20: FALLOFF_AR, paintball: FALLOFF_AR, freeze_gun: FALLOFF_AR, plasma_carbine: FALLOFF_AR, arc_rifle: FALLOFF_AR, flechette: FALLOFF_AR, burst_cannon: FALLOFF_AR, twin_ar: FALLOFF_AR, airburst_projector: FALLOFF_AR, glassmaker: FALLOFF_AR, gravity_paint: FALLOFF_AR, laser_pointer: FALLOFF_AR, auto_revolver: FALLOFF_AR, frost_blaster: FALLOFF_AR, nail_gun: FALLOFF_AR, event_horizon: FALLOFF_AR, storm_core: FALLOFF_AR, abs_zero: FALLOFF_AR, quantum_repeater: FALLOFF_AR, pulse_needle: FALLOFF_AR, xm7: FALLOFF_AR, hkmp7: FALLOFF_AR,
+  crossbow: FALLOFF_NONE, grenade_launcher: FALLOFF_NONE, boombow: FALLOFF_NONE, flare: FALLOFF_NONE, gravity_launcher: FALLOFF_NONE, potato_cannon: FALLOFF_NONE, mortar_rifle: FALLOFF_NONE, firework_launcher: FALLOFF_NONE, seismic_hammer: FALLOFF_NONE, signal_pistol: FALLOFF_NONE, throwing_axes: FALLOFF_NONE, nebula_mortar: FALLOFF_NONE, rpg: FALLOFF_NONE, bazooka: FALLOFF_NONE, cyroclasm_laser: FALLOFF_NONE,
+  pistol: FALLOFF_SIDEARM, throwing_knives: FALLOFF_SIDEARM, taser: FALLOFF_SIDEARM, harpoon_gun: FALLOFF_SIDEARM, switchblade_gun: FALLOFF_SIDEARM, air_rifle: FALLOFF_SIDEARM, shockwave_launcher: FALLOFF_SIDEARM, storm_cannon: FALLOFF_SIDEARM, prism_launcher: FALLOFF_SIDEARM, foam_cannon: FALLOFF_SIDEARM, portal_launcher: FALLOFF_SIDEARM, traffic_controller: FALLOFF_SIDEARM, pinball_launcher: FALLOFF_SIDEARM, dart_gun: FALLOFF_SIDEARM, gatecrasher: FALLOFF_SIDEARM, gatecrasher_slug: FALLOFF_SIDEARM, continuum: FALLOFF_SIDEARM, snub_revolver: FALLOFF_SIDEARM, mauser: FALLOFF_SIDEARM, boomerang: FALLOFF_SIDEARM, magnetar: FALLOFF_SIDEARM, void_harvester: FALLOFF_SIDEARM, five_seven: FALLOFF_SIDEARM, lancer: FALLOFF_SIDEARM, traffic_cone: FALLOFF_SIDEARM, cream_pie: FALLOFF_SIDEARM,
+  ak20: FALLOFF_AR, cyroclasm: FALLOFF_AR, paintball: FALLOFF_AR, freeze_gun: FALLOFF_AR, plasma_carbine: FALLOFF_AR, arc_rifle: FALLOFF_AR, flechette: FALLOFF_AR, burst_cannon: FALLOFF_AR, twin_ar: FALLOFF_AR, airburst_projector: FALLOFF_AR, glassmaker: FALLOFF_AR, gravity_paint: FALLOFF_AR, laser_pointer: FALLOFF_AR, auto_revolver: FALLOFF_AR, frost_blaster: FALLOFF_AR, nail_gun: FALLOFF_AR, event_horizon: FALLOFF_AR, storm_core: FALLOFF_AR, abs_zero: FALLOFF_AR, quantum_repeater: FALLOFF_AR, pulse_needle: FALLOFF_AR, xm7: FALLOFF_AR, hkmp7: FALLOFF_AR,
 };
 function dist3(a, b) {
   const dx = a.x - b.x, dy = (a.y || 0) - (b.y || 0), dz = a.z - b.z;
@@ -1877,6 +1877,13 @@ function falloffMultiplier(weaponId, dist) {
   if (dist >= f.far) return f.min;
   const t = (dist - f.near) / (f.far - f.near);
   return 1 - t * (1 - f.min);
+}
+function weaponDamageForHit(data, dist) {
+  if (data && data.weapon === 'cyroclasm_laser') {
+    const raw = Math.round(Number(data.damage) || 0);
+    return Math.max(0, Math.min(300, raw));
+  }
+  return Math.round((WEAPON_DAMAGE[data.weapon] || 25) * falloffMultiplier(data.weapon, dist));
 }
 
 const players = {};
@@ -2109,7 +2116,7 @@ io.on('connection', (socket) => {
     const shooter = players[socket.id];
     if (!target || !shooter || target.dead || target.isBot || shielded(target)) return;
     if (blocksFriendlyFire(shooter, target)) return;
-    let dmg = Math.round((WEAPON_DAMAGE[data.weapon] || 25) * falloffMultiplier(data.weapon, dist3(shooter, target)));
+    let dmg = weaponDamageForHit(data, dist3(shooter, target));
     if (data.headshot) dmg = data.instakill ? target.hp : Math.round(dmg * (WEAPON_HS_MULT[data.weapon] || 2));
     const hpBefore = target.hp;
     target.hp = Math.max(0, target.hp - dmg);
@@ -2133,7 +2140,7 @@ io.on('connection', (socket) => {
       : players[socket.id];
     if (!bot || !bot.isBot || bot.dead || !shooter) return;
     if (blocksFriendlyFire(shooter, bot)) return;
-    let dmg = Math.round((WEAPON_DAMAGE[data.weapon] || 25) * falloffMultiplier(data.weapon, dist3(shooter, bot)));
+    let dmg = weaponDamageForHit(data, dist3(shooter, bot));
     if (data.headshot) dmg = data.instakill ? bot.hp : Math.round(dmg * (WEAPON_HS_MULT[data.weapon] || 2));
     // The shooter's client already saw this bot die (#48). Client and server work damage out
     // differently (their own tables, zone bonuses, positions), and with other real players in
@@ -2401,7 +2408,7 @@ io.on('connection', (socket) => {
     const bot    = players[data.botId];
     if (!player || player.dead || !bot || !bot.isBot || shielded(player)) return;
     if (blocksFriendlyFire(bot, player)) return;
-    let dmg = Math.round((WEAPON_DAMAGE[data.weapon] || 25) * falloffMultiplier(data.weapon, dist3(bot, player)));
+    let dmg = weaponDamageForHit(data, dist3(bot, player));
     player.hp = Math.max(0, player.hp - dmg);
     emitToMatch(player.matchId, 'playerHit', { targetId: player.id, hp: player.hp, bulletId: null });
     if (player.hp <= 0) {
