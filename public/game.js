@@ -4755,6 +4755,22 @@ function rampSurfaceAt(r, x, z) {
   if (along < -0.1 || along > r.run + 0.1 || side > r.halfW) return null;
   return Math.max(0, Math.min(r.rise, along * r.tan));
 }
+function botGroundYAt(x, z, fromY = 0, stepUp = 0.95, dropReach = 1.25) {
+  let ground = 0;
+  for (const r of MAP_RAMPS[activeMapName] || []) {
+    const y = rampSurfaceAt(r, x, z);
+    if (y == null) continue;
+    if (y <= fromY + stepUp && fromY - y <= dropReach) ground = Math.max(ground, y);
+  }
+  for (const box of wallColliders) {
+    if (box.max.y <= 0.05 || box.max.y > 14) continue;
+    if (x < box.min.x - PLAYER_RADIUS || x > box.max.x + PLAYER_RADIUS) continue;
+    if (z < box.min.z - PLAYER_RADIUS || z > box.max.z + PLAYER_RADIUS) continue;
+    const top = box.max.y;
+    if (top <= fromY + stepUp && fromY - top <= dropReach) ground = Math.max(ground, top);
+  }
+  return ground;
+}
 // The ramp the player is standing on (feet on its surface), or null.
 function rampUnderPlayer() {
   const list = MAP_RAMPS[activeMapName];
@@ -38326,11 +38342,19 @@ function updateBotAI(dt) {
       bot.nextUtilityAt = now + 10000 + Math.random() * 8000;
     }
 
-    // ── Vertical physics: air grenades + land mines can launch bots upward ──
-    if (bot.yVel != null && (bot.yVel !== 0 || (bot.y || 0) > 0)) {
-      bot.yVel -= GRAVITY * dt; // gravity — bots share the player's physics
-      bot.y = (bot.y || 0) + bot.yVel * dt;
-      if (bot.y <= 0) { bot.y = 0; bot.yVel = 0; }
+    // ── Vertical physics: bots can be launched, slide-jump, and climb ramp/landing heights.
+    {
+      const curY = bot.y || 0;
+      const groundY = botGroundYAt(bot.x, bot.z, curY, 1.05, 2.2);
+      const airborne = (bot.yVel || 0) !== 0 || curY > groundY + 0.05;
+      if (airborne) {
+        bot.yVel = (bot.yVel || 0) - GRAVITY * dt;
+        bot.y = curY + bot.yVel * dt;
+        const landY = botGroundYAt(bot.x, bot.z, bot.y || 0, 1.2, 6.0);
+        if ((bot.y || 0) <= landY && bot.yVel <= 0) { bot.y = landY; bot.yVel = 0; bot._airCarryX = 0; bot._airCarryZ = 0; }
+      } else {
+        bot.y = groundY; bot.yVel = 0;
+      }
     }
 
     // ── Horizontal knockback (bat): a decaying push, applied here so it
@@ -39201,6 +39225,10 @@ function updateBotAI(dt) {
     }
     // 🎭 Drafted-teammate playstyle: per-character movement speed flavor
     if (bot.speedMult && bot.speedMult !== 1) { moveX *= bot.speedMult; moveZ *= bot.speedMult; }
+    if (now < (bot._airCarryUntil || 0)) {
+      moveX += (bot._airCarryX || 0) * dt;
+      moveZ += (bot._airCarryZ || 0) * dt;
+    }
 
     // 🧭 Wall feeler: if the planned step points into a collider, bias toward the
     // clearer side before collision clamps it. This makes bots round corners
@@ -39233,19 +39261,43 @@ function updateBotAI(dt) {
       // ReferenceError that the per-bot try/catch swallowed → bots froze like statues.
       const engDist = target ? Math.hypot(target.x - bot.x, target.z - bot.z) : Infinity;
       const engaging = target && !isDead && engDist < 38;
-      const onGround = (bot.y || 0) <= 0.05 && (bot.yVel || 0) === 0;
+      const groundY = botGroundYAt(bot.x, bot.z, bot.y || 0, 1.05, 2.2);
+      const onGround = Math.abs((bot.y || 0) - groundY) <= 0.08 && (bot.yVel || 0) === 0;
       // — Slide: a short low-profile speed burst (boosts this frame's move).
       if (now < (bot._slideUntil || 0)) {
-        moveX *= 1.55; moveZ *= 1.55;
+        moveX *= 2.05; moveZ *= 2.05;
       } else if (engaging && onGround && now >= (bot._nextSlideAt || 0)) {
         const wantSlide = wasHit || bot._kiting
-          || (bot.personality === 'aggressor' && engDist < 16)
-          || (bot.personality === 'tactician' && engDist < 12 && Math.random() < 0.5);
-        if (wantSlide && Math.random() < (wasHit ? 0.9 : 0.6)) {
-          bot._slideUntil  = now + 550;
-          bot._nextSlideAt = now + 2200 + Math.random() * 2600;
+          || engDist < 20
+          || (bot.personality === 'aggressor' && engDist < 28)
+          || (bot.personality === 'tactician' && engDist < 22 && Math.random() < 0.75);
+        if (wantSlide && Math.random() < (wasHit ? 0.95 : 0.78)) {
+          bot._slideUntil  = now + 850;
+          bot._nextSlideAt = now + 1000 + Math.random() * 1400;
         } else {
-          bot._nextSlideAt = now + 900 + Math.random() * 1200; // re-check soon
+          bot._nextSlideAt = now + 450 + Math.random() * 700; // re-check soon
+        }
+      }
+      // — Slide jump: if a bot is sliding into an uphill ramp / route, pop up and
+      // carry horizontal speed so it can reach ramps, landings and second floors.
+      if (engaging && onGround && now < (bot._slideUntil || 0) && now >= (bot._nextSlideJumpAt || 0)) {
+        const mLen = Math.hypot(moveX, moveZ);
+        let rampUp = 0;
+        const r = (MAP_RAMPS[activeMapName] || []).find(rr => rampSurfaceAt(rr, bot.x, bot.z) != null);
+        if (r && mLen > 0.001) rampUp = (moveX / mLen) * r.ux + (moveZ / mLen) * r.uz;
+        const wantsHeight = rampUp > 0.15 || engDist < 24 || wasHit;
+        if (wantsHeight && Math.random() < 0.42) {
+          const hx = mLen > 0.001 ? moveX / mLen : Math.sin(bot.rotY || 0);
+          const hz = mLen > 0.001 ? moveZ / mLen : Math.cos(bot.rotY || 0);
+          bot.yVel = 10.8 + Math.max(0, rampUp) * 3.2;
+          bot.y = Math.max(bot.y || 0, groundY + 0.03);
+          bot._airCarryX = hx * 7.5;
+          bot._airCarryZ = hz * 7.5;
+          bot._airCarryUntil = now + 620;
+          bot._slideUntil = 0;
+          bot._nextSlideJumpAt = now + 1700 + Math.random() * 1800;
+        } else {
+          bot._nextSlideJumpAt = now + 550 + Math.random() * 900;
         }
       }
       // — Jump: hop mid-fight to dodge/juke. Same impulse as the player's jump.
@@ -39265,8 +39317,11 @@ function updateBotAI(dt) {
     const mapHalf = getMapBounds();
     nx = Math.max(-mapHalf, Math.min(mapHalf, nx));
     nz = Math.max(-mapHalf, Math.min(mapHalf, nz));
+    const nextGroundY = botGroundYAt(nx, nz, bot.y || 0, 1.05, 2.2);
+    if ((bot.yVel || 0) === 0 && nextGroundY >= (bot.y || 0) - 0.35) bot.y = nextGroundY;
     [nx, nz] = resolvePosCollisions(nx, nz, bot.y || 0);
     bot.x = nx; bot.z = nz;
+    if ((bot.yVel || 0) === 0) bot.y = botGroundYAt(bot.x, bot.z, bot.y || 0, 1.05, 2.2);
 
     // ── Stuck detection: if chasing but collision ate all movement, trigger detour ─
     if (target && (bot.stuckTimer || 0) <= 0) {
