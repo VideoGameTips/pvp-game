@@ -24273,6 +24273,20 @@ function kickWeaponVisual(w, pellets = 1) {
   const hyperKick = hyperrealismFactor('kick');
   const s = strength * shake * hyperKick;
   const side = Math.random() < 0.5 ? -1 : 1;
+  if (w?.id === 'throwing_knives') {
+    _gunKick.z -= Math.min(0.32, 0.16 + s * 0.060);
+    _gunKick.y += Math.min(0.012, 0.004 + s * 0.002);
+    _gunKick.x += side * Math.min(0.026, 0.004 + s * 0.004);
+    _gunKick.rx -= Math.min(0.105, 0.045 + s * 0.010);
+    _gunKick.ry += side * Math.min(0.050, 0.016 + s * 0.006);
+    _gunKick.rz += side * Math.min(0.060, 0.018 + s * 0.007);
+    _fovPunch = Math.min(1.8, _fovPunch + 0.35 * Math.sqrt(Math.max(0.3, s)));
+    for (const key of ['x', 'y', 'z', 'rx', 'ry', 'rz']) {
+      const max = (hyperrealisticOn() ? _GUN_KICK_HYPER_MAX : _GUN_KICK_MAX)[key];
+      _gunKick[key] = Math.max(-max, Math.min(max, _gunKick[key]));
+    }
+    return;
+  }
   // Backwards, not upwards: the gun is driven into your shoulder (z, toward the
   // camera) much harder than before, and climbs (y) and muzzle-flips (rx) much less.
   _gunKick.z += Math.min(0.39, (model._kickZ || 0.015) * (9.2 + s * 3.3));
@@ -25970,9 +25984,28 @@ function switchWeapon(idx) {
   startEquipAnim(idx);
   ammo    = weaponAmmo[idx].ammo;
   reserve = weaponAmmo[idx].reserve;
+  syncHeldAmmoModelForIndex(idx);
   if (isADS) { isADS=false; targetFOV=75; setWeaponADSPos(false); }
   updateAmmoHUD();
   updateWeaponHUD();
+}
+
+function syncHeldAmmoModelForIndex(idx) {
+  const model = weaponModels[idx];
+  const w = WEAPONS[idx];
+  const pool = weaponAmmo[idx];
+  const parts = model && model._parts;
+  if (!model || !w || !pool || !parts || !parts.ammo) return;
+  const kids = parts.ammo.children;
+  if (!kids.length) return;
+  let shown;
+  if (w.id === 'throwing_knives') {
+    shown = Math.max(0, Math.min(kids.length, pool.ammo));
+  } else {
+    const per = kids.length / Math.max(1, parts.ammo._n || kids.length);
+    shown = Math.round(Math.max(0, Math.min(1, pool.ammo / Math.max(1, w.mag || kids.length))) * kids.length / per) * per;
+  }
+  for (let i = 0; i < kids.length; i++) kids[i].visible = i < shown;
 }
 
 function loadoutReady() {
@@ -26232,6 +26265,7 @@ function equipActiveSlot() {
       startSupportEquipAnim(selectedSupportIdx);
     }
   }
+  syncHeldAmmoModelForIndex(currentWeaponIdx);
   updateAmmoHUD(); updateWeaponHUD(); updateWeaponSelector();
   try { prewarmKillfeedIcons(); } catch (e) {}
 }
@@ -28346,6 +28380,7 @@ function tryShoot() {
   addRecoil(currentWeapon);
   if (!adminInfAmmo) pool.ammo--; // ⚡ admin infinite ammo: don't decrement
   ammo = pool.ammo;
+  syncHeldAmmoModelForIndex(currentWeaponIdx);
   updateAmmoHUD();
   if (GAMEPLAY_SETTINGS.autoReload && pool.ammo <= 0 && pool.reserve > 0 && !wStats.noReload) {
     setTimeout(() => {
@@ -28870,6 +28905,7 @@ function startReload() {
     if (model) { model._reloadStart = 0; }
     // Only touch the HUD globals if that gun is still the one in your hands.
     if (currentWeaponIdx === reloadIdx) { ammo = pool.ammo; reserve = pool.reserve; }
+    syncHeldAmmoModelForIndex(reloadIdx);
     updateAmmoHUD();
   }, dur);
 }
@@ -32118,10 +32154,10 @@ nail_gun:[K(.12,{py:.03,rx:.20,rz:-.18,hx:-.02,hy:-.04}), K(.26,{py:.05,rx:.28,r
           K(.62,{py:.05,rx:.30,rz:-.32,hy:-.09,hz:.09}), K(.73,{py:.05,rx:.30,rz:-.32,hy:-.02,hz:.11}),
           K(.83,{py:.06,rx:.26,rz:-.26,hy:-.01,hz:.04}), K(.92,{py:.03,rx:.12,rz:-.14,hz:-.03,hy:.02})],
 // ════ THROWN ════ reach the belt · draw · set it in the hand ════════════════
-throwing_knives:[K(.12,{py:.06,rx:.26,rz:.34,hy:-.12,hz:.03}), K(.26,{py:.07,rx:.30,rz:.40,hy:-.20,hz:.06,hr:.7}),
-                 K(.38,{py:.06,rx:.30,rz:.40,hy:-.13,hz:.04}), K(.52,{py:.07,rx:.30,rz:.40,hy:-.20,hz:.06,hr:.7}),
-                 K(.64,{py:.06,rx:.30,rz:.40,hy:-.13,hz:.04}), K(.76,{py:.07,rx:.30,rz:.40,hy:-.20,hz:.06,hr:.7}),
-                 K(.87,{py:.05,rx:.24,rz:.32,hy:-.06,hz:.02}), K(.95,{py:.04,rx:.14,rz:.18})],
+throwing_knives:[K(.08,{py:.03,pz:.01,rx:.12,rz:.12,hz:.02,av:0}), K(.24,{py:-.08,pz:.08,rx:.42,rz:.24,hy:-.22,hz:.12,hr:.95,av:0}),
+                 K(.38,{py:-.12,pz:.12,rx:.50,rz:.30,hy:-.34,hz:.18,hr:1.15,av:.34}), K(.52,{py:.02,pz:.02,rx:.24,rz:.18,hy:-.08,hz:.07,hr:.45,av:.34}),
+                 K(.67,{py:-.10,pz:.10,rx:.48,rz:.28,hy:-.32,hz:.17,hr:1.08,av:.67}), K(.81,{py:.03,pz:.01,rx:.22,rz:.14,hy:-.05,hz:.05,av:1}),
+                 K(.94,{py:.02,rx:.08,rz:.08,av:1})],
 throwing_axes:[K(.13,{py:.08,rx:.30,rz:.40,hy:-.13,hz:.04}), K(.28,{py:.09,rx:.34,rz:.46,hy:-.22,hz:.07,hr:.8}),
                K(.42,{py:.08,rx:.34,rz:.46,hy:-.14,hz:.05}), K(.57,{py:.09,rx:.34,rz:.46,hy:-.22,hz:.07,hr:.8}),
                K(.71,{py:.08,rx:.34,rz:.46,hy:-.14,hz:.05}), K(.84,{py:.06,rx:.26,rz:.36,hy:-.06,hz:.02}),
@@ -32451,6 +32487,15 @@ function _makeReloadProp(kind) {
     case 'ball': {    // a lead ball, a paintball, a slug
       g.add(new THREE.Mesh(_rGeo('ball', () => new THREE.SphereGeometry(0.011, 8, 7)), M(0x9aa2ac, 150)));
       break; }
+    case 'knife': {
+      const blade = new THREE.Mesh(_rGeo('knifeBlade', () => new THREE.BoxGeometry(0.014, 0.0035, 0.090)), M(0xb8bec6, 150));
+      blade.position.z = -0.032; g.add(blade);
+      const tip = new THREE.Mesh(_rGeo('knifeTip', () => new THREE.ConeGeometry(0.008, 0.024, 4)), M(0xe1e6ee, 170));
+      tip.rotation.x = -Math.PI / 2; tip.rotation.z = Math.PI / 4; tip.scale.set(1, 1, 0.28);
+      tip.position.z = -0.090; g.add(tip);
+      const grip = new THREE.Mesh(_rGeo('knifeGrip', () => new THREE.BoxGeometry(0.012, 0.010, 0.050)), M(0x272a2f, 34));
+      grip.position.z = 0.046; g.add(grip);
+      break; }
     case 'nail': {
       const s = new THREE.Mesh(_rGeo('nailS', () => new THREE.CylinderGeometry(0.0022, 0.0010, 0.038, 6)), M(0xb8bec6, 140));
       s.rotation.x = Math.PI / 2; g.add(s);
@@ -32651,7 +32696,7 @@ const RELOAD_PROPS = {
   sticker_blaster:[RP(.35,'mag',null,1,'breech'),RP(.58,'mag','arrive',1,'breech')],
   traffic_controller:[RP(.35,'cell',null,1,'breech'),RP(.58,'cell','arrive',1,'breech')],
   // ── Thrown: the next one is drawn from the belt ──────────────────────────
-  throwing_knives:[RP(.26,'nail','arrive',1,'breech'),RP(.52,'nail','arrive',1,'breech'),RP(.76,'nail','arrive',1,'breech')],
+  throwing_knives:[RP(.38,'knife','arrive',1,'breech'),RP(.67,'knife','arrive',1,'breech'),RP(.81,'knife','arrive',1,'breech')],
   throwing_axes:[RP(.28,'nail','arrive',1,'breech'),RP(.57,'nail','arrive',1,'breech')],
   boomerang:[RP(.30,'bolt','arrive',1,'breech')],
   traffic_cone:[RP(.30,'bottle','arrive',1,'breech')],
