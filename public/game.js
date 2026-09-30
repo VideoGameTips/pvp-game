@@ -797,6 +797,19 @@ const WEAPONS = [
     bulletColor: 0x9fe8ff, bulletSize: 0.038,
     ability: { name: 'Ball Lightning', cd: 15000, desc: 'Slow orb · aura roots 1s · direct roots 3s', type: 'ball_lightning', noADS: true },
   },
+  {
+    // ⛓️ Chain Gun: fire rate isn't fixed — it climbs from 1 shot/s (cold) to
+    // 10 shots/s (fully spun) the longer the trigger stays down, and past ~72%
+    // spun it starts to misfire the interval itself (chainGunFireInterval),
+    // turning "fully spun up" into an unpredictable stutter/burst instead of a
+    // clean 10/s. fireRate below is only the COLD rate; see chainGunFireInterval.
+    id: 'chain_gun', name: 'Chain Gun', type: 'Spin-Up LMG', slot: 'primary',
+    mag: 50, reserve: 100, damage: 22, fireRate: 1000, reloadTime: 3200,
+    auto: true, pellets: 1, spread: 0.022, adsZoom: 46, bulletSpeed: 140, noReload: false,
+    bulletColor: 0xffbb55, bulletSize: 0.05,
+    spinUp: { minInterval: 1000, maxInterval: 100, spinPerShot: 0.10, idleDecayPerSec: 1.2,
+              jitterStart: 0.72, maxJitter: 0.65 },
+  },
 ];
 
 // ── Damage drop-off by range ────────────────────────────────────────────────
@@ -1229,6 +1242,7 @@ let ammo = currentWeapon.mag;
 let reserve = currentWeapon.reserve;
 let reloading = false, lastShot = 0, shooting = false;
 let minigunTriggerStartedAt = 0, minigunBraceHeld = false, minigunLastSpoolNotice = 0;
+let chainGunSpin = 0, chainGunLastShotAt = 0;   // 0 = cold (1/s), 1 = fully spun (10/s, unstable)
 const weaponHeatState = {}; // per-weapon-id { shotCount, cooldownUntil } for heatShots, or { windowStart, lastFireAt, cooldownUntil } for heatWindow weapons
 const spreadBloomState = {}; // per-weapon-id { amount, lastShotAt } for spreadBloom weapons
 let isADS = false, adsFOV = 75, targetFOV = 75;
@@ -1329,7 +1343,7 @@ const WEAPON_COSTS = {
   // Primaries — Special
   rpd: 450, paintball: 120, crossbow: 280,
   // Primaries — Heavy
-  minigun: 600, grenade_launcher: 500, flamethrower: 420,
+  minigun: 600, grenade_launcher: 500, flamethrower: 420, chain_gun: 560,
   // Primaries — Sci-fi / energy
   railgun: 600, freeze_gun: 350, plasma_carbine: 420, arc_rifle: 400,
   arc_torrent: 460, prism_launcher: 420,  storm_cannon: 540, cyroclasm: 480,
@@ -10042,6 +10056,72 @@ function buildGAU19() {
   const flash = new THREE.Mesh(new THREE.SphereGeometry(0.030, 8, 7),
     new THREE.MeshBasicMaterial({ color: 0xffcc00 }));
   flash.visible = false; flash.position.set(0, 0.004, -0.312); g.add(flash);
+  g._flash = flash; g._kickZ = 0.008; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildChainGun() {
+  // ⛓️ Chain Gun: four barrels on a driven cluster, visibly turned by an actual
+  // chain loop around a sprocket on the side — not a motor housing like the
+  // GAU-19/M134 it borrows its general shape from.
+  const g = new THREE.Group();
+  const steel = GUN_MATS.steel(), blued = GUN_MATS.blued(), bright = GUN_MATS.bright();
+  const poly = GUN_MATS.polymer(), inner = GUN_MATS.inner();
+  gpBox(g, poly, 0.082, 0.078, 0.180, 0, 0.006, 0.055);             // receiver
+  gpBox(g, inner, 0.083, 0.009, 0.160, 0, 0.042, 0.055);
+  gpCyl(g, steel, 0.044, 0.044, 0.040, 16, 0, 0.006, -0.044);       // front trunnion
+  gpCyl(g, blued, 0.036, 0.036, 0.022, 16, 0, 0.006, -0.022);
+  const barrelCluster = new THREE.Group();
+  barrelCluster.position.set(0, 0.006, -0.160);
+  g.add(barrelCluster);
+  const bGeo = new THREE.CylinderGeometry(0.0125, 0.0125, 0.250, 12);
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+    const bx = Math.cos(a) * 0.026, by = Math.sin(a) * 0.026;
+    const b = new THREE.Mesh(bGeo, blued);
+    b.rotation.x = Math.PI / 2; b.position.set(bx, by, 0);
+    b.castShadow = true; barrelCluster.add(b);
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(0.0155, 0.0155, 0.024, 12), steel);
+    m.rotation.x = Math.PI / 2; m.position.set(bx, by, -0.119); barrelCluster.add(m);
+  }
+  [-0.066, 0.048, 0.110].forEach(z => {
+    const c = new THREE.Mesh(new THREE.CylinderGeometry(0.040, 0.040, 0.015, 10), steel);
+    c.rotation.x = Math.PI / 2; c.position.set(0, 0, z); barrelCluster.add(c);
+  });
+  g._barrelCluster = barrelCluster;
+  g._spinRate = 10;
+  // Chain drive: a toothed sprocket on the trunnion and a smaller idler gear further
+  // back, linked by a visible chain loop — the mechanism the gun is named for.
+  const sprocket = new THREE.Mesh(new THREE.CylinderGeometry(0.030, 0.030, 0.010, 16), steel);
+  sprocket.rotation.z = Math.PI / 2; sprocket.position.set(0.052, 0.006, -0.030); g.add(sprocket);
+  for (let i = 0; i < 10; i++) {
+    const a = (i / 10) * Math.PI * 2;
+    const tooth = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.010, 0.006), steel);
+    tooth.position.set(0.052, 0.006 + Math.sin(a) * 0.033, -0.030 + Math.cos(a) * 0.033);
+    g.add(tooth);
+  }
+  const idler = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.009, 12), blued);
+  idler.rotation.z = Math.PI / 2; idler.position.set(0.052, 0.006, -0.110); g.add(idler);
+  [-0.020, 0.020].forEach(off => {
+    const link = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.004, 0.084), bright);
+    link.position.set(0.052 + off, 0.006, -0.070); g.add(link);
+  });
+  // Feed chute and ammo can.
+  gpBox(g, steel, 0.040, 0.048, 0.072, -0.058, 0.006, 0.045);
+  for (let i = 0; i < 3; i++) gpBox(g, inner, 0.042, 0.005, 0.052, -0.058, -0.012 + i * 0.016, 0.045);
+  gpBox(g, poly, 0.036, 0.032, 0.100, -0.058, -0.024, 0.120, 0.20);
+  // Mount cradle and spade handles.
+  gpBox(g, steel, 0.100, 0.011, 0.100, 0, -0.040, 0.065);
+  [-1, 1].forEach(sd => gpBox(g, steel, 0.009, 0.034, 0.009, sd * 0.044, -0.022, 0.065));
+  [-1, 1].forEach(sd => {
+    gpBox(g, steel, 0.008, 0.008, 0.064, sd * 0.032, 0.009, 0.160);
+    gpBox(g, poly, 0.015, 0.060, 0.018, sd * 0.032, -0.024, 0.186, 0.20);
+  });
+  gpBox(g, steel, 0.072, 0.011, 0.015, 0, 0.009, 0.190);
+  gpBox(g, bright, 0.006, 0.015, 0.006, 0, -0.009, 0.182, 0.2);
+  const flash = new THREE.Mesh(new THREE.SphereGeometry(0.028, 8, 7),
+    new THREE.MeshBasicMaterial({ color: 0xffbb55 }));
+  flash.visible = false; flash.position.set(0, 0.006, -0.290); g.add(flash);
   g._flash = flash; g._kickZ = 0.008; g._greebled = true; g._handDetailed = true;
   g.position.set(0.12, -0.1, -0.25); return g;
 }
@@ -19766,6 +19846,7 @@ const weaponModels = [
   buildFreezeGun(),  // cyroclasm
   buildCycler(),  // continuum
   buildArcRifle(),  // storm_bloom
+  buildChainGun(),  // chain_gun
 ];
 function addWeaponRealismDetails(model, weapon) {
   if (!model || !model.add || (model.userData && model.userData.realismDetailed)) return;
@@ -26041,6 +26122,7 @@ function switchWeapon(idx) {
   if (idx === null || idx === undefined || idx < 0 || idx >= WEAPONS.length || !weaponModels[idx]) return;
   if (idx === currentWeaponIdx) return;
   minigunBraceHeld = false; resetMinigunSpool();
+  chainGunSpin = 0; chainGunLastShotAt = 0;
   cancelInspect();
   cancelReload();                      // you can always swap out of a reload
   meleeModels.forEach(m => m.visible = false);
@@ -26114,6 +26196,7 @@ function resetCombatResources() {
   reloading = false; shooting = false; isADS = false; targetFOV = 75;
   abilityBuff = null; meleeAbilityBuff = null; pendingFanFire = null;
   minigunBraceHeld = false; resetMinigunSpool();
+  chainGunSpin = 0; chainGunLastShotAt = 0;
   playerRootedUntil = 0;
   crossbowCharging = false; crossbowChargeStart = 0;
   spearThrown = false; revealActive = false; revealEndTime = 0;
@@ -26296,6 +26379,7 @@ function updateQuickMelee() {
 function equipActiveSlot() {
   finishEquip();   // whatever was assembling is put back together before it is hidden
   minigunBraceHeld = false; resetMinigunSpool();
+  chainGunSpin = 0; chainGunLastShotAt = 0;
   // Reset any in-progress melee swing before hiding
   meleeSwingT = 1;
   meleeModels.forEach(m => {
@@ -27561,6 +27645,26 @@ function abilityCooldownFor(item, ab = equippedAbility(item) || item?.ability) {
   return 0;
 }
 
+function chainGunFireInterval() {
+  const spec = WEAPONS.find(w => w.id === 'chain_gun').spinUp;
+  const now = Date.now();
+  if (chainGunLastShotAt) {
+    const idleMs = now - chainGunLastShotAt;
+    if (idleMs > 150) chainGunSpin = Math.max(0, chainGunSpin - spec.idleDecayPerSec * (idleMs / 1000));
+  }
+  const t = chainGunSpin;
+  let interval = spec.minInterval + (spec.maxInterval - spec.minInterval) * t;
+  if (t > spec.jitterStart) {
+    const jitter = (t - spec.jitterStart) / (1 - spec.jitterStart) * spec.maxJitter;
+    interval *= 1 + (Math.random() * 2 - 1) * jitter;
+  }
+  return Math.max(30, interval);
+}
+function chainGunAdvanceSpin() {
+  const spec = WEAPONS.find(w => w.id === 'chain_gun').spinUp;
+  chainGunSpin = Math.min(1, chainGunSpin + spec.spinPerShot);
+  chainGunLastShotAt = Date.now();
+}
 function isMinigunHeld() {
   return (activeSlot === 'primary' || activeSlot === 'secondary') && currentWeapon?.id === 'minigun';
 }
@@ -28517,7 +28621,8 @@ function tryShoot() {
   }
   const activeRateMult = (abilityBuff?.weaponId === currentWeapon.id && abilityBuff.rateMult) ? abilityBuff.rateMult : 1;
   const forcedShot = forcedCycleShot;
-  if (!forcedShot && now - lastShot < wStats.fireRate * activeRateMult) return;
+  const effectiveFireRate = wStats.id === 'chain_gun' ? chainGunFireInterval() : wStats.fireRate;
+  if (!forcedShot && now - lastShot < effectiveFireRate * activeRateMult) return;
   if (!forcedShot && wStats.id === 'minigun' && !minigunReadyToFire(now)) return;
   if (!forcedShot && wStats.cycleBurst && startCycleBurst(wStats)) return;
   let heat = null;
@@ -28555,6 +28660,7 @@ function tryShoot() {
   if (pool.ammo <= 0 && !adminInfAmmo) { if (pool.reserve > 0 && !wStats.noReload) startReload(); else dryFire(); return; }
 
   lastShot = now;
+  if (wStats.id === 'chain_gun') chainGunAdvanceSpin();
   // Sustained-fire spread bloom: a weapon can get a little less precise the
   // longer the trigger stays down, on top of its fixed recoil climb. Applies
   // to THIS shot using whatever built up from previous shots, then grows for
@@ -41977,6 +42083,8 @@ function loop() {
         const warm = minigunBraced() ? 1 : Math.min(1, Math.max(0, (Date.now() - (minigunTriggerStartedAt || Date.now())) / 2000));
         model._barrelCluster.rotation.z += (4 + (model._spinRate || 10) * 1.8 * warm) * dt;
       }
+    } else if (currentWeapon?.id === 'chain_gun') {
+      if (shooting) model._barrelCluster.rotation.z += (1.5 + (model._spinRate || 10) * chainGunSpin) * dt;
     } else if (shooting) {
       model._barrelCluster.rotation.z += (model._spinRate || 10) * dt;
     }
