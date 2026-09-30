@@ -219,7 +219,7 @@ const WEAPON_COSTS = {
   // Secondaries
   revolver: 150, flare: 80, pistol: 60, shorty: 180, cycler: 140,
   hand_cannon: 260, throwing_knives: 120, taser: 200, traffic_cone: 160, cream_pie: 140,
-  machine_pistol: 220, sawed_off: 260, machine_revolver: 240,
+  machine_pistol: 220, gatecrasher: 280, sawed_off: 260, machine_revolver: 240,
   dart_gun: 160, laser_pointer: 120,
   auto_revolver: 220, frost_blaster: 240,
   // Batch-4 secondaries
@@ -1758,6 +1758,7 @@ event_horizon: 75,
   // Secondaries
   revolver: 83, flare: 85, pistol: 20, shorty: 30, cycler: 8,
   hand_cannon: 105, throwing_knives: 45, taser: 53,
+  gatecrasher: 5, gatecrasher_slug: 40,
   // Ability shots
   sg100_ab: 140, lever_ab: 150, crossbow_ab: 220, crossbow_c1: 140,
   sg8_wave: 20,
@@ -1862,7 +1863,7 @@ const WEAPON_FALLOFF = {
   rpd: FALLOFF_LMG, minigun: FALLOFF_LMG, cycler: FALLOFF_LMG, arc_torrent: FALLOFF_LMG, slingshot: FALLOFF_LMG, solar_lance: FALLOFF_LMG, gau19: FALLOFF_LMG, mk44: FALLOFF_LMG, m134: FALLOFF_LMG, mg42: FALLOFF_LMG,
   mp40: FALLOFF_SMG, p90: FALLOFF_SMG, burst: FALLOFF_BURST, vector: FALLOFF_SMG, sticker_blaster: FALLOFF_SMG, smart_smg: FALLOFF_SMG, swarm_rifle: FALLOFF_SMG, painter_beam: FALLOFF_SMG, machine_pistol: FALLOFF_SMG, machine_revolver: FALLOFF_SMG, prism_engine: FALLOFF_SMG, p90_spec: FALLOFF_SMG, glock18: FALLOFF_SMG,
   crossbow: FALLOFF_NONE, grenade_launcher: FALLOFF_NONE, boombow: FALLOFF_NONE, flare: FALLOFF_NONE, gravity_launcher: FALLOFF_NONE, potato_cannon: FALLOFF_NONE, mortar_rifle: FALLOFF_NONE, firework_launcher: FALLOFF_NONE, seismic_hammer: FALLOFF_NONE, signal_pistol: FALLOFF_NONE, throwing_axes: FALLOFF_NONE, nebula_mortar: FALLOFF_NONE, rpg: FALLOFF_NONE, bazooka: FALLOFF_NONE,
-  pistol: FALLOFF_SIDEARM, throwing_knives: FALLOFF_SIDEARM, taser: FALLOFF_SIDEARM, harpoon_gun: FALLOFF_SIDEARM, switchblade_gun: FALLOFF_SIDEARM, air_rifle: FALLOFF_SIDEARM, shockwave_launcher: FALLOFF_SIDEARM, storm_cannon: FALLOFF_SIDEARM, prism_launcher: FALLOFF_SIDEARM, foam_cannon: FALLOFF_SIDEARM, portal_launcher: FALLOFF_SIDEARM, traffic_controller: FALLOFF_SIDEARM, pinball_launcher: FALLOFF_SIDEARM, dart_gun: FALLOFF_SIDEARM, snub_revolver: FALLOFF_SIDEARM, mauser: FALLOFF_SIDEARM, boomerang: FALLOFF_SIDEARM, magnetar: FALLOFF_SIDEARM, void_harvester: FALLOFF_SIDEARM, five_seven: FALLOFF_SIDEARM, lancer: FALLOFF_SIDEARM, traffic_cone: FALLOFF_SIDEARM, cream_pie: FALLOFF_SIDEARM,
+  pistol: FALLOFF_SIDEARM, throwing_knives: FALLOFF_SIDEARM, taser: FALLOFF_SIDEARM, harpoon_gun: FALLOFF_SIDEARM, switchblade_gun: FALLOFF_SIDEARM, air_rifle: FALLOFF_SIDEARM, shockwave_launcher: FALLOFF_SIDEARM, storm_cannon: FALLOFF_SIDEARM, prism_launcher: FALLOFF_SIDEARM, foam_cannon: FALLOFF_SIDEARM, portal_launcher: FALLOFF_SIDEARM, traffic_controller: FALLOFF_SIDEARM, pinball_launcher: FALLOFF_SIDEARM, dart_gun: FALLOFF_SIDEARM, gatecrasher: FALLOFF_SIDEARM, gatecrasher_slug: FALLOFF_SIDEARM, snub_revolver: FALLOFF_SIDEARM, mauser: FALLOFF_SIDEARM, boomerang: FALLOFF_SIDEARM, magnetar: FALLOFF_SIDEARM, void_harvester: FALLOFF_SIDEARM, five_seven: FALLOFF_SIDEARM, lancer: FALLOFF_SIDEARM, traffic_cone: FALLOFF_SIDEARM, cream_pie: FALLOFF_SIDEARM,
   ak20: FALLOFF_AR, paintball: FALLOFF_AR, freeze_gun: FALLOFF_AR, plasma_carbine: FALLOFF_AR, arc_rifle: FALLOFF_AR, flechette: FALLOFF_AR, burst_cannon: FALLOFF_AR, twin_ar: FALLOFF_AR, airburst_projector: FALLOFF_AR, glassmaker: FALLOFF_AR, gravity_paint: FALLOFF_AR, laser_pointer: FALLOFF_AR, auto_revolver: FALLOFF_AR, frost_blaster: FALLOFF_AR, nail_gun: FALLOFF_AR, event_horizon: FALLOFF_AR, storm_core: FALLOFF_AR, abs_zero: FALLOFF_AR, quantum_repeater: FALLOFF_AR, pulse_needle: FALLOFF_AR, xm7: FALLOFF_AR, hkmp7: FALLOFF_AR,
 };
 function dist3(a, b) {

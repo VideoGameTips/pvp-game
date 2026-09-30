@@ -497,6 +497,14 @@ const WEAPONS = [
     ability: { name: 'Akimbo', cd: 8000, desc: 'Dual-wield · 2 shots per trigger for 4 s', type: 'buff', duration: 4000, rateMult: 0.5, akimbo: true },
   },
   {
+    id: 'gatecrasher', name: 'Gatecrasher', type: 'Secondary · Piercer Burst', slot: 'secondary',
+    mag: 36, reserve: 108, damage: 5, fireRate: 260, reloadTime: 1650,
+    auto: false, pellets: 1, spread: 0.007, adsZoom: 50, bulletSpeed: 168, noReload: false,
+    bulletColor: 0x9fd7ff, bulletSize: 0.036,
+    recoil: { up: 0.005, side: 0.003, climb: 0.06, max: 1.45, recover: 10, adsMult: 0.45 },
+    cycleBurst: { shots: 5, delay: 45, finisherDelay: 70, finisherWeaponId: 'gatecrasher_slug', finisherSpreadMult: 0.2 },
+  },
+  {
     id: 'sawed_off', name: 'Sawed-Off', type: 'Secondary', slot: 'secondary',
     mag: 2, reserve: 8, damage: 35, fireRate: 750, reloadTime: 2000,
     auto: false, pellets: 5, spread: 0.13, adsZoom: 58, bulletSpeed: 88, noReload: false,
@@ -799,6 +807,7 @@ function computeWeaponFalloff(w) {
   return f;
 }
 const WEAPON_FALLOFF = Object.fromEntries(WEAPONS.map(w => [w.id, computeWeaponFalloff(w)]));
+WEAPON_FALLOFF.gatecrasher_slug = computeWeaponFalloff({ auto: false, pellets: 1, mag: 6, damage: 40, bulletSpeed: 168, fireRate: 260 });
 function falloffMultiplier(weaponId, dist) {
   const f = WEAPON_FALLOFF[weaponId];
   if (!f || dist == null) return 1;
@@ -1316,7 +1325,7 @@ const WEAPON_COSTS = {
   // Secondaries
   revolver: 150, flare: 80, pistol: 60, shorty: 180, cycler: 140,
   hand_cannon: 260, throwing_knives: 120, taser: 200, traffic_cone: 160, cream_pie: 140,
-  machine_pistol: 220, sawed_off: 260, machine_revolver: 240,
+  machine_pistol: 220, gatecrasher: 280, sawed_off: 260, machine_revolver: 240,
   dart_gun: 160, laser_pointer: 120,
   auto_revolver: 220, frost_blaster: 240,
   // Batch-4 secondaries
@@ -1671,6 +1680,8 @@ let abilityBuff = null;          // active stat-override buff
    }
 */
 let pendingFanFire = null;       // { shots remaining, delay, weaponRef }
+let forcedCycleShot = null;      // internal shot override for tap-fired burst-cycle weapons
+const cycleBurstLocks = {};      // weaponId -> timestamp while a burst sequence is self-firing
 let revealActive   = false;
 let revealEndTime  = 0;
 const burnZones    = [];          // { x, z, radius, dps, until, mesh, lastTick }
@@ -16852,6 +16863,34 @@ function buildMachinePistol() {
   g.position.set(0.1, -0.1, -0.22); return g;
 }
 
+function buildGatecrasher() {
+  const g = _genericGun({
+    bodyShape: 'compact',
+    bodyColor: 0x18212a,
+    accentColor: 0x68c9ff,
+    barrelColor: 0xaeb8c5,
+    magType: 'stick',
+    topRail: true,
+    emissive: true,
+    bodyLen: 0.23,
+  });
+  const steel = GUN_MATS.steel();
+  const blue = new THREE.MeshBasicMaterial({ color: 0x72d7ff });
+  const dark = GUN_MATS.inner();
+  gpBox(g, dark, 0.030, 0.020, 0.050, 0, 0.030, -0.155);
+  for (let i = 0; i < 5; i++) {
+    gpCyl(g, blue, 0.0045, 0.0045, 0.038, 8, -0.022 + i * 0.011, 0.056, -0.160);
+  }
+  gpCyl(g, steel, 0.015, 0.015, 0.060, 14, 0, 0.010, -0.250);
+  gpCyl(g, dark, 0.0075, 0.0075, 0.014, 12, 0, 0.010, -0.286);
+  if (g._flash) g._flash.position.set(0, 0.010, -0.292);
+  g._kickZ = 0.018;
+  g._greebled = true;
+  g._handDetailed = true;
+  g.position.set(0.1, -0.1, -0.22);
+  return g;
+}
+
 function buildHandCannon() {
   // 🔫 Hand Cannon: a .50 Desert Eagle in spirit — squared slide, the gas tube
   // slung under the barrel that gives the real thing its brick-like nose, a
@@ -18112,6 +18151,7 @@ const weaponModels = [
   buildPinballLauncher(),  // pinball_launcher
   // ── New secondaries ────────────────────────────────────────────────────
   buildMachinePistol(),  // machine_pistol
+  buildGatecrasher(),  // gatecrasher
   buildSawedOff(),  // sawed_off
   buildDartGun(),  // dart_gun
   buildLaserPointer(),  // laser_pointer
@@ -26541,6 +26581,36 @@ function _updateAbilityHUD() {
   if (keyEl) keyEl.style.opacity = pct >= 1 ? '1' : '0.4';
 }
 
+function startCycleBurst(wStats) {
+  const cfg = wStats?.cycleBurst;
+  if (!cfg) return false;
+  const now = Date.now();
+  if (cycleBurstLocks[wStats.id] && now < cycleBurstLocks[wStats.id]) return true;
+  const burstIdx = currentWeaponIdx;
+  const weaponId = currentWeapon.id;
+  const smallShots = Math.max(0, cfg.shots || 0);
+  const delay = cfg.delay || wStats.fireRate || 60;
+  const finisherAt = smallShots * delay + (cfg.finisherDelay ?? delay);
+  cycleBurstLocks[wStats.id] = now + finisherAt + Math.max(wStats.fireRate || 0, 80);
+  for (let i = 0; i <= smallShots; i++) {
+    const isFinisher = i === smallShots;
+    const shotAt = isFinisher ? finisherAt : i * delay;
+    setTimeout(() => {
+      if (currentWeaponIdx !== burstIdx || currentWeapon.id !== weaponId || activeSlot !== 'gun') return;
+      if (isDead || countdownActive || KILLCAM.active) return;
+      forcedCycleShot = {
+        weaponId: isFinisher ? (cfg.finisherWeaponId || weaponId) : weaponId,
+        spreadMult: isFinisher ? (cfg.finisherSpreadMult ?? 0.35) : 1,
+        bulletColor: isFinisher ? (cfg.finisherColor ?? 0xffffff) : null,
+        bulletSize: isFinisher ? (cfg.finisherSize ?? 0.055) : null,
+      };
+      try { tryShoot(); }
+      finally { forcedCycleShot = null; }
+    }, shotAt);
+  }
+  return true;
+}
+
 function tryShoot() {
   if ((!pointerLocked && !gameStarted) || isDead) return;
   if (reloading) {
@@ -26565,7 +26635,9 @@ function tryShoot() {
     return;
   }
   const activeRateMult = (abilityBuff?.weaponId === currentWeapon.id && abilityBuff.rateMult) ? abilityBuff.rateMult : 1;
-  if (now - lastShot < wStats.fireRate * activeRateMult) return;
+  const forcedShot = forcedCycleShot;
+  if (!forcedShot && now - lastShot < wStats.fireRate * activeRateMult) return;
+  if (!forcedShot && wStats.cycleBurst && startCycleBurst(wStats)) return;
   let heat = null;
   if (wStats.heatShots) {
     heat = weaponHeatState[currentWeapon.id] || (weaponHeatState[currentWeapon.id] = { shotCount: 0, cooldownUntil: 0 });
@@ -26670,8 +26742,8 @@ function tryShoot() {
   // Apply ability buff for this shot
   const ab = (abilityBuff && abilityBuff.weaponId === currentWeapon.id) ? abilityBuff : null;
   const shotPellets  = ab?.pellets      ?? wStats.pellets;
-  const shotSpread   = (wStats.spread + bloomAdd) * (ab?.spreadMult ?? 1);
-  let shotWeaponId   = ab?.weaponAbId   ?? (wStats.damageId || currentWeapon.id);
+  const shotSpread   = (wStats.spread + bloomAdd) * (ab?.spreadMult ?? 1) * (forcedShot?.spreadMult ?? 1);
+  let shotWeaponId   = forcedShot?.weaponId ?? ab?.weaponAbId ?? (wStats.damageId || currentWeapon.id);
   const shotSpeed    = wStats.bulletSpeed * (ab?.speedMult ?? 1);
 
   // Switchblade Gun: charged state fires a 100-dmg shot; subsequent shots are 50 dmg until a hit lands
@@ -26714,8 +26786,8 @@ function tryShoot() {
     });
     const bColor = wStats.randomBulletColor
       ? PAINTBALL_COLORS[Math.floor(Math.random() * PAINTBALL_COLORS.length)]
-      : wStats.bulletColor;
-    spawnLocalBullet(muzzleWorld, spreadDir, `local_${myId}_${now}_${p}`, true, shotSpeed, bColor, wStats.bulletSize, shotWeaponId);
+      : (forcedShot?.bulletColor ?? wStats.bulletColor);
+    spawnLocalBullet(muzzleWorld, spreadDir, `local_${myId}_${now}_${p}`, true, shotSpeed, bColor, forcedShot?.bulletSize ?? wStats.bulletSize, shotWeaponId);
   }
 }
 
@@ -32201,6 +32273,12 @@ function getClientWeaponDamage(weaponId) {
   return 10;
 }
 
+function weaponPiercesDefenses(weaponId) {
+  if (weaponId === 'gatecrasher_slug') return true;
+  const w = WEAPONS.find(x => x.id === weaponId);
+  return !!w?.ignoreDefenses;
+}
+
 function makeTrainingDummyMesh(dummy) {
   const g    = new THREE.Group();
   const mat  = new THREE.MeshLambertMaterial({ color: dummy.color });
@@ -32529,14 +32607,15 @@ function updateBullets(dt) {
             spawnHitParticle(at);
             // Shields and parry are judged HERE, when the round actually
             // arrives, so raising one mid-flight genuinely saves you.
-            if (!isShielded() && !isRiotShieldBlocking()) {
+            const piercesDefense = weaponPiercesDefenses(b.weaponId);
+            if (!isShielded() && (piercesDefense || !isRiotShieldBlocking())) {
               const _mp = meleeAbilityBuff?.type;
-              if (_mp === 'deflect') {
+              if (!piercesDefense && _mp === 'deflect') {
                 triggerDeflectImpact(at);
                 const dp = remoteMeshes[b.botId] ? remoteMeshes[b.botId].position.clone().setY(1.0)
                                                  : camera.position.clone().setY(1.0);
                 emitHit(b.botId, `deflect_${myId}_${Date.now()}`, 'katana', dp);
-              } else if (_mp !== 'parry') {
+              } else if (piercesDefense || _mp !== 'parry') {
                 applyDotToPlayer(b.weaponId);
                 // wasHead is known here, but bot damage is not scaled by
                 // location yet, so it is deliberately not passed as if it were.
@@ -34234,6 +34313,7 @@ const CLIENT_WEAPON_DAMAGE = Object.fromEntries([
   ['m1_garand_ab', 150], ['plasma_storm', 35], ['arc_overload', 70],
   ['singularity', 90], ['rotten_potato', 40], ['sticker_bomb', 35],
   ['chain_pull', 60], ['airburst', 95], ['toxin_dart', 30], ['blind_flash', 0],
+  ['gatecrasher_slug', 40],
   ['arc_torrent', 5], ['firework_launcher', 50], ['switchblade_gun', 50], ['switchblade_charged', 100],
   ['lancer_blade', 50],   // ⚔️ Lancer bayonet-charge hit (main shot uses the WEAPONS 'lancer' damage)
   ['molotov_burn', 10], ['molotov_fire', 5],  // 🔥 inside-the-flames tick / lingering on-fire DOT
@@ -34424,8 +34504,9 @@ function applyBotDamageToPlayer(weaponId, botId) {
     onEntityDied(myId, botId || null);
     return true;
   }
-  if (isDead || isShielded() || isRiotShieldBlocking()) return;
-  if (meleeAbilityBuff?.type === 'parry' || meleeAbilityBuff?.type === 'deflect') return;
+  const piercesDefense = weaponPiercesDefenses(weaponId);
+  if (isDead || isShielded() || (!piercesDefense && isRiotShieldBlocking())) return;
+  if (!piercesDefense && (meleeAbilityBuff?.type === 'parry' || meleeAbilityBuff?.type === 'deflect')) return;
   if (match?.type === 'range') return;
   const dmg = CLIENT_WEAPON_DAMAGE[weaponId] || 25;
   const me = players[myId];
@@ -34870,8 +34951,9 @@ socket.on('playerHit', data => {
     }
     return; // don't apply HP loss
   }
+  const incomingPiercesDefense = data.targetId === myId && weaponPiercesDefenses(data.weapon);
   // Lightsabre parry: absorb incoming damage
-  if (data.targetId === myId && meleeAbilityBuff?.type === 'parry') {
+  if (data.targetId === myId && !incomingPiercesDefense && meleeAbilityBuff?.type === 'parry') {
     const oldHp = players[myId]?.hp ?? data.hp;
     const dmgAbsorbed = Math.max(0, oldHp - data.hp);
     flashHitIndicator();
@@ -34884,7 +34966,7 @@ socket.on('playerHit', data => {
     return;
   }
   // Katana deflect: absorb AND reflect damage back to nearest enemy
-  if (data.targetId === myId && meleeAbilityBuff?.type === 'deflect') {
+  if (data.targetId === myId && !incomingPiercesDefense && meleeAbilityBuff?.type === 'deflect') {
     const oldHp = players[myId]?.hp ?? data.hp;
     const dmgAbsorbed = Math.max(0, oldHp - data.hp);
     flashHitIndicator();
@@ -34911,7 +34993,7 @@ socket.on('playerHit', data => {
     return;
   }
   // Riot shield blocks frontal hits when not swinging
-  if (data.targetId === myId && isRiotShieldBlocking()) {
+  if (data.targetId === myId && !incomingPiercesDefense && isRiotShieldBlocking()) {
     const oldHp = players[myId]?.hp ?? data.hp;
     const dmgAbsorbed = Math.max(0, oldHp - data.hp);
     flashHitIndicator(); // shield clang
