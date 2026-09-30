@@ -1240,6 +1240,13 @@ const GAME_MODE_CONFIGS = {
   '10v10': { type: 'race', allies: 9, enemies: 10, killGoal: 100, timeLimit: 180 },
   'm4_tower': { type: 'race', allies: 4, enemies: 5, killGoal: 99, timeLimit: 300,
     fixedKit: 'm4_tower', forcedMap: 'm4_tower', playerHp: 100, botHp: 100, autoRespawn: true },
+  // Same kit and rules as m4_tower (fixedKit stays 'm4_tower' on purpose --
+  // every applyM4TowerKit()/isM4Tower check keys off THAT string); forcedMap
+  // is the only thing that differs, since that is what picks the arena.
+  'm4_tower_big':   { type: 'race', allies: 4, enemies: 5, killGoal: 99, timeLimit: 300,
+    fixedKit: 'm4_tower', forcedMap: 'm4_tower_big', playerHp: 100, botHp: 100, autoRespawn: true },
+  'm4_tower_super': { type: 'race', allies: 4, enemies: 5, killGoal: 99, timeLimit: 300,
+    fixedKit: 'm4_tower', forcedMap: 'm4_tower_super', playerHp: 100, botHp: 100, autoRespawn: true },
   // FFA: respawn, most kills when timer ends
   'ffa5':  { type: 'ffa',  allies: 0, enemies: 5,  timeLimit: 300 },
   'ffa15': { type: 'ffa',  allies: 0, enemies: 15, timeLimit: 300 },
@@ -5319,6 +5326,91 @@ function buildM4TowerMap() {
 }
 buildM4TowerMap();
 
+// 🏢 Two taller M4 Tower variants -- Big Tower adds a 3rd story, Super Tower a
+// 4th, each on a slightly bigger footprint, generalized out of the original
+// 2-story builder above (stories=2, scale=1 reproduces it exactly). Every
+// climb corner keeps going flight-by-flight all the way to the top floor
+// instead of stopping at the first, and the roof always sits above whichever
+// floor ends up on top.
+const M4_TOWER_MAP_NAMES = new Set(['m4_tower', 'm4_tower_big', 'm4_tower_super']);
+registerMap('m4_tower_big');
+registerMap('m4_tower_super');
+function buildM4TowerStoryMap(name, stories, scale) {
+  const m = name;
+  const STORY_H = 4.15;                          // matches the original deck spacing exactly
+  const topDeckY = (stories - 1) * STORY_H;
+  const roofY = topDeckY + 4.20;                  // same headroom above the top floor as the original (8.35 - 4.15)
+  const half = 50 * scale;                        // original footprint is 100x100
+  addMapBox(m, 0, roofY, 0, half * 2, 0.7, half * 2, 0x111316);
+  addMapBox(m, 0, roofY - 0.5, 0, half * 1.76, 0.08, half * 1.76, 0x070809, 0, 0.78);
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(half * 2, half * 2), new THREE.MeshLambertMaterial({ color: 0x51585c }));
+  ground.rotation.x = -Math.PI / 2;
+  MAP_GROUPS[m].add(ground);
+  const grid = new THREE.GridHelper(half * 2, 50, 0x3c4246, 0x3c4246);
+  grid.position.y = 0.01;
+  MAP_GROUPS[m].add(grid);
+  [[half*2,4,1,0,2,-half],[half*2,4,1,0,2,half],[1,4,half*2,-half,2,0],[1,4,half*2,half,2,0]].forEach(([w,h,d,x,y,z]) => {
+    addMapBox(m, x, y, z, w, h, d, 0x30343a);
+  });
+  const deck = 0x747b80, wall = 0x454a50, trim = 0xa98d55, cover = 0x5b635f;
+  const pillarH = roofY - 0.15;
+  [[-38,-38], [38,-38], [-38,38], [38,38], [0,-44], [0,44], [-44,0], [44,0]].forEach(([x,z]) => {
+    addMapBox(m, x * scale, pillarH / 2, z * scale, 2.2, pillarH, 2.2, 0x25282d);
+  });
+
+  // Every upper floor -- a deck ring, a railing ring, and its own cover set --
+  // repeated per story instead of the original's single hard-coded floor.
+  for (let f = 1; f < stories; f++) {
+    const deckY = f * STORY_H, wallY = deckY + 0.85;
+    [[0,-30,34,12], [0,30,34,12], [-30,0,12,34], [30,0,12,34]].forEach(([x,z,w,d]) => {
+      addMapBox(m, x * scale, deckY, z * scale, w * scale, 0.35, d * scale, deck);
+    });
+    [[0,-30,30,0.5], [0,30,30,0.5], [-30,0,0.5,30], [30,0,0.5,30]].forEach(([x,z,w,d]) => {
+      addMapBox(m, x * scale, wallY, z * scale, w * scale, 1.7, d * scale, wall);
+    });
+    [[-30,-30], [30,-30], [-30,30], [30,30], [0,-30], [0,30], [-30,0], [30,0]].forEach(([x,z], i) => {
+      addMapBox(m, x * scale, wallY, z * scale, (i % 2 ? 7 : 2.4) * scale, 1.7, (i % 2 ? 2.4 : 7) * scale, cover);
+    });
+  }
+
+  // Climb corners: the same rising-block staircase as the original, one
+  // flight per floor gap, each flight resting on the floor below it and
+  // landing just above the floor it reaches.
+  const makeCornerClimb = (sx, sz) => {
+    const dirX = sx < 0 ? 1 : -1;
+    const dirZ = sz < 0 ? 1 : -1;
+    for (let f = 0; f < stories - 1; f++) {
+      const base = f * STORY_H;
+      for (let i = 0; i < 12; i++) {
+        const hl = 0.38 + i * 0.32;
+        const x = sx + dirX * (1.4 + (i % 6) * 1.25);
+        const z = sz + dirZ * (1.4 + Math.floor(i / 6) * 4.2);
+        addMapBox(m, x, base + hl / 2, z, 3.2, hl, 2.4, trim);
+      }
+      addMapBox(m, sx + dirX * 4.8, base + 4.25, sz + dirZ * 7.5, 8, 0.35, 5, deck);
+    }
+  };
+  [[-43,-43], [43,-43], [-43,43], [43,43]].forEach(([x,z]) => makeCornerClimb(x * scale, z * scale));
+
+  // Ground-floor lane cover -- unchanged from the original, just scaled.
+  [
+    [0, 0, 10, 2.1, 2.2, 0],
+    [-18, 0, 2.2, 2.0, 10, 0],
+    [18, 0, 2.2, 2.0, 10, 0],
+    [0, -18, 12, 1.8, 2.2, 0],
+    [0, 18, 12, 1.8, 2.2, 0],
+    [-16, -16, 7, 1.8, 2.2, Math.PI / 4],
+    [16, 16, 7, 1.8, 2.2, Math.PI / 4],
+    [-16, 16, 7, 1.8, 2.2, -Math.PI / 4],
+    [16, -16, 7, 1.8, 2.2, -Math.PI / 4],
+  ].forEach(([x,z,w,h,d,rot]) => addMapBox(m, x * scale, h / 2, z * scale, w * scale, h, d * scale, cover, rot));
+
+  addMapBox(m, 0, 0.06, 0, 13 * scale, 0.04, 13 * scale, 0x24282b, 0, 0.9);
+  MAP_GROUPS[m]._skyColor = 0x070809;
+}
+buildM4TowerStoryMap('m4_tower_big', 3, 1.15);
+buildM4TowerStoryMap('m4_tower_super', 4, 1.30);
+
 // ──────────────────────────────────────────────────────────────────────────
 // BASE RAID — PvE compound assault. Player and allies start outside the south
 // breach; guards fill the courtyard, towers, barracks and command building.
@@ -7592,7 +7684,7 @@ function addGridBlock(name, cx, cz, sizeX, sizeZ, groundH, roofH, flip = false) 
   addGridLadder(name, cx + dir * (sizeX / 2 + 0.16), cz, Math.PI / 2, 0, roofH);
 }
 function addGridConceptMap(name, index) {
-  if (isArchivedLobbyMap(name) || name === 'base_raid') return;
+  if (isArchivedLobbyMap(name) || name === 'base_raid' || M4_TOWER_MAP_NAMES.has(name)) return;
   if (name.startsWith(ADMIN_CUSTOM_MAP_PREFIX)) return;
   clearMapForGridConcept(name);
   const large = name === 'br_arena';
@@ -21286,8 +21378,8 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
 // ── Character walk / slide animation ────────────────────────────────────────
 // Drives leg + arm swing from how far the mesh actually moved, plus a crouch/
 // slide pose. Works uniformly for bots and remote players. `crouchTarget` is
-// 0..1 (1 = crouched); `slideTarget` adds the intense low sliding silhouette.
-function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0) {
+// 0..1 (1 = sliding/crouched); pass null to auto-keep current.
+function animateCharacterMesh(mesh, dt, crouchTarget) {
   const rig = mesh && mesh._rig;
   if (!rig) return;
   // Horizontal distance moved since last frame → speed estimate
@@ -21327,9 +21419,6 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0) {
   const effCrouch  = Math.max(baseCrouch, moveCrouch);
   rig.crouch += (effCrouch - rig.crouch) * Math.min(1, dt * 8);
   const crouch = rig.crouch;
-  if (rig.slide === undefined) rig.slide = 0;
-  rig.slide += (slideTarget - rig.slide) * Math.min(1, dt * 14);
-  const slide = rig.slide;
 
   // Phase, offset per character. `gait()` is a sine with a touch of second
   // harmonic: a real leg's swing is quicker than its stance, and that slight
@@ -21392,24 +21481,23 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0) {
   // Slide / crouch pose: tuck legs forward, lean torso back, arms back
   if (crouch > 0.01) {
     const c = crouch;
-    const advancePose = tacticalAdvance && baseCrouch < 0.5 && slide < 0.35;
-    const slideLean = Math.max(0, slide);
-    rig.legL.rotation.x = THREE.MathUtils.lerp(rig.legL.rotation.x, slideLean ? 1.55 : (advancePose ? 0.55 : 1.1), c);
-    rig.legR.rotation.x = THREE.MathUtils.lerp(rig.legR.rotation.x, slideLean ? -0.18 : (advancePose ? 0.25 : 0.4), c);
-    rig.armL.rotation.x = THREE.MathUtils.lerp(rig.armL.rotation.x, slideLean ? -1.22 : (advancePose ? -1.05 : -0.8), c);
-    rig.armR.rotation.x = THREE.MathUtils.lerp(rig.armR.rotation.x, slideLean ? -1.55 : (advancePose ? -1.38 : -0.8), c);
-    rig.torso.rotation.x = THREE.MathUtils.lerp(0, slideLean ? -0.82 : (advancePose ? 0.24 : -0.45), c);
-    rig.head.rotation.x  = THREE.MathUtils.lerp(0, slideLean ? 0.72 : (advancePose ? -0.12 : 0.45), c);
+    const advancePose = tacticalAdvance && baseCrouch < 0.5;
+    rig.legL.rotation.x = THREE.MathUtils.lerp(rig.legL.rotation.x, advancePose ? 0.55 : 1.1, c);
+    rig.legR.rotation.x = THREE.MathUtils.lerp(rig.legR.rotation.x, advancePose ? 0.25 : 0.4, c);
+    rig.armL.rotation.x = THREE.MathUtils.lerp(rig.armL.rotation.x, advancePose ? -1.05 : -0.8, c);
+    rig.armR.rotation.x = THREE.MathUtils.lerp(rig.armR.rotation.x, advancePose ? -1.38 : -0.8, c);
+    rig.torso.rotation.x = THREE.MathUtils.lerp(0, advancePose ? 0.24 : -0.45, c);
+    rig.head.rotation.x  = THREE.MathUtils.lerp(0, advancePose ? -0.12 : 0.45, c);
     // Knees have to fold hard here or a tucked slide looks like a plank.
-    if (rig.kneeL) rig.kneeL.rotation.x = THREE.MathUtils.lerp(rig.kneeL.rotation.x, slideLean ? -1.65 : (advancePose ? -0.85 : -1.35), c);
-    if (rig.kneeR) rig.kneeR.rotation.x = THREE.MathUtils.lerp(rig.kneeR.rotation.x, slideLean ? -0.25 : (advancePose ? -0.65 : -0.75), c);
-    if (rig.elbowL) rig.elbowL.rotation.x = THREE.MathUtils.lerp(rig.elbowL.rotation.x, slideLean ? 1.05 : (advancePose ? 0.85 : 0.7), c);
-    if (rig.elbowR) rig.elbowR.rotation.x = THREE.MathUtils.lerp(rig.elbowR.rotation.x, slideLean ? 1.15 : (advancePose ? 0.9 : 0.7), c);
-    if (rig.footL) rig.footL.rotation.x = THREE.MathUtils.lerp(rig.footL.rotation.x, slideLean ? 0.72 : (advancePose ? 0.18 : 0.5), c);
-    if (rig.footR) rig.footR.rotation.x = THREE.MathUtils.lerp(rig.footR.rotation.x, slideLean ? -0.18 : (advancePose ? 0.14 : 0.5), c);
-    // Crouch unwinds twist; a slide gets a slight shoulder roll so it reads from a distance.
+    if (rig.kneeL) rig.kneeL.rotation.x = THREE.MathUtils.lerp(rig.kneeL.rotation.x, advancePose ? -0.85 : -1.35, c);
+    if (rig.kneeR) rig.kneeR.rotation.x = THREE.MathUtils.lerp(rig.kneeR.rotation.x, advancePose ? -0.65 : -0.75, c);
+    if (rig.elbowL) rig.elbowL.rotation.x = THREE.MathUtils.lerp(rig.elbowL.rotation.x, advancePose ? 0.85 : 0.7, c);
+    if (rig.elbowR) rig.elbowR.rotation.x = THREE.MathUtils.lerp(rig.elbowR.rotation.x, advancePose ? 0.9 : 0.7, c);
+    if (rig.footL) rig.footL.rotation.x = THREE.MathUtils.lerp(rig.footL.rotation.x, advancePose ? 0.18 : 0.5, c);
+    if (rig.footR) rig.footR.rotation.x = THREE.MathUtils.lerp(rig.footR.rotation.x, advancePose ? 0.14 : 0.5, c);
+    // Twist/roll don't belong in a slide — unwind them.
     rig.torso.rotation.y = THREE.MathUtils.lerp(rig.torso.rotation.y, 0, c);
-    rig.torso.rotation.z = THREE.MathUtils.lerp(rig.torso.rotation.z, slideLean ? 0.22 : 0, c);
+    rig.torso.rotation.z = THREE.MathUtils.lerp(rig.torso.rotation.z, 0, c);
   }
 
   // ── Body bob ──────────────────────────────────────────────────────────────
@@ -21421,8 +21509,7 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0) {
   // which is added later, is picked up when it appears.
   const bobAmt = -Math.cos(2 * p) * 0.022 * blend * (rig.gaitBob ?? 1)
                  - 0.012 * blend * (1 - crouch)   // walking rides slightly lower
-                 - 0.12 * crouch                  // and a crouch settles down a bit
-                 - 0.12 * slide;                  // true slides get visibly lower
+                 - 0.12 * crouch;                 // and a crouch settles down a bit
                  // 0.12 is deliberately modest: the legs bottom out only 0.225
                  // above the group origin, and the mesh sits on the ground, so a
                  // deeper drop puts the boots through the floor mid-slide.
@@ -39609,20 +39696,17 @@ function animateCharacters(dt) {
     const mesh = remoteMeshes[id];
     if (!mesh || !mesh.visible || !mesh._rig) continue;
     let crouchTarget = 0;
-    let slideTarget = 0;
     const b = gameBots.find(bb => bb.id === id);
     if (!b) {
       const p = players[id];
       if (p && typeof p.y === 'number') {
         // 1.65 standing → 0.70 sliding. Map to 0..1 crouch amount.
         crouchTarget = Math.max(0, Math.min(1, (1.65 - p.y) / (1.65 - 0.70)));
-        slideTarget = crouchTarget > 0.78 ? 1 : 0;
       }
     } else if (b._slideUntil && Date.now() < b._slideUntil) {
       crouchTarget = 1; // 🛹 bot is sliding → low profile
-      slideTarget = 1;
     }
-    animateCharacterMesh(mesh, dt, crouchTarget, slideTarget);
+    animateCharacterMesh(mesh, dt, crouchTarget);
   }
 }
 
@@ -41432,7 +41516,7 @@ function openModeMenu() {
 
 // Modes whose kit is built inside selectMode() (forced weapons / infinite ammo) replay
 // through it; every other mode keeps the loadout you just played with.
-const SELF_KIT_MODES = ['dday', 'range', 'lobby13', 'm4_tower'];
+const SELF_KIT_MODES = ['dday', 'range', 'lobby13', 'm4_tower', 'm4_tower_big', 'm4_tower_super'];
 // The GAME_MODE_CONFIGS key being played (configs are shared objects: match by identity).
 function currentModeId() {
   const hit = Object.entries(GAME_MODE_CONFIGS).find(([, cfg]) => cfg === selectedModeConfig);
@@ -42417,7 +42501,7 @@ function selectMode(modeId) {
     showLobbyModesButton(true); // 🎮 floating button back to the mode menu
     showLobbyDuelButton(true);  // ⚔️ pick who you want to 1V1 (#31)
     showFloatingSettingsButton(true);
-  } else if (modeId === 'm4_tower') {
+  } else if (modeId === 'm4_tower' || modeId === 'm4_tower_big' || modeId === 'm4_tower_super') {
     applyM4TowerKit();
     gameStarted = true;
     spawnGameBots();
