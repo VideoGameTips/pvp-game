@@ -36603,6 +36603,32 @@ function weaponIconURL(id, mine) {
   try { url = _renderWeaponIcon(found.model); } catch (e) { console.warn('[killfeed icon]', id, e); }
   return (_iconCache[key] = url);
 }
+let _loadoutIconObserver = null;
+function loadoutPreviewHTML(id) {
+  return `<div class="lc-preview"><img data-loadout-icon="${id}" alt="" loading="lazy"></div>`;
+}
+function hydrateLoadoutPreviews(root = document) {
+  const imgs = [...root.querySelectorAll('img[data-loadout-icon]:not([src])')];
+  if (!imgs.length) return;
+  const fill = img => {
+    const id = img.dataset.loadoutIcon;
+    const src = weaponIconURL(id, true);
+    if (src) img.src = src;
+    else img.closest('.lc-preview')?.classList.add('empty');
+    img.removeAttribute('data-loadout-icon');
+  };
+  if (!('IntersectionObserver' in window)) { imgs.forEach(fill); return; }
+  if (!_loadoutIconObserver) {
+    _loadoutIconObserver = new IntersectionObserver(entries => {
+      for (const e of entries) {
+        if (!e.isIntersecting) continue;
+        _loadoutIconObserver.unobserve(e.target);
+        fill(e.target);
+      }
+    }, { rootMargin: '120px' });
+  }
+  imgs.forEach(img => _loadoutIconObserver.observe(img));
+}
 function _renderWeaponIcon(model) {
   if (!_iconScene) {
     _iconScene = new THREE.Scene();
@@ -40415,9 +40441,11 @@ function showLoadoutScreen(mode) {
     const fireTag = dw.auto ? 'AUTO' : 'SEMI';
     const rateTag = dw.ammoRegen ? 'REGEN' : `${Math.round(1000/dw.fireRate)}/s`;
     const adminTag = w.adminItem ? ' <span style="color:#ffcc44;font-size:9px;">🪖 ADMIN</span>' : '';
-    card.innerHTML = `<div class="lc-name">${displayWeaponName(w)}${adminTag}</div>
+    card.innerHTML = `${loadoutPreviewHTML(w.id)}<div class="lc-copy">
+      <div class="lc-name">${displayWeaponName(w)}${adminTag}</div>
       <div class="lc-type">${dw.type}${dw.skinName ? ' · SKIN' : ''}</div>
-      <div class="lc-stats">DMG ${dw.damage} · MAG ${w.mag} · ${fireTag} · ${rateTag}</div>`;
+      <div class="lc-stats">DMG ${dw.damage} · MAG ${w.mag} · ${fireTag} · ${rateTag}</div>
+    </div>`;
     if (!w.adminItem && !isOwned(w.id)) return; // not yet bought — hidden from loadout
     const usable = decorateOwnedBadge(card, w.id, !!w.adminItem);
     addGunSkinChips(card, w);
@@ -40437,9 +40465,11 @@ function showLoadoutScreen(mode) {
     card.dataset.idx = i;
     card.dataset.itemId = m.id;
     const adminTag = m.adminItem ? ' <span style="color:#ffcc44;font-size:9px;">🪖 ADMIN</span>' : '';
-    card.innerHTML = `<div class="lc-name">${displayMeleeName(m)}${adminTag}</div>
+    card.innerHTML = `${loadoutPreviewHTML(m.id)}<div class="lc-copy">
+      <div class="lc-name">${displayMeleeName(m)}${adminTag}</div>
       <div class="lc-type">${dm.type}${dm.skinId ? ' · SKIN' : ''}</div>
-      <div class="lc-stats">DMG ${dm.damage} · RANGE ${dm.range} · ${Math.round(1000/dm.cooldown)}/s</div>`;
+      <div class="lc-stats">DMG ${dm.damage} · RANGE ${dm.range} · ${Math.round(1000/dm.cooldown)}/s</div>
+    </div>`;
     if (!m.adminItem && !isOwned(m.id)) return;
     const usable = decorateOwnedBadge(card, m.id, !!m.adminItem);
     addMeleeSkinChips(card, m);
@@ -40458,9 +40488,11 @@ function showLoadoutScreen(mode) {
     card.dataset.itemId = s.id;
     const stat = s.heal ? `HEAL ${s.heal}` : s.blink ? `BLINK ${s.blink}` : s.refill ? 'REFILL AMMO' : `DMG ${s.damage || 0}`;
     const adminTag = s.adminItem ? ' <span style="color:#ffcc44;font-size:9px;">🪖 ADMIN</span>' : '';
-    card.innerHTML = `<div class="lc-name">${s.name}${adminTag}</div>
+    card.innerHTML = `${loadoutPreviewHTML(s.id)}<div class="lc-copy">
+      <div class="lc-name">${s.name}${adminTag}</div>
       <div class="lc-type">${s.type}</div>
-      <div class="lc-stats">${stat} · USES ${s.uses}</div>`;
+      <div class="lc-stats">${stat} · USES ${s.uses}</div>
+    </div>`;
     if (!s.adminItem && !isOwned(s.id)) return;
     const usable = decorateOwnedBadge(card, s.id, !!s.adminItem);
     const handler = () => { if (usable) pickSupport(i, card); };
@@ -40515,6 +40547,7 @@ function showLoadoutScreen(mode) {
   if (title) title.textContent = loadoutMode === 'swap' ? 'SWAP LOADOUT' : 'SELECT LOADOUT';
 
   screen.style.display = 'flex';
+  hydrateLoadoutPreviews(screen);
   if (loadoutMode === 'death' && gameStarted && match && !match.over && loadoutReady()) startAutoRespawn();
 }
 

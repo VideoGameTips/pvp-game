@@ -482,10 +482,20 @@
     }
     .loadout-card {
       background: rgba(255,255,255,0.05); border: 1px solid #333; border-radius: 6px;
-      padding: 8px 12px; cursor: pointer; transition: all 0.1s;
+      padding: 7px 10px; cursor: pointer; transition: all 0.1s;
+      display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 9px; align-items: center;
+      min-height: 58px;
     }
     .loadout-card:hover  { background: rgba(255,255,255,0.1); border-color: #666; }
     .loadout-card.selected { background: rgba(231,76,60,0.25); border-color: #e74c3c; }
+    .lc-preview {
+      height: 42px; border-radius: 5px; overflow: hidden; display: flex; align-items: center; justify-content: center;
+      background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02));
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+    .lc-preview img { width: 100%; height: 100%; object-fit: contain; image-rendering: auto; filter: drop-shadow(0 3px 5px rgba(0,0,0,0.6)); }
+    .lc-preview.empty::after { content: "?"; color: #777; font-size: 18px; font-weight: bold; }
+    .lc-copy { min-width: 0; }
     .lc-name  { font-size: 15px; font-weight: bold; }
     .lc-type  { font-size: 10px; color: #888; margin: 1px 0; }
     .lc-stats { font-size: 10px; color: #aaa; }
@@ -506,7 +516,8 @@
       #loadout-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
       .lc-name { font-size: 13px; }
       .lc-stats { font-size: 9px; }
-      .loadout-card { padding: 7px 8px; }
+      .loadout-card { grid-template-columns: 52px minmax(0, 1fr); gap: 7px; min-height: 50px; padding: 6px 7px; }
+      .lc-preview { height: 34px; }
       #loadout-ready-btn { width: min(280px, 100%); padding: 11px 24px; }
     }
 
