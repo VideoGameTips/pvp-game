@@ -794,6 +794,14 @@ const WEAPONS = [
     bulletColor: 0x8a5cff, bulletSize: 0.05,
     ability: { name: 'Overcharge', cd: 10000, desc: '3s · fire rate doubled', type: 'buff', duration: 3000, rateMult: 0.5 },
   },
+  {
+    id: 'storm_bloom', name: 'Storm Bloom', type: 'Lightning Shotgun', slot: 'primary',
+    mag: 33, reserve: 99, damage: 5, fireRate: 500, reloadTime: 2400,
+    auto: false, pellets: 10, spread: 0.052, fixedPelletPattern: 'ring',
+    adsZoom: 48, bulletSpeed: 138, noReload: false,
+    bulletColor: 0x9fe8ff, bulletSize: 0.038,
+    ability: { name: 'Ball Lightning', cd: 12000, desc: 'Slow orb · aura roots 1s · direct roots 3s', type: 'ball_lightning', noADS: true },
+  },
 ];
 
 // ── Damage drop-off by range ────────────────────────────────────────────────
@@ -1324,6 +1332,7 @@ const WEAPON_COSTS = {
   // Primaries — Sci-fi / energy
   railgun: 600, freeze_gun: 350, plasma_carbine: 420, arc_rifle: 400,
   arc_torrent: 460, prism_launcher: 420,  storm_cannon: 540, cyroclasm: 480,
+  storm_bloom: 520,
   coilgun: 460,  painter_beam: 300, gravity_paint: 400,
   portal_launcher: 460,  traffic_controller: 320,
   // Primaries — Explosive / projectile
@@ -1716,6 +1725,7 @@ const orbitalMarkers = [];        // {mesh, x, z, fireAt, damage, radius}
 let playerFrostSlow = 100;        // 100 = full speed, 0 = frozen + dead. Frost Blaster reduces this on hit.
 let playerSlowOnHitUntil = 0;     // Cyroclasm laser etc: timed flat-% slow, see SLOW_ON_HIT
 let playerSlowOnHitMult = 1;
+let playerRootUntil = 0;          // Storm Bloom ball lightning: movement locked, aim/fire still allowed
 let playerYVel = 0;               // Player vertical velocity (for air grenades launching the player)
 
 // ── 🏃 Movement tuning ──────────────────────────────────────────────────────
@@ -2973,6 +2983,7 @@ const GRENADE_WINDUP_DUR = 620; // ms (pull-back + hold + throw)
 
 // World-space grenades (physics objects, not camera-children)
 const activeGrenades = [];
+const activeBallLightnings = [];
 const GRENADE_GRAVITY = 16; // m/s²
 const GRENADE_FUSE    = 3000; // ms before detonation
 
@@ -3139,6 +3150,8 @@ function weaponAudioProfile(id, baseWeapon) {
   if (lowerId === 'freeze_gun' || lowerId === 'frost_blaster') return { kind:'freeze', vol:0.24, dur:0.16, f1:680, f2:420 };
   if (lowerId === 'cyroclasm') return { kind:'freeze', vol:0.22, dur:0.09, f1:900, f2:560 };
   if (lowerId === 'continuum') return { kind:'energy', vol:0.22, dur:0.09, f1:1020, f2:620 };
+  if (lowerId === 'storm_bloom') return { kind:'arc', vol:0.34, dur:0.15, f1:1180, f2:360, action:'shotgun' };
+  if (lowerId === 'storm_bloom_ball' || lowerId === 'storm_bloom_aura') return { kind:'arc', vol:0.44, dur:0.26, f1:420, f2:1100 };
   if (lowerId === 'flamethrower') return { kind:'flamethrower', vol:0.24, dur:0.18, f1:95, f2:58 };
   if (lowerId === 'plasma_carbine') return { kind:'energy', vol:0.30, dur:0.14, f1:880, f2:540 };
   if (lowerId === 'railgun')        return { kind:'energy', vol:0.42, dur:0.32, f1:1620, f2:120 };
@@ -18095,6 +18108,61 @@ function buildContinuum() {
   g.position.set(0.1, -0.1, -0.22); return g;
 }
 
+function buildStormBloom() {
+  const g = new THREE.Group();
+  const steel = GUN_MATS.steel(), bright = GUN_MATS.bright(), inner = GUN_MATS.inner();
+  const grip = GUN_MATS.grip();
+  const shell = new THREE.MeshPhongMaterial({ color: 0x183546, shininess: 120, specular: 0x8fdfff });
+  const coil  = new THREE.MeshPhongMaterial({ color: 0x5b2f7a, shininess: 115, specular: 0xcfa8ff });
+  const glow  = new THREE.MeshBasicMaterial({ color: 0x9fe8ff, transparent: true, opacity: 0.74 });
+
+  gpBox(g, shell, 0.062, 0.058, 0.210, 0, 0.020, 0.020);
+  gpBox(g, inner, 0.060, 0.008, 0.178, 0, 0.048, 0.020);
+  gpBox(g, grip, 0.042, 0.090, 0.036, 0, -0.030, 0.055, -0.18);
+  gpBox(g, steel, 0.050, 0.022, 0.080, 0, -0.020, -0.020);
+
+  // Ten equal emitters mirror the ten-pellet spread pattern.
+  const emitterGroup = new THREE.Group();
+  emitterGroup.position.set(0, 0.020, -0.135);
+  for (let i = 0; i < 10; i++) {
+    const a = (i / 10) * Math.PI * 2;
+    const x = Math.cos(a) * 0.033, y = Math.sin(a) * 0.033;
+    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.0065, 0.0065, 0.110, 8), steel);
+    barrel.rotation.x = Math.PI / 2;
+    barrel.position.set(x, y, -0.010);
+    emitterGroup.add(barrel);
+    const tip = new THREE.Mesh(new THREE.SphereGeometry(0.0085, 8, 6), glow);
+    tip.position.set(x, y, -0.070);
+    emitterGroup.add(tip);
+  }
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.041, 0.0045, 8, 24), coil);
+  ring.position.set(0, 0, -0.070);
+  emitterGroup.add(ring);
+  g.add(emitterGroup);
+
+  // Lightning bottle on top.
+  const core = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.112, 12), glow);
+  core.rotation.x = Math.PI / 2;
+  core.position.set(0, 0.066, -0.010);
+  g.add(core);
+  gpCyl(g, bright, 0.020, 0.020, 0.010, 12, 0, 0.066, 0.050);
+  gpCyl(g, bright, 0.020, 0.020, 0.010, 12, 0, 0.066, -0.070);
+  for (let i = 0; i < 5; i++) gpBox(g, coil, 0.006, 0.010, 0.130, Math.sin(i) * 0.019, 0.074, -0.010, i * 0.18);
+
+  gpBox(g, bright, 0.018, 0.010, 0.016, 0, 0.054, 0.090);
+  gpBox(g, bright, 0.014, 0.008, 0.012, 0, 0.053, -0.092);
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.022, 0.0038, 6, 12, Math.PI * 1.04), shell);
+  guard.rotation.set(0, Math.PI / 2, -0.35);
+  guard.position.set(0, -0.018, 0.030);
+  g.add(guard);
+  const flash = new THREE.Mesh(new THREE.SphereGeometry(0.035, 10, 8), glow);
+  flash.visible = false;
+  flash.position.set(0, 0.020, -0.212);
+  g.add(flash);
+  g._flash = flash; g._kickZ = 0.014; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.1, -0.1, -0.24); return g;
+}
+
 function buildCreamPie() {
   // 🥧 Cream pie: a foil dish with a real crimped rim, a mound of whipped
   // cream built from overlapping swirls rather than one dome, a glacé cherry
@@ -18314,6 +18382,7 @@ const weaponModels = [
   // ── 🥶 / ♾️ must mirror the two trailing WEAPONS entries ──
   buildCyroclasm(),  // cyroclasm
   buildContinuum(),  // continuum
+  buildStormBloom(),  // storm_bloom
 ];
 function addWeaponRealismDetails(model, weapon) {
   if (!model || !model.add || (model.userData && model.userData.realismDetailed)) return;
@@ -21833,6 +21902,7 @@ const PROJECTILE_KIND_BY_ID = {
   traffic_cone:'cone', cream_pie:'pie',
   flamethrower:'flame',
   freeze_gun:'ice', abs_zero:'ice', frost_blaster:'ice', cyroclasm:'ice',
+  storm_bloom:'spark', storm_bloom_ball:'spark', storm_bloom_aura:'spark',
   paintball:'paintball', glassmaker:'blob', gravity_paint:'blob',
   foam_cannon:'blob', sticker_blaster:'blob',
   taser:'spark', arc_rifle:'spark', arc_torrent:'spark', storm_core:'spark',
@@ -24513,6 +24583,8 @@ function resetCombatResources() {
   localBullets.length = 0;
   for (const g of activeGrenades) scene.remove(g.mesh);
   activeGrenades.length = 0;
+  for (const o of activeBallLightnings) scene.remove(o.mesh);
+  activeBallLightnings.length = 0;
   const isRange = match?.type === 'range';
   const isDDay = match?.type === 'dday';
   const isM4Tower = match?.cfg?.fixedKit === 'm4_tower';
@@ -24533,6 +24605,7 @@ function resetCombatResources() {
   supportUses[selectedSupportIdx] = SUPPORT_ITEMS[selectedSupportIdx].uses;
   reloading = false; shooting = false; isADS = false; targetFOV = 75;
   abilityBuff = null; meleeAbilityBuff = null; pendingFanFire = null;
+  playerRootUntil = 0;
   crossbowCharging = false; crossbowChargeStart = 0;
   spearThrown = false; revealActive = false; revealEndTime = 0;
   meleeSwingT = 1; grenadeWindupT = 1; grenadeThrowFired = false;
@@ -25607,6 +25680,7 @@ function updateMovement(dt) {
   // Frost slow: 100 = normal, 0 = frozen. Linear scale.
   const frostMult = Math.max(0, playerFrostSlow) / 100;
   const slowOnHitMult = Date.now() < playerSlowOnHitUntil ? playerSlowOnHitMult : 1;
+  const rootMult = Date.now() < playerRootUntil ? 0 : 1;
   // ⚡ Admin speed boost: 3× speed
   const adminSpeedMult = (adminCheats.speed && currentUser?.isAdmin) ? 3 : 1;
   // 🏃 Sprint (Shift): +50% speed.  🦆 Crouch (Ctrl/C): -45% speed.
@@ -25684,7 +25758,7 @@ function updateMovement(dt) {
   const fireBoost = (shooting && currentWeapon && currentWeapon.moveBoost
                      && (activeSlot === 'primary' || activeSlot === 'secondary'))
                     ? currentWeapon.moveBoost : 1;
-  const speedMult = baseSpeedMult * (adrenalineActive ? 1.6 : 1) * frostMult * slowOnHitMult * adminSpeedMult * crouchMult * slideMult * fireBoost;
+  const speedMult = baseSpeedMult * (adrenalineActive ? 1.6 : 1) * frostMult * slowOnHitMult * rootMult * adminSpeedMult * crouchMult * slideMult * fireBoost;
   // Drop the camera when crouching / sliding (eased)
   if (!window._crouchEye) window._crouchEye = 1.65;
   // Slide drops the eye to 0.70 m so the view clearly dips below normal
@@ -26284,6 +26358,10 @@ function activateAbility() {
     doThrowBomb(w, ab);
     flashAbilityName(ab.name);
   }
+  else if (ab.type === 'ball_lightning') {
+    doBallLightning(w, ab);
+    flashAbilityName(ab.name);
+  }
   else if (ab.type === 'multishot') {
     doMultishot(w, ab);
     flashAbilityName(ab.name);
@@ -26390,6 +26468,38 @@ function doThrowBomb(w, ab) {
   playWeaponSound(w.id, { baseWeapon: w, volume: 0.95 });
   spawnLocalBullet(origin, dir, id, true, 22, color, 0.13, w.id,
     { isPaintBomb: true, paintRadius: ab.radius || 4, paintColor: color });
+}
+
+function doBallLightning(w, ab) {
+  const origin = new THREE.Vector3();
+  camera.getWorldPosition(origin);
+  origin.add(new THREE.Vector3(0.10, -0.08, -0.55).applyQuaternion(camera.quaternion));
+  const dir = new THREE.Vector3(0, 0.01, -1).applyQuaternion(camera.quaternion).normalize();
+  const group = new THREE.Group();
+  const coreMat = new THREE.MeshBasicMaterial({ color: 0xbdf6ff, transparent: true, opacity: 0.92 });
+  const shellMat = new THREE.MeshBasicMaterial({ color: 0x6ab8ff, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending });
+  const arcMat = new THREE.MeshBasicMaterial({ color: 0xf6fbff, transparent: true, opacity: 0.78 });
+  const core = new THREE.Mesh(new THREE.SphereGeometry(0.26, 16, 12), coreMat);
+  const shell = new THREE.Mesh(new THREE.SphereGeometry(0.52, 16, 12), shellMat);
+  group.add(shell, core);
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    const arc = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.012, 0.95), arcMat);
+    arc.position.set(Math.cos(a) * 0.18, Math.sin(a) * 0.18, 0);
+    arc.rotation.set(Math.PI / 2, 0, a);
+    group.add(arc);
+  }
+  group.position.copy(origin);
+  scene.add(group);
+  activeBallLightnings.push({
+    id: `stormball_${myId}_${Date.now()}`,
+    mesh: group, dir, ownerId: myId,
+    born: Date.now(), until: Date.now() + (ab.life || 5200),
+    speed: ab.speed || 7.2, auraRadius: ab.auraRadius || 3.1, directRadius: ab.directRadius || 0.72,
+    lastAuraHit: Object.create(null),
+  });
+  playWeaponSound('storm_bloom_ball', { baseWeapon: w, volume: 1.12 });
+  flashScreen('rgba(120,220,255,0.10)', 160);
 }
 
 function fireCrossbowCharge() {
@@ -26892,8 +27002,16 @@ function tryShoot() {
   for (let p = 0; p < shotPellets; p++) {
     const spreadDir = baseDir.clone();
     if (shotSpread > 0) {
-      spreadDir.x += (Math.random()-0.5)*shotSpread*2;
-      spreadDir.y += (Math.random()-0.5)*shotSpread*2;
+      if (wStats.fixedPelletPattern === 'ring' && shotPellets > 1) {
+        const ringA = (p / shotPellets) * Math.PI * 2 + (now % 1000) * 0.0007;
+        const camRight = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion).normalize();
+        const camUp = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion).normalize();
+        spreadDir.addScaledVector(camRight, Math.cos(ringA) * shotSpread);
+        spreadDir.addScaledVector(camUp, Math.sin(ringA) * shotSpread);
+      } else {
+        spreadDir.x += (Math.random()-0.5)*shotSpread*2;
+        spreadDir.y += (Math.random()-0.5)*shotSpread*2;
+      }
       spreadDir.normalize();
     }
     socket.emit('shoot', {
@@ -32192,7 +32310,7 @@ function updateDamageNumbers() {
 const INSTAKILL_HS_WEAPONS = new Set(['srx', 'railgun', 'lever', 'boombow', 'boombow_ab', 'boombow_c1', 'railgun_ab']);
 
 // 🤫 Secret weapon category sets used for hidden synergy mechanics
-const ELECTRIC_WEAPONS = new Set(['arc_rifle','arc_torrent','taser','pistol','shock_baton','storm_core','revolver','freeze_gun','coilgun','plasma_carbine']);
+const ELECTRIC_WEAPONS = new Set(['arc_rifle','arc_torrent','taser','pistol','shock_baton','storm_core','revolver','freeze_gun','coilgun','plasma_carbine','storm_bloom','storm_bloom_ball','storm_bloom_aura']);
 const FIRE_WEAPONS     = new Set(['flamethrower','firework_launcher','sg8','fire_axe','fire_poker','thermite','molotov']);
 const GRAVITY_WEAPONS  = new Set(['gravity_launcher','gravity_hammer','gravity_paint','event_horizon','magnetar','void_harvester','black_hole_seed']);
 const FROST_WEAPONS    = new Set(['freeze_gun','frost_blaster','abs_zero','cyroclasm','cyroclasm_laser']);
@@ -32200,6 +32318,7 @@ const FROST_WEAPONS    = new Set(['freeze_gun','frost_blaster','abs_zero','cyroc
 // fixed duration — the frostSlow bleed above is a gradual drain/regen, not a timed debuff,
 // so this is its own small table rather than overloading that mechanic.
 const SLOW_ON_HIT = { cyroclasm_laser: { factor: 0.5, dur: 3000 } };
+const ROOT_ON_HIT = { storm_bloom_aura: { dur: 1000 }, storm_bloom_ball: { dur: 3000 } };
 const BOT_STUN_ON_HIT_WEAPONS = new Set(['arc_torrent', 'taser']);
 
 // Returns a synergy multiplier for damage based on map zones + weapon category.
@@ -32329,6 +32448,8 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false) {
       bot.slowOnHitUntil = Date.now() + _slowFx.dur;
     }
   }
+  const _rootFx = ROOT_ON_HIT[weaponId];
+  if (_rootFx) rootBotMovement(pid, _rootFx.dur);
   // ⚡ Only explicit stun weapons should interrupt bot AI. Cycler and Laser
   // Pointer are also "energy" visuals and fire rapidly; treating every energy
   // hit as a stun chain-locked bots forever and skipped their gravity updates.
@@ -34479,7 +34600,7 @@ const CLIENT_WEAPON_DAMAGE = Object.fromEntries([
   ['m1_garand_ab', 150], ['plasma_storm', 35], ['arc_overload', 70],
   ['singularity', 90], ['rotten_potato', 40], ['sticker_bomb', 35],
   ['chain_pull', 60], ['airburst', 95], ['toxin_dart', 30], ['blind_flash', 0],
-  ['gatecrasher_slug', 40],
+  ['gatecrasher_slug', 40], ['storm_bloom_ball', 100], ['storm_bloom_aura', 10],
   ['arc_torrent', 5], ['firework_launcher', 50], ['switchblade_gun', 50], ['switchblade_charged', 100],
   ['lancer_blade', 50],   // ⚔️ Lancer bayonet-charge hit (main shot uses the WEAPONS 'lancer' damage)
   ['molotov_burn', 10], ['molotov_fire', 5],  // 🔥 inside-the-flames tick / lingering on-fire DOT
@@ -35216,6 +35337,8 @@ socket.on('playerHit', data => {
     if (data.shooterId) showDamageDirection(data.shooterId); else flashHitIndicator();
     const slowFx = SLOW_ON_HIT[data.weapon];
     if (slowFx) { playerSlowOnHitMult = slowFx.factor; playerSlowOnHitUntil = Date.now() + slowFx.dur; }
+    const rootFx = ROOT_ON_HIT[data.weapon];
+    if (rootFx) playerRootUntil = Math.max(playerRootUntil, Date.now() + rootFx.dur);
   }
   if (data.bulletId) {
     for (let i=localBullets.length-1; i>=0; i--) {
@@ -35636,6 +35759,64 @@ function updateGrenades(dt) {
         activeGrenades.splice(i, 1);
       }
     }
+  }
+}
+
+function stormBloomTargetPos(pid) {
+  const mesh = remoteMeshes[pid];
+  if (mesh && mesh.visible !== false) return mesh.position.clone().setY((mesh.position.y || 0) + 1.0);
+  const p = players[pid] || resolveBot(pid);
+  return p ? new THREE.Vector3(p.x || 0, (p.y || 0) + 1.0, p.z || 0) : null;
+}
+
+function rootBotMovement(pid, dur) {
+  const bot = resolveBot(pid);
+  if (bot && !bot.dead) bot._rootUntil = Math.max(bot._rootUntil || 0, Date.now() + dur);
+}
+
+function updateBallLightnings(dt) {
+  const now = Date.now();
+  for (let i = activeBallLightnings.length - 1; i >= 0; i--) {
+    const orb = activeBallLightnings[i];
+    const mesh = orb.mesh;
+    if (!mesh || now >= orb.until) {
+      if (mesh) scene.remove(mesh);
+      activeBallLightnings.splice(i, 1);
+      continue;
+    }
+    mesh.position.addScaledVector(orb.dir, orb.speed * dt);
+    mesh.rotation.x += dt * 1.7;
+    mesh.rotation.y += dt * 2.4;
+    const pulse = 1 + Math.sin((now - orb.born) * 0.012) * 0.08;
+    mesh.scale.setScalar(pulse);
+
+    let consumed = false;
+    for (const pid of Object.keys(players)) {
+      if (pid === myId || pid === orb.ownerId) continue;
+      const p = players[pid];
+      if (!p || p.dead || friendlyFireBlocked(pid, orb.ownerId)) continue;
+      const target = stormBloomTargetPos(pid);
+      if (!target) continue;
+      const dist = mesh.position.distanceTo(target);
+      if (dist <= orb.directRadius) {
+        rootBotMovement(pid, 3000);
+        emitHit(pid, `${orb.id}_direct_${pid}`, 'storm_bloom_ball', target);
+        spawnAbilityAOEFX(target, 1.0, 0x9fe8ff);
+        playWeaponSound('storm_bloom_ball', { volume: 0.95 });
+        scene.remove(mesh);
+        activeBallLightnings.splice(i, 1);
+        consumed = true;
+        break;
+      }
+      if (dist <= orb.auraRadius && (!orb.lastAuraHit[pid] || now - orb.lastAuraHit[pid] > 900)) {
+        orb.lastAuraHit[pid] = now;
+        rootBotMovement(pid, 1000);
+        emitHit(pid, `${orb.id}_aura_${pid}_${now}`, 'storm_bloom_aura', target);
+        spawnAbilityAOEFX(target, 0.45, 0x77ddff);
+      }
+    }
+    if (consumed) continue;
+    if ((now - orb.born) % 220 < 18) spawnAbilityAOEFX(mesh.position.clone(), 0.28, 0x9fe8ff);
   }
 }
 
@@ -39902,7 +40083,8 @@ function updateBotAI(dt) {
     // intent (am I stuck, am I kiting), not ground actually covered.
     const frostMult = (bot.frostSlow || 100) / 100;
     const botSlowOnHitMult = (bot.slowOnHitUntil || 0) > Date.now() ? (bot.slowOnHitMult || 1) : 1;
-    const moveScale = BOT_SPEED_MULT * frostMult * botSlowOnHitMult;
+    const botRootMult = (bot._rootUntil || 0) > Date.now() ? 0 : 1;
+    const moveScale = BOT_SPEED_MULT * frostMult * botSlowOnHitMult * botRootMult;
     if (moveScale !== 1) {
       bot.x = prevBotX + (bot.x - prevBotX) * moveScale;
       bot.z = prevBotZ + (bot.z - prevBotZ) * moveScale;
@@ -40041,6 +40223,7 @@ function loop() {
   safeLoopStep('king-crown', () => updateKingCrown(dt));   // crown the current top fragger
   safeLoopStep('burn-zones', () => updateBurnZones(dt)); // firework launcher DOT fields
   safeLoopStep('ground-flares', () => updateGroundFlares(dt)); // flares burning where they landed
+  safeLoopStep('ball-lightning', () => updateBallLightnings(dt)); // Storm Bloom orb aura/direct hits
   safeLoopStep('traps', () => updateTraps(dt)); // tripwires, magnet mines, bounce pads, hologram decoys
   safeLoopStep('p2w-systems', () => updateP2WSystems(dt)); // orbital strikes, guardian drones, nano shield
   safeLoopStep('tesla-coils', () => updateTeslaCoils(dt)); // deployed tesla coils zap nearby enemies
