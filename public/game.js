@@ -35024,7 +35024,12 @@ function updateBatch5(dt) {
             const bd = Math.hypot(bot.x, bot.z);
             if (bd < 6) {
               bot.hp -= 200;
-              if (bot.hp <= 0) { bot.dead = true; if (remoteMeshes[bot.id]) remoteMeshes[bot.id].visible = false; }
+              // Was silent: no floating number and no particle, so a bot already
+              // chunked by this landed dead off a small, unrelated-looking hit
+              // later — reads as "damage not shown" (#51).
+              const bmesh = remoteMeshes[bot.id];
+              if (bmesh) { trackTotalDamage(bot.id, 200, bmesh); spawnHitParticle(bmesh.position.clone().setY(1.0)); }
+              if (bot.hp <= 0) { bot.dead = true; if (bmesh) bmesh.visible = false; }
             }
           }
           const pd = Math.hypot(camera.position.x, camera.position.z);
@@ -35063,7 +35068,10 @@ function updateBatch5(dt) {
           if (bot.dead) continue;
           if (Math.hypot(bot.x - d.x, bot.z - d.z) < 3) {
             bot.hp -= 120;
-            if (bot.hp <= 0) { bot.dead = true; if (remoteMeshes[bot.id]) remoteMeshes[bot.id].visible = false; }
+            // Same silent-damage gap as the chandelier above (#51).
+            const bmesh = remoteMeshes[bot.id];
+            if (bmesh) { trackTotalDamage(bot.id, 120, bmesh); spawnHitParticle(bmesh.position.clone().setY(1.0)); }
+            if (bot.hp <= 0) { bot.dead = true; if (bmesh) bmesh.visible = false; }
           }
         }
         setTimeout(() => { scene.remove(d.mesh); S.debris.splice(S.debris.indexOf(d), 1); }, 4000);
@@ -36200,6 +36208,9 @@ const CLIENT_WEAPON_DAMAGE = Object.fromEntries([
   ['rpg_skin_soda', 118],
   ['mg42', 15], ['bat', 38], ['sabre', 45], ['frying_pan', 32], ['sledge', 70],
   ['spear', 50], ['spear_throw', 85], ['pickle', 22], ['shield_charge', 60],
+  // Opera/Doomsday map hazards — without these, applyBotDamageToPlayer's own
+  // ||25 fallback silently underdealt them too (#51).
+  ['chandelier', 200], ['debris', 120],
   ['twin_knife_throw', 30],
   ['knife_instakill', 9999], ['chainsaw', 45], ['katana', 65], ['knife', 28],
   ['lightsabre', 72], ['riot_shield', 18], ['baguette', 16], ['screwdriver', 20],
