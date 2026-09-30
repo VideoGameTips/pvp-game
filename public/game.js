@@ -600,7 +600,7 @@ const WEAPONS = [
     // bounces once, so it is lethal up close and has to be lobbed at range.
     mag: 999,  reserve: 0,  damage: 9,  fireRate: 50,  reloadTime: 700,
     auto: true,  pellets: 1, spread: 0.020, adsZoom: 48, bulletSpeed: 80, noReload: true,
-    arcShot: true, bounce: { maxBounces: 1, speedMult: 0.62 },
+    arcShot: true, bounce: { maxBounces: 2, speedMult: 0.62 },
     bulletColor: 0x9a8c72, bulletSize: 0.045,
     ability: { name: 'Volley', cd: 8000, desc: 'Loose 5 pellets in a spread', type: 'multishot', count: 5, spread: 0.18 },
   },
