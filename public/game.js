@@ -807,7 +807,7 @@ const WEAPONS = [
     mag: 50, reserve: 100, damage: 22, fireRate: 1000, reloadTime: 3200,
     auto: true, pellets: 1, spread: 0.022, adsZoom: 46, bulletSpeed: 140, noReload: false,
     bulletColor: 0xffbb55, bulletSize: 0.05,
-    spinUp: { minInterval: 1000, maxInterval: 100, spinPerShot: 0.10, idleDecayPerSec: 1.2,
+    spinUp: { minInterval: 1000, maxInterval: 100, spinPerShot: 0.35, idleDecayPerSec: 1.2,
               jitterStart: 0.72, maxJitter: 0.65 },
   },
 ];
