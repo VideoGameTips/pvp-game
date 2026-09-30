@@ -21066,6 +21066,43 @@ function setMeshCrown(group, on) {
   }
 }
 
+// Blue teammate arrow. Unlike old name/logo markers this is team-only: enemies
+// get nothing, while allies stay readable in busy fights and dark maps.
+function setMeshTeamArrow(group, on) {
+  if (!group) return;
+  if (on) {
+    if (group._teamArrow) return;
+    const arrow = new THREE.Group();
+    const mat = new THREE.MeshBasicMaterial({ color: 0x4da3ff, transparent: true, opacity: 0.95, depthTest: false });
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.34, 3), mat);
+    cone.rotation.z = Math.PI;
+    cone.position.y = -0.06;
+    arrow.add(cone);
+    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.18, 8), mat);
+    stem.position.y = 0.14;
+    arrow.add(stem);
+    arrow.position.set(0, 2.68, 0);
+    arrow.renderOrder = 2000;
+    arrow.traverse(o => { o.renderOrder = 2000; });
+    group.add(arrow);
+    group._teamArrow = arrow;
+  } else if (group._teamArrow) {
+    const old = group._teamArrow;
+    group.remove(old);
+    old.traverse(o => { if (o.geometry) o.geometry.dispose(); });
+    group._teamArrow = null;
+  }
+}
+function shouldShowTeamArrow(id, p = players[id]) {
+  if (!p || id === myId || p.dead || p.isDummy || inLobby) return false;
+  return relTeam(p.team) === 'ally';
+}
+function updateTeamArrows() {
+  for (const [id, mesh] of Object.entries(remoteMeshes)) {
+    setMeshTeamArrow(mesh, shouldShowTeamArrow(id));
+  }
+}
+
 function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default', opts = {}) {
   const group = new THREE.Group();
   // #50: dealt from the name, not from a local counter. `lookSeed` is for
@@ -34617,6 +34654,7 @@ socket.on('skinChanged', ({ id, skin, isAdmin }) => {
   const mesh = makePlayerMesh(p.name, p.isBot, p.team || 'enemy',
                               renderedSkinForPlayer(p, skin), { crown: !!isAdmin, tag: humanTagKind(p) });
   mesh.position.copy(old.position); mesh.rotation.y = old.rotation.y; mesh.visible = wasVisible;
+  setMeshTeamArrow(mesh, shouldShowTeamArrow(id, p));
   scene.add(mesh); remoteMeshes[id] = mesh;
 });
 socket.on('bulletFired', b => {
@@ -34930,6 +34968,7 @@ function spawnRemotePlayer(p) {
     mesh._gun = gun;
     if (mesh._rig) mesh._rig.holdsGun = true;
   }
+  setMeshTeamArrow(mesh, shouldShowTeamArrow(p.id, p));
   scene.add(mesh); remoteMeshes[p.id]=mesh;
 }
 
@@ -39601,6 +39640,7 @@ function loop() {
   safeLoopStep('impact-marks', () => updateImpactMarks());
   safeLoopStep('bot-ai', () => updateBotAI(dt));
   safeLoopStep('characters', () => animateCharacters(dt)); // walk-cycle + slide pose for bots & remote players
+  safeLoopStep('team-arrows', () => updateTeamArrows());    // blue arrows over teammates only
   safeLoopStep('king-crown', () => updateKingCrown(dt));   // crown the current top fragger
   safeLoopStep('burn-zones', () => updateBurnZones(dt)); // firework launcher DOT fields
   safeLoopStep('ground-flares', () => updateGroundFlares(dt)); // flares burning where they landed
