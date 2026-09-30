@@ -38164,6 +38164,31 @@ function getBotTarget(bot) {
     if (best) { bot.currentTargetId = best.id; return { x: best.x, z: best.z, isPlayer: false, botRef: best }; }
     return null;
   }
+  // M4 Tower is a team kill-race, not "protect/ignore the human" mode. Enemy
+  // bots used to hard-prioritize the player, which meant they could ignore allied
+  // bots while allied bots farmed them. Here every opponent is just a target.
+  const fairTeamTargeting = selectedModeConfig?.fixedKit === 'm4_tower' || match?.cfg?.fixedKit === 'm4_tower';
+  if (fairTeamTargeting) {
+    let best = null, bestDist = Infinity, bestKind = null;
+    if (bot.team === 'enemy' && !isDead) {
+      const d = Math.hypot(camera.position.x - bot.x, camera.position.z - bot.z);
+      if (d < bestDist) { bestDist = d; best = null; bestKind = 'player'; }
+    }
+    for (const h of remoteHumanTargets().filter(h => h.team === oppositeTeam)) {
+      const d = Math.hypot(h.x - bot.x, h.z - bot.z);
+      if (d < bestDist) { bestDist = d; best = h; bestKind = 'human'; }
+    }
+    for (const ob of gameBots) {
+      if (ob.dead || ob.id === bot.id || ob.team !== oppositeTeam) continue;
+      const d = Math.hypot(ob.x - bot.x, ob.z - bot.z);
+      if (d < bestDist) { bestDist = d; best = ob; bestKind = 'bot'; }
+    }
+    if (bestKind === 'player') { bot.currentTargetId = myId; return { x: camera.position.x, z: camera.position.z, isPlayer: true }; }
+    if (bestKind === 'human' && best) { bot.currentTargetId = best.id; return { x: best.x, z: best.z, isPlayer: false, humanRef: best }; }
+    if (bestKind === 'bot' && best) { bot.currentTargetId = best.id; return { x: best.x, z: best.z, isPlayer: false, botRef: best }; }
+    bot.currentTargetId = null;
+    return null;
+  }
   // 👥 With other real players in the match (#48), bots go for the nearest real player on
   // the other side — me or one of them — before any bot. Without them `foes` is empty and
   // everything below runs exactly as it always has.
