@@ -214,7 +214,7 @@ const WEAPON_COSTS = {
   // Premium / P2W — ridiculously expensive on purpose
 
   // 🌌 Sci-fi P2W primaries
-  event_horizon: 24000, storm_core: 20000, abs_zero: 22000, solar_lance: 26000,
+  event_horizon: 24000, storm_core: 20000, abs_zero: 22000, solar_lance: 26000, javelin_launcher: 32000,
    quantum_repeater: 28000, magnetar: 25000,
   nebula_mortar: 35000, prism_engine: 27000, void_harvester: 40000,
   // Secondaries
@@ -288,6 +288,7 @@ const SKIN_CASE_GEN2_COST = 5000;       // ~59 matches. P2W is the absurd tier, 
 const ECONOMY_V = 2;
 const OLD_MATCH_REWARD_MULT = 400;
 const P2W_ITEM_IDS = new Set([
+  'javelin_launcher',
   'event_horizon', 'storm_core', 'abs_zero', 'solar_lance', 'quantum_repeater',
   'magnetar', 'nebula_mortar', 'prism_engine', 'void_harvester',
   'pulse_needle', 'phase_blade', 'gravity_hammer', 'volt_whip',
@@ -1757,7 +1758,7 @@ event_horizon: 75,
   srx: 95, rpd: 10, mp40: 15, p90: 15,
   paintball: 40, burst: 47, lever: 93,
   vector: 12, crossbow: 80, flamethrower: 3,
-  grenade_launcher: 90, railgun: 110, minigun: 27, chain_gun: 22,
+  grenade_launcher: 90, railgun: 110, minigun: 27, chain_gun: 22, javelin_launcher: 100,
   freeze_gun: 13, boombow: 95,
   // Secondaries
   revolver: 83, flare: 85, pistol: 20, shorty: 30, cycler: 8,
@@ -1870,7 +1871,7 @@ const WEAPON_FALLOFF = {
   srx: FALLOFF_SNIPER, lever: FALLOFF_SNIPER, railgun: FALLOFF_SNIPER, revolver: FALLOFF_SNIPER, hand_cannon: FALLOFF_SNIPER, m1_garand: FALLOFF_SNIPER, coilgun: FALLOFF_SNIPER, amr: FALLOFF_SNIPER, duelist_pistol: FALLOFF_SNIPER, barrett: FALLOFF_SNIPER, desert_eagle: FALLOFF_SNIPER, m1911: FALLOFF_SNIPER,
   rpd: FALLOFF_LMG, minigun: FALLOFF_LMG, cycler: FALLOFF_LMG, arc_torrent: FALLOFF_LMG, slingshot: FALLOFF_LMG, solar_lance: FALLOFF_LMG, gau19: FALLOFF_LMG, mk44: FALLOFF_LMG, m134: FALLOFF_LMG, mg42: FALLOFF_LMG, chain_gun: FALLOFF_LMG,
   mp40: FALLOFF_SMG, p90: FALLOFF_SMG, burst: FALLOFF_BURST, vector: FALLOFF_SMG, sticker_blaster: FALLOFF_SMG, smart_smg: FALLOFF_SMG, swarm_rifle: FALLOFF_SMG, painter_beam: FALLOFF_SMG, machine_pistol: FALLOFF_SMG, machine_revolver: FALLOFF_SMG, prism_engine: FALLOFF_SMG, p90_spec: FALLOFF_SMG, glock18: FALLOFF_SMG,
-  crossbow: FALLOFF_NONE, grenade_launcher: FALLOFF_NONE, boombow: FALLOFF_NONE, flare: FALLOFF_NONE, gravity_launcher: FALLOFF_NONE, potato_cannon: FALLOFF_NONE, mortar_rifle: FALLOFF_NONE, firework_launcher: FALLOFF_NONE, seismic_hammer: FALLOFF_NONE, signal_pistol: FALLOFF_NONE, throwing_axes: FALLOFF_NONE, nebula_mortar: FALLOFF_NONE, rpg: FALLOFF_NONE, bazooka: FALLOFF_NONE, cyroclasm_laser: FALLOFF_NONE, storm_bloom_ball: FALLOFF_NONE, storm_bloom_aura: FALLOFF_NONE,
+  crossbow: FALLOFF_NONE, grenade_launcher: FALLOFF_NONE, boombow: FALLOFF_NONE, flare: FALLOFF_NONE, gravity_launcher: FALLOFF_NONE, potato_cannon: FALLOFF_NONE, mortar_rifle: FALLOFF_NONE, firework_launcher: FALLOFF_NONE, seismic_hammer: FALLOFF_NONE, signal_pistol: FALLOFF_NONE, throwing_axes: FALLOFF_NONE, nebula_mortar: FALLOFF_NONE, rpg: FALLOFF_NONE, bazooka: FALLOFF_NONE, cyroclasm_laser: FALLOFF_NONE, storm_bloom_ball: FALLOFF_NONE, storm_bloom_aura: FALLOFF_NONE, javelin_launcher: FALLOFF_NONE,
   pistol: FALLOFF_SIDEARM, throwing_knives: FALLOFF_SIDEARM, taser: FALLOFF_SIDEARM, harpoon_gun: FALLOFF_SIDEARM, switchblade_gun: FALLOFF_SIDEARM, air_rifle: FALLOFF_SIDEARM, shockwave_launcher: FALLOFF_SIDEARM, storm_cannon: FALLOFF_SIDEARM, prism_launcher: FALLOFF_SIDEARM, foam_cannon: FALLOFF_SIDEARM, portal_launcher: FALLOFF_SIDEARM, traffic_controller: FALLOFF_SIDEARM, pinball_launcher: FALLOFF_SIDEARM, dart_gun: FALLOFF_SIDEARM, gatecrasher: FALLOFF_SIDEARM, gatecrasher_slug: FALLOFF_SIDEARM, gatecrasher_beam: FALLOFF_SIDEARM, continuum: FALLOFF_SIDEARM, snub_revolver: FALLOFF_SIDEARM, mauser: FALLOFF_SIDEARM, boomerang: FALLOFF_SIDEARM, magnetar: FALLOFF_SIDEARM, void_harvester: FALLOFF_SIDEARM, five_seven: FALLOFF_SIDEARM, lancer: FALLOFF_SIDEARM, traffic_cone: FALLOFF_SIDEARM, cream_pie: FALLOFF_SIDEARM,
   ak20: FALLOFF_AR, cyroclasm: FALLOFF_AR, paintball: FALLOFF_AR, freeze_gun: FALLOFF_AR, plasma_carbine: FALLOFF_AR, arc_rifle: FALLOFF_AR, flechette: FALLOFF_AR, burst_cannon: FALLOFF_AR, twin_ar: FALLOFF_AR, airburst_projector: FALLOFF_AR, glassmaker: FALLOFF_AR, gravity_paint: FALLOFF_AR, laser_pointer: FALLOFF_AR, auto_revolver: FALLOFF_AR, frost_blaster: FALLOFF_AR, nail_gun: FALLOFF_AR, event_horizon: FALLOFF_AR, storm_core: FALLOFF_AR, abs_zero: FALLOFF_AR, quantum_repeater: FALLOFF_AR, pulse_needle: FALLOFF_AR, xm7: FALLOFF_AR, hkmp7: FALLOFF_AR,
 };
