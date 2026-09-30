@@ -1697,7 +1697,8 @@ let playerYVel = 0;               // Player vertical velocity (for air grenades 
 const GRAVITY       = 24;    // m/s² -> 3.97 m apex, 1.15 s hang (was 31.5, before that 21)
 const JUMP_VEL      = 13.8;  // m/s standing jump -> 3.02 m apex
 const AIR_JUMP_VEL  = 12.3;  // m/s mid-air second jump -> 2.4 m, same ratio as before
-const BOT_SPEED_MULT = 1.5;  // NPCs keep pace with the player's 1.5x bump
+const DEFAULT_MOVE_MULT = 0.65; // calmer default player/bot ground speed
+const BOT_SPEED_MULT = 1.5 * DEFAULT_MOVE_MULT;  // NPCs keep pace with the slowed default player
 const SLIDE_MS      = 1250;  // slide duration (was 800)
 const SLIDE_BOOST   = 2.6;   // slide speed at its start, decaying to 1.0 (was 2.0)
 const SLIDE_JUMP_CARRY = 11; // m/s of the slide carried into a slide jump
@@ -25527,7 +25528,7 @@ function updateMovement(dt) {
   playerPosHistory.push({ x: camera.position.x, z: camera.position.z, t: Date.now() });
   if (playerPosHistory.length > 8) playerPosHistory.shift();
   lastPlayerPos.copy(camera.position);
-  const moveDist = SPEED * speedMult * joyMag * dt;
+  const moveDist = SPEED * DEFAULT_MOVE_MULT * speedMult * joyMag * dt;
   moveWithWalls(dir, moveDist);
   // 📐 Stay on the slope. Ground height is looked up once a frame, from where you
   // were, so going down a ramp left you hanging in the air (a 50 m/s slide drops
