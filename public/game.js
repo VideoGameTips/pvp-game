@@ -21286,8 +21286,8 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
 // ── Character walk / slide animation ────────────────────────────────────────
 // Drives leg + arm swing from how far the mesh actually moved, plus a crouch/
 // slide pose. Works uniformly for bots and remote players. `crouchTarget` is
-// 0..1 (1 = sliding/crouched); pass null to auto-keep current.
-function animateCharacterMesh(mesh, dt, crouchTarget) {
+// 0..1 (1 = crouched); `slideTarget` adds the intense low sliding silhouette.
+function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0) {
   const rig = mesh && mesh._rig;
   if (!rig) return;
   // Horizontal distance moved since last frame → speed estimate
@@ -21327,6 +21327,9 @@ function animateCharacterMesh(mesh, dt, crouchTarget) {
   const effCrouch  = Math.max(baseCrouch, moveCrouch);
   rig.crouch += (effCrouch - rig.crouch) * Math.min(1, dt * 8);
   const crouch = rig.crouch;
+  if (rig.slide === undefined) rig.slide = 0;
+  rig.slide += (slideTarget - rig.slide) * Math.min(1, dt * 14);
+  const slide = rig.slide;
 
   // Phase, offset per character. `gait()` is a sine with a touch of second
   // harmonic: a real leg's swing is quicker than its stance, and that slight
@@ -21389,23 +21392,24 @@ function animateCharacterMesh(mesh, dt, crouchTarget) {
   // Slide / crouch pose: tuck legs forward, lean torso back, arms back
   if (crouch > 0.01) {
     const c = crouch;
-    const advancePose = tacticalAdvance && baseCrouch < 0.5;
-    rig.legL.rotation.x = THREE.MathUtils.lerp(rig.legL.rotation.x, advancePose ? 0.55 : 1.1, c);
-    rig.legR.rotation.x = THREE.MathUtils.lerp(rig.legR.rotation.x, advancePose ? 0.25 : 0.4, c);
-    rig.armL.rotation.x = THREE.MathUtils.lerp(rig.armL.rotation.x, advancePose ? -1.05 : -0.8, c);
-    rig.armR.rotation.x = THREE.MathUtils.lerp(rig.armR.rotation.x, advancePose ? -1.38 : -0.8, c);
-    rig.torso.rotation.x = THREE.MathUtils.lerp(0, advancePose ? 0.24 : -0.45, c);
-    rig.head.rotation.x  = THREE.MathUtils.lerp(0, advancePose ? -0.12 : 0.45, c);
+    const advancePose = tacticalAdvance && baseCrouch < 0.5 && slide < 0.35;
+    const slideLean = Math.max(0, slide);
+    rig.legL.rotation.x = THREE.MathUtils.lerp(rig.legL.rotation.x, slideLean ? 1.55 : (advancePose ? 0.55 : 1.1), c);
+    rig.legR.rotation.x = THREE.MathUtils.lerp(rig.legR.rotation.x, slideLean ? -0.18 : (advancePose ? 0.25 : 0.4), c);
+    rig.armL.rotation.x = THREE.MathUtils.lerp(rig.armL.rotation.x, slideLean ? -1.22 : (advancePose ? -1.05 : -0.8), c);
+    rig.armR.rotation.x = THREE.MathUtils.lerp(rig.armR.rotation.x, slideLean ? -1.55 : (advancePose ? -1.38 : -0.8), c);
+    rig.torso.rotation.x = THREE.MathUtils.lerp(0, slideLean ? -0.82 : (advancePose ? 0.24 : -0.45), c);
+    rig.head.rotation.x  = THREE.MathUtils.lerp(0, slideLean ? 0.72 : (advancePose ? -0.12 : 0.45), c);
     // Knees have to fold hard here or a tucked slide looks like a plank.
-    if (rig.kneeL) rig.kneeL.rotation.x = THREE.MathUtils.lerp(rig.kneeL.rotation.x, advancePose ? -0.85 : -1.35, c);
-    if (rig.kneeR) rig.kneeR.rotation.x = THREE.MathUtils.lerp(rig.kneeR.rotation.x, advancePose ? -0.65 : -0.75, c);
-    if (rig.elbowL) rig.elbowL.rotation.x = THREE.MathUtils.lerp(rig.elbowL.rotation.x, advancePose ? 0.85 : 0.7, c);
-    if (rig.elbowR) rig.elbowR.rotation.x = THREE.MathUtils.lerp(rig.elbowR.rotation.x, advancePose ? 0.9 : 0.7, c);
-    if (rig.footL) rig.footL.rotation.x = THREE.MathUtils.lerp(rig.footL.rotation.x, advancePose ? 0.18 : 0.5, c);
-    if (rig.footR) rig.footR.rotation.x = THREE.MathUtils.lerp(rig.footR.rotation.x, advancePose ? 0.14 : 0.5, c);
-    // Twist/roll don't belong in a slide — unwind them.
+    if (rig.kneeL) rig.kneeL.rotation.x = THREE.MathUtils.lerp(rig.kneeL.rotation.x, slideLean ? -1.65 : (advancePose ? -0.85 : -1.35), c);
+    if (rig.kneeR) rig.kneeR.rotation.x = THREE.MathUtils.lerp(rig.kneeR.rotation.x, slideLean ? -0.25 : (advancePose ? -0.65 : -0.75), c);
+    if (rig.elbowL) rig.elbowL.rotation.x = THREE.MathUtils.lerp(rig.elbowL.rotation.x, slideLean ? 1.05 : (advancePose ? 0.85 : 0.7), c);
+    if (rig.elbowR) rig.elbowR.rotation.x = THREE.MathUtils.lerp(rig.elbowR.rotation.x, slideLean ? 1.15 : (advancePose ? 0.9 : 0.7), c);
+    if (rig.footL) rig.footL.rotation.x = THREE.MathUtils.lerp(rig.footL.rotation.x, slideLean ? 0.72 : (advancePose ? 0.18 : 0.5), c);
+    if (rig.footR) rig.footR.rotation.x = THREE.MathUtils.lerp(rig.footR.rotation.x, slideLean ? -0.18 : (advancePose ? 0.14 : 0.5), c);
+    // Crouch unwinds twist; a slide gets a slight shoulder roll so it reads from a distance.
     rig.torso.rotation.y = THREE.MathUtils.lerp(rig.torso.rotation.y, 0, c);
-    rig.torso.rotation.z = THREE.MathUtils.lerp(rig.torso.rotation.z, 0, c);
+    rig.torso.rotation.z = THREE.MathUtils.lerp(rig.torso.rotation.z, slideLean ? 0.22 : 0, c);
   }
 
   // ── Body bob ──────────────────────────────────────────────────────────────
@@ -21417,7 +21421,8 @@ function animateCharacterMesh(mesh, dt, crouchTarget) {
   // which is added later, is picked up when it appears.
   const bobAmt = -Math.cos(2 * p) * 0.022 * blend * (rig.gaitBob ?? 1)
                  - 0.012 * blend * (1 - crouch)   // walking rides slightly lower
-                 - 0.12 * crouch;                 // and a crouch settles down a bit
+                 - 0.12 * crouch                  // and a crouch settles down a bit
+                 - 0.12 * slide;                  // true slides get visibly lower
                  // 0.12 is deliberately modest: the legs bottom out only 0.225
                  // above the group origin, and the mesh sits on the ground, so a
                  // deeper drop puts the boots through the floor mid-slide.
@@ -39604,17 +39609,20 @@ function animateCharacters(dt) {
     const mesh = remoteMeshes[id];
     if (!mesh || !mesh.visible || !mesh._rig) continue;
     let crouchTarget = 0;
+    let slideTarget = 0;
     const b = gameBots.find(bb => bb.id === id);
     if (!b) {
       const p = players[id];
       if (p && typeof p.y === 'number') {
         // 1.65 standing → 0.70 sliding. Map to 0..1 crouch amount.
         crouchTarget = Math.max(0, Math.min(1, (1.65 - p.y) / (1.65 - 0.70)));
+        slideTarget = crouchTarget > 0.78 ? 1 : 0;
       }
     } else if (b._slideUntil && Date.now() < b._slideUntil) {
       crouchTarget = 1; // 🛹 bot is sliding → low profile
+      slideTarget = 1;
     }
-    animateCharacterMesh(mesh, dt, crouchTarget);
+    animateCharacterMesh(mesh, dt, crouchTarget, slideTarget);
   }
 }
 
