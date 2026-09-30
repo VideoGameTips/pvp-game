@@ -780,6 +780,7 @@ const WEAPONS = [
     auto: true, pellets: 1, spread: 0.012, adsZoom: 45, bulletSpeed: 130, noReload: false,
     bulletColor: 0xbdf3ff, bulletSize: 0.05,
     heatShots: 5, heatCooldown: 200,
+    ability: { name: 'Cryo Dump', cd: 9000, desc: 'Spend mag · beam deals ammo ×10 · slows 50% for 3s', type: 'cyro_laser', noADS: true },
   },
   {
     id: 'continuum', name: 'Continuum', type: 'Secondary', slot: 'secondary',
@@ -1724,6 +1725,7 @@ const teslaCoils     = [];        // ⚡ {mesh, x, z, until, lastShot, fireRate,
 const beeSwarms      = [];        // 🐝 {mesh, x, y, z, until, lastSting, fireRate, damage, range, targetId}
 const orbitalMarkers = [];        // {mesh, x, z, fireAt, damage, radius}
 let playerFrostSlow = 100;        // 100 = full speed, 0 = frozen + dead. Frost Blaster reduces this on hit.
+let playerRootedUntil = 0;        // timestamp: movement locked, shooting/look still allowed
 let playerYVel = 0;               // Player vertical velocity (for air grenades launching the player)
 
 // ── 🏃 Movement tuning ──────────────────────────────────────────────────────
@@ -2312,7 +2314,7 @@ const DOUBLE_JUMP_IDS = new Set(['fists','crossbow','air_rifle','dart_gun']);
 //   • guns that genuinely can't aim, or are one of a kind: the paintball marker
 //     (that hopper sits right where the sights should be) and the revolver
 // Ordinary guns lost theirs. They can aim; that IS their thing.
-const ABILITY_GUNS = new Set(['paintball', 'revolver']);
+const ABILITY_GUNS = new Set(['paintball', 'revolver', 'cyroclasm', 'storm_bloom']);
 function hasAbility(w) {
   if (!w) return false;
   // A marketplace ability counts even on a gun that has none of its own — that
@@ -23301,11 +23303,15 @@ const PROJECTILE_KIND_BY_ID = {
   seismic_hammer:'shock',
   event_horizon:'void',
   quantum_repeater:'phase',
-  cycler:'energy', laser_pointer:'energy', gatecrasher_beam:'energy',
+  cycler:'energy', laser_pointer:'energy', gatecrasher_beam:'beam',
+  cyroclasm_laser:'icebeam', storm_bloom_ball:'ball_lightning', storm_bloom_aura:'spark',
   airburst_projector:'grenade',
 };
 const SPECIAL_PROJECTILE_SPECS = {
   gatecrasher_beam: { id: 'gatecrasher_beam', type: 'Beam', bulletSpeed: 220, bulletColor: 0x88ccff, bulletSize: 0.07, bounce: { maxBounces: 1, speedMult: 1.0 } },
+  cyroclasm_laser: { id: 'cyroclasm_laser', type: 'Cryo Beam', bulletSpeed: 260, bulletColor: 0xbdf3ff, bulletSize: 0.08 },
+  storm_bloom_ball: { id: 'storm_bloom_ball', type: 'Ball Lightning', bulletSpeed: 18, bulletColor: 0x9fe8ff, bulletSize: 0.22, maxRange: 42 },
+  storm_bloom_aura: { id: 'storm_bloom_aura', type: 'Static Field', bulletSpeed: 0, bulletColor: 0x9fe8ff, bulletSize: 0.12 },
 };
 // How fast each kind flies, relative to a metal round. A bullet is supersonic;
 // a lobbed grenade, a rocket building thrust and a gout of flame are not, and
@@ -23834,6 +23840,46 @@ function _buildSlug(tint, r) {
   return g;
 }
 
+function _buildBeamShot(tint, r) {
+  const c = tint || 0x88ccff;
+  const len = Math.max(1.1, r * 24);
+  const P = _projCache('beam|' + c + '|' + r, () => ({
+    core: new THREE.CylinderGeometry(r * 0.38, r * 0.38, len, 10, 1, true),
+    glow: new THREE.CylinderGeometry(r * 1.35, r * 0.72, len * 1.2, 12, 1, true),
+    coreM: new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false }),
+    glowM: new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false }),
+  }));
+  const g = new THREE.Group();
+  const glow = new THREE.Mesh(P.glow, P.glowM); glow.position.y = -len * 0.44; g.add(glow);
+  const core = new THREE.Mesh(P.core, P.coreM); core.position.y = -len * 0.42; g.add(core);
+  g._alignToDir = true;
+  return g;
+}
+
+function _buildBallLightning(tint, r) {
+  const c = tint || 0x9fe8ff;
+  r = Math.max(0.18, r);
+  const P = _projCache('ballLightning|' + c + '|' + r, () => ({
+    core: new THREE.SphereGeometry(r * 0.78, 14, 10),
+    halo: new THREE.SphereGeometry(r * 1.45, 14, 10),
+    ring: new THREE.TorusGeometry(r * 1.15, r * 0.06, 6, 28),
+    coreM: new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }),
+    haloM: new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false }),
+    ringM: new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.75, blending: THREE.AdditiveBlending, depthWrite: false }),
+  }));
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(P.halo, P.haloM));
+  g.add(new THREE.Mesh(P.core, P.coreM));
+  for (let i = 0; i < 3; i++) {
+    const ring = new THREE.Mesh(P.ring, P.ringM);
+    ring.rotation.set(i * 0.75, i * 1.15, i * 0.45);
+    g.add(ring);
+  }
+  g._alignToDir = false;
+  g._spin = { x: 2.5, y: 4.8, z: 3.3 };
+  return g;
+}
+
 // ── 🍩 Donut trail ─────────────────────────────────────────────────────────
 // The glow streak behind a donut round lies along the flight path, which is
 // exactly the line you are looking down when you fire it -- so from behind the
@@ -23988,6 +24034,9 @@ function makeBulletMesh(color, size, weaponId, own) {
     case 'grenade': return _buildGrenade(color, r);
     case 'bolt':    return _buildBolt(color, r);
     case 'energy':  return _buildEnergy(color, r);
+    case 'beam':    return _buildBeamShot(color, r);
+    case 'icebeam': return _buildBeamShot(color || 0xbdf3ff, Math.max(r, 0.075));
+    case 'ball_lightning': return _buildBallLightning(color, r);
     case 'spark':   return _buildSpark(color, r);
     case 'flame':   return _buildFlame(color, r);
     case 'ice':     return _buildIce(color, r);
@@ -26053,6 +26102,7 @@ function resetCombatResources() {
   supportUses[selectedSupportIdx] = isObby ? 0 : SUPPORT_ITEMS[selectedSupportIdx].uses;
   reloading = false; shooting = false; isADS = false; targetFOV = 75;
   abilityBuff = null; meleeAbilityBuff = null; pendingFanFire = null;
+  playerRootedUntil = 0;
   crossbowCharging = false; crossbowChargeStart = 0;
   spearThrown = false; revealActive = false; revealEndTime = 0;
   twinKnifeCharges = 10;
@@ -27228,7 +27278,8 @@ function updateMovement(dt) {
   const fireBoost = (shooting && currentWeapon && currentWeapon.moveBoost
                      && (activeSlot === 'primary' || activeSlot === 'secondary'))
                     ? currentWeapon.moveBoost : 1;
-  const speedMult = baseSpeedMult * (adrenalineActive ? 1.6 : 1) * frostMult * adminSpeedMult * crouchMult * slideMult * fireBoost;
+  const rootMult = Date.now() < playerRootedUntil ? 0 : 1;
+  const speedMult = baseSpeedMult * (adrenalineActive ? 1.6 : 1) * frostMult * rootMult * adminSpeedMult * crouchMult * slideMult * fireBoost;
   // Drop the camera when crouching / sliding (eased)
   if (!window._crouchEye) window._crouchEye = 1.65;
   // Slide drops the eye to 0.70 m so the view clearly dips below normal
@@ -27869,6 +27920,14 @@ function activateAbility() {
     if (ab.reveal) { revealActive = true; revealEndTime = Date.now() + (ab.revealDur || 3000); }
     flashAbilityName(ab.name);
   }
+  else if (ab.type === 'cyro_laser') {
+    doCyroclasmLaser(w, ab);
+    flashAbilityName(ab.name);
+  }
+  else if (ab.type === 'ball_lightning') {
+    doBallLightning(w, ab);
+    flashAbilityName(ab.name);
+  }
   else if (ab.type === 'dash') {
     const right = new THREE.Vector3(Math.cos(euler.y), 0, -Math.sin(euler.y));
     const side = (Math.random() > 0.5 ? 1 : -1);
@@ -27893,6 +27952,95 @@ function activateAbility() {
   }
 
   updateAbilityHUD();
+}
+
+function _abilityMuzzleOrigin(offset = new THREE.Vector3(0, -0.12, -0.62)) {
+  const origin = new THREE.Vector3();
+  const model = weaponModels[currentWeaponIdx];
+  if (model && model._flash) model._flash.getWorldPosition(origin);
+  else camera.getWorldPosition(origin);
+  return origin.add(offset.clone().applyQuaternion(camera.quaternion));
+}
+
+function _applyRootToTarget(pid, ms, color = 0x9fe8ff) {
+  const bot = resolveBot(pid);
+  const mesh = remoteMeshes[pid];
+  if (bot && !bot.dead) bot._rootUntil = Math.max(bot._rootUntil || 0, Date.now() + ms);
+  if (mesh) spawnAbilityAOEFX(mesh.position.clone().setY(mesh.position.y + 0.9), 0.75, color);
+}
+
+function _nearestAbilityRayHit(origin, dir, range, radius = 0.65) {
+  let best = null;
+  const r2Body = radius * radius, r2Head = 0.32 * 0.32;
+  for (const [pid, mesh] of Object.entries(remoteMeshes)) {
+    if (!mesh.visible || players[pid]?.dead) continue;
+    if (friendlyFireBlocked(pid, myId)) continue;
+    if (!hasLineOfSight(origin.x, origin.z, mesh.position.x, mesh.position.z)) continue;
+    const pts = [
+      { p: new THREE.Vector3(mesh.position.x, mesh.position.y + 1.55, mesh.position.z), r2: r2Head, head: true },
+      { p: new THREE.Vector3(mesh.position.x, mesh.position.y + 0.95, mesh.position.z), r2: r2Body, head: false },
+    ];
+    for (const s of pts) {
+      const rel = s.p.clone().sub(origin);
+      const t = rel.dot(dir);
+      if (t < 0 || t > range) continue;
+      const closest = origin.clone().addScaledVector(dir, t);
+      if (closest.distanceToSquared(s.p) <= s.r2 && (!best || t < best.t)) {
+        best = { pid, mesh, t, pos: closest, headshot: s.head };
+      }
+    }
+  }
+  return best;
+}
+
+function _spawnAbilityBeam(from, to, color = 0x9fe8ff, radius = 0.04, life = 160) {
+  const dir = to.clone().sub(from);
+  const len = Math.max(0.1, dir.length());
+  const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false });
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, len, 10), mat);
+  beam.position.copy(from).add(to).multiplyScalar(0.5);
+  beam.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
+  scene.add(beam);
+  setTimeout(() => { scene.remove(beam); _disposeFinisherObject(beam); }, life);
+}
+
+function doCyroclasmLaser(w, ab) {
+  const pool = weaponAmmo[currentWeaponIdx];
+  if (!pool || pool.ammo <= 0 || reloading) { abilityCDs[w.id] = 0; dryFire(); return; }
+  const spent = pool.ammo;
+  const dmg = Math.max(10, Math.min(300, spent * 10));
+  pool.ammo = 0; ammo = 0; updateAmmoHUD();
+  const origin = _abilityMuzzleOrigin(new THREE.Vector3(0, -0.08, -0.42));
+  const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+  const range = 72;
+  const hit = _nearestAbilityRayHit(origin, dir, range, 0.72);
+  const end = hit ? hit.pos.clone() : origin.clone().addScaledVector(dir, range);
+  _spawnAbilityBeam(origin, end, 0xbdf3ff, 0.055, 220);
+  _spawnAbilityBeam(origin, end, 0xffffff, 0.018, 180);
+  spawnAbilityAOEFX(end.clone(), hit ? 1.2 : 0.55, 0xbdf3ff);
+  playWeaponSound('cyroclasm_laser', { baseWeapon: w, volume: 1.25 });
+  flashScreen('rgba(190,245,255,0.16)', 160);
+  kickWeaponVisual(w, 2);
+  socket.emit('shoot', { x: origin.x, y: origin.y, z: origin.z, dx: dir.x, dy: dir.y, dz: dir.z, weapon: 'cyroclasm_laser' });
+  if (hit) {
+    emitHit(hit.pid, `cyro_${myId}_${Date.now()}`, 'cyroclasm_laser', hit.pos, hit.headshot, { damageOverride: dmg });
+    _applyRootToTarget(hit.pid, 3000, 0xbdf3ff);
+    const bot = resolveBot(hit.pid);
+    if (bot && !bot.dead) bot.frostSlow = Math.min(bot.frostSlow || 100, 50);
+  }
+  setTimeout(() => { if (!reloading && pool.reserve > 0 && currentWeaponIdx >= 0 && currentWeapon?.id === 'cyroclasm') startReload(); }, 160);
+}
+
+function doBallLightning(w, ab) {
+  if (reloading) return;
+  const origin = _abilityMuzzleOrigin(new THREE.Vector3(0, -0.05, -0.55));
+  const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+  const id = `ball_lightning_${myId}_${Date.now()}`;
+  playWeaponSound('storm_bloom_ball', { baseWeapon: w, volume: 1.22 });
+  spawnAbilityAOEFX(origin.clone(), 1.0, 0x9fe8ff);
+  socket.emit('shoot', { x: origin.x, y: origin.y, z: origin.z, dx: dir.x, dy: dir.y, dz: dir.z, weapon: 'storm_bloom_ball' });
+  spawnLocalBullet(origin, dir, id, true, 18, 0x9fe8ff, 0.22, 'storm_bloom_ball',
+    { ballLightning: true, auraRadius: 3.0, auraCooldown: 1000, directRootMs: 3000, auraRootMs: 1000, maxRange: 42 });
 }
 
 // ⚔️ Bayonet Charge — lunge forward; if the blade reaches an opponent, deal bladeDamage.
@@ -33756,10 +33904,10 @@ function updateDamageNumbers() {
 const INSTAKILL_HS_WEAPONS = new Set(['srx', 'railgun', 'lever', 'boombow', 'boombow_ab', 'boombow_c1', 'railgun_ab']);
 
 // 🤫 Secret weapon category sets used for hidden synergy mechanics
-const ELECTRIC_WEAPONS = new Set(['arc_rifle','arc_torrent','taser','pistol','shock_baton','storm_core','revolver','freeze_gun','coilgun','plasma_carbine']);
+const ELECTRIC_WEAPONS = new Set(['arc_rifle','arc_torrent','taser','pistol','shock_baton','storm_core','revolver','freeze_gun','coilgun','plasma_carbine','storm_bloom','storm_bloom_ball','storm_bloom_aura','gatecrasher_beam']);
 const FIRE_WEAPONS     = new Set(['flamethrower','firework_launcher','sg8','fire_axe','fire_poker','thermite','molotov']);
 const GRAVITY_WEAPONS  = new Set(['gravity_launcher','gravity_hammer','gravity_paint','event_horizon','magnetar','void_harvester','black_hole_seed']);
-const FROST_WEAPONS    = new Set(['freeze_gun','frost_blaster','abs_zero']);
+const FROST_WEAPONS    = new Set(['freeze_gun','frost_blaster','abs_zero','cyroclasm','cyroclasm_laser']);
 const BOT_STUN_ON_HIT_WEAPONS = new Set(['arc_torrent', 'taser']);
 
 // Returns a synergy multiplier for damage based on map zones + weapon category.
@@ -33819,7 +33967,7 @@ function friendlyFireBlocked(targetId, shooterId = myId) {
 }
 
 // Helper: emit hit to server AND show damage numbers AND apply damage client-authoritatively
-function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false) {
+function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false, opts = {}) {
   // 🛋️ Lobby 13 is a no-combat chill zone — the cast is neutral and can't be hurt. The hit still
   // shows (grey), and the first one says why nothing happened: a gun that seems to do nothing reads
   // as broken (#35).
@@ -33838,7 +33986,7 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false) {
   const hitDist = hitWorldPos ? camera.position.distanceTo(hitWorldPos)
                  : mesh ? camera.position.distanceTo(mesh.position) : null;
   const falloff = falloffMultiplier(weaponId, hitDist);
-  const dmg = (headshot && instakill) ? 999 : Math.round(
+  const dmg = Number.isFinite(opts.damageOverride) ? Math.max(0, Math.min(999, Math.round(opts.damageOverride))) : (headshot && instakill) ? 999 : Math.round(
     (headshot ? baseDmg * headshotMultFor(weaponId) : baseDmg) * synergy * falloff);
   // With other real players in the match, a bot this hit kills on our screen is dead on
   // everyone's (#48): the server takes `fatal` as the kill. (Guests know a bot's HP from
@@ -33849,6 +33997,7 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false) {
     [isBot ? 'botId' : 'targetId']: pid,
     bulletId, weapon: weaponId,
     headshot, instakill, fatal,
+    ...(Number.isFinite(opts.damageOverride) ? { damageOverride: dmg } : {}),
   });
   showHitmarker(headshot ? 'head' : 'hit');   // a kill below turns it red
   // Briefly tint the damage number / spawn a synergy spark for player discovery
@@ -33873,11 +34022,13 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false) {
   if (_hitKind === 'ice') {
     const bot = resolveBot(pid);
     if (bot && !bot.dead) {
-      const chill = weaponId === 'frost_blaster' ? 3 : 8;   // the dedicated chiller ticks
+      const chill = weaponId === 'cyroclasm_laser' ? 50 : weaponId === 'frost_blaster' ? 3 : 8;   // the dedicated chiller ticks
       bot.frostSlow = Math.max(0, (bot.frostSlow || 100) - chill);
       spawnAbilityAOEFX(hitWorldPos ? hitWorldPos.clone() : mesh.position.clone(), 0.5, 0x9fe8ff);
     }
   }
+  if (weaponId === 'storm_bloom_ball') _applyRootToTarget(pid, 3000, 0x9fe8ff);
+  else if (weaponId === 'storm_bloom_aura') _applyRootToTarget(pid, 1000, 0x9fe8ff);
   // ⚡ Only explicit stun weapons should interrupt bot AI. Cycler and Laser
   // Pointer are also "energy" visuals and fire rapidly; treating every energy
   // hit as a stun chain-locked bots forever and skipped their gravity updates.
@@ -34219,7 +34370,7 @@ function updateBullets(dt) {
       scene.remove(b.mesh);
       localBullets.splice(i, 1);
     };
-    const maxAge = b.weaponId === 'frag' ? 3500 : 1800;
+    const maxAge = b.weaponId === 'frag' ? 3500 : b.ballLightning ? 4200 : 1800;
     if (now - b.createdAt > maxAge) {
       if (b.isPaintBomb) triggerPaintExplosion(b.mesh.position.clone(), b);
       removeBullet(); continue;
@@ -34243,6 +34394,33 @@ function updateBullets(dt) {
       b.mesh.rotation.z += b.mesh._spin.z * dt;
     }
     _bpos.copy(b.mesh.position);
+
+    if (b.ballLightning) {
+      const pulseDue = !b._nextAuraAt || now >= b._nextAuraAt;
+      const auraR = b.auraRadius || 3;
+      if (pulseDue) {
+        b._nextAuraAt = now + (b.auraCooldown || 1000);
+        spawnAbilityAOEFX(_bpos.clone(), auraR, 0x9fe8ff);
+        playSoundEvent('emp_zap', { position: _bpos, volume: 0.45, minGap: 180 });
+      }
+      if (b.isOwn) {
+        if (!b._auraHits) b._auraHits = {};
+        for (const [pid, mesh] of Object.entries(remoteMeshes)) {
+          if (!mesh.visible || players[pid]?.dead || friendlyFireBlocked(pid, myId)) continue;
+          const target = mesh.position.clone().setY(mesh.position.y + 1.0);
+          if (_bpos.distanceTo(target) > auraR) continue;
+          if ((b._auraHits[pid] || 0) > now) continue;
+          b._auraHits[pid] = now + (b.auraCooldown || 1000);
+          emitHit(pid, `${b.id}_aura_${now}_${pid}`, 'storm_bloom_aura', target, false);
+          _applyRootToTarget(pid, b.auraRootMs || 1000, 0x9fe8ff);
+        }
+      } else if (!isDead && _bpos.distanceTo(camera.position) <= auraR && (!b._nextPlayerAuraAt || now >= b._nextPlayerAuraAt)) {
+        b._nextPlayerAuraAt = now + (b.auraCooldown || 1000);
+        playerRootedUntil = Math.max(playerRootedUntil, now + (b.auraRootMs || 1000));
+        applyBotDamageToPlayer('storm_bloom_aura', null);
+        spawnAbilityAOEFX(camera.position.clone().setY(camera.position.y - 0.5), 1.0, 0x9fe8ff);
+      }
+    }
 
     // ── Wall collision (swept ray vs all wall AABBs) ─────────────────────
     let wallHitPt = null;
@@ -36028,6 +36206,7 @@ const CLIENT_WEAPON_DAMAGE = Object.fromEntries([
   ['singularity', 90], ['rotten_potato', 40], ['sticker_bomb', 35],
   ['chain_pull', 60], ['airburst', 95], ['toxin_dart', 30], ['blind_flash', 0],
   ['gatecrasher_slug', 40], ['gatecrasher_beam', 40],
+  ['cyroclasm_laser', 10], ['storm_bloom_ball', 100], ['storm_bloom_aura', 10],
   ['arc_torrent', 5], ['firework_launcher', 50], ['switchblade_gun', 50], ['switchblade_charged', 100],
   ['lancer_blade', 50],   // ⚔️ Lancer bayonet-charge hit (main shot uses the WEAPONS 'lancer' damage)
   ['molotov_burn', 10], ['molotov_fire', 5],  // 🔥 inside-the-flames tick / lingering on-fire DOT
@@ -36202,6 +36381,12 @@ function applyBotDamageToPlayer(weaponId, botId) {
     const k = projectileKind(weaponId, WEAPONS.find(w => w.id === weaponId));
     if (k === 'ice' && !isDead) playerFrostSlow = Math.max(0, playerFrostSlow - 8);
     if (k === 'energy' && !isDead) flashScreen('rgba(255,255,255,0.55)', 260);
+  }
+  if (weaponId === 'storm_bloom_ball') playerRootedUntil = Math.max(playerRootedUntil, Date.now() + 3000);
+  else if (weaponId === 'storm_bloom_aura') playerRootedUntil = Math.max(playerRootedUntil, Date.now() + 1000);
+  else if (weaponId === 'cyroclasm_laser') {
+    playerFrostSlow = Math.min(playerFrostSlow, 50);
+    playerRootedUntil = Math.max(playerRootedUntil, Date.now() + 3000);
   }
   // Frost-freeze death routes via this function with a special weapon ID
   if (weaponId === 'frost_freeze') {
@@ -36623,7 +36808,10 @@ socket.on('bulletFired', b => {
   const w = projectileWeaponSpec(b.weapon) || WEAPONS[0];
   const origin = new THREE.Vector3(b.x,b.y,b.z);
   playWeaponSound(b.weapon || w.id, { baseWeapon: w, remote: true, position: origin });
-  spawnLocalBullet(origin, new THREE.Vector3(b.dx,b.dy,b.dz), b.id, false, w.bulletSpeed, w.bulletColor, w.bulletSize, b.weapon || w.id);
+  const opts = b.weapon === 'storm_bloom_ball'
+    ? { ballLightning: true, auraRadius: 3.0, auraCooldown: 1000, directRootMs: 3000, auraRootMs: 1000, maxRange: 42 }
+    : {};
+  spawnLocalBullet(origin, new THREE.Vector3(b.dx,b.dy,b.dz), b.id, false, w.bulletSpeed, w.bulletColor, w.bulletSize, b.weapon || w.id, opts);
 });
 // 🔥 FFA Legend progress, sent as it is earned: every few seconds of FFA
 // damage, and after every FFA win the server accepts.
@@ -36666,6 +36854,14 @@ socket.on('playerHit', data => {
     return; // don't apply HP loss
   }
   const incomingPiercesDefense = data.targetId === myId && weaponPiercesDefenses(data.weapon);
+  if (data.targetId === myId && !isDead) {
+    if (data.weapon === 'storm_bloom_ball') playerRootedUntil = Math.max(playerRootedUntil, Date.now() + 3000);
+    else if (data.weapon === 'storm_bloom_aura') playerRootedUntil = Math.max(playerRootedUntil, Date.now() + 1000);
+    else if (data.weapon === 'cyroclasm_laser') {
+      playerFrostSlow = Math.min(playerFrostSlow, 50);
+      playerRootedUntil = Math.max(playerRootedUntil, Date.now() + 3000);
+    }
+  }
   // Lightsabre parry: absorb incoming damage
   if (data.targetId === myId && !incomingPiercesDefense && meleeAbilityBuff?.type === 'parry') {
     const oldHp = players[myId]?.hp ?? data.hp;
@@ -41472,7 +41668,8 @@ function updateBotAI(dt) {
     // above run on the UNSCALED movement, which is what we want: they measure
     // intent (am I stuck, am I kiting), not ground actually covered.
     const frostMult = (bot.frostSlow || 100) / 100;
-    const moveScale = BOT_SPEED_MULT * frostMult;
+    const rootMult = Date.now() < (bot._rootUntil || 0) ? 0 : 1;
+    const moveScale = BOT_SPEED_MULT * frostMult * rootMult;
     if (moveScale !== 1) {
       bot.x = prevBotX + (bot.x - prevBotX) * moveScale;
       bot.z = prevBotZ + (bot.z - prevBotZ) * moveScale;

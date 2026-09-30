@@ -2122,6 +2122,9 @@ io.on('connection', (socket) => {
     if (!target || !shooter || target.dead || target.isBot || shielded(target)) return;
     if (blocksFriendlyFire(shooter, target)) return;
     let dmg = Math.round((WEAPON_DAMAGE[data.weapon] || 25) * falloffMultiplier(data.weapon, dist3(shooter, target)));
+    if (data.weapon === 'cyroclasm_laser' && Number.isFinite(+data.damageOverride)) {
+      dmg = Math.max(10, Math.min(300, Math.round(+data.damageOverride)));
+    }
     if (data.headshot) dmg = data.instakill ? target.hp : Math.round(dmg * (WEAPON_HS_MULT[data.weapon] || 2));
     const hpBefore = target.hp;
     target.hp = Math.max(0, target.hp - dmg);
@@ -2146,6 +2149,9 @@ io.on('connection', (socket) => {
     if (!bot || !bot.isBot || bot.dead || !shooter) return;
     if (blocksFriendlyFire(shooter, bot)) return;
     let dmg = Math.round((WEAPON_DAMAGE[data.weapon] || 25) * falloffMultiplier(data.weapon, dist3(shooter, bot)));
+    if (data.weapon === 'cyroclasm_laser' && Number.isFinite(+data.damageOverride)) {
+      dmg = Math.max(10, Math.min(300, Math.round(+data.damageOverride)));
+    }
     if (data.headshot) dmg = data.instakill ? bot.hp : Math.round(dmg * (WEAPON_HS_MULT[data.weapon] || 2));
     // The shooter's client already saw this bot die (#48). Client and server work damage out
     // differently (their own tables, zone bonuses, positions), and with other real players in
