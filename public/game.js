@@ -161,10 +161,12 @@ const WEAPONS = [
   },
   {
     id: 'railgun', name: 'Railgun', type: 'Charge', slot: 'primary',
-    mag: 3, reserve: 12, damage: 110, fireRate: 1400, reloadTime: 3000,
+    mag: 3, reserve: 12, damage: 100, fireRate: 1400, reloadTime: 3000,
     auto: false, pellets: 1, spread: 0, adsZoom: 25, bulletSpeed: 280, noReload: false,
     bulletColor: 0x66ccff, bulletSize: 0.055,
-    ability: { name: 'Overcharge', cd: 20000, desc: 'Triple-power shot (330 dmg)', type: 'powershot', pellets: 1, spreadMult: 0, weaponAbId: 'railgun_ab' },
+    // Hold to charge, release for an instant beam — see fireRailgunCharge.
+    chargeDamage: { min: 100, max: 299, maxChargeMs: 1500 },
+    ability: { name: 'Charge Shot', cd: 0, type: 'charge', desc: 'Hold fire · release for a 100-299 dmg beam' },
   },
   {
     id: 'minigun', name: 'Minigun', type: 'Heavy', slot: 'primary',
@@ -236,10 +238,13 @@ const WEAPONS = [
   },
   {
     id: 'taser', name: 'Taser', type: 'Control', slot: 'secondary',
-    mag: 2, reserve: 16, damage: 53, fireRate: 450, reloadTime: 1300,
+    mag: 2, reserve: 16, damage: 10, fireRate: 450, reloadTime: 1300,
     auto: false, pellets: 1, spread: 0.004, adsZoom: 52, bulletSpeed: 92, noReload: false,
     recoil: { up: 0.007, side: 0.004, climb: 0.12, max: 1.6, recover: 9, adsMult: 0.6 },
     bulletColor: 0xffff55, bulletSize: 0.06,
+    // damage above is per tick (see wireOnHit) — a hit wire ticks tickDmg every
+    // tickMs for dur, totaling 100 over 2s, and stuns the target the whole time.
+    wireOnHit: { dur: 2000, tickMs: 200, tickDmg: 10, stun: true },
     ability: { name: 'Discharge', cd: 11000, desc: 'AOE electric burst 2.5 m · 70 dmg', type: 'aoe', radius: 2.5, damage: 70, color: 0xffff44 },
   },
   {
@@ -525,6 +530,7 @@ const WEAPONS = [
     mag: 50, reserve: 0, damage: 6, fireRate: 80, reloadTime: 99999,
     auto: true, pellets: 1, spread: 0, adsZoom: 50, bulletSpeed: 240, noReload: true,
     bulletColor: 0xff2222, bulletSize: 0.03,
+    hitscan: true, hitscanRange: 70, // instant beam — see fireHitscanShot
     ammoRegen: 6,
     blindOnHit: { dur: 800 }, // brief screen flash on player hit
     ability: { name: 'Blinding Flash', cd: 12000, desc: 'Strobe enemies in front · blinds 2 s', type: 'aoe', radius: 8, damage: 0, color: 0xffffff, weaponAbId: 'blind_flash' },
@@ -2367,7 +2373,7 @@ const DOUBLE_JUMP_IDS = new Set(['fists','crossbow','air_rifle','dart_gun']);
 //   • guns that genuinely can't aim, or are one of a kind: the paintball marker
 //     (that hopper sits right where the sights should be) and the revolver
 // Ordinary guns lost theirs. They can aim; that IS their thing.
-const ABILITY_GUNS = new Set(['paintball', 'revolver', 'cyroclasm', 'storm_bloom', 'javelin_launcher']);
+const ABILITY_GUNS = new Set(['paintball', 'revolver', 'cyroclasm', 'storm_bloom', 'javelin_launcher', 'railgun']);
 function hasAbility(w) {
   if (!w) return false;
   // A marketplace ability counts even on a gun that has none of its own — that
@@ -25283,7 +25289,8 @@ document.addEventListener('mouseup', e => {
   resetMinigunSpool();
   if (crossbowCharging) {
     crossbowCharging = false;
-    fireCrossbowCharge();
+    if (currentWeapon?.id === 'railgun') fireRailgunCharge();
+    else fireCrossbowCharge();
   }
 });
 
@@ -28652,6 +28659,114 @@ function _spawnAbilityBeam(from, to, color = 0x9fe8ff, radius = 0.04, life = 160
   scene.add(beam);
   setTimeout(() => { scene.remove(beam); _disposeFinisherObject(beam); }, life);
 }
+// Generic instant hitscan: any weapon flagged `hitscan: true` (Laser Pointer) resolves
+// the moment it's fired instead of spawning a travelling bullet. Reusable by future
+// hitscan weapons without touching tryShoot() again.
+function fireHitscanShot(origin, dir, weaponId, wStats) {
+  const range = wStats.hitscanRange || 70;
+  const hit = _nearestAbilityRayHit(origin, dir, range, 0.6);
+  const end = hit ? hit.pos.clone() : origin.clone().addScaledVector(dir, range);
+  _spawnAbilityBeam(origin, end, wStats.bulletColor || 0xff3333, 0.016, 90);
+  if (hit) {
+    const mesh = remoteMeshes[hit.pid];
+    const dummy = TRAINING_DUMMIES.find(d => d.id === hit.pid);
+    if (dummy) handleDummyHit(dummy, mesh, { weaponId }, hit.pos.clone());
+    else emitHit(hit.pid, `hitscan_${myId}_${Date.now()}`, weaponId, hit.pos.clone(), hit.headshot);
+    spawnHitParticle(hit.pos.clone());
+  }
+}
+// 🔌 Taser wire: one active connection at a time. A hit roots the target in place
+// (bot._stunUntil, the same flag BOT_STUN_ON_HIT_WEAPONS already reads) and ticks
+// damage for the duration instead of landing one lump sum.
+let taserWire = null; // { targetId, until, lastTickAt, tickMs, tickDmg }
+function fireTaserWire(origin, dir) {
+  const spec = currentWeapon.wireOnHit || { dur: 2000, tickMs: 200, tickDmg: 10, stun: true };
+  const hit = _nearestAbilityRayHit(origin, dir, 55, 0.7);
+  if (!hit) {
+    _spawnAbilityBeam(origin, origin.clone().addScaledVector(dir, 55), 0xffff55, 0.010, 140);
+    return;
+  }
+  taserWire = { targetId: hit.pid, until: Date.now() + spec.dur, lastTickAt: 0, tickMs: spec.tickMs, tickDmg: spec.tickDmg };
+  if (spec.stun) {
+    const bot = resolveBot(hit.pid);
+    if (bot && !bot.dead) bot._stunUntil = Math.max(bot._stunUntil || 0, Date.now() + spec.dur);
+  }
+  flashAbilityName('WIRED');
+}
+// Redraws the wire beam every frame (both ends can move) and ticks damage on its
+// own clock. Breaks early if the weapon's put away or the target dies — a wall in
+// the way does NOT break it, same as Tesla Coil/Mini Turret's zap.
+function updateTaserWire() {
+  if (!taserWire) return;
+  const now = Date.now();
+  if (now >= taserWire.until || currentWeapon?.id !== 'taser' || activeSlot !== 'secondary') { taserWire = null; return; }
+  const bot = resolveBot(taserWire.targetId);
+  const mesh = remoteMeshes[taserWire.targetId];
+  if (!bot || bot.dead || !mesh) { taserWire = null; return; }
+  const model = weaponModels[currentWeaponIdx];
+  const muz = new THREE.Vector3();
+  if (model?._flash) model._flash.getWorldPosition(muz); else muz.copy(camera.position);
+  const targetPos = mesh.position.clone().setY(mesh.position.y + 1.0);
+  _spawnAbilityBeam(muz, targetPos, 0xffff55, 0.013, 90);
+  if (now - taserWire.lastTickAt >= taserWire.tickMs) {
+    taserWire.lastTickAt = now;
+    const dummy = TRAINING_DUMMIES.find(d => d.id === taserWire.targetId);
+    if (dummy) handleDummyHit(dummy, mesh, { damage: taserWire.tickDmg }, targetPos);
+    else emitHit(taserWire.targetId, `taser_tick_${myId}_${now}`, 'taser', targetPos, false, { damageOverride: taserWire.tickDmg });
+    spawnHitParticle(targetPos);
+  }
+}
+// ⚡ Railgun release: fires an instant beam, damage scaling continuously from
+// chargeDamage.min (tap) to chargeDamage.max (held chargeDamage.maxChargeMs or
+// longer). A headshot still instakills (INSTAKILL_HS_WEAPONS) — damageOverride
+// otherwise bypasses emitHit's own headshot math entirely, so that has to be
+// applied here explicitly.
+function fireRailgunCharge() {
+  if (!gameStarted || isDead) return;
+  if (activeSlot !== 'primary' || currentWeapon.id !== 'railgun') return;
+  if (equippedAbility(currentWeapon)?.type !== 'charge') return;
+  const pool = weaponAmmo[currentWeaponIdx];
+  if (pool.ammo <= 0) { if (pool.reserve > 0 && !currentWeapon.noReload) startReload(); else dryFire(); return; }
+  if (reloading) return;
+  const now = Date.now();
+  if (now - lastShot < currentWeapon.fireRate) return;
+  lastShot = now;
+  const spec = currentWeapon.chargeDamage || { min: 100, max: 299, maxChargeMs: 1500 };
+  const t = Math.min(1, (now - crossbowChargeStart) / spec.maxChargeMs);
+  const chargeDmg = Math.round(spec.min + (spec.max - spec.min) * t);
+  pool.ammo--; ammo = pool.ammo;
+  syncHeldAmmoModelForIndex(currentWeaponIdx);
+  updateAmmoHUD();
+  if (GAMEPLAY_SETTINGS.autoReload && pool.ammo <= 0 && pool.reserve > 0 && !currentWeapon.noReload) {
+    setTimeout(() => {
+      const latest = weaponAmmo[currentWeaponIdx];
+      if (!reloading && latest && latest.ammo <= 0 && latest.reserve > 0) startReload();
+    }, 120);
+  }
+  const model = weaponModels[currentWeaponIdx];
+  triggerMuzzleBlast(model, { duration: 120 + t * 80, scale: 1.4 + t * 1.6 });
+  kickWeaponVisual(currentWeapon, 1 + t * 2);
+  const muzzleWorld = new THREE.Vector3();
+  model._flash.getWorldPosition(muzzleWorld);
+  const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+  socket.emit('shoot', { x: muzzleWorld.x, y: muzzleWorld.y, z: muzzleWorld.z, dx: dir.x, dy: dir.y, dz: dir.z, weapon: 'railgun' });
+  playWeaponSound('railgun', { baseWeapon: currentWeapon, volume: 1.1 + t * 0.4 });
+  const range = 90;
+  const hit = _nearestAbilityRayHit(muzzleWorld, dir, range, 0.65);
+  const end = hit ? hit.pos.clone() : muzzleWorld.clone().addScaledVector(dir, range);
+  _spawnAbilityBeam(muzzleWorld, end, 0x66ccff, 0.025 + t * 0.05, 160);
+  _spawnAbilityBeam(muzzleWorld, end, 0xffffff, 0.010, 130);
+  if (hit) {
+    const finalDmg = (hit.headshot && INSTAKILL_HS_WEAPONS.has('railgun')) ? 999 : chargeDmg;
+    const mesh = remoteMeshes[hit.pid];
+    const dummy = TRAINING_DUMMIES.find(d => d.id === hit.pid);
+    if (dummy) handleDummyHit(dummy, mesh, { damage: finalDmg }, hit.pos.clone());
+    else emitHit(hit.pid, `railgun_${myId}_${now}`, 'railgun', hit.pos.clone(), hit.headshot, { damageOverride: finalDmg });
+    spawnHitParticle(hit.pos.clone());
+  }
+  flashAbilityName(`${Math.round(t * 100)}% CHARGE · ${chargeDmg} DMG`);
+  crossbowChargeStart = 0;
+}
 
 function doCyroclasmLaser(w, ab) {
   const pool = weaponAmmo[currentWeaponIdx];
@@ -29299,22 +29414,31 @@ function tryShoot() {
     flashScreen('rgba(255,238,190,0.055)', Math.min(115, 52 + shotViolence * 22));
   }
 
-  for (let p = 0; p < shotPellets; p++) {
-    const spreadDir = baseDir.clone();
-    if (shotSpread > 0) {
-      spreadDir.x += (Math.random()-0.5)*shotSpread*2;
-      spreadDir.y += (Math.random()-0.5)*shotSpread*2;
-      spreadDir.normalize();
+  if (currentWeapon.id === 'taser') {
+    socket.emit('shoot', { x: muzzleWorld.x, y: muzzleWorld.y, z: muzzleWorld.z, dx: baseDir.x, dy: baseDir.y, dz: baseDir.z, weapon: shotWeaponId });
+    fireTaserWire(muzzleWorld, baseDir);
+  } else {
+    for (let p = 0; p < shotPellets; p++) {
+      const spreadDir = baseDir.clone();
+      if (shotSpread > 0) {
+        spreadDir.x += (Math.random()-0.5)*shotSpread*2;
+        spreadDir.y += (Math.random()-0.5)*shotSpread*2;
+        spreadDir.normalize();
+      }
+      socket.emit('shoot', {
+        x: muzzleWorld.x, y: muzzleWorld.y, z: muzzleWorld.z,
+        dx: spreadDir.x, dy: spreadDir.y, dz: spreadDir.z,
+        weapon: shotWeaponId,
+      });
+      if (wStats.hitscan) {
+        fireHitscanShot(muzzleWorld, spreadDir, shotWeaponId, wStats);
+        continue;
+      }
+      const bColor = wStats.randomBulletColor
+        ? PAINTBALL_COLORS[Math.floor(Math.random() * PAINTBALL_COLORS.length)]
+        : (forcedShot?.bulletColor ?? wStats.bulletColor);
+      spawnLocalBullet(muzzleWorld, spreadDir, `local_${myId}_${now}_${p}`, true, shotSpeed, bColor, forcedShot?.bulletSize ?? wStats.bulletSize, shotWeaponId);
     }
-    socket.emit('shoot', {
-      x: muzzleWorld.x, y: muzzleWorld.y, z: muzzleWorld.z,
-      dx: spreadDir.x, dy: spreadDir.y, dz: spreadDir.z,
-      weapon: shotWeaponId,
-    });
-    const bColor = wStats.randomBulletColor
-      ? PAINTBALL_COLORS[Math.floor(Math.random() * PAINTBALL_COLORS.length)]
-      : (forcedShot?.bulletColor ?? wStats.bulletColor);
-    spawnLocalBullet(muzzleWorld, spreadDir, `local_${myId}_${now}_${p}`, true, shotSpeed, bColor, forcedShot?.bulletSize ?? wStats.bulletSize, shotWeaponId);
   }
 }
 
@@ -42815,6 +42939,7 @@ function loop() {
   safeLoopStep('tesla-coils', () => updateTeslaCoils(dt)); // deployed tesla coils zap nearby enemies
   safeLoopStep('mini-turrets', () => updateMiniTurrets(dt)); // deployed mini turrets zap nearby enemies + take fire
   safeLoopStep('javelin-lock', () => updateJavelinLock()); // crosshair-hold lock-on tracking for the Javelin Launcher
+  safeLoopStep('taser-wire', () => updateTaserWire()); // redraws the wire + ticks damage while a Taser hit is channeling
   safeLoopStep('javelins', () => updateJavelins(dt));      // in-flight guided javelins: steer, wall-stop, hit
   safeLoopStep('chain-gun-spin', () => updateChainGunSpin(dt)); // spins back down in real time once you let off the trigger
   safeLoopStep('bee-swarms', () => updateBeeSwarms(dt));  // bee swarms home + sting the nearest enemy
