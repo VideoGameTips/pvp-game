@@ -822,16 +822,21 @@ const WEAPONS = [
     airborneOnly: true,
   },
   {
-    // 🚀🔒 Javelin Launcher: hold the crosshair on someone for lockTime (1s) and
-    // firing switches from a dumb ballistic lob (arcShot — lands wherever you
-    // aimed, standard physics) to a guided javelin that launches up, then curves
-    // in on the locked target (see updateJavelinLock/fireJavelin/updateJavelins).
+    // 🚀🔒 Javelin Launcher: hold the crosshair on someone for lockOn.lockTime
+    // (0.25s) and, once locked, [E] dumps the whole magazine as a guided volley
+    // (fireJavelinVolley) — each javelin launches up, then curves in on the
+    // target (updateJavelins). Lock persists through updateJavelinLock as long
+    // as the target stays alive and on screen, independent of where the
+    // crosshair drifts afterward; the crosshair itself turns red while locked
+    // (see #crosshair.locked in index.html). Left-click is disabled (tryShoot's
+    // early guard) — this gun only fires through its ability.
     // Strictly P2W: see P2W_ITEM_IDS and the WEAPON_PRICE_MULT tier in WEAPON_COSTS.
     id: 'javelin_launcher', name: 'Javelin Launcher', type: 'Guided Launcher', slot: 'primary',
-    mag: 1, reserve: 6, damage: 100, fireRate: 1400, reloadTime: 3200,
+    mag: 6, reserve: 36, damage: 30, fireRate: 1400, reloadTime: 3200,
     auto: false, pellets: 1, spread: 0, adsZoom: 40, bulletSpeed: 55, noReload: false,
     bulletColor: 0xffaa33, bulletSize: 0.12, arcShot: true,
-    lockOn: { lockTime: 1000, lockRange: 60, homingDelay: 450, homingSpeed: 55, turnRate: 2.6, hitRadius: 1.6 },
+    lockOn: { lockTime: 250, lockRange: 60, homingDelay: 450, homingSpeed: 55, turnRate: 2.6, hitRadius: 1.6 },
+    ability: { name: 'Volley', cd: 500, desc: 'Launch the whole magazine at the locked target', type: 'javelin_volley', noADS: true },
   },
 ];
 
@@ -2364,7 +2369,7 @@ const DOUBLE_JUMP_IDS = new Set(['fists','crossbow','air_rifle','dart_gun']);
 //   • guns that genuinely can't aim, or are one of a kind: the paintball marker
 //     (that hopper sits right where the sights should be) and the revolver
 // Ordinary guns lost theirs. They can aim; that IS their thing.
-const ABILITY_GUNS = new Set(['paintball', 'revolver', 'cyroclasm', 'storm_bloom']);
+const ABILITY_GUNS = new Set(['paintball', 'revolver', 'cyroclasm', 'storm_bloom', 'javelin_launcher']);
 function hasAbility(w) {
   if (!w) return false;
   // A marketplace ability counts even on a gun that has none of its own — that
@@ -28329,6 +28334,9 @@ function activateAbility() {
     doBallLightning(w, ab);
     flashAbilityName(ab.name);
   }
+  else if (ab.type === 'javelin_volley') {
+    fireJavelinVolley(w);
+  }
   else if (ab.type === 'dash') {
     const right = new THREE.Vector3(Math.cos(euler.y), 0, -Math.sin(euler.y));
     const side = (Math.random() > 0.5 ? 1 : -1);
@@ -28393,27 +28401,54 @@ function _nearestAbilityRayHit(origin, dir, range, radius = 0.65) {
   return best;
 }
 
-// 🔒 Javelin lock-on: runs every frame regardless of firing state, so walking the
-// crosshair across a target for lockOn.lockTime seconds is what arms tracking mode.
+// Is pid's mesh actually visible to the player right now — in front of the camera,
+// inside the viewport, and not behind a wall? "Still on the screen" for lock-hold
+// purposes, as opposed to "under the crosshair" for lock-acquisition purposes.
+function _isTargetOnScreen(pid) {
+  const mesh = remoteMeshes[pid];
+  if (!mesh || !mesh.visible) return false;
+  const pos = mesh.position.clone().setY(mesh.position.y + 1.0);
+  const sc = worldToScreen(pos);
+  if (!sc || sc.x < 0 || sc.x > window.innerWidth || sc.y < 0 || sc.y > window.innerHeight) return false;
+  return hasLineOfSight(camera.position.x, camera.position.z, pos.x, pos.z);
+}
+// 🔒 Javelin lock-on: runs every frame regardless of firing state.
+// Acquiring: the crosshair has to be directly on someone for lockOn.lockTime.
+// Holding: once locked, it stays locked through crosshair drift — only the target
+// dying or leaving the screen (or ducking behind a wall) breaks it.
 function updateJavelinLock() {
   if (!(currentWeapon?.id === 'javelin_launcher' && activeSlot === 'primary')) {
     javelinLockTargetId = null; javelinLockStartedAt = 0; javelinLocked = false;
+    syncJavelinCrosshair();
+    return;
+  }
+  const now = Date.now();
+  if (javelinLocked && javelinLockTargetId) {
+    const bot = resolveBot(javelinLockTargetId);
+    if (bot && !bot.dead && _isTargetOnScreen(javelinLockTargetId)) { syncJavelinCrosshair(); return; }
+    javelinLockTargetId = null; javelinLockStartedAt = 0; javelinLocked = false;
+    syncJavelinCrosshair();
     return;
   }
   const spec = currentWeapon.lockOn;
   const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
   const hit = _nearestAbilityRayHit(camera.position, dir, spec.lockRange, 0.85);
-  const now = Date.now();
-  if (!hit) { javelinLockTargetId = null; javelinLockStartedAt = 0; javelinLocked = false; return; }
+  if (!hit) { javelinLockTargetId = null; javelinLockStartedAt = 0; syncJavelinCrosshair(); return; }
   if (javelinLockTargetId !== hit.pid) {
-    javelinLockTargetId = hit.pid; javelinLockStartedAt = now; javelinLocked = false;
+    javelinLockTargetId = hit.pid; javelinLockStartedAt = now;
+    syncJavelinCrosshair();
     return;
   }
-  if (!javelinLocked && now - javelinLockStartedAt >= spec.lockTime) {
+  if (now - javelinLockStartedAt >= spec.lockTime) {
     javelinLocked = true;
     flashAbilityName('🔒 LOCKED ON');
     playSoundEvent('radar_ping', { volume: 0.8 });
   }
+  syncJavelinCrosshair();
+}
+function syncJavelinCrosshair() {
+  const cross = document.getElementById('crosshair');
+  if (cross) cross.classList.toggle('locked', javelinLocked);
 }
 // A thin missile body + fins, oriented along its own velocity every frame in
 // updateJavelins. Simple on purpose — it's a fast-moving small silhouette, not
@@ -28431,14 +28466,14 @@ function makeJavelinMesh() {
   const fin2 = fin.clone(); fin2.rotation.z = Math.PI / 2; g.add(fin2);
   return g;
 }
-// Fires the Javelin Launcher's single round. Unlocked, it's exactly the same
-// arcShot ballistic bullet every other lobbed weapon uses — lands wherever you
-// aimed, no special code needed. Locked, it's a guided entity of its own.
-function fireJavelin(origin, dir) {
+// Fires one round of the volley. Unlocked, it's exactly the same arcShot ballistic
+// bullet every other lobbed weapon uses — lands wherever you aimed, no special code
+// needed. Locked (lockedTargetId set), it's a guided entity of its own.
+function fireJavelin(origin, dir, lockedTargetId, shotIdx) {
   const spec = currentWeapon.lockOn;
-  const id = `javelin_${myId}_${Date.now()}`;
-  const launchDir = new THREE.Vector3(dir.x, Math.max(dir.y, 0.55), dir.z).normalize();
-  if (javelinLocked && javelinLockTargetId) {
+  const id = `javelin_${myId}_${Date.now()}_${shotIdx || 0}`;
+  if (lockedTargetId) {
+    const launchDir = new THREE.Vector3(dir.x, Math.max(dir.y, 0.55), dir.z).normalize();
     socket.emit('shoot', { x: origin.x, y: origin.y, z: origin.z, dx: launchDir.x, dy: launchDir.y, dz: launchDir.z, weapon: 'javelin_launcher' });
     const mesh = makeJavelinMesh();
     mesh.position.copy(origin);
@@ -28446,13 +28481,60 @@ function fireJavelin(origin, dir) {
     javelins.push({
       id, mesh, x: origin.x, y: origin.y, z: origin.z,
       vx: launchDir.x * spec.homingSpeed, vy: launchDir.y * spec.homingSpeed, vz: launchDir.z * spec.homingSpeed,
-      targetId: javelinLockTargetId, bornAt: Date.now(), homing: false,
+      targetId: lockedTargetId, bornAt: Date.now(), homing: false,
     });
     playWeaponSound('javelin_launcher', { baseWeapon: currentWeapon, volume: 1.2 });
   } else {
     socket.emit('shoot', { x: origin.x, y: origin.y, z: origin.z, dx: dir.x, dy: dir.y, dz: dir.z, weapon: 'javelin_launcher' });
     spawnLocalBullet(origin, dir, id, true, currentWeapon.bulletSpeed, currentWeapon.bulletColor, currentWeapon.bulletSize, 'javelin_launcher');
   }
+}
+// [E]: dumps the whole magazine at once, staggered 90ms apart so they read as a
+// volley rather than one giant overlapping clump. Lock state is captured ONCE here
+// and threaded through to each shot — the player could look away mid-volley and the
+// already-launched javelins should keep tracking what they were actually locked to.
+function fireJavelinVolley(w) {
+  const pool = weaponAmmo[currentWeaponIdx];
+  if (!pool || pool.ammo <= 0) { dryFire(); return; }
+  const shots = pool.ammo;
+  const lockedTargetId = javelinLocked ? javelinLockTargetId : null;
+  const origin = _abilityMuzzleOrigin(new THREE.Vector3(0, -0.10, -0.30));
+  const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+  for (let i = 0; i < shots; i++) {
+    setTimeout(() => {
+      if (currentWeapon?.id !== 'javelin_launcher') return; // switched away mid-volley
+      const spreadDir = dir.clone();
+      if (!lockedTargetId) {
+        spreadDir.x += (Math.random() - 0.5) * 0.06;
+        spreadDir.y += (Math.random() - 0.5) * 0.03;
+        spreadDir.normalize();
+      }
+      fireJavelin(origin.clone(), spreadDir, lockedTargetId, i);
+    }, i * 90);
+  }
+  pool.ammo = 0; ammo = 0;
+  syncHeldAmmoModelForIndex(currentWeaponIdx);
+  updateAmmoHUD();
+  flashAbilityName(lockedTargetId ? `VOLLEY · ${shots} LOCKED` : `VOLLEY · ${shots} DUMB-FIRED`);
+  const idx = currentWeaponIdx;
+  setTimeout(() => {
+    if (!reloading && currentWeaponIdx === idx && weaponAmmo[idx]?.ammo <= 0 && weaponAmmo[idx]?.reserve > 0) startReload();
+  }, shots * 90 + 160);
+}
+const _javelinRay = new THREE.Ray();
+const _javelinHitPt = new THREE.Vector3();
+// A real 3D segment-vs-wallColliders test (unlike hasLineOfSight, which is a flat
+// X/Z-only check and has no idea a javelin flying 10m up is nowhere near a 3m wall).
+function _javelinBlockedByWall(x1, y1, z1, x2, y2, z2) {
+  const dx = x2 - x1, dy = y2 - y1, dz = z2 - z1;
+  const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+  if (dist < 0.001) return false;
+  _javelinRay.origin.set(x1, y1, z1);
+  _javelinRay.direction.set(dx / dist, dy / dist, dz / dist);
+  for (const box of wallColliders) {
+    if (_javelinRay.intersectBox(box, _javelinHitPt) && _javelinHitPt.distanceTo(_javelinRay.origin) <= dist + 0.05) return true;
+  }
+  return false;
 }
 // Guided javelins in flight: a brief straight launch phase (still climbing off the
 // initial upward kick), then homingDelay later they start steering toward wherever
@@ -28482,7 +28564,7 @@ function updateJavelins(dt) {
       j.vy -= (j.homing ? 18 : 8) * dt; // target gone → falls; still launching → gentle arc
     }
     const nx = j.x + j.vx * dt, ny = j.y + j.vy * dt, nz = j.z + j.vz * dt;
-    if (!hasLineOfSight(j.x, j.z, nx, nz) || ny <= 0.05) {
+    if (_javelinBlockedByWall(j.x, j.y, j.z, nx, ny, nz) || ny <= 0.05) {
       const stopPos = new THREE.Vector3(nx, Math.max(0.05, ny), nz);
       spawnAbilityAOEFX(stopPos, 1.0, 0xffaa33);
       playSoundEvent('explosion', { position: stopPos, volume: 0.6 });
@@ -29018,6 +29100,12 @@ function tryShoot() {
     if (now - lastShot > 260) { flashAbilityName('AIRBORNE ONLY'); lastShot = now; }
     return;
   }
+  // Javelin Launcher only fires through its ability (fireJavelinVolley) — left-click
+  // (and auto-fire, which also calls tryShoot) does nothing.
+  if (currentWeapon.id === 'javelin_launcher') {
+    if (now - lastShot > 260) { flashAbilityName('[E] TO LAUNCH'); lastShot = now; }
+    return;
+  }
   const activeRateMult = (abilityBuff?.weaponId === currentWeapon.id && abilityBuff.rateMult) ? abilityBuff.rateMult : 1;
   const forcedShot = forcedCycleShot;
   const effectiveFireRate = wStats.id === 'chain_gun' ? chainGunFireInterval() : wStats.fireRate;
@@ -29160,26 +29248,22 @@ function tryShoot() {
     flashScreen('rgba(255,238,190,0.055)', Math.min(115, 52 + shotViolence * 22));
   }
 
-  if (currentWeapon.id === 'javelin_launcher') {
-    fireJavelin(muzzleWorld, baseDir);
-  } else {
-    for (let p = 0; p < shotPellets; p++) {
-      const spreadDir = baseDir.clone();
-      if (shotSpread > 0) {
-        spreadDir.x += (Math.random()-0.5)*shotSpread*2;
-        spreadDir.y += (Math.random()-0.5)*shotSpread*2;
-        spreadDir.normalize();
-      }
-      socket.emit('shoot', {
-        x: muzzleWorld.x, y: muzzleWorld.y, z: muzzleWorld.z,
-        dx: spreadDir.x, dy: spreadDir.y, dz: spreadDir.z,
-        weapon: shotWeaponId,
-      });
-      const bColor = wStats.randomBulletColor
-        ? PAINTBALL_COLORS[Math.floor(Math.random() * PAINTBALL_COLORS.length)]
-        : (forcedShot?.bulletColor ?? wStats.bulletColor);
-      spawnLocalBullet(muzzleWorld, spreadDir, `local_${myId}_${now}_${p}`, true, shotSpeed, bColor, forcedShot?.bulletSize ?? wStats.bulletSize, shotWeaponId);
+  for (let p = 0; p < shotPellets; p++) {
+    const spreadDir = baseDir.clone();
+    if (shotSpread > 0) {
+      spreadDir.x += (Math.random()-0.5)*shotSpread*2;
+      spreadDir.y += (Math.random()-0.5)*shotSpread*2;
+      spreadDir.normalize();
     }
+    socket.emit('shoot', {
+      x: muzzleWorld.x, y: muzzleWorld.y, z: muzzleWorld.z,
+      dx: spreadDir.x, dy: spreadDir.y, dz: spreadDir.z,
+      weapon: shotWeaponId,
+    });
+    const bColor = wStats.randomBulletColor
+      ? PAINTBALL_COLORS[Math.floor(Math.random() * PAINTBALL_COLORS.length)]
+      : (forcedShot?.bulletColor ?? wStats.bulletColor);
+    spawnLocalBullet(muzzleWorld, spreadDir, `local_${myId}_${now}_${p}`, true, shotSpeed, bColor, forcedShot?.bulletSize ?? wStats.bulletSize, shotWeaponId);
   }
 }
 

@@ -1758,7 +1758,7 @@ event_horizon: 75,
   srx: 95, rpd: 10, mp40: 15, p90: 15,
   paintball: 40, burst: 47, lever: 93,
   vector: 12, crossbow: 80, flamethrower: 3,
-  grenade_launcher: 90, railgun: 110, minigun: 27, chain_gun: 22, javelin_launcher: 100,
+  grenade_launcher: 90, railgun: 110, minigun: 27, chain_gun: 22, javelin_launcher: 30,
   freeze_gun: 13, boombow: 95,
   // Secondaries
   revolver: 83, flare: 85, pistol: 20, shorty: 30, cycler: 8,

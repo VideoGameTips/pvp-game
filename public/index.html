@@ -35,6 +35,8 @@
     }
     #crosshair::before { width: 2px; height: 100%; left: 50%; transform: translateX(-50%); }
     #crosshair::after  { width: 100%; height: 2px; top: 50%; transform: translateY(-50%); }
+    /* Javelin Launcher: red while locked on (toggled via syncJavelinCrosshair in game.js) */
+    #crosshair.locked::before, #crosshair.locked::after { background: rgba(255,40,40,0.95); }
 
     #health-bar {
       position: absolute; bottom: 30px; left: 30px;
