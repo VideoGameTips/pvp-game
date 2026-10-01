@@ -248,7 +248,7 @@ const WEAPON_COSTS = {
   adrenaline: 220, tripwire: 200, hologram: 240, magnet_mine: 220,
   bounce_pad: 140, hunter_drone: 460, emp_grenade: 240, sticky_charge: 320,
   orbital_strike: 2500, guardian_drone: 380, nano_shield: 320, mini_turret: 340,
-  air_grenade: 160, land_mine: 380,
+  air_grenade: 160, land_mine: 380, air_blaster: 260,
   // Batch-4 utilities
   flashbang_basic: 200, proximity_mine: 220, dynamite: 280, drone_strike: 340,
   healing_pulse: 200, teleport_beacon: 260, cloak: 280, berserker_serum: 240,
@@ -2114,6 +2114,27 @@ io.on('connection', (socket) => {
       x: data.x, y: data.y, z: data.z,
       dx: data.dx, dy: data.dy, dz: data.dz,
       weapon: w,
+    });
+  });
+
+  socket.on('airBlast', (data) => {
+    const shooter = players[socket.id];
+    const target = players[String(data?.targetId || '')];
+    if (!shooter || shooter.dead || !target || target.dead || target.isBot) return;
+    if (shooter.matchId !== target.matchId) return;
+    if (blocksFriendlyFire(shooter, target)) return;
+    const dx = Number(data?.x) || 0;
+    const dz = Number(data?.z) || 0;
+    const len = Math.hypot(dx, dz);
+    if (!Number.isFinite(len) || len < 0.01) return;
+    const dist = dist3(shooter, target);
+    if (dist > 15) return;
+    io.to(target.id).emit('airBlasted', {
+      shooterId: shooter.id,
+      x: Math.max(-1, Math.min(1, dx / len)),
+      z: Math.max(-1, Math.min(1, dz / len)),
+      y: Math.max(0, Math.min(14, Number(data?.y) || 0)),
+      force: Math.max(0, Math.min(34, Number(data?.force) || 0)),
     });
   });
 

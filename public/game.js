@@ -1206,6 +1206,7 @@ const SUPPORT_ITEMS = [
   // ── 😈 Lazy weapons batch ─────────────────────────────────────────────────
   { id: 'air_grenade', archived: true, name: 'Air Grenade', type: 'Launch', uses: 2, damage: 15, cooldown: 950, bulletSpeed: 50, bulletColor: 0xaaccff, bulletSize: 0.11, launchVel: 14, launchRadius: 4 },
   { id: 'land_mine', name: 'Land Mine', type: 'Trap', uses: 2, damage: 298, cooldown: 1100, mineRadius: 1.8, launchVel: 16 },
+  { id: 'air_blaster', name: 'Air Blaster', type: 'Knockback · No Damage', uses: 5, damage: 0, cooldown: 750, airBlast: true, range: 13, cone: 0.74, launchVel: 11, pushVel: 24 },
   // ── 🪖 ADMIN UTILITIES (locked behind unlock codes) ──────────────────────
   // ── 🆕 More utilities — batch 4 ──────────────────────────────────────────
   { id: 'flashbang_basic', archived: true, name: 'Flashbang',    type: 'Stun',       uses: 2, damage: 5,  cooldown: 900, bulletSpeed: 50, bulletColor: 0xffffff, bulletSize: 0.10, stunDur: 2500, stunRadius: 6 },
@@ -1424,7 +1425,7 @@ const WEAPON_COSTS = {
   adrenaline: 220, tripwire: 200, hologram: 240, magnet_mine: 220,
   bounce_pad: 140, hunter_drone: 460, emp_grenade: 240, sticky_charge: 320,
   orbital_strike: 2500, guardian_drone: 380, nano_shield: 320, mini_turret: 340,
-  air_grenade: 160, land_mine: 380,
+  air_grenade: 160, land_mine: 380, air_blaster: 260,
   // Batch-4 utilities
   flashbang_basic: 200, proximity_mine: 220, dynamite: 280, drone_strike: 340,
   healing_pulse: 200, teleport_beacon: 260, cloak: 280, berserker_serum: 240,
@@ -21354,6 +21355,32 @@ function buildAirGrenade() {
   stripe.rotation.x = Math.PI/2; g.add(stripe);
   g.position.set(0.10, -0.12, -0.18); return g;
 }
+function buildAirBlaster() {
+  const g = new THREE.Group();
+  const shell = new THREE.MeshLambertMaterial({ color: 0x8fc7ff });
+  const steel = new THREE.MeshLambertMaterial({ color: 0xd8e6f0 });
+  const dark = new THREE.MeshLambertMaterial({ color: 0x1d2530 });
+  const glow = new THREE.MeshBasicMaterial({ color: 0xcff7ff, transparent: true, opacity: 0.78 });
+  const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.030, 0.030, 0.115, 12), shell);
+  tank.rotation.x = Math.PI / 2; tank.position.set(0, 0.000, 0.020); g.add(tank);
+  const grip = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.072, 0.036), dark);
+  grip.position.set(0, -0.052, 0.048); grip.rotation.x = -0.24; g.add(grip);
+  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.017, 0.030, 0.110, 14), steel);
+  barrel.rotation.x = Math.PI / 2; barrel.position.set(0, 0.004, -0.070); g.add(barrel);
+  const cone = new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.070, 14, 1, true), glow);
+  cone.rotation.x = -Math.PI / 2; cone.position.set(0, 0.004, -0.145); g.add(cone);
+  for (let i = 0; i < 3; i++) {
+    const fin = new THREE.Mesh(new THREE.BoxGeometry(0.010, 0.036, 0.040), dark);
+    const a = i / 3 * Math.PI * 2;
+    fin.position.set(Math.cos(a) * 0.026, 0.004 + Math.sin(a) * 0.026, -0.088);
+    fin.rotation.z = a; g.add(fin);
+  }
+  const gauge = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.006, 12), steel);
+  gauge.rotation.z = Math.PI / 2; gauge.position.set(0.027, 0.020, 0.024); g.add(gauge);
+  const needle = new THREE.Mesh(new THREE.BoxGeometry(0.003, 0.012, 0.003), dark);
+  needle.position.set(0.031, 0.023, 0.024); needle.rotation.z = -0.5; g.add(needle);
+  g.position.set(0.10, -0.12, -0.18); return g;
+}
 function buildC4()           { const g=new THREE.Group(); const m=new THREE.MeshLambertMaterial({color:0xbbaa66}); const led=new THREE.MeshBasicMaterial({color:0xff2222}); const body=new THREE.Mesh(new THREE.BoxGeometry(0.10,0.04,0.07),m); g.add(body); const l=new THREE.Mesh(new THREE.SphereGeometry(0.010,4,4),led); l.position.set(0.03,0.025,0); g.add(l); g.position.set(0.10,-0.12,-0.18); return g; }
 function buildClaymore()     { const g=new THREE.Group(); const m=new THREE.MeshLambertMaterial({color:0x2a3a26}); const body=new THREE.Mesh(new THREE.BoxGeometry(0.10,0.06,0.025),m); body.rotation.x=-0.2; g.add(body); const leg1=new THREE.Mesh(new THREE.CylinderGeometry(0.005,0.005,0.05,4),m); leg1.position.set(-0.04,-0.025,0.018); g.add(leg1); const leg2=leg1.clone(); leg2.position.set(0.04,-0.025,0.018); g.add(leg2); g.position.set(0.10,-0.12,-0.18); return g; }
 function buildStunGrenade()  { const g=new THREE.Group(); const m=new THREE.MeshLambertMaterial({color:0x666666}); const lid=new THREE.MeshLambertMaterial({color:0x222222}); const body=new THREE.Mesh(new THREE.CylinderGeometry(0.045,0.045,0.10,8),m); g.add(body); const cap=new THREE.Mesh(new THREE.CylinderGeometry(0.030,0.030,0.012,8),lid); cap.position.y=0.056; g.add(cap); g.position.set(0.10,-0.12,-0.18); return g; }
@@ -21383,7 +21410,7 @@ const supportModels = [buildDonutFragGrenade(), buildMedkit(), buildStimShot(), 
   // 😈 P2W supports
   buildOrbitalStrike(), buildGuardianDrone(), buildNanoShield(),
   // Lazy weapons supports
-  buildAirGrenade(), buildLandMine(),
+  buildAirGrenade(), buildLandMine(), buildAirBlaster(),
   // Batch-4 and sci-fi utilities: individually composed props.
   handcraftedSupport('flashbang_basic'), handcraftedSupport('proximity_mine'),
   handcraftedSupport('dynamite'), handcraftedSupport('drone_strike'),
@@ -27430,6 +27457,13 @@ function getMapBounds() {
   if (activeMapName === 'blank') return 68;
   return BOUNDS;
 }
+function outOfBoundsLimit() {
+  return getMapBounds() + 3.5;
+}
+function isOutOfBoundsXZ(x, z) {
+  const b = outOfBoundsLimit();
+  return Math.abs(x) > b || Math.abs(z) > b;
+}
 
 function updateAdminBuilderFreeCam(dt) {
   const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
@@ -27686,9 +27720,10 @@ function updateMovement(dt) {
       if (gap > 0 && gap < (ramp === r ? 1.6 : 0.6)) { camera.position.y = want; slamState = null; break; }
     }
   }
-  const _mb = getMapBounds();
-  camera.position.x = Math.max(-_mb, Math.min(_mb, camera.position.x));
-  camera.position.z = Math.max(-_mb, Math.min(_mb, camera.position.z));
+  if (isOutOfBoundsXZ(camera.position.x, camera.position.z)) {
+    killLocalOutOfBounds(window._lastAirBlastBy || null);
+    return;
+  }
   // 🦶 Footsteps — accumulate distance, fire on every ~2.8 m of grounded travel
   if (dir.lengthSq() > 0.001 && !slamState && !pilotedVehicle && !pilotedMortar && !isDead) {
     window._stepDist = (window._stepDist || 0) + moveDist;
@@ -27798,6 +27833,10 @@ function updateMovement(dt) {
   }
 
   resolveWallCollisions();
+  if (isOutOfBoundsXZ(camera.position.x, camera.position.z)) {
+    killLocalOutOfBounds(window._lastAirBlastBy || null);
+    return;
+  }
 
   // 🛹 First-person slide feedback — only while in normal first-person control
   // (skip during killcam / theater / piloted camera overrides, which own the camera).
@@ -28281,8 +28320,7 @@ function activateAbility() {
     const right = new THREE.Vector3(Math.cos(euler.y), 0, -Math.sin(euler.y));
     const side = (Math.random() > 0.5 ? 1 : -1);
     moveWithWalls(right.clone().multiplyScalar(side), ab.distance || 5);
-    camera.position.x = Math.max(-48, Math.min(48, camera.position.x));
-    camera.position.z = Math.max(-48, Math.min(48, camera.position.z));
+    if (isOutOfBoundsXZ(camera.position.x, camera.position.z)) { killLocalOutOfBounds(); return; }
     resolveWallCollisions();
     flashAbilityName(ab.name);
     spawnHitParticle(camera.position.clone().setY(1.65));
@@ -28527,8 +28565,7 @@ function doBladeCharge(ab) {
   // Lunge: stop just short of the target, else charge the full distance.
   const moveDist = best ? Math.max(0, Math.min(dist, bestD - 1.1)) : dist;
   moveWithWalls(fwd, moveDist);
-  camera.position.x = Math.max(-48, Math.min(48, camera.position.x));
-  camera.position.z = Math.max(-48, Math.min(48, camera.position.z));
+  if (isOutOfBoundsXZ(camera.position.x, camera.position.z)) { killLocalOutOfBounds(); return; }
   resolveWallCollisions();
   flashScreen('rgba(200,60,60,0.16)', 200);
   playSoundEvent('melee_blade', { volume: 1.0 });
@@ -29315,8 +29352,77 @@ const SUPPORT_SOUND = {
   thermite: 'thermite_ignite', predator_uav: 'radar_ping', warp_beacon: 'radar_ping', teleport_beacon: 'radar_ping',
   care_package: 'air_drop', tac_nuke: 'nuke_siren',
   confetti_cannon: 'confetti_blast',
+  air_blaster: 'air_burst',
   // hologram, glitch_cube, moon_mine, black_hole_seed already use their own sounds or none
 };
+
+function doAirBlaster(item) {
+  const now = Date.now();
+  const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+  const flatForward = forward.clone(); flatForward.y = 0;
+  if (flatForward.lengthSq() < 0.001) flatForward.set(-Math.sin(euler.y), 0, -Math.cos(euler.y));
+  flatForward.normalize();
+  const origin = camera.position.clone();
+  const range = item.range || 13;
+  const cone = item.cone || 0.74;
+  let hitSomething = false;
+
+  const puffAt = origin.clone().addScaledVector(forward, 1.4);
+  spawnAbilityAOEFX(puffAt, 1.15, 0xbfefff);
+  flashScreen('rgba(190,235,255,0.13)', 140);
+
+  // Blast-jump if you point it at your own feet/ground. This uses the same
+  // external impulse system as explosions, but no damage is involved.
+  if (forward.y < -0.35) {
+    const groundPos = origin.clone().addScaledVector(forward, Math.min(range, Math.max(1.4, (origin.y - 0.08) / Math.max(0.12, -forward.y))));
+    groundPos.y = Math.max(0.05, groundPos.y);
+    applyBlastImpulse(groundPos, { radius: 4.2, power: 20 });
+    spawnAbilityAOEFX(groundPos, 2.2, 0xbfefff);
+    playSoundEvent('air_launch', { volume: 1.0, minGap: 80 });
+    hitSomething = true;
+  }
+
+  const pushTarget = (pid, pos, isBot, ref) => {
+    const to = pos.clone().sub(origin);
+    to.y = 0;
+    const dist = to.length();
+    if (dist < 0.05 || dist > range) return;
+    const dirTo = to.clone().normalize();
+    const dot = flatForward.dot(dirTo);
+    if (dot < cone) return;
+    if (hasLineOfSight && !hasLineOfSight(origin.x, origin.z, pos.x, pos.z)) return;
+    const straightBonus = Math.max(0, (dot - cone) / (1 - cone));
+    const distanceFalloff = Math.max(0, 1 - dist / range);
+    const strength = (item.pushVel || 24) * (0.18 + 0.82 * distanceFalloff) * (0.35 + 0.65 * straightBonus);
+    if (strength < 3.2) return;
+    hitSomething = true;
+    spawnAbilityAOEFX(pos.clone().setY(1.0), 0.9 + strength * 0.035, 0xbfefff);
+    playSoundEvent('air_launch', { position: pos, remote: true, volume: 0.85, minGap: 80 });
+    if (isBot && ref) {
+      ref.kbVX = (ref.kbVX || 0) + dirTo.x * strength;
+      ref.kbVZ = (ref.kbVZ || 0) + dirTo.z * strength;
+      ref.yVel = Math.max(ref.yVel || 0, (item.launchVel || 11) * (0.25 + 0.75 * distanceFalloff));
+      ref.y = ref.y || 0;
+      ref._ringoutKiller = myId;
+      ref._ringoutKillerUntil = Date.now() + 4500;
+    } else {
+      socket.emit('airBlast', { targetId: pid, x: dirTo.x, z: dirTo.z, y: (item.launchVel || 11) * (0.25 + 0.75 * distanceFalloff), force: strength });
+    }
+  };
+
+  for (const bot of gameBots) {
+    if (bot.dead || bot.team === 'ally') continue;
+    pushTarget(bot.id, new THREE.Vector3(bot.x, 1.0, bot.z), true, bot);
+  }
+  const myTeam = players[myId] && players[myId].team;
+  for (const [pid, p] of Object.entries(players)) {
+    if (pid === myId || p.isBot || p.dead) continue;
+    if (myTeam && p.team === myTeam) continue;
+    pushTarget(pid, new THREE.Vector3(p.x, p.y || 1, p.z), false, p);
+  }
+  if (!hitSomething) showAnnouncement('AIR BLASTER', 'Too far or not lined up', '#aaccff', 650);
+  else showAnnouncement('AIR BLASTER', 'WHOOSH', '#aaccff', 650);
+}
 
 function trySupport() {
   if (!gameStarted || isDead) return;
@@ -29388,8 +29494,7 @@ function trySupport() {
     playSoundEvent('blink', { volume: 1.15 });
     const dir = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion).normalize();
     moveWithWalls(dir, item.blink);
-    camera.position.x = Math.max(-48, Math.min(48, camera.position.x));
-    camera.position.z = Math.max(-48, Math.min(48, camera.position.z));
+    if (isOutOfBoundsXZ(camera.position.x, camera.position.z)) { killLocalOutOfBounds(); return; }
     resolveWallCollisions();
     spawnHitParticle(camera.position.clone().setY(1.4));
     return;
@@ -29436,6 +29541,10 @@ function trySupport() {
   }
   if (item.id === 'air_grenade') {
     throwAirGrenade(item);
+    return;
+  }
+  if (item.id === 'air_blaster') {
+    doAirBlaster(item);
     return;
   }
   if (item.id === 'land_mine') {
@@ -37033,6 +37142,42 @@ function tellServerIDied(killerId) {
   _localDeathAt = performance.now();
   socket.emit('iDied', { killerId: killerId || null });
 }
+function killLocalOutOfBounds(killerId = null) {
+  if (isDead || match?.type === 'range' || adminMapBuilderOpen) return false;
+  const me = players[myId];
+  if (me) { me.hp = 0; me.dead = true; }
+  updateHealthHUD(0);
+  isDead = true;
+  isADS = false; targetFOV = 75; shooting = false; reloading = false;
+  abilityBuff = null; meleeAbilityBuff = null; pendingFanFire = null;
+  tellServerIDied(killerId);
+  playSoundEvent('air_launch', { volume: 1.0, minGap: 80 });
+  showAnnouncement('RING OUT', 'You left the arena', '#aaccff', 1600);
+  const scope = document.getElementById('scope-overlay');
+  if (scope) scope.style.display = 'none';
+  const ds = document.getElementById('death-screen');
+  if (ds) ds.style.display = 'flex';
+  onEntityDied(myId, killerId || null);
+  if (killerId) startKillcam(killerId, 'air_blaster');
+  return true;
+}
+function killBotOutOfBounds(bot, killerId = null) {
+  if (!bot || bot.dead) return false;
+  bot.dead = true; bot.hp = 0;
+  if (players[bot.id]) { players[bot.id].hp = 0; players[bot.id].dead = true; }
+  dropBody(bot.id);
+  if (killerId === myId) {
+    myKills++;
+    creditWeaponKill('air_blaster');
+    saveKillReplay(bot.id, 'air_blaster');
+    const kc = document.getElementById('kill-count');
+    if (kc) kc.textContent = `Kills: ${myKills}`;
+    if (confirmKill(bot.id, players[bot.id]?.name || 'Bot')) showAnnouncement('RING OUT', players[bot.id]?.name || 'Bot', '#aaccff', 1200);
+  }
+  onEntityDied(bot.id, killerId || null);
+  setTimeout(() => clientRespawnBot(bot.id), 3000);
+  return true;
+}
 // Returns true when the hit landed — only then is the server told (botHitsMe, #22).
 function applyBotDamageToPlayer(weaponId, botId) {
   noteKillInfo(myId, botId, weaponId, _botHitHead);   // for the kill feed, should this be the one that kills
@@ -37645,6 +37790,26 @@ socket.on('playerHit', data => {
       if (localBullets[i].id===data.bulletId) { scene.remove(localBullets[i].mesh); localBullets.splice(i,1); break; }
     }
   }
+});
+socket.on('airBlasted', data => {
+  if (isDead || match?.type === 'range') return;
+  const dx = Number(data?.x) || 0;
+  const dz = Number(data?.z) || 0;
+  const force = Math.max(0, Math.min(34, Number(data?.force) || 0));
+  const len = Math.hypot(dx, dz) || 1;
+  _extVel.x += (dx / len) * force;
+  _extVel.z += (dz / len) * force;
+  const lift = Math.max(0, Math.min(14, Number(data?.y) || 0));
+  if (lift > 0) {
+    if (slamState) slamState.vel = Math.max(slamState.vel || 0, lift);
+    else slamState = { vel: lift, type: 'jump' };
+  }
+  window._lastAirBlastBy = data?.shooterId || null;
+  clearTimeout(window._lastAirBlastTimer);
+  window._lastAirBlastTimer = setTimeout(() => { window._lastAirBlastBy = null; }, 4500);
+  spawnAbilityAOEFX(camera.position.clone().setY(camera.position.y - 0.9), 1.25, 0xbfefff);
+  playSoundEvent('air_launch', { volume: 1.0, minGap: 80 });
+  flashScreen('rgba(190,235,255,0.16)', 180);
 });
 socket.on('playerDied', data => {
   if (players[data.targetId]) { players[data.targetId].hp = 0; players[data.targetId].dead = true; }
@@ -41320,9 +41485,12 @@ function updateBotAI(dt) {
     // composes with the bot's own chase movement below instead of fighting
     // it — the AI's `nx = bot.x + moveX` picks up wherever this leaves off ──
     if (bot.kbVX || bot.kbVZ) {
-      const botMapHalf = getMapBounds();
-      bot.x = Math.max(-botMapHalf, Math.min(botMapHalf, bot.x + bot.kbVX * dt));
-      bot.z = Math.max(-botMapHalf, Math.min(botMapHalf, bot.z + bot.kbVZ * dt));
+      bot.x += bot.kbVX * dt;
+      bot.z += bot.kbVZ * dt;
+      if (isOutOfBoundsXZ(bot.x, bot.z)) {
+        killBotOutOfBounds(bot, (bot._ringoutKillerUntil || 0) > Date.now() ? bot._ringoutKiller : null);
+        continue;
+      }
       const kbFriction = Math.max(0, 1 - dt * 6);
       bot.kbVX *= kbFriction; bot.kbVZ *= kbFriction;
       if (Math.abs(bot.kbVX) < 0.05) bot.kbVX = 0;
@@ -42254,8 +42422,10 @@ function updateBotAI(dt) {
     const prevBotX = bot.x, prevBotZ = bot.z;
     let nx = bot.x + moveX, nz = bot.z + moveZ;
     const mapHalf = getMapBounds();
-    nx = Math.max(-mapHalf, Math.min(mapHalf, nx));
-    nz = Math.max(-mapHalf, Math.min(mapHalf, nz));
+    if (isOutOfBoundsXZ(nx, nz)) {
+      killBotOutOfBounds(bot, (bot._ringoutKillerUntil || 0) > Date.now() ? bot._ringoutKiller : null);
+      continue;
+    }
     const nextGroundY = botGroundYAt(nx, nz, bot.y || 0, 1.05, 2.2);
     if ((bot.yVel || 0) === 0 && nextGroundY >= (bot.y || 0) - 0.35) bot.y = nextGroundY;
     [nx, nz] = resolvePosCollisions(nx, nz, bot.y || 0);
