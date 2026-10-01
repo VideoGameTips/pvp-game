@@ -4839,6 +4839,7 @@ function resolvePosCollisions(px, pz, feetY = 0) {
 // ── Map Groups ──────────────────────────────────────────────────────────────
 const MAP_GROUPS = {};
 const MAP_COLLIDERS = {};
+const MAP_BOUNDS = {};
 // 📐 Ramps. Floors are all axis-aligned boxes, so a slope is a smooth wedge over
 // a staircase of hidden steps -- and the movement code has no way to know it is
 // standing on one. A map registers each slope here: its footprint, the way it
@@ -4945,6 +4946,9 @@ function registerMap(name) {
   MAP_COLLIDERS[name] = [];
   MAP_GIMMICKS[name] = { damageZones: [], jumpPads: [], iceZones: [], oilZones: [], lowGravZones: [] };
 }
+function setMapBounds(mapName, width, depth = width) {
+  MAP_BOUNDS[mapName] = { halfX: width / 2, halfZ: depth / 2 };
+}
 
 // Legacy refs for existing buildBlankMap/Battlefield/Range — bridge them to the registry
 registerMap('blank');
@@ -4987,6 +4991,7 @@ function activateMap(name) {
 function buildBlankMap() {
   const SIZE = 140;
   const HALF = SIZE / 2;
+  setMapBounds('blank', SIZE, SIZE);
   const ground = new THREE.Mesh(
     new THREE.PlaneGeometry(SIZE, SIZE),
     new THREE.MeshLambertMaterial({ color: 0x667d58 })
@@ -5077,6 +5082,7 @@ function buildBlankMap() {
 //         barbed wire at z≈0 and z≈4
 //         enemies attack from z≈-38
 function buildBattlefieldMap() {
+  setMapBounds('battlefield', 100, 100);
   const addBF = (x, y, z, w, h, d, mat, collide, rotY) => {
     const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
     m.position.set(x, y, z);
@@ -5204,6 +5210,7 @@ function buildBattlefieldMap() {
 }
 
 function buildRangeMap() {
+  setMapBounds('range', 40, 90);
   const addRM = (x, y, z, w, h, d, mat, collide) => {
     const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
     m.position.set(x, y, z);
@@ -5327,6 +5334,7 @@ function addMapMesh(mapName, mesh, collide = false) {
   }
 }
 function addMapGround(mapName, color, gridColor) {
+  setMapBounds(mapName, 100, 100);
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), new THREE.MeshLambertMaterial({ color }));
   ground.rotation.x = -Math.PI / 2;
   MAP_GROUPS[mapName].add(ground);
@@ -5639,6 +5647,7 @@ let obbyLastResetAt = 0;
 let obbyGraceUntil = 0;
 
 function buildObbyMap() {
+  setMapBounds('obby', 96, 112);
   const mats = {
     white: new THREE.MeshLambertMaterial({ color: 0xf8f8f8 }),
     grid:  new THREE.MeshBasicMaterial({ color: 0xd8d8d8, transparent: true, opacity: 0.45 }),
@@ -8973,6 +8982,7 @@ registerMap('br_arena');
 function buildBrArenaMap() {
   const m = 'br_arena';
   const SIZE = 250; // 250x250 — 6x bigger than standard maps
+  setMapBounds(m, SIZE, SIZE);
   // Ground
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(SIZE, SIZE), new THREE.MeshLambertMaterial({ color: 0x5a7440 }));
   ground.rotation.x = -Math.PI / 2;
@@ -9123,6 +9133,7 @@ function clearMapForGridConcept(name) {
 }
 function addGridConceptGround(name, size = 140) {
   const group = MAP_GROUPS[name];
+  setMapBounds(name, size, size);
   const ground = new THREE.Mesh(
     new THREE.PlaneGeometry(size, size),
     new THREE.MeshLambertMaterial({ color: 0xffffff })
@@ -27451,18 +27462,20 @@ function getDefaultWeaponWeight(item) {
 }
 const dir = new THREE.Vector3();
 const BOUNDS = 48;
-// Map-aware boundary (BR arena is 6× larger). 123 lets player reach the actual wall surface (walls at ±125, 3 thick).
 function getMapBounds() {
-  if (activeMapName === 'br_arena') return 123;
-  if (activeMapName === 'blank') return 68;
+  const b = MAP_BOUNDS[activeMapName];
+  if (b) return Math.max(b.halfX, b.halfZ);
   return BOUNDS;
 }
-function outOfBoundsLimit() {
-  return getMapBounds() + 3.5;
+function getMapBoundsRect() {
+  const b = MAP_BOUNDS[activeMapName];
+  if (b) return b;
+  const fallback = getMapBounds();
+  return { halfX: fallback, halfZ: fallback };
 }
 function isOutOfBoundsXZ(x, z) {
-  const b = outOfBoundsLimit();
-  return Math.abs(x) > b || Math.abs(z) > b;
+  const b = getMapBoundsRect();
+  return Math.abs(x) > b.halfX || Math.abs(z) > b.halfZ;
 }
 
 function updateAdminBuilderFreeCam(dt) {
