@@ -30100,6 +30100,99 @@ weaponModels.forEach((m, i) => prepViewModel(m, WEAPONS[i] && WEAPONS[i].id));
 // id, its stats, its reload track and its prop beats -- only the thing in your
 // hands changes -- so everything downstream (reload, inspect, hands, anchors,
 // audio) works on it without knowing it happened.
+// 🌶️ Chain Gun -> Pepper Grinder. The grinding head up top IS the barrel
+// cluster — four stubby chambers that spin up exactly like the real gun's
+// barrels (same _barrelCluster/_spinRate rig), just dressed as a kitchen tool.
+function buildPepperGrinder() {
+  const g = new THREE.Group();
+  const wood = new THREE.MeshPhongMaterial({ color: 0x8a5a30, shininess: 40, specular: 0x6a4020 });
+  const steel = GUN_MATS.steel(), bright = GUN_MATS.bright();
+  const black = new THREE.MeshLambertMaterial({ color: 0x1c1c1c });
+  gpCyl(g, wood, 0.044, 0.050, 0.170, 14, 0, 0.000, 0.040, 0.7);
+  gpCyl(g, steel, 0.044, 0.044, 0.012, 14, 0, 0.088, 0.040);
+  const barrelCluster = new THREE.Group();
+  barrelCluster.position.set(0, 0.096, -0.040);
+  g.add(barrelCluster);
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+    const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.060, 10), black);
+    tube.position.set(Math.cos(a) * 0.024, Math.sin(a) * 0.024, 0);
+    tube.rotation.z = Math.PI / 2; barrelCluster.add(tube);
+  }
+  const head = new THREE.Mesh(new THREE.ConeGeometry(0.044, 0.030, 14), steel);
+  head.rotation.z = -Math.PI / 2; head.position.set(0, 0.096, -0.066); g.add(head);
+  g._barrelCluster = barrelCluster;
+  g._spinRate = 10;
+  const crank = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.050, 8), bright);
+  crank.position.set(0.050, 0.096, 0.040); g.add(crank);
+  const knob = new THREE.Mesh(new THREE.SphereGeometry(0.012, 8, 6), black);
+  knob.position.set(0.050, 0.096, 0.066); g.add(knob);
+  gpBox(g, steel, 0.090, 0.012, 0.070, 0, -0.012, 0.070);
+  gpPlate(g, GUN_MATS.grip(), [[0.020,-0.026],[0.046,-0.038],[0.052,-0.112],[0.024,-0.126],[0.002,-0.070],[0.000,-0.030]], 0.036, 0);
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.019, 0.0034, 6, 12, Math.PI * 1.05), steel);
+  guard.rotation.set(0, Math.PI/2, -0.4); guard.position.set(0, -0.044, -0.004); g.add(guard);
+  const flash = new THREE.Mesh(new THREE.SphereGeometry(0.030, 8, 7), new THREE.MeshBasicMaterial({ color: 0xffbb55 }));
+  flash.visible = false; flash.position.set(0, 0.096, -0.090); g.add(flash);
+  g._flash = flash; g._kickZ = 0.008; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+// 🎉 Gunslinger -> Confetti Popper. Same revolving-cylinder rig (gpPart/_chambers)
+// as buildCapGun — the "cylinder" is a ring of six paper streamer tubes.
+function buildConfettiPopper() {
+  const g = new THREE.Group();
+  const bright = GUN_MATS.bright(), grip = GUN_MATS.grip();
+  const foil = new THREE.MeshPhongMaterial({ color: 0xffcc22, shininess: 150, specular: 0xffffff });
+  const paper = new THREE.MeshLambertMaterial({ color: 0xff4466 });
+  gpBox(g, foil, 0.026, 0.040, 0.082, 0, 0.014, 0.020);
+  gpBox(g, bright, 0.027, 0.006, 0.064, 0, 0.032, 0.020);
+  gpPart(g, 'main', () => {
+    gpCyl(g, foil, 0.026, 0.026, 0.040, 12, 0, 0.012, -0.010);
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      gpCyl(g, paper, 0.0055, 0.0055, 0.044, 8, Math.cos(a) * 0.015, 0.012 + Math.sin(a) * 0.015, -0.010);
+    }
+  }, { x: 0, y: 0.012, z: -0.010 });
+  g._parts.main._chambers = 6;
+  gpCyl(g, foil, 0.013, 0.013, 0.100, 12, 0, 0.014, -0.080);
+  gpCyl(g, bright, 0.015, 0.015, 0.010, 12, 0, 0.014, -0.128);
+  const streamerColors = [0xffdd33, 0x33ccff, 0xff66aa, 0x66ff88, 0xffaa33, 0xaa66ff];
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    const streamer = new THREE.Mesh(new THREE.CylinderGeometry(0.0025, 0.0025, 0.060, 5),
+      new THREE.MeshLambertMaterial({ color: streamerColors[i] }));
+    streamer.position.set(Math.cos(a) * 0.012, 0.014 + Math.sin(a) * 0.012, -0.150);
+    streamer.rotation.set(0.3, 0, a); g.add(streamer);
+  }
+  gpPlate(g, grip, [[0.058,-0.010],[0.082,-0.024],[0.086,-0.092],[0.058,-0.104],[0.038,-0.048],[0.036,-0.018]], 0.032, 0);
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.017, 0.0032, 6, 12, Math.PI * 1.05), foil);
+  guard.rotation.set(0, Math.PI/2, -0.4); guard.position.set(0, -0.022, 0.020); g.add(guard);
+  gpBox(g, bright, 0.005, 0.012, 0.005, 0, -0.012, 0.020, 0.2);
+  const flash = new THREE.Mesh(new THREE.SphereGeometry(0.024, 8, 7), new THREE.MeshBasicMaterial({ color: 0xffee99 }));
+  flash.visible = false; flash.position.set(0, 0.014, -0.158); g.add(flash);
+  g._flash = flash; g._kickZ = 0.007; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.1, -0.1, -0.22); return g;
+}
+// 🍾 Javelin Launcher -> Champagne Popper. Same shoulder-tube silhouette as
+// buildRPG, dressed as party supplies — the "warhead" is the cork.
+function buildChampagnePopper() {
+  const g = new THREE.Group();
+  const glass = new THREE.MeshPhongMaterial({ color: 0x2a5a2a, shininess: 120, specular: 0x88bb88, transparent: true, opacity: 0.85 });
+  const foilMat = new THREE.MeshPhongMaterial({ color: 0xd8b84a, shininess: 150, specular: 0xffffff });
+  const cork = new THREE.MeshLambertMaterial({ color: 0xc89860 });
+  const steel = GUN_MATS.steel(), poly = GUN_MATS.polymer();
+  gpCyl(g, glass, 0.052, 0.052, 0.280, 16, 0, 0.010, 0.040);
+  gpCyl(g, glass, 0.052, 0.030, 0.090, 16, 0, 0.010, -0.145);
+  gpCyl(g, foilMat, 0.030, 0.030, 0.050, 14, 0, 0.010, -0.188);
+  gpCyl(g, cork, 0.022, 0.026, 0.040, 12, 0, 0.010, -0.222);
+  gpCyl(g, steel, 0.0075, 0.0075, 0.020, 8, 0, 0.010, -0.244);
+  gpBox(g, poly, 0.080, 0.070, 0.090, 0, -0.050, 0.100);
+  gpBox(g, poly, 0.040, 0.050, 0.140, 0, -0.060, 0.220, 0.10);
+  gpBox(g, steel, 0.090, 0.012, 0.070, 0, -0.012, 0.070);
+  const flash = new THREE.Mesh(new THREE.SphereGeometry(0.040, 8, 7), new THREE.MeshBasicMaterial({ color: 0xffeeaa }));
+  flash.visible = false; flash.position.set(0, 0.010, -0.270); g.add(flash);
+  g._flash = flash; g._kickZ = 0.014; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
 const MODEL_SKINS = [
   { id: 'aug', weapon: 'ak20', name: 'AUG', rarity: 'rare',
     sw: ['#4c5339', '#6c7a46'], build: buildAUG,
@@ -30529,6 +30622,15 @@ const MODEL_SKINS = [
   { id: 'swarm_rifle_bee_smoker', weapon: 'swarm_rifle', name: 'Bee Smoker', rarity: 'rare',
     sw: ['#b8bcc2', '#8a4a22'], build: buildBeeSmoker,
     blurb: 'Tin can, leather bellows. It calms the swarm. Allegedly.' },
+  { id: 'chain_gun_pepper_mill', weapon: 'chain_gun', name: 'Pepper Grinder', rarity: 'good',
+    sw: ['#8a5a30', '#1c1c1c'], build: buildPepperGrinder,
+    blurb: 'A crank where the trigger should be. The grind IS the warm-up.' },
+  { id: 'gunslinger_confetti', weapon: 'gunslinger', name: 'Confetti Popper', rarity: 'good',
+    sw: ['#ffcc22', '#ff4466'], build: buildConfettiPopper,
+    blurb: 'Six streamer tubes where the chambers were. Lands the same.' },
+  { id: 'javelin_launcher_champagne', weapon: 'javelin_launcher', name: 'Champagne Popper', rarity: 'rare',
+    sw: ['#2a5a2a', '#d8b84a'], build: buildChampagnePopper,
+    blurb: 'Still corks. Still locks on. Somehow still a celebration.' },
 ];
 // 🔥 FFA Legend skins unlock from FFA: a million damage or five thousand wins.
 // Wrapped because it runs while the file is still loading -- skins restored
