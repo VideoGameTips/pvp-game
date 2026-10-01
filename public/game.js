@@ -812,14 +812,12 @@ const WEAPONS = [
               jitterStart: 0.72, maxJitter: 0.65 },
   },
   {
-    // 🤠 Gunslinger: a trick-shot pistol that only fires while airborne — jump,
-    // double-jump, fall off a ledge, whatever gets your feet off the ground.
-    // Same punch as a revolver (83 dmg), just gated by isPlayerGrounded().
+    // 🤠 Gunslinger: every shot kicks the player upward for air-trick chaos.
     id: 'gunslinger', name: 'Gunslinger', type: 'Secondary', slot: 'secondary',
     mag: 30, reserve: 45, damage: 83, fireRate: 280, reloadTime: 1800,
     auto: false, pellets: 1, spread: 0.01, adsZoom: 50, bulletSpeed: 170, noReload: false,
     bulletColor: 0xffcc44, bulletSize: 0.05,
-    airborneOnly: true,
+    selfLaunch: 9.2,
   },
   {
     // 🚀🔒 Javelin Launcher: hold the crosshair on someone for lockOn.lockTime
@@ -17673,6 +17671,59 @@ function buildRevolver() {
   g.position.set(0.1, -0.1, -0.22); return g;
 }
 
+function buildGunslinger() {
+  const g = new THREE.Group();
+  const blued = GUN_MATS.blued();
+  const steel = GUN_MATS.steel();
+  const gripMat = GUN_MATS.wood();
+  const bandMat = GUN_MATS.bright();
+  const skinMat = new THREE.MeshLambertMaterial({ color: 0xc08a64 });
+  const barrels = [];
+
+  [-1, 1].forEach(side => {
+    const palm = new THREE.Group();
+    palm.position.set(side * 0.070, -0.078, -0.120);
+    palm.rotation.set(0.12, side * -0.18, side * 0.12);
+    g.add(palm);
+
+    gpBox(palm, skinMat, 0.050, 0.038, 0.052, 0, -0.020, 0.034, side * 0.08);
+    gpBox(palm, bandMat, 0.054, 0.009, 0.060, 0, 0.005, -0.018, side * 0.08);
+
+    for (let i = 0; i < 5; i++) {
+      const gun = new THREE.Group();
+      const row = i - 2;
+      gpBox(gun, blued, 0.016, 0.032, 0.050, 0, 0.012, 0.020);
+      gpPart(gun, 'main', () => {
+        gpCyl(gun, blued, 0.013, 0.013, 0.030, 6, 0, 0.010, -0.010);
+        gpCyl(gun, steel, 0.003, 0.003, 0.032, 8, 0, 0.010, -0.011);
+      }, { x: 0, y: 0.010, z: -0.010 });
+      gpCyl(gun, blued, 0.0058, 0.0058, 0.102, 12, 0, 0.010, -0.074);
+      gpBox(gun, blued, 0.011, 0.008, 0.094, 0, 0.022, -0.072);
+      gpBox(gun, steel, 0.003, 0.010, 0.004, 0, 0.030, -0.124);
+      gpBox(gun, gripMat, 0.022, 0.050, 0.020, 0, -0.040, 0.052, 0.25);
+      gpBox(gun, bandMat, 0.003, 0.012, 0.004, 0, -0.006, 0.025, 0.1);
+      gun.scale.setScalar(0.62);
+      gun.position.set(side * (0.012 + Math.abs(row) * 0.006), 0.016 + row * 0.020, -0.030 - Math.abs(row) * 0.010);
+      gun.rotation.set(-0.10 + row * 0.045, side * (0.12 + Math.abs(row) * 0.035), side * row * 0.070);
+      palm.add(gun);
+      if (gun._parts?.main) barrels.push(gun._parts.main);
+      gpBox(palm, gripMat, 0.010, 0.050, 0.018, side * 0.010, -0.040 + row * 0.005, 0.050 + row * 0.004, side * 0.18);
+    }
+  });
+
+  const flash = makeMuzzleFlash();
+  flash.position.set(0, -0.045, -0.270);
+  g.add(flash);
+  g._flash = flash;
+  g._parts = { main: barrels[0] };
+  if (g._parts.main) g._parts.main._chambers = 6;
+  g._kickZ = 0.034;
+  g._greebled = true;
+  g._handDetailed = true;
+  g.position.set(0.1, -0.095, -0.215);
+  return g;
+}
+
 // ── Flare Gun ─────────────────────────────────────────────────────────────
 function buildFlare() {
   // 🔥 Modern pocket flare launcher: a stubby anodised aluminium tube with a
@@ -20042,7 +20093,7 @@ const weaponModels = [
   buildContinuum(),  // continuum
   buildStormBloom(),  // storm_bloom
   buildChainGun(),  // chain_gun
-  buildRevolver(),  // gunslinger
+  buildGunslinger(),  // gunslinger
   buildRPG(),  // javelin_launcher
 ];
 function addWeaponRealismDetails(model, weapon) {
@@ -29094,12 +29145,6 @@ function tryShoot() {
     doSwitchbladeKnifeSwing();
     return;
   }
-  // Gunslinger: grounded feet don't get to use this gun. lastShot also throttles the
-  // rejection message so holding the trigger while grounded doesn't spam the feed.
-  if (wStats.airborneOnly && isPlayerGrounded()) {
-    if (now - lastShot > 260) { flashAbilityName('AIRBORNE ONLY'); lastShot = now; }
-    return;
-  }
   // Javelin Launcher only fires through its ability (fireJavelinVolley) — left-click
   // (and auto-fire, which also calls tryShoot) does nothing.
   if (currentWeapon.id === 'javelin_launcher') {
@@ -29179,6 +29224,12 @@ function tryShoot() {
     heat.lastFireAt = now;
   }
   addRecoil(currentWeapon);
+  if (wStats.selfLaunch) {
+    const lift = Math.max(slamState?.vel || 0, wStats.selfLaunch);
+    if (slamState) { slamState.vel = lift; slamState.type = 'jump'; }
+    else slamState = { vel: lift, type: 'jump' };
+    spawnAbilityAOEFX(camera.position.clone().setY(camera.position.y - 1.25), 0.9, wStats.bulletColor || 0xffcc44);
+  }
   if (!adminInfAmmo) pool.ammo--; // ⚡ admin infinite ammo: don't decrement
   ammo = pool.ammo;
   syncHeldAmmoModelForIndex(currentWeaponIdx);
