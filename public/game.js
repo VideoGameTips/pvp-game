@@ -818,12 +818,12 @@ const WEAPONS = [
               jitterStart: 0.72, maxJitter: 0.65 },
   },
   {
-    // 🤠 Gunslinger: every shot kicks the player upward for air-trick chaos.
+    // 🤠 Gunslinger: every shot fires upward for air-trick chaos.
     id: 'gunslinger', name: 'Gunslinger', type: 'Secondary', slot: 'secondary',
     mag: 30, reserve: 45, damage: 83, fireRate: 280, reloadTime: 1800,
     auto: false, pellets: 1, spread: 0.01, adsZoom: 50, bulletSpeed: 170, noReload: false,
     bulletColor: 0xffcc44, bulletSize: 0.05,
-    selfLaunch: 9.2,
+    shootUpward: true,
   },
   {
     // 🚀🔒 Javelin Launcher: hold the crosshair on someone for lockOn.lockTime
@@ -29339,12 +29339,6 @@ function tryShoot() {
     heat.lastFireAt = now;
   }
   addRecoil(currentWeapon);
-  if (wStats.selfLaunch) {
-    const lift = Math.max(slamState?.vel || 0, wStats.selfLaunch);
-    if (slamState) { slamState.vel = lift; slamState.type = 'jump'; }
-    else slamState = { vel: lift, type: 'jump' };
-    spawnAbilityAOEFX(camera.position.clone().setY(camera.position.y - 1.25), 0.9, wStats.bulletColor || 0xffcc44);
-  }
   if (!adminInfAmmo) pool.ammo--; // ⚡ admin infinite ammo: don't decrement
   ammo = pool.ammo;
   syncHeldAmmoModelForIndex(currentWeaponIdx);
@@ -29380,6 +29374,7 @@ function tryShoot() {
       baseDir = targetPos.clone().sub(camera.position).normalize();
     }
   }
+  if (wStats.shootUpward) baseDir.set(0, 1, 0);
 
   // Apply ability buff for this shot
   const ab = (abilityBuff && abilityBuff.weaponId === currentWeapon.id) ? abilityBuff : null;
