@@ -818,12 +818,12 @@ const WEAPONS = [
               jitterStart: 0.72, maxJitter: 0.65 },
   },
   {
-    // 🤠 Gunslinger: every shot fires upward for air-trick chaos.
+    // 🤠 Gunslinger: locks onto a target, then fires an upward trick shot that still lands.
     id: 'gunslinger', name: 'Gunslinger', type: 'Secondary', slot: 'secondary',
     mag: 30, reserve: 45, damage: 83, fireRate: 280, reloadTime: 1800,
     auto: false, pellets: 1, spread: 0.01, adsZoom: 50, bulletSpeed: 170, noReload: false,
     bulletColor: 0xffcc44, bulletSize: 0.05,
-    shootUpward: true,
+    trickShot: { lockTime: 90, range: 72, radius: 0.95, lift: 0.42, delay: 115 },
   },
   {
     // 🚀🔒 Javelin Launcher: hold the crosshair on someone for lockOn.lockTime
@@ -1779,6 +1779,9 @@ const teslaCoils     = [];        // ⚡ {mesh, x, z, until, lastShot, fireRate,
 let javelinLockTargetId = null;   // pid the crosshair has been continuously on
 let javelinLockStartedAt = 0;
 let javelinLocked = false;        // true once that hold has lasted lockOn.lockTime
+let gunslingerLockTargetId = null;
+let gunslingerLockStartedAt = 0;
+let gunslingerLocked = false;
 const javelins = [];              // 🚀 {id, mesh, x,y,z, vx,vy,vz, targetId, bornAt, homing}
 const miniTurrets    = [];        // 🔧 {mesh, lens, x, z, until, lastShot, fireRate, damage, range, hp, maxHp}
 const beeSwarms      = [];        // 🐝 {mesh, x, y, z, until, lastSting, fireRate, damage, range, targetId}
@@ -28506,7 +28509,35 @@ function updateJavelinLock() {
 }
 function syncJavelinCrosshair() {
   const cross = document.getElementById('crosshair');
-  if (cross) cross.classList.toggle('locked', javelinLocked);
+  if (cross) cross.classList.toggle('locked', !!(javelinLocked || gunslingerLockTargetId));
+}
+function updateGunslingerLock() {
+  if (!(currentWeapon?.id === 'gunslinger' && activeSlot === 'secondary')) {
+    gunslingerLockTargetId = null; gunslingerLockStartedAt = 0; gunslingerLocked = false;
+    syncJavelinCrosshair();
+    return;
+  }
+  const spec = currentWeapon.trickShot || {};
+  const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+  const hit = _nearestAbilityRayHit(camera.position, dir, spec.range || 72, spec.radius || 0.95);
+  const now = Date.now();
+  if (!hit) {
+    gunslingerLockTargetId = null; gunslingerLockStartedAt = 0; gunslingerLocked = false;
+    syncJavelinCrosshair();
+    return;
+  }
+  if (gunslingerLockTargetId !== hit.pid) {
+    gunslingerLockTargetId = hit.pid;
+    gunslingerLockStartedAt = now;
+    gunslingerLocked = false;
+    syncJavelinCrosshair();
+    return;
+  }
+  if (!gunslingerLocked && now - gunslingerLockStartedAt >= (spec.lockTime || 90)) {
+    gunslingerLocked = true;
+    playSoundEvent('radar_ping', { volume: 0.42, pitch: 1.35, minGap: 120 });
+  }
+  syncJavelinCrosshair();
 }
 // A thin missile body + fins, oriented along its own velocity every frame in
 // updateJavelins. Simple on purpose — it's a fast-moving small silhouette, not
@@ -29374,7 +29405,7 @@ function tryShoot() {
       baseDir = targetPos.clone().sub(camera.position).normalize();
     }
   }
-  if (wStats.shootUpward) baseDir.set(0, 1, 0);
+  let trickShotTarget = null;
 
   // Apply ability buff for this shot
   const ab = (abilityBuff && abilityBuff.weaponId === currentWeapon.id) ? abilityBuff : null;
@@ -29382,6 +29413,24 @@ function tryShoot() {
   const shotSpread   = (wStats.spread + bloomAdd) * (ab?.spreadMult ?? 1) * (forcedShot?.spreadMult ?? 1);
   let shotWeaponId   = forcedShot?.weaponId ?? ab?.weaponAbId ?? (wStats.damageId || currentWeapon.id);
   const shotSpeed    = wStats.bulletSpeed * (ab?.speedMult ?? 1);
+  if (wStats.trickShot) {
+    const spec = wStats.trickShot;
+    const lockedPid = gunslingerLocked ? gunslingerLockTargetId : null;
+    const mesh = lockedPid && remoteMeshes[lockedPid];
+    if (mesh && mesh.visible && !players[lockedPid]?.dead && !friendlyFireBlocked(lockedPid, myId)
+        && hasLineOfSight(camera.position.x, camera.position.z, mesh.position.x, mesh.position.z)) {
+      const hitPos = mesh.position.clone().setY(mesh.position.y + 1.05);
+      const direct = hitPos.clone().sub(muzzleWorld);
+      if (direct.lengthSq() > 0.0001) {
+        direct.normalize();
+        baseDir.copy(direct).add(new THREE.Vector3(0, spec.lift || 0.42, 0)).normalize();
+        trickShotTarget = { pid: lockedPid, delay: spec.delay || 115 };
+      }
+    } else {
+      baseDir.y = Math.max(baseDir.y, spec.lift || 0.42);
+      baseDir.normalize();
+    }
+  }
 
   // Switchblade Gun: charged state fires a 100-dmg shot; subsequent shots are 50 dmg until a hit lands
   if (currentWeapon.id === 'switchblade_gun') {
@@ -29412,6 +29461,23 @@ function tryShoot() {
   if (currentWeapon.id === 'taser') {
     socket.emit('shoot', { x: muzzleWorld.x, y: muzzleWorld.y, z: muzzleWorld.z, dx: baseDir.x, dy: baseDir.y, dz: baseDir.z, weapon: shotWeaponId });
     fireTaserWire(muzzleWorld, baseDir);
+  } else if (trickShotTarget) {
+    const bColor = wStats.randomBulletColor
+      ? PAINTBALL_COLORS[Math.floor(Math.random() * PAINTBALL_COLORS.length)]
+      : (forcedShot?.bulletColor ?? wStats.bulletColor);
+    const id = `trick_${myId}_${now}`;
+    spawnLocalBullet(muzzleWorld, baseDir, id, true, shotSpeed, bColor, forcedShot?.bulletSize ?? wStats.bulletSize, shotWeaponId, {
+      visualOnly: true,
+      maxRange: 90,
+    });
+    setTimeout(() => {
+      const mesh = remoteMeshes[trickShotTarget.pid];
+      if (!mesh || !mesh.visible || players[trickShotTarget.pid]?.dead || friendlyFireBlocked(trickShotTarget.pid, myId)) return;
+      const hitPos = mesh.position.clone().setY(mesh.position.y + 1.05);
+      if (!hasLineOfSight(camera.position.x, camera.position.z, mesh.position.x, mesh.position.z)) return;
+      spawnHitParticle(hitPos);
+      emitHit(trickShotTarget.pid, id, shotWeaponId, hitPos, false);
+    }, trickShotTarget.delay);
   } else {
     for (let p = 0; p < shotPellets; p++) {
       const spreadDir = baseDir.clone();
@@ -35374,6 +35440,7 @@ function updateBullets(dt) {
       b.mesh.rotation.z += b.mesh._spin.z * dt;
     }
     _bpos.copy(b.mesh.position);
+    if (b.visualOnly) continue;
 
     if (b.ballLightning) {
       const pulseDue = !b._nextAuraAt || now >= b._nextAuraAt;
@@ -42934,6 +43001,7 @@ function loop() {
   safeLoopStep('tesla-coils', () => updateTeslaCoils(dt)); // deployed tesla coils zap nearby enemies
   safeLoopStep('mini-turrets', () => updateMiniTurrets(dt)); // deployed mini turrets zap nearby enemies + take fire
   safeLoopStep('javelin-lock', () => updateJavelinLock()); // crosshair-hold lock-on tracking for the Javelin Launcher
+  safeLoopStep('gunslinger-lock', () => updateGunslingerLock()); // red reticle + target for Gunslinger trick shots
   safeLoopStep('taser-wire', () => updateTaserWire()); // redraws the wire + ticks damage while a Taser hit is channeling
   safeLoopStep('javelins', () => updateJavelins(dt));      // in-flight guided javelins: steer, wall-stop, hit
   safeLoopStep('chain-gun-spin', () => updateChainGunSpin(dt)); // spins back down in real time once you let off the trigger
