@@ -2442,6 +2442,7 @@ function heldItem() {
 // Horizontal momentum that isn't from the movement keys — explosions and dashes.
 // Decays and is resolved against walls along with normal movement.
 const _extVel = { x: 0, z: 0 };
+let _grappleRide = null; // { dest, until } — Grapple Hook zip movement to a latched point
 let switchbladeCharged = true;    // Switchblade Gun: true → next shot is 100 dmg
 let switchbladeMode = 'pistol';   // When !charged: 'pistol' (ranged 50 dmg) or 'knife' (melee 50 dmg) — toggle with E
 let lastPlayerPos = new THREE.Vector3();    // For computing player velocity (bots use this for bullet leading)
@@ -27652,6 +27653,46 @@ function updateAdminBuilderFreeCam(dt) {
   slamState = null;
 }
 
+function updateGrappleRide(dt) {
+  if (!_grappleRide) return false;
+  const now = Date.now();
+  const dest = _grappleRide.dest;
+  const delta = dest.clone().sub(camera.position);
+  const dist = delta.length();
+  if (dist < 0.45 || now > _grappleRide.until) {
+    camera.position.copy(dest);
+    resolveWallCollisions();
+    camera.position.y = Math.max(camera.position.y, getGroundEyeY(camera.position.x, camera.position.z, camera.position.y));
+    playerYVel = 0;
+    slamState = null;
+    _grappleRide = null;
+    return false;
+  }
+
+  const stepLen = Math.min(dist, 72 * dt);
+  const step = delta.multiplyScalar(stepLen / dist);
+  const steps = Math.min(24, Math.max(1, Math.ceil(stepLen / 0.30)));
+  for (let i = 0; i < steps; i++) {
+    camera.position.x += step.x / steps;
+    camera.position.y += step.y / steps;
+    camera.position.z += step.z / steps;
+    resolveWallCollisions();
+  }
+  _extVel.x = 0; _extVel.z = 0;
+  playerYVel = 0;
+  slamState = null;
+  if (now >= (window._nextGrappleRideFx || 0)) {
+    window._nextGrappleRideFx = now + 60;
+    spawnAbilityAOEFX(camera.position.clone().setY(camera.position.y - 0.85), 0.42, 0x99eeff);
+  }
+  if (isOutOfBoundsXZ(camera.position.x, camera.position.z)) {
+    killLocalOutOfBounds(window._lastAirBlastBy || null);
+    _grappleRide = null;
+    return false;
+  }
+  return true;
+}
+
 function updateMovement(dt) {
   if (isDead) return;
   if (match && !match.roundActive) return; // frozen during countdown
@@ -27667,6 +27708,7 @@ function updateMovement(dt) {
     updateAdminBuilderFreeCam(dt);
     return;
   }
+  if (updateGrappleRide(dt)) return;
 
   // WASD movement
   const fwd   = new THREE.Vector3(-Math.sin(euler.y), 0, -Math.cos(euler.y));
@@ -29784,29 +29826,29 @@ function spawnGrappleCable(from, to) {
   }, 130);
 }
 
-function addPlayerGrappleImpulse(dir, pullVel, liftVel = 0) {
-  const flat = dir.clone();
-  flat.y = 0;
-  if (flat.lengthSq() > 0.0001) {
-    flat.normalize();
-    _extVel.x += flat.x * pullVel;
-    _extVel.z += flat.z * pullVel;
-    const hz = Math.hypot(_extVel.x, _extVel.z);
-    if (hz > BLAST_MAX_HORIZ) {
-      const k = BLAST_MAX_HORIZ / hz;
-      _extVel.x *= k;
-      _extVel.z *= k;
-    }
+function startPlayerGrappleRide(point, incomingDir, kind = 'wall') {
+  const dest = point.clone();
+  const standOff = incomingDir.clone();
+  if (standOff.lengthSq() > 0.0001) {
+    standOff.normalize();
+    dest.addScaledVector(standOff, -0.92);
   }
-  const up = Math.max(liftVel, dir.y > 0 ? dir.y * pullVel * 0.45 : 0);
-  if (up > 0) {
-    if (slamState) { slamState.vel = Math.max(slamState.vel || 0, up); slamState.type = 'jump'; }
-    else slamState = { vel: up, type: 'jump' };
+  if (kind === 'ground' || dest.y <= GROUND_PLANE_Y + 0.35) {
+    dest.y = getGroundEyeY(dest.x, dest.z);
+  } else {
+    dest.y = Math.max(dest.y, getGroundEyeY(dest.x, dest.z, dest.y));
   }
+  const bounds = getMapBoundsRect();
+  dest.x = Math.max(-bounds.halfX + PLAYER_RADIUS, Math.min(bounds.halfX - PLAYER_RADIUS, dest.x));
+  dest.z = Math.max(-bounds.halfZ + PLAYER_RADIUS, Math.min(bounds.halfZ - PLAYER_RADIUS, dest.z));
+  _extVel.x = 0; _extVel.z = 0;
+  playerYVel = 0;
+  slamState = null;
+  _grappleRide = { dest, until: Date.now() + 1200 };
 }
 
 function firstGrappleSurface(origin, dir, range) {
-  let best = null, bestDist = Infinity;
+  let best = null, bestDist = Infinity, kind = 'wall';
   const ray = new THREE.Ray(origin, dir);
   const hit = new THREE.Vector3();
   for (const box of wallColliders) {
@@ -29815,6 +29857,7 @@ function firstGrappleSurface(origin, dir, range) {
     if (dist > 0.35 && dist <= range && dist < bestDist) {
       bestDist = dist;
       best = hit.clone();
+      kind = 'wall';
     }
   }
   if (dir.y < -0.08 && origin.y > GROUND_PLANE_Y) {
@@ -29822,9 +29865,10 @@ function firstGrappleSurface(origin, dir, range) {
     if (t > 0.35 && t <= range && t < bestDist) {
       best = origin.clone().addScaledVector(dir, t);
       best.y = GROUND_PLANE_Y + 0.04;
+      kind = 'ground';
     }
   }
-  return best;
+  return best ? { point: best, kind } : null;
 }
 
 function doGrappleHook(item) {
@@ -29834,9 +29878,9 @@ function doGrappleHook(item) {
   const enemyHit = _nearestAbilityRayHit(origin, dir, range, 0.9);
   const surfaceHit = firstGrappleSurface(origin, dir, range);
   const enemyDist = enemyHit ? enemyHit.mesh.position.clone().setY(enemyHit.mesh.position.y + 1.0).distanceTo(origin) : Infinity;
-  const surfaceDist = surfaceHit ? surfaceHit.distanceTo(origin) : Infinity;
+  const surfaceDist = surfaceHit ? surfaceHit.point.distanceTo(origin) : Infinity;
   const hitEnemy = enemyHit && enemyDist <= surfaceDist + 1.5;
-  const target = hitEnemy ? enemyHit.mesh.position.clone().setY(enemyHit.mesh.position.y + 1.0) : surfaceHit;
+  const target = hitEnemy ? enemyHit.mesh.position.clone().setY(enemyHit.mesh.position.y + 1.0) : surfaceHit?.point;
 
   if (!target) {
     showAnnouncement('GRAPPLE', 'No hook point', '#aaccff', 650);
@@ -29848,10 +29892,7 @@ function doGrappleHook(item) {
   spawnAbilityAOEFX(target.clone(), hitEnemy ? 0.85 : 0.55, 0x99eeff);
   playSoundEvent('air_launch', { volume: 0.95, minGap: 80 });
 
-  const pullDir = target.clone().sub(origin);
-  const dist = Math.max(1, pullDir.length());
-  pullDir.normalize();
-  addPlayerGrappleImpulse(pullDir, Math.min(item.pullVel || 34, 16 + dist * 0.95), item.liftVel || 7);
+  startPlayerGrappleRide(target, dir, hitEnemy ? 'enemy' : (surfaceHit?.kind || 'wall'));
 
   if (hitEnemy) {
     const towardMe = origin.clone().sub(target);
