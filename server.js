@@ -1902,8 +1902,11 @@ function nextSpawn() {
   return { x: s.x, y: 1, z: s.z };
 }
 
+// Big Tower / Super Tower reuse the M4 Tower rules (100 HP) on a taller map; the client
+// already plays them at 100, so the server must too or hits and deaths desync.
+const M4_TOWER_MODES = new Set(['m4_tower', 'm4_tower_big', 'm4_tower_super']);
 function maxHpForMode(mode) {
-  return mode === 'm4_tower' ? 100 : PLAYER_MAX_HP;
+  return M4_TOWER_MODES.has(mode) ? 100 : PLAYER_MAX_HP;
 }
 
 function createPlayer(id, name) {
@@ -2421,7 +2424,7 @@ io.on('connection', (socket) => {
       // Use client-provided spawn position if given, otherwise fall back to nextSpawn
       const spawn = (b.spawnX != null) ? { x: b.spawnX, y: 1, z: b.spawnZ } : nextSpawn();
       const botWeaponId = ownerMode === 'm4_tower' ? 'm4a1_arena' : b.weaponId;
-      const botHp = ownerMode === 'm4_tower' ? 100 : (b.hp || PLAYER_MAX_HP);
+      const botHp = M4_TOWER_MODES.has(ownerMode) ? 100 : (b.hp || PLAYER_MAX_HP);
       players[b.id] = {
         id: b.id, name: b.name, isBot: true, team: b.team,
         weaponId: botWeaponId, ownerId: socket.id, skin: String(b.skin || 'default').slice(0, 24),
