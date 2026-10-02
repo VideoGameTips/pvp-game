@@ -1834,6 +1834,15 @@ const BLAST_RADIUS  = 7.5;   // m — how far an explosion can still shove you
 // Rocket jumping is the ride, not a hop.
 const BLAST_POWER   = 66.5;  // impulse at the very centre of the blast
 const SLIDE_BLAST_BOOST = 1.5;  // a blast you slide into drives you on, faster
+// 🌊 Blast surf: the slide trick above, for ANY fast movement. Ordinary walking is
+// ~7.3 m/s (SPEED x DEFAULT_MOVE_MULT), so 9 only trips on a slide, dash, adrenaline,
+// a previous blast or similar. Blast within BLAST_SURF_CONE of dead ahead and you're
+// thrown the way you were already going, at BLAST_SURF_BOOST x whatever the blast
+// would have pushed, but never slower than BLAST_SURF_CARRY x your current speed.
+const BLAST_SURF_MIN_SPEED = 9;
+const BLAST_SURF_CONE  = 0.45;  // cos of the half-angle that counts as "in front" (~63 deg)
+const BLAST_SURF_BOOST = 1.6;
+const BLAST_SURF_CARRY = 1.3;
 const BULLET_GRAVITY = 26;   // m/s^2 on arcing shots, scaled by their speed
 const BLAST_DECAY   = 0.10;  // fraction of horizontal blast speed left after 1 s
 // A point-blank charge used to hand you 65 m/s straight up -- an 88 m apex,
@@ -38958,6 +38967,20 @@ function spawnSmokeCloud(pos) {
 // spawnExplosion because that is the single place every blast in the game passes
 // through — grenades, rockets, launchers and map events all land here — so
 // nothing can explode without pushing you.
+// Horizontal speed of the player in m/s, measured from how far the camera actually moved
+// (so walking, slides, dashes and blasts in flight all count). A jump bigger than anything
+// movement can produce — respawn, blink pearl, map change — reads as a teleport, not speed.
+let _playerVel = { x: 0, z: 0 };
+let _playerVelPrev = null;
+function updatePlayerVel(dt) {
+  const px = camera.position.x, pz = camera.position.z;
+  if (_playerVelPrev && dt > 0) {
+    const vx = (px - _playerVelPrev.x) / dt, vz = (pz - _playerVelPrev.z) / dt;
+    if (Math.hypot(vx, vz) > 70 || isDead) { _playerVel.x = 0; _playerVel.z = 0; }
+    else { _playerVel.x = _playerVel.x * 0.4 + vx * 0.6; _playerVel.z = _playerVel.z * 0.4 + vz * 0.6; }
+  }
+  _playerVelPrev = { x: px, z: pz };
+}
 function applyBlastImpulse(pos, opts = {}) {
   if (isDead || pilotedVehicle || pilotedMortar) return;
   const radius = opts.radius ?? BLAST_RADIUS;
@@ -38990,6 +39013,7 @@ function applyBlastImpulse(pos, opts = {}) {
   // redirected along the slide instead — you duck under it and get fired down
   // the lane. Behind you it still shoves you forward, as it always did.
   let px = away.x * power, pz = away.z * power;
+  let surfed = false;
   const slidingNow = !!(window._slideUntil && Date.now() < window._slideUntil && window._slideDir);
   if (slidingNow) {
     const f = window._slideDir;
@@ -38998,8 +39022,27 @@ function applyBlastImpulse(pos, opts = {}) {
     if (ahead > 0) {
       const mag = Math.hypot(px, pz) * SLIDE_BLAST_BOOST;
       px = f.x * mag; pz = f.z * mag;
+      surfed = true;
     }
   }
+  // 🌊 Same idea without needing a slide: fast enough and the blast ahead of you throws
+  // you the way you were already going, faster. _extVel is REPLACED, not added to —
+  // _playerVel already contains any blast speed still in flight, so adding would count it twice.
+  if (!surfed) {
+    const spd = Math.hypot(_playerVel.x, _playerVel.z);
+    if (spd >= BLAST_SURF_MIN_SPEED) {
+      const fx = _playerVel.x / spd, fz = _playerVel.z / spd;
+      const tx = pos.x - feet.x, tz = pos.z - feet.z;
+      const th = Math.hypot(tx, tz);
+      if (th > 0.5 && (tx * fx + tz * fz) / th >= BLAST_SURF_CONE) {
+        const mag = Math.max(Math.hypot(px, pz) * BLAST_SURF_BOOST, spd * BLAST_SURF_CARRY);
+        _extVel.x = fx * mag; _extVel.z = fz * mag;
+        px = 0; pz = 0;
+        surfed = true;
+      }
+    }
+  }
+  if (surfed) pushFeedLine('🌊 BLAST SURF', '', '#7fe8ff', false);
   _extVel.x += px;
   _extVel.z += pz;
   const hz = Math.hypot(_extVel.x, _extVel.z);
@@ -43163,6 +43206,7 @@ function loop() {
   const dt = Math.min((now-lastTime)/1000, 0.05);
   lastTime = now;
   safeLoopStep('movement', () => updateMovement(dt));
+  safeLoopStep('player-vel', () => updatePlayerVel(dt)); // measured speed, read by applyBlastImpulse's blast surf
   safeLoopStep('quick-melee', () => updateQuickMelee());  // and back to what you were holding
   // Auto-fire used to poll on a fixed 50ms setInterval, independent of the
   // render loop. Fine for anything fireRate >= 50, but P90 (20ms), Minigun
