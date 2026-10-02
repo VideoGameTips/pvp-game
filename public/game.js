@@ -24685,15 +24685,28 @@ const SENS = 0.002;
 // rate — this snaps back almost immediately instead of climbing, so it reads
 // as an impact, not a second recoil pattern stacked on the first.
 let _shakePitch = 0, _shakeYaw = 0;
+const ADS_RECOIL_DAMPING = {
+  aimPitch: 0.24,
+  aimYaw: 0.42,
+  shakePitch: 0.24,
+  shakeYaw: 0.42,
+  gunUp: 0.18,
+  gunBack: 0.30,
+  gunTilt: 0.38,
+  gunSide: 0.48,
+  fov: 0.28,
+};
 function addFireShake(strength) {
   const mult = gameplaySettingMult('cameraShake');
   if (mult <= 0) return;
   const mag = Math.min(hyperrealisticOn() ? 0.058 : 0.026, (strength || 1) * mult * 0.0088);
+  const pitchDamp = isADS ? ADS_RECOIL_DAMPING.shakePitch : 1;
+  const yawDamp = isADS ? ADS_RECOIL_DAMPING.shakeYaw : 1;
   // Less of the shot goes UP (was 0.72-1.34 of mag): a real gun shoves back into the
   // shoulder first, and a camera that jumps upward on every round reads as a toy.
   // The push-back itself is the viewmodel's z kick and the small FOV punch.
-  const dp = mag * (0.38 + Math.random() * 0.34);
-  const dy = (Math.random() - 0.5) * mag * 1.05;
+  const dp = mag * (0.38 + Math.random() * 0.34) * pitchDamp;
+  const dy = (Math.random() - 0.5) * mag * 1.05 * yawDamp;
   euler.x += dp; euler.y += dy;
   euler.x = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, euler.x));
   camera.quaternion.setFromEuler(euler);
@@ -24783,13 +24796,15 @@ function addRecoil(w) {
   const mult = Math.min(rc.max || 2.5, 1 + _recoilShots * (rc.climb || 0));
   _recoilShots++;
   const ads = isADS ? (rc.adsMult != null ? rc.adsMult : 0.6) : 1;
+  const adsPitch = isADS ? ads * ADS_RECOIL_DAMPING.aimPitch : 1;
+  const adsYaw = isADS ? ads * ADS_RECOIL_DAMPING.aimYaw : 1;
   // Recoil control: actively dragging the aim down earns a real cut on THIS
   // shot's push, not just a position offset the next shot immediately
   // overwrites. Capped well under 1 so it's a skill discount, not a cheat
   // code — you still have to out-drag an escalating climb, just less badly.
   const control = Math.min(0.6, _recoilCounterRate / ((rc.up || 0.001) * 8));
-  const up = (rc.up || 0) * mult * ads * (0.8 + Math.random() * 0.4) * (1 - control);
-  const side = (rc.side || 0) * mult * ads * (Math.random() * 2 - 1);
+  const up = (rc.up || 0) * mult * adsPitch * (0.8 + Math.random() * 0.4) * (1 - control);
+  const side = (rc.side || 0) * mult * adsYaw * (Math.random() * 2 - 1);
   _recoilRecover = rc.recover || 7;
   euler.x += up; euler.y += side;
   euler.x = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, euler.x));
@@ -24931,6 +24946,10 @@ function kickWeaponVisual(w, pellets = 1) {
   const hyperKick = hyperrealismFactor('kick');
   const s = strength * shake * hyperKick;
   const side = Math.random() < 0.5 ? -1 : 1;
+  const adsGunUp = isADS ? ADS_RECOIL_DAMPING.gunUp : 1;
+  const adsGunBack = isADS ? ADS_RECOIL_DAMPING.gunBack : 1;
+  const adsGunTilt = isADS ? ADS_RECOIL_DAMPING.gunTilt : 1;
+  const adsGunSide = isADS ? ADS_RECOIL_DAMPING.gunSide : 1;
   if (w?.id === 'throwing_knives') {
     _gunKick.z -= Math.min(0.32, 0.16 + s * 0.060);
     _gunKick.y += Math.min(0.012, 0.004 + s * 0.002);
@@ -24947,13 +24966,13 @@ function kickWeaponVisual(w, pellets = 1) {
   }
   // Backwards, not upwards: the gun is driven into your shoulder (z, toward the
   // camera) much harder than before, and climbs (y) and muzzle-flips (rx) much less.
-  _gunKick.z += Math.min(0.39, (model._kickZ || 0.015) * (9.2 + s * 3.3));
-  _gunKick.y += Math.min(0.017, 0.0022 + s * 0.0044);
-  _gunKick.x += side * Math.min(0.066, 0.008 + s * 0.012);
-  _gunKick.rx += Math.min(0.092, 0.012 + s * 0.021);
-  _fovPunch = Math.min(3.6, _fovPunch + (isADS ? 0.38 : 1.22) * Math.sqrt(Math.max(0.3, s)));
-  _gunKick.ry += side * Math.min(0.102, 0.014 + s * 0.020);
-  _gunKick.rz += -side * Math.min(0.136, 0.020 + s * 0.026);
+  _gunKick.z += Math.min(0.39, (model._kickZ || 0.015) * (9.2 + s * 3.3)) * adsGunBack;
+  _gunKick.y += Math.min(0.017, 0.0022 + s * 0.0044) * adsGunUp;
+  _gunKick.x += side * Math.min(0.066, 0.008 + s * 0.012) * adsGunSide;
+  _gunKick.rx += Math.min(0.092, 0.012 + s * 0.021) * adsGunTilt;
+  _fovPunch = Math.min(3.6, _fovPunch + (isADS ? ADS_RECOIL_DAMPING.fov : 1.22) * Math.sqrt(Math.max(0.3, s)));
+  _gunKick.ry += side * Math.min(0.102, 0.014 + s * 0.020) * adsGunTilt;
+  _gunKick.rz += -side * Math.min(0.136, 0.020 + s * 0.026) * adsGunTilt;
   for (const key of ['x', 'y', 'z', 'rx', 'ry', 'rz']) {
     const max = (hyperrealisticOn() ? _GUN_KICK_HYPER_MAX : _GUN_KICK_MAX)[key];
     _gunKick[key] = Math.max(-max, Math.min(max, _gunKick[key]));
