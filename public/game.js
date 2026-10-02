@@ -1339,6 +1339,13 @@ const GAME_MODE_CONFIGS = {
   '10v10': { type: 'race', allies: 9, enemies: 10, killGoal: 100, timeLimit: 180 },
   'm4_tower': { type: 'race', allies: 4, enemies: 5, killGoal: 99, timeLimit: 300,
     fixedKit: 'm4_tower', forcedMap: 'm4_tower', playerHp: 100, botHp: 100, autoRespawn: true },
+  // Same kit and rules as m4_tower (fixedKit stays 'm4_tower' on purpose --
+  // every applyM4TowerKit()/isM4Tower check keys off THAT string); forcedMap
+  // is the only thing that differs, since that is what picks the arena.
+  'm4_tower_big':   { type: 'race', allies: 4, enemies: 5, killGoal: 99, timeLimit: 300,
+    fixedKit: 'm4_tower', forcedMap: 'm4_tower_big', playerHp: 100, botHp: 100, autoRespawn: true },
+  'm4_tower_super': { type: 'race', allies: 4, enemies: 5, killGoal: 99, timeLimit: 300,
+    fixedKit: 'm4_tower', forcedMap: 'm4_tower_super', playerHp: 100, botHp: 100, autoRespawn: true },
   // FFA: respawn, most kills when timer ends
   'ffa5':  { type: 'ffa',  allies: 0, enemies: 5,  timeLimit: 300 },
   'ffa15': { type: 'ffa',  allies: 0, enemies: 15, timeLimit: 300 },
@@ -5543,6 +5550,91 @@ function buildM4TowerMap() {
 }
 buildM4TowerMap();
 
+// 🏢 Two taller M4 Tower variants -- Big Tower adds a 3rd story, Super Tower a
+// 4th, each on a slightly bigger footprint, generalized out of the original
+// 2-story builder above (stories=2, scale=1 reproduces it exactly). Every
+// climb corner keeps going flight-by-flight all the way to the top floor
+// instead of stopping at the first, and the roof always sits above whichever
+// floor ends up on top.
+const M4_TOWER_MAP_NAMES = new Set(['m4_tower', 'm4_tower_big', 'm4_tower_super']);
+registerMap('m4_tower_big');
+registerMap('m4_tower_super');
+function buildM4TowerStoryMap(name, stories, scale) {
+  const m = name;
+  const STORY_H = 4.15;                          // matches the original deck spacing exactly
+  const topDeckY = (stories - 1) * STORY_H;
+  const roofY = topDeckY + 4.20;                  // same headroom above the top floor as the original (8.35 - 4.15)
+  const half = 50 * scale;                        // original footprint is 100x100
+  addMapBox(m, 0, roofY, 0, half * 2, 0.7, half * 2, 0x111316);
+  addMapBox(m, 0, roofY - 0.5, 0, half * 1.76, 0.08, half * 1.76, 0x070809, 0, 0.78);
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(half * 2, half * 2), new THREE.MeshLambertMaterial({ color: 0x51585c }));
+  ground.rotation.x = -Math.PI / 2;
+  MAP_GROUPS[m].add(ground);
+  const grid = new THREE.GridHelper(half * 2, 50, 0x3c4246, 0x3c4246);
+  grid.position.y = 0.01;
+  MAP_GROUPS[m].add(grid);
+  [[half*2,4,1,0,2,-half],[half*2,4,1,0,2,half],[1,4,half*2,-half,2,0],[1,4,half*2,half,2,0]].forEach(([w,h,d,x,y,z]) => {
+    addMapBox(m, x, y, z, w, h, d, 0x30343a);
+  });
+  const deck = 0x747b80, wall = 0x454a50, trim = 0xa98d55, cover = 0x5b635f;
+  const pillarH = roofY - 0.15;
+  [[-38,-38], [38,-38], [-38,38], [38,38], [0,-44], [0,44], [-44,0], [44,0]].forEach(([x,z]) => {
+    addMapBox(m, x * scale, pillarH / 2, z * scale, 2.2, pillarH, 2.2, 0x25282d);
+  });
+
+  // Every upper floor -- a deck ring, a railing ring, and its own cover set --
+  // repeated per story instead of the original's single hard-coded floor.
+  for (let f = 1; f < stories; f++) {
+    const deckY = f * STORY_H, wallY = deckY + 0.85;
+    [[0,-30,34,12], [0,30,34,12], [-30,0,12,34], [30,0,12,34]].forEach(([x,z,w,d]) => {
+      addMapBox(m, x * scale, deckY, z * scale, w * scale, 0.35, d * scale, deck);
+    });
+    [[0,-30,30,0.5], [0,30,30,0.5], [-30,0,0.5,30], [30,0,0.5,30]].forEach(([x,z,w,d]) => {
+      addMapBox(m, x * scale, wallY, z * scale, w * scale, 1.7, d * scale, wall);
+    });
+    [[-30,-30], [30,-30], [-30,30], [30,30], [0,-30], [0,30], [-30,0], [30,0]].forEach(([x,z], i) => {
+      addMapBox(m, x * scale, wallY, z * scale, (i % 2 ? 7 : 2.4) * scale, 1.7, (i % 2 ? 2.4 : 7) * scale, cover);
+    });
+  }
+
+  // Climb corners: the same rising-block staircase as the original, one
+  // flight per floor gap, each flight resting on the floor below it and
+  // landing just above the floor it reaches.
+  const makeCornerClimb = (sx, sz) => {
+    const dirX = sx < 0 ? 1 : -1;
+    const dirZ = sz < 0 ? 1 : -1;
+    for (let f = 0; f < stories - 1; f++) {
+      const base = f * STORY_H;
+      for (let i = 0; i < 12; i++) {
+        const hl = 0.38 + i * 0.32;
+        const x = sx + dirX * (1.4 + (i % 6) * 1.25);
+        const z = sz + dirZ * (1.4 + Math.floor(i / 6) * 4.2);
+        addMapBox(m, x, base + hl / 2, z, 3.2, hl, 2.4, trim);
+      }
+      addMapBox(m, sx + dirX * 4.8, base + 4.25, sz + dirZ * 7.5, 8, 0.35, 5, deck);
+    }
+  };
+  [[-43,-43], [43,-43], [-43,43], [43,43]].forEach(([x,z]) => makeCornerClimb(x * scale, z * scale));
+
+  // Ground-floor lane cover -- unchanged from the original, just scaled.
+  [
+    [0, 0, 10, 2.1, 2.2, 0],
+    [-18, 0, 2.2, 2.0, 10, 0],
+    [18, 0, 2.2, 2.0, 10, 0],
+    [0, -18, 12, 1.8, 2.2, 0],
+    [0, 18, 12, 1.8, 2.2, 0],
+    [-16, -16, 7, 1.8, 2.2, Math.PI / 4],
+    [16, 16, 7, 1.8, 2.2, Math.PI / 4],
+    [-16, 16, 7, 1.8, 2.2, -Math.PI / 4],
+    [16, -16, 7, 1.8, 2.2, -Math.PI / 4],
+  ].forEach(([x,z,w,h,d,rot]) => addMapBox(m, x * scale, h / 2, z * scale, w * scale, h, d * scale, cover, rot));
+
+  addMapBox(m, 0, 0.06, 0, 13 * scale, 0.04, 13 * scale, 0x24282b, 0, 0.9);
+  MAP_GROUPS[m]._skyColor = 0x070809;
+}
+buildM4TowerStoryMap('m4_tower_big', 3, 1.15);
+buildM4TowerStoryMap('m4_tower_super', 4, 1.30);
+
 // ──────────────────────────────────────────────────────────────────────────
 // BASE RAID — PvE compound assault. Player and allies start outside the south
 // breach; guards fill the courtyard, towers, barracks and command building.
@@ -9085,6 +9177,14 @@ buildFlyingMoaiMap();
 // 17. KING OF THE HILL / BR ARENA — massive map with vehicles + helicopters
 // ──────────────────────────────────────────────────────────────────────────
 registerMap('br_arena');
+// 🗺️ Two dedicated big-footprint arenas for 2v2/3v3 -- a bigger, denser step
+// up from the standard 172 map, and a bigger one again. Both ride the grid
+// concept system below (addGridConceptMap): no hand-built content of their
+// own, just a bigger size, a forced archetype (never each other's, and never
+// br_arena's -- a fresh footprint each), and extra addGridClutter density so
+// a wider map doesn't read as emptier, just as more of one.
+registerMap('big_arena');
+registerMap('super_arena');
 function buildBrArenaMap() {
   const m = 'br_arena';
   const SIZE = 250; // 250x250 — 6x bigger than standard maps
@@ -9342,15 +9442,17 @@ function addGridLedges(name, s, large) {
 // varying size so some pieces are full walls and some are low enough to see
 // and shoot over. Built once at boot like the rest of the map, so the layout
 // is fixed for that server run, not re-rolled mid-match.
-function addGridClutter(name, half, s) {
+function addGridClutter(name, half, s, boost = 0) {
   const sizes = [[3.2, 3.4, 3.0], [4.6, 5.4, 3.6], [2.4, 2.0, 2.4], [6.2, 6.6, 3.2], [3.6, 4.6, 5.2], [2.8, 3.0, 2.8]];
   const tints = [0xf7f7f7, 0xeef1f4, 0xffffff, 0xe4e9ee];
-  const step = 12.5 * s, margin = 9 * s, centerClear = 15 * s;
+  // boost (0-1.5, the big/super-big arenas) packs the grid tighter and skips
+  // fewer slots, so a bigger footprint reads as MORE cover, not thinner cover.
+  const step = Math.max(7, 12.5 - boost * 2.6) * s, margin = 9 * s, centerClear = 15 * s;
   let placed = 0;
   for (let gx = -half + margin; gx <= half - margin; gx += step) {
     for (let gz = -half + margin; gz <= half - margin; gz += step) {
       if (Math.hypot(gx, gz) < centerClear) continue;           // leave the archetype's own centrepiece alone
-      if (Math.random() < 0.26) continue;                       // some open lanes, or this reads as a maze
+      if (Math.random() < Math.max(0.05, 0.26 - boost * 0.14)) continue; // some open lanes, or this reads as a maze
       const x = gx + (Math.random() * 2 - 1) * step * 0.32;
       const z = gz + (Math.random() * 2 - 1) * step * 0.32;
       const [w, hh, d] = sizes[Math.floor(Math.random() * sizes.length)];
@@ -9417,20 +9519,26 @@ function addGridBlock(name, cx, cz, sizeX, sizeZ, groundH, roofH, flip = false) 
   addGridLadder(name, cx + dir * (sizeX / 2 + 0.16), cz, Math.PI / 2, 0, roofH);
 }
 function addGridConceptMap(name, index) {
-  if (isArchivedLobbyMap(name) || name === 'base_raid') return;
+  if (isArchivedLobbyMap(name) || name === 'base_raid' || M4_TOWER_MAP_NAMES.has(name)) return;
   if (name.startsWith(ADMIN_CUSTOM_MAP_PREFIX)) return;
   clearMapForGridConcept(name);
   const large = name === 'br_arena';
   const compact = name === 'range';
-  const size = large ? 260 : compact ? 100 : 172;
+  const big = name === 'big_arena';
+  const superBig = name === 'super_arena';
+  const size = superBig ? 300 : big ? 220 : large ? 260 : compact ? 100 : 172;
   const half = size / 2 - 6;
-  const h = large ? 10.2 : 8.4;
+  const h = superBig ? 11.4 : big ? 9.4 : large ? 10.2 : 8.4;
   addGridConceptGround(name, size);
   addGridPerimeter(name, half, h);
 
   const solid = 0xffffff, soft = 0xf7f7f7, marker = 0xe8edf2;
-  const arch = GRID_MAP_ARCHETYPES[index % GRID_MAP_ARCHETYPES.length];
-  const s = large ? 1.6 : compact ? 0.8 : 1.15;
+  // Forced, not indexed: big_arena and super_arena always land on different
+  // archetypes from each other (and from br_arena's own layout), rather than
+  // leaving it to index % 12 luck.
+  const arch = big ? 'tower_corners' : superBig ? 'outpost'
+             : GRID_MAP_ARCHETYPES[index % GRID_MAP_ARCHETYPES.length];
+  const s = superBig ? 1.9 : big ? 1.4 : large ? 1.6 : compact ? 0.8 : 1.15;
   const B = (x, y, z, w, hh, d, rot = 0, color = solid) =>
     addMapBox(name, x * s, y, z * s, w * s, hh, d * s, color, rot);
   const W = (x, z, w, d, rot = 0, hh = 7.2, color = solid) => B(x, hh / 2, z, w, hh, d, rot, color);
@@ -9520,9 +9628,10 @@ function addGridConceptMap(name, index) {
     [[-20,-16], [20,16], [-20,16], [20,-16]].forEach(([x,z]) => W(x, z, 9, 3.4, 0, 3.2, soft));
   }
 
-  try { addGridRamps(name, s, large); } catch (e) { console.warn('[ramps]', name, e); }
-  try { addGridLedges(name, s, large); } catch (e) { console.warn('[ledges]', name, e); }
-  try { addGridClutter(name, half, s); } catch (e) { console.warn('[clutter]', name, e); }
+  const bigScaleRoutes = large || big || superBig;
+  try { addGridRamps(name, s, bigScaleRoutes); } catch (e) { console.warn('[ramps]', name, e); }
+  try { addGridLedges(name, s, bigScaleRoutes); } catch (e) { console.warn('[ledges]', name, e); }
+  try { addGridClutter(name, half, s, superBig ? 1.4 : big ? 1 : 0); } catch (e) { console.warn('[clutter]', name, e); }
 
   // Small spawn-side anchors make orientation obvious without breaking the all-white look.
   B(-half / s + 10, 0.04, 0, 7, 0.08, 24, 0, 0xe9f2ff);
@@ -41619,7 +41728,7 @@ function spawnGameBots() {
     const sky = MAP_GROUPS[selectedModeConfig.forcedMap]?._skyColor;
     if (sky != null && scene.background?.setHex) scene.background.setHex(sky);
   } else if (selectedModeConfig.type !== 'dday' && selectedModeConfig.type !== 'range') {
-    const pool = ['blank','urban','warehouse','forest','vietnam','volcano','cyber','desert','tundra','space','airport','trenches','chernobyl','refinery','skydock','sewer','gravity_lab','glassworks','carrier','overgrowth','orbital_station','foundry','carnival','biosphere','lockdown','studio','temple','holiday','labyrinth','arena','opera','doomsday','train','dreamscape','pearl_harbor','titanic','supermarket','pyongyang','traffic_cone_republic','flying_moai'];
+    const pool = ['blank','urban','warehouse','forest','vietnam','volcano','cyber','desert','tundra','space','airport','trenches','chernobyl','refinery','skydock','sewer','gravity_lab','glassworks','carrier','overgrowth','orbital_station','foundry','carnival','biosphere','lockdown','studio','temple','holiday','labyrinth','arena','opera','doomsday','train','dreamscape','pearl_harbor','titanic','supermarket','pyongyang','traffic_cone_republic','flying_moai','big_arena','super_arena'];
     const chosen = (selectedMap === 'auto' || !MAP_GROUPS[selectedMap]) ? pool[Math.floor(Math.random()*pool.length)] : selectedMap;
     activateMap(chosen);
     // Update sky color if the map specifies one
@@ -45211,7 +45320,7 @@ function openModeMenu() {
 
 // Modes whose kit is built inside selectMode() (forced weapons / infinite ammo) replay
 // through it; every other mode keeps the loadout you just played with.
-const SELF_KIT_MODES = ['dday', 'range', 'aim_trainer', 'obby', 'wave_dash', 'lobby13', 'm4_tower'];
+const SELF_KIT_MODES = ['dday', 'range', 'aim_trainer', 'obby', 'wave_dash', 'lobby13', 'm4_tower', 'm4_tower_big', 'm4_tower_super'];
 // The GAME_MODE_CONFIGS key being played (configs are shared objects: match by identity).
 function currentModeId() {
   const hit = Object.entries(GAME_MODE_CONFIGS).find(([, cfg]) => cfg === selectedModeConfig);
@@ -46221,7 +46330,7 @@ function selectMode(modeId) {
     showLobbyModesButton(true); // 🎮 floating button back to the mode menu
     showLobbyDuelButton(true);  // ⚔️ pick who you want to 1V1 (#31)
     showFloatingSettingsButton(true);
-  } else if (modeId === 'm4_tower') {
+  } else if (modeId === 'm4_tower' || modeId === 'm4_tower_big' || modeId === 'm4_tower_super') {
     applyM4TowerKit();
     gameStarted = true;
     spawnGameBots();
@@ -47407,6 +47516,8 @@ const MAP_DESCS = {
   doomsday:   '🌋 Doomsday — collapsing city, fire pillars, abandoned heli',
   train:      '🚂 Train Terminal — 3 tracks, platforms + canopy, footbridge, level crossing',
   dreamscape: '🌌 Dreamscape — floating stairs + impossible shapes',
+  big_arena:   '🗺️ Big Arena — bigger footprint, four fortified corners, denser cover — built for 2v2/3v3',
+  super_arena: '🗺️ Super Big Arena — biggest non-BR map, two full compounds face off, densest cover — 2v2/3v3',
 };
 function selectMapPick(mapId) {
   selectedMap = pickedMap = mapId;
