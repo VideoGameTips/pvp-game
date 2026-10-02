@@ -13179,6 +13179,7 @@ function buildAK20() {
 
   const flash = makeMuzzleFlash(); flash.position.set(0, 0.020, -0.585); g.add(flash);
   g._flash = flash; g._kickZ = 0.015;
+  g._hasDefaultAimer = true;
   g._greebled = true; g._handDetailed = true;
   g.position.set(0.12, -0.1, -0.25);
   return g;
@@ -22492,9 +22493,81 @@ function addFlankStripes(model, colour) {
   }
   return n;
 }
+function addDefaultAutoAimer(model, weapon) {
+  if (!model || !weapon?.auto || model._hasDefaultAimer) return 0;
+  const skip = new Set();
+  if (model._flash) model._flash.traverse(o => skip.add(o));
+  let body = null, best = 0;
+  model.traverse(o => {
+    if (!o.isMesh || !o.geometry || skip.has(o)) return;
+    const mat = Array.isArray(o.material) ? o.material[0] : o.material;
+    if (!mat || mat.transparent || mat.isMeshBasicMaterial) return;
+    const t = o.geometry.type;
+    if (t !== 'BoxGeometry' && t !== 'ExtrudeGeometry') return;
+    o.geometry.computeBoundingBox();
+    const bb = o.geometry.boundingBox;
+    if (!bb) return;
+    const sx = bb.max.x - bb.min.x, sy = bb.max.y - bb.min.y, sz = bb.max.z - bb.min.z;
+    const vol = sx * sy * sz;
+    if (sx < 0.018 || sy < 0.020 || sz < 0.070) return;
+    if (vol > best) { best = vol; body = o; }
+  });
+  if (!body) return 0;
+  const bb = body.geometry.boundingBox;
+  const sx = bb.max.x - bb.min.x, sy = bb.max.y - bb.min.y, sz = bb.max.z - bb.min.z;
+  const cx = (bb.max.x + bb.min.x) / 2, cy = (bb.max.y + bb.min.y) / 2, cz = (bb.max.z + bb.min.z) / 2;
+  if (sx < 0.018 || sz < 0.080) return 0;
+
+  const railMat = new THREE.MeshPhongMaterial({ color: 0x24282d, shininess: 85, specular: 0x77818c });
+  const sightMat = new THREE.MeshPhongMaterial({ color: 0x88939d, shininess: 145, specular: 0xdde7f0 });
+  const stripeMat = new THREE.MeshPhongMaterial({ color: 0x6f7a86, shininess: 55, specular: 0xa8b0b8 });
+  const topY = bb.max.y - sy * 0.012;
+  const railH = Math.max(0.004, Math.min(0.010, sy * 0.10));
+  const rail = new THREE.Mesh(new THREE.BoxGeometry(Math.max(0.010, sx * 0.38), railH, sz * 0.70), railMat);
+  rail.position.set(cx, topY, cz - sz * 0.03);
+  body.add(rail);
+
+  const rearZ = Math.min(bb.max.z - sz * 0.12, cz + sz * 0.32);
+  const frontZ = Math.max(bb.min.z + sz * 0.12, cz - sz * 0.36);
+  const deckY = topY + railH * 0.80;
+  const rearBase = new THREE.Mesh(new THREE.BoxGeometry(Math.max(0.018, sx * 0.42), railH, Math.max(0.012, sz * 0.06)), railMat);
+  rearBase.position.set(cx, deckY, rearZ);
+  body.add(rearBase);
+  const ringR = Math.max(0.008, Math.min(0.015, sy * 0.17));
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(ringR, Math.max(0.0018, ringR * 0.22), 7, 16), sightMat);
+  ring.position.set(cx, deckY + ringR * 0.95, rearZ);
+  ring.castShadow = true;
+  body.add(ring);
+  const frontBase = new THREE.Mesh(new THREE.BoxGeometry(Math.max(0.016, sx * 0.34), railH, Math.max(0.010, sz * 0.05)), railMat);
+  frontBase.position.set(cx, deckY, frontZ);
+  body.add(frontBase);
+  const post = new THREE.Mesh(new THREE.BoxGeometry(Math.max(0.003, sx * 0.08), ringR * 1.55, Math.max(0.003, sx * 0.08)), sightMat);
+  post.position.set(cx, deckY + ringR * 0.78, frontZ);
+  body.add(post);
+
+  // Same readability language as the AK pass: one long stripe, two broken
+  // middle stripes, one long lower stripe per flank, sunk into the side faces.
+  const stripeW = Math.max(0.002, sx * 0.055);
+  const stripeH = Math.max(0.003, Math.min(0.007, sy * 0.08));
+  const stripeX = sx / 2 - stripeW * 0.35;
+  const addStripe = (sign, y, z, d) => {
+    const s = new THREE.Mesh(new THREE.BoxGeometry(stripeW, stripeH, d), stripeMat);
+    s.position.set(cx + sign * stripeX, y, z);
+    body.add(s);
+  };
+  for (const sign of [-1, 1]) {
+    addStripe(sign, cy + sy * 0.28, cz, sz * 0.64);
+    addStripe(sign, cy + sy * 0.02, cz - sz * 0.22, sz * 0.22);
+    addStripe(sign, cy + sy * 0.02, cz + sz * 0.22, sz * 0.22);
+    addStripe(sign, cy - sy * 0.24, cz, sz * 0.56);
+  }
+  model._hasDefaultAimer = true;
+  return 1;
+}
 for (let i = 0; i < WEAPONS.length; i++) {
   const c = STRIPE_GUNS[WEAPONS[i].id];
   if (c != null && weaponModels[i]) { try { addFlankStripes(weaponModels[i], c); } catch (e) {} }
+  try { addDefaultAutoAimer(weaponModels[i], WEAPONS[i]); } catch (e) {}
 }
 
 // Finish every model the player can see: welded together, and shiny.
