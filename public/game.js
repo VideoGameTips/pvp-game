@@ -13057,17 +13057,16 @@ function buildVoidHarvester() {
 
 function buildAK20() {
   const g = new THREE.Group();
-  // 🔫 AK-47, black furniture. Real parkerised steel is a dark GREY-blue, not
-  // black: at luminance 0.085 the old receiver had no shading range at all, so
-  // every light level clamped to the same value and the rifle rendered as a
-  // silhouette. These sit at 0.16-0.22, which is where gun metal actually lives,
-  // and let the specular do the work.
+  // 🔫 AK-20, black furniture. Keep the AK silhouette, but make every attachment
+  // visibly socket into a larger part: magwell sleeve, stock hinge, handguard
+  // collars, and real sights instead of tiny blocks floating on the spine.
   const steel   = new THREE.MeshPhongMaterial({ color: 0x3a3f47, shininess: 105, specular: 0xb2bcc7 });
   const blued   = new THREE.MeshPhongMaterial({ color: 0x454b53, shininess: 140, specular: 0xd2dbe4 });
   const bright  = new THREE.MeshPhongMaterial({ color: 0x8d959d, shininess: 150, specular: 0xdfe6ee });
   const polymer = new THREE.MeshPhongMaterial({ color: 0x2b2f35, shininess: 40,  specular: 0x5e646c });
   const grip    = new THREE.MeshPhongMaterial({ color: 0x272b30, shininess: 30,  specular: 0x4a5057 });
   const magMat  = new THREE.MeshPhongMaterial({ color: 0x32373d, shininess: 66,  specular: 0x8d959e });
+  const stripe  = new THREE.MeshPhongMaterial({ color: 0x79838d, shininess: 70,  specular: 0xb0bac4 });
   const inner   = new THREE.MeshPhongMaterial({ color: 0x121417, shininess: 20,  specular: 0x2a2d31 });
 
   function sidePlate(mat, pts, width, x = 0) {
@@ -13097,24 +13096,30 @@ function buildAK20() {
     m.castShadow = true; g.add(m); return m;
   };
 
-  // ── Simplified pass ───────────────────────────────────────────────────
-  // Every part below used to be several: a dust cover with 5 stamped ribs, six
-  // receiver rivets, a 5-piece front sight tower, a magazine with a rib and a
-  // seam box per segment, finger grooves in the grip and handguard, a separate
-  // butt plate/sling loop/comb seam/rear trunnion behind the stock. Up close,
-  // in first person, that many small edges catch the light at slightly
-  // different angles and read as a lumpy, uneven surface rather than a clean
-  // gun -- which is what was flagged. This keeps one shape per real part:
-  // receiver, ejection port, selector, magazine, grip, stock (+ the wrist
-  // bridge that closes the gap to the receiver), handguard, gas tube, barrel,
-  // front sight, muzzle brake.
+  const sideStripe = (x, y, z, d) => box(stripe, 0.0032, 0.006, d, x, y, z);
+
   box(steel, 0.048, 0.100, 0.320, 0, 0.005, -0.010);                 // receiver
-  box(inner, 0.044, 0.014, 0.080, 0, 0.053, -0.060);                 // dust cover / ejection port, one flat inset
+  box(steel, 0.050, 0.025, 0.080, 0, -0.044, -0.056);                 // magwell sleeve: magazine grows out of this, not a thread
+  box(inner, 0.044, 0.014, 0.080, 0, 0.053, -0.060);                 // dust cover / ejection port
   box(bright, 0.006, 0.052, 0.010, 0.028, 0.014, 0.010, 0, 0, 0.20);  // selector lever
-  // Rear sight -- an aiming reference so the top of the receiver isn't bare.
-  // A block with a notch cut into it, sitting behind the dust cover.
-  box(steel, 0.028, 0.012, 0.020, 0, 0.070, -0.086);
-  box(inner,  0.007, 0.006, 0.008, 0, 0.076, -0.086);                // notch
+
+  // Rivals-style flank markings: long top stripe, split middle stripe, long low
+  // stripe on both sides. They are sunk into the receiver faces so they read as
+  // paint/insets rather than plates hanging off the gun.
+  [-1, 1].forEach(sd => {
+    const x = sd * 0.0234;
+    sideStripe(x, 0.036, -0.010, 0.230);
+    sideStripe(x, 0.006, -0.092, 0.074);
+    sideStripe(x, 0.006,  0.070, 0.082);
+    sideStripe(x, -0.024, -0.004, 0.220);
+  });
+
+  // Rear aperture and hooded front sight. The ring gives the starter rifle a
+  // clear aiming shape instead of a tiny notch lost on the dark receiver.
+  box(steel, 0.032, 0.016, 0.026, 0, 0.070, -0.082);
+  const rearRing = new THREE.Mesh(new THREE.TorusGeometry(0.013, 0.0026, 7, 16), bright);
+  rearRing.position.set(0, 0.083, -0.082); rearRing.castShadow = true; g.add(rearRing);
+  box(inner, 0.007, 0.006, 0.006, 0, 0.083, -0.082);                 // peep hole shadow
 
   gpPart(g, 'main', () => { box(bright, 0.014, 0.011, 0.030, 0.030, 0.046, -0.030); });
 
@@ -13122,8 +13127,8 @@ function buildAK20() {
   guard.rotation.set(0, Math.PI / 2, -0.45); guard.position.set(0, -0.078, 0.020); g.add(guard);
   box(bright, 0.005, 0.017, 0.006, 0, -0.068, 0.020, 0.22);          // trigger
 
-  // Magazine: the banana curve, one smooth segment per step -- see the git
-  // history if the rib/seam detailing is ever wanted back.
+  // Magazine: still curved, but the top segment is buried inside the magwell so
+  // it reads as locked in, not pinched on by a tiny edge.
   let my = -0.056, mz = -0.060, ang = 0.10;
   for (let i = 0; i < 5; i++) {
     box(magMat, 0.030, 0.034, 0.048, 0, my, mz, ang);
@@ -13138,6 +13143,7 @@ function buildAK20() {
   // "two pieces, floating" look that was flagged -- same fix as the stock).
   // Still reaches the receiver and runs far enough past the firing hand to
   // read as a handle.
+  box(grip, 0.040, 0.026, 0.052, 0, -0.046, 0.058, 0.16);            // grip tang under receiver
   sidePlate(grip, [
     [0.078,-0.038],[0.114,-0.064],[0.124,-0.148],[0.130,-0.172],[0.106,-0.184],
     [0.070,-0.180],[0.056,-0.148],[0.068,-0.088],[0.062,-0.044],
@@ -13146,6 +13152,7 @@ function buildAK20() {
   // Stock: ONE piece, wrist through to the butt, instead of two separate
   // plates (a "bridge" bolted to a "stock") that read as floating apart from
   // each other where they met. Same silhouette, one continuous outline now.
+  box(steel, 0.054, 0.070, 0.026, 0, 0.000, 0.144);                 // stock hinge block
   sidePlate(polymer, [
     [0.142,0.052],[0.170,0.042],[0.200,0.024],[0.222,0.011],
     [0.326,0.014],[0.392,-0.012],[0.386,-0.030],[0.220,-0.048],[0.166,-0.052],[0.142,-0.046],
@@ -13153,15 +13160,20 @@ function buildAK20() {
   box(inner, 0.048, 0.052, 0.008, 0, -0.002, 0.404, 0.10);           // butt plate
 
   // Handguard, one piece covering the gas tube instead of stacked halves.
+  box(steel, 0.052, 0.070, 0.026, 0, 0.018, -0.166);                 // rear handguard collar
   sidePlate(polymer, [
     [-0.336,0.012],[-0.310,0.052],[-0.186,0.052],[-0.164,0.012],[-0.190,-0.008],[-0.320,-0.006],
   ], 0.050, 0);
+  box(steel, 0.052, 0.060, 0.024, 0, 0.018, -0.336);                 // front handguard collar
   cyl(blued, 0.0052, 0.0052, 0.180, 14, 0, 0.046, -0.256);           // gas tube
 
   // Barrel, front sight, slant brake -- the AKM's signature angled cut.
+  cyl(steel, 0.016, 0.016, 0.038, 16, 0, 0.018, -0.344);             // barrel trunnion collar
   cyl(blued, 0.0064, 0.0064, 0.330, 20, 0, 0.018, -0.396);
   box(steel, 0.022, 0.040, 0.024, 0, 0.040, -0.505);                 // front sight block
-  box(bright, 0.0035, 0.022, 0.0035, 0, 0.058, -0.505);              // post
+  const frontHood = new THREE.Mesh(new THREE.TorusGeometry(0.013, 0.0024, 7, 14), steel);
+  frontHood.position.set(0, 0.063, -0.505); frontHood.castShadow = true; g.add(frontHood);
+  box(bright, 0.0035, 0.024, 0.0035, 0, 0.058, -0.505);              // post
   const brake = cyl(steel, 0.0118, 0.0104, 0.046, 18, 0, 0.018, -0.556);
   brake.rotation.x = Math.PI / 2 - 0.13;
 
