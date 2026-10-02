@@ -3250,7 +3250,7 @@ function weaponAudioProfile(id, baseWeapon) {
   const lowerId = String(id || w.id || '').toLowerCase();
   // ── Explicit per-weapon profiles (each unique-ish) ─────────────────────
   if (lowerId === 'ak20') return { kind:'ak_metal', vol:0.24, dur:0.075, f1:260, f2:90, action:'ak_rifle' };
-  if (lowerId === 'p90' || lowerId === 'p90_spec') return { kind:'auto_blast', vol:0.20, dur:0.075, f1:760, f2:240, action:'water_smg' };
+  if (lowerId === 'p90' || lowerId === 'p90_spec') return { kind:'p90_metal', vol:0.20, dur:0.06, f1:760, f2:240, action:'p90_metal' };
   if (lowerId === 'firework_launcher') return { kind:'firework', vol:0.36, dur:0.26, f1:130, f2:55 };
   if (lowerId === 'arc_torrent') return { kind:'arc', vol:0.26, dur:0.11, f1:980, f2:320 };
   if (lowerId === 'arc_rifle')   return { kind:'arc', vol:0.30, dur:0.13, f1:1240, f2:380 };
@@ -3296,7 +3296,7 @@ function weaponAudioProfile(id, baseWeapon) {
   if (lowerId.includes('knife') || lowerId.includes('throwing')) return { kind:'throw', vol:0.23, dur:0.12, f1:780, f2:260 };
   if (type.includes('shotgun') || lowerId.includes('shotgun') || lowerId.includes('sg8') || lowerId.includes('sg8') || lowerId.includes('shorty') || lowerId.includes('sawed') || lowerId === 'boomstick' || lowerId.includes('spas')) return { kind:'boom', vol:0.56, dur:0.22, f1:150, f2:55, action:'shotgun', tail:0.55 };
   if (type.includes('sniper') || type.includes('marksman') || lowerId.includes('srx') || lowerId.includes('lever') || lowerId === 'amr' || lowerId === 'm1_garand' || lowerId === 'air_rifle' || lowerId === 'duelist_pistol') return { kind:'crack', vol:0.66, dur:0.18, f1:680, f2:95, action:'bolt', tail: lowerId === 'amr' ? 1.35 : 1.0 };
-  if (type.includes('smg') || lowerId.includes('vector') || lowerId.includes('mp40') || lowerId === 'machine_pistol' || lowerId === 'hkmp7' || lowerId === 'smart_smg') return { kind:'auto_blast', vol:0.20, dur:0.075, f1:430, f2:160, action:'water_smg' };
+  if (type.includes('smg') || lowerId.includes('vector') || lowerId.includes('mp40') || lowerId === 'machine_pistol' || lowerId === 'hkmp7' || lowerId === 'smart_smg') return { kind:'smg_metal', vol:0.20, dur:0.06, f1:430, f2:160, action:'smg_metal' };
   if (type.includes('lmg') || type.includes('heavy') || lowerId.includes('minigun') || lowerId.includes('rpd') || lowerId === 'gau19' || lowerId === 'm134') return { kind:'auto_blast_heavy', vol:0.30, dur:0.11, f1:230, f2:80, action:'water_belt', tail:0.30 };
   if (type.includes('secondary') || lowerId.includes('pistol') || lowerId.includes('revolver') || lowerId.includes('hand_cannon') || lowerId === 'mauser' || lowerId === 'nail_gun') return { kind:'pistol', vol:0.34, dur:0.12, f1:540, f2:120, action: lowerId.includes('revolver') ? 'revolver' : 'slide' };
   return w.auto ? { kind:'auto_blast', vol:0.23, dur:0.080, f1:145, f2:52, action:'water_rifle' }
@@ -3531,6 +3531,27 @@ function playMuzzleBlast(ctx, start, outNode, kind, volume) {
     PFN(start + 0.003, 0.030, volume * 0.30, 'bandpass', 2650, 7.0, 2.2);   // steel ring
     PFN(start + 0.003, 0.022, volume * 0.20, 'bandpass', 4300, 9.0, 2.2);   // higher partial
     TAIL(volume * 0.20, 0.20, 1100);
+  } else if (kind === 'smg_metal') {           // SMGs: tighter and brighter than the AK
+    // Same fix as ak_metal for the same complaint (hollow, plastic "tok" from the
+    // generic auto_blast + water_smg action), pitched higher and cut shorter
+    // because these fire two to five times as fast and a long tail turns to mush.
+    CRACK(volume * 1.40, 5200, 0.0035);
+    BLAST(volume * 0.80, 9200, 1100, 0.030);
+    PT(start, 0.040, 130, 95, volume * 0.10, 'sine');
+    PFN(start, 0.020, volume * 0.62, 'bandpass', 2100, 0.6);
+    PT(start, 0.026, 430, 170, volume * 0.30, 'triangle');
+    PFN(start + 0.002, 0.022, volume * 0.26, 'bandpass', 3000, 8.0, 2.2);   // steel ring
+    PFN(start + 0.002, 0.016, volume * 0.16, 'bandpass', 4800, 10.0, 2.2);
+    TAIL(volume * 0.15, 0.14, 1300);
+  } else if (kind === 'p90_metal') {           // P90: the highest and tightest of them
+    CRACK(volume * 1.35, 6200, 0.003);
+    BLAST(volume * 0.70, 9800, 1400, 0.024);
+    PT(start, 0.030, 140, 100, volume * 0.07, 'sine');
+    PFN(start, 0.016, volume * 0.58, 'bandpass', 2600, 0.6);
+    PT(start, 0.020, 520, 220, volume * 0.26, 'triangle');
+    PFN(start + 0.002, 0.018, volume * 0.24, 'bandpass', 3600, 9.0, 2.2);
+    PFN(start + 0.002, 0.012, volume * 0.14, 'bandpass', 5600, 11.0, 2.2);
+    TAIL(volume * 0.11, 0.11, 1500);
   } else if (kind === 'tick' || kind === 'p90') {
     CRACK(volume * 1.35, kind === 'p90' ? 4200 : 3700, 0.004);
     BLAST(volume * 0.70, 8024, 1062, 0.026);
@@ -3663,6 +3684,15 @@ function playGunAction(ctx, start, outNode, action, volume) {
     metalClack(ctx, start + 0.024, outNode, V * 0.72, 880, 0.050);   // into battery
     chainRattle(ctx, start, outNode, V * 0.24, 3);
     brassDrop(ctx, start + 0.03, outNode, V * 0.20);
+  } else if (action === 'smg_metal') {                                // SMGs: light, bright steel
+    metalClack(ctx, start + 0.002, outNode, V * 0.50, 1350, 0.030);
+    metalClack(ctx, start + 0.016, outNode, V * 0.55, 980, 0.036);
+    chainRattle(ctx, start, outNode, V * 0.16, 2);
+    brassDrop(ctx, start + 0.03, outNode, V * 0.14);
+  } else if (action === 'p90_metal') {                                // P90: one tick, it fires ~50/s
+    metalClack(ctx, start + 0.002, outNode, V * 0.45, 1500, 0.028);
+    chainRattle(ctx, start, outNode, V * 0.14, 2);
+    brassDrop(ctx, start + 0.03, outNode, V * 0.12);
   } else if (action === 'slide') {                                    // pistols
     metalClack(ctx, start + 0.004, outNode, V * 0.90, 980, 0.048);   // slide to the rear
     metalClack(ctx, start + 0.030, outNode, V * 1.05, 680, 0.062);   // slide slams shut
@@ -3713,7 +3743,7 @@ function longReport(ctx, start, outNode, volume, scale) {
 // shot): makeup gain up to that level, a glue compressor, then a soft clipper that
 // holds the ceiling at the reference peak. Whole-shot level only -- the sounds
 // themselves are unchanged. GUN_BUS_GAIN is the one number that sets the level.
-const GUN_BUS_KINDS = new Set(['rifle', 'auto_blast', 'auto_blast_heavy', 'pistol', 'crack', 'boom', 'ak_metal']);
+const GUN_BUS_KINDS = new Set(['rifle', 'auto_blast', 'auto_blast_heavy', 'pistol', 'crack', 'boom', 'ak_metal', 'smg_metal', 'p90_metal']);
 const GUN_BUS_GAIN = 25, GUN_BUS_CEIL = 0.56;
 function gunBus(ctx) {
   if (ctx._gunBus) return ctx._gunBus;
@@ -3814,7 +3844,7 @@ function playWeaponSound(idOrWeapon, opts = {}) {
   } else if (p.kind === 'pop' || p.kind === 'throw') {
     playTone(ctx, start, p.dur, mainGain, p.f1, p.f2, p.vol * mult, 'triangle');
     playNoise(ctx, start, p.dur * 0.55, mainGain, p.vol * 0.18 * mult, 0.35);
-  } else if (['boom', 'crack', 'tick', 'heavy', 'pistol', 'thump', 'ak_metal'].includes(p.kind)) {
+  } else if (['boom', 'crack', 'tick', 'heavy', 'pistol', 'thump', 'ak_metal', 'smg_metal', 'p90_metal'].includes(p.kind)) {
     playMuzzleBlast(ctx, start, mainGain, p.kind, p.vol * mult);
     playGunAction(ctx, start, mainGain, p.action, p.vol * mult);
   } else {
