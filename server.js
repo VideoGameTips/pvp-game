@@ -1600,8 +1600,8 @@ function startLobbyMatch(L, extra = {}) {
   const matchId = `lobby-${mode}-${Date.now()}`;
   // 🗺️ Server picks the map ONCE so all players load the same one: the lobby's pick if someone
   // chose a map (#17 — the picker used to be ignored here), else random.
-  const mapId = mode === 'm4_tower'
-    ? 'm4_tower'
+  const mapId = M4_TOWER_MODES.has(mode)
+    ? mode   // each tower mode is also the name of its map
     : (lobbyMapPick(L) || LOBBY_MAP_POOL[Math.floor(Math.random() * LOBBY_MAP_POOL.length)]);
   // Designate the first player as host (they spawn the bots if any)
   const host = L.players[0];
@@ -2423,7 +2423,7 @@ io.on('connection', (socket) => {
     for (const b of botList) {
       // Use client-provided spawn position if given, otherwise fall back to nextSpawn
       const spawn = (b.spawnX != null) ? { x: b.spawnX, y: 1, z: b.spawnZ } : nextSpawn();
-      const botWeaponId = ownerMode === 'm4_tower' ? 'm4a1_arena' : b.weaponId;
+      const botWeaponId = M4_TOWER_MODES.has(ownerMode) ? 'm4a1_arena' : b.weaponId;
       const botHp = M4_TOWER_MODES.has(ownerMode) ? 100 : (b.hp || PLAYER_MAX_HP);
       players[b.id] = {
         id: b.id, name: b.name, isBot: true, team: b.team,
@@ -2481,14 +2481,14 @@ io.on('connection', (socket) => {
   socket.on('forceRespawnBot', (data) => {
     const bot = players[data.id || data.botId];
     if (!bot || !bot.isBot || bot.ownerId !== socket.id) return;
-    const hp = bot.matchMode === 'm4_tower' ? 100 : (data.hp || PLAYER_MAX_HP);
+    const hp = M4_TOWER_MODES.has(bot.matchMode) ? 100 : (data.hp || PLAYER_MAX_HP);
     if (data.x != null && data.z != null) {
       Object.assign(bot, { x: data.x, y: 1, z: data.z, hp, dead: false });
     } else {
       respawnBot(bot);
       bot.hp = hp;
     }
-    if (data.weaponId) bot.weaponId = bot.matchMode === 'm4_tower' ? 'm4a1_arena' : data.weaponId;
+    if (data.weaponId) bot.weaponId = M4_TOWER_MODES.has(bot.matchMode) ? 'm4a1_arena' : data.weaponId;
     emitToMatch(bot.matchId, 'playerRespawned', bot);
   });
 
