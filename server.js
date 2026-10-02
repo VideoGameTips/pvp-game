@@ -1765,7 +1765,7 @@ event_horizon: 75,
   hand_cannon: 105, throwing_knives: 45, taser: 10,
   gatecrasher: 5, gatecrasher_slug: 40, gatecrasher_beam: 40,
   cyroclasm: 10, cyroclasm_laser: 10, continuum: 30,
-  storm_bloom: 5, storm_bloom_ball: 45, storm_bloom_aura: 5,
+  storm_bloom: 5, storm_bloom_ball: 100, storm_bloom_aura: 10,
   // Ability shots
   sg100_ab: 140, lever_ab: 150, crossbow_ab: 220, crossbow_c1: 140,
   sg8_wave: 20,

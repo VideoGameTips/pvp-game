@@ -803,7 +803,7 @@ const WEAPONS = [
     headshotMult: 1, // all 10 pellets land on a head at close range; x2 each was a 100-dmg one-shot
     adsZoom: 48, bulletSpeed: 138, noReload: false,
     bulletColor: 0x9fe8ff, bulletSize: 0.038,
-    ability: { name: 'Ball Lightning', cd: 15000, desc: 'Slow orb · aura roots 0.6s · direct roots 1.5s', type: 'ball_lightning', noADS: true },
+    ability: { name: 'Ball Lightning', cd: 15000, desc: 'Slow orb · aura roots 1s · direct roots 3s', type: 'ball_lightning', noADS: true },
   },
   {
     // ⛓️ Chain Gun: fire rate isn't fixed — it climbs from 1 shot/s (cold) to
@@ -28960,7 +28960,7 @@ function doBallLightning(w, ab) {
   spawnAbilityAOEFX(origin.clone(), 1.0, 0x9fe8ff);
   socket.emit('shoot', { x: origin.x, y: origin.y, z: origin.z, dx: dir.x, dy: dir.y, dz: dir.z, weapon: 'storm_bloom_ball' });
   spawnLocalBullet(origin, dir, id, true, 18, 0x9fe8ff, 0.22, 'storm_bloom_ball',
-    { ballLightning: true, auraRadius: 3.0, auraCooldown: 1000, directRootMs: 1500, auraRootMs: 600, maxRange: 42 });
+    { ballLightning: true, auraRadius: 3.0, auraCooldown: 1000, directRootMs: 3000, auraRootMs: 1000, maxRange: 42 });
 }
 
 // ⚔️ Bayonet Charge — lunge forward; if the blade reaches an opponent, deal bladeDamage.
@@ -35301,8 +35301,8 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false, opts = 
       spawnAbilityAOEFX(hitWorldPos ? hitWorldPos.clone() : mesh.position.clone(), 0.5, 0x9fe8ff);
     }
   }
-  if (weaponId === 'storm_bloom_ball') _applyRootToTarget(pid, 1500, 0x9fe8ff);
-  else if (weaponId === 'storm_bloom_aura') _applyRootToTarget(pid, 600, 0x9fe8ff);
+  if (weaponId === 'storm_bloom_ball') _applyRootToTarget(pid, 3000, 0x9fe8ff);
+  else if (weaponId === 'storm_bloom_aura') _applyRootToTarget(pid, 1000, 0x9fe8ff);
   // ⚡ Only explicit stun weapons should interrupt bot AI. Cycler and Laser
   // Pointer are also "energy" visuals and fire rapidly; treating every energy
   // hit as a stun chain-locked bots forever and skipped their gravity updates.
@@ -35687,11 +35687,11 @@ function updateBullets(dt) {
           if ((b._auraHits[pid] || 0) > now) continue;
           b._auraHits[pid] = now + (b.auraCooldown || 1000);
           emitHit(pid, `${b.id}_aura_${now}_${pid}`, 'storm_bloom_aura', target, false);
-          _applyRootToTarget(pid, b.auraRootMs || 600, 0x9fe8ff);
+          _applyRootToTarget(pid, b.auraRootMs || 1000, 0x9fe8ff);
         }
       } else if (!isDead && _bpos.distanceTo(camera.position) <= auraR && (!b._nextPlayerAuraAt || now >= b._nextPlayerAuraAt)) {
         b._nextPlayerAuraAt = now + (b.auraCooldown || 1000);
-        playerRootedUntil = Math.max(playerRootedUntil, now + (b.auraRootMs || 600));
+        playerRootedUntil = Math.max(playerRootedUntil, now + (b.auraRootMs || 1000));
         applyBotDamageToPlayer('storm_bloom_aura', null);
         spawnAbilityAOEFX(camera.position.clone().setY(camera.position.y - 0.5), 1.0, 0x9fe8ff);
       }
@@ -37551,7 +37551,7 @@ const CLIENT_WEAPON_DAMAGE = Object.fromEntries([
   ['singularity', 90], ['rotten_potato', 40], ['sticker_bomb', 35],
   ['chain_pull', 60], ['airburst', 95], ['toxin_dart', 30], ['blind_flash', 0],
   ['gatecrasher_slug', 40], ['gatecrasher_beam', 40],
-  ['cyroclasm_laser', 10], ['storm_bloom_ball', 45], ['storm_bloom_aura', 5],
+  ['cyroclasm_laser', 10], ['storm_bloom_ball', 100], ['storm_bloom_aura', 10],
   ['arc_torrent', 5], ['firework_launcher', 50], ['switchblade_gun', 50], ['switchblade_charged', 100],
   ['lancer_blade', 50],   // ⚔️ Lancer bayonet-charge hit (main shot uses the WEAPONS 'lancer' damage)
   ['molotov_burn', 10], ['molotov_fire', 5],  // 🔥 inside-the-flames tick / lingering on-fire DOT
@@ -37768,8 +37768,8 @@ function applyBotDamageToPlayer(weaponId, botId) {
     const _vfx = WEAPONS.find(w => w.id === weaponId)?.visionHit;
     if (_vfx && !isDead) applyVisionHitEffect(_vfx);
   }
-  if (weaponId === 'storm_bloom_ball') playerRootedUntil = Math.max(playerRootedUntil, Date.now() + 1500);
-  else if (weaponId === 'storm_bloom_aura') playerRootedUntil = Math.max(playerRootedUntil, Date.now() + 600);
+  if (weaponId === 'storm_bloom_ball') playerRootedUntil = Math.max(playerRootedUntil, Date.now() + 3000);
+  else if (weaponId === 'storm_bloom_aura') playerRootedUntil = Math.max(playerRootedUntil, Date.now() + 1000);
   else if (weaponId === 'cyroclasm_laser') {
     playerFrostSlow = Math.min(playerFrostSlow, 50);
     playerRootedUntil = Math.max(playerRootedUntil, Date.now() + 3000);
@@ -38195,7 +38195,7 @@ socket.on('bulletFired', b => {
   const origin = new THREE.Vector3(b.x,b.y,b.z);
   playWeaponSound(b.weapon || w.id, { baseWeapon: w, remote: true, position: origin });
   const opts = b.weapon === 'storm_bloom_ball'
-    ? { ballLightning: true, auraRadius: 3.0, auraCooldown: 1000, directRootMs: 1500, auraRootMs: 600, maxRange: 42 }
+    ? { ballLightning: true, auraRadius: 3.0, auraCooldown: 1000, directRootMs: 3000, auraRootMs: 1000, maxRange: 42 }
     : {};
   spawnLocalBullet(origin, new THREE.Vector3(b.dx,b.dy,b.dz), b.id, false, w.bulletSpeed, w.bulletColor, w.bulletSize, b.weapon || w.id, opts);
 });
@@ -38241,8 +38241,8 @@ socket.on('playerHit', data => {
   }
   const incomingPiercesDefense = data.targetId === myId && weaponPiercesDefenses(data.weapon);
   if (data.targetId === myId && !isDead) {
-    if (data.weapon === 'storm_bloom_ball') playerRootedUntil = Math.max(playerRootedUntil, Date.now() + 1500);
-    else if (data.weapon === 'storm_bloom_aura') playerRootedUntil = Math.max(playerRootedUntil, Date.now() + 600);
+    if (data.weapon === 'storm_bloom_ball') playerRootedUntil = Math.max(playerRootedUntil, Date.now() + 3000);
+    else if (data.weapon === 'storm_bloom_aura') playerRootedUntil = Math.max(playerRootedUntil, Date.now() + 1000);
     else if (data.weapon === 'cyroclasm_laser') {
       playerFrostSlow = Math.min(playerFrostSlow, 50);
       playerRootedUntil = Math.max(playerRootedUntil, Date.now() + 3000);
