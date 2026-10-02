@@ -1002,6 +1002,9 @@ const MELEE_ITEMS = [
     dualHit: true, // every swing lands BOTH blades (50 + 50), not one flat number
     doubleJump: true, // light and quick — an extra jump mid-air, no new code needed (grantsDoubleJump)
     ability: { name: 'Throw Knife', cd: 350, desc: 'Hurl a knife · 30 dmg · 10 in reserve', type: 'melee_multithrow', damage: 30, maxCharges: 10 } },
+  { id: 'scythe', name: 'Scythe', type: 'Movement Reaper', damage: 58, range: 2.7, cooldown: 560, speedMult: 1.35,
+    doubleJump: true,
+    ability: { name: 'Reap Dash', cd: 4200, desc: 'Movement dash · slash through space', type: 'melee_mobility', speed: 30, side: 0, up: 3.5, color: 0x99ffe8 } },
 ];
 
 // ── 📦 Basic Skin Case generation ──────────────────────────────────────────
@@ -1217,6 +1220,7 @@ const SUPPORT_ITEMS = [
   { id: 'air_grenade', archived: true, name: 'Air Grenade', type: 'Launch', uses: 2, damage: 15, cooldown: 950, bulletSpeed: 50, bulletColor: 0xaaccff, bulletSize: 0.11, launchVel: 14, launchRadius: 4 },
   { id: 'land_mine', name: 'Land Mine', type: 'Trap', uses: 2, damage: 298, cooldown: 1100, mineRadius: 1.8, launchVel: 16 },
   { id: 'air_blaster', name: 'Air Blaster', type: 'Knockback · No Damage', uses: 5, damage: 0, cooldown: 750, airBlast: true, range: 13, cone: 0.74, launchVel: 11, pushVel: 24 },
+  { id: 'grapple_hook', name: 'Grapple Hook', type: 'Movement · Pull', uses: 4, damage: 0, cooldown: 650, grapple: true, range: 36, pullVel: 34, liftVel: 7, enemyPull: 16 },
   // ── 🪖 ADMIN UTILITIES (locked behind unlock codes) ──────────────────────
   // ── 🆕 More utilities — batch 4 ──────────────────────────────────────────
   { id: 'flashbang_basic', archived: true, name: 'Flashbang',    type: 'Stun',       uses: 2, damage: 5,  cooldown: 900, bulletSpeed: 50, bulletColor: 0xffffff, bulletSize: 0.10, stunDur: 2500, stunRadius: 6 },
@@ -1425,7 +1429,7 @@ const WEAPON_COSTS = {
   // Batch-4 melees
   brass_knuckles: 200, hatchet: 220, machete: 260, cane: 140, cricket_bat: 200,
   pipe: 160, wrench: 180, shovel: 280, golf_club: 200, tennis_racket: 100,
-  fire_poker: 200, meat_cleaver: 260, twin_knife: 480,
+  fire_poker: 200, meat_cleaver: 260, twin_knife: 480, scythe: 420,
   // 🌌 Sci-fi P2W melees
   phase_blade: 18000, gravity_hammer: 22000, volt_whip: 17000,
   // Support / Utility
@@ -1435,7 +1439,7 @@ const WEAPON_COSTS = {
   adrenaline: 220, tripwire: 200, hologram: 240, magnet_mine: 220,
   bounce_pad: 140, hunter_drone: 460, emp_grenade: 240, sticky_charge: 320,
   orbital_strike: 2500, guardian_drone: 380, nano_shield: 320, mini_turret: 340,
-  air_grenade: 160, land_mine: 380, air_blaster: 260,
+  air_grenade: 160, land_mine: 380, air_blaster: 260, grapple_hook: 300,
   // Batch-4 utilities
   flashbang_basic: 200, proximity_mine: 220, dynamite: 280, drone_strike: 340,
   healing_pulse: 200, teleport_beacon: 260, cloak: 280, berserker_serum: 240,
@@ -1694,6 +1698,7 @@ const MELEE_SWING_TYPES = [
   'thrust',  // 41 garrote       → nothing here really fits a strangle; a forward
              //                    reach is the least wrong. Change it if it feels off.
   'punch',   // 42 twin_knife    → alternating dual-hand jabs (dual:true reuses this rig)
+  'slash',   // 43 scythe        → wide reaping slash
 ];
 
 // ── Which swing sound each melee makes ─────────────────────────────────────
@@ -1752,6 +1757,7 @@ const MELEE_SWING_SOUND = {
   ots04:           'blade',   // its own type says Blade; the old test read only the id
   garrote:         'blade',   // inherited from the old name match; a wire has no edge — worth an ear
   twin_knife:      'blade',
+  scythe:          'blade',
 };
 const MELEE_SWING_EVENT = { blade: 'melee_blade', heavy: 'melee_heavy', generic: 'melee_swing' };
 
@@ -20854,6 +20860,39 @@ function buildVampireBlade() {
   edge.position.set(0.008, 0.01, -0.05); g.add(edge);
   g.position.set(0.14, -0.12, -0.30); return g;
 }
+function buildScythe() {
+  const g = new THREE.Group();
+  const shaftMat = new THREE.MeshLambertMaterial({ color: 0x243038 });
+  const bladeMat = new THREE.MeshLambertMaterial({ color: 0xaeefff });
+  const edgeMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const gripMat = new THREE.MeshLambertMaterial({ color: 0x11171c });
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.010, 0.012, 0.46, 8), shaftMat);
+  shaft.rotation.x = Math.PI / 2;
+  shaft.position.set(0, 0, -0.040);
+  g.add(shaft);
+  const rearGrip = new THREE.Mesh(new THREE.BoxGeometry(0.030, 0.030, 0.090), gripMat);
+  rearGrip.position.set(0, -0.004, 0.175);
+  g.add(rearGrip);
+  const blade = new THREE.Mesh(new THREE.BoxGeometry(0.016, 0.118, 0.030), bladeMat);
+  blade.position.set(0.052, 0.040, -0.275);
+  blade.rotation.z = -0.45;
+  blade.rotation.y = 0.25;
+  g.add(blade);
+  const bladeTip = new THREE.Mesh(new THREE.ConeGeometry(0.020, 0.075, 4), bladeMat);
+  bladeTip.rotation.set(Math.PI / 2, 0.35, -0.15);
+  bladeTip.position.set(0.060, 0.102, -0.300);
+  g.add(bladeTip);
+  const edge = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.128, 0.006), edgeMat);
+  edge.position.set(0.063, 0.048, -0.294);
+  edge.rotation.z = -0.45;
+  g.add(edge);
+  const socket = new THREE.Mesh(new THREE.CylinderGeometry(0.020, 0.020, 0.038, 8), shaftMat);
+  socket.rotation.x = Math.PI / 2;
+  socket.position.set(0, 0.010, -0.270);
+  g.add(socket);
+  g.position.set(0.14, -0.12, -0.30);
+  return g;
+}
 // 🪖 ADMIN melee models
 function buildKarambit()   { return _genericMelee({ handleColor: 0x111111, headColor: 0xaaaaaa, length: 0.18, headShape: 'sphere', headSize: 0.025 }); }
 function buildBayonet()    { return _genericMelee({ handleColor: 0x333322, headColor: 0xcccccc, length: 0.42, headShape: 'box' }); }
@@ -20907,6 +20946,7 @@ const meleeModels = [
   handcraftedMelee('karambit'), handcraftedMelee('bayonet'),
   handcraftedMelee('tomahawk'), handcraftedMelee('ots04'), buildGarrote(),
   buildKnife(),  // twin_knife — same blade, dual-wielded via MELEE_ITEMS.dual
+  buildScythe(), // scythe
 ];
 meleeModels.forEach(m => { m.visible = false; camera.add(m); });
 
@@ -21458,6 +21498,39 @@ function buildAirBlaster() {
   needle.position.set(0.031, 0.023, 0.024); needle.rotation.z = -0.5; g.add(needle);
   g.position.set(0.10, -0.12, -0.18); return g;
 }
+function buildGrappleHook() {
+  const g = new THREE.Group();
+  const dark = new THREE.MeshLambertMaterial({ color: 0x20252b });
+  const steel = new THREE.MeshLambertMaterial({ color: 0xc7d2d8 });
+  const cableMat = new THREE.MeshLambertMaterial({ color: 0x0f1418 });
+  const grip = new THREE.Mesh(new THREE.BoxGeometry(0.028, 0.075, 0.040), dark);
+  grip.position.set(0, -0.045, 0.045);
+  grip.rotation.x = -0.22;
+  g.add(grip);
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.068, 0.044, 0.095), dark);
+  body.position.set(0, 0.000, -0.010);
+  g.add(body);
+  const spool = new THREE.Mesh(new THREE.CylinderGeometry(0.033, 0.033, 0.062, 16), steel);
+  spool.rotation.z = Math.PI / 2;
+  spool.position.set(0, 0.004, -0.006);
+  g.add(spool);
+  const cable = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.125, 6), cableMat);
+  cable.rotation.x = Math.PI / 2;
+  cable.position.set(0, 0.006, -0.092);
+  g.add(cable);
+  const hookStem = new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.007, 0.055, 6), steel);
+  hookStem.rotation.x = Math.PI / 2;
+  hookStem.position.set(0, 0.006, -0.170);
+  g.add(hookStem);
+  [-1, 1].forEach(side => {
+    const claw = new THREE.Mesh(new THREE.ConeGeometry(0.012, 0.052, 4), steel);
+    claw.rotation.set(Math.PI / 2, 0, side * 0.75);
+    claw.position.set(side * 0.022, 0.010, -0.190);
+    g.add(claw);
+  });
+  g.position.set(0.10, -0.12, -0.18);
+  return g;
+}
 function buildC4()           { const g=new THREE.Group(); const m=new THREE.MeshLambertMaterial({color:0xbbaa66}); const led=new THREE.MeshBasicMaterial({color:0xff2222}); const body=new THREE.Mesh(new THREE.BoxGeometry(0.10,0.04,0.07),m); g.add(body); const l=new THREE.Mesh(new THREE.SphereGeometry(0.010,4,4),led); l.position.set(0.03,0.025,0); g.add(l); g.position.set(0.10,-0.12,-0.18); return g; }
 function buildClaymore()     { const g=new THREE.Group(); const m=new THREE.MeshLambertMaterial({color:0x2a3a26}); const body=new THREE.Mesh(new THREE.BoxGeometry(0.10,0.06,0.025),m); body.rotation.x=-0.2; g.add(body); const leg1=new THREE.Mesh(new THREE.CylinderGeometry(0.005,0.005,0.05,4),m); leg1.position.set(-0.04,-0.025,0.018); g.add(leg1); const leg2=leg1.clone(); leg2.position.set(0.04,-0.025,0.018); g.add(leg2); g.position.set(0.10,-0.12,-0.18); return g; }
 function buildStunGrenade()  { const g=new THREE.Group(); const m=new THREE.MeshLambertMaterial({color:0x666666}); const lid=new THREE.MeshLambertMaterial({color:0x222222}); const body=new THREE.Mesh(new THREE.CylinderGeometry(0.045,0.045,0.10,8),m); g.add(body); const cap=new THREE.Mesh(new THREE.CylinderGeometry(0.030,0.030,0.012,8),lid); cap.position.y=0.056; g.add(cap); g.position.set(0.10,-0.12,-0.18); return g; }
@@ -21487,7 +21560,7 @@ const supportModels = [buildDonutFragGrenade(), buildMedkit(), buildStimShot(), 
   // 😈 P2W supports
   buildOrbitalStrike(), buildGuardianDrone(), buildNanoShield(),
   // Lazy weapons supports
-  buildAirGrenade(), buildLandMine(), buildAirBlaster(),
+  buildAirGrenade(), buildLandMine(), buildAirBlaster(), buildGrappleHook(),
   // Batch-4 and sci-fi utilities: individually composed props.
   handcraftedSupport('flashbang_basic'), handcraftedSupport('proximity_mine'),
   handcraftedSupport('dynamite'), handcraftedSupport('drone_strike'),
@@ -29686,9 +29759,109 @@ const SUPPORT_SOUND = {
   thermite: 'thermite_ignite', predator_uav: 'radar_ping', warp_beacon: 'radar_ping', teleport_beacon: 'radar_ping',
   care_package: 'air_drop', tac_nuke: 'nuke_siren',
   confetti_cannon: 'confetti_blast',
-  air_blaster: 'air_burst',
+  air_blaster: 'air_burst', grapple_hook: 'air_launch',
   // hologram, glitch_cube, moon_mine, black_hole_seed already use their own sounds or none
 };
+
+function spawnGrappleCable(from, to) {
+  const geo = new THREE.BufferGeometry().setFromPoints([from, to]);
+  const mat = new THREE.LineBasicMaterial({ color: 0xc7f5ff, transparent: true, opacity: 0.95 });
+  const line = new THREE.Line(geo, mat);
+  scene.add(line);
+  setTimeout(() => {
+    scene.remove(line);
+    geo.dispose?.();
+    mat.dispose?.();
+  }, 130);
+}
+
+function addPlayerGrappleImpulse(dir, pullVel, liftVel = 0) {
+  const flat = dir.clone();
+  flat.y = 0;
+  if (flat.lengthSq() > 0.0001) {
+    flat.normalize();
+    _extVel.x += flat.x * pullVel;
+    _extVel.z += flat.z * pullVel;
+    const hz = Math.hypot(_extVel.x, _extVel.z);
+    if (hz > BLAST_MAX_HORIZ) {
+      const k = BLAST_MAX_HORIZ / hz;
+      _extVel.x *= k;
+      _extVel.z *= k;
+    }
+  }
+  const up = Math.max(liftVel, dir.y > 0 ? dir.y * pullVel * 0.45 : 0);
+  if (up > 0) {
+    if (slamState) { slamState.vel = Math.max(slamState.vel || 0, up); slamState.type = 'jump'; }
+    else slamState = { vel: up, type: 'jump' };
+  }
+}
+
+function firstGrappleSurface(origin, dir, range) {
+  let best = null, bestDist = Infinity;
+  const ray = new THREE.Ray(origin, dir);
+  const hit = new THREE.Vector3();
+  for (const box of wallColliders) {
+    if (!ray.intersectBox(box, hit)) continue;
+    const dist = hit.distanceTo(origin);
+    if (dist > 0.35 && dist <= range && dist < bestDist) {
+      bestDist = dist;
+      best = hit.clone();
+    }
+  }
+  if (dir.y < -0.08 && origin.y > GROUND_PLANE_Y) {
+    const t = (origin.y - GROUND_PLANE_Y) / -dir.y;
+    if (t > 0.35 && t <= range && t < bestDist) {
+      best = origin.clone().addScaledVector(dir, t);
+      best.y = GROUND_PLANE_Y + 0.04;
+    }
+  }
+  return best;
+}
+
+function doGrappleHook(item) {
+  const origin = camera.position.clone();
+  const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+  const range = item.range || 36;
+  const enemyHit = _nearestAbilityRayHit(origin, dir, range, 0.9);
+  const surfaceHit = firstGrappleSurface(origin, dir, range);
+  const enemyDist = enemyHit ? enemyHit.mesh.position.clone().setY(enemyHit.mesh.position.y + 1.0).distanceTo(origin) : Infinity;
+  const surfaceDist = surfaceHit ? surfaceHit.distanceTo(origin) : Infinity;
+  const hitEnemy = enemyHit && enemyDist <= surfaceDist + 1.5;
+  const target = hitEnemy ? enemyHit.mesh.position.clone().setY(enemyHit.mesh.position.y + 1.0) : surfaceHit;
+
+  if (!target) {
+    showAnnouncement('GRAPPLE', 'No hook point', '#aaccff', 650);
+    playSoundEvent('dryfire', { volume: 0.55, pitch: 1.25, minGap: 80 });
+    return;
+  }
+
+  spawnGrappleCable(origin.clone().addScaledVector(dir, 0.35), target);
+  spawnAbilityAOEFX(target.clone(), hitEnemy ? 0.85 : 0.55, 0x99eeff);
+  playSoundEvent('air_launch', { volume: 0.95, minGap: 80 });
+
+  const pullDir = target.clone().sub(origin);
+  const dist = Math.max(1, pullDir.length());
+  pullDir.normalize();
+  addPlayerGrappleImpulse(pullDir, Math.min(item.pullVel || 34, 16 + dist * 0.95), item.liftVel || 7);
+
+  if (hitEnemy) {
+    const towardMe = origin.clone().sub(target);
+    towardMe.y = 0;
+    if (towardMe.lengthSq() > 0.001) towardMe.normalize();
+    const force = item.enemyPull || 16;
+    const bot = resolveBot(enemyHit.pid);
+    if (bot && !bot.dead) {
+      bot.kbVX = (bot.kbVX || 0) + towardMe.x * force;
+      bot.kbVZ = (bot.kbVZ || 0) + towardMe.z * force;
+      bot.yVel = Math.max(bot.yVel || 0, 3.5);
+    } else {
+      socket.emit('grapplePull', { targetId: enemyHit.pid, x: towardMe.x, z: towardMe.z, force });
+    }
+    showAnnouncement('GRAPPLE', 'Hooked target', '#99eeff', 650);
+  } else {
+    showAnnouncement('GRAPPLE', 'Pulling', '#99eeff', 650);
+  }
+}
 
 function doAirBlaster(item) {
   const now = Date.now();
@@ -29879,6 +30052,10 @@ function trySupport() {
   }
   if (item.id === 'air_blaster') {
     doAirBlaster(item);
+    return;
+  }
+  if (item.id === 'grapple_hook') {
+    doGrappleHook(item);
     return;
   }
   if (item.id === 'land_mine') {
@@ -38145,6 +38322,19 @@ socket.on('airBlasted', data => {
   spawnAbilityAOEFX(camera.position.clone().setY(camera.position.y - 0.9), 1.25, 0xbfefff);
   playSoundEvent('air_launch', { volume: 1.0, minGap: 80 });
   flashScreen('rgba(190,235,255,0.16)', 180);
+});
+socket.on('grapplePulled', data => {
+  if (isDead || match?.type === 'range') return;
+  const dx = Number(data?.x) || 0;
+  const dz = Number(data?.z) || 0;
+  const force = Math.max(0, Math.min(26, Number(data?.force) || 0));
+  const len = Math.hypot(dx, dz) || 1;
+  _extVel.x += (dx / len) * force;
+  _extVel.z += (dz / len) * force;
+  if (slamState) { slamState.vel = Math.max(slamState.vel || 0, 3.5); slamState.type = 'jump'; }
+  else slamState = { vel: 3.5, type: 'jump' };
+  spawnAbilityAOEFX(camera.position.clone().setY(camera.position.y - 0.5), 0.85, 0x99eeff);
+  playSoundEvent('air_launch', { volume: 0.85, minGap: 80 });
 });
 socket.on('playerDied', data => {
   if (players[data.targetId]) { players[data.targetId].hp = 0; players[data.targetId].dead = true; }

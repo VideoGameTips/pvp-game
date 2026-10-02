@@ -238,7 +238,7 @@ const WEAPON_COSTS = {
   // Batch-4 melees
   brass_knuckles: 200, hatchet: 220, machete: 260, cane: 140, cricket_bat: 200,
   pipe: 160, wrench: 180, shovel: 280, golf_club: 200, tennis_racket: 100,
-  fire_poker: 200, meat_cleaver: 260, twin_knife: 480,
+  fire_poker: 200, meat_cleaver: 260, twin_knife: 480, scythe: 420,
   // 🌌 Sci-fi P2W melees
   phase_blade: 18000, gravity_hammer: 22000, volt_whip: 17000,
   // Support / Utility
@@ -248,7 +248,7 @@ const WEAPON_COSTS = {
   adrenaline: 220, tripwire: 200, hologram: 240, magnet_mine: 220,
   bounce_pad: 140, hunter_drone: 460, emp_grenade: 240, sticky_charge: 320,
   orbital_strike: 2500, guardian_drone: 380, nano_shield: 320, mini_turret: 340,
-  air_grenade: 160, land_mine: 380, air_blaster: 260,
+  air_grenade: 160, land_mine: 380, air_blaster: 260, grapple_hook: 300,
   // Batch-4 utilities
   flashbang_basic: 200, proximity_mine: 220, dynamite: 280, drone_strike: 340,
   healing_pulse: 200, teleport_beacon: 260, cloak: 280, berserker_serum: 240,
@@ -1788,7 +1788,7 @@ event_horizon: 75,
   // Melee
   bat: 50, sabre: 45, frying_pan: 32, sledge: 70, spear: 50,
   spear_throw: 85, pickle: 22, shield_charge: 60, knife_instakill: 9999,
-  chainsaw: 45, katana: 65, knife: 28, lightsabre: 72, twin_knife: 50,
+  chainsaw: 45, katana: 65, knife: 28, lightsabre: 72, twin_knife: 50, scythe: 58,
   riot_shield: 18, baguette: 28, screwdriver: 20,
   // cane and shovel were missing here entirely — every hit with either one
   // fell through to the (WEAPON_DAMAGE[x] || 25) fallback, dealing 25 no
@@ -2135,6 +2135,26 @@ io.on('connection', (socket) => {
       z: Math.max(-1, Math.min(1, dz / len)),
       y: Math.max(0, Math.min(14, Number(data?.y) || 0)),
       force: Math.max(0, Math.min(34, Number(data?.force) || 0)),
+    });
+  });
+
+  socket.on('grapplePull', (data) => {
+    const shooter = players[socket.id];
+    const target = players[String(data?.targetId || '')];
+    if (!shooter || shooter.dead || !target || target.dead || target.isBot) return;
+    if (shooter.matchId !== target.matchId) return;
+    if (blocksFriendlyFire(shooter, target)) return;
+    const dx = Number(data?.x) || 0;
+    const dz = Number(data?.z) || 0;
+    const len = Math.hypot(dx, dz);
+    if (!Number.isFinite(len) || len < 0.01) return;
+    const dist = dist3(shooter, target);
+    if (dist > 38) return;
+    io.to(target.id).emit('grapplePulled', {
+      shooterId: shooter.id,
+      x: Math.max(-1, Math.min(1, dx / len)),
+      z: Math.max(-1, Math.min(1, dz / len)),
+      force: Math.max(0, Math.min(26, Number(data?.force) || 0)),
     });
   });
 
