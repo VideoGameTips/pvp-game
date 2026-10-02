@@ -40,10 +40,11 @@ const WEAPONS = [
   {
     id: 'ak20',  name: 'AK20',  type: 'AR', slot: 'primary',
     // Pulled back from the 38/1333 buff, which overshot into absolute dominance.
-    // 30 a shot still kills in four, and the 2.33x head multiplier puts a
-    // headshot at 70 — two of them and you are down. The reload goes back to
-    // 2000, because the gun has to be cocked and that takes as long as it takes.
-    mag: 30,  reserve: 90,  damage: 30, fireRate: 150,  reloadTime: 2000,
+    // Same 200 DPS it always had (30 every 150 ms), now delivered as 24 every
+    // 120 ms: lighter, faster rounds. A headshot is 24 x 2.33 = 56. The reload
+    // goes back to 2000, because the gun has to be cocked and that takes as long
+    // as it takes.
+    mag: 30,  reserve: 90,  damage: 24, fireRate: 120,  reloadTime: 2000,
     headshotMult: 2.333,
     auto: true,  pellets: 1, spread: 0,    adsZoom: 45, bulletSpeed: 120, noReload: false,
     ability: { name: 'Focus Fire', cd: 8000, desc: '3s · laser-accurate · +40% dmg', type: 'buff', duration: 3000, spreadMult: 0, dmgMult: 1.4 },
@@ -3248,6 +3249,7 @@ function weaponAudioProfile(id, baseWeapon) {
   const type = (w.type || '').toLowerCase();
   const lowerId = String(id || w.id || '').toLowerCase();
   // ── Explicit per-weapon profiles (each unique-ish) ─────────────────────
+  if (lowerId === 'ak20') return { kind:'ak_metal', vol:0.24, dur:0.075, f1:260, f2:90, action:'ak_rifle' };
   if (lowerId === 'p90' || lowerId === 'p90_spec') return { kind:'auto_blast', vol:0.20, dur:0.075, f1:760, f2:240, action:'water_smg' };
   if (lowerId === 'firework_launcher') return { kind:'firework', vol:0.36, dur:0.26, f1:130, f2:55 };
   if (lowerId === 'arc_torrent') return { kind:'arc', vol:0.26, dur:0.11, f1:980, f2:320 };
@@ -3516,6 +3518,19 @@ function playMuzzleBlast(ctx, start, outNode, kind, volume) {
     PFN(start, 0.038, volume * 0.76, 'bandpass', 960, 0.55);
     PT(start, 0.060, 239, 71, volume * 0.58, 'triangle');
     TAIL(volume * 0.28, 0.36, 600);
+  } else if (kind === 'ak_metal') {            // AK-20: high and steel, not a plastic tap
+    // The generic auto_blast sat at a 1.2 kHz body with a 150 Hz sine under it —
+    // a hollow, toy-like "tok". This one moves everything up (crack 4.7k, body
+    // 1.9k, triangle 380 Hz), drops the sine to a hint, and adds two short
+    // high-Q partials where a steel receiver rings.
+    CRACK(volume * 1.45, 4700, 0.0045);
+    BLAST(volume * 0.95, 8600, 900, 0.040);
+    PT(start, 0.050, 120, 85, volume * 0.14, 'sine');
+    PFN(start, 0.026, volume * 0.70, 'bandpass', 1900, 0.6);
+    PT(start, 0.034, 380, 140, volume * 0.36, 'triangle');
+    PFN(start + 0.003, 0.030, volume * 0.30, 'bandpass', 2650, 7.0, 2.2);   // steel ring
+    PFN(start + 0.003, 0.022, volume * 0.20, 'bandpass', 4300, 9.0, 2.2);   // higher partial
+    TAIL(volume * 0.20, 0.20, 1100);
   } else if (kind === 'tick' || kind === 'p90') {
     CRACK(volume * 1.35, kind === 'p90' ? 4200 : 3700, 0.004);
     BLAST(volume * 0.70, 8024, 1062, 0.026);
@@ -3643,6 +3658,11 @@ function playGunAction(ctx, start, outNode, action, volume) {
     // volume. High-Q, gone in under 10ms -- a small steel part clicking, not a
     // clack -- so it reads as an extra edge of mechanism, never as more bang.
     playFilteredNoise(ctx, start + 0.004, 0.006, outNode, V * 0.30, 'bandpass', 3400, 4.0, 0.0002, 0.6);
+  } else if (action === 'ak_rifle') {                                 // AK-20: bright, fast steel
+    metalClack(ctx, start + 0.003, outNode, V * 0.62, 1250, 0.040);  // bolt back
+    metalClack(ctx, start + 0.024, outNode, V * 0.72, 880, 0.050);   // into battery
+    chainRattle(ctx, start, outNode, V * 0.24, 3);
+    brassDrop(ctx, start + 0.03, outNode, V * 0.20);
   } else if (action === 'slide') {                                    // pistols
     metalClack(ctx, start + 0.004, outNode, V * 0.90, 980, 0.048);   // slide to the rear
     metalClack(ctx, start + 0.030, outNode, V * 1.05, 680, 0.062);   // slide slams shut
@@ -3693,7 +3713,7 @@ function longReport(ctx, start, outNode, volume, scale) {
 // shot): makeup gain up to that level, a glue compressor, then a soft clipper that
 // holds the ceiling at the reference peak. Whole-shot level only -- the sounds
 // themselves are unchanged. GUN_BUS_GAIN is the one number that sets the level.
-const GUN_BUS_KINDS = new Set(['rifle', 'auto_blast', 'auto_blast_heavy', 'pistol', 'crack', 'boom']);
+const GUN_BUS_KINDS = new Set(['rifle', 'auto_blast', 'auto_blast_heavy', 'pistol', 'crack', 'boom', 'ak_metal']);
 const GUN_BUS_GAIN = 25, GUN_BUS_CEIL = 0.56;
 function gunBus(ctx) {
   if (ctx._gunBus) return ctx._gunBus;
@@ -3794,7 +3814,7 @@ function playWeaponSound(idOrWeapon, opts = {}) {
   } else if (p.kind === 'pop' || p.kind === 'throw') {
     playTone(ctx, start, p.dur, mainGain, p.f1, p.f2, p.vol * mult, 'triangle');
     playNoise(ctx, start, p.dur * 0.55, mainGain, p.vol * 0.18 * mult, 0.35);
-  } else if (['boom', 'crack', 'tick', 'heavy', 'pistol', 'thump'].includes(p.kind)) {
+  } else if (['boom', 'crack', 'tick', 'heavy', 'pistol', 'thump', 'ak_metal'].includes(p.kind)) {
     playMuzzleBlast(ctx, start, mainGain, p.kind, p.vol * mult);
     playGunAction(ctx, start, mainGain, p.action, p.vol * mult);
   } else {
