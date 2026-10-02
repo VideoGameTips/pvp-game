@@ -33737,6 +33737,23 @@ cream_pie:[K(.14,{py:.05,rx:.12,rz:-.28,hy:-.05,hz:-.04}), K(.30,{py:.06,rx:.16,
            K(.72,{py:.04,rx:.10,rz:-.22,ry:.20}), K(.86,{py:.03,rx:.06,rz:-.14}), K(.95,{py:.02,rx:.04,rz:-.06})],
 };
 
+const SMG_FLIP_RELOAD = [
+  K(.08,{py:.025,px:-.010,pz:-.018,rx:.20,ry:-.12,rz:-.42,hy:-.03,hz:.02}),
+  K(.20,{py:.040,px:-.016,pz:-.028,rx:.28,ry:-.22,rz:-.82,hy:-.11,hz:.035,hr:-.55}),
+  K(.30,{py:.044,px:-.020,pz:-.030,rx:.30,ry:-.25,rz:-.96,hy:-.17,hz:.030,hr:-.90}),
+  K(.43,{py:.050,px:-.018,pz:-.024,rx:.27,ry:-.18,rz:-.78,hy:-.05,hz:.060,hr:.30}),
+  K(.56,{py:.038,px:-.010,pz:-.016,rx:.20,ry:-.10,rz:-.50,hy:.035,hz:.022,hr:.70}),
+  K(.70,{py:.025,px:-.004,pz:-.008,rx:.13,ry:-.04,rz:-.24,hy:.016,hz:.006,hr:.25}),
+  K(.90,{py:.010,rx:.06,rz:-.06,hy:.004})
+];
+Object.assign(RELOAD_KEYS, {
+  vector: SMG_FLIP_RELOAD,
+  mp40: SMG_FLIP_RELOAD,
+  hkmp7: SMG_FLIP_RELOAD,
+  machine_pistol: SMG_FLIP_RELOAD,
+  smart_smg: SMG_FLIP_RELOAD
+});
+
 // The one fallback, for anything that isn't a numbered weapon (ability
 // variants, anything added later): a plain magazine change.
 const _RELOAD_DEFAULT = [K(.20,{py:-.07,rx:.40,rz:.18,hy:-.14}),
@@ -34152,13 +34169,13 @@ const RELOAD_PROPS = {
   ak20:[RP(.30,'mag'),RP(.56,'mag','arrive'),RP(.74,'case',null,1,'breech')],
   xm7:[RP(.31,'mag'),RP(.58,'mag','arrive')],
   burst:[RP(.32,'mag'),RP(.59,'mag','arrive')],
-  vector:[RP(.34,'mag'),RP(.61,'mag','arrive')],
-  mp40:[RP(.31,'mag'),RP(.58,'mag','arrive')],
+  vector:[RP(.29,'mag'),RP(.52,'mag','arrive')],
+  mp40:[RP(.29,'mag'),RP(.52,'mag','arrive')],
   p90:[RP(.34,'mag',null,1,'breech'),RP(.60,'mag','arrive',1,'breech')],
   p90_spec:[RP(.32,'mag',null,1,'breech'),RP(.58,'mag','arrive',1,'breech')],
-  hkmp7:[RP(.36,'mag'),RP(.63,'mag','arrive')],
-  machine_pistol:[RP(.36,'mag'),RP(.63,'mag','arrive')],
-  smart_smg:[RP(.32,'mag'),RP(.57,'mag','arrive')],
+  hkmp7:[RP(.29,'mag'),RP(.52,'mag','arrive')],
+  machine_pistol:[RP(.29,'mag'),RP(.52,'mag','arrive')],
+  smart_smg:[RP(.29,'mag'),RP(.52,'mag','arrive')],
   swarm_rifle:[RP(.32,'mag'),RP(.57,'mag','arrive')],
   twin_ar:[RP(.27,'mag'),RP(.47,'mag','arrive'),RP(.71,'mag'),RP(.81,'mag','arrive')],
   lancer:[RP(.30,'mag'),RP(.55,'mag','arrive')],
