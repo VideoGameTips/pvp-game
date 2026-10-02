@@ -800,6 +800,7 @@ const WEAPONS = [
     id: 'storm_bloom', name: 'Storm Bloom', type: 'Lightning Shotgun', slot: 'primary',
     mag: 33, reserve: 99, damage: 5, fireRate: 500, reloadTime: 2400,
     auto: false, pellets: 10, spread: 0.052, fixedPelletPattern: 'ring',
+    headshotMult: 1, // all 10 pellets land on a head at close range; x2 each was a 100-dmg one-shot
     adsZoom: 48, bulletSpeed: 138, noReload: false,
     bulletColor: 0x9fe8ff, bulletSize: 0.038,
     ability: { name: 'Ball Lightning', cd: 15000, desc: 'Slow orb · aura roots 1s · direct roots 3s', type: 'ball_lightning', noADS: true },
@@ -43880,7 +43881,7 @@ function showLoadoutScreen(mode) {
     card.innerHTML = `${loadoutPreviewHTML(w.id)}<div class="lc-copy">
       <div class="lc-name">${displayWeaponName(w)}${adminTag}</div>
       <div class="lc-type">${dw.type}${dw.skinName ? ' · SKIN' : ''}</div>
-      <div class="lc-stats">DMG ${dw.damage} · MAG ${w.mag} · ${fireTag} · ${rateTag}</div>
+      <div class="lc-stats">DMG ${dw.damage}${w.pellets > 1 ? '×' + w.pellets : ''} · MAG ${w.mag} · ${fireTag} · ${rateTag}</div>
     </div>`;
     if (!w.adminItem && !isOwned(w.id)) return; // not yet bought — hidden from loadout
     const usable = decorateOwnedBadge(card, w.id, !!w.adminItem);
