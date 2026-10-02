@@ -451,6 +451,23 @@ const ARCHIVED_ITEM_IDS = new Set([
   'tesla_coil',
 ]);
 
+const ADMIN_ITEM_IDS = new Set([
+  'gau19', 'mk44', 'xm7', 'barrett', 'm134', 'hkmp7', 'p90_spec',
+  'desert_eagle', 'm1911', 'glock18', 'five_seven',
+  'karambit', 'bayonet', 'tomahawk', 'ots04', 'garrote',
+  'c4', 'claymore', 'stun_grenade', 'thermite', 'predator_uav',
+  'care_package', 'tac_nuke',
+]);
+
+function sanitizeBotWeaponId(id, ownerMode = '') {
+  if (M4_TOWER_MODES.has(ownerMode)) return 'm4a1_arena';
+  id = String(id || 'ak20');
+  if (id === 'm4a1_arena') return 'ak20';
+  if (ARCHIVED_ITEM_IDS.has(id) || ADMIN_ITEM_IDS.has(id)) return 'ak20';
+  if (!Object.prototype.hasOwnProperty.call(WEAPON_DAMAGE, id)) return 'ak20';
+  return id;
+}
+
 // Free starter loadout — every account has these unlocked from day 1.
 const FREE_WEAPONS = new Set([
   'ak20', 'sg8',          // primaries
@@ -2423,7 +2440,7 @@ io.on('connection', (socket) => {
     for (const b of botList) {
       // Use client-provided spawn position if given, otherwise fall back to nextSpawn
       const spawn = (b.spawnX != null) ? { x: b.spawnX, y: 1, z: b.spawnZ } : nextSpawn();
-      const botWeaponId = M4_TOWER_MODES.has(ownerMode) ? 'm4a1_arena' : b.weaponId;
+      const botWeaponId = sanitizeBotWeaponId(b.weaponId, ownerMode);
       const botHp = M4_TOWER_MODES.has(ownerMode) ? 100 : (b.hp || PLAYER_MAX_HP);
       players[b.id] = {
         id: b.id, name: b.name, isBot: true, team: b.team,
@@ -2488,7 +2505,7 @@ io.on('connection', (socket) => {
       respawnBot(bot);
       bot.hp = hp;
     }
-    if (data.weaponId) bot.weaponId = M4_TOWER_MODES.has(bot.matchMode) ? 'm4a1_arena' : data.weaponId;
+    if (data.weaponId) bot.weaponId = sanitizeBotWeaponId(data.weaponId, bot.matchMode);
     emitToMatch(bot.matchId, 'playerRespawned', bot);
   });
 

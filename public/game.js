@@ -1602,8 +1602,35 @@ function adminPassMsLeft() {
   return Math.max(0, (currentUser.adminPassExpiresAt || 0) - Date.now());
 }
 
-const PRIMARY_WEAPON_IDS = WEAPONS.filter(w => w.slot === 'primary' && !w.ddayOnly && !w.modeOnly && !w.archived).map(w => w.id);
-function randomPrimaryId() { return PRIMARY_WEAPON_IDS[Math.floor(Math.random() * PRIMARY_WEAPON_IDS.length)]; }
+function botLegalGun(w, slot = null) {
+  return !!w
+    && (!slot || w.slot === slot)
+    && !w.adminItem && !w.archived && !w.skinOnly && !w.modeOnly && !w.ddayOnly;
+}
+function botLegalMelee(m) {
+  return !!m && !m.adminItem && !m.archived && !m.skinOnly;
+}
+function botLegalSupport(s) {
+  return !!s && !s.adminItem && !s.archived;
+}
+const BOT_PRIMARY_WEAPONS = WEAPONS.filter(w => botLegalGun(w, 'primary'));
+const BOT_SECONDARY_WEAPONS = WEAPONS.filter(w => botLegalGun(w, 'secondary'));
+const BOT_MELEE_ITEMS = MELEE_ITEMS.filter(botLegalMelee);
+const BOT_SUPPORT_ITEMS = SUPPORT_ITEMS.filter(botLegalSupport);
+const PRIMARY_WEAPON_IDS = BOT_PRIMARY_WEAPONS.map(w => w.id);
+function randomPrimaryId() { return PRIMARY_WEAPON_IDS[Math.floor(Math.random() * PRIMARY_WEAPON_IDS.length)] || 'ak20'; }
+function chooseBotPrimaryId(id) {
+  return botLegalGun(WEAPONS.find(w => w.id === id), 'primary') ? id : randomPrimaryId();
+}
+function chooseBotSecondaryId(id) {
+  return botLegalGun(WEAPONS.find(w => w.id === id), 'secondary') ? id : (BOT_SECONDARY_WEAPONS[Math.floor(Math.random() * BOT_SECONDARY_WEAPONS.length)]?.id || 'pistol');
+}
+function chooseBotMeleeId(id) {
+  return botLegalMelee(MELEE_ITEMS.find(m => m.id === id)) ? id : (BOT_MELEE_ITEMS[Math.floor(Math.random() * BOT_MELEE_ITEMS.length)]?.id || 'bat');
+}
+function chooseBotSupportId(id) {
+  return botLegalSupport(SUPPORT_ITEMS.find(s => s.id === id)) ? id : (BOT_SUPPORT_ITEMS[Math.floor(Math.random() * BOT_SUPPORT_ITEMS.length)]?.id || 'frag');
+}
 
 let match = null; // active match state (see initMatch)
 let frontlineState = null;
@@ -41622,20 +41649,15 @@ function spawnGameBots() {
         if (drafted) _playstyle = { ...DEFAULT_TEAMMATE_PLAYSTYLE, ...(TEAMMATE_PLAYSTYLES[tmId] || {}) };
       }
     }
-    // 🆕 Full bot loadout — secondary, melee, utility (random non-admin picks)
-    const SECONDARIES = WEAPONS.filter(w => w.slot === 'secondary' && !w.adminItem && !w.ddayOnly && !w.archived);
-    const MELEES_NONADMIN = MELEE_ITEMS.filter(m => !m.adminItem && !m.archived);
-    const UTILS_NONADMIN  = SUPPORT_ITEMS.filter(s => !s.adminItem && !s.archived);
+    // 🆕 Full bot loadout — only public, normal picks. Drafted character
+    // signatures are sanitized too, so archived/admin toys never leak into bots.
     // 🎭 Drafted teammate uses their signature loadout; everyone else rolls random.
     const fixedM4Tower = selectedModeConfig.fixedKit === 'm4_tower';
-    let weaponId = (_playstyle && _playstyle.primary && WEAPONS.some(w => w.id === _playstyle.primary))
-      ? _playstyle.primary : randomPrimaryId();
+    let weaponId = chooseBotPrimaryId(_playstyle?.primary);
     if (fixedM4Tower) weaponId = 'm4a1_arena';
-    const botSecondaryId = fixedM4Tower ? null : (_playstyle && _playstyle.secondary && WEAPONS.some(w => w.id === _playstyle.secondary))
-      ? _playstyle.secondary : (SECONDARIES[Math.floor(Math.random() * SECONDARIES.length)]?.id || 'pistol');
-    const botMeleeId     = fixedM4Tower ? null : (_playstyle && _playstyle.melee && MELEE_ITEMS.some(m => m.id === _playstyle.melee))
-      ? _playstyle.melee : (MELEES_NONADMIN[Math.floor(Math.random() * MELEES_NONADMIN.length)]?.id || 'bat');
-    const botUtilityId   = fixedM4Tower ? 'frag' : (UTILS_NONADMIN[Math.floor(Math.random() * UTILS_NONADMIN.length)]?.id || 'frag');
+    const botSecondaryId = fixedM4Tower ? null : chooseBotSecondaryId(_playstyle?.secondary);
+    const botMeleeId     = fixedM4Tower ? null : chooseBotMeleeId(_playstyle?.melee);
+    const botUtilityId   = fixedM4Tower ? 'frag' : chooseBotSupportId(_playstyle?.utility);
 
     // ── Create locally RIGHT NOW (no network round-trip needed) ──────────
     // Lobby 13 keeps the named cast's looks. Actual match bots all wear the
