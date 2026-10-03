@@ -5493,6 +5493,7 @@ function addLowPolyArenaWalls(mapName, color = 0x3a3a34) {
 registerMap('m4_tower');
 function buildM4TowerMap() {
   const m = 'm4_tower';
+  setMapBounds(m, 100, 100);
   addMapGround(m, 0x51585c, 0x3c4246);
   addOuterWalls(m, 0x30343a);
   const deck = 0x747b80, wall = 0x454a50, trim = 0xa98d55, cover = 0x5b635f;
@@ -5565,6 +5566,7 @@ function buildM4TowerStoryMap(name, stories, scale) {
   const topDeckY = (stories - 1) * STORY_H;
   const roofY = topDeckY + 4.20;                  // same headroom above the top floor as the original (8.35 - 4.15)
   const half = 50 * scale;                        // original footprint is 100x100
+  setMapBounds(m, half * 2, half * 2);
   addMapBox(m, 0, roofY, 0, half * 2, 0.7, half * 2, 0x111316);
   addMapBox(m, 0, roofY - 0.5, 0, half * 1.76, 0.08, half * 1.76, 0x070809, 0, 0.78);
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(half * 2, half * 2), new THREE.MeshLambertMaterial({ color: 0x51585c }));
@@ -5643,6 +5645,7 @@ registerMap('base_raid');
 function buildBaseRaidMap() {
   const m = 'base_raid';
   addMapGround(m, 0x4b5146, 0x30382f);
+  setMapBounds(m, 140, 140);
   const wall = 0x575b56, dark = 0x252b2b, trim = 0x9a8b5d, cover = 0x6f684f, roof = 0x171b1d;
 
   addMapBox(m, 0, 3.0, -44, 86, 6, 3, wall);
@@ -38046,6 +38049,64 @@ function tellServerIDied(killerId, meta = {}) {
     headshot: !!meta.headshot,
   });
 }
+function scheduleLocalOutOfBoundsRecovery() {
+  const ds = document.getElementById('death-screen');
+  const dm = document.getElementById('death-msg');
+  if (match?.type === 'br') {
+    const livesLeft = Math.max(0, (match.lives?.[myId] || 0) - 1);
+    if (dm) dm.textContent = livesLeft > 0 ? `Respawning in 4s · ${livesLeft} lives left` : 'You\'re out of lives — spectating';
+    if (livesLeft <= 0) afterDeath(1500, () => { if (ds) ds.style.display = 'none'; enterSpectator(); });
+    else setTimeout(() => { if (ds) ds.style.display = 'none'; }, 3800);
+    return;
+  }
+  if (match?.type === 'arcade') {
+    if (dm) dm.textContent = 'Respawning in 2.5s...';
+    setTimeout(() => { if (ds) ds.style.display = 'none'; }, 2400);
+    return;
+  }
+  if (match?.type === 'dday') {
+    if (dm) dm.textContent = 'Respawning in 3s...';
+    afterDeath(3000, () => {
+      if (!match || match.over || !isDead) return;
+      if (ds) ds.style.display = 'none';
+      isDead = false;
+      const me = players[myId];
+      if (me) { me.hp = matchMaxHp(); me.dead = false; }
+      updateHealthHUD(matchMaxHp());
+      resetCombatResources();
+      camera.position.set(-22, 1.65, 22);
+      faceToward(-22, 0);
+      socket.emit('readyRespawn', { x: camera.position.x, z: camera.position.z, mode: currentModeId() });
+      grantSpawnShield(3000);
+      requestPointerLockSafe();
+    });
+    return;
+  }
+  if (match?.cfg?.autoRespawn) {
+    if (dm) dm.textContent = 'Respawning...';
+    afterDeath(1600, () => {
+      if (!match || match.over || !isDead) return;
+      if (ds) ds.style.display = 'none';
+      isDead = false;
+      const me = players[myId];
+      if (me) { me.hp = matchMaxHp(); me.dead = false; }
+      updateHealthHUD(matchMaxHp());
+      resetCombatResources();
+      if (match.cfg.fixedKit === 'm4_tower') applyM4TowerKit();
+      const sp = placePlayerAtTeamSpawn(localPlayerTeam(), 28, 40);
+      socket.emit('readyRespawn', { x: sp.x, z: sp.z, mode: currentModeId() });
+      grantSpawnShield(1800);
+      requestPointerLockSafe();
+    });
+    return;
+  }
+  if (match?.type === 'elim') {
+    if (dm) dm.textContent = 'Waiting for round to end...';
+    return;
+  }
+  if (dm) dm.textContent = 'Select your loadout...';
+  afterDeath(1500, () => { if (ds) ds.style.display = 'none'; showLoadoutScreen('death'); });
+}
 function killLocalOutOfBounds(killerId = null) {
   if (isDead || match?.type === 'range' || adminMapBuilderOpen) return false;
   const meta = killerId
@@ -38066,6 +38127,7 @@ function killLocalOutOfBounds(killerId = null) {
   const ds = document.getElementById('death-screen');
   if (ds) ds.style.display = 'flex';
   onEntityDied(myId, killerId || null);
+  scheduleLocalOutOfBoundsRecovery();
   if (killerId) startKillcam(killerId, 'air_blaster');
   return true;
 }
