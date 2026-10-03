@@ -34792,10 +34792,6 @@ for (const id in _MAG_STYLES) {
 }
 // ── Not magazine guns: each its own trick ───────────────────────────────────
 Object.assign(_STYLE_RK, {
-  // drum box: the whole belt drum is hauled off and a fresh one hefted on
-  rpd:   _variant(RELOAD_KEYS.rpd, { amp: 1.2, lift: .01, tip: .04 }),
-  // lid up, belt laid in links first, lid slammed — heavier hands, mirrored
-  mg42:  _variant(RELOAD_KEYS.mg42, { mirror: true, amp: 1.1, tip: -.03 }),
   // mounted gun: both arms, big movements
   gau19: _variant(RELOAD_KEYS.gau19, { amp: 1.35, lift: .015 }),
   // chain gun: lid, then straight in
@@ -34845,8 +34841,6 @@ Object.assign(_STYLE_RK, {
     K(.85,{py:.09,rx:.20,rz:.30,hy:.03,hz:-.04}), K(.94,{py:.03,rx:.12,rz:.20})],
 });
 Object.assign(_STYLE_RP, {
-  rpd:    [RP(.29,'drum',null,1,'breech'), RP(.53,'drum','arrive',1,'breech'), RP(.92,'case',null,1,'breech')],
-  mg42:   [RP(.28,'link',null,8,'breech'), RP(.52,'link','arrive',6,'breech'), RP(.91,'case',null,2,'breech')],
   gau19:  [RP(.30,'canister',null,1,'breech'), RP(.54,'canister','arrive',1,'breech'), RP(.30,'link',null,5,'breech')],
   mk44:   [RP(.28,'link',null,5,'breech'), RP(.51,'link','arrive',3,'breech'), RP(.80,'case',null,2,'breech'), RP(.88,'case',null,1,'breech')],
   snub_revolver: [RP(.44,'case',null,5,'breech'), RP(.62,'round','arrive',5,'breech')],
