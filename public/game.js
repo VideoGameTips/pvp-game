@@ -608,7 +608,10 @@ const WEAPONS = [
     // bounces once, so it is lethal up close and has to be lobbed at range.
     mag: 999,  reserve: 0,  damage: 9,  fireRate: 50,  reloadTime: 700,
     auto: true,  pellets: 1, spread: 0.020, adsZoom: 48, bulletSpeed: 80, noReload: true,
-    arcShot: true, bounce: { maxBounces: 2, speedMult: 0.62 },
+    arcShot: true, bounce: { maxBounces: 99, speedMult: 0.55 },
+    // Pellets don't vanish on a miss: they bounce until they run out of energy,
+    // then lie where they landed, and only go away 5 s after they were fired.
+    linger: { ms: 5000, restSpeed: 14, maxResting: 120 },
     bulletColor: 0x9a8c72, bulletSize: 0.045,
     ability: { name: 'Volley', cd: 8000, desc: 'Loose 5 pellets in a spread', type: 'multishot', count: 5, spread: 0.18 },
   },
@@ -36349,11 +36352,14 @@ function updateBullets(dt) {
       scene.remove(b.mesh);
       localBullets.splice(i, 1);
     };
-    const maxAge = b.weaponId === 'frag' ? 3500 : b.ballLightning ? 4200 : 1800;
+    if (b._lingerMs === undefined) b._lingerMs = projectileWeaponSpec(b.weaponId)?.linger?.ms || 0;
+    const maxAge = b._lingerMs || (b.weaponId === 'frag' ? 3500 : b.ballLightning ? 4200 : 1800);
+    if (b._cull) { removeBullet(); continue; }
     if (now - b.createdAt > maxAge) {
       if (b.isPaintBomb) triggerPaintExplosion(b.mesh.position.clone(), b);
       removeBullet(); continue;
     }
+    if (b.rest) continue;        // a pellet lying where it landed: nothing left to simulate
     // Save start position for swept (CCD) hit detection
     const px0 = b.mesh.position.x, py0 = b.mesh.position.y, pz0 = b.mesh.position.z;
     // Projectiles that fall. Apply before moving so the swept collision segment
@@ -36649,6 +36655,18 @@ function updateBullets(dt) {
           b.mesh.position.copy(wallHitPt).addScaledVector(b.dir, 0.15);
           // Speed up per bounce
           b.speed *= wSpec.bounce.speedMult || 1.2;
+          // Out of energy on a floor or ledge: it stops and lies there until it expires.
+          if (wSpec.linger && wallHitNormal.y > 0.5 && b.speed < (wSpec.linger.restSpeed || 14)) {
+            b.rest = true; b.speed = 0;
+            b.mesh.position.copy(wallHitPt).addScaledVector(wallHitNormal, 0.04);
+            const cap = wSpec.linger.maxResting || 120;
+            let resting = 0;
+            for (const o of localBullets) if (o.rest && !o._cull) resting++;
+            if (resting > cap) {              // keep the floor from filling up: the oldest ones go first
+              for (const o of localBullets) if (o.rest && !o._cull) { o._cull = true; if (--resting <= cap) break; }
+            }
+            continue;
+          }
           // Reset spawn position for max-range checks (so each bounce gets its full range)
           b.spawnX = b.mesh.position.x; b.spawnY = b.mesh.position.y; b.spawnZ = b.mesh.position.z;
           continue; // keep the bullet alive
