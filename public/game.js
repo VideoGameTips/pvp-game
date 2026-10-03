@@ -9212,12 +9212,12 @@ function _mechHurtPlayer(dmg, id) {
   if (me.hp <= 0 && !isDead) applyBotDamageToPlayer(id, null);
   return true;
 }
-function _mechHurtBot(bot, dmg) {
+function _mechHurtBot(bot, dmg, hazardId) {
   if (!bot || bot.dead) return;
   bot.hp -= dmg;
   const bm = remoteMeshes[bot.id];
   if (bm) { trackTotalDamage(bot.id, dmg, bm); spawnHitParticle(bm.position.clone().setY(1.0)); }
-  if (bot.hp <= 0) { bot.dead = true; if (bm) bm.visible = false; }
+  if (bot.hp <= 0) killBotByHazard(bot, hazardId);
 }
 function _mechRing(group, x, z, r, color) {
   const ring = new THREE.Mesh(new THREE.RingGeometry(r - 0.35, r, 40),
@@ -9303,7 +9303,7 @@ function buildStormPierMap() {
                 applyBlastImpulse(flash, { radius: k.r + 2.5, power: 12 });
               }
             }
-            for (const b of gameBots) if (!b.dead && Math.hypot(b.x - k.x, b.z - k.z) < k.r) _mechHurtBot(b, 80);
+            for (const b of gameBots) if (!b.dead && Math.hypot(b.x - k.x, b.z - k.z) < k.r) _mechHurtBot(b, 80, 'lightning_strike');
           }
         } else if (k.t >= 1.55) {
           G.remove(k.beam); S.strikes.splice(i, 1);
@@ -9425,7 +9425,7 @@ function buildLaserVaultMap() {
       for (const bot of gameBots) {
         if (bot.dead || (S.botCd[bot.id] || 0) > 0) continue;
         for (const ar of arms) if (hitArm(bot.x, bot.z, ar, bot.y || 0, (bot.y || 0) + 1.6)) {
-          S.botCd[bot.id] = 0.5; _mechHurtBot(bot, 32); break;
+          S.botCd[bot.id] = 0.5; _mechHurtBot(bot, 32, 'laser'); break;
         }
       }
     },
@@ -9585,7 +9585,7 @@ function buildMagmaRiseMap() {
         if (S.tick >= 0.5) {
           S.tick = 0;
           if (!isDead && _mechFeetY() < 0.45) _mechHurtPlayer(9, 'lava');
-          for (const bot of gameBots) if (!bot.dead && (bot.y || 0) < 0.45) _mechHurtBot(bot, 4);
+          for (const bot of gameBots) if (!bot.dead && (bot.y || 0) < 0.45) _mechHurtBot(bot, 4, 'lava');
         }
       }
     },
@@ -37516,7 +37516,7 @@ function updateBatch5(dt) {
               // later — reads as "damage not shown" (#51).
               const bmesh = remoteMeshes[bot.id];
               if (bmesh) { trackTotalDamage(bot.id, 200, bmesh); spawnHitParticle(bmesh.position.clone().setY(1.0)); }
-              if (bot.hp <= 0) { bot.dead = true; if (bmesh) bmesh.visible = false; }
+              if (bot.hp <= 0) killBotByHazard(bot, 'chandelier');
             }
           }
           const pd = Math.hypot(camera.position.x, camera.position.z);
@@ -37558,7 +37558,7 @@ function updateBatch5(dt) {
             // Same silent-damage gap as the chandelier above (#51).
             const bmesh = remoteMeshes[bot.id];
             if (bmesh) { trackTotalDamage(bot.id, 120, bmesh); spawnHitParticle(bmesh.position.clone().setY(1.0)); }
-            if (bot.hp <= 0) { bot.dead = true; if (bmesh) bmesh.visible = false; }
+            if (bot.hp <= 0) killBotByHazard(bot, 'debris');
           }
         }
         setTimeout(() => { scene.remove(d.mesh); S.debris.splice(S.debris.indexOf(d), 1); }, 4000);
@@ -38948,6 +38948,18 @@ function killLocalOutOfBounds(killerId = null) {
   if (killerId) startKillcam(killerId, 'air_blaster');
   return true;
 }
+// A bot killed by the map itself (lightning, lasers, lava, falling debris): same
+// bookkeeping as any other death — feed line, body, round count, respawn.
+function killBotByHazard(bot, hazardId) {
+  if (!bot || bot.dead) return false;
+  noteKillInfo(bot.id, null, null, false, { cause: 'hazard', label: KILLFEED_HAZARDS[hazardId] || 'died' });
+  bot.dead = true; bot.hp = 0;
+  if (players[bot.id]) { players[bot.id].hp = 0; players[bot.id].dead = true; }
+  dropBody(bot.id);
+  onEntityDied(bot.id, null);
+  setTimeout(() => clientRespawnBot(bot.id), 3000);
+  return true;
+}
 function killBotOutOfBounds(bot, killerId = null) {
   if (!bot || bot.dead) return false;
   const meta = killerId
@@ -38971,7 +38983,8 @@ function killBotOutOfBounds(bot, killerId = null) {
 }
 // Returns true when the hit landed — only then is the server told (botHitsMe, #22).
 function applyBotDamageToPlayer(weaponId, botId) {
-  noteKillInfo(myId, botId, weaponId, _botHitHead);   // for the kill feed, should this be the one that kills
+  if (!botId && KILLFEED_HAZARDS[weaponId]) noteKillInfo(myId, null, null, false, { cause: 'hazard', label: KILLFEED_HAZARDS[weaponId] });
+  else noteKillInfo(myId, botId, weaponId, _botHitHead);   // for the kill feed, should this be the one that kills
   // 🛋️ Lobby 13 is a no-combat chill zone — nobody takes damage.
   if (inLobby) return;
   if (botId && friendlyFireBlocked(myId, botId)) return;
@@ -41472,6 +41485,11 @@ function checkBrWin() {
 // of death in every mode goes through, so bots, players, hazards and self-kills
 // all show up. Names go in as text nodes -- a nickname is user input.
 const KILLFEED_MAX = 5, KILLFEED_MS = 5500;
+// Deaths with no killer and no weapon: what to say in the feed.
+const KILLFEED_HAZARDS = {
+  lava: 'burned in lava', lightning_strike: 'was struck by lightning', laser: 'was sliced by a laser',
+  chandelier: 'was crushed by a chandelier', debris: 'was hit by falling debris',
+};
 const KILLFEED_TURN_WINDOW = 1400;
 const KILLFEED_360_RAD = Math.PI * 1.65;
 const _killfeedTurnSamples = [];
@@ -41523,6 +41541,7 @@ function noteKillInfo(targetId, killerId, weaponId, head, extra = {}) {
     weapon: weaponId || null,
     head: !!head,
     cause: extra.cause || null,
+    label: extra.label || null,
     tags: cleanKillfeedTags(extra.tags),
     t: performance.now(),
   };
@@ -41680,9 +41699,11 @@ function ensureKillfeedStyles() {
     .kf-row{display:flex;align-items:center;gap:7px;min-height:32px;max-width:min(520px,calc(100vw - 32px));padding:6px 9px;background:rgba(10,12,16,.74);border:1px solid rgba(255,255,255,.15);box-shadow:0 8px 26px rgba(0,0,0,.35);backdrop-filter:blur(8px);color:#f4f7fb;transform:translateX(0);opacity:1;transition:opacity .45s ease,transform .45s ease}
     .kf-row.mine{border-color:rgba(255,210,63,.45);box-shadow:0 0 0 1px rgba(255,210,63,.16),0 8px 26px rgba(0,0,0,.35)}
     .kf-row.out{opacity:0;transform:translateX(22px)}
+    .kf-row{animation:kfIn .18s ease-out;transition:opacity .5s,transform .5s}
+    @keyframes kfIn{from{opacity:0;transform:translateX(18px)}to{opacity:1;transform:none}}
     .kf-name{max-width:132px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:0 1px 2px #000}
     .kf-action,.kf-wpn{color:#c7d0dc;font-weight:800;white-space:nowrap}
-    .kf-icon{width:62px;height:26px;object-fit:contain;filter:brightness(0) contrast(1.6) drop-shadow(0 1px 0 rgba(255,255,255,.18));opacity:.95}
+    .kf-icon{width:62px;height:26px;object-fit:contain;filter:brightness(0) drop-shadow(0 0 1px rgba(255,255,255,.95)) drop-shadow(0 0 1px rgba(255,255,255,.75));opacity:1}
     .kf-head{width:21px;height:21px;object-fit:contain;filter:drop-shadow(0 1px 2px #000)}
     .kf-tag{padding:3px 5px;border:1px solid rgba(255,255,255,.28);background:rgba(255,255,255,.12);color:#fff;font-size:10px;font-weight:900;white-space:nowrap}
     @media (max-width:700px){#killfeed{right:8px;top:76px}.kf-row{gap:5px;padding:5px 7px}.kf-name{max-width:86px}.kf-icon{width:48px;height:22px}.kf-tag{font-size:9px;padding:2px 4px}}
@@ -41739,10 +41760,13 @@ function pushKillfeed(targetId, killerId) {
     const info = _killInfo[targetId];
     const known = info && now - info.t < 4000 && (info.killer === killerId || !killerId) ? info : null;
     const widKnown = known && known.weapon;
-    if ((known && known.cause === 'fall') || (!killerId && !widKnown)) {
+    if (known && known.cause === 'hazard') {
+      part('kf-name', v.name, v.color);
+      part('kf-action', known.label || 'died');
+    } else if ((known && known.cause === 'fall') || (!killerId && !widKnown)) {
       part('kf-name', v.name, v.color);
       part('kf-action', 'fell off');
-      tags(known && known.tags);
+      tags(((known && known.tags) || []).filter(t => t !== 'FELL'));
     } else if (!killerId || killerId === targetId) {
       part('kf-name', v.name, v.color);
       part('kf-action', v.name === 'You' ? 'eliminated yourself with' : 'eliminated themself with');
