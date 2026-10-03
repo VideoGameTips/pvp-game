@@ -58,7 +58,7 @@ const WEAPONS = [
   {
     id: 'srx',   name: 'SR-X',  type: 'Sniper', slot: 'primary',
     mag: 5,   reserve: 20,  damage: 95, fireRate: 1200, reloadTime: 3000,
-    auto: false, pellets: 1, spread: 0,    adsZoom: 15, bulletSpeed: 200, noReload: false,
+    auto: false, pellets: 1, spread: 0,    adsZoom: 15, bulletSpeed: 200, bulletSpeedMult: 10, noReload: false,
     // spread:0 and no recoil object already meant no random scatter and no
     // aim climb — but every gun still gets a camera-shake "kick" on fire
     // regardless of those fields (kickWeaponVisual/addFireShake), and SR-X's
@@ -372,7 +372,7 @@ const WEAPONS = [
   {
     id: 'amr', name: 'Anti-Material Rifle', type: 'Heavy Sniper', slot: 'primary',
     mag: 3, reserve: 12, damage: 180, fireRate: 1600, reloadTime: 3400,
-    auto: false, pellets: 1, spread: 0, adsZoom: 14, bulletSpeed: 260, noReload: false,
+    auto: false, pellets: 1, spread: 0, adsZoom: 14, bulletSpeed: 260, bulletSpeedMult: 10, noReload: false,
     bulletColor: 0xddaa44, bulletSize: 0.075,
     ignoreDefenses: true, // bypasses parry/deflect/spawn shield/riot shield
     ability: { name: 'Armor Break', cd: 18000, desc: 'Next shot ignores all armor', type: 'powershot', pellets: 1, spreadMult: 0, weaponAbId: 'amr' },
@@ -686,7 +686,7 @@ const WEAPONS = [
   {
     id: 'barrett', name: 'Barrett M82', type: 'Admin · Anti-Material', slot: 'primary',
     mag: 5, reserve: 15, damage: 250, fireRate: 1100, reloadTime: 3200,
-    auto: false, pellets: 1, spread: 0, adsZoom: 12, bulletSpeed: 320, noReload: false,
+    auto: false, pellets: 1, spread: 0, adsZoom: 12, bulletSpeed: 320, bulletSpeedMult: 10, noReload: false,
     bulletColor: 0xffcc66, bulletSize: 0.08, adminItem: true,
     ability: { name: '.50 BMG Overload', cd: 16000, desc: 'Next shot · 600 dmg · pierces walls', type: 'powershot', pellets: 1, spreadMult: 0, weaponAbId: 'barrett_ab' },
   },
@@ -35233,7 +35233,7 @@ function spawnLocalBullet(origin, dir, id, isOwn, speed, color, size, weaponId, 
   const wSpec = projectileWeaponSpec(weaponId);
   const maxRange = opts.maxRange || wSpec?.maxRange;
   localBullets.push({ mesh, dir: flightDir, createdAt: Date.now(), id, isOwn,
-    speed: projectileBaseSpeed(weaponId, wSpec, speed) * BULLET_SPEED_MULTIPLIER, weaponId, size,
+    speed: projectileBaseSpeed(weaponId, wSpec, speed) * BULLET_SPEED_MULTIPLIER * (wSpec?.bulletSpeedMult || 1), weaponId, size,
     spawnX: origin.x, spawnY: origin.y, spawnZ: origin.z, maxRange, ...opts });
 }
 
