@@ -51,7 +51,7 @@ const WEAPONS = [
   },
   {
     id: 'sg8',   name: 'SG-8',  type: 'Shotgun', slot: 'primary',
-    mag: 8,   reserve: 32,  damage: 18, fireRate: 450,  reloadTime: 2500,
+    mag: 8,   reserve: 32,  damage: 18, fireRate: 450,  reloadTime: 2500, reloadStyle: 'shell',
     auto: false, pellets: 6, spread: 0.08, adsZoom: 55, bulletSpeed: 110, noReload: false,
     ability: { name: 'Bullet Wave', cd: 12000, desc: '6×6 grid · 36 bullets · 20 dmg each', type: 'bulletwave', noADS: true },
   },
@@ -212,7 +212,7 @@ const WEAPONS = [
   },
   {
     id: 'shorty',   name: 'Shorty',   type: 'Secondary', slot: 'secondary',
-    mag: 2,   reserve: 10,  damage: 30, fireRate: 700,  reloadTime: 1800,
+    mag: 2,   reserve: 10,  damage: 30, fireRate: 700,  reloadTime: 1800, reloadStyle: 'shell',
     auto: false, pellets: 4, spread: 0.10,  adsZoom: 58, bulletSpeed: 96, noReload: false,
     ability: { name: 'Point Blank', cd: 12000, desc: 'Next shot · 10 pellets · max spread', type: 'powershot', pellets: 10, spreadMult: 0.01, dmgMult: 1.3 },
   },
@@ -513,7 +513,7 @@ const WEAPONS = [
   },
   {
     id: 'sawed_off', name: 'Sawed-Off', type: 'Secondary', slot: 'secondary',
-    mag: 2, reserve: 8, damage: 35, fireRate: 750, reloadTime: 2000,
+    mag: 2, reserve: 8, damage: 35, fireRate: 750, reloadTime: 2000, reloadStyle: 'shell',
     auto: false, pellets: 5, spread: 0.13, adsZoom: 58, bulletSpeed: 88, noReload: false,
     ability: { name: 'Double Barrel', cd: 11000, desc: 'Fire both barrels at once · 10 pellets', type: 'powershot', pellets: 10, spreadMult: 1.2, dmgMult: 1.1 },
   },
@@ -10325,6 +10325,35 @@ function buildGAU19() {
   g.position.set(0.12, -0.1, -0.25); return g;
 }
 
+// 🔗 Belt-fed guns: a chain of real cartridges hangs out of the feed tray, and
+// a hinged top cover sits over the tray. The cover is the model's 'main' part
+// and the belt its 'ammo' part, so the reload animation lifts the cover, strips
+// the old belt, feeds a new one in round by round and shuts the cover again,
+// while firing shortens the hanging belt as the magazine empties.
+function addBeltAndCover(g, o) {
+  const steel = GUN_MATS.steel(), inner = GUN_MATS.inner(), bright = GUN_MATS.bright();
+  const brass  = new THREE.MeshPhongMaterial({ color: 0xcaa24a, shininess: 120, specular: 0xfff0b0 });
+  const copper = new THREE.MeshPhongMaterial({ color: 0xb4642e, shininess: 90,  specular: 0xe0a070 });
+  const sd = o.side || 1;
+  gpBox(g, inner, o.coverW - 0.006, 0.004, o.coverLen - 0.010, 0, o.topY + 0.002, o.trayZ);   // the open feed tray
+  gpBox(g, steel, 0.016, 0.006, 0.030, sd * (o.coverW / 2 + 0.002), o.topY + 0.004, o.beltZ);  // feed lip the belt rides out over
+  gpPart(g, 'main', () => {                                                                  // top cover, hinged at its rear edge
+    gpBox(g, steel, o.coverW, 0.012, o.coverLen, 0, o.topY + 0.008, o.trayZ);
+    gpBox(g, bright, 0.012, 0.004, 0.016, 0, o.topY + 0.0155, o.trayZ - o.coverLen * 0.25);  // latch
+  }, { x: 0, y: o.topY + 0.004, z: o.trayZ + o.coverLen / 2 });
+  const N = o.rounds || 13, bx = sd * (o.coverW / 2 + 0.018);
+  for (let i = 0; i < N; i++) {
+    const s = i / (N - 1);
+    const y = o.topY + 0.010 - o.drop * s;
+    const z = o.beltZ + 0.014 * Math.sin(s * 2.4);                                            // the belt sways a little to the rear
+    gpPart(g, 'ammo', () => {
+      gpCyl(g, brass, 0.0042, 0.0046, 0.022, 8, bx, y, z, 0, Math.PI / 2);                    // casing
+      gpCyl(g, copper, 0.0042, 0.0012, 0.010, 8, bx + sd * 0.0165, y, z, 0, Math.PI / 2 * sd); // bullet, nose out
+      gpCyl(g, steel, 0.0051, 0.0051, 0.004, 8, bx, y, z, 0, Math.PI / 2);                    // belt link band
+    });
+  }
+}
+
 function buildChainGun() {
   // ⛓️ Chain Gun: four barrels on a driven cluster, visibly turned by an actual
   // chain loop around a sprocket on the side — not a motor housing like the
@@ -10386,6 +10415,7 @@ function buildChainGun() {
   gpBox(g, bright, 0.006, 0.015, 0.006, 0, -0.009, 0.182, 0.2);
   const flash = new THREE.Mesh(new THREE.SphereGeometry(0.028, 8, 7),
     new THREE.MeshBasicMaterial({ color: 0xffbb55 }));
+  addBeltAndCover(g, { topY: 0.047, trayZ: 0.055, coverW: 0.060, coverLen: 0.100, beltZ: 0.095, drop: 0.140, side: 1 });
   flash.visible = false; flash.position.set(0, 0.006, -0.290); g.add(flash);
   g._flash = flash; g._kickZ = 0.008; g._greebled = true; g._handDetailed = true;
   g.position.set(0.12, -0.1, -0.25); return g;
@@ -18610,6 +18640,7 @@ function buildMinigun() {
   gpBox(g, inner, 0.040, 0.020, 0.014, 0, 0.042, 0.120);              // rear sight block
   const flash = new THREE.Mesh(new THREE.SphereGeometry(0.026, 8, 7),
     new THREE.MeshBasicMaterial({ color: 0xffcc00 }));
+  addBeltAndCover(g, { topY: 0.040, trayZ: 0.040, coverW: 0.060, coverLen: 0.085, beltZ: 0.070, drop: 0.140, side: 1 });
   flash.visible = false; flash.position.set(0, 0.004, -0.348); g.add(flash);
   g._flash = flash; g._kickZ = 0.006; g._greebled = true; g._handDetailed = true;
   g.position.set(0.12, -0.1, -0.25); return g;
@@ -25462,6 +25493,7 @@ document.addEventListener('keydown', e => {
   }
   // 💬 V — open the custom chat box (filtered; bots never react to it)
   if (e.code === 'KeyV' && !e.repeat && !commsMenuOpen && document.activeElement?.tagName !== 'INPUT') { e.preventDefault(); openVChat(); return; }
+  if (e.code==='KeyR' && !e.repeat && reloading && (activeSlot === 'primary' || activeSlot === 'secondary')) tryActiveReload();
   if (e.code==='KeyR' && (activeSlot === 'primary' || activeSlot === 'secondary') && !reloading && !currentWeapon.noReload && weaponAmmo[currentWeaponIdx].ammo < currentWeapon.mag && weaponAmmo[currentWeaponIdx].reserve > 0) startReload();
   // 🔎 T — look the gun over. Cancelled by anything that needs the weapon.
   if (e.code === 'KeyT' && !e.repeat && !isDead && document.activeElement?.tagName !== 'INPUT'
@@ -29731,7 +29763,8 @@ function tryShoot() {
     if (now - lastShot > 260) { flashAbilityName('[E] TO LAUNCH'); lastShot = now; }
     return;
   }
-  const activeRateMult = (abilityBuff?.weaponId === currentWeapon.id && abilityBuff.rateMult) ? abilityBuff.rateMult : 1;
+  const activeRateMult = ((abilityBuff?.weaponId === currentWeapon.id && abilityBuff.rateMult) ? abilityBuff.rateMult : 1)
+    * (Date.now() < activeReloadBoostUntil ? ACTIVE_RELOAD_RATE : 1);
   const forcedShot = forcedCycleShot;
   const effectiveFireRate = wStats.id === 'chain_gun' ? chainGunFireInterval() : wStats.fireRate;
   if (!forcedShot && now - lastShot < effectiveFireRate * activeRateMult) return;
@@ -30519,10 +30552,122 @@ function throwSupportItem(item) {
 // cancels the reload outright, which is what every other shooter does.
 let _reloadToken = 0;
 
+// ── Reload styles ──────────────────────────────────────────────────────────
+// Magazine guns get an ACTIVE RELOAD: tap R again while the marker is inside the
+// green zone and the reload snaps shut and you shoot 25% faster for a moment;
+// tap it late and the gun jams for half a second. Tapping early does nothing, so
+// a nervous double-tap of R never costs you anything.
+// `reloadStyle: 'shell'` guns (the shotguns) load one shell per beat instead,
+// so every shell is in the gun the moment it lands and firing mid-reload keeps
+// whatever has gone in so far.
+let _reloadSt = null;                 // the reload in progress
+let activeReloadBoostUntil = 0;
+const ACTIVE_RELOAD_RATE = 0.8;       // fire interval multiplier while boosted
+const ACTIVE_RELOAD_BOOST_MS = 3000;
+const ACTIVE_RELOAD_JAM_MS = 500;
+
+function _arEls() {
+  let wrap = document.getElementById('active-reload');
+  if (wrap) return wrap;
+  const host = document.getElementById('reload-flash')?.parentNode || document.body;
+  wrap = document.createElement('div');
+  wrap.id = 'active-reload';
+  wrap.style.cssText = 'position:absolute;top:50%;left:50%;margin-top:74px;transform:translateX(-50%);display:none;pointer-events:none;text-align:center;z-index:30';
+  wrap.innerHTML = '<div class="ar-msg" style="font-size:12px;letter-spacing:2px;height:16px;color:#7dffa0"></div>'
+    + '<div class="ar-bar" style="position:relative;width:190px;height:9px;margin:0 auto;background:rgba(0,0,0,0.55);border:1px solid rgba(255,255,255,0.35);border-radius:5px;overflow:hidden">'
+    + '<div class="ar-zone" style="position:absolute;top:0;bottom:0;background:rgba(90,255,140,0.9)"></div>'
+    + '<div class="ar-tick" style="position:absolute;top:0;bottom:0;width:3px;background:#fff;left:0"></div></div>';
+  host.appendChild(wrap);
+  return wrap;
+}
+function _arMessage(text, color) {
+  const wrap = _arEls(), msg = wrap.querySelector('.ar-msg');
+  msg.textContent = text; msg.style.color = color;
+  wrap.style.display = 'block';
+  wrap.querySelector('.ar-bar').style.display = 'none';
+  clearTimeout(wrap._hide);
+  wrap._hide = setTimeout(() => { wrap.style.display = 'none'; msg.textContent = ''; }, 700);
+}
+function updateActiveReloadHUD() {
+  const wrap = document.getElementById('active-reload');
+  const st = _reloadSt;
+  const live = reloading && st && st.w0 != null && !st.pressed;
+  if (!live) {
+    if (wrap && wrap._shownBar) {          // the marker is done; only a result message may stay up
+      wrap._shownBar = false;
+      wrap.querySelector('.ar-bar').style.display = 'none';
+      if (!wrap.querySelector('.ar-msg').textContent) wrap.style.display = 'none';
+    }
+    return;
+  }
+  const el = _arEls();
+  if (!el._shownBar) {
+    el._shownBar = true;
+    clearTimeout(el._hide);
+    const z = el.querySelector('.ar-zone');
+    z.style.left = (st.w0 * 100) + '%'; z.style.width = ((st.w1 - st.w0) * 100) + '%';
+    el.querySelector('.ar-msg').textContent = '';
+    el.querySelector('.ar-bar').style.display = 'block';
+    el.style.display = 'block';
+  }
+  el.querySelector('.ar-tick').style.left = Math.min(100, Math.max(0, (Date.now() - st.start) / st.dur * 100)) + '%';
+}
+// Re-time a reload that is already running without the animation jumping.
+function _retimeReload(st, newDur, progress, skipProps) {
+  st.dur = newDur; st.start = Date.now() - progress * newDur;
+  const m = st.model;
+  if (!m) return;
+  m._reloadDur = newDur; m._reloadStart = st.start; m._propRun = st.start;
+  if (skipProps) m._propFired = -1;      // everything before this point has "happened"
+}
+function _endReload(st, fill) {
+  if (st.token !== _reloadToken || st.done) return;
+  st.done = true;
+  clearTimeout(st.timer);
+  if (fill) {
+    const need = st.weapon.mag - st.pool.ammo;
+    const take = Math.min(need, st.pool.reserve);
+    st.pool.ammo += take; st.pool.reserve -= take;
+  }
+  reloading = false;
+  if (_reloadSt === st) _reloadSt = null;
+  const flash = document.getElementById('reload-flash');
+  if (flash) flash.style.display = 'none';
+  if (st.model) st.model._reloadStart = 0;
+  // Only touch the HUD globals if that gun is still the one in your hands.
+  if (currentWeaponIdx === st.idx) { ammo = st.pool.ammo; reserve = st.pool.reserve; }
+  syncHeldAmmoModelForIndex(st.idx);
+  updateAmmoHUD();
+}
+function tryActiveReload() {
+  const st = _reloadSt;
+  if (!reloading || !st || st.done || st.w0 == null || st.pressed) return false;
+  const elapsed = Date.now() - st.start, p = elapsed / st.dur;
+  if (p < st.w0) return false;           // too early to count — ignored, no penalty
+  st.pressed = true;
+  clearTimeout(st.timer);
+  if (p <= st.w1) {
+    activeReloadBoostUntil = Date.now() + ACTIVE_RELOAD_BOOST_MS;
+    const skipTo = 0.9;
+    let left = st.dur * (1 - p);
+    if (p < skipTo) { _retimeReload(st, st.dur, skipTo, true); left = st.dur * (1 - skipTo); }
+    st.timer = setTimeout(() => _endReload(st, true), left);
+    _arMessage('ACTIVE RELOAD', '#7dffa0');
+    playSoundEvent('click', { volume: 0.42, pitch: 1.9, minGap: 0 });
+  } else {
+    _retimeReload(st, st.dur + ACTIVE_RELOAD_JAM_MS, elapsed / (st.dur + ACTIVE_RELOAD_JAM_MS), false);
+    st.timer = setTimeout(() => _endReload(st, true), st.dur - elapsed);
+    _arMessage('JAMMED', '#ff6a5a');
+    playSoundEvent('click', { volume: 0.4, pitch: 0.55, minGap: 0 });
+  }
+  return true;
+}
+
 function cancelReload() {
   if (!reloading) return;
   _reloadToken++;                       // any timer still pending is now stale
   reloading = false;
+  if (_reloadSt) { clearTimeout(_reloadSt.timer); _reloadSt.done = true; _reloadSt = null; }
   const flash = document.getElementById('reload-flash');
   if (flash) flash.style.display = 'none';
   const m = weaponModels[currentWeaponIdx];
@@ -30539,7 +30684,11 @@ function startReload() {
   reloading = true;
   updateAmmoHint();   // RELOADING... takes the hint's line (#34)
   document.getElementById('reload-flash').style.display = 'block';
-  const dur = currentWeapon.reloadTime * (Date.now() < adrenalineUntil ? 0.5 : 1);
+  const speed = Date.now() < adrenalineUntil ? 0.5 : 1;
+  const shellStyle = reloadWeapon.reloadStyle === 'shell';
+  const missing = Math.min(reloadWeapon.mag - pool.ammo, pool.reserve);
+  // A shell gun's reload is as long as the shells it is short of.
+  const dur = reloadWeapon.reloadTime * speed * (shellStyle ? 0.2 + 0.8 * missing / reloadWeapon.mag : 1);
   // After dur, not before: the whole sequence is scheduled against the real
   // length of this reload, so adrenaline halving it moves every beat with it.
   playReloadSound(currentWeapon, dur);
@@ -30549,19 +30698,28 @@ function startReload() {
     model._reloadStart = Date.now();
     model._reloadDur = dur;
   }
-  setTimeout(() => {
-    if (token !== _reloadToken) return;          // cancelled, or superseded
-    const need = reloadWeapon.mag - pool.ammo;   // the mag of the gun being reloaded
-    const take = Math.min(need, pool.reserve);
-    pool.ammo += take; pool.reserve -= take;
-    reloading = false;
-    document.getElementById('reload-flash').style.display = 'none';
-    if (model) { model._reloadStart = 0; }
-    // Only touch the HUD globals if that gun is still the one in your hands.
-    if (currentWeaponIdx === reloadIdx) { ammo = pool.ammo; reserve = pool.reserve; }
-    syncHeldAmmoModelForIndex(reloadIdx);
-    updateAmmoHUD();
-  }, dur);
+  const st = { token, idx: reloadIdx, weapon: reloadWeapon, pool, model, dur, start: Date.now(),
+               w0: null, w1: null, pressed: false, done: false, timer: 0 };
+  _reloadSt = st;
+  if (shellStyle) {
+    for (let k = 1; k <= missing; k++) {
+      setTimeout(() => {
+        if (token !== _reloadToken || pool.reserve <= 0 || pool.ammo >= reloadWeapon.mag) return;
+        pool.ammo++; pool.reserve--;
+        if (currentWeaponIdx === reloadIdx) { ammo = pool.ammo; reserve = pool.reserve; }
+        syncHeldAmmoModelForIndex(reloadIdx);
+        updateAmmoHUD();
+      }, dur * (0.2 + 0.7 * k / missing));
+    }
+    st.timer = setTimeout(() => _endReload(st, false), dur);
+  } else {
+    if (dur >= 650) {
+      const width = Math.max(0.14, 240 / dur);
+      st.w0 = Math.min(0.92 - width, 0.45 + Math.random() * 0.20);
+      st.w1 = st.w0 + width;
+    }
+    st.timer = setTimeout(() => _endReload(st, true), dur);
+  }
 }
 
 // Map gimmicks: lava DOT, jump pads, ice, low-grav
@@ -33550,10 +33708,15 @@ mg42: [K(.07,{py:.05,rx:.18,rz:.44,hx:-.03,hy:.04}), K(.18,{arx:0.359,py:.07,rx:
        K(.52,{arx:0.620,py:.09,rx:.30,rz:.70,hy:-.11,hz:.02}), K(.64,{arx:0.620,py:.08,rx:.30,rz:.70,hy:.07,hz:.07}),
        K(.74,{arx:0.620,py:.08,rx:.28,rz:.66,hy:.13,hz:.02,hr:-.8}), K(.83,{arx:0.155,py:.11,rx:.22,rz:.52,hy:.02,hz:.01}),
        K(.91,{py:.07,rx:.20,rz:.60,hx:.06,hy:.05,hz:.11,hr:-.6}), K(.97,{py:.06,rx:.14,rz:.38})],
-minigun:[K(.09,{py:.06,rx:.10,rz:-.24,hx:.03,hy:-.03}), K(.21,{py:.10,rx:.14,rz:-.38,hx:.07,hy:-.08,hz:.04}),
-         K(.31,{py:.11,rx:.16,rz:-.42,hx:.11,hy:-.14,hr:.8}), K(.43,{py:.12,rx:.16,rz:-.42,hx:-.04,hy:-.18,hz:.03}),
-         K(.55,{py:.12,rx:.16,rz:-.42,hy:-.06,hz:.08}), K(.66,{py:.11,rx:.16,rz:-.42,hy:.03,hz:.05}),
-         K(.75,{py:.13,rx:.12,rz:-.34,hy:.04,hz:.02}), K(.85,{py:.08,rx:.10,rz:-.24,hy:.02,hz:-.04}),
+minigun:[K(.09,{py:.06,rx:.10,rz:-.24,hx:.03,hy:-.03}), K(.21,{py:.10,rx:.14,rz:-.38,hx:.07,hy:-.08,hz:.04,arx:.85}),
+         K(.31,{py:.11,rx:.16,rz:-.42,hx:.11,hy:-.14,hr:.8,arx:1.15}), K(.43,{py:.12,rx:.16,rz:-.42,hx:-.04,hy:-.18,hz:.03,arx:1.15,av:0}),
+         K(.55,{py:.12,rx:.16,rz:-.42,hy:-.06,hz:.08,arx:1.15,av:.5}), K(.66,{py:.11,rx:.16,rz:-.42,hy:.03,hz:.05,arx:1.15,av:1}),
+         K(.75,{py:.13,rx:.12,rz:-.34,hy:.04,hz:.02,arx:1.0}), K(.85,{py:.08,rx:.10,rz:-.24,hy:.02,hz:-.04,arx:.25}),
+         K(.92,{py:.09,rx:.14,rz:-.30,hy:-.02,hz:.03}), K(.97,{py:.07,rx:.08,rz:-.18})],
+chain_gun:[K(.09,{py:.06,rx:.10,rz:-.24,hx:.03,hy:-.03}), K(.21,{py:.10,rx:.14,rz:-.38,hx:.07,hy:-.08,hz:.04,arx:.85}),
+         K(.31,{py:.11,rx:.16,rz:-.42,hx:.11,hy:-.14,hr:.8,arx:1.15}), K(.43,{py:.12,rx:.16,rz:-.42,hx:-.04,hy:-.18,hz:.03,arx:1.15,av:0}),
+         K(.55,{py:.12,rx:.16,rz:-.42,hy:-.06,hz:.08,arx:1.15,av:.5}), K(.66,{py:.11,rx:.16,rz:-.42,hy:.03,hz:.05,arx:1.15,av:1}),
+         K(.75,{py:.13,rx:.12,rz:-.34,hy:.04,hz:.02,arx:1.0}), K(.85,{py:.08,rx:.10,rz:-.24,hy:.02,hz:-.04,arx:.25}),
          K(.92,{py:.09,rx:.14,rz:-.30,hy:-.02,hz:.03}), K(.97,{py:.07,rx:.08,rz:-.18})],
 gau19:[K(.08,{py:.07,rx:.08,rz:-.30,hx:.04,hy:-.02}), K(.20,{py:.12,rx:.12,rz:-.48,hx:.08,hy:-.07,hz:.05}),
        K(.30,{py:.13,rx:.14,rz:-.54,hx:.13,hy:-.13,hr:.9}), K(.42,{py:.14,rx:.14,rz:-.54,hx:-.05,hy:-.17,hz:.04}),
@@ -34412,6 +34575,7 @@ const RELOAD_PROPS = {
   rpd:[RP(.29,'link',null,5,'breech'),RP(.53,'link','arrive',3,'breech'),RP(.92,'case',null,1,'breech')],
   mg42:[RP(.28,'link',null,6,'breech'),RP(.52,'link','arrive',4,'breech'),RP(.91,'case',null,1,'breech')],
   minigun:[RP(.31,'link',null,6,'breech'),RP(.55,'link','arrive',4,'breech')],
+  chain_gun:[RP(.31,'link',null,6,'breech'),RP(.55,'link','arrive',4,'breech')],
   gau19:[RP(.30,'link',null,7,'breech'),RP(.54,'link','arrive',4,'breech')],
   m134:[RP(.31,'link',null,6,'breech'),RP(.55,'link','arrive',4,'breech')],
   mk44:[RP(.28,'link',null,6,'breech'),RP(.51,'link','arrive',4,'breech'),RP(.88,'case',null,1,'breech')],
@@ -34945,6 +35109,7 @@ function _reloadPose(track, t) {
 
 function updateReloadAnim() {
   const model = weaponModels[currentWeaponIdx];
+  updateActiveReloadHUD();
   if (!model) return;
   if (model._mech) {
     const wid = WEAPONS[currentWeaponIdx]?.id || '';
@@ -34965,7 +35130,7 @@ function updateReloadAnim() {
         const h = pr.main._home || _ZERO3;
         pr.main.position.copy(h); pr.main.rotation.set(0, 0, pr.main._spin || 0);
       }
-      if (pr.ammo) pr.ammo.children.forEach(c => { c.visible = true; });
+      if (pr.ammo) { pr.ammo.children.forEach(c => { c.visible = true; }); syncHeldAmmoModelForIndex(currentWeaponIdx); }
     }
     if (H && H.hideFront) H.front.visible = false;   // back to one-handed
     if (H) {
@@ -47907,7 +48072,8 @@ document.getElementById('btn-reload-mobile').addEventListener('touchstart', e =>
   e.stopPropagation(); e.preventDefault();
   if (activeSlot !== 'primary' && activeSlot !== 'secondary') return;
   const pool = weaponAmmo[currentWeaponIdx];
-  if (!reloading && !currentWeapon.noReload && pool.ammo < currentWeapon.mag && pool.reserve > 0) startReload();
+  if (reloading) tryActiveReload();
+  else if (!currentWeapon.noReload && pool.ammo < currentWeapon.mag && pool.reserve > 0) startReload();
 }, { passive:false });
 
 document.getElementById('btn-prev-weapon').addEventListener('touchstart', e => {

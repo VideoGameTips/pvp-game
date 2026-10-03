@@ -53,7 +53,7 @@ const constBlock = n => { const b = blockAt(new RegExp('^const ' + n + ' = \\{',
 
 function load() {
   let code = '';
-  for (const n of ['gpBox', 'gpCyl', 'gpPlate', 'gpPart', 'makeMuzzleFlash',
+  for (const n of ['gpBox', 'gpCyl', 'gpPlate', 'gpPart', 'addBeltAndCover', 'makeMuzzleFlash',
                    '_skM', '_skGlass', '_skGrip', '_skFinish',
                    '_throwableHolder', '_gunDetails', '_makeViewHand',
                    '_localPartBoxes', 'attachViewHands', '_reloadPose',
