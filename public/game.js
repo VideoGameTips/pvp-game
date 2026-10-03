@@ -20986,12 +20986,24 @@ function buildScrewdriver() {
 }
 
 // ── Riot Shield blocking helper ───────────────────────────────────────────────
+// The riot shield used to block everything forever. It now has 1000 HP of its own:
+// every blocked hit spends damage from this pool, and once it's gone the shield stops
+// blocking until you respawn (resetCombatResources refills it).
+const RIOT_SHIELD_MAX_HP = 1000;
+let riotShieldHp = RIOT_SHIELD_MAX_HP;
 function isRiotShieldBlocking() {
   if (activeSlot !== 'melee') return false;
   const item = MELEE_ITEMS[selectedMeleeIdx];
   if (!item || !item.shield) return false;
+  if (riotShieldHp <= 0) return false;
   // Blocking = shield equipped AND not mid-swing
   return meleeSwingT >= 1;
+}
+function depleteRiotShield(dmg) {
+  if (!(dmg > 0) || riotShieldHp <= 0) return;
+  riotShieldHp = Math.max(0, riotShieldHp - dmg);
+  if (riotShieldHp <= 0) showAnnouncement('SHIELD BROKEN', 'Your riot shield is spent', '#ff8844', 1400);
+  updateWeaponHUD();
 }
 
 // ── New melee model builders (simple themed shapes) ─────────────────────
@@ -26878,6 +26890,7 @@ function resetCombatResources() {
   crossbowCharging = false; crossbowChargeStart = 0;
   spearThrown = false; revealActive = false; revealEndTime = 0;
   twinKnifeCharges = 10;
+  riotShieldHp = RIOT_SHIELD_MAX_HP;
   javelinLockTargetId = null; javelinLockStartedAt = 0; javelinLocked = false;
   meleeSwingT = 1; grenadeWindupT = 1; grenadeThrowFired = false;
   const reloadEl = document.getElementById('reload-flash');
@@ -36094,6 +36107,8 @@ function updateBullets(dt) {
                 // location yet, so it is deliberately not passed as if it were.
                 botHitsMe(b.botId, b.weaponId);
               }
+            } else if (!isShielded() && !piercesDefense && isRiotShieldBlocking()) {
+              depleteRiotShield(CLIENT_WEAPON_DAMAGE[b.weaponId] || 25);
             }
             removeBullet();
             continue;
@@ -37722,8 +37737,9 @@ function updateWeaponHUD() {
   updateAmmoHint();   // melee / support: nothing to warn about
   if (activeSlot === 'melee' && selectedMeleeIdx !== null && selectedMeleeIdx >= 0) {
     document.getElementById('ammo-gun').textContent = displayMeleeName(MELEE_ITEMS[selectedMeleeIdx]);
-    document.getElementById('ammo-count').textContent = 'MELEE';
-    document.getElementById('ammo-reserve').textContent = 'RANGE';
+    const _shieldItem = MELEE_ITEMS[selectedMeleeIdx];
+    document.getElementById('ammo-count').textContent = _shieldItem.shield ? riotShieldHp : 'MELEE';
+    document.getElementById('ammo-reserve').textContent = _shieldItem.shield ? 'SHIELD HP' : 'RANGE';
     return;
   }
   if (activeSlot === 'support' && selectedSupportIdx !== null && selectedSupportIdx >= 0) {
@@ -38097,6 +38113,7 @@ function applyBotDamageToPlayer(weaponId, botId) {
     return true;
   }
   const piercesDefense = weaponPiercesDefenses(weaponId);
+  if (!isDead && !isShielded() && !piercesDefense && isRiotShieldBlocking()) depleteRiotShield(CLIENT_WEAPON_DAMAGE[weaponId] || 25);
   if (isDead || isShielded() || (!piercesDefense && isRiotShieldBlocking())) return;
   if (!piercesDefense && (meleeAbilityBuff?.type === 'parry' || meleeAbilityBuff?.type === 'deflect')) return;
   if (match?.type === 'range') return;
@@ -38600,6 +38617,7 @@ socket.on('playerHit', data => {
     const oldHp = players[myId]?.hp ?? data.hp;
     const dmgAbsorbed = Math.max(0, oldHp - data.hp);
     flashHitIndicator(); // shield clang
+    depleteRiotShield(dmgAbsorbed);
     if (dmgAbsorbed > 0) socket.emit('healSelf', { amount: dmgAbsorbed });
     if (data.bulletId) {
       for (let i=localBullets.length-1; i>=0; i--) {
