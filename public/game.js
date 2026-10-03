@@ -51,7 +51,7 @@ const WEAPONS = [
   },
   {
     id: 'sg8',   name: 'SG-8',  type: 'Shotgun', slot: 'primary',
-    mag: 8,   reserve: 32,  damage: 18, fireRate: 450,  reloadTime: 2500, reloadStyle: 'shell',
+    mag: 8,   reserve: 32,  damage: 18, fireRate: 450,  reloadTime: 3125, reloadStyle: 'shell',
     auto: false, pellets: 6, spread: 0.08, adsZoom: 55, bulletSpeed: 110, noReload: false,
     ability: { name: 'Bullet Wave', cd: 12000, desc: '6×6 grid · 36 bullets · 20 dmg each', type: 'bulletwave', noADS: true },
   },
@@ -212,7 +212,7 @@ const WEAPONS = [
   },
   {
     id: 'shorty',   name: 'Shorty',   type: 'Secondary', slot: 'secondary',
-    mag: 2,   reserve: 10,  damage: 30, fireRate: 700,  reloadTime: 1800, reloadStyle: 'shell',
+    mag: 2,   reserve: 10,  damage: 30, fireRate: 700,  reloadTime: 2250, reloadStyle: 'shell',
     auto: false, pellets: 4, spread: 0.10,  adsZoom: 58, bulletSpeed: 96, noReload: false,
     ability: { name: 'Point Blank', cd: 12000, desc: 'Next shot · 10 pellets · max spread', type: 'powershot', pellets: 10, spreadMult: 0.01, dmgMult: 1.3 },
   },
@@ -513,7 +513,7 @@ const WEAPONS = [
   },
   {
     id: 'sawed_off', name: 'Sawed-Off', type: 'Secondary', slot: 'secondary',
-    mag: 2, reserve: 8, damage: 35, fireRate: 750, reloadTime: 2000, reloadStyle: 'shell',
+    mag: 2, reserve: 8, damage: 35, fireRate: 750, reloadTime: 2500, reloadStyle: 'shell',
     auto: false, pellets: 5, spread: 0.13, adsZoom: 58, bulletSpeed: 88, noReload: false,
     ability: { name: 'Double Barrel', cd: 11000, desc: 'Fire both barrels at once · 10 pellets', type: 'powershot', pellets: 10, spreadMult: 1.2, dmgMult: 1.1 },
   },
@@ -581,7 +581,7 @@ const WEAPONS = [
     bulletColor: 0xccccaa, bulletSize: 0.03,
     ability: { name: 'Pin Down', cd: 8000, desc: 'Next shot deals 3× damage', type: 'powershot', pellets: 1, spreadMult: 0, dmgMult: 3 } },
   { id: 'boomstick', archived: true, name: 'Boomstick', type: 'Secondary', slot: 'secondary',
-    mag: 2, reserve: 12, damage: 35, fireRate: 600, reloadTime: 2000,
+    mag: 2, reserve: 12, damage: 35, fireRate: 600, reloadTime: 2500, reloadStyle: 'shell',
     auto: false, pellets: 5, spread: 0.12, adsZoom: 56, bulletSpeed: 100, noReload: false,
     ability: { name: 'Both Barrels', cd: 11000, desc: 'Empty both at once', type: 'fanfire', count: 2, delay: 40 } },
   { id: 'signal_pistol', archived: true, name: 'Signal Pistol', type: 'Secondary', slot: 'secondary',
@@ -4290,23 +4290,24 @@ const PROP_SFX = {
 
 // Where a weapon's moving assembly opens and shuts, as fractions of the reload.
 const _asmBeatCache = {};
-function assemblyBeats(id) {
-  if (id in _asmBeatCache) return _asmBeatCache[id];
-  const tr = RELOAD_KEYS[id];
+function assemblyBeats(id, trackOverride) {
+  if (!trackOverride && id in _asmBeatCache) return _asmBeatCache[id];
+  const tr = trackOverride || RELOAD_KEYS[id];
+  const keep = (v) => trackOverride ? v : (_asmBeatCache[id] = v);
   const mag = k => Math.abs(k.ax) + Math.abs(k.ay) + Math.abs(k.az)
                  + Math.abs(k.arx) + Math.abs(k.ary) + Math.abs(k.arz);
   let peak = 0;
   if (tr) for (const k of tr) peak = Math.max(peak, mag(k));
-  if (!tr || peak < 0.005) return (_asmBeatCache[id] = null);
+  if (!tr || peak < 0.005) return keep(null);
   let open = null, shut = null;
   for (const k of tr) if (open === null && mag(k) > peak * 0.5) open = k.t;
   for (let i = tr.length - 1; i >= 0; i--) {
     if (shut === null && mag(tr[i]) > peak * 0.5) shut = Math.min(0.99, tr[i].t + 0.06);
   }
-  return (_asmBeatCache[id] = { open, shut });
+  return keep({ open, shut });
 }
 
-function playReloadSound(w, durMs) {
+function playReloadSound(w, durMs, plan) {
   const ctx = getAudioCtx();
   if (!ctx) return;
   unlockAudio();
@@ -4364,7 +4365,7 @@ function playReloadSound(w, durMs) {
   // ── Everything the reload actually does, in the order it does it ──────────
   const fx = _skinFxFor(id);
   const skinReload = fx && fx.reload;
-  const evs = (skinReload && skinReload.props) || RELOAD_PROPS[id] || [];
+  const evs = (skinReload && skinReload.props) || (plan && plan.props) || RELOAD_PROPS[id] || [];
   let sawMagOut = false, sawAnything = false;
   for (const e of evs) {
     const t = at(e.t);
@@ -4388,7 +4389,7 @@ function playReloadSound(w, durMs) {
   }
 
   // The assembly, at the frames it actually moves.
-  const beats = assemblyBeats(id);
+  const beats = assemblyBeats(id, plan && plan.keys);
   if (beats) {
     if (beats.open !== null) metalClack(ctx, at(beats.open), g, V * 0.75, 500, 0.085);
     if (beats.shut !== null) metalClack(ctx, at(beats.shut), g, V * 0.95, 400, 0.100);
@@ -30633,7 +30634,7 @@ function _endReload(st, fill) {
   if (_reloadSt === st) _reloadSt = null;
   const flash = document.getElementById('reload-flash');
   if (flash) flash.style.display = 'none';
-  if (st.model) st.model._reloadStart = 0;
+  if (st.model) { st.model._reloadStart = 0; }
   // Only touch the HUD globals if that gun is still the one in your hands.
   if (currentWeaponIdx === st.idx) { ammo = st.pool.ammo; reserve = st.pool.reserve; }
   syncHeldAmmoModelForIndex(st.idx);
@@ -30663,6 +30664,56 @@ function tryActiveReload() {
   return true;
 }
 
+// One reload pose/prop plan per shell gun, built for the number of shells that are
+// actually missing: lead-in, one load cycle per shell (the shell lands on the
+// rise, and the round counts on that very beat), then the closing action.
+// Times are fractions of a FULL reload; lead + mag cycles + tail = 1.
+const SHELL_RELOAD = {
+  sg8: { lead: .10, tail: .15, where: 'mag',
+    leadKeys: [[.8, { py:.03, rx:.13, rz:.34 }]],
+    dip: { py:.03, rx:.13, rz:.34, hy:-.13, hz:.02 }, rise: { py:.04, rx:.15, rz:.36, hy:-.02, hz:.05 },
+    tailKeys: [[.1, { py:.02, rx:.08, rz:.10, hz:-.05, hy:-.05 }], [.45, { az:.040, py:.03, rx:.10, rz:.10, hz:-.06 }], [.85, { az:0, py:.05, rx:.16, rz:.06, hz:.09 }]],
+    tailProps: [[.55, 'shell', null, 1, 'breech']] },
+  shorty: { lead: .16, tail: .24, where: 'mag',
+    leadKeys: [[.8, { py:.03, rx:.14, rz:.38 }]],
+    dip: { py:.03, rx:.14, rz:.38, hy:-.13, hz:.02 }, rise: { py:.04, rx:.16, rz:.40, hy:-.02, hz:.05 },
+    tailKeys: [[.1, { py:.02, rx:.08, rz:.10, hz:-.05, hy:-.05 }], [.45, { az:.036, py:.03, rx:.10, rz:.10, hz:-.06, hy:-.04 }], [.9, { az:0, py:.05, rx:.18, rz:.08, hz:.10 }]],
+    tailProps: [[.5, 'shell', null, 1, 'breech']] },
+  sawed_off: { lead: .45, tail: .20, where: 'breech', eject: .9,
+    leadKeys: [[.18, { py:.03, rx:.20, rz:.14, hx:.03 }], [.40, { arx:-.16, py:.05, rx:.90, pz:.04, hx:.05, hy:-.02 }],
+               [.67, { arx:-.44, py:.05, rx:.98, pz:.05, hx:.06, hy:-.09, hz:-.05, hr:.7 }], [.89, { arx:-.46, py:.05, rx:.98, pz:.05, hx:-.06, hy:-.14, hr:.9 }]],
+    dip: { arx:-.44, py:.05, rx:.98, pz:.05, hy:-.16, hz:-.02 }, rise: { arx:-.44, py:.05, rx:.98, pz:.05, hy:.02, hz:-.03 },
+    tailKeys: [[.35, { arx:-.20, py:.03, rx:.34, pz:.02, hy:-.02 }], [.9, { arx:0, py:.05, rx:.16 }]], tailProps: [] },
+  boomstick: { lead: .45, tail: .20, where: 'breech', eject: .82,
+    leadKeys: [[.16, { py:.04, rx:.24, rz:-.12, hx:.04 }], [.36, { arx:-.207, py:.06, rx:1.00, pz:.05, hx:.06, hy:-.03 }],
+               [.60, { arx:-.460, py:.06, rx:1.08, pz:.06, hx:.07, hy:-.10, hz:-.06, hr:.8 }], [.82, { arx:-.460, py:.06, rx:1.08, pz:.06, hx:-.07, hy:-.15, hr:1.0 }]],
+    dip: { arx:-.460, py:.06, rx:1.08, pz:.06, hy:-.17, hz:-.03 }, rise: { arx:-.460, py:.06, rx:1.08, pz:.06, hy:.03, hz:-.04 },
+    tailKeys: [[.3, { arx:-.123, py:.04, rx:.38, pz:.03, hy:-.02 }], [.9, { py:.06, rx:.18 }]], tailProps: [] },
+};
+// Returns { frac, keys, props, loadAt } for `n` missing shells; loadAt[k] is the
+// fraction of the (shortened) reload at which shell k+1 lands.
+function _shellReloadPlan(id, mag, n) {
+  const sp = SHELL_RELOAD[id];
+  if (!sp) return null;
+  const per = (1 - sp.lead - sp.tail) / mag;
+  const total = sp.lead + n * per + sp.tail;
+  const T = f => f / total;
+  const keys = [], props = [], loadAt = [];
+  for (const [u, pose] of sp.leadKeys) keys.push(K(T(u * sp.lead), pose));
+  if (sp.eject != null) props.push(RP(T(sp.eject * sp.lead), 'shell', null, Math.max(1, n), 'breech'));
+  for (let k = 0; k < n; k++) {
+    const start = sp.lead + k * per;
+    keys.push(K(T(start + per * 0.5), sp.dip));
+    keys.push(K(T(start + per), sp.rise));
+    props.push(RP(T(start + per), 'shell', 'arrive', 1, sp.where));
+    loadAt.push(T(start + per));
+  }
+  const tail0 = sp.lead + n * per;
+  for (const [u, pose] of sp.tailKeys) keys.push(K(T(tail0 + u * sp.tail), pose));
+  for (const [u, k, m, c, w] of sp.tailProps) props.push(RP(T(tail0 + u * sp.tail), k, m, c, w));
+  return { frac: total, keys, props, loadAt };
+}
+
 function cancelReload() {
   if (!reloading) return;
   _reloadToken++;                       // any timer still pending is now stale
@@ -30687,21 +30738,24 @@ function startReload() {
   const speed = Date.now() < adrenalineUntil ? 0.5 : 1;
   const shellStyle = reloadWeapon.reloadStyle === 'shell';
   const missing = Math.min(reloadWeapon.mag - pool.ammo, pool.reserve);
-  // A shell gun's reload is as long as the shells it is short of.
-  const dur = reloadWeapon.reloadTime * speed * (shellStyle ? 0.2 + 0.8 * missing / reloadWeapon.mag : 1);
+  // A shell gun's reload is as long as the shells it is short of, and its
+  // animation, sound and ammo count all run off one plan built for that number.
+  const plan = shellStyle ? _shellReloadPlan(reloadWeapon.id, reloadWeapon.mag, missing) : null;
+  const dur = reloadWeapon.reloadTime * speed * (plan ? plan.frac : 1);
   // After dur, not before: the whole sequence is scheduled against the real
   // length of this reload, so adrenaline halving it moves every beat with it.
-  playReloadSound(currentWeapon, dur);
+  playReloadSound(currentWeapon, dur, plan);
   // Trigger reload animation on the current weapon model
   const model = weaponModels[currentWeaponIdx];
   if (model) {
     model._reloadStart = Date.now();
     model._reloadDur = dur;
+    model._reloadPlan = plan;
   }
   const st = { token, idx: reloadIdx, weapon: reloadWeapon, pool, model, dur, start: Date.now(),
                w0: null, w1: null, pressed: false, done: false, timer: 0 };
   _reloadSt = st;
-  if (shellStyle) {
+  if (plan) {
     for (let k = 1; k <= missing; k++) {
       setTimeout(() => {
         if (token !== _reloadToken || pool.reserve <= 0 || pool.ammo >= reloadWeapon.mag) return;
@@ -30709,7 +30763,7 @@ function startReload() {
         if (currentWeaponIdx === reloadIdx) { ammo = pool.ammo; reserve = pool.reserve; }
         syncHeldAmmoModelForIndex(reloadIdx);
         updateAmmoHUD();
-      }, dur * (0.2 + 0.7 * k / missing));
+      }, dur * plan.loadAt[k - 1]);
     }
     st.timer = setTimeout(() => _endReload(st, false), dur);
   } else {
@@ -35113,7 +35167,7 @@ function updateReloadAnim() {
   if (!model) return;
   if (model._mech) {
     const wid = WEAPONS[currentWeaponIdx]?.id || '';
-    const fx0 = _skinFxFor(wid), evs0 = (fx0 && fx0.reload && fx0.reload.props) || RELOAD_PROPS[wid];
+    const fx0 = _skinFxFor(wid), evs0 = (fx0 && fx0.reload && fx0.reload.props) || (model._reloadPlan && model._reloadPlan.props) || RELOAD_PROPS[wid];
     const on = model._reloadStart && model._reloadDur && !model._inspectMode;
     updateGunMech(model, wid, on ? Math.min(1, (Date.now() - model._reloadStart) / model._reloadDur) : null, evs0, model._reloadDur || 1000);
   }
@@ -35157,7 +35211,8 @@ function updateReloadAnim() {
   if (model._propRun !== model._reloadStart) { model._propRun = model._reloadStart; model._propFired = 0; }
   const fx = inspecting ? null : _skinFxFor(id);
   const skinReload = fx && fx.reload;
-  const evs = inspecting ? null : ((skinReload && skinReload.props) || RELOAD_PROPS[id]);
+  const plan = !skinReload && model._reloadPlan;
+  const evs = inspecting ? null : ((skinReload && skinReload.props) || (plan && plan.props) || RELOAD_PROPS[id]);
   if (evs) for (let i = 0; i < evs.length && i < 30; i++) {
     if (model._propFired & (1 << i)) continue;
     if (t < evs[i].t) continue;
@@ -35169,7 +35224,7 @@ function updateReloadAnim() {
   }
 
   const P = _reloadPose(
-    inspecting ? INSPECT_DEFAULT : ((skinReload && skinReload.keys) || RELOAD_KEYS[id] || _RELOAD_DEFAULT), t);
+    inspecting ? INSPECT_DEFAULT : ((skinReload && skinReload.keys) || (plan && plan.keys) || RELOAD_KEYS[id] || _RELOAD_DEFAULT), t);
   if (inspecting) {
     // Open whatever this weapon opens, out and back across the middle of the
     // look. Same channels the reload drives, so nothing special downstream.
