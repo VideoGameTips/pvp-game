@@ -468,6 +468,18 @@ function sanitizeBotWeaponId(id, ownerMode = '') {
   return id;
 }
 
+function cleanKillTags(tags) {
+  if (!Array.isArray(tags)) tags = tags ? [tags] : [];
+  const seen = new Set(), out = [];
+  for (const raw of tags) {
+    const tag = String(raw || '').toUpperCase().replace(/[^A-Z0-9 !-]/g, '').trim().slice(0, 18);
+    if (!tag || seen.has(tag)) continue;
+    seen.add(tag); out.push(tag);
+    if (out.length >= 3) break;
+  }
+  return out;
+}
+
 // Free starter loadout — every account has these unlocked from day 1.
 const FREE_WEAPONS = new Set([
   'ak20', 'sg8',          // primaries
@@ -2192,11 +2204,12 @@ io.on('connection', (socket) => {
     target.hp = Math.max(0, target.hp - dmg);
     creditFfaDamage(shooter, hpBefore - target.hp);
     // shooterId: the victim's screen points an arc at whoever fired (#36)
-    emitToMatch(target.matchId, 'playerHit', { targetId: target.id, hp: target.hp, bulletId: data.bulletId, shooterId: socket.id, weapon: data.weapon, headshot: !!data.headshot });
+    const killTags = cleanKillTags(data.tags);
+    emitToMatch(target.matchId, 'playerHit', { targetId: target.id, hp: target.hp, bulletId: data.bulletId, shooterId: socket.id, weapon: data.weapon, headshot: !!data.headshot, tags: killTags });
     if (target.hp <= 0) {
       target.dead = true; target.deaths++; shooter.kills++;
       shooter.matchKills = (shooter.matchKills || 0) + 1;
-      emitToMatch(target.matchId, 'playerDied', { targetId: target.id, killerId: socket.id });
+      emitToMatch(target.matchId, 'playerDied', { targetId: target.id, killerId: socket.id, weapon: data.weapon, headshot: !!data.headshot, tags: killTags });
       // Respawn is triggered by the client sending 'readyRespawn' after loadout selection
     }
   });
@@ -2224,11 +2237,12 @@ io.on('connection', (socket) => {
     // Only what the PLAYER dealt counts -- not a friendly bot they own.
     if (shooter === players[socket.id]) creditFfaDamage(shooter, botHpBefore - bot.hp);
     // shooterId: the host must not count another player's kill of its bot as its own (#48)
-    emitToMatch(bot.matchId, 'playerHit', { targetId: bot.id, hp: bot.hp, bulletId: data.bulletId, shooterId: shooter.id, weapon: data.weapon, headshot: !!data.headshot });
+    const killTags = cleanKillTags(data.tags);
+    emitToMatch(bot.matchId, 'playerHit', { targetId: bot.id, hp: bot.hp, bulletId: data.bulletId, shooterId: shooter.id, weapon: data.weapon, headshot: !!data.headshot, tags: killTags });
     if (bot.hp <= 0) {
       bot.dead = true; bot.deaths++; shooter.kills++;
       if (shooter === players[socket.id]) shooter.matchKills = (shooter.matchKills || 0) + 1;
-      emitToMatch(bot.matchId, 'playerDied', { targetId: bot.id, killerId: shooter.id });
+      emitToMatch(bot.matchId, 'playerDied', { targetId: bot.id, killerId: shooter.id, weapon: data.weapon, headshot: !!data.headshot, tags: killTags });
       setTimeout(() => {
         if (!bot.dead) return; // already respawned via forceRespawnBot (elim round restart)
         respawnBot(bot);
@@ -2249,7 +2263,10 @@ io.on('connection', (socket) => {
     const killer = k && k.id !== p.id && k.matchId === p.matchId ? k : null;
     p.hp = 0; p.dead = true; p.deaths++;
     if (killer) killer.kills++;
-    emitToMatch(p.matchId, 'playerDied', { targetId: p.id, killerId: killer ? killer.id : null });
+    const weapon = typeof data?.weapon === 'string' ? data.weapon.slice(0, 64) : null;
+    const causeRaw = typeof data?.cause === 'string' ? data.cause : '';
+    const cause = causeRaw === 'fall' || causeRaw === 'ringout' ? causeRaw : null;
+    emitToMatch(p.matchId, 'playerDied', { targetId: p.id, killerId: killer ? killer.id : null, weapon, cause, tags: cleanKillTags(data?.tags), headshot: !!data?.headshot });
   });
   // The host's bots' shots, for the other players' clients to fly through their own hitbox
   // test (the one the host runs on itself) — so a dodge counts on the dodger's screen.
@@ -2487,11 +2504,11 @@ io.on('connection', (socket) => {
     if (blocksFriendlyFire(bot, player)) return;
     let dmg = Math.round((WEAPON_DAMAGE[data.weapon] || 25) * falloffMultiplier(data.weapon, dist3(bot, player)));
     player.hp = Math.max(0, player.hp - dmg);
-    emitToMatch(player.matchId, 'playerHit', { targetId: player.id, hp: player.hp, bulletId: null });
+    emitToMatch(player.matchId, 'playerHit', { targetId: player.id, hp: player.hp, bulletId: null, shooterId: bot.id, weapon: data.weapon, headshot: !!data.headshot });
     if (player.hp <= 0) {
       player.dead = true; player.deaths++;
       bot.kills++;
-      emitToMatch(player.matchId, 'playerDied', { targetId: player.id, killerId: bot.id });
+      emitToMatch(player.matchId, 'playerDied', { targetId: player.id, killerId: bot.id, weapon: data.weapon, headshot: !!data.headshot });
     }
   });
 

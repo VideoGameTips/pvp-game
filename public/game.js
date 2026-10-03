@@ -25132,8 +25132,11 @@ function kickWeaponVisual(w, pellets = 1) {
 
 document.addEventListener('mousemove', e => {
   if ((!pointerLocked && !gameStarted) || isDead) return;
-  euler.y -= e.movementX * SENS * lookSensMult();
-  euler.x -= e.movementY * SENS * lookSensMult();
+  const lookScale = SENS * lookSensMult();
+  const yawStep = e.movementX * lookScale;
+  recordKillfeedTurn(yawStep);
+  euler.y -= yawStep;
+  euler.x -= e.movementY * lookScale;
   euler.x = Math.max(-Math.PI/2.2, Math.min(Math.PI/2.2, euler.x));
   camera.quaternion.setFromEuler(euler);
   // 🎯 Manual aim always wins: while you're moving the mouse, the aim aids yield.
@@ -35578,7 +35581,8 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false, opts = 
   if (players[pid]?.dead) return;   // a body going down is not a target (#34)
   const isBot    = players[pid] && players[pid].isBot;
   if (friendlyFireBlocked(pid, myId)) return;
-  noteKillInfo(pid, myId, weaponId, headshot);
+  const killTags = killfeedShotTags(weaponId, opts);
+  noteKillInfo(pid, myId, weaponId, headshot, { tags: killTags });
   const instakill = headshot && INSTAKILL_HS_WEAPONS.has(weaponId);
   const baseDmg = getClientWeaponDamage(weaponId);
   // 🤫 Secret synergy: certain weapons get a damage bonus in matching map zones
@@ -35599,7 +35603,7 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false, opts = 
   socket.emit(isBot ? 'hitBot' : 'hit', {
     [isBot ? 'botId' : 'targetId']: pid,
     bulletId, weapon: weaponId,
-    headshot, instakill, fatal,
+    headshot, instakill, fatal, tags: killTags,
     ...(Number.isFinite(opts.damageOverride) ? { damageOverride: dmg } : {}),
   });
   showHitmarker(headshot ? 'head' : 'hit');   // a kill below turns it red
@@ -38025,26 +38029,36 @@ function botHitsMe(botId, weaponId, head) {
   _botHitHead = !!head;
   const landed = applyBotDamageToPlayer(weaponId, botId);
   _botHitHead = false;
-  if (landed) socket.emit('botHitMe', { botId, weapon: weaponId });
+  if (landed) socket.emit('botHitMe', { botId, weapon: weaponId, headshot: !!head });
 }
 // A death played out here — a bot's bullet, a hazard — told to the server when other real
 // players are in the match (#48): its own sums can still say we're alive, and then nobody
 // else ever hears of it (the host's round would never end).
 let _localDeathAt = 0;
-function tellServerIDied(killerId) {
+function tellServerIDied(killerId, meta = {}) {
   if (!mpMatch()) return;
   _localDeathAt = performance.now();
-  socket.emit('iDied', { killerId: killerId || null });
+  socket.emit('iDied', {
+    killerId: killerId || null,
+    weapon: meta.weapon || null,
+    cause: meta.cause || null,
+    tags: cleanKillfeedTags(meta.tags),
+    headshot: !!meta.headshot,
+  });
 }
 function killLocalOutOfBounds(killerId = null) {
   if (isDead || match?.type === 'range' || adminMapBuilderOpen) return false;
+  const meta = killerId
+    ? { weapon: 'air_blaster', cause: 'ringout', tags: ['RING OUT'] }
+    : { cause: 'fall', tags: ['FELL'] };
+  noteKillInfo(myId, killerId || myId, meta.weapon || null, false, meta);
   const me = players[myId];
   if (me) { me.hp = 0; me.dead = true; }
   updateHealthHUD(0);
   isDead = true;
   isADS = false; targetFOV = 75; shooting = false; reloading = false;
   abilityBuff = null; meleeAbilityBuff = null; pendingFanFire = null;
-  tellServerIDied(killerId);
+  tellServerIDied(killerId, meta);
   playSoundEvent('air_launch', { volume: 1.0, minGap: 80 });
   showAnnouncement('RING OUT', 'You left the arena', '#aaccff', 1600);
   const scope = document.getElementById('scope-overlay');
@@ -38057,6 +38071,10 @@ function killLocalOutOfBounds(killerId = null) {
 }
 function killBotOutOfBounds(bot, killerId = null) {
   if (!bot || bot.dead) return false;
+  const meta = killerId
+    ? { weapon: 'air_blaster', cause: 'ringout', tags: ['RING OUT'] }
+    : { cause: 'fall', tags: ['FELL'] };
+  noteKillInfo(bot.id, killerId || bot.id, meta.weapon || null, false, meta);
   bot.dead = true; bot.hp = 0;
   if (players[bot.id]) { players[bot.id].hp = 0; players[bot.id].dead = true; }
   dropBody(bot.id);
@@ -38114,7 +38132,7 @@ function applyBotDamageToPlayer(weaponId, botId) {
     playSoundEvent('freeze_shatter', { volume: 1.1 });
     updateHealthHUD(0);
     isDead = true;
-    tellServerIDied(botId);
+    tellServerIDied(botId, { weapon: weaponId });
     showAnnouncement('FROZEN', 'You turned to ice', '#99eeff', 1800);
     const ds = document.getElementById('death-screen');
     if (ds) ds.style.display = 'flex';
@@ -38138,7 +38156,7 @@ function applyBotDamageToPlayer(weaponId, botId) {
   if (botId) showDamageDirection(botId); else flashHitIndicator();
   if (me.hp <= 0 && !isDead) {
     isDead = true;
-    tellServerIDied(botId);
+    tellServerIDied(botId, { weapon: weaponId, headshot: _botHitHead });
     isADS = false; targetFOV = 75; shooting = false;
     reloading = false;
     // Clear any active buffs so bots stop reacting to a dead player's lingering effects
@@ -38555,7 +38573,7 @@ socket.on('sessionReplaced', async () => {
 socket.on('nameRefused', () => console.warn('[auth] the server refused this name — sign in again'));
 
 socket.on('playerHit', data => {
-  if (data.shooterId && data.weapon) noteKillInfo(data.targetId, data.shooterId, data.weapon, data.headshot);   // for the kill feed
+  if (data.shooterId && data.weapon) noteKillInfo(data.targetId, data.shooterId, data.weapon, data.headshot, { tags: data.tags });   // for the kill feed
   // Range mode: player is invincible — just ignore any damage (no healSelf to avoid server loop)
   if (data.targetId === myId && match?.type === 'range') {
     updateHealthHUD(300);
@@ -38721,10 +38739,16 @@ socket.on('grapplePulled', data => {
   playSoundEvent('air_launch', { volume: 0.85, minGap: 80 });
 });
 socket.on('playerDied', data => {
+  if (data.targetId && (data.weapon || data.cause || data.headshot || (Array.isArray(data.tags) && data.tags.length) || !_killInfo[data.targetId])) {
+    noteKillInfo(data.targetId, data.killerId || data.targetId, data.weapon || null, data.headshot, {
+      cause: data.cause || null,
+      tags: data.tags,
+    });
+  }
   if (players[data.targetId]) { players[data.targetId].hp = 0; players[data.targetId].dead = true; }
   // Only count kill if playerHit didn't already count it (check if bot.dead was already set)
   const _alreadyDead = gameBots.find(b => b.id === data.targetId)?.dead;
-  if (data.killerId===myId && !_alreadyDead) { myKills++; creditWeaponKill(currentEquippedId()); saveKillReplay(data.targetId, currentEquippedId()); const kc=document.getElementById('kill-count'); if(kc) kc.textContent=`Kills: ${myKills}`; }
+  if (data.killerId===myId && !_alreadyDead) { const killWeapon = data.weapon || currentEquippedId(); myKills++; creditWeaponKill(killWeapon); saveKillReplay(data.targetId, killWeapon); const kc=document.getElementById('kill-count'); if(kc) kc.textContent=`Kills: ${myKills}`; }
   // Our own death, already played out here (a bot, a hazard — tellServerIDied, #48): the
   // server's echo only has to count it, not run the death screens a second time.
   const echoOfMine = data.targetId === myId && isDead && performance.now() - _localDeathAt < 4000;
@@ -38737,7 +38761,7 @@ socket.on('playerDied', data => {
     abilityBuff=null; meleeAbilityBuff=null; pendingFanFire=null;
     document.getElementById('scope-overlay').style.display='none';
     // 🎬 Start killcam — overrides camera + hides death screen for ~2.2s
-    startKillcam(data.killerId, resolveBot(data.killerId)?.weaponId);   // no-op if the local death started it (#42)
+    startKillcam(data.killerId, data.weapon || resolveBot(data.killerId)?.weaponId);   // no-op if the local death started it (#42)
     const ds = document.getElementById('death-screen');
     if (!KILLCAM.active) ds.style.display='flex';
     if (match && match.type === 'elim' && !match.over) {
@@ -38799,7 +38823,7 @@ socket.on('playerDied', data => {
     }
   }
   if (remoteMeshes[data.targetId]) {
-    if (data.killerId === myId && data.targetId !== myId) triggerFinisher(data.targetId, currentEquippedId());
+    if (data.killerId === myId && data.targetId !== myId) triggerFinisher(data.targetId, data.weapon || currentEquippedId());
     dropBody(data.targetId);   // falls, then hides (#34)
   }
   const bot = resolveBot(data.targetId);
@@ -40569,13 +40593,60 @@ function checkBrWin() {
 // of death in every mode goes through, so bots, players, hazards and self-kills
 // all show up. Names go in as text nodes -- a nickname is user input.
 const KILLFEED_MAX = 5, KILLFEED_MS = 5500;
+const KILLFEED_TURN_WINDOW = 1400;
+const KILLFEED_360_RAD = Math.PI * 1.65;
+const _killfeedTurnSamples = [];
+
+function cleanKillfeedTags(tags) {
+  if (!Array.isArray(tags)) tags = tags ? [tags] : [];
+  const seen = new Set(), out = [];
+  for (const raw of tags) {
+    const tag = String(raw || '').toUpperCase().replace(/[^A-Z0-9 !-]/g, '').trim().slice(0, 18);
+    if (!tag || seen.has(tag)) continue;
+    seen.add(tag); out.push(tag);
+    if (out.length >= 3) break;
+  }
+  return out;
+}
+
+function recordKillfeedTurn(deltaYaw) {
+  const now = performance.now();
+  if (Number.isFinite(deltaYaw) && Math.abs(deltaYaw) > 0.0001) _killfeedTurnSamples.push({ t: now, v: deltaYaw });
+  while (_killfeedTurnSamples.length && now - _killfeedTurnSamples[0].t > KILLFEED_TURN_WINDOW) _killfeedTurnSamples.shift();
+}
+
+function recentKillfeedTurnRadians(now = performance.now()) {
+  while (_killfeedTurnSamples.length && now - _killfeedTurnSamples[0].t > KILLFEED_TURN_WINDOW) _killfeedTurnSamples.shift();
+  return Math.abs(_killfeedTurnSamples.reduce((sum, s) => sum + s.v, 0));
+}
+
+function killfeedNoScopeWeapon(weaponId) {
+  const w = WEAPONS.find(x => x.id === weaponId);
+  const type = String(w?.type || '').toLowerCase();
+  return weaponId === 'srx' || weaponId === 'amr' || weaponId === 'lever' || weaponId === 'railgun'
+    || type.includes('sniper') || type.includes('marksman');
+}
+
+function killfeedShotTags(weaponId, opts = {}) {
+  const tags = cleanKillfeedTags(opts.tags);
+  if (!opts.noTrickshot && killfeedNoScopeWeapon(weaponId) && !isADS) tags.push('NO SCOPE');
+  if (!opts.noTrickshot && recentKillfeedTurnRadians() >= KILLFEED_360_RAD) tags.push('360');
+  return cleanKillfeedTags(tags);
+}
 
 // How each victim was last hit -- who, with what, and whether it was the head --
 // noted where the hit is dealt (emitHit, a bot's hit on us, the server's
 // playerHit for other real players) so the feed can say more than "X died".
 const _killInfo = {};
-function noteKillInfo(targetId, killerId, weaponId, head) {
-  if (targetId) _killInfo[targetId] = { killer: killerId || null, weapon: weaponId || null, head: !!head, t: performance.now() };
+function noteKillInfo(targetId, killerId, weaponId, head, extra = {}) {
+  if (targetId) _killInfo[targetId] = {
+    killer: killerId || null,
+    weapon: weaponId || null,
+    head: !!head,
+    cause: extra.cause || null,
+    tags: cleanKillfeedTags(extra.tags),
+    t: performance.now(),
+  };
 }
 let _botHitHead = false;        // did the bot's shot being resolved right now take our head?
 let _lastBotShotHead = false;   // set by botShotHitsPlayer, picked up when the hit is scheduled
@@ -40721,6 +40792,37 @@ function prewarmKillfeedIcons() {
   _iconWarmTimer = setTimeout(step, 1500);
 }
 
+function ensureKillfeedStyles() {
+  if (document.getElementById('killfeed-style')) return;
+  const st = document.createElement('style');
+  st.id = 'killfeed-style';
+  st.textContent = `
+    #killfeed{position:fixed;right:18px;top:92px;z-index:6200;display:flex;flex-direction:column;gap:7px;align-items:flex-end;pointer-events:none;font:700 12px/1.1 system-ui,-apple-system,Segoe UI,sans-serif;text-transform:uppercase;letter-spacing:0}
+    .kf-row{display:flex;align-items:center;gap:7px;min-height:32px;max-width:min(520px,calc(100vw - 32px));padding:6px 9px;background:rgba(10,12,16,.74);border:1px solid rgba(255,255,255,.15);box-shadow:0 8px 26px rgba(0,0,0,.35);backdrop-filter:blur(8px);color:#f4f7fb;transform:translateX(0);opacity:1;transition:opacity .45s ease,transform .45s ease}
+    .kf-row.mine{border-color:rgba(255,210,63,.45);box-shadow:0 0 0 1px rgba(255,210,63,.16),0 8px 26px rgba(0,0,0,.35)}
+    .kf-row.out{opacity:0;transform:translateX(22px)}
+    .kf-name{max-width:132px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:0 1px 2px #000}
+    .kf-action,.kf-wpn{color:#c7d0dc;font-weight:800;white-space:nowrap}
+    .kf-icon{width:62px;height:26px;object-fit:contain;filter:brightness(0) contrast(1.6) drop-shadow(0 1px 0 rgba(255,255,255,.18));opacity:.95}
+    .kf-head{width:21px;height:21px;object-fit:contain;filter:drop-shadow(0 1px 2px #000)}
+    .kf-tag{padding:3px 5px;border:1px solid rgba(255,255,255,.28);background:rgba(255,255,255,.12);color:#fff;font-size:10px;font-weight:900;white-space:nowrap}
+    @media (max-width:700px){#killfeed{right:8px;top:76px}.kf-row{gap:5px;padding:5px 7px}.kf-name{max-width:86px}.kf-icon{width:48px;height:22px}.kf-tag{font-size:9px;padding:2px 4px}}
+  `;
+  document.head.appendChild(st);
+}
+
+function ensureKillfeedBox() {
+  ensureKillfeedStyles();
+  let box = document.getElementById('killfeed');
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'killfeed';
+    box.setAttribute('aria-live', 'polite');
+    document.body.appendChild(box);
+  }
+  return box;
+}
+
 function _killfeedWho(id) {
   if (id === myId) return { name: 'You', color: '#ffd23f' };
   const p = players[id], mine = players[myId];
@@ -40733,8 +40835,8 @@ function _itemName(id) {
 }
 function pushKillfeed(targetId, killerId) {
   try {
-    const box = document.getElementById('killfeed');
-    if (!box || !targetId) return;
+    if (!targetId) return;
+    const box = ensureKillfeedBox();
     const now = performance.now();
     if (box._last && box._last[0] === targetId && now - box._last[1] < 1500) return;   // the echo of a death already shown
     box._last = [targetId, now];
@@ -40747,20 +40849,34 @@ function pushKillfeed(targetId, killerId) {
     const icon = (src, cls, title) => {
       const im = document.createElement('img'); im.className = cls; im.src = src; im.alt = title || ''; if (title) im.title = title; row.appendChild(im);
     };
+    const tags = list => { for (const tag of cleanKillfeedTags(list)) part('kf-tag', tag); };
+    const weaponBit = (wid, mine) => {
+      wid = _KILLFEED_ICON_ALIAS[wid] || wid;
+      const url = weaponIconURL(wid, mine);
+      if (url) icon(url, 'kf-icon', _itemName(wid));
+      else part('kf-wpn', _itemName(wid) ? '[' + _itemName(wid) + ']' : '✖');
+    };
     const v = _killfeedWho(targetId);
     const info = _killInfo[targetId];
     const known = info && now - info.t < 4000 && (info.killer === killerId || !killerId) ? info : null;
-    if (!killerId || killerId === targetId) {
-      part('kf-wpn', killerId ? '☠' : '☠ fell');
+    const widKnown = known && known.weapon;
+    if ((known && known.cause === 'fall') || (!killerId && !widKnown)) {
       part('kf-name', v.name, v.color);
+      part('kf-action', 'fell off');
+      tags(known && known.tags);
+    } else if (!killerId || killerId === targetId) {
+      part('kf-name', v.name, v.color);
+      part('kf-action', v.name === 'You' ? 'eliminated yourself with' : 'eliminated themself with');
+      if (widKnown) weaponBit(widKnown, targetId === myId);
+      else part('kf-wpn', '☠');
+      tags(known && known.tags);
+      if (known && known.head) icon(_HEAD_ICON, 'kf-head', 'Headshot');
     } else {
       const k = _killfeedWho(killerId);
-      let wid = (known && known.weapon) || (killerId === myId ? currentEquippedId() : (resolveBot(killerId)?.weaponId || players[killerId]?.weaponId));
-      wid = _KILLFEED_ICON_ALIAS[wid] || wid;
+      const wid = widKnown || (killerId === myId ? currentEquippedId() : (resolveBot(killerId)?.weaponId || players[killerId]?.weaponId));
       part('kf-name', k.name, k.color);
-      const url = weaponIconURL(wid, killerId === myId);
-      if (url) icon(url, 'kf-icon', _itemName(wid));
-      else part('kf-wpn', _itemName(wid) ? '[' + _itemName(wid) + ']' : '✖');
+      weaponBit(wid, killerId === myId);
+      tags(known && known.tags);
       if (known && known.head) icon(_HEAD_ICON, 'kf-head', 'Headshot');
       part('kf-name', v.name, v.color);
     }
