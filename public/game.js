@@ -5088,6 +5088,7 @@ function activateMap(name) {
   if (MAP_COLLIDERS[name]) wallColliders.push(...MAP_COLLIDERS[name]);
   activeMapName = name;
   activeMapGimmicks = MAP_GIMMICKS[name] || { damageZones: [], jumpPads: [], iceZones: [], oilZones: [], lowGravZones: [] };
+  if (typeof MAP_MECH !== 'undefined' && MAP_MECH && MAP_MECH[name]) MAP_MECH[name].reset();
   // Reset batch-5 stateful mechanics so a re-entered map starts fresh
   if (typeof _batch5 !== 'undefined') {
     if (_batch5.orbital_station) { _batch5.orbital_station.broken = false; _batch5.orbital_station.hp = 200;
@@ -9180,6 +9181,418 @@ function buildFlyingMoaiMap() {
 }
 buildFlyingMoaiMap();
 
+// ═════════════════════════════════════════════════════════════════════════════
+// 🎢 MECHANIC MAPS — six arenas where the map itself fights back.
+//   Storm Pier    lightning strikes, telegraphed, with lightning rods to hide by
+//   Pinball Arcade bumpers that fling you across the table
+//   Laser Vault   sweeping beams: jump the red ones, duck the cyan ones
+//   Cargo Belts   conveyor lanes that carry you into the shredders
+//   Gale Peaks    a ziggurat with wind gusts and updraft thermals
+//   Magma Rise    the floor turns to lava on a timer; the platforms don't
+// Static things (jump pads, damage zones) ride the existing MAP_GIMMICKS; the
+// moving parts live in MAP_MECH[map] = { reset(), update(dt) }, which the main
+// loop runs for whichever map is active.
+// ═════════════════════════════════════════════════════════════════════════════
+var MAP_MECH = {};
+function updateMapMechanics(dt) {
+  const M = MAP_MECH[activeMapName];
+  if (M) M.update(Math.min(dt, 0.1));
+}
+function _mechCanHurt() { return !isDead && !inLobby && match?.type !== 'range' && !countdownActive; }
+const _mechFeetY = () => camera.position.y - (window._crouchEye || PLAYER_EYE_HEIGHT);
+// A map hazard that hurts the player: tick damage with the normal death path.
+function _mechHurtPlayer(dmg, id) {
+  if (!_mechCanHurt()) return false;
+  if (adminCheats.godMode && currentUser?.isAdmin) { flashHitIndicator(); return false; }
+  const me = players[myId];
+  if (!me) return false;
+  me.hp = Math.max(0, me.hp - dmg);
+  updateHealthHUD(me.hp);
+  flashHitIndicator();
+  if (me.hp <= 0 && !isDead) applyBotDamageToPlayer(id, null);
+  return true;
+}
+function _mechHurtBot(bot, dmg) {
+  if (!bot || bot.dead) return;
+  bot.hp -= dmg;
+  const bm = remoteMeshes[bot.id];
+  if (bm) { trackTotalDamage(bot.id, dmg, bm); spawnHitParticle(bm.position.clone().setY(1.0)); }
+  if (bot.hp <= 0) { bot.dead = true; if (bm) bm.visible = false; }
+}
+function _mechRing(group, x, z, r, color) {
+  const ring = new THREE.Mesh(new THREE.RingGeometry(r - 0.35, r, 40),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }));
+  ring.rotation.x = -Math.PI / 2; ring.position.set(x, 0.06, z); group.add(ring);
+  return ring;
+}
+const _MECH_BASIC = (c, o = 1) => new THREE.MeshBasicMaterial({ color: c, transparent: o < 1, opacity: o, depthWrite: o >= 1 });
+
+// ── ⛈️ STORM PIER ──────────────────────────────────────────────────────────
+registerMap('storm_pier');
+function buildStormPierMap() {
+  const m = 'storm_pier', G = MAP_GROUPS[m];
+  addMapGround(m, 0x232b33, 0x2c353f);
+  addOuterWalls(m, 0x1a2027);
+  const deck = new THREE.Mesh(new THREE.PlaneGeometry(18, 96), new THREE.MeshLambertMaterial({ color: 0x5b4630 }));
+  deck.rotation.x = -Math.PI / 2; deck.position.y = 0.03; G.add(deck);
+  for (let z = -46; z <= 46; z += 4) {
+    const seam = new THREE.Mesh(new THREE.PlaneGeometry(18, 0.12), new THREE.MeshBasicMaterial({ color: 0x2c2218 }));
+    seam.rotation.x = -Math.PI / 2; seam.position.set(0, 0.04, z); G.add(seam);
+  }
+  // Shipping containers, in clusters that leave the four corners open for spawns.
+  const cols = [0xa33b2b, 0x2f5f8f, 0xc8a22a, 0x3b7a4f, 0x7a4a8a];
+  [[-22,-8,0],[-22,2,0],[-30,-24,1.57],[24,12,0],[24,22,0],[30,-18,1.57],
+   [-8,-30,1.57],[10,32,1.57],[-14,22,0.4],[14,-24,-0.4],[-34,16,1.57],[34,2,1.57],
+   [0,-14,0],[0,16,0]].forEach(([x, z, r], i) => addMapBox(m, x, 1.3, z, 6, 2.6, 2.4, cols[i % cols.length], r));
+  // Lighthouse: the tall landmark in the middle, with a lamp that sweeps.
+  addMapBox(m, 0, 7, 0, 5, 14, 5, 0xe8e4da);
+  addMapBox(m, 0, 4, 0, 5.2, 1.6, 5.2, 0xc43b30);
+  addMapBox(m, 0, 10, 0, 5.2, 1.6, 5.2, 0xc43b30);
+  const lamp = new THREE.Mesh(new THREE.BoxGeometry(3, 2, 3), _MECH_BASIC(0xfff2a0));
+  lamp.position.set(0, 15, 0); G.add(lamp);
+  // Lightning rods: a strike inside RODS_PULL of one lands on the rod instead.
+  const rods = [[-24,-24],[24,-24],[-24,24],[24,24]];
+  rods.forEach(([x, z]) => {
+    addMapBox(m, x, 4.5, z, 0.5, 9, 0.5, 0x8d97a3);
+    const tip = new THREE.Mesh(new THREE.SphereGeometry(0.5, 10, 8), _MECH_BASIC(0xffee66));
+    tip.position.set(x, 9.3, z); G.add(tip);
+  });
+  G._skyColor = 0x141b26;
+  const RODS_PULL = 10;
+  const S = { next: 3.5, strikes: [], hinted: false };
+  const clearStrikes = () => { for (const k of S.strikes) { G.remove(k.ring); if (k.beam) G.remove(k.beam); } S.strikes.length = 0; };
+  MAP_MECH[m] = {
+    reset() { clearStrikes(); S.next = 3.5; S.hinted = false; },
+    update(dt) {
+      if (_mechCanHurt() && !S.hinted) { S.hinted = true; showAnnouncement('⛈️ STORM PIER', 'Red rings = lightning. Rods catch strikes nearby.', '#9fd8ff', 2600); }
+      S.next -= dt;
+      if (S.next <= 0 && _mechCanHurt()) {
+        S.next = 2.0 + Math.random() * 1.6;
+        const actors = [];
+        if (!isDead) actors.push([camera.position.x, camera.position.z]);
+        for (const b of gameBots) if (!b.dead) actors.push([b.x, b.z]);
+        let x, z;
+        if (actors.length && Math.random() < 0.7) {
+          const a = actors[Math.floor(Math.random() * actors.length)];
+          x = a[0] + (Math.random() - 0.5) * 6; z = a[1] + (Math.random() - 0.5) * 6;
+        } else { x = (Math.random() - 0.5) * 80; z = (Math.random() - 0.5) * 80; }
+        let r = 3.6, onRod = false, best = RODS_PULL;
+        for (const [rx, rz] of rods) {
+          const d = Math.hypot(rx - x, rz - z);
+          if (d < best) { best = d; x = rx; z = rz; r = 2.2; onRod = true; }
+        }
+        S.strikes.push({ x, z, r, t: 0, fired: false, ring: _mechRing(G, x, z, r, onRod ? 0xffee66 : 0xff3322), beam: null });
+      }
+      for (let i = S.strikes.length - 1; i >= 0; i--) {
+        const k = S.strikes[i];
+        k.t += dt;
+        if (!k.fired) {
+          k.ring.material.opacity = 0.35 + 0.45 * Math.abs(Math.sin(k.t * 14));
+          if (k.t >= 1.3) {
+            k.fired = true;
+            G.remove(k.ring);
+            k.beam = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.9, 40, 8), _MECH_BASIC(0xffffff, 0.95));
+            k.beam.position.set(k.x, 20, k.z); G.add(k.beam);
+            const flash = new THREE.Vector3(k.x, 0.2, k.z);
+            spawnAbilityAOEFX(flash, k.r, 0xdff4ff);
+            playSoundEvent('emp_zap', { position: flash, volume: 0.7, minGap: 0 });
+            if (!isDead && _mechCanHurt()) {
+              if (camera.position.distanceTo(new THREE.Vector3(k.x, camera.position.y, k.z)) < 30) flashScreen('rgba(255,255,255,0.35)', 160);
+              if (Math.hypot(camera.position.x - k.x, camera.position.z - k.z) < k.r && _mechFeetY() < 3) {
+                applyBotDamageToPlayer('lightning_strike', null);
+                applyBlastImpulse(flash, { radius: k.r + 2.5, power: 12 });
+              }
+            }
+            for (const b of gameBots) if (!b.dead && Math.hypot(b.x - k.x, b.z - k.z) < k.r) _mechHurtBot(b, 80);
+          }
+        } else if (k.t >= 1.55) {
+          G.remove(k.beam); S.strikes.splice(i, 1);
+        } else if (k.beam) k.beam.material.opacity = Math.max(0, 0.95 - (k.t - 1.3) * 4);
+      }
+    },
+  };
+}
+buildStormPierMap();
+
+// ── 🕹️ PINBALL ARCADE ─────────────────────────────────────────────────────
+registerMap('pinball_arcade');
+function buildPinballArcadeMap() {
+  const m = 'pinball_arcade', G = MAP_GROUPS[m];
+  addMapGround(m, 0x140f26, 0xff2d95);
+  addOuterWalls(m, 0x2a1850);
+  const neon = [0xff3399, 0x33ddff, 0xffdd33];
+  const bumpers = [];
+  [[0,0],[-16,-14],[16,-14],[-16,14],[16,14],[0,-28],[0,28],[-30,0],[30,0]].forEach(([x, z], i) => {
+    const mesh = new THREE.Mesh(new THREE.CylinderGeometry(1.3, 1.5, 1.4, 20), _MECH_BASIC(neon[i % 3]));
+    mesh.position.set(x, 0.7, z); G.add(mesh);
+    mesh.updateMatrixWorld(true); MAP_COLLIDERS[m].push(new THREE.Box3().setFromObject(mesh));
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 0.3, 20), _MECH_BASIC(0xffffff));
+    cap.position.set(x, 1.5, z); G.add(cap);
+    _mechRing(G, x, z, 2.7, neon[i % 3]);
+    bumpers.push({ x, z, mesh, cap, cd: 0, pulse: 0 });
+  });
+  // Slingshot rails and drop-target posts, like the plastic bits on a real table.
+  [[-8,-22,0.6],[8,-22,-0.6],[-8,22,-0.6],[8,22,0.6],[-24,-8,1.0],[24,8,1.0],[-24,8,-1.0],[24,-8,-1.0]]
+    .forEach(([x, z, r], i) => addMapBox(m, x, 0.9, z, 7, 1.8, 0.8, neon[(i + 1) % 3], r));
+  for (let i = 0; i < 8; i++) {
+    const a = i / 8 * Math.PI * 2;
+    addMapBox(m, Math.cos(a) * 9, 1.1, Math.sin(a) * 9, 0.7, 2.2, 0.7, 0xffffff);
+  }
+  // Launch lanes in the corners: a yellow pad throws you across the table.
+  [[-40,-40],[40,-40],[-40,40],[40,40]].forEach(([x, z]) => {
+    const pad = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.2, 0.15, 24), _MECH_BASIC(0xffdd33));
+    pad.position.set(x, 0.08, z); G.add(pad);
+    MAP_GIMMICKS[m].jumpPads.push({ x, z, r: 2.2, vel: 18 });
+  });
+  G._skyColor = 0x0c0818;
+  const botCd = {};
+  MAP_MECH[m] = {
+    reset() { for (const b of bumpers) { b.cd = 0; b.pulse = 0; b.mesh.scale.set(1, 1, 1); } for (const k in botCd) delete botCd[k]; },
+    update(dt) {
+      for (const b of bumpers) {
+        b.cd = Math.max(0, b.cd - dt);
+        b.pulse = Math.max(0, b.pulse - dt * 4);
+        const s = 1 + b.pulse * 0.3; b.mesh.scale.set(s, 1, s); b.cap.scale.set(s, 1, s);
+        if (!isDead && b.cd <= 0 && Math.hypot(camera.position.x - b.x, camera.position.z - b.z) < 2.7 && _mechFeetY() < 2.4) {
+          b.cd = 0.45; b.pulse = 1;
+          applyBlastImpulse(new THREE.Vector3(b.x, _mechFeetY() + 0.2, b.z), { radius: 6, power: 24 });
+          flashScreen('rgba(255,255,255,0.12)', 120);
+          playSoundEvent('click', { volume: 0.5, pitch: 0.6 + Math.random() * 0.4, minGap: 0 });
+        }
+        for (const bot of gameBots) {
+          if (bot.dead || (botCd[bot.id] || 0) > 0) continue;
+          const dx = bot.x - b.x, dz = bot.z - b.z, d = Math.hypot(dx, dz);
+          if (d < 2.7 && (bot.y || 0) < 2) {
+            botCd[bot.id] = 0.6; b.pulse = 1;
+            const nx = d > 0.01 ? dx / d : 1, nz = d > 0.01 ? dz / d : 0;
+            bot.x += nx * 3.2; bot.z += nz * 3.2;
+            bot.yVel = 6; bot.y = bot.y || 0;
+          }
+        }
+      }
+      for (const id in botCd) botCd[id] = Math.max(0, botCd[id] - dt);
+    },
+  };
+}
+buildPinballArcadeMap();
+
+// ── 🔴 LASER VAULT ─────────────────────────────────────────────────────────
+registerMap('laser_vault');
+function buildLaserVaultMap() {
+  const m = 'laser_vault', G = MAP_GROUPS[m];
+  addMapGround(m, 0x20242b, 0x0a6a85);
+  addOuterWalls(m, 0x161a20);
+  addMapBox(m, 0, 5, 0, 4, 10, 4, 0x3a4350);                       // the emitter hub
+  [[-20,-20],[20,-20],[-20,20],[20,20],[-34,0],[34,0],[0,-34],[0,34],[-10,-30],[10,30],[-30,12],[30,-12]]
+    .forEach(([x, z]) => addMapBox(m, x, 3, z, 2.4, 6, 2.4, 0x2d333c));
+  [[-12,-10,0],[12,10,0],[-12,10,1.57],[12,-10,1.57]].forEach(([x, z, r]) => addMapBox(m, x, 0.6, z, 8, 1.2, 1, 0x39424e, r));
+  const L = 30;
+  // kind 'low' (red, hip height: jump it) and 'high' (cyan, head height: duck it)
+  const arms = [];
+  const addArm = (kind, a0, w) => {
+    const piv = new THREE.Group();
+    const y = kind === 'low' ? 0.45 : 1.6, col = kind === 'low' ? 0xff2a2a : 0x33e6ff;
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(L, 0.2, 0.22), _MECH_BASIC(col));
+    beam.position.set(L / 2 + 2, y, 0); piv.add(beam);
+    const glow = new THREE.Mesh(new THREE.BoxGeometry(L, 0.55, 0.9), _MECH_BASIC(col, 0.18));
+    glow.position.set(L / 2 + 2, y, 0); piv.add(glow);
+    G.add(piv);
+    arms.push({ kind, a: a0, w, piv });
+  };
+  [0, 2.094, 4.189].forEach(a => addArm('low', a, 0.5));
+  [1.047, 4.189].forEach(a => addArm('high', a, -0.38));
+  G._skyColor = 0x0b0f14;
+  const S = { cd: 0, botCd: {}, hinted: false };
+  const hitArm = (x, z, ar, footY, headY) => {
+    const c = Math.cos(ar.a), s = Math.sin(ar.a);
+    const along = x * c + z * s, side = -x * s + z * c;
+    if (along < 2.2 || along > L + 2 || Math.abs(side) > 0.6) return false;
+    return ar.kind === 'low' ? footY < 0.9 : headY > 1.25;
+  };
+  MAP_MECH[m] = {
+    reset() { S.cd = 0; S.botCd = {}; S.hinted = false; arms.forEach((ar, i) => { ar.a = [0, 2.094, 4.189, 1.047, 4.189][i]; ar.piv.rotation.y = -ar.a; }); },
+    update(dt) {
+      if (_mechCanHurt() && !S.hinted) { S.hinted = true; showAnnouncement('🔴 LASER VAULT', 'Jump the red beams. Duck the cyan ones.', '#ff6666', 2600); }
+      S.cd = Math.max(0, S.cd - dt);
+      for (const ar of arms) { ar.a += ar.w * dt; ar.piv.rotation.y = -ar.a; }
+      if (_mechCanHurt() && S.cd <= 0) {
+        const feet = _mechFeetY(), head = camera.position.y + 0.1;
+        for (const ar of arms) if (hitArm(camera.position.x, camera.position.z, ar, feet, head)) {
+          S.cd = 0.4; _mechHurtPlayer(32, 'laser'); flashScreen('rgba(255,40,40,0.25)', 140); break;
+        }
+      }
+      for (const id in S.botCd) S.botCd[id] = Math.max(0, S.botCd[id] - dt);
+      for (const bot of gameBots) {
+        if (bot.dead || (S.botCd[bot.id] || 0) > 0) continue;
+        for (const ar of arms) if (hitArm(bot.x, bot.z, ar, bot.y || 0, (bot.y || 0) + 1.6)) {
+          S.botCd[bot.id] = 0.5; _mechHurtBot(bot, 32); break;
+        }
+      }
+    },
+  };
+}
+buildLaserVaultMap();
+
+// ── 📦 CARGO BELTS ─────────────────────────────────────────────────────────
+registerMap('cargo_belts');
+function buildCargoBeltsMap() {
+  const m = 'cargo_belts', G = MAP_GROUPS[m];
+  addMapGround(m, 0x363a3d, 0x2b2f32);
+  addOuterWalls(m, 0x24272a);
+  const LEN = 60, W = 5.5;
+  const lanes = [{ z: -20, dir: 1 }, { z: 0, dir: -1 }, { z: 20, dir: 1 }];
+  const SPEED = 5;
+  lanes.forEach((ln, li) => {
+    const belt = new THREE.Mesh(new THREE.BoxGeometry(LEN, 0.1, W), new THREE.MeshLambertMaterial({ color: 0x1d2024 }));
+    belt.position.set(0, 0.05, ln.z); G.add(belt);
+    ln.stripes = [];
+    for (let i = 0; i < 12; i++) {
+      const st = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.04, W * 0.8), _MECH_BASIC(0xffcc22, 0.9));
+      st.position.set(-LEN / 2 + i * (LEN / 12), 0.12, ln.z); G.add(st); ln.stripes.push(st);
+    }
+    // The shredder at the end of the lane: spinning drums and a damage zone.
+    const ex = ln.dir * (LEN / 2 + 2.2);
+    [-1, 1].forEach(sd => {
+      const drum = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, W, 12), new THREE.MeshLambertMaterial({ color: 0xb23a2a }));
+      drum.rotation.x = Math.PI / 2; drum.position.set(ex + sd * 0.9, 0.9, ln.z); G.add(drum);
+      (ln.drums || (ln.drums = [])).push({ mesh: drum, sd });
+    });
+    MAP_GIMMICKS[m].damageZones.push({ x: ex, z: ln.z, r: 2.6, dps: 45, type: 'lava' });
+  });
+  // Crates on and between the lanes (they don't move; the belt carries you past them).
+  [[-12,-20],[14,-20],[-6,0],[18,0],[-20,20],[8,20],[-30,-10],[30,10],[-2,-10],[4,10],[-26,10],[26,-10]]
+    .forEach(([x, z], i) => addMapBox(m, x, 0.9, z, 2.2, 1.8, 2.2, i % 2 ? 0x8a6a3a : 0x6e5430));
+  // Catwalks: stairs up from the gaps between lanes to a raised deck.
+  const stairs = (sx, sz, dir) => {
+    for (let i = 0; i < 5; i++) addMapBox(m, sx + dir * i * 1.6, 0.3 * (i + 1), sz, 1.6, 0.6 * (i + 1), 4, 0x7b8086);
+  };
+  addMapBox(m, 43, 2.8, 0, 8, 0.4, 32, 0x7b8086); stairs(31.4, -10, 1);
+  addMapBox(m, -43, 2.8, 0, 8, 0.4, 32, 0x7b8086); stairs(-31.4, 10, -1);
+  G._skyColor = 0x2a2d31;
+  const onLane = (x, z, ln) => Math.abs(z - ln.z) < W / 2 && Math.abs(x) < LEN / 2;
+  MAP_MECH[m] = {
+    reset() {},
+    update(dt) {
+      for (const ln of lanes) {
+        for (const st of ln.stripes) {
+          st.position.x += ln.dir * SPEED * dt;
+          if (st.position.x > LEN / 2) st.position.x -= LEN;
+          if (st.position.x < -LEN / 2) st.position.x += LEN;
+        }
+        for (const d of ln.drums) d.mesh.rotation.y += d.sd * ln.dir * 9 * dt;
+        if (!isDead && _mechFeetY() < 0.7 && onLane(camera.position.x, camera.position.z, ln)) camera.position.x += ln.dir * SPEED * dt;
+        for (const bot of gameBots) if (!bot.dead && (bot.y || 0) < 0.5 && onLane(bot.x, bot.z, ln)) bot.x += ln.dir * SPEED * dt;
+      }
+    },
+  };
+}
+buildCargoBeltsMap();
+
+// ── 💨 GALE PEAKS ──────────────────────────────────────────────────────────
+registerMap('gale_peaks');
+function buildGalePeaksMap() {
+  const m = 'gale_peaks', G = MAP_GROUPS[m];
+  addMapGround(m, 0x5f6b4a, null);
+  addOuterWalls(m, 0x586070);
+  // A ziggurat in the middle: 0.6 m steps, so it walks like a hill.
+  [[34,0.6],[28,1.2],[22,1.8],[16,2.4],[10,3.0]].forEach(([s, top], i) =>
+    addMapBox(m, 0, top / 2, 0, s, top, s, [0x8a8f7a, 0x81866f, 0x777c66, 0x6d725c, 0x9a9c86][i]));
+  // Crags and boulders for cover, and tall corner cliffs to fight from the side of.
+  [[-34,-34],[34,-34],[-34,34],[34,34]].forEach(([x, z]) => addMapBox(m, x, 4.5, z, 7, 9, 7, 0x6a6f78));
+  [[-14,-30,4,2.4],[16,-32,5,2.8],[-30,-6,3,2],[32,12,4,2.4],[-18,32,5,2.6],[22,30,3,2],[-42,14,4,2.4],[42,-16,4,2.4],[-26,-44,3,2],[26,44,3,2]]
+    .forEach(([x, z, s, h]) => addMapBox(m, x, h / 2, z, s, h, s, 0x7a7f88));
+  // Updraft thermals.
+  [[-30,30],[30,-30],[-30,-30],[30,30]].forEach(([x, z]) => {
+    const pad = new THREE.Mesh(new THREE.CylinderGeometry(2.4, 2.4, 0.1, 24), _MECH_BASIC(0xbfefff, 0.55));
+    pad.position.set(x, 0.06, z); G.add(pad);
+    MAP_GIMMICKS[m].jumpPads.push({ x, z, r: 2.4, vel: 16 });
+  });
+  G._skyColor = 0x9ec7ee;
+  // Wind streaks, only visible while a gust is coming or blowing.
+  const streaks = [];
+  for (let i = 0; i < 22; i++) {
+    const st = new THREE.Mesh(new THREE.BoxGeometry(7, 0.05, 0.05), _MECH_BASIC(0xffffff, 0.5));
+    st.position.set((Math.random() - 0.5) * 100, 0.8 + Math.random() * 6, (Math.random() - 0.5) * 100);
+    st.visible = false; G.add(st); streaks.push(st);
+  }
+  const DIRS = [[1,0,'east'],[-1,0,'west'],[0,1,'south'],[0,-1,'north'],[0.707,0.707,'south-east'],[-0.707,-0.707,'north-west']];
+  const S = { phase: 'calm', t: 9, dir: DIRS[0] };
+  const GUST = 5.5;
+  MAP_MECH[m] = {
+    reset() { S.phase = 'calm'; S.t = 9; streaks.forEach(s => { s.visible = false; }); },
+    update(dt) {
+      if (!_mechCanHurt() && S.phase === 'calm') return;
+      S.t -= dt;
+      if (S.phase === 'calm' && S.t <= 0) {
+        S.phase = 'warn'; S.t = 2.5; S.dir = DIRS[Math.floor(Math.random() * DIRS.length)];
+        showAnnouncement('💨 GUST', `Wind from the ${S.dir[2]} — brace!`, '#9fd8ff', 1800);
+        for (const s of streaks) { s.visible = true; s.rotation.y = Math.atan2(-S.dir[1], S.dir[0]); }
+      } else if (S.phase === 'warn' && S.t <= 0) { S.phase = 'gust'; S.t = 5;
+      } else if (S.phase === 'gust' && S.t <= 0) {
+        S.phase = 'calm'; S.t = 11 + Math.random() * 5; streaks.forEach(s => { s.visible = false; });
+      }
+      if (S.phase !== 'calm') {
+        const speed = S.phase === 'gust' ? 42 : 12;
+        for (const s of streaks) {
+          s.position.x += S.dir[0] * speed * dt; s.position.z += S.dir[1] * speed * dt;
+          if (s.position.x > 50) s.position.x -= 100; if (s.position.x < -50) s.position.x += 100;
+          if (s.position.z > 50) s.position.z -= 100; if (s.position.z < -50) s.position.z += 100;
+        }
+      }
+      if (S.phase === 'gust') {
+        if (!isDead && _mechCanHurt()) { camera.position.x += S.dir[0] * GUST * dt; camera.position.z += S.dir[1] * GUST * dt; }
+        for (const bot of gameBots) if (!bot.dead) { bot.x += S.dir[0] * GUST * 0.6 * dt; bot.z += S.dir[1] * GUST * 0.6 * dt; }
+      }
+    },
+  };
+}
+buildGalePeaksMap();
+
+// ── 🌋 MAGMA RISE ──────────────────────────────────────────────────────────
+registerMap('magma_rise');
+function buildMagmaRiseMap() {
+  const m = 'magma_rise', G = MAP_GROUPS[m];
+  addMapGround(m, 0x2b1a14, 0x4a2418);
+  addOuterWalls(m, 0x1a100c);
+  // Rock platforms: tops at 0.8 m, which both players and bots can step onto.
+  const P = [[0,0,10],[-14,-12,6],[14,-12,6],[-14,12,6],[14,12,6],[0,-26,8],[0,26,8],[-28,0,8],[28,0,8],
+             [-26,-26,6],[26,-26,6],[-26,26,6],[26,26,6],[-40,-14,5],[40,14,5],[-40,14,5],[40,-14,5],
+             [-22,-41,5],[22,41,5],[-22,41,5],[22,-41,5],[-20,0,4],[20,0,4],[0,-12,4],[0,12,4]];
+  P.forEach(([x, z, s], i) => addMapBox(m, x, 0.4, z, s, 0.8, s, i === 0 ? 0x6a5648 : 0x4a3b32));
+  // A pair of high perches (stairs up from the centre platform) for the brave.
+  for (let i = 0; i < 4; i++) addMapBox(m, 6 + i * 1.5, 0.8 + 0.5 * (i + 1) - 0.25, 0, 1.5, 0.5, 4, 0x6a5648);
+  addMapBox(m, 14, 3.1, 0, 5, 0.4, 5, 0x6a5648);
+  const lava = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), _MECH_BASIC(0xff4a10, 0.0));
+  lava.rotation.x = -Math.PI / 2; lava.position.y = 0.2; lava.visible = false; G.add(lava);
+  G._skyColor = 0x2a0d08;
+  const S = { phase: 'safe', t: 12, tick: 0, hinted: false };
+  const setPhase = (ph, t) => { S.phase = ph; S.t = t; };
+  MAP_MECH[m] = {
+    reset() { setPhase('safe', 12); S.hinted = false; lava.visible = false; },
+    update(dt) {
+      if (!_mechCanHurt() && S.phase === 'safe') return;
+      S.t -= dt;
+      if (S.phase === 'safe' && S.t <= 0) {
+        setPhase('warn', 3);
+        showAnnouncement('🌋 LAVA RISING', 'Get off the floor — stand on the rock!', '#ff7733', 2200);
+        lava.visible = true;
+      } else if (S.phase === 'warn' && S.t <= 0) setPhase('lava', 8);
+      else if (S.phase === 'lava' && S.t <= 0) { setPhase('safe', 13); lava.visible = false; }
+      if (S.phase === 'warn') lava.material.opacity = 0.18 + 0.14 * Math.abs(Math.sin(S.t * 8));
+      if (S.phase === 'lava') lava.material.opacity = 0.62 + 0.1 * Math.sin(performance.now() / 160);
+      if (S.phase === 'lava') {
+        S.tick += dt;
+        if (S.tick >= 0.5) {
+          S.tick = 0;
+          if (!isDead && _mechFeetY() < 0.45) _mechHurtPlayer(9, 'lava');
+          for (const bot of gameBots) if (!bot.dead && (bot.y || 0) < 0.45) _mechHurtBot(bot, 4);
+        }
+      }
+    },
+  };
+}
+buildMagmaRiseMap();
+
 // ──────────────────────────────────────────────────────────────────────────
 // 17. KING OF THE HILL / BR ARENA — massive map with vehicles + helicopters
 // ──────────────────────────────────────────────────────────────────────────
@@ -9333,6 +9746,8 @@ const GRID_MAP_ARCHETYPES = [
   'outpost', 'block_row',
 ];
 const GRID_CONCEPT_MAPS_ACTIVE = true;
+// Hand-built maps with their own mechanics: the grid-concept pass below must not wipe them.
+const MECHANIC_MAP_NAMES = new Set(['storm_pier', 'pinball_arcade', 'laser_vault', 'cargo_belts', 'gale_peaks', 'magma_rise']);
 function clearMapForGridConcept(name) {
   if (isArchivedLobbyMap(name)) return;
   const group = MAP_GROUPS[name];
@@ -9526,7 +9941,7 @@ function addGridBlock(name, cx, cz, sizeX, sizeZ, groundH, roofH, flip = false) 
   addGridLadder(name, cx + dir * (sizeX / 2 + 0.16), cz, Math.PI / 2, 0, roofH);
 }
 function addGridConceptMap(name, index) {
-  if (isArchivedLobbyMap(name) || name === 'base_raid' || M4_TOWER_MAP_NAMES.has(name)) return;
+  if (isArchivedLobbyMap(name) || name === 'base_raid' || M4_TOWER_MAP_NAMES.has(name) || MECHANIC_MAP_NAMES.has(name)) return;
   if (name.startsWith(ADMIN_CUSTOM_MAP_PREFIX)) return;
   clearMapForGridConcept(name);
   const large = name === 'br_arena';
@@ -38283,7 +38698,7 @@ const CLIENT_WEAPON_DAMAGE = Object.fromEntries([
   ['spear', 50], ['spear_throw', 85], ['pickle', 22], ['shield_charge', 60],
   // Opera/Doomsday map hazards — without these, applyBotDamageToPlayer's own
   // ||25 fallback silently underdealt them too (#51).
-  ['chandelier', 200], ['debris', 120],
+  ['chandelier', 200], ['debris', 120], ['lightning_strike', 70],
   ['twin_knife_throw', 30],
   ['knife_instakill', 9999], ['chainsaw', 45], ['katana', 65], ['knife', 28],
   ['lightsabre', 72], ['riot_shield', 18], ['baguette', 16], ['screwdriver', 20],
@@ -42335,7 +42750,7 @@ function spawnGameBots() {
     const sky = MAP_GROUPS[selectedModeConfig.forcedMap]?._skyColor;
     if (sky != null && scene.background?.setHex) scene.background.setHex(sky);
   } else if (selectedModeConfig.type !== 'dday' && selectedModeConfig.type !== 'range') {
-    const pool = ['blank','urban','warehouse','forest','vietnam','volcano','cyber','desert','tundra','space','airport','trenches','chernobyl','refinery','skydock','sewer','gravity_lab','glassworks','carrier','overgrowth','orbital_station','foundry','carnival','biosphere','lockdown','studio','temple','holiday','labyrinth','arena','opera','doomsday','train','dreamscape','pearl_harbor','titanic','supermarket','pyongyang','traffic_cone_republic','flying_moai','big_arena','super_arena'];
+    const pool = ['blank','urban','warehouse','forest','vietnam','volcano','cyber','desert','tundra','space','airport','trenches','chernobyl','refinery','skydock','sewer','gravity_lab','glassworks','carrier','overgrowth','orbital_station','foundry','carnival','biosphere','lockdown','studio','temple','holiday','labyrinth','arena','opera','doomsday','train','dreamscape','pearl_harbor','titanic','supermarket','pyongyang','traffic_cone_republic','flying_moai','big_arena','super_arena','storm_pier','pinball_arcade','laser_vault','cargo_belts','gale_peaks','magma_rise'];
     const chosen = (selectedMap === 'auto' || !MAP_GROUPS[selectedMap]) ? pool[Math.floor(Math.random()*pool.length)] : selectedMap;
     activateMap(chosen);
     // Update sky color if the map specifies one
@@ -44191,6 +44606,7 @@ function loop() {
   safeLoopStep('javelins', () => updateJavelins(dt));      // in-flight guided javelins: steer, wall-stop, hit
   safeLoopStep('chain-gun-spin', () => updateChainGunSpin(dt)); // spins back down in real time once you let off the trigger
   safeLoopStep('bee-swarms', () => updateBeeSwarms(dt));  // bee swarms home + sting the nearest enemy
+  safeLoopStep('map-mechanics', () => updateMapMechanics(dt)); // moving map hazards (lightning, lasers, belts, wind, lava)
   safeLoopStep('map-gimmicks', () => updateMapGimmicks(dt)); // lava DOT, jump pads, low-grav zones, ice friction
   safeLoopStep('obby', () => updateObby(dt));              // floor reset + finish pads for Obby stages
   safeLoopStep('wave-dash', () => updateWaveDash(dt));     // endless hold/release spike runner
@@ -48125,6 +48541,12 @@ const MAP_DESCS = {
   dreamscape: '🌌 Dreamscape — floating stairs + impossible shapes',
   big_arena:   '🗺️ Big Arena — bigger footprint, four fortified corners, denser cover — built for 2v2/3v3',
   super_arena: '🗺️ Super Big Arena — biggest non-BR map, two full compounds face off, densest cover — 2v2/3v3',
+  storm_pier:     '⛈️ Storm Pier — lightning strikes the pier: red rings warn you, lightning rods catch strikes nearby',
+  pinball_arcade: '🕹️ Pinball Arcade — neon bumpers fling you across the table, corner pads launch you',
+  laser_vault:    '🔴 Laser Vault — sweeping beams: jump the red ones, duck the cyan ones',
+  cargo_belts:    '📦 Cargo Belts — conveyor lanes carry you toward the shredders, catwalks above',
+  gale_peaks:     '💨 Gale Peaks — a stepped peak with wind gusts that shove you around, updraft thermals',
+  magma_rise:     '🌋 Magma Rise — the floor turns to lava on a timer; stand on the rock',
 };
 function selectMapPick(mapId) {
   selectedMap = pickedMap = mapId;

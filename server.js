@@ -1566,7 +1566,7 @@ const LOBBY_MAP_POOL = ['blank','urban','warehouse','forest','vietnam','volcano'
                         'sewer','gravity_lab','glassworks','carrier','overgrowth','orbital_station',
                         'foundry','carnival','biosphere','lockdown','studio','temple','holiday',
                         'labyrinth','arena','opera','doomsday','train','dreamscape',
-                        'pearl_harbor','titanic','supermarket','pyongyang','traffic_cone_republic','flying_moai','big_arena','super_arena'];
+                        'pearl_harbor','titanic','supermarket','pyongyang','traffic_cone_republic','flying_moai','big_arena','super_arena','storm_pier','pinball_arcade','laser_vault','cargo_belts','gale_peaks','magma_rise'];
 // The lobby plays the map of the first player (in join order) who picked a specific one.
 function lobbyMapPick(L) {
   return L.players.find(p => p.map)?.map || null;
@@ -1733,7 +1733,7 @@ function tryPairPvpQueue(mode) {
                     'sewer','gravity_lab','glassworks','carrier','overgrowth','orbital_station',
                     'foundry','carnival','biosphere','lockdown','studio','temple','holiday',
                     'labyrinth','arena','opera','doomsday','train','dreamscape',
-                    'pearl_harbor','titanic','supermarket','pyongyang','traffic_cone_republic','flying_moai','big_arena','super_arena'];
+                    'pearl_harbor','titanic','supermarket','pyongyang','traffic_cone_republic','flying_moai','big_arena','super_arena','storm_pier','pinball_arcade','laser_vault','cargo_belts','gale_peaks','magma_rise'];
   const mapId = MAP_POOL[Math.floor(Math.random() * MAP_POOL.length)];
   io.to(a.socketId).emit('pvpResult', {
     mode, paired: true, team: teamA, mapId,
