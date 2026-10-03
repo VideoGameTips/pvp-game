@@ -56,7 +56,7 @@ const WEAPONS = [
     ability: { name: 'Bullet Wave', cd: 12000, desc: '6×6 grid · 36 bullets · 20 dmg each', type: 'bulletwave', noADS: true },
   },
   {
-    id: 'srx',   name: 'SR-X',  type: 'Sniper', slot: 'primary',
+    id: 'srx', activeReload: true,   name: 'SR-X',  type: 'Sniper', slot: 'primary',
     mag: 5,   reserve: 20,  damage: 95, fireRate: 1200, reloadTime: 3000,
     auto: false, pellets: 1, spread: 0,    adsZoom: 15, bulletSpeed: 200, bulletSpeedMult: 10, noReload: false,
     // spread:0 and no recoil object already meant no random scatter and no
@@ -75,13 +75,13 @@ const WEAPONS = [
     ability: { name: 'Overclock', cd: 12000, desc: '5s · fire rate ×2', type: 'buff', duration: 5000, rateMult: 0.5 },
   },
   {
-    id: 'mp40',  name: 'MP-40', type: 'SMG', slot: 'primary',
+    id: 'mp40', killReload: 0.4,  name: 'MP-40', type: 'SMG', slot: 'primary',
     mag: 40,  reserve: 120, damage: 15, fireRate: 80,   reloadTime: 1600,
     auto: true,  pellets: 1, spread: 0.01, adsZoom: 50, bulletSpeed: 116, noReload: false,
     ability: { name: 'Piercing Round', cd: 7000, desc: 'Entire magazine fires at 3× bullet speed', type: 'buff', duration: 99999, speedMult: 3, shotsFromMag: true },
   },
   {
-    id: 'p90',   name: 'P90',   type: 'SMG+', slot: 'primary',
+    id: 'p90', killReload: 0.4,   name: 'P90',   type: 'SMG+', slot: 'primary',
     mag: 50,  reserve: 150, damage: 15,  fireRate: 20,   reloadTime: 1400,
     auto: true,  pellets: 1, spread: 0.005,
     // Fifty rounds a second out of a fifty-round magazine: the whole mag is gone
@@ -125,7 +125,7 @@ const WEAPONS = [
     ability: { name: 'Deadeye', cd: 16000, desc: 'Next shot deals 150 dmg', type: 'powershot', pellets: 1, spreadMult: 0, weaponAbId: 'lever_ab' },
   },
   {
-    id: 'vector', name: 'Vector SMG', type: 'SMG', slot: 'primary',
+    id: 'vector', killReload: 0.5, name: 'Vector SMG', type: 'SMG', slot: 'primary',
     mag: 32, reserve: 160, damage: 12, fireRate: 45, reloadTime: 1500,
     auto: true, pellets: 1, spread: 0.017, adsZoom: 50, bulletSpeed: 128, noReload: false,
     ability: { name: 'Overdrive', cd: 13000, desc: '2s · fire rate ×5', type: 'buff', duration: 2000, rateMult: 0.2 },
@@ -191,7 +191,7 @@ const WEAPONS = [
     ability: { name: 'Power Draw', cd: 17000, desc: 'Next arrow · 190 dmg', type: 'powershot', pellets: 1, spreadMult: 0, weaponAbId: 'boombow_ab' },
   },
   {
-    id: 'revolver', name: 'Revolver', type: 'Secondary', slot: 'secondary',
+    id: 'revolver', activeReload: true, name: 'Revolver', type: 'Secondary', slot: 'secondary',
     mag: 6,   reserve: 18,  damage: 83, fireRate: 350,  reloadTime: 2200,
     auto: false, pellets: 1, spread: 0.004, adsZoom: 48, bulletSpeed: 170, noReload: false,
     recoil: { up: 0.012, side: 0.006, climb: 0.15, max: 1.8, recover: 9, adsMult: 0.6 },
@@ -205,7 +205,7 @@ const WEAPONS = [
     ability: { name: 'Signal Flare', cd: 22000, desc: 'Reveal all enemies 4 s + AOE 50 dmg', type: 'aoe', radius: 8, damage: 50, color: 0xff5500, reveal: true, revealDur: 4000 },
   },
   {
-    id: 'pistol',   name: 'Pistol',   type: 'Secondary', slot: 'secondary',
+    id: 'pistol', killReload: 0.5,   name: 'Pistol',   type: 'Secondary', slot: 'secondary',
     mag: 15,  reserve: 45,  damage: 20, fireRate: 200,  reloadTime: 1400,
     auto: false, pellets: 1, spread: 0.005, adsZoom: 52, bulletSpeed: 150, noReload: false,
     ability: { name: 'Rapid Fire', cd: 8000, desc: '1 s burst · shoot 8 times fast', type: 'fanfire', count: 8, delay: 55 },
@@ -224,7 +224,7 @@ const WEAPONS = [
     ability: { name: 'Surge', cd: 12000, desc: 'Fire 4 large energy balls', type: 'multishot', count: 4, spread: 0.06, weaponAbId: 'cycler_ab' },
   },
   {
-    id: 'hand_cannon', name: 'Hand Cannon', type: 'Secondary+', slot: 'secondary',
+    id: 'hand_cannon', activeReload: true, name: 'Hand Cannon', type: 'Secondary+', slot: 'secondary',
     mag: 5, reserve: 20, damage: 105, fireRate: 520, reloadTime: 2400,
     auto: false, pellets: 1, spread: 0.014, adsZoom: 48, bulletSpeed: 164, noReload: false,
     recoil: { up: 0.018, side: 0.008, climb: 0.18, max: 1.9, recover: 8, adsMult: 0.6 },
@@ -370,7 +370,7 @@ const WEAPONS = [
     ability: { name: 'Target Link', cd: 13000, desc: '3 s · enhanced bullet tracking', type: 'buff', duration: 3000, spreadMult: 0.3, trackingBoost: true },
   },
   {
-    id: 'amr', name: 'Anti-Material Rifle', type: 'Heavy Sniper', slot: 'primary',
+    id: 'amr', activeReload: true, name: 'Anti-Material Rifle', type: 'Heavy Sniper', slot: 'primary',
     mag: 3, reserve: 12, damage: 180, fireRate: 1600, reloadTime: 3400,
     auto: false, pellets: 1, spread: 0, adsZoom: 14, bulletSpeed: 260, bulletSpeedMult: 10, noReload: false,
     bulletColor: 0xddaa44, bulletSize: 0.075,
@@ -498,7 +498,7 @@ const WEAPONS = [
     ability: { name: 'Multiball', cd: 14000, desc: 'Fire 3 pinballs in a cone', type: 'multishot', count: 3, spread: 0.12, noADS: true },
   },
   {
-    id: 'machine_pistol', name: 'Machine Pistol', type: 'Secondary', slot: 'secondary',
+    id: 'machine_pistol', killReload: 0.5, name: 'Machine Pistol', type: 'Secondary', slot: 'secondary',
     mag: 24, reserve: 96, damage: 14, fireRate: 70, reloadTime: 1500,
     auto: true, pellets: 1, spread: 0.013, adsZoom: 50, bulletSpeed: 130, noReload: false,
     ability: { name: 'Akimbo', cd: 8000, desc: 'Dual-wield · 2 shots per trigger for 4 s', type: 'buff', duration: 4000, rateMult: 0.5, akimbo: true },
@@ -687,7 +687,7 @@ const WEAPONS = [
     ability: { name: 'Precision Fire', cd: 10000, desc: '5 s · perfect accuracy · +30% dmg', type: 'buff', duration: 5000, spreadMult: 0, dmgMult: 1.3 },
   },
   {
-    id: 'barrett', name: 'Barrett M82', type: 'Admin · Anti-Material', slot: 'primary',
+    id: 'barrett', activeReload: true, name: 'Barrett M82', type: 'Admin · Anti-Material', slot: 'primary',
     mag: 5, reserve: 15, damage: 250, fireRate: 1100, reloadTime: 3200,
     auto: false, pellets: 1, spread: 0, adsZoom: 12, bulletSpeed: 320, bulletSpeedMult: 10, noReload: false,
     bulletColor: 0xffcc66, bulletSize: 0.08, adminItem: true,
@@ -701,21 +701,21 @@ const WEAPONS = [
     ability: { name: 'Brrrrt!', cd: 15000, desc: '6 s · fire rate ×2', type: 'buff', duration: 6000, rateMult: 0.5 },
   },
   {
-    id: 'hkmp7', name: 'HK-MP7 Operator', type: 'Admin · PDW', slot: 'primary',
+    id: 'hkmp7', killReload: 0.5, name: 'HK-MP7 Operator', type: 'Admin · PDW', slot: 'primary',
     mag: 60, reserve: 240, damage: 30, fireRate: 50, reloadTime: 1400,
     auto: true, pellets: 1, spread: 0, adsZoom: 50, bulletSpeed: 175, noReload: false,
     adminItem: true,
     ability: { name: 'Silenced Burst', cd: 9000, desc: '3 s · silent + ×0 spread', type: 'buff', duration: 3000, spreadMult: 0, stealth: true },
   },
   {
-    id: 'p90_spec', name: 'FN P-90 Special', type: 'Admin · Bullpup SMG', slot: 'primary',
+    id: 'p90_spec', killReload: 0.4, name: 'FN P-90 Special', type: 'Admin · Bullpup SMG', slot: 'primary',
     mag: 80, reserve: 240, damage: 22, fireRate: 60, reloadTime: 1500,
     auto: true, pellets: 1, spread: 0, adsZoom: 50, bulletSpeed: 165, noReload: false,
     adminItem: true,
     ability: { name: 'Spec Ops Drill', cd: 11000, desc: '4 s · piercing rounds', type: 'buff', duration: 4000, dmgMult: 1.5 },
   },
   {
-    id: 'desert_eagle', name: 'Desert Eagle', type: 'Admin · Hand Cannon', slot: 'secondary',
+    id: 'desert_eagle', activeReload: true, name: 'Desert Eagle', type: 'Admin · Hand Cannon', slot: 'secondary',
     mag: 7, reserve: 28, damage: 65, fireRate: 200, reloadTime: 1900,
     auto: false, pellets: 1, spread: 0.003, adsZoom: 48, bulletSpeed: 180, noReload: false,
     adminItem: true,
@@ -729,14 +729,14 @@ const WEAPONS = [
     ability: { name: 'Mozambique', cd: 7000, desc: 'Triple-tap · 3 shots in 90ms', type: 'fanfire', count: 3, delay: 30 },
   },
   {
-    id: 'glock18', name: 'Glock-18 Auto', type: 'Admin · Full-Auto Pistol', slot: 'secondary',
+    id: 'glock18', killReload: 0.5, name: 'Glock-18 Auto', type: 'Admin · Full-Auto Pistol', slot: 'secondary',
     mag: 33, reserve: 99, damage: 30, fireRate: 70, reloadTime: 1500,
     auto: true, pellets: 1, spread: 0.008, adsZoom: 50, bulletSpeed: 160, noReload: false,
     adminItem: true,
     ability: { name: 'Mag Dump', cd: 8000, desc: 'Empty 12 rounds instantly', type: 'fanfire', count: 12, delay: 30 },
   },
   {
-    id: 'five_seven', name: 'Five-seveN', type: 'Admin · Armor Piercer', slot: 'secondary',
+    id: 'five_seven', killReload: 0.5, name: 'Five-seveN', type: 'Admin · Armor Piercer', slot: 'secondary',
     mag: 20, reserve: 60, damage: 40, fireRate: 130, reloadTime: 1400,
     auto: false, pellets: 1, spread: 0.003, adsZoom: 50, bulletSpeed: 200, noReload: false,
     bulletColor: 0xddddff, bulletSize: 0.035, adminItem: true,
@@ -27274,8 +27274,23 @@ function weaponTitleString(id) {
   const t = weaponTitleFor(id);
   return t ? `${t.title}` : '';
 }
+// Fast guns tagged `killReload: f` refill f of a magazine from reserve the moment they score a kill.
+function applyKillReload(weaponId) {
+  const idx = WEAPONS.findIndex(w => w.id === weaponId), w = WEAPONS[idx];
+  if (!w || !w.killReload || (reloading && idx === currentWeaponIdx)) return;
+  const pool = weaponAmmo[idx];
+  if (!pool || pool.reserve <= 0 || pool.ammo >= w.mag) return;
+  const take = Math.min(w.mag - pool.ammo, pool.reserve, Math.max(1, Math.ceil(w.mag * w.killReload)));
+  pool.ammo += take; pool.reserve -= take;
+  if (idx !== currentWeaponIdx) return;
+  ammo = pool.ammo; reserve = pool.reserve;
+  syncHeldAmmoModelForIndex(idx);
+  updateAmmoHUD();
+  flashAbilityName('KILL RELOAD');
+}
 function creditWeaponKill(weaponId) {
   if (!weaponId) return;
+  applyKillReload(weaponId);
   const before = weaponKills[weaponId] || 0;
   const after  = before + 1;
   weaponKills[weaponId] = after;
@@ -30558,7 +30573,7 @@ function throwSupportItem(item) {
 let _reloadToken = 0;
 
 // ── Reload styles ──────────────────────────────────────────────────────────
-// Magazine guns get an ACTIVE RELOAD: tap R again while the marker is inside the
+// Guns tagged `activeReload` (the heavy, slow-reloading ones) get an ACTIVE RELOAD: tap R again while the marker is inside the
 // green zone and the reload snaps shut and you shoot 25% faster for a moment;
 // tap it late and the gun jams for half a second. Tapping early does nothing, so
 // a nervous double-tap of R never costs you anything.
@@ -30771,7 +30786,7 @@ function startReload() {
     }
     st.timer = setTimeout(() => _endReload(st, false), dur);
   } else {
-    if (dur >= 650) {
+    if (reloadWeapon.activeReload && dur >= 650) {
       const width = Math.max(0.14, 240 / dur);
       st.w0 = Math.min(0.92 - width, 0.45 + Math.random() * 0.20);
       st.w1 = st.w0 + width;

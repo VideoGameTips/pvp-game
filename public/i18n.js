@@ -170,7 +170,7 @@
     '🎮 MODES': '🎮 模式',
     'PRIMARY': '主武器', 'SECONDARY': '副武器', 'MELEE': '近战', 'SUPPORT': '辅助',
     'RELOADING...': '换弹中…',
-    'ACTIVE RELOAD': '极速换弹', 'JAMMED': '卡壳了',
+    'ACTIVE RELOAD': '极速换弹', 'JAMMED': '卡壳了', 'KILL RELOAD': '击杀补弹',
     '🗑 F · SWAP WEAPONS': '🗑 F · 换武器',
     'SCOREBOARD': '计分板', 'NAME': '名字', 'KILLS': '击杀', 'DEATHS': '阵亡', 'HP': '生命',
     'YOU DIED': '你阵亡了',
