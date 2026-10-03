@@ -35607,7 +35607,7 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false, opts = 
     [isBot ? 'botId' : 'targetId']: pid,
     bulletId, weapon: weaponId,
     headshot, instakill, fatal, tags: killTags,
-    ...(Number.isFinite(opts.damageOverride) ? { damageOverride: dmg } : {}),
+    damageOverride: dmg,
   });
   showHitmarker(headshot ? 'head' : 'hit');   // a kill below turns it red
   // Briefly tint the damage number / spawn a synergy spark for player discovery

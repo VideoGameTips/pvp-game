@@ -1880,6 +1880,24 @@ event_horizon: 75,
   twin_knife_throw: 30,
 };
 
+const DAMAGE_OVERRIDE_CAPS = {
+  cyroclasm_laser: 300,
+};
+
+function serverHitDamage(data, shooter, target) {
+  const weapon = data?.weapon;
+  const base = WEAPON_DAMAGE[weapon] || 25;
+  const tableDmg = Math.round(base * falloffMultiplier(weapon, dist3(shooter, target)));
+  const override = Number(data?.damageOverride);
+  if (Number.isFinite(override)) {
+    const headMax = data?.instakill ? 999 : Math.max(tableDmg, base) * (WEAPON_HS_MULT[weapon] || 2);
+    const hardMax = Math.max(1, Math.min(999, Math.max(DAMAGE_OVERRIDE_CAPS[weapon] || 0, Math.ceil(headMax * 1.6 + 4))));
+    return Math.max(0, Math.min(hardMax, Math.round(override)));
+  }
+  if (data?.headshot) return data?.instakill ? target.hp : Math.round(tableDmg * (WEAPON_HS_MULT[weapon] || 2));
+  return tableDmg;
+}
+
 // Damage drop-off by range — the server is authoritative for real PvP hits,
 // so this table (and dist3/falloffMultiplier below) must mirror
 // computeWeaponFalloff()/WEAPON_FALLOFF in public/game.js (CLAUDE.md gotcha
@@ -2195,11 +2213,7 @@ io.on('connection', (socket) => {
     const shooter = players[socket.id];
     if (!target || !shooter || target.dead || target.isBot || shielded(target)) return;
     if (blocksFriendlyFire(shooter, target)) return;
-    let dmg = Math.round((WEAPON_DAMAGE[data.weapon] || 25) * falloffMultiplier(data.weapon, dist3(shooter, target)));
-    if (data.weapon === 'cyroclasm_laser' && Number.isFinite(+data.damageOverride)) {
-      dmg = Math.max(10, Math.min(300, Math.round(+data.damageOverride)));
-    }
-    if (data.headshot) dmg = data.instakill ? target.hp : Math.round(dmg * (WEAPON_HS_MULT[data.weapon] || 2));
+    const dmg = serverHitDamage(data, shooter, target);
     const hpBefore = target.hp;
     target.hp = Math.max(0, target.hp - dmg);
     creditFfaDamage(shooter, hpBefore - target.hp);
@@ -2223,11 +2237,7 @@ io.on('connection', (socket) => {
       : players[socket.id];
     if (!bot || !bot.isBot || bot.dead || !shooter) return;
     if (blocksFriendlyFire(shooter, bot)) return;
-    let dmg = Math.round((WEAPON_DAMAGE[data.weapon] || 25) * falloffMultiplier(data.weapon, dist3(shooter, bot)));
-    if (data.weapon === 'cyroclasm_laser' && Number.isFinite(+data.damageOverride)) {
-      dmg = Math.max(10, Math.min(300, Math.round(+data.damageOverride)));
-    }
-    if (data.headshot) dmg = data.instakill ? bot.hp : Math.round(dmg * (WEAPON_HS_MULT[data.weapon] || 2));
+    let dmg = serverHitDamage(data, shooter, bot);
     // The shooter's client already saw this bot die (#48). Client and server work damage out
     // differently (their own tables, zone bonuses, positions), and with other real players in
     // the match a kill that stays on one screen leaves a frozen, unkillable bot on everyone else's.
