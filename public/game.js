@@ -99,7 +99,7 @@ const WEAPONS = [
     auto: true,  pellets: 1, spread: 0.018, adsZoom: 52, bulletSpeed: 50, noReload: false,
     randomBulletColor: true, bulletSize: 0.2,
     visionHit: { color: 'rgba(255,68,255,0.30)', blur: 4, duration: 1500 }, // splat on the lens
-    ability: { name: 'Splat Bomb', cd: 10000, desc: 'Launch a paint bomb · explodes on impact · 4m AOE', type: 'throwbomb', radius: 4, color: 0xff44ff, noADS: true },
+    ability: { name: 'Splat Bomb', cd: 5000, desc: 'Launch a paint bomb · explodes on impact · 4m AOE', type: 'throwbomb', radius: 4, color: 0xff44ff, noADS: true },
   },
   {
     id: 'burst', name: 'Burst Rifle', type: 'Burst AR', slot: 'primary',
