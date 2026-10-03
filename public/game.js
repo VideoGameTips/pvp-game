@@ -244,8 +244,8 @@ const WEAPONS = [
     recoil: { up: 0.007, side: 0.004, climb: 0.12, max: 1.6, recover: 9, adsMult: 0.6 },
     bulletColor: 0xffff55, bulletSize: 0.06,
     // damage above is per tick (see wireOnHit) — a hit wire ticks tickDmg every
-    // tickMs for dur, totaling 100 over 2s, and stuns the target the whole time.
-    wireOnHit: { dur: 2000, tickMs: 200, tickDmg: 10, stun: true },
+    // Six controlled ticks: 60 total damage, plus the stun/root value.
+    wireOnHit: { dur: 1800, tickMs: 300, tickDmg: 10, stun: true },
     ability: { name: 'Discharge', cd: 11000, desc: 'AOE electric burst 2.5 m · 70 dmg', type: 'aoe', radius: 2.5, damage: 70, color: 0xffff44 },
   },
   {
@@ -35901,21 +35901,16 @@ const BOT_STUN_ON_HIT_WEAPONS = new Set(['arc_torrent', 'taser']);
 
 // Returns a synergy multiplier for damage based on map zones + weapon category.
 // Examples:
-//   electric weapons on ice/water = ×1.5
 //   fire weapons on forest map    = ×1.3 (and target keeps burning)
 //   gravity weapons in low-grav   = ×1.5
 //   frost weapons on tundra/space = ×1.4
 // All bonuses are discoverable, never advertised in the UI.
 function getSecretSynergy(weaponId, hitPos) {
   if (!weaponId || !hitPos) return 1;
-  // Electric synergy with water/ice zones (frozen lake on holiday, ice patches on tundra, sewer pools)
+  // Electric weapons are already control-heavy; hidden bonus damage made tiny
+  // zaps feel like surprise kills, so they deliberately get no map multiplier.
   if (ELECTRIC_WEAPONS.has(weaponId)) {
-    const ice = activeMapGimmicks.iceZones || [];
-    for (const z of ice) {
-      const dx = hitPos.x - z.x, dz = hitPos.z - z.z;
-      if (dx*dx + dz*dz < z.r * z.r) return 1.5;
-    }
-    if (activeMapName === 'sewer' || activeMapName === 'holiday') return 1.25;
+    return 1;
   }
   // Fire synergy with foliage maps
   if (FIRE_WEAPONS.has(weaponId)) {
