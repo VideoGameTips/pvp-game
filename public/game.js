@@ -763,7 +763,7 @@ const WEAPONS = [
     ability: { name: 'Barrage', cd: 18000, desc: 'Unleash 4 rockets in a spread', type: 'multishot', count: 4, spread: 0.12, noADS: true },
   },
   {
-    id: 'lancer', name: 'Lancer', type: 'Blade Rifle', slot: 'primary',
+    id: 'lancer', archived: true, name: 'Lancer', type: 'Blade Rifle', slot: 'primary',
     mag: 1, reserve: 24, damage: 95, fireRate: 900, reloadTime: 1700,
     auto: false, pellets: 1, spread: 0.004, adsZoom: 50, bulletSpeed: 150, noReload: false,
     ability: { name: 'Bayonet Charge', cd: 9000, type: 'blade_charge', distance: 8, bladeDamage: 50, noADS: true, desc: 'Lunge forward · blade contact deals 50' },
