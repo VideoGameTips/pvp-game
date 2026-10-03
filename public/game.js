@@ -4373,7 +4373,7 @@ function playReloadSound(w, durMs) {
     if (PROP_SFX[e.k])          playObjectSfx(ctx, g, PROP_SFX[e.k][arriving ? 1 : 0], t, V);
     else if (e.k === 'mag')          { arriving ? magIn(t) : (magOut(t), sawMagOut = true); }
     else if (e.k === 'shell')   { arriving ? shellIn(t) : tinkle(t, Math.min(4, e.n)); }
-    else if (e.k === 'round' || e.k === 'dart' || e.k === 'nail') { arriving ? roundIn(t) : tinkle(t, Math.min(4, e.n)); }
+    else if (e.k === 'round' || e.k === 'dart') { arriving ? roundIn(t) : tinkle(t, Math.min(4, e.n)); }
     else if (e.k === 'grenade') { arriving ? heavyIn(t) : tinkle(t, Math.min(4, e.n)); }
     else if (e.k === 'clip')    { arriving ? magIn(t)   : tinkle(t, 2); }
     else                        { tinkle(t, Math.min(5, e.n)); }   // cases, links
@@ -33829,15 +33829,10 @@ gravity_launcher:[K(.10,{py:.03,rx:.10,rz:.14,ry:-.18,hy:-.03,hz:-.02}), K(.23,{
                   K(.34,{py:.05,rx:.18,rz:.24,ry:-.52,hx:-.06,hy:-.13,hr:.7}), K(.46,{py:.05,rx:.18,rz:.24,ry:-.52,hx:.03,hy:-.06,hz:-.03}),
                   K(.58,{py:.05,rx:.18,rz:.24,ry:-.30,hy:-.04,hz:-.02}), K(.69,{py:.05,rx:.16,rz:.22,ry:-.10,hy:-.01}),
                   K(.79,{py:.06,rx:.12,rz:.14,ry:.10}), K(.88,{py:.03,rx:.04,rz:.06,ry:-.08}), K(.95,{py:.04,rx:.08,rz:.08})],
-pulse_needle:[K(.10,{py:.02,rx:.18,rz:.18,hy:-.03}),
-              K(.22,{py:.04,rx:.34,rz:.26,hy:-.11,hz:.02}),
-              K(.31,{py:.04,rx:.36,rz:.26,hx:-.07,hy:-.17,hz:-.02,hr:.7}),
-              K(.40,{py:.05,rx:.36,rz:.26,hx:.04,hy:-.05,hz:.04}),
-              K(.49,{py:.04,rx:.36,rz:.26,hx:-.07,hy:-.17,hz:-.02,hr:.7}),
-              K(.58,{py:.05,rx:.36,rz:.26,hx:.04,hy:-.05,hz:.04}),
-              K(.67,{py:.04,rx:.36,rz:.26,hx:-.07,hy:-.17,hz:-.02,hr:.7}),
-              K(.76,{py:.06,rx:.32,rz:.22,hx:.03,hy:-.04,hz:.04}),
-              K(.86,{py:.03,rx:.12,rz:.08,hy:.04,hz:.05,hr:-.5}), K(.96,{py:.03,rx:.08,rz:.04})],
+pulse_needle:[K(.12,{py:.03,rx:.22,rz:.18,hy:-.04}), K(.26,{py:.04,rx:.28,rz:.22,hy:-.12,hz:.01}),
+              K(.37,{py:.04,rx:.30,rz:.22,hx:-.06,hy:-.17,hr:.7}), K(.50,{py:.05,rx:.30,rz:.22,hx:.03,hy:-.20,hz:.01}),
+              K(.62,{py:.05,rx:.30,rz:.22,hy:-.09,hz:.03}), K(.73,{py:.04,rx:.32,rz:.22,hy:-.02,hz:.04}),
+              K(.82,{py:.07,rx:.28,rz:.20,hy:0,hz:.02}), K(.90,{py:.02,rx:.08,rz:.06}), K(.96,{py:.05,rx:.14,rz:.10})],
 laser_pointer:[K(.14,{py:.02,rx:.08,rz:-.30,ry:.30,hy:-.01,hz:.02}), K(.30,{py:.02,rx:.10,rz:-.44,ry:.80,hz:.05}),
                K(.42,{py:.02,rx:.10,rz:-.46,ry:1.10,hz:.07}), K(.54,{py:.02,rx:.10,rz:-.46,ry:1.10,hy:-.06,hz:.02}),
                K(.66,{py:.02,rx:.10,rz:-.46,ry:.70,hz:.06}), K(.78,{py:.02,rx:.10,rz:-.44,ry:.30,hz:.04}),
@@ -33851,15 +33846,11 @@ seismic_hammer:[K(.09,{py:.04,rx:.16,rz:.10,hy:-.03,hz:.03}), K(.20,{py:.11,rx:.
                 K(.51,{py:.05,rx:.14,rz:.08,hy:-.06,hz:.02}), K(.62,{py:.13,rx:.34,rz:.16,hy:-.01,hz:.14}),
                 K(.72,{py:.05,rx:.14,rz:.08,hy:-.06,hz:.02}), K(.83,{py:.14,rx:.36,rz:.16,hy:-.01,hz:.15}),
                 K(.92,{py:.06,rx:.16,rz:.08,hy:-.04})],
-pinball_launcher:[K(.10,{py:.02,rx:.08,rz:.12,hz:.06,hy:-.02}),
-                  K(.20,{py:.04,rx:-.10,rz:.20,hx:.04,hy:.08,hz:.06,hr:-.5}),
-                  K(.30,{py:.02,rx:.06,rz:.12,hz:.18,hy:-.05}),
-                  K(.40,{py:.04,rx:-.10,rz:.20,hx:.04,hy:.08,hz:.06,hr:-.5}),
-                  K(.50,{py:.03,rx:.10,rz:.14,hz:.20,hy:-.05}),
-                  K(.60,{py:.04,rx:-.10,rz:.20,hx:.04,hy:.08,hz:.06,hr:-.5}),
-                  K(.70,{py:.04,rx:.12,rz:.14,hz:.22,hy:-.06}),
-                  K(.80,{py:.04,rx:-.08,rz:.18,hx:.04,hy:.07,hz:.05,hr:-.4}),
-                  K(.90,{py:.05,rx:.16,rz:.14,hz:.03}), K(.97,{py:.03,rx:.06,rz:.06})],
+pinball_launcher:[K(.10,{py:.02,rx:.08,rz:.12,hz:.06,hy:-.02}), K(.22,{py:.02,rx:.06,rz:.12,hz:.18,hy:-.05}),
+                  K(.32,{py:.03,rx:.10,rz:.14,hz:.03}), K(.44,{py:.02,rx:.06,rz:.12,hz:.20,hy:-.05}),
+                  K(.54,{py:.04,rx:.12,rz:.14,hz:.03}), K(.66,{py:.02,rx:.06,rz:.12,hz:.22,hy:-.06}),
+                  K(.76,{py:.05,rx:.14,rz:.16,hz:.03}), K(.88,{py:.02,rx:.06,rz:.12,hz:.24,hy:-.06}),
+                  K(.96,{py:.06,rx:.16,rz:.14,hz:.02})],
 // ════ TANKS · BOTTLES · HOPPERS ════ close · twist off · swap · thread · bleed
 flamethrower:[K(.08,{py:.03,rx:.16,rz:-.26,hx:.03,hy:-.02}), K(.19,{py:.06,rx:.26,rz:-.46,ry:.26,hx:.06,hy:-.07,hz:.04}),
               K(.29,{py:.07,rx:.28,rz:-.48,ry:.62,hx:.07,hy:-.09,hz:.08,hr:.6}), K(.40,{py:.07,rx:.28,rz:-.48,ry:.62,hx:-.06,hy:-.18,hz:.02}),
@@ -34405,9 +34396,7 @@ const RELOAD_PROPS = {
   coilgun:[RP(.32,'mag'),RP(.57,'mag','arrive')],
   plasma_carbine:[RP(.32,'cell'),RP(.57,'cell','arrive')],
   airburst_projector:[RP(.31,'mag'),RP(.56,'mag','arrive'),RP(.85,'grenade','arrive',1,'breech')],
-  pulse_needle:[RP(.32,'nail','arrive',1,'breech'),RP(.41,'nail','arrive',1,'breech'),
-                RP(.50,'nail','arrive',1,'breech'),RP(.59,'nail','arrive',1,'breech'),
-                RP(.68,'nail','arrive',1,'breech'),RP(.77,'nail','arrive',1,'breech')],
+  pulse_needle:[RP(.37,'mag'),RP(.62,'mag','arrive')],
   nail_gun:[RP(.37,'mag'),RP(.62,'mag','arrive'),RP(.83,'nail',null,2,'breech')],
   frost_blaster:[RP(.35,'cell'),RP(.60,'cell','arrive')],
   dart_gun:[RP(.28,'dart','arrive',1,'breech'),RP(.36,'dart','arrive',1,'breech'),
@@ -34469,9 +34458,8 @@ const RELOAD_PROPS = {
   laser_pointer:[RP(.42,'case'),RP(.54,'round','arrive')],
   painter_beam:[RP(.37,'cell'),RP(.62,'cell','arrive')],
   seismic_hammer:[RP(.41,'case',null,2,'muzzle'),RP(.83,'case',null,2,'muzzle')],
-  pinball_launcher:[RP(.25,'ball','arrive',1,'breech'),RP(.38,'ball','arrive',1,'breech'),
-                    RP(.51,'ball','arrive',1,'breech'),RP(.64,'ball','arrive',1,'breech'),
-                    RP(.77,'ball','arrive',1,'breech'),RP(.90,'ball','arrive',1,'breech')],
+  pinball_launcher:[RP(.32,'ball','arrive',1,'breech'),RP(.54,'ball','arrive',1,'breech'),
+                    RP(.76,'ball','arrive',1,'breech'),RP(.96,'ball','arrive',1,'breech')],
   // ── Tanks, bottles, hoppers ──────────────────────────────────────────────
   flamethrower:[RP(.29,'bottle'),RP(.52,'bottle','arrive')],
   freeze_gun:[RP(.30,'bottle'),RP(.54,'bottle','arrive')],
@@ -34479,12 +34467,8 @@ const RELOAD_PROPS = {
   foam_cannon:[RP(.29,'bottle'),RP(.50,'bottle','arrive'),RP(.70,'bottle'),RP(.80,'bottle','arrive')],
   gravity_paint:[RP(.33,'bottle',null,1,'breech'),RP(.55,'bottle','arrive',1,'breech')],
   storm_cannon:[RP(.33,'bottle',null,1,'breech'),RP(.57,'bottle','arrive',1,'breech')],
-  glassmaker:[RP(.33,'ball','arrive',1,'breech'),RP(.41,'ball','arrive',1,'breech'),
-              RP(.49,'ball','arrive',1,'breech'),RP(.57,'ball','arrive',1,'breech'),
-              RP(.65,'ball','arrive',1,'breech')],
-  paintball:[RP(.31,'ball','arrive',1,'breech'),RP(.39,'ball','arrive',1,'breech'),
-             RP(.47,'ball','arrive',1,'breech'),RP(.55,'ball','arrive',1,'breech'),
-             RP(.63,'ball','arrive',1,'breech'),RP(.71,'ball','arrive',1,'breech')],
+  glassmaker:[RP(.35,'ball','arrive',6,'breech'),RP(.57,'ball','arrive',5,'breech')],
+  paintball:[RP(.33,'ball','arrive',6,'breech'),RP(.53,'ball','arrive',6,'breech'),RP(.69,'ball','arrive',5,'breech')],
   sticker_blaster:[RP(.35,'mag',null,1,'breech'),RP(.58,'mag','arrive',1,'breech')],
   traffic_controller:[RP(.35,'cell',null,1,'breech'),RP(.58,'cell','arrive',1,'breech')],
   // ── Thrown: the next one is drawn from the belt ──────────────────────────
