@@ -28426,6 +28426,7 @@ function abilityCooldownFor(item, ab = equippedAbility(item) || item?.ability) {
   if (item?.id === 'katana') return 7000;
   if (item?.id === 'lightsabre') return 6200;
   if (isMelee) return 1500;
+  if (item?.id === 'paintball') return ab.cd || 5000;
   if (item?.id === 'storm_bloom') return ab.cd || 15000;
   return 0;
 }
