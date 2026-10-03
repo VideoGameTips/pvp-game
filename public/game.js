@@ -34703,6 +34703,165 @@ const RELOAD_PROPS = {
   traffic_cone:[RP(.30,'bottle','arrive',1,'breech')],
   cream_pie:[RP(.30,'ball','arrive',1,'breech')],
 };
+// ── 🎬 One reload per gun ───────────────────────────────────────────────────
+// The tables above gave most magazine guns the same move: strip, reach, seat,
+// rack. This block overrides them with choreography that is each gun's own —
+// where it is held while the hands work, how the old mag leaves, how the new
+// one goes in and what the last beat is. _magTrack writes the pose track from a
+// handful of those choices; the props below keep the mag / case / link beats on
+// the same frames so the working parts still follow the hands.
+function _magTrack(o) {
+  const R = o.rx ?? .28, Z = o.rz ?? .2, P = o.py ?? .05, c = o.cant || 0, L = o.lift ?? .02;
+  const sd = o.side ?? -.08, fd = o.fetch ?? -.22, ho = o.hr ?? .7, to = o.out, ti = o.in;
+  const hold = { py: P + L, rx: R + (o.tip ?? .08), rz: Z + c };
+  const seat = o.seat === 'slap' ? { py: P + L + .035, rx: R + .02, rz: Z + c, hy: -.01, hz: .07 }
+             : o.seat === 'rock' ? { py: P + L, rx: R - .06, rz: Z + c, hy: -.03, hz: .06 }
+             : { ...hold, hy: -.02, hz: .05 };
+  const k = [
+    K(o.t0 ?? .09, { py: P - .01, rx: R - .04, rz: Z, hy: -.04 }),
+    K(to - .10, { py: P + L * .5, rx: R + .04, rz: Z + c * .5, hy: -.13, hz: .02 }),
+    K(to, { ...hold, hx: sd, hy: fd + .04, hr: ho }),
+    K((to + ti) / 2, { ...hold, hx: -sd * .5, hy: fd, hz: .02 }),
+    K(ti - .07, { ...hold, hy: -.10, hz: .05 }),
+    K(ti, seat),
+  ];
+  const f = ti, T = (d) => Math.min(.985, f + d);
+  switch (o.fin) {
+    case 'rack':    k.push(K(T(.09), { py: P, rx: R - .02, rz: Z + .1, hy: .09, hz: .13, hr: -.7 }), K(T(.16), { py: P, rx: R - .02, rz: Z + .1, hy: .10, hz: .20, hr: -.7 })); break;
+    case 'release': k.push(K(T(.07), { py: P + .02, rx: R, rz: Z, hy: .07, hz: .03, hr: -.4 }), K(T(.13), { py: P, rx: R - .04, rz: Z })); break;
+    case 'check':   k.push(K(T(.07), { py: P + .01, rx: R - .10, rz: Z + .5, hy: .02 }), K(T(.15), { py: P, rx: R - .06, rz: Z + .45 }), K(T(.20), { py: P, rx: R - .04, rz: Z + .1 })); break;
+    case 'slap':    k.push(K(T(.05), { py: P + .05, rx: R, rz: Z, hy: .0, hz: .05 }), K(T(.10), { py: P, rx: R - .03, rz: Z })); break;
+    case 'slide':   k.push(K(T(.08), { py: P, rx: R - .06, rz: Z + .08, hy: .06, hz: -.08, hr: -.5 }), K(T(.14), { py: P, rx: R - .04, rz: Z, hy: .04, hz: .02 })); break;
+    case 'bolt':    k.push(K(T(.08), { py: P, rx: R - .04, rz: Z + .26, hx: .06, hy: .05, hz: .12, hr: -.6 }), K(T(.14), { py: P, rx: R - .04, rz: Z + .1, hx: .03, hy: .02, hz: .04 })); break;
+    case 'dip':     k.push(K(T(.07), { py: P - .02, rx: R + .12, rz: Z, hy: -.05 }), K(T(.13), { py: P, rx: R, rz: Z })); break;
+    default:        k.push(K(T(.10), { py: P, rx: R - .04, rz: Z }));
+  }
+  return k;
+}
+// props: arrive sits just before the seat so the mag slides home as the hand lands.
+function _magProps(o, extra) {
+  const p = [RP(o.out, 'mag', null, 1, o.where || 'mag'), RP(o.in - .09, 'mag', 'arrive', 1, o.where || 'mag')];
+  if (o.fin === 'rack' || o.fin === 'bolt') p.push(RP(Math.min(.97, o.in + .14), 'case', null, 1, 'breech'));
+  return p.concat(extra || []);
+}
+// A variant of an existing track: mirrored, or with the hands working bigger.
+function _variant(track, o) {
+  const m = o.mirror ? -1 : 1, a = o.amp ?? 1;
+  return track.map(k => K(k.t, Object.assign({}, k, {
+    rz: k.rz * m, ry: k.ry * m, hx: k.hx * m, arz: k.arz * m,
+    hy: k.hy * a, hz: k.hz * a, py: k.py + (o.lift || 0), rx: k.rx + (o.tip || 0) })));
+}
+const _MAG_STYLES = {
+  // tactical roll: canted hard, dumps and fetches in one quick sweep, release on the way up
+  xm7:            { out: .26, in: .50, rx: .22, rz: .10, cant: .55, lift: .01, fetch: -.20, side: -.10, fin: 'release', seat: 'rock' },
+  // triple-tap: seats the mag then taps it home twice
+  burst:          { out: .30, in: .56, rx: .26, rz: -.14, cant: -.20, fetch: -.22, side: .09, fin: 'slap', seat: 'slap', hr: -.7 },
+  // flip: rolls the whole gun on its side, changes it from the hip, and is back before you notice
+  vector:         { out: .21, in: .42, rx: .14, rz: .10, cant: .85, lift: .00, fetch: -.16, side: -.07, fin: 'none', seat: 'rock', t0: .06 },
+  // old school: muzzle high, mag straight down, a long slow haul on the bolt
+  mp40:           { out: .30, in: .54, rx: .46, rz: .30, cant: .10, lift: .04, fetch: -.26, side: -.09, fin: 'bolt', seat: 'press' },
+  // compact PDW: tiny motions, a palm-slap seat and gone
+  hkmp7:          { out: .24, in: .44, rx: .16, rz: .14, cant: .12, lift: .005, fetch: -.14, side: -.05, fin: 'slap', seat: 'slap', hr: .4 },
+  // extended mag: gun out low, long reach to the belt, support hand pulls the slide
+  machine_pistol: { out: .28, in: .56, rx: .12, rz: .20, cant: .06, lift: -.01, fetch: -.30, side: -.08, fin: 'slide', seat: 'press', hr: .8 },
+  // precise: upright and square, thumb release, then a quick glance at the chamber
+  five_seven:     { out: .30, in: .54, rx: .08, rz: .06, cant: 0, lift: .01, fetch: -.16, side: -.06, fin: 'check', seat: 'rock' },
+  // tuck it to the chest and go: fastest pistol
+  glock18:        { out: .22, in: .44, rx: .42, rz: .22, cant: .10, lift: .03, fetch: -.12, side: -.04, fin: 'slap', seat: 'slap', t0: .06 },
+  // classic: gun turned flat so you can see the mag release, slow, ends with a slide-stop thumb
+  m1911:          { out: .34, in: .62, rx: .30, rz: .85, cant: .20, lift: .02, fetch: -.20, side: -.07, fin: 'release', seat: 'press', t0: .12 },
+  // heavy hand cannon: huge lift, slow, a big rack to finish
+  desert_eagle:   { out: .36, in: .66, rx: .36, rz: .30, cant: .08, lift: .07, fetch: -.28, side: -.09, fin: 'rack', seat: 'slap' },
+  // tip-and-tap: muzzle straight down so the empty falls free, then a hammer cock
+  hand_cannon:    { out: .30, in: .60, rx: .62, rz: .36, cant: .0, lift: .05, fetch: -.20, side: -.10, fin: 'dip', seat: 'rock', hr: .9, tip: .16 },
+  // service pistol: textbook press-check
+  pistol:         { out: .32, in: .58, rx: .24, rz: .24, cant: .06, fetch: -.18, side: -.06, fin: 'slide', seat: 'press' },
+  // anti-materiel: shoulder it, huge mag, bolt hauled with the whole arm
+  barrett:        { out: .32, in: .60, rx: .18, rz: .22, cant: .04, lift: .06, fetch: -.30, side: -.10, fin: 'bolt', seat: 'slap' },
+  // arena rifle: clean competition change, bolt catch and a short check
+  m4a1_arena:     { out: .26, in: .50, rx: .24, rz: .16, cant: .20, lift: .02, fetch: -.20, side: -.08, fin: 'check', seat: 'rock' },
+  // piercer: heavy block magazine, seated with the heel of the hand
+  gatecrasher:    { out: .30, in: .58, rx: .20, rz: -.18, cant: -.12, lift: .03, fetch: -.22, side: .08, fin: 'slap', seat: 'slap', hr: -.6 },
+  // nail strip: side-loaded, rocks in, then a thumb flick
+  nail_gun:       { out: .34, in: .60, rx: .20, rz: -.30, cant: -.35, lift: .02, fetch: -.14, side: .06, fin: 'release', seat: 'rock' },
+};
+const _STYLE_RK = {}, _STYLE_RP = {};
+for (const id in _MAG_STYLES) {
+  _STYLE_RK[id] = _magTrack(_MAG_STYLES[id]);
+  _STYLE_RP[id] = _magProps(_MAG_STYLES[id], id === 'nail_gun' ? [RP(.83, 'nail', null, 2, 'breech')] : []);
+}
+// ── Not magazine guns: each its own trick ───────────────────────────────────
+Object.assign(_STYLE_RK, {
+  // drum box: the whole belt drum is hauled off and a fresh one hefted on
+  rpd:   _variant(RELOAD_KEYS.rpd, { amp: 1.2, lift: .01, tip: .04 }),
+  // lid up, belt laid in links first, lid slammed — heavier hands, mirrored
+  mg42:  _variant(RELOAD_KEYS.mg42, { mirror: true, amp: 1.1, tip: -.03 }),
+  // mounted gun: both arms, big movements
+  gau19: _variant(RELOAD_KEYS.gau19, { amp: 1.35, lift: .015 }),
+  // chain gun: lid, then straight in
+  mk44:  _variant(RELOAD_KEYS.mk44, { mirror: true, amp: .9, tip: .02 }),
+  // speedloader: the cylinder opens, empties drop, ALL rounds go in with one push
+  snub_revolver: [
+    K(.10,{py:.03,rx:.12,rz:-.56,ry:.16,hx:.03}), K(.22,{ax:-0.0209,ary:-0.219,py:.05,rx:.22,rz:-1.12,ry:.38,hx:.07,hy:.06,hr:.6}),
+    K(.34,{ax:-0.0400,ary:-0.420,py:.05,rx:.30,rz:-1.20,ry:.40,hx:.10,hy:.12,hz:-.08,hr:1.2}),
+    K(.50,{ax:-0.0400,ary:-0.420,py:.05,rx:.26,rz:-1.16,ry:.40,hx:.02,hy:-.15,hz:-.02}),
+    K(.62,{ax:-0.0400,ary:-0.420,py:.05,rx:.24,rz:-1.16,ry:.40,hx:.07,hy:.02,hz:-.05}),
+    K(.74,{ax:-0.0400,ary:-0.420,py:.05,rx:.24,rz:-1.16,ry:.40,hx:.09,hy:.06,hr:.6}),
+    K(.84,{ax:-0.0114,ary:-0.120,py:.06,rx:.16,rz:-.78,ry:.22,hx:.04}), K(.92,{py:.04,rx:.10,rz:-.38,ry:.08})],
+  // moon clip: the whole ring of cases snaps out as one, a fresh ring clicks in
+  auto_revolver: [
+    K(.09,{py:.03,rx:.16,rz:-.44,ry:.12,hx:.03}), K(.20,{ax:-0.0190,ary:-0.180,py:.06,rx:.26,rz:-.92,ry:.30,hx:.06,hy:.05,hr:.5}),
+    K(.30,{ax:-0.0380,ary:-0.360,py:.07,rx:.34,rz:-1.02,ry:.32,hx:.08,hy:.11,hz:-.09,hr:1.1}),
+    K(.42,{ax:-0.0380,ary:-0.360,py:.07,rx:.30,rz:-.96,ry:.32,hx:-.04,hy:-.16,hz:-.02}),
+    K(.58,{ax:-0.0380,ary:-0.360,py:.06,rx:.28,rz:-.96,ry:.32,hx:.06,hy:.03,hz:-.05}),
+    K(.70,{ax:-0.0380,ary:-0.360,py:.06,rx:.28,rz:-.96,ry:.32,hx:.08,hy:.07,hr:.7}),
+    K(.80,{ax:-0.0127,ary:-0.120,py:.08,rx:.20,rz:-.64,ry:.18,hx:.03,hz:.05}), K(.90,{py:.05,rx:.12,rz:-.32,ry:.08})],
+  // drum revolver: the whole 12-round drum swaps, not the cylinder
+  machine_revolver: _variant(RELOAD_KEYS.machine_revolver, { amp: 1.2, lift: .01 }),
+  // gunslinger: flicks the cylinder out with a flourish and spins it shut
+  gunslinger: [
+    K(.08,{py:.03,rx:.14,rz:-.50,ry:.14,hx:.03}), K(.20,{ax:-0.0220,ary:-0.200,py:.07,rx:.30,rz:-1.0,ry:.30,hx:.07,hy:.05,hr:.5}),
+    K(.30,{ax:-0.0440,ary:-0.400,py:.08,rx:.34,rz:-1.12,ry:.34,hx:.09,hy:.12,hz:-.06,hr:1.1}),
+    K(.46,{ax:-0.0440,ary:-0.400,py:.07,rx:.26,rz:-1.06,ry:.36,hx:.02,hy:-.14,hz:-.02}),
+    K(.62,{ax:-0.0440,ary:-0.400,py:.07,rx:.26,rz:-1.06,ry:.36,hx:.08,hy:.04,hz:-.04}),
+    K(.74,{ax:-0.0440,ary:-0.400,py:.07,rx:.26,rz:-1.06,ry:.36,hx:.09,hy:.07,hr:.7}),
+    K(.82,{ax:-0.0155,ary:-0.141,py:.10,rx:.22,rz:-.70,ry:.20,hx:.04,hy:.02}),
+    K(.90,{py:.09,rx:.16,rz:-.20,ry:.10,hy:.04}), K(.96,{py:.05,rx:.12,rz:-.38,ry:.08})],
+  // javelin: shoulder tube, ram the next missile in from the rear, check the seeker
+  javelin_launcher: [
+    K(.09,{py:.02,pz:.03,rx:-.30,rz:.10,hy:-.03,hz:-.04}), K(.22,{py:.04,pz:.06,rx:-.52,rz:.14,hy:-.12,hz:-.12}),
+    K(.34,{py:.04,pz:.06,rx:-.56,rz:.14,hx:.05,hy:-.22,hz:-.08,hr:.8}), K(.48,{py:.04,pz:.06,rx:-.56,rz:.14,hx:-.02,hy:-.16,hz:-.20}),
+    K(.62,{py:.04,pz:.06,rx:-.56,rz:.14,hy:-.05,hz:-.22}), K(.74,{py:.04,pz:.06,rx:-.52,rz:.28,hy:-.02,hz:-.10,hr:.4}),
+    K(.85,{py:.03,pz:.04,rx:-.40,rz:.10,hy:.02,hz:-.04}), K(.95,{py:.01,pz:.02,rx:-.20,rz:.06})],
+  // cyroclasm: slides out the frozen core, slams in a fresh one, shakes the frost off
+  cyroclasm: _variant(RELOAD_KEYS.freeze_gun, { amp: 1.1, tip: .02 }),
+  // continuum: a quick flip of the cell — it's a 0.5 s reload, so one flick
+  continuum: [K(.20,{py:.04,rx:.20,rz:.30,hy:-.08,hr:.5}), K(.45,{py:.05,rx:.28,rz:.50,hy:-.16,hz:.02}), K(.70,{py:.04,rx:.20,rz:.30,hy:-.04,hz:.04}), K(.90,{py:.02,rx:.08,rz:.10})],
+  // storm bloom: twists a capacitor out, claps it, drops a charged one in, and the shotgun thumps shut
+  storm_bloom: [
+    K(.09,{py:.03,rx:.14,rz:.26,hx:.02,hy:-.03}), K(.22,{py:.06,rx:.30,rz:.44,ry:.18,hx:.05,hy:-.10,hz:.04}),
+    K(.34,{py:.07,rx:.34,rz:.48,ry:.40,hx:.07,hy:-.14,hz:.06,hr:.7}), K(.48,{py:.07,rx:.34,rz:.48,ry:.40,hx:-.07,hy:-.20,hz:.02}),
+    K(.62,{py:.07,rx:.34,rz:.48,ry:.40,hy:-.08,hz:.06}), K(.74,{py:.06,rx:.30,rz:.44,ry:.16,hy:-.03,hz:.06,hr:-.5}),
+    K(.85,{py:.09,rx:.20,rz:.30,hy:.03,hz:-.04}), K(.94,{py:.03,rx:.12,rz:.20})],
+});
+Object.assign(_STYLE_RP, {
+  rpd:    [RP(.29,'drum',null,1,'breech'), RP(.53,'drum','arrive',1,'breech'), RP(.92,'case',null,1,'breech')],
+  mg42:   [RP(.28,'link',null,8,'breech'), RP(.52,'link','arrive',6,'breech'), RP(.91,'case',null,2,'breech')],
+  gau19:  [RP(.30,'canister',null,1,'breech'), RP(.54,'canister','arrive',1,'breech'), RP(.30,'link',null,5,'breech')],
+  mk44:   [RP(.28,'link',null,5,'breech'), RP(.51,'link','arrive',3,'breech'), RP(.80,'case',null,2,'breech'), RP(.88,'case',null,1,'breech')],
+  snub_revolver: [RP(.44,'case',null,5,'breech'), RP(.62,'round','arrive',5,'breech')],
+  auto_revolver: [RP(.38,'clip',null,1,'breech'), RP(.58,'clip','arrive',1,'breech')],
+  machine_revolver: [RP(.36,'drum',null,1,'breech'), RP(.56,'drum','arrive',1,'breech')],
+  gunslinger: [RP(.40,'case',null,6,'breech'), RP(.62,'round','arrive',6,'breech')],
+  javelin_launcher: [RP(.34,'rocket',null,1,'breech'), RP(.50,'rocket','arrive',1,'breech'), RP(.72,'cell',null,1,'breech')],
+  cyroclasm: [RP(.30,'canister'), RP(.54,'canister','arrive')],
+  continuum: [RP(.30,'cell'), RP(.52,'cell','arrive')],
+  storm_bloom: [RP(.34,'battery'), RP(.54,'battery','arrive')],
+});
+// Guns kept as they were already have a move of their own; everything above overrides.
+Object.assign(RELOAD_KEYS, _STYLE_RK);
+Object.assign(RELOAD_PROPS, _STYLE_RP);
+for (const _id of Object.keys(_STYLE_RK)) delete _asmBeatCache[_id];
 // Working parts (magazine, bolt, slide, loaded round) now that the reload beats they follow exist.
 weaponModels.forEach((m, i) => ensureMech(m, WEAPONS[i] && WEAPONS[i].id));
 for (const _sk of MODEL_SKINS) if (_sk._model && _skinHasMechanics(_sk)) ensureMech(_sk._model, _sk.weapon);
