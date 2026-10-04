@@ -17260,9 +17260,9 @@ function buildLegendDaggers() {
       kn.traverse(m => { if (m.isMesh && m.material && m.material.transparent) m.material.opacity = Math.max(m.material.opacity || 0, 0.58); });
     }
   };
-  if (kids[0]) { kids[0].position.set(-0.042, 0.010, -0.002); kids[0].rotation.set(0.12, -0.26, 0.32); addAura(kids[0], false); }
-  if (kids[1]) { kids[1].position.set( 0.042, 0.000, -0.002); kids[1].rotation.set(0.12,  0.26,-0.32); addAura(kids[1], false); }
-  if (kids[2]) { kids[2].position.set( 0.000, 0.052, -0.052); kids[2].rotation.set(-0.05, 0, 0); addAura(kids[2], true); }
+  if (kids[0]) { kids[0].position.set(-0.62, 0.040, -0.120); kids[0].rotation.set(0.02, -0.62, 0.48); addAura(kids[0], false); }
+  if (kids[1]) { kids[1].position.set( 0.34, 0.020, -0.130); kids[1].rotation.set(0.02,  0.62,-0.48); addAura(kids[1], false); }
+  if (kids[2]) { kids[2].position.set(-0.16, 0.310, -0.240); kids[2].rotation.set(-0.20, 0, 0); addAura(kids[2], true); }
   g._legendDaggerSkin = true;
   const oldTick = g._tick, oldCalm = g._calm, float = kids[2], base = float && { y: float.position.y, rz: float.rotation.z };
   g._tick = (dt, now, assembling) => {
