@@ -17181,7 +17181,11 @@ function _legendize(g, o) {
 }
 function buildLegendAK()     { return _legendize(buildAK20(),      { top: 5, side: 3, bottom: 2, fires: 3 }); }
 function buildLegendPistol() { return _legendize(buildPistol(),    { top: 3, side: 2, fires: 2, scale: 0.8, fireScale: 0.8 }); }
-function buildLegendSG8()    { return _legendize(buildSG8(),       { top: 5, side: 3, bottom: 2, fires: 3 }); }
+function buildLegendSG8() {
+  const g = _legendize(buildSG8(), { top: 5, side: 3, bottom: 2, fires: 3 });
+  g._spinOnFire = 640;     // ms: every shot flips the whole gun a full turn and snaps it back (see gunSpinAngle)
+  return g;
+}
 function buildLegendSRX()    { return _legendize(buildSRX(),       { top: 6, side: 3, bottom: 2, fires: 3 }); }
 function buildLegendVector() { return _legendize(buildVectorSMG(), { top: 4, side: 2, bottom: 1, fires: 3, scale: 0.9 }); }
 // Blades: spikes down the spine of the blade only, never over the handle.
@@ -25677,8 +25681,25 @@ function spawnImpactDebris(pos, normal, weaponId) {
   }
 }
 
+// 🔄 FFA Legend SG8: a full forward flip per shot. The angle is added AFTER the recoil spring has
+// moved the model and taken off again BEFORE the next pass, so the spring never chases it.
+// A flip is fast off the trigger, runs a little past the full turn, and snaps back.
+function gunSpinAngle(m) {
+  const sp = m._spinFx;
+  if (!sp) return 0;
+  const t = (performance.now() - sp.t0) / sp.dur;
+  if (t >= 1) { m._spinFx = null; return 0; }
+  const over = 0.2, full = Math.PI * 2;
+  if (t < 0.7) { const k = t / 0.7; return (full + over) * (1 - Math.pow(1 - k, 3)); }
+  const k = (t - 0.7) / 0.3;
+  return full + over * (1 - k * k * (3 - 2 * k));
+}
 function updateRealismFeedback(dt) {
   const model = weaponModels[currentWeaponIdx];
+  if (model && model._spinApplied) {
+    if (model.visible && !reloading && activeSlot !== 'melee' && activeSlot !== 'support' && !_equip) model.rotation.x -= model._spinApplied;
+    model._spinApplied = 0;
+  }
   if (model && model.visible && model._homePos && !reloading && activeSlot !== 'melee' && activeSlot !== 'support') {
     const moving = Math.min(1, Math.hypot(playerVelocity.x, playerVelocity.z) / 8);
     const t = performance.now() * 0.001;
@@ -25694,6 +25715,7 @@ function updateRealismFeedback(dt) {
     model.rotation.x += (_gunKick.rx - model.rotation.x) * Math.min(1, dt * 22);
     model.rotation.y += (_gunKick.ry - model.rotation.y) * Math.min(1, dt * 18);
     model.rotation.z += (_gunKick.rz - model.rotation.z) * Math.min(1, dt * 18);
+    if (model._spinFx && !isADS && !_equip) { const sa = gunSpinAngle(model); if (sa) { model.rotation.x += sa; model._spinApplied = sa; } }
   }
   const settle = Math.pow(0.018, dt);
   _gunKick.x *= settle; _gunKick.y *= settle; _gunKick.z *= settle;
@@ -25727,6 +25749,7 @@ const _GUN_KICK_HYPER_MAX = { x: 0.120, y: 0.036, z: 0.66, rx: 0.105, ry: 0.165,
 let _fovPunch = 0;   // degrees of momentary FOV widening per shot: the camera being shoved back
 function kickWeaponVisual(w, pellets = 1) {
   { const mm = weaponModels[currentWeaponIdx]; if (mm && mm._mech) mm._mech.kick = 1; }   // bolt / slide cycles
+  { const mm = weaponModels[currentWeaponIdx]; if (mm && mm._spinOnFire && !isADS) mm._spinFx = { t0: performance.now(), dur: mm._spinOnFire }; }   // legend SG8 flip
   // perfectAccuracy (SR-X): skip camera shake AND the viewmodel wobble. This
   // matters more than the weapon's own spread/recoil fields being zero —
   // addFireShake() below nudges euler.x/y (the actual camera aim) BEFORE
@@ -26710,6 +26733,7 @@ function playEquipSound(name) {
 }
 
 var _EQ_X = new THREE.Vector3(1, 0, 0), _EQ_Z = new THREE.Vector3(0, 0, 1);
+var _EQ_FLAT = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2);   // side-on, for a laid-out net
 function _eqOut(t) { return 1 - Math.pow(1 - t, 3); }
 function _eqHomeOf(c) {
   if (!c.userData.eqHome) c.userData.eqHome = {
@@ -26765,6 +26789,26 @@ function _eqMakeProps(model, type, ctr, box, targets) {
     band.position.z = len * 0.36 - 0.007; sc.add(band);                         // the mouth
     sc.userData.from = sc.position.clone(); sc.userData.len = len;
     model.add(sc); out.push(sc);
+  }
+  if (type === 'foldout') {                    // FFA Legend SG8: the glowing sheet the net is laid out on
+    const len = box.max.z - box.min.z;
+    const sheet = new THREE.Group(); sheet.position.set(ctr.x, ctr.y, ctr.z - 0.085);
+    const pw = len * 1.3 + 0.07, ph = 0.25;
+    const plane = new THREE.Mesh(new THREE.PlaneGeometry(pw, ph), new THREE.MeshBasicMaterial({ color: 0xff2a1a, transparent: true,
+      opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    sheet.add(plane);
+    const pts = [];
+    for (let i = 1; i < 6; i++) { const x = -pw / 2 + pw * i / 6; pts.push(new THREE.Vector3(x, -ph / 2, 0), new THREE.Vector3(x, ph / 2, 0)); }
+    pts.push(new THREE.Vector3(-pw / 2, 0, 0), new THREE.Vector3(pw / 2, 0, 0));
+    const creases = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts),
+      new THREE.LineBasicMaterial({ color: 0xff7a55, transparent: true, opacity: 0 }));
+    sheet.add(creases);
+    const rim = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(-pw / 2, -ph / 2, 0), new THREE.Vector3(pw / 2, -ph / 2, 0), new THREE.Vector3(pw / 2, ph / 2, 0), new THREE.Vector3(-pw / 2, ph / 2, 0)]),
+      new THREE.LineBasicMaterial({ color: 0xffb08a, transparent: true, opacity: 0 }));
+    sheet.add(rim);
+    sheet.userData.foldsheet = { plane, creases, rim };
+    model.add(sheet); out.push(sheet);
   }
   if (type === 'leafstorm') {                  // FFA Legend Katana: a black tornado of leaves round the blade
     const storm = new THREE.Group(); storm.position.copy(ctr);
@@ -26912,6 +26956,11 @@ function _eqStepProps(e, t) {
     lm.obsidian.emissive.setHex(0xff3a10);
     lm.obsidian.emissiveIntensity = 2.2 * Math.pow(1 - t, 1.5) + Math.sin(t * 60) * 0.05;
   }
+  if (lm && e.type === 'foldout') {
+    const hold = t < 0.8 ? 1.5 + 0.5 * Math.sin(t * 44) : 0;
+    const flare = t > 0.72 ? 3.4 * Math.pow(1 - _eqClamp((t - 0.72) / 0.28), 1.6) : 0;
+    lm.obsidian.emissive.setHex(0xff5a28); lm.obsidian.emissiveIntensity = hold + flare;
+  }
   if (lm && (e.type === 'unsheathe' || e.type === 'leafstorm')) {
     const f = t > 0.5 && t < 0.9 ? Math.sin((t - 0.5) / 0.4 * Math.PI) : 0;
     lm.obsidian.emissive.setHex(0xff2010); lm.obsidian.emissiveIntensity = 1.6 * f;
@@ -26926,6 +26975,16 @@ function _eqStepProps(e, t) {
         f.rotation.x = k * 1.4;
       }
       o.visible = k < 1;
+    }
+    if (o.userData.foldsheet) {                  // the sheet appears, glows, and folds away as the gun closes up
+      const F = o.userData.foldsheet;
+      const appear = _eqOut(_eqClamp(t / 0.14)), fold = _eqClamp((t - 0.38) / 0.4), fade = 1 - _eqClamp((t - 0.4) / 0.3);
+      const pulse = 0.85 + 0.15 * Math.sin(t * 46);
+      F.plane.material.opacity = 0.2 * appear * fade * pulse;
+      F.creases.material.opacity = 0.75 * appear * fade;
+      F.rim.material.opacity = 0.95 * appear * fade;
+      o.scale.set(Math.max(0.001, 1 - 0.7 * fold), Math.max(0.001, 0.25 + 0.75 * appear), 1);
+      o.visible = fade > 0.001;
     }
     if (o.userData.leafstorm) {                  // the black leaf tornado: builds, holds, blows away
       const S = o.userData.leafstorm;
@@ -27172,10 +27231,10 @@ function _beginEquip(model, spec, melee, support = false) {
   if (type === 'unfold') ps.sort((a, b) => b.h.p.z - a.h.p.z);
   if (type === 'build')  ps.sort((a, b) => a.h.p.y - b.h.p.y);
   if (type === 'eruption') ps.sort((a, b) => b.h.p.z - a.h.p.z);   // rising back to front
-  if (type === 'petals' || type === 'leafstorm') ps.sort((a, b) => b.h.p.z - a.h.p.z);   // blooming hilt to tip
+  if (type === 'petals' || type === 'leafstorm' || type === 'foldout') ps.sort((a, b) => b.h.p.z - a.h.p.z);   // blooming hilt to tip
   if (type === 'windup' || type === 'inflate') ps.sort((a, b) => b.h.p.z - a.h.p.z);   // back to front
   if (type === 'meteor')   ps.sort((a, b) => a.h.p.z - b.h.p.z);   // raining front to back
-  if (type === 'unfold' || type === 'build' || type === 'eruption' || type === 'meteor' || type === 'petals' || type === 'leafstorm' || type === 'windup' || type === 'inflate')
+  if (type === 'unfold' || type === 'build' || type === 'eruption' || type === 'meteor' || type === 'petals' || type === 'leafstorm' || type === 'foldout' || type === 'windup' || type === 'inflate')
     ps.forEach((p, i) => { p.delay = i / Math.max(1, ps.length - 1); });
   let ring = null;
   if (type === 'warp') {
@@ -27454,6 +27513,21 @@ function _equipStep(e, t) {
         c.position.copy(h.p).sub(e.ctr).applyQuaternion(q).add(e.ctr);
         c.position.y += arc * 0.12;
         c.quaternion.copy(q).multiply(h.q); c.scale.copy(h.s);
+        break; }
+      case 'foldout': {
+        // FFA Legend SG8: every piece starts laid out flat on a glowing sheet (side-on, three
+        // rows), unfolds out of the middle of it, holds, and then folds up into the shotgun --
+        // back to front, each piece swinging round on its own hinge as it lands.
+        const R = _EQ_FLAT, row = p.i % 3;
+        const v = h.p.clone().sub(e.ctr).applyQuaternion(R);
+        const flat = new THREE.Vector3(e.ctr.x + v.x * 1.05, e.ctr.y + v.y * 1.05 + (row - 1) * 0.056, e.ctr.z - 0.07 + v.z * 0.08);
+        const appear = _eqOut(_eqClamp(t / 0.16));
+        const k = _eqEase(_eqClamp((t - 0.38 - p.delay * 0.30) / 0.22));
+        flat.sub(e.ctr).multiplyScalar(appear).add(e.ctr);
+        c.position.copy(flat).lerp(h.p, k);
+        c.position.z += Math.sin(Math.PI * k) * 0.07;
+        c.quaternion.slerpQuaternions(R.clone().multiply(h.q), h.q, k);
+        c.scale.copy(h.s).multiplyScalar(Math.max(0.001, appear));
         break; }
       case 'leafstorm': {
         // FFA Legend Katana: there is no blade while the black leaf-tornado builds. It forms
@@ -32641,7 +32715,7 @@ const MODEL_SKINS = [
     blurb: 'A sidearm that has been to hell and came back for more.' },
   { id: 'sg8_legend', weapon: 'sg8', name: 'FFA Legend SG8', rarity: 'legend',
     sw: ['#17121a', '#ff2a1a'], build: buildLegendSG8, look: { projectile: 'hellfire', bulletColor: 0xff2a1a },
-    blurb: 'Spikes down the spine, fire off the top. Close range, closer to hell.' },
+    blurb: 'Comes out folded flat and glowing, then assembles itself into the shotgun. Every shot flips the whole gun a full turn.' },
   { id: 'srx_legend', weapon: 'srx', name: 'FFA Legend SR-X', rarity: 'legend',
     sw: ['#17121a', '#ff2a1a'], build: buildLegendSRX, look: { projectile: 'hellfire', bulletColor: 0xff2a1a },
     blurb: 'A long black barrel crowned in spikes. The fire gives you away. Worth it.' },
@@ -36189,7 +36263,7 @@ const SKIN_FX = {
     // the old soul crumbles to ash; a burning one is stuffed into the grip
     reload: _fxR(_RK.under(), [RP(.30,'ash'), RP(.56,'soul','arrive')], [[.48,'whoosh']], 'cock') },
   sg8_legend: { sound: _fxS('hellfire', .58, .22, 0, 0, { base:'boom', action:'shotgun', tail:.70 }),
-    equip: 'forge', equipMs: 1100, equipSfx: ['fireup', 'hiss'], equipBeats: [[.2,'clink'],[.4,'clink'],[.6,'clink']],
+    equip: 'foldout', equipMs: 1700, equipSfx: ['fireup', 'hiss'], equipBeats: [[.12,'whoosh'],[.44,'clink'],[.56,'clink'],[.68,'clink'],[.80,'ignite']],
     // coals fed in where the shells would go, on the SG8's own beats
     reload: _fxR(RELOAD_KEYS.sg8, (RELOAD_PROPS.sg8 || []).map(e => e.k === 'shell' ? Object.assign({}, e, { k: 'coal' }) : e), null, 'rack') },
   srx_legend: { sound: _fxS('hellfire', .64, .18, 0, 0, { base:'crack', action:'bolt', tail:1.20 }),
