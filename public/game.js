@@ -28453,7 +28453,7 @@ function updateGrappleRide(dt) {
     camera.position.z += step.z / steps;
     resolveWallCollisions();
   }
-  _extVel.x = 0; _extVel.z = 0;
+  _extVel.x = 0; _extVel.z = 0; window._blastCarry = false;
   playerYVel = 0;
   slamState = null;
   if (now >= (window._nextGrappleRideFx || 0)) {
@@ -28650,6 +28650,7 @@ function updateMovement(dt) {
         playerYVel = 0;
         window._slideUntil = 0;
         _extVel.x *= 0.2; _extVel.z *= 0.2;
+        window._blastCarry = false;
       }
     } else {
       // glue to ground when not jumping
@@ -28743,6 +28744,7 @@ function updateMovement(dt) {
       camera.position.y = groundEyeY;
       window._slideUntil = 0;
       _extVel.x *= 0.2; _extVel.z *= 0.2;
+      window._blastCarry = false;
       if (landingHardness > 0.18) {
         _realismLandKick = Math.max(_realismLandKick, landingHardness);
         playSoundEvent('footstep', { volume: Math.min(1, 0.35 + landingHardness * 0.45), pitch: 0.72, minGap: 80 });
@@ -28803,12 +28805,31 @@ function updateMovement(dt) {
     for (let i = 0; i < steps; i++) {
       camera.position.x += _extVel.x * sdt;
       camera.position.z += _extVel.z * sdt;
+      if (window._blastCarry) {
+        // A blast flight has no drag, so it would carry you clean out of the arena and
+        // into the ring-out. The edge of the map stops you instead, and you drop from there.
+        const bb = getMapBoundsRect(), mx = bb.halfX - PLAYER_RADIUS, mz = bb.halfZ - PLAYER_RADIUS;
+        if (Math.abs(camera.position.x) > mx) { camera.position.x = Math.sign(camera.position.x) * mx; _extVel.x = 0; }
+        if (Math.abs(camera.position.z) > mz) { camera.position.z = Math.sign(camera.position.z) * mz; _extVel.z = 0; }
+      }
       if (steps > 1) resolveWallCollisions();
     }
-    const keep = Math.pow(BLAST_DECAY, dt);
-    _extVel.x *= keep; _extVel.z *= keep;
+    // 💥 An explosion's push does not fade while you are in the air: you keep the speed
+    // it gave you until you come down (the landing code below bleeds it off).
+    // The flag clears itself if you somehow stand on the ground for a moment without
+    // a landing, so a stuck state can never leave you gliding on the floor.
+    if (window._blastCarry) {
+      const gEye = getGroundEyeY() + (window._crouchEye - 1.65);
+      const onGroundNow = camera.position.y <= gEye + 0.06 && !(slamState && slamState.vel > 0);
+      window._blastCarryGround = onGroundNow ? (window._blastCarryGround || 0) + dt : 0;
+      if (window._blastCarryGround > 0.25) window._blastCarry = false;
+    }
+    if (!window._blastCarry) {
+      const keep = Math.pow(BLAST_DECAY, dt);
+      _extVel.x *= keep; _extVel.z *= keep;
+    }
   } else {
-    _extVel.x = 0; _extVel.z = 0;
+    _extVel.x = 0; _extVel.z = 0; window._blastCarry = false;
   }
 
   resolveWallCollisions();
@@ -30618,7 +30639,7 @@ function startPlayerGrappleRide(point, incomingDir, kind = 'wall') {
   const bounds = getMapBoundsRect();
   dest.x = Math.max(-bounds.halfX + PLAYER_RADIUS, Math.min(bounds.halfX - PLAYER_RADIUS, dest.x));
   dest.z = Math.max(-bounds.halfZ + PLAYER_RADIUS, Math.min(bounds.halfZ - PLAYER_RADIUS, dest.z));
-  _extVel.x = 0; _extVel.z = 0;
+  _extVel.x = 0; _extVel.z = 0; window._blastCarry = false;
   playerYVel = 0;
   slamState = null;
   _grappleRide = { dest, until: Date.now() + 1200 };
@@ -40338,6 +40359,7 @@ function applyBlastImpulse(pos, opts = {}) {
   _extVel.z += pz;
   const hz = Math.hypot(_extVel.x, _extVel.z);
   if (hz > BLAST_MAX_HORIZ) { const k = BLAST_MAX_HORIZ / hz; _extVel.x *= k; _extVel.z *= k; }
+  window._blastCarry = true; window._blastCarryGround = 0;   // no drag until you land
   // A blast you rode is a fresh air state: you get your dash back, and an air
   // jump you can use whatever you are holding. This one is counted separately
   // from the light-weapon double jump, so riding a blast while carrying a
