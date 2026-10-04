@@ -1882,7 +1882,16 @@ const BLAST_SURF_CONE  = 0.45;  // cos of the half-angle that counts as "in fron
 const BLAST_SURF_BOOST = 1.6;
 const BLAST_SURF_CARRY = 1.3;
 const BULLET_GRAVITY = 26;   // m/s^2 on arcing shots, scaled by their speed
-const BLAST_DECAY   = 0.10;  // fraction of horizontal blast speed left after 1 s
+const BLAST_DECAY   = 0.10;  // fraction of horizontal blast speed left after 1 s (only applies on the ground: a blast carries you undiminished through the air)
+const BLAST_AIRJUMP_BOOST = 1.12;   // an air jump while a blast is carrying you adds this much horizontal speed
+// An air jump mid-blast-flight: keep going, a little faster.
+function boostBlastCarryOnAirJump() {
+  if (!window._blastCarry) return;
+  const hz = Math.hypot(_extVel.x, _extVel.z);
+  if (hz < 1) return;
+  const k = Math.min(BLAST_AIRJUMP_BOOST, (BLAST_MAX_HORIZ * 1.25) / hz);
+  _extVel.x *= k; _extVel.z *= k;
+}
 // A point-blank charge used to hand you 65 m/s straight up -- an 88 m apex,
 // twenty-two times a normal jump, seven seconds of helpless hang time and a
 // clean exit from the play area. Rocket jumping is worth keeping; launching to
@@ -25974,6 +25983,7 @@ document.addEventListener('keydown', e => {
       // riding a charge while holding a light weapon really does leave you two.
       if ((window._airJumpsLeft || 0) > 0 && grantsDoubleJump(heldItem())) window._airJumpsLeft = 0;
       else window._blastJumpsLeft = 0;
+      boostBlastCarryOnAirJump();
       spawnAbilityAOEFX(camera.position.clone().setY(camera.position.y - 1.4), 1.2, 0xaaccff);
       playSoundEvent('footstep', { volume: 0.5, pitch: 1.6, minGap: 60 });
     }
@@ -27495,6 +27505,7 @@ function quickMelee() {
     if (slamState) slamState.vel = AIR_JUMP_VEL;
     else slamState = { vel: AIR_JUMP_VEL, type: 'jump' };
     window._airJumpsLeft = 0;
+    boostBlastCarryOnAirJump();
     spawnAbilityAOEFX(camera.position.clone().setY(camera.position.y - 1.4), 1.2, 0xaaccff);
     playSoundEvent('footstep', { volume: 0.5, pitch: 1.6, minGap: 60 });
     return;
@@ -28628,6 +28639,7 @@ function updateMovement(dt) {
       // ✨ Double jump in mid-air — reset velocity to full jump, brief sparkle FX
       playerYVel = 9;
       window._airJumpsLeft = 0;
+      boostBlastCarryOnAirJump();
       window._climbArmed = true;    // an air jump re-arms the climb too
       window._mobileJump = false;
       spawnAbilityAOEFX(camera.position.clone().setY(0.3), 1.2, 0xaaccff);
