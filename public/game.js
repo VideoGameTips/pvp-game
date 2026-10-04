@@ -1890,7 +1890,20 @@ function boostBlastCarryOnAirJump() {
   const hz = Math.hypot(_extVel.x, _extVel.z);
   if (hz < 1) return;
   const k = Math.min(BLAST_AIRJUMP_BOOST, (BLAST_MAX_HORIZ * 1.25) / hz);
-  _extVel.x *= k; _extVel.z *= k;
+  // The jump also re-aims the flight at once: you are thrown the way you are steering
+  // (movement keys / stick), or the way you are looking if you are not steering.
+  const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion); fwd.y = 0;
+  if (fwd.lengthSq() < 1e-6) fwd.set(0, 0, -1);
+  fwd.normalize();
+  const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion); right.y = 0; right.normalize();
+  const want = new THREE.Vector3();
+  if (keys['KeyW'] || joyDir.y < -0.15) want.add(fwd);
+  if (keys['KeyS'] || joyDir.y >  0.15) want.sub(fwd);
+  if (keys['KeyA'] || joyDir.x < -0.15) want.sub(right);
+  if (keys['KeyD'] || joyDir.x >  0.15) want.add(right);
+  if (want.lengthSq() < 0.01) want.copy(fwd);
+  want.normalize();
+  _extVel.x = want.x * hz * k; _extVel.z = want.z * hz * k;
 }
 // A point-blank charge used to hand you 65 m/s straight up -- an 88 m apex,
 // twenty-two times a normal jump, seven seconds of helpless hang time and a
@@ -2479,6 +2492,15 @@ function grantsDash(w) {
 // equippedItem: updateMovement already has a local `equippedItem` OBJECT for the
 // weapon-weight calculation, and a same-named global function is invisible in
 // there — it shadows to the object and every call throws "not a function".
+// Extra jumps your loadout buys: one per carried item that grants a double jump, so two such
+// items give you a triple jump (a jump from each, then the ground again to reset).
+function loadoutAirJumps() {
+  let n = 0;
+  const gear = [WEAPONS[selectedPrimaryIdx], WEAPONS[selectedSecondaryIdx], MELEE_ITEMS[selectedMeleeIdx], SUPPORT_ITEMS[selectedSupportIdx]];
+  for (const it of gear) if (grantsDoubleJump(it)) n++;
+  return n;
+}
+const MAX_BLAST_JUMPS = 3;   // explosions you ride each bank an air jump, up to this many
 function heldItem() {
   return activeSlot === 'primary'   ? WEAPONS[selectedPrimaryIdx]
        : activeSlot === 'secondary' ? WEAPONS[selectedSecondaryIdx]
@@ -25993,11 +26015,10 @@ document.addEventListener('keydown', e => {
       }
       // A light weapon buys one extra jump in the air. Charge it here, on the
       // jump itself, so walking off a ledge doesn't hand you a free one.
-      window._airJumpsLeft = grantsDoubleJump(heldItem()) ? 1 : 0;
+      window._airJumpsLeft = loadoutAirJumps();
       window._blastJumpsLeft = 0;
     } else if (!isDead && !e.repeat
-               && (((window._airJumpsLeft || 0) > 0 && grantsDoubleJump(heldItem()))
-                   || (window._blastJumpsLeft || 0) > 0)) {
+               && ((window._airJumpsLeft || 0) > 0 || (window._blastJumpsLeft || 0) > 0)) {
       // 🦘 Second jump. Replace vertical velocity outright instead of adding to
       // it, so the kick feels identical whether you tap it at the top of the arc
       // or halfway back down.
@@ -26005,8 +26026,8 @@ document.addEventListener('keydown', e => {
       else slamState = { vel: AIR_JUMP_VEL, type: 'jump' };
       // Spend the weapon's jump first and keep the blast one in reserve, so
       // riding a charge while holding a light weapon really does leave you two.
-      if ((window._airJumpsLeft || 0) > 0 && grantsDoubleJump(heldItem())) window._airJumpsLeft = 0;
-      else window._blastJumpsLeft = 0;
+      if ((window._airJumpsLeft || 0) > 0) window._airJumpsLeft--;
+      else window._blastJumpsLeft--;
       boostBlastCarryOnAirJump();
       spawnAbilityAOEFX(camera.position.clone().setY(camera.position.y - 1.4), 1.2, 0xaaccff);
       playSoundEvent('footstep', { volume: 0.5, pitch: 1.6, minGap: 60 });
@@ -27528,7 +27549,7 @@ function quickMelee() {
   if (m.doubleJump && !isPlayerGrounded() && (window._airJumpsLeft || 0) > 0) {
     if (slamState) slamState.vel = AIR_JUMP_VEL;
     else slamState = { vel: AIR_JUMP_VEL, type: 'jump' };
-    window._airJumpsLeft = 0;
+    window._airJumpsLeft--;
     boostBlastCarryOnAirJump();
     spawnAbilityAOEFX(camera.position.clone().setY(camera.position.y - 1.4), 1.2, 0xaaccff);
     playSoundEvent('footstep', { volume: 0.5, pitch: 1.6, minGap: 60 });
@@ -28505,7 +28526,7 @@ function updateGrappleRide(dt) {
 
 function updateMovement(dt) {
   if (isDead) return;
-  if (match && !match.roundActive) return; // frozen during countdown
+  if (match && !match.roundActive && countdownActive) return; // frozen only during countdown
   if (pilotedVehicle) return; // piloting handles its own movement
 
   // Arrow key look
@@ -28650,7 +28671,7 @@ function updateMovement(dt) {
                    : null;
     const grantsDouble = !!(equipped && equipped.doubleJump);
     if (isGrounded) {
-      window._airJumpsLeft = grantsDouble ? 1 : 0;
+      window._airJumpsLeft = loadoutAirJumps();
       window._climbArmed = false;   // wall-climb only after an actual jump
       window._climbBudget = 1.4;    // refill ~1.4s of climb stamina on landing
       window._climbing = false;
@@ -28659,10 +28680,10 @@ function updateMovement(dt) {
       playerYVel = 9;
       window._climbArmed = true;    // a real jump arms the wall-climb
       window._mobileJump = false;
-    } else if (spaceEdge && !isGrounded && grantsDouble && (window._airJumpsLeft || 0) > 0) {
+    } else if (spaceEdge && !isGrounded && (window._airJumpsLeft || 0) > 0) {
       // ✨ Double jump in mid-air — reset velocity to full jump, brief sparkle FX
       playerYVel = 9;
-      window._airJumpsLeft = 0;
+      window._airJumpsLeft--;
       boostBlastCarryOnAirJump();
       window._climbArmed = true;    // an air jump re-arms the climb too
       window._mobileJump = false;
@@ -36055,6 +36076,31 @@ function resetDeathPose(mesh) {
   mesh._drop = null;
   mesh.rotation.x = 0;
   mesh.rotation.z = 0;
+  const rig = mesh._rig;
+  if (rig) {
+    rig.prevX = null; rig.prevZ = null;
+    rig.speedSmooth = 0; rig.blend = 0; rig.crouch = 0; rig.slide = 0;
+    for (const part of [rig.legL, rig.legR, rig.kneeL, rig.kneeR, rig.footL, rig.footR,
+                        rig.armL, rig.armR, rig.elbowL, rig.elbowR, rig.head, rig.torso]) {
+      if (!part) continue;
+      part.rotation.x = 0; part.rotation.y = 0; part.rotation.z = 0;
+    }
+  }
+  for (const child of mesh.children || []) {
+    if (child._baseY !== undefined) child.position.y = child._baseY;
+  }
+}
+
+function syncBotMesh(bot, opts = {}) {
+  if (!bot) return null;
+  const mesh = remoteMeshes[bot.id];
+  if (!mesh) return null;
+  const y = Number.isFinite(bot.y) ? bot.y : 0;
+  mesh.position.set(bot.x || 0, y, bot.z || 0);
+  mesh.rotation.y = (bot.rotY || 0) + Math.PI;
+  if (opts.visible !== undefined) mesh.visible = !!opts.visible;
+  if (opts.resetPose) resetDeathPose(mesh);
+  return mesh;
 }
 
 function dropBody(id) {
@@ -36567,8 +36613,7 @@ function clientRespawnBot(botId) {
   bot.prevHp = _rhp; bot.stuckTimer = 0;
   if (bot.state !== 'turret') bot.state = 'chase';
   if (players[botId]) { players[botId].hp = _rhp; players[botId].dead = false; players[botId].x = sp.x; players[botId].z = sp.z; }
-  const mesh = remoteMeshes[botId];
-  if (mesh) { mesh.position.set(sp.x, 0, sp.z); mesh.visible = true; resetDeathPose(mesh); }
+  syncBotMesh(bot, { visible: true, resetPose: true });
 }
 
 
@@ -39819,7 +39864,7 @@ socket.on('playerRespawned', p => {
       bot.hp = p.hp || 300; bot.dead = false;
       if (bot.state !== 'turret') { bot.state = 'chase'; }
       bot.stuckTimer = 0;
-      remoteMeshes[p.id].position.set(bot.x, 0, bot.z);
+      syncBotMesh(bot, { visible: true, resetPose: true });
     } else {
       remoteMeshes[p.id].position.set(p.x, 0, p.z);
     }
@@ -40400,8 +40445,8 @@ function applyBlastImpulse(pos, opts = {}) {
   // jump you can use whatever you are holding. This one is counted separately
   // from the light-weapon double jump, so riding a blast while carrying a
   // weapon that already grants one leaves you BOTH -- they stack.
-  if (grantsDoubleJump(heldItem())) window._airJumpsLeft = 1;
-  window._blastJumpsLeft = 1;
+  window._airJumpsLeft = Math.max(window._airJumpsLeft || 0, loadoutAirJumps());
+  window._blastJumpsLeft = Math.min(MAX_BLAST_JUMPS, (window._blastJumpsLeft || 0) + 1);   // explosions stack
   window._dashLeft = 1;
 }
 
@@ -41518,8 +41563,7 @@ function scheduleBotArcadeRespawn(botId) {
     bot.hp = (match.juggernautId === botId) ? 1000 : 300;
     bot.dead = false; bot.prevHp = bot.hp; bot.stuckTimer = 0;
     if (players[bot.id]) { players[bot.id].hp = bot.hp; players[bot.id].dead = false; }
-    const mesh = remoteMeshes[bot.id];
-    if (mesh) { mesh.position.set(bot.x, 0, bot.z); mesh.visible = true; resetDeathPose(mesh); }
+    syncBotMesh(bot, { visible: true, resetPose: true });
     socket.emit('forceRespawnBot', { botId: bot.id, x: bot.x, z: bot.z });
   }, 2500);
 }
@@ -41909,8 +41953,7 @@ function onEntityDied(targetId, killerId) {
           bot.x = Math.cos(ang) * r; bot.z = Math.sin(ang) * r;
           bot.hp = 300; bot.dead = false; bot.prevHp = 300; bot.stuckTimer = 0;
           if (players[bot.id]) { players[bot.id].hp = 300; players[bot.id].dead = false; }
-          const mesh = remoteMeshes[bot.id];
-          if (mesh) { mesh.position.set(bot.x, 0, bot.z); mesh.visible = true; }
+          syncBotMesh(bot, { visible: true, resetPose: true });
           socket.emit('forceRespawnBot', { botId: bot.id, x: bot.x, z: bot.z });
         }, 4000);
       }
@@ -42107,8 +42150,7 @@ function onFrontlinesKill(targetId, killerId) {
         players[targetBot.id].dead = false;
         players[targetBot.id].weaponId = targetBot.weaponId;
       }
-      const mesh = remoteMeshes[targetBot.id];
-      if (mesh) { mesh.position.set(targetBot.x, 0, targetBot.z); mesh.visible = true; resetDeathPose(mesh); }
+      syncBotMesh(targetBot, { visible: true, resetPose: true });
       socket.emit('forceRespawnBot', { id: targetBot.id, x: targetBot.x, z: targetBot.z, weaponId: targetBot.weaponId });
     }, 3000);
   }
@@ -42347,8 +42389,7 @@ function restartElimRound(lastWinner) {
     }
     bot.x = sp.x; bot.z = sp.z;
     bot.wanderAngle = Math.random() * Math.PI * 2;
-    const mesh = remoteMeshes[bot.id];
-    if (mesh) { mesh.position.set(bot.x, 0, bot.z); mesh.visible = true; resetDeathPose(mesh); }
+    syncBotMesh(bot, { visible: true, resetPose: true });
     socket.emit('forceRespawnBot', { id: bot.id, x: bot.x, z: bot.z, weaponId: bot.weaponId });
   }
   setTimeout(() => startMatchRound(), 1200);
@@ -43540,8 +43581,7 @@ function updateBotAI(dt) {
     }
 
     if (bot._stunActive) {
-      const mesh = remoteMeshes[bot.id];
-      if (mesh) { mesh.position.set(bot.x, bot.y || 0, bot.z); mesh.rotation.y = bot.rotY + Math.PI; }
+      syncBotMesh(bot);
       continue; // stunned bots skip decisions/shooting, but physics above still runs
     }
 
@@ -43590,10 +43630,9 @@ function updateBotAI(dt) {
           }
         }
       }
-      const mesh = remoteMeshes[bot.id];
       // +PI so the face (+Z side of the head) points along forward, matching the
       // remote-player convention. Without this, bot heads render backwards.
-      if (mesh) { mesh.position.set(bot.x, 0, bot.z); mesh.rotation.y = bot.rotY + Math.PI; }
+      syncBotMesh(bot);
       continue; // skip movement block
     }
 
@@ -44542,9 +44581,8 @@ function updateBotAI(dt) {
     }
 
     // Sync remote mesh position (with vertical lift from air grenade)
-    const mesh = remoteMeshes[bot.id];
     // +PI so the face points forward (see note above; matches remote players).
-    if (mesh) { mesh.position.set(bot.x, bot.y || 0, bot.z); mesh.rotation.y = bot.rotY + Math.PI; }
+    syncBotMesh(bot);
     } catch(e) { console.error('[botAI] error for bot', bot.id, ':', e.message, e.stack); }
     } catch (err) {
       // This handler runs when a bot is ALREADY in a bad state, so it must not
