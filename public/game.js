@@ -4005,6 +4005,11 @@ function playObjectShot(ctx, start, out, p, m) {
     case 'splat':
       playFilteredNoise(ctx, start, d, out, v, 'lowpass', f1 * 3, 0.8, 0.001, 1.6);
       playTone(ctx, start, d * 0.7, out, f1, f2, v * 0.6, 'sine'); return true;
+    case 'fart':
+      playFilteredNoise(ctx, start, d, out, v, 'lowpass', f1, 1.4, 0.004, 2.2);
+      playTone(ctx, start, d * 0.78, out, f1, f2, v * 0.55, 'sawtooth');
+      playTone(ctx, start + d * 0.18, d * 0.46, out, f1 * 0.52, f2 * 0.48, v * 0.24, 'triangle');
+      return true;
     case 'splash':
       playFilteredNoise(ctx, start, d, out, v, 'bandpass', f1 * 3, 0.7, 0.002, 1.2);
       playFilteredNoise(ctx, start + 0.02, d * 1.5, out, v * 0.4, 'highpass', 3000, 0.5, 0.01, 1.2); return true;
@@ -18620,6 +18625,44 @@ function buildPistol() {
   g.position.set(0.1, -0.1, -0.22); return g;
 }
 
+function buildFartGun() {
+  const g = buildPistol();
+  const green = new THREE.MeshPhongMaterial({ color: 0x4f7f24, shininess: 62, specular: 0xa0c86a });
+  const brown = new THREE.MeshPhongMaterial({ color: 0x6b4a22, shininess: 34, specular: 0x967247 });
+  const dark = new THREE.MeshPhongMaterial({ color: 0x1b2212, shininess: 40, specular: 0x556044 });
+  const gas = new THREE.MeshBasicMaterial({ color: 0xa6ff4a, transparent: true, opacity: 0.34,
+    blending: THREE.AdditiveBlending, depthWrite: false });
+  const skip = g._flash;
+  g.traverse(m => {
+    if (!m.isMesh || m === skip || (m.material && m.material.transparent)) return;
+    m.material = Math.max(m.scale.x, m.scale.y, m.scale.z) < 0.018 ? dark : green;
+  });
+  gpCyl(g, brown, 0.015, 0.015, 0.092, 12, -0.022, -0.012, -0.020, Math.PI / 2, 0, 0);
+  gpCyl(g, dark, 0.017, 0.017, 0.010, 12, -0.022, -0.012, -0.073, Math.PI / 2, 0, 0);
+  gpCyl(g, dark, 0.017, 0.017, 0.010, 12, -0.022, -0.012,  0.033, Math.PI / 2, 0, 0);
+  gpBox(g, dark, 0.010, 0.018, 0.080, -0.020, 0.004, -0.024, 0, 0, -0.24);
+  for (let i = 0; i < 3; i++) {
+    const puff = new THREE.Mesh(new THREE.SphereGeometry(0.014 + i * 0.004, 8, 6), gas);
+    puff.position.set((i - 1) * 0.013, 0.022 + i * 0.004, -0.146 - i * 0.014);
+    puff.scale.set(1.25, 0.75, 1.0);
+    puff.userData.legendFx = true;
+    g.add(puff);
+  }
+  const oldTick = g._tick;
+  g._tick = (dt, now, assembling) => {
+    if (oldTick) oldTick(dt, now, assembling);
+    if (assembling) return;
+    g.children.forEach(o => {
+      if (o.userData && o.userData.legendFx) {
+        o.material.opacity = 0.22 + 0.12 * Math.sin(now * 5.2 + o.position.z * 40);
+        o.scale.x = 1.25 + 0.10 * Math.sin(now * 3.6 + o.position.x * 20);
+      }
+    });
+  };
+  g._greebled = true; g._handDetailed = true;
+  return g;
+}
+
 // ── Shorty ────────────────────────────────────────────────────────────────
 function buildShorty() {
   // 🔫 Shorty: a pump shotgun cut to the legal minimum. Tube magazine under a
@@ -24877,6 +24920,29 @@ function _buildBlob(tint, r) {
   g._spin = { x: 4, y: 6, z: 3 };
   return g;
 }
+function _buildFartCloud(tint, r) {
+  const c = tint || 0x9ad84a;
+  r = Math.max(r, 0.055);
+  const P = _projCache('fartCloud|' + c + '|' + r, () => ({
+    puff: new THREE.SphereGeometry(r, 8, 6),
+    coreM: new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.58, depthWrite: false }),
+    darkM: new THREE.MeshBasicMaterial({ color: 0x6b7a2a, transparent: true, opacity: 0.36, depthWrite: false }),
+    wake: new THREE.CylinderGeometry(r * 0.75, r * 0.08, r * 8.5, 7, 1, true),
+    wakeM: new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.30,
+      blending: THREE.AdditiveBlending, depthWrite: false }),
+  }));
+  const g = new THREE.Group();
+  const w = new THREE.Mesh(P.wake, P.wakeM); w.position.y = -r * 4.2; g.add(w);
+  [[0,0,0,1.2,P.coreM], [.7,.1,.15,.78,P.darkM], [-.6,-.25,-.1,.72,P.coreM], [.12,.62,-.2,.64,P.darkM]].forEach(([x,y,z,s,m]) => {
+    const p = new THREE.Mesh(P.puff, m);
+    p.position.set(x * r, y * r, z * r);
+    p.scale.set(s * 1.2, s * 0.82, s);
+    g.add(p);
+  });
+  g._alignToDir = true;
+  g._spin = { x: 0.8, y: 2.2, z: 1.6 };
+  return g;
+}
 function _buildPaintball(tint, r) {
   // A marker round: a glossy gelatin shell with the fill showing through, not
   // the generic paint splat the other paint weapons throw.
@@ -25444,6 +25510,7 @@ function makeBulletMesh(color, size, weaponId, own) {
     case 'flame':   return _buildFlame(color, r);
     case 'ice':     return _buildIce(color, r);
     case 'blob':    return _buildBlob(color, r);
+    case 'fart_cloud': return _buildFartCloud(color, r);
     case 'paintball': return _buildPaintball(color, r);
     case 'stone':   return _buildStone(color, r);
     case 'pellet':  return _buildPellet(color, r);
@@ -32428,6 +32495,9 @@ const MODEL_SKINS = [
   { id: 'pistol_spy', weapon: 'pistol', name: 'Spy Pistol', rarity: 'good',
     sw: ['#14161a', '#8a7256'], build: buildSpyPistol,
     blurb: 'Slim slide, oversized can, walnut grip. The quiet one.' },
+  { id: 'pistol_fart_gun', weapon: 'pistol', name: 'Fart Gun', rarity: 'basic',
+    sw: ['#4f7f24', '#9ad84a'], build: buildFartGun, look: { projectile: 'fart_cloud', bulletColor: 0x9ad84a },
+    blurb: 'The pistol, regrettably, has gas operation now.' },
   { id: 'sg8_leaf_blower', weapon: 'sg8', name: 'Leaf Blower', rarity: 'good',
     sw: ['#e8631c', '#24262a'], build: buildLeafBlower,
     blurb: 'Corrugated tube, pull cord, a warning sticker nobody reads.' },
@@ -36039,6 +36109,7 @@ const SKIN_FX = {
   ak20_twin_barrel:     { sound: _fxS('auto_blast', .24, .08, 0, 0, { action:'water_rifle', double:true }) },
   ak20_swarm_rifle:     { sound: _fxS('energy', .26, .10, 1400, 600) },
   pistol_spy:           { sound: _fxS('pfft', .26, .06, 900, 300) },
+  pistol_fart_gun:      { sound: _fxS('fart', .34, .18, 170, 82) },
   ak20_ak47_wood:       { sound: _fxS('auto_blast', .27, .09, 0, 0, { action:'rifle', tail:.25 }) },
   burst_m4a1:           { sound: _fxS('auto_blast', .21, .07, 0, 0, { action:'water_smg', tail:.18 }) },
   flechette_bullpup:    { sound: _fxS('crack', .34, .10, 0, 0, { action:'rifle', tail:.40 }) },
