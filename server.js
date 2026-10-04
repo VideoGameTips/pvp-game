@@ -2128,19 +2128,21 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Quick-chat: relay to all other clients (rate-limited)
+  // Quick-chat: relay to the current match, not every connected tab (rate-limited)
   socket.on('chatLine', (data) => {
     const p = players[socket.id];
     if (!p) return;
     const now = Date.now();
     if (p._lastChatAt && now - p._lastChatAt < 800) return; // throttle to ~1/0.8s
     p._lastChatAt = now;
-    socket.broadcast.emit('chatLine', {
+    const payload = {
       id: socket.id,
       text: String(data.text || '').slice(0, 60),
       color: String(data.color || '#fff').slice(0, 12),
       emoji: String(data.emoji || '').slice(0, 4),
-    });
+    };
+    if (p.matchId) emitToMatchExcept(p.matchId, socket.id, 'chatLine', payload);
+    else socket.broadcast.emit('chatLine', payload);
   });
 
   socket.on('move', (data) => {

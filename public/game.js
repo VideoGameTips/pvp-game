@@ -2881,7 +2881,7 @@ function reactAllyBotsToComms(playerSaid) {
       let reply;
       if (willComply) reply = pickComms((charF && charF.ok) || flavor.ok || cmd.okLines);
       else            reply = pickComms((charF && charF.nope) || flavor.nope || (cmd.nopeLines.length ? cmd.nopeLines : flavor.nope));
-      showBotSpeech(x.b, reply, 2000, willComply ? '#88ccff' : '#ffaa66');
+      showBotSpeech(x.b, reply, 2000, willComply ? '#88ccff' : '#ffaa66', true);
       pushChatLine(`${players[x.b.id]?.name || 'Ally'}: ${reply}`, willComply ? '#88ccff' : '#ffaa66');
       // Physical reaction: set command override only if they actually agreed.
       if (willComply && cmd.type) {
@@ -2907,6 +2907,30 @@ function safeColor(c) {
 // Comms and character chat land in the same left-hand feed as everything else (#29).
 function pushChatLine(text, color) {
   pushFeedLine(text, '', color || '#fff', false, true);
+}
+function reactAllyBotsToFreeChat(playerSaid) {
+  if (!playerSaid || !gameStarted) return;
+  const nearbyAllies = gameBots
+    .filter(b => !b.dead && b.team === 'ally')
+    .map(b => ({ b, d: Math.hypot(b.x - camera.position.x, b.z - camera.position.z) }))
+    .filter(x => x.d < 24)
+    .sort((a,b) => a.d - b.d)
+    .slice(0, 2);
+  if (!nearbyAllies.length) return;
+  const text = String(playerSaid).toLowerCase();
+  let pool = ['Copy.', 'Got it.', 'I am with you.', 'On it.'];
+  if (/\b(help|backup|cover|save|heal)\b/.test(text)) pool = ['Coming!', 'Hold on!', 'Covering you!', 'I got you.'];
+  else if (/\b(push|rush|attack|go)\b/.test(text)) pool = ['Pushing!', 'Right behind you.', 'Taking space.', 'Let us go.'];
+  else if (/\b(run|retreat|fall back|hide)\b/.test(text)) pool = ['Falling back.', 'Good call.', 'Resetting.', 'Backing up.'];
+  else if (/\b(no|stop|wait|stay)\b/.test(text)) pool = ['Holding.', 'Waiting.', 'Stopping.', 'Okay, okay.'];
+  nearbyAllies.forEach((x, i) => {
+    setTimeout(() => {
+      if (!x.b || x.b.dead) return;
+      const reply = pickComms(pool);
+      showBotSpeech(x.b, reply, 1800, '#88ccff', true);
+      pushChatLine(`${players[x.b.id]?.name || 'Ally'}: ${reply}`, '#88ccff');
+    }, 350 + i * 280);
+  });
 }
 // ── Bot speech bubbles: bots say what they're thinking ───────────────────
 // Lines library per reason. Each picks a random variation.
@@ -2943,11 +2967,11 @@ const BOT_THOUGHTS = {
 };
 
 // Show a speech bubble over a bot for `duration` ms with the given text
-function showBotSpeech(bot, text, duration = 2200, color = '#fff') {
+function showBotSpeech(bot, text, duration = 2200, color = '#fff', force = false) {
   if (!bot || bot.dead) return;
   // Throttle: don't replace if same text shown recently, and rate-limit per bot
   const now = Date.now();
-  if (bot._lastSpeechAt && now - bot._lastSpeechAt < 1800) return;
+  if (!force && bot._lastSpeechAt && now - bot._lastSpeechAt < 1800) return;
   bot._lastSpeechAt = now;
   // Create or reuse the bubble div
   if (!bot._bubble) {
@@ -46216,8 +46240,8 @@ _onlineTimer = setInterval(refreshOnlineCount, 15000);
 document.getElementById('login-toggle').addEventListener('click', () => setLoginBoxOpen(document.getElementById('login-box').hidden));
 
 // ════════════════════════════════════════════════════════════════════════════
-// 💬 CUSTOM CHAT (press V) — sends a plain chat line that BOTS never react to
-//    (it skips the comms-wheel/bot-reply path), run through a cheeky filter.
+// 💬 CUSTOM CHAT (press V) — sends a plain chat line and lets nearby ally bots
+//    toss back short squad replies after the cheeky filter.
 // ════════════════════════════════════════════════════════════════════════════
 //   • virus-y / code-y input → "I'm a stupid idiot"
 //   • swearing             → "what just happened?"
@@ -46264,6 +46288,7 @@ function sendVChat(raw) {
   if (!msg) return;
   pushChatLine(`You: 💬 ${msg}`, '#66ccff');                 // local echo (escaped on render)
   try { socket.emit('chatLine', { text: msg, color: '#66ccff', emoji: '💬' }); } catch (e) {}
+  reactAllyBotsToFreeChat(msg);
 }
 
 // ════════════════════════════════════════════════════════════════════════════
