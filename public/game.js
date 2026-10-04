@@ -17186,7 +17186,55 @@ function buildLegendSRX()    { return _legendize(buildSRX(),       { top: 6, sid
 function buildLegendVector() { return _legendize(buildVectorSMG(), { top: 4, side: 2, bottom: 1, fires: 3, scale: 0.9 }); }
 // Blades: spikes down the spine of the blade only, never over the handle.
 function buildLegendKnife()  { return _legendize(buildKnife(),  { top: 4, side: 0, fires: 2, from: 0.45, to: 0.92, muzzle: false, scale: 0.7, fireScale: 0.7 }); }
-function buildLegendKatana() { return _legendize(buildKatana(), { top: 6, side: 0, fires: 3, from: 0.35, to: 0.95, muzzle: false, scale: 0.8, fireScale: 0.8 }); }
+function buildLegendKatana() {
+  const g = _legendize(buildKatana(), { top: 6, side: 0, fires: 3, from: 0.35, to: 0.95, muzzle: false, scale: 0.8, fireScale: 0.8 });
+  // 🛡️ Guard: while the Deflect is up, three glowing katanas are summoned from the blade and
+  // hang in front of you as a fan, floating, until it ends. They live on the camera (the
+  // viewmodel's own parent), not on the sword, so the sword's guard pose does not drag them.
+  const blades = [], shield = new THREE.Group();
+  shield.visible = false; shield.position.set(0, -0.02, -0.62);
+  const dark = new THREE.MeshPhongMaterial({ color: 0x0c0709, shininess: 170, specular: 0x9a2a2a });
+  const hot = new THREE.MeshBasicMaterial({ color: 0xff3a22 });
+  const bladeCore = new THREE.MeshBasicMaterial({ color: 0xffe6d8 });
+  const halo = new THREE.MeshBasicMaterial({ color: 0xff1a10, transparent: true, opacity: 0.2,
+    blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  for (let i = 0; i < 3; i++) {
+    const b = new THREE.Group();                      // upright: hilt at the bottom, tip up
+    const blade = new THREE.Mesh(new THREE.BoxGeometry(0.030, 0.30, 0.006), hot); blade.position.y = 0.19; b.add(blade);
+    const core = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.29, 0.008), bladeCore); core.position.y = 0.19; b.add(core);
+    const tip = new THREE.Mesh(new THREE.ConeGeometry(0.0155, 0.04, 4), hot); tip.position.y = 0.36; tip.rotation.y = Math.PI / 4; tip.scale.z = 0.3; b.add(tip);
+    const glow = new THREE.Mesh(new THREE.BoxGeometry(0.048, 0.38, 0.02), halo); glow.position.y = 0.2; b.add(glow);
+    const guard = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.012, 0.016), dark); guard.position.y = 0.032; b.add(guard);
+    const grip = new THREE.Mesh(new THREE.BoxGeometry(0.016, 0.10, 0.016), dark); grip.position.y = -0.03; b.add(grip);
+    const pommel = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.014, 0.022), hot); pommel.position.y = -0.088; b.add(pommel);
+    b.userData.halo = glow;
+    b.userData.fan = [0.34, 0, -0.34][i];             // the tips splay out, left and right
+    b.userData.home = new THREE.Vector3([-0.15, 0, 0.15][i], i === 1 ? 0.0 : -0.02, i === 1 ? 0 : 0.03);
+    b.visible = false; shield.add(b); blades.push(b);
+  }
+  if (typeof camera !== 'undefined' && camera) camera.add(shield);
+  let up = 0;
+  const from = new THREE.Vector3(0.04, 0.0, 0.2);     // where the sword is, relative to the shield
+  g._tick = (dt, now) => {
+    const buff = meleeAbilityBuff;
+    const on = !!(buff && buff.type === 'deflect' && Date.now() < buff.endTime && activeSlot === 'melee');
+    up = Math.max(0, Math.min(1, up + (on ? 1 : -1) * dt / 0.24));
+    shield.visible = up > 0;
+    if (!shield.visible) return;
+    const k = up * up * (3 - 2 * up);
+    blades.forEach((b, i) => {
+      b.visible = true;
+      const bob = Math.sin(now * 2.6 + i * 2.1) * 0.012 * k, sway = Math.sin(now * 1.7 + i * 1.3) * 0.05 * k;
+      b.position.copy(from).lerp(b.userData.home, k); b.position.y += bob;
+      b.rotation.set(0, (1 - k) * 3.2 * (i - 1 || 1), b.userData.fan * k + sway);
+      b.scale.setScalar(Math.max(0.001, k * 0.78));
+      b.userData.halo.material.opacity = 0.16 + 0.07 * Math.sin(now * 14 + i * 1.9);
+    });
+  };
+  g._calm = () => { up = 0; shield.visible = false; };
+  g._legendKatanaSkin = true;
+  return g;
+}
 function buildLegendBat()    { return _legendize(buildBat(),    { top: 5, side: 3, fires: 3, from: 0.45, to: 0.95, muzzle: false }); }
 function buildLegendDaggers() {
   const g = _legendize(buildThrowingKnives(), { top: 3, side: 1, fires: 2, from: 0.25, to: 0.86, muzzle: false, scale: 0.55, fireScale: 0.55 });
@@ -26718,6 +26766,28 @@ function _eqMakeProps(model, type, ctr, box, targets) {
     sc.userData.from = sc.position.clone(); sc.userData.len = len;
     model.add(sc); out.push(sc);
   }
+  if (type === 'leafstorm') {                  // FFA Legend Katana: a black tornado of leaves round the blade
+    const storm = new THREE.Group(); storm.position.copy(ctr);
+    const shp = new THREE.Shape();
+    shp.moveTo(0, -1); shp.quadraticCurveTo(0.95, -0.15, 0, 1); shp.quadraticCurveTo(-0.95, -0.15, 0, -1);
+    const lg = new THREE.ShapeGeometry(shp); lg.scale(0.0115, 0.0115, 0.0115);
+    const mats = [0x050306, 0x120609, 0x2a0508].map(c => new THREE.MeshBasicMaterial({ color: c, side: THREE.DoubleSide, transparent: true, opacity: 1 }));
+    const leaves = [];
+    for (let i = 0; i < 64; i++) {
+      const m = new THREE.Mesh(lg, mats[i % 3]);
+      m.userData.lf = { a0: Math.random() * 6.283, h: Math.random(), r: 0.6 + Math.random() * 0.7, sp: 0.8 + Math.random() * 0.8,
+                        sx: Math.random() * 6, sy: Math.random() * 6, big: 0.7 + Math.random() * 0.9 };
+      storm.add(m); leaves.push(m);
+    }
+    const cones = [];
+    for (let i = 0; i < 3; i++) {
+      const cm = new THREE.Mesh(new THREE.CylinderGeometry(0.05 + i * 0.012, 0.012, Math.max(0.2, box.max.z - box.min.z), 14, 1, true),
+        new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.0, side: THREE.DoubleSide, depthWrite: false }));
+      cm.rotation.x = Math.PI / 2; cm.position.z = ((box.max.z + box.min.z) / 2) - ctr.z; storm.add(cm); cones.push(cm);
+    }
+    storm.userData.leafstorm = { leaves, cones, z0: box.max.z - ctr.z, z1: box.min.z - ctr.z };
+    model.add(storm); out.push(storm);
+  }
   if (type === 'blackhole') {                  // the black hole: core, accretion disk, photon ring
     const bh = new THREE.Group(); bh.position.copy(ctr);
     bh.add(new THREE.Mesh(new THREE.SphereGeometry(0.020, 20, 14), new THREE.MeshBasicMaterial({ color: 0x000000 })));
@@ -26842,7 +26912,7 @@ function _eqStepProps(e, t) {
     lm.obsidian.emissive.setHex(0xff3a10);
     lm.obsidian.emissiveIntensity = 2.2 * Math.pow(1 - t, 1.5) + Math.sin(t * 60) * 0.05;
   }
-  if (lm && e.type === 'unsheathe') {
+  if (lm && (e.type === 'unsheathe' || e.type === 'leafstorm')) {
     const f = t > 0.5 && t < 0.9 ? Math.sin((t - 0.5) / 0.4 * Math.PI) : 0;
     lm.obsidian.emissive.setHex(0xff2010); lm.obsidian.emissiveIntensity = 1.6 * f;
   }
@@ -26856,6 +26926,26 @@ function _eqStepProps(e, t) {
         f.rotation.x = k * 1.4;
       }
       o.visible = k < 1;
+    }
+    if (o.userData.leafstorm) {                  // the black leaf tornado: builds, holds, blows away
+      const S = o.userData.leafstorm;
+      const grow = _eqOut(_eqClamp(t / 0.22)), out = _eqClamp((t - 0.7) / 0.3), env = grow * (1 - out * out);
+      for (const lf of S.leaves) {
+        const L = lf.userData.lf;
+        const z = S.z0 + (S.z1 - S.z0) * (L.h * (0.2 + 0.8 * grow)) - out * out * 0.35 * L.sp;
+        const r = (0.016 + 0.07 * L.h * L.r) * (0.3 + 0.7 * grow) * (1 + out * 3.2);
+        const a = L.a0 + t * (9 + 7 * L.h) * L.sp + out * 5;
+        lf.position.set(Math.cos(a) * r, Math.sin(a) * r, z);
+        lf.rotation.set(L.sx + t * 7 * L.sp, L.sy + t * 5, a);
+        lf.scale.setScalar(Math.max(0.001, env * L.big));
+        lf.material.opacity = 1 - out;
+      }
+      S.cones.forEach((cm, i) => {
+        cm.rotation.z = t * (6 + i * 2) * (i % 2 ? -1 : 1);
+        cm.material.opacity = 0.34 * env * (1 - out);
+        cm.scale.set(env * (1 + out * 1.5), 1, env * (1 + out * 1.5));
+      });
+      o.visible = out < 1;
     }
     if (o.userData.len) {                        // the scabbard: slides off the blade
       const k = _eqClamp((t - 0.12) / 0.45);
@@ -27082,10 +27172,10 @@ function _beginEquip(model, spec, melee, support = false) {
   if (type === 'unfold') ps.sort((a, b) => b.h.p.z - a.h.p.z);
   if (type === 'build')  ps.sort((a, b) => a.h.p.y - b.h.p.y);
   if (type === 'eruption') ps.sort((a, b) => b.h.p.z - a.h.p.z);   // rising back to front
-  if (type === 'petals')   ps.sort((a, b) => b.h.p.z - a.h.p.z);   // blooming hilt to tip
+  if (type === 'petals' || type === 'leafstorm') ps.sort((a, b) => b.h.p.z - a.h.p.z);   // blooming hilt to tip
   if (type === 'windup' || type === 'inflate') ps.sort((a, b) => b.h.p.z - a.h.p.z);   // back to front
   if (type === 'meteor')   ps.sort((a, b) => a.h.p.z - b.h.p.z);   // raining front to back
-  if (type === 'unfold' || type === 'build' || type === 'eruption' || type === 'meteor' || type === 'petals' || type === 'windup' || type === 'inflate')
+  if (type === 'unfold' || type === 'build' || type === 'eruption' || type === 'meteor' || type === 'petals' || type === 'leafstorm' || type === 'windup' || type === 'inflate')
     ps.forEach((p, i) => { p.delay = i / Math.max(1, ps.length - 1); });
   let ring = null;
   if (type === 'warp') {
@@ -27364,6 +27454,15 @@ function _equipStep(e, t) {
         c.position.copy(h.p).sub(e.ctr).applyQuaternion(q).add(e.ctr);
         c.position.y += arc * 0.12;
         c.quaternion.copy(q).multiply(h.q); c.scale.copy(h.s);
+        break; }
+      case 'leafstorm': {
+        // FFA Legend Katana: there is no blade while the black leaf-tornado builds. It forms
+        // out of the middle of it, hilt to tip, and the storm blows itself away.
+        const k = _eqEase(_eqClamp((t - 0.24 - p.delay * 0.36) / 0.24));
+        c.visible = k > 0.001;
+        c.position.set(e.ctr.x, e.ctr.y, h.p.z).lerp(h.p, k);
+        c.quaternion.copy(h.q).premultiply(new THREE.Quaternion().setFromAxisAngle(_EQ_Z, (1 - k) * 4));
+        c.scale.copy(h.s).multiplyScalar(Math.max(0.001, k));
         break; }
       case 'unsheathe': {
         // FFA Legend Katana: drawn from a black scabbard; the blade itself
@@ -34349,8 +34448,8 @@ const MELEE_MODEL_SKINS = [
     equip: 'hellflip', equipMs: 850, equipSfx: ['whoosh', 'snapin'] },
   { id: 'katana_legend', melee: 'katana', name: 'FFA Legend Katana', rarity: 'legend',
     sw: ['#17121a', '#ff2a1a'], build: buildLegendKatana,
-    blurb: 'Obsidian steel, the whole length of it burning.',
-    equip: 'unsheathe', equipMs: 1000, equipSfx: [null, null], equipBeats: [[.12,'shing']] },
+    blurb: 'Drawn out of a black tornado of swirling leaves. Raise the guard and three glowing katanas rise to float in front of you as a shield.',
+    equip: 'leafstorm', equipMs: 1700, equipSfx: ['whoosh', null], equipBeats: [[.22,'whoosh'],[.62,'shing']] },
   { id: 'bat_legend', melee: 'bat', name: 'FFA Legend Bat', rarity: 'legend',
     sw: ['#17121a', '#ff2a1a'], build: buildLegendBat,
     blurb: 'Nails were not enough. Spikes, and fire.',
