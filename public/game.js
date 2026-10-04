@@ -4330,7 +4330,7 @@ const PROP_SFX = {
   filter: ['slideout', 'snapin'], canister: ['hiss', 'snapin'], dash: ['type', 'type'],
   shard: ['clink', 'clink'], paper: ['fold', 'fold'], brick: ['click', 'snapin'], pixel: ['blip', 'blip'],
   soul: ['whoosh', 'fireup'], ash: ['brush', 'brush'], coal: ['crunch', 'hiss'], magma: ['hiss', 'snapin'],
-  holomag: ['slideout', 'beep'], rainbowmag: ['slideout', 'snapin'],
+  holomag: ['slideout', 'beep'], rainbowmag: ['slideout', 'snapin'], bloodoutline: ['whoosh', 'ignite'], blooddagger: ['ignite', 'clink'],
 };
 
 // ── 🔁 Reload audio ─────────────────────────────────────────────────────────
@@ -17188,6 +17188,47 @@ function buildLegendVector() { return _legendize(buildVectorSMG(), { top: 4, sid
 function buildLegendKnife()  { return _legendize(buildKnife(),  { top: 4, side: 0, fires: 2, from: 0.45, to: 0.92, muzzle: false, scale: 0.7, fireScale: 0.7 }); }
 function buildLegendKatana() { return _legendize(buildKatana(), { top: 6, side: 0, fires: 3, from: 0.35, to: 0.95, muzzle: false, scale: 0.8, fireScale: 0.8 }); }
 function buildLegendBat()    { return _legendize(buildBat(),    { top: 5, side: 3, fires: 3, from: 0.45, to: 0.95, muzzle: false }); }
+function buildLegendDaggers() {
+  const g = _legendize(buildThrowingKnives(), { top: 3, side: 1, fires: 2, from: 0.25, to: 0.86, muzzle: false, scale: 0.55, fireScale: 0.55 });
+  const ammo = g._parts && g._parts.ammo;
+  const kids = ammo ? ammo.children : [];
+  const glowMat = new THREE.MeshBasicMaterial({ color: 0xff1a12, transparent: true, opacity: 0.48,
+    blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  const edgeMat = new THREE.LineBasicMaterial({ color: 0xff3328, transparent: true, opacity: 0.88 });
+  const bloodMat = new THREE.MeshBasicMaterial({ color: 0x9d0808, transparent: true, opacity: 0.62,
+    blending: THREE.AdditiveBlending, depthWrite: false });
+  const addAura = (kn, spectral) => {
+    const bladeGlow = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.006, 0.155), glowMat);
+    bladeGlow.position.set(0, 0.001, -0.082); bladeGlow.userData.legendFx = true; kn.add(bladeGlow);
+    const drip = new THREE.Mesh(new THREE.SphereGeometry(0.008, 7, 5), bloodMat);
+    drip.scale.set(0.65, 0.35, 1.8); drip.position.set(0.011, 0.004, -0.120); drip.userData.legendFx = true; kn.add(drip);
+    kn.traverse(m => {
+      if (!m.isMesh || m.userData.legendFx) return;
+      const ed = new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry, 25), edgeMat);
+      ed.userData.legendFx = true; m.add(ed);
+    });
+    if (spectral) {
+      kn.scale.setScalar(1.08);
+      kn.traverse(m => { if (m.isMesh && m.material && m.material.transparent) m.material.opacity = Math.max(m.material.opacity || 0, 0.58); });
+    }
+  };
+  if (kids[0]) { kids[0].position.set(-0.042, 0.010, -0.002); kids[0].rotation.set(0.12, -0.26, 0.32); addAura(kids[0], false); }
+  if (kids[1]) { kids[1].position.set( 0.042, 0.000, -0.002); kids[1].rotation.set(0.12,  0.26,-0.32); addAura(kids[1], false); }
+  if (kids[2]) { kids[2].position.set( 0.000, 0.052, -0.052); kids[2].rotation.set(-0.05, 0, 0); addAura(kids[2], true); }
+  g._legendDaggerSkin = true;
+  const oldTick = g._tick, oldCalm = g._calm, float = kids[2], base = float && { y: float.position.y, rz: float.rotation.z };
+  g._tick = (dt, now, assembling) => {
+    if (oldTick) oldTick(dt, now, assembling);
+    if (!float || assembling) return;
+    float.position.y = base.y + Math.sin(now * 4.2) * 0.010;
+    float.rotation.z = base.rz + Math.sin(now * 2.8) * 0.18;
+  };
+  g._calm = () => {
+    if (oldCalm) oldCalm();
+    if (float) { float.position.y = base.y; float.rotation.z = base.rz; }
+  };
+  return g;
+}
 
 function buildBlueprintAK() {
   // 📐 AK-20 -> Blueprint AK. The real AK, as its own technical drawing: every
@@ -24818,6 +24859,37 @@ function _buildKnife(tint, r) {
   g._spin = { x: 26, y: 0, z: 0 };     // end over end, fast
   return g;
 }
+function _buildBloodDagger(tint, r) {
+  const c = tint || 0xff1a12;
+  r = Math.max(r, 0.052);
+  const P = _projCache('bloodDagger|' + c + '|' + r, () => ({
+    blade: new THREE.BoxGeometry(r * 0.42, r * 0.12, r * 3.3),
+    edge:  new THREE.BoxGeometry(r * 0.08, r * 0.14, r * 3.35),
+    tip:   new THREE.ConeGeometry(r * 0.22, r * 0.78, 4),
+    grip:  new THREE.BoxGeometry(r * 0.34, r * 0.30, r * 1.0),
+    guard: new THREE.BoxGeometry(r * 1.0, r * 0.15, r * 0.16),
+    wake:  new THREE.CylinderGeometry(r * 0.86, r * 0.05, r * 12, 6, 1, true),
+    obs:   new THREE.MeshPhongMaterial({ color: 0x12070a, shininess: 190, specular: 0xaa2222 }),
+    red:   new THREE.MeshBasicMaterial({ color: c }),
+    glow:  new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.58,
+      blending: THREE.AdditiveBlending, depthWrite: false }),
+    dark:  new THREE.MeshPhongMaterial({ color: 0x0a0607, shininess: 80, specular: 0x661818 }),
+  }));
+  const g = new THREE.Group();
+  const wake = new THREE.Mesh(P.wake, P.glow); wake.position.y = -r * 6.1; g.add(wake);
+  const blade = new THREE.Mesh(P.blade, P.obs); blade.position.y = -r * 1.3; g.add(blade);
+  [-1, 1].forEach(sd => {
+    const e = new THREE.Mesh(P.edge, P.red);
+    e.position.set(sd * r * 0.20, 0, -r * 1.3); g.add(e);
+  });
+  const tip = new THREE.Mesh(P.tip, P.red); tip.rotation.z = Math.PI / 4; tip.position.y = -r * 3.35; g.add(tip);
+  const guard = new THREE.Mesh(P.guard, P.dark); guard.position.y = r * 0.65; g.add(guard);
+  const grip = new THREE.Mesh(P.grip, P.dark); grip.position.y = r * 1.15; g.add(grip);
+  g._alignToDir = true;
+  g._spin = { x: 19, y: 0, z: 5 };
+  g._bloodTrail = { tint: c, r };
+  return g;
+}
 // A hatchet: haft with a bit at the head, tumbling nose-heavy.
 function _buildAxe(tint, r) {
   const P = _projCache('axe|'+r, () => ({
@@ -25179,6 +25251,25 @@ function _emitDonutTrail(tint, r, from, to) {
     if (_donutPuffs.length > 420) { const o = _donutPuffs.shift(); scene.remove(o.sp); o.mat.dispose(); }
   }
 }
+function _emitBloodTrail(tint, r, from, to) {
+  const dx = to.x - from.x, dy = to.y - from.y, dz = to.z - from.z;
+  const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+  if (dist < 0.001) return;
+  const step = Math.max(0.10, r * 1.65), n = Math.min(18, Math.floor(dist / step) + 1);
+  for (let i = 0; i < n; i++) {
+    const t = (i + 1) / n;
+    const mat = new THREE.SpriteMaterial({ map: _getGlowPuffTex(), color: tint || 0xff1a12, transparent: true, opacity: 0.96,
+      blending: THREE.AdditiveBlending, depthWrite: false });
+    const sp = new THREE.Sprite(mat);
+    const s0 = r * 4.2 * (i % 2 ? 0.78 : 1.0);
+    sp.position.set(from.x + dx * t, from.y + dy * t, from.z + dz * t);
+    sp.scale.setScalar(s0);
+    sp.renderOrder = 998;
+    scene.add(sp);
+    _donutPuffs.push({ sp, mat, life: 0, max: 0.34, s0 });
+    if (_donutPuffs.length > 520) { const o = _donutPuffs.shift(); scene.remove(o.sp); o.mat.dispose(); }
+  }
+}
 function _updateDonutPuffs(dt) {
   for (let i = _donutPuffs.length - 1; i >= 0; i--) {
     const p = _donutPuffs[i]; p.life += dt;
@@ -25305,6 +25396,7 @@ function makeBulletMesh(color, size, weaponId, own) {
     case 'stone':   return _buildStone(color, r);
     case 'pellet':  return _buildPellet(color, r);
     case 'knife':     return _buildKnife(color, r);
+    case 'blood_dagger': return _buildBloodDagger(color, r);
     case 'axe':       return _buildAxe(color, r);
     case 'boomerang': return _buildBoomerang(color, r);
     case 'cone':      return _buildCone(color, r);
@@ -27590,6 +27682,10 @@ function syncHeldAmmoModelForIndex(idx) {
   if (!kids.length) return;
   let shown;
   if (w.id === 'throwing_knives') {
+    if (_activeModelSkin[w.id]?.id === 'throwing_knives_legend') {
+      for (let i = 0; i < kids.length; i++) kids[i].visible = i === 0 ? pool.ammo >= 3 : i === 1 ? pool.ammo >= 2 : i === 2 ? pool.ammo >= 1 : i < pool.ammo;
+      return;
+    }
     shown = Math.max(0, Math.min(kids.length, pool.ammo));
   } else {
     const per = kids.length / Math.max(1, parts.ammo._n || kids.length);
@@ -30555,6 +30651,7 @@ function tryShoot() {
   const pool = weaponAmmo[currentWeaponIdx];
   const adminInfAmmo = adminCheats.infiniteAmmo && currentUser?.isAdmin;
   if (pool.ammo <= 0 && !adminInfAmmo) { if (pool.reserve > 0 && !wStats.noReload) startReload(); else dryFire(); return; }
+  const preShotAmmo = pool.ammo;
 
   lastShot = now;
   if (wStats.id === 'chain_gun') chainGunAdvanceSpin();
@@ -30649,6 +30746,10 @@ function tryShoot() {
       baseDir.y = Math.max(baseDir.y, spec.lift || 0.42);
       baseDir.normalize();
     }
+  }
+  if (currentWeapon.id === 'throwing_knives' && _activeModelSkin[currentWeapon.id]?.id === 'throwing_knives_legend' && preShotAmmo <= 1) {
+    muzzleWorld.copy(camera.position).addScaledVector(baseDir, 0.64);
+    muzzleWorld.y -= 0.16;
   }
 
   // Switchblade Gun: charged state fires a 100-dmg shot; subsequent shots are 50 dmg until a hit lands
@@ -32448,6 +32549,9 @@ const MODEL_SKINS = [
   { id: 'vector_legend', weapon: 'vector', name: 'FFA Legend Vector', rarity: 'legend',
     sw: ['#17121a', '#ff2a1a'], build: buildLegendVector, look: { projectile: 'hellfire', bulletColor: 0xff2a1a },
     blurb: 'Compact, spiked, on fire. Mostly on fire.' },
+  { id: 'throwing_knives_legend', weapon: 'throwing_knives', name: 'FFA Legend Daggers', rarity: 'legend',
+    sw: ['#17121a', '#ff1a12'], build: buildLegendDaggers, look: { projectile: 'blood_dagger', bulletColor: 0xff1a12 },
+    blurb: 'Two obsidian daggers in hand, one floating in the middle, all leaving red laser aftertrails.' },
   // ✨ An entrance, and something that never stops while you hold it.
   { id: 'ak20_blueprint', weapon: 'ak20', name: 'Blueprint AK', rarity: 'rare',
     sw: ['#1a6aa8', '#8aeaff'], build: buildBlueprintAK,
@@ -35139,6 +35243,21 @@ function _makeObjectProp(kind, M, g) {
       add('s', S(0.019, 10, 8), new THREE.MeshBasicMaterial({ color: 0x0a0405, transparent: true, opacity: 0.55,
         depthWrite: false })).scale.set(1, 1.3, 1);
       return true;
+    case 'bloodoutline': {
+      const line = new THREE.MeshBasicMaterial({ color: 0xff1a12, transparent: true, opacity: 0.28,
+        blending: THREE.AdditiveBlending, depthWrite: false });
+      add('b', B(0.030, 0.004, 0.105), line, 0, 0, -0.030);
+      add('t', () => new THREE.ConeGeometry(0.017, 0.030, 4), line, 0, 0, -0.096, -X, 0, Math.PI / 4);
+      add('h', B(0.018, 0.014, 0.050), line, 0, 0, 0.040);
+      return true;
+    }
+    case 'blooddagger':
+      add('b', B(0.018, 0.004, 0.100), M(0x12070a, 190), 0, 0, -0.036);
+      add('e', B(0.004, 0.005, 0.102), new THREE.MeshBasicMaterial({ color: 0xff1a12 }), 0.009, 0, -0.036);
+      add('f', B(0.004, 0.005, 0.102), new THREE.MeshBasicMaterial({ color: 0xff1a12 }), -0.009, 0, -0.036);
+      add('t', () => new THREE.ConeGeometry(0.010, 0.030, 4), new THREE.MeshBasicMaterial({ color: 0xff1a12 }), 0, 0, -0.104, -X, 0, Math.PI / 4);
+      add('g', B(0.014, 0.012, 0.050), M(0x0a0607, 80), 0, 0, 0.040);
+      return true;
     case 'ash':        // what is left of the old one
       add('a', S(0.016, 7, 5), M(0x3a3634, 5)).scale.set(1.3, 0.6, 1.2); return true;
     case 'coal':       // a coal where a shell would go
@@ -35983,6 +36102,13 @@ const SKIN_FX = {
     // the old magazine crumbles to ash; a molten one goes in
     reload: _fxR(RELOAD_KEYS.vector, (RELOAD_PROPS.vector || []).map(e => e.k === 'mag'
       ? Object.assign({}, e, { k: e.m === 'arrive' ? 'magma' : 'ash' }) : e), [[.30,'hiss']], 'snapin') },
+  throwing_knives_legend: { sound: _fxS('hellfire', .30, .10, 0, 0, { base:'throw', tail:.24 }),
+    equip: 'vortex', equipMs: 900, equipSfx: ['whoosh', 'clink'], equipBeats: [[.34,'ignite'],[.56,'clink']],
+    reload: _fxR(RELOAD_KEYS.throwing_knives, [
+      RP(.23,'bloodoutline','arrive',1,'breech'), RP(.34,'blooddagger','arrive',1,'breech'),
+      RP(.50,'bloodoutline','arrive',1,'breech'), RP(.60,'blooddagger','arrive',1,'breech'),
+      RP(.72,'bloodoutline','arrive',1,'breech'), RP(.82,'blooddagger','arrive',1,'breech')
+    ], [[.18,'whoosh'],[.46,'ignite'],[.76,'ignite']], 'clink') },
   ak20_blueprint: { sound: _fxS('holo', .26, .05, 1800, 900),
     equip: 'scan', equipMs: 1000, equipSfx: ['scan', 'beep'],
     reload: _fxR(RELOAD_KEYS.ak20, (RELOAD_PROPS.ak20 || []).map(e => e.k === 'mag' ? Object.assign({}, e, { k: 'holomag' }) : e), null, 'beep') },
@@ -37149,6 +37275,7 @@ function updateBullets(dt) {
     }
     b.mesh.position.addScaledVector(b.dir, b.speed * dt);
     if (b.mesh._donutTrail) _emitDonutTrail(b.mesh._donutTrail.tint, b.mesh._donutTrail.r, _bulletPrevTrail.set(px0, py0, pz0), b.mesh.position);
+    if (b.mesh._bloodTrail) _emitBloodTrail(b.mesh._bloodTrail.tint, b.mesh._bloodTrail.r, _bulletPrevTrail.set(px0, py0, pz0), b.mesh.position);
     // Grenades, blobs and shards tumble; tracers and rockets hold their line.
     if (b.mesh._spin) {
       b.mesh.rotation.x += b.mesh._spin.x * dt;
