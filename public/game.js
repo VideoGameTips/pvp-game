@@ -25956,6 +25956,245 @@ function updateAimAssist(dt) {
 }
 
 // ── Input ──────────────────────────────────────────────────────────────────
+// ═════════════════════════════════════════════════════════════════════════════
+// 🎮 CUSTOM CONTROLS + 🎯 CUSTOM CROSSHAIR  (⚙ Settings → Controls / Crosshair)
+//
+// Controls: the game reads dozens of hard-coded e.code / keys['KeyX'] checks. Rather
+// than rewrite them, a capture listener on window translates the key you PRESS into
+// the default key of the action you bound it to, before any other listener sees the
+// event. Bind Reload to G and pressing G reaches the game as KeyR; R itself goes dead.
+// Typing in a text box is never touched.
+// ═════════════════════════════════════════════════════════════════════════════
+const KEY_ACTIONS = [
+  ['forward', 'Move forward', 'KeyW'], ['back', 'Move back', 'KeyS'],
+  ['left', 'Move left', 'KeyA'], ['right', 'Move right', 'KeyD'],
+  ['jump', 'Jump', 'Space'], ['slide', 'Slide', 'ShiftLeft'], ['crouch', 'Crouch', 'ControlLeft'],
+  ['reload', 'Reload', 'KeyR'], ['ability', 'Ability / aim', 'KeyE'], ['interact', 'Interact / swap gear', 'KeyF'],
+  ['cycle', 'Next weapon', 'KeyQ'], ['slot1', 'Primary weapon', 'Digit1'], ['slot2', 'Secondary weapon', 'Digit2'],
+  ['slot3', 'Melee', 'Digit3'], ['slot4', 'Support item', 'Digit4'],
+  ['inspect', 'Inspect weapon', 'KeyT'], ['melee', 'Quick melee', 'KeyB'], ['chat', 'Quick chat', 'KeyV'],
+  ['comms1', 'Comms wheel 1', 'KeyZ'], ['comms2', 'Comms wheel 2', 'KeyX'], ['scoreboard', 'Scoreboard', 'Tab'],
+];
+const KEY_RESERVED = new Set(['Escape', 'F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12', 'Enter', 'MetaLeft', 'MetaRight']);
+let KEYBINDS = {};                       // action -> code, only where it differs from the default
+try { KEYBINDS = JSON.parse(localStorage.getItem('pvp_keybinds') || '{}') || {}; } catch (e) { KEYBINDS = {}; }
+let _kbRev = new Map(), _kbDefaults = new Set(), _kbListening = null;
+function keyBoundTo(action) {
+  const a = KEY_ACTIONS.find(x => x[0] === action);
+  return a ? (KEYBINDS[action] || a[2]) : null;
+}
+function _kbRebuild() {
+  // Drop anything that is not a real action or equals its default, so the table stays small and honest.
+  for (const k of Object.keys(KEYBINDS)) {
+    const a = KEY_ACTIONS.find(x => x[0] === k);
+    if (!a || KEYBINDS[k] === a[2]) delete KEYBINDS[k];
+  }
+  _kbRev = new Map(); _kbDefaults = new Set();
+  if (!Object.keys(KEYBINDS).length) return;        // nothing custom: events pass straight through
+  for (const [id, , def] of KEY_ACTIONS) { _kbDefaults.add(def); _kbRev.set(keyBoundTo(id), def); }
+}
+function _kbSave() {
+  _kbRebuild();
+  try { localStorage.setItem('pvp_keybinds', JSON.stringify(KEYBINDS)); } catch (e) {}
+}
+function setKeyBind(action, code) {
+  const a = KEY_ACTIONS.find(x => x[0] === action);
+  if (!a || KEY_RESERVED.has(code)) return false;
+  const old = keyBoundTo(action);
+  const other = KEY_ACTIONS.find(x => x[0] !== action && keyBoundTo(x[0]) === code);
+  KEYBINDS[action] = code;
+  if (other) KEYBINDS[other[0]] = old;               // taking a key in use swaps the two actions
+  _kbSave();
+  return other ? other[1] : true;
+}
+function keyLabel(code) {
+  if (!code) return '—';
+  if (code === 'Unbound') return '—';
+  if (/^Key[A-Z]$/.test(code)) return code.slice(3);
+  if (/^Digit\d$/.test(code)) return code.slice(5);
+  if (/^Numpad/.test(code)) return 'NUM ' + code.slice(6);
+  const map = { Space: 'SPACE', ShiftLeft: 'L-SHIFT', ShiftRight: 'R-SHIFT', ControlLeft: 'L-CTRL', ControlRight: 'R-CTRL',
+    AltLeft: 'L-ALT', AltRight: 'R-ALT', ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', Tab: 'TAB',
+    Backquote: '`', Minus: '-', Equal: '=', BracketLeft: '[', BracketRight: ']', Semicolon: ';', Quote: "'",
+    Comma: ',', Period: '.', Slash: '/', Backslash: '\\', CapsLock: 'CAPS', Backspace: 'BKSP' };
+  return map[code] || code.toUpperCase();
+}
+function _kbCapture(e) {
+  if (_kbListening) {
+    if (e.type === 'keydown' && !e.repeat) {
+      const act = _kbListening; _kbListening = null;
+      if (e.code !== 'Escape') {
+        const r = setKeyBind(act, e.code);
+        _kbNote = r === false ? 'That key is reserved.' : (typeof r === 'string' ? `Swapped with “${r}”.` : '');
+      } else _kbNote = '';
+      if (typeof openControlsPanel === 'function') openControlsPanel();
+    }
+    e.preventDefault(); e.stopImmediatePropagation();
+    return;
+  }
+  if (!_kbRev.size) return;
+  const tag = document.activeElement && document.activeElement.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+  const to = _kbRev.get(e.code);
+  const out = to !== undefined ? to : (_kbDefaults.has(e.code) ? 'Unbound' : e.code);
+  if (out !== e.code) { try { Object.defineProperty(e, 'code', { value: out }); } catch (err) {} }
+}
+let _kbNote = '';
+_kbRebuild();
+window.addEventListener('keydown', _kbCapture, true);
+window.addEventListener('keyup', _kbCapture, true);
+
+function openControlsPanel() {
+  closeOtherDialogs('controls-panel');
+  let panel = document.getElementById('controls-panel');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'controls-panel';
+    panel.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9900;background:#0f1520;border:2px solid #5599ff;border-radius:8px;padding:22px;color:#fff;font-family:"Courier New",monospace;';
+    document.body.appendChild(panel);
+  }
+  panel.style.display = 'block';
+  _kbListening = null;
+  const row = ([id, label, def]) => {
+    const cur = keyBoundTo(id), changed = cur !== def;
+    return `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid #22304a;">
+      <div style="font-size:12px;letter-spacing:1px;color:#cfe0ff;">${label}</div>
+      <div style="display:flex;gap:6px;align-items:center;">
+        ${changed ? `<span style="font-size:10px;color:#7f93b8;">default ${keyLabel(def)}</span>` : ''}
+        <button data-bind="${id}" data-no-i18n style="min-width:84px;padding:6px 10px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:bold;letter-spacing:1px;border-radius:4px;background:${changed ? '#1c3a6a' : '#142238'};color:${changed ? '#9fd0ff' : '#cfe0ff'};border:1px solid ${changed ? '#5599ff' : '#33496e'};">${keyLabel(cur)}</button>
+      </div></div>`;
+  };
+  panel.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;border-bottom:1px solid #2c4a80;padding-bottom:10px;">
+      <div style="font-size:18px;letter-spacing:3px;color:#8fbfff;">🎮 CONTROLS</div>
+      <button id="ctl-close" style="background:#1f2a3a;color:#ffaaaa;border:1px solid #ff6666;padding:4px 10px;cursor:pointer;font-family:inherit;border-radius:3px;">✕</button>
+    </div>
+    <div style="font-size:10px;color:#8da2c8;margin-bottom:8px;line-height:1.5;">Click a key, then press the new one. Esc cancels. Taking a key that is already in use swaps the two actions. Saved on this device. On-screen hints may still show the default keys.</div>
+    <div id="ctl-note" style="min-height:14px;font-size:11px;color:#ffd27a;margin-bottom:4px;">${_kbNote}</div>
+    ${KEY_ACTIONS.map(row).join('')}
+    <button id="ctl-reset" style="display:block;width:100%;margin-top:14px;padding:10px;background:#2a1a1a;color:#ff9988;border:1px solid #ff5544;cursor:pointer;font-family:inherit;letter-spacing:2px;border-radius:4px;">RESET ALL TO DEFAULT</button>
+  `;
+  _kbNote = '';
+  document.getElementById('ctl-close').addEventListener('click', () => { _kbListening = null; panel.style.display = 'none'; });
+  document.getElementById('ctl-reset').addEventListener('click', () => { KEYBINDS = {}; _kbSave(); openControlsPanel(); });
+  panel.querySelectorAll('button[data-bind]').forEach(btn => btn.addEventListener('click', () => {
+    panel.querySelectorAll('button[data-bind]').forEach(b => { b.style.outline = ''; });
+    _kbListening = btn.dataset.bind;
+    btn.textContent = 'PRESS A KEY…'; btn.style.outline = '2px solid #ffd27a';
+  }));
+}
+
+// ── 🎯 Crosshair ────────────────────────────────────────────────────────────
+const CROSSHAIR_DEFAULT = { shape: 'cross', color: '#ffffff', opacity: 0.85, size: 10, thickness: 2, gap: 0, dot: 0, outline: false };
+let CROSSHAIR = { ...CROSSHAIR_DEFAULT };
+try { Object.assign(CROSSHAIR, JSON.parse(localStorage.getItem('pvp_crosshair') || '{}') || {}); } catch (e) {}
+const CROSSHAIR_PRESETS = [
+  ['Classic', { ...CROSSHAIR_DEFAULT }],
+  ['Gap', { shape: 'cross', color: '#00ff88', opacity: 1, size: 7, thickness: 2, gap: 5, dot: 0, outline: true }],
+  ['Dot', { shape: 'dot', color: '#ff3b3b', opacity: 1, size: 8, thickness: 2, gap: 0, dot: 4, outline: true }],
+  ['Ring', { shape: 'circle', color: '#66ccff', opacity: 0.95, size: 9, thickness: 2, gap: 0, dot: 2, outline: true }],
+  ['Cross+Dot', { shape: 'crossdot', color: '#ffee44', opacity: 1, size: 8, thickness: 2, gap: 4, dot: 2, outline: true }],
+  ['T', { shape: 'tee', color: '#ffffff', opacity: 1, size: 8, thickness: 2, gap: 3, dot: 0, outline: true }],
+];
+// Builds the parts of a crosshair centred on (0,0) inside `host`.
+function buildCrosshairParts(host, c) {
+  host.innerHTML = '';
+  const col = c.color || '#ffffff', t = Math.max(1, +c.thickness || 2), len = Math.max(1, +c.size || 10), gap = Math.max(0, +c.gap || 0);
+  const op = Math.max(0.15, Math.min(1, +c.opacity || 1));
+  const outline = c.outline ? ',0 0 0 1px rgba(0,0,0,.85)' : '';
+  const part = (css) => {
+    const d = document.createElement('div');
+    d.className = 'ch-part';
+    d.style.cssText = `position:absolute;background:${col};opacity:${op};${css}` + (c.outline ? ';box-shadow:0 0 0 1px rgba(0,0,0,.85)' : '');
+    host.appendChild(d); return d;
+  };
+  const arms = (skipTop) => {
+    if (!skipTop) part(`left:${-t / 2}px;top:${-(gap + len)}px;width:${t}px;height:${len}px`);
+    part(`left:${-t / 2}px;top:${gap}px;width:${t}px;height:${len}px`);
+    part(`top:${-t / 2}px;left:${-(gap + len)}px;height:${t}px;width:${len}px`);
+    part(`top:${-t / 2}px;left:${gap}px;height:${t}px;width:${len}px`);
+  };
+  const dot = (r) => { if (r > 0) part(`left:${-r}px;top:${-r}px;width:${r * 2}px;height:${r * 2}px;border-radius:50%`); };
+  switch (c.shape) {
+    case 'dot': dot(Math.max(1, +c.dot || 3)); break;
+    case 'circle': {
+      const d = document.createElement('div'); d.className = 'ch-part ch-ring';
+      d.style.cssText = `position:absolute;left:${-len}px;top:${-len}px;width:${len * 2 - t * 2}px;height:${len * 2 - t * 2}px;border:${t}px solid ${col};border-radius:50%;opacity:${op};background:transparent` + (c.outline ? ';box-shadow:0 0 0 1px rgba(0,0,0,.85),inset 0 0 0 1px rgba(0,0,0,.85)' : '');
+      host.appendChild(d); dot(+c.dot || 0); break; }
+    case 'tee': arms(true); dot(+c.dot || 0); break;
+    case 'crossdot': arms(false); dot(Math.max(1, +c.dot || 2)); break;
+    default: arms(false); dot(+c.dot || 0);
+  }
+}
+function applyCrosshair() {
+  const el = document.getElementById('crosshair');
+  if (el) buildCrosshairParts(el, CROSSHAIR);
+}
+function saveCrosshair() {
+  try { localStorage.setItem('pvp_crosshair', JSON.stringify(CROSSHAIR)); } catch (e) {}
+  applyCrosshair();
+}
+function openCrosshairPanel() {
+  closeOtherDialogs('crosshair-panel');
+  let panel = document.getElementById('crosshair-panel');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'crosshair-panel';
+    panel.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9900;background:#14120a;border:2px solid #ffcc44;border-radius:8px;padding:22px;color:#fff;font-family:"Courier New",monospace;';
+    document.body.appendChild(panel);
+  }
+  panel.style.display = 'block';
+  const btn = (attrs, label, on) => `<button ${attrs} style="padding:6px 10px;cursor:pointer;font-family:inherit;font-size:11px;font-weight:bold;letter-spacing:1px;border-radius:4px;background:${on ? '#4a3a10' : '#241f10'};color:${on ? '#ffe28a' : '#c9b46a'};border:1px solid ${on ? '#ffcc44' : '#5a4a20'};">${label}</button>`;
+  const slider = (key, label, min, max, step) => `
+    <div style="margin:9px 0;">
+      <div style="display:flex;justify-content:space-between;font-size:11px;letter-spacing:1px;color:#f0e2b0;"><span>${label}</span><span id="ch-${key}-val" style="color:#ffe28a;">${CROSSHAIR[key]}</span></div>
+      <input data-ch="${key}" type="range" min="${min}" max="${max}" step="${step}" value="${CROSSHAIR[key]}" style="width:100%;">
+    </div>`;
+  const shapes = [['cross', 'CROSS'], ['crossdot', 'CROSS + DOT'], ['tee', 'T'], ['dot', 'DOT'], ['circle', 'RING']];
+  const swatches = ['#ffffff', '#00ff88', '#ff3b3b', '#ffee44', '#66ccff', '#ff66ff', '#ff9933'];
+  panel.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;border-bottom:1px solid #6a5420;padding-bottom:10px;">
+      <div style="font-size:18px;letter-spacing:3px;color:#ffd866;">🎯 CROSSHAIR</div>
+      <button id="ch-close" style="background:#3a2a1a;color:#ffaaaa;border:1px solid #ff6666;padding:4px 10px;cursor:pointer;font-family:inherit;border-radius:3px;">✕</button>
+    </div>
+    <div style="position:relative;height:130px;margin-bottom:12px;border-radius:6px;background:linear-gradient(135deg,#3b4a5a,#1b232c);overflow:hidden;">
+      <div id="ch-preview" style="position:absolute;left:50%;top:50%;width:0;height:0;"></div>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;" data-no-i18n>${CROSSHAIR_PRESETS.map(([n], i) => btn(`data-preset="${i}"`, n.toUpperCase(), false)).join('')}</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin:10px 0;" data-no-i18n>${shapes.map(([k, l]) => btn(`data-shape="${k}"`, l, CROSSHAIR.shape === k)).join('')}</div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0;" data-no-i18n>
+      ${swatches.map(c => `<button data-color="${c}" style="width:24px;height:24px;border-radius:50%;cursor:pointer;background:${c};border:${CROSSHAIR.color.toLowerCase() === c ? '3px solid #fff' : '2px solid #000'};"></button>`).join('')}
+      <input type="color" id="ch-color" value="${CROSSHAIR.color}" style="width:34px;height:28px;border:none;background:none;cursor:pointer;">
+    </div>
+    ${slider('size', 'SIZE', 2, 30, 1)}
+    ${slider('thickness', 'THICKNESS', 1, 8, 1)}
+    ${slider('gap', 'CENTER GAP', 0, 20, 1)}
+    ${slider('dot', 'DOT SIZE', 0, 8, 1)}
+    ${slider('opacity', 'OPACITY', 0.2, 1, 0.05)}
+    <div style="display:flex;align-items:center;justify-content:space-between;margin:12px 0 4px;">
+      <div style="font-size:11px;letter-spacing:1px;color:#f0e2b0;">BLACK OUTLINE</div>
+      ${btn('id="ch-outline"', CROSSHAIR.outline ? 'ON' : 'OFF', CROSSHAIR.outline)}
+    </div>
+    <button id="ch-reset" style="display:block;width:100%;margin-top:12px;padding:10px;background:#2a1a1a;color:#ff9988;border:1px solid #ff5544;cursor:pointer;font-family:inherit;letter-spacing:2px;border-radius:4px;">RESET TO DEFAULT</button>
+  `;
+  const prev = document.getElementById('ch-preview');
+  const refresh = () => buildCrosshairParts(prev, CROSSHAIR);
+  refresh();
+  document.getElementById('ch-close').addEventListener('click', () => panel.style.display = 'none');
+  panel.querySelectorAll('[data-preset]').forEach(b => b.addEventListener('click', () => { CROSSHAIR = { ...CROSSHAIR_DEFAULT, ...CROSSHAIR_PRESETS[+b.dataset.preset][1] }; saveCrosshair(); openCrosshairPanel(); }));
+  panel.querySelectorAll('[data-shape]').forEach(b => b.addEventListener('click', () => { CROSSHAIR.shape = b.dataset.shape; saveCrosshair(); openCrosshairPanel(); }));
+  panel.querySelectorAll('[data-color]').forEach(b => b.addEventListener('click', () => { CROSSHAIR.color = b.dataset.color; saveCrosshair(); openCrosshairPanel(); }));
+  document.getElementById('ch-color').addEventListener('input', e => { CROSSHAIR.color = e.target.value; saveCrosshair(); refresh(); });
+  panel.querySelectorAll('input[data-ch]').forEach(inp => inp.addEventListener('input', () => {
+    const k = inp.dataset.ch; CROSSHAIR[k] = parseFloat(inp.value);
+    const v = document.getElementById(`ch-${k}-val`); if (v) v.textContent = CROSSHAIR[k];
+    saveCrosshair(); refresh();
+  }));
+  document.getElementById('ch-outline').addEventListener('click', () => { CROSSHAIR.outline = !CROSSHAIR.outline; saveCrosshair(); openCrosshairPanel(); });
+  document.getElementById('ch-reset').addEventListener('click', () => { CROSSHAIR = { ...CROSSHAIR_DEFAULT }; saveCrosshair(); openCrosshairPanel(); });
+}
+applyCrosshair();
+
 const keys = {};
 document.addEventListener('keydown', e => {
   keys[e.code] = true;
@@ -46752,7 +46991,7 @@ document.addEventListener('langchange', () => {
 // One dialog at a time (#21): each of these used to open on top of whatever was already open, all in
 // different sizes. Closing is only hiding — every dialog rebuilds from current state when it opens.
 // index.html gives them one shared frame.
-const DIALOG_IDS = ['settings-hub-panel', 'shoot-fx-panel', 'aim-assist-panel', 'weapon-skins-panel',
+const DIALOG_IDS = ['settings-hub-panel', 'controls-panel', 'crosshair-panel', 'shoot-fx-panel', 'aim-assist-panel', 'weapon-skins-panel',
                     'skins-panel', 'kill-log-panel', 'char-chat-panel', 'map-dialog', 'diff-dialog', 'duel-panel'];
 function anyDialogOpen() {
   return DIALOG_IDS.some(id => { const el = document.getElementById(id); return el && getComputedStyle(el).display !== 'none'; });
@@ -46828,6 +47067,10 @@ function openSettingsHub() {
     ${rangeRow('cameraShake', 'CAMERA SHAKE')}
     ${rangeRow('screenFx', 'SCREEN EFFECTS')}
     <div style="height:1px;background:#276b55;margin:16px 0 12px;"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0;">
+      <button id="settings-controls" style="padding:12px;background:#10203a;color:#8fbfff;border:1px solid #5599ff;cursor:pointer;font-family:inherit;letter-spacing:2px;border-radius:4px;">🎮 CONTROLS</button>
+      <button id="settings-crosshair" style="padding:12px;background:#2a2410;color:#ffd866;border:1px solid #ffcc44;cursor:pointer;font-family:inherit;letter-spacing:2px;border-radius:4px;">🎯 CROSSHAIR</button>
+    </div>
     <button id="settings-shoot-fx" style="display:block;width:100%;margin:8px 0;padding:12px;background:#2a1a3a;color:#cc99ff;border:1px solid #aa77ff;cursor:pointer;font-family:inherit;letter-spacing:2px;border-radius:4px;">🔊 SHOOT FX</button>
     <button id="settings-aim-assist" style="display:block;width:100%;margin:8px 0;padding:12px;background:#3a1a1a;color:#ff9988;border:1px solid #ff5544;cursor:pointer;font-family:inherit;letter-spacing:2px;border-radius:4px;">🎯 AIM ASSIST</button>
     ${inLobby && currentUser ? `<button id="settings-logout" style="display:block;width:100%;min-height:48px;margin-top:14px;background:transparent;color:#ffb3a8;border:1px solid #7a3a34;border-radius:6px;cursor:pointer;font-family:inherit;font-size:13px;font-weight:bold;letter-spacing:2px;">🚪 LOG OUT</button>` : ''}
@@ -46869,6 +47112,8 @@ function openSettingsHub() {
       saveGameplaySettings();
     });
   });
+  document.getElementById('settings-controls').addEventListener('click', () => { panel.style.display = 'none'; openControlsPanel(); });
+  document.getElementById('settings-crosshair').addEventListener('click', () => { panel.style.display = 'none'; openCrosshairPanel(); });
   document.getElementById('settings-shoot-fx').addEventListener('click', () => { panel.style.display = 'none'; openShootFxPanel(); });
   document.getElementById('settings-aim-assist').addEventListener('click', () => { panel.style.display = 'none'; openAimAssistPanel(); });
   const resume = document.getElementById('settings-resume');
