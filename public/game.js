@@ -4435,6 +4435,7 @@ function playReloadSound(w, durMs, plan) {
     sawAnything = true;
     const arriving = e.m === 'arrive';
     if (PROP_SFX[e.k])          playObjectSfx(ctx, g, PROP_SFX[e.k][arriving ? 1 : 0], t, V);
+    else if (e.k === 'mag' && e.dust) { playObjectSfx(ctx, g, PROP_SFX.ash[0], t, V); sawMagOut = true; }   // a mag that turns to ash makes no clatter
     else if (e.k === 'mag')          { arriving ? magIn(t) : (magOut(t), sawMagOut = true); }
     else if (e.k === 'shell')   { arriving ? shellIn(t) : tinkle(t, Math.min(4, e.n)); }
     else if (e.k === 'round' || e.k === 'dart') { arriving ? roundIn(t) : tinkle(t, Math.min(4, e.n)); }
@@ -17184,7 +17185,87 @@ function _legendize(g, o) {
   g.position.copy(at);
   return g;
 }
-function buildLegendAK()     { return _legendize(buildAK20(),      { top: 5, side: 3, bottom: 2, fires: 3 }); }
+function buildLegendAK() {
+  const g = _legendize(buildAK20(), { top: 5, side: 3, bottom: 2, fires: 3 });
+  const M = g._legendMats;
+  // 🔥 It is not held, it is lit: no hands on it, the black body glows from inside and every hard
+  // edge is a hot line. Both follow g._heat, which each shot kicks up and a second or so cools.
+  const edgeMat = new THREE.LineBasicMaterial({ color: 0xff3a1a, transparent: true, opacity: 0.5,
+    blending: THREE.AdditiveBlending, depthWrite: false });
+  const bodies = [];
+  g.traverse(m => { if (m.isMesh && m.material === M.obsidian && !m.userData.legendFx) bodies.push(m); });
+  for (const m of bodies) {
+    const ed = new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry, 28), edgeMat);
+    ed.userData.legendFx = true; m.add(ed);
+  }
+  // Three spikes of its own orbit the barrel, slowly, a little out of step.
+  const at = g.position.clone(); g.position.set(0, 0, 0); g.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(g); g.position.copy(at);
+  const orbit = new THREE.Group(); orbit.userData.legendFx = true;
+  orbit.position.set((box.min.x + box.max.x) / 2, (box.min.y + box.max.y) / 2 + 0.01, box.min.z + (box.max.z - box.min.z) * 0.22);
+  for (let i = 0; i < 3; i++) {
+    const a = i / 3 * Math.PI * 2, sp = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.ConeGeometry(0.010, 0.056, 5), M.obsidian); body.rotation.x = -Math.PI / 2; sp.add(body);
+    const tip = new THREE.Mesh(new THREE.ConeGeometry(0.0045, 0.020, 5), M.tip); tip.rotation.x = -Math.PI / 2; tip.position.z = -0.034; sp.add(tip);
+    sp.position.set(Math.cos(a) * 0.085, Math.sin(a) * 0.085, 0);
+    sp.userData.a = a; orbit.add(sp);
+  }
+  orbit.visible = false; g.add(orbit);
+  g._heat = 0; g._shots = 0;
+  g._onFire = () => {
+    g._shots++;
+    const big = g._shots % 10 === 0;                  // every tenth shot flares: a bigger spray, the whole gun white-hot
+    g._heat = big ? 1 : Math.min(1, g._heat + 0.22);
+    spawnLegendEmbers(g, 'breech', big ? 9 : 3, big);
+    spawnLegendEmbers(g, 'muzzle', big ? 16 : 4, big);
+  };
+  g._tick = (dt, now, assembling) => {
+    const H = g._hands;
+    if (H) { if (H.rear) H.rear.visible = false; if (H.front) H.front.visible = false; }   // not in anyone's hands, not even while it forms
+    if (assembling) { orbit.visible = false; return; }
+    orbit.visible = true;
+    orbit.rotation.z = now * 1.2;
+    orbit.children.forEach((sp, i) => { sp.position.z = Math.sin(now * 2.1 + i * 2.1) * 0.012; });
+    g._heat = Math.max(0, g._heat - dt * 0.55);
+    const pulse = 0.5 + 0.5 * Math.sin(now * 3.2);
+    M.obsidian.emissive.setHex(0xff2a10);
+    M.obsidian.emissiveIntensity = 0.22 + 0.08 * pulse + g._heat * 0.95;
+    edgeMat.opacity = Math.min(1, 0.4 + 0.18 * pulse + g._heat * 0.6);
+  };
+  g._calm = () => { orbit.visible = false; M.obsidian.emissive.setHex(0x000000); M.obsidian.emissiveIntensity = 1; };
+  return g;
+}
+// 🔥 Embers thrown off a shot: world-space glow sprites that fly, fall and die out.
+const _legendEmbers = [];
+function spawnLegendEmbers(model, where, n, big) {
+  try {
+    const world = camera.localToWorld(_propAnchor(model, where));
+    const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+    for (let i = 0; i < n; i++) {
+      const mat = new THREE.SpriteMaterial({ map: _getGlowPuffTex(), color: i % 3 ? 0xff5a1a : 0xffb030, transparent: true,
+        opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false });
+      const sp = new THREE.Sprite(mat), s0 = (big ? 0.07 : 0.045) * (0.6 + Math.random() * 0.8);
+      sp.position.copy(world); sp.scale.setScalar(s0); sp.renderOrder = 999; scene.add(sp);
+      const v = where === 'breech' ? right.clone().multiplyScalar(1.2 + Math.random() * 1.4)
+                                   : fwd.clone().multiplyScalar(1.5 + Math.random() * 2.6).addScaledVector(right, (Math.random() - 0.5) * 1.8);
+      v.add(new THREE.Vector3((Math.random() - 0.5) * 0.8, 0.8 + Math.random() * 1.5, (Math.random() - 0.5) * 0.8));
+      _legendEmbers.push({ sp, mat, v, life: 0, max: 0.55 + Math.random() * 0.55, s0 });
+    }
+    while (_legendEmbers.length > 160) { const o = _legendEmbers.shift(); scene.remove(o.sp); o.mat.dispose(); }
+  } catch (e) {}
+}
+function _updateLegendEmbers(dt) {
+  for (let i = _legendEmbers.length - 1; i >= 0; i--) {
+    const p = _legendEmbers[i]; p.life += dt;
+    const t = p.life / p.max;
+    if (t >= 1) { scene.remove(p.sp); p.mat.dispose(); _legendEmbers.splice(i, 1); continue; }
+    p.v.y -= 3.2 * dt;
+    p.sp.position.addScaledVector(p.v, dt);
+    p.mat.opacity = Math.pow(1 - t, 1.5);
+    p.sp.scale.setScalar(p.s0 * (1 - 0.6 * t));
+  }
+}
 function buildLegendPistol() { return _legendize(buildPistol(),    { top: 3, side: 2, fires: 2, scale: 0.8, fireScale: 0.8 }); }
 function buildLegendSG8() {
   const g = _legendize(buildSG8(), { top: 5, side: 3, bottom: 2, fires: 3 });
@@ -25817,6 +25898,7 @@ let _fovPunch = 0;   // degrees of momentary FOV widening per shot: the camera b
 function kickWeaponVisual(w, pellets = 1) {
   { const mm = weaponModels[currentWeaponIdx]; if (mm && mm._mech) mm._mech.kick = 1; }   // bolt / slide cycles
   { const mm = weaponModels[currentWeaponIdx]; if (mm && mm._spinOnFire && !isADS) mm._spinFx = { t0: performance.now(), dur: mm._spinOnFire }; }   // legend SG8 flip
+  { const mm = weaponModels[currentWeaponIdx]; if (mm && mm._onFire) { try { mm._onFire(); } catch (e) {} } }   // legend AK embers + heat
   // perfectAccuracy (SR-X): skip camera shake AND the viewmodel wobble. This
   // matters more than the weapon's own spread/recoil fields being zero —
   // addFireShake() below nudges euler.x/y (the actual camera aim) BEFORE
@@ -26857,6 +26939,22 @@ function _eqMakeProps(model, type, ctr, box, targets) {
     sc.userData.from = sc.position.clone(); sc.userData.len = len;
     model.add(sc); out.push(sc);
   }
+  if (type === 'ashform') {                    // FFA Legend AK: a cloud of grey ash that gathers into the rifle
+    const ash = new THREE.Group(); ash.position.copy(ctr);
+    const geo = new THREE.PlaneGeometry(0.0052, 0.0052);
+    const mats = [0xb4b4bc, 0x8a8a92, 0x5e5e66, 0xd4d4dc].map(c => new THREE.MeshBasicMaterial({ color: c, side: THREE.DoubleSide, transparent: true, opacity: 1 }));
+    const len = Math.max(0.1, box.max.z - box.min.z), hh = Math.max(0.05, box.max.y - box.min.y), ww = Math.max(0.04, box.max.x - box.min.x);
+    const flakes = [];
+    for (let i = 0; i < 90; i++) {
+      const m = new THREE.Mesh(geo, mats[i % 4]);
+      m.userData.fl = { tx: (Math.random() - 0.5) * ww, ty: (Math.random() - 0.5) * hh, tz: (Math.random() - 0.5) * len,
+        a0: Math.random() * 6.283, r0: 0.05 + Math.random() * 0.12, h0: (Math.random() - 0.5) * len * 1.4,
+        sp: 0.6 + Math.random() * 0.9, rise: 0.05 + Math.random() * 0.12, rot: [Math.random() * 6, Math.random() * 6, Math.random() * 6] };
+      ash.add(m); flakes.push(m);
+    }
+    ash.userData.ashform = { flakes };
+    model.add(ash); out.push(ash);
+  }
   if (type === 'foldout') {                    // FFA Legend SG8: the glowing sheet the net is laid out on
     const len = box.max.z - box.min.z;
     const sheet = new THREE.Group(); sheet.position.set(ctr.x, ctr.y, ctr.z - 0.085);
@@ -27023,6 +27121,11 @@ function _eqStepProps(e, t) {
     lm.obsidian.emissive.setHex(0xff3a10);
     lm.obsidian.emissiveIntensity = 2.2 * Math.pow(1 - t, 1.5) + Math.sin(t * 60) * 0.05;
   }
+  if (lm && e.type === 'ashform') {                 // ash grey while it forms, then the heat catches
+    const heat = _eqClamp((t - 0.62) / 0.2);
+    lm.obsidian.emissive.setHex(0x77777f).lerp(new THREE.Color(0xff3314), heat);
+    lm.obsidian.emissiveIntensity = 1.0 + (t > 0.7 ? 2.6 * Math.pow(1 - _eqClamp((t - 0.7) / 0.3), 1.4) : 0);
+  }
   if (lm && e.type === 'foldout') {
     const hold = t < 0.8 ? 1.5 + 0.5 * Math.sin(t * 44) : 0;
     const flare = t > 0.72 ? 3.4 * Math.pow(1 - _eqClamp((t - 0.72) / 0.28), 1.6) : 0;
@@ -27042,6 +27145,17 @@ function _eqStepProps(e, t) {
         f.rotation.x = k * 1.4;
       }
       o.visible = k < 1;
+    }
+    if (o.userData.ashform) {                    // the ash swirls in, settles into the gun's shape, and the rest blows away
+      const conv = _eqEase(_eqClamp(t / 0.62)), out = _eqClamp((t - 0.6) / 0.4);
+      for (const f of o.userData.ashform.flakes) {
+        const L = f.userData.fl, r = L.r0 * (1 - conv) + 0.006, a = L.a0 + t * 8 * L.sp * (1 - conv * 0.6);
+        f.position.set(L.tx * conv + Math.cos(a) * r, L.ty * conv + Math.sin(a) * r + out * out * L.rise, L.tz * conv + L.h0 * (1 - conv));
+        f.rotation.set(L.rot[0] + t * 6, L.rot[1] + t * 4, L.rot[2]);
+        f.scale.setScalar(Math.max(0.001, 1 - out * out * 0.9));
+        f.material.opacity = 1 - out;
+      }
+      o.visible = out < 1;
     }
     if (o.userData.foldsheet) {                  // the sheet appears, glows, and folds away as the gun closes up
       const F = o.userData.foldsheet;
@@ -27580,6 +27694,15 @@ function _equipStep(e, t) {
         c.position.copy(h.p).sub(e.ctr).applyQuaternion(q).add(e.ctr);
         c.position.y += arc * 0.12;
         c.quaternion.copy(q).multiply(h.q); c.scale.copy(h.s);
+        break; }
+      case 'ashform': {
+        // FFA Legend AK: there is only drifting ash at first. Each piece forms out of it,
+        // coming together from a little way off and turning into place.
+        const k = _eqEase(_eqClamp((t - 0.16 - p.delay * 0.44) / 0.26));
+        c.visible = k > 0.001;
+        c.position.copy(h.p).addScaledVector(p.dir, (1 - k) * 0.05);
+        c.quaternion.copy(h.q).multiply(new THREE.Quaternion().setFromAxisAngle(p.spin, (1 - k) * 1.2));
+        c.scale.copy(h.s).multiplyScalar(Math.max(0.001, k));
         break; }
       case 'foldout': {
         // FFA Legend SG8: every piece starts laid out flat on a glowing sheet (side-on, three
@@ -32779,7 +32902,7 @@ const MODEL_SKINS = [
   // 🔥 FFA Legend: the real weapon, cursed -- obsidian, spikes, black and red fire.
   { id: 'ak20_legend', weapon: 'ak20', name: 'FFA Legend AK', rarity: 'legend',
     sw: ['#17121a', '#ff2a1a'], build: buildLegendAK, look: { projectile: 'hellfire', bulletColor: 0xff2a1a },
-    blurb: 'Obsidian, spiked, and burning black and red. The FFA crown, as a rifle.' },
+    blurb: 'Not held: lit. It forms out of ash, glows hotter the faster you fire, sprays embers every shot and flares every tenth. The magazine turns to ash, and a burning one takes its place.' },
   { id: 'pistol_legend', weapon: 'pistol', name: 'FFA Legend Pistol', rarity: 'legend',
     sw: ['#17121a', '#ff2a1a'], build: buildLegendPistol, look: { projectile: 'hellfire', bulletColor: 0xff2a1a },
     blurb: 'A sidearm that has been to hell and came back for more.' },
@@ -36324,11 +36447,13 @@ const SKIN_FX = {
   // Each has its own entrance and its own reload -- no two alike, and none of
   // them a magazine.
   ak20_legend: { sound: _fxS('hellfire', .26, .09, 0, 0, { base:'auto_blast', action:'water_rifle', tail:.30 }),
-    equip: 'eruption', equipMs: 1000, equipSfx: ['fireup', 'cock'],
-    // a wave of red light bursts through it, stock to muzzle
+    equip: 'ashform', equipMs: 1500, equipSfx: ['brush', 'fireup'], equipBeats: [[.25,'rustle'],[.62,'ignite']],
+    // the magazine dissolves to ash; a lit one is fitted, and a wave of red light bursts through it, stock to muzzle
     reload: Object.assign(_fxR([K(.10,{py:.05,rx:.18,rz:-.30,hy:.02}), K(.30,{py:.07,rx:.22,rz:-.42,hy:.04}),
       K(.62,{py:.07,rx:.22,rz:-.44,hy:.04}), K(.76,{py:.03,rx:.32,rz:-.10}), K(.90,{py:.01,rx:.04})],
-      null, [[.15,'ignite'],[.70,'fireup']]), { fx: 'wave' }) },
+      [Object.assign(RP(.30,'mag',null,1,'mag'), { dust: true }), RP(.30,'ash',null,5,'mag'),
+       RP(.56,'mag','arrive',1,'mag'), RP(.56,'soul','arrive',1,'mag')],
+      [[.15,'ignite'],[.70,'fireup']]), { fx: 'wave' }) },
   pistol_legend: { sound: _fxS('hellfire', .34, .12, 0, 0, { base:'pistol', action:'slide', tail:.25 }),
     equip: 'cube', equipMs: 1000, equipSfx: ['ignite', 'snapin'], equipBeats: [[.30,'click'],[.38,'click'],[.46,'click']],
     // the old soul crumbles to ash; a burning one is stuffed into the grip
@@ -36493,7 +36618,7 @@ function updateReloadAnim() {
     model._propFired |= (1 << i);
     if (evs[i].k === 'mag' && evs[i].m === 'arrive' && model._mech && model._mech.mag) continue;   // the gun's own magazine slides in instead
     for (let n = 0; n < evs[i].n; n++) {
-      try { spawnReloadProp(model, evs[i].k, evs[i].m, evs[i].w); } catch (e) {}
+      try { spawnReloadProp(model, evs[i].dust ? 'ash' : evs[i].k, evs[i].m, evs[i].w); } catch (e) {}
     }
   }
 
@@ -37493,6 +37618,7 @@ function rocketExplode(pos, weaponId, excludePid, opts = {}) {
 function updateBullets(dt) {
   const now = Date.now();
   _updateDonutPuffs(dt);
+  _updateLegendEmbers(dt);
   for (let i = localBullets.length-1; i>=0; i--) {
     const b = localBullets[i];
     const removeBullet = () => {
