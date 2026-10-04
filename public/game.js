@@ -36093,6 +36093,12 @@ function resetDeathPose(mesh) {
 
 function syncBotMesh(bot, opts = {}) {
   if (!bot) return null;
+  if (opts.resetPose) {
+    bot.yVel = 0;
+    bot._airCarryX = 0; bot._airCarryZ = 0; bot._airCarryUntil = 0;
+    bot._slideUntil = 0; bot._rootUntil = 0;
+    bot.y = (typeof botGroundYAt === 'function') ? botGroundYAt(bot.x || 0, bot.z || 0, 0, 1.05, 2.2) : 0;
+  }
   const mesh = remoteMeshes[bot.id];
   if (!mesh) return null;
   const y = Number.isFinite(bot.y) ? bot.y : 0;
