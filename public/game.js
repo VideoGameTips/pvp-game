@@ -4431,7 +4431,7 @@ function playReloadSound(w, durMs, plan) {
 
   // ── Everything the reload actually does, in the order it does it ──────────
   const fx = _skinFxFor(id);
-  const skinReload = fx && fx.reload;
+  const skinReload = (plan && plan.skin) ? plan : (fx && fx.reload);
   const evs = (skinReload && skinReload.props) || (plan && plan.props) || RELOAD_PROPS[id] || [];
   let sawMagOut = false, sawAnything = false;
   for (const e of evs) {
@@ -32819,6 +32819,63 @@ function _shellReloadPlan(id, mag, n) {
   return { frac: total, keys, props, loadAt };
 }
 
+// A shell gun's skin that brings its own reload used to play that reload whole,
+// with however many insertions its author drew (four leaves, five souls...),
+// squeezed into the shortened time of "one shell missing". Seven of eight shells
+// still in the tube meant the five-insertion routine at five times the speed.
+// This cuts the skin's own routine at its repeating beat instead: the lead-in,
+// then exactly as many insertions as are missing (the drawn ones cycled if more
+// are needed), then the finish. A skin with no repeating beat (a comb swapped,
+// a handful of salt poured) is one motion, so it is shortened but not repeated.
+function _skinShellPlan(r, id, mag, n) {
+  if (!r || !r.keys) return null;
+  const props = r.props || [], beats = r.beats || [];
+  const groups = {};
+  props.forEach(p => { if (p.m === 'arrive' && p.n === 1) (groups[p.k] = groups[p.k] || []).push(p.t); });
+  let arr = null;
+  for (const k in groups) if (groups[k].length >= 2 && (!arr || groups[k].length > arr.length)) arr = groups[k];
+  const sp = SHELL_RELOAD[id] || { lead: .1, tail: .15 };
+  if (!arr) {
+    const last = props.reduce((m, p) => p.m === 'arrive' ? Math.max(m, p.t) : m, 0.5);
+    const frac = Math.min(1, 0.5 + 0.5 * n / mag);
+    const loadAt = []; for (let k = 0; k < n; k++) loadAt.push(Math.min(0.97, last + k * 0.012));
+    return { frac, keys: r.keys, props, beats, finish: r.finish, loadAt, skin: true };
+  }
+  arr = arr.slice().sort((a, b) => a - b);
+  const N = arr.length, per0 = (arr[N - 1] - arr[0]) / (N - 1);
+  const A = arr[0] - per0, B = arr[N - 1];
+  const perU = (1 - sp.lead - sp.tail) / mag;
+  const totalU = A + n * perU + (1 - B), fullU = A + mag * perU + (1 - B);
+  const T = u => Math.min(0.9999, u / totalU);
+  const win = j => [j > 0 ? arr[j - 1] : arr[0] - per0, arr[j]];   // one insertion: from the last arrival to this one
+  const keys = [], outProps = [], outBeats = [], loadAt = [];
+  const inWin = (t, lo, hi) => t > lo + 1e-6 && t <= hi + 1e-6;
+  r.keys.forEach(k => { if (k.t <= A + 1e-6) keys.push(K(T(k.t), k)); });
+  props.forEach(p => { if (p.t <= A + 1e-6) outProps.push(Object.assign({}, p, { t: T(p.t) })); });
+  beats.forEach(b => { if (b.t <= A + 1e-6) outBeats.push({ t: T(b.t), s: b.s }); });
+  for (let k = 0; k < n; k++) {
+    const [lo, hi] = win(k % N), start = A + k * perU, sc = perU / (hi - lo);
+    const map = t => start + (t - lo) * sc;
+    r.keys.forEach(q => { if (inWin(q.t, lo, hi)) keys.push(K(T(map(q.t)), q)); });
+    props.forEach(p => { if (inWin(p.t, lo, hi)) outProps.push(Object.assign({}, p, { t: T(map(p.t)) })); });
+    beats.forEach(b => { if (inWin(b.t, lo, hi)) outBeats.push({ t: T(map(b.t)), s: b.s }); });
+    loadAt.push(T(start + perU));
+  }
+  const shift = A + n * perU - B;
+  r.keys.forEach(k => { if (k.t > B + 1e-6) keys.push(K(T(k.t + shift), k)); });
+  props.forEach(p => { if (p.t > B + 1e-6) outProps.push(Object.assign({}, p, { t: T(p.t + shift) })); });
+  beats.forEach(b => { if (b.t > B + 1e-6) outBeats.push({ t: T(b.t + shift), s: b.s }); });
+  keys.sort((a, b) => a.t - b.t);
+  return { frac: totalU / fullU, keys, props: outProps, beats: outBeats, finish: r.finish, loadAt, skin: true };
+}
+// The plan for the gun that is actually in your hands: its skin's own routine if
+// it has one, otherwise the gun's.
+function _shellPlanFor(weapon, n) {
+  const fx = _skinFxFor(weapon.id);
+  return (fx && fx.reload && _skinShellPlan(fx.reload, weapon.id, weapon.mag, n))
+      || _shellReloadPlan(weapon.id, weapon.mag, n);
+}
+
 function cancelReload() {
   if (!reloading) return;
   _reloadToken++;                       // any timer still pending is now stale
@@ -32845,7 +32902,7 @@ function startReload() {
   const missing = Math.min(reloadWeapon.mag - pool.ammo, pool.reserve);
   // A shell gun's reload is as long as the shells it is short of, and its
   // animation, sound and ammo count all run off one plan built for that number.
-  const plan = shellStyle ? _shellReloadPlan(reloadWeapon.id, reloadWeapon.mag, missing) : null;
+  const plan = shellStyle ? _shellPlanFor(reloadWeapon, missing) : null;
   const dur = reloadWeapon.reloadTime * speed * (plan ? plan.frac : 1);
   // After dur, not before: the whole sequence is scheduled against the real
   // length of this reload, so adrenaline halving it moves every beat with it.
@@ -37823,7 +37880,7 @@ function updateReloadAnim() {
   if (!model) return;
   if (model._mech) {
     const wid = WEAPONS[currentWeaponIdx]?.id || '';
-    const fx0 = _skinFxFor(wid), evs0 = (fx0 && fx0.reload && fx0.reload.props) || (model._reloadPlan && model._reloadPlan.props) || RELOAD_PROPS[wid];
+    const fx0 = _skinFxFor(wid), evs0 = (model._reloadPlan && model._reloadPlan.skin && model._reloadPlan.props) || (fx0 && fx0.reload && fx0.reload.props) || (model._reloadPlan && model._reloadPlan.props) || RELOAD_PROPS[wid];
     const on = model._reloadStart && model._reloadDur && !model._inspectMode;
     updateGunMech(model, wid, on ? Math.min(1, (Date.now() - model._reloadStart) / model._reloadDur) : null, evs0, model._reloadDur || 1000);
   }
@@ -37866,7 +37923,7 @@ function updateReloadAnim() {
   // inspecting: you are looking at the gun, not emptying it onto the floor.
   if (model._propRun !== model._reloadStart) { model._propRun = model._reloadStart; model._propFired = 0; model._kick = null; }
   const fx = inspecting ? null : _skinFxFor(id);
-  const skinReload = fx && fx.reload;
+  const skinReload = (model._reloadPlan && model._reloadPlan.skin) ? model._reloadPlan : (fx && fx.reload);
   const plan = !skinReload && model._reloadPlan;
   const evs = inspecting ? null : ((skinReload && skinReload.props) || (plan && plan.props) || RELOAD_PROPS[id]);
   if (evs) for (let i = 0; i < evs.length && i < 30; i++) {
