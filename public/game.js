@@ -6181,6 +6181,10 @@ const waveDash = {
   slashPresses: [],
   trailTheme: localStorage.getItem('pvp_wave_trail') || 'comet',
   bossNextAt: 5200,
+  obstacleRunLeft: 0,
+  obstacleRunTypes: null,
+  obstacleRunName: '',
+  obstacleRunTheme: 'cyan',
 };
 
 const WAVE_TRAIL_THEMES = {
@@ -6190,6 +6194,20 @@ const WAVE_TRAIL_THEMES = {
   royal:  { name: 'Royal',  hues: [270, 302, 334], glow: '#d06cff' },
   void:   { name: 'Void',   hues: [210, 250, 325], glow: '#8aa8ff' },
 };
+
+const WAVE_OBSTACLE_THEMES = {
+  cyan:    { hues: [184, 204], bg: ['#080a14', '#101b32', '#090b12'], grid: 'rgba(102,247,255,0.12)' },
+  red:     { hues: [0, 10, 350], bg: ['#160506', '#321015', '#100508'], grid: 'rgba(255,70,70,0.15)' },
+  violet:  { hues: [274, 300], bg: ['#090716', '#211138', '#0c0714'], grid: 'rgba(210,112,255,0.14)' },
+  amber:   { hues: [32, 48], bg: ['#130b05', '#2e1b08', '#100804'], grid: 'rgba(255,184,80,0.14)' },
+  green:   { hues: [96, 132], bg: ['#06120a', '#102a17', '#071009'], grid: 'rgba(124,255,85,0.13)' },
+  whiteout:{ hues: [205, 225], bg: ['#11131a', '#262b36', '#0d0f15'], grid: 'rgba(220,235,255,0.18)' },
+  blackout:{ hues: [250, 286], bg: ['#020204', '#070711', '#010104'], grid: 'rgba(130,120,190,0.10)' },
+};
+
+function waveObstacleTheme(id) {
+  return WAVE_OBSTACLE_THEMES[id] || WAVE_OBSTACLE_THEMES.cyan;
+}
 
 function ensureWaveDashCanvas() {
   if (waveDash.canvas) return waveDash.canvas;
@@ -6349,6 +6367,10 @@ function resetWaveDash() {
   waveDash.extremeNoted = false;
   waveDash.slashPresses.length = 0;
   waveDash.bossNextAt = 5200;
+  waveDash.obstacleRunLeft = 0;
+  waveDash.obstacleRunTypes = null;
+  waveDash.obstacleRunName = '';
+  waveDash.obstacleRunTheme = 'cyan';
   for (let i = 0; i < 7; i++) spawnWaveDashObstacle();
 }
 
@@ -6374,6 +6396,64 @@ function stopWaveDash() {
   if (waveDash.trailMenu) waveDash.trailMenu.style.display = 'none';
 }
 
+function pickWaveObstacleRun(progress, demon, extreme) {
+  const base = [
+    { name: 'Spike Lanes', types: ['top_spike', 'bottom_spike'], theme: 'cyan', min: 6, max: 10, weight: 1.20 },
+    { name: 'Pinch Gates', types: ['dual_spike', 'diamond_spike'], theme: 'whiteout', min: 5, max: 8, weight: 1.00 },
+    { name: 'Rotors', types: ['spinner', 'laser_sweep'], theme: 'violet', min: 5, max: 8, weight: progress > 0.25 ? 0.95 : 0.35 },
+    { name: 'Turrets', types: ['shooter', 'laser_burst'], theme: 'amber', min: 4, max: 7, weight: progress > 0.34 ? 0.82 : 0.16 },
+    { name: 'Redline Swords', types: ['laser_sword', 'laser_zone'], theme: 'red', min: 4, max: 6, weight: progress > 0.45 ? 0.68 : 0.06 },
+    { name: 'Mine Drift', types: ['mine_field', 'diamond_spike'], theme: 'green', min: 4, max: 6, weight: progress > 0.55 ? 0.46 : 0.02 },
+    { name: 'Blackout Corridor', types: ['blackout', 'mine_field'], theme: 'blackout', min: 3, max: 5, weight: progress > 0.68 ? 0.14 : 0 },
+  ];
+  if (demon > 0.18 || extreme) {
+    base.push(
+      { name: 'Crushers', types: ['claw_chop', 'dino_jaws'], theme: 'green', min: 4, max: 6, weight: 0.40 + demon * 0.55 + extreme * 0.45 },
+      { name: 'Saw Line', types: ['saw_chain', 'spinner'], theme: 'red', min: 4, max: 6, weight: 0.34 + demon * 0.48 + extreme * 0.36 },
+      { name: 'Marksmen', types: ['sniper', 'dual_spike'], theme: 'amber', min: 3, max: 5, weight: 0.26 + demon * 0.36 + extreme * 0.30 },
+    );
+  }
+  if (extreme) {
+    base.push(
+      { name: 'Demon Swords', types: ['laser_sword', 'saw_chain'], theme: 'red', min: 3, max: 5, weight: 0.70 },
+      { name: 'Demon Fire', types: ['sniper', 'laser_burst'], theme: 'red', min: 3, max: 5, weight: 0.62 },
+      { name: 'Extreme Blackout', types: ['blackout', 'sniper'], theme: 'blackout', min: 3, max: 4, weight: 0.18 },
+    );
+  }
+  let total = 0;
+  for (const r of base) total += Math.max(0, r.weight);
+  let roll = Math.random() * Math.max(0.001, total);
+  let chosen = base[0];
+  for (const r of base) {
+    roll -= Math.max(0, r.weight);
+    if (roll <= 0) { chosen = r; break; }
+  }
+  const len = chosen.min + Math.floor(Math.random() * (chosen.max - chosen.min + 1));
+  waveDash.obstacleRunLeft = Math.max(2, Math.round(len * (extreme ? 0.82 : 1)));
+  waveDash.obstacleRunTypes = chosen.types.slice(0, 2);
+  waveDash.obstacleRunName = chosen.name;
+  waveDash.obstacleRunTheme = chosen.theme || 'cyan';
+}
+
+function chooseWaveDashObstacleType(progress, demon, extreme, bossDue) {
+  if (bossDue) return 'boss_eye';
+  if (progress < 0.16) {
+    if (!waveDash.obstacleRunLeft || !waveDash.obstacleRunTypes) {
+      waveDash.obstacleRunLeft = 7;
+      waveDash.obstacleRunTypes = ['top_spike', 'bottom_spike'];
+      waveDash.obstacleRunName = 'Spike Lanes';
+      waveDash.obstacleRunTheme = 'cyan';
+    }
+  } else if (!waveDash.obstacleRunLeft || !waveDash.obstacleRunTypes) {
+    pickWaveObstacleRun(progress, demon, extreme);
+  }
+  waveDash.obstacleRunLeft--;
+  const types = waveDash.obstacleRunTypes || ['top_spike', 'bottom_spike'];
+  if (types.length === 1) return types[0];
+  const alternate = waveDash.spawnIndex % 2;
+  return Math.random() < 0.72 ? types[alternate] : types[1 - alternate];
+}
+
 function spawnWaveDashObstacle() {
   const d = waveDashDifficulty();
   const travelTime = d.spacing / Math.max(1, d.speed);
@@ -6390,29 +6470,12 @@ function spawnWaveDashObstacle() {
   const diff = waveDashDifficulty();
   const demon = diff.demon;
   const extreme = diff.extreme;
-  const roll = Math.random();
   const bossDue = waveDash.dist >= waveDash.bossNextAt && waveDash.spawnIndex % (extreme ? 3 : 5) === 0;
   if (bossDue) waveDash.bossNextAt = waveDash.dist + (extreme ? 2500 : 6400) + Math.random() * (extreme ? 1700 : 3800);
-  const type = bossDue ? 'boss_eye'
-    : progress < 0.18
-    ? (roll < 0.42 ? 'top_spike' : roll < 0.84 ? 'bottom_spike' : 'dual_spike')
-    : extreme ? (roll < 0.10 ? 'boss_eye' : roll < 0.20 ? 'sniper' : roll < 0.30 ? 'laser_sword' : roll < 0.40 ? 'laser_zone' : roll < 0.50 ? 'laser_burst' : roll < 0.60 ? 'saw_chain' : roll < 0.70 ? 'claw_chop' : roll < 0.79 ? 'dino_jaws' : roll < 0.87 ? 'mine_field' : roll < 0.94 ? 'laser_sweep' : 'spinner')
-    : demon > 0.55 && roll > 0.86 ? (roll < 0.90 ? 'sniper' : roll < 0.94 ? 'claw_chop' : roll < 0.98 ? 'dino_jaws' : 'saw_chain')
-    : roll < 0.16 ? 'top_spike'
-    : roll < 0.32 ? 'bottom_spike'
-    : roll < 0.47 ? 'dual_spike'
-    : roll < 0.58 ? 'diamond_spike'
-    : roll < 0.67 ? 'spinner'
-    : roll < 0.75 ? 'laser_sweep'
-    : roll < 0.82 ? 'laser_burst'
-    : roll < 0.87 ? 'shooter'
-    : roll < 0.91 ? 'laser_sword'
-    : roll < 0.94 ? 'laser_zone'
-    : roll < 0.965 ? 'mine_field'
-    : roll < 0.98 ? 'claw_chop'
-    : roll < 0.985 ? 'dino_jaws'
-    : roll < 0.995 ? 'blackout'
-    : 'sniper';
+  const type = chooseWaveDashObstacleType(progress, demon, extreme, bossDue);
+  const themeId = bossDue ? 'violet' : (waveDash.obstacleRunTheme || 'cyan');
+  const theme = waveObstacleTheme(themeId);
+  const baseHue = theme.hues[Math.floor(Math.random() * theme.hues.length)];
   waveDash.obstacles.push({
     x: waveDash.nextX,
     w: d.width,
@@ -6431,7 +6494,8 @@ function spawnWaveDashObstacle() {
     bossBeam: null,
     bossTimer: 0,
     bossPattern: Math.floor(Math.random() * 3),
-    hue: 184 + Math.sin(waveDash.dist * 0.003) * 32,
+    theme: themeId,
+    hue: baseHue + (Math.random() - 0.5) * 16,
   });
   waveDash.nextX += d.spacing + Math.random() * 46;
 }
@@ -6646,18 +6710,31 @@ function updateWaveDashActiveHazards(dt) {
   }
 }
 
+function currentWaveObstacleTheme() {
+  let best = null;
+  let bestDist = Infinity;
+  for (const o of waveDash.obstacles) {
+    const center = o.x + o.w * 0.5;
+    if (center < waveDash.px - 120) continue;
+    const dist = Math.abs(center - waveDash.px);
+    if (dist < bestDist) { best = o; bestDist = dist; }
+  }
+  return waveObstacleTheme(best?.theme || waveDash.obstacleRunTheme || 'cyan');
+}
+
 function drawWaveDash() {
   const ctx = waveDash.ctx;
   const w = waveDash.w, h = waveDash.h;
   ctx.clearRect(0, 0, w, h);
+  const theme = currentWaveObstacleTheme();
   const g = ctx.createLinearGradient(0, 0, 0, h);
-  g.addColorStop(0, '#080a14');
-  g.addColorStop(0.52, '#111a30');
-  g.addColorStop(1, '#090b12');
+  g.addColorStop(0, theme.bg[0]);
+  g.addColorStop(0.52, theme.bg[1]);
+  g.addColorStop(1, theme.bg[2]);
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, w, h);
 
-  ctx.strokeStyle = 'rgba(102,247,255,0.12)';
+  ctx.strokeStyle = theme.grid;
   ctx.lineWidth = 1;
   const grid = 42;
   const off = -(waveDash.dist * 0.22) % grid;
@@ -19331,6 +19408,29 @@ function buildFartGun() {
   return g;
 }
 
+function buildBlaster() {
+  const g = new THREE.Group();
+  const red = new THREE.MeshPhongMaterial({ color: 0xd82a3a, shininess: 120, specular: 0xffffff });
+  const blue = new THREE.MeshPhongMaterial({ color: 0x2a75ff, shininess: 150, specular: 0xffffff });
+  const cream = new THREE.MeshPhongMaterial({ color: 0xf3ead8, shininess: 70, specular: 0xffffff });
+  const dark = new THREE.MeshPhongMaterial({ color: 0x20222a, shininess: 50, specular: 0x606070 });
+  const glow = new THREE.MeshBasicMaterial({ color: 0xff3344 });
+  gpCyl(g, cream, 0.032, 0.040, 0.110, 18, 0, 0.018, -0.028);
+  gpCyl(g, red, 0.026, 0.026, 0.136, 18, 0, 0.018, -0.118);
+  gpCyl(g, blue, 0.035, 0.024, 0.054, 18, 0, 0.018, -0.214);
+  gpCyl(g, glow, 0.010, 0.010, 0.010, 12, 0, 0.018, -0.246);
+  for (let i = 0; i < 4; i++) gpBox(g, blue, 0.010, 0.024, 0.030, (i - 1.5) * 0.012, 0.050, -0.100 - i * 0.022, 0, 0, (i - 1.5) * 0.15);
+  gpPlate(g, dark, [[0.044,-0.016],[0.074,-0.030],[0.078,-0.096],[0.050,-0.112],[0.026,-0.054],[0.026,-0.022]], 0.035, 0);
+  gpBox(g, red, 0.042, 0.014, 0.030, 0, -0.110, 0.030, 0.25);
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.019, 0.0035, 6, 12, Math.PI * 1.05), red);
+  guard.rotation.set(0, Math.PI / 2, -0.4); guard.position.set(0, -0.032, 0.010); g.add(guard);
+  gpBox(g, cream, 0.005, 0.016, 0.006, 0, -0.022, 0.010, 0.2);
+  const flash = new THREE.Mesh(new THREE.SphereGeometry(0.024, 8, 7), glow);
+  flash.visible = false; flash.position.set(0, 0.018, -0.250); g.add(flash);
+  g._flash = flash; g._kickZ = 0.012; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.1, -0.1, -0.22); return g;
+}
+
 // ── Shorty ────────────────────────────────────────────────────────────────
 function buildShorty() {
   // 🔫 Shorty: a pump shotgun cut to the legal minimum. Tube magazine under a
@@ -20067,6 +20167,104 @@ function buildContinuum() {
   flash.visible = false; flash.position.set(0, 0.012, -0.312); g.add(flash);
   g._flash = flash; g._kickZ = 0.006; g._greebled = true; g._handDetailed = true;
   g.position.set(0.1, -0.1, -0.22); return g;
+}
+
+function buildRayGun() {
+  const g = new THREE.Group();
+  const chrome = GUN_MATS.bright(), dark = GUN_MATS.inner();
+  const mint = new THREE.MeshPhongMaterial({ color: 0x34d6b4, shininess: 160, specular: 0xffffff });
+  const red = new THREE.MeshPhongMaterial({ color: 0xe23a3a, shininess: 130, specular: 0xffffff });
+  const glass = new THREE.MeshPhongMaterial({ color: 0xb8fff0, shininess: 220, specular: 0xffffff, transparent: true, opacity: 0.44 });
+  const glow = new THREE.MeshBasicMaterial({ color: 0x55ffdd });
+  gpCyl(g, chrome, 0.030, 0.036, 0.120, 18, 0, 0.012, -0.010);
+  gpCyl(g, glass, 0.026, 0.026, 0.105, 18, 0, 0.012, -0.010);
+  gpCyl(g, mint, 0.020, 0.032, 0.130, 18, 0, 0.012, -0.124);
+  for (let i = 0; i < 5; i++) {
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.029, 0.0032, 6, 18), i % 2 ? red : chrome);
+    ring.rotation.y = Math.PI / 2; ring.position.set(0, 0.012, -0.064 - i * 0.026); g.add(ring);
+  }
+  gpCyl(g, glow, 0.006, 0.006, 0.210, 10, 0, 0.012, -0.102);
+  gpCyl(g, red, 0.014, 0.014, 0.040, 12, 0, 0.012, -0.208);
+  gpCyl(g, glow, 0.007, 0.007, 0.008, 12, 0, 0.012, -0.232);
+  [1, -1].forEach(sd => gpBox(g, red, 0.010, 0.038, 0.075, sd * 0.030, 0.012, -0.112, 0, 0, sd * 0.45));
+  gpPlate(g, dark, [[0.060,-0.022],[0.090,-0.034],[0.094,-0.096],[0.064,-0.112],[0.042,-0.054],[0.040,-0.026]], 0.033, 0);
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.018, 0.0034, 6, 12, Math.PI * 1.05), mint);
+  guard.rotation.set(0, Math.PI / 2, -0.4); guard.position.set(0, -0.034, 0.038); g.add(guard);
+  gpBox(g, chrome, 0.005, 0.014, 0.005, 0, -0.026, 0.038, 0.2);
+  const flash = new THREE.Mesh(new THREE.SphereGeometry(0.022, 8, 7), glow);
+  flash.visible = false; flash.position.set(0, 0.012, -0.238); g.add(flash);
+  g._flash = flash; g._kickZ = 0.008; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.1, -0.1, -0.22); return g;
+}
+
+function buildSingularityShotgun() {
+  const g = buildSG8();
+  const black = new THREE.MeshPhongMaterial({ color: 0x050507, shininess: 240, specular: 0xffffff });
+  const white = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const voidM = new THREE.MeshBasicMaterial({ color: 0x000000 });
+  const flash = g._flash;
+  g.traverse(m => { if (m.isMesh && m !== flash && (!m.material || !m.material.transparent)) m.material = black; });
+  for (let i = 0; i < 4; i++) {
+    const z = -0.060 - i * 0.052;
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.028 + i * 0.002, 0.0025, 6, 30), white);
+    ring.rotation.y = Math.PI / 2; ring.position.set(0, 0.020, z); ring.userData.eqFx = true; g.add(ring);
+  }
+  const hole = new THREE.Mesh(new THREE.SphereGeometry(0.025, 14, 10), voidM);
+  hole.scale.set(1, 1, 0.35); hole.position.set(0, 0.020, -0.258); hole.userData.eqFx = true; g.add(hole);
+  const oldTick = g._tick;
+  g._tick = (dt, now, assembling) => {
+    if (oldTick) oldTick(dt, now, assembling);
+    if (assembling) return;
+    for (const c of g.children) if (c.userData?.eqFx) {
+      c.rotation.z += dt * 1.8;
+      c.scale.setScalar(1 + Math.sin(now * 4 + c.position.z * 20) * 0.035);
+    }
+  };
+  if (flash && flash.material) flash.material = white;
+  g._greebled = true; g._handDetailed = true;
+  return g;
+}
+
+function buildBubbleBlaster() {
+  const g = new THREE.Group();
+  const clear = new THREE.MeshPhongMaterial({ color: 0xc8f7ff, shininess: 220, specular: 0xffffff, transparent: true, opacity: 0.42 });
+  const blue = new THREE.MeshPhongMaterial({ color: 0x3aa8e8, shininess: 120, specular: 0xffffff });
+  const pink = new THREE.MeshPhongMaterial({ color: 0xff7ab8, shininess: 100, specular: 0xffffff });
+  const dark = GUN_MATS.inner(), glow = new THREE.MeshBasicMaterial({ color: 0x9ffcff });
+  gpBox(g, blue, 0.050, 0.052, 0.170, 0, 0.014, 0.010);
+  gpCyl(g, clear, 0.036, 0.036, 0.110, 18, 0, 0.050, -0.020, Math.PI / 2);
+  for (let i = 0; i < 6; i++) {
+    const b = new THREE.Mesh(new THREE.SphereGeometry(0.006 + i * 0.001, 8, 6), clear);
+    b.position.set((Math.random() - 0.5) * 0.040, 0.050 + (Math.random() - 0.5) * 0.034, -0.060 + i * 0.018); g.add(b);
+  }
+  gpCyl(g, pink, 0.018, 0.026, 0.105, 16, 0, 0.016, -0.122);
+  gpCyl(g, glow, 0.008, 0.008, 0.012, 12, 0, 0.016, -0.182);
+  gpBox(g, dark, 0.032, 0.076, 0.030, 0, -0.062, 0.050, 0.24);
+  gpBox(g, pink, 0.038, 0.010, 0.034, 0, -0.106, 0.058, 0.24);
+  const flash = new THREE.Mesh(new THREE.SphereGeometry(0.026, 8, 7), clear);
+  flash.visible = false; flash.position.set(0, 0.016, -0.188); g.add(flash);
+  g._flash = flash; g._kickZ = 0.010; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildRPGWaterBalloonLauncher() {
+  const g = new THREE.Group();
+  const plastic = new THREE.MeshPhongMaterial({ color: 0x2a9fd8, shininess: 100, specular: 0xc8f2ff });
+  const hose = new THREE.MeshPhongMaterial({ color: 0x2f8a3a, shininess: 45, specular: 0x7ac08a });
+  const dark = GUN_MATS.inner(), clear = new THREE.MeshPhongMaterial({ color: 0xaeeeff, shininess: 180, specular: 0xffffff, transparent: true, opacity: 0.45 });
+  const balloon = new THREE.MeshPhongMaterial({ color: 0x55bbff, shininess: 130, specular: 0xffffff });
+  gpCyl(g, plastic, 0.035, 0.035, 0.330, 18, 0, 0.010, -0.070);
+  gpCyl(g, dark, 0.025, 0.025, 0.018, 18, 0, 0.010, -0.246);
+  gpCyl(g, clear, 0.050, 0.050, 0.090, 18, 0, 0.048, 0.030, Math.PI / 2);
+  const bal = new THREE.Mesh(new THREE.SphereGeometry(0.036, 14, 10), balloon);
+  bal.scale.set(1.15, 0.86, 1.0); bal.position.set(0, 0.048, 0.030); g.add(bal);
+  gpCyl(g, hose, 0.009, 0.009, 0.180, 10, -0.030, -0.010, 0.010, Math.PI / 2, 0.35);
+  gpBox(g, hose, 0.020, 0.020, 0.020, -0.044, -0.050, 0.082);
+  gpPlate(g, dark, [[0.076,-0.020],[0.108,-0.034],[0.112,-0.100],[0.080,-0.116],[0.058,-0.056],[0.056,-0.026]], 0.040, 0);
+  const flash = new THREE.Mesh(new THREE.SphereGeometry(0.030, 8, 7), balloon);
+  flash.visible = false; flash.position.set(0, 0.010, -0.258); g.add(flash);
+  g._flash = flash; g._kickZ = 0.020; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
 }
 
 function buildStormBloom() {
@@ -25588,6 +25786,41 @@ function _buildBlob(tint, r) {
   g._spin = { x: 4, y: 6, z: 3 };
   return g;
 }
+function _buildBubbleShot(tint, r) {
+  const c = tint || 0x9ffcff;
+  r = Math.max(r, 0.055);
+  const P = _projCache('bubbleShot|' + c + '|' + r, () => ({
+    shell: new THREE.SphereGeometry(r * 1.3, 14, 10),
+    shellM: new THREE.MeshPhongMaterial({ color: c, shininess: 240, specular: 0xffffff, transparent: true, opacity: 0.38, depthWrite: false }),
+    rim: new THREE.TorusGeometry(r * 1.05, r * 0.055, 6, 22),
+    rimM: new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55, depthWrite: false }),
+    wake: new THREE.CylinderGeometry(r * 0.9, r * 0.05, r * 8, 8, 1, true),
+    wakeM: new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.24, blending: THREE.AdditiveBlending, depthWrite: false }),
+  }));
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(P.shell, P.shellM));
+  const rim = new THREE.Mesh(P.rim, P.rimM); rim.rotation.x = Math.PI / 2; g.add(rim);
+  const wake = new THREE.Mesh(P.wake, P.wakeM); wake.position.y = -r * 4.2; g.add(wake);
+  g._alignToDir = true; g._spin = { x: 1.2, y: 1.8, z: 2.4 };
+  return g;
+}
+function _buildWaterBalloonShot(tint, r) {
+  const c = tint || 0x55bbff;
+  r = Math.max(r, 0.12);
+  const P = _projCache('waterBalloonShot|' + c + '|' + r, () => ({
+    body: new THREE.SphereGeometry(r * 0.9, 12, 9),
+    bodyM: new THREE.MeshPhongMaterial({ color: c, shininess: 140, specular: 0xffffff, transparent: true, opacity: 0.78 }),
+    knot: new THREE.SphereGeometry(r * 0.22, 7, 5),
+    wake: new THREE.CylinderGeometry(r * 0.75, r * 0.10, r * 8, 8, 1, true),
+    wakeM: new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false }),
+  }));
+  const g = new THREE.Group();
+  const b = new THREE.Mesh(P.body, P.bodyM); b.scale.set(1.15, 0.88, 1.0); g.add(b);
+  const k = new THREE.Mesh(P.knot, P.bodyM); k.position.y = r * 0.8; g.add(k);
+  const w = new THREE.Mesh(P.wake, P.wakeM); w.position.y = -r * 4.0; g.add(w);
+  g._alignToDir = true; g._spin = { x: 2.8, y: 3.6, z: 1.7 };
+  return g;
+}
 function _buildFartCloud(tint, r) {
   const c = tint || 0x9ad84a;
   r = Math.max(r, 0.055);
@@ -26178,6 +26411,8 @@ function makeBulletMesh(color, size, weaponId, own) {
     case 'flame':   return _buildFlame(color, r);
     case 'ice':     return _buildIce(color, r);
     case 'blob':    return _buildBlob(color, r);
+    case 'bubble_shot': return _buildBubbleShot(color, r);
+    case 'water_balloon': return _buildWaterBalloonShot(color, r);
     case 'fart_cloud': return _buildFartCloud(color, r);
     case 'paintball': return _buildPaintball(color, r);
     case 'stone':   return _buildStone(color, r);
@@ -33276,9 +33511,15 @@ const MODEL_SKINS = [
   { id: 'pistol_fart_gun', weapon: 'pistol', name: 'Fart Gun', rarity: 'basic',
     sw: ['#4f7f24', '#9ad84a'], build: buildFartGun, look: { projectile: 'fart_cloud', bulletColor: 0x9ad84a },
     blurb: 'The pistol, regrettably, has gas operation now.' },
+  { id: 'pistol_blaster', weapon: 'pistol', name: 'Blaster', rarity: 'good',
+    sw: ['#d82a3a', '#2a75ff'], build: buildBlaster, look: { projectile: 'beam', bulletColor: 0xff3344 },
+    blurb: 'Toy space pistol shell, real pew-pew voice.' },
   { id: 'sg8_leaf_blower', weapon: 'sg8', name: 'Leaf Blower', rarity: 'good',
     sw: ['#e8631c', '#24262a'], build: buildLeafBlower,
     blurb: 'Corrugated tube, pull cord, a warning sticker nobody reads.' },
+  { id: 'sg8_singularity', weapon: 'sg8', name: 'Singularity Shotgun', rarity: 'rare',
+    sw: ['#050507', '#ffffff'], build: buildSingularityShotgun, look: { projectile: 'void', bulletColor: 0xffffff },
+    blurb: 'The pump shotgun collapses into a tiny black hole at the muzzle.' },
   { id: 'freeze_slushie', weapon: 'freeze_gun', name: 'Slushie Machine', rarity: 'good',
     sw: ['#3aa8e8', '#e03a5a'], build: buildSlushieMachine,
     blurb: 'Blue raspberry, turning in a clear hopper. Chrome tap.' },
@@ -33312,6 +33553,9 @@ const MODEL_SKINS = [
   { id: 'vector_label_maker', weapon: 'vector', name: 'Label Maker', rarity: 'good',
     sw: ['#2a5ab8', '#faf8f0'], build: buildLabelMaker,
     blurb: 'Tiny keyboard, tiny screen, a strip that says YOU.' },
+  { id: 'vector_bubble_blaster', weapon: 'vector', name: 'Bubble Blaster', rarity: 'good',
+    sw: ['#3aa8e8', '#ff7ab8'], build: buildBubbleBlaster, look: { projectile: 'bubble_shot', bulletColor: 0x9ffcff },
+    blurb: 'Fast bubbles from a clear tank. Absolutely unserious.' },
   { id: 'srx_telescope', weapon: 'srx', name: 'Telescope', rarity: 'rare',
     sw: ['#f2f2ee', '#1c2a4a'], build: buildTelescope,
     blurb: 'Refractor with a finder scope. Magnification: yes.' },
@@ -33339,6 +33583,9 @@ const MODEL_SKINS = [
   { id: 'rpg_carrot', weapon: 'rpg', name: 'Carrot Launcher', rarity: 'good',
     sw: ['#2f8a3a', '#f07a1a'], build: buildCarrotLauncher,
     blurb: 'Garden-hose tube, one giant carrot, leaves still on.' },
+  { id: 'rpg_water_balloon', weapon: 'rpg', name: 'Water Balloon Launcher', rarity: 'good',
+    sw: ['#2a9fd8', '#55bbff'], build: buildRPGWaterBalloonLauncher, look: { projectile: 'water_balloon', bulletColor: 0x55bbff },
+    blurb: 'A shoulder launcher with one very doomed water balloon loaded.' },
   { id: 'bazooka_tuba', weapon: 'bazooka', name: 'Tuba', rarity: 'rare',
     sw: ['#d8aa3a', '#9a7420'], build: buildTuba,
     blurb: 'The bazooka was named after a comedian\'s horn. This is it going home.' },
@@ -33637,6 +33884,9 @@ const MODEL_SKINS = [
   { id: 'portal_launcher_constellation', weapon: 'portal_launcher', name: 'Constellation Launcher', rarity: 'rare',
     sw: ['#1c1660', '#e8c050'], build: buildConstellationLauncher,
     blurb: 'Stars first, then the lines between them, then the launcher.' },
+  { id: 'continuum_ray_gun', weapon: 'continuum', name: 'Ray Gun', rarity: 'rare',
+    sw: ['#34d6b4', '#e23a3a'], build: buildRayGun, look: { projectile: 'beam', bulletColor: 0x55ffdd },
+    blurb: 'Chrome rings, glass time-cell, mint beam. It says ray gun on purpose.' },
   { id: 'burst_cannon_phantom', weapon: 'burst_cannon', name: 'Phantom Cannon', rarity: 'rare',
     sw: ['#6affc8', '#0a2a1c'], build: buildPhantomCannon,
     blurb: 'Fades up out of nothing. Breathes, and sheds wisps.' },
@@ -36940,6 +37190,12 @@ const SKIN_FX = {
   ak20_swarm_rifle:     { sound: _fxS('energy', .26, .10, 1400, 600) },
   pistol_spy:           { sound: _fxS('pfft', .26, .06, 900, 300) },
   pistol_fart_gun:      { sound: _fxS('fart', .46, .28, 96, 58) },
+  pistol_blaster:        { sound: _fxS('laser', .24, .08, 2600, 520),
+    reload: _fxR(_RK.under(), [RP(.30,'cell'), RP(.58,'cell','arrive')], [[.45,'beep']], 'beep'),
+    equip: 'neon', equipMs: 750, equipSfx: ['beep', 'hum'] },
+  sg8_singularity:       { sound: _fxS('cosmic', .58, .24, 180, 44),
+    reload: _fxR(RELOAD_KEYS.sg8, (RELOAD_PROPS.sg8 || []).map(e => e.k === 'shell' ? Object.assign({}, e, { k: 'soul' }) : e), [[.24,'singularity']], 'chime'),
+    equip: 'blackhole', equipMs: 1100, equipSfx: ['singularity', 'chime'] },
   ak20_ak47_wood:       { sound: _fxS('auto_blast', .27, .09, 0, 0, { action:'rifle', tail:.25 }) },
   burst_m4a1:           { sound: _fxS('auto_blast', .21, .07, 0, 0, { action:'water_smg', tail:.18 }) },
   flechette_bullpup:    { sound: _fxS('crack', .34, .10, 0, 0, { action:'rifle', tail:.40 }) },
@@ -36958,6 +37214,12 @@ const SKIN_FX = {
     reload: _fxR(_RK.under(), [RP(.30,'drum'), RP(.58,'drum','arrive')], null, 'click') },
   gl_water_balloon: { sound: _fxS('pop', .30, .16, 220, 90),
     reload: _fxR(_RK.top(), [.30,.36,.42,.48,.54,.60].map(t => RP(t,'balloon','arrive',1,'breech')), null, 'click') },
+  vector_bubble_blaster: { sound: _fxS('bubblegun', .20, .07, 420, 980),
+    reload: _fxR(RELOAD_KEYS.vector, [RP(.30,'refill'), RP(.54,'refill','arrive'), RP(.66,'bubble','eject',4,'muzzle')], [[.34,'glug']], 'bloop'),
+    equip: 'fill', equipMs: 900, equipSfx: ['pour', 'bloop'] },
+  rpg_water_balloon: { sound: _fxS('splash', .40, .18, 260, 120),
+    reload: _fxR(RELOAD_KEYS.rpg, [RP(.44,'balloon','arrive',1,'muzzle')], [[.30,'glug']], 'plop'),
+    equip: 'fill', equipMs: 850, equipSfx: ['pour', 'bloop'] },
   sg8_leaf_blower: { sound: _fxS('whirr', .30, .16, 180, 90),
     reload: _fxR(_RK.front(), [.32,.40,.48,.56].map(t => RP(t,'leaf','arrive',1,'muzzle')), [[.20,'whirr']]) },
   freeze_slushie: { sound: _fxS('squirt', .24, .14, 900, 500),
@@ -37350,6 +37612,9 @@ const SKIN_FX = {
     equip: 'neon', equipMs: 1000, equipSfx: ['neonbuzz', 'hum'] },
   portal_launcher_constellation: { sound: _fxS('cosmic', .26, .20, 2200, 180),
     equip: 'constellation', equipMs: 1200, equipSfx: ['starfall', 'chime'] },
+  continuum_ray_gun: { sound: _fxS('laser', .24, .08, 2400, 420),
+    reload: _fxR(RELOAD_KEYS.continuum, [RP(.30,'cell'), RP(.52,'cell','arrive')], [[.48,'beep']], 'chime'),
+    equip: 'warp', equipMs: 760, equipSfx: ['warp', 'beep'] },
   burst_cannon_phantom: { sound: _fxS('phantom', .34, .24, 330, 300),
     equip: 'haunt', equipMs: 1100, equipSfx: ['boo', null] },
   p90_neon_sign: { sound: _fxS('laser', .22, .07, 1800, 300),
