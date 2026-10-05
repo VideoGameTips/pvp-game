@@ -5192,6 +5192,9 @@ const obbyMapColliders        = MAP_COLLIDERS.obby;
 function _weatherOnActivate(name) { if (MAP_GROUPS[name]) weatherMapGroup(MAP_GROUPS[name]); }
 function activateMap(name) {
   for (const [n, g] of Object.entries(MAP_GROUPS)) g.visible = (n === name);
+  if (typeof dressThemeMap === 'function') { try { dressThemeMap(name); } catch (e) { console.warn('[theme]', name, e); } }
+  // The haze takes the colour of the sky it hangs under, so a dark map is not wrapped in pale blue.
+  if (scene.fog && scene.fog.color && MAP_GROUPS[name] && MAP_GROUPS[name]._skyColor != null) scene.fog.color.setHex(MAP_GROUPS[name]._skyColor);
   wallColliders.length = 0;
   if (MAP_COLLIDERS[name]) wallColliders.push(...MAP_COLLIDERS[name]);
   activeMapName = name;
@@ -10255,6 +10258,346 @@ function replaceBuiltMapsWithGridConcepts() {
   });
 }
 replaceBuiltMapsWithGridConcepts();
+
+// ═══ 🎨 MAP THEMES ═══════════════════════════════════════════════════════════
+// The grid-concept pass gave every map a layout, in white. This gives every map a place: its own palette (ground,
+// walls, cover, decks, trim, accent, sky), its own solid props placed in the open (cars, crates, trees, sandbags,
+// pyramids, ice...) and, the first time the map is played, a detail pass over every wall, block and deck -- base and
+// cap bands, pilasters, lit and dark windows, rails, stripes, and a motif per theme (vines, snow, neon edges,
+// cracks of lava, crenellations, string lights...). The recolour and the props happen at load, before the surface
+// pass that weathers the materials; the detail is built on first use as a handful of merged meshes (no colliders:
+// it is dressing, not geometry), so a map nobody plays costs nothing.
+//   [ground, grid, wall, wall2, cover, deck, trim, accent, sky, motif, props, lit-window]
+const _T = (g, gr, w, w2, c, d, t, a, sky, motif, props, wl) => ({ g, gr, w, w2, c, d, t, a, sky, motif, props: props || [], wl: wl ?? 0xffd98a });
+const MAP_THEMES = {
+  blank:        _T(0xb9bec2, 0x9aa0a6, 0xdfe3e6, 0xc9cfd4, 0xaab2b8, 0xe9edf0, 0xf2c14e, 0x4a90d9, 0xa5b6c4, 'industrial', ['crates', 'barrels']),
+  battlefield:  _T(0x5f7a45, 0x4f6a39, 0x7b705f, 0x6a6050, 0x6b5d49, 0x8a7d66, 0xc2a45a, 0xb23a2e, 0x9cc4e4, 'nature', ['sandbags', 'trees', 'crates']),
+  range:        _T(0x6b7076, 0x565b61, 0x8c929a, 0x777d85, 0x5a6068, 0x9aa0a8, 0xe8c43a, 0xd04a3a, 0x8a929c, 'industrial', ['crates', 'barrels']),
+  urban:        _T(0x4a4d52, 0x3d4044, 0x8a6f5d, 0x6f7b86, 0x5a5f66, 0x9a9a98, 0xd8c8a0, 0xd9822b, 0x8fa2b4, 'urban', ['cars', 'crates', 'barrels']),
+  warehouse:    _T(0x6d6a64, 0x57544f, 0x6f7d86, 0x8a6a46, 0x7a5a38, 0x8d8f91, 0xe8b932, 0xc8402a, 0x2f3338, 'industrial', ['crates', 'crates', 'barrels']),
+  forest:       _T(0x4d6b35, 0x3f5a2b, 0x6b5a45, 0x56693a, 0x6b6b5f, 0x8a7352, 0x9bb86a, 0xe0c24a, 0xa8d3e8, 'nature', ['trees', 'trees', 'rocks', 'logs']),
+  vietnam:      _T(0x5a6b3a, 0x4a5a2e, 0x7d6a45, 0x5a6a38, 0x6a5a3a, 0x8a7a54, 0xb8a05a, 0xc8402a, 0xb8c8a0, 'nature', ['trees', 'sandbags', 'crates']),
+  volcano:      _T(0x2a1f1c, 0x4a1f10, 0x3a2b26, 0x4a3028, 0x2f2522, 0x5a4036, 0xff7a2a, 0xff4a12, 0x3a1208, 'fire', ['rocks', 'rocks']),
+  cyber:        _T(0x10141f, 0x1a8aa8, 0x1b2338, 0x242b45, 0x2a3355, 0x1d2840, 0x00e5ff, 0xff2bd6, 0x0b0e1c, 'neon', ['crates', 'pylons'], 0x66f0ff),
+  desert:       _T(0xd2b27a, 0xbd9d64, 0xc9a46c, 0xb58a55, 0x9d7a4a, 0xdcc08a, 0xe8d3a0, 0x2f8f8a, 0xcfe3f2, 'desert', ['pyramids', 'crates', 'rocks']),
+  tundra:       _T(0xe8f0f5, 0xc4d4de, 0xb9ccd9, 0x9fb6c6, 0xc9d8e2, 0xdbe7ef, 0xffffff, 0x3a8fd0, 0xdde9f2, 'ice', ['iceblocks', 'rocks']),
+  space:        _T(0x14182a, 0x2a3a66, 0x2c3550, 0x3a4666, 0x4a5678, 0x232c48, 0x6ad5ff, 0xa56bff, 0x05060f, 'space', ['pods', 'crates'], 0x9ae6ff),
+  airport:      _T(0x6e7378, 0x5a5f64, 0xc4c9cf, 0xa6adb5, 0x888f97, 0xd0d4d8, 0xf2b01e, 0x2a6fc9, 0xa8cfee, 'industrial', ['crates', 'cars']),
+  trenches:     _T(0x6b5a3f, 0x57492f, 0x7a6a4a, 0x5f5238, 0x5a4a30, 0x8a7a58, 0xa89a6a, 0xb23a2e, 0x8a8f86, 'nature', ['sandbags', 'sandbags', 'crates']),
+  chernobyl:    _T(0x5a6054, 0x474d42, 0x8a8f86, 0x6f766a, 0x5a6252, 0x9a9f94, 0xc8d23a, 0x6fe03a, 0x8a9482, 'industrial', ['barrels', 'crates', 'rocks'], 0xb8ff7a),
+  refinery:     _T(0x4f4a42, 0x3d3933, 0x6a6a6a, 0x8a4a2f, 0x555049, 0x808080, 0xe2a21e, 0xd8452a, 0x7a8590, 'industrial', ['barrels', 'barrels', 'crates']),
+  skydock:      _T(0x5a6c7c, 0x485a6a, 0x7a8c9c, 0x5f7384, 0x4e6678, 0x93a5b4, 0xf0c24a, 0x2a9ad8, 0xb4d6f0, 'industrial', ['crates', 'pods']),
+  sewer:        _T(0x3e4a3c, 0x2f3a2e, 0x56604f, 0x44503f, 0x4a5442, 0x66705e, 0x8ab04a, 0x6fd06a, 0x1c241c, 'industrial', ['barrels', 'crates'], 0xb8e878),
+  gravity_lab:  _T(0xdde3ee, 0xaab4c8, 0xe9eef7, 0xc8d2e4, 0x8c9cc0, 0xf3f6fb, 0x6a7cff, 0x7a4aff, 0x2a3050, 'space', ['pods', 'pylons'], 0xcfd8ff),
+  glassworks:   _T(0xaec4c9, 0x8fa8ae, 0xcfe0e4, 0xa8c4cc, 0x88a8b0, 0xe2eef0, 0xffffff, 0x2ab8c8, 0xbfdfe8, 'ice', ['iceblocks', 'crates']),
+  carrier:      _T(0x5a6168, 0x474d53, 0x7a828a, 0x6a7078, 0x555c63, 0x8a9299, 0xf2c24a, 0xc8402a, 0x7fa6c9, 'industrial', ['crates', 'barrels']),
+  overgrowth:   _T(0x3f5a30, 0x314a24, 0x6a6f5a, 0x4f6a3a, 0x5a6f40, 0x7a7a5c, 0xa0c860, 0xf0a0c0, 0x9ccf9a, 'nature', ['trees', 'trees', 'rocks']),
+  orbital_station: _T(0x9aa4b0, 0x7c8794, 0xd0d6de, 0xaab4c0, 0x7a8696, 0xdfe4ea, 0xff8a3a, 0x2ab0ff, 0x05070d, 'space', ['pods', 'crates'], 0xbfe8ff),
+  foundry:      _T(0x3e3a36, 0x2d2a27, 0x5a4a40, 0x6a5a50, 0x4a3f38, 0x70645a, 0xff8a2a, 0xff5a12, 0x2a1a12, 'fire', ['barrels', 'crates']),
+  carnival:     _T(0xcdb08a, 0xb69a74, 0xd8483a, 0xf2c93a, 0x3a8fd0, 0xf5ead0, 0xffffff, 0xff4aa0, 0xf0b0d0, 'carnival', ['crates', 'cones']),
+  biosphere:    _T(0x7aa060, 0x628a4a, 0xc8e0d8, 0xa0c8b8, 0x6a8a5a, 0xe0eee8, 0xffffff, 0x4ac88a, 0xbfe8f0, 'nature', ['trees', 'rocks']),
+  lockdown:     _T(0x3a3d40, 0x2c2e30, 0x555a5e, 0x6a6f74, 0x4a4e52, 0x7a7f84, 0xe8c43a, 0xd03a2a, 0x1a1c20, 'industrial', ['crates', 'barrels']),
+  studio:       _T(0x2a2a30, 0x45454f, 0x3a3a46, 0x56485a, 0x6a5846, 0x4a4a56, 0xffd24a, 0xd0302a, 0x15151c, 'neon', ['crates', 'pylons'], 0xffe08a),
+  temple:       _T(0xc4b48a, 0xa89868, 0xb89a62, 0x9a8050, 0x8a7248, 0xd8c898, 0xe8c24a, 0x3a8a70, 0xb8d8c0, 'desert', ['pyramids', 'rocks']),
+  holiday:      _T(0xf4f8fa, 0xc8d8e0, 0xc4332e, 0x2f7a4a, 0xe8d8c0, 0xf8f0e0, 0xffd24a, 0xffffff, 0xb8c8d8, 'carnival', ['iceblocks', 'crates']),
+  labyrinth:    _T(0x6a6f66, 0x555a52, 0x7a7e72, 0x65695e, 0x595d52, 0x8a8e82, 0xa8b090, 0x6a9a5a, 0x8a9a8a, 'nature', ['rocks', 'trees']),
+  arena:        _T(0xc2a86a, 0xa88e52, 0x9a9a98, 0x7a7a78, 0x8a7048, 0xd0c090, 0xd8b048, 0xb02a2a, 0xa8c8e8, 'desert', ['pyramids', 'crates']),
+  opera:        _T(0x5a2a34, 0x44202a, 0x7a2e3c, 0x5a2a34, 0x3a2a30, 0x8a6a3a, 0xe8c050, 0xe8c050, 0x1a1015, 'urban', ['crates', 'pylons']),
+  doomsday:     _T(0x4a4036, 0x3a322a, 0x5a4a3a, 0x6a5a4a, 0x4a3e32, 0x6a5e50, 0xe8742a, 0xe03a1a, 0x4a2a1a, 'fire', ['rocks', 'barrels']),
+  train:        _T(0x5a5a56, 0x484844, 0x4a5a6a, 0x7a4a3a, 0x555a60, 0x7a7a76, 0xe8c43a, 0x2a7ac8, 0x9ab4c8, 'industrial', ['crates', 'barrels']),
+  dreamscape:   _T(0xb6a0d8, 0x9a84c4, 0xd8c4f0, 0xf0b8d8, 0x8ab8f0, 0xf0e0ff, 0xffffff, 0xff9ad0, 0xd0b8f0, 'neon', ['iceblocks', 'pylons'], 0xfff0ff),
+  pearl_harbor: _T(0x8a8a7a, 0x76766a, 0x7a8a96, 0x5a6a76, 0x6a6a5a, 0xa09a86, 0xd8c88a, 0xb02a2a, 0x9ac8e8, 'industrial', ['crates', 'barrels', 'sandbags']),
+  titanic:      _T(0x8a6a46, 0x745838, 0xc8b890, 0x3a3f4a, 0x6a5238, 0xd8c8a0, 0xe8c860, 0xa02a2a, 0x2a3a4a, 'urban', ['crates', 'barrels']),
+  supermarket:  _T(0xd8d4c8, 0xbab6aa, 0xe8e0c8, 0x7ac0a0, 0xc86a3a, 0xf0ece0, 0xffd24a, 0xd03a3a, 0xd8e4ec, 'urban', ['crates', 'cones']),
+  pyongyang:    _T(0x8a8a84, 0x74746e, 0xb04040, 0x8a9aa8, 0x7a7a74, 0xb8b8b0, 0xe8c850, 0xc02a2a, 0xa8b8c4, 'urban', ['cars', 'crates']),
+  traffic_cone_republic: _T(0x6a6a6e, 0x55555a, 0xe8782a, 0xf4f4f0, 0xe8782a, 0x9a9aa0, 0xffffff, 0xe8782a, 0xb8c8d8, 'carnival', ['cones', 'cones', 'cars']),
+  flying_moai:  _T(0x7a8a7a, 0x667666, 0x7a756a, 0x6a655a, 0x5a564c, 0x948e80, 0xb0a890, 0x3a9a8a, 0x9ad0e8, 'desert', ['rocks', 'pyramids']),
+  big_arena:    _T(0x6b7058, 0x575c46, 0x8a8f7a, 0x6f745e, 0x5f654f, 0x959a84, 0xe0b83a, 0xc8402a, 0xa0c0d8, 'industrial', ['crates', 'sandbags', 'cars']),
+  super_arena:  _T(0x58606a, 0x464d56, 0x7a848e, 0x5f6a75, 0x4a535c, 0x8a949e, 0x6ad0ff, 0xff6a3a, 0x8ab0d0, 'space', ['pods', 'crates', 'pylons']),
+  br_arena:     _T(0x5a7440, 0x4a6234, 0x8b7355, 0x6a5540, 0x6a6a5a, 0x9a8a68, 0xd8b84a, 0xc8402a, 0x88aacc, 'nature', ['trees', 'cars', 'crates', 'sandbags']),
+  // The Towers keep their own build: dressing only.
+  m4_tower:       Object.assign(_T(0x51585c, 0x3c4246, 0x454a50, 0x25282d, 0x5b635f, 0x747b80, 0xa98d55, 0xd8962a, 0x070809, 'neon', [], 0xffc870), { keep: true, tower: true }),
+  m4_tower_big:   Object.assign(_T(0x51585c, 0x3c4246, 0x454a50, 0x25282d, 0x5b635f, 0x747b80, 0xa98d55, 0xd8962a, 0x070809, 'neon', [], 0xffc870), { keep: true, tower: true }),
+  m4_tower_super: Object.assign(_T(0x51585c, 0x3c4246, 0x454a50, 0x25282d, 0x5b635f, 0x747b80, 0xa98d55, 0xd8962a, 0x070809, 'neon', [], 0xffc870), { keep: true, tower: true }),
+};
+const _thShade = (hex, f) => { const r = Math.min(255, ((hex >> 16) & 255) * f), g = Math.min(255, ((hex >> 8) & 255) * f), b = Math.min(255, (hex & 255) * f); return (Math.round(r) << 16) | (Math.round(g) << 8) | Math.round(b); };
+const _thMix = (a, b, f) => {
+  const ar = (a >> 16) & 255, ag = (a >> 8) & 255, ab = a & 255, br = (b >> 16) & 255, bg = (b >> 8) & 255, bb = b & 255;
+  return (Math.round(ar + (br - ar) * f) << 16) | (Math.round(ag + (bg - ag) * f) << 8) | Math.round(bb * f + ab * (1 - f));
+};
+function _thRng(name) {
+  let h = 2166136261; for (let i = 0; i < name.length; i++) { h ^= name.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return () => { h += 0x6D2B79F5; let t = h; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
+// What a box in a grid map is, from its size and where it sits.
+function _thClass(m) {
+  const g = m.geometry, p = g && g.parameters;
+  if (!g || g.type !== 'BoxGeometry' || !p) return null;
+  const w = p.width, h = p.height, d = p.depth, len = Math.max(w, d), y = m.position.y;
+  if (len >= 90 && h >= 3) return 'perimeter';
+  if (len >= 60 && h < 1.2 && y > 6) return 'roof';
+  if (h < 0.7 && y < 1) return 'floor';
+  if (h < 0.7) return 'deck';
+  if (h >= 5.5) return 'wall';
+  if (h < 0.06 || (w < 0.4 && d < 0.4)) return null;
+  return 'cover';
+}
+// 1) Colours: every concept box takes its theme's palette.
+function themeRecolorMap(name) {
+  const th = MAP_THEMES[name], group = MAP_GROUPS[name];
+  if (!th || !group) return;
+  const half = (MAP_BOUNDS[name] ? MAP_BOUNDS[name].halfX : 80);
+  for (const m of group.children.slice()) {
+    if (!m.isMesh && m.type !== 'GridHelper') continue;
+    // What each box is, noted NOW: the surface pass that follows rebuilds every geometry, and a rebuilt one
+    // no longer remembers its own dimensions.
+    if (m.isMesh && m.geometry && m.geometry.type === 'BoxGeometry' && m.geometry.parameters) {
+      const pp = m.geometry.parameters;
+      m.userData.thDims = { w: pp.width, h: pp.height, d: pp.depth };
+      m.userData.thCls = _thClass(m);
+    }
+    if (th.keep) continue;
+    if (m.type === 'GridHelper') {
+      group.remove(m);
+      const gr = new THREE.GridHelper(half * 2, half, th.gr, th.gr); gr.position.y = 0.012; group.add(gr);
+      continue;
+    }
+    const mat = m.material; if (!mat || !mat.color) continue;
+    const g = m.geometry, orig = mat.color.getHex();
+    if (g.type === 'PlaneGeometry') { mat.color.setHex(th.g); continue; }
+    if (orig === 0xffd76a || orig === 0xffcc33) { mat.color.setHex(th.t); continue; }
+    if (orig === 0xe9cfa6) { mat.color.setHex(_thShade(th.d, 0.92)); continue; }
+    if (orig === 0xf3e3c6) { mat.color.setHex(_thShade(th.d, 1.08)); continue; }
+    if (orig === 0xe9f2ff) { mat.color.setHex(0x3f76b8); continue; }
+    if (orig === 0xffeeee) { mat.color.setHex(0xb84a4a); continue; }
+    const cls = m.userData.thCls;
+    if (!cls) continue;
+    const alt = ((Math.round(m.position.x / 5) + Math.round(m.position.z / 5)) & 1) === 1;
+    if (cls === 'perimeter') mat.color.setHex(_thShade(th.w, 0.82));
+    else if (cls === 'wall') mat.color.setHex(alt ? th.w2 : th.w);
+    else if (cls === 'cover') mat.color.setHex(alt ? _thShade(th.c, 1.12) : th.c);
+    else if (cls === 'deck' || cls === 'floor') mat.color.setHex(_thShade(th.d, alt ? 0.94 : 1.0));
+    else if (cls === 'roof') mat.color.setHex(_thShade(th.w, 0.7));
+  }
+  if (th.sky != null) group._skyColor = th.sky;
+}
+// 2) Props: solid pieces in the open, from the theme's list, where there is room.
+const _TH_PROPS = {
+  crates:    { r: 4.2, parts: [[0, 1.1, 0, 2.2, 2.2, 2.2, 0, 'wood'], [0.2, 3.0, -0.1, 1.6, 1.6, 1.6, 0.4, 'wood2'], [3.0, 0.8, 1.0, 1.6, 1.6, 1.6, 0.2, 'wood']] },
+  barrels:   { r: 2.6, parts: [[0, 0.8, 0, 1.2, 1.6, 1.2, 0, 'drum'], [1.5, 0.8, 0.5, 1.2, 1.6, 1.2, 0.3, 'drum2'], [0.5, 0.8, 1.6, 1.2, 1.6, 1.2, 0, 'drum']] },
+  cars:      { r: 3.6, parts: [[0, 0.6, 0, 2.3, 1.2, 4.6, 0, 'a'], [0, 1.5, -0.2, 2.0, 0.9, 2.6, 0, 'dark']] },
+  sandbags:  { r: 3.2, parts: [[0, 0.65, 0, 5.6, 1.3, 1.4, 0, 'sand'], [0.4, 1.55, 0, 4.2, 0.8, 1.2, 0, 'sand2']] },
+  trees:     { r: 3.2, parts: [[0, 3.2, 0, 1.3, 6.4, 1.3, 0, 'bark'], [0, 7.4, 0, 4.8, 3.0, 4.8, 0, 'leaf'], [0, 9.3, 0, 3.0, 1.8, 3.0, 0, 'leaf2']] },
+  rocks:     { r: 3.2, parts: [[0, 1.2, 0, 3.6, 2.4, 3.0, 0.4, 'rock'], [2.4, 0.8, 1.0, 2.0, 1.6, 2.2, 0.9, 'rock2']] },
+  logs:      { r: 3.8, parts: [[0, 0.6, 0, 6.4, 1.2, 1.2, 0, 'bark'], [0.4, 1.6, 0.2, 5.0, 0.9, 1.1, 0.1, 'bark']] },
+  pyramids:  { r: 4.6, parts: [[0, 0.5, 0, 7, 1, 7, 0, 'stone'], [0, 1.5, 0, 5, 1, 5, 0, 'stone'], [0, 2.5, 0, 3, 1, 3, 0, 'stone2']] },
+  iceblocks: { r: 3.4, parts: [[0, 2.0, 0, 3.2, 4.0, 3.0, 0.3, 'ice'], [2.4, 1.2, 1.2, 2.2, 2.4, 2.0, 0.8, 'ice2']] },
+  pods:      { r: 3.8, parts: [[0, 1.3, 0, 2.6, 2.6, 4.8, 0, 'pod'], [0, 2.9, 0, 1.2, 0.6, 2.0, 0, 'glass']] },
+  pylons:    { r: 1.8, parts: [[0, 3.0, 0, 1.4, 6.0, 1.4, 0, 'pylon'], [0, 6.3, 0, 2.2, 0.6, 2.2, 0, 'a']] },
+  cones:     { r: 2.6, parts: [[0, 1.0, 0, 1.5, 2.0, 1.5, 0, 'orange'], [2.0, 1.0, 0.6, 1.5, 2.0, 1.5, 0, 'orange'], [0.6, 1.0, 2.0, 1.5, 2.0, 1.5, 0, 'orange']] },
+};
+function _thPropColor(key, th) {
+  switch (key) {
+    case 'wood': return 0x8a6a3a; case 'wood2': return 0x7a5a30; case 'drum': return _thShade(th.a, 0.8); case 'drum2': return 0x5a5f66;
+    case 'a': return th.a; case 'dark': return _thShade(th.w2, 0.5); case 'sand': return 0xb9a57a; case 'sand2': return 0xa89464;
+    case 'bark': return 0x5a4430; case 'leaf': return _thMix(0x4a7a3a, th.g, 0.25); case 'leaf2': return _thMix(0x3a6a2c, th.g, 0.2);
+    case 'rock': return 0x7a7a74; case 'rock2': return 0x6a6a64; case 'stone': return _thShade(th.w, 0.95); case 'stone2': return _thShade(th.w, 1.12);
+    case 'ice': return 0xcfe6f4; case 'ice2': return 0xb4d4e8; case 'pod': return th.w2; case 'glass': return 0x6ad5ff; case 'pylon': return th.c; case 'orange': return 0xe8782a;
+  }
+  return th.c;
+}
+function themePlaceProps(name) {
+  const th = MAP_THEMES[name], group = MAP_GROUPS[name];
+  if (!th || th.keep || !th.props.length || !group) return;
+  const rnd = _thRng(name + ':props'), b = MAP_BOUNDS[name] || { halfX: 80, halfZ: 80 };
+  const half = b.halfX - 6, rx = half - 36, rz = half - 8;
+  if (rx < 10) return;
+  const count = Math.round(10 + (b.halfX - 50) / 10);
+  let placed = 0;
+  for (let i = 0; i < count * 3 && placed < count; i++) {
+    const kind = th.props[Math.floor(rnd() * th.props.length)], spec = _TH_PROPS[kind];
+    if (!spec) continue;
+    const x = (rnd() * 2 - 1) * rx, z = (rnd() * 2 - 1) * rz, rot = (Math.floor(rnd() * 4)) * Math.PI / 2 + (rnd() < 0.3 ? 0.35 : 0);
+    const r = spec.r + 1.4;
+    if (!_gridSpotFree(name, { minX: x - r, maxX: x + r, minZ: z - r, maxZ: z + r })) continue;
+    const cs = Math.cos(rot), sn = Math.sin(rot);
+    for (const [dx, dy, dz, w, h, d, ry, key] of spec.parts) {
+      addMapBox(name, x + dx * cs + dz * sn, dy, z - dx * sn + dz * cs, w, h, d, _thPropColor(key, th), rot + ry);
+    }
+    placed++;
+  }
+}
+// 3) Detail, built the first time a map is played.
+const _TH_FACES = [
+  [[1, 0, 0], [[.5, -.5, .5], [.5, -.5, -.5], [.5, .5, -.5], [.5, .5, .5]]],
+  [[-1, 0, 0], [[-.5, -.5, -.5], [-.5, -.5, .5], [-.5, .5, .5], [-.5, .5, -.5]]],
+  [[0, 1, 0], [[-.5, .5, .5], [.5, .5, .5], [.5, .5, -.5], [-.5, .5, -.5]]],
+  [[0, -1, 0], [[-.5, -.5, -.5], [.5, -.5, -.5], [.5, -.5, .5], [-.5, -.5, .5]]],
+  [[0, 0, 1], [[-.5, -.5, .5], [.5, -.5, .5], [.5, .5, .5], [-.5, .5, .5]]],
+  [[0, 0, -1], [[.5, -.5, -.5], [-.5, -.5, -.5], [-.5, .5, -.5], [.5, .5, -.5]]],
+];
+const _TH_WORLD = { position: { x: 0, y: 0, z: 0 }, rotation: { y: 0 } };
+function _thBuf() { return { p: [], n: [], c: [], boxes: 0 }; }
+function _thBox(buf, host, lx, ly, lz, sx, sy, sz, hex) {
+  const cs = Math.cos(host.rotation.y), sn = Math.sin(host.rotation.y);
+  const r = ((hex >> 16) & 255) / 255, g = ((hex >> 8) & 255) / 255, bl = (hex & 255) / 255;
+  const hx = host.position.x, hy = host.position.y, hz = host.position.z;
+  const tx = (x, z) => x * cs + z * sn, tz = (x, z) => -x * sn + z * cs;
+  buf.boxes++;
+  for (const [nrm, quad] of _TH_FACES) {
+    const nx = tx(nrm[0], nrm[2]), nz = tz(nrm[0], nrm[2]), ny = nrm[1];
+    const V = quad.map(([cx, cy, cz]) => {
+      const px = cx * sx + lx, py = cy * sy + ly, pz = cz * sz + lz;
+      return [hx + tx(px, pz), hy + py, hz + tz(px, pz)];
+    });
+    for (const i of [0, 1, 2, 0, 2, 3]) { buf.p.push(V[i][0], V[i][1], V[i][2]); buf.n.push(nx, ny, nz); buf.c.push(r, g, bl); }
+  }
+}
+function _thMesh(group, buf, glow) {
+  if (!buf.p.length) return;
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(buf.p, 3));
+  geo.setAttribute('normal', new THREE.Float32BufferAttribute(buf.n, 3));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(buf.c, 3));
+  const mat = glow ? new THREE.MeshBasicMaterial({ vertexColors: true })
+                   : new THREE.MeshPhongMaterial({ vertexColors: true, flatShading: true, shininess: 14, specular: 0x2e3033 });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.userData.themeDecor = true; mesh.castShadow = false;
+  group.add(mesh);
+}
+function _thDecorBox(S, G, m, cls, th, rnd) {
+  const p = m.userData.thDims, w = p.w, h = p.h, d = p.d;
+  const alongX = w >= d, len = alongX ? w : d, thick = alongX ? d : w;
+  // A box addressed along its own length: u runs along the long axis, v across it.
+  const at = (u, y, v, su, sy, sv, hex, glow) => {
+    const lx = alongX ? u : v, lz = alongX ? v : u, sx = alongX ? su : sv, sz = alongX ? sv : su;
+    _thBox(glow ? G : S, m, lx, y, lz, sx, sy, sz, hex);
+  };
+  const wallCol = m.material.color.getHex(), dark = _thShade(wallCol, 0.55), light = _thShade(wallCol, 1.18);
+  const motif = th.motif;
+  if (cls === 'wall' || cls === 'perimeter') {
+    const big = cls === 'perimeter';
+    at(0, -h / 2 + 0.3, 0, len + 0.12, 0.6, thick + 0.12, dark);                       // base band
+    at(0, h / 2 + 0.15, 0, len + 0.3, 0.3, thick + 0.3, big ? _thShade(th.t, 0.85) : th.t);   // cap
+    if (big) at(0, h * 0.08, 0, len + 0.08, 0.45, thick + 0.08, th.a);                 // accent stripe
+    const pil = Math.min(big ? 14 : 8, Math.floor(len / (big ? 12 : 6)));
+    for (let i = 1; i <= pil; i++) {
+      const u = -len / 2 + len * i / (pil + 1);
+      at(u, 0, 0, big ? 1.6 : 0.8, h - 0.7, thick + (big ? 0.7 : 0.24), _thShade(wallCol, 0.86));
+    }
+    if (len >= 8 && !big) {                                                              // windows, both long faces
+      const rows = h >= 9 ? [0.36, 0.68] : [0.62], cols = Math.min(9, Math.floor(len / 3.2));
+      for (const f of [-1, 1]) for (const rr of rows) for (let i = 0; i < cols; i++) {
+        const u = -len / 2 + len * (i + 0.5) / cols, lit = rnd() < 0.34;
+        at(u, -h / 2 + h * rr, f * (thick / 2 + 0.04), 1.4, 1.15, 0.1, lit ? th.wl : 0x1c232b, lit);
+      }
+    }
+    if (big) {                                                                           // lamps along the top
+      const n = Math.floor(len / 11);
+      for (let i = 0; i <= n; i++) at(-len / 2 + 5 + i * (len - 10) / Math.max(1, n), h / 2 + 0.8, 0, 0.8, 0.7, 0.8, th.wl, true);
+    }
+    // theme motifs
+    if (motif === 'industrial' && len >= 8) {
+      const n = Math.floor(len / 9);
+      for (let i = 0; i < n; i++) at(-len / 2 + 4 + i * (len - 8) / Math.max(1, n - 1 || 1), h / 2 + 0.9, (rnd() - 0.5) * thick * 0.5, 1.6, 1.0, 1.4, 0x5a5f66);
+      at(0, h / 2 + 0.6, thick * 0.3, len * 0.8, 0.32, 0.32, 0xb0452a);
+    } else if (motif === 'nature') {
+      const n = Math.min(10, Math.floor(len / 3));
+      for (let i = 0; i < n; i++) {
+        const u = -len / 2 + len * (i + 0.5) / n, f = rnd() < 0.5 ? -1 : 1, vh = h * (0.25 + rnd() * 0.4);
+        at(u, h / 2 - vh / 2, f * (thick / 2 + 0.07), 0.3, vh, 0.14, _thMix(0x3f7a30, th.g, 0.2));
+        at(u + (rnd() - 0.5) * len / n, h / 2 + 0.45, (rnd() - 0.5) * thick * 0.6, 1.1 + rnd() * 1.4, 0.9 + rnd() * 0.8, 1.1 + rnd(), _thMix(0x4a8a38, th.g, 0.2));
+      }
+    } else if (motif === 'ice') {
+      at(0, h / 2 + 0.45, 0, len + 0.5, 0.7, thick + 0.5, 0xffffff);
+      const n = Math.min(10, Math.floor(len / 2.4));
+      for (let i = 0; i < n; i++) for (const f of [-1, 1]) at(-len / 2 + len * (i + 0.5) / n, h / 2 - 0.5, f * (thick / 2 + 0.25), 0.28, 0.9 + rnd() * 0.9, 0.28, 0xcfe9f7);
+    } else if (motif === 'neon') {
+      for (const su of [-1, 1]) for (const sv of [-1, 1]) at(su * len / 2, 0, sv * thick / 2, 0.16, h - 0.3, 0.16, th.t, true);
+      for (const f of [-1, 1]) at(0, -h / 2 + h * 0.22, f * (thick / 2 + 0.05), len * 0.92, 0.12, 0.1, th.a, true);
+    } else if (motif === 'desert') {
+      at(0, -h / 2 + h * 0.2, 0, len + 0.1, 0.5, thick + 0.1, _thShade(th.w2, 0.9));
+      at(0, -h / 2 + h * 0.8, 0, len + 0.1, 0.5, thick + 0.1, _thShade(th.w2, 0.9));
+      const n = Math.floor(len / 2.4);
+      for (let i = 0; i < n; i++) if (i % 2 === 0) at(-len / 2 + 1.2 + i * 2.4, h / 2 + 0.7, 0, 1.2, 0.8, thick + 0.2, light);
+    } else if (motif === 'fire') {
+      at(0, -h / 2 + 0.7, 0, len + 0.1, 0.3, thick + 0.1, th.a, true);
+      const n = Math.min(12, Math.floor(len / 2.2));
+      for (let i = 0; i < n; i++) {
+        const f = rnd() < 0.5 ? -1 : 1, ch = 0.7 + rnd() * 2.0;
+        at(-len / 2 + len * (i + 0.5) / n, -h / 2 + 1.2 + rnd() * (h - 3), f * (thick / 2 + 0.05), 0.16, ch, 0.08, th.t, true);
+      }
+    } else if (motif === 'space') {
+      const n = Math.min(12, Math.floor(len / 2.6));
+      for (let i = 0; i < n; i++) for (const f of [-1, 1]) at(-len / 2 + len * (i + 0.5) / n, -h / 2 + h * 0.5, f * (thick / 2 + 0.04), 0.5, 0.5, 0.08, rnd() < 0.5 ? th.t : th.a, true);
+      if (len < 40) { at(0, h / 2 + 1.5, 0, 0.14, 2.6, 0.14, 0x8a929c); at(0, h / 2 + 2.9, 0, 0.4, 0.3, 0.4, 0xff4a3a, true); }
+    } else if (motif === 'urban' && len >= 8) {
+      const n = Math.floor(len / 10);
+      for (let i = 0; i < n; i++) at(-len / 2 + 4 + i * (len - 8) / Math.max(1, n - 1 || 1), h / 2 + 0.8, (rnd() - 0.5) * thick * 0.4, 1.8, 1.0, 1.4, 0x7a7f84);
+      at(0, -h / 2 + h * 0.3, 0, len + 0.14, 0.18, thick + 0.14, th.a);
+    } else if (motif === 'carnival') {
+      const n = Math.min(22, Math.floor(len / 1.6));
+      for (let i = 0; i < n; i += 2) at(-len / 2 + len * (i + 0.5) / n, 0, 0, len / n, h - 0.5, thick + 0.1, th.w2);
+      const bulbs = Math.min(16, Math.floor(len / 2));
+      for (let i = 0; i < bulbs; i++) at(-len / 2 + len * (i + 0.5) / bulbs, h / 2 - 0.4, thick / 2 + 0.15, 0.3, 0.3, 0.3, i % 2 ? th.a : th.wl, true);
+    }
+  } else if (cls === 'cover') {
+    at(0, h / 2 + 0.12, 0, len + 0.1, 0.24, thick + 0.1, th.t);
+    at(0, -h / 2 + h * 0.34, 0, len + 0.06, Math.min(0.5, h * 0.18), thick + 0.06, th.a);
+    if (motif === 'industrial' || motif === 'urban') at(0, h / 2 + 0.5, 0, len * 0.5, 0.5, thick * 0.4, 0x5a5f66);
+    else if (motif === 'nature') at((rnd() - 0.5) * len * 0.4, h / 2 + 0.55, 0, 1.2, 0.9, 1.2, _thMix(0x4a8a38, th.g, 0.2));
+    else if (motif === 'ice') at(0, h / 2 + 0.3, 0, len + 0.3, 0.5, thick + 0.3, 0xffffff);
+    else if (motif === 'neon' || motif === 'space') at(0, h / 2 + 0.28, 0, len * 0.8, 0.06, thick * 0.3, th.t, true);
+    else if (motif === 'fire') at(0, h / 2 + 0.26, 0, len * 0.8, 0.08, thick * 0.4, th.a, true);
+  } else if (cls === 'deck') {
+    for (const f of [-1, 1]) at(0, -h / 2 - 0.05, f * (thick / 2 - 0.5), len * 0.92, 0.08, 0.3, th.t, true);   // lit strips under the edges
+    for (const f of [-1, 1]) at(0, h / 2 + 0.55, f * (thick / 2 - 0.08), len, 0.1, 0.1, th.t);   // rails
+    for (const f of [-1, 1]) at(0, h / 2 + 0.2, f * (thick / 2 - 0.08), len, 0.1, 0.1, th.t);
+    for (const f of [-1, 1]) at(f * (len / 2 - 0.08), h / 2 + 0.4, 0, 0.1, 0.8, thick, _thShade(th.t, 0.8));
+    const n = Math.floor(len / 3);
+    for (let i = 0; i <= n; i++) for (const f of [-1, 1]) at(-len / 2 + i * len / Math.max(1, n), h / 2 + 0.4, f * (thick / 2 - 0.08), 0.12, 0.8, 0.12, _thShade(th.t, 0.8));
+  } else if (cls === 'roof') {
+    const n = Math.floor(len / 8);
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+      const u = -len / 2 + len * (i + 0.5) / n, v = -len / 2 + len * (j + 0.5) / n;
+      at(u, -h / 2 - 0.04, v, 3.2, 0.06, 1.1, th.wl, true);
+    }
+  }
+}
+function _thFloorDecals(S, G, name, th) {
+  const b = MAP_BOUNDS[name] || { halfX: 80 }, half = b.halfX - 6;
+  const sq = Math.min(30, half * 0.36);
+  for (const [u, v, w, d] of [[0, -sq, sq * 2, 0.5], [0, sq, sq * 2, 0.5], [-sq, 0, 0.5, sq * 2], [sq, 0, 0.5, sq * 2]]) _thBox(S, _TH_WORLD, u, 0.035, v, w, 0.04, d, _thShade(th.t, 0.85));
+  for (let t = -half + 6; t < half - 6; t += 7) {
+    if (Math.abs(t) < sq + 2) continue;
+    _thBox(S, _TH_WORLD, t, 0.03, 0, 3, 0.04, 0.28, _thShade(th.t, 0.7));
+    _thBox(S, _TH_WORLD, 0, 0.03, t, 0.28, 0.04, 3, _thShade(th.t, 0.7));
+  }
+  _thBox(G, _TH_WORLD, -half + 10, 0.05, 0, 7, 0.05, 24, 0x5aa0ff);
+  _thBox(G, _TH_WORLD, half - 10, 0.05, 0, 7, 0.05, 24, 0xff6a6a);
+}
+function dressThemeMap(name) {
+  const group = MAP_GROUPS[name], th = MAP_THEMES[name];
+  if (!group || !th || group._themeDressed) return;
+  group._themeDressed = true;
+  const S = _thBuf(), G = _thBuf(), rnd = _thRng(name + ':dress');
+  const hosts = group.children.filter(m => m.isMesh && !m.userData.themeDecor && m.visible !== false && m.userData.thCls);
+  for (const m of hosts) {
+    const cls = m.userData.thCls;
+    if (cls === 'floor') continue;
+    if (S.boxes + G.boxes > 9000) break;
+    _thDecorBox(S, G, m, cls, th, rnd);
+  }
+  if (!th.keep) _thFloorDecals(S, G, name, th);
+  _thMesh(group, S, false); _thMesh(group, G, true);
+}
+function initMapThemes() {
+  for (const name of Object.keys(MAP_THEMES)) {
+    if (!MAP_GROUPS[name]) continue;
+    try { themeRecolorMap(name); themePlaceProps(name); } catch (e) { console.warn('[theme]', name, e); }
+  }
+}
+initMapThemes();
 
 // Keep every map in the same readable, low-poly arena language. Individual
 // builders keep their theme; this pass fixes the common problems: missing
