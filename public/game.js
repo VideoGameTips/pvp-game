@@ -1870,7 +1870,7 @@ const BLAST_RADIUS  = 7.5;   // m — how far an explosion can still shove you
 // 66.5, which still throws a centre hit ~29 m across the map (horizontal reach
 // is power / ln(1/BLAST_DECAY) ≈ power / 2.3) but keeps the arc readable.
 // Rocket jumping is the ride, not a hop.
-const BLAST_POWER   = 40;    // impulse at the very centre of the blast (was 66.5, then 49.9; now 60% of the original)
+const BLAST_POWER   = 49.9;  // impulse at the very centre of the blast: 75% of the original 66.5
 const SLIDE_BLAST_BOOST = 1.5;  // a blast you slide into drives you on, faster
 // 🌊 Blast surf: the slide trick above, for ANY fast movement. Ordinary walking is
 // ~7.3 m/s (SPEED x DEFAULT_MOVE_MULT), so 9 only trips on a slide, dash, adrenaline,
@@ -1911,8 +1911,8 @@ function boostBlastCarryOnAirJump() {
 // orbit is not. Vertical is capped so the arc is something you can learn and
 // aim, and the horizontal is left generous, because crossing a gap is the
 // interesting trick.
-const BLAST_MAX_UP    = 14.5; // m/s -> about 4.3 m apex (was 24 / 12 m; 60% of the original speed)
-const BLAST_MAX_HORIZ = 27.5; // m/s (was 46; 60%)
+const BLAST_MAX_UP    = 18;   // m/s -> about 6.6 m apex (was 24 / 12 m originally; 75%)
+const BLAST_MAX_HORIZ = 34.5; // m/s (was 46 originally; 75%)
 const BLAST_UP_BIAS   = 0.32; // minimum upward share; lower than it was, so a
                               // blast beside you shoves you sideways, not up
 
