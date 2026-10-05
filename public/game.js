@@ -17451,6 +17451,237 @@ function _buildLegendArrow(tint, r) {
   return g;
 }
 
+
+// ═══ Seven things that are not really guns ═══════════════════════════════════
+// Each has its own model, its own report, and its own reload.
+
+// 🔮 Storm Bloom -> Plasma Globe. The filaments crawl; a lit cell goes in under the glass.
+function buildPlasmaGlobe() {
+  const g = new THREE.Group();
+  const brass = _skM(0xb8903a, 190, 0xfff0b0), dark = _skM(0x2a2230, 80, 0x8a7aa0);
+  const glass = new THREE.MeshPhongMaterial({ color: 0xcfd8ff, shininess: 220, specular: 0xffffff, transparent: true, opacity: 0.20, depthWrite: false });
+  const core = new THREE.MeshBasicMaterial({ color: 0xf6e8ff });
+  const fil = new THREE.MeshBasicMaterial({ color: 0xc080ff, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false });
+  gpCyl(g, brass, 0.022, 0.028, 0.150, 16, 0, 0, -0.005);                // stem
+  gpCyl(g, dark, 0.034, 0.034, 0.030, 16, 0, 0, 0.078);                  // back cap
+  gpCyl(g, brass, 0.040, 0.030, 0.014, 16, 0, 0, -0.080);                // collar under the glass
+  const GZ = -0.150;
+  const fx = new THREE.Group(); fx.position.set(0, 0, GZ);
+  const bolts = [];
+  for (let i = 0; i < 8; i++) {
+    const arm = new THREE.Group();
+    const b = new THREE.Mesh(new THREE.BoxGeometry(0.0038, 0.0038, 0.050), fil); b.position.z = -0.026; arm.add(b);
+    const kink = new THREE.Mesh(new THREE.BoxGeometry(0.0034, 0.0034, 0.016), fil); kink.position.set(0.006, 0, -0.058); kink.rotation.y = 0.5; arm.add(kink);
+    arm.rotation.set(Math.random() * 6.28, Math.random() * 6.28, 0); fx.add(arm); bolts.push(arm);
+  }
+  gpPart(g, 'main', () => {                                              // the globe, which lifts off for the reload
+    const ball = new THREE.Mesh(new THREE.SphereGeometry(0.066, 20, 14), glass); ball.position.set(0, 0, GZ); ball.renderOrder = 5; g.add(ball);
+    const c = new THREE.Mesh(new THREE.SphereGeometry(0.012, 10, 8), core); c.position.set(0, 0, GZ); g.add(c);
+    g.add(fx);
+  }, { x: 0, y: 0, z: GZ });
+  _skGrip(g, dark, 0.002);
+  g._tick = (dt, now) => {
+    const k = Math.floor(now * 22);
+    if (k !== g._plk) { g._plk = k; bolts.forEach(a => a.rotation.set(Math.random() * 6.28, Math.random() * 6.28, 0)); }
+    fil.opacity = 0.65 + 0.3 * Math.sin(now * 31);
+  };
+  return _skFinish(g, GZ - 0.075, 0, 0.012);
+}
+
+// ❄️ Cyroclasm -> Snow Globe. A village in a bubble; reload turns it upside down and shakes it.
+function buildSnowGlobe() {
+  const g = new THREE.Group();
+  const wood = _skM(0x6a4220, 100, 0xd8b080), brass = _skM(0xc8a040, 190, 0xfff0b0), white = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const glass = new THREE.MeshPhongMaterial({ color: 0xdff0ff, shininess: 220, specular: 0xffffff, transparent: true, opacity: 0.22, depthWrite: false });
+  gpCyl(g, wood, 0.034, 0.042, 0.080, 18, 0, 0, 0.040);                  // the plinth, lying along the gun
+  gpCyl(g, brass, 0.044, 0.044, 0.008, 18, 0, 0, -0.006);                // brass ring
+  gpCyl(g, wood, 0.046, 0.046, 0.016, 18, 0, 0, -0.016);
+  const GZ = -0.112, R = 0.068;
+  const ball = new THREE.Mesh(new THREE.SphereGeometry(R, 22, 16), glass); ball.position.set(0, 0, GZ); ball.renderOrder = 5; g.add(ball);
+  // Inside: a house, two pines on a white hill.
+  const hill = new THREE.Mesh(new THREE.SphereGeometry(0.040, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), _skM(0xf4f6fa, 30, 0xffffff));
+  hill.rotation.x = Math.PI / 2; hill.position.set(0, 0, GZ + 0.030); g.add(hill);
+  gpBox(g, _skM(0xc86a4a), 0.022, 0.018, 0.018, 0.000, 0.0, GZ + 0.012);
+  gpBox(g, _skM(0x5a3a2a), 0.026, 0.006, 0.022, 0.000, 0.0, GZ + 0.002);
+  [[-0.020, 0.012], [0.018, 0.016]].forEach(([x, y], i) => {
+    const t = new THREE.Mesh(new THREE.ConeGeometry(0.009, 0.030, 6), _skM(0x2f6a3a)); t.rotation.x = -Math.PI / 2;
+    t.position.set(x, y, GZ + 0.010 + i * 0.004); g.add(t);
+  });
+  const flakes = [];
+  for (let i = 0; i < 22; i++) {
+    const f = new THREE.Mesh(new THREE.BoxGeometry(0.0034, 0.0034, 0.0034), white);
+    f.userData.fl = { a: Math.random() * 6.28, r: 0.012 + Math.random() * 0.040, z: Math.random(), sp: 0.25 + Math.random() * 0.4 };
+    g.add(f); flakes.push(f);
+  }
+  _skGrip(g, wood, 0.002);
+  g._tick = (dt, now) => {
+    const fast = g._reloadStart ? 7 : 1;                                 // shaken: a blizzard
+    for (const f of flakes) {
+      const L = f.userData.fl;
+      L.z -= dt * L.sp * 0.22 * fast; if (L.z < 0) L.z += 1;
+      L.a += dt * (0.6 + fast * 1.4) * L.sp;
+      const h = L.z * 0.9 - 0.45;                                        // -0.45 .. 0.45 of the ball's radius, falling
+      const rr = Math.min(L.r, Math.sqrt(Math.max(0.0001, 1 - h * h * 1.2)) * R * 0.85);
+      f.position.set(Math.cos(L.a) * rr, h * R + 0.0, GZ + Math.sin(L.a) * rr * 0.9);
+    }
+  };
+  return _skFinish(g, GZ - 0.085, 0, 0.014);
+}
+
+// 🧊 P90 -> Rubik's Cube. Nine of the cubies are the top layer, and it really turns.
+function buildRubiksCube() {
+  const g = new THREE.Group();
+  const black = _skM(0x111214, 60, 0x555a66), dark = _skM(0x23252a, 70, 0x667088);
+  const cols = { px: 0xd8281e, nx: 0xf27a12, py: 0xf4f4f0, ny: 0xf2d21a, pz: 0x1f9a3a, nz: 0x1f5fcf };
+  const U = 0.034, CZ = -0.062;
+  const cubie = (ix, iy, iz) => {
+    const x = ix * U, y = iy * U, z = CZ + iz * U;
+    gpBox(g, black, 0.0335, 0.0335, 0.0335, x, y, z);
+    const st = (c, w, h, d, ox, oy, oz) => gpBox(g, _skM(c, 120, 0xffffff), w, h, d, x + ox, y + oy, z + oz);
+    if (ix === 1)  st(cols.px, 0.0016, 0.027, 0.027, 0.0170, 0, 0);
+    if (ix === -1) st(cols.nx, 0.0016, 0.027, 0.027, -0.0170, 0, 0);
+    if (iy === 1)  st(cols.py, 0.027, 0.0016, 0.027, 0, 0.0170, 0);
+    if (iy === -1) st(cols.ny, 0.027, 0.0016, 0.027, 0, -0.0170, 0);
+    if (iz === 1)  st(cols.pz, 0.027, 0.027, 0.0016, 0, 0, 0.0170);
+    if (iz === -1) st(cols.nz, 0.027, 0.027, 0.0016, 0, 0, -0.0170);
+  };
+  for (let ix = -1; ix <= 1; ix++) for (let iz = -1; iz <= 1; iz++) for (let iy = -1; iy <= 0; iy++) cubie(ix, iy, iz);
+  gpPart(g, 'main', () => { for (let ix = -1; ix <= 1; ix++) for (let iz = -1; iz <= 1; iz++) cubie(ix, 1, iz); }, { x: 0, y: U, z: CZ });
+  gpCyl(g, black, 0.0075, 0.0075, 0.008, 10, 0, 0.0, CZ - 0.058);        // the muzzle, in the middle of the front face
+  gpBox(g, dark, 0.036, 0.032, 0.056, 0, -0.012, 0.012);                 // the handle block behind it
+  _skGrip(g, dark, -0.010);
+  return _skFinish(g, CZ - 0.078, 0, 0.010);
+}
+
+// 🎼 Railgun -> Tuning Fork. It hums all the time; a shot sets it ringing.
+function buildTuningFork() {
+  const g = new THREE.Group();
+  const steel = _skM(0xc4ccd6, 200, 0xffffff), dark = _skM(0x23262c, 60, 0x667080);
+  const glow = new THREE.MeshBasicMaterial({ color: 0x66e8ff, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false });
+  gpCyl(g, steel, 0.0085, 0.0085, 0.110, 12, 0, 0, 0.055);               // the handle
+  const bend = new THREE.Mesh(new THREE.TorusGeometry(0.0225, 0.0085, 8, 18, Math.PI), steel);
+  bend.rotation.set(0, 0, Math.PI); bend.rotation.y = Math.PI / 2; bend.position.set(0, 0, -0.004); bend.rotation.order = 'ZYX';
+  g.add(bend);
+  const prongs = [];
+  [-1, 1].forEach(sd => {
+    const p = new THREE.Mesh(new THREE.BoxGeometry(0.0150, 0.0185, 0.300), steel); p.position.set(sd * 0.0225, 0, -0.155); g.add(p);
+    const gl = new THREE.Mesh(new THREE.BoxGeometry(0.0020, 0.0100, 0.280), glow); gl.position.set(sd * 0.0225 - sd * 0.0078, 0, -0.158); g.add(gl);
+    prongs.push({ p, gl, sd });
+  });
+  gpCyl(g, dark, 0.014, 0.014, 0.060, 12, 0, 0, 0.100);                  // rubber grip sleeve
+  _skGrip(g, dark, 0.008);
+  g._ring = 0;
+  g._onFire = () => { g._ring = 1; };
+  g._tick = (dt, now) => {
+    g._ring = Math.max(0, g._ring - dt * 0.9);
+    const amp = 0.0006 + g._ring * 0.0030;
+    for (const q of prongs) {
+      const x = q.sd * (0.0225 + Math.sin(now * 95) * amp);
+      q.p.position.x = x; q.gl.position.x = x - q.sd * 0.0078;
+      q.gl.material.opacity = 0.30 + 0.25 * Math.sin(now * 3) + g._ring * 0.45;
+    }
+  };
+  return _skFinish(g, -0.322, 0, 0.016);
+}
+
+// 🔫 Desert Eagle -> Gilded Flintlock. Powder, a ball, the ramrod -- and the hammer is cocked last.
+function buildFlintlock() {
+  const g = new THREE.Group();
+  const wood = _skM(0x5a3418, 110, 0xd0a070), gold = _skM(0xd8aa3a, 200, 0xfff0b0), iron = _skM(0x3a3d44, 150, 0xaab0bc), dark = _skM(0x1e1a18, 60, 0x665a50);
+  gpCyl(g, iron, 0.0125, 0.0115, 0.320, 8, 0, 0.012, -0.170);            // the long barrel
+  [-0.06, -0.14, -0.22, -0.30].forEach(z => gpCyl(g, gold, 0.0150, 0.0150, 0.010, 8, 0, 0.012, z - 0.002));
+  gpCyl(g, gold, 0.0175, 0.0125, 0.020, 8, 0, 0.012, -0.332);            // the muzzle flare
+  gpBox(g, wood, 0.026, 0.024, 0.250, 0, -0.006, -0.088);                // the fore stock
+  gpCyl(g, gold, 0.0035, 0.0035, 0.240, 8, 0, -0.022, -0.096);           // the ramrod
+  gpBox(g, gold, 0.006, 0.034, 0.064, 0.0185, 0.020, 0.030);             // the lock plate, both sides
+  gpBox(g, gold, 0.006, 0.034, 0.064, -0.0185, 0.020, 0.030);
+  gpBox(g, iron, 0.020, 0.012, 0.022, 0, 0.032, 0.000);                  // the pan
+  gpBox(g, iron, 0.016, 0.034, 0.008, 0, 0.044, -0.016, 0.25);           // the frizzen
+  gpPart(g, 'main', () => {                                              // the hammer, with its flint
+    gpBox(g, iron, 0.010, 0.040, 0.010, 0, 0.056, 0.040, -0.5);
+    gpBox(g, dark, 0.012, 0.012, 0.010, 0, 0.074, 0.030, -0.5);
+    gpBox(g, gold, 0.006, 0.014, 0.006, 0, 0.040, 0.050);
+  }, { x: 0, y: 0.036, z: 0.050 });
+  gpPlate(g, wood, [[0.012,-0.002],[0.070,-0.018],[0.100,-0.060],[0.098,-0.120],[0.070,-0.128],[0.044,-0.062],[0.010,-0.032]], 0.030, 0);
+  gpCyl(g, gold, 0.020, 0.020, 0.008, 10, 0, -0.124, 0.084, 0);          // the butt cap
+  gpBox(g, gold, 0.006, 0.016, 0.006, 0, -0.030, 0.006, 0.22);           // the trigger
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.019, 0.0034, 6, 12, Math.PI * 1.05), gold);
+  guard.rotation.set(0, Math.PI / 2, -0.4); guard.position.set(0, -0.026, 0.012); g.add(guard);
+  return _skFinish(g, -0.350, 0.012, 0.026);
+}
+
+// ⚡ Taser -> Jacob's Ladder. A spark climbs between two rods, forever, and a shot sends a bunch up at once.
+function buildJacobsLadder() {
+  const g = new THREE.Group();
+  const white = _skM(0xe8e8e2, 120, 0xffffff), copper = _skM(0xc07a3a, 170, 0xffd0a0), dark = _skM(0x25272c, 70, 0x667080);
+  const spark = new THREE.MeshBasicMaterial({ color: 0xcfe8ff, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false });
+  gpBox(g, white, 0.056, 0.040, 0.080, 0, 0.000, 0.010);                 // the ceramic base
+  [-1, 1].forEach(sd => gpCyl(g, white, 0.010, 0.010, 0.026, 10, sd * 0.014, 0.000, -0.044));
+  const Z0 = -0.050, Z1 = -0.320, W0 = 0.013, W1 = 0.052;
+  [-1, 1].forEach(sd => {
+    const len = Math.hypot(Z1 - Z0, (W1 - W0)), ang = Math.atan2(W1 - W0, Z0 - Z1);
+    const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.0034, 0.0034, len, 8), copper);
+    rod.rotation.x = Math.PI / 2; rod.rotation.z = sd * ang * -1;
+    rod.position.set(sd * (W0 + W1) / 2, 0, (Z0 + Z1) / 2); g.add(rod);
+  });
+  const arcs = [];
+  for (let i = 0; i < 3; i++) {
+    const a = new THREE.Mesh(new THREE.BoxGeometry(1, 0.0040, 0.0040), spark); g.add(a); arcs.push({ a, ph: i / 3 });
+  }
+  _skGrip(g, dark, 0.004);
+  g._burst = 0;
+  g._onFire = () => { g._burst = 1; };
+  g._tick = (dt, now) => {
+    g._burst = Math.max(0, g._burst - dt * 2.5);
+    arcs.forEach((q, i) => {
+      const sp = 0.9 + g._burst * 3.2;
+      q.ph = (q.ph + dt * sp * 0.6) % 1;
+      const z = Z0 + (Z1 - Z0) * q.ph, w = W0 + (W1 - W0) * q.ph;
+      q.a.position.set(0, (Math.random() - 0.5) * 0.004, z);
+      q.a.scale.x = Math.max(0.001, w * 2);
+      q.a.visible = !(q.ph > 0.96) && (Math.random() > 0.08);
+    });
+  };
+  return _skFinish(g, Z1 - 0.012, 0, 0.012);
+}
+
+// 🐉 Flamethrower -> Dragon Lantern. A paper lantern with a dragon's head; the jaw opens for the reload.
+function buildDragonLantern() {
+  const g = new THREE.Group();
+  const red = _skM(0xc4261c, 90, 0xffa090), gold = _skM(0xe0b03a, 200, 0xfff0b0), dark = _skM(0x2a1410, 60, 0x7a4a3a);
+  const paper = new THREE.MeshPhongMaterial({ color: 0xd8301c, emissive: 0xff3a14, emissiveIntensity: 0.6, shininess: 40, specular: 0xffb090 });
+  const white = new THREE.MeshBasicMaterial({ color: 0xfaf3df }), mouth = new THREE.MeshBasicMaterial({ color: 0xff8a2a });
+  const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.062, 16, 12), paper); lamp.scale.set(1, 1, 1.15); lamp.position.set(0, 0.002, 0.020); g.add(lamp);
+  [-0.030, 0.0, 0.030].forEach(z => { const r = new THREE.Mesh(new THREE.TorusGeometry(0.060 - Math.abs(z) * 0.30, 0.0040, 6, 20), gold); r.position.set(0, 0.002, 0.020 + z * 1.4); g.add(r); });
+  gpCyl(g, gold, 0.014, 0.014, 0.020, 10, 0, 0.002, 0.092, 0);           // lamp cap
+  gpBox(g, red, 0.010, 0.050, 0.010, 0, -0.050, 0.060);                  // tassel cord
+  const tas = new THREE.Mesh(new THREE.ConeGeometry(0.012, 0.040, 8), red); tas.position.set(0, -0.100, 0.060); tas.rotation.x = Math.PI; g.add(tas);
+  gpCyl(g, red, 0.030, 0.026, 0.150, 14, 0, 0.002, -0.118);              // the neck
+  for (let i = 0; i < 6; i++) gpCyl(g, gold, 0.032, 0.032, 0.006, 14, 0, 0.002, -0.070 - i * 0.022);   // scales
+  gpBox(g, red, 0.056, 0.044, 0.096, 0, 0.012, -0.232);                  // the snout
+  gpBox(g, gold, 0.058, 0.008, 0.098, 0, 0.036, -0.232);                 // brow ridge
+  [-1, 1].forEach(sd => {
+    const horn = new THREE.Mesh(new THREE.ConeGeometry(0.008, 0.070, 6), gold); horn.position.set(sd * 0.022, 0.060, -0.188); horn.rotation.x = 0.7; g.add(horn);
+    gpBox(g, white, 0.014, 0.014, 0.014, sd * 0.030, 0.030, -0.206);     // eye
+    gpBox(g, dark, 0.006, 0.008, 0.006, sd * 0.0345, 0.030, -0.212);
+    gpBox(g, gold, 0.004, 0.004, 0.130, sd * 0.034, 0.002, -0.290, 0, sd * -0.14);   // whisker
+    gpBox(g, dark, 0.008, 0.008, 0.008, sd * 0.012, 0.030, -0.282);      // nostril
+  });
+  gpPart(g, 'main', () => {                                              // the lower jaw, hinged under the neck
+    gpBox(g, red, 0.050, 0.014, 0.090, 0, -0.018, -0.230);
+    gpBox(g, mouth, 0.040, 0.004, 0.080, 0, -0.011, -0.230);
+    [-1, 1].forEach(sd => gpBox(g, white, 0.006, 0.014, 0.008, sd * 0.018, -0.006, -0.262));
+  }, { x: 0, y: -0.012, z: -0.188 });
+  _skGrip(g, dark, -0.010);
+  g._burn = 0;
+  g._onFire = () => { g._burn = 1; };
+  g._tick = (dt, now) => {
+    g._burn = Math.max(0, g._burn - dt * 3);
+    paper.emissiveIntensity = 0.55 + 0.12 * Math.sin(now * 2.6) + g._burn * 0.9;
+  };
+  return _skFinish(g, -0.296, 0.010, 0.016);
+}
+
 function buildBlueprintAK() {
   // 📐 AK-20 -> Blueprint AK. The real AK, as its own technical drawing: every
   // part a pale blue fill with bright edges, a dimension line along the top.
@@ -33076,6 +33307,27 @@ const MODEL_SKINS = [
   { id: 'boombow_legend', weapon: 'boombow', name: 'FFA Legend Bow', rarity: 'legend',
     sw: ['#17121a', '#ff2a1a'], build: buildLegendBow, look: { projectile: 'legend_arrow', bulletColor: 0xff2a1a },
     blurb: 'One dark piece in your hand. Two strings fold out, wings snap open and settle into the limbs. Every arrow leaves a red afterimage; to reload, toss it up and an arrow floats in.' },
+  { id: 'storm_bloom_plasma_globe', weapon: 'storm_bloom', name: 'Plasma Globe', rarity: 'rare',
+    sw: ['#b070ff', '#2a2230'], build: buildPlasmaGlobe,
+    blurb: 'Do not tap the glass. Do not tap the glass. The lightning follows your finger.' },
+  { id: 'cyroclasm_snow_globe', weapon: 'cyroclasm', name: 'Snow Globe', rarity: 'rare',
+    sw: ['#dff0ff', '#6a4220'], build: buildSnowGlobe,
+    blurb: 'A small village, permanently in the middle of a blizzard. Turn it upside down to reload.' },
+  { id: 'p90_rubiks_cube', weapon: 'p90', name: "Rubik's Cube", rarity: 'rare',
+    sw: ['#d8281e', '#1f5fcf'], build: buildRubiksCube,
+    blurb: 'Every reload is a clean quarter-turn of the top layer. It has never once been solved.' },
+  { id: 'railgun_tuning_fork', weapon: 'railgun', name: 'Tuning Fork', rarity: 'rare',
+    sw: ['#c4ccd6', '#66e8ff'], build: buildTuningFork,
+    blurb: 'A perfect A, held very hard. Every shot sets it ringing.' },
+  { id: 'desert_eagle_flintlock', weapon: 'desert_eagle', name: 'Gilded Flintlock', rarity: 'rare',
+    sw: ['#d8aa3a', '#5a3418'], build: buildFlintlock,
+    blurb: 'Powder, ball, ramrod, and the hammer last. Eleven seconds of ceremony, one very good shot.' },
+  { id: 'taser_jacobs_ladder', weapon: 'taser', name: "Jacob's Ladder", rarity: 'rare',
+    sw: ['#cfe8ff', '#c07a3a'], build: buildJacobsLadder,
+    blurb: 'A spark climbs between two copper rods, forever. A shot sends a whole flight of them up.' },
+  { id: 'flamethrower_dragon_lantern', weapon: 'flamethrower', name: 'Dragon Lantern', rarity: 'rare',
+    sw: ['#c4261c', '#e0b03a'], build: buildDragonLantern,
+    blurb: 'Festival of lights. The dragon is real, the lantern is only a lantern.' },
   { id: 'throwing_knives_legend', weapon: 'throwing_knives', name: 'FFA Legend Daggers', rarity: 'legend',
     sw: ['#17121a', '#ff1a12'], build: buildLegendDaggers, look: { projectile: 'blood_dagger', bulletColor: 0xff1a12 },
     blurb: 'Two obsidian daggers in hand, one floating in the middle, all leaving red laser aftertrails.' },
@@ -36649,6 +36901,78 @@ const SKIN_FX = {
       K(.72,{py:.03,rx:-6.283,hy:-.04,hz:.04}),
       K(.88,{py:.02,rx:-6.283}), K(.9995,{py:.0,rx:-6.283})],
       [RP(.50,'bolt','arrive',1,'breech')], [[.18,'whoosh'],[.72,'clink']]) },
+  storm_bloom_plasma_globe: { sound: _fxS('arc', .34, .18, 1300, 260),
+    equip: 'strike', equipMs: 800, equipSfx: ['thunder', null],
+    // the globe lifts off its collar, a fresh lit cell goes in underneath, and it is set back down humming
+    reload: _fxR([K(.10,{py:.05,rx:.35,hy:-.04}),
+      K(.24,{py:.07,rx:.55,hx:.04,hy:.06,hz:-.10,hr:-.5}),
+      K(.38,{py:.07,rx:.55,hy:.08,hz:-.12,ay:.07}),
+      K(.54,{py:.07,rx:.55,hy:.08,hz:-.12,ay:.11}),
+      K(.70,{py:.06,rx:.50,hy:.05,hz:-.10,ay:.01}),
+      K(.86,{py:.03,rx:.20,hz:-.02}), K(.95,{py:.01})],
+      [RP(.30,'cell','eject',1,'breech'), RP(.52,'cell','arrive',1,'muzzle')], [[.34,'click'],[.66,'buzz']], 'buzz') },
+  cyroclasm_snow_globe: { sound: _fxS('crystal', .30, .45, 1568, 2349),
+    equip: 'inflate', equipMs: 1000, equipSfx: ['inflate', 'chime'],
+    // turned upside down, then shaken until it blizzards, and set right again
+    reload: _fxR([K(.08,{py:.05,rx:.10}),
+      K(.20,{py:.08,rx:-1.20,rz:.12,hy:-.08,hz:-.02,hr:.4}),
+      K(.30,{py:.09,rx:-1.30,rz:-.26,hy:.02}), K(.38,{py:.07,rx:-1.10,rz:.28,hy:-.02}),
+      K(.46,{py:.09,rx:-1.30,rz:-.28,hy:.02}), K(.54,{py:.07,rx:-1.10,rz:.26,hy:-.02}),
+      K(.62,{py:.09,rx:-1.30,rz:-.24,hy:.02}),
+      K(.78,{py:.06,rx:-.30,rz:.04}), K(.92,{py:.01,rx:.04})],
+      [RP(.64,'ice','arrive',1,'muzzle')], [[.30,'clink'],[.46,'clink'],[.62,'clink']], 'chime') },
+  p90_rubiks_cube: { sound: _fxS('rattle', .26, .06, 2200, 900),
+    equip: 'build', equipMs: 900, equipSfx: ['brick', 'snapin'],
+    // the off hand turns the top layer a quarter at a time: four clicks, and it is back where it began
+    reload: _fxR([K(.08,{py:.05,rx:.15,rz:-.20}),
+      K(.20,{py:.06,rx:.20,rz:-.25,hx:.03,hy:.06,hz:-.08,hr:-.3}),
+      K(.32,{py:.06,rx:.20,rz:-.25,hx:.04,hy:.05,hz:-.08,ary:1.5708}),
+      K(.44,{py:.06,rx:.20,rz:-.25,hx:.03,hy:.06,hz:-.08,ary:3.1416}),
+      K(.56,{py:.06,rx:.20,rz:-.25,hx:.04,hy:.05,hz:-.08,ary:4.7124}),
+      K(.68,{py:.06,rx:.20,rz:-.25,hx:.03,hy:.06,hz:-.08,ary:6.2832}),
+      K(.82,{py:.04,rx:.10,rz:-.10,ary:6.2832}), K(.9995,{py:.0,ary:6.2832})],
+      null, [[.32,'click'],[.44,'click'],[.56,'click'],[.68,'click']], 'ding') },
+  railgun_tuning_fork: { sound: _fxS('ring', .32, .90, 1046, 1046),
+    equip: 'spin', equipMs: 900, equipSfx: ['whoosh', 'ding'],
+    // struck on the palm and held to the ear, where a silver coin flips into the V
+    reload: _fxR([K(.10,{py:.05,rx:.20,rz:.10,hy:-.05}),
+      K(.26,{py:.08,rx:.55,rz:.45,hx:-.02,hy:.10,hz:-.04,hr:.6}),
+      K(.36,{py:.05,rx:.10,rz:.30,hy:.04,hz:-.05}),
+      K(.41,{py:.08,rx:.50,rz:.40,hy:.12}),
+      K(.64,{py:.09,rx:.55,rz:.90,hy:.10,hz:-.02}),
+      K(.82,{py:.04,rx:.20,rz:.20}), K(.94,{py:.01})],
+      [RP(.46,'coin','arrive',1,'breech')], [[.38,'clink'],[.48,'ding']], 'ding') },
+  desert_eagle_flintlock: { sound: _fxS('boom', .46, .34, 110, 45),
+    // powder at the pan, a ball down the muzzle, three strokes of the ramrod -- and the hammer cocked at the end
+    reload: _fxR([K(.10,{py:.04,rx:.55,rz:.30,hy:-.03}),
+      K(.22,{py:.05,rx:.50,rz:.30,hx:.02,hy:-.14,hz:.03,hr:.5}),
+      K(.34,{py:.05,rx:.45,rz:.28,hy:-.06,hz:.05}),
+      K(.46,{py:.07,rx:.95,rz:.20,hy:.06,hz:-.12}),
+      K(.54,{py:.07,rx:.95,hz:-.17}), K(.60,{py:.07,rx:.95,hz:-.05}),
+      K(.66,{py:.07,rx:.95,hz:-.17}), K(.72,{py:.07,rx:.95,hz:-.05}),
+      K(.78,{py:.05,rx:.40,hy:.02,hz:-.02}),
+      K(.86,{py:.04,rx:.20,arx:.95}), K(.91,{py:.04,rx:.18,arx:.95}), K(.95,{py:.02,arx:0})],
+      [RP(.34,'grain','arrive',1,'breech'), RP(.46,'ball','arrive',1,'muzzle')],
+      [[.34,'rustle'],[.56,'tap'],[.62,'tap'],[.68,'tap'],[.88,'click']], 'click') },
+  taser_jacobs_ladder: { sound: _fxS('zip', .30, .09, 400, 3800),
+    equip: 'strike', equipMs: 800, equipSfx: ['thunder', null],
+    // the knife switch: the off hand rises, throws it down, and the transformer hums up
+    reload: _fxR([K(.10,{py:.05,rx:.10,rz:.15}),
+      K(.24,{py:.05,rx:.12,rz:.15,hx:.06,hy:.12,hz:.03,hr:-.5}),
+      K(.38,{py:.05,rx:.12,rz:.15,hx:.06,hy:-.14,hz:.03}),
+      K(.46,{py:.06,rx:.14,rz:.15,hx:.05,hy:-.02}),
+      K(.66,{py:.06,rx:.28,rz:.12}), K(.84,{py:.03,rx:.12}), K(.94,{py:.01})],
+      [RP(.30,'plug','eject',1,'breech'), RP(.56,'plug','arrive',1,'breech')], [[.38,'click'],[.46,'buzz']], 'buzz') },
+  flamethrower_dragon_lantern: { sound: _fxS('flame', .38, .24, 95, 55),
+    equip: 'windup', equipMs: 900, equipSfx: ['windup', 'fireup'],
+    // muzzle up, the jaw drops, a pearl goes in, the jaw shuts on it, and it breathes out
+    reload: _fxR([K(.10,{py:.05,rx:.50,hz:-.03}),
+      K(.28,{py:.07,rx:.95,hx:.02,hy:.10,hz:-.14,hr:-.5,arx:-.75}),
+      K(.46,{py:.08,rx:1.00,hy:.12,hz:-.16,arx:-.80}),
+      K(.58,{py:.07,rx:.95,hy:.08,hz:-.12,arx:-.80}),
+      K(.64,{py:.06,rx:.90,arx:0}),
+      K(.80,{py:.04,rx:.40,arx:0}), K(.94,{py:.01,rx:.05})],
+      [RP(.46,'ball','arrive',1,'muzzle')], [[.30,'hiss'],[.64,'crunch'],[.76,'ignite']], 'ignite') },
   throwing_knives_legend: { sound: _fxS('hellfire', .30, .10, 0, 0, { base:'throw', tail:.24 }),
     equip: 'vortex', equipMs: 900, equipSfx: ['whoosh', 'clink'], equipBeats: [[.34,'ignite'],[.56,'clink']],
     reload: _fxR(RELOAD_KEYS.throwing_knives, [
