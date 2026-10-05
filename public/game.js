@@ -18710,28 +18710,34 @@ function buildPistol() {
 }
 
 function buildFartGun() {
-  const g = buildPistol();
+  const g = new THREE.Group();
   const green = new THREE.MeshPhongMaterial({ color: 0x4f7f24, shininess: 62, specular: 0xa0c86a });
   const brown = new THREE.MeshPhongMaterial({ color: 0x6b4a22, shininess: 34, specular: 0x967247 });
   const dark = new THREE.MeshPhongMaterial({ color: 0x1b2212, shininess: 40, specular: 0x556044 });
   const gas = new THREE.MeshBasicMaterial({ color: 0xa6ff4a, transparent: true, opacity: 0.34,
     blending: THREE.AdditiveBlending, depthWrite: false });
-  const skip = g._flash;
-  g.traverse(m => {
-    if (!m.isMesh || m === skip || (m.material && m.material.transparent)) return;
-    m.material = Math.max(m.scale.x, m.scale.y, m.scale.z) < 0.018 ? dark : green;
-  });
-  gpCyl(g, brown, 0.015, 0.015, 0.092, 12, -0.022, -0.012, -0.020, Math.PI / 2, 0, 0);
-  gpCyl(g, dark, 0.017, 0.017, 0.010, 12, -0.022, -0.012, -0.073, Math.PI / 2, 0, 0);
-  gpCyl(g, dark, 0.017, 0.017, 0.010, 12, -0.022, -0.012,  0.033, Math.PI / 2, 0, 0);
-  gpBox(g, dark, 0.010, 0.018, 0.080, -0.020, 0.004, -0.024, 0, 0, -0.24);
+  const cushion = new THREE.Mesh(new THREE.SphereGeometry(0.066, 18, 10), green);
+  cushion.scale.set(1.22, 0.44, 0.90); cushion.position.set(0, -0.012, -0.014); g.add(cushion);
+  const seam = new THREE.Mesh(new THREE.TorusGeometry(0.064, 0.0035, 6, 30), dark);
+  seam.scale.set(1.18, 0.46, 0.82); seam.rotation.x = Math.PI / 2; seam.position.copy(cushion.position); g.add(seam);
+  gpBox(g, dark, 0.036, 0.052, 0.030, 0, -0.080, 0.012, 0.18);        // soft handle tab
+  gpBox(g, brown, 0.054, 0.012, 0.034, 0, -0.107, 0.018, 0.18);
+  gpCyl(g, dark, 0.014, 0.014, 0.032, 12, 0, 0.020, -0.076);          // valve collar
+  gpCyl(g, brown, 0.010, 0.012, 0.088, 12, 0, 0.018, -0.126);         // hose neck
+  gpCyl(g, brown, 0.010, 0.010, 0.078, 12, 0.036, 0.024, -0.158, Math.PI / 2, 0.52);
+  gpCyl(g, brown, 0.010, 0.010, 0.078, 12, -0.036, 0.024, -0.158, Math.PI / 2, -0.52);
+  gpCyl(g, dark, 0.030, 0.017, 0.050, 18, 0, 0.020, -0.202);          // silly trumpet nozzle
+  gpCyl(g, dark, 0.021, 0.021, 0.008, 18, 0, 0.020, -0.230);
+  for (let i = 0; i < 5; i++) gpBox(g, dark, 0.006, 0.006, 0.014, -0.048 + i * 0.024, 0.012, -0.042, 0, 0, i % 2 ? 0.35 : -0.35);
   for (let i = 0; i < 3; i++) {
     const puff = new THREE.Mesh(new THREE.SphereGeometry(0.014 + i * 0.004, 8, 6), gas);
-    puff.position.set((i - 1) * 0.013, 0.022 + i * 0.004, -0.146 - i * 0.014);
+    puff.position.set((i - 1) * 0.014, 0.024 + i * 0.004, -0.246 - i * 0.016);
     puff.scale.set(1.25, 0.75, 1.0);
     puff.userData.legendFx = true;
     g.add(puff);
   }
+  const flash = new THREE.Mesh(new THREE.SphereGeometry(0.030, 8, 7), gas);
+  flash.visible = false; flash.position.set(0, 0.020, -0.244); g.add(flash);
   const oldTick = g._tick;
   g._tick = (dt, now, assembling) => {
     if (oldTick) oldTick(dt, now, assembling);
@@ -18743,7 +18749,8 @@ function buildFartGun() {
       }
     });
   };
-  g._greebled = true; g._handDetailed = true;
+  g._flash = flash; g._kickZ = 0.010; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.1, -0.1, -0.22);
   return g;
 }
 
