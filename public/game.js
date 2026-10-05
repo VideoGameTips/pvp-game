@@ -850,14 +850,27 @@ const WEAPONS = [
 ];
 
 // ── Damage drop-off by range ────────────────────────────────────────────────
-// Full damage inside `near` meters, then a straight-line decay down to a
-// `min` multiplier by `far` meters (held flat beyond that). {min:0} guns do
-// nothing at long range; {near:9999} guns (heavy ordnance) don't fall off —
-// a direct rocket/grenade hit is a direct hit regardless of distance.
-// Bucketed from each gun's own stats (pellets, bullet speed, fire rate, mag,
-// auto) so all 99 of them land somewhere sensible without hand-tuning each
-// one. Mirror WEAPON_FALLOFF in server.js if this logic changes (CLAUDE.md
-// gotcha #4) — the server is authoritative for real PvP damage.
+// Full damage inside `near` meters, then straight-line decay down to `min` by
+// `far` meters. These curves are intentionally opinionated now: shotguns and
+// pocket bullet hoses fall off brutally, ARs own mid range, marksman/sniper
+// weapons keep their bite, and slow direct-hit ordnance does not decay.
+// Mirror the named curves and explicit overrides in server.js — real PvP damage
+// is server-authoritative.
+const FALLOFF_POINTBLANK = { near: 7,  far: 18,  min: 0.02 };
+const FALLOFF_FLAME      = { near: 5,  far: 13,  min: 0.08 };
+const FALLOFF_SMG        = { near: 11, far: 36,  min: 0.24 };
+const FALLOFF_MACHINEPISTOL = { near: 8, far: 28, min: 0.18 };
+const FALLOFF_AR         = { near: 28, far: 70,  min: 0.55 };
+const FALLOFF_ARENA_AR   = { near: 34, far: 82,  min: 0.78 };
+const FALLOFF_LMG        = { near: 22, far: 65,  min: 0.48 };
+const FALLOFF_MINIGUN    = { near: 12, far: 40,  min: 0.25 };
+const FALLOFF_SIDEARM    = { near: 18, far: 50,  min: 0.45 };
+const FALLOFF_HEAVY_PISTOL = { near: 32, far: 82, min: 0.70 };
+const FALLOFF_MARKSMAN   = { near: 42, far: 100, min: 0.78 };
+const FALLOFF_SNIPER     = { near: 60, far: 135, min: 0.92 };
+const FALLOFF_ENERGY     = { near: 24, far: 64,  min: 0.58 };
+const FALLOFF_PAINT      = { near: 14, far: 34,  min: 0.25 };
+const FALLOFF_NONE       = { near: 9999, far: 9999, min: 1 };
 function computeWeaponFalloff(w) {
   const pellets = w.pellets || 1;
   const speed = w.bulletSpeed || 100;
@@ -866,22 +879,52 @@ function computeWeaponFalloff(w) {
   const auto = !!w.auto;
   const rate = w.fireRate || 100;
   let f;
-  if (pellets >= 4) f = { near: 10, far: 24, min: 0.05 };                          // shotguns/flame
-  else if (speed <= 75 && !auto && dmg >= 45) f = { near: 9999, far: 9999, min: 1 };     // heavy ordnance
-  else if (!auto && speed >= 160 && mag <= 10 && dmg >= 45) f = { near: 45, far: 95, min: 0.9 }; // snipers/marksman
-  else if (auto && mag >= 100) f = { near: 24, far: 50, min: 0.62 };                     // LMGs/sustained-fire
-  else if (auto && rate <= 80 && dmg < 35 && speed < 170) f = { near: 15, far: 32, min: 0.42 }; // SMGs/CQB autos
-  else if (!auto) f = { near: 19, far: 40, min: 0.52 };                                 // sidearms/utility
-  else f = { near: 25, far: 52, min: 0.67 };                                            // assault rifles (default)
-  // Per-weapon override: a gun can lift its own floor above the archetype
-  // default (e.g. a bespoke design call) without moving the shared constant
-  // every other gun in its class still uses.
+  if (w.maxRange && w.maxRange <= 14) f = FALLOFF_FLAME;
+  else if (pellets >= 4) f = FALLOFF_POINTBLANK;
+  else if (speed <= 75 && !auto && dmg >= 45) f = FALLOFF_NONE;
+  else if (!auto && speed >= 185 && mag <= 10 && dmg >= 80) f = FALLOFF_SNIPER;
+  else if (!auto && speed >= 145 && dmg >= 55) f = FALLOFF_MARKSMAN;
+  else if (auto && mag >= 100) f = FALLOFF_LMG;
+  else if (auto && rate <= 80 && speed < 170) f = FALLOFF_SMG;
+  else if (!auto && dmg >= 70) f = FALLOFF_HEAVY_PISTOL;
+  else if (!auto) f = FALLOFF_SIDEARM;
+  else f = FALLOFF_AR;
   if (w.falloffLift) f = { ...f, min: Math.min(1, f.min + w.falloffLift) };
   return f;
 }
 const WEAPON_FALLOFF = Object.fromEntries(WEAPONS.map(w => [w.id, computeWeaponFalloff(w)]));
-WEAPON_FALLOFF.gatecrasher_slug = computeWeaponFalloff({ auto: false, pellets: 1, mag: 6, damage: 40, bulletSpeed: 168, fireRate: 260 });
-WEAPON_FALLOFF.gatecrasher_beam = computeWeaponFalloff({ auto: false, pellets: 1, mag: 6, damage: 40, bulletSpeed: 220, fireRate: 260 });
+Object.assign(WEAPON_FALLOFF, {
+  sg8: FALLOFF_POINTBLANK, shorty: FALLOFF_POINTBLANK, sawed_off: FALLOFF_POINTBLANK,
+  boomstick: FALLOFF_POINTBLANK, storm_bloom: FALLOFF_POINTBLANK,
+  flamethrower: FALLOFF_FLAME,
+  mp40: FALLOFF_SMG, p90: FALLOFF_SMG, vector: FALLOFF_SMG, smart_smg: FALLOFF_SMG,
+  swarm_rifle: FALLOFF_SMG, painter_beam: FALLOFF_SMG, prism_engine: FALLOFF_SMG, p90_spec: FALLOFF_SMG,
+  machine_pistol: FALLOFF_MACHINEPISTOL, glock18: FALLOFF_MACHINEPISTOL, machine_revolver: FALLOFF_MACHINEPISTOL,
+  rpd: FALLOFF_LMG, mg42: FALLOFF_LMG, chain_gun: FALLOFF_LMG, gau19: FALLOFF_LMG, mk44: FALLOFF_LMG,
+  minigun: FALLOFF_MINIGUN, m134: FALLOFF_MINIGUN,
+  ak20: FALLOFF_AR, burst: { near: 31, far: 76, min: 0.68 }, cyroclasm: FALLOFF_AR,
+  freeze_gun: FALLOFF_AR, plasma_carbine: FALLOFF_AR, arc_rifle: FALLOFF_AR, flechette: FALLOFF_AR,
+  burst_cannon: FALLOFF_AR, twin_ar: FALLOFF_AR, glassmaker: FALLOFF_AR, auto_revolver: FALLOFF_AR,
+  xm7: { near: 38, far: 96, min: 0.72 }, hkmp7: FALLOFF_SMG, m4a1_arena: FALLOFF_ARENA_AR,
+  paintball: FALLOFF_PAINT, nail_gun: FALLOFF_PAINT, sticker_blaster: FALLOFF_PAINT,
+  srx: FALLOFF_SNIPER, railgun: FALLOFF_SNIPER, coilgun: FALLOFF_SNIPER, amr: FALLOFF_SNIPER, barrett: FALLOFF_SNIPER,
+  lever: FALLOFF_MARKSMAN, m1_garand: FALLOFF_MARKSMAN, air_rifle: FALLOFF_MARKSMAN, harpoon_gun: FALLOFF_MARKSMAN,
+  revolver: FALLOFF_HEAVY_PISTOL, hand_cannon: FALLOFF_HEAVY_PISTOL, duelist_pistol: FALLOFF_HEAVY_PISTOL,
+  desert_eagle: FALLOFF_HEAVY_PISTOL, m1911: FALLOFF_HEAVY_PISTOL, gunslinger: FALLOFF_HEAVY_PISTOL,
+  pistol: FALLOFF_SIDEARM, five_seven: FALLOFF_SIDEARM, mauser: FALLOFF_SIDEARM, snub_revolver: FALLOFF_SIDEARM,
+  throwing_knives: FALLOFF_SIDEARM, taser: FALLOFF_SIDEARM, gatecrasher: FALLOFF_SIDEARM,
+  gatecrasher_slug: FALLOFF_MARKSMAN, gatecrasher_beam: FALLOFF_NONE, continuum: FALLOFF_HEAVY_PISTOL,
+  lancer: FALLOFF_MARKSMAN, laser_pointer: { near: 20, far: 90, min: 0.85 },
+  event_horizon: FALLOFF_ENERGY, storm_core: FALLOFF_ENERGY, abs_zero: FALLOFF_ENERGY,
+  quantum_repeater: FALLOFF_ENERGY, pulse_needle: FALLOFF_ENERGY, magnetar: FALLOFF_MARKSMAN,
+  void_harvester: FALLOFF_MARKSMAN, solar_lance: FALLOFF_LMG, arc_torrent: FALLOFF_LMG, slingshot: FALLOFF_LMG,
+  crossbow: FALLOFF_NONE, grenade_launcher: FALLOFF_NONE, boombow: FALLOFF_NONE, flare: FALLOFF_NONE,
+  gravity_launcher: FALLOFF_NONE, potato_cannon: FALLOFF_NONE, mortar_rifle: FALLOFF_NONE,
+  firework_launcher: FALLOFF_NONE, seismic_hammer: FALLOFF_NONE, signal_pistol: FALLOFF_NONE,
+  throwing_axes: FALLOFF_NONE, nebula_mortar: FALLOFF_NONE, rpg: FALLOFF_NONE, bazooka: FALLOFF_NONE,
+  javelin_launcher: FALLOFF_NONE, cyroclasm_laser: FALLOFF_NONE, storm_bloom_ball: FALLOFF_NONE,
+  storm_bloom_aura: FALLOFF_NONE,
+});
 function falloffMultiplier(weaponId, dist) {
   const f = WEAPON_FALLOFF[weaponId];
   if (!f || dist == null) return 1;

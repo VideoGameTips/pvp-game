@@ -1809,6 +1809,7 @@ event_horizon: 75,
   // 💣 launcher area splash — mirrors the client table (60% of the direct hit)
   grenade_launcher_splash: 54, gravity_launcher_splash: 45, potato_cannon_splash: 36, mortar_rifle_splash: 51, firework_launcher_splash: 30, shockwave_launcher_splash: 29, storm_cannon_splash: 42, pinball_launcher_splash: 36, nebula_mortar_splash: 66,
   // 🪖 M4A1
+  m4a1_arena: 50,
 
   // ⚡ Tesla Coil zap · 🧪 acid pool · 🐝 bee sting
   tesla_coil: 16, acid_pool: 8, bee_sting: 5, mini_turret: 15, gunslinger: 83,
@@ -1899,28 +1900,40 @@ function serverHitDamage(data, shooter, target) {
 }
 
 // Damage drop-off by range — the server is authoritative for real PvP hits,
-// so this table (and dist3/falloffMultiplier below) must mirror
-// computeWeaponFalloff()/WEAPON_FALLOFF in public/game.js (CLAUDE.md gotcha
-// #4). Full damage inside `near` meters, straight-line decay to a `min`
-// multiplier by `far` meters, held flat beyond that. {min:0} guns (shotguns)
-// do nothing at long range; {near:9999} guns (rockets/grenades/mortars)
-// don't fall off — a direct hit is a direct hit.
-const FALLOFF_SHOTGUN = { near: 10, far: 24, min: 0.05 };
-const FALLOFF_SNIPER  = { near: 45, far: 95, min: 0.9 };
-const FALLOFF_LMG     = { near: 24, far: 50, min: 0.62 };
-const FALLOFF_SMG     = { near: 15, far: 32, min: 0.42 };
-const FALLOFF_BURST   = { near: 15, far: 32, min: 0.55 }; // Burst Rifle's own — floor lifted above stock SMG
-const FALLOFF_NONE    = { near: 9999, far: 9999, min: 1 };
-const FALLOFF_SIDEARM = { near: 19, far: 40, min: 0.52 };
-const FALLOFF_AR      = { near: 25, far: 52, min: 0.67 };
+// so these named curves and explicit overrides must mirror public/game.js.
+const FALLOFF_POINTBLANK = { near: 7,  far: 18,  min: 0.02 };
+const FALLOFF_FLAME      = { near: 5,  far: 13,  min: 0.08 };
+const FALLOFF_SMG        = { near: 11, far: 36,  min: 0.24 };
+const FALLOFF_MACHINEPISTOL = { near: 8, far: 28, min: 0.18 };
+const FALLOFF_AR         = { near: 28, far: 70,  min: 0.55 };
+const FALLOFF_ARENA_AR   = { near: 34, far: 82,  min: 0.78 };
+const FALLOFF_LMG        = { near: 22, far: 65,  min: 0.48 };
+const FALLOFF_MINIGUN    = { near: 12, far: 40,  min: 0.25 };
+const FALLOFF_SIDEARM    = { near: 18, far: 50,  min: 0.45 };
+const FALLOFF_HEAVY_PISTOL = { near: 32, far: 82, min: 0.70 };
+const FALLOFF_MARKSMAN   = { near: 42, far: 100, min: 0.78 };
+const FALLOFF_SNIPER     = { near: 60, far: 135, min: 0.92 };
+const FALLOFF_ENERGY     = { near: 24, far: 64,  min: 0.58 };
+const FALLOFF_PAINT      = { near: 14, far: 34,  min: 0.25 };
+const FALLOFF_NONE       = { near: 9999, far: 9999, min: 1 };
 const WEAPON_FALLOFF = {
-  sg8: FALLOFF_SHOTGUN, flamethrower: FALLOFF_SHOTGUN, shorty: FALLOFF_SHOTGUN, sawed_off: FALLOFF_SHOTGUN, boomstick: FALLOFF_SHOTGUN,
-  srx: FALLOFF_SNIPER, lever: FALLOFF_SNIPER, railgun: FALLOFF_SNIPER, revolver: FALLOFF_SNIPER, hand_cannon: FALLOFF_SNIPER, m1_garand: FALLOFF_SNIPER, coilgun: FALLOFF_SNIPER, amr: FALLOFF_SNIPER, duelist_pistol: FALLOFF_SNIPER, barrett: FALLOFF_SNIPER, desert_eagle: FALLOFF_SNIPER, m1911: FALLOFF_SNIPER,
-  rpd: FALLOFF_LMG, minigun: FALLOFF_LMG, cycler: FALLOFF_LMG, arc_torrent: FALLOFF_LMG, slingshot: FALLOFF_LMG, solar_lance: FALLOFF_LMG, gau19: FALLOFF_LMG, mk44: FALLOFF_LMG, m134: FALLOFF_LMG, mg42: FALLOFF_LMG, chain_gun: FALLOFF_LMG,
-  mp40: FALLOFF_SMG, p90: FALLOFF_SMG, burst: FALLOFF_BURST, vector: FALLOFF_SMG, sticker_blaster: FALLOFF_SMG, smart_smg: FALLOFF_SMG, swarm_rifle: FALLOFF_SMG, painter_beam: FALLOFF_SMG, machine_pistol: FALLOFF_SMG, machine_revolver: FALLOFF_SMG, prism_engine: FALLOFF_SMG, p90_spec: FALLOFF_SMG, glock18: FALLOFF_SMG,
+  sg8: FALLOFF_POINTBLANK, shorty: FALLOFF_POINTBLANK, sawed_off: FALLOFF_POINTBLANK, boomstick: FALLOFF_POINTBLANK, storm_bloom: FALLOFF_POINTBLANK,
+  flamethrower: FALLOFF_FLAME,
+  mp40: FALLOFF_SMG, p90: FALLOFF_SMG, vector: FALLOFF_SMG, smart_smg: FALLOFF_SMG, swarm_rifle: FALLOFF_SMG, painter_beam: FALLOFF_SMG, prism_engine: FALLOFF_SMG, p90_spec: FALLOFF_SMG,
+  machine_pistol: FALLOFF_MACHINEPISTOL, glock18: FALLOFF_MACHINEPISTOL, machine_revolver: FALLOFF_MACHINEPISTOL,
+  rpd: FALLOFF_LMG, mg42: FALLOFF_LMG, chain_gun: FALLOFF_LMG, gau19: FALLOFF_LMG, mk44: FALLOFF_LMG, cycler: FALLOFF_LMG,
+  minigun: FALLOFF_MINIGUN, m134: FALLOFF_MINIGUN,
+  ak20: FALLOFF_AR, burst: { near: 31, far: 76, min: 0.68 }, cyroclasm: FALLOFF_AR, freeze_gun: FALLOFF_AR, plasma_carbine: FALLOFF_AR, arc_rifle: FALLOFF_AR, flechette: FALLOFF_AR, burst_cannon: FALLOFF_AR, twin_ar: FALLOFF_AR, glassmaker: FALLOFF_AR, auto_revolver: FALLOFF_AR, xm7: { near: 38, far: 96, min: 0.72 }, hkmp7: FALLOFF_SMG, m4a1_arena: FALLOFF_ARENA_AR,
+  paintball: FALLOFF_PAINT, nail_gun: FALLOFF_PAINT, sticker_blaster: FALLOFF_PAINT,
+  srx: FALLOFF_SNIPER, railgun: FALLOFF_SNIPER, coilgun: FALLOFF_SNIPER, amr: FALLOFF_SNIPER, barrett: FALLOFF_SNIPER,
+  lever: FALLOFF_MARKSMAN, m1_garand: FALLOFF_MARKSMAN, air_rifle: FALLOFF_MARKSMAN, harpoon_gun: FALLOFF_MARKSMAN,
+  revolver: FALLOFF_HEAVY_PISTOL, hand_cannon: FALLOFF_HEAVY_PISTOL, duelist_pistol: FALLOFF_HEAVY_PISTOL, desert_eagle: FALLOFF_HEAVY_PISTOL, m1911: FALLOFF_HEAVY_PISTOL, gunslinger: FALLOFF_HEAVY_PISTOL,
+  pistol: FALLOFF_SIDEARM, five_seven: FALLOFF_SIDEARM, mauser: FALLOFF_SIDEARM, snub_revolver: FALLOFF_SIDEARM, throwing_knives: FALLOFF_SIDEARM, taser: FALLOFF_SIDEARM, gatecrasher: FALLOFF_SIDEARM,
+  gatecrasher_slug: FALLOFF_MARKSMAN, gatecrasher_beam: FALLOFF_NONE, continuum: FALLOFF_HEAVY_PISTOL, lancer: FALLOFF_MARKSMAN, laser_pointer: { near: 20, far: 90, min: 0.85 },
+  event_horizon: FALLOFF_ENERGY, storm_core: FALLOFF_ENERGY, abs_zero: FALLOFF_ENERGY, quantum_repeater: FALLOFF_ENERGY, pulse_needle: FALLOFF_ENERGY, magnetar: FALLOFF_MARKSMAN, void_harvester: FALLOFF_MARKSMAN, solar_lance: FALLOFF_LMG, arc_torrent: FALLOFF_LMG, slingshot: FALLOFF_LMG,
   crossbow: FALLOFF_NONE, grenade_launcher: FALLOFF_NONE, boombow: FALLOFF_NONE, flare: FALLOFF_NONE, gravity_launcher: FALLOFF_NONE, potato_cannon: FALLOFF_NONE, mortar_rifle: FALLOFF_NONE, firework_launcher: FALLOFF_NONE, seismic_hammer: FALLOFF_NONE, signal_pistol: FALLOFF_NONE, throwing_axes: FALLOFF_NONE, nebula_mortar: FALLOFF_NONE, rpg: FALLOFF_NONE, bazooka: FALLOFF_NONE, cyroclasm_laser: FALLOFF_NONE, storm_bloom_ball: FALLOFF_NONE, storm_bloom_aura: FALLOFF_NONE, javelin_launcher: FALLOFF_NONE,
-  pistol: FALLOFF_SIDEARM, throwing_knives: FALLOFF_SIDEARM, taser: FALLOFF_SIDEARM, harpoon_gun: FALLOFF_SIDEARM, switchblade_gun: FALLOFF_SIDEARM, air_rifle: FALLOFF_SIDEARM, shockwave_launcher: FALLOFF_SIDEARM, storm_cannon: FALLOFF_SIDEARM, prism_launcher: FALLOFF_SIDEARM, foam_cannon: FALLOFF_SIDEARM, portal_launcher: FALLOFF_SIDEARM, traffic_controller: FALLOFF_SIDEARM, pinball_launcher: FALLOFF_SIDEARM, dart_gun: FALLOFF_SIDEARM, gatecrasher: FALLOFF_SIDEARM, gatecrasher_slug: FALLOFF_SIDEARM, gatecrasher_beam: FALLOFF_SIDEARM, continuum: FALLOFF_SIDEARM, snub_revolver: FALLOFF_SIDEARM, mauser: FALLOFF_SIDEARM, boomerang: FALLOFF_SIDEARM, magnetar: FALLOFF_SIDEARM, void_harvester: FALLOFF_SIDEARM, five_seven: FALLOFF_SIDEARM, lancer: FALLOFF_SIDEARM, traffic_cone: FALLOFF_SIDEARM, cream_pie: FALLOFF_SIDEARM,
-  ak20: FALLOFF_AR, cyroclasm: FALLOFF_AR, paintball: FALLOFF_AR, freeze_gun: FALLOFF_AR, plasma_carbine: FALLOFF_AR, arc_rifle: FALLOFF_AR, flechette: FALLOFF_AR, burst_cannon: FALLOFF_AR, twin_ar: FALLOFF_AR, airburst_projector: FALLOFF_AR, glassmaker: FALLOFF_AR, gravity_paint: FALLOFF_AR, laser_pointer: FALLOFF_AR, auto_revolver: FALLOFF_AR, frost_blaster: FALLOFF_AR, nail_gun: FALLOFF_AR, event_horizon: FALLOFF_AR, storm_core: FALLOFF_AR, abs_zero: FALLOFF_AR, quantum_repeater: FALLOFF_AR, pulse_needle: FALLOFF_AR, xm7: FALLOFF_AR, hkmp7: FALLOFF_AR,
+  switchblade_gun: FALLOFF_SIDEARM, shockwave_launcher: FALLOFF_SIDEARM, storm_cannon: FALLOFF_SIDEARM, prism_launcher: FALLOFF_SIDEARM, foam_cannon: FALLOFF_SIDEARM, portal_launcher: FALLOFF_SIDEARM, traffic_controller: FALLOFF_SIDEARM, pinball_launcher: FALLOFF_SIDEARM, dart_gun: FALLOFF_SIDEARM, boomerang: FALLOFF_SIDEARM, traffic_cone: FALLOFF_SIDEARM, cream_pie: FALLOFF_SIDEARM,
+  airburst_projector: FALLOFF_AR, gravity_paint: FALLOFF_AR, frost_blaster: FALLOFF_AR,
 };
 function dist3(a, b) {
   const dx = a.x - b.x, dy = (a.y || 0) - (b.y || 0), dz = a.z - b.z;
