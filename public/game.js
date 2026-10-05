@@ -17372,6 +17372,85 @@ function buildLegendDaggers() {
   return g;
 }
 
+// 🏹 FFA Legend Bow. Built as separate pieces so its entrance can unfold them: the riser (the one
+// piece it starts as), two strings, two limbs shaped like swept wings, and the arrow on the string.
+function buildLegendBow() {
+  const g = new THREE.Group();
+  const M = _legendMats();
+  const hot = new THREE.MeshBasicMaterial({ color: 0xff3a22 });
+  const stringMat = new THREE.MeshBasicMaterial({ color: 0xff6a4a });
+  const grip = GUN_MATS.grip(), bright = GUN_MATS.bright();
+  const role = (name, side) => { const p = new THREE.Group(); p.userData.bowRole = name; p.userData.bowSide = side || 1; g.add(p); return p; };
+  // Riser: the single piece it begins as.
+  const riser = role('riser');
+  gpPlate(riser, M.obsidian, [[0.070,0.070],[0.046,0.086],[0.010,0.030],[0.008,-0.030],[0.046,-0.086],[0.070,-0.070],[0.058,0.000]], 0.026, 0);
+  gpBox(riser, M.obsidian, 0.024, 0.020, 0.090, 0, 0.000, -0.028);
+  gpCyl(riser, M.obsidian, 0.016, 0.016, 0.030, 12, 0, 0.000, -0.084);
+  gpBox(riser, hot, 0.004, 0.006, 0.080, 0.0135, 0.000, -0.028);
+  gpBox(riser, hot, 0.004, 0.006, 0.080, -0.0135, 0.000, -0.028);
+  gpPlate(riser, grip, [[0.062,-0.006],[0.086,-0.020],[0.088,-0.084],[0.060,-0.096],[0.040,-0.046],[0.038,-0.010]], 0.030, 0);
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.019, 0.0034, 6, 12, Math.PI * 1.05), M.obsidian);
+  guard.rotation.set(0, Math.PI / 2, -0.4); guard.position.set(0, -0.016, 0.046); riser.add(guard);
+  gpBox(riser, bright, 0.005, 0.015, 0.005, 0, -0.008, 0.046, 0.2);
+  gpBox(riser, M.obsidian, 0.018, 0.014, 0.030, 0.018, 0.006, 0.020);
+  // Limbs: swept blades that fold out like wings, hinged at the riser.
+  const NOCK = new THREE.Vector3(0, 0, 0.156);
+  [1, -1].forEach(sd => {
+    const pivot = new THREE.Vector3(0, sd * 0.075, 0.050);
+    const limb = role('limb', sd); limb.position.copy(pivot);
+    const blade = new THREE.Group(); blade.position.copy(pivot).negate(); limb.add(blade);
+    const pts = [[0.054,0.062],[0.068,0.104],[0.094,0.150],[0.114,0.196],[0.084,0.164],[0.074,0.128],[0.052,0.094],[0.044,0.070]]
+      .map(([z, y]) => [z, y * sd]);
+    gpPlate(blade, M.obsidian, sd > 0 ? pts : pts.slice().reverse(), 0.014, 0);
+    gpBox(blade, hot, 0.0045, 0.100, 0.0045, 0.0075, sd * 0.130, 0.080, sd * 0.44);
+    gpBox(blade, hot, 0.0045, 0.100, 0.0045, -0.0075, sd * 0.130, 0.080, sd * 0.44);
+    const tip = new THREE.Mesh(new THREE.ConeGeometry(0.0075, 0.030, 5), M.tip);
+    tip.position.set(0, sd * 0.203, 0.117); tip.rotation.x = sd * 0.44 + (sd > 0 ? 0 : Math.PI); blade.add(tip);
+    // Its string, from the limb tip back to the nock.
+    const str = role('string', sd); str.position.copy(NOCK);
+    const tipPos = new THREE.Vector3(0, sd * 0.198, 0.114);
+    const dy = tipPos.y - NOCK.y, dz = tipPos.z - NOCK.z, len = Math.hypot(dy, dz);
+    const line = new THREE.Mesh(new THREE.BoxGeometry(0.0045, len, 0.0045), stringMat);
+    line.position.set(0, dy / 2, dz / 2); line.rotation.x = Math.atan2(dz, dy); str.add(line);
+  });
+  // The arrow, nocked: dark shaft, a red head, red fletching.
+  const arrow = role('arrow');
+  gpCyl(arrow, M.obsidian, 0.0055, 0.0055, 0.340, 8, 0, 0.000, -0.014);
+  gpCyl(arrow, M.obsidian, 0.0170, 0.0170, 0.044, 12, 0, 0.000, -0.166);
+  gpCyl(arrow, hot, 0.0170, 0.0055, 0.030, 12, 0, 0.000, -0.202);
+  gpCyl(arrow, hot, 0.0178, 0.0178, 0.005, 12, 0, 0.000, -0.150);
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2;
+    gpBox(arrow, hot, 0.003, 0.024, 0.026, Math.cos(a) * 0.010, Math.sin(a) * 0.010, 0.140, 0, 0, a);
+  }
+  gpCyl(arrow, bright, 0.0075, 0.0075, 0.012, 8, 0, 0.000, 0.158);
+  const flash = new THREE.Mesh(new THREE.SphereGeometry(0.026, 8, 7), new THREE.MeshBasicMaterial({ color: 0xff4422 }));
+  flash.visible = false; flash.position.set(0, 0, -0.222); g.add(flash);
+  g._flash = flash; g._kickZ = 0.012; g._legendMats = M; g._greebled = true; g._handDetailed = true;
+  g._tick = (dt, now, assembling) => { if (!assembling) stringMat.color.setHSL(0.02, 1, 0.6 + 0.12 * Math.sin(now * 5)); };
+  g.position.set(0.12, -0.1, -0.25);
+  return g;
+}
+// Its arrows: dark shaft, red head, and a red afterimage laid down behind them as they fly.
+function _buildLegendArrow(tint, r) {
+  const P = _projCache('legendArrow|' + r, () => ({
+    shaft: new THREE.CylinderGeometry(r * 0.20, r * 0.20, r * 9, 6), shaftM: new THREE.MeshPhongMaterial({ color: 0x140a0e, shininess: 160, specular: 0x992222 }),
+    head:  new THREE.ConeGeometry(r * 0.55, r * 1.9, 6),            headM: new THREE.MeshBasicMaterial({ color: 0xff2a1a }),
+    fletch:new THREE.BoxGeometry(r * 0.05, r * 1.3, r * 1.0),       fletchM: new THREE.MeshBasicMaterial({ color: 0xff4a30 }),
+  }));
+  const g = new THREE.Group();
+  const h = new THREE.Mesh(P.head, P.headM); h.position.y = -r * 0.9; g.add(h);
+  const sh = new THREE.Mesh(P.shaft, P.shaftM); sh.position.y = -r * 6.3; g.add(sh);
+  [0, Math.PI * 2 / 3, Math.PI * 4 / 3].forEach(a => {
+    const f = new THREE.Mesh(P.fletch, P.fletchM);
+    f.position.set(Math.cos(a) * r * 0.3, -r * 10.2, Math.sin(a) * r * 0.3);
+    f.rotation.y = -a; g.add(f);
+  });
+  g._alignToDir = true;
+  g._bloodTrail = { tint: 0xff1a12, r: Math.min(r, 0.05) * 0.8 };
+  return g;
+}
+
 function buildBlueprintAK() {
   // 📐 AK-20 -> Blueprint AK. The real AK, as its own technical drawing: every
   // part a pale blue fill with bright edges, a dimension line along the top.
@@ -25608,6 +25687,7 @@ function makeBulletMesh(color, size, weaponId, own) {
     case 'pellet':  return _buildPellet(color, r);
     case 'knife':     return _buildKnife(color, r);
     case 'blood_dagger': return _buildBloodDagger(color, r);
+    case 'legend_arrow': return _buildLegendArrow(color, r);
     case 'axe':       return _buildAxe(color, r);
     case 'boomerang': return _buildBoomerang(color, r);
     case 'cone':      return _buildCone(color, r);
@@ -27132,6 +27212,11 @@ function _eqStepProps(e, t) {
     lm.obsidian.emissive.setHex(0xff3a10);
     lm.obsidian.emissiveIntensity = 2.2 * Math.pow(1 - t, 1.5) + Math.sin(t * 60) * 0.05;
   }
+  if (lm && e.type === 'bowform') {                  // the riser smoulders; the wings are white-hot as they open, and cool to black
+    const open = _eqClamp((t - 0.44) / 0.5);
+    lm.obsidian.emissive.setHex(0xff4a22);
+    lm.obsidian.emissiveIntensity = (t < 0.44 ? 0.7 : 0.7 + 2.6 * Math.pow(1 - open, 1.5)) + (t > 0.8 ? 0.0 : 0);
+  }
   if (lm && e.type === 'ashform') {                 // ash grey while it forms, then the heat catches
     const heat = _eqClamp((t - 0.62) / 0.2);
     lm.obsidian.emissive.setHex(0x77777f).lerp(new THREE.Color(0xff3314), heat);
@@ -27705,6 +27790,27 @@ function _equipStep(e, t) {
         c.position.copy(h.p).sub(e.ctr).applyQuaternion(q).add(e.ctr);
         c.position.y += arc * 0.12;
         c.quaternion.copy(q).multiply(h.q); c.scale.copy(h.s);
+        break; }
+      case 'bowform': {
+        // FFA Legend Bow: it starts as the riser alone, one dark piece. Two strings fold out of
+        // it, then the wings snap open and settle into the limbs, and the arrow lights last.
+        const role = c.userData.bowRole, sd = c.userData.bowSide || 1;
+        c.position.copy(h.p); c.quaternion.copy(h.q); c.scale.copy(h.s);
+        if (role === 'string') {
+          const k = _eqEase(_eqClamp((t - 0.18) / 0.26));
+          c.visible = k > 0.001;
+          c.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(_EQ_X, -sd * (1 - k) * 1.5));
+          c.scale.multiplyScalar(Math.max(0.001, k));
+        } else if (role === 'limb') {
+          const k = _eqBack(_eqClamp((t - 0.44) / 0.30));
+          c.visible = k > 0.001;
+          c.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(_EQ_Z, sd * (1 - k) * 1.7));
+          c.scale.multiplyScalar(Math.max(0.001, 0.15 + 0.85 * Math.max(0, k)));
+        } else if (role === 'arrow') {
+          const k = _eqEase(_eqClamp((t - 0.78) / 0.16));
+          c.visible = k > 0.001;
+          c.scale.multiplyScalar(Math.max(0.001, k));
+        }
         break; }
       case 'ashform': {
         // FFA Legend AK: there is only drifting ash at first. Each piece forms out of it,
@@ -32967,6 +33073,9 @@ const MODEL_SKINS = [
   { id: 'vector_legend', weapon: 'vector', name: 'FFA Legend Vector', rarity: 'legend',
     sw: ['#17121a', '#ff2a1a'], build: buildLegendVector, look: { projectile: 'hellfire', bulletColor: 0xff2a1a },
     blurb: 'Compact, spiked, on fire. Mostly on fire.' },
+  { id: 'boombow_legend', weapon: 'boombow', name: 'FFA Legend Bow', rarity: 'legend',
+    sw: ['#17121a', '#ff2a1a'], build: buildLegendBow, look: { projectile: 'legend_arrow', bulletColor: 0xff2a1a },
+    blurb: 'One dark piece in your hand. Two strings fold out, wings snap open and settle into the limbs. Every arrow leaves a red afterimage; to reload, toss it up and an arrow floats in.' },
   { id: 'throwing_knives_legend', weapon: 'throwing_knives', name: 'FFA Legend Daggers', rarity: 'legend',
     sw: ['#17121a', '#ff1a12'], build: buildLegendDaggers, look: { projectile: 'blood_dagger', bulletColor: 0xff1a12 },
     blurb: 'Two obsidian daggers in hand, one floating in the middle, all leaving red laser aftertrails.' },
@@ -36530,6 +36639,16 @@ const SKIN_FX = {
     // the old magazine crumbles to ash; a molten one goes in
     reload: _fxR(RELOAD_KEYS.vector, (RELOAD_PROPS.vector || []).map(e => e.k === 'mag'
       ? Object.assign({}, e, { k: e.m === 'arrive' ? 'magma' : 'ash' }) : e), [[.30,'hiss']], 'snapin') },
+  boombow_legend: { sound: _fxS('hellfire', .34, .18, 0, 0, { base:'throw', tail:.34 }),
+    equip: 'bowform', equipMs: 1800, equipSfx: ['whoosh', 'fireup'], equipBeats: [[.20,'whoosh'],[.46,'ignite'],[.64,'clink']],
+    // thrown up out of the hand, a full turn at the top, caught -- and an arrow floats up into it on the way
+    reload: _fxR([K(.10,{py:.02,rx:-.20,hy:-.05,hx:-.02}),
+      K(.24,{py:.10,rx:-1.57,rz:.22,hy:-.14,hz:.03,hr:.5}),
+      K(.40,{py:.13,rx:-3.14,hy:-.18,hx:.04}),
+      K(.58,{py:.09,rx:-5.00,hy:-.12}),
+      K(.72,{py:.03,rx:-6.283,hy:-.04,hz:.04}),
+      K(.88,{py:.02,rx:-6.283}), K(.9995,{py:.0,rx:-6.283})],
+      [RP(.50,'bolt','arrive',1,'breech')], [[.18,'whoosh'],[.72,'clink']]) },
   throwing_knives_legend: { sound: _fxS('hellfire', .30, .10, 0, 0, { base:'throw', tail:.24 }),
     equip: 'vortex', equipMs: 900, equipSfx: ['whoosh', 'clink'], equipBeats: [[.34,'ignite'],[.56,'clink']],
     reload: _fxR(RELOAD_KEYS.throwing_knives, [
