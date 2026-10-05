@@ -26749,8 +26749,10 @@ function kickWeaponVisual(w, pellets = 1) {
     _gunKick.y += Math.min(0.012, 0.004 + s * 0.002);
     _gunKick.x += side * Math.min(0.026, 0.004 + s * 0.004);
     _gunKick.rx -= Math.min(0.105, 0.045 + s * 0.010);
-    _gunKick.ry += side * Math.min(0.050, 0.016 + s * 0.006);
-    _gunKick.rz += side * Math.min(0.060, 0.018 + s * 0.007);
+    if (!isADS) {
+      _gunKick.ry += side * Math.min(0.050, 0.016 + s * 0.006);
+      _gunKick.rz += side * Math.min(0.060, 0.018 + s * 0.007);
+    }
     _fovPunch = Math.min(1.8, _fovPunch + 0.35 * Math.sqrt(Math.max(0.3, s)));
     for (const key of ['x', 'y', 'z', 'rx', 'ry', 'rz']) {
       const max = (hyperrealisticOn() ? _GUN_KICK_HYPER_MAX : _GUN_KICK_MAX)[key];
@@ -26765,8 +26767,12 @@ function kickWeaponVisual(w, pellets = 1) {
   _gunKick.x += side * Math.min(0.066, 0.008 + s * 0.012) * adsGunSide;
   _gunKick.rx += Math.min(0.092, 0.012 + s * 0.021) * adsGunTilt;
   _fovPunch = Math.min(3.6, _fovPunch + (isADS ? ADS_RECOIL_DAMPING.fov : 1.22) * Math.sqrt(Math.max(0.3, s)));
-  _gunKick.ry += side * Math.min(0.102, 0.014 + s * 0.020) * adsGunTilt;
-  _gunKick.rz += -side * Math.min(0.136, 0.020 + s * 0.026) * adsGunTilt;
+  // Down the sights the gun stays LEVEL: it still kicks back and up, but it does not twist or roll,
+  // because a canted gun is what covers the ring you are trying to see through.
+  if (!isADS) {
+    _gunKick.ry += side * Math.min(0.102, 0.014 + s * 0.020) * adsGunTilt;
+    _gunKick.rz += -side * Math.min(0.136, 0.020 + s * 0.026) * adsGunTilt;
+  }
   for (const key of ['x', 'y', 'z', 'rx', 'ry', 'rz']) {
     const max = (hyperrealisticOn() ? _GUN_KICK_HYPER_MAX : _GUN_KICK_MAX)[key];
     _gunKick[key] = Math.max(-max, Math.min(max, _gunKick[key]));
@@ -37965,6 +37971,11 @@ function updateReloadAnim() {
     // Nobody holds a gun perfectly still while their other hand is busy.
     const ph = nowMs / 1000, sw = Math.sin(Math.PI * t);
     P.py += 0.003 * Math.sin(ph * 2.3) * sw; P.px += 0.002 * Math.sin(ph * 1.7 + 1) * sw; P.rz += 0.010 * Math.sin(ph * 1.9 + 2) * sw;
+  }
+  if (isADS && !inspecting) {
+    // Reloading while aiming: the hands still work, but the gun is held level and near the centre line
+    // rather than swung across the body, so the sights and the ring stay readable.
+    P.rx *= 0.3; P.ry *= 0.15; P.rz *= 0.15; P.px *= 0.2; P.pz *= 0.3; P.py *= 0.5;
   }
   const home = model._homePos;
   model.position.set(home.x + P.px, home.y + P.py, home.z + P.pz);
