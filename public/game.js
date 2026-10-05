@@ -4006,9 +4006,13 @@ function playObjectShot(ctx, start, out, p, m) {
       playFilteredNoise(ctx, start, d, out, v, 'lowpass', f1 * 3, 0.8, 0.001, 1.6);
       playTone(ctx, start, d * 0.7, out, f1, f2, v * 0.6, 'sine'); return true;
     case 'fart':
-      playFilteredNoise(ctx, start, d, out, v, 'lowpass', f1, 1.4, 0.004, 2.2);
-      playTone(ctx, start, d * 0.78, out, f1, f2, v * 0.55, 'sawtooth');
-      playTone(ctx, start + d * 0.18, d * 0.46, out, f1 * 0.52, f2 * 0.48, v * 0.24, 'triangle');
+      playFilteredNoise(ctx, start, d * 1.25, out, v * 0.78, 'lowpass', 260, 1.8, 0.010, 2.8);
+      playFilteredNoise(ctx, start + d * 0.12, d * 0.72, out, v * 0.42, 'bandpass', 92, 2.6, 0.006, 3.0);
+      for (let i = 0; i < 3; i++) {
+        const t = start + i * d * 0.22;
+        playTone(ctx, t, d * (0.34 - i * 0.045), out, f1 * (1 - i * 0.16), f2 * (1 + i * 0.10), v * (0.48 - i * 0.08), 'sawtooth');
+        playTone(ctx, t + 0.018, d * 0.18, out, f1 * 0.48, f2 * 0.42, v * 0.20, 'triangle');
+      }
       return true;
     case 'splash':
       playFilteredNoise(ctx, start, d, out, v, 'bandpass', f1 * 3, 0.7, 0.002, 1.2);
@@ -36232,7 +36236,7 @@ const SKIN_FX = {
   ak20_twin_barrel:     { sound: _fxS('auto_blast', .24, .08, 0, 0, { action:'water_rifle', double:true }) },
   ak20_swarm_rifle:     { sound: _fxS('energy', .26, .10, 1400, 600) },
   pistol_spy:           { sound: _fxS('pfft', .26, .06, 900, 300) },
-  pistol_fart_gun:      { sound: _fxS('fart', .34, .18, 170, 82) },
+  pistol_fart_gun:      { sound: _fxS('fart', .46, .28, 96, 58) },
   ak20_ak47_wood:       { sound: _fxS('auto_blast', .27, .09, 0, 0, { action:'rifle', tail:.25 }) },
   burst_m4a1:           { sound: _fxS('auto_blast', .21, .07, 0, 0, { action:'water_smg', tail:.18 }) },
   flechette_bullpup:    { sound: _fxS('crack', .34, .10, 0, 0, { action:'rifle', tail:.40 }) },
