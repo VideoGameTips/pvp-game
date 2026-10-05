@@ -27456,20 +27456,10 @@ document.addEventListener('keydown', e => {
       playSoundEvent('footstep', { volume: 0.5, pitch: 1.6, minGap: 60 });
     }
   }
-  // ── Admin cheat hotkeys (only when admin) ────────────────────────────────
+  // ── Admin panel shortcut (cheats are typed in V chat: ;help) ─────────────
   if (currentUser?.isAdmin && !e.repeat && !commsMenuOpen) {
-    // Hotkeys use letters that don't conflict with WASD/QER/G/Z/X/1-4
-    const adminMap = { KeyH:'fly', KeyJ:'godMode', KeyL:'infiniteAmmo', KeyK:'killAura', KeyB:'aimbot', KeyN:'speed', KeyM:'freezeBots' };
-    // Only fire admin hotkeys when not typing in an input field
     if (document.activeElement?.tagName !== 'INPUT') {
       if (e.code === 'F2') { e.preventDefault(); toggleAdminPanel(); return; }
-      if (adminMap[e.code]) {
-        e.preventDefault();
-        adminCheats[adminMap[e.code]] = !adminCheats[adminMap[e.code]];
-        showAnnouncement(adminCheats[adminMap[e.code]] ? `⚡ ${adminMap[e.code]} ON` : `${adminMap[e.code]} OFF`,
-                         '', adminCheats[adminMap[e.code]] ? '#ff4444' : '#888888', 900);
-        if (adminPanelOpen) openAdminPanel(); // refresh checkbox states
-      }
     }
   }
   // ── Z key: primary comms wheel ───────────────────────────────────────────
@@ -48360,6 +48350,93 @@ const adminCheats = {
   speed: false,
   freezeBots: false,
 };
+const ADMIN_CHEAT_COMMANDS = {
+  fly: 'fly',
+  flight: 'fly',
+  god: 'godMode',
+  godmode: 'godMode',
+  ammo: 'infiniteAmmo',
+  infammo: 'infiniteAmmo',
+  infiniteammo: 'infiniteAmmo',
+  aura: 'killAura',
+  killaura: 'killAura',
+  aim: 'aimbot',
+  aimbot: 'aimbot',
+  speed: 'speed',
+  fast: 'speed',
+  freeze: 'freezeBots',
+  freezebots: 'freezeBots',
+};
+const ADMIN_CHEAT_LABELS = {
+  fly: 'Fly mode',
+  killAura: 'Kill aura',
+  infiniteAmmo: 'Infinite ammo',
+  godMode: 'God mode',
+  aimbot: 'Aimbot',
+  speed: 'Speed boost',
+  freezeBots: 'Freeze bots',
+};
+const ADMIN_COMMAND_HELP = ';fly ;god ;ammo ;aura ;aimbot ;speed ;freeze ;panel ;nuke ;heal ;refill ;win ;builder';
+function parseAdminToggleArg(arg) {
+  if (/^(on|1|true|yes|enable|enabled)$/i.test(arg || '')) return true;
+  if (/^(off|0|false|no|disable|disabled)$/i.test(arg || '')) return false;
+  return null;
+}
+function setAdminCheat(key, next, source) {
+  if (!Object.prototype.hasOwnProperty.call(adminCheats, key)) return false;
+  adminCheats[key] = !!next;
+  const label = ADMIN_CHEAT_LABELS[key] || key;
+  showAnnouncement(
+    adminCheats[key] ? `⚡ ${label} ON` : `${label} OFF`,
+    source || '',
+    adminCheats[key] ? '#ff4444' : '#888888',
+    1000
+  );
+  if (adminPanelOpen) openAdminPanel(); // refresh checkbox states
+  return true;
+}
+function handleAdminChatCommand(raw) {
+  const text = String(raw || '').trim();
+  if (!text.startsWith(';')) return false;
+  const parts = text.slice(1).trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const cmd = parts[0] || 'help';
+  const arg = parts[1] || '';
+  if (!currentUser?.isAdmin) {
+    pushChatLine('Admin: semicolon commands are admin-only.', '#ff7777');
+    showAnnouncement('ADMIN ONLY', 'Semicolon commands need admin access', '#ff6666', 1200);
+    return true;
+  }
+  if (cmd === 'help' || cmd === '?' || cmd === 'commands') {
+    pushChatLine(`Admin commands: ${ADMIN_COMMAND_HELP}`, '#ff8888');
+    pushChatLine('Tip: add on/off, like ;aimbot off or ;fly on.', '#ffaaaa');
+    return true;
+  }
+  const cheatKey = ADMIN_CHEAT_COMMANDS[cmd];
+  if (cheatKey) {
+    const parsed = parseAdminToggleArg(arg);
+    const next = parsed == null ? !adminCheats[cheatKey] : parsed;
+    setAdminCheat(cheatKey, next, `V chat ;${cmd}`);
+    return true;
+  }
+  const actions = {
+    panel: () => toggleAdminPanel(),
+    admin: () => toggleAdminPanel(),
+    nuke: () => adminAction('nuke'),
+    heal: () => adminAction('heal'),
+    refill: () => adminAction('ammo'),
+    reload: () => adminAction('ammo'),
+    win: () => adminAction('endRound'),
+    endround: () => adminAction('endRound'),
+    builder: () => adminAction('mapBuilder'),
+    mapbuilder: () => adminAction('mapBuilder'),
+  };
+  if (actions[cmd]) {
+    actions[cmd]();
+    return true;
+  }
+  pushChatLine(`Admin: unknown command ;${cmd}. Try ;help.`, '#ff8888');
+  return true;
+}
 
 // On page load: try to auto-login with stored credentials. Deferred a tick: called inline it ran
 // before `const AUTH_BASE` below was initialised, so authRequest threw (twice — its catch reads
@@ -48615,6 +48692,7 @@ function closeVChat() {
   try { requestPointerLockSafe(); } catch (e) {}
 }
 function sendVChat(raw) {
+  if (handleAdminChatCommand(raw)) return;
   const msg = filterVChat(raw);
   if (!msg) return;
   pushChatLine(`You: 💬 ${msg}`, '#66ccff');                 // local echo (escaped on render)
@@ -50714,22 +50792,22 @@ function openAdminPanel() {
   }
   panel.innerHTML = `
     <div style="font-size:13px;letter-spacing:3px;color:#ff4444;margin-bottom:10px;text-align:center;font-weight:bold;">⚡ ADMIN PANEL</div>
-    <div style="font-size:10px;color:#888;margin-bottom:8px;text-align:center;">[F2] toggle · [F] fly toggle</div>
+    <div style="font-size:10px;color:#888;margin-bottom:8px;text-align:center;">[F2] panel · V chat: ;help</div>
     <div style="border-bottom:1px solid #444;margin:6px 0;"></div>
     <div style="font-size:10px;color:#888;letter-spacing:2px;margin-bottom:6px;">TOGGLE CHEATS</div>
     ${[
-      ['fly',          '🪂 Fly mode',           'H'],
-      ['godMode',      '🛡️ God mode',           'J'],
-      ['infiniteAmmo', '♾️ Infinite ammo',      'L'],
-      ['killAura',     '☠️ Kill aura (8m)',     'K'],
-      ['aimbot',       '🎯 Aimbot',             'B'],
-      ['speed',        '⚡ Speed boost (3×)',   'N'],
-      ['freezeBots',   '🧊 Freeze all bots',    'M'],
-    ].map(([key, label, hotkey]) =>
+      ['fly',          '🪂 Fly mode',           ';fly'],
+      ['godMode',      '🛡️ God mode',           ';god'],
+      ['infiniteAmmo', '♾️ Infinite ammo',      ';ammo'],
+      ['killAura',     '☠️ Kill aura (8m)',     ';aura'],
+      ['aimbot',       '🎯 Aimbot',             ';aimbot'],
+      ['speed',        '⚡ Speed boost (3×)',   ';speed'],
+      ['freezeBots',   '🧊 Freeze all bots',    ';freeze'],
+    ].map(([key, label, command]) =>
       `<label style="display:flex;align-items:center;gap:8px;padding:5px;cursor:pointer;background:rgba(50,20,20,0.5);border-radius:4px;margin-bottom:3px;">
         <input type="checkbox" data-cheat="${key}" ${adminCheats[key] ? 'checked' : ''} style="cursor:pointer;">
         <span style="flex:1;">${label}</span>
-        <span style="color:#888;font-size:10px;">[${hotkey}]</span>
+        <span style="color:#888;font-size:10px;">${command}</span>
       </label>`
     ).join('')}
     <div style="border-bottom:1px solid #444;margin:10px 0 6px;"></div>
