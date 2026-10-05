@@ -1,0 +1,2438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>PVP Arena Wiki</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: 'Helvetica Neue', Arial, sans-serif; background: #1a1a1a; color: #e4e4e4; line-height: 1.55; }
+  a { color: #58a6ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  /* Top bar */
+  header.topbar { background: linear-gradient(90deg, #c91414 0%, #7a0000 100%); color: white; padding: 14px 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.4); position: sticky; top: 0; z-index: 100; }
+  header.topbar .title { font-size: 24px; font-weight: 800; letter-spacing: 2px; }
+  header.topbar .tagline { font-size: 12px; opacity: 0.85; margin-top: 2px; }
+  header.topbar a.play-btn { float: right; background: white; color: #c91414; padding: 8px 16px; border-radius: 4px; font-weight: bold; font-size: 13px; }
+  /* Layout */
+  .layout { display: flex; max-width: 1280px; margin: 0 auto; }
+  /* Sidebar */
+  aside.sidebar { width: 240px; min-width: 240px; background: #232323; padding: 24px 16px; border-right: 1px solid #333; min-height: calc(100vh - 60px); position: sticky; top: 60px; align-self: flex-start; max-height: calc(100vh - 60px); overflow-y: auto; }
+  aside.sidebar h3 { font-size: 11px; letter-spacing: 2px; color: #888; text-transform: uppercase; margin: 18px 0 8px; padding-bottom: 4px; border-bottom: 1px solid #333; }
+  aside.sidebar ul { list-style: none; padding: 0; margin: 0; }
+  aside.sidebar li a { display: block; padding: 5px 10px; color: #ccc; font-size: 13px; border-left: 3px solid transparent; transition: all 0.15s; }
+  aside.sidebar li a:hover { background: #2c2c2c; border-left-color: #c91414; color: white; text-decoration: none; }
+  /* Main content */
+  main { flex: 1; padding: 32px 40px; max-width: 100%; overflow-x: auto; }
+  main h1 { font-size: 32px; font-weight: 800; margin: 0 0 6px; color: #ffcc44; border-bottom: 2px solid #444; padding-bottom: 10px; }
+  main h2 { font-size: 22px; margin: 32px 0 12px; color: #ffaa44; border-bottom: 1px solid #333; padding-bottom: 6px; }
+  main h3 { font-size: 17px; margin: 24px 0 8px; color: #ddd; }
+  main .lead { color: #aaa; font-size: 14px; margin-bottom: 24px; padding: 12px; background: #1f1f1f; border-left: 4px solid #c91414; border-radius: 3px; }
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 18px; font-size: 13px; }
+  th { background: #2a2a2a; color: #ffcc44; text-align: left; padding: 8px 12px; border-bottom: 2px solid #444; font-weight: 600; }
+  td { padding: 7px 12px; border-bottom: 1px solid #2a2a2a; }
+  tr:nth-child(even) td { background: #1c1c1c; }
+  /* Pills */
+  .pill { display: inline-block; padding: 2px 9px; border-radius: 10px; font-size: 11px; margin-right: 4px; }
+  .pill-meta { background: #2a3a44; color: #88ddff; }
+  .pill-fun  { background: #44324a; color: #cc99ff; }
+  .pill-p2w  { background: #443214; color: #ffcc44; }
+  .pill-admin { background: #4a2a2a; color: #ff8888; }
+  /* Stat boxes */
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 14px 0 20px; }
+  .stat-box { background: #232323; border: 1px solid #333; border-radius: 5px; padding: 12px 14px; }
+  .stat-box .label { font-size: 11px; color: #888; letter-spacing: 1.5px; text-transform: uppercase; }
+  .stat-box .value { font-size: 22px; font-weight: 700; color: #ffcc44; margin-top: 4px; }
+  /* Quote / tip box */
+  .tip-box { background: #1f2620; border-left: 4px solid #66ff99; padding: 10px 14px; margin: 10px 0; font-size: 13px; }
+  .secret-box { background: #261f26; border-left: 4px solid #cc99ff; padding: 10px 14px; margin: 10px 0; font-size: 13px; }
+  /* Code-style monospace */
+  code { background: #2a2a2a; padding: 2px 6px; border-radius: 3px; font-family: 'Courier New', monospace; font-size: 12px; color: #ffcc66; }
+  /* Footer */
+  footer { background: #161616; color: #888; padding: 20px 40px; font-size: 12px; text-align: center; border-top: 1px solid #333; margin-top: 40px; }
+  footer a { color: #58a6ff; }
+  /* Responsive */
+  @media (max-width: 800px) {
+    aside.sidebar { display: none; }
+    main { padding: 20px 16px; }
+    header.topbar a.play-btn { display: none; }
+  }
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <a class="play-btn" href="/">▶ PLAY</a>
+    <div class="title">⚔️ PVP ARENA WIKI</div>
+    <div class="tagline">The unofficial-official guide to a browser FPS</div>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <h3>Getting Started</h3>
+      <ul>
+        <li><a href="#overview">Overview</a></li>
+        <li><a href="#getting-started">First Steps</a></li>
+      </ul>
+      <h3>Gameplay</h3>
+      <ul>
+        <li><a href="#modes">Game Modes</a></li>
+        <li><a href="#arcade">Arcade Modes</a></li>
+        <li><a href="#difficulty">Difficulty</a></li>
+        <li><a href="#lobby">Lobby System</a></li>
+      </ul>
+      <h3>World</h3>
+      <ul>
+        <li><a href="#maps">Maps</a></li>
+        <li><a href="#secrets">Secrets</a></li>
+      </ul>
+      <h3>Arsenal</h3>
+      <ul>
+        <li><a href="#weapons">Weapons</a></li>
+        <li><a href="#admin-items">Admin Items</a></li>
+        <li><a href="#loadouts">Best Loadouts</a></li>
+        <li><a href="#all-primaries">All Primaries</a></li>
+        <li><a href="#all-secondaries">All Secondaries</a></li>
+        <li><a href="#all-melees">All Melees</a></li>
+        <li><a href="#all-utilities">All Utilities</a></li>
+      </ul>
+      <h3>Economy</h3>
+      <ul>
+        <li><a href="#shop">Shop</a></li>
+        <li><a href="#bundles">Bundles</a></li>
+        <li><a href="#chests">Chests &amp; Fragments</a></li>
+        <li><a href="#wheel">Daily Wheel</a></li>
+        <li><a href="#upgrades">Upgrades</a></li>
+        <li><a href="#admin-pass">Admin Pass</a></li>
+      </ul>
+      <h3>Reference</h3>
+      <ul>
+        <li><a href="#tips">Tips &amp; Tricks</a></li>
+        <li><a href="#fun-facts">Fun Facts</a></li>
+        <li><a href="#tech">Tech Stack</a></li>
+      </ul>
+    </aside>
+
+    <main>
+      <h1 id="overview">PVP Arena</h1>
+      <div class="lead">
+        Fast-paced multiplayer browser FPS built on Three.js + Socket.IO. Battle bots and other players across 13 maps, 15+ game modes, and an arsenal of 200+ weapons.<br>
+        🌐 <a href="https://sushigamelab.com/pvp/">Play it live</a> &middot; 📦 <a href="https://github.com/VideoGameTips/pvp-game">Source code</a>
+      </div>
+
+      <div class="stat-grid">
+        <div class="stat-box"><div class="label">Weapons</div><div class="value">200+</div></div>
+        <div class="stat-box"><div class="label">Maps</div><div class="value">13</div></div>
+        <div class="stat-box"><div class="label">Game Modes</div><div class="value">15+</div></div>
+        <div class="stat-box"><div class="label">Bundles</div><div class="value">26</div></div>
+        <div class="stat-box"><div class="label">Best Loadouts</div><div class="value">30</div></div>
+        <div class="stat-box"><div class="label">Promo Codes</div><div class="value">24</div></div>
+      </div>
+
+      <h2 id="getting-started">First Steps</h2>
+      <p>Make an account on the login screen (username + password — auto-saves locally so you only do this once). You'll start with <strong>500 donuts</strong> and the free starter loadout: <em>AK20, SG-8, Pistol, Flare, Fists, Frying Pan, Frag, Medkit</em>. From the mode-select screen you can shop, redeem promo codes, or jump straight into a match.</p>
+
+      <h2 id="modes">Game Modes</h2>
+
+      <h3>Elimination (Round-Based)</h3>
+      <table>
+        <tr><th>Mode</th><th>Format</th></tr>
+        <tr><td>1v1</td><td>First to N rounds, no respawns within a round</td></tr>
+        <tr><td>2v2</td><td>Team elimination</td></tr>
+        <tr><td>3v3</td><td>Team elimination</td></tr>
+      </table>
+
+      <h3>Race (First to N Kills)</h3>
+      <table>
+        <tr><th>Mode</th><th>Format</th></tr>
+        <tr><td>FFA5</td><td>Free-for-all, 5 bots</td></tr>
+        <tr><td>FFA8</td><td>Free-for-all, 8 bots</td></tr>
+        <tr><td>Race 2v2 / 3v3</td><td>Team kill race</td></tr>
+      </table>
+
+      <h3>Special Modes</h3>
+      <ul>
+        <li><strong>D-Day</strong> — Defend the hill against waves; MG42 + AK20 forced.</li>
+        <li><strong>Frontlines</strong> — Push the battle line to the enemy base.</li>
+        <li><strong>Last Stand</strong> — Survive 10 escalating waves.</li>
+        <li><strong>Shooting Range</strong> — Practice mode, no enemies.</li>
+        <li><strong>👑 King of the Hill (KOTH)</strong> — 10 players, 3 lives each. Plays on the 250×250 BR arena map with vehicles, helicopters, and mortars.</li>
+      </ul>
+
+      <h2 id="arcade">🎮 Arcade Modes (6)</h2>
+      <table>
+        <tr><th>Mode</th><th>Mechanic</th></tr>
+        <tr><td>Gun Game</td><td>21-tier weapon ladder, win on knife</td></tr>
+        <tr><td>One in the Chamber</td><td>1 bullet, every shot is a kill, refills on kill</td></tr>
+        <tr><td>Juggernaut</td><td>One mega-buffed player vs. the rest; killer becomes juggernaut</td></tr>
+        <tr><td>Infection</td><td>Zombies vs. humans; zombies convert on kill</td></tr>
+        <tr><td>Sniper Only</td><td>Snipers forced, no secondaries</td></tr>
+        <tr><td>Speedrun</td><td>Solo race to 20 kills, personal best tracked</td></tr>
+      </table>
+
+      <h2 id="difficulty">Difficulty Tiers</h2>
+      <table>
+        <tr><th>Tier</th><th>Bot Behavior</th></tr>
+        <tr><td>Easy</td><td>Slow aim, late reactions</td></tr>
+        <tr><td>Medium</td><td>Standard challenge</td></tr>
+        <tr><td>Hard</td><td>Faster reactions, ability use</td></tr>
+        <tr><td>Expert</td><td>Aggressive flanking, kite-retreat from scary weapons, low timidity</td></tr>
+      </table>
+
+      <h2 id="lobby">🏛️ Lobby System</h2>
+      <p>Every multiplayer mode routes you through a staging lobby. Players ready up, and the undermanned side can vote to fill with bots or play short-handed. Each match runs in its own isolated bubble — concurrent games don't bleed into each other.</p>
+
+      <h2 id="maps">🗺️ Maps</h2>
+      <table>
+        <tr><th>Map</th><th>Theme</th><th>Notable Features</th></tr>
+        <tr><td>Blank</td><td>Open arena</td><td>Default, no obstacles</td></tr>
+        <tr><td>Urban</td><td>City</td><td>🤫 Climbable skyscraper</td></tr>
+        <tr><td>Warehouse</td><td>Industrial</td><td>Crate cover</td></tr>
+        <tr><td>Forest</td><td>Woodland</td><td>Trees + tall grass</td></tr>
+        <tr><td>Volcano</td><td>Lava</td><td>Hot zones</td></tr>
+        <tr><td>Cyber</td><td>Neon city</td><td>Glowing structures</td></tr>
+        <tr><td>Desert</td><td>Arid</td><td>Long sightlines</td></tr>
+        <tr><td>Tundra</td><td>Snowy</td><td>Slippery surfaces</td></tr>
+        <tr><td>Space Station</td><td>Sci-fi</td><td>Low-G zones</td></tr>
+        <tr><td>🛬 Airport</td><td>Terminal</td><td>Breakable glass + lights</td></tr>
+        <tr><td>🪖 Trenches</td><td>WWI</td><td>Pilotable mortars (hold E)</td></tr>
+        <tr><td>☢️ Chernobyl</td><td>Nuclear</td><td>4 destructible reactors, toxic gas</td></tr>
+        <tr><td>🛢️/🛫/☣️/🌀/🔷</td><td>Various</td><td>Refinery, Skydock, Sewer, Gravity Lab, Glassworks</td></tr>
+        <tr><td>👑 BR Arena</td><td>Massive</td><td>250×250, vehicles + helis + mortars (KOTH only)</td></tr>
+      </table>
+
+      <h2 id="secrets">🤫 Map Secrets</h2>
+      <div class="secret-box">You can climb the skyscraper in <strong>URBAN</strong>.</div>
+      <div class="secret-box"><strong>Chernobyl's</strong> 4 reactors are destructible.</div>
+      <div class="secret-box"><strong>Airport</strong> glass + lights all break.</div>
+      <div class="secret-box"><strong>Mortars</strong> in Trenches can be piloted (hold E).</div>
+      <div class="secret-box"><strong>Helicopters</strong> in KOTH can be hijacked mid-air.</div>
+      <div class="secret-box">0.3% wheel jackpot drops a random rare weapon ≥400 donuts.</div>
+
+      <h2 id="weapons">🔫 Weapon Arsenal</h2>
+      <p>Over 200 weapons across 4 slots. Most are buyable in the shop; admin items are promo-code only.</p>
+      <p><em>Every gun now punches the actual camera on fire, not just the
+      viewmodel — it used to be that only a handful of weapons (the Revolver
+      most noticeably) visibly kicked the screen; the rest only wiggled the
+      gun prop. The kick scales off the same damage/speed/rate formula the
+      viewmodel wobble already used, so a Revolver still hits harder than a
+      Cycler, but nothing hits for zero anymore. It snaps back fast — this is
+      an impact punch, not a second recoil pattern stacked on your aim.</em></p>
+      <div class="stat-grid">
+        <div class="stat-box"><div class="label">Primaries</div><div class="value">60</div></div>
+        <div class="stat-box"><div class="label">Secondaries</div><div class="value">30</div></div>
+        <div class="stat-box"><div class="label">Melees</div><div class="value">34</div></div>
+        <div class="stat-box"><div class="label">Utilities</div><div class="value">37</div></div>
+      </div>
+
+      <h3>Notable P2W Weapons</h3>
+      <table>
+        <tr><th>Weapon</th><th>Slot</th><th>Cost</th></tr>
+        <tr><td>Royal Minigun</td><td>Primary</td><td>3,500🍩</td></tr>
+        <tr><td>Orbital Strike</td><td>Utility</td><td>2,500🍩</td></tr>
+        <tr><td>Titan Hammer</td><td>Melee</td><td>2,400🍩</td></tr>
+        <tr><td>Black Hole Seed</td><td>Utility</td><td>2,200🍩</td></tr>
+        <tr><td>Lightsabre</td><td>Melee</td><td>1,800🍩</td></tr>
+        <tr><td>Vampire Blade</td><td>Melee</td><td>2,000🍩</td></tr>
+        <tr><td>AMR (Anti-Material Rifle)</td><td>Primary</td><td>2,000🍩</td></tr>
+      </table>
+
+      <h3>🌌 Sci-Fi P2W (Cosmic Tier)</h3>
+      <p>Ten primaries with reality-bending themes: <strong>Event Horizon Rifle</strong> (168,000🍩), <strong>Void Harvester</strong> (280,000🍩), <strong>Nebula Mortar</strong> (245,000🍩), and more. Plus matching secondaries, melees, and utilities. <span class="pill pill-p2w">~3.01M donuts total</span></p>
+
+      <h2 id="admin-items">🪖 Admin Items (24)</h2>
+      <p>Unlockable only via case-sensitive promo codes. Bypasses the shop entirely. Once unlocked, they're permanently free on that account.</p>
+      <p><span class="pill pill-admin">Heavy primaries</span> Minigun M134, Anti-Material Barrett, MK-44 Bushmaster, GAU-19, XM7, HK-MP7, P90 Spec</p>
+      <p><span class="pill pill-admin">Secondaries</span> Desert Eagle, M1911 Match, Walther PPK, Glock 18, Five-Seven</p>
+      <p><span class="pill pill-admin">Combat knives</span> Karambit, Trench Bayonet, Tomahawk, OTs-04, Spec-Ops Garrote</p>
+      <p><span class="pill pill-admin">Utilities</span> C4 Charge, Claymore, M84 Stun, Thermite, Predator UAV, Care Package, Tactical Nuke</p>
+
+      <h2 id="loadouts">📋 Best Loadouts (30 Curated)</h2>
+      <p>Accessible via the <strong>📋 BEST LOADOUTS</strong> button on the loadout screen. Tap to auto-equip.</p>
+      <table>
+        <tr><th>#</th><th>Name</th><th>Theme</th></tr>
+        <tr><td>1</td><td>🏆 The Lockdown</td><td>Tournament-grade fundamentals</td></tr>
+        <tr><td>2</td><td>⚡ Caffeine Crash</td><td>Outrun every bullet</td></tr>
+        <tr><td>3</td><td>🎯 Headhunter</td><td>One scope. One tap.</td></tr>
+        <tr><td>4</td><td>💥 Demo Disco</td><td>Explosives party</td></tr>
+        <tr><td>5</td><td>🔥 Arsonist's Holiday</td><td>Everything burns</td></tr>
+        <tr><td>6</td><td>🤖 404: You Lose</td><td>Disable &amp; dismantle</td></tr>
+        <tr><td>7</td><td>🥷 Lights Out</td><td>Heard, never seen</td></tr>
+        <tr><td>8</td><td>🛡️ Immovable Object</td><td>You will not pass</td></tr>
+        <tr><td>9</td><td>🏏 Recess Bully</td><td>Playground chaos</td></tr>
+        <tr><td>10</td><td>🌪️ Yeet Squad</td><td>Send them flying</td></tr>
+        <tr><td>11</td><td>⚔️ For The Realm</td><td>Knight's loadout</td></tr>
+        <tr><td>12</td><td>🩸 Bloodletter</td><td>Heal off their pain</td></tr>
+        <tr><td>13</td><td>🏹 Sherwood Special</td><td>Bows + bolas</td></tr>
+        <tr><td>14</td><td>🛹 No Brakes</td><td>Sprint-only kit</td></tr>
+        <tr><td>15</td><td>🧊 Permafrost</td><td>Slow + finish</td></tr>
+        <tr><td>16</td><td>⚡ Thor's Allowance</td><td>Shock therapy</td></tr>
+        <tr><td>17</td><td>🎯 Steady Hand</td><td>Mid-range scalpel</td></tr>
+        <tr><td>18</td><td>🍳 Recipe for Disaster</td><td>Kitchen tools</td></tr>
+        <tr><td>19</td><td>💎 Credit Card Maxed</td><td>Pure P2W</td></tr>
+        <tr><td>20</td><td>🐢 The Hedge</td><td>Camp + punish</td></tr>
+        <tr><td>21</td><td>🌌 Spacefarer</td><td>Sci-fi tech</td></tr>
+        <tr><td>22</td><td>🎪 Clown Convention</td><td>Slapstick warfare</td></tr>
+        <tr><td>23</td><td>🔮 Light Show</td><td>Refractive chaos</td></tr>
+        <tr><td>24</td><td>🦅 Bread &amp; Butter</td><td>Reliable in any mode</td></tr>
+        <tr><td>25</td><td>🥊 Closing Time</td><td>Bar-fight ready</td></tr>
+        <tr><td>26</td><td>🌠 Reality Breaker</td><td>Endgame cosmic flex</td></tr>
+        <tr><td>27</td><td>🎤 Loudpack</td><td>Subtle as a brick</td></tr>
+        <tr><td>28</td><td>🪖 Boots on Ground</td><td>Mil-spec professional</td></tr>
+        <tr><td>29</td><td>🩹 Field Medic</td><td>Outlive everyone</td></tr>
+        <tr><td>30</td><td>👻 Through the Veil</td><td>Phase past wards</td></tr>
+      </table>
+
+      <h2 id="shop">🛒 Shop System</h2>
+      <p>Open the shop from the mode-select screen. Five tabs: <strong>Bundles</strong>, <strong>Primary</strong>, <strong>Secondary</strong>, <strong>Melee</strong>, <strong>Utility</strong>, plus <strong>Chests</strong>, <strong>Wheel</strong>, and <strong>Upgrades</strong>.</p>
+
+      <h3>🍩 Donuts</h3>
+      <p>Earned at match end: <code>5 × kills + 50 (win) / 20 (loss)</code>, capped at <strong>250/match</strong>. Spend on weapons, bundles, chests, wheel spins, and the Admin Pass.</p>
+
+      <h2 id="bundles">💼 Bundles (26)</h2>
+      <p>Save 20-60% off the sum of individual prices — bumped ~30% after the economy rebalance, since a deep bundle discount on top of "real" weapon prices was a loophole around the grind. Every bundle is a tight 1-4 item kit — no more grab-bags.</p>
+
+      <h3>Standard</h3>
+      <table>
+        <tr><th>Bundle</th><th>Cost</th><th>Contents</th></tr>
+        <tr><td>Pitiful Pack</td><td>1,980🍩</td><td>AK20 · SG-8 · Revolver · Bat</td></tr>
+        <tr><td>Starter Pro</td><td>1,720🍩</td><td>AK20 · Revolver · Bat · Stim</td></tr>
+        <tr><td>Heavy Duty</td><td>3,020🍩</td><td>Minigun · Grenade Launcher · Machine Revolver · Crowbar</td></tr>
+        <tr><td>🎖️ WWII Arsenal</td><td>2,920🍩</td><td>MP-40 · M1 Garand · Mauser C96 · Katana</td></tr>
+      </table>
+
+      <h3>Themed</h3>
+      <table>
+        <tr><th>Bundle</th><th>Cost</th><th>Theme</th></tr>
+        <tr><td>Sniper Pack</td><td>3,020🍩</td><td>Long-range duelist</td></tr>
+        <tr><td>Run &amp; Gun</td><td>2,240🍩</td><td>Fast SMGs + speed</td></tr>
+        <tr><td>Melee Master</td><td>2,500🍩</td><td>Close quarters</td></tr>
+        <tr><td>Shotgun Pack</td><td>2,240🍩</td><td>Close-range chaos</td></tr>
+        <tr><td>Pyromaniac</td><td>3,220🍩</td><td>Fire weapons</td></tr>
+        <tr><td>Stealth Ops</td><td>1,880🍩</td><td>Silent kit</td></tr>
+        <tr><td>Storm Pack</td><td>2,180🍩</td><td>Lightning</td></tr>
+        <tr><td>Defensive</td><td>2,340🍩</td><td>Tank survival</td></tr>
+        <tr><td>Frostbite</td><td>1,980🍩</td><td>Cold weapons</td></tr>
+        <tr><td>Knockback</td><td>2,600🍩</td><td>Send 'em flying</td></tr>
+        <tr><td>Smart Tech</td><td>3,180🍩</td><td>Tracking drones</td></tr>
+        <tr><td>Mortar Squad</td><td>2,860🍩</td><td>Indirect fire</td></tr>
+        <tr><td>Sci-Fi Arsenal</td><td>2,600🍩</td><td>Energy weapons</td></tr>
+        <tr><td>Demolition</td><td>3,120🍩</td><td>Explosives</td></tr>
+        <tr><td>Archer's Kit</td><td>3,020🍩</td><td>Bows + traps</td></tr>
+        <tr><td>Marksman</td><td>2,240🍩</td><td>Precision</td></tr>
+        <tr><td>Knight's Honor</td><td>2,140🍩</td><td>Swords + shotgun</td></tr>
+      </table>
+
+      <h3>Fun</h3>
+      <table>
+        <tr><th>Bundle</th><th>Cost</th><th>Theme</th></tr>
+        <tr><td>Retro Pack</td><td>600🍩</td><td>Paintball, laser pointer, baguette, rubber duck</td></tr>
+        <tr><td>Chaos Mode</td><td>780🍩</td><td>Goofy weapons</td></tr>
+        <tr><td>Kitchen Catastrophe</td><td>680🍩</td><td>Frying pan, baguette, rubber duck</td></tr>
+      </table>
+
+      <h3>Premium <span class="pill pill-p2w">P2W</span></h3>
+      <table>
+        <tr><th>Bundle</th><th>Cost</th><th>Contents</th></tr>
+        <tr><td>Royalty</td><td>21,600🍩</td><td>Royal Minigun + Vampire Blade + Hand Cannon + Orbital Strike (barely a discount)</td></tr>
+        <tr><td>🌌 Cosmic P2W</td><td>2,730,000🍩</td><td>All 19 sci-fi P2W items (~10% off)</td></tr>
+      </table>
+
+      <h2 id="earning">💰 Earning donuts</h2>
+      <p>A match pays <strong>5🍩 a kill</strong>, plus <strong>50🍩 for a win</strong> or 20🍩 for a
+      loss, up to 250🍩 &mdash; about <strong>85🍩</strong> for an ordinary game. Every price in the
+      game is in those same units, so the shop reads as matches of work:</p>
+      <table>
+        <tr><th>Weapon</th><th>Cost</th><th>About</th></tr>
+        <tr><td>Pistol, bat, baguette</td><td>50&ndash;80🍩</td><td>under a match</td></tr>
+        <tr><td>AK-20, SG8</td><td>880&ndash;1,000🍩</td><td>~10&ndash;12 matches</td></tr>
+        <tr><td>SR-X, minigun, railgun</td><td>2,000&ndash;2,400🍩</td><td>24&ndash;28 matches</td></tr>
+        <tr><td>Chainsaw, AMR, Titan Hammer</td><td>5,600&ndash;9,600🍩</td><td>66&ndash;113 matches</td></tr>
+        <tr><td>P2W</td><td>84,000&ndash;280,000🍩</td><td>988&ndash;3,294 matches &mdash; legitimately out of reach, on purpose</td></tr>
+      </table>
+      <p>New accounts start with 500🍩. Match rewards used to be multiplied by 400 while normal
+      weapons were only doubled, so one match bought about seventy AKs; balances saved under that
+      rate were scaled down once by the same 400, so every account kept what it had in matches.</p>
+
+      <p><strong>💳 You can also just buy donuts.</strong> Four packs, $1.99 to $19.99, from about
+      1,000 donuts a dollar at the bottom to 2,000 at the top. Everything donuts buy is cosmetic or a
+      weapon unlock, so paying makes you look better, not harder to kill. Stripe handles the payment
+      and the game never sees a card number; the donuts are added by a signed message from Stripe to
+      the server, not by the page you land on afterwards, so the receipt cannot be faked by reloading
+      it. The store only exists if the server has been given payment keys &mdash; the offline build
+      and any copy you run yourself simply will not show it.</p>
+
+      <h2 id="chests">📦 Chests &amp; 🧩 Fragments</h2>
+      <p>Open chests to earn <strong>weapon fragments</strong>. Spend them to unlock any priced weapon (a quarter of its donut price in fragments, 100 at least), or spend them on upgrades.</p>
+      <table>
+        <tr><th>Chest</th><th>Cost</th><th>Drops</th></tr>
+        <tr><td>Common</td><td>12,000🍩</td><td>750-1,875 frags + 0-2,250 donuts</td></tr>
+        <tr><td>Rare</td><td>40,000🍩</td><td>2,625-6,000 frags + 2,250-7,500 donuts + 5% chance of a free weapon</td></tr>
+      </table>
+      <p><strong>Match-end drops:</strong> Win = 50% common + 15% rare. Loss = 30% common + 5% rare. (Independent rolls — not guaranteed every match.)</p>
+
+      <h2 id="wheel">🎡 Daily Wheel</h2>
+      <p>One free spin per day (UTC reset). Extra spins cost 100🍩. Possible outcomes:</p>
+      <table>
+        <tr><th>Probability</th><th>Outcome</th></tr>
+        <tr><td>45%</td><td>Donuts (60-180)</td></tr>
+        <tr><td>35%</td><td>Fragments (12-30)</td></tr>
+        <tr><td>14%</td><td>Big Fragments (40-80)</td></tr>
+        <tr><td>5%</td><td>Small Rare (200🍩 or 100🧩)</td></tr>
+        <tr><td>0.7%</td><td>Big Bundle (400🍩 + 150🧩)</td></tr>
+        <tr><td><strong>0.3%</strong></td><td><strong>JACKPOT — random rare weapon ≥400🍩</strong></td></tr>
+      </table>
+
+      <h2 id="upgrades">✨ Weapon Upgrades</h2>
+      <p>Each owned weapon has three stats, each independently upgradeable up to <strong>level 10</strong>:</p>
+      <table>
+        <tr><th>Stat</th><th>Per-Level Effect</th><th>At Max (lvl 10)</th></tr>
+        <tr><td>Damage</td><td>+12%</td><td>+120%</td></tr>
+        <tr><td>Magazine</td><td>+25%</td><td>+250% (3.5×)</td></tr>
+        <tr><td>Reload</td><td>×0.85</td><td>-85% (6.7× faster)</td></tr>
+      </table>
+      <p><strong>Costs per level</strong> (per stat): <code>30 / 60 / 120 / 240 / 480 / 800 / 1,200 / 1,800 / 2,500 / 3,500</code> fragments. Maxing one stat = <strong>10,710 frags</strong>. Maxing all three = <strong>32,130 frags</strong>.</p>
+
+      <h2 id="admin-pass">🪖 Admin Pass</h2>
+      <p><strong>30,000 donuts</strong> for a 10-minute window where every weapon (including all admin items) is equippable. Trial-style flex — once it expires, you go back to what you actually own.</p>
+
+      <h2 id="tips">💡 Tips &amp; Tricks</h2>
+
+      <h3>Useful</h3>
+      <div class="tip-box">The default loadout is more versatile than it looks.</div>
+      <div class="tip-box">Aiming down sights tightens spread on every gun.</div>
+      <div class="tip-box">Reloading early loses your reserve bullets — finish the mag.</div>
+      <div class="tip-box">Free spin resets daily at midnight UTC.</div>
+
+      <h3>Strategic</h3>
+      <div class="tip-box"><strong>Cycler</strong> never reloads — perfect for finishing weak enemies.</div>
+      <div class="tip-box"><strong>SR-X</strong> one-shots headshots.</div>
+      <div class="tip-box"><strong>Stim Shot</strong> is faster than Medkit.</div>
+      <div class="tip-box"><strong>Knife</strong> users move 2× as fast.</div>
+      <div class="tip-box"><strong>RPD</strong> never reloads either.</div>
+      <div class="tip-box"><strong>KOTH</strong> gives 3 lives — don't rush the center first.</div>
+
+      <h2 id="fun-facts">😂 Fun Facts</h2>
+      <p>Randomly shown in the lobby and 3 seconds after each match starts. 39 total facts across four categories: useful, strategic, secret, and funny. A sampling:</p>
+      <ul>
+        <li>"Chainsaw users are legally required to scream while charging."</li>
+        <li>"Frying Pan does NOT in fact deflect bullets. Stop trying."</li>
+        <li>"Tennis Racket reflects bullets. We don't know how."</li>
+        <li>"Baguette ability 'Eat' heals you. Carbs."</li>
+        <li>"Tac Nuke is balanced because it costs 250 of your fragile feelings."</li>
+        <li>"Fists are free. They have always been free. They will always be free."</li>
+        <li>"Trash123 has every admin item. Suspicious."</li>
+      </ul>
+
+      <h2 id="tech">🔧 Tech Stack</h2>
+      <ul>
+        <li><strong>Three.js</strong> — 3D rendering</li>
+        <li><strong>Socket.IO</strong> — multiplayer networking</li>
+        <li><strong>Express + Node.js</strong> — server</li>
+        <li><strong>Railway</strong> — production hosting</li>
+        <li><strong>Vanilla JS</strong> — no framework on the client</li>
+      </ul>
+
+      <h2 id="controls">🎮 Controls</h2>
+      <table>
+        <tr><th>Key</th><th>Does</th></tr>
+        <tr><td><code>WASD</code></td><td>Move</td></tr>
+        <tr><td><code>Space</code></td><td>Jump. Press it out of a slide for a <strong>slide jump</strong> — lower, but it carries the slide with you</td></tr>
+        <tr><td><code>Shift</code> / <code>Ctrl</code></td><td>Slide / crouch</td></tr>
+        <tr><td><code>1</code> <code>2</code> <code>3</code> <code>4</code></td><td>Primary · secondary · melee · support</td></tr>
+        <tr><td><code>Q</code></td><td>Cycle slot</td></tr>
+        <tr><td><code>B</code> or <strong>middle mouse</strong></td><td><strong>Quick melee</strong> — swings or fires the melee's ability, then puts you straight back on the gun you were holding. If your melee grants a double jump and you are in the air, it spends the jump instead</td></tr>
+        <tr><td><code>R</code></td><td>Reload</td></tr>
+        <tr><td><code>E</code></td><td>Ability, or aim down sights if what you hold has none</td></tr>
+        <tr><td><code>T</code></td><td><strong>Inspect</strong> — turn the weapon over. Anything that opens, opens</td></tr>
+        <tr><td><code>F</code></td><td>Interact / pilot</td></tr>
+        <tr><td><code>V</code></td><td>Chat</td></tr>
+        <tr><td><code>Tab</code></td><td>Scoreboard</td></tr>
+      </table>
+      <p><strong>Slide into an explosion.</strong> A blast normally shoves you away from itself, which stops a
+      slide dead. If one goes off <em>in front of you while you are sliding</em>, it drives you along the slide
+      instead &mdash; and 50% faster than the shove would have been. Behind or beside you, it pushes you the
+      usual way.</p>
+
+      <h2 id="characters">🧍 Characters</h2>
+      <p><strong>Everyone is built out of hard-edged blocks wearing a pixel texture</strong>, the
+      way a Minecraft character is. They used to be bevelled boxes with a face drawn on: brows, a
+      nose, cheeks and a smile, softened at every edge. At the size a player actually sees another
+      player, that reads as a plush toy rather than a character, and the nose was three brown pixels
+      that looked like damage.</p>
+      <p>Every character texture is a 16&times;16 grid of whole pixels, magnified with no smoothing
+      and no mipmaps. That rule is the whole look &mdash; one gradient or one half-pixel edge and the
+      character stops reading as pixel art and starts reading as a small drawing, which is worse than
+      either. Eyes are deliberately big and low on the face: at three pixels they vanished past a few
+      metres.</p>
+      <p><strong>Everyone is the same soldier in different colours.</strong> The kit that worked was
+      the SWAT one, so it became the template and the default: balaclava under a helmet, a goggle band
+      across the eyes, a plate carrier whose magazine pouches have amber tips, knee pads. The body is
+      identical on every skin &mdash; what tells them apart is the head, which is how real kit reads at
+      the distance you actually see another player from.</p>
+      <p>Six issues. <strong>Operator</strong> is the default, black on black with grey webbing.
+      <strong>Soldier</strong> is olive with the goggles pushed up onto the helmet and the face
+      uncovered &mdash; the only one in the set you can see is a person. <strong>Riot</strong> is navy
+      behind a full clear face shield, with the face drawn dimmer through it. <strong>Desert Recon</strong>
+      is a sand helmet, amber goggles and a shemagh wrapped over the nose and mouth, with no skin
+      showing at all. <strong>Night Ops</strong> is three blacks and two green tubes, nothing else.
+      <strong>Juggernaut</strong> is welded plate with a slit, lit red from inside.</p>
+      <p>The old name-seeded look is still there as <strong>Recruit</strong>, and the accessory skins
+      (Shadow, Spiky, Green Cap, Riot Chad) keep working. Sizes, joints and hitboxes did not move by a
+      millimetre, so animation and shooting cannot tell which skin is on.</p>
+
+      <h2 id="skins">🎨 Skins</h2>
+      <p><strong>Skins are purely cosmetic.</strong> Every one of them changes how a weapon looks
+      &mdash; body and accent colours, the tint of its tracer, sometimes a effect shell like
+      crystal or smoke &mdash; and <em>none</em> of them changes damage, spread, fire rate,
+      magazine, reload or anything else that decides a fight. A gold AK kills exactly as fast as a
+      cardboard one.</p>
+      <p>That is enforced in code rather than by discipline: a skin's stats are filtered down to
+      the cosmetic keys before they ever reach the weapon, so a skin that declared a damage number
+      would simply be ignored.</p>
+      <p>There are three kinds. <strong>Colour themes</strong> (22) repaint every gun at once.
+      <strong>Model skins</strong> replace the weapon with a different object entirely &mdash; 91 of
+      them across 72 guns, from the AUG to a leaf blower, a slushie machine, a telescope on the SR-X,
+      a banana Desert Eagle, an accordion MG42, a boombox for a shockwave launcher, a toaster for twin barrels and a tuba where the bazooka was &mdash; and they keep the weapon's stats, its reload track and its prop beats, so
+      nothing about the fight changes. <strong>Melee model skins</strong> do the same for the other
+      hand: 30 of them &mdash; every melee you can actually equip now has an alternative, admin blades
+      included. The knife
+      becomes a floss dispenser, the fire axe becomes an actual electric guitar (it is called an
+      axe), the riot shield becomes a trash can lid, the lightsabre becomes a fluorescent tube, the
+      Vampire Blade becomes a ketchup bottle, the Volt Whip becomes a string of Christmas lights
+      and the Gravity Hammer becomes a meat tenderizer. On the admin rack the Karambit becomes a can
+      opener, the Trench Bayonet a cocktail toothpick, the Tomahawk an ice scraper, the OTs-04 a
+      nail file and the Spec-Ops Garrote a phone charger. Same damage, same reach, same
+      ability.</p>
+      <p>One family goes further than a different object. The <strong>emoticon</strong> skins are
+      guns drawn out of characters &mdash; the text gun <code>&#7509;&#6197;&#12487;&#6209;&#9596;&#9473;</code>
+      stretched into three dimensions, white faces with black rims and nothing in between. There are
+      five of them, on the AK-20, pistol, SR-X, SG8 and minigun, and they fire <code>-</code>. The
+      dash is the only thing in the game a skin changes about a projectile, it is still purely
+      cosmetic, and it only applies to rounds YOU fire: an enemy holding the same weapon is holding
+      their own skin, and the server is never told about any of it.</p>
+      <p><strong>Every gun skin has its own sound, and every object has its own reload.</strong>
+      A barcode scanner beeps and takes a battery; a glue gun takes a glue stick in the back; the
+      crisp tube is refilled with crisps; the champagne is shaken and re-corked; the egg timer is
+      wound; the pipe organ has its bellows pumped; the emoticon guns are backspaced and retyped.
+      Skins that are real guns &mdash; the AUG, the Dragunov, the M249 &mdash; keep their gun&rsquo;s
+      reload, because they take the same ammunition, but each has its own voice. All of it is heard
+      only by you: other players hear your gun, not your skin.</p>
+      <p><strong>Everything you draw is pulled up from the hip.</strong> A weapon used to simply
+      appear in your hands, fully placed, the instant you switched to it. Now it swings up from
+      off-screen bottom-right as one rigid object, in 0.09&ndash;0.3 seconds depending on how heavy
+      it is: a pistol is up in under a tenth of a second, an AK-20 in under a fifth, an M134 in three
+      tenths. The timing comes from the movement penalty each weapon already carries, with a
+      floor set by the weapon&rsquo;s actual length &mdash; without that an RPG would come up as fast
+      as a pistol, because the weight table is really damage &times; magazine.</p>
+      <p><strong>Some skins make a better entrance.</strong> Draw the <strong>Hyperspace AK</strong> and
+      it arrives as crystal shards hanging in space around your hands, which then fuse into a rifle.
+      The <strong>Origami Pistol</strong> folds itself up out of a sheet of paper, the <strong>Brick
+      XM7</strong> is snapped together a brick at a time, the <strong>8-Bit SR-X</strong> pops in
+      a pixel at a time, and the <strong>Portal SG8</strong> steps out of a portal. It is only
+      something to look at: fire, reload or aim and the gun is instantly whole, so an entrance can
+      never make you slower to shoot.</p>
+      <p>Close range gets them too. The <strong>Hyperspace Knife</strong> fuses from crystal like the
+      AK; the <strong>Butterfly Knife</strong>&rsquo;s handles flip round the blade and close as the
+      grip; the <strong>Laser Katana</strong>&rsquo;s blade runs out of the hilt; the <strong>Frost
+      Axe</strong> is tossed up and caught; the <strong>Outlaw Shorty</strong> spin-cocks round its
+      loop lever; and the <strong>Gunslinger</strong> twirls twice round the trigger finger. Swing a
+      blade or fire a gun and it is instantly ready.</p>
+      <p>A few never stop moving while you hold them. The <strong>Singularity Knife</strong> is
+      pulled out of a black hole &mdash; stretched thin as it comes &mdash; and black and white
+      sparks flash off it constantly. The <strong>Sakura Katana</strong> blooms out of a swirl of
+      petals and keeps shedding them. The <strong>Thunder Spear</strong> arrives on a lightning
+      strike with arcs crawling along the shaft. The <strong>Blueprint AK</strong> is the AK as its
+      own technical drawing: it scans itself in and flickers like a hologram. The <strong>Glitch
+      Deagle</strong> teleports together, and every so often a piece is somewhere it should not be.</p>
+      <p>More of them: the <strong>Fishbowl Carbine</strong> fills with water when drawn and three
+      fish live in it; the <strong>Clockwork Coilgun</strong> clicks together like something wound,
+      its gears never stop turning and it lets off steam; the <strong>Neon SMG</strong> warms up a
+      tube at a time like a sign, its colours drifting; the <strong>Constellation Launcher</strong>
+      draws its stars, then the lines between them, then itself, with stars twinkling inside; the
+      <strong>Phantom Cannon</strong> fades up out of nothing and breathes, shedding wisps; and the
+      <strong>Balloon Sword</strong> is blown up hilt to tip and never quite stops wobbling.</p>
+      <p>🌈 The <strong>Rainbow AK</strong> is split out of a prism. A beam of white light hits a
+      spinning prism in front of your hands, it splits into seven, and every piece of the AK comes out
+      of the prism along its own colour &mdash; red first, violet last. The prism shatters, rainbow
+      rings blast out, and from then on the colours flow down the gun. Its rounds are rainbow too.</p>
+      <p><strong>🎬 Entrances come out of Skin Case Gen 2.</strong> Every skin above that plays an
+      animation when you draw it &mdash; 60 of them, 45 guns and 15 melee &mdash; is dealt by that
+      case: <strong>5,000🍩</strong> &mdash; about 59 matches, well under any P2W weapon (cheapest is
+      84,000🍩). Rarity sets the odds rather than the price.
+      The roll is weighted <em>mythic 1 : legendary 2 : rare 3 : good 6</em>, so a balloon knife turns
+      up early and often while the Rainbow AK sits at roughly <strong>1%</strong> on a fresh account
+      and each of the fourteen donut weapons at half that. No case
+      is ever wasted: each one deals a skin you do not own yet, and duplicates only start once you
+      own them all, so the whole set is exactly 60 cases &mdash; 300,000🍩, which nobody is going to finish. The server owns both the roll and the record of what you have pulled, so neither
+      can be claimed from the browser. The Legend entrances below are not in it &mdash; those are
+      earned, not bought.</p>
+      <p>There are two cases. <strong>Gen 1</strong> (1,500🍩) holds the basic skins and the
+      realistic military models: the Dragunov, the M249, the Remington 870, the MGL. <strong>Gen 2</strong>
+      (5,000🍩) holds the entrances. You can buy a case anywhere, but you have to be standing in
+      Lobby 13 to open one.</p>
+      <p>The Donut Case used to be a third, with a pool of two &mdash; which is a vending machine, not
+      a case. Both its weapons draw with an animation, which is Gen 2&rsquo;s whole rule, so The Glazer
+      and the Ring King moved there as its rarest tier, and twelve more donut guns
+      &mdash; the Glazed AK, Rocket Cruller, Glazed Uzi, Snack Sidearm, Powdered Pump, Long John SR-X,
+      Sprinkle Vector, Glaze Launcher, Sprinkle Spinner, Creamline MP40, Dessert Eagle and Doughboy Shorty
+      &mdash; joined them. Each is half as likely as the Rainbow AK, about 0.5% on a fresh account. Their
+      rounds are little glazed donuts that leave a glowing trail, and they fire with a metallic ring
+      instead of a pop. Anyone still holding an unopened Donut Case gets a Gen 2 case instead.</p>
+      <p><strong>🔥 FFA Legend</strong> skins are the real weapon, cursed: turned to obsidian, the
+      small hardware glowing like embers, spikes driven out along the spine and flanks, and black and
+      red fire burning off the top with embers lifting off it. Drawing one makes the fire flare up
+      with a whoomph, and your rounds fly as red-hot streaks trailing black smoke. There are eight:
+      the AK-20, pistol, SG8, SR-X and Vector, and the knife, katana and bat.</p>
+      <p><strong>They are earned, and it is meant to take forever:</strong> deal <strong>1,000,000
+      damage in FFA</strong>, or win <strong>5,000 FFA matches</strong> &mdash; whichever comes
+      first unlocks all eight at once. Progress shows on every locked Legend in the skins panel.
+      Damage is counted by the server as it lands, so it cannot be claimed; a win only counts from
+      a real FFA match that has run at least 30 seconds, where you landed a kill the server saw.
+      You need to be logged in for any of it to count.</p>
+      <p>Every Legend makes its own entrance and none are alike: the AK rises out of an eruption of
+      fire; the pistol is packed in a black cube that folds open; the SG8 is forged, red hot under
+      three hammer blows, and cools with a hiss; the SR-X rains down in pieces like meteors; the
+      Vector spirals in on a fiery vortex; the knife is thrown up and drilled round three times; the
+      katana is drawn from a black scabbard; the bat is slammed down with a ring of fire. The fire
+      catches with a whoomph once it is whole. None of the guns reload with a magazine either: a
+      wave of red light bursts through the AK; the pistol takes a burning soul; the SG8 takes coals;
+      the SR-X draws red energy back up its barrel; and the Vector takes a molten magazine.</p>
+      <p>The older melee skins (27 of them) are a name and a look on the same weapon, and they also
+      keep the base item's numbers and its ability. Where one of those has since been given a real
+      model the rename was deleted, because a skin that is
+      only a different caption is not a skin. So far that has taken Dental Floss, Pool Noodle and
+      Umbrella Sword.</p>
+
+      <h2 id="all-primaries">📋 Every Primary (77)</h2>
+<table><tr><th>Name</th><th>Type</th><th>DMG</th><th>MAG</th><th>RATE</th><th>FIRE</th><th>ABILITY</th><th>PRICE</th><th>NOTES</th></tr><tr>
+    <td>AK20</td>
+    <td>AR</td>
+    <td>30 <small>(70 head)</small></td>
+    <td>30/90</td>
+    <td>7/s</td>
+    <td>AUTO</td>
+    <td>Focus Fire</td>
+    <td>250🍩</td>
+    <td><em>We wanted this to be one of the most underestimated weapons in the game.
+    It went the other way — buffed to 38 it became a damage monster with absolute
+    dominance, so it has come back down to 30. It should feel like a weapon for any
+    situation: no spread, no falloff, four to the body or two to the head, and a
+    reload you have to cock — chunk, chunk — so pick your moment.</em></td>
+  </tr><tr>
+    <td>AK30</td>
+    <td>AR+</td>
+    <td>22</td>
+    <td>45/135</td>
+    <td>7/s</td>
+    <td>AUTO</td>
+    <td>Armor Pierce</td>
+    <td>300🍩</td>
+  </tr><tr>
+    <td>SG-8</td>
+    <td>Shotgun</td>
+    <td>18</td>
+    <td>8/32</td>
+    <td>2/s</td>
+    <td>SEMI</td>
+    <td>Bullet Wave</td>
+    <td>220🍩</td>
+    <td><em>Weakest gun in the starter loadout, by the numbers, and it showed.
+    Pump speed doubles &mdash; 900&nbsp;ms &rarr; 450&nbsp;ms between shots &mdash;
+    so the second barrel is there for you a lot sooner instead of leaving you
+    standing there after a whiff.</em></td>
+  </tr><tr>
+    <td>SG100</td>
+    <td>Shotgun+</td>
+    <td>70</td>
+    <td>10/50</td>
+    <td>1/s</td>
+    <td>SEMI</td>
+    <td>Fan Hammer</td>
+    <td>380🍩</td>
+  </tr><tr>
+    <td>SR-X</td>
+    <td>Sniper</td>
+    <td>95</td>
+    <td>5/20</td>
+    <td>1/s</td>
+    <td>SEMI</td>
+    <td>Light Speed</td>
+    <td>500🍩</td>
+  </tr><tr>
+    <td>RPD</td>
+    <td>LMG</td>
+    <td>10</td>
+    <td>300</td>
+    <td>17/s</td>
+    <td>AUTO</td>
+    <td>Overclock</td>
+    <td>450🍩</td>
+  </tr><tr>
+    <td>MP-40</td>
+    <td>SMG</td>
+    <td>15</td>
+    <td>40/120</td>
+    <td>13/s</td>
+    <td>AUTO</td>
+    <td>Piercing Round</td>
+    <td>200🍩</td>
+  </tr><tr>
+    <td>P90</td>
+    <td>SMG+</td>
+    <td>15</td>
+    <td>50/150</td>
+    <td>50/s</td>
+    <td>AUTO</td>
+    <td>Hyperspin</td>
+    <td>350🍩</td>
+    <td><em>Pin accurate and always was — the spread is 0.005, which puts every
+    round inside a hand's width at 25&nbsp;m. What stops it is new: the P90 is the
+    first weapon in the game with real recoil. Fifty rounds a second out of a
+    fifty-round magazine means the whole mag is gone in one second, so the kick
+    per shot is tiny and the CLIMB is what you feel — 1.5&deg; after ten rounds,
+    12.7&deg; if you hold the whole thing down. It should feel like a laser for
+    the first half-second and a fight after that. Aim down sights and it kicks
+    45% less. Still, 250 damage a second was forgettable next to guns half its
+    fire rate, so damage triples: 5 &rarr; 15, 750 dps at full auto. That much
+    output earns a second cost besides the climb — a small spread bloom now
+    stacks in with every shot, roughly doubling the base spread by the time the
+    mag runs dry. Shot 1 is always clean; shot 40 is not.</em></td>
+  </tr><tr>
+    <td>Paintball</td>
+    <td>Paintball</td>
+    <td>40</td>
+    <td>8/48</td>
+    <td>5/s</td>
+    <td>AUTO</td>
+    <td>Splat Bomb</td>
+    <td>120🍩</td>
+    <td><em>Bullet speed dropped 84 &rarr; 50 &mdash; this thing lobs now, easy to
+    see coming and lead away from at range. In exchange the blob itself got real:
+    bulletSize 0.07 &rarr; 0.2, and hit detection was reworked so a bullet's own
+    radius actually counts toward landing a hit (it never did before &mdash; size
+    was purely visual, for every gun). Up close, that fat paint blob is far more
+    forgiving than the raw numbers suggest.</em></td>
+  </tr><tr>
+    <td>Burst Rifle</td>
+    <td>Burst AR</td>
+    <td>47</td>
+    <td>36/108</td>
+    <td>11/s</td>
+    <td>AUTO</td>
+    <td>Triple Burst</td>
+    <td>280🍩</td>
+    <td><em>1,340 dps turned out to be too much of a wide margin &mdash; damage
+    comes back down 25% (63 &rarr; 47), landing at exactly 1,000 dps while the
+    trigger is down. Still exactly <strong>three rounds</strong> before it locks
+    you out for 0.75&nbsp;s, whether those three land back-to-back or spread
+    over separate taps. Three shots is now 141 damage against a 300 HP player
+    &mdash; hard-hitting, no longer nearly a one-burst kill. Falloff floor and
+    fire rate are unchanged.</em></td>
+  </tr><tr>
+    <td>Lever Rifle</td>
+    <td>Marksman</td>
+    <td>93</td>
+    <td>8/40</td>
+    <td>2/s</td>
+    <td>SEMI</td>
+    <td>Deadeye</td>
+    <td>360🍩</td>
+    <td><em>A real lever gun kicks your head back with every round you cycle, and
+    this one never did. Damage is up 50% (62 &rarr; 93) and now there's a
+    matching jolt to work the lever through &mdash; up to nearly 2&deg; of climb on
+    consecutive shots that settles fast once you let off.</em></td>
+  </tr><tr>
+    <td>Auto Shotgun</td>
+    <td>Shotgun</td>
+    <td>12</td>
+    <td>12/48</td>
+    <td>4/s</td>
+    <td>AUTO</td>
+    <td>Tight Choke</td>
+    <td>340🍩</td>
+  </tr><tr>
+    <td>Vector SMG</td>
+    <td>SMG</td>
+    <td>12</td>
+    <td>32/160</td>
+    <td>22/s</td>
+    <td>AUTO</td>
+    <td>Overdrive</td>
+    <td>300🍩</td>
+  </tr><tr>
+    <td>Crossbow</td>
+    <td>Projectile</td>
+    <td>80</td>
+    <td>1/18</td>
+    <td>2/s</td>
+    <td>SEMI</td>
+    <td>Power Charge</td>
+    <td>280🍩</td>
+  </tr><tr>
+    <td>Flamethrower</td>
+    <td>Area</td>
+    <td>6</td>
+    <td>80/160</td>
+    <td>29/s</td>
+    <td>AUTO</td>
+    <td>Propane Burst</td>
+    <td>420🍩</td>
+    <td><em>It no longer melts people by holding the trigger &mdash; it sets them on
+    fire and lets go. Direct damage is halved, but one pellet lights you for
+    7&nbsp;a&nbsp;second over ten seconds, which is 70 off a 100&nbsp;HP bar, and it
+    does not stack: touching someone again refreshes the burn rather than adding a
+    second one. In exchange the flames stop dead at 12&nbsp;m instead of carrying
+    86, and you move 10% faster while pouring it on. It should feel like a weapon
+    that forces the fight close, marks whoever it touches, and then walks away.</em></td>
+  </tr><tr>
+    <td>Grenade Launcher</td>
+    <td>Explosive</td>
+    <td>90</td>
+    <td>6/18</td>
+    <td>1/s</td>
+    <td>SEMI</td>
+    <td>Cluster</td>
+    <td>500🍩</td>
+    <td><em>A buff aimed at how clunky this felt to actually use, not at its
+    damage: follow-up shots come 30% faster back to back (900&nbsp;ms &rarr;
+    692&nbsp;ms) and the reload is 20% quicker (1.8&nbsp;s &rarr; 1.5&nbsp;s).
+    Still 90 damage, still no one-shots &mdash; it should feel like using the
+    gun instead of waiting on it.</em></td>
+  </tr><tr>
+    <td>Railgun</td>
+    <td>Charge</td>
+    <td>110</td>
+    <td>3/12</td>
+    <td>1/s</td>
+    <td>SEMI</td>
+    <td>Overcharge</td>
+    <td>600🍩</td>
+  </tr><tr>
+    <td>Minigun</td>
+    <td>Heavy</td>
+    <td>27</td>
+    <td>180/360</td>
+    <td>31/s</td>
+    <td>AUTO</td>
+    <td>Spin-Up</td>
+    <td>600🍩</td>
+    <td><em>281 damage a second was forgettable for a chaingun. It's now three times
+    the damage per bullet &mdash; same 31 rounds/s, 844/s while it's spinning &mdash;
+    with the commitment to match: fire it for 10 straight seconds and the barrel
+    locks up for a 2&nbsp;s warm-up you can't shoot through. Aim down sights and it
+    never needs to warm up at all, because the barrel never stopped turning &mdash;
+    but that focus costs half your speed instead of the usual 30% hip-fire
+    penalty (down from 40%, since it's not just heavy anymore, it's dangerous).</em></td>
+  </tr><tr>
+    <td>Freeze Gun</td>
+    <td>Control</td>
+    <td>13</td>
+    <td>30/90</td>
+    <td>9/s</td>
+    <td>AUTO</td>
+    <td>Cryo Nova</td>
+    <td>350🍩</td>
+  </tr><tr>
+    <td>Boombow</td>
+    <td>Explosive Bow</td>
+    <td>95</td>
+    <td>1/14</td>
+    <td>1/s</td>
+    <td>SEMI</td>
+    <td>Power Draw</td>
+    <td>500🍩</td>
+  </tr><tr>
+    <td>AN-94</td>
+    <td>Hyperburst AR</td>
+    <td>24</td>
+    <td>30/90</td>
+    <td>8/s</td>
+    <td>AUTO</td>
+    <td>Hyperburst</td>
+    <td>380🍩</td>
+  </tr><tr>
+    <td>SPAS-12</td>
+    <td>Tactical Shotgun</td>
+    <td>20</td>
+    <td>8/24</td>
+    <td>1/s</td>
+    <td>SEMI</td>
+    <td>Slam Fire</td>
+    <td>360🍩</td>
+  </tr><tr>
+    <td>M1 Garand</td>
+    <td>Battle Rifle</td>
+    <td>117</td>
+    <td>8/32</td>
+    <td>3/s</td>
+    <td>SEMI</td>
+    <td>Last Ping</td>
+    <td>380🍩</td>
+    <td><em>A battle rifle chambered for something that hits like a battle rifle
+    now: damage up 50% (78 &rarr; 117), with real recoil to earn it &mdash; the
+    kind of kick that means you're resetting your aim every shot, not walking
+    it up like an SMG.</em></td>
+  </tr><tr>
+    <td>Plasma Carbine</td>
+    <td>Energy Rifle</td>
+    <td>18</td>
+    <td>25/100</td>
+    <td>7/s</td>
+    <td>AUTO</td>
+    <td>Plasma Storm</td>
+    <td>420🍩</td>
+  </tr><tr>
+    <td>Arc Rifle</td>
+    <td>Lightning</td>
+    <td>22</td>
+    <td>20/80</td>
+    <td>5/s</td>
+    <td>AUTO</td>
+    <td>Overload</td>
+    <td>400🍩</td>
+  </tr><tr>
+    <td>Gravity Launcher</td>
+    <td>Heavy</td>
+    <td>75</td>
+    <td>2/10</td>
+    <td>1/s</td>
+    <td>SEMI</td>
+    <td>Singularity</td>
+    <td>480🍩</td>
+  </tr><tr>
+    <td>Potato Cannon</td>
+    <td>Joke Launcher</td>
+    <td>60</td>
+    <td>1/10</td>
+    <td>1/s</td>
+    <td>SEMI</td>
+    <td>Rotten Potato</td>
+    <td>220🍩</td>
+  </tr><tr>
+    <td>Sticker Blaster</td>
+    <td>SMG</td>
+    <td>8</td>
+    <td>50/200</td>
+    <td>17/s</td>
+    <td>AUTO</td>
+    <td>Sticker Bomb</td>
+    <td>280🍩</td>
+  </tr><tr>
+    <td>Harpoon Gun</td>
+    <td>Heavy Projectile</td>
+    <td>95</td>
+    <td>1/6</td>
+    <td>1/s</td>
+    <td>SEMI</td>
+    <td>Chain Pull</td>
+    <td>440🍩</td>
+  </tr><tr>
+    <td>Mortar Rifle</td>
+    <td>Indirect Explosive</td>
+    <td>85</td>
+    <td>3/12</td>
+    <td>1/s</td>
+    <td>SEMI</td>
+    <td>Airburst</td>
+    <td>480🍩</td>
+  </tr><tr>
+    <td>Arc Torrent</td>
+    <td>Beam</td>
+    <td>5</td>
+    <td>100/200</td>
+    <td>10/s</td>
+    <td>AUTO</td>
+    <td>Surge</td>
+    <td>460🍩</td>
+  </tr><tr>
+    <td>Firework Launcher</td>
+    <td>Explosive</td>
+    <td>50</td>
+    <td>2/10</td>
+    <td>1/s</td>
+    <td>SEMI</td>
+    <td>Grand Finale</td>
+    <td>360🍩</td>
+  </tr><tr>
+    <td>Switchblade Gun</td>
+    <td>Adaptive</td>
+    <td>50</td>
+    <td>12/36</td>
+    <td>3/s</td>
+    <td>SEMI</td>
+    <td>Recombine</td>
+    <td>420🍩</td>
+  </tr><tr>
+    <td>Flechette Rifle</td>
+    <td>Precision AR</td>
+    <td>16</td>
+    <td>40/120</td>
+    <td>14/s</td>
+    <td>AUTO</td>
+    <td>Needle Storm</td>
+    <td>380🍩</td>
+  </tr><tr>
+    <td>Thermal LMG</td>
+    <td>Heavy LMG</td>
+    <td>11</td>
+    <td>180/360</td>
+    <td>18/s</td>
+    <td>AUTO</td>
+    <td>Vent Burst</td>
+    <td>520🍩</td>
+  </tr><tr>
+    <td>Burst Cannon</td>
+    <td>Heavy Burst Rifle</td>
+    <td>40</td>
+    <td>24/72</td>
+    <td>2/s</td>
+    <td>AUTO</td>
+    <td>Stabilizer</td>
+    <td>480🍩</td>
+  </tr><tr>
+    <td>Incendiary Shotgun</td>
+    <td>Fire Shotgun</td>
+    <td>14</td>
+    <td>8/32</td>
+    <td>1/s</td>
+    <td>SEMI</td>
+    <td>Dragon Breath</td>
+    <td>400🍩</td>
+  </tr><tr>
+    <td>Coilgun</td>
+    <td>Electromagnetic Rifle</td>
+    <td>92</td>
+    <td>5/20</td>
+    <td>1/s</td>
+    <td>SEMI</td>
+    <td>Overcharge</td>
+    <td>460🍩</td>
+  </tr><tr>
+    <td>Smart SMG</td>
+    <td>Tracking SMG</td>
+    <td>9</td>
+    <td>36/144</td>
+    <td>22/s</td>
+    <td>AUTO</td>
+    <td>Target Link</td>
+    <td>380🍩</td>
+  </tr><tr>
+    <td>Anti-Material Rifle</td>
+    <td>Heavy Sniper</td>
+    <td>180</td>
+    <td>3/12</td>
+    <td>1/s</td>
+    <td>SEMI</td>
+    <td>Armor Break</td>
+    <td>2,000🍩</td>
+  </tr><tr>
+    <td>Compressed Air Rifle</td>
+    <td>Silent Rifle</td>
+    <td>51</td>
+    <td>20/80</td>
+    <td>6/s</td>
+    <td>SEMI</td>
+    <td>Silent Step</td>
+    <td>320🍩</td>
+    <td><em>Damage up 50% (34 &rarr; 51) with the lightest recoil of this whole
+    pass &mdash; no gunpowder, no real kick, but a pneumatic charge still pushes
+    back a little. Still silent, now actually worth reaching for.</em></td>
+  </tr><tr>
+    <td>Shockwave Launcher</td>
+    <td>Knockback Heavy</td>
+    <td>48</td>
+    <td>4/16</td>
+    <td>1/s</td>
+    <td>SEMI</td>
+    <td>Concussion Blast</td>
+    <td>460🍩</td>
+  </tr><tr>
+    <td>Twin Barrel AR</td>
+    <td>Dual Rifle</td>
+    <td>20</td>
+    <td>32/96</td>
+    <td>7/s</td>
+    <td>AUTO</td>
+    <td>Dual Burst</td>
+    <td>440🍩</td>
+  </tr><tr>
+    <td>Swarm Rifle</td>
+    <td>Tracking AR</td>
+    <td>11</td>
+    <td>60/180</td>
+    <td>22/s</td>
+    <td>AUTO</td>
+    <td>Hive Mode</td>
+    <td>460🍩</td>
+  </tr><tr>
+    <td>Lazy Laser</td>
+    <td>Wide Beam</td>
+    <td>6</td>
+    <td>120/240</td>
+    <td>11/s</td>
+    <td>AUTO</td>
+    <td>Full Sweep</td>
+    <td>420🍩</td>
+  </tr><tr>
+    <td>Storm Cannon</td>
+    <td>Lightning Explosive</td>
+    <td>70</td>
+    <td>4/16</td>
+    <td>2/s</td>
+    <td>SEMI</td>
+    <td>Thunderstorm</td>
+    <td>540🍩</td>
+  </tr><tr>
+    <td>Royal Minigun</td>
+    <td>Premium Heavy</td>
+    <td>12</td>
+    <td>400/400</td>
+    <td>29/s</td>
+    <td>AUTO</td>
+    <td>Golden Overheat</td>
+    <td>3,500🍩</td>
+  </tr><tr>
+    <td>Prism Launcher</td>
+    <td>Bouncing Light</td>
+    <td>38</td>
+    <td>12/36</td>
+    <td>3/s</td>
+    <td>SEMI</td>
+    <td>Rainbow Split</td>
+    <td>420🍩</td>
+  </tr><tr>
+    <td>Foam Cannon</td>
+    <td>Industrial Utility</td>
+    <td>18</td>
+    <td>6/24</td>
+    <td>1/s</td>
+    <td>SEMI</td>
+    <td>Foam Fortress</td>
+    <td>280🍩</td>
+  </tr><tr>
+    <td>Airburst Projector</td>
+    <td>Knockback Tech</td>
+    <td>22</td>
+    <td>8/32</td>
+    <td>2/s</td>
+    <td>AUTO</td>
+    <td>Cyclone Pulse</td>
+    <td>360🍩</td>
+  </tr><tr>
+    <td>Glassmaker</td>
+    <td>Caustic Projectile</td>
+    <td>28</td>
+    <td>10/40</td>
+    <td>3/s</td>
+    <td>AUTO</td>
+    <td>Crystal Rain</td>
+    <td>380🍩</td>
+  </tr><tr>
+    <td>Magnet Rifle</td>
+    <td>Electromagnetic</td>
+    <td>16</td>
+    <td>24/96</td>
+    <td>7/s</td>
+    <td>AUTO</td>
+    <td>Polar Shift</td>
+    <td>380🍩</td>
+  </tr><tr>
+    <td>Seismic Hammer</td>
+    <td>Ground Shockwave</td>
+    <td>70</td>
+    <td>4/16</td>
+    <td>1/s</td>
+    <td>SEMI</td>
+    <td>Earthbreaker</td>
+    <td>480🍩</td>
+  </tr><tr>
+    <td>Painter Beam</td>
+    <td>Effect Painter</td>
+    <td>6</td>
+    <td>60/180</td>
+    <td>13/s</td>
+    <td>AUTO</td>
+    <td>Spectrum Blast</td>
+    <td>300🍩</td>
+  </tr><tr>
+    <td>Portal Launcher</td>
+    <td>Spatial</td>
+    <td>10</td>
+    <td>6/12</td>
+    <td>2/s</td>
+    <td>SEMI</td>
+    <td>Portal Storm</td>
+    <td>460🍩</td>
+  </tr><tr>
+    <td>Pulse Disc Launcher</td>
+    <td>Bouncing Disc</td>
+    <td>32</td>
+    <td>8/32</td>
+    <td>2/s</td>
+    <td>SEMI</td>
+    <td>Hyper Disc</td>
+    <td>380🍩</td>
+  </tr><tr>
+    <td>Gravity Paint</td>
+    <td>Reality Paint</td>
+    <td>4</td>
+    <td>30/90</td>
+    <td>8/s</td>
+    <td>AUTO</td>
+    <td>Anti-Grav Field</td>
+    <td>400🍩</td>
+  </tr><tr>
+    <td>Traffic Controller</td>
+    <td>Signal Painter</td>
+    <td>4</td>
+    <td>18/54</td>
+    <td>5/s</td>
+    <td>SEMI</td>
+    <td>Gridlock</td>
+    <td>320🍩</td>
+  </tr><tr>
+    <td>Pinball Launcher</td>
+    <td>Chaos Heavy</td>
+    <td>60</td>
+    <td>3/12</td>
+    <td>1/s</td>
+    <td>SEMI</td>
+    <td>Multiball</td>
+    <td>440🍩</td>
+  </tr><tr>
+    <td>Event Horizon Rifle</td>
+    <td>Gravity AR</td>
+    <td>75</td>
+    <td>18/54</td>
+    <td>4/s</td>
+    <td>AUTO</td>
+    <td>Collapse</td>
+    <td>12,000🍩</td>
+  </tr><tr>
+    <td>Storm Core</td>
+    <td>Plasma Heavy</td>
+    <td>55</td>
+    <td>24/72</td>
+    <td>5/s</td>
+    <td>AUTO</td>
+    <td>Supercell</td>
+    <td>10,000🍩</td>
+  </tr><tr>
+    <td>Absolute Zero Projector</td>
+    <td>Cryo</td>
+    <td>35</td>
+    <td>30/90</td>
+    <td>10/s</td>
+    <td>AUTO</td>
+    <td>Cryostasis</td>
+    <td>11,000🍩</td>
+  </tr><tr>
+    <td>Solar Lance</td>
+    <td>Beam</td>
+    <td>12</td>
+    <td>200</td>
+    <td>25/s</td>
+    <td>AUTO</td>
+    <td>Solar Flare</td>
+    <td>13,000🍩</td>
+  </tr><tr>
+    <td>Phase Driver</td>
+    <td>Phasing AR</td>
+    <td>60</td>
+    <td>20/60</td>
+    <td>5/s</td>
+    <td>AUTO</td>
+    <td>Ghost Protocol</td>
+    <td>3,000,000🍩</td>
+  </tr><tr>
+    <td>Quantum Repeater</td>
+    <td>Time-Shift AR</td>
+    <td>50</td>
+    <td>22/66</td>
+    <td>5/s</td>
+    <td>AUTO</td>
+    <td>Timeline Break</td>
+    <td>14,000🍩</td>
+  </tr><tr>
+    <td>Magnetar Cannon</td>
+    <td>Magnetic Heavy</td>
+    <td>90</td>
+    <td>12/36</td>
+    <td>2/s</td>
+    <td>SEMI</td>
+    <td>Polar Collapse</td>
+    <td>12,500🍩</td>
+  </tr><tr>
+    <td>Nebula Mortar</td>
+    <td>Cosmic Indirect</td>
+    <td>110</td>
+    <td>4/16</td>
+    <td>1/s</td>
+    <td>SEMI</td>
+    <td>Starfall</td>
+    <td>17,500🍩</td>
+  </tr><tr>
+    <td>Prism Engine</td>
+    <td>Refractive Beam</td>
+    <td>22</td>
+    <td>50/150</td>
+    <td>14/s</td>
+    <td>AUTO</td>
+    <td>Refraction Overload</td>
+    <td>13,500🍩</td>
+  </tr><tr>
+    <td>Void Harvester</td>
+    <td>Void Heavy</td>
+    <td>130</td>
+    <td>6/24</td>
+    <td>1/s</td>
+    <td>SEMI</td>
+    <td>Consume</td>
+    <td>20,000🍩</td>
+  </tr><tr>
+    <td>GAU-19 Heavy <span class="pill pill-admin">ADMIN</span></td>
+    <td>Admin · Mounted MG</td>
+    <td>50</td>
+    <td>500/1000</td>
+    <td>56/s</td>
+    <td>AUTO</td>
+    <td>Sustained Fire</td>
+    <td><span style="color:#888">—</span></td>
+  </tr><tr>
+    <td>MK-44 Bushmaster <span class="pill pill-admin">ADMIN</span></td>
+    <td>Admin · Chain Gun</td>
+    <td>25</td>
+    <td>360/720</td>
+    <td>25/s</td>
+    <td>AUTO</td>
+    <td>Saturation</td>
+    <td><span style="color:#888">—</span></td>
+  </tr><tr>
+    <td>XM7 Service Rifle <span class="pill pill-admin">ADMIN</span></td>
+    <td>Admin · Battle AR</td>
+    <td>60</td>
+    <td>40/120</td>
+    <td>13/s</td>
+    <td>AUTO</td>
+    <td>Precision Fire</td>
+    <td><span style="color:#888">—</span></td>
+  </tr><tr>
+    <td>Barrett M82 <span class="pill pill-admin">ADMIN</span></td>
+    <td>Admin · Anti-Material</td>
+    <td>250</td>
+    <td>5/15</td>
+    <td>1/s</td>
+    <td>SEMI</td>
+    <td>.50 BMG Overload</td>
+    <td><span style="color:#888">—</span></td>
+  </tr><tr>
+    <td>M134 Minigun <span class="pill pill-admin">ADMIN</span></td>
+    <td>Admin · Gatling</td>
+    <td>15</td>
+    <td>800</td>
+    <td>40/s</td>
+    <td>AUTO</td>
+    <td>Brrrrt!</td>
+    <td><span style="color:#888">—</span></td>
+  </tr><tr>
+    <td>HK-MP7 Operator <span class="pill pill-admin">ADMIN</span></td>
+    <td>Admin · PDW</td>
+    <td>30</td>
+    <td>60/240</td>
+    <td>20/s</td>
+    <td>AUTO</td>
+    <td>Silenced Burst</td>
+    <td><span style="color:#888">—</span></td>
+  </tr><tr>
+    <td>FN P-90 Special <span class="pill pill-admin">ADMIN</span></td>
+    <td>Admin · Bullpup SMG</td>
+    <td>22</td>
+    <td>80/240</td>
+    <td>17/s</td>
+    <td>AUTO</td>
+    <td>Spec Ops Drill</td>
+    <td><span style="color:#888">—</span></td>
+  </tr><tr>
+    <td>MG-42 <span class="pill pill-fun">D-Day only</span></td>
+    <td>MG</td>
+    <td>15</td>
+    <td>5000</td>
+    <td>20/s</td>
+    <td>AUTO</td>
+    <td>—</td>
+    <td><span style="color:#888">—</span></td>
+  </tr></table>
+
+<h2 id="all-secondaries">📋 Every Secondary (38)</h2>
+<table><tr><th>Name</th><th>Type</th><th>DMG</th><th>MAG</th><th>RATE</th><th>FIRE</th><th>ABILITY</th><th>PRICE</th></tr><tr>
+    <td>Revolver</td>
+    <td>Secondary</td>
+    <td>83</td>
+    <td>6/18</td>
+    <td>3/s</td>
+    <td>SEMI</td>
+    <td>Fan Hammer</td>
+    <td>150🍩</td>
+    <td><em>Solid but skippable at 55. Damage up 50% (&rarr; 83) with real recoil
+    to go with it, the way a six-shooter actually feels in the hand.</em></td>
+  </tr><tr>
+    <td>Flare</td>
+    <td>Secondary</td>
+    <td>85</td>
+    <td>1/6</td>
+    <td>5/s</td>
+    <td>SEMI</td>
+    <td>Signal Flare</td>
+    <td>80🍩</td>
+  </tr><tr>
+    <td>Pistol</td>
+    <td>Secondary</td>
+    <td>20</td>
+    <td>15/45</td>
+    <td>5/s</td>
+    <td>SEMI</td>
+    <td>Rapid Fire</td>
+    <td>60🍩</td>
+  </tr><tr>
+    <td>Shorty</td>
+    <td>Secondary</td>
+    <td>30</td>
+    <td>2/10</td>
+    <td>1/s</td>
+    <td>SEMI</td>
+    <td>Point Blank</td>
+    <td>180🍩</td>
+  </tr><tr>
+    <td>Cycler</td>
+    <td>Secondary</td>
+    <td>8</td>
+    <td>100</td>
+    <td>20/s</td>
+    <td>AUTO</td>
+    <td>Surge</td>
+    <td>140🍩</td>
+  </tr><tr>
+    <td>Hand Cannon</td>
+    <td>Secondary+</td>
+    <td>105</td>
+    <td>5/20</td>
+    <td>2/s</td>
+    <td>SEMI</td>
+    <td>Execution</td>
+    <td>260🍩</td>
+    <td><em>Damage up 50% (70 &rarr; 105) and now the biggest kick of any pistol
+    in the game to match &mdash; this is the one that should genuinely hurt to
+    hold on target for a second shot.</em></td>
+  </tr><tr>
+    <td>Throwing Knives</td>
+    <td>Thrown</td>
+    <td>45</td>
+    <td>3/18</td>
+    <td>4/s</td>
+    <td>SEMI</td>
+    <td>Volley</td>
+    <td>120🍩</td>
+  </tr><tr>
+    <td>Taser</td>
+    <td>Control</td>
+    <td>53</td>
+    <td>2/16</td>
+    <td>2/s</td>
+    <td>SEMI</td>
+    <td>Discharge</td>
+    <td>200🍩</td>
+    <td><em>Damage up 50% (35 &rarr; 53) with a light kick added — nothing like
+    the Hand Cannon, but enough that you feel the jolt is coming from both
+    ends.</em></td>
+  </tr><tr>
+    <td>Machine Pistol</td>
+    <td>Secondary</td>
+    <td>14</td>
+    <td>24/96</td>
+    <td>14/s</td>
+    <td>AUTO</td>
+    <td>Akimbo</td>
+    <td>220🍩</td>
+  </tr><tr>
+    <td>Sawed-Off</td>
+    <td>Secondary</td>
+    <td>35</td>
+    <td>2/8</td>
+    <td>1/s</td>
+    <td>SEMI</td>
+    <td>Double Barrel</td>
+    <td>260🍩</td>
+  </tr><tr>
+    <td>Dart Gun</td>
+    <td>Secondary</td>
+    <td>38</td>
+    <td>6/18</td>
+    <td>3/s</td>
+    <td>SEMI</td>
+    <td>Toxin Dart</td>
+    <td>160🍩</td>
+    <td><em>Damage up 50% (25 &rarr; 38, poison DOT unchanged) with the lightest
+    kick of any gun getting this treatment — a compressed-air dart launcher
+    should barely nudge you, and it barely does.</em></td>
+  </tr><tr>
+    <td>Laser Pointer</td>
+    <td>Secondary</td>
+    <td>6</td>
+    <td>50</td>
+    <td>13/s</td>
+    <td>AUTO</td>
+    <td>Blinding Flash</td>
+    <td>120🍩</td>
+  </tr><tr>
+    <td>Coin Gun</td>
+    <td>Secondary</td>
+    <td>30</td>
+    <td>8/32</td>
+    <td>4/s</td>
+    <td>SEMI</td>
+    <td>Jackpot</td>
+    <td>180🍩</td>
+  </tr><tr>
+    <td>Machine Revolver</td>
+    <td>Secondary</td>
+    <td>36</td>
+    <td>8/24</td>
+    <td>13/s</td>
+    <td>AUTO</td>
+    <td>Wild Spin</td>
+    <td>240🍩</td>
+    <td><em>The named example of a gun that was just there — fine numbers, no
+    personality. Damage up 50% (24 &rarr; 36) with a P90-style climbing kick
+    since it's the one full-auto gun in this batch, not a single big jolt per
+    shot.</em></td>
+  </tr><tr>
+    <td>EMP Pistol</td>
+    <td>Secondary</td>
+    <td>26</td>
+    <td>12/48</td>
+    <td>4/s</td>
+    <td>SEMI</td>
+    <td>EMP Burst</td>
+    <td>240🍩</td>
+  </tr><tr>
+    <td>Pocket Rocket</td>
+    <td>Secondary</td>
+    <td>90</td>
+    <td>1/6</td>
+    <td>1/s</td>
+    <td>SEMI</td>
+    <td>Mini Barrage</td>
+    <td>320🍩</td>
+  </tr><tr>
+    <td>Auto Revolver</td>
+    <td>Secondary</td>
+    <td>42</td>
+    <td>6/24</td>
+    <td>8/s</td>
+    <td>AUTO</td>
+    <td>Deadeye</td>
+    <td>220🍩</td>
+  </tr><tr>
+    <td>Frost Blaster</td>
+    <td>Secondary</td>
+    <td>0</td>
+    <td>50</td>
+    <td>10/s</td>
+    <td>AUTO</td>
+    <td>Cryo Burst</td>
+    <td>240🍩</td>
+  </tr><tr>
+    <td>Snubnose</td>
+    <td>Secondary</td>
+    <td>48</td>
+    <td>6/18</td>
+    <td>4/s</td>
+    <td>SEMI</td>
+    <td>Fan</td>
+    <td>140🍩</td>
+    <td><em>Damage up 50% (32 &rarr; 48) with recoil added — a short barrel means
+    less to hold the muzzle down, so it climbs a little faster per shot than
+    the full-size Revolver does.</em></td>
+  </tr><tr>
+    <td>Duelist</td>
+    <td>Secondary</td>
+    <td>90</td>
+    <td>1/8</td>
+    <td>3/s</td>
+    <td>SEMI</td>
+    <td>Honor Shot</td>
+    <td>280🍩</td>
+  </tr><tr>
+    <td>Mauser C96</td>
+    <td>Secondary</td>
+    <td>36</td>
+    <td>10/30</td>
+    <td>7/s</td>
+    <td>SEMI</td>
+    <td>Rapid Strip</td>
+    <td>200🍩</td>
+    <td><em>Damage up 50% (24 &rarr; 36) with recoil added — fast semi-auto
+    cycling on the C96 means the climb between shots barely has time to
+    settle before the next one lands.</em></td>
+  </tr><tr>
+    <td>Mini Uzi</td>
+    <td>Secondary</td>
+    <td>12</td>
+    <td>25/75</td>
+    <td>14/s</td>
+    <td>AUTO</td>
+    <td>Spray</td>
+    <td>240🍩</td>
+  </tr><tr>
+    <td>Nail Gun</td>
+    <td>Secondary</td>
+    <td>27</td>
+    <td>20/60</td>
+    <td>9/s</td>
+    <td>AUTO</td>
+    <td>Pin Down</td>
+    <td>180🍩</td>
+    <td><em>Damage up 50% (18 &rarr; 27) with a mild full-auto climb added —
+    nowhere near the Machine Revolver's kick, this is a nail gun, not a
+    handgun, so it stays fairly plantable.</em></td>
+  </tr><tr>
+    <td>Boomstick</td>
+    <td>Secondary</td>
+    <td>35</td>
+    <td>2/12</td>
+    <td>2/s</td>
+    <td>SEMI</td>
+    <td>Both Barrels</td>
+    <td>220🍩</td>
+  </tr><tr>
+    <td>Signal Pistol</td>
+    <td>Secondary</td>
+    <td>70</td>
+    <td>1/5</td>
+    <td>4/s</td>
+    <td>SEMI</td>
+    <td>Beacon</td>
+    <td>200🍩</td>
+  </tr><tr>
+    <td>Throwing Axes</td>
+    <td>Thrown</td>
+    <td>70</td>
+    <td>1/5</td>
+    <td>1/s</td>
+    <td>SEMI</td>
+    <td>Triple Toss</td>
+    <td>240🍩</td>
+  </tr><tr>
+    <td>Shuriken</td>
+    <td>Thrown</td>
+    <td>22</td>
+    <td>8/24</td>
+    <td>6/s</td>
+    <td>SEMI</td>
+    <td>Star Storm</td>
+    <td>160🍩</td>
+  </tr><tr>
+    <td>Boomerang</td>
+    <td>Thrown</td>
+    <td>35</td>
+    <td>1/4</td>
+    <td>1/s</td>
+    <td>SEMI</td>
+    <td>Trick Shot</td>
+    <td>180🍩</td>
+  </tr><tr>
+    <td>Slingshot</td>
+    <td>Secondary</td>
+    <td>24</td>
+    <td>1/12</td>
+    <td>3/s</td>
+    <td>SEMI</td>
+    <td>Volley</td>
+    <td>100🍩</td>
+  </tr><tr>
+    <td>Blowgun</td>
+    <td>Secondary</td>
+    <td>32</td>
+    <td>1/10</td>
+    <td>2/s</td>
+    <td>SEMI</td>
+    <td>Toxic Dart</td>
+    <td>200🍩</td>
+  </tr><tr>
+    <td>Pulse Needle</td>
+    <td>Tracking Secondary</td>
+    <td>14</td>
+    <td>12/36</td>
+    <td>9/s</td>
+    <td>AUTO</td>
+    <td>Detonate</td>
+    <td>6,000🍩</td>
+  </tr><tr>
+    <td>Phase Pistol</td>
+    <td>Phasing Secondary</td>
+    <td>45</td>
+    <td>8/24</td>
+    <td>4/s</td>
+    <td>SEMI</td>
+    <td>Blink Shot</td>
+    <td>16,000🍩</td>
+  </tr><tr>
+    <td>Ion Revolver</td>
+    <td>Electric Revolver</td>
+    <td>50</td>
+    <td>6/18</td>
+    <td>3/s</td>
+    <td>SEMI</td>
+    <td>Arc Burst</td>
+    <td>14,000🍩</td>
+  </tr><tr>
+    <td>Desert Eagle <span class="pill pill-admin">ADMIN</span></td>
+    <td>Admin · Hand Cannon</td>
+    <td>65</td>
+    <td>7/28</td>
+    <td>5/s</td>
+    <td>SEMI</td>
+    <td>Hand Cannon</td>
+    <td><span style="color:#888">—</span></td>
+  </tr><tr>
+    <td>M1911 Match <span class="pill pill-admin">ADMIN</span></td>
+    <td>Admin · Match Pistol</td>
+    <td>50</td>
+    <td>8/32</td>
+    <td>8/s</td>
+    <td>SEMI</td>
+    <td>Mozambique</td>
+    <td><span style="color:#888">—</span></td>
+  </tr><tr>
+    <td>Walther PPK <span class="pill pill-admin">ADMIN</span></td>
+    <td>Admin · Spy Pistol</td>
+    <td>45</td>
+    <td>8/24</td>
+    <td>10/s</td>
+    <td>SEMI</td>
+    <td>Stealth Strike</td>
+    <td><span style="color:#888">—</span></td>
+  </tr><tr>
+    <td>Glock-18 Auto <span class="pill pill-admin">ADMIN</span></td>
+    <td>Admin · Full-Auto Pistol</td>
+    <td>30</td>
+    <td>33/99</td>
+    <td>14/s</td>
+    <td>AUTO</td>
+    <td>Mag Dump</td>
+    <td><span style="color:#888">—</span></td>
+  </tr><tr>
+    <td>Five-seveN <span class="pill pill-admin">ADMIN</span></td>
+    <td>Admin · Armor Piercer</td>
+    <td>40</td>
+    <td>20/60</td>
+    <td>8/s</td>
+    <td>SEMI</td>
+    <td>AP Burst</td>
+    <td><span style="color:#888">—</span></td>
+  </tr></table>
+
+<h2 id="all-melees">📋 Every Melee (42)</h2>
+<table><tr><th>Name</th><th>Type</th><th>DMG</th><th>RANGE</th><th>RATE</th><th>ABILITY</th><th>PRICE</th></tr><tr>
+    <td>Bat</td>
+    <td>Melee</td>
+    <td>38</td>
+    <td>2.1</td>
+    <td>2/s</td>
+    <td>Heavy Strike</td>
+    <td>80🍩</td>
+  </tr><tr>
+    <td>Sabre</td>
+    <td>Melee</td>
+    <td>45</td>
+    <td>2.4</td>
+    <td>2/s</td>
+    <td>Lunge</td>
+    <td>140🍩</td>
+  </tr><tr>
+    <td>Frying Pan</td>
+    <td>Melee</td>
+    <td>32</td>
+    <td>1.8</td>
+    <td>2/s</td>
+    <td>Pickle Throw</td>
+    <td>60🍩</td>
+  </tr><tr>
+    <td>Sledge</td>
+    <td>Heavy Melee</td>
+    <td>70</td>
+    <td>1.9</td>
+    <td>1/s</td>
+    <td>Ground Slam</td>
+    <td>360🍩</td>
+  </tr><tr>
+    <td>Spear</td>
+    <td>Reach Melee</td>
+    <td>50</td>
+    <td>3</td>
+    <td>1/s</td>
+    <td>Throw Spear</td>
+    <td>200🍩</td>
+  </tr><tr>
+    <td>Katana</td>
+    <td>Melee</td>
+    <td>65</td>
+    <td>2.8</td>
+    <td>2/s</td>
+    <td>Deflect</td>
+    <td>360🍩</td>
+  </tr><tr>
+    <td>Baguette</td>
+    <td>Melee</td>
+    <td>16</td>
+    <td>2</td>
+    <td>3/s</td>
+    <td>Eat It</td>
+    <td>50🍩</td>
+  </tr><tr>
+    <td>Knife</td>
+    <td>Melee</td>
+    <td>28</td>
+    <td>1.6</td>
+    <td>4/s</td>
+    <td>Death Touch</td>
+    <td>280🍩</td>
+  </tr><tr>
+    <td>Chainsaw</td>
+    <td>Heavy Melee</td>
+    <td>45</td>
+    <td>1.9</td>
+    <td>7/s</td>
+    <td>Rev Up</td>
+    <td>1,400🍩</td>
+  </tr><tr>
+    <td>Lightsabre</td>
+    <td>Melee</td>
+    <td>72</td>
+    <td>2.5</td>
+    <td>2/s</td>
+    <td>Parry</td>
+    <td>1,800🍩</td>
+  </tr><tr>
+    <td>Riot Shield</td>
+    <td>Shield</td>
+    <td>18</td>
+    <td>1.7</td>
+    <td>1/s</td>
+    <td>Shield Charge</td>
+    <td>220🍩</td>
+  </tr><tr>
+    <td>Screwdriver</td>
+    <td>Melee</td>
+    <td>20</td>
+    <td>1.5</td>
+    <td>5/s</td>
+    <td>Spin Mode</td>
+    <td>60🍩</td>
+  </tr><tr>
+    <td>Crowbar</td>
+    <td>Utility Melee</td>
+    <td>32</td>
+    <td>1.8</td>
+    <td>3/s</td>
+    <td>Pry</td>
+    <td>110🍩</td>
+  </tr><tr>
+    <td>Fire Axe</td>
+    <td>Heavy Melee</td>
+    <td>85</td>
+    <td>2</td>
+    <td>1/s</td>
+    <td>Hellfire Swing</td>
+    <td>420🍩</td>
+  </tr><tr>
+    <td>Nunchucks</td>
+    <td>Melee</td>
+    <td>22</td>
+    <td>1.9</td>
+    <td>6/s</td>
+    <td>Combo Frenzy</td>
+    <td>160🍩</td>
+  </tr><tr>
+    <td>Umbrella</td>
+    <td>Shield</td>
+    <td>18</td>
+    <td>1.8</td>
+    <td>2/s</td>
+    <td>Bumbershoot</td>
+    <td>140🍩</td>
+  </tr><tr>
+    <td>Yo-Yo</td>
+    <td>Reach Melee</td>
+    <td>30</td>
+    <td>3.5</td>
+    <td>2/s</td>
+    <td>Loop the World</td>
+    <td>180🍩</td>
+  </tr><tr>
+    <td>Combat Axe</td>
+    <td>Heavy Melee</td>
+    <td>78</td>
+    <td>2.2</td>
+    <td>1/s</td>
+    <td>Throw Axe</td>
+    <td>380🍩</td>
+  </tr><tr>
+    <td>Shock Baton</td>
+    <td>Melee</td>
+    <td>32</td>
+    <td>2</td>
+    <td>3/s</td>
+    <td>Static Shock</td>
+    <td>220🍩</td>
+  </tr><tr>
+    <td>Titan Hammer</td>
+    <td>Heavy AOE</td>
+    <td>95</td>
+    <td>2.3</td>
+    <td>1/s</td>
+    <td>Earthquake</td>
+    <td>2,400🍩</td>
+  </tr><tr>
+    <td>Vampire Blade</td>
+    <td>Lifesteal Melee</td>
+    <td>52</td>
+    <td>2.2</td>
+    <td>2/s</td>
+    <td>Blood Frenzy</td>
+    <td>2,000🍩</td>
+  </tr><tr>
+    <td>Fists</td>
+    <td>Brass Knuckles</td>
+    <td>24</td>
+    <td>1.4</td>
+    <td>5/s</td>
+    <td>Haymaker</td>
+    <td>0🍩</td>
+  </tr><tr>
+    <td>Brass Knuckles</td>
+    <td>Punch</td>
+    <td>28</td>
+    <td>1.5</td>
+    <td>5/s</td>
+    <td>Haymaker</td>
+    <td>200🍩</td>
+  </tr><tr>
+    <td>Hatchet</td>
+    <td>Throwable Melee</td>
+    <td>50</td>
+    <td>1.9</td>
+    <td>2/s</td>
+    <td>Throw Hatchet</td>
+    <td>220🍩</td>
+  </tr><tr>
+    <td>Machete</td>
+    <td>Bleed Melee</td>
+    <td>56</td>
+    <td>2.4</td>
+    <td>2/s</td>
+    <td>Slash Combo</td>
+    <td>260🍩</td>
+  </tr><tr>
+    <td>Walking Cane</td>
+    <td>Reach Melee</td>
+    <td>30</td>
+    <td>2.2</td>
+    <td>2/s</td>
+    <td>Yank</td>
+    <td>140🍩</td>
+  </tr><tr>
+    <td>Launching Melee</td>
+    <td>Melee</td>
+    <td>42</td>
+    <td>2.3</td>
+    <td>2/s</td>
+    <td>Homerun</td>
+    <td>200🍩</td>
+  </tr><tr>
+    <td>Lead Pipe</td>
+    <td>Chain Melee</td>
+    <td>44</td>
+    <td>2</td>
+    <td>2/s</td>
+    <td>Bonk</td>
+    <td>160🍩</td>
+  </tr><tr>
+    <td>Wrench</td>
+    <td>Utility Melee</td>
+    <td>36</td>
+    <td>1.8</td>
+    <td>3/s</td>
+    <td>Spanner Toss</td>
+    <td>180🍩</td>
+  </tr><tr>
+    <td>Shovel</td>
+    <td>AOE Melee</td>
+    <td>55</td>
+    <td>2.2</td>
+    <td>2/s</td>
+    <td>Ground Slam</td>
+    <td>280🍩</td>
+  </tr><tr>
+    <td>Golf Club</td>
+    <td>Launching Melee</td>
+    <td>40</td>
+    <td>2.4</td>
+    <td>2/s</td>
+    <td>Fore!</td>
+    <td>200🍩</td>
+  </tr><tr>
+    <td>Tennis Racket</td>
+    <td>Reflect Melee</td>
+    <td>26</td>
+    <td>2.2</td>
+    <td>3/s</td>
+    <td>Backhand</td>
+    <td>100🍩</td>
+  </tr><tr>
+    <td>Fire Poker</td>
+    <td>Burn Melee</td>
+    <td>38</td>
+    <td>2.6</td>
+    <td>2/s</td>
+    <td>Hot Brand</td>
+    <td>200🍩</td>
+  </tr><tr>
+    <td>Meat Cleaver</td>
+    <td>Vampiric Melee</td>
+    <td>60</td>
+    <td>1.7</td>
+    <td>2/s</td>
+    <td>Butcher</td>
+    <td>260🍩</td>
+  </tr><tr>
+    <td>Phase Blade</td>
+    <td>Phasing Melee</td>
+    <td>90</td>
+    <td>2.6</td>
+    <td>3/s</td>
+    <td>Ghost Dash</td>
+    <td>9,000🍩</td>
+  </tr><tr>
+    <td>Gravity Hammer</td>
+    <td>Heavy AOE</td>
+    <td>110</td>
+    <td>2.3</td>
+    <td>1/s</td>
+    <td>Singularity Slam</td>
+    <td>11,000🍩</td>
+  </tr><tr>
+    <td>Volt Whip</td>
+    <td>Long Electric</td>
+    <td>50</td>
+    <td>4</td>
+    <td>2/s</td>
+    <td>Thunder Lash</td>
+    <td>8,500🍩</td>
+  </tr><tr>
+    <td>Karambit <span class="pill pill-admin">ADMIN</span></td>
+    <td>Admin · Combat Knife</td>
+    <td>80</td>
+    <td>1.6</td>
+    <td>5/s</td>
+    <td>Stealth Stab</td>
+    <td><span style="color:#888">—</span></td>
+  </tr><tr>
+    <td>Trench Bayonet <span class="pill pill-admin">ADMIN</span></td>
+    <td>Admin · Reach Knife</td>
+    <td>100</td>
+    <td>3</td>
+    <td>3/s</td>
+    <td>Charge!</td>
+    <td><span style="color:#888">—</span></td>
+  </tr><tr>
+    <td>Tactical Tomahawk <span class="pill pill-admin">ADMIN</span></td>
+    <td>Admin · Throwable Axe</td>
+    <td>120</td>
+    <td>2</td>
+    <td>1/s</td>
+    <td>Throw Tomahawk</td>
+    <td><span style="color:#888">—</span></td>
+  </tr><tr>
+    <td>OTs-04 Bayonet <span class="pill pill-admin">ADMIN</span></td>
+    <td>Admin · Spetsnaz Blade</td>
+    <td>90</td>
+    <td>1.8</td>
+    <td>4/s</td>
+    <td>Spetsnaz Combo</td>
+    <td><span style="color:#888">—</span></td>
+  </tr><tr>
+    <td>Spec-Ops Garrote <span class="pill pill-admin">ADMIN</span></td>
+    <td>Admin · Silent Kill</td>
+    <td>9999</td>
+    <td>1.5</td>
+    <td>1/s</td>
+    <td>Lights Out</td>
+    <td><span style="color:#888">—</span></td>
+  </tr></table>
+
+<h2 id="all-utilities">📋 Every Utility (49)</h2>
+<table><tr><th>Name</th><th>Type</th><th>EFFECT</th><th>USES</th><th>CD</th><th>PRICE</th></tr><tr>
+      <td>Frag Grenade</td>
+      <td>Explosive</td>
+      <td>DMG 80</td>
+      <td>2</td>
+      <td>0.9s</td>
+      <td>120🍩</td>
+    </tr><tr>
+      <td>Medkit</td>
+      <td>Heal</td>
+      <td>HEAL 45</td>
+      <td>1</td>
+      <td>1.2s</td>
+      <td>80🍩</td>
+    </tr><tr>
+      <td>Stim Shot</td>
+      <td>Quick Heal</td>
+      <td>HEAL 22</td>
+      <td>2</td>
+      <td>0.7s</td>
+      <td>60🍩</td>
+    </tr><tr>
+      <td>Smoke Bomb</td>
+      <td>Utility</td>
+      <td>—</td>
+      <td>2</td>
+      <td>0.7s</td>
+      <td>70🍩</td>
+      <td><em>Five thin puffs you could see straight through, so nobody ever
+      bothered. Two passes later it's 18 puffs on a spiral at roughly 45x the
+      original puff volume, with the throw radius scaled up to match &mdash;
+      this is cover now, not a decoration.</em></td>
+    </tr><tr>
+      <td>Blink Pearl</td>
+      <td>Teleport</td>
+      <td>BLINK 10m</td>
+      <td>2</td>
+      <td>0.9s</td>
+      <td>280🍩</td>
+    </tr><tr>
+      <td>Ammo Fountain</td>
+      <td>Resupply</td>
+      <td>REFILL AMMO</td>
+      <td>1</td>
+      <td>1.0s</td>
+      <td>180🍩</td>
+    </tr><tr>
+      <td>Confetti Cannon</td>
+      <td>Chaos</td>
+      <td>DMG 8</td>
+      <td>3</td>
+      <td>0.5s</td>
+      <td>100🍩</td>
+    </tr><tr>
+      <td>Moon Mine</td>
+      <td>Floaty Bomb</td>
+      <td>DMG 65</td>
+      <td>2</td>
+      <td>0.8s</td>
+      <td>220🍩</td>
+    </tr><tr>
+      <td>Rubber Duck</td>
+      <td>Bouncer</td>
+      <td>DMG 18</td>
+      <td>4</td>
+      <td>0.4s</td>
+      <td>90🍩</td>
+    </tr><tr>
+      <td>Black Hole Seed</td>
+      <td>Void</td>
+      <td>DMG 105</td>
+      <td>1</td>
+      <td>1.3s</td>
+      <td>2,200🍩</td>
+    </tr><tr>
+      <td>Glitch Cube</td>
+      <td>Wild Card</td>
+      <td>DMG 42</td>
+      <td>2</td>
+      <td>0.8s</td>
+      <td>240🍩</td>
+    </tr><tr>
+      <td>Vampire Syringe</td>
+      <td>Risk Heal</td>
+      <td>HEAL 35</td>
+      <td>2</td>
+      <td>0.7s</td>
+      <td>200🍩</td>
+    </tr><tr>
+      <td>Adrenaline Pack</td>
+      <td>Buff</td>
+      <td>—</td>
+      <td>1</td>
+      <td>1.5s</td>
+      <td>220🍩</td>
+    </tr><tr>
+      <td>Tripwire</td>
+      <td>Trap</td>
+      <td>DMG 60</td>
+      <td>2</td>
+      <td>1.1s</td>
+      <td>200🍩</td>
+    </tr><tr>
+      <td>Hologram Decoy</td>
+      <td>Decoy</td>
+      <td>DECOY 8000ms</td>
+      <td>1</td>
+      <td>2.0s</td>
+      <td>240🍩</td>
+    </tr><tr>
+      <td>Magnet Mine</td>
+      <td>Magnet</td>
+      <td>DMG 40</td>
+      <td>2</td>
+      <td>0.9s</td>
+      <td>220🍩</td>
+    </tr><tr>
+      <td>Bounce Pad</td>
+      <td>Mobility</td>
+      <td>—</td>
+      <td>2</td>
+      <td>0.9s</td>
+      <td>140🍩</td>
+    </tr><tr>
+      <td>Hunter Drone</td>
+      <td>Drone</td>
+      <td>DMG 100</td>
+      <td>1</td>
+      <td>1.2s</td>
+      <td>460🍩</td>
+    </tr><tr>
+      <td>EMP Grenade</td>
+      <td>Disable</td>
+      <td>DMG 25</td>
+      <td>2</td>
+      <td>0.9s</td>
+      <td>240🍩</td>
+    </tr><tr>
+      <td>Sticky Charge</td>
+      <td>Explosive</td>
+      <td>DMG 120</td>
+      <td>2</td>
+      <td>0.8s</td>
+      <td>320🍩</td>
+    </tr><tr>
+      <td>Orbital Strike</td>
+      <td>Doom</td>
+      <td>DMG 250</td>
+      <td>1</td>
+      <td>2.0s</td>
+      <td>2,500🍩</td>
+    </tr><tr>
+      <td>Guardian Drone</td>
+      <td>Auto Turret</td>
+      <td>DMG 14</td>
+      <td>1</td>
+      <td>1.5s</td>
+      <td>380🍩</td>
+    </tr><tr>
+      <td>Nano Shield</td>
+      <td>Auto Heal</td>
+      <td>HEAL 20/s</td>
+      <td>1</td>
+      <td>1.8s</td>
+      <td>320🍩</td>
+    </tr><tr>
+      <td>Air Grenade</td>
+      <td>Launch</td>
+      <td>DMG 15</td>
+      <td>2</td>
+      <td>0.9s</td>
+      <td>160🍩</td>
+    </tr><tr>
+      <td>Land Mine</td>
+      <td>Trap</td>
+      <td>DMG 298</td>
+      <td>2</td>
+      <td>1.1s</td>
+      <td>380🍩</td>
+    </tr><tr>
+      <td>Flashbang</td>
+      <td>Stun</td>
+      <td>DMG 5</td>
+      <td>2</td>
+      <td>0.9s</td>
+      <td>200🍩</td>
+    </tr><tr>
+      <td>Proximity Mine</td>
+      <td>Trap</td>
+      <td>DMG 70</td>
+      <td>2</td>
+      <td>1.1s</td>
+      <td>220🍩</td>
+    </tr><tr>
+      <td>Dynamite Bundle</td>
+      <td>Explosive</td>
+      <td>DMG 120</td>
+      <td>2</td>
+      <td>1.2s</td>
+      <td>280🍩</td>
+    </tr><tr>
+      <td>Mini Drone Strike</td>
+      <td>Doom</td>
+      <td>DMG 140</td>
+      <td>1</td>
+      <td>1.8s</td>
+      <td>340🍩</td>
+    </tr><tr>
+      <td>Healing Pulse</td>
+      <td>Heal</td>
+      <td>HEAL 60</td>
+      <td>1</td>
+      <td>1.5s</td>
+      <td>200🍩</td>
+    </tr><tr>
+      <td>Teleport Beacon</td>
+      <td>Teleport</td>
+      <td>BLINK 12m</td>
+      <td>1</td>
+      <td>1.2s</td>
+      <td>260🍩</td>
+    </tr><tr>
+      <td>Cloak</td>
+      <td>Buff</td>
+      <td>—</td>
+      <td>1</td>
+      <td>1.8s</td>
+      <td>280🍩</td>
+    </tr><tr>
+      <td>Berserker Serum</td>
+      <td>Buff</td>
+      <td>—</td>
+      <td>1</td>
+      <td>1.8s</td>
+      <td>240🍩</td>
+    </tr><tr>
+      <td>Taser Grenade</td>
+      <td>Disable</td>
+      <td>DMG 15</td>
+      <td>2</td>
+      <td>0.9s</td>
+      <td>220🍩</td>
+    </tr><tr>
+      <td>Ink Bomb</td>
+      <td>Utility</td>
+      <td>—</td>
+      <td>2</td>
+      <td>0.8s</td>
+      <td>140🍩</td>
+    </tr><tr>
+      <td>Distraction Siren</td>
+      <td>Decoy</td>
+      <td>DECOY 6000ms</td>
+      <td>1</td>
+      <td>2.0s</td>
+      <td>200🍩</td>
+    </tr><tr>
+      <td>Caltrops</td>
+      <td>Trap</td>
+      <td>DMG 30</td>
+      <td>3</td>
+      <td>0.7s</td>
+      <td>180🍩</td>
+    </tr><tr>
+      <td>Nano Swarm</td>
+      <td>Heal Drone</td>
+      <td>HEAL 120</td>
+      <td>1</td>
+      <td>1.8s</td>
+      <td>10,000🍩</td>
+    </tr><tr>
+      <td>Warp Beacon</td>
+      <td>Teleport</td>
+      <td>BLINK 20m</td>
+      <td>2</td>
+      <td>1.5s</td>
+      <td>12,500🍩</td>
+    </tr><tr>
+      <td>Stasis Mine</td>
+      <td>Time Trap</td>
+      <td>DMG 20</td>
+      <td>2</td>
+      <td>1.2s</td>
+      <td>9,000🍩</td>
+    </tr><tr>
+      <td>Specter Drone</td>
+      <td>Stealth Drone</td>
+      <td>DMG 160</td>
+      <td>1</td>
+      <td>1.8s</td>
+      <td>15,000🍩</td>
+    </tr><tr>
+      <td>Quantum Barrier</td>
+      <td>Shield</td>
+      <td>HEAL 12/s</td>
+      <td>1</td>
+      <td>2.0s</td>
+      <td>10,500🍩</td>
+    </tr><tr>
+      <td>C4 Charge <span class="pill pill-admin">ADMIN</span></td>
+      <td>Admin · Explosive</td>
+      <td>DMG 200</td>
+      <td>2</td>
+      <td>1.2s</td>
+      <td><span style="color:#888">—</span></td>
+    </tr><tr>
+      <td>Claymore Mine <span class="pill pill-admin">ADMIN</span></td>
+      <td>Admin · Directional Mine</td>
+      <td>DMG 250</td>
+      <td>2</td>
+      <td>1.1s</td>
+      <td><span style="color:#888">—</span></td>
+    </tr><tr>
+      <td>M84 Stun Grenade <span class="pill pill-admin">ADMIN</span></td>
+      <td>Admin · Flashbang</td>
+      <td>DMG 10</td>
+      <td>3</td>
+      <td>0.8s</td>
+      <td><span style="color:#888">—</span></td>
+    </tr><tr>
+      <td>Thermite Charge <span class="pill pill-admin">ADMIN</span></td>
+      <td>Admin · Burn Zone</td>
+      <td>DMG 8</td>
+      <td>2</td>
+      <td>1.0s</td>
+      <td><span style="color:#888">—</span></td>
+    </tr><tr>
+      <td>Predator UAV <span class="pill pill-admin">ADMIN</span></td>
+      <td>Admin · Recon</td>
+      <td>UAV 10000ms</td>
+      <td>1</td>
+      <td>2.0s</td>
+      <td><span style="color:#888">—</span></td>
+    </tr><tr>
+      <td>Care Package <span class="pill pill-admin">ADMIN</span></td>
+      <td>Admin · Random Drop</td>
+      <td>—</td>
+      <td>1</td>
+      <td>1.5s</td>
+      <td><span style="color:#888">—</span></td>
+    </tr><tr>
+      <td>Tactical Nuke <span class="pill pill-admin">ADMIN</span></td>
+      <td>Admin · End the Match</td>
+      <td>DMG 500</td>
+      <td>1</td>
+      <td>3.0s</td>
+      <td><span style="color:#888">—</span></td>
+    </tr></table>
+
+      <h2 id="donuts">📜 Donuts</h2>
+      <ul>
+        <li>Engine, design, and most code: <strong>VideoGameTips</strong></li>
+        <li>Additional content: <strong>Codex</strong> (5 maps + respawn improvements)</li>
+        <li>Master Admin: <strong>Trash123</strong> 👑 <span class="pill pill-fun">suspiciously well-equipped</span></li>
+      </ul>
+    </main>
+  </div>
+
+  <footer>
+    <div>⚔️ PVP Arena · Made for fun · <a href="https://github.com/VideoGameTips/pvp-game">Source on GitHub</a></div>
+  </footer>
+</body>
+</html>

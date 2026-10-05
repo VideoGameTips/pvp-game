@@ -1,0 +1,1401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PVP Arena — free 3D multiplayer shooter in your browser</title>
+  <meta name="description" content="A free 3D multiplayer first-person shooter that runs in the browser. Guns, melee weapons, a shop and in-room chat — no download, no install." />
+  <!-- Absolute on purpose: this file gets served from more than one host, and
+       this is the address that should be the indexed one. -->
+  <link rel="canonical" href="https://sushigamelab.com/pvp/" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Sushi Game Lab" />
+  <meta property="og:title" content="PVP Arena — free 3D multiplayer browser shooter" />
+  <meta property="og:description" content="Free 3D multiplayer FPS in the browser. Guns, melee, a shop and room chat — no download." />
+  <meta property="og:url" content="https://sushigamelab.com/pvp/" />
+  <meta property="og:image" content="https://sushigamelab.com/og-cover.png" />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { touch-action: none; overscroll-behavior: none; }
+    body { background: #000; overflow: hidden; font-family: 'Courier New', monospace; }
+    canvas { display: block; touch-action: none; }
+
+    #hud {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      pointer-events: none; color: #fff;
+    }
+
+    /* The crosshair's parts (arms, dot, ring) are drawn by game.js (buildCrosshairParts) from the
+       player's settings → Crosshair; this is just the zero-size anchor at the centre. */
+    #crosshair {
+      position: absolute; top: 50%; left: 50%;
+      width: 0; height: 0;
+    }
+    /* Javelin Launcher / Gunslinger: red while locked on (toggled via syncJavelinCrosshair in game.js) */
+    #crosshair.locked .ch-part { background: rgba(255,40,40,0.95) !important; opacity: 1 !important; }
+    #crosshair.locked .ch-ring { background: transparent !important; border-color: rgba(255,40,40,0.95) !important; }
+
+    #health-bar {
+      position: absolute; bottom: 30px; left: 30px;
+    }
+    #health-label { font-size: 12px; color: #aaa; margin-bottom: 4px; }
+    #health-track {
+      width: 200px; height: 14px; background: #333; border-radius: 7px; overflow: hidden;
+    }
+    #health-fill {
+      height: 100%; width: 100%; background: linear-gradient(90deg, #e74c3c, #ff6b6b);
+      border-radius: 7px; transition: width 0.2s;
+    }
+    #health-num { font-size: 18px; font-weight: bold; margin-top: 4px; }
+
+    #ammo {
+      position: absolute; bottom: 30px; right: 30px; text-align: right;
+    }
+    #ammo-gun { font-size: 12px; color: #aaa; }
+    #ammo-count { font-size: 32px; font-weight: bold; letter-spacing: 2px; }
+    #ammo-reserve { font-size: 14px; color: #888; }
+
+    #kills {
+      position: absolute; top: 20px; right: 20px; text-align: right;
+    }
+    #kills span { font-size: 14px; color: #ffd700; }
+
+    /* The kill feed's styles live in game.js (ensureKillfeedStyles), which also creates the box. */
+
+    #scoreboard {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+      background: rgba(0,0,0,0.85); border: 1px solid #444; border-radius: 8px;
+      padding: 24px 40px; min-width: 320px; display: none;
+    }
+    #scoreboard h2 { text-align: center; margin-bottom: 16px; color: #ffd700; font-size: 18px; }
+    #scoreboard table { width: 100%; border-collapse: collapse; }
+    #scoreboard th { color: #888; font-size: 12px; padding: 4px 8px; border-bottom: 1px solid #333; }
+    #scoreboard td { padding: 6px 8px; font-size: 14px; }
+    #scoreboard tr.me td { color: #4fc3f7; }
+
+
+    /* ── 🎯 Hit / kill / ammo at the crosshair (#34) ──
+       An ✕ of four ticks around the crosshair (the centre is masked out so the crosshair stays
+       readable): white = hit, gold = headshot, red = kill, grey = the lobby, where nothing takes
+       damage (#35). Under it: the kill confirm, then one line for ammo (or RELOADING). */
+    #hitmarker {
+      position: absolute; top: 50%; left: 50%; width: 26px; height: 26px; color: #fff;
+      transform: translate(-50%, -50%) rotate(45deg); pointer-events: none; opacity: 0;
+      -webkit-mask: radial-gradient(circle, transparent 5px, #000 5.5px); mask: radial-gradient(circle, transparent 5px, #000 5.5px);
+    }
+    #hitmarker::before, #hitmarker::after { content: ''; position: absolute; background: currentColor; }
+    #hitmarker::before { left: 50%; top: 0; width: 3px; height: 100%; transform: translateX(-50%); }
+    #hitmarker::after  { top: 50%; left: 0; height: 3px; width: 100%; transform: translateY(-50%); }
+    #hitmarker.head  { color: #ffd23f; }
+    #hitmarker.kill  { color: #ff3b3b; width: 36px; height: 36px; }
+    #hitmarker.lobby { color: #aab0b8; }
+    #kill-confirm {
+      position: absolute; top: calc(50% + 30px); left: 50%; transform: translateX(-50%);
+      font: 700 15px/1.2 -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+      color: #ff6b6b; letter-spacing: 1px; white-space: nowrap; pointer-events: none; opacity: 0;
+      text-shadow: 0 1px 2px #000, 0 0 10px rgba(0,0,0,0.7);
+    }
+    #ammo-hint {
+      position: absolute; top: calc(50% + 52px); left: 50%; transform: translate(-50%, -50%);
+      font: 700 13px/1.2 -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+      letter-spacing: 1px; white-space: nowrap; pointer-events: none; display: none;
+      text-shadow: 0 1px 2px #000, 0 0 8px rgba(0,0,0,0.7);
+    }
+    #ammo-hint.low   { display: block; color: #ffd23f; }
+    #ammo-hint.empty { display: block; color: #ff9a3c; }
+    #ammo-hint.out   { display: block; color: #ff5b5b; }
+    #ammo.low #ammo-count { color: #ffd23f; }
+    #ammo.empty #ammo-count, #ammo.out #ammo-count { color: #ff5b5b; }
+    body.touch-ui #btn-reload-mobile.pulse { animation: reloadPulse 0.8s ease-in-out infinite; }
+
+    /* 🛋️ Lobby 13's own tag, where the score strip sits in a match (#35) */
+    #lobby-tag {
+      display: none; position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+      padding: 5px 14px; border-radius: 8px; background: rgba(0,0,0,0.55); border: 1px solid rgba(170,255,170,0.45);
+      color: #aaffaa; font: 700 12px/1.3 -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+      letter-spacing: 1px; white-space: nowrap; pointer-events: none;
+    }
+    body.touch-ui #lobby-tag { top: 52px; font-size: 11px; }
+    @media (orientation: landscape) { body.touch-ui #lobby-tag { top: 8px; } }
+
+    /* 🧭 Incoming damage (#36): an arc on the ring around the crosshair, turned toward the shooter;
+       a red edge that stays while HP is low; a short edge pulse for damage with no direction. */
+    #dmg-dir, #low-hp, #dmg-edge { position: fixed; inset: 0; pointer-events: none; z-index: 79; }
+    .dmg-arc {
+      position: absolute; top: 50%; left: 50%; width: min(58vw, 58vh); height: min(58vw, 58vh);
+      margin: calc(min(58vw, 58vh) / -2) 0 0 calc(min(58vw, 58vh) / -2); border-radius: 50%;
+      background: conic-gradient(from -32deg, rgba(255,40,40,0.9) 0deg 64deg, transparent 64deg);
+      -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 7px), #000 calc(100% - 6px));
+              mask: radial-gradient(farthest-side, transparent calc(100% - 7px), #000 calc(100% - 6px));
+      transition: opacity 0.6s; filter: drop-shadow(0 0 4px rgba(255,0,0,0.6));
+    }
+    #low-hp {
+      opacity: 0; transition: opacity 0.4s;
+      background: radial-gradient(ellipse at center, transparent 55%, rgba(200,0,0,0.38) 100%);
+    }
+    #low-hp.on { opacity: 1; animation: lowHp 1.4s ease-in-out infinite; }
+    @keyframes lowHp { 50% { opacity: 0.6; } }
+    #dmg-edge {
+      opacity: 0; transition: opacity 0.25s;
+      background: radial-gradient(ellipse at center, transparent 62%, rgba(255,30,30,0.35) 100%);
+    }
+    @keyframes reloadPulse { 50% { box-shadow: 0 0 0 7px rgba(255,154,60,0.55); border-color: #ffb46b; } }
+
+    #death-screen {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(180,0,0,0.4); display: none; align-items: center; justify-content: center;
+      flex-direction: column; font-size: clamp(28px, 10vw, 48px); font-weight: bold; color: #fff;
+      text-shadow: 0 0 20px #f00; padding: 0 16px; box-sizing: border-box; text-align: center;
+    }
+    #death-screen p { font-size: 18px; margin-top: 12px; color: #ccc; font-weight: normal; }
+
+    /* Full-screen overlays below use `safe center`: centred when they fit, start at the top and
+       scroll when they don't (a phone in landscape with its browser bars is ~300px tall). */
+    #overlay {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.92); display: flex; align-items: center;
+      justify-content: flex-start; justify-content: safe center; overflow-y: auto;
+      flex-direction: column; z-index: 100; color: #fff; padding: 16px; box-sizing: border-box; text-align: center;
+    }
+    #overlay > * { flex-shrink: 0; }
+    #overlay h1 { font-size: clamp(34px, 12vw, 48px); letter-spacing: 4px; color: #e74c3c; margin-bottom: 8px; }
+    #overlay p  { color: #888; margin-bottom: 32px; font-size: 14px; }
+    #overlay input {
+      background: #111; border: 1px solid #444; color: #fff; padding: 10px 20px;
+      font-size: 16px; border-radius: 4px; margin-bottom: 16px; width: 240px; text-align: center;
+    }
+    #overlay button {
+      background: #e74c3c; color: #fff; border: none; padding: 12px 40px;
+      font-size: 18px; border-radius: 4px; cursor: pointer; letter-spacing: 2px;
+    }
+    #overlay button:hover { background: #c0392b; }
+    /* EN / 中文 (#16) — the same data-lang buttons also live in ⚙ settings */
+    #lang-switch { position: absolute; top: 12px; right: 12px; display: flex; border: 1px solid #444; border-radius: 6px; overflow: hidden; }
+    #overlay #lang-switch button {
+      background: transparent; color: #999; border: 0; padding: 0 14px; min-height: 40px; min-width: 52px;
+      font-size: 13px; letter-spacing: 1px; font-family: inherit; border-radius: 0;
+    }
+    #overlay #lang-switch button[aria-pressed="true"] { background: #e74c3c; color: #fff; }
+    #online-count { color: #6fcf8a; font-size: 12px; letter-spacing: 1px; min-height: 16px; margin: -18px 0 18px; }
+    #overlay #login-toggle {
+      background: transparent; color: #8fb4d8; padding: 0 12px; min-height: 44px; margin: -8px 0 4px;
+      font-size: 12px; letter-spacing: 0; font-family: inherit;
+    }
+    #overlay #login-toggle:hover { background: transparent; color: #cfe3f7; }
+    #login-box { display: flex; flex-direction: column; align-items: center; }
+    #login-box[hidden] { display: none; }
+    #overlay #pass-hint { color: #8a8a8a; font-size: 11px; line-height: 1.5; max-width: 260px; margin: -8px 0 10px; text-align: center; }
+    /* Nothing of the game shows through behind the login screen (#11). */
+    body.login-open #hud, body.login-open #mobile-controls, body.login-open #fps-counter { visibility: hidden; }
+
+    .mode-card {
+      background: rgba(255,255,255,0.05); border: 1px solid #444; border-radius: 8px;
+      padding: 16px 22px; cursor: pointer; text-align: center; min-width: 100px;
+      transition: all 0.12s; font-size: 20px; font-weight: bold; letter-spacing: 2px;
+      display: flex; flex-direction: column; gap: 4px;
+    }
+    .mode-card span { font-size: 10px; color: #888; font-weight: normal; letter-spacing: 1px; }
+    .mode-card:hover { background: rgba(231,76,60,0.2); border-color: #e74c3c; color: #e74c3c; }
+    .mode-card:hover span { color: #c0392b; }
+
+    /* Mode screen (#24). The top bar stays put while the page scrolls: ← LOBBY and who you are, then the
+       four buttons kids use most and ⋯ MORE for the rest. It fits the width — nothing scrolls sideways. */
+    #user-info-bar {
+      position: sticky; top: 0; z-index: 3; flex-shrink: 0;
+      display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px;
+      width: 100%; box-sizing: border-box; padding: 8px 12px; margin-bottom: 4px;
+      background: rgba(8,8,12,0.97); border-bottom: 1px solid #2a2a33; font-size: 11px;
+    }
+    #uib-me { flex: 1 1 220px; min-width: 0; display: flex; align-items: center; gap: 10px; }
+    #user-info-name { color: #88ccff; letter-spacing: 1px; white-space: nowrap; }
+    #user-info-unlocks { color: #ffcc44; letter-spacing: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+    #mode-back-btn {
+      flex-shrink: 0; min-height: 44px; padding: 6px 14px; background: #222; color: #ddd; border: 1px solid #666;
+      border-radius: 4px; cursor: pointer; font-family: 'Courier New', monospace; font-size: 12px; letter-spacing: 2px;
+    }
+    #mode-tools { flex: 1 1 100%; display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+    #mode-tools button {
+      min-width: 0; min-height: 48px; padding: 4px 2px; display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 2px; background: #15151c; color: #ddd; border: 1px solid #34343f; border-radius: 6px;
+      cursor: pointer; font-family: inherit; font-size: 10px; letter-spacing: 1px; white-space: nowrap;
+    }
+    #mode-tools .ic { font-size: 16px; letter-spacing: 0; }
+    #more-btn[aria-expanded="true"] { border-color: #aab; background: #22222c; }
+    @media (min-width: 700px) {
+      #mode-tools { flex: 0 1 auto; display: flex; }
+      #mode-tools button { flex-direction: row; gap: 6px; min-height: 44px; padding: 4px 12px; font-size: 11px; }
+    }
+    #more-menu {
+      position: absolute; top: 100%; right: 12px; z-index: 5; margin-top: 4px; min-width: 240px;
+      display: flex; flex-direction: column; background: #121219; border: 1px solid #556; border-radius: 8px;
+      padding: 6px; box-shadow: 0 8px 30px rgba(0,0,0,0.6);
+    }
+    #more-menu[hidden] { display: none; }
+    #more-menu button, #more-menu a {
+      min-height: 44px; display: flex; align-items: center; padding: 0 12px; background: transparent; border: 0;
+      border-radius: 6px; color: #ddd; font-family: inherit; font-size: 12px; letter-spacing: 1px; cursor: pointer;
+      text-align: left; text-decoration: none;
+    }
+    #more-menu button:hover, #more-menu a:hover { background: #1f1f2a; }
+    #more-menu #logout-btn { color: #f99; }
+    /* One column that fits any width: quick start, the map / difficulty row, then the modes as tabs. */
+    #mode-body { width: 100%; max-width: 1040px; box-sizing: border-box; padding: 0 12px; }
+    .ms-label { font-size: 10px; letter-spacing: 3px; color: #888; margin: 16px 2px 8px; }
+    #quick-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .quick-card {
+      display: flex; flex-direction: column; gap: 3px; padding: 14px 12px; min-height: 92px; box-sizing: border-box;
+      background: linear-gradient(160deg, #2a1414, #1a1010); border: 2px solid #7a2c24; border-radius: 10px; cursor: pointer;
+    }
+    .quick-card .ic { font-size: 24px; }
+    .quick-card b { font-size: 17px; letter-spacing: 2px; }
+    .quick-card span:last-child { font-size: 11px; color: #d9b3ad; letter-spacing: 1px; }
+    .quick-card:hover { border-color: #e74c3c; }
+    #match-settings { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 12px; }
+    #match-settings button {
+      min-width: 0; min-height: 48px; display: flex; align-items: center; gap: 8px; padding: 6px 12px;
+      background: #15151c; color: #ddd; border: 1px solid #34343f; border-radius: 8px; cursor: pointer;
+      font-family: inherit; font-size: 12px; letter-spacing: 1px; text-align: left;
+    }
+    #match-settings b { color: #ffcc44; font-weight: normal; margin-left: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #mode-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+    .mode-tab {
+      min-width: 0; min-height: 44px; background: transparent; color: #aaa; border: 1px solid #34343f; border-radius: 6px;
+      cursor: pointer; font-family: inherit; font-size: 12px; letter-spacing: 1px; white-space: nowrap;
+    }
+    .mode-tab small { color: #666; }
+    .mode-tab.on { background: #2a1414; border-color: #e74c3c; color: #fff; }
+    .mode-group { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 10px; }
+    .mode-group[hidden] { display: none; }
+    .mode-group .mode-card { min-width: 0; padding: 12px 10px; font-size: 16px; }
+    @media (min-width: 700px) {
+      #quick-row, .mode-group { grid-template-columns: repeat(4, 1fr); }
+      #match-settings { grid-template-columns: repeat(2, minmax(0, 340px)); }
+      #mode-tabs { grid-template-columns: repeat(4, minmax(0, 200px)); }
+    }
+    /* MAP and BOT DIFFICULTY open in the shared dialog frame (see #21 below). */
+    .ms-dialog { position: fixed; z-index: 9900; background: #121219; border: 2px solid #556; border-radius: 8px; color: #fff; font-family: 'Courier New', monospace; }
+    .ms-dialog-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; font-size: 16px; letter-spacing: 3px; }
+    .ms-dialog-close { min-width: 44px; min-height: 40px; background: #3a1a1a; color: #f88; border: 1px solid #f44; border-radius: 6px; cursor: pointer; font-family: inherit; }
+    .ms-note { font-size: 10px; color: #666; margin-top: 8px; }
+
+    /* ── Match HUD ── */
+    #match-hud {
+      display: none; position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.72); border: 1px solid #555; border-radius: 8px;
+      padding: 7px 22px; align-items: center; gap: 28px;
+      font-family: 'Courier New', monospace; color: #fff; z-index: 50;
+      pointer-events: none; min-width: min(380px, calc(100vw - 24px)); justify-content: space-between;
+    }
+    #match-left  { color: #4cff4c; font-size: 13px; font-weight: bold; }
+    #match-center { font-size: 19px; font-weight: bold; letter-spacing: 3px; text-align: center; min-width: 72px; }
+    #match-right { color: #ff5555; font-size: 13px; font-weight: bold; text-align: right; }
+
+    /* ── Round/match announcement (#29) ──
+       Only the big moments still appear over the world — and now as a one-line pill
+       under the score strip, not as a banner across the middle of the screen. Every
+       other message goes to #msg-feed on the left, so what you are shooting at stays
+       visible. The detail line lives in the feed, not in the pill. */
+    #match-announce {
+      display: none; position: fixed; top: 52px; left: 50%; transform: translateX(-50%);
+      align-items: center; justify-content: center; flex-direction: column;
+      background: rgba(0,0,0,0.55); border-radius: 10px; padding: 2px 18px;
+      max-width: calc(100vw - 24px);
+      pointer-events: none; z-index: 84; transition: opacity 0.4s;
+    }
+    #announce-text {
+      font-family: 'Courier New', monospace; font-size: clamp(18px, 4.6vw, 30px); font-weight: 900;
+      letter-spacing: clamp(1px, 0.5vw, 4px); text-shadow: 0 0 18px currentColor, 2px 2px 0 #000;
+      animation: announceIn 0.3s ease-out; text-align: center;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: calc(100vw - 48px);
+    }
+    #announce-sub { display: none; }
+    @keyframes announceIn { from { transform: scale(1.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+    /* ── Message feed (#29): every in-match message, top-left, newest on top ──
+       Older lines are pushed down instead of being wiped by the next message, which
+       is what made them "disappear too fast" (one centre banner, clearTimeout'd by
+       whatever came next). Chat lines land here too — they carry data-no-i18n. */
+    #msg-feed {
+      position: fixed; left: 16px; top: 64px; width: min(330px, 40vw); z-index: 80;   /* under the lobby's MODES / DUEL chips */
+      display: flex; flex-direction: column; gap: 4px; pointer-events: none;
+      font-family: 'Courier New', monospace;
+    }
+    .mf {
+      background: rgba(0,0,0,0.42); border-left: 3px solid #fff; border-radius: 5px;
+      padding: 3px 9px; color: #fff; font-size: 13px; line-height: 1.35;
+      text-shadow: 1px 1px 0 #000; width: fit-content; max-width: 100%;
+      animation: mfIn 0.22s ease-out; transition: opacity 0.6s;
+    }
+    .mf-big { font-weight: bold; font-size: 14px; }
+    /* 💡 The fun fact, on screens where you have time to read it (#29) */
+    .fun-fact {
+      margin-top: 14px; max-width: 560px; align-self: center; text-align: center;
+      font-family: 'Courier New', monospace; font-size: 13px; line-height: 1.5; color: #ffcc66; opacity: 0.85;
+    }
+    .mf-s { color: #bbb; font-size: 12px; margin-left: 6px; }
+    @keyframes mfIn { from { transform: translateY(-8px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+    /* ── Elimination waiting screen (dead, waiting for round end) ── */
+    #waiting-screen {
+      display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.75); align-items: center;
+      justify-content: flex-start; justify-content: safe center; overflow-y: auto;
+      flex-direction: column; z-index: 85; color: #fff; padding: 16px; box-sizing: border-box; text-align: center;
+      font-family: 'Courier New', monospace;
+    }
+    #waiting-screen > * { flex-shrink: 0; }
+    #waiting-screen h2 { font-size: clamp(26px, 9vw, 40px); color: #e74c3c; letter-spacing: clamp(2px, 1.2vw, 6px); margin: 0 0 12px; }
+    #waiting-msg { color: #888; font-size: 15px; letter-spacing: 2px; }
+    #round-score-display { margin-top: 16px; font-size: 22px; letter-spacing: 4px; color: #fff; }
+
+    /* ── Match over screen ── */
+    #match-over-screen {
+      display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.88); align-items: center; justify-content: center;
+      flex-direction: column; z-index: 110; color: #fff;
+      font-family: 'Courier New', monospace; gap: 14px;
+      padding: 16px; box-sizing: border-box; text-align: center;
+      justify-content: flex-start; justify-content: safe center; overflow-y: auto;
+    }
+    #match-over-screen > * { flex-shrink: 0; }
+    /* Scales down so "🏆 VICTORY" fits a 375px phone instead of running off both edges. */
+    #match-over-title { font-size: clamp(34px, 11vw, 64px); font-weight: 900; letter-spacing: clamp(3px, 1.2vw, 8px); text-shadow: 0 0 40px currentColor; }
+    #match-over-sub   { font-size: 16px; color: #aaa; letter-spacing: 3px; }
+    #match-over-score { font-size: 18px; color: #ddd; letter-spacing: 2px; margin: 8px 0 0; }
+    #match-over-stats { font-size: 14px; color: #bbb; letter-spacing: 2px; }
+    #match-over-actions { display: flex; flex-direction: column; gap: 10px; width: min(340px, 100%); margin-top: 10px; }
+    #match-over-actions button {
+      color: #fff; border-radius: 6px; cursor: pointer; letter-spacing: 3px;
+      font-family: 'Courier New', monospace;
+    }
+    #play-again-btn {
+      min-height: 64px; background: #e74c3c; border: none; font-size: 20px; font-weight: bold;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+    }
+    #play-again-btn:hover { background: #c0392b; }
+    #play-again-sub { font-size: 11px; font-weight: normal; letter-spacing: 2px; color: #ffe3de; }
+    .mo-secondary { min-height: 52px; background: transparent; border: 1px solid #555; font-size: 14px; }
+    .mo-secondary:hover { border-color: #aaa; }
+    /* A phone on its side (~410 px tall): all three buttons on screen at once — the last one used to sit
+       half under the bottom edge. Smaller title, tighter gaps, the two secondary buttons side by side. */
+    /* The match reward, inside the card instead of floating over it (#29) */
+    #match-over-reward {
+      display: none; font-size: 14px; color: #ffdd55; background: rgba(255,221,85,0.09);
+      border-radius: 8px; padding: 5px 14px; letter-spacing: 1px;
+    }
+    /* ⚔️ JUST FOUGHT — the people worth challenging again (#31) */
+    #match-over-rivals { width: min(430px, calc(100vw - 32px)); text-align: left; }
+    .mo-rivals-head { font-size: 11px; letter-spacing: 2px; color: #ffcc55; text-align: center; margin-bottom: 6px; }
+
+    @media (max-height: 480px) {
+      #match-over-screen { gap: 6px; padding: 10px 16px; }
+      #match-over-rivals { width: min(520px, calc(100vw - 24px)); }
+      .mo-rivals-head { margin-bottom: 3px; }
+      #match-over-title { font-size: 34px; }
+      #match-over-score { margin: 0; }
+      #match-over-actions { display: grid; grid-template-columns: 1fr 1fr; width: min(480px, 100%); margin-top: 4px; }
+      #play-again-btn { grid-column: 1 / -1; min-height: 56px; }
+      .mo-secondary { min-height: 46px; }
+    }
+
+    /* ── Pre-match countdown overlay ── */
+    #countdown-overlay {
+      display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      align-items: center; justify-content: center; flex-direction: column;
+      pointer-events: none; z-index: 92;
+    }
+    #countdown-number {
+      font-family: 'Courier New', monospace; font-size: 140px; font-weight: 900;
+      color: #fff; text-shadow: 0 0 60px #fff, 2px 2px 0 #000;
+      line-height: 1; animation: cdPop 0.18s ease-out;
+    }
+    #countdown-label {
+      font-family: 'Courier New', monospace; font-size: 16px; color: #aaa;
+      letter-spacing: 4px; margin-top: 6px;
+    }
+    @keyframes cdPop { from { transform: scale(1.7); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+    /* ── Spawn-shield indicator ── */
+    #spawn-shield {
+      display: none; position: absolute; bottom: 90px; left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 140, 255, 0.22); border: 2px solid #44aaff;
+      border-radius: 6px; padding: 5px 18px;
+      font-family: 'Courier New', monospace; font-size: 13px; color: #88ccff;
+      letter-spacing: 3px; pointer-events: none; z-index: 60;
+      animation: shieldPulse 0.8s ease-in-out infinite alternate;
+    }
+    @keyframes shieldPulse { from { border-color: #44aaff; color: #88ccff; } to { border-color: #aaddff; color: #cceeff; } }
+
+    /* ── In-game 2-slot weapon bar ── */
+    #weapon-selector {
+      position: absolute; bottom: 90px; left: 50%; transform: translateX(-50%);
+      display: flex; gap: 8px;
+    }
+    .ws-slot {
+      background: rgba(0,0,0,0.6); border: 1px solid #444; border-radius: 6px;
+      padding: 6px 14px; text-align: center; min-width: 72px; transition: all 0.12s;
+      pointer-events: all; cursor: pointer;
+    }
+    .ws-slot.active { background: rgba(255,255,255,0.18); border-color: #fff; }
+    .ws-slot .ws-key  { font-size: 10px; color: #888; }
+    .ws-slot .ws-name { font-size: 14px; font-weight: bold; }
+    .ws-slot .ws-type { font-size: 10px; color: #aaa; }
+
+    /* ── Loadout screen ── */
+    #loadout-screen {
+      position: fixed; top:0; left:0; width:100%; height:100%;
+      background: rgba(0,0,0,0.92); display: none; flex-direction: column;
+      align-items: center; justify-content: flex-start; z-index: 95; color: #fff;
+      font-family: 'Courier New', monospace; padding: 28px 18px 22px; overflow: hidden;
+    }
+    #loadout-screen h2 { font-size: 28px; letter-spacing: 4px; color: #e74c3c; margin-bottom: 16px; flex: 0 0 auto; }
+    #loadout-cols { display: flex; gap: 18px; min-height: 0; flex: 1 1 auto; max-width: 1040px; width: 100%; }
+    .loadout-col { display: flex; flex-direction: column; min-width: 0; flex: 1 1 0; }
+    .loadout-col-title { font-size: 11px; letter-spacing: 3px; color: #888; margin-bottom: 8px; text-align: center; }
+    #loadout-primary-list, #loadout-secondary-list,
+    #loadout-melee-list, #loadout-support-list {
+      display: flex; flex-direction: column; gap: 6px;
+      overflow-y: auto; padding-right: 4px; min-height: 0; overscroll-behavior: contain;
+    }
+    .loadout-card {
+      background: rgba(255,255,255,0.05); border: 1px solid #333; border-radius: 6px;
+      padding: 7px 10px; cursor: pointer; transition: all 0.1s;
+      display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 9px; align-items: center;
+      min-height: 58px;
+    }
+    .loadout-card:hover  { background: rgba(255,255,255,0.1); border-color: #666; }
+    .loadout-card.selected { background: rgba(231,76,60,0.25); border-color: #e74c3c; }
+    .lc-preview {
+      height: 42px; border-radius: 5px; overflow: hidden; display: flex; align-items: center; justify-content: center;
+      background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02));
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+    .lc-preview img { width: 100%; height: 100%; object-fit: contain; image-rendering: auto; filter: drop-shadow(0 3px 5px rgba(0,0,0,0.6)); }
+    .lc-preview.empty::after { content: "?"; color: #777; font-size: 18px; font-weight: bold; }
+    .lc-copy { min-width: 0; }
+    .lc-name  { font-size: 15px; font-weight: bold; }
+    .lc-type  { font-size: 10px; color: #888; margin: 1px 0; }
+    .lc-stats { font-size: 10px; color: #aaa; }
+    #loadout-ready-btn {
+      margin-top: 16px; background: #e74c3c; color: #fff; border: none;
+      padding: 12px 48px; font-size: 18px; border-radius: 4px; cursor: pointer;
+      letter-spacing: 2px; transition: background 0.15s; flex: 0 0 auto;
+    }
+    #loadout-ready-btn:disabled { background: #555; cursor: default; }
+    /* "Auto in 8s · tap any item to stay" under READY while the death countdown runs (#20) */
+    #loadout-ready-btn .auto-respawn-sub { display: block; margin-top: 3px; font-size: 11px; letter-spacing: 1px; opacity: 0.85; }
+    #loadout-ready-btn:not(:disabled):hover { background: #c0392b; }
+
+    @media (max-width: 620px) {
+      #loadout-screen { padding: 18px 12px 16px; }
+      #loadout-screen h2 { font-size: 22px; margin-bottom: 8px; }
+      #best-loadouts-btn { position: static !important; margin: 0 0 10px; }
+      #loadout-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+      .lc-name { font-size: 13px; }
+      .lc-stats { font-size: 9px; }
+      .loadout-card { grid-template-columns: 52px minmax(0, 1fr); gap: 7px; min-height: 50px; padding: 6px 7px; }
+      .lc-preview { height: 34px; }
+      #loadout-ready-btn { width: min(280px, 100%); padding: 11px 24px; }
+    }
+
+    #scope-overlay {
+      position: absolute; top:0; left:0; width:100%; height:100%;
+      display: none; pointer-events: none;
+    }
+    #scope-canvas { width: 100%; height: 100%; }
+
+    #controls-hint {
+      position: absolute; bottom: 68px; left: 50%; transform: translateX(-50%);
+      font-size: 11px; color: #555; text-align: center; letter-spacing: 1px;
+    }
+    /* Below ~900px the one-line key list wraps upward into the weapon slots and health bar. */
+    @media (max-width: 900px) { #controls-hint { display: none; } }
+
+    #ability-hud {
+      position: absolute; bottom: 130px; right: 30px;
+      background: rgba(0,0,0,0.6); border: 1px solid #444; border-radius: 8px;
+      padding: 6px 12px; min-width: 130px; text-align: center;
+      pointer-events: none;
+    }
+    #ability-key-hint { font-size: 10px; color: #ffd700; letter-spacing: 1px; margin-bottom: 2px; }
+    #ability-name { font-size: 13px; font-weight: bold; color: #fff; letter-spacing: 1px; margin-bottom: 4px; }
+    #ability-cd-track {
+      width: 100%; height: 4px; background: #333; border-radius: 2px; overflow: hidden;
+    }
+    #ability-cd-fill { height: 100%; width: 0%; background: #4caf50; transition: width 0.1s, background 0.3s; border-radius: 2px; }
+    /* ── Mobile controls ── */
+    #mobile-controls {
+      display: none;
+      position: fixed; top:0; left:0; width:100%; height:100%;
+      z-index: 50; pointer-events: none;
+    }
+    #mobile-controls.active { display: block; }
+
+    #joystick-base {
+      position: absolute; width:110px; height:110px; border-radius:50%;
+      background: rgba(255,255,255,0.08); border: 2px solid rgba(255,255,255,0.3);
+      display: none; transform: translate(-50%,-50%); pointer-events: none;
+    }
+    #joystick-thumb {
+      position: absolute; width:48px; height:48px; border-radius:50%;
+      background: rgba(255,255,255,0.5); border: 2px solid rgba(255,255,255,0.8);
+      transform: translate(-50%,-50%); top:50%; left:50%;
+    }
+
+    /* All buttons sit above everything */
+    #btn-fire, #btn-ads, #btn-reload-mobile, #btn-prev-weapon, #btn-next-weapon {
+      position: absolute; pointer-events: all; z-index: 60;
+      display: flex; align-items: center; justify-content: center;
+      user-select: none; -webkit-user-select: none; touch-action: none;
+      font-weight: bold; color: #fff;
+    }
+
+    #btn-fire {
+      right:22px; bottom:60px; width:82px; height:82px; border-radius:50%;
+      background: rgba(220,50,50,0.8); border: 3px solid rgba(255,90,90,0.9);
+      font-size:12px; letter-spacing:1px;
+    }
+    #btn-fire.pressed { background: rgba(255,80,80,0.95); transform: scale(0.92); }
+
+    #btn-ads {
+      right:120px; bottom:75px; width:58px; height:58px; border-radius:50%;
+      background: rgba(255,200,0,0.7); border: 2px solid rgba(255,230,60,0.9);
+      font-size:11px;
+    }
+    #btn-ads.active-ads { background: rgba(255,220,0,0.95); }
+
+    #btn-reload-mobile {
+      right:28px; bottom:160px; width:52px; height:52px; border-radius:50%;
+      background: rgba(60,140,255,0.7); border: 2px solid rgba(100,180,255,0.9);
+      font-size:11px;
+    }
+
+    #btn-prev-weapon, #btn-next-weapon {
+      bottom:168px; width:46px; height:46px; border-radius:8px;
+      background: rgba(0,0,0,0.55); border: 1px solid #666; font-size:22px;
+    }
+    #btn-prev-weapon { right:188px; }
+    #btn-next-weapon { right:136px; }
+
+    #reload-flash {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      font-size: 14px; color: #ffd700; display: none; margin-top: 52px;   /* the ammo-hint line; +30 is the kill confirm (#34) */
+    }
+
+    #interact-hint {
+      position: absolute; bottom: 130px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.72); border: 1px solid #4caf50; border-radius: 20px;
+      padding: 6px 18px; font-size: 13px; color: #4caf50; letter-spacing: 1px;
+      display: none; white-space: nowrap;
+      animation: hint-pulse 1s ease-in-out infinite alternate;
+    }
+    @keyframes hint-pulse {
+      from { opacity: 0.7; } to { opacity: 1; box-shadow: 0 0 8px rgba(76,175,80,0.6); }
+    }
+
+    #btn-interact {
+      position: absolute; pointer-events: all; z-index: 60;
+      display: none; align-items: center; justify-content: center;
+      user-select: none; -webkit-user-select: none; touch-action: none;
+      font-weight: bold; color: #fff; font-size: 11px; letter-spacing: 1px;
+      right: 200px; bottom: 60px; width: 60px; height: 60px; border-radius: 50%;
+      background: rgba(60,180,60,0.8); border: 2px solid rgba(100,220,100,0.9);
+    }
+    #btn-slide, #btn-crouch, #btn-jump {
+      position: absolute; pointer-events: all; z-index: 60;
+      display: none; align-items: center; justify-content: center;
+      user-select: none; -webkit-user-select: none; touch-action: none;
+      font-weight: bold; color: #fff; font-size: 11px; letter-spacing: 1px;
+      width: 60px; height: 60px; border-radius: 50%;
+    }
+    #btn-slide  { left: 200px; bottom: 60px;  background: rgba(100,170,255,0.7); border: 2px solid rgba(150,210,255,0.9); }
+    #btn-slide.pressed  { background: rgba(120,200,255,0.95); transform: scale(0.92); }
+    #btn-crouch { left: 200px; bottom: 130px; background: rgba(170,140,80,0.7);  border: 2px solid rgba(220,180,120,0.9); }
+    #btn-crouch.pressed { background: rgba(220,180,120,0.95); transform: scale(0.92); }
+    #btn-jump   { left: 280px; bottom: 60px;  background: rgba(120,220,120,0.7); border: 2px solid rgba(160,255,160,0.9); }
+    #btn-jump.pressed   { background: rgba(160,255,160,0.95); transform: scale(0.92); }
+    #mobile-controls.active #btn-slide, #mobile-controls.active #btn-crouch, #mobile-controls.active #btn-jump { display: flex; }
+
+    /* One frame for every dialog (#21) — only one is open at a time (closeOtherDialogs in game.js).
+       Same width and the same top edge, so the header and its ✕ stay put from one dialog to the next;
+       a short dialog keeps its own height instead of becoming a mostly empty box. Never taller than the
+       screen: long content scrolls inside (#18). !important because game.js sizes them inline. */
+    #settings-hub-panel, #controls-panel, #crosshair-panel, #shoot-fx-panel, #aim-assist-panel, #weapon-skins-panel, #skins-panel, #kill-log-panel, #char-chat-panel,
+    #map-dialog, #diff-dialog {
+      top: max(8px, 6vh) !important; left: 50% !important; transform: translateX(-50%) !important;
+      width: min(640px, calc(100vw - 16px)) !important; min-width: 0 !important; max-width: none !important;
+      max-height: calc(100vh - max(8px, 6vh) - 8px) !important; max-height: calc(100dvh - max(8px, 6vh) - 8px) !important;
+      box-sizing: border-box !important;
+    }
+    /* The chat panel scrolls inside its own columns; the others scroll as a whole. */
+    #settings-hub-panel, #controls-panel, #crosshair-panel, #shoot-fx-panel, #aim-assist-panel, #weapon-skins-panel, #skins-panel, #kill-log-panel,
+    #map-dialog, #diff-dialog { overflow-y: auto !important; padding: 20px !important; }
+    @media (max-width: 460px) { #best-loadouts-panel { width: 100vw !important; } }
+
+    /* ── Touch layout: body.touch-ui (set together with #mobile-controls.active) ──
+       #14 fixed the overlaps; #29 makes it small: every button is an icon, translucent
+       and ~25% smaller, and the two clusters are anchored to their own corner so the
+       ⚙ size setting (--tbs) scales sizes and gaps together. Readouts stay out of the
+       thumb zone, the weapon slots move to the top-right as icons, and the middle of
+       the screen carries nothing but the crosshair. Desktop never gets the class. */
+    #mobile-controls .tc {
+      position: absolute; bottom: 0; width: 300px; height: 250px; pointer-events: none;
+      transform: scale(var(--tbs, 1));
+    }
+    #mobile-controls .tc-left  { left: 0;  transform-origin: 0 100%; }
+    #mobile-controls .tc-right { right: 0; transform-origin: 100% 100%; }
+    /* The word inside each button gives way to an icon drawn as a mask, so the
+       existing `.pressed` background rules keep working. */
+    body.touch-ui #btn-fire, body.touch-ui #btn-ads, body.touch-ui #btn-reload-mobile,
+    body.touch-ui #btn-jump, body.touch-ui #btn-crouch, body.touch-ui #btn-slide,
+    body.touch-ui #btn-ability { font-size: 0 !important; }
+    body.touch-ui #btn-fire::before, body.touch-ui #btn-ads::before, body.touch-ui #btn-reload-mobile::before,
+    body.touch-ui #btn-jump::before, body.touch-ui #btn-crouch::before, body.touch-ui #btn-slide::before,
+    body.touch-ui #btn-ability::before {
+      content: ''; position: absolute; inset: 0; background: #fff;
+      -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+      -webkit-mask-position: center; mask-position: center;
+      -webkit-mask-size: 50% 50%; mask-size: 50% 50%;
+    }
+    body.touch-ui #btn-fire::before {
+      -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M12 2.5c2.2 2.2 3.3 4.8 3.3 7.6V18H8.7v-7.9c0-2.8 1.1-5.4 3.3-7.6z'/><rect x='8' y='19.2' width='8' height='2.3' rx='.8'/></svg>");
+              mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M12 2.5c2.2 2.2 3.3 4.8 3.3 7.6V18H8.7v-7.9c0-2.8 1.1-5.4 3.3-7.6z'/><rect x='8' y='19.2' width='8' height='2.3' rx='.8'/></svg>");
+    }
+    body.touch-ui #btn-ads::before {
+      -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'><circle cx='12' cy='12' r='6.5'/><path d='M12 2.5v5M12 16.5v5M2.5 12h5M16.5 12h5'/><circle cx='12' cy='12' r='1.2' fill='black'/></svg>");
+              mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'><circle cx='12' cy='12' r='6.5'/><path d='M12 2.5v5M12 16.5v5M2.5 12h5M16.5 12h5'/><circle cx='12' cy='12' r='1.2' fill='black'/></svg>");
+    }
+    body.touch-ui #btn-reload-mobile::before {
+      -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><path d='M19.5 12a7.5 7.5 0 1 1-2.2-5.3'/><path d='M19.5 4v4.5H15'/></svg>");
+              mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><path d='M19.5 12a7.5 7.5 0 1 1-2.2-5.3'/><path d='M19.5 4v4.5H15'/></svg>");
+    }
+    body.touch-ui #btn-jump::before {
+      -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='M6 12l6-6 6 6M6 18.5l6-6 6 6'/></svg>");
+              mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='M6 12l6-6 6 6M6 18.5l6-6 6 6'/></svg>");
+    }
+    body.touch-ui #btn-crouch::before {
+      -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='M6 8l6 6 6-6'/><path d='M5 19.5h14'/></svg>");
+              mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='M6 8l6 6 6-6'/><path d='M5 19.5h14'/></svg>");
+    }
+    body.touch-ui #btn-slide::before {
+      -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='M5.5 6.5l5.5 5.5-5.5 5.5M12.5 6.5l5.5 5.5-5.5 5.5'/></svg>");
+              mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='M5.5 6.5l5.5 5.5-5.5 5.5M12.5 6.5l5.5 5.5-5.5 5.5'/></svg>");
+    }
+    body.touch-ui #btn-ability::before {
+      -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M13.5 2L4.5 13.5h6.5L10 22l9.5-12H13z'/></svg>");
+              mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M13.5 2L4.5 13.5h6.5L10 22l9.5-12H13z'/></svg>");
+    }
+    /* Sizes and places (same corners as before, so the thumbs keep their habits). */
+    body.touch-ui #btn-fire          { right: 20px;  bottom: 24px;  width: 72px; height: 72px; background: rgba(215,50,50,0.45); border-color: rgba(255,130,130,0.85); }
+    body.touch-ui #btn-jump          { left: auto; right: 106px; bottom: 18px; width: 48px; height: 48px; background: rgba(20,24,32,0.36); border-color: rgba(255,255,255,0.55); }
+    body.touch-ui #btn-ads           { right: 104px; bottom: 78px; width: 48px; height: 48px; background: rgba(20,24,32,0.36); border-color: rgba(255,255,255,0.55); }
+    body.touch-ui #btn-ads.active-ads { background: rgba(255,210,0,0.55); }
+    body.touch-ui #btn-reload-mobile { right: 26px;  bottom: 108px; width: 44px; height: 44px; background: rgba(20,24,32,0.36); border-color: rgba(255,255,255,0.55); }
+    body.touch-ui #btn-interact      { right: 170px; bottom: 42px;  width: 48px; height: 48px; font-size: 10px; background: rgba(40,160,70,0.5); border-color: rgba(120,240,150,0.9); }
+    body.touch-ui #btn-ability       { position: absolute; right: 168px; bottom: 104px; width: 44px; height: 44px; border-radius: 50%;
+                                       background: rgba(120,70,220,0.45); border: 2px solid rgba(190,150,255,0.9); pointer-events: all;
+                                       display: none; align-items: center; justify-content: center; touch-action: none; }
+    body.touch-ui #btn-ability.ready { display: flex; }
+    body.touch-ui #btn-ability.cooling::before { opacity: 0.45; }
+    body.touch-ui #btn-crouch        { left: 16px;   bottom: 20px;  width: 48px; height: 48px; background: rgba(170,140,80,0.4); border-color: rgba(220,180,120,0.8); }
+    body.touch-ui #btn-slide         { left: 78px;   bottom: 20px;  width: 48px; height: 48px; background: rgba(100,170,255,0.4); border-color: rgba(150,210,255,0.8); }
+    body.touch-ui #btn-prev-weapon, body.touch-ui #btn-next-weapon { display: none !important; } /* the slot icons switch weapons now */
+    body.touch-ui #ability-hud       { display: none !important; }  /* [E] is a keyboard hint; touch has the button (#30) */
+    body.touch-ui #fps-counter       { display: none; }             /* ⚙ → 显示 FPS brings it back */
+    body.show-fps #fps-counter       { display: block; }
+    /* The cooldown ring around the ability button. */
+    #ability-ring {
+      position: absolute; inset: -5px; border-radius: 50%; pointer-events: none;
+      background: conic-gradient(rgba(200,165,255,0.95) var(--cd, 100%), rgba(255,255,255,0.10) 0);
+      -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 0);
+              mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 0);
+    }
+    body.touch-ui #health-bar        { left: 16px;   bottom: 80px; }
+    body.touch-ui #health-label      { display: none; }
+    body.touch-ui #health-track      { width: 120px; height: 8px; border-radius: 4px; }
+    body.touch-ui #health-num        { font-size: 15px; margin-top: 2px; }
+    /* Top band: ⚙ top-right, kills beside it, score strip, weapon icons + ammo under them. */
+    body.touch-ui #floating-settings-btn {
+      top: 8px !important; left: auto !important; right: 8px !important;
+      width: 36px; height: 36px; padding: 0 !important; font-size: 0 !important; line-height: 32px; text-align: center;
+    }
+    body.touch-ui #floating-settings-btn::before { content: '⚙'; font-size: 19px; }
+    body.touch-ui #lobby-modes-btn   { top: 6px !important; left: 8px !important; padding: 7px 14px; font-size: 13px; }
+    /* The score strip opens the scoreboard on a tap — phones have no Tab key (#44) */
+    body.touch-ui #match-hud         { pointer-events: auto; cursor: pointer; }
+    body.touch-ui #match-hud::after  { content: '▾'; margin-left: 2px; opacity: 0.55; font-size: 11px; }
+    body.touch-ui #scoreboard        { pointer-events: auto; max-height: calc(100vh - 24px); overflow-y: auto; padding: 12px 18px; box-sizing: border-box; min-width: min(320px, calc(100vw - 24px)); }
+    body.touch-ui #lobby-duel-btn    { top: 6px !important; left: 116px !important; padding: 7px 14px; font-size: 13px; }
+    body.touch-ui #kills             { top: 14px; right: 52px; font-size: 12px; }
+    /* Portrait (the default here): ⚙ and kills on row 1 (the lobby's MODES / DUEL chips share
+       it on the left), the score strip on row 2, the weapon icons as a column down the right
+       edge with the ammo under them, and the feed on the left under the strip. Landscape
+       (below) folds this into one top row. */
+    body.touch-ui #match-hud         { top: 52px; min-width: 0; max-width: calc(100vw - 16px); padding: 4px 12px; gap: 12px; white-space: nowrap; }
+    /* Weapons: four icon slots in the top-right corner, with the live weapon + ammo under them. */
+    body.touch-ui #weapon-selector   { top: 96px; right: 8px; left: auto; bottom: auto; transform: none; gap: 5px; pointer-events: auto; flex-direction: column; }
+    body.touch-ui .ws-slot           { position: relative; width: 36px; height: 36px; min-width: 0; padding: 0; border-radius: 9px; background: rgba(0,0,0,0.42); }
+    body.touch-ui .ws-slot .ws-key, body.touch-ui .ws-slot .ws-type, body.touch-ui .ws-slot .ws-name { display: none; }
+    body.touch-ui .ws-slot::before {
+      content: ''; position: absolute; inset: 0; background: rgba(255,255,255,0.75);
+      -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+      -webkit-mask-position: center; mask-position: center;
+      -webkit-mask-size: 22px 22px; mask-size: 22px 22px;
+    }
+    body.touch-ui .ws-slot.active { background: rgba(255,204,85,0.2); border-color: #ffcc55; }
+    body.touch-ui .ws-slot.active::before { background: #fff; }
+    #ws-primary::before {
+      -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M1.5 10h14.5l1.8-1.8h4.7v3.3h-3.2l-1.2 2H13l-1.3 4.5H8.6L9.9 13.5H6.5l-.8 1.2H1.5z'/></svg>");
+              mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M1.5 10h14.5l1.8-1.8h4.7v3.3h-3.2l-1.2 2H13l-1.3 4.5H8.6L9.9 13.5H6.5l-.8 1.2H1.5z'/></svg>");
+    }
+    #ws-secondary::before {
+      -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M2.5 6.5h16v4h-4.2l-1 1.5-1.4 5.5H8.2l.8-4.6a2.8 2.8 0 0 1-2.7-2.4H2.5z'/></svg>");
+              mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M2.5 6.5h16v4h-4.2l-1 1.5-1.4 5.5H8.2l.8-4.6a2.8 2.8 0 0 1-2.7-2.4H2.5z'/></svg>");
+    }
+    #ws-melee::before {
+      -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M20.5 2.5l1 1-9.3 10.8-2-2z'/><path d='M9.2 13.3l1.5 1.5-5.3 5.3a1.1 1.1 0 0 1-1.5-1.5z'/></svg>");
+              mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M20.5 2.5l1 1-9.3 10.8-2-2z'/><path d='M9.2 13.3l1.5 1.5-5.3 5.3a1.1 1.1 0 0 1-1.5-1.5z'/></svg>");
+    }
+    #ws-support::before {
+      -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='11' cy='14.5' r='6.3'/><rect x='9' y='5.4' width='4.4' height='3.4' rx='.6'/><path d='M13.4 6.4l3.8-2.6 1 1.4-3.8 2.6z'/></svg>");
+              mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='11' cy='14.5' r='6.3'/><rect x='9' y='5.4' width='4.4' height='3.4' rx='.6'/><path d='M13.4 6.4l3.8-2.6 1 1.4-3.8 2.6z'/></svg>");
+    }
+    /* Ammo sits with the gun, right above ↻ — where the eye and the thumb already are. Up in the
+       corner under the weapon icons it was, in the playtester's words, basically invisible. */
+    body.touch-ui #ammo              { top: auto; bottom: 158px; right: 18px; }
+    body.touch-ui #ammo-gun          { font-size: 11px; }
+    body.touch-ui #ammo-count        { font-size: 26px; letter-spacing: 1px; line-height: 1; }
+    body.touch-ui #ammo-reserve      { font-size: 12px; }
+    body.touch-ui #spawn-shield      { top: auto !important; bottom: 112px; left: 12px; transform: none; font-size: 11px; padding: 3px 9px;
+                                       letter-spacing: 1px; white-space: nowrap; max-width: 130px; overflow: hidden; text-overflow: ellipsis; }
+    body.touch-ui #lobby-prompt      { top: auto !important; bottom: 170px !important; max-width: calc(100vw - 32px); font-size: 13px; padding: 5px 12px; }
+    body.touch-ui #interact-hint     { display: none !important; } /* the SWAP / DUEL button replaces it */
+    /* On a phone the feed is tighter and lighter — it can hold four lines without
+       becoming a wall of boxes down the left edge. */
+    body.touch-ui #msg-feed          { left: 12px; top: 96px; width: min(240px, calc(100vw - 72px)); gap: 3px;
+                                       max-height: calc(100vh - 290px); overflow: hidden; }  /* never down into the thumb zone; the oldest line is the one cut */
+    body.touch-ui .mf                { font-size: 12px; line-height: 1.3; padding: 2px 7px; background: rgba(0,0,0,0.38); }
+    body.touch-ui .mf-big            { font-size: 13px; }
+    body.touch-ui .mf-s              { font-size: 11px; }
+    /* Narrow phones (Galaxy S9+ class, 320px): the same layout, one size down. */
+    @media (max-width: 350px) {
+      body.touch-ui #btn-fire          { right: 14px; bottom: 20px;  width: 64px; height: 64px; }
+      body.touch-ui #btn-jump          { right: 92px; bottom: 16px;  width: 44px; height: 44px; }
+      body.touch-ui #btn-ads           { right: 90px; bottom: 72px;  width: 44px; height: 44px; }
+      body.touch-ui #btn-reload-mobile { right: 20px; bottom: 96px;  width: 44px; height: 44px; }
+      body.touch-ui #btn-interact      { right: 148px; bottom: 34px; width: 44px; height: 44px; }
+      body.touch-ui #btn-ability       { right: 146px; bottom: 94px; width: 44px; height: 44px; }
+      body.touch-ui #btn-crouch        { left: 12px;  bottom: 18px;  width: 44px; height: 44px; }
+      body.touch-ui #btn-slide         { left: 68px;  bottom: 18px;  width: 44px; height: 44px; }
+      body.touch-ui #health-bar        { left: 12px;  bottom: 72px; }
+      body.touch-ui #health-track      { width: 104px; }
+      body.touch-ui #weapon-selector   { gap: 4px; }
+      body.touch-ui .ws-slot           { width: 32px; height: 32px; }
+      body.touch-ui #ammo              { bottom: 146px; right: 14px; }
+    }
+    /* Landscape (by orientation, not width — a portrait tablet is wide too): the top row
+       has to share with the score strip, so it sits a little higher. */
+    @media (orientation: landscape) {
+      body.touch-ui #match-hud       { top: 6px; max-width: calc(100vw - 260px); white-space: nowrap; padding: 3px 10px; gap: 10px; }
+      body.touch-ui #match-center    { font-size: 15px; }
+      body.touch-ui #weapon-selector { top: 46px; flex-direction: row; }
+
+      body.touch-ui #msg-feed        { top: 48px; width: 240px; max-height: calc(100vh - 188px); }
+      body.touch-ui #spawn-shield    { bottom: 80px; left: 146px; }   /* beside the health bar: the feed owns the upper left */
+      body.touch-ui #lobby-prompt    { top: 118px !important; bottom: auto !important; }
+    }
+
+    /* ── 🖥️ Desktop HUD (#37) ──────────────────────────────────────────────────────────
+       A UI font instead of Courier (numbers stay tabular), one row of chips at the top with ⚙ on the
+       right like the phone, the FPS readout out of the way, icon weapon slots, a slim health bar,
+       and the key list only in the lobby — it used to sit half under the weapon slots in #555 grey. */
+    #hud, #match-hud, #msg-feed, #match-announce, #announce-text, #lobby-tag, #kill-confirm, #ammo-hint, #controls-hint {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    #hud, #match-hud { font-variant-numeric: tabular-nums; }
+    #health-label { display: none; }
+    #health-fill { border-radius: 4px; }
+    body:not(.touch-ui) #health-bar { display: flex; align-items: center; gap: 10px; }   /* the phone keeps its stacked bar (#29) */
+    body:not(.touch-ui) #health-track { width: 220px; height: 8px; border-radius: 4px; background: rgba(0,0,0,0.55); }
+    body:not(.touch-ui) #health-num { font-size: 20px; margin-top: 0; }
+    body:not(.touch-ui) #fps-counter {
+      top: auto !important; bottom: 6px !important; left: 8px !important;
+      font-size: 10px !important; padding: 2px 5px !important; opacity: 0.7;
+    }
+    body:not(.touch-ui) #floating-settings-btn { top: 14px !important; left: auto !important; right: 14px !important; }
+    body:not(.touch-ui) #kills { top: 25px; right: 180px; }
+    body:not(.touch-ui) #weapon-selector { bottom: 26px; gap: 8px; }
+    body:not(.touch-ui) .ws-slot {
+      position: relative; min-width: 96px; padding: 9px 14px 9px 42px; border-radius: 8px; text-align: left;
+      background: rgba(10,12,18,0.62); border: 1px solid rgba(255,255,255,0.18);
+    }
+    body:not(.touch-ui) .ws-slot::before {
+      content: ''; position: absolute; left: 11px; top: 50%; width: 22px; height: 22px; transform: translateY(-50%);
+      background: rgba(255,255,255,0.72);
+      -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-position: center; mask-position: center;
+      -webkit-mask-size: 22px 22px; mask-size: 22px 22px;
+    }
+    body:not(.touch-ui) .ws-slot .ws-type { display: none; }
+    body:not(.touch-ui) .ws-slot .ws-key { position: absolute; top: 3px; right: 6px; font-size: 10px; color: #8a8f98; }
+    body:not(.touch-ui) .ws-slot .ws-name { font-size: 14px; font-weight: 700; }
+    body:not(.touch-ui) .ws-slot.active { border-color: #ffcc55; background: rgba(255,204,85,0.16); }
+    body:not(.touch-ui) .ws-slot.active::before { background: #fff; }
+    body:not(.touch-ui) #ability-hud { bottom: 110px; }
+    #controls-hint {
+      bottom: auto; top: 48px; color: #c3c8d0; background: rgba(0,0,0,0.42); padding: 5px 12px; border-radius: 8px;
+      line-height: 1.6; max-width: calc(100vw - 420px);
+    }
+
+    /* 🪟 In-game dialog (#43) — replaces the browser's alert / confirm / prompt; above everything. */
+    .ui-dialog-wrap {
+      position: fixed; inset: 0; z-index: 100000; background: rgba(0,0,0,0.55);
+      display: flex; align-items: center; justify-content: center; padding: 16px; box-sizing: border-box;
+    }
+    .ui-dialog {
+      width: min(420px, 100%); box-sizing: border-box; background: #14171f; color: #eceef4;
+      border: 1px solid #3a4258; border-radius: 12px; padding: 18px 18px 14px;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+      font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    .ui-dialog-msg { white-space: pre-line; margin-bottom: 14px; max-height: 55vh; overflow-y: auto; }
+    .ui-dialog-input {
+      width: 100%; box-sizing: border-box; padding: 10px 12px; margin: 0 0 14px; font: inherit;
+      background: #0c0e14; color: #fff; border: 1px solid #3a4258; border-radius: 8px;
+    }
+    .ui-dialog-btns { display: flex; gap: 10px; justify-content: flex-end; }
+    .ui-dialog-btns button {
+      min-width: 96px; min-height: 44px; padding: 0 18px; border-radius: 8px; cursor: pointer;
+      font-family: inherit; font-size: 14px; font-weight: 700; letter-spacing: 1px;
+    }
+    .ui-ok { background: #e74c3c; color: #fff; border: 0; }
+    .ui-cancel { background: transparent; color: #cfd3dc; border: 1px solid #4a5170; }
+
+    /* 🎬 Killcam (#42): who and with what at the top, the angle under it, progress + SKIP at the bottom */
+    #killcam-ui {
+      position: fixed; inset: 0; z-index: 9700; display: none; flex-direction: column;
+      justify-content: space-between; align-items: center; pointer-events: none;
+      padding: 14px 16px 18px; box-sizing: border-box;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    #killcam-ui .kc-top { text-align: center; background: rgba(0,0,0,0.55); border-radius: 10px; padding: 8px 18px; max-width: calc(100vw - 32px); }
+    #killcam-ui .kc-title { color: #fff; font-size: 18px; font-weight: 800; letter-spacing: 0.5px; }
+    #killcam-ui .kc-shot { color: #ffcc55; font-size: 12px; font-weight: 700; letter-spacing: 3px; margin-top: 2px; }
+    #killcam-ui .kc-bottom { display: flex; align-items: center; gap: 14px; pointer-events: auto; }
+    #killcam-ui .kc-bar { width: min(260px, 50vw); height: 4px; background: rgba(255,255,255,0.22); border-radius: 2px; overflow: hidden; }
+    #killcam-ui .kc-fill { height: 100%; width: 0; background: #ff5b5b; }
+    #killcam-ui .kc-skip {
+      min-height: 44px; padding: 0 18px; border-radius: 8px; cursor: pointer; color: #fff;
+      border: 1px solid rgba(255,255,255,0.4); background: rgba(0,0,0,0.55);
+      font-family: inherit; font-size: 14px; font-weight: 700; letter-spacing: 1px;
+    }
+    body.killcam-on #hud, body.killcam-on #mobile-controls, body.killcam-on #msg-feed,
+    body.killcam-on #match-announce, body.killcam-on #match-hud, body.killcam-on #floating-settings-btn,
+    body.killcam-on .bot-speech { visibility: hidden; }
+
+    /* ── Frontlines HUD ── */
+    #frontline-hud {
+      display: none; position: absolute; top: 58px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.7); border: 1px solid #555; border-radius: 6px;
+      padding: 5px 10px; align-items: center; gap: 3px;
+      font-family: 'Courier New', monospace; z-index: 49;
+      pointer-events: none;
+    }
+    .frontline-sector {
+      width: 56px; height: 26px; border-radius: 4px; border: 1px solid #666;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 9px; letter-spacing: 1px; font-weight: bold; color: #fff;
+      transition: background 0.3s;
+    }
+    .frontline-sector.ally   { background: rgba(76,255,76,0.35); border-color: #4cff4c; color: #4cff4c; }
+    .frontline-sector.enemy  { background: rgba(255,85,85,0.35); border-color: #ff5555; color: #ff5555; }
+    .frontline-sector.contested { animation: frontPulse 0.7s ease-in-out infinite alternate; border-color: #ffd700; color: #ffd700; }
+    @keyframes frontPulse {
+      from { background: rgba(255,215,0,0.15); }
+      to   { background: rgba(255,215,0,0.40); }
+    }
+    #frontline-progress {
+      margin-left: 8px; font-size: 11px; color: #aaa; white-space: nowrap;
+    }
+
+    /* ── Last Stand HUD ── */
+    #ls-coins {
+      display: none; position: absolute; top: 20px; left: 20px;
+      background: rgba(0,0,0,0.7); border: 1px solid #f0c040; border-radius: 6px;
+      padding: 5px 14px; font-family: 'Courier New', monospace; font-size: 15px;
+      font-weight: bold; color: #ffd700; letter-spacing: 2px; z-index: 55;
+      pointer-events: none;
+    }
+
+    /* ── Last Stand Shop ── */
+    #laststand-shop {
+      display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.82); z-index: 120; align-items: center; justify-content: center;
+      flex-direction: column; font-family: 'Courier New', monospace; color: #fff;
+      gap: 16px;
+    }
+    #ls-shop-title { font-size: 32px; font-weight: 900; letter-spacing: 6px; color: #ffd700; }
+    #ls-shop-subtitle { font-size: 13px; color: #888; letter-spacing: 3px; margin-top: -8px; }
+    #ls-wave-timer {
+      font-size: 22px; font-weight: bold; color: #ff9944; letter-spacing: 3px;
+    }
+    #ls-shop-upgrades {
+      display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; max-width: 680px;
+    }
+    .ls-upgrade-btn {
+      background: rgba(255,255,255,0.07); border: 1px solid #555; border-radius: 8px;
+      padding: 12px 18px; cursor: pointer; text-align: center; min-width: 140px;
+      transition: all 0.12s; font-family: 'Courier New', monospace; color: #fff;
+      pointer-events: all;
+    }
+    .ls-upgrade-btn:hover:not(:disabled) { background: rgba(255,215,0,0.2); border-color: #ffd700; color: #ffd700; }
+    .ls-upgrade-btn:disabled { opacity: 0.4; cursor: default; }
+    .ls-upgrade-btn .ls-upg-name { font-size: 15px; font-weight: bold; letter-spacing: 1px; }
+    .ls-upgrade-btn .ls-upg-cost { font-size: 12px; color: #ffd700; margin-top: 4px; }
+    .ls-upgrade-btn .ls-upg-desc { font-size: 10px; color: #aaa; margin-top: 3px; }
+    #ls-skip-btn {
+      background: transparent; border: 1px solid #555; border-radius: 6px;
+      padding: 9px 32px; font-family: 'Courier New', monospace; font-size: 14px;
+      color: #888; cursor: pointer; letter-spacing: 2px; pointer-events: all;
+    }
+    #ls-skip-btn:hover { border-color: #aaa; color: #ccc; }
+    /* ── D-Day HUD ── */
+    #dday-hud { display: none; }
+    @keyframes waveFlash {
+      0% { color: #ff2222; text-shadow: 0 0 18px #ff2222; }
+      50% { color: #ff9944; text-shadow: none; }
+      100% { color: #ff2222; text-shadow: 0 0 18px #ff2222; }
+    }
+  </style>
+</head>
+<body class="login-open">
+  <!-- A nickname is enough to play (#11): a guest gets a real account behind the scenes, with a
+       random secret kept on this device. The password only matters for playing elsewhere. -->
+  <div id="overlay">
+    <div id="lang-switch" role="group" aria-label="Language / 语言" data-no-i18n>
+      <button type="button" data-lang="en">EN</button><button type="button" data-lang="zh">中文</button>
+    </div>
+    <h1>PVP ARENA</h1>
+    <p id="tagline">Free 3D arena shooter · no download</p>
+    <div id="online-count"></div>
+    <input id="name-input" maxlength="16" placeholder="Nickname" autocomplete="nickname" enterkeyhint="go" />
+    <button id="login-toggle" type="button" aria-expanded="false" aria-controls="login-box">Have an account? Log in to keep your progress ▾</button>
+    <div id="login-box" hidden>
+      <input id="pass-input" maxlength="32" type="password" placeholder="Password" autocomplete="current-password" enterkeyhint="go" />
+      <p id="pass-hint">Pick a throwaway password — it only saves your shop progress. Don't reuse one from anywhere else.</p>
+    </div>
+    <div id="auth-status" style="color:#ccc;font-size:12px;margin:6px 0;min-height:14px;"></div>
+    <button id="play-btn">PLAY</button>
+    <div id="welcome-back" style="color:#88ccff;font-size:11px;margin-top:8px;display:none;letter-spacing:1px;"></div>
+  </div>
+
+  <!-- The mode screen starts at the top: its bar is sticky and the page is about one phone screen tall
+       (#24). It used to centre (`safe center`), from when the overflow was pushed above the top (#15).
+       Opaque: at 93% the game HUD behind it (weapon slots, ammo, touch controls) showed through. -->
+  <div id="mode-screen" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:#08080c; z-index:101; color:#fff; font-family:'Courier New',monospace; flex-direction:column; align-items:center; justify-content:flex-start; overflow-y:auto; padding:0 0 40px;">
+    <div id="user-info-bar">
+      <div id="uib-me">
+        <button id="mode-back-btn" title="Back to Lobby 13 (Esc)">← LOBBY</button>
+        <span id="user-info-name"></span>
+        <span id="user-info-unlocks"></span>
+      </div>
+      <div id="mode-tools">
+        <button id="open-shop-btn"><span class="ic">🛒</span>SHOP</button>
+        <button id="skins-btn"><span class="ic">🎭</span>SKINS</button>
+        <button id="weapon-skins-btn"><span class="ic">🎨</span>GUN SKINS</button>
+        <button id="char-chat-btn"><span class="ic">💬</span>CHAT</button>
+        <button id="more-btn" aria-haspopup="true" aria-expanded="false" aria-controls="more-menu"><span class="ic">⋯</span>MORE</button>
+      </div>
+      <div id="more-menu" hidden>
+        <button id="shoot-fx-btn">🔊 SHOOT FX</button>
+        <button id="aim-assist-btn">🎯 AIM ASSIST</button>
+        <button id="kill-log-btn">📹 KILL LOG</button>
+        <a href="wiki.html" target="_blank">📖 WIKI</a>
+        <!-- The offline copy. It used to sit right under PLAY on the first screen, as big as
+             PLAY and close enough to hit by accident on a phone (#32). -->
+        <a id="download-zip-link" href="PVP%20game.zip" download>⬇️ DOWNLOAD ZIP</a>
+        <button id="enter-code-btn">🔑 ENTER UNLOCK CODE</button>
+        <button id="change-pass-btn">🔐 CHANGE PASSWORD</button>
+        <button id="logout-btn">LOG OUT</button>
+      </div>
+    </div>
+    <h2 style="font-size:32px; letter-spacing:6px; color:#e74c3c; margin:16px 0 4px;">SELECT MODE</h2>
+    <p style="color:#666; font-size:12px; letter-spacing:2px; margin:0;">BOTS FILL EVERY SLOT · RANDOM LOADOUTS</p>
+    <div id="mode-body">
+      <div class="ms-label">QUICK START</div>
+      <div id="quick-row">
+        <div class="quick-card" data-mode="ffa5"><span class="ic">🎯</span><b>FREE FOR ALL</b><span>5 bots · all vs all</span></div>
+        <div class="quick-card" data-mode="5v5"><span class="ic">⚔️</span><b>TEAM 5v5</b><span>4 allies · 5 enemies</span></div>
+        <div class="quick-card" data-mode="1v1"><span class="ic">🥊</span><b>1v1 DUEL</b><span>1 enemy</span></div>
+        <div class="quick-card" data-mode="gungame"><span class="ic">🔫</span><b>GUN GAME</b><span>Each kill upgrades weapon · knife wins</span></div>
+      </div>
+      <div id="match-settings">
+        <button id="map-pick-btn" aria-haspopup="dialog">🗺️ MAP<b id="map-pick-value">RANDOM</b>▾</button>
+        <button id="diff-pick-btn" aria-haspopup="dialog">🤖 BOT DIFFICULTY<b id="diff-pick-value">MEDIUM</b>▾</button>
+      </div>
+      <div class="ms-label">ALL MODES</div>
+      <div id="mode-tabs" role="tablist">
+        <button class="mode-tab on" role="tab" aria-selected="true" data-group="team">TEAM <small>8</small></button>
+        <button class="mode-tab" role="tab" aria-selected="false" data-group="ffa">FFA <small>2</small></button>
+        <button class="mode-tab" role="tab" aria-selected="false" data-group="special">SPECIAL <small>10</small></button>
+        <button class="mode-tab" role="tab" aria-selected="false" data-group="arcade">ARCADE <small>7</small></button>
+      </div>
+      <div class="mode-group" data-group="team">
+      <div class="mode-card" data-mode="1v1">1v1<span>1 enemy</span></div>
+      <div class="mode-card" data-mode="2v2">2v2<span>1 ally · 2 enemies</span></div>
+      <div class="mode-card" data-mode="3v3">3v3<span>2 allies · 3 enemies</span></div>
+      <div class="mode-card" data-mode="5v5">5v5<span>4 allies · 5 enemies</span></div>
+      <div class="mode-card" data-mode="10v10">10v10<span>9 allies · 10 enemies</span></div>
+      <div class="mode-card" data-mode="m4_tower" style="border-color:#ffcc88;color:#ffcc88;">🏢 M4 TOWER<span>100 HP · M4A1 250/250 · grenades · first to 99</span></div>
+      <div class="mode-card" data-mode="m4_tower_big" style="border-color:#ffaa66;color:#ffaa66;">🏢 BIG TOWER<span>3-story · 100 HP · M4A1 · first to 99</span></div>
+      <div class="mode-card" data-mode="m4_tower_super" style="border-color:#ff8844;color:#ff8844;">🏢 SUPER TOWER<span>4-story · 100 HP · M4A1 · first to 99</span></div>
+      </div>
+      <div class="mode-group" data-group="ffa" hidden>
+      <div class="mode-card" data-mode="ffa5">FFA · 5 Bots<span>All vs All</span></div>
+      <div class="mode-card" data-mode="ffa15">FFA · 15 Bots<span>All vs All</span></div>
+      </div>
+      <div class="mode-group" data-group="special" hidden>
+      <div class="mode-card" data-mode="frontlines">FRONTLINES<span>Push the battle line</span></div>
+      <div class="mode-card" data-mode="laststand">LAST STAND<span>Survive endless waves</span></div>
+      <div class="mode-card" data-mode="dday">D-DAY<span>Defend the hill · 3 waves</span></div>
+      <div class="mode-card" data-mode="base_raid" style="border-color:#55ffaa;color:#55ffaa;">🏰 BASE RAID<span>Storm a guarded compound with teammates</span></div>
+      <div class="mode-card" data-mode="range">SHOOTING RANGE<span>Practice · No enemies</span></div>
+      <div class="mode-card" data-mode="aim_trainer" style="border-color:#66ddff;color:#66ddff;">🎯 AIM TRAINER<span>Moving targets · infinite ammo</span></div>
+      <div class="mode-card" data-mode="obby" style="border-color:#88ff99;color:#88ff99;">🧗 OBBY<span>Generated course · loops forever</span></div>
+      <div class="mode-card" data-mode="wave_dash" style="border-color:#66f7ff;color:#66f7ff;">〽️ WAVE DASH<span>Endless wave · spikes ramp up</span></div>
+      <div class="mode-card" data-mode="lobby13" style="border-color:#aaffaa;color:#aaffaa;">🛋️ LOBBY 13<span>Chill hub · organize 1v1s · no scoring</span></div>
+      <div class="mode-card" data-mode="koth" style="border-color:#ffaa44;color:#ffaa44;">👑 KING OF THE HILL<span>10 players · 3 lives · vehicles · last alive wins</span></div>
+      </div>
+      <div class="mode-group" data-group="arcade" hidden>
+      <div class="mode-card" data-mode="gungame"     style="border-color:#ff44ff;color:#ff44ff;">🔫 GUN GAME<span>Each kill upgrades weapon · knife wins</span></div>
+      <div class="mode-card" data-mode="oitc"        style="border-color:#ffcc22;color:#ffcc22;">🎯 ONE IN THE CHAMBER<span>1 bullet · 1 shot kill · melee fallback</span></div>
+      <div class="mode-card" data-mode="juggernaut"  style="border-color:#ff2222;color:#ff2222;">🛡️ JUGGERNAUT<span>1 OP super-soldier vs everyone</span></div>
+      <div class="mode-card" data-mode="infection"   style="border-color:#44ff44;color:#44ff44;">🧟 INFECTION<span>Zombies infect on melee · last human wins</span></div>
+      <div class="mode-card" data-mode="sniper_only" style="border-color:#aaeeff;color:#aaeeff;">🔭 SNIPER ONLY<span>SR-X only · long-range chess</span></div>
+      <div class="mode-card" data-mode="speedrun"    style="border-color:#ff8844;color:#ff8844;">⏱️ SPEEDRUN<span>Kill 20 bots as fast as possible · solo</span></div>
+      <div class="mode-card" data-mode="piefight"    style="border-color:#ffcc66;color:#ffcc66;">🥧 PIE FIGHT<span>Cream pies only · splat everyone · FFA</span></div>
+      </div>
+    </div>
+    <!-- MAP / BOT DIFFICULTY: the same cards as before, one tap away (#24) -->
+    <div id="map-dialog" class="ms-dialog" role="dialog" aria-label="Map" style="display:none;">
+      <div class="ms-dialog-head"><span>🗺️ MAP</span><button class="ms-dialog-close" aria-label="Close">✕</button></div>
+      <div id="map-row" style="display:flex; gap:6px; justify-content:center; flex-wrap:wrap; max-width:760px;">
+        <div class="map-card selected" data-map="auto"      style="padding:6px 14px; border:2px solid #aaa; color:#aaa; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px; background:rgba(170,170,170,0.18);">AUTO</div>
+        <div class="map-card" data-map="blank"      style="padding:6px 14px; border:2px solid #b9a877; color:#b9a877; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">CLASSIC</div>
+        <div class="map-card" data-map="urban"      style="padding:6px 14px; border:2px solid #9a9a9a; color:#9a9a9a; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">URBAN</div>
+        <div class="map-card" data-map="warehouse"  style="padding:6px 14px; border:2px solid #8a7050; color:#8a7050; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">WAREHOUSE</div>
+        <div class="map-card" data-map="forest"     style="padding:6px 14px; border:2px solid #4a8a3f; color:#4a8a3f; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">FOREST</div>
+        <div class="map-card" data-map="volcano"    style="padding:6px 14px; border:2px solid #ff5522; color:#ff5522; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">VOLCANO</div>
+        <div class="map-card" data-map="cyber"      style="padding:6px 14px; border:2px solid #ff00ff; color:#ff00ff; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">CYBER ALLEY</div>
+        <div class="map-card" data-map="desert"     style="padding:6px 14px; border:2px solid #c8a050; color:#c8a050; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">DESERT</div>
+        <div class="map-card" data-map="tundra"     style="padding:6px 14px; border:2px solid #88aacc; color:#88aacc; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">TUNDRA</div>
+        <div class="map-card" data-map="space"      style="padding:6px 14px; border:2px solid #aa44ff; color:#aa44ff; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">SPACE STATION</div>
+        <div class="map-card" data-map="airport"    style="padding:6px 14px; border:2px solid #ddeeff; color:#ddeeff; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">AIRPORT</div>
+        <div class="map-card" data-map="trenches"   style="padding:6px 14px; border:2px solid #c0a060; color:#c0a060; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">TRENCHES</div>
+        <div class="map-card" data-map="chernobyl"  style="padding:6px 14px; border:2px solid #44aa22; color:#44aa22; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">CHERNOBYL</div>
+        <div class="map-card" data-map="refinery"   style="padding:6px 14px; border:2px solid #d06a2d; color:#d06a2d; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">REFINERY</div>
+        <div class="map-card" data-map="skydock"    style="padding:6px 14px; border:2px solid #44ddff; color:#44ddff; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">SKYDOCK</div>
+        <div class="map-card" data-map="sewer"      style="padding:6px 14px; border:2px solid #55ff22; color:#55ff22; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">SEWER</div>
+        <div class="map-card" data-map="gravity_lab" style="padding:6px 14px; border:2px solid #66aaff; color:#66aaff; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">GRAVITY LAB</div>
+        <div class="map-card" data-map="glassworks" style="padding:6px 14px; border:2px solid #8ee8ff; color:#8ee8ff; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">GLASSWORKS</div>
+        <div class="map-card" data-map="carrier"         style="padding:6px 14px; border:2px solid #6b88a0; color:#6b88a0; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">CARRIER</div>
+        <div class="map-card" data-map="overgrowth"      style="padding:6px 14px; border:2px solid #6aaa44; color:#6aaa44; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">OVERGROWTH</div>
+        <div class="map-card" data-map="orbital_station" style="padding:6px 14px; border:2px solid #aaccff; color:#aaccff; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">ORBITAL STATION</div>
+        <div class="map-card" data-map="foundry"         style="padding:6px 14px; border:2px solid #ff7733; color:#ff7733; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">FOUNDRY</div>
+        <div class="map-card" data-map="carnival"        style="padding:6px 14px; border:2px solid #ff44cc; color:#ff44cc; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">CARNIVAL</div>
+        <div class="map-card" data-map="biosphere"       style="padding:6px 14px; border:2px solid #66ccaa; color:#66ccaa; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">BIOSPHERE</div>
+        <div class="map-card" data-map="lockdown"        style="padding:6px 14px; border:2px solid #aaaaaa; color:#aaaaaa; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">LOCKDOWN</div>
+        <div class="map-card" data-map="studio"          style="padding:6px 14px; border:2px solid #22ff88; color:#22ff88; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">STUDIO</div>
+        <div class="map-card" data-map="temple"          style="padding:6px 14px; border:2px solid #ddaa66; color:#ddaa66; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">TEMPLE</div>
+        <div class="map-card" data-map="holiday"         style="padding:6px 14px; border:2px solid #ee5566; color:#ee5566; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">HOLIDAY</div>
+        <div class="map-card" data-map="labyrinth"       style="padding:6px 14px; border:2px solid #888888; color:#888888; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">LABYRINTH</div>
+        <div class="map-card" data-map="arena"           style="padding:6px 14px; border:2px solid #44dd44; color:#44dd44; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">ARENA</div>
+        <div class="map-card" data-map="opera"           style="padding:6px 14px; border:2px solid #aa4466; color:#aa4466; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">OPERA</div>
+        <div class="map-card" data-map="doomsday"        style="padding:6px 14px; border:2px solid #ff4422; color:#ff4422; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">DOOMSDAY</div>
+        <div class="map-card" data-map="train"           style="padding:6px 14px; border:2px solid #aa88cc; color:#aa88cc; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">TRAIN</div>
+        <div class="map-card" data-map="dreamscape"      style="padding:6px 14px; border:2px solid #ff88dd; color:#ff88dd; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">DREAMSCAPE</div>
+        <div class="map-card" data-map="big_arena"       style="padding:6px 14px; border:2px solid #ffaa44; color:#ffaa44; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">BIG ARENA</div>
+        <div class="map-card" data-map="super_arena"     style="padding:6px 14px; border:2px solid #ff6644; color:#ff6644; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">SUPER BIG ARENA</div>
+        <div class="map-card" data-map="pearl_harbor"    style="padding:6px 14px; border:2px solid #6fb0d8; color:#6fb0d8; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">PEARL HARBOR</div>
+        <div class="map-card" data-map="titanic"         style="padding:6px 14px; border:2px solid #88aacc; color:#88aacc; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">TITANIC</div>
+        <div class="map-card" data-map="supermarket"     style="padding:6px 14px; border:2px solid #88ccaa; color:#88ccaa; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">SUPERMARKET</div>
+        <div class="map-card" data-map="pyongyang"       style="padding:6px 14px; border:2px solid #cc4444; color:#cc4444; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">PYONGYANG</div>
+        <div class="map-card" data-map="traffic_cone_republic" style="padding:6px 14px; border:2px solid #ff8a33; color:#ff8a33; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">CONE REPUBLIC</div>
+        <div class="map-card" data-map="flying_moai"     style="padding:6px 14px; border:2px solid #b0a690; color:#b0a690; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">FLYING MOAI</div>
+        <div class="map-card" data-map="storm_pier" style="padding:6px 14px; border:2px solid #9fd8ff; color:#9fd8ff; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">STORM PIER</div>
+        <div class="map-card" data-map="pinball_arcade" style="padding:6px 14px; border:2px solid #ff4fa8; color:#ff4fa8; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">PINBALL ARCADE</div>
+        <div class="map-card" data-map="laser_vault" style="padding:6px 14px; border:2px solid #ff5555; color:#ff5555; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">LASER VAULT</div>
+        <div class="map-card" data-map="cargo_belts" style="padding:6px 14px; border:2px solid #e0b030; color:#e0b030; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">CARGO BELTS</div>
+        <div class="map-card" data-map="gale_peaks" style="padding:6px 14px; border:2px solid #8fd0ee; color:#8fd0ee; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">GALE PEAKS</div>
+        <div class="map-card" data-map="magma_rise" style="padding:6px 14px; border:2px solid #ff7733; color:#ff7733; cursor:pointer; font-size:11px; letter-spacing:2px; border-radius:4px;">MAGMA RISE</div>
+      </div>
+      <div id="map-desc" style="font-size:11px; color:#888; margin-top:6px; letter-spacing:1px; max-width:600px;">Random — game picks one for you each match</div>
+      <div class="ms-note">Maps with built-in modes (D-Day, Range, KOTH) use their own map regardless of this choice.</div>
+    </div>
+    <div id="diff-dialog" class="ms-dialog" role="dialog" aria-label="Bot difficulty" style="display:none;">
+      <div class="ms-dialog-head"><span>🤖 BOT DIFFICULTY</span><button class="ms-dialog-close" aria-label="Close">✕</button></div>
+      <div id="difficulty-row" style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap;">
+        <div class="diff-card" data-diff="easy"  style="padding:8px 18px; border:2px solid #4cf; color:#4cf; cursor:pointer; font-size:13px; letter-spacing:3px; border-radius:4px;">EASY</div>
+        <div class="diff-card selected" data-diff="medium" style="padding:8px 18px; border:2px solid #fc4; color:#fc4; cursor:pointer; font-size:13px; letter-spacing:3px; border-radius:4px; background:rgba(255,204,68,0.2);">MEDIUM</div>
+        <div class="diff-card" data-diff="hard"  style="padding:8px 18px; border:2px solid #f44; color:#f44; cursor:pointer; font-size:13px; letter-spacing:3px; border-radius:4px;">HARD</div>
+        <div class="diff-card" data-diff="expert"  style="padding:8px 18px; border:2px solid #c0f; color:#c0f; cursor:pointer; font-size:13px; letter-spacing:3px; border-radius:4px;">EXPERT</div>
+      </div>
+      <div id="difficulty-desc" style="font-size:11px; color:#888; margin-top:8px; letter-spacing:1px; max-width:600px;">+ Reloading · Bullet leading · Reaction time · Skill variation · Smarter melee charges</div>
+    </div>
+  </div>
+
+  <div id="hud">
+    <div id="crosshair"></div>
+    <!-- Your own hits, kills and ammo, at the crosshair where your eyes already are (#34) -->
+    <div id="hitmarker"></div>
+    <div id="kill-confirm"></div>
+    <div id="ammo-hint"></div>
+    <!-- Lobby 13 says what it is: shooting works, nothing takes damage (#35) -->
+    <div id="lobby-tag">LOBBY 13 · CHILL ZONE · NO DAMAGE</div>
+    <!-- Where the hit came from, and when you are low (#36) -->
+    <div id="dmg-dir"></div>
+    <div id="low-hp"></div>
+    <div id="dmg-edge"></div>
+
+    <div id="health-bar">
+      <div id="health-label">HEALTH</div>
+      <div id="health-track"><div id="health-fill"></div></div>
+      <div id="health-num">100</div>
+    </div>
+
+    <div id="ammo">
+      <div id="ammo-gun">AK20</div>
+      <div id="ammo-count">30</div>
+      <div id="ammo-reserve">/ 90</div>
+    </div>
+
+    <div id="kills">
+      <span id="kill-count">Kills: 0</span>
+    </div>
+
+    <div id="weapon-selector">
+      <div class="ws-slot active" id="ws-primary">
+        <div class="ws-key">[1]</div>
+        <div class="ws-name">—</div>
+        <div class="ws-type">PRIMARY</div>
+      </div>
+      <div class="ws-slot" id="ws-secondary">
+        <div class="ws-key">[2] / Q</div>
+        <div class="ws-name">—</div>
+        <div class="ws-type">SECONDARY</div>
+      </div>
+      <div class="ws-slot" id="ws-melee">
+        <div class="ws-key">[3]</div>
+        <div class="ws-name">—</div>
+        <div class="ws-type">MELEE</div>
+      </div>
+      <div class="ws-slot" id="ws-support">
+        <div class="ws-key">[4]</div>
+        <div class="ws-name">—</div>
+        <div class="ws-type">SUPPORT</div>
+      </div>
+    </div>
+
+    <div id="scope-overlay">
+      <canvas id="scope-canvas"></canvas>
+    </div>
+
+    <div id="controls-hint">WASD · MOVE &nbsp;|&nbsp; SPACE · JUMP &nbsp;|&nbsp; SHIFT · SLIDE &nbsp;|&nbsp; CTRL/C · CROUCH &nbsp;|&nbsp; MOUSE · AIM &nbsp;|&nbsp; LMB · USE &nbsp;|&nbsp; E · ADS &nbsp;|&nbsp; Q / 1-4 · SLOTS &nbsp;|&nbsp; R · RELOAD &nbsp;|&nbsp; G · ABILITY &nbsp;|&nbsp; Z / X · CHAT &nbsp;|&nbsp; TAB · SCORES &nbsp;|&nbsp; F · USE VEH/C4 &nbsp;|&nbsp; 📱 JOYSTICK + JUMP / SLIDE / CROUCH BUTTONS</div>
+    <!-- Ability HUD -->
+    <div id="ability-hud">
+      <div id="ability-key-hint">[G]</div>
+      <div id="ability-name">—</div>
+      <div id="ability-cd-track"><div id="ability-cd-fill"></div></div>
+      <div id="ability-desc"></div>
+    </div>
+    <div id="reload-flash">RELOADING...</div>
+    <div id="interact-hint">🗑 F · SWAP WEAPONS</div>
+
+    <div id="scoreboard">
+      <h2>SCOREBOARD</h2>
+      <table>
+        <thead><tr><th>NAME</th><th>KILLS</th><th>DEATHS</th><th>HP</th></tr></thead>
+        <tbody id="score-body"></tbody>
+      </table>
+    </div>
+
+    <div id="death-screen">
+      YOU DIED
+      <p id="death-msg">Respawning in 3s...</p>
+    </div>
+
+    <!-- Match HUD top bar -->
+    <div id="match-hud">
+      <div id="match-left"></div>
+      <div id="match-center"></div>
+      <div id="match-right"></div>
+    </div>
+
+    <!-- Frontlines sector HUD (shown below match-hud) -->
+    <div id="frontline-hud">
+      <div class="frontline-sector" id="fl-sector-0">ENEMY<br>BASE</div>
+      <div class="frontline-sector" id="fl-sector-1">SECTOR 2</div>
+      <div class="frontline-sector" id="fl-sector-2">MID</div>
+      <div class="frontline-sector" id="fl-sector-3">SECTOR 4</div>
+      <div class="frontline-sector" id="fl-sector-4">ALLY<br>BASE</div>
+      <div id="frontline-progress">z=0</div>
+    </div>
+
+    <!-- D-Day wave HUD -->
+    <div id="dday-hud" style="display:none; position:absolute; top:58px; left:50%; transform:translateX(-50%);
+      background:rgba(0,0,0,0.72); border:1px solid #884422; border-radius:6px;
+      padding:5px 16px; align-items:center; gap:16px;
+      font-family:'Courier New',monospace; color:#ff9944; z-index:49; pointer-events:none;">
+      <span id="dday-wave-label" style="font-size:13px; font-weight:bold; letter-spacing:2px;">WAVE 0/3</span>
+      <span id="dday-enemies-label" style="font-size:12px; color:#ffcc88; letter-spacing:1px;">0 ENEMIES</span>
+      <span id="dday-phase-label" style="font-size:11px; color:#ff7722; letter-spacing:2px; text-transform:uppercase;">PREPARE</span>
+    </div>
+
+    <!-- Shooting Range HUD -->
+    <div id="range-hud" style="display:none; position:absolute; top:58px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.5); border:1px solid #44ddff; border-radius:6px; padding:6px 16px; flex-direction:row; gap:16px; align-items:center; pointer-events:none; z-index:49;">
+      <span id="range-stats" style="font-size:13px; font-weight:bold; letter-spacing:2px; color:#44ddff;">SHOTS 0  ·  HITS 0  ·  ACC 0%</span>
+    </div>
+
+    <!-- Last Stand coins display -->
+    <div id="ls-coins">COINS: 0</div>
+
+    <div id="spawn-shield">🛡 SPAWN SHIELD</div>
+  </div>
+
+  <!-- Last Stand shop overlay -->
+  <div id="laststand-shop">
+    <div id="ls-shop-title">WAVE COMPLETE</div>
+    <div id="ls-shop-subtitle">BUY UPGRADES</div>
+    <div id="ls-wave-timer">15s</div>
+    <div id="ls-shop-upgrades"></div>
+    <button id="ls-skip-btn" onclick="lsSkipShop()">SKIP</button>
+  </div>
+
+  <!-- Round/match announcement (big moments only — see #msg-feed for the rest) -->
+  <div id="match-announce">
+    <div id="announce-text"></div>
+    <div id="announce-sub"></div>
+  </div>
+
+  <!-- Message feed: kills, comms, pickups, round banners — newest on top (#29) -->
+  <div id="msg-feed"></div>
+
+  <!-- Pre-match 5-second countdown -->
+  <div id="countdown-overlay">
+    <div id="countdown-number">5</div>
+    <div id="countdown-label">GET READY</div>
+  </div>
+
+  <!-- Elimination: waiting for round end while dead -->
+  <div id="waiting-screen">
+    <h2>ELIMINATED</h2>
+    <p id="waiting-msg">Waiting for round to end...</p>
+    <div id="round-score-display"></div>
+    <button id="change-loadout-btn" style="margin-top:18px;padding:10px 22px;background:#222;color:#fff;border:2px solid #888;border-radius:6px;font-family:monospace;font-size:14px;letter-spacing:2px;cursor:pointer;">CHANGE LOADOUT</button>
+  </div>
+
+  <!-- Match over -->
+  <div id="match-over-screen">
+    <div id="match-over-title">VICTORY</div>
+    <div id="match-over-sub"></div>
+    <div id="match-over-score"></div>
+    <div id="match-over-stats"></div>
+    <!-- Wired in game.js (click + touchstart): an onclick here never fires on a phone mid-match. -->
+    <div id="match-over-actions">
+      <button id="play-again-btn">PLAY AGAIN<span id="play-again-sub"></span></button>
+      <button id="change-mode-btn" class="mo-secondary">CHANGE MODE</button>
+      <button id="back-lobby-btn" class="mo-secondary">BACK TO LOBBY 13</button>
+    </div>
+  </div>
+
+  <!-- Touch controls. The two .tc clusters are anchored to their own bottom corner so
+       ⚙ → button size scales each one as a whole (#29); the joystick stays outside them
+       because game.js places it wherever the thumb lands. -->
+  <div id="mobile-controls">
+    <div id="joystick-base"><div id="joystick-thumb"></div></div>
+    <div class="tc tc-left">
+      <div id="btn-slide">SLIDE</div>
+      <div id="btn-crouch">CROUCH</div>
+    </div>
+    <div class="tc tc-right">
+      <div id="btn-fire">FIRE</div>
+      <div id="btn-ads">ADS</div>
+      <div id="btn-reload-mobile">R</div>
+      <div id="btn-prev-weapon">&#8249;</div>
+      <div id="btn-next-weapon">&#8250;</div>
+      <div id="btn-interact">SWAP</div>
+      <div id="btn-jump">JUMP</div>
+      <!-- Only while what you hold has an ability — the E key's job, which touch never had (#30) -->
+      <div id="btn-ability"><div id="ability-ring"></div></div>
+    </div>
+  </div>
+
+  <!-- Loadout selection screen -->
+  <div id="loadout-screen">
+    <h2>SELECT LOADOUT</h2>
+    <!-- ← BACK / 🚪 LEAVE MATCH, set in showLoadoutScreen (#26) -->
+    <button id="loadout-exit-btn" style="position:absolute; top:20px; left:20px; min-height:40px; padding:8px 14px; background:#222; color:#ffb3a8; border:1px solid #7a3a34; cursor:pointer; font-family:'Courier New',monospace; font-size:12px; letter-spacing:1px; border-radius:6px;">← BACK</button>
+    <button id="best-loadouts-btn" style="position:absolute; top:20px; right:20px; padding:8px 16px; background:#1a2a3a; color:#ffcc66; border:1px solid #ffcc66; cursor:pointer; font-family:'Courier New',monospace; font-size:12px; letter-spacing:2px; border-radius:4px;">📋 BEST LOADOUTS</button>
+    <div id="loadout-cols">
+      <div class="loadout-col">
+        <div class="loadout-col-title">PRIMARY</div>
+        <div id="loadout-primary-list"></div>
+      </div>
+      <div class="loadout-col">
+        <div class="loadout-col-title">SECONDARY</div>
+        <div id="loadout-secondary-list"></div>
+      </div>
+      <div class="loadout-col">
+        <div class="loadout-col-title">MELEE</div>
+        <div id="loadout-melee-list"></div>
+      </div>
+      <div class="loadout-col">
+        <div class="loadout-col-title">SUPPORT</div>
+        <div id="loadout-support-list"></div>
+      </div>
+    </div>
+    <button id="loadout-ready-btn" disabled>READY</button>
+  </div>
+
+  <div id="err" style="display:none;position:fixed;top:0;left:0;width:100%;background:#c00;color:#fff;padding:16px;font-size:14px;z-index:9999;word-break:break-all;white-space:pre-wrap;"></div>
+
+  <script>
+    window.onerror = function(msg, src, line, col, err) {
+      if (msg === 'Script error.' && !src && (!line || line === 0)) {
+        console.warn('Ignored opaque script error event with no source location.');
+        return true;
+      }
+      var el = document.getElementById('err');
+      el.style.display = 'block';
+      el.textContent = 'JS ERROR:\n' + msg + '\n' + src + ':' + line + (col ? ':' + col : '') + (err && err.stack ? '\n' + err.stack : '');
+      return false;
+    };
+    window.addEventListener('unhandledrejection', function(e) {
+      var msg = String(e.reason);
+      if (msg.indexOf('pointer lock') !== -1 || msg.indexOf('pointerlock') !== -1) return;
+      var el = document.getElementById('err');
+      el.style.display = 'block';
+      el.textContent += '\nPromise: ' + e.reason;
+    });
+  </script>
+
+  <script src="three.min.js"></script>
+  <script>
+    if (typeof THREE === 'undefined') {
+      document.getElementById('err').style.display='block';
+      document.getElementById('err').textContent='Failed to load three.min.js';
+    }
+  </script>
+  <script src="socket.io.min.js"></script>
+  <script>
+    if (typeof io === 'undefined') {
+      document.getElementById('err').style.display='block';
+      document.getElementById('err').textContent='Failed to load socket.io.min.js';
+    }
+  </script>
+  <script src="equipment-models.js"></script>
+  <script src="i18n.js"></script>
+  <script src="game.js"></script>
+  <script src="chat.js"></script>
+</body>
+</html>
