@@ -5606,9 +5606,11 @@ function addLowPolyArenaWalls(mapName, color = 0x3a3a34) {
 registerMap('m4_tower');
 function buildM4TowerMap() {
   const m = 'm4_tower';
-  setMapBounds(m, 100, 100);
-  addMapGround(m, 0x51585c, 0x3c4246);
+  // Inside the wall (its inner face is at 49.5), not on it: everything that clamps to the bounds then stops
+  // short of the wall instead of pushing a bot into it, where it was shoved out the far side.
+  addMapGround(m, 0x51585c, 0x3c4246);   // (this sets the bounds to 100, so ours go after it)
   addOuterWalls(m, 0x30343a);
+  setMapBounds(m, 97, 97);
   const deck = 0x747b80, wall = 0x454a50, trim = 0xa98d55, cover = 0x5b635f;
   // Low roof makes the whole arena feel like a dark indoor CQB tower instead
   // of an outdoor platform map. It is high enough for the upper floor fights.
@@ -5679,7 +5681,7 @@ function buildM4TowerStoryMap(name, stories, scale) {
   const topDeckY = (stories - 1) * STORY_H;
   const roofY = topDeckY + 4.20;                  // same headroom above the top floor as the original (8.35 - 4.15)
   const half = 50 * scale;                        // original footprint is 100x100
-  setMapBounds(m, half * 2, half * 2);
+  setMapBounds(m, half * 2 - 3, half * 2 - 3);   // inside the walls, see buildM4TowerMap
   addMapBox(m, 0, roofY, 0, half * 2, 0.7, half * 2, 0x111316);
   addMapBox(m, 0, roofY - 0.5, 0, half * 1.76, 0.08, half * 1.76, 0x070809, 0, 0.78);
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(half * 2, half * 2), new THREE.MeshLambertMaterial({ color: 0x51585c }));
@@ -30042,6 +30044,9 @@ function getMapBoundsRect() {
   return { halfX: fallback, halfZ: fallback };
 }
 function isOutOfBoundsXZ(x, z) {
+  // The Towers are walled, roofed rooms: there is no edge to fall off, and the old ring-out line sat ON the wall,
+  // so bots spawned against it died on the spot, over and over, and the player's respawn went with them.
+  if (M4_TOWER_MAP_NAMES.has(activeMapName)) return false;
   const b = getMapBoundsRect();
   return Math.abs(x) > b.halfX || Math.abs(z) > b.halfZ;
 }
@@ -40836,11 +40841,13 @@ function showDamageDirection(fromId) {
   setTimeout(() => { arc.style.opacity = '0'; setTimeout(() => arc.remove(), 650); }, 450);
 }
 function updateHealthHUD(hp) {
-  document.getElementById('health-fill').style.width = `${(hp / 300 * 100).toFixed(1)}%`;
+  // The bar is a share of THIS mode's health: the Towers are 100 HP, and a full bar there read as a third.
+  const maxHp = (typeof match !== 'undefined' && match && match.cfg && match.cfg.playerHp) || 300;
+  document.getElementById('health-fill').style.width = `${Math.min(100, hp / maxHp * 100).toFixed(1)}%`;
   document.getElementById('health-num').textContent = hp;
   // Under 30%: the edges stay red until you heal, respawn or die (#36).
   const low = document.getElementById('low-hp');
-  if (low) low.classList.toggle('on', hp > 0 && hp <= 90 && !inLobby);
+  if (low) low.classList.toggle('on', hp > 0 && hp <= maxHp * 0.3 && !inLobby);
 }
 
 // ── Spectator mode (watch teammates after dying) ────────────────────────────
@@ -41208,6 +41215,26 @@ function killBotOutOfBounds(bot, killerId = null) {
   return true;
 }
 // Returns true when the hit landed — only then is the server told (botHitsMe, #22).
+// Modes that bring you straight back (the Towers): the same respawn from every way of dying. Being shot by a bot
+// went down the loadout-screen branch instead -- and a fixed-kit mode has no loadout to pick, so you never came back.
+function scheduleAutoRespawnLocal() {
+  const ds = document.getElementById('death-screen'), dm = document.getElementById('death-msg');
+  if (dm) dm.textContent = 'Respawning...';
+  afterDeath(1600, () => {
+    if (!match || match.over || !isDead) return;
+    if (ds) ds.style.display = 'none';
+    isDead = false;
+    const me = players[myId];
+    if (me) { me.hp = matchMaxHp(); me.dead = false; }
+    updateHealthHUD(matchMaxHp());
+    resetCombatResources();
+    if (match.cfg.fixedKit === 'm4_tower') applyM4TowerKit();
+    const sp = placePlayerAtTeamSpawn(localPlayerTeam(), 28, 40);
+    socket.emit('readyRespawn', { x: sp.x, z: sp.z, mode: currentModeId() });
+    grantSpawnShield(1800);
+    requestPointerLockSafe();
+  });
+}
 function applyBotDamageToPlayer(weaponId, botId) {
   if (!botId && KILLFEED_HAZARDS[weaponId]) noteKillInfo(myId, null, null, false, { cause: 'hazard', label: KILLFEED_HAZARDS[weaponId] });
   else noteKillInfo(myId, botId, weaponId, _botHitHead);   // for the kill feed, should this be the one that kills
@@ -41255,6 +41282,7 @@ function applyBotDamageToPlayer(weaponId, botId) {
     const ds = document.getElementById('death-screen');
     if (ds) ds.style.display = 'flex';
     onEntityDied(myId, botId || null);
+    if (match?.cfg?.autoRespawn) scheduleAutoRespawnLocal();
     return true;
   }
   const piercesDefense = weaponPiercesDefenses(weaponId);
@@ -41348,6 +41376,9 @@ function applyBotDamageToPlayer(weaponId, botId) {
         grantSpawnShield(3000);
         requestPointerLockSafe();
       });
+    } else if (match?.cfg?.autoRespawn) {
+      if (ds) ds.style.display = 'flex';
+      scheduleAutoRespawnLocal();
     } else {
       if (ds) { ds.style.display = 'flex'; const dm = document.getElementById('death-msg'); if (dm) dm.textContent = 'Select your loadout...'; }
       afterDeath(1500, () => { if (ds) ds.style.display='none'; showLoadoutScreen('death'); });
@@ -46759,6 +46790,11 @@ function updateBotAI(dt) {
     const prevBotX = bot.x, prevBotZ = bot.z;
     let nx = bot.x + moveX, nz = bot.z + moveZ;
     const mapHalf = getMapBounds();
+    if (M4_TOWER_MAP_NAMES.has(activeMapName)) {   // a walled room: bots are kept inside it instead of dying on the wall
+      const tb = getMapBoundsRect();
+      nx = Math.max(-tb.halfX + 0.9, Math.min(tb.halfX - 0.9, nx));
+      nz = Math.max(-tb.halfZ + 0.9, Math.min(tb.halfZ - 0.9, nz));
+    }
     if (isOutOfBoundsXZ(nx, nz)) {
       killBotOutOfBounds(bot, (bot._ringoutKillerUntil || 0) > Date.now() ? bot._ringoutKiller : null);
       continue;
