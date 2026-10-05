@@ -28077,6 +28077,7 @@ function loadoutReady() {
 
 function resetCombatResources() {
   if (!loadoutReady()) return;
+  cancelMedkitHeal();
   for (const b of localBullets) scene.remove(b.mesh);
   localBullets.length = 0;
   for (const g of activeGrenades) scene.remove(g.mesh);
@@ -31383,6 +31384,41 @@ const SUPPORT_SOUND = {
   // hologram, glitch_cube, moon_mine, black_hole_seed already use their own sounds or none
 };
 
+function cancelMedkitHeal(reason) {
+  if (!medkitHealChannel) return false;
+  clearTimeout(medkitHealChannel.timer);
+  medkitHealChannel = null;
+  if (reason) {
+    pushFeedLine('MEDKIT CANCELLED', reason, '#ff7777', false);
+    flashScreen('rgba(255,80,80,0.14)', 180);
+  }
+  return true;
+}
+
+function startMedkitHeal(item) {
+  cancelMedkitHeal();
+  const duration = item.healTime || 2500;
+  const amount = item.heal || 100;
+  const token = Date.now() + Math.random();
+  medkitHealChannel = { token, amount, startedAt: performance.now(), duration, timer: null };
+  pushFeedLine('MEDKIT', `Healing +${amount} HP...`, '#66ddaa', false);
+  flashScreen('rgba(68,255,136,0.10)', 180);
+  medkitHealChannel.timer = setTimeout(() => {
+    if (!medkitHealChannel || medkitHealChannel.token !== token || isDead) return;
+    medkitHealChannel = null;
+    socket.emit('healSelf', { amount });
+    const me = players[myId];
+    if (me) {
+      const maxHp = matchMaxHp();
+      me.hp = Math.max(1, Math.min(maxHp, me.hp + amount));
+      updateHealthHUD(me.hp);
+    }
+    spawnHitParticle(camera.position.clone().setY(1.4));
+    flashScreen('rgba(68,255,136,0.18)', 220);
+    pushFeedLine('MEDKIT COMPLETE', `+${amount} HP`, '#66ddaa', false);
+  }, duration);
+}
+
 function spawnGrappleCable(from, to) {
   const geo = new THREE.BufferGeometry().setFromPoints([from, to]);
   const mat = new THREE.LineBasicMaterial({ color: 0xc7f5ff, transparent: true, opacity: 0.95 });
@@ -31555,6 +31591,7 @@ function trySupport() {
   if (countdownActive) return;
   const item = SUPPORT_ITEMS[selectedSupportIdx];
   if (!item || supportUses[selectedSupportIdx] <= 0) return;
+  if (item.id === 'medkit' && medkitHealChannel) return;
   const now = Date.now();
   if (now - lastSupport < item.cooldown) return;
 
@@ -31576,6 +31613,10 @@ function trySupport() {
   if (SUPPORT_SOUND[item.id]) playSoundEvent(SUPPORT_SOUND[item.id], { volume: 1.0 });
 
   // ── Instant-use consumables ────────────────────────────────────────────────
+  if (item.id === 'medkit' && item.healTime) {
+    startMedkitHeal(item);
+    return;
+  }
   if (item.heal) {
     socket.emit('healSelf', { amount: item.heal });
     const me = players[myId];
@@ -40438,6 +40479,9 @@ socket.on('playerHit', data => {
     return;
   }
   const hpBeforeServerHit = data.targetId === myId ? (players[myId]?.hp ?? 300) : null;
+  if (data.targetId === myId && hpBeforeServerHit != null && data.hp < hpBeforeServerHit) {
+    cancelMedkitHeal('interrupted by damage');
+  }
   if (players[data.targetId]) {
     const tgt = players[data.targetId];
     if (tgt.isBot) {
