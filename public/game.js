@@ -32097,6 +32097,12 @@ function tryMelee() {
     else if (_prof && _prof.alt) swingModel._swingSide = (swingModel._swingSide || 1) * -1;
     else if (meleeSwingType === 'slash') swingModel._slashSide = (swingModel._slashSide || 1) * -1;
     else if (meleeSwingType === 'thrust') swingModel._thrustDir = (swingModel._thrustDir || 1) * -1;
+    if (_prof && _prof.park) {
+      const sd = swingModel._swingSide || 1, m = swingModel;
+      swingModel._swingKeys = [_MS(.001, [(m.position.x - MELEE_REST_POS.x) * sd, m.position.y - MELEE_REST_POS.y, m.position.z - MELEE_REST_POS.z],
+                                        [m.rotation.x, m.rotation.y * sd, m.rotation.z * sd]), ..._prof.keys];
+      swingModel._park = null;
+    }
   }
 
   const forward = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion).normalize();
@@ -42712,11 +42718,13 @@ function applyMeleeDeflectPose(model) {
 //   _MS(t, [right, up, back], [pitch, yaw, roll])
 const _MS = (t, p, r) => K(t, { px: p[0], py: p[1], pz: p[2], rx: r[0], ry: r[1], rz: r[2] });
 const MELEE_SWING = {
-  // iai: drawn back to the hip, raised to a high guard, then ONE diagonal cut from the
-  // upper right to the lower left that carries the tip through two radians, and a flick to clear the blade
-  katana:  { ms: 360, alt: true, keys: [_MS(.14,[.04,.02,.06],[.25,-.35,-.25]), _MS(.30,[.07,.12,.00],[.80,-.55,-.70]),
-            _MS(.42,[-.02,.07,-.10],[.45,.10,-.20]), _MS(.52,[-.12,-.02,-.18],[-.02,.85,.45]), _MS(.62,[-.20,-.10,-.20],[-.32,1.35,.90]),
-            _MS(.76,[-.18,-.11,-.16],[-.36,1.40,.95]), _MS(.90,[-.06,-.11,-.18],[-.12,.60,.30])] },
+  // A draw-cut: the blade stays pointing ahead and is CARRIED across the screen with its edge leading, pushed
+  // out a little at the middle of the stroke and pulled back at the end, and it stays where it ended. The next
+  // swing starts from there and cuts back the other way: left, then right, then left. (Written for the
+  // stroke to the right; the alternating side mirrors it. Yaw is kept small so it never swings outward.)
+  katana:  { ms: 340, alt: true, park: true, keys: [_MS(.16,[-.30,-.04,-.04],[.10,.15,0]), _MS(.24,[-.30,-.02,-.04],[.15,.25,1.00]),
+            _MS(.38,[-.06,-.10,-.30],[-.05,.30,1.20]), _MS(.52,[.24,-.12,-.20],[-.15,.20,1.25]), _MS(.62,[.28,-.10,-.10],[-.12,.12,1.20]),
+            _MS(1.0,[.26,-.08,-.12],[-.15,.20,1.20])] },
   // fencing: salute, a small circle, then a fast lunge ending in a flick of the wrist
   sabre:   { ms: 340, keys: [_MS(.16,[.02,0,.07],[.15,-.25,.25]), _MS(.30,[0,.03,.02],[.35,-.45,.55]), _MS(.42,[-.03,.02,-.08],[.10,.15,-.30]),
             _MS(.56,[-.04,-.04,-.34],[-.05,.30,-.55]), _MS(.66,[-.10,-.06,-.34],[-.25,.70,-.20]), _MS(.84,[0,-.08,-.22],[.10,.20,0])] },
@@ -42833,7 +42841,19 @@ function updateMeleeSwing(dt) {
     const model = meleeModels[selectedMeleeIdx];
     if (model && model.visible && meleeSwingT >= 1) applyMeleeDeflectPose(model);
   }
-  if (meleeSwingT >= 1) return;
+  if (meleeSwingT >= 1) {
+    const pm = (activeSlot === 'melee' && selectedMeleeIdx !== null) ? meleeModels[selectedMeleeIdx] : null;
+    if (pm && pm._park) {
+      const k = Math.min(1, Math.max(0, (performance.now() - pm._park.t0 - 900) / 450)), e = k * k * (3 - 2 * k);
+      if (k > 0) {
+        const f = pm._park, a = 1 - e;
+        pm.position.set(MELEE_REST_POS.x + f.p.x * a, MELEE_REST_POS.y + f.p.y * a, MELEE_REST_POS.z + f.p.z * a);
+        pm.rotation.set(f.r.x * a, f.r.y * a, f.r.z * a);
+        if (k >= 1) { pm._park = null; pm.position.copy(MELEE_REST_POS); pm.rotation.set(0, 0, 0); pm.rotation.order = 'XYZ'; }
+      }
+    }
+    return;
+  }
   if (activeSlot !== 'melee' || selectedMeleeIdx === null) { meleeSwingT = 1; return; }
   const model = meleeModels[selectedMeleeIdx];
   if (!model || !model.visible) { meleeSwingT = 1; return; }
@@ -42847,11 +42867,14 @@ function updateMeleeSwing(dt) {
   if (prof) {
     // YXZ: turn about the vertical first, then tip up or down, then roll -- the order a wrist swings in.
     const side = prof.alt ? (model._swingSide || 1) : 1;
-    const P = _reloadPose(prof.keys, t);
+    const P = _reloadPose((prof.park && model._swingKeys) || prof.keys, t);
     model.rotation.order = 'YXZ';
     model.position.set(MELEE_REST_POS.x + P.px * side, MELEE_REST_POS.y + P.py, MELEE_REST_POS.z + P.pz);
     model.rotation.set(P.rx, P.ry * side, P.rz * side);
-    if (t >= 1) { model.position.copy(MELEE_REST_POS); model.rotation.set(0, 0, 0); model.rotation.order = 'XYZ'; }
+    if (t >= 1) {
+      if (prof.park) model._park = { t0: performance.now(), p: model.position.clone().sub(MELEE_REST_POS), r: model.rotation.clone() };   // stays where the stroke ended; eases home if left alone
+      else { model.position.copy(MELEE_REST_POS); model.rotation.set(0, 0, 0); model.rotation.order = 'XYZ'; }
+    }
     return;
   }
   model.rotation.order = 'XYZ';
