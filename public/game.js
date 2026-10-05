@@ -1911,10 +1911,9 @@ function boostBlastCarryOnAirJump() {
 // orbit is not. Vertical is capped so the arc is something you can learn and
 // aim, and the horizontal is left generous, because crossing a gap is the
 // interesting trick.
-const BLAST_MAX_UP    = 18;   // m/s -> about 6.6 m apex (was 24 / 12 m originally; 75%)
+const BLAST_MAX_UP    = 24;   // m/s -> about 12 m apex (back to the original height; sideways stays at 75%)
 const BLAST_MAX_HORIZ = 34.5; // m/s (was 46 originally; 75%)
-const BLAST_UP_BIAS   = 0.32; // minimum upward share; lower than it was, so a
-                              // blast beside you shoves you sideways, not up
+const BLAST_UP_BIAS   = 0.55; // minimum upward share (was 0.32): the push goes up more than out, so a blast lifts you higher without sending you further
 
 // ══════════════════════════════════════════════════════════════════════════
 // 🎛️ ABILITY MARKETPLACE
