@@ -37048,6 +37048,124 @@ Object.assign(_STYLE_RP, {
 Object.assign(RELOAD_KEYS, _STYLE_RK);
 Object.assign(RELOAD_PROPS, _STYLE_RP);
 for (const _id of Object.keys(_STYLE_RK)) delete _asmBeatCache[_id];
+
+// ── 🧍 Posture ───────────────────────────────────────────────────────────────
+// Every reload used to happen in place: the gun lifted a little, rolled a little
+// and the off hand dipped, 107 times, from the same spot on the screen. A person
+// does not do that. A pistol is tucked in to the chest, a rifle is swung across
+// the body so the magwell faces you, a shotgun is turned to show its ejection
+// port, a launcher is hauled back onto the shoulder. This lays that posture over
+// every track -- eased in at the start, held while the hands work, eased out at
+// the end -- and ends each one with a small gesture of its own (a tap, a rack, a
+// press-check, a heave), picked per gun, so two guns of one kind still finish
+// differently. The tracks themselves stay as they were: the mag still leaves and
+// arrives on the same beats, because the posture only moves the whole gun.
+function _bakeReloadPostures(T) {
+  const ARCH = {
+    pistol:   { px: -.07, pz: .03, py: .02,   ry: .26,  fl: ['tap', 'check', 'rack', 'flick'] },
+    smg:      { px: -.05, pz: .02, py: .01,   ry: .34,  fl: ['tap', 'rack', 'check', 'flick'] },
+    rifle:    { px: -.04, pz: .03, py: 0,     ry: .26,  fl: ['rack', 'tap', 'check'] },
+    lmg:      { px: -.015, pz: .03, py: -.015, ry: .22,  fl: ['heave', 'jerk'] },
+    sniper:   { px: -.03, pz: .05, py: 0,     ry: -.18, fl: ['check', 'rack', 'jerk'] },
+    shotgun:  { px: -.05, pz: .05, py: .01,   ry: -.22, fl: ['jerk', 'tap'] },
+    launcher: { px: -.05, pz: .03, py: 0,     ry: .22,  fl: ['heave', 'jerk'] },
+    revolver: { px: -.06, pz: .02, py: .015,  ry: .12,  fl: ['snap', 'flick'] },
+    energy:   { px: -.04, pz: .02, py: .01,   ry: .30,  fl: ['flick', 'tap', 'check'] },
+    spray:    { px: -.04, pz: .02, py: 0,     ry: .24,  fl: ['heave', 'tap', 'jerk'] },
+    thrown:   { px: -.03, pz: .01, py: 0,     ry: 0,    fl: ['flick'] },
+  };
+  const OF = {};
+  const GROUPS = {
+    pistol: 'pistol five_seven glock18 m1911 desert_eagle hand_cannon switchblade_gun duelist_pistol signal_pistol taser flare nail_gun gatecrasher',
+    smg: 'vector mp40 hkmp7 machine_pistol smart_smg p90 p90_spec cycler',
+    rifle: 'ak20 xm7 burst swarm_rifle twin_ar lancer flechette burst_cannon m4a1_arena coilgun plasma_carbine pulse_needle',
+    lmg: 'rpd mg42 minigun chain_gun gau19 m134 mk44',
+    sniper: 'srx barrett amr lever m1_garand mauser air_rifle railgun crossbow',
+    shotgun: 'sg8 shorty sawed_off boomstick dart_gun',
+    launcher: 'rpg bazooka boombow harpoon_gun mortar_rifle potato_cannon firework_launcher shockwave_launcher grenade_launcher nebula_mortar javelin_launcher seismic_hammer pinball_launcher airburst_projector',
+    revolver: 'revolver snub_revolver auto_revolver machine_revolver gunslinger',
+    energy: 'abs_zero arc_rifle arc_torrent storm_core event_horizon quantum_repeater magnetar solar_lance prism_launcher prism_engine void_harvester portal_launcher gravity_launcher laser_pointer storm_cannon traffic_controller cyroclasm continuum storm_bloom',
+    spray: 'glassmaker painter_beam flamethrower freeze_gun frost_blaster foam_cannon gravity_paint paintball sticker_blaster',
+    thrown: 'throwing_knives throwing_axes boomerang slingshot traffic_cone cream_pie',
+  };
+  for (const a in GROUPS) GROUPS[a].split(' ').forEach(id => { OF[id] = a; });
+  // Guns whose tracks were near twins of another's: told apart on purpose.
+  const OV = {
+    minigun:  { fl: 'heave', px: -.03 },
+    srx:      { fl: 'check' },                       amr: { fl: 'rack', px: -.045 },
+    rpd:      { fl: 'jerk', px: -.01 },
+    rpg:      { fl: 'heave' },                       javelin_launcher: { fl: 'jerk', px: -.06 },
+    revolver: { fl: 'snap' },                        snub_revolver: { fl: 'flick', px: -.08, py: .03 },
+    sawed_off: { fl: 'jerk' },                      boomstick: { fl: 'tap', px: -.02, pz: .01 },
+    harpoon_gun: { fl: 'heave' },                    firework_launcher: { fl: 'jerk', ry: -.18 },
+    storm_core: { fl: 'flick' },                     traffic_controller: { fl: 'check', ry: -.2 },
+    flamethrower: { fl: 'heave' },                   abs_zero: { fl: 'jerk', ry: -.2 },
+    burst: { fl: 'rack' },                           coilgun: { fl: 'check' },
+    vector: { fl: 'tap' },                           mp40: { fl: 'rack' },
+    hkmp7: { fl: 'check' },                          machine_pistol: { fl: 'flick', px: -.08 },
+    pistol: { fl: 'rack' },                          glock18: { fl: 'tap' },
+    m1911: { fl: 'check' },                          desert_eagle: { fl: 'heave', pz: .06 },
+    potato_cannon: { fl: 'tap', px: -.01, pz: 0 },   bazooka: { fl: 'heave', pz: .01, px: -.03 },
+    mk44: { fl: 'jerk', pz: 0, px: -.01 },           pinball_launcher: { fl: 'tap', pz: .01 },
+    lever: { fl: 'rack', px: -.02, pz: .02 },        burst: { fl: 'tap', pz: .015 },
+    shorty: { fl: 'tap', ry: .15, pz: .08, sc: { hy: 1.1, rz: .8 } },   sg8: { fl: 'jerk', ry: -.30 },
+    cyroclasm: { fl: 'check', ry: -.3, px: -.02 },    m134: { fl: 'heave', ry: -.15, px: -.04, pz: .04 },
+    airburst_projector: { fl: 'jerk', ry: -.2, py: .04 },
+    coilgun: { fl: 'check', ry: -.15 },              plasma_carbine: { fl: 'flick', px: -.07 },
+    gatecrasher: { fl: 'rack', px: -.03, ry: -.2 },  chain_gun: { fl: 'jerk', px: -.005, ry: .06, pz: .04, py: .01, sc: { hy: .85 } },
+  };
+  // The gesture each gun finishes on: [start, peak, end], what it moves.
+  const FL = {
+    tap:   { t: [.80, .85, .90],  v: { py: .018, rx: -.06, hy: .05 } },
+    rack:  { t: [.79, .86, .93],  v: { hz: .10, hy: .05, hr: -.5, rz: .07 } },
+    check: { t: [.83, .89, .95],  v: { rz: .20, ry: .10, rx: -.09 } },
+    jerk:  { t: [.85, .885, .92], v: { rx: -.10, pz: .03 } },
+    heave: { t: [.79, .87, .94],  v: { py: .03, rx: -.12, pz: .04 } },
+    flick: { t: [.82, .87, .92],  v: { rz: -.18, ry: -.10, py: .01 } },
+    snap:  { t: [.81, .85, .90],  v: { rz: -.45, ry: -.14, py: .02 } },
+  };
+  const ss = (x) => x * x * (3 - 2 * x);
+  const T0 = .12, T1 = .88;
+  const env = (t) => t <= 0 || t >= 1 ? 0 : t < T0 ? ss(t / T0) : t > T1 ? ss((1 - t) / (1 - T1)) : 1;
+  for (const id of Object.keys(T)) {
+    const src = T[id];
+    const arch = ARCH[OF[id]];
+    if (!arch || src._baked) continue;
+    let hs = 0; for (let c = 0; c < id.length; c++) hs = (hs * 31 + id.charCodeAt(c)) | 0;
+    hs = hs >>> 0;
+    const rnd = (k) => ((hs >>> (k * 4)) & 15) / 15;
+    const ov = OV[id] || {};
+    const flName = ov.fl || arch.fl[hs % arch.fl.length];
+    const fl = FL[flName];
+    const ryUsed = Math.max(0, ...src.map(k => Math.abs(k.ry)));
+    const post = {
+      px: (ov.px ?? arch.px) * (0.85 + 0.30 * rnd(0)),
+      pz: (ov.pz ?? arch.pz) * (0.85 + 0.30 * rnd(1)),
+      py: ov.py ?? arch.py,
+      ry: (ov.ry ?? arch.ry) * (0.80 + 0.40 * rnd(2)) * Math.max(0, 1 - ryUsed / 0.5),
+    };
+    const sc = Object.assign({ hx: 1, hy: 1, hz: 1, rx: 1, rz: 1 }, ov.sc || {});
+    sc.hy *= 0.92 + 0.16 * rnd(3); sc.hz *= 0.92 + 0.16 * rnd(4);
+    sc.rx *= 0.92 + 0.16 * rnd(5); sc.rz *= 0.92 + 0.16 * rnd(6);
+    const bump = (t) => t <= fl.t[0] || t >= fl.t[2] ? 0
+      : t < fl.t[1] ? ss((t - fl.t[0]) / (fl.t[1] - fl.t[0])) : ss((fl.t[2] - t) / (fl.t[2] - fl.t[1]));
+    const times = src.map(k => k.t);
+    for (const t of [T0, T1, ...fl.t]) if (!times.some(q => Math.abs(q - t) < 0.02)) times.push(t);
+    times.sort((x, y) => x - y);
+    const out = times.map(t => {
+      const P = _reloadPose(src, t);
+      const e = env(t), b = bump(t);
+      for (const f in sc) P[f] *= sc[f];
+      for (const f in post) P[f] += post[f] * e;
+      for (const f in fl.v) P[f] += fl.v[f] * b;
+      return K(t, P);
+    });
+    out._baked = true;
+    T[id] = out;
+  }
+}
+_bakeReloadPostures(RELOAD_KEYS);
+for (const _id of Object.keys(RELOAD_KEYS)) delete _asmBeatCache[_id];
 // Working parts (magazine, bolt, slide, loaded round) now that the reload beats they follow exist.
 weaponModels.forEach((m, i) => ensureMech(m, WEAPONS[i] && WEAPONS[i].id));
 for (const _sk of MODEL_SKINS) if (_sk._model && _skinHasMechanics(_sk)) ensureMech(_sk._model, _sk.weapon);
@@ -37666,17 +37784,33 @@ const SKIN_FX = {
 };
 
 function _reloadPose(track, t) {
-  let a = _RELOAD_REST, b = _RELOAD_REST;
-  for (let i = 0; i < track.length; i++) {
-    if (track[i].t <= t) a = track[i];
-    else { b = track[i]; break; }
-  }
-  // Past the last keyframe we settle back to rest rather than holding the pose.
-  if (b === _RELOAD_REST && a !== _RELOAD_REST && a.t <= t) b = K(1, {});
-  const span = Math.max(0.0001, b.t - a.t);
-  const p = Math.max(0, Math.min(1, (t - a.t) / span));
-  const s = p * p * (3 - 2 * p);            // smoothstep, so nothing snaps
-  const L = (k) => a[k] + (b[k] - a[k]) * s;
+  // A Hermite spline through the keys, with Fritsch-Carlson tangents. The old
+  // smoothstep between each pair of keys brought the gun to a dead stop at every
+  // one of them -- ten stop-start moves per reload, which is what a robot does.
+  // This keeps the speed going through a key, flattens to a hold wherever two
+  // neighbours agree, and never overshoots a key (monotone), so a mag still
+  // lands where it was told to. The implicit rests at t=0 and t=1 have zero
+  // speed, so every reload still eases out of the aim pose and back into it.
+  const n = track.length;
+  const end = _reloadPose._end || (_reloadPose._end = K(1, {}));
+  const at = (j) => j < 0 ? _RELOAD_REST : j >= n ? end : track[j];
+  let i = -1;
+  while (i + 1 < n && track[i + 1].t <= t) i++;
+  const a = at(i), b = at(i + 1);
+  const h = Math.max(0.0001, b.t - a.t);
+  const u = Math.max(0, Math.min(1, (t - a.t) / h));
+  const u2 = u * u, u3 = u2 * u;
+  const h00 = 2 * u3 - 3 * u2 + 1, h10 = u3 - 2 * u2 + u, h01 = -2 * u3 + 3 * u2, h11 = u3 - u2;
+  const slope = (k, f) => {
+    if (k < 0 || k >= n) return 0;
+    const lo = at(k - 1), c = at(k), hi = at(k + 1);
+    const h0 = Math.max(0.0001, c.t - lo.t), h1 = Math.max(0.0001, hi.t - c.t);
+    const d0 = (c[f] - lo[f]) / h0, d1 = (hi[f] - c[f]) / h1;
+    if (d0 * d1 <= 0) return 0;
+    const w1 = 2 * h1 + h0, w2 = h1 + 2 * h0;
+    return (w1 + w2) / (w1 / d0 + w2 / d1);
+  };
+  const L = (f) => h00 * a[f] + h10 * h * slope(i, f) + h01 * b[f] + h11 * h * slope(i + 1, f);
   return { px:L('px'), py:L('py'), pz:L('pz'), rx:L('rx'), ry:L('ry'), rz:L('rz'),
            hx:L('hx'), hy:L('hy'), hz:L('hz'), hr:L('hr'),
            ax:L('ax'), ay:L('ay'), az:L('az'), arx:L('arx'), ary:L('ary'), arz:L('arz'),
@@ -37730,7 +37864,7 @@ function updateReloadAnim() {
   // Parts come off, get thrown clear, and arrive to be fitted, on the same
   // beats the hands work. Each event fires once per reload -- and never while
   // inspecting: you are looking at the gun, not emptying it onto the floor.
-  if (model._propRun !== model._reloadStart) { model._propRun = model._reloadStart; model._propFired = 0; }
+  if (model._propRun !== model._reloadStart) { model._propRun = model._reloadStart; model._propFired = 0; model._kick = null; }
   const fx = inspecting ? null : _skinFxFor(id);
   const skinReload = fx && fx.reload;
   const plan = !skinReload && model._reloadPlan;
@@ -37739,6 +37873,10 @@ function updateReloadAnim() {
     if (model._propFired & (1 << i)) continue;
     if (t < evs[i].t) continue;
     model._propFired |= (1 << i);
+    {   // the part going in knocks the gun; the part coming out only eases it
+      const heavy = /^(mag|clip|cell|canister|drum|rocket|battery|bottle)$/.test(evs[i].k);
+      model._kick = { t0: Date.now(), a: (evs[i].m === 'arrive' ? 1 : .5) * (heavy ? 1 : .3) };
+    }
     if (evs[i].k === 'mag' && evs[i].m === 'arrive' && model._mech && model._mech.mag) continue;   // the gun's own magazine slides in instead
     for (let n = 0; n < evs[i].n; n++) {
       try { spawnReloadProp(model, evs[i].dust ? 'ash' : evs[i].k, evs[i].m, evs[i].w); } catch (e) {}
@@ -37756,6 +37894,17 @@ function updateReloadAnim() {
       P.ax += op.ax * w; P.ay += op.ay * w; P.az += op.az * w;
       P.arx += op.arx * w; P.ary += op.ary * w; P.arz += op.arz * w;
     }
+  }
+  if (!inspecting) {
+    const nowMs = Date.now(), kk = model._kick;
+    if (kk) {   // a damped knock: pressed down and back, then springs home
+      const tau = (nowMs - kk.t0) / 1000;
+      if (tau > 0.5) model._kick = null;
+      else { const e = Math.exp(-11 * tau) * Math.cos(28 * tau) * kk.a; P.rx += 0.04 * e; P.py -= 0.008 * e; P.pz += 0.005 * e; }
+    }
+    // Nobody holds a gun perfectly still while their other hand is busy.
+    const ph = nowMs / 1000, sw = Math.sin(Math.PI * t);
+    P.py += 0.003 * Math.sin(ph * 2.3) * sw; P.px += 0.002 * Math.sin(ph * 1.7 + 1) * sw; P.rz += 0.010 * Math.sin(ph * 1.9 + 2) * sw;
   }
   const home = model._homePos;
   model.position.set(home.x + P.px, home.y + P.py, home.z + P.pz);

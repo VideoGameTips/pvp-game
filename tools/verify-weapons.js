@@ -87,10 +87,17 @@ function load() {
   code += src.match(/^const RP = .*$/m)[0] + '\n';
   code += constBlock('RELOAD_PROPS') + '\n';
   code += fnBlock('_fxS') + '\n' + fnBlock('_fxR') + '\n';
+  code += 'const _asmBeatCache = {};\n';
+  // The tracks that actually play are not the RELOAD_KEYS literal: per-gun styles are laid over it
+  // and every track is then given a posture. Run the same span the game runs.
+  { const i0 = src.indexOf('function _magTrack(o) {');
+    const endMark = 'for (const _id of Object.keys(RELOAD_KEYS)) delete _asmBeatCache[_id];';
+    const i1 = src.indexOf(endMark, i0);
+    if (i0 > 0 && i1 > 0) code += src.slice(i0, i1 + endMark.length) + '\n'; }
   code += constBlock('_RK') + '\n';
   code += src.match(/^const _emoReload = [\s\S]*?'ding'\);/m)[0] + '\n';
   code += constBlock('SKIN_FX') + '\n';
-  code += fnBlock('assemblyBeats') + '\nconst _asmBeatCache = {};\n';
+  code += fnBlock('assemblyBeats') + '\n';
   code += fnBlock('prepViewModel') + '\n';
   // Model skins replace a weapon outright, so they must satisfy everything a
   // weapon does. The table is rewritten without its build closures, which the
