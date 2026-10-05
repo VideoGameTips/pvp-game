@@ -32070,7 +32070,9 @@ function tryMelee() {
   // Trigger swing animation — each swing type has its own characteristic duration
   meleeSwingType = MELEE_SWING_TYPES[selectedMeleeIdx] || 'slash';
   const cd = item.cooldown;
-  meleeSwingDur = meleeSwingType === 'slam'   ? Math.min(cd * 0.78, 600)   // slow, weighty overhead
+  const _prof = MELEE_SWING[_meleeSwingId(selectedMeleeIdx)];
+  meleeSwingDur = _prof ? Math.min(_prof.ms, cd * 0.95)
+                : meleeSwingType === 'slam'   ? Math.min(cd * 0.78, 600)   // slow, weighty overhead
                 : meleeSwingType === 'chop'   ? Math.min(cd * 0.62, 380)   // faster than slam, less wind-up
                 : meleeSwingType === 'bash'   ? Math.min(cd * 0.70, 440)   // medium shove
                 : meleeSwingType === 'thrust' ? Math.min(cd * 0.58, 380)   // lunge + recover
@@ -32086,6 +32088,7 @@ function tryMelee() {
   const swingModel = meleeModels[selectedMeleeIdx];
   if (swingModel) {
     if (meleeSwingType === 'punch') swingModel._punchLeft = !swingModel._punchLeft;
+    else if (_prof && _prof.alt) swingModel._swingSide = (swingModel._swingSide || 1) * -1;
     else if (meleeSwingType === 'slash') swingModel._slashSide = (swingModel._slashSide || 1) * -1;
     else if (meleeSwingType === 'thrust') swingModel._thrustDir = (swingModel._thrustDir || 1) * -1;
   }
@@ -42683,6 +42686,130 @@ function applyMeleeDeflectPose(model) {
   );
 }
 
+// ── ⚔️ One swing per weapon ─────────────────────────────────────────────────
+// Forty-four melee weapons shared nine swings, and the main one (the "slash"
+// that eleven blades and bats used) rolled the weapon about its own length and
+// slid it sideways: a blade that points down the barrel and only ROLLS does not
+// cut anything, it just shuffles. A cut is the tip travelling through an arc, so
+// these are written as that: the weapon is turned (rx = tip up, ry = tip swung
+// left, rz = rolled about its length) and carried, one path per weapon.
+//
+// Offsets are from the resting pose (right, low, forward of the camera); every
+// path begins and ends at rest. `alt` mirrors every second swing, so a combo
+// weaves from one side to the other instead of repeating itself. `ms` is the
+// length of the swing, kept inside the weapon's own cooldown.
+//   _MS(t, [right, up, back], [pitch, yaw, roll])
+const _MS = (t, p, r) => K(t, { px: p[0], py: p[1], pz: p[2], rx: r[0], ry: r[1], rz: r[2] });
+const MELEE_SWING = {
+  // iai: drawn back to the hip, raised to a high guard, then ONE diagonal cut from the
+  // upper right to the lower left that carries the tip through two radians, and a flick to clear the blade
+  katana:  { ms: 360, alt: true, keys: [_MS(.14,[.04,.02,.06],[.25,-.35,-.25]), _MS(.30,[.07,.12,.00],[.80,-.55,-.70]),
+            _MS(.42,[-.02,.07,-.10],[.45,.10,-.20]), _MS(.52,[-.12,-.02,-.18],[-.02,.85,.45]), _MS(.62,[-.20,-.10,-.20],[-.32,1.35,.90]),
+            _MS(.76,[-.18,-.11,-.16],[-.36,1.40,.95]), _MS(.90,[-.06,-.11,-.18],[-.12,.60,.30])] },
+  // fencing: salute, a small circle, then a fast lunge ending in a flick of the wrist
+  sabre:   { ms: 340, keys: [_MS(.16,[.02,0,.07],[.15,-.25,.25]), _MS(.30,[0,.03,.02],[.35,-.45,.55]), _MS(.42,[-.03,.02,-.08],[.10,.15,-.30]),
+            _MS(.56,[-.04,-.04,-.34],[-.05,.30,-.55]), _MS(.66,[-.10,-.06,-.34],[-.25,.70,-.20]), _MS(.84,[0,-.08,-.22],[.10,.20,0])] },
+  // baseball: cocked behind the right shoulder, then a flat swing all the way round to the left
+  bat:     { ms: 440, keys: [_MS(.22,[.10,.06,.06],[.35,-.90,-.35]), _MS(.34,[.12,.06,.04],[.40,-.95,-.40]),
+            _MS(.52,[-.08,-.02,-.20],[.12,.40,-.05]), _MS(.62,[-.22,-.02,-.12],[.15,1.15,.20]), _MS(.80,[-.10,-.06,-.04],[.08,.60,.10])] },
+  // a straight-bat drive: back-lift high, then down through the ball and up in a lofted follow-through
+  cricket_bat: { ms: 420, keys: [_MS(.22,[0,.10,.02],[.90,-.10,0]), _MS(.34,[0,.11,.02],[.98,-.10,0]), _MS(.52,[-.02,-.06,-.30],[-.35,.15,0]),
+            _MS(.66,[-.03,.02,-.22],[.60,.35,.10]), _MS(.84,[0,0,-.10],[.25,.15,0])] },
+  // a low backswing and a scooping upswing that finishes high over the left shoulder
+  golf_club: { ms: 450, keys: [_MS(.26,[.10,-.04,.04],[-.25,-.85,.30]), _MS(.40,[.10,-.04,.04],[-.28,-.90,.30]), _MS(.54,[-.06,-.12,-.22],[-.40,.35,.10]),
+            _MS(.70,[-.20,.08,-.08],[.70,1.05,-.50]), _MS(.86,[-.12,.05,-.03],[.40,.60,-.30])] },
+  // a hack: shoulder-high, then straight down and across into a deep stop
+  machete: { ms: 400, alt: true, keys: [_MS(.20,[.06,.12,.04],[.80,-.40,-.50]), _MS(.40,[-.02,.04,-.12],[.20,.30,-.10]),
+            _MS(.52,[-.10,-.12,-.26],[-.70,.55,.25]), _MS(.64,[-.10,-.13,-.26],[-.75,.60,.30]), _MS(.86,[-.04,-.06,-.12],[-.20,.20,.10])] },
+  // reaping: far out to the right and low, then a long flat arc across the whole screen
+  scythe:  { ms: 540, keys: [_MS(.26,[.16,-.04,.00],[.10,-.95,.60]), _MS(.55,[-.02,-.10,-.20],[-.15,.20,.10]), _MS(.72,[-.24,-.08,-.10],[0,1.25,-.50]),
+            _MS(.90,[-.12,-.10,-.14],[0,.70,-.20])] },
+  // a jedi overhead: straight up, then down through the front in one long vertical arc
+  lightsabre: { ms: 380, keys: [_MS(.20,[.02,.06,.02],[.50,-.20,.30]), _MS(.38,[0,.10,-.06],[1.10,-.10,0]), _MS(.46,[0,.08,-.08],[.95,.05,-.20]),
+            _MS(.60,[-.04,-.10,-.26],[-.55,.20,-.40]), _MS(.74,[-.02,-.08,-.20],[-.45,.25,-.50]), _MS(.90,[0,-.02,-.08],[-.10,.10,-.10])] },
+  // a dash: held flat, thrown forward and ripped across to the left while the whole body slides with it
+  phase_blade: { ms: 320, alt: true, keys: [_MS(.15,[.10,0,.08],[0,-.90,.70]), _MS(.38,[-.02,-.02,-.30],[-.05,.20,.80]),
+            _MS(.55,[-.30,-.04,-.26],[0,1.30,.60]), _MS(.75,[-.10,-.02,-.10],[.10,.40,.20])] },
+  // a cross: down-left, a beat, then straight back up-right on the same line
+  vampire_blade: { ms: 460, keys: [_MS(.15,[.08,.14,.02],[.90,-.50,-.60]), _MS(.34,[-.14,-.10,-.24],[-.60,1.00,.70]), _MS(.44,[-.14,-.10,-.24],[-.62,1.02,.72]),
+            _MS(.64,[.16,.08,-.22],[.70,-.90,-.50]), _MS(.82,[.06,-.04,-.12],[.20,-.20,0])] },
+  // a flat backhand: the pan swung level, across, with a wobble as it rings
+  frying_pan: { ms: 380, keys: [_MS(.24,[.10,.05,.06],[.25,-.80,-.10]), _MS(.46,[-.04,0,-.24],[.10,.30,0]), _MS(.58,[-.18,-.02,-.20],[.05,.95,.10]),
+            _MS(.68,[-.16,-.02,-.20],[.05,.85,.25]), _MS(.78,[-.14,-.02,-.18],[.05,.92,-.05]), _MS(.92,[-.04,-.04,-.08],[0,.30,0])] },
+  // two hands, over the head, a pause at the top, and everything coming down
+  sledge:  { ms: 640, keys: [_MS(.30,[.02,.14,-.12],[1.25,-.05,0]), _MS(.42,[.02,.15,-.12],[1.32,0,0]), _MS(.54,[0,-.20,-.36],[-.85,0,0]),
+            _MS(.66,[0,-.17,-.34],[-.60,0,0]), _MS(.90,[0,-.06,-.12],[-.10,0,0])] },
+  // wound all the way round behind the back and brought through in one turn
+  titan_hammer: { ms: 700, keys: [_MS(.20,[.10,.04,.00],[.40,-.90,0]), _MS(.38,[.14,.10,-.04],[.70,-1.80,0]), _MS(.56,[-.02,-.18,-.34],[-.80,.40,0]),
+            _MS(.70,[0,-.15,-.30],[-.55,.30,0]), _MS(.90,[0,-.05,-.10],[-.10,.10,0])] },
+  // dug in low, scooped up, lifted overhead, then brought down on top
+  shovel:  { ms: 540, keys: [_MS(.22,[.06,-.10,-.06],[-.35,-.20,-.20]), _MS(.40,[.02,.04,-.22],[.50,.10,.20]), _MS(.52,[0,.12,-.14],[1.20,0,.10]),
+            _MS(.66,[-.02,-.20,-.34],[-.80,0,0]), _MS(.88,[0,-.05,-.10],[-.10,0,0])] },
+  // rises on its own, hangs there shaking, and then comes down far harder than it went up
+  gravity_hammer: { ms: 720, keys: [_MS(.35,[0,.18,-.06],[.80,0,0]), _MS(.48,[0,.20,-.06],[.88,0,.15]), _MS(.54,[.01,.20,-.06],[.88,0,-.15]),
+            _MS(.62,[0,-.22,-.36],[-.90,0,0]), _MS(.74,[0,-.18,-.32],[-.65,0,0]), _MS(.92,[0,-.04,-.10],[-.10,0,0])] },
+  // a hook: up and round, then down and across at an angle
+  crowbar: { ms: 340, alt: true, keys: [_MS(.20,[.08,.10,.06],[.90,-.60,.50]), _MS(.46,[-.06,-.10,-.24],[-.30,.50,-.40]), _MS(.60,[-.10,-.12,-.22],[-.50,.70,-.50]),
+            _MS(.84,[-.02,-.06,-.10],[-.10,.20,-.10])] },
+  // a woodsman's overhead: all the body behind it, and it stays in the wood a moment
+  fire_axe: { ms: 640, keys: [_MS(.30,[.04,.12,-.10],[1.20,-.20,0]), _MS(.40,[.04,.13,-.10],[1.25,-.20,0]), _MS(.52,[0,-.18,-.32],[-.70,.10,0]),
+            _MS(.72,[0,-.17,-.30],[-.66,.10,0]), _MS(.92,[0,-.05,-.10],[-.10,0,0])] },
+  // down from the right shoulder, across the body
+  combat_axe: { ms: 580, alt: true, keys: [_MS(.26,[.08,.14,.06],[1.10,-.60,-.40]), _MS(.46,[-.04,-.12,-.28],[-.55,.55,.25]), _MS(.62,[-.06,-.13,-.26],[-.60,.60,.28]),
+            _MS(.88,[0,-.05,-.10],[-.10,.15,.05])] },
+  // quick: a flick of the wrist and nothing else
+  hatchet: { ms: 300, alt: true, keys: [_MS(.22,[.04,.06,.04],[.70,-.20,-.20]), _MS(.44,[0,-.06,-.20],[-.50,.20,.15]), _MS(.64,[0,-.07,-.18],[-.52,.20,.16]), _MS(.88,[0,-.02,-.06],[-.05,.05,0])] },
+  // chopped down and dragged back toward you
+  meat_cleaver: { ms: 380, keys: [_MS(.22,[.04,.10,.02],[.90,-.10,.20]), _MS(.44,[0,-.10,-.26],[-.65,.10,-.20]), _MS(.60,[0,-.12,-.10],[-.40,.10,-.25]), _MS(.86,[0,-.04,-.04],[-.10,.05,-.05])] },
+  // thrown, almost: cocked far back and snapped forward from the wrist
+  tomahawk: { ms: 360, keys: [_MS(.26,[.06,.10,.14],[1.00,-.15,.20]), _MS(.46,[.02,0,-.14],[-.80,.10,-.20]), _MS(.62,[0,-.06,-.22],[-.85,.10,-.25]), _MS(.88,[0,-.03,-.08],[-.10,.05,0])] },
+  // the shield: pulled in, then the whole slab driven forward and a little up
+  riot_shield: { ms: 440, keys: [_MS(.26,[0,-.02,.08],[.05,0,0]), _MS(.50,[-.06,.04,-.34],[.10,0,0]), _MS(.58,[-.06,.05,-.36],[.12,.04,0]), _MS(.62,[-.05,.04,-.34],[.10,-.04,0]), _MS(.88,[0,0,-.08],[0,0,0])] },
+  // a poke with a twirl of the handle
+  umbrella: { ms: 400, keys: [_MS(.22,[.02,.02,.06],[.20,0,.20]), _MS(.46,[-.02,.02,-.30],[.10,0,1.80]), _MS(.66,[-.02,0,-.28],[.10,0,3.20]), _MS(.92,[0,0,-.08],[0,0,6.28])] },
+  // the gentleman's whack: up and round, then a short sideways crack with the wrist
+  cane:    { ms: 380, alt: true, keys: [_MS(.24,[.08,.06,.04],[.50,-.70,.40]), _MS(.46,[-.04,-.02,-.20],[.10,.55,-.20]), _MS(.60,[-.12,-.02,-.16],[.05,1.00,-.30]), _MS(.86,[-.04,-.02,-.06],[0,.30,-.10])] },
+  // a heavy diagonal, with both hands
+  pipe:    { ms: 440, alt: true, keys: [_MS(.26,[.10,.10,.08],[.80,-.90,-.30]), _MS(.48,[-.08,-.06,-.24],[-.10,.40,-.10]), _MS(.62,[-.18,-.10,-.18],[-.30,1.00,.10]), _MS(.86,[-.04,-.04,-.06],[0,.30,0])] },
+  // an elbow: short, sideways, and all in the roll of the wrist
+  wrench:  { ms: 320, alt: true, keys: [_MS(.22,[.10,-.02,.04],[0,-.30,.50]), _MS(.46,[-.18,-.04,-.16],[0,.35,-.50]), _MS(.60,[-.20,-.04,-.14],[0,.40,-.60]), _MS(.86,[-.04,-.02,-.04],[0,.10,-.10])] },
+  // a forehand with topspin: back and low, then up and across with the face rolling over the ball
+  tennis_racket: { ms: 340, alt: true, keys: [_MS(.24,[.12,-.04,.06],[-.20,-.90,.60]), _MS(.46,[-.06,-.04,-.22],[.10,.40,-.30]), _MS(.62,[-.20,.06,-.14],[.40,1.10,-1.00]), _MS(.86,[-.06,.02,-.04],[.12,.40,-.30])] },
+  // couched, pulled back and driven forward the whole length of the arm
+  spear:   { ms: 420, keys: [_MS(.22,[.04,-.02,.14],[.10,-.20,.30]), _MS(.45,[-.02,0,-.46],[0,.05,-.30]), _MS(.58,[-.02,0,-.46],[0,.05,-.30]), _MS(.86,[0,0,-.10],[0,0,0])] },
+  // a short stab with the point twisting round as it goes in
+  fire_poker: { ms: 300, keys: [_MS(.22,[.02,0,.08],[.10,-.10,0]), _MS(.44,[-.02,0,-.30],[0,.05,-1.50]), _MS(.60,[-.02,0,-.28],[0,.05,-2.40]), _MS(.86,[0,0,-.06],[0,0,-3.14])] },
+  // from low to high, the way a bayonet goes in under the guard
+  bayonet: { ms: 320, keys: [_MS(.20,[.02,-.08,.10],[-.20,-.10,0]), _MS(.44,[-.02,.02,-.40],[.30,.05,0]), _MS(.58,[-.02,.03,-.40],[.34,.05,0]), _MS(.84,[0,0,-.08],[0,0,0])] },
+  // reaching: pulled back and a slow, twisting reach with both hands wide
+  garrote: { ms: 760, keys: [_MS(.26,[.02,0,.12],[.10,-.30,.40]), _MS(.56,[-.04,.02,-.26],[0,.50,-.50]), _MS(.74,[-.04,.02,-.26],[0,.55,-.55]), _MS(.92,[0,0,-.06],[0,.10,-.05])] },
+  // reverse grip: up, then an ice-pick stab straight down and forward
+  knife:   { ms: 230, keys: [_MS(.22,[.02,.08,.02],[1.20,-.05,.10]), _MS(.44,[-.02,-.06,-.28],[-.40,.05,-.10]), _MS(.60,[-.02,-.07,-.26],[-.42,.05,-.10]), _MS(.88,[0,0,-.06],[-.05,0,0])] },
+  // a jab that stutters with the current
+  shock_baton: { ms: 280, keys: [_MS(.20,[.02,0,.08],[.10,-.10,0]), _MS(.40,[-.02,0,-.30],[0,.05,0]), _MS(.46,[-.02,.02,-.28],[.05,.08,.12]), _MS(.52,[-.02,-.02,-.30],[-.05,.02,-.12]),
+            _MS(.58,[-.02,.02,-.28],[.05,.08,.12]), _MS(.64,[-.02,-.02,-.30],[-.05,.02,-.12]), _MS(.88,[0,0,-.08],[0,0,0])] },
+  // a claw: the curved blade rolled right round on the way through, close in
+  karambit: { ms: 240, alt: true, keys: [_MS(.20,[.06,.04,.04],[.30,-.40,-1.30]), _MS(.42,[-.04,-.04,-.20],[-.10,.30,0]), _MS(.58,[-.10,-.08,-.18],[-.40,.60,1.30]), _MS(.86,[-.02,-.02,-.04],[0,.10,.20])] },
+  // a straight, flat, quick jab with no windup to speak of
+  ots04:   { ms: 210, keys: [_MS(.14,[0,0,.04],[0,0,0]), _MS(.34,[-.02,0,-.40],[.05,0,0]), _MS(.50,[-.02,0,-.40],[.05,0,0]), _MS(.84,[0,0,-.06],[0,0,0])] },
+  // a back-and-forth saw: forward and drag, forward and drag, with the engine shaking it
+  chainsaw: { ms: 140, keys: [_MS(.18,[0,-.02,-.12],[.10,0,.20]), _MS(.36,[0,-.04,-.02],[-.05,0,-.20]), _MS(.54,[0,-.02,-.16],[.10,0,.20]), _MS(.72,[0,-.04,-.04],[-.05,0,-.20]), _MS(.90,[0,-.02,-.08],[.05,0,.05])] },
+  // thrust in and wound twice round
+  screwdriver: { ms: 260, keys: [_MS(.20,[.02,0,.06],[.10,0,.30]), _MS(.48,[-.02,0,-.28],[.05,0,-3.10]), _MS(.80,[-.02,0,-.26],[.05,0,-6.28]), _MS(.9995,[0,0,-.06],[0,0,-6.28])] },
+  // a figure of eight: out to the left, back through the middle to the right, rolling the whole way
+  nunchucks: { ms: 380, keys: [_MS(.18,[.06,.02,.02],[.20,-.90,.80]), _MS(.36,[-.10,.04,-.10],[.10,.90,-.80]), _MS(.54,[.08,0,-.12],[.20,-.90,.80]), _MS(.72,[-.10,.04,-.10],[.10,.90,-.80]), _MS(.90,[-.02,0,-.04],[0,.20,-.10])] },
+  // thrown straight out, spinning on its string, and wound back in
+  yoyo:    { ms: 520, keys: [_MS(.16,[.02,.02,.04],[.30,0,.40]), _MS(.40,[0,.02,-.42],[.10,0,3.30]), _MS(.58,[0,.01,-.46],[.10,0,6.28]), _MS(.80,[0,0,-.22],[.05,0,9.42]), _MS(.9995,[0,0,-.06],[0,0,12.56])] },
+  // lifted high, then cracked forward and down: the whip's tip is the fast part
+  volt_whip: { ms: 440, keys: [_MS(.26,[.04,.08,.02],[.95,-.40,.30]), _MS(.40,[.02,.10,.00],[1.05,-.30,.20]), _MS(.52,[-.04,-.06,-.30],[-.50,.40,-.30]),
+            _MS(.60,[-.06,-.08,-.32],[-.60,.55,-.40]), _MS(.88,[0,-.02,-.08],[-.10,.10,-.05])] },
+};
+// The swing that is actually playing is keyed by the weapon underneath a skin.
+function _meleeSwingId(idx) {
+  const it = MELEE_ITEMS[idx];
+  return it ? (it.baseId || it.id) : null;
+}
+
 function updateMeleeSwing(dt) {
   // Dual-wield companions (fists, brass knuckles) track their main hand's
   // visibility every frame, rather than touching every equip/switch/reset
@@ -42704,6 +42831,19 @@ function updateMeleeSwing(dt) {
   const t = meleeSwingT;
   const lerp = (a, b, s) => a + (b - a) * s;
   let px, py, pz, rx, rz;
+
+  const prof = MELEE_SWING[_meleeSwingId(selectedMeleeIdx)];
+  if (prof) {
+    // YXZ: turn about the vertical first, then tip up or down, then roll -- the order a wrist swings in.
+    const side = prof.alt ? (model._swingSide || 1) : 1;
+    const P = _reloadPose(prof.keys, t);
+    model.rotation.order = 'YXZ';
+    model.position.set(MELEE_REST_POS.x + P.px * side, MELEE_REST_POS.y + P.py, MELEE_REST_POS.z + P.pz);
+    model.rotation.set(P.rx, P.ry * side, P.rz * side);
+    if (t >= 1) { model.position.copy(MELEE_REST_POS); model.rotation.set(0, 0, 0); model.rotation.order = 'XYZ'; }
+    return;
+  }
+  model.rotation.order = 'XYZ';
 
   if (meleeSwingType === 'punch' && MELEE_ITEMS[selectedMeleeIdx]?.dual && model._offHand) {
     // DUAL PUNCH — two real objects, not one box sliding sideways. Whichever
