@@ -33613,39 +33613,9 @@ function buildOvenMitts() {
   g.position.set(0.10, -0.12, -0.20); return g;
 }
 
-// ☝️ Fists → Fist. Singular. The other one stayed home.
-function buildSingleFist() {
-  const g = new THREE.Group();
-  const skin = new THREE.MeshLambertMaterial({ color: 0xeac39a });
-  const shade = new THREE.MeshLambertMaterial({ color: 0xd9ab7d });
-  const crease = new THREE.MeshLambertMaterial({ color: 0xb98760 });
-  const band = new THREE.MeshLambertMaterial({ color: 0xf2f0ea });
-  const stripe = new THREE.MeshLambertMaterial({ color: 0xc83a30 });
-  const palm = new THREE.Mesh(new THREE.BoxGeometry(0.112, 0.100, 0.130), skin);
-  palm.position.set(0, 0, -0.050); g.add(palm);
-  // Four proud knuckles across the front, and the finger tops folded back over the palm.
-  for (let i = 0; i < 4; i++) {
-    const x = -0.039 + i * 0.026;
-    const k = new THREE.Mesh(new THREE.SphereGeometry(0.0215, 9, 7), shade);
-    k.position.set(x, 0.012, -0.118); g.add(k);
-    const f = new THREE.Mesh(new THREE.BoxGeometry(0.0235, 0.022, 0.058), skin);
-    f.position.set(x, 0.050, -0.090); g.add(f);
-    const c = new THREE.Mesh(new THREE.BoxGeometry(0.0235, 0.003, 0.003), crease);
-    c.position.set(x, 0.0615, -0.106); g.add(c);
-  }
-  // The thumb across the front of the fingers, the way you are told not to hold it.
-  const thumb = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.030, 0.082), skin);
-  thumb.position.set(-0.052, -0.020, -0.100); thumb.rotation.y = 0.55; g.add(thumb);
-  const thumbTip = new THREE.Mesh(new THREE.SphereGeometry(0.018, 8, 6), shade);
-  thumbTip.position.set(-0.026, -0.020, -0.136); g.add(thumbTip);
-  // A sweatband, because it is a serious fist.
-  const wrist = new THREE.Mesh(new THREE.BoxGeometry(0.118, 0.106, 0.034), band);
-  wrist.position.set(0, 0, 0.034); g.add(wrist);
-  const ring = new THREE.Mesh(new THREE.BoxGeometry(0.120, 0.108, 0.008), stripe);
-  ring.position.set(0, 0, 0.034); g.add(ring);
-  g.scale.setScalar(1.12);
-  g.position.set(0.10, -0.12, -0.20); return g;
-}
+// ☝️ Fists → Fist. Singular. Exactly the normal fist, just the one: the skin model has no second
+// hand (the base model's is what alternates), so every punch comes from this one.
+function buildSingleFist() { return buildFists(); }
 
 // 🎱 Spear → Pool Cue. The reach was always the point.
 function buildPoolCue() {
@@ -34716,7 +34686,7 @@ const MELEE_MODEL_SKINS = [
     blurb: 'Quilted, scorched at the thumb. Gas mark nine.' },
   { id: 'fists_one_fist', melee: 'fists', name: 'Fist', rarity: 'lame',
     sw: ['#eac39a', '#c83a30'], build: buildSingleFist,
-    blurb: 'One fist. The other one stayed home. Every punch comes from the same hand.' },
+    blurb: 'The normal fist, but only the one. The other one stayed home.' },
   { id: 'spear_pool_cue', melee: 'spear', name: 'Pool Cue', rarity: 'good',
     sw: ['#d8b276', '#2a6fa8'], build: buildPoolCue,
     blurb: 'The reach was always the point. Chalked and ready.' },
