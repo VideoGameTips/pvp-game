@@ -17682,6 +17682,272 @@ function buildDragonLantern() {
   return _skFinish(g, -0.296, 0.010, 0.016);
 }
 
+
+// ═══ Seven more things that are not really guns ══════════════════════════════
+// A clock, a fan, a mousetrap, a trombone, a typewriter, an accordion, an umbrella.
+
+// 🕰️ Grenade Launcher -> Cuckoo Launcher. The pendulum never stops; a shot sends the bird out of its door.
+function buildCuckooClock() {
+  const g = new THREE.Group();
+  const wood = _skM(0x6a3e1c, 90, 0xd8b080), dark = _skM(0x3a2010, 70, 0x9a7a60), brass = _skM(0xc8a040, 190, 0xfff0b0);
+  const cone = _skM(0x7a5530, 40, 0xc0a070), feather = _skM(0xe8c8a0, 40, 0xffffff);
+  const white = new THREE.MeshBasicMaterial({ color: 0xf6efd8 }), ink = new THREE.MeshBasicMaterial({ color: 0x20140c });
+  const beakM = _skM(0xe8b020, 60, 0xffffff);
+  gpBox(g, wood, 0.070, 0.090, 0.150, 0, 0.012, -0.010);                 // the house
+  [-1, 1].forEach(sd => gpBox(g, dark, 0.056, 0.006, 0.164, sd * 0.026, 0.072, -0.010, 0, 0, sd * -0.62));   // the roof
+  gpBox(g, ink, 0.030, 0.028, 0.002, 0, 0.050, -0.0855);                 // the little door
+  gpCyl(g, brass, 0.017, 0.020, 0.160, 14, 0, 0.010, -0.170);            // the barrel, as a drainpipe
+  gpCyl(g, brass, 0.022, 0.022, 0.008, 14, 0, 0.010, -0.250);
+  const hands = [];
+  [-1, 1].forEach(sd => {
+    gpCyl(g, white, 0.026, 0.026, 0.003, 18, sd * 0.0355, 0.020, -0.012, 0, Math.PI / 2);   // a clock face on each side
+    const hm = new THREE.Group(); hm.position.set(sd * 0.0375, 0.020, -0.012); g.add(hm);
+    gpBox(hm, ink, 0.0015, 0.020, 0.0015, 0, 0.009, 0);
+    gpBox(g, ink, 0.0015, 0.002, 0.012, sd * 0.0375, 0.020, -0.018);
+    hands.push(hm);
+  });
+  const bird = new THREE.Group(); bird.position.set(0, 0.050, -0.070); g.add(bird);
+  const bb = new THREE.Mesh(new THREE.SphereGeometry(0.0105, 10, 8), feather); bb.scale.set(1, 1, 1.5); bird.add(bb);
+  const bh = new THREE.Mesh(new THREE.SphereGeometry(0.0068, 8, 6), feather); bh.position.set(0, 0.009, -0.012); bird.add(bh);
+  const bk = new THREE.Mesh(new THREE.ConeGeometry(0.0036, 0.011, 6), beakM); bk.rotation.x = -Math.PI / 2; bk.position.set(0, 0.009, -0.023); bird.add(bk);
+  gpBox(bird, dark, 0.012, 0.003, 0.014, 0, 0.003, 0.017);
+  const pend = new THREE.Group(); pend.position.set(0, -0.034, -0.010); g.add(pend);
+  gpBox(pend, brass, 0.003, 0.060, 0.003, 0, -0.030, 0);
+  const bob = new THREE.Mesh(new THREE.SphereGeometry(0.0125, 12, 8), brass); bob.position.set(0, -0.064, 0); pend.add(bob);
+  gpPart(g, 'main', () => {                                              // the two pine-cone weights on their chains
+    [-1, 1].forEach(sd => {
+      gpBox(g, brass, 0.002, 0.060, 0.002, sd * 0.045, -0.010, 0.045);
+      const c = new THREE.Mesh(new THREE.ConeGeometry(0.010, 0.034, 8), cone); c.rotation.x = Math.PI; c.position.set(sd * 0.045, -0.057, 0.045); g.add(c);
+    });
+  }, { x: 0, y: 0, z: 0.045 });
+  _skGrip(g, wood, 0.002);
+  g._pop = 0;
+  g._onFire = () => { g._pop = 1; };
+  g._tick = (dt, now) => {
+    g._pop = Math.max(0, g._pop - dt * 2.0);
+    pend.rotation.z = Math.sin(now * 5.2) * 0.30;
+    const out = Math.min(1, g._pop * 3);
+    bird.position.z = -0.070 - out * 0.042;
+    const sp = 1.4 + g._pop * 14;
+    hands.forEach((h, i) => { h.rotation.x += (i ? -1 : 1) * sp * dt; });
+  };
+  return _skFinish(g, -0.262, 0.010, 0.020);
+}
+
+// 🪭 Minigun -> Ceiling Fan. It idles slow; the more you fire, the faster it goes. The light kit is the magazine.
+function buildCeilingFan() {
+  const g = new THREE.Group();
+  const bronze = _skM(0x8a5a2a, 170, 0xffe0b0), wood = _skM(0x7a4a22, 70, 0xd8b080), wood2 = _skM(0xa87a44, 70, 0xe8c090);
+  const dark = _skM(0x241a14, 60, 0x7a6a5a), iron = _skM(0x3a3d44, 120, 0xaab0bc);
+  const glass = new THREE.MeshPhongMaterial({ color: 0xfff2c8, emissive: 0xffd680, emissiveIntensity: 0.35, shininess: 160, specular: 0xffffff, transparent: true, opacity: 0.55, depthWrite: false });
+  const core = new THREE.MeshBasicMaterial({ color: 0xfff0b0 });
+  gpCyl(g, bronze, 0.046, 0.040, 0.100, 18, 0, 0, -0.030);               // the motor housing
+  gpCyl(g, bronze, 0.050, 0.050, 0.008, 18, 0, 0, -0.082);               // flange
+  gpCyl(g, bronze, 0.030, 0.014, 0.016, 16, 0, 0, -0.096);               // hub cap
+  const bl = new THREE.Group(); bl.position.set(0, 0, -0.090); g.add(bl);
+  for (let i = 0; i < 5; i++) {
+    const arm = new THREE.Group(); arm.rotation.z = i * Math.PI * 2 / 5; bl.add(arm);
+    gpBox(arm, iron, 0.008, 0.030, 0.003, 0, 0.040, 0);
+    gpBox(arm, i % 2 ? wood2 : wood, 0.030, 0.064, 0.004, 0, 0.074, 0, 0, 0.26, 0);
+  }
+  gpPart(g, 'main', () => {                                              // the light kit: a frosted bowl round a bulb
+    const bowl = new THREE.Mesh(new THREE.SphereGeometry(0.034, 14, 10), glass); bowl.scale.set(1, 1, 0.75); bowl.position.set(0, 0, 0.042); bowl.renderOrder = 5; g.add(bowl);
+    const b = new THREE.Mesh(new THREE.SphereGeometry(0.011, 8, 6), core); b.position.set(0, 0, 0.040); g.add(b);
+  }, { x: 0, y: 0, z: 0.030 });
+  [0.020, -0.020].forEach((x, i) => {                                    // two pull chains
+    gpBox(g, dark, 0.0015, 0.046 + i * 0.014, 0.0015, x, -0.068 - i * 0.007, -0.030);
+    gpBox(g, bronze, 0.006, 0.006, 0.006, x, -0.092 - i * 0.014, -0.030);
+  });
+  _skGrip(g, dark, -0.034);
+  g._spin = 0;
+  g._onFire = () => { g._spin = Math.min(1, g._spin + 0.22); };
+  g._tick = (dt) => {
+    g._spin = Math.max(0, g._spin - dt * 0.6);
+    bl.rotation.z -= (g._reloadStart ? 1.0 : 2.2 + g._spin * 46) * dt;
+    glass.emissiveIntensity = 0.35 + 0.45 * g._spin;
+  };
+  return _skFinish(g, -0.112, 0, 0.014);
+}
+
+// 🪤 Crossbow -> Mousetrap. A spring bar that really snaps, and cheese on the catch.
+function buildMousetrap() {
+  const g = new THREE.Group();
+  const wood = _skM(0xc89a58, 70, 0xf0d098), steel = _skM(0xb8bcc4, 200, 0xffffff), dark = _skM(0x3a2a18, 60, 0x8a7a60);
+  const cheese = _skM(0xf2c230, 80, 0xfff0a0), hole = _skM(0xc89a10, 40, 0xffe080), grip = _skM(0x5a3a1a, 70, 0xc0a070);
+  gpBox(g, wood, 0.060, 0.012, 0.250, 0, 0, -0.060);                     // the base
+  gpBox(g, dark, 0.010, 0.003, 0.200, 0, 0.0075, -0.085);                // the groove
+  gpCyl(g, steel, 0.0035, 0.0035, 0.190, 8, 0, 0.0115, -0.085);          // the bolt
+  gpCyl(g, steel, 0.0005, 0.0045, 0.022, 8, 0, 0.0115, -0.191);          // and its head
+  gpBox(g, steel, 0.026, 0.002, 0.030, 0, 0.007, -0.120);                // the catch plate
+  gpBox(g, cheese, 0.024, 0.010, 0.026, 0, 0.012, -0.120);               // the cheese
+  gpBox(g, hole, 0.006, 0.0105, 0.006, 0.006, 0.0125, -0.126);
+  gpBox(g, hole, 0.005, 0.0105, 0.005, -0.006, 0.0125, -0.114);
+  [-1, 1].forEach(sd => {
+    const coil = new THREE.Mesh(new THREE.TorusGeometry(0.0075, 0.0018, 6, 12), steel);
+    coil.rotation.y = Math.PI / 2; coil.position.set(sd * 0.0155, 0.011, 0.040); g.add(coil);
+    gpBox(g, steel, 0.003, 0.004, 0.012, sd * 0.024, 0.008, 0.052);      // the staples
+  });
+  const REST = 1.0;
+  let ham;
+  gpPart(g, 'main', () => {                                              // the bar, hinged at the back
+    ham = new THREE.Group(); ham.position.set(0, 0.012, 0.040); ham.rotation.x = REST; g.add(ham);
+    [-1, 1].forEach(sd => gpCyl(ham, steel, 0.003, 0.003, 0.200, 6, sd * 0.022, 0, -0.100));
+    gpCyl(ham, steel, 0.003, 0.003, 0.048, 6, 0, 0, -0.200, 0, Math.PI / 2);
+    gpCyl(ham, steel, 0.003, 0.003, 0.048, 6, 0, 0, 0, 0, Math.PI / 2);
+  }, { x: 0, y: 0.012, z: 0.040 });
+  _skGrip(g, grip, -0.006);
+  g._snap = 0;
+  g._onFire = () => { g._snap = 1; };
+  g._tick = (dt) => {
+    g._snap = Math.max(0, g._snap - dt * 1.6);
+    const sn = g._snap;
+    ham.rotation.x = sn > 0.72 ? REST * (1 - (1 - sn) / 0.28) : sn > 0.5 ? 0 : REST * (1 - sn / 0.5);
+  };
+  return _skFinish(g, -0.204, 0.012, 0.018);
+}
+
+// 🎺 Lever Rifle -> Trombone. The bell is the barrel; reloading is three long pulls on the slide.
+function buildTrombone() {
+  const g = new THREE.Group();
+  const brass = _skM(0xd0a038, 210, 0xfff0b0), steel = _skM(0xd4d8de, 220, 0xffffff), dark = _skM(0x2a1c14, 60, 0x7a6a5a);
+  const bellM = new THREE.MeshPhongMaterial({ color: 0xd8aa3c, shininess: 220, specular: 0xfff4c0, emissive: 0xffb030, emissiveIntensity: 0 });
+  gpCyl(g, brass, 0.0105, 0.0105, 0.200, 12, 0, 0.010, 0.000);           // the upper tube
+  gpCyl(g, bellM, 0.011, 0.056, 0.170, 22, 0, 0.010, -0.185);            // the bell
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(0.056, 0.004, 8, 26), bellM); rim.position.set(0, 0.010, -0.270); g.add(rim);
+  const bend = new THREE.Mesh(new THREE.TorusGeometry(0.025, 0.0095, 8, 16, Math.PI), brass);
+  bend.rotation.set(0, Math.PI / 2, Math.PI / 2); bend.position.set(0, -0.015, 0.100); g.add(bend);
+  gpCyl(g, brass, 0.0075, 0.0075, 0.032, 8, 0, -0.040, 0.100, 0, Math.PI / 2);   // the joint at the back
+  [-1, 1].forEach(sd => gpCyl(g, steel, 0.0065, 0.0065, 0.150, 10, sd * 0.014, -0.040, 0.025));   // the inner slide
+  gpPart(g, 'main', () => {                                              // the slide: two outer tubes and the brace
+    [-1, 1].forEach(sd => gpCyl(g, steel, 0.0095, 0.0095, 0.180, 12, sd * 0.014, -0.040, -0.110));
+    gpCyl(g, brass, 0.0045, 0.0045, 0.062, 8, 0, -0.040, -0.195, 0, Math.PI / 2);
+    [-1, 1].forEach(sd => gpCyl(g, brass, 0.0075, 0.0075, 0.008, 8, sd * 0.034, -0.040, -0.195, 0, Math.PI / 2));
+  }, { x: 0, y: -0.040, z: -0.110 });
+  _skGrip(g, dark, 0.002);
+  g._blare = 0;
+  g._onFire = () => { g._blare = 1; };
+  g._tick = (dt) => { g._blare = Math.max(0, g._blare - dt * 3); bellM.emissiveIntensity = g._blare * 0.7; };
+  return _skFinish(g, -0.285, 0.010, 0.020);
+}
+
+// ⌨️ MP40 -> Typewriter. The carriage steps along with every shot, and the bell rings when it flies home.
+function buildTypewriter() {
+  const g = new THREE.Group();
+  const body = _skM(0x2c4a3e, 80, 0x9ac0b0), steel = _skM(0xc4cad2, 200, 0xffffff), dark = _skM(0x16181c, 50, 0x555a64);
+  const cream = _skM(0xf0e6c8, 60, 0xffffff), rubber = _skM(0x23252a, 30, 0x555a64);
+  const sheet = new THREE.MeshPhongMaterial({ color: 0xfbf8ee, shininess: 20, side: THREE.DoubleSide });
+  gpBox(g, body, 0.074, 0.040, 0.190, 0, -0.004, -0.015);                // the case
+  gpBox(g, body, 0.070, 0.006, 0.060, 0, 0.020, 0.048, 0.20);            // the key deck, sloped
+  for (let r = 0; r < 3; r++) for (let c = 0; c < 8; c++) {
+    const z = 0.065 - r * 0.017, y = 0.020 + (0.048 - z) * 0.2 + 0.0055;
+    gpCyl(g, dark, 0.0055, 0.0055, 0.003, 8, (c - 3.5) * 0.0085, y - 0.002, z, 0);
+    gpCyl(g, cream, 0.0047, 0.0047, 0.004, 8, (c - 3.5) * 0.0085, y + 0.001, z, 0);
+  }
+  [-1, 1].forEach(sd => gpBox(g, body, 0.006, 0.030, 0.020, sd * 0.036, 0.030, -0.050));   // the carriage rails' posts
+  [-1, 1].forEach(sd => gpCyl(g, dark, 0.014, 0.014, 0.004, 14, sd * 0.024, 0.020, -0.100, 0));   // ribbon spools
+  gpCyl(g, steel, 0.0095, 0.0095, 0.140, 10, 0, 0.012, -0.170);          // the barrel, as the type-bar guide
+  let car;
+  gpPart(g, 'main', () => {                                              // the carriage: roller, knobs, paper
+    car = new THREE.Group(); car.position.set(0, 0.046, -0.050); g.add(car);
+    gpCyl(car, rubber, 0.012, 0.012, 0.094, 14, 0, 0, 0, 0, Math.PI / 2);
+    [-1, 1].forEach(sd => {
+      gpCyl(car, steel, 0.008, 0.008, 0.012, 10, sd * 0.054, 0, 0, 0, Math.PI / 2);
+      gpCyl(car, dark, 0.0085, 0.0085, 0.004, 10, sd * 0.062, 0, 0, 0, Math.PI / 2);
+    });
+    const p = new THREE.Mesh(new THREE.BoxGeometry(0.062, 0.058, 0.0016), sheet); p.position.set(0, 0.030, 0.014); p.rotation.x = 0.22; car.add(p);
+    gpBox(car, steel, 0.030, 0.003, 0.003, -0.068, 0.012, -0.004);       // the return lever
+  }, { x: 0, y: 0.046, z: -0.050 });
+  _skGrip(g, body, -0.016);
+  g._col = 0; g._carX = 0.026;
+  g._onFire = () => { g._col = Math.min(14, g._col + 1); };
+  g._tick = (dt) => {
+    if (g._reloadStart) g._col = 0;
+    const target = 0.026 - g._col * 0.0037;
+    g._carX += (target - g._carX) * Math.min(1, dt * (g._reloadStart ? 5 : 30));
+    car.position.x = g._carX;
+  };
+  return _skFinish(g, -0.243, 0.012, 0.016);
+}
+
+// 🪗 SG8 -> Accordion. A shot slams the bellows shut; a reload is a long breath in and a long breath out.
+function buildAccordionGun() {
+  const g = new THREE.Group();
+  const red = _skM(0x8a1c1c, 80, 0xff9a9a), cream = _skM(0xf0e4c4, 60, 0xffffff), black = _skM(0x1a1a1e, 50, 0x666a72);
+  const steel = _skM(0xc4cad2, 200, 0xffffff), gold = _skM(0xd0a038, 190, 0xfff0b0);
+  const RZ = 0.044, FZ = -0.100, N = 11;
+  gpBox(g, red, 0.066, 0.080, 0.034, 0, 0, RZ);                          // the case you hold
+  for (let r = 0; r < 2; r++) for (let c = 0; c < 4; c++) gpCyl(g, cream, 0.0042, 0.0042, 0.004, 8, (c - 1.5) * 0.012, 0.041, RZ - 0.006 + r * 0.012, 0);
+  const pleats = [];
+  for (let i = 0; i < N; i++) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(0.060, 0.066, 0.0045), i % 2 ? cream : black);
+    m.castShadow = true; g.add(m); pleats.push(m);
+  }
+  let fe;
+  gpPart(g, 'main', () => {                                              // the far case: keys, and the barrel through it
+    fe = new THREE.Group(); g.add(fe);
+    gpBox(fe, red, 0.066, 0.080, 0.034, 0, 0, FZ);
+    for (let i = 0; i < 6; i++) gpBox(fe, cream, 0.006, 0.009, 0.014, 0.0365, 0.028 - i * 0.011, FZ);
+    [0.020, -0.020].forEach(y => gpBox(fe, black, 0.0045, 0.010, 0.026, -0.0360, y, FZ));
+    gpCyl(fe, steel, 0.0115, 0.0115, 0.130, 12, 0, 0, FZ - 0.080);
+    gpCyl(fe, gold, 0.0135, 0.0135, 0.008, 12, 0, 0, FZ - 0.140);
+  });
+  _skGrip(g, red, -0.006);
+  g._sq = 0;
+  g._onFire = () => { g._sq = 1; };
+  g._tick = (dt) => {
+    g._sq = Math.max(0, g._sq - dt * 4.5);
+    const m = g._parts.main;
+    fe.position.z = g._sq * 0.032;
+    const front = FZ + (m.position.z - m._home.z) + fe.position.z;
+    const zr = RZ - 0.017, zf = front + 0.017, step = (zf - zr) / N;
+    const th = Math.max(1, Math.abs(step) * 1.15 / 0.0045);
+    pleats.forEach((p, i) => {
+      p.position.set(0, 0, zr + step * (i + 0.5));
+      p.scale.set(i % 2 ? 1 : 0.94, i % 2 ? 1 : 0.94, th);
+    });
+    if (g._flash) g._flash.position.z = -0.256 + (front - FZ);
+  };
+  return _skFinish(g, -0.256, 0, 0.022);
+}
+
+// ☂️ Javelin Launcher -> Umbrella. Furled it is a stick; a shot pops it halfway open, a reload all the way.
+function buildUmbrellaLauncher() {
+  const g = new THREE.Group();
+  const wood = _skM(0x3a2616, 80, 0xb89a78), gold = _skM(0xd0a038, 190, 0xfff0b0), steel = _skM(0xb8bec8, 200, 0xffffff);
+  const red = new THREE.MeshPhongMaterial({ color: 0xc8202a, shininess: 60, specular: 0xffb0b0, side: THREE.DoubleSide });
+  const cream = new THREE.MeshPhongMaterial({ color: 0xf2ead2, shininess: 60, specular: 0xffffff, side: THREE.DoubleSide });
+  const TZ = -0.200, L = 0.150;
+  gpCyl(g, wood, 0.006, 0.006, 0.300, 8, 0, 0, -0.050);                  // the shaft
+  const crook = new THREE.Mesh(new THREE.TorusGeometry(0.022, 0.0065, 8, 14, Math.PI), wood);
+  crook.rotation.set(0, Math.PI / 2, Math.PI / 2); crook.position.set(0, -0.022, 0.100); g.add(crook);
+  const tri = new THREE.BufferGeometry();
+  tri.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, -1, 0, L, 1, 0, L], 3));
+  tri.computeVertexNormals();
+  const ribs = [];
+  for (let i = 0; i < 8; i++) {
+    const arm = new THREE.Group(); arm.position.set(0, 0, TZ); arm.rotation.z = i * Math.PI * 2 / 8; g.add(arm);
+    const hinge = new THREE.Group(); arm.add(hinge);
+    const rib = new THREE.Mesh(new THREE.BoxGeometry(0.0022, 0.0022, L), steel); rib.position.z = L / 2; hinge.add(rib);
+    const panel = new THREE.Mesh(tri, i % 2 ? cream : red); hinge.add(panel);
+    ribs.push({ hinge, panel });
+  }
+  gpPart(g, 'main', () => {                                              // the tip: a cap and a ferrule
+    gpCyl(g, gold, 0.0035, 0.0012, 0.030, 8, 0, 0, TZ - 0.012);
+    const ball = new THREE.Mesh(new THREE.SphereGeometry(0.0045, 8, 6), gold); ball.position.set(0, 0, TZ - 0.027); g.add(ball);
+  }, { x: 0, y: 0, z: TZ });
+  _skGrip(g, wood, 0.002);
+  g._op = 0; g._fo = 0;
+  g._onFire = () => { g._fo = 1; };
+  g._tick = (dt) => {
+    g._fo = Math.max(0, g._fo - dt * 2.4);
+    const tgt = g._reloadStart ? 1 : Math.min(1, g._fo * 2.2) * 0.55;
+    g._op += (tgt - g._op) * Math.min(1, dt * (tgt > g._op ? 10 : 5));
+    const th = 0.10 + g._op * 0.85;
+    ribs.forEach(r => { r.hinge.rotation.x = -th; r.panel.scale.x = Math.max(0.0035, 0.414 * L * Math.sin(th)); });
+  };
+  return _skFinish(g, TZ - 0.038, 0, 0.016);
+}
+
 function buildBlueprintAK() {
   // 📐 AK-20 -> Blueprint AK. The real AK, as its own technical drawing: every
   // part a pale blue fill with bright edges, a dimension line along the top.
@@ -33328,6 +33594,27 @@ const MODEL_SKINS = [
   { id: 'flamethrower_dragon_lantern', weapon: 'flamethrower', name: 'Dragon Lantern', rarity: 'rare',
     sw: ['#c4261c', '#e0b03a'], build: buildDragonLantern,
     blurb: 'Festival of lights. The dragon is real, the lantern is only a lantern.' },
+  { id: 'grenade_launcher_cuckoo', weapon: 'grenade_launcher', name: 'Cuckoo Launcher', rarity: 'rare',
+    sw: ['#6a3e1c', '#e8b020'], build: buildCuckooClock,
+    blurb: 'It is exactly on time. The bird comes out on every shot, and so does everything else.' },
+  { id: 'minigun_ceiling_fan', weapon: 'minigun', name: 'Ceiling Fan', rarity: 'rare',
+    sw: ['#8a5a2a', '#fff2c8'], build: buildCeilingFan,
+    blurb: 'Idles on low. The longer you hold the trigger, the closer it gets to taking off.' },
+  { id: 'crossbow_mousetrap', weapon: 'crossbow', name: 'Mousetrap', rarity: 'rare',
+    sw: ['#c89a58', '#f2c230'], build: buildMousetrap,
+    blurb: 'Loaded with cheese. The bar really does snap, and it is faster than it looks.' },
+  { id: 'lever_trombone', weapon: 'lever', name: 'Trombone', rarity: 'rare',
+    sw: ['#d0a038', '#ffb030'], build: buildTrombone,
+    blurb: 'Three long pulls on the slide to reload. The bell is the muzzle, and it is a very loud bell.' },
+  { id: 'mp40_typewriter', weapon: 'mp40', name: 'Typewriter', rarity: 'rare',
+    sw: ['#2c4a3e', '#fbf8ee'], build: buildTypewriter,
+    blurb: 'The carriage steps over with every shot. Reload when the line runs out; the bell tells you.' },
+  { id: 'sg8_accordion', weapon: 'sg8', name: 'Accordion', rarity: 'rare',
+    sw: ['#8a1c1c', '#f0e4c4'], build: buildAccordionGun,
+    blurb: 'Squeezes shut on every shot. Reloading is a long breath in, then a long breath out.' },
+  { id: 'javelin_launcher_umbrella', weapon: 'javelin_launcher', name: 'Umbrella', rarity: 'rare',
+    sw: ['#c8202a', '#f2ead2'], build: buildUmbrellaLauncher,
+    blurb: 'Furled, it is a stick. A shot pops it half open, a reload all the way, to shake the rain off.' },
   { id: 'throwing_knives_legend', weapon: 'throwing_knives', name: 'FFA Legend Daggers', rarity: 'legend',
     sw: ['#17121a', '#ff1a12'], build: buildLegendDaggers, look: { projectile: 'blood_dagger', bulletColor: 0xff1a12 },
     blurb: 'Two obsidian daggers in hand, one floating in the middle, all leaving red laser aftertrails.' },
@@ -36973,6 +37260,75 @@ const SKIN_FX = {
       K(.64,{py:.06,rx:.90,arx:0}),
       K(.80,{py:.04,rx:.40,arx:0}), K(.94,{py:.01,rx:.05})],
       [RP(.46,'ball','arrive',1,'muzzle')], [[.30,'hiss'],[.64,'crunch'],[.76,'ignite']], 'ignite') },
+  grenade_launcher_cuckoo: { sound: _fxS('toot', .30, .16, 740, 590),
+    equip: 'slam', equipMs: 900, equipSfx: ['whoosh', null], equipBeats: [[.55, 'ding']],
+    // wound by the chain: three tugs raise the weights, a round goes in the door, and the clock ticks on
+    reload: _fxR([K(.10,{py:.05,rx:.15,hy:-.04}),
+      K(.22,{py:.05,rx:.15,hx:.07,hy:-.12,hz:.05,hr:.5}),
+      K(.30,{py:.05,rx:.15,hx:.07,hy:-.22,hz:.05,ay:.02}), K(.38,{py:.05,rx:.15,hx:.07,hy:-.12,hz:.05,ay:.02}),
+      K(.46,{py:.05,rx:.15,hx:.07,hy:-.22,hz:.05,ay:.04}), K(.54,{py:.05,rx:.15,hx:.07,hy:-.12,hz:.05,ay:.04}),
+      K(.62,{py:.05,rx:.15,hx:.07,hy:-.22,hz:.05,ay:.06}),
+      K(.74,{py:.04,rx:.10,hy:-.04,ay:.06}), K(.90,{py:.01,ay:.0})],
+      [RP(.62,'round','arrive',1,'muzzle')], [[.30,'tick'],[.46,'tick'],[.62,'tick'],[.82,'ticking']], 'ding') },
+  minigun_ceiling_fan: { sound: _fxS('whirr', .28, .07, 700, 380),
+    equip: 'spin', equipMs: 900, equipSfx: ['whoosh', 'ding'],
+    // the light kit unscrewed, a fresh bulb dropped in, screwed back on, and two tugs on the pull chain
+    reload: _fxR([K(.10,{py:.05,rx:-.10,rz:.10,hy:.02}),
+      K(.22,{py:.06,rx:-.12,rz:.14,hx:.03,hy:.06,hz:.10,hr:-.4}),
+      K(.40,{py:.06,rx:-.12,rz:.14,hy:.06,hz:.14,az:.05,arz:-3.1416}),
+      K(.52,{py:.06,rx:-.12,rz:.14,hy:.06,hz:.14,az:.06,arz:-3.1416}),
+      K(.64,{py:.06,rx:-.12,rz:.14,hy:.06,hz:.12,az:.01,arz:-6.2832}),
+      K(.74,{py:.05,rx:.0,hx:.04,hy:-.14,hz:-.02,arz:-6.2832}),
+      K(.84,{py:.04,rx:.0,hx:.04,hy:-.20,hz:-.02,arz:-6.2832}), K(.9995,{py:.01,arz:-6.2832})],
+      [RP(.48,'candle','arrive',1,'breech')], [[.30,'squeak'],[.66,'squeak'],[.74,'click'],[.84,'click']], 'click') },
+  crossbow_mousetrap: { sound: _fxS('snap', .38, .08, 2200, 500),
+    equip: 'flip', equipMs: 900, equipSfx: ['whoosh', 'clink'],
+    // the bar pulled up and back, a new slice of cheese on the catch, and set down very carefully
+    reload: _fxR([K(.10,{py:.05,rx:.30,rz:.20,hy:-.04}),
+      K(.24,{py:.06,rx:.40,rz:.24,hx:-.02,hy:-.16,hz:.04,hr:.5,arx:.5}),
+      K(.40,{py:.06,rx:.40,rz:.24,hy:-.20,hz:.00,arx:.5}),
+      K(.52,{py:.06,rx:.40,rz:.24,hy:-.14,hz:-.08,arx:.5}),
+      K(.64,{py:.06,rx:.40,rz:.24,hy:-.06,hz:-.04,arx:.0}),
+      K(.74,{py:.05,rx:.30,rz:.18,arx:-.2}), K(.90,{py:.01,arx:.0})],
+      [RP(.46,'crisp','arrive',1,'muzzle')], [[.24,'click'],[.52,'rustle'],[.76,'snapin']], 'snapin') },
+  lever_trombone: { sound: _fxS('toot', .34, .26, 233, 175),
+    equip: 'flip', equipMs: 850, equipSfx: ['whoosh', 'clink'],
+    // three long pulls out and in on the slide, the way a trombone actually warms up
+    reload: _fxR([K(.10,{py:.05,rx:.20,hz:-.04}),
+      K(.22,{py:.06,rx:.22,hx:-.02,hy:-.04,hz:-.20,hr:.3}),
+      K(.34,{py:.06,rx:.22,hy:-.04,hz:-.30,az:-.10}), K(.44,{py:.06,rx:.22,hy:-.04,hz:-.20,az:.0}),
+      K(.54,{py:.06,rx:.22,hy:-.04,hz:-.30,az:-.10}), K(.64,{py:.06,rx:.22,hy:-.04,hz:-.20,az:.0}),
+      K(.74,{py:.06,rx:.22,hy:-.04,hz:-.30,az:-.10}), K(.84,{py:.04,rx:.12,hz:-.08,az:.0}), K(.94,{py:.01})],
+      [], [[.34,'gliss'],[.54,'gliss'],[.74,'honk']], 'honk') },
+  mp40_typewriter: { sound: _fxS('type', .34, .05, 1700, 0, { n: 3 }),
+    equip: 'build', equipMs: 900, equipSfx: ['brick', 'snapin'],
+    // the sheet pulled out and a clean one rolled in, a line of typing, and the bell
+    reload: _fxR([K(.10,{py:.05,rx:.30,rz:-.30}),
+      K(.24,{py:.06,rx:.34,rz:-.52,hx:.02,hy:.12,hz:-.04,hr:-.4}),
+      K(.36,{py:.06,rx:.34,rz:-.54,hx:.02,hy:.16,hz:-.04,hr:-.4,ay:.05}),
+      K(.50,{py:.06,rx:.34,rz:-.54,hx:.02,hy:.14,hz:-.04,hr:-.4}),
+      K(.66,{py:.06,rx:.32,rz:-.48,hx:.02,hy:.08,hz:.04}),
+      K(.80,{py:.05,rx:.24,rz:-.24,hy:.10,hz:.00}), K(.94,{py:.01})],
+      [RP(.32,'paper','eject',1,'breech'), RP(.50,'paper','arrive',1,'breech')], [[.60,'typing'],[.82,'ding']], 'ding') },
+  sg8_accordion: { sound: _fxS('reed', .34, .28, 196, 199),
+    equip: 'unfold', equipMs: 850, equipSfx: ['fold', 'click'],
+    // pulled out to full stretch, squeezed shut, and again, a shell in between
+    reload: _fxR([K(.10,{py:.05,rx:.15,hz:-.04}),
+      K(.22,{py:.06,rx:.18,hx:-.02,hy:-.02,hz:-.18,hr:.3}),
+      K(.36,{py:.06,rx:.18,hy:-.02,hz:-.30,az:-.09}), K(.48,{py:.06,rx:.18,hy:-.02,hz:-.14,az:.01}),
+      K(.60,{py:.06,rx:.18,hy:-.02,hz:-.30,az:-.09}), K(.72,{py:.06,rx:.18,hy:-.02,hz:-.14,az:.01}),
+      K(.84,{py:.04,rx:.10,hz:-.06}), K(.94,{py:.01})],
+      [RP(.48,'shell','arrive',2,'breech')], [[.36,'wheeze'],[.60,'wheeze'],[.74,'pump']], 'pump') },
+  javelin_launcher_umbrella: { sound: _fxS('swish', .36, .30, 1600, 260),
+    equip: 'unfold', equipMs: 850, equipSfx: ['fold', 'click'],
+    // snapped open to shake the rain off, the tip cap lifted, a round pushed in, and furled again
+    reload: _fxR([K(.10,{py:.05,rx:.40,hz:-.03}),
+      K(.26,{py:.07,rx:.80,hx:.02,hy:.10,hz:-.14,hr:-.5}),
+      K(.46,{py:.08,rx:.90,hy:.12,hz:-.16,az:-.05}),
+      K(.58,{py:.07,rx:.85,hy:.08,hz:-.12,az:-.05}),
+      K(.66,{py:.06,rx:.80,az:.0}),
+      K(.80,{py:.04,rx:.36}), K(.94,{py:.01,rx:.05})],
+      [RP(.50,'round','arrive',1,'muzzle')], [[.26,'fold'],[.66,'snapin']], 'click') },
   throwing_knives_legend: { sound: _fxS('hellfire', .30, .10, 0, 0, { base:'throw', tail:.24 }),
     equip: 'vortex', equipMs: 900, equipSfx: ['whoosh', 'clink'], equipBeats: [[.34,'ignite'],[.56,'clink']],
     reload: _fxR(RELOAD_KEYS.throwing_knives, [
