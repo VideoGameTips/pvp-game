@@ -10714,10 +10714,90 @@ function themePlaceBuildings(name) {
     placed++;
   }
 }
+// 🌋 The Volcano. Four huge low-poly volcanoes stand beyond the walls with glowing craters, lava streaming down
+// their sides and smoke over them; inside, stepped volcano mounds with a lava crater can be climbed; the ground
+// is cracked with lava; and dark rocks with molten undersides drift over the whole arena, bobbing and turning.
+// Everything here is scenery with no collider except the mounds.
+function buildVolcanoScenery() {
+  const name = 'volcano', group = MAP_GROUPS[name];
+  if (!group) return;
+  const rnd = _thRng('volcano:scenery'), b = MAP_BOUNDS[name] || { halfX: 86 };
+  const flat = (c) => new THREE.MeshPhongMaterial({ color: c, flatShading: true, shininess: 6, specular: 0x201410 });
+  const glowM = (c) => new THREE.MeshBasicMaterial({ color: c });
+  const far = (m) => { m.fog = false; return m; };                       // the big ones stay readable through the haze
+  // 1. Volcanoes outside the walls.
+  const spots = [[-1, -1, 80, 96], [1, -1, 66, 78], [-1, 1, 72, 84], [1, 1, 88, 104]];
+  spots.forEach(([sx, sz, R, H], i) => {
+    const dist = b.halfX + 60 + i * 12;
+    const g = new THREE.Group(); g.position.set(sx * (dist + 20 * (i % 2)), 0, sz * (dist - 10 * (i % 3)));
+    const cone = new THREE.Mesh(new THREE.CylinderGeometry(R * 0.2, R, H, 7, 1), far(flat(0x3a2a24))); cone.position.y = H / 2; g.add(cone);
+    const shoulder = new THREE.Mesh(new THREE.CylinderGeometry(R * 0.5, R * 1.1, H * 0.38, 7, 1), far(flat(0x2e211c))); shoulder.position.y = H * 0.19; shoulder.rotation.y = 0.4; g.add(shoulder);
+    const crater = new THREE.Mesh(new THREE.CylinderGeometry(R * 0.19, R * 0.19, 1.2, 7), far(glowM(0xff7a1a))); crater.position.y = H + 0.4; g.add(crater);
+    const rim = new THREE.Mesh(new THREE.CylinderGeometry(R * 0.26, R * 0.2, 2.6, 7), far(flat(0x1f1612))); rim.position.y = H - 0.8; g.add(rim);
+    const slope = Math.hypot(R * 0.8, H);
+    for (let k = 0; k < 6; k++) {                                          // lava running down the side
+      const phi = rnd() * Math.PI * 2, t0 = 0.12 + rnd() * 0.25, len = slope * (0.35 + rnd() * 0.5);
+      const top = new THREE.Vector3(Math.cos(phi) * R * (0.2 + 0.8 * t0), H * (1 - t0), Math.sin(phi) * R * (0.2 + 0.8 * t0));
+      const dir = new THREE.Vector3(Math.cos(phi) * R * 0.8, -H, Math.sin(phi) * R * 0.8).normalize();
+      const stream = new THREE.Mesh(new THREE.BoxGeometry(2.2 + rnd() * 2.6, len, 0.5), far(glowM(rnd() < 0.5 ? 0xff5a12 : 0xff8a2a)));
+      stream.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+      stream.position.copy(top).addScaledVector(dir, len / 2).add(new THREE.Vector3(Math.cos(phi), 0.15, Math.sin(phi)).multiplyScalar(1.4));
+      g.add(stream);
+    }
+    for (let k = 0; k < 4; k++) {                                          // the smoke
+      const sm = new THREE.Mesh(new THREE.BoxGeometry(R * (0.25 - k * 0.04), R * 0.2, R * (0.25 - k * 0.04)), far(flat(0x4a3a36)));
+      sm.position.set((rnd() - 0.5) * R * 0.2, H + 14 + k * R * 0.19, (rnd() - 0.5) * R * 0.2); sm.rotation.y = rnd() * 3; g.add(sm);
+    }
+    g.userData.themeDecor = true; group.add(g);
+  });
+  // 2. Climbable volcano mounds with a crater of lava.
+  const cols = MAP_COLLIDERS[name], half = b.halfX - 6, rx = half - 36, rz = half - 14;
+  let mounds = 0;
+  for (let i = 0; i < 60 && mounds < 3; i++) {
+    const x = (rnd() * 2 - 1) * rx, z = (rnd() * 2 - 1) * rz;
+    if (Math.hypot(x, z) < 16) continue;
+    if (!_gridSpotFree(name, { minX: x - 12, maxX: x + 12, minZ: z - 12, maxZ: z + 12 })) continue;
+    [[18, 1.1], [14, 2.2], [10, 3.3], [6.5, 4.4]].forEach(([w, top], k) => {
+      addMapBox(name, x, top - 0.55 + (k ? 0 : 0), z, w, 1.1, w, k % 2 ? 0x4a3228 : 0x3a2820, k * 0.2);
+    });
+    const lava = new THREE.Mesh(new THREE.BoxGeometry(4, 0.2, 4), glowM(0xff6a1a)); lava.position.set(x, 4.5, z); lava.rotation.y = 0.8; group.add(lava);
+    for (let k = 0; k < 4; k++) {                                           // lava over the tier edges
+      const a = k * Math.PI / 2 + 0.3, d = 4 + k;
+      const ft = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.14, 4 + k * 1.3), glowM(0xff5a12)); ft.position.set(x + Math.cos(a) * d, 1.2 + (3 - k) * 0.4, z + Math.sin(a) * d); ft.rotation.y = -a + Math.PI / 2; group.add(ft);
+    }
+    mounds++;
+  }
+  // 3. Cracks of lava in the ground.
+  for (let i = 0; i < 26; i++) {
+    const x = (rnd() * 2 - 1) * (half - 8), z = (rnd() * 2 - 1) * (half - 8), len = 6 + rnd() * 16, a = rnd() * Math.PI;
+    const c = new THREE.Mesh(new THREE.BoxGeometry(len, 0.04, 0.35 + rnd() * 0.5), glowM(rnd() < 0.5 ? 0xff5a12 : 0xff7a1a));
+    c.position.set(x, 0.04, z); c.rotation.y = a; group.add(c);
+  }
+  // 4. Floating lava rocks.
+  const rocks = [];
+  for (let i = 0; i < 22; i++) {
+    const r = 1.4 + rnd() * 2.6 + (i < 4 ? 2.5 : 0), g = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 0), flat(rnd() < 0.5 ? 0x2a1f1c : 0x3a2a24)); body.scale.set(1, 0.7 + rnd() * 0.4, 0.9 + rnd() * 0.3); g.add(body);
+    const under = new THREE.Mesh(new THREE.ConeGeometry(r * 0.85, r * 0.9, 6), glowM(0xff6a1a)); under.rotation.x = Math.PI; under.position.y = -r * 0.6; g.add(under);
+    const crown = new THREE.Mesh(new THREE.IcosahedronGeometry(r * 0.45, 0), glowM(0xff9a3a)); crown.position.set(r * 0.2, r * 0.45, 0); g.add(crown);
+    const x = (rnd() * 2 - 1) * (half + 14), z = (rnd() * 2 - 1) * (half + 14), y = 9 + rnd() * 22 + (i < 4 ? 14 : 0);
+    g.position.set(x, y, z); g.rotation.set(rnd() * 0.5, rnd() * 6, rnd() * 0.5);
+    g.userData = { y0: y, ph: rnd() * 6.28, sp: 0.35 + rnd() * 0.5, spin: (rnd() - 0.5) * 0.3, amp: 0.5 + rnd() * 1.0 };
+    group.add(g); rocks.push(g);
+  }
+  MAP_MECH[name] = {
+    reset() {},
+    update(dt) {
+      const t = performance.now() / 1000;
+      for (const g of rocks) { g.position.y = g.userData.y0 + Math.sin(t * g.userData.sp + g.userData.ph) * g.userData.amp; g.rotation.y += g.userData.spin * dt; }
+    },
+  };
+  group._skyColor = 0x5a1c0c;
+}
 function initMapThemes() {
   for (const name of Object.keys(MAP_THEMES)) {
     if (!MAP_GROUPS[name]) continue;
-    try { themeHollowBuildings(name); themePlaceBuildings(name); themeRecolorMap(name); themePlaceProps(name); } catch (e) { console.warn('[theme]', name, e); }
+    try { themeHollowBuildings(name); themePlaceBuildings(name); themeRecolorMap(name); themePlaceProps(name); if (name === 'volcano') buildVolcanoScenery(); } catch (e) { console.warn('[theme]', name, e); }
   }
 }
 initMapThemes();
