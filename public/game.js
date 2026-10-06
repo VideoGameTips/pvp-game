@@ -9937,7 +9937,8 @@ const GRID_MAP_ARCHETYPES = [
 ];
 const GRID_CONCEPT_MAPS_ACTIVE = true;
 // Hand-built maps with their own mechanics: the grid-concept pass below must not wipe them.
-const MECHANIC_MAP_NAMES = new Set(['storm_pier', 'pinball_arcade', 'laser_vault', 'cargo_belts', 'gale_peaks', 'magma_rise']);
+const MECHANIC_MAP_NAMES = new Set(['storm_pier', 'pinball_arcade', 'laser_vault', 'cargo_belts', 'gale_peaks', 'magma_rise',
+  'titanic', 'warehouse', 'urban', 'airport', 'train', 'supermarket']);   // + the hand-built layouts (see _BESPOKE)
 function clearMapForGridConcept(name) {
   if (isArchivedLobbyMap(name)) return;
   const group = MAP_GROUPS[name];
@@ -10273,8 +10274,8 @@ const MAP_THEMES = {
   blank:        _T(0xb9bec2, 0x9aa0a6, 0xdfe3e6, 0xc9cfd4, 0xaab2b8, 0xe9edf0, 0xf2c14e, 0x4a90d9, 0xa5b6c4, 'industrial', ['crates', 'barrels']),
   battlefield:  _T(0x5f7a45, 0x4f6a39, 0x7b705f, 0x6a6050, 0x6b5d49, 0x8a7d66, 0xc2a45a, 0xb23a2e, 0x9cc4e4, 'nature', ['sandbags', 'trees', 'crates']),
   range:        _T(0x6b7076, 0x565b61, 0x8c929a, 0x777d85, 0x5a6068, 0x9aa0a8, 0xe8c43a, 0xd04a3a, 0x8a929c, 'industrial', ['crates', 'barrels']),
-  urban:        _T(0x4a4d52, 0x3d4044, 0x8a6f5d, 0x6f7b86, 0x5a5f66, 0x9a9a98, 0xd8c8a0, 0xd9822b, 0x8fa2b4, 'urban', ['cars', 'crates', 'barrels']),
-  warehouse:    _T(0x6d6a64, 0x57544f, 0x6f7d86, 0x8a6a46, 0x7a5a38, 0x8d8f91, 0xe8b932, 0xc8402a, 0x2f3338, 'industrial', ['crates', 'crates', 'barrels']),
+  urban: Object.assign(_T(0x4a4d52, 0x3d4044, 0x8a6f5d, 0x6f7b86, 0x5a5f66, 0x9a9a98, 0xd8c8a0, 0xd9822b, 0x8fa2b4, 'urban', ['cars', 'crates', 'barrels']), { keep: true }),
+  warehouse: Object.assign(_T(0x6d6a64, 0x57544f, 0x6f7d86, 0x8a6a46, 0x7a5a38, 0x8d8f91, 0xe8b932, 0xc8402a, 0x2f3338, 'industrial', ['crates', 'crates', 'barrels']), { keep: true }),
   forest:       _T(0x4d6b35, 0x3f5a2b, 0x6b5a45, 0x56693a, 0x6b6b5f, 0x8a7352, 0x9bb86a, 0xe0c24a, 0xa8d3e8, 'nature', ['trees', 'trees', 'rocks', 'logs']),
   vietnam:      _T(0x5a6b3a, 0x4a5a2e, 0x7d6a45, 0x5a6a38, 0x6a5a3a, 0x8a7a54, 0xb8a05a, 0xc8402a, 0xb8c8a0, 'nature', ['trees', 'sandbags', 'crates']),
   volcano:      _T(0x2a1f1c, 0x4a1f10, 0x3a2b26, 0x4a3028, 0x2f2522, 0x5a4036, 0xff7a2a, 0xff4a12, 0x3a1208, 'fire', ['rocks', 'rocks']),
@@ -10282,7 +10283,7 @@ const MAP_THEMES = {
   desert:       _T(0xd2b27a, 0xbd9d64, 0xc9a46c, 0xb58a55, 0x9d7a4a, 0xdcc08a, 0xe8d3a0, 0x2f8f8a, 0xcfe3f2, 'desert', ['pyramids', 'crates', 'rocks']),
   tundra:       _T(0xe8f0f5, 0xc4d4de, 0xb9ccd9, 0x9fb6c6, 0xc9d8e2, 0xdbe7ef, 0xffffff, 0x3a8fd0, 0xdde9f2, 'ice', ['iceblocks', 'rocks']),
   space:        _T(0x14182a, 0x2a3a66, 0x2c3550, 0x3a4666, 0x4a5678, 0x232c48, 0x6ad5ff, 0xa56bff, 0x05060f, 'space', ['pods', 'crates'], 0x9ae6ff),
-  airport:      _T(0x6e7378, 0x5a5f64, 0xc4c9cf, 0xa6adb5, 0x888f97, 0xd0d4d8, 0xf2b01e, 0x2a6fc9, 0xa8cfee, 'industrial', ['crates', 'cars']),
+  airport: Object.assign(_T(0x6e7378, 0x5a5f64, 0xc4c9cf, 0xa6adb5, 0x888f97, 0xd0d4d8, 0xf2b01e, 0x2a6fc9, 0xa8cfee, 'industrial', ['crates', 'cars']), { keep: true }),
   trenches:     _T(0x6b5a3f, 0x57492f, 0x7a6a4a, 0x5f5238, 0x5a4a30, 0x8a7a58, 0xa89a6a, 0xb23a2e, 0x8a8f86, 'nature', ['sandbags', 'sandbags', 'crates']),
   chernobyl:    _T(0x5a6054, 0x474d42, 0x8a8f86, 0x6f766a, 0x5a6252, 0x9a9f94, 0xc8d23a, 0x6fe03a, 0x8a9482, 'industrial', ['barrels', 'crates', 'rocks'], 0xb8ff7a),
   refinery:     _T(0x4f4a42, 0x3d3933, 0x6a6a6a, 0x8a4a2f, 0x555049, 0x808080, 0xe2a21e, 0xd8452a, 0x7a8590, 'industrial', ['barrels', 'barrels', 'crates']),
@@ -10304,11 +10305,11 @@ const MAP_THEMES = {
   arena:        _T(0xc2a86a, 0xa88e52, 0x9a9a98, 0x7a7a78, 0x8a7048, 0xd0c090, 0xd8b048, 0xb02a2a, 0xa8c8e8, 'desert', ['pyramids', 'crates']),
   opera:        _T(0x5a2a34, 0x44202a, 0x7a2e3c, 0x5a2a34, 0x3a2a30, 0x8a6a3a, 0xe8c050, 0xe8c050, 0x1a1015, 'urban', ['crates', 'pylons']),
   doomsday:     _T(0x4a4036, 0x3a322a, 0x5a4a3a, 0x6a5a4a, 0x4a3e32, 0x6a5e50, 0xe8742a, 0xe03a1a, 0x4a2a1a, 'fire', ['rocks', 'barrels']),
-  train:        _T(0x5a5a56, 0x484844, 0x4a5a6a, 0x7a4a3a, 0x555a60, 0x7a7a76, 0xe8c43a, 0x2a7ac8, 0x9ab4c8, 'industrial', ['crates', 'barrels']),
+  train: Object.assign(_T(0x5a5a56, 0x484844, 0x4a5a6a, 0x7a4a3a, 0x555a60, 0x7a7a76, 0xe8c43a, 0x2a7ac8, 0x9ab4c8, 'industrial', ['crates', 'barrels']), { keep: true }),
   dreamscape:   _T(0xb6a0d8, 0x9a84c4, 0xd8c4f0, 0xf0b8d8, 0x8ab8f0, 0xf0e0ff, 0xffffff, 0xff9ad0, 0xd0b8f0, 'neon', ['iceblocks', 'pylons'], 0xfff0ff),
   pearl_harbor: _T(0x8a8a7a, 0x76766a, 0x7a8a96, 0x5a6a76, 0x6a6a5a, 0xa09a86, 0xd8c88a, 0xb02a2a, 0x9ac8e8, 'industrial', ['crates', 'barrels', 'sandbags']),
-  titanic:      _T(0x8a6a46, 0x745838, 0xc8b890, 0x3a3f4a, 0x6a5238, 0xd8c8a0, 0xe8c860, 0xa02a2a, 0x2a3a4a, 'urban', ['crates', 'barrels']),
-  supermarket:  _T(0xd8d4c8, 0xbab6aa, 0xe8e0c8, 0x7ac0a0, 0xc86a3a, 0xf0ece0, 0xffd24a, 0xd03a3a, 0xd8e4ec, 'urban', ['crates', 'cones']),
+  titanic:      Object.assign(_T(0x8a6a46, 0x745838, 0xc8b890, 0x3a3f4a, 0x6a5238, 0xd8c8a0, 0xe8c860, 0xa02a2a, 0x7aa0c0, 'urban', []), { keep: true }),
+  supermarket: Object.assign(_T(0xd8d4c8, 0xbab6aa, 0xe8e0c8, 0x7ac0a0, 0xc86a3a, 0xf0ece0, 0xffd24a, 0xd03a3a, 0xd8e4ec, 'urban', ['crates', 'cones']), { keep: true }),
   pyongyang:    _T(0x8a8a84, 0x74746e, 0xb04040, 0x8a9aa8, 0x7a7a74, 0xb8b8b0, 0xe8c850, 0xc02a2a, 0xa8b8c4, 'urban', ['cars', 'crates']),
   traffic_cone_republic: _T(0x6a6a6e, 0x55555a, 0xe8782a, 0xf4f4f0, 0xe8782a, 0x9a9aa0, 0xffffff, 0xe8782a, 0xb8c8d8, 'carnival', ['cones', 'cones', 'cars']),
   flying_moai:  _T(0x7a8a7a, 0x667666, 0x7a756a, 0x6a655a, 0x5a564c, 0x948e80, 0xb0a890, 0x3a9a8a, 0x9ad0e8, 'desert', ['rocks', 'pyramids']),
@@ -10951,13 +10952,9 @@ const _SCN = {
   },
   airport(K) {
     K.ground(0x6a6f74);
-    const tw = new THREE.Group(); tw.position.set(K.half + 60, 0, 40); K.group.add(tw);
-    K.mesh(new THREE.CylinderGeometry(4, 6, 60, 8), K.flat(0xc4c9cf), 0, 30, 0, tw); K.mesh(new THREE.CylinderGeometry(11, 7, 7, 8), K.flat(0x2a6fc9), 0, 63, 0, tw); K.mesh(new THREE.CylinderGeometry(12, 12, 6, 8), K.glow(0x9ad8ff), 0, 69, 0, tw); K.mesh(new THREE.CylinderGeometry(13, 13, 1.4, 8), K.flat(0xf2f2f2), 0, 72.7, 0, tw);
     const jet = () => { const g = new THREE.Group(); K.mesh(new THREE.CylinderGeometry(3, 3, 44, 8), K.flat(0xf2f4f6), 0, 0, 0, g).rotation.x = Math.PI / 2; K.mesh(new THREE.ConeGeometry(3, 8, 8), K.flat(0xf2f4f6), 0, 0, -26, g).rotation.x = -Math.PI / 2;
       K.mesh(new THREE.BoxGeometry(60, 0.8, 9), K.flat(0xd8dce0), 0, -0.6, 4, g); K.mesh(new THREE.BoxGeometry(18, 0.6, 5), K.flat(0xd8dce0), 0, 0.4, 21, g); K.mesh(new THREE.BoxGeometry(0.8, 9, 6), K.flat(0x2a6fc9), 0, 4.5, 20, g); return g; };
-    for (let i = 0; i < 3; i++) { const j = jet(); j.position.set(-K.half - 45 - i * 10, 3.2, -60 + i * 50); j.rotation.y = 0.5 + i * 0.3; K.group.add(j); }
     const fly = jet(); fly.scale.setScalar(1.4); fly.position.set(-400, 90, -40); K.group.add(fly);
-    for (let i = 0; i < 28; i++) K.mesh(new THREE.BoxGeometry(0.8, 0.6, 0.8), K.glow(i % 4 ? 0xffe08a : 0xff5a3a), K.half + 14, 0.5, -K.half + i * 6);
     K.anim((dt) => { fly.position.x += dt * 38; if (fly.position.x > 400) fly.position.x = -400; fly.position.y = 90 + Math.sin(fly.position.x * 0.01) * 4; });
   },
   doomsday(K) {
@@ -10972,15 +10969,8 @@ const _SCN = {
     K.anim((dt, t) => { met.forEach((g, i) => { const k = ((t * 0.12 + g.userData.ph) % 1); g.position.set(-260 + k * 520, 190 - k * 170, -120 - i * 20 + Math.sin(i) * 60); }); });
   },
   titanic(K) {
-    K.ground(0x24384a);
-    const ship = new THREE.Group(); ship.position.set(0, 0, -K.half - 80); K.group.add(ship);
-    K.mesh(new THREE.BoxGeometry(150, 22, 26), K.flat(0x1f2630), 0, 11, 0, ship); K.mesh(new THREE.BoxGeometry(150.4, 3, 26.4), K.flat(0xa02a2a), 0, 3, 0, ship);
-    const bow = K.mesh(new THREE.ConeGeometry(13, 26, 4), K.flat(0x1f2630), 78, 11, 0, ship); bow.rotation.z = -Math.PI / 2; bow.rotation.y = Math.PI / 4;
-    K.mesh(new THREE.BoxGeometry(110, 10, 22), K.flat(0xe8e2d0), -4, 27, 0, ship); K.mesh(new THREE.BoxGeometry(60, 9, 18), K.flat(0xd8d0b8), -4, 36, 0, ship);
-    for (let i = 0; i < 4; i++) { K.mesh(new THREE.CylinderGeometry(4.2, 4.6, 22, 10), K.flat(0xd8a050), -36 + i * 24, 51, 0, ship); K.mesh(new THREE.CylinderGeometry(4.3, 4.3, 5, 10), K.flat(0x1a1a1a), -36 + i * 24, 63, 0, ship); }
-    for (let i = 0; i < 30; i++) K.mesh(new THREE.BoxGeometry(1.4, 1.4, 0.3), K.glow(0xffd98a), -58 + i * 4, 20, 13.2, ship);
+    K.ground(0x24506a);
     K.around(8, 70, (x, z) => { const r = 14 + K.rnd() * 20; K.mesh(new THREE.ConeGeometry(r, r * 1.2, 5), K.flat(0xdff0f8), x, r * 0.5, z); });
-    K.anim((dt, t) => { ship.position.y = Math.sin(t * 0.4) * 0.8; ship.rotation.z = Math.sin(t * 0.3) * 0.012; });
   },
 };
 function buildMapScenery(name) {
@@ -10990,9 +10980,342 @@ function buildMapScenery(name) {
     MAP_MECH[name] = { reset() {}, update(dt) { const t = performance.now() / 1000; for (const f of K.anims) f(dt, t); } };
   }
 }
+// 🧱 HAND-BUILT LAYOUTS. The archetype maps share a dozen layouts. These are built for the place they are: real
+// structures with an outside and an inside -- decks and corridors, rooms and halls, stairs between floors -- so a
+// match has close quarters and long sight lines in the same map. They replace the archetype layout outright.
+// Teams spawn at the two ends along z (allies +z, enemies -z), in the rectangles MAP_SPAWNS names.
+var MAP_SPAWNS = {};
+function _bkit(name) {
+  const K = { name };
+  K.box = (x, y0, z, w, h, d, c, rot) => addMapBox(name, x, y0 + h / 2, z, w, h, d, c, rot || 0);
+  // A slab whose TOP is at `top`.
+  K.slab = (x0, x1, z0, z1, top, th, c) => K.box((x0 + x1) / 2, top - th, (z0 + z1) / 2, x1 - x0, th, z1 - z0, c);
+  // A wall along x (at z) or along z (at x), with openings [{at, w, sill, top}] cut through it.
+  const run = (a0, a1, t, y0, h, c, open, put) => {
+    const piece = (p, q, b0, b1) => { if (q - p > 0.05 && b1 - b0 > 0.05) put((p + q) / 2, q - p, b0, b1 - b0); };
+    let cur = a0;
+    for (const o of (open || []).slice().sort((u, v) => u.at - v.at)) {
+      const lo = o.at - o.w / 2, hi = o.at + o.w / 2, sill = o.sill || 0, top = o.top ?? 3.6;
+      piece(cur, lo, y0, y0 + h); piece(lo, hi, y0, y0 + sill); piece(lo, hi, y0 + top, y0 + h); cur = hi;
+    }
+    piece(cur, a1, y0, y0 + h);
+  };
+  K.wx = (x0, x1, z, t, y0, h, c, open) => run(x0, x1, t, y0, h, c, open, (mid, len, b0, bh) => K.box(mid, b0, z, len, bh, t, c));
+  K.wz = (z0, z1, x, t, y0, h, c, open) => run(z0, z1, t, y0, h, c, open, (mid, len, b0, bh) => K.box(x, b0, mid, t, bh, len, c));
+  K.door = (at, w = 3.4, top = 3.6) => ({ at, w, sill: 0, top });
+  K.win = (at, w = 2.4, sill = 1.3, top = 2.7) => ({ at, w, sill, top });
+  // Four walls round a room; doors: { n: [...], s: [...], w: [...], e: [...] } (n is the -z side, w the -x side).
+  K.room = (x0, x1, z0, z1, y0, h, c, d = {}, t = 0.8) => {
+    K.wx(x0, x1, z0 + t / 2, t, y0, h, c, d.n); K.wx(x0, x1, z1 - t / 2, t, y0, h, c, d.s);
+    K.wz(z0 + t, z1 - t, x0 + t / 2, t, y0, h, c, d.w); K.wz(z0 + t, z1 - t, x1 - t / 2, t, y0, h, c, d.e);
+  };
+  // Stairs: (x, z) is the foot, the middle of the first step. dir is the way you climb: N = -z, S = +z, E = +x, W = -x.
+  K.stairs = (x, z, dir, rise, width, c, y0 = 0, depth = 1.1, stepH = 0.4) => {
+    const n = Math.max(2, Math.round(rise / stepH)), sh = rise / n;
+    const dx = dir === 'E' ? 1 : dir === 'W' ? -1 : 0, dz = dir === 'S' ? 1 : dir === 'N' ? -1 : 0;
+    for (let i = 0; i < n; i++) {
+      const top = (i + 1) * sh, cx = x + dx * i * depth, cz = z + dz * i * depth;
+      K.box(cx, y0, cz, dx ? depth : width, top, dz ? depth : width, c);
+    }
+    return { run: n * depth, n };
+  };
+  K.ground = (w, d, color) => {
+    const g = new THREE.Mesh(new THREE.PlaneGeometry(w, d), new THREE.MeshLambertMaterial({ color }));
+    g.rotation.x = -Math.PI / 2; MAP_GROUPS[name].add(g); setMapBounds(name, w, d);
+  };
+  return K;
+}
+function _bkBegin(name, w, d, groundColor) {
+  clearMapForGridConcept(name);
+  const K = _bkit(name); K.ground(w, d, groundColor); return K;
+}
+// 🚢 Titanic: a ship. Open decks fore and aft with room to move, a long superstructure between them -- cabin
+// corridors, a dining saloon and a grand hall inside, an upper deck over the top with funnels, lifeboats and a
+// wheelhouse -- reached by the grand staircase or four stairs up the outside.
+function buildTitanicLayout() {
+  const name = 'titanic', K = _bkBegin(name, 46, 150, 0x8c6c46);
+  const hull = 0x2a303a, cream = 0xe4dcc8, wall = 0xd0c4a8, wood = 0x7a5230, deck2 = 0x9a7a52, stairC = 0x6a4a2a, buff = 0xd8a050, boat = 0xe8e2d0;
+  const H = 4.2, TOP = 4.6;
+  // hull rails: low enough to see over from the upper deck, too high to vault
+  K.wz(-55, 75, -22.6, 0.8, 0, 3.6, hull); K.wz(-55, 75, 22.6, 0.8, 0, 3.6, hull); K.wx(-23, 23, 74.6, 0.8, 0, 3.6, hull);
+  for (const sgn of [-1, 1]) {
+    const dx = -sgn * 22.6, dz = -19.6, L = Math.hypot(dx, dz), th = Math.atan2(dx, dz);
+    K.box(sgn * 11.3, 0, -64.8, 0.8, 3.6, L, hull, th);
+  }
+  // the superstructure
+  const doorsZ = [-28, -14, 0, 13, 25], winsZ = [-21, -7, 7, 19, 31];
+  const side = [...doorsZ.map(z => K.door(z)), ...winsZ.map(z => K.win(z))];
+  K.wz(-34, 34, -12.6, 0.8, 0, H, cream, side); K.wz(-34, 34, 12.6, 0.8, 0, H, cream, side);
+  K.wx(-12.2, 12.2, -33.6, 0.8, 0, H, cream, [K.door(0), K.win(-7), K.win(7)]); K.wx(-12.2, 12.2, 33.6, 0.8, 0, H, cream, [K.door(0), K.win(-7), K.win(7)]);
+  // inside: the fore saloon, the grand hall, the cabin corridor
+  K.wx(-12.2, 12.2, -9, 0.8, 0, H, wall, [K.door(-6, 4), K.door(6, 4)]);
+  K.wx(-12.2, 12.2, 10.4, 0.8, 0, H, wall, [K.door(-7.5, 3), K.door(7.5, 3)]);
+  K.wz(10.8, 33.2, -1.7, 0.6, 0, H, wall, [13.4, 19, 25, 30.6].map(z => K.door(z, 2.6, 3.4)));
+  K.wz(10.8, 33.2, 1.7, 0.6, 0, H, wall, [13.4, 19, 25, 30.6].map(z => K.door(z, 2.6, 3.4)));
+  for (const z of [16, 22, 28]) { K.wx(-12.2, -2, z, 0.5, 0, H, wall); K.wx(2, 12.2, z, 0.5, 0, H, wall); }
+  for (const [x, z] of [[-5, -16], [5, -16], [-5, -27], [5, -27], [-8, -4.5], [8, -4.5], [-8, 5], [8, 5]]) K.box(x, 0, z, 1.4, H, 1.4, wall);
+  for (const z of [-14, -22, -29]) for (const x of [-8.5, 8.5]) K.box(x, 0, z, 1.6, 1.0, 7, wood);           // saloon tables
+  K.box(0, 0, -21, 1.6, 1.1, 10, wood);                                                                          // buffet
+  for (const [x, z] of [[-9.5, 0], [9.5, 0], [-7, 6], [7, 6]]) K.box(x, 0, z, 2.6, 0.8, 1.2, wood);              // sofas
+  for (const x of [-7, 7]) for (const z of [13.4, 19, 25, 30.6]) K.box(x, 0, z + 1.4, 3, 0.9, 1.2, wood);            // bunks
+  // the upper deck, with the stairwell cut out of it
+  K.slab(-13, 13, -34, -4.5, TOP, 0.4, deck2); K.slab(-13, 13, 9.2, 34, TOP, 0.4, deck2);
+  K.slab(-13, -3.6, -4.5, 9.2, TOP, 0.4, deck2); K.slab(3.6, 13, -4.5, 9.2, TOP, 0.4, deck2);
+  K.stairs(0, -4, 'S', TOP, 6, stairC, 0, 1.15, TOP / 12);   // up from the hall, to the aft end of the upper deck
+  const railGap = [-19.5, 19.5].map(z => ({ at: z, w: 4.4, sill: 0, top: 9 }));
+  K.wz(-34, 34, -12.7, 0.3, TOP, 1.1, boat, railGap); K.wz(-34, 34, 12.7, 0.3, TOP, 1.1, boat, railGap);
+  K.wx(-12.6, 12.6, 33.8, 0.3, TOP, 1.1, boat); K.wx(-12.6, 12.6, -33.8, 0.3, TOP, 1.1, boat);
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {                                                          // four stairs up the outside
+    K.stairs(sx * 16, sz * 33.4, sz > 0 ? 'N' : 'S', TOP, 3, stairC, 0, 1.15, TOP / 12);
+    K.slab(sx > 0 ? 13 : -18, sx > 0 ? 18 : -13, sz > 0 ? 16.4 : -21.2, sz > 0 ? 21.2 : -16.4, TOP, 0.4, deck2);
+  }
+  for (const z of [-22, -12, 15, 26]) { K.box(0, TOP, z, 7, 14, 7, buff); K.box(0, TOP + 14, z, 7.3, 3, 7.3, 0x1a1a1a); }   // funnels
+  K.room(-8, 8, -33.4, -27, TOP, 3.6, cream, { s: [K.door(0, 3.4, 3)], n: [K.win(-4, 3, 1.2, 2.6), K.win(4, 3, 1.2, 2.6)] });     // the wheelhouse
+  K.box(0, TOP + 3.6, -30.2, 17, 0.4, 7, deck2);
+  for (const z of [-12, 18]) for (const sx of [-1, 1]) K.box(sx * 9, TOP, z, 2.4, 2.2, 7, boat);                  // lifeboats on top
+  // along the walkways
+  for (const sx of [-1, 1]) {
+    for (const z of [-12, 14]) K.box(sx * 19.5, 0, z, 2.6, 2.4, 7.5, boat);
+    for (const z of [-5, 0, 5, 20, -22]) K.box(sx * 15.6, 0, z, 1.2, 0.6, 2.4, wood);                            // deck chairs
+  }
+  // fore and aft decks: crates, winches, cranes, lifeboats
+  const crates = (x, z) => { K.box(x, 0, z, 2.4, 2.2, 2.4, 0x8a6a3a); K.box(x + 2.8, 0, z + 0.6, 2, 1.8, 2, 0x7a5a30); K.box(x + 0.4, 2.2, z, 1.8, 1.6, 1.8, 0x7a5a30, 0.3); };
+  [[-14, 40], [8, 43], [-6, 67], [12, 64], [-16, 56]].forEach(([x, z]) => crates(x, z));
+  [[-12, -42], [6, -43], [-5, -66], [10, -52]].forEach(([x, z]) => crates(x, z));
+  for (const z of [40, 52, 68, -40, -50]) { K.box(-19, 0, z, 3, 3.4, 3, 0x5a5f66); K.box(19, 0, z + 3, 3, 3.4, 3, 0x5a5f66); }   // winches along the rails
+  for (const z of [58, -56]) for (const sx of [-1, 1]) K.box(sx * 17, 0, z, 2.6, 2.4, 8, boat);
+  K.box(0, 0, 68, 1.4, 6.5, 1.4, 0x3a3f46); K.box(0, 6.5, 68, 1.4, 0.6, 9, 0x3a3f46);                              // a crane post
+  K.box(0, 0, -64, 4, 1.4, 4, 0x3a3f46); K.box(0, 0, -64.0, 1.4, 4.2, 1.4, 0x3a3f46);                              // the capstan
+  MAP_SPAWNS[name] = { ally: { x0: -11, x1: 11, z0: 44, z1: 60 }, enemy: { x0: -8, x1: 8, z0: -62, z1: -46 } };
+  MAP_GROUPS[name]._skyColor = 0x7aa0c0;
+}
+var _BESPOKE = { titanic: buildTitanicLayout };
+
+// A slab with a rectangular hole in it (a stairwell): four pieces round the hole.
+function _bkSlabHole(K, x0, x1, z0, z1, top, th, c, h) {
+  K.slab(x0, h.x0, z0, z1, top, th, c); K.slab(h.x1, x1, z0, z1, top, th, c);
+  K.slab(h.x0, h.x1, z0, h.z0, top, th, c); K.slab(h.x0, h.x1, h.z1, z1, top, th, c);
+}
+// A building: walls with a door (ground floor, on the sides asked for) and windows, floors and a roof of slabs, a
+// staircase between each pair of levels (alternating sides) up to the roof, a parapet, a little furniture.
+function _bkBuilding(K, x0, x1, z0, z1, o = {}) {
+  const floors = o.floors || 1, TOPH = 4.6, WH = 4.2, c = o.color || 0xd8d0bc, rc = o.roof || 0x8a8478, doors = o.doors || ['s'];
+  const W = x1 - x0, D = z1 - z0, steps = 12, d = Math.min(1.1, (D - 4) / steps);
+  for (let f = 0; f < floors; f++) {
+    const y0 = f * TOPH;
+    const along = (len, lo, door) => door ? [K.door(lo + len / 2, 3.4, 3.4), K.win(lo + len * 0.2), K.win(lo + len * 0.8)] : [K.win(lo + len * 0.25), K.win(lo + len * 0.75)];
+    K.wx(x0, x1, z0 + 0.4, 0.8, y0, WH, c, along(W, x0, f === 0 && doors.includes('n')));
+    K.wx(x0, x1, z1 - 0.4, 0.8, y0, WH, c, along(W, x0, f === 0 && doors.includes('s')));
+    K.wz(z0 + 0.8, z1 - 0.8, x0 + 0.4, 0.8, y0, WH, c, along(D - 1.6, z0 + 0.8, f === 0 && doors.includes('w')));
+    K.wz(z0 + 0.8, z1 - 0.8, x1 - 0.4, 0.8, y0, WH, c, along(D - 1.6, z0 + 0.8, f === 0 && doors.includes('e')));
+    // the stairs up from this level
+    const west = f % 2 === 0, sx = west ? x0 + 2.6 : x1 - 2.6, foot = west ? z0 + 3.2 : z1 - 3.2, dir = west ? 'S' : 'N';   // the foot clear of the wall: a body has to fit between
+    K.stairs(sx, foot, dir, TOPH, 3.2, 0x6a5a48, y0, d, TOPH / steps);
+    const run = (steps - 1) * d + 0.6;
+    const hole = { x0: sx - 1.7, x1: sx + 1.7, z0: west ? foot - 0.55 : foot - run, z1: west ? foot + run : foot + 0.55 };
+    _bkSlabHole(K, x0, x1, z0, z1, (f + 1) * TOPH, 0.4, f === floors - 1 ? rc : 0x9a8a72, hole);
+    K.box(x0 + W * 0.6, y0, (z0 + z1) / 2, 2.6, 1.0, 1.2, 0x7a5a38);
+    K.box(x0 + W * 0.45, y0, z0 + D * 0.3, 1.4, 1.4, 1.4, 0x8a6a3a, 0.3);
+  }
+  const top = floors * TOPH;
+  K.wx(x0, x1, z0 + 0.15, 0.3, top, 1.0, rc); K.wx(x0, x1, z1 - 0.15, 0.3, top, 1.0, rc);
+  K.wz(z0, z1, x0 + 0.15, 0.3, top, 1.0, rc); K.wz(z0, z1, x1 - 0.15, 0.3, top, 1.0, rc);
+}
+function _bkTruck(K, x, z, rot, c) {                                                       // a delivery truck / bus: cab and body
+  const cs = Math.cos(rot), sn = Math.sin(rot), at = (lx, lz) => [x + lx * cs + lz * sn, z - lx * sn + lz * cs];
+  let p = at(0, 2.2); K.box(p[0], 0.5, p[1], 2.6, 3.0, 6.4, c, rot); p = at(0, -2.6); K.box(p[0], 0.5, p[1], 2.4, 1.8, 2.2, 0x2a3038, rot);
+}
+// 🏭 Warehouse: a long hall. Rack aisles and crossings on the floor, a two-storey office in the middle, catwalks
+// round both walls joined to it by bridges, loading docks at each end.
+function buildWarehouseLayout() {
+  const name = 'warehouse', K = _bkBegin(name, 100, 120, 0x6d6a64);
+  const wallC = 0x6f7d86, rackC = 0x8a5a2a, rackB = 0x3a5a8a, off = 0xb8b2a4, TOP = 4.6;
+  K.wx(-50, 50, -59.6, 0.8, 0, 10, wallC); K.wx(-50, 50, 59.6, 0.8, 0, 10, wallC); K.wz(-60, 60, -49.6, 0.8, 0, 10, wallC); K.wz(-60, 60, 49.6, 0.8, 0, 10, wallC);
+  K.slab(-50, 50, -60, 60, 10.4, 0.4, 0x3a3d40);
+  for (const x of [-40, -28, -16, 16, 28, 40]) for (const [z0, z1] of [[-34, -18], [-13, 13], [18, 34]]) {   // rack rows
+    K.box(x, 0, (z0 + z1) / 2, 3.2, 4.0, z1 - z0, x % 24 === 16 || x === -40 ? rackC : rackB);
+  }
+  // the office
+  K.room(-9, 9, -14, 14, 0, 4.2, off, { n: [K.door(0)], s: [K.door(0)], w: [K.door(-7), K.door(7)], e: [K.door(-7), K.door(7)] });
+  K.wx(-8.2, 8.2, 0, 0.6, 0, 4.2, off, [K.door(4, 3)]);
+  K.stairs(-6.5, -12, 'S', TOP, 3, 0x5a5048, 0, 1.0, TOP / 11);
+  _bkSlabHole(K, -9, 9, -14, 14, TOP, 0.4, 0x9a9488, { x0: -8.2, x1: -4.8, z0: -12.6, z1: -0.4 });
+  K.wx(-9, 9, -13.85, 0.3, TOP, 1.1, 0x6a6a6a); K.wx(-9, 9, 13.85, 0.3, TOP, 1.1, 0x6a6a6a);
+  const bridgeGap = [{ at: 0, w: 4, sill: 0, top: 9 }];                                                // where the bridges come in
+  K.wz(-14, 14, -8.85, 0.3, TOP, 1.1, 0x6a6a6a, bridgeGap); K.wz(-14, 14, 8.85, 0.3, TOP, 1.1, 0x6a6a6a, bridgeGap);
+  K.box(4, TOP, 6, 3, 1.1, 1.2, 0x7a5a38); K.box(-3, TOP, 8, 1.6, 1.0, 3, 0x7a5a38);
+  // catwalks and the bridges to the office
+  for (const sx of [-1, 1]) {
+    K.slab(sx > 0 ? 44.5 : -49.2, sx > 0 ? 49.2 : -44.5, -31.5, 31.5, TOP, 0.4, 0x7a7e82);
+    K.wz(-31.5, 31.5, sx * 44.7, 0.3, TOP, 1.1, 0x4a4a4a);
+    K.stairs(sx * 47, -44, 'S', TOP, 3, 0x5a5048, 0, 1.0, TOP / 13);
+    K.stairs(sx * 47, 44, 'N', TOP, 3, 0x5a5048, 0, 1.0, TOP / 13);
+    K.slab(sx > 0 ? 9 : -44.5, sx > 0 ? 44.5 : -9, -1.6, 1.6, TOP, 0.4, 0x7a7e82);
+    K.wx(sx > 0 ? 9 : -44.5, sx > 0 ? 44.5 : -9, -1.55, 0.3, TOP, 1.1, 0x4a4a4a); K.wx(sx > 0 ? 9 : -44.5, sx > 0 ? 44.5 : -9, 1.55, 0.3, TOP, 1.1, 0x4a4a4a);
+  }
+  // floor cover and the docks
+  [[-22, -26], [22, 26], [-34, 6], [34, -6], [10, -30], [-10, 30], [0, -20], [0, 22]].forEach(([x, z], i) => { K.box(x, 0, z, 2.4, 2.0, 2.4, 0x8a6a3a); K.box(x + 2.8, 0, z + 0.4, 2, 1.5, 2, 0x7a5a30); if (i % 2) K.box(x, 2.0, z, 1.6, 1.4, 1.6, 0x7a5a30, 0.4); });
+  const cont = (x, z, rot, c) => K.box(x, 0, z, 2.6, 2.6, 6.2, c, rot);
+  [[-44, 41, 0, 0xb83a2a], [-38, 41, 0, 0x2a5aa8], [38, 41, 0, 0xd88a2a], [44, 41, 0, 0x3a8a4a], [-44, -41, 0, 0x2a5aa8], [-38, -41, 0, 0xb83a2a], [38, -41, 0, 0x3a8a4a], [44, -41, 0, 0xd88a2a]].forEach(([x, z, r, c]) => cont(x, z, r, c));
+  for (const z of [-51, 51]) for (const x of [-32, -20, 20, 32]) K.box(x, 0, z + (z > 0 ? 3.6 : -3.6), 5, 1.2, 1.4, 0x5a5f66);   // dock benches
+  MAP_SPAWNS[name] = { ally: { x0: -22, x1: 22, z0: 47, z1: 57 }, enemy: { x0: -22, x1: 22, z0: -57, z1: -47 } };
+  MAP_GROUPS[name]._skyColor = 0x2f3338;
+}
+// 🏙️ Urban: two streets crossing at a plaza, four blocks of buildings you can walk through and climb to the roof.
+function buildUrbanLayout() {
+  const name = 'urban', K = _bkBegin(name, 150, 150, 0x4a4d52);
+  const brick = 0x8a6f5d, blue = 0x6f7b86, sand = 0xb8a888, wallC = 0x5a5f66;
+  K.wx(-75, 75, -74.6, 0.8, 0, 9, wallC); K.wx(-75, 75, 74.6, 0.8, 0, 9, wallC); K.wz(-75, 75, -74.6, 0.8, 0, 9, wallC); K.wz(-75, 75, 74.6, 0.8, 0, 9, wallC);
+  // four blocks: a tall building on the corner nearest the plaza, a shop further out, an alley wall and a yard
+  const block = (sx, sz, k) => {
+    const X = (a, b) => sx > 0 ? [a, b] : [-b, -a], Z = (a, b) => sz > 0 ? [a, b] : [-b, -a];
+    const [ax0, ax1] = X(14, 40), [az0, az1] = Z(14, 34);
+    _bkBuilding(K, ax0, ax1, az0, az1, { floors: 2, color: k % 2 ? brick : blue, doors: ['n', 's', 'e', 'w'] });
+    const [bx0, bx1] = X(48, 64), [bz0, bz1] = Z(16, 30);
+    _bkBuilding(K, bx0, bx1, bz0, bz1, { floors: 1, color: k % 2 ? sand : brick, doors: ['w', 'e'] });
+    const [cx0, cx1] = X(16, 34), [cz0, cz1] = Z(42, 56);
+    _bkBuilding(K, cx0, cx1, cz0, cz1, { floors: 1, color: k % 2 ? blue : sand, doors: ['n', 's'] });
+    const [dx0, dx1] = X(44, 66), [dz0, dz1] = Z(42, 54);
+    K.box((dx0 + dx1) / 2, 0, (dz0 + dz1) / 2, dx1 - dx0, 2.6, 1.2, wallC); K.box(X(52, 52)[0], 0, Z(48, 48)[0], 1.4, 1.4, 6, 0x5a4a3a);
+  };
+  block(1, 1, 0); block(-1, 1, 1); block(1, -1, 1); block(-1, -1, 0);
+  // the plaza: a fountain, planters and a kiosk
+  K.box(0, 0, 0, 8, 0.9, 8, 0x8a8a84); K.box(0, 0.9, 0, 3, 2.2, 3, 0x9a9a94);
+  for (const [x, z] of [[-7, -7], [7, -7], [-7, 7], [7, 7]]) K.box(x, 0, z, 3, 1.1, 3, 0x5a6a3a);
+  K.room(-4, 4, 10.5, 15, 0, 3.2, 0xd8a050, { n: [K.door(0, 2.6, 2.8)], s: [K.win(0, 2.4, 1.1, 2.2)] });
+  // cars and barricades along the roads
+  const car = (x, z, r, c) => { K.box(x, 0, z, 2.3, 1.2, 4.6, c, r); K.box(x, 1.2, z, 2.0, 0.9, 2.6, 0x2a3038, r); };
+  [[-5, -30, 0, 0xb83a2a], [5, 38, 0, 0x2a5aa8], [-4, 24, 0.2, 0xd8c8a0], [4, -42, -0.2, 0x3a8a4a], [-40, 4, 1.57, 0xb83a2a], [44, -5, 1.57, 0xd88a2a], [-28, -4, 1.4, 0x2a5aa8], [30, 5, 1.7, 0x5a5f66]].forEach(([x, z, r, c]) => car(x, z, r, c));
+  for (const [x, z, r] of [[-8, 52, 0], [8, 52, 0], [-8, -52, 0], [8, -52, 0]]) K.box(x, 0, z, 9, 1.2, 1.2, 0xc8a850, r);   // jersey barriers
+  for (const z of [64, -64]) for (const x of [-26, 26]) K.box(x, 0, z, 6, 1.6, 2, 0x6a7a5a);
+  _bkTruck(K, -22, 60, 0.3, 0xe8e2d0); _bkTruck(K, 22, -60, -0.3, 0xd8a050);
+  MAP_SPAWNS[name] = { ally: { x0: -18, x1: 18, z0: 58, z1: 70 }, enemy: { x0: -18, x1: 18, z0: -70, z1: -58 } };
+  MAP_GROUPS[name]._skyColor = 0x8fa2b4;
+}
+// ✈️ Airport: a two-storey terminal with an atrium across the middle, an apron with parked jets on each side
+// of it, a hangar with a jet inside, and a control tower.
+function buildAirportLayout() {
+  const name = 'airport', K = _bkBegin(name, 160, 140, 0x6e7378);
+  const glass = 0xbfd8e8, wallC = 0xc4c9cf, TOP = 4.6, roofC = 0x8a9299;
+  K.wx(-80, 80, -69.6, 0.8, 0, 8, 0x8a9096); K.wx(-80, 80, 69.6, 0.8, 0, 8, 0x8a9096); K.wz(-70, 70, -79.6, 0.8, 0, 8, 0x8a9096); K.wz(-70, 70, 79.6, 0.8, 0, 8, 0x8a9096);
+  // the terminal: ground floor, atrium hole, a walkway round it, roof
+  const tx0 = -48, tx1 = 48, tz0 = -14, tz1 = 14;
+  const doors = [-36, -18, 0, 18, 36].map(x => K.door(x, 4, 3.6)), wins = [-27, -9, 9, 27, -45, 45].map(x => K.win(x, 3, 1.1, 3));
+  K.wx(tx0, tx1, tz0 + 0.4, 0.8, 0, 4.2, wallC, [...doors, ...wins]); K.wx(tx0, tx1, tz1 - 0.4, 0.8, 0, 4.2, wallC, [...doors, ...wins]);
+  K.wz(tz0 + 0.8, tz1 - 0.8, tx0 + 0.4, 0.8, 0, 4.2, wallC, [K.door(0, 3.4)]); K.wz(tz0 + 0.8, tz1 - 0.8, tx1 - 0.4, 0.8, 0, 4.2, wallC, [K.door(0, 3.4)]);
+  const hole = { x0: -21, x1: 21, z0: -8, z1: 8 };
+  _bkSlabHole(K, tx0, tx1, tz0, tz1, TOP, 0.4, 0x9a9ea4, hole);
+  K.wx(hole.x0, hole.x1, hole.z0 + 0.15, 0.3, TOP, 1.1, 0x4a4a4a); K.wx(hole.x0, hole.x1, hole.z1 - 0.15, 0.3, TOP, 1.1, 0x4a4a4a);
+  const gap = [{ at: 0, w: 4, sill: 0, top: 9 }];
+  K.wz(hole.z0, hole.z1, hole.x0 + 0.15, 0.3, TOP, 1.1, 0x4a4a4a, gap); K.wz(hole.z0, hole.z1, hole.x1 - 0.15, 0.3, TOP, 1.1, 0x4a4a4a, gap);
+  K.stairs(-9.5, 0, 'W', TOP, 3.4, 0x6a6e74, 0, 1.0, TOP / 12); K.stairs(9.5, 0, 'E', TOP, 3.4, 0x6a6e74, 0, 1.0, TOP / 12);   // up from the middle of the atrium to the walkway
+  K.wx(tx0, tx1, tz0 + 0.15, 0.3, TOP, 1.0, roofC); K.wx(tx0, tx1, tz1 - 0.15, 0.3, TOP, 1.0, roofC); K.wz(tz0, tz1, tx0 + 0.15, 0.3, TOP, 1.0, roofC); K.wz(tz0, tz1, tx1 - 0.15, 0.3, TOP, 1.0, roofC);
+  // check-in desks, a security lane, shops on the ground floor
+  for (const x of [-40, -33, -26]) K.box(x, 0, -3, 1.4, 1.1, 7, 0x4a5a6a);
+  for (const x of [26, 33, 40]) K.box(x, 0, 3, 1.4, 1.1, 7, 0x4a5a6a);
+  K.room(-46, -34, 4.5, 12.5, 0, 4.2, 0xd8c8a0, { n: [K.door(-40, 3)] }); K.room(34, 46, -12.5, -4.5, 0, 4.2, 0xa8c8d8, { s: [K.door(40, 3)] });
+  for (const x of [-12, 12]) K.box(x, 0, 11, 6, 1.0, 1.4, 0x5a5f66);
+  // the apron: parked jets and ground vehicles
+  const jet = (x, z, rot) => {
+    const cs = Math.cos(rot), sn = Math.sin(rot), at = (lx, lz) => [x + lx * cs + lz * sn, z - lx * sn + lz * cs];
+    let p = at(0, 0); K.box(p[0], 0, p[1], 5, 5, 34, 0xe8ecf0, rot);
+    p = at(0, 3); K.box(p[0], 0, p[1], 32, 1.2, 8, 0xd0d4d8, rot);
+    p = at(0, 16); K.box(p[0], 0, p[1], 12, 1.0, 4, 0xd0d4d8, rot); K.box(p[0], 5, p[1], 1, 5, 6, 0x2a6fc9, rot);
+  };
+  [[-50, 38, 0.2], [50, 38, -0.2], [-52, -40, 3.3], [52, -40, 3.0], [-18, 46, 1.57], [18, -46, 1.57]].forEach(([x, z, r]) => jet(x, z, r));
+  for (const [x, z] of [[-30, 28], [30, -28], [-8, -32], [8, 32], [-64, 4], [64, -4]]) { K.box(x, 0, z, 2.2, 1.8, 3.8, 0xe8c030); K.box(x + 3.4, 0, z, 2.6, 1.4, 1.6, 0x5a5f66); }
+  for (const [x, z] of [[-42, 56], [42, 56], [-42, -56], [42, -56]]) K.box(x, 0, z, 7, 2.4, 2.4, 0x8a8f94);          // baggage trains
+  // the hangar, with a jet inside
+  K.room(-78, -56, 24, 54, 0, 8, 0x7a8590, { n: [K.door(-67, 5, 5)], e: [K.door(39, 5, 5)], s: [K.door(-67, 5, 5)] }, 1);
+  K.slab(-78, -56, 24, 54, 8.4, 0.4, 0x4a5058);
+  { const cs = 1, p = [-67, 39]; K.box(p[0], 0, p[1], 5, 4, 22, 0xe8ecf0); K.box(p[0], 0, p[1] - 2, 20, 1.1, 6, 0xd0d4d8); }
+  // the control tower, with a room at its foot
+  K.room(56, 70, 22, 34, 0, 4.2, 0xc4c9cf, { w: [K.door(28, 3.4)], n: [K.door(63, 3.4)] });
+  K.box(63, 0, 28, 6, 26, 6, 0xc4c9cf); K.box(63, 26, 28, 11, 4, 11, 0x2a6fc9);
+  MAP_SPAWNS[name] = { ally: { x0: -34, x1: 34, z0: 50, z1: 64 }, enemy: { x0: -34, x1: 34, z0: -64, z1: -50 } };
+  MAP_GROUPS[name]._skyColor = 0xa8cfee;
+}
+// 🚆 Train: a station. Two trains of walk-through carriages down the middle with platforms either side, a roof on
+// pillars, and a footbridge across the top reached by a stair from each platform.
+function buildTrainLayout() {
+  const name = 'train', K = _bkBegin(name, 80, 150, 0x5a5a56);
+  const carC = [0x4a5a6a, 0x7a4a3a], TOP = 4.6, plat = 0x7a7a76;
+  K.wx(-40, 40, -74.6, 0.8, 0, 9, 0x4a4a46); K.wx(-40, 40, 74.6, 0.8, 0, 9, 0x4a4a46); K.wz(-75, 75, -39.6, 0.8, 0, 9, 0x4a4a46); K.wz(-75, 75, 39.6, 0.8, 0, 9, 0x4a4a46);
+  // platforms
+  for (const sx of [-1, 1]) {
+    K.slab(sx > 0 ? 20 : -39, sx > 0 ? 39 : -20, -60, 60, 0.6, 0.6, plat);
+    K.stairs(sx * 32, 61.35, 'N', 0.6, 6, plat, 0, 0.9, 0.3); K.stairs(sx * 32, -61.35, 'S', 0.6, 6, plat, 0, 0.9, 0.3);
+    for (let i = 0; i < 6; i++) { const z = -50 + i * 20; K.box(sx * 33, 0.6, z, 1.4, 1.5, 4.0, 0x5a5048); }       // benches / kiosks
+    K.box(sx * 21, 0.6, -57, 1.2, 1.4, 1.2, 0xc8a850);
+  }
+  // the roof, on pillars
+  K.slab(-40, 40, -60, 60, 9.4, 0.4, 0x2a2d30);
+  for (const x of [-26, -20, 20, 26]) for (let z = -54; z <= 54; z += 18) if (Math.abs(z) > 9) K.box(x, 0, z, 1.2, 9.4, 1.2, 0x3a3d40);   // none where the footbridge crosses
+  // two trains, four carriages each
+  const car = (cx, cz, c) => {
+    const x0 = cx - 4.5, x1 = cx + 4.5, z0 = cz - 11, z1 = cz + 11, H = 4.2;
+    K.wx(x0, x1, z0 + 0.3, 0.6, 0, H, c, [K.door(cx, 3, 3.4)]); K.wx(x0, x1, z1 - 0.3, 0.6, 0, H, c, [K.door(cx, 3, 3.4)]);
+    K.wz(z0, z1, x0 + 0.3, 0.6, 0, H, c, [K.door(cz, 3.4), K.win(cz - 7), K.win(cz + 7), K.win(cz - 3.6), K.win(cz + 3.6)]);
+    K.wz(z0, z1, x1 - 0.3, 0.6, 0, H, c, [K.door(cz, 3.4), K.win(cz - 7), K.win(cz + 7), K.win(cz - 3.6), K.win(cz + 3.6)]);
+    K.slab(x0, x1, z0, z1, TOP, 0.4, 0x2a2d30);
+    for (const sx of [-1, 1]) for (let k = -2; k <= 2; k++) if (k !== 0) K.box(cx + sx * 3.2, 0, cz + k * 3.4, 1.4, 1.0, 1.6, 0x5a3a2a);   // seats
+  };
+  [-8.5, 8.5].forEach((cx, ti) => [-39, -13, 13, 39].forEach(cz => car(cx, cz, carC[ti])));
+  // the footbridge, and a stair up it from each platform end
+  K.slab(-33, 33, -2, 2, 7.0, 0.4, 0x4a4e52);
+  K.wx(-33, 33, -1.85, 0.3, 7.0, 1.1, 0x3a3a3a); K.wx(-33, 33, 1.85, 0.3, 7.0, 1.1, 0x3a3a3a);
+  for (const sx of [-1, 1]) {
+    K.stairs(sx * 31, 18, 'N', 6.4, 3, 0x5a5048, 0.6, 0.95, 6.4 / 16);
+    K.slab(sx * 31 - 2.5, sx * 31 + 2.5, -4, 3.3, 7.0, 0.4, 0x4a4e52);
+  }
+  // cover at the two ends
+  for (const z of [-58, 58]) { K.box(-6, 0, z, 6, 1.4, 1.4, 0x5a5f66); K.box(6, 0, z, 6, 1.4, 1.4, 0x5a5f66); }
+  for (const z of [-62, 62]) for (const x of [-26, 0, 26]) K.box(x, 0, z, 5, 1.5, 2, 0x6a5a3a);
+  MAP_SPAWNS[name] = { ally: { x0: -28, x1: 28, z0: 64, z1: 72 }, enemy: { x0: -28, x1: 28, z0: -72, z1: -64 } };
+  MAP_GROUPS[name]._skyColor = 0x9ab4c8;
+}
+// 🛒 Supermarket: a store with aisles, checkouts, a deli island, a freezer, a stock room and an office with a
+// mezzanine; a car park outside the front doors and loading docks behind the back ones.
+function buildSupermarketLayout() {
+  const name = 'supermarket', K = _bkBegin(name, 100, 130, 0xb8b4a8);
+  const wallC = 0xe8e0c8, shelf = 0xc86a3a, shelf2 = 0x3a8a6a, TOP = 4.6;
+  K.wx(-50, 50, -64.6, 0.8, 0, 9, 0x8a8a84); K.wx(-50, 50, 64.6, 0.8, 0, 9, 0x8a8a84); K.wz(-65, 65, -49.6, 0.8, 0, 9, 0x8a8a84); K.wz(-65, 65, 49.6, 0.8, 0, 9, 0x8a8a84);
+  // the store: z -46 .. 38, x -44 .. 44
+  const sx0 = -44, sx1 = 44, sz0 = -46, sz1 = 38;
+  K.wx(sx0, sx1, sz1 - 0.4, 0.8, 0, 6.4, wallC, [K.door(-12, 6, 4), K.door(12, 6, 4), K.win(-34, 6, 1.2, 4), K.win(34, 6, 1.2, 4)]);
+  K.wx(sx0, sx1, sz0 + 0.4, 0.8, 0, 6.4, wallC, [K.door(-28, 6, 4), K.door(28, 6, 4), K.door(0, 4, 3.6)]);
+  K.wz(sz0 + 0.8, sz1 - 0.8, sx0 + 0.4, 0.8, 0, 6.4, wallC, [K.door(0, 3.4)]); K.wz(sz0 + 0.8, sz1 - 0.8, sx1 - 0.4, 0.8, 0, 6.4, wallC, [K.door(-8, 3.4)]);
+  K.slab(sx0, sx1, sz0, sz1, 6.8, 0.4, 0xd8d0b8);
+  // aisles of shelving, with crossings
+  for (const x of [-36, -28, -20, -12, 12, 20, 28, 36]) for (const [z0, z1] of [[-30, -10], [-4, 14]]) K.box(x, 0, (z0 + z1) / 2, 1.6, 2.2, z1 - z0, Math.abs(x) % 16 < 8 ? shelf : shelf2);
+  // checkouts across the front, the deli island and the produce stands
+  for (const x of [-32, -22, -12, 12, 22, 32]) { K.box(x, 0, 28, 1.4, 1.1, 4, 0x4a5a6a); K.box(x, 0, 24.4, 0.5, 2.6, 0.5, 0xd03a3a); }
+  K.box(0, 0, 4, 12, 1.2, 5, 0xe8d8b0); K.box(0, 1.2, 4, 10, 0.9, 3.4, 0xb8e8f8);
+  for (const [x, z] of [[-6, 24], [6, 24], [-6, -20], [6, -20]]) K.box(x, 0, z, 4, 1.0, 2.4, 0x5a8a3a);
+  // the freezer room (west) and the stock room across the back
+  K.room(-44, -30, -46, -34, 0, 4.2, 0xaad0e0, { e: [K.door(-40, 3, 3.4)], s: [K.door(-37, 3, 3.4)] });
+  K.wx(-30, sx1, -38, 0.8, 0, 4.2, 0xb8b2a4, [K.door(-20, 5), K.door(0, 5), K.door(20, 5)]);
+  for (const x of [-14, -6, 6, 14, 26, 34]) K.box(x, 0, -43, 3, 3.6, 5, 0x7a5a38);                       // pallet racks
+  // the office, with a mezzanine and stairs
+  K.room(30, 44, -36, -14, 0, 4.2, 0xcfc8b4, { w: [K.door(-18, 3)], s: [K.door(37, 3), K.win(32.5)] });
+  _bkSlabHole(K, 30, 44, -36, -14, TOP, 0.4, 0xaaa496, { x0: 31, x1: 34.4, z0: -34, z1: -22.2 });
+  K.stairs(32.7, -33.2, 'S', TOP, 3, 0x6a5a48, 0, 0.95, TOP / 12);                                           // up to the office mezzanine
+  K.wx(30, 44, -14.15, 0.3, TOP, 1.1, 0x6a6a6a); K.box(40, TOP, -18, 2.4, 1.0, 1.2, 0x7a5a38);
+  // outside: cars and carts in front, docks behind
+  const car = (x, z, r, c) => { K.box(x, 0, z, 2.3, 1.2, 4.6, c, r); K.box(x, 1.2, z, 2.0, 0.9, 2.6, 0x2a3038, r); };
+  [[-30, 48, 0, 0xb83a2a], [-8, 48.5, 0, 0x2a5aa8], [10, 46, 0.2, 0xd8c8a0], [32, 50, 0, 0x3a8a4a], [-36, 60, 0, 0x5a5f66], [36, 61, 0, 0xd88a2a]].forEach(([x, z, r, c]) => car(x, z, r, c));
+  for (const x of [-40, -16, 16, 40]) K.box(x, 0, 43, 3.2, 1.1, 8, 0x8a8f94);                            // trolley bays
+  for (const [x, z] of [[-40, -57], [-28, -59], [28, -57], [40, -59]]) { K.box(x, 0, z, 2.6, 2.6, 6.2, [0xb83a2a, 0x2a5aa8, 0xd88a2a, 0x3a8a4a][Math.abs(x / 6 | 0) % 4]); }
+  _bkTruck(K, -14, -50, 0, 0xe8e2d0); _bkTruck(K, 14, -50, 0, 0xd8a050);
+  MAP_SPAWNS[name] = { ally: { x0: -24, x1: 24, z0: 54, z1: 62 }, enemy: { x0: -20, x1: 20, z0: -62, z1: -56 } };
+  MAP_GROUPS[name]._skyColor = 0xd8e4ec;
+}
+Object.assign(_BESPOKE, { warehouse: buildWarehouseLayout, urban: buildUrbanLayout, airport: buildAirportLayout, train: buildTrainLayout, supermarket: buildSupermarketLayout });
+
 function initMapThemes() {
   for (const name of Object.keys(MAP_THEMES)) {
     if (!MAP_GROUPS[name]) continue;
+    try { if (_BESPOKE[name]) _BESPOKE[name](); } catch (e) { console.warn('[bespoke]', name, e); }
     try { themeHollowBuildings(name); themePlaceBuildings(name); themeRecolorMap(name); themePlaceProps(name); if (name === 'volcano') buildVolcanoScenery(); buildMapScenery(name); } catch (e) { console.warn('[theme]', name, e); }
   }
 }
@@ -29836,6 +30159,7 @@ function faceToward(x, z) {
 }
 
 function teamSideSpawn(team = 'ally', spread = 36, depth = 38) {
+  { const S = MAP_SPAWNS[activeMapName]; if (S) { const r = team === 'enemy' ? S.enemy : S.ally; const x = r.x0 + Math.random() * (r.x1 - r.x0), z = r.z0 + Math.random() * (r.z1 - r.z0); return { x, z, yaw: Math.atan2(x, z) }; } }
   if (selectedModeConfig && selectedModeConfig.type === 'race' && selectedModeConfig.forcedMap === 'base_raid') {
     const x = (Math.random() - 0.5) * 16;
     return { x, z: 58 + Math.random() * 6, yaw: 0 };
@@ -45708,6 +46032,9 @@ function endMatch(winner, reason) {
 
 // ── Bot AI ─────────────────────────────────────────────────────────────────
 function botSideSpawn(idx, count, team) {
+  { const S = MAP_SPAWNS[activeMapName]; if (S) {   // a hand-built map names where each side starts
+    const r = absTeam(team) === 'ally' ? S.ally : S.enemy, f = count <= 1 ? Math.random() : idx / (count - 1);
+    return { x: r.x0 + (r.x1 - r.x0) * (0.1 + 0.8 * f) + (Math.random() - 0.5) * 2, z: r.z0 + Math.random() * (r.z1 - r.z0) }; } }
   if (selectedModeConfig && selectedModeConfig.forcedMap === 'base_raid') {
     if (absTeam(team) === 'ally') {
       const xs = [-16, -8, 8, 16, 0, -22, 22];
