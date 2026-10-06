@@ -25942,25 +25942,26 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
     rig.head.rotation.z  = -rig.torso.rotation.z * 0.5;
   }
 
-  // Slide / crouch pose: tuck legs forward, lean torso back, arms back
+  // Slide / crouch pose. Torso +X leans forward, but hanging limbs need -X to
+  // put their hands/feet forward because they extend downward from the pivot.
   if (crouch > 0.01) {
     const c = crouch;
     const advancePose = baseCrouch < 0.5 && slide < 0.35;
     const slideLean = Math.max(0, slide);
     const advanceLean = 0.22 + run * 0.16 + (tacticalAdvance ? 0.04 : 0);
-    rig.legL.rotation.x = THREE.MathUtils.lerp(rig.legL.rotation.x, slideLean ? 1.55 : (advancePose ? 0.55 : 1.1), c);
-    rig.legR.rotation.x = THREE.MathUtils.lerp(rig.legR.rotation.x, slideLean ? -0.18 : (advancePose ? 0.25 : 0.4), c);
+    rig.legL.rotation.x = THREE.MathUtils.lerp(rig.legL.rotation.x, slideLean ? -1.35 : (advancePose ? -0.38 : -0.72), c);
+    rig.legR.rotation.x = THREE.MathUtils.lerp(rig.legR.rotation.x, slideLean ? 0.48 : (advancePose ? 0.16 : -0.28), c);
     rig.armL.rotation.x = THREE.MathUtils.lerp(rig.armL.rotation.x, slideLean ? -1.22 : (advancePose ? -1.05 : -0.8), c);
     rig.armR.rotation.x = THREE.MathUtils.lerp(rig.armR.rotation.x, slideLean ? -1.55 : (advancePose ? -1.38 : -0.8), c);
-    rig.torso.rotation.x = THREE.MathUtils.lerp(0, slideLean ? -0.82 : (advancePose ? advanceLean : -0.45), c);
-    rig.head.rotation.x  = THREE.MathUtils.lerp(0, slideLean ? 0.72 : (advancePose ? -0.12 : 0.45), c);
+    rig.torso.rotation.x = THREE.MathUtils.lerp(0, slideLean ? -0.62 : (advancePose ? advanceLean : 0.18), c);
+    rig.head.rotation.x  = THREE.MathUtils.lerp(0, slideLean ? 0.54 : (advancePose ? -0.12 : -0.08), c);
     // Knees have to fold hard here or a tucked slide looks like a plank.
-    if (rig.kneeL) rig.kneeL.rotation.x = THREE.MathUtils.lerp(rig.kneeL.rotation.x, slideLean ? -1.65 : (advancePose ? -0.85 : -1.35), c);
-    if (rig.kneeR) rig.kneeR.rotation.x = THREE.MathUtils.lerp(rig.kneeR.rotation.x, slideLean ? -0.25 : (advancePose ? -0.65 : -0.75), c);
+    if (rig.kneeL) rig.kneeL.rotation.x = THREE.MathUtils.lerp(rig.kneeL.rotation.x, slideLean ? 1.20 : (advancePose ? 0.62 : 1.05), c);
+    if (rig.kneeR) rig.kneeR.rotation.x = THREE.MathUtils.lerp(rig.kneeR.rotation.x, slideLean ? -0.35 : (advancePose ? 0.46 : 0.88), c);
     if (rig.elbowL) rig.elbowL.rotation.x = THREE.MathUtils.lerp(rig.elbowL.rotation.x, slideLean ? 1.05 : (advancePose ? 0.85 : 0.7), c);
     if (rig.elbowR) rig.elbowR.rotation.x = THREE.MathUtils.lerp(rig.elbowR.rotation.x, slideLean ? 1.15 : (advancePose ? 0.9 : 0.7), c);
-    if (rig.footL) rig.footL.rotation.x = THREE.MathUtils.lerp(rig.footL.rotation.x, slideLean ? 0.72 : (advancePose ? 0.18 : 0.5), c);
-    if (rig.footR) rig.footR.rotation.x = THREE.MathUtils.lerp(rig.footR.rotation.x, slideLean ? -0.18 : (advancePose ? 0.14 : 0.5), c);
+    if (rig.footL) rig.footL.rotation.x = THREE.MathUtils.lerp(rig.footL.rotation.x, slideLean ? -0.22 : (advancePose ? -0.12 : -0.18), c);
+    if (rig.footR) rig.footR.rotation.x = THREE.MathUtils.lerp(rig.footR.rotation.x, slideLean ? 0.26 : (advancePose ? -0.08 : -0.14), c);
     // Crouch unwinds twist; a slide gets a slight shoulder roll so it reads from a distance.
     rig.torso.rotation.y = THREE.MathUtils.lerp(rig.torso.rotation.y, 0, c);
     rig.torso.rotation.z = THREE.MathUtils.lerp(rig.torso.rotation.z, slideLean ? 0.22 : 0, c);
@@ -25970,18 +25971,18 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
   // deliberate athletic hop instead of the standing pose floating upward.
   if (jump > 0.01) {
     const j = jump * (1 - slide * 0.35);
-    rig.legL.rotation.x = THREE.MathUtils.lerp(rig.legL.rotation.x, 0.78, j);
-    rig.legR.rotation.x = THREE.MathUtils.lerp(rig.legR.rotation.x, 0.58, j);
-    if (rig.kneeL) rig.kneeL.rotation.x = THREE.MathUtils.lerp(rig.kneeL.rotation.x, -1.05, j);
-    if (rig.kneeR) rig.kneeR.rotation.x = THREE.MathUtils.lerp(rig.kneeR.rotation.x, -0.95, j);
+    rig.legL.rotation.x = THREE.MathUtils.lerp(rig.legL.rotation.x, -0.72, j);
+    rig.legR.rotation.x = THREE.MathUtils.lerp(rig.legR.rotation.x, -0.54, j);
+    if (rig.kneeL) rig.kneeL.rotation.x = THREE.MathUtils.lerp(rig.kneeL.rotation.x, 1.05, j);
+    if (rig.kneeR) rig.kneeR.rotation.x = THREE.MathUtils.lerp(rig.kneeR.rotation.x, 0.95, j);
     rig.armL.rotation.x = THREE.MathUtils.lerp(rig.armL.rotation.x, rig.holdsGun ? -1.15 : -0.52, j);
     rig.armR.rotation.x = THREE.MathUtils.lerp(rig.armR.rotation.x, rig.holdsGun ? -1.42 : -0.72, j);
     if (rig.elbowL) rig.elbowL.rotation.x = THREE.MathUtils.lerp(rig.elbowL.rotation.x, 0.82, j);
     if (rig.elbowR) rig.elbowR.rotation.x = THREE.MathUtils.lerp(rig.elbowR.rotation.x, 0.92, j);
     rig.torso.rotation.x = THREE.MathUtils.lerp(rig.torso.rotation.x, 0.34, j);
     rig.head.rotation.x = THREE.MathUtils.lerp(rig.head.rotation.x, -0.18, j);
-    if (rig.footL) rig.footL.rotation.x = THREE.MathUtils.lerp(rig.footL.rotation.x, 0.26, j);
-    if (rig.footR) rig.footR.rotation.x = THREE.MathUtils.lerp(rig.footR.rotation.x, 0.22, j);
+    if (rig.footL) rig.footL.rotation.x = THREE.MathUtils.lerp(rig.footL.rotation.x, -0.12, j);
+    if (rig.footR) rig.footR.rotation.x = THREE.MathUtils.lerp(rig.footR.rotation.x, -0.10, j);
   }
 
   // ── Body bob ──────────────────────────────────────────────────────────────
