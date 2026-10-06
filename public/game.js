@@ -9943,7 +9943,7 @@ const GRID_MAP_ARCHETYPES = [
 const GRID_CONCEPT_MAPS_ACTIVE = true;
 // Hand-built maps with their own mechanics: the grid-concept pass below must not wipe them.
 const MECHANIC_MAP_NAMES = new Set(['storm_pier', 'pinball_arcade', 'laser_vault', 'cargo_belts', 'gale_peaks', 'magma_rise',
-  'titanic', 'warehouse', 'urban', 'airport', 'train', 'supermarket', 'battlefield', 'forest', 'vietnam', 'desert', 'tundra', 'trenches', 'overgrowth', 'holiday', 'labyrinth', 'cyber', 'space', 'orbital_station', 'gravity_lab', 'glassworks', 'studio', 'lockdown', 'opera', 'sewer', 'chernobyl', 'refinery', 'foundry', 'carrier', 'pearl_harbor', 'skydock', 'doomsday', 'volcano', 'carnival']);   // + the hand-built layouts (see _BESPOKE)
+  'titanic', 'warehouse', 'urban', 'airport', 'train', 'supermarket', 'battlefield', 'forest', 'vietnam', 'desert', 'tundra', 'trenches', 'overgrowth', 'holiday', 'labyrinth', 'cyber', 'space', 'orbital_station', 'gravity_lab', 'glassworks', 'studio', 'lockdown', 'opera', 'sewer', 'chernobyl', 'refinery', 'foundry', 'carrier', 'pearl_harbor', 'skydock', 'doomsday', 'volcano', 'carnival', 'temple', 'arena', 'biosphere', 'dreamscape', 'pyongyang', 'traffic_cone_republic', 'flying_moai', 'big_arena', 'super_arena']);   // + the hand-built layouts (see _BESPOKE)
 function clearMapForGridConcept(name) {
   if (isArchivedLobbyMap(name)) return;
   const group = MAP_GROUPS[name];
@@ -10301,25 +10301,25 @@ const MAP_THEMES = {
   orbital_station: Object.assign(_T(0x9aa4b0, 0x7c8794, 0xd0d6de, 0xaab4c0, 0x7a8696, 0xdfe4ea, 0xff8a3a, 0x2ab0ff, 0x05070d, 'space', ['pods', 'crates'], 0xbfe8ff), { keep: true }),
   foundry: Object.assign(_T(0x3e3a36, 0x2d2a27, 0x5a4a40, 0x6a5a50, 0x4a3f38, 0x70645a, 0xff8a2a, 0xff5a12, 0x2a1a12, 'fire', ['barrels', 'crates']), { keep: true }),
   carnival: Object.assign(_T(0xcdb08a, 0xb69a74, 0xd8483a, 0xf2c93a, 0x3a8fd0, 0xf5ead0, 0xffffff, 0xff4aa0, 0xf0b0d0, 'carnival', ['crates', 'cones']), { keep: true }),
-  biosphere:    _T(0x7aa060, 0x628a4a, 0xc8e0d8, 0xa0c8b8, 0x6a8a5a, 0xe0eee8, 0xffffff, 0x4ac88a, 0xbfe8f0, 'nature', ['trees', 'rocks']),
+  biosphere: Object.assign(_T(0x7aa060, 0x628a4a, 0xc8e0d8, 0xa0c8b8, 0x6a8a5a, 0xe0eee8, 0xffffff, 0x4ac88a, 0xbfe8f0, 'nature', ['trees', 'rocks']), { keep: true }),
   lockdown: Object.assign(_T(0x3a3d40, 0x2c2e30, 0x555a5e, 0x6a6f74, 0x4a4e52, 0x7a7f84, 0xe8c43a, 0xd03a2a, 0x1a1c20, 'industrial', ['crates', 'barrels']), { keep: true }),
   studio: Object.assign(_T(0x2a2a30, 0x45454f, 0x3a3a46, 0x56485a, 0x6a5846, 0x4a4a56, 0xffd24a, 0xd0302a, 0x15151c, 'neon', ['crates', 'pylons'], 0xffe08a), { keep: true }),
-  temple:       _T(0xc4b48a, 0xa89868, 0xb89a62, 0x9a8050, 0x8a7248, 0xd8c898, 0xe8c24a, 0x3a8a70, 0xb8d8c0, 'desert', ['pyramids', 'rocks']),
+  temple: Object.assign(_T(0xc4b48a, 0xa89868, 0xb89a62, 0x9a8050, 0x8a7248, 0xd8c898, 0xe8c24a, 0x3a8a70, 0xb8d8c0, 'desert', ['pyramids', 'rocks']), { keep: true }),
   holiday: Object.assign(_T(0xf4f8fa, 0xc8d8e0, 0xc4332e, 0x2f7a4a, 0xe8d8c0, 0xf8f0e0, 0xffd24a, 0xffffff, 0xb8c8d8, 'carnival', ['iceblocks', 'crates']), { keep: true }),
   labyrinth: Object.assign(_T(0x6a6f66, 0x555a52, 0x7a7e72, 0x65695e, 0x595d52, 0x8a8e82, 0xa8b090, 0x6a9a5a, 0x8a9a8a, 'nature', ['rocks', 'trees']), { keep: true }),
-  arena:        _T(0xc2a86a, 0xa88e52, 0x9a9a98, 0x7a7a78, 0x8a7048, 0xd0c090, 0xd8b048, 0xb02a2a, 0xa8c8e8, 'desert', ['pyramids', 'crates']),
+  arena: Object.assign(_T(0xc2a86a, 0xa88e52, 0x9a9a98, 0x7a7a78, 0x8a7048, 0xd0c090, 0xd8b048, 0xb02a2a, 0xa8c8e8, 'desert', ['pyramids', 'crates']), { keep: true }),
   opera: Object.assign(_T(0x5a2a34, 0x44202a, 0x7a2e3c, 0x5a2a34, 0x3a2a30, 0x8a6a3a, 0xe8c050, 0xe8c050, 0x1a1015, 'urban', ['crates', 'pylons']), { keep: true }),
   doomsday: Object.assign(_T(0x4a4036, 0x3a322a, 0x5a4a3a, 0x6a5a4a, 0x4a3e32, 0x6a5e50, 0xe8742a, 0xe03a1a, 0x4a2a1a, 'fire', ['rocks', 'barrels']), { keep: true }),
   train: Object.assign(_T(0x5a5a56, 0x484844, 0x4a5a6a, 0x7a4a3a, 0x555a60, 0x7a7a76, 0xe8c43a, 0x2a7ac8, 0x9ab4c8, 'industrial', ['crates', 'barrels']), { keep: true }),
-  dreamscape:   _T(0xb6a0d8, 0x9a84c4, 0xd8c4f0, 0xf0b8d8, 0x8ab8f0, 0xf0e0ff, 0xffffff, 0xff9ad0, 0xd0b8f0, 'neon', ['iceblocks', 'pylons'], 0xfff0ff),
+  dreamscape: Object.assign(_T(0xb6a0d8, 0x9a84c4, 0xd8c4f0, 0xf0b8d8, 0x8ab8f0, 0xf0e0ff, 0xffffff, 0xff9ad0, 0xd0b8f0, 'neon', ['iceblocks', 'pylons'], 0xfff0ff), { keep: true }),
   pearl_harbor: Object.assign(_T(0x8a8a7a, 0x76766a, 0x7a8a96, 0x5a6a76, 0x6a6a5a, 0xa09a86, 0xd8c88a, 0xb02a2a, 0x9ac8e8, 'industrial', ['crates', 'barrels', 'sandbags']), { keep: true }),
   titanic:      Object.assign(_T(0x8a6a46, 0x745838, 0xc8b890, 0x3a3f4a, 0x6a5238, 0xd8c8a0, 0xe8c860, 0xa02a2a, 0x7aa0c0, 'urban', []), { keep: true }),
   supermarket: Object.assign(_T(0xd8d4c8, 0xbab6aa, 0xe8e0c8, 0x7ac0a0, 0xc86a3a, 0xf0ece0, 0xffd24a, 0xd03a3a, 0xd8e4ec, 'urban', ['crates', 'cones']), { keep: true }),
-  pyongyang:    _T(0x8a8a84, 0x74746e, 0xb04040, 0x8a9aa8, 0x7a7a74, 0xb8b8b0, 0xe8c850, 0xc02a2a, 0xa8b8c4, 'urban', ['cars', 'crates']),
-  traffic_cone_republic: _T(0x6a6a6e, 0x55555a, 0xe8782a, 0xf4f4f0, 0xe8782a, 0x9a9aa0, 0xffffff, 0xe8782a, 0xb8c8d8, 'carnival', ['cones', 'cones', 'cars']),
-  flying_moai:  _T(0x7a8a7a, 0x667666, 0x7a756a, 0x6a655a, 0x5a564c, 0x948e80, 0xb0a890, 0x3a9a8a, 0x9ad0e8, 'desert', ['rocks', 'pyramids']),
-  big_arena:    _T(0x6b7058, 0x575c46, 0x8a8f7a, 0x6f745e, 0x5f654f, 0x959a84, 0xe0b83a, 0xc8402a, 0xa0c0d8, 'industrial', ['crates', 'sandbags', 'cars']),
-  super_arena:  _T(0x58606a, 0x464d56, 0x7a848e, 0x5f6a75, 0x4a535c, 0x8a949e, 0x6ad0ff, 0xff6a3a, 0x8ab0d0, 'space', ['pods', 'crates', 'pylons']),
+  pyongyang: Object.assign(_T(0x8a8a84, 0x74746e, 0xb04040, 0x8a9aa8, 0x7a7a74, 0xb8b8b0, 0xe8c850, 0xc02a2a, 0xa8b8c4, 'urban', ['cars', 'crates']), { keep: true }),
+  traffic_cone_republic: Object.assign(_T(0x6a6a6e, 0x55555a, 0xe8782a, 0xf4f4f0, 0xe8782a, 0x9a9aa0, 0xffffff, 0xe8782a, 0xb8c8d8, 'carnival', ['cones', 'cones', 'cars']), { keep: true }),
+  flying_moai: Object.assign(_T(0x7a8a7a, 0x667666, 0x7a756a, 0x6a655a, 0x5a564c, 0x948e80, 0xb0a890, 0x3a9a8a, 0x9ad0e8, 'desert', ['rocks', 'pyramids']), { keep: true }),
+  big_arena: Object.assign(_T(0x6b7058, 0x575c46, 0x8a8f7a, 0x6f745e, 0x5f654f, 0x959a84, 0xe0b83a, 0xc8402a, 0xa0c0d8, 'industrial', ['crates', 'sandbags', 'cars']), { keep: true }),
+  super_arena: Object.assign(_T(0x58606a, 0x464d56, 0x7a848e, 0x5f6a75, 0x4a535c, 0x8a949e, 0x6ad0ff, 0xff6a3a, 0x8ab0d0, 'space', ['pods', 'crates', 'pylons']), { keep: true }),
   br_arena:     _T(0x5a7440, 0x4a6234, 0x8b7355, 0x6a5540, 0x6a6a5a, 0x9a8a68, 0xd8b84a, 0xc8402a, 0x88aacc, 'nature', ['trees', 'cars', 'crates', 'sandbags']),
   // The Towers keep their own build: dressing only.
   m4_tower:       Object.assign(_T(0x51585c, 0x3c4246, 0x454a50, 0x25282d, 0x5b635f, 0x747b80, 0xa98d55, 0xd8962a, 0x070809, 'neon', [], 0xffc870), { keep: true, tower: true }),
@@ -12123,6 +12123,216 @@ function buildCarnivalLayout() {
 }
 Object.assign(_BESPOKE, { chernobyl: buildChernobylLayout, refinery: buildRefineryLayout, foundry: buildFoundryLayout, carrier: buildCarrierLayout, pearl_harbor: buildPearlHarborLayout,
   skydock: buildSkydockLayout, doomsday: buildDoomsdayLayout, volcano: buildVolcanoLayout, carnival: buildCarnivalLayout });
+
+// ── Batch D: monuments, arenas and the big maps ──────────────────────────────────────────────
+// Tiers of half-metre steps, each narrower than the one below: a pyramid you can simply walk up.
+function _bkSteps(K, cx, cz, widths, c1, c2, step = 0.5) { widths.forEach((w, i) => K.box(cx, 0, cz, w, step * (i + 1), w, i % 2 ? c2 : c1)); }
+// 🏛️ Temple: a walled court with a gate on each side, a stepped pyramid with a shrine on top, a hall of columns,
+// statues down the processional way, shrines at the corners.
+function buildTempleLayout() {
+  const name = 'temple', K = _bkBegin(name, 130, 150, 0xc4b48a);
+  K.perim(8, 0xb89a62);
+  const stone = 0xb89a62, dark = 0x9a8050;
+  // the court wall, with a gate in the middle of each side
+  K.wx(-50, 50, -49.4, 1.2, 0, 5, stone, [K.door(0, 9, 4.4)]); K.wx(-50, 50, 49.4, 1.2, 0, 5, stone, [K.door(0, 9, 4.4)]);
+  K.wz(-50, 50, -49.4, 1.2, 0, 5, stone, [K.door(0, 9, 4.4)]); K.wz(-50, 50, 49.4, 1.2, 0, 5, stone, [K.door(0, 9, 4.4)]);
+  // the pyramid
+  _bkSteps(K, 0, 0, [34, 31, 28, 25, 22, 19, 16, 13], stone, dark);
+  K.room(-3.5, 3.5, -3.5, 3.5, 4.0, 3.2, 0xd8c898, { s: [K.door(0, 3, 2.7)], n: [K.door(0, 3, 2.7)] }); K.slab(-3.5, 3.5, -3.5, 3.5, 7.6, 0.4, 0x8a7248);
+  K.poi('summit', 0, 0, 4.0);
+  // the hall of columns (north-west) and a second (south-east)
+  for (const [cx, cz] of [[-30, -30], [30, 30]]) {
+    for (let i = 0; i < 4; i++) for (let j = 0; j < 3; j++) K.box(cx - 9 + i * 6, 0, cz - 6 + j * 6, 2, 8, 2, dark);
+    K.slab(cx - 12, cx + 12, cz - 9, cz + 9, 8.4, 0.4, 0x7a6644);
+  }
+  // shrines at the other two corners
+  K.hut(26, 38, -38, -26, 0xd8c898, 'sw', 3.6, 0x8a7248); K.hut(-38, -26, 26, 38, 0xd8c898, 'ne', 3.6, 0x8a7248);
+  // statues down the way in
+  for (const z of [-22, 22]) for (const x of [-9, 9]) { K.box(x, 0, z, 3, 1.4, 3, stone); K.box(x, 1.4, z, 1.8, 4.2, 1.8, dark); }
+  for (const [x, z] of [[-18, 0], [18, 0], [0, -20], [0, 20]]) K.crate(x, z, 0xb89a62);
+  K.spawn({ x0: -26, x1: 26, z0: 58, z1: 68 }, { x0: -26, x1: 26, z0: -68, z1: -58 });
+  MAP_GROUPS[name]._skyColor = 0xb8d8c0;
+}
+// 🏟️ Arena: a sand floor ringed by terraces of seats that you can climb, a gate through the stands on each side, ruined
+// columns and an altar in the middle.
+function buildArenaLayout() {
+  const name = 'arena', K = _bkBegin(name, 130, 130, 0xc2a86a);
+  K.perim(9, 0x9a9a98);
+  const seat = 0x8a8478, seat2 = 0x7a7468;
+  // terraces on all four sides: 8 steps of half a metre, each 2.5 deep, from 28 out to 48, with a gate 10 wide in the middle
+  for (let i = 0; i < 8; i++) {
+    const top = 0.5 * (i + 1), a = 28 + i * 2.5, b = 28 + (i + 1) * 2.5, col = i % 2 ? seat : seat2, m = (a + b) / 2;
+    for (const s of [-1, 1]) for (const [z0, z1] of [[-28, -5], [5, 28]]) {
+      K.box(s * m, 0, (z0 + z1) / 2, b - a, top, z1 - z0, col);                 // east and west
+      K.box((z0 + z1) / 2, 0, s * m, z1 - z0, top, b - a, col);                 // north and south
+    }
+  }
+  // (the corners are open: the floor runs out through them to the ring road behind the stands)
+  K.box(0, 0, 0, 5, 1.0, 5, 0x8a8478); K.box(0, 1.0, 0, 3, 0.6, 3, 0xd8b048);
+  for (const [x, z] of [[-14, -14], [14, -14], [-14, 14], [14, 14]]) { K.box(x, 0, z, 2.6, 7, 2.6, 0x9a9a98); K.box(x + 1.5, 0, z + 1, 2.2, 2.4, 2.2, 0x8a8a88, 0.4); }
+  for (const [x, z] of [[-20, 0], [20, 0], [0, -22], [0, 22]]) K.box(x, 0, z, 6, 1.1, 1.4, 0x8a8478);
+  // gatehouses outside the stands at north and south
+  K.hut(-10, 10, 54, 60, 0x9a9a98, 'ns', 3.6, 0x6a6a68); K.hut(-10, 10, -60, -54, 0x9a9a98, 'ns', 3.6, 0x6a6a68);
+  K.spawn({ x0: -26, x1: 26, z0: 50, z1: 53 }, { x0: -26, x1: 26, z0: -53, z1: -50 });
+  MAP_GROUPS[name]._skyColor = 0xa8c8e8;
+}
+// 🌿 Biosphere: a greenhouse. A two-floor lab in the middle, rings of garden beds, four great trees, a raised walkway round
+// the lab with a stair at each corner.
+function buildBiosphereLayout() {
+  const name = 'biosphere', K = _bkBegin(name, 130, 130, 0x7aa060);
+  K.perim(8, 0xc8e0d8);
+  _bkBuilding(K, -14, 14, -12, 12, { floors: 2, color: 0xe0eee8, roof: 0x6a9a7a, doors: ['n', 's', 'e', 'w'] });
+  // the walkway: a ring of slab at 4.6 round the lab at 26 out, with stairs up at the four corners
+  const T = 4.6;
+  K.slab(-30, 30, -30, -24, T, 0.4, 0x9ab8a8); K.slab(-30, 30, 24, 30, T, 0.4, 0x9ab8a8); K.slab(-30, -24, -24, 24, T, 0.4, 0x9ab8a8); K.slab(24, 30, -24, 24, T, 0.4, 0x9ab8a8);
+  const sg = [-27, 27].map(x => ({ at: x, w: 4, sill: 0, top: 9 }));
+  K.wx(-30, 30, -29.85, 0.3, T, 1.0, 0x6a8a7a, sg); K.wx(-30, 30, 29.85, 0.3, T, 1.0, 0x6a8a7a, sg); K.wz(-30, 30, -29.85, 0.3, T, 1.0, 0x6a8a7a); K.wz(-30, 30, 29.85, 0.3, T, 1.0, 0x6a8a7a);
+  K.wx(-24, 24, -24.15, 0.3, T, 1.0, 0x6a8a7a, [{ at: 0, w: 5, sill: 0, top: 9 }]); K.wx(-24, 24, 24.15, 0.3, T, 1.0, 0x6a8a7a, [{ at: 0, w: 5, sill: 0, top: 9 }]);
+  K.wz(-24, 24, -24.15, 0.3, T, 1.0, 0x6a8a7a, [{ at: 0, w: 5, sill: 0, top: 9 }]); K.wz(-24, 24, 24.15, 0.3, T, 1.0, 0x6a8a7a, [{ at: 0, w: 5, sill: 0, top: 9 }]);
+  for (const sx of [-1, 1]) { K.stairs(sx * 27, 41.5, 'N', T, 3, 0x7a9a8a, 0, 1.0, T / 12); K.stairs(sx * 27, -41.5, 'S', T, 3, 0x7a9a8a, 0, 1.0, T / 12); }
+  // beds in two rings, and four great trees
+  for (const [x0, x1, z] of [[-50, -34, -14], [34, 50, 14], [-50, -34, 14], [34, 50, -14], [-14, 14, -42], [-14, 14, 42]]) K.box((x0 + x1) / 2, 0, z, x1 - x0, 1.1, 2.4, 0x4a7a3a);
+  for (const [x, z] of [[-44, -44], [44, 44], [-44, 44], [44, -44]]) { K.box(x, 0, z, 3, 9, 3, 0x5a4430); K.box(x, 8, z, 12, 3.6, 12, 0x3a7a3a); }
+  K.hut(-6, 6, -56, -48, 0xe0eee8, 'ns', 3.4, 0x6a9a7a); K.hut(-6, 6, 48, 56, 0xe0eee8, 'ns', 3.4, 0x6a9a7a);
+  for (const [x, z] of [[-20, 40], [20, -40], [-40, 6], [40, -6], [8, 34], [-8, -34]]) K.crate(x, z, 0x8a6a3a);
+  K.spawn({ x0: -26, x1: 26, z0: 54, z1: 60 }, { x0: -26, x1: 26, z0: -60, z1: -54 });
+  MAP_GROUPS[name]._skyColor = 0xbfe8f0;
+}
+// 💭 Dreamscape: tiers of impossible platforms. Four islands at different heights with stairs between them, floating
+// blocks to run under, and giant chess pieces for cover.
+function buildDreamscapeLayout() {
+  const name = 'dreamscape', K = _bkBegin(name, 130, 130, 0xb6a0d8);
+  K.perim(8, 0xd8c4f0);
+  const pink = 0xf0b8d8, blue = 0x8ab8f0, mint = 0xb8f0d0, gold = 0xf0e0a0;
+  // the central stack: tiers of steps up to a ring, with a stair each side
+  _bkSteps(K, 0, 0, [22, 18, 14, 10], pink, blue);
+  // four islands at 2.3, 4.6: slabs on posts, each with a stair up from the ground and a bridge to the next
+  const isle = (cx, cz, top, c) => { for (const [dx, dz] of [[-5, -5], [5, -5], [-5, 5], [5, 5]]) K.box(cx + dx, 0, cz + dz, 1.2, top - 0.4, 1.2, 0xd8c4f0); K.slab(cx - 8, cx + 8, cz - 8, cz + 8, top, 0.4, c); K.wx(cx - 8, cx + 8, cz - 7.85, 0.3, top, 1.0, 0xffffff, [{ at: cx, w: 5, sill: 0, top: 9 }]); K.wx(cx - 8, cx + 8, cz + 7.85, 0.3, top, 1.0, 0xffffff, [{ at: cx, w: 5, sill: 0, top: 9 }]); };
+  isle(-36, -30, 4.6, mint); isle(36, 30, 4.6, mint); isle(36, -30, 2.3, gold); isle(-36, 30, 2.3, gold);
+  K.stairs(-36, -49.5, 'S', 4.6, 3, 0xd8c4f0, 0, 1.0, 4.6 / 12); K.stairs(36, 49.5, 'N', 4.6, 3, 0xd8c4f0, 0, 1.0, 4.6 / 12);
+  K.stairs(36, -43.5, 'S', 2.3, 3, 0xd8c4f0, 0, 1.0, 2.3 / 6); K.stairs(-36, 43.5, 'N', 2.3, 3, 0xd8c4f0, 0, 1.0, 2.3 / 6);
+  // floating blocks, high enough to run under
+  for (const [x, z, w] of [[-14, 34, 10], [14, -34, 10], [-52, 0, 8], [52, 0, 8], [0, 52, 12], [0, -52, 12]]) K.box(x, 3.2, z, w, 2.2, w * 0.7, pink);
+  // chess pieces
+  const pawn = (x, z, c) => { K.box(x, 0, z, 3.4, 1.0, 3.4, c); K.box(x, 1.0, z, 2.0, 3.0, 2.0, c); K.box(x, 4.0, z, 2.8, 1.4, 2.8, c); };
+  [[-20, 0, 0xffffff], [20, 0, 0x2a2a3a], [0, -24, 0xffffff], [0, 24, 0x2a2a3a], [-52, -44, 0x2a2a3a], [52, 44, 0xffffff]].forEach(([x, z, c]) => pawn(x, z, c));
+  K.spawn({ x0: -26, x1: 26, z0: 56, z1: 62 }, { x0: -26, x1: 26, z0: -62, z1: -56 });
+  MAP_GROUPS[name]._skyColor = 0xd0b8f0;
+}
+// 🏛️ Pyongyang: a parade square. A stepped plinth and statue at the head, colonnades down both sides of the avenue, two
+// ministries, tribunes, flagpoles.
+function buildPyongyangLayout() {
+  const name = 'pyongyang', K = _bkBegin(name, 140, 140, 0x8a8a84);
+  K.perim(8, 0xa0a09a);
+  const red = 0xb04040, cream = 0xc8c2b0, grey = 0x8a9aa8;
+  _bkSteps(K, 0, -34, [24, 20, 16, 12], cream, 0xb8b2a0, 0.5); K.box(0, 2.0, -34, 5, 14, 5, 0xd8b048);
+  // two ministries and two colonnades
+  _bkBuilding(K, -58, -34, -20, 4, { floors: 3, color: grey, roof: 0x5a6a78, doors: ['e', 's'] });
+  _bkBuilding(K, 34, 58, -20, 4, { floors: 3, color: grey, roof: 0x5a6a78, doors: ['w', 's'] });
+  for (const sx of [-1, 1]) {
+    for (let z = 8; z <= 44; z += 9) { K.box(sx * 22, 0, z, 1.6, 7, 1.6, cream); K.box(sx * 40, 0, z, 1.6, 7, 1.6, cream); }
+    K.slab(sx > 0 ? 21 : -41, sx > 0 ? 41 : -21, 6, 46, 7.4, 0.4, red);
+  }
+  // tribunes: steps at the south end facing the plinth
+  for (let i = 0; i < 5; i++) K.box(0, 0, 56 - i * 2.2, 44 - i * 2, 0.5 * (i + 1), 2.2, i % 2 ? 0xa0a09a : 0x9a9a94);
+  // flagpoles, planters, a kiosk
+  for (const [x, z] of [[-14, -4], [14, -4], [-14, 20], [14, 20], [-30, 8], [30, 8]]) { K.box(x, 0, z, 0.6, 12, 0.6, 0x6a6a6a); K.box(x + 1.4, 9, z, 2.4, 1.6, 0.2, red); }
+  for (const [x, z] of [[-8, 12], [8, 12], [-8, 30], [8, 30], [0, 2]]) K.box(x, 0, z, 3.2, 1.1, 3.2, 0x5a7a4a);
+  K.hut(-30, -20, -40, -28, cream, 'e', 3.4, 0x7a7a74); K.hut(20, 30, -40, -28, cream, 'w', 3.4, 0x7a7a74);
+  K.spawn({ x0: -26, x1: 26, z0: 60, z1: 66 }, { x0: -26, x1: 26, z0: -66, z1: -60 });
+  MAP_GROUPS[name]._skyColor = 0xa8b8c4;
+}
+// 🚧 Traffic Cone Republic: giant cones in rows that make slaloms and lanes, barriers, toll booths, a roundabout, a
+// flyover to cross by, a cone fortress.
+function buildTrafficConeLayout() {
+  const name = 'traffic_cone_republic', K = _bkBegin(name, 140, 140, 0x6a6a6e);
+  K.perim(7, 0xe8782a);
+  const orange = 0xe8782a, white = 0xf4f4f0;
+  const cone = (x, z, s = 1) => { K.box(x, 0, z, 4.4 * s, 0.6, 4.4 * s, 0x3a3a3e); K.box(x, 0.6, z, 3.4 * s, 1.4, 3.4 * s, orange); K.box(x, 2.0, z, 2.6 * s, 1.4, 2.6 * s, white); K.box(x, 3.4, z, 1.8 * s, 1.4 * s + 0.6, 1.8 * s, orange); };
+  // slalom rows between the spawns and the middle
+  for (const sz of [-1, 1]) for (let i = 0; i < 6; i++) for (const sx of [-1, 1]) cone(sx * (12 + i * 3) , sz * (24 + i * 6), 1);
+  for (const sz of [-1, 1]) for (let i = 0; i < 5; i++) { cone(-40 + i * 5, sz * (44 + (i % 2) * 5)); cone(40 - i * 5, sz * (44 + (i % 2) * 5)); }
+  // the roundabout
+  for (let i = 0; i < 10; i++) { const a = i / 10 * Math.PI * 2; cone(Math.cos(a) * 14, Math.sin(a) * 14, 0.8); }
+  K.box(0, 0, 0, 5, 1.0, 5, white); K.box(0, 1.0, 0, 3, 3.4, 3, orange);
+  // barriers
+  for (const [x, z, w, d] of [[-30, -10, 14, 1.2], [30, 10, 14, 1.2], [-30, 12, 14, 1.2], [30, -12, 14, 1.2], [0, -34, 1.2, 12], [0, 34, 1.2, 12]]) { K.box(x, 0, z, w, 1.4, d, white); K.box(x, 0.6, z, w + 0.04, 0.4, d + 0.04, orange); }
+  // toll booths: a room each side of a lane at the middle crossing
+  K.hut(-52, -44, -4, 4, white, 'e', 3.2, orange); K.hut(44, 52, -4, 4, white, 'w', 3.2, orange);
+  // the flyover: a slab at 4.6 along x across the middle, stairs at both ends
+  K.slab(-44, 44, -22, -17, 4.6, 0.6, 0x5a5a5e); K.wx(-44, 44, -22.15, 0.3, 4.6, 1.0, white); K.wx(-44, 44, -16.85, 0.3, 4.6, 1.0, white);
+  for (let x = -40; x <= 40; x += 16) K.box(x, 0, -19.5, 2.4, 4.0, 2.4, 0x7a7a7e);
+  K.stairs(-55.5, -19.5, 'E', 4.6, 3, 0x5a5a5e, 0, 1.0, 4.6 / 12); K.stairs(55.5, -19.5, 'W', 4.6, 3, 0x5a5a5e, 0, 1.0, 4.6 / 12);
+  // the cone fortress
+  K.room(24, 42, 30, 46, 0, 4.4, white, { w: [K.door(38, 3.4, 3.6)], n: [K.door(33, 3.4, 3.6)] }); K.slab(24, 42, 30, 46, 4.8, 0.4, orange);
+  for (const [x, z] of [[24, 30], [42, 30], [24, 46], [42, 46]]) cone(x, z, 0.9);
+  K.spawn({ x0: -26, x1: 26, z0: 56, z1: 64 }, { x0: -26, x1: 26, z0: -64, z1: -56 });
+  MAP_GROUPS[name]._skyColor = 0xb8c8d8;
+}
+// 🗿 Flying Moai: a great stepped platform with a row of giant heads, terraces to either side with more, stone paths,
+// small shrines.
+function buildMoaiLayout() {
+  const name = 'flying_moai', K = _bkBegin(name, 130, 130, 0x7a8a7a);
+  K.perim(8, 0x7a756a);
+  const stone = 0x7d756a, dark = 0x5a564c, light = 0x948e80;
+  const head = (x, z, s = 1, rot = 0, y0 = 0) => { const cs = Math.cos(rot), sn = Math.sin(rot); const at = (lx, lz) => [x + lx * cs + lz * sn, z - lx * sn + lz * cs];
+    let p = at(0, 0); K.box(p[0], y0, p[1], 4 * s, 10 * s, 4 * s, stone, rot); p = at(0, 2.2 * s); K.box(p[0], y0 + 6.2 * s, p[1], 4.6 * s, 1.4 * s, 1.0 * s, dark, rot); p = at(0, 2.2 * s); K.box(p[0], y0 + 3.0 * s, p[1], 1.2 * s, 3.2 * s, 1.0 * s, light, rot); };
+  // the big ahu: four tiers, with five heads along the top
+  _bkSteps(K, 0, -20, [48, 44, 40, 36], 0x8a8478, 0x7a7468);
+  [-14, -7, 0, 7, 14].forEach(x => head(x, -20, 0.8, 0, 2.0));
+  // side terraces
+  _bkSteps(K, -44, 14, [20, 16, 12], 0x8a8478, 0x7a7468); head(-44, 14, 0.7, 0.8, 1.5);
+  _bkSteps(K, 44, 14, [20, 16, 12], 0x8a8478, 0x7a7468); head(44, 14, 0.7, -0.8, 1.5);
+  // heads standing about as cover
+  for (const [x, z, r] of [[-20, 26, 0.5], [20, 26, -0.5], [-8, 6, 0.2], [8, 6, -0.2], [-52, -34, 0.6], [52, -34, -0.6], [-30, 50, 0], [30, -50, 3.14]]) head(x, z, 0.55, r);
+  K.hut(-6, 6, 40, 48, light, 'ns', 3.4, dark); K.hut(-6, 6, -52, -44, light, 'ns', 3.4, dark);
+  for (const [x, z] of [[-26, 0], [26, 0], [-10, 38], [10, -40], [-36, -8], [36, -8]]) K.crate(x, z, 0x7a7468);
+  K.spawn({ x0: -26, x1: 26, z0: 54, z1: 62 }, { x0: -26, x1: 26, z0: -62, z1: -56 });
+  MAP_GROUPS[name]._skyColor = 0x9ad0e8;
+}
+// 🏰 Big arena: a fortress. Four corner keeps of three floors, curtain walls between them with gates, a keep in the
+// courtyard, a bunker and crates in the open.
+function buildBigArenaLayout() {
+  const name = 'big_arena', K = _bkBegin(name, 200, 200, 0x6b7058);
+  K.perim(9, 0x8a8f7a);
+  const stone = 0x8a8f7a;
+  // curtain walls 8 high, 3 thick, with a gate in the middle of each
+  K.wx(-80, 80, -80, 3, 0, 8, stone, [K.door(0, 10, 6)]); K.wx(-80, 80, 80, 3, 0, 8, stone, [K.door(0, 10, 6)]);
+  K.wz(-80, 80, -80, 3, 0, 8, stone, [K.door(0, 10, 6)]); K.wz(-80, 80, 80, 3, 0, 8, stone, [K.door(0, 10, 6)]);
+  // corner keeps
+  [[-66, -66, 'e', 's'], [66, -66, 'w', 's'], [-66, 66, 'e', 'n'], [66, 66, 'w', 'n']].forEach(([cx, cz, d1, d2]) => _bkBuilding(K, cx - 12, cx + 12, cz - 12, cz + 12, { floors: 3, color: 0x7a8068, roof: 0x4a4f3c, doors: [d1, d2] }));
+  // the central keep, a bunker, and cover
+  _bkBuilding(K, -16, 16, -14, 14, { floors: 2, color: 0x7a8068, roof: 0x4a4f3c, doors: ['n', 's', 'e', 'w'] });
+  K.hut(40, 54, -10, 6, 0x6a6e58, 'w', 3.6, 0x3a3e2c); K.hut(-54, -40, -6, 10, 0x6a6e58, 'e', 3.6, 0x3a3e2c);
+  K.mound(-34, -22, 28, 40, 4.6, 0x8a8f7a, ['s']); K.mound(22, 34, -40, -28, 4.6, 0x8a8f7a, ['n']);
+  for (const [x, z] of [[-40, 0], [40, 0], [-20, -44], [20, 44], [-24, 24], [24, -24], [-60, 20], [60, -20], [0, -50], [0, 50]]) { K.crate(x, z, 0x7a6a4a); K.crate(x + 3, z + 1, 0x6a5a3a); }
+  for (const [x, z] of [[-30, -22], [30, 22], [-30, 56], [30, -56]]) K.sandbags(x, z, 8);
+  K.spawn({ x0: -34, x1: 34, z0: 86, z1: 94 }, { x0: -34, x1: 34, z0: -94, z1: -86 });
+  MAP_GROUPS[name]._skyColor = 0xa0c0d8;
+}
+// 🏙️ Super arena: a city of nine blocks. Buildings of one to three floors in every block, a four-floor tower at the
+// crossroads, streets between with cars.
+function buildSuperArenaLayout() {
+  const name = 'super_arena', K = _bkBegin(name, 260, 260, 0x58606a);
+  K.perim(10, 0x7a848e);
+  const rnd = _thRng('super_arena:city'), tints = [0x7a848e, 0x8a7a6a, 0x6a7a86, 0x9a9488, 0x7a8a7a];
+  for (const bx of [-85, 0, 85]) for (const bz of [-85, 0, 85]) {
+    if (bx === 0 && bz === 0) { _bkBuilding(K, -18, 18, -14, 14, { floors: 4, color: 0x6a7a86, roof: 0x3a4a56, doors: ['n', 's', 'e', 'w'] }); continue; }
+    for (const [ox, oz] of [[-17, -17], [17, -17], [-17, 17], [17, 17]]) {
+      if (rnd() < 0.2) { K.crate(bx + ox, bz + oz, 0x7a6a4a); K.crate(bx + ox + 3, bz + oz + 1, 0x6a5a3a); continue; }
+      const w = 14 + Math.floor(rnd() * 8), d = 12 + Math.floor(rnd() * 6), fl = 1 + Math.floor(rnd() * 3);
+      _bkBuilding(K, bx + ox - w / 2, bx + ox + w / 2, bz + oz - d / 2, bz + oz + d / 2, { floors: fl, color: tints[Math.floor(rnd() * tints.length)], roof: 0x4a525a, doors: ['n', 's', 'e', 'w'] });
+    }
+  }
+  // cars and barriers along the streets
+  const car = (x, z, r, c) => { K.box(x, 0, z, 2.3, 1.2, 4.6, c, r); K.box(x, 1.2, z, 2.0, 0.9, 2.6, 0x2a3038, r); };
+  [[-45, -85, 1.57, 0xb83a2a], [45, 85, 1.57, 0x2a5aa8], [-85, 45, 0, 0xd88a2a], [85, -45, 0, 0x3a8a4a], [-45, 0, 1.57, 0x5a5f66], [45, 0, 1.57, 0xd8c8a0], [0, -45, 0, 0xb83a2a], [0, 45, 0, 0x2a5aa8], [-45, -40, 0.4, 0x3a8a4a], [45, 40, -0.4, 0xd88a2a]].forEach(([x, z, r, c]) => car(x, z, r, c));
+  for (const [x, z] of [[-28, 112], [28, 112], [-28, -112], [28, -112]]) K.box(x, 0, z, 10, 1.4, 1.4, 0xc8a850);
+  K.spawn({ x0: -34, x1: 34, z0: 112, z1: 122 }, { x0: -34, x1: 34, z0: -122, z1: -112 });
+  MAP_GROUPS[name]._skyColor = 0x8ab0d0;
+}
+Object.assign(_BESPOKE, { temple: buildTempleLayout, arena: buildArenaLayout, biosphere: buildBiosphereLayout, dreamscape: buildDreamscapeLayout, pyongyang: buildPyongyangLayout,
+  traffic_cone_republic: buildTrafficConeLayout, flying_moai: buildMoaiLayout, big_arena: buildBigArenaLayout, super_arena: buildSuperArenaLayout });
 
 function initMapThemes() {
   for (const name of Object.keys(MAP_THEMES)) {
