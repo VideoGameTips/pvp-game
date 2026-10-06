@@ -10794,10 +10794,206 @@ function buildVolcanoScenery() {
   };
   group._skyColor = 0x5a1c0c;
 }
+// 🏞️ SIGNATURE SCENERY. A map should be recognisable from where you stand: beyond the walls and above the arena,
+// each of these gets its own landmarks, in the same low-poly flat style as the Volcano, with no colliders (it is
+// all out of reach) and a little motion where it suits. Ground out to the horizon, too, so the arena stands
+// somewhere instead of in a void.
+function _scnKit(name) {
+  const group = MAP_GROUPS[name], b = MAP_BOUNDS[name] || { halfX: 86 }, anims = [];
+  const K = {
+    group, half: b.halfX, rnd: _thRng(name + ':scenery'), anims,
+    flat: (c) => { const m = new THREE.MeshPhongMaterial({ color: c, flatShading: true, shininess: 6, specular: 0x202020 }); m.fog = false; return m; },
+    glow: (c, fog) => { const m = new THREE.MeshBasicMaterial({ color: c }); m.fog = !!fog; return m; },
+    veil: (c, a) => { const m = new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: a, side: THREE.DoubleSide, depthWrite: false }); m.fog = false; return m; },
+    mesh: (geo, mat, x, y, z, parent) => { const m = new THREE.Mesh(geo, mat); m.position.set(x || 0, y || 0, z || 0); (parent || group).add(m); return m; },
+    anim: (fn) => anims.push(fn),
+  };
+  K.ground = (c) => { const m = K.mesh(new THREE.PlaneGeometry(1600, 1600), K.flat(c), 0, -0.4, 0); m.rotation.x = -Math.PI / 2; return m; };
+  K.stars = (n, c, size = 2.2) => {
+    const pos = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) { const a = K.rnd() * 6.283, e = K.rnd() * 1.35, r = 380 + K.rnd() * 60; pos[i * 3] = Math.cos(a) * Math.cos(e) * r; pos[i * 3 + 1] = Math.sin(e) * r; pos[i * 3 + 2] = Math.sin(a) * Math.cos(e) * r; }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const pm = new THREE.PointsMaterial({ color: c, size, sizeAttenuation: false }); pm.fog = false;
+    const pts = new THREE.Points(g, pm); group.add(pts); return pts;
+  };
+  // Rocks (or islands, or heads) hanging over the arena, bobbing and turning.
+  K.floaters = (n, make, o = {}) => {
+    const list = [];
+    for (let i = 0; i < n; i++) {
+      const g = make(i); const R = K.half + (o.reach ?? 16);
+      const y = (o.y0 ?? 10) + K.rnd() * (o.y1 ?? 28);
+      g.position.set((K.rnd() * 2 - 1) * R, y, (K.rnd() * 2 - 1) * R);
+      g.userData = { y0: y, ph: K.rnd() * 6.28, sp: 0.3 + K.rnd() * 0.5, spin: (K.rnd() - 0.5) * (o.spin ?? 0.3), amp: 0.5 + K.rnd() };
+      group.add(g); list.push(g);
+    }
+    K.anim((dt, t) => { for (const g of list) { g.position.y = g.userData.y0 + Math.sin(t * g.userData.sp + g.userData.ph) * g.userData.amp; g.rotation.y += g.userData.spin * dt; } });
+    return list;
+  };
+  // A ring of things around the outside of the map.
+  K.around = (n, dist, fn) => { for (let i = 0; i < n; i++) { const a = (i + K.rnd() * 0.6) / n * Math.PI * 2, d = K.half + dist + K.rnd() * dist * 0.5; fn(Math.cos(a) * d, Math.sin(a) * d, a, i); } };
+  return K;
+}
+const _SCN = {
+  space(K) {
+    K.stars(520, 0xffffff);
+    const pl = K.mesh(new THREE.IcosahedronGeometry(58, 1), K.flat(0x4a6fa8), -140, 80, -190);
+    K.mesh(new THREE.IcosahedronGeometry(59, 0), K.flat(0x4c8a58), -140, 80, -190).scale.set(1, 0.6, 1);
+    const ring = K.mesh(new THREE.TorusGeometry(96, 3.4, 3, 30), K.flat(0xc8b08a), -140, 80, -190); ring.rotation.set(1.25, 0.3, 0);
+    K.mesh(new THREE.IcosahedronGeometry(14, 0), K.flat(0xb8b8c0), 150, 60, -120);
+    K.floaters(16, () => { const g = new THREE.Group(); const r = 1.5 + K.rnd() * 3; const m = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 0), K.flat(0x5a5f6a)); m.scale.set(1, 0.7, 0.9); g.add(m); return g; });
+    K.anim((dt) => { pl.rotation.y += dt * 0.02; });
+  },
+  orbital_station(K) {
+    K.stars(420, 0xdfeaff);
+    const pl = K.mesh(new THREE.IcosahedronGeometry(170, 1), K.flat(0x2a5f9a), 0, -210, -120);
+    K.mesh(new THREE.IcosahedronGeometry(171, 0), K.flat(0x3f8a5a), 0, -210, -120).scale.set(1, 0.55, 1);
+    const station = new THREE.Group(); station.position.set(0, 26, 0); K.group.add(station);
+    const rg = new THREE.Mesh(new THREE.TorusGeometry(K.half + 56, 5, 4, 36), K.flat(0x9aa4b0)); rg.rotation.x = Math.PI / 2; station.add(rg);
+    for (let i = 0; i < 24; i++) { const a = i / 24 * 6.283, d = K.half + 56; const w = new THREE.Mesh(new THREE.BoxGeometry(5, 3, 1.2), K.glow(0xbfe8ff)); w.position.set(Math.cos(a) * d, 4.2, Math.sin(a) * d); w.rotation.y = -a; station.add(w); }
+    for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2, sp = new THREE.Mesh(new THREE.BoxGeometry(6, 6, K.half + 52), K.flat(0x7a8696)); sp.position.set(Math.cos(a) * (K.half / 2 + 26), 0, Math.sin(a) * (K.half / 2 + 26)); sp.rotation.y = -a + Math.PI / 2; station.add(sp); }
+    K.anim((dt) => { station.rotation.y += dt * 0.05; pl.rotation.y += dt * 0.01; });
+  },
+  tundra(K) {
+    K.ground(0xdde7ee);
+    K.around(9, 55, (x, z, a, i) => { const R = 38 + K.rnd() * 36, H = 60 + K.rnd() * 70;
+      const g = new THREE.Group(); g.position.set(x, 0, z);
+      K.mesh(new THREE.CylinderGeometry(R * 0.1, R, H, 6), K.flat(0x9fb6c6), 0, H / 2, 0, g);
+      K.mesh(new THREE.CylinderGeometry(R * 0.04, R * 0.38, H * 0.34, 6), K.flat(0xf4f8fb), 0, H * 0.84, 0, g); K.group.add(g); });
+    const auroras = [[0x4affb0, -120, 90], [0xa070ff, 40, 110], [0x4affb0, 160, 80]].map(([c, x, y], i) => K.mesh(new THREE.PlaneGeometry(260, 60, 1, 1), K.veil(c, 0.22), x, y, -230 + i * 25));
+    const flakes = 700, pos = new Float32Array(flakes * 3);
+    for (let i = 0; i < flakes; i++) { pos[i * 3] = (K.rnd() - 0.5) * 190; pos[i * 3 + 1] = K.rnd() * 60; pos[i * 3 + 2] = (K.rnd() - 0.5) * 190; }
+    const fg = new THREE.BufferGeometry(); fg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const snow = new THREE.Points(fg, new THREE.PointsMaterial({ color: 0xffffff, size: 2.2, sizeAttenuation: false })); K.group.add(snow);
+    K.anim((dt, t) => { auroras.forEach((a, i) => { a.material.opacity = 0.16 + 0.1 * Math.sin(t * 0.5 + i * 2); a.scale.x = 1 + 0.08 * Math.sin(t * 0.3 + i); });
+      const p = fg.attributes.position; for (let i = 0; i < flakes; i++) { let y = p.getY(i) - dt * 3.2; if (y < 0) y += 60; p.setY(i, y); p.setX(i, p.getX(i) + Math.sin(t + i) * dt * 0.4); } p.needsUpdate = true; });
+  },
+  desert(K) {
+    K.ground(0xd9bb84);
+    K.around(3, 62, (x, z, a, i) => { const R = 62 + i * 8; const m = K.mesh(new THREE.ConeGeometry(R, R * 0.95, 4, 1), K.flat(i % 2 ? 0xc79a58 : 0xd2a965), x, R * 0.475, z); m.rotation.y = Math.PI / 4 + a; });
+    K.around(10, 44, (x, z) => { const r = 24 + K.rnd() * 30; const d = K.mesh(new THREE.IcosahedronGeometry(r, 0), K.flat(0xe0c28a), x, -r * 0.7, z); d.scale.set(1.6, 0.6, 1.2); d.rotation.y = K.rnd() * 3; });
+    const sun = K.mesh(new THREE.CylinderGeometry(26, 26, 2, 12), K.glow(0xfff0b0), 120, 150, -260); sun.rotation.x = Math.PI / 2;
+    K.mesh(new THREE.CylinderGeometry(40, 40, 1, 12), K.veil(0xffe08a, 0.25), 120, 150, -262).rotation.x = Math.PI / 2;
+  },
+  forest(K) {
+    K.ground(0x3a5a2c);
+    K.around(16, 38, (x, z) => { const h = 70 + K.rnd() * 60, r = 4 + K.rnd() * 3, g = new THREE.Group(); g.position.set(x, 0, z);
+      K.mesh(new THREE.CylinderGeometry(r * 0.8, r, h, 7), K.flat(0x4a3626), 0, h / 2, 0, g);
+      for (let k = 0; k < 3; k++) K.mesh(new THREE.IcosahedronGeometry(r * (6 - k), 0), K.flat(k % 2 ? 0x2f5a2a : 0x3a6a30), (K.rnd() - 0.5) * 6, h + k * r * 2.5, (K.rnd() - 0.5) * 6, g);
+      K.group.add(g); });
+    const flies = []; for (let i = 0; i < 70; i++) { const f = K.mesh(new THREE.BoxGeometry(0.35, 0.35, 0.35), K.glow(0xd8ff7a, true), (K.rnd() * 2 - 1) * K.half, 1.5 + K.rnd() * 8, (K.rnd() * 2 - 1) * K.half); f.userData = { ph: K.rnd() * 6, y0: f.position.y }; flies.push(f); }
+    K.anim((dt, t) => { for (const f of flies) { f.position.y = f.userData.y0 + Math.sin(t * 0.8 + f.userData.ph) * 1.2; f.position.x += Math.sin(t * 0.5 + f.userData.ph) * dt * 0.8; f.visible = Math.sin(t * 2 + f.userData.ph * 3) > -0.3; } });
+  },
+  cyber(K) {
+    K.ground(0x080a14);
+    K.around(26, 60, (x, z, a, i) => { const w = 14 + K.rnd() * 18, h = 40 + K.rnd() * 90, g = new THREE.Group(); g.position.set(x, 0, z);
+      K.mesh(new THREE.BoxGeometry(w, h, w), K.flat(0x141a2e), 0, h / 2, 0, g);
+      for (let k = 0; k < 6; k++) K.mesh(new THREE.BoxGeometry(w + 0.3, 0.8, w + 0.3), K.glow(k % 2 ? 0x00e5ff : 0xff2bd6), 0, 6 + k * (h - 10) / 6, 0, g);
+      K.mesh(new THREE.BoxGeometry(1, 14, 1), K.glow(0x00e5ff), 0, h + 7, 0, g); K.group.add(g); });
+    const rings = [0x00e5ff, 0xff2bd6, 0x00e5ff].map((c, i) => { const r = K.mesh(new THREE.TorusGeometry(40 + i * 18, 0.7, 4, 40), K.glow(c), 0, 60 + i * 12, 0); r.rotation.x = Math.PI / 2; return r; });
+    K.anim((dt, t) => { rings.forEach((r, i) => { r.rotation.z += dt * (0.2 + i * 0.1) * (i % 2 ? -1 : 1); r.rotation.x = Math.PI / 2 + 0.12 * Math.sin(t * 0.4 + i); }); });
+  },
+  carnival(K) {
+    K.ground(0xc6a97e);
+    const wheel = new THREE.Group(); wheel.position.set(-K.half - 62, 40, -30); K.group.add(wheel);
+    K.mesh(new THREE.TorusGeometry(36, 1.3, 4, 24), K.flat(0xf2f2f2), 0, 0, 0, wheel);
+    for (let i = 0; i < 12; i++) { const a = i / 12 * 6.283; const sp = K.mesh(new THREE.BoxGeometry(72, 0.5, 0.5), K.flat(0xd8483a), 0, 0, 0, wheel); sp.rotation.z = a;
+      const gon = K.mesh(new THREE.BoxGeometry(5, 4, 4), K.flat([0xd8483a, 0xf2c93a, 0x3a8fd0, 0xff4aa0][i % 4]), Math.cos(a) * 36, Math.sin(a) * 36, 0, wheel); gon.userData.keep = a; }
+    const stand = K.mesh(new THREE.BoxGeometry(3, 44, 3), K.flat(0xb8b8c0), -K.half - 62, 20, -34); stand.rotation.z = 0.2; K.mesh(new THREE.BoxGeometry(3, 44, 3), K.flat(0xb8b8c0), -K.half - 62, 20, -26).rotation.z = -0.2;
+    K.around(7, 40, (x, z, a, i) => { const R = 12 + K.rnd() * 6; const t = K.mesh(new THREE.ConeGeometry(R, R * 1.1, 8), K.flat(i % 2 ? 0xd8483a : 0x3a8fd0), x, R * 0.9, z); K.mesh(new THREE.CylinderGeometry(R, R, R * 0.7, 8), K.flat(0xf2ead0), x, R * 0.35, z); K.mesh(new THREE.BoxGeometry(0.4, 5, 0.4), K.glow(0xffd24a), x, R * 1.5 + 2, z); });
+    K.anim((dt) => { wheel.rotation.z += dt * 0.12; wheel.children.forEach(c => { if (c.userData.keep != null) c.rotation.z -= dt * 0.12; }); });
+  },
+  temple(K) {
+    K.ground(0xc9b88c);
+    const flames = [];
+    K.around(4, 58, (x, z, a, i) => { const g = new THREE.Group(); g.position.set(x, 0, z); const W = 70 - i * 4;
+      for (let k = 0; k < 6; k++) K.mesh(new THREE.BoxGeometry(W - k * 10, 9, W - k * 10), K.flat(k % 2 ? 0xb89a62 : 0xa88a54), 0, 4.5 + k * 9, 0, g);
+      K.mesh(new THREE.BoxGeometry(12, 10, 12), K.flat(0x8a7248), 0, 59, 0, g);
+      const fl = K.mesh(new THREE.ConeGeometry(3, 8, 5), K.glow(0xffa030), 0, 68, 0, g); flames.push(fl); K.group.add(g); });
+    K.around(12, 30, (x, z, a) => { const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = -a;
+      K.mesh(new THREE.BoxGeometry(5, 18, 5), K.flat(0x8a8576), 0, 9, 0, g); K.mesh(new THREE.BoxGeometry(6, 5, 6), K.flat(0x9a9586), 0, 20.5, 0, g); K.mesh(new THREE.BoxGeometry(2, 1.2, 1.6), K.flat(0x6a6556), 0, 20.5, 3.3, g); K.group.add(g); });
+    K.anim((dt, t) => flames.forEach((f, i) => { f.scale.set(1 + 0.12 * Math.sin(t * 7 + i), 1 + 0.25 * Math.sin(t * 9 + i * 2), 1 + 0.12 * Math.sin(t * 7 + i)); }));
+  },
+  flying_moai(K) {
+    K.ground(0x7a8a7a);
+    K.floaters(12, () => { const g = new THREE.Group(), s = 1.2 + K.rnd() * 0.9;
+      K.mesh(new THREE.BoxGeometry(4 * s, 9 * s, 4 * s), K.flat(0x7d756a), 0, 0, 0, g); K.mesh(new THREE.BoxGeometry(4.6 * s, 1.4 * s, 2 * s), K.flat(0x6a655a), 0, 1.6 * s, 2.2 * s, g);
+      K.mesh(new THREE.BoxGeometry(1.2 * s, 3.4 * s, 1.4 * s), K.flat(0x948e80), 0, -0.4 * s, 2.4 * s, g); K.mesh(new THREE.BoxGeometry(2.6 * s, 1 * s, 0.6 * s), K.flat(0x5a564c), 0, -2.6 * s, 2.0 * s, g);
+      K.mesh(new THREE.ConeGeometry(3.4 * s, 5 * s, 6), K.flat(0x5a564c), 0, -7 * s, 0, g).rotation.x = Math.PI; g.rotation.y = K.rnd() * 6; return g; }, { y0: 16, y1: 30, reach: 40, spin: 0.15 });
+    K.around(5, 50, (x, z) => { const r = 30 + K.rnd() * 20; K.mesh(new THREE.ConeGeometry(r, r * 1.6, 6), K.flat(0x6a7a68), x, r * 0.8, z); });
+  },
+  dreamscape(K) {
+    K.stars(240, 0xffffff, 2.6);
+    ['#ff7a9a', '#ffb86a', '#ffe66a', '#8aff9a', '#6ac8ff', '#9a8aff', '#d28aff'].forEach((c, i) => { const r = K.mesh(new THREE.TorusGeometry(150 - i * 5, 2.8, 3, 30, Math.PI), K.veil(parseInt(c.slice(1), 16), 0.7), 0, -2, -230); r.rotation.z = 0; });
+    K.floaters(14, () => { const g = new THREE.Group(), r = 5 + K.rnd() * 9;
+      K.mesh(new THREE.CylinderGeometry(r, r * 0.9, 1.6, 8), K.flat(0xb8e8a0), 0, 0, 0, g); K.mesh(new THREE.ConeGeometry(r * 0.9, r * 1.1, 8), K.flat(0xd8b8f0), 0, -r * 0.55 - 0.8, 0, g).rotation.x = Math.PI;
+      for (let k = 0; k < 3; k++) K.mesh(new THREE.ConeGeometry(0.9 + K.rnd(), 3 + K.rnd() * 2, 5), K.flat(0xff9ad0), (K.rnd() - 0.5) * r, 2.4, (K.rnd() - 0.5) * r, g); return g; }, { y0: 14, y1: 40, reach: 60, spin: 0.08 });
+    K.floaters(18, () => { const g = new THREE.Group(); for (let k = 0; k < 4; k++) K.mesh(new THREE.BoxGeometry(6 + K.rnd() * 6, 3, 4 + K.rnd() * 4), K.flat(0xfff6ff), (k - 1.5) * 4, (K.rnd() - 0.5), (K.rnd() - 0.5) * 3, g); return g; }, { y0: 24, y1: 40, reach: 120, spin: 0.02 });
+  },
+  chernobyl(K) {
+    K.ground(0x58604f);
+    const steam = [];
+    K.around(4, 52, (x, z, a, i) => { const g = new THREE.Group(); g.position.set(x, 0, z);
+      K.mesh(new THREE.CylinderGeometry(15, 24, 70, 10, 1, true), K.flat(0x8a8f86), 0, 35, 0, g).material.side = THREE.DoubleSide;
+      K.mesh(new THREE.CylinderGeometry(15.4, 15.4, 2, 10), K.flat(0x3a3f36), 0, 70, 0, g);
+      for (let k = 0; k < 3; k++) { const s = K.mesh(new THREE.BoxGeometry(14, 10, 14), K.veil(0xcfd6cc, 0.5), (K.rnd() - 0.5) * 4, 76 + k * 16, (K.rnd() - 0.5) * 4, g); s.userData = { y0: s.position.y, ph: k * 2 }; steam.push(s); } K.group.add(g); });
+    const rx = new THREE.Group(); rx.position.set(0, 0, -K.half - 70); K.group.add(rx);
+    K.mesh(new THREE.BoxGeometry(80, 30, 50), K.flat(0x6a6f64), 0, 15, 0, rx); K.mesh(new THREE.BoxGeometry(34, 14, 30), K.flat(0x4a4f46), 10, 36, 0, rx); const core = K.mesh(new THREE.BoxGeometry(18, 2, 18), K.glow(0x7aff3a), 10, 44, 0, rx);
+    K.anim((dt, t) => { for (const s of steam) { const k = ((t * 3 + s.userData.ph * 5) % 30) / 30; s.position.y = s.userData.y0 + k * 18; s.material.opacity = 0.5 * (1 - k); } core.scale.y = 1 + 0.4 * Math.sin(t * 3); });
+  },
+  refinery(K) {
+    K.ground(0x4a463f);
+    const flames = [];
+    K.around(6, 50, (x, z, a, i) => { const h = 55 + K.rnd() * 25, g = new THREE.Group(); g.position.set(x, 0, z);
+      K.mesh(new THREE.CylinderGeometry(1.4, 2.2, h, 6), K.flat(0x5a5f66), 0, h / 2, 0, g); K.mesh(new THREE.BoxGeometry(8, 0.8, 0.8), K.flat(0x5a5f66), 0, h * 0.6, 0, g);
+      const f = K.mesh(new THREE.ConeGeometry(3, 11, 5), K.glow(0xff7a1a), 0, h + 5.5, 0, g); flames.push(f); K.group.add(g); });
+    K.around(10, 36, (x, z) => { const r = 9 + K.rnd() * 7, h = 12 + K.rnd() * 10; K.mesh(new THREE.CylinderGeometry(r, r, h, 10), K.flat(0xb8b2a4), x, h / 2, z); K.mesh(new THREE.CylinderGeometry(r * 1.03, r * 1.03, 1.2, 10), K.flat(0xd8452a), x, h * 0.6, z); });
+    K.anim((dt, t) => flames.forEach((f, i) => { f.scale.set(1 + 0.15 * Math.sin(t * 8 + i), 1 + 0.35 * Math.sin(t * 11 + i * 3), 1 + 0.15 * Math.sin(t * 8 + i)); }));
+  },
+  airport(K) {
+    K.ground(0x6a6f74);
+    const tw = new THREE.Group(); tw.position.set(K.half + 60, 0, 40); K.group.add(tw);
+    K.mesh(new THREE.CylinderGeometry(4, 6, 60, 8), K.flat(0xc4c9cf), 0, 30, 0, tw); K.mesh(new THREE.CylinderGeometry(11, 7, 7, 8), K.flat(0x2a6fc9), 0, 63, 0, tw); K.mesh(new THREE.CylinderGeometry(12, 12, 6, 8), K.glow(0x9ad8ff), 0, 69, 0, tw); K.mesh(new THREE.CylinderGeometry(13, 13, 1.4, 8), K.flat(0xf2f2f2), 0, 72.7, 0, tw);
+    const jet = () => { const g = new THREE.Group(); K.mesh(new THREE.CylinderGeometry(3, 3, 44, 8), K.flat(0xf2f4f6), 0, 0, 0, g).rotation.x = Math.PI / 2; K.mesh(new THREE.ConeGeometry(3, 8, 8), K.flat(0xf2f4f6), 0, 0, -26, g).rotation.x = -Math.PI / 2;
+      K.mesh(new THREE.BoxGeometry(60, 0.8, 9), K.flat(0xd8dce0), 0, -0.6, 4, g); K.mesh(new THREE.BoxGeometry(18, 0.6, 5), K.flat(0xd8dce0), 0, 0.4, 21, g); K.mesh(new THREE.BoxGeometry(0.8, 9, 6), K.flat(0x2a6fc9), 0, 4.5, 20, g); return g; };
+    for (let i = 0; i < 3; i++) { const j = jet(); j.position.set(-K.half - 45 - i * 10, 3.2, -60 + i * 50); j.rotation.y = 0.5 + i * 0.3; K.group.add(j); }
+    const fly = jet(); fly.scale.setScalar(1.4); fly.position.set(-400, 90, -40); K.group.add(fly);
+    for (let i = 0; i < 28; i++) K.mesh(new THREE.BoxGeometry(0.8, 0.6, 0.8), K.glow(i % 4 ? 0xffe08a : 0xff5a3a), K.half + 14, 0.5, -K.half + i * 6);
+    K.anim((dt) => { fly.position.x += dt * 38; if (fly.position.x > 400) fly.position.x = -400; fly.position.y = 90 + Math.sin(fly.position.x * 0.01) * 4; });
+  },
+  doomsday(K) {
+    K.ground(0x3e342b);
+    K.around(22, 56, (x, z, a, i) => { const w = 12 + K.rnd() * 14, h = 30 + K.rnd() * 70, g = new THREE.Group(); g.position.set(x, 0, z);
+      K.mesh(new THREE.BoxGeometry(w, h, w), K.flat(0x2a2420), 0, h / 2, 0, g);
+      K.mesh(new THREE.BoxGeometry(w * 0.6, h * 0.25, w * 0.6), K.flat(0x1a1612), w * 0.2, h + h * 0.1, 0, g).rotation.z = 0.4;
+      for (let k = 0; k < 4; k++) K.mesh(new THREE.BoxGeometry(2, 2.4, w + 0.2), K.glow(0xff7a2a), (K.rnd() - 0.5) * (w - 3), 5 + K.rnd() * (h - 12), 0, g); K.group.add(g); });
+    const sunD = K.mesh(new THREE.CylinderGeometry(44, 44, 2, 14), K.glow(0xd8420a), -60, 70, -300); sunD.rotation.x = Math.PI / 2;
+    const met = []; for (let i = 0; i < 9; i++) { const g = new THREE.Group(); K.mesh(new THREE.IcosahedronGeometry(3 + K.rnd() * 3, 0), K.glow(0xffa030), 0, 0, 0, g);
+      for (let k = 1; k < 6; k++) K.mesh(new THREE.BoxGeometry(2.2 - k * 0.3, 2.2 - k * 0.3, 7), K.glow(0xff5a12), -k * 3, k * 2.2, 0, g).rotation.y = 0.5; g.userData = { ph: K.rnd() * 10 }; K.group.add(g); met.push(g); }
+    K.anim((dt, t) => { met.forEach((g, i) => { const k = ((t * 0.12 + g.userData.ph) % 1); g.position.set(-260 + k * 520, 190 - k * 170, -120 - i * 20 + Math.sin(i) * 60); }); });
+  },
+  titanic(K) {
+    K.ground(0x24384a);
+    const ship = new THREE.Group(); ship.position.set(0, 0, -K.half - 80); K.group.add(ship);
+    K.mesh(new THREE.BoxGeometry(150, 22, 26), K.flat(0x1f2630), 0, 11, 0, ship); K.mesh(new THREE.BoxGeometry(150.4, 3, 26.4), K.flat(0xa02a2a), 0, 3, 0, ship);
+    const bow = K.mesh(new THREE.ConeGeometry(13, 26, 4), K.flat(0x1f2630), 78, 11, 0, ship); bow.rotation.z = -Math.PI / 2; bow.rotation.y = Math.PI / 4;
+    K.mesh(new THREE.BoxGeometry(110, 10, 22), K.flat(0xe8e2d0), -4, 27, 0, ship); K.mesh(new THREE.BoxGeometry(60, 9, 18), K.flat(0xd8d0b8), -4, 36, 0, ship);
+    for (let i = 0; i < 4; i++) { K.mesh(new THREE.CylinderGeometry(4.2, 4.6, 22, 10), K.flat(0xd8a050), -36 + i * 24, 51, 0, ship); K.mesh(new THREE.CylinderGeometry(4.3, 4.3, 5, 10), K.flat(0x1a1a1a), -36 + i * 24, 63, 0, ship); }
+    for (let i = 0; i < 30; i++) K.mesh(new THREE.BoxGeometry(1.4, 1.4, 0.3), K.glow(0xffd98a), -58 + i * 4, 20, 13.2, ship);
+    K.around(8, 70, (x, z) => { const r = 14 + K.rnd() * 20; K.mesh(new THREE.ConeGeometry(r, r * 1.2, 5), K.flat(0xdff0f8), x, r * 0.5, z); });
+    K.anim((dt, t) => { ship.position.y = Math.sin(t * 0.4) * 0.8; ship.rotation.z = Math.sin(t * 0.3) * 0.012; });
+  },
+};
+function buildMapScenery(name) {
+  const fn = _SCN[name]; if (!fn || !MAP_GROUPS[name]) return;
+  const K = _scnKit(name); fn(K);
+  if (K.anims.length && !MAP_MECH[name]) {
+    MAP_MECH[name] = { reset() {}, update(dt) { const t = performance.now() / 1000; for (const f of K.anims) f(dt, t); } };
+  }
+}
 function initMapThemes() {
   for (const name of Object.keys(MAP_THEMES)) {
     if (!MAP_GROUPS[name]) continue;
-    try { themeHollowBuildings(name); themePlaceBuildings(name); themeRecolorMap(name); themePlaceProps(name); if (name === 'volcano') buildVolcanoScenery(); } catch (e) { console.warn('[theme]', name, e); }
+    try { themeHollowBuildings(name); themePlaceBuildings(name); themeRecolorMap(name); themePlaceProps(name); if (name === 'volcano') buildVolcanoScenery(); buildMapScenery(name); } catch (e) { console.warn('[theme]', name, e); }
   }
 }
 initMapThemes();
