@@ -10591,10 +10591,133 @@ function dressThemeMap(name) {
   if (!th.keep) _thFloorDecals(S, G, name, th);
   _thMesh(group, S, false); _thMesh(group, G, true);
 }
+// 🏚️ Hollow buildings. The solid blocks of the building maps were just that -- solid. Each big, ground-standing,
+// axis-aligned block becomes a room: four 0.8 m walls, a door on the side that faces the middle of the map and
+// another on the far side (so it is a way through, not a dead end), a window to shoot through on each of the
+// other two, a roof, and a counter and a pair of crates inside. Done before the colours and the surface pass,
+// so the new walls are themed and weathered like everything else.
+const _TH_HOLLOW_SKIP = new Set(['blank', 'range', 'battlefield', 'trenches', 'forest', 'overgrowth', 'biosphere', 'labyrinth', 'vietnam', 'volcano']);
+// A box placed in the building's own frame (x along its width, z along its depth) and turned with it.
+function _thLocalBox(name, bx, bz, r, lx, y, lz, w, h, d, color, extraRot = 0) {
+  const cs = Math.cos(r), sn = Math.sin(r);
+  addMapBox(name, bx + lx * cs + lz * sn, y, bz - lx * sn + lz * cs, w, h, d, color, r + extraRot);
+}
+function _thWallRun(name, bx, bz, r, ox, oz, along, L, t, h, color, openings) {
+  const piece = (a, b, y0, y1) => {
+    if (b - a < 0.05 || y1 - y0 < 0.05) return;
+    const mid = (a + b) / 2, len = b - a, hh = y1 - y0;
+    if (along === 'x') _thLocalBox(name, bx, bz, r, ox + mid, y0 + hh / 2, oz, len, hh, t, color);
+    else _thLocalBox(name, bx, bz, r, ox, y0 + hh / 2, oz + mid, t, hh, len, color);
+  };
+  let cur = -L / 2;
+  for (const o of openings.slice().sort((p, q) => p.u - q.u)) {
+    const a = o.u - o.w / 2, b = o.u + o.w / 2;
+    piece(cur, a, 0, h);
+    piece(a, b, 0, o.sill);             // under a window
+    piece(a, b, o.top, h);              // over a door or window
+    cur = b;
+  }
+  piece(cur, L / 2, 0, h);
+}
+// One room: four walls, a door on the side facing the middle and one on the far side, a window on each of the
+// others, a roof, a counter and two crates.
+function _thRoom(name, cx, cz, r, W, D, h, color) {
+  const T = 0.8;
+  const vx = -cx, vz = -cz;                                   // toward the middle of the map, in the building's own frame
+  const locX = vx * Math.cos(r) - vz * Math.sin(r), locZ = vx * Math.sin(r) + vz * Math.cos(r);
+  const faceX = Math.abs(locX) > Math.abs(locZ);
+  const door = { u: 0, w: 3.4, sill: 0, top: 3.8 };
+  const win = (u) => ({ u, w: 2.4, sill: 1.3, top: 2.7 });
+  const nsOpen = faceX ? [win(-W / 4), win(W / 4)] : [door];
+  const ewOpen = faceX ? [door] : [win(-(D - 2 * T) / 4), win((D - 2 * T) / 4)];
+  for (const sg of [-1, 1]) _thWallRun(name, cx, cz, r, 0, sg * (D / 2 - T / 2), 'x', W, T, h, color, nsOpen);
+  for (const sg of [-1, 1]) _thWallRun(name, cx, cz, r, sg * (W / 2 - T / 2), 0, 'z', D - 2 * T, T, h, color, ewOpen);
+  _thLocalBox(name, cx, cz, r, 0, h - 0.2, 0, W, 0.4, D, _thShade(color, 0.8));                                   // roof
+  if (faceX) _thLocalBox(name, cx, cz, r, 0, 0.55, 0, 1.4, 1.1, D * 0.4, _thShade(color, 0.6));                   // a counter
+  else _thLocalBox(name, cx, cz, r, 0, 0.55, D * 0.12, W * 0.4, 1.1, 1.4, _thShade(color, 0.6));
+  _thLocalBox(name, cx, cz, r, W * 0.28, 0.7, -D * 0.25, 1.4, 1.4, 1.4, 0x8a6a3a, 0.3);                           // crates
+  _thLocalBox(name, cx, cz, r, -W * 0.3, 0.7, D * 0.28, 1.4, 1.4, 1.4, 0x7a5a30, -0.2);
+}
+function themeHollowBuildings(name) {
+  const th = MAP_THEMES[name], group = MAP_GROUPS[name];
+  if (!th || th.keep || !group || _TH_HOLLOW_SKIP.has(name)) return;
+  const half = (MAP_BOUNDS[name] ? MAP_BOUNDS[name].halfX : 80) - 6;
+  const cols = MAP_COLLIDERS[name];
+  for (const m of group.children.slice()) {
+    if (!m.isMesh || !m.geometry || m.geometry.type !== 'BoxGeometry' || !m.geometry.parameters) continue;
+    if (_thClass(m) !== 'wall') continue;
+    const p = m.geometry.parameters, r = m.rotation.y || 0;
+    const W = p.width, D = p.depth, h = p.height;
+    if (m.rotation.x || m.rotation.z || W < 9 || D < 9 || Math.abs(m.position.y - h / 2) > 0.05) continue;
+    const cx = m.position.x, cz = m.position.z;
+    if (Math.abs(cx) > half - 24 && Math.abs(cz) < 22) continue;      // spawn pockets
+    // Take out the block's own colliders (a turned box has several).
+    const mine = r ? turnedBoxColliders(cx, m.position.y, cz, W, h, D, r) : [new THREE.Box3().setFromObject(m)];
+    const same = (a, b) => Math.abs(a.min.x - b.min.x) < 0.05 && Math.abs(a.max.x - b.max.x) < 0.05 && Math.abs(a.min.z - b.min.z) < 0.05 && Math.abs(a.max.z - b.max.z) < 0.05 && Math.abs(a.max.y - b.max.y) < 0.1;
+    const idx = mine.map(b => cols.findIndex(c => same(c, b)));
+    if (idx.some(i => i < 0)) continue;
+    idx.sort((a, b) => b - a).forEach(i => cols.splice(i, 1));
+    group.remove(m);
+    _thRoom(name, cx, cz, r, W, D, h, m.material.color.getHex());
+  }
+}
+// And the building maps get buildings: the three-lane and courtyard layouts have none to hollow.
+const _TH_BUILDINGS = { urban: 9, desert: 7, airport: 5, warehouse: 4, pyongyang: 7, supermarket: 4, titanic: 4, temple: 5, carrier: 3, pearl_harbor: 5,
+  opera: 4, train: 4, refinery: 4, chernobyl: 5, skydock: 4, lockdown: 4, studio: 4, arena: 4, flying_moai: 3, carnival: 5, holiday: 5, traffic_cone_republic: 5,
+  cyber: 5, space: 4, orbital_station: 4, tundra: 4, glassworks: 4, sewer: 3, foundry: 4, doomsday: 5, dreamscape: 5, gravity_lab: 4, big_arena: 9, super_arena: 14, br_arena: 9 };
+const _thSameBox = (a, b) => Math.abs(a.min.x - b.min.x) < 0.05 && Math.abs(a.max.x - b.max.x) < 0.05 && Math.abs(a.min.z - b.min.z) < 0.05 && Math.abs(a.max.z - b.max.z) < 0.05 && Math.abs(a.max.y - b.max.y) < 0.1;
+function _thMeshColliders(m) {
+  const p = m.geometry.parameters, r = m.rotation.y || 0;
+  return r ? turnedBoxColliders(m.position.x, m.position.y, m.position.z, p.width, p.height, p.depth, r) : [new THREE.Box3().setFromObject(m)];
+}
+// Room for a building: the clutter standing there is cleared away -- but a ramp, a layout wall or the perimeter
+// in the way means no building here.
+function _thClearFor(name, rect) {
+  const group = MAP_GROUPS[name], cols = MAP_COLLIDERS[name], out = [];
+  for (const m of group.children) {
+    if (!m.isMesh || !m.geometry || m.geometry.type !== 'BoxGeometry' || !m.geometry.parameters) continue;
+    const p = m.geometry.parameters, rot = m.rotation.y || 0, cr = Math.abs(Math.cos(rot)), sr = Math.abs(Math.sin(rot));
+    const ex = cr * p.width / 2 + sr * p.depth / 2, ez = sr * p.width / 2 + cr * p.depth / 2;   // its footprint, turned
+    if (m.position.x + ex < rect.minX || m.position.x - ex > rect.maxX || m.position.z + ez < rect.minZ || m.position.z - ez > rect.maxZ) continue;
+    const cls = _thClass(m);
+    if (!cls) continue;                                              // a rung, a decal: nothing to collide with
+    const small = Math.max(p.width, p.depth) <= 7.5 && p.height <= 7.5 && m.visible !== false && (cls === 'wall' || cls === 'cover');
+    if (!small) return null;
+    out.push(m);
+  }
+  const gone = [];
+  for (const m of out) for (const b of _thMeshColliders(m)) gone.push(b);
+  for (const b of cols) {
+    if (!(b.max.y > 0.2 && b.max.x > rect.minX && b.min.x < rect.maxX && b.max.z > rect.minZ && b.min.z < rect.maxZ)) continue;
+    if (!gone.some(g => _thSameBox(g, b))) return null;
+  }
+  return { meshes: out, boxes: gone };
+}
+function themePlaceBuildings(name) {
+  const th = MAP_THEMES[name], group = MAP_GROUPS[name];
+  if (!th || th.keep || !group || _TH_HOLLOW_SKIP.has(name)) return;
+  const want = _TH_BUILDINGS[name] ?? 3, cols = MAP_COLLIDERS[name];
+  const rnd = _thRng(name + ':bld'), b = MAP_BOUNDS[name] || { halfX: 80, halfZ: 80 };
+  const half = b.halfX - 6, rx = half - 36, rz = half - 12;
+  if (rx < 10) return;
+  let placed = 0;
+  for (let i = 0; i < want * 10 && placed < want; i++) {
+    const W = 10 + Math.floor(rnd() * 7), D = 9 + Math.floor(rnd() * 5), h = 5.8 + Math.floor(rnd() * 3);
+    const x = (rnd() * 2 - 1) * rx, z = (rnd() * 2 - 1) * rz, r = rnd() < 0.5 ? 0 : Math.PI / 2;
+    if (Math.hypot(x, z) < 16) continue;                               // leave the middle to the layout
+    const reach = Math.hypot(W, D) / 2 + 2.5;
+    const clear = _thClearFor(name, { minX: x - reach, maxX: x + reach, minZ: z - reach, maxZ: z + reach });
+    if (!clear) continue;
+    for (const g of clear.boxes) { const k = cols.findIndex(c => _thSameBox(c, g)); if (k >= 0) cols.splice(k, 1); }
+    for (const m of clear.meshes) group.remove(m);
+    _thRoom(name, x, z, r, W, D, h, th.w);
+    placed++;
+  }
+}
 function initMapThemes() {
   for (const name of Object.keys(MAP_THEMES)) {
     if (!MAP_GROUPS[name]) continue;
-    try { themeRecolorMap(name); themePlaceProps(name); } catch (e) { console.warn('[theme]', name, e); }
+    try { themeHollowBuildings(name); themePlaceBuildings(name); themeRecolorMap(name); themePlaceProps(name); } catch (e) { console.warn('[theme]', name, e); }
   }
 }
 initMapThemes();
@@ -25631,7 +25754,7 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
 // Drives leg + arm swing from how far the mesh actually moved, plus a crouch/
 // slide pose. Works uniformly for bots and remote players. `crouchTarget` is
 // 0..1 (1 = crouched); `slideTarget` adds the intense low sliding silhouette.
-function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0) {
+function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarget = 0) {
   const rig = mesh && mesh._rig;
   if (!rig) return;
   // Horizontal distance moved since last frame → speed estimate
@@ -25645,6 +25768,7 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0) {
   const speed = dt > 0 ? dist / dt : 0;
   rig.speedSmooth += (speed - rig.speedSmooth) * Math.min(1, dt * 12);
   const moving = rig.speedSmooth > 0.6;
+  const run = Math.max(0, Math.min(1, (rig.speedSmooth - 3.5) / 7.5));
 
   // Advance phase by distance travelled so stride length stays natural.
   // ×2.75 (half of the old ×5.5) so the LEG GRAPHIC swings 2× slower than the
@@ -25667,13 +25791,18 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0) {
   // low walk) — blend a small movement-crouch in on top of any explicit crouch.
   const baseCrouch = (crouchTarget !== null && crouchTarget !== undefined) ? crouchTarget : 0;
   const tacticalAdvance = !!(rig.tacticalAdvance && rig.holdsGun);
-  const moveCrouch = tacticalAdvance ? (moving ? 0.45 : 0.28) : (moving ? 0.2 : 0);
+  const moveCrouch = tacticalAdvance
+    ? (moving ? 0.42 + run * 0.12 : 0.24)
+    : (moving ? 0.26 + run * 0.14 : 0.10);
   const effCrouch  = Math.max(baseCrouch, moveCrouch);
   rig.crouch += (effCrouch - rig.crouch) * Math.min(1, dt * 8);
   const crouch = rig.crouch;
   if (rig.slide === undefined) rig.slide = 0;
   rig.slide += (slideTarget - rig.slide) * Math.min(1, dt * 14);
   const slide = rig.slide;
+  if (rig.jump === undefined) rig.jump = 0;
+  rig.jump += (Math.max(0, Math.min(1, jumpTarget || 0)) - rig.jump) * Math.min(1, dt * 12);
+  const jump = rig.jump;
 
   // Phase, offset per character. `gait()` is a sine with a touch of second
   // harmonic: a real leg's swing is quicker than its stance, and that slight
@@ -25736,13 +25865,14 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0) {
   // Slide / crouch pose: tuck legs forward, lean torso back, arms back
   if (crouch > 0.01) {
     const c = crouch;
-    const advancePose = tacticalAdvance && baseCrouch < 0.5 && slide < 0.35;
+    const advancePose = baseCrouch < 0.5 && slide < 0.35;
     const slideLean = Math.max(0, slide);
+    const advanceLean = 0.22 + run * 0.16 + (tacticalAdvance ? 0.04 : 0);
     rig.legL.rotation.x = THREE.MathUtils.lerp(rig.legL.rotation.x, slideLean ? 1.55 : (advancePose ? 0.55 : 1.1), c);
     rig.legR.rotation.x = THREE.MathUtils.lerp(rig.legR.rotation.x, slideLean ? -0.18 : (advancePose ? 0.25 : 0.4), c);
     rig.armL.rotation.x = THREE.MathUtils.lerp(rig.armL.rotation.x, slideLean ? -1.22 : (advancePose ? -1.05 : -0.8), c);
     rig.armR.rotation.x = THREE.MathUtils.lerp(rig.armR.rotation.x, slideLean ? -1.55 : (advancePose ? -1.38 : -0.8), c);
-    rig.torso.rotation.x = THREE.MathUtils.lerp(0, slideLean ? -0.82 : (advancePose ? 0.24 : -0.45), c);
+    rig.torso.rotation.x = THREE.MathUtils.lerp(0, slideLean ? -0.82 : (advancePose ? advanceLean : -0.45), c);
     rig.head.rotation.x  = THREE.MathUtils.lerp(0, slideLean ? 0.72 : (advancePose ? -0.12 : 0.45), c);
     // Knees have to fold hard here or a tucked slide looks like a plank.
     if (rig.kneeL) rig.kneeL.rotation.x = THREE.MathUtils.lerp(rig.kneeL.rotation.x, slideLean ? -1.65 : (advancePose ? -0.85 : -1.35), c);
@@ -25756,6 +25886,24 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0) {
     rig.torso.rotation.z = THREE.MathUtils.lerp(rig.torso.rotation.z, slideLean ? 0.22 : 0, c);
   }
 
+  // Air pose: knees tuck and the shoulders pitch forward so jumps read as a
+  // deliberate athletic hop instead of the standing pose floating upward.
+  if (jump > 0.01) {
+    const j = jump * (1 - slide * 0.35);
+    rig.legL.rotation.x = THREE.MathUtils.lerp(rig.legL.rotation.x, 0.78, j);
+    rig.legR.rotation.x = THREE.MathUtils.lerp(rig.legR.rotation.x, 0.58, j);
+    if (rig.kneeL) rig.kneeL.rotation.x = THREE.MathUtils.lerp(rig.kneeL.rotation.x, -1.05, j);
+    if (rig.kneeR) rig.kneeR.rotation.x = THREE.MathUtils.lerp(rig.kneeR.rotation.x, -0.95, j);
+    rig.armL.rotation.x = THREE.MathUtils.lerp(rig.armL.rotation.x, rig.holdsGun ? -1.15 : -0.52, j);
+    rig.armR.rotation.x = THREE.MathUtils.lerp(rig.armR.rotation.x, rig.holdsGun ? -1.42 : -0.72, j);
+    if (rig.elbowL) rig.elbowL.rotation.x = THREE.MathUtils.lerp(rig.elbowL.rotation.x, 0.82, j);
+    if (rig.elbowR) rig.elbowR.rotation.x = THREE.MathUtils.lerp(rig.elbowR.rotation.x, 0.92, j);
+    rig.torso.rotation.x = THREE.MathUtils.lerp(rig.torso.rotation.x, 0.34, j);
+    rig.head.rotation.x = THREE.MathUtils.lerp(rig.head.rotation.x, -0.18, j);
+    if (rig.footL) rig.footL.rotation.x = THREE.MathUtils.lerp(rig.footL.rotation.x, 0.26, j);
+    if (rig.footR) rig.footR.rotation.x = THREE.MathUtils.lerp(rig.footR.rotation.x, 0.22, j);
+  }
+
   // ── Body bob ──────────────────────────────────────────────────────────────
   // A walk rises and falls twice per stride; without it the character glides
   // like it's on rails. This drives EVERY direct child off a captured base Y
@@ -25766,7 +25914,8 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0) {
   const bobAmt = -Math.cos(2 * p) * 0.022 * blend * (rig.gaitBob ?? 1)
                  - 0.012 * blend * (1 - crouch)   // walking rides slightly lower
                  - 0.12 * crouch                  // and a crouch settles down a bit
-                 - 0.12 * slide;                  // true slides get visibly lower
+                 - 0.12 * slide                   // true slides get visibly lower
+                 - 0.035 * jump;                  // airborne bodies tuck upward around the hips
                  // 0.12 is deliberately modest: the legs bottom out only 0.225
                  // above the group origin, and the mesh sits on the ground, so a
                  // deeper drop puts the boots through the floor mid-slide.
@@ -38543,7 +38692,7 @@ function resetDeathPose(mesh) {
   const rig = mesh._rig;
   if (rig) {
     rig.prevX = null; rig.prevZ = null;
-    rig.speedSmooth = 0; rig.blend = 0; rig.crouch = 0; rig.slide = 0;
+    rig.speedSmooth = 0; rig.blend = 0; rig.crouch = 0; rig.slide = 0; rig.jump = 0;
     for (const part of [rig.legL, rig.legR, rig.kneeL, rig.kneeR, rig.footL, rig.footR,
                         rig.armL, rig.armR, rig.elbowL, rig.elbowR, rig.head, rig.torso]) {
       if (!part) continue;
@@ -42447,6 +42596,14 @@ socket.on('posUpdate', positions => {
     if (!mesh) continue;
     mesh.position.x += (pos.x - mesh.position.x) * 0.35;
     mesh.position.z += (pos.z - mesh.position.z) * 0.35;
+    if (typeof pos.y === 'number') {
+      const groundY = (typeof botGroundYAt === 'function') ? botGroundYAt(pos.x, pos.z, mesh.position.y || 0, 0.9, 2.4) : 0;
+      const eyeAboveGround = pos.y - groundY;
+      const poseEye = Math.max(0.70, Math.min(1.65, eyeAboveGround));
+      const airborne = Math.max(0, eyeAboveGround - poseEye);
+      const targetY = groundY + airborne;
+      mesh.position.y += (targetY - mesh.position.y) * 0.35;
+    }
     mesh.rotation.y  = pos.rotY + Math.PI;
   }
 });
@@ -46040,6 +46197,9 @@ function findBotCover(bot, target) {
   for (const box of wallColliders) {
     const bw = box.max.x - box.min.x, bd = box.max.z - box.min.z;
     if (bw < 1.5 && bd < 1.5) continue; // skip tiny colliders
+    // The outer walls are 100+ m boxes: their "far side" is the other side of the world. A bot sent to take
+    // cover behind one ran out through the wall -- in the Towers it came out of the match start outside them.
+    if (bw > 40 || bd > 40) continue;
     const cx = (box.min.x + box.max.x) / 2;
     const cz = (box.min.z + box.max.z) / 2;
     const distToBot = Math.hypot(cx - bot.x, cz - bot.z);
@@ -46051,6 +46211,7 @@ function findBotCover(bot, target) {
       x: cx - (toTX / toTLen) * (bw * 0.5 + 1.0),
       z: cz - (toTZ / toTLen) * (bd * 0.5 + 1.0),
     };
+    { const bb = getMapBoundsRect(); pt.x = Math.max(-bb.halfX + 2, Math.min(bb.halfX - 2, pt.x)); pt.z = Math.max(-bb.halfZ + 2, Math.min(bb.halfZ - 2, pt.z)); }   // never outside the arena
     // Prefer close walls that are actually between bot and target
     const score = distToBot * 0.7 + Math.hypot(pt.x - bot.x, pt.z - bot.z) * 0.3;
     if (score < bestScore) { bestScore = score; bestPt = pt; }
@@ -46115,6 +46276,10 @@ let _botShotsOut = [];   // see botShots
 function updateBotAI(dt) {
   resolveBotHitsInFlight();   // land any bot bullets whose tracer has arrived
   if (!gameBots.length) return;
+  if (M4_TOWER_MAP_NAMES.has(activeMapName)) {   // the Towers are closed rooms: a bot is never outside the wall, whatever the frame rate
+    const tb = getMapBoundsRect();
+    for (const b of gameBots) { b.x = Math.max(-tb.halfX, Math.min(tb.halfX, b.x)); b.z = Math.max(-tb.halfZ, Math.min(tb.halfZ, b.z)); }
+  }
   if (match?.type === 'range') return; // range targets are handled by updateRange()
   // ⚡ Admin freeze: stop all bot AI entirely
   if (adminCheats.freezeBots && currentUser?.isAdmin) return;
@@ -47262,7 +47427,7 @@ function updateBotAI(dt) {
   botMoveTimer += dt;
   if (botMoveTimer >= BOT_MOVE_INTERVAL) {
     botMoveTimer = 0;
-    const moves = gameBots.filter(b => !b.dead).map(b => ({ id: b.id, x: b.x, y: 1, z: b.z, rotY: b.rotY }));
+    const moves = gameBots.filter(b => !b.dead).map(b => ({ id: b.id, x: b.x, y: (b.y || 0) + 1.65, z: b.z, rotY: b.rotY }));
     if (moves.length && !inLobby) socket.emit('botMove', moves);   // the lobby cast is local-only (#46)
   }
   // This frame's bot shots, for the other real players' hitbox tests (#48)
@@ -47281,19 +47446,29 @@ function animateCharacters(dt) {
     if (!mesh || !mesh.visible || !mesh._rig) continue;
     let crouchTarget = 0;
     let slideTarget = 0;
+    let jumpTarget = 0;
     const b = gameBots.find(bb => bb.id === id);
     if (!b) {
       const p = players[id];
       if (p && typeof p.y === 'number') {
-        // 1.65 standing → 0.70 sliding. Map to 0..1 crouch amount.
-        crouchTarget = Math.max(0, Math.min(1, (1.65 - p.y) / (1.65 - 0.70)));
+        const groundY = (typeof botGroundYAt === 'function') ? botGroundYAt(p.x ?? mesh.position.x, p.z ?? mesh.position.z, mesh.position.y || 0, 0.9, 2.4) : 0;
+        const eyeAboveGround = p.y - groundY;
+        // 1.65 standing → 0.70 sliding. Use eye height above the local floor, not
+        // raw world Y, so second floors do not make everyone look upright.
+        crouchTarget = Math.max(0, Math.min(1, (1.65 - eyeAboveGround) / (1.65 - 0.70)));
         slideTarget = crouchTarget > 0.78 ? 1 : 0;
+        jumpTarget = eyeAboveGround > 1.82 ? Math.max(0, Math.min(1, (eyeAboveGround - 1.82) / 0.55)) : 0;
       }
-    } else if (b._slideUntil && Date.now() < b._slideUntil) {
-      crouchTarget = 1; // 🛹 bot is sliding → low profile
-      slideTarget = 1;
+    } else {
+      const now = Date.now();
+      const groundY = (typeof botGroundYAt === 'function') ? botGroundYAt(b.x || 0, b.z || 0, b.y || 0, 0.9, 2.4) : 0;
+      if (b._slideUntil && now < b._slideUntil) {
+        crouchTarget = 1; // 🛹 bot is sliding → low profile
+        slideTarget = 1;
+      }
+      jumpTarget = (Math.abs((b.y || 0) - groundY) > 0.12 || Math.abs(b.yVel || 0) > 0.1) ? 1 : 0;
     }
-    animateCharacterMesh(mesh, dt, crouchTarget, slideTarget);
+    animateCharacterMesh(mesh, dt, crouchTarget, slideTarget, jumpTarget);
   }
 }
 
