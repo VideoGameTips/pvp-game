@@ -9943,7 +9943,7 @@ const GRID_MAP_ARCHETYPES = [
 const GRID_CONCEPT_MAPS_ACTIVE = true;
 // Hand-built maps with their own mechanics: the grid-concept pass below must not wipe them.
 const MECHANIC_MAP_NAMES = new Set(['storm_pier', 'pinball_arcade', 'laser_vault', 'cargo_belts', 'gale_peaks', 'magma_rise',
-  'titanic', 'warehouse', 'urban', 'airport', 'train', 'supermarket', 'battlefield', 'forest', 'vietnam', 'desert', 'tundra', 'trenches', 'overgrowth', 'holiday', 'labyrinth']);   // + the hand-built layouts (see _BESPOKE)
+  'titanic', 'warehouse', 'urban', 'airport', 'train', 'supermarket', 'battlefield', 'forest', 'vietnam', 'desert', 'tundra', 'trenches', 'overgrowth', 'holiday', 'labyrinth', 'cyber', 'space', 'orbital_station', 'gravity_lab', 'glassworks', 'studio', 'lockdown', 'opera', 'sewer']);   // + the hand-built layouts (see _BESPOKE)
 function clearMapForGridConcept(name) {
   if (isArchivedLobbyMap(name)) return;
   const group = MAP_GROUPS[name];
@@ -10284,31 +10284,31 @@ const MAP_THEMES = {
   forest: Object.assign(_T(0x4d6b35, 0x3f5a2b, 0x6b5a45, 0x56693a, 0x6b6b5f, 0x8a7352, 0x9bb86a, 0xe0c24a, 0xa8d3e8, 'nature', ['trees', 'trees', 'rocks', 'logs']), { keep: true }),
   vietnam: Object.assign(_T(0x5a6b3a, 0x4a5a2e, 0x7d6a45, 0x5a6a38, 0x6a5a3a, 0x8a7a54, 0xb8a05a, 0xc8402a, 0xb8c8a0, 'nature', ['trees', 'sandbags', 'crates']), { keep: true }),
   volcano:      _T(0x2a1f1c, 0x4a1f10, 0x3a2b26, 0x4a3028, 0x2f2522, 0x5a4036, 0xff7a2a, 0xff4a12, 0x3a1208, 'fire', ['rocks', 'rocks']),
-  cyber:        _T(0x10141f, 0x1a8aa8, 0x1b2338, 0x242b45, 0x2a3355, 0x1d2840, 0x00e5ff, 0xff2bd6, 0x0b0e1c, 'neon', ['crates', 'pylons'], 0x66f0ff),
+  cyber: Object.assign(_T(0x10141f, 0x1a8aa8, 0x1b2338, 0x242b45, 0x2a3355, 0x1d2840, 0x00e5ff, 0xff2bd6, 0x0b0e1c, 'neon', ['crates', 'pylons'], 0x66f0ff), { keep: true }),
   desert: Object.assign(_T(0xd2b27a, 0xbd9d64, 0xc9a46c, 0xb58a55, 0x9d7a4a, 0xdcc08a, 0xe8d3a0, 0x2f8f8a, 0xcfe3f2, 'desert', ['pyramids', 'crates', 'rocks']), { keep: true }),
   tundra: Object.assign(_T(0xe8f0f5, 0xc4d4de, 0xb9ccd9, 0x9fb6c6, 0xc9d8e2, 0xdbe7ef, 0xffffff, 0x3a8fd0, 0xdde9f2, 'ice', ['iceblocks', 'rocks']), { keep: true }),
-  space:        _T(0x14182a, 0x2a3a66, 0x2c3550, 0x3a4666, 0x4a5678, 0x232c48, 0x6ad5ff, 0xa56bff, 0x05060f, 'space', ['pods', 'crates'], 0x9ae6ff),
+  space: Object.assign(_T(0x14182a, 0x2a3a66, 0x2c3550, 0x3a4666, 0x4a5678, 0x232c48, 0x6ad5ff, 0xa56bff, 0x05060f, 'space', ['pods', 'crates'], 0x9ae6ff), { keep: true }),
   airport: Object.assign(_T(0x6e7378, 0x5a5f64, 0xc4c9cf, 0xa6adb5, 0x888f97, 0xd0d4d8, 0xf2b01e, 0x2a6fc9, 0xa8cfee, 'industrial', ['crates', 'cars']), { keep: true }),
   trenches: Object.assign(_T(0x6b5a3f, 0x57492f, 0x7a6a4a, 0x5f5238, 0x5a4a30, 0x8a7a58, 0xa89a6a, 0xb23a2e, 0x8a8f86, 'nature', ['sandbags', 'sandbags', 'crates']), { keep: true }),
   chernobyl:    _T(0x5a6054, 0x474d42, 0x8a8f86, 0x6f766a, 0x5a6252, 0x9a9f94, 0xc8d23a, 0x6fe03a, 0x8a9482, 'industrial', ['barrels', 'crates', 'rocks'], 0xb8ff7a),
   refinery:     _T(0x4f4a42, 0x3d3933, 0x6a6a6a, 0x8a4a2f, 0x555049, 0x808080, 0xe2a21e, 0xd8452a, 0x7a8590, 'industrial', ['barrels', 'barrels', 'crates']),
   skydock:      _T(0x5a6c7c, 0x485a6a, 0x7a8c9c, 0x5f7384, 0x4e6678, 0x93a5b4, 0xf0c24a, 0x2a9ad8, 0xb4d6f0, 'industrial', ['crates', 'pods']),
-  sewer:        _T(0x3e4a3c, 0x2f3a2e, 0x56604f, 0x44503f, 0x4a5442, 0x66705e, 0x8ab04a, 0x6fd06a, 0x1c241c, 'industrial', ['barrels', 'crates'], 0xb8e878),
-  gravity_lab:  _T(0xdde3ee, 0xaab4c8, 0xe9eef7, 0xc8d2e4, 0x8c9cc0, 0xf3f6fb, 0x6a7cff, 0x7a4aff, 0x2a3050, 'space', ['pods', 'pylons'], 0xcfd8ff),
-  glassworks:   _T(0xaec4c9, 0x8fa8ae, 0xcfe0e4, 0xa8c4cc, 0x88a8b0, 0xe2eef0, 0xffffff, 0x2ab8c8, 0xbfdfe8, 'ice', ['iceblocks', 'crates']),
+  sewer: Object.assign(_T(0x3e4a3c, 0x2f3a2e, 0x56604f, 0x44503f, 0x4a5442, 0x66705e, 0x8ab04a, 0x6fd06a, 0x1c241c, 'industrial', ['barrels', 'crates'], 0xb8e878), { keep: true }),
+  gravity_lab: Object.assign(_T(0xdde3ee, 0xaab4c8, 0xe9eef7, 0xc8d2e4, 0x8c9cc0, 0xf3f6fb, 0x6a7cff, 0x7a4aff, 0x2a3050, 'space', ['pods', 'pylons'], 0xcfd8ff), { keep: true }),
+  glassworks: Object.assign(_T(0xaec4c9, 0x8fa8ae, 0xcfe0e4, 0xa8c4cc, 0x88a8b0, 0xe2eef0, 0xffffff, 0x2ab8c8, 0xbfdfe8, 'ice', ['iceblocks', 'crates']), { keep: true }),
   carrier:      _T(0x5a6168, 0x474d53, 0x7a828a, 0x6a7078, 0x555c63, 0x8a9299, 0xf2c24a, 0xc8402a, 0x7fa6c9, 'industrial', ['crates', 'barrels']),
   overgrowth: Object.assign(_T(0x3f5a30, 0x314a24, 0x6a6f5a, 0x4f6a3a, 0x5a6f40, 0x7a7a5c, 0xa0c860, 0xf0a0c0, 0x9ccf9a, 'nature', ['trees', 'trees', 'rocks']), { keep: true }),
-  orbital_station: _T(0x9aa4b0, 0x7c8794, 0xd0d6de, 0xaab4c0, 0x7a8696, 0xdfe4ea, 0xff8a3a, 0x2ab0ff, 0x05070d, 'space', ['pods', 'crates'], 0xbfe8ff),
+  orbital_station: Object.assign(_T(0x9aa4b0, 0x7c8794, 0xd0d6de, 0xaab4c0, 0x7a8696, 0xdfe4ea, 0xff8a3a, 0x2ab0ff, 0x05070d, 'space', ['pods', 'crates'], 0xbfe8ff), { keep: true }),
   foundry:      _T(0x3e3a36, 0x2d2a27, 0x5a4a40, 0x6a5a50, 0x4a3f38, 0x70645a, 0xff8a2a, 0xff5a12, 0x2a1a12, 'fire', ['barrels', 'crates']),
   carnival:     _T(0xcdb08a, 0xb69a74, 0xd8483a, 0xf2c93a, 0x3a8fd0, 0xf5ead0, 0xffffff, 0xff4aa0, 0xf0b0d0, 'carnival', ['crates', 'cones']),
   biosphere:    _T(0x7aa060, 0x628a4a, 0xc8e0d8, 0xa0c8b8, 0x6a8a5a, 0xe0eee8, 0xffffff, 0x4ac88a, 0xbfe8f0, 'nature', ['trees', 'rocks']),
-  lockdown:     _T(0x3a3d40, 0x2c2e30, 0x555a5e, 0x6a6f74, 0x4a4e52, 0x7a7f84, 0xe8c43a, 0xd03a2a, 0x1a1c20, 'industrial', ['crates', 'barrels']),
-  studio:       _T(0x2a2a30, 0x45454f, 0x3a3a46, 0x56485a, 0x6a5846, 0x4a4a56, 0xffd24a, 0xd0302a, 0x15151c, 'neon', ['crates', 'pylons'], 0xffe08a),
+  lockdown: Object.assign(_T(0x3a3d40, 0x2c2e30, 0x555a5e, 0x6a6f74, 0x4a4e52, 0x7a7f84, 0xe8c43a, 0xd03a2a, 0x1a1c20, 'industrial', ['crates', 'barrels']), { keep: true }),
+  studio: Object.assign(_T(0x2a2a30, 0x45454f, 0x3a3a46, 0x56485a, 0x6a5846, 0x4a4a56, 0xffd24a, 0xd0302a, 0x15151c, 'neon', ['crates', 'pylons'], 0xffe08a), { keep: true }),
   temple:       _T(0xc4b48a, 0xa89868, 0xb89a62, 0x9a8050, 0x8a7248, 0xd8c898, 0xe8c24a, 0x3a8a70, 0xb8d8c0, 'desert', ['pyramids', 'rocks']),
   holiday: Object.assign(_T(0xf4f8fa, 0xc8d8e0, 0xc4332e, 0x2f7a4a, 0xe8d8c0, 0xf8f0e0, 0xffd24a, 0xffffff, 0xb8c8d8, 'carnival', ['iceblocks', 'crates']), { keep: true }),
   labyrinth: Object.assign(_T(0x6a6f66, 0x555a52, 0x7a7e72, 0x65695e, 0x595d52, 0x8a8e82, 0xa8b090, 0x6a9a5a, 0x8a9a8a, 'nature', ['rocks', 'trees']), { keep: true }),
   arena:        _T(0xc2a86a, 0xa88e52, 0x9a9a98, 0x7a7a78, 0x8a7048, 0xd0c090, 0xd8b048, 0xb02a2a, 0xa8c8e8, 'desert', ['pyramids', 'crates']),
-  opera:        _T(0x5a2a34, 0x44202a, 0x7a2e3c, 0x5a2a34, 0x3a2a30, 0x8a6a3a, 0xe8c050, 0xe8c050, 0x1a1015, 'urban', ['crates', 'pylons']),
+  opera: Object.assign(_T(0x5a2a34, 0x44202a, 0x7a2e3c, 0x5a2a34, 0x3a2a30, 0x8a6a3a, 0xe8c050, 0xe8c050, 0x1a1015, 'urban', ['crates', 'pylons']), { keep: true }),
   doomsday:     _T(0x4a4036, 0x3a322a, 0x5a4a3a, 0x6a5a4a, 0x4a3e32, 0x6a5e50, 0xe8742a, 0xe03a1a, 0x4a2a1a, 'fire', ['rocks', 'barrels']),
   train: Object.assign(_T(0x5a5a56, 0x484844, 0x4a5a6a, 0x7a4a3a, 0x555a60, 0x7a7a76, 0xe8c43a, 0x2a7ac8, 0x9ab4c8, 'industrial', ['crates', 'barrels']), { keep: true }),
   dreamscape:   _T(0xb6a0d8, 0x9a84c4, 0xd8c4f0, 0xf0b8d8, 0x8ab8f0, 0xf0e0ff, 0xffffff, 0xff9ad0, 0xd0b8f0, 'neon', ['iceblocks', 'pylons'], 0xfff0ff),
@@ -11146,15 +11146,17 @@ function _bkSlabHole(K, x0, x1, z0, z1, top, th, c, h) {
 function _bkBuilding(K, x0, x1, z0, z1, o = {}) {
   const floors = o.floors || 1, TOPH = 4.6, WH = 4.2, c = o.color || 0xd8d0bc, rc = o.roof || 0x8a8478, doors = o.doors || ['s'];
   const W = x1 - x0, D = z1 - z0, steps = 12, d = Math.min(1.1, (D - 4) / steps);
+  // The stairs go on the west wall, or the east one when the door is on the west: a stair in front of a door is a wall.
+  const west0 = !(doors.includes('w') && !doors.includes('e'));
   for (let f = 0; f < floors; f++) {
     const y0 = f * TOPH;
     const along = (len, lo, door) => door ? [K.door(lo + len / 2, 3.4, 3.4), K.win(lo + len * 0.2), K.win(lo + len * 0.8)] : [K.win(lo + len * 0.25), K.win(lo + len * 0.75)];
     K.wx(x0, x1, z0 + 0.4, 0.8, y0, WH, c, along(W, x0, f === 0 && doors.includes('n')));
     K.wx(x0, x1, z1 - 0.4, 0.8, y0, WH, c, along(W, x0, f === 0 && doors.includes('s')));
-    K.wz(z0 + 0.8, z1 - 0.8, x0 + 0.4, 0.8, y0, WH, c, along(D - 1.6, z0 + 0.8, f === 0 && doors.includes('w')));
+    K.wz(z0 + 0.8, z1 - 0.8, x0 + 0.4, 0.8, y0, WH, c, along(D - 1.6, z0 + 0.8, f === 0 && doors.includes('w') && !west0));
     K.wz(z0 + 0.8, z1 - 0.8, x1 - 0.4, 0.8, y0, WH, c, along(D - 1.6, z0 + 0.8, f === 0 && doors.includes('e')));
     // the stairs up from this level
-    const west = f % 2 === 0, sx = west ? x0 + 2.6 : x1 - 2.6, foot = west ? z0 + 3.2 : z1 - 3.2, dir = west ? 'S' : 'N';   // the foot clear of the wall: a body has to fit between
+    const west = (f % 2 === 0) === west0, sx = west ? x0 + 2.6 : x1 - 2.6, foot = west ? z0 + 3.2 : z1 - 3.2, dir = west ? 'S' : 'N';   // the foot clear of the wall: a body has to fit between
     K.stairs(sx, foot, dir, TOPH, 3.2, 0x6a5a48, y0, d, TOPH / steps);
     const run = (steps - 1) * d + 0.6;
     const hole = { x0: sx - 1.7, x1: sx + 1.7, z0: west ? foot - 0.55 : foot - run, z1: west ? foot + run : foot + 0.55 };
@@ -11623,6 +11625,266 @@ function buildLabyrinthLayout() {
 }
 Object.assign(_BESPOKE, { battlefield: buildBattlefieldLayout, forest: buildForestLayout, vietnam: buildVietnamLayout, desert: buildDesertLayout, tundra: buildTundraLayout,
   trenches: buildTrenchesLayout, overgrowth: buildOvergrowthLayout, holiday: buildHolidayLayout, labyrinth: buildLabyrinthLayout });
+
+// ── Batch B: the indoor and technical maps ───────────────────────────────────────────────────
+function _bkRoof(K, h, c) { K.slab(-K.hx, K.hx, -K.hz, K.hz, h + 0.4, 0.4, c); }
+// 🌐 Cyber: a data campus. A three-floor tower in the middle, four server halls round it, rows of lit racks, and
+// holo-billboards on legs to fight round.
+function buildCyberLayout() {
+  const name = 'cyber', K = _bkBegin(name, 130, 130, 0x10141f);
+  K.perim(9, 0x1b2338);
+  const glass = 0x242b45, rack = 0x2a3355;
+  _bkBuilding(K, -18, 18, -16, 16, { floors: 3, color: glass, roof: 0x1a2a40, doors: ['n', 's', 'e', 'w'] });
+  [[-46, -30], [46, -30], [-46, 30], [46, 30]].forEach(([cx, cz]) => {
+    K.room(cx - 10, cx + 10, cz - 8, cz + 8, 0, 4.2, 0x1b2338, { n: [K.door(cx, 3.6)], s: [K.door(cx, 3.6)], e: [K.door(cz, 3.6)], w: [K.door(cz, 3.6)] });
+    K.slab(cx - 10, cx + 10, cz - 8, cz + 8, 4.6, 0.4, 0x141a2e);
+    for (const dx of [-4, 4]) K.box(cx + dx, 0, cz, 1.6, 3.0, 9, rack);             // racks inside
+  });
+  for (const x of [-26, 26]) for (const [z0, z1] of [[-52, -38], [-4, 4], [38, 52]]) K.box(x, 0, (z0 + z1) / 2, 2.2, 2.6, z1 - z0, rack);
+  for (const [x, z] of [[-10, -44], [10, 44], [-10, 44], [10, -44], [0, -26], [0, 26]]) { K.box(x - 2.5, 0, z, 0.6, 2.2, 0.6, 0x3a4570); K.box(x + 2.5, 0, z, 0.6, 2.2, 0.6, 0x3a4570); K.box(x, 2.2, z, 6, 3.4, 0.4, 0x6a2bd6); }   // holo billboards
+  for (const [x, z] of [[-56, 0], [56, 0], [-36, -56], [36, 56], [-36, 56], [36, -56]]) K.box(x, 0, z, 3, 2.2, 3, rack);
+  K.poi('tower', 0, 0, 0);
+  K.spawn({ x0: -24, x1: 24, z0: 52, z1: 60 }, { x0: -24, x1: 24, z0: -60, z1: -52 });
+  MAP_GROUPS[name]._skyColor = 0x0b0e1c;
+}
+// 🛰️ Space: a cargo station, roofed. A docking bay at each end, a hub in the middle, cargo rooms with gantries on
+// either side, wide corridors between.
+function buildSpaceLayout() {
+  const name = 'space', K = _bkBegin(name, 110, 160, 0x232c48);
+  const hull = 0x3a4666, deck = 0x4a5678, H = 7.2;
+  K.perim(H, hull);
+  _bkRoof(K, H, 0x1a2036);
+  // docking bays at each end, open to the corridor system through wide doors
+  for (const sz of [1, -1]) {
+    const z0 = sz > 0 ? 44 : -76, z1 = sz > 0 ? 76 : -44, wallZ = sz > 0 ? z0 : z1;
+    K.wx(-50, 50, wallZ + (sz > 0 ? 0.4 : -0.4), 0.8, 0, H, hull, [K.door(0, 10, 4.4), K.door(-34, 5, 4.2), K.door(34, 5, 4.2)]);
+    for (const x of [-22, 22]) K.box(x, 0, sz * 60, 8, 2.4, 3, deck);                // cargo cradles
+    for (const x of [-36, 36]) { K.box(x, 0, sz * 52, 3, 2.2, 3, 0x7a8696); K.box(x + 3, 0, sz * 52 + 1, 2.4, 1.6, 2.4, 0x6a7686); }
+  }
+  // the hub
+  K.room(-16, 16, -16, 16, 0, H, deck, { n: [K.door(0, 8, 4.4)], s: [K.door(0, 8, 4.4)], e: [K.door(0, 6, 4.4)], w: [K.door(0, 6, 4.4)] });
+  for (const [x, z] of [[-8, -8], [8, -8], [-8, 8], [8, 8]]) K.box(x, 0, z, 2, H, 2, hull);
+  K.box(0, 0, 0, 5, 1.0, 5, 0x6a7a9a);
+  // cargo rooms with a gantry
+  for (const sx of [-1, 1]) {
+    const x0 = sx > 0 ? 24 : -52, x1 = sx > 0 ? 52 : -24;
+    K.room(x0, x1, -18, 18, 0, H, deck, { [sx > 0 ? 'w' : 'e']: [K.door(0, 6, 4.4)], n: [K.door((x0 + x1) / 2, 4, 4.2)], s: [K.door((x0 + x1) / 2, 4, 4.2)] });
+    K.slab(x0 + 1, x1 - 1, 5.5, 17.2, 4.4, 0.4, 0x6a7686);                            // the gantry: a deck along the south side ...
+    K.stairs((x0 + x1) / 2, -6, 'S', 4.4, 3, 0x5a6676, 0, 1.0, 4.4 / 12);              // ... up from the middle of the room
+    K.wx(x0 + 1, x1 - 1, 5.65, 0.3, 4.4, 1.0, 0x3a3f46, [{ at: (x0 + x1) / 2, w: 4, sill: 0, top: 9 }]);
+    for (const [dx, dz] of [[-6, -10], [6, -10], [-8, 1], [8, 2]]) K.box((x0 + x1) / 2 + dx, 0, dz, 3, 2.4, 3, 0x7a8696);
+  }
+  // corridor cover
+  for (const [x, z] of [[-9, -34], [9, -34], [-9, 34], [9, 34], [-9, -52], [9, 52]]) K.box(x, 0, z, 3.4, 1.4, 1.6, 0x6a7686);
+  K.spawn({ x0: -24, x1: 24, z0: 62, z1: 72 }, { x0: -24, x1: 24, z0: -72, z1: -62 });
+  MAP_GROUPS[name]._skyColor = 0x05060f;
+}
+// 🛸 Orbital station: a ring corridor round a reactor hall. The ring has windows to the void, spokes join it to the
+// hall, and the reactor has a catwalk round it.
+function buildOrbitalLayout() {
+  const name = 'orbital_station', K = _bkBegin(name, 130, 130, 0x9aa4b0);
+  const hull = 0xd0d6de, inner = 0xaab4c0, H = 7.2;
+  K.perim(H, hull);
+  _bkRoof(K, H, 0x7a8696);
+  // the inner wall of the ring: x/z = +-50 square, with a door in the middle of each side and windows on the way
+  const doors = (len) => [K.door(0, 6, 4.4), K.win(-len * 0.3, 5, 1.0, 3.6), K.win(len * 0.3, 5, 1.0, 3.6)];
+  K.wx(-50, 50, -49.6, 0.8, 0, H, inner, doors(100)); K.wx(-50, 50, 49.6, 0.8, 0, H, inner, doors(100));
+  K.wz(-50, 50, -49.6, 0.8, 0, H, inner, doors(100)); K.wz(-50, 50, 49.6, 0.8, 0, H, inner, doors(100));
+  // the ring itself: pillars and crates in the corridor
+  for (const [x, z] of [[-56, -56], [56, -56], [-56, 56], [56, 56]]) K.box(x, 0, z, 4, H, 4, hull);
+  for (const [x, z] of [[-56, -26], [-56, 26], [56, -26], [56, 26], [-26, -56], [26, -56], [-26, 56], [26, 56]]) { K.box(x, 0, z, 2.6, 2.2, 2.6, 0x7a8696); }
+  // the reactor: a block with a catwalk round it at 4.4, four stairs, rails
+  K.box(0, 0, 0, 14, 4.2, 14, 0x5a6676); K.box(0, 4.2, 0, 8, 2.8, 8, 0x2ab0ff);
+  K.slab(-16, 16, -16, 16, 4.4, 0.4, 0x8a96a6);
+  // (the catwalk is the slab minus the reactor, which stands through it)
+  for (const [dx, dz, dir] of [[0, 27.5, 'N'], [0, -27.5, 'S'], [27.5, 0, 'W'], [-27.5, 0, 'E']]) {
+    // stairs rise toward the catwalk edge at 16
+    K.stairs(dx, dz, dir, 4.4, 3, 0x6a7686, 0, 1.0, 4.4 / 12);
+  }
+  K.wx(-16, 16, -15.85, 0.3, 4.4, 1.0, 0x3a3f46, [{ at: 0, w: 4, sill: 0, top: 9 }]); K.wx(-16, 16, 15.85, 0.3, 4.4, 1.0, 0x3a3f46, [{ at: 0, w: 4, sill: 0, top: 9 }]);
+  K.wz(-16, 16, -15.85, 0.3, 4.4, 1.0, 0x3a3f46, [{ at: 0, w: 4, sill: 0, top: 9 }]); K.wz(-16, 16, 15.85, 0.3, 4.4, 1.0, 0x3a3f46, [{ at: 0, w: 4, sill: 0, top: 9 }]);
+  for (const [x, z] of [[-30, -30], [30, -30], [-30, 30], [30, 30]]) { K.box(x, 0, z, 6, 1.1, 6, 0x6a7686); K.box(x, 1.1, z, 3, 1.6, 3, 0x5a6676); }
+  K.spawn({ x0: -24, x1: 24, z0: 52, z1: 60 }, { x0: -24, x1: 24, z0: -60, z1: -52 });
+  MAP_GROUPS[name]._skyColor = 0x05070d;
+}
+// 🧪 Gravity lab: a grid of lab modules with open corridors between, a raised stage in the centre module.
+function buildGravityLabLayout() {
+  const name = 'gravity_lab', K = _bkBegin(name, 130, 130, 0xdde3ee);
+  K.perim(7, 0xe9eef7);
+  const wall = 0xc8d2e4, H = 4.2;
+  const cols = [[-52, -20], [-14, 14], [20, 52]], rows = [[-50, -20], [-14, 14], [20, 50]];
+  rows.forEach((rz, r) => cols.forEach((cx, c) => {
+    const x0 = cx[0], x1 = cx[1], z0 = rz[0], z1 = rz[1], mx = (x0 + x1) / 2, mz = (z0 + z1) / 2;
+    K.room(x0, x1, z0, z1, 0, H, wall, { n: [K.door(mx, 4.4)], s: [K.door(mx, 4.4)], w: [K.door(mz, 4.4)], e: [K.door(mz, 4.4)] });
+    K.slab(x0, x1, z0, z1, H + 0.4, 0.4, 0x8c9cc0);
+    if (r === 1 && c === 1) return;
+    for (const dx of [-5, 5]) K.box(mx + dx, 0, mz, 1.4, 1.0, (z1 - z0) * 0.4, 0x7a8ab0);        // benches
+    K.box(mx, 0, mz - 6, 2.4, 2.2, 2.4, 0x6a7aa0);
+  }));
+  // the centre module: a stage with a stair on each side
+  K.mound(-6, 6, -6, 6, 2.0, 0x9aa8d0, ['n', 's', 'e', 'w'], 0.4, 1.0, 3);
+  // open yard cover between the modules
+  for (const [x, z] of [[-17, -17], [17, -17], [-17, 17], [17, 17]]) K.box(x, 0, z, 3, 2.2, 3, 0x7a8ab0);
+  for (const x of [-34, 0, 34]) for (const z of [-17, 17]) K.box(x, 0, z, 6, 1.1, 1.2, 0x7a8ab0);
+  K.spawn({ x0: -32, x1: 32, z0: 54, z1: 60 }, { x0: -32, x1: 32, z0: -60, z1: -54 });
+  MAP_GROUPS[name]._skyColor = 0x2a3050;
+}
+// 🏺 Glassworks: a factory in three bays. Furnaces in the middle bay, glass racks in the end bays, partition walls
+// with big windows to shoot through, mezzanines down both sides.
+function buildGlassworksLayout() {
+  const name = 'glassworks', K = _bkBegin(name, 130, 140, 0xaec4c9);
+  K.perim(9, 0xcfe0e4);
+  const wall = 0xa8c4cc, TOP = 4.6;
+  for (const z of [-26, 26]) {
+    const open = [K.door(-40, 4.4), K.door(0, 4.4), K.door(40, 4.4), ...[-22, -10, 10, 22, -52, 52].map(x => K.win(x, 6, 0.9, 3.4))];
+    K.wx(-62, 62, z, 0.8, 0, 6, wall, open);
+  }
+  // the furnaces
+  for (const [x, z] of [[-34, -8], [34, 8], [-34, 10], [34, -10]]) { K.box(x, 0, z, 10, 3.2, 8, 0x8a4a3a); K.box(x, 3.2, z, 6, 1.0, 5, 0xff7a2a); K.box(x + (x > 0 ? 3 : -3), 0, z, 2.2, 9, 2.2, 0x6a5a52); }
+  for (const x of [-12, 0, 12]) K.box(x, 0, 0, 1.4, 1.0, 38, 0x6a6a6a);                    // conveyors
+  // glass racks in the end bays
+  for (const sz of [-1, 1]) for (const x of [-44, -30, -16, 16, 30, 44]) K.box(x, 0, sz * 40, 0.7, 3.2, 9, 0x9ad8e8);
+  // mezzanines down both walls
+  for (const sx of [-1, 1]) {
+    K.slab(sx > 0 ? 50 : -61, sx > 0 ? 61 : -50, -46, 46, TOP, 0.4, 0x8a9aa0);
+    K.wz(-46, 46, sx * 50.2, 0.3, TOP, 1.0, 0x4a5258);
+    K.stairs(sx * 55.5, -56, 'S', TOP, 3, 0x6a7278, 0, 1.0, TOP / 12); K.stairs(sx * 55.5, 56, 'N', TOP, 3, 0x6a7278, 0, 1.0, TOP / 12);
+  }
+  for (const [x, z] of [[-22, -50], [22, 50], [0, -34], [0, 34], [-6, 18], [6, -18]]) K.crate(x, z, 0x8a6a3a);
+  K.spawn({ x0: -28, x1: 28, z0: 58, z1: 66 }, { x0: -28, x1: 28, z0: -66, z1: -58 });
+  MAP_GROUPS[name]._skyColor = 0xbfdfe8;
+}
+// 🎬 Studio: three sets on one backlot -- a western street, a soundstage with a scaffold catwalk, a sci-fi corridor set.
+function buildStudioLayout() {
+  const name = 'studio', K = _bkBegin(name, 130, 130, 0x2a2a30);
+  K.perim(8, 0x3a3a46);
+  const western = [0x9a6a3a, 0x8a5a2a, 0xb08a52, 0x7a4a2a];
+  // the western street: facades down both sides of x = -44
+  [[-56, -44], [-56, -22], [-56, 0], [-56, 22], [-32, -44], [-32, -22], [-32, 0], [-32, 22]].forEach(([cx, cz], i) => {
+    _bkBuilding(K, cx - 6, cx + 6, cz - 8, cz + 8, { floors: i % 3 === 0 ? 2 : 1, color: western[i % 4], roof: 0x5a3a22, doors: [cx < -44 ? 'e' : 'w'] });
+  });
+  // the soundstage: a big room with a scaffold ring above
+  K.room(-20, 22, -18, 18, 0, 8, 0x56485a, { n: [K.door(0, 6, 5)], s: [K.door(0, 6, 5)], w: [K.door(0, 6, 5)], e: [K.door(0, 6, 5)] }, 1);
+  K.slab(-20, 22, -18, 18, 8.4, 0.4, 0x3a3040);
+  K.slab(-19, 21, -17, -13, 4.6, 0.4, 0x7a7a82); K.slab(-19, 21, 13, 17, 4.6, 0.4, 0x7a7a82);     // the scaffold: a deck along each long side
+  K.stairs(-14, -1.5, 'N', 4.6, 3, 0x6a6a72, 0, 1.0, 4.6 / 12);
+  K.stairs(16, 1.5, 'S', 4.6, 3, 0x6a6a72, 0, 1.0, 4.6 / 12);
+  K.wx(-19, 21, -12.85, 0.3, 4.6, 1.0, 0x3a3a3a, [{ at: -14, w: 4, sill: 0, top: 9 }]); K.wx(-19, 21, 12.85, 0.3, 4.6, 1.0, 0x3a3a3a, [{ at: 16, w: 4, sill: 0, top: 9 }]);
+  K.box(1, 0, 0, 6, 1.2, 3, 0x9a8a5a); K.box(-8, 0, 5, 1.4, 6, 1.4, 0x3a3a3a); K.box(8, 0, -5, 1.4, 6, 1.4, 0x3a3a3a);   // a dolly, light stands
+  // the sci-fi set: rooms in a 2 x 2 with corridors between
+  for (const [cx, cz] of [[38, -26], [38, 26], [54, -26], [54, 26]]) {
+    K.room(cx - 7, cx + 7, cz - 10, cz + 10, 0, 4.2, 0x6a7a8a, { n: [K.door(cx, 3.4)], s: [K.door(cx, 3.4)], w: [K.door(cz, 3.4)], e: [K.door(cz, 3.4)] });
+    K.slab(cx - 7, cx + 7, cz - 10, cz + 10, 4.6, 0.4, 0x4a5a6a);
+    K.box(cx, 0, cz, 3, 1.1, 3, 0x2ab0d8);
+  }
+  // backlot cover
+  for (const [x, z] of [[0, -40], [0, 40], [-40, 52], [40, -52], [30, 0], [-4, 26], [4, -26]]) K.crate(x, z, 0x6a5a46);
+  K.box(-38, 0, 46, 8, 1.2, 1.2, 0x6a5a46); K.box(38, 0, -46, 8, 1.2, 1.2, 0x6a5a46);
+  K.spawn({ x0: -28, x1: 28, z0: 52, z1: 60 }, { x0: -28, x1: 28, z0: -60, z1: -52 });
+  MAP_GROUPS[name]._skyColor = 0x15151c;
+}
+// 🔒 Lockdown: a prison. A two-floor cellblock round a central atrium with a balcony, a yard with watchtowers, a
+// cafeteria and a guard house.
+function buildLockdownLayout() {
+  const name = 'lockdown', K = _bkBegin(name, 110, 140, 0x3a3d40);
+  K.perim(9, 0x555a5e);
+  const cellC = 0x6a6f74, TOP = 4.6;
+  // the cellblock: x -22..22, z -34..34. Cells (4 x 6) down both long sides on two floors, atrium between.
+  K.wx(-22, 22, -33.6, 0.8, 0, 9.4, cellC, [K.door(0, 5, 4)]); K.wx(-22, 22, 33.6, 0.8, 0, 9.4, cellC, [K.door(0, 5, 4)]);
+  K.wz(-34, 34, -21.6, 0.8, 0, 9.4, cellC, [K.door(-18, 3.4), K.door(18, 3.4)]); K.wz(-34, 34, 21.6, 0.8, 0, 9.4, cellC, [K.door(-18, 3.4), K.door(18, 3.4)]);
+  for (const sx of [-1, 1]) {
+    for (let i = 0; i < 8; i++) {
+      const z0 = -32 + i * 8, ix0 = sx > 0 ? 9 : -21, ix1 = sx > 0 ? 21 : -9;
+      K.wx(ix0, ix1, z0, 0.4, 0, 4.2, cellC);                                                  // cell partitions
+      K.box(sx * 17.5, 0, z0 + 4, 1.2, 0.8, 3, 0x4a4e52);                                      // a bunk
+    }
+    K.wz(-32, 32, sx * 9, 0.5, 0, 4.2, cellC, Array.from({ length: 8 }, (_, i) => K.door(-28 + i * 8, 2.6, 3.4)));   // the cell fronts, a door each
+    // the upper floor: cell roofs are the gallery, with a balcony along the atrium and rails
+    K.slab(sx > 0 ? 9 : -21.4, sx > 0 ? 21.4 : -9, -33.2, 33.2, TOP, 0.4, 0x7a7e82);
+    K.wz(-32, 32, sx * 9.2, 0.3, TOP, 1.1, 0x3a3a3a, [{ at: sx > 0 ? 12 : -12, w: 4, sill: 0, top: 9 }]);   // (the east stair is at z 12, the west at -12)
+  }
+  // stairs from the atrium floor up to the gallery on both sides, at the two ends
+  K.stairs(1.5, -12, 'W', TOP, 3, 0x5a5f64, 0, 1.0, TOP / 12);                  // up to the west gallery
+  K.stairs(-1.5, 12, 'E', TOP, 3, 0x5a5f64, 0, 1.0, TOP / 12);                  // and the east one
+  // (the atrium is open to the roof; a skylight slab runs overhead)
+  K.slab(-22, 22, -34, 34, 9.4, 0.4, 0x2a2d30);
+  // yard cover, watchtowers
+  for (const [x, z] of [[-36, -10], [36, 10], [-36, 22], [36, -22], [-42, -44], [42, 44]]) K.box(x, 0, z, 6, 1.2, 1.2, 0x7a7e82);
+  for (const [x, z] of [[-44, -46], [44, 46]]) {
+    K.mound(x - 3, x + 3, z - 3, z + 3, 4.6, 0x6a6f74, [x < 0 ? 's' : 'n']);
+  }
+  K.room(-52, -34, 0, 14, 0, 4.2, 0x5a5f64, { e: [K.door(7, 3.4)], n: [K.door(-43, 3.4)] }); K.slab(-52, -34, 0, 14, 4.6, 0.4, 0x4a4f54);       // the cafeteria
+  K.room(34, 50, -14, 0, 0, 4.2, 0x5a5f64, { w: [K.door(-7, 3.4)], s: [K.door(42, 3.4)] }); K.slab(34, 50, -14, 0, 4.6, 0.4, 0x4a4f54);          // the guard house
+  K.box(-43, 0, 8, 2.6, 0.9, 7, 0x4a4e52);
+  K.spawn({ x0: -24, x1: 24, z0: 50, z1: 62 }, { x0: -24, x1: 24, z0: -62, z1: -50 });
+  MAP_GROUPS[name]._skyColor = 0x1a1c20;
+}
+// 🎭 Opera: an auditorium of stepped rows rising from a stage, balconies down both sides with box seats, a grand
+// lobby and staircase at the front, rehearsal rooms behind the stage.
+function buildOperaLayout() {
+  const name = 'opera', K = _bkBegin(name, 130, 140, 0x5a2a34);
+  K.perim(10, 0x7a2e3c);
+  const wall = 0x7a2e3c, gold = 0xe8c050, TOP = 4.6;
+  _bkRoof(K, 10, 0x3a1a22);
+  // the hall: x -36..36, z -34..30. Stage at the north end, rows rising to the south.
+  K.wx(-36, 36, -34.4, 0.8, 0, 10, wall, [K.door(-24, 5, 4), K.door(24, 5, 4)]);          // stage-left / stage-right doors to the rehearsal wing
+  K.wz(-34, 30, -35.6, 0.8, 0, 10, wall, [K.door(-12, 4, 4), K.door(12, 4, 4)]); K.wz(-34, 30, 35.6, 0.8, 0, 10, wall, [K.door(-12, 4, 4), K.door(12, 4, 4)]);
+  K.wx(-36, 36, 29.6, 0.8, 0, 10, wall, [K.door(-14, 6, 4.4), K.door(0, 8, 4.4), K.door(14, 6, 4.4)]);
+  K.mound(-20, 20, -33.6, -24, 1.2, 0x8a6a3a, ['s'], 0.4, 1.0, 5);                          // the stage
+  for (const x of [-12, 12]) K.mound(x - 2, x + 2, -33, -29, 1.2, 0x8a6a3a, []);
+  for (let i = 0; i < 8; i++) { K.box(0, 0, -12 + i * 3.4, 40, 0.45 * (i + 1), 3.4, 0x6a3a44); for (const sx of [-1, 1]) K.box(sx * 13, 0.45 * (i + 1), -12 + i * 3.4, 12, 0.6, 1.0, gold); }   // stepped rows, a seat block on each
+  K.box(-9, 0, -22, 8, 1.0, 3, 0x3a1a22); K.box(9, 0, -22, 8, 1.0, 3, 0x3a1a22);              // the orchestra pit rail, open in the middle for the stage stairs
+  // balconies along both walls, with box seats
+  for (const sx of [-1, 1]) {
+    K.slab(sx > 0 ? 28 : -35.2, sx > 0 ? 35.2 : -28, -30, 26, TOP, 0.4, 0x8a4a54);
+    K.wz(-30, 26, sx * 28.2, 0.3, TOP, 1.1, gold, [{ at: 20, w: 4, sill: 0, top: 9 }]);
+    K.stairs(sx * 16.5, 20, sx > 0 ? 'E' : 'W', TOP, 3, 0x6a3a44, 0, 1.0, TOP / 12);   // up the side of the hall to the balcony
+  }
+  // the lobby, the grand staircase to a foyer
+  K.room(-36, 36, 30, 52, 0, 10, 0x6a2a34, { n: [K.door(-14, 6, 4.4), K.door(0, 8, 4.4), K.door(14, 6, 4.4)], s: [K.door(-10, 6, 4.4), K.door(10, 6, 4.4)] }, 1);
+  K.slab(-36, 36, 30, 52, 10.4, 0.4, 0x3a1a22);
+  K.slab(-36, 36, 44, 51, TOP, 0.4, 0x8a4a54);
+  K.stairs(0, 32.5, 'S', TOP, 8, 0xa87a5a, 0, 1.0, TOP / 12);
+  K.wx(-36, 36, 44.15, 0.3, TOP, 1.1, gold, [{ at: 0, w: 9, sill: 0, top: 9 }]);
+  for (const x of [-26, 26]) K.box(x, 0, 38, 2, 5, 2, gold);
+  // the rehearsal wing behind the stage
+  K.room(-52, -38, -62, -36, 0, 4.2, 0x6a2a34, { e: [K.door(-45, 3.4)], s: [K.door(-45, 3.4)] }); K.slab(-52, -38, -62, -36, 4.6, 0.4, 0x3a1a22);
+  K.room(38, 52, -62, -36, 0, 4.2, 0x6a2a34, { w: [K.door(-45, 3.4)], s: [K.door(45, 3.4)] }); K.slab(38, 52, -62, -36, 4.6, 0.4, 0x3a1a22);
+  for (const x of [-12, 0, 12]) K.crate(x, -52, 0x4a2a2a);
+  K.spawn({ x0: -24, x1: 24, z0: 56, z1: 66 }, { x0: -24, x1: 24, z0: -66, z1: -56 });
+  MAP_GROUPS[name]._skyColor = 0x1a1015;
+}
+// 🐀 Sewer: rock blocks with big chambers cut into them, and tunnels between. A main tunnel the length of the map,
+// two cross tunnels, an acid pool in each chamber.
+function buildSewerLayout() {
+  const name = 'sewer', K = _bkBegin(name, 110, 150, 0x3e4a3c);
+  K.perim(5.4, 0x44503f);
+  const rock = 0x56604f, H = 5.4;
+  _bkRoof(K, H, 0x2a3328);
+  // six blocks: x bands [-50,-4] and [4,50], z bands [-54,-33], [-27,27], [33,54]
+  const xs = [[-50, -4], [4, 50]], zs = [[-54, -33], [-27, 27], [33, 54]];
+  zs.forEach((zb, r) => xs.forEach((xb, c) => {
+    const mx = (xb[0] + xb[1]) / 2, mz = (zb[0] + zb[1]) / 2, inner = c === 0 ? 1 : -1;
+    const o = {};
+    o[c === 0 ? 'e' : 'w'] = [K.door(mz, 5, 4.4)];                                      // onto the main tunnel
+    if (r === 1) { o.n = [K.door(mx, 5, 4.4)]; o.s = [K.door(mx, 5, 4.4)]; }               // onto the cross tunnels
+    else { o[r === 0 ? 's' : 'n'] = [K.door(mx, 5, 4.4)]; }
+    K.room(xb[0], xb[1], zb[0], zb[1], 0, H, rock, o, 1.2);
+    if (r === 1) {                                                                      // the big chambers: an acid pool, pillars, a ledge
+      K.pool(mx, mz, 6, 'acid', 0x6fd06a);
+      for (const [dx, dz] of [[-12, -14], [12, -14], [-12, 14], [12, 14]]) K.box(mx + dx, 0, mz + dz, 2.4, H, 2.4, 0x6a745e);
+      K.mound(xb[0] + 1.4, xb[0] + 9, mz - 4, mz + 4, 1.0, 0x66705e, []);
+    } else {
+      for (const dx of [-12, 0, 12]) K.box(mx + dx, 0, mz, 2.0, 2.0, 2.0, 0x66705e);
+    }
+  }));
+  K.pool(0, 0, 2.6, 'acid', 0x6fd06a);
+  for (const z of [-30, 30]) for (const x of [-20, 20]) K.box(x, 0, z, 1.6, 1.4, 1.6, 0x66705e);
+  K.spawn({ x0: -20, x1: 20, z0: 58, z1: 70 }, { x0: -20, x1: 20, z0: -70, z1: -58 });
+  MAP_GROUPS[name]._skyColor = 0x1c241c;
+}
+Object.assign(_BESPOKE, { cyber: buildCyberLayout, space: buildSpaceLayout, orbital_station: buildOrbitalLayout, gravity_lab: buildGravityLabLayout, glassworks: buildGlassworksLayout,
+  studio: buildStudioLayout, lockdown: buildLockdownLayout, opera: buildOperaLayout, sewer: buildSewerLayout });
 
 function initMapThemes() {
   for (const name of Object.keys(MAP_THEMES)) {
