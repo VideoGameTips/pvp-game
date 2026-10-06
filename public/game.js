@@ -9943,7 +9943,7 @@ const GRID_MAP_ARCHETYPES = [
 const GRID_CONCEPT_MAPS_ACTIVE = true;
 // Hand-built maps with their own mechanics: the grid-concept pass below must not wipe them.
 const MECHANIC_MAP_NAMES = new Set(['storm_pier', 'pinball_arcade', 'laser_vault', 'cargo_belts', 'gale_peaks', 'magma_rise',
-  'titanic', 'warehouse', 'urban', 'airport', 'train', 'supermarket', 'battlefield', 'forest', 'vietnam', 'desert', 'tundra', 'trenches', 'overgrowth', 'holiday', 'labyrinth', 'cyber', 'space', 'orbital_station', 'gravity_lab', 'glassworks', 'studio', 'lockdown', 'opera', 'sewer']);   // + the hand-built layouts (see _BESPOKE)
+  'titanic', 'warehouse', 'urban', 'airport', 'train', 'supermarket', 'battlefield', 'forest', 'vietnam', 'desert', 'tundra', 'trenches', 'overgrowth', 'holiday', 'labyrinth', 'cyber', 'space', 'orbital_station', 'gravity_lab', 'glassworks', 'studio', 'lockdown', 'opera', 'sewer', 'chernobyl', 'refinery', 'foundry', 'carrier', 'pearl_harbor', 'skydock', 'doomsday', 'volcano', 'carnival']);   // + the hand-built layouts (see _BESPOKE)
 function clearMapForGridConcept(name) {
   if (isArchivedLobbyMap(name)) return;
   const group = MAP_GROUPS[name];
@@ -10283,24 +10283,24 @@ const MAP_THEMES = {
   warehouse: Object.assign(_T(0x6d6a64, 0x57544f, 0x6f7d86, 0x8a6a46, 0x7a5a38, 0x8d8f91, 0xe8b932, 0xc8402a, 0x2f3338, 'industrial', ['crates', 'crates', 'barrels']), { keep: true }),
   forest: Object.assign(_T(0x4d6b35, 0x3f5a2b, 0x6b5a45, 0x56693a, 0x6b6b5f, 0x8a7352, 0x9bb86a, 0xe0c24a, 0xa8d3e8, 'nature', ['trees', 'trees', 'rocks', 'logs']), { keep: true }),
   vietnam: Object.assign(_T(0x5a6b3a, 0x4a5a2e, 0x7d6a45, 0x5a6a38, 0x6a5a3a, 0x8a7a54, 0xb8a05a, 0xc8402a, 0xb8c8a0, 'nature', ['trees', 'sandbags', 'crates']), { keep: true }),
-  volcano:      _T(0x2a1f1c, 0x4a1f10, 0x3a2b26, 0x4a3028, 0x2f2522, 0x5a4036, 0xff7a2a, 0xff4a12, 0x3a1208, 'fire', ['rocks', 'rocks']),
+  volcano: Object.assign(_T(0x2a1f1c, 0x4a1f10, 0x3a2b26, 0x4a3028, 0x2f2522, 0x5a4036, 0xff7a2a, 0xff4a12, 0x3a1208, 'fire', ['rocks', 'rocks']), { keep: true }),
   cyber: Object.assign(_T(0x10141f, 0x1a8aa8, 0x1b2338, 0x242b45, 0x2a3355, 0x1d2840, 0x00e5ff, 0xff2bd6, 0x0b0e1c, 'neon', ['crates', 'pylons'], 0x66f0ff), { keep: true }),
   desert: Object.assign(_T(0xd2b27a, 0xbd9d64, 0xc9a46c, 0xb58a55, 0x9d7a4a, 0xdcc08a, 0xe8d3a0, 0x2f8f8a, 0xcfe3f2, 'desert', ['pyramids', 'crates', 'rocks']), { keep: true }),
   tundra: Object.assign(_T(0xe8f0f5, 0xc4d4de, 0xb9ccd9, 0x9fb6c6, 0xc9d8e2, 0xdbe7ef, 0xffffff, 0x3a8fd0, 0xdde9f2, 'ice', ['iceblocks', 'rocks']), { keep: true }),
   space: Object.assign(_T(0x14182a, 0x2a3a66, 0x2c3550, 0x3a4666, 0x4a5678, 0x232c48, 0x6ad5ff, 0xa56bff, 0x05060f, 'space', ['pods', 'crates'], 0x9ae6ff), { keep: true }),
   airport: Object.assign(_T(0x6e7378, 0x5a5f64, 0xc4c9cf, 0xa6adb5, 0x888f97, 0xd0d4d8, 0xf2b01e, 0x2a6fc9, 0xa8cfee, 'industrial', ['crates', 'cars']), { keep: true }),
   trenches: Object.assign(_T(0x6b5a3f, 0x57492f, 0x7a6a4a, 0x5f5238, 0x5a4a30, 0x8a7a58, 0xa89a6a, 0xb23a2e, 0x8a8f86, 'nature', ['sandbags', 'sandbags', 'crates']), { keep: true }),
-  chernobyl:    _T(0x5a6054, 0x474d42, 0x8a8f86, 0x6f766a, 0x5a6252, 0x9a9f94, 0xc8d23a, 0x6fe03a, 0x8a9482, 'industrial', ['barrels', 'crates', 'rocks'], 0xb8ff7a),
-  refinery:     _T(0x4f4a42, 0x3d3933, 0x6a6a6a, 0x8a4a2f, 0x555049, 0x808080, 0xe2a21e, 0xd8452a, 0x7a8590, 'industrial', ['barrels', 'barrels', 'crates']),
-  skydock:      _T(0x5a6c7c, 0x485a6a, 0x7a8c9c, 0x5f7384, 0x4e6678, 0x93a5b4, 0xf0c24a, 0x2a9ad8, 0xb4d6f0, 'industrial', ['crates', 'pods']),
+  chernobyl: Object.assign(_T(0x5a6054, 0x474d42, 0x8a8f86, 0x6f766a, 0x5a6252, 0x9a9f94, 0xc8d23a, 0x6fe03a, 0x8a9482, 'industrial', ['barrels', 'crates', 'rocks'], 0xb8ff7a), { keep: true }),
+  refinery: Object.assign(_T(0x4f4a42, 0x3d3933, 0x6a6a6a, 0x8a4a2f, 0x555049, 0x808080, 0xe2a21e, 0xd8452a, 0x7a8590, 'industrial', ['barrels', 'barrels', 'crates']), { keep: true }),
+  skydock: Object.assign(_T(0x5a6c7c, 0x485a6a, 0x7a8c9c, 0x5f7384, 0x4e6678, 0x93a5b4, 0xf0c24a, 0x2a9ad8, 0xb4d6f0, 'industrial', ['crates', 'pods']), { keep: true }),
   sewer: Object.assign(_T(0x3e4a3c, 0x2f3a2e, 0x56604f, 0x44503f, 0x4a5442, 0x66705e, 0x8ab04a, 0x6fd06a, 0x1c241c, 'industrial', ['barrels', 'crates'], 0xb8e878), { keep: true }),
   gravity_lab: Object.assign(_T(0xdde3ee, 0xaab4c8, 0xe9eef7, 0xc8d2e4, 0x8c9cc0, 0xf3f6fb, 0x6a7cff, 0x7a4aff, 0x2a3050, 'space', ['pods', 'pylons'], 0xcfd8ff), { keep: true }),
   glassworks: Object.assign(_T(0xaec4c9, 0x8fa8ae, 0xcfe0e4, 0xa8c4cc, 0x88a8b0, 0xe2eef0, 0xffffff, 0x2ab8c8, 0xbfdfe8, 'ice', ['iceblocks', 'crates']), { keep: true }),
-  carrier:      _T(0x5a6168, 0x474d53, 0x7a828a, 0x6a7078, 0x555c63, 0x8a9299, 0xf2c24a, 0xc8402a, 0x7fa6c9, 'industrial', ['crates', 'barrels']),
+  carrier: Object.assign(_T(0x5a6168, 0x474d53, 0x7a828a, 0x6a7078, 0x555c63, 0x8a9299, 0xf2c24a, 0xc8402a, 0x7fa6c9, 'industrial', ['crates', 'barrels']), { keep: true }),
   overgrowth: Object.assign(_T(0x3f5a30, 0x314a24, 0x6a6f5a, 0x4f6a3a, 0x5a6f40, 0x7a7a5c, 0xa0c860, 0xf0a0c0, 0x9ccf9a, 'nature', ['trees', 'trees', 'rocks']), { keep: true }),
   orbital_station: Object.assign(_T(0x9aa4b0, 0x7c8794, 0xd0d6de, 0xaab4c0, 0x7a8696, 0xdfe4ea, 0xff8a3a, 0x2ab0ff, 0x05070d, 'space', ['pods', 'crates'], 0xbfe8ff), { keep: true }),
-  foundry:      _T(0x3e3a36, 0x2d2a27, 0x5a4a40, 0x6a5a50, 0x4a3f38, 0x70645a, 0xff8a2a, 0xff5a12, 0x2a1a12, 'fire', ['barrels', 'crates']),
-  carnival:     _T(0xcdb08a, 0xb69a74, 0xd8483a, 0xf2c93a, 0x3a8fd0, 0xf5ead0, 0xffffff, 0xff4aa0, 0xf0b0d0, 'carnival', ['crates', 'cones']),
+  foundry: Object.assign(_T(0x3e3a36, 0x2d2a27, 0x5a4a40, 0x6a5a50, 0x4a3f38, 0x70645a, 0xff8a2a, 0xff5a12, 0x2a1a12, 'fire', ['barrels', 'crates']), { keep: true }),
+  carnival: Object.assign(_T(0xcdb08a, 0xb69a74, 0xd8483a, 0xf2c93a, 0x3a8fd0, 0xf5ead0, 0xffffff, 0xff4aa0, 0xf0b0d0, 'carnival', ['crates', 'cones']), { keep: true }),
   biosphere:    _T(0x7aa060, 0x628a4a, 0xc8e0d8, 0xa0c8b8, 0x6a8a5a, 0xe0eee8, 0xffffff, 0x4ac88a, 0xbfe8f0, 'nature', ['trees', 'rocks']),
   lockdown: Object.assign(_T(0x3a3d40, 0x2c2e30, 0x555a5e, 0x6a6f74, 0x4a4e52, 0x7a7f84, 0xe8c43a, 0xd03a2a, 0x1a1c20, 'industrial', ['crates', 'barrels']), { keep: true }),
   studio: Object.assign(_T(0x2a2a30, 0x45454f, 0x3a3a46, 0x56485a, 0x6a5846, 0x4a4a56, 0xffd24a, 0xd0302a, 0x15151c, 'neon', ['crates', 'pylons'], 0xffe08a), { keep: true }),
@@ -10309,10 +10309,10 @@ const MAP_THEMES = {
   labyrinth: Object.assign(_T(0x6a6f66, 0x555a52, 0x7a7e72, 0x65695e, 0x595d52, 0x8a8e82, 0xa8b090, 0x6a9a5a, 0x8a9a8a, 'nature', ['rocks', 'trees']), { keep: true }),
   arena:        _T(0xc2a86a, 0xa88e52, 0x9a9a98, 0x7a7a78, 0x8a7048, 0xd0c090, 0xd8b048, 0xb02a2a, 0xa8c8e8, 'desert', ['pyramids', 'crates']),
   opera: Object.assign(_T(0x5a2a34, 0x44202a, 0x7a2e3c, 0x5a2a34, 0x3a2a30, 0x8a6a3a, 0xe8c050, 0xe8c050, 0x1a1015, 'urban', ['crates', 'pylons']), { keep: true }),
-  doomsday:     _T(0x4a4036, 0x3a322a, 0x5a4a3a, 0x6a5a4a, 0x4a3e32, 0x6a5e50, 0xe8742a, 0xe03a1a, 0x4a2a1a, 'fire', ['rocks', 'barrels']),
+  doomsday: Object.assign(_T(0x4a4036, 0x3a322a, 0x5a4a3a, 0x6a5a4a, 0x4a3e32, 0x6a5e50, 0xe8742a, 0xe03a1a, 0x4a2a1a, 'fire', ['rocks', 'barrels']), { keep: true }),
   train: Object.assign(_T(0x5a5a56, 0x484844, 0x4a5a6a, 0x7a4a3a, 0x555a60, 0x7a7a76, 0xe8c43a, 0x2a7ac8, 0x9ab4c8, 'industrial', ['crates', 'barrels']), { keep: true }),
   dreamscape:   _T(0xb6a0d8, 0x9a84c4, 0xd8c4f0, 0xf0b8d8, 0x8ab8f0, 0xf0e0ff, 0xffffff, 0xff9ad0, 0xd0b8f0, 'neon', ['iceblocks', 'pylons'], 0xfff0ff),
-  pearl_harbor: _T(0x8a8a7a, 0x76766a, 0x7a8a96, 0x5a6a76, 0x6a6a5a, 0xa09a86, 0xd8c88a, 0xb02a2a, 0x9ac8e8, 'industrial', ['crates', 'barrels', 'sandbags']),
+  pearl_harbor: Object.assign(_T(0x8a8a7a, 0x76766a, 0x7a8a96, 0x5a6a76, 0x6a6a5a, 0xa09a86, 0xd8c88a, 0xb02a2a, 0x9ac8e8, 'industrial', ['crates', 'barrels', 'sandbags']), { keep: true }),
   titanic:      Object.assign(_T(0x8a6a46, 0x745838, 0xc8b890, 0x3a3f4a, 0x6a5238, 0xd8c8a0, 0xe8c860, 0xa02a2a, 0x7aa0c0, 'urban', []), { keep: true }),
   supermarket: Object.assign(_T(0xd8d4c8, 0xbab6aa, 0xe8e0c8, 0x7ac0a0, 0xc86a3a, 0xf0ece0, 0xffd24a, 0xd03a3a, 0xd8e4ec, 'urban', ['crates', 'cones']), { keep: true }),
   pyongyang:    _T(0x8a8a84, 0x74746e, 0xb04040, 0x8a9aa8, 0x7a7a74, 0xb8b8b0, 0xe8c850, 0xc02a2a, 0xa8b8c4, 'urban', ['cars', 'crates']),
@@ -11143,30 +11143,32 @@ function _bkSlabHole(K, x0, x1, z0, z1, top, th, c, h) {
 }
 // A building: walls with a door (ground floor, on the sides asked for) and windows, floors and a roof of slabs, a
 // staircase between each pair of levels (alternating sides) up to the roof, a parapet, a little furniture.
+//   o.base   lifts the whole building (on a ship's deck, say)       o.gaps  { n: [x..], s: [x..], w: [z..], e: [z..] }
+//   leaves the parapet open there (where a bridge comes in)
 function _bkBuilding(K, x0, x1, z0, z1, o = {}) {
-  const floors = o.floors || 1, TOPH = 4.6, WH = 4.2, c = o.color || 0xd8d0bc, rc = o.roof || 0x8a8478, doors = o.doors || ['s'];
+  const floors = o.floors || 1, TOPH = 4.6, WH = 4.2, c = o.color || 0xd8d0bc, rc = o.roof || 0x8a8478, doors = o.doors || ['s'], B = o.base || 0, gaps = o.gaps || {};
   const W = x1 - x0, D = z1 - z0, steps = 12, d = Math.min(1.1, (D - 4) / steps);
   // The stairs go on the west wall, or the east one when the door is on the west: a stair in front of a door is a wall.
   const west0 = !(doors.includes('w') && !doors.includes('e'));
   for (let f = 0; f < floors; f++) {
-    const y0 = f * TOPH;
+    const y0 = B + f * TOPH;
     const along = (len, lo, door) => door ? [K.door(lo + len / 2, 3.4, 3.4), K.win(lo + len * 0.2), K.win(lo + len * 0.8)] : [K.win(lo + len * 0.25), K.win(lo + len * 0.75)];
     K.wx(x0, x1, z0 + 0.4, 0.8, y0, WH, c, along(W, x0, f === 0 && doors.includes('n')));
     K.wx(x0, x1, z1 - 0.4, 0.8, y0, WH, c, along(W, x0, f === 0 && doors.includes('s')));
     K.wz(z0 + 0.8, z1 - 0.8, x0 + 0.4, 0.8, y0, WH, c, along(D - 1.6, z0 + 0.8, f === 0 && doors.includes('w') && !west0));
     K.wz(z0 + 0.8, z1 - 0.8, x1 - 0.4, 0.8, y0, WH, c, along(D - 1.6, z0 + 0.8, f === 0 && doors.includes('e')));
     // the stairs up from this level
-    const west = (f % 2 === 0) === west0, sx = west ? x0 + 2.6 : x1 - 2.6, foot = west ? z0 + 3.2 : z1 - 3.2, dir = west ? 'S' : 'N';   // the foot clear of the wall: a body has to fit between
+    const west = (f % 2 === 0) === west0, sx = west ? x0 + 2.6 : x1 - 2.6, foot = west ? z0 + 3.2 : z1 - 3.2, dir = west ? 'S' : 'N';
     K.stairs(sx, foot, dir, TOPH, 3.2, 0x6a5a48, y0, d, TOPH / steps);
     const run = (steps - 1) * d + 0.6;
     const hole = { x0: sx - 1.7, x1: sx + 1.7, z0: west ? foot - 0.55 : foot - run, z1: west ? foot + run : foot + 0.55 };
-    _bkSlabHole(K, x0, x1, z0, z1, (f + 1) * TOPH, 0.4, f === floors - 1 ? rc : 0x9a8a72, hole);
+    _bkSlabHole(K, x0, x1, z0, z1, B + (f + 1) * TOPH, 0.4, f === floors - 1 ? rc : 0x9a8a72, hole);
     K.box(x0 + W * 0.6, y0, (z0 + z1) / 2, 2.6, 1.0, 1.2, 0x7a5a38);
     K.box(x0 + W * 0.45, y0, z0 + D * 0.3, 1.4, 1.4, 1.4, 0x8a6a3a, 0.3);
   }
-  const top = floors * TOPH;
-  K.wx(x0, x1, z0 + 0.15, 0.3, top, 1.0, rc); K.wx(x0, x1, z1 - 0.15, 0.3, top, 1.0, rc);
-  K.wz(z0, z1, x0 + 0.15, 0.3, top, 1.0, rc); K.wz(z0, z1, x1 - 0.15, 0.3, top, 1.0, rc);
+  const top = B + floors * TOPH, gap = (list) => (list || []).map(v => ({ at: v, w: 4, sill: 0, top: 9 }));
+  K.wx(x0, x1, z0 + 0.15, 0.3, top, 1.0, rc, gap(gaps.n)); K.wx(x0, x1, z1 - 0.15, 0.3, top, 1.0, rc, gap(gaps.s));
+  K.wz(z0, z1, x0 + 0.15, 0.3, top, 1.0, rc, gap(gaps.w)); K.wz(z0, z1, x1 - 0.15, 0.3, top, 1.0, rc, gap(gaps.e));
 }
 function _bkTruck(K, x, z, rot, c) {                                                       // a delivery truck / bus: cab and body
   const cs = Math.cos(rot), sn = Math.sin(rot), at = (lx, lz) => [x + lx * cs + lz * sn, z - lx * sn + lz * cs];
@@ -11885,6 +11887,242 @@ function buildSewerLayout() {
 }
 Object.assign(_BESPOKE, { cyber: buildCyberLayout, space: buildSpaceLayout, orbital_station: buildOrbitalLayout, gravity_lab: buildGravityLabLayout, glassworks: buildGlassworksLayout,
   studio: buildStudioLayout, lockdown: buildLockdownLayout, opera: buildOperaLayout, sewer: buildSewerLayout });
+
+// ── Batch C: industrial, naval and set-piece maps ─────────────────────────────────────────────
+// A reactor-style core: a block with a catwalk round it at `top`, a stair up on each side. (hx, hz) is the catwalk's
+// half-size; the block stands through it.
+function _bkCore(K, cx, cz, hx, hz, top, blockW, blockH, c, glow) {
+  K.box(cx, 0, cz, blockW, top - 0.2, blockW, c); K.box(cx, top - 0.2, cz, blockW * 0.6, blockH, blockW * 0.6, glow);
+  K.slab(cx - hx, cx + hx, cz - hz, cz + hz, top, 0.4, 0x8a8f94);
+  const gap = [{ at: 0, w: 4, sill: 0, top: 9 }];
+  K.wx(cx - hx, cx + hx, cz - hz + 0.15, 0.3, top, 1.0, 0x3a3f46, [{ at: cx, w: 4, sill: 0, top: 9 }]); K.wx(cx - hx, cx + hx, cz + hz - 0.15, 0.3, top, 1.0, 0x3a3f46, [{ at: cx, w: 4, sill: 0, top: 9 }]);
+  K.wz(cz - hz, cz + hz, cx - hx + 0.15, 0.3, top, 1.0, 0x3a3f46, [{ at: cz, w: 4, sill: 0, top: 9 }]); K.wz(cz - hz, cz + hz, cx + hx - 0.15, 0.3, top, 1.0, 0x3a3f46, [{ at: cz, w: 4, sill: 0, top: 9 }]);
+  const n = 12, d = 1.0, L = (n - 1) * d + 0.5;
+  K.stairs(cx, cz + hz + L, 'N', top, 3, 0x6a7078, 0, d, top / n); K.stairs(cx, cz - hz - L, 'S', top, 3, 0x6a7078, 0, d, top / n);
+  K.stairs(cx + hx + L, cz, 'W', top, 3, 0x6a7078, 0, d, top / n); K.stairs(cx - hx - L, cz, 'E', top, 3, 0x6a7078, 0, d, top / n);
+}
+// ☢️ Chernobyl: a reactor hall with a core and a catwalk, two cooling-tower shells, two apartment blocks, a bunker.
+function buildChernobylLayout() {
+  const name = 'chernobyl', K = _bkBegin(name, 140, 140, 0x58604f);
+  K.perim(8, 0x6f766a);
+  const conc = 0x8a8f86;
+  K.room(-34, 34, -32, 32, 0, 9, conc, { n: [K.door(0, 6, 4.4), K.door(-20, 4, 4.4), K.door(20, 4, 4.4)], s: [K.door(0, 6, 4.4), K.door(-20, 4, 4.4), K.door(20, 4, 4.4)], w: [K.door(0, 6, 4.4)], e: [K.door(0, 6, 4.4)] }, 1.2);
+  K.slab(-34, 34, -32, 32, 9.4, 0.4, 0x4a4f46);
+  _bkCore(K, 0, 0, 14, 14, 4.6, 12, 3.2, 0x5a6254, 0x7aff3a);
+  for (const [x, z] of [[-26, -24], [26, -24], [-26, 24], [26, 24]]) K.box(x, 0, z, 3, 9, 3, 0x6f766a);
+  for (const [x, z] of [[-22, 10], [22, -10], [8, -26]]) K.crate(x, z, 0x6a6a5a);
+  // the cooling-tower shells
+  for (const [cx, cz] of [[-52, -42], [52, 42]]) {
+    K.wx(cx - 12, cx + 12, cz - 11.4, 1.2, 0, 10, 0x7a7f76, [K.door(cx, 5, 4.4)]); K.wx(cx - 12, cx + 12, cz + 11.4, 1.2, 0, 10, 0x7a7f76, [K.door(cx, 5, 4.4)]);
+    K.wz(cz - 12, cz + 12, cx - 11.4, 1.2, 0, 10, 0x7a7f76, [K.door(cz, 5, 4.4)]); K.wz(cz - 12, cz + 12, cx + 11.4, 1.2, 0, 10, 0x7a7f76, [K.door(cz, 5, 4.4)]);
+    K.box(cx, 0, cz, 4, 1.2, 4, 0x5a5f56); K.poi('tower shell', cx + 6, cz + 6, 0);
+  }
+  // two apartment blocks
+  _bkBuilding(K, 42, 64, -30, -12, { floors: 3, color: 0x7a8074, roof: 0x4a4f46, doors: ['w', 's'] });
+  _bkBuilding(K, -64, -42, 12, 30, { floors: 3, color: 0x7a8074, roof: 0x4a4f46, doors: ['e', 'n'] });
+  K.hut(-8, 8, -52, -42, 0x6a6f64, 'ns', 3.4, 0x3a3f36); K.hut(-8, 8, 42, 52, 0x6a6f64, 'ns', 3.4, 0x3a3f36);
+  // barrels, containers, a wrecked truck
+  for (const [x, z] of [[-40, 6], [40, -6], [-14, 40], [14, -40], [-44, -20], [44, 20]]) { K.box(x, 0, z, 1.2, 1.6, 1.2, 0x6a7a3a); K.box(x + 1.5, 0, z + 0.4, 1.2, 1.6, 1.2, 0x5a5f66); K.box(x + 0.6, 0, z + 1.8, 1.2, 1.6, 1.2, 0x6a7a3a); }
+  K.pool(-18, -46, 2.4, 'acid', 0x7aff3a); K.pool(18, 46, 2.4, 'acid', 0x7aff3a);
+  K.spawn({ x0: -26, x1: 26, z0: 58, z1: 66 }, { x0: -26, x1: 26, z0: -66, z1: -58 });
+  MAP_GROUPS[name]._skyColor = 0x8a9482;
+}
+// 🛢️ Refinery: a control building in the middle, a tank farm, columns, and pipe racks you can walk under and along.
+function buildRefineryLayout() {
+  const name = 'refinery', K = _bkBegin(name, 140, 140, 0x4f4a42);
+  K.perim(8, 0x6a6a6a);
+  _bkBuilding(K, -13, 13, -9, 9, { floors: 2, color: 0x8a8a84, roof: 0x5a5a56, doors: ['n', 's', 'e', 'w'] });
+  // tanks: solid, with a stair up one side to the roof
+  [[-42, -26], [42, 26], [-42, 26], [42, -26]].forEach(([x, z], i) => K.mound(x - 7, x + 7, z - 7, z + 7, 4.6, i % 2 ? 0xb8b2a4 : 0xa8a294, [x < 0 ? 'e' : 'w']));
+  // pipe racks: a walkway on pillars at 4.6 along each side of the middle, stairs at both ends
+  for (const z of [-40, 40]) {
+    for (let x = -50; x <= 50; x += 12.5) K.box(x, 0, z, 1.0, 4.2, 1.0, 0x5a5f66);
+    K.slab(-52, 52, z - 1.5, z + 1.5, 4.6, 0.4, 0x7a7e82);
+    K.wx(-52, 52, z - 1.35, 0.3, 4.6, 1.0, 0x3a3a3a); K.wx(-52, 52, z + 1.35, 0.3, 4.6, 1.0, 0x3a3a3a);
+    K.stairs(63.5, z, 'W', 4.6, 3, 0x6a7078, 0, 1.0, 4.6 / 12); K.stairs(-63.5, z, 'E', 4.6, 3, 0x6a7078, 0, 1.0, 4.6 / 12);
+  }
+  // distillation columns and the flare
+  for (const [x, z] of [[-22, -22], [22, 22], [-22, 22], [22, -22], [0, -26], [0, 26]]) { K.box(x, 0, z, 4.4, 14, 4.4, 0x8a8a84); K.box(x, 3, z, 5.4, 0.6, 5.4, 0xd8452a); K.box(x, 8, z, 5.4, 0.6, 5.4, 0xd8452a); }
+  K.box(-58, 0, 0, 1.6, 30, 1.6, 0x5a5f66); K.box(58, 0, 0, 1.6, 30, 1.6, 0x5a5f66);
+  for (const [x, z] of [[-30, 0], [30, 0], [12, -52], [-12, 52], [-12, -20], [12, 20]]) K.crate(x, z, 0x7a6a4a);
+  K.hut(-6, 6, -56, -48, 0x7a7a74, 'ns', 3.4, 0x4a4a46); K.hut(-6, 6, 48, 56, 0x7a7a74, 'ns', 3.4, 0x4a4a46);
+  K.spawn({ x0: -26, x1: 26, z0: 58, z1: 66 }, { x0: -26, x1: 26, z0: -66, z1: -58 });
+  MAP_GROUPS[name]._skyColor = 0x7a8590;
+}
+// 🔥 Foundry: a casting hall with a glowing pit at its heart and rings of catwalk round it, crucible racks, a slag
+// floor with pools you have to go round.
+function buildFoundryLayout() {
+  const name = 'foundry', K = _bkBegin(name, 140, 140, 0x3e3a36);
+  K.perim(9, 0x5a4a40);
+  const steel = 0x6a5a50;
+  K.room(-36, 36, -30, 30, 0, 9, steel, { n: [K.door(0, 6, 4.4), K.door(-24, 4, 4.4), K.door(24, 4, 4.4)], s: [K.door(0, 6, 4.4), K.door(-24, 4, 4.4), K.door(24, 4, 4.4)], w: [K.door(0, 6, 4.4), K.door(-18, 4, 4.4), K.door(18, 4, 4.4)], e: [K.door(0, 6, 4.4), K.door(-18, 4, 4.4), K.door(18, 4, 4.4)] }, 1.2);
+  K.slab(-36, 36, -30, 30, 9.4, 0.4, 0x2a2420);
+  K.pool(0, 0, 7, 'lava', 0xff6a1a);                                                    // the pit
+  K.box(0, 0, -9.5, 18, 1.2, 1.2, 0x4a3f38); K.box(0, 0, 9.5, 18, 1.2, 1.2, 0x4a3f38); K.box(-9.5, 0, 0, 1.2, 1.2, 18, 0x4a3f38); K.box(9.5, 0, 0, 1.2, 1.2, 18, 0x4a3f38);   // a low kerb round it
+  // catwalks across the hall at 4.6 along both long sides, reached by stairs at the ends
+  for (const sz of [-1, 1]) {
+    K.slab(-32, 32, sz * 24 - 2, sz * 24 + 2, 4.6, 0.4, 0x7a6a5a);
+    K.wx(-32, 32, sz * 24 - sz * 1.85, 0.3, 4.6, 1.0, 0x3a3a3a, [{ at: -31.5, w: 4, sill: 0, top: 9 }]);
+    K.stairs(-31.5, sz * 10.5, sz > 0 ? 'S' : 'N', 4.6, 3, 0x6a5a50, 0, 1.0, 4.6 / 12);          // up from the hall floor to the near end of the catwalk
+  }
+  // crucibles and ladles
+  for (const [x, z] of [[-24, -12], [24, 12], [-24, 12], [24, -12]]) { K.box(x, 0, z, 5, 3.4, 5, 0x5a4a40); K.box(x, 3.4, z, 3, 1.0, 3, 0xff8a2a); }
+  for (const x of [-12, 12]) K.box(x, 0, -17, 1.4, 6, 1.4, 0x4a3f38);
+  // the yard: slag heaps, pools, scrap
+  K.pool(-52, 40, 4, 'lava', 0xff6a1a); K.pool(52, -40, 4, 'lava', 0xff6a1a); K.pool(-48, -44, 3, 'lava', 0xff6a1a); K.pool(50, 44, 3, 'lava', 0xff6a1a);
+  for (const [x, z] of [[-52, 12], [52, -12], [-44, -20], [44, 20], [-14, 46], [14, -46], [-60, -40], [60, 40]]) { K.box(x, 0, z, 7, 1.0, 6, 0x3a3430, x * 0.1); K.box(x, 1.0, z, 4, 0.9, 3.4, 0x3a3430, x * 0.1); }
+  for (const [x, z] of [[-30, 50], [30, -50], [-4, 44], [4, -44]]) K.crate(x, z, 0x5a4a40);
+  K.spawn({ x0: -26, x1: 26, z0: 58, z1: 66 }, { x0: -26, x1: 26, z0: -66, z1: -58 });
+  MAP_GROUPS[name]._skyColor = 0x2a1a12;
+}
+// ⚓ Carrier: a flight deck. An island of three floors, a hangar amidships with aircraft inside, parked jets and
+// tugs on the deck, with the two teams at the bow and the stern.
+function buildCarrierLayout() {
+  const name = 'carrier', K = _bkBegin(name, 70, 170, 0x5a6168);
+  K.perim(3.6, 0x3a4048);
+  const gray = 0x7a828a;
+  // the island, on the starboard side
+  _bkBuilding(K, 16, 32, -14, 14, { floors: 3, color: 0x8a929a, roof: 0x5a626a, doors: ['w', 'n', 's'] });
+  K.box(24, 13.8, 0, 3, 5, 3, 0x5a626a); K.box(24, 18.8, 0, 8, 1.4, 5, 0x2a6fc9);
+  // the hangar amidships: a roofed bay with its great doors open at both sides
+  K.room(-30, 10, -22, 22, 0, 6, gray, { n: [K.door(-10, 10, 5), K.door(-26, 5, 4.4)], s: [K.door(-10, 10, 5), K.door(-26, 5, 4.4)], w: [K.door(0, 6, 4.4)], e: [K.door(0, 6, 4.4)] }, 1);
+  K.slab(-30, 10, -22, 22, 6.4, 0.4, 0x4a5058);
+  const jet = (x, z, r, c) => { const cs = Math.cos(r), sn = Math.sin(r), at = (lx, lz) => [x + lx * cs + lz * sn, z - lx * sn + lz * cs];
+    let p = at(0, 0); K.box(p[0], 0, p[1], 3, 2.6, 15, c, r); p = at(0, 1); K.box(p[0], 0, p[1], 14, 0.9, 4, c, r); p = at(0, 6.5); K.box(p[0], 0, p[1], 5.5, 0.8, 2.2, c, r); K.box(p[0], 0, p[1], 0.6, 4, 2.4, c, r); };
+  jet(-18, -2, 0, 0x6a7280); jet(-4, 8, 0.1, 0x6a7280);
+  [[-22, 40, 0.3], [10, 56, -0.2], [-14, -42, 3.3], [8, -60, 2.9], [-8, 24, 0], [-24, -30, 0.2]].forEach(([x, z, r], i) => { if (Math.abs(z) > 30 || x < -30 || x > 12) jet(x, z, r, i % 2 ? 0x6a7280 : 0x7a8290); });
+  for (const [x, z] of [[-26, 64], [24, 66], [-24, -66], [26, -64], [0, 30], [0, -30]]) K.box(x, 0, z, 3.4, 1.6, 2.2, 0xe8c030);        // tugs
+  for (const [x, z] of [[-30, 20], [30, -20]]) K.crate(x, z, 0x5a6168);
+  K.box(0, 0, 70, 12, 1.2, 1.2, 0x8a929a); K.box(0, 0, -70, 12, 1.2, 1.2, 0x8a929a);                                                  // jet-blast deflectors
+  K.spawn({ x0: -22, x1: 22, z0: 74, z1: 82 }, { x0: -22, x1: 22, z0: -82, z1: -74 });
+  MAP_GROUPS[name]._skyColor = 0x7fa6c9;
+}
+// 🌊 Pearl Harbor: a dock and a battleship. The ship's deck is two metres up with a stair on to it, a superstructure
+// and turrets; the dock has warehouses, cranes and tanks to fight round and through.
+function buildPearlHarborLayout() {
+  const name = 'pearl_harbor', K = _bkBegin(name, 110, 170, 0x8a8a7a);
+  K.perim(7, 0x7a8a96);
+  const hull = 0x5a6a76, deckC = 0x8a8a7a;
+  // the battleship, moored along the east side
+  K.box(26, 0, 0, 20, 3.2, 100, hull);                                                      // hull and main deck, y = 3.2
+  K.box(26, 3.2, -20, 6, 1.6, 6, 0x4a5a66); K.box(26, 3.2, 20, 6, 1.6, 6, 0x4a5a66); K.box(26, 3.2, 38, 6, 1.6, 6, 0x4a5a66);   // turrets (the barrels: the long boxes)
+  K.box(26, 4.0, -26, 1.0, 1.0, 10, 0x3a4650); K.box(26, 4.0, 14, 1.0, 1.0, 10, 0x3a4650);
+  _bkBuilding(K, 20, 32, -8, 8, { floors: 2, color: 0x6a7a86, roof: 0x4a5a66, doors: ['w', 'n', 's'], base: 3.2 });          // the superstructure, on the deck
+  for (const z of [-36, 0, 30]) K.stairs(8.5, z, 'E', 3.2, 3, 0x6a7078, 0, 1.0, 3.2 / 8);                                          // gangways up from the quay
+  // the quay: warehouses, cranes, tanks, crates
+  K.room(-48, -30, -44, -22, 0, 5.4, 0x8a8478, { e: [K.door(-33, 5, 4.4)], s: [K.door(-39, 4, 4.4)] }); K.slab(-48, -30, -44, -22, 5.8, 0.4, 0x5a5448);
+  K.room(-48, -30, 22, 44, 0, 5.4, 0x8a8478, { e: [K.door(33, 5, 4.4)], n: [K.door(-39, 4, 4.4)] }); K.slab(-48, -30, 22, 44, 5.8, 0.4, 0x5a5448);
+  K.room(-12, 4, -8, 8, 0, 4.2, 0x7a8286, { n: [K.door(-4, 3.4)], s: [K.door(-4, 3.4)], e: [K.door(0, 3.4)], w: [K.door(0, 3.4)] }); K.slab(-12, 4, -8, 8, 4.6, 0.4, 0x4a5256);
+  for (const [x, z] of [[-14, -40], [-14, 40]]) { K.box(x - 2, 0, z, 0.8, 12, 0.8, 0xc8402a); K.box(x + 2, 0, z, 0.8, 12, 0.8, 0xc8402a); K.box(x, 11, z, 5, 0.8, 0.8, 0xc8402a); K.box(x + 6, 11, z, 12, 0.6, 0.6, 0xc8402a); }   // dock cranes
+  K.mound(-24, -10, -20, -6, 4.6, 0xb8b2a4, ['e']); K.mound(-24, -10, 6, 20, 4.6, 0xa8a294, ['e']);                                         // fuel tanks
+  for (const [x, z] of [[-20, 0], [-6, -26], [-6, 26], [4, -50], [4, 50], [-26, 52], [-26, -52], [10, 14], [10, -14]]) K.crate(x, z, 0x7a6a4a);
+  K.spawn({ x0: -34, x1: 6, z0: 64, z1: 78 }, { x0: -34, x1: 6, z0: -78, z1: -64 });
+  MAP_GROUPS[name]._skyColor = 0x9ac8e8;
+}
+// 🎈 Skydock: an airship moored between two towers. The airship's hull floats three metres up -- you can run under
+// it -- towers have three floors and are joined by a high catwalk, with hangars at each end.
+function buildSkydockLayout() {
+  const name = 'skydock', K = _bkBegin(name, 130, 150, 0x5a6c7c);
+  K.perim(8, 0x7a8c9c);
+  K.box(0, 3.2, 0, 14, 9, 60, 0xd8d2c0); K.box(0, 2.4, -6, 7, 1.2, 14, 0x6a4a3a); K.box(0, 5.5, -33, 5, 5, 5, 0xc8c2b0); K.box(0, 5.5, 33, 5, 5, 5, 0xc8c2b0);   // the airship
+  // two mooring towers, three floors, joined at the roof by a catwalk
+  _bkBuilding(K, -40, -22, -12, 12, { floors: 3, color: 0x7a8c9c, roof: 0x4a5c6c, doors: ['e', 'n', 's'], gaps: { e: [0] } });
+  _bkBuilding(K, 22, 40, -12, 12, { floors: 3, color: 0x7a8c9c, roof: 0x4a5c6c, doors: ['w', 'n', 's'], gaps: { w: [0] } });
+  K.slab(-22, 22, -1.6, 1.6, 13.8, 0.4, 0x6a7c8c); K.wx(-22, 22, -1.45, 0.3, 13.8, 1.1, 0x3a3a3a); K.wx(-22, 22, 1.45, 0.3, 13.8, 1.1, 0x3a3a3a);
+  K.poi('catwalk', 0, 0, 13.8);
+  // hangars
+  for (const sz of [-1, 1]) {
+    const z0 = sz > 0 ? 40 : -56, z1 = sz > 0 ? 56 : -40;
+    K.room(-30, 30, z0, z1, 0, 7, 0x6a7c8c, { [sz > 0 ? 'n' : 's']: [K.door(0, 12, 5.4), K.door(-22, 5, 4.4), K.door(22, 5, 4.4)], [sz > 0 ? 's' : 'n']: [K.door(0, 8, 5)] }, 1);
+    K.slab(-30, 30, z0, z1, 7.4, 0.4, 0x3a4c5c);
+    for (const x of [-16, 16]) K.box(x, 0, sz * 48, 5, 2.4, 3, 0x7a8696);
+  }
+  for (const [x, z] of [[-14, -26], [14, 26], [-14, 26], [14, -26], [-50, 10], [50, -10]]) K.crate(x, z, 0x8a7a5a);
+  for (const x of [-56, 56]) K.box(x, 0, 0, 3, 8, 12, 0x5a6c7c);
+  K.spawn({ x0: -22, x1: 22, z0: 62, z1: 70 }, { x0: -22, x1: 22, z0: -70, z1: -62 });
+  MAP_GROUPS[name]._skyColor = 0xb4d6f0;
+}
+// 💥 Doomsday: a wrecked city round a missile silo. A collapsed highway you can walk along, shells of buildings,
+// a command bunker entered from the street, rubble.
+function buildDoomsdayLayout() {
+  const name = 'doomsday', K = _bkBegin(name, 140, 140, 0x4a4036);
+  K.perim(8, 0x5a4a3a);
+  const rub = 0x5a4a3a, burnt = 0x2a2420;
+  // the silo: a ring wall with four gaps, the hatch in the middle, a stair up onto the rim
+  K.wx(-12, 12, -11.6, 1.2, 0, 3.6, 0x6a6258, [K.door(0, 5, 3)]); K.wx(-12, 12, 11.6, 1.2, 0, 3.6, 0x6a6258, [K.door(0, 5, 3)]);
+  K.wz(-12, 12, -11.6, 1.2, 0, 3.6, 0x6a6258, [K.door(0, 5, 3)]); K.wz(-12, 12, 11.6, 1.2, 0, 3.6, 0x6a6258, [K.door(0, 5, 3)]);
+  K.box(0, 0, 0, 10, 0.8, 10, 0x3a3a3a); K.box(0, 0.8, 0, 5, 0.6, 5, 0xd8420a);
+  // the collapsed highway: a raised road slab along z, with ramps at each end and gaps (cars as cover)
+  K.slab(-32, -26, -52, 52, 4.6, 0.6, 0x4a4a4c);
+  K.wz(-52, 52, -32.15, 0.3, 4.6, 1.0, 0x6a6a6a); K.wz(-52, 52, -25.85, 0.3, 4.6, 1.0, 0x6a6a6a);
+  for (let z = -48; z <= 48; z += 12) K.box(-29, 0, z, 1.6, 4.0, 1.6, 0x5a5a5a);
+  K.stairs(-29, 63.5, 'N', 4.6, 3, 0x5a5a5c, 0, 1.0, 4.6 / 12); K.stairs(-29, -63.5, 'S', 4.6, 3, 0x5a5a5c, 0, 1.0, 4.6 / 12);
+  K.box(-29, 4.6, -10, 2.4, 1.2, 4.6, 0x7a3a2a); K.box(-28, 4.6, 24, 2.4, 1.2, 4.6, 0x3a4a6a);
+  // shells of buildings: three walls and an open side, tall, burnt
+  const shell = (x0, x1, z0, z1, open) => {
+    if (open !== 'n') K.wx(x0, x1, z0 + 0.5, 1.0, 0, 7, burnt, [K.door((x0 + x1) / 2, 5, 3.4)]);
+    if (open !== 's') K.wx(x0, x1, z1 - 0.5, 1.0, 0, 7, burnt, [K.door((x0 + x1) / 2, 5, 3.4)]);
+    if (open !== 'w') K.wz(z0 + 1, z1 - 1, x0 + 0.5, 1.0, 0, 7, burnt, [K.win((z0 + z1) / 2, 3, 1.3, 3.6)]);
+    if (open !== 'e') K.wz(z0 + 1, z1 - 1, x1 - 0.5, 1.0, 0, 7, burnt, [K.win((z0 + z1) / 2, 3, 1.3, 3.6)]);
+    K.box((x0 + x1) / 2, 0, (z0 + z1) / 2 + 1, 2.4, 1.2, 1.4, rub); K.poi('shell', x0 + 3, (z0 + z1) / 2 - 3, 0);
+  };
+  shell(14, 34, -44, -26, 'w'); shell(40, 60, -20, -2, 'w'); shell(14, 34, 26, 44, 'e'); shell(40, 60, 10, 28, 'n');
+  shell(-62, -42, -46, -30, 'e'); shell(-62, -42, 32, 48, 'e');
+  // the command bunker (south-east), entered by a stair-less ramp of steps
+  K.room(38, 58, 36, 52, 0, 4.2, 0x6a6a62, { n: [K.door(48, 4, 3.6)], w: [K.door(44, 3.4, 3.4)] }); K.slab(38, 58, 36, 52, 4.6, 0.4, 0x4a4a42);
+  K.box(48, 0, 44, 8, 1.1, 2, 0x5a5a52);
+  // rubble heaps and burnt cars
+  _bkScatter(name, 16, { x0: -58, x1: 58, z0: -52, z1: 52, gap: 6 }, [[-14, 14, -14, 14], [-36, -22, -56, 56], [-30, 30, 58, 70], [-30, 30, -70, -58], [12, 62, -46, -0], [10, 62, 8, 30], [36, 60, 34, 54]], (x, z, i, rnd) => { K.box(x, 0, z, 3 + rnd() * 4, 1.1 + rnd() * 1.2, 3 + rnd() * 3, rub, rnd() * 3); });
+  K.spawn({ x0: -22, x1: 22, z0: 58, z1: 66 }, { x0: -22, x1: 22, z0: -66, z1: -58 });
+  MAP_GROUPS[name]._skyColor = 0x4a2a1a;
+}
+// 🌋 Volcano: obsidian ridges and lava pools across a black plain, a caldera in the middle you climb in rings, rock
+// arches to cross, a shrine on the south rim.
+function buildVolcanoLayout() {
+  const name = 'volcano', K = _bkBegin(name, 140, 140, 0x2a1f1c);
+  K.perim(10, 0x3a2b26);
+  const rock = 0x4a3028, obs = 0x1a1414;
+  // the caldera: five rings, each 0.5 higher, with a lava pool in the middle and a stair on each side
+  [[34, 0.5], [30, 1.0], [26, 1.5], [22, 2.0], [18, 2.5]].forEach(([w, top], i) => K.box(0, 0, 0, w, top, w, i % 2 ? 0x5a3a30 : rock));
+  K.box(0, 2.5, 0, 12, 0.3, 12, 0x2a1a16); K.pool(0, 0, 5, 'lava', 0xff6a1a);
+  // lava pools to skirt, and obsidian ridges and pillars to fight from
+  for (const [x, z, r] of [[-40, -20, 6], [40, 20, 6], [-42, 30, 5], [42, -30, 5], [0, -46, 5], [0, 46, 5], [-20, 14, 3], [20, -14, 3]]) K.pool(x, z, r, 'lava', 0xff6a1a);
+  for (const [x0, x1, z] of [[-60, -44, -8], [44, 60, 8], [-56, -40, 44], [40, 56, -44], [-18, -6, -34], [6, 18, 34]]) K.box((x0 + x1) / 2, 0, z, x1 - x0, 4.2, 2.4, obs);
+  for (const [x, z] of [[-26, 4], [26, -4], [-14, 28], [14, -28], [-48, -4], [48, 4], [8, -22], [-8, 22]]) { K.box(x, 0, z, 2.2, 6, 2.2, obs, x); K.box(x, 6, z, 1.4, 1.6, 1.4, 0x3a1a14, x); }
+  // rock arches: two blocks with a lintel at 4.6, a stair up one side
+  for (const [cx, cz] of [[-34, -4], [34, 4]]) { K.box(cx - 6, 0, cz, 3, 4.2, 6, rock); K.box(cx + 6, 0, cz, 3, 4.2, 6, rock); K.slab(cx - 7.5, cx + 7.5, cz - 3, cz + 3, 4.6, 0.8, 0x5a3a30); K.stairs(cx, cz + 3 + 11.5, 'N', 4.6, 3, 0x5a3a30, 0, 1.0, 4.6 / 12); }
+  K.hut(-10, 10, 50, 58, 0x4a3a34, 'n', 3.6, 0x2a1a16);
+  K.spawn({ x0: -26, x1: 26, z0: 60, z1: 66 }, { x0: -26, x1: 26, z0: -66, z1: -60 });
+  MAP_GROUPS[name]._skyColor = 0x5a1c0c;
+  // (the caldera is climbed by its own steps, one every half metre, all the way round)
+}
+// 🎡 Carnival: a midway. A carousel with a ring of posts under a canopy, a haunted house to go through, a big top with a
+// ring in the middle, game booths down the lanes, a ferris wheel's base platform.
+function buildCarnivalLayout() {
+  const name = 'carnival', K = _bkBegin(name, 140, 140, 0xcdb08a);
+  K.perim(7, 0xd8483a);
+  const red = 0xd8483a, blue = 0x3a8fd0, yellow = 0xf2c93a, cream = 0xf5ead0;
+  // the carousel: eight posts in a ring, a canopy overhead at 4.2 you can walk under, a platform in the middle
+  for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; K.box(Math.cos(a) * 9, 0, Math.sin(a) * 9, 0.8, 3.8, 0.8, i % 2 ? red : yellow); }
+  K.slab(-11, 11, -11, 11, 4.2, 0.4, red);
+  K.box(0, 0, 0, 6, 0.6, 6, 0x8a6a3a); K.box(0, 0.6, 0, 1.2, 3.2, 1.2, 0xe8d8b0);
+  // the haunted house: two floors, doors on three sides
+  _bkBuilding(K, -50, -28, -20, 4, { floors: 2, color: 0x4a3a52, roof: 0x2a1a32, doors: ['e', 's', 'n'] });
+  // the big top: a room with a ring in the middle and a gallery of seats
+  K.room(26, 56, -22, 14, 0, 7, blue, { w: [K.door(-4, 6, 5.2)], s: [K.door(41, 6, 5.2)], n: [K.door(41, 6, 5.2)] }, 1);
+  K.slab(26, 56, -22, 14, 7.4, 0.4, red);
+  K.box(41, 0, -4, 10, 0.8, 10, 0x8a6a3a);
+  for (const z of [-17, 9]) K.box(41, 0, z, 18, 1.0, 1.6, yellow);
+  // booths down the lanes
+  for (const [x, z] of [[-24, 36], [-10, 36], [10, 36], [24, 36], [-24, -36], [-10, -36], [10, -36], [24, -36]]) { K.room(x - 4, x + 4, z - 3, z + 3, 0, 3.4, [red, blue, yellow][Math.abs(x / 7 | 0) % 3], { [z > 0 ? 'n' : 's']: [K.door(x, 3, 2.8)] }); K.slab(x - 4.6, x + 4.6, z - 3.6, z + 3.6, 3.8, 0.4, cream); }
+  // the ferris wheel's platform and a stair
+  K.mound(-62, -46, 24, 40, 2.4, 0x8a8a84, ['e', 'n'], 0.4, 1.0, 3);
+  for (const [x, z] of [[-24, 8], [20, 20], [-14, -12], [12, -28], [46, 28], [-40, -38], [48, -46]]) K.crate(x, z, [red, blue, yellow][Math.abs(x | 0) % 3]);
+  K.spawn({ x0: -26, x1: 26, z0: 54, z1: 62 }, { x0: -26, x1: 26, z0: -62, z1: -54 });
+  MAP_GROUPS[name]._skyColor = 0xf0b0d0;
+}
+Object.assign(_BESPOKE, { chernobyl: buildChernobylLayout, refinery: buildRefineryLayout, foundry: buildFoundryLayout, carrier: buildCarrierLayout, pearl_harbor: buildPearlHarborLayout,
+  skydock: buildSkydockLayout, doomsday: buildDoomsdayLayout, volcano: buildVolcanoLayout, carnival: buildCarnivalLayout });
 
 function initMapThemes() {
   for (const name of Object.keys(MAP_THEMES)) {
