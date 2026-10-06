@@ -5050,6 +5050,11 @@ function resolvePosCollisions(px, pz, feetY = 0) {
   const RADIUS = PLAYER_RADIUS;
   for (const box of wallColliders) {
     if (feetY >= box.max.y - 0.08) continue;
+    // A slab overhead -- a roof, a deck, a bridge -- is not in the way: only what overlaps the body is. Without this
+    // every box above a bot's head pushed it sideways out to that box's NEAREST EDGE: a roof 100 m across threw every
+    // bot onto the wall, and a deck threw the bots under it out from beneath. Wedged in a wall, a bot "freezes", and
+    // its own wall stops every bullet while an explosion, which ignores walls, still reaches it.
+    if (box.min.y >= feetY + 1.8) continue;
     const exMinX = box.min.x - RADIUS, exMaxX = box.max.x + RADIUS;
     const exMinZ = box.min.z - RADIUS, exMaxZ = box.max.z + RADIUS;
     if (px <= exMinX || px >= exMaxX || pz <= exMinZ || pz >= exMaxZ) continue;
@@ -9938,7 +9943,7 @@ const GRID_MAP_ARCHETYPES = [
 const GRID_CONCEPT_MAPS_ACTIVE = true;
 // Hand-built maps with their own mechanics: the grid-concept pass below must not wipe them.
 const MECHANIC_MAP_NAMES = new Set(['storm_pier', 'pinball_arcade', 'laser_vault', 'cargo_belts', 'gale_peaks', 'magma_rise',
-  'titanic', 'warehouse', 'urban', 'airport', 'train', 'supermarket']);   // + the hand-built layouts (see _BESPOKE)
+  'titanic', 'warehouse', 'urban', 'airport', 'train', 'supermarket', 'battlefield', 'forest', 'vietnam', 'desert', 'tundra', 'trenches', 'overgrowth', 'holiday', 'labyrinth']);   // + the hand-built layouts (see _BESPOKE)
 function clearMapForGridConcept(name) {
   if (isArchivedLobbyMap(name)) return;
   const group = MAP_GROUPS[name];
@@ -10272,19 +10277,19 @@ replaceBuiltMapsWithGridConcepts();
 const _T = (g, gr, w, w2, c, d, t, a, sky, motif, props, wl) => ({ g, gr, w, w2, c, d, t, a, sky, motif, props: props || [], wl: wl ?? 0xffd98a });
 const MAP_THEMES = {
   blank:        _T(0xb9bec2, 0x9aa0a6, 0xdfe3e6, 0xc9cfd4, 0xaab2b8, 0xe9edf0, 0xf2c14e, 0x4a90d9, 0xa5b6c4, 'industrial', ['crates', 'barrels']),
-  battlefield:  _T(0x5f7a45, 0x4f6a39, 0x7b705f, 0x6a6050, 0x6b5d49, 0x8a7d66, 0xc2a45a, 0xb23a2e, 0x9cc4e4, 'nature', ['sandbags', 'trees', 'crates']),
+  battlefield: Object.assign(_T(0x5f7a45, 0x4f6a39, 0x7b705f, 0x6a6050, 0x6b5d49, 0x8a7d66, 0xc2a45a, 0xb23a2e, 0x9cc4e4, 'nature', ['sandbags', 'trees', 'crates']), { keep: true }),
   range:        _T(0x6b7076, 0x565b61, 0x8c929a, 0x777d85, 0x5a6068, 0x9aa0a8, 0xe8c43a, 0xd04a3a, 0x8a929c, 'industrial', ['crates', 'barrels']),
   urban: Object.assign(_T(0x4a4d52, 0x3d4044, 0x8a6f5d, 0x6f7b86, 0x5a5f66, 0x9a9a98, 0xd8c8a0, 0xd9822b, 0x8fa2b4, 'urban', ['cars', 'crates', 'barrels']), { keep: true }),
   warehouse: Object.assign(_T(0x6d6a64, 0x57544f, 0x6f7d86, 0x8a6a46, 0x7a5a38, 0x8d8f91, 0xe8b932, 0xc8402a, 0x2f3338, 'industrial', ['crates', 'crates', 'barrels']), { keep: true }),
-  forest:       _T(0x4d6b35, 0x3f5a2b, 0x6b5a45, 0x56693a, 0x6b6b5f, 0x8a7352, 0x9bb86a, 0xe0c24a, 0xa8d3e8, 'nature', ['trees', 'trees', 'rocks', 'logs']),
-  vietnam:      _T(0x5a6b3a, 0x4a5a2e, 0x7d6a45, 0x5a6a38, 0x6a5a3a, 0x8a7a54, 0xb8a05a, 0xc8402a, 0xb8c8a0, 'nature', ['trees', 'sandbags', 'crates']),
+  forest: Object.assign(_T(0x4d6b35, 0x3f5a2b, 0x6b5a45, 0x56693a, 0x6b6b5f, 0x8a7352, 0x9bb86a, 0xe0c24a, 0xa8d3e8, 'nature', ['trees', 'trees', 'rocks', 'logs']), { keep: true }),
+  vietnam: Object.assign(_T(0x5a6b3a, 0x4a5a2e, 0x7d6a45, 0x5a6a38, 0x6a5a3a, 0x8a7a54, 0xb8a05a, 0xc8402a, 0xb8c8a0, 'nature', ['trees', 'sandbags', 'crates']), { keep: true }),
   volcano:      _T(0x2a1f1c, 0x4a1f10, 0x3a2b26, 0x4a3028, 0x2f2522, 0x5a4036, 0xff7a2a, 0xff4a12, 0x3a1208, 'fire', ['rocks', 'rocks']),
   cyber:        _T(0x10141f, 0x1a8aa8, 0x1b2338, 0x242b45, 0x2a3355, 0x1d2840, 0x00e5ff, 0xff2bd6, 0x0b0e1c, 'neon', ['crates', 'pylons'], 0x66f0ff),
-  desert:       _T(0xd2b27a, 0xbd9d64, 0xc9a46c, 0xb58a55, 0x9d7a4a, 0xdcc08a, 0xe8d3a0, 0x2f8f8a, 0xcfe3f2, 'desert', ['pyramids', 'crates', 'rocks']),
-  tundra:       _T(0xe8f0f5, 0xc4d4de, 0xb9ccd9, 0x9fb6c6, 0xc9d8e2, 0xdbe7ef, 0xffffff, 0x3a8fd0, 0xdde9f2, 'ice', ['iceblocks', 'rocks']),
+  desert: Object.assign(_T(0xd2b27a, 0xbd9d64, 0xc9a46c, 0xb58a55, 0x9d7a4a, 0xdcc08a, 0xe8d3a0, 0x2f8f8a, 0xcfe3f2, 'desert', ['pyramids', 'crates', 'rocks']), { keep: true }),
+  tundra: Object.assign(_T(0xe8f0f5, 0xc4d4de, 0xb9ccd9, 0x9fb6c6, 0xc9d8e2, 0xdbe7ef, 0xffffff, 0x3a8fd0, 0xdde9f2, 'ice', ['iceblocks', 'rocks']), { keep: true }),
   space:        _T(0x14182a, 0x2a3a66, 0x2c3550, 0x3a4666, 0x4a5678, 0x232c48, 0x6ad5ff, 0xa56bff, 0x05060f, 'space', ['pods', 'crates'], 0x9ae6ff),
   airport: Object.assign(_T(0x6e7378, 0x5a5f64, 0xc4c9cf, 0xa6adb5, 0x888f97, 0xd0d4d8, 0xf2b01e, 0x2a6fc9, 0xa8cfee, 'industrial', ['crates', 'cars']), { keep: true }),
-  trenches:     _T(0x6b5a3f, 0x57492f, 0x7a6a4a, 0x5f5238, 0x5a4a30, 0x8a7a58, 0xa89a6a, 0xb23a2e, 0x8a8f86, 'nature', ['sandbags', 'sandbags', 'crates']),
+  trenches: Object.assign(_T(0x6b5a3f, 0x57492f, 0x7a6a4a, 0x5f5238, 0x5a4a30, 0x8a7a58, 0xa89a6a, 0xb23a2e, 0x8a8f86, 'nature', ['sandbags', 'sandbags', 'crates']), { keep: true }),
   chernobyl:    _T(0x5a6054, 0x474d42, 0x8a8f86, 0x6f766a, 0x5a6252, 0x9a9f94, 0xc8d23a, 0x6fe03a, 0x8a9482, 'industrial', ['barrels', 'crates', 'rocks'], 0xb8ff7a),
   refinery:     _T(0x4f4a42, 0x3d3933, 0x6a6a6a, 0x8a4a2f, 0x555049, 0x808080, 0xe2a21e, 0xd8452a, 0x7a8590, 'industrial', ['barrels', 'barrels', 'crates']),
   skydock:      _T(0x5a6c7c, 0x485a6a, 0x7a8c9c, 0x5f7384, 0x4e6678, 0x93a5b4, 0xf0c24a, 0x2a9ad8, 0xb4d6f0, 'industrial', ['crates', 'pods']),
@@ -10292,7 +10297,7 @@ const MAP_THEMES = {
   gravity_lab:  _T(0xdde3ee, 0xaab4c8, 0xe9eef7, 0xc8d2e4, 0x8c9cc0, 0xf3f6fb, 0x6a7cff, 0x7a4aff, 0x2a3050, 'space', ['pods', 'pylons'], 0xcfd8ff),
   glassworks:   _T(0xaec4c9, 0x8fa8ae, 0xcfe0e4, 0xa8c4cc, 0x88a8b0, 0xe2eef0, 0xffffff, 0x2ab8c8, 0xbfdfe8, 'ice', ['iceblocks', 'crates']),
   carrier:      _T(0x5a6168, 0x474d53, 0x7a828a, 0x6a7078, 0x555c63, 0x8a9299, 0xf2c24a, 0xc8402a, 0x7fa6c9, 'industrial', ['crates', 'barrels']),
-  overgrowth:   _T(0x3f5a30, 0x314a24, 0x6a6f5a, 0x4f6a3a, 0x5a6f40, 0x7a7a5c, 0xa0c860, 0xf0a0c0, 0x9ccf9a, 'nature', ['trees', 'trees', 'rocks']),
+  overgrowth: Object.assign(_T(0x3f5a30, 0x314a24, 0x6a6f5a, 0x4f6a3a, 0x5a6f40, 0x7a7a5c, 0xa0c860, 0xf0a0c0, 0x9ccf9a, 'nature', ['trees', 'trees', 'rocks']), { keep: true }),
   orbital_station: _T(0x9aa4b0, 0x7c8794, 0xd0d6de, 0xaab4c0, 0x7a8696, 0xdfe4ea, 0xff8a3a, 0x2ab0ff, 0x05070d, 'space', ['pods', 'crates'], 0xbfe8ff),
   foundry:      _T(0x3e3a36, 0x2d2a27, 0x5a4a40, 0x6a5a50, 0x4a3f38, 0x70645a, 0xff8a2a, 0xff5a12, 0x2a1a12, 'fire', ['barrels', 'crates']),
   carnival:     _T(0xcdb08a, 0xb69a74, 0xd8483a, 0xf2c93a, 0x3a8fd0, 0xf5ead0, 0xffffff, 0xff4aa0, 0xf0b0d0, 'carnival', ['crates', 'cones']),
@@ -10300,8 +10305,8 @@ const MAP_THEMES = {
   lockdown:     _T(0x3a3d40, 0x2c2e30, 0x555a5e, 0x6a6f74, 0x4a4e52, 0x7a7f84, 0xe8c43a, 0xd03a2a, 0x1a1c20, 'industrial', ['crates', 'barrels']),
   studio:       _T(0x2a2a30, 0x45454f, 0x3a3a46, 0x56485a, 0x6a5846, 0x4a4a56, 0xffd24a, 0xd0302a, 0x15151c, 'neon', ['crates', 'pylons'], 0xffe08a),
   temple:       _T(0xc4b48a, 0xa89868, 0xb89a62, 0x9a8050, 0x8a7248, 0xd8c898, 0xe8c24a, 0x3a8a70, 0xb8d8c0, 'desert', ['pyramids', 'rocks']),
-  holiday:      _T(0xf4f8fa, 0xc8d8e0, 0xc4332e, 0x2f7a4a, 0xe8d8c0, 0xf8f0e0, 0xffd24a, 0xffffff, 0xb8c8d8, 'carnival', ['iceblocks', 'crates']),
-  labyrinth:    _T(0x6a6f66, 0x555a52, 0x7a7e72, 0x65695e, 0x595d52, 0x8a8e82, 0xa8b090, 0x6a9a5a, 0x8a9a8a, 'nature', ['rocks', 'trees']),
+  holiday: Object.assign(_T(0xf4f8fa, 0xc8d8e0, 0xc4332e, 0x2f7a4a, 0xe8d8c0, 0xf8f0e0, 0xffd24a, 0xffffff, 0xb8c8d8, 'carnival', ['iceblocks', 'crates']), { keep: true }),
+  labyrinth: Object.assign(_T(0x6a6f66, 0x555a52, 0x7a7e72, 0x65695e, 0x595d52, 0x8a8e82, 0xa8b090, 0x6a9a5a, 0x8a9a8a, 'nature', ['rocks', 'trees']), { keep: true }),
   arena:        _T(0xc2a86a, 0xa88e52, 0x9a9a98, 0x7a7a78, 0x8a7048, 0xd0c090, 0xd8b048, 0xb02a2a, 0xa8c8e8, 'desert', ['pyramids', 'crates']),
   opera:        _T(0x5a2a34, 0x44202a, 0x7a2e3c, 0x5a2a34, 0x3a2a30, 0x8a6a3a, 0xe8c050, 0xe8c050, 0x1a1015, 'urban', ['crates', 'pylons']),
   doomsday:     _T(0x4a4036, 0x3a322a, 0x5a4a3a, 0x6a5a4a, 0x4a3e32, 0x6a5e50, 0xe8742a, 0xe03a1a, 0x4a2a1a, 'fire', ['rocks', 'barrels']),
@@ -10984,7 +10989,7 @@ function buildMapScenery(name) {
 // structures with an outside and an inside -- decks and corridors, rooms and halls, stairs between floors -- so a
 // match has close quarters and long sight lines in the same map. They replace the archetype layout outright.
 // Teams spawn at the two ends along z (allies +z, enemies -z), in the rectangles MAP_SPAWNS names.
-var MAP_SPAWNS = {};
+var MAP_SPAWNS = {}, MAP_POIS = {};
 function _bkit(name) {
   const K = { name };
   K.box = (x, y0, z, w, h, d, c, rot) => addMapBox(name, x, y0 + h / 2, z, w, h, d, c, rot || 0);
@@ -11022,7 +11027,47 @@ function _bkit(name) {
   K.ground = (w, d, color) => {
     const g = new THREE.Mesh(new THREE.PlaneGeometry(w, d), new THREE.MeshLambertMaterial({ color }));
     g.rotation.x = -Math.PI / 2; MAP_GROUPS[name].add(g); setMapBounds(name, w, d);
+    K.hx = w / 2; K.hz = d / 2;
   };
+  K.perim = (h, c, t = 0.8) => { K.wx(-K.hx, K.hx, -K.hz + t / 2, t, 0, h, c); K.wx(-K.hx, K.hx, K.hz - t / 2, t, 0, h, c); K.wz(-K.hz, K.hz, -K.hx + t / 2, t, 0, h, c); K.wz(-K.hz, K.hz, K.hx - t / 2, t, 0, h, c); };
+  // Spots every map must let you reach, noted for the walkability check (and the foot-of-the-stairs ones automatically).
+  K.poi = (label, x, z, h = 0) => { (MAP_POIS[name] = MAP_POIS[name] || []).push([label, x, z, h]); };
+  const rawStairs = K.stairs;
+  K.stairs = (x, z, dir, rise, width, c, y0 = 0, depth = 1.1, stepH = 0.4) => {
+    const r = rawStairs(x, z, dir, rise, width, c, y0, depth, stepH);
+    const dx = dir === 'E' ? 1 : dir === 'W' ? -1 : 0, dz = dir === 'S' ? 1 : dir === 'N' ? -1 : 0;
+    K.poi('stairs top', x + dx * (r.n - 1) * depth, z + dz * (r.n - 1) * depth, y0 + rise);
+    return r;
+  };
+  // A solid raised block with a stair up each side asked for ('n' -z, 's' +z, 'w' -x, 'e' +x).
+  K.mound = (x0, x1, z0, z1, top, c, sides = [], stepH = 0.4, depth = 1.0, width = 3) => {
+    K.box((x0 + x1) / 2, 0, (z0 + z1) / 2, x1 - x0, top, z1 - z0, c);
+    const n = Math.max(2, Math.round(top / stepH)), L = (n - 1) * depth + depth / 2, sh = top / n;
+    for (const s of sides) {
+      if (s === 's') K.stairs((x0 + x1) / 2, z1 + L, 'N', top, width, c, 0, depth, sh);
+      else if (s === 'n') K.stairs((x0 + x1) / 2, z0 - L, 'S', top, width, c, 0, depth, sh);
+      else if (s === 'e') K.stairs(x1 + L, (z0 + z1) / 2, 'W', top, width, c, 0, depth, sh);
+      else if (s === 'w') K.stairs(x0 - L, (z0 + z1) / 2, 'E', top, width, c, 0, depth, sh);
+    }
+  };
+  // A one-room hut with a roof slab; `door` is the sides that get a door ('ew' = both), the others get a window.
+  K.hut = (x0, x1, z0, z1, c, door = 's', h = 3.4, roof = 0x6a5a48) => {
+    const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, o = { n: [], s: [], e: [], w: [] };
+    for (const side of ['n', 's', 'e', 'w']) { const along = side === 'n' || side === 's' ? cx : cz; o[side] = door.includes(side) ? [K.door(along, 3, h - 0.5)] : [K.win(along)]; }
+    K.room(x0, x1, z0, z1, 0, h, c, o);
+    K.slab(x0, x1, z0, z1, h + 0.4, 0.4, roof);
+    K.poi('hut', cx, cz, 0);
+  };
+  K.sandbags = (x, z, w, rot = 0) => { K.box(x, 0, z, w, 1.3, 1.2, 0xb9a57a, rot); };
+  K.crate = (x, z, c = 0x8a6a3a, rot = 0) => { K.box(x, 0, z, 2.2, 2.0, 2.2, c, rot); };
+  // A pool of lava, acid or the like: lit on the floor, and it hurts.
+  K.pool = (x, z, r, type = 'lava', color = 0xff5a12) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(r * 1.9, 0.06, r * 1.9), new THREE.MeshBasicMaterial({ color }));
+    m.position.set(x, 0.05, z); m.rotation.y = 0.5; MAP_GROUPS[name].add(m);
+    const m2 = new THREE.Mesh(new THREE.BoxGeometry(r * 1.9, 0.06, r * 1.9), new THREE.MeshBasicMaterial({ color })); m2.position.set(x, 0.05, z); MAP_GROUPS[name].add(m2);
+    MAP_GIMMICKS[name].damageZones.push({ x, z, r, dps: type === 'lava' ? 6 : 4, type });
+  };
+  K.spawn = (ally, enemy) => { MAP_SPAWNS[name] = { ally, enemy }; };
   return K;
 }
 function _bkBegin(name, w, d, groundColor) {
@@ -11311,6 +11356,273 @@ function buildSupermarketLayout() {
   MAP_GROUPS[name]._skyColor = 0xd8e4ec;
 }
 Object.assign(_BESPOKE, { warehouse: buildWarehouseLayout, urban: buildUrbanLayout, airport: buildAirportLayout, train: buildTrainLayout, supermarket: buildSupermarketLayout });
+
+// ── Batch A: the open-air maps ────────────────────────────────────────────────────────────────
+// A scatter helper: places `fn(x, z, i)` up to `count` times at seeded random spots in the rect, clear of keep-out rects.
+function _bkScatter(name, count, rect, keep, fn) {
+  const rnd = _thRng(name + ':scatter' + (rect.salt || 0));
+  let placed = 0;
+  for (let i = 0; i < count * 12 && placed < count; i++) {
+    const x = rect.x0 + rnd() * (rect.x1 - rect.x0), z = rect.z0 + rnd() * (rect.z1 - rect.z0);
+    if (keep.some(k => x > k[0] && x < k[1] && z > k[2] && z < k[3])) continue;
+    keep.push([x - (rect.gap || 5), x + (rect.gap || 5), z - (rect.gap || 5), z + (rect.gap || 5)]);
+    fn(x, z, placed++, rnd);
+  }
+}
+// 🪖 Battlefield: two trench lines, a cratered no-man's-land, a ruined farmhouse in the middle, a barn and a
+// bunker on the flanks, hedgerows and a wrecked tank.
+function buildBattlefieldLayout() {
+  const name = 'battlefield', K = _bkBegin(name, 120, 160, 0x5f7a45);
+  const berm = 0x6a5a3c, stone = 0x8a8478, wood = 0x7a5a3a;
+  K.perim(6, berm);
+  for (const sz of [1, -1]) {                                          // a trench line per side: two staggered rows of sandbag walls
+    for (const [x0, x1] of [[-52, -34], [-26, -8], [0, 18], [26, 44]]) K.box((x0 + x1) / 2, 0, sz * 50, x1 - x0, 1.4, 1.2, 0xb9a57a);
+    for (const [x0, x1] of [[-44, -28], [-16, 2], [10, 28], [36, 52]]) K.box((x0 + x1) / 2, 0, sz * 42, x1 - x0, 1.4, 1.2, 0xb9a57a);
+    for (const x of [-40, -12, 8, 40]) K.sandbags(x, sz * 46, 3.2, 0);
+    for (const dx of [-38, 38]) K.hut(dx - 6, dx + 6, Math.min(sz * 60, sz * 68), Math.max(sz * 60, sz * 68), 0x6a5a48, sz > 0 ? 'n' : 's', 3.2, 0x4a3a28);   // dugouts behind each line
+  }
+  // no man's land: craters, hedgerows, a wrecked tank
+  const keep = [[-60, 60, -4, 4], [-60, -40, -14, 14]];
+  _bkScatter(name, 14, { x0: -52, x1: 52, z0: -34, z1: 34, gap: 6 }, [[-16, 16, -14, 14]], (x, z, i) => { K.box(x, 0, z, 6, 0.5, 6, 0x4a4030, i * 0.5); K.box(x, 0.5, z, 3.2, 0.45, 3.2, 0x4a4030, i * 0.5); });
+  for (const [x0, x1, z] of [[-56, -30, 26], [30, 56, -26], [-56, -34, -22], [34, 56, 22]]) K.box((x0 + x1) / 2, 0, z, x1 - x0, 2.2, 1.5, 0x4a6a34);   // hedgerows
+  K.box(26, 0, 6, 7, 2.2, 3.4, 0x5a6048); K.box(24.5, 2.2, 6, 3.2, 1.2, 3, 0x4a5038); K.box(31, 1.6, 6, 5, 0.5, 0.6, 0x3a3a34);   // tank
+  // the farmhouse and its yard
+  _bkBuilding(K, -13, 13, -9, 9, { floors: 2, color: stone, roof: 0x5a4a38, doors: ['n', 's', 'e', 'w'] });
+  for (const [x0, x1, z] of [[-20, -8, -14], [8, 20, -14], [-20, -8, 14], [8, 20, 14]]) K.box((x0 + x1) / 2, 0, z, x1 - x0, 2.2, 0.9, stone);
+  K.poi('farmhouse', 0, 0, 0);
+  // the barn (west) with a hayloft
+  K.room(-54, -32, -12, 12, 0, 5, wood, { n: [K.door(-43, 6, 4)], s: [K.door(-43, 6, 4)], e: [K.door(0, 4, 3.4)] });
+  K.slab(-54, -32, -12, 12, 5.4, 0.4, 0x4a3a28);
+  K.box(-43, 0, 0, 3, 1.4, 3, 0x9a8a4a);
+  // the bunker (east)
+  K.hut(34, 46, -6, 6, 0x6a6a60, 'w', 3.4, 0x4a4a42); K.sandbags(31, -9, 6); K.sandbags(31, 9, 6);
+  K.spawn({ x0: -24, x1: 24, z0: 65, z1: 76 }, { x0: -24, x1: 24, z0: -76, z1: -65 });
+  MAP_GROUPS[name]._skyColor = 0x9cc4e4;
+}
+// 🌲 Forest: dense trees and logs with a clearing at each end, a rock outcrop, a ranger's cabin, and a pair of
+// treehouses on a rope bridge over the middle.
+function buildForestLayout() {
+  const name = 'forest', K = _bkBegin(name, 140, 140, 0x4d6b35);
+  K.perim(8, 0x5a5a50);
+  const keep = [[-30, 30, 54, 70], [-30, 30, -70, -54], [-12, 12, -26, 26], [-36, -18, -12, 12], [-22, -10, -52, 4], [-22, 22, -6, 6], [10, 22, -4, 54], [-22, -10, -56, -28], [10, 22, 28, 56]];
+  _bkScatter(name, 34, { x0: -62, x1: 62, z0: -52, z1: 52, gap: 5 }, keep, (x, z, i, rnd) => {
+    const r = 1 + rnd() * 0.6, h = 8 + rnd() * 3;
+    K.box(x, 0, z, 1.8 * r, h, 1.8 * r, 0x4a3626);
+    K.box(x, h - 1, z, 6 + rnd() * 2, 3, 6 + rnd() * 2, i % 2 ? 0x2f5a2a : 0x3a6a30);
+    if (i % 3 === 0) K.box(x + 3.6, 0, z + 1, 6.4, 1.1, 1.1, 0x5a4430, 0.4);          // a fallen log
+  });
+  K.poi('clearing', 0, 60, 0); K.poi('clearing', 0, -60, 0);
+  // boulders you can climb: five steps
+  const boulders = (x, z) => { [[8, 0.45], [6.4, 0.9], [4.8, 1.35], [3.2, 1.8]].forEach(([w, top], i) => K.box(x, 0, z, w, top, w, i % 2 ? 0x7a7a72 : 0x6a6a64, i * 0.3)); };
+  boulders(-46, 8); boulders(46, -8); boulders(40, 30); boulders(-40, -30);
+  // the ranger's cabin
+  K.hut(-34, -22, -8, 8, 0x7a5a38, 'e', 3.4, 0x4a3a28);
+  K.box(-20, 0, -5, 2.4, 1.0, 5, 0x5a4430);
+  // the treehouses: two decks at 4.6, a bridge between, a stair up to each
+  const deck = (x, z) => {
+    for (const [dx, dz] of [[-3, -3], [3, -3], [-3, 3], [3, 3]]) K.box(x + dx, 0, z + dz, 1.2, 4.2, 1.2, 0x4a3626);
+    K.slab(x - 4.5, x + 4.5, z - 4.5, z + 4.5, 4.6, 0.4, 0x8a6a3a);
+    K.wz(z - 4.5, z + 4.5, x - 4.35, 0.3, 4.6, 1.1, 0x5a4430); K.wz(z - 4.5, z + 4.5, x + 4.35, 0.3, 4.6, 1.1, 0x5a4430);   // rails on the sides; the ends are open, for the stair and the bridge
+    K.box(x, 4.6, z, 2.4, 1.2, 2.4, 0x5a4430);
+  };
+  deck(-16, -34); deck(16, 34);
+  K.stairs(-16, -50, 'S', 4.6, 3, 0x6a5038, 0, 1.0, 4.6 / 12);          // up to the first deck from the north
+  K.stairs(16, 50, 'N', 4.6, 3, 0x6a5038, 0, 1.0, 4.6 / 12);
+  K.slab(-17.5, -14.5, -29.5, 1.5, 4.6, 0.3, 0x8a6a3a);                    // the rope bridge: down from one deck, across the middle, up to the other
+  K.slab(-17.5, 17.5, -1.5, 1.5, 4.6, 0.3, 0x8a6a3a);
+  K.slab(14.5, 17.5, -1.5, 29.5, 4.6, 0.3, 0x8a6a3a);
+  K.poi('bridge', 0, 0, 4.6);
+  K.spawn({ x0: -26, x1: 26, z0: 56, z1: 66 }, { x0: -26, x1: 26, z0: -66, z1: -56 });
+  MAP_GROUPS[name]._skyColor = 0xa8d3e8;
+}
+// 🌴 Vietnam: a jungle village. A longhouse in the middle, huts on stilts-and-thatch round it, rice paddy berms in
+// front of each landing zone, a roofed tunnel under the middle, and a watchtower.
+function buildVietnamLayout() {
+  const name = 'vietnam', K = _bkBegin(name, 140, 140, 0x5a6b3a);
+  K.perim(8, 0x4a5a30);
+  const thatch = 0x8a7a44, bamboo = 0x9a8a54;
+  // rice paddies: low berms in front of each spawn, with gaps
+  for (const sz of [1, -1]) for (const z of [sz * 40, sz * 48]) for (const [x0, x1] of [[-58, -34], [-26, -6], [6, 26], [34, 58]]) K.box((x0 + x1) / 2, 0, z, x1 - x0, 0.9, 0.7, 0x4a5a2a);
+  // the longhouse
+  K.room(-14, 14, -6, 6, 0, 3.6, bamboo, { w: [K.door(0, 3.4)], e: [K.door(0, 3.4)], n: [K.win(-8), K.win(8)], s: [K.win(-8), K.win(8)] });
+  K.slab(-14, 14, -6, 6, 4.0, 0.4, thatch); K.box(0, 0, 0, 1.2, 1.1, 8, 0x5a4430);
+  // huts round it
+  [[-34, -18], [-34, 18], [34, -18], [34, 18], [-20, 30], [20, -30], [-48, 0], [48, 0]].forEach(([x, z], i) => K.hut(x - 5, x + 5, z - 4, z + 4, bamboo, ['n', 's', 'e', 'w'][i % 4], 3.2, thatch));
+  // the tunnel: a roofed corridor under the middle, entered from both ends
+  K.room(-30, 30, 14, 20, 0, 3, 0x5a4a32, { w: [K.door(17, 3.4, 2.8)], e: [K.door(17, 3.4, 2.8)], n: [K.door(-10, 3, 2.8), K.door(10, 3, 2.8)], s: [K.door(0, 3, 2.8)] });
+  K.slab(-30, 30, 14, 20, 3.4, 0.4, 0x4a3a28);
+  K.room(-30, 30, -20, -14, 0, 3, 0x5a4a32, { w: [K.door(-17, 3.4, 2.8)], e: [K.door(-17, 3.4, 2.8)], s: [K.door(-10, 3, 2.8), K.door(10, 3, 2.8)], n: [K.door(0, 3, 2.8)] });
+  K.slab(-30, 30, -20, -14, 3.4, 0.4, 0x4a3a28);
+  K.poi('tunnel', 0, 17, 0); K.poi('tunnel', 0, -17, 0);
+  // the watchtower
+  for (const [dx, dz] of [[-2.4, -2.4], [2.4, -2.4], [-2.4, 2.4], [2.4, 2.4]]) K.box(-40 + dx, 0, 44 + dz, 0.9, 4.2, 0.9, 0x5a4430);
+  K.slab(-43.5, -36.5, 40.5, 47.5, 4.6, 0.4, 0x8a7a54); K.stairs(-40, 59, 'N', 4.6, 3, 0x6a5038, 0, 1.0, 4.6 / 12);
+  K.wx(-43.5, -36.5, 40.65, 0.3, 4.6, 1.1, 0x5a4430); K.wz(40.5, 47.5, -43.35, 0.3, 4.6, 1.1, 0x5a4430); K.wz(40.5, 47.5, -36.65, 0.3, 4.6, 1.1, 0x5a4430);
+  // jungle: trees
+  _bkScatter(name, 22, { x0: -60, x1: 60, z0: -34, z1: 34, gap: 6 }, [[-36, 36, -24, 24], [-34, 34, 10, 24], [-34, 34, -24, -10]], (x, z, i, rnd) => { K.box(x, 0, z, 1.6, 9, 1.6, 0x4a3626); K.box(x, 8, z, 7, 3, 7, 0x2f5a2a); });
+  K.spawn({ x0: -26, x1: 26, z0: 56, z1: 66 }, { x0: -26, x1: 26, z0: -66, z1: -56 });
+  MAP_GROUPS[name]._skyColor = 0xb8c8a0;
+}
+// 🏜️ Desert: an adobe village round a market square with a well, a ruined fort on one flank, a stepped pyramid on
+// the other, dunes to cross between.
+function buildDesertLayout() {
+  const name = 'desert', K = _bkBegin(name, 150, 150, 0xd9bb84);
+  K.perim(8, 0xc9a46c);
+  const adobe = 0xc79a58, adobe2 = 0xb58a55;
+  // the village: buildings on either side of the market street
+  [[-30, -26, 0], [-30, 26, 1], [30, -26, 1], [30, 26, 0]].forEach(([cx, cz, k]) => _bkBuilding(K, cx - 9, cx + 9, cz - 8, cz + 8, { floors: k ? 2 : 1, color: k ? adobe : adobe2, roof: 0xa88a58, doors: ['n', 's', 'e', 'w'] }));
+  // the market: poles and awnings you can walk under, stalls, the well
+  for (const x of [-12, 12]) for (const z of [-10, 10]) K.box(x, 0, z, 0.8, 3.4, 0.8, 0x6a4a2a);
+  K.slab(-13, 13, -11, 11, 3.8, 0.3, 0xd8483a);
+  for (const [x, z] of [[-8, 0], [8, 0], [0, -7], [0, 7]]) K.box(x, 0, z, 3, 1.0, 1.4, 0x7a5a38);
+  K.box(0, 0, 0, 3, 1.0, 3, 0x9a9a90); K.box(0, 1.0, 0, 1.6, 1.2, 1.6, 0x8a8a80);
+  K.poi('market', 4.5, 3.5, 0);
+  // the fort (east side)
+  const fx0 = 40, fx1 = 66, fz0 = -12, fz1 = 12;
+  K.wx(fx0, fx1, fz0 + 0.6, 1.2, 0, 5, adobe2, [K.door(53, 5, 4)]); K.wx(fx0, fx1, fz1 - 0.6, 1.2, 0, 5, adobe2, [K.door(53, 5, 4)]);
+  K.wz(fz0, fz1, fx0 + 0.6, 1.2, 0, 5, adobe2, [K.door(0, 5, 4)]); K.wz(fz0, fz1, fx1 - 0.6, 1.2, 0, 5, adobe2, [K.door(-6, 4, 4)]);
+  for (const [x, z] of [[fx0 + 2.5, fz0 + 2.5], [fx1 - 2.5, fz0 + 2.5], [fx0 + 2.5, fz1 - 2.5], [fx1 - 2.5, fz1 - 2.5]]) K.mound(x - 2.5, x + 2.5, z - 2.5, z + 2.5, 6.6, adobe, []);
+  K.box(53, 0, 0, 4, 1.4, 4, 0x8a8478);
+  // the pyramid (west)
+  [20, 18, 16, 14, 12, 10, 8, 6].forEach((w, i) => K.box(-60, 0, 0, w, 0.5 * (i + 1), w, i % 2 ? 0xc79a58 : 0xd2a965));
+  // dunes: stepped mounds
+  [[-8, -46], [14, 44], [-44, 46], [44, -46], [-6, 46], [10, -46]].forEach(([x, z], i) => { [[11, 0.45], [8, 0.9], [5, 1.35]].forEach(([w, top], k) => K.box(x, 0, z, w, top, w * 0.8, 0xe0c28a, i * 0.4 + k * 0.2)); });
+  for (const [x, z] of [[-20, 52], [22, 54], [-22, -52], [20, -54]]) K.sandbags(x, z, 5);
+  K.spawn({ x0: -28, x1: 28, z0: 60, z1: 70 }, { x0: -28, x1: 28, z0: -70, z1: -60 });
+  MAP_GROUPS[name]._skyColor = 0xcfe3f2;
+}
+// ❄️ Tundra: a research station: huts linked by roofed walkways round a two-floor hall, a radio mast on a pad, ice
+// walls and snow mounds across the open ground.
+function buildTundraLayout() {
+  const name = 'tundra', K = _bkBegin(name, 140, 140, 0xdde7ee);
+  K.perim(8, 0xb9ccd9);
+  const pre = 0xcfd8e0, ice = 0xa8d0e8;
+  _bkBuilding(K, -14, 14, -12, 12, { floors: 2, color: 0xe8eef2, roof: 0x8a9aa8, doors: ['n', 's', 'e', 'w'] });
+  // four huts on a cross, joined to the hall by roofed walkways
+  K.hut(-44, -30, -6, 6, pre, 'ew', 3.4, 0x7a8a98); K.hut(30, 44, -6, 6, pre, 'ew', 3.4, 0x7a8a98);
+  K.hut(-6, 6, -44, -30, pre, 'ns', 3.4, 0x7a8a98); K.hut(-6, 6, 30, 44, pre, 'ns', 3.4, 0x7a8a98);
+  for (const [x0, x1] of [[-30, -14], [14, 30]]) { K.wx(x0, x1, -2.6, 0.5, 0, 3.2, pre); K.wx(x0, x1, 2.6, 0.5, 0, 3.2, pre); K.slab(x0, x1, -3, 3, 3.6, 0.4, 0x7a8a98); }
+  for (const [z0, z1] of [[-30, -12], [12, 30]]) { K.wz(z0, z1, -2.6, 0.5, 0, 3.2, pre); K.wz(z0, z1, 2.6, 0.5, 0, 3.2, pre); K.slab(-3, 3, z0, z1, 3.6, 0.4, 0x7a8a98); }
+  K.poi('walkway', -22, 0, 0); K.poi('walkway', 22, 0, 0); K.poi('walkway', 0, -22, 0); K.poi('walkway', 0, 22, 0);
+  // the radio mast on a pad with a stair
+  K.mound(-52, -42, 38, 48, 2.0, 0x9aaab8, ['s'], 0.4, 1.0, 3); K.box(-47, 2, 43, 1.2, 14, 1.2, 0x5a6068);
+  // ice walls and snow mounds
+  for (const [x, z, w, d] of [[-24, 44, 14, 2.2], [24, -44, 14, 2.2], [24, 44, 2.2, 14], [-24, -44, 2.2, 14], [-56, 22, 2.2, 14], [56, -22, 2.2, 14]]) K.box(x, 0, z, w, 3.6, d, ice);
+  [[-30, 24], [30, -24], [48, 26], [-48, -26], [10, 52], [-10, -52]].forEach(([x, z], i) => { [[9, 0.45], [6.5, 0.9], [4, 1.35]].forEach(([w, top], k) => K.box(x, 0, z, w, top, w * 0.8, 0xf4f8fb, i * 0.3 + k * 0.2)); });
+  K.spawn({ x0: -28, x1: 28, z0: 56, z1: 66 }, { x0: -28, x1: 28, z0: -66, z1: -56 });
+  MAP_GROUPS[name]._skyColor = 0xdde9f2;
+}
+// 🪵 Trenches: a long thin map. Each side has a trench system behind a wall of sandbags, then a cratered, wired
+// no-man's-land, and a ruined chapel in the middle you can fight through.
+function buildTrenchesLayout() {
+  const name = 'trenches', K = _bkBegin(name, 110, 180, 0x6b5a3f);
+  K.perim(6, 0x5a4a30);
+  const bag = 0xb9a57a, plank = 0x6a5236;
+  for (const sz of [1, -1]) {
+    // front parapet with gaps, a trench behind it (walls both sides), cross-traverses, dugouts
+    const zf = sz * 44, zb = sz * 54;
+    for (const [x0, x1] of [[-50, -36], [-30, -14], [-8, 8], [14, 30], [36, 50]]) K.box((x0 + x1) / 2, 0, zf, x1 - x0, 1.5, 1.4, bag);
+    for (const [x0, x1] of [[-50, -26], [-20, 20], [26, 50]]) K.box((x0 + x1) / 2, 0, zb, x1 - x0, 1.5, 1.2, plank);
+    for (const x of [-34, -10, 12, 34]) K.box(x, 0, sz * 49, 1.2, 1.5, 9, plank);
+    K.hut(-12, 12, Math.min(sz * 66, sz * 74), Math.max(sz * 66, sz * 74), 0x5a4a38, sz > 0 ? 'n' : 's', 3.2, 0x3a2a1c);
+    K.hut(-46, -34, sz * 62 > 0 ? 58 : -70, sz * 62 > 0 ? 70 : -58, 0x5a4a38, sz > 0 ? 'e' : 'e', 3.2, 0x3a2a1c);
+    K.hut(34, 46, sz * 62 > 0 ? 58 : -70, sz * 62 > 0 ? 70 : -58, 0x5a4a38, 'w', 3.2, 0x3a2a1c);
+  }
+  // no man's land: craters and wire
+  _bkScatter(name, 18, { x0: -48, x1: 48, z0: -34, z1: 34, gap: 6 }, [[-22, 22, -22, 22]], (x, z, i) => { K.box(x, 0, z, 7, 0.5, 6, 0x4a4030, i * 0.5); K.box(x, 0.5, z, 3.6, 0.4, 3, 0x4a4030, i * 0.5); });
+  for (const sz of [1, -1]) for (const [x0, x1] of [[-46, -30], [-18, -2], [10, 26], [34, 48]]) K.box((x0 + x1) / 2, 0, sz * 26, x1 - x0, 1.0, 0.25, 0x3a3a3a);   // wire
+  // the chapel
+  K.room(-10, 10, -16, 16, 0, 5.6, 0x8a8478, { n: [K.door(0, 4, 4.4)], s: [K.door(0, 4, 4.4)], w: [K.win(-8, 2.4, 1.4, 3.6), K.win(8, 2.4, 1.4, 3.6), K.door(0, 3, 3.6)], e: [K.win(-8, 2.4, 1.4, 3.6), K.win(8, 2.4, 1.4, 3.6)] });
+  for (const z of [-10, -4, 2, 8]) { K.box(-4.5, 0, z, 2.2, 0.9, 1.0, 0x5a4a38); K.box(4.5, 0, z, 2.2, 0.9, 1.0, 0x5a4a38); }   // pews
+  K.box(0, 0, -13, 4, 1.2, 1.4, 0x9a9488);
+  K.poi('chapel', 0, 0, 0);
+  K.spawn({ x0: -34, x1: 34, z0: 76, z1: 84 }, { x0: -34, x1: 34, z0: -84, z1: -76 });
+  MAP_GROUPS[name]._skyColor = 0x8a8f86;
+}
+// 🌿 Overgrowth: a ruined town the jungle has taken. Roofless shells with breaches for doors, rubble heaps, a
+// collapsed tower to climb, and trees growing through all of it.
+function buildOvergrowthLayout() {
+  const name = 'overgrowth', K = _bkBegin(name, 140, 140, 0x3f5a30);
+  K.perim(8, 0x5a6048);
+  const stone = 0x6a6f5a, moss = 0x56693a;
+  const shell = (x0, x1, z0, z1, k) => {
+    const big = (a, b) => [K.door((a + b) / 2, 5, 3.0), K.door(a + (b - a) * 0.15, 3.4, 2.4), K.door(b - (b - a) * 0.15, 3.4, 2.4)];
+    K.wx(x0, x1, z0 + 0.4, 0.8, 0, 3.6, k ? stone : moss, big(x0, x1)); K.wx(x0, x1, z1 - 0.4, 0.8, 0, 3.6, k ? moss : stone, big(x0, x1));
+    K.wz(z0 + 0.8, z1 - 0.8, x0 + 0.4, 0.8, 0, 3.6, stone, [K.door((z0 + z1) / 2, 5, 3.0)]); K.wz(z0 + 0.8, z1 - 0.8, x1 - 0.4, 0.8, 0, 3.6, moss, [K.door((z0 + z1) / 2, 5, 3.0)]);
+    K.box((x0 + x1) / 2 + 2, 0, (z0 + z1) / 2, 2.2, 1.1, 1.4, 0x5a4a38);
+    K.poi('ruin', x0 + 3.5, (z0 + z1) / 2 - 3, 0);
+  };
+  [[-52, -36, -34, -18], [-30, -12, -32, -16], [14, 32, -34, -18], [38, 54, -30, -14], [-54, -38, 18, 34], [-28, -10, 16, 32], [12, 30, 18, 34], [36, 52, 16, 32]].forEach((r, i) => shell(r[0], r[1], r[2], r[3], i % 2));
+  // the collapsed tower: a rubble ramp of tiers up to a broken top, with stairs on two sides
+  K.mound(-9, 9, -9, 9, 4.6, 0x6a6558, ['n', 's']); K.box(-3, 4.6, -3, 5, 1.6, 5, 0x5a5448, 0.3); K.box(4, 4.6, 3, 3, 2.2, 3, 0x5a5448);
+  _bkScatter(name, 16, { x0: -62, x1: 62, z0: -56, z1: 56, gap: 5 }, [[-14, 14, -14, 14], [-30, 30, 58, 70], [-30, 30, -70, -58]], (x, z, i, rnd) => { K.box(x, 0, z, 3 + rnd() * 3, 1.2 + rnd(), 3 + rnd() * 2, 0x5a5a4a, rnd() * 3); });
+  _bkScatter(name, 12, { x0: -60, x1: 60, z0: -54, z1: 54, gap: 6, salt: 1 }, [[-16, 16, -16, 16]], (x, z, i, rnd) => { K.box(x, 0, z, 2, 9, 2, 0x4a3626); K.box(x, 8, z, 8, 3.4, 8, 0x2f5a2a); });
+  K.spawn({ x0: -28, x1: 28, z0: 58, z1: 68 }, { x0: -28, x1: 28, z0: -68, z1: -58 });
+  MAP_GROUPS[name]._skyColor = 0x9ccf9a;
+}
+// 🎄 Holiday: a snowy village around a huge tree. Cottages and a toy workshop, snowmen, gift stacks, an ice rink
+// with rails, a sleigh.
+function buildHolidayLayout() {
+  const name = 'holiday', K = _bkBegin(name, 130, 130, 0xf4f8fa);
+  K.perim(7, 0xc4d4e0);
+  const red = 0xc4332e, green = 0x2f7a4a, cream = 0xe8d8c0;
+  // the tree: four green tiers and a gold star, solid cover with stairs up the first tier
+  K.box(0, 0, 0, 3, 9, 3, 0x5a3a24);
+  [[16, 0.5], [13, 1.0], [10, 1.5], [7, 2.0], [4.4, 2.5]].forEach(([w, top], i) => K.box(0, 0, 0, w, top, w, i % 2 ? 0x2f7a4a : 0x246a3e, i * 0.3));
+  K.box(0, 9, 0, 1.4, 1.4, 1.4, 0xf2c93a);
+  // cottages
+  [[-34, -20, 0], [-34, 20, 1], [34, -20, 1], [34, 20, 0], [-20, 44, 1], [20, -44, 0]].forEach(([cx, cz, k]) => _bkBuilding(K, cx - 8, cx + 8, cz - 6, cz + 6, { floors: 1, color: k ? red : cream, roof: k ? 0x2f7a4a : 0x8a3a2a, doors: ['n', 's'] }));
+  // the toy workshop: two floors
+  _bkBuilding(K, 40, 60, -8, 14, { floors: 2, color: green, roof: 0xc4332e, doors: ['w', 'n', 's'] });
+  // the ice rink: a ring of low rails with openings
+  for (const [x0, x1, z] of [[-22, -6, -14], [6, 22, -14], [-22, -6, 14], [6, 22, 14]]) K.box((x0 + x1) / 2, 0, z, x1 - x0, 1.0, 0.4, 0xd8e8f4);
+  for (const [z0, z1, x] of [[-14, -4, -22], [4, 14, -22], [-14, -4, 22], [4, 14, 22]]) K.box(x, 0, (z0 + z1) / 2, 0.4, 1.0, z1 - z0, 0xd8e8f4);
+  // snowmen, gifts, a sleigh
+  for (const [x, z] of [[-46, 6], [28, -36], [-10, -38], [12, 38], [-50, -40], [52, 40]]) { K.box(x, 0, z, 3.4, 2.2, 3.4, 0xffffff); K.box(x, 2.2, z, 2.4, 1.6, 2.4, 0xffffff); K.box(x, 3.8, z, 1.5, 1.2, 1.5, 0xffffff); }
+  [[-26, -50, red], [24, 50, green], [-52, 30, 0xf2c93a], [50, -32, 0x3a8fd0], [8, -26, red], [-8, 26, green]].forEach(([x, z, c], i) => { K.box(x, 0, z, 2.6, 2.2, 2.6, c, i * 0.4); K.box(x + 2.4, 0, z + 1, 2, 1.6, 2, i % 2 ? red : 0xf2c93a, 0.2); });
+  K.box(-46, 0, -12, 6, 1.2, 2.4, red); K.box(-48.6, 1.2, -12, 1.6, 1.6, 2.4, red);
+  K.spawn({ x0: -26, x1: 26, z0: 52, z1: 60 }, { x0: -26, x1: 26, z0: -60, z1: -52 });
+  MAP_GROUPS[name]._skyColor = 0xb8c8d8;
+}
+// 🌀 Labyrinth: a stone maze of twelve-metre cells, loops cut through it so nothing is a dead end for long, an
+// open plaza in the middle and an open row of cells at each end for the teams.
+function buildLabyrinthLayout() {
+  const name = 'labyrinth', K = _bkBegin(name, 120, 120, 0x6a6f66);
+  K.perim(6, 0x4a4e44);
+  const N = 9, S = 12, o = -N * S / 2, rnd = _thRng('labyrinth:maze'), wallC = 0x7a7e72;
+  const right = [], down = [], seen = [];
+  for (let i = 0; i < N; i++) { right.push(new Array(N).fill(true)); down.push(new Array(N).fill(true)); seen.push(new Array(N).fill(false)); }
+  const stack = [[4, 0]]; seen[0][4] = true;                     // [col, row]; carve a spanning tree
+  while (stack.length) {
+    const [c, r] = stack[stack.length - 1], opts = [];
+    if (c > 0 && !seen[r][c - 1]) opts.push([c - 1, r, 'L']); if (c < N - 1 && !seen[r][c + 1]) opts.push([c + 1, r, 'R']);
+    if (r > 0 && !seen[r - 1][c]) opts.push([c, r - 1, 'U']); if (r < N - 1 && !seen[r + 1][c]) opts.push([c, r + 1, 'D']);
+    if (!opts.length) { stack.pop(); continue; }
+    const [nc, nr, d] = opts[Math.floor(rnd() * opts.length)]; seen[nr][nc] = true;
+    if (d === 'R') right[r][c] = false; else if (d === 'L') right[r][nc] = false; else if (d === 'D') down[r][c] = false; else down[nr][c] = false;
+    stack.push([nc, nr]);
+  }
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {          // loops: knock out a third of the walls that remain
+    if (c < N - 1 && right[r][c] && rnd() < 0.34) right[r][c] = false;
+    if (r < N - 1 && down[r][c] && rnd() < 0.34) down[r][c] = false;
+  }
+  for (const r of [0, N - 1]) for (let c = 2; c <= 6; c++) { if (c < 6) right[r][c] = false; }    // open the end rows
+  for (const r of [0, 1, N - 2, N - 1]) for (let c = 2; c <= 6; c++) if (r < N - 1 && (r === 0 || r === N - 2)) down[r][c] = (c === 2 || c === 6) ? down[r][c] : false;
+  for (let r = 3; r <= 5; r++) for (let c = 3; c <= 5; r === 5 && c === 5 ? c++ : c++) { if (c < 5) right[r][c] = false; if (r < 5) down[r][c] = false; }   // the plaza
+  const T = 1.2, H = 5;
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+    const x0 = o + c * S, z0 = o + r * S;
+    if (c < N - 1 && right[r][c]) K.box(x0 + S, 0, z0 + S / 2, T, H, S + T, wallC);
+    if (r < N - 1 && down[r][c]) K.box(x0 + S / 2, 0, z0 + S, S + T, H, T, wallC);
+  }
+  for (const [x, z] of [[-6, -6], [6, -6], [-6, 6], [6, 6]]) K.box(x, 0, z, 2, 3.4, 2, 0x8a8e82);   // the plaza's pillars
+  K.box(0, 0, 0, 4, 1.0, 4, 0x6a6e62);
+  K.poi('plaza', 0, 2.5, 0);
+  K.spawn({ x0: -24, x1: 24, z0: 46, z1: 52 }, { x0: -24, x1: 24, z0: -52, z1: -46 });
+  MAP_GROUPS[name]._skyColor = 0x8a9a8a;
+}
+Object.assign(_BESPOKE, { battlefield: buildBattlefieldLayout, forest: buildForestLayout, vietnam: buildVietnamLayout, desert: buildDesertLayout, tundra: buildTundraLayout,
+  trenches: buildTrenchesLayout, overgrowth: buildOvergrowthLayout, holiday: buildHolidayLayout, labyrinth: buildLabyrinthLayout });
 
 function initMapThemes() {
   for (const name of Object.keys(MAP_THEMES)) {
@@ -37576,6 +37888,173 @@ const INSPECT_DEFAULT = [
   K(.74,{px:-.048,py:.048,pz:-.110,rx:-.26,ry:-.36,rz:-.16,hy:.03}),        // and over to the right
   K(.88,{px:-.022,py:.025,pz:-.050,rx:-.10,ry:-.14,rz:-.05}),
 ];
+const INSPECT_LIBRARY = {
+  rifle_check: [
+    K(.10,{px:-.020,py:.040,pz:-.070,rx:.10,ry:.10,rz:.10,hy:.02}),
+    K(.24,{px:-.052,py:.060,pz:-.110,rx:.18,ry:-.18,rz:.24,hy:-.10,hz:.04,hr:.45}),
+    K(.38,{px:-.058,py:.066,pz:-.116,rx:.18,ry:-.18,rz:.24,hy:-.03,hz:.06}),
+    K(.52,{px:-.042,py:.055,pz:-.090,rx:.08,ry:.20,rz:.12,hy:.08,hz:.12,hr:-.60,az:.026}),
+    K(.64,{px:-.042,py:.055,pz:-.090,rx:.08,ry:.20,rz:.12,hy:.10,hz:.18,hr:-.60,az:.000}),
+    K(.78,{px:-.026,py:.038,pz:-.055,rx:.04,ry:.06,rz:.05})
+  ],
+  smg_flip: [
+    K(.08,{px:-.010,py:.035,pz:-.055,rx:.12,ry:-.08,rz:-.18}),
+    K(.20,{px:-.040,py:.060,pz:-.105,rx:.18,ry:-.32,rz:-.72,hy:-.08,hz:.05,hr:-.45}),
+    K(.34,{px:-.050,py:.066,pz:-.112,rx:.22,ry:-.42,rz:-1.06,hy:-.16,hz:.02,hr:-.90}),
+    K(.48,{px:-.036,py:.060,pz:-.096,rx:.16,ry:-.24,rz:-.66,hy:.07,hz:.05,hr:.50}),
+    K(.64,{px:-.022,py:.046,pz:-.070,rx:.12,ry:.10,rz:-.22,hy:.03,hz:.12,az:.020}),
+    K(.76,{px:-.020,py:.040,pz:-.060,rx:.10,ry:.06,rz:-.10,hy:.04,hz:.17,az:0})
+  ],
+  pistol_press: [
+    K(.10,{px:-.012,py:.030,pz:-.050,rx:.08,ry:.10,rz:.18}),
+    K(.24,{px:-.050,py:.060,pz:-.105,rx:.14,ry:.56,rz:.28,hy:.06,hz:.04,hr:-.35}),
+    K(.38,{px:-.052,py:.062,pz:-.108,rx:.12,ry:.64,rz:.25,hy:.02,hz:.10,az:.028}),
+    K(.50,{px:-.048,py:.058,pz:-.100,rx:.12,ry:.58,rz:.20,hy:.02,hz:.15,az:0}),
+    K(.64,{px:-.035,py:.048,pz:-.080,rx:.02,ry:.20,rz:-.16,hy:-.04,hz:.02,hr:.35}),
+    K(.80,{px:-.018,py:.030,pz:-.045,rx:.02,ry:.04,rz:-.05})
+  ],
+  revolver_spin: [
+    K(.10,{px:-.016,py:.034,pz:-.054,rx:.08,ry:.10,rz:.16}),
+    K(.24,{px:-.048,py:.064,pz:-.105,rx:.16,ry:.44,rz:.26,hy:.04,hz:.04,arx:.36,ary:.70}),
+    K(.38,{px:-.052,py:.068,pz:-.112,rx:.14,ry:.52,rz:.30,hy:.05,hz:.05,arx:.36,ary:2.60}),
+    K(.52,{px:-.052,py:.068,pz:-.112,rx:.14,ry:.52,rz:.30,hy:.05,hz:.05,arx:.36,ary:5.00}),
+    K(.66,{px:-.042,py:.056,pz:-.088,rx:.08,ry:.20,rz:.12,hy:.02,hz:.04,arx:.10,ary:6.28}),
+    K(.82,{px:-.018,py:.032,pz:-.048,rx:.02,ry:.04,rz:.04,arx:0,ary:0})
+  ],
+  shotgun_break: [
+    K(.10,{px:-.018,py:.036,pz:-.060,rx:.16,ry:.06,rz:.10}),
+    K(.24,{px:-.045,py:.060,pz:-.105,rx:.46,ry:.16,rz:.34,hy:-.03,hz:.04,hr:.45}),
+    K(.38,{px:-.052,py:.064,pz:-.116,rx:.62,ry:.12,rz:.38,hy:.08,hz:-.07,arx:-.52,av:.20}),
+    K(.52,{px:-.050,py:.064,pz:-.112,rx:.58,ry:-.12,rz:.26,hy:.12,hz:-.08,arx:-.52,av:.20}),
+    K(.66,{px:-.038,py:.050,pz:-.085,rx:.30,ry:.04,rz:.12,arx:0,av:1}),
+    K(.82,{px:-.018,py:.030,pz:-.050,rx:.08,ry:.02,rz:.04})
+  ],
+  sniper_bolt: [
+    K(.10,{px:-.022,py:.034,pz:-.075,rx:.06,ry:.08,rz:.08}),
+    K(.24,{px:-.070,py:.060,pz:-.150,rx:.02,ry:.18,rz:.18,hy:.06,hz:.02,hr:-.20}),
+    K(.38,{px:-.078,py:.066,pz:-.165,rx:-.04,ry:.26,rz:.16,hy:.13,hz:.12,hr:-.80,az:.052,arx:.16}),
+    K(.52,{px:-.080,py:.064,pz:-.165,rx:-.06,ry:.20,rz:.14,hy:.13,hz:.18,hr:-.80,az:0,arx:0}),
+    K(.66,{px:-.058,py:.052,pz:-.120,rx:-.12,ry:-.20,rz:-.10,hy:.02,hz:.04}),
+    K(.82,{px:-.024,py:.030,pz:-.060,rx:-.03,ry:-.05,rz:-.02})
+  ],
+  launcher_tube: [
+    K(.10,{px:-.014,py:.030,pz:-.070,rx:.18,ry:.04,rz:.08}),
+    K(.24,{px:-.044,py:.060,pz:-.140,rx:.44,ry:.22,rz:.18,hy:-.02,hz:.08}),
+    K(.38,{px:-.050,py:.070,pz:-.165,rx:.60,ry:.30,rz:.24,hy:.12,hz:-.10,hr:.50,av:.15}),
+    K(.54,{px:-.048,py:.068,pz:-.160,rx:.34,ry:-.26,rz:-.14,hy:.10,hz:-.04,av:.15}),
+    K(.68,{px:-.034,py:.050,pz:-.110,rx:.18,ry:-.08,rz:-.06,av:1}),
+    K(.82,{px:-.016,py:.028,pz:-.060,rx:.06,ry:-.02,rz:-.02})
+  ],
+  energy_tune: [
+    K(.10,{px:-.020,py:.038,pz:-.070,rx:.06,ry:.10,rz:.06}),
+    K(.22,{px:-.052,py:.064,pz:-.120,rx:-.10,ry:.34,rz:.18,hy:.08,hz:.04,hr:-.25}),
+    K(.36,{px:-.055,py:.070,pz:-.125,rx:-.18,ry:.20,rz:.10,hy:.12,hz:.08,ary:1.60,arz:.60}),
+    K(.50,{px:-.052,py:.070,pz:-.120,rx:-.12,ry:-.20,rz:-.12,hy:.10,hz:.05,ary:3.20,arz:-.60}),
+    K(.64,{px:-.040,py:.055,pz:-.092,rx:.04,ry:.12,rz:.06,hy:.04,hz:.10,ary:6.28,arz:0}),
+    K(.80,{px:-.018,py:.030,pz:-.050,rx:.02,ry:.02,rz:.02,ary:0})
+  ],
+  bow_draw: [
+    K(.10,{px:-.020,py:.034,pz:-.080,rx:.12,ry:.06,rz:.12}),
+    K(.24,{px:-.052,py:.060,pz:-.130,rx:.18,ry:.28,rz:.36,hy:.04,hz:.02,hr:.35}),
+    K(.40,{px:-.060,py:.066,pz:-.150,rx:.20,ry:.32,rz:.42,hy:.18,hz:.22,hr:-.85,az:-.055}),
+    K(.54,{px:-.060,py:.066,pz:-.150,rx:.20,ry:.32,rz:.42,hy:.18,hz:.28,hr:-.85,az:-.075}),
+    K(.68,{px:-.044,py:.052,pz:-.105,rx:.12,ry:.10,rz:.18,hy:.06,hz:.06,az:0}),
+    K(.82,{px:-.018,py:.030,pz:-.055,rx:.04,ry:.02,rz:.04})
+  ],
+  heavy_spin: [
+    K(.10,{px:-.018,py:.034,pz:-.075,rx:.12,ry:.06,rz:.08}),
+    K(.24,{px:-.050,py:.058,pz:-.135,rx:.16,ry:.22,rz:.18,hy:.06,hz:.02}),
+    K(.38,{px:-.058,py:.064,pz:-.150,rx:.10,ry:.30,rz:.22,hy:.12,hz:.10,arz:2.50}),
+    K(.52,{px:-.058,py:.064,pz:-.150,rx:.10,ry:.30,rz:.22,hy:.12,hz:.10,arz:5.00}),
+    K(.66,{px:-.042,py:.052,pz:-.105,rx:.08,ry:.08,rz:.06,hy:.05,hz:.04,arz:6.28}),
+    K(.82,{px:-.018,py:.030,pz:-.055,rx:.02,ry:.02,rz:.02,arz:0})
+  ],
+  thrown_count: [
+    K(.10,{px:-.016,py:.032,pz:-.055,rx:.08,ry:.06,rz:.12}),
+    K(.24,{px:-.044,py:.058,pz:-.100,rx:.20,ry:.34,rz:.40,hy:.04,hz:.06,hr:.45}),
+    K(.38,{px:-.050,py:.064,pz:-.110,rx:.28,ry:.52,rz:.48,hy:.11,hz:-.04,hr:.85,av:.35}),
+    K(.52,{px:-.046,py:.060,pz:-.105,rx:.20,ry:-.26,rz:-.34,hy:-.08,hz:.05,hr:-.55,av:.70}),
+    K(.66,{px:-.036,py:.050,pz:-.085,rx:.10,ry:.08,rz:.14,hy:.04,hz:.08,av:1}),
+    K(.82,{px:-.016,py:.028,pz:-.050,rx:.02,ry:.02,rz:.02})
+  ]
+};
+const INSPECT_EXACT = {
+  revolver: INSPECT_LIBRARY.revolver_spin,
+  hand_cannon: INSPECT_LIBRARY.revolver_spin,
+  sg8: INSPECT_LIBRARY.shotgun_break,
+  shorty: INSPECT_LIBRARY.shotgun_break,
+  sawed_off: INSPECT_LIBRARY.shotgun_break,
+  srx: INSPECT_LIBRARY.sniper_bolt,
+  amr: INSPECT_LIBRARY.sniper_bolt,
+  barrett: INSPECT_LIBRARY.sniper_bolt,
+  rpg: INSPECT_LIBRARY.launcher_tube,
+  bazooka: INSPECT_LIBRARY.launcher_tube,
+  javelin_launcher: INSPECT_LIBRARY.launcher_tube,
+  grenade_launcher: INSPECT_LIBRARY.launcher_tube,
+  mortar_rifle: INSPECT_LIBRARY.launcher_tube,
+  minigun: INSPECT_LIBRARY.heavy_spin,
+  rpd: INSPECT_LIBRARY.heavy_spin,
+  mg42: INSPECT_LIBRARY.heavy_spin,
+  crossbow: INSPECT_LIBRARY.bow_draw,
+  boombow: INSPECT_LIBRARY.bow_draw,
+  throwing_knives: INSPECT_LIBRARY.thrown_count,
+  gatecrasher: INSPECT_LIBRARY.energy_tune,
+  cyroclasm: INSPECT_LIBRARY.energy_tune,
+  continuum: INSPECT_LIBRARY.energy_tune,
+  storm_bloom: INSPECT_LIBRARY.energy_tune,
+  freeze_gun: INSPECT_LIBRARY.energy_tune,
+  railgun: INSPECT_LIBRARY.energy_tune,
+  coilgun: INSPECT_LIBRARY.energy_tune,
+  cycler: INSPECT_LIBRARY.energy_tune,
+  taser: INSPECT_LIBRARY.energy_tune,
+  plasma_carbine: INSPECT_LIBRARY.energy_tune,
+  arc_rifle: INSPECT_LIBRARY.energy_tune,
+  arc_torrent: INSPECT_LIBRARY.energy_tune,
+};
+const _inspectTrackCache = {};
+function _inspectHash(id) {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = ((h << 5) - h + id.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+function _inspectClone(track, id) {
+  const h = _inspectHash(id);
+  const yaw = ((h % 7) - 3) * 0.018;
+  const roll = (((h >> 3) % 7) - 3) * 0.012;
+  const lift = (((h >> 6) % 5) - 2) * 0.002;
+  return track.map(k => K(k.t, {
+    px: k.px, py: k.py + lift, pz: k.pz,
+    rx: k.rx, ry: k.ry + yaw, rz: k.rz + roll,
+    hx: k.hx, hy: k.hy, hz: k.hz, hr: k.hr,
+    ax: k.ax, ay: k.ay, az: k.az,
+    arx: k.arx, ary: k.ary, arz: k.arz, av: k.av
+  }));
+}
+function inspectTrackFor(id, weapon) {
+  id = id || '';
+  if (_inspectTrackCache[id]) return _inspectTrackCache[id];
+  const type = String(weapon?.type || '').toLowerCase();
+  const name = String(weapon?.name || id).toLowerCase();
+  let base = INSPECT_EXACT[id];
+  if (!base) {
+    if (/revolver|six.?shooter|wheel/.test(id + ' ' + type + ' ' + name)) base = INSPECT_LIBRARY.revolver_spin;
+    else if (/shotgun|shorty|sawed|double|sg-?8/.test(type + ' ' + name + ' ' + id)) base = INSPECT_LIBRARY.shotgun_break;
+    else if (/sniper|marksman|rifle.*heavy|anti/.test(type + ' ' + name)) base = INSPECT_LIBRARY.sniper_bolt;
+    else if (/launcher|rocket|mortar|explosive|projector|potato|foam|pinball|prism/.test(type + ' ' + name + ' ' + id)) base = INSPECT_LIBRARY.launcher_tube;
+    else if (/minigun|lmg|heavy|belt|mg42|rpd/.test(type + ' ' + name + ' ' + id)) base = INSPECT_LIBRARY.heavy_spin;
+    else if (/bow|crossbow|harpoon|javelin/.test(type + ' ' + name + ' ' + id)) base = INSPECT_LIBRARY.bow_draw;
+    else if (/energy|plasma|arc|lightning|coil|rail|freeze|cryo|control|beam|gravity|portal|shock|storm|cycler/.test(type + ' ' + name + ' ' + id)) base = INSPECT_LIBRARY.energy_tune;
+    else if (/smg|machine|p90|vector|mp40|mp7|automatic/.test(type + ' ' + name + ' ' + id)) base = INSPECT_LIBRARY.smg_flip;
+    else if (/secondary|pistol|deagle|mauser|glock|1911|five/.test(type + ' ' + name + ' ' + id)) base = INSPECT_LIBRARY.pistol_press;
+    else if (/thrown|knife|dart/.test(type + ' ' + name + ' ' + id)) base = INSPECT_LIBRARY.thrown_count;
+    else base = INSPECT_LIBRARY.rifle_check;
+  }
+  return (_inspectTrackCache[id] = _inspectClone(base, id));
+}
+function inspectTrackUsesAssembly(track) {
+  return !!(track && track.some(k => Math.abs(k.ax) + Math.abs(k.ay) + Math.abs(k.az)
+    + Math.abs(k.arx) + Math.abs(k.ary) + Math.abs(k.arz) + Math.abs((k.av ?? 1) - 1) > 0.001));
+}
 
 // A weapon that opens should open while you are looking at it. Rather than
 // authoring a second pose for all ten of them, the widest assembly position in
@@ -37598,6 +38077,8 @@ function startInspect() {
   if (isDead || reloading) return;
   const model = weaponModels[currentWeaponIdx];
   if (!model || model._inspectMode) return;
+  const id = WEAPONS[currentWeaponIdx]?.id || '';
+  const inspectTrack = inspectTrackFor(id, WEAPONS[currentWeaponIdx]);
   model._inspectMode = true;
   model._reloadStart = Date.now();
   model._reloadDur = INSPECT_MS;
@@ -37606,9 +38087,14 @@ function startInspect() {
     const t0 = ctx.currentTime + 0.002;
     const g = ctx.createGain(); g.connect(ctx.destination);
     metalClack(ctx, t0 + 0.10, g, 0.16, 620, 0.050);
-    if (inspectOpenPose(WEAPONS[currentWeaponIdx]?.id || '')) {
+    if (inspectTrackUsesAssembly(inspectTrack) || inspectOpenPose(id)) {
       metalClack(ctx, t0 + 0.62, g, 0.30, 540, 0.080);
       metalClack(ctx, t0 + 1.62, g, 0.26, 700, 0.070);
+    }
+    const wText = `${id} ${WEAPONS[currentWeaponIdx]?.type || ''} ${WEAPONS[currentWeaponIdx]?.name || ''}`.toLowerCase();
+    if (/energy|plasma|arc|lightning|coil|rail|freeze|cryo|control|beam|gravity|portal|shock|storm|cycler|continuum|cyroclasm/.test(wText)) {
+      playTone(ctx, t0 + 0.44, 0.08, g, 900, 1600, 0.06, 'sine');
+      playTone(ctx, t0 + 1.05, 0.10, g, 1400, 700, 0.05, 'triangle');
     }
   }
 }
@@ -39063,6 +39549,7 @@ function updateReloadAnim() {
 
   const id = WEAPONS[currentWeaponIdx]?.id || '';
   const inspecting = !!model._inspectMode;
+  const inspectTrack = inspecting ? inspectTrackFor(id, WEAPONS[currentWeaponIdx]) : null;
 
   // Parts come off, get thrown clear, and arrive to be fitted, on the same
   // beats the hands work. Each event fires once per reload -- and never while
@@ -39087,11 +39574,11 @@ function updateReloadAnim() {
   }
 
   const P = _reloadPose(
-    inspecting ? INSPECT_DEFAULT : ((skinReload && skinReload.keys) || (plan && plan.keys) || RELOAD_KEYS[id] || _RELOAD_DEFAULT), t);
+    inspecting ? inspectTrack : ((skinReload && skinReload.keys) || (plan && plan.keys) || RELOAD_KEYS[id] || _RELOAD_DEFAULT), t);
   if (inspecting) {
     // Open whatever this weapon opens, out and back across the middle of the
     // look. Same channels the reload drives, so nothing special downstream.
-    const op = inspectOpenPose(id);
+    const op = inspectTrackUsesAssembly(inspectTrack) ? null : inspectOpenPose(id);
     if (op) {
       const w = t > 0.20 && t < 0.80 ? Math.sin((t - 0.20) / 0.60 * Math.PI) : 0;
       P.ax += op.ax * w; P.ay += op.ay * w; P.az += op.az * w;
@@ -39985,10 +40472,12 @@ const _wallHitPt   = new THREE.Vector3();
 // Returns false if any wall box's XZ footprint intersects the segment from
 // (x1,z1) to (x2,z2). Uses parametric slab method; t ∈ [0.08, 0.92] so
 // the shooter's own position and target's own position are never counted.
-function hasLineOfSight(x1, z1, x2, z2) {
+function hasLineOfSight(x1, z1, x2, z2, y1 = 1.0, y2 = y1) {
   const dx = x2 - x1, dz = z2 - z1;
   if (dx === 0 && dz === 0) return true;
   for (const box of wallColliders) {
+    // Height counts: a roof above the line, a kerb below it, or low cover the line passes over, do not block it.
+    if (box.min.y > Math.max(y1, y2) + 0.05 || box.max.y < Math.min(y1, y2) - 0.05) continue;
     let tmin = 0.08, tmax = 0.92;
     // X slab
     if (Math.abs(dx) < 1e-9) {
@@ -40010,6 +40499,7 @@ function hasLineOfSight(x1, z1, x2, z2) {
       tmin = Math.max(tmin, t1); tmax = Math.min(tmax, t2);
       if (tmin > tmax) continue;
     }
+    if (y1 !== y2) { const yAt = y1 + (y2 - y1) * tmin; if (yAt > box.max.y + 0.05 || yAt < box.min.y - 0.05) continue; }   // passes over or under it
     return false; // wall blocks the segment
   }
   return true;
@@ -40430,7 +40920,7 @@ function updateBullets(dt) {
       }
 
       // Secondary 2D LOS check: catches bullets that arced OVER short walls (e.g. flamethrower's vertical spread)
-      if (bestHit && !hasLineOfSight(px0, pz0, bestHit.mesh.position.x, bestHit.mesh.position.z)) {
+      if (bestHit && !hasLineOfSight(px0, pz0, bestHit.pos.x, bestHit.pos.z, py0, bestHit.pos.y)) {
         // There's a wall between the bullet origin and the target in 2D — reject the hit
         spawnHitParticle(_bpos);
         removeBullet();
