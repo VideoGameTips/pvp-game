@@ -8638,7 +8638,7 @@ function buildVietnamMap() {
 buildVietnamMap();
 
 // ──────────────────────────────────────────────────────────────────────────
-// 4. VOLCANO — rocky terrain with LAVA DAMAGE ZONES (4 dmg/sec when standing)
+// 4. VOLCANO — rocky terrain with LAVA DAMAGE ZONES
 // ──────────────────────────────────────────────────────────────────────────
 registerMap('volcano');
 function buildVolcanoMap() {
@@ -8657,7 +8657,7 @@ function buildVolcanoMap() {
     glow.rotation.x = -Math.PI / 2; glow.position.set(x, 0.07, z);
     MAP_GROUPS[m].add(glow);
     // Register as damage zone
-    MAP_GIMMICKS[m].damageZones.push({ x, z, r, dps: 4, type: 'lava' });
+    MAP_GIMMICKS[m].damageZones.push({ x, z, r, dps: 18, type: 'lava' });
   });
   // Black rock spires for cover
   const rockMat = new THREE.MeshLambertMaterial({ color: 0x111111 });
@@ -11617,7 +11617,14 @@ function _bkit(name) {
     const m = new THREE.Mesh(new THREE.BoxGeometry(r * 1.9, 0.06, r * 1.9), new THREE.MeshBasicMaterial({ color }));
     m.position.set(x, 0.05, z); m.rotation.y = 0.5; MAP_GROUPS[name].add(m);
     const m2 = new THREE.Mesh(new THREE.BoxGeometry(r * 1.9, 0.06, r * 1.9), new THREE.MeshBasicMaterial({ color })); m2.position.set(x, 0.05, z); MAP_GROUPS[name].add(m2);
-    MAP_GIMMICKS[name].damageZones.push({ x, z, r, dps: type === 'lava' ? 6 : 4, type });
+    MAP_GIMMICKS[name].damageZones.push({ x, z, r, dps: type === 'lava' ? 18 : 4, type });
+  };
+  K.lavaRect = (x, z, w, d, dps = 22, color = 0xff5a12, rot = 0) => {
+    const a = new THREE.Mesh(new THREE.BoxGeometry(w, 0.06, d), new THREE.MeshBasicMaterial({ color }));
+    a.position.set(x, 0.045, z); a.rotation.y = rot; MAP_GROUPS[name].add(a);
+    const b = new THREE.Mesh(new THREE.BoxGeometry(w * 0.96, 0.065, d * 0.96), new THREE.MeshBasicMaterial({ color: 0xff8a1a, transparent: true, opacity: 0.62 }));
+    b.position.set(x, 0.055, z); b.rotation.y = rot + 0.03; MAP_GROUPS[name].add(b);
+    MAP_GIMMICKS[name].damageZones.push({ x, z, w, d, rot, dps, type: 'lava' });
   };
   K.spawn = (ally, enemy) => { MAP_SPAWNS[name] = { ally, enemy }; };
   return K;
@@ -12631,22 +12638,58 @@ function buildDoomsdayLayout() {
 // 🌋 Volcano: obsidian ridges and lava pools across a black plain, a caldera in the middle you climb in rings, rock
 // arches to cross, a shrine on the south rim.
 function buildVolcanoLayout() {
-  const name = 'volcano', K = _bkBegin(name, 140, 140, 0x2a1f1c);
-  K.perim(10, 0x3a2b26);
-  const rock = 0x4a3028, obs = 0x1a1414;
-  // the caldera: five rings, each 0.5 higher, with a lava pool in the middle and a stair on each side
-  [[34, 0.5], [30, 1.0], [26, 1.5], [22, 2.0], [18, 2.5]].forEach(([w, top], i) => K.box(0, 0, 0, w, top, w, i % 2 ? 0x5a3a30 : rock));
-  K.box(0, 2.5, 0, 12, 0.3, 12, 0x2a1a16); K.pool(0, 0, 5, 'lava', 0xff6a1a);
-  // lava pools to skirt, and obsidian ridges and pillars to fight from
-  for (const [x, z, r] of [[-40, -20, 6], [40, 20, 6], [-42, 30, 5], [42, -30, 5], [0, -46, 5], [0, 46, 5], [-20, 14, 3], [20, -14, 3]]) K.pool(x, z, r, 'lava', 0xff6a1a);
-  for (const [x0, x1, z] of [[-60, -44, -8], [44, 60, 8], [-56, -40, 44], [40, 56, -44], [-18, -6, -34], [6, 18, 34]]) K.box((x0 + x1) / 2, 0, z, x1 - x0, 4.2, 2.4, obs);
-  for (const [x, z] of [[-26, 4], [26, -4], [-14, 28], [14, -28], [-48, -4], [48, 4], [8, -22], [-8, 22]]) { K.box(x, 0, z, 2.2, 6, 2.2, obs, x); K.box(x, 6, z, 1.4, 1.6, 1.4, 0x3a1a14, x); }
-  // rock arches: two blocks with a lintel at 4.6, a stair up one side
-  for (const [cx, cz] of [[-34, -4], [34, 4]]) { K.box(cx - 6, 0, cz, 3, 4.2, 6, rock); K.box(cx + 6, 0, cz, 3, 4.2, 6, rock); K.slab(cx - 7.5, cx + 7.5, cz - 3, cz + 3, 4.6, 0.8, 0x5a3a30); K.stairs(cx, cz + 3 + 11.5, 'N', 4.6, 3, 0x5a3a30, 0, 1.0, 4.6 / 12); }
-  K.hut(-10, 10, 50, 58, 0x4a3a34, 'n', 3.6, 0x2a1a16);
+  const name = 'volcano', K = _bkBegin(name, 140, 140, 0x180f0d);
+  K.perim(14, 0x120c0b);
+  const obs = 0x161212, rock = 0x241816, ash = 0x2a201d, rim = 0x3a2118, ember = 0xff6a1a;
+
+  // The floor reads as molten first, arena second: safe play happens on black
+  // rock plates and ridges, with high-damage lava filling the dead space.
+  K.lavaRect(0, 35, 22, 18, 24, ember, 0);
+  K.lavaRect(0, -35, 22, 18, 24, ember, 0);
+  K.lavaRect(-35, 0, 18, 22, 24, ember, 0);
+  K.lavaRect(35, 0, 18, 22, 24, ember, 0);
+  K.lavaRect(-56, -34, 18, 20, 22, 0xff5412, 0.14);
+  K.lavaRect(56, 34, 18, 20, 22, 0xff5412, 0.14);
+  K.lavaRect(-56, 34, 18, 20, 22, 0xff7a1a, -0.14);
+  K.lavaRect(56, -34, 18, 20, 22, 0xff7a1a, -0.14);
+  K.lavaRect(0, 18, 42, 8, 22, 0xff5a12, 0);
+  K.lavaRect(0, -18, 42, 8, 22, 0xff5a12, 0);
+
+  // Safe obsidian islands. They are low and chunky so nothing visually fights
+  // the theme, but they give readable routes across the lava.
+  const plate = (x, z, w, d, rot = 0) => {
+    K.box(x, 0, z, w, 0.34, d, obs, rot);
+    K.box(x, 0.34, z, w * 0.82, 0.18, d * 0.82, ash, rot);
+  };
+  [
+    [0, 55, 42, 12, 0], [0, -55, 42, 12, 0],
+    [-54, 0, 12, 42, 0], [54, 0, 12, 42, 0],
+    [-31, 31, 28, 14, -0.35], [31, -31, 28, 14, -0.35],
+    [-31, -31, 28, 14, 0.35], [31, 31, 28, 14, 0.35],
+  ].forEach(p => plate(...p));
+
+  // Central caldera: climbed in black rings, with a real hot crater.
+  [[32, 0.7], [27, 1.4], [22, 2.1], [17, 2.8]].forEach(([w, top], i) => K.box(0, 0, 0, w, top, w, i % 2 ? rim : obs, i * 0.18));
+  K.box(0, 2.8, 0, 10, 0.3, 10, 0x120b09); K.pool(0, 0, 5.6, 'lava', ember);
+
+  // Black basalt pillars: the map's cover language is volcanic rock, not crates.
+  for (const [x, z, h, w] of [
+    [-48, -8, 10, 3.0], [48, 8, 10, 3.0], [-18, -44, 8, 2.6], [18, 44, 8, 2.6],
+    [-44, 44, 12, 3.4], [44, -44, 12, 3.4], [-16, 18, 7, 2.4], [16, -18, 7, 2.4],
+    [-58, 24, 9, 2.6], [58, -24, 9, 2.6],
+  ]) {
+    K.box(x, 0, z, w, h, w, obs, (x + z) * 0.04);
+    K.box(x, h, z, w * 0.72, 1.2, w * 0.72, 0x070606, (x - z) * 0.03);
+  }
+
+  // A few narrow ridges for rotations; no off-theme props.
+  for (const [x, z, w, d, rot] of [[-40, 0, 26, 2.6, 0.12], [40, 0, 26, 2.6, 0.12], [0, -40, 2.6, 26, -0.12], [0, 40, 2.6, 26, -0.12]]) {
+    K.box(x, 0, z, w, 2.4, d, obs, rot);
+    K.box(x, 2.4, z, w * 0.72, 0.8, d * 0.72, 0x0b0909, rot);
+  }
+
   K.spawn({ x0: -26, x1: 26, z0: 60, z1: 66 }, { x0: -26, x1: 26, z0: -66, z1: -60 });
-  MAP_GROUPS[name]._skyColor = 0x5a1c0c;
-  // (the caldera is climbed by its own steps, one every half metre, all the way round)
+  MAP_GROUPS[name]._skyColor = 0x2a0804;
 }
 // 🎡 Carnival: a midway. A carousel with a ring of posts under a canopy, a haunted house to go through, a big top with a
 // ring in the middle, game booths down the lanes, a ferris wheel's base platform.
@@ -12922,6 +12965,7 @@ function applyLowPolyMapPlayabilityPass() {
     Object.keys(MAP_GROUPS).forEach(name => {
       if (name === 'blank' || name === 'range' || name === 'battlefield' || name === 'lobby13' || name === 'br_arena') return;
       if (name.startsWith(ADMIN_CUSTOM_MAP_PREFIX)) return;
+      if (name === 'volcano') return;
       addLowPolyArenaCover(name, LOW_POLY_COVER_COLORS[name] || 0x6f6a60);
     });
   }
@@ -36845,14 +36889,23 @@ function updateMapGimmicks(dt) {
   const g = activeMapGimmicks;
   if (!g) return;
   const now = Date.now();
+  const inDamageZone = (z, x, zz) => {
+    if (z.w && z.d) {
+      const a = -(z.rot || 0), cs = Math.cos(a), sn = Math.sin(a);
+      const dx = x - z.x, dz = zz - z.z;
+      const lx = dx * cs - dz * sn, lz = dx * sn + dz * cs;
+      return Math.abs(lx) < z.w * 0.5 && Math.abs(lz) < z.d * 0.5;
+    }
+    const dx = x - z.x, dz = zz - z.z, r = z.r || z.radius || 0;
+    return dx*dx + dz*dz < r * r;
+  };
   // ── Damage zones (lava etc.) — tick every 500ms ─────────────────────────
   if (g.damageZones && g.damageZones.length && now - _lavaTickAt >= 500) {
     _lavaTickAt = now;
     // Player
     if (!isDead && match?.type !== 'range') {
       for (const z of g.damageZones) {
-        const dx = camera.position.x - z.x, dz = camera.position.z - z.z;
-        if (dx*dx + dz*dz < z.r * z.r) {
+        if (inDamageZone(z, camera.position.x, camera.position.z)) {
           // Apply half a second's worth (since tick is 500ms)
           const dmg = (z.dps || 4) / 2;
           const me = players[myId];
@@ -36870,8 +36923,7 @@ function updateMapGimmicks(dt) {
     for (const bot of gameBots) {
       if (bot.dead) continue;
       for (const z of g.damageZones) {
-        const dx = bot.x - z.x, dz = bot.z - z.z;
-        if (dx*dx + dz*dz < z.r * z.r) {
+        if (inDamageZone(z, bot.x, bot.z)) {
           const mesh = remoteMeshes[bot.id];
           const hp = mesh ? mesh.position.clone().setY(1.0) : new THREE.Vector3(bot.x, 1, bot.z);
           emitHit(bot.id, `lava_${bot.id}_${now}`, z.type || 'lava', hp);
@@ -50834,6 +50886,20 @@ function updateBotAI(dt) {
       const avoidStrength = bot.difficulty === 'expert' ? 1.6 : bot.difficulty === 'hard' ? 1.2 : 0.8;
       let pushX = 0, pushZ = 0;
       const checkZone = (z, pad) => {
+        if (z.w && z.d) {
+          const a = -(z.rot || 0), cs = Math.cos(a), sn = Math.sin(a);
+          const dx = bot.x - z.x, dz = bot.z - z.z;
+          const lx = dx * cs - dz * sn, lz = dx * sn + dz * cs;
+          const hx = z.w * 0.5 + pad, hz = z.d * 0.5 + pad;
+          if (Math.abs(lx) < hx && Math.abs(lz) < hz) {
+            const ox = hx - Math.abs(lx), oz = hz - Math.abs(lz);
+            const localX = ox < oz ? Math.sign(lx || 1) : 0;
+            const localZ = ox < oz ? 0 : Math.sign(lz || 1);
+            pushX += localX * cs + localZ * sn;
+            pushZ += -localX * sn + localZ * cs;
+          }
+          return;
+        }
         const ddx = bot.x - z.x, ddz = bot.z - z.z;
         const d = Math.hypot(ddx, ddz);
         const danger = (z.r || z.radius || 2) + pad; // react before touching
@@ -55243,7 +55309,7 @@ const MAP_DESCS = {
   warehouse:  'Warehouse — stacked crates, pipes, narrow lanes',
   forest:     'Forest Clearing — trees + rocks, mostly open',
   vietnam:    '🇻🇳 Vietnam — huge dense jungle, thick canopy, tight sightlines',
-  volcano:    '🔥 Volcano — lava pools deal 4 dmg/sec',
+  volcano:    '🔥 Volcano — high-damage lava fields with black obsidian routes',
   cyber:      '⚡ Cyber Alley — neon city, JUMP PADS launch you up',
   desert:     'Desert Ruins — broken pillars + sand dunes, open sightlines',
   tundra:     '❄️ Tundra — ice patches make you slip and slide',

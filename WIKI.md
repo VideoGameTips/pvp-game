@@ -42,7 +42,7 @@
 | **Urban** | City | Climbable skyscraper 🤫 |
 | **Warehouse** | Industrial | Crate cover |
 | **Forest** | Woodland | Trees + tall grass |
-| **Volcano** | Lava plain | Hot zones |
+| **Volcano** | Lava field | High-damage lava and black obsidian routes |
 | **Cyber** | Neon city | Glowing structures |
 | **Desert** | Arid | Long sightlines |
 | **Tundra** | Snowy | Slippery |

@@ -135,7 +135,7 @@
     'Warehouse — stacked crates, pipes, narrow lanes': '仓库——成堆的货箱、管道、窄通道',
     'Forest Clearing — trees + rocks, mostly open': '森林空地——树和石头，大部分很开阔',
     '🇻🇳 Vietnam — huge dense jungle, thick canopy, tight sightlines': '🇻🇳 越南——茂密的大丛林，树冠厚，视野很近',
-    '🔥 Volcano — lava pools deal 4 dmg/sec': '🔥 火山——岩浆池每秒掉 4 点血',
+    '🔥 Volcano — high-damage lava fields with black obsidian routes': '🔥 火山——高伤害岩浆区和黑曜石路线',
     '⚡ Cyber Alley — neon city, JUMP PADS launch you up': '⚡ 赛博小巷——霓虹城市，跳板能把你弹上天',
     'Desert Ruins — broken pillars + sand dunes, open sightlines': '沙漠遗迹——断柱和沙丘，视野开阔',
     '❄️ Tundra — ice patches make you slip and slide': '❄️ 冻原——冰面会让你打滑',

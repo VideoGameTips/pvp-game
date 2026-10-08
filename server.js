@@ -1945,7 +1945,7 @@ event_horizon: 75,
    seismic_hammer: 70, painter_beam: 6, portal_launcher: 10,
    gravity_paint: 4, traffic_controller: 4, pinball_launcher: 60,
   hyper_disc: 80,
-  lava: 4,
+  lava: 12,
   fists: 24,
   // NEW SECONDARIES
   machine_pistol: 14, sawed_off: 35, dart_gun: 38, laser_pointer: 6,
