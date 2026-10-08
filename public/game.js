@@ -26415,13 +26415,21 @@ const P_SOLE = [
 const GUN_HOLD = {
   shoulderX: 0.272, elbowX: -2.313,
   gripPitch: 2.041,
+  // Carried ACROSS the body, a patrol carry, rather than with the muzzle
+  // pointed at whoever is looking. Not decoration: measured head-on at three
+  // metres, a weapon held straight projects to 24 x 43 px — a sliver against a
+  // dark torso, which is why an armed character read as holding nothing. At 25
+  // degrees across it is 73 x 42, nearly three times the area, and it is also
+  // what a carried rifle actually looks like.
+  gripYaw: -0.44,
   // Support hand, forward on the handguard. The shoulder also abducts (z) to
   // get the elbow out from under the weapon instead of through it.
   // Solved the same way, but numerically: sweep the support arm's three angles
   // and keep the triple that puts the palm on the HANDGUARD — measured off the
   // weapon's own bounding box at 62% of the way to the muzzle, not guessed.
-  // Residual 7 mm.
-  supShoulderX: -0.98, supShoulderZ: 0.60, supElbowX: -0.64,
+  // Re-solved against the yawed carry above, because turning the weapon moves
+  // the handguard out from under the hand that was holding it. Residual 5 mm.
+  supShoulderX: -0.55, supShoulderZ: 0.75, supElbowX: -1.49,
 };
 
 // ── 🗿 sculptBox ────────────────────────────────────────────────────────────
@@ -28038,11 +28046,13 @@ function _addHelmet(group, color) {
   const shell = new THREE.Mesh(sculptBox('helmet', 0.123, P_HELMET, { segs: 10, vsegs: 7, round: 0.90 }), mat);
   shell.position.set(0, 1.7585, 0); shell.castShadow = true; group.add(shell);
   const nape = new THREE.Mesh(sculptBox('helmnape', 0.088, P_HELMET_NAPE, { segs: 10, vsegs: 4, round: 0.88 }), mat);
-  nape.position.set(0, 1.676, 0); nape.castShadow = true; group.add(nape);
+  nape.position.set(0, 1.676, 0); group.add(nape);
   // NVG shroud: the one detail that separates a combat helmet from a bowl.
   const dk = _gearMat('plate', darkenColor(color, 0.55));
   const shroud = new THREE.Mesh(new THREE.BoxGeometry(0.044, 0.028, 0.022), dk);
   shroud.position.set(0, 1.782, 0.090); shroud.rotation.x = 0.22; group.add(shroud);
+  // Rails, ear pads and the chin strap do not cast: they are all under 0.09 m
+  // and sit inside the shell's own shadow.
   // Side rails + ear pads + a chin strap, so it is strapped on rather than
   // balanced on top of the head.
   [-1, 1].forEach(sx => {
@@ -28064,7 +28074,7 @@ const P_CAP = [
 function _addCap(group, color) {
   const mat = _gearMat('cloth', color);
   const crown = new THREE.Mesh(sculptBox('cap', 0.112, P_CAP, { segs: 10, vsegs: 6, round: 0.9 }), mat);
-  crown.position.set(0, 1.740, 0); crown.castShadow = true; group.add(crown);
+  crown.position.set(0, 1.740, 0); crown.castShadow = true; group.add(crown);   // the cap's crown does; its brim below does not
   // A curved brim, not a flat tab: the curl is most of what says "cap".
   const brim = new THREE.Group();
   const bm = _gearMat('cloth', darkenColor(color, 0.82));
@@ -28075,7 +28085,7 @@ function _addCap(group, color) {
     seg.rotation.y = -t * 0.42; seg.rotation.x = -0.14;
     brim.add(seg);
   }
-  brim.position.set(0, 1.700, 0.058); brim.castShadow = true; group.add(brim);
+  brim.position.set(0, 1.700, 0.058); group.add(brim);
   const btn = new THREE.Mesh(new THREE.SphereGeometry(0.009, 8, 6), bm);
   btn.position.set(0, 1.800, -0.006); group.add(btn);
 }
@@ -28097,7 +28107,7 @@ function _addVisor(group, color, intensity = 1.2) {
   const strap = _gearMat('cloth', 0x15181d);
   const band = new THREE.Mesh(sculptBox('band', 0.046, P_BAND, { segs: 10, vsegs: 3, round: 0.88 }),
                               _bandMats(lens, strap));
-  band.position.set(0, 1.684, 0.004); band.castShadow = true; group.add(band);
+  band.position.set(0, 1.684, 0.004); group.add(band);   // a goggle band casts nothing anyone can see
 }
 function _addShades(head) {
   // On the HEAD, not the group: hair turns with the head, and shades left
@@ -28141,10 +28151,14 @@ let _hairSphereGeo = null;
 function _addSeedHair(head, style, color) {
   const mat = _gearMat('hair', color, { roughness: 0.58 });
   const Y = y => y - BODY.headY;                  // head-local
+  // Only the shell casts; the tufts, curls and fringes on top of it are all
+  // inside its own shadow and each one is another draw in the shadow pass.
+  let first = true;
   const put = (geo, x, y, z, rx) => {
     const m = new THREE.Mesh(geo, mat);
     m.position.set(x, Y(y), z); if (rx) m.rotation.x = rx;
-    m.castShadow = true; head.add(m); return m;
+    if (first) { m.castShadow = true; first = false; }
+    head.add(m); return m;
   };
   const buzz = style === 'buzz';
   const shell = put(sculptBox('hair', 0.142, P_HAIRSHELL, { segs: 10, vsegs: 7, round: 0.88 }), 0, 1.716, 0);
@@ -28488,7 +28502,11 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
   // doll" tell a game character has, and the collar covers most of it anyway.
   const neckMat = flesh(tone);
   const neck = new THREE.Mesh(sculptBox('neck', 0.145, P_NECK, { segs: 8, vsegs: 4, round: 0.94 }), neckMat);
-  neck.position.set(0, B.chin - 0.052, -0.006); neck.castShadow = true; group.add(neck);
+  // No shadow: the neck is 0.11 m across and sits between a head and a torso
+  // that both cast. The shadow pass is a second draw of everything that casts
+  // it, and in Lobby 13 renderer.render is 96% of the frame's CPU — so only
+  // parts that change the silhouette earn a place in it (#53).
+  neck.position.set(0, B.chin - 0.052, -0.006); group.add(neck);
 
   // ── Torso ─────────────────────────────────────────────────────────────────
   const torsoMat = cloth(shirt);
@@ -28518,7 +28536,7 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
     fore.position.y = -B.foreArm / 2; fore.castShadow = true; elbow.add(fore);
     const wrist = new THREE.Group(); wrist.position.y = -B.foreArm; elbow.add(wrist);
     const hand = new THREE.Mesh(sculptBox('hand', 0.165, P_HAND, { segs: 6, vsegs: 5, round: 0.72 }), flesh(tone));
-    hand.position.y = -0.0825; hand.castShadow = true; wrist.add(hand);
+    hand.position.y = -0.0825; wrist.add(hand);   // no shadow: it is inside the forearm's
     hands.push(hand);
     group.add(pivot);
     armMeshes.push(pivot); armElbows.push(elbow); armWrists.push(wrist); armLimbs.push(upper, fore);
@@ -28528,7 +28546,7 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
   // arm through every other one.
   const gripR = new THREE.Group();
   gripR.position.set(0, -0.085, 0.015);
-  gripR.rotation.x = GUN_HOLD.gripPitch;
+  gripR.rotation.set(GUN_HOLD.gripPitch, GUN_HOLD.gripYaw, 0);
   armWrists[1].add(gripR);
 
   // ── Legs ──────────────────────────────────────────────────────────────────
@@ -49752,7 +49770,15 @@ function updateBotAI(dt) {
           const sp = Math.min(8 * dt, gd); // brisk walk over to the slot
           moveX = (gdx / gd) * sp;
           moveZ = (gdz / gd) * sp;
-          bot.rotY = Math.atan2(moveX, moveZ);
+          // NEGATED, like every other facing in this file. `mesh.rotation.y`
+          // is `bot.rotY + Math.PI`, so the convention that points a face along
+          // a direction is atan2(-x, -z) — which is what the target-facing
+          // lines use. These two movement lines did not, so a bot walking to a
+          // slot or wandering faced exactly 180 degrees away from where it was
+          // going. It has always moonwalked; you could not see it because an
+          // armed character's legs were frozen (that gate is gone now), and
+          // every character in Lobby 13 is armed.
+          bot.rotY = Math.atan2(-moveX, -moveZ);
         }
         bot.state = 'duel_stage';
       } else {
@@ -49762,7 +49788,7 @@ function updateBotAI(dt) {
         if (bot.wanderTimer <= 0) { bot.wanderAngle += (Math.random()-0.5)*1.8; bot.wanderTimer = 1.5 + Math.random()*2; }
         moveX = Math.sin(bot.wanderAngle) * 4 * dt;
         moveZ = Math.cos(bot.wanderAngle) * 4 * dt;
-        bot.rotY = Math.atan2(moveX, moveZ);
+        bot.rotY = Math.atan2(-moveX, -moveZ);
       }
     } else {
       const dx = target.x - bot.x, dz = target.z - bot.z;
