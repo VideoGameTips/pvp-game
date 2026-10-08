@@ -456,6 +456,7 @@
     'BUTTON SIZE': '按钮大小', 'SMALL': '小', 'NORMAL': '中', 'BIG': '大',
     'HOLD': '按住', 'TOGGLE': '切换', 'ON': '开', 'OFF': '关',
     'CAMERA SHAKE': '镜头晃动', 'SCREEN EFFECTS': '屏幕特效',
+    'AMBIENT SOUND': '环境音', 'WEATHER & PARTICLES': '天气与粒子', 'Blown sand, snow, ash and rain in the air. Turn off if the game runs slow.': '空气中的风沙、雪、灰烬和雨。游戏卡顿时可以关掉。',
     'Tweak the muzzle blast on every gun. Saved per device.': '调整所有枪的开枪声音，只保存在这台设备上。',
     'VOLUME': '音量', 'PITCH': '音调', 'ATTACK (snap)': '起音（清脆）', 'BODY (boom)': '厚度（轰鸣）', 'DURATION': '时长',
     '🔫 TEST': '🔫 试听', 'RESET': '重置',

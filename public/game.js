@@ -5750,6 +5750,7 @@ function activateMap(name) {
   if (typeof dressThemeMap === 'function') { try { dressThemeMap(name); } catch (e) { console.warn('[theme]', name, e); } }
   // The haze takes the colour of the sky it hangs under, so a dark map is not wrapped in pale blue.
   if (scene.fog && scene.fog.color && MAP_GROUPS[name] && MAP_GROUPS[name]._skyColor != null) scene.fog.color.setHex(MAP_GROUPS[name]._skyColor);
+  if (typeof atmoActivate === 'function') { try { atmoActivate(name); } catch (e) { console.warn('[atmo]', name, e); } }
   wallColliders.length = 0;
   if (MAP_COLLIDERS[name]) wallColliders.push(...MAP_COLLIDERS[name]);
   activeMapName = name;
@@ -11350,6 +11351,564 @@ function buildVolcanoScenery() {
   };
   group._skyColor = 0x5a1c0c;
 }
+// ═══ 🌬️ MAP ATMOSPHERE ═══════════════════════════════════════════════════════════════════════════════════════════
+// The layouts are built; this makes them feel like places. Per map (profiles at the bottom of this block):
+//   • a ground with a surface -- a tileable detail texture (sand ripples, grass, snow, asphalt, planks...) on a
+//     mesh that is gently uneven, with the colour mottled across it, and a scatter of small stones, tufts and rubble;
+//   • terrain past the walls (dunes, hills) that fades into the haze, a sky that shades from horizon to zenith with
+//     the sun's glow in it, and drifting clouds;
+//   • weather in the air round the player -- blown sand, snow, ash, embers, leaves, rain, spray, dust -- that leans
+//     into the same wind gusts, which also thin the fog;
+//   • and sound: a bed of wind / rain / surf / machinery hum for the place, with its own birds, distant guns,
+//     sirens, drips and clanks arriving at random.
+// Everything here is dressing: nothing collides, and the ground stays flat for the players' feet (the unevenness is
+// only ever DOWN from the floor, a few centimetres, so nobody sinks into it). Colliders and layouts are untouched.
+var ATMO = { name: null, gust: 0, gustTarget: 0, gustT: 4, windA: 0.6, t: 0, tex: {}, fx: [], sheets: null, dome: null, clouds: null, fog0: [40, 120], audioT: 0 };
+function _anHash(x, z) { let h = Math.imul(x | 0, 374761393) ^ Math.imul(z | 0, 668265263); h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
+function _anSm(a, b, x) { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); }
+// value noise: free (period 0) or tileable over Px x Pz lattice cells
+function _anN(x, z, Px, Pz, s) {
+  const ix = Math.floor(x), iz = Math.floor(z), fx = x - ix, fz = z - iz, u = fx * fx * (3 - 2 * fx), v = fz * fz * (3 - 2 * fz);
+  let x0 = ix, x1 = ix + 1, z0 = iz, z1 = iz + 1;
+  if (Px) { x0 = ((ix % Px) + Px) % Px; x1 = (x0 + 1) % Px; }
+  if (Pz) { z0 = ((iz % Pz) + Pz) % Pz; z1 = (z0 + 1) % Pz; }
+  const o = (s || 0) * 977;
+  const a = _anHash(x0 + o, z0), b = _anHash(x1 + o, z0), c = _anHash(x0 + o, z1), d = _anHash(x1 + o, z1);
+  return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+}
+function _anFbm(x, z, oct, s) { let sum = 0, a = 0.5, f = 1, norm = 0; for (let i = 0; i < oct; i++) { sum += a * _anN(x * f, z * f, 0, 0, (s || 0) + i); norm += a; a *= 0.5; f *= 2.03; } return sum / norm; }
+// the same, wrapping every `base` cells (octaves double it), for textures that must tile
+function _anTile(u, v, base, oct, s) { let sum = 0, a = 0.5, P = base, norm = 0; for (let i = 0; i < oct; i++) { sum += a * _anN(u * P, v * P, P, P, (s || 0) + i); norm += a; a *= 0.5; P *= 2; } return sum / norm; }
+
+// ── ground surface textures: greyscale detail that the map's own ground colour is multiplied through ──────────────
+var ATMO_TILE = { sand: 9, grass: 10, dirt: 8, mud: 8, snow: 12, asphalt: 8, concrete: 6, rock: 8, metal: 6, tile: 6, wood: 8 };
+function _atmoTex(kind) {
+  if (ATMO.tex[kind]) return ATMO.tex[kind];
+  const N = 256, c = document.createElement('canvas'); c.width = c.height = N;
+  const x = c.getContext('2d'), img = x.createImageData(N, N), d = img.data, rnd = _thRng('tex:' + kind);
+  const px = (fn) => {
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+      const L = Math.max(0, Math.min(1, fn(i / N, j / N, i, j))), v = 255 * (0.58 + 0.42 * L), o = (j * N + i) * 4;
+      d[o] = d[o + 1] = d[o + 2] = v; d[o + 3] = 255;
+    }
+  };
+  const grain = (i, j, s) => _anHash(i * 3 + 7 + (s || 0), j * 5 + 11);
+  const stroke = (n, fn) => { for (let k = 0; k < n; k++) fn(rnd() * (N - 16) + 8, rnd() * (N - 16) + 8, k); };
+  const line = (x0, y0, x1, y1, col, w) => { x.strokeStyle = col; x.lineWidth = w; x.beginPath(); x.moveTo(x0, y0); x.lineTo(x1, y1); x.stroke(); };
+  const crack = (a, w) => { let cx = rnd() * N, cy = rnd() * N, dir = rnd() * 6.28; x.strokeStyle = `rgba(0,0,0,${a})`; x.lineWidth = w; x.beginPath(); x.moveTo(cx, cy); for (let k = 0; k < 14; k++) { dir += (rnd() - 0.5) * 1.1; cx += Math.cos(dir) * 7; cy += Math.sin(dir) * 7; x.lineTo(cx, cy); } x.stroke(); };
+  let post = null;
+  switch (kind) {
+    case 'sand':   // wind ripples, warped, over soft drifts and grain
+      px((u, v, i, j) => { const w = _anTile(u, v, 3, 3, 1) * 1.7, r = 1 - Math.abs(Math.sin(6.2832 * (11 * u + 4 * v + w))); return 0.5 * Math.pow(r, 1.5) + 0.32 * _anTile(u, v, 2, 3, 2) + 0.18 * grain(i, j); });
+      break;
+    case 'grass':
+      px((u, v, i, j) => 0.3 + 0.42 * _anTile(u, v, 4, 3, 3) + 0.14 * _anTile(u, v, 16, 1, 4) + 0.14 * grain(i >> 1, j >> 1));
+      post = () => stroke(1100, (a, b, k) => { const l = 3 + rnd() * 4, an = -1.57 + (rnd() - 0.5) * 0.8; line(a, b, a + Math.cos(an) * l, b + Math.sin(an) * l, k % 2 ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.18)', 1); });
+      break;
+    case 'dirt': case 'mud':
+      px((u, v, i, j) => 0.18 + 0.4 * _anTile(u, v, 5, 3, 5) + 0.22 * _anTile(u, v, 14, 2, 6) + 0.2 * grain(i, j, 3) + (kind === 'mud' && _anTile(u, v, 4, 2, 7) > 0.66 ? 0.25 : 0));
+      post = () => stroke(kind === 'mud' ? 40 : 90, (a, b) => { const r = 1 + rnd() * 2.4; x.fillStyle = 'rgba(0,0,0,0.28)'; x.beginPath(); x.ellipse(a + 1, b + 1, r, r * 0.8, 0, 0, 6.3); x.fill(); x.fillStyle = 'rgba(255,255,255,0.3)'; x.beginPath(); x.ellipse(a, b, r, r * 0.8, 0, 0, 6.3); x.fill(); });
+      break;
+    case 'snow':   // soft blotches, wind-scoured streaks, a few glints
+      px((u, v, i, j) => 0.62 + 0.18 * _anTile(u, v, 3, 3, 8) + 0.12 * _anN(u * 3, v * 40, 3, 40, 9) + (grain(i, j, 5) > 0.985 ? 0.4 : 0));
+      break;
+    case 'asphalt':
+      px((u, v, i, j) => 0.3 + 0.25 * grain(i, j, 7) + 0.3 * _anTile(u, v, 8, 3, 10) + 0.15 * _anTile(u, v, 3, 2, 11));
+      post = () => { for (let k = 0; k < 9; k++) crack(0.5, 1); stroke(4, (a, b) => { x.fillStyle = 'rgba(0,0,0,0.12)'; x.fillRect(a, b, 30 + rnd() * 40, 20 + rnd() * 30); }); };
+      break;
+    case 'concrete':
+      px((u, v, i, j) => 0.45 + 0.2 * grain(i, j, 9) + 0.3 * _anTile(u, v, 3, 3, 12));
+      post = () => { x.fillStyle = 'rgba(0,0,0,0.5)'; x.fillRect(0, 0, N, 2); x.fillRect(0, N / 2, N, 1); x.fillRect(0, 0, 2, N); x.fillRect(N / 2, 0, 1, N); stroke(6, (a, b) => { x.fillStyle = 'rgba(30,25,20,0.1)'; x.beginPath(); x.ellipse(a, b, 8 + rnd() * 20, 5 + rnd() * 12, rnd() * 3, 0, 6.3); x.fill(); }); crack(0.35, 1); };
+      break;
+    case 'rock':   // plates split by cracks
+      px((u, v, i, j) => { const f = _anTile(u, v, 5, 3, 13), ridge = Math.abs(f * 2 - 1); return ridge < 0.05 ? 0.02 : 0.28 + 0.45 * _anTile(u, v, 3, 3, 14) + 0.25 * grain(i, j, 11); });
+      break;
+    case 'metal':  // brushed steel plates, seams, rivets
+      px((u, v, i, j) => 0.52 + 0.3 * _anN(u * 2, v * 128, 2, 128, 15) + 0.12 * _anTile(u, v, 3, 2, 16) + 0.06 * grain(i, j));
+      post = () => { x.fillStyle = 'rgba(0,0,0,0.6)'; for (let k = 0; k < 4; k++) { x.fillRect(k * N / 4, 0, 2, N); x.fillRect(0, k * N / 4, N, 2); } for (let a = 0; a < 4; a++) for (let b = 0; b < 4; b++) for (const [ox, oy] of [[8, 8], [N / 4 - 8, 8], [8, N / 4 - 8], [N / 4 - 8, N / 4 - 8]]) { x.fillStyle = 'rgba(0,0,0,0.5)'; x.beginPath(); x.arc(a * N / 4 + ox + 1, b * N / 4 + oy + 1, 2.2, 0, 6.3); x.fill(); x.fillStyle = 'rgba(255,255,255,0.4)'; x.beginPath(); x.arc(a * N / 4 + ox, b * N / 4 + oy, 1.8, 0, 6.3); x.fill(); } };
+      break;
+    case 'tile':
+      px((u, v, i, j) => { const ti = Math.floor(u * 4), tj = Math.floor(v * 4), fu = u * 4 - ti, fv = v * 4 - tj; if (fu < 0.035 || fv < 0.035) return 0.04; return 0.6 + 0.3 * _anHash(ti + 3, tj + 9) + 0.12 * _anTile(u, v, 4, 2, 17) + (fu + fv < 0.5 ? 0.08 : 0); });
+      break;
+    case 'wood':   // deck planks with grain, seams and butt joints
+      { const joint = []; for (let k = 0; k < 8; k++) joint.push(_anHash(k, 41)); px((u, v, i, j) => { const id = Math.floor(u * 8), fu = u * 8 - id; if (fu < 0.045) return 0.02; if (Math.abs(v - joint[id]) < 0.006 || Math.abs(v - ((joint[id] + 0.5) % 1)) < 0.006) return 0.05; return 0.45 + 0.35 * _anHash(id, 7) + 0.18 * _anN(u * 24, v * 4, 24, 4, 18); }); }
+      post = () => stroke(34, (a, b) => { x.fillStyle = 'rgba(0,0,0,0.5)'; x.fillRect(Math.round(a / 32) * 32 + 14, b, 2, 2); });
+      break;
+    default: px(() => 0.6);
+  }
+  x.putImageData(img, 0, 0);
+  if (post) post();
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy ? renderer.capabilities.getMaxAnisotropy() : 1);
+  return (ATMO.tex[kind] = t);
+}
+// The ground mesh the layout built, made uneven and given its surface. Heights only ever go DOWN from the floor.
+function _atmoGround(name, prof) {
+  const g = MAP_GROUPS[name]; if (!g || g._atmoGround || !prof.ground) return; g._atmoGround = true;
+  const b = MAP_BOUNDS[name] || { halfX: 70, halfZ: 70 };
+  let ground = null, gw = 0, gd = 0;
+  for (const o of g.children) {
+    if (!o.isMesh || !o.geometry || o.geometry.type !== 'PlaneGeometry' || Math.abs(o.position.y) > 0.05 || Math.abs(o.rotation.x + Math.PI / 2) > 0.01) continue;
+    o.geometry.computeBoundingBox(); const bb = o.geometry.boundingBox, w = bb.max.x - bb.min.x, d = bb.max.y - bb.min.y;
+    if (w >= b.halfX * 1.2 && w < 600 && w * d > gw * gd) { ground = o; gw = w; gd = d; }
+  }
+  if (!ground) return;
+  const old = ground.material, kind = prof.ground, amp = prof.amp ?? 0.1;
+  const cell = amp > 0 ? 2.4 : 6, sx = Math.max(2, Math.min(110, Math.round(gw / cell))), sz = Math.max(2, Math.min(110, Math.round(gd / cell)));
+  const geo = new THREE.PlaneGeometry(gw, gd, sx, sz), pos = geo.attributes.position, uv = geo.attributes.uv, col = new Float32Array(pos.count * 3);
+  const rnd = _thRng(name + ':ground'), ox = rnd() * 90, oz = rnd() * 90, tile = prof.tile || ATMO_TILE[kind] || 8;
+  const mot = prof.mottle || [0.9, 0.9, 0.9];
+  for (let i = 0; i < pos.count; i++) {
+    const lx = pos.getX(i), ly = pos.getY(i), wx = lx + ground.position.x, wz = -ly + ground.position.z;
+    let h;
+    if (kind === 'sand') { const r = 1 - Math.abs(2 * _anFbm(wx * 0.05 + ox, wz * 0.07 + oz, 3, 1) - 1); h = 0.62 * Math.pow(r, 1.3) + 0.38 * _anFbm(wx * 0.22 + ox, wz * 0.22 + oz, 2, 2); }
+    else h = _anFbm(wx * 0.09 + ox, wz * 0.09 + oz, 3, 3);
+    pos.setZ(i, -amp * (1 - h));
+    const m = _anFbm(wx * 0.035 + oz, wz * 0.035 + ox, 3, 4), s = 0.9 + 0.2 * h + 0.06 * (_anHash(i, 5) - 0.5);
+    col[i * 3] = s * (1 + (mot[0] - 1) * m); col[i * 3 + 1] = s * (1 + (mot[1] - 1) * m); col[i * 3 + 2] = s * (1 + (mot[2] - 1) * m);
+    uv.setXY(i, (lx + gw / 2) / tile, (ly + gd / 2) / tile);
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3)); geo.computeVertexNormals();
+  const mat = new THREE.MeshPhongMaterial({ color: old.color ? old.color.clone().multiplyScalar(1.22) : 0xffffff, map: _atmoTex(kind), vertexColors: true, flatShading: true, shininess: kind === 'metal' || kind === 'tile' ? 22 : 5, specular: kind === 'metal' || kind === 'tile' ? 0x44484c : 0x16161a });
+  ground.geometry = geo; ground.material = mat; ground.receiveShadow = true;
+}
+// Small things on the ground, merged into one mesh, kept off every collider. Knee-high at most.
+function _atmoClutter(name, prof) {
+  const g = MAP_GROUPS[name], cl = prof.clutter; if (!g || g._atmoClutter || !cl) return; g._atmoClutter = true;
+  const b = MAP_BOUNDS[name] || { halfX: 70, halfZ: 70 }, hz = b.halfZ || b.halfX, rnd = _thRng(name + ':clutter');
+  const boxes = (MAP_COLLIDERS[name] || []).filter(bx => bx.min && bx.min.y < 1.6 && bx.max.y > 0.05);
+  const free = (x, z, m) => { for (const bx of boxes) if (x > bx.min.x - m && x < bx.max.x + m && z > bx.min.z - m && z < bx.max.z + m) return false; return true; };
+  const P = [], C = [];
+  const put = (geo, x, y, z, ry, c, sx = 1, sy = 1, sz = 1) => {
+    const m = new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler((rnd() - 0.5) * 0.3, ry, (rnd() - 0.5) * 0.3)), new THREE.Vector3(sx, sy, sz));
+    const g0 = geo.clone().applyMatrix4(m), gg = g0.index ? g0.toNonIndexed() : g0, p = gg.attributes.position, cc = new THREE.Color(c), v = 0.85 + rnd() * 0.3;
+    for (let i = 0; i < p.count; i++) { P.push(p.getX(i), p.getY(i), p.getZ(i)); C.push(cc.r * v, cc.g * v, cc.b * v); }
+    gg.dispose();
+  };
+  const G = { rock: new THREE.IcosahedronGeometry(1, 0), cone: new THREE.ConeGeometry(0.06, 1, 4), box: new THREE.BoxGeometry(1, 1, 1), drift: new THREE.IcosahedronGeometry(1, 0) };
+  const make = {
+    rock: (x, z, c) => { const r = 0.1 + rnd() * 0.2; put(G.rock, x, r * 0.3, z, rnd() * 6, c, r, r * 0.6, r * 0.85); },
+    tuft: (x, z, c) => { for (let k = 0; k < 5; k++) { const a = rnd() * 6.28, h = 0.35 + rnd() * 0.5; put(G.cone, x + Math.cos(a) * 0.12, h / 2, z + Math.sin(a) * 0.12, 0, c, 1, h, 1); } },
+    shrub: (x, z, c) => { const r = 0.3 + rnd() * 0.35; put(G.rock, x, r * 0.55, z, rnd() * 6, c, r, r * 0.75, r); },
+    drift: (x, z, c) => { const r = 0.7 + rnd() * 1.4; put(G.drift, x, 0, z, rnd() * 6, c, r * 1.5, 0.16 + rnd() * 0.12, r); },
+    rubble: (x, z, c) => { for (let k = 0; k < 3; k++) { const s = 0.12 + rnd() * 0.3; put(G.box, x + (rnd() - 0.5) * 0.7, s * 0.35, z + (rnd() - 0.5) * 0.7, rnd() * 6, c, s * (1 + rnd()), s * 0.7, s * (1 + rnd())); } },
+    scrap: (x, z, c) => { const s = 0.3 + rnd() * 0.5; put(G.box, x, 0.03, z, rnd() * 6, c, s * 1.6, 0.05, s); },
+  };
+  const total = Math.round(cl.n * (isTouchLike() ? 0.6 : 1));
+  for (let k = 0, tries = 0; k < total && tries < total * 4; tries++) {
+    const x = (rnd() * 2 - 1) * (b.halfX - 1.6), z = (rnd() * 2 - 1) * (hz - 1.6);
+    if (!free(x, z, 0.7)) continue;
+    let r = rnd() * cl.parts.reduce((s, p) => s + p[2], 0), part = cl.parts[0];
+    for (const p of cl.parts) { r -= p[2]; if (r <= 0) { part = p; break; } }
+    const cols = Array.isArray(part[1]) ? part[1] : [part[1]];
+    make[part[0]](x, z, cols[Math.floor(rnd() * cols.length)]); k++;
+  }
+  if (!P.length) return;
+  const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); geo.setAttribute('color', new THREE.Float32BufferAttribute(C, 3)); geo.computeVertexNormals();
+  const mesh = new THREE.Mesh(geo, new THREE.MeshPhongMaterial({ vertexColors: true, flatShading: true, shininess: 3, specular: 0x101010 }));
+  mesh.raycast = () => {}; mesh.userData.atmoClutter = true; g.add(mesh);
+}
+function isTouchLike() { return (navigator.maxTouchPoints > 0) || ('ontouchstart' in window); }
+// Terrain past the walls, rising out of the haze. Heights are absolute; the arena's own floor is y = 0.
+function _atmoFarGround(name, group, color, relief, shape) {
+  const b = MAP_BOUNDS[name] || { halfX: 70, halfZ: 70 }, hx = b.halfX, hz = b.halfZ || b.halfX, SIZE = 800, SEG = 80;
+  const geo = new THREE.PlaneGeometry(SIZE, SIZE, SEG, SEG), pos = geo.attributes.position, col = new Float32Array(pos.count * 3);
+  const rnd = _thRng(name + ':far'), ox = rnd() * 100, oz = rnd() * 100, base = new THREE.Color(color);
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), z = -pos.getY(i), d = Math.max(Math.abs(x) - hx, Math.abs(z) - hz), ramp = _anSm(8, 130, d);
+    let h;
+    if (shape === 'dune') { const r = 1 - Math.abs(2 * _anFbm(x * 0.012 + ox, z * 0.019 + oz, 3, 1) - 1); h = 0.7 * Math.pow(r, 1.3) + 0.3 * _anFbm(x * 0.006 + ox, z * 0.006 + oz, 3, 2); }
+    else h = _anFbm(x * 0.0075 + ox, z * 0.0075 + oz, 4, 3);
+    pos.setZ(i, -0.4 + ramp * relief * h);
+    const s = 0.78 + 0.34 * h * ramp + 0.12 * (_anFbm(x * 0.03 + oz, z * 0.03 + ox, 2, 4) - 0.5);
+    col[i * 3] = base.r * s; col[i * 3 + 1] = base.g * s; col[i * 3 + 2] = base.b * s;
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3)); geo.computeVertexNormals();
+  const m = new THREE.Mesh(geo, new THREE.MeshPhongMaterial({ vertexColors: true, flatShading: true, shininess: 2, specular: 0x0c0c0c }));
+  m.rotation.x = -Math.PI / 2; m.raycast = () => {}; group.add(m); group._hasFarGround = true; return m;
+}
+// ── sky: a dome that shades horizon -> zenith, with the sun's glow in it; clouds drifting under it ───────────────────
+function _anMerge(list) {   // [{geo, pos:[x,y,z], scl:[x,y,z], rot}] -> one BufferGeometry
+  const P = [];
+  for (const it of list) {
+    const m = new THREE.Matrix4().compose(new THREE.Vector3(...it.pos), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, it.rot || 0, 0)), new THREE.Vector3(...it.scl));
+    const g0 = it.geo.clone().applyMatrix4(m), g = g0.index ? g0.toNonIndexed() : g0, p = g.attributes.position; for (let i = 0; i < p.count; i++) P.push(p.getX(i), p.getY(i), p.getZ(i)); g.dispose();
+  }
+  const out = new THREE.BufferGeometry(); out.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); out.computeVertexNormals(); return out;
+}
+function _atmoSky(name, prof) {
+  if (!ATMO.dome) {
+    const geo = new THREE.SphereGeometry(150, 40, 20);
+    geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(geo.attributes.position.count * 3), 3));
+    const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false, depthWrite: false, depthTest: false }));
+    m.renderOrder = -1000; m.frustumCulled = false; m.raycast = () => {}; scene.add(m); ATMO.dome = m;
+  }
+  const m = ATMO.dome, sky = MAP_GROUPS[name] && MAP_GROUPS[name]._skyColor;
+  if (!prof.zen && prof.zen !== 0 || sky == null) { m.visible = false; return; }
+  const H = new THREE.Color(sky), Z = new THREE.Color(prof.zen), S = prof.sun ? new THREE.Color(prof.sun[2]) : null;
+  const sd = prof.sun ? new THREE.Vector3(Math.cos(prof.sun[1]) * Math.sin(prof.sun[0]), Math.sin(prof.sun[1]), -Math.cos(prof.sun[1]) * Math.cos(prof.sun[0])) : null;
+  const pos = m.geometry.attributes.position, col = m.geometry.attributes.color, v = new THREE.Vector3(), c = new THREE.Color();
+  for (let i = 0; i < pos.count; i++) {
+    v.set(pos.getX(i), pos.getY(i), pos.getZ(i)).normalize();
+    c.copy(H).lerp(Z, Math.pow(Math.max(0, v.y), 0.5));
+    if (sd) { const s = Math.max(0, v.dot(sd)); const glow = Math.pow(s, 5) * 0.22 + Math.pow(s, 40) * 0.5 + Math.pow(s, 400) * 0.9; c.r += S.r * glow; c.g += S.g * glow; c.b += S.b * glow; }
+    col.setXYZ(i, Math.min(1, c.r), Math.min(1, c.g), Math.min(1, c.b));
+  }
+  col.needsUpdate = true; m.userData.horizon = H; m.visible = true;
+}
+function _atmoClouds(name, prof) {
+  if (ATMO.clouds) { scene.remove(ATMO.clouds.group); ATMO.clouds.group.traverse(o => { if (o.geometry) o.geometry.dispose(); }); ATMO.clouds.mat.dispose(); ATMO.clouds = null; }
+  const spec = prof.cloud; if (!spec || !spec[0]) return;
+  const n = Math.round(spec[0] * (isTouchLike() ? 0.7 : 1)), rnd = _thRng(name + ':clouds'), group = new THREE.Group(), blob = new THREE.IcosahedronGeometry(1, 0);
+  const mat = new THREE.MeshLambertMaterial({ color: spec[1], emissive: new THREE.Color(spec[1]).multiplyScalar(0.42), flatShading: true, fog: false });
+  const list = [];
+  for (let i = 0; i < n; i++) {
+    const parts = [], k = 4 + ((rnd() * 3) | 0), R = 7 + rnd() * 9;
+    for (let j = 0; j < k; j++) { const r = R * (0.55 + rnd() * 0.6); parts.push({ geo: blob, pos: [(j - k / 2) * R * 0.9 + (rnd() - 0.5) * R * 0.4, (rnd() - 0.5) * R * 0.25, (rnd() - 0.5) * R * 0.8], scl: [r * 1.5, r * 0.5, r * 1.1], rot: rnd() * 3 }); }
+    const mesh = new THREE.Mesh(_anMerge(parts), mat); mesh.raycast = () => {};
+    mesh.position.set((rnd() * 2 - 1) * 150, 55 + rnd() * 45, (rnd() * 2 - 1) * 150); mesh.rotation.y = rnd() * 3; mesh.userData.sp = 0.7 + rnd() * 1.4;
+    group.add(mesh); list.push(mesh);
+  }
+  scene.add(group); ATMO.clouds = { group, mat, list };
+}
+
+// ── weather in the air round the player ───────────────────────────────────────────────────────────────────────────
+var ATMO_FX = {
+  sand:     { n: 760, col: [0xe8cc92, 0xd6b676, 0xf2dcae], size: 0.11, ws: 7.5, vy: -0.05, turb: 1.5, gk: 2.4, h: 6.5, B: 28, op: 0.85, sheet: { n: 9, col: 0xe4c98e, op: 0.16, size: 24, ws: 5.5, y: [0.6, 4] } },
+  dust:     { n: 240, col: [0xffffff, 0xe8e0d0], size: 0.06, ws: 0.3, vy: 0.0, turb: 0.55, gk: 0.4, h: 7, B: 20, op: 0.55 },
+  dustgold: { n: 200, col: [0xffe2a8, 0xfff0c8], size: 0.07, ws: 0.2, vy: 0.03, turb: 0.5, gk: 0.2, h: 8, B: 20, op: 0.7, add: true, blink: 0.9 },
+  snow:     { n: 950, col: [0xffffff], size: 0.11, ws: 2.4, vy: -1.5, turb: 0.9, gk: 3.2, h: 24, B: 26, op: 0.92, sheet: { n: 7, col: 0xf2f6fa, op: 0.14, size: 26, ws: 3, y: [0.5, 5] } },
+  snowsoft: { n: 480, col: [0xffffff], size: 0.1, ws: 0.6, vy: -1.0, turb: 0.9, gk: 1.2, h: 22, B: 26, op: 0.9 },
+  ash:      { n: 260, col: [0x3c3834, 0x6c645a, 0x8a8278], size: 0.12, ws: 2.4, vy: -0.55, turb: 1.1, gk: 1.3, h: 18, B: 26, op: 0.8 },
+  embers:   { n: 170, col: [0xff7a1a, 0xffb040], size: 0.1, ws: 1.6, vy: 1.4, turb: 1.4, gk: 1.0, h: 18, B: 24, add: true, blink: 3.2, op: 1 },
+  sparks:   { n: 130, col: [0xffd070, 0xff8a20], size: 0.07, ws: 0.9, vy: -1.4, turb: 1.8, gk: 0.4, h: 9, B: 22, add: true, blink: 9, op: 1 },
+  leaves:   { n: 70, col: [0x7a9a3a, 0xb8923a, 0x9a5a28], size: 0.22, ws: 2.4, vy: -0.9, turb: 1.9, gk: 1.6, h: 14, B: 24, op: 1 },
+  pollen:   { n: 130, col: [0xf4f0a0, 0xd8ff88], size: 0.09, ws: 0.3, vy: 0.05, turb: 0.9, gk: 0.3, h: 8, B: 20, add: true, blink: 1.3, op: 0.9 },
+  rain:     { n: 700, line: true, col: [0xaac4dc], ws: 0, vy: -22, h: 22, B: 24, op: 0.38 },
+  spray:    { n: 280, col: [0xffffff], size: 0.08, ws: 6, vy: 0.1, turb: 1.7, gk: 1.4, h: 5, B: 24, op: 0.5, sheet: { n: 6, col: 0xe8f0f6, op: 0.1, size: 22, ws: 4, y: [0.5, 3] } },
+  mist:     { n: 70, col: [0xffffff], size: 1.1, ws: 0.5, vy: 0.02, turb: 0.4, gk: 0.5, h: 5, B: 22, op: 0.1, sheet: { n: 8, col: 0xd8e0e0, op: 0.12, size: 28, ws: 0.8, y: [0.4, 3.5] } },
+  rad:      { n: 170, col: [0x7aff3a, 0xc8ff5a], size: 0.08, ws: 0.2, vy: 0.15, turb: 1.1, gk: 0.2, h: 8, B: 20, add: true, blink: 2.2, op: 0.9 },
+  neon:     { n: 170, col: [0x00e5ff, 0xff2bd6], size: 0.09, ws: 0.3, vy: 0.35, turb: 0.8, gk: 0.1, h: 14, B: 22, add: true, blink: 1.6, op: 0.95 },
+  confetti: { n: 130, col: [0xff4aa0, 0xf2c93a, 0x3a8fd0, 0xd8483a, 0x7aff7a], size: 0.14, ws: 0.8, vy: -0.7, turb: 1.4, gk: 0.5, h: 12, B: 22, op: 1 },
+  glints:   { n: 130, col: [0xffffff, 0xbfe8ff], size: 0.08, ws: 0.15, vy: 0.05, turb: 0.6, gk: 0.1, h: 7, B: 20, add: true, blink: 3, op: 1 },
+  stardust: { n: 170, col: [0xcfe8ff, 0xffffff], size: 0.07, ws: 0.1, vy: 0.02, turb: 0.4, gk: 0, h: 16, B: 22, add: true, blink: 1.2, op: 0.9 },
+};
+var _atmoSoftTex = null;
+function _atmoSoft() {
+  if (_atmoSoftTex) return _atmoSoftTex;
+  const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d'), g = x.createRadialGradient(32, 32, 0, 32, 32, 32);
+  g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.45, 'rgba(255,255,255,0.55)'); g.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = g; x.fillRect(0, 0, 64, 64);
+  return (_atmoSoftTex = new THREE.CanvasTexture(c));
+}
+function _atmoClearFx() {
+  for (const f of ATMO.fx) { scene.remove(f.obj); f.obj.geometry.dispose(); f.obj.material.dispose(); if (f.sheets) { for (const s of f.sheets) { scene.remove(s); s.material.dispose(); } } }
+  ATMO.fx = [];
+}
+function _atmoMakeFx(key) {
+  const spec = ATMO_FX[key]; if (!spec) return null;
+  const n = Math.round(spec.n * (isTouchLike() ? 0.5 : 1)), cx = camera.position.x, cz = camera.position.z, B = spec.B;
+  const geo = new THREE.BufferGeometry(), ph = new Float32Array(n), sf = new Float32Array(n), cols = new Float32Array(n * 3), base = new Float32Array(n * 3);
+  const palette = spec.col.map(h => new THREE.Color(h));
+  for (let i = 0; i < n; i++) {
+    ph[i] = Math.random() * 6.28; sf[i] = 0.6 + Math.random() * 0.8;
+    const c = palette[i % palette.length], br = 0.75 + Math.random() * 0.25;
+    base[i * 3] = cols[i * 3] = c.r * br; base[i * 3 + 1] = cols[i * 3 + 1] = c.g * br; base[i * 3 + 2] = cols[i * 3 + 2] = c.b * br;
+  }
+  const f = { key, spec, n, ph, sf, base, cols, obj: null, sheets: null, head: null };
+  if (spec.line) {
+    const pos = new Float32Array(n * 6); f.head = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) { f.head[i * 3] = cx + (Math.random() * 2 - 1) * B; f.head[i * 3 + 1] = Math.random() * spec.h; f.head[i * 3 + 2] = cz + (Math.random() * 2 - 1) * B; }
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3).setUsage(THREE.DynamicDrawUsage));
+    f.obj = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: spec.col[0], transparent: true, opacity: spec.op, depthWrite: false }));
+  } else {
+    const pos = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) { pos[i * 3] = cx + (Math.random() * 2 - 1) * B; pos[i * 3 + 1] = 0.1 + spec.h * Math.pow(Math.random(), spec.hp || 1.4); pos[i * 3 + 2] = cz + (Math.random() * 2 - 1) * B; }
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3).setUsage(THREE.DynamicDrawUsage)); geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+    f.obj = new THREE.Points(geo, new THREE.PointsMaterial({ size: spec.size, map: _atmoSoft(), vertexColors: true, transparent: true, opacity: spec.op, depthWrite: false, sizeAttenuation: true, blending: spec.add ? THREE.AdditiveBlending : THREE.NormalBlending }));
+  }
+  f.obj.frustumCulled = false; f.obj.raycast = () => {}; scene.add(f.obj);
+  if (spec.sheet) {
+    f.sheets = [];
+    for (let i = 0; i < Math.round(spec.sheet.n * (isTouchLike() ? 0.6 : 1)); i++) {
+      const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: _atmoSoft(), color: spec.sheet.col, transparent: true, opacity: spec.sheet.op, depthWrite: false }));
+      s.position.set(cx + (Math.random() * 2 - 1) * 45, spec.sheet.y[0] + Math.random() * (spec.sheet.y[1] - spec.sheet.y[0]), cz + (Math.random() * 2 - 1) * 45);
+      s.userData = { sz: spec.sheet.size * (0.7 + Math.random() * 0.6), ph: Math.random() * 6.28 }; s.scale.setScalar(s.userData.sz); s.raycast = () => {}; scene.add(s); f.sheets.push(s);
+    }
+  }
+  return f;
+}
+function _atmoUpdateFx(dt, on) {
+  const t = ATMO.t, A = ATMO.windA, gust = ATMO.gust, cx = camera.position.x, cz = camera.position.z;
+  for (const f of ATMO.fx) {
+    f.obj.visible = on; if (f.sheets) for (const s of f.sheets) s.visible = on;
+    if (!on) continue;
+    const sp = f.spec, k = 1 + gust * (sp.gk || 0), wx = Math.cos(A) * sp.ws * k, wz = Math.sin(A) * sp.ws * k, B = sp.B, ph = f.ph, sf = f.sf;
+    if (sp.line) {
+      const pos = f.obj.geometry.attributes.position.array, hd = f.head, lean = 0.3 + gust * 0.5;
+      for (let i = 0; i < f.n; i++) {
+        const s = sf[i], vx = Math.cos(A) * 6 * lean * s, vz = Math.sin(A) * 6 * lean * s, vy = sp.vy * s;
+        let x = hd[i * 3] + vx * dt, y = hd[i * 3 + 1] + vy * dt, z = hd[i * 3 + 2] + vz * dt;
+        if (y < 0) { y += sp.h; x = cx + (Math.random() * 2 - 1) * B; z = cz + (Math.random() * 2 - 1) * B; }
+        let dx = x - cx, dz = z - cz; if (dx > B) x -= 2 * B; else if (dx < -B) x += 2 * B; if (dz > B) z -= 2 * B; else if (dz < -B) z += 2 * B;
+        hd[i * 3] = x; hd[i * 3 + 1] = y; hd[i * 3 + 2] = z;
+        pos[i * 6] = x; pos[i * 6 + 1] = y; pos[i * 6 + 2] = z; pos[i * 6 + 3] = x - vx * 0.045; pos[i * 6 + 4] = y - vy * 0.045; pos[i * 6 + 5] = z - vz * 0.045;
+      }
+      f.obj.geometry.attributes.position.needsUpdate = true;
+    } else {
+      const pos = f.obj.geometry.attributes.position.array, turb = sp.turb || 0, H = sp.h, vy0 = sp.vy;
+      for (let i = 0; i < f.n; i++) {
+        const p = ph[i], s = sf[i];
+        let x = pos[i * 3] + (wx * s + Math.sin(t * 0.9 + p) * turb * 0.5) * dt, y = pos[i * 3 + 1] + (vy0 * s + Math.sin(t * 1.3 + p * 1.7) * turb * 0.25) * dt, z = pos[i * 3 + 2] + (wz * s + Math.cos(t * 0.8 + p * 1.3) * turb * 0.5) * dt;
+        const dx = x - cx, dz = z - cz;
+        if (dx > B) x -= 2 * B; else if (dx < -B) x += 2 * B; if (dz > B) z -= 2 * B; else if (dz < -B) z += 2 * B;
+        if (y < 0.05) y = vy0 < -0.3 ? H : 0.05; else if (y > H) y = vy0 > 0.3 ? 0.1 : H * 0.9;
+        pos[i * 3] = x; pos[i * 3 + 1] = y; pos[i * 3 + 2] = z;
+      }
+      f.obj.geometry.attributes.position.needsUpdate = true;
+      if (sp.blink) {
+        const c = f.cols, b = f.base, bl = sp.blink;
+        for (let i = 0; i < f.n; i++) { const v = Math.max(0, 0.5 + 0.7 * Math.sin(t * bl + ph[i] * 3)); c[i * 3] = b[i * 3] * v; c[i * 3 + 1] = b[i * 3 + 1] * v; c[i * 3 + 2] = b[i * 3 + 2] * v; }
+        f.obj.geometry.attributes.color.needsUpdate = true;
+      }
+    }
+    if (f.sheets) {
+      const sh = sp.sheet, sk = 1 + gust * 1.2;
+      for (const s of f.sheets) {
+        let x = s.position.x + Math.cos(A) * sh.ws * sk * 0.7 * dt, z = s.position.z + Math.sin(A) * sh.ws * sk * 0.7 * dt;
+        const dx = x - cx, dz = z - cz; if (dx > 45) x -= 90; else if (dx < -45) x += 90; if (dz > 45) z -= 90; else if (dz < -45) z += 90;
+        s.position.x = x; s.position.z = z;
+        const pul = 1 + 0.15 * Math.sin(t * 0.4 + s.userData.ph); s.scale.set(s.userData.sz * pul * (1 + gust * 0.3), s.userData.sz * pul * 0.5, 1);
+        s.material.opacity = sh.op * (0.55 + gust * 1.1);
+      }
+    }
+  }
+}
+// ── sound: a bed for the place and the odd thing happening in it ──────────────────────────────────────────────────
+// All of it is synthesised (nothing to download). Beds are looped noise through filters whose level follows the wind
+// gusts; events are short one-shots scheduled at random. Everything routes through one bus per map so a map change
+// is a cross-fade, and one master so the AMBIENT SOUND slider (settings) turns the lot down.
+var ATMO_A = { ctx: null, map: null, master: null, masterCtx: null, bus: null, nodes: [], wind: null, ev: [], nb: {}, next: 0 };
+function _aBuf(ctx, kind) {
+  const c = ATMO_A.nb[kind]; if (c && c.ctx === ctx) return c.b;
+  const len = Math.floor(ctx.sampleRate * 3), b = ctx.createBuffer(1, len, ctx.sampleRate), d = b.getChannelData(0);
+  let last = 0, p0 = 0, p1 = 0, p2 = 0;
+  for (let i = 0; i < len; i++) {
+    const w = Math.random() * 2 - 1;
+    if (kind === 'brown') { last = (last + 0.02 * w) / 1.02; d[i] = last * 3.5; }
+    else if (kind === 'pink') { p0 = 0.99886 * p0 + w * 0.0555179; p1 = 0.99332 * p1 + w * 0.0750759; p2 = 0.969 * p2 + w * 0.153852; d[i] = (p0 + p1 + p2 + w * 0.1848) * 0.32; }
+    else d[i] = w;
+  }
+  for (let i = 0; i < 400; i++) { const k = i / 400; d[i] *= k; d[len - 1 - i] *= k; }   // no click where the loop closes
+  ATMO_A.nb[kind] = { ctx, b }; return b;
+}
+function _aOut(ctx, v, far, pan) {
+  const g = ctx.createGain(); g.gain.value = v; let n = g;
+  if (far) { const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = far; n.connect(lp); n = lp; }
+  if (ctx.createStereoPanner) { const p = ctx.createStereoPanner(); p.pan.value = pan ?? (Math.random() * 1.6 - 0.8); n.connect(p); n = p; }
+  n.connect(ATMO_A.bus); return g;
+}
+// a tone that swells in, holds for `hold` of its length, then dies away
+function _aTone(ctx, t, dur, o, type, f0, f1, vol, atk, hold) {
+  const os = ctx.createOscillator(), g = ctx.createGain(); os.type = type; os.frequency.setValueAtTime(f0, t);
+  if (f1 !== f0) os.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
+  g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vol, t + (atk || 0.02)); if (hold) g.gain.setValueAtTime(vol, t + dur * hold); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  os.connect(g); g.connect(o); os.start(t); os.stop(t + dur + 0.05);
+}
+var _AFAR = { boom: 600, gun: 1800, siren: 1400, honk: 2200, horn: 1000, jet: 1500, heli: 900, hawk: 4200, gull: 4600, thunder: 500, crow: 2200 };
+var _AEV = {
+  bird(c, t, o) { const r = Math.random(), f = 2400 + Math.random() * 1800;
+    if (r < 0.4) { const n = 3 + ((Math.random() * 3) | 0); for (let k = 0; k < n; k++) playTone(c, t + k * 0.11, 0.07, o, f, f * (Math.random() < 0.5 ? 1.3 : 0.78), 0.5, 'sine'); }
+    else if (r < 0.75) { playTone(c, t, 0.5, o, f * 0.7, f * 1.1, 0.45, 'sine'); playTone(c, t + 0.58, 0.3, o, f * 1.1, f * 0.8, 0.4, 'sine'); }
+    else for (let k = 0; k < 7; k++) playTone(c, t + k * 0.065, 0.05, o, f * (0.8 + Math.random() * 0.6), f * (0.8 + Math.random() * 0.6), 0.4, 'sine'); },
+  hawk(c, t, o) { _aTone(c, t, 0.75, o, 'sawtooth', 2900, 1900, 0.35, 0.04); _aTone(c, t + 0.9, 0.5, o, 'sawtooth', 2700, 1800, 0.28, 0.04); },
+  gull(c, t, o) { for (let k = 0; k < 3; k++) _aTone(c, t + k * 0.27, 0.3, o, 'sawtooth', 1900, 1250, 0.3, 0.03); },
+  crow(c, t, o) { for (let k = 0; k < 3; k++) _aTone(c, t + k * 0.5, 0.3, o, 'sawtooth', 520, 330, 0.4, 0.02); },
+  drip(c, t, o) { playTone(c, t, 0.06, o, 1800, 700, 0.5, 'sine'); playTone(c, t + 0.17, 0.06, o, 1750, 700, 0.18, 'sine'); playTone(c, t + 0.36, 0.06, o, 1700, 700, 0.08, 'sine'); },
+  boom(c, t, o) { playFilteredNoise(c, t, 2.4, o, 1, 'lowpass', 240, 0.8, 0.03, 1.6); playTone(c, t, 1.2, o, 75, 28, 0.9, 'sine'); },
+  gun(c, t, o) { const n = 3 + ((Math.random() * 6) | 0); let at = t; for (let k = 0; k < n; k++) { playFilteredNoise(c, at, 0.07, o, 0.7, 'bandpass', 1200, 0.7, 0.002, 2); playFilteredNoise(c, at + 0.01, 0.25, o, 0.25, 'lowpass', 500, 0.8, 0.01, 2); at += 0.06 + Math.random() * 0.09; } },
+  siren(c, t, o) { const os = c.createOscillator(), g = c.createGain(); os.type = 'triangle'; os.frequency.setValueAtTime(620, t); for (let k = 0; k < 6; k++) os.frequency.linearRampToValueAtTime(k % 2 ? 620 : 900, t + (k + 1) * 1.2);
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.5, t + 1); g.gain.setValueAtTime(0.5, t + 5.2); g.gain.linearRampToValueAtTime(0.0001, t + 7.2); os.connect(g); g.connect(o); os.start(t); os.stop(t + 7.3); },
+  alarm(c, t, o) { for (let k = 0; k < 8; k++) _aTone(c, t + k * 0.3, 0.22, o, 'square', 880, 880, 0.3, 0.01); },
+  honk(c, t, o) { const n = Math.random() < 0.5 ? 1 : 2; for (let j = 0; j < n; j++) { _aTone(c, t + j * 0.35, 0.25, o, 'sawtooth', 410, 410, 0.4, 0.01, 0.6); _aTone(c, t + j * 0.35, 0.25, o, 'sawtooth', 510, 510, 0.3, 0.01, 0.6); } },
+  horn(c, t, o) { _aTone(c, t, 2.4, o, 'sawtooth', 110, 108, 0.5, 0.25, 0.7); _aTone(c, t, 2.4, o, 'sawtooth', 138, 136, 0.4, 0.25, 0.7); },
+  jet(c, t, o) { playFilteredNoise(c, t, 8, o, 0.5, 'bandpass', 500, 0.8, 3.5, 0); playFilteredNoise(c, t, 8, o, 0.3, 'lowpass', 260, 0.8, 3.5, 0); },
+  heli(c, t, o) { for (let k = 0; k < 64; k++) playFilteredNoise(c, t + k * 0.078, 0.05, o, 0.8 * Math.pow(Math.sin(Math.PI * k / 64), 1.5) + 0.02, 'lowpass', 200, 0.7, 0.004, 1.2); },
+  thunder(c, t, o) { playFilteredNoise(c, t, 4, o, 0.9, 'lowpass', 260, 0.7, 0.2, 1.2); playFilteredNoise(c, t + 0.8, 2.5, o, 0.5, 'lowpass', 180, 0.7, 0.1, 1.5); playTone(c, t, 2, o, 60, 30, 0.6, 'sine'); },
+  cheer(c, t, o) { playFilteredNoise(c, t, 3.6, o, 0.6, 'bandpass', 900, 0.7, 1.2, 0); playFilteredNoise(c, t, 3.6, o, 0.25, 'bandpass', 2200, 0.9, 1.0, 0); },
+  applause(c, t, o) { for (let k = 0; k < 70; k++) playFilteredNoise(c, t + k * 0.045 + Math.random() * 0.03, 0.03, o, (0.2 + Math.random() * 0.5) * Math.sin(Math.PI * k / 70), 'bandpass', 2200 + Math.random() * 1500, 0.8, 0.001, 1); },
+  bells(c, t, o) { for (let k = 0; k < 8; k++) playTone(c, t + k * (0.07 + Math.random() * 0.05), 0.3, o, 3200 + Math.random() * 1200, 3000, 0.3, 'sine'); },
+  chime(c, t, o) { const P = [523, 587, 659, 784, 880, 1047, 1175, 1319], n = 1 + ((Math.random() * 3) | 0); for (let k = 0; k < n; k++) { const f = P[(Math.random() * P.length) | 0], at = t + k * 0.35; playTone(c, at, 2.2, o, f, f, 0.35, 'sine'); playTone(c, at, 1.0, o, f * 2.76, f * 2.76, 0.08, 'sine'); } },
+  ding(c, t, o) { playTone(c, t, 1.4, o, 659, 659, 0.35, 'sine'); playTone(c, t + 0.5, 1.6, o, 523, 523, 0.35, 'sine'); playTone(c, t, 0.5, o, 1318, 1318, 0.06, 'sine'); },
+  clank(c, t, o) { const f = 420 + Math.random() * 300; playFilteredNoise(c, t, 0.03, o, 0.8, 'highpass', 2000, 0.7, 0.0005, 1); playFilteredNoise(c, t, 0.12, o, 0.6, 'lowpass', 900, 0.8, 0.001, 1.6); playTone(c, t, 0.3, o, f, f, 0.18, 'sine'); playTone(c, t, 0.2, o, f * 1.61, f * 1.61, 0.12, 'sine'); playTone(c, t, 0.12, o, f * 2.31, f * 2.31, 0.06, 'sine'); },
+  hammer(c, t, o) { _AEV.clank(c, t, o); _AEV.clank(c, t + 0.55, o); },
+  creak(c, t, o) { _aTone(c, t, 1.2, o, 'sawtooth', 70, 100 + Math.random() * 50, 0.4, 0.4, 0.5); playFilteredNoise(c, t, 1.2, o, 0.1, 'bandpass', 900, 1.5, 0.4, 0); },
+  geiger(c, t, o) { let at = t; const n = 2 + ((Math.random() * 5) | 0); for (let k = 0; k < n; k++) { playFilteredNoise(c, at, 0.008, o, 0.9, 'highpass', 3000, 0.7, 0.0005, 1); at += 0.03 + Math.random() * 0.25; } },
+  squeak(c, t, o) { playTone(c, t, 0.07, o, 4800, 3600, 0.3, 'sine'); playTone(c, t + 0.13, 0.07, o, 4600, 3500, 0.25, 'sine'); },
+  pigeon(c, t, o) { for (let k = 0; k < 7; k++) playFilteredNoise(c, t + k * 0.065 * (1 + k * 0.12), 0.05, o, 0.5, 'bandpass', 1800, 0.6, 0.003, 1.2); },
+  crackle(c, t, o) { let at = t; const n = 4 + ((Math.random() * 6) | 0); for (let k = 0; k < n; k++) { playFilteredNoise(c, at, 0.015, o, 0.2 + Math.random() * 0.7, 'bandpass', 2400, 1, 0.001, 1); at += 0.02 + Math.random() * 0.18; } },
+  rails(c, t, o) { for (let k = 0; k < 12; k++) { const v = Math.sin(Math.PI * (k + 1) / 13); playFilteredNoise(c, t + k * 0.42, 0.08, o, 0.6 * v, 'lowpass', 900, 0.8, 0.002, 1.5); playFilteredNoise(c, t + k * 0.42 + 0.12, 0.07, o, 0.45 * v, 'lowpass', 800, 0.8, 0.002, 1.5); } },
+  beep(c, t, o) { playTone(c, t, 0.08, o, 1040, 1040, 0.2, 'sine'); playTone(c, t + 0.12, 0.1, o, 1560, 1560, 0.2, 'sine'); },
+  thump(c, t, o) { playTone(c, t, 0.3, o, 62, 36, 0.8, 'sine'); playFilteredNoise(c, t, 0.3, o, 0.4, 'lowpass', 160, 0.8, 0.005, 1.4); },
+  glitch(c, t, o) { for (let k = 0; k < 4; k++) playTone(c, t + k * 0.045, 0.03, o, 300 + Math.random() * 2600, 300 + Math.random() * 2600, 0.25, 'square'); },
+};
+function _aEvent(name, vol) {
+  const c = ATMO_A.ctx, fn = _AEV[name]; if (!c || !fn) return;
+  fn(c, c.currentTime + 0.03, _aOut(c, vol * 0.5, _AFAR[name]));
+}
+function _aBuild(ctx, name) {
+  const A = ATMO_A, prof = ATMO_PROFILES[name], snd = prof && prof.snd;
+  if (A.bus && A.ctx === ctx) {   // the old place fades out, then is taken apart
+    const old = A.bus, nodes = A.nodes; old.gain.cancelScheduledValues(ctx.currentTime); old.gain.setTargetAtTime(0, ctx.currentTime, 0.4);
+    setTimeout(() => { for (const n of nodes) { try { n.stop && n.stop(); } catch (e) {} try { n.disconnect(); } catch (e) {} } try { old.disconnect(); } catch (e) {} }, 2600);
+  }
+  A.ctx = ctx; A.map = name; A.nodes = []; A.wind = null; A.ev = [];
+  if (!A.master || A.masterCtx !== ctx) { A.master = ctx.createGain(); A.master.gain.value = 0; A.master.connect(ctx.destination); A.masterCtx = ctx; }
+  A.bus = ctx.createGain(); A.bus.gain.value = 0; A.bus.connect(A.master); A.bus.gain.setTargetAtTime(1, ctx.currentTime + 0.1, 0.8);
+  if (!snd) return;
+  const N = (kind, ftype, freq, q, gain) => {
+    const s = ctx.createBufferSource(); s.buffer = _aBuf(ctx, kind); s.loop = true;
+    const f = ctx.createBiquadFilter(); f.type = ftype; f.frequency.value = freq; f.Q.value = q; const g = ctx.createGain(); g.gain.value = gain;
+    s.connect(f); f.connect(g); g.connect(A.bus); s.start(0, Math.random() * 2.5); A.nodes.push(s); return { f, g };
+  };
+  const osc = (type, freq, dst, gain, det) => { const o = ctx.createOscillator(), g = ctx.createGain(); o.type = type; o.frequency.value = freq; if (det) o.detune.value = det; g.gain.value = gain; o.connect(g); g.connect(dst); o.start(); A.nodes.push(o); return o; };
+  const lfo = (freq, depth, param) => { const o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.value = freq; g.gain.value = depth; o.connect(g); g.connect(param); o.start(); A.nodes.push(o); };
+  if (snd.wind) {
+    const f0 = snd.windF || 500, w = N('pink', 'bandpass', f0, 0.6, snd.wind); A.wind = { g: w.g, f: w.f, base: snd.wind, f0 };
+    if (snd.wind >= 0.4) A.wind.h = N('pink', 'bandpass', f0 * 2.6, 4, snd.wind * 0.18);
+  }
+  if (snd.howl) { const h = N('pink', 'bandpass', 700, 10, snd.howl); lfo(0.07, 220, h.f.frequency); }
+  if (snd.rumble) { const r = N('brown', 'lowpass', 140, 0.7, snd.rumble * 0.65); lfo(0.07, snd.rumble * 0.35, r.g.gain); }
+  if (snd.hiss) N('white', 'highpass', snd.hissF || 4500, 0.7, snd.hiss);
+  if (snd.rain) { N('white', 'bandpass', 3500, 0.4, snd.rain * 0.8); N('pink', 'lowpass', 1200, 0.5, snd.rain * 0.5); }
+  if (snd.waves) { const w = N('brown', 'lowpass', 600, 0.6, snd.waves * 0.5); lfo(0.09, snd.waves * 0.5, w.g.gain); const h = N('white', 'highpass', 3000, 0.7, snd.waves * 0.06); lfo(0.09, snd.waves * 0.06, h.g.gain); }
+  if (snd.city) { const c = N('brown', 'lowpass', 260, 0.6, snd.city); lfo(0.05, snd.city * 0.3, c.g.gain); N('pink', 'bandpass', 900, 0.5, snd.city * 0.3); }
+  if (snd.crowd) { const c = N('pink', 'bandpass', 600, 0.8, snd.crowd * 0.7); lfo(0.13, snd.crowd * 0.3, c.g.gain); N('pink', 'bandpass', 1800, 1, snd.crowd * 0.4); }
+  if (snd.hum) { const [f, v] = snd.hum; for (const [m, a] of [[1, 1], [2, 0.5], [3, 0.3], [4, 0.12]]) osc('sine', f * m + (Math.random() - 0.5) * 0.3, A.bus, v * a); }
+  if (snd.insect) for (const [f, rate] of [[4300, 26], [5200, 19]]) {
+    const am = ctx.createGain(); am.gain.value = snd.insect * 0.5; const o = ctx.createOscillator(); o.frequency.value = f; o.connect(am); am.connect(A.bus); o.start(); A.nodes.push(o);
+    const gate = ctx.createOscillator(), gg = ctx.createGain(); gate.type = 'square'; gate.frequency.value = rate; gg.gain.value = snd.insect * 0.5; gate.connect(gg); gg.connect(am.gain); gate.start(); A.nodes.push(gate); lfo(0.17, snd.insect * 0.4, am.gain);
+  }
+  if (snd.pad) {
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 380; lp.Q.value = 1.2; const g = ctx.createGain(); g.gain.value = snd.pad; lp.connect(g); g.connect(A.bus);
+    for (const [f, det] of [[55, -6], [82.4, 5], [110, -4], [164.8, 7]]) osc('sawtooth', f, lp, 0.25, det);
+    lfo(0.05, 160, lp.frequency);
+  }
+  for (const [n, lo, hi, v] of (snd.ev || [])) A.ev.push({ n, lo, hi, v, next: ATMO.t + lo * (0.2 + Math.random() * 0.6) });
+}
+function _atmoAudio(dt) {
+  const ctx = (typeof audioCtx !== 'undefined') ? audioCtx : null, A = ATMO_A;
+  const vol = (typeof GAMEPLAY_SETTINGS !== 'undefined' && GAMEPLAY_SETTINGS.ambient != null) ? GAMEPLAY_SETTINGS.ambient : 1;
+  if (!ctx || ctx.state !== 'running') return;
+  if (A.ctx !== ctx || A.map !== ATMO.name) _aBuild(ctx, ATMO.name);
+  A.master.gain.setTargetAtTime(0.6 * vol, ctx.currentTime, 0.15);
+  if (vol <= 0.01) return;
+  A.next -= dt;
+  if (A.next <= 0) {   // the wind follows the gusts, a few times a second is plenty
+    A.next = 0.1;
+    if (A.wind) { const g = ATMO.gust, w = A.wind; w.g.gain.setTargetAtTime(w.base * (0.55 + g * 1.0), ctx.currentTime, 0.15); w.f.frequency.setTargetAtTime(w.f0 * (0.75 + g * 0.6), ctx.currentTime, 0.2); if (w.h) w.h.g.gain.setTargetAtTime(w.base * 0.18 * (0.3 + g * 1.6), ctx.currentTime, 0.2); }
+  }
+  for (const e of A.ev) if (ATMO.t >= e.next) { e.next = ATMO.t + e.lo + Math.random() * (e.hi - e.lo); try { _aEvent(e.n, e.v); } catch (err) {} }
+}
+
+// ── what each place is like ───────────────────────────────────────────────────────────────────────────────────────
+var ATMO_PROFILES = {};
+function _ap(names, p) { for (const n of names.split(' ')) ATMO_PROFILES[n] = Object.assign({}, ATMO_PROFILES[n] || {}, p); }
+var _SUN = [0.9, 0.62, 0xffe8b8], _SUNLOW = [0.9, 0.22, 0xffb070];
+var _CL = (n, c) => [n, c == null ? 0xffffff : c];
+// open ground
+_ap('desert', { ground: 'sand', amp: 0.14, mottle: [0.93, 0.82, 0.66], clutter: { n: 240, parts: [['rock', [0xa88c66, 0x8a7556, 0xb9a07a], 0.4], ['tuft', [0xb8a35a, 0x9a8a48], 0.35], ['shrub', [0x8a8452, 0x7a7448], 0.15], ['drift', 0xe2c88e, 0.1]] }, relief: 18, shape: 'dune', fog: [60, 200], zen: 0x6fa8dc, sun: _SUN, cloud: _CL(6), fx: ['sand'], haze: 0.5, gusty: 1, snd: { wind: 0.5, windF: 650, hiss: 0.05, hissF: 5000, ev: [['hawk', 16, 36, 0.5], ['bird', 20, 40, 0.3]] } });
+_ap('temple', { ground: 'sand', amp: 0.12, mottle: [0.92, 0.84, 0.7], clutter: { n: 200, parts: [['rock', [0xb0a07c, 0x8a7a58], 0.45], ['tuft', [0xa8a458, 0x8a9248], 0.4], ['shrub', 0x7a8a48, 0.15]] }, relief: 12, shape: 'dune', fog: [60, 190], zen: 0x7ab8d4, sun: _SUN, cloud: _CL(6), fx: ['sand'], haze: 0.25, gusty: 0.6, snd: { wind: 0.32, windF: 560, insect: 0.04, ev: [['bird', 8, 20, 0.4], ['hawk', 28, 60, 0.4]] } });
+_ap('arena', { ground: 'sand', amp: 0.08, mottle: [0.9, 0.84, 0.7], clutter: { n: 120, parts: [['rock', 0x9a8a68, 0.5], ['tuft', 0xa89a58, 0.3], ['rubble', 0xb0a888, 0.2]] }, fog: [60, 190], zen: 0x7ab2e0, sun: _SUN, cloud: _CL(5), fx: ['dustgold', 'sand'], gusty: 0.5, snd: { wind: 0.2, windF: 500, crowd: 0.1, ev: [['cheer', 12, 30, 0.55], ['bird', 20, 40, 0.3]] } });
+_ap('carnival', { ground: 'dirt', amp: 0.07, mottle: [0.9, 0.84, 0.74], clutter: { n: 120, parts: [['scrap', [0xd8483a, 0xf2c93a, 0x3a8fd0], 0.4], ['rock', 0xa88c66, 0.3], ['tuft', 0xa8a458, 0.3]] }, fog: [60, 190], zen: 0x7ab0e0, sun: _SUN, cloud: _CL(7), fx: ['confetti', 'dust'], gusty: 0.3, snd: { wind: 0.1, crowd: 0.1, ev: [['bells', 8, 18, 0.4], ['chime', 14, 30, 0.3], ['cheer', 25, 50, 0.35]] } });
+_ap('flying_moai', { ground: 'grass', amp: 0.12, mottle: [0.85, 0.95, 0.8], clutter: { n: 200, parts: [['tuft', [0x7a9a58, 0x8aa868], 0.5], ['rock', [0x7a756a, 0x6a655a], 0.35], ['shrub', 0x5a7a40, 0.15]] }, relief: 14, shape: 'hill', fog: [60, 190], zen: 0x6ab0e4, sun: _SUN, cloud: _CL(9), fx: ['pollen', 'mist'], gusty: 0.6, snd: { wind: 0.3, windF: 500, waves: 0.22, ev: [['gull', 8, 20, 0.45]] } });
+_ap('battlefield', { ground: 'dirt', amp: 0.16, mottle: [0.84, 0.9, 0.74], clutter: { n: 260, parts: [['tuft', [0x7a8a48, 0x6a7a3c], 0.4], ['rock', [0x7a7060, 0x6a6050], 0.25], ['rubble', [0x6a6050, 0x8a806a], 0.2], ['shrub', 0x5a6a38, 0.15]] }, relief: 9, shape: 'hill', fog: [60, 170], zen: 0x7a9ab8, sun: _SUNLOW, cloud: _CL(14, 0xc8ccd0), fx: ['ash'], gusty: 0.6, snd: { wind: 0.3, windF: 480, rumble: 0.08, ev: [['boom', 9, 22, 0.6], ['gun', 6, 16, 0.4]] } });
+_ap('trenches', { ground: 'mud', amp: 0.18, mottle: [0.8, 0.82, 0.7], clutter: { n: 260, parts: [['rubble', [0x5a4a34, 0x7a6a50], 0.4], ['rock', 0x6a5a44, 0.3], ['scrap', 0x4a4a46, 0.2], ['tuft', 0x6a6a38, 0.1]] }, relief: 6, shape: 'hill', fog: [50, 150], zen: 0x6a7a86, cloud: _CL(16, 0x9a9e9a), fx: ['ash'], gusty: 0.7, snd: { wind: 0.34, windF: 420, rumble: 0.1, ev: [['boom', 7, 18, 0.6], ['gun', 5, 12, 0.45]] } });
+_ap('forest', { ground: 'grass', amp: 0.14, mottle: [0.82, 0.94, 0.78], clutter: { n: 340, parts: [['tuft', [0x5a8a3a, 0x6a9a44, 0x4a7a32], 0.55], ['shrub', [0x3f6a2c, 0x4a7a34], 0.2], ['rock', [0x7a7a6a, 0x6a6a5c], 0.15], ['scrap', [0x8a6a3a, 0x6a4a2a], 0.1]] }, relief: 14, shape: 'hill', fog: [50, 170], zen: 0x6fb0e0, sun: _SUN, cloud: _CL(8), fx: ['leaves', 'pollen'], gusty: 0.45, snd: { wind: 0.25, windF: 900, insect: 0.04, ev: [['bird', 2, 6, 0.5], ['bird', 4, 10, 0.4]] } });
+_ap('overgrowth', { ground: 'grass', amp: 0.14, mottle: [0.8, 0.96, 0.76], clutter: { n: 340, parts: [['tuft', [0x5a8a3a, 0x6a9a44, 0x7aa84e], 0.55], ['shrub', [0x3f6a2c, 0x4a7a34], 0.25], ['rock', 0x6a7a62, 0.2]] }, relief: 12, shape: 'hill', fog: [50, 170], zen: 0x70b8d8, sun: _SUN, cloud: _CL(7), fx: ['pollen', 'leaves'], gusty: 0.3, snd: { wind: 0.18, windF: 800, insect: 0.06, ev: [['bird', 3, 8, 0.5], ['drip', 6, 14, 0.3]] } });
+_ap('vietnam', { ground: 'mud', amp: 0.16, mottle: [0.8, 0.9, 0.72], clutter: { n: 320, parts: [['tuft', [0x5a8a3a, 0x4a7a32], 0.5], ['shrub', 0x3f6a2c, 0.2], ['rock', 0x6a6a58, 0.15], ['rubble', 0x6a5a44, 0.15]] }, relief: 22, shape: 'hill', fog: [40, 150], zen: 0x78948c, cloud: _CL(16, 0xa8b0a8), fx: ['rain'], gusty: 0.5, snd: { rain: 0.35, wind: 0.15, windF: 600, insect: 0.06, ev: [['heli', 22, 48, 0.55], ['bird', 8, 20, 0.35], ['thunder', 40, 90, 0.5]] } });
+_ap('biosphere', { ground: 'grass', amp: 0.1, mottle: [0.85, 0.95, 0.8], clutter: { n: 240, parts: [['tuft', [0x6a9a48, 0x7aa856], 0.6], ['shrub', 0x4a7a38, 0.25], ['rock', 0x8a9a8a, 0.15]] }, fog: [60, 190], zen: 0x8ad0e8, sun: _SUN, cloud: _CL(6), fx: ['pollen', 'mist'], gusty: 0.2, snd: { wind: 0.1, insect: 0.05, ev: [['bird', 3, 8, 0.45], ['drip', 6, 12, 0.3]] } });
+_ap('br_arena', { ground: 'grass', amp: 0.12, mottle: [0.85, 0.94, 0.78], clutter: { n: 280, parts: [['tuft', [0x6a8a44, 0x5a7a38], 0.5], ['rock', 0x7a7a68, 0.25], ['shrub', 0x4a6a34, 0.15], ['rubble', 0x6a5a48, 0.1]] }, relief: 10, shape: 'hill', fog: [60, 180], zen: 0x6aaadc, sun: _SUN, cloud: _CL(8), fx: ['leaves'], gusty: 0.5, snd: { wind: 0.25, windF: 600, ev: [['bird', 5, 12, 0.4], ['gun', 15, 35, 0.35]] } });
+_ap('big_arena', { ground: 'dirt', amp: 0.1, mottle: [0.88, 0.92, 0.78], clutter: { n: 240, parts: [['tuft', 0x7a8a48, 0.4], ['rock', 0x7a7a68, 0.3], ['rubble', 0x7a6a54, 0.3]] }, relief: 6, shape: 'hill', fog: [60, 180], zen: 0x76a8d6, sun: _SUN, cloud: _CL(8), fx: ['dust'], gusty: 0.4, snd: { wind: 0.22, windF: 560, ev: [['gun', 12, 30, 0.35], ['bird', 8, 20, 0.35]] } });
+// cold
+_ap('tundra', { ground: 'snow', amp: 0.16, mottle: [0.9, 0.95, 1], clutter: { n: 260, parts: [['drift', [0xffffff, 0xe8f0f6], 0.5], ['rock', [0x8a929a, 0x7a828a], 0.3], ['tuft', 0xc8c2a8, 0.2]] }, relief: 22, shape: 'hill', fog: [50, 170], zen: 0xa0bedc, sun: _SUNLOW, cloud: _CL(10, 0xeef2f6), fx: ['snow'], haze: 0.45, gusty: 1, snd: { wind: 0.6, windF: 420, howl: 0.05, ev: [['creak', 14, 30, 0.35]] } });
+_ap('holiday', { ground: 'snow', amp: 0.1, mottle: [0.92, 0.95, 1], clutter: { n: 200, parts: [['drift', [0xffffff, 0xeef4fa], 0.6], ['rock', 0x9aa2aa, 0.2], ['scrap', [0xc4332e, 0x2f7a4a], 0.2]] }, relief: 8, shape: 'hill', fog: [60, 180], zen: 0x86a6d0, sun: _SUNLOW, cloud: _CL(8, 0xf0f4f8), fx: ['snowsoft'], gusty: 0.3, snd: { wind: 0.15, windF: 400, ev: [['bells', 10, 22, 0.4]] } });
+// fire
+_ap('volcano', { ground: 'rock', amp: 0.12, mottle: [0.82, 0.7, 0.64], clutter: { n: 220, parts: [['rock', [0x2a1f1c, 0x3a2a24, 0x4a3028], 0.7], ['rubble', 0x2a1f1c, 0.3]] }, fog: [40, 150], zen: 0x2a0c06, fx: ['ash', 'embers'], gusty: 0.5, snd: { rumble: 0.34, hiss: 0.05, ev: [['boom', 10, 24, 0.55], ['crackle', 2, 6, 0.4]] } });
+_ap('doomsday', { ground: 'rock', amp: 0.12, mottle: [0.85, 0.75, 0.68], clutter: { n: 240, parts: [['rubble', [0x3a322a, 0x5a4a3a], 0.5], ['rock', 0x4a4036, 0.3], ['scrap', 0x2a2420, 0.2]] }, fog: [40, 150], zen: 0x2a1208, fx: ['ash', 'embers'], gusty: 0.8, snd: { rumble: 0.3, wind: 0.3, windF: 380, ev: [['boom', 5, 12, 0.6], ['siren', 35, 70, 0.3]] } });
+_ap('foundry', { ground: 'metal', amp: 0, clutter: { n: 120, parts: [['scrap', [0x3a3430, 0x5a4a40], 0.6], ['rubble', 0x4a3f38, 0.4]] }, fx: ['sparks', 'embers'], snd: { rumble: 0.25, hiss: 0.07, hissF: 4000, hum: [60, 0.05], ev: [['hammer', 4, 10, 0.5], ['crackle', 3, 8, 0.4]] } });
+// industry, ruin
+_ap('refinery', { ground: 'concrete', amp: 0.04, mottle: [0.88, 0.86, 0.82], clutter: { n: 160, parts: [['scrap', [0x5a5f66, 0x8a4a2f], 0.5], ['rubble', 0x6a6a6a, 0.3], ['rock', 0x5a554c, 0.2]] }, fog: [50, 160], zen: 0x6a7480, cloud: _CL(10, 0x9a9a98), fx: ['dust'], gusty: 0.3, snd: { hum: [60, 0.07], rumble: 0.15, hiss: 0.06, ev: [['clank', 6, 14, 0.5], ['siren', 40, 80, 0.3]] } });
+_ap('chernobyl', { ground: 'concrete', amp: 0.06, mottle: [0.86, 0.9, 0.8], clutter: { n: 260, parts: [['rubble', [0x6a6f64, 0x8a8f86], 0.45], ['tuft', [0x7a8a4a, 0x6a7a3c], 0.3], ['rock', 0x6a6f64, 0.15], ['scrap', 0x5a6054, 0.1]] }, relief: 6, shape: 'hill', fog: [50, 160], zen: 0x6a7a68, cloud: _CL(14, 0xaab0a4), fx: ['rad', 'dust'], gusty: 0.4, snd: { wind: 0.2, windF: 450, hum: [50, 0.04], ev: [['geiger', 1.5, 5, 0.5], ['crow', 25, 50, 0.4]] } });
+_ap('urban', { ground: 'asphalt', amp: 0.03, mottle: [0.9, 0.9, 0.92], clutter: { n: 220, parts: [['rubble', [0x6a6a68, 0x8a7a6a], 0.4], ['scrap', [0xcfcac0, 0x8a8a86], 0.4], ['rock', 0x6a6a6a, 0.2]] }, fog: [60, 190], zen: 0x7aa0c8, sun: _SUN, cloud: _CL(8), fx: ['dust'], gusty: 0.4, snd: { city: 0.12, wind: 0.1, windF: 500, ev: [['siren', 18, 45, 0.35], ['honk', 8, 20, 0.35], ['bird', 14, 30, 0.3]] } });
+_ap('pyongyang', { ground: 'asphalt', amp: 0.03, mottle: [0.92, 0.92, 0.9], clutter: { n: 160, parts: [['scrap', [0xcfcac0, 0xb8b8b0], 0.5], ['rubble', 0x8a8a84, 0.3], ['rock', 0x7a7a74, 0.2]] }, fog: [60, 190], zen: 0x86a4c0, sun: _SUN, cloud: _CL(8), fx: ['dust'], gusty: 0.3, snd: { city: 0.1, wind: 0.1, windF: 500, ev: [['crow', 14, 30, 0.35], ['honk', 20, 45, 0.3]] } });
+_ap('traffic_cone_republic', { ground: 'asphalt', amp: 0.03, mottle: [0.9, 0.9, 0.92], clutter: { n: 200, parts: [['scrap', [0xe8782a, 0xf4f4f0], 0.5], ['rubble', 0x7a7a7e, 0.3], ['rock', 0x6a6a6e, 0.2]] }, fog: [60, 190], zen: 0x7aa4cc, sun: _SUN, cloud: _CL(8), fx: ['dust'], gusty: 0.3, snd: { city: 0.1, wind: 0.1, windF: 500, ev: [['honk', 4, 10, 0.4], ['siren', 30, 60, 0.3]] } });
+_ap('airport', { ground: 'asphalt', amp: 0.03, mottle: [0.9, 0.9, 0.92], clutter: { n: 160, parts: [['scrap', [0xf2b01e, 0xd0d4d8], 0.5], ['rubble', 0x7a7f84, 0.3], ['tuft', 0x7a8a4a, 0.2]] }, fog: [60, 200], zen: 0x6a9ed8, sun: _SUN, cloud: _CL(10), fx: ['dust'], gusty: 0.5, snd: { wind: 0.25, windF: 520, hum: [50, 0.04], ev: [['jet', 18, 40, 0.5], ['ding', 30, 60, 0.3]] } });
+_ap('train', { ground: 'dirt', amp: 0.06, mottle: [0.86, 0.86, 0.84], clutter: { n: 220, parts: [['rock', [0x7a7a76, 0x5a5a56], 0.5], ['scrap', 0x5a4a38, 0.3], ['tuft', 0x7a8a4a, 0.2]] }, fog: [60, 190], zen: 0x7a9ab4, sun: _SUN, cloud: _CL(8), fx: ['dust'], gusty: 0.4, snd: { wind: 0.25, windF: 500, rumble: 0.06, ev: [['rails', 12, 25, 0.4], ['horn', 30, 70, 0.4]] } });
+_ap('range', { ground: 'concrete', amp: 0.04, mottle: [0.9, 0.9, 0.9], clutter: { n: 100, parts: [['scrap', 0x8a8e94, 0.5], ['rubble', 0x7a7e84, 0.5]] }, fog: [60, 180], zen: 0x7a96b4, sun: _SUN, cloud: _CL(6), fx: ['dust'], gusty: 0.3, snd: { wind: 0.15, windF: 500, ev: [['gun', 8, 20, 0.35]] } });
+// sea
+_ap('carrier', { ground: 'metal', amp: 0, fog: [60, 200], zen: 0x5a90c8, sun: _SUN, cloud: _CL(10), fx: ['spray'], gusty: 0.6, snd: { waves: 0.35, wind: 0.35, windF: 520, rumble: 0.08, ev: [['gull', 8, 18, 0.45], ['clank', 12, 25, 0.4]] } });
+_ap('pearl_harbor', { ground: 'concrete', amp: 0.03, mottle: [0.9, 0.9, 0.86], clutter: { n: 120, parts: [['scrap', [0x8a7a5a, 0x6a6a5a], 0.5], ['rubble', 0x7a7a6a, 0.5]] }, fog: [60, 200], zen: 0x6aa2d4, sun: _SUN, cloud: _CL(9), fx: ['spray'], gusty: 0.5, snd: { waves: 0.3, wind: 0.25, windF: 520, ev: [['gull', 8, 16, 0.45], ['horn', 40, 80, 0.4], ['jet', 25, 50, 0.3]] } });
+_ap('titanic', { ground: 'wood', amp: 0, fog: [60, 200], zen: 0x6a98c4, sun: _SUNLOW, cloud: _CL(8, 0xe8ecf0), fx: ['spray'], gusty: 0.5, snd: { waves: 0.35, wind: 0.3, windF: 480, ev: [['creak', 6, 14, 0.4], ['gull', 15, 30, 0.4], ['horn', 45, 90, 0.4]] } });
+_ap('skydock', { ground: 'metal', amp: 0, fog: [50, 200], zen: 0x5a90d0, sun: _SUN, cloud: _CL(14), fx: ['mist'], haze: 0.2, gusty: 0.8, snd: { wind: 0.55, windF: 420, hum: [55, 0.06], rumble: 0.1, ev: [['jet', 15, 35, 0.45]] } });
+// indoors and underground
+_ap('warehouse', { ground: 'concrete', amp: 0.03, mottle: [0.88, 0.86, 0.82], clutter: { n: 140, parts: [['scrap', [0x8a6a3a, 0x6a6a64], 0.5], ['rubble', 0x6a6a64, 0.5]] }, fx: ['dust'], snd: { hum: [60, 0.06], rumble: 0.08, ev: [['creak', 8, 20, 0.4], ['drip', 6, 14, 0.3], ['pigeon', 20, 40, 0.4]] } });
+_ap('supermarket', { ground: 'tile', amp: 0, fx: ['dust'], snd: { hum: [120, 0.05], rumble: 0.04, ev: [['ding', 20, 45, 0.25]] } });
+_ap('sewer', { ground: 'concrete', amp: 0.04, mottle: [0.75, 0.9, 0.7], clutter: { n: 160, parts: [['rubble', 0x4a5442, 0.5], ['scrap', 0x3a3a34, 0.5]] }, fx: ['mist'], snd: { rumble: 0.1, hiss: 0.03, ev: [['drip', 1.2, 3.5, 0.45], ['squeak', 10, 25, 0.35], ['clank', 12, 30, 0.35]] } });
+_ap('lockdown', { ground: 'concrete', amp: 0.02, mottle: [0.9, 0.9, 0.9], fx: ['dust'], snd: { hum: [60, 0.08], rumble: 0.06, ev: [['alarm', 12, 24, 0.35], ['clank', 15, 35, 0.3]] } });
+_ap('glassworks', { ground: 'tile', amp: 0, fx: ['glints'], snd: { hum: [60, 0.05], hiss: 0.04, ev: [['chime', 5, 12, 0.3], ['crackle', 10, 22, 0.3]] } });
+_ap('labyrinth', { ground: 'rock', amp: 0.06, mottle: [0.9, 0.92, 0.86], clutter: { n: 160, parts: [['rubble', [0x6a6f66, 0x555a52], 0.6], ['tuft', 0x6a8a4a, 0.4]] }, fx: ['dust'], gusty: 0.4, snd: { wind: 0.3, windF: 300, rumble: 0.08, ev: [['drip', 5, 12, 0.35], ['creak', 15, 30, 0.35]] } });
+_ap('opera', { ground: 'wood', amp: 0, fx: ['dustgold'], snd: { hum: [60, 0.04], ev: [['creak', 12, 26, 0.3], ['applause', 40, 80, 0.3]] } });
+_ap('studio', { ground: 'concrete', amp: 0, fx: ['dust'], snd: { hum: [60, 0.08], ev: [['thump', 10, 22, 0.35]] } });
+// the far side of reality
+_ap('cyber', { ground: 'asphalt', amp: 0, mottle: [0.7, 0.8, 1], fx: ['rain', 'neon'], snd: { rain: 0.3, hum: [60, 0.06], pad: 0.05, ev: [['glitch', 4, 10, 0.4], ['siren', 25, 60, 0.3]] } });
+_ap('space', { ground: 'metal', amp: 0, fx: ['stardust'], snd: { pad: 0.07, hum: [50, 0.05], ev: [['beep', 6, 14, 0.3]] } });
+_ap('orbital_station', { ground: 'metal', amp: 0, fx: ['dust'], snd: { pad: 0.04, hum: [60, 0.08], ev: [['beep', 5, 12, 0.3]] } });
+_ap('gravity_lab', { ground: 'tile', amp: 0, fx: ['glints'], snd: { pad: 0.05, hum: [60, 0.06], ev: [['beep', 5, 12, 0.3]] } });
+_ap('super_arena', { ground: 'metal', amp: 0, fx: ['dust'], snd: { hum: [60, 0.06], ev: [['beep', 8, 18, 0.25]] } });
+_ap('dreamscape', { ground: 'snow', amp: 0.08, mottle: [1, 0.86, 1], fog: [60, 190], zen: 0x8a6ad0, sun: [0.9, 0.5, 0xffc8f0], cloud: _CL(10, 0xffe8ff), fx: ['glints', 'pollen'], gusty: 0.2, snd: { pad: 0.06, wind: 0.08, ev: [['chime', 2, 6, 0.35]] } });
+// an outdoor map is fog-free past what the camera can see: lift the fog out to where it ends
+// ── switching on, and the per-frame tick ──────────────────────────────────────────────────────────────────────────
+function atmoActivate(name) {
+  const prof = ATMO_PROFILES[name], g = MAP_GROUPS[name];
+  ATMO.name = name; ATMO.prof = prof || null; ATMO.gust = 0; ATMO.gustTarget = 0; ATMO.gustT = 3 + Math.random() * 4;
+  _atmoClearFx();
+  if (scene.fog && scene.fog.isFog) { const f = (prof && prof.fog) || [40, 120]; scene.fog.near = f[0]; scene.fog.far = f[1]; ATMO.fog0 = f.slice(); }
+  if (!prof || !g) { if (ATMO.dome) ATMO.dome.visible = false; _atmoClouds(name, {}); return; }
+  _atmoGround(name, prof); _atmoClutter(name, prof);
+  if (prof.relief && !g._hasFarGround) { const th = MAP_THEMES[name]; _atmoFarGround(name, g, th ? _thShade(th.g, 0.9) : 0x6a7a50, prof.relief, prof.shape); }
+  _atmoSky(name, prof); _atmoClouds(name, prof);
+  ATMO.fx = (prof.fx || []).map(_atmoMakeFx).filter(Boolean);
+  ATMO.windA = _thRng(name)() * 6.28;
+}
+function updateAtmosphere(dt) {
+  if (!ATMO.name) return;
+  const prof = ATMO.prof || {}, cam = camera.position;
+  ATMO.t += dt;
+  ATMO.gustT -= dt;
+  if (ATMO.gustT <= 0) {   // now and then the wind picks up for a few seconds, and drops again
+    const up = Math.random() < 0.55;
+    ATMO.gustTarget = up ? (0.5 + Math.random() * 0.5) * (prof.gusty ?? 0.35) : 0; ATMO.gustT = up ? 3 + Math.random() * 5 : 5 + Math.random() * 12;
+  }
+  ATMO.gust += (ATMO.gustTarget - ATMO.gust) * Math.min(1, dt * 0.9);
+  ATMO.windA += Math.sin(ATMO.t * 0.05) * dt * 0.02;
+  const fxOn = !(typeof GAMEPLAY_SETTINGS !== 'undefined' && GAMEPLAY_SETTINGS.weatherFx === false);
+  _atmoUpdateFx(dt, fxOn);
+  const d = ATMO.dome;
+  if (d && d.visible) {
+    d.position.copy(cam);
+    const bg = scene.background, H = d.userData.horizon;   // follows whatever the scene's own sky does (lights going out, doomsday phases)
+    if (bg && bg.isColor && H) d.material.color.setRGB(H.r > 0.004 ? Math.min(3, bg.r / H.r) : 1, H.g > 0.004 ? Math.min(3, bg.g / H.g) : 1, H.b > 0.004 ? Math.min(3, bg.b / H.b) : 1);
+  }
+  const C = ATMO.clouds;
+  if (C) for (const m of C.list) {
+    let x = m.position.x + Math.cos(ATMO.windA) * m.userData.sp * (1 + ATMO.gust) * dt, z = m.position.z + Math.sin(ATMO.windA) * m.userData.sp * (1 + ATMO.gust) * dt;
+    const dx = x - cam.x, dz = z - cam.z; if (dx > 150) x -= 300; else if (dx < -150) x += 300; if (dz > 150) z -= 300; else if (dz < -150) z += 300;
+    m.position.x = x; m.position.z = z;
+  }
+  if (prof.haze && scene.fog && scene.fog.isFog) scene.fog.far = ATMO.fog0[1] * (1 - 0.4 * prof.haze * ATMO.gust);   // a gust of sand or snow thins the view
+  _atmoAudio(dt);
+}
+
 // 🏞️ SIGNATURE SCENERY. A map should be recognisable from where you stand: beyond the walls and above the arena,
 // each of these gets its own landmarks, in the same low-poly flat style as the Volcano, with no colliders (it is
 // all out of reach) and a little motion where it suits. Ground out to the horizon, too, so the arena stands
@@ -11364,7 +11923,11 @@ function _scnKit(name) {
     mesh: (geo, mat, x, y, z, parent) => { const m = new THREE.Mesh(geo, mat); m.position.set(x || 0, y || 0, z || 0); (parent || group).add(m); return m; },
     anim: (fn) => anims.push(fn),
   };
-  K.ground = (c) => { const m = K.mesh(new THREE.PlaneGeometry(1600, 1600), K.flat(c), 0, -0.4, 0); m.rotation.x = -Math.PI / 2; return m; };
+  K.ground = (c) => {
+    const pf = ATMO_PROFILES[name];   // hills and dunes beyond the walls where the place has them (see MAP ATMOSPHERE)
+    if (pf && pf.relief) return _atmoFarGround(name, group, c, pf.relief, pf.shape);
+    const m = K.mesh(new THREE.PlaneGeometry(1600, 1600), K.flat(c), 0, -0.4, 0); m.rotation.x = -Math.PI / 2; return m;
+  };
   K.stars = (n, c, size = 2.2) => {
     const pos = new Float32Array(n * 3);
     for (let i = 0; i < n; i++) { const a = K.rnd() * 6.283, e = K.rnd() * 1.35, r = 380 + K.rnd() * 60; pos[i * 3] = Math.cos(a) * Math.cos(e) * r; pos[i * 3 + 1] = Math.sin(e) * r; pos[i * 3 + 2] = Math.sin(a) * Math.cos(e) * r; }
@@ -30714,6 +31277,8 @@ let GAMEPLAY_SETTINGS = {
   screenFx: 1,
   touchScale: 1,   // ⚙ → BUTTON SIZE on phones: 0.85 / 1 / 1.2 (#29)
   lookSens: 1,     // ⚙ → LOOK / MOUSE SENSITIVITY, a multiplier of the old fixed speed (#45)
+  ambient: 1,      // ⚙ → AMBIENT SOUND: the wind, surf, birds and hum of each map (0 = off)
+  weatherFx: true, // ⚙ → WEATHER & PARTICLES: blown sand, snow, ash, rain in the air
 };
 try {
   const saved = JSON.parse(localStorage.getItem('pvp_gameplay_settings') || 'null');
@@ -51324,6 +51889,7 @@ function loop() {
   safeLoopStep('admin-map-preview', updateAdminMapPreview); // green ghost where PLACE IN FRONT will drop
   safeLoopStep('uav', () => updateUAV(dt));        // Predator UAV overlay tick
   safeLoopStep('map-effects', () => updateMapEffects(dt)); // airport darkening, chernobyl gas, mortar prompt
+  safeLoopStep('atmosphere', () => updateAtmosphere(dt));  // wind, weather in the air, the sky, the sound of the place
   safeLoopStep('batch5', () => updateBatch5(dt));     // train scroll, vacuum, weather, lights-out, chandelier, debris
   safeLoopStep('killcam-sample', () => killcamSample(performance.now()));
   safeLoopStep('killcam', () => updateKillcam(performance.now()));
@@ -53493,6 +54059,8 @@ function openSettingsHub() {
     ${rangeRow('lookSens', isTouchUI() ? 'LOOK SENSITIVITY' : 'MOUSE SENSITIVITY', 0.3, 2.5, 0.05)}
     ${rangeRow('cameraShake', 'CAMERA SHAKE')}
     ${rangeRow('screenFx', 'SCREEN EFFECTS')}
+    ${rangeRow('ambient', 'AMBIENT SOUND', 0, 1, 0.05)}
+    ${toggleRow('weatherFx', 'WEATHER & PARTICLES', 'Blown sand, snow, ash and rain in the air. Turn off if the game runs slow.')}
     <div style="height:1px;background:#276b55;margin:16px 0 12px;"></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0;">
       <button id="settings-controls" style="padding:12px;background:#10203a;color:#8fbfff;border:1px solid #5599ff;cursor:pointer;font-family:inherit;letter-spacing:2px;border-radius:4px;">🎮 CONTROLS</button>
