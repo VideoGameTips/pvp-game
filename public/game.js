@@ -28666,85 +28666,161 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
 // refine exists because the hand hangs a little below the wrist joint and the
 // grip anchor is pitched, neither of which the closed form knows about.
 // Cached per weapon: the geometry is identical for everyone carrying one.
-const _supPoseCache = new Map();
-function fitSupportHand(mesh, gun, key) {
+const _weaponPoseCache = new Map();
+
+// Where a given weapon wants to be carried. A pistol has no stock, so it is
+// held out and up near the sight line; a long gun's stock goes into the
+// shoulder, so the longer it is the closer the grip comes in — otherwise a
+// 0.81 m sniper ends up with its muzzle a metre and a half in front of the
+// owner. Height follows the same logic: a pistol rides higher than a rifle.
+function weaponCarry(len) {
+  if (len <= 0.34) return { z: 0.40, y: 1.33 };                       // pistol: arms out, high
+  const t = Math.max(0, Math.min(1, (len - 0.40) / 0.45));            // 0.40 m … 0.85 m
+  return { z: 0.345 - 0.065 * t, y: 1.275 - 0.020 * t };              // 0.345 → 0.280
+}
+
+// Solve BOTH arms for the weapon actually being held, once per weapon.
+//
+// Analytic two-bone IK for the support arm — the shoulder's Euler is XYZ with
+// no Y term, so the arm direction
+//     d = (sin z, −cos z·cos x, −cos z·sin x)
+// inverts directly and the elbow supplies the interior angle — then a short
+// coordinate-descent refine, because the closed form does not know that the
+// hand hangs below the wrist or that the grip anchor is pitched and yawed.
+// The firing arm is swept directly, since its target also has to satisfy
+// `gripPitch`, which exists to cancel the forearm's world pitch so the weapon
+// comes out level and therefore changes with every candidate.
+function fitWeaponPose(mesh, gun, key) {
   const rig = mesh && mesh._rig;
   if (!rig || !rig.wristL || !gun) return;
-  if (key && _supPoseCache.has(key)) { rig.supPose = _supPoseCache.get(key); return; }
-
+  if (key && _weaponPoseCache.has(key)) {
+    const c = _weaponPoseCache.get(key);
+    rig.firePose = c.fire; rig.supPose = c.sup; rig.magPose = c.mag;
+    rig.gripR.rotation.set(c.fire.pitch, GUN_HOLD.gripYaw, 0);
+    return;
+  }
   const keep = { pos: mesh.position.clone(), rot: mesh.rotation.y };
   mesh.position.set(0, 0, 0); mesh.rotation.y = 0;
-  // Put the firing arm in its stance first — the grip, and therefore the
-  // weapon, hangs off it.
-  rig.armR.rotation.set(GUN_HOLD.shoulderX, 0, -0.10);
-  rig.elbowR.rotation.x = GUN_HOLD.elbowX;
-  mesh.updateMatrixWorld(true);
 
-  // Where the support hand belongs: 62% of the way along the weapon, measured
-  // off its own geometry, and never behind the firing hand.
-  const box = new THREE.Box3();
+  // The weapon's own length, measured off its geometry rather than its name.
+  // updateMatrixWorld FIRST: a freshly built object's `matrix` is still the
+  // identity until something updates it, so reading o.matrix before this
+  // collapses every weapon to a point and reports a sniper rifle as a pistol.
+  mesh.updateMatrixWorld(true);
+  const localBox = new THREE.Box3();
   gun.traverse(o => {
     if (!o.isMesh || !o.geometry) return;
     o.geometry.computeBoundingBox();
-    const b = o.geometry.boundingBox.clone(); b.applyMatrix4(o.matrix); box.union(b);
+    const b = o.geometry.boundingBox.clone(); b.applyMatrix4(o.matrix); localBox.union(b);
   });
-  const muzzle = new THREE.Vector3(0, 0, box.min.z).applyMatrix4(gun.matrixWorld);
-  const breech = new THREE.Vector3(0, 0, box.max.z).applyMatrix4(gun.matrixWorld);
-  const grip = new THREE.Vector3(); rig.gripR.getWorldPosition(grip);
-  const axis = muzzle.clone().sub(breech);
-  const len = axis.length();
-  axis.normalize();
-  // A long gun gets the handguard; anything shorter than a forearm gets a
-  // two-handed grip just ahead of the firing hand instead of a hand hanging
-  // off the end of a pistol's muzzle.
-  const reach = len > 0.34 ? Math.min(len * 0.62, 0.46) : 0.10;
-  // A support hand wraps UNDER the handguard, so the palm sits a little below
-  // the bore, not on it.
-  const target = grip.clone().addScaledVector(axis, reach);
-  target.y -= 0.018;
+  const gunLen = Math.max(0.05, localBox.max.z - localBox.min.z);
+  const carry = weaponCarry(gunLen);
 
-  // Clamp into the arm's reach from the shoulder.
+  // ── Firing arm ────────────────────────────────────────────────────────────
+  const fTarget = new THREE.Vector3(BODY.shoulderHalf, carry.y, carry.z);
+  const probe = new THREE.Vector3();
+  const fireErr = (sx, ex) => {
+    rig.armR.rotation.set(sx, 0, -0.10); rig.elbowR.rotation.x = ex;
+    rig.gripR.rotation.set(-(sx + ex), GUN_HOLD.gripYaw, 0);
+    mesh.updateMatrixWorld(true);
+    rig.gripR.getWorldPosition(probe);
+    return probe.distanceTo(fTarget);
+  };
+  let fb = null;
+  for (let sx = -1.2; sx <= 1.2; sx += 0.08)
+    for (let ex = -2.6; ex <= -0.2; ex += 0.08) {
+      const e = fireErr(sx, ex);
+      if (!fb || e < fb.e) fb = { sx, ex, e };
+    }
+  for (let step = 0.08; step > 0.0015; step *= 0.6)
+    for (const k of ['sx', 'ex']) for (const d of [1, -1]) {
+      const c = { ...fb }; c[k] += d * step; const e = fireErr(c.sx, c.ex);
+      if (e < fb.e) fb = { ...c, e };
+    }
+  const fire = { x: fb.sx, ex: fb.ex, pitch: -(fb.sx + fb.ex) };
+  fireErr(fb.sx, fb.ex);                      // leave the arm in the solved pose
+
+  // ── Support arm, onto wherever that put the weapon ────────────────────────
+  mesh.updateMatrixWorld(true);
+  const muzzle = new THREE.Vector3(0, 0, localBox.min.z).applyMatrix4(gun.matrixWorld);
+  const breech = new THREE.Vector3(0, 0, localBox.max.z).applyMatrix4(gun.matrixWorld);
+  const grip = new THREE.Vector3(); rig.gripR.getWorldPosition(grip);
+  const axis = muzzle.clone().sub(breech).normalize();
+  // A long gun gets the handguard; anything shorter than a forearm gets a
+  // two-handed grip just ahead of the firing hand, not a hand dangling past a
+  // pistol's muzzle. Eighteen millimetres low, because a support hand wraps
+  // UNDER a handguard rather than through it.
   const sh = new THREE.Vector3(); rig.armL.getWorldPosition(sh);
-  const L1 = BODY.upperArm, L2 = BODY.foreArm + 0.075;   // + the palm below the wrist
-  const to = target.clone().sub(sh);
+  const L1 = BODY.upperArm, L2 = BODY.foreArm + 0.075;
+  // …and never further along it than the arm can actually get. A sniper
+  // rifle's handguard at 62% of 0.81 m is 0.15 m past the end of the support
+  // arm, so aiming at it leaves the hand short and in the air. Walk the grip
+  // point back down the barrel until it is in reach, which is what a person
+  // does with a long gun.
+  const maxArm = (L1 + L2) * 0.97;
+  // Never past 78% of the weapon either: on a short gun, grip + a rifle's
+  // reach lands the hand at the muzzle, which looks like someone about to lose
+  // a finger. `gripAlong` is where the firing hand already sits.
+  const gripAlong = grip.clone().sub(breech).dot(axis);
+  let reach = gunLen > 0.34 ? Math.min(gunLen * 0.62, 0.46) : 0.10;
+  reach = Math.max(0.07, Math.min(reach, gunLen * 0.78 - gripAlong));
+  const sTarget = new THREE.Vector3();
+  for (let i = 0; i < 30; i++) {
+    sTarget.copy(grip).addScaledVector(axis, reach); sTarget.y -= 0.018;
+    if (sTarget.distanceTo(sh) <= maxArm || reach <= 0.07) break;
+    reach -= 0.015;
+  }
+  const to = sTarget.clone().sub(sh);
   const d = Math.min(to.length(), (L1 + L2) * 0.985) || 0.01;
-  to.normalize();
-  const u = to;
+  const u = to.normalize();
   const zAng = Math.asin(Math.max(-1, Math.min(1, u.x)));
   const cz = Math.cos(zAng) || 1e-4;
   const xAng = Math.atan2(-u.z / cz, -u.y / cz);
-  const cosA = Math.max(-1, Math.min(1, (L1 * L1 + d * d - L2 * L2) / (2 * L1 * d)));
-  const cosB = Math.max(-1, Math.min(1, (L1 * L1 + L2 * L2 - d * d) / (2 * L1 * L2)));
-  const A = Math.acos(cosA), flex = Math.PI - Math.acos(cosB);
-
-  const probe = new THREE.Vector3();
-  const palm = rig.handL || rig.wristL;      // the hand itself, not a guess below the wrist
-  const err = (sx, sz, ex) => {
-    rig.armL.rotation.set(sx, 0, sz); rig.elbowL.rotation.x = ex;
-    mesh.updateMatrixWorld(true);
-    palm.getWorldPosition(probe);
-    return probe.distanceTo(target);
-  };
-  // Both elbow signs are geometrically valid; keep whichever reaches.
-  let best = null;
-  for (const s1 of [1, -1]) for (const s2 of [-1, 1]) {
-    const c = { sx: xAng + s1 * A, sz: zAng, ex: s2 * flex };
-    const e = err(c.sx, c.sz, c.ex);
-    if (!best || e < best.e) best = { ...c, e };
-  }
-  for (let step = 0.18; step > 0.0015; step *= 0.6) {
-    for (const k of ['sx', 'sz', 'ex']) {
-      for (const dir of [1, -1]) {
-        const c = { ...best }; c[k] += dir * step;
-        const e = err(c.sx, c.sz, c.ex);
-        if (e < best.e) { best = { ...c, e }; }
-      }
+  const A = Math.acos(Math.max(-1, Math.min(1, (L1 * L1 + d * d - L2 * L2) / (2 * L1 * d))));
+  const flex = Math.PI - Math.acos(Math.max(-1, Math.min(1, (L1 * L1 + L2 * L2 - d * d) / (2 * L1 * L2))));
+  const palm = rig.handL || rig.wristL;
+  // Aim the left hand at an arbitrary point: analytic seed, then refine.
+  const solveLeft = (tgt) => {
+    const to2 = tgt.clone().sub(sh);
+    const d2 = Math.min(to2.length(), maxArm) || 0.01;
+    const u2 = to2.normalize();
+    const z2 = Math.asin(Math.max(-1, Math.min(1, u2.x)));
+    const cz2 = Math.cos(z2) || 1e-4;
+    const x2 = Math.atan2(-u2.z / cz2, -u2.y / cz2);
+    const A2 = Math.acos(Math.max(-1, Math.min(1, (L1 * L1 + d2 * d2 - L2 * L2) / (2 * L1 * d2))));
+    const f2 = Math.PI - Math.acos(Math.max(-1, Math.min(1, (L1 * L1 + L2 * L2 - d2 * d2) / (2 * L1 * L2))));
+    const er = (sx, sz, ex) => {
+      rig.armL.rotation.set(sx, 0, sz); rig.elbowL.rotation.x = ex;
+      mesh.updateMatrixWorld(true);
+      palm.getWorldPosition(probe);
+      return probe.distanceTo(tgt);
+    };
+    let b = null;
+    for (const s1 of [1, -1]) for (const s2 of [-1, 1]) {
+      const c = { x: x2 + s1 * A2, z: z2, ex: s2 * f2 };
+      const e = er(c.x, c.z, c.ex);
+      if (!b || e < b.e) b = { ...c, e };
     }
-  }
+    for (let step = 0.18; step > 0.0015; step *= 0.6)
+      for (const k of ['x', 'z', 'ex']) for (const dir of [1, -1]) {
+        const c = { ...b }; c[k] += dir * step; const e = er(c.x, c.z, c.ex);
+        if (e < b.e) b = { ...c, e };
+      }
+    return { x: b.x, z: b.z, ex: b.ex, err: b.e };
+  };
+  const sup = solveLeft(sTarget);
+  // Where the hand goes to change a magazine: under the receiver, just forward
+  // of the firing hand. Solved against this weapon like everything else, so a
+  // long gun's reload reaches to a different place than a pistol's.
+  const magTarget = grip.clone().addScaledVector(axis, 0.055);
+  magTarget.y -= 0.135;
+  const mag = solveLeft(magTarget);
+
   mesh.position.copy(keep.pos); mesh.rotation.y = keep.rot;
-  const pose = { x: best.sx, z: best.sz, ex: best.ex, err: best.e };
-  if (key) _supPoseCache.set(key, pose);
-  rig.supPose = pose;
+  const pose = { fire, sup, mag, gunLen: +gunLen.toFixed(3), fireErr: fb.e };
+  if (key) _weaponPoseCache.set(key, pose);
+  rig.firePose = fire; rig.supPose = sup; rig.magPose = mag;
+  rig.gripR.rotation.set(fire.pitch, GUN_HOLD.gripYaw, 0);
 }
 
 // ── Character walk / slide animation ────────────────────────────────────────
@@ -28752,7 +28828,7 @@ function fitSupportHand(mesh, gun, key) {
 // jump / aim poses. Works uniformly for bots and remote players. `crouchTarget`
 // is 0..1 (1 = crouched); `slideTarget` adds the low sliding silhouette;
 // `aimPitch` is where the character is looking, in radians, positive = down.
-function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarget = 0, aimPitch = 0) {
+function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarget = 0, aimPitch = 0, reloadT = -1) {
   const rig = mesh && mesh._rig;
   if (!rig) return;
   const clamp01 = v => v < 0 ? 0 : v > 1 ? 1 : v;
@@ -28827,6 +28903,27 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
   rig.aim += (aimT - rig.aim) * Math.min(1, dt * 10);
   const aim = rig.aim;
 
+  // ── Reloading ─────────────────────────────────────────────────────────────
+  // The support hand leaves the handguard, goes to the magazine well and comes
+  // back. Both ends of that are solved per weapon (fitWeaponPose), so a long
+  // gun reaches to a different place than a pistol. Trapezoidal rather than a
+  // plain sine: the hand gets there quickly, stays while the magazine is
+  // changed, and comes back quickly.
+  const rTarget = reloadT >= 0
+    ? Math.min(1, 1.6 * Math.sin(Math.PI * Math.max(0, Math.min(1, reloadT)))) : 0;
+  if (rig.reloadK === undefined) rig.reloadK = 0;
+  rig.reloadK += (rTarget - rig.reloadK) * Math.min(1, dt * 14);
+  const rk = rig.reloadK;
+  // The support pose in use this frame: on the handguard, or on the magazine.
+  const _sp = rig.supPose, _mp = rig.magPose;
+  const SUP = _sp
+    ? (_mp && rk > 0.002
+        ? { x: THREE.MathUtils.lerp(_sp.x, _mp.x, rk),
+            z: THREE.MathUtils.lerp(_sp.z, _mp.z, rk),
+            ex: THREE.MathUtils.lerp(_sp.ex, _mp.ex, rk) }
+        : _sp)
+    : { x: GUN_HOLD.supShoulderX, z: GUN_HOLD.supShoulderZ, ex: GUN_HOLD.supElbowX };
+
   // ── Idle: breathing and a weight shift ────────────────────────────────────
   // Standing perfectly still is the other half of looking like a machine. A
   // chest that rises, and weight that moves from one hip to the other every few
@@ -28867,7 +28964,7 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
   rig.head.rotation.x = 0;
   if (rig.holdsGun) {
     rig.armR.rotation.z = -0.10;                 // firing elbow tucked in
-    rig.armL.rotation.z = rig.supPose ? rig.supPose.z : GUN_HOLD.supShoulderZ;
+    rig.armL.rotation.z = SUP.z;
   } else {
     rig.armL.rotation.z = 0; rig.armR.rotation.z = 0;
   }
@@ -28899,11 +28996,11 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
       // stance — the weapon is parented to its grip, so this is what points the
       // barrel — and the support arm reaches forward onto the handguard instead
       // of swinging free beside a rifle it is meant to be steadying.
-      rig.armR.rotation.x = GUN_HOLD.shoulderX + aim * 0.55;
-      if (rig.elbowR) rig.elbowR.rotation.x = GUN_HOLD.elbowX;
-      const sp = rig.supPose;
-      rig.armL.rotation.x = (sp ? sp.x : GUN_HOLD.supShoulderX) - gait(p + Math.PI) * armAmp * 0.16 + aim * 0.55;
-      if (rig.elbowL) rig.elbowL.rotation.x = sp ? sp.ex : GUN_HOLD.supElbowX;
+      const fp = rig.firePose;
+      rig.armR.rotation.x = (fp ? fp.x : GUN_HOLD.shoulderX) + aim * 0.55;
+      if (rig.elbowR) rig.elbowR.rotation.x = fp ? fp.ex : GUN_HOLD.elbowX;
+      rig.armL.rotation.x = SUP.x - gait(p + Math.PI) * armAmp * 0.16 * (1 - rk) + aim * 0.55 * (1 - rk);
+      if (rig.elbowL) rig.elbowL.rotation.x = SUP.ex;
     } else {
       // An arm swings opposite its OWN leg, and an elbow folds FORWARD.
       rig.armL.rotation.x = gait(p + Math.PI) * armAmp;
@@ -28945,9 +29042,9 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
     // An armed character keeps the weapon stance through a crouch and a slide —
     // the gun hangs off the firing hand now, so throwing the arms into a free
     // pose would throw the rifle with them.
-    const armLT = rig.holdsGun ? (rig.supPose ? rig.supPose.x : GUN_HOLD.supShoulderX) + (slideLean ? -0.16 : 0) + aim * 0.55
+    const armLT = rig.holdsGun ? SUP.x + (slideLean ? -0.16 : 0) + aim * 0.55 * (1 - rk)
                                : (slideLean ? -1.22 : (advancePose ? -1.05 : -0.8));
-    const armRT = rig.holdsGun ? GUN_HOLD.shoulderX + (slideLean ? 0.12 : 0) + aim * 0.55
+    const armRT = rig.holdsGun ? (rig.firePose ? rig.firePose.x : GUN_HOLD.shoulderX) + (slideLean ? 0.12 : 0) + aim * 0.55
                                : (slideLean ? -1.55 : (advancePose ? -1.38 : -0.8));
     rig.armL.rotation.x = THREE.MathUtils.lerp(rig.armL.rotation.x, armLT, c);
     rig.armR.rotation.x = THREE.MathUtils.lerp(rig.armR.rotation.x, armRT, c);
@@ -28956,8 +29053,8 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
     // Knees have to fold hard here or a tucked slide looks like a plank.
     if (rig.kneeL) rig.kneeL.rotation.x = THREE.MathUtils.lerp(rig.kneeL.rotation.x, slideLean ? 1.20 : (advancePose ? 0.62 : 1.05), c);
     if (rig.kneeR) rig.kneeR.rotation.x = THREE.MathUtils.lerp(rig.kneeR.rotation.x, slideLean ? -0.35 : (advancePose ? 0.46 : 0.88), c);
-    const elbLT = rig.holdsGun ? (rig.supPose ? rig.supPose.ex : GUN_HOLD.supElbowX) : (slideLean ? -1.05 : (advancePose ? -0.85 : -0.7));
-    const elbRT = rig.holdsGun ? GUN_HOLD.elbowX     : (slideLean ? -1.15 : (advancePose ? -0.9 : -0.7));
+    const elbLT = rig.holdsGun ? SUP.ex : (slideLean ? -1.05 : (advancePose ? -0.85 : -0.7));
+    const elbRT = rig.holdsGun ? (rig.firePose ? rig.firePose.ex : GUN_HOLD.elbowX) : (slideLean ? -1.15 : (advancePose ? -0.9 : -0.7));
     if (rig.elbowL) rig.elbowL.rotation.x = THREE.MathUtils.lerp(rig.elbowL.rotation.x, elbLT, c);
     if (rig.elbowR) rig.elbowR.rotation.x = THREE.MathUtils.lerp(rig.elbowR.rotation.x, elbRT, c);
     if (rig.footL) rig.footL.rotation.x = THREE.MathUtils.lerp(rig.footL.rotation.x, slideLean ? -0.22 : (advancePose ? -0.12 : -0.18), c);
@@ -28975,10 +29072,10 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
     rig.legR.rotation.x = THREE.MathUtils.lerp(rig.legR.rotation.x, -0.54, j);
     if (rig.kneeL) rig.kneeL.rotation.x = THREE.MathUtils.lerp(rig.kneeL.rotation.x, 1.05, j);
     if (rig.kneeR) rig.kneeR.rotation.x = THREE.MathUtils.lerp(rig.kneeR.rotation.x, 0.95, j);
-    rig.armL.rotation.x = THREE.MathUtils.lerp(rig.armL.rotation.x, rig.holdsGun ? (rig.supPose ? rig.supPose.x : GUN_HOLD.supShoulderX) - 0.12 : -0.52, j);
-    rig.armR.rotation.x = THREE.MathUtils.lerp(rig.armR.rotation.x, rig.holdsGun ? GUN_HOLD.shoulderX : -0.72, j);
-    if (rig.elbowL) rig.elbowL.rotation.x = THREE.MathUtils.lerp(rig.elbowL.rotation.x, rig.holdsGun ? (rig.supPose ? rig.supPose.ex : GUN_HOLD.supElbowX) : -0.82, j);
-    if (rig.elbowR) rig.elbowR.rotation.x = THREE.MathUtils.lerp(rig.elbowR.rotation.x, rig.holdsGun ? GUN_HOLD.elbowX : -0.92, j);
+    rig.armL.rotation.x = THREE.MathUtils.lerp(rig.armL.rotation.x, rig.holdsGun ? SUP.x - 0.12 : -0.52, j);
+    rig.armR.rotation.x = THREE.MathUtils.lerp(rig.armR.rotation.x, rig.holdsGun ? (rig.firePose ? rig.firePose.x : GUN_HOLD.shoulderX) : -0.72, j);
+    if (rig.elbowL) rig.elbowL.rotation.x = THREE.MathUtils.lerp(rig.elbowL.rotation.x, rig.holdsGun ? SUP.ex : -0.82, j);
+    if (rig.elbowR) rig.elbowR.rotation.x = THREE.MathUtils.lerp(rig.elbowR.rotation.x, rig.holdsGun ? (rig.firePose ? rig.firePose.ex : GUN_HOLD.elbowX) : -0.92, j);
     rig.torso.rotation.x = THREE.MathUtils.lerp(rig.torso.rotation.x, 0.34, j);
     rig.head.rotation.x = THREE.MathUtils.lerp(rig.head.rotation.x, -0.18, j);
     if (rig.footL) rig.footL.rotation.x = THREE.MathUtils.lerp(rig.footL.rotation.x, -0.12, j);
@@ -29002,7 +29099,7 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
   // The chest takes a share of the aim and the head takes the rest, which is
   // how a person actually points a weapon up a staircase. The head is clamped
   // so nobody ends up looking out of the back of their own neck.
-  rig.torso.rotation.x += aim * 0.26;
+  rig.torso.rotation.x += aim * 0.26 + rk * 0.10;      // a reload bows the chest over the weapon
   rig.head.rotation.x = Math.max(-1.0, Math.min(1.0, rig.head.rotation.x + aim * 0.62));
   if (rig.pelvis) {
     // Hip drop onto the loaded leg (the pelvis tilts down over the SWINGING
@@ -33432,7 +33529,7 @@ function openKillTheater(index) {
       gun.position.set(0, -0.02, 0.055);
       gun.rotation.y = Math.PI;
       ((body._rig && body._rig.gripR) || body).add(gun);
-      if (body._rig) fitSupportHand(body, gun, 'theater');
+      if (body._rig) fitWeaponPose(body, gun, 'theater');
       body._gun = gun;
     }
     THEATER.ghostGroup.add(body);
@@ -42071,7 +42168,7 @@ function resetDeathPose(mesh) {
     // The rig grew wrists, a pelvis, a neck, an aim and a landing impulse
     // (#53); without these a respawned body keeps the hip tilt, neck pitch and
     // aim it died with, and its chest stays mid-breath.
-    rig.aim = 0; rig.land = 0; rig.jumpPeak = 0; rig.breathe = 0;
+    rig.aim = 0; rig.land = 0; rig.jumpPeak = 0; rig.breathe = 0; rig.reloadK = 0;
     for (const part of [rig.legL, rig.legR, rig.kneeL, rig.kneeR, rig.footL, rig.footR,
                         rig.armL, rig.armR, rig.elbowL, rig.elbowR, rig.wristL, rig.wristR,
                         rig.head, rig.torso, rig.neck, rig.pelvis]) {
@@ -45931,7 +46028,7 @@ function spawnRemotePlayer(p) {
     gun.rotation.y = Math.PI;
     ((mesh._rig && mesh._rig.gripR) || mesh).add(gun);
     mesh._gun = gun;
-    if (mesh._rig) { mesh._rig.holdsGun = true; fitSupportHand(mesh, gun, p.weaponId); }
+    if (mesh._rig) { mesh._rig.holdsGun = true; fitWeaponPose(mesh, gun, p.weaponId); }
   }
   setMeshTeamArrow(mesh, shouldShowTeamArrow(p.id, p));
   scene.add(mesh); remoteMeshes[p.id]=mesh;
@@ -48456,7 +48553,7 @@ function spawnDDayWave(count, waveNum) {
       gun.position.set(0, -0.02, 0.055);
       gun.rotation.y = Math.PI;
       ((mesh._rig && mesh._rig.gripR) || mesh).add(gun);
-      if (mesh._rig) { mesh._rig.holdsGun = true; fitSupportHand(mesh, gun, weaponId); }
+      if (mesh._rig) { mesh._rig.holdsGun = true; fitWeaponPose(mesh, gun, weaponId); }
     }
     gameBots.push({
       id, team: 'enemy', weaponId,
@@ -49245,7 +49342,7 @@ function spawnGameBots() {
       gun.position.set(0, -0.02, 0.055);
       gun.rotation.y = Math.PI; // barrel points along forward with the bot
       ((mesh._rig && mesh._rig.gripR) || mesh).add(gun);
-      if (mesh._rig) { mesh._rig.holdsGun = true; fitSupportHand(mesh, gun, weaponId); }
+      if (mesh._rig) { mesh._rig.holdsGun = true; fitWeaponPose(mesh, gun, weaponId); }
     }
 
     // Per-bot difficulty rolls
@@ -50495,6 +50592,7 @@ function updateBotAI(dt) {
               if (bot.botAmmo <= 0) {
                 const reloadMs = tune.reloadMin + Math.random() * tune.reloadRand;
                 bot.reloadUntil = now + reloadMs;
+                bot.reloadFrom = now;      // so the third-person reload action can read its progress (#53)
                 bot.botAmmo = bot.botMag;
                 bot.burstLeft = 0; // reload interrupts the burst
               }
@@ -50853,6 +50951,7 @@ function animateCharacters(dt) {
     let jumpTarget = 0;
     // Where this character is LOOKING. Positive is down, matching the rig.
     let aimPitch = 0;
+    let reloadT = -1;        // -1 = not reloading
     const b = gameBots.find(bb => bb.id === id);
     if (!b) {
       const p = players[id];
@@ -50882,6 +50981,10 @@ function animateCharacters(dt) {
       // to its chest; disengaged, it eases back to level.
       const engaged = b.state === 'chase' || b.state === 'attack' || b.state === 'dday_attacker'
                       || (b.lastShot && now - b.lastShot < 2500);
+      if (b.reloadUntil && now < b.reloadUntil) {
+        const from = b.reloadFrom || (b.reloadUntil - 2000);
+        reloadT = Math.max(0, Math.min(1, (now - from) / Math.max(1, b.reloadUntil - from)));
+      }
       if (engaged) {
         const dxp = camera.position.x - (b.x || 0), dzp = camera.position.z - (b.z || 0);
         const dyp = camera.position.y - ((b.y || 0) + 1.35);
@@ -50889,7 +50992,7 @@ function animateCharacters(dt) {
         if (horiz < 60) aimPitch = -Math.atan2(dyp, Math.max(0.5, horiz));
       }
     }
-    animateCharacterMesh(mesh, dt, crouchTarget, slideTarget, jumpTarget, aimPitch);
+    animateCharacterMesh(mesh, dt, crouchTarget, slideTarget, jumpTarget, aimPitch, reloadT);
   }
 }
 
