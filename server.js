@@ -2034,6 +2034,7 @@ function createPlayer(id, name) {
     kills: 0, deaths: 0,
     lastShot: 0, isBot: false,
     skin: 'default', isAdmin: false, // 🎭 cosmetic skin + crown marker
+    weaponId: null,                   // 🔫 what everyone else draws in their hands
     matchId: 'lobby', // 🌐 lobby = idle / mode-select. Set to a unique match ID when in a real match.
   };
 }
@@ -2163,6 +2164,19 @@ io.on('connection', (socket) => {
     p.isAdmin = !!(data && data.isAdmin);
     // Tell everyone in the same match so they can re-skin this player's mesh
     emitToMatch(p.matchId, 'skinChanged', { id: socket.id, skin: p.skin, isAdmin: p.isAdmin });
+  });
+
+  // 🔫 What this player is holding. Cosmetic and client-trusted exactly like
+  // setSkin above: damage comes from WEAPON_DAMAGE on a hit, never from this.
+  // Without it a human opponent is drawn empty-handed in the two-handed carry
+  // pose — measured in a live duel, holdsGun false and zero gun meshes — because
+  // only a bot's weaponId ever reached the other client.
+  socket.on('setWeapon', (data) => {
+    const p = players[socket.id];
+    if (!p) return;
+    const id = data && data.weaponId;
+    p.weaponId = id ? String(id).slice(0, 32) : null;
+    emitToMatch(p.matchId, 'weaponChanged', { id: socket.id, weaponId: p.weaponId });
   });
 
   // ── 🌐 PvP matchmaking: player wants to find others playing the same elim mode ──

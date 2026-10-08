@@ -28631,7 +28631,7 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
     speedSmooth: 0,      // smoothed horizontal speed
     blend: 0,            // 0 = standing, 1 = full walk (eased, so limbs don't snap)
     crouch: 0,           // 0 = standing, 1 = fully crouched/sliding
-    prevX: null, prevZ: null,
+    prevX: null, prevZ: null, gaitDir: 1,
     tacticalAdvance: !!isBot,
     // ── Per-character gait ──────────────────────────────────────────────────
     // Identical bots stepping in perfect unison is the single loudest "these
@@ -28834,9 +28834,9 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
   const clamp01 = v => v < 0 ? 0 : v > 1 ? 1 : v;
   // Horizontal distance moved since last frame → speed estimate
   const px = mesh.position.x, pz = mesh.position.z;
-  let dist = 0;
+  let dist = 0, dx = 0, dz = 0;
   if (rig.prevX !== null) {
-    const dx = px - rig.prevX, dz = pz - rig.prevZ;
+    dx = px - rig.prevX; dz = pz - rig.prevZ;
     dist = Math.sqrt(dx * dx + dz * dz);
   }
   rig.prevX = px; rig.prevZ = pz;
@@ -28848,7 +28848,17 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
   // Advance phase by distance travelled so stride length stays natural.
   // ×2.75 (half of the old ×5.5) so the LEG GRAPHIC swings 2× slower than the
   // distance covered — purely cosmetic, does not change actual move speed.
-  rig.phase += dist * 2.75 * (rig.gaitStride ?? 1);
+  // Which way is this body actually going, relative to the way it faces? `dist`
+  // is a magnitude, so the cycle only ever ran forwards — someone back-pedalling
+  // out of a fight walked at you while sliding away. Measured in a live duel
+  // against a real opponent: 97 of 383 moving frames were backwards and another
+  // 171 were sideways, so three quarters of their movement was cycling the wrong
+  // way. Local +Z is the facing (the mesh carries the +PI). The direction only
+  // flips once the motion is clearly along that axis, so a sidestep — which is
+  // neither — holds the last direction instead of chattering between the two.
+  const along = dist > 0 ? (dx * Math.sin(mesh.rotation.y) + dz * Math.cos(mesh.rotation.y)) / dist : 0;
+  if (Math.abs(along) > 0.35) rig.gaitDir = along > 0 ? 1 : -1;
+  rig.phase += dist * 2.75 * (rig.gaitStride ?? 1) * (rig.gaitDir ?? 1);
   if (!moving) {
     // Ease the phase back toward a neutral standing pose
     rig.phase += (Math.round(rig.phase / Math.PI) * Math.PI - rig.phase) * Math.min(1, dt * 8);
@@ -32662,6 +32672,19 @@ function switchWeapon(idx) {
   if (isADS) { isADS=false; targetFOV=75; setWeaponADSPos(false); }
   updateAmmoHUD();
   updateWeaponHUD();
+  broadcastHeldWeapon();
+}
+
+// Tell the match what we are holding, so the bodies on everyone else's screen
+// carry it. Cosmetic only — damage has always come from the server's own table
+// on a hit. Deduped because a swap can fire several times a second.
+let _sentWeaponId = null;
+function broadcastHeldWeapon() {
+  const w = WEAPONS[currentWeaponIdx];
+  const id = (w && w.id) || null;
+  if (id === _sentWeaponId) return;
+  _sentWeaponId = id;
+  try { socket.emit('setWeapon', { weaponId: id }); } catch (e) {}
 }
 
 function syncHeldAmmoModelForIndex(idx) {
@@ -42163,7 +42186,7 @@ function resetDeathPose(mesh) {
   mesh.rotation.z = 0;
   const rig = mesh._rig;
   if (rig) {
-    rig.prevX = null; rig.prevZ = null;
+    rig.prevX = null; rig.prevZ = null; rig.gaitDir = 1;
     rig.speedSmooth = 0; rig.blend = 0; rig.crouch = 0; rig.slide = 0; rig.jump = 0;
     // The rig grew wrists, a pelvis, a neck, an aim and a landing impulse
     // (#53); without these a respawned body keeps the hip tilt, neck pitch and
@@ -45648,6 +45671,12 @@ socket.on('matchRoster', ({ matchId, players: roster }) => {
   }
 });
 // 🎭 A player changed skin (or their admin flag arrived) — rebuild their mesh
+socket.on('weaponChanged', ({ id, weaponId }) => {
+  if (id === myId) return;                   // the local player sees a viewmodel, not a body
+  if (players[id]) players[id].weaponId = weaponId;
+  const m = remoteMeshes[id];
+  if (m) armRemoteMesh(m, armableWeaponOf(players[id] || { weaponId }));
+});
 socket.on('skinChanged', ({ id, skin, isAdmin }) => {
   if (id === myId) return; // local player has no body mesh
   if (players[id]) { players[id].skin = skin; players[id].isAdmin = isAdmin; }
@@ -45659,6 +45688,7 @@ socket.on('skinChanged', ({ id, skin, isAdmin }) => {
   const mesh = makePlayerMesh(p.name, p.isBot, p.team || 'enemy',
                               renderedSkinForPlayer(p, skin), { crown: !!isAdmin, tag: humanTagKind(p) });
   mesh.position.copy(old.position); mesh.rotation.y = old.rotation.y; mesh.visible = wasVisible;
+  armRemoteMesh(mesh, armableWeaponOf(p));   // the rebuild drops the old body's gun with it
   setMeshTeamArrow(mesh, shouldShowTeamArrow(id, p));
   scene.add(mesh); remoteMeshes[id] = mesh;
 });
@@ -46017,19 +46047,35 @@ function renderedSkinForPlayer(p, skin = p && p.skin) {
   if (p && p.isBot && selectedModeConfig?.type !== 'lobby') return 'default';
   return resolveSkinId(skin);
 }
+// ── 🔫 What to put in another body's hands ──────────────────────────────────
+// Our own bots are armed by makeBot, so skip those; everyone else — another
+// player's bots (#48) and, since the wire carries weaponId, real people — is
+// armed from here. A human used to come out empty-handed in the two-handed
+// carry pose, which is the one thing the pose cannot survive.
+function armableWeaponOf(p) {
+  if (!p || !p.weaponId) return null;
+  if (p.isBot && p.ownerId === myId) return null;
+  return p.weaponId;
+}
+function armRemoteMesh(mesh, weaponId) {
+  if (!mesh) return;
+  if (mesh._gun) { mesh._gun.parent && mesh._gun.parent.remove(mesh._gun); mesh._gun = null; }
+  if (mesh._rig) mesh._rig.holdsGun = false;
+  if (!weaponId) return;
+  const gun = makeBotWeaponProp(weaponId);
+  gun.position.set(0, -0.02, 0.055);
+  gun.rotation.y = Math.PI;
+  ((mesh._rig && mesh._rig.gripR) || mesh).add(gun);
+  mesh._gun = gun;
+  // The arms are solved from the weapon's own measured length, so a swap has to
+  // re-solve: a pistol pose on a sniper rifle leaves the support hand in the air.
+  if (mesh._rig) { mesh._rig.holdsGun = true; fitWeaponPose(mesh, gun, weaponId); }
+}
 function spawnRemotePlayer(p) {
   const skinId = renderedSkinForPlayer(p);
   const mesh = makePlayerMesh(p.name, p.isBot, p.team || 'enemy', skinId, { crown: !!p.isAdmin, tag: humanTagKind(p) });
   mesh.position.set(p.x,0,p.z);
-  // Another player's bot: makeBot arms our own, so arm theirs here (#48)
-  if (p.isBot && p.ownerId !== myId && p.weaponId) {
-    const gun = makeBotWeaponProp(p.weaponId);
-    gun.position.set(0, -0.02, 0.055);
-    gun.rotation.y = Math.PI;
-    ((mesh._rig && mesh._rig.gripR) || mesh).add(gun);
-    mesh._gun = gun;
-    if (mesh._rig) { mesh._rig.holdsGun = true; fitWeaponPose(mesh, gun, p.weaponId); }
-  }
+  armRemoteMesh(mesh, armableWeaponOf(p));
   setMeshTeamArrow(mesh, shouldShowTeamArrow(p.id, p));
   scene.add(mesh); remoteMeshes[p.id]=mesh;
 }
@@ -52417,6 +52463,7 @@ let mySkin = (() => { try { const s = localStorage.getItem('pvp_skin'); return S
 function emitMySkin() {
   if (!socket) return;
   socket.emit('setSkin', { skin: mySkin, isAdmin: !!(currentUser && currentUser.isAdmin) });
+  _sentWeaponId = null; broadcastHeldWeapon();   // a reconnect or room change clears what the server knew
 }
 // Admin cheat toggles — only active when currentUser.isAdmin
 const adminCheats = {
