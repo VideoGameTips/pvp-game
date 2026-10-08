@@ -3291,7 +3291,7 @@ function _metalizeMat(m) {
                    'polygonOffsetFactor', 'polygonOffsetUnits', 'name', 'alphaTest', 'visible'])
     if (m[k] !== undefined) p[k] = m[k];
   const out = pbrMat(p);
-  out.userData = Object.assign({}, m.userData, { metalDone: true, legacy: m });
+  out.userData = Object.assign({}, m.userData, { metalDone: true });
   return out;
 }
 function metalizeModel(root) {
@@ -26389,7 +26389,13 @@ const GUN_HOLD = {
 // 0.95; a chest wants about 0.5, because a chest is not a cylinder.
 const _sculptCache = new Map();
 function sculptBox(key, h, profile, { segs = 8, vsegs = 10, round = 0.9 } = {}) {
-  const ck = key + '|' + h + '|' + segs + ',' + vsegs + ',' + round;
+  // The profile is part of the key, not just the name: two parts that happened
+  // to share a name would otherwise silently share a shape, and the caller
+  // would have no way to tell. It also lets the inline profiles below (which
+  // build a fresh array every call) still hit the cache.
+  let pk = '';
+  for (const r of profile) pk += r[0] + ':' + r[1] + ',' + r[2] + ',' + (r[3] || 0) + ';';
+  const ck = key + '|' + h + '|' + segs + ',' + vsegs + ',' + round + '|' + pk;
   let geo = _sculptCache.get(ck);
   if (geo) return geo;
   geo = new THREE.BoxGeometry(2, h, 2, segs, vsegs, segs);
@@ -26479,19 +26485,6 @@ function charSurf() {
 let _soleMat = null;
 function soleMat() {
   return _soleMat || (_soleMat = pbrMat({ surface: charSurf().boot, color: 0x15120f, roughness: 1.0, metalness: 0.0, bumpScale: 0.0016 }));
-}
-
-// ── 🧱 Minecraft-style character blocks ─────────────────────────────────────
-// The bodies were bevelled boxes wearing a drawn-on face: soft edges, a nose,
-// brows, cheeks and a smile. At character scale that reads as a plush toy. A
-// Minecraft character is hard-edged blocks wearing a PIXEL texture, so that is
-// what these are now — same sizes, same joints, same hitboxes, no bevel.
-const _mcBoxCache = new Map();
-function mcBoxGeo(w, h, d) {
-  const key = w + ',' + h + ',' + d;
-  let geo = _mcBoxCache.get(key);
-  if (!geo) { geo = new THREE.BoxGeometry(w, h, d); _mcBoxCache.set(key, geo); }
-  return geo;
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -26700,45 +26693,6 @@ const _k = {
     x.fillStyle = g; x.fillRect(0, 0, S, S);
   },
 };
-
-// ── 🎨 The pixel skins ──────────────────────────────────────────────────────
-// Each one is a set of face painters. Nothing here is procedural or seeded:
-// these are drawn skins, the same on every player wearing them, exactly like
-// a Minecraft skin file.
-const _P = {
-  skin:    '#f0c8a0', skinSh: '#d9a884', skinDk: '#b07f5e',
-  hairBr:  '#3a2a1c', hairBrHi: '#4d3826', hairBlk: '#1b1712', hairGn: '#8a6a34',
-  eyeW:    '#ffffff', eyeBlue: '#2f7fd6', eyeDeep: '#17539c', line: '#14161c',
-  mouth:   '#9a6252',
-  jacket:  '#1b56b8', jacketD: '#123f8c', shirtW: '#f2f2f2', collar: '#14161c',
-  string:  '#9aa3ad', green: '#4cd137', pants: '#16181f', pantsHi: '#1f222b',
-  shoe:    '#1b56b8',
-  tee:     '#2e8b57', teeD: '#23694180', jeans: '#35507a', jeansD: '#2a3f61',
-  pink:    '#d94f8a', pinkD: '#ad3d6d', white: '#e8eef5',
-  navy:    '#1e2a4a', navyD: '#151d35', copBlue: '#5b8fd6', gold: '#ffd24a',
-  blk:     '#14161a', blkHi: '#23262c', vest: '#1a1d22', vestHi: '#2c3037',
-  strapGy: '#575d66', pouch: '#2a2e35', amber: '#e0902a', visorTeal: '#3fe0b0',
-};
-const _solid = col => (p => p(col, 0, 0, 16, 16));
-// ── ✏️ A face is a picture, not a list of rectangles ──────────────────────
-// Sixteen rows of sixteen characters, plus a key saying what each letter is.
-// Edit the picture and the skin changes — there are no coordinates to count
-// and nothing to keep in step. A space leaves that pixel alone, so a grid can
-// be laid over something already painted underneath.
-//
-// Letters are conventions, not rules: '.' skin · 's' jaw shade · 'H' hair
-// 'W' white of the eye · 'I' iris · 'D' deeper iris · 'K' black · 'G' webbing.
-function gridFace(key, rows) {
-  return p => {
-    for (let y = 0; y < rows.length; y++) {
-      const row = rows[y];
-      for (let x = 0; x < row.length; x++) {
-        const col = key[row[x]];
-        if (col) p(col, x, y, 1, 1);
-      }
-    }
-  };
-}
 
 // Hair on the head texture rather than as extra geometry: no second surface to
 // z-fight with the scalp. The FRONT of each head is a grid (below); these draw
@@ -27028,7 +26982,7 @@ function applyPixelSkin(art, parts) {
     const fall = new THREE.Mesh(sculptBox('hfall', 0.28,
       [[0.00, 0.052, 0.030, -0.052], [0.35, 0.070, 0.044, -0.060],
        [0.75, 0.080, 0.062, -0.048], [1.00, 0.078, 0.078, -0.026]],
-      { segs: 10, vsegs: 6, round: 0.8 }), mat);
+      { segs: 8, vsegs: 5, round: 0.8 }), mat);
     fall.position.set(0, 1.585 - BODY.headY, 0); fall.castShadow = true; head.add(fall);
   }
   if (art.cap) {
@@ -27646,7 +27600,7 @@ function applyCharacterSkin(skinId, parts) {
   // machinery below — no seeded shirt, no accessory library, no face overlay.
   if (PIXEL_SKINS[skinId]) { applyPixelSkin(PIXEL_SKINS[skinId], parts); return; }
   const { group, head, headMats, faceMat, torso, torsoMat, armLimbs, legLimbs, look,
-          pelvisMat, neckMat, gearHead: gh, gearBody: gb, gearSkull: gs, gearTorso: gt } = parts;
+          pelvisMat, neckMat, gearHead: gh, gearBody: gb, gearSkull: gs } = parts;
   // Accessories are authored in the OLD rig's coordinates and land in the
   // containers that map them onto the new body (see GEAR_FIT). `pin` picks the
   // head container or the body container by how high the part sits in that old
@@ -28027,9 +27981,9 @@ const P_HELMET_NAPE = [
 ];
 function _addHelmet(group, color) {
   const mat = _gearMat('plate', color);
-  const shell = new THREE.Mesh(sculptBox('helmet', 0.123, P_HELMET, { segs: 12, vsegs: 10, round: 0.90 }), mat);
+  const shell = new THREE.Mesh(sculptBox('helmet', 0.123, P_HELMET, { segs: 10, vsegs: 7, round: 0.90 }), mat);
   shell.position.set(0, 1.7585, 0); shell.castShadow = true; group.add(shell);
-  const nape = new THREE.Mesh(sculptBox('helmnape', 0.088, P_HELMET_NAPE, { segs: 12, vsegs: 6, round: 0.88 }), mat);
+  const nape = new THREE.Mesh(sculptBox('helmnape', 0.088, P_HELMET_NAPE, { segs: 10, vsegs: 4, round: 0.88 }), mat);
   nape.position.set(0, 1.676, 0); nape.castShadow = true; group.add(nape);
   // NVG shroud: the one detail that separates a combat helmet from a bowl.
   const dk = _gearMat('plate', darkenColor(color, 0.55));
@@ -28055,7 +28009,7 @@ const P_CAP = [
 ];
 function _addCap(group, color) {
   const mat = _gearMat('cloth', color);
-  const crown = new THREE.Mesh(sculptBox('cap', 0.112, P_CAP, { segs: 12, vsegs: 8, round: 0.9 }), mat);
+  const crown = new THREE.Mesh(sculptBox('cap', 0.112, P_CAP, { segs: 10, vsegs: 6, round: 0.9 }), mat);
   crown.position.set(0, 1.740, 0); crown.castShadow = true; group.add(crown);
   // A curved brim, not a flat tab: the curl is most of what says "cap".
   const brim = new THREE.Group();
@@ -28087,7 +28041,7 @@ function _addVisor(group, color, intensity = 1.2) {
   const lens = pbrMat({ color: 0x0a0d12, emissive: new THREE.Color(color), emissiveIntensity: intensity,
                         roughness: 0.12, metalness: 0.0 });
   const strap = _gearMat('cloth', 0x15181d);
-  const band = new THREE.Mesh(sculptBox('band', 0.046, P_BAND, { segs: 12, vsegs: 4, round: 0.88 }),
+  const band = new THREE.Mesh(sculptBox('band', 0.046, P_BAND, { segs: 10, vsegs: 3, round: 0.88 }),
                               _bandMats(lens, strap));
   band.position.set(0, 1.684, 0.004); band.castShadow = true; group.add(band);
 }
@@ -28096,7 +28050,7 @@ function _addShades(head) {
   // behind on the group come off the face in a slide.
   const lens = pbrMat({ color: 0x07080b, roughness: 0.08, metalness: 0.1, envMapIntensity: 1.6 });
   const frame = _gearMat('plate', 0x101216);
-  const band = new THREE.Mesh(sculptBox('shades', 0.030, P_BAND, { segs: 12, vsegs: 3, round: 0.88 }),
+  const band = new THREE.Mesh(sculptBox('shades', 0.030, P_BAND, { segs: 10, vsegs: 2, round: 0.88 }),
                               _bandMats(lens, frame));
   band.scale.set(0.99, 1, 0.99);
   band.position.set(0, 1.688 - BODY.headY, 0.004);
@@ -28139,7 +28093,7 @@ function _addSeedHair(head, style, color) {
     m.castShadow = true; head.add(m); return m;
   };
   const buzz = style === 'buzz';
-  const shell = put(sculptBox('hair', 0.142, P_HAIRSHELL, { segs: 12, vsegs: 10, round: 0.88 }), 0, 1.716, 0);
+  const shell = put(sculptBox('hair', 0.142, P_HAIRSHELL, { segs: 10, vsegs: 7, round: 0.88 }), 0, 1.716, 0);
   if (buzz) shell.scale.set(0.965, 0.93, 0.965);   // clipped close to the skull
   switch (style) {
     case 'buzz':
@@ -28212,7 +28166,6 @@ function _addSpikyHair(group, color) {
 function _addKit(torso, kit, color, group) {
   if (!kit || kit === 'none') return;
   const mat = _gearMat('cloth', color, { roughness: 0.92 });
-  const web = _gearMat('cloth', darkenColor(color, 0.7), { roughness: 0.95 });
   // Pauldrons hang off the GROUP. The arm pivots are children of the group,
   // not of the torso, and they only ever rotate in place — so a cap on the
   // group stays welded to the joint it covers. On the torso, a slide (-0.62
@@ -28221,7 +28174,7 @@ function _addKit(torso, kit, color, group) {
     [-1, 1].forEach(sx => {
       const m = new THREE.Mesh(sculptBox('pauldron', 0.078,
         [[0.00, 0.070, 0.080, 0], [0.55, 0.079, 0.089, 0], [1.00, 0.064, 0.074, 0]],
-        { segs: 10, vsegs: 4, round: 0.86 }), mat);
+        { segs: 8, vsegs: 3, round: 0.86 }), mat);
       m.position.set(sx * 0.166, 1.462, -0.004); m.castShadow = true;
       (group || torso).add(m);
     });
@@ -28234,7 +28187,7 @@ function _addKit(torso, kit, color, group) {
   // floats away from the body through both.
   const Y = y => y - BODY.torsoY;
   const put = (geo, x, y, z, rz, rx) => {
-    const m = new THREE.Mesh(geo, geo._webbing ? web : mat);
+    const m = new THREE.Mesh(geo, mat);
     m.position.set(x, Y(y), z);
     if (rz) m.rotation.z = rz;
     if (rx) m.rotation.x = rx;
@@ -28474,25 +28427,25 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
   // ── Head ──────────────────────────────────────────────────────────────────
   const faceMat  = pbrMat({ map: faceTextureFor(tone), roughness: 0.92, metalness: 0.0 });
   const headMats = [flesh(tone), flesh(tone), flesh(tone), flesh(tone), faceMat, flesh(tone)];
-  const head = new THREE.Mesh(sculptBox('head', B.headH, P_HEAD, { segs: 12, vsegs: 16, round: 0.88 }), headMats);
+  const head = new THREE.Mesh(sculptBox('head', B.headH, P_HEAD, { segs: 10, vsegs: 12, round: 0.88 }), headMats);
   head.position.set(0, B.headY, 0); head.castShadow = true; group.add(head);
 
   // Neck. Short and thick on purpose: a thin one is the clearest "this is a
   // doll" tell a game character has, and the collar covers most of it anyway.
   const neckMat = flesh(tone);
-  const neck = new THREE.Mesh(sculptBox('neck', 0.145, P_NECK, { segs: 10, vsegs: 6, round: 0.94 }), neckMat);
+  const neck = new THREE.Mesh(sculptBox('neck', 0.145, P_NECK, { segs: 8, vsegs: 4, round: 0.94 }), neckMat);
   neck.position.set(0, B.chin - 0.052, -0.006); neck.castShadow = true; group.add(neck);
 
   // ── Torso ─────────────────────────────────────────────────────────────────
   const torsoMat = cloth(shirt);
-  const torso = new THREE.Mesh(sculptBox('torso', B.torsoH, P_TORSO, { segs: 12, vsegs: 14, round: 0.52 }), torsoMat);
+  const torso = new THREE.Mesh(sculptBox('torso', B.torsoH, P_TORSO, { segs: 10, vsegs: 10, round: 0.52 }), torsoMat);
   torso.position.set(0, B.torsoY, 0); torso.castShadow = true; group.add(torso);
 
   // Pelvis — trousers, so it takes the LEG colour. Its own part rather than the
   // bottom of the torso because the torso counter-rotates through the walk and
   // the hips must not come with it.
   const pelvisMat = cloth(pant);
-  const pelvis = new THREE.Mesh(sculptBox('pelvis', 0.225, P_PELVIS, { segs: 10, vsegs: 6, round: 0.62 }), pelvisMat);
+  const pelvis = new THREE.Mesh(sculptBox('pelvis', 0.225, P_PELVIS, { segs: 8, vsegs: 5, round: 0.62 }), pelvisMat);
   pelvis.position.set(0, B.waist - 0.095, 0); pelvis.castShadow = true; group.add(pelvis);
 
   // ── Arms ──────────────────────────────────────────────────────────────────
@@ -28504,13 +28457,13 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
   [-1, 1].forEach(side => {
     const pivot = new THREE.Group();
     pivot.position.set(side * B.shoulderHalf, B.shoulder, 0);
-    const upper = new THREE.Mesh(sculptBox('uarm', B.upperArm, P_UPPERARM, { segs: 8, vsegs: 8, round: 0.95 }), cloth(shirt));
+    const upper = new THREE.Mesh(sculptBox('uarm', B.upperArm, P_UPPERARM, { segs: 6, vsegs: 5, round: 0.95 }), cloth(shirt));
     upper.position.y = -B.upperArm / 2; upper.castShadow = true; pivot.add(upper);
     const elbow = new THREE.Group(); elbow.position.y = -B.upperArm; pivot.add(elbow);
-    const fore = new THREE.Mesh(sculptBox('farm', B.foreArm, P_FOREARM, { segs: 8, vsegs: 8, round: 0.95 }), cloth(shirt));
+    const fore = new THREE.Mesh(sculptBox('farm', B.foreArm, P_FOREARM, { segs: 6, vsegs: 5, round: 0.95 }), cloth(shirt));
     fore.position.y = -B.foreArm / 2; fore.castShadow = true; elbow.add(fore);
     const wrist = new THREE.Group(); wrist.position.y = -B.foreArm; elbow.add(wrist);
-    const hand = new THREE.Mesh(sculptBox('hand', 0.165, P_HAND, { segs: 8, vsegs: 8, round: 0.72 }), flesh(tone));
+    const hand = new THREE.Mesh(sculptBox('hand', 0.165, P_HAND, { segs: 6, vsegs: 5, round: 0.72 }), flesh(tone));
     hand.position.y = -0.0825; hand.castShadow = true; wrist.add(hand);
     hands.push(hand);
     group.add(pivot);
@@ -28529,21 +28482,21 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
   [-1, 1].forEach(side => {
     const pivot = new THREE.Group();
     pivot.position.set(side * B.hipHalf, B.hip, 0);
-    const thigh = new THREE.Mesh(sculptBox('thigh', B.thigh, P_THIGH, { segs: 8, vsegs: 8, round: 0.72 }), cloth(pant));
+    const thigh = new THREE.Mesh(sculptBox('thigh', B.thigh, P_THIGH, { segs: 6, vsegs: 5, round: 0.72 }), cloth(pant));
     thigh.position.y = -B.thigh / 2; thigh.castShadow = true; pivot.add(thigh);
     const knee = new THREE.Group(); knee.position.y = -B.thigh; pivot.add(knee);
-    const shin = new THREE.Mesh(sculptBox('shin', B.shin, P_SHIN, { segs: 8, vsegs: 8, round: 0.80 }), cloth(pant));
+    const shin = new THREE.Mesh(sculptBox('shin', B.shin, P_SHIN, { segs: 6, vsegs: 5, round: 0.80 }), cloth(pant));
     shin.position.y = -B.shin / 2; shin.castShadow = true; knee.add(shin);
     // A real ankle joint, so the foot ROLLS about the ankle instead of spinning
     // about the middle of the boot the way it did when the mesh was the pivot.
     const ankle = new THREE.Group(); ankle.position.y = -B.shin; knee.add(ankle);
     // Boots stay dark on every skin, so they are deliberately NOT in legLimbs.
-    const boot = new THREE.Mesh(sculptBox('boot', 0.20, P_BOOT, { segs: 10, vsegs: 8, round: 0.55 }),
+    const boot = new THREE.Mesh(sculptBox('boot', 0.20, P_BOOT, { segs: 8, vsegs: 5, round: 0.55 }),
       pbrMat({ surface: S.boot, color: 0x2a221d, roughness: 0.80, metalness: 0.0, bumpScale: 0.0012 }));
     boot.position.set(0, 0.031, 0); boot.castShadow = true; ankle.add(boot);
     // Rubber sole, always dark, never recoloured: it is what makes the boot
     // read as footwear rather than as the bottom of a trouser leg.
-    const sole = new THREE.Mesh(sculptBox('sole', 0.034, P_SOLE, { segs: 8, vsegs: 3, round: 0.5 }), soleMat());
+    const sole = new THREE.Mesh(sculptBox('sole', 0.034, P_SOLE, { segs: 6, vsegs: 2, round: 0.5 }), soleMat());
     sole.position.set(0, -0.052, 0); ankle.add(sole);
     group.add(pivot);
     legMeshes.push(pivot); legKnees.push(knee); legAnkles.push(ankle); legFeet.push(boot);
@@ -28563,9 +28516,6 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
   const gearSkull = new THREE.Group();           // head-LOCAL: hair, shades
   gearSkull.scale.set(hf.s[0], hf.s[1], hf.s[2]);
   head.add(gearSkull);
-  const gearTorso = new THREE.Group();           // torso-LOCAL: vest, belt, pack
-  gearTorso.scale.set(tf.s[0], tf.s[1], tf.s[2]);
-  torso.add(gearTorso);
 
   // ── Apply skin (recolour + accessories) ───────────────────────────────────
   // _gearHead BEFORE the skin, not after: cc_kingchaos calls setMeshCrown()
@@ -28575,7 +28525,7 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
   applyCharacterSkin(skinId, {
     group, head, headMats, faceMat, torso, torsoMat, pelvis, pelvisMat, neck, neckMat,
     armLimbs, legLimbs, look, hands, feet: legFeet,
-    gearHead, gearBody, gearSkull, gearTorso,
+    gearHead, gearBody, gearSkull,
   });
   if (opts.crown) setMeshCrown(group, true);
   // Hands take the head's colour: skin on most skins, gloves on the armoured
@@ -36602,7 +36552,7 @@ function _makeViewHand(mirror) {
   // near enough as wide as the weapon they hold. At 56 x 59 x 72 they take
   // about 45%, which reads as hands ON a gun rather than hands WITH one.
   const skin = VM_SKIN_MAT();
-  const fist = new THREE.Mesh(sculptBox('vmfist', 0.059, P_VMFIST, { segs: 8, vsegs: 8, round: 0.62 }), skin);
+  const fist = new THREE.Mesh(sculptBox('vmfist', 0.059, P_VMFIST, { segs: 6, vsegs: 6, round: 0.62 }), skin);
   fist.castShadow = true;
   h.add(fist);
   // Curled fingers: three grooves across the front of the fist. Shallow, so
@@ -36616,7 +36566,7 @@ function _makeViewHand(mirror) {
   // The thumb, lying over the fingers the way it does on a grip.
   const thumb = new THREE.Mesh(
     sculptBox('vmthumb', 0.040, [[0, 0.009, 0.010, 0], [0.45, 0.012, 0.013, 0], [1, 0.010, 0.011, 0]],
-              { segs: 6, vsegs: 4, round: 0.92 }), skin);
+              { segs: 5, vsegs: 3, round: 0.92 }), skin);
   thumb.position.set((mirror ? -1 : 1) * 0.023, 0.006, 0.020);
   thumb.rotation.set(1.25, 0, (mirror ? 1 : -1) * 0.5);
   h.add(thumb);
@@ -41912,11 +41862,17 @@ function resetDeathPose(mesh) {
   if (rig) {
     rig.prevX = null; rig.prevZ = null;
     rig.speedSmooth = 0; rig.blend = 0; rig.crouch = 0; rig.slide = 0; rig.jump = 0;
+    // The rig grew wrists, a pelvis, a neck, an aim and a landing impulse
+    // (#53); without these a respawned body keeps the hip tilt, neck pitch and
+    // aim it died with, and its chest stays mid-breath.
+    rig.aim = 0; rig.land = 0; rig.prevJump = 0; rig.breathe = 0;
     for (const part of [rig.legL, rig.legR, rig.kneeL, rig.kneeR, rig.footL, rig.footR,
-                        rig.armL, rig.armR, rig.elbowL, rig.elbowR, rig.head, rig.torso]) {
+                        rig.armL, rig.armR, rig.elbowL, rig.elbowR, rig.wristL, rig.wristR,
+                        rig.head, rig.torso, rig.neck, rig.pelvis]) {
       if (!part) continue;
       part.rotation.x = 0; part.rotation.y = 0; part.rotation.z = 0;
     }
+    if (rig.torso) rig.torso.scale.set(1, 1, 1);
   }
   for (const child of mesh.children || []) {
     if (child._baseY !== undefined) child.position.y = child._baseY;
