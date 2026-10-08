@@ -4258,10 +4258,18 @@ function metalClack(ctx, at, outNode, vol, freq, ringDur = 0.055) {
 // The case landing, well after everything else. Nobody notices it consciously;
 // its absence is part of why the old shots felt like they came from nothing.
 function brassDrop(ctx, at, outNode, vol) {
-  for (let i = 0; i < 2; i++) {
-    const t = at + 0.34 + Math.random() * 0.22 + i * (0.06 + Math.random() * 0.05);
-    const f = 2900 + Math.random() * 1900;
-    playFilteredNoise(ctx, t, 0.030, outNode, vol * (i ? 0.45 : 1), 'bandpass', f, 13, 0.0003, 1.6);
+  // This used to be a bandpass at Q 13 on noise, which is a damped sine at 3-5 kHz --
+  // the same physics as a falling water droplet (see metalClack), and it played after
+  // every shot, so every gun ended in a "plink". A casing on the floor is a wide, dry
+  // tick with a little thud behind it, and it bounces: three hits, each quieter and
+  // sooner than the last, none of them ringing.
+  let t = at + 0.30 + Math.random() * 0.2, gap = 0.07 + Math.random() * 0.03, v = 1;
+  const f = 2300 + Math.random() * 900;
+  for (let i = 0; i < 3; i++) {
+    playFilteredNoise(ctx, t, 0.006, outNode, vol * v * 0.9, 'highpass', 1800, 0.7, 0.0002, 0);                  // the edge
+    playFilteredNoise(ctx, t, 0.016, outNode, vol * v * 0.7, 'bandpass', f * (1 + i * 0.07), 2.0, 0.0003, 2.2); // short body, cut off
+    if (i === 0) playFilteredNoise(ctx, t, 0.022, outNode, vol * 0.5, 'lowpass', 800, 0.9, 0.0004, 2.0);         // brass on concrete
+    t += gap; gap *= 0.55; v *= 0.5;
   }
 }
 // ⛓️ The feed. A chain gun is a mechanism you can HEAR working: a hard chunk as
