@@ -26413,8 +26413,15 @@ const P_SOLE = [
 // parented to the grip comes out LEVEL in this stance and then tilts with the
 // arm in every other one, which is what being held means.
 const GUN_HOLD = {
-  shoulderX: 0.272, elbowX: -2.313,
-  gripPitch: 2.041,
+  // Held OUT, not tucked into the chest. The first solve put the grip 0.21 m
+  // forward of the body's centre, which reads as a weapon clutched against the
+  // ribs; this one puts it at 0.32, which leaves the upper arm hanging close to
+  // vertical and the elbow at 69 degrees of flex — a carry, with somewhere
+  // still to go before the arm locks straight.
+  shoulderX: -0.012, elbowX: -1.931,
+  // Cancels the forearm's world pitch (shoulderX + elbowX) so the weapon comes
+  // out level; it has to be re-derived whenever the two above move.
+  gripPitch: 1.943,
   // Carried ACROSS the body, a patrol carry, rather than with the muzzle
   // pointed at whoever is looking. Not decoration: measured head-on at three
   // metres, a weapon held straight projects to 24 x 43 px — a sliver against a
