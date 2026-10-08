@@ -26942,8 +26942,8 @@ const BODY = (() => {
     wrist: f(0.485), knee: f(0.285), ankle: f(0.039), sole: 0,
     hip: 0.95,                 // femoral head, a little above the crotch
     shoulderHalf: 0.158,       // the JOINT, inboard of the 0.43 m shoulder span
-    hipHalf: 0.093,
-    headHalfW: 0.078, headHalfD: 0.098,
+    hipHalf: 0.116,            // was 0.093; the thighs are 30% thicker now (see GIRTH)
+    headHalfW: 0.086, headHalfD: 0.103,   // x1.10 / x1.05 (see GIRTH), so every hat follows the skull
   };
   B.headH    = +(B.crown - B.chin).toFixed(4);          // 0.2310
   B.headY    = +((B.crown + B.chin) / 2).toFixed(4);    // 1.6645
@@ -27090,6 +27090,17 @@ const GUN_HOLD = {
   supShoulderX: -0.55, supShoulderZ: 0.75, supElbowX: -1.49,
 };
 
+// 💪 GIRTH. The realistic rig (#53) came out too slim for this game: a 0.43 m shoulder span with 0.07 m calves reads as a
+// stick figure beside the chunky weapons and the old 1.0 m wide characters. Every part's CROSS-SECTION is widened here
+// -- not its length, so every joint, the weapon-hold IK, the eye height and the hit spheres stay exactly where they
+// were -- and the hips are set a little further apart so the thicker thighs do not cut into each other.
+(() => {
+  const fat = (P, kx, kz) => { for (const r of P) { r[1] *= kx; r[2] *= kz; } };
+  fat(P_TORSO, 1.38, 1.14); fat(P_PELVIS, 1.30, 1.12); fat(P_NECK, 1.25, 1.14); fat(P_HEAD, 1.10, 1.05);
+  fat(P_UPPERARM, 1.30, 1.30); fat(P_FOREARM, 1.26, 1.26); fat(P_HAND, 1.18, 1.18);
+  fat(P_THIGH, 1.30, 1.18); fat(P_SHIN, 1.26, 1.18); fat(P_BOOT, 1.15, 1.0); fat(P_SOLE, 1.15, 1.0);
+})();
+
 // ── 🗿 sculptBox ────────────────────────────────────────────────────────────
 // A box, sculpted into anatomy — and keeping BoxGeometry's topology is the
 // whole trick. Its six material groups and its per-face UV squares are what the
@@ -27181,7 +27192,7 @@ function sculptBox(key, h, profile, { segs = 8, vsegs = 10, round = 0.9 } = {}) 
 // uniformly would leave the back of the cranium sticking out of it.
 const GEAR_FIT = {
   head:  { s: [BODY.headHalfW * 2 / 0.5, BODY.headH / 0.5, BODY.headHalfD * 2 / 0.5], y: 1.85 },
-  torso: { s: [0.312 / 0.55, 0.418 / 0.65, 0.230 / 0.30], y: 1.20 },
+  torso: { s: [0.312 * 1.38 / 0.55, 0.418 / 0.65, 0.230 * 1.14 / 0.30], y: 1.20 },   // x GIRTH, so vests and packs still fit
 };
 
 // The five surfaces a body is made of, built once on first use rather than at
@@ -29508,6 +29519,17 @@ function fitWeaponPose(mesh, gun, key) {
 // jump / aim poses. Works uniformly for bots and remote players. `crouchTarget`
 // is 0..1 (1 = crouched); `slideTarget` adds the low sliding silhouette;
 // `aimPitch` is where the character is looking, in radians, positive = down.
+// A hit lands on a character: (dx, dz) is the way the round was travelling in world space, `damage` sets how hard it jolts.
+function flinchCharacter(mesh, damage, dx, dz) {
+  const rig = mesh && mesh._rig; if (!rig) return;
+  const k = Math.max(0.35, Math.min(1, 0.35 + damage / 70));
+  let l = Math.hypot(dx, dz);
+  if (l < 1e-4) { dx = Math.random() - 0.5; dz = Math.random() - 0.5; l = Math.hypot(dx, dz) || 1; }
+  dx /= l; dz /= l;
+  const th = mesh.rotation.y;   // local +Z is the way the body faces
+  rig.hitFz = dx * Math.sin(th) + dz * Math.cos(th); rig.hitFx = dx * Math.cos(th) - dz * Math.sin(th);
+  rig.hitK = Math.min(1, Math.max(rig.hitK || 0, k) + 0.15 * (rig.hitK || 0));
+}
 function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarget = 0, aimPitch = 0, reloadT = -1) {
   const rig = mesh && mesh._rig;
   if (!rig) return;
@@ -29805,6 +29827,28 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
   // Breathing. The ribcage expands up and FORWARD, not sideways, so the depth
   // scale is the biggest of the three.
   rig.torso.scale.set(1 + br * 0.010, 1 + br * 0.007, 1 + br * 0.018);
+
+  // ── Taking a hit ───────────────────────────────────────────────────────────
+  // Shot, burned or blasted, a body does not stand there unchanged. The chest is shoved the way the round was going
+  // (back for a hit from the front, forward from behind), the head snaps and shakes, the arms jolt -- so the weapon
+  // wobbles in the hands -- and the knees give a little. A fast tremor rides on top, strongest at the moment of the
+  // hit and gone in about half a second; sustained fire keeps it going (flinchCharacter re-arms it every hit).
+  if (rig.hitK > 0.003) {
+    const e = Math.min(1, rig.hitK), ht = (rig.hitT = (rig.hitT || 0) + dt), fz = rig.hitFz || 0, fx = rig.hitFx || 0;
+    const sh = Math.sin(ht * 52 + (rig.gaitOffset || 0)), sh2 = Math.sin(ht * 37 + 1.7);
+    rig.torso.rotation.x += 0.30 * e * fz + 0.035 * e * sh;
+    rig.torso.rotation.z += -0.22 * e * fx + 0.04 * e * sh2;
+    rig.torso.rotation.y += 0.05 * e * sh2;
+    rig.head.rotation.x += 0.45 * e * fz + 0.06 * e * sh2;
+    rig.head.rotation.y += 0.10 * e * sh;
+    rig.head.rotation.z += -0.12 * e * fx;
+    if (rig.pelvis) rig.pelvis.rotation.z += 0.03 * e * sh;
+    rig.armL.rotation.x += 0.18 * e * Math.sin(ht * 44 + 1.0);
+    rig.armR.rotation.x += 0.18 * e * Math.sin(ht * 41 + 2.4);
+    if (rig.kneeL) rig.kneeL.rotation.x += 0.22 * e;
+    if (rig.kneeR) rig.kneeR.rotation.x += 0.22 * e;
+    rig.hitK *= Math.exp(-dt * 7);
+  } else if (rig.hitK) { rig.hitK = 0; rig.hitT = 0; }
 
   // ── Foot planting, and the bob that falls out of it ──────────────────────
   // The old rig's boot soles floated 0.225 m above the ground, so the body
@@ -43253,6 +43297,7 @@ function trackTotalDamage(targetId, damage, targetMesh) {
     document.body.appendChild(el);
     damageTracker[targetId] = { total: 0, lastHit: 0, el, mesh: targetMesh };
   }
+  if (targetMesh._rig) flinchCharacter(targetMesh, damage, targetMesh.position.x - camera.position.x, targetMesh.position.z - camera.position.z);
   const tr = damageTracker[targetId];
   tr.total  += damage;
   tr.lastHit = performance.now();
