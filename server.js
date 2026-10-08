@@ -8,7 +8,23 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
-app.use(express.static('public'));
+// The game is one unversioned bundle — index.html loads `game.js` with no
+// version query — and it sits behind Cloudflare, whose default Browser Cache
+// TTL for .js is FOUR HOURS when the origin sends no Cache-Control of its own.
+// So every deploy was invisible to anyone who had already opened the page:
+// the server had the new file, `curl` fetched the new file, and the browser
+// went on running the old one. (.html is not in Cloudflare's default extension
+// list, which is why index.html was always fresh and the scripts were not.)
+//
+// `no-cache` does not mean "do not cache" — it means revalidate before reuse.
+// An unchanged file costs a 304 with no body; a changed one is picked up on
+// the next load. ETag and Last-Modified are already being sent, so that is all
+// it takes.
+app.use(express.static('public', {
+  setHeaders(res, filePath) {
+    if (/\.(js|css|html|json)$/i.test(filePath)) res.setHeader('Cache-Control', 'no-cache');
+  },
+}));
 app.use(express.json({ verify: (req, res, buf) => { req.rawBody = buf; } }));   // Stripe signs raw bytes
 
 // CORS for /auth/* endpoints (allows file:// page to reach the server)
