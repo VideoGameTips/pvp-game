@@ -12182,12 +12182,19 @@ function _bkit(name) {
     const m2 = new THREE.Mesh(new THREE.BoxGeometry(r * 1.9, 0.06, r * 1.9), new THREE.MeshBasicMaterial({ color })); m2.position.set(x, 0.05, z); MAP_GROUPS[name].add(m2);
     MAP_GIMMICKS[name].damageZones.push({ x, z, r, dps: type === 'lava' ? 18 : 4, type });
   };
-  K.lavaRect = (x, z, w, d, dps = 22, color = 0xff5a12, rot = 0) => {
+  K.lavaPaint = (x, z, w, d, color = 0xff5a12, rot = 0, opacity = 1) => {
     const a = new THREE.Mesh(new THREE.BoxGeometry(w, 0.06, d), new THREE.MeshBasicMaterial({ color }));
-    a.position.set(x, 0.045, z); a.rotation.y = rot; MAP_GROUPS[name].add(a);
-    const b = new THREE.Mesh(new THREE.BoxGeometry(w * 0.96, 0.065, d * 0.96), new THREE.MeshBasicMaterial({ color: 0xff8a1a, transparent: true, opacity: 0.62 }));
+    a.position.set(x, 0.045, z); a.rotation.y = rot; a.material.transparent = opacity < 1; a.material.opacity = opacity; MAP_GROUPS[name].add(a);
+    const b = new THREE.Mesh(new THREE.BoxGeometry(w * 0.96, 0.065, d * 0.96), new THREE.MeshBasicMaterial({ color: 0xff8a1a, transparent: true, opacity: Math.min(0.72, opacity * 0.62) }));
     b.position.set(x, 0.055, z); b.rotation.y = rot + 0.03; MAP_GROUPS[name].add(b);
+  };
+  K.lavaRect = (x, z, w, d, dps = 22, color = 0xff5a12, rot = 0) => {
+    K.lavaPaint(x, z, w, d, color, rot);
     MAP_GIMMICKS[name].damageZones.push({ x, z, w, d, rot, dps, type: 'lava' });
+  };
+  K.lavaSheet = (x, z, w, d, dps = 26, safeRects = [], color = 0xff4a12) => {
+    K.lavaPaint(x, z, w, d, color, 0, 0.92);
+    MAP_GIMMICKS[name].damageZones.push({ x, z, w, d, rot: 0, dps, type: 'lava', safeRects });
   };
   K.spawn = (ally, enemy) => { MAP_SPAWNS[name] = { ally, enemy }; };
   return K;
@@ -12195,6 +12202,12 @@ function _bkit(name) {
 function _bkBegin(name, w, d, groundColor) {
   clearMapForGridConcept(name);
   const K = _bkit(name); K.ground(w, d, groundColor); return K;
+}
+function _pointInRotRect(x, z, r, pad = 0) {
+  const a = -(r.rot || 0), cs = Math.cos(a), sn = Math.sin(a);
+  const dx = x - r.x, dz = z - r.z;
+  const lx = dx * cs - dz * sn, lz = dx * sn + dz * cs;
+  return Math.abs(lx) < r.w * 0.5 + pad && Math.abs(lz) < r.d * 0.5 + pad;
 }
 // 🚢 Titanic: a ship. Open decks fore and aft with room to move, a long superstructure between them -- cabin
 // corridors, a dining saloon and a grand hall inside, an upper deck over the top with funnels, lifeboats and a
@@ -13203,20 +13216,30 @@ function buildDoomsdayLayout() {
 function buildVolcanoLayout() {
   const name = 'volcano', K = _bkBegin(name, 140, 140, 0x180f0d);
   K.perim(14, 0x120c0b);
-  const obs = 0x161212, rock = 0x241816, ash = 0x2a201d, rim = 0x3a2118, ember = 0xff6a1a;
+  const obs = 0x111010, ash = 0x251c19, rim = 0x3a2118, ember = 0xff6a1a;
+  const safe = [
+    { x: 0, z: 61, w: 58, d: 18, rot: 0 }, { x: 0, z: -61, w: 58, d: 18, rot: 0 },
+    { x: -61, z: 0, w: 18, d: 58, rot: 0 }, { x: 61, z: 0, w: 18, d: 58, rot: 0 },
+    { x: -33, z: 33, w: 38, d: 20, rot: -0.35 }, { x: 33, z: -33, w: 38, d: 20, rot: -0.35 },
+    { x: -33, z: -33, w: 38, d: 20, rot: 0.35 }, { x: 33, z: 33, w: 38, d: 20, rot: 0.35 },
+    { x: 0, z: 0, w: 41, d: 41, rot: 0 },
+    { x: -42, z: 0, w: 32, d: 8, rot: 0.12 }, { x: 42, z: 0, w: 32, d: 8, rot: 0.12 },
+    { x: 0, z: -42, w: 8, d: 32, rot: -0.12 }, { x: 0, z: 42, w: 8, d: 32, rot: -0.12 },
+  ];
 
   // The floor reads as molten first, arena second: safe play happens on black
   // rock plates and ridges, with high-damage lava filling the dead space.
-  K.lavaRect(0, 35, 22, 18, 24, ember, 0);
-  K.lavaRect(0, -35, 22, 18, 24, ember, 0);
-  K.lavaRect(-35, 0, 18, 22, 24, ember, 0);
-  K.lavaRect(35, 0, 18, 22, 24, ember, 0);
-  K.lavaRect(-56, -34, 18, 20, 22, 0xff5412, 0.14);
-  K.lavaRect(56, 34, 18, 20, 22, 0xff5412, 0.14);
-  K.lavaRect(-56, 34, 18, 20, 22, 0xff7a1a, -0.14);
-  K.lavaRect(56, -34, 18, 20, 22, 0xff7a1a, -0.14);
-  K.lavaRect(0, 18, 42, 8, 22, 0xff5a12, 0);
-  K.lavaRect(0, -18, 42, 8, 22, 0xff5a12, 0);
+  K.lavaSheet(0, 0, 134, 134, 28, safe, 0xff3a0a);
+  K.lavaPaint(0, 35, 22, 18, ember, 0);
+  K.lavaPaint(0, -35, 22, 18, ember, 0);
+  K.lavaPaint(-35, 0, 18, 22, ember, 0);
+  K.lavaPaint(35, 0, 18, 22, ember, 0);
+  K.lavaPaint(-56, -34, 18, 20, 0xff5412, 0.14);
+  K.lavaPaint(56, 34, 18, 20, 0xff5412, 0.14);
+  K.lavaPaint(-56, 34, 18, 20, 0xff7a1a, -0.14);
+  K.lavaPaint(56, -34, 18, 20, 0xff7a1a, -0.14);
+  K.lavaPaint(0, 18, 42, 8, 0xff5a12, 0);
+  K.lavaPaint(0, -18, 42, 8, 0xff5a12, 0);
 
   // Safe obsidian islands. They are low and chunky so nothing visually fights
   // the theme, but they give readable routes across the lava.
@@ -13225,8 +13248,8 @@ function buildVolcanoLayout() {
     K.box(x, 0.34, z, w * 0.82, 0.18, d * 0.82, ash, rot);
   };
   [
-    [0, 55, 42, 12, 0], [0, -55, 42, 12, 0],
-    [-54, 0, 12, 42, 0], [54, 0, 12, 42, 0],
+    [0, 61, 54, 16, 0], [0, -61, 54, 16, 0],
+    [-61, 0, 16, 54, 0], [61, 0, 16, 54, 0],
     [-31, 31, 28, 14, -0.35], [31, -31, 28, 14, -0.35],
     [-31, -31, 28, 14, 0.35], [31, 31, 28, 14, 0.35],
   ].forEach(p => plate(...p));
@@ -13249,6 +13272,17 @@ function buildVolcanoLayout() {
   for (const [x, z, w, d, rot] of [[-40, 0, 26, 2.6, 0.12], [40, 0, 26, 2.6, 0.12], [0, -40, 2.6, 26, -0.12], [0, 40, 2.6, 26, -0.12]]) {
     K.box(x, 0, z, w, 2.4, d, obs, rot);
     K.box(x, 2.4, z, w * 0.72, 0.8, d * 0.72, 0x0b0909, rot);
+  }
+  // Bright cracks make the "lava everywhere except the route" read instantly.
+  const rnd = _thRng('volcano:cracks:v2');
+  for (let i = 0; i < 36; i++) {
+    const x = (rnd() * 2 - 1) * 62, z = (rnd() * 2 - 1) * 62;
+    if (safe.some(r => _pointInRotRect(x, z, r))) continue;
+    K.lavaPaint(x, z, 5 + rnd() * 16, 0.34 + rnd() * 0.42, rnd() < 0.5 ? 0xff7a1a : 0xff3a0a, rnd() * Math.PI, 0.72);
+  }
+  for (const z of [-69, 69]) {
+    K.lavaPaint(-36, z, 22, 1.8, 0xff7a1a, 0);
+    K.lavaPaint(36, z, 22, 1.8, 0xff7a1a, 0);
   }
 
   K.spawn({ x0: -26, x1: 26, z0: 60, z1: 66 }, { x0: -26, x1: 26, z0: -66, z1: -60 });
@@ -37455,11 +37489,9 @@ function updateMapGimmicks(dt) {
   if (!g) return;
   const now = Date.now();
   const inDamageZone = (z, x, zz) => {
+    if (z.safeRects?.some(r => _pointInRotRect(x, zz, r))) return false;
     if (z.w && z.d) {
-      const a = -(z.rot || 0), cs = Math.cos(a), sn = Math.sin(a);
-      const dx = x - z.x, dz = zz - z.z;
-      const lx = dx * cs - dz * sn, lz = dx * sn + dz * cs;
-      return Math.abs(lx) < z.w * 0.5 && Math.abs(lz) < z.d * 0.5;
+      return _pointInRotRect(x, zz, z);
     }
     const dx = x - z.x, dz = zz - z.z, r = z.r || z.radius || 0;
     return dx*dx + dz*dz < r * r;
@@ -51451,17 +51483,29 @@ function updateBotAI(dt) {
       const avoidStrength = bot.difficulty === 'expert' ? 1.6 : bot.difficulty === 'hard' ? 1.2 : 0.8;
       let pushX = 0, pushZ = 0;
       const checkZone = (z, pad) => {
+        if (z.safeRects?.some(r => _pointInRotRect(bot.x, bot.z, r, 0.4))) return;
         if (z.w && z.d) {
-          const a = -(z.rot || 0), cs = Math.cos(a), sn = Math.sin(a);
-          const dx = bot.x - z.x, dz = bot.z - z.z;
-          const lx = dx * cs - dz * sn, lz = dx * sn + dz * cs;
-          const hx = z.w * 0.5 + pad, hz = z.d * 0.5 + pad;
-          if (Math.abs(lx) < hx && Math.abs(lz) < hz) {
-            const ox = hx - Math.abs(lx), oz = hz - Math.abs(lz);
-            const localX = ox < oz ? Math.sign(lx || 1) : 0;
-            const localZ = ox < oz ? 0 : Math.sign(lz || 1);
-            pushX += localX * cs + localZ * sn;
-            pushZ += -localX * sn + localZ * cs;
+          if (z.safeRects?.length && _pointInRotRect(bot.x, bot.z, z, pad)) {
+            let best = z.safeRects[0], bestD = Infinity;
+            for (const r of z.safeRects) {
+              const d = Math.hypot(bot.x - r.x, bot.z - r.z);
+              if (d < bestD) { best = r; bestD = d; }
+            }
+            const dx = best.x - bot.x, dz = best.z - bot.z, d = Math.hypot(dx, dz) || 1;
+            pushX += dx / d;
+            pushZ += dz / d;
+          } else {
+            const a = -(z.rot || 0), cs = Math.cos(a), sn = Math.sin(a);
+            const dx = bot.x - z.x, dz = bot.z - z.z;
+            const lx = dx * cs - dz * sn, lz = dx * sn + dz * cs;
+            const hx = z.w * 0.5 + pad, hz = z.d * 0.5 + pad;
+            if (Math.abs(lx) < hx && Math.abs(lz) < hz) {
+              const ox = hx - Math.abs(lx), oz = hz - Math.abs(lz);
+              const localX = ox < oz ? Math.sign(lx || 1) : 0;
+              const localZ = ox < oz ? 0 : Math.sign(lz || 1);
+              pushX += localX * cs + localZ * sn;
+              pushZ += -localX * sn + localZ * cs;
+            }
           }
           return;
         }
