@@ -20,6 +20,45 @@ const io = new Server(server, { cors: { origin: '*' } });
 // An unchanged file costs a 304 with no body; a changed one is picked up on
 // the next load. ETag and Last-Modified are already being sent, so that is all
 // it takes.
+// ── 🧊 Cache-busting the bundle ─────────────────────────────────────────────
+// The `no-cache` below is correct and arrives at the browser as
+// `max-age=14400` anyway: Cloudflare's Browser Cache TTL is set to a fixed
+// four hours and OVERRIDES the origin (verified — localhost:7780 answers
+// `no-cache`, the edge answers `max-age=14400`). That is a dashboard toggle
+// nothing in this repo can reach.
+//
+// A changed URL is a new cache entry whatever the TTL says. index.html is the
+// one file Cloudflare does not cache (.html is not in its default extension
+// list), so it is the one place a cache-buster can live: it is served from
+// here with a build token on every script that actually changes. The two
+// vendor bundles are left alone — they never change and they are large.
+const VERSIONED = ['game.js', 'i18n.js', 'chat.js', 'equipment-models.js'];
+const PUBLIC_DIR = path.join(__dirname, 'public');
+function buildToken() {
+  let h = 2166136261;
+  for (const f of VERSIONED) {
+    try {
+      const st = fs.statSync(path.join(PUBLIC_DIR, f));
+      h = (Math.imul(h ^ st.size, 16777619) ^ Math.floor(st.mtimeMs)) >>> 0;
+    } catch (e) { /* a file that is not there cannot have changed */ }
+  }
+  return h.toString(36);
+}
+let _indexToken = null, _indexHtml = null;
+app.get(['/', '/index.html'], (req, res, next) => {
+  try {
+    const tok = buildToken();
+    if (tok !== _indexToken) {
+      _indexToken = tok;
+      _indexHtml = fs.readFileSync(path.join(PUBLIC_DIR, 'index.html'), 'utf8')
+        .replace(/(<script\s+src=")([^"?]+\.js)(")/g,
+                 (m, a, src, b) => VERSIONED.includes(src) ? `${a}${src}?v=${tok}${b}` : m);
+    }
+    res.setHeader('Cache-Control', 'no-cache');
+    res.type('html').send(_indexHtml);
+  } catch (e) { next(); }      // fall through to the static handler
+});
+
 app.use(express.static('public', {
   setHeaders(res, filePath) {
     if (/\.(js|css|html|json)$/i.test(filePath)) res.setHeader('Cache-Control', 'no-cache');
