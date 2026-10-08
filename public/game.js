@@ -28759,7 +28759,15 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
   const armAmp  = (0.34 + run * 0.22) * blend * gAmp;
   const lean    = blend * (rig.gaitLean ?? 1);
 
-  if (crouch < 0.5) {
+  // The walk cycle runs at EVERY crouch level. It used to be gated on
+  // `crouch < 0.5`, and an armed character's own tactical-advance crouch is
+  // 0.42 + run*0.12 — which crosses 0.5 at about two thirds of full speed. So
+  // every armed bot at a run had its legs frozen in a static lunge while it
+  // slid across the map at 11.25 m/s: measured hip swing 0.0 degrees, knee
+  // swing 0.0. The crouch pose below lerps FROM these values, so it still
+  // arrives exactly where it did at c = 1; at a partial crouch it now blends
+  // over a moving leg instead of replacing it with a frozen one.
+  {
     // Upright walking: legs + arms swing in opposition
     rig.legL.rotation.x = swing;
     rig.legR.rotation.x = swingR;
@@ -41014,6 +41022,7 @@ function sweepModelsPBR() {
   } catch (e) { console.warn('[pbr] sweep', e); }
 }
 requestAnimationFrame(sweepModelsPBR);
+
 
 // ── 🧰 Reloads for things that are not guns ─────────────────────────────────
 // Every model skin used to borrow its gun's reload, so the barcode scanner had
