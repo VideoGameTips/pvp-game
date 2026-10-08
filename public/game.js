@@ -26072,20 +26072,24 @@ function makeFaceTexture(tone = 0xffcc99) {
     x.quadraticCurveTo(24, -7, 26, 1);
     x.quadraticCurveTo(10, 15, -8, 14); x.quadraticCurveTo(-20, 12, -26, 1);
     x.closePath();
-    x.fillStyle = '#efe9e2'; x.fill();                          // sclera is never white
+    x.fillStyle = '#ddd4c9'; x.fill();                          // sclera is never white
     x.save(); x.clip();
     x.fillStyle = _cssHex(irisCol);
-    x.beginPath(); x.arc(1, 2, 11, 0, Math.PI * 2); x.fill();   // iris
-    const ig = x.createRadialGradient(1, 2, 1, 1, 2, 11);
+    x.beginPath(); x.arc(1, 2, 9.5, 0, Math.PI * 2); x.fill();  // iris
+    const ig = x.createRadialGradient(1, 2, 1, 1, 2, 9.5);
     ig.addColorStop(0, 'rgba(0,0,0,0.55)');                     // pupil fading into the iris
     ig.addColorStop(0.42, 'rgba(0,0,0,0.0)');
     ig.addColorStop(0.86, 'rgba(0,0,0,0.0)');
     ig.addColorStop(1, 'rgba(0,0,0,0.6)');                      // limbal ring
-    x.fillStyle = ig; x.beginPath(); x.arc(1, 2, 11, 0, Math.PI * 2); x.fill();
-    x.fillStyle = '#0b0c0f'; x.beginPath(); x.arc(1, 2, 4.4, 0, Math.PI * 2); x.fill();
-    x.fillStyle = 'rgba(255,255,255,0.9)';                      // catchlight, one only
-    x.beginPath(); x.arc(-3.4, -2.4, 2.6, 0, Math.PI * 2); x.fill();
-    x.fillStyle = 'rgba(0,0,0,0.30)'; x.fillRect(-28, -16, 56, 9);   // lid shadow
+    x.fillStyle = ig; x.beginPath(); x.arc(1, 2, 9.5, 0, Math.PI * 2); x.fill();
+    x.fillStyle = '#0b0c0f'; x.beginPath(); x.arc(1, 2, 3.8, 0, Math.PI * 2); x.fill();
+    x.fillStyle = 'rgba(255,255,255,0.72)';                     // catchlight, one only
+    x.beginPath(); x.arc(-3.0, -2.2, 1.9, 0, Math.PI * 2); x.fill();
+    // The upper lid shades the top third of the eye on every real face, and
+    // without it the whole eye glows at any distance.
+    const lg = x.createLinearGradient(0, -16, 0, 8);
+    lg.addColorStop(0, 'rgba(0,0,0,0.55)'); lg.addColorStop(1, 'rgba(0,0,0,0)');
+    x.fillStyle = lg; x.fillRect(-28, -16, 56, 24);
     x.restore();
     x.lineWidth = 2.4; x.strokeStyle = 'rgba(28,22,18,0.78)';   // lash line, top only
     x.beginPath(); x.moveTo(-26, 1); x.quadraticCurveTo(-8, -14, 11, -10);
@@ -26480,26 +26484,56 @@ function mcBoxGeo(w, h, d) {
   return geo;
 }
 
-// Every character texture is a 16×16 grid of whole pixels, magnified with
-// NearestFilter and no mipmaps. That rule is the whole look: one gradient, one
-// curve or one half-pixel edge in here and the character stops reading as pixel
-// art and starts reading as a small drawing, which is worse than either.
+// ══════════════════════════════════════════════════════════════════════════
+// 🎽 KIT ART (#53)
+// ══════════════════════════════════════════════════════════════════════════
+// Every character texture used to be a 16x16 grid of whole pixels magnified
+// with NearestFilter, and the rule was that one gradient in here broke the
+// look. That rule was right for a cube head wearing pixel art. The head is a
+// skull now, so the art is painted instead: 320 px a face, linear-filtered and
+// mipmapped, drawn in 0..1 so the same helper reads correctly on a 0.39 m
+// chest and on a 0.13 m sleeve.
+//
+// What makes kit read as kit is not the colours — it is stitching, webbing,
+// buckles and the fact that a panel is lit from above. All of that lives in
+// the helpers below, so the six colourways stay six colour tables.
+const KIT_RES = 320;
 const _charTexCache = new Map();
-function charTex(key, draw) {
-  let t = _charTexCache.get(key);
+function charTex(key, draw, dataMap = false) {
+  const ck = key + (dataMap ? ':d' : '');
+  let t = _charTexCache.get(ck);
   if (t) return t;
-  const c = document.createElement('canvas'); c.width = 16; c.height = 16;
-  const ctx = c.getContext('2d');
-  const p = (col, x, y, w = 1, h = 1) => { ctx.fillStyle = col; ctx.fillRect(x | 0, y | 0, w | 0, h | 0); };
-  draw(p);
+  const S = KIT_RES;
+  const c = document.createElement('canvas'); c.width = S; c.height = S;
+  const x = c.getContext('2d');
+  // The old rect-in-16-space painter, kept working: the long tail of one-off
+  // art still calls p(col, x, y, w, h) and does not need to know the canvas
+  // grew by 20x.
+  const u = S / 16;
+  const p = (col, px, py, w = 1, h = 1) => { x.fillStyle = col; x.fillRect(px * u, py * u, w * u, h * u); };
+  draw(p, x, S);
   t = new THREE.CanvasTexture(c);
-  t.magFilter = THREE.NearestFilter;
-  t.minFilter = THREE.NearestFilter;     // no mip smear at range either
-  t.generateMipmaps = false;
-  _charTexCache.set(key, t);
+  t.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy?.() || 1);
+  if (!dataMap) {
+    if ('colorSpace' in t && THREE.SRGBColorSpace !== undefined) t.colorSpace = THREE.SRGBColorSpace;
+    else if (THREE.sRGBEncoding !== undefined) t.encoding = THREE.sRGBEncoding;
+  }
+  t.needsUpdate = true;
+  _charTexCache.set(ck, t);
   return t;
 }
-function charMat(key, draw) { return new THREE.MeshLambertMaterial({ map: charTex(key, draw) }); }
+function charMat(key, draw, opts) {
+  const o = opts || {};
+  const S = charSurf();
+  return pbrMat({
+    map: charTex(key, draw),
+    roughnessMap: o.roughnessMap || S.cloth.roughnessMap,
+    bumpMap: o.bumpMap || S.cloth.bumpMap,
+    bumpScale: o.bumpScale != null ? o.bumpScale : 0.0008,
+    roughness: o.roughness != null ? o.roughness : 1.0,
+    metalness: o.metalness || 0.0,
+  });
+}
 // BoxGeometry material order is +X −X +Y −Y +Z −Z: right, left, top, bottom,
 // front, back. A face left out falls back to the part's plain colour.
 function charFaceMats(id, f) {
@@ -26509,6 +26543,153 @@ function charFaceMats(id, f) {
     charMat(id + ':f', f.front),           charMat(id + ':k', f.back),
   ];
 }
+
+// ── Kit drawing helpers. All coordinates are 0..1 across the face. ──────────
+const _k = {
+  dark(col, f) { return _cssHex(darkenColor(parseInt(String(col).slice(1), 16), f)); },
+  lite(col, f) { return _cssHex(_mixColor(parseInt(String(col).slice(1), 16), 0xffffff, f)); },
+  // Flat cloth: the colour, a weave, and a top-lit gradient. The gradient does
+  // more work than the weave — a panel with no light direction in it reads as
+  // a sticker whatever is printed on top.
+  cloth(x, S, col, seed = 3) {
+    x.fillStyle = col; x.fillRect(0, 0, S, S);
+    const rnd = _rng((seed * 2654435761) >>> 0);
+    for (let yy = 0; yy < S; yy += 3) {
+      x.fillStyle = 'rgba(255,255,255,0.035)'; x.fillRect(0, yy, S, 1);
+      x.fillStyle = 'rgba(0,0,0,0.045)';       x.fillRect(0, yy + 1, S, 1);
+    }
+    _grain(x, S, rnd, { n: S * S * 0.09, a: 0.055 });
+    const g = x.createLinearGradient(0, 0, 0, S);
+    g.addColorStop(0, 'rgba(255,255,255,0.11)');
+    g.addColorStop(0.42, 'rgba(255,255,255,0.0)');
+    g.addColorStop(1, 'rgba(0,0,0,0.20)');
+    x.fillStyle = g; x.fillRect(0, 0, S, S);
+  },
+  // A sewn panel. The dashed thread a couple of millimetres in from the edge is
+  // the single detail that says "sewn" instead of "printed".
+  panel(x, S, col, rx, ry, rw, rh, o = {}) {
+    const X = rx * S, Y = ry * S, W = rw * S, H = rh * S, r = (o.r != null ? o.r : 0.012) * S;
+    x.save();
+    x.beginPath();
+    if (x.roundRect) x.roundRect(X, Y, W, H, r); else x.rect(X, Y, W, H);
+    x.fillStyle = col; x.fill();
+    const g = x.createLinearGradient(0, Y, 0, Y + H);     // form across the panel
+    g.addColorStop(0, 'rgba(255,255,255,0.13)');
+    g.addColorStop(0.5, 'rgba(255,255,255,0.0)');
+    g.addColorStop(1, 'rgba(0,0,0,0.22)');
+    x.fillStyle = g; x.fill();
+    x.lineWidth = Math.max(1, 0.006 * S); x.strokeStyle = 'rgba(0,0,0,0.42)'; x.stroke();
+    if (o.stitch !== false) {
+      x.setLineDash([0.012 * S, 0.012 * S]);
+      x.lineWidth = Math.max(1, 0.0045 * S);
+      x.strokeStyle = o.thread || 'rgba(255,255,255,0.26)';
+      x.beginPath();
+      const i = 0.022 * S;
+      if (x.roundRect) x.roundRect(X + i, Y + i, W - 2 * i, H - 2 * i, Math.max(0, r - i));
+      else x.rect(X + i, Y + i, W - 2 * i, H - 2 * i);
+      x.stroke(); x.setLineDash([]);
+    }
+    x.restore();
+  },
+  // MOLLE: rows of webbing loops with the gap between them, which is what the
+  // back of a carrier actually looks like from more than two metres.
+  molle(x, S, rx, ry, rw, rh, col, rows = 3) {
+    const dark = _k.dark(col, 0.62);
+    for (let r = 0; r < rows; r++) {
+      const y = (ry + (rh / rows) * r) * S, h = (rh / rows) * S * 0.46;
+      x.fillStyle = col; x.fillRect(rx * S, y, rw * S, h);
+      x.fillStyle = 'rgba(255,255,255,0.13)'; x.fillRect(rx * S, y, rw * S, h * 0.22);
+      x.fillStyle = 'rgba(0,0,0,0.30)'; x.fillRect(rx * S, y + h * 0.82, rw * S, h * 0.18);
+      x.fillStyle = dark;                                   // the lashings
+      const n = Math.max(2, Math.round(rw * 7));
+      for (let i = 0; i <= n; i++) x.fillRect(rx * S + (rw * S) * (i / n) - 0.004 * S, y, 0.008 * S, h);
+    }
+  },
+  // A magazine pouch: body, flap, the retention tab, and a pull loop. The tab
+  // is the bright bit — on a black-on-black kit it is the only thing that
+  // carries at distance, which is why it is a colour of its own.
+  pouch(x, S, rx, ry, rw, rh, col, tip) {
+    _k.panel(x, S, col, rx, ry, rw, rh, { r: 0.016 });
+    _k.panel(x, S, _k.lite(col, 0.06), rx, ry, rw, rh * 0.34, { r: 0.014, thread: 'rgba(255,255,255,0.3)' });
+    x.fillStyle = tip;                                      // pull tab
+    const tw = rw * 0.26, tx = (rx + rw * 0.5 - tw * 0.5) * S;
+    x.fillRect(tx, (ry + rh * 0.28) * S, tw * S, rh * 0.16 * S);
+    x.fillStyle = 'rgba(0,0,0,0.35)';
+    x.fillRect(tx, (ry + rh * 0.40) * S, tw * S, 0.012 * S);
+  },
+  // Nylon webbing with its woven edge binding.
+  strap(x, S, rx, ry, rw, rh, col) {
+    const X = rx * S, Y = ry * S, W = rw * S, H = rh * S;
+    x.fillStyle = col; x.fillRect(X, Y, W, H);
+    const along = W >= H;
+    const n = Math.max(3, Math.round((along ? W : H) / (0.012 * S)));
+    x.fillStyle = 'rgba(0,0,0,0.16)';
+    for (let i = 0; i < n; i++) {
+      if (along) x.fillRect(X + (W / n) * i, Y, (W / n) * 0.45, H);
+      else       x.fillRect(X, Y + (H / n) * i, W, (H / n) * 0.45);
+    }
+    x.fillStyle = 'rgba(0,0,0,0.38)';
+    if (along) { x.fillRect(X, Y, W, H * 0.14); x.fillRect(X, Y + H * 0.86, W, H * 0.14); }
+    else       { x.fillRect(X, Y, W * 0.14, H); x.fillRect(X + W * 0.86, Y, W * 0.14, H); }
+    x.fillStyle = 'rgba(255,255,255,0.10)';
+    if (along) x.fillRect(X, Y + H * 0.16, W, H * 0.16); else x.fillRect(X + W * 0.16, Y, W * 0.16, H);
+  },
+  // A side-release buckle. Small, and worth every pixel: it is a hard, shiny
+  // object on an otherwise entirely matte body, so the eye lands on it.
+  buckle(x, S, cx, cy, w, h) {
+    const X = (cx - w / 2) * S, Y = (cy - h / 2) * S, W = w * S, H = h * S;
+    x.save();
+    x.beginPath(); if (x.roundRect) x.roundRect(X, Y, W, H, 0.01 * S); else x.rect(X, Y, W, H);
+    const g = x.createLinearGradient(0, Y, 0, Y + H);
+    g.addColorStop(0, '#4e525a'); g.addColorStop(0.45, '#2a2d33'); g.addColorStop(1, '#16181c');
+    x.fillStyle = g; x.fill();
+    x.strokeStyle = 'rgba(0,0,0,0.6)'; x.lineWidth = Math.max(1, 0.004 * S); x.stroke();
+    x.fillStyle = 'rgba(255,255,255,0.22)'; x.fillRect(X, Y + H * 0.08, W, H * 0.1);
+    x.fillStyle = 'rgba(0,0,0,0.55)'; x.fillRect(X + W * 0.42, Y + H * 0.2, W * 0.16, H * 0.6);
+    x.restore();
+  },
+  // Hook-and-loop field, for name tapes and flag patches.
+  velcro(x, S, rx, ry, rw, rh, col) {
+    x.fillStyle = col; x.fillRect(rx * S, ry * S, rw * S, rh * S);
+    const rnd = _rng(0xbeef);
+    x.fillStyle = 'rgba(0,0,0,0.22)';
+    for (let i = 0; i < rw * rh * S * 2; i++) x.fillRect(rx * S + rnd() * rw * S, ry * S + rnd() * rh * S, 1.6, 1.6);
+    x.strokeStyle = 'rgba(0,0,0,0.4)'; x.lineWidth = Math.max(1, 0.004 * S);
+    x.strokeRect(rx * S, ry * S, rw * S, rh * S);
+  },
+  // Rubbed-through edges. Kit that has never been worn looks like a render.
+  wear(x, S, seed = 9, amt = 1) {
+    const rnd = _rng((seed * 374761393) >>> 0);
+    x.globalAlpha = 0.5 * amt;
+    for (let i = 0; i < 90; i++) {
+      x.fillStyle = rnd() < 0.5 ? 'rgba(255,255,255,0.11)' : 'rgba(0,0,0,0.14)';
+      x.fillRect(rnd() * S, rnd() * S, 2 + rnd() * 26, 1 + rnd() * 2);
+    }
+    x.globalAlpha = 1;
+  },
+  // The real painted face (makeFaceTexture), reused rather than redrawn — a
+  // balaclava with an eye slot needs the SAME eyes as a bare head, or a player
+  // changes person when they put a mask on. `clip` is an [x,y,w,h] window in
+  // 0..1, for the masks that only show a strip of it.
+  face(x, S, tone, o = {}) {
+    const img = faceTextureFor(tone).image;
+    if (o.clip) {
+      x.save();
+      x.beginPath(); x.rect(o.clip[0] * S, o.clip[1] * S, o.clip[2] * S, o.clip[3] * S); x.clip();
+      x.drawImage(img, 0, 0, S, S);
+      x.restore();
+    } else x.drawImage(img, 0, 0, S, S);
+  },
+  // Ambient occlusion at the edges of a part, so limbs read as round.
+  edgeAO(x, S, a = 0.3) {
+    const g = x.createLinearGradient(0, 0, S, 0);
+    g.addColorStop(0, 'rgba(0,0,0,' + a + ')');
+    g.addColorStop(0.22, 'rgba(0,0,0,0)');
+    g.addColorStop(0.78, 'rgba(0,0,0,0)');
+    g.addColorStop(1, 'rgba(0,0,0,' + a + ')');
+    x.fillStyle = g; x.fillRect(0, 0, S, S);
+  },
+};
 
 // ── 🎨 The pixel skins ──────────────────────────────────────────────────────
 // Each one is a set of face painters. Nothing here is procedural or seeded:
@@ -26552,46 +26733,8 @@ function gridFace(key, rows) {
 // Hair on the head texture rather than as extra geometry: no second surface to
 // z-fight with the scalp. The FRONT of each head is a grid (below); these draw
 // the sides and back, where a full picture would be six identical rows.
-// ── 🛡️ One kit, six issues ─────────────────────────────────────────────────
-// The SWAT skin is the shape that worked, so every skin is now that soldier in
-// different colours. The body is identical between them — plate carrier, straps,
-// pouches, knee pads — and what tells them apart is the head: what is covering
-// the face, and what colour the lens is. That is also how real kit reads at a
-// distance, which is the only distance anyone sees another player from.
-function tacticalSkin(c, headFront) {
-  const hex = s => parseInt(String(s).slice(1), 16);
-  return {
-    hand: hex(c.glove), foot: c.boot,
-    head: {
-      front: headFront,
-      back:  p => { p(c.shell, 0, 0, 16, 16); p(c.band, 0, 6, 16, 2); },
-      side:  p => { p(c.shell, 0, 0, 16, 16); p(c.band, 0, 6, 16, 3); p(c.shellHi, 0, 10, 16, 1); },
-      top:   _solid(c.shell), bottom: _solid(c.shell),
-    },
-    torso: {
-      front: p => { p(c.vest, 0, 0, 16, 16);
-                    p(c.vestHi, 2, 1, 12, 13);                 // plate carrier face
-                    p(c.strap, 2, 0, 3, 2); p(c.strap, 11, 0, 3, 2);
-                    p(c.pouch, 3, 6, 3, 5); p(c.pouch, 7, 6, 3, 5); p(c.pouch, 11, 6, 2, 5);
-                    p(c.tip, 3, 6, 3, 1); p(c.tip, 7, 6, 3, 1); p(c.tip, 11, 6, 2, 1);
-                    p(c.strap, 2, 12, 12, 1);
-                    p(c.shell, 0, 14, 16, 2); },
-      back:  p => { p(c.vest, 0, 0, 16, 16); p(c.vestHi, 2, 1, 12, 12);
-                    p(c.strap, 2, 0, 3, 2); p(c.strap, 11, 0, 3, 2);
-                    p(c.strap, 2, 7, 12, 1); },
-      side:  p => { p(c.vest, 0, 0, 16, 16); p(c.strap, 0, 4, 16, 1); p(c.strap, 0, 9, 16, 1); },
-      top:   _solid(c.shell), bottom: _solid(c.shell),
-    },
-    armU: p => { p(c.vest, 0, 0, 16, 16); p(c.vestHi, 0, 0, 16, 4); p(c.strap, 0, 5, 16, 1); },
-    armF: p => { p(c.glove, 0, 0, 16, 16); p(c.shellHi, 0, 2, 16, 2); },
-    leg:  p => { p(c.trouser, 0, 0, 16, 16); p(c.pouch, 2, 4, 5, 6); },
-    shin: p => { p(c.trouser, 0, 0, 16, 16); p(c.strap, 3, 1, 10, 4); p(c.shellHi, 0, 11, 16, 2); },
-    helmet: { color: hex(c.shell) },
-  };
-}
-
 // Six colourways. Every field is a colour you can change on its own; the head
-// grid below each one is the picture that makes it that soldier.
+// front picked for it below is the picture that makes it that soldier.
 const _KIT = {
   operator: { shell: '#14161a', shellHi: '#23262c', band: '#575d66', vest: '#1a1d22', vestHi: '#2c3037',
               pouch: '#2a2e35', tip: '#e0902a', strap: '#575d66', glove: '#14161a', boot: '#14161a',
@@ -26613,143 +26756,241 @@ const _KIT = {
               trouser: '#3a4047' },
 };
 
+// ── 🛡️ One kit, six issues ─────────────────────────────────────────────────
+// Every skin is the same soldier in different colours: plate carrier, webbing,
+// pouches, knee pads. What tells them apart is the head — what is over the
+// face and what colour the lens is — which is also how real kit reads at the
+// only distance anyone ever sees another player from.
+function tacticalSkin(c, headFront) {
+  const hex = s => parseInt(String(s).slice(1), 16);
+  const K = _k;
+  const shellDk = K.dark(c.shell, 0.72), strapDk = K.dark(c.strap, 0.7);
+  return {
+    hand: hex(c.glove), foot: c.boot,
+    head: {
+      front: headFront,
+      // Balaclava / hood: a knit, the goggle strap across the back of the
+      // skull, and the retention strap under it.
+      back: (p, x, S) => {
+        K.cloth(x, S, c.shell, 5);
+        K.strap(x, S, 0, 0.38, 1, 0.13, c.band);
+        K.buckle(x, S, 0.5, 0.445, 0.14, 0.09);
+        x.fillStyle = 'rgba(0,0,0,0.22)'; x.fillRect(0, 0.70 * S, S, 0.30 * S);
+      },
+      side: (p, x, S) => {
+        K.cloth(x, S, c.shell, 6);
+        K.strap(x, S, 0, 0.38, 1, 0.13, c.band);
+        x.fillStyle = K.lite(c.shell, 0.10); x.fillRect(0, 0.63 * S, S, 0.05 * S);
+        K.edgeAO(x, S, 0.26);
+      },
+      top:   (p, x, S) => K.cloth(x, S, c.shell, 7),
+      bottom:(p, x, S) => { K.cloth(x, S, c.shell, 8); x.fillStyle = 'rgba(0,0,0,0.45)'; x.fillRect(0, 0, S, S); },
+    },
+    torso: {
+      // The plate carrier, seen from the front: cummerbund, placard, three mag
+      // pouches with retention tabs, an admin pouch, shoulder straps over the
+      // top, and a name tape.
+      front: (p, x, S) => {
+        K.cloth(x, S, c.vest, 11);
+        K.panel(x, S, c.vestHi, 0.11, 0.07, 0.78, 0.74, { r: 0.05 });      // plate bag
+        K.strap(x, S, 0.13, 0.00, 0.19, 0.17, c.strap);                    // shoulder straps
+        K.strap(x, S, 0.68, 0.00, 0.19, 0.17, c.strap);
+        K.buckle(x, S, 0.225, 0.175, 0.15, 0.07);
+        K.buckle(x, S, 0.775, 0.175, 0.15, 0.07);
+        K.velcro(x, S, 0.33, 0.14, 0.34, 0.10, strapDk);                   // name tape field
+        x.fillStyle = c.tip; x.fillRect(0.36 * S, 0.165 * S, 0.28 * S, 0.012 * S);
+        K.pouch(x, S, 0.145, 0.34, 0.21, 0.33, c.pouch, c.tip);            // three mags
+        K.pouch(x, S, 0.395, 0.34, 0.21, 0.33, c.pouch, c.tip);
+        K.pouch(x, S, 0.645, 0.34, 0.21, 0.33, c.pouch, c.tip);
+        K.panel(x, S, K.dark(c.pouch, 0.9), 0.30, 0.70, 0.40, 0.13, { r: 0.02 }); // admin pouch
+        K.strap(x, S, 0.06, 0.845, 0.88, 0.085, c.strap);                  // cummerbund
+        K.buckle(x, S, 0.5, 0.888, 0.17, 0.07);
+        K.wear(x, S, 12);
+        K.edgeAO(x, S, 0.30);
+      },
+      back: (p, x, S) => {
+        K.cloth(x, S, c.vest, 13);
+        K.panel(x, S, c.vestHi, 0.10, 0.08, 0.80, 0.72, { r: 0.05 });
+        K.molle(x, S, 0.16, 0.24, 0.68, 0.42, c.strap, 3);
+        K.strap(x, S, 0.13, 0.00, 0.19, 0.19, c.strap);
+        K.strap(x, S, 0.68, 0.00, 0.19, 0.19, c.strap);
+        K.panel(x, S, c.strap, 0.40, 0.055, 0.20, 0.07, { r: 0.03, stitch: false }); // drag handle
+        K.strap(x, S, 0.06, 0.845, 0.88, 0.085, c.strap);
+        K.wear(x, S, 14);
+        K.edgeAO(x, S, 0.30);
+      },
+      // The flanks are the cummerbund: elastic, side plates, two buckles.
+      side: (p, x, S) => {
+        K.cloth(x, S, c.vest, 15);
+        K.panel(x, S, c.vestHi, 0.08, 0.26, 0.84, 0.42, { r: 0.04 });
+        K.strap(x, S, 0, 0.14, 1, 0.10, c.strap);
+        K.strap(x, S, 0, 0.74, 1, 0.10, c.strap);
+        K.buckle(x, S, 0.5, 0.19, 0.17, 0.08);
+        K.buckle(x, S, 0.5, 0.79, 0.17, 0.08);
+        K.edgeAO(x, S, 0.34);
+      },
+      top:    (p, x, S) => { K.cloth(x, S, c.shell, 16); K.strap(x, S, 0.12, 0, 0.2, 1, c.strap); K.strap(x, S, 0.68, 0, 0.2, 1, c.strap); },
+      bottom: (p, x, S) => { K.cloth(x, S, c.trouser, 17); x.fillStyle = 'rgba(0,0,0,0.5)'; x.fillRect(0, 0, S, S); },
+    },
+    // Upper sleeve: a shoulder yoke seam, a bicep pocket and a patch.
+    armU: (p, x, S) => {
+      K.cloth(x, S, c.vest, 21);
+      x.fillStyle = K.lite(c.vest, 0.07); x.fillRect(0, 0, S, 0.22 * S);
+      x.fillStyle = 'rgba(0,0,0,0.3)';   x.fillRect(0, 0.22 * S, S, 0.016 * S);
+      K.panel(x, S, K.dark(c.vest, 0.88), 0.22, 0.42, 0.56, 0.34, { r: 0.03 });
+      K.velcro(x, S, 0.30, 0.50, 0.40, 0.16, strapDk);
+      x.fillStyle = c.tip; x.fillRect(0.33 * S, 0.545 * S, 0.34 * S, 0.014 * S);
+      K.edgeAO(x, S, 0.34);
+    },
+    // Forearm: the sleeve, then the glove's gauntlet cuff over the wrist.
+    armF: (p, x, S) => {
+      K.cloth(x, S, c.vest, 22);
+      x.fillStyle = 'rgba(0,0,0,0.28)'; x.fillRect(0, 0.46 * S, S, 0.02 * S);
+      K.cloth(x, S, c.glove, 23);
+      const g = x.createLinearGradient(0, 0, 0, S);
+      g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(0.44, 'rgba(0,0,0,0)');
+      g.addColorStop(0.46, 'rgba(0,0,0,0.0)'); x.fillStyle = g; x.fillRect(0, 0, S, S);
+      K.strap(x, S, 0, 0.40, 1, 0.09, c.shellHi);                          // cuff strap
+      K.edgeAO(x, S, 0.34);
+    },
+    // Thigh: trouser, cargo pocket, and the drop-leg strap.
+    leg: (p, x, S) => {
+      K.cloth(x, S, c.trouser, 31);
+      K.panel(x, S, K.dark(c.trouser, 0.9), 0.16, 0.34, 0.50, 0.40, { r: 0.03 });
+      x.fillStyle = K.lite(c.trouser, 0.08); x.fillRect(0.16 * S, 0.34 * S, 0.50 * S, 0.055 * S);
+      K.strap(x, S, 0, 0.78, 1, 0.08, c.strap);
+      K.wear(x, S, 33, 0.7);
+      K.edgeAO(x, S, 0.34);
+    },
+    // Shin: knee pad up top, trouser, and the boot cuff at the bottom.
+    shin: (p, x, S) => {
+      K.cloth(x, S, c.trouser, 34);
+      K.panel(x, S, K.dark(c.trouser, 0.78), 0.18, 0.04, 0.64, 0.30, { r: 0.08 });  // knee pad
+      x.fillStyle = 'rgba(0,0,0,0.26)';
+      for (let i = 0; i < 3; i++) x.fillRect(0.20 * S, (0.10 + i * 0.07) * S, 0.60 * S, 0.012 * S);
+      K.strap(x, S, 0.12, 0.345, 0.76, 0.06, c.strap);
+      x.fillStyle = c.boot; x.fillRect(0, 0.76 * S, S, 0.24 * S);                   // boot cuff
+      K.strap(x, S, 0, 0.74, 1, 0.055, c.shellHi);
+      K.wear(x, S, 36, 0.8);
+      K.edgeAO(x, S, 0.34);
+    },
+    helmet: { color: hex(c.shell) },
+  };
+}
+
+// ── 😷 Six head fronts ──────────────────────────────────────────────────────
+// This is the whole difference between the six. Each draws the real painted
+// face first where any of it shows, then covers it.
+const _KITFACE = {
+  // Balaclava with a goggle band: knit, an eye slot, and the bridge of the
+  // nose pushing the knit forward.
+  operator: (col, band) => (p, x, S) => {
+    _k.cloth(x, S, col, 41);
+    x.fillStyle = 'rgba(0,0,0,0.30)';                                   // eye slot, cut deep
+    if (x.roundRect) { x.beginPath(); x.roundRect(0.14 * S, 0.40 * S, 0.72 * S, 0.17 * S, 0.06 * S); x.fill(); }
+    else x.fillRect(0.14 * S, 0.40 * S, 0.72 * S, 0.17 * S);
+    _k.face(x, S, 0xe8b893, { clip: [0.16, 0.415, 0.68, 0.14] });
+    _k.strap(x, S, 0, 0.345, 1, 0.075, band);                           // goggle band above it
+    x.fillStyle = 'rgba(0,0,0,0.22)'; x.fillRect(0, 0.60 * S, S, 0.016 * S);  // mouth seam
+    x.fillStyle = 'rgba(255,255,255,0.07)'; x.fillRect(0.34 * S, 0.63 * S, 0.32 * S, 0.10 * S); // nose
+    _k.edgeAO(x, S, 0.30);
+  },
+  // Bare face, goggles pushed up onto the brow.
+  soldier: (col, band) => (p, x, S) => {
+    _k.face(x, S, 0xe0b088);
+    // Pushed up to the BROW, not under the helmet rim where nothing shows.
+    _k.strap(x, S, 0, 0.30, 1, 0.075, band);
+    x.fillStyle = 'rgba(14,16,20,0.94)';
+    if (x.roundRect) { x.beginPath(); x.roundRect(0.13 * S, 0.285 * S, 0.74 * S, 0.105 * S, 0.045 * S); x.fill(); }
+    else x.fillRect(0.13 * S, 0.285 * S, 0.74 * S, 0.105 * S);
+    x.fillStyle = 'rgba(190,215,235,0.30)'; x.fillRect(0.17 * S, 0.300 * S, 0.66 * S, 0.032 * S); // lens glint
+    _k.edgeAO(x, S, 0.26);
+  },
+  // Riot: a clear polycarbonate shield in front of a shadowed face.
+  riot: (col, lens) => (p, x, S) => {
+    _k.face(x, S, 0xd8a880);
+    x.fillStyle = 'rgba(10,16,30,0.42)'; x.fillRect(0, 0, S, S);         // the face is behind glass
+    const g = x.createLinearGradient(0, 0, S, S);                        // and the glass reflects
+    g.addColorStop(0.00, 'rgba(255,255,255,0.30)');
+    g.addColorStop(0.28, 'rgba(255,255,255,0.05)');
+    g.addColorStop(0.46, 'rgba(255,255,255,0.26)');
+    g.addColorStop(0.62, 'rgba(255,255,255,0.03)');
+    g.addColorStop(1.00, 'rgba(255,255,255,0.16)');
+    x.fillStyle = g; x.fillRect(0, 0, S, S);
+    _k.strap(x, S, 0, 0.03, 1, 0.09, col);                               // shield mount
+    x.fillStyle = lens; x.fillRect(0, 0.93 * S, S, 0.07 * S);            // chin bar
+    _k.edgeAO(x, S, 0.3);
+  },
+  // Desert: shemagh over the lower face, amber goggles over the eyes.
+  ranger: (col, lens) => (p, x, S) => {
+    _k.face(x, S, 0xdca878);
+    _k.cloth(x, S, col, 45);                                             // wrap, then cut it back
+    x.globalCompositeOperation = 'destination-out';
+    x.fillStyle = '#000';
+    x.fillRect(0, 0, S, 0.56 * S);
+    x.globalCompositeOperation = 'source-over';
+    x.fillStyle = 'rgba(0,0,0,0.22)';                                    // folds in the wrap
+    for (let i = 0; i < 5; i++) x.fillRect(0, (0.60 + i * 0.075) * S, S, 0.014 * S);
+    x.fillStyle = 'rgba(12,14,18,0.95)';                                 // goggle body
+    if (x.roundRect) { x.beginPath(); x.roundRect(0.10 * S, 0.37 * S, 0.80 * S, 0.19 * S, 0.07 * S); x.fill(); }
+    else x.fillRect(0.10 * S, 0.37 * S, 0.80 * S, 0.19 * S);
+    const lg = x.createLinearGradient(0, 0.37 * S, 0, 0.56 * S);
+    lg.addColorStop(0, lens); lg.addColorStop(1, 'rgba(60,30,0,0.85)');
+    x.fillStyle = lg; x.fillRect(0.13 * S, 0.395 * S, 0.74 * S, 0.14 * S);
+    x.fillStyle = 'rgba(255,255,255,0.35)'; x.fillRect(0.16 * S, 0.405 * S, 0.30 * S, 0.028 * S);
+    _k.strap(x, S, 0, 0.30, 1, 0.07, col);
+    _k.edgeAO(x, S, 0.3);
+  },
+  // Night ops: three blacks and two tubes. Nothing else.
+  nightops: (col, glow) => (p, x, S) => {
+    _k.cloth(x, S, col, 46);
+    x.fillStyle = 'rgba(0,0,0,0.5)'; x.fillRect(0, 0.36 * S, S, 0.22 * S);
+    _k.strap(x, S, 0, 0.30, 1, 0.07, '#2a2e35');
+    for (const sx of [0.33, 0.67]) {                                      // NVG tubes
+      x.fillStyle = '#0b0d10';
+      x.beginPath(); x.ellipse(sx * S, 0.46 * S, 0.115 * S, 0.105 * S, 0, 0, Math.PI * 2); x.fill();
+      const g = x.createRadialGradient(sx * S, 0.46 * S, 0.01 * S, sx * S, 0.46 * S, 0.10 * S);
+      g.addColorStop(0, glow); g.addColorStop(0.55, 'rgba(40,120,40,0.5)'); g.addColorStop(1, 'rgba(0,0,0,0.9)');
+      x.fillStyle = g;
+      x.beginPath(); x.ellipse(sx * S, 0.46 * S, 0.085 * S, 0.078 * S, 0, 0, Math.PI * 2); x.fill();
+    }
+    _k.edgeAO(x, S, 0.34);
+  },
+  // Juggernaut: a welded plate with a vision slit, lit from inside.
+  jugger: (col, glow) => (p, x, S) => {
+    _k.cloth(x, S, col, 47);
+    const g = x.createLinearGradient(0, 0, 0, S);
+    g.addColorStop(0, 'rgba(255,255,255,0.16)'); g.addColorStop(0.5, 'rgba(255,255,255,0)');
+    g.addColorStop(1, 'rgba(0,0,0,0.3)'); x.fillStyle = g; x.fillRect(0, 0, S, S);
+    x.strokeStyle = 'rgba(0,0,0,0.45)'; x.lineWidth = Math.max(1, 0.012 * S);  // weld seams
+    x.strokeRect(0.08 * S, 0.14 * S, 0.84 * S, 0.72 * S);
+    x.fillStyle = 'rgba(255,255,255,0.12)';
+    for (let i = 0; i < 12; i++) x.fillRect((0.10 + i * 0.07) * S, 0.145 * S, 0.02 * S, 0.012 * S);  // weld beads
+    x.fillStyle = '#07080a'; x.fillRect(0.14 * S, 0.40 * S, 0.72 * S, 0.11 * S);                     // the slit
+    const sg = x.createLinearGradient(0, 0.40 * S, 0, 0.51 * S);
+    sg.addColorStop(0, 'rgba(0,0,0,1)'); sg.addColorStop(0.55, glow); sg.addColorStop(1, 'rgba(0,0,0,1)');
+    x.fillStyle = sg; x.fillRect(0.16 * S, 0.428 * S, 0.68 * S, 0.055 * S);
+    for (let i = 0; i < 8; i++) {                                                                    // rivets
+      const rx = i < 4 ? 0.115 : 0.865, ry = 0.22 + (i % 4) * 0.17;
+      const rg = x.createRadialGradient(rx * S, ry * S, 0, rx * S, ry * S, 0.03 * S);
+      rg.addColorStop(0, 'rgba(255,255,255,0.4)'); rg.addColorStop(0.6, 'rgba(0,0,0,0.3)'); rg.addColorStop(1, 'rgba(0,0,0,0)');
+      x.fillStyle = rg; x.beginPath(); x.arc(rx * S, ry * S, 0.03 * S, 0, Math.PI * 2); x.fill();
+    }
+    _k.wear(x, S, 48, 1.4);
+    _k.edgeAO(x, S, 0.3);
+  },
+};
+
 const PIXEL_SKINS = {
   // 🖤 The default. Balaclava under the helmet, goggle band across the eyes,
   // plate carrier with amber-tipped mag pouches. Black on black, so the grey
   // webbing and those amber tips are what carry at a distance.
-  default: tacticalSkin(_KIT.operator, gridFace(
-    { '.': _P.skin, 'W': _P.eyeW, 'L': _P.line, 'K': '#14161a', 'k': '#23262c', 'G': '#575d66' }, [
-      'KKKKKKKKKKKKKKKK',
-      'KKKKKKKKKKKKKKKK',
-      'KKKKKKKKKKKKKKKK',
-      'KKKKKKKKKKKKKKKK',
-      'KKKKKKKKKKKKKKKK',
-      'KKKKKKKKKKKKKKKK',
-      'GGGGGGGGGGGGGGGG',
-      'GLWWWLLLLLLWWWLG',
-      'GL...LLLLLL...LG',
-      'GL...LLLLLL...LG',
-      'GGGGGGGGGGGGGGGG',
-      'kkkkkkkkkkkkkkkk',
-      'KKKKKKKKKKKKKKKK',
-      'KKKKKkkkkkkKKKKK',
-      'KKKKKKKKKKKKKKKK',
-      'KKKKKKKKKKKKKKKK',
-    ])),
-
-  // 🪖 Goggles pushed up onto the helmet and an uncovered face — the one in the
-  // set you can actually see is a person.
-  soldier: tacticalSkin(_KIT.soldier, gridFace(
-    { '.': _P.skin, 's': _P.skinSh, 'W': _P.eyeW, 'I': '#4a6fa5', 'D': '#2f4f7a',
-      'H': '#3d4a24', 'G': '#6b5d3a', 'L': '#2b2416', 'C': '#4a4230' }, [
-      'HHHHHHHHHHHHHHHH',
-      'HHHHHHHHHHHHHHHH',
-      'HHHHHHHHHHHHHHHH',
-      'GGGGGGGGGGGGGGGG',
-      'GLLLLLLLLLLLLLLG',
-      'HHHHHHHHHHHHHHHH',
-      'C..............C',
-      'C.WII......IIW.C',
-      'C.WII......IIW.C',
-      'C.WDD......DDW.C',
-      'C..............C',
-      'C..............C',
-      '................',
-      '.....CCCCCC.....',
-      '................',
-      'ssssssssssssssss',
-    ])),
-
-  // 🛡️ Riot: a clear shield over the whole face. The face behind it is drawn
-  // dimmer than an uncovered one, which is what a scratched polycarbonate
-  // visor actually does to it.
-  riot: tacticalSkin(_KIT.riot, gridFace(
-    { '.': '#9fb4cf', 'W': '#d8e4f2', 'I': '#4f6f9c', 'D': '#36527a',
-      'N': '#1e2a4a', 'S': '#7fa3cc', 'F': '#0f1526' }, [
-      'NNNNNNNNNNNNNNNN',
-      'NNNNNNNNNNNNNNNN',
-      'NNNNNNNNNNNNNNNN',
-      'NNNNNNNNNNNNNNNN',
-      'FFFFFFFFFFFFFFFF',
-      'FSSSSSSSSSSSSSSF',
-      'FS............SF',
-      'FS.WII....IIW.SF',
-      'FS.WII....IIW.SF',
-      'FS.WDD....DDW.SF',
-      'FS............SF',
-      'FSSSSSSSSSSSSSSF',
-      'FFFFFFFFFFFFFFFF',
-      'NNNNNNNNNNNNNNNN',
-      'NNNNNNNNNNNNNNNN',
-      'NNNNNNNNNNNNNNNN',
-    ])),
-
-  // 🏜️ Desert recon: sand helmet, amber goggles, and a shemagh wrapped over
-  // the nose and mouth. No skin shows at all.
-  ranger: tacticalSkin(_KIT.ranger, gridFace(
-    { 'H': '#a8905e', 'h': '#c2a273', 'A': '#e0902a', 'a': '#f0b45e', 'F': '#6f5c38',
-      'S': '#d8c9a3', 's': '#bdae88' }, [
-      'HHHHHHHHHHHHHHHH',
-      'HHHHHHHHHHHHHHHH',
-      'hhhhhhhhhhhhhhhh',
-      'HHHHHHHHHHHHHHHH',
-      'FFFFFFFFFFFFFFFF',
-      'FAAAAAAAAAAAAAAF',
-      'FAaaAAAAAAAAaaAF',
-      'FAAAAAAAAAAAAAAF',
-      'FFFFFFFFFFFFFFFF',
-      'SSSSSSSSSSSSSSSS',
-      'SsssSSSSSSSSsssS',
-      'SSSSSSSSSSSSSSSS',
-      'SSSSssssssssSSSS',
-      'SSSSSSSSSSSSSSSS',
-      'ssssssssssssssss',
-      'SSSSSSSSSSSSSSSS',
-    ])),
-
-  // 🌙 Night ops: no colour anywhere except the two green tubes. Everything
-  // else on this skin is one of three blacks.
-  nightops: tacticalSkin(_KIT.nightops, gridFace(
-    { 'K': '#0e1013', 'k': '#191d22', 'M': '#2a2e35', 'N': '#4cd137', 'n': '#2e7d22' }, [
-      'KKKKKKKKKKKKKKKK',
-      'KKKKKKKKKKKKKKKK',
-      'KKKKKKKKKKKKKKKK',
-      'KKKKMMMMMMMMKKKK',
-      'KKKMNNNNNNNNMKKK',
-      'KKKMNnnNNNNnnNMK',
-      'KKKMNnnNNNNnnNMK',
-      'KKKMNNNNNNNNMKKK',
-      'KKKKMMMMMMMMKKKK',
-      'kkkkkkkkkkkkkkkk',
-      'KKKKKKKKKKKKKKKK',
-      'KKKKKKKKKKKKKKKK',
-      'KKKKkkkkkkkkKKKK',
-      'KKKKKKKKKKKKKKKK',
-      'KKKKKKKKKKKKKKKK',
-      'KKKKKKKKKKKKKKKK',
-    ])),
-
-  // ⛑️ Juggernaut: a welded plate with a slit to see through, lit red from
-  // inside. The heaviest thing in the set and the only one with no fabric.
-  jugger: tacticalSkin(_KIT.jugger, gridFace(
-    { 'P': '#4a5058', 'p': '#5d646e', 'd': '#31363c', 'R': '#c0392b', 'r': '#e05c4a' }, [
-      'pppppppppppppppp',
-      'PPPPPPPPPPPPPPPP',
-      'PPPPPPPPPPPPPPPP',
-      'PPPPPPPPPPPPPPPP',
-      'PddddddddddddddP',
-      'PdPPPPPPPPPPPPdP',
-      'PdPPPPPPPPPPPPdP',
-      'PdRRRRRRRRRRRRdP',
-      'PdrrRRRRRRRRrrdP',
-      'PdPPPPPPPPPPPPdP',
-      'PddddddddddddddP',
-      'PPPPPPPPPPPPPPPP',
-      'PPPPPdddddddPPPP',
-      'PPPPPPPPPPPPPPPP',
-      'PPPPPPPPPPPPPPPP',
-      'dddddddddddddddd',
-    ])),
+  default:  tacticalSkin(_KIT.operator, _KITFACE.operator(_KIT.operator.shell, _KIT.operator.band)),
+  soldier:  tacticalSkin(_KIT.soldier,  _KITFACE.soldier(_KIT.soldier.shell, _KIT.soldier.band)),
+  riot:     tacticalSkin(_KIT.riot,     _KITFACE.riot(_KIT.riot.shell, _KIT.riot.tip)),
+  ranger:   tacticalSkin(_KIT.ranger,   _KITFACE.ranger(_KIT.ranger.strap, 'rgba(230,150,40,0.9)')),
+  nightops: tacticalSkin(_KIT.nightops, _KITFACE.nightops(_KIT.nightops.shell, 'rgba(120,255,110,0.95)')),
+  jugger:   tacticalSkin(_KIT.jugger,   _KITFACE.jugger(_KIT.jugger.shell, 'rgba(220,70,50,0.95)')),
 };
 
 // Swap a built body over to a drawn skin. Everything below only replaces
@@ -26757,8 +26998,10 @@ const PIXEL_SKINS = {
 // joints and the hitboxes are untouched, so animation and shooting cannot
 // notice which skin is on.
 function applyPixelSkin(art, parts) {
-  const { group, head, torso, armLimbs, legLimbs, hands, feet, pelvis, gearHead: gh } = parts;
+  const { group, head, torso, armLimbs, legLimbs, hands, feet, pelvis, neck, gearHead: gh } = parts;
   head.material = charFaceMats('h:' + art._id, art.head);
+  // The neck wears whatever is over the head — balaclava, hood, collar.
+  if (neck) neck.material = charMat('n:' + art._id, art.head.side);
   torso.material = charFaceMats('t:' + art._id, art.torso);
   // armLimbs is [upperL, foreL, upperR, foreR]; legLimbs is [thighL, shinL, …]
   armLimbs.forEach((m, i) => { m.material = charMat('a' + (i % 2) + ':' + art._id, i % 2 ? art.armF : art.armU); });
@@ -27393,7 +27636,7 @@ function applyCharacterSkin(skinId, parts) {
   // machinery below — no seeded shirt, no accessory library, no face overlay.
   if (PIXEL_SKINS[skinId]) { applyPixelSkin(PIXEL_SKINS[skinId], parts); return; }
   const { group, head, headMats, faceMat, torso, torsoMat, armLimbs, legLimbs, look,
-          pelvisMat, gearHead: gh, gearBody: gb, gearSkull: gs, gearTorso: gt } = parts;
+          pelvisMat, neckMat, gearHead: gh, gearBody: gb, gearSkull: gs, gearTorso: gt } = parts;
   // Accessories are authored in the OLD rig's coordinates and land in the
   // containers that map them onto the new body (see GEAR_FIT). `pin` picks the
   // head container or the body container by how high the part sits in that old
@@ -27409,7 +27652,9 @@ function applyCharacterSkin(skinId, parts) {
   };
   // The pelvis wears the trousers too, so it follows the legs, not the shirt.
   const setLegs = (hex) => { legLimbs.forEach(m => m.material.color.setHex(hex)); if (pelvisMat) pelvisMat.color.setHex(hex); };
-  const setHeadAll = (hex) => headMats.forEach((m,i) => { if (i !== 4) m.color.setHex(hex); });
+  // The neck goes with the head: a balaclava'd operator with a bare pink neck
+  // was the loudest thing wrong with the masked skins.
+  const setHeadAll = (hex) => { headMats.forEach((m,i) => { if (i !== 4) m.color.setHex(hex); }); if (neckMat) neckMat.color.setHex(hex); };
 
   switch (skinId) {
     case 'swat': {
@@ -27756,27 +28001,39 @@ function _gearMat(kind, color, extra) {
 }
 
 const P_HELMET = [
-  [0.00, 0.094, 0.112, -0.004],
-  [0.16, 0.098, 0.117, -0.002],   // the rim flares, which is the whole read of a helmet
-  [0.42, 0.095, 0.113,  0.000],
-  [0.70, 0.086, 0.102, -0.002],
-  [0.88, 0.064, 0.076, -0.006],
-  [1.00, 0.030, 0.038, -0.008],
+  [0.00, 0.093, 0.109, -0.008],
+  [0.22, 0.096, 0.113, -0.005],   // the rim flares, which is the whole read of a helmet
+  [0.52, 0.093, 0.109, -0.003],
+  [0.76, 0.083, 0.097, -0.005],
+  [0.92, 0.058, 0.070, -0.009],
+  [1.00, 0.026, 0.033, -0.011],
+];
+// The nape: a rear-only shell, pushed back far enough that it covers the back
+// and the sides below the rim without coming round over the face.
+const P_HELMET_NAPE = [
+  [0.00, 0.070, 0.050, -0.060],
+  [0.50, 0.084, 0.065, -0.050],
+  [1.00, 0.092, 0.082, -0.034],
 ];
 function _addHelmet(group, color) {
   const mat = _gearMat('plate', color);
-  const shell = new THREE.Mesh(sculptBox('helmet', 0.163, P_HELMET, { segs: 12, vsegs: 10, round: 0.90 }), mat);
-  shell.position.set(0, 1.7365, 0); shell.castShadow = true; group.add(shell);
+  const shell = new THREE.Mesh(sculptBox('helmet', 0.123, P_HELMET, { segs: 12, vsegs: 10, round: 0.90 }), mat);
+  shell.position.set(0, 1.7585, 0); shell.castShadow = true; group.add(shell);
+  const nape = new THREE.Mesh(sculptBox('helmnape', 0.088, P_HELMET_NAPE, { segs: 12, vsegs: 6, round: 0.88 }), mat);
+  nape.position.set(0, 1.676, 0); nape.castShadow = true; group.add(nape);
   // NVG shroud: the one detail that separates a combat helmet from a bowl.
   const dk = _gearMat('plate', darkenColor(color, 0.55));
-  const shroud = new THREE.Mesh(new THREE.BoxGeometry(0.044, 0.030, 0.022), dk);
-  shroud.position.set(0, 1.776, 0.092); shroud.rotation.x = 0.22; group.add(shroud);
-  // Side rails + a chin strap, so it is strapped on rather than balanced on.
+  const shroud = new THREE.Mesh(new THREE.BoxGeometry(0.044, 0.028, 0.022), dk);
+  shroud.position.set(0, 1.782, 0.090); shroud.rotation.x = 0.22; group.add(shroud);
+  // Side rails + ear pads + a chin strap, so it is strapped on rather than
+  // balanced on top of the head.
   [-1, 1].forEach(sx => {
-    const rail = new THREE.Mesh(new THREE.BoxGeometry(0.010, 0.016, 0.085), dk);
-    rail.position.set(sx * 0.090, 1.726, 0.012); group.add(rail);
-    const strap = new THREE.Mesh(new THREE.BoxGeometry(0.009, 0.072, 0.016), _gearMat('cloth', darkenColor(color, 0.7)));
-    strap.position.set(sx * 0.072, 1.655, 0.026); strap.rotation.z = sx * 0.17; group.add(strap);
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(0.010, 0.014, 0.080), dk);
+    rail.position.set(sx * 0.090, 1.742, 0.008); group.add(rail);
+    const ear = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.046, 0.054), dk);
+    ear.position.set(sx * 0.090, 1.688, -0.012); group.add(ear);
+    const strap = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.062, 0.014), _gearMat('cloth', darkenColor(color, 0.7)));
+    strap.position.set(sx * 0.078, 1.646, 0.022); strap.rotation.z = sx * 0.20; group.add(strap);
   });
 }
 
@@ -28205,7 +28462,8 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
 
   // Neck. Short and thick on purpose: a thin one is the clearest "this is a
   // doll" tell a game character has, and the collar covers most of it anyway.
-  const neck = new THREE.Mesh(sculptBox('neck', 0.145, P_NECK, { segs: 10, vsegs: 6, round: 0.94 }), flesh(tone));
+  const neckMat = flesh(tone);
+  const neck = new THREE.Mesh(sculptBox('neck', 0.145, P_NECK, { segs: 10, vsegs: 6, round: 0.94 }), neckMat);
   neck.position.set(0, B.chin - 0.052, -0.006); neck.castShadow = true; group.add(neck);
 
   // ── Torso ─────────────────────────────────────────────────────────────────
@@ -28298,7 +28556,7 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
   // fell back to raw group space and floated 0.7 m over his head.
   group._gearHead = gearHead;
   applyCharacterSkin(skinId, {
-    group, head, headMats, faceMat, torso, torsoMat, pelvis, pelvisMat,
+    group, head, headMats, faceMat, torso, torsoMat, pelvis, pelvisMat, neck, neckMat,
     armLimbs, legLimbs, look, hands, feet: legFeet,
     gearHead, gearBody, gearSkull, gearTorso,
   });
