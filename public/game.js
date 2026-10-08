@@ -11876,6 +11876,8 @@ function atmoActivate(name) {
   if (!prof || !g) { if (ATMO.dome) ATMO.dome.visible = false; _atmoClouds(name, {}); return; }
   _atmoGround(name, prof); _atmoClutter(name, prof);
   if (prof.relief && !g._hasFarGround) { const th = MAP_THEMES[name]; _atmoFarGround(name, g, th ? _thShade(th.g, 0.9) : 0x6a7a50, prof.relief, prof.shape); }
+  // the sky is drawn relative to the scene's own background colour (so lights going out darken it), which therefore has to start as this map's sky
+  if (g._skyColor != null && scene.background && scene.background.setHex) scene.background.setHex(g._skyColor);
   _atmoSky(name, prof); _atmoClouds(name, prof);
   ATMO.fx = (prof.fx || []).map(_atmoMakeFx).filter(Boolean);
   ATMO.windA = _thRng(name)() * 6.28;
@@ -26941,9 +26943,9 @@ const BODY = (() => {
     chest: f(0.720), elbow: f(0.630), waist: f(0.600),
     wrist: f(0.485), knee: f(0.285), ankle: f(0.039), sole: 0,
     hip: 0.95,                 // femoral head, a little above the crotch
-    shoulderHalf: 0.158,       // the JOINT, inboard of the 0.43 m shoulder span
-    hipHalf: 0.116,            // was 0.093; the thighs are 30% thicker now (see GIRTH)
-    headHalfW: 0.086, headHalfD: 0.103,   // x1.10 / x1.05 (see GIRTH), so every hat follows the skull
+    shoulderHalf: 0.28,        // the JOINT: the corner of the chest (blocky body, see BLOCKY)
+    hipHalf: 0.10,
+    headHalfW: 0.13, headHalfD: 0.13,   // a cube head, and every hat is scaled to it
   };
   B.headH    = +(B.crown - B.chin).toFixed(4);          // 0.2310
   B.headY    = +((B.crown + B.chin) / 2).toFixed(4);    // 1.6645
@@ -27063,6 +27065,7 @@ const P_SOLE = [
 // `gripPitch` is the forearm's resulting world pitch, negated — a weapon
 // parented to the grip comes out LEVEL in this stance and then tilts with the
 // arm in every other one, which is what being held means.
+const ARM_TUCK = -0.28;   // the firing arm's abduction: with the shoulder at the corner of a blocky chest the elbow has to come in
 const GUN_HOLD = {
   // Held OUT, not tucked into the chest. The first solve put the grip 0.21 m
   // forward of the body's centre, which reads as a weapon clutched against the
@@ -27090,15 +27093,15 @@ const GUN_HOLD = {
   supShoulderX: -0.55, supShoulderZ: 0.75, supElbowX: -1.49,
 };
 
-// 💪 GIRTH. The realistic rig (#53) came out too slim for this game: a 0.43 m shoulder span with 0.07 m calves reads as a
-// stick figure beside the chunky weapons and the old 1.0 m wide characters. Every part's CROSS-SECTION is widened here
-// -- not its length, so every joint, the weapon-hold IK, the eye height and the hit spheres stay exactly where they
-// were -- and the hips are set a little further apart so the thicker thighs do not cut into each other.
+// 🧱 BLOCKY. The sculpted anatomy of #53 looked too slim and too realistic for this game, so every part is a plain
+// box again -- the old look -- on the new rig: the skeleton, the walk, the weapon-hold IK, the skins' UV layout and
+// the hit spheres are all untouched. Only each part's CROSS-SECTION changes (a constant rectangle, no taper), and the
+// two joints that depend on it move with it: the shoulders sit at the corners of the chest, the hips under the pelvis.
 (() => {
-  const fat = (P, kx, kz) => { for (const r of P) { r[1] *= kx; r[2] *= kz; } };
-  fat(P_TORSO, 1.38, 1.14); fat(P_PELVIS, 1.30, 1.12); fat(P_NECK, 1.25, 1.14); fat(P_HEAD, 1.10, 1.05);
-  fat(P_UPPERARM, 1.30, 1.30); fat(P_FOREARM, 1.26, 1.26); fat(P_HAND, 1.18, 1.18);
-  fat(P_THIGH, 1.30, 1.18); fat(P_SHIN, 1.26, 1.18); fat(P_BOOT, 1.15, 1.0); fat(P_SOLE, 1.15, 1.0);
+  const blk = (P, hw, hd, cz = 0) => { P.length = 0; P.push([0, hw, hd, cz], [1, hw, hd, cz]); };
+  blk(P_HEAD, 0.13, 0.13); blk(P_NECK, 0.06, 0.06); blk(P_TORSO, 0.21, 0.14); blk(P_PELVIS, 0.19, 0.13);
+  blk(P_UPPERARM, 0.075, 0.075); blk(P_FOREARM, 0.068, 0.068); blk(P_HAND, 0.062, 0.068, 0.01);
+  blk(P_THIGH, 0.095, 0.105); blk(P_SHIN, 0.088, 0.095); blk(P_BOOT, 0.095, 0.16, 0.04); blk(P_SOLE, 0.097, 0.165, 0.04);
 })();
 
 // ── 🗿 sculptBox ────────────────────────────────────────────────────────────
@@ -27158,12 +27161,13 @@ function sculptBox(key, h, profile, { segs = 8, vsegs = 10, round = 0.9 } = {}) 
     const dx = x / Math.max(1e-4, hw), dz = (z - cz) / Math.max(1e-4, hd);
     return dx * dx + dz * dz;
   };
-  const E = 0.0025;
+  const E = 0.0025, flat = round === 0;
   for (let i = 0; i < pos.count; i++) {
     const nx = Math.max(-1, Math.min(1, pos.getX(i)));
     const nz = Math.max(-1, Math.min(1, pos.getZ(i)));
     const [x, y, z] = place(nx, nz, pos.getY(i));
     pos.setXYZ(i, x, y, z);
+    if (flat) continue;   // a true box keeps the box's own normals
     if (isCap[i]) { nor.setXYZ(i, 0, Math.sign(pos.getY(i)) || 1, 0); continue; }
     const gx = F(x + E, y, z) - F(x - E, y, z);
     const gy = F(x, y + E, z) - F(x, y - E, z);
@@ -27192,7 +27196,7 @@ function sculptBox(key, h, profile, { segs = 8, vsegs = 10, round = 0.9 } = {}) 
 // uniformly would leave the back of the cranium sticking out of it.
 const GEAR_FIT = {
   head:  { s: [BODY.headHalfW * 2 / 0.5, BODY.headH / 0.5, BODY.headHalfD * 2 / 0.5], y: 1.85 },
-  torso: { s: [0.312 * 1.38 / 0.55, 0.418 / 0.65, 0.230 * 1.14 / 0.30], y: 1.20 },   // x GIRTH, so vests and packs still fit
+  torso: { s: [0.42 / 0.55, 0.418 / 0.65, 0.28 / 0.30], y: 1.20 },   // blocky chest, 0.42 x 0.28
 };
 
 // The five surfaces a body is made of, built once on first use rather than at
@@ -29164,13 +29168,13 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
   // ── Head ──────────────────────────────────────────────────────────────────
   const faceMat  = pbrMat({ map: faceTextureFor(tone), roughness: 0.92, metalness: 0.0 });
   const headMats = [flesh(tone), flesh(tone), flesh(tone), flesh(tone), faceMat, flesh(tone)];
-  const head = new THREE.Mesh(sculptBox('head', B.headH, P_HEAD, { segs: 10, vsegs: 12, round: 0.88 }), headMats);
+  const head = new THREE.Mesh(sculptBox('head', B.headH, P_HEAD, { segs: 10, vsegs: 12, round: 0 }), headMats);
   head.position.set(0, B.headY, 0); head.castShadow = true; group.add(head);
 
   // Neck. Short and thick on purpose: a thin one is the clearest "this is a
   // doll" tell a game character has, and the collar covers most of it anyway.
   const neckMat = flesh(tone);
-  const neck = new THREE.Mesh(sculptBox('neck', 0.145, P_NECK, { segs: 8, vsegs: 4, round: 0.94 }), neckMat);
+  const neck = new THREE.Mesh(sculptBox('neck', 0.145, P_NECK, { segs: 8, vsegs: 4, round: 0 }), neckMat);
   // No shadow: the neck is 0.11 m across and sits between a head and a torso
   // that both cast. The shadow pass is a second draw of everything that casts
   // it, and in Lobby 13 renderer.render is 96% of the frame's CPU — so only
@@ -29179,14 +29183,14 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
 
   // ── Torso ─────────────────────────────────────────────────────────────────
   const torsoMat = cloth(shirt);
-  const torso = new THREE.Mesh(sculptBox('torso', B.torsoH, P_TORSO, { segs: 10, vsegs: 10, round: 0.52 }), torsoMat);
+  const torso = new THREE.Mesh(sculptBox('torso', B.torsoH, P_TORSO, { segs: 10, vsegs: 10, round: 0 }), torsoMat);
   torso.position.set(0, B.torsoY, 0); torso.castShadow = true; group.add(torso);
 
   // Pelvis — trousers, so it takes the LEG colour. Its own part rather than the
   // bottom of the torso because the torso counter-rotates through the walk and
   // the hips must not come with it.
   const pelvisMat = cloth(pant);
-  const pelvis = new THREE.Mesh(sculptBox('pelvis', 0.225, P_PELVIS, { segs: 8, vsegs: 5, round: 0.62 }), pelvisMat);
+  const pelvis = new THREE.Mesh(sculptBox('pelvis', 0.225, P_PELVIS, { segs: 8, vsegs: 5, round: 0 }), pelvisMat);
   pelvis.position.set(0, B.waist - 0.095, 0); pelvis.castShadow = true; group.add(pelvis);
 
   // ── Arms ──────────────────────────────────────────────────────────────────
@@ -29198,13 +29202,13 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
   [-1, 1].forEach(side => {
     const pivot = new THREE.Group();
     pivot.position.set(side * B.shoulderHalf, B.shoulder, 0);
-    const upper = new THREE.Mesh(sculptBox('uarm', B.upperArm, P_UPPERARM, { segs: 6, vsegs: 5, round: 0.95 }), cloth(shirt));
+    const upper = new THREE.Mesh(sculptBox('uarm', B.upperArm, P_UPPERARM, { segs: 6, vsegs: 5, round: 0 }), cloth(shirt));
     upper.position.y = -B.upperArm / 2; upper.castShadow = true; pivot.add(upper);
     const elbow = new THREE.Group(); elbow.position.y = -B.upperArm; pivot.add(elbow);
-    const fore = new THREE.Mesh(sculptBox('farm', B.foreArm, P_FOREARM, { segs: 6, vsegs: 5, round: 0.95 }), cloth(shirt));
+    const fore = new THREE.Mesh(sculptBox('farm', B.foreArm, P_FOREARM, { segs: 6, vsegs: 5, round: 0 }), cloth(shirt));
     fore.position.y = -B.foreArm / 2; fore.castShadow = true; elbow.add(fore);
     const wrist = new THREE.Group(); wrist.position.y = -B.foreArm; elbow.add(wrist);
-    const hand = new THREE.Mesh(sculptBox('hand', 0.165, P_HAND, { segs: 6, vsegs: 5, round: 0.72 }), flesh(tone));
+    const hand = new THREE.Mesh(sculptBox('hand', 0.165, P_HAND, { segs: 6, vsegs: 5, round: 0 }), flesh(tone));
     hand.position.y = -0.0825; wrist.add(hand);   // no shadow: it is inside the forearm's
     hands.push(hand);
     group.add(pivot);
@@ -29223,21 +29227,21 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
   [-1, 1].forEach(side => {
     const pivot = new THREE.Group();
     pivot.position.set(side * B.hipHalf, B.hip, 0);
-    const thigh = new THREE.Mesh(sculptBox('thigh', B.thigh, P_THIGH, { segs: 6, vsegs: 5, round: 0.72 }), cloth(pant));
+    const thigh = new THREE.Mesh(sculptBox('thigh', B.thigh, P_THIGH, { segs: 6, vsegs: 5, round: 0 }), cloth(pant));
     thigh.position.y = -B.thigh / 2; thigh.castShadow = true; pivot.add(thigh);
     const knee = new THREE.Group(); knee.position.y = -B.thigh; pivot.add(knee);
-    const shin = new THREE.Mesh(sculptBox('shin', B.shin, P_SHIN, { segs: 6, vsegs: 5, round: 0.80 }), cloth(pant));
+    const shin = new THREE.Mesh(sculptBox('shin', B.shin, P_SHIN, { segs: 6, vsegs: 5, round: 0 }), cloth(pant));
     shin.position.y = -B.shin / 2; shin.castShadow = true; knee.add(shin);
     // A real ankle joint, so the foot ROLLS about the ankle instead of spinning
     // about the middle of the boot the way it did when the mesh was the pivot.
     const ankle = new THREE.Group(); ankle.position.y = -B.shin; knee.add(ankle);
     // Boots stay dark on every skin, so they are deliberately NOT in legLimbs.
-    const boot = new THREE.Mesh(sculptBox('boot', 0.20, P_BOOT, { segs: 8, vsegs: 5, round: 0.55 }),
+    const boot = new THREE.Mesh(sculptBox('boot', 0.20, P_BOOT, { segs: 8, vsegs: 5, round: 0 }),
       pbrMat({ surface: S.boot, color: 0x2a221d, roughness: 0.80, metalness: 0.0, bumpScale: 0.0012 }));
     boot.position.set(0, 0.031, 0); boot.castShadow = true; ankle.add(boot);
     // Rubber sole, always dark, never recoloured: it is what makes the boot
     // read as footwear rather than as the bottom of a trouser leg.
-    const sole = new THREE.Mesh(sculptBox('sole', 0.034, P_SOLE, { segs: 6, vsegs: 2, round: 0.5 }), soleMat());
+    const sole = new THREE.Mesh(sculptBox('sole', 0.034, P_SOLE, { segs: 6, vsegs: 2, round: 0 }), soleMat());
     sole.position.set(0, -0.052, 0); ankle.add(sole);
     group.add(pivot);
     legMeshes.push(pivot); legKnees.push(knee); legAnkles.push(ankle); legFeet.push(boot);
@@ -29409,10 +29413,10 @@ function fitWeaponPose(mesh, gun, key) {
   const carry = weaponCarry(gunLen);
 
   // ── Firing arm ────────────────────────────────────────────────────────────
-  const fTarget = new THREE.Vector3(BODY.shoulderHalf, carry.y, carry.z);
+  const fTarget = new THREE.Vector3(BODY.shoulderHalf - 0.07, carry.y, carry.z);
   const probe = new THREE.Vector3();
   const fireErr = (sx, ex) => {
-    rig.armR.rotation.set(sx, 0, -0.10); rig.elbowR.rotation.x = ex;
+    rig.armR.rotation.set(sx, 0, ARM_TUCK); rig.elbowR.rotation.x = ex;
     rig.gripR.rotation.set(-(sx + ex), GUN_HOLD.gripYaw, 0);
     mesh.updateMatrixWorld(true);
     rig.gripR.getWorldPosition(probe);
@@ -29519,6 +29523,8 @@ function fitWeaponPose(mesh, gun, key) {
 // jump / aim poses. Works uniformly for bots and remote players. `crouchTarget`
 // is 0..1 (1 = crouched); `slideTarget` adds the low sliding silhouette;
 // `aimPitch` is where the character is looking, in radians, positive = down.
+// A shot leaves a character's gun (bots, remote players): see 'Firing' in animateCharacterMesh.
+function kickCharacter(mesh, power = 1) { const rig = mesh && mesh._rig; if (rig) rig.kick = Math.min(1, (rig.kick || 0) * 0.5 + 0.8 * power); }
 // A hit lands on a character: (dx, dz) is the way the round was travelling in world space, `damage` sets how hard it jolts.
 function flinchCharacter(mesh, damage, dx, dz) {
   const rig = mesh && mesh._rig; if (!rig) return;
@@ -29679,17 +29685,17 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
   rig.torso.rotation.x = 0;
   rig.head.rotation.x = 0;
   if (rig.holdsGun) {
-    rig.armR.rotation.z = -0.10;                 // firing elbow tucked in
+    rig.armR.rotation.z = ARM_TUCK;              // firing elbow tucked in
     rig.armL.rotation.z = SUP.z;
   } else {
     rig.armL.rotation.z = 0; rig.armR.rotation.z = 0;
   }
 
-  const legAmp  = (0.40 + run * 0.26) * blend * gAmp;
+  const legAmp  = (0.52 + run * 0.34) * blend * gAmp;      // a longer, harder stride than the polite walk it was
   const legAmpR = legAmp * (rig.gaitAsym ?? 1);
   const swing   = gait(p) * legAmp;                 // left leg
   const swingR  = gait(p + Math.PI) * legAmpR;      // right leg, half a cycle later
-  const armAmp  = (0.34 + run * 0.22) * blend * gAmp;
+  const armAmp  = (0.46 + run * 0.34) * blend * gAmp;
   const lean    = blend * (rig.gaitLean ?? 1);
 
   // The walk cycle runs at EVERY crouch level. It used to be gated on
@@ -29738,10 +29744,10 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
     // Shoulders and hips counter-rotate against each other, and the body rolls
     // a little onto the loaded leg. The head then counters the torso so the
     // character keeps looking where it is going instead of scanning side to side.
-    rig.torso.rotation.y = -gait(p) * 0.14 * lean;
-    rig.torso.rotation.z =  Math.sin(p) * 0.045 * lean + sway * 0.030;
-    rig.legL.rotation.y  =  gait(p) * 0.05 * lean;   // pelvis twist, opposite the chest
-    rig.legR.rotation.y  =  gait(p) * 0.05 * lean;
+    rig.torso.rotation.y = -gait(p) * 0.22 * lean;                       // shoulders drive against the hips
+    rig.torso.rotation.z =  Math.sin(p) * 0.075 * lean + sway * 0.045;
+    rig.legL.rotation.y  =  gait(p) * 0.07 * lean;   // pelvis twist, opposite the chest
+    rig.legR.rotation.y  =  gait(p) * 0.07 * lean;
     rig.head.rotation.y  = -rig.torso.rotation.y * 0.7;
     rig.head.rotation.z  = -rig.torso.rotation.z * 0.5;
   }
@@ -29816,6 +29822,10 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
   // how a person actually points a weapon up a staircase. The head is clamped
   // so nobody ends up looking out of the back of their own neck.
   rig.torso.rotation.x += aim * 0.26 + rk * 0.10;      // a reload bows the chest over the weapon
+  // Intent. Nobody in a firefight walks upright: the chest is thrown forward into the move (more the faster it is), the
+  // chin comes down behind the shoulders, and a body holding a gun stands braced rather than at ease.
+  rig.torso.rotation.x += lean * (0.07 + run * 0.20) + (rig.holdsGun ? idle * 0.06 : 0);
+  rig.head.rotation.x  -= lean * (0.03 + run * 0.09);
   rig.head.rotation.x = Math.max(-1.0, Math.min(1.0, rig.head.rotation.x + aim * 0.62));
   if (rig.pelvis) {
     // Hip drop onto the loaded leg (the pelvis tilts down over the SWINGING
@@ -29826,7 +29836,19 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
   if (rig.neck) rig.neck.rotation.x = aim * 0.18;
   // Breathing. The ribcage expands up and FORWARD, not sideways, so the depth
   // scale is the biggest of the three.
-  rig.torso.scale.set(1 + br * 0.010, 1 + br * 0.007, 1 + br * 0.018);
+  rig.torso.scale.set(1 + br * 0.016, 1 + br * 0.011, 1 + br * 0.028);
+
+  // ── Firing ───────────────────────────────────────────────────────────────
+  // Every shot is felt: the chest rocks back, the muzzle climbs, the knees brace. kickCharacter re-arms it per round,
+  // so an automatic weapon holds a steady shudder and a sniper rifle gets one big shove.
+  if (rig.kick > 0.003) {
+    const kk = Math.min(1, rig.kick);
+    rig.torso.rotation.x -= 0.10 * kk; rig.head.rotation.x -= 0.05 * kk; rig.torso.rotation.z += 0.025 * kk * Math.sin((rig.hitT = (rig.hitT || 0) + dt) * 60);
+    rig.armR.rotation.x -= 0.11 * kk; rig.armL.rotation.x -= 0.07 * kk;
+    if (rig.kneeL) rig.kneeL.rotation.x += 0.07 * kk;
+    if (rig.kneeR) rig.kneeR.rotation.x += 0.07 * kk;
+    rig.kick *= Math.exp(-dt * 13);
+  } else if (rig.kick) rig.kick = 0;
 
   // ── Taking a hit ───────────────────────────────────────────────────────────
   // Shot, burned or blasted, a body does not stand there unchanged. The chest is shoved the way the round was going
@@ -29912,6 +29934,7 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
 }
 
 // ── Bot world-space weapon prop ────────────────────────────────────────────
+const WORLD_GUN_SCALE = 1.9;   // see the end of makeBotWeaponProp
 function makeBotWeaponProp(weaponId) {
   // It only ever searched WEAPONS, so a bat or a grenade resolved to WEAPONS[0]
   // and came out a rifle — and the isMelee / isSupport branches below, which
@@ -30028,6 +30051,10 @@ function makeBotWeaponProp(weaponId) {
   // so that a part added to this builder later still gets finished, because a
   // world prop is parented to the player and never goes through the camera.add
   // hook the rest of the roster relies on.
+  // The props were authored for a rifle about 0.45 m long, which is a toy beside a 0.56 m wide body. The size is
+  // baked into the PARTS rather than put on the group, so everything that measures the prop -- fitWeaponPose's
+  // length and muzzle, the flash -- sees the real size and solves the hands for it.
+  for (const c of g.children) { c.position.multiplyScalar(WORLD_GUN_SCALE); c.scale.multiplyScalar(WORLD_GUN_SCALE); }
   metalizeModel(g);
   return g;
 }
@@ -33972,6 +33999,7 @@ function makeKillcamActor(name, team, skin, armed) {
     const gun = _genericGun({ bodyShape: 'classic', bodyColor: 0x222222, accentColor: 0x6a6a6a, magType: 'banana', topRail: true });
     gun.position.set(0, -0.02, 0.055);
     gun.rotation.y = Math.PI;
+    gun.scale.setScalar(WORLD_GUN_SCALE);
     const flash = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffdd66 }));
     flash.position.set(0, 0.02, -0.55);
     flash.visible = false;
@@ -46402,6 +46430,7 @@ socket.on('botShots', shots => {
     const origin = new THREE.Vector3(sh.o[0], sh.o[1], sh.o[2]);
     const dir = new THREE.Vector3(sh.d[0], sh.d[1], sh.d[2]);
     playWeaponSound(w.id, { baseWeapon: w, remote: true, position: origin });
+    kickCharacter(remoteMeshes[sh.id]);
     spawnLocalBullet(origin, dir, `rb_${sh.id}_${performance.now()}`, false, sh.s || w.bulletSpeed || 120,
                      w.bulletColor, w.bulletSize, w.id, { botId: sh.id, botTeam: players[sh.id].team });
   }
@@ -46481,6 +46510,7 @@ socket.on('bulletFired', b => {
   const w = projectileWeaponSpec(b.weapon) || WEAPONS[0];
   const origin = new THREE.Vector3(b.x,b.y,b.z);
   playWeaponSound(b.weapon || w.id, { baseWeapon: w, remote: true, position: origin });
+  kickCharacter(remoteMeshes[b.ownerId]);
   const opts = b.weapon === 'storm_bloom_ball'
     ? { ballLightning: true, auraRadius: 3.0, auraCooldown: 1000, directRootMs: 3000, auraRootMs: 1000, maxRange: 42 }
     : {};
@@ -51513,6 +51543,7 @@ function updateBotAI(dt) {
               aimDz / aimLen + (Math.random()-0.5)*spread
             ).normalize();
             playWeaponSound(w.id, { baseWeapon: w, remote: true, position: origin });
+            kickCharacter(remoteMeshes[bot.id]);
             spawnLocalBullet(origin, dir, `bot_${bot.id}_${now}`, false, w.bulletSpeed || 120,
                              w.bulletColor, w.bulletSize, w.id, { botId: bot.id, botTeam: bot.team });
             if (mpHost() && mpTeamMatch()) _botShotsOut.push({ id: bot.id, o: [origin.x, origin.y, origin.z].map(v => +v.toFixed(2)),
