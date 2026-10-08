@@ -3228,85 +3228,95 @@ scene.fog = new THREE.Fog(0x87ceeb, 40, 120);
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.05, 200);
 camera.position.set(0, 1.65, 0);
 
-// ── 🔩 Metal pass ────────────────────────────────────────────────────────────
-// Phong alone gives a metal a highlight and nothing else, and a highlight with
-// nothing to reflect reads as glossy plastic. Every metallic-looking weapon
-// material gets a reflection of a small studio environment (bright window
-// strips, a pale sky, a dark floor) mixed over its own colour, so barrels and
-// slides catch long streaks that slide across them as you turn -- the viewmodel
-// is parented to the camera, so the reflection moves with your aim.
-// Hooked on camera.add because every viewmodel (guns, melee, throwables, and
-// skins built lazily on first equip) is added there, so nothing is missed.
-let _metalEnvTex = null;
-function _metalEnv() {
-  if (_metalEnvTex) return _metalEnvTex;
-  const W = 512, H = 256, c = document.createElement('canvas');
-  c.width = W; c.height = H;
-  const x = c.getContext('2d');
-  const g = x.createLinearGradient(0, 0, 0, H);            // equirect: top of the map is straight up
-  g.addColorStop(0.00, '#f1f7ff'); g.addColorStop(0.28, '#a9bdd3'); g.addColorStop(0.46, '#c9d4e0');
-  g.addColorStop(0.50, '#8f99a4'); g.addColorStop(0.56, '#726c65'); g.addColorStop(0.75, '#413d38'); g.addColorStop(1.00, '#1e1c1a');
-  x.fillStyle = g; x.fillRect(0, 0, W, H);
-  // The sides of a barrel reflect the horizon, so the banding that reads as
-  // "metal" has to cross it: tall bright window strips and dark cabinet bars,
-  // alternating around the whole 360 so something new slides over the steel as you turn.
-  x.fillStyle = 'rgba(255,255,255,0.7)';
-  for (const [px, w] of [[14, 26], [84, 14], [150, 38], [226, 16], [292, 30], [362, 12], [430, 34], [488, 14]]) x.fillRect(px, 34, w, 150);
-  x.fillStyle = 'rgba(8,8,10,0.3)';
-  for (const [px, w] of [[52, 18], [118, 20], [196, 22], [262, 18], [332, 24], [398, 18], [464, 16]]) x.fillRect(px, 70, w, 120);
-  x.fillStyle = 'rgba(255,255,255,0.96)';                   // overhead softboxes: streaks on top planes
-  for (const [px, py, w, h] of [[36, 20, 76, 30], [186, 14, 128, 20], [348, 24, 60, 34], [446, 18, 52, 24]]) x.fillRect(px, py, w, h);
-  x.fillStyle = 'rgba(255,196,128,0.5)';                    // warm bounce off a floor
-  x.fillRect(118, 150, 96, 30); x.fillRect(378, 142, 74, 34);
-  const t = new THREE.CanvasTexture(c);
-  t.mapping = THREE.EquirectangularReflectionMapping;
-  if (THREE.SRGBColorSpace !== undefined && 'colorSpace' in t) t.colorSpace = THREE.SRGBColorSpace;
-  else if (THREE.sRGBEncoding !== undefined) t.encoding = THREE.sRGBEncoding;
-  t.needsUpdate = true;
-  return (_metalEnvTex = t);
-}
 const _mHSL = { h: 0, s: 0, l: 0 }, _mSpec = { h: 0, s: 0, l: 0 };
-const _glazeWhite = new THREE.Color(0xffffff);
+// Gun surfaces, built on first use. Weapons are the thing a player stares at
+// for the whole match, so they get their own set rather than sharing the body's.
+let _gunSurf = null;
+function gunSurf() {
+  return _gunSurf || (_gunSurf = {
+    steel: SURF.steel(0xffffff, 71),
+    poly:  SURF.polymer(0xffffff, 83),
+    wood:  SURF.wood(0xffffff, 97),
+    rub:   SURF.leather(0xffffff, 61),
+  });
+}
+// ── 🔩 The metal pass, as PBR (#53) ─────────────────────────────────────────
+// Phong gives a surface exactly one highlight, and a highlight with nothing to
+// reflect reads as glossy plastic — which is why this pass used to bolt an
+// environment map onto it and hope. A weapon is the one object a player looks
+// at for an entire match, so it gets the real thing: the ~1000 hand-built
+// Lambert and Phong materials across 107 guns are CONVERTED to
+// MeshStandardMaterial here, lit by scene.environment, with the roughness and
+// bump maps that tell parkerized steel from glass-filled polymer from oiled
+// walnut.
+//
+// The classification is the one that was already here and already tuned:
+// bright-specular and glossy is metal, any tint of grey/steel or a warm
+// gold/brass/copper; everything else is furniture. What changes is what each
+// answer gets.
 function _metalizeMat(m) {
-  if (!m || !m.isMeshPhongMaterial || (m.userData && m.userData.metalDone)) return m;
-  m.userData = m.userData || {};
-  m.userData.metalDone = true;
-  if (m.transparent || m.map || (m.emissive && m.emissive.getHex() !== 0)) return m;   // glass, decals, glowing bits
-  m.color.getHSL(_mHSL, THREE.SRGBColorSpace);        // sRGB, not the linear working space: thresholds below are the hex values you see
-  m.specular.getHSL(_mSpec, THREE.SRGBColorSpace);
-  // Metal is bright-specular and glossy; grey/steel any tint, or a warm gold/brass/copper.
-  // Plastic and rubber (low shine, dull specular) and saturated coloured plastics stay as they are.
-  const glossy = m.shininess >= 60 && _mSpec.l >= 0.55;
+  if (!m || (m.userData && m.userData.metalDone)) return m;
+  if (!m.isMeshPhongMaterial && !m.isMeshLambertMaterial) return m;
+  // Glass, decals and anything glowing keep exactly what they were given.
+  if (m.transparent || m.map || (m.emissive && m.emissive.getHex() !== 0)) { (m.userData = m.userData || {}).metalDone = true; return m; }
+  const G = gunSurf();
+  // sRGB, not the linear working space: the thresholds below are the hex
+  // values you see in the builders.
+  m.color.getHSL(_mHSL, THREE.SRGBColorSpace);
+  if (m.specular) m.specular.getHSL(_mSpec, THREE.SRGBColorSpace); else { _mSpec.l = 0; }
+  const shin = m.shininess || 0;
+  const glossy = m.isMeshPhongMaterial && shin >= 60 && _mSpec.l >= 0.55;
   const warmMetal = _mHSL.h > 0.03 && _mHSL.h < 0.17 && _mHSL.s < 0.75;
-  if (!glossy || !(_mHSL.s < 0.45 || warmMetal)) {
-    // 🍯 Glaze: everything that is not metal -- wood, polymer, grips, rubber,
-    // coloured plastic -- gets a wet clear-coat instead: a faint reflection of the
-    // same environment, a tighter, whiter highlight. Far lighter than the metal
-    // (a lacquer, not a mirror). Near-black parts (bores, gaps) are left dark.
-    if (_mHSL.l >= 0.15) {
-      m.envMap = _metalEnv();
-      m.combine = THREE.MixOperation;
-      m.reflectivity = 0.022;
-      m.shininess = Math.min(100, Math.max(50, m.shininess * 1.35));
-      m.specular.lerp(_glazeWhite, 0.06);
-      m.needsUpdate = true;
-    }
-    return m;
+  const isMetal = glossy && (_mHSL.s < 0.45 || warmMetal);
+  const isWood  = !isMetal && _mHSL.h > 0.015 && _mHSL.h < 0.13 && _mHSL.s > 0.22 && _mHSL.l > 0.12 && _mHSL.l < 0.62;
+  const isBore  = _mHSL.l < 0.10;              // bores, gaps, shadow lines
+  let p;
+  if (isMetal) {
+    // A polished slide and a bead-blasted receiver are both metal; shininess
+    // is what the builder already used to say which, so it still decides.
+    p = { surface: G.steel, roughness: Math.max(0.14, 0.52 - (shin - 60) / 420), metalness: 0.95,
+          bumpScale: 0.00035, envMapIntensity: 1.25 };
+  } else if (isBore) {
+    p = { surface: G.poly, roughness: 0.92, metalness: 0.30, bumpScale: 0.0004, envMapIntensity: 0.5 };
+  } else if (isWood) {
+    p = { surface: G.wood, roughness: 0.42, metalness: 0.0, bumpScale: 0.0006, envMapIntensity: 1.0 };
+  } else {
+    // Glass-filled polymer, rubber, coloured plastic: matte, a clear-coat's
+    // worth of reflection and no more.
+    p = { surface: G.poly, roughness: m.isMeshPhongMaterial && shin > 40 ? 0.46 : 0.68,
+          metalness: 0.0, bumpScale: 0.0005, envMapIntensity: 0.85 };
   }
-  m.envMap = _metalEnv();
-  m.combine = THREE.MixOperation;
-  m.reflectivity = Math.min(0.36, 0.16 + (m.shininess - 60) / 500);   // was up to 0.74: too chrome
-  m.shininess = Math.min(240, m.shininess * 1.15);
-  m.needsUpdate = true;
-  return m;
+  p.color = m.color.clone();
+  for (const k of ['side', 'flatShading', 'depthTest', 'depthWrite', 'polygonOffset',
+                   'polygonOffsetFactor', 'polygonOffsetUnits', 'name', 'alphaTest', 'visible'])
+    if (m[k] !== undefined) p[k] = m[k];
+  const out = pbrMat(p);
+  out.userData = Object.assign({}, m.userData, { metalDone: true, legacy: m });
+  return out;
 }
 function metalizeModel(root) {
   if (!root || !root.traverse) return;
+  const swap = new Map();
+  const conv = (m) => {
+    if (!m) return m;
+    if (swap.has(m)) return swap.get(m);
+    let out = m;
+    try { out = _metalizeMat(m); } catch (e) { console.warn('[pbr]', e); }
+    swap.set(m, out);
+    return out;
+  };
   root.traverse(o => {
     if (!o.isMesh || (o.userData && o.userData.vmHand)) return;
-    if (Array.isArray(o.material)) o.material.forEach(_metalizeMat); else _metalizeMat(o.material);
+    if (Array.isArray(o.material)) o.material = o.material.map(conv);
+    else o.material = conv(o.material);
   });
+  // A few builders keep a handle on a material to recolour it later, and
+  // would otherwise be left holding the one that is no longer on the model.
+  for (const k of ['_bodyMat', '_accentMat', '_hpFillMat']) {
+    if (root[k] && swap.has(root[k])) root[k] = swap.get(root[k]);
+  }
 }
+
 {
   const _camAdd = camera.add;
   camera.add = function (...objs) {
@@ -28804,12 +28814,18 @@ function makeBotWeaponProp(weaponId) {
   const g = new THREE.Group();
   // Same reasoning as the viewmodel: steel needs a specular highlight or it
   // reads as flat cardboard at any distance.
-  const metalMat = new THREE.MeshPhongMaterial({
-    color: 0x2b2b2b, shininess: 60, specular: 0x8a9096,
-  });
-  const bodyMat  = new THREE.MeshLambertMaterial({ color: w.bulletColor ? w.bulletColor : 0x2a3a4a });
-  const woodMat  = new THREE.MeshLambertMaterial({ color: 0x6b3a20 });
-  const polyMat  = new THREE.MeshLambertMaterial({ color: 0x23252a });
+  // The receiver used to be painted the weapon's BULLET colour outright, which
+  // is a gameplay cue, not a gun: it came out powder blue. A real receiver is
+  // parkerized dark grey, and the bullet colour belongs in it as a tint you can
+  // just about read at ten metres — enough to tell two guns apart, not enough
+  // to make one of them a toy.
+  const G = gunSurf();
+  const tint = w.bulletColor ? _mixColor(0x30343a, w.bulletColor, 0.18) : 0x30343a;
+  const metalMat = pbrMat({ surface: G.steel, color: 0x3a3e45, roughness: 0.30, metalness: 0.95,
+                            bumpScale: 0.00035, envMapIntensity: 1.25 });
+  const bodyMat  = pbrMat({ surface: G.steel, color: tint, roughness: 0.46, metalness: 0.82, bumpScale: 0.00035 });
+  const woodMat  = pbrMat({ surface: G.wood,  color: 0x6b3a20, roughness: 0.42, metalness: 0.0, bumpScale: 0.0006 });
+  const polyMat  = pbrMat({ surface: G.poly,  color: 0x23252a, roughness: 0.66, metalness: 0.0, bumpScale: 0.0005 });
 
   const isShotgun  = w.type?.includes('Shotgun');
   const isSniper   = w.type === 'Sniper';
@@ -28899,6 +28915,10 @@ function makeBotWeaponProp(weaponId) {
       sight.position.set(0, bh * 0.5 + 0.012, 0.02); g.add(sight);
     }
   }
+  // The finishing pass is hooked on camera.add, which a world prop never goes
+  // through — so the gun in another player's hands was the one gun in the game
+  // still rendering as flat charcoal paper. Run it here (#53).
+  metalizeModel(g);
   return g;
 }
 
@@ -36452,12 +36472,19 @@ function playerOnIce() {
 // support hand is placed under the forend, at the model's actual underside for
 // that slice of z. Pistols get a cupped support hand under the grip instead,
 // because nobody puts their off hand on a Glock's muzzle.
-const VM_SKIN_MAT = () => new THREE.MeshPhongMaterial({ color: 0xeac39a, shininess: 18, specular: 0x6a5a48 });
-
+const VM_SKIN_MAT = () => pbrMat({ surface: charSurf().skin, color: 0xdcae86,
+                                   roughness: 0.88, metalness: 0.0, bumpScale: 0.0005 });
+// A fist, sculpted (#53). Same envelope as the block it replaces — 56 x 59 x 72
+// is a measured number (hands at 45% of the gun's screen area, see below) and
+// nothing about it moves — but with knuckles, a wrapped thumb and finger
+// grooves, because this is the one model a player never stops looking at.
+const P_VMFIST = [
+  [0.00, 0.024, 0.030, -0.003],   // heel of the palm
+  [0.30, 0.028, 0.036,  0.000],   // knuckles
+  [0.70, 0.027, 0.035,  0.002],
+  [1.00, 0.021, 0.027,  0.002],
+];
 function _makeViewHand(mirror) {
-  // A fist is one block. The Fists melee is a single skin-tone box with no
-  // knuckles and no fingers, and these match it exactly — anything more
-  // detailed would read as a different pair of hands to the ones you punch with.
   const h = new THREE.Group();
   // 86 x 86 x 112 was a forearm, not a fist: on the AK it spanned 86 mm across
   // and completely enclosed a 30 mm magazine, so the gun looked like it had no
@@ -36465,9 +36492,25 @@ function _makeViewHand(mirror) {
   // the gun's own screen area, measured across all 93 weapons that have them --
   // near enough as wide as the weapon they hold. At 56 x 59 x 72 they take
   // about 45%, which reads as hands ON a gun rather than hands WITH one.
-  const fist = new THREE.Mesh(new THREE.BoxGeometry(0.056, 0.059, 0.072), VM_SKIN_MAT());
+  const skin = VM_SKIN_MAT();
+  const fist = new THREE.Mesh(sculptBox('vmfist', 0.059, P_VMFIST, { segs: 8, vsegs: 8, round: 0.62 }), skin);
   fist.castShadow = true;
   h.add(fist);
+  // Curled fingers: three grooves across the front of the fist. Shallow, so
+  // they read as fingers and not as a grille.
+  const groove = pbrMat({ surface: charSurf().skin, color: 0xb98a66, roughness: 0.9, metalness: 0.0 });
+  for (let i = 0; i < 3; i++) {
+    const gr = new THREE.Mesh(new THREE.BoxGeometry(0.058, 0.0035, 0.030), groove);
+    gr.position.set(0, 0.018 - i * 0.017, 0.021);
+    h.add(gr);
+  }
+  // The thumb, lying over the fingers the way it does on a grip.
+  const thumb = new THREE.Mesh(
+    sculptBox('vmthumb', 0.040, [[0, 0.009, 0.010, 0], [0.45, 0.012, 0.013, 0], [1, 0.010, 0.011, 0]],
+              { segs: 6, vsegs: 4, round: 0.92 }), skin);
+  thumb.position.set((mirror ? -1 : 1) * 0.023, 0.006, 0.020);
+  thumb.rotation.set(1.25, 0, (mirror ? 1 : -1) * 0.5);
+  h.add(thumb);
   // Tagged so the skin system leaves them alone: a gold weapon skin should
   // gild the gun, not the hands holding it.
   h.traverse(o => { if (o.isMesh) { o.castShadow = true; o.userData.vmHand = true; } });
@@ -36863,6 +36906,12 @@ function prepViewModel(m, weaponId) {
   return m;
 }
 weaponModels.forEach((m, i) => prepViewModel(m, WEAPONS[i] && WEAPONS[i].id));
+// prepViewModel adds geometry (seams, plates, pins, vents) with materials of
+// its own, and it runs AFTER camera.add, so those parts missed the finishing
+// pass entirely — 522 Phong materials still rendering as flat card next to a
+// receiver that had been converted (#53). Converted materials carry metalDone,
+// so a second sweep only touches what is new.
+weaponModels.forEach(metalizeModel);
 
 // ── 🔫 Model skins ──────────────────────────────────────────────────────────
 // A skin that is a different GUN, not a different colour. The weapon keeps its
@@ -40816,6 +40865,21 @@ for (const _id of Object.keys(RELOAD_KEYS)) delete _asmBeatCache[_id];
 // Working parts (magazine, bolt, slide, loaded round) now that the reload beats they follow exist.
 weaponModels.forEach((m, i) => ensureMech(m, WEAPONS[i] && WEAPONS[i].id));
 for (const _sk of MODEL_SKINS) if (_sk._model && _skinHasMechanics(_sk)) ensureMech(_sk._model, _sk.weapon);
+// Final sweep, deferred a frame. Half a dozen passes bolt parts onto these
+// models during load — mechanics, welds, flank stripes, model skins — and
+// chasing each one with its own sweep is how you miss the next one. metalDone
+// makes this idempotent and cheap, so it runs once after load instead. Melee
+// and support models were the biggest gap: 1072 materials between them had
+// only ever seen the camera.add hook, which fires before their own passes.
+function sweepModelsPBR() {
+  try {
+    weaponModels.forEach(metalizeModel);
+    meleeModels.forEach(metalizeModel);
+    supportModels.forEach(metalizeModel);
+    for (const sk of MODEL_SKINS) if (sk._model) metalizeModel(sk._model);
+  } catch (e) { console.warn('[pbr] sweep', e); }
+}
+requestAnimationFrame(sweepModelsPBR);
 
 // ── 🧰 Reloads for things that are not guns ─────────────────────────────────
 // Every model skin used to borrow its gun's reload, so the barcode scanner had
