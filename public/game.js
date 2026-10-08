@@ -3315,6 +3315,497 @@ function metalizeModel(root) {
   };
 }
 
+// ══════════════════════════════════════════════════════════════════════════
+// 🌍 IMAGE-BASED LIGHTING + REAL SURFACES (#53)
+// ══════════════════════════════════════════════════════════════════════════
+// Lambert has no specular term and Phong has exactly one highlight, so a body
+// or a receiver built out of them reads as flat coloured card however much
+// geometry you give it. The realistic characters and weapons below are
+// MeshStandardMaterial, which is lit by what it can reflect — so it needs an
+// environment. There are no asset files in this project, so this builds one:
+// a sky gradient with a sun, horizon haze and a ground bounce, painted into an
+// equirectangular canvas and run through PMREMGenerator so each roughness
+// level gets the blur that belongs to it.
+//
+// It is assigned to scene.environment, which the renderer applies ONLY to
+// Standard/Physical materials. Every map in the game is Lambert and Phong, so
+// none of them change by a pixel.
+let _pbrEnvTex = null;
+function _pbrEnv() {
+  if (_pbrEnvTex) return _pbrEnvTex;
+  const W = 1024, H = 512, c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const x = c.getContext('2d');
+  // v = 0 is straight up, v = 0.5 the horizon, v = 1 straight down.
+  const sky = x.createLinearGradient(0, 0, 0, H * 0.5);
+  sky.addColorStop(0.00, '#2f6cb8');      // zenith
+  sky.addColorStop(0.45, '#7fb0e2');
+  sky.addColorStop(0.82, '#cfe0ef');
+  sky.addColorStop(1.00, '#eef2f4');      // horizon haze
+  x.fillStyle = sky; x.fillRect(0, 0, W, H * 0.5);
+  // Cloud bank. Soft, low-contrast and banded around the upper sky: it is what
+  // puts a gradient across a shoulder or a barrel as the character turns.
+  x.globalAlpha = 0.5;
+  for (let i = 0; i < 46; i++) {
+    const cx = Math.random() * W, cy = Math.random() * H * 0.40;
+    const r = 26 + Math.random() * 90;
+    const g = x.createRadialGradient(cx, cy, 0, cx, cy, r);
+    g.addColorStop(0, 'rgba(255,255,255,0.95)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    x.fillStyle = g; x.beginPath(); x.arc(cx, cy, r, 0, Math.PI * 2); x.fill();
+  }
+  x.globalAlpha = 1;
+  // The sun, placed to agree with the directional light at (30, 50, 20):
+  // elevation atan2(50, |30,20|) ≈ 54°, so v ≈ 0.5 - 54/180.
+  const sx = W * 0.62, sy = H * (0.5 - 54 / 180);
+  const glow = x.createRadialGradient(sx, sy, 0, sx, sy, 200);
+  glow.addColorStop(0.00, 'rgba(255,252,240,1)');
+  glow.addColorStop(0.06, 'rgba(255,244,214,0.95)');
+  glow.addColorStop(0.30, 'rgba(255,230,190,0.35)');
+  glow.addColorStop(1.00, 'rgba(255,225,185,0)');
+  x.fillStyle = glow; x.fillRect(sx - 200, sy - 200, 400, 400);
+  // Ground half. Desaturated and much darker than the sky: the contrast between
+  // the two is what gives a rounded surface its light top and shaded underside,
+  // which is most of why a limb reads as a cylinder and not as a flat strip.
+  const gnd = x.createLinearGradient(0, H * 0.5, 0, H);
+  gnd.addColorStop(0.00, '#8d8a80');
+  gnd.addColorStop(0.18, '#6e6a60');
+  gnd.addColorStop(0.60, '#3c3a35');
+  gnd.addColorStop(1.00, '#211f1c');
+  x.fillStyle = gnd; x.fillRect(0, H * 0.5, W, H * 0.5);
+  // Warm bounce where the sun hits the ground, under the sun's own azimuth.
+  const b = x.createRadialGradient(sx, H * 0.56, 0, sx, H * 0.56, 300);
+  b.addColorStop(0, 'rgba(228,196,150,0.5)');
+  b.addColorStop(1, 'rgba(228,196,150,0)');
+  x.fillStyle = b; x.fillRect(sx - 300, H * 0.5, 600, 300);
+
+  const eq = new THREE.CanvasTexture(c);
+  eq.mapping = THREE.EquirectangularReflectionMapping;
+  if ('colorSpace' in eq && THREE.SRGBColorSpace !== undefined) eq.colorSpace = THREE.SRGBColorSpace;
+  else if (THREE.sRGBEncoding !== undefined) eq.encoding = THREE.sRGBEncoding;
+  eq.needsUpdate = true;
+  try {
+    const pm = new THREE.PMREMGenerator(renderer);
+    pm.compileEquirectangularShader();
+    const rt = pm.fromEquirectangular(eq);
+    pm.dispose(); eq.dispose();
+    return (_pbrEnvTex = rt.texture);
+  } catch (e) {
+    // No float render targets (very old mobile GL): the raw equirect still
+    // reflects, it just doesn't blur correctly on rough surfaces.
+    console.warn('[pbr] PMREM unavailable, using raw equirect:', e?.message || e);
+    return (_pbrEnvTex = eq);
+  }
+}
+scene.environment = _pbrEnv();
+
+
+// ── 🧵 Procedural surface textures ──────────────────────────────────────────
+// Everything a realistic body and a realistic gun are made of, painted into
+// canvases at build time. Three maps come out of each surface:
+//   map          — the colour
+//   roughnessMap — where it is glossy and where it is dusty (this is what tells
+//                  cordura from a visor lens; a single roughness number cannot)
+//   bumpMap      — relief, so a weave or a knurl catches the light per-pixel
+// bumpMap rather than a normal map on purpose: a normal map means computing
+// gradients over every canvas at load, and at the sizes a character is actually
+// seen from, bump is indistinguishable and free.
+const _surfCache = new Map();
+function surfTex(key, size, draw, dataMap = false) {
+  const ck = key + '@' + size + (dataMap ? ':d' : '');
+  let t = _surfCache.get(ck);
+  if (t) return t;
+  const c = document.createElement('canvas'); c.width = c.height = size;
+  const x = c.getContext('2d');
+  draw(x, size);
+  t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy?.() || 1);
+  // A roughness or bump map is DATA, not a picture: putting it through the sRGB
+  // decode would brighten every value and flatten the whole range.
+  if (!dataMap) {
+    if ('colorSpace' in t && THREE.SRGBColorSpace !== undefined) t.colorSpace = THREE.SRGBColorSpace;
+    else if (THREE.sRGBEncoding !== undefined) t.encoding = THREE.sRGBEncoding;
+  }
+  t.needsUpdate = true;
+  _surfCache.set(ck, t);
+  return t;
+}
+
+// Deterministic value noise, so a texture is the same every session (a camo
+// pattern that reshuffles on reload is the sort of thing you notice once and
+// can never un-notice).
+function _rng(seed) {
+  let s = seed >>> 0 || 1;
+  return () => { s ^= s << 13; s ^= s >>> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; };
+}
+// Fine grain: the single most useful painter here. Real cloth, real polymer and
+// real skin are all slightly non-uniform, and a perfectly flat fill is the
+// loudest "this is a 3D model" tell there is.
+function _grain(x, size, rnd, { n = 9000, a = 0.05, dark = true, r = 1 } = {}) {
+  for (let i = 0; i < n; i++) {
+    const v = rnd();
+    x.fillStyle = (dark && v < 0.5 ? 'rgba(0,0,0,' : 'rgba(255,255,255,') + (a * (0.4 + rnd())).toFixed(3) + ')';
+    x.fillRect(rnd() * size, rnd() * size, r, r);
+  }
+}
+// Fabric weave: warp and weft as alternating 2 px runs. At character distance
+// this is sub-pixel and only shows up as a texture in the roughness; up close
+// it is what makes a sleeve read as woven cloth and not as painted plastic.
+function _weave(x, size, rnd, pitch = 4, a = 0.09) {
+  for (let yy = 0; yy < size; yy += pitch) {
+    x.fillStyle = 'rgba(255,255,255,' + a + ')'; x.fillRect(0, yy, size, pitch / 2);
+    x.fillStyle = 'rgba(0,0,0,' + a + ')';       x.fillRect(0, yy + pitch / 2, size, pitch / 2);
+  }
+  for (let xx = 0; xx < size; xx += pitch) {
+    x.fillStyle = 'rgba(0,0,0,' + (a * 0.7) + ')'; x.fillRect(xx, 0, pitch / 2, size);
+    x.fillStyle = 'rgba(255,255,255,' + (a * 0.7) + ')'; x.fillRect(xx + pitch / 2, 0, pitch / 2, size);
+  }
+  _grain(x, size, rnd, { n: size * size * 0.12, a: 0.06 });
+}
+// Multicam-style blotching: three tones of irregular overlapping blobs. Drawn
+// with many small circles per blob rather than one big one, which is what keeps
+// the edges ragged instead of reading as polka dots.
+function _blotches(x, size, rnd, cols, { count = 16, r0 = 14, r1 = 48 } = {}) {
+  for (const col of cols) {
+    x.fillStyle = col;
+    for (let i = 0; i < count; i++) {
+      const cx = rnd() * size, cy = rnd() * size, R = r0 + rnd() * (r1 - r0);
+      x.beginPath();
+      for (let k = 0; k < 9; k++) {
+        const a = (k / 9) * Math.PI * 2, rr = R * (0.55 + rnd() * 0.6);
+        // Wrapped four ways so the pattern tiles without a visible seam.
+        for (const [ox, oy] of [[0, 0], [size, 0], [0, size], [-size, 0], [0, -size]]) {
+          x.moveTo(cx + ox, cy + oy);
+          x.arc(cx + ox, cy + oy, rr, a, a + Math.PI / 4.2);
+        }
+      }
+      x.fill();
+    }
+  }
+}
+const _hx = n => '#' + (n >>> 0).toString(16).padStart(6, '0');
+function _shade(hex, f) {
+  const r = Math.min(255, Math.round(((hex >> 16) & 255) * f));
+  const g = Math.min(255, Math.round(((hex >> 8) & 255) * f));
+  const b = Math.min(255, Math.round((hex & 255) * f));
+  return (r << 16) | (g << 8) | b;
+}
+
+// ── The surfaces ────────────────────────────────────────────────────────────
+// Each returns { map, roughnessMap, bumpMap } ready to spread into a material.
+const SURF = {
+  // Ripstop / NYCO uniform cloth.
+  fabric(color, seed = 7) {
+    const key = 'fab' + color + seed;
+    return {
+      map: surfTex(key, 256, (x, s) => {
+        const rnd = _rng(seed * 2654435761);
+        x.fillStyle = _hx(color); x.fillRect(0, 0, s, s);
+        _weave(x, s, rnd, 4, 0.085);
+        // Ripstop grid: a heavier thread every 24 px in both directions.
+        x.fillStyle = 'rgba(0,0,0,0.10)';
+        for (let i = 0; i < s; i += 24) { x.fillRect(i, 0, 1, s); x.fillRect(0, i, s, 1); }
+      }),
+      roughnessMap: surfTex(key + 'R', 128, (x, s) => {
+        const rnd = _rng(seed * 40503);
+        x.fillStyle = '#d2d2d2'; x.fillRect(0, 0, s, s);   // cloth: rough
+        _grain(x, s, rnd, { n: 5200, a: 0.22, r: 2 });
+      }, true),
+      bumpMap: surfTex(key + 'B', 256, (x, s) => {
+        const rnd = _rng(seed * 69069);
+        x.fillStyle = '#808080'; x.fillRect(0, 0, s, s);
+        _weave(x, s, rnd, 4, 0.28);
+      }, true),
+    };
+  },
+  // Camouflaged cloth — the same weave under a blotch pattern.
+  camo(base, tones, seed = 11) {
+    const key = 'cam' + base + tones.join('') + seed;
+    return {
+      map: surfTex(key, 256, (x, s) => {
+        const rnd = _rng(seed * 2246822519);
+        x.fillStyle = _hx(base); x.fillRect(0, 0, s, s);
+        _blotches(x, s, rnd, tones.map(_hx), { count: 13, r0: 16, r1: 44 });
+        _weave(x, s, rnd, 4, 0.07);
+      }),
+      roughnessMap: SURF.fabric(base, seed).roughnessMap,
+      bumpMap: SURF.fabric(base, seed).bumpMap,
+    };
+  },
+  // Cordura / nylon pack cloth: a coarse basket weave with a faint sheen, so
+  // it separates from the matte uniform it is worn over.
+  cordura(color, seed = 23) {
+    const key = 'cor' + color + seed;
+    return {
+      map: surfTex(key, 256, (x, s) => {
+        const rnd = _rng(seed * 374761393);
+        x.fillStyle = _hx(color); x.fillRect(0, 0, s, s);
+        for (let yy = 0; yy < s; yy += 8) for (let xx = 0; xx < s; xx += 8) {
+          const up = ((xx / 8 + yy / 8) & 1) === 0;
+          x.fillStyle = up ? 'rgba(255,255,255,0.11)' : 'rgba(0,0,0,0.13)';
+          x.fillRect(xx, yy, 8, 4); x.fillRect(xx + 4, yy + 4, 4, 4);
+        }
+        _grain(x, s, rnd, { n: 6000, a: 0.07 });
+      }),
+      roughnessMap: surfTex(key + 'R', 128, (x, s) => {
+        const rnd = _rng(seed * 2166136261);
+        x.fillStyle = '#9a9a9a'; x.fillRect(0, 0, s, s);   // coated: semi-gloss
+        _grain(x, s, rnd, { n: 4200, a: 0.3, r: 2 });
+      }, true),
+      bumpMap: surfTex(key + 'B', 256, (x, s) => {
+        x.fillStyle = '#808080'; x.fillRect(0, 0, s, s);
+        for (let yy = 0; yy < s; yy += 8) for (let xx = 0; xx < s; xx += 8) {
+          const up = ((xx / 8 + yy / 8) & 1) === 0;
+          x.fillStyle = up ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.45)';
+          x.fillRect(xx, yy, 8, 4); x.fillRect(xx + 4, yy + 4, 4, 4);
+        }
+      }, true),
+    };
+  },
+  // Rigid armour plate / helmet shell: textured paint with rubbed-through edges.
+  plate(color, seed = 31) {
+    const key = 'plt' + color + seed;
+    return {
+      map: surfTex(key, 256, (x, s) => {
+        const rnd = _rng(seed * 2654435761);
+        x.fillStyle = _hx(color); x.fillRect(0, 0, s, s);
+        _grain(x, s, rnd, { n: 14000, a: 0.085, r: 2 });      // textured paint
+        x.fillStyle = 'rgba(190,196,204,0.16)';                // scuffs to bare shell
+        for (let i = 0; i < 26; i++) {
+          const cx = rnd() * s, cy = rnd() * s;
+          x.fillRect(cx, cy, 2 + rnd() * 16, 1 + rnd() * 2);
+        }
+      }),
+      roughnessMap: surfTex(key + 'R', 128, (x, s) => {
+        const rnd = _rng(seed * 16777619);
+        x.fillStyle = '#b4b4b4'; x.fillRect(0, 0, s, s);
+        for (let i = 0; i < 40; i++) {                          // polished rub marks
+          x.fillStyle = 'rgba(70,70,70,0.5)';
+          x.fillRect(rnd() * s, rnd() * s, 3 + rnd() * 22, 1 + rnd() * 3);
+        }
+        _grain(x, s, rnd, { n: 3600, a: 0.2, r: 2 });
+      }, true),
+      bumpMap: surfTex(key + 'B', 256, (x, s) => {
+        const rnd = _rng(seed * 374761393);
+        x.fillStyle = '#808080'; x.fillRect(0, 0, s, s);
+        _grain(x, s, rnd, { n: 16000, a: 0.3, r: 2 });
+      }, true),
+    };
+  },
+  // Nylon webbing / straps: woven edge binding down both sides.
+  webbing(color, seed = 41) {
+    const key = 'web' + color + seed;
+    return {
+      map: surfTex(key, 128, (x, s) => {
+        const rnd = _rng(seed * 2246822519);
+        x.fillStyle = _hx(color); x.fillRect(0, 0, s, s);
+        for (let yy = 0; yy < s; yy += 3) {
+          x.fillStyle = yy % 6 ? 'rgba(0,0,0,0.13)' : 'rgba(255,255,255,0.10)';
+          x.fillRect(0, yy, s, 2);
+        }
+        x.fillStyle = 'rgba(0,0,0,0.22)'; x.fillRect(0, 0, 4, s); x.fillRect(s - 4, 0, 4, s);
+        _grain(x, s, rnd, { n: 2200, a: 0.07 });
+      }),
+      roughnessMap: SURF.cordura(color, seed).roughnessMap,
+      bumpMap: surfTex(key + 'B', 128, (x, s) => {
+        x.fillStyle = '#808080'; x.fillRect(0, 0, s, s);
+        for (let yy = 0; yy < s; yy += 3) {
+          x.fillStyle = yy % 6 ? 'rgba(0,0,0,0.4)' : 'rgba(255,255,255,0.4)';
+          x.fillRect(0, yy, s, 2);
+        }
+      }, true),
+    };
+  },
+  // Skin. Mottling at two scales plus pores — a flat fill reads as a mannequin
+  // no matter how good the head geometry is.
+  skin(tone, seed = 53) {
+    const key = 'skn' + tone + seed;
+    return {
+      map: surfTex(key, 256, (x, s) => {
+        const rnd = _rng(seed * 2654435761);
+        x.fillStyle = _hx(tone); x.fillRect(0, 0, s, s);
+        for (let i = 0; i < 90; i++) {                          // broad colour drift
+          const cx = rnd() * s, cy = rnd() * s, R = 10 + rnd() * 40;
+          const g = x.createRadialGradient(cx, cy, 0, cx, cy, R);
+          const warm = rnd() < 0.55;
+          g.addColorStop(0, warm ? 'rgba(196,96,78,0.085)' : 'rgba(228,206,186,0.085)');
+          g.addColorStop(1, 'rgba(0,0,0,0)');
+          x.fillStyle = g; x.beginPath(); x.arc(cx, cy, R, 0, Math.PI * 2); x.fill();
+        }
+        _grain(x, s, rnd, { n: 16000, a: 0.045 });               // pores
+      }),
+      roughnessMap: surfTex(key + 'R', 128, (x, s) => {
+        const rnd = _rng(seed * 69069);
+        x.fillStyle = '#7e7e7e'; x.fillRect(0, 0, s, s);         // skin is semi-matte
+        _grain(x, s, rnd, { n: 6000, a: 0.25, r: 2 });
+      }, true),
+      bumpMap: surfTex(key + 'B', 256, (x, s) => {
+        const rnd = _rng(seed * 40503);
+        x.fillStyle = '#808080'; x.fillRect(0, 0, s, s);
+        _grain(x, s, rnd, { n: 18000, a: 0.16 });
+      }, true),
+    };
+  },
+  // Leather: pebbled grain, glossier in the valleys where it is worn smooth.
+  leather(color, seed = 61) {
+    const key = 'lth' + color + seed;
+    return {
+      map: surfTex(key, 256, (x, s) => {
+        const rnd = _rng(seed * 2166136261);
+        x.fillStyle = _hx(color); x.fillRect(0, 0, s, s);
+        for (let i = 0; i < 2600; i++) {
+          const cx = rnd() * s, cy = rnd() * s, R = 1.5 + rnd() * 3.5;
+          x.fillStyle = rnd() < 0.5 ? 'rgba(255,255,255,0.055)' : 'rgba(0,0,0,0.075)';
+          x.beginPath(); x.arc(cx, cy, R, 0, Math.PI * 2); x.fill();
+        }
+      }),
+      roughnessMap: surfTex(key + 'R', 128, (x, s) => {
+        const rnd = _rng(seed * 374761393);
+        x.fillStyle = '#8c8c8c'; x.fillRect(0, 0, s, s);
+        for (let i = 0; i < 900; i++) {
+          x.fillStyle = 'rgba(40,40,40,0.35)';
+          x.beginPath(); x.arc(rnd() * s, rnd() * s, 1 + rnd() * 3, 0, Math.PI * 2); x.fill();
+        }
+      }, true),
+      bumpMap: surfTex(key + 'B', 256, (x, s) => {
+        const rnd = _rng(seed * 2654435761);
+        x.fillStyle = '#808080'; x.fillRect(0, 0, s, s);
+        for (let i = 0; i < 2600; i++) {
+          x.fillStyle = rnd() < 0.5 ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)';
+          x.beginPath(); x.arc(rnd() * s, rnd() * s, 1.5 + rnd() * 3.5, 0, Math.PI * 2); x.fill();
+        }
+      }, true),
+    };
+  },
+  // Parkerized / phosphated gun steel: directional machining marks plus the
+  // odd bright scratch where the finish has been knocked off.
+  steel(color = 0x3a3d42, seed = 71) {
+    const key = 'stl' + color + seed;
+    return {
+      map: surfTex(key, 256, (x, s) => {
+        const rnd = _rng(seed * 2246822519);
+        x.fillStyle = _hx(color); x.fillRect(0, 0, s, s);
+        for (let i = 0; i < 260; i++) {                          // lengthwise tooling
+          x.fillStyle = rnd() < 0.5 ? 'rgba(255,255,255,0.045)' : 'rgba(0,0,0,0.06)';
+          x.fillRect(0, rnd() * s, s, 1);
+        }
+        for (let i = 0; i < 30; i++) {                           // worn-through edges
+          x.fillStyle = 'rgba(206,212,220,0.3)';
+          x.fillRect(rnd() * s, rnd() * s, 4 + rnd() * 30, 1);
+        }
+        _grain(x, s, rnd, { n: 9000, a: 0.05 });
+      }),
+      roughnessMap: surfTex(key + 'R', 128, (x, s) => {
+        const rnd = _rng(seed * 16777619);
+        x.fillStyle = '#4e4e4e'; x.fillRect(0, 0, s, s);         // fairly glossy steel
+        for (let i = 0; i < 150; i++) {
+          x.fillStyle = 'rgba(150,150,150,0.3)';
+          x.fillRect(0, rnd() * s, s, 1);
+        }
+        for (let i = 0; i < 26; i++) {                           // polished wear: mirror
+          x.fillStyle = 'rgba(16,16,16,0.6)';
+          x.fillRect(rnd() * s, rnd() * s, 6 + rnd() * 34, 1 + rnd() * 2);
+        }
+      }, true),
+      bumpMap: surfTex(key + 'B', 256, (x, s) => {
+        const rnd = _rng(seed * 69069);
+        x.fillStyle = '#808080'; x.fillRect(0, 0, s, s);
+        for (let i = 0; i < 300; i++) {
+          x.fillStyle = rnd() < 0.5 ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.22)';
+          x.fillRect(0, rnd() * s, s, 1);
+        }
+      }, true),
+    };
+  },
+  // Glass-filled polymer: furniture, grips, magazines. Fine stipple, matte.
+  polymer(color = 0x22242a, seed = 83) {
+    const key = 'ply' + color + seed;
+    return {
+      map: surfTex(key, 256, (x, s) => {
+        const rnd = _rng(seed * 2654435761);
+        x.fillStyle = _hx(color); x.fillRect(0, 0, s, s);
+        _grain(x, s, rnd, { n: 22000, a: 0.06, r: 2 });          // mould stipple
+        for (let i = 0; i < 1100; i++) {                         // glass fibre flecks
+          x.fillStyle = 'rgba(190,190,196,0.055)';
+          x.fillRect(rnd() * s, rnd() * s, 2, 1);
+        }
+      }),
+      roughnessMap: surfTex(key + 'R', 128, (x, s) => {
+        const rnd = _rng(seed * 40503);
+        x.fillStyle = '#b0b0b0'; x.fillRect(0, 0, s, s);
+        _grain(x, s, rnd, { n: 5000, a: 0.22, r: 2 });
+      }, true),
+      bumpMap: surfTex(key + 'B', 256, (x, s) => {
+        const rnd = _rng(seed * 374761393);
+        x.fillStyle = '#808080'; x.fillRect(0, 0, s, s);
+        _grain(x, s, rnd, { n: 24000, a: 0.28, r: 2 });
+      }, true),
+    };
+  },
+  // Walnut / birch gun furniture: grain lines that follow one axis.
+  wood(color = 0x6b4426, seed = 97) {
+    const key = 'wod' + color + seed;
+    return {
+      map: surfTex(key, 256, (x, s) => {
+        const rnd = _rng(seed * 2166136261);
+        x.fillStyle = _hx(color); x.fillRect(0, 0, s, s);
+        for (let i = 0; i < 70; i++) {
+          const y0 = rnd() * s, amp = 2 + rnd() * 7, dark = rnd() < 0.6;
+          x.strokeStyle = dark ? 'rgba(42,22,10,0.24)' : 'rgba(216,170,120,0.17)';
+          x.lineWidth = 0.6 + rnd() * 2.2;
+          x.beginPath();
+          for (let xx = 0; xx <= s; xx += 8) x.lineTo(xx, y0 + Math.sin(xx / 34 + i) * amp);
+          x.stroke();
+        }
+        _grain(x, s, rnd, { n: 7000, a: 0.05 });
+      }),
+      roughnessMap: surfTex(key + 'R', 128, (x, s) => {
+        const rnd = _rng(seed * 16777619);
+        x.fillStyle = '#6a6a6a'; x.fillRect(0, 0, s, s);         // oiled: fairly glossy
+        _grain(x, s, rnd, { n: 4000, a: 0.22, r: 2 });
+      }, true),
+      bumpMap: surfTex(key + 'B', 256, (x, s) => {
+        const rnd = _rng(seed * 69069);
+        x.fillStyle = '#808080'; x.fillRect(0, 0, s, s);
+        for (let i = 0; i < 70; i++) {
+          const y0 = rnd() * s, amp = 2 + rnd() * 7;
+          x.strokeStyle = rnd() < 0.5 ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.3)';
+          x.lineWidth = 1 + rnd() * 2;
+          x.beginPath();
+          for (let xx = 0; xx <= s; xx += 8) x.lineTo(xx, y0 + Math.sin(xx / 34 + i) * amp);
+          x.stroke();
+        }
+      }, true),
+    };
+  },
+};
+
+// A PBR material in one call. `surface` is a SURF.* result (or nothing, for a
+// plain painted part); everything else is a MeshStandardMaterial parameter.
+function pbrMat(opts = {}) {
+  const { surface, repeat, ...rest } = opts;
+  const p = Object.assign({ roughness: 0.6, metalness: 0.0, envMapIntensity: 1.0 }, rest);
+  if (surface) {
+    p.map = surface.map;
+    p.roughnessMap = surface.roughnessMap;
+    p.bumpMap = surface.bumpMap;
+    if (p.bumpScale === undefined) p.bumpScale = 0.0016;
+  }
+  const m = new THREE.MeshStandardMaterial(p);
+  // Repeating a shared texture means cloning it, or every part using that
+  // surface inherits the last repeat anyone set.
+  if (surface && repeat) {
+    for (const k of ['map', 'roughnessMap', 'bumpMap']) {
+      if (!m[k]) continue;
+      m[k] = m[k].clone(); m[k].needsUpdate = true;
+      m[k].repeat.set(repeat[0], repeat[1]);
+    }
+  }
+  m.userData.metalDone = true;   // already PBR: the Phong finishing pass must skip it
+  return m;
+}
+
 // Procedural weapon audio: no asset files needed, unlocked by the first player gesture.
 let audioCtx = null;
 let weaponSoundLastAt = {};
@@ -4845,6 +5336,13 @@ sun.shadow.mapSize.set(2048, 2048);
 sun.shadow.camera.near = 0.5; sun.shadow.camera.far = 200;
 sun.shadow.camera.left = -60; sun.shadow.camera.right = 60;
 sun.shadow.camera.top = 60;  sun.shadow.camera.bottom = -60;
+// Softer, better-seated shadows (#53). normalBias is the fix for the "shadow
+// acne" stripes a curved surface gets when it shadows itself — the realistic
+// bodies are full of those, where the old boxes had none. radius widens the PCF
+// kernel so a boot's shadow has a believable edge, not a hard stair-step.
+sun.shadow.normalBias = 0.02;
+sun.shadow.bias = -0.0004;
+sun.shadow.radius = 2.5;
 scene.add(sun);
 
 // ── Wall collision boxes ────────────────────────────────────────────────────
