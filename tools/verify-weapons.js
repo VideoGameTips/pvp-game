@@ -17,6 +17,14 @@ const THREE = require('../public/three.min.js');
 const fs = require('fs');
 const path = require('path');
 
+// The viewmodel hands and the legend materials are PBR now, which means they
+// paint procedural surfaces into canvases. Nothing here renders, so a canvas
+// that swallows every call is enough — the geometry is what is being measured.
+if (typeof global.document === 'undefined') {
+  const ctx2d = () => new Proxy({}, { get: () => (() => ctx2d()) });
+  global.document = { createElement: () => ({ width: 0, height: 0, getContext: () => ctx2d() }) };
+}
+
 const GAME = path.join(__dirname, '..', 'public', 'game.js');
 const src = fs.readFileSync(GAME, 'utf8');
 const VERBOSE = process.argv.includes('--verbose');
@@ -55,6 +63,9 @@ function load() {
   let code = '';
   for (const n of ['gpBox', 'gpCyl', 'gpPlate', 'gpPart', 'addBeltAndCover', 'makeMuzzleFlash',
                    '_skM', '_skGlass', '_skGrip', '_skFinish',
+                   // PBR plumbing the hands and the legend materials now sit on
+                   '_rng', '_grain', '_weave', '_blotches', '_shade', 'surfTex', 'pbrMat',
+                   'charSurf', 'gunSurf', 'sculptBox',
                    '_throwableHolder', '_gunDetails', '_makeViewHand',
                    '_localPartBoxes', 'attachViewHands', '_reloadPose',
                    '_meleeOffset', '_collarGeometry', 'blendProudSteps',
@@ -66,6 +77,19 @@ function load() {
     const b = fnBlock(n);
     if (b) code += b + '\n';
   }
+  // …and the tables and caches that plumbing reads.
+  for (const re of [/^const _surfCache = .*$/m, /^const _sculptCache = .*$/m,
+                    /^let _charSurf = .*$/m, /^let _gunSurf = .*$/m,
+                    /^const _hx = .*$/m, /^const artRes = .*$/m]) {
+    const m = src.match(re); if (m) code += m[0] + '\n';
+  }
+  for (const re of [/^const ART_SCALE = [\s\S]*?\}\)\(\);/m, /^const BODY = [\s\S]*?\n\}\)\(\);/m,
+                    /^const P_VMFIST = [\s\S]*?\n\];/m]) {
+    const m = src.match(re); if (m) code += m[0] + '\n';
+  }
+  code += constBlock('SURF') + '\n';
+  // surfTex asks the live renderer for its anisotropy limit; there isn't one.
+  code += 'const renderer = { capabilities: { getMaxAnisotropy: () => 1 } };\n';
   code += src.match(/^const _COLLAR_AXES = .*$/m)[0] + '\n';
   code += src.match(/^const EMO_FACE = .*$/m)[0] + '\n';
   code += constBlock('GUN_MATS') + '\n';

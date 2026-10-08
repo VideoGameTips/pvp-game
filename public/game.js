@@ -19838,9 +19838,10 @@ function _legendMats() {
     // pass would otherwise convert them and swap them off every mesh, leaving
     // the closure writing to nothing (#53). pbrMat marks them metalDone.
     obsidian: pbrMat({ surface: gunSurf().steel, color: 0x17121a, roughness: 0.22, metalness: 0.9,
-                       bumpScale: 0.00035, envMapIntensity: 1.3 }),
+                       bumpScale: 0.00035, envMapIntensity: 1.3, userData: { skinLock: true } }),
     ember:    pbrMat({ surface: gunSurf().steel, color: 0x4a0806, emissive: new THREE.Color(0xff2010),
-                       emissiveIntensity: 0.9, roughness: 0.35, metalness: 0.7, bumpScale: 0.00035 }),
+                       emissiveIntensity: 0.9, roughness: 0.35, metalness: 0.7, bumpScale: 0.00035,
+                       userData: { skinLock: true } }),
     tip:      new THREE.MeshBasicMaterial({ color: 0xff2a14 }),
     black:    flame(0x0a0405, 0.78, false),   // the black fire, on the outside
     red:      flame(0xff2a1a, 0.85, true),    // the red inside it
@@ -24814,6 +24815,10 @@ function applyWeaponSkin(model, skin) {
         // may repaint it". A procedural SURFACE map is grain under a colour,
         // not art, so it stays repaintable (#53) — without this every weapon
         // colour skin silently does nothing.
+        // skinLock: a Legend model skin IS the skin. Repainting it gold both
+        // loses the look you paid for and swaps the materials _legendize
+        // animates off every mesh, so the heat and reload glow die with it.
+        if (o.material && o.material.userData && o.material.userData.skinLock) return;
         if (o.isMesh && o.material && o.material.color &&
             (!o.material.map || (o.material.userData && o.material.userData.surfaceMap))) {
           const basic = !!o.material.isMeshBasicMaterial; // glow/lens/reticle — leave colored
@@ -28683,10 +28688,13 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
   // the one moment a body is unmistakably taking a load. The knees give and
   // recover over about a third of a second.
   const rawJump = clamp01(jumpTarget || 0);
-  if (rig.prevJump === undefined) rig.prevJump = rawJump;
   if (rig.land === undefined) rig.land = 0;
-  if (rig.prevJump > 0.5 && rawJump < 0.1) rig.land = 1;
-  rig.prevJump = rawJump;
+  if (rig.jumpPeak === undefined) rig.jumpPeak = 0;
+  if (rawJump > rig.jumpPeak) rig.jumpPeak = rawJump;
+  if (rig.jumpPeak > 0.12 && rawJump < 0.06) {
+    rig.land = rig.jumpPeak;      // a longer drop lands harder
+    rig.jumpPeak = 0;
+  } else if (rawJump < 0.06) rig.jumpPeak = 0;
   rig.land = Math.max(0, rig.land - dt * 3.4);
   const land = rig.land * rig.land * (1 - jump);
 
@@ -36593,8 +36601,9 @@ function playerOnIce() {
 // support hand is placed under the forend, at the model's actual underside for
 // that slice of z. Pistols get a cupped support hand under the grip instead,
 // because nobody puts their off hand on a Glock's muzzle.
-const VM_SKIN_MAT = () => pbrMat({ surface: charSurf().skin, color: 0xdcae86,
-                                   roughness: 0.88, metalness: 0.0, bumpScale: 0.0005 });
+// One line on purpose: tools/verify-weapons.js lifts this out of the file with
+// a single-line regex, and wrapping it broke the whole weapon verifier.
+const VM_SKIN_MAT = () => pbrMat({ surface: charSurf().skin, color: 0xdcae86, roughness: 0.88, metalness: 0.0, bumpScale: 0.0005 });
 // A fist, sculpted (#53). Same envelope as the block it replaces — 56 x 59 x 72
 // is a measured number (hands at 45% of the gun's screen area, see below) and
 // nothing about it moves — but with knuckles, a wrapped thumb and finger
@@ -41931,7 +41940,7 @@ function resetDeathPose(mesh) {
     // The rig grew wrists, a pelvis, a neck, an aim and a landing impulse
     // (#53); without these a respawned body keeps the hip tilt, neck pitch and
     // aim it died with, and its chest stays mid-breath.
-    rig.aim = 0; rig.land = 0; rig.prevJump = 0; rig.breathe = 0;
+    rig.aim = 0; rig.land = 0; rig.jumpPeak = 0; rig.breathe = 0;
     for (const part of [rig.legL, rig.legR, rig.kneeL, rig.kneeR, rig.footL, rig.footR,
                         rig.armL, rig.armR, rig.elbowL, rig.elbowR, rig.wristL, rig.wristR,
                         rig.head, rig.torso, rig.neck, rig.pelvis]) {
