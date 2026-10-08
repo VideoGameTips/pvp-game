@@ -28586,8 +28586,13 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
   const hf = GEAR_FIT.head, tf = GEAR_FIT.torso;
   const gearHead = new THREE.Group();            // group space, head gear
   gearHead.scale.set(hf.s[0], hf.s[1], hf.s[2]);
-  gearHead.position.y = B.headY - hf.s[1] * hf.y;
-  group.add(gearHead);
+  // Parented to the HEAD, not the body. Everything in here — helmet, cap,
+  // visor, headphones, antenna — was a sibling of the skull in body space, so
+  // once #53 gave remote players a real aim pitch the head rotated inside gear
+  // still bolted to the shoulders. _addShades already knew this rule and said
+  // so in its comment; this family never followed it.
+  gearHead.position.y = -hf.s[1] * hf.y;
+  head.add(gearHead);
   const gearBody = new THREE.Group();            // group space, torso gear
   gearBody.scale.set(tf.s[0], tf.s[1], tf.s[2]);
   gearBody.position.y = B.torsoY - tf.s[1] * tf.y;
@@ -28666,7 +28671,8 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
 // refine exists because the hand hangs a little below the wrist joint and the
 // grip anchor is pitched, neither of which the closed form knows about.
 // Cached per weapon: the geometry is identical for everyone carrying one.
-const _weaponPoseCache = new Map();
+const _weaponPoseCache = new Map();   // SHAPE key -> solved arms
+const _weaponGeoKey = new Map();      // weapon id -> that weapon's shape key
 
 // Where a given weapon wants to be carried. A pistol has no stock, so it is
 // held out and up near the sight line; a long gun's stock goes into the
@@ -28693,14 +28699,22 @@ function weaponCarry(len) {
 function fitWeaponPose(mesh, gun, key) {
   const rig = mesh && mesh._rig;
   if (!rig || !rig.wristL || !gun) return;
-  if (key && _weaponPoseCache.has(key)) {
-    const c = _weaponPoseCache.get(key);
+  const apply = (c) => {
     rig.firePose = c.fire; rig.supPose = c.sup; rig.magPose = c.mag;
     rig.gripR.rotation.set(c.fire.pitch, GUN_HOLD.gripYaw, 0);
-    return;
-  }
-  const keep = { pos: mesh.position.clone(), rot: mesh.rotation.y };
-  mesh.position.set(0, 0, 0); mesh.rotation.y = 0;
+  };
+  // The arms are solved from the weapon's SHAPE, so that is what the cache is
+  // keyed on rather than its name. A cold Lobby 13 holds seventeen different
+  // weapons but only a handful of silhouettes, and the grid scan below is about
+  // 4 ms each — keying by id paid for every one of the seventeen.
+  const known = key && _weaponGeoKey.get(key);
+  if (known && _weaponPoseCache.has(known)) { apply(_weaponPoseCache.get(known)); return; }
+  // Upright at the origin, on EVERY axis. dropBody pitches a corpse to -PI/2 for
+  // 1600 ms, and solving in that frame aims the IK at a point the shoulder
+  // cannot reach — which then gets written into the shape cache and handed to
+  // everyone else holding that silhouette for the rest of the session.
+  const keep = { pos: mesh.position.clone(), rot: mesh.rotation.clone() };
+  mesh.position.set(0, 0, 0); mesh.rotation.set(0, 0, 0);
 
   // The weapon's own length, measured off its geometry rather than its name.
   // updateMatrixWorld FIRST: a freshly built object's `matrix` is still the
@@ -28714,6 +28728,22 @@ function fitWeaponPose(mesh, gun, key) {
     const b = o.geometry.boundingBox.clone(); b.applyMatrix4(o.matrix); localBox.union(b);
   });
   const gunLen = Math.max(0.05, localBox.max.z - localBox.min.z);
+
+  // Bucketed to 2 cm on the two numbers the solve actually reads: the length,
+  // and where the muzzle sits relative to the prop's own origin. Two weapons
+  // inside the same bucket differ by less than the millimetre the solve lands.
+  const gk = Math.round(gunLen * 50) + ':' + Math.round(localBox.min.z * 50)
+           + ':' + (gunLen > 0.34 ? 'L' : 'S');
+  // Only for an id that names something real: this map is keyed by a string
+  // that arrives over the wire, and an unknown one resolves to WEAPONS[0]
+  // anyway, so remembering it would grow the map on remote input forever.
+  if (key && (WEAPONS.some(x => x.id === key) || MELEE_ITEMS.some(x => x.id === key)
+              || SUPPORT_ITEMS.some(x => x.id === key))) _weaponGeoKey.set(key, gk);
+  if (_weaponPoseCache.has(gk)) {
+    mesh.position.copy(keep.pos); mesh.rotation.copy(keep.rot);
+    apply(_weaponPoseCache.get(gk));
+    return;
+  }
   const carry = weaponCarry(gunLen);
 
   // ── Firing arm ────────────────────────────────────────────────────────────
@@ -28816,11 +28846,10 @@ function fitWeaponPose(mesh, gun, key) {
   magTarget.y -= 0.135;
   const mag = solveLeft(magTarget);
 
-  mesh.position.copy(keep.pos); mesh.rotation.y = keep.rot;
+  mesh.position.copy(keep.pos); mesh.rotation.copy(keep.rot);
   const pose = { fire, sup, mag, gunLen: +gunLen.toFixed(3), fireErr: fb.e };
-  if (key) _weaponPoseCache.set(key, pose);
-  rig.firePose = fire; rig.supPose = sup; rig.magPose = mag;
-  rig.gripR.rotation.set(fire.pitch, GUN_HOLD.gripYaw, 0);
+  _weaponPoseCache.set(gk, pose);
+  apply(pose);
 }
 
 // ── Character walk / slide animation ────────────────────────────────────────
@@ -28860,6 +28889,10 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
   if (Math.abs(along) > 0.35) rig.gaitDir = along > 0 ? 1 : -1;
   rig.phase += dist * 2.75 * (rig.gaitStride ?? 1) * (rig.gaitDir ?? 1);
   if (!moving) {
+    // Standing still clears the direction latch. Without this, "back-pedal out
+    // of a fight, then circle-strafe" left the legs cycling in reverse for every
+    // sideways step after it, because a sidestep never crosses the dead zone.
+    rig.gaitDir = 1;
     // Ease the phase back toward a neutral standing pose
     rig.phase += (Math.round(rig.phase / Math.PI) * Math.PI - rig.phase) * Math.min(1, dt * 8);
   }
@@ -29160,6 +29193,17 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
                  - 0.035 * jump
                  - 0.030 * slide
                  + br * 0.005;
+  // Where the bullet spheres belong. The shot code scaled a fixed 1.65 / 1.0 by
+  // rig.crouch, on its comment's assumption that crouch is a height factor
+  // 0 (standing) .. 1 (sliding). It stopped being that: moveCrouch pins it at
+  // 0.24-0.54 for every armed bot while the body barely moves, so the head
+  // sphere sat a third of a metre BELOW the drawn skull — measured live against
+  // a chasing bot, shots at its head passed straight through and shots at its
+  // chest came back as headshots. These follow the art instead, bob and all, so
+  // a target that really is lower really does have a lower hitbox.
+  rig.hitHeadOff = BODY.headY + bobAmt;
+  rig.hitBodyOff = 1.02 + bobAmt;
+
   // This drives EVERY direct child off a captured base Y rather than bobbing a
   // wrapper group, because the skin code parents helmets, visors, ears and the
   // crown straight onto the group — a wrapper would leave them hovering while
@@ -29174,7 +29218,13 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
 
 // ── Bot world-space weapon prop ────────────────────────────────────────────
 function makeBotWeaponProp(weaponId) {
-  const w = WEAPONS.find(w => w.id === weaponId) || WEAPONS[0];
+  // It only ever searched WEAPONS, so a bat or a grenade resolved to WEAPONS[0]
+  // and came out a rifle — and the isMelee / isSupport branches below, which
+  // tested a `slot` field that appears nowhere in this file, could never run.
+  const w = WEAPONS.find(x => x.id === weaponId)
+         || MELEE_ITEMS.find(x => x.id === weaponId)
+         || SUPPORT_ITEMS.find(x => x.id === weaponId)
+         || WEAPONS[0];
   const g = new THREE.Group();
   // Same reasoning as the viewmodel: steel needs a specular highlight or it
   // reads as flat cardboard at any distance.
@@ -29194,8 +29244,8 @@ function makeBotWeaponProp(weaponId) {
   const isShotgun  = w.type?.includes('Shotgun');
   const isSniper   = w.type === 'Sniper';
   const isLMG      = w.type === 'LMG';
-  const isMelee    = w.slot === 'melee';
-  const isSupport  = w.slot === 'support';
+  const isMelee    = MELEE_ITEMS.indexOf(w) >= 0;
+  const isSupport  = SUPPORT_ITEMS.indexOf(w) >= 0;
 
   if (isMelee) {
     // Club/bat: a tapered shaft with a wrapped grip and a heavier head, rather
@@ -32672,16 +32722,41 @@ function switchWeapon(idx) {
   if (isADS) { isADS=false; targetFOV=75; setWeaponADSPos(false); }
   updateAmmoHUD();
   updateWeaponHUD();
-  broadcastHeldWeapon();
+}
+
+// What is actually in our hands right now. currentWeaponIdx only tracks the two
+// gun slots, so asking it alone says "rifle" while you are holding a bat.
+function heldItemId() {
+  if (activeSlot === 'melee') {
+    const m = (selectedMeleeIdx != null && selectedMeleeIdx >= 0) ? MELEE_ITEMS[selectedMeleeIdx] : null;
+    return (m && m.id) || null;
+  }
+  if (activeSlot === 'support') {
+    const u = (selectedSupportIdx != null && selectedSupportIdx >= 0) ? SUPPORT_ITEMS[selectedSupportIdx] : null;
+    return (u && u.id) || null;
+  }
+  const w = WEAPONS[currentWeaponIdx];
+  return (w && w.id) || null;
 }
 
 // Tell the match what we are holding, so the bodies on everyone else's screen
 // carry it. Cosmetic only — damage has always come from the server's own table
-// on a hit. Deduped because a swap can fire several times a second.
+// on a hit.
+//
+// Polled from the render loop rather than hooked onto the swap, because there
+// is no single swap: currentWeaponIdx is written from nine places (the number
+// keys via equipActiveSlot, applying a loadout, a kit, gun game's forced
+// weapon) and the one this used to hang off — switchWeapon — turns out to have
+// no callers at all, so every body in the match wore WEAPONS[0] for the whole
+// game. A poll cannot miss a path that has not been written yet; the compare
+// below is one array index and a string compare per frame.
 let _sentWeaponId = null;
+// A reconnect is a NEW player record on the server, with weaponId back to null.
+// Without this the dedupe below matches a value nobody holds any more and the
+// body stays empty-handed for the rest of the session.
+try { socket.on('connect', () => { _sentWeaponId = null; }); } catch (e) {}
 function broadcastHeldWeapon() {
-  const w = WEAPONS[currentWeaponIdx];
-  const id = (w && w.id) || null;
+  const id = heldItemId();
   if (id === _sentWeaponId) return;
   _sentWeaponId = id;
   try { socket.emit('setWeapon', { weaponId: id }); } catch (e) {}
@@ -42211,6 +42286,9 @@ function syncBotMesh(bot, opts = {}) {
     bot.yVel = 0;
     bot._airCarryX = 0; bot._airCarryZ = 0; bot._airCarryUntil = 0;
     bot._slideUntil = 0; bot._rootUntil = 0;
+    // Left set, animateCharacters reads it again next frame and the fresh body
+    // stands up still groping for a magazine.
+    bot.reloadUntil = 0; bot.reloadFrom = 0;
     bot.y = (typeof botGroundYAt === 'function') ? botGroundYAt(bot.x || 0, bot.z || 0, 0, 1.05, 2.2) : 0;
   }
   const mesh = remoteMeshes[bot.id];
@@ -43209,12 +43287,13 @@ function updateBullets(dt) {
         let hitX = _bpos.x, hitY = _bpos.y, hitZ = _bpos.z;
         let hitT = 1;
 
-        // 🛹 Crouch/slide lowers the hitbox so it matches the visual pose.
-        // rig.crouch is 0 (standing) .. 1 (fully sliding). Head drops 0.75 m,
-        // body drops 0.45 m, so a sliding target's spheres sit much lower.
-        const _cr = mesh._rig ? mesh._rig.crouch : 0;
-        const headOff = 1.65 - _cr * 0.75;   // 1.65 → 0.90
-        const bodyOff = 1.0  - _cr * 0.45;   // 1.00 → 0.55
+        // 🛹 Both heights are published every frame by animateCharacterMesh from
+        // the pose it just applied, so the spheres sit where the body is drawn.
+        // The fallbacks are the old standing numbers, for a mesh that has not
+        // been animated yet.
+        const _rg = mesh._rig;
+        const headOff = (_rg && _rg.hitHeadOff !== undefined) ? _rg.hitHeadOff : 1.65;
+        const bodyOff = (_rg && _rg.hitBodyOff !== undefined) ? _rg.hitBodyOff : 1.0;
 
         if (segLenSq > 0.0001) {
           // --- Head sphere: center at (mesh.x, mesh.y+headOff, mesh.z), r=0.28
@@ -45685,10 +45764,11 @@ socket.on('skinChanged', ({ id, skin, isAdmin }) => {
   const wasVisible = old.visible;
   scene.remove(old);
   const p = players[id] || { name: '', isBot: false, team: 'enemy', x: old.position.x, z: old.position.z };
+  disposeBody(old);           // the rebuild throws this whole body away, gun included
   const mesh = makePlayerMesh(p.name, p.isBot, p.team || 'enemy',
                               renderedSkinForPlayer(p, skin), { crown: !!isAdmin, tag: humanTagKind(p) });
   mesh.position.copy(old.position); mesh.rotation.y = old.rotation.y; mesh.visible = wasVisible;
-  armRemoteMesh(mesh, armableWeaponOf(p));   // the rebuild drops the old body's gun with it
+  armRemoteMesh(mesh, armableWeaponOf(p));
   setMeshTeamArrow(mesh, shouldShowTeamArrow(id, p));
   scene.add(mesh); remoteMeshes[id] = mesh;
 });
@@ -46057,16 +46137,48 @@ function armableWeaponOf(p) {
   if (p.isBot && p.ownerId === myId) return null;
   return p.weaponId;
 }
+// The one place a body gets a weapon put in its hands: both bot spawns, first
+// sight of a remote player, a mid-match swap, and the mesh rebuild inside
+// skinChanged. It was four near-identical copies of the same six lines, and the
+// two bot copies did not record mesh._gun — so anything that later re-armed one
+// of those bodies would have hung a second gun off the first.
+// Everything a discarded body owns. scene.remove() only unlinks it: the
+// geometries and materials stay on the GPU until the page is closed, and a
+// character is about 35 meshes.
+function disposeBody(obj) {
+  if (!obj || !obj.traverse) return;
+  obj.traverse(o => {
+    if (o.geometry) o.geometry.dispose();
+    const ms = Array.isArray(o.material) ? o.material : (o.material ? [o.material] : []);
+    for (const m of ms) m.dispose();
+  });
+}
 function armRemoteMesh(mesh, weaponId) {
   if (!mesh) return;
-  if (mesh._gun) { mesh._gun.parent && mesh._gun.parent.remove(mesh._gun); mesh._gun = null; }
+  // Re-sending the same weapon is common (a reconnect replays it), and tearing
+  // the prop down to build an identical one is pure churn.
+  if (mesh._gun && mesh._gunId === weaponId) return;
+  if (mesh._gun) {
+    // makeBotWeaponProp builds a fresh prop every call — about nineteen
+    // geometries and materials — so dropping the old one on the floor leaks
+    // them for the rest of the session, once per weapon swap per player.
+    // Same disposal the team arrow above already does on removal.
+    const old = mesh._gun;
+    old.parent && old.parent.remove(old);
+    old.traverse(o => {
+      if (o.geometry) o.geometry.dispose();
+      const ms = Array.isArray(o.material) ? o.material : (o.material ? [o.material] : []);
+      for (const m of ms) m.dispose();
+    });
+    mesh._gun = null; mesh._gunId = null;
+  }
   if (mesh._rig) mesh._rig.holdsGun = false;
   if (!weaponId) return;
   const gun = makeBotWeaponProp(weaponId);
   gun.position.set(0, -0.02, 0.055);
   gun.rotation.y = Math.PI;
   ((mesh._rig && mesh._rig.gripR) || mesh).add(gun);
-  mesh._gun = gun;
+  mesh._gun = gun; mesh._gunId = weaponId;
   // The arms are solved from the weapon's own measured length, so a swap has to
   // re-solve: a pistol pose on a sniper rifle leaves the support hand in the air.
   if (mesh._rig) { mesh._rig.holdsGun = true; fitWeaponPose(mesh, gun, weaponId); }
@@ -48594,12 +48706,7 @@ function spawnDDayWave(count, waveNum) {
     remoteMeshes[id].position.set(xPos, 0, zPos);
     const mesh = remoteMeshes[id];
     if (mesh) {
-      const gun = makeBotWeaponProp(weaponId);
-      // In the right hand (#53); the grip anchor carries the +PI facing's pitch.
-      gun.position.set(0, -0.02, 0.055);
-      gun.rotation.y = Math.PI;
-      ((mesh._rig && mesh._rig.gripR) || mesh).add(gun);
-      if (mesh._rig) { mesh._rig.holdsGun = true; fitWeaponPose(mesh, gun, weaponId); }
+      armRemoteMesh(mesh, weaponId);
     }
     gameBots.push({
       id, team: 'enemy', weaponId,
@@ -49380,15 +49487,7 @@ function spawnGameBots() {
     // ── Attach weapon prop to bot mesh ────────────────────────────────────
     const mesh = remoteMeshes[id];
     if (mesh) {
-      const gun = makeBotWeaponProp(weaponId);
-      // Gun on the +Z (forward) side + flipped barrel, matching the +PI mesh facing.
-      // In the right hand (#53). The grip anchor carries the pitch that levels
-      // the weapon in the ready stance, so the gun travels with the arm through
-      // the whole walk instead of hanging at a fixed body offset beside it.
-      gun.position.set(0, -0.02, 0.055);
-      gun.rotation.y = Math.PI; // barrel points along forward with the bot
-      ((mesh._rig && mesh._rig.gripR) || mesh).add(gun);
-      if (mesh._rig) { mesh._rig.holdsGun = true; fitWeaponPose(mesh, gun, weaponId); }
+      armRemoteMesh(mesh, weaponId);
     }
 
     // Per-bot difficulty rolls
@@ -51100,6 +51199,7 @@ function loop() {
   safeLoopStep('movement', () => updateMovement(dt));
   safeLoopStep('player-vel', () => updatePlayerVel(dt)); // measured speed, read by applyBlastImpulse's blast surf
   safeLoopStep('quick-melee', () => updateQuickMelee());  // and back to what you were holding
+  safeLoopStep('held-item', () => broadcastHeldWeapon());   // no-op unless it actually changed
   // Auto-fire used to poll on a fixed 50ms setInterval, independent of the
   // render loop. Fine for anything fireRate >= 50, but P90 (20ms), Minigun
   // (32ms) and Burst Rifle (47ms) were all capped at the interval's ~20

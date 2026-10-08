@@ -33,10 +33,14 @@ const io = new Server(server, { cors: { origin: '*' } });
 // here with a build token on every script that actually changes. The two
 // vendor bundles are left alone — they never change and they are large.
 const VERSIONED = ['game.js', 'i18n.js', 'chat.js', 'equipment-models.js'];
+// index.html is cached in memory below, so it has to be able to invalidate
+// itself: without it in here, editing only index.html changed nothing until the
+// process restarted.
+const TOKEN_INPUTS = VERSIONED.concat(['index.html']);
 const PUBLIC_DIR = path.join(__dirname, 'public');
 function buildToken() {
   let h = 2166136261;
-  for (const f of VERSIONED) {
+  for (const f of TOKEN_INPUTS) {
     try {
       const st = fs.statSync(path.join(PUBLIC_DIR, f));
       h = (Math.imul(h ^ st.size, 16777619) ^ Math.floor(st.mtimeMs)) >>> 0;
@@ -48,11 +52,16 @@ let _indexToken = null, _indexHtml = null;
 app.get(['/', '/index.html'], (req, res, next) => {
   try {
     const tok = buildToken();
-    if (tok !== _indexToken) {
-      _indexToken = tok;
-      _indexHtml = fs.readFileSync(path.join(PUBLIC_DIR, 'index.html'), 'utf8')
+    if (tok !== _indexToken || _indexHtml === null) {
+      // Build first, publish after. Claiming the token BEFORE the read meant one
+      // transient failure — index.html mid-rsync, a momentary EACCES — left
+      // _indexHtml at null while the token already matched, so every later
+      // request skipped the rebuild and answered 200 with an empty body: a white
+      // page for every visitor until a file's mtime moved or the process died.
+      const html = fs.readFileSync(path.join(PUBLIC_DIR, 'index.html'), 'utf8')
         .replace(/(<script\s+src=")([^"?]+\.js)(")/g,
                  (m, a, src, b) => VERSIONED.includes(src) ? `${a}${src}?v=${tok}${b}` : m);
+      _indexHtml = html; _indexToken = tok;
     }
     res.setHeader('Cache-Control', 'no-cache');
     res.type('html').send(_indexHtml);
@@ -1085,10 +1094,26 @@ app.post('/shop/trial', (req, res) => {
 
 // Award donuts at match end. Capped per call so a misbehaving client can't
 // just print money. The old credit reward is multiplied for the donut economy.
+// How recently each account was paid. In memory on purpose: it costs nothing,
+// needs no migration, and a restart losing it is harmless.
+const _lastAward = new Map();
+const AWARD_COOLDOWN_MS = 25000;
 app.post('/shop/award', (req, res) => {
   const { kills = 0, won = false } = req.body || {};
   const u = authedUser(req);
   if (!u) return res.status(401).json({ error: 'auth failed' });
+  // The cap above is per CALL, not per match, and nothing tied a call to a match
+  // that actually finished — so a loop in the console printed the whole economy
+  // in about two minutes, bypassing the donut packs this same currency is sold
+  // in. A cooldown is not the real fix (that is binding the award to a match the
+  // SERVER saw end, the way the FFA Legend check already does) but no real match
+  // ends twice in 25 seconds, and it takes the exploit from unbounded to a trickle.
+  const nowMs = Date.now();
+  const last = _lastAward.get(u.username) || 0;
+  if (nowMs - last < AWARD_COOLDOWN_MS) {
+    return res.json({ ok: true, amount: 0, credits: u.credits, chestDrops: { common: 0, rare: 0 }, throttled: true });
+  }
+  _lastAward.set(u.username, nowMs);
   const k = Math.max(0, Math.min(40, Number(kills) | 0));
   const baseAmount = Math.min(250, k * 5 + (won ? 50 : 20));
   const amount = baseAmount * MATCH_REWARD_MULT;
@@ -2293,9 +2318,15 @@ io.on('connection', (socket) => {
   });
 
   socket.on('hit', (data) => {
+    if (!data || typeof data !== 'object') return;
     const target  = players[data.targetId];
     const shooter = players[socket.id];
     if (!target || !shooter || target.dead || target.isBot || shielded(target)) return;
+    // airBlast and grapplePull both have this line; the two handlers that
+    // actually deal gunfire did not. blocksFriendlyFire is not a substitute —
+    // it returns false (allow) when the two are in different matches, so a
+    // stranger could shoot into someone else's private duel from the menu.
+    if (shooter.matchId !== target.matchId) return;
     if (blocksFriendlyFire(shooter, target)) return;
     const dmg = serverHitDamage(data, shooter, target);
     const hpBefore = target.hp;
@@ -2314,12 +2345,14 @@ io.on('connection', (socket) => {
 
   // Allow hitting bots (client detected)
   socket.on('hitBot', (data) => {
+    if (!data || typeof data !== 'object') return;
     const bot     = players[data.botId];
     const requestedKiller = data.killerId ? players[data.killerId] : null;
     const shooter = requestedKiller && requestedKiller.isBot && requestedKiller.ownerId === socket.id
       ? requestedKiller
       : players[socket.id];
     if (!bot || !bot.isBot || bot.dead || !shooter) return;
+    if (shooter.matchId !== bot.matchId) return;
     if (blocksFriendlyFire(shooter, bot)) return;
     let dmg = serverHitDamage(data, shooter, bot);
     // The shooter's client already saw this bot die (#48). Client and server work damage out
@@ -2545,10 +2578,19 @@ io.on('connection', (socket) => {
   });
 
   socket.on('spawnBots', (botList) => {
+    if (!Array.isArray(botList)) return;              // a non-array threw on the for..of
     const ownerPlayer = players[socket.id];
     const ownerMatchId = ownerPlayer ? ownerPlayer.matchId : 'lobby';
     const ownerMode = ownerPlayer?.matchMode || '';
-    for (const b of botList) {
+    for (const b of botList.slice(0, 64)) {
+      if (!b || typeof b !== 'object' || !b.id) continue;
+      // The key comes from the client, and this was the one place that wrote
+      // players[] without checking what was already there. Writing over a real
+      // person's record made them invisible to every emitToMatch, undamageable,
+      // and deletable by the attacker — indistinguishable from a disconnect.
+      // Every other bot handler already checks isBot + ownerId.
+      const existing = players[b.id];
+      if (existing && (!existing.isBot || existing.ownerId !== socket.id)) continue;
       // Use client-provided spawn position if given, otherwise fall back to nextSpawn
       const spawn = (b.spawnX != null) ? { x: b.spawnX, y: 1, z: b.spawnZ } : nextSpawn();
       const botWeaponId = sanitizeBotWeaponId(b.weaponId, ownerMode);
@@ -2582,7 +2624,9 @@ io.on('connection', (socket) => {
   });
 
   socket.on('botMove', (moves) => {
+    if (!Array.isArray(moves)) return;        // a non-array threw on the for..of
     for (const m of moves) {
+      if (!m || typeof m !== 'object') continue;
       const bot = players[m.id];
       if (bot && bot.isBot && bot.ownerId === socket.id) {
         bot.x = m.x; bot.y = 1; bot.z = m.z;
@@ -2651,6 +2695,20 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3001;
+// socket.io invokes its listeners bare, inside process.nextTick, with no
+// try/catch of its own — so a single malformed payload that got past a handler's
+// guards took the whole process down, dropping every player in every match at
+// once and losing whatever saveUsersSoon had not flushed. One line in a browser
+// console could do it, repeatably. This is the net, not the fix: the guards in
+// the handlers are what stop a throw happening, and a few of them are still thin.
+process.on('uncaughtException', (err) => {
+  console.error('[fatal] uncaught, staying up:', err && err.stack || err);
+  try { saveUsers(); } catch (e) {}
+});
+process.on('unhandledRejection', (err) => {
+  console.error('[fatal] unhandled rejection, staying up:', err && err.stack || err);
+});
+
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`PVP server running on http://0.0.0.0:${PORT}`);
 });
