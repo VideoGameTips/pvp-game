@@ -3502,10 +3502,11 @@ const SURF = {
       map: surfTex(key, 256, (x, s) => {
         const rnd = _rng(seed * 2654435761);
         x.fillStyle = _hx(color); x.fillRect(0, 0, s, s);
-        _weave(x, s, rnd, 4, 0.085);
-        // Ripstop grid: a heavier thread every 24 px in both directions.
-        x.fillStyle = 'rgba(0,0,0,0.10)';
-        for (let i = 0; i < s; i += 24) { x.fillRect(i, 0, 1, s); x.fillRect(0, i, s, 1); }
+        _weave(x, s, rnd, 2, 0.065);
+        // Ripstop grid. Every 8 px, not every 24: a torso texture covers 0.36 m,
+        // so 24 px was a heavy thread every 3.4 cm and it read as pinstripes.
+        x.fillStyle = 'rgba(0,0,0,0.055)';
+        for (let i = 0; i < s; i += 8) { x.fillRect(i, 0, 1, s); x.fillRect(0, i, s, 1); }
       }),
       roughnessMap: surfTex(key + 'R', 128, (x, s) => {
         const rnd = _rng(seed * 40503);
@@ -3515,7 +3516,7 @@ const SURF = {
       bumpMap: surfTex(key + 'B', 256, (x, s) => {
         const rnd = _rng(seed * 69069);
         x.fillStyle = '#808080'; x.fillRect(0, 0, s, s);
-        _weave(x, s, rnd, 4, 0.28);
+        _weave(x, s, rnd, 2, 0.26);
       }, true),
     };
   },
@@ -26014,29 +26015,125 @@ function appearanceFor(name) {
 // default skin wears it.
 // Every tint that used to be a fixed peach value is derived from the tone now,
 // so a darker recruit doesn't get pale cheeks and invisible brows (#50).
+// ── 🙂 The face ─────────────────────────────────────────────────────────────
+// Was 32x32 of flat blocks with no nose and no mouth, magnified with
+// NearestFilter — correct for a cube head wearing pixel art, and the single
+// most cartoon thing left once the head became a skull. This is a painted
+// face at 256: a brow that casts, eyes with a sclera, an iris, a pupil and a
+// catchlight, a nose built out of its own shadow rather than out of lines, and
+// lips.
+//
+// The texture lands on the head's +Z face, so canvas X is ear to ear and
+// canvas Y runs crown (0) to chin (255) — the head is 0.231 m tall, which puts
+// the eye line at 0.506 of it, i.e. y = 126. Every landmark below is that
+// fraction of a real head, not a guess.
 function makeFaceTexture(tone = 0xffcc99) {
-  const c = document.createElement('canvas'); c.width = 32; c.height = 32;
-  const ctx = c.getContext('2d');
-  const px = (col, x, y, w = 1, h = 1) => { ctx.fillStyle = col; ctx.fillRect(x, y, w, h); };
+  const S = 256;
+  const c = document.createElement('canvas'); c.width = S; c.height = S;
+  const x = c.getContext('2d');
   const sk    = _cssHex(tone);
-  const jaw   = _cssHex(darkenColor(tone, 0.93));
-  const nose  = _cssHex(darkenColor(tone, 0.86));
-  const brow  = _cssHex(darkenColor(tone, 0.35));
-  const cheek = _cssHex(_mixColor(tone, 0xc05038, 0.17));   // a hint of blood, not rouge (#50)
-  const iris  = _cssHex(_mixColor(tone, 0x2f7fd6, 0.92));       // blue, faintly warmed by the tone
-  const deep  = _cssHex(_mixColor(tone, 0x17539c, 0.94));
-  // Same rules as the drawn skins: flat blocks on a coarse grid, big eyes low
-  // on the face, no nose and no cheeks. A modelled nose at this size is three
-  // brown pixels that read as damage, and the smile made everyone a doll.
-  px(sk, 0, 0, 32, 32);                                         // skin
-  px(jaw, 0, 28, 32, 4);                                        // jaw shade
-  px('#ffffff', 4, 14, 6, 6);   px('#ffffff', 22, 14, 6, 6);    // whites — the outer edge
-  px(iris, 6, 14, 4, 6);        px(iris, 22, 14, 4, 6);         // iris — the inner two thirds
-  px(deep, 6, 18, 4, 2);        px(deep, 22, 18, 4, 2);         // …deeper along the bottom
+  const shade = _cssHex(darkenColor(tone, 0.86));
+  const deepS = _cssHex(darkenColor(tone, 0.72));
+  const lift  = _cssHex(_mixColor(tone, 0xffffff, 0.22));
+  const blush = _cssHex(_mixColor(tone, 0xc05038, 0.26));
+  const lip   = _cssHex(_mixColor(tone, 0xa84a44, 0.42));
+  const rnd   = _rng(0x5eed | (tone & 0xffff));
+  const soft = (cx, cy, rx, ry, col, a, rot = 0) => {
+    x.save(); x.translate(cx, cy); x.rotate(rot); x.scale(rx, ry);
+    const g = x.createRadialGradient(0, 0, 0, 0, 0, 1);
+    g.addColorStop(0, col); g.addColorStop(1, 'rgba(0,0,0,0)');
+    x.globalAlpha = a; x.fillStyle = g;
+    x.beginPath(); x.arc(0, 0, 1, 0, Math.PI * 2); x.fill();
+    x.restore(); x.globalAlpha = 1;
+  };
+
+  x.fillStyle = sk; x.fillRect(0, 0, S, S);
+  soft(128, 72, 92, 60, lift, 0.40);                           // forehead catches the sky
+  soft(68, 150, 44, 44, blush, 0.34); soft(188, 150, 44, 44, blush, 0.34);   // cheeks
+  soft(128, 236, 70, 40, shade, 0.5);                          // under the jaw
+  soft(128, 124, 120, 110, '#000000', 0.10);                   // the sides turn away
+
+  // Brow ridge. Shadow UNDER it, highlight on top: that pair is what gives a
+  // face a third dimension at a distance where no detail survives.
+  for (const s of [-1, 1]) {
+    x.save(); x.translate(128 + s * 44, 104); x.rotate(s * -0.16);
+    soft(0, 10, 40, 13, deepS, 0.55);
+    soft(0, -8, 38, 9, lift, 0.34);
+    x.restore();
+  }
+  // Eye sockets, then the eyes themselves.
+  const irisCol = _mixColor(tone, 0x3d7fc4, 0.9);
+  for (const s of [-1, 1]) {
+    const ex = 128 + s * 44, ey = 128;
+    soft(ex, ey + 2, 34, 20, deepS, 0.32);                     // socket
+    x.save(); x.translate(ex, ey);
+    x.beginPath();                                             // almond opening
+    x.moveTo(-26, 1); x.quadraticCurveTo(-8, -14, 11, -10);
+    x.quadraticCurveTo(24, -7, 26, 1);
+    x.quadraticCurveTo(10, 15, -8, 14); x.quadraticCurveTo(-20, 12, -26, 1);
+    x.closePath();
+    x.fillStyle = '#efe9e2'; x.fill();                          // sclera is never white
+    x.save(); x.clip();
+    x.fillStyle = _cssHex(irisCol);
+    x.beginPath(); x.arc(1, 2, 11, 0, Math.PI * 2); x.fill();   // iris
+    const ig = x.createRadialGradient(1, 2, 1, 1, 2, 11);
+    ig.addColorStop(0, 'rgba(0,0,0,0.55)');                     // pupil fading into the iris
+    ig.addColorStop(0.42, 'rgba(0,0,0,0.0)');
+    ig.addColorStop(0.86, 'rgba(0,0,0,0.0)');
+    ig.addColorStop(1, 'rgba(0,0,0,0.6)');                      // limbal ring
+    x.fillStyle = ig; x.beginPath(); x.arc(1, 2, 11, 0, Math.PI * 2); x.fill();
+    x.fillStyle = '#0b0c0f'; x.beginPath(); x.arc(1, 2, 4.4, 0, Math.PI * 2); x.fill();
+    x.fillStyle = 'rgba(255,255,255,0.9)';                      // catchlight, one only
+    x.beginPath(); x.arc(-3.4, -2.4, 2.6, 0, Math.PI * 2); x.fill();
+    x.fillStyle = 'rgba(0,0,0,0.30)'; x.fillRect(-28, -16, 56, 9);   // lid shadow
+    x.restore();
+    x.lineWidth = 2.4; x.strokeStyle = 'rgba(28,22,18,0.78)';   // lash line, top only
+    x.beginPath(); x.moveTo(-26, 1); x.quadraticCurveTo(-8, -14, 11, -10);
+    x.quadraticCurveTo(24, -7, 26, 1); x.stroke();
+    x.restore();
+    soft(ex, ey + 17, 22, 7, shade, 0.26);                      // tear trough
+  }
+  // Nose. Built entirely out of its own shadow — a drawn outline at this size
+  // reads as a scar.
+  soft(128, 168, 15, 44, shade, 0.34);
+  soft(114, 162, 7, 40, deepS, 0.30); soft(142, 162, 7, 40, deepS, 0.30);
+  soft(128, 150, 9, 36, lift, 0.34);                            // the ridge
+  soft(128, 182, 17, 11, lift, 0.30);                           // the tip
+  for (const s of [-1, 1]) {
+    soft(128 + s * 13, 185, 7, 5, deepS, 0.62);                 // nostril
+    soft(128 + s * 19, 181, 7, 7, shade, 0.4);                  // ala
+  }
+  soft(128, 192, 20, 6, deepS, 0.34);                           // under the nose
+  // Mouth.
+  soft(128, 211, 30, 11, lip, 0.52);
+  x.strokeStyle = 'rgba(92,48,42,0.62)'; x.lineWidth = 2.6;
+  x.beginPath(); x.moveTo(104, 210); x.quadraticCurveTo(128, 215, 152, 210); x.stroke();
+  soft(128, 218, 20, 5, lift, 0.26);                            // lower lip catches light
+  soft(128, 226, 24, 7, shade, 0.3);                            // and casts under itself
+  // Stubble over the jaw and the top lip.
+  x.globalAlpha = 0.5;
+  for (let i = 0; i < 1500; i++) {
+    const px = 24 + rnd() * 208, py = 196 + rnd() * 58;
+    const d = Math.hypot((px - 128) / 100, (py - 232) / 34);
+    if (d > 1 || (py < 206 && Math.abs(px - 128) < 30)) continue;
+    x.fillStyle = 'rgba(40,32,28,' + (0.12 + rnd() * 0.2).toFixed(3) + ')';
+    x.fillRect(px, py, 1.6, 1.6);
+  }
+  x.globalAlpha = 1;
+  // Pores, at the same strength as the rest of the skin surface.
+  _grain(x, S, rnd, { n: 9000, a: 0.04 });
+  // The border has to meet the plain skin on the head's sides, so fade to it.
+  const vg = x.createRadialGradient(128, 140, 60, 128, 140, 150);
+  vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, sk + '00');
+  x.fillStyle = vg; x.fillRect(0, 0, S, S);
+
   const tex = new THREE.CanvasTexture(c);
-  tex.magFilter = THREE.NearestFilter;
+  tex.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy?.() || 1);
+  if ('colorSpace' in tex && THREE.SRGBColorSpace !== undefined) tex.colorSpace = THREE.SRGBColorSpace;
+  tex.needsUpdate = true;
   return tex;
 }
+
 // One texture per TONE, not per character — skins swap faceMat.map, they never
 // draw on it, so four of these cover everybody.
 const _faceTexCache = new Map();
@@ -26107,6 +26204,269 @@ function darkenColor(hex, f) {
 // ── 🎭 Character skins (inspired by the comic crew) ─────────────────────────
 // Each skin recolors the blocky body and/or adds accessories. 'crown' is NOT a
 // skin — it's an overlay added on top of any skin for the admin / match leader.
+// ══════════════════════════════════════════════════════════════════════════
+// 🧍 ANATOMY (#53)
+// ══════════════════════════════════════════════════════════════════════════
+// The body used to be six boxes: a 0.5 m cube head on a 0.55 x 0.65 torso,
+// 1.00 m across the shoulders, with the boot soles sitting 0.225 m ABOVE the
+// floor. That is 3.8 heads tall, a shoulder span half a metre wider than a
+// real one, and everybody quietly hovering.
+//
+// These are the standard segment fractions of stature (Drillis & Contini):
+// crown 1.000, eye 0.936, chin 0.870, acromion 0.818, nipple 0.720,
+// elbow 0.630, waist 0.600, wrist/crotch 0.485, knee 0.285, ankle 0.039.
+//
+// 1.78 m is not arbitrary: it puts the head INSIDE the headshot sphere, which
+// is not moving (r 0.28 at y 1.65). The head now runs 1.549 -> 1.780 where the
+// old one ran 1.60 -> 2.10 and stuck 0.17 m out of the top of its own hitbox.
+// Eye height lands at 1.666, which is the camera's PLAYER_EYE_HEIGHT of 1.65.
+const BODY = (() => {
+  const H = 1.78, f = k => +(H * k).toFixed(4);
+  const B = {
+    h: H,
+    crown: f(1.000), eye: f(0.936), chin: f(0.870), shoulder: f(0.818),
+    chest: f(0.720), elbow: f(0.630), waist: f(0.600),
+    wrist: f(0.485), knee: f(0.285), ankle: f(0.039), sole: 0,
+    hip: 0.95,                 // femoral head, a little above the crotch
+    shoulderHalf: 0.158,       // the JOINT, inboard of the 0.43 m shoulder span
+    hipHalf: 0.093,
+    headHalfW: 0.078, headHalfD: 0.098,
+  };
+  B.headH    = +(B.crown - B.chin).toFixed(4);          // 0.2310
+  B.headY    = +((B.crown + B.chin) / 2).toFixed(4);    // 1.6645
+  B.upperArm = +(B.shoulder - B.elbow).toFixed(4);      // 0.3346
+  B.foreArm  = +(B.elbow - B.wrist).toFixed(4);         // 0.2581
+  B.thigh    = +(B.hip - B.knee).toFixed(4);            // 0.4427
+  B.shin     = +(B.knee - B.ankle).toFixed(4);          // 0.4379
+  B.torsoBot = B.waist;
+  B.torsoTop = +(B.shoulder + 0.030).toFixed(4);
+  B.torsoH   = +(B.torsoTop - B.torsoBot).toFixed(4);
+  B.torsoY   = +((B.torsoTop + B.torsoBot) / 2).toFixed(4);
+  return B;
+})();
+
+// ── Silhouettes ─────────────────────────────────────────────────────────────
+// [t, halfWidth, halfDepth, centreZ] from the BOTTOM of the part (t = 0) to the
+// top (t = 1). Everything is in metres off a real body, which is why the
+// numbers look fussy: a calf really is 0.07 deep and 0.058 wide, and swapping
+// the two is exactly what makes a game leg read as a pipe.
+const P_HEAD = [
+  [0.00, 0.035, 0.049,  0.020],   // chin — proud of the skull's axis
+  [0.10, 0.051, 0.073,  0.015],   // jaw
+  [0.22, 0.063, 0.090,  0.008],   // gonion
+  [0.38, 0.072, 0.097,  0.003],   // zygomatic
+  [0.54, 0.077, 0.099,  0.000],   // eye line / temple
+  [0.70, 0.078, 0.098, -0.004],   // parietal — the skull's widest, not the face
+  [0.86, 0.068, 0.085, -0.008],
+  [0.96, 0.043, 0.054, -0.010],
+  [1.00, 0.020, 0.026, -0.011],   // crown
+];
+const P_NECK = [
+  [0.00, 0.082, 0.074, -0.006],   // flares into the trapezius, so there is no step
+  [0.30, 0.066, 0.061, -0.002],
+  [0.62, 0.060, 0.056,  0.000],
+  [1.00, 0.055, 0.052,  0.004],   // under the jaw
+];
+const P_TORSO = [
+  [0.00, 0.134, 0.100,  0.000],   // waist
+  [0.20, 0.152, 0.113,  0.005],
+  [0.44, 0.174, 0.125,  0.010],   // chest — deepest, and the pecs sit forward
+  [0.66, 0.190, 0.121,  0.006],
+  [0.80, 0.196, 0.109,  0.000],   // shoulder yoke — widest
+  [0.90, 0.178, 0.095, -0.004],   // trapezius starts to climb
+  [1.00, 0.100, 0.067, -0.008],   // base of the neck
+];
+const P_PELVIS = [
+  [0.00, 0.128, 0.096, 0.000],
+  [0.38, 0.150, 0.109, 0.000],    // widest across the hips
+  [0.72, 0.145, 0.106, 0.000],
+  [1.00, 0.133, 0.099, 0.000],    // meets the waist
+];
+const P_UPPERARM = [
+  [0.00, 0.045, 0.046, 0],        // elbow
+  [0.18, 0.048, 0.049, 0],
+  [0.50, 0.055, 0.056, 0],        // mid-humerus
+  [0.78, 0.063, 0.064, 0],        // biceps / triceps mass
+  [0.94, 0.068, 0.068, 0],        // deltoid — this is what the shoulder reads as
+  [1.00, 0.058, 0.058, 0],        // into the shoulder socket
+];
+const P_FOREARM = [
+  [0.00, 0.033, 0.030, 0],        // wrist
+  [0.22, 0.038, 0.035, 0],
+  [0.55, 0.046, 0.043, 0],
+  [0.82, 0.052, 0.050, 0],        // brachioradialis
+  [1.00, 0.049, 0.048, 0],        // elbow
+];
+// A hand closed around something. Open fingers at this size are five slivers
+// that read as damage; a grip reads as a hand.
+const P_HAND = [
+  [0.00, 0.029, 0.034, 0.012],    // fingertips, curled under
+  [0.24, 0.040, 0.047, 0.013],    // knuckles
+  [0.52, 0.042, 0.045, 0.006],    // palm
+  [0.82, 0.036, 0.033, 0.000],
+  [1.00, 0.029, 0.026, 0.000],    // wrist
+];
+const P_THIGH = [
+  [0.00, 0.063, 0.067, 0],        // just above the knee
+  [0.15, 0.070, 0.075, 0],
+  [0.45, 0.082, 0.089, 0],
+  [0.75, 0.093, 0.101, 0],
+  [0.95, 0.098, 0.106, 0],        // upper thigh
+  [1.00, 0.092, 0.099, 0],
+];
+const P_SHIN = [
+  [0.00, 0.041, 0.045,  0.004],   // ankle
+  [0.14, 0.047, 0.053,  0.001],
+  [0.34, 0.058, 0.069, -0.005],   // the calf belly sits BEHIND the bone
+  [0.52, 0.063, 0.076, -0.008],
+  [0.74, 0.064, 0.072, -0.002],
+  [1.00, 0.060, 0.065,  0.005],   // knee
+];
+// A boot is mostly a Z shape, so the depth and the centre do the work: long and
+// low at the sole, short and set back over the ankle.
+const P_BOOT = [
+  [0.00, 0.047, 0.122,  0.046],
+  [0.18, 0.051, 0.130,  0.050],   // toe box
+  [0.38, 0.050, 0.115,  0.032],
+  [0.58, 0.046, 0.086,  0.004],   // instep
+  [0.80, 0.044, 0.068, -0.012],
+  [1.00, 0.043, 0.062, -0.016],   // cuff over the ankle
+];
+const P_SOLE = [
+  [0.00, 0.050, 0.126, 0.048],
+  [0.65, 0.054, 0.132, 0.050],
+  [1.00, 0.051, 0.127, 0.048],
+];
+
+// ── 🔫 The weapon stance ────────────────────────────────────────────────────
+// Solved, not eyeballed. Put the firing hand on the grip at (0.158, 1.249,
+// 0.140) — chest height, tucked in, which is where a rifle grip actually sits —
+// and run two-bone IK back up a 0.335 upper arm and a 0.258 forearm:
+//   d = |shoulder -> wrist| = 0.249
+//   shoulder interior = acos((L1² + d² - L2²) / 2·L1·d) = 0.869 rad
+//   elbow flexion     = π - acos((L1² + L2² - d²) / 2·L1·L2) = 2.313 rad
+// The elbow folding 132° looks like a lot written down and is exactly right:
+// the arm is 0.59 long and the grip is 0.25 from the shoulder, so it has to.
+// `gripPitch` is the forearm's resulting world pitch, negated — a weapon
+// parented to the grip comes out LEVEL in this stance and then tilts with the
+// arm in every other one, which is what being held means.
+const GUN_HOLD = {
+  shoulderX: 0.272, elbowX: -2.313,
+  gripPitch: 2.041,
+  // Support hand, forward on the handguard. The shoulder also abducts (z) to
+  // get the elbow out from under the weapon instead of through it.
+  // Solved the same way, but numerically: sweep the support arm's three angles
+  // and keep the triple that puts the palm on the HANDGUARD — measured off the
+  // weapon's own bounding box at 62% of the way to the muzzle, not guessed.
+  // Residual 7 mm.
+  supShoulderX: -0.98, supShoulderZ: 0.60, supElbowX: -0.64,
+};
+
+// ── 🗿 sculptBox ────────────────────────────────────────────────────────────
+// A box, sculpted into anatomy — and keeping BoxGeometry's topology is the
+// whole trick. Its six material groups and its per-face UV squares are what the
+// entire skin system is written against (headMats[4] IS the face; a torso
+// texture has a front and a back). So the vertices move and the topology does
+// not: a head that is finally head-shaped still takes its face texture on the
+// front, and that front is now curved, which is most of what stops the face
+// reading as a sticker.
+//
+// `round` 0 leaves the section square, 1 makes it a full ellipse. A limb wants
+// 0.95; a chest wants about 0.5, because a chest is not a cylinder.
+const _sculptCache = new Map();
+function sculptBox(key, h, profile, { segs = 8, vsegs = 10, round = 0.9 } = {}) {
+  const ck = key + '|' + h + '|' + segs + ',' + vsegs + ',' + round;
+  let geo = _sculptCache.get(ck);
+  if (geo) return geo;
+  geo = new THREE.BoxGeometry(2, h, 2, segs, vsegs, segs);
+  // Smoothstep between samples, so the silhouette has no visible kink where
+  // two of them meet.
+  const at = (t) => {
+    let i = 0;
+    while (i < profile.length - 2 && profile[i + 1][0] < t) i++;
+    const a = profile[i], b = profile[i + 1] || a;
+    const span = (b[0] - a[0]) || 1;
+    const k = Math.max(0, Math.min(1, (t - a[0]) / span));
+    const s = k * k * (3 - 2 * k);
+    return [a[1] + (b[1] - a[1]) * s, a[2] + (b[2] - a[2]) * s, (a[3] || 0) + ((b[3] || 0) - (a[3] || 0)) * s];
+  };
+  const place = (nx, nz, y) => {
+    const t = Math.max(0, Math.min(1, (y + h / 2) / h));
+    const [hw, hd, cz] = at(t);
+    // Elliptical grid mapping: the unit square onto the unit disc. It is smooth
+    // and it preserves the grid, so the UVs still line up after the move.
+    const u = nx * Math.sqrt(Math.max(0, 1 - nz * nz / 2));
+    const w = nz * Math.sqrt(Math.max(0, 1 - nx * nx / 2));
+    return [(nx + (u - nx) * round) * hw, y, (nz + (w - nz) * round) * hd + cz];
+  };
+  const pos = geo.attributes.position, nor = geo.attributes.normal;
+  // Cap vertices keep a flat +Y / -Y normal; everything else gets one from the
+  // gradient of the surface, which is CONTINUOUS ACROSS THE BOX SEAMS. That is
+  // the part that matters: computeVertexNormals() would leave four hard creases
+  // running the length of every arm, because BoxGeometry does not share
+  // vertices between its faces.
+  const isCap = new Uint8Array(pos.count);
+  for (let i = 0; i < pos.count; i++) isCap[i] = Math.abs(nor.getY(i)) > 0.9 ? 1 : 0;
+  const F = (x, y, z) => {
+    const t = Math.max(0, Math.min(1, (y + h / 2) / h));
+    const [hw, hd, cz] = at(t);
+    const dx = x / Math.max(1e-4, hw), dz = (z - cz) / Math.max(1e-4, hd);
+    return dx * dx + dz * dz;
+  };
+  const E = 0.0025;
+  for (let i = 0; i < pos.count; i++) {
+    const nx = Math.max(-1, Math.min(1, pos.getX(i)));
+    const nz = Math.max(-1, Math.min(1, pos.getZ(i)));
+    const [x, y, z] = place(nx, nz, pos.getY(i));
+    pos.setXYZ(i, x, y, z);
+    if (isCap[i]) { nor.setXYZ(i, 0, Math.sign(pos.getY(i)) || 1, 0); continue; }
+    const gx = F(x + E, y, z) - F(x - E, y, z);
+    const gy = F(x, y + E, z) - F(x, y - E, z);
+    const gz = F(x, y, z + E) - F(x, y, z - E);
+    const l = Math.hypot(gx, gy, gz) || 1;
+    nor.setXYZ(i, gx / l, gy / l, gz / l);
+  }
+  pos.needsUpdate = true; nor.needsUpdate = true;
+  geo.computeBoundingBox(); geo.computeBoundingSphere();
+  _sculptCache.set(ck, geo);
+  return geo;
+}
+
+// ── 🔁 Retargeting the accessory library ────────────────────────────────────
+// Forty-odd hats, visors, capes, packs and haircuts were authored against the
+// old rig's literal coordinates — a 0.5 m head centred at y 1.85, a
+// 0.55 x 0.65 x 0.30 torso centred at 1.20. Re-deriving sixty numbers by hand
+// would be sixty chances to put a helmet through somebody's eyes, so each
+// accessory family instead gets a container that maps its OLD reference frame
+// onto the new one. A helmet that fitted a 0.5 m head fits a 0.156 m head at
+// the same scale, and everything stays in proportion for nothing.
+//
+// This is a rig retarget, not a fudge: each number below is the ratio of the
+// new part to the old one on that axis. Non-uniform on purpose — the head went
+// from a cube to a skull that is taller than it is wide, and a helmet scaled
+// uniformly would leave the back of the cranium sticking out of it.
+const GEAR_FIT = {
+  head:  { s: [BODY.headHalfW * 2 / 0.5, BODY.headH / 0.5, BODY.headHalfD * 2 / 0.5], y: 1.85 },
+  torso: { s: [0.364 / 0.55, 0.418 / 0.65, 0.230 / 0.30], y: 1.20 },
+};
+
+// The five surfaces a body is made of, built once on first use rather than at
+// load: a session that never spawns a character never pays for them.
+let _charSurf = null;
+function charSurf() {
+  return _charSurf || (_charSurf = {
+    cloth: SURF.fabric(0xffffff, 7),
+    skin:  SURF.skin(0xffffff, 53),
+    boot:  SURF.leather(0xffffff, 61),
+    plate: SURF.plate(0xffffff, 31),
+    web:   SURF.webbing(0xffffff, 41),
+  });
+}
+let _soleMat = null;
+function soleMat() {
+  return _soleMat || (_soleMat = pbrMat({ surface: charSurf().boot, color: 0x15120f, roughness: 1.0, metalness: 0.0, bumpScale: 0.0016 }));
+}
+
 // ── 🧱 Minecraft-style character blocks ─────────────────────────────────────
 // The bodies were bevelled boxes wearing a drawn-on face: soft edges, a nose,
 // brows, cheeks and a smile. At character scale that reads as a plush toy. A
@@ -26397,35 +26757,33 @@ const PIXEL_SKINS = {
 // joints and the hitboxes are untouched, so animation and shooting cannot
 // notice which skin is on.
 function applyPixelSkin(art, parts) {
-  const { group, head, torso, armLimbs, legLimbs, hands, feet } = parts;
+  const { group, head, torso, armLimbs, legLimbs, hands, feet, pelvis, gearHead: gh } = parts;
   head.material = charFaceMats('h:' + art._id, art.head);
   torso.material = charFaceMats('t:' + art._id, art.torso);
   // armLimbs is [upperL, foreL, upperR, foreR]; legLimbs is [thighL, shinL, …]
   armLimbs.forEach((m, i) => { m.material = charMat('a' + (i % 2) + ':' + art._id, i % 2 ? art.armF : art.armU); });
   legLimbs.forEach((m, i) => { m.material = charMat('g' + (i % 2) + ':' + art._id, i % 2 ? art.shin : art.leg); });
-  for (const h of hands) h.material = new THREE.MeshLambertMaterial({ color: art.hand });
-  if (art.foot) for (const f of feet) f.material = new THREE.MeshLambertMaterial({ color: new THREE.Color(art.foot) });
+  for (const h of hands) h.material = pbrMat({ surface: charSurf().skin, color: art.hand, roughness: 0.95, bumpScale: 0.0006 });
+  if (art.foot) for (const f of feet) f.material = pbrMat({ surface: charSurf().boot, color: new THREE.Color(art.foot), roughness: 0.80, bumpScale: 0.0012 });
+  // The pelvis wears the trousers, so it takes the leg texture.
+  if (pelvis) pelvis.material = charMat('g0:' + art._id, art.leg);
   if (art.hair && art.hair.long) {
-    const mat = new THREE.MeshLambertMaterial({ color: art.hair.color });
-    const back = new THREE.Mesh(mcBoxGeo(0.46, 0.55, 0.10), mat);
-    back.position.set(0, 1.60, -0.21); back.castShadow = true; group.add(back);
-    [-0.22, 0.22].forEach(x => {
-      const side = new THREE.Mesh(mcBoxGeo(0.10, 0.34, 0.34), mat);
-      side.position.set(x, 1.72, -0.02); side.castShadow = true; group.add(side);
-    });
+    // Long hair: the seeded shell, plus a fall down the back and over the
+    // shoulders. Head-parented, so it turns with the head like the rest.
+    _addSeedHair(head, 'crop', art.hair.color);
+    const mat = _gearMat('hair', art.hair.color, { roughness: 0.58 });
+    const fall = new THREE.Mesh(sculptBox('hfall', 0.28,
+      [[0.00, 0.052, 0.030, -0.052], [0.35, 0.070, 0.044, -0.060],
+       [0.75, 0.080, 0.062, -0.048], [1.00, 0.078, 0.078, -0.026]],
+      { segs: 10, vsegs: 6, round: 0.8 }), mat);
+    fall.position.set(0, 1.585 - BODY.headY, 0); fall.castShadow = true; head.add(fall);
   }
   if (art.cap) {
-    const crown = new THREE.Mesh(mcBoxGeo(0.54, 0.16, 0.54), new THREE.MeshLambertMaterial({ color: art.cap.color }));
-    crown.position.set(0, 2.16, 0); crown.castShadow = true; group.add(crown);
-    const brim = new THREE.Mesh(mcBoxGeo(0.54, 0.05, 0.20), new THREE.MeshLambertMaterial({ color: art.cap.brim }));
-    brim.position.set(0, 2.08, 0.30); group.add(brim);
-    const badge = new THREE.Mesh(mcBoxGeo(0.10, 0.08, 0.03), new THREE.MeshLambertMaterial({ color: art.cap.badge }));
-    badge.position.set(0, 2.16, 0.275); group.add(badge);
+    _addCap(group, art.cap.color);
+    const badge = new THREE.Mesh(new THREE.BoxGeometry(0.030, 0.024, 0.010), _gearMat('cloth', art.cap.badge));
+    badge.position.set(0, 1.742, 0.092); group.add(badge);
   }
-  if (art.helmet) {
-    const helm = new THREE.Mesh(mcBoxGeo(0.58, 0.26, 0.58), new THREE.MeshLambertMaterial({ color: art.helmet.color }));
-    helm.position.set(0, 2.15, 0); helm.castShadow = true; group.add(helm);
-  }
+  if (art.helmet) _addHelmet(group, art.helmet.color);
 }
 
 for (const k of Object.keys(PIXEL_SKINS)) PIXEL_SKINS[k]._id = k;
@@ -27034,7 +27392,14 @@ function applyCharacterSkin(skinId, parts) {
   // Drawn skins replace the textures outright and share none of the recolour
   // machinery below — no seeded shirt, no accessory library, no face overlay.
   if (PIXEL_SKINS[skinId]) { applyPixelSkin(PIXEL_SKINS[skinId], parts); return; }
-  const { group, head, headMats, faceMat, torso, torsoMat, armLimbs, legLimbs, look } = parts;
+  const { group, head, headMats, faceMat, torso, torsoMat, armLimbs, legLimbs, look,
+          pelvisMat, gearHead: gh, gearBody: gb, gearSkull: gs, gearTorso: gt } = parts;
+  // Accessories are authored in the OLD rig's coordinates and land in the
+  // containers that map them onto the new body (see GEAR_FIT). `pin` picks the
+  // head container or the body container by how high the part sits in that old
+  // space — the same split the named helpers get, without classifying forty
+  // one-off literals by hand.
+  const pin = (o) => { (o.position.y >= 1.55 ? gh : gb).add(o); return o; };
   // Human-faced skins take the seeded tone; the cast members with a colour of
   // their own (panda white, duck yellow, Pyro's soot) keep theirs (#50).
   const tone = (look && look.tone) || 0xffcc99;
@@ -27042,7 +27407,8 @@ function applyCharacterSkin(skinId, parts) {
     torsoMat.color.setHex(hex);
     armLimbs.forEach(m => m.material.color.setHex(hex));
   };
-  const setLegs = (hex) => legLimbs.forEach(m => m.material.color.setHex(hex));
+  // The pelvis wears the trousers too, so it follows the legs, not the shirt.
+  const setLegs = (hex) => { legLimbs.forEach(m => m.material.color.setHex(hex)); if (pelvisMat) pelvisMat.color.setHex(hex); };
   const setHeadAll = (hex) => headMats.forEach((m,i) => { if (i !== 4) m.color.setHex(hex); });
 
   switch (skinId) {
@@ -27050,21 +27416,17 @@ function applyCharacterSkin(skinId, parts) {
       setBody(0x23272e); setLegs(0x16181c); setHeadAll(0x1a1d22);
       // Replace face with a glowing blue visor strip
       faceMat.map = null; faceMat.color.setHex(0x10131a);
-      const visor = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.14, 0.04),
-        new THREE.MeshLambertMaterial({ color: 0x0a0d12, emissive: 0x2f7dff, emissiveIntensity: 1.2 }));
-      visor.position.set(0, 1.87, 0.255); group.add(visor);
+      _addVisor(group, 0x2f7dff, 1.2);
       _addHelmet(group, 0x14171c);
-      _addKit(torso, 'vest', _gearFor(0x23272e));   // #50 phase 2
+      _addKit(gt, 'vest', _gearFor(0x23272e));   // #50 phase 2
       break;
     }
     case 'swat_shades': {
       setBody(0x2a2e35); setLegs(0x1a1d22); setHeadAll(tone);
       // Keep the skin-tone face, add black sunglasses across the eyes
-      const shades = new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.10, 0.04),
-        new THREE.MeshLambertMaterial({ color: 0x080808 }));
-      shades.position.set(0, 1.90, 0.255); group.add(shades);
+      _addShades(head);
       _addHelmet(group, 0x14171c);
-      _addKit(torso, 'vest', _gearFor(0x2a2e35));   // #50 phase 2
+      _addKit(gt, 'vest', _gearFor(0x2a2e35));   // #50 phase 2
       break;
     }
     case 'riot_chad': {
@@ -27072,20 +27434,20 @@ function applyCharacterSkin(skinId, parts) {
       // Red bandana around the neck / lower face
       const bandana = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.16, 0.34),
         new THREE.MeshLambertMaterial({ color: 0xc62828 }));
-      bandana.position.set(0, 1.66, 0); group.add(bandana);
+      bandana.position.set(0, 1.66, 0); pin(bandana);
       _addSeedHair(head, 'crop', 0x1a1208);    // was a bare scalp (#50)
-      _addKit(torso, 'bandolier', _gearFor(0x33271f));  // #50 phase 2
+      _addKit(gt, 'bandolier', _gearFor(0x33271f));  // #50 phase 2
       break;
     }
     case 'spiky': {
       setBody(0x5a2a2a); setLegs(0x222831); setHeadAll(tone);
-      _addSpikyHair(group, 0x2b1a10);
+      _addSpikyHair(gh, 0x2b1a10);
       break;
     }
     case 'green_cap': {
       setBody(0x6b5d3a); setLegs(0x4a4327); setHeadAll(tone);
       _addCap(group, 0x3f6b2f);
-      _addKit(torso, 'belt', _gearFor(0x6b5d3a));   // #50 phase 2
+      _addKit(gt, 'belt', _gearFor(0x6b5d3a));   // #50 phase 2
       break;
     }
     case 'shadow': {
@@ -27100,7 +27462,7 @@ function applyCharacterSkin(skinId, parts) {
       setBody(0x2a0d3a); setLegs(0x140520); setHeadAll(0x1a0a26);
       faceMat.map = null; faceMat.color.setHex(0x0a0410); faceMat.needsUpdate = true;
       _addVisor(group, 0xff2233, 1.5);
-      _addCape(group, 0x4a1060);
+      _addCape(gb, 0x4a1060);
       setMeshCrown(group, true);
       break;
     }
@@ -27109,27 +27471,27 @@ function applyCharacterSkin(skinId, parts) {
       faceMat.map = null; faceMat.color.setHex(0x12161c); faceMat.needsUpdate = true;
       _addVisor(group, 0x33e0ff, 1.4);
       _addHelmet(group, 0x3a444c);
-      _addAntenna(group, 0x33e0ff);
+      _addAntenna(gh, 0x33e0ff);
       break;
     }
     case 'cc_rager': {                           // all-red fury + spiky red hair
       setBody(0x9b1b1b); setLegs(0x3a1010); setHeadAll(0xffb3a0);
-      _addSpikyHair(group, 0x6b0f0f);
+      _addSpikyHair(gh, 0x6b0f0f);
       break;
     }
     case 'cc_mirage': {                          // sleek purple ninja + shades + ears
       setBody(0x5a2a8a); setLegs(0x2a123f); setHeadAll(tone);
       _addShades(head);
-      _addSpikyHair(group, 0xcfc4e0);            // silver-lilac hair (poster look)
-      _addEars(group, 0xcfc4e0);
+      _addSpikyHair(gh, 0xcfc4e0);            // silver-lilac hair (poster look)
+      _addEars(gh, 0xcfc4e0);
       break;
     }
     case 'cc_grandmaster': {                     // ♀ navy strategist + long ponytail + glasses
       setBody(0x1b2a4a); setLegs(0x10182c); setHeadAll(tone);
-      _addPonytail(group, 0x2a1840);             // long dark-purple hair
+      _addPonytail(gh, 0x2a1840);             // long dark-purple hair
       const g = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.08, 0.03),
         new THREE.MeshLambertMaterial({ color: 0x222222 }));
-      g.position.set(0, 1.90, 0.255); group.add(g);
+      g.position.set(0, 1.90, 0.255); pin(g);
       break;
     }
     case 'cc_lucky': {                           // green leprechaun + green hat
@@ -27142,9 +27504,9 @@ function applyCharacterSkin(skinId, parts) {
       _addHelmet(group, 0xffffff);
       const crossMat = new THREE.MeshLambertMaterial({ color: 0xcc1111 });
       const c1 = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.22, 0.02), crossMat);
-      c1.position.set(0, 1.25, 0.16); group.add(c1);
+      c1.position.set(0, 1.25, 0.16); pin(c1);
       const c2 = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.07, 0.02), crossMat);
-      c2.position.set(0, 1.25, 0.16); group.add(c2);
+      c2.position.set(0, 1.25, 0.16); pin(c2);
       break;
     }
     case 'cc_goat': {                            // white tee + black shades GOAT
@@ -27171,7 +27533,7 @@ function applyCharacterSkin(skinId, parts) {
       setBody(0xf2c014); setLegs(0xd99a00); setHeadAll(0xf2c014);
       const bill = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.08, 0.16),
         new THREE.MeshLambertMaterial({ color: 0xff8c1a }));
-      bill.position.set(0, 1.80, 0.26); group.add(bill);
+      bill.position.set(0, 1.80, 0.26); pin(bill);
       break;
     }
     case 'cc_panic': {                           // panda — black body, white head + ears
@@ -27179,7 +27541,7 @@ function applyCharacterSkin(skinId, parts) {
       [-0.18, 0.18].forEach(x => {
         const ear = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8),
           new THREE.MeshLambertMaterial({ color: 0x111111 }));
-        ear.position.set(x, 2.12, 0); group.add(ear);
+        ear.position.set(x, 2.12, 0); pin(ear);
       });
       break;
     }
@@ -27189,39 +27551,39 @@ function applyCharacterSkin(skinId, parts) {
       _addCap(group, 0x202820);
       const pt = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.30, 0.14),
         new THREE.MeshLambertMaterial({ color: 0x140f0a }));
-      pt.position.set(0, 1.80, -0.28); group.add(pt);
+      pt.position.set(0, 1.80, -0.28); pin(pt);
       const eye = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.06, 0.03),
         new THREE.MeshLambertMaterial({ color: 0x0a0d12, emissive: 0xff3344, emissiveIntensity: 1.4 }));
-      eye.position.set(0.1, 1.92, 0.255); group.add(eye);
+      eye.position.set(0.1, 1.92, 0.255); pin(eye);
       break;
     }
     case 'cc_ladymayhem': {                      // pink/purple jester
       setBody(0xc81e8c); setLegs(0x5a1240); setHeadAll(tone);
-      _addJesterHat(group, 0xc81e8c, 0x6a1ea0);
+      _addJesterHat(gh, 0xc81e8c, 0x6a1ea0);
       break;
     }
     case 'cc_jinx': {                            // teal mischief + cyan pigtails
       setBody(0x14808a); setLegs(0x0c4a50); setHeadAll(tone);
-      _addPigtails(group, 0x1ad6e0);
+      _addPigtails(gh, 0x1ad6e0);
       break;
     }
     case 'cc_pandora': {                         // lavender witch + light hair
       setBody(0x6a3aa5); setLegs(0x2a1240); setHeadAll(tone);
-      _addPonytail(group, 0xe0d0ff);
-      _addWitchHat(group, 0x3a1255);
+      _addPonytail(gh, 0xe0d0ff);
+      _addWitchHat(gh, 0x3a1255);
       break;
     }
     case 'cc_wildfire': {                        // red body + literal flame hair
       setBody(0xb01818); setLegs(0x401010); setHeadAll(tone);
-      _addFlameHair(group);
+      _addFlameHair(gh);
       break;
     }
     case 'cc_anarchy': {                         // purple punk mohawk + red bandana
       setBody(0x4a2a6a); setLegs(0x201233); setHeadAll(tone);
-      _addMohawk(group, 0x9a2ad0);
+      _addMohawk(gh, 0x9a2ad0);
       const band = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.12, 0.34),
         new THREE.MeshLambertMaterial({ color: 0xc0142a }));
-      band.position.set(0, 1.66, 0); group.add(band);
+      band.position.set(0, 1.66, 0); pin(band);
       break;
     }
     // ── 🕶️ Specialists ──────────────────────────────────────────────────────
@@ -27229,7 +27591,7 @@ function applyCharacterSkin(skinId, parts) {
       setBody(0x3a3f47); setLegs(0x232830); setHeadAll(tone);
       const hair = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.14, 0.54),
         new THREE.MeshLambertMaterial({ color: 0xcfcfd6 }));
-      hair.position.set(0, 2.07, 0); group.add(hair);
+      hair.position.set(0, 2.07, 0); pin(hair);
       _addShades(head);
       break;
     }
@@ -27255,7 +27617,7 @@ function applyCharacterSkin(skinId, parts) {
       setBody(0xd47a14); setLegs(0x3a2a14); setHeadAll(tone);
       const hat = new THREE.Mesh(new THREE.SphereGeometry(0.30, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2),
         new THREE.MeshLambertMaterial({ color: 0xffcc00 }));
-      hat.position.set(0, 2.04, 0); hat.castShadow = true; group.add(hat);
+      hat.position.set(0, 2.04, 0); hat.castShadow = true; pin(hat);
       _addVisor(group, 0x99ddff, 0.8);           // goggles
       break;
     }
@@ -27265,7 +27627,7 @@ function applyCharacterSkin(skinId, parts) {
       faceMat.map = null; faceMat.color.setHex(0xffffff); faceMat.needsUpdate = true; // white label
       const straw = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.42, 8),
         new THREE.MeshLambertMaterial({ color: 0xff4488 }));
-      straw.position.set(0.12, 2.30, 0); straw.rotation.z = 0.3; group.add(straw);
+      straw.position.set(0.12, 2.30, 0); straw.rotation.z = 0.3; pin(straw);
       break;
     }
     // ── 👻 Weird Department ──────────────────────────────────────────────────
@@ -27274,7 +27636,7 @@ function applyCharacterSkin(skinId, parts) {
       faceMat.map = null; faceMat.color.setHex(0x0c0c0c); faceMat.needsUpdate = true;
       _addVisor(group, 0x55ff44, 1.2);
       _addHelmet(group, 0xd8c81a);
-      _addBackTanks(group, 0x888888, 0x55ff44);
+      _addBackTanks(gb, 0x888888, 0x55ff44);
       break;
     }
     case 'cc_lorekeeper': {                      // brown hooded mage + glowing eyes + robe
@@ -27282,13 +27644,13 @@ function applyCharacterSkin(skinId, parts) {
       faceMat.map = null; faceMat.color.setHex(0x0e0a06); faceMat.needsUpdate = true;
       _addVisor(group, 0xffcc44, 0.9);
       _addHelmet(group, 0x3a2a18);               // hood
-      _addCape(group, 0x2e2014);                 // robe
+      _addCape(gb, 0x2e2014);                 // robe
       break;
     }
     case 'cc_turtle': {                          // green + helmet + shell on the back
       setBody(0x2e7d32); setLegs(0x1c4a20); setHeadAll(0x88bb55);
       _addHelmet(group, 0x3d4a24);
-      _addShell(group, 0x5a3a1a);
+      _addShell(gb, 0x5a3a1a);
       break;
     }
     case 'cc_casual': {                          // blue tee + ball cap
@@ -27298,9 +27660,9 @@ function applyCharacterSkin(skinId, parts) {
     }
     case 'cc_suspicious': {                      // black trenchcoat + fedora + shades
       setBody(0x1a1a1f); setLegs(0x101012); setHeadAll(tone);
-      _addFedora(group, 0x121214);
+      _addFedora(gh, 0x121214);
       _addShades(head);
-      _addCape(group, 0x141418);                 // coat tail
+      _addCape(gb, 0x141418);                 // coat tail
       break;
     }
     case 'cc_sweat': {                           // tryhard gamer: VR visor + headset
@@ -27316,28 +27678,28 @@ function applyCharacterSkin(skinId, parts) {
       _addCap(group, 0x1f4a6a);
       const beard = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.08, 0.06),
         new THREE.MeshLambertMaterial({ color: 0xcccccc }));
-      beard.position.set(0, 1.78, 0.24); group.add(beard);
+      beard.position.set(0, 1.78, 0.24); pin(beard);
       break;
     }
     case 'cc_timekeeper': {                      // brown coat + top hat + clock emblem
       setBody(0x5a4632); setLegs(0x3a2e20); setHeadAll(tone);
-      _addTopHat(group, 0x3a2e20);
-      _addChestEmblem(group, 0xffcc44, 'clock');
+      _addTopHat(gh, 0x3a2e20);
+      _addChestEmblem(gb, 0xffcc44, 'clock');
       break;
     }
     case 'cc_wildcard': {                         // purple harlequin + ? emblem
       setBody(0x7a1ea0); setLegs(0x3a0f50); setHeadAll(tone);
-      _addJesterHat(group, 0x7a1ea0, 0xffcc00);
-      _addChestEmblem(group, 0xffcc00, 'q');
+      _addJesterHat(gh, 0x7a1ea0, 0xffcc00);
+      _addChestEmblem(gb, 0xffcc00, 'q');
       break;
     }
     case 'cc_drama': {                           // pink + pigtails + teary eyes
       setBody(0xe0418c); setLegs(0x7a1f50); setHeadAll(tone);
-      _addPigtails(group, 0xff8cc0);
+      _addPigtails(gh, 0xff8cc0);
       [-0.1, 0.1].forEach(x => {
         const t = new THREE.Mesh(new THREE.SphereGeometry(0.03, 6, 6),
           new THREE.MeshLambertMaterial({ color: 0x66ccff, emissive: 0x3399cc, emissiveIntensity: 0.6 }));
-        t.position.set(x, 1.84, 0.25); group.add(t);
+        t.position.set(x, 1.84, 0.25); pin(t);
       });
       break;
     }
@@ -27351,7 +27713,7 @@ function applyCharacterSkin(skinId, parts) {
     default: {
       // Recruit. The shirt is already seeded in makePlayerMesh; the hair is what
       // stops Lobby 13 being a row of identical bald heads (#50).
-      if (look) { _addSeedHair(head, look.style, look.hair); _addKit(torso, look.kit, look.gear, group); }
+      if (look) { _addSeedHair(head, look.style, look.hair); _addKit(gt, look.kit, look.gear, gb); }
       break;
     }
   }
@@ -27371,11 +27733,179 @@ function resolveSkinId(s) {
   return (SKIN_IDS.includes(s) || CHARACTER_SKIN_IDS.includes(s)) ? s : 'default';
 }
 
-// Simple combat helmet / hood cap that sits on top of the head box
+// ── 🪖 Head gear, built on the skull ────────────────────────────────────────
+// These six are on nearly every character, so unlike the long tail of one-off
+// hats they are not retargeted — they are rebuilt against the real head: a
+// 0.156 x 0.231 x 0.196 skull with a brow at 1.682 and a crown at 1.780.
+// A helmet scaled down from a 0.5 m cube fits a cube; this has to fit a head.
+const _HEADGEAR_MAT = new Map();
+function _gearMat(kind, color, extra) {
+  const key = kind + ':' + color + (extra ? JSON.stringify(extra) : '');
+  let m = _HEADGEAR_MAT.get(key);
+  if (!m) {
+    const S = charSurf();
+    const base = kind === 'plate' ? { surface: S.plate, roughness: 0.72, metalness: 0.08, bumpScale: 0.0010 }
+               : kind === 'cloth' ? { surface: S.cloth, roughness: 1.0,  metalness: 0.0,  bumpScale: 0.0009 }
+               : kind === 'hair'  ? { surface: S.skin,  roughness: 0.62, metalness: 0.0,  bumpScale: 0.0008 }
+               : kind === 'rub'   ? { surface: S.boot,  roughness: 0.95, metalness: 0.0,  bumpScale: 0.0012 }
+               :                    { roughness: 0.4,  metalness: 0.2 };
+    m = pbrMat(Object.assign({ color }, base, extra || {}));
+    _HEADGEAR_MAT.set(key, m);
+  }
+  return m;
+}
+
+const P_HELMET = [
+  [0.00, 0.094, 0.112, -0.004],
+  [0.16, 0.098, 0.117, -0.002],   // the rim flares, which is the whole read of a helmet
+  [0.42, 0.095, 0.113,  0.000],
+  [0.70, 0.086, 0.102, -0.002],
+  [0.88, 0.064, 0.076, -0.006],
+  [1.00, 0.030, 0.038, -0.008],
+];
 function _addHelmet(group, color) {
-  const helm = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.22, 0.56),
-    new THREE.MeshLambertMaterial({ color }));
-  helm.position.set(0, 2.13, 0); helm.castShadow = true; group.add(helm);
+  const mat = _gearMat('plate', color);
+  const shell = new THREE.Mesh(sculptBox('helmet', 0.163, P_HELMET, { segs: 12, vsegs: 10, round: 0.90 }), mat);
+  shell.position.set(0, 1.7365, 0); shell.castShadow = true; group.add(shell);
+  // NVG shroud: the one detail that separates a combat helmet from a bowl.
+  const dk = _gearMat('plate', darkenColor(color, 0.55));
+  const shroud = new THREE.Mesh(new THREE.BoxGeometry(0.044, 0.030, 0.022), dk);
+  shroud.position.set(0, 1.776, 0.092); shroud.rotation.x = 0.22; group.add(shroud);
+  // Side rails + a chin strap, so it is strapped on rather than balanced on.
+  [-1, 1].forEach(sx => {
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(0.010, 0.016, 0.085), dk);
+    rail.position.set(sx * 0.090, 1.726, 0.012); group.add(rail);
+    const strap = new THREE.Mesh(new THREE.BoxGeometry(0.009, 0.072, 0.016), _gearMat('cloth', darkenColor(color, 0.7)));
+    strap.position.set(sx * 0.072, 1.655, 0.026); strap.rotation.z = sx * 0.17; group.add(strap);
+  });
+}
+
+const P_CAP = [
+  [0.00, 0.085, 0.099, -0.004],
+  [0.30, 0.087, 0.101, -0.002],
+  [0.70, 0.078, 0.091, -0.004],
+  [1.00, 0.036, 0.042, -0.006],
+];
+function _addCap(group, color) {
+  const mat = _gearMat('cloth', color);
+  const crown = new THREE.Mesh(sculptBox('cap', 0.112, P_CAP, { segs: 12, vsegs: 8, round: 0.9 }), mat);
+  crown.position.set(0, 1.740, 0); crown.castShadow = true; group.add(crown);
+  // A curved brim, not a flat tab: the curl is most of what says "cap".
+  const brim = new THREE.Group();
+  const bm = _gearMat('cloth', darkenColor(color, 0.82));
+  for (let i = -3; i <= 3; i++) {
+    const t = i / 3;
+    const seg = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.009, 0.072 * (1 - 0.22 * t * t)), bm);
+    seg.position.set(t * 0.070, -Math.abs(t) * 0.009, 0.064 * (1 - 0.28 * t * t));
+    seg.rotation.y = -t * 0.42; seg.rotation.x = -0.14;
+    brim.add(seg);
+  }
+  brim.position.set(0, 1.700, 0.058); brim.castShadow = true; group.add(brim);
+  const btn = new THREE.Mesh(new THREE.SphereGeometry(0.009, 8, 6), bm);
+  btn.position.set(0, 1.800, -0.006); group.add(btn);
+}
+
+// A wrap-around band at the eye line. It is a closed band on purpose — goggles
+// and visors are held on by one, and the +Z face is the lens while the rest is
+// the strap, which BoxGeometry's material groups give for free.
+const P_BAND = [
+  [0.00, 0.082, 0.101, 0.000],
+  [0.50, 0.085, 0.104, 0.002],
+  [1.00, 0.082, 0.101, 0.000],
+];
+function _bandMats(lens, strap) {
+  return [strap, strap, strap, strap, lens, strap];
+}
+function _addVisor(group, color, intensity = 1.2) {
+  const lens = pbrMat({ color: 0x0a0d12, emissive: new THREE.Color(color), emissiveIntensity: intensity,
+                        roughness: 0.12, metalness: 0.0 });
+  const strap = _gearMat('cloth', 0x15181d);
+  const band = new THREE.Mesh(sculptBox('band', 0.046, P_BAND, { segs: 12, vsegs: 4, round: 0.88 }),
+                              _bandMats(lens, strap));
+  band.position.set(0, 1.684, 0.004); band.castShadow = true; group.add(band);
+}
+function _addShades(head) {
+  // On the HEAD, not the group: hair turns with the head, and shades left
+  // behind on the group come off the face in a slide.
+  const lens = pbrMat({ color: 0x07080b, roughness: 0.08, metalness: 0.1, envMapIntensity: 1.6 });
+  const frame = _gearMat('plate', 0x101216);
+  const band = new THREE.Mesh(sculptBox('shades', 0.030, P_BAND, { segs: 12, vsegs: 3, round: 0.88 }),
+                              _bandMats(lens, frame));
+  band.scale.set(0.99, 1, 0.99);
+  band.position.set(0, 1.688 - BODY.headY, 0.004);
+  head.add(band);
+}
+function _addHeadphones(group, color) {
+  const mat = _gearMat('plate', color);
+  const band = new THREE.Mesh(new THREE.TorusGeometry(0.090, 0.011, 8, 18, Math.PI), mat);
+  band.position.set(0, 1.760, -0.004); band.rotation.y = Math.PI / 2; group.add(band);
+  [-1, 1].forEach(sx => {
+    const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.040, 0.024, 16), mat);
+    cup.rotation.z = Math.PI / 2;
+    cup.position.set(sx * 0.082, 1.672, -0.004); cup.castShadow = true; group.add(cup);
+    const pad = new THREE.Mesh(new THREE.CylinderGeometry(0.030, 0.030, 0.012, 16), _gearMat('rub', 0x16181c));
+    pad.rotation.z = Math.PI / 2; pad.position.set(sx * 0.068, 1.672, -0.004); group.add(pad);
+  });
+}
+
+// ── 💇 Seeded hair (#50), rebuilt on the skull (#53) ────────────────────────
+// Short hair starts at a HAIRLINE and covers everything above and behind it,
+// and that is a shape a single shell can hold: the profile's centre slides
+// BACK as it descends, so the bottom of the shell hugs the nape and the sides
+// while the forehead stays bare, and the front only comes forward once it is
+// above the brow. Six cuts are then volume added on top of that one shell.
+const P_HAIRSHELL = [
+  [0.00, 0.080, 0.071, -0.040],   // nape and sideburn height — behind the brow
+  [0.30, 0.083, 0.093, -0.016],
+  [0.58, 0.083, 0.103,  0.000],   // over the hairline, forward across the forehead
+  [0.80, 0.076, 0.093, -0.004],
+  [0.94, 0.052, 0.064, -0.010],
+  [1.00, 0.026, 0.032, -0.012],
+];
+let _hairSphereGeo = null;
+function _addSeedHair(head, style, color) {
+  const mat = _gearMat('hair', color, { roughness: 0.58 });
+  const Y = y => y - BODY.headY;                  // head-local
+  const put = (geo, x, y, z, rx) => {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(x, Y(y), z); if (rx) m.rotation.x = rx;
+    m.castShadow = true; head.add(m); return m;
+  };
+  const buzz = style === 'buzz';
+  const shell = put(sculptBox('hair', 0.142, P_HAIRSHELL, { segs: 12, vsegs: 10, round: 0.88 }), 0, 1.716, 0);
+  if (buzz) shell.scale.set(0.965, 0.93, 0.965);   // clipped close to the skull
+  switch (style) {
+    case 'buzz':
+      break;
+    case 'crop':                                   // a short fringe over the brow
+      put(sculptBox('hcrop', 0.034, [[0, 0.064, 0.030, 0.082], [0.6, 0.070, 0.034, 0.085], [1, 0.062, 0.028, 0.080]],
+                    { segs: 8, vsegs: 3, round: 0.8 }), 0, 1.733, 0, -0.18);
+      break;
+    case 'messy':
+      [[-0.040, 1.775, -0.028], [0.044, 1.783, -0.040], [0.006, 1.790, 0.008],
+       [-0.030, 1.772, 0.044], [0.038, 1.769, 0.042]]
+        .forEach(([x, y, z]) => put(sculptBox('htuft', 0.044, [[0, 0.026, 0.026, 0], [0.55, 0.030, 0.030, 0], [1, 0.012, 0.012, 0]],
+                                              { segs: 6, vsegs: 4, round: 0.9 }), x, y, z));
+      break;
+    case 'swoop':                                  // a side part sweeping over the brow
+      put(sculptBox('hswoop', 0.040, [[0, 0.056, 0.040, 0.054], [0.5, 0.064, 0.046, 0.058], [1, 0.050, 0.036, 0.050]],
+                    { segs: 8, vsegs: 3, round: 0.75 }), -0.016, 1.760, 0, -0.26);
+      put(sculptBox('hswoop2', 0.052, [[0, 0.022, 0.030, 0], [0.6, 0.028, 0.038, 0], [1, 0.018, 0.024, 0]],
+                    { segs: 6, vsegs: 3, round: 0.85 }), 0.054, 1.772, 0.030);
+      break;
+    case 'curls':
+      if (!_hairSphereGeo) _hairSphereGeo = new THREE.SphereGeometry(0.031, 10, 8);
+      [[-0.048, 1.770, -0.016], [-0.014, 1.784, 0.030], [0.028, 1.780, -0.032],
+       [0.050, 1.762, 0.022], [0.000, 1.790, -0.048], [0.000, 1.796, -0.004]]
+        .forEach(([x, y, z]) => put(_hairSphereGeo, x, y, z));
+      break;
+    case 'tail':                                   // gathered at the back
+      put(sculptBox('htie', 0.026, [[0, 0.024, 0.020, 0], [1, 0.024, 0.020, 0]], { segs: 6, vsegs: 2, round: 0.9 }),
+          0, 1.700, -0.098);
+      put(sculptBox('htail', 0.105, [[0, 0.016, 0.014, 0], [0.3, 0.027, 0.024, 0], [1, 0.021, 0.018, 0]],
+                    { segs: 8, vsegs: 5, round: 0.9 }), 0, 1.632, -0.112, 0.22);
+      break;
+  }
 }
 
 // Spiky hair — a cluster of little cones on top of the head (no helmet)
@@ -27391,71 +27921,6 @@ function _addSpikyHair(group, color) {
     s.rotation.z = (x) * 0.8; s.rotation.x = (-z) * 0.8; // fan outward
     s.castShadow = true; group.add(s);
   });
-}
-
-// ── 💇 Seeded hair (#50) ────────────────────────────────────────────────────
-// The Recruit's head was a bare skin-coloured box, so thirty-seven of them in
-// Lobby 13 read as a room of bald clones.
-//
-// Parented to the HEAD, not to the group, so coordinates here are relative to
-// the head box (which sits at y 1.85, 0.5 on a side: its top is +0.25, the
-// 2.02 shelf the helmets use is +0.17). The existing helmets and caps DO hang
-// off the group, and the walk rig turns the head — torso.rotation.y up to 0.18
-// and the head counter-rotating, plus a 0.30 pitch in the slide — so they slide
-// around on the scalp. A cap only covers the crown and gets away with it; this
-// hugs the sides and back, and at a 0.13 turn the head corner comes straight
-// out through a 0.045 shell. Parenting fixes it for good rather than by luck.
-let _hairSphereGeo = null;
-function _addSeedHair(head, style, color) {
-  const mat = new THREE.MeshLambertMaterial({ color });
-  const put = (geo, x, y, z) => {
-    const m = new THREE.Mesh(geo, mat);
-    m.position.set(x, y, z); m.castShadow = true; head.add(m); return m;
-  };
-  // Every cut starts from a slab over the scalp, plus a thin shell down the
-  // sides and back. Without the shell it reads as a hat balanced on a bald head
-  // rather than hair on a head — the scalp slab alone leaves bare skin in the
-  // whole silhouette below it.
-  const capH = style === 'buzz' ? 0.07 : 0.11;
-  put(roundedBoxGeo(0.53, capH, 0.53, 0.035, 3), 0, 0.17 + capH / 2, 0);
-  // The back comes down further than the sides: sideburns should stop about
-  // ear height, but anything short of the jaw at the BACK leaves a bare patch of
-  // scalp that is the whole silhouette when a character is running away from you.
-  const backH = style === 'buzz' ? 0.34 : 0.42;       // head box runs -0.25 → +0.25
-  const sideH = style === 'buzz' ? 0.15 : 0.24;
-  put(roundedBoxGeo(0.53, backH, 0.045, 0.02, 3), 0, 0.18 - backH / 2, -0.247);     // back
-  [-0.247, 0.247].forEach(x =>
-    put(roundedBoxGeo(0.045, sideH, 0.50, 0.02, 3), x, 0.18 - sideH / 2, 0));       // sideburns
-  switch (style) {
-    case 'buzz':                                            // that IS the whole cut
-      break;
-    case 'crop':                                            // short, with a fringe
-      put(roundedBoxGeo(0.50, 0.07, 0.10, 0.03, 3), 0, 0.19, 0.23);
-      break;
-    case 'messy':
-      [[-0.14, 0.05, -0.09], [0.15, 0.07, -0.13], [0.02, 0.09, 0.02],
-       [-0.10, 0.06, 0.15], [0.13, 0.05, 0.14]]
-        .forEach(([x, y, z]) => put(roundedBoxGeo(0.13, 0.13, 0.13, 0.05, 1), x, 0.24 + y, z));
-      break;
-    case 'swoop':                                           // side part over the brow
-      put(roundedBoxGeo(0.34, 0.10, 0.14, 0.04, 3), -0.08, 0.26, 0.20);
-      put(roundedBoxGeo(0.14, 0.13, 0.12, 0.04, 3), 0.19, 0.28, 0.13);
-      break;
-    case 'curls':
-      if (!_hairSphereGeo) _hairSphereGeo = new THREE.SphereGeometry(0.11, 7, 5);
-      [[-0.17, 0.02, -0.06], [-0.05, 0.05, 0.10], [0.09, 0.04, -0.11],
-       [0.17, 0.01, 0.07], [0.00, 0.06, -0.17]]
-        .forEach(([x, y, z]) => put(_hairSphereGeo, x, 0.25 + y, z));
-      break;
-    case 'tail':                                            // gathered at the back
-      // Stands well CLEAR of the shell rather than hanging below it. Flush
-      // against same-coloured hair it is invisible from behind (same normal,
-      // same light); hanging past the head it shows through the neck gap from
-      // the front instead. Proud of the back, stopping at the jaw, does both.
-      put(roundedBoxGeo(0.19, 0.09, 0.10, 0.035, 3), 0, 0.14, -0.29);   // the tie
-      put(roundedBoxGeo(0.16, 0.34, 0.16, 0.06, 3), 0, -0.09, -0.36);
-      break;
-  }
 }
 
 // ── 🎒 Silhouette kit (#50 phase 2) ─────────────────────────────────────────
@@ -27533,12 +27998,6 @@ function _addKit(torso, kit, color, group) {
   }
 }
 
-// Glowing eye-visor strip (robots / villains). intensity drives the glow.
-function _addVisor(group, color, intensity = 1.2) {
-  const visor = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.12, 0.04),
-    new THREE.MeshLambertMaterial({ color: 0x0a0d12, emissive: color, emissiveIntensity: intensity }));
-  visor.position.set(0, 1.88, 0.255); group.add(visor);
-}
 // Flowing cape behind the torso (King Chaos).
 function _addCape(group, color) {
   const cape = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.85, 0.05),
@@ -27554,24 +28013,6 @@ function _addAntenna(group, color) {
     new THREE.MeshLambertMaterial({ color, emissive: color, emissiveIntensity: 1.0 }));
   tip.position.set(0.13, 2.41, 0); group.add(tip);
 }
-// Flat black sunglasses across the eyes.
-// On the HEAD, not the group: cc_goat now has hair that turns with the head,
-// and shades left behind on the group come off the face in a slide.
-function _addShades(head) {
-  const shades = new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.10, 0.04),
-    new THREE.MeshLambertMaterial({ color: 0x080808 }));
-  shades.position.set(0, 0.05, 0.255); head.add(shades);
-}
-
-// Soft cap with a forward brim (the green-cap "default loadout" guy)
-function _addCap(group, color) {
-  const mat = new THREE.MeshLambertMaterial({ color });
-  const dome = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.16, 0.54), mat);
-  dome.position.set(0, 2.10, 0); dome.castShadow = true; group.add(dome);
-  const brim = new THREE.Mesh(new THREE.BoxGeometry(0.50, 0.05, 0.20), mat);
-  brim.position.set(0, 2.04, 0.32); brim.castShadow = true; group.add(brim);
-}
-
 // ── More signature-skin accessories (comic-cast looks) ─────────────────────
 function _addPonytail(group, color) {
   const mat = new THREE.MeshLambertMaterial({ color });
@@ -27609,15 +28050,6 @@ function _addWitchHat(group, color) {
   brim.position.set(0, 2.10, 0); brim.castShadow = true; group.add(brim);
   const cone = new THREE.Mesh(new THREE.ConeGeometry(0.24, 0.52, 18), mat);
   cone.position.set(0, 2.38, 0); cone.rotation.z = 0.12; group.add(cone);
-}
-function _addHeadphones(group, color) {
-  const mat = new THREE.MeshLambertMaterial({ color });
-  const band = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.035, 8, 18, Math.PI), mat);
-  band.position.set(0, 1.95, 0); group.add(band);
-  [-0.29, 0.29].forEach(x => {
-    const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.07, 12), mat);
-    cup.rotation.z = Math.PI / 2; cup.position.set(x, 1.90, 0); group.add(cup);
-  });
 }
 function _addMohawk(group, color) {
   const mat = new THREE.MeshLambertMaterial({ color });
@@ -27698,9 +28130,13 @@ function setMeshCrown(group, on) {
       crown.add(spike);
     }
     crown.position.set(0, 2.30, 0);
-    group.add(crown); group._crown = crown;
+    // Head gear, so it goes in the container that maps old head coordinates
+    // onto the new skull (GEAR_FIT) — on the group it would hover a third of a
+    // metre over everybody.
+    const host = group._gearHead || group;
+    host.add(crown); group._crown = crown; group._crownHost = host;
   } else if (group._crown) {
-    group.remove(group._crown);
+    (group._crownHost || group).remove(group._crown);
     group._crown.traverse(o => { if (o.geometry) o.geometry.dispose(); });
     group._crown = null;
   }
@@ -27721,7 +28157,7 @@ function setMeshTeamArrow(group, on) {
     const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.18, 8), mat);
     stem.position.y = 0.14;
     arrow.add(stem);
-    arrow.position.set(0, 2.68, 0);
+    arrow.position.set(0, 2.12, 0);   // clear of the 1.78 m crown
     arrow.renderOrder = 2000;
     arrow.traverse(o => { o.renderOrder = 2000; });
     group.add(arrow);
@@ -27751,99 +28187,141 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
   const look  = appearanceFor(opts.lookSeed != null ? opts.lookSeed : name);
   const shirt = look.shirt;
   const pant  = darkenColor(shirt, 0.55);
-  const skin  = look.tone;
+  const tone  = look.tone;
+  const B = BODY, S = charSurf();
 
-  const mkMat = c => new THREE.MeshLambertMaterial({ color: c });
+  // Every surface is painted on WHITE and tinted through material.color,
+  // because that is how the skin system recolours (setBody / setLegs /
+  // setHeadAll all set .color). A map that already carried its own colour
+  // would multiply the two together and every skin would come out muddy.
+  const cloth = c => pbrMat({ surface: S.cloth, color: c, roughness: 1.0, metalness: 0.0, bumpScale: 0.0010 });
+  const flesh = c => pbrMat({ surface: S.skin,  color: c, roughness: 0.95, metalness: 0.0, bumpScale: 0.0006 });
 
-  // Head with face — keep the material array so skins can recolor / reface it.
-  // Parts are smooth shared blocks of the old sizes (#47); see roundedBoxGeo.
-  const headGeo = mcBoxGeo(0.5, 0.5, 0.5);
-  const ft = faceTextureFor(look.tone);
-  const faceMat = new THREE.MeshLambertMaterial({ map: ft });
-  const headMats = [ mkMat(skin), mkMat(skin), mkMat(skin), mkMat(skin), faceMat, mkMat(skin) ];
-  const head = new THREE.Mesh(headGeo, headMats);
-  head.position.set(0,1.85,0); head.castShadow = true; group.add(head);
+  // ── Head ──────────────────────────────────────────────────────────────────
+  const faceMat  = pbrMat({ map: faceTextureFor(tone), roughness: 0.92, metalness: 0.0 });
+  const headMats = [flesh(tone), flesh(tone), flesh(tone), flesh(tone), faceMat, flesh(tone)];
+  const head = new THREE.Mesh(sculptBox('head', B.headH, P_HEAD, { segs: 12, vsegs: 16, round: 0.88 }), headMats);
+  head.position.set(0, B.headY, 0); head.castShadow = true; group.add(head);
 
-  // Torso
-  const torsoMat = mkMat(shirt);
-  const torso = new THREE.Mesh(mcBoxGeo(0.55, 0.65, 0.3), torsoMat);
-  torso.position.set(0,1.2,0); torso.castShadow = true; group.add(torso);
+  // Neck. Short and thick on purpose: a thin one is the clearest "this is a
+  // doll" tell a game character has, and the collar covers most of it anyway.
+  const neck = new THREE.Mesh(sculptBox('neck', 0.145, P_NECK, { segs: 10, vsegs: 6, round: 0.94 }), flesh(tone));
+  neck.position.set(0, B.chin - 0.052, -0.006); neck.castShadow = true; group.add(neck);
 
-  // Arms — shoulder pivot → upper arm → ELBOW pivot → forearm.
-  // Two segments rather than one rigid board. A limb that can only pivot at the
-  // shoulder reads as a mannequin being slid along the floor no matter how you
-  // time the swing; the joint in the middle is most of the fix.
-  // Total length stays 0.6 (0.32 + 0.28) so silhouettes and skins are unchanged.
-  const armMeshes = [];   // shoulder pivots
-  const armElbows = [];   // elbow pivots
-  const armLimbs = [];    // limb meshes (for recolor — BOTH segments, so skins
-                          // keep tinting the whole arm the way they always did)
-  const hands = [];       // #47: arms used to end in a sleeve; coloured after the skin, below
-  [-0.39,0.39].forEach(x => {
+  // ── Torso ─────────────────────────────────────────────────────────────────
+  const torsoMat = cloth(shirt);
+  const torso = new THREE.Mesh(sculptBox('torso', B.torsoH, P_TORSO, { segs: 12, vsegs: 14, round: 0.52 }), torsoMat);
+  torso.position.set(0, B.torsoY, 0); torso.castShadow = true; group.add(torso);
+
+  // Pelvis — trousers, so it takes the LEG colour. Its own part rather than the
+  // bottom of the torso because the torso counter-rotates through the walk and
+  // the hips must not come with it.
+  const pelvisMat = cloth(pant);
+  const pelvis = new THREE.Mesh(sculptBox('pelvis', 0.225, P_PELVIS, { segs: 10, vsegs: 6, round: 0.62 }), pelvisMat);
+  pelvis.position.set(0, B.waist - 0.095, 0); pelvis.castShadow = true; group.add(pelvis);
+
+  // ── Arms ──────────────────────────────────────────────────────────────────
+  // shoulder → upper arm → ELBOW → forearm → WRIST → hand, plus a grip anchor
+  // in the right palm. The grip anchor is the point: a weapon parented there is
+  // actually HELD, where it used to be parked at a fixed body offset while the
+  // arm swung past it.
+  const armMeshes = [], armElbows = [], armWrists = [], armLimbs = [], hands = [];
+  [-1, 1].forEach(side => {
     const pivot = new THREE.Group();
-    pivot.position.set(x, 1.5, 0);            // shoulder joint (top of arm)
-    const upper = new THREE.Mesh(mcBoxGeo(0.22, 0.32, 0.22), mkMat(shirt));
-    upper.position.set(0, -0.16, 0);
-    upper.castShadow = true; pivot.add(upper);
-    const elbow = new THREE.Group();
-    elbow.position.set(0, -0.32, 0);          // elbow joint
-    pivot.add(elbow);
-    const fore = new THREE.Mesh(mcBoxGeo(0.205, 0.28, 0.205), mkMat(shirt));
-    fore.position.set(0, -0.14, 0);
-    fore.castShadow = true; elbow.add(fore);
-    const hand = new THREE.Mesh(mcBoxGeo(0.15, 0.13, 0.15), mkMat(skin));
-    hand.position.set(0, -0.30, 0);           // out of the cuff, a little past the sleeve
-    elbow.add(hand);                          // too small to cast a shadow worth a draw call
+    pivot.position.set(side * B.shoulderHalf, B.shoulder, 0);
+    const upper = new THREE.Mesh(sculptBox('uarm', B.upperArm, P_UPPERARM, { segs: 8, vsegs: 8, round: 0.95 }), cloth(shirt));
+    upper.position.y = -B.upperArm / 2; upper.castShadow = true; pivot.add(upper);
+    const elbow = new THREE.Group(); elbow.position.y = -B.upperArm; pivot.add(elbow);
+    const fore = new THREE.Mesh(sculptBox('farm', B.foreArm, P_FOREARM, { segs: 8, vsegs: 8, round: 0.95 }), cloth(shirt));
+    fore.position.y = -B.foreArm / 2; fore.castShadow = true; elbow.add(fore);
+    const wrist = new THREE.Group(); wrist.position.y = -B.foreArm; elbow.add(wrist);
+    const hand = new THREE.Mesh(sculptBox('hand', 0.165, P_HAND, { segs: 8, vsegs: 8, round: 0.72 }), flesh(tone));
+    hand.position.y = -0.0825; hand.castShadow = true; wrist.add(hand);
     hands.push(hand);
     group.add(pivot);
-    armMeshes.push(pivot); armElbows.push(elbow); armLimbs.push(upper, fore);
+    armMeshes.push(pivot); armElbows.push(elbow); armWrists.push(wrist); armLimbs.push(upper, fore);
   });
+  // Where a weapon is held. Pitched to cancel the firing arm's pose, so a prop
+  // parented here comes out level in the ready stance and then travels with the
+  // arm through every other one.
+  const gripR = new THREE.Group();
+  gripR.position.set(0, -0.085, 0.015);
+  gripR.rotation.x = GUN_HOLD.gripPitch;
+  armWrists[1].add(gripR);
 
-  // Legs — hip pivot → thigh → KNEE pivot → shin → foot.
-  // Same total 0.65 as the old single box (0.32 thigh + 0.24 shin + 0.09 foot).
-  const legMeshes = [];   // hip pivots
-  const legKnees = [];    // knee pivots
-  const legFeet = [];     // foot meshes (rotated to keep the sole level)
-  const legLimbs = [];    // limb meshes (for recolor)
-  [-0.155,0.155].forEach(x => {
+  // ── Legs ──────────────────────────────────────────────────────────────────
+  const legMeshes = [], legKnees = [], legAnkles = [], legFeet = [], legLimbs = [];
+  [-1, 1].forEach(side => {
     const pivot = new THREE.Group();
-    pivot.position.set(x, 0.875, 0);          // hip joint (top of leg)
-    const thigh = new THREE.Mesh(mcBoxGeo(0.24, 0.32, 0.26), mkMat(pant));
-    thigh.position.set(0, -0.16, 0);
-    thigh.castShadow = true; pivot.add(thigh);
-    const knee = new THREE.Group();
-    knee.position.set(0, -0.32, 0);           // knee joint
-    pivot.add(knee);
-    const shin = new THREE.Mesh(mcBoxGeo(0.225, 0.24, 0.245), mkMat(pant));
-    shin.position.set(0, -0.12, 0);
-    shin.castShadow = true; knee.add(shin);
+    pivot.position.set(side * B.hipHalf, B.hip, 0);
+    const thigh = new THREE.Mesh(sculptBox('thigh', B.thigh, P_THIGH, { segs: 8, vsegs: 8, round: 0.72 }), cloth(pant));
+    thigh.position.y = -B.thigh / 2; thigh.castShadow = true; pivot.add(thigh);
+    const knee = new THREE.Group(); knee.position.y = -B.thigh; pivot.add(knee);
+    const shin = new THREE.Mesh(sculptBox('shin', B.shin, P_SHIN, { segs: 8, vsegs: 8, round: 0.80 }), cloth(pant));
+    shin.position.y = -B.shin / 2; shin.castShadow = true; knee.add(shin);
+    // A real ankle joint, so the foot ROLLS about the ankle instead of spinning
+    // about the middle of the boot the way it did when the mesh was the pivot.
+    const ankle = new THREE.Group(); ankle.position.y = -B.shin; knee.add(ankle);
     // Boots stay dark on every skin, so they are deliberately NOT in legLimbs.
-    const foot = new THREE.Mesh(mcBoxGeo(0.235, 0.09, 0.33), mkMat(0x241c18));
-    foot.position.set(0, -0.285, 0.04);       // toe sticks forward a little
-    knee.add(foot);   // no shadow: it hid under the leg's anyway, and pays for the hands' draw calls (#47)
+    const boot = new THREE.Mesh(sculptBox('boot', 0.20, P_BOOT, { segs: 10, vsegs: 8, round: 0.55 }),
+      pbrMat({ surface: S.boot, color: 0x2a221d, roughness: 0.80, metalness: 0.0, bumpScale: 0.0012 }));
+    boot.position.set(0, 0.031, 0); boot.castShadow = true; ankle.add(boot);
+    // Rubber sole, always dark, never recoloured: it is what makes the boot
+    // read as footwear rather than as the bottom of a trouser leg.
+    const sole = new THREE.Mesh(sculptBox('sole', 0.034, P_SOLE, { segs: 8, vsegs: 3, round: 0.5 }), soleMat());
+    sole.position.set(0, -0.052, 0); ankle.add(sole);
     group.add(pivot);
-    legMeshes.push(pivot); legKnees.push(knee); legFeet.push(foot);
+    legMeshes.push(pivot); legKnees.push(knee); legAnkles.push(ankle); legFeet.push(boot);
     legLimbs.push(thigh, shin);
   });
 
-  // ── Apply skin (recolor + accessories) ────────────────────────────────────
-  applyCharacterSkin(skinId, { group, head, headMats, faceMat, torso, torsoMat, armLimbs, legLimbs, look, hands, feet: legFeet });
+  // ── Gear containers (see GEAR_FIT) ────────────────────────────────────────
+  const hf = GEAR_FIT.head, tf = GEAR_FIT.torso;
+  const gearHead = new THREE.Group();            // group space, head gear
+  gearHead.scale.set(hf.s[0], hf.s[1], hf.s[2]);
+  gearHead.position.y = B.headY - hf.s[1] * hf.y;
+  group.add(gearHead);
+  const gearBody = new THREE.Group();            // group space, torso gear
+  gearBody.scale.set(tf.s[0], tf.s[1], tf.s[2]);
+  gearBody.position.y = B.torsoY - tf.s[1] * tf.y;
+  group.add(gearBody);
+  const gearSkull = new THREE.Group();           // head-LOCAL: hair, shades
+  gearSkull.scale.set(hf.s[0], hf.s[1], hf.s[2]);
+  head.add(gearSkull);
+  const gearTorso = new THREE.Group();           // torso-LOCAL: vest, belt, pack
+  gearTorso.scale.set(tf.s[0], tf.s[1], tf.s[2]);
+  torso.add(gearTorso);
+
+  // ── Apply skin (recolour + accessories) ───────────────────────────────────
+  // _gearHead BEFORE the skin, not after: cc_kingchaos calls setMeshCrown()
+  // from inside its own case, and without the container to land in the crown
+  // fell back to raw group space and floated 0.7 m over his head.
+  group._gearHead = gearHead;
+  applyCharacterSkin(skinId, {
+    group, head, headMats, faceMat, torso, torsoMat, pelvis, pelvisMat,
+    armLimbs, legLimbs, look, hands, feet: legFeet,
+    gearHead, gearBody, gearSkull, gearTorso,
+  });
   if (opts.crown) setMeshCrown(group, true);
-  // Hands take the head's colour: skin on most skins, gloves on the armoured ones.
-  // A drawn skin has already said what its hands are; only the recoloured ones
-  // take the head's colour.
+  // Hands take the head's colour: skin on most skins, gloves on the armoured
+  // ones. A drawn skin has already said what its hands are; only the recoloured
+  // ones take the head's colour.
   if (!PIXEL_SKINS[skinId]) for (const h of hands) h.material.color.copy(headMats[0].color);
 
   const tag = isBot ? null : opts.tag;
 
-  // ── Animation rig: store limb pivots + per-character walk state ───────────
+  // ── Animation rig: joints + per-character walk state ──────────────────────
   group._rig = {
     legL: legMeshes[0], legR: legMeshes[1],
     kneeL: legKnees[0], kneeR: legKnees[1],
-    footL: legFeet[0],  footR: legFeet[1],
+    footL: legAnkles[0], footR: legAnkles[1],
     armL: armMeshes[0], armR: armMeshes[1],
     elbowL: armElbows[0], elbowR: armElbows[1],
-    head, torso,
+    wristL: armWrists[0], wristR: armWrists[1],
+    head, torso, neck, pelvis, gripR,
+    // Everything that wears the shirt colour, for callers that tint a whole
+    // body at once (the killcam paints the killer blue and the victim red).
+    bodyMats: [torsoMat, ...armLimbs.map(m => m.material)],
     phase: 0,            // walk-cycle phase
     speedSmooth: 0,      // smoothed horizontal speed
     blend: 0,            // 0 = standing, 1 = full walk (eased, so limbs don't snap)
@@ -27861,6 +28339,7 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
     gaitAsym:   0.94 + Math.random() * 0.12,   // right side swings a bit differently
     gaitBob:    0.80 + Math.random() * 0.40,   // how much the body rises and falls
     gaitLean:   0.85 + Math.random() * 0.30,   // torso twist / roll amount
+    breathe:    Math.random() * Math.PI * 2,   // idle breathing, out of step with everyone
   };
   group._skinId = skinId;
   group._tagKind = tag || null;
@@ -27947,13 +28426,19 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
     if (rig.kneeR) rig.kneeR.rotation.x = -knee(p + Math.PI) * blend * gAmp;
 
     if (rig.holdsGun) {
-      // Right arm stays raised forward holding the weapon; left arm swings a bit
-      rig.armR.rotation.x = -1.25;
-      rig.armL.rotation.x = -gait(p + Math.PI) * armAmp * 0.5;
-      if (rig.elbowR) rig.elbowR.rotation.x = 0.55;   // bent to bring the gun in
-      if (rig.elbowL) rig.elbowL.rotation.x = 0.30 + 0.25 * Math.max(0, Math.sin(p));
+      // BOTH hands on the weapon (GUN_HOLD). The firing arm holds the solved
+      // stance — the weapon is parented to its grip, so this is what points the
+      // barrel — and the support arm reaches forward onto the handguard instead
+      // of swinging free beside a rifle it is meant to be steadying.
+      rig.armR.rotation.x = GUN_HOLD.shoulderX;
+      rig.armR.rotation.z = -0.10;
+      if (rig.elbowR) rig.elbowR.rotation.x = GUN_HOLD.elbowX;
+      rig.armL.rotation.x = GUN_HOLD.supShoulderX - gait(p + Math.PI) * armAmp * 0.16;
+      rig.armL.rotation.z = GUN_HOLD.supShoulderZ;
+      if (rig.elbowL) rig.elbowL.rotation.x = GUN_HOLD.supElbowX;
     } else {
       // An arm swings opposite its OWN leg.
+      rig.armL.rotation.z = 0; rig.armR.rotation.z = 0;
       rig.armL.rotation.x = gait(p + Math.PI) * armAmp;
       rig.armR.rotation.x = gait(p) * armAmp;
       // Elbows never lock straight, even standing — hence the 0.4 floor.
@@ -27990,15 +28475,24 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
     const advanceLean = 0.22 + run * 0.16 + (tacticalAdvance ? 0.04 : 0);
     rig.legL.rotation.x = THREE.MathUtils.lerp(rig.legL.rotation.x, slideLean ? -1.35 : (advancePose ? -0.38 : -0.72), c);
     rig.legR.rotation.x = THREE.MathUtils.lerp(rig.legR.rotation.x, slideLean ? 0.48 : (advancePose ? 0.16 : -0.28), c);
-    rig.armL.rotation.x = THREE.MathUtils.lerp(rig.armL.rotation.x, slideLean ? -1.22 : (advancePose ? -1.05 : -0.8), c);
-    rig.armR.rotation.x = THREE.MathUtils.lerp(rig.armR.rotation.x, slideLean ? -1.55 : (advancePose ? -1.38 : -0.8), c);
+    // An armed character keeps the weapon stance through a crouch and a slide —
+    // the gun hangs off the firing hand now, so throwing the arms into a free
+    // pose would throw the rifle with them.
+    const armLT = rig.holdsGun ? GUN_HOLD.supShoulderX + (slideLean ? -0.16 : 0)
+                               : (slideLean ? -1.22 : (advancePose ? -1.05 : -0.8));
+    const armRT = rig.holdsGun ? GUN_HOLD.shoulderX + (slideLean ? 0.12 : 0)
+                               : (slideLean ? -1.55 : (advancePose ? -1.38 : -0.8));
+    rig.armL.rotation.x = THREE.MathUtils.lerp(rig.armL.rotation.x, armLT, c);
+    rig.armR.rotation.x = THREE.MathUtils.lerp(rig.armR.rotation.x, armRT, c);
     rig.torso.rotation.x = THREE.MathUtils.lerp(0, slideLean ? -0.62 : (advancePose ? advanceLean : 0.18), c);
     rig.head.rotation.x  = THREE.MathUtils.lerp(0, slideLean ? 0.54 : (advancePose ? -0.12 : -0.08), c);
     // Knees have to fold hard here or a tucked slide looks like a plank.
     if (rig.kneeL) rig.kneeL.rotation.x = THREE.MathUtils.lerp(rig.kneeL.rotation.x, slideLean ? 1.20 : (advancePose ? 0.62 : 1.05), c);
     if (rig.kneeR) rig.kneeR.rotation.x = THREE.MathUtils.lerp(rig.kneeR.rotation.x, slideLean ? -0.35 : (advancePose ? 0.46 : 0.88), c);
-    if (rig.elbowL) rig.elbowL.rotation.x = THREE.MathUtils.lerp(rig.elbowL.rotation.x, slideLean ? 1.05 : (advancePose ? 0.85 : 0.7), c);
-    if (rig.elbowR) rig.elbowR.rotation.x = THREE.MathUtils.lerp(rig.elbowR.rotation.x, slideLean ? 1.15 : (advancePose ? 0.9 : 0.7), c);
+    const elbLT = rig.holdsGun ? GUN_HOLD.supElbowX : (slideLean ? -1.05 : (advancePose ? -0.85 : -0.7));
+    const elbRT = rig.holdsGun ? GUN_HOLD.elbowX     : (slideLean ? -1.15 : (advancePose ? -0.9 : -0.7));
+    if (rig.elbowL) rig.elbowL.rotation.x = THREE.MathUtils.lerp(rig.elbowL.rotation.x, elbLT, c);
+    if (rig.elbowR) rig.elbowR.rotation.x = THREE.MathUtils.lerp(rig.elbowR.rotation.x, elbRT, c);
     if (rig.footL) rig.footL.rotation.x = THREE.MathUtils.lerp(rig.footL.rotation.x, slideLean ? -0.22 : (advancePose ? -0.12 : -0.18), c);
     if (rig.footR) rig.footR.rotation.x = THREE.MathUtils.lerp(rig.footR.rotation.x, slideLean ? 0.26 : (advancePose ? -0.08 : -0.14), c);
     // Crouch unwinds twist; a slide gets a slight shoulder roll so it reads from a distance.
@@ -28014,10 +28508,10 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
     rig.legR.rotation.x = THREE.MathUtils.lerp(rig.legR.rotation.x, -0.54, j);
     if (rig.kneeL) rig.kneeL.rotation.x = THREE.MathUtils.lerp(rig.kneeL.rotation.x, 1.05, j);
     if (rig.kneeR) rig.kneeR.rotation.x = THREE.MathUtils.lerp(rig.kneeR.rotation.x, 0.95, j);
-    rig.armL.rotation.x = THREE.MathUtils.lerp(rig.armL.rotation.x, rig.holdsGun ? -1.15 : -0.52, j);
-    rig.armR.rotation.x = THREE.MathUtils.lerp(rig.armR.rotation.x, rig.holdsGun ? -1.42 : -0.72, j);
-    if (rig.elbowL) rig.elbowL.rotation.x = THREE.MathUtils.lerp(rig.elbowL.rotation.x, 0.82, j);
-    if (rig.elbowR) rig.elbowR.rotation.x = THREE.MathUtils.lerp(rig.elbowR.rotation.x, 0.92, j);
+    rig.armL.rotation.x = THREE.MathUtils.lerp(rig.armL.rotation.x, rig.holdsGun ? GUN_HOLD.supShoulderX - 0.12 : -0.52, j);
+    rig.armR.rotation.x = THREE.MathUtils.lerp(rig.armR.rotation.x, rig.holdsGun ? GUN_HOLD.shoulderX : -0.72, j);
+    if (rig.elbowL) rig.elbowL.rotation.x = THREE.MathUtils.lerp(rig.elbowL.rotation.x, rig.holdsGun ? GUN_HOLD.supElbowX : -0.82, j);
+    if (rig.elbowR) rig.elbowR.rotation.x = THREE.MathUtils.lerp(rig.elbowR.rotation.x, rig.holdsGun ? GUN_HOLD.elbowX : -0.92, j);
     rig.torso.rotation.x = THREE.MathUtils.lerp(rig.torso.rotation.x, 0.34, j);
     rig.head.rotation.x = THREE.MathUtils.lerp(rig.head.rotation.x, -0.18, j);
     if (rig.footL) rig.footL.rotation.x = THREE.MathUtils.lerp(rig.footL.rotation.x, -0.12, j);
@@ -32048,14 +32542,13 @@ function makeKillcamActor(name, team, skin, armed) {
   if (armed) {
     if (body._rig) body._rig.holdsGun = true;
     const gun = _genericGun({ bodyShape: 'classic', bodyColor: 0x222222, accentColor: 0x6a6a6a, magType: 'banana', topRail: true });
-    gun.scale.setScalar(1.25);
-    gun.position.set(0.26, 1.34, 0.34);
+    gun.position.set(0, -0.02, 0.055);
     gun.rotation.y = Math.PI;
     const flash = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffdd66 }));
     flash.position.set(0, 0.02, -0.55);
     flash.visible = false;
     gun.add(flash);
-    body.add(gun);
+    ((body._rig && body._rig.gripR) || body).add(gun);
     body._flash = flash;
   }
   scene.add(body);
@@ -32391,19 +32884,18 @@ function openKillTheater(index) {
     // Tint shirt + arms to the team color for at-a-glance identification.
     const tint = isKiller ? 0x3a72d6 : isVictim ? 0xd63a3a : 0x9a9a9a;
     if (body._rig) {
-      body._rig.torso.material.color.setHex(tint);
-      body._rig.armL.children[0].material.color.setHex(tint);
-      body._rig.armR.children[0].material.color.setHex(tint);
+      body._rig.bodyMats.forEach(m => m.color.setHex(tint));
       body._rig.holdsGun = isKiller; // killer keeps the weapon arm raised
     }
     // Give the killer a visible weapon in hand (generic gun, barrel along -Z).
     if (isKiller) {
       const gun = _genericGun({ bodyShape: 'classic', bodyColor: 0x222222, accentColor: 0x6a6a6a, magType: 'banana', topRail: true });
-      gun.scale.setScalar(1.25);
-      // +Z side + flipped barrel to match the ghost's +PI mesh facing.
-      gun.position.set(0.26, 1.34, 0.34); // right-hand, forward of the chest
+      gun.scale.setScalar(1.0);
+      // In the hand, not beside the body: the grip anchor already carries the
+      // facing (+PI) and the pitch that levels the weapon in the ready stance.
+      gun.position.set(0, -0.02, 0.055);
       gun.rotation.y = Math.PI;
-      body.add(gun);
+      ((body._rig && body._rig.gripR) || body).add(gun);
       body._gun = gun;
     }
     THEATER.ghostGroup.add(body);
@@ -44842,9 +45334,9 @@ function spawnRemotePlayer(p) {
   // Another player's bot: makeBot arms our own, so arm theirs here (#48)
   if (p.isBot && p.ownerId !== myId && p.weaponId) {
     const gun = makeBotWeaponProp(p.weaponId);
-    gun.position.set(0.38, 1.18, 0.22);
+    gun.position.set(0, -0.02, 0.055);
     gun.rotation.y = Math.PI;
-    mesh.add(gun);
+    ((mesh._rig && mesh._rig.gripR) || mesh).add(gun);
     mesh._gun = gun;
     if (mesh._rig) mesh._rig.holdsGun = true;
   }
@@ -47361,10 +47853,10 @@ function spawnDDayWave(count, waveNum) {
     const mesh = remoteMeshes[id];
     if (mesh) {
       const gun = makeBotWeaponProp(weaponId);
-      // Gun on the +Z (forward) side + flipped barrel, matching the +PI mesh facing.
-      gun.position.set(0.38, 1.18, 0.22);
+      // In the right hand (#53); the grip anchor carries the +PI facing's pitch.
+      gun.position.set(0, -0.02, 0.055);
       gun.rotation.y = Math.PI;
-      mesh.add(gun);
+      ((mesh._rig && mesh._rig.gripR) || mesh).add(gun);
       if (mesh._rig) mesh._rig.holdsGun = true;
     }
     gameBots.push({
@@ -47862,7 +48354,7 @@ function attachTeammateAvatar(mesh, tc) {
   const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
   const sprite = new THREE.Sprite(mat);
   sprite.scale.set(0.9, 0.9, 0.9);
-  sprite.position.set(0, 2.85, 0); // above the head/nametag
+  sprite.position.set(0, 2.42, 0); // above the head/nametag (crown is 1.78)
   sprite.renderOrder = 999;
   sprite.name = '_teammateAvatar';
   mesh.add(sprite);
@@ -48148,9 +48640,12 @@ function spawnGameBots() {
     if (mesh) {
       const gun = makeBotWeaponProp(weaponId);
       // Gun on the +Z (forward) side + flipped barrel, matching the +PI mesh facing.
-      gun.position.set(0.38, 1.18, 0.22);
+      // In the right hand (#53). The grip anchor carries the pitch that levels
+      // the weapon in the ready stance, so the gun travels with the arm through
+      // the whole walk instead of hanging at a fixed body offset beside it.
+      gun.position.set(0, -0.02, 0.055);
       gun.rotation.y = Math.PI; // barrel points along forward with the bot
-      mesh.add(gun);
+      ((mesh._rig && mesh._rig.gripR) || mesh).add(gun);
       if (mesh._rig) mesh._rig.holdsGun = true;
     }
 
