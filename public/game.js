@@ -11509,7 +11509,9 @@ const _SCN = {
     K.ground(0x6a6f74);
     const jet = () => { const g = new THREE.Group(); K.mesh(new THREE.CylinderGeometry(3, 3, 44, 8), K.flat(0xf2f4f6), 0, 0, 0, g).rotation.x = Math.PI / 2; K.mesh(new THREE.ConeGeometry(3, 8, 8), K.flat(0xf2f4f6), 0, 0, -26, g).rotation.x = -Math.PI / 2;
       K.mesh(new THREE.BoxGeometry(60, 0.8, 9), K.flat(0xd8dce0), 0, -0.6, 4, g); K.mesh(new THREE.BoxGeometry(18, 0.6, 5), K.flat(0xd8dce0), 0, 0.4, 21, g); K.mesh(new THREE.BoxGeometry(0.8, 9, 6), K.flat(0x2a6fc9), 0, 4.5, 20, g); return g; };
-    const fly = jet(); fly.scale.setScalar(1.4); fly.position.set(-400, 90, -40); K.group.add(fly);
+    const fly = jet(); fly.scale.setScalar(1.4); fly.position.set(-400, 90, -40);
+    // The jet is built nose to -z but flies along +x, which had it crossing the sky broadside. Turn the nose to +x.
+    fly.rotation.y = -Math.PI / 2; K.group.add(fly);
     K.anim((dt) => { fly.position.x += dt * 38; if (fly.position.x > 400) fly.position.x = -400; fly.position.y = 90 + Math.sin(fly.position.x * 0.01) * 4; });
   },
   doomsday(K) {
