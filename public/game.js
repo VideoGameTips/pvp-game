@@ -3079,7 +3079,7 @@ function updateBotSpeech(dt) {
     // Position over the bot's head
     const mesh = remoteMeshes[bot.id];
     if (!mesh) { bot._bubble.style.display = 'none'; continue; }
-    const headPos = mesh.position.clone(); headPos.y += 2.5;
+    const headPos = mesh.position.clone(); headPos.y += 2.05;   // crown is 1.78 (#53)
     const sc = worldToScreen(headPos);
     if (!sc) { bot._bubble.style.display = 'none'; continue; }
     bot._bubble.style.display = 'block';
@@ -3291,7 +3291,11 @@ function _metalizeMat(m) {
                    'polygonOffsetFactor', 'polygonOffsetUnits', 'name', 'alphaTest', 'visible'])
     if (m[k] !== undefined) p[k] = m[k];
   const out = pbrMat(p);
-  out.userData = Object.assign({}, m.userData, { metalDone: true });
+  // The NEW material's own userData last-but-one: pbrMat sets `surfaceMap`
+  // there, and copying only the old material's userData over the top threw it
+  // away — which is what kept every weapon colour skin dead even after the
+  // collector learned to ask for it.
+  out.userData = Object.assign({}, m.userData, out.userData, { metalDone: true });
   return out;
 }
 function metalizeModel(root) {
@@ -3356,9 +3360,10 @@ function _pbrEnv() {
   // Cloud bank. Soft, low-contrast and banded around the upper sky: it is what
   // puts a gradient across a shoulder or a barrel as the character turns.
   x.globalAlpha = 0.5;
-  for (let i = 0; i < 46; i++) {
-    const cx = Math.random() * W, cy = Math.random() * H * 0.40;
-    const r = 26 + Math.random() * 90;
+  const erand = _rng(0x5c1e5);   // the rule the rest of this file follows: the
+  for (let i = 0; i < 46; i++) { // environment every surface reflects must not
+    const cx = erand() * W, cy = erand() * H * 0.40;   // reshuffle on reload
+    const r = 26 + erand() * 90;
     const g = x.createRadialGradient(cx, cy, 0, cx, cy, r);
     g.addColorStop(0, 'rgba(255,255,255,0.95)');
     g.addColorStop(1, 'rgba(255,255,255,0)');
@@ -3420,8 +3425,27 @@ scene.environment = _pbrEnv();
 // bumpMap rather than a normal map on purpose: a normal map means computing
 // gradients over every canvas at load, and at the sizes a character is actually
 // seen from, bump is indistinguishable and free.
+// ── 📱 Art scale ────────────────────────────────────────────────────────────
+// A character's torso is about 40 px tall on a phone, so the 320 px kit art is
+// roughly eight times oversampled there. At full size the six tactical skins
+// cost about 40 MB of canvas backing store and 75 ms of synchronous painting
+// for the first character wearing each of them — which on a mid-range phone is
+// a two-to-four-tenths-of-a-second stall in the middle of a match. Everything
+// here scales with the square of the size, so 0.4 is a 6x cut for no visible
+// loss at phone sizes.
+const ART_SCALE = (() => {
+  try {
+    const touch = (navigator.maxTouchPoints || 0) > 0 ||
+                  (window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+    const shortEdge = Math.min(screen.width || 9999, screen.height || 9999);
+    return (touch && shortEdge <= 900) ? 0.4 : 1;
+  } catch (e) { return 1; }
+})();
+const artRes = n => Math.max(32, Math.round(n * ART_SCALE));
+
 const _surfCache = new Map();
-function surfTex(key, size, draw, dataMap = false) {
+function surfTex(key, rawSize, draw, dataMap = false) {
+  const size = artRes(rawSize);
   const ck = key + '@' + size + (dataMap ? ':d' : '');
   let t = _surfCache.get(ck);
   if (t) return t;
@@ -3540,8 +3564,9 @@ const SURF = {
         _blotches(x, s, rnd, tones.map(_hx), { count: 13, r0: 16, r1: 44 });
         _weave(x, s, rnd, 4, 0.07);
       }),
-      roughnessMap: SURF.fabric(base, seed).roughnessMap,
-      bumpMap: SURF.fabric(base, seed).bumpMap,
+      // One call, destructured — two calls painted the colour map twice and
+      // threw one of them away.
+      ...(() => { const f = SURF.fabric(base, seed); return { roughnessMap: f.roughnessMap, bumpMap: f.bumpMap }; })(),
     };
   },
   // Cordura / nylon pack cloth: a coarse basket weave with a faint sheen, so
@@ -3618,7 +3643,14 @@ const SURF = {
         x.fillStyle = 'rgba(0,0,0,0.22)'; x.fillRect(0, 0, 4, s); x.fillRect(s - 4, 0, 4, s);
         _grain(x, s, rnd, { n: 2200, a: 0.07 });
       }),
-      roughnessMap: SURF.cordura(color, seed).roughnessMap,
+      // Coated nylon, same as cordura's — painted here rather than built by
+      // calling SURF.cordura(), which would paint two 256² colour and bump
+      // canvases nobody then references.
+      roughnessMap: surfTex(key + 'R', 128, (x, s) => {
+        const rnd = _rng(seed * 2166136261);
+        x.fillStyle = '#9a9a9a'; x.fillRect(0, 0, s, s);
+        _grain(x, s, rnd, { n: 4200, a: 0.3, r: 2 });
+      }, true),
       bumpMap: surfTex(key + 'B', 128, (x, s) => {
         x.fillStyle = '#808080'; x.fillRect(0, 0, s, s);
         for (let yy = 0; yy < s; yy += 3) {
@@ -3799,6 +3831,7 @@ function pbrMat(opts = {}) {
   const p = Object.assign({ roughness: 0.6, metalness: 0.0, envMapIntensity: 1.0 }, rest);
   if (surface) {
     p.map = surface.map;
+    p.userData = Object.assign({ surfaceMap: true }, p.userData);
     p.roughnessMap = surface.roughnessMap;
     p.bumpMap = surface.bumpMap;
     if (p.bumpScale === undefined) p.bumpScale = 0.0016;
@@ -19800,9 +19833,14 @@ function _legendMats() {
   const flame = (c, op, add) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: op,
     depthWrite: false, side: THREE.DoubleSide, blending: add ? THREE.AdditiveBlending : THREE.NormalBlending });
   return {
-    obsidian: new THREE.MeshPhongMaterial({ color: 0x17121a, shininess: 190, specular: 0x9a3a3a }),
-    ember:    new THREE.MeshPhongMaterial({ color: 0x4a0806, emissive: 0xff2010, emissiveIntensity: 0.9,
-                                            shininess: 120, specular: 0xff8a6a }),
+    // PBR, not Phong, and deliberately so: _legendize keeps these in a closure
+    // and animates obsidian.emissive on draw and on reload, and the finishing
+    // pass would otherwise convert them and swap them off every mesh, leaving
+    // the closure writing to nothing (#53). pbrMat marks them metalDone.
+    obsidian: pbrMat({ surface: gunSurf().steel, color: 0x17121a, roughness: 0.22, metalness: 0.9,
+                       bumpScale: 0.00035, envMapIntensity: 1.3 }),
+    ember:    pbrMat({ surface: gunSurf().steel, color: 0x4a0806, emissive: new THREE.Color(0xff2010),
+                       emissiveIntensity: 0.9, roughness: 0.35, metalness: 0.7, bumpScale: 0.00035 }),
     tip:      new THREE.MeshBasicMaterial({ color: 0xff2a14 }),
     black:    flame(0x0a0405, 0.78, false),   // the black fire, on the outside
     red:      flame(0xff2a1a, 0.85, true),    // the red inside it
@@ -24772,7 +24810,12 @@ function applyWeaponSkin(model, skin) {
       model._skinMats = [];
       model.traverse(o => {
         if (o.userData && o.userData.vmHand) return;   // hands are not part of the gun
-        if (o.isMesh && o.material && o.material.color && !o.material.map) {
+        // `!map` used to mean "no hand-drawn art on this part, so a colour skin
+        // may repaint it". A procedural SURFACE map is grain under a colour,
+        // not art, so it stays repaintable (#53) — without this every weapon
+        // colour skin silently does nothing.
+        if (o.isMesh && o.material && o.material.color &&
+            (!o.material.map || (o.material.userData && o.material.userData.surfaceMap))) {
           const basic = !!o.material.isMeshBasicMaterial; // glow/lens/reticle — leave colored
           const clone = o.material.clone(); o.material = clone;
           model._skinMats.push({ mat: clone, orig: clone.color.getHex(), basic });
@@ -26137,8 +26180,8 @@ function makeFaceTexture(tone = 0xffcc99) {
   // Pores, at the same strength as the rest of the skin surface.
   _grain(x, S, rnd, { n: 9000, a: 0.04 });
   // The border has to meet the plain skin on the head's sides, so fade to it.
-  const vg = x.createRadialGradient(128, 140, 60, 128, 140, 150);
-  vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, sk + '00');
+  const vg = x.createRadialGradient(128, 140, 70, 128, 140, 170);
+  vg.addColorStop(0, sk + '00'); vg.addColorStop(0.55, sk + '00'); vg.addColorStop(1, sk);
   x.fillStyle = vg; x.fillRect(0, 0, S, S);
 
   const tex = new THREE.CanvasTexture(c);
@@ -26500,7 +26543,7 @@ function soleMat() {
 // What makes kit read as kit is not the colours — it is stitching, webbing,
 // buckles and the fact that a panel is lit from above. All of that lives in
 // the helpers below, so the six colourways stay six colour tables.
-const KIT_RES = 320;
+const KIT_RES = artRes(320);
 const _charTexCache = new Map();
 function charTex(key, draw, dataMap = false) {
   const ck = key + (dataMap ? ':d' : '');
@@ -26887,11 +26930,17 @@ const _KITFACE = {
   },
   // Desert: shemagh over the lower face, amber goggles over the eyes.
   ranger: (col, lens) => (p, x, S) => {
-    _k.face(x, S, 0xdca878);
-    _k.cloth(x, S, col, 45);                                             // wrap, then cut it back
+    // Order matters. Painting the face FIRST and then cutting the wrap back
+    // with destination-out takes the face out with it — 17 000 px of this
+    // texture came out fully transparent, a hole in the forehead that only the
+    // helmet was covering. Wrap first, cut the hole, then paint the face in
+    // UNDER it with destination-over.
+    _k.cloth(x, S, col, 45);
     x.globalCompositeOperation = 'destination-out';
     x.fillStyle = '#000';
     x.fillRect(0, 0, S, 0.56 * S);
+    x.globalCompositeOperation = 'destination-over';
+    _k.face(x, S, 0xdca878);
     x.globalCompositeOperation = 'source-over';
     x.fillStyle = 'rgba(0,0,0,0.22)';                                    // folds in the wrap
     for (let i = 0; i < 5; i++) x.fillRect(0, (0.60 + i * 0.075) * S, S, 0.014 * S);
@@ -27600,7 +27649,7 @@ function applyCharacterSkin(skinId, parts) {
   // machinery below — no seeded shirt, no accessory library, no face overlay.
   if (PIXEL_SKINS[skinId]) { applyPixelSkin(PIXEL_SKINS[skinId], parts); return; }
   const { group, head, headMats, faceMat, torso, torsoMat, armLimbs, legLimbs, look,
-          pelvisMat, neckMat, gearHead: gh, gearBody: gb, gearSkull: gs } = parts;
+          pelvisMat, neckMat, gearHead: gh, gearBody: gb } = parts;
   // Accessories are authored in the OLD rig's coordinates and land in the
   // containers that map them onto the new body (see GEAR_FIT). `pin` picks the
   // head container or the body container by how high the part sits in that old
@@ -28513,9 +28562,6 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
   gearBody.scale.set(tf.s[0], tf.s[1], tf.s[2]);
   gearBody.position.y = B.torsoY - tf.s[1] * tf.y;
   group.add(gearBody);
-  const gearSkull = new THREE.Group();           // head-LOCAL: hair, shades
-  gearSkull.scale.set(hf.s[0], hf.s[1], hf.s[2]);
-  head.add(gearSkull);
 
   // ── Apply skin (recolour + accessories) ───────────────────────────────────
   // _gearHead BEFORE the skin, not after: cc_kingchaos calls setMeshCrown()
@@ -28525,7 +28571,7 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
   applyCharacterSkin(skinId, {
     group, head, headMats, faceMat, torso, torsoMat, pelvis, pelvisMat, neck, neckMat,
     armLimbs, legLimbs, look, hands, feet: legFeet,
-    gearHead, gearBody, gearSkull,
+    gearHead, gearBody,
   });
   if (opts.crown) setMeshCrown(group, true);
   // Hands take the head's colour: skin on most skins, gloves on the armoured
@@ -28546,7 +28592,10 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
     head, torso, neck, pelvis, gripR,
     // Everything that wears the shirt colour, for callers that tint a whole
     // body at once (the killcam paints the killer blue and the victim red).
-    bodyMats: [torsoMat, ...armLimbs.map(m => m.material)],
+    // Read AFTER the skin has been applied, and flattened: a drawn skin
+    // replaces torso.material with charFaceMats' six-entry array, so capturing
+    // the pre-skin local left the chest orphaned and only the sleeves tinted.
+    bodyMats: [torso, ...armLimbs].flatMap(m => Array.isArray(m.material) ? m.material : [m.material]),
     phase: 0,            // walk-cycle phase
     speedSmooth: 0,      // smoothed horizontal speed
     blend: 0,            // 0 = standing, 1 = full walk (eased, so limbs don't snap)
@@ -28633,10 +28682,11 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
   // Coming out of the air used to snap straight back to the walk pose, which is
   // the one moment a body is unmistakably taking a load. The knees give and
   // recover over about a third of a second.
-  if (rig.prevJump === undefined) rig.prevJump = 0;
+  const rawJump = clamp01(jumpTarget || 0);
+  if (rig.prevJump === undefined) rig.prevJump = rawJump;
   if (rig.land === undefined) rig.land = 0;
-  if (rig.prevJump > 0.45 && jump <= 0.20) rig.land = 1;
-  rig.prevJump = jump;
+  if (rig.prevJump > 0.5 && rawJump < 0.1) rig.land = 1;
+  rig.prevJump = rawJump;
   rig.land = Math.max(0, rig.land - dt * 3.4);
   const land = rig.land * rig.land * (1 - jump);
 
@@ -28677,6 +28727,23 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
 
   // 0.62 everywhere was a lunge at walking pace. A real walk swings the hip
   // about 0.40 rad and a run earns the rest, so the amplitude follows speed.
+  // ── Per-frame neutral ────────────────────────────────────────────────────
+  // Every pose below is written as a lerp FROM whatever is already on the
+  // joint, so any channel that is not rewritten each frame accumulates. The
+  // walk branch used to be the only thing clearing the pitch channels, and it
+  // is skipped at crouch >= 0.5 — which made the aim term at the bottom feed
+  // back into itself: a crouching player looking down settled at 0.94 rad of
+  // head pitch where the pose asks for 0.51, and saturated on the clamp going
+  // the other way. The shoulder abduction froze for the same reason.
+  rig.torso.rotation.x = 0;
+  rig.head.rotation.x = 0;
+  if (rig.holdsGun) {
+    rig.armR.rotation.z = -0.10;                 // firing elbow tucked in
+    rig.armL.rotation.z = GUN_HOLD.supShoulderZ; // support elbow out from under the gun
+  } else {
+    rig.armL.rotation.z = 0; rig.armR.rotation.z = 0;
+  }
+
   const legAmp  = (0.40 + run * 0.26) * blend * gAmp;
   const legAmpR = legAmp * (rig.gaitAsym ?? 1);
   const swing   = gait(p) * legAmp;                 // left leg
@@ -28696,15 +28763,12 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
       // stance — the weapon is parented to its grip, so this is what points the
       // barrel — and the support arm reaches forward onto the handguard instead
       // of swinging free beside a rifle it is meant to be steadying.
-      rig.armR.rotation.x = GUN_HOLD.shoulderX - aim * 0.55;
-      rig.armR.rotation.z = -0.10;
+      rig.armR.rotation.x = GUN_HOLD.shoulderX + aim * 0.55;
       if (rig.elbowR) rig.elbowR.rotation.x = GUN_HOLD.elbowX;
-      rig.armL.rotation.x = GUN_HOLD.supShoulderX - gait(p + Math.PI) * armAmp * 0.16 - aim * 0.55;
-      rig.armL.rotation.z = GUN_HOLD.supShoulderZ;
+      rig.armL.rotation.x = GUN_HOLD.supShoulderX - gait(p + Math.PI) * armAmp * 0.16 + aim * 0.55;
       if (rig.elbowL) rig.elbowL.rotation.x = GUN_HOLD.supElbowX;
     } else {
       // An arm swings opposite its OWN leg, and an elbow folds FORWARD.
-      rig.armL.rotation.z = 0; rig.armR.rotation.z = 0;
       rig.armL.rotation.x = gait(p + Math.PI) * armAmp;
       rig.armR.rotation.x = gait(p) * armAmp;
       // Elbows never lock straight, even standing — hence the 0.4 floor. The
@@ -28724,12 +28788,10 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
     // Shoulders and hips counter-rotate against each other, and the body rolls
     // a little onto the loaded leg. The head then counters the torso so the
     // character keeps looking where it is going instead of scanning side to side.
-    rig.torso.rotation.x = 0;
     rig.torso.rotation.y = -gait(p) * 0.14 * lean;
     rig.torso.rotation.z =  Math.sin(p) * 0.045 * lean + sway * 0.030;
     rig.legL.rotation.y  =  gait(p) * 0.05 * lean;   // pelvis twist, opposite the chest
     rig.legR.rotation.y  =  gait(p) * 0.05 * lean;
-    rig.head.rotation.x  = 0;
     rig.head.rotation.y  = -rig.torso.rotation.y * 0.7;
     rig.head.rotation.z  = -rig.torso.rotation.z * 0.5;
   }
@@ -28746,9 +28808,9 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
     // An armed character keeps the weapon stance through a crouch and a slide —
     // the gun hangs off the firing hand now, so throwing the arms into a free
     // pose would throw the rifle with them.
-    const armLT = rig.holdsGun ? GUN_HOLD.supShoulderX + (slideLean ? -0.16 : 0) - aim * 0.55
+    const armLT = rig.holdsGun ? GUN_HOLD.supShoulderX + (slideLean ? -0.16 : 0) + aim * 0.55
                                : (slideLean ? -1.22 : (advancePose ? -1.05 : -0.8));
-    const armRT = rig.holdsGun ? GUN_HOLD.shoulderX + (slideLean ? 0.12 : 0) - aim * 0.55
+    const armRT = rig.holdsGun ? GUN_HOLD.shoulderX + (slideLean ? 0.12 : 0) + aim * 0.55
                                : (slideLean ? -1.55 : (advancePose ? -1.38 : -0.8));
     rig.armL.rotation.x = THREE.MathUtils.lerp(rig.armL.rotation.x, armLT, c);
     rig.armR.rotation.x = THREE.MathUtils.lerp(rig.armR.rotation.x, armRT, c);
@@ -28853,7 +28915,6 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
   const bobAmt = plant * (1 - jump * 0.9)
                  - 0.035 * jump
                  - 0.030 * slide
-                 - 0.045 * land
                  + br * 0.005;
   // This drives EVERY direct child off a captured base Y rather than bobbing a
   // wrapper group, because the skin code parents helmets, visors, ears and the
@@ -28974,9 +29035,10 @@ function makeBotWeaponProp(weaponId) {
       sight.position.set(0, bh * 0.5 + 0.012, 0.02); g.add(sight);
     }
   }
-  // The finishing pass is hooked on camera.add, which a world prop never goes
-  // through — so the gun in another player's hands was the one gun in the game
-  // still rendering as flat charcoal paper. Run it here (#53).
+  // Every material above is already PBR, so this is a no-op today — it is here
+  // so that a part added to this builder later still gets finished, because a
+  // world prop is parented to the player and never goes through the camera.add
+  // hook the rest of the roster relies on.
   metalizeModel(g);
   return g;
 }
@@ -36567,8 +36629,12 @@ function _makeViewHand(mirror) {
   const thumb = new THREE.Mesh(
     sculptBox('vmthumb', 0.040, [[0, 0.009, 0.010, 0], [0.45, 0.012, 0.013, 0], [1, 0.010, 0.011, 0]],
               { segs: 5, vsegs: 3, round: 0.92 }), skin);
-  thumb.position.set((mirror ? -1 : 1) * 0.023, 0.006, 0.020);
-  thumb.rotation.set(1.25, 0, (mirror ? 1 : -1) * 0.5);
+  // The callers pass +1 and -1, and BOTH are truthy — so a `mirror ? …` test
+  // gave the two hands the same thumb and the support hand read as a second
+  // right hand on the handguard. Take the sign, not the truthiness.
+  const side = mirror < 0 ? -1 : 1;
+  thumb.position.set(side * 0.023, 0.006, 0.020);
+  thumb.rotation.set(1.25, 0, -side * 0.5);
   h.add(thumb);
   // Tagged so the skin system leaves them alone: a gold weapon skin should
   // gild the gun, not the hands holding it.
@@ -42205,7 +42271,7 @@ function updateDamageNumbers() {
     const age = now - tr.lastHit;
     if (age > 3500) { tr.el.remove(); delete damageTracker[id]; continue; }
     tr.el.style.opacity = age > 3000 ? String(1 - (age - 3000) / 500) : '1';
-    const sc = worldToScreen(tr.mesh.position.clone().setY(tr.mesh.position.y + 2.6));
+    const sc = worldToScreen(tr.mesh.position.clone().setY(tr.mesh.position.y + 2.00));  // crown is 1.78 (#53)
     if (!sc) { tr.el.style.display = 'none'; continue; }
     tr.el.style.display = 'block';
     tr.el.style.left = sc.x + 'px';
@@ -47698,6 +47764,12 @@ function hydrateLoadoutPreviews(root = document) {
 function _renderWeaponIcon(model) {
   if (!_iconScene) {
     _iconScene = new THREE.Scene();
+    // The weapon materials are metalness 0.82-0.95 now, and metal has no
+    // diffuse response — with nothing to reflect, every loadout and kill-feed
+    // thumbnail rendered as a near-black silhouette (mean luminance 32/255
+    // against 64 with this line). Icons are cached for the session, so they
+    // stayed dark once drawn.
+    _iconScene.environment = scene.environment;
     _iconScene.add(new THREE.AmbientLight(0xffffff, 2.4));
     const sun = new THREE.DirectionalLight(0xffffff, 2.6); sun.position.set(3, 4, 2); _iconScene.add(sun);
     const back = new THREE.DirectionalLight(0xbfd4ff, 1.1); back.position.set(-3, 1, -2); _iconScene.add(back);
