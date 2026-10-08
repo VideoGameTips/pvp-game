@@ -26461,7 +26461,7 @@ function sculptBox(key, h, profile, { segs = 8, vsegs = 10, round = 0.9 } = {}) 
 // uniformly would leave the back of the cranium sticking out of it.
 const GEAR_FIT = {
   head:  { s: [BODY.headHalfW * 2 / 0.5, BODY.headH / 0.5, BODY.headHalfD * 2 / 0.5], y: 1.85 },
-  torso: { s: [0.364 / 0.55, 0.418 / 0.65, 0.230 / 0.30], y: 1.20 },
+  torso: { s: [0.312 / 0.55, 0.418 / 0.65, 0.230 / 0.30], y: 1.20 },
 };
 
 // The five surfaces a body is made of, built once on first use rather than at
@@ -27673,7 +27673,7 @@ function applyCharacterSkin(skinId, parts) {
       faceMat.map = null; faceMat.color.setHex(0x10131a);
       _addVisor(group, 0x2f7dff, 1.2);
       _addHelmet(group, 0x14171c);
-      _addKit(gt, 'vest', _gearFor(0x23272e));   // #50 phase 2
+      _addKit(torso, 'vest', _gearFor(0x23272e));   // #50 phase 2
       break;
     }
     case 'swat_shades': {
@@ -27681,7 +27681,7 @@ function applyCharacterSkin(skinId, parts) {
       // Keep the skin-tone face, add black sunglasses across the eyes
       _addShades(head);
       _addHelmet(group, 0x14171c);
-      _addKit(gt, 'vest', _gearFor(0x2a2e35));   // #50 phase 2
+      _addKit(torso, 'vest', _gearFor(0x2a2e35));   // #50 phase 2
       break;
     }
     case 'riot_chad': {
@@ -27691,7 +27691,7 @@ function applyCharacterSkin(skinId, parts) {
         new THREE.MeshLambertMaterial({ color: 0xc62828 }));
       bandana.position.set(0, 1.66, 0); pin(bandana);
       _addSeedHair(head, 'crop', 0x1a1208);    // was a bare scalp (#50)
-      _addKit(gt, 'bandolier', _gearFor(0x33271f));  // #50 phase 2
+      _addKit(torso, 'bandolier', _gearFor(0x33271f));  // #50 phase 2
       break;
     }
     case 'spiky': {
@@ -27702,7 +27702,7 @@ function applyCharacterSkin(skinId, parts) {
     case 'green_cap': {
       setBody(0x6b5d3a); setLegs(0x4a4327); setHeadAll(tone);
       _addCap(group, 0x3f6b2f);
-      _addKit(gt, 'belt', _gearFor(0x6b5d3a));   // #50 phase 2
+      _addKit(torso, 'belt', _gearFor(0x6b5d3a));   // #50 phase 2
       break;
     }
     case 'shadow': {
@@ -27968,7 +27968,7 @@ function applyCharacterSkin(skinId, parts) {
     default: {
       // Recruit. The shirt is already seeded in makePlayerMesh; the hair is what
       // stops Lobby 13 being a row of identical bald heads (#50).
-      if (look) { _addSeedHair(head, look.style, look.hair); _addKit(gt, look.kit, look.gear, gb); }
+      if (look) { _addSeedHair(head, look.style, look.hair); _addKit(torso, look.kit, look.gear, group); }
       break;
     }
   }
@@ -28211,56 +28211,63 @@ function _addSpikyHair(group, color) {
 // the arc the thighs sweep.
 function _addKit(torso, kit, color, group) {
   if (!kit || kit === 'none') return;
-  const mat = new THREE.MeshLambertMaterial({ color });
-  // Shoulder pieces are the exception, and they have to hang off the GROUP.
-  // The arm pivots are children of the group, not of the torso, and they only
-  // ever rotate in place — so a pauldron on the group stays welded to the
-  // joint it is covering. On the torso, a slide (-0.45 pitch) swings it 15cm
-  // back and 3.5cm down off a shoulder that has not moved at all, and the
-  // joint ends up outside the pauldron entirely.
-  const host = (kit === 'pauldrons' && group) ? group : torso;
-  const put = (geo, x, y, z, rz) => {
-    const m = new THREE.Mesh(geo, mat);
-    m.position.set(x, y, z);
+  const mat = _gearMat('cloth', color, { roughness: 0.92 });
+  const web = _gearMat('cloth', darkenColor(color, 0.7), { roughness: 0.95 });
+  // Pauldrons hang off the GROUP. The arm pivots are children of the group,
+  // not of the torso, and they only ever rotate in place — so a cap on the
+  // group stays welded to the joint it covers. On the torso, a slide (-0.62
+  // pitch) swings it back and down off a shoulder that has not moved at all.
+  if (kit === 'pauldrons') {
+    [-1, 1].forEach(sx => {
+      const m = new THREE.Mesh(sculptBox('pauldron', 0.078,
+        [[0.00, 0.070, 0.080, 0], [0.55, 0.079, 0.089, 0], [1.00, 0.064, 0.074, 0]],
+        { segs: 10, vsegs: 4, round: 0.86 }), mat);
+      m.position.set(sx * 0.166, 1.462, -0.004); m.castShadow = true;
+      (group || torso).add(m);
+    });
+    return;
+  }
+  // Everything else is TORSO-local, in real metres: the torso mesh is centred
+  // at BODY.torsoY and is not scaled, so local y = world y - 1.277. It has to
+  // be on the torso rather than the group because the rig twists the chest by
+  // up to 0.14 and pitches it 0.62 back in a slide, and gear hung off the group
+  // floats away from the body through both.
+  const Y = y => y - BODY.torsoY;
+  const put = (geo, x, y, z, rz, rx) => {
+    const m = new THREE.Mesh(geo, geo._webbing ? web : mat);
+    m.position.set(x, Y(y), z);
     if (rz) m.rotation.z = rz;
-    m.castShadow = true; host.add(m); return m;
+    if (rx) m.rotation.x = rx;
+    m.castShadow = true; torso.add(m); return m;
   };
+  const slab = (w, h, d, r) => roundedBoxGeo(w, h, d, r != null ? r : 0.012, 3);
   switch (kit) {
     case 'pack':                                   // reads from the side and from behind
-      put(roundedBoxGeo(0.36, 0.42, 0.20, 0.05, 3), 0, 0.04, -0.245);
-      put(roundedBoxGeo(0.38, 0.08, 0.22, 0.03, 3), 0, 0.27, -0.245);   // top flap
-      break;
-    case 'pauldrons':                              // GROUP space (see host above);
-      // 1.555 is just clear of the arm pivot at 1.5, and the upper arm's top
-      // end stays at that pivot through the whole swing, so the arm turns
-      // under the pauldron instead of through it.
-      [-0.33, 0.33].forEach(x => put(roundedBoxGeo(0.30, 0.13, 0.30, 0.055, 3), x, 1.555, 0));
+      put(slab(0.235, 0.270, 0.135, 0.030), 0, 1.300, -0.172);
+      put(slab(0.245, 0.050, 0.145, 0.018), 0, 1.452, -0.172);        // top flap
+      put(slab(0.030, 0.230, 0.020, 0.008), -0.075, 1.300, -0.106);   // shoulder straps, down the back
+      put(slab(0.030, 0.230, 0.020, 0.008),  0.075, 1.300, -0.106);
       break;
     case 'vest':
-      // Plate high on the chest, two short straps from its top edge over the
-      // shoulder (breaking the shoulder line is the point), pouches low. Get
-      // the order wrong and it reads as dungarees: a wide panel LOW with
-      // straps above it is a bib, and a full-width slab is a hole in the torso.
-      put(roundedBoxGeo(0.36, 0.24, 0.07, 0.03, 3), 0, 0.10, 0.16);
-      [-0.17, 0.17].forEach(x => put(roundedBoxGeo(0.10, 0.22, 0.08, 0.03, 3), x, 0.27, 0.155));
-      [-0.14, 0.14].forEach(x => put(roundedBoxGeo(0.12, 0.13, 0.09, 0.03, 3), x, -0.15, 0.175));
+      // Plate high on the chest, two short straps lying OVER the trapezius,
+      // pouches low. The straps used to stand up off the collarbones like two
+      // chimneys, which is what happens when a 0.22 m box is scaled onto a
+      // 0.42 m torso and left at the height it had on a 0.65 m one.
+      put(slab(0.235, 0.165, 0.055, 0.018), 0, 1.345, 0.098);
+      [-0.088, 0.088].forEach(x => put(slab(0.052, 0.040, 0.105, 0.016), x, 1.468, 0.028, 0, -0.18));
+      [-0.078, 0.078].forEach(x => put(slab(0.078, 0.080, 0.055, 0.016), x, 1.192, 0.106));
       break;
     case 'belt':
-      put(roundedBoxGeo(0.58, 0.09, 0.33, 0.03, 3), 0, -0.285, 0);
-      // The pouch has to clear three moving parts: thighs sweep to z ±0.29 and
-      // their top corner rises to ~0.95, and the hands hang at y 0.805–0.955.
-      // Above the swing, on the small of the back, is the only spot that is
-      // clear of all of them.
-      put(roundedBoxGeo(0.15, 0.17, 0.12, 0.04, 3), 0, -0.15, -0.21);
+      put(slab(0.300, 0.055, 0.215, 0.018), 0, 1.088, 0);
+      // The pouch has to clear the thighs, which sweep forward to z 0.29 with
+      // their tops at 0.95. The small of the back is the only place clear of them.
+      put(slab(0.095, 0.095, 0.065, 0.018), 0, 1.150, -0.118);
       break;
     case 'bandolier':                              // strap low-right to high-left
-      // Stops at y 1.00, not at the waist: a thigh swung forward reaches z 0.29
-      // and y 0.95, which is straight through where the bottom of the strap
-      // would otherwise hang.
-      put(roundedBoxGeo(0.12, 0.52, 0.07, 0.03, 3), 0, 0.03, 0.155, 0.52);
+      put(slab(0.070, 0.330, 0.045, 0.016), 0, 1.300, 0.100, 0.52);
       // Pouches proud of the strap and wider than it: a bare strap is a stick.
-      [[0.071, -0.094], [0, 0.03], [-0.071, 0.154]].forEach(([x, y]) =>
-        put(roundedBoxGeo(0.15, 0.12, 0.09, 0.03, 3), x, y, 0.20, 0.52));
+      [[0.046, 1.215], [0, 1.300], [-0.046, 1.385]].forEach(([x, y]) =>
+        put(slab(0.090, 0.072, 0.055, 0.016), x, y, 0.128, 0.52));
       break;
   }
 }
@@ -28617,24 +28624,26 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
 }
 
 // ── Character walk / slide animation ────────────────────────────────────────
-// Drives leg + arm swing from how far the mesh actually moved, plus a crouch/
-// slide pose. Works uniformly for bots and remote players. `crouchTarget` is
-// 0..1 (1 = crouched); `slideTarget` adds the intense low sliding silhouette.
-function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarget = 0) {
+// Drives the rig from how far the mesh actually moved, plus crouch / slide /
+// jump / aim poses. Works uniformly for bots and remote players. `crouchTarget`
+// is 0..1 (1 = crouched); `slideTarget` adds the low sliding silhouette;
+// `aimPitch` is where the character is looking, in radians, positive = down.
+function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarget = 0, aimPitch = 0) {
   const rig = mesh && mesh._rig;
   if (!rig) return;
+  const clamp01 = v => v < 0 ? 0 : v > 1 ? 1 : v;
   // Horizontal distance moved since last frame → speed estimate
   const px = mesh.position.x, pz = mesh.position.z;
   let dist = 0;
   if (rig.prevX !== null) {
     const dx = px - rig.prevX, dz = pz - rig.prevZ;
-    dist = Math.sqrt(dx*dx + dz*dz);
+    dist = Math.sqrt(dx * dx + dz * dz);
   }
   rig.prevX = px; rig.prevZ = pz;
   const speed = dt > 0 ? dist / dt : 0;
   rig.speedSmooth += (speed - rig.speedSmooth) * Math.min(1, dt * 12);
   const moving = rig.speedSmooth > 0.6;
-  const run = Math.max(0, Math.min(1, (rig.speedSmooth - 3.5) / 7.5));
+  const run = clamp01((rig.speedSmooth - 3.5) / 7.5);
 
   // Advance phase by distance travelled so stride length stays natural.
   // ×2.75 (half of the old ×5.5) so the LEG GRAPHIC swings 2× slower than the
@@ -28667,8 +28676,38 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
   rig.slide += (slideTarget - rig.slide) * Math.min(1, dt * 14);
   const slide = rig.slide;
   if (rig.jump === undefined) rig.jump = 0;
-  rig.jump += (Math.max(0, Math.min(1, jumpTarget || 0)) - rig.jump) * Math.min(1, dt * 12);
+  rig.jump += (clamp01(jumpTarget || 0) - rig.jump) * Math.min(1, dt * 12);
   const jump = rig.jump;
+
+  // ── Landing absorb ────────────────────────────────────────────────────────
+  // Coming out of the air used to snap straight back to the walk pose, which is
+  // the one moment a body is unmistakably taking a load. The knees give and
+  // recover over about a third of a second.
+  if (rig.prevJump === undefined) rig.prevJump = 0;
+  if (rig.land === undefined) rig.land = 0;
+  if (rig.prevJump > 0.45 && jump <= 0.20) rig.land = 1;
+  rig.prevJump = jump;
+  rig.land = Math.max(0, rig.land - dt * 3.4);
+  const land = rig.land * rig.land * (1 - jump);
+
+  // ── Aim ───────────────────────────────────────────────────────────────────
+  // Where the character is LOOKING, which the wire has carried all along
+  // (rotX) and nothing has ever used. Without it everyone stands bolt upright
+  // while shooting at a roof.
+  if (rig.aim === undefined) rig.aim = 0;
+  const aimT = Math.max(-0.95, Math.min(0.95, aimPitch || 0));
+  rig.aim += (aimT - rig.aim) * Math.min(1, dt * 10);
+  const aim = rig.aim;
+
+  // ── Idle: breathing and a weight shift ────────────────────────────────────
+  // Standing perfectly still is the other half of looking like a machine. A
+  // chest that rises, and weight that moves from one hip to the other every few
+  // seconds, cost nothing and are the difference between a person waiting and a
+  // statue.
+  rig.breathe = (rig.breathe || 0) + dt * (1.05 + run * 0.9);
+  const idle = (1 - blend) * (1 - slide);
+  const br   = Math.sin(rig.breathe) * idle;
+  const sway = Math.sin(rig.breathe * 0.37) * idle;
 
   // Phase, offset per character. `gait()` is a sine with a touch of second
   // harmonic: a real leg's swing is quicker than its stance, and that slight
@@ -28676,57 +28715,68 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
   const p = rig.phase + (rig.gaitOffset ?? 0);
   const gAmp = rig.gaitAmp ?? 1;
   const gait = a => Math.sin(a) + 0.14 * Math.sin(2 * a);
-  // Knees flex hardest just after the foot leaves the ground, so the shin can
-  // clear it — timed off the same phase, offset into the swing.
-  const knee = a => 0.10 + 0.85 * Math.max(0, Math.sin(a + 0.6));
+  // A knee flexes hardest just AFTER toe-off, to bring the heel up and let the
+  // shin clear the ground — and it flexes BACKWARD. This used to be negated,
+  // which bent every walking knee the wrong way: the crouch and jump poses were
+  // fixed at some point and the cycle was not.
+  const knee = a => 0.08 + 0.95 * Math.max(0, Math.sin(a - 0.75));
+  // Heel strike, roll flat, toe off. The ankle carries most of the weight in a
+  // walk: a foot held level through the cycle reads as a doll being slid along,
+  // and a foot that merely follows the shin reads as a puppet.
+  const roll = a => 0.30 * Math.sin(a + 0.35) + 0.22 * Math.max(0, Math.sin(2 * a - 0.40));
 
-  const legAmp  = 0.62 * blend * gAmp;
+  // 0.62 everywhere was a lunge at walking pace. A real walk swings the hip
+  // about 0.40 rad and a run earns the rest, so the amplitude follows speed.
+  const legAmp  = (0.40 + run * 0.26) * blend * gAmp;
   const legAmpR = legAmp * (rig.gaitAsym ?? 1);
   const swing   = gait(p) * legAmp;                 // left leg
   const swingR  = gait(p + Math.PI) * legAmpR;      // right leg, half a cycle later
-  const armAmp  = 0.40 * blend * gAmp;
+  const armAmp  = (0.34 + run * 0.22) * blend * gAmp;
+  const lean    = blend * (rig.gaitLean ?? 1);
 
   if (crouch < 0.5) {
     // Upright walking: legs + arms swing in opposition
     rig.legL.rotation.x = swing;
     rig.legR.rotation.x = swingR;
-    if (rig.kneeL) rig.kneeL.rotation.x = -knee(p) * blend * gAmp;
-    if (rig.kneeR) rig.kneeR.rotation.x = -knee(p + Math.PI) * blend * gAmp;
+    if (rig.kneeL) rig.kneeL.rotation.x = knee(p) * blend * gAmp;
+    if (rig.kneeR) rig.kneeR.rotation.x = knee(p + Math.PI) * blend * gAmp;
 
     if (rig.holdsGun) {
       // BOTH hands on the weapon (GUN_HOLD). The firing arm holds the solved
       // stance — the weapon is parented to its grip, so this is what points the
       // barrel — and the support arm reaches forward onto the handguard instead
       // of swinging free beside a rifle it is meant to be steadying.
-      rig.armR.rotation.x = GUN_HOLD.shoulderX;
+      rig.armR.rotation.x = GUN_HOLD.shoulderX - aim * 0.55;
       rig.armR.rotation.z = -0.10;
       if (rig.elbowR) rig.elbowR.rotation.x = GUN_HOLD.elbowX;
-      rig.armL.rotation.x = GUN_HOLD.supShoulderX - gait(p + Math.PI) * armAmp * 0.16;
+      rig.armL.rotation.x = GUN_HOLD.supShoulderX - gait(p + Math.PI) * armAmp * 0.16 - aim * 0.55;
       rig.armL.rotation.z = GUN_HOLD.supShoulderZ;
       if (rig.elbowL) rig.elbowL.rotation.x = GUN_HOLD.supElbowX;
     } else {
-      // An arm swings opposite its OWN leg.
+      // An arm swings opposite its OWN leg, and an elbow folds FORWARD.
       rig.armL.rotation.z = 0; rig.armR.rotation.z = 0;
       rig.armL.rotation.x = gait(p + Math.PI) * armAmp;
       rig.armR.rotation.x = gait(p) * armAmp;
-      // Elbows never lock straight, even standing — hence the 0.4 floor.
+      // Elbows never lock straight, even standing — hence the 0.4 floor. The
+      // bend peaks as that arm travels BACK, which is where a real one tucks.
       const elbowEase = 0.4 + 0.6 * blend;
-      if (rig.elbowL) rig.elbowL.rotation.x = (0.22 + 0.34 * Math.max(0, -Math.sin(p))) * elbowEase;
-      if (rig.elbowR) rig.elbowR.rotation.x = (0.22 + 0.34 * Math.max(0,  Math.sin(p))) * elbowEase;
+      if (rig.elbowL) rig.elbowL.rotation.x = -(0.22 + 0.40 * Math.max(0, Math.sin(p + Math.PI))) * elbowEase;
+      if (rig.elbowR) rig.elbowR.rotation.x = -(0.22 + 0.40 * Math.max(0, Math.sin(p))) * elbowEase;
     }
 
-    // Keep the soles roughly level rather than pointing wherever the shin ended
-    // up. Flat feet are most of what makes a walk look weighted.
-    if (rig.footL) rig.footL.rotation.x = -(swing  + (rig.kneeL?.rotation.x ?? 0)) * 0.6;
-    if (rig.footR) rig.footR.rotation.x = -(swingR + (rig.kneeR?.rotation.x ?? 0)) * 0.6;
+    // Ankles. The first term cancels the whole leg chain, so the sole is LEVEL
+    // by default — it used to cancel only 55% of it, which left the foot
+    // pointing wherever the shin ended up. The roll then does the heel-strike
+    // and toe-off work on top of a flat foot, which is where it belongs.
+    if (rig.footL) rig.footL.rotation.x = -(swing  + (rig.kneeL?.rotation.x ?? 0)) + roll(p) * blend * gAmp;
+    if (rig.footR) rig.footR.rotation.x = -(swingR + (rig.kneeR?.rotation.x ?? 0)) + roll(p + Math.PI) * blend * gAmp * (rig.gaitAsym ?? 1);
 
     // Shoulders and hips counter-rotate against each other, and the body rolls
     // a little onto the loaded leg. The head then counters the torso so the
     // character keeps looking where it is going instead of scanning side to side.
-    const lean = blend * (rig.gaitLean ?? 1);
     rig.torso.rotation.x = 0;
     rig.torso.rotation.y = -gait(p) * 0.14 * lean;
-    rig.torso.rotation.z =  Math.sin(p) * 0.045 * lean;
+    rig.torso.rotation.z =  Math.sin(p) * 0.045 * lean + sway * 0.030;
     rig.legL.rotation.y  =  gait(p) * 0.05 * lean;   // pelvis twist, opposite the chest
     rig.legR.rotation.y  =  gait(p) * 0.05 * lean;
     rig.head.rotation.x  = 0;
@@ -28746,14 +28796,14 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
     // An armed character keeps the weapon stance through a crouch and a slide —
     // the gun hangs off the firing hand now, so throwing the arms into a free
     // pose would throw the rifle with them.
-    const armLT = rig.holdsGun ? GUN_HOLD.supShoulderX + (slideLean ? -0.16 : 0)
+    const armLT = rig.holdsGun ? GUN_HOLD.supShoulderX + (slideLean ? -0.16 : 0) - aim * 0.55
                                : (slideLean ? -1.22 : (advancePose ? -1.05 : -0.8));
-    const armRT = rig.holdsGun ? GUN_HOLD.shoulderX + (slideLean ? 0.12 : 0)
+    const armRT = rig.holdsGun ? GUN_HOLD.shoulderX + (slideLean ? 0.12 : 0) - aim * 0.55
                                : (slideLean ? -1.55 : (advancePose ? -1.38 : -0.8));
     rig.armL.rotation.x = THREE.MathUtils.lerp(rig.armL.rotation.x, armLT, c);
     rig.armR.rotation.x = THREE.MathUtils.lerp(rig.armR.rotation.x, armRT, c);
-    rig.torso.rotation.x = THREE.MathUtils.lerp(0, slideLean ? -0.62 : (advancePose ? advanceLean : 0.18), c);
-    rig.head.rotation.x  = THREE.MathUtils.lerp(0, slideLean ? 0.54 : (advancePose ? -0.12 : -0.08), c);
+    rig.torso.rotation.x = THREE.MathUtils.lerp(rig.torso.rotation.x, slideLean ? -0.62 : (advancePose ? advanceLean : 0.18), c);
+    rig.head.rotation.x  = THREE.MathUtils.lerp(rig.head.rotation.x, slideLean ? 0.54 : (advancePose ? -0.12 : -0.08), c);
     // Knees have to fold hard here or a tucked slide looks like a plank.
     if (rig.kneeL) rig.kneeL.rotation.x = THREE.MathUtils.lerp(rig.kneeL.rotation.x, slideLean ? 1.20 : (advancePose ? 0.62 : 1.05), c);
     if (rig.kneeR) rig.kneeR.rotation.x = THREE.MathUtils.lerp(rig.kneeR.rotation.x, slideLean ? -0.35 : (advancePose ? 0.46 : 0.88), c);
@@ -28786,21 +28836,80 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
     if (rig.footR) rig.footR.rotation.x = THREE.MathUtils.lerp(rig.footR.rotation.x, -0.10, j);
   }
 
-  // ── Body bob ──────────────────────────────────────────────────────────────
-  // A walk rises and falls twice per stride; without it the character glides
-  // like it's on rails. This drives EVERY direct child off a captured base Y
-  // rather than bobbing a wrapper group, because the skin code parents helmets,
-  // visors, ears and the crown straight onto the group — a wrapper would leave
-  // them hovering while the head moved. Base Y is captured lazily so the crown,
-  // which is added later, is picked up when it appears.
-  const bobAmt = -Math.cos(2 * p) * 0.022 * blend * (rig.gaitBob ?? 1)
-                 - 0.012 * blend * (1 - crouch)   // walking rides slightly lower
-                 - 0.12 * crouch                  // and a crouch settles down a bit
-                 - 0.12 * slide                   // true slides get visibly lower
-                 - 0.035 * jump;                  // airborne bodies tuck upward around the hips
-                 // 0.12 is deliberately modest: the legs bottom out only 0.225
-                 // above the group origin, and the mesh sits on the ground, so a
-                 // deeper drop puts the boots through the floor mid-slide.
+  // Landing: both knees give at once, the hips drop and the chest folds over
+  // them. Applied last so it reads on top of whatever pose is underneath.
+  if (land > 0.004) {
+    const L = land * 0.9;
+    if (rig.kneeL) rig.kneeL.rotation.x = THREE.MathUtils.lerp(rig.kneeL.rotation.x, 0.95, L);
+    if (rig.kneeR) rig.kneeR.rotation.x = THREE.MathUtils.lerp(rig.kneeR.rotation.x, 0.88, L);
+    rig.legL.rotation.x = THREE.MathUtils.lerp(rig.legL.rotation.x, -0.42, L);
+    rig.legR.rotation.x = THREE.MathUtils.lerp(rig.legR.rotation.x, -0.38, L);
+    rig.torso.rotation.x = THREE.MathUtils.lerp(rig.torso.rotation.x, 0.26, L);
+    if (rig.footL) rig.footL.rotation.x = THREE.MathUtils.lerp(rig.footL.rotation.x, -0.22, L);
+    if (rig.footR) rig.footR.rotation.x = THREE.MathUtils.lerp(rig.footR.rotation.x, -0.20, L);
+  }
+
+  // ── Spine and gaze ────────────────────────────────────────────────────────
+  // The chest takes a share of the aim and the head takes the rest, which is
+  // how a person actually points a weapon up a staircase. The head is clamped
+  // so nobody ends up looking out of the back of their own neck.
+  rig.torso.rotation.x += aim * 0.26;
+  rig.head.rotation.x = Math.max(-1.0, Math.min(1.0, rig.head.rotation.x + aim * 0.62));
+  if (rig.pelvis) {
+    // Hip drop onto the loaded leg (the pelvis tilts down over the SWINGING
+    // side), plus the pelvic rotation that runs opposite the chest.
+    rig.pelvis.rotation.z = -Math.sin(p) * 0.055 * lean - sway * 0.045;
+    rig.pelvis.rotation.y = gait(p) * 0.07 * lean;
+  }
+  if (rig.neck) rig.neck.rotation.x = aim * 0.18;
+  // Breathing. The ribcage expands up and FORWARD, not sideways, so the depth
+  // scale is the biggest of the three.
+  rig.torso.scale.set(1 + br * 0.010, 1 + br * 0.007, 1 + br * 0.018);
+
+  // ── Foot planting, and the bob that falls out of it ──────────────────────
+  // The old rig's boot soles floated 0.225 m above the ground, so the body
+  // could sink by any amount and nobody saw it — which is how the bob ended up
+  // as a hand-tuned stack of constants (-0.12 for a crouch, -0.12 for a slide).
+  // The soles are on the floor now, and those constants put them 0.095 m
+  // THROUGH it on an ordinary walk.
+  //
+  // So the drop is computed from the pose instead of guessed: work out where
+  // each sole ends up for the hip and knee angles the pose just set, and bring
+  // the body down until the lower one touches. That also hands back the real
+  // walk bob for free — the pelvis is highest at mid-stance, where the leg is
+  // straight and vertical, and lowest at double support, where both legs are
+  // bent away from vertical — instead of approximating it with a cosine.
+  // The ankle angle counts too, and it is the bigger term: at toe-off the boot
+  // pivots 0.22 rad about the ankle, which drives the toe 0.037 m below the
+  // flat sole plane. Ignoring it left walkers' feet 0.05 m through the floor.
+  // Taking it into account also hands back the rise over the planted toe.
+  const SOLE = -0.0694, TOE = 0.180, HEEL = -0.080;   // boot, relative to the ankle joint
+  const footLow = (hip, kn, f) => {
+    const a = BODY.hip - BODY.thigh * Math.cos(hip) - BODY.shin * Math.cos(hip + kn);
+    // The ankle's rotation is LOCAL: the foot's world pitch is the whole chain,
+    // hip + knee + ankle. Treating `f` as the world angle under-read the drop
+    // by 0.05 m at toe-off — which is exactly how far through the floor a
+    // walker's boot went.
+    const w = hip + kn + f;
+    const c = Math.cos(w), sn = Math.sin(w);
+    return a + Math.min(SOLE * c - TOE * sn, SOLE * c - HEEL * sn);
+  };
+  const plant = -Math.min(
+    footLow(rig.legL.rotation.x, rig.kneeL ? rig.kneeL.rotation.x : 0, rig.footL ? rig.footL.rotation.x : 0),
+    footLow(rig.legR.rotation.x, rig.kneeR ? rig.kneeR.rotation.x : 0, rig.footR ? rig.footR.rotation.x : 0));
+  // Everything that is NOT about where the feet are: airborne bodies tuck up
+  // around the hips, a slide puts the hips lower than the trailing foot alone
+  // would, a landing drops through the knees, and breathing lifts a little.
+  const bobAmt = plant * (1 - jump * 0.9)
+                 - 0.035 * jump
+                 - 0.030 * slide
+                 - 0.045 * land
+                 + br * 0.005;
+  // This drives EVERY direct child off a captured base Y rather than bobbing a
+  // wrapper group, because the skin code parents helmets, visors, ears and the
+  // crown straight onto the group — a wrapper would leave them hovering while
+  // the head moved. Base Y is captured lazily so the crown, which is added
+  // later, is picked up when it appears.
   for (const child of mesh.children) {
     if (child.isSprite) continue;                 // name tag stays legible
     if (child._baseY === undefined) child._baseY = child.position.y;
@@ -50566,9 +50675,15 @@ function animateCharacters(dt) {
     let crouchTarget = 0;
     let slideTarget = 0;
     let jumpTarget = 0;
+    // Where this character is LOOKING. Positive is down, matching the rig.
+    let aimPitch = 0;
     const b = gameBots.find(bb => bb.id === id);
     if (!b) {
       const p = players[id];
+      // The wire has carried rotX since the first commit and nothing has ever
+      // drawn it, so every remote player stood bolt upright while shooting at a
+      // roof. Camera pitch is negative looking down; the rig's is positive.
+      if (p && typeof p.rotX === 'number') aimPitch = -p.rotX;
       if (p && typeof p.y === 'number') {
         const groundY = (typeof botGroundYAt === 'function') ? botGroundYAt(p.x ?? mesh.position.x, p.z ?? mesh.position.z, mesh.position.y || 0, 0.9, 2.4) : 0;
         const eyeAboveGround = p.y - groundY;
@@ -50586,8 +50701,19 @@ function animateCharacters(dt) {
         slideTarget = 1;
       }
       jumpTarget = (Math.abs((b.y || 0) - groundY) > 0.12 || Math.abs(b.yVel || 0) > 0.1) ? 1 : 0;
+      // A bot that is engaging looks at you, including up and down. Bots carry
+      // no pitch of their own, so it comes from where you actually are relative
+      // to its chest; disengaged, it eases back to level.
+      const engaged = b.state === 'chase' || b.state === 'attack' || b.state === 'dday_attacker'
+                      || (b.lastShot && now - b.lastShot < 2500);
+      if (engaged) {
+        const dxp = camera.position.x - (b.x || 0), dzp = camera.position.z - (b.z || 0);
+        const dyp = camera.position.y - ((b.y || 0) + 1.35);
+        const horiz = Math.hypot(dxp, dzp);
+        if (horiz < 60) aimPitch = -Math.atan2(dyp, Math.max(0.5, horiz));
+      }
     }
-    animateCharacterMesh(mesh, dt, crouchTarget, slideTarget, jumpTarget);
+    animateCharacterMesh(mesh, dt, crouchTarget, slideTarget, jumpTarget, aimPitch);
   }
 }
 
