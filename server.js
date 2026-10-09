@@ -1640,13 +1640,21 @@ function autoAssignTeam(L, mode) {
   if (enemyRoom) return 'enemy';
   return allies <= enemies ? 'ally' : 'enemy'; // both full (shouldn't happen): balance
 }
-// Maps a matchmade lobby can start on — mirrors the client's pool in spawnGameBots() (CLAUDE.md #4).
-const LOBBY_MAP_POOL = ['blank','urban','warehouse','forest','vietnam','volcano','cyber','desert',
+// Every map a lobby will accept as an explicit pick — mirrors the client's list
+// in spawnGameBots() (CLAUDE.md #4).
+const MAP_IDS = ['blank','urban','warehouse','forest','vietnam','volcano','cyber','desert',
                         'tundra','space','airport','trenches','chernobyl','refinery','skydock',
                         'sewer','gravity_lab','glassworks','carrier','overgrowth','orbital_station',
                         'foundry','carnival','biosphere','lockdown','studio','temple','holiday',
                         'labyrinth','arena','opera','doomsday','train','dreamscape',
                         'pearl_harbor','titanic','supermarket','pyongyang','traffic_cone_republic','flying_moai','big_arena','super_arena','storm_pier','pinball_arcade','laser_vault','cargo_belts','gale_peaks','magma_rise'];
+// 🗺️ Dealt at RANDOM when nobody picks, which is not the same list (#66). Each
+// map below is a flat field — magma_rise has ONE piece of cover in 10,000 m²,
+// labyrinth has five — and in a 48-map pool each of them came up exactly as
+// often as train, which has 138 per 100 m². They stay pickable by name from the
+// map cards; they are thin, not broken. Put each one back here as it is rebuilt.
+const THIN_MAPS = new Set(['magma_rise', 'labyrinth', 'laser_vault', 'gale_peaks', 'cargo_belts', 'storm_pier']);
+const LOBBY_MAP_POOL = MAP_IDS.filter(m => !THIN_MAPS.has(m));
 // The lobby plays the map of the first player (in join order) who picked a specific one.
 function lobbyMapPick(L) {
   return L.players.find(p => p.map)?.map || null;
@@ -1808,13 +1816,7 @@ function tryPairPvpQueue(mode) {
     else { teamA = Math.random() < 0.5 ? 'ally' : 'enemy'; teamB = teamA; }
   }
   // 🗺️ Server picks ONE map for both players so they don't diverge
-  const MAP_POOL = ['blank','urban','warehouse','forest','vietnam','volcano','cyber','desert',
-                    'tundra','space','airport','trenches','chernobyl','refinery','skydock',
-                    'sewer','gravity_lab','glassworks','carrier','overgrowth','orbital_station',
-                    'foundry','carnival','biosphere','lockdown','studio','temple','holiday',
-                    'labyrinth','arena','opera','doomsday','train','dreamscape',
-                    'pearl_harbor','titanic','supermarket','pyongyang','traffic_cone_republic','flying_moai','big_arena','super_arena','storm_pier','pinball_arcade','laser_vault','cargo_belts','gale_peaks','magma_rise'];
-  const mapId = MAP_POOL[Math.floor(Math.random() * MAP_POOL.length)];
+  const mapId = LOBBY_MAP_POOL[Math.floor(Math.random() * LOBBY_MAP_POOL.length)];
   io.to(a.socketId).emit('pvpResult', {
     mode, paired: true, team: teamA, mapId,
     opponents: [{ socketId: b.socketId, team: teamB }],
@@ -2459,7 +2461,7 @@ io.on('connection', (socket) => {
     // Already in this lobby?
     if (L.players.some(p => p.socketId === socket.id)) return;
     const team = autoAssignTeam(L, mode);
-    const map = LOBBY_MAP_POOL.includes(data?.map) ? data.map : null; // 'auto' / unknown → no pick
+    const map = MAP_IDS.includes(data?.map) ? data.map : null; // 'auto' / unknown → no pick
     L.players.push({ socketId: socket.id, team, ready: false, fillBots: true, map });
     broadcastLobbyState(L);
   });

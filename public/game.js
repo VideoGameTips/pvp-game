@@ -5618,6 +5618,12 @@ function resolvePosCollisions(px, pz, feetY = 0) {
 
 // ── Map Groups ──────────────────────────────────────────────────────────────
 const MAP_GROUPS = {};
+// Every map that can be played, and the subset the random draw skips (#66).
+// Mirrors server.js — MAP_IDS and THIN_MAPS have to stay identical there
+// (CLAUDE.md #4), because the server picks the map and the client honours it.
+const MAP_IDS = ['blank', 'urban', 'warehouse', 'forest', 'vietnam', 'volcano', 'cyber', 'desert', 'tundra', 'space', 'airport', 'trenches', 'chernobyl', 'refinery', 'skydock', 'sewer', 'gravity_lab', 'glassworks', 'carrier', 'overgrowth', 'orbital_station', 'foundry', 'carnival', 'biosphere', 'lockdown', 'studio', 'temple', 'holiday', 'labyrinth', 'arena', 'opera', 'doomsday', 'train', 'dreamscape', 'pearl_harbor', 'titanic', 'supermarket', 'pyongyang', 'traffic_cone_republic', 'flying_moai', 'big_arena', 'super_arena', 'storm_pier', 'pinball_arcade', 'laser_vault', 'cargo_belts', 'gale_peaks', 'magma_rise'];
+const THIN_MAPS = new Set(['magma_rise', 'labyrinth', 'laser_vault', 'gale_peaks', 'cargo_belts', 'storm_pier']);
+
 const MAP_COLLIDERS = {};
 const MAP_BOUNDS = {};
 // 📐 Ramps. Floors are all axis-aligned boxes, so a slope is a smooth wedge over
@@ -49814,7 +49820,9 @@ function spawnGameBots() {
     const sky = MAP_GROUPS[selectedModeConfig.forcedMap]?._skyColor;
     if (sky != null && scene.background?.setHex) scene.background.setHex(sky);
   } else if (selectedModeConfig.type !== 'dday' && selectedModeConfig.type !== 'range') {
-    const pool = ['blank','urban','warehouse','forest','vietnam','volcano','cyber','desert','tundra','space','airport','trenches','chernobyl','refinery','skydock','sewer','gravity_lab','glassworks','carrier','overgrowth','orbital_station','foundry','carnival','biosphere','lockdown','studio','temple','holiday','labyrinth','arena','opera','doomsday','train','dreamscape','pearl_harbor','titanic','supermarket','pyongyang','traffic_cone_republic','flying_moai','big_arena','super_arena','storm_pier','pinball_arcade','laser_vault','cargo_belts','gale_peaks','magma_rise'];
+    // Mirrors server.js MAP_IDS / THIN_MAPS (CLAUDE.md #4): a specific pick still
+    // activates any of these, but the random draw skips the six flat ones (#66).
+    const pool = MAP_IDS.filter(m => !THIN_MAPS.has(m));
     const chosen = (selectedMap === 'auto' || !MAP_GROUPS[selectedMap]) ? pool[Math.floor(Math.random()*pool.length)] : selectedMap;
     activateMap(chosen);
     // Update sky color if the map specifies one
