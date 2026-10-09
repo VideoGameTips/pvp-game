@@ -5758,6 +5758,10 @@ function _weatherOnActivate(name) { if (MAP_GROUPS[name]) weatherMapGroup(MAP_GR
 function activateMap(name) {
   for (const [n, g] of Object.entries(MAP_GROUPS)) g.visible = (n === name);
   if (typeof dressThemeMap === 'function') { try { dressThemeMap(name); } catch (e) { console.warn('[theme]', name, e); } }
+  // Then bake this map's static boxes into one draw call per material (#66).
+  // After the dressing, because the dressing is what reads the per-box tags;
+  // before atmoActivate, so the weather and ambience it adds stay separate.
+  if (typeof mergeMapOnActivate === 'function') mergeMapOnActivate(name);
   // The haze takes the colour of the sky it hangs under, so a dark map is not wrapped in pale blue.
   if (scene.fog && scene.fog.color && MAP_GROUPS[name] && MAP_GROUPS[name]._skyColor != null) scene.fog.color.setHex(MAP_GROUPS[name]._skyColor);
   if (typeof atmoActivate === 'function') { try { atmoActivate(name); } catch (e) { console.warn('[atmo]', name, e); } }
@@ -6187,14 +6191,33 @@ function mergeMapStatics(name, held) {
   group.traverse(o => {
     if (!o.isMesh || !o.userData || !o.userData.mapStatic) return;
     if (held.has(o)) return;
+    // Invisible on purpose: addRamp builds its slope out of hidden step boxes
+    // that exist only to be collided with, and lobby13 and base_raid both use
+    // it. Merging drops per-mesh `visible`, so baking those into a visible
+    // mesh put a bright orange staircase through the hub's test ramp. They
+    // cost no draw call as they are, which is the whole point of merging.
+    if (o.visible === false) return;
     const mat = o.material;
     // One material, no texture: a textured or multi-material box keeps its own
     // draw call rather than forcing a UV atlas nobody asked for.
-    if (!mat || Array.isArray(mat) || !mat.isMeshLambertMaterial || mat.map) return;
+    //
+    // Phong as well as Lambert, and this is not hypothetical: weatherMapGroup
+    // swaps every opaque Lambert on every map for a cached vertexColors Phong,
+    // and it runs at load — so by the time a map is activated and merged there
+    // is not one Lambert left on it. Testing for Lambert alone merged exactly
+    // nothing, silently, while still setting the _merged flag.
+    if (!mat || Array.isArray(mat) || mat.map) return;
+    if (!mat.isMeshLambertMaterial && !mat.isMeshPhongMaterial) return;
     const g = o.geometry;
     if (!g || !g.attributes || !g.attributes.position) return;
-    const key = [mat.color.getHex(), mat.transparent ? 1 : 0, +mat.opacity.toFixed(3),
-                 mat.flatShading ? 1 : 0, o.castShadow ? 1 : 0, o.receiveShadow ? 1 : 0].join('|');
+    // vertexColors reads a per-vertex attribute that _weatherGeometry adds; a
+    // mesh missing it would render with whatever the merged buffer happened to
+    // hold at those indices.
+    if (mat.vertexColors && !g.attributes.color) return;
+    const key = [mat.type, mat.color.getHex(), mat.transparent ? 1 : 0, +mat.opacity.toFixed(3),
+                 mat.flatShading ? 1 : 0, mat.vertexColors ? 1 : 0, mat.shininess | 0,
+                 mat.specular ? mat.specular.getHex() : -1, mat.side,
+                 o.castShadow ? 1 : 0, o.receiveShadow ? 1 : 0].join('|');
     let b = buckets.get(key);
     if (!b) { b = { mat, list: [] }; buckets.set(key, b); }
     b.list.push(o);
@@ -6212,17 +6235,21 @@ function mergeMapStatics(name, held) {
       if (!g.attributes.normal) g.computeVertexNormals();
       parts.push(g); n += g.attributes.position.count;
     }
+    const wantColor = !!b.mat.vertexColors;
     const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3);
+    const col = wantColor ? new Float32Array(n * 3) : null;
     let at = 0;
     for (const g of parts) {
       pos.set(g.attributes.position.array, at * 3);
       nor.set(g.attributes.normal.array, at * 3);
+      if (col) col.set(g.attributes.color.array, at * 3);
       at += g.attributes.position.count;
       g.dispose();
     }
     const merged = new THREE.BufferGeometry();
     merged.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     merged.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+    if (col) merged.setAttribute('color', new THREE.BufferAttribute(col, 3));
     merged.computeBoundingBox(); merged.computeBoundingSphere();
     const mesh = new THREE.Mesh(merged, b.mat);
     mesh.castShadow = b.list[0].castShadow; mesh.receiveShadow = b.list[0].receiveShadow;
@@ -6230,7 +6257,11 @@ function mergeMapStatics(name, held) {
     for (const o of b.list) {
       if (o.parent) o.parent.remove(o);
       o.geometry.dispose();
-      if (o.material !== b.mat) o.material.dispose();
+      // The materials are NOT disposed. weatherMapGroup hands out cached Phong
+      // materials from _mapMatCache, so the one on this box may be the same
+      // object another box — on another map, not yet merged — is still using.
+      // Dropping the reference is enough; the GPU program goes with the last
+      // mesh that used it.
     }
     group.add(mesh);
     saved += b.list.length - 1;
@@ -6238,13 +6269,19 @@ function mergeMapStatics(name, held) {
   group._merged = true;
   return saved;
 }
-function mergeAllMapStatics() {
-  const held = _meshesHeldByMechanics();
-  let saved = 0;
-  for (const name of Object.keys(MAP_GROUPS)) {
-    try { saved += mergeMapStatics(name, held); } catch (e) { console.warn('[merge]', name, e); }
-  }
-  return saved;
+// Merged on FIRST ACTIVATION, not at load, and only after dressThemeMap has
+// run for that map. dressThemeMap is itself lazy — activateMap is its only
+// caller — and it finds the boxes it decorates by the `thCls` tag themeRecolorMap
+// stamped on each one. Merging at load wiped those: urban went from 889 tagged
+// boxes to six, and every map quietly lost its base bands, wall caps, pilasters
+// and window grids. Dressing first and merging after keeps both, and costs one
+// pass over a map the first time anyone plays it instead of over all 48 at load.
+let _mapDrawsSaved = 0;
+function mergeMapOnActivate(name) {
+  const group = MAP_GROUPS[name];
+  if (!group || group._merged) return;
+  try { _mapDrawsSaved += mergeMapStatics(name, _meshesHeldByMechanics()); }
+  catch (e) { console.warn('[merge]', name, e); }
 }
 
 function addLowPolyArenaCover(mapName, color = 0x777064) {
@@ -10139,7 +10176,10 @@ function buildStormPierMap() {
   [-20, 20].forEach(z => {
     addMapBox(m, 0, 6.0, z, 26, 0.4, 3.0, 0x6b7480);
     [-1, 1].forEach(sd => addMapBox(m, 0, 6.75, z + sd * 1.3, 26, 1.1, 0.3, 0x6b7480));
-    [-1, 1].forEach(sd => { for (let k = 0; k < 11; k++) addMapBox(m, sd * (13 + k * 1.2), 0.3 + k * 0.55, z, 1.2, 0.55, 2.6, 0x5a626c); });
+    // k climbs as it comes IN toward the deck. Written the other way round it
+    // put the tallest step 12 m out and a 0.575 m step at the deck edge, i.e.
+    // a staircase to nowhere against a 6 m wall.
+    [-1, 1].forEach(sd => { for (let k = 0; k < 11; k++) addMapBox(m, sd * (25 - k * 1.2), 0.3 + k * 0.55, z, 1.2, 0.55, 2.6, 0x5a626c); });
   });
   MAP_SPAWNS[m] = { ally: { x0: -7, x1: 7, z0: 40, z1: 46 }, enemy: { x0: -7, x1: 7, z0: -46, z1: -40 } };
   G._skyColor = 0x141b26;
@@ -10309,13 +10349,17 @@ function buildLaserVaultMap() {
   // still read through the room.
   [[-26,-8],[26,8],[-8,26],[8,-26],[-18,18],[18,-18]].forEach(([x, z], i) =>
     addMapBox(m, x, 0.9, z, 2.2, 1.8, 2.2, CASE, i * 0.5));
-  // A gallery at 2.6 — above BOTH beams. The only place the sweep cannot reach,
-  // which is exactly why it is the most exposed place to stand.
+  // A gallery at 2.7. NOT a hiding place from the beams — the sweep's hit test
+  // is `footY < 0.9` for the red one and `headY > 1.25` for the cyan, with no
+  // ceiling on either, so height does not save you and claiming it would be a
+  // lie. What it is, is the high ground: you can see over the racks from up
+  // here, and you pay for it by being the most visible thing in the room while
+  // the cyan arm still comes round.
   [-1, 1].forEach(sd => {
     addMapBox(m, sd * 16, 2.5, 0, 10, 0.4, 20, 0x39424e);
     addMapBox(m, sd * 16, 3.25, -9.8, 10, 1.1, 0.4, RACK);
     addMapBox(m, sd * 16, 3.25,  9.8, 10, 1.1, 0.4, RACK);
-    for (let k = 0; k < 5; k++) addMapBox(m, sd * 22, 0.25 + k * 0.5, -12 - k * 1.6, 3.0, 0.5, 1.6, CASE);
+    for (let k = 0; k < 5; k++) addMapBox(m, sd * 22, 2.25 - k * 0.5, -12 - k * 1.6, 3.0, 0.5, 1.6, CASE);   // tallest step nearest the deck
   });
   // Partition walls, one each side of the vault floor, with a gap off-centre.
   // 10 of the 25 spawn-to-spawn lines were open across 80 m — the racks are
@@ -10415,14 +10459,17 @@ function buildCargoBeltsMap() {
   });
   // Stacks between the lanes, tall enough to cut the hall in half — the one
   // thing this map had none of.
-  [[-26, -10], [-4, -10], [18, -10], [-26, 10], [-4, 10], [18, 10]].forEach(([x, z], i) => {
+  [[-34, -10], [-4, -10], [26, -10], [-34, 10], [-4, 10], [26, 10]].forEach(([x, z], i) => {   // clear of the 2.2 m crates at ±26, ±10
     addMapBox(m, x, 2.1, z, 4.2, 4.2, 4.2, i % 2 ? CRATE : CRATE2, i * 0.25);
     addMapBox(m, x + 2.6, 1.1, z + 2.4, 2.4, 2.2, 2.4, STEEL, i * 0.4);
   });
-  // Catwalk cover: it was a bare plank over the floor, so being up there was
-  // only a way to be shot from three sides at once.
-  [-1, 1].forEach(sd => [-18, 0, 18].forEach(x =>
-    addMapBox(m, x, 5.2, sd * 31, 5.0, 1.2, 0.5, STEEL)));
+  // Catwalk cover: the deck was a bare plank, so being up there was only a way
+  // to be shot from three sides at once. ON the decks — they are at x ±43,
+  // z −16…16, top 3.0; the first version of this put six blocks at z ±31 and
+  // y 5.2, which is 4.6 m above bare floor and 25 m from anything you can
+  // stand on.
+  [-1, 1].forEach(sd => [-11, 0, 11].forEach(z =>
+    addMapBox(m, sd * 43, 3.6, z, 5.0, 1.2, 0.6, STEEL)));
   MAP_SPAWNS[m] = { ally: { x0: -15, x1: 15, z0: 38, z1: 44 }, enemy: { x0: -15, x1: 15, z0: -44, z1: -38 } };
   G._skyColor = 0x2a2d31;
   const onLane = (x, z, ln) => Math.abs(z - ln.z) < W / 2 && Math.abs(x) < LEN / 2;
@@ -10471,14 +10518,22 @@ function buildGalePeaksMap() {
   // Shelter and cover are the same object, which is the point — leaving cover
   // on this map means the gust gets you.
   const STONE = 0x6e7363, SHELTER = 0x7f8472;
-  [[34, 0.6], [28, 1.2], [22, 1.8], [16, 2.4]].forEach(([s, top], ti) => {
-    const r = s / 2 - 1.4;
-    for (let k = 0; k < 4; k++) {
-      const a = (k / 4) * Math.PI * 2 + ti * 0.4;
-      const x = Math.cos(a) * r, z = Math.sin(a) * r;
-      addMapBox(m, x, top + 0.6, z, 5.4 - ti * 0.5, 1.2, 1.1, SHELTER, a + Math.PI / 2);
-      if (k % 2 === 0) addMapBox(m, x * 0.72, top + 0.45, z * 0.72, 1.6, 0.9, 1.6, STONE, a);
-    }
+  // One wall per EDGE, not four points on a circle. The terraces are square, so
+  // a circle of radius s/2 − 1.4 puts every shelter near 45°, which is inside
+  // the next terrace up — all eight walls ended up two thirds buried, a 1.2 m
+  // wall showing 0.3 m. Walls sit on the edge midpoints, where the terrace is
+  // actually widest, and each is short enough to leave the corners open to run
+  // through.
+  [[34, 0.6], [28, 1.2], [22, 1.8], [16, 2.4], [10, 3.0]].forEach(([sz, top], ti) => {
+    const r = sz / 2 - 1.3, len = Math.min(sz * 0.52, 7.0);
+    [[0, 1], [0, -1], [1, 0], [-1, 0]].forEach(([ex, ez], k) => {
+      const alongX = ez !== 0;
+      addMapBox(m, ex * r, top + 0.6, ez * r, alongX ? len : 1.1, 1.2, alongX ? 1.1 : len, SHELTER);
+      // A stone just inboard of the wall, on the same terrace — the earlier
+      // version pulled these to 0.72 r, which on a square terrace is under the
+      // next step up.
+      if (k % 2 === 0) addMapBox(m, ex * (r - 2.6), top + 0.45, ez * (r - 2.6), 1.6, 0.9, 1.6, STONE, ti * 0.3);
+    });
   });
   // Boulders on the flat, so the run in from a corner tower is not a straight
   // line across open ground with a crosswind on it.
@@ -10568,7 +10623,9 @@ function buildMagmaRiseMap() {
     const w = Math.min(2.6, s * 0.42);
     addMapBox(m, x === 0 && z === 0 ? s * 0.3 : bx, 0.8 + 0.65, x === 0 && z === 0 ? s * 0.3 : bz,
               w, 1.3, w * 0.8, CRUST, (x + z) * 0.11);
-    if (s >= 6) {                                  // a second, lower one opposite
+    // ...and a second, lower one opposite — except on the centre island, whose
+    // opposite side is the middle of the map, where the tower below goes.
+    if (s >= 6 && !(x === 0 && z === 0)) {
       addMapBox(m, x + (x - bx) * 0.55, 0.8 + 0.45, z + (z - bz) * 0.55,
                 w * 0.8, 0.9, w * 0.7, CRUST, (x - z) * 0.09);
     }
@@ -10601,7 +10658,7 @@ function buildMagmaRiseMap() {
   // commit to a jump in the open to do it.
   [-43, 43].forEach(x => {
     [-28, 0, 28].forEach(z => {
-      addMapBox(m, x, 0.5, z, 6, 1.0, 9, ROCK);
+      addMapBox(m, x, 0.5, z, 6, 1.0, 24, ROCK);        // 24 deep, 28 apart → a 4 m gap
       addMapBox(m, x + (x < 0 ? 2.2 : -2.2), 1.0 + 0.6, z - 2.5, 1.4, 1.2, 3.2, CRUST);   // cover on the ridge
     });
   });
@@ -14214,7 +14271,6 @@ function applyLowPolyMapPlayabilityPass() {
   });
 }
 applyLowPolyMapPlayabilityPass();
-const _MAP_DRAWS_SAVED = mergeAllMapStatics();
 
 // ══════════════════════════════════════════════════════════════════════════
 // 🏚️ MAP SURFACE PASS — reflective, and not perfectly clean
@@ -50136,8 +50192,9 @@ function spawnGameBots() {
     const sky = MAP_GROUPS[selectedModeConfig.forcedMap]?._skyColor;
     if (sky != null && scene.background?.setHex) scene.background.setHex(sky);
   } else if (selectedModeConfig.type !== 'dday' && selectedModeConfig.type !== 'range') {
-    // Mirrors server.js MAP_IDS / THIN_MAPS (CLAUDE.md #4): a specific pick still
-    // activates any of these, but the random draw skips the six flat ones (#66).
+    // Mirrors server.js MAP_IDS / THIN_MAPS (CLAUDE.md #4): a specific pick
+    // activates any map, and the random draw skips whatever is in THIN_MAPS —
+    // which is empty now that the five flat ones have been rebuilt (#66).
     const pool = MAP_IDS.filter(m => !THIN_MAPS.has(m));
     const chosen = (selectedMap === 'auto' || !MAP_GROUPS[selectedMap]) ? pool[Math.floor(Math.random()*pool.length)] : selectedMap;
     activateMap(chosen);
