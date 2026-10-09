@@ -96,6 +96,12 @@ THREE.WebGLRenderer = function () {
 // index.html loads equipment-models.js before game.js, and game.js depends on
 // what it defines. Load the page's scripts in the page's order.
 let ok = true;
+const mapWarnings = [];
+const originalWarn = console.warn;
+console.warn = (...args) => {
+  if (/^\[(bespoke|theme)\]/.test(String(args[0]))) mapWarnings.push(args.map(String).join(' '));
+  originalWarn(...args);
+};
 try {
   vm.runInThisContext(fs.readFileSync(path.join(__dirname, '..', 'public', 'equipment-models.js'), 'utf8'),
                       { filename: 'public/equipment-models.js' });
@@ -114,6 +120,60 @@ try {
   if (site) console.log('   at' + site.replace(/^\s*at/, ''));
   console.log('\n   Everything after that line never ran, and node --check still passes:');
   console.log('   this is a runtime failure during module evaluation, not a syntax error.');
+}
+
+if (ok && process.argv.includes('--maps')) {
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [], names = Object.keys(_BESPOKE);
+    for (const rot of [-0.35, 0.35, Math.PI / 4]) {
+      const rect = { x: 7, z: -11, w: 38, d: 8, rot };
+      const x = rect.x + 16 * Math.cos(rot), z = rect.z - 16 * Math.sin(rot);
+      if (!_pointInRotRect(x, z, rect)) issues.push('rotated safe island disagrees with its visible footprint');
+    }
+    const blocked = (name, x, z) => MAP_COLLIDERS[name].some(b =>
+      b.max.y > 0.6 && b.min.y < 1.8 && x > b.min.x - 0.45 && x < b.max.x + 0.45 && z > b.min.z - 0.45 && z < b.max.z + 0.45);
+    for (const name of names) {
+      const b = MAP_BOUNDS[name], s = MAP_SPAWNS[name], g = MAP_GROUPS[name];
+      if (!b || !s || !g || !MAP_COLLIDERS[name].length) { issues.push(name + ': incomplete map'); continue; }
+      if (name !== 'volcano' && !g.userData.identityRefined) issues.push(name + ': identity pass did not finish');
+      for (const col of MAP_COLLIDERS[name]) if (![col.min.x, col.min.y, col.min.z, col.max.x, col.max.y, col.max.z].every(Number.isFinite)) issues.push(name + ': invalid collider');
+      for (const [team, r] of Object.entries(s)) {
+        if (r.x0 < -b.halfX || r.x1 > b.halfX || r.z0 < -b.halfZ || r.z1 > b.halfZ) issues.push(name + ': ' + team + ' spawn outside bounds');
+        let free = 0;
+        for (let ix = 0; ix < 9; ix++) for (let iz = 0; iz < 5; iz++) {
+          const x = r.x0 + (r.x1 - r.x0) * (ix + 0.5) / 9, z = r.z0 + (r.z1 - r.z0) * (iz + 0.5) / 5;
+          if (!blocked(name, x, z)) free++;
+        }
+        if (free < 45) issues.push(name + ': obstructed ' + team + ' spawn (' + free + '/45 clear)');
+      }
+    }
+    // The rebuilt outdoor maps must offer a continuous ground route between spawn clearings.
+    for (const name of ['forest', 'desert', 'tundra']) {
+      const s = MAP_SPAWNS[name], b = MAP_BOUNDS[name], start = [0, Math.round((s.ally.z0 + s.ally.z1) / 4)], target = Math.round((s.enemy.z0 + s.enemy.z1) / 4);
+      const queue = [start], seen = new Set([start.join(',')]); let reached = false;
+      for (let head = 0; head < queue.length; head++) {
+        const [x, z] = queue[head]; if (z === target) { reached = true; break; }
+        for (const [dx, dz] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+          const nx = x + dx, nz = z + dz, key = nx + ',' + nz;
+          if (seen.has(key) || Math.abs(nx * 2) >= b.halfX - 1 || Math.abs(nz * 2) >= b.halfZ - 1 || blocked(name, nx * 2, nz * 2)) continue;
+          seen.add(key); queue.push([nx, nz]);
+        }
+      }
+      if (!reached) issues.push(name + ': no ground route between spawns');
+    }
+    console.log('map checks: ' + names.length + ' themed layouts, spawn clearances, bounds and outdoor routes');
+    return issues;
+  })()`);
+  issues.push(...mapWarnings);
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
+if (ok && process.env.MAP_REVIEW_DIR) {
+  fs.mkdirSync(process.env.MAP_REVIEW_DIR, { recursive: true });
+  for (const name of ['forest', 'desert', 'tundra', 'refinery', 'space', 'volcano']) {
+    const json = vm.runInThisContext('MAP_GROUPS[' + JSON.stringify(name) + '].toJSON()');
+    fs.writeFileSync(path.join(process.env.MAP_REVIEW_DIR, name + '.json'), JSON.stringify(json));
+  }
 }
 
 if (ok) {

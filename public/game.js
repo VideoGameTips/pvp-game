@@ -12206,7 +12206,7 @@ function _bkBegin(name, w, d, groundColor) {
   const K = _bkit(name); K.ground(w, d, groundColor); return K;
 }
 function _pointInRotRect(x, z, r, pad = 0) {
-  const a = -(r.rot || 0), cs = Math.cos(a), sn = Math.sin(a);
+  const a = r.rot || 0, cs = Math.cos(a), sn = Math.sin(a);
   const dx = x - r.x, dz = z - r.z;
   const lx = dx * cs - dz * sn, lz = dx * sn + dz * cs;
   return Math.abs(lx) < r.w * 0.5 + pad && Math.abs(lz) < r.d * 0.5 + pad;
@@ -12344,7 +12344,7 @@ function buildWarehouseLayout() {
   const cont = (x, z, rot, c) => K.box(x, 0, z, 2.6, 2.6, 6.2, c, rot);
   [[-44, 41, 0, 0xb83a2a], [-38, 41, 0, 0x2a5aa8], [38, 41, 0, 0xd88a2a], [44, 41, 0, 0x3a8a4a], [-44, -41, 0, 0x2a5aa8], [-38, -41, 0, 0xb83a2a], [38, -41, 0, 0x3a8a4a], [44, -41, 0, 0xd88a2a]].forEach(([x, z, r, c]) => cont(x, z, r, c));
   for (const z of [-51, 51]) for (const x of [-32, -20, 20, 32]) K.box(x, 0, z + (z > 0 ? 3.6 : -3.6), 5, 1.2, 1.4, 0x5a5f66);   // dock benches
-  MAP_SPAWNS[name] = { ally: { x0: -22, x1: 22, z0: 47, z1: 57 }, enemy: { x0: -22, x1: 22, z0: -57, z1: -47 } };
+  MAP_SPAWNS[name] = { ally: { x0: -14, x1: 14, z0: 47, z1: 57 }, enemy: { x0: -14, x1: 14, z0: -57, z1: -47 } };
   MAP_GROUPS[name]._skyColor = 0x2f3338;
 }
 // 🏙️ Urban: two streets crossing at a plaza, four blocks of buildings you can walk through and climb to the roof.
@@ -12418,7 +12418,7 @@ function buildAirportLayout() {
   // the control tower, with a room at its foot
   K.room(56, 70, 22, 34, 0, 4.2, 0xc4c9cf, { w: [K.door(28, 3.4)], n: [K.door(63, 3.4)] });
   K.box(63, 0, 28, 6, 26, 6, 0xc4c9cf); K.box(63, 26, 28, 11, 4, 11, 0x2a6fc9);
-  MAP_SPAWNS[name] = { ally: { x0: -34, x1: 34, z0: 50, z1: 64 }, enemy: { x0: -34, x1: 34, z0: -64, z1: -50 } };
+  MAP_SPAWNS[name] = { ally: { x0: -34, x1: 34, z0: 64, z1: 67.5 }, enemy: { x0: -34, x1: 34, z0: -67.5, z1: -64 } };
   MAP_GROUPS[name]._skyColor = 0xa8cfee;
 }
 // 🚆 Train: a station. Two trains of walk-through carriages down the middle with platforms either side, a roof on
@@ -13389,7 +13389,7 @@ function buildBiosphereLayout() {
   for (const [x, z] of [[-44, -44], [44, 44], [-44, 44], [44, -44]]) { K.box(x, 0, z, 3, 9, 3, 0x5a4430); K.box(x, 8, z, 12, 3.6, 12, 0x3a7a3a); }
   K.hut(-6, 6, -56, -48, 0xe0eee8, 'ns', 3.4, 0x6a9a7a); K.hut(-6, 6, 48, 56, 0xe0eee8, 'ns', 3.4, 0x6a9a7a);
   for (const [x, z] of [[-20, 40], [20, -40], [-40, 6], [40, -6], [8, 34], [-8, -34]]) K.crate(x, z, 0x8a6a3a);
-  K.spawn({ x0: -26, x1: 26, z0: 54, z1: 60 }, { x0: -26, x1: 26, z0: -60, z1: -54 });
+  K.spawn({ x0: -26, x1: 26, z0: 58, z1: 62 }, { x0: -26, x1: 26, z0: -62, z1: -58 });
   MAP_GROUPS[name]._skyColor = 0xbfe8f0;
 }
 // 💭 Dreamscape: tiers of impossible platforms. Four islands at different heights with stairs between them, floating
@@ -13522,24 +13522,329 @@ function buildSuperArenaLayout() {
   const car = (x, z, r, c) => { K.box(x, 0, z, 2.3, 1.2, 4.6, c, r); K.box(x, 1.2, z, 2.0, 0.9, 2.6, 0x2a3038, r); };
   [[-45, -85, 1.57, 0xb83a2a], [45, 85, 1.57, 0x2a5aa8], [-85, 45, 0, 0xd88a2a], [85, -45, 0, 0x3a8a4a], [-45, 0, 1.57, 0x5a5f66], [45, 0, 1.57, 0xd8c8a0], [0, -45, 0, 0xb83a2a], [0, 45, 0, 0x2a5aa8], [-45, -40, 0.4, 0x3a8a4a], [45, 40, -0.4, 0xd88a2a]].forEach(([x, z, r, c]) => car(x, z, r, c));
   for (const [x, z] of [[-28, 112], [28, 112], [-28, -112], [28, -112]]) K.box(x, 0, z, 10, 1.4, 1.4, 0xc8a850);
-  K.spawn({ x0: -34, x1: 34, z0: 112, z1: 122 }, { x0: -34, x1: 34, z0: -122, z1: -112 });
+  K.spawn({ x0: -34, x1: 34, z0: 116, z1: 124 }, { x0: -34, x1: 34, z0: -124, z1: -116 });
   MAP_GROUPS[name]._skyColor = 0x8ab0d0;
 }
 Object.assign(_BESPOKE, { temple: buildTempleLayout, arena: buildArenaLayout, biosphere: buildBiosphereLayout, dreamscape: buildDreamscapeLayout, pyongyang: buildPyongyangLayout,
   traffic_cone_republic: buildTrafficConeLayout, flying_moai: buildMoaiLayout, big_arena: buildBigArenaLayout, super_arena: buildSuperArenaLayout });
 
+function buildForestIdentityLayout() {
+  const name = 'forest', K = _bkBegin(name, 140, 140, 0x304c28);
+  K.perim(11, 0x364632);
+  const tree = (x, z, h = 12) => {
+    K.box(x, 0, z, 2.8, h, 2.8, 0x493526);
+    const mesh = new THREE.Mesh(new THREE.ConeGeometry(6.5, 9, 7), new THREE.MeshLambertMaterial({ color: 0x245d36 }));
+    mesh.position.set(x, h + 1, z); MAP_GROUPS[name].add(mesh);
+    const top = new THREE.Mesh(new THREE.ConeGeometry(4.2, 7, 7), new THREE.MeshLambertMaterial({ color: 0x387c45 }));
+    top.position.set(x, h + 6, z); MAP_GROUPS[name].add(top);
+  };
+  // Tree lines form three winding routes; the clearings and bridge approaches stay open.
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    for (const [x, z, h] of [[27, 17, 13], [31, 30, 15], [37, 43, 12], [49, 17, 14], [53, 32, 16], [59, 46, 13], [59, 2, 15]]) tree(sx * x, sz * z, h);
+    K.box(sx * 21, 0, sz * 43, 18, 3.8, 4, 0x465441, sx * sz * 0.22);
+    K.box(sx * 44, 0, sz * 9, 14, 1.1, 2.6, 0x60432e, sx * sz * 0.25);
+    K.box(sx * 44, 1.1, sz * 9, 11, 0.8, 2.1, 0x493526, sx * sz * 0.25);
+  }
+  for (const sz of [-1, 1]) {
+    K.box(0, 0, sz * 49, 18, 5, 5, 0x465441);
+    K.mound(-8, 8, sz > 0 ? 20 : -30, sz > 0 ? 30 : -20, 3.2, 0x59644c, ['e', 'w'], 0.4, 0.8, 4);
+  }
+  K.slab(-8, 8, -20, 20, 3.2, 0.4, 0x78563a);
+  for (const x of [-7.8, 7.8]) {
+    K.wz(-20, 20, x, 0.3, 3.2, 1.1, 0x493526);
+    for (const z of [-17, 0, 17]) K.box(x, 0, z, 0.8, 3.2, 0.8, 0x493526);
+  }
+  K.hut(-60, -44, -8, 8, 0x78563a, 'ew', 4.2, 0x344c32);
+  K.hut(44, 60, -8, 8, 0x78563a, 'ew', 4.2, 0x344c32);
+  K.spawn({ x0: -24, x1: 24, z0: 57, z1: 65 }, { x0: -24, x1: 24, z0: -65, z1: -57 });
+  K.poi('forest bridge', 0, 0, 3.2);
+  MAP_GROUPS[name]._skyColor = 0xb2d0c4;
+}
+
+function buildDesertIdentityLayout() {
+  const name = 'desert', K = _bkBegin(name, 150, 150, 0xe0bc73);
+  K.perim(12, 0xa66e3c);
+  const sandstone = 0xc28b4c, pale = 0xe9c887;
+  // A canyon splits into a sheltered ruin route, a middle passage and a high ridge.
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    K.box(sx * 22, 0, sz * 30, 10, 10, 26, sandstone);
+    K.box(sx * 22, 10, sz * 30, 8, 1.6, 24, pale);
+    K.box(sx * 52, 0, sz * 26, 10, 8, 20, sandstone);
+    K.box(sx * 52, 8, sz * 26, 8, 1.5, 18, pale);
+    K.box(sx * 19, 0, sz * 51, 24, 5.6, 4, sandstone);
+    for (let i = 0; i < 5; i++) K.box(sx * 60, 0, sz * 48, 24 - i * 3, (i + 1) * 0.4, 18 - i * 2, pale);
+  }
+  K.room(-12, 12, -14, 14, 0, 7, sandstone, { n: [K.door(0, 6, 5)], s: [K.door(0, 6, 5)], e: [K.door(0, 5, 4)], w: [K.door(0, 5, 4)] }, 1.5);
+  for (const x of [-9, 9]) for (const z of [-11, 11]) K.box(x, 7, z, 3, 2, 3, pale);
+  K.box(0, 0, 0, 4.5, 1.2, 4.5, 0xa66e3c);
+  for (const sx of [-1, 1]) {
+    K.mound(sx > 0 ? 34 : -44, sx > 0 ? 44 : -34, -12, 12, 3.2, sandstone, ['n', 's'], 0.4, 0.9, 5);
+    K.box(sx * 39, 3.2, 0, 7, 1.3, 3, pale);
+    for (const z of [-8, 8]) { K.box(sx * 63, 0, z, 3, 6, 3, pale); K.box(sx * 63, 6, z, 4, 0.6, 4, sandstone); }
+    K.box(sx * 63, 6.6, 0, 4, 1.0, 20, sandstone);
+  }
+  K.spawn({ x0: -26, x1: 26, z0: 61, z1: 69 }, { x0: -26, x1: 26, z0: -69, z1: -61 });
+  K.poi('canyon courtyard', 0, 7, 0);
+  MAP_GROUPS[name]._skyColor = 0xe9d7b2;
+}
+
+function buildTundraIdentityLayout() {
+  const name = 'tundra', K = _bkBegin(name, 140, 140, 0xeaf2f7);
+  K.perim(12, 0x9abfd4);
+  const ice = 0x7db6d2, snow = 0xf4fafc;
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    K.box(sx * 25, 0, sz * 28, 12, 7, 24, ice);
+    K.box(sx * 25, 7, sz * 28, 12.4, 0.7, 24.4, snow);
+    K.box(sx * 20, 0, sz * 47, 21, 4.8, 4, ice);
+    K.box(sx * 51, 0, sz * 28, 9, 4.8, 13, ice);
+    K.box(sx * 51, 4.8, sz * 28, 9.4, 0.7, 13.4, snow);
+    for (let i = 0; i < 4; i++) K.box(sx * 50, 0, sz * 47, 17 - i * 3, (i + 1) * 0.4, 14 - i * 2, snow);
+  }
+  _bkBuilding(K, -13, 13, -12, 12, { floors: 2, color: 0xd7e2e8, roof: 0x496578, doors: ['n', 's', 'e', 'w'] });
+  for (const sx of [-1, 1]) {
+    K.hut(sx > 0 ? 43 : -59, sx > 0 ? 59 : -43, -8, 8, 0xd7e2e8, 'ew', 4.2, 0x496578);
+    K.mound(sx > 0 ? 30 : -38, sx > 0 ? 38 : -30, -8, 8, 2.4, ice, ['n', 's'], 0.4, 0.9, 4);
+    K.box(sx * 34, 2.4, 0, 4, 1.1, 5, snow);
+  }
+  K.spawn({ x0: -24, x1: 24, z0: 56, z1: 65 }, { x0: -24, x1: 24, z0: -65, z1: -56 });
+  MAP_GROUPS[name]._skyColor = 0xc6dfec;
+}
+Object.assign(_BESPOKE, { forest: buildForestIdentityLayout, desert: buildDesertIdentityLayout, tundra: buildTundraIdentityLayout });
+
+function refineMapIdentity(name) {
+  if (!_BESPOKE[name] || name === 'volcano') return;
+  const group = MAP_GROUPS[name], K = _bkit(name), th = MAP_THEMES[name];
+  const detail = _thBuf(), glow = _thBuf();
+  const box = (x, y, z, w, h, d, c, lit = false) => _thBox(lit ? glow : detail, _TH_WORLD, x, y + h / 2, z, w, h, d, c);
+  const pipe = (x, z, length, height, color, alongX = true) => {
+    for (const off of [-length / 2 + 1, length / 2 - 1]) box(x + (alongX ? off : 0), 0, z + (alongX ? 0 : off), 0.5, height, 0.5, 0x495157);
+    box(x, height, z, alongX ? length : 0.8, 0.8, alongX ? 0.8 : length, color);
+    for (let off = -length / 2 + 2; off < length / 2; off += 5) box(x + (alongX ? off : 0), height - 0.1, z + (alongX ? 0 : off), alongX ? 0.3 : 1, 1, alongX ? 1 : 0.3, 0x919a9e);
+  };
+  const strip = (x, z, w, d, c) => box(x, 0.015, z, w, 0.025, d, c);
+  const originals = group.children.slice();
+  // Details follow existing surfaces, so doorways and stair clearances retain their original hitboxes.
+  for (const m of originals) {
+    const p = m.geometry?.parameters;
+    if (!m.isMesh || m.geometry.type !== 'BoxGeometry' || !p) continue;
+    const { width: w, height: h, depth: d } = p, c = m.material?.color?.getHex();
+    const host = (lx, ly, lz, bw, bh, bd, col, lit = false) => _thBox(lit ? glow : detail, m, lx, ly, lz, bw, bh, bd, col);
+    if (['forest', 'vietnam', 'overgrowth', 'biosphere', 'holiday'].includes(name) && h >= 6 && w <= 3.5 && d <= 3.5 && [0x4a3626, 0x5a4430, 0x5a3a24].includes(c)) {
+      for (let i = 0; i < 3; i++) {
+        const mesh = new THREE.Mesh(new THREE.ConeGeometry(5 - i, 5, 6), new THREE.MeshLambertMaterial({ color: i % 2 ? 0x387b42 : 0x245b35 }));
+        mesh.position.set(m.position.x, m.position.y + h / 2 + i * 2, m.position.z); group.add(mesh);
+      }
+    }
+    if (['warehouse', 'refinery', 'foundry', 'glassworks', 'chernobyl', 'space', 'orbital_station', 'gravity_lab', 'cyber', 'lockdown', 'sewer'].includes(name) && h >= 3 && h <= 16 && Math.max(w, d) > 6 && Math.min(w, d) < 2) {
+      const alongX = w > d, len = Math.max(w, d);
+      for (const y of [-h / 2 + 0.5, h / 2 - 0.4]) host(0, y, 0, alongX ? len : w + 0.06, 0.18, alongX ? d + 0.06 : len, _thShade(th.w, 0.6));
+      for (let a = -len / 2 + 2; a < len / 2 - 1; a += 6) host(alongX ? a : 0, 0, alongX ? 0 : a, alongX ? 0.16 : w + 0.08, h, alongX ? d + 0.08 : 0.16, _thShade(th.w, 0.75));
+      if (['cyber', 'space', 'orbital_station', 'gravity_lab'].includes(name)) host(0, h / 2 - 0.8, 0, alongX ? len - 0.4 : w + 0.1, 0.12, alongX ? d + 0.1 : len - 0.4, th.a, true);
+    }
+    if (['urban', 'super_arena', 'pyongyang', 'studio', 'supermarket', 'airport', 'titanic', 'carrier', 'pearl_harbor'].includes(name) && h >= 3 && Math.max(w, d) > 8 && Math.min(w, d) < 1.6) {
+      host(0, -h / 2 + 0.3, 0, w + 0.08, 0.5, d + 0.08, _thShade(c, 0.65));
+      host(0, h / 2 - 0.18, 0, w + 0.15, 0.3, d + 0.15, _thShade(c, 1.2));
+    }
+    if (['temple', 'arena', 'big_arena', 'labyrinth', 'flying_moai', 'desert'].includes(name) && h >= 3 && Math.max(w, d) > 5 && Math.min(w, d) < 3.5) {
+      for (let y = -h / 2 + 1; y < h / 2; y += 1.2) host(0, y, 0, w + 0.025, 0.04, d + 0.025, _thShade(c, 0.65));
+    }
+    if (['refinery', 'pearl_harbor'].includes(name) && w === 14 && d === 14 && h === 4.6) {
+      for (const y of [-1.7, 1.7]) host(0, y, 0, 14.06, 0.25, 14.06, 0x69757a);
+      for (const sx of [-1, 1]) for (let z = -5; z <= 5; z += 2) host(sx * 7.03, 0, z, 0.08, 4.5, 0.12, 0x899599);
+    }
+    if (['warehouse', 'supermarket'].includes(name) && h >= 2 && h <= 4 && Math.max(w, d) >= 5 && Math.min(w, d) <= 2) {
+      for (let y = -h / 2 + 0.4; y < h / 2; y += 0.7) host(0, y, 0, w + 0.08, 0.09, d + 0.08, 0xd6dadd);
+    }
+    // Turn plain supply cubes into theme-specific cover without widening their colliders.
+    if (w === 2.2 && d === 2.2 && h === 2) {
+      if (['forest', 'overgrowth', 'temple', 'arena', 'flying_moai', 'desert', 'tundra'].includes(name)) {
+        m.material.color.setHex(th.w);
+        for (const y of [-0.4, 0.4]) host(0, y, 0, 2.23, 0.06, 2.23, _thShade(th.w, 0.65));
+      } else {
+        for (const x of [-0.8, 0.8]) host(x, 0, 0, 0.15, 2.02, 2.23, _thShade(c, 0.65));
+      }
+    }
+  }
+  switch (name) {
+    case 'forest':
+      for (const x of [-58, 58]) for (const z of [-55, 55]) box(x, 0, z, 9, 1.0, 3, 0x493526);
+      break;
+    case 'vietnam':
+      for (const x of [-58, 58]) for (let z = -45; z <= 45; z += 10) { box(x, 0, z, 0.6, 10, 0.6, 0x707f39); box(x + 1.4, 0, z + 2, 0.6, 8, 0.6, 0x869b46); }
+      for (const sz of [-1, 1]) strip(0, sz * 44, 100, 4, 0x708341);
+      break;
+    case 'overgrowth':
+      for (const m of originals) { const p = m.geometry?.parameters; if (p?.height > 3 && p?.width > 5 && p?.depth < 2) for (let x = -p.width / 2 + 1; x < p.width / 2; x += 4) _thBox(detail, m, x, 0.3, p.depth / 2 + 0.03, 0.32, p.height, 0.08, 0x36683c); }
+      break;
+    case 'desert':
+      for (const sz of [-1, 1]) strip(0, sz * 35, 20, 34, 0xd3aa61);
+      break;
+    case 'tundra':
+      for (const x of [-66, 66]) for (const z of [-40, 0, 40]) box(x, 0, z, 3, 10, 8, 0xa0c9df);
+      break;
+    case 'battlefield': case 'trenches':
+      for (const sz of [-1, 1]) for (const x of [-44, -22, 22, 44]) { box(x, 0, sz * 35, 0.3, 2, 0.3, 0x403e36); box(x, 1.5, sz * 35, 5, 0.12, 0.12, 0x55534d); }
+      for (const sz of [-1, 1]) strip(0, sz * 49, name === 'trenches' ? 96 : 100, 5, 0x4d4130);
+      break;
+    case 'warehouse':
+      for (const z of [-44, 44]) { strip(0, z, 70, 0.35, 0xf0c542); pipe(0, z, 60, 10, 0x737e84); }
+      break;
+    case 'refinery':
+      for (const z of [-40, 40]) pipe(0, z, 104, 7.5, 0xb4a077);
+      for (const x of [-58, 58]) box(x, 30, 0, 2.5, 2, 2.5, 0xff9f32, true);
+      break;
+    case 'foundry':
+      pipe(0, -24, 64, 8, 0x857568); pipe(0, 24, 64, 8, 0x857568);
+      for (const x of [-24, 24]) for (const z of [-12, 12]) box(x, 4.4, z, 3.2, 0.06, 3.2, 0xffb344, true);
+      break;
+    case 'glassworks':
+      for (const sz of [-1, 1]) for (const x of [-44, -30, -16, 16, 30, 44]) { box(x, 0, sz * 40, 0.82, 0.3, 9.2, 0x506e78); box(x, 3.15, sz * 40, 0.82, 0.15, 9.2, 0x506e78); }
+      pipe(0, 0, 60, 11, 0x818e94);
+      break;
+    case 'chernobyl':
+      pipe(0, -29, 60, 7.5, 0x6c7867); pipe(0, 29, 60, 7.5, 0x6c7867);
+      for (const x of [-26, 26]) box(x, 3, 0, 0.06, 0.6, 8, 0xc5b849);
+      break;
+    case 'sewer':
+      for (const x of [-2.8, 2.8]) pipe(x, 0, 136, 4.4, 0x776b4f, false);
+      for (const z of [-30, 30]) pipe(0, z, 100, 4.4, 0x776b4f);
+      strip(0, 0, 1.3, 140, 0x59765e);
+      break;
+    case 'cyber':
+      for (const x of [-23, 23]) strip(x, 0, 0.22, 102, 0x00bad6);
+      for (const z of [-40, 40]) strip(0, z, 110, 0.22, 0xe45098);
+      break;
+    case 'space':
+      for (const z of [-43, 43]) strip(0, z, 16, 2, 0xcb8e37);
+      for (const x of [-18, 18]) pipe(x, 0, 150, 6.3, 0x8994a1, false);
+      break;
+    case 'orbital_station':
+      for (const x of [-59, 59]) strip(x, 0, 0.4, 114, 0x2ab0ff);
+      for (const z of [-59, 59]) strip(0, z, 114, 0.4, 0x2ab0ff);
+      for (const x of [-7.1, 7.1]) box(x, 0.8, 0, 0.08, 2.4, 10, 0x50d5f3, true);
+      break;
+    case 'gravity_lab':
+      for (const x of [-36, 0, 36]) for (const z of [-35, 0, 35]) { strip(x, z, 12, 0.2, 0x778cd5); strip(x, z, 0.2, 12, 0x778cd5); }
+      break;
+    case 'urban': case 'super_arena':
+      for (const x of name === 'urban' ? [-22, 22] : [-43, 43]) for (let z = -40; z <= 40; z += 10) strip(x, z, 0.25, 4, 0xe8e3d2);
+      break;
+    case 'airport':
+      for (const x of [-42, 42]) for (let z = -40; z <= 40; z += 12) strip(x, z, 0.35, 7, 0xe8d057);
+      break;
+    case 'supermarket':
+      for (const sz of [-1, 1]) for (const x of [-36, -28, -20, -12, 12, 20, 28, 36]) box(x, 2.3, sz > 0 ? 10 : -24, 1.5, 0.6, 3, [0x98b16a, 0xe7c971, 0xc96755][Math.abs(x) % 3]);
+      break;
+    case 'train':
+      for (const x of [-19, 19]) strip(x, 0, 0.45, 118, 0xe1bc43);
+      for (const x of [-13.5, -3.5, 3.5, 13.5]) strip(x, 0, 0.2, 120, 0x8e9499);
+      break;
+    case 'titanic':
+      for (const x of [-7, 7]) for (let z = -40; z <= 40; z += 6) strip(x, z, 0.07, 5, 0x5c4836);
+      break;
+    case 'carrier':
+      for (const z of [-55, -35, 35, 55]) strip(0, z, 16, 0.5, 0xe3e9ec);
+      for (const x of [-32, 32]) strip(x, 0, 0.5, 152, 0xe2c449);
+      break;
+    case 'pearl_harbor':
+      for (const z of [-26, 14]) for (const x of [24.5, 27.5]) box(x, 4, z, 0.8, 0.8, 10, 0x3a4650);
+      for (const z of [-40, 40]) box(-8, 3, z, 0.14, 8, 0.14, 0x3c4850);
+      break;
+    case 'skydock':
+      for (const x of [-7.05, 7.05]) for (const z of [-20, -10, 0, 10, 20]) box(x, 3.2, z, 0.12, 9, 0.3, 0x8b9696);
+      for (const x of [-17, 17]) { box(x, 0, 0, 0.7, 13.4, 0.7, 0x627787); }
+      break;
+    case 'doomsday':
+      for (const z of [-42, -24, 0, 24, 42]) box(-29, 4.62, z, 0.2, 0.02, 4, 0xb8ab82);
+      for (const x of [-11.7, 11.7]) box(x, 0.3, 0, 0.08, 0.4, 12, 0xbca146);
+      break;
+    case 'carnival':
+      for (const sz of [-1, 1]) for (const x of [-24, -10, 10, 24]) for (let dx = -3; dx <= 3; dx += 2) box(x + dx, 3.81, sz * 36, 1, 0.04, 7.2, 0xd8483a);
+      for (const x of [-6, 6]) box(x, 0.6, 0, 0.3, 3.2, 0.3, 0xe8c04c);
+      break;
+    case 'holiday':
+      for (const x of [-6, 6]) box(x, 0, 0, 0.5, 5.5, 0.5, 0xf2c93a, true);
+      for (const x of [-22, 22]) strip(x, 0, 0.3, 24, 0x7eb1cc);
+      break;
+    case 'temple':
+      for (const z of [-40, -24, 24, 40]) strip(0, z, 6, 8, 0x9c8054);
+      for (const x of [-9, 9]) for (const z of [-22, 22]) box(x, 5.6, z, 2.4, 0.6, 2.4, 0xd6bb80);
+      break;
+    case 'arena':
+      for (const x of [-14, 14]) for (const z of [-14, 14]) { box(x, 7, z, 3.2, 0.5, 3.2, 0xb6b2a3); box(x, 0, z, 3.2, 0.3, 3.2, 0xb6b2a3); }
+      break;
+    case 'big_arena':
+      for (const sz of [-1, 1]) for (let x = -76; x <= 76; x += 8) box(x, 8, sz * 80, 3, 1.8, 3, 0x8a8f7a);
+      for (const sx of [-1, 1]) for (let z = -76; z <= 76; z += 8) box(sx * 80, 8, z, 3, 1.8, 3, 0x8a8f7a);
+      break;
+    case 'biosphere':
+      for (const x of [-62, 62]) box(x, 0, 0, 0.8, 17, 0.8, 0xb7d7cb);
+      box(0, 16.2, 0, 124, 0.8, 0.8, 0xb7d7cb);
+      for (const z of [-60, 60]) { box(0, 0, z, 0.8, 17, 0.8, 0xb7d7cb); box(0, 16.2, 0, 0.8, 0.8, 120, 0xb7d7cb); }
+      break;
+    case 'lockdown':
+      for (const sx of [-1, 1]) for (let z = -30; z <= 30; z += 8) for (let dz = -0.7; dz <= 0.7; dz += 0.7) box(sx * 9, 0, z + dz, 0.08, 3, 0.08, 0x9ba4a8);
+      break;
+    case 'studio':
+      for (const x of [-8, 8]) { box(x, 5.6, x < 0 ? 5 : -5, 1.6, 0.5, 1.2, 0x28282c); box(x, 5.7, x < 0 ? 5.65 : -4.35, 1.2, 0.3, 0.05, 0xffd899, true); }
+      break;
+    case 'opera':
+      for (const x of [-32, 32]) box(x, 0, -32, 3, 9.5, 1, 0x8b233d);
+      for (const z of [-28, -20]) strip(0, z, 12, 3, 0x793747);
+      break;
+    case 'labyrinth':
+      for (const m of originals) { const p = m.geometry?.parameters; if (p?.height === 4.8) _thBox(detail, m, 0, 2.42, 0, p.width + 0.2, 0.12, p.depth + 0.2, 0xa4aa96); }
+      break;
+    case 'dreamscape':
+      for (const m of originals) { const p = m.geometry?.parameters; if (p?.height === 2.2 && m.position.y > 3) K.box(m.position.x, 0, m.position.z, 1.2, 3.2, 1.2, 0xd8c4f0); }
+      break;
+    case 'pyongyang':
+      for (const x of [-5, 5]) strip(x, 12, 0.15, 68, 0xc5beb0);
+      break;
+    case 'traffic_cone_republic':
+      for (const x of [-56, 56]) for (let z = -42; z <= 42; z += 10) strip(x, z, 0.3, 5, 0xf4f4f0);
+      break;
+    case 'flying_moai':
+      for (const x of [-14, -7, 0, 7, 14]) box(x, 5, -18.15, 1.8, 0.4, 0.08, 0x413e39);
+      break;
+  }
+  _thMesh(group, detail, false); _thMesh(group, glow, true);
+  group.userData.identityRefined = true;
+}
+
+function protectThemedMapSpawns(name) {
+  const spawns = MAP_SPAWNS[name];
+  if (!_BESPOKE[name] || !spawns) return;
+  const K = _bkit(name), color = name === 'volcano' ? 0x111010 : MAP_THEMES[name].w;
+  const samples = r => [-0.35, 0, 0.35].map(f => new THREE.Vector3((r.x0 + r.x1) / 2 + f * (r.x1 - r.x0), 1.65, (r.z0 + r.z1) / 2));
+  const allies = samples(spawns.ally), enemies = samples(spawns.enemy);
+  const exposed = allies.some(a => enemies.some(b => {
+    const dir = b.clone().sub(a), distance = dir.length(), ray = new THREE.Ray(a, dir.normalize()), hit = new THREE.Vector3();
+    return !MAP_COLLIDERS[name].some(c => ray.intersectBox(c, hit) && hit.distanceTo(a) < distance);
+  }));
+  if (!exposed) return;
+  for (const r of [spawns.ally, spawns.enemy]) {
+    const centerZ = (r.z0 + r.z1) / 2, side = Math.sign(centerZ), width = Math.min(20, r.x1 - r.x0 - 6);
+    if (width < 4) continue;
+    const z = (side > 0 ? r.z0 : r.z1) - side * 5, x = (r.x0 + r.x1) / 2;
+    const free = !MAP_COLLIDERS[name].some(b => b.max.y > 0.6 && b.min.y < 3.8 && b.max.x > x - width / 2 - 1 && b.min.x < x + width / 2 + 1 && b.max.z > z - 2 && b.min.z < z + 2);
+    if (!free) continue;
+    K.box(x, 0, z, width, 3.8, 2.4, color);
+    K.box(x, 3.8, z, width, 0.4, 2.4, _thShade(color, 0.85));
+  }
+}
+
 function initMapThemes() {
   for (const name of Object.keys(MAP_THEMES)) {
     if (!MAP_GROUPS[name]) continue;
     try { if (_BESPOKE[name]) _BESPOKE[name](); } catch (e) { console.warn('[bespoke]', name, e); }
-    try { themeHollowBuildings(name); themePlaceBuildings(name); themeRecolorMap(name); themePlaceProps(name); if (name === 'volcano') buildVolcanoScenery(); buildMapScenery(name); } catch (e) { console.warn('[theme]', name, e); }
+    try { refineMapIdentity(name); protectThemedMapSpawns(name); themeHollowBuildings(name); themePlaceBuildings(name); themeRecolorMap(name); themePlaceProps(name); if (name === 'volcano') buildVolcanoScenery(); buildMapScenery(name); } catch (e) { console.warn('[theme]', name, e); }
   }
 }
 initMapThemes();
 
-// Keep every map in the same readable, low-poly arena language. Individual
-// builders keep their theme; this pass fixes the common problems: missing
-// visible boundaries, over-round props, and open midfields with no fair rotate.
+// Bespoke layouts own their routes and cover. Only legacy layouts need the
+// generic arena pass; all maps still receive flat shading below.
 const LOW_POLY_BOUNDARY_MAPS = [
   'carrier', 'overgrowth', 'orbital_station', 'foundry', 'carnival',
   'biosphere', 'lockdown', 'studio', 'temple', 'holiday', 'labyrinth',
@@ -13560,11 +13865,11 @@ const LOW_POLY_COVER_COLORS = {
 };
 function applyLowPolyMapPlayabilityPass() {
   if (!GRID_CONCEPT_MAPS_ACTIVE) {
-    LOW_POLY_BOUNDARY_MAPS.forEach(name => addLowPolyArenaWalls(name, 0x343434));
+    LOW_POLY_BOUNDARY_MAPS.filter(name => !_BESPOKE[name]).forEach(name => addLowPolyArenaWalls(name, 0x343434));
     Object.keys(MAP_GROUPS).forEach(name => {
       if (name === 'blank' || name === 'range' || name === 'battlefield' || name === 'lobby13' || name === 'br_arena') return;
       if (name.startsWith(ADMIN_CUSTOM_MAP_PREFIX)) return;
-      if (name === 'volcano') return;
+      if (_BESPOKE[name]) return;
       addLowPolyArenaCover(name, LOW_POLY_COVER_COLORS[name] || 0x6f6a60);
     });
   }
@@ -55995,12 +56300,12 @@ const MAP_DESCS = {
   base_raid:  'Base Raid — storm a guarded compound with allied bots',
   urban:      'Urban Plaza — corner buildings, cars as low cover',
   warehouse:  'Warehouse — stacked crates, pipes, narrow lanes',
-  forest:     'Forest Clearing — trees + rocks, mostly open',
+  forest:     'Forest — dense pine routes, sheltered clearings and a raised timber bridge',
   vietnam:    '🇻🇳 Vietnam — huge dense jungle, thick canopy, tight sightlines',
   volcano:    '🔥 Volcano — high-damage lava fields with black obsidian routes',
   cyber:      '⚡ Cyber Alley — neon city, JUMP PADS launch you up',
-  desert:     'Desert Ruins — broken pillars + sand dunes, open sightlines',
-  tundra:     '❄️ Tundra — ice patches make you slip and slide',
+  desert:     'Desert — sandstone canyons, ruined arches and climbable ridges',
+  tundra:     'Tundra — blue ice corridors, snowbanks and a two-floor research station',
   space:      '🌌 Space Station — LOW GRAVITY zones · jump higher',
   airport:    '🛬 Airport — break glass + lights · gets darker as lights die',
   trenches:   '🪖 Trenches — barbed wire + 4 PILOTABLE mortar cannons (F to use)',
