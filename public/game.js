@@ -10606,9 +10606,13 @@ function buildGalePeaksMap() {
   G._skyColor = 0x9ec7ee;
   // Wind streaks, only visible while a gust is coming or blowing.
   const streaks = [];
+  // Seeded (#71): these are decorative and carry no collider, so they were not
+  // a desync — but a map that hashes differently on every load makes "did this
+  // change any geometry?" impossible to answer without faking Math.random.
+  const _rs = _thRng('gale:streaks');
   for (let i = 0; i < 22; i++) {
     const st = new THREE.Mesh(new THREE.BoxGeometry(7, 0.05, 0.05), _MECH_BASIC(0xffffff, 0.5));
-    st.position.set((Math.random() - 0.5) * 100, 0.8 + Math.random() * 6, (Math.random() - 0.5) * 100);
+    st.position.set((_rs() - 0.5) * 100, 0.8 + _rs() * 6, (_rs() - 0.5) * 100);
     st.visible = false; G.add(st); streaks.push(st);
   }
   const DIRS = [[1,0,'east'],[-1,0,'west'],[0,1,'south'],[0,-1,'north'],[0.707,0.707,'south-east'],[-0.707,-0.707,'north-west']];
@@ -11125,6 +11129,29 @@ function addGridBlock(name, cx, cz, sizeX, sizeZ, groundH, roofH, flip = false) 
 }
 function addGridConceptMap(name, index) {
   if (!GENERATED_LAYOUT_MAPS.has(name)) return;
+  // 🎲 Deterministic from here down (#71). addGridClutter rolls Math.random six
+  // times per placement, and every client builds its own copy of the map — so
+  // blank, range and br_arena, the three maps this function still produces,
+  // came out DIFFERENT on every machine. Colliders are built from these meshes,
+  // movement is resolved client-side and hits are client-authoritative, which
+  // made two players in the same match stand in different buildings with
+  // neither of them wrong.
+  //
+  // Swapping the global for the length of the call covers addGridClutter,
+  // addGridRamps and addGridLedges without threading an rng through five
+  // signatures, and keying on the map's own name keeps the three layouts
+  // different from each other while each is the same everywhere. try/finally
+  // because a builder that throws must not leave the game with a fixed
+  // Math.random.
+  const _realRandom = Math.random;
+  Math.random = _thRng('grid:' + name);
+  try {
+    _buildGridConceptMap(name, index);
+  } finally {
+    Math.random = _realRandom;
+  }
+}
+function _buildGridConceptMap(name, index) {
   resetMapContents(name);
   const large = name === 'br_arena';
   const compact = name === 'range';
