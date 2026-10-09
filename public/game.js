@@ -5618,6 +5618,10 @@ function resolvePosCollisions(px, pz, feetY = 0) {
 
 // ── Map Groups ──────────────────────────────────────────────────────────────
 const MAP_GROUPS = {};
+// Where each side starts on a map that names it, and the points of interest a
+// map wants called out. Declared here, with the other map registries, because
+// the builders below fill them in as they run.
+var MAP_SPAWNS = {}, MAP_POIS = {};
 // Every map that can be played, and the subset the random draw skips (#66).
 // Mirrors server.js — MAP_IDS and THIN_MAPS have to stay identical there
 // (CLAUDE.md #4), because the server picks the map and the client honours it.
@@ -10137,6 +10141,7 @@ function buildStormPierMap() {
     [-1, 1].forEach(sd => addMapBox(m, 0, 6.75, z + sd * 1.3, 26, 1.1, 0.3, 0x6b7480));
     [-1, 1].forEach(sd => { for (let k = 0; k < 11; k++) addMapBox(m, sd * (13 + k * 1.2), 0.3 + k * 0.55, z, 1.2, 0.55, 2.6, 0x5a626c); });
   });
+  MAP_SPAWNS[m] = { ally: { x0: -7, x1: 7, z0: 40, z1: 46 }, enemy: { x0: -7, x1: 7, z0: -46, z1: -40 } };
   G._skyColor = 0x141b26;
   const RODS_PULL = 10;
   const S = { next: 3.5, strikes: [], hinted: false };
@@ -10312,6 +10317,16 @@ function buildLaserVaultMap() {
     addMapBox(m, sd * 16, 3.25,  9.8, 10, 1.1, 0.4, RACK);
     for (let k = 0; k < 5; k++) addMapBox(m, sd * 22, 0.25 + k * 0.5, -12 - k * 1.6, 3.0, 0.5, 1.6, CASE);
   });
+  // Partition walls, one each side of the vault floor, with a gap off-centre.
+  // 10 of the 25 spawn-to-spawn lines were open across 80 m — the racks are
+  // 1.1 m and the cases 1.8, so at 1.65 eye height a diagonal went straight
+  // through. These are 2.8 and they break the diagonals without closing the
+  // room the beams sweep.
+  [-1, 1].forEach(sd => {
+    [-1, 1].forEach(half => addMapBox(m, half * 15, 1.4, sd * 28, 24, 2.8, 1.2, 0x323a45));
+    addMapBox(m, 0, 2.3, sd * 28, 7, 0.6, 1.2, 0x323a45);              // a lintel over the gap
+  });
+  MAP_SPAWNS[m] = { ally: { x0: -15, x1: 15, z0: 40, z1: 46 }, enemy: { x0: -15, x1: 15, z0: -46, z1: -40 } };
   G._skyColor = 0x0b0f14;
   const S = { cd: 0, botCd: {}, hinted: false };
   const hitArm = (x, z, ar, footY, headY) => {
@@ -10408,6 +10423,7 @@ function buildCargoBeltsMap() {
   // only a way to be shot from three sides at once.
   [-1, 1].forEach(sd => [-18, 0, 18].forEach(x =>
     addMapBox(m, x, 5.2, sd * 31, 5.0, 1.2, 0.5, STEEL)));
+  MAP_SPAWNS[m] = { ally: { x0: -15, x1: 15, z0: 38, z1: 44 }, enemy: { x0: -15, x1: 15, z0: -44, z1: -38 } };
   G._skyColor = 0x2a2d31;
   const onLane = (x, z, ln) => Math.abs(z - ln.z) < W / 2 && Math.abs(x) < LEN / 2;
   MAP_MECH[m] = {
@@ -10466,9 +10482,12 @@ function buildGalePeaksMap() {
   });
   // Boulders on the flat, so the run in from a corner tower is not a straight
   // line across open ground with a crosswind on it.
+  // The last pair sits out at x ±28: at ±8 they landed inside the spawn
+  // rectangle, and four of thirty sampled spawn points were inside a boulder.
   [[-24,-12],[-12,-26],[12,26],[24,12],[-26,14],[26,-14],[14,-28],[-14,28],
-   [-40,-30],[40,30],[-40,30],[40,-30],[-8,-42],[8,42]].forEach(([x, z], i) =>
+   [-40,-30],[40,30],[-40,30],[40,-30],[-28,-42],[28,42]].forEach(([x, z], i) =>
     addMapBox(m, x, 0.85, z, 3.4 + (i % 3), 1.7, 3.0 + (i % 2), STONE, i * 0.37));
+  MAP_SPAWNS[m] = { ally: { x0: -15, x1: 15, z0: 40, z1: 46 }, enemy: { x0: -15, x1: 15, z0: -46, z1: -40 } };
   G._skyColor = 0x9ec7ee;
   // Wind streaks, only visible while a gust is coming or blowing.
   const streaks = [];
@@ -10604,6 +10623,12 @@ function buildMagmaRiseMap() {
 
   const lava = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), _MECH_BASIC(0xff4a10, 0.0));
   lava.rotation.x = -Math.PI / 2; lava.position.y = 0.2; lava.visible = false; G.add(lava);
+  // Where the two sides start. Without this the fallback drops everyone at
+  // z = ±(38..46) with no regard for what is there — two of those points were
+  // inside a spire. Named rectangles also mean protectThemedMapSpawns' rule
+  // applies by hand: the lines between them are broken (3 of 25 open), which
+  // on an 80 m map is what stops spawn-sniping.
+  MAP_SPAWNS[m] = { ally: { x0: -15, x1: 15, z0: 40, z1: 46 }, enemy: { x0: -15, x1: 15, z0: -46, z1: -40 } };
   G._skyColor = 0x2a0d08;
   const S = { phase: 'safe', t: 12, tick: 0, hinted: false };
   const setPhase = (ph, t) => { S.phase = ph; S.t = t; };
@@ -12400,7 +12425,9 @@ function buildMapScenery(name) {
 // structures with an outside and an inside -- decks and corridors, rooms and halls, stairs between floors -- so a
 // match has close quarters and long sight lines in the same map. They replace the archetype layout outright.
 // Teams spawn at the two ends along z (allies +z, enemies -z), in the rectangles MAP_SPAWNS names.
-var MAP_SPAWNS = {}, MAP_POIS = {};
+// MAP_SPAWNS / MAP_POIS are declared up with MAP_GROUPS: the map builders run
+// long before this point and fill them in, and a `var ... = {}` here would both
+// throw on the way up (TDZ-like: hoisted but undefined) and reset the table.
 function _bkit(name) {
   const K = { name };
   K.box = (x, y0, z, w, h, d, c, rot) => addMapBox(name, x, y0 + h / 2, z, w, h, d, c, rot || 0);
