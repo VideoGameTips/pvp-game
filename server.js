@@ -1651,10 +1651,10 @@ const MAP_IDS = ['blank','urban','warehouse','forest','vietnam','volcano','cyber
 // 🗺️ Dealt at RANDOM when nobody picks, which is not the same list (#66): a
 // map that is not worth landing on by accident goes in THIN_MAPS and stays
 // pickable by name from the map cards. Empty right now — the five that were in
-// it have been rebuilt. Counting things that break a sightline at chest height,
-// over a whole 100x100 m map: magma_rise went from 1 to 86, storm_pier 26 → 88,
-// cargo_belts 26 → 74, laser_vault 17 → 59, gale_peaks 18 → 52, against
-// foundry's 47 and arena's 59. The lever stays for next time.
+// it (magma_rise, storm_pier, cargo_belts, laser_vault, gale_peaks) have been
+// rebuilt and all five now carry more cover than foundry does. No figures here
+// on purpose: they moved three times while #66 was being reviewed and a comment
+// nobody re-measures is worse than no comment. #66 has the method.
 const THIN_MAPS = new Set([]);
 const LOBBY_MAP_POOL = MAP_IDS.filter(m => !THIN_MAPS.has(m));
 // The lobby plays the map of the first player (in join order) who picked a specific one.

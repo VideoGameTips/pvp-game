@@ -10193,8 +10193,12 @@ function buildStormPierMap() {
   // contesting rather than a free parking space.
   const C = [0xa33b2b, 0x2f5f8f, 0xc8a22a, 0x3b7a4f, 0x7a4a8a, 0x8a5a2a];
   const stack = (x, z, rot, n, i0) => {
+    // STOP at the first refusal. addClearBox returns null when a box would be
+    // buried, and the box above it is testing at a height where nothing else
+    // reaches — so ignoring the null left a 6 m container hanging at y 2.6
+    // over bare deck. Anything stacked has to inherit its support's fate.
     for (let k = 0; k < n; k++)
-      addClearBox(m, x + k * 0.35, 1.3 + k * 2.6, z + k * 0.3, 6.0, 2.6, 2.4, C[(i0 + k) % C.length], rot + k * 0.06);
+      if (!addClearBox(m, x + k * 0.35, 1.3 + k * 2.6, z + k * 0.3, 6.0, 2.6, 2.4, C[(i0 + k) % C.length], rot + k * 0.06)) break;
   };
   rods.forEach(([rx, rz], i) => {                       // cover beside every rod
     stack(rx + (rx < 0 ? 5.5 : -5.5), rz, i * 0.5, 2, i);
@@ -10402,7 +10406,7 @@ function buildLaserVaultMap() {
     for (let k = 0; k < 5; k++) addMapBox(m, sd * 16, 0.3 + k * 0.55, -16.4 + k * 1.4, 3.0, 0.55, 1.4, CASE);
   });
   // Partition walls, one each side of the vault floor. 10 of the 25
-  // spawn-to-spawn lines were open across 80 m — the racks are 1.1 m and the
+  // spawn-to-spawn lines (of 225 sampled pairs) were open across 80 m — the racks are 1.1 m and the
   // cases 1.8, so at 1.65 eye height a diagonal went straight through. These
   // are 2.8 and they break the diagonals without closing the room the beams
   // sweep. The gap is at x = ±6, opposite on each side, so crossing one
@@ -10497,8 +10501,9 @@ function buildCargoBeltsMap() {
       const x = k * 11 + (li - 1) * 3.5;
       [-1, 1].forEach(sd => {
         const z = ln.z + sd * (W / 2 + 2.2);
-        addClearBox(m, x, 1.0, z, 3.0, 2.0, 3.0, (k + li) % 2 ? CRATE : CRATE2, (k * 0.2));
-        if (k % 2 === 0) addClearBox(m, x + 1.2, 2.6, z - 0.6, 2.2, 1.2, 2.2, CRATE2, 0.3);  // stacked
+        const base = addClearBox(m, x, 1.0, z, 3.0, 2.0, 3.0, (k + li) % 2 ? CRATE : CRATE2, (k * 0.2));
+        // only if the crate it rides on is actually there
+        if (base && k % 2 === 0) addClearBox(m, x + 1.2, 2.6, z - 0.6, 2.2, 1.2, 2.2, CRATE2, 0.3);
       });
     }
   });
@@ -10591,7 +10596,9 @@ function buildGalePeaksMap() {
       // anything pulled inboard is under the next step up — which is where the
       // last two versions of this line put it, twice, 0.6 m of a 0.9 m stone
       // buried. At the corner the ring is just as wide and nothing is above it.
-      if (k === 0) [[1, 1], [1, -1], [-1, 1], [-1, -1]].forEach(([sx, sz], q) =>
+      // Not on the summit: its ring is 3.7 m to the wall ends, so a 1.6 m stone
+      // at the corner closes the very gap the walls are cut short to leave.
+      if (k === 0 && ti < 4) [[1, 1], [1, -1], [-1, 1], [-1, -1]].forEach(([sx, sz], q) =>
         addClearBox(m, sx * (r - 0.3), top + 0.45, sz * (r - 0.3), 1.6, 0.9, 1.6, STONE, (ti + q) * 0.3));
     });
   });
