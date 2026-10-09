@@ -6112,6 +6112,7 @@ function addMapBox(mapName, x, y, z, w, h, d, color, rotY = 0, opacity = 1) {
   const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
   m.position.set(x, y, z);
   if (rotY) m.rotation.y = rotY;
+  m.userData.mapStatic = true;        // may be baked into a merged draw call (#66)
   MAP_GROUPS[mapName].add(m);
   m.updateMatrixWorld(true);
   pushMeshColliders(MAP_COLLIDERS[mapName], m);
@@ -6139,6 +6140,107 @@ function addOuterWalls(mapName, color) {
   [[100,4,1,0,2,-50],[100,4,1,0,2,50],[1,4,100,-50,2,0],[1,4,100,50,2,0]].forEach(([w,h,d,x,y,z]) => {
     addMapBox(mapName, x, y, z, w, h, d, color);
   });
+}
+
+// ── 🧵 One draw call per colour, per map (#66) ──────────────────────────────
+// A map is cheap in triangles and ruinous in draw calls: super_arena is 3,080
+// meshes for 37,850 triangles, urban 889, studio 672. Three.js issues one draw
+// per mesh, and renderer.render was already 96% of the frame's CPU in Lobby 13
+// (#53). Twelve triangles do not cost anything; asking the GPU for them three
+// thousand times does.
+//
+// So every static box is baked into one geometry per material. What may be
+// merged is decided by how it was BUILT, not by a list someone has to maintain:
+// addMapBox tags its meshes, and a mechanic that animates part of a map builds
+// that part by hand (the lava plane, the laser arms, the conveyor drums) and
+// never through addMapBox — so it is never tagged and never merged. The three
+// exceptions, where a mechanic holds onto something addMapBox made, are found
+// by walking _batch5 for meshes rather than being written down here.
+//
+// Nothing else depends on map mesh identity: bullets resolve against
+// wallColliders, which is a separate array of Box3 built at addMapBox time, and
+// the only raycast against a map group is the killcam's line-of-sight test,
+// which works the same against merged geometry.
+function _meshesHeldByMechanics() {
+  const held = new Set();
+  const seen = new Set();
+  (function walk(v, depth) {
+    if (!v || depth > 5 || typeof v !== 'object') return;
+    if (v.isMesh) { held.add(v); return; }
+    if (seen.has(v)) return;
+    seen.add(v);
+    if (Array.isArray(v)) { for (const x of v) walk(x, depth + 1); return; }
+    for (const k in v) { try { walk(v[k], depth + 1); } catch (e) { /* getters */ } }
+  })(typeof _batch5 !== 'undefined' ? _batch5 : null, 0);
+  return held;
+}
+function mergeMapStatics(name, held) {
+  const group = MAP_GROUPS[name];
+  if (!group || group._merged) return 0;
+  group.updateMatrixWorld(true);
+  const inv = new THREE.Matrix4().copy(group.matrixWorld).invert();
+  const buckets = new Map();
+  group.traverse(o => {
+    if (!o.isMesh || !o.userData || !o.userData.mapStatic) return;
+    if (held.has(o)) return;
+    const mat = o.material;
+    // One material, no texture: a textured or multi-material box keeps its own
+    // draw call rather than forcing a UV atlas nobody asked for.
+    if (!mat || Array.isArray(mat) || !mat.isMeshLambertMaterial || mat.map) return;
+    const g = o.geometry;
+    if (!g || !g.attributes || !g.attributes.position) return;
+    const key = [mat.color.getHex(), mat.transparent ? 1 : 0, +mat.opacity.toFixed(3),
+                 mat.flatShading ? 1 : 0, o.castShadow ? 1 : 0, o.receiveShadow ? 1 : 0].join('|');
+    let b = buckets.get(key);
+    if (!b) { b = { mat, list: [] }; buckets.set(key, b); }
+    b.list.push(o);
+  });
+  let saved = 0;
+  const local = new THREE.Matrix4();
+  for (const b of buckets.values()) {
+    if (b.list.length < 2) continue;
+    let n = 0;
+    const parts = [];
+    for (const o of b.list) {
+      const g = (o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone());
+      local.copy(inv).multiply(o.matrixWorld);
+      g.applyMatrix4(local);
+      if (!g.attributes.normal) g.computeVertexNormals();
+      parts.push(g); n += g.attributes.position.count;
+    }
+    const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3);
+    let at = 0;
+    for (const g of parts) {
+      pos.set(g.attributes.position.array, at * 3);
+      nor.set(g.attributes.normal.array, at * 3);
+      at += g.attributes.position.count;
+      g.dispose();
+    }
+    const merged = new THREE.BufferGeometry();
+    merged.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    merged.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+    merged.computeBoundingBox(); merged.computeBoundingSphere();
+    const mesh = new THREE.Mesh(merged, b.mat);
+    mesh.castShadow = b.list[0].castShadow; mesh.receiveShadow = b.list[0].receiveShadow;
+    mesh.userData.mapMerged = true;
+    for (const o of b.list) {
+      if (o.parent) o.parent.remove(o);
+      o.geometry.dispose();
+      if (o.material !== b.mat) o.material.dispose();
+    }
+    group.add(mesh);
+    saved += b.list.length - 1;
+  }
+  group._merged = true;
+  return saved;
+}
+function mergeAllMapStatics() {
+  const held = _meshesHeldByMechanics();
+  let saved = 0;
+  for (const name of Object.keys(MAP_GROUPS)) {
+    try { saved += mergeMapStatics(name, held); } catch (e) { console.warn('[merge]', name, e); }
+  }
+  return saved;
 }
 
 function addLowPolyArenaCover(mapName, color = 0x777064) {
@@ -14085,6 +14187,7 @@ function applyLowPolyMapPlayabilityPass() {
   });
 }
 applyLowPolyMapPlayabilityPass();
+const _MAP_DRAWS_SAVED = mergeAllMapStatics();
 
 // ══════════════════════════════════════════════════════════════════════════
 // 🏚️ MAP SURFACE PASS — reflective, and not perfectly clean
