@@ -5618,6 +5618,16 @@ function resolvePosCollisions(px, pz, feetY = 0) {
 
 // ── Map Groups ──────────────────────────────────────────────────────────────
 const MAP_GROUPS = {};
+// Where each side starts on a map that names it, and the points of interest a
+// map wants called out. Declared here, with the other map registries, because
+// the builders below fill them in as they run.
+var MAP_SPAWNS = {}, MAP_POIS = {};
+// Every map that can be played, and the subset the random draw skips (#66).
+// Mirrors server.js — MAP_IDS and THIN_MAPS have to stay identical there
+// (CLAUDE.md #4), because the server picks the map and the client honours it.
+const MAP_IDS = ['blank', 'urban', 'warehouse', 'forest', 'vietnam', 'volcano', 'cyber', 'desert', 'tundra', 'space', 'airport', 'trenches', 'chernobyl', 'refinery', 'skydock', 'sewer', 'gravity_lab', 'glassworks', 'carrier', 'overgrowth', 'orbital_station', 'foundry', 'carnival', 'biosphere', 'lockdown', 'studio', 'temple', 'holiday', 'labyrinth', 'arena', 'opera', 'doomsday', 'train', 'dreamscape', 'pearl_harbor', 'titanic', 'supermarket', 'pyongyang', 'traffic_cone_republic', 'flying_moai', 'big_arena', 'super_arena', 'storm_pier', 'pinball_arcade', 'laser_vault', 'cargo_belts', 'gale_peaks', 'magma_rise'];
+const THIN_MAPS = new Set([]);
+
 const MAP_COLLIDERS = {};
 const MAP_BOUNDS = {};
 // 📐 Ramps. Floors are all axis-aligned boxes, so a slope is a smooth wedge over
@@ -5764,6 +5774,10 @@ function _weatherOnActivate(name) { if (MAP_GROUPS[name]) weatherMapGroup(MAP_GR
 function activateMap(name) {
   for (const [n, g] of Object.entries(MAP_GROUPS)) g.visible = (n === name);
   if (typeof dressThemeMap === 'function') { try { dressThemeMap(name); } catch (e) { console.warn('[theme]', name, e); } }
+  // Then bake this map's static boxes into one draw call per material (#66).
+  // After the dressing, because the dressing is what reads the per-box tags;
+  // before atmoActivate, so the weather and ambience it adds stay separate.
+  if (typeof mergeMapOnActivate === 'function') mergeMapOnActivate(name);
   // The haze takes the colour of the sky it hangs under, so a dark map is not wrapped in pale blue.
   if (scene.fog && scene.fog.color && MAP_GROUPS[name] && MAP_GROUPS[name]._skyColor != null) scene.fog.color.setHex(MAP_GROUPS[name]._skyColor);
   if (typeof atmoActivate === 'function') { try { atmoActivate(name); } catch (e) { console.warn('[atmo]', name, e); } }
@@ -6122,11 +6136,44 @@ function addMapBox(mapName, x, y, z, w, h, d, color, rotY = 0, opacity = 1) {
   const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
   m.position.set(x, y, z);
   if (rotY) m.rotation.y = rotY;
+  m.userData.mapStatic = true;        // may be baked into a merged draw call (#66)
   MAP_GROUPS[mapName].add(m);
   m.updateMatrixWorld(true);
   pushMeshColliders(MAP_COLLIDERS[mapName], m);
   return m;
 }
+// ── 🧱 Cover that refuses to be placed inside something else (#66) ──────────
+// Every one of the mechanic maps grew by hand, and hand-picked coordinates
+// checked against hand-picked neighbours is exactly how a 1.2 m wall ends up
+// showing 0.3 m of itself, a container swallows a crate whole, and a staircase
+// gets sealed by the cover added three lines later. All three happened.
+//
+// MAP_COLLIDERS already holds everything placed so far on this map, so the
+// check is cheap and it is the same test an audit would run afterwards: if the
+// new box would lose (or take) more than 45% of the smaller volume, it is not
+// placed at all. Returning null rather than nudging is deliberate — a piece of
+// cover that cannot go where the layout wants it is better absent than moved
+// somewhere nobody designed.
+function addClearBox(mapName, x, y, z, w, h, d, color, rotY = 0) {
+  const cols = MAP_COLLIDERS[mapName] || [];
+  // A turned box's axis-aligned extent is wider than the box; test with that.
+  const sn = rotY ? Math.abs(Math.sin(rotY)) : 0, cs = rotY ? Math.abs(Math.cos(rotY)) : 1;
+  const ex = (w / 2) * cs + (d / 2) * sn, ez = (w / 2) * sn + (d / 2) * cs, ey = h / 2;
+  const nx0 = x - ex, nx1 = x + ex, ny0 = y - ey, ny1 = y + ey, nz0 = z - ez, nz1 = z + ez;
+  const vol = (nx1 - nx0) * (ny1 - ny0) * (nz1 - nz0);
+  for (const b of cols) {
+    const ox = Math.min(nx1, b.max.x) - Math.max(nx0, b.min.x);
+    if (ox <= 0) continue;
+    const oy = Math.min(ny1, b.max.y) - Math.max(ny0, b.min.y);
+    if (oy <= 0) continue;
+    const oz = Math.min(nz1, b.max.z) - Math.max(nz0, b.min.z);
+    if (oz <= 0) continue;
+    const bv = (b.max.x - b.min.x) * (b.max.y - b.min.y) * (b.max.z - b.min.z);
+    if (ox * oy * oz > 0.45 * Math.min(vol, bv)) return null;
+  }
+  return addMapBox(mapName, x, y, z, w, h, d, color, rotY);
+}
+
 function addMapMesh(mapName, mesh, collide = false) {
   MAP_GROUPS[mapName].add(mesh);
   if (collide) {
@@ -6149,6 +6196,140 @@ function addOuterWalls(mapName, color) {
   [[100,4,1,0,2,-50],[100,4,1,0,2,50],[1,4,100,-50,2,0],[1,4,100,50,2,0]].forEach(([w,h,d,x,y,z]) => {
     addMapBox(mapName, x, y, z, w, h, d, color);
   });
+}
+
+// ── 🧵 One draw call per colour, per map (#66) ──────────────────────────────
+// A map is cheap in triangles and ruinous in draw calls: super_arena is 3,080
+// meshes for 37,850 triangles, urban 889, studio 672. Three.js issues one draw
+// per mesh, and renderer.render was already 96% of the frame's CPU in Lobby 13
+// (#53). Twelve triangles do not cost anything; asking the GPU for them three
+// thousand times does.
+//
+// So every static box is baked into one geometry per material. What may be
+// merged is decided by how it was BUILT, not by a list someone has to maintain:
+// addMapBox tags its meshes, and a mechanic that animates part of a map builds
+// that part by hand (the lava plane, the laser arms, the conveyor drums) and
+// never through addMapBox — so it is never tagged and never merged. The three
+// exceptions, where a mechanic holds onto something addMapBox made, are found
+// by walking _batch5 for meshes rather than being written down here.
+//
+// Nothing else depends on map mesh identity: bullets resolve against
+// wallColliders, which is a separate array of Box3 built at addMapBox time, and
+// the only raycast against a map group is the killcam's line-of-sight test,
+// which works the same against merged geometry.
+function _meshesHeldByMechanics() {
+  const held = new Set();
+  const seen = new Set();
+  (function walk(v, depth) {
+    if (!v || depth > 5 || typeof v !== 'object') return;
+    if (v.isMesh) { held.add(v); return; }
+    if (seen.has(v)) return;
+    seen.add(v);
+    if (Array.isArray(v)) { for (const x of v) walk(x, depth + 1); return; }
+    for (const k in v) { try { walk(v[k], depth + 1); } catch (e) { /* getters */ } }
+  })(typeof _batch5 !== 'undefined' ? _batch5 : null, 0);
+  return held;
+}
+function mergeMapStatics(name, held) {
+  const group = MAP_GROUPS[name];
+  if (!group || group._merged) return 0;
+  group.updateMatrixWorld(true);
+  const inv = new THREE.Matrix4().copy(group.matrixWorld).invert();
+  const buckets = new Map();
+  group.traverse(o => {
+    if (!o.isMesh || !o.userData || !o.userData.mapStatic) return;
+    if (held.has(o)) return;
+    // Invisible on purpose: addRamp builds its slope out of hidden step boxes
+    // that exist only to be collided with, and lobby13 and base_raid both use
+    // it. Merging drops per-mesh `visible`, so baking those into a visible
+    // mesh put a bright orange staircase through the hub's test ramp. They
+    // cost no draw call as they are, which is the whole point of merging.
+    if (o.visible === false) return;
+    const mat = o.material;
+    // One material, no texture: a textured or multi-material box keeps its own
+    // draw call rather than forcing a UV atlas nobody asked for.
+    //
+    // Phong as well as Lambert, and this is not hypothetical: weatherMapGroup
+    // swaps every opaque Lambert on every map for a cached vertexColors Phong,
+    // and it runs at load — so by the time a map is activated and merged there
+    // is not one Lambert left on it. Testing for Lambert alone merged exactly
+    // nothing, silently, while still setting the _merged flag.
+    if (!mat || Array.isArray(mat) || mat.map) return;
+    if (!mat.isMeshLambertMaterial && !mat.isMeshPhongMaterial) return;
+    const g = o.geometry;
+    if (!g || !g.attributes || !g.attributes.position) return;
+    // vertexColors reads a per-vertex attribute that _weatherGeometry adds; a
+    // mesh missing it would render with whatever the merged buffer happened to
+    // hold at those indices.
+    if (mat.vertexColors && !g.attributes.color) return;
+    const key = [mat.type, mat.color.getHex(), mat.transparent ? 1 : 0, +mat.opacity.toFixed(3),
+                 mat.flatShading ? 1 : 0, mat.vertexColors ? 1 : 0, mat.shininess | 0,
+                 mat.specular ? mat.specular.getHex() : -1, mat.side,
+                 o.castShadow ? 1 : 0, o.receiveShadow ? 1 : 0].join('|');
+    let b = buckets.get(key);
+    if (!b) { b = { mat, list: [] }; buckets.set(key, b); }
+    b.list.push(o);
+  });
+  let saved = 0;
+  const local = new THREE.Matrix4();
+  for (const b of buckets.values()) {
+    if (b.list.length < 2) continue;
+    let n = 0;
+    const parts = [];
+    for (const o of b.list) {
+      const g = (o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone());
+      local.copy(inv).multiply(o.matrixWorld);
+      g.applyMatrix4(local);
+      if (!g.attributes.normal) g.computeVertexNormals();
+      parts.push(g); n += g.attributes.position.count;
+    }
+    const wantColor = !!b.mat.vertexColors;
+    const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3);
+    const col = wantColor ? new Float32Array(n * 3) : null;
+    let at = 0;
+    for (const g of parts) {
+      pos.set(g.attributes.position.array, at * 3);
+      nor.set(g.attributes.normal.array, at * 3);
+      if (col) col.set(g.attributes.color.array, at * 3);
+      at += g.attributes.position.count;
+      g.dispose();
+    }
+    const merged = new THREE.BufferGeometry();
+    merged.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    merged.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+    if (col) merged.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    merged.computeBoundingBox(); merged.computeBoundingSphere();
+    const mesh = new THREE.Mesh(merged, b.mat);
+    mesh.castShadow = b.list[0].castShadow; mesh.receiveShadow = b.list[0].receiveShadow;
+    mesh.userData.mapMerged = true;
+    for (const o of b.list) {
+      if (o.parent) o.parent.remove(o);
+      o.geometry.dispose();
+      // The materials are NOT disposed. weatherMapGroup hands out cached Phong
+      // materials from _mapMatCache, so the one on this box may be the same
+      // object another box — on another map, not yet merged — is still using.
+      // Dropping the reference is enough; the GPU program goes with the last
+      // mesh that used it.
+    }
+    group.add(mesh);
+    saved += b.list.length - 1;
+  }
+  group._merged = true;
+  return saved;
+}
+// Merged on FIRST ACTIVATION, not at load, and only after dressThemeMap has
+// run for that map. dressThemeMap is itself lazy — activateMap is its only
+// caller — and it finds the boxes it decorates by the `thCls` tag themeRecolorMap
+// stamped on each one. Merging at load wiped those: urban went from 889 tagged
+// boxes to six, and every map quietly lost its base bands, wall caps, pilasters
+// and window grids. Dressing first and merging after keeps both, and costs one
+// pass over a map the first time anyone plays it instead of over all 48 at load.
+let _mapDrawsSaved = 0;
+function mergeMapOnActivate(name) {
+  const group = MAP_GROUPS[name];
+  if (!group || group._merged) return;
+  try { _mapDrawsSaved += mergeMapStatics(name, _meshesHeldByMechanics()); }
+  catch (e) { console.warn('[merge]', name, e); }
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -9996,6 +10177,42 @@ function buildStormPierMap() {
     const tip = new THREE.Mesh(new THREE.SphereGeometry(0.5, 10, 8), _MECH_BASIC(0xffee66));
     tip.position.set(x, 9.3, z); G.add(tip);
   });
+  // ⛈️ Containers (#66). A pier with 27 identical crates on it and nothing to
+  // break a sightline: lightning was the only thing that made anything happen.
+  //
+  // Stacked containers, placed so every lightning rod has cover within a few
+  // metres. The rod pulls the strike, the container next to it is where you
+  // stand to survive it — which turns "the rods are safe" into a position worth
+  // contesting rather than a free parking space.
+  const C = [0xa33b2b, 0x2f5f8f, 0xc8a22a, 0x3b7a4f, 0x7a4a8a, 0x8a5a2a];
+  const stack = (x, z, rot, n, i0) => {
+    // STOP at the first refusal. addClearBox returns null when a box would be
+    // buried, and the box above it is testing at a height where nothing else
+    // reaches — so ignoring the null left a 6 m container hanging at y 2.6
+    // over bare deck. Anything stacked has to inherit its support's fate.
+    for (let k = 0; k < n; k++)
+      if (!addClearBox(m, x + k * 0.35, 1.3 + k * 2.6, z + k * 0.3, 6.0, 2.6, 2.4, C[(i0 + k) % C.length], rot + k * 0.06)) break;
+  };
+  rods.forEach(([rx, rz], i) => {                       // cover beside every rod
+    stack(rx + (rx < 0 ? 5.5 : -5.5), rz, i * 0.5, 2, i);
+    // Pushed OUT to |z| 29 rather than in to 19: at 19 it sat exactly on the
+    // foot of the gantry staircase and sealed three of its steps.
+    addClearBox(m, rx, 1.3, rz + (rz < 0 ? -5.0 : 5.0), 2.4, 2.6, 5.0, C[(i + 3) % C.length], 0);
+  });
+  [[-14, -42, 0, 3], [14, 42, 0, 3], [-36, -2, 1.57, 2], [36, 2, 1.57, 2],
+   [-6, 36, 0.3, 2], [6, -36, -0.3, 2], [-30, 34, 1.2, 1], [30, -34, -1.2, 1]]
+    .forEach(([x, z, r, n], i) => stack(x, z, r, n, i + 2));
+  // Gantry across the pier at 6 m: somewhere to shoot down from, and the only
+  // way over the container wall the stacks just made.
+  [-20, 20].forEach(z => {
+    addMapBox(m, 0, 6.0, z, 26, 0.4, 3.0, 0x6b7480);
+    [-1, 1].forEach(sd => addMapBox(m, 0, 6.75, z + sd * 1.3, 26, 1.1, 0.3, 0x6b7480));
+    // k climbs as it comes IN toward the deck. Written the other way round it
+    // put the tallest step 12 m out and a 0.575 m step at the deck edge, i.e.
+    // a staircase to nowhere against a 6 m wall.
+    [-1, 1].forEach(sd => { for (let k = 0; k < 11; k++) addClearBox(m, sd * (25 - k * 1.2), 0.3 + k * 0.55, z, 1.2, 0.55, 2.6, 0x5a626c); });
+  });
+  MAP_SPAWNS[m] = { ally: { x0: -7, x1: 7, z0: 40, z1: 46 }, enemy: { x0: -7, x1: 7, z0: -46, z1: -40 } };
   G._skyColor = 0x141b26;
   const RODS_PULL = 10;
   const S = { next: 3.5, strikes: [], hinted: false };
@@ -10140,6 +10357,62 @@ function buildLaserVaultMap() {
   };
   [0, 2.094, 4.189].forEach(a => addArm('low', a, 0.5));
   [1.047, 4.189].forEach(a => addArm('high', a, -0.38));
+  // 🔴 Vault furniture (#66). It was 21 colliders in 10,000 m² — four pieces of
+  // cover and twelve pillars, so the beams had nothing to sweep between and the
+  // fight had nothing to fight over.
+  //
+  // Everything here is sized against the two beams, because that is what the
+  // map is: the red one sweeps at 0.45 and you jump it, the cyan at 1.6 and you
+  // duck it. A 1.1 m bullion rack is cover you can crouch behind AND the thing
+  // that lets the cyan beam pass over you — so taking cover and surviving the
+  // sweep become the same move, instead of two unrelated problems.
+  const RACK = 0x2a313b, CASE = 0x3b444f, GOLD = 0x8a7230;
+  for (let ring = 0; ring < 2; ring++) {
+    const rad = 13 + ring * 11, count = 6 + ring * 4;
+    for (let i = 0; i < count; i++) {
+      const a = (i / count) * Math.PI * 2 + ring * 0.3;
+      const x = Math.cos(a) * rad, z = Math.sin(a) * rad;
+      addMapBox(m, x, 0.55, z, 3.6, 1.1, 1.4, RACK, a);                       // duck under the cyan beam
+      if (i % 2 === 0) addMapBox(m, x, 1.25, z, 1.2, 0.3, 1.2, GOLD, a);      // the bars on top
+    }
+  }
+  // Display cases: tall enough to break a sightline, thin enough that the beams
+  // still read through the room.
+  [[-26,-8],[26,8],[-8,26],[8,-26],[-18,18],[18,-18]].forEach(([x, z], i) =>
+    addMapBox(m, x, 0.9, z, 2.2, 1.8, 2.2, CASE, i * 0.5));
+  // A gallery at 2.7. NOT a hiding place from the beams — the sweep's hit test
+  // is `footY < 0.9` for the red one and `headY > 1.25` for the cyan, with no
+  // ceiling on either, so height does not save you and claiming it would be a
+  // lie. What it is, is the high ground: you can see over the racks from up
+  // here, and you pay for it by being the most visible thing in the room while
+  // the cyan arm still comes round.
+  [-1, 1].forEach(sd => {
+    addMapBox(m, sd * 16, 2.5, 0, 10, 0.4, 20, 0x39424e);
+    // The -z rail is split, because that is where the stairs arrive. A full
+    // rail there made the staircase a jump into a waist-high wall.
+    [-1, 1].forEach(h => addMapBox(m, sd * 16 + h * 3.35, 3.25, -9.8, 3.3, 1.1, 0.4, RACK));
+    addMapBox(m, sd * 16, 3.25, 9.8, 10, 1.1, 0.4, RACK);
+    // Up the deck's own x line, climbing TOWARD it: the top step lands at
+    // z -10.8, top 2.75, against a deck edge at z -10, top 2.7. The previous
+    // two versions put the stairs out at x 22, which shares half a metre of x
+    // with the deck and left 1.2 m of air at the top.
+    for (let k = 0; k < 5; k++) addMapBox(m, sd * 16, 0.3 + k * 0.55, -16.4 + k * 1.4, 3.0, 0.55, 1.4, CASE);
+  });
+  // Partition walls, one each side of the vault floor. 10 of the 25
+  // spawn-to-spawn lines (of 225 sampled pairs) were open across 80 m — the racks are 1.1 m and the
+  // cases 1.8, so at 1.65 eye height a diagonal went straight through. These
+  // are 2.8 and they break the diagonals without closing the room the beams
+  // sweep. The gap is at x = ±6, opposite on each side, so crossing one
+  // partition does not line you up with the gap in the other; written as
+  // `half * 15` with the lintel at 0 it was dead centre on both, which is the
+  // one place the emitter hub already blocks.
+  [-1, 1].forEach(sd => {
+    const gx = sd * 6;
+    addMapBox(m, (-27 + gx - 3) / 2, 1.4, sd * 28, (gx - 3) + 27, 2.8, 1.2, 0x323a45);
+    addMapBox(m, (gx + 3 + 27) / 2, 1.4, sd * 28, 27 - (gx + 3), 2.8, 1.2, 0x323a45);
+    addMapBox(m, gx, 2.3, sd * 28, 7, 0.6, 1.2, 0x323a45);             // a lintel over the gap
+  });
+  MAP_SPAWNS[m] = { ally: { x0: -15, x1: 15, z0: 40, z1: 46 }, enemy: { x0: -15, x1: 15, z0: -46, z1: -40 } };
   G._skyColor = 0x0b0f14;
   const S = { cd: 0, botCd: {}, hinted: false };
   const hitArm = (x, z, ar, footY, headY) => {
@@ -10207,6 +10480,52 @@ function buildCargoBeltsMap() {
   };
   addMapBox(m, 43, 2.8, 0, 8, 0.4, 32, 0x7b8086); stairs(31.4, -10, 1);
   addMapBox(m, -43, 2.8, 0, 8, 0.4, 32, 0x7b8086); stairs(-31.4, 10, -1);
+  // 📦 Cargo (#66). Three belts, three shredders and 26 flat strips: the map had
+  // zero colliders over 3.5 m, so you could see the whole floor from anywhere on
+  // it and the belts just carried you into the open.
+  //
+  // The crates sit BESIDE the lanes, not on them — a crate on a belt would have
+  // to move with it, and a 5 m/s wall of cover is a different map. Beside them
+  // they do the work that matters: you can fight along a lane instead of only
+  // riding it, and stepping off the belt is now a real option.
+  const CRATE = 0x7a6238, CRATE2 = 0x4e6a7a, STEEL = 0x4a5158;
+  lanes.forEach((ln, li) => {
+    for (let k = -2; k <= 2; k++) {
+      const x = k * 11 + (li - 1) * 3.5;
+      [-1, 1].forEach(sd => {
+        const z = ln.z + sd * (W / 2 + 2.2);
+        const base = addClearBox(m, x, 1.0, z, 3.0, 2.0, 3.0, (k + li) % 2 ? CRATE : CRATE2, (k * 0.2));
+        // only if the crate it rides on is actually there
+        if (base && k % 2 === 0) addClearBox(m, x + 1.2, 2.6, z - 0.6, 2.2, 1.2, 2.2, CRATE2, 0.3);
+      });
+    }
+  });
+  // Stacks between the lanes, tall enough to cut the hall in half — the one
+  // thing this map had none of.
+  // Hand-picked coordinates on a map that already has twelve hand-picked
+  // crates is how the last two attempts buried one. addClearBox decides.
+  [[-34, -10], [-10, -10], [22, -10], [-34, 10], [-10, 10], [22, 10]].forEach(([x, z], i) => {
+    addClearBox(m, x, 2.1, z, 4.2, 4.2, 4.2, i % 2 ? CRATE : CRATE2, i * 0.25);
+    addClearBox(m, x + 2.6, 1.1, z + 2.4, 2.4, 2.2, 2.4, STEEL, i * 0.4);
+  });
+  // Racking across each end, with the gap off to one side and opposite on the
+  // other. The spawns sit at z ±38…44 and the hall is open along x, so without
+  // these 10 of 225 spawn-to-spawn lines ran the full 80 m — and the stacks
+  // that used to break some of them were the ones addClearBox refused.
+  [-1, 1].forEach(sd => {
+    const gx = sd * 8;
+    addClearBox(m, (-34 + gx - 3.5) / 2, 1.6, sd * 28, (gx - 3.5) + 34, 3.2, 1.6, 0x5a6168);
+    addClearBox(m, ((gx + 3.5) + 34) / 2, 1.6, sd * 28, 34 - (gx + 3.5), 3.2, 1.6, 0x5a6168);
+    addClearBox(m, gx, 2.9, sd * 28, 7, 0.6, 1.6, 0x5a6168);           // a lintel over the gap
+  });
+  // Catwalk cover: the deck was a bare plank, so being up there was only a way
+  // to be shot from three sides at once. ON the decks — they are at x ±43,
+  // z −16…16, top 3.0; the first version of this put six blocks at z ±31 and
+  // y 5.2, which is 4.6 m above bare floor and 25 m from anything you can
+  // stand on.
+  [-1, 1].forEach(sd => [-11, 0, 11].forEach(z =>
+    addMapBox(m, sd * 43, 3.6, z, 5.0, 1.2, 0.6, STEEL)));
+  MAP_SPAWNS[m] = { ally: { x0: -15, x1: 15, z0: 38, z1: 44 }, enemy: { x0: -15, x1: 15, z0: -44, z1: -38 } };
   G._skyColor = 0x2a2d31;
   const onLane = (x, z, ln) => Math.abs(z - ln.z) < W / 2 && Math.abs(x) < LEN / 2;
   MAP_MECH[m] = {
@@ -10246,6 +10565,44 @@ function buildGalePeaksMap() {
     pad.position.set(x, 0.06, z); G.add(pad);
     MAP_GIMMICKS[m].jumpPads.push({ x, z, r: 2.4, vel: 16 });
   });
+  // 💨 Wind breaks (#66). The peak was five bare terraces — a wedding cake you
+  // shot each other across, 14 cover in 10,000 m².
+  //
+  // The wind is the map, so the cover is what you hide from the wind behind:
+  // a low wall on each terrace, cut so there is a gap to be pushed through.
+  // Shelter and cover are the same object, which is the point — leaving cover
+  // on this map means the gust gets you.
+  const STONE = 0x6e7363, SHELTER = 0x7f8472;
+  // One wall per EDGE, not four points on a circle. The terraces are square, so
+  // a circle of radius s/2 − 1.4 puts every shelter near 45°, which is inside
+  // the next terrace up — all eight walls ended up two thirds buried, a 1.2 m
+  // wall showing 0.3 m. Walls sit on the edge midpoints, where the terrace is
+  // actually widest, and each is short enough to leave the corners open to run
+  // through.
+  [[34, 0.6], [28, 1.2], [22, 1.8], [16, 2.4], [10, 3.0]].forEach(([sz, top], ti) => {
+    const r = sz / 2 - 1.3, len = Math.min(sz * 0.52, 7.0);
+    [[0, 1], [0, -1], [1, 0], [-1, 0]].forEach(([ex, ez], k) => {
+      const alongX = ez !== 0;
+      addMapBox(m, ex * r, top + 0.6, ez * r, alongX ? len : 1.1, 1.2, alongX ? 1.1 : len, SHELTER);
+      // A stone at the CORNER of the same ring. Not inboard of the wall: the
+      // standable ring is 3 m wide and the wall already takes 1.1 of it, so
+      // anything pulled inboard is under the next step up — which is where the
+      // last two versions of this line put it, twice, 0.6 m of a 0.9 m stone
+      // buried. At the corner the ring is just as wide and nothing is above it.
+      // Not on the summit: its ring is 3.7 m to the wall ends, so a 1.6 m stone
+      // at the corner closes the very gap the walls are cut short to leave.
+      if (k === 0 && ti < 4) [[1, 1], [1, -1], [-1, 1], [-1, -1]].forEach(([sx, sz], q) =>
+        addClearBox(m, sx * (r - 0.3), top + 0.45, sz * (r - 0.3), 1.6, 0.9, 1.6, STONE, (ti + q) * 0.3));
+    });
+  });
+  // Boulders on the flat, so the run in from a corner tower is not a straight
+  // line across open ground with a crosswind on it.
+  // The last pair sits out at x ±28: at ±8 they landed inside the spawn
+  // rectangle, and four of thirty sampled spawn points were inside a boulder.
+  [[-24,-12],[-12,-26],[12,26],[24,12],[-26,14],[26,-14],[14,-28],[-14,28],
+   [-40,-30],[40,30],[-40,30],[40,-30],[-28,-42],[28,42]].forEach(([x, z], i) =>
+    addMapBox(m, x, 0.85, z, 3.4 + (i % 3), 1.7, 3.0 + (i % 2), STONE, i * 0.37));
+  MAP_SPAWNS[m] = { ally: { x0: -15, x1: 15, z0: 40, z1: 46 }, enemy: { x0: -15, x1: 15, z0: -46, z1: -40 } };
   G._skyColor = 0x9ec7ee;
   // Wind streaks, only visible while a gust is coming or blowing.
   const streaks = [];
@@ -10293,16 +10650,105 @@ function buildMagmaRiseMap() {
   const m = 'magma_rise', G = MAP_GROUPS[m];
   addMapGround(m, 0x2b1a14, 0x4a2418);
   addOuterWalls(m, 0x1a100c);
-  // Rock platforms: tops at 0.8 m, which both players and bots can step onto.
+  const ROCK = 0x4a3b32, HI = 0x6a5648, BASALT = 0x2e2420, CRUST = 0x3a2a22;
+
+  // 🌋 The map is a timer: 13 s of floor, then 8 s of lava you survive by being
+  // off it. Both halves have to be a gunfight, and they want opposite things —
+  // which is why the cover comes in two kinds (#66).
+  //
+  // The islands are the lava answer, so they carry the REAL cover: a boulder at
+  // the rim of each big one, centre left open to stand in. Before #66 they were
+  // bare 0.8 m slabs, so the lava phase herded everyone onto twenty-five podiums
+  // in the open and the fight became whoever aimed first.
+  //
+  // The spires are the floor answer. They are deliberately NARROW on top: a
+  // standing jump clears 3.02 m, so nothing here can be made unclimbable and
+  // trying would just be a lie. Instead the floor cover is climbable and a
+  // terrible place to be — a 1.4 m square with nothing to hide behind — so the
+  // islands stay the right answer when the floor goes.
+
+  // ── Islands. Top at 0.8: above the 0.45 m the lava checks, one step up. ────
   const P = [[0,0,10],[-14,-12,6],[14,-12,6],[-14,12,6],[14,12,6],[0,-26,8],[0,26,8],[-28,0,8],[28,0,8],
              [-26,-26,6],[26,-26,6],[-26,26,6],[26,26,6],[-40,-14,5],[40,14,5],[-40,14,5],[40,-14,5],
              [-22,-41,5],[22,41,5],[-22,41,5],[22,-41,5],[-20,0,4],[20,0,4],[0,-12,4],[0,12,4]];
-  P.forEach(([x, z, s], i) => addMapBox(m, x, 0.4, z, s, 0.8, s, i === 0 ? 0x6a5648 : 0x4a3b32));
-  // A pair of high perches (stairs up from the centre platform) for the brave.
-  for (let i = 0; i < 4; i++) addMapBox(m, 6 + i * 1.5, 0.8 + 0.5 * (i + 1) - 0.25, 0, 1.5, 0.5, 4, 0x6a5648);
-  addMapBox(m, 14, 3.1, 0, 5, 0.4, 5, 0x6a5648);
+  P.forEach(([x, z, s], i) => addMapBox(m, x, 0.4, z, s, 0.8, s, i === 0 ? HI : ROCK));
+
+  // Rim boulders on every island wide enough to still stand on with one there.
+  // Sited on the side facing the middle, so an island covers you FROM the fight
+  // and you have to give that up to shoot back.
+  P.forEach(([x, z, s]) => {
+    if (s < 5) return;
+    const inward = Math.hypot(x, z) < 1 ? 1 : 1 / Math.hypot(x, z);
+    const bx = x - x * inward * (s * 0.34), bz = z - z * inward * (s * 0.34);
+    const w = Math.min(2.6, s * 0.42);
+    addMapBox(m, x === 0 && z === 0 ? s * 0.3 : bx, 0.8 + 0.65, x === 0 && z === 0 ? s * 0.3 : bz,
+              w, 1.3, w * 0.8, CRUST, (x + z) * 0.11);
+    // ...and a second, lower one opposite — except on the centre island, whose
+    // opposite side is the middle of the map, where the tower below goes.
+    if (s >= 6 && !(x === 0 && z === 0)) {
+      addMapBox(m, x + (x - bx) * 0.55, 0.8 + 0.45, z + (z - bz) * 0.55,
+                w * 0.8, 0.9, w * 0.7, CRUST, (x - z) * 0.09);
+    }
+  });
+
+  // ── Floor spires. Tall enough to break a sightline, too thin to fight from. ─
+  const SP = [[-34,-33,1.5,2.8],[-19,-36,1.3,2.5],[-5,-33,1.6,3.1],[9,-37,1.4,2.6],[24,-34,1.5,2.9],[38,-31,1.3,2.4],
+              [-37,-19,1.4,2.6],[-21,-20,1.7,3.2],[-6,-18,1.3,2.5],[8,-21,1.6,3.0],[23,-19,1.4,2.7],[36,-17,1.5,2.8],
+              [-33,-4,1.6,3.0],[-16,-5,1.3,2.4],[16,5,1.3,2.4],[33,4,1.6,3.0],
+              [-36,17,1.5,2.8],[-23,19,1.4,2.7],[-8,21,1.6,3.0],[6,18,1.3,2.5],[21,20,1.7,3.2],[37,19,1.4,2.6],
+              [-38,31,1.3,2.4],[-24,34,1.5,2.9],[-9,37,1.4,2.6],[5,33,1.6,3.1],[19,36,1.3,2.5],[34,33,1.5,2.8]];
+  SP.forEach(([x, z, w, h], i) => {
+    addMapBox(m, x, h / 2, z, w, h, w * 0.85, i % 3 ? BASALT : ROCK, (x * 0.07 + z * 0.05));
+    // A broken cap, offset and turned, on two out of three. Without it
+    // twenty-eight identical blocks read as chess pieces rather than as rock,
+    // and a repeated silhouette is also harder to range by eye in a fight.
+    if (i % 3) addMapBox(m, x + w * 0.22, h + 0.3, z - w * 0.18, w * 0.72, 0.6, w * 0.6,
+                         i % 3 === 1 ? ROCK : CRUST, (x * 0.13 - z * 0.09));
+    // A glowing crack at the foot of every other one: the floor has to read as
+    // the thing that is about to kill you even while it is safe.
+    if (i % 2 === 0) {
+      const crack = new THREE.Mesh(new THREE.PlaneGeometry(w * 2.6, w * 1.7), new THREE.MeshBasicMaterial({ color: 0xff5a1e, transparent: true, opacity: 0.5 }));
+      crack.rotation.set(-Math.PI / 2, 0, x * 0.3); crack.position.set(x, 0.03, z); G.add(crack);
+    }
+  });
+
+  // ── Two flank ridges, broken into jumps. ──────────────────────────────────
+  // A continuous safe path along the edge would be a free pass through the lava
+  // phase, so each is three 24 m segments with a 4 m gap — crossable, but you
+  // commit to a jump in the open to do it.
+  // x ±46, not ±43: at 43 the ridge overlapped the islands at (±40, ±14), whose
+  // 0.8 m tops bridged both 4 m gaps end to end — a continuous lava-proof walk
+  // down each flank, which is the one thing this is not meant to be.
+  [-46, 46].forEach(x => {
+    [-28, 0, 28].forEach(z => {
+      addClearBox(m, x, 0.5, z, 6, 1.0, 24, ROCK);      // 24 deep, 28 apart → a 4 m gap
+      addClearBox(m, x + (x < 0 ? 2.2 : -2.2), 1.0 + 0.6, z - 2.5, 1.4, 1.2, 3.2, CRUST);   // cover on the ridge
+    });
+  });
+
+  // ── The middle: worth taking, and the only two-storey thing on the map. ───
+  addMapBox(m, 0, 1.1, 0, 7, 0.6, 7, HI);                       // step onto the centre island
+  addMapBox(m, 0, 2.0, 0, 5, 1.2, 5, HI);                       // the top, at 2.6
+  [[-1.8, -1.8], [1.8, 1.8]].forEach(([bx, bz]) =>
+    addMapBox(m, bx, 2.6 + 0.55, bz, 2.0, 1.1, 2.0, CRUST, 0.4));   // cover up there
+  // Stairs up from two sides only, so the high ground has a cost to reach.
+  for (let i = 0; i < 4; i++) {
+    addMapBox(m,  6 + i * 1.5, 0.8 + 0.5 * (i + 1) - 0.25, 0, 1.5, 0.5, 4, HI);
+    addMapBox(m, -6 - i * 1.5, 0.8 + 0.5 * (i + 1) - 0.25, 0, 1.5, 0.5, 4, HI);
+  }
+  addMapBox(m,  14, 3.1, 0, 5, 0.4, 5, HI);
+  addMapBox(m, -14, 3.1, 0, 5, 0.4, 5, HI);
+  [[14, 0], [-14, 0]].forEach(([px, pz]) =>
+    addMapBox(m, px, 3.3 + 0.6, pz + 1.9, 4.2, 1.2, 1.0, CRUST));    // a lip on each perch
+
   const lava = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), _MECH_BASIC(0xff4a10, 0.0));
   lava.rotation.x = -Math.PI / 2; lava.position.y = 0.2; lava.visible = false; G.add(lava);
+  // Where the two sides start. Without this the fallback drops everyone at
+  // z = ±(38..46) with no regard for what is there — two of those points were
+  // inside a spire. Named rectangles also mean protectThemedMapSpawns' rule
+  // applies by hand: the lines between them are broken (3 of 25 open), which
+  // on an 80 m map is what stops spawn-sniping.
+  MAP_SPAWNS[m] = { ally: { x0: -15, x1: 15, z0: 40, z1: 46 }, enemy: { x0: -15, x1: 15, z0: -46, z1: -40 } };
   G._skyColor = 0x2a0d08;
   const S = { phase: 'safe', t: 12, tick: 0, hinted: false };
   const setPhase = (ph, t) => { S.phase = ph; S.t = t; };
@@ -10491,10 +10937,10 @@ const GRID_MAP_ARCHETYPES = [
 // obby / base_raid / the M4 Towers by hand. This used to be the inverse -- a
 // list of 48 names to SKIP, still named for mechanic maps long after it had
 // come to mean "has its own layout" -- which hid the fact that three maps were
-// left behind: blank is in all three map pools, range is the shooting range and
-// br_arena is King of the Hill, so all three are live, and all three re-roll
-// their clutter on every page load. Whether they deserve hand-built layouts
-// instead is #69.
+// left behind, and all three are live: blank is in MAP_IDS (the random pool,
+// mirrored in server.js), range is the shooting range and br_arena is King of
+// the Hill. All three also re-roll their clutter on every page load. Whether
+// they deserve hand-built layouts instead is #69.
 const GENERATED_LAYOUT_MAPS = new Set(['blank', 'range', 'br_arena']);
 function addGridConceptGround(name, size = 140) {
   const group = MAP_GROUPS[name];
@@ -12099,7 +12545,9 @@ function buildMapScenery(name) {
 // structures with an outside and an inside -- decks and corridors, rooms and halls, stairs between floors -- so a
 // match has close quarters and long sight lines in the same map. They replace the archetype layout outright.
 // Teams spawn at the two ends along z (allies +z, enemies -z), in the rectangles MAP_SPAWNS names.
-var MAP_SPAWNS = {}, MAP_POIS = {};
+// MAP_SPAWNS / MAP_POIS are declared up with MAP_GROUPS: the map builders run
+// long before this point and fill them in, and a `var ... = {}` here would both
+// throw on the way up (TDZ-like: hoisted but undefined) and reset the table.
 function _bkit(name) {
   const K = { name };
   K.box = (x, y0, z, w, h, d, c, rot) => addMapBox(name, x, y0 + h / 2, z, w, h, d, c, rot || 0);
@@ -49782,7 +50230,10 @@ function spawnGameBots() {
     const sky = MAP_GROUPS[selectedModeConfig.forcedMap]?._skyColor;
     if (sky != null && scene.background?.setHex) scene.background.setHex(sky);
   } else if (selectedModeConfig.type !== 'dday' && selectedModeConfig.type !== 'range') {
-    const pool = ['blank','urban','warehouse','forest','vietnam','volcano','cyber','desert','tundra','space','airport','trenches','chernobyl','refinery','skydock','sewer','gravity_lab','glassworks','carrier','overgrowth','orbital_station','foundry','carnival','biosphere','lockdown','studio','temple','holiday','labyrinth','arena','opera','doomsday','train','dreamscape','pearl_harbor','titanic','supermarket','pyongyang','traffic_cone_republic','flying_moai','big_arena','super_arena','storm_pier','pinball_arcade','laser_vault','cargo_belts','gale_peaks','magma_rise'];
+    // Mirrors server.js MAP_IDS / THIN_MAPS (CLAUDE.md #4): a specific pick
+    // activates any map, and the random draw skips whatever is in THIN_MAPS —
+    // which is empty now that the five flat ones have been rebuilt (#66).
+    const pool = MAP_IDS.filter(m => !THIN_MAPS.has(m));
     const chosen = (selectedMap === 'auto' || !MAP_GROUPS[selectedMap]) ? pool[Math.floor(Math.random()*pool.length)] : selectedMap;
     activateMap(chosen);
     // Update sky color if the map specifies one
