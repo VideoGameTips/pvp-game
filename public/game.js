@@ -6126,6 +6126,38 @@ function addMapBox(mapName, x, y, z, w, h, d, color, rotY = 0, opacity = 1) {
   pushMeshColliders(MAP_COLLIDERS[mapName], m);
   return m;
 }
+// ── 🧱 Cover that refuses to be placed inside something else (#66) ──────────
+// Every one of the mechanic maps grew by hand, and hand-picked coordinates
+// checked against hand-picked neighbours is exactly how a 1.2 m wall ends up
+// showing 0.3 m of itself, a container swallows a crate whole, and a staircase
+// gets sealed by the cover added three lines later. All three happened.
+//
+// MAP_COLLIDERS already holds everything placed so far on this map, so the
+// check is cheap and it is the same test an audit would run afterwards: if the
+// new box would lose (or take) more than 45% of the smaller volume, it is not
+// placed at all. Returning null rather than nudging is deliberate — a piece of
+// cover that cannot go where the layout wants it is better absent than moved
+// somewhere nobody designed.
+function addClearBox(mapName, x, y, z, w, h, d, color, rotY = 0) {
+  const cols = MAP_COLLIDERS[mapName] || [];
+  // A turned box's axis-aligned extent is wider than the box; test with that.
+  const sn = rotY ? Math.abs(Math.sin(rotY)) : 0, cs = rotY ? Math.abs(Math.cos(rotY)) : 1;
+  const ex = (w / 2) * cs + (d / 2) * sn, ez = (w / 2) * sn + (d / 2) * cs, ey = h / 2;
+  const nx0 = x - ex, nx1 = x + ex, ny0 = y - ey, ny1 = y + ey, nz0 = z - ez, nz1 = z + ez;
+  const vol = (nx1 - nx0) * (ny1 - ny0) * (nz1 - nz0);
+  for (const b of cols) {
+    const ox = Math.min(nx1, b.max.x) - Math.max(nx0, b.min.x);
+    if (ox <= 0) continue;
+    const oy = Math.min(ny1, b.max.y) - Math.max(ny0, b.min.y);
+    if (oy <= 0) continue;
+    const oz = Math.min(nz1, b.max.z) - Math.max(nz0, b.min.z);
+    if (oz <= 0) continue;
+    const bv = (b.max.x - b.min.x) * (b.max.y - b.min.y) * (b.max.z - b.min.z);
+    if (ox * oy * oz > 0.45 * Math.min(vol, bv)) return null;
+  }
+  return addMapBox(mapName, x, y, z, w, h, d, color, rotY);
+}
+
 function addMapMesh(mapName, mesh, collide = false) {
   MAP_GROUPS[mapName].add(mesh);
   if (collide) {
@@ -10162,13 +10194,15 @@ function buildStormPierMap() {
   const C = [0xa33b2b, 0x2f5f8f, 0xc8a22a, 0x3b7a4f, 0x7a4a8a, 0x8a5a2a];
   const stack = (x, z, rot, n, i0) => {
     for (let k = 0; k < n; k++)
-      addMapBox(m, x + k * 0.35, 1.3 + k * 2.6, z + k * 0.3, 6.0, 2.6, 2.4, C[(i0 + k) % C.length], rot + k * 0.06);
+      addClearBox(m, x + k * 0.35, 1.3 + k * 2.6, z + k * 0.3, 6.0, 2.6, 2.4, C[(i0 + k) % C.length], rot + k * 0.06);
   };
   rods.forEach(([rx, rz], i) => {                       // cover beside every rod
     stack(rx + (rx < 0 ? 5.5 : -5.5), rz, i * 0.5, 2, i);
-    addMapBox(m, rx, 1.3, rz + (rz < 0 ? 5.0 : -5.0), 2.4, 2.6, 5.0, C[(i + 3) % C.length], 0);
+    // Pushed OUT to |z| 29 rather than in to 19: at 19 it sat exactly on the
+    // foot of the gantry staircase and sealed three of its steps.
+    addClearBox(m, rx, 1.3, rz + (rz < 0 ? -5.0 : 5.0), 2.4, 2.6, 5.0, C[(i + 3) % C.length], 0);
   });
-  [[-14, -40, 0, 3], [14, 40, 0, 3], [-36, -2, 1.57, 2], [36, 2, 1.57, 2],
+  [[-14, -42, 0, 3], [14, 42, 0, 3], [-36, -2, 1.57, 2], [36, 2, 1.57, 2],
    [-6, 36, 0.3, 2], [6, -36, -0.3, 2], [-30, 34, 1.2, 1], [30, -34, -1.2, 1]]
     .forEach(([x, z, r, n], i) => stack(x, z, r, n, i + 2));
   // Gantry across the pier at 6 m: somewhere to shoot down from, and the only
@@ -10179,7 +10213,7 @@ function buildStormPierMap() {
     // k climbs as it comes IN toward the deck. Written the other way round it
     // put the tallest step 12 m out and a 0.575 m step at the deck edge, i.e.
     // a staircase to nowhere against a 6 m wall.
-    [-1, 1].forEach(sd => { for (let k = 0; k < 11; k++) addMapBox(m, sd * (25 - k * 1.2), 0.3 + k * 0.55, z, 1.2, 0.55, 2.6, 0x5a626c); });
+    [-1, 1].forEach(sd => { for (let k = 0; k < 11; k++) addClearBox(m, sd * (25 - k * 1.2), 0.3 + k * 0.55, z, 1.2, 0.55, 2.6, 0x5a626c); });
   });
   MAP_SPAWNS[m] = { ally: { x0: -7, x1: 7, z0: 40, z1: 46 }, enemy: { x0: -7, x1: 7, z0: -46, z1: -40 } };
   G._skyColor = 0x141b26;
@@ -10357,18 +10391,29 @@ function buildLaserVaultMap() {
   // the cyan arm still comes round.
   [-1, 1].forEach(sd => {
     addMapBox(m, sd * 16, 2.5, 0, 10, 0.4, 20, 0x39424e);
-    addMapBox(m, sd * 16, 3.25, -9.8, 10, 1.1, 0.4, RACK);
-    addMapBox(m, sd * 16, 3.25,  9.8, 10, 1.1, 0.4, RACK);
-    for (let k = 0; k < 5; k++) addMapBox(m, sd * 22, 2.25 - k * 0.5, -12 - k * 1.6, 3.0, 0.5, 1.6, CASE);   // tallest step nearest the deck
+    // The -z rail is split, because that is where the stairs arrive. A full
+    // rail there made the staircase a jump into a waist-high wall.
+    [-1, 1].forEach(h => addMapBox(m, sd * 16 + h * 3.35, 3.25, -9.8, 3.3, 1.1, 0.4, RACK));
+    addMapBox(m, sd * 16, 3.25, 9.8, 10, 1.1, 0.4, RACK);
+    // Up the deck's own x line, climbing TOWARD it: the top step lands at
+    // z -10.8, top 2.75, against a deck edge at z -10, top 2.7. The previous
+    // two versions put the stairs out at x 22, which shares half a metre of x
+    // with the deck and left 1.2 m of air at the top.
+    for (let k = 0; k < 5; k++) addMapBox(m, sd * 16, 0.3 + k * 0.55, -16.4 + k * 1.4, 3.0, 0.55, 1.4, CASE);
   });
-  // Partition walls, one each side of the vault floor, with a gap off-centre.
-  // 10 of the 25 spawn-to-spawn lines were open across 80 m — the racks are
-  // 1.1 m and the cases 1.8, so at 1.65 eye height a diagonal went straight
-  // through. These are 2.8 and they break the diagonals without closing the
-  // room the beams sweep.
+  // Partition walls, one each side of the vault floor. 10 of the 25
+  // spawn-to-spawn lines were open across 80 m — the racks are 1.1 m and the
+  // cases 1.8, so at 1.65 eye height a diagonal went straight through. These
+  // are 2.8 and they break the diagonals without closing the room the beams
+  // sweep. The gap is at x = ±6, opposite on each side, so crossing one
+  // partition does not line you up with the gap in the other; written as
+  // `half * 15` with the lintel at 0 it was dead centre on both, which is the
+  // one place the emitter hub already blocks.
   [-1, 1].forEach(sd => {
-    [-1, 1].forEach(half => addMapBox(m, half * 15, 1.4, sd * 28, 24, 2.8, 1.2, 0x323a45));
-    addMapBox(m, 0, 2.3, sd * 28, 7, 0.6, 1.2, 0x323a45);              // a lintel over the gap
+    const gx = sd * 6;
+    addMapBox(m, (-27 + gx - 3) / 2, 1.4, sd * 28, (gx - 3) + 27, 2.8, 1.2, 0x323a45);
+    addMapBox(m, (gx + 3 + 27) / 2, 1.4, sd * 28, 27 - (gx + 3), 2.8, 1.2, 0x323a45);
+    addMapBox(m, gx, 2.3, sd * 28, 7, 0.6, 1.2, 0x323a45);             // a lintel over the gap
   });
   MAP_SPAWNS[m] = { ally: { x0: -15, x1: 15, z0: 40, z1: 46 }, enemy: { x0: -15, x1: 15, z0: -46, z1: -40 } };
   G._skyColor = 0x0b0f14;
@@ -10452,16 +10497,28 @@ function buildCargoBeltsMap() {
       const x = k * 11 + (li - 1) * 3.5;
       [-1, 1].forEach(sd => {
         const z = ln.z + sd * (W / 2 + 2.2);
-        addMapBox(m, x, 1.0, z, 3.0, 2.0, 3.0, (k + li) % 2 ? CRATE : CRATE2, (k * 0.2));
-        if (k % 2 === 0) addMapBox(m, x + 1.2, 2.6, z - 0.6, 2.2, 1.2, 2.2, CRATE2, 0.3);  // stacked
+        addClearBox(m, x, 1.0, z, 3.0, 2.0, 3.0, (k + li) % 2 ? CRATE : CRATE2, (k * 0.2));
+        if (k % 2 === 0) addClearBox(m, x + 1.2, 2.6, z - 0.6, 2.2, 1.2, 2.2, CRATE2, 0.3);  // stacked
       });
     }
   });
   // Stacks between the lanes, tall enough to cut the hall in half — the one
   // thing this map had none of.
-  [[-34, -10], [-4, -10], [26, -10], [-34, 10], [-4, 10], [26, 10]].forEach(([x, z], i) => {   // clear of the 2.2 m crates at ±26, ±10
-    addMapBox(m, x, 2.1, z, 4.2, 4.2, 4.2, i % 2 ? CRATE : CRATE2, i * 0.25);
-    addMapBox(m, x + 2.6, 1.1, z + 2.4, 2.4, 2.2, 2.4, STEEL, i * 0.4);
+  // Hand-picked coordinates on a map that already has twelve hand-picked
+  // crates is how the last two attempts buried one. addClearBox decides.
+  [[-34, -10], [-10, -10], [22, -10], [-34, 10], [-10, 10], [22, 10]].forEach(([x, z], i) => {
+    addClearBox(m, x, 2.1, z, 4.2, 4.2, 4.2, i % 2 ? CRATE : CRATE2, i * 0.25);
+    addClearBox(m, x + 2.6, 1.1, z + 2.4, 2.4, 2.2, 2.4, STEEL, i * 0.4);
+  });
+  // Racking across each end, with the gap off to one side and opposite on the
+  // other. The spawns sit at z ±38…44 and the hall is open along x, so without
+  // these 10 of 225 spawn-to-spawn lines ran the full 80 m — and the stacks
+  // that used to break some of them were the ones addClearBox refused.
+  [-1, 1].forEach(sd => {
+    const gx = sd * 8;
+    addClearBox(m, (-34 + gx - 3.5) / 2, 1.6, sd * 28, (gx - 3.5) + 34, 3.2, 1.6, 0x5a6168);
+    addClearBox(m, ((gx + 3.5) + 34) / 2, 1.6, sd * 28, 34 - (gx + 3.5), 3.2, 1.6, 0x5a6168);
+    addClearBox(m, gx, 2.9, sd * 28, 7, 0.6, 1.6, 0x5a6168);           // a lintel over the gap
   });
   // Catwalk cover: the deck was a bare plank, so being up there was only a way
   // to be shot from three sides at once. ON the decks — they are at x ±43,
@@ -10529,10 +10586,13 @@ function buildGalePeaksMap() {
     [[0, 1], [0, -1], [1, 0], [-1, 0]].forEach(([ex, ez], k) => {
       const alongX = ez !== 0;
       addMapBox(m, ex * r, top + 0.6, ez * r, alongX ? len : 1.1, 1.2, alongX ? 1.1 : len, SHELTER);
-      // A stone just inboard of the wall, on the same terrace — the earlier
-      // version pulled these to 0.72 r, which on a square terrace is under the
-      // next step up.
-      if (k % 2 === 0) addMapBox(m, ex * (r - 2.6), top + 0.45, ez * (r - 2.6), 1.6, 0.9, 1.6, STONE, ti * 0.3);
+      // A stone at the CORNER of the same ring. Not inboard of the wall: the
+      // standable ring is 3 m wide and the wall already takes 1.1 of it, so
+      // anything pulled inboard is under the next step up — which is where the
+      // last two versions of this line put it, twice, 0.6 m of a 0.9 m stone
+      // buried. At the corner the ring is just as wide and nothing is above it.
+      if (k === 0) [[1, 1], [1, -1], [-1, 1], [-1, -1]].forEach(([sx, sz], q) =>
+        addClearBox(m, sx * (r - 0.3), top + 0.45, sz * (r - 0.3), 1.6, 0.9, 1.6, STONE, (ti + q) * 0.3));
     });
   });
   // Boulders on the flat, so the run in from a corner tower is not a straight
@@ -10654,12 +10714,15 @@ function buildMagmaRiseMap() {
 
   // ── Two flank ridges, broken into jumps. ──────────────────────────────────
   // A continuous safe path along the edge would be a free pass through the lava
-  // phase, so each is three 9 m segments with a 4 m gap — crossable, but you
+  // phase, so each is three 24 m segments with a 4 m gap — crossable, but you
   // commit to a jump in the open to do it.
-  [-43, 43].forEach(x => {
+  // x ±46, not ±43: at 43 the ridge overlapped the islands at (±40, ±14), whose
+  // 0.8 m tops bridged both 4 m gaps end to end — a continuous lava-proof walk
+  // down each flank, which is the one thing this is not meant to be.
+  [-46, 46].forEach(x => {
     [-28, 0, 28].forEach(z => {
-      addMapBox(m, x, 0.5, z, 6, 1.0, 24, ROCK);        // 24 deep, 28 apart → a 4 m gap
-      addMapBox(m, x + (x < 0 ? 2.2 : -2.2), 1.0 + 0.6, z - 2.5, 1.4, 1.2, 3.2, CRUST);   // cover on the ridge
+      addClearBox(m, x, 0.5, z, 6, 1.0, 24, ROCK);      // 24 deep, 28 apart → a 4 m gap
+      addClearBox(m, x + (x < 0 ? 2.2 : -2.2), 1.0 + 0.6, z - 2.5, 1.4, 1.2, 3.2, CRUST);   // cover on the ridge
     });
   });
 
