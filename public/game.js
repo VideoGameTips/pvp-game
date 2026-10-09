@@ -10306,14 +10306,92 @@ function buildMagmaRiseMap() {
   const m = 'magma_rise', G = MAP_GROUPS[m];
   addMapGround(m, 0x2b1a14, 0x4a2418);
   addOuterWalls(m, 0x1a100c);
-  // Rock platforms: tops at 0.8 m, which both players and bots can step onto.
+  const ROCK = 0x4a3b32, HI = 0x6a5648, BASALT = 0x2e2420, CRUST = 0x3a2a22;
+
+  // 🌋 The map is a timer: 13 s of floor, then 8 s of lava you survive by being
+  // off it. Both halves have to be a gunfight, and they want opposite things —
+  // which is why the cover comes in two kinds (#66).
+  //
+  // The islands are the lava answer, so they carry the REAL cover: a boulder at
+  // the rim of each big one, centre left open to stand in. Before #66 they were
+  // bare 0.8 m slabs, so the lava phase herded everyone onto twenty-five podiums
+  // in the open and the fight became whoever aimed first.
+  //
+  // The spires are the floor answer. They are deliberately NARROW on top: a
+  // standing jump clears 3.02 m, so nothing here can be made unclimbable and
+  // trying would just be a lie. Instead the floor cover is climbable and a
+  // terrible place to be — a 1.4 m square with nothing to hide behind — so the
+  // islands stay the right answer when the floor goes.
+
+  // ── Islands. Top at 0.8: above the 0.45 m the lava checks, one step up. ────
   const P = [[0,0,10],[-14,-12,6],[14,-12,6],[-14,12,6],[14,12,6],[0,-26,8],[0,26,8],[-28,0,8],[28,0,8],
              [-26,-26,6],[26,-26,6],[-26,26,6],[26,26,6],[-40,-14,5],[40,14,5],[-40,14,5],[40,-14,5],
              [-22,-41,5],[22,41,5],[-22,41,5],[22,-41,5],[-20,0,4],[20,0,4],[0,-12,4],[0,12,4]];
-  P.forEach(([x, z, s], i) => addMapBox(m, x, 0.4, z, s, 0.8, s, i === 0 ? 0x6a5648 : 0x4a3b32));
-  // A pair of high perches (stairs up from the centre platform) for the brave.
-  for (let i = 0; i < 4; i++) addMapBox(m, 6 + i * 1.5, 0.8 + 0.5 * (i + 1) - 0.25, 0, 1.5, 0.5, 4, 0x6a5648);
-  addMapBox(m, 14, 3.1, 0, 5, 0.4, 5, 0x6a5648);
+  P.forEach(([x, z, s], i) => addMapBox(m, x, 0.4, z, s, 0.8, s, i === 0 ? HI : ROCK));
+
+  // Rim boulders on every island wide enough to still stand on with one there.
+  // Sited on the side facing the middle, so an island covers you FROM the fight
+  // and you have to give that up to shoot back.
+  P.forEach(([x, z, s]) => {
+    if (s < 5) return;
+    const inward = Math.hypot(x, z) < 1 ? 1 : 1 / Math.hypot(x, z);
+    const bx = x - x * inward * (s * 0.34), bz = z - z * inward * (s * 0.34);
+    const w = Math.min(2.6, s * 0.42);
+    addMapBox(m, x === 0 && z === 0 ? s * 0.3 : bx, 0.8 + 0.65, x === 0 && z === 0 ? s * 0.3 : bz,
+              w, 1.3, w * 0.8, CRUST, (x + z) * 0.11);
+    if (s >= 6) {                                  // a second, lower one opposite
+      addMapBox(m, x + (x - bx) * 0.55, 0.8 + 0.45, z + (z - bz) * 0.55,
+                w * 0.8, 0.9, w * 0.7, CRUST, (x - z) * 0.09);
+    }
+  });
+
+  // ── Floor spires. Tall enough to break a sightline, too thin to fight from. ─
+  const SP = [[-34,-33,1.5,2.8],[-19,-36,1.3,2.5],[-5,-33,1.6,3.1],[9,-37,1.4,2.6],[24,-34,1.5,2.9],[38,-31,1.3,2.4],
+              [-37,-19,1.4,2.6],[-21,-20,1.7,3.2],[-6,-18,1.3,2.5],[8,-21,1.6,3.0],[23,-19,1.4,2.7],[36,-17,1.5,2.8],
+              [-33,-4,1.6,3.0],[-16,-5,1.3,2.4],[16,5,1.3,2.4],[33,4,1.6,3.0],
+              [-36,17,1.5,2.8],[-23,19,1.4,2.7],[-8,21,1.6,3.0],[6,18,1.3,2.5],[21,20,1.7,3.2],[37,19,1.4,2.6],
+              [-38,31,1.3,2.4],[-24,34,1.5,2.9],[-9,37,1.4,2.6],[5,33,1.6,3.1],[19,36,1.3,2.5],[34,33,1.5,2.8]];
+  SP.forEach(([x, z, w, h], i) => {
+    addMapBox(m, x, h / 2, z, w, h, w * 0.85, i % 3 ? BASALT : ROCK, (x * 0.07 + z * 0.05));
+    // A broken cap, offset and turned, on two out of three. Without it
+    // twenty-eight identical blocks read as chess pieces rather than as rock,
+    // and a repeated silhouette is also harder to range by eye in a fight.
+    if (i % 3) addMapBox(m, x + w * 0.22, h + 0.3, z - w * 0.18, w * 0.72, 0.6, w * 0.6,
+                         i % 3 === 1 ? ROCK : CRUST, (x * 0.13 - z * 0.09));
+    // A glowing crack at the foot of every other one: the floor has to read as
+    // the thing that is about to kill you even while it is safe.
+    if (i % 2 === 0) {
+      const crack = new THREE.Mesh(new THREE.PlaneGeometry(w * 2.6, w * 1.7), new THREE.MeshBasicMaterial({ color: 0xff5a1e, transparent: true, opacity: 0.5 }));
+      crack.rotation.set(-Math.PI / 2, 0, x * 0.3); crack.position.set(x, 0.03, z); G.add(crack);
+    }
+  });
+
+  // ── Two flank ridges, broken into jumps. ──────────────────────────────────
+  // A continuous safe path along the edge would be a free pass through the lava
+  // phase, so each is three 9 m segments with a 4 m gap — crossable, but you
+  // commit to a jump in the open to do it.
+  [-43, 43].forEach(x => {
+    [-28, 0, 28].forEach(z => {
+      addMapBox(m, x, 0.5, z, 6, 1.0, 9, ROCK);
+      addMapBox(m, x + (x < 0 ? 2.2 : -2.2), 1.0 + 0.6, z - 2.5, 1.4, 1.2, 3.2, CRUST);   // cover on the ridge
+    });
+  });
+
+  // ── The middle: worth taking, and the only two-storey thing on the map. ───
+  addMapBox(m, 0, 1.1, 0, 7, 0.6, 7, HI);                       // step onto the centre island
+  addMapBox(m, 0, 2.0, 0, 5, 1.2, 5, HI);                       // the top, at 2.6
+  [[-1.8, -1.8], [1.8, 1.8]].forEach(([bx, bz]) =>
+    addMapBox(m, bx, 2.6 + 0.55, bz, 2.0, 1.1, 2.0, CRUST, 0.4));   // cover up there
+  // Stairs up from two sides only, so the high ground has a cost to reach.
+  for (let i = 0; i < 4; i++) {
+    addMapBox(m,  6 + i * 1.5, 0.8 + 0.5 * (i + 1) - 0.25, 0, 1.5, 0.5, 4, HI);
+    addMapBox(m, -6 - i * 1.5, 0.8 + 0.5 * (i + 1) - 0.25, 0, 1.5, 0.5, 4, HI);
+  }
+  addMapBox(m,  14, 3.1, 0, 5, 0.4, 5, HI);
+  addMapBox(m, -14, 3.1, 0, 5, 0.4, 5, HI);
+  [[14, 0], [-14, 0]].forEach(([px, pz]) =>
+    addMapBox(m, px, 3.3 + 0.6, pz + 1.9, 4.2, 1.2, 1.0, CRUST));    // a lip on each perch
+
   const lava = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), _MECH_BASIC(0xff4a10, 0.0));
   lava.rotation.x = -Math.PI / 2; lava.position.y = 0.2; lava.visible = false; G.add(lava);
   G._skyColor = 0x2a0d08;
