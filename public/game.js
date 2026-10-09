@@ -37877,23 +37877,9 @@ function _makeViewHand(mirror) {
   const fist = new THREE.Mesh(new THREE.BoxGeometry(0.056, 0.059, 0.072), skin);
   fist.castShadow = true;
   h.add(fist);
-  // Curled fingers: three grooves across the front of the fist, which is what
-  // tells a fist from a lump at this size.
-  const groove = new THREE.MeshLambertMaterial({ color: 0xb98a66 });
-  for (let i = 0; i < 3; i++) {
-    const gr = new THREE.Mesh(new THREE.BoxGeometry(0.058, 0.0035, 0.030), groove);
-    gr.position.set(0, 0.018 - i * 0.017, 0.021);
-    h.add(gr);
-  }
-  // The thumb, lying over the fingers the way it does on a grip.
-  const thumb = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.040, 0.024), skin);
-  // The callers pass +1 and -1, and BOTH are truthy — so a `mirror ? …` test
-  // gave the two hands the same thumb and the support hand read as a second
-  // right hand on the handguard. Take the sign, not the truthiness.
-  const side = mirror < 0 ? -1 : 1;
-  thumb.position.set(side * 0.023, 0.006, 0.020);
-  thumb.rotation.set(1.25, 0, -side * 0.5);
-  h.add(thumb);
+  // And nothing on it: the old Fists melee is a single skin-tone box with no knuckles, no grooves and no thumb, and
+  // these match it exactly. The grooves and thumb that were here read as a different pair of hands to the blocky
+  // ones on the body, so a hand is one block again, everywhere.
   // Tagged so the skin system leaves them alone: a gold weapon skin should
   // gild the gun, not the hands holding it.
   h.traverse(o => { if (o.isMesh) { o.castShadow = true; o.userData.vmHand = true; } });
