@@ -5784,6 +5784,10 @@ function activateMap(name) {
   wallColliders.length = 0;
   if (MAP_COLLIDERS[name]) wallColliders.push(...MAP_COLLIDERS[name]);
   activeMapName = name;
+  for (const dest of mapDestructibles) if (dest.mapName === name) {
+    dest.hp = dest.maxHp;
+    dest.mesh.visible = true;
+  }
   activeMapGimmicks = MAP_GIMMICKS[name] || { damageZones: [], jumpPads: [], iceZones: [], oilZones: [], lowGravZones: [] };
   if (typeof MAP_MECH !== 'undefined' && MAP_MECH && MAP_MECH[name]) MAP_MECH[name].reset();
   // Reset batch-5 stateful mechanics so a re-entered map starts fresh
@@ -8384,41 +8388,64 @@ function addSlickZone(mapName, x, z, r, color = 0x111111) {
   MAP_GROUPS[mapName].add(slick);
   MAP_GIMMICKS[mapName].oilZones.push({ x, z, r });
 }
-function addExplosiveBarrel(mapName, x, z, color = 0xb52b20) {
+function addExplosiveBarrel(mapName, x, z, color = 0xb52b20, kind = 'barrel') {
   const barrel = new THREE.Group();
-  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.62, 1.25, 14), new THREE.MeshLambertMaterial({ color }));
+  const body = new THREE.Mesh(kind === 'crate' ? new THREE.BoxGeometry(1.4, 1.4, 1.4) : new THREE.CylinderGeometry(0.62, 0.62, 1.25, 14), new THREE.MeshLambertMaterial({ color }));
   body.position.y = 0.72;
   barrel.add(body);
   const bandMat = new THREE.MeshBasicMaterial({ color: 0xffcc33 });
   [-0.34, 0.34].forEach(y => {
-    const band = new THREE.Mesh(new THREE.TorusGeometry(0.63, 0.035, 5, 14), bandMat);
-    band.rotation.x = Math.PI / 2;
+    const band = new THREE.Mesh(kind === 'crate' ? new THREE.BoxGeometry(1.44, 0.1, 1.44) : new THREE.TorusGeometry(0.63, 0.035, 5, 14), bandMat);
+    if (kind !== 'crate') band.rotation.x = Math.PI / 2;
     band.position.y = 0.72 + y;
     barrel.add(band);
   });
+  const label = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.32, 0.025), bandMat);
+  label.position.set(0, 0.74, kind === 'crate' ? 0.715 : 0.63);
+  label.rotation.z = Math.PI / 4; barrel.add(label);
   barrel.position.set(x, 0, z);
   MAP_GROUPS[mapName].add(barrel);
   barrel.updateMatrixWorld(true);
   MAP_COLLIDERS[mapName].push(new THREE.Box3().setFromObject(barrel));
   mapDestructibles.push({
     mesh: barrel, hp: 60, maxHp: 60, type: 'explosive_barrel', mapName,
+    propId: `${mapName}:${x}:${z}`, kind,
     colliderRef: MAP_COLLIDERS[mapName][MAP_COLLIDERS[mapName].length - 1],
-    onDestroy: () => {
-      spawnAbilityAOEFX(new THREE.Vector3(x, 0.5, z), 7, 0xff7722);
-      flashScreen('rgba(255,120,20,0.35)', 450);
-      for (const bot of gameBots) {
-        if (bot.dead) continue;
-        const dx = bot.x - x, dz = bot.z - z;
-        if (dx*dx + dz*dz < 49) {
-          const mesh = remoteMeshes[bot.id];
-          const hp = mesh ? mesh.position.clone().setY(1.0) : new THREE.Vector3(bot.x, 1, bot.z);
-          emitHit(bot.id, `barrel_${Date.now()}_${bot.id}`, 'explosive_barrel', hp);
-        }
-      }
-      const pdx = camera.position.x - x, pdz = camera.position.z - z;
-      if (pdx*pdx + pdz*pdz < 49) applyBotDamageToPlayer('explosive_barrel', null);
-    },
+    onDestroy: opts => detonateMapProp(mapName, new THREE.Vector3(x, 0.8, z), opts),
   });
+}
+
+function mapBlastDamage(origin, target, ignoredCollider) {
+  const delta = target.clone().sub(origin), distance = delta.length();
+  if (distance >= 7) return 0;
+  const ray = new THREE.Ray(origin, delta.normalize()), hit = new THREE.Vector3();
+  if (wallColliders.some(c => c !== ignoredCollider && ray.intersectBox(c, hit) && hit.distanceTo(origin) < distance - 0.15)) return 0;
+  return Math.round(100 * (1 - distance / 7));
+}
+
+function detonateMapProp(mapName, origin, opts = {}) {
+  if (mapName !== activeMapName) return;
+  spawnExplosion(origin);
+  spawnAbilityAOEFX(origin, 7, 0xff7722);
+  playSoundEvent('explosion', { position: origin, volume: 1, minGap: 60 });
+  if (!opts.remote) {
+    for (const [pid, mesh] of Object.entries(remoteMeshes)) {
+      const target = mesh.position.clone(); target.y += 1;
+      const damage = mapBlastDamage(origin, target);
+      if (damage) emitHit(pid, `barrel_${myId}_${Date.now()}_${origin.x}_${origin.z}_${pid}`, 'explosive_barrel', target, false, { damageOverride: damage });
+    }
+  }
+  // PvP victims receive the shooter's normal hit event; never subtract twice on the relay.
+  if (!opts.remote && opts.ownerId !== myId) {
+    const damage = mapBlastDamage(origin, camera.position);
+    if (damage) applyBotDamageToPlayer('explosive_barrel', opts.ownerId || null, damage);
+  }
+  for (const dest of mapDestructibles) {
+    if (dest.mapName !== mapName || dest.hp <= 0 || dest.type !== 'explosive_barrel') continue;
+    const target = dest.mesh.position.clone(); target.y += 0.8;
+    const damage = mapBlastDamage(origin, target, dest.colliderRef);
+    if (damage) damageDestructible(dest, damage, opts);
+  }
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -14360,6 +14387,51 @@ function mapSpawnSightlineSamples(r) {
   return result;
 }
 
+function addThemedCombatStores(name) {
+  const themes = {
+    warehouse: 'munitions', refinery: 'fuel', pearl_harbor: 'naval', carrier: 'naval',
+    urban: 'munitions', airport: 'fuel', train: 'munitions', foundry: 'fuel',
+    chernobyl: 'fuel', lockdown: 'munitions', sewer: 'fuel', skydock: 'naval',
+    pyongyang: 'munitions', glassworks: 'munitions', construction: 'fuel',
+  };
+  const type = themes[name], b = MAP_BOUNDS[name], spawns = MAP_SPAWNS[name];
+  if (!type || !b || !spawns) return;
+  const K = _bkit(name), th = MAP_THEMES[name];
+  const fuel = type === 'fuel', color = fuel ? 0xb13a26 : type === 'naval' ? 0x984b30 : 0x687348;
+  const available = (x, z) => {
+    if (Math.abs(x) + 7 > b.halfX || Math.abs(z) + 7 > b.halfZ) return false;
+    for (const r of Object.values(spawns)) {
+      if (x > r.x0 - 14 && x < r.x1 + 14 && z > r.z0 - 14 && z < r.z1 + 14) return false;
+    }
+    if (MAP_GIMMICKS[name].damageZones.some(r => r.w ? _pointInRotRect(x, z, r, 7) : Math.hypot(x - r.x, z - r.z) < r.r + 7)) return false;
+    return !MAP_COLLIDERS[name].some(c => c.max.y > 0.15 && c.min.y < 5 && c.max.x > x - 6 && c.min.x < x + 6 && c.max.z > z - 5 && c.min.z < z + 5);
+  };
+  // Mirrored supply bays sit beside lanes, never in a spawn or atop existing geometry.
+  let count = 0;
+  for (const [fx, fz] of [[-0.62,-0.28],[0.62,0.28],[-0.62,0.28],[0.62,-0.28],[-0.62,0],[0.62,0],[-0.8,-0.18],[0.8,0.18],[-0.38,-0.48],[0.38,0.48],[-0.38,0.48],[0.38,-0.48]]) {
+    const x = Math.round(b.halfX * fx), z = Math.round(b.halfZ * fz);
+    if (!available(x, z)) continue;
+    // Open-sided canopy, anchored uprights, and a substantial backstop provide real cover.
+    K.box(x, 0, z + 3.7, 10, 4.5, 0.8, th.w);
+    for (const dx of [-4.7, 4.7]) K.box(x + dx, 0, z - 3.7, 0.6, 4.5, 0.6, th.w2);
+    K.box(x, 4.5, z, 10.6, 0.4, 8.4, th.d);
+    K.box(x - 3.4, 0, z, 2.4, 1.5, 3, th.c);
+    K.box(x - 3.4, 1.5, z, 2.5, 0.15, 3.1, th.t);
+    if (fuel) {
+      for (const dz of [-1, 1]) K.box(x - 3.4, 1.65, z + dz, 0.4, 1.5, 0.4, th.w2);
+      K.box(x - 3.4, 3.15, z, 0.5, 0.35, 2.7, th.a);
+    } else {
+      for (const dz of [-0.9, 0.9]) K.box(x - 3.4, 1.65, z + dz, 1.7, 0.65, 1.1, th.c);
+    }
+    addExplosiveBarrel(name, x + 1.5, z + 1, color, fuel ? 'barrel' : 'crate');
+    addExplosiveBarrel(name, x + 3.3, z + 1, color);
+    K.poi(type + ' store', x, z - 1);
+    count++;
+    if (count === 4) break;
+  }
+  MAP_GROUPS[name].userData.combatStores = count;
+}
+
 function raiseThemedMapBoundaries(name) {
   const group = MAP_GROUPS[name], bounds = MAP_BOUNDS[name];
   if (!group || !bounds || !_BESPOKE[name]) return;
@@ -14387,7 +14459,7 @@ function initMapThemes() {
         enemy: { x0: -14 * scale, x1: -4 * scale, z0: -b.halfZ + 3, z1: -b.halfZ + 7 },
       };
     }
-    try { raiseThemedMapBoundaries(name); refineMapIdentity(name); protectThemedMapSpawns(name); themeHollowBuildings(name); themePlaceBuildings(name); themeRecolorMap(name); themePlaceProps(name); if (name === 'volcano') buildVolcanoScenery(); buildMapScenery(name); } catch (e) { console.warn('[theme]', name, e); }
+    try { raiseThemedMapBoundaries(name); addThemedCombatStores(name); refineMapIdentity(name); protectThemedMapSpawns(name); themeHollowBuildings(name); themePlaceBuildings(name); themeRecolorMap(name); themePlaceProps(name); if (name === 'volcano') buildVolcanoScenery(); buildMapScenery(name); } catch (e) { console.warn('[theme]', name, e); }
   }
 }
 initMapThemes();
@@ -44191,6 +44263,11 @@ function rocketExplode(pos, weaponId, excludePid, opts = {}) {
   const splashId = weaponId + '_splash';
   const damageRemotes = opts.damageRemotes !== false;
   const damagePlayer = !!opts.damagePlayer;
+  if (damageRemotes) for (const dest of mapDestructibles) {
+    if (dest.mapName !== activeMapName || dest.hp <= 0 || dest.type !== 'explosive_barrel') continue;
+    const target = dest.mesh.position.clone(); target.y += 0.8;
+    if (pos.distanceTo(target) <= radius && mapBlastDamage(pos, target, dest.colliderRef)) damageDestructible(dest, 60, { ownerId: myId });
+  }
   if (damageRemotes) {
     for (const [pid, mesh] of Object.entries(remoteMeshes)) {
       if (pid === excludePid) continue;
@@ -44475,11 +44552,11 @@ function updateBullets(dt) {
         const destDmg = getClientWeaponDamage(b.weaponId) || 25;
         for (const dest of mapDestructibles) {
           if (dest.mapName !== activeMapName) continue;
-          if (!dest.mesh) continue;
+          if (!dest.mesh || dest.hp <= 0 || !b.isOwn) continue;
           const dpos = new THREE.Vector3();
           dest.mesh.getWorldPosition(dpos);
-          if (dpos.distanceTo(wallHitPt) < (dest.type === 'reactor' ? 4 : dest.type === 'glass' ? 6 : dest.type === 'explosive_barrel' ? 2.2 : 1.5)) {
-            damageDestructible(dest, destDmg);
+          if (dest.colliderRef ? dest.colliderRef.clone().expandByScalar(0.08).containsPoint(wallHitPt) : dpos.distanceTo(wallHitPt) < (dest.type === 'reactor' ? 4 : dest.type === 'glass' ? 6 : 1.5)) {
+            damageDestructible(dest, destDmg, { ownerId: myId });
             break;
           }
         }
@@ -44858,7 +44935,7 @@ function placeLandMine(item) {
   showAnnouncement('LAND MINE ARMED', `${item.damage} dmg + launch`, '#ff2200', 900);
 }
 // ── Destructible map objects (glass, lights, reactors) ───────────────────
-function damageDestructible(dest, dmg) {
+function damageDestructible(dest, dmg, opts = {}) {
   if (dest.hp <= 0) return;
   dest.hp = Math.max(0, dest.hp - dmg);
   // Show damage number above the object
@@ -44875,7 +44952,8 @@ function damageDestructible(dest, dmg) {
     }
     // Particle burst at the object's position
     spawnHitParticle(dpos.clone().setY(dpos.y - 0.5));
-    if (dest.onDestroy) dest.onDestroy();
+    if (dest.propId && !opts.remote && socket?.connected) socket.emit('mapPropDestroyed', { mapName: dest.mapName, propId: dest.propId });
+    if (dest.onDestroy) dest.onDestroy(opts);
     if (dest.type === 'glass') showAnnouncement('🔨 GLASS BROKEN', '', '#88ccee', 700);
     if (dest.type === 'airport_light') showAnnouncement('💡 LIGHT OUT', `${Math.round(airportLightLevel * 100)}% brightness`, '#888888', 700);
     if (dest.type === 'reactor') showAnnouncement('☢️ REACTOR DESTROYED', '12 m AOE explosion!', '#ffaa22', 2400);
@@ -46439,7 +46517,7 @@ function scheduleAutoRespawnLocal() {
     requestPointerLockSafe();
   });
 }
-function applyBotDamageToPlayer(weaponId, botId) {
+function applyBotDamageToPlayer(weaponId, botId, damageOverride) {
   if (!botId && KILLFEED_HAZARDS[weaponId]) noteKillInfo(myId, null, null, false, { cause: 'hazard', label: KILLFEED_HAZARDS[weaponId] });
   else noteKillInfo(myId, botId, weaponId, _botHitHead);   // for the kill feed, should this be the one that kills
   // 🛋️ Lobby 13 is a no-combat chill zone — nobody takes damage.
@@ -46494,7 +46572,7 @@ function applyBotDamageToPlayer(weaponId, botId) {
   if (isDead || isShielded() || (!piercesDefense && isRiotShieldBlocking())) return;
   if (!piercesDefense && (meleeAbilityBuff?.type === 'parry' || meleeAbilityBuff?.type === 'deflect')) return;
   if (match?.type === 'range') return;
-  const dmg = CLIENT_WEAPON_DAMAGE[weaponId] || 25;
+  const dmg = Number.isFinite(damageOverride) ? Math.max(0, Math.min(CLIENT_WEAPON_DAMAGE[weaponId] || 25, Math.round(damageOverride))) : CLIENT_WEAPON_DAMAGE[weaponId] || 25;
   const me = players[myId];
   if (!me || !dmg) { console.warn('[damage] no me or dmg', me, dmg); return; }
   const oldHp = me.hp;
@@ -46912,6 +46990,11 @@ socket.on('bulletFired', b => {
     ? { ballLightning: true, auraRadius: 3.0, auraCooldown: 1000, directRootMs: 3000, auraRootMs: 1000, maxRange: 42 }
     : {};
   spawnLocalBullet(origin, new THREE.Vector3(b.dx,b.dy,b.dz), b.id, false, w.bulletSpeed, w.bulletColor, w.bulletSize, b.weapon || w.id, opts);
+});
+socket.on('mapPropDestroyed', data => {
+  if (!data || data.mapName !== activeMapName) return;
+  const dest = mapDestructibles.find(d => d.mapName === activeMapName && d.propId === data.propId);
+  if (dest) damageDestructible(dest, dest.maxHp, { remote: true, ownerId: data.ownerId });
 });
 // 🔥 FFA Legend progress, sent as it is earned: every few seconds of FFA
 // damage, and after every FFA win the server accepts.

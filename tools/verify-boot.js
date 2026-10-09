@@ -177,6 +177,86 @@ if (ok && process.argv.includes('--maps')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+if (ok && process.argv.includes('--props')) {
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [], props = mapDestructibles.filter(d => d.propId);
+    const ids = new Set();
+    for (const d of props) {
+      if (ids.has(d.propId)) issues.push('duplicate prop: ' + d.propId);
+      ids.add(d.propId);
+      if (!MAP_COLLIDERS[d.mapName].includes(d.colliderRef)) issues.push('missing prop collider: ' + d.propId);
+      for (const r of Object.values(MAP_SPAWNS[d.mapName])) {
+        const dx = Math.max(r.x0 - d.mesh.position.x, 0, d.mesh.position.x - r.x1);
+        const dz = Math.max(r.z0 - d.mesh.position.z, 0, d.mesh.position.z - r.z1);
+        if (Math.hypot(dx, dz) < 7) issues.push('prop can blast a spawn: ' + d.propId);
+      }
+    }
+    if (props.length < 20) issues.push('too few themed combat props');
+    const saved = { spawnExplosion, spawnAbilityAOEFX, playSoundEvent, showDamageNumber, spawnHitParticle, showAnnouncement, emitHit, applyBotDamageToPlayer };
+    let hits = 0, localHits = 0;
+    try {
+      spawnExplosion = spawnAbilityAOEFX = playSoundEvent = showDamageNumber = spawnHitParticle = showAnnouncement = () => {};
+      emitHit = () => { hits++; }; applyBotDamageToPlayer = () => { localHits++; };
+      activateMap('refinery');
+      const a = props.find(d => d.mapName === 'refinery');
+      if (!a) throw new Error('refinery has no explosives');
+      if (!a.mesh.parent) issues.push('static merge swallowed explosive');
+      const muzzle = a.mesh.position.clone().add(new THREE.Vector3(0, 0.8, -2));
+      spawnLocalBullet(muzzle, new THREE.Vector3(0, 0, 1), 'prop-test', true, 200, 0xffffff, 0.01, 'ak20');
+      updateBullets(0.02);
+      if (a.hp !== 36) issues.push('actual bullet did not damage explosive (' + a.hp + ')');
+      activateMap('refinery');
+      damageDestructible(a, 25, { ownerId: myId });
+      if (a.hp !== 35 || !a.mesh.visible) issues.push('nonfatal prop hit destroys it');
+      damageDestructible(a, 35, { ownerId: myId });
+      if (a.hp !== 0 || a.mesh.visible || wallColliders.includes(a.colliderRef)) issues.push('destroyed prop remains solid or visible');
+      if (localHits) issues.push('own explosion damaged player');
+      const dead = props.filter(d => d.mapName === 'refinery' && d.hp <= 0);
+      if (dead.length < 2) issues.push('nearby barrels did not chain react');
+      damageDestructible(a, 100, { ownerId: myId });
+      activateMap('refinery');
+      if (a.hp !== a.maxHp || !a.mesh.visible || !wallColliders.includes(a.colliderRef)) issues.push('reactivation did not restore prop');
+      damageDestructible(a, 60, { remote: true, ownerId: 'opponent' });
+      if (hits || localHits) issues.push('remote explosion duplicated damage');
+      const oldCols = wallColliders.slice(); wallColliders.length = 0;
+      const origin = new THREE.Vector3(0, 1, 0), near = new THREE.Vector3(1, 1, 0), far = new THREE.Vector3(6, 1, 0);
+      if (!(mapBlastDamage(origin, near) > mapBlastDamage(origin, far)) || mapBlastDamage(origin, new THREE.Vector3(8, 1, 0)) !== 0) issues.push('blast falloff/range is wrong');
+      wallColliders.push(new THREE.Box3(new THREE.Vector3(2, 0, -2), new THREE.Vector3(3, 4, 2)));
+      if (mapBlastDamage(origin, far)) issues.push('blast passed through solid cover');
+      wallColliders.length = 0; wallColliders.push(...oldCols);
+      activateMap('blank');
+    } finally {
+      ({ spawnExplosion, spawnAbilityAOEFX, playSoundEvent, showDamageNumber, spawnHitParticle, showAnnouncement, emitHit, applyBotDamageToPlayer } = saved);
+    }
+    console.log('prop checks: ' + props.length + ' explosives on ' + new Set(props.map(d => d.mapName)).size + ' maps; damage, cover, chains, reset and merge');
+    return issues;
+  })()`);
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
+if (ok && process.argv.includes('--props')) {
+  const serverSource = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  const begin = serverSource.indexOf("  socket.on('mapPropDestroyed',");
+  const end = serverSource.indexOf("  socket.on('airBlast',", begin);
+  let handler;
+  const delivered = [], player = { matchId: 'prop-test-match', dead: false };
+  vm.runInNewContext(serverSource.slice(begin, end), {
+    players: { shooter: player }, socket: { id: 'shooter', on: (name, fn) => { handler = fn; } },
+    emitToMatchExcept: (...args) => delivered.push(args),
+  });
+  handler({ mapName: 'refinery', propId: 'refinery:44.5:1' });
+  handler({ mapName: 'refinery', propId: 'warehouse:44.5:1' });
+  handler({ mapName: 'refinery', propId: 'refinery:not-a-position' });
+  player.dead = true;
+  handler({ mapName: 'refinery', propId: 'refinery:44.5:1' });
+  player.dead = false;
+  for (let i = 0; i < 40; i++) handler({ mapName: 'refinery', propId: 'refinery:44.5:1' });
+  if (delivered.length !== 32 || delivered.some(([match, except, event, payload]) =>
+    match !== 'prop-test-match' || except !== 'shooter' || event !== 'mapPropDestroyed' || payload.ownerId !== 'shooter')) {
+    ok = false; console.log('prop relay failed validation, match scoping or rate limiting');
+  } else console.log('prop relay: fractional coordinates, validation, dead-player guard and match scoping passed');
+}
+
 if (ok && process.env.MAP_REVIEW_DIR) {
   fs.mkdirSync(process.env.MAP_REVIEW_DIR, { recursive: true });
   for (const name of ['forest', 'desert', 'tundra', 'refinery', 'space', 'volcano', 'titanic', 'carrier', 'pearl_harbor']) {

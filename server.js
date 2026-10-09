@@ -1968,6 +1968,7 @@ event_horizon: 75,
 const DAMAGE_OVERRIDE_CAPS = {
   cyroclasm_laser: 300,
 };
+WEAPON_DAMAGE.explosive_barrel = 100;
 
 function serverHitDamage(data, shooter, target) {
   const weapon = data?.weapon;
@@ -2278,6 +2279,18 @@ io.on('connection', (socket) => {
       dx: data.dx, dy: data.dy, dz: data.dz,
       weapon: w,
     });
+  });
+
+  // Destructible identities are deterministic; relay only inside the shooter's match.
+  socket.on('mapPropDestroyed', (data) => {
+    const p = players[socket.id];
+    if (!p || p.dead || !p.matchId || !data) return;
+    const mapName = String(data.mapName || ''), propId = String(data.propId || '');
+    if (!/^[a-z0-9_]{1,40}$/.test(mapName) || !propId.startsWith(mapName + ':') || propId.length > 80 || !/^[a-z0-9_]+:-?\d+(?:\.\d+)?:-?\d+(?:\.\d+)?$/.test(propId)) return;
+    const now = Date.now();
+    if (!p._propWindow || now - p._propWindow > 1000) { p._propWindow = now; p._propCount = 0; }
+    if (++p._propCount > 32) return;
+    emitToMatchExcept(p.matchId, socket.id, 'mapPropDestroyed', { mapName, propId, ownerId: socket.id });
   });
 
   socket.on('airBlast', (data) => {
