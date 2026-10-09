@@ -5739,6 +5739,22 @@ function registerMap(name) {
 function setMapBounds(mapName, width, depth = width) {
   MAP_BOUNDS[mapName] = { halfX: width / 2, halfZ: depth / 2 };
 }
+// Empties a map so a layout can be built on top of it: every child out of the
+// group, every collider and gimmick dropped. _bkBegin starts here, so all 42
+// _BESPOKE layouts go through it, and so do the generated-layout maps. (It used
+// to be named for the generator and to live down inside it, which read as if
+// the generator were its only caller.)
+function resetMapContents(name) {
+  if (isArchivedLobbyMap(name)) return;
+  const group = MAP_GROUPS[name];
+  if (!group) return;
+  while (group.children.length) {
+    const child = group.children.pop();
+    if (child.parent) child.parent.remove(child);
+  }
+  MAP_COLLIDERS[name] = [];
+  MAP_GIMMICKS[name] = { damageZones: [], jumpPads: [], iceZones: [], oilZones: [], lowGravZones: [] };
+}
 
 // Legacy refs for existing buildBlankMap/Battlefield/Range — bridge them to the registry
 registerMap('blank');
@@ -6314,29 +6330,6 @@ function mergeMapOnActivate(name) {
   if (!group || group._merged) return;
   try { _mapDrawsSaved += mergeMapStatics(name, _meshesHeldByMechanics()); }
   catch (e) { console.warn('[merge]', name, e); }
-}
-
-function addLowPolyArenaCover(mapName, color = 0x777064) {
-  const group = MAP_GROUPS[mapName];
-  if (!group || group._arenaCoverAdded) return;
-  group._arenaCoverAdded = true;
-  const matA = color;
-  const matB = Math.max(0, color - 0x181818);
-  [
-    [-18, -10, 8, 2.2, 2.4,  0.15],
-    [ 18,  10, 8, 2.2, 2.4, -0.15],
-    [-10,  20, 2.4, 2.2, 8, 0],
-    [ 10, -20, 2.4, 2.2, 8, 0],
-  ].forEach(([x, z, w, h, d, rot], i) => {
-    addMapBox(mapName, x, h / 2, z, w, h, d, i % 2 ? matA : matB, rot);
-  });
-}
-
-function addLowPolyArenaWalls(mapName, color = 0x3a3a34) {
-  const group = MAP_GROUPS[mapName];
-  if (!group || group._arenaWallsAdded) return;
-  group._arenaWallsAdded = true;
-  addOuterWalls(mapName, color);
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -10790,11 +10783,12 @@ buildMagmaRiseMap();
 // ──────────────────────────────────────────────────────────────────────────
 registerMap('br_arena');
 // 🗺️ Two dedicated big-footprint arenas for 2v2/3v3 -- a bigger, denser step
-// up from the standard 172 map, and a bigger one again. Both ride the grid
-// concept system below (addGridConceptMap): no hand-built content of their
-// own, just a bigger size, a forced archetype (never each other's, and never
-// br_arena's -- a fresh footprint each), and extra addGridClutter density so
-// a wider map doesn't read as emptier, just as more of one.
+// up from the standard map, and a bigger one again. They started as generated
+// blockouts; both have had hand-built layouts for a while now
+// (buildBigArenaLayout, a fortress of four corner keeps, and
+// buildSuperArenaLayout, a city of nine blocks), so addGridConceptMap no longer
+// touches either -- the comment here claimed otherwise long after it stopped
+// being true, and #66 planned around it (#69).
 registerMap('big_arena');
 registerMap('super_arena');
 function buildBrArenaMap() {
@@ -10928,30 +10922,26 @@ buildObbyMap();
 buildLobby13Map();
 loadAdminCustomMaps();
 
-// ── White Grid Concepts ────────────────────────────────────────────────────
-// The original themed maps are archived in docs/archive. Active maps now use a
-// TABS-style prototype language: white grid floors, grounded blockout shapes,
-// clear lanes, and no decorative floating pieces.
+// ── Generated layouts (white grid concepts) ───────────────────────────────
+// A TABS-style prototype language -- white grid floor, grounded blockout
+// shapes, clear lanes, no decorative floating pieces -- sized and themed per
+// map. It laid out every map once; the themed maps have taken their layouts
+// back one at a time since, and three maps are still built from here.
 const GRID_MAP_ARCHETYPES = [
   'blank_slate', 'three_lane', 'courtyard', 'stairs', 'tower_corners',
   'crossroads', 'trenches', 'warehouse_lanes', 'ring', 'bridge',
   'outpost', 'block_row',
 ];
-const GRID_CONCEPT_MAPS_ACTIVE = true;
-// Hand-built maps with their own mechanics: the grid-concept pass below must not wipe them.
-const MECHANIC_MAP_NAMES = new Set(['storm_pier', 'pinball_arcade', 'laser_vault', 'cargo_belts', 'gale_peaks', 'magma_rise',
-  'titanic', 'warehouse', 'urban', 'airport', 'train', 'supermarket', 'battlefield', 'forest', 'vietnam', 'desert', 'tundra', 'trenches', 'overgrowth', 'holiday', 'labyrinth', 'cyber', 'space', 'orbital_station', 'gravity_lab', 'glassworks', 'studio', 'lockdown', 'opera', 'sewer', 'chernobyl', 'refinery', 'foundry', 'carrier', 'pearl_harbor', 'skydock', 'doomsday', 'volcano', 'carnival', 'temple', 'arena', 'biosphere', 'dreamscape', 'pyongyang', 'traffic_cone_republic', 'flying_moai', 'big_arena', 'super_arena']);   // + the hand-built layouts (see _BESPOKE)
-function clearMapForGridConcept(name) {
-  if (isArchivedLobbyMap(name)) return;
-  const group = MAP_GROUPS[name];
-  if (!group) return;
-  while (group.children.length) {
-    const child = group.children.pop();
-    if (child.parent) child.parent.remove(child);
-  }
-  MAP_COLLIDERS[name] = [];
-  MAP_GIMMICKS[name] = { damageZones: [], jumpPads: [], iceZones: [], oilZones: [], lowGravZones: [] };
-}
+// The maps still laid out from here. Everything else builds its own: 42 maps
+// through _BESPOKE, the six mechanic maps in their own builders, and lobby13 /
+// obby / base_raid / the M4 Towers by hand. This used to be the inverse -- a
+// list of 48 names to SKIP, still named for mechanic maps long after it had
+// come to mean "has its own layout" -- which hid the fact that three maps were
+// left behind, and all three are live: blank is in MAP_IDS (the random pool,
+// mirrored in server.js), range is the shooting range and br_arena is King of
+// the Hill. All three also re-roll their clutter on every page load. Whether
+// they deserve hand-built layouts instead is #69.
+const GENERATED_LAYOUT_MAPS = new Set(['blank', 'range', 'br_arena']);
 function addGridConceptGround(name, size = 140) {
   const group = MAP_GROUPS[name];
   setMapBounds(name, size, size);
@@ -11134,9 +11124,8 @@ function addGridBlock(name, cx, cz, sizeX, sizeZ, groundH, roofH, flip = false) 
   addGridLadder(name, cx + dir * (sizeX / 2 + 0.16), cz, Math.PI / 2, 0, roofH);
 }
 function addGridConceptMap(name, index) {
-  if (isArchivedLobbyMap(name) || name === 'base_raid' || M4_TOWER_MAP_NAMES.has(name) || MECHANIC_MAP_NAMES.has(name)) return;
-  if (name.startsWith(ADMIN_CUSTOM_MAP_PREFIX)) return;
-  clearMapForGridConcept(name);
+  if (!GENERATED_LAYOUT_MAPS.has(name)) return;
+  resetMapContents(name);
   const large = name === 'br_arena';
   const compact = name === 'range';
   const big = name === 'big_arena';
@@ -11252,15 +11241,19 @@ function addGridConceptMap(name, index) {
   B(-half / s + 10, 0.04, 0, 7, 0.08, 24, 0, 0xe9f2ff);
   B( half / s - 10, 0.04, 0, 7, 0.08, 24, 0, 0xffeeee);
 }
-function replaceBuiltMapsWithGridConcepts() {
+// The walk stays over every registered map, because the archetype is
+// index % GRID_MAP_ARCHETYPES.length of it -- blank is 0, range 2, br_arena 54
+// -- so narrowing it to the three would silently re-roll their layouts.
+function buildGeneratedLayoutMaps() {
+  // Rebuilding a map leaves its destructibles, mortars and vehicles pointing at
+  // meshes that are no longer in the scene. Dropping them keeps the arrays honest
+  // -- and takes br_arena's own jeeps, helicopters and mortars with it (#68).
   mapDestructibles.length = 0;
   mapMortars.length = 0;
   mapVehicles.length = 0;
-  Object.keys(MAP_GROUPS).forEach((name, index) => {
-    if (!isArchivedLobbyMap(name) && name !== 'obby') addGridConceptMap(name, index);
-  });
+  Object.keys(MAP_GROUPS).forEach((name, index) => addGridConceptMap(name, index));
 }
-replaceBuiltMapsWithGridConcepts();
+buildGeneratedLayoutMaps();
 
 // ═══ 🎨 MAP THEMES ═══════════════════════════════════════════════════════════
 // The grid-concept pass gave every map a layout, in white. This gives every map a place: its own palette (ground,
@@ -12650,7 +12643,7 @@ function _bkit(name) {
   return K;
 }
 function _bkBegin(name, w, d, groundColor) {
-  clearMapForGridConcept(name);
+  resetMapContents(name);
   const K = _bkit(name); K.ground(w, d, groundColor); return K;
 }
 function _pointInRotRect(x, z, r, pad = 0) {
@@ -14291,36 +14284,11 @@ function initMapThemes() {
 }
 initMapThemes();
 
-// Bespoke layouts own their routes and cover. Only legacy layouts need the
-// generic arena pass; all maps still receive flat shading below.
-const LOW_POLY_BOUNDARY_MAPS = [
-  'carrier', 'overgrowth', 'orbital_station', 'foundry', 'carnival',
-  'biosphere', 'lockdown', 'studio', 'temple', 'holiday', 'labyrinth',
-  'arena', 'opera', 'doomsday', 'dreamscape',
-];
-const LOW_POLY_COVER_COLORS = {
-  urban: 0x6a6258, warehouse: 0x7a5a38, forest: 0x536b34, vietnam: 0x4a5b2d,
-  volcano: 0x2a1a12, cyber: 0x243052, desert: 0x9a7652, tundra: 0x9fb4c4,
-  space: 0x3a4860, airport: 0xb4b7ba, trenches: 0x7a623a, chernobyl: 0x596452,
-  refinery: 0x4f493e, skydock: 0x4e6678, sewer: 0x40493c, gravity_lab: 0x3e4568,
-  glassworks: 0xb8c7cc, carrier: 0x5f676f, overgrowth: 0x56634b,
-  orbital_station: 0x8090a0, foundry: 0x5e5040, carnival: 0x80506a,
-  biosphere: 0x5f7458, lockdown: 0x5b5b54, studio: 0x665846, temple: 0x8a7a54,
-  holiday: 0xb9c5d0, labyrinth: 0x555555, arena: 0x4e6b4e, opera: 0x6b4450,
-  doomsday: 0x5a4a3a, dreamscape: 0x724f86, train: 0x666a6e,
-  pearl_harbor: 0x8a6a3a, titanic: 0xbfa36f, supermarket: 0x94a2ad,
-  pyongyang: 0x7c7c74, traffic_cone_republic: 0xc0b8a8, flying_moai: 0x7d756a,
-};
-function applyLowPolyMapPlayabilityPass() {
-  if (!GRID_CONCEPT_MAPS_ACTIVE) {
-    LOW_POLY_BOUNDARY_MAPS.filter(name => !_BESPOKE[name]).forEach(name => addLowPolyArenaWalls(name, 0x343434));
-    Object.keys(MAP_GROUPS).forEach(name => {
-      if (name === 'blank' || name === 'range' || name === 'battlefield' || name === 'lobby13' || name === 'br_arena') return;
-      if (name.startsWith(ADMIN_CUSTOM_MAP_PREFIX)) return;
-      if (_BESPOKE[name]) return;
-      addLowPolyArenaCover(name, LOW_POLY_COVER_COLORS[name] || 0x6f6a60);
-    });
-  }
+// Flat shading for every map, whatever built it. The generic arena pass that
+// used to run first (addLowPolyArenaWalls / addLowPolyArenaCover over every map
+// without a _BESPOKE layout) sat behind a flag that has been `true` since it was
+// introduced, so none of it ever ran -- gone with its two colour tables in #69.
+function applyFlatShadingToMaps() {
   Object.values(MAP_GROUPS).forEach(group => {
     group.traverse(o => {
       if (!o.isMesh) return;
@@ -14340,7 +14308,7 @@ function applyLowPolyMapPlayabilityPass() {
     });
   });
 }
-applyLowPolyMapPlayabilityPass();
+applyFlatShadingToMaps();
 
 // ══════════════════════════════════════════════════════════════════════════
 // 🏚️ MAP SURFACE PASS — reflective, and not perfectly clean
