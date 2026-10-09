@@ -14479,6 +14479,143 @@ function weatherMapGroup(group) {
 function weatherAllMaps() {
   Object.values(MAP_GROUPS).forEach(g => { try { weatherMapGroup(g); } catch (e) {} });
 }
+// ═══ 🥚 EASTER EGGS ═══════════════════════════════════════════════════════════════════════════════════════════════
+// Things to find. Three kinds, all of them dressing on top of finished maps (nothing here moves a spawn or a route):
+//   • messages sprayed on walls, and on the top of anything crane-shaped, where only someone who goes looking will see;
+//   • a SLIDE-JUMP ROUTE: four blocks along the edge of the map, rising a little each time, 15 m apart. A run-up jump
+//     carries about 8 m and a double jump about 14, so the gaps are there to be crossed only by sliding into a jump
+//     (the slide's speed carried into the air is worth 16-21 m). The last block has a note on it;
+//   • a FLOATING CHAIN, in the maps that are not meant to be real places only: three platforms at 7, 10 and 13 m, a
+//     blast jump from one to the next, to be reached with the grenade launcher at your own feet.
+// Everything is placed by looking at what the map already has (colliders, bounds, spawn rectangles), seeded from the
+// map's name so it is the same on every machine, and skipped where it does not fit rather than squeezed in.
+const EGG_NOTES = ['mochi wuz hair', 'you found it :)', 'skill issue', 'slide + jump', "don't look down", 'the cake is a lie',
+  'hi from the devs', 'secret #7', 'try the grenade launcher', 'ur doing great', 'no camping', 'sushi sensei was here'];
+const EGG_SKIP = new Set(['blank', 'range', 'obby', 'm4_tower', 'm4_tower_big', 'm4_tower_super', 'storm_pier', 'pinball_arcade',
+  'laser_vault', 'cargo_belts', 'gale_peaks', 'magma_rise', 'br_arena', 'base_raid']);
+const EGG_FLOATING = new Set(['space', 'orbital_station', 'gravity_lab', 'dreamscape', 'flying_moai', 'cyber', 'super_arena']);
+function _eggSign(name, text, x, y, z, ry, w = 3.2, color = '#fff36a') {
+  const c = document.createElement('canvas'); c.width = 512; c.height = 128;
+  const g = c.getContext('2d');
+  g.font = 'bold 72px "Marker Felt","Chalkboard SE","Comic Sans MS",cursive'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.lineJoin = 'round'; g.lineWidth = 11; g.strokeStyle = 'rgba(0,0,0,0.6)'; g.strokeText(text, 256, 60, 488);
+  g.fillStyle = color; g.fillText(text, 256, 60, 488);
+  g.fillStyle = color;   // a few drips of paint
+  for (let i = 0; i < 4; i++) g.fillRect(70 + ((i * 97 + text.length * 31) % 370), 92, 4, 8 + ((i * 53 + text.length * 7) % 22));
+  const tex = new THREE.CanvasTexture(c);
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, w / 4),
+    new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2 }));
+  m.position.set(x, y, z); m.rotation.y = ry; m.raycast = () => {}; m.userData.eggSign = true;
+  MAP_GROUPS[name].add(m);
+  return m;
+}
+// Is this box of space empty of every collider (to within `pad`), inside the map, and clear of the spawn rectangles?
+function _eggFree(name, x0, x1, z0, z1, y0, y1, pad = 0.6) {
+  const b = MAP_BOUNDS[name], sp = MAP_SPAWNS[name];
+  if (!b || x0 < -b.halfX + 2.5 || x1 > b.halfX - 2.5 || z0 < -b.halfZ + 2.5 || z1 > b.halfZ - 2.5) return false;
+  if (sp) for (const r of [sp.ally, sp.enemy]) if (r && x1 > r.x0 - 5 && x0 < r.x1 + 5 && z1 > r.z0 - 5 && z0 < r.z1 + 5) return false;
+  for (const c of MAP_COLLIDERS[name] || []) {
+    if (c.max.x > x0 - pad && c.min.x < x1 + pad && c.max.z > z0 - pad && c.min.z < z1 + pad && c.max.y > y0 && c.min.y < y1) return false;
+  }
+  return true;
+}
+function _eggMessages(name, rnd) {
+  const boxes = (MAP_COLLIDERS[name] || []), b = MAP_BOUNDS[name], notes = EGG_NOTES.slice();
+  for (let i = notes.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [notes[i], notes[j]] = [notes[j], notes[i]]; }
+  let used = 0; const placed = [];
+  const spaced = (x, z) => placed.every(p => Math.hypot(p[0] - x, p[1] - z) > 22);
+  // 1. the top of anything crane-shaped
+  const cranes = boxes.filter(c => c.min.y < 0.5 && c.max.y - c.min.y >= 8 && c.max.x - c.min.x <= 2.4 && c.max.z - c.min.z <= 2.4);
+  if (cranes.length) {
+    const c = cranes[Math.floor(rnd() * cranes.length)], cx = (c.min.x + c.max.x) / 2, cz = (c.min.z + c.max.z) / 2;
+    const l = Math.hypot(cx, cz) || 1, nx = -cx / l, nz = -cz / l;   // face the middle of the map
+    _eggSign(name, 'mochi wuz hair', cx + nx * 1.1, c.max.y - 1.3, cz + nz * 1.1, Math.atan2(nx, nz), 3.6, '#ff9ad0');
+    placed.push([cx, cz]); used++;
+  }
+  // 2. a wall nobody is sent to
+  const cands = [];
+  for (const c of boxes) {
+    const h = c.max.y - c.min.y; if (c.min.y > 0.6 || h < 3.2) continue;
+    const cx = (c.min.x + c.max.x) / 2, cz = (c.min.z + c.max.z) / 2, lx = c.max.x - c.min.x, lz = c.max.z - c.min.z;
+    for (const [nx, nz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const len = nx ? lz : lx; if (len < 4.5) continue;
+      const fx = cx + nx * (lx / 2), fz = cz + nz * (lz / 2), px = fx + nx * 1.8, pz = fz + nz * 1.8;
+      if (Math.hypot(fx, fz) < Math.min(b.halfX, b.halfZ) * 0.3) continue;
+      if (!_eggFree(name, px - 0.5, px + 0.5, pz - 0.5, pz + 0.5, 1.0, 2.8, 0.2)) continue;
+      cands.push({ x: fx + nx * 0.05, z: fz + nz * 0.05, y: Math.min(2.5, c.max.y - 1), ry: Math.atan2(nx, nz), w: Math.min(3.4, len - 0.8) });
+    }
+  }
+  for (let i = cands.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [cands[i], cands[j]] = [cands[j], cands[i]]; }
+  const colors = ['#fff36a', '#7affc8', '#ff9a6a', '#9ad0ff'];
+  for (const c of cands) {
+    if (used >= 3) break;
+    if (!spaced(c.x, c.z)) continue;
+    _eggSign(name, notes[used % notes.length], c.x, c.y, c.z, c.ry, c.w, colors[used % colors.length]);
+    placed.push([c.x, c.z]); used++;
+  }
+}
+// Four blocks 15 m apart in a straight line, rising 0.6 m each: the slide-jump line. Edges first, where a route like
+// this belongs, then anywhere the map has a free corridor.
+function _eggSlideRoute(name, rnd, note) {
+  const b = MAP_BOUNDS[name], PITCH = 19, SZ = 4, tops = [3.0, 3.6, 4.2, 4.8], span = 3 * PITCH + SZ;
+  const th = MAP_THEMES[name], color = th ? th.c : 0x8a8f94;
+  for (let tr = 0; tr < 120; tr++) {
+    const alongX = rnd() < 0.5, longH = alongX ? b.halfX : b.halfZ, crossH = alongX ? b.halfZ : b.halfX;
+    if (longH * 2 - 10 < span) continue;
+    // the first 40 tries hug an edge, the rest take any cross line
+    const cross = tr < 40 ? (rnd() < 0.5 ? 1 : -1) * (crossH - 6.5 - rnd() * 4) : (rnd() * 2 - 1) * (crossH - 7);
+    const start = -longH + 5 + rnd() * (longH * 2 - 10 - span), dir = rnd() < 0.5 ? 1 : -1;
+    const pads = []; let ok = true;
+    for (let k = 0; k < 4 && ok; k++) {
+      const along = dir > 0 ? start + k * PITCH + SZ / 2 : -(start + k * PITCH + SZ / 2);
+      const cx = alongX ? along : cross, cz = alongX ? cross : along;
+      if (!_eggFree(name, cx - SZ / 2, cx + SZ / 2, cz - SZ / 2, cz + SZ / 2, 0, tops[k] + 2.2, 0.8)) ok = false;
+      pads.push([cx, cz]);
+    }
+    if (!ok) continue;
+    pads.forEach(([cx, cz], k) => { addMapBox(name, cx, tops[k] / 2, cz, SZ, tops[k], SZ, color).userData.egg = 'route'; });
+    // a hint at the start (on the face you run up to), and the prize at the far end, facing back down the line
+    const [sx, sz] = pads[0], [ex, ez] = pads[3];
+    const fx = alongX ? -dir : 0, fz = alongX ? 0 : -dir;      // the way the line points back from its first block
+    _eggSign(name, 'slide + jump', sx + fx * (SZ / 2 + 0.05), tops[0] - 0.9, sz + fz * (SZ / 2 + 0.05), Math.atan2(fx, fz), 3.0, '#ffd24a');
+    addMapBox(name, ex, tops[3] + 0.9, ez, 0.2, 1.8, 0.2, 0x3a3f46);
+    _eggSign(name, note, ex, tops[3] + 2.1, ez, Math.atan2(-fx, -fz) + Math.PI, 3.4, '#7affc8');
+    return true;
+  }
+  return false;
+}
+// Three platforms climbing out of reach of a plain jump, one blast apart. Unrealistic maps only.
+function _eggFloatingChain(name, rnd, note) {
+  const b = MAP_BOUNDS[name], th = MAP_THEMES[name], color = th ? th.a : 0x6ad0ff;
+  const tops = [7.0, 10.0, 13.0], HOP = 7.0;
+  for (let tr = 0; tr < 300; tr++) {
+    const x = (rnd() * 2 - 1) * (b.halfX - 16), z = (rnd() * 2 - 1) * (b.halfZ - 16);
+    const a = Math.floor(rnd() * 8) * Math.PI / 4, step = [Math.cos(a) * HOP, Math.sin(a) * HOP];
+    const turn = (rnd() < 0.5 ? 1 : -1) * Math.PI / 4;
+    const dirs = [[step[0], step[1]], [Math.cos(a + turn) * HOP, Math.sin(a + turn) * HOP]];
+    const pts = [[x, z], [x + dirs[0][0], z + dirs[0][1]]]; pts.push([pts[1][0] + dirs[1][0], pts[1][1] + dirs[1][1]]);
+    if (!pts.every(([px, pz], k) => { const r = k === 2 ? 3.4 : 2.6; return _eggFree(name, px - r, px + r, pz - r, pz + r, tops[k] - 1.2, tops[k] + 3.0, 1.0); })) continue;   // only the platform's own band: what stands under it is just more cover
+    pts.forEach(([px, pz], k) => { const r = k === 2 ? 6 : 4.5; addMapBox(name, px, tops[k] - 0.3, pz, r, 0.6, r, color).userData.egg = 'chain'; });
+    const [ex, ez] = pts[2], l = Math.hypot(ex, ez) || 1, nx = -ex / l, nz = -ez / l;
+    addMapBox(name, ex, tops[2] + 0.9, ez, 0.2, 1.8, 0.2, 0x3a3f46);
+    _eggSign(name, note, ex, tops[2] + 2.1, ez, Math.atan2(nx, nz), 3.4, '#ff9ad0');
+    return true;
+  }
+  return false;
+}
+function addMapEasterEggs() {
+  for (const name of Object.keys(MAP_THEMES)) {
+    if (EGG_SKIP.has(name) || !MAP_GROUPS[name] || !MAP_BOUNDS[name] || !MAP_COLLIDERS[name]) continue;
+    const rnd = _thRng(name + ':eggs');
+    try { _eggMessages(name, rnd); } catch (e) { console.warn('[eggs]', name, e); }
+    try {
+      if (EGG_FLOATING.has(name)) _eggFloatingChain(name, rnd, 'gl jump wuz here');
+      else _eggSlideRoute(name, rnd, 'you slide jumped!');
+    } catch (e) { console.warn('[eggs]', name, e); }
+  }
+}
+addMapEasterEggs();
+
 weatherAllMaps();
 camera.add(_vmKey); camera.add(_vmFill);
 scene.add(camera);   // lights parented to the camera only render if it is in the scene
