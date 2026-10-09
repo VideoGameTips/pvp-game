@@ -124,7 +124,7 @@ try {
 
 if (ok && process.argv.includes('--maps')) {
   const issues = vm.runInThisContext(`(() => {
-    const issues = [], names = Object.keys(_BESPOKE);
+    const issues = [], names = [...Object.keys(_BESPOKE), ...M4_TOWER_MAP_NAMES];
     for (const rot of [-0.35, 0.35, Math.PI / 4]) {
       const rect = { x: 7, z: -11, w: 38, d: 8, rot };
       const x = rect.x + 16 * Math.cos(rot), z = rect.z - 16 * Math.sin(rot);
@@ -135,8 +135,17 @@ if (ok && process.argv.includes('--maps')) {
     for (const name of names) {
       const b = MAP_BOUNDS[name], s = MAP_SPAWNS[name], g = MAP_GROUPS[name];
       if (!b || !s || !g || !MAP_COLLIDERS[name].length) { issues.push(name + ': incomplete map'); continue; }
-      if (name !== 'volcano' && !g.userData.identityRefined) issues.push(name + ': identity pass did not finish');
+      if (_BESPOKE[name] && !g.userData.identityRefined) issues.push(name + ': identity pass did not finish');
       for (const col of MAP_COLLIDERS[name]) if (![col.min.x, col.min.y, col.min.z, col.max.x, col.max.y, col.max.z].every(Number.isFinite)) issues.push(name + ': invalid collider');
+      const boundary = MAP_COLLIDERS[name].filter(c => c.min.y < 0.1 && c.max.y >= 12 && (Math.abs(c.min.x) > b.halfX - 4 || Math.abs(c.max.x) > b.halfX - 4 || Math.abs(c.min.z) > b.halfZ - 4 || Math.abs(c.max.z) > b.halfZ - 4));
+      if (boundary.length < 4) issues.push(name + ': missing high perimeter walls');
+      const allies = mapSpawnSightlineSamples(s.ally), enemies = mapSpawnSightlineSamples(s.enemy);
+      let visible = 0;
+      for (const a of allies) for (const enemy of enemies) {
+        const dir = enemy.clone().sub(a), distance = dir.length(), ray = new THREE.Ray(a, dir.normalize()), hit = new THREE.Vector3();
+        if (!MAP_COLLIDERS[name].some(c => ray.intersectBox(c, hit) && hit.distanceTo(a) < distance)) visible++;
+      }
+      if (visible) issues.push(name + ': ' + visible + ' exposed starting sightlines');
       for (const [team, r] of Object.entries(s)) {
         if (r.x0 < -b.halfX || r.x1 > b.halfX || r.z0 < -b.halfZ || r.z1 > b.halfZ) issues.push(name + ': ' + team + ' spawn outside bounds');
         let free = 0;
@@ -170,7 +179,7 @@ if (ok && process.argv.includes('--maps')) {
 
 if (ok && process.env.MAP_REVIEW_DIR) {
   fs.mkdirSync(process.env.MAP_REVIEW_DIR, { recursive: true });
-  for (const name of ['forest', 'desert', 'tundra', 'refinery', 'space', 'volcano']) {
+  for (const name of ['forest', 'desert', 'tundra', 'refinery', 'space', 'volcano', 'titanic', 'carrier', 'pearl_harbor']) {
     const json = vm.runInThisContext('MAP_GROUPS[' + JSON.stringify(name) + '].toJSON()');
     fs.writeFileSync(path.join(process.env.MAP_REVIEW_DIR, name + '.json'), JSON.stringify(json));
   }

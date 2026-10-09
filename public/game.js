@@ -6193,7 +6193,7 @@ function addMapGround(mapName, color, gridColor) {
   }
 }
 function addOuterWalls(mapName, color) {
-  [[100,4,1,0,2,-50],[100,4,1,0,2,50],[1,4,100,-50,2,0],[1,4,100,50,2,0]].forEach(([w,h,d,x,y,z]) => {
+  [[100,12,1,0,6,-50],[100,12,1,0,6,50],[1,12,100,-50,6,0],[1,12,100,50,6,0]].forEach(([w,h,d,x,y,z]) => {
     addMapBox(mapName, x, y, z, w, h, d, color);
   });
 }
@@ -6423,7 +6423,8 @@ function buildM4TowerStoryMap(name, stories, scale) {
   const grid = new THREE.GridHelper(half * 2, 50, 0x3c4246, 0x3c4246);
   grid.position.y = 0.01;
   MAP_GROUPS[m].add(grid);
-  [[half*2,4,1,0,2,-half],[half*2,4,1,0,2,half],[1,4,half*2,-half,2,0],[1,4,half*2,half,2,0]].forEach(([w,h,d,x,y,z]) => {
+  const boundaryH = Math.max(12, roofY + 0.35);
+  [[half*2,boundaryH,1,0,boundaryH/2,-half],[half*2,boundaryH,1,0,boundaryH/2,half],[1,boundaryH,half*2,-half,boundaryH/2,0],[1,boundaryH,half*2,half,boundaryH/2,0]].forEach(([w,h,d,x,y,z]) => {
     addMapBox(m, x, y, z, w, h, d, 0x30343a);
   });
   const deck = 0x747b80, wall = 0x454a50, trim = 0xa98d55, cover = 0x5b635f;
@@ -10967,7 +10968,7 @@ function addGridStairs(name, x0, z0, dirX, dirZ, steps = 5, width = 8, depth = 2
       dirZ ? width : depth, h, dirX ? width : depth, 0xf7f7f7);
   }
 }
-function addGridPerimeter(name, half = 64, height = 5.2) {
+function addGridPerimeter(name, half = 64, height = 12) {
   const wall = 0xf4f4f4;
   addMapBox(name, 0, height / 2, -half, half * 2 + 4, height, 2.8, wall);
   addMapBox(name, 0, height / 2,  half, half * 2 + 4, height, 2.8, wall);
@@ -11159,7 +11160,7 @@ function _buildGridConceptMap(name, index) {
   const superBig = name === 'super_arena';
   const size = superBig ? 300 : big ? 220 : large ? 260 : compact ? 100 : 172;
   const half = size / 2 - 6;
-  const h = superBig ? 11.4 : big ? 9.4 : large ? 10.2 : 8.4;
+  const h = superBig ? 16 : big ? 14 : 12;
   addGridConceptGround(name, size);
   addGridPerimeter(name, half, h);
 
@@ -13605,7 +13606,7 @@ function buildCarrierLayout() {
 // 🌊 Pearl Harbor: a dock and a battleship. The ship's deck is two metres up with a stair on to it, a superstructure
 // and turrets; the dock has warehouses, cranes and tanks to fight round and through.
 function buildPearlHarborLayout() {
-  const name = 'pearl_harbor', K = _bkBegin(name, 110, 170, 0x8a8a7a);
+  const name = 'pearl_harbor', K = _bkBegin(name, 160, 170, 0x8a8a7a);
   K.perim(7, 0x7a8a96);
   const hull = 0x5a6a76, deckC = 0x8a8a7a;
   // the battleship, moored along the east side
@@ -13621,6 +13622,19 @@ function buildPearlHarborLayout() {
   for (const [x, z] of [[-14, -40], [-14, 40]]) { K.box(x - 2, 0, z, 0.8, 12, 0.8, 0xc8402a); K.box(x + 2, 0, z, 0.8, 12, 0.8, 0xc8402a); K.box(x, 11, z, 5, 0.8, 0.8, 0xc8402a); K.box(x + 6, 11, z, 12, 0.6, 0.6, 0xc8402a); }   // dock cranes
   K.mound(-24, -10, -20, -6, 4.6, 0xb8b2a4, ['e']); K.mound(-24, -10, 6, 20, 4.6, 0xa8a294, ['e']);                                         // fuel tanks
   for (const [x, z] of [[-20, 0], [-6, -26], [-6, 26], [4, -50], [4, 50], [-26, 52], [-26, -52], [10, 14], [10, -14]]) K.crate(x, z, 0x7a6a4a);
+  // An escort destroyer alongside the western quay, with two independent gangways.
+  K.box(-66, 0, 0, 18, 2.4, 90, 0x394e5b);
+  _bkBuilding(K, -72, -60, -9, 9, { floors: 2, color: 0x7f929d, roof: 0x3b505e, doors: ['n', 's', 'e', 'w'], base: 2.4 });
+  for (const z of [-17, 17]) K.stairs(-51.5, z, 'W', 2.4, 4, 0x71838b, 0, 1, 0.4);
+  for (const z of [-30, 30]) {
+    K.box(-66, 2.4, z, 7, 1.8, 7, 0x596e7a);
+    for (const x of [-67.5, -64.5]) K.box(x, 3.4, z + Math.sign(z) * 4, 0.7, 0.7, 9, 0x293f4b);
+  }
+  K.box(-66, 11.6, 0, 1, 8, 1, 0x394e5b);
+  K.box(-66, 17.6, 0, 10, 0.6, 0.6, 0x394e5b);
+  for (const x of [-74.7, -57.3]) K.wz(-45, 45, x, 0.3, 2.4, 1.1, 0xb3c2ca, [-17, 17].map(at => ({ at, w: 5, sill: 0, top: 2 })));
+  for (const z of [-43, 43]) K.box(-66, 2.4, z, 4, 1.2, 2, 0x526674);
+  K.poi('escort deck', -66, 17, 2.4);
   K.spawn({ x0: -34, x1: 6, z0: 64, z1: 78 }, { x0: -34, x1: 6, z0: -78, z1: -64 });
   MAP_GROUPS[name]._skyColor = 0x9ac8e8;
 }
@@ -14080,7 +14094,7 @@ function buildTundraIdentityLayout() {
 Object.assign(_BESPOKE, { forest: buildForestIdentityLayout, desert: buildDesertIdentityLayout, tundra: buildTundraIdentityLayout });
 
 function refineMapIdentity(name) {
-  if (!_BESPOKE[name] || name === 'volcano') return;
+  if (!_BESPOKE[name]) return;
   const group = MAP_GROUPS[name], K = _bkit(name), th = MAP_THEMES[name];
   const detail = _thBuf(), glow = _thBuf();
   const box = (x, y, z, w, h, d, c, lit = false) => _thBox(lit ? glow : detail, _TH_WORLD, x, y + h / 2, z, w, h, d, c);
@@ -14097,6 +14111,37 @@ function refineMapIdentity(name) {
     if (!m.isMesh || m.geometry.type !== 'BoxGeometry' || !p) continue;
     const { width: w, height: h, depth: d } = p, c = m.material?.color?.getHex();
     const host = (lx, ly, lz, bw, bh, bd, col, lit = false) => _thBox(lit ? glow : detail, m, lx, ly, lz, bw, bh, bd, col);
+    const long = Math.max(w, d), thin = Math.min(w, d), alongX = w > d;
+    const nature = ['forest', 'vietnam', 'overgrowth', 'biosphere', 'holiday'].includes(name);
+    const masonry = ['temple', 'desert', 'arena', 'big_arena', 'labyrinth', 'flying_moai', 'doomsday'].includes(name);
+    const ships = ['titanic', 'carrier', 'pearl_harbor', 'skydock'].includes(name);
+    if (nature && h > 6 && w < 3.5 && d < 3.5) {
+      for (const x of [-w * 0.3, w * 0.3]) host(x, 0, d / 2 + 0.015, 0.09, h * 0.88, 0.03, _thShade(c, 0.65));
+    }
+    if (masonry && thin < 3 && long > 5 && h > 3) {
+      for (let y = -h / 2 + 0.6, row = 0; y < h / 2; y += 1.2, row++) for (let a = -long / 2 + 1.5 + (row % 2) * 1.5; a < long / 2 - 0.3; a += 3) {
+        host(alongX ? a : 0, y, alongX ? 0 : a, alongX ? 0.045 : w + 0.04, 1.15, alongX ? d + 0.04 : 0.045, _thShade(c, 0.72));
+      }
+    }
+    if (name === 'tundra' && c === 0x7db6d2 && h >= 4) {
+      for (const sx of [-1, 1]) for (let a = -d / 2 + 1; a < d / 2; a += 3) host(sx * (w / 2 + 0.025), 0, a, 0.05, h * 0.8, 0.12, 0xbadce9);
+    }
+    if (name === 'volcano' && h >= 7 && thin < 4) {
+      for (const y of [-h * 0.3, 0, h * 0.3]) host(0, y, 0, w + 0.025, 0.045, d + 0.025, 0x665049);
+      host(w / 2 + 0.02, -h * 0.23, 0, 0.04, h * 0.22, 0.09, 0xb54d24, true);
+    }
+    if (!nature && !masonry && thin < 2 && long > 5 && h >= 3) {
+      // Panel seams and fasteners stay flush with the host surface.
+      for (let a = -long / 2 + 0.5; a < long / 2; a += 4) for (const y of [-h / 2 + 0.35, h / 2 - 0.35]) {
+        host(alongX ? a : 0, y, alongX ? 0 : a, alongX ? 0.09 : w + 0.045, 0.09, alongX ? d + 0.045 : 0.09, _thShade(c, 1.32));
+      }
+    }
+    if (ships && thin < 1.6 && long > 5 && h >= 3 && h < 5) {
+      for (let a = -long / 2 + 2; a < long / 2 - 1; a += 5) {
+        host(alongX ? a : 0, 0.5, alongX ? 0 : a, alongX ? 0.8 : w + 0.07, 0.8, alongX ? d + 0.07 : 0.8, 0xb1a889);
+        host(alongX ? a : 0, 0.5, alongX ? 0 : a, alongX ? 0.58 : w + 0.09, 0.58, alongX ? d + 0.09 : 0.58, 0x254350);
+      }
+    }
     if (['forest', 'vietnam', 'overgrowth', 'biosphere', 'holiday'].includes(name) && h >= 6 && w <= 3.5 && d <= 3.5 && [0x4a3626, 0x5a4430, 0x5a3a24].includes(c)) {
       for (let i = 0; i < 3; i++) {
         const mesh = new THREE.Mesh(new THREE.ConeGeometry(5 - i, 5, 6), new THREE.MeshLambertMaterial({ color: i % 2 ? 0x387b42 : 0x245b35 }));
@@ -14217,6 +14262,13 @@ function refineMapIdentity(name) {
     case 'pearl_harbor':
       for (const z of [-26, 14]) for (const x of [24.5, 27.5]) box(x, 4, z, 0.8, 0.8, 10, 0x3a4650);
       for (const z of [-40, 40]) box(-8, 3, z, 0.14, 8, 0.14, 0x3c4850);
+      for (const x of [-66, 26]) for (const z of [-40, 40]) {
+        const y = x < 0 ? 2.4 : 3.2;
+        box(x - 3, y, z, 1.6, 0.5, 1.6, 0x293f4b);
+        box(x - 3, y + 0.5, z, 1, 0.5, 1, 0x899ba4);
+        for (let dz = -2; dz <= 2; dz += 1) box(x + 5, y + 0.02, z + dz, 2, 0.04, 0.12, 0xb9c5c9);
+      }
+      for (const z of [-33, 33]) for (let x = -48; x <= -30; x += 3) strip(x, z, 0.25, 0.8, 0xd0b75e);
       break;
     case 'skydock':
       for (const x of [-7.05, 7.05]) for (const z of [-20, -10, 0, 10, 20]) box(x, 3.2, z, 0.12, 9, 0.3, 0x8b9696);
@@ -14282,9 +14334,9 @@ function refineMapIdentity(name) {
 
 function protectThemedMapSpawns(name) {
   const spawns = MAP_SPAWNS[name];
-  if (!_BESPOKE[name] || !spawns) return;
+  if ((!_BESPOKE[name] && !MAP_THEMES[name]?.tower) || !spawns) return;
   const K = _bkit(name), color = name === 'volcano' ? 0x111010 : MAP_THEMES[name].w;
-  const samples = r => [-0.35, 0, 0.35].map(f => new THREE.Vector3((r.x0 + r.x1) / 2 + f * (r.x1 - r.x0), 1.65, (r.z0 + r.z1) / 2));
+  const samples = mapSpawnSightlineSamples;
   const allies = samples(spawns.ally), enemies = samples(spawns.enemy);
   const exposed = allies.some(a => enemies.some(b => {
     const dir = b.clone().sub(a), distance = dir.length(), ray = new THREE.Ray(a, dir.normalize()), hit = new THREE.Vector3();
@@ -14292,13 +14344,35 @@ function protectThemedMapSpawns(name) {
   }));
   if (!exposed) return;
   for (const r of [spawns.ally, spawns.enemy]) {
-    const centerZ = (r.z0 + r.z1) / 2, side = Math.sign(centerZ), width = Math.min(20, r.x1 - r.x0 - 6);
+    const centerZ = (r.z0 + r.z1) / 2, side = Math.sign(centerZ), width = Math.min(MAP_BOUNDS[name].halfX * 2 - 12, r.x1 - r.x0 + 8);
     if (width < 4) continue;
     const z = (side > 0 ? r.z0 : r.z1) - side * 5, x = (r.x0 + r.x1) / 2;
-    const free = !MAP_COLLIDERS[name].some(b => b.max.y > 0.6 && b.min.y < 3.8 && b.max.x > x - width / 2 - 1 && b.min.x < x + width / 2 + 1 && b.max.z > z - 2 && b.min.z < z + 2);
-    if (!free) continue;
-    K.box(x, 0, z, width, 3.8, 2.4, color);
-    K.box(x, 3.8, z, width, 0.4, 2.4, _thShade(color, 0.85));
+    K.box(x, 0, z, width, 8, 1.4, color);
+    K.box(x, 8, z, width, 0.4, 1.6, _thShade(color, 0.85));
+  }
+}
+
+function mapSpawnSightlineSamples(r) {
+  const result = [];
+  for (const fx of [0.01, 0.25, 0.5, 0.75, 0.99]) for (const fz of [0.01, 0.5, 0.99]) {
+    result.push(new THREE.Vector3(r.x0 + (r.x1 - r.x0) * fx, 1.65, r.z0 + (r.z1 - r.z0) * fz));
+  }
+  return result;
+}
+
+function raiseThemedMapBoundaries(name) {
+  const group = MAP_GROUPS[name], bounds = MAP_BOUNDS[name];
+  if (!group || !bounds || !_BESPOKE[name]) return;
+  for (const mesh of group.children) {
+    const p = mesh.geometry?.parameters;
+    if (mesh.geometry?.type !== 'BoxGeometry' || !p || p.height < 3 || p.height >= 12 || Math.abs(mesh.position.y - p.height / 2) > 0.1) continue;
+    const edge = (Math.abs(mesh.position.x) > bounds.halfX - 3 && p.depth > bounds.halfZ) || (Math.abs(mesh.position.z) > bounds.halfZ - 3 && p.width > bounds.halfX);
+    const shipHull = name === 'titanic' && p.width < 1 && p.depth > 20;
+    if (!edge && !shipHull) continue;
+    const old = _thMeshColliders(mesh), cols = MAP_COLLIDERS[name];
+    for (let i = cols.length - 1; i >= 0; i--) if (old.some(b => _thSameBox(b, cols[i]))) cols.splice(i, 1);
+    mesh.geometry.dispose(); mesh.geometry = new THREE.BoxGeometry(p.width, 12, p.depth);
+    mesh.position.y = 6; mesh.updateMatrixWorld(true); pushMeshColliders(cols, mesh);
   }
 }
 
@@ -14306,7 +14380,14 @@ function initMapThemes() {
   for (const name of Object.keys(MAP_THEMES)) {
     if (!MAP_GROUPS[name]) continue;
     try { if (_BESPOKE[name]) _BESPOKE[name](); } catch (e) { console.warn('[bespoke]', name, e); }
-    try { refineMapIdentity(name); protectThemedMapSpawns(name); themeHollowBuildings(name); themePlaceBuildings(name); themeRecolorMap(name); themePlaceProps(name); if (name === 'volcano') buildVolcanoScenery(); buildMapScenery(name); } catch (e) { console.warn('[theme]', name, e); }
+    if (MAP_THEMES[name].tower) {
+      const b = MAP_BOUNDS[name], scale = (b.halfX + 1.5) / 50;
+      MAP_SPAWNS[name] = {
+        ally: { x0: -14 * scale, x1: -4 * scale, z0: b.halfZ - 7, z1: b.halfZ - 3 },
+        enemy: { x0: -14 * scale, x1: -4 * scale, z0: -b.halfZ + 3, z1: -b.halfZ + 7 },
+      };
+    }
+    try { raiseThemedMapBoundaries(name); refineMapIdentity(name); protectThemedMapSpawns(name); themeHollowBuildings(name); themePlaceBuildings(name); themeRecolorMap(name); themePlaceProps(name); if (name === 'volcano') buildVolcanoScenery(); buildMapScenery(name); } catch (e) { console.warn('[theme]', name, e); }
   }
 }
 initMapThemes();
