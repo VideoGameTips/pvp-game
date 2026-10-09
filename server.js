@@ -1648,12 +1648,13 @@ const MAP_IDS = ['blank','urban','warehouse','forest','vietnam','volcano','cyber
                         'foundry','carnival','biosphere','lockdown','studio','temple','holiday',
                         'labyrinth','arena','opera','doomsday','train','dreamscape',
                         'pearl_harbor','titanic','supermarket','pyongyang','traffic_cone_republic','flying_moai','big_arena','super_arena','storm_pier','pinball_arcade','laser_vault','cargo_belts','gale_peaks','magma_rise'];
-// 🗺️ Dealt at RANDOM when nobody picks, which is not the same list (#66). Each
-// map below is a flat field — magma_rise has ONE piece of cover in 10,000 m²,
-// labyrinth has five — and in a 48-map pool each of them came up exactly as
-// often as train, which has 138 per 100 m². They stay pickable by name from the
-// map cards; they are thin, not broken. Put each one back here as it is rebuilt.
-const THIN_MAPS = new Set(['magma_rise', 'labyrinth', 'laser_vault', 'gale_peaks', 'cargo_belts', 'storm_pier']);
+// 🗺️ Dealt at RANDOM when nobody picks, which is not the same list (#66): a
+// map that is not worth landing on by accident goes in THIN_MAPS and stays
+// pickable by name from the map cards. Empty right now — the five that were in
+// it have been rebuilt (magma_rise 1 → 87 sightline blockers per 100 m²,
+// storm_pier 26 → 88, cargo_belts 26 → 74, laser_vault 17 → 55, gale_peaks
+// 18 → 46, against foundry's 47 and arena's 59). The lever stays for next time.
+const THIN_MAPS = new Set([]);
 const LOBBY_MAP_POOL = MAP_IDS.filter(m => !THIN_MAPS.has(m));
 // The lobby plays the map of the first player (in join order) who picked a specific one.
 function lobbyMapPick(L) {

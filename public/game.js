@@ -5622,7 +5622,7 @@ const MAP_GROUPS = {};
 // Mirrors server.js — MAP_IDS and THIN_MAPS have to stay identical there
 // (CLAUDE.md #4), because the server picks the map and the client honours it.
 const MAP_IDS = ['blank', 'urban', 'warehouse', 'forest', 'vietnam', 'volcano', 'cyber', 'desert', 'tundra', 'space', 'airport', 'trenches', 'chernobyl', 'refinery', 'skydock', 'sewer', 'gravity_lab', 'glassworks', 'carrier', 'overgrowth', 'orbital_station', 'foundry', 'carnival', 'biosphere', 'lockdown', 'studio', 'temple', 'holiday', 'labyrinth', 'arena', 'opera', 'doomsday', 'train', 'dreamscape', 'pearl_harbor', 'titanic', 'supermarket', 'pyongyang', 'traffic_cone_republic', 'flying_moai', 'big_arena', 'super_arena', 'storm_pier', 'pinball_arcade', 'laser_vault', 'cargo_belts', 'gale_peaks', 'magma_rise'];
-const THIN_MAPS = new Set(['magma_rise', 'labyrinth', 'laser_vault', 'gale_peaks', 'cargo_belts', 'storm_pier']);
+const THIN_MAPS = new Set([]);
 
 const MAP_COLLIDERS = {};
 const MAP_BOUNDS = {};
@@ -10009,6 +10009,32 @@ function buildStormPierMap() {
     const tip = new THREE.Mesh(new THREE.SphereGeometry(0.5, 10, 8), _MECH_BASIC(0xffee66));
     tip.position.set(x, 9.3, z); G.add(tip);
   });
+  // ⛈️ Containers (#66). A pier with 27 identical crates on it and nothing to
+  // break a sightline: lightning was the only thing that made anything happen.
+  //
+  // Stacked containers, placed so every lightning rod has cover within a few
+  // metres. The rod pulls the strike, the container next to it is where you
+  // stand to survive it — which turns "the rods are safe" into a position worth
+  // contesting rather than a free parking space.
+  const C = [0xa33b2b, 0x2f5f8f, 0xc8a22a, 0x3b7a4f, 0x7a4a8a, 0x8a5a2a];
+  const stack = (x, z, rot, n, i0) => {
+    for (let k = 0; k < n; k++)
+      addMapBox(m, x + k * 0.35, 1.3 + k * 2.6, z + k * 0.3, 6.0, 2.6, 2.4, C[(i0 + k) % C.length], rot + k * 0.06);
+  };
+  rods.forEach(([rx, rz], i) => {                       // cover beside every rod
+    stack(rx + (rx < 0 ? 5.5 : -5.5), rz, i * 0.5, 2, i);
+    addMapBox(m, rx, 1.3, rz + (rz < 0 ? 5.0 : -5.0), 2.4, 2.6, 5.0, C[(i + 3) % C.length], 0);
+  });
+  [[-14, -40, 0, 3], [14, 40, 0, 3], [-36, -2, 1.57, 2], [36, 2, 1.57, 2],
+   [-6, 36, 0.3, 2], [6, -36, -0.3, 2], [-30, 34, 1.2, 1], [30, -34, -1.2, 1]]
+    .forEach(([x, z, r, n], i) => stack(x, z, r, n, i + 2));
+  // Gantry across the pier at 6 m: somewhere to shoot down from, and the only
+  // way over the container wall the stacks just made.
+  [-20, 20].forEach(z => {
+    addMapBox(m, 0, 6.0, z, 26, 0.4, 3.0, 0x6b7480);
+    [-1, 1].forEach(sd => addMapBox(m, 0, 6.75, z + sd * 1.3, 26, 1.1, 0.3, 0x6b7480));
+    [-1, 1].forEach(sd => { for (let k = 0; k < 11; k++) addMapBox(m, sd * (13 + k * 1.2), 0.3 + k * 0.55, z, 1.2, 0.55, 2.6, 0x5a626c); });
+  });
   G._skyColor = 0x141b26;
   const RODS_PULL = 10;
   const S = { next: 3.5, strikes: [], hinted: false };
@@ -10153,6 +10179,37 @@ function buildLaserVaultMap() {
   };
   [0, 2.094, 4.189].forEach(a => addArm('low', a, 0.5));
   [1.047, 4.189].forEach(a => addArm('high', a, -0.38));
+  // 🔴 Vault furniture (#66). It was 21 colliders in 10,000 m² — four pieces of
+  // cover and twelve pillars, so the beams had nothing to sweep between and the
+  // fight had nothing to fight over.
+  //
+  // Everything here is sized against the two beams, because that is what the
+  // map is: the red one sweeps at 0.45 and you jump it, the cyan at 1.6 and you
+  // duck it. A 1.1 m bullion rack is cover you can crouch behind AND the thing
+  // that lets the cyan beam pass over you — so taking cover and surviving the
+  // sweep become the same move, instead of two unrelated problems.
+  const RACK = 0x2a313b, CASE = 0x3b444f, GOLD = 0x8a7230;
+  for (let ring = 0; ring < 2; ring++) {
+    const rad = 13 + ring * 11, count = 6 + ring * 4;
+    for (let i = 0; i < count; i++) {
+      const a = (i / count) * Math.PI * 2 + ring * 0.3;
+      const x = Math.cos(a) * rad, z = Math.sin(a) * rad;
+      addMapBox(m, x, 0.55, z, 3.6, 1.1, 1.4, RACK, a);                       // duck under the cyan beam
+      if (i % 2 === 0) addMapBox(m, x, 1.25, z, 1.2, 0.3, 1.2, GOLD, a);      // the bars on top
+    }
+  }
+  // Display cases: tall enough to break a sightline, thin enough that the beams
+  // still read through the room.
+  [[-26,-8],[26,8],[-8,26],[8,-26],[-18,18],[18,-18]].forEach(([x, z], i) =>
+    addMapBox(m, x, 0.9, z, 2.2, 1.8, 2.2, CASE, i * 0.5));
+  // A gallery at 2.6 — above BOTH beams. The only place the sweep cannot reach,
+  // which is exactly why it is the most exposed place to stand.
+  [-1, 1].forEach(sd => {
+    addMapBox(m, sd * 16, 2.5, 0, 10, 0.4, 20, 0x39424e);
+    addMapBox(m, sd * 16, 3.25, -9.8, 10, 1.1, 0.4, RACK);
+    addMapBox(m, sd * 16, 3.25,  9.8, 10, 1.1, 0.4, RACK);
+    for (let k = 0; k < 5; k++) addMapBox(m, sd * 22, 0.25 + k * 0.5, -12 - k * 1.6, 3.0, 0.5, 1.6, CASE);
+  });
   G._skyColor = 0x0b0f14;
   const S = { cd: 0, botCd: {}, hinted: false };
   const hitArm = (x, z, ar, footY, headY) => {
@@ -10220,6 +10277,35 @@ function buildCargoBeltsMap() {
   };
   addMapBox(m, 43, 2.8, 0, 8, 0.4, 32, 0x7b8086); stairs(31.4, -10, 1);
   addMapBox(m, -43, 2.8, 0, 8, 0.4, 32, 0x7b8086); stairs(-31.4, 10, -1);
+  // 📦 Cargo (#66). Three belts, three shredders and 26 flat strips: the map had
+  // zero colliders over 3.5 m, so you could see the whole floor from anywhere on
+  // it and the belts just carried you into the open.
+  //
+  // The crates sit BESIDE the lanes, not on them — a crate on a belt would have
+  // to move with it, and a 5 m/s wall of cover is a different map. Beside them
+  // they do the work that matters: you can fight along a lane instead of only
+  // riding it, and stepping off the belt is now a real option.
+  const CRATE = 0x7a6238, CRATE2 = 0x4e6a7a, STEEL = 0x4a5158;
+  lanes.forEach((ln, li) => {
+    for (let k = -2; k <= 2; k++) {
+      const x = k * 11 + (li - 1) * 3.5;
+      [-1, 1].forEach(sd => {
+        const z = ln.z + sd * (W / 2 + 2.2);
+        addMapBox(m, x, 1.0, z, 3.0, 2.0, 3.0, (k + li) % 2 ? CRATE : CRATE2, (k * 0.2));
+        if (k % 2 === 0) addMapBox(m, x + 1.2, 2.6, z - 0.6, 2.2, 1.2, 2.2, CRATE2, 0.3);  // stacked
+      });
+    }
+  });
+  // Stacks between the lanes, tall enough to cut the hall in half — the one
+  // thing this map had none of.
+  [[-26, -10], [-4, -10], [18, -10], [-26, 10], [-4, 10], [18, 10]].forEach(([x, z], i) => {
+    addMapBox(m, x, 2.1, z, 4.2, 4.2, 4.2, i % 2 ? CRATE : CRATE2, i * 0.25);
+    addMapBox(m, x + 2.6, 1.1, z + 2.4, 2.4, 2.2, 2.4, STEEL, i * 0.4);
+  });
+  // Catwalk cover: it was a bare plank over the floor, so being up there was
+  // only a way to be shot from three sides at once.
+  [-1, 1].forEach(sd => [-18, 0, 18].forEach(x =>
+    addMapBox(m, x, 5.2, sd * 31, 5.0, 1.2, 0.5, STEEL)));
   G._skyColor = 0x2a2d31;
   const onLane = (x, z, ln) => Math.abs(z - ln.z) < W / 2 && Math.abs(x) < LEN / 2;
   MAP_MECH[m] = {
@@ -10259,6 +10345,28 @@ function buildGalePeaksMap() {
     pad.position.set(x, 0.06, z); G.add(pad);
     MAP_GIMMICKS[m].jumpPads.push({ x, z, r: 2.4, vel: 16 });
   });
+  // 💨 Wind breaks (#66). The peak was five bare terraces — a wedding cake you
+  // shot each other across, 14 cover in 10,000 m².
+  //
+  // The wind is the map, so the cover is what you hide from the wind behind:
+  // a low wall on each terrace, cut so there is a gap to be pushed through.
+  // Shelter and cover are the same object, which is the point — leaving cover
+  // on this map means the gust gets you.
+  const STONE = 0x6e7363, SHELTER = 0x7f8472;
+  [[34, 0.6], [28, 1.2], [22, 1.8], [16, 2.4]].forEach(([s, top], ti) => {
+    const r = s / 2 - 1.4;
+    for (let k = 0; k < 4; k++) {
+      const a = (k / 4) * Math.PI * 2 + ti * 0.4;
+      const x = Math.cos(a) * r, z = Math.sin(a) * r;
+      addMapBox(m, x, top + 0.6, z, 5.4 - ti * 0.5, 1.2, 1.1, SHELTER, a + Math.PI / 2);
+      if (k % 2 === 0) addMapBox(m, x * 0.72, top + 0.45, z * 0.72, 1.6, 0.9, 1.6, STONE, a);
+    }
+  });
+  // Boulders on the flat, so the run in from a corner tower is not a straight
+  // line across open ground with a crosswind on it.
+  [[-24,-12],[-12,-26],[12,26],[24,12],[-26,14],[26,-14],[14,-28],[-14,28],
+   [-40,-30],[40,30],[-40,30],[40,-30],[-8,-42],[8,42]].forEach(([x, z], i) =>
+    addMapBox(m, x, 0.85, z, 3.4 + (i % 3), 1.7, 3.0 + (i % 2), STONE, i * 0.37));
   G._skyColor = 0x9ec7ee;
   // Wind streaks, only visible while a gust is coming or blowing.
   const streaks = [];
