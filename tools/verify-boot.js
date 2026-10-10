@@ -307,11 +307,19 @@ if (ok && process.argv.includes('--secret-inspects')) {
         model._secretInspect = run;
         const pose = { rx: 0, rz: 0, py: 0 };
         updateSecretInspect(model, .2, pose);
-        if (run.triggered && (!run.group || run.group.children.length < 9 || run.group.scale.x <= 0)) issues.push(skinId + ': missing visible effect');
-        let disposed = 0;
-        if (run.group) run.group.traverse(o => { if (o.geometry) o.geometry.addEventListener('dispose', () => disposed++); });
+        if (run.triggered && (!run.group || run.group.children.length < 4 || run.group.scale.x <= 0)) issues.push(skinId + ': missing visible effect');
+        if (run.triggered) {
+          run.sounded = true; // Audio is unavailable in this headless WebGL harness.
+          for (const t of [.45, .65, .9]) updateSecretInspect(model, t, pose);
+          run.group.traverse(o => {
+            if (![...o.position.toArray(), ...o.scale.toArray(), o.rotation.x, o.rotation.y, o.rotation.z].every(Number.isFinite)) issues.push(skinId + ': invalid animated transform');
+          });
+          if (run.kind === 'splash' && (run.balloon.visible || !run.group.children.some(o => o.userData.drop !== undefined && o.visible))) issues.push('balloon did not burst');
+        }
+        let disposed = 0, geometryCount = 0;
+        if (run.group) run.group.traverse(o => { if (o.geometry) { geometryCount++; o.geometry.addEventListener('dispose', () => disposed++); } });
         clearSecretInspect(model, true);
-        if (model.children.length || model._secretInspect || (run.triggered && disposed < 9)) issues.push(skinId + ': leaked effect resources');
+        if (model.children.length || model._secretInspect || disposed !== geometryCount) issues.push(skinId + ': leaked effect resources');
       }
       const count = _secretInspectCounts.get(key);
       model._secretInspect = secretInspectFor(skin.weapon);
@@ -345,7 +353,7 @@ if (ok && process.argv.includes('--secret-inspects')) {
       currentWeaponIdx = saved.idx; weaponModels[idx] = saved.model; _activeModelSkin.pistol = saved.skin;
       isDead = saved.dead; reloading = saved.reload; getAudioCtx = saved.audio;
     }
-    console.log('secret inspect checks: four skin/weapon pairs, repeated triggers, frame updates, cancellation and resource cleanup');
+    console.log('secret inspect checks: ' + Object.keys(SECRET_INSPECTS).length + ' skin/weapon pairs, repeated triggers, frame updates, cancellation and resource cleanup');
     return issues;
   })()`);
   if (issues.length) { ok = false; console.log(issues.join('\n')); }

@@ -42269,6 +42269,12 @@ const SECRET_INSPECTS = {
   sg8_singularity: { every: 5, kind: 'void', color: 0xc087ff },
   vector_bubble_blaster: { every: 4, kind: 'bubble', color: 0x79efff },
   revolver_donut: { every: 6, kind: 'donut', color: 0xff83ba },
+  srx_telescope: { every: 5, kind: 'solar', color: 0xffcb55 },
+  freeze_slushie: { every: 4, kind: 'snow', color: 0x9aeaff },
+  rpg_water_balloon: { every: 4, kind: 'splash', color: 0x55bbff },
+  p90_barcode_scanner: { every: 3, kind: 'receipt', color: 0xff4455 },
+  lever_fishing_rod: { every: 4, kind: 'catch', color: 0x9b623c },
+  ak20_nerf_elite: { every: 5, kind: 'darts', color: 0x44aaff },
 };
 const _secretInspectCounts = new Map();
 function secretInspectFor(weaponId) {
@@ -42313,12 +42319,56 @@ function updateSecretInspect(model, t, pose) {
       part(new THREE.SphereGeometry(.052, 24, 16), run.color, .22);
       const rim = part(new THREE.TorusGeometry(.05, .002, 6, 40), 0xffffff, .8);
       rim.rotation.y = .4;
-    } else {
+    } else if (run.kind === 'donut') {
       const dough = part(new THREE.TorusGeometry(.035, .015, 12, 32), 0xc8894b);
       dough.rotation.x = .45;
       part(new THREE.TorusGeometry(.035, .012, 12, 32), run.color).position.z = .005;
+    } else if (run.kind === 'solar') {
+      part(new THREE.SphereGeometry(.023, 20, 12), run.color);
+      for (let i = 0; i < 3; i++) {
+        const ring = part(new THREE.TorusGeometry(.04 + i * .017, .001, 6, 48), 0x99bbee, .45);
+        ring.rotation.x = Math.PI / 2;
+        const planet = part(new THREE.SphereGeometry(.005 + i * .002, 12, 8), [0x66aaff, 0xff7766, 0x88ff99][i]);
+        planet.userData.planet = i;
+      }
+    } else if (run.kind === 'snow') {
+      part(new THREE.SphereGeometry(.05, 24, 16), run.color, .12);
+      part(new THREE.CylinderGeometry(.04, .045, .009, 20), 0xcbd8e1).position.y = -.047;
+      for (let i = 0; i < 14; i++) {
+        const flake = part(new THREE.OctahedronGeometry(.003), 0xffffff);
+        flake.userData.snow = i;
+      }
+    } else if (run.kind === 'splash') {
+      run.balloon = part(new THREE.SphereGeometry(.038, 20, 12), run.color, .8);
+      run.knot = part(new THREE.ConeGeometry(.006, .014, 8), run.color); run.knot.position.y = -.041;
+      for (let i = 0; i < 12; i++) {
+        const drop = part(new THREE.SphereGeometry(.005, 10, 8), 0x99eaff, .8);
+        drop.userData.drop = i;
+      }
+    } else if (run.kind === 'receipt') {
+      run.paper = part(new THREE.BoxGeometry(.04, .13, .001), 0xfffdf4);
+      run.paper.position.y = -.065;
+      for (let i = 0; i < 12; i++) {
+        const line = part(new THREE.BoxGeometry(i % 3 ? .027 : .017, .002, .001), 0x292b30);
+        line.position.set(-.003, -.01 - i * .009, .001);
+      }
+      run.scan = part(new THREE.BoxGeometry(.047, .002, .002), run.color);
+      run.scan.position.z = .003;
+    } else if (run.kind === 'catch') {
+      part(new THREE.CylinderGeometry(.0007, .0007, .09, 6), 0xd4dce0).position.y = .047;
+      part(new THREE.BoxGeometry(.025, .032, .025), run.color).position.y = -.015;
+      part(new THREE.BoxGeometry(.042, .013, .027), 0x493427).position.set(.008, -.035, 0);
+      const eyelet = part(new THREE.TorusGeometry(.007, .0015, 6, 16), 0xbfc5c9);
+      eyelet.position.y = .003;
+    } else if (run.kind === 'darts') {
+      for (let i = 0; i < 7; i++) {
+        const dart = part(new THREE.CylinderGeometry(.005, .005, .04, 10), run.color);
+        dart.userData.dart = i;
+        const tip = part(new THREE.SphereGeometry(.0055, 10, 8), 0xff8822);
+        tip.userData.dartTip = i;
+      }
     }
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < (['ufo', 'void', 'bubble', 'donut'].includes(run.kind) ? 8 : 0); i++) {
       const satellite = part(run.kind === 'bubble' ? new THREE.SphereGeometry(.007, 10, 8) : new THREE.BoxGeometry(.004, .009, .004), i % 2 ? run.color : 0xffffff, .85);
       satellite.userData.orbit = i;
     }
@@ -42328,6 +42378,29 @@ function updateSecretInspect(model, t, pose) {
   g.scale.setScalar(Math.max(.001, envelope));
   g.position.set(-.035 + Math.sin(phase) * .025, .11 + envelope * .035, -.06);
   g.rotation.set(.15 * Math.sin(phase), t * Math.PI * 2, 0);
+  if (['receipt', 'catch', 'darts', 'snow', 'solar'].includes(run.kind)) g.rotation.set(0, .25 * Math.sin(phase), 0);
+  if (run.kind === 'receipt') { g.scale.y *= Math.min(1, t * 3); run.scan.position.y = -.13 * ((t * 3) % 1); }
+  if (run.kind === 'catch') { g.position.y += .045 * Math.sin(t * Math.PI * 3); g.rotation.z = .3 * Math.sin(phase); }
+  if (run.kind === 'splash') { run.balloon.visible = t < .55; run.knot.visible = t < .55; }
+  for (const o of g.children) {
+    const d = o.userData;
+    if (d.planet !== undefined) {
+      const a = phase / (d.planet + 1), r = .04 + d.planet * .017;
+      o.position.set(Math.cos(a) * r, .008 * Math.sin(a), Math.sin(a) * r);
+    } else if (d.snow !== undefined) {
+      const a = d.snow * 2.4;
+      o.position.set(Math.cos(a) * .03, .035 - ((t * 1.8 + d.snow / 14) % 1) * .07, Math.sin(a) * .025);
+    } else if (d.drop !== undefined) {
+      const burst = Math.max(0, (t - .55) / .45), a = d.drop * Math.PI / 6;
+      o.visible = burst > 0;
+      o.position.set(Math.cos(a) * burst * .12, Math.sin(a) * burst * .09 - burst * burst * .06, 0);
+    } else if (d.dart !== undefined || d.dartTip !== undefined) {
+      const i = d.dart ?? d.dartTip, a = (i - 3) * .24 * envelope;
+      const tip = d.dartTip !== undefined ? .02 : 0;
+      o.position.set(Math.sin(a) * (.07 + tip), Math.cos(a) * (.025 + tip), 0);
+      o.rotation.z = -a;
+    }
+  }
   for (const o of g.children) if (o.userData.orbit !== undefined) {
     const a = phase + o.userData.orbit * Math.PI / 4;
     const radius = run.kind === 'void' ? .07 * (1 - t) : .065;
@@ -42336,12 +42409,12 @@ function updateSecretInspect(model, t, pose) {
   }
   // The gun tips to watch the event; this never touches ammunition or world combat.
   pose.rx += envelope * .16; pose.rz -= envelope * .2; pose.py -= envelope * .018;
-  if (t > .32 && !run.sounded) {
+  if (t > (run.kind === 'splash' ? .55 : .32) && !run.sounded) {
     run.sounded = true;
     const ctx = getAudioCtx();
     if (ctx) {
       const gain = ctx.createGain(); gain.connect(ctx.destination);
-      const tones = { void: [240, 65, 110, 40], bubble: [420, 1700, 900, 240], donut: [1500, 2400, 2100, 1600], ufo: [800, 1800, 1400, 500] }[run.kind];
+      const tones = { void: [240, 65, 110, 40], bubble: [420, 1700, 900, 240], donut: [1500, 2400, 2100, 1600], ufo: [800, 1800, 1400, 500], solar: [650, 1300, 980, 1600], snow: [2100, 2700, 2600, 2200], splash: [700, 90, 180, 60], receipt: [2400, 2400, 1800, 1800], catch: [300, 120, 600, 220], darts: [500, 850, 800, 500] }[run.kind];
       playTone(ctx, ctx.currentTime, .28, gain, tones[0], tones[1], .09, 'sine');
       playTone(ctx, ctx.currentTime + .08, .22, gain, tones[2], tones[3], .04, 'triangle');
     }
