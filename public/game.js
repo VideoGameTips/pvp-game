@@ -127,9 +127,10 @@ const WEAPONS = [
   {
     id: 'vector', killReload: 0.5, name: 'Vector SMG', type: 'SMG', slot: 'primary',
     // Buffed: one full magazine used to be 32 x 12 = 384 damage against a 300 HP
-    // player, so you could not kill even one person per mag. Now 40 x 18 = 720,
-    // with a tighter spray and a longer falloff than the other SMGs.
-    mag: 40, reserve: 200, damage: 18, fireRate: 45, reloadTime: 1500,
+    // player, so you could not kill even one person per mag. Now 32 x 18 = 576,
+    // with a tighter spray and a longer falloff than the other SMGs. The
+    // magazine itself is deliberately unchanged.
+    mag: 32, reserve: 160, damage: 18, fireRate: 45, reloadTime: 1500,
     auto: true, pellets: 1, spread: 0.012, adsZoom: 50, bulletSpeed: 128, noReload: false,
     ability: { name: 'Overdrive', cd: 13000, desc: '2s · fire rate ×5', type: 'buff', duration: 2000, rateMult: 0.2 },
   },
