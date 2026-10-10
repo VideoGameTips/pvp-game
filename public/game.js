@@ -26775,6 +26775,10 @@ const WS_PATTERNS = {
     for (let x = 0; x < N; x += 16) { let y = r() * N; const len = 4 + (r() * 10 | 0); for (let j = 0; j < len; j++) { g.fillStyle = c[1]; g.globalAlpha = 1 - j / len; if (r() > 0.25) g.fillRect(x + 2, (y + j * 12) % N, 9, 9); } }
     g.globalAlpha = 1;
   },
+  pixels(g, N, c, r, look) {   // a picture drawn by hand in the Skin Pixelizer: sixteen by sixteen, hard-edged
+    const px = (look && look.px) || [], s = N / 16;
+    for (let i = 0; i < 256; i++) { g.fillStyle = px[i] || '#808080'; g.fillRect((i & 15) * s, (i >> 4) * s, s, s); }
+  },
   facets(g, N, c, r) {   // cut crystal
     g.fillStyle = c[0]; g.fillRect(0, 0, N, N);
     for (let y = 0; y < N; y += 32) for (let x = 0; x < N; x += 32) for (const t of [0, 1]) {
@@ -26820,8 +26824,9 @@ function _wsTextures(id, variant) {
   const look = WS_LOOKS[id], N = 256, r = _wsRng(key);
   const draw = (colors) => {
     const c = document.createElement('canvas'); c.width = c.height = N;
-    WS_PATTERNS[look.pat](c.getContext('2d'), N, colors, r);
+    WS_PATTERNS[look.pat](c.getContext('2d'), N, colors, r, look);
     const tx = new THREE.CanvasTexture(c); tx.wrapS = tx.wrapT = THREE.RepeatWrapping;
+    if (look.pat === 'pixels') { tx.magFilter = THREE.NearestFilter; tx.minFilter = THREE.NearestFilter; tx.generateMipmaps = false; }
     // painted in sRGB, so it has to say so: left untagged it reads as linear and every colour comes out pale
     if ('colorSpace' in tx && THREE.SRGBColorSpace !== undefined) tx.colorSpace = THREE.SRGBColorSpace;
     else if (THREE.sRGBEncoding !== undefined) tx.encoding = THREE.sRGBEncoding;
@@ -29311,6 +29316,360 @@ function _fuseModel(root) {
 });
 
 const SKIN_IDS = SKINS.map(s => s.id);
+
+// ═══ 🎨 SKIN PIXELIZER ═══════════════════════════════════════════════════════════════════════════════════════════════
+// An editor for pixel skins, for the admin account (F2 -> SKIN PIXELIZER). Two kinds of skin, one grid:
+//   CHARACTER   every face of the body as its own 16x16 picture -- head front / back / side / top, torso front / back /
+//               side, upper arm, forearm, thigh, shin -- plus the hand and boot colours. Pick a colour, click a pixel.
+//   GUN         one 16x16 picture that wraps the guns, in the weapon-wraps list beside Gold and Carbon.
+// Skins are kept in this browser (localStorage) and join the game's own pickers as ordinary skins, so they are worn and
+// equipped the way any other is. They are not sent to other players: they see the default skin on you.
+const CUSTOM_SKINS_KEY = 'pvp_custom_skins';
+const PX_CHAR_PARTS = [['head.front', 'Head · front'], ['head.back', 'Head · back'], ['head.side', 'Head · side'], ['head.top', 'Head · top'],
+  ['torso.front', 'Torso · front'], ['torso.back', 'Torso · back'], ['torso.side', 'Torso · side'], ['armU', 'Arm · upper'],
+  ['armF', 'Arm · forearm'], ['leg', 'Leg · thigh'], ['shin', 'Leg · shin']];
+const PX_PALETTE = ['#000000', '#1a1a1f', '#3a3a44', '#6a6a76', '#9a9aa6', '#cfcfd8', '#ffffff', '#5a3418', '#8a5428', '#b87a38', '#d9a066',
+  '#f2c88a', '#ffe9c8', '#f0c8a0', '#d9a884', '#b07f5e', '#7a1c1c', '#c0392b', '#ff4fa8', '#ff9ac8', '#ffd1e8', '#ff8a3a', '#ffd24a',
+  '#fff36a', '#2f8a4a', '#6fe03a', '#b8ff7a', '#0f6a8a', '#2f7fd6', '#7ad8ff', '#3b1466', '#9a6cff'];
+let _pxRev = 0;
+function _pxLoad() {
+  try { const d = JSON.parse(localStorage.getItem(CUSTOM_SKINS_KEY)); return { char: (d && d.char) || [], gun: (d && d.gun) || [] }; }
+  catch (e) { return { char: [], gun: [] }; }
+}
+function _pxStore(db) { try { localStorage.setItem(CUSTOM_SKINS_KEY, JSON.stringify(db)); return true; } catch (e) { return false; } }
+const _pxPainter = arr => p => { for (let i = 0; i < 256; i++) p(arr[i] || '#808080', i & 15, i >> 4, 1, 1); };
+const _pxHex = n => '#' + (n >>> 0).toString(16).padStart(6, '0');
+// Any painter (or a wrap's pattern) rasterised to sixteen by sixteen pixels, so a new skin can start from an existing one.
+function _pxRaster(painter) {
+  const c = document.createElement('canvas'); c.width = c.height = 16;
+  const g = c.getContext('2d'); g.imageSmoothingEnabled = false;
+  painter((col, x, y, w = 1, h = 1) => { g.fillStyle = col; g.fillRect(x | 0, y | 0, w | 0, h | 0); });
+  const d = g.getImageData(0, 0, 16, 16).data, out = [];
+  for (let i = 0; i < 256; i++) out.push(d[i * 4 + 3] < 10 ? '#808080' : '#' + [d[i * 4], d[i * 4 + 1], d[i * 4 + 2]].map(v => v.toString(16).padStart(2, '0')).join(''));
+  return out;
+}
+function _pxTemplateChar(baseId) {
+  const a = PIXEL_SKINS[baseId] || PIXEL_SKINS.default, parts = {};
+  const get = (path) => path.split('.').reduce((o, k) => (o ? o[k] : null), a);
+  for (const [k] of PX_CHAR_PARTS) parts[k] = _pxRaster(get(k) || (p => p('#808080', 0, 0, 16, 16)));
+  return { id: 'px_' + Math.random().toString(36).slice(2, 10), name: 'My Skin', parts,
+           hand: typeof a.hand === 'number' ? _pxHex(a.hand) : (a.hand || '#f0c8a0'), foot: a.foot || '#14161a' };
+}
+function _pxTemplateGun(baseId) {
+  const look = WS_LOOKS[baseId];
+  let px = new Array(256).fill('#808080');
+  if (look && WS_PATTERNS[look.pat]) {
+    const c = document.createElement('canvas'); c.width = c.height = 256;
+    WS_PATTERNS[look.pat](c.getContext('2d'), 256, look.c.map(_wsCss), _wsRng('px:' + baseId), look);
+    const s = document.createElement('canvas'); s.width = s.height = 16;
+    const g = s.getContext('2d'); g.imageSmoothingEnabled = false; g.drawImage(c, 0, 0, 16, 16);
+    const d = g.getImageData(0, 0, 16, 16).data;
+    px = []; for (let i = 0; i < 256; i++) px.push('#' + [d[i * 4], d[i * 4 + 1], d[i * 4 + 2]].map(v => v.toString(16).padStart(2, '0')).join(''));
+  }
+  return { id: 'pxg_' + Math.random().toString(36).slice(2, 9), name: 'My Wrap', px };
+}
+// ── putting a saved skin into the game ──
+function _pxRegisterChar(def) {
+  const P = def.parts, id = def.id;
+  const art = {
+    hand: parseInt(String(def.hand || '#f0c8a0').slice(1), 16), foot: def.foot || '#14161a',
+    head: { front: _pxPainter(P['head.front']), back: _pxPainter(P['head.back']), side: _pxPainter(P['head.side']),
+            top: _pxPainter(P['head.top']), bottom: _pxPainter(P['head.top']) },
+    torso: { front: _pxPainter(P['torso.front']), back: _pxPainter(P['torso.back']), side: _pxPainter(P['torso.side']),
+             top: _solid(P['torso.side'][0] || '#808080'), bottom: _solid(P['torso.side'][255] || '#808080') },
+    armU: _pxPainter(P.armU), armF: _pxPainter(P.armF), leg: _pxPainter(P.leg), shin: _pxPainter(P.shin),
+  };
+  art._id = id + '.' + (++_pxRev);        // the texture cache is keyed on this, so a re-save is a fresh set of textures
+  PIXEL_SKINS[id] = art;
+  const entry = { id, name: def.name || 'My Skin', desc: 'Your own pixel skin.', swatch: [P['torso.front'][40] || '#444', P['head.front'][100] || '#888'], custom: true };
+  const i = SKINS.findIndex(s => s.id === id);
+  if (i >= 0) SKINS[i] = entry; else SKINS.push(entry);
+  if (!SKIN_IDS.includes(id)) SKIN_IDS.push(id);
+}
+function _pxRegisterGun(def) {
+  const id = def.id, count = {};
+  for (const c of def.px) count[c] = (count[c] || 0) + 1;
+  const top = Object.keys(count).sort((a, b) => count[b] - count[a]);
+  const c1 = top[0] || '#808080', c2 = top[1] || c1;
+  const hexN = c => parseInt(c.slice(1), 16);
+  const e = { id, name: def.name || 'My Wrap', body: hexN(c1), accent: hexN(c2), flag: null, sw: [c1, c2], custom: true };
+  const i = WEAPON_SKINS.findIndex(s => s.id === id);
+  if (i >= 0) WEAPON_SKINS[i] = e; else WEAPON_SKINS.push(e);
+  WEAPON_SKINS_BY_ID[id] = e;
+  WS_LOOKS[id] = { pat: 'pixels', px: def.px, c: [hexN(c1), hexN(c2)], metal: 0.25, rough: 0.55 };
+  for (const k of Array.from(_wsCache.keys())) if (k.startsWith(id + ':')) _wsCache.delete(k);
+}
+(function loadCustomSkins() {
+  const db = _pxLoad();
+  for (const d of db.char) { try { _pxRegisterChar(d); } catch (e) { console.warn('[pixelizer] skin', d && d.id, e); } }
+  for (const d of db.gun) { try { _pxRegisterGun(d); } catch (e) { console.warn('[pixelizer] wrap', d && d.id, e); } }
+  // the wrap that was worn last session may be one of these: put it on now that it exists
+  try { if (WEAPON_SKINS_BY_ID[selectedWeaponSkin] && WEAPON_SKINS_BY_ID[selectedWeaponSkin].custom) applySelectedWeaponSkinToAll(); } catch (e) {}
+})();
+
+// ── the editor ──
+let _pxUI = null;
+function openSkinPixelizer() {
+  if (!(typeof currentUser !== 'undefined' && currentUser && currentUser.isAdmin)) return;
+  try { document.exitPointerLock && document.exitPointerLock(); } catch (e) {}
+  let panel = document.getElementById('pixelizer-panel');
+  if (panel) { panel.style.display = 'block'; _pxDrawAll(); return; }
+  const db = _pxLoad();
+  _pxUI = { tab: 'char', db, char: db.char[0] ? JSON.parse(JSON.stringify(db.char[0])) : _pxTemplateChar('default'),
+            gun: db.gun[0] ? JSON.parse(JSON.stringify(db.gun[0])) : _pxTemplateGun('carbon'),
+            part: 'head.front', color: '#ff4fa8', tool: 'pencil', mirror: true, hist: [], recent: [], msg: '' };
+  panel = document.createElement('div');
+  panel.id = 'pixelizer-panel';
+  panel.setAttribute('data-no-i18n', '');   // an editor, not copy: the language layer must not translate its labels
+  panel.style.cssText = 'position:fixed;top:4%;left:50%;transform:translateX(-50%);width:min(900px,94vw);max-height:92vh;overflow:auto;z-index:9800;'
+    + 'background:#0d1622;border:2px solid #ff66cc;border-radius:8px;padding:16px;color:#fff;font-family:"Courier New",monospace;font-size:12px;'
+    + 'box-shadow:0 8px 40px rgba(0,0,0,0.7);';
+  document.body.appendChild(panel);
+  // nothing typed or clicked in here is the game's business
+  for (const ev of ['keydown', 'keyup', 'mousedown', 'mouseup', 'click', 'wheel', 'contextmenu']) panel.addEventListener(ev, e => { e.stopPropagation(); });
+  panel.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #6a2a55;padding-bottom:8px;margin-bottom:10px;">
+      <div style="font-size:16px;letter-spacing:3px;color:#ff99dd;">🎨 SKIN PIXELIZER <span style="font-size:10px;color:#8a7a90;letter-spacing:1px;">admin · saved in this browser</span></div>
+      <div><button id="px-tab-char" class="pxb">CHARACTER</button> <button id="px-tab-gun" class="pxb">GUN</button> <button id="px-close" class="pxb" style="color:#ff8888;border-color:#ff4444;">✕</button></div>
+    </div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;">
+      <div style="flex:none;">
+        <canvas id="px-edit" width="320" height="320" style="background:#222;border:2px solid #ff66cc;cursor:crosshair;touch-action:none;display:block;image-rendering:pixelated;"></canvas>
+        <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
+          <button class="pxb" data-tool="pencil">✏️ PENCIL</button><button class="pxb" data-tool="fill">🪣 FILL</button>
+          <button class="pxb" data-tool="pick">💧 PICK</button><button class="pxb" id="px-mirror">↔ MIRROR</button>
+          <button class="pxb" id="px-undo">↶ UNDO</button><button class="pxb" id="px-clear">CLEAR</button>
+        </div>
+        <div style="margin-top:8px;display:flex;align-items:center;gap:8px;">
+          <input id="px-color" type="color" value="#ff4fa8" style="width:44px;height:30px;padding:0;border:1px solid #888;background:none;cursor:pointer;">
+          <span id="px-colorname" style="color:#aaa;">#ff4fa8</span>
+        </div>
+        <div id="px-palette" style="margin-top:8px;display:grid;grid-template-columns:repeat(16,18px);gap:2px;"></div>
+        <div id="px-recent" style="margin-top:6px;display:flex;gap:2px;min-height:18px;"></div>
+      </div>
+      <div style="flex:1;min-width:300px;">
+        <div id="px-parts" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px;"></div>
+        <div style="display:flex;gap:14px;align-items:flex-start;">
+          <canvas id="px-prev" width="200" height="300" style="background:#0a0f18;border:1px solid #345;image-rendering:pixelated;flex:none;"></canvas>
+          <div style="flex:1;">
+            <div style="color:#aab;margin-bottom:4px;">NAME</div>
+            <input id="px-name" maxlength="20" style="width:100%;box-sizing:border-box;padding:6px;background:#0a1220;color:#fff;border:1px solid #556;font-family:inherit;">
+            <div id="px-extra" style="margin-top:8px;"></div>
+            <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap;">
+              <button class="pxb" id="px-save" style="border-color:#44ff99;color:#88ffcc;">💾 SAVE</button>
+              <button class="pxb" id="px-wear" style="border-color:#ffd24a;color:#ffe08a;">✅ USE IT</button>
+              <button class="pxb" id="px-new">➕ NEW</button>
+              <button class="pxb" id="px-del" style="border-color:#ff4444;color:#ff8888;">🗑 DELETE</button>
+            </div>
+            <div style="margin-top:8px;color:#aab;">START A NEW ONE FROM</div>
+            <select id="px-base" style="width:100%;margin-top:4px;padding:5px;background:#0a1220;color:#fff;border:1px solid #556;font-family:inherit;"></select>
+            <div id="px-msg" style="margin-top:8px;color:#88ffcc;min-height:16px;"></div>
+          </div>
+        </div>
+        <div style="margin-top:12px;color:#aab;">SAVED</div>
+        <div id="px-saved" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;"></div>
+        <details style="margin-top:12px;"><summary style="cursor:pointer;color:#aab;">EXPORT / IMPORT</summary>
+          <textarea id="px-json" rows="4" style="width:100%;box-sizing:border-box;margin-top:6px;background:#0a1220;color:#9fd;border:1px solid #556;font-size:10px;"></textarea>
+          <div style="margin-top:4px;"><button class="pxb" id="px-export">COPY OUT</button> <button class="pxb" id="px-import">PASTE IN</button></div>
+        </details>
+      </div>
+    </div>
+    <style>.pxb{padding:5px 8px;background:#1a2433;color:#cfe8ff;border:1px solid #5577aa;border-radius:4px;cursor:pointer;font-family:inherit;font-size:11px;letter-spacing:1px}
+    .pxb.on{background:#3a1a40;border-color:#ff66cc;color:#ffd1f0}</style>`;
+  _pxWire(panel);
+  _pxDrawAll();
+}
+function _pxCur() { const u = _pxUI; return u.tab === 'char' ? u.char : u.gun; }
+function _pxArr() { const u = _pxUI; return u.tab === 'char' ? u.char.parts[u.part] : u.gun.px; }
+function _pxMsg(t) { if (_pxUI) { _pxUI.msg = t; const m = document.getElementById('px-msg'); if (m) m.textContent = t; } }
+function _pxFill(arr, i, col) {
+  const from = arr[i]; if (from === col) return;
+  const st = [i];
+  while (st.length) {
+    const k = st.pop(); if (arr[k] !== from) continue;
+    arr[k] = col; const x = k & 15, y = k >> 4;
+    if (x > 0) st.push(k - 1); if (x < 15) st.push(k + 1); if (y > 0) st.push(k - 16); if (y < 15) st.push(k + 16);
+  }
+}
+function _pxWire(panel) {
+  const u = _pxUI, $ = id => panel.querySelector('#' + id);
+  const edit = $('px-edit');
+  let down = false;
+  const cell = e => { const r = edit.getBoundingClientRect(); const x = Math.floor((e.clientX - r.left) / r.width * 16), y = Math.floor((e.clientY - r.top) / r.height * 16);
+    return (x < 0 || y < 0 || x > 15 || y > 15) ? -1 : y * 16 + x; };
+  const act = (i, first) => {
+    if (i < 0) return; const arr = _pxArr();
+    if (u.tool === 'pick') { u.color = arr[i]; _pxSyncColor(); u.tool = 'pencil'; _pxDrawTools(); return; }
+    if (first) { u.hist.push({ arr, copy: arr.slice() }); if (u.hist.length > 60) u.hist.shift(); }
+    if (u.tool === 'fill') { if (first) { _pxFill(arr, i, u.color); if (u.mirror && u.tab === 'char') {} } }
+    else { arr[i] = u.color; if (u.mirror) arr[(i >> 4) * 16 + (15 - (i & 15))] = u.color; }
+    _pxDrawAll();
+  };
+  edit.addEventListener('pointerdown', e => { down = true; edit.setPointerCapture && edit.setPointerCapture(e.pointerId); act(cell(e), true); e.preventDefault(); });
+  edit.addEventListener('pointermove', e => { if (down && u.tool === 'pencil') act(cell(e), false); });
+  const up = () => { if (down) { down = false; _pxNoteColor(); } };
+  edit.addEventListener('pointerup', up); edit.addEventListener('pointercancel', up);
+  panel.querySelectorAll('[data-tool]').forEach(b => b.addEventListener('click', () => { u.tool = b.dataset.tool; _pxDrawTools(); }));
+  $('px-mirror').addEventListener('click', () => { u.mirror = !u.mirror; _pxDrawTools(); });
+  $('px-undo').addEventListener('click', () => { const h = u.hist.pop(); if (h) { for (let i = 0; i < 256; i++) h.arr[i] = h.copy[i]; _pxDrawAll(); } });
+  $('px-clear').addEventListener('click', () => { const arr = _pxArr(); u.hist.push({ arr, copy: arr.slice() }); arr.fill(u.color); _pxDrawAll(); });
+  $('px-color').addEventListener('input', e => { u.color = e.target.value; $('px-colorname').textContent = u.color; });
+  $('px-color').addEventListener('change', () => _pxNoteColor());
+  $('px-close').addEventListener('click', () => { panel.style.display = 'none'; });
+  $('px-tab-char').addEventListener('click', () => { u.tab = 'char'; u.hist = []; _pxDrawAll(); });
+  $('px-tab-gun').addEventListener('click', () => { u.tab = 'gun'; u.hist = []; _pxDrawAll(); });
+  $('px-name').addEventListener('input', e => { _pxCur().name = e.target.value.slice(0, 20); });
+  $('px-save').addEventListener('click', () => {
+    const d = _pxCur(), db = _pxLoad(), list = u.tab === 'char' ? db.char : db.gun;
+    d.name = (d.name || 'My Skin').slice(0, 20);
+    const i = list.findIndex(s => s.id === d.id), copy = JSON.parse(JSON.stringify(d));
+    if (i >= 0) list[i] = copy; else list.push(copy);
+    if (!_pxStore(db)) { _pxMsg('Could not save: the browser refused storage.'); return; }
+    if (u.tab === 'char') _pxRegisterChar(copy); else _pxRegisterGun(copy);
+    // a wrap that is on a gun right now should show the edit
+    if (u.tab === 'gun' && selectedWeaponSkin === d.id) { try { applySelectedWeaponSkinToAll(); } catch (e) {} }
+    u.db = db; _pxMsg('Saved "' + d.name + '".'); _pxDrawAll();
+  });
+  $('px-wear').addEventListener('click', () => {
+    const d = _pxCur();
+    $('px-save').click();
+    if (u.tab === 'char') {
+      mySkin = d.id; try { localStorage.setItem('pvp_skin', mySkin); } catch (e) {}
+      try { emitMySkin(); } catch (e) {}
+      _pxMsg('Wearing "' + d.name + '". (Other players see the default skin on you.)');
+    } else {
+      selectedWeaponSkin = d.id; try { localStorage.setItem('pvp_weapon_skin', d.id); } catch (e) {}
+      try { applySelectedWeaponSkinToAll(); } catch (e) {}
+      _pxMsg('"' + d.name + '" is on your guns now.');
+    }
+  });
+  $('px-new').addEventListener('click', () => {
+    const base = $('px-base').value;
+    if (u.tab === 'char') u.char = _pxTemplateChar(base); else u.gun = _pxTemplateGun(base);
+    u.hist = []; _pxMsg('Started a new one.'); _pxDrawAll();
+  });
+  $('px-del').addEventListener('click', () => {
+    const d = _pxCur(), db = _pxLoad(), list = u.tab === 'char' ? db.char : db.gun, i = list.findIndex(s => s.id === d.id);
+    if (i < 0) { _pxMsg('That one is not saved.'); return; }
+    list.splice(i, 1); _pxStore(db); u.db = db;
+    if (u.tab === 'char') { delete PIXEL_SKINS[d.id]; const k = SKINS.findIndex(s => s.id === d.id); if (k >= 0) SKINS.splice(k, 1); if (mySkin === d.id) { mySkin = 'default'; try { localStorage.setItem('pvp_skin', 'default'); emitMySkin(); } catch (e) {} } }
+    else { const k = WEAPON_SKINS.findIndex(s => s.id === d.id); if (k >= 0) WEAPON_SKINS.splice(k, 1); delete WEAPON_SKINS_BY_ID[d.id]; delete WS_LOOKS[d.id];
+           if (selectedWeaponSkin === d.id) { selectedWeaponSkin = 'default'; try { localStorage.setItem('pvp_weapon_skin', 'default'); applySelectedWeaponSkinToAll(); } catch (e) {} } }
+    if (u.tab === 'char') u.char = list[0] ? JSON.parse(JSON.stringify(list[0])) : _pxTemplateChar('default');
+    else u.gun = list[0] ? JSON.parse(JSON.stringify(list[0])) : _pxTemplateGun('carbon');
+    _pxMsg('Deleted.'); _pxDrawAll();
+  });
+  $('px-export').addEventListener('click', () => {
+    const t = $('px-json'); t.value = JSON.stringify({ kind: u.tab, skin: _pxCur() }); t.select();
+    try { navigator.clipboard && navigator.clipboard.writeText(t.value); } catch (e) {}
+    _pxMsg('Copied. Paste it into another browser\'s PASTE IN.');
+  });
+  $('px-import').addEventListener('click', () => {
+    try {
+      const j = JSON.parse($('px-json').value), s = j.skin;
+      if (!s || !(s.parts || s.px)) throw new Error('not a skin');
+      s.id = (j.kind === 'gun' ? 'pxg_' : 'px_') + Math.random().toString(36).slice(2, 9);   // always a new one: never overwrites
+      if (j.kind === 'gun') { u.tab = 'gun'; u.gun = s; } else { u.tab = 'char'; u.char = s; }
+      _pxMsg('Imported. SAVE to keep it.'); _pxDrawAll();
+    } catch (e) { _pxMsg('That is not a skin.'); }
+  });
+  const pal = $('px-palette');
+  PX_PALETTE.forEach(c => { const b = document.createElement('div'); b.style.cssText = `width:18px;height:18px;background:${c};border:1px solid #000;cursor:pointer;`;
+    b.addEventListener('click', () => { u.color = c; _pxSyncColor(); }); pal.appendChild(b); });
+}
+function _pxSyncColor() { const u = _pxUI, i = document.getElementById('px-color'); if (i) { i.value = u.color; document.getElementById('px-colorname').textContent = u.color; } }
+function _pxNoteColor() {
+  const u = _pxUI; if (!u) return;
+  u.recent = [u.color, ...u.recent.filter(c => c !== u.color)].slice(0, 16);
+  const r = document.getElementById('px-recent'); if (!r) return; r.innerHTML = '';
+  u.recent.forEach(c => { const b = document.createElement('div'); b.style.cssText = `width:18px;height:18px;background:${c};border:1px solid #000;cursor:pointer;`;
+    b.addEventListener('click', () => { u.color = c; _pxSyncColor(); }); r.appendChild(b); });
+}
+function _pxDrawTools() {
+  const u = _pxUI, p = document.getElementById('pixelizer-panel'); if (!p) return;
+  p.querySelectorAll('[data-tool]').forEach(b => b.classList.toggle('on', b.dataset.tool === u.tool));
+  p.querySelector('#px-mirror').classList.toggle('on', u.mirror);
+  p.querySelector('#px-tab-char').classList.toggle('on', u.tab === 'char');
+  p.querySelector('#px-tab-gun').classList.toggle('on', u.tab === 'gun');
+}
+function _pxDrawAll() {
+  const u = _pxUI, p = document.getElementById('pixelizer-panel'); if (!u || !p) return;
+  _pxDrawTools();
+  // the grid
+  const edit = p.querySelector('#px-edit'), g = edit.getContext('2d'), arr = _pxArr();
+  g.imageSmoothingEnabled = false;
+  for (let i = 0; i < 256; i++) { g.fillStyle = arr[i] || '#808080'; g.fillRect((i & 15) * 20, (i >> 4) * 20, 20, 20); }
+  g.strokeStyle = 'rgba(0,0,0,0.28)'; g.lineWidth = 1; g.beginPath();
+  for (let k = 0; k <= 16; k++) { g.moveTo(k * 20 + 0.5, 0); g.lineTo(k * 20 + 0.5, 320); g.moveTo(0, k * 20 + 0.5); g.lineTo(320, k * 20 + 0.5); }
+  g.stroke();
+  if (u.mirror) { g.strokeStyle = 'rgba(255,102,204,0.8)'; g.beginPath(); g.moveTo(160.5, 0); g.lineTo(160.5, 320); g.stroke(); }
+  // the parts (character) or the extras (gun)
+  const parts = p.querySelector('#px-parts'); parts.innerHTML = '';
+  if (u.tab === 'char') {
+    for (const [k, label] of PX_CHAR_PARTS) {
+      const b = document.createElement('button'); b.className = 'pxb' + (k === u.part ? ' on' : ''); b.textContent = label;
+      b.addEventListener('click', () => { u.part = k; u.hist = []; _pxDrawAll(); }); parts.appendChild(b);
+    }
+  } else { const t = document.createElement('div'); t.style.color = '#aab'; t.textContent = 'One picture wraps every part of every gun.'; parts.appendChild(t); }
+  const extra = p.querySelector('#px-extra'); extra.innerHTML = '';
+  if (u.tab === 'char') {
+    extra.innerHTML = `<div style="color:#aab;margin-bottom:4px;">HANDS &nbsp; BOOTS</div>
+      <input id="px-hand" type="color" value="${u.char.hand}" style="width:44px;height:28px;padding:0;border:1px solid #888;background:none;"> 
+      <input id="px-foot" type="color" value="${u.char.foot.length === 7 ? u.char.foot : '#14161a'}" style="width:44px;height:28px;padding:0;border:1px solid #888;background:none;">`;
+    extra.querySelector('#px-hand').addEventListener('input', e => { u.char.hand = e.target.value; _pxDrawAll(); });
+    extra.querySelector('#px-foot').addEventListener('input', e => { u.char.foot = e.target.value; _pxDrawAll(); });
+  }
+  // base templates
+  const sel = p.querySelector('#px-base'); const want = u.tab === 'char' ? Object.keys(PIXEL_SKINS).filter(k => !k.startsWith('px_')) : ['carbon', 'woodland', 'urban', 'outlaw', 'hazard', 'candycane', 'bubblegum', 'ocean', 'sunset', 'neon', 'gold'];
+  if (sel.dataset.tab !== u.tab) { sel.dataset.tab = u.tab; sel.innerHTML = want.map(k => `<option value="${k}">${k}</option>`).join(''); }
+  p.querySelector('#px-name').value = _pxCur().name || '';
+  _pxDrawPreview();
+  // saved list
+  const saved = p.querySelector('#px-saved'); saved.innerHTML = '';
+  const list = u.tab === 'char' ? u.db.char : u.db.gun;
+  if (!list.length) saved.innerHTML = '<span style="color:#678;">nothing saved yet</span>';
+  list.forEach(s => {
+    const b = document.createElement('button'); b.className = 'pxb' + (s.id === _pxCur().id ? ' on' : ''); b.textContent = s.name || s.id;
+    b.addEventListener('click', () => { const c = JSON.parse(JSON.stringify(s)); if (u.tab === 'char') u.char = c; else u.gun = c; u.hist = []; _pxDrawAll(); });
+    saved.appendChild(b);
+  });
+  p.querySelector('#px-msg').textContent = u.msg || '';
+}
+function _pxFace(g, arr, x, y, w, h) {
+  const t = document.createElement('canvas'); t.width = t.height = 16;
+  const tg = t.getContext('2d'), id = tg.createImageData(16, 16);
+  for (let i = 0; i < 256; i++) { const c = parseInt((arr[i] || '#808080').slice(1), 16); id.data[i * 4] = c >> 16 & 255; id.data[i * 4 + 1] = c >> 8 & 255; id.data[i * 4 + 2] = c & 255; id.data[i * 4 + 3] = 255; }
+  tg.putImageData(id, 0, 0);
+  g.imageSmoothingEnabled = false; g.drawImage(t, x, y, w, h);
+}
+function _pxDrawPreview() {
+  const u = _pxUI, c = document.getElementById('px-prev'); if (!c) return;
+  const g = c.getContext('2d'); g.clearRect(0, 0, 200, 300); g.imageSmoothingEnabled = false;
+  if (u.tab === 'char') {
+    const P = u.char.parts;   // a paper doll, front on: head, chest, both arms, both legs, hands and boots
+    _pxFace(g, P['head.front'], 62, 8, 76, 76);
+    _pxFace(g, P['torso.front'], 56, 86, 88, 104);
+    for (const side of [0, 1]) {
+      const ax = side ? 146 : 30;
+      _pxFace(g, P.armU, ax, 86, 26, 54); _pxFace(g, P.armF, ax, 140, 26, 40);
+      g.fillStyle = u.char.hand; g.fillRect(ax, 180, 26, 14);
+      const lx = side ? 100 : 56;
+      _pxFace(g, P.leg, lx, 192, 44, 48); _pxFace(g, P.shin, lx, 240, 44, 40);
+      g.fillStyle = u.char.foot; g.fillRect(lx, 280, 44, 14);
+    }
+  } else {
+    // the wrap, laid over a gun silhouette so it reads at about the scale it will be seen
+    const t = document.createElement('canvas'); t.width = t.height = 16;
+    const tg = t.getContext('2d'), id = tg.createImageData(16, 16), arr = u.gun.px;
+    for (let i = 0; i < 256; i++) { const col = parseInt((arr[i] || '#808080').slice(1), 16); id.data[i * 4] = col >> 16 & 255; id.data[i * 4 + 1] = col >> 8 & 255; id.data[i * 4 + 2] = col & 255; id.data[i * 4 + 3] = 255; }
+    tg.putImageData(id, 0, 0);
+    const pat = g.createPattern(t, 'repeat'); g.save(); g.scale(3, 3); g.fillStyle = pat;
+    const shapes = [[8, 40, 60, 14], [58, 43, 18, 6], [14, 54, 10, 22], [40, 54, 8, 20], [2, 42, 8, 14]];
+    shapes.forEach(([x, y, w, h]) => g.fillRect(x, y + 10, w, h));
+    g.restore();
+  }
+}
+
 
 // 🎭 Per-character face: configurable eyes + mouth (+blush/brows) drawn on the
 // 64×64 head-front texture, so each cast member has their own expression.
@@ -56964,7 +57323,7 @@ function openSkinsPanel() {
   panel.style.display = 'block';
   const isAdmin = !!(currentUser && currentUser.isAdmin);
   const cards = SKINS.map(s => {
-    const [c1, c2] = SKIN_SWATCH[s.id] || ['#444', '#888'];
+    const [c1, c2] = SKIN_SWATCH[s.id] || s.swatch || ['#444', '#888'];
     const sel = s.id === mySkin;
     return `<div class="skin-card" data-skin="${s.id}" style="display:flex;align-items:center;gap:12px;padding:10px;margin-bottom:8px;border:2px solid ${sel ? '#55ffaa' : '#2a3a4a'};border-radius:6px;cursor:pointer;background:${sel ? '#11261d' : '#11202e'};">
         <div style="flex:none;width:34px;height:46px;border-radius:4px;background:${c1};display:flex;align-items:flex-start;justify-content:center;overflow:hidden;">
@@ -57504,6 +57863,7 @@ function openAdminPanel() {
     <button data-action="heal"     style="width:100%;padding:8px;margin-bottom:4px;background:#116611;color:#fff;border:1px solid #44ff44;cursor:pointer;font-family:inherit;font-size:12px;border-radius:4px;">❤️ FULL HEAL</button>
     <button data-action="ammo"     style="width:100%;padding:8px;margin-bottom:4px;background:#222288;color:#fff;border:1px solid #88aaff;cursor:pointer;font-family:inherit;font-size:12px;border-radius:4px;">📦 REFILL AMMO</button>
     <button data-action="endRound" style="width:100%;padding:8px;margin-bottom:4px;background:#444411;color:#ffcc44;border:1px solid #ffcc44;cursor:pointer;font-family:inherit;font-size:12px;border-radius:4px;">🏁 INSTANT WIN ROUND</button>
+    <button data-action="pixelizer" style="width:100%;padding:8px;margin-bottom:4px;background:#2a1030;color:#ff99dd;border:1px solid #ff66cc;cursor:pointer;font-family:inherit;font-size:12px;border-radius:4px;">🎨 SKIN PIXELIZER</button>
     <button data-action="mapBuilder" style="width:100%;padding:8px;background:#1f1018;color:#ff99bb;border:1px solid #ff6688;cursor:pointer;font-family:inherit;font-size:12px;border-radius:4px;">🧱 MAP LOADER / BUILDER</button>
   `;
   panel.style.display = 'block';
@@ -57525,6 +57885,7 @@ function closeAdminPanel() {
 function adminAction(act) {
   if (!currentUser?.isAdmin) return;
   switch (act) {
+    case 'pixelizer': openSkinPixelizer(); break;
     case 'nuke': {
       // Kill all bots instantly via emitHit with insane damage
       for (const bot of gameBots) {
