@@ -73,7 +73,9 @@ function load() {
                    '_mPivot', '_eqCrystalMats', '_donutMats', '_donutSprinkleMat',
                    '_buildDonutRing', '_addDonutOrbit', 'buildDonutClassicGun',
                    // builders that take arguments are not picked up by the build*() sweep below
-                   'buildPixelGunModel', '_eqSegment']) {
+                   'buildPixelGunModel', '_eqSegment',
+                   // the Neon Rift (cyberpunk) skins are one generator over the stock builders
+                   '_cyberize']) {
     const b = fnBlock(n);
     if (b) code += b + '\n';
   }
@@ -93,6 +95,7 @@ function load() {
   code += src.match(/^const _COLLAR_AXES = .*$/m)[0] + '\n';
   code += src.match(/^const EMO_FACE = .*$/m)[0] + '\n';
   code += constBlock('GUN_MATS') + '\n';
+  code += constBlock('CYBER_PALETTES') + '\n';
   code += src.match(/^const VM_SKIN_MAT = .*$/m)[0] + '\n';
   // The shipped viewmodels are scaled as a group; measure what ships, not the
   // unscaled builder output.
