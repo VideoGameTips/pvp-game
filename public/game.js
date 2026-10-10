@@ -23529,8 +23529,9 @@ function buildMP40() {
   [-0.013, 0.013].forEach(x => gpBox(g, steel, 0.005, 0.005, 0.150, x, -0.024, 0.140, 0.10));
   gpBox(g, steel, 0.036, 0.030, 0.008, 0, -0.040, 0.214);
   // Sights.
-  gpBox(g, steel, 0.012, 0.014, 0.010, 0, 0.032, -0.230);
-  gpBox(g, bright, 0.003, 0.010, 0.003, 0, 0.040, -0.230);
+  // The front sight stands ON the barrel (top at y 0.0172), not 7 mm above it: block 0.022 +- 0.007, post on top of it.
+  gpBox(g, steel, 0.012, 0.014, 0.010, 0, 0.022, -0.230);
+  gpBox(g, bright, 0.003, 0.010, 0.003, 0, 0.030, -0.230);
   gpBox(g, steel, 0.016, 0.012, 0.012, 0, 0.032, 0.036);
   const flash = makeMuzzleFlash(); flash.position.set(0, 0.010, -0.340); g.add(flash);
   g._flash = flash; g._kickZ = 0.012; g._greebled = true; g._handDetailed = true;
@@ -38970,6 +38971,19 @@ function _buildMech(model, id, evs) {
     const stem = new THREE.Mesh(new THREE.BoxGeometry(0.010, 0.006, 0.016), _mechMat(0x2b2f35, 60)); knob.add(stem);
     const grip = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.011, 0.022), _mechMat(0x454b53, 90)); grip.position.set(0.008, 0, 0.004); knob.add(grip);
     knob.position.set(0.030, A.breech.y - 0.006, A.breech.z);
+    // Sit it on the receiver actually there. A fixed 30 mm out is right for a broad receiver and floats beside a round
+    // tube (the MP-40's, 21 mm across): find the biggest part under the knob and put its stem against that part's side.
+    {
+      const z = A.breech.z;
+      const rec = P.filter(p => p.obj.geometry.type !== 'TorusGeometry' && p.box.min.z <= z && p.box.max.z >= z && Math.abs(p.box.getCenter(new THREE.Vector3()).x) <= 0.012)
+        .sort((a, b) => { const va = a.box.getSize(new THREE.Vector3()), vb = b.box.getSize(new THREE.Vector3()); return vb.x * vb.y * vb.z - va.x * va.y * va.z; })[0];
+      if (rec) {
+        const c = rec.box.getCenter(new THREE.Vector3()), round = rec.obj.geometry.type === 'CylinderGeometry';
+        let y = round ? c.y + 0.004 : Math.min(A.breech.y - 0.006, rec.box.max.y - 0.004);
+        y = Math.max(y, rec.box.min.y + 0.004);
+        knob.position.set(rec.box.max.x + 0.003, y, z);   // the stem is 10 mm wide: its inner face sinks 2 mm into the side
+      }
+    }
     model.add(knob); M.knob = { g: knob, home: knob.position.clone() };
   }
   // ── the projectile that sits in the front of a launcher
