@@ -444,6 +444,22 @@ if (ok && process.argv.includes('--combat-feedback')) {
       killfeedChain('killer', null, 8100);
       if (killfeedChain('d', 'killer', 8200) !== 1 || killfeedChain('killer', 'killer', 8300) !== 0) issues.push('death/self-kill did not reset streak');
       if (!killfeedLaser('gatecrasher_beam') || !killfeedLaser('cyroclasm_laser') || !killfeedLaser('laser') || killfeedLaser('ak20') || killfeedLaser('taser')) issues.push('laser gag classification wrong');
+      for (const [weapon, info, self, want] of [
+        ['rpg', {}, false, 'boom'], ['freeze_gun', {}, false, 'ice'], ['taser', {}, false, 'electric'],
+        ['flamethrower', {}, false, 'fire'], [null, { cause: 'fall' }, false, 'fall'],
+        ['air_blaster', { cause: 'ringout' }, false, 'ringout'], ['rpg', {}, true, 'self'],
+        ['pistol', { look: 'fart_cloud' }, false, 'fart'], ['vector', { look: 'bubble_shot' }, false, 'bubble'],
+        ['rpg', { look: 'donut' }, false, 'donut'], ['rpg', { look: 'water_balloon' }, false, 'water'],
+        ['sg8', { look: 'void' }, false, 'void'], ['frying_pan', {}, false, 'bonk'], ['throwing_knives', {}, false, 'thrown'],
+        ['pistol', { look: 'beam' }, false, 'laser'], ['ak20', {}, false, null],
+        [null, { cause: 'hazard', label: KILLFEED_HAZARDS.lava }, true, 'fire'],
+      ]) if (killfeedGagKind(weapon, info, self) !== want) issues.push(String(weapon) + ': gag category wrong');
+      for (const [kind, gag] of Object.entries(KILLFEED_GAGS)) {
+        _killfeedGagCounts.delete(kind);
+        const lines = gag.lines.map(() => nextKillfeedGag(kind).line);
+        if (new Set(lines).size !== gag.lines.length || nextKillfeedGag(kind).line !== lines[0]) issues.push(kind + ': joke rotation broken');
+      }
+      _killfeedGagCounts.clear();
     } finally {
       wallColliders.splice(0, wallColliders.length, ...saved.boxes); camera.position.copy(saved.pos); playerYVel = saved.vel; slamState = saved.slam;
       window._crouchEye = saved.eye; window._climbArmed = saved.armed; window._climbing = saved.climbing; window._slideUntil = saved.slide;

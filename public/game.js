@@ -50310,6 +50310,51 @@ function killfeedChain(targetId, killerId, now = performance.now()) {
 function killfeedLaser(weaponId) {
   return weaponId === 'laser' || weaponId === 'laser_pointer' || ['beam', 'icebeam'].includes(PROJECTILE_KIND_BY_ID[weaponId]);
 }
+const KILLFEED_GAGS = {
+  laser: { icon: '', color: '#ffacc4', lines: ['NOW IN TWO PIECES', 'SOME ASSEMBLY REQUIRED', 'SLICED, NOT DICED'] },
+  boom: { icon: '*', color: '#ffbc79', lines: ['RETURNED TO THE ATMOSPHERE', 'SOMEWHERE OVER THERE', 'EXPRESS SHIPPING: EVERYWHERE'] },
+  ice: { icon: '\u2744', color: '#a4e8ff', lines: ['PLEASE DEFROST BEFORE USE', 'BRAIN FREEZE: PERMANENT', 'SENT TO THE FREEZER'] },
+  electric: { icon: '\u03df', color: '#ffec7d', lines: ['WARRANTY VOID', 'CHARGED TO 0%', 'HAVE YOU TRIED REBOOTING?'] },
+  fire: { icon: '\u2668', color: '#ff967a', lines: ['WELL DONE. TOO WELL DONE.', 'CRISPY MODE ENABLED', 'LEFT IN THE OVEN'] },
+  fall: { icon: '\u2193', color: '#bdd5ff', lines: ['THE FLOOR DECLINED', 'GRAVITY WON THE ARGUMENT', 'FORGOT TO INSTALL WINGS'] },
+  ringout: { icon: '\u21e2', color: '#bdd5ff', lines: ['EVICTED FROM THE MAP', 'ONE-WAY TICKET', 'LEFT THE GROUP CHAT'] },
+  self: { icon: '?', color: '#ffb8a0', lines: ['YOU PLAYED YOURSELF', 'FRIENDLY FIRE: YOURSELF', 'TASK FAILED SUCCESSFULLY'] },
+  fart: { icon: '~', color: '#b8e981', lines: ['AIR QUALITY: CRITICAL', 'DEFEATED BY THE ATMOSPHERE', 'GAS LEAK CONFIRMED'] },
+  bubble: { icon: '\u25cb', color: '#a2f4ef', lines: ['PERSONALLY BURST YOUR BUBBLE', 'RINSED AND DELETED', 'SOAP OPERA FINALE'] },
+  donut: { icon: '\u25ce', color: '#ffb1d4', lines: ['GLAZED AND CONFUSED', 'FRESHLY DEFEATED', 'HOLE NEW PROBLEM'] },
+  water: { icon: '\u224b', color: '#88d8ff', lines: ['SPLASH DAMAGE. LITERALLY.', 'WATER YOU DOING?', 'DRY CLEAN ONLY'] },
+  void: { icon: '\u25c9', color: '#dab5ff', lines: ['DELETED FROM THIS DIMENSION', '404: OPPONENT NOT FOUND', 'THE VOID ACCEPTED YOUR RETURN'] },
+  bonk: { icon: '!', color: '#e6dda4', lines: ['BONK. THAT IS ALL.', 'PERCUSSIVE MAINTENANCE', 'THINK FAST. TOO LATE.'] },
+  thrown: { icon: '\u21d7', color: '#d6dce7', lines: ['SPECIAL DELIVERY', 'CATCH! ...NEVER MIND', 'NO HANDS. NO CHANCE.'] },
+};
+const _killfeedGagCounts = new Map();
+function killfeedGagKind(weaponId, info = {}, self = false) {
+  if (info.cause === 'fall') return 'fall';
+  if (info.cause === 'ringout') return 'ringout';
+  if (self && info.cause !== 'hazard') return 'self';
+  const look = info.look;
+  if (look === 'fart_cloud') return 'fart';
+  if (look === 'bubble_shot') return 'bubble';
+  if (look === 'donut') return 'donut';
+  if (look === 'water_balloon') return 'water';
+  if (look === 'void' || weaponId === 'event_horizon') return 'void';
+  if (FROST_WEAPONS.has(weaponId)) return 'ice';
+  if (killfeedLaser(weaponId) || look === 'beam' || info.label === KILLFEED_HAZARDS.laser) return 'laser';
+  const w = projectileWeaponSpec(weaponId), kind = weaponId && projectileKind(weaponId, w);
+  if (kind === 'spark' || kind === 'ball_lightning' || weaponId === 'storm_bloom' || info.label === KILLFEED_HAZARDS.lightning_strike) return 'electric';
+  if (kind === 'flame' || weaponId === 'flame_burn' || look === 'hellfire' || info.label === KILLFEED_HAZARDS.lava) return 'fire';
+  if (isExplosiveKill(weaponId, w, SUPPORT_ITEMS.find(s => s.id === weaponId))) return 'boom';
+  if (['bat', 'frying_pan', 'sledge', 'baguette', 'tennis_racket', 'shovel'].includes(weaponId) || info.label === KILLFEED_HAZARDS.chandelier) return 'bonk';
+  if (['throwing_knives', 'throwing_axes', 'boomerang', 'traffic_cone', 'cream_pie'].includes(weaponId)) return 'thrown';
+  return null;
+}
+function nextKillfeedGag(kind) {
+  const gag = KILLFEED_GAGS[kind];
+  if (!gag) return null;
+  const count = _killfeedGagCounts.get(kind) || 0;
+  _killfeedGagCounts.set(kind, count + 1);
+  return { ...gag, line: gag.lines[count % gag.lines.length] };
+}
 function killfeedTagMark(tag) {
   return ({ 'NO SCOPE': ['', 'noscope', 'No scope'], '360': ['360', 'turn', '360-degree shot'], AIR: ['\u2191', 'air', 'Airborne kill'], SLIDE: ['\u21b3', 'slide', 'Sliding kill'], CROUCH: ['\u2193', 'crouch', 'Crouched kill'], ELEVATED: ['\u2303', 'elevated', 'High-ground kill'], COMBO: ['\u21c4', 'combo', 'Weapon-switch combo'] })[tag] || [tag, '', tag];
 }
@@ -50371,6 +50416,7 @@ function noteKillInfo(targetId, killerId, weaponId, head, extra = {}) {
     head: !!head,
     cause: extra.cause || null,
     label: extra.label || null,
+    look: extra.look || (killerId === myId ? _modelSkinLook[weaponId]?.projectile : null),
     tags: cleanKillfeedTags(extra.tags),
     t: performance.now(),
   };
@@ -50532,7 +50578,7 @@ function ensureKillfeedStyles() {
   st.textContent = `
     #killfeed{position:fixed;right:18px;top:92px;z-index:6200;display:flex;flex-direction:column;gap:7px;align-items:flex-end;pointer-events:none;font:700 12px/1.1 system-ui,-apple-system,Segoe UI,sans-serif;text-transform:uppercase;letter-spacing:0}
     .kf-row{display:flex;align-items:center;gap:7px;min-height:32px;max-width:min(520px,calc(100vw - 32px));padding:6px 9px;background:rgba(10,12,16,.74);border:1px solid rgba(255,255,255,.15);box-shadow:0 8px 26px rgba(0,0,0,.35);backdrop-filter:blur(8px);color:#f4f7fb;transform:translateX(0);opacity:1;transition:opacity .45s ease,transform .45s ease}
-    .kf-row{border-radius:4px;border-left:3px solid #8294a8}
+    .kf-row{border-radius:4px;border-left:3px solid #8294a8;flex-wrap:wrap;justify-content:flex-end}
     .kf-row.mine{border-left-color:#ffd23f;border-color:rgba(255,210,63,.45);box-shadow:0 0 0 1px rgba(255,210,63,.16),0 8px 26px rgba(0,0,0,.35)}
     .kf-row.kf-laser{border-left-color:#ff688f;background:rgba(30,8,20,.9)}
     .kf-row.out{opacity:0;transform:translateX(22px)}
@@ -50548,12 +50594,18 @@ function ensureKillfeedStyles() {
     .kf-mark.noscope:after{content:'';position:absolute;width:23px;height:2px;background:#ff728f;transform:rotate(-45deg);box-shadow:0 0 0 1px #141820}
     .kf-mark.turn{font-size:10px;border:1px dashed #91ddff;border-radius:50%}
     .kf-mark.combo{color:#e4acff}.kf-chain{color:#ffd23f;border-color:#bd983d;background:rgba(255,210,63,.1)}
-    .kf-gag{display:inline-flex;align-items:center;gap:5px;font-size:9px;color:#ffacc4;white-space:nowrap}
+    .kf-gag{display:inline-flex;align-items:center;justify-content:flex-end;flex-basis:100%;gap:5px;font-size:9px;color:#ffacc4;white-space:nowrap}
+    .kf-gag-icon{display:inline-flex;align-items:center;justify-content:center;width:20px;height:22px;flex-shrink:0;font-size:22px;animation:kfGoof .7s ease-out both}
+    .kf-gag-kind-boom .kf-gag-icon{animation:kfBurst .6s ease-out both}
+    .kf-gag-kind-fall .kf-gag-icon,.kf-gag-kind-ringout .kf-gag-icon{animation:kfDrop .65s ease-out both}
+    @keyframes kfGoof{0%,35%{transform:rotate(-18deg)}65%{transform:rotate(15deg)}100%{transform:none}}
+    @keyframes kfBurst{0%{transform:scale(.2) rotate(0)}60%{transform:scale(1.4) rotate(140deg)}100%{transform:scale(1) rotate(180deg)}}
+    @keyframes kfDrop{0%{transform:translateY(-7px);opacity:.3}100%{transform:translateY(0);opacity:1}}
     .kf-sliced{display:inline-block;position:relative;width:18px;height:24px;flex-shrink:0}
     .kf-sliced:before{content:'';position:absolute;left:4px;top:1px;width:8px;height:9px;border-radius:50% 50% 0 0;background:#ffacc4;animation:kfTop .8s ease-out both}
     .kf-sliced:after{content:'';position:absolute;left:4px;top:12px;width:8px;height:10px;background:#ffacc4;clip-path:polygon(0 0,100% 0,100% 100%,60% 100%,50% 50%,40% 100%,0 100%);animation:kfBottom .8s ease-out both}
     @keyframes kfTop{to{transform:translate(-3px,-2px) rotate(-18deg)}}@keyframes kfBottom{to{transform:translate(3px,2px) rotate(18deg)}}
-    @media(prefers-reduced-motion:reduce){.kf-row,.kf-sliced:before,.kf-sliced:after{animation:none}}
+    @media(prefers-reduced-motion:reduce){.kf-row,.kf-sliced:before,.kf-sliced:after,.kf-gag-icon{animation:none}}
     @media(max-width:700px){.kf-row{flex-wrap:wrap;justify-content:flex-end;max-width:calc(100vw - 16px)}.kf-gag{flex-basis:100%;justify-content:flex-end}.kf-mark{flex-basis:18px;height:18px}}
     @media (max-width:700px){#killfeed{right:8px;top:76px}.kf-row{gap:5px;padding:5px 7px}.kf-name{max-width:86px}.kf-icon{width:48px;height:22px}.kf-tag{font-size:9px;padding:2px 4px}}
   `;
@@ -50615,7 +50667,9 @@ function pushKillfeed(targetId, killerId) {
     const known = info && now - info.t < 4000 && (info.killer === killerId || !killerId) ? info : null;
     const widKnown = known && known.weapon;
     const chain = killfeedChain(targetId, killerId, now);
-    const laser = killfeedLaser(widKnown || (killerId === myId ? currentEquippedId() : players[killerId]?.weaponId));
+    const gagWeapon = widKnown || (killerId === myId ? currentEquippedId() : (resolveBot(killerId)?.weaponId || players[killerId]?.weaponId));
+    const gagInfo = known || (!killerId ? { cause: 'fall' } : {});
+    const gagKind = killfeedGagKind(gagWeapon, gagInfo, killerId === targetId || (!killerId && !!widKnown));
     if (known && known.cause === 'hazard') {
       part('kf-name', v.name, v.color);
       part('kf-action', known.label || 'died');
@@ -50640,10 +50694,12 @@ function pushKillfeed(targetId, killerId) {
       part('kf-name', v.name, v.color);
     }
     if (chain > 1) { const el = part('kf-tag kf-chain', 'x' + chain); el.title = chain + ' eliminations within five seconds'; }
-    if (laser || known?.label === KILLFEED_HAZARDS.laser) {
-      row.classList.add('kf-laser');
-      const gag = part('kf-gag', 'NOW IN TWO PIECES');
-      const dummy = document.createElement('span'); dummy.className = 'kf-sliced'; dummy.setAttribute('aria-hidden', 'true'); gag.prepend(dummy);
+    const joke = nextKillfeedGag(gagKind);
+    if (joke) {
+      if (gagKind === 'laser') row.classList.add('kf-laser');
+      const gag = part('kf-gag kf-gag-kind-' + gagKind, joke.line, joke.color);
+      const mark = document.createElement('span'); mark.className = gagKind === 'laser' ? 'kf-sliced' : 'kf-gag-icon';
+      mark.textContent = joke.icon; mark.setAttribute('aria-hidden', 'true'); gag.prepend(mark);
     }
     box.insertBefore(row, box.firstChild);
     while (box.children.length > KILLFEED_MAX) box.lastChild.remove();
