@@ -301,6 +301,13 @@ if (ok && process.argv.includes('--secret-inspects')) {
       const key = skin.weapon + ':' + skinId;
       _secretInspectCounts.delete(key);
       const model = new THREE.Group();
+      const rear = new THREE.Group(), front = new THREE.Group(), main = new THREE.Group();
+      rear.add(new THREE.Mesh(new THREE.BoxGeometry(.02, .02, .02), new THREE.MeshStandardMaterial()));
+      front.position.set(-.03, -.05, -.04); main._home = new THREE.Vector3(0, .02, -.03); main.position.copy(main._home);
+      model.add(rear, front, main); model._homePos = model.position.clone();
+      model._parts = { main };
+      model._hands = { rear, front, rearHome: rear.position.clone(), frontHome: front.position.clone(), rearRot: rear.rotation.clone(), frontRot: front.rotation.clone(), single: def.kind === 'receipt', hideFront: false };
+      const initialChildren = model.children.length;
       for (let n = 1; n <= def.every * 2; n++) {
         const run = secretInspectFor(skin.weapon);
         if (run.triggered !== (n % def.every === 0)) issues.push(skinId + ': wrong repeat threshold');
@@ -310,7 +317,16 @@ if (ok && process.argv.includes('--secret-inspects')) {
         if (run.triggered && (!run.group || run.group.children.length < 4 || run.group.scale.x <= 0)) issues.push(skinId + ': missing visible effect');
         if (run.triggered) {
           run.sounded = true; // Audio is unavailable in this headless WebGL harness.
-          for (const t of [.45, .65, .9]) updateSecretInspect(model, t, pose);
+          const track = SECRET_INSPECT_TRACKS[run.kind];
+          if (!track || !track.some(k => Math.abs(k.hx) + Math.abs(k.hy) + Math.abs(k.hz) > .05)) issues.push(skinId + ': missing independent hand track');
+          for (const t of [.45, .65, .9]) {
+            const p = _reloadPose(track, t);
+            main.position.set(main._home.x + p.ax, main._home.y + p.ay, main._home.z + p.az); main.rotation.set(p.arx, p.ary, p.arz);
+            updateSecretInspect(model, t, p); finishSecretInspectPose(model, t, p);
+            const hand = run.extraHand || front;
+            if (t === .45 && hand.position.distanceTo(model._hands.frontHome) < .001) issues.push(skinId + ': hand did not act');
+            if (run.kind === 'donut' && t === .65 && (main.position.distanceTo(main._home) < .05 || Math.abs(main.rotation.z) < Math.PI * 2)) issues.push('glazer did not remove and spin its real cylinder');
+          }
           run.group.traverse(o => {
             if (![...o.position.toArray(), ...o.scale.toArray(), o.rotation.x, o.rotation.y, o.rotation.z].every(Number.isFinite)) issues.push(skinId + ': invalid animated transform');
           });
@@ -319,7 +335,8 @@ if (ok && process.argv.includes('--secret-inspects')) {
         let disposed = 0, geometryCount = 0;
         if (run.group) run.group.traverse(o => { if (o.geometry) { geometryCount++; o.geometry.addEventListener('dispose', () => disposed++); } });
         clearSecretInspect(model, true);
-        if (model.children.length || model._secretInspect || disposed !== geometryCount) issues.push(skinId + ': leaked effect resources');
+        if (model.children.length !== initialChildren || model._secretInspect || disposed !== geometryCount) issues.push(skinId + ': leaked effect resources');
+        if (!rear.position.equals(model._hands.rearHome) || !front.position.equals(model._hands.frontHome) || !main.position.equals(main._home)) issues.push(skinId + ': did not restore hands or cylinder');
       }
       const count = _secretInspectCounts.get(key);
       model._secretInspect = secretInspectFor(skin.weapon);

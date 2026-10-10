@@ -42392,6 +42392,18 @@ const SECRET_INSPECTS = {
   ak20_nerf_elite: { every: 5, kind: 'darts', color: 0x44aaff },
 };
 const _secretInspectCounts = new Map();
+const SECRET_INSPECT_TRACKS = {
+  donut: [K(.18,{px:-.03,py:.035,rz:-.28,hx:-.03,hy:.04,hz:.05}), K(.32,{px:.02,py:.02,rz:-.3,ax:-.09,ay:.035,az:.10,hx:-.08,hy:.04,hz:.11}), K(.68,{px:.02,py:.02,rz:-.3,ax:-.09,ay:.035,az:.10,arz:Math.PI*8,hx:-.08,hy:.04,hz:.11,hr:.3}), K(.84,{px:-.01,py:.025,rz:-.2,arz:Math.PI*8,hx:-.02,hy:.015,hz:.035}), K(1,{})],
+  ufo: [K(.18,{py:.055,rx:-.32,ry:-.35,rz:-.3,hx:.02,hy:.04,hz:-.04}), K(.34,{py:.05,rx:-.28,ry:-.35,rz:-.3,hx:.015,hy:.055,hz:-.07,hr:-.6}), K(.55,{py:.02,rx:.18,ry:.28,rz:.12,hx:-.045,hy:.04,hz:-.04,hr:.3}), K(.78,{py:.04,rx:-.12,ry:-.25,rz:-.2,hx:.01,hy:.03,hz:-.05}), K(1,{})],
+  void: [K(.2,{py:.04,rx:.2,rz:-.4,hx:.02,hy:.07,hz:-.055}), K(.4,{py:.04,rx:.2,rz:-.4,hx:.035,hy:.10,hz:-.08,hr:-.65}), K(.62,{py:-.01,rx:.45,rz:-.18,hx:-.12,hy:.035,hz:.10,hr:.55}), K(.8,{py:.02,rx:.22,rz:-.3,hx:-.04,hy:.045,hz:.01}), K(1,{})],
+  bubble: [K(.2,{py:.035,rx:.2,rz:-.22,hx:.02,hy:.06,hz:-.05}), K(.4,{py:.03,rx:.25,rz:-.25,hx:.02,hy:.08,hz:-.075,hr:-.6}), K(.58,{py:.015,rx:.35,rz:.08,hx:-.025,hy:.055,hz:.015,hr:.4}), K(.78,{py:.045,rx:-.1,rz:-.12,hx:.015,hy:.085,hz:-.04}), K(1,{})],
+  solar: [K(.2,{px:-.04,py:.06,rx:-.18,ry:.65,rz:-.15,hx:.02,hy:.035,hz:-.02}), K(.38,{px:-.04,py:.06,rx:-.18,ry:.65,rz:-.15,hx:.01,hy:.045,hz:-.06,hr:-.55}), K(.68,{px:-.025,py:.05,rx:-.12,ry:.4,rz:-.1,hx:.015,hy:.055,hz:-.045,hr:.5}), K(.84,{py:.03,ry:.2,hx:.01,hy:.02}), K(1,{})],
+  snow: [K(.18,{py:.025,rx:.25,rz:-.28,hx:.02,hy:.06,hz:-.015}), K(.36,{py:.055,rx:-.25,rz:.35,hx:.01,hy:.035,hr:.4}), K(.56,{py:.015,rx:.4,rz:-.4,hx:.02,hy:.06,hr:-.4}), K(.76,{py:.055,rx:-.2,rz:.3,hx:.01,hy:.04,hr:.3}), K(1,{})],
+  splash: [K(.18,{py:.025,rx:.25,rz:-.35,hx:.02,hy:.035,hz:-.05}), K(.34,{py:.02,rx:.3,rz:-.3,hx:-.06,hy:.055,hz:.07,hr:.15}), K(.52,{py:.02,rx:.3,rz:-.3,hx:-.06,hy:.055,hz:.07,hr:.75}), K(.62,{py:-.025,rx:.5,rz:.2,hx:-.11,hy:-.035,hz:.12,hr:-.4}), K(.82,{py:.02,rx:.2,rz:-.12,hx:-.025,hy:.02,hz:.025}), K(1,{})],
+  receipt: [K(.18,{py:.045,rx:.25,rz:-.3,hx:.01,hy:.045,hz:-.02}), K(.35,{py:.04,rx:.3,rz:-.3,hx:.02,hy:.035,hz:-.04,hr:-.2}), K(.66,{py:.045,rx:.35,rz:-.3,hx:-.06,hy:-.10,hz:.07,hr:.4}), K(.82,{py:.02,rx:.25,rz:.15,hx:-.12,hy:-.07,hz:.10,hr:1.2}), K(1,{})],
+  catch: [K(.2,{py:.04,rx:-.55,ry:.15,rz:.22,hx:.015,hy:.04,hz:-.02}), K(.4,{py:.065,rx:-.7,ry:-.2,rz:-.25,hx:-.045,hy:.095,hz:.06,hr:.3}), K(.65,{py:.04,rx:-.45,ry:.35,rz:.25,hx:-.045,hy:.08,hz:.06,hr:-.3}), K(.82,{py:.015,rx:.3,ry:-.25,rz:-.35,hx:-.09,hy:-.04,hz:.09,hr:.8}), K(1,{})],
+  darts: [K(.2,{py:.04,rx:.25,rz:-.35,hx:.015,hy:.04,hz:.01}), K(.36,{py:.025,rx:.3,rz:-.35,hx:-.065,hy:.05,hz:.065,hr:.25}), K(.65,{py:.025,rx:.3,rz:-.35,hx:-.065,hy:.05,hz:.065,hr:-.4}), K(.84,{py:.035,rx:.2,rz:-.2,hx:.01,hy:.035,hz:.01,hr:.15}), K(1,{})],
+};
 function secretInspectFor(weaponId) {
   const skin = _activeModelSkin[weaponId];
   const def = skin && SECRET_INSPECTS[skin.id];
@@ -42410,6 +42422,20 @@ function clearSecretInspect(model, completed = false) {
       if (o.material) o.material.dispose();
     });
   }
+  if (run.extraHand) {
+    model.remove(run.extraHand);
+    run.extraHand.traverse(o => { o.geometry?.dispose(); if (o.material) o.material.dispose(); });
+  }
+  const H = model._hands;
+  if (run.triggered && H) {
+    H.rear.position.copy(H.rearHome); H.rear.rotation.copy(H.rearRot);
+    if (!H.single) { H.front.position.copy(H.frontHome); H.front.rotation.copy(H.frontRot); if (H.hideFront) H.front.visible = false; }
+  }
+  if (run.triggered && model._parts?.main) {
+    const main = model._parts.main;
+    main.position.copy(main._home || _ZERO3); main.rotation.set(0, 0, main._spin || 0);
+  }
+  if (run.triggered && model._homePos) { model.position.copy(model._homePos); model.rotation.set(0, 0, 0); }
   model._secretInspect = null;
 }
 function updateSecretInspect(model, t, pose) {
@@ -42435,9 +42461,7 @@ function updateSecretInspect(model, t, pose) {
       const rim = part(new THREE.TorusGeometry(.05, .002, 6, 40), 0xffffff, .8);
       rim.rotation.y = .4;
     } else if (run.kind === 'donut') {
-      const dough = part(new THREE.TorusGeometry(.035, .015, 12, 32), 0xc8894b);
-      dough.rotation.x = .45;
-      part(new THREE.TorusGeometry(.035, .012, 12, 32), run.color).position.z = .005;
+      // The original cylinder is lifted out by the inspect track, not duplicated.
     } else if (run.kind === 'solar') {
       part(new THREE.SphereGeometry(.023, 20, 12), run.color);
       for (let i = 0; i < 3; i++) {
@@ -42522,8 +42546,6 @@ function updateSecretInspect(model, t, pose) {
     o.position.set(Math.cos(a) * radius, Math.sin(a) * radius * .6, Math.sin(a * 2) * .02);
     o.rotation.set(a, a * 2, a);
   }
-  // The gun tips to watch the event; this never touches ammunition or world combat.
-  pose.rx += envelope * .16; pose.rz -= envelope * .2; pose.py -= envelope * .018;
   if (t > (run.kind === 'splash' ? .55 : .32) && !run.sounded) {
     run.sounded = true;
     const ctx = getAudioCtx();
@@ -42532,6 +42554,54 @@ function updateSecretInspect(model, t, pose) {
       const tones = { void: [240, 65, 110, 40], bubble: [420, 1700, 900, 240], donut: [1500, 2400, 2100, 1600], ufo: [800, 1800, 1400, 500], solar: [650, 1300, 980, 1600], snow: [2100, 2700, 2600, 2200], splash: [700, 90, 180, 60], receipt: [2400, 2400, 1800, 1800], catch: [300, 120, 600, 220], darts: [500, 850, 800, 500] }[run.kind];
       playTone(ctx, ctx.currentTime, .28, gain, tones[0], tones[1], .09, 'sine');
       playTone(ctx, ctx.currentTime + .08, .22, gain, tones[2], tones[3], .04, 'triangle');
+    }
+  }
+}
+
+function finishSecretInspectPose(model, t, pose) {
+  const run = model._secretInspect, H = model._hands;
+  if (!run?.triggered || !run.group || !H) return;
+  let hand = H.front;
+  let home = H.frontHome, rot = H.frontRot;
+  if (H.single) {
+    if (!run.extraHand) {
+      run.extraHand = H.rear.clone(true);
+      run.extraHand.traverse(o => {
+        if (o.geometry) o.geometry = o.geometry.clone();
+        if (o.material) o.material = o.material.clone();
+      });
+      model.add(run.extraHand);
+    }
+    hand = run.extraHand;
+    home = H.rearHome.clone().add(new THREE.Vector3(-.065, -.015, -.035));
+    rot = H.rearRot;
+    H.rear.position.copy(H.rearHome); H.rear.rotation.copy(H.rearRot);
+  }
+  hand.visible = true;
+  hand.position.set(home.x + pose.hx, home.y + pose.hy, home.z + pose.hz);
+  hand.rotation.set(rot.x + pose.hr, rot.y, rot.z);
+  const g = run.group, main = model._parts?.main;
+  const hold = Math.sin(Math.PI * Math.min(1, Math.max(0, (t - .16) / .72)));
+  if (run.kind === 'donut' && main) {
+    // Keep the palm under the actual removed donut as it spins on the finger.
+    const reach = Math.max(0, Math.min(1, t / .25, (1 - t) / .2));
+    hand.position.lerp(main.position.clone().add(new THREE.Vector3(0, -.035, .01)), reach);
+    hand.rotation.set(rot.x + (.2 - rot.x) * reach, rot.y + (.1 - rot.y) * reach, rot.z + (-.25 - rot.z) * reach);
+    g.position.copy(main.position); g.rotation.set(0, 0, 0);
+  } else if (['splash', 'receipt', 'catch', 'darts', 'bubble'].includes(run.kind)) {
+    g.position.copy(hand.position).add(new THREE.Vector3(0, .045, -.01));
+    g.rotation.copy(hand.rotation);
+    if (run.kind === 'bubble') g.scale.set(hold * (1 - .28 * Math.sin(t * Math.PI * 4)), hold, hold);
+    if (run.kind === 'receipt') { g.rotation.set(.1, 0, -.12); g.scale.y *= Math.min(1, t * 3); }
+    if (run.kind === 'catch' && t > .72) g.position.x -= (t - .72) * .5;
+  } else {
+    const muzzle = model._anchors?.muzzle;
+    if (muzzle) g.position.set(muzzle.x, muzzle.y + .055, muzzle.z + .025);
+    if (run.kind === 'snow') g.position.copy(hand.position).add(new THREE.Vector3(0, .045, -.025));
+    if (run.kind === 'void') {
+      const pull = Math.sin(t * Math.PI);
+      hand.rotation.z -= pull * .45;
+      g.position.copy(home).add(new THREE.Vector3(.02, .11, -.065));
     }
   }
 }
@@ -44048,7 +44118,8 @@ function updateReloadAnim() {
 
   const id = WEAPONS[currentWeaponIdx]?.id || '';
   const inspecting = !!model._inspectMode;
-  const inspectTrack = inspecting ? inspectTrackFor(id, WEAPONS[currentWeaponIdx]) : null;
+  const secretTrack = inspecting && model._secretInspect?.triggered ? SECRET_INSPECT_TRACKS[model._secretInspect.kind] : null;
+  const inspectTrack = inspecting ? (secretTrack || inspectTrackFor(id, WEAPONS[currentWeaponIdx])) : null;
 
   // Parts come off, get thrown clear, and arrive to be fitted, on the same
   // beats the hands work. Each event fires once per reload -- and never while
@@ -44078,7 +44149,7 @@ function updateReloadAnim() {
     updateSecretInspect(model, t, P);
     // Open whatever this weapon opens, out and back across the middle of the
     // look. Same channels the reload drives, so nothing special downstream.
-    const op = inspectTrackUsesAssembly(inspectTrack) ? null : inspectOpenPose(id);
+    const op = secretTrack || inspectTrackUsesAssembly(inspectTrack) ? null : inspectOpenPose(id);
     if (op) {
       const w = t > 0.20 && t < 0.80 ? Math.sin((t - 0.20) / 0.60 * Math.PI) : 0;
       P.ax += op.ax * w; P.ay += op.ay * w; P.az += op.az * w;
@@ -44133,6 +44204,7 @@ function updateReloadAnim() {
                         H.rearHome.z + P.hz * 0.4);
     H.rear.rotation.set(H.rearRot.x + P.hr * 0.5, H.rearRot.y, H.rearRot.z);
   }
+  if (secretTrack) finishSecretInspectPose(model, t, P);
 }
 
 
