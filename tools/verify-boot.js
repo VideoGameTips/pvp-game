@@ -27,6 +27,7 @@ const el = () => new Proxy({
   focus: noop, blur: noop, click: noop, play: () => Promise.resolve(), pause: noop,
   getBoundingClientRect: () => ({ x:0, y:0, width: 1920, height: 1080, top:0, left:0, right:1920, bottom:1080 }),
   requestPointerLock: noop, width: 1920, height: 1080,
+  toDataURL: () => 'data:image/png;base64,test',
 }, { get: (t, k) => (k in t ? t[k] : (typeof k === 'string' && k.startsWith('on') ? null : undefined)),
      set: (t, k, v) => { t[k] = v; return true; } });
 
@@ -454,12 +455,11 @@ if (ok && process.argv.includes('--combat-feedback')) {
         ['pistol', { look: 'beam' }, false, 'laser'], ['ak20', {}, false, null],
         [null, { cause: 'hazard', label: KILLFEED_HAZARDS.lava }, true, 'fire'],
       ]) if (killfeedGagKind(weapon, info, self) !== want) issues.push(String(weapon) + ': gag category wrong');
-      for (const [kind, gag] of Object.entries(KILLFEED_GAGS)) {
-        _killfeedGagCounts.delete(kind);
-        const lines = gag.lines.map(() => nextKillfeedGag(kind).line);
-        if (new Set(lines).size !== gag.lines.length || nextKillfeedGag(kind).line !== lines[0]) issues.push(kind + ': joke rotation broken');
+      for (const kind of Object.keys(KILLFEED_LOGOS)) {
+        const url = killfeedLogoURL(kind), cached = _killfeedLogoCache.get(kind);
+        if (!url.startsWith('data:image/png') || url !== killfeedLogoURL(kind) || cached.canvas.width !== 128 || cached.canvas.height !== 128) issues.push(kind + ': logo generation/cache broken');
       }
-      _killfeedGagCounts.clear();
+      if (killfeedLogoURL('unknown')) issues.push('unknown kill received a logo');
     } finally {
       wallColliders.splice(0, wallColliders.length, ...saved.boxes); camera.position.copy(saved.pos); playerYVel = saved.vel; slamState = saved.slam;
       window._crouchEye = saved.eye; window._climbArmed = saved.armed; window._climbing = saved.climbing; window._slideUntil = saved.slide;

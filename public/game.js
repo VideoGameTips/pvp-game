@@ -50345,24 +50345,80 @@ function killfeedChain(targetId, killerId, now = performance.now()) {
 function killfeedLaser(weaponId) {
   return weaponId === 'laser' || weaponId === 'laser_pointer' || ['beam', 'icebeam'].includes(PROJECTILE_KIND_BY_ID[weaponId]);
 }
-const KILLFEED_GAGS = {
-  laser: { icon: '', color: '#ffacc4', lines: ['NOW IN TWO PIECES', 'SOME ASSEMBLY REQUIRED', 'SLICED, NOT DICED'] },
-  boom: { icon: '*', color: '#ffbc79', lines: ['RETURNED TO THE ATMOSPHERE', 'SOMEWHERE OVER THERE', 'EXPRESS SHIPPING: EVERYWHERE'] },
-  ice: { icon: '\u2744', color: '#a4e8ff', lines: ['PLEASE DEFROST BEFORE USE', 'BRAIN FREEZE: PERMANENT', 'SENT TO THE FREEZER'] },
-  electric: { icon: '\u03df', color: '#ffec7d', lines: ['WARRANTY VOID', 'CHARGED TO 0%', 'HAVE YOU TRIED REBOOTING?'] },
-  fire: { icon: '\u2668', color: '#ff967a', lines: ['WELL DONE. TOO WELL DONE.', 'CRISPY MODE ENABLED', 'LEFT IN THE OVEN'] },
-  fall: { icon: '\u2193', color: '#bdd5ff', lines: ['THE FLOOR DECLINED', 'GRAVITY WON THE ARGUMENT', 'FORGOT TO INSTALL WINGS'] },
-  ringout: { icon: '\u21e2', color: '#bdd5ff', lines: ['EVICTED FROM THE MAP', 'ONE-WAY TICKET', 'LEFT THE GROUP CHAT'] },
-  self: { icon: '?', color: '#ffb8a0', lines: ['YOU PLAYED YOURSELF', 'FRIENDLY FIRE: YOURSELF', 'TASK FAILED SUCCESSFULLY'] },
-  fart: { icon: '~', color: '#b8e981', lines: ['AIR QUALITY: CRITICAL', 'DEFEATED BY THE ATMOSPHERE', 'GAS LEAK CONFIRMED'] },
-  bubble: { icon: '\u25cb', color: '#a2f4ef', lines: ['PERSONALLY BURST YOUR BUBBLE', 'RINSED AND DELETED', 'SOAP OPERA FINALE'] },
-  donut: { icon: '\u25ce', color: '#ffb1d4', lines: ['GLAZED AND CONFUSED', 'FRESHLY DEFEATED', 'HOLE NEW PROBLEM'] },
-  water: { icon: '\u224b', color: '#88d8ff', lines: ['SPLASH DAMAGE. LITERALLY.', 'WATER YOU DOING?', 'DRY CLEAN ONLY'] },
-  void: { icon: '\u25c9', color: '#dab5ff', lines: ['DELETED FROM THIS DIMENSION', '404: OPPONENT NOT FOUND', 'THE VOID ACCEPTED YOUR RETURN'] },
-  bonk: { icon: '!', color: '#e6dda4', lines: ['BONK. THAT IS ALL.', 'PERCUSSIVE MAINTENANCE', 'THINK FAST. TOO LATE.'] },
-  thrown: { icon: '\u21d7', color: '#d6dce7', lines: ['SPECIAL DELIVERY', 'CATCH! ...NEVER MIND', 'NO HANDS. NO CHANCE.'] },
-};
-const _killfeedGagCounts = new Map();
+const KILLFEED_LOGOS = { laser: 'Laser sliced face', boom: 'Exploded face', ice: 'Frozen face', electric: 'Electrocuted skeleton', fire: 'Toasted face', fall: 'Upside-down face', ringout: 'Flying face', self: 'Self-own face', fart: 'Gas cloud face', bubble: 'Bubble face', donut: 'Donut face', water: 'Soaked face', void: 'Black-hole face', bonk: 'Flattened face', thrown: 'Knife stuck in face' };
+const _killfeedLogoCache = new Map();
+function killfeedLogoURL(kind) {
+  if (!KILLFEED_LOGOS[kind]) return null;
+  if (_killfeedLogoCache.has(kind)) return _killfeedLogoCache.get(kind).url;
+  const canvas = document.createElement('canvas'); canvas.width = canvas.height = 128;
+  const c = canvas.getContext('2d'); c.scale(2, 2);
+  const ink = '#171923'; c.lineWidth = 2.5; c.lineJoin = c.lineCap = 'round';
+  const circle = (x, y, r, color) => { c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fillStyle = color; c.fill(); c.strokeStyle = ink; c.stroke(); };
+  const path = (points, color, closed = true) => { c.beginPath(); points.forEach(([x,y],i) => i ? c.lineTo(x,y) : c.moveTo(x,y)); if (closed) c.closePath(); c.strokeStyle = !closed && color ? color : ink; if (color && closed) { c.fillStyle = color; c.fill(); } c.stroke(); };
+  const eyes = (x, y, dead = false) => {
+    for (const dx of [-8, 8]) {
+      if (dead) { path([[x+dx-3,y-3],[x+dx+3,y+3]], null, false); path([[x+dx+3,y-3],[x+dx-3,y+3]], null, false); }
+      else { circle(x+dx,y,5.5,'#fff'); circle(x+dx+(dx<0?1:-1),y+1,1.6,ink); }
+    }
+    path([[x-6,y+11],[x,y+8],[x+6,y+11]], null, false);
+  };
+  const face = (color = '#ffd966', dead = false) => { circle(32,34,20,color); eyes(32,30,dead); };
+  if (kind === 'laser') {
+    for (const [dy, xshift, yshift] of [[0,-3,-4],[32,3,4]]) {
+      c.save(); c.beginPath(); c.rect(0,dy,64,32); c.clip(); c.translate(xshift,yshift); face('#ffca8f'); c.restore();
+    }
+    c.strokeStyle = '#ff527c'; c.lineWidth = 4; c.beginPath(); c.moveTo(5,32); c.lineTo(59,32); c.stroke();
+  } else if (kind === 'boom') {
+    const points = Array.from({length:20},(_,i) => { const a=i*Math.PI/10, r=i%2?21:30; return [32+Math.cos(a)*r,32+Math.sin(a)*r]; });
+    path(points,'#ff8349'); face('#ffe998',true);
+  } else if (kind === 'ice') {
+    face('#93d2ef'); path([[6,9],[51,6],[58,54],[11,58]],'#5cccf088');
+    eyes(32,30); path([[13,17],[23,13],[16,36]],null,false); path([[43,15],[49,45],[41,52]],null,false);
+  } else if (kind === 'electric') {
+    path([[9,3],[3,23],[14,20],[6,39],[22,15],[12,18]],'#ffe45d');
+    path([[54,11],[44,31],[54,27],[46,48],[62,22],[53,25]],'#ffe45d');
+    circle(33,27,17,'#e5f5e5'); circle(26,26,5,ink); circle(40,26,5,ink);
+    path([[24,42],[42,42],[40,54],[26,54]],'#f5fff1');
+    for (const x of [29,35,40]) path([[x,43],[x,52]],null,false);
+  } else if (kind === 'fire') {
+    path([[7,44],[11,16],[22,24],[32,3],[38,22],[49,12],[58,46]],'#ff7349');
+    path([[17,48],[18,21],[46,21],[48,48]],'#815951'); eyes(33,32,true);
+    path([[20,53],[42,57]],null,false);
+  } else if (kind === 'fall') {
+    c.save(); c.translate(64,64); c.rotate(Math.PI); face('#a8bdff'); c.restore();
+    path([[7,8],[7,25]],null,false); path([[56,5],[56,19]],null,false);
+  } else if (kind === 'ringout') {
+    for (const y of [18,30,43]) path([[3,y],[17,y]],null,false);
+    c.save(); c.translate(12,-2); c.translate(32,34); c.rotate(.5); c.translate(-32,-34); face('#a8bdff'); c.restore();
+  } else if (kind === 'self') {
+    face('#ffb7a4',true);
+    path([[7,19],[9,5],[32,5],[39,12]],null,false); path([[39,5],[39,14],[30,12]],'#ff7d88');
+  } else if (kind === 'fart') {
+    for (const [x,y,r] of [[15,32,12],[25,17,12],[43,21,13],[51,39,11],[33,45,14]]) circle(x,y,r,'#98cc5b');
+    eyes(33,29,true); path([[25,42],[40,42]],null,false);
+  } else if (kind === 'bubble') {
+    face('#6cdddb'); circle(32,32,28,'#b7ffff44'); circle(14,12,5,'#fff'); circle(53,8,4,'#7fede5');
+  } else if (kind === 'donut') {
+    circle(32,32,26,'#d59750'); circle(32,32,22,'#ff8fbf'); circle(32,36,7,'#302632');
+    circle(23,25,4,'#fff'); circle(41,25,4,'#fff'); circle(24,26,1.3,ink); circle(40,26,1.3,ink);
+    for (const [x,y,color] of [[18,15,'#74f4da'],[42,13,'#fff3a0'],[13,39,'#e5edff'],[48,43,'#74f4da'],[29,52,'#fff3a0']]) path([[x,y],[x+4,y+2]],color,false);
+  } else if (kind === 'water') {
+    face('#85d6fa'); path([[10,28],[17,35],[10,49],[3,35]],'#44b6ef'); path([[53,11],[60,21],[53,29],[46,21]],'#44b6ef');
+    path([[21,48],[27,53],[43,49]],null,false);
+  } else if (kind === 'void') {
+    circle(32,32,28,'#8956c5'); circle(32,32,23,'#181421');
+    c.save(); c.translate(32,32); c.rotate(.7); c.scale(.6,1.1); c.translate(-32,-34); face('#dcc0ff'); c.restore();
+    c.strokeStyle='#a586f0'; c.beginPath(); c.arc(32,32,25,.4,4.6); c.stroke();
+  } else if (kind === 'bonk') {
+    c.save(); c.translate(0,23); c.scale(1,.65); face('#ffdc7b',true); c.restore();
+    path([[9,13],[50,13],[48,23],[13,23]],'#9eacbd'); path([[49,16],[60,16]],null,false);
+    path([[21,5],[25,10],[29,5]],null,false);
+  } else if (kind === 'thrown') {
+    face('#e0d7b7',true); path([[29,4],[37,4],[35,23],[32,28]],'#cedee8'); path([[25,4],[41,4]],null,false);
+  }
+  const url = canvas.toDataURL('image/png');
+  _killfeedLogoCache.set(kind, { canvas, url }); return url;
+}
 function killfeedGagKind(weaponId, info = {}, self = false) {
   if (info.cause === 'fall') return 'fall';
   if (info.cause === 'ringout') return 'ringout';
@@ -50382,13 +50438,6 @@ function killfeedGagKind(weaponId, info = {}, self = false) {
   if (['bat', 'frying_pan', 'sledge', 'baguette', 'tennis_racket', 'shovel'].includes(weaponId) || info.label === KILLFEED_HAZARDS.chandelier) return 'bonk';
   if (['throwing_knives', 'throwing_axes', 'boomerang', 'traffic_cone', 'cream_pie'].includes(weaponId)) return 'thrown';
   return null;
-}
-function nextKillfeedGag(kind) {
-  const gag = KILLFEED_GAGS[kind];
-  if (!gag) return null;
-  const count = _killfeedGagCounts.get(kind) || 0;
-  _killfeedGagCounts.set(kind, count + 1);
-  return { ...gag, line: gag.lines[count % gag.lines.length] };
 }
 function killfeedTagMark(tag) {
   return ({ 'NO SCOPE': ['', 'noscope', 'No scope'], '360': ['360', 'turn', '360-degree shot'], AIR: ['\u2191', 'air', 'Airborne kill'], SLIDE: ['\u21b3', 'slide', 'Sliding kill'], CROUCH: ['\u2193', 'crouch', 'Crouched kill'], ELEVATED: ['\u2303', 'elevated', 'High-ground kill'], COMBO: ['\u21c4', 'combo', 'Weapon-switch combo'] })[tag] || [tag, '', tag];
@@ -50629,19 +50678,10 @@ function ensureKillfeedStyles() {
     .kf-mark.noscope:after{content:'';position:absolute;width:23px;height:2px;background:#ff728f;transform:rotate(-45deg);box-shadow:0 0 0 1px #141820}
     .kf-mark.turn{font-size:10px;border:1px dashed #91ddff;border-radius:50%}
     .kf-mark.combo{color:#e4acff}.kf-chain{color:#ffd23f;border-color:#bd983d;background:rgba(255,210,63,.1)}
-    .kf-gag{display:inline-flex;align-items:center;justify-content:flex-end;flex-basis:100%;gap:5px;font-size:9px;color:#ffacc4;white-space:nowrap}
-    .kf-gag-icon{display:inline-flex;align-items:center;justify-content:center;width:20px;height:22px;flex-shrink:0;font-size:22px;animation:kfGoof .7s ease-out both}
-    .kf-gag-kind-boom .kf-gag-icon{animation:kfBurst .6s ease-out both}
-    .kf-gag-kind-fall .kf-gag-icon,.kf-gag-kind-ringout .kf-gag-icon{animation:kfDrop .65s ease-out both}
-    @keyframes kfGoof{0%,35%{transform:rotate(-18deg)}65%{transform:rotate(15deg)}100%{transform:none}}
-    @keyframes kfBurst{0%{transform:scale(.2) rotate(0)}60%{transform:scale(1.4) rotate(140deg)}100%{transform:scale(1) rotate(180deg)}}
-    @keyframes kfDrop{0%{transform:translateY(-7px);opacity:.3}100%{transform:translateY(0);opacity:1}}
-    .kf-sliced{display:inline-block;position:relative;width:18px;height:24px;flex-shrink:0}
-    .kf-sliced:before{content:'';position:absolute;left:4px;top:1px;width:8px;height:9px;border-radius:50% 50% 0 0;background:#ffacc4;animation:kfTop .8s ease-out both}
-    .kf-sliced:after{content:'';position:absolute;left:4px;top:12px;width:8px;height:10px;background:#ffacc4;clip-path:polygon(0 0,100% 0,100% 100%,60% 100%,50% 50%,40% 100%,0 100%);animation:kfBottom .8s ease-out both}
-    @keyframes kfTop{to{transform:translate(-3px,-2px) rotate(-18deg)}}@keyframes kfBottom{to{transform:translate(3px,2px) rotate(18deg)}}
-    @media(prefers-reduced-motion:reduce){.kf-row,.kf-sliced:before,.kf-sliced:after,.kf-gag-icon{animation:none}}
-    @media(max-width:700px){.kf-row{flex-wrap:wrap;justify-content:flex-end;max-width:calc(100vw - 16px)}.kf-gag{flex-basis:100%;justify-content:flex-end}.kf-mark{flex-basis:18px;height:18px}}
+    .kf-logo{width:40px;height:40px;flex:0 0 40px;object-fit:contain;filter:drop-shadow(0 1px 2px #000);animation:kfLogo .45s ease-out both}
+    @keyframes kfLogo{0%{transform:scale(.35) rotate(-20deg)}65%{transform:scale(1.12) rotate(7deg)}100%{transform:none}}
+    @media(prefers-reduced-motion:reduce){.kf-row,.kf-logo{animation:none}}
+    @media(max-width:700px){.kf-row{flex-wrap:wrap;justify-content:flex-end;max-width:calc(100vw - 16px)}.kf-logo{width:34px;height:34px;flex-basis:34px}.kf-mark{flex-basis:18px;height:18px}}
     @media (max-width:700px){#killfeed{right:8px;top:76px}.kf-row{gap:5px;padding:5px 7px}.kf-name{max-width:86px}.kf-icon{width:48px;height:22px}.kf-tag{font-size:9px;padding:2px 4px}}
   `;
   document.head.appendChild(st);
@@ -50729,12 +50769,10 @@ function pushKillfeed(targetId, killerId) {
       part('kf-name', v.name, v.color);
     }
     if (chain > 1) { const el = part('kf-tag kf-chain', 'x' + chain); el.title = chain + ' eliminations within five seconds'; }
-    const joke = nextKillfeedGag(gagKind);
-    if (joke) {
+    const logo = killfeedLogoURL(gagKind);
+    if (logo) {
       if (gagKind === 'laser') row.classList.add('kf-laser');
-      const gag = part('kf-gag kf-gag-kind-' + gagKind, joke.line, joke.color);
-      const mark = document.createElement('span'); mark.className = gagKind === 'laser' ? 'kf-sliced' : 'kf-gag-icon';
-      mark.textContent = joke.icon; mark.setAttribute('aria-hidden', 'true'); gag.prepend(mark);
+      icon(logo, 'kf-logo kf-logo-' + gagKind, KILLFEED_LOGOS[gagKind]);
     }
     box.insertBefore(row, box.firstChild);
     while (box.children.length > KILLFEED_MAX) box.lastChild.remove();
