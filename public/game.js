@@ -33834,7 +33834,7 @@ function _beginEquip(model, spec, melee, support = false) {
     const L = box.max.z - box.min.z;
     dur = Math.max(dur, Math.round(67 + _eqClamp((L - 0.18) / 0.67) * 133));
   }
-  _equip = { model, melee, support, type, t0: performance.now(), dur,
+  _equip = { model, melee, support, type, t0: performance.now(), dur, magic: !!spec.magic,
              ps, ctr, ring, glow, sfx: spec.equipSfx || null, box, temp,
              prismPos: prismProp ? prismProp.userData.prism.pos.clone() : ctr.clone(),
              beats: (spec.equipBeats || []).map(([t, name]) => ({ t, name, done: false })),
@@ -33883,7 +33883,7 @@ function updateEquipAnim() {
     ? (!e.model.visible || activeSlot !== 'support' || e.model !== supportModels[selectedSupportIdx])
     : e.melee
       ? (!e.model.visible || activeSlot !== 'melee' || e.model !== meleeModels[selectedMeleeIdx] || meleeSwingT < 1)
-      : (!e.model.visible || e.model !== weaponModels[currentWeaponIdx] || shooting || reloading || isADS);
+      : (!e.model.visible || e.model !== weaponModels[currentWeaponIdx] || shooting || (reloading && !e.magic) || isADS);
   if (gone) { finishEquip(); return; }
   const t = (performance.now() - e.t0) / e.dur;
   for (const b of e.beats) if (!b.done && t >= b.t) { b.done = true; playEquipSound(b.name); }
@@ -42960,7 +42960,23 @@ function spawnReloadProp(model, kind, mode, where, opts) {
   const mesh = _makeReloadProp(kind);
   const at = _propAnchor(model, where);
   const R = (a) => (Math.random() - 0.5) * a;
-  if (mode === 'arrive') {
+  if (mode === 'float' || mode === 'swirl' || mode === 'orbit') {
+    // 🪄 The reload with a little magic in it (see RELOAD_MAGIC): nothing is thrown and nothing falls.
+    //   float  the part lifts out of the gun on its own, hangs in the air turning, glowing, then drifts away;
+    //   swirl  the part comes in out of the air round the gun along a spiral, from a random direction;
+    //   orbit  the part leaves, circles the gun once and a bit, and settles back where it came from.
+    const tint = o.tint != null ? o.tint : 0x7ad8ff;
+    const halo = new THREE.Mesh(new THREE.TorusGeometry(mode === 'swirl' ? 0.016 : 0.040, mode === 'swirl' ? 0.0016 : 0.0022, 6, 22),
+      new THREE.MeshBasicMaterial({ color: tint, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false }));
+    halo.userData.vmHand = true; halo.userData.halo = true; mesh.add(halo);
+    const side = Math.random() < 0.5 ? -1 : 1, ang0 = Math.random() * Math.PI * 2;
+    const P = { mesh, mode, t: 0, life: mode === 'float' ? 1.15 : mode === 'swirl' ? 0.55 : 1.05, at: at.clone(), side, ang0,
+                rad: 0.13 + Math.random() * 0.10, turn: (Math.random() < 0.5 ? -1 : 1) * (1.2 + Math.random() * 0.5),
+                spin: new THREE.Vector3(R(5), R(5), R(5)), tint };
+    if (mode === 'swirl') mesh.scale.setScalar(0.7);
+    mesh.position.copy(mode === 'swirl' ? at.clone().add(new THREE.Vector3(Math.cos(ang0) * P.rad, Math.sin(ang0) * P.rad * 0.8, R(0.10))) : at);
+    _rProps.push(P);
+  } else if (mode === 'arrive') {
     // Comes up into frame from below and disappears once it is fitted: from
     // here on it is part of the gun again.
     mesh.position.set(at.x + R(0.04), at.y - 0.26, at.z + 0.05 + R(0.02));
@@ -42982,7 +42998,28 @@ function updateReloadProps(dt) {
   for (let i = _rProps.length - 1; i >= 0; i--) {
     const p = _rProps[i];
     p.t += dt;
-    if (p.mode === 'arrive') {
+    if (p.mode === 'float' || p.mode === 'swirl' || p.mode === 'orbit') {
+      const k = Math.min(1, p.t / p.life), e = k * k * (3 - 2 * k), now = performance.now() / 1000;
+      let fade = 1, sc = 1;
+      if (p.mode === 'float') {
+        // up and out to one side, hover with a slow bob, then thin out as it rises away
+        const lift = Math.min(1, k / 0.32), L = lift * lift * (3 - 2 * lift);
+        p.mesh.position.set(p.at.x + p.side * 0.17 * L, p.at.y + 0.12 * L + Math.sin(now * 4 + p.ang0) * 0.006 * L + Math.max(0, k - 0.72) * 0.25, p.at.z - 0.03 * L);
+        fade = k > 0.72 ? 1 - (k - 0.72) / 0.28 : 1;
+      } else if (p.mode === 'swirl') {
+        // from a random place round the gun, in along a tightening spiral
+        const a = p.ang0 + (1 - e) * p.turn * Math.PI, r = p.rad * (1 - e);
+        p.mesh.position.set(p.at.x + Math.cos(a) * r, p.at.y + Math.sin(a) * r * 0.8, p.at.z + Math.sin(a * 0.5) * r * 0.5);
+        sc = 0.7 + 0.3 * e; fade = k < 0.15 ? k / 0.15 : 1;
+      } else {
+        // out to a ring about a hand's width from the gun, once round and a bit, and home
+        const env = k < 0.2 ? k / 0.2 : k > 0.8 ? (1 - k) / 0.2 : 1, a = p.ang0 + k * p.turn * Math.PI * 2;
+        p.mesh.position.set(p.at.x + Math.cos(a) * 0.11 * env, p.at.y + 0.04 * env + Math.sin(a) * 0.07 * env, p.at.z + Math.sin(a * 2) * 0.03 * env);
+      }
+      p.mesh.rotation.x += p.spin.x * dt; p.mesh.rotation.y += p.spin.y * dt; p.mesh.rotation.z += p.spin.z * dt;
+      p.mesh.scale.setScalar(sc * (p.mode === 'swirl' ? 1 : 1 + 0.06 * Math.sin(now * 9 + p.ang0)));
+      p.mesh.traverse(o => { if (o.isMesh) { o.material.transparent = true; o.material.opacity = (o.userData.halo ? 0.85 : 1) * fade; } });
+    } else if (p.mode === 'arrive') {
       const k = Math.min(1, p.t / p.life), s = k * k * (3 - 2 * k);
       p.mesh.position.lerpVectors(p.from, p.to, s);
     } else {
@@ -43123,6 +43160,50 @@ const RELOAD_PROPS = {
   traffic_cone:[RP(.30,'bottle','arrive',1,'breech')],
   cream_pie:[RP(.30,'ball','arrive',1,'breech')],
 };
+// ── 🪄 RELOAD_MAGIC: a reload with something unreal in it, for every gun ─────────────────────────────────────────────────
+// The physical reloads above are right for a gun that is a gun. This is for making them different from one another, and
+// from anything a real range would put up with. Each stock gun is given one move, spread through the whole roster so
+// neighbours in the list never share one:
+//   levitate  the magazine lifts out and hangs in the air glowing; fresh rounds then stream in out of nowhere, one by one
+//   orbit     the old magazine circles the gun once and settles back; new rounds spiral in
+//   storm     the old one floats away and a tight swarm of rounds (three for every one it needs) spiral in from every side
+//   eq:<kind> the gun comes apart, in the manner of one of the entrances -- assemble, build, warp, vortex, unfold,
+//             pixelate, meteor, blackhole, spin, windup, constellation -- and puts itself back together in time
+// Only visuals: the ammunition, the timing and the sound of a reload are untouched, and a skin that has a reload of its
+// own (the doughnuts, the pixel guns, the legends) keeps it.
+const RELOAD_MAGIC_STYLES = ['levitate', 'eq:assemble', 'orbit', 'eq:vortex', 'storm', 'eq:build', 'levitate', 'eq:warp', 'orbit',
+  'eq:unfold', 'storm', 'eq:meteor', 'levitate', 'eq:blackhole', 'orbit', 'eq:spin', 'storm', 'eq:constellation', 'levitate',
+  'eq:pixelate', 'orbit', 'eq:windup', 'storm'];
+const RELOAD_MAGIC_TINTS = [0x7ad8ff, 0xff7ad8, 0xb68cff, 0x7affc8, 0xffd27a, 0xff8a7a, 0x8ab4ff, 0xc8ff7a];
+const RELOAD_MAGIC_SFX = { 'eq:assemble': ['whoosh', 'chime'], 'eq:vortex': ['warp', 'chime'], 'eq:build': ['whoosh', 'click'],
+  'eq:warp': ['warp', 'beep'], 'eq:unfold': ['fold', 'click'], 'eq:meteor': ['starfall', 'chime'], 'eq:blackhole': ['singularity', 'chime'],
+  'eq:spin': ['whoosh', 'click'], 'eq:constellation': ['starfall', 'chime'], 'eq:pixelate': ['blip', null], 'eq:windup': ['click', 'click'] };
+const _magicCache = {};
+function reloadMagicFor(id) {
+  if (id in _magicCache) return _magicCache[id];
+  const i = WEAPONS.findIndex(w => w.id === id);
+  if (i < 0) return (_magicCache[id] = null);
+  const style = RELOAD_MAGIC_STYLES[i % RELOAD_MAGIC_STYLES.length], tint = RELOAD_MAGIC_TINTS[(i * 3 + Math.floor(i / 8)) % RELOAD_MAGIC_TINTS.length];
+  const m = { style, tint };
+  if (style.startsWith('eq:')) {
+    // the gun comes apart a little after the old magazine would have gone and is whole again before the reload ends
+    m.eq = style.slice(3); m.at = 0.10; m.frac = 0.72; m.sfx = RELOAD_MAGIC_SFX[style];
+  } else {
+    // the same beats the physical reload has, with the old part floating / orbiting out and rounds coming in on a spiral
+    const base = RELOAD_PROPS[id] || [RP(.32, 'mag'), RP(.58, 'mag', 'arrive')];
+    const out = [];
+    for (const e of base) {
+      if (e.m === 'arrive') {
+        const holder = (e.k === 'mag' || e.k === 'cell' || e.k === 'bottle' || e.k === 'drum');
+        const n = Math.max(1, e.n || 1) * (style === 'storm' ? 3 : 1);
+        for (let k = 0; k < n; k++) out.push({ t: Math.min(0.95, e.t + k * 0.022), k: holder ? 'round' : e.k, m: 'swirl', n: 1, w: e.w });
+        if (holder) out.push({ t: Math.min(0.95, e.t + n * 0.022 + 0.03), k: e.k, m: 'swirl', n: 1, w: e.w });   // and the magazine itself, last
+      } else out.push(Object.assign({}, e, { m: style === 'orbit' ? 'orbit' : 'float' }));
+    }
+    m.evs = out;
+  }
+  return (_magicCache[id] = m);
+}
 // ── 🎬 One reload per gun ───────────────────────────────────────────────────
 // The tables above gave most magazine guns the same move: strip, reach, seat,
 // rack. This block overrides them with choreography that is each gun's own —
@@ -44131,8 +44212,24 @@ function updateReloadAnim() {
   const fx = inspecting ? null : _skinFxFor(id);
   const skinReload = (model._reloadPlan && model._reloadPlan.skin) ? model._reloadPlan : (fx && fx.reload);
   const plan = !skinReload && model._reloadPlan;
-  const evs = inspecting ? null : ((skinReload && skinReload.props) || (plan && plan.props) || RELOAD_PROPS[id]);
-  if (evs) for (let i = 0; i < evs.length && i < 30; i++) {
+  let evs = inspecting ? null : ((skinReload && skinReload.props) || (plan && plan.props) || RELOAD_PROPS[id]);
+  // 🪄 Stock guns (and the Neon Rift skins) take a magical reload. A skin with a reload of its own, or a real-gun skin,
+  // keeps the one it has.
+  let magic = null;
+  if (!inspecting && !skinReload && !model._throwable) {
+    const ask = _activeModelSkin[id];
+    if (!ask || /_cyberpunk$/.test(ask.id)) magic = reloadMagicFor(id);
+  }
+  if (magic) {
+    if (magic.eq) {
+      evs = null;
+      if (t >= magic.at && model._magicRun !== model._reloadStart) {
+        model._magicRun = model._reloadStart;
+        try { _beginEquip(model, { equip: magic.eq, equipMs: Math.max(500, model._reloadDur * magic.frac), equipSfx: magic.sfx, magic: true }, false); } catch (e) {}
+      }
+    } else evs = magic.evs;
+  }
+  if (evs) for (let i = 0; i < evs.length && i < 40; i++) {
     if (model._propFired & (1 << i)) continue;
     if (t < evs[i].t) continue;
     model._propFired |= (1 << i);
@@ -44142,7 +44239,7 @@ function updateReloadAnim() {
     }
     if (evs[i].k === 'mag' && evs[i].m === 'arrive' && model._mech && model._mech.mag) continue;   // the gun's own magazine slides in instead
     for (let n = 0; n < evs[i].n; n++) {
-      try { spawnReloadProp(model, evs[i].dust ? 'ash' : evs[i].k, evs[i].m, evs[i].w); } catch (e) {}
+      try { spawnReloadProp(model, evs[i].dust ? 'ash' : evs[i].k, evs[i].m, evs[i].w, magic ? { tint: magic.tint } : undefined); } catch (e) {}
     }
   }
 
