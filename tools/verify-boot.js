@@ -402,6 +402,60 @@ if (ok && process.argv.includes('--secret-inspects')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+if (ok && process.argv.includes('--combat-feedback')) {
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [], saved = { boxes: wallColliders.slice(), pos: camera.position.clone(), vel: playerYVel, slam: slamState, eye: window._crouchEye, armed: window._climbArmed, climbing: window._climbing, slide: window._slideUntil, ads: isADS, id: myId, match, turns: _killfeedTurnSamples.slice() };
+    try {
+      wallColliders.length = 0;
+      const roof = new THREE.Box3(new THREE.Vector3(-8, 2.5, -8), new THREE.Vector3(8, 2.6, 8)); wallColliders.push(roof);
+      window._crouchEye = 1.65; window._climbArmed = true;
+      camera.position.set(0, 4, 0); playerYVel = 20; slamState = null;
+      if (!resolvePlayerCeiling(1.8) || camera.position.y >= 2.5 - PLAYER_HEAD_CLEARANCE || playerYVel !== 0 || window._climbArmed) issues.push('standing jump failed swept ceiling contact');
+      resolveWallCollisions();
+      if (camera.position.x || camera.position.z || camera.position.y > 2.4) issues.push('roof still ejects player sideways');
+      camera.position.set(0, 3, 0); slamState = { vel: 15, type: 'jump' };
+      resolvePlayerCeiling(1.8);
+      if (slamState.vel !== 0 || slamState.type !== 'fall') issues.push('slide/double jump did not stop at ceiling');
+      window._crouchEye = .95; roof.min.y = 1.6; roof.max.y = 1.7;
+      camera.position.set(0, 2, 0); slamState = null; resolvePlayerCeiling(1);
+      resolveWallCollisions();
+      if (camera.position.x || camera.position.z || camera.position.y > 1.42) issues.push('crouched ceiling contact failed');
+      camera.position.set(10, 3, 10);
+      if (resolvePlayerCeiling(1)) issues.push('non-overlapping roof blocked jump');
+      camera.position.set(0, 4, 0);
+      if (resolvePlayerCeiling(4.5)) issues.push('downward landing treated as ceiling');
+      roof.min.y = 20; roof.max.y = 20.02; camera.position.set(0, 25, 0);
+      if (!resolvePlayerCeiling(15)) issues.push('high thin ceiling tunneled');
+      wallColliders.length = 0; window._crouchEye = 1.65; camera.position.set(0, 1.65, 0);
+      isADS = false; myId = 'feedback-test'; _killfeedTurnSamples.length = 0;
+      if (!killfeedShotTags('srx').includes('NO SCOPE') || killfeedTagMark('NO SCOPE')[0] !== '' || killfeedTagMark('NO SCOPE')[1] !== 'noscope') issues.push('no-scope symbol failed');
+      isADS = true;
+      if (killfeedShotTags('srx').includes('NO SCOPE')) issues.push('scoped shot labeled no scope');
+      camera.position.y = 3;
+      if (!killfeedShotTags('pistol').includes('AIR')) issues.push('air kill context missing');
+      camera.position.y = 1.65; window._slideUntil = Date.now() + 1000;
+      if (!killfeedShotTags('pistol').includes('SLIDE')) issues.push('slide kill context missing');
+      noteKillInfo('feedback-target', myId, 'ak20', false);
+      if (!killfeedShotTags('pistol', { targetId: 'feedback-target' }).includes('COMBO')) issues.push('weapon-switch combo missing');
+      noteKillInfo('feedback-target', myId, 'pistol', false, { tags: ['COMBO'] });
+      if (!killfeedShotTags('pistol', { targetId: 'feedback-target' }).includes('COMBO')) issues.push('same-weapon follow-up lost combo');
+      match = {}; _killfeedChains.clear();
+      if (killfeedChain('a', 'killer', 1000) !== 1 || killfeedChain('b', 'killer', 2000) !== 2 || killfeedChain('c', 'killer', 8001) !== 1) issues.push('multi-kill window wrong');
+      killfeedChain('killer', null, 8100);
+      if (killfeedChain('d', 'killer', 8200) !== 1 || killfeedChain('killer', 'killer', 8300) !== 0) issues.push('death/self-kill did not reset streak');
+      if (!killfeedLaser('gatecrasher_beam') || !killfeedLaser('cyroclasm_laser') || !killfeedLaser('laser') || killfeedLaser('ak20') || killfeedLaser('taser')) issues.push('laser gag classification wrong');
+    } finally {
+      wallColliders.splice(0, wallColliders.length, ...saved.boxes); camera.position.copy(saved.pos); playerYVel = saved.vel; slamState = saved.slam;
+      window._crouchEye = saved.eye; window._climbArmed = saved.armed; window._climbing = saved.climbing; window._slideUntil = saved.slide;
+      isADS = saved.ads; myId = saved.id; match = saved.match; _killfeedTurnSamples.splice(0, _killfeedTurnSamples.length, ...saved.turns);
+      delete _killInfo['feedback-target']; _killfeedChains.clear(); _killfeedChainMatch = null;
+    }
+    console.log('combat feedback checks: swept ceilings, crouch, high roofs, no-scope symbols, position tags, combos, streak resets and laser classification');
+    return issues;
+  })()`);
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 if (ok && process.env.MAP_REVIEW_DIR) {
   fs.mkdirSync(process.env.MAP_REVIEW_DIR, { recursive: true });
   for (const name of ['forest', 'desert', 'tundra', 'refinery', 'space', 'volcano', 'titanic', 'carrier', 'pearl_harbor']) {

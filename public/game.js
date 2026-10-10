@@ -5495,6 +5495,25 @@ function getLandingEyeY(prevEyeY, px = camera.position.x, pz = camera.position.z
   return groundY;
 }
 
+const PLAYER_HEAD_CLEARANCE = .18;
+function resolvePlayerCeiling(prevEyeY) {
+  const nextEyeY = camera.position.y;
+  if (nextEyeY <= prevEyeY) return false;
+  let limit = Infinity;
+  for (const box of wallColliders) {
+    if (prevEyeY + PLAYER_HEAD_CLEARANCE > box.min.y + .025 || nextEyeY + PLAYER_HEAD_CLEARANCE < box.min.y) continue;
+    if (camera.position.x <= box.min.x - PLAYER_RADIUS || camera.position.x >= box.max.x + PLAYER_RADIUS
+        || camera.position.z <= box.min.z - PLAYER_RADIUS || camera.position.z >= box.max.z + PLAYER_RADIUS) continue;
+    limit = Math.min(limit, box.min.y - PLAYER_HEAD_CLEARANCE - .015);
+  }
+  if (!Number.isFinite(limit)) return false;
+  camera.position.y = limit;
+  playerYVel = Math.min(0, playerYVel);
+  if (slamState) { slamState.vel = Math.min(0, slamState.vel); if (slamState.type === 'jump') slamState.type = 'fall'; }
+  window._climbing = false; window._climbArmed = false;
+  return true;
+}
+
 function tryWallClimbMove(dt, dir) {
   if (!window._climbArmed || (window._climbBudget || 0) <= 0 || !dir || dir.lengthSq() <= 0.01) return false;
   const wall = nearClimbableWall();
@@ -5565,7 +5584,7 @@ function resolveWallCollisions() {
   for (const box of wallColliders) {
     if (feetY >= box.max.y - 0.08) continue;
     // Quick vertical cull — player occupies y ∈ [0.65, 2.65]
-    if (py + 1.0 < box.min.y || py - 1.0 > box.max.y) continue;
+    if (py + PLAYER_HEAD_CLEARANCE <= box.min.y || feetY >= box.max.y) continue;
     // Expand box horizontally by player radius (Minkowski sum)
     const exMinX = box.min.x - RADIUS;
     const exMaxX = box.max.x + RADIUS;
@@ -35854,8 +35873,9 @@ function updateMovement(dt) {
       const prevEyeY = camera.position.y;
       if (!climbing) playerYVel -= GRAVITY * dt; // gravity (suspended while climbing)
       camera.position.y += playerYVel * dt;
+      resolvePlayerCeiling(prevEyeY);
       const landingEyeY = getLandingEyeY(prevEyeY) + (window._crouchEye - 1.65);
-      if (camera.position.y <= Math.max(groundEyeY, landingEyeY)) {
+      if (playerYVel <= 0 && camera.position.y <= Math.max(groundEyeY, landingEyeY)) {
         camera.position.y = Math.max(groundEyeY, landingEyeY);
         playerYVel = 0;
         window._slideUntil = 0;
@@ -35936,6 +35956,7 @@ function updateMovement(dt) {
       slamState.type = 'jump';
     }
     camera.position.y += slamState.vel * dt;
+    resolvePlayerCeiling(prevEyeY);
     // Land at the eye height you are actually going to stand at. This branch
     // used to ignore the crouch/slide offset the grounded branch applies, so
     // touching down mid-slide snapped the camera from 0.70 up to 1.65 and then
@@ -44897,7 +44918,7 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false, opts = 
   if (players[pid]?.dead) return;   // a body going down is not a target (#34)
   const isBot    = players[pid] && players[pid].isBot;
   if (friendlyFireBlocked(pid, myId)) return;
-  const killTags = killfeedShotTags(weaponId, opts);
+  const killTags = killfeedShotTags(weaponId, { ...opts, targetId: pid });
   noteKillInfo(pid, myId, weaponId, headshot, { tags: killTags });
   const instakill = headshot && INSTAKILL_HS_WEAPONS.has(weaponId);
   const baseDmg = getClientWeaponDamage(weaponId);
@@ -50271,6 +50292,23 @@ const KILLFEED_HAZARDS = {
 const KILLFEED_TURN_WINDOW = 1400;
 const KILLFEED_360_RAD = Math.PI * 1.65;
 const _killfeedTurnSamples = [];
+const _killfeedChains = new Map();
+let _killfeedChainMatch = null;
+function killfeedChain(targetId, killerId, now = performance.now()) {
+  if (_killfeedChainMatch !== match) { _killfeedChains.clear(); _killfeedChainMatch = match; }
+  _killfeedChains.delete(targetId);
+  if (!killerId || killerId === targetId) return 0;
+  const last = _killfeedChains.get(killerId);
+  const count = last && now - last.t <= 5000 ? last.count + 1 : 1;
+  _killfeedChains.set(killerId, { t: now, count });
+  return count;
+}
+function killfeedLaser(weaponId) {
+  return weaponId === 'laser' || weaponId === 'laser_pointer' || ['beam', 'icebeam'].includes(PROJECTILE_KIND_BY_ID[weaponId]);
+}
+function killfeedTagMark(tag) {
+  return ({ 'NO SCOPE': ['', 'noscope', 'No scope'], '360': ['360', 'turn', '360-degree shot'], AIR: ['\u2191', 'air', 'Airborne kill'], SLIDE: ['\u21b3', 'slide', 'Sliding kill'], CROUCH: ['\u2193', 'crouch', 'Crouched kill'], ELEVATED: ['\u2303', 'elevated', 'High-ground kill'], COMBO: ['\u21c4', 'combo', 'Weapon-switch combo'] })[tag] || [tag, '', tag];
+}
 
 function cleanKillfeedTags(tags) {
   if (!Array.isArray(tags)) tags = tags ? [tags] : [];
@@ -50306,6 +50344,15 @@ function killfeedShotTags(weaponId, opts = {}) {
   const tags = cleanKillfeedTags(opts.tags);
   if (!opts.noTrickshot && killfeedNoScopeWeapon(weaponId) && !isADS) tags.push('NO SCOPE');
   if (!opts.noTrickshot && recentKillfeedTurnRadians() >= KILLFEED_360_RAD) tags.push('360');
+  if (!opts.noTrickshot) {
+    const ground = getGroundEyeY() + ((window._crouchEye || PLAYER_EYE_HEIGHT) - PLAYER_EYE_HEIGHT);
+    if (camera.position.y > ground + .25) tags.push('AIR');
+    else if (Date.now() < (window._slideUntil || 0)) tags.push('SLIDE');
+    else if ((window._crouchEye || PLAYER_EYE_HEIGHT) < 1.3) tags.push('CROUCH');
+    else if (playerFeetY() > 3) tags.push('ELEVATED');
+    const previous = _killInfo[opts.targetId];
+    if (previous?.killer === myId && previous.weapon && (previous.weapon !== weaponId || previous.tags.includes('COMBO')) && performance.now() - previous.t < 4000) tags.unshift('COMBO');
+  }
   return cleanKillfeedTags(tags);
 }
 
@@ -50443,7 +50490,7 @@ function _renderWeaponIcon(model) {
   return cv.toDataURL('image/png');
 }
 // Damage-over-time ids that are not items of their own borrow their gun's icon.
-const _KILLFEED_ICON_ALIAS = { flame_burn: 'flamethrower', caustic_burn: 'glassmaker', flame: 'flamethrower' };
+const _KILLFEED_ICON_ALIAS = { flame_burn: 'flamethrower', caustic_burn: 'glassmaker', flame: 'flamethrower', gatecrasher_beam: 'gatecrasher', cyroclasm_laser: 'cyroclasm' };
 // A small head with a red target on it: this kill was a headshot.
 const _HEAD_ICON = 'data:image/svg+xml;utf8,' + encodeURIComponent(
   "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M4 23c0-5 3.5-7.5 8-7.5s8 2.500 8 7.500z' fill='#7d838c'/>" +
@@ -50481,7 +50528,9 @@ function ensureKillfeedStyles() {
   st.textContent = `
     #killfeed{position:fixed;right:18px;top:92px;z-index:6200;display:flex;flex-direction:column;gap:7px;align-items:flex-end;pointer-events:none;font:700 12px/1.1 system-ui,-apple-system,Segoe UI,sans-serif;text-transform:uppercase;letter-spacing:0}
     .kf-row{display:flex;align-items:center;gap:7px;min-height:32px;max-width:min(520px,calc(100vw - 32px));padding:6px 9px;background:rgba(10,12,16,.74);border:1px solid rgba(255,255,255,.15);box-shadow:0 8px 26px rgba(0,0,0,.35);backdrop-filter:blur(8px);color:#f4f7fb;transform:translateX(0);opacity:1;transition:opacity .45s ease,transform .45s ease}
-    .kf-row.mine{border-color:rgba(255,210,63,.45);box-shadow:0 0 0 1px rgba(255,210,63,.16),0 8px 26px rgba(0,0,0,.35)}
+    .kf-row{border-radius:4px;border-left:3px solid #8294a8}
+    .kf-row.mine{border-left-color:#ffd23f;border-color:rgba(255,210,63,.45);box-shadow:0 0 0 1px rgba(255,210,63,.16),0 8px 26px rgba(0,0,0,.35)}
+    .kf-row.kf-laser{border-left-color:#ff688f;background:rgba(30,8,20,.9)}
     .kf-row.out{opacity:0;transform:translateX(22px)}
     .kf-row{animation:kfIn .18s ease-out;transition:opacity .5s,transform .5s}
     @keyframes kfIn{from{opacity:0;transform:translateX(18px)}to{opacity:1;transform:none}}
@@ -50490,6 +50539,18 @@ function ensureKillfeedStyles() {
     .kf-icon{width:62px;height:26px;object-fit:contain;filter:brightness(0) drop-shadow(0 0 1px rgba(255,255,255,.95)) drop-shadow(0 0 1px rgba(255,255,255,.75));opacity:1}
     .kf-head{width:21px;height:21px;object-fit:contain;filter:drop-shadow(0 1px 2px #000)}
     .kf-tag{padding:3px 5px;border:1px solid rgba(255,255,255,.28);background:rgba(255,255,255,.12);color:#fff;font-size:10px;font-weight:900;white-space:nowrap}
+    .kf-mark{display:inline-flex;align-items:center;justify-content:center;flex:0 0 22px;height:22px;font-size:19px;color:#91ddff;position:relative}
+    .kf-mark.noscope:before{content:'';width:14px;height:14px;border:2px solid currentColor;border-radius:50%;background:linear-gradient(currentColor,currentColor) center/2px 6px no-repeat,linear-gradient(currentColor,currentColor) center/6px 2px no-repeat}
+    .kf-mark.noscope:after{content:'';position:absolute;width:23px;height:2px;background:#ff728f;transform:rotate(-45deg);box-shadow:0 0 0 1px #141820}
+    .kf-mark.turn{font-size:10px;border:1px dashed #91ddff;border-radius:50%}
+    .kf-mark.combo{color:#e4acff}.kf-chain{color:#ffd23f;border-color:#bd983d;background:rgba(255,210,63,.1)}
+    .kf-gag{display:inline-flex;align-items:center;gap:5px;font-size:9px;color:#ffacc4;white-space:nowrap}
+    .kf-sliced{display:inline-block;position:relative;width:18px;height:24px;flex-shrink:0}
+    .kf-sliced:before{content:'';position:absolute;left:4px;top:1px;width:8px;height:9px;border-radius:50% 50% 0 0;background:#ffacc4;animation:kfTop .8s ease-out both}
+    .kf-sliced:after{content:'';position:absolute;left:4px;top:12px;width:8px;height:10px;background:#ffacc4;clip-path:polygon(0 0,100% 0,100% 100%,60% 100%,50% 50%,40% 100%,0 100%);animation:kfBottom .8s ease-out both}
+    @keyframes kfTop{to{transform:translate(-3px,-2px) rotate(-18deg)}}@keyframes kfBottom{to{transform:translate(3px,2px) rotate(18deg)}}
+    @media(prefers-reduced-motion:reduce){.kf-row,.kf-sliced:before,.kf-sliced:after{animation:none}}
+    @media(max-width:700px){.kf-row{flex-wrap:wrap;justify-content:flex-end;max-width:calc(100vw - 16px)}.kf-gag{flex-basis:100%;justify-content:flex-end}.kf-mark{flex-basis:18px;height:18px}}
     @media (max-width:700px){#killfeed{right:8px;top:76px}.kf-row{gap:5px;padding:5px 7px}.kf-name{max-width:86px}.kf-icon{width:48px;height:22px}.kf-tag{font-size:9px;padding:2px 4px}}
   `;
   document.head.appendChild(st);
@@ -50529,11 +50590,16 @@ function pushKillfeed(targetId, killerId) {
     const part = (cls, text, color) => {
       const s = document.createElement('span'); s.className = cls; s.textContent = text;
       if (color) s.style.color = color; row.appendChild(s);
+      return s;
     };
     const icon = (src, cls, title) => {
       const im = document.createElement('img'); im.className = cls; im.src = src; im.alt = title || ''; if (title) im.title = title; row.appendChild(im);
     };
-    const tags = list => { for (const tag of cleanKillfeedTags(list)) part('kf-tag', tag); };
+    const tags = list => { for (const tag of cleanKillfeedTags(list)) {
+      const [symbol, cls, label] = killfeedTagMark(tag);
+      const el = part(cls ? 'kf-mark ' + cls : 'kf-tag', symbol);
+      el.title = label; el.setAttribute('aria-label', label);
+    } };
     const weaponBit = (wid, mine) => {
       wid = _KILLFEED_ICON_ALIAS[wid] || wid;
       const url = weaponIconURL(wid, mine);
@@ -50544,6 +50610,8 @@ function pushKillfeed(targetId, killerId) {
     const info = _killInfo[targetId];
     const known = info && now - info.t < 4000 && (info.killer === killerId || !killerId) ? info : null;
     const widKnown = known && known.weapon;
+    const chain = killfeedChain(targetId, killerId, now);
+    const laser = killfeedLaser(widKnown || (killerId === myId ? currentEquippedId() : players[killerId]?.weaponId));
     if (known && known.cause === 'hazard') {
       part('kf-name', v.name, v.color);
       part('kf-action', known.label || 'died');
@@ -50566,6 +50634,12 @@ function pushKillfeed(targetId, killerId) {
       tags(known && known.tags);
       if (known && known.head) icon(_HEAD_ICON, 'kf-head', 'Headshot');
       part('kf-name', v.name, v.color);
+    }
+    if (chain > 1) { const el = part('kf-tag kf-chain', 'x' + chain); el.title = chain + ' eliminations within five seconds'; }
+    if (laser || known?.label === KILLFEED_HAZARDS.laser) {
+      row.classList.add('kf-laser');
+      const gag = part('kf-gag', 'NOW IN TWO PIECES');
+      const dummy = document.createElement('span'); dummy.className = 'kf-sliced'; dummy.setAttribute('aria-hidden', 'true'); gag.prepend(dummy);
     }
     box.insertBefore(row, box.firstChild);
     while (box.children.length > KILLFEED_MAX) box.lastChild.remove();
