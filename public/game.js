@@ -26569,6 +26569,215 @@ function updateWeaponSkinFX(dt) {
   }
 }
 
+// ── 🎨 Wrap skins, upgraded ────────────────────────────────────────────────────────────────────────────────────────
+// A wrap skin used to be one colour poured over every part of the gun: "Woodland" was an olive gun, "Carbon" a dark
+// grey one. They are surface treatments now -- a pattern painted on the part (camo blotches, twill weave, hazard
+// stripes, filigree, cracks, code rain...), the finish that goes with it (polished metal, matte, glassy), and for the
+// ones that glow, an emissive layer drawn separately so the light sits in the pattern and not on the whole gun.
+// Everything is a small tileable canvas, built the first time a skin is worn and cached after.
+const _wsCache = new Map(), _wsBase = new WeakMap();
+function _wsRng(seed) { let h = 2166136261; for (let i = 0; i < seed.length; i++) { h ^= seed.charCodeAt(i); h = Math.imul(h, 16777619); } return () => { h += 0x6D2B79F5; let t = h; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+const _wsCss = (n) => '#' + (n >>> 0).toString(16).padStart(6, '0');
+const WS_PATTERNS = {
+  camo(g, N, c, r) {   // blotches of the other colours over the first
+    g.fillStyle = c[0]; g.fillRect(0, 0, N, N);
+    for (let k = 1; k < c.length; k++) for (let i = 0; i < 20; i++) {
+      g.fillStyle = c[k]; g.beginPath();
+      const cx = r() * N, cy = r() * N, R = 14 + r() * 26, pts = 9;
+      for (let j = 0; j < pts; j++) { const a = j / pts * 6.283, rr = R * (0.55 + r() * 0.6); const x = cx + Math.cos(a) * rr * 1.5, y = cy + Math.sin(a) * rr; j ? g.lineTo(x, y) : g.moveTo(x, y); }
+      g.closePath(); g.fill();
+    }
+  },
+  stripes(g, N, c, r) {   // diagonal bands, a clean repeat
+    g.fillStyle = c[0]; g.fillRect(0, 0, N, N); g.fillStyle = c[1];
+    for (let i = -N; i < N * 2; i += 64) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i + 32, 0); g.lineTo(i + 32 - N, N); g.lineTo(i - N, N); g.closePath(); g.fill(); }
+  },
+  weave(g, N, c, r) {   // 2x2 twill: the carbon-fibre look is the light catching alternate cells
+    g.fillStyle = c[0]; g.fillRect(0, 0, N, N);
+    const S = 16;
+    for (let y = 0; y < N / S; y++) for (let x = 0; x < N / S; x++) {
+      const up = ((x + y) >> 1) % 2 === 0, gr = up ? g.createLinearGradient(x * S, y * S, x * S + S, y * S) : g.createLinearGradient(x * S, y * S, x * S, y * S + S);
+      gr.addColorStop(0, c[0]); gr.addColorStop(0.5, c[1]); gr.addColorStop(1, c[0]); g.fillStyle = gr; g.fillRect(x * S, y * S, S - 1, S - 1);
+    }
+  },
+  dots(g, N, c, r) {   // offset polka dots
+    g.fillStyle = c[0]; g.fillRect(0, 0, N, N); g.fillStyle = c[1];
+    for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) { g.beginPath(); g.arc(x * 32 + (y % 2) * 16 + 16, y * 32 + 16, 9, 0, 6.3); g.fill(); }
+  },
+  lattice(g, N, c, r) {   // diamond lattice with a stud at every crossing
+    g.fillStyle = c[0]; g.fillRect(0, 0, N, N); g.strokeStyle = c[1]; g.lineWidth = 4;
+    for (let i = -N; i < N * 2; i += 64) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i + N, N); g.moveTo(i + N, 0); g.lineTo(i, N); g.stroke(); }
+    g.fillStyle = c[1];
+    for (let y = 0; y <= N; y += 64) for (let x = 0; x <= N; x += 64) { g.beginPath(); g.arc(x, y, 7, 0, 6.3); g.fill(); }
+  },
+  filigree(g, N, c, r) {   // engraved overlapping rings: scrollwork
+    g.fillStyle = c[0]; g.fillRect(0, 0, N, N); g.strokeStyle = c[1]; g.lineWidth = 3;
+    for (let y = 0; y <= N; y += 32) for (let x = 0; x <= N; x += 32) { g.beginPath(); g.arc(x, y, 22, 0, 6.3); g.stroke(); g.beginPath(); g.arc(x + 16, y + 16, 9, 0, 6.3); g.stroke(); }
+  },
+  bands(g, N, c, r) {   // flame-like: vertical gradient, tongues rising through it
+    const gr = g.createLinearGradient(0, N, 0, 0); gr.addColorStop(0, c[0]); gr.addColorStop(0.55, c[1]); gr.addColorStop(1, c[2] || c[1]);
+    g.fillStyle = gr; g.fillRect(0, 0, N, N); g.fillStyle = c[2] || c[0];
+    for (let i = 0; i < 9; i++) { const x = (i + r() * 0.6) * (N / 9), h = 60 + r() * 120; g.beginPath(); g.moveTo(x - 14, N); g.quadraticCurveTo(x, N - h * 0.6, x + (r() - 0.5) * 20, N - h); g.quadraticCurveTo(x + 6, N - h * 0.5, x + 16, N); g.closePath(); g.globalAlpha = 0.55; g.fill(); }
+    g.globalAlpha = 1;
+  },
+  waves(g, N, c, r) {
+    g.fillStyle = c[0]; g.fillRect(0, 0, N, N);
+    for (let k = 0; k < 12; k++) { g.strokeStyle = k % 3 ? c[1] : (c[2] || c[1]); g.lineWidth = 3; g.beginPath(); for (let x = 0; x <= N; x += 8) { const y = k * 22 + Math.sin(x / N * 12.566 + k) * 9; x ? g.lineTo(x, y) : g.moveTo(x, y); } g.stroke(); }
+  },
+  grid(g, N, c, r) {   // circuit grid
+    g.fillStyle = c[0]; g.fillRect(0, 0, N, N); g.strokeStyle = c[1]; g.lineWidth = 3;
+    for (let i = 0; i <= N; i += 32) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i, N); g.moveTo(0, i); g.lineTo(N, i); g.stroke(); }
+    g.fillStyle = c[1]; for (let i = 0; i < 14; i++) g.fillRect(Math.floor(r() * 8) * 32 - 5, Math.floor(r() * 8) * 32 - 5, 10, 10);
+  },
+  cracks(g, N, c, r) {   // veins through dark stone
+    g.fillStyle = c[0]; g.fillRect(0, 0, N, N); g.strokeStyle = c[1]; g.lineWidth = 3; g.lineJoin = 'round';
+    for (let k = 0; k < 9; k++) { let x = r() * N, y = r() * N, a = r() * 6.28; g.beginPath(); g.moveTo(x, y); for (let j = 0; j < 12; j++) { a += (r() - 0.5) * 1.3; x += Math.cos(a) * 14; y += Math.sin(a) * 14; g.lineTo(x, y); } g.stroke(); }
+  },
+  speckle(g, N, c, r) {   // grit and rust
+    g.fillStyle = c[0]; g.fillRect(0, 0, N, N);
+    for (let k = 1; k < c.length; k++) for (let i = 0; i < 260; i++) { g.fillStyle = c[k]; const s = 1.5 + r() * 4; g.fillRect(r() * N, r() * N, s, s); }
+    g.fillStyle = c[1] || c[0]; for (let i = 0; i < 10; i++) { g.globalAlpha = 0.25; g.beginPath(); g.arc(r() * N, r() * N, 14 + r() * 24, 0, 6.3); g.fill(); } g.globalAlpha = 1;
+  },
+  hammered(g, N, c, r) {   // beaten metal, patina in the dents
+    g.fillStyle = c[0]; g.fillRect(0, 0, N, N);
+    for (let i = 0; i < 90; i++) { const x = r() * N, y = r() * N, R = 9 + r() * 12, gr = g.createRadialGradient(x - R * 0.3, y - R * 0.3, 1, x, y, R); gr.addColorStop(0, c[1]); gr.addColorStop(1, r() < 0.2 ? c[2] : c[0]); g.fillStyle = gr; g.globalAlpha = 0.8; g.beginPath(); g.arc(x, y, R, 0, 6.3); g.fill(); }
+    g.globalAlpha = 1;
+  },
+  code(g, N, c, r) {   // columns of falling glyphs
+    g.fillStyle = c[0]; g.fillRect(0, 0, N, N);
+    for (let x = 0; x < N; x += 16) { let y = r() * N; const len = 4 + (r() * 10 | 0); for (let j = 0; j < len; j++) { g.fillStyle = c[1]; g.globalAlpha = 1 - j / len; if (r() > 0.25) g.fillRect(x + 2, (y + j * 12) % N, 9, 9); } }
+    g.globalAlpha = 1;
+  },
+  facets(g, N, c, r) {   // cut crystal
+    g.fillStyle = c[0]; g.fillRect(0, 0, N, N);
+    for (let y = 0; y < N; y += 32) for (let x = 0; x < N; x += 32) for (const t of [0, 1]) {
+      g.fillStyle = r() < 0.5 ? c[0] : c[1]; g.globalAlpha = 0.35 + r() * 0.65; g.beginPath();
+      if (t) { g.moveTo(x, y); g.lineTo(x + 32, y); g.lineTo(x + 32, y + 32); } else { g.moveTo(x, y); g.lineTo(x + 32, y + 32); g.lineTo(x, y + 32); }
+      g.closePath(); g.fill();
+    }
+    g.globalAlpha = 1;
+  },
+};
+// id -> how it is painted and finished. `glow`: which of the pattern's colours also lights up (an emissive layer).
+const WS_LOOKS = {
+  gold:      { pat: 'filigree', c: [0xc8a020, 0xffe070], metal: 0.95, rough: 0.26 },
+  crimson:   { pat: 'bands', c: [0x4a0808, 0x9a1414, 0xe04444], metal: 0.45, rough: 0.4 },
+  arctic:    { pat: 'camo', c: [0xdfe6ee, 0x9fb6c8, 0xc8d6e2, 0xffffff], metal: 0.15, rough: 0.55 },
+  neon:      { pat: 'grid', c: [0x141425, 0x33ffcc], metal: 0.6, rough: 0.3, glow: 1 },
+  woodland:  { pat: 'camo', c: [0x4a5320, 0x2e3618, 0x6b6a2a, 0x1c2210], metal: 0.1, rough: 0.85 },
+  urban:     { pat: 'camo', c: [0x6a6f76, 0x3a3d42, 0x9a9fa6, 0x22252a], metal: 0.15, rough: 0.8 },
+  outlaw:    { pat: 'camo', c: [0x8a7038, 0x4a3a1c, 0xb09858, 0x2f2412], metal: 0.1, rough: 0.8 },
+  obsidian:  { pat: 'cracks', c: [0x08090c, 0x8a2cff], metal: 0.55, rough: 0.1, glow: 1 },
+  toxic:     { pat: 'camo', c: [0x203a12, 0x8cff2a, 0x3f6a1c, 0x5aa81c], metal: 0.1, rough: 0.35, glow: 1 },
+  bubblegum: { pat: 'dots', c: [0xff7ab8, 0x74d7ff], metal: 0.05, rough: 0.35 },
+  carbon:    { pat: 'weave', c: [0x14171b, 0x4a5058], metal: 0.7, rough: 0.22 },
+  royal:     { pat: 'lattice', c: [0x3b1466, 0xffd227], metal: 0.55, rough: 0.3 },
+  sunset:    { pat: 'bands', c: [0xe0306a, 0xff6a2a, 0xffd15c], metal: 0.2, rough: 0.4 },
+  ocean:     { pat: 'waves', c: [0x0b335f, 0x36d1dc, 0x1a6aa8], metal: 0.35, rough: 0.2 },
+  candycane: { pat: 'stripes', c: [0xf5f2e8, 0xd92828], metal: 0.05, rough: 0.35 },
+  hazard:    { pat: 'stripes', c: [0x1b1b1b, 0xffc400], metal: 0.1, rough: 0.6 },
+  copper:    { pat: 'hammered', c: [0xb46a2d, 0xe0a060, 0x3f9a7a], metal: 0.9, rough: 0.4 },
+  p2w_gold:  { pat: 'filigree', c: [0xffcc00, 0xfff0a0], metal: 1.0, rough: 0.14 },
+  broke:     { pat: 'speckle', c: [0x6b6256, 0x3a342c, 0x8a4a28], metal: 0.05, rough: 0.95 },
+  crystal:   { pat: 'facets', c: [0x55cfe6, 0xbff6ff], metal: 0.2, rough: 0.08 },
+  rock:      { pat: 'speckle', c: [0x6a6258, 0x4a443c, 0x8a8478], metal: 0.0, rough: 1.0 },
+  data:      { pat: 'code', c: [0x0a0a12, 0x2266ff], metal: 0.5, rough: 0.3, glow: 1 },
+  glacier:   { pat: 'facets', c: [0x9be8ff, 0xffffff], metal: 0.15, rough: 0.1 },
+  meteor:    { pat: 'cracks', c: [0x2a201a, 0xff5a1f], metal: 0.2, rough: 0.8, glow: 1 },
+  matrix:    { pat: 'code', c: [0x050805, 0x00ff66], metal: 0.5, rough: 0.3, glow: 1 },
+  smog:      { pat: 'speckle', c: [0x383a3d, 0x777b80, 0x55585c], metal: 0.0, rough: 0.9 },
+};
+function _wsTextures(id, variant) {
+  const key = id + ':' + variant;
+  let t = _wsCache.get(key); if (t) return t;
+  const look = WS_LOOKS[id], N = 256, r = _wsRng(key);
+  const draw = (colors) => {
+    const c = document.createElement('canvas'); c.width = c.height = N;
+    WS_PATTERNS[look.pat](c.getContext('2d'), N, colors, r);
+    const tx = new THREE.CanvasTexture(c); tx.wrapS = tx.wrapT = THREE.RepeatWrapping;
+    // painted in sRGB, so it has to say so: left untagged it reads as linear and every colour comes out pale
+    if ('colorSpace' in tx && THREE.SRGBColorSpace !== undefined) tx.colorSpace = THREE.SRGBColorSpace;
+    else if (THREE.sRGBEncoding !== undefined) tx.encoding = THREE.sRGBEncoding;
+    return tx;
+  };
+  const cols = look.c.map(_wsCss);
+  // the second variant swaps the two main colours, so a two-tone gun's body and accent parts do not match
+  const v = variant ? [cols[1] || cols[0], cols[0], ...cols.slice(2)] : cols;
+  t = { map: draw(v) };
+  if (look.glow) {   // the light: only the pattern's bright colour, on black
+    const glow = [ '#000000', cols[1] || cols[0], ...cols.slice(2).map(() => '#000000') ];
+    t.glow = draw(glow);
+  }
+  _wsCache.set(key, t); return t;
+}
+// Two kinds of hand-built part do not suit a pattern as they come: ones with no UVs at all, and extruded ones whose UVs
+// are in metres (0 to 0.3 over the whole part), which sample one corner of the texture and come out a single flat
+// colour among patterned neighbours. While a pattern skin is on, the first get box-projected UVs and the second their
+// UVs scaled up; Stock puts the original UVs back, so nothing else that reads them is changed.
+function _wsUVMode(model, on) {
+  if (!model._wsUVParts) {
+    model._wsUVParts = [];
+    const K = 6;   // pattern tiles per metre on a projected part
+    model.traverse(o => {
+      if (!o.isMesh || !o.geometry || (o.userData && o.userData.vmHand) || !o.geometry.attributes.position) return;
+      const g = o.geometry, uv = g.attributes.uv;
+      if (g.userData._wsUV) { model._wsUVParts.push(g); return; }
+      let alt = null;
+      if (!uv) {
+        const pos = g.attributes.position, nor = g.attributes.normal; alt = new Float32Array(pos.count * 2);
+        for (let k = 0; k < pos.count; k++) {
+          const x = pos.getX(k), y = pos.getY(k), z = pos.getZ(k);
+          const nx = nor ? Math.abs(nor.getX(k)) : 0, ny = nor ? Math.abs(nor.getY(k)) : 1, nz = nor ? Math.abs(nor.getZ(k)) : 0;
+          if (nx >= ny && nx >= nz) { alt[k * 2] = z * K; alt[k * 2 + 1] = y * K; }
+          else if (ny >= nz) { alt[k * 2] = x * K; alt[k * 2 + 1] = z * K; }
+          else { alt[k * 2] = x * K; alt[k * 2 + 1] = y * K; }
+        }
+        g.userData._wsUV = { orig: null, alt };
+      } else {
+        let lo = 1e9, hi = -1e9, lv = 1e9, hv = -1e9;
+        for (let k = 0; k < uv.count; k++) { const u = uv.getX(k), v = uv.getY(k); if (u < lo) lo = u; if (u > hi) hi = u; if (v < lv) lv = v; if (v > hv) hv = v; }
+        if (g.type === 'ExtrudeGeometry' || (hi - lo < 0.5 && hv - lv < 0.5 && g.type !== 'BoxGeometry')) {   // metres, not 0..1
+          alt = new Float32Array(uv.array.length); for (let k = 0; k < alt.length; k++) alt[k] = uv.array[k] * 5;
+          g.userData._wsUV = { orig: uv.array.slice(), alt };
+        } else g.userData._wsUV = { skip: true };
+      }
+      model._wsUVParts.push(g);
+    });
+  }
+  for (const g of model._wsUVParts) {
+    const d = g.userData._wsUV; if (!d || d.skip) continue;
+    if (d.orig === null) {   // had no UVs: add them, or take them away again
+      if (on) g.setAttribute('uv', new THREE.BufferAttribute(d.alt, 2)); else g.deleteAttribute('uv');
+    } else {
+      g.attributes.uv.array.set(on ? d.alt : d.orig); g.attributes.uv.needsUpdate = true;
+    }
+  }
+}
+// Dress (or undress) each material. The original map / finish is kept the first time a part is touched and restored
+// whenever the skin changes, so going back to Stock gives back exactly the gun that came out of the box.
+function _wsApplyLook(skin, mats) {
+  const look = skin && WS_LOOKS[skin.id];
+  mats.forEach((m, i) => {
+    if (!m || !m.isMaterial) return;
+    let base = _wsBase.get(m);
+    if (!base) {
+      base = { map: m.map || null, metalness: m.metalness, roughness: m.roughness, emissive: m.emissive ? m.emissive.getHex() : null,
+               emissiveIntensity: m.emissiveIntensity, emissiveMap: m.emissiveMap || null };
+      _wsBase.set(m, base);
+    }
+    const had = m.map !== base.map || m.emissiveMap !== base.emissiveMap;
+    m.map = base.map;
+    if ('metalness' in m && base.metalness !== undefined) { m.metalness = base.metalness; m.roughness = base.roughness; }
+    if (m.emissive && base.emissive !== null) { m.emissive.setHex(base.emissive); m.emissiveIntensity = base.emissiveIntensity; m.emissiveMap = base.emissiveMap; }
+    if (look) {
+      const t = _wsTextures(skin.id, i & 1);
+      m.map = t.map; m.color.setHex(0xffffff);
+      if ('metalness' in m) { m.metalness = look.metal; m.roughness = look.rough; }
+      if (look.glow && m.emissive && t.glow) { m.emissive.setHex(0xffffff); m.emissiveMap = t.glow; m.emissiveIntensity = 1.1; }
+    }
+    if (look || had) m.needsUpdate = true;
+  });
+}
 function applyWeaponSkin(model, skin) {
   if (!model) return;
   if (model._bodyMat) {
@@ -26609,6 +26818,8 @@ function applyWeaponSkin(model, skin) {
   const bodyMats = model._bodyMat ? [model._bodyMat, model._accentMat]
     : (model._skinMats ? model._skinMats.filter(e => !e.basic).map(e => e.mat) : []);
   bodyMats.forEach(m => { m.transparent = false; m.opacity = 1; });
+  _wsUVMode(model, !!(skin && WS_LOOKS[skin.id]));
+  _wsApplyLook(skin, bodyMats);   // pattern + finish on top of the colours above
   model._fx = (skin && skin.fx) || null;
   if (model._fx === 'crystal') { bodyMats.forEach(m => { m.transparent = true; m.opacity = 0.72; }); _buildSkinExtra(model, 'crystal'); }
   else if (model._fx === 'rock') { _buildSkinExtra(model, 'rock'); }
