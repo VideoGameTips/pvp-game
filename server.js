@@ -1872,7 +1872,7 @@ event_horizon: 75,
   ak20: 24,  sg8: 18,
   srx: 95, rpd: 10, mp40: 15, p90: 15,
   paintball: 40, burst: 47, lever: 93,
-  vector: 12, crossbow: 80, flamethrower: 3,
+  vector: 18, crossbow: 80, flamethrower: 3,
   grenade_launcher: 90, railgun: 200, minigun: 27, chain_gun: 22, javelin_launcher: 30,
   freeze_gun: 13, boombow: 95,
   // Secondaries
@@ -2006,7 +2006,7 @@ const FALLOFF_NONE       = { near: 9999, far: 9999, min: 1 };
 const WEAPON_FALLOFF = {
   sg8: FALLOFF_POINTBLANK, shorty: FALLOFF_POINTBLANK, sawed_off: FALLOFF_POINTBLANK, boomstick: FALLOFF_POINTBLANK, storm_bloom: FALLOFF_POINTBLANK,
   flamethrower: FALLOFF_FLAME,
-  mp40: FALLOFF_SMG, p90: FALLOFF_SMG, vector: FALLOFF_SMG, smart_smg: FALLOFF_SMG, swarm_rifle: FALLOFF_SMG, painter_beam: FALLOFF_SMG, prism_engine: FALLOFF_SMG, p90_spec: FALLOFF_SMG,
+  mp40: FALLOFF_SMG, p90: FALLOFF_SMG, vector: { near: 14, far: 44, min: 0.32 }, smart_smg: FALLOFF_SMG, swarm_rifle: FALLOFF_SMG, painter_beam: FALLOFF_SMG, prism_engine: FALLOFF_SMG, p90_spec: FALLOFF_SMG,
   machine_pistol: FALLOFF_MACHINEPISTOL, glock18: FALLOFF_MACHINEPISTOL, machine_revolver: FALLOFF_MACHINEPISTOL,
   rpd: FALLOFF_LMG, mg42: FALLOFF_LMG, chain_gun: FALLOFF_LMG, gau19: FALLOFF_LMG, mk44: FALLOFF_LMG, cycler: FALLOFF_LMG,
   minigun: FALLOFF_MINIGUN, m134: FALLOFF_MINIGUN,

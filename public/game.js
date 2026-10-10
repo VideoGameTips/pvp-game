@@ -126,8 +126,11 @@ const WEAPONS = [
   },
   {
     id: 'vector', killReload: 0.5, name: 'Vector SMG', type: 'SMG', slot: 'primary',
-    mag: 32, reserve: 160, damage: 12, fireRate: 45, reloadTime: 1500,
-    auto: true, pellets: 1, spread: 0.017, adsZoom: 50, bulletSpeed: 128, noReload: false,
+    // Buffed: one full magazine used to be 32 x 12 = 384 damage against a 300 HP
+    // player, so you could not kill even one person per mag. Now 40 x 18 = 720,
+    // with a tighter spray and a longer falloff than the other SMGs.
+    mag: 40, reserve: 200, damage: 18, fireRate: 45, reloadTime: 1500,
+    auto: true, pellets: 1, spread: 0.012, adsZoom: 50, bulletSpeed: 128, noReload: false,
     ability: { name: 'Overdrive', cd: 13000, desc: '2s · fire rate ×5', type: 'buff', duration: 2000, rateMult: 0.2 },
   },
   {
@@ -897,7 +900,7 @@ Object.assign(WEAPON_FALLOFF, {
   sg8: FALLOFF_POINTBLANK, shorty: FALLOFF_POINTBLANK, sawed_off: FALLOFF_POINTBLANK,
   boomstick: FALLOFF_POINTBLANK, storm_bloom: FALLOFF_POINTBLANK,
   flamethrower: FALLOFF_FLAME,
-  mp40: FALLOFF_SMG, p90: FALLOFF_SMG, vector: FALLOFF_SMG, smart_smg: FALLOFF_SMG,
+  mp40: FALLOFF_SMG, p90: FALLOFF_SMG, vector: { near: 14, far: 44, min: 0.32 }, smart_smg: FALLOFF_SMG,
   swarm_rifle: FALLOFF_SMG, painter_beam: FALLOFF_SMG, prism_engine: FALLOFF_SMG, p90_spec: FALLOFF_SMG,
   machine_pistol: FALLOFF_MACHINEPISTOL, glock18: FALLOFF_MACHINEPISTOL, machine_revolver: FALLOFF_MACHINEPISTOL,
   rpd: FALLOFF_LMG, mg42: FALLOFF_LMG, chain_gun: FALLOFF_LMG, gau19: FALLOFF_LMG, mk44: FALLOFF_LMG,
