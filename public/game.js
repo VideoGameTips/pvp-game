@@ -14552,32 +14552,104 @@ function weatherAllMaps() {
   Object.values(MAP_GROUPS).forEach(g => { try { weatherMapGroup(g); } catch (e) {} });
 }
 // ═══ 🥚 EASTER EGGS ═══════════════════════════════════════════════════════════════════════════════════════════════
-// Things to find. Three kinds, all of them dressing on top of finished maps (nothing here moves a spawn or a route):
-//   • messages sprayed on walls, and on the top of anything crane-shaped, where only someone who goes looking will see;
-//   • a SLIDE-JUMP ROUTE: four blocks along the edge of the map, rising a little each time, 15 m apart. A run-up jump
-//     carries about 8 m and a double jump about 14, so the gaps are there to be crossed only by sliding into a jump
-//     (the slide's speed carried into the air is worth 16-21 m). The last block has a note on it;
-//   • a FLOATING CHAIN, in the maps that are not meant to be real places only: three platforms at 7, 10 and 13 m, a
-//     blast jump from one to the next, to be reached with the grenade launcher at your own feet.
-// Everything is placed by looking at what the map already has (colliders, bounds, spawn rectangles), seeded from the
-// map's name so it is the same on every machine, and skipped where it does not fit rather than squeezed in.
-const EGG_NOTES = ['mochi wuz hair', 'you found it :)', 'skill issue', 'slide + jump', "don't look down", 'the cake is a lie',
-  'hi from the devs', 'secret #7', 'try the grenade launcher', 'ur doing great', 'no camping', 'sushi sensei was here'];
+// Things to find, as dressing on finished maps (nothing here moves a spawn or a route; skipped where it does not fit;
+// seeded from the map's name so it is the same on every machine). Three kinds:
+//   • marks -- a line of someone's handwriting, or a small drawing -- put where nobody is sent: low on a wall that
+//     faces away from both spawns, in a nook between cover, behind a pillar. Small, low contrast, and every map has
+//     its own (EGG_LINES), so there is nothing to recognise from one map to the next;
+//   • a SLIDE-JUMP ROUTE: four blocks in a line 15 m apart, rising 0.6 m each. A run-up jump carries about 8 m and a
+//     double jump about 14, a slide jump 16-21, so only sliding into the jump crosses the gaps. The only hint is a
+//     pair of skid marks on the floor leading up to the first block; the last block has a drawing on its top;
+//   • a FLOATING CHAIN, in the maps that are not meant to be real places only: three platforms at 7, 10 and 13 m, one
+//     blast jump apart, for the grenade launcher. A small drawing on the last one.
+// '@name' in a list is a drawing (tally, arrow, smile, star, heart, cat, x, crown, stick, cone), anything else is text.
+const EGG_LINES = {
+  battlefield: ['day 41. still no relief', '@tally', 'dig here (do not)'],
+  urban: ["dave's pizza -> 2 blocks", 'rent is due', '@arrow'],
+  warehouse: ['forklift license: revoked', 'box 7 is empty', '@smile'],
+  forest: ['bear was here (very polite)', 'tree 14 = best tree', '@heart'],
+  vietnam: ['gone fishing', 'mind the mud', '@tally'],
+  volcano: ['too hot for the cat', 'lava is just a floor, hot'],
+  cyber: ['0xC0FFEE', 'wake up', '@smile'],
+  desert: ['pyramid #3 is hollow', 'the camel had the right idea', '@x'],
+  tundra: ["ice fishing champ '19", 'yellow snow: no', '@star'],
+  space: ['no sound here. ask me how i know', 'mind the gaps', '@star'],
+  airport: ['gate 7 cancelled', 'lost: 1 left shoe', '@arrow'],
+  trenches: ['home by christmas', 'mail call: nothing', '@tally'],
+  chernobyl: ['day 4017. nobody came', 'green is not a colour', '@tally'],
+  refinery: ['valve 9: DO NOT', 'smells like victory', '@x'],
+  skydock: ['wind 40 knots. vibes 100', 'parked here 3 days', '@arrow'],
+  sewer: ['the turtles say hi', 'watch your step', '@smile'],
+  gravity_lab: ['weight: ?', 'up is a suggestion', '@arrow'],
+  glassworks: ['handle with care', 'ironically', '@heart'],
+  carrier: ['swab the deck (again)', 'fish: yes', '@stick'],
+  overgrowth: ['nature wins', 'plant 3 needs water', '@heart'],
+  orbital_station: ['oxygen: yes', 'houston: ???', '@star'],
+  foundry: ['break room is closed', 'hot', '@x'],
+  carnival: ['height requirement: 1 pickle', 'win a goldfish', '@smile'],
+  biosphere: ['photosynthesis: ok', 'ferns > you', '@heart'],
+  lockdown: ['door 3 is stuck again', 'day 12', '@tally'],
+  studio: ['quiet on set', 'take 47', '@star'],
+  temple: ['no running. (run)', 'the cat is sacred', '@cat'],
+  holiday: ['naughty list: you', 'cookies ->', '@arrow'],
+  labyrinth: ['you are here (probably)', 'left? no, the other left', '@arrow'],
+  arena: ['ladies and gentlemen: nothing', 'gift shop ->', '@crown'],
+  opera: ['intermission', 'bravo (sarcastic)', '@star'],
+  doomsday: ['it was fine yesterday', 'bring snacks', '@x'],
+  train: ['delayed 40 min', 'mind the gap', '@arrow'],
+  dreamscape: ['you left the stove on', 'this is not a dream (it is)', '@star'],
+  pearl_harbor: ['shore leave ends 1800', 'port side = the left one', '@arrow'],
+  titanic: ['deck chairs: all accounted for', 'orchestra on break', '@star'],
+  supermarket: ['aisle 5 is lava', 'out of: eggs', '@arrow'],
+  pyongyang: ['photo day', 'smile', '@star'],
+  traffic_cone_republic: ['cone count: 4,812', 'the cone knows', '@cone'],
+  flying_moai: ['stone: very fine', 'do not stare back', '@cat'],
+  big_arena: ['bring a friend', 'seat 12B: view blocked', '@crown'],
+  super_arena: ['tier 2 is tier 1 with extras', 'not a drill (a drill)', '@star'],
+};
+const EGG_CRANE = ['nice view', "don't look down", 'rope: 4 left', 'ahoy', 'tired of climbing', 'hi', 'shift ends at 5', 'hard hat: lost'];
 const EGG_SKIP = new Set(['blank', 'range', 'obby', 'm4_tower', 'm4_tower_big', 'm4_tower_super', 'storm_pier', 'pinball_arcade',
   'laser_vault', 'cargo_belts', 'gale_peaks', 'magma_rise', 'br_arena', 'base_raid']);
 const EGG_FLOATING = new Set(['space', 'orbital_station', 'gravity_lab', 'dreamscape', 'flying_moai', 'cyber', 'super_arena']);
-function _eggSign(name, text, x, y, z, ry, w = 3.2, color = '#fff36a') {
-  const c = document.createElement('canvas'); c.width = 512; c.height = 128;
-  const g = c.getContext('2d');
-  g.font = 'bold 72px "Marker Felt","Chalkboard SE","Comic Sans MS",cursive'; g.textAlign = 'center'; g.textBaseline = 'middle';
-  g.lineJoin = 'round'; g.lineWidth = 11; g.strokeStyle = 'rgba(0,0,0,0.6)'; g.strokeText(text, 256, 60, 488);
-  g.fillStyle = color; g.fillText(text, 256, 60, 488);
-  g.fillStyle = color;   // a few drips of paint
-  for (let i = 0; i < 4; i++) g.fillRect(70 + ((i * 97 + text.length * 31) % 370), 92, 4, 8 + ((i * 53 + text.length * 7) % 22));
-  const tex = new THREE.CanvasTexture(c);
-  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, w / 4),
-    new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2 }));
-  m.position.set(x, y, z); m.rotation.y = ry; m.raycast = () => {}; m.userData.eggSign = true;
+// Hand-drawn glyphs: a few wobbly strokes in a 256 square.
+function _eggGlyph(g, kind, rnd) {
+  const w = (a) => a + (rnd() - 0.5) * 7;   // wobble
+  g.lineCap = 'round'; g.lineJoin = 'round';
+  const L = (x0, y0, x1, y1) => { g.beginPath(); g.moveTo(w(x0), w(y0)); g.lineTo(w(x1), w(y1)); g.stroke(); };
+  const C = (x, y, r) => { g.beginPath(); g.arc(w(x), w(y), r, 0, 6.3); g.stroke(); };
+  if (kind === 'tally') { const n = 7 + ((rnd() * 8) | 0); for (let k = 0; k < n; k++) { const gx = 30 + (k % 5 === 4 ? 0 : 0) + Math.floor(k / 5) * 100, i = k % 5; if (i < 4) L(gx + i * 18, 70, gx + i * 18 + 2, 170); else L(gx - 6, 160, gx + 66, 80); } }
+  else if (kind === 'arrow') { g.beginPath(); g.moveTo(30, 170); g.quadraticCurveTo(120, 60, 215, 128); g.stroke(); L(215, 128, 178, 100); L(215, 128, 170, 150); }
+  else if (kind === 'smile') { C(128, 128, 86); C(98, 104, 6); C(158, 104, 6); g.beginPath(); g.arc(128, 138, 44, 0.25, 2.9); g.stroke(); }
+  else if (kind === 'star') { g.beginPath(); for (let k = 0; k < 10; k++) { const a = -Math.PI / 2 + k * Math.PI / 5, r = k % 2 ? 40 : 92; const x = 128 + Math.cos(a) * r, y = 132 + Math.sin(a) * r; k ? g.lineTo(w(x), w(y)) : g.moveTo(w(x), w(y)); } g.closePath(); g.stroke(); }
+  else if (kind === 'heart') { g.beginPath(); g.moveTo(128, 200); g.bezierCurveTo(10, 120, 60, 30, 128, 90); g.bezierCurveTo(196, 30, 246, 120, 128, 200); g.stroke(); }
+  else if (kind === 'cat') { C(128, 140, 70); L(66, 110, 62, 44); L(62, 44, 104, 78); L(190, 110, 194, 44); L(194, 44, 152, 78); C(104, 132, 5); C(152, 132, 5); L(128, 146, 128, 156); L(40, 140, 88, 148); L(40, 168, 88, 156); L(216, 140, 168, 148); L(216, 168, 168, 156); }
+  else if (kind === 'x') { C(128, 128, 90); L(70, 70, 186, 186); L(186, 70, 70, 186); }
+  else if (kind === 'crown') { g.beginPath(); g.moveTo(40, 190); g.lineTo(30, 80); g.lineTo(84, 130); g.lineTo(128, 50); g.lineTo(172, 130); g.lineTo(226, 80); g.lineTo(216, 190); g.closePath(); g.stroke(); }
+  else if (kind === 'stick') { C(128, 60, 28); L(128, 88, 128, 160); L(128, 110, 84, 140); L(128, 110, 172, 90); L(128, 160, 96, 220); L(128, 160, 164, 220); }
+  else if (kind === 'cone') { g.beginPath(); g.moveTo(128, 30); g.lineTo(196, 200); g.lineTo(60, 200); g.closePath(); g.stroke(); L(100, 110, 156, 110); L(84, 156, 172, 156); L(36, 214, 220, 214); }
+  else { C(128, 128, 80); }
+}
+// A mark: text or a drawing, small, in whatever a person would have had to hand. `flat` lays it on a surface that faces up.
+function _eggMark(name, spec, x, y, z, ry, o = {}) {
+  const rnd = _thRng(name + ':mark:' + spec + ':' + x.toFixed(1));
+  const isGlyph = spec[0] === '@', th = MAP_THEMES[name];
+  const wallLum = th ? (((th.w >> 16) & 255) * 0.3 + ((th.w >> 8) & 255) * 0.59 + (th.w & 255) * 0.11) / 255 : 0.5;
+  const dark = o.surfaceLum != null ? o.surfaceLum < 0.5 : wallLum < 0.5;
+  const ink = rnd() < 0.25 ? ['rgba(206,86,80,0.8)', 'rgba(96,142,210,0.8)', 'rgba(224,190,84,0.8)'][(rnd() * 3) | 0]
+                           : dark ? 'rgba(236,236,226,0.72)' : 'rgba(26,26,26,0.78)';
+  const c = document.createElement('canvas'), g = (c.width = isGlyph ? 256 : 512, c.height = isGlyph ? 256 : 128, c.getContext('2d'));
+  g.strokeStyle = ink; g.fillStyle = ink;
+  if (isGlyph) { g.lineWidth = 11; _eggGlyph(g, spec.slice(1), rnd); }
+  else {
+    g.font = (rnd() < 0.5 ? 'italic ' : '') + 'bold 64px "Marker Felt","Bradley Hand","Chalkboard SE","Comic Sans MS",cursive';
+    g.textAlign = 'center'; g.textBaseline = 'middle'; g.save(); g.translate(256, 64); g.rotate((rnd() - 0.5) * 0.09); g.fillText(spec, 0, 0, 480); g.restore();
+  }
+  const width = o.width || (isGlyph ? 0.42 + rnd() * 0.2 : 0.62 + rnd() * 0.3), height = isGlyph ? width : width / 4;
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(width, height),
+    new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2 }));
+  m.position.set(x, y, z);
+  if (o.flat) { m.rotation.x = -Math.PI / 2; m.rotation.z = ry; } else m.rotation.y = ry;
+  m.raycast = () => {}; m.userData.eggSign = true;
   MAP_GROUPS[name].add(m);
   return m;
 }
@@ -14591,50 +14663,58 @@ function _eggFree(name, x0, x1, z0, z1, y0, y1, pad = 0.6) {
   }
   return true;
 }
+// Where a mark would be seen least: faces turned away from both spawns, with something beside them, a long way from the
+// middle, low down. Ranked, not random, so the good hiding places are the ones used.
 function _eggMessages(name, rnd) {
-  const boxes = (MAP_COLLIDERS[name] || []), b = MAP_BOUNDS[name], notes = EGG_NOTES.slice();
-  for (let i = notes.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [notes[i], notes[j]] = [notes[j], notes[i]]; }
-  let used = 0; const placed = [];
-  const spaced = (x, z) => placed.every(p => Math.hypot(p[0] - x, p[1] - z) > 22);
-  // 1. the top of anything crane-shaped
+  const boxes = MAP_COLLIDERS[name] || [], b = MAP_BOUNDS[name], sp = MAP_SPAWNS[name];
+  const centres = sp ? [sp.ally, sp.enemy].filter(Boolean).map(r => [(r.x0 + r.x1) / 2, (r.z0 + r.z1) / 2]) : [[0, b.halfZ], [0, -b.halfZ]];
+  const lines = (EGG_LINES[name] || ['was here']).slice();
+  const blocked = (x, z, y0, y1) => boxes.some(c => x > c.min.x && x < c.max.x && z > c.min.z && z < c.max.z && c.max.y > y0 && c.min.y < y1);
+  const cands = [];
+  for (const c of boxes) {
+    const h = c.max.y - c.min.y; if (c.min.y > 0.6 || h < 1.3) continue;
+    const cx = (c.min.x + c.max.x) / 2, cz = (c.min.z + c.max.z) / 2, lx = c.max.x - c.min.x, lz = c.max.z - c.min.z;
+    for (const [nx, nz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const len = nx ? lz : lx; if (len < 1.4) continue;
+      const fx = cx + nx * (lx / 2), fz = cz + nz * (lz / 2);
+      const px = fx + nx * 0.9, pz = fz + nz * 0.9;
+      if (Math.abs(px) > b.halfX - 3 || Math.abs(pz) > b.halfZ - 3 || blocked(px, pz, 0.3, 1.7)) continue;
+      let score = rnd() * 0.5;
+      if (centres.every(([sx, sz]) => nx * (sx - fx) + nz * (sz - fz) < 0)) score += 1.5;          // faces away from both spawns
+      const tx = nz, tz = nx;                                                                        // along the face
+      if (blocked(px + tx * 1.5, pz + tz * 1.5, 0.3, 1.7) || blocked(px - tx * 1.5, pz - tz * 1.5, 0.3, 1.7)) score += 1.0;   // a nook
+      if (Math.min(...centres.map(([sx, sz]) => Math.hypot(sx - fx, sz - fz))) > 40) score += 0.8;
+      if (Math.hypot(fx, fz) > Math.min(b.halfX, b.halfZ) * 0.6) score += 0.6;
+      if (Math.hypot(fx, fz) < 8) score -= 1.0;
+      if (!_eggFree(name, fx - 0.2, fx + 0.2, fz - 0.2, fz + 0.2, 0, 0.1, 0) && false) continue;
+      cands.push({ x: fx + nx * 0.04, z: fz + nz * 0.04, y: Math.min(0.55 + rnd() * 0.95, c.max.y - 0.35), ry: Math.atan2(nx, nz), score, w: Math.min(1.0, len - 0.3), tall: h });
+    }
+  }
+  cands.sort((p, q) => q.score - p.score);
+  const placed = []; let n = 0;
+  // the top of anything crane-shaped gets a line of its own
   const cranes = boxes.filter(c => c.min.y < 0.5 && c.max.y - c.min.y >= 8 && c.max.x - c.min.x <= 2.4 && c.max.z - c.min.z <= 2.4);
   if (cranes.length) {
     const c = cranes[Math.floor(rnd() * cranes.length)], cx = (c.min.x + c.max.x) / 2, cz = (c.min.z + c.max.z) / 2;
-    const l = Math.hypot(cx, cz) || 1, nx = -cx / l, nz = -cz / l;   // face the middle of the map
-    _eggSign(name, 'mochi wuz hair', cx + nx * 1.1, c.max.y - 1.3, cz + nz * 1.1, Math.atan2(nx, nz), 3.6, '#ff9ad0');
-    placed.push([cx, cz]); used++;
+    const l = Math.hypot(cx, cz) || 1, nx = -cx / l, nz = -cz / l;
+    _eggMark(name, EGG_CRANE[Math.floor(rnd() * EGG_CRANE.length)], cx + nx * 0.8, c.max.y - 0.8, cz + nz * 0.8, Math.atan2(nx, nz), { width: 0.9 });
+    placed.push([cx, cz]);
   }
-  // 2. a wall nobody is sent to
-  const cands = [];
-  for (const c of boxes) {
-    const h = c.max.y - c.min.y; if (c.min.y > 0.6 || h < 3.2) continue;
-    const cx = (c.min.x + c.max.x) / 2, cz = (c.min.z + c.max.z) / 2, lx = c.max.x - c.min.x, lz = c.max.z - c.min.z;
-    for (const [nx, nz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-      const len = nx ? lz : lx; if (len < 4.5) continue;
-      const fx = cx + nx * (lx / 2), fz = cz + nz * (lz / 2), px = fx + nx * 1.8, pz = fz + nz * 1.8;
-      if (Math.hypot(fx, fz) < Math.min(b.halfX, b.halfZ) * 0.3) continue;
-      if (!_eggFree(name, px - 0.5, px + 0.5, pz - 0.5, pz + 0.5, 1.0, 2.8, 0.2)) continue;
-      cands.push({ x: fx + nx * 0.05, z: fz + nz * 0.05, y: Math.min(2.5, c.max.y - 1), ry: Math.atan2(nx, nz), w: Math.min(3.4, len - 0.8) });
-    }
-  }
-  for (let i = cands.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [cands[i], cands[j]] = [cands[j], cands[i]]; }
-  const colors = ['#fff36a', '#7affc8', '#ff9a6a', '#9ad0ff'];
   for (const c of cands) {
-    if (used >= 3) break;
-    if (!spaced(c.x, c.z)) continue;
-    _eggSign(name, notes[used % notes.length], c.x, c.y, c.z, c.ry, c.w, colors[used % colors.length]);
-    placed.push([c.x, c.z]); used++;
+    if (n >= Math.min(3, lines.length)) break;
+    if (placed.some(p => Math.hypot(p[0] - c.x, p[1] - c.z) < 16)) continue;
+    _eggMark(name, lines[n], c.x, c.y, c.z, c.ry, { width: lines[n][0] === '@' ? 0.5 : Math.max(0.5, c.w) });
+    placed.push([c.x, c.z]); n++;
   }
 }
 // Four blocks 15 m apart in a straight line, rising 0.6 m each: the slide-jump line. Edges first, where a route like
 // this belongs, then anywhere the map has a free corridor.
-function _eggSlideRoute(name, rnd, note) {
+function _eggSlideRoute(name, rnd) {
   const b = MAP_BOUNDS[name], PITCH = 19, SZ = 4, tops = [3.0, 3.6, 4.2, 4.8], span = 3 * PITCH + SZ;
   const th = MAP_THEMES[name], color = th ? th.c : 0x8a8f94;
   for (let tr = 0; tr < 120; tr++) {
     const alongX = rnd() < 0.5, longH = alongX ? b.halfX : b.halfZ, crossH = alongX ? b.halfZ : b.halfX;
     if (longH * 2 - 10 < span) continue;
-    // the first 40 tries hug an edge, the rest take any cross line
     const cross = tr < 40 ? (rnd() < 0.5 ? 1 : -1) * (crossH - 6.5 - rnd() * 4) : (rnd() * 2 - 1) * (crossH - 7);
     const start = -longH + 5 + rnd() * (longH * 2 - 10 - span), dir = rnd() < 0.5 ? 1 : -1;
     const pads = []; let ok = true;
@@ -14646,31 +14726,34 @@ function _eggSlideRoute(name, rnd, note) {
     }
     if (!ok) continue;
     pads.forEach(([cx, cz], k) => { addMapBox(name, cx, tops[k] / 2, cz, SZ, tops[k], SZ, color).userData.egg = 'route'; });
-    // a hint at the start (on the face you run up to), and the prize at the far end, facing back down the line
-    const [sx, sz] = pads[0], [ex, ez] = pads[3];
-    const fx = alongX ? -dir : 0, fz = alongX ? 0 : -dir;      // the way the line points back from its first block
-    _eggSign(name, 'slide + jump', sx + fx * (SZ / 2 + 0.05), tops[0] - 0.9, sz + fz * (SZ / 2 + 0.05), Math.atan2(fx, fz), 3.0, '#ffd24a');
-    addMapBox(name, ex, tops[3] + 0.9, ez, 0.2, 1.8, 0.2, 0x3a3f46);
-    _eggSign(name, note, ex, tops[3] + 2.1, ez, Math.atan2(-fx, -fz) + Math.PI, 3.4, '#7affc8');
+    // the only hint: two skid marks on the floor, running up to the first block
+    const [sx, sz] = pads[0], fx = alongX ? -dir : 0, fz = alongX ? 0 : -dir;
+    for (const off of [-0.45, 0.45]) {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 4.5), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.32, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }));
+      m.rotation.x = -Math.PI / 2; m.rotation.z = alongX ? Math.PI / 2 : 0;
+      m.position.set(sx + fx * (SZ / 2 + 3.2) + (alongX ? 0 : off), 0.03, sz + fz * (SZ / 2 + 3.2) + (alongX ? off : 0));
+      m.raycast = () => {}; MAP_GROUPS[name].add(m);
+    }
+    // the prize: a little drawing on the top of the last block
+    const [ex, ez] = pads[3];
+    _eggMark(name, ['@crown', '@star', '@cat', '@smile'][(rnd() * 4) | 0], ex, tops[3] + 0.02, ez, rnd() * 6, { flat: true, width: 0.9, surfaceLum: 0.7 });
     return true;
   }
   return false;
 }
 // Three platforms climbing out of reach of a plain jump, one blast apart. Unrealistic maps only.
-function _eggFloatingChain(name, rnd, note) {
+function _eggFloatingChain(name, rnd) {
   const b = MAP_BOUNDS[name], th = MAP_THEMES[name], color = th ? th.a : 0x6ad0ff;
   const tops = [7.0, 10.0, 13.0], HOP = 7.0;
   for (let tr = 0; tr < 300; tr++) {
     const x = (rnd() * 2 - 1) * (b.halfX - 16), z = (rnd() * 2 - 1) * (b.halfZ - 16);
-    const a = Math.floor(rnd() * 8) * Math.PI / 4, step = [Math.cos(a) * HOP, Math.sin(a) * HOP];
-    const turn = (rnd() < 0.5 ? 1 : -1) * Math.PI / 4;
-    const dirs = [[step[0], step[1]], [Math.cos(a + turn) * HOP, Math.sin(a + turn) * HOP]];
-    const pts = [[x, z], [x + dirs[0][0], z + dirs[0][1]]]; pts.push([pts[1][0] + dirs[1][0], pts[1][1] + dirs[1][1]]);
-    if (!pts.every(([px, pz], k) => { const r = k === 2 ? 3.4 : 2.6; return _eggFree(name, px - r, px + r, pz - r, pz + r, tops[k] - 1.2, tops[k] + 3.0, 1.0); })) continue;   // only the platform's own band: what stands under it is just more cover
+    const a = Math.floor(rnd() * 8) * Math.PI / 4, turn = (rnd() < 0.5 ? 1 : -1) * Math.PI / 4;
+    const pts = [[x, z], [x + Math.cos(a) * HOP, z + Math.sin(a) * HOP]];
+    pts.push([pts[1][0] + Math.cos(a + turn) * HOP, pts[1][1] + Math.sin(a + turn) * HOP]);
+    if (!pts.every(([px, pz], k) => { const r = k === 2 ? 3.4 : 2.6; return _eggFree(name, px - r, px + r, pz - r, pz + r, tops[k] - 1.2, tops[k] + 3.0, 1.0); })) continue;
     pts.forEach(([px, pz], k) => { const r = k === 2 ? 6 : 4.5; addMapBox(name, px, tops[k] - 0.3, pz, r, 0.6, r, color).userData.egg = 'chain'; });
-    const [ex, ez] = pts[2], l = Math.hypot(ex, ez) || 1, nx = -ex / l, nz = -ez / l;
-    addMapBox(name, ex, tops[2] + 0.9, ez, 0.2, 1.8, 0.2, 0x3a3f46);
-    _eggSign(name, note, ex, tops[2] + 2.1, ez, Math.atan2(nx, nz), 3.4, '#ff9ad0');
+    const [ex, ez] = pts[2];
+    _eggMark(name, ['@star', '@x', '@crown'][(rnd() * 3) | 0], ex, tops[2] + 0.02, ez, rnd() * 6, { flat: true, width: 1.1, surfaceLum: 0.7 });
     return true;
   }
   return false;
@@ -14680,10 +14763,7 @@ function addMapEasterEggs() {
     if (EGG_SKIP.has(name) || !MAP_GROUPS[name] || !MAP_BOUNDS[name] || !MAP_COLLIDERS[name]) continue;
     const rnd = _thRng(name + ':eggs');
     try { _eggMessages(name, rnd); } catch (e) { console.warn('[eggs]', name, e); }
-    try {
-      if (EGG_FLOATING.has(name)) _eggFloatingChain(name, rnd, 'gl jump wuz here');
-      else _eggSlideRoute(name, rnd, 'you slide jumped!');
-    } catch (e) { console.warn('[eggs]', name, e); }
+    try { if (EGG_FLOATING.has(name)) _eggFloatingChain(name, rnd); else _eggSlideRoute(name, rnd); } catch (e) { console.warn('[eggs]', name, e); }
   }
 }
 addMapEasterEggs();
