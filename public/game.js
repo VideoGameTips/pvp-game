@@ -39814,6 +39814,8 @@ function applyModelSkin(weaponId) {
   else delete _activeModelSkin[weaponId];
   const cur = weaponModels[idx];
   if (next === cur) return;
+  clearSecretInspect(cur);
+  if (cur._inspectMode) { cur._inspectMode = false; cur._reloadStart = 0; }
   const wasVisible = cur.visible;
   cur.visible = false;
   next.visible = wasVisible;
@@ -42248,15 +42250,101 @@ function inspectOpenPose(id) {
   return (_inspectOpenCache[id] = mag > 0.001 ? best : null);
 }
 
+const SECRET_INSPECTS = {
+  pistol_blaster: { every: 4, kind: 'ufo', color: 0x55eeff },
+  sg8_singularity: { every: 5, kind: 'void', color: 0xc087ff },
+  vector_bubble_blaster: { every: 4, kind: 'bubble', color: 0x79efff },
+  revolver_donut: { every: 6, kind: 'donut', color: 0xff83ba },
+};
+const _secretInspectCounts = new Map();
+function secretInspectFor(weaponId) {
+  const skin = _activeModelSkin[weaponId];
+  const def = skin && SECRET_INSPECTS[skin.id];
+  if (!def || skin.weapon !== weaponId) return null;
+  const key = `${weaponId}:${skin.id}`;
+  return { ...def, key, triggered: ((_secretInspectCounts.get(key) || 0) + 1) % def.every === 0 };
+}
+function clearSecretInspect(model, completed = false) {
+  const run = model?._secretInspect;
+  if (!run) return;
+  if (completed) _secretInspectCounts.set(run.key, (_secretInspectCounts.get(run.key) || 0) + 1);
+  if (run.group) {
+    model.remove(run.group);
+    run.group.traverse(o => {
+      o.geometry?.dispose();
+      if (o.material) o.material.dispose();
+    });
+  }
+  model._secretInspect = null;
+}
+function updateSecretInspect(model, t, pose) {
+  const run = model._secretInspect;
+  if (!run?.triggered) return;
+  if (!run.group) {
+    const group = new THREE.Group(); run.group = group; model.add(group);
+    const part = (geo, color, opacity = 1) => {
+      const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthTest: false }));
+      mesh.renderOrder = 999; group.add(mesh); return mesh;
+    };
+    if (run.kind === 'ufo') {
+      part(new THREE.SphereGeometry(.036, 20, 12), run.color).scale.set(1, .28, 1);
+      part(new THREE.SphereGeometry(.018, 16, 10), 0xffffff, .65).position.y = .008;
+      const beam = part(new THREE.ConeGeometry(.03, .09, 20, 1, true), run.color, .2);
+      beam.position.y = -.055;
+    } else if (run.kind === 'void') {
+      part(new THREE.SphereGeometry(.028, 20, 12), 0x020105);
+      const ring = part(new THREE.TorusGeometry(.04, .005, 8, 40), run.color);
+      ring.rotation.x = 1.1;
+    } else if (run.kind === 'bubble') {
+      part(new THREE.SphereGeometry(.052, 24, 16), run.color, .22);
+      const rim = part(new THREE.TorusGeometry(.05, .002, 6, 40), 0xffffff, .8);
+      rim.rotation.y = .4;
+    } else {
+      const dough = part(new THREE.TorusGeometry(.035, .015, 12, 32), 0xc8894b);
+      dough.rotation.x = .45;
+      part(new THREE.TorusGeometry(.035, .012, 12, 32), run.color).position.z = .005;
+    }
+    for (let i = 0; i < 8; i++) {
+      const satellite = part(run.kind === 'bubble' ? new THREE.SphereGeometry(.007, 10, 8) : new THREE.BoxGeometry(.004, .009, .004), i % 2 ? run.color : 0xffffff, .85);
+      satellite.userData.orbit = i;
+    }
+  }
+  const envelope = Math.sin(Math.PI * t), phase = t * Math.PI * 6;
+  const g = run.group;
+  g.scale.setScalar(Math.max(.001, envelope));
+  g.position.set(-.035 + Math.sin(phase) * .025, .11 + envelope * .035, -.06);
+  g.rotation.set(.15 * Math.sin(phase), t * Math.PI * 2, 0);
+  for (const o of g.children) if (o.userData.orbit !== undefined) {
+    const a = phase + o.userData.orbit * Math.PI / 4;
+    const radius = run.kind === 'void' ? .07 * (1 - t) : .065;
+    o.position.set(Math.cos(a) * radius, Math.sin(a) * radius * .6, Math.sin(a * 2) * .02);
+    o.rotation.set(a, a * 2, a);
+  }
+  // The gun tips to watch the event; this never touches ammunition or world combat.
+  pose.rx += envelope * .16; pose.rz -= envelope * .2; pose.py -= envelope * .018;
+  if (t > .32 && !run.sounded) {
+    run.sounded = true;
+    const ctx = getAudioCtx();
+    if (ctx) {
+      const gain = ctx.createGain(); gain.connect(ctx.destination);
+      const tones = { void: [240, 65, 110, 40], bubble: [420, 1700, 900, 240], donut: [1500, 2400, 2100, 1600], ufo: [800, 1800, 1400, 500] }[run.kind];
+      playTone(ctx, ctx.currentTime, .28, gain, tones[0], tones[1], .09, 'sine');
+      playTone(ctx, ctx.currentTime + .08, .22, gain, tones[2], tones[3], .04, 'triangle');
+    }
+  }
+}
+
 function startInspect() {
   if (isDead || reloading) return;
   const model = weaponModels[currentWeaponIdx];
   if (!model || model._inspectMode) return;
   const id = WEAPONS[currentWeaponIdx]?.id || '';
   const inspectTrack = inspectTrackFor(id, WEAPONS[currentWeaponIdx]);
+  clearSecretInspect(model);
+  model._secretInspect = secretInspectFor(id);
   model._inspectMode = true;
   model._reloadStart = Date.now();
-  model._reloadDur = INSPECT_MS;
+  model._reloadDur = model._secretInspect?.triggered ? 3400 : INSPECT_MS;
   const ctx = getAudioCtx();
   if (ctx) {
     const t0 = ctx.currentTime + 0.002;
@@ -42275,6 +42363,7 @@ function startInspect() {
 }
 function cancelInspect() {
   const model = weaponModels[currentWeaponIdx];
+  clearSecretInspect(model);
   if (model && model._inspectMode) { model._inspectMode = false; model._reloadStart = 0; }
 }
 
@@ -43736,7 +43825,10 @@ function updateReloadAnim() {
   if (H && H.hideFront) H.front.visible = true;   // the off hand comes in to work
   model._wasReloading = true;
   const t = Math.min(1, (Date.now() - model._reloadStart) / model._reloadDur);
-  if (t >= 1) { model._inspectMode = false; rest(); return; }
+  if (t >= 1) {
+    if (model._inspectMode) { clearSecretInspect(model, true); model._reloadStart = 0; }
+    model._inspectMode = false; rest(); return;
+  }
 
   const id = WEAPONS[currentWeaponIdx]?.id || '';
   const inspecting = !!model._inspectMode;
@@ -43767,6 +43859,7 @@ function updateReloadAnim() {
   const P = _reloadPose(
     inspecting ? inspectTrack : ((skinReload && skinReload.keys) || (plan && plan.keys) || RELOAD_KEYS[id] || _RELOAD_DEFAULT), t);
   if (inspecting) {
+    updateSecretInspect(model, t, P);
     // Open whatever this weapon opens, out and back across the middle of the
     // look. Same channels the reload drives, so nothing special downstream.
     const op = inspectTrackUsesAssembly(inspectTrack) ? null : inspectOpenPose(id);

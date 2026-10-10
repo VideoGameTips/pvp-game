@@ -290,6 +290,67 @@ if (ok && process.argv.includes('--wraps')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+if (ok && process.argv.includes('--secret-inspects')) {
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    for (const [skinId, def] of Object.entries(SECRET_INSPECTS)) {
+      const skin = MODEL_SKINS.find(s => s.id === skinId);
+      if (!skin) { issues.push(skinId + ': missing skin'); continue; }
+      const old = _activeModelSkin[skin.weapon];
+      _activeModelSkin[skin.weapon] = skin;
+      const key = skin.weapon + ':' + skinId;
+      _secretInspectCounts.delete(key);
+      const model = new THREE.Group();
+      for (let n = 1; n <= def.every * 2; n++) {
+        const run = secretInspectFor(skin.weapon);
+        if (run.triggered !== (n % def.every === 0)) issues.push(skinId + ': wrong repeat threshold');
+        model._secretInspect = run;
+        const pose = { rx: 0, rz: 0, py: 0 };
+        updateSecretInspect(model, .2, pose);
+        if (run.triggered && (!run.group || run.group.children.length < 9 || run.group.scale.x <= 0)) issues.push(skinId + ': missing visible effect');
+        let disposed = 0;
+        if (run.group) run.group.traverse(o => { if (o.geometry) o.geometry.addEventListener('dispose', () => disposed++); });
+        clearSecretInspect(model, true);
+        if (model.children.length || model._secretInspect || (run.triggered && disposed < 9)) issues.push(skinId + ': leaked effect resources');
+      }
+      const count = _secretInspectCounts.get(key);
+      model._secretInspect = secretInspectFor(skin.weapon);
+      clearSecretInspect(model);
+      if (_secretInspectCounts.get(key) !== count) issues.push(skinId + ': interrupted inspect counted');
+      _activeModelSkin[skin.weapon] = null;
+      if (secretInspectFor(skin.weapon)) issues.push(skinId + ': stock triggered skin secret');
+      _activeModelSkin[skin.weapon] = { ...skin, weapon: 'wrong_weapon' };
+      if (secretInspectFor(skin.weapon)) issues.push(skinId + ': wrong weapon triggered secret');
+      _activeModelSkin[skin.weapon] = old;
+      _secretInspectCounts.delete(key);
+    }
+    const idx = WEAPONS.findIndex(w => w.id === 'pistol');
+    const saved = { idx: currentWeaponIdx, model: weaponModels[idx], skin: _activeModelSkin.pistol, dead: isDead, reload: reloading, audio: getAudioCtx };
+    try {
+      currentWeaponIdx = idx; isDead = false; reloading = false; getAudioCtx = () => null;
+      weaponModels[idx] = new THREE.Group();
+      _activeModelSkin.pistol = MODEL_SKINS.find(s => s.id === 'pistol_blaster');
+      const key = 'pistol:pistol_blaster'; _secretInspectCounts.set(key, 3);
+      startInspect();
+      const model = weaponModels[idx];
+      if (!model._secretInspect?.triggered || model._reloadDur !== 3400) issues.push('secret animation did not start');
+      model._reloadStart = Date.now() - 800; updateReloadAnim();
+      if (!model._secretInspect?.group) issues.push('secret animation did not run through frame update');
+      model._reloadStart = Date.now() - 4000; updateReloadAnim(); updateReloadAnim();
+      if (_secretInspectCounts.get(key) !== 4 || model._inspectMode || model.children.length) issues.push('completed animation counted twice or failed cleanup');
+      startInspect(); cancelInspect();
+      if (_secretInspectCounts.get(key) !== 4 || model._inspectMode) issues.push('cancel counted inspection');
+      _secretInspectCounts.delete(key);
+    } finally {
+      currentWeaponIdx = saved.idx; weaponModels[idx] = saved.model; _activeModelSkin.pistol = saved.skin;
+      isDead = saved.dead; reloading = saved.reload; getAudioCtx = saved.audio;
+    }
+    console.log('secret inspect checks: four skin/weapon pairs, repeated triggers, frame updates, cancellation and resource cleanup');
+    return issues;
+  })()`);
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 if (ok && process.env.MAP_REVIEW_DIR) {
   fs.mkdirSync(process.env.MAP_REVIEW_DIR, { recursive: true });
   for (const name of ['forest', 'desert', 'tundra', 'refinery', 'space', 'volcano', 'titanic', 'carrier', 'pearl_harbor']) {
