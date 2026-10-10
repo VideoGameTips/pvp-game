@@ -29041,9 +29041,132 @@ for (let i = 0; i < WEAPONS.length; i++) {
   try { addDefaultAutoAimer(weaponModels[i], WEAPONS[i]); } catch (e) {}
 }
 
+// ── 🫧 Smooth model skins ───────────────────────────────────────────────────────────────────────────────────────────
+// The model skins are built from primitives with a handful of facets each: a 7-sided barrel, a 6x5 sphere, a box with
+// edges sharp enough to cut. That reads as a pile of parts. Every model skin is passed through this on its way out of
+// its builder -- the built-in guns are left exactly as they were -- and comes back with:
+//   • every box given rounded edges (a bevel proportional to its smallest side, so a fat grip and a thin rail both get
+//     the right amount), with the box's own UVs and per-face groups untouched;
+//   • cylinders, cones, spheres, tori, capsules and lathed parts re-cut with enough facets to read as round (shapes that
+//     are deliberately angular -- 3, 4 and 5-sided prisms, pyramids -- are left alone);
+//   • faceted rocks and gems raised to a smooth detail level, and flat shading switched off.
+// Identical parts share one geometry, so a belt of fifty rounds costs one.
+const _smoothGeoCache = new Map();
+function _roundedBox(w, h, d) {
+  const hw = w / 2, hh = h / 2, hd = d / 2;   // (callers pass the size they want, grown or not)
+  const m3 = Math.min(w, h, d), r = Math.max(0.0008, Math.min(0.016, m3 * 0.32));
+  const g = new THREE.BoxGeometry(w, h, d, 6, 6, 6), pos = g.attributes.position, nor = g.attributes.normal;
+  // 7 vertices an axis: centre, the two that end the flat face, the two half-way round the bevel, the edge.
+  const map = (v, a) => { const t = Math.abs(v) / a, s = Math.sign(v);
+    return s * (t < 0.2 ? 0 : t < 0.5 ? a - r : t < 0.84 ? a - r / 2 : a); };
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+    const mx = map(x, hw), my = map(y, hh), mz = map(z, hd);
+    const ix = Math.max(-(hw - r), Math.min(hw - r, mx)), iy = Math.max(-(hh - r), Math.min(hh - r, my)), iz = Math.max(-(hd - r), Math.min(hd - r, mz));
+    let dx = mx - ix, dy = my - iy, dz = mz - iz; const l = Math.hypot(dx, dy, dz);
+    if (l > 1e-9) { dx /= l; dy /= l; dz /= l; pos.setXYZ(i, ix + dx * r, iy + dy * r, iz + dz * r); nor.setXYZ(i, dx, dy, dz); }
+    else pos.setXYZ(i, mx, my, mz);
+  }
+  g.computeBoundingBox(); g.computeBoundingSphere();
+  return g;
+}
+function _smoothGeometry(g, grow = 0) {
+  const p = g.parameters; if (!p) return null;
+  const key = g.type + JSON.stringify(p) + '|' + grow;
+  if (_smoothGeoCache.has(key)) return _smoothGeoCache.get(key);
+  let out = null;
+  switch (g.type) {
+    case 'BoxGeometry':
+      if (Math.min(p.width, p.height, p.depth) > 0.006 && (p.widthSegments || 1) === 1 && (p.heightSegments || 1) === 1 && (p.depthSegments || 1) === 1)
+        out = _roundedBox(p.width + Math.min(grow, p.width * 0.1), p.height + Math.min(grow, p.height * 0.1), p.depth + Math.min(grow, p.depth * 0.1));
+      break;
+    case 'CylinderGeometry':
+      if (p.radialSegments >= 6 && p.radialSegments < 20) out = new THREE.CylinderGeometry(p.radiusTop, p.radiusBottom, p.height, 24, p.heightSegments, p.openEnded, p.thetaStart, p.thetaLength);
+      break;
+    case 'ConeGeometry':
+      if (p.radialSegments >= 6 && p.radialSegments < 20) out = new THREE.ConeGeometry(p.radius, p.height, 24, p.heightSegments, p.openEnded, p.thetaStart, p.thetaLength);
+      break;
+    case 'SphereGeometry':
+      if (p.widthSegments < 20 || p.heightSegments < 14) out = new THREE.SphereGeometry(p.radius, Math.max(24, p.widthSegments), Math.max(16, p.heightSegments), p.phiStart, p.phiLength, p.thetaStart, p.thetaLength);
+      break;
+    case 'TorusGeometry':
+      if (p.radialSegments < 12 || p.tubularSegments < 28) out = new THREE.TorusGeometry(p.radius, p.tube, Math.max(12, p.radialSegments), Math.max(32, p.tubularSegments), p.arc);
+      break;
+    case 'CapsuleGeometry':
+      out = new THREE.CapsuleGeometry(p.radius, p.length, Math.max(6, p.capSegments), Math.max(16, p.radialSegments));
+      break;
+    case 'LatheGeometry':
+      if (p.segments < 24) out = new THREE.LatheGeometry(p.points, 32, p.phiStart, p.phiLength);
+      break;
+    case 'IcosahedronGeometry': case 'DodecahedronGeometry': case 'OctahedronGeometry':
+      if ((p.detail || 0) < 2) out = new THREE[g.type](p.radius, 2);
+      break;
+  }
+  _smoothGeoCache.set(key, out);
+  return out;
+}
+function _smoothModelSkin(root, grow = 0) {
+  if (!root) return root;
+  root.traverse(o => {
+    if (!o.isMesh || !o.geometry || (o.userData && (o.userData.vmHand || o.userData.noSmooth))) return;
+    let sm = null;
+    try { sm = _smoothGeometry(o.geometry, grow); } catch (e) { sm = null; }
+    if (sm) o.geometry = sm;
+    const ms = Array.isArray(o.material) ? o.material : [o.material];
+    for (const m of ms) if (m && m.flatShading) { m.flatShading = false; m.needsUpdate = true; }
+  });
+  return root;
+}
+
+// ── 🧱 One casting ───────────────────────────────────────────────────────────────────────────────────────────────────
+// The stock guns were built part by part, and showed it: a barrel, a gas tube, a receiver and a handguard each their
+// own slightly different dark grey, every edge sharp, every join a visible crack, so a rifle read as plastic and metal
+// pieces forced together. _fuseModel makes the model read as one object:
+//   • every box is rounded and grown by a couple of millimetres, so neighbours overlap instead of touching edge to edge
+//     and the blended corners meet in a soft line instead of a gap;
+//   • parts that touch AND are the same family of colour (dark with dark, grey with grey, wood with wood) are given one
+//     shared material, so there is no tone change at the join to tell the eye where one piece ends;
+//   • smooth shading throughout.
+// Different families stay different: wood is still wood, a bright sight is still a bright sight.
+function _fuseModel(root) {
+  if (!root) return root;
+  _smoothModelSkin(root, 0.0025);
+  root.updateMatrixWorld(true);
+  const parts = [];
+  root.traverse(o => {
+    if (!o.isMesh || !o.geometry || !o.material || Array.isArray(o.material)) return;
+    if (o.userData && (o.userData.vmHand || o.userData.noSmooth)) return;
+    const m = o.material;
+    if (m.isMeshBasicMaterial || m.transparent || !m.color) return;
+    if (m.emissive && m.emissive.getHex() !== 0 && (m.emissiveIntensity || 0) > 0) return;
+    if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+    const b = o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld), sz = b.getSize(new THREE.Vector3());
+    const hsl = { h: 0, s: 0, l: 0 }; m.color.getHSL(hsl);
+    parts.push({ o, b: b.expandByScalar(0.004), vol: sz.x * sz.y * sz.z, hsl });
+  });
+  const n = parts.length; if (n < 2) return root;
+  const parent = parts.map((_, i) => i), find = i => parent[i] === i ? i : (parent[i] = find(parent[i]));
+  const near = (a, b) => {
+    const dh = Math.min(Math.abs(a.h - b.h), 1 - Math.abs(a.h - b.h));
+    const neutral = a.s < 0.2 && b.s < 0.2;
+    return Math.abs(a.l - b.l) < (neutral ? 0.2 : 0.14) && (neutral || (dh < 0.07 && Math.abs(a.s - b.s) < 0.3));
+  };
+  for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
+    if (parts[i].b.intersectsBox(parts[j].b) && near(parts[i].hsl, parts[j].hsl)) parent[find(i)] = find(j);
+  }
+  const groups = new Map();
+  parts.forEach((p, i) => { const r = find(i); (groups.get(r) || groups.set(r, []).get(r)).push(p); });
+  for (const g of groups.values()) {
+    if (g.length < 2) continue;
+    const ref = g.reduce((a, b) => (b.vol > a.vol ? b : a));
+    for (const p of g) p.o.material = ref.o.material;
+  }
+  return root;
+}
+
 // Finish every model the player can see: welded together, and shiny.
 [weaponModels, meleeModels, supportModels].forEach(arr => {
-  arr.forEach(m => { if (!m) return; try { greebleModel(m); weldModelParts(m); blendProudSteps(m); shinifyModel(m); } catch (e) {} });
+  arr.forEach(m => { if (!m) return; try { greebleModel(m); weldModelParts(m); blendProudSteps(m); _fuseModel(m); shinifyModel(m); } catch (e) {} });
 });
 
 const SKIN_IDS = SKINS.map(s => s.id);
@@ -39569,82 +39692,6 @@ function _skinFxFor(weaponId) {
   } catch (e) { return null; }
 }
 
-// ── 🫧 Smooth model skins ───────────────────────────────────────────────────────────────────────────────────────────
-// The model skins are built from primitives with a handful of facets each: a 7-sided barrel, a 6x5 sphere, a box with
-// edges sharp enough to cut. That reads as a pile of parts. Every model skin is passed through this on its way out of
-// its builder -- the built-in guns are left exactly as they were -- and comes back with:
-//   • every box given rounded edges (a bevel proportional to its smallest side, so a fat grip and a thin rail both get
-//     the right amount), with the box's own UVs and per-face groups untouched;
-//   • cylinders, cones, spheres, tori, capsules and lathed parts re-cut with enough facets to read as round (shapes that
-//     are deliberately angular -- 3, 4 and 5-sided prisms, pyramids -- are left alone);
-//   • faceted rocks and gems raised to a smooth detail level, and flat shading switched off.
-// Identical parts share one geometry, so a belt of fifty rounds costs one.
-const _smoothGeoCache = new Map();
-function _roundedBox(w, h, d) {
-  const hw = w / 2, hh = h / 2, hd = d / 2;
-  const m3 = Math.min(w, h, d), r = Math.max(0.0008, Math.min(0.016, m3 * 0.32));
-  const g = new THREE.BoxGeometry(w, h, d, 6, 6, 6), pos = g.attributes.position, nor = g.attributes.normal;
-  // 7 vertices an axis: centre, the two that end the flat face, the two half-way round the bevel, the edge.
-  const map = (v, a) => { const t = Math.abs(v) / a, s = Math.sign(v);
-    return s * (t < 0.2 ? 0 : t < 0.5 ? a - r : t < 0.84 ? a - r / 2 : a); };
-  for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
-    const mx = map(x, hw), my = map(y, hh), mz = map(z, hd);
-    const ix = Math.max(-(hw - r), Math.min(hw - r, mx)), iy = Math.max(-(hh - r), Math.min(hh - r, my)), iz = Math.max(-(hd - r), Math.min(hd - r, mz));
-    let dx = mx - ix, dy = my - iy, dz = mz - iz; const l = Math.hypot(dx, dy, dz);
-    if (l > 1e-9) { dx /= l; dy /= l; dz /= l; pos.setXYZ(i, ix + dx * r, iy + dy * r, iz + dz * r); nor.setXYZ(i, dx, dy, dz); }
-    else pos.setXYZ(i, mx, my, mz);
-  }
-  g.computeBoundingBox(); g.computeBoundingSphere();
-  return g;
-}
-function _smoothGeometry(g) {
-  const p = g.parameters; if (!p) return null;
-  const key = g.type + JSON.stringify(p);
-  if (_smoothGeoCache.has(key)) return _smoothGeoCache.get(key);
-  let out = null;
-  switch (g.type) {
-    case 'BoxGeometry':
-      if (Math.min(p.width, p.height, p.depth) > 0.006 && (p.widthSegments || 1) === 1 && (p.heightSegments || 1) === 1 && (p.depthSegments || 1) === 1)
-        out = _roundedBox(p.width, p.height, p.depth);
-      break;
-    case 'CylinderGeometry':
-      if (p.radialSegments >= 6 && p.radialSegments < 20) out = new THREE.CylinderGeometry(p.radiusTop, p.radiusBottom, p.height, 24, p.heightSegments, p.openEnded, p.thetaStart, p.thetaLength);
-      break;
-    case 'ConeGeometry':
-      if (p.radialSegments >= 6 && p.radialSegments < 20) out = new THREE.ConeGeometry(p.radius, p.height, 24, p.heightSegments, p.openEnded, p.thetaStart, p.thetaLength);
-      break;
-    case 'SphereGeometry':
-      if (p.widthSegments < 20 || p.heightSegments < 14) out = new THREE.SphereGeometry(p.radius, Math.max(24, p.widthSegments), Math.max(16, p.heightSegments), p.phiStart, p.phiLength, p.thetaStart, p.thetaLength);
-      break;
-    case 'TorusGeometry':
-      if (p.radialSegments < 12 || p.tubularSegments < 28) out = new THREE.TorusGeometry(p.radius, p.tube, Math.max(12, p.radialSegments), Math.max(32, p.tubularSegments), p.arc);
-      break;
-    case 'CapsuleGeometry':
-      out = new THREE.CapsuleGeometry(p.radius, p.length, Math.max(6, p.capSegments), Math.max(16, p.radialSegments));
-      break;
-    case 'LatheGeometry':
-      if (p.segments < 24) out = new THREE.LatheGeometry(p.points, 32, p.phiStart, p.phiLength);
-      break;
-    case 'IcosahedronGeometry': case 'DodecahedronGeometry': case 'OctahedronGeometry':
-      if ((p.detail || 0) < 2) out = new THREE[g.type](p.radius, 2);
-      break;
-  }
-  _smoothGeoCache.set(key, out);
-  return out;
-}
-function _smoothModelSkin(root) {
-  if (!root) return root;
-  root.traverse(o => {
-    if (!o.isMesh || !o.geometry || (o.userData && (o.userData.vmHand || o.userData.noSmooth))) return;
-    let sm = null;
-    try { sm = _smoothGeometry(o.geometry); } catch (e) { sm = null; }
-    if (sm) o.geometry = sm;
-    const ms = Array.isArray(o.material) ? o.material : [o.material];
-    for (const m of ms) if (m && m.flatShading) { m.flatShading = false; m.needsUpdate = true; }
-  });
-  return root;
-}
 function applyModelSkin(weaponId) {
   const idx = WEAPONS.findIndex(w => w.id === weaponId);
   if (idx < 0 || !weaponModels[idx]) return;
