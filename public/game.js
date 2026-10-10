@@ -26449,10 +26449,14 @@ const WEAPON_SKINS = [
   { id: 'woodland',  name: 'Woodland',     body: 0x4a5320, accent: 0x2e3618, flag: null,         sw: ['#4a5320', '#2e3618'] },
   { id: 'urban',     name: 'Urban Camo',   body: 0x6a6f76, accent: 0x3a3d42, flag: null,         sw: ['#6a6f76', '#3a3d42'] },
   { id: 'outlaw',    name: 'Outlaw Tan',   body: 0x8a7038, accent: 0x4a3a1c, flag: null,         sw: ['#8a7038', '#4a3a1c'] },
-  { id: 'obsidian',  name: 'Obsidian',     body: 0x08090c, accent: 0x8a2cff, flag: null,         sw: ['#08090c', '#8a2cff'] },
+  { id: 'obsidian',  name: 'Obsidian',     body: 0x08090c, accent: 0x8a2cff, flag: null, wrap: 'obsidian', sw: ['#08090c', '#8a2cff'] },
   { id: 'toxic',     name: 'Toxic Slime',  body: 0x203a12, accent: 0x8cff2a, flag: null,         sw: ['#203a12', '#8cff2a'] },
   { id: 'bubblegum', name: 'Bubblegum',    body: 0xff7ab8, accent: 0x74d7ff, flag: null,         sw: ['#ff7ab8', '#74d7ff'] },
-  { id: 'carbon',    name: 'Carbon Fiber', body: 0x1a1d22, accent: 0x9aa3ad, flag: null,         sw: ['#1a1d22', '#9aa3ad'] },
+  { id: 'carbon',    name: 'Carbon Fiber', body: 0x1a1d22, accent: 0x9aa3ad, flag: null, wrap: 'carbon', sw: ['#1a1d22', '#9aa3ad'] },
+  { id: 'wood', name: 'Walnut Wood', body: 0x774723, accent: 0x30251d, flag: null, wrap: 'wood', sw: ['#774723', '#30251d'] },
+  { id: 'fire', name: 'Fire', body: 0x25100b, accent: 0xff671c, flag: null, wrap: 'fire', sw: ['#25100b', '#ff671c'] },
+  { id: 'ultraviolet', name: 'Ultraviolet', body: 0x241039, accent: 0xc84eff, flag: null, wrap: 'ultraviolet', sw: ['#241039', '#c84eff'] },
+  { id: 'cyber', name: 'Cyber', body: 0x101b24, accent: 0x48ffd8, flag: null, wrap: 'cyber', sw: ['#101b24', '#48ffd8'] },
   { id: 'royal',     name: 'Royal Purple', body: 0x3b1466, accent: 0xffd227, flag: null,         sw: ['#3b1466', '#ffd227'] },
   { id: 'sunset',    name: 'Sunset',       body: 0xff6a2a, accent: 0xffd15c, flag: null,         sw: ['#ff6a2a', '#ffd15c'] },
   { id: 'ocean',     name: 'Deep Ocean',   body: 0x0b335f, accent: 0x36d1dc, flag: null,         sw: ['#0b335f', '#36d1dc'] },
@@ -26483,6 +26487,83 @@ const WEAPON_SKINS = [
 const WEAPON_SKINS_BY_ID = Object.fromEntries(WEAPON_SKINS.map(s => [s.id, s]));
 let selectedWeaponSkin = 'default';
 try { selectedWeaponSkin = localStorage.getItem('pvp_weapon_skin') || 'default'; } catch (e) {}
+
+const _weaponWrapSurfaces = new Map();
+function getWeaponWrapSurface(kind) {
+  if (_weaponWrapSurfaces.has(kind)) return _weaponWrapSurfaces.get(kind);
+  const canvas = document.createElement('canvas'); canvas.width = canvas.height = 256;
+  const glow = document.createElement('canvas'); glow.width = glow.height = 256;
+  const c = canvas.getContext('2d'), e = glow.getContext('2d');
+  e.fillStyle = '#000'; e.fillRect(0, 0, 256, 256);
+  let seed = 1741;
+  const rnd = () => { seed = (Math.imul(seed, 1664525) + 1013904223) | 0; return (seed >>> 0) / 4294967296; };
+  const stroke = (ctx, pts, color, width) => {
+    ctx.strokeStyle = color; ctx.lineWidth = width; ctx.beginPath();
+    pts.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.stroke();
+  };
+  let roughness = .3, metalness = .15, bumpScale = .00018, intensity = 0;
+  c.fillStyle = '#171b20'; c.fillRect(0, 0, 256, 256);
+  if (kind === 'carbon') {
+    for (let y = 0; y < 256; y += 16) for (let x = 0; x < 256; x += 16) {
+      const horizontal = ((x / 16 + y / 16) % 4) < 2;
+      c.fillStyle = horizontal ? '#384048' : '#15191e'; c.fillRect(x, y, 16, 16);
+      for (let i = 2; i < 16; i += 3) stroke(c, horizontal ? [[x, y + i], [x + 15, y + i]] : [[x + i, y], [x + i, y + 15]], i % 2 ? '#4a5158' : '#272d34', 1);
+      c.fillStyle = 'rgba(0,0,0,.45)'; c.fillRect(x, y + 14, 16, 2); c.fillRect(x + 14, y, 2, 16);
+    }
+    roughness = .26;
+  } else if (kind === 'wood') {
+    c.fillStyle = '#80502d'; c.fillRect(0, 0, 256, 256);
+    for (let y = -20; y < 280; y += 2) {
+      const pts = [];
+      for (let x = 0; x <= 256; x += 4) pts.push([x, y + Math.sin(x * Math.PI / 128 + y * .08) * 5 + Math.sin(x * Math.PI / 64) * 2]);
+      stroke(c, pts, rnd() > .5 ? '#5e381f' : '#a27345', .5 + rnd() * 1.3);
+    }
+    for (let r = 24; r > 2; r -= 2) { c.strokeStyle = r % 4 ? '#a07245' : '#4d2a18'; c.lineWidth = 1; c.beginPath(); c.ellipse(150, 115, r * 1.8, r * .4, -.08, 0, Math.PI * 2); c.stroke(); }
+    roughness = .42; metalness = 0; bumpScale = .00012;
+  } else if (kind === 'obsidian' || kind === 'fire') {
+    for (let y = -32; y < 256; y += 32) for (let x = -32; x < 256; x += 32) {
+      c.fillStyle = `hsl(${kind === 'fire' ? 12 : 252},${kind === 'fire' ? 18 : 12}%,${5 + rnd() * 12}%)`;
+      c.beginPath(); c.moveTo(x, y); c.lineTo(x + 44, y + 3); c.lineTo(x + 18 + rnd() * 20, y + 46); c.closePath(); c.fill();
+      stroke(c, [[x, y], [x + 44, y + 3]], '#35353e', .7);
+    }
+    roughness = .16; metalness = .08; bumpScale = .0003;
+    if (kind === 'fire') {
+      for (let i = 0; i < 10; i++) {
+        const x = i * 28, pts = [];
+        for (let y = -16; y <= 272; y += 16) pts.push([x + Math.sin(y * .055 + i) * 12, y]);
+        stroke(c, pts, '#7e1e08', 6); stroke(c, pts, '#ff641a', 2.8); stroke(c, pts, '#ffdc7a', .8);
+        stroke(e, pts, '#ff6314', 3); stroke(e, pts, '#ffcc66', .8);
+      }
+      intensity = .85; roughness = .62;
+    }
+  } else if (kind === 'ultraviolet') {
+    for (let y = 0; y < 256; y++) {
+      c.fillStyle = `hsl(${245 + Math.sin(y * Math.PI / 128) * 45},65%,${18 + Math.sin(y * Math.PI / 64) * 6}%)`;
+      c.fillRect(0, y, 256, 1);
+    }
+    for (let x = -128; x < 300; x += 32) { stroke(c, [[x, 0], [x + 128, 256]], '#9e41c6', 1.5); stroke(e, [[x, 0], [x + 128, 256]], '#ad3cff', 1); }
+    roughness = .2; metalness = .72; intensity = .3;
+  } else if (kind === 'cyber') {
+    c.fillStyle = '#13232c'; c.fillRect(0, 0, 256, 256);
+    for (let y = 0; y < 256; y += 32) for (let x = 0; x < 256; x += 32) {
+      c.fillStyle = '#09151d'; c.fillRect(x + 5, y + 7, 13, 13);
+      const pts = [[x + 8, y + 28], [x + 23, y + 28], [x + 28, y + 23], [x + 28, y]];
+      stroke(c, pts, '#3ccab4', 2); stroke(e, pts, '#35e5ca', 1.5);
+      c.fillStyle = '#bac7c6'; c.fillRect(x + 26, y + 20, 4, 4);
+      for (let i = 0; i < 3; i++) { c.fillStyle = '#53646a'; c.fillRect(x + 5 + i * 4, y + 3, 2, 3); }
+    }
+    roughness = .38; metalness = .55; intensity = .42;
+  }
+  const texture = image => {
+    const t = new THREE.CanvasTexture(image); t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy?.() || 1); return t;
+  };
+  const map = texture(canvas); map.colorSpace = THREE.SRGBColorSpace;
+  const bumpMap = texture(canvas), emissiveMap = intensity ? texture(glow) : null;
+  if (emissiveMap) emissiveMap.colorSpace = THREE.SRGBColorSpace;
+  const surface = { map, bumpMap, emissiveMap, roughness, metalness, bumpScale, intensity, canvas };
+  _weaponWrapSurfaces.set(kind, surface); return surface;
+}
 
 // ── ✨ Weapon-skin FX: particles ($ money, smoke) + structural extras
 //    (crystal shards, rock chunks, flickering data streaks). ──
@@ -26755,27 +26836,34 @@ function _wsUVMode(model, on) {
 }
 // Dress (or undress) each material. The original map / finish is kept the first time a part is touched and restored
 // whenever the skin changes, so going back to Stock gives back exactly the gun that came out of the box.
-function _wsApplyLook(skin, mats) {
+function _wsApplyLook(skin, mats, wrapMats = mats) {
   const look = skin && WS_LOOKS[skin.id];
   mats.forEach((m, i) => {
     if (!m || !m.isMaterial) return;
     let base = _wsBase.get(m);
     if (!base) {
       base = { map: m.map || null, metalness: m.metalness, roughness: m.roughness, emissive: m.emissive ? m.emissive.getHex() : null,
-               emissiveIntensity: m.emissiveIntensity, emissiveMap: m.emissiveMap || null };
+               emissiveIntensity: m.emissiveIntensity, emissiveMap: m.emissiveMap || null,
+               bumpMap: m.bumpMap, bumpScale: m.bumpScale, roughnessMap: m.roughnessMap };
       _wsBase.set(m, base);
     }
     const had = m.map !== base.map || m.emissiveMap !== base.emissiveMap;
     m.map = base.map;
+    m.bumpMap = base.bumpMap; m.bumpScale = base.bumpScale; m.roughnessMap = base.roughnessMap;
     if ('metalness' in m && base.metalness !== undefined) { m.metalness = base.metalness; m.roughness = base.roughness; }
     if (m.emissive && base.emissive !== null) { m.emissive.setHex(base.emissive); m.emissiveIntensity = base.emissiveIntensity; m.emissiveMap = base.emissiveMap; }
-    if (look) {
+    if (skin?.wrap && wrapMats.includes(m)) {
+      const s = getWeaponWrapSurface(skin.wrap);
+      m.color.setHex(0xffffff); m.map = s.map; m.bumpMap = s.bumpMap; m.bumpScale = s.bumpScale;
+      if ('metalness' in m) { m.roughness = s.roughness; m.metalness = s.metalness; m.roughnessMap = null; }
+      if (m.emissive) { m.emissive.setHex(s.intensity ? 0xffffff : 0); m.emissiveMap = s.emissiveMap; m.emissiveIntensity = s.intensity; }
+    } else if (look && !skin?.wrap) {
       const t = _wsTextures(skin.id, i & 1);
       m.map = t.map; m.color.setHex(0xffffff);
       if ('metalness' in m) { m.metalness = look.metal; m.roughness = look.rough; }
       if (look.glow && m.emissive && t.glow) { m.emissive.setHex(0xffffff); m.emissiveMap = t.glow; m.emissiveIntensity = 1.1; }
     }
-    if (look || had) m.needsUpdate = true;
+    if (look || skin?.wrap || had) m.needsUpdate = true;
   });
 }
 function applyWeaponSkin(model, skin) {
@@ -26803,7 +26891,7 @@ function applyWeaponSkin(model, skin) {
             (!o.material.map || (o.material.userData && o.material.userData.surfaceMap))) {
           const basic = !!o.material.isMeshBasicMaterial; // glow/lens/reticle — leave colored
           const clone = o.material.clone(); o.material = clone;
-          model._skinMats.push({ mat: clone, orig: clone.color.getHex(), basic });
+          model._skinMats.push({ mat: clone, orig: clone.color.getHex(), basic, mesh: o });
         }
       });
     }
@@ -26818,8 +26906,15 @@ function applyWeaponSkin(model, skin) {
   const bodyMats = model._bodyMat ? [model._bodyMat, model._accentMat]
     : (model._skinMats ? model._skinMats.filter(e => !e.basic).map(e => e.mat) : []);
   bodyMats.forEach(m => { m.transparent = false; m.opacity = 1; });
-  _wsUVMode(model, !!(skin && WS_LOOKS[skin.id]));
-  _wsApplyLook(skin, bodyMats);   // pattern + finish on top of the colours above
+  _wsUVMode(model, !!(skin && (skin.wrap || WS_LOOKS[skin.id])));
+  const wrapMats = model._bodyMat ? [model._bodyMat] : (model._skinMats || []).filter(entry => {
+    if (entry.basic) return false;
+    const p = entry.mesh.geometry?.parameters;
+    const size = p ? Math.max(p.width || 0, p.height || 0, p.depth || 0, (p.radius || p.radiusTop || 0) * 2) : 1;
+    if (skin?.wrap && size < .03) entry.mat.color.setHex(entry.orig);
+    return size >= .03;
+  }).map(entry => entry.mat);
+  _wsApplyLook(skin, bodyMats, wrapMats);
   model._fx = (skin && skin.fx) || null;
   if (model._fx === 'crystal') { bodyMats.forEach(m => { m.transparent = true; m.opacity = 0.72; }); _buildSkinExtra(model, 'crystal'); }
   else if (model._fx === 'rock') { _buildSkinExtra(model, 'rock'); }
@@ -55989,7 +56084,7 @@ function openWeaponSkinsPanel() {
   };
   const swatch = (s) => `
     <div data-skin="${s.id}" class="ws-cell" style="cursor:pointer;border:2px solid ${s.id===selectedWeaponSkin?'#ffdd55':'#444'};border-radius:6px;padding:8px;text-align:center;background:${s.id===selectedWeaponSkin?'#2a2410':'#1d1a12'};">
-      <div style="height:26px;border-radius:4px;background:linear-gradient(90deg, ${s.sw[0]} 0 50%, ${s.sw[1]} 50% 100%);border:1px solid #000;margin-bottom:6px;"></div>
+      <div style="height:40px;border-radius:4px;background:${s.wrap ? `url('${getWeaponWrapSurface(s.wrap).canvas.toDataURL()}') center / 128px 128px` : `linear-gradient(90deg, ${s.sw[0]} 0 50%, ${s.sw[1]} 50% 100%)`};border:1px solid #000;margin-bottom:6px;"></div>
       <div style="font-size:10px;letter-spacing:1px;color:${s.id===selectedWeaponSkin?'#ffdd55':'#ccc'};">${s.name}</div>
     </div>`;
   const basicCaseSection = () => {
@@ -56069,7 +56164,7 @@ function openWeaponSkinsPanel() {
     </div>
     ${modelSkinSection()}
     ${meleeModelSkinSection()}
-    <div style="font-size:12px;letter-spacing:2px;color:#ffdd88;margin:20px 0 6px;border-top:1px solid #6a5520;padding-top:14px;">🎨 COLOUR THEMES</div>
+    <div style="font-size:12px;letter-spacing:2px;color:#ffdd88;margin:20px 0 6px;border-top:1px solid #6a5520;padding-top:14px;">🎨 WEAPON WRAPS</div>
     <div style="font-size:10px;color:#aa9966;margin-bottom:12px;line-height:1.4;">One pick applies to every gun. Country themes use real national flags; the German theme is the Iron Cross military mark (no Nazi imagery).</div>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">${WEAPON_SKINS.map(swatch).join('')}</div>
     ${gen2CaseSection()}

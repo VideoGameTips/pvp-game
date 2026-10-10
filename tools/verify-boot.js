@@ -257,6 +257,39 @@ if (ok && process.argv.includes('--props')) {
   } else console.log('prop relay: fractional coordinates, validation, dead-player guard and match scoping passed');
 }
 
+if (ok && process.argv.includes('--wraps')) {
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [], originalMap = new THREE.Texture(), originalBump = new THREE.Texture();
+    const model = new THREE.Group();
+    const main = new THREE.Mesh(new THREE.BoxGeometry(.1, .06, .2), new THREE.MeshStandardMaterial({ color: 0x456789, map: originalMap, bumpMap: originalBump, roughness: .67, metalness: .8 }));
+    main.material.userData.surfaceMap = true; model.add(main);
+    const sight = new THREE.Mesh(new THREE.BoxGeometry(.01, .01, .01), new THREE.MeshStandardMaterial({ color: 0x111111 })); model.add(sight);
+    const lens = new THREE.Mesh(new THREE.BoxGeometry(.01, .01, .01), new THREE.MeshBasicMaterial({ color: 0x55aaff })); model.add(lens);
+    const locked = new THREE.Mesh(new THREE.BoxGeometry(.1, .1, .1), new THREE.MeshStandardMaterial({ color: 0xaa1122 })); locked.material.userData.skinLock = true; model.add(locked);
+    const lockedMat = locked.material, geometry = main.geometry;
+    for (const id of ['carbon', 'wood', 'fire', 'obsidian', 'ultraviolet', 'cyber']) {
+      const skin = WEAPON_SKINS_BY_ID[id];
+      if (!skin?.wrap) { issues.push(id + ': missing wrap'); continue; }
+      applyWeaponSkin(model, skin);
+      const surface = getWeaponWrapSurface(id);
+      if (main.material.map !== surface.map || main.material.bumpMap !== surface.bumpMap) issues.push(id + ': wrap did not reach gun');
+      if (getWeaponWrapSurface(id) !== surface) issues.push(id + ': texture cache missed');
+      if (main.geometry !== geometry || locked.material !== lockedMat || lens.material.color.getHex() !== 0x55aaff || sight.material.map) issues.push(id + ': altered geometry, locked skin, lens or sight');
+      if (id === 'wood' && main.material.metalness !== 0) issues.push('wood reads as metal');
+      if (id === 'fire' && !main.material.emissiveMap) issues.push('fire has no glow mask');
+    }
+    applyWeaponSkin(model, WEAPON_SKINS_BY_ID.woodland);
+    if (main.material.map !== _wsTextures('woodland', 0).map || main.material.bumpMap !== originalBump) issues.push('legacy pattern did not replace wrap cleanly');
+    applyWeaponSkin(model, WEAPON_SKINS_BY_ID.cyber);
+    if (main.material.map !== getWeaponWrapSurface('cyber').map) issues.push('wrap did not replace legacy pattern');
+    applyWeaponSkin(model, WEAPON_SKINS_BY_ID.default);
+    if (main.material.map !== originalMap || main.material.bumpMap !== originalBump || main.material.color.getHex() !== 0x456789 || main.material.roughness !== .67 || main.material.metalness !== .8 || main.material.emissiveMap) issues.push('stock did not restore original material');
+    console.log('wrap checks: six textured materials, cache, sight/lens protection, skin locks and stock restoration');
+    return issues;
+  })()`);
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 if (ok && process.env.MAP_REVIEW_DIR) {
   fs.mkdirSync(process.env.MAP_REVIEW_DIR, { recursive: true });
   for (const name of ['forest', 'desert', 'tundra', 'refinery', 'space', 'volcano', 'titanic', 'carrier', 'pearl_harbor']) {
