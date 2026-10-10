@@ -408,6 +408,8 @@ const GEN2_GOOD_SKIN_IDS = [
   'ak20_8bit', 'sg8_8bit', 'revolver_8bit', 'vector_8bit', 'shorty_8bit', 'knife_balloon',
   'bat_inflatable', 'frying_pan_pizza_cutter', 'sabre_balloon',
 ];
+// The Neon Rift series: seven Gen 2 skins that light up. Ordinary rarity, so they drop alongside the other 'rare' entrances.
+GEN2_RARE_SKIN_IDS.push('ak20_cyberpunk', 'srx_cyberpunk', 'sg8_cyberpunk', 'vector_cyberpunk', 'pistol_cyberpunk', 'mp40_cyberpunk', 'revolver_cyberpunk');
 const GEN2_SKIN_IDS = [...GEN2_MYTHIC_SKIN_IDS, ...GEN2_LEGENDARY_SKIN_IDS, ...GEN2_RARE_SKIN_IDS, ...GEN2_GOOD_SKIN_IDS];
 const GEN2_SKIN_WEIGHTS = {};
 for (const id of GEN2_MYTHIC_SKIN_IDS) GEN2_SKIN_WEIGHTS[id] = 1;

@@ -39193,6 +39193,99 @@ function buildChampagnePopper() {
   g._flash = flash; g._kickZ = 0.014; g._greebled = true; g._handDetailed = true;
   g.position.set(0.12, -0.1, -0.25); return g;
 }
+// ═══ 🌆 CYBERPUNK ═══════════════════════════════════════════════════════════════════════════════════════════════════
+// A series of skins that take the gun and put it in a different century: a dark violet-and-indigo shell, edges and
+// panels that light up pink and cyan, a hologram sight floating above the receiver, and rings of light turning
+// round the barrel with a few shards of data in orbit. The gun underneath is the stock one -- same shape, same working
+// parts, same reload -- so what changes is the finish and what hovers around it.
+const CYBER_PALETTES = {
+  violet: { body: [0x120a24, 0x1d1238, 0x2a1a50], metal: 0x3a2f66, trim: 0xff2bd6, alt: 0x00e5ff, ring: 0x9a6cff },
+  cyan:   { body: [0x07162a, 0x0d2440, 0x16355c], metal: 0x2a4a6a, trim: 0x00e5ff, alt: 0xff3df0, ring: 0x6a8cff },
+  pink:   { body: [0x240a1e, 0x381436, 0x50205a], metal: 0x5a2a5a, trim: 0xff3df0, alt: 0x00f0ff, ring: 0xff7ad8 },
+};
+function _cyberize(g, o = {}) {
+  const pal = CYBER_PALETTES[o.palette] || CYBER_PALETTES.violet;
+  const mats = pal.body.map((c, i) => { const m = new THREE.MeshStandardMaterial({ color: c, metalness: 0.78 - i * 0.08, roughness: 0.26 + i * 0.07, envMapIntensity: 1.3 });
+    m.userData.metalDone = true; m.userData.skinLock = true; return m; });
+  const metal = new THREE.MeshStandardMaterial({ color: pal.metal, metalness: 0.9, roughness: 0.22, envMapIntensity: 1.4 });
+  metal.userData.metalDone = true; metal.userData.skinLock = true;
+  const glow = (c, a = 1) => { const m = new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: a, depthWrite: false, blending: THREE.AdditiveBlending }); m.fog = false; return m; };
+  const trimA = glow(pal.trim), trimB = glow(pal.alt), ringM = glow(pal.ring, 0.95);
+  // 1. the shell: every solid part re-finished by size, so the big pieces are the deep violet and the fittings catch light
+  const parts = [];
+  g.updateMatrixWorld(true);
+  g.traverse(m => {
+    if (!m.isMesh || !m.geometry || (m.userData && m.userData.vmHand)) return;
+    const mt = Array.isArray(m.material) ? m.material[0] : m.material;
+    if (!mt || mt.isMeshBasicMaterial || mt.transparent || (mt.emissive && mt.emissive.getHex() !== 0)) return;
+    m.geometry.computeBoundingBox();
+    const sz = m.geometry.boundingBox.getSize(new THREE.Vector3()), sc = new THREE.Vector3(); m.getWorldScale(sc);
+    const vol = sz.x * sz.y * sz.z * sc.x * sc.y * sc.z;
+    parts.push({ m, vol, sz: sz.clone().multiply(sc) });
+  });
+  for (const p of parts) p.m.material = p.vol > 4e-6 ? mats[0] : p.vol > 1.2e-6 ? mats[1] : p.vol > 2.5e-7 ? mats[2] : metal;
+  // 2. light along the edges of the three biggest boxy parts, and a lit panel in each flank
+  const big = parts.filter(p => p.m.geometry.type === 'BoxGeometry' || p.m.geometry.type === 'ExtrudeGeometry').sort((a, b) => b.vol - a.vol).slice(0, 3);
+  big.forEach((p, i) => {
+    const gb = p.m.geometry.boundingBox, c = gb.getCenter(new THREE.Vector3()), sx = gb.max.x - gb.min.x, sy = gb.max.y - gb.min.y, sz = gb.max.z - gb.min.z;
+    if (sz < 0.03) return;
+    const t = 0.0016, mat = i % 2 ? trimB : trimA;
+    for (const sx2 of [-1, 1]) {   // a thin line along each top edge
+      const e = new THREE.Mesh(new THREE.BoxGeometry(t, t, sz * 0.9), mat);
+      e.position.set(c.x + sx2 * (sx / 2 + t * 0.2), gb.max.y - sy * 0.12, c.z); e.userData.neon = true; p.m.add(e);
+    }
+    const panel = new THREE.Mesh(new THREE.BoxGeometry(t, Math.max(0.004, sy * 0.20), sz * 0.34), i % 2 ? trimA : trimB);
+    panel.position.set(c.x + (sx / 2 + t * 0.3), c.y - sy * 0.05, c.z + sz * 0.12); panel.userData.neon = true; p.m.add(panel);
+    const panel2 = panel.clone(); panel2.position.x = c.x - (sx / 2 + t * 0.3); p.m.add(panel2);
+  });
+  // 3. the rings and what orbits them, sized to the gun
+  const bb = new THREE.Box3().setFromObject(g); bb.min.sub(g.position); bb.max.sub(g.position);
+  const ctr = bb.getCenter(new THREE.Vector3()), size = bb.getSize(new THREE.Vector3());
+  const R = Math.max(0.05, Math.min(0.09, Math.max(size.x, size.y) * 0.95 + 0.035));
+  const halo = new THREE.Group(); halo.position.copy(ctr); halo.userData.neon = true; g.add(halo);
+  const rings = [];
+  const ring = (r, tube, mat, z, tiltX, spin) => {
+    const m = new THREE.Mesh(new THREE.TorusGeometry(r, tube, 6, 48), mat); m.position.set(0, 0, z); m.rotation.x = tiltX;
+    m.userData.neon = true; m.userData.spin = spin; halo.add(m); rings.push(m); return m;
+  };
+  ring(R, 0.0022, ringM, -size.z * 0.30, 0, 1.4);          // forward, round the barrel
+  ring(R * 1.18, 0.0016, glow(pal.alt, 0.9), size.z * 0.04, 0, -0.9);   // amidships, the other way
+  ring(R * 0.9, 0.0016, glow(pal.trim, 0.9), size.z * 0.34, 0, 0.7);    // aft
+  const gyro = ring(R * 1.35, 0.0012, glow(pal.ring, 0.55), 0, Math.PI / 2.6, 0.5);   // a tilted one, gyroscope-fashion
+  const shards = [];
+  for (let i = 0; i < 6; i++) {
+    const sh = new THREE.Mesh(new THREE.OctahedronGeometry(0.0042, 0), i % 2 ? trimA : trimB);
+    sh.userData.neon = true; sh.userData.ph = i / 6 * Math.PI * 2; sh.userData.rad = R * (1.05 + (i % 3) * 0.12); sh.userData.zz = (i - 2.5) * size.z * 0.12;
+    halo.add(sh); shards.push(sh);
+  }
+  // 4. a hologram sight: a lit ring and cross hanging in the air above the receiver
+  const holo = new THREE.Group(); holo.position.set(0, bb.max.y + 0.032, ctr.z + size.z * 0.18); holo.userData.neon = true; g.add(holo);
+  const hr = new THREE.Mesh(new THREE.TorusGeometry(0.0125, 0.0010, 5, 28), glow(pal.alt, 0.95)); holo.add(hr);
+  const hx = new THREE.Mesh(new THREE.BoxGeometry(0.0009, 0.0150, 0.0009), glow(pal.alt, 0.9)); holo.add(hx);
+  const hy = new THREE.Mesh(new THREE.BoxGeometry(0.0150, 0.0009, 0.0009), glow(pal.alt, 0.9)); holo.add(hy);
+  const stem = new THREE.Mesh(new THREE.BoxGeometry(0.0016, 0.026, 0.0016), glow(pal.trim, 0.8)); stem.position.y = -0.0185; holo.add(stem);
+  g._cyber = { halo, rings, shards, holo, mats: [trimA, trimB, ringM] };
+  g._tick = (dt, now) => {
+    for (const r of rings) r.rotation.z += dt * r.userData.spin;
+    gyro.rotation.y += dt * 0.8;
+    for (const sh of shards) { const a = now * 1.1 + sh.userData.ph, rad = sh.userData.rad;
+      sh.position.set(Math.cos(a) * rad, Math.sin(a) * rad, sh.userData.zz + Math.sin(a * 2) * 0.006); sh.rotation.x += dt * 2.2; sh.rotation.y += dt * 1.7; }
+    halo.position.y = ctr.y + Math.sin(now * 1.6) * 0.0015;
+    holo.position.y = bb.max.y + 0.032 + Math.sin(now * 2.1) * 0.0018; hr.rotation.z += dt * 1.2;
+    const pulse = 0.78 + 0.22 * Math.sin(now * 3.2);
+    trimA.opacity = pulse; trimB.opacity = 1.0 - (pulse - 0.78) * 0.9; ringM.opacity = 0.7 + 0.3 * pulse;
+  };
+  g._calm = () => { trimA.opacity = 1; trimB.opacity = 1; ringM.opacity = 0.95; };
+  return g;
+}
+function buildCyberAK20()     { return _cyberize(buildAK20(),      { palette: 'violet' }); }
+function buildCyberSRX()      { return _cyberize(buildSRX(),       { palette: 'cyan' }); }
+function buildCyberSG8()      { return _cyberize(buildSG8(),       { palette: 'pink' }); }
+function buildCyberVector()   { return _cyberize(buildVectorSMG(), { palette: 'cyan' }); }
+function buildCyberPistol()   { return _cyberize(buildPistol(),    { palette: 'violet' }); }
+function buildCyberMP40()     { return _cyberize(buildMP40(),      { palette: 'pink' }); }
+function buildCyberRevolver() { return _cyberize(buildRevolver(),  { palette: 'violet' }); }
+
 const MODEL_SKINS = [
   { id: 'aug', weapon: 'ak20', name: 'AUG', rarity: 'rare',
     sw: ['#4c5339', '#6c7a46'], build: buildAUG,
@@ -39463,6 +39556,27 @@ const MODEL_SKINS = [
   { id: 'xm7_bricks', weapon: 'xm7', name: 'Brick XM7', rarity: 'good',
     sw: ['#d8242a', '#f0c020'], build: buildBrickXM7,
     blurb: 'Snapped together a brick at a time, every time you draw it.' },
+  { id: 'ak20_cyberpunk', weapon: 'ak20', name: 'Neon Rift AK-20', rarity: 'rare',
+    sw: ['#1d1238', '#ff2bd6'], build: buildCyberAK20,
+    blurb: 'Violet shell, pink and cyan light in the seams. Three rings turn round the barrel; a sight hangs in the air above it.' },
+  { id: 'srx_cyberpunk', weapon: 'srx', name: 'Neon Rift SR-X', rarity: 'rare',
+    sw: ['#0d2440', '#00e5ff'], build: buildCyberSRX,
+    blurb: 'Cyan-lit rail, a hologram scope floating over the receiver, and a ring of shards that never quite settles.' },
+  { id: 'sg8_cyberpunk', weapon: 'sg8', name: 'Neon Rift SG-8', rarity: 'rare',
+    sw: ['#381436', '#ff3df0'], build: buildCyberSG8,
+    blurb: 'Hot-pink trim on a black-cherry pump. The rings spin the other way on every second one.' },
+  { id: 'vector_cyberpunk', weapon: 'vector', name: 'Neon Rift Vector', rarity: 'rare',
+    sw: ['#0d2440', '#ff3df0'], build: buildCyberVector,
+    blurb: 'Blue steel, magenta panels, and a gyroscope ring that tumbles round the whole gun.' },
+  { id: 'pistol_cyberpunk', weapon: 'pistol', name: 'Neon Rift Pistol', rarity: 'rare',
+    sw: ['#1d1238', '#00e5ff'], build: buildCyberPistol,
+    blurb: 'The small one of the set. Same rings, scaled to fit a hand.' },
+  { id: 'mp40_cyberpunk', weapon: 'mp40', name: 'Neon Rift MP-40', rarity: 'rare',
+    sw: ['#381436', '#00f0ff'], build: buildCyberMP40,
+    blurb: 'A tube receiver wearing a halo. Pink shell, cyan light.' },
+  { id: 'revolver_cyberpunk', weapon: 'revolver', name: 'Neon Rift Revolver', rarity: 'rare',
+    sw: ['#1d1238', '#9a6cff'], build: buildCyberRevolver,
+    blurb: 'Six chambers and four rings. The cylinder is the only thing in the frame that is not glowing.' },
   { id: 'srx_8bit', weapon: 'srx', name: '8-Bit SR-X', rarity: 'good',
     sw: ['#2a2e34', '#55ddff'], build: buildPixelSniper,
     blurb: 'Loads in a pixel at a time. Fires a chiptune.' },
@@ -39768,6 +39882,7 @@ const GEN2_MODEL_SKIN_IDS = new Set([
   'railgun_constellation', 'pistol_origami', 'xm7_bricks', 'vector_brick_labeler',
   'shorty_buzzdraw', 'srx_8bit', 'ak20_8bit', 'sg8_8bit', 'revolver_8bit', 'vector_8bit',
   'shorty_8bit',
+  'ak20_cyberpunk', 'srx_cyberpunk', 'sg8_cyberpunk', 'vector_cyberpunk', 'pistol_cyberpunk', 'mp40_cyberpunk', 'revolver_cyberpunk',
 ]);
 const GEN2_MELEE_MODEL_SKIN_IDS = new Set([
   'katana_donut', 'knife_hyperspace', 'knife_butterfly', 'knife_singularity', 'lightsabre_singularity',
@@ -43782,6 +43897,20 @@ const SKIN_FX = {
     reload: _fxR(_RK.top(), [.30,.38,.46,.54].map(t => RP(t,'drop','arrive',1,'breech')), [[.28,'glug']], 'bloop') },
   coilgun_clockwork: { sound: _fxS('clockwork', .30, .12, 900, 2800),
     equip: 'windup', equipMs: 1000, equipSfx: ['windup', 'ding'] },
+  ak20_cyberpunk: { sound: _fxS('laser', 0.24, 0.09, 1500, 260),
+    equip: 'neon', equipMs: 1000, equipSfx: ['neonbuzz', 'hum'] },
+  srx_cyberpunk: { sound: _fxS('laser', 0.3, 0.16, 2200, 240),
+    equip: 'neon', equipMs: 1000, equipSfx: ['neonbuzz', 'hum'] },
+  sg8_cyberpunk: { sound: _fxS('laser', 0.36, 0.2, 900, 150),
+    equip: 'neon', equipMs: 1000, equipSfx: ['neonbuzz', 'hum'] },
+  vector_cyberpunk: { sound: _fxS('laser', 0.17, 0.06, 2000, 420),
+    equip: 'neon', equipMs: 1000, equipSfx: ['neonbuzz', 'hum'] },
+  pistol_cyberpunk: { sound: _fxS('laser', 0.2, 0.08, 1700, 300),
+    equip: 'neon', equipMs: 1000, equipSfx: ['neonbuzz', 'hum'] },
+  mp40_cyberpunk: { sound: _fxS('laser', 0.2, 0.07, 1600, 300),
+    equip: 'neon', equipMs: 1000, equipSfx: ['neonbuzz', 'hum'] },
+  revolver_cyberpunk: { sound: _fxS('laser', 0.26, 0.11, 1300, 200),
+    equip: 'neon', equipMs: 1000, equipSfx: ['neonbuzz', 'hum'] },
   smart_smg_neon: { sound: _fxS('laser', .22, .07, 1800, 300),
     equip: 'neon', equipMs: 1000, equipSfx: ['neonbuzz', 'hum'] },
   portal_launcher_constellation: { sound: _fxS('cosmic', .26, .20, 2200, 180),
