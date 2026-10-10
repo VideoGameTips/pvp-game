@@ -43160,49 +43160,68 @@ const RELOAD_PROPS = {
   traffic_cone:[RP(.30,'bottle','arrive',1,'breech')],
   cream_pie:[RP(.30,'ball','arrive',1,'breech')],
 };
-// ── 🪄 RELOAD_MAGIC: a reload with something unreal in it, for every gun ─────────────────────────────────────────────────
-// The physical reloads above are right for a gun that is a gun. This is for making them different from one another, and
-// from anything a real range would put up with. Each stock gun is given one move, spread through the whole roster so
-// neighbours in the list never share one:
+// ── 🪄 RELOAD_MAGIC: skins that are not real things reload like they are not ──────────────────────────────────────────────
+// A skin that is a doughnut, a toaster or a hair dryer has no business reloading like a rifle. The ones without a
+// reload of their own (the doughnuts, and the objects that borrowed the base gun's) get one move each. The default guns,
+// the realistic-gun skins (AUG, Python, M9...) and every skin that already has a reload of its own are left alone.
 //   levitate  the magazine lifts out and hangs in the air glowing; fresh rounds then stream in out of nowhere, one by one
 //   orbit     the old magazine circles the gun once and settles back; new rounds spiral in
 //   storm     the old one floats away and a tight swarm of rounds (three for every one it needs) spiral in from every side
-//   eq:<kind> the gun comes apart, in the manner of one of the entrances -- assemble, build, warp, vortex, unfold,
-//             pixelate, meteor, blackhole, spin, windup, constellation -- and puts itself back together in time
-// Only visuals: the ammunition, the timing and the sound of a reload are untouched, and a skin that has a reload of its
-// own (the doughnuts, the pixel guns, the legends) keeps it.
-const RELOAD_MAGIC_STYLES = ['levitate', 'eq:assemble', 'orbit', 'eq:vortex', 'storm', 'eq:build', 'levitate', 'eq:warp', 'orbit',
-  'eq:unfold', 'storm', 'eq:meteor', 'levitate', 'eq:blackhole', 'orbit', 'eq:spin', 'storm', 'eq:constellation', 'levitate',
-  'eq:pixelate', 'orbit', 'eq:windup', 'storm'];
+//   eq:<kind> the gun comes apart, in the manner of an entrance, and puts itself back together before the reload ends
+// A skin whose own entrance is one of the pieces-flying kinds reloads the way it arrives (a portal skin warps, a clockwork
+// one winds up, a ghost fades in); a doughnut skin rebuilds itself round its ring or goes by sprinkles. Everything else
+// takes the next move in the rotation, so no two neighbours match. Only visuals: ammunition, timing and sound untouched.
+const RELOAD_MAGIC_STYLES = ['levitate', 'eq:assemble', 'orbit', 'eq:vortex', 'storm', 'eq:build', 'eq:unfold', 'levitate',
+  'eq:meteor', 'orbit', 'eq:pixelate', 'storm', 'eq:blackhole', 'eq:spin', 'levitate', 'eq:constellation', 'orbit', 'storm'];
+const RELOAD_MAGIC_THEMED = { warp: 'eq:warp', spin: 'eq:spin', glitch: 'eq:glitch', windup: 'eq:windup', constellation: 'eq:constellation',
+  haunt: 'eq:haunt', blackhole: 'eq:blackhole', vortex: 'eq:vortex', unfold: 'eq:unfold', build: 'eq:build', assemble: 'eq:assemble',
+  pixelate: 'eq:pixelate', meteor: 'eq:meteor' };
+const RELOAD_MAGIC_DONUT = ['eq:donutbuild', 'levitate', 'storm', 'eq:donutbuild', 'orbit', 'levitate', 'eq:donutbuild', 'storm'];
 const RELOAD_MAGIC_TINTS = [0x7ad8ff, 0xff7ad8, 0xb68cff, 0x7affc8, 0xffd27a, 0xff8a7a, 0x8ab4ff, 0xc8ff7a];
+const RELOAD_MAGIC_FROSTING = [0xff7ad8, 0xffd27a, 0x7affc8, 0xb68cff, 0x8ab4ff];
 const RELOAD_MAGIC_SFX = { 'eq:assemble': ['whoosh', 'chime'], 'eq:vortex': ['warp', 'chime'], 'eq:build': ['whoosh', 'click'],
   'eq:warp': ['warp', 'beep'], 'eq:unfold': ['fold', 'click'], 'eq:meteor': ['starfall', 'chime'], 'eq:blackhole': ['singularity', 'chime'],
-  'eq:spin': ['whoosh', 'click'], 'eq:constellation': ['starfall', 'chime'], 'eq:pixelate': ['blip', null], 'eq:windup': ['click', 'click'] };
-const _magicCache = {};
-function reloadMagicFor(id) {
-  if (id in _magicCache) return _magicCache[id];
-  const i = WEAPONS.findIndex(w => w.id === id);
-  if (i < 0) return (_magicCache[id] = null);
-  const style = RELOAD_MAGIC_STYLES[i % RELOAD_MAGIC_STYLES.length], tint = RELOAD_MAGIC_TINTS[(i * 3 + Math.floor(i / 8)) % RELOAD_MAGIC_TINTS.length];
+  'eq:spin': ['whoosh', 'click'], 'eq:constellation': ['starfall', 'chime'], 'eq:pixelate': ['blip', null], 'eq:windup': ['click', 'click'],
+  'eq:glitch': ['beep', 'click'], 'eq:haunt': ['boo', null], 'eq:donutbuild': ['whoosh', 'chime'] };
+// Does this model skin get a magic reload? Not if it has one of its own, and not if it is a real gun.
+function _skinWantsMagic(sk) {
+  if (!sk) return false;
+  let fx = null; try { fx = SKIN_FX[sk.id]; } catch (e) {}
+  if (fx && fx.reload) return false;
+  return sk.rarity === 'donut' || !_skinHasMechanics(sk);
+}
+const _magicCache = {}; let _magicIndex = null;
+function reloadMagicForSkin(sk) {
+  if (!sk) return null;
+  if (sk.id in _magicCache) return _magicCache[sk.id];
+  if (!_magicIndex) { _magicIndex = {}; let n = 0; for (const x of MODEL_SKINS) if (_skinWantsMagic(x)) _magicIndex[x.id] = n++; }
+  const i = _magicIndex[sk.id];
+  if (i == null) return (_magicCache[sk.id] = null);
+  let fx = null; try { fx = SKIN_FX[sk.id]; } catch (e) {}
+  const donut = sk.rarity === 'donut';
+  let style = donut ? RELOAD_MAGIC_DONUT[i % RELOAD_MAGIC_DONUT.length]
+            : (fx && fx.equip && RELOAD_MAGIC_THEMED[fx.equip]) || RELOAD_MAGIC_STYLES[i % RELOAD_MAGIC_STYLES.length];
+  const tint = donut ? RELOAD_MAGIC_FROSTING[i % RELOAD_MAGIC_FROSTING.length] : RELOAD_MAGIC_TINTS[(i * 3 + Math.floor(i / 8)) % RELOAD_MAGIC_TINTS.length];
   const m = { style, tint };
   if (style.startsWith('eq:')) {
     // the gun comes apart a little after the old magazine would have gone and is whole again before the reload ends
     m.eq = style.slice(3); m.at = 0.10; m.frac = 0.72; m.sfx = RELOAD_MAGIC_SFX[style];
   } else {
-    // the same beats the physical reload has, with the old part floating / orbiting out and rounds coming in on a spiral
-    const base = RELOAD_PROPS[id] || [RP(.32, 'mag'), RP(.58, 'mag', 'arrive')];
+    // the same beats the base gun's physical reload has, with the old part floating / orbiting out and rounds coming in on a
+    // spiral (sprinkles, for a doughnut)
+    const base = RELOAD_PROPS[sk.weapon] || [RP(.32, 'mag'), RP(.58, 'mag', 'arrive')];
     const out = [];
     for (const e of base) {
       if (e.m === 'arrive') {
         const holder = (e.k === 'mag' || e.k === 'cell' || e.k === 'bottle' || e.k === 'drum');
         const n = Math.max(1, e.n || 1) * (style === 'storm' ? 3 : 1);
-        for (let k = 0; k < n; k++) out.push({ t: Math.min(0.95, e.t + k * 0.022), k: holder ? 'round' : e.k, m: 'swirl', n: 1, w: e.w });
+        for (let k = 0; k < n; k++) out.push({ t: Math.min(0.95, e.t + k * 0.022), k: donut ? 'gumball' : (holder ? 'round' : e.k), m: 'swirl', n: 1, w: e.w });
         if (holder) out.push({ t: Math.min(0.95, e.t + n * 0.022 + 0.03), k: e.k, m: 'swirl', n: 1, w: e.w });   // and the magazine itself, last
       } else out.push(Object.assign({}, e, { m: style === 'orbit' ? 'orbit' : 'float' }));
     }
     m.evs = out;
   }
-  return (_magicCache[id] = m);
+  return (_magicCache[sk.id] = m);
 }
 // ── 🎬 One reload per gun ───────────────────────────────────────────────────
 // The tables above gave most magazine guns the same move: strip, reach, seat,
@@ -44213,12 +44232,12 @@ function updateReloadAnim() {
   const skinReload = (model._reloadPlan && model._reloadPlan.skin) ? model._reloadPlan : (fx && fx.reload);
   const plan = !skinReload && model._reloadPlan;
   let evs = inspecting ? null : ((skinReload && skinReload.props) || (plan && plan.props) || RELOAD_PROPS[id]);
-  // 🪄 Stock guns (and the Neon Rift skins) take a magical reload. A skin with a reload of its own, or a real-gun skin,
-  // keeps the one it has.
+  // 🪄 Skins that are not real things (the doughnuts, the objects) take a magical reload. The default guns, real-gun skins
+  // and skins with a reload of their own keep the one they have.
   let magic = null;
   if (!inspecting && !skinReload && !model._throwable) {
     const ask = _activeModelSkin[id];
-    if (!ask || /_cyberpunk$/.test(ask.id)) magic = reloadMagicFor(id);
+    if (ask && _skinWantsMagic(ask)) magic = reloadMagicForSkin(ask);
   }
   if (magic) {
     if (magic.eq) {
