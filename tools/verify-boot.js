@@ -370,7 +370,33 @@ if (ok && process.argv.includes('--secret-inspects')) {
       currentWeaponIdx = saved.idx; weaponModels[idx] = saved.model; _activeModelSkin.pistol = saved.skin;
       isDead = saved.dead; reloading = saved.reload; getAudioCtx = saved.audio;
     }
-    console.log('secret inspect checks: ' + Object.keys(SECRET_INSPECTS).length + ' skin/weapon pairs, repeated triggers, frame updates, cancellation and resource cleanup');
+    const ri = WEAPONS.findIndex(w => w.id === 'revolver');
+    const revolverSaved = { idx: currentWeaponIdx, model: weaponModels[ri], skin: _activeModelSkin.revolver, dead: isDead, reload: reloading, audio: getAudioCtx };
+    try {
+      currentWeaponIdx = ri; isDead = false; reloading = false; getAudioCtx = () => null;
+      const model = prepViewModel(buildDonutRevolver(), 'revolver'); weaponModels[ri] = model;
+      _activeModelSkin.revolver = MODEL_SKINS.find(s => s.id === 'revolver_donut');
+      _secretInspectCounts.set('revolver:revolver_donut', 5);
+      startInspect();
+      const cylinder = model._parts.main, angles = [];
+      for (const t of [.4, .5, .6]) {
+        model._reloadStart = Date.now() - model._reloadDur * t;
+        updateReloadAnim();
+        const angle = cylinder.rotation.z;
+        updateCylinders(1 / 60); // Same ordering as the live render loop.
+        if (Math.abs(cylinder.rotation.z - angle) > .001) issues.push('live cylinder update overwrote secret spin');
+        if (Math.abs(cylinder.rotation.x) < .3) issues.push('glazer spin lacked visible tilt');
+        angles.push(cylinder.rotation.z);
+      }
+      if (angles[2] - angles[0] < Math.PI * 2) issues.push('glazer failed to visibly spin through a revolution');
+      cancelInspect(); updateCylinders(1 / 60);
+      if (!cylinder.position.equals(cylinder._home) || cylinder.rotation.x || cylinder.rotation.y || Math.abs(cylinder.rotation.z - (cylinder._spin || 0)) > .001) issues.push('glazer did not restore firing cylinder');
+      _secretInspectCounts.delete('revolver:revolver_donut');
+    } finally {
+      currentWeaponIdx = revolverSaved.idx; weaponModels[ri] = revolverSaved.model; _activeModelSkin.revolver = revolverSaved.skin;
+      isDead = revolverSaved.dead; reloading = revolverSaved.reload; getAudioCtx = revolverSaved.audio;
+    }
+    console.log('secret inspect checks: ' + Object.keys(SECRET_INSPECTS).length + ' skin/weapon pairs, live cylinder ordering, frame updates, cancellation and resource cleanup');
     return issues;
   })()`);
   if (issues.length) { ok = false; console.log(issues.join('\n')); }

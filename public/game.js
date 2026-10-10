@@ -14914,13 +14914,13 @@ function indexCylinder(model) {
   m._spinTo = (m._spinTo || 0) + (Math.PI * 2) / m._chambers;
 }
 function updateCylinders(dt) {
-  const m = weaponModels[currentWeaponIdx] && weaponModels[currentWeaponIdx]._parts
-          && weaponModels[currentWeaponIdx]._parts.main;
+  const model = weaponModels[currentWeaponIdx];
+  const m = model && model._parts && model._parts.main;
   if (!m || !m._chambers) return;
   const to = m._spinTo || 0;
   m._spin = (m._spin || 0) + (to - (m._spin || 0)) * Math.min(1, dt * 14);
-  // While reloading, the reload owns the rotation and folds _spin in itself.
-  if (!reloading) m.rotation.z = m._spin;
+  // Reloads and inspections both own the assembly pose for the entire frame.
+  if (!reloading && !model._inspectMode) m.rotation.z = m._spin;
 }
 
 function ejectFiredCase(model) {
@@ -42585,8 +42585,11 @@ function finishSecretInspectPose(model, t, pose) {
   if (run.kind === 'donut' && main) {
     // Keep the palm under the actual removed donut as it spins on the finger.
     const reach = Math.max(0, Math.min(1, t / .25, (1 - t) / .2));
+    const spinBeat = Math.max(0, Math.min(1, (t - .25) / .1, (.84 - t) / .1));
+    main.rotation.x += spinBeat * (.55 + .12 * Math.sin(t * Math.PI * 16));
+    main.rotation.y += spinBeat * .25;
     hand.position.lerp(main.position.clone().add(new THREE.Vector3(0, -.035, .01)), reach);
-    hand.rotation.set(rot.x + (.2 - rot.x) * reach, rot.y + (.1 - rot.y) * reach, rot.z + (-.25 - rot.z) * reach);
+    hand.rotation.set(rot.x + (.2 - rot.x) * reach, rot.y + (.1 - rot.y) * reach, rot.z + (-.25 - rot.z) * reach + spinBeat * .08 * Math.sin(t * Math.PI * 16));
     g.position.copy(main.position); g.rotation.set(0, 0, 0);
   } else if (['splash', 'receipt', 'catch', 'darts', 'bubble'].includes(run.kind)) {
     g.position.copy(hand.position).add(new THREE.Vector3(0, .045, -.01));
