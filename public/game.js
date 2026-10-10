@@ -39569,6 +39569,82 @@ function _skinFxFor(weaponId) {
   } catch (e) { return null; }
 }
 
+// ── 🫧 Smooth model skins ───────────────────────────────────────────────────────────────────────────────────────────
+// The model skins are built from primitives with a handful of facets each: a 7-sided barrel, a 6x5 sphere, a box with
+// edges sharp enough to cut. That reads as a pile of parts. Every model skin is passed through this on its way out of
+// its builder -- the built-in guns are left exactly as they were -- and comes back with:
+//   • every box given rounded edges (a bevel proportional to its smallest side, so a fat grip and a thin rail both get
+//     the right amount), with the box's own UVs and per-face groups untouched;
+//   • cylinders, cones, spheres, tori, capsules and lathed parts re-cut with enough facets to read as round (shapes that
+//     are deliberately angular -- 3, 4 and 5-sided prisms, pyramids -- are left alone);
+//   • faceted rocks and gems raised to a smooth detail level, and flat shading switched off.
+// Identical parts share one geometry, so a belt of fifty rounds costs one.
+const _smoothGeoCache = new Map();
+function _roundedBox(w, h, d) {
+  const hw = w / 2, hh = h / 2, hd = d / 2;
+  const m3 = Math.min(w, h, d), r = Math.max(0.0008, Math.min(0.016, m3 * 0.32));
+  const g = new THREE.BoxGeometry(w, h, d, 6, 6, 6), pos = g.attributes.position, nor = g.attributes.normal;
+  // 7 vertices an axis: centre, the two that end the flat face, the two half-way round the bevel, the edge.
+  const map = (v, a) => { const t = Math.abs(v) / a, s = Math.sign(v);
+    return s * (t < 0.2 ? 0 : t < 0.5 ? a - r : t < 0.84 ? a - r / 2 : a); };
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+    const mx = map(x, hw), my = map(y, hh), mz = map(z, hd);
+    const ix = Math.max(-(hw - r), Math.min(hw - r, mx)), iy = Math.max(-(hh - r), Math.min(hh - r, my)), iz = Math.max(-(hd - r), Math.min(hd - r, mz));
+    let dx = mx - ix, dy = my - iy, dz = mz - iz; const l = Math.hypot(dx, dy, dz);
+    if (l > 1e-9) { dx /= l; dy /= l; dz /= l; pos.setXYZ(i, ix + dx * r, iy + dy * r, iz + dz * r); nor.setXYZ(i, dx, dy, dz); }
+    else pos.setXYZ(i, mx, my, mz);
+  }
+  g.computeBoundingBox(); g.computeBoundingSphere();
+  return g;
+}
+function _smoothGeometry(g) {
+  const p = g.parameters; if (!p) return null;
+  const key = g.type + JSON.stringify(p);
+  if (_smoothGeoCache.has(key)) return _smoothGeoCache.get(key);
+  let out = null;
+  switch (g.type) {
+    case 'BoxGeometry':
+      if (Math.min(p.width, p.height, p.depth) > 0.006 && (p.widthSegments || 1) === 1 && (p.heightSegments || 1) === 1 && (p.depthSegments || 1) === 1)
+        out = _roundedBox(p.width, p.height, p.depth);
+      break;
+    case 'CylinderGeometry':
+      if (p.radialSegments >= 6 && p.radialSegments < 20) out = new THREE.CylinderGeometry(p.radiusTop, p.radiusBottom, p.height, 24, p.heightSegments, p.openEnded, p.thetaStart, p.thetaLength);
+      break;
+    case 'ConeGeometry':
+      if (p.radialSegments >= 6 && p.radialSegments < 20) out = new THREE.ConeGeometry(p.radius, p.height, 24, p.heightSegments, p.openEnded, p.thetaStart, p.thetaLength);
+      break;
+    case 'SphereGeometry':
+      if (p.widthSegments < 20 || p.heightSegments < 14) out = new THREE.SphereGeometry(p.radius, Math.max(24, p.widthSegments), Math.max(16, p.heightSegments), p.phiStart, p.phiLength, p.thetaStart, p.thetaLength);
+      break;
+    case 'TorusGeometry':
+      if (p.radialSegments < 12 || p.tubularSegments < 28) out = new THREE.TorusGeometry(p.radius, p.tube, Math.max(12, p.radialSegments), Math.max(32, p.tubularSegments), p.arc);
+      break;
+    case 'CapsuleGeometry':
+      out = new THREE.CapsuleGeometry(p.radius, p.length, Math.max(6, p.capSegments), Math.max(16, p.radialSegments));
+      break;
+    case 'LatheGeometry':
+      if (p.segments < 24) out = new THREE.LatheGeometry(p.points, 32, p.phiStart, p.phiLength);
+      break;
+    case 'IcosahedronGeometry': case 'DodecahedronGeometry': case 'OctahedronGeometry':
+      if ((p.detail || 0) < 2) out = new THREE[g.type](p.radius, 2);
+      break;
+  }
+  _smoothGeoCache.set(key, out);
+  return out;
+}
+function _smoothModelSkin(root) {
+  if (!root) return root;
+  root.traverse(o => {
+    if (!o.isMesh || !o.geometry || (o.userData && (o.userData.vmHand || o.userData.noSmooth))) return;
+    let sm = null;
+    try { sm = _smoothGeometry(o.geometry); } catch (e) { sm = null; }
+    if (sm) o.geometry = sm;
+    const ms = Array.isArray(o.material) ? o.material : [o.material];
+    for (const m of ms) if (m && m.flatShading) { m.flatShading = false; m.needsUpdate = true; }
+  });
+  return root;
+}
 function applyModelSkin(weaponId) {
   const idx = WEAPONS.findIndex(w => w.id === weaponId);
   if (idx < 0 || !weaponModels[idx]) return;
@@ -39582,7 +39658,7 @@ function applyModelSkin(weaponId) {
     // opened a menu would leak geometry into the scene graph.
     if (!skin._model) {
       try {
-        skin._model = prepViewModel(skin.build(), _skinHasMechanics(skin) ? weaponId : null);
+        skin._model = prepViewModel(_smoothModelSkin(skin.build()), _skinHasMechanics(skin) ? weaponId : null);
         try { blendProudSteps(skin._model); } catch (e) {}   // same fittings as the gun it replaces
         skin._model.visible = false;
         camera.add(skin._model);
@@ -41223,7 +41299,7 @@ function applyMeleeModelSkin(baseId) {
     // would leak a group into the camera each time.
     if (!skin._model) {
       try {
-        const m = skin.build();
+        const m = _smoothModelSkin(skin.build());
         try { greebleModel(m); } catch (e) {}
         try { weldModelParts(m); } catch (e) {}
         try { blendProudSteps(m); } catch (e) {}
