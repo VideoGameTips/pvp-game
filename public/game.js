@@ -22940,36 +22940,36 @@ function buildRainbowAK() {
 // environment map for a PBR metal to reflect, so a StandardMaterial with
 // metalness would just render dark).
 function _donutMats(flavor = 'strawberry') {
+  // Every doughnut is caramel and pink now -- dough the colour of caramel, glaze somewhere between hot pink and
+  // caramel -- and every one of them is lit from within. The old flavours (blueberry, lime, grape...) are kept as names,
+  // so the builders still say which gun is which, and each is dealt one of three caramel/pink mixes.
   const palettes = {
-    strawberry: { dough:0xff9ccf, glaze:0xff5cae, cream:0xfff1f9, deep:0xc4368a, steel:0xffc4e4, dark:0x6a2456, grip:0xa02a70, glow:0x40092a },
-    blueberry:  { dough:0x9ed2ff, glaze:0x4aa8ff, cream:0xe8f6ff, deep:0x2d62c8, steel:0xbde7ff, dark:0x1c3f86, grip:0x315bc0, glow:0x062850 },
-    lime:       { dough:0xc8ff9c, glaze:0x72e85a, cream:0xf2ffe8, deep:0x42aa3c, steel:0xd6ffc4, dark:0x246a30, grip:0x3a9a44, glow:0x0b4016 },
-    lemon:      { dough:0xfff49c, glaze:0xffdd3a, cream:0xffffee, deep:0xd4a72e, steel:0xfff2b8, dark:0x80642a, grip:0xb88628, glow:0x554000 },
-    grape:      { dough:0xd7a6ff, glaze:0xa85cff, cream:0xf6eaff, deep:0x7334c8, steel:0xe4c5ff, dark:0x46206f, grip:0x6930a0, glow:0x250640 },
-    mint:       { dough:0xa9ffe8, glaze:0x44e6bd, cream:0xf0fff9, deep:0x25a082, steel:0xc7fff2, dark:0x126656, grip:0x209078, glow:0x064032 },
-    orange:     { dough:0xffc38a, glaze:0xff8a2a, cream:0xfff3e6, deep:0xd86422, steel:0xffd3aa, dark:0x7a3216, grip:0xa84a1e, glow:0x4a1705 },
-    cherry:     { dough:0xff9caa, glaze:0xff3358, cream:0xffedf1, deep:0xc52044, steel:0xffbfcb, dark:0x6f1530, grip:0xa02040, glow:0x460616 },
-    vanilla:    { dough:0xffe7b0, glaze:0xfff4cc, cream:0xffffff, deep:0xd6b66a, steel:0xfff7dc, dark:0x7a663a, grip:0xb89654, glow:0x5a4312 },
-    cosmic:     { dough:0x8ad8ff, glaze:0xff66e8, cream:0xf5f0ff, deep:0x5b44d8, steel:0xc7f0ff, dark:0x2b237a, grip:0x8a30b8, glow:0x260650 },
+    pink:    { dough:0xd9955a, glaze:0xff4fa8, cream:0xffd9ec, deep:0xe0307f, steel:0xf2b27a, dark:0x7a3a1c, grip:0xb5642e, glow:0xff3d9a },
+    caramel: { dough:0xd9a068, glaze:0xcf8f4c, cream:0xffe9c8, deep:0xa86c30, steel:0xeabf86, dark:0x5a3418, grip:0x8a5428, glow:0x9a6430 },
+    rose:    { dough:0xe3a070, glaze:0xff7fb8, cream:0xfff0e0, deep:0xc8508a, steel:0xffc8a0, dark:0x7a3a2a, grip:0xb0603a, glow:0xff6aa8 },
   };
-  const P = palettes[flavor] || palettes.strawberry;
-  const metal = (color, shininess, emissive, ei) => new THREE.MeshPhongMaterial({
-    color, shininess, specular: 0xffffff, emissive: emissive || 0x000000, emissiveIntensity: ei || 0 });
+  const alias = { strawberry: 'pink', cherry: 'pink', grape: 'pink', blueberry: 'caramel', lemon: 'caramel', orange: 'caramel',
+                  vanilla: 'rose', lime: 'rose', mint: 'rose', cosmic: 'rose' };
+  const P = palettes[alias[flavor] || flavor] || palettes.pink;
+  // Phong with a high shininess and a white specular (there is no environment map for a PBR metal to reflect), and an
+  // emissive of its own colour: the glaze and frosting are lit nearly to full, so they glow whatever the room is doing.
+  const lit = (color, shininess, emissive, ei) => new THREE.MeshPhongMaterial({
+    color, shininess, specular: 0xfff0f6, emissive, emissiveIntensity: ei });
   return {
-    dough: metal(P.dough, 190),
-    glaze: metal(P.glaze, 230, P.glow, 0.20),
-    cream: metal(P.cream, 240),
-    deep:  metal(P.deep, 200, P.glow, 0.12),
-    steel: metal(P.steel, 250),
-    dark:  metal(P.dark, 170),
-    grip:  metal(P.grip, 160),
+    dough: lit(P.dough, 170, P.glow, 0.45),
+    glaze: lit(P.glaze, 230, P.glaze, 1.10),
+    cream: lit(P.cream, 240, P.cream, 0.70),
+    deep:  lit(P.deep, 200, P.glow, 0.90),
+    steel: lit(P.steel, 250, P.steel, 0.50),
+    dark:  lit(P.dark, 170, P.glow, 0.25),
+    grip:  lit(P.grip, 160, P.glow, 0.45),
   };
 }
 
 function _donutSprinkleMat(i) {
-  const colors = [0xff4a7a, 0x66ddff, 0xffee55, 0x7cff77, 0xba7cff, 0xffffff];
+  const colors = [0xff4a9a, 0xff9ac8, 0xffd27a, 0xffffff, 0xff8a5a, 0xe8a060];   // pink, caramel, gold, icing white
   const c = colors[i % colors.length];
-  return new THREE.MeshPhongMaterial({ color: c, shininess: 240, specular: 0xffffff, emissive: c, emissiveIntensity: 0.22 });
+  return new THREE.MeshPhongMaterial({ color: c, shininess: 240, specular: 0xffffff, emissive: c, emissiveIntensity: 1.0 });
 }
 
 function _buildDonutRing(radius = 0.038, tube = 0.010, glazeScale = 0.92, flavor = 'strawberry') {
@@ -23001,8 +23001,30 @@ function _addDonutOrbit(g, radius = 0.075, z = -0.060) {
     g.add(s);
     orbit.push(s);
   }
-  g._calm = () => orbit.forEach(s => { s.visible = false; });
+  // Light that spills off the whole thing: soft additive halos round the ring, ahead of the muzzle and behind the body,
+  // pulsing out of step. They are sprites, so they cost nothing to light and stay readable at any angle.
+  const halos = [];
+  const addHalo = (x, y, zz, size, color, ph) => {
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: _getGlowPuffTex(), color, transparent: true, opacity: 0.45,
+      blending: THREE.AdditiveBlending, depthWrite: false }));
+    sp.position.set(x, y, zz); sp.scale.setScalar(size); sp.renderOrder = 996;
+    sp.userData.eqFx = true; sp.userData.size = size; sp.userData.ph = ph; g.add(sp); halos.push(sp);
+  };
+  // Built the first time the thing is in your hands: the glow texture is declared further down the file than the
+  // builders, which run at load for the grenade.
+  const makeHalos = () => {
+    addHalo(0, 0.02, z, 0.24, 0xff4fa8, 0);
+    addHalo(0, 0.02, z - 0.17, 0.15, 0xffb070, 1.7);
+    addHalo(0, 0.00, z + 0.15, 0.16, 0xff8fcf, 3.1);
+  };
+  g._calm = () => { orbit.forEach(s => { s.visible = false; }); halos.forEach(h => { h.visible = false; }); };
   g._tick = (dt, now, assembling) => {
+    if (!halos.length) makeHalos();
+    halos.forEach(h => {
+      h.visible = !assembling;
+      const k = 0.5 + 0.5 * Math.sin(now * 3.0 + h.userData.ph);
+      h.material.opacity = 0.30 + 0.30 * k; h.scale.setScalar(h.userData.size * (0.92 + 0.18 * k));
+    });
     orbit.forEach((s, i) => {
       s.visible = !assembling;
       const a = now * 1.9 + i * (Math.PI * 2 / orbit.length);
@@ -31835,7 +31857,7 @@ function _getGlowPuffTex() {
   return (_glowPuffTex = new THREE.CanvasTexture(c));
 }
 const _donutPuffs = [];
-const _DONUT_PUFF_COLORS = [0xff78bd, 0xff78bd, 0xffee55, 0xff78bd, 0x66ddff, 0xff78bd, 0x7cff77];
+const _DONUT_PUFF_COLORS = [0xff78bd, 0xff4fa8, 0xffb070, 0xff78bd, 0xffd27a, 0xff8fcf, 0xffa060];   // pink and caramel
 let _donutPuffN = 0;
 const _bulletPrevTrail = new THREE.Vector3();
 function _emitDonutTrail(tint, r, from, to) {
@@ -31911,22 +31933,35 @@ function _donutMeleeHeld() {
   const sk = want && MELEE_MODEL_SKINS.find(s => s.id === want && s.melee === base.id);
   return (sk && sk.rarity === 'donut' && sk._model === m && m.visible) ? m : null;
 }
+// The trail is the WEAPON's: it is laid down from the doughnut ring and the muzzle of the gun in your hands, wherever
+// they go -- walking, whipping the view round, the recoil, a reload -- not from a spot behind the player. (It used to
+// drop puffs half a metre behind your hip, which is where YOU had been, and said nothing about the gun.)
+const _dmGunPrev = [new THREE.Vector3(), new THREE.Vector3()], _dmGunNow = new THREE.Vector3();
+let _dmGunHave = false, _dmGunModel = null;
+function _donutGunAnchors(m) {
+  if (!m._dmAnchors) {
+    let ring = null;
+    m.traverse(o => { if (!ring && o.userData && o.userData.donutMain) ring = o; });
+    m._dmAnchors = [ring, m._flash].filter(Boolean);
+  }
+  return m._dmAnchors;
+}
 function updateDonutMotionTrails(dt) {
   if (dt > 0 && _donutGunHeld()) {
-    const cp = camera.position;
-    if (_dmHaveCam) {
-      _dmDir.set(cp.x - _dmPrevCam.x, 0, cp.z - _dmPrevCam.z);
-      const d = _dmDir.length();
-      if (d > 1e-4 && d / dt > 3 && d < 3) {          // walking pace and up; a respawn teleport is not a trail
-        _dmDir.multiplyScalar(1 / d);
-        // hip height, half a metre behind you, so a puff is never stuck to the lens
-        _dmFrom.set(_dmPrevCam.x, cp.y - 0.8, _dmPrevCam.z).addScaledVector(_dmDir, -0.5);
-        _dmTo.set(cp.x, cp.y - 0.8, cp.z).addScaledVector(_dmDir, -0.5);
-        _emitDonutTrail(0xff78bd, 0.045, _dmFrom, _dmTo);
+    const m = weaponModels[currentWeaponIdx], anchors = _donutGunAnchors(m);
+    camera.updateMatrixWorld();
+    m.updateMatrixWorld(true);
+    if (_dmGunModel !== m) { _dmGunModel = m; _dmGunHave = false; }
+    for (let i = 0; i < anchors.length; i++) {
+      anchors[i].getWorldPosition(_dmGunNow);
+      if (_dmGunHave) {
+        const d = _dmGunNow.distanceTo(_dmGunPrev[i]);
+        if (d > 0.012 && d < 3) _emitDonutTrail(i ? 0xffb070 : 0xff4fa8, i ? 0.026 : 0.036, _dmGunPrev[i], _dmGunNow);   // a respawn teleport is not a trail
       }
+      _dmGunPrev[i].copy(_dmGunNow);
     }
-    _dmPrevCam.copy(cp); _dmHaveCam = true;
-  } else _dmHaveCam = false;
+    _dmGunHave = true;
+  } else _dmGunHave = false;
 
   const mm = meleeSwingT < 1 ? _donutMeleeHeld() : null;
   if (mm) {
@@ -31953,7 +31988,7 @@ function _buildDonutShot(tint, r) {
     glaze: new THREE.TorusGeometry(R, r * 0.42, 8, 16),
     glazeM: new THREE.MeshPhongMaterial({ color: c, shininess: 120, specular: 0xffffff }),
     spr: new THREE.BoxGeometry(r * 0.55, r * 0.14, r * 0.14),
-    sprM: [0xffee55, 0x66ddff, 0x7cff77, 0xffffff].map(col => new THREE.MeshBasicMaterial({ color: col })),
+    sprM: [0xffd27a, 0xff9ac8, 0xffb070, 0xffffff].map(col => new THREE.MeshBasicMaterial({ color: col })),
     wake: new THREE.CylinderGeometry(R * 0.9, r * 0.1, r * 12, 8, 1, true), wakeM: _glow(c),
   }));
   const g = new THREE.Group();
@@ -39758,43 +39793,43 @@ const MODEL_SKINS = [
     sw: ['#ff3a3a', '#8a3aff'], build: buildRainbowAK, look: { rainbow: true },
     blurb: 'Split out of a prism when drawn. The rainbow flows down it, and so do its rounds.' },
   { id: 'revolver_donut', weapon: 'revolver', name: 'The Glazer', rarity: 'donut',
-    sw: ['#ff5cae', '#fff1f9'], build: buildDonutRevolver, look: { projectile: 'donut', bulletColor: 0xff78bd, bulletSize: 0.075 },
+    sw: ['#ff4fa8', '#e0a45c'], build: buildDonutRevolver, look: { projectile: 'donut', bulletColor: 0xff78bd, bulletSize: 0.075 },
     blurb: 'The cylinder is a frosted donut. Sprinkles orbit it because subtlety lost.' },
   { id: 'ak20_donut', weapon: 'ak20', name: 'Glazed AK', rarity: 'donut',
-    sw: ['#ff5cae', '#fff1f9'], build: buildDonutAK20, look: { projectile: 'donut', bulletColor: 0xff78bd },
+    sw: ['#ff4fa8', '#e0a45c'], build: buildDonutAK20, look: { projectile: 'donut', bulletColor: 0xff78bd },
     blurb: 'Pink chrome receiver, frosted donut core, and sprinkles orbiting the muzzle.' },
   { id: 'rpg_donut', weapon: 'rpg', name: 'Rocket Cruller', rarity: 'donut',
-    sw: ['#ff5cae', '#fff1f9'], build: buildDonutRPG, look: { projectile: 'donut', bulletColor: 0xff78bd, bulletSize: 0.15 },
+    sw: ['#ff4fa8', '#e0a45c'], build: buildDonutRPG, look: { projectile: 'donut', bulletColor: 0xff78bd, bulletSize: 0.15 },
     blurb: 'A launcher built around a donut ring. The rocket leaves with dessert-level disrespect.' },
   { id: 'machine_pistol_donut', weapon: 'machine_pistol', name: 'Glazed Uzi', rarity: 'donut',
-    sw: ['#ff5cae', '#fff1f9'], build: buildDonutMachinePistol, look: { projectile: 'donut', bulletColor: 0xff78bd },
+    sw: ['#ff4fa8', '#e0a45c'], build: buildDonutMachinePistol, look: { projectile: 'donut', bulletColor: 0xff78bd },
     blurb: 'A tiny pink-metal bullet hose with a donut threaded through the receiver.' },
   { id: 'pistol_donut', weapon: 'pistol', name: 'Snack Sidearm', rarity: 'donut',
-    sw: ['#ff5cae', '#fff1f9'], build: buildDonutPistol, look: { projectile: 'donut', bulletColor: 0xff78bd },
+    sw: ['#ff4fa8', '#e0a45c'], build: buildDonutPistol, look: { projectile: 'donut', bulletColor: 0xff78bd },
     blurb: 'A compact donut pistol that snaps together like flying jewelry.' },
   { id: 'sg8_donut', weapon: 'sg8', name: 'Powdered Pump', rarity: 'donut',
-    sw: ['#ff5cae', '#fff1f9'], build: buildDonutSG8, look: { projectile: 'donut', bulletColor: 0xff78bd },
+    sw: ['#ff4fa8', '#e0a45c'], build: buildDonutSG8, look: { projectile: 'donut', bulletColor: 0xff78bd },
     blurb: 'A donut shotgun: loud, frosted, and absolutely not breakfast-safe.' },
   { id: 'srx_donut', weapon: 'srx', name: 'Long John SR-X', rarity: 'donut',
-    sw: ['#ff5cae', '#fff1f9'], build: buildDonutSRX, look: { projectile: 'donut', bulletColor: 0xff78bd },
+    sw: ['#ff4fa8', '#e0a45c'], build: buildDonutSRX, look: { projectile: 'donut', bulletColor: 0xff78bd },
     blurb: 'A sniper skin with a donut core and a suspicious amount of sparkle.' },
   { id: 'vector_donut', weapon: 'vector', name: 'Sprinkle Vector', rarity: 'donut',
-    sw: ['#ff5cae', '#fff1f9'], build: buildDonutVector, look: { projectile: 'donut', bulletColor: 0xff78bd },
+    sw: ['#ff4fa8', '#e0a45c'], build: buildDonutVector, look: { projectile: 'donut', bulletColor: 0xff78bd },
     blurb: 'Fast metal bits slam together, then the donut seats itself with a cling.' },
   { id: 'grenade_launcher_donut', weapon: 'grenade_launcher', name: 'Glaze Launcher', rarity: 'donut',
-    sw: ['#ff5cae', '#fff1f9'], build: buildDonutGrenadeLauncher, look: { projectile: 'donut', bulletColor: 0xff78bd, bulletSize: 0.13 },
+    sw: ['#ff4fa8', '#e0a45c'], build: buildDonutGrenadeLauncher, look: { projectile: 'donut', bulletColor: 0xff78bd, bulletSize: 0.13 },
     blurb: 'A frosted launcher with orbiting sprinkles and a ring that threads itself on draw.' },
   { id: 'minigun_donut', weapon: 'minigun', name: 'Sprinkle Spinner', rarity: 'donut',
-    sw: ['#ff5cae', '#fff1f9'], build: buildDonutMinigun, look: { projectile: 'donut', bulletColor: 0xff78bd },
+    sw: ['#ff4fa8', '#e0a45c'], build: buildDonutMinigun, look: { projectile: 'donut', bulletColor: 0xff78bd },
     blurb: 'A heavy donut machine that should probably come with a napkin.' },
   { id: 'mp40_donut', weapon: 'mp40', name: 'Creamline MP40', rarity: 'donut',
-    sw: ['#ff5cae', '#fff1f9'], build: buildDonutMP40, look: { projectile: 'donut', bulletColor: 0xff78bd },
+    sw: ['#ff4fa8', '#e0a45c'], build: buildDonutMP40, look: { projectile: 'donut', bulletColor: 0xff78bd },
     blurb: 'A compact classic SMG, rebuilt in pink chrome and icing.' },
   { id: 'deagle_donut', weapon: 'desert_eagle', name: 'Dessert Eagle', rarity: 'donut',
-    sw: ['#ff5cae', '#fff1f9'], build: buildDonutDeagle, look: { projectile: 'donut', bulletColor: 0xff78bd },
+    sw: ['#ff4fa8', '#e0a45c'], build: buildDonutDeagle, look: { projectile: 'donut', bulletColor: 0xff78bd },
     blurb: 'Big pistol, bigger frosting. Yes, the pun was mandatory.' },
   { id: 'shorty_donut', weapon: 'shorty', name: 'Doughboy Shorty', rarity: 'donut',
-    sw: ['#ff5cae', '#fff1f9'], build: buildDonutShorty, look: { projectile: 'donut', bulletColor: 0xff78bd },
+    sw: ['#ff4fa8', '#e0a45c'], build: buildDonutShorty, look: { projectile: 'donut', bulletColor: 0xff78bd },
     blurb: 'A sawed-off donut shotgun that enters like expensive kitchenware.' },
   // Plain model skins: no entrance animation, no case, free to equip.
   { id: 'cycler_walkie_talkie', weapon: 'cycler', name: 'Walkie-Talkie', rarity: 'good',
@@ -39954,7 +39989,7 @@ function applyModelSkin(weaponId) {
     // opened a menu would leak geometry into the scene graph.
     if (!skin._model) {
       try {
-        skin._model = prepViewModel(_smoothModelSkin(skin.build()), _skinHasMechanics(skin) ? weaponId : null);
+        skin._model = prepViewModel(skin.rarity === 'donut' ? skin.build() : _smoothModelSkin(skin.build()), _skinHasMechanics(skin) ? weaponId : null);   // a doughnut keeps its hard edges
         try { blendProudSteps(skin._model); } catch (e) {}   // same fittings as the gun it replaces
         skin._model.visible = false;
         camera.add(skin._model);
@@ -41558,7 +41593,7 @@ const MELEE_MODEL_SKINS = [
     blurb: 'The baton traded sparks for lightning and got carried away.',
     equip: 'strike', equipMs: 800, equipSfx: ['thunder', null] },
   { id: 'katana_donut', melee: 'katana', name: 'Ring King', rarity: 'donut',
-    sw: ['#ff78bd', '#ffe7f3'], build: buildDonutKatana,
+    sw: ['#ff4fa8', '#e0a45c'], build: buildDonutKatana,
     blurb: 'A frosted ring guard, icing down the blade, and sprinkles circling the swing.',
     equip: 'donutbuild', equipMs: 1600, equipSfx: ['whoosh', 'chime'], equipBeats: [[.88,'snapin'],[.88,'cling']] },
   { id: 'spear_thunder', melee: 'spear', name: 'Thunder Spear', rarity: 'rare',
@@ -41597,7 +41632,7 @@ function applyMeleeModelSkin(baseId) {
     // would leak a group into the camera each time.
     if (!skin._model) {
       try {
-        const m = _smoothModelSkin(skin.build());
+        const m = skin.rarity === 'donut' ? skin.build() : _smoothModelSkin(skin.build());   // a doughnut keeps its hard edges
         try { greebleModel(m); } catch (e) {}
         try { weldModelParts(m); } catch (e) {}
         try { blendProudSteps(m); } catch (e) {}
@@ -43203,7 +43238,7 @@ const RELOAD_MAGIC_THEMED = { warp: 'eq:warp', spin: 'eq:spin', glitch: 'eq:glit
   pixelate: 'eq:pixelate', meteor: 'eq:meteor' };
 const RELOAD_MAGIC_DONUT = ['eq:donutbuild', 'levitate', 'storm', 'eq:donutbuild', 'orbit', 'levitate', 'eq:donutbuild', 'storm'];
 const RELOAD_MAGIC_TINTS = [0x7ad8ff, 0xff7ad8, 0xb68cff, 0x7affc8, 0xffd27a, 0xff8a7a, 0x8ab4ff, 0xc8ff7a];
-const RELOAD_MAGIC_FROSTING = [0xff7ad8, 0xffd27a, 0x7affc8, 0xb68cff, 0x8ab4ff];
+const RELOAD_MAGIC_FROSTING = [0xff7ad8, 0xffb070, 0xff9ac8, 0xffd27a, 0xff8a5a];   // pink and caramel, nothing cold
 const RELOAD_MAGIC_SFX = { 'eq:assemble': ['whoosh', 'chime'], 'eq:vortex': ['warp', 'chime'], 'eq:build': ['whoosh', 'click'],
   'eq:warp': ['warp', 'beep'], 'eq:unfold': ['fold', 'click'], 'eq:meteor': ['starfall', 'chime'], 'eq:blackhole': ['singularity', 'chime'],
   'eq:spin': ['whoosh', 'click'], 'eq:constellation': ['starfall', 'chime'], 'eq:pixelate': ['blip', null], 'eq:windup': ['click', 'click'],
