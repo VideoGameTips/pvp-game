@@ -1320,6 +1320,8 @@ const SUPPORT_ITEMS = [
   { id: 'predator_uav', name: 'Predator UAV', type: 'Admin · Recon', uses: 1, cooldown: 2000, uavDur: 10000, adminItem: true },
   { id: 'care_package', name: 'Care Package', type: 'Admin · Random Drop', uses: 1, cooldown: 1500, adminItem: true },
   { id: 'tac_nuke', name: 'Tactical Nuke', type: 'Admin · End the Match', uses: 1, damage: 500, cooldown: 3000, nukeRadius: 25, nukeDelay: 5000, adminItem: true },
+  { id: 'satchel', name: 'Satchel Charge', type: 'Remote Explosive', uses: 2, damage: 140, radius: 6, cooldown: 900, playerOnly: true,
+    ability: { name: 'Detonate', type: 'satchel_detonate', cd: 0 } },
 ];
 const ARCHIVED_ITEM_IDS = new Set([...WEAPONS, ...MELEE_ITEMS, ...SUPPORT_ITEMS].filter(x => x.archived).map(x => x.id));
 
@@ -1496,7 +1498,7 @@ const WEAPON_COSTS = {
   ammo_fountain: 180, confetti_cannon: 100, moon_mine: 220, rubber_duck: 90,
   black_hole_seed: 2200, glitch_cube: 240, vampire_syringe: 200,
   adrenaline: 220, tripwire: 200, hologram: 240, magnet_mine: 220,
-  bounce_pad: 140, hunter_drone: 460, emp_grenade: 240, sticky_charge: 320,
+  bounce_pad: 140, hunter_drone: 460, emp_grenade: 240, sticky_charge: 320, satchel: 320,
   orbital_strike: 2500, guardian_drone: 380, nano_shield: 320, mini_turret: 340,
   air_grenade: 160, land_mine: 380, air_blaster: 260, grapple_hook: 300,
   // Batch-4 utilities
@@ -1670,7 +1672,7 @@ function botLegalMelee(m) {
   return !!m && !m.adminItem && !m.archived && !m.skinOnly;
 }
 function botLegalSupport(s) {
-  return !!s && !s.adminItem && !s.archived;
+  return !!s && !s.adminItem && !s.archived && !s.playerOnly;
 }
 const BOT_PRIMARY_WEAPONS = WEAPONS.filter(w => botLegalGun(w, 'primary'));
 const BOT_SECONDARY_WEAPONS = WEAPONS.filter(w => botLegalGun(w, 'secondary'));
@@ -28368,6 +28370,30 @@ function buildEMPGrenade() {
   band.rotation.x = Math.PI/2; g.add(band);
   g.position.set(0.10, -0.12, -0.18); return g;
 }
+function buildSatchel() {
+  const g = new THREE.Group();
+  const canvas = new THREE.MeshStandardMaterial({ color: 0x63684c, roughness: 0.95 });
+  const strap = new THREE.MeshStandardMaterial({ color: 0x36382d, roughness: 0.85 });
+  const metal = new THREE.MeshStandardMaterial({ color: 0x999b91, metalness: 0.65, roughness: 0.4 });
+  g.add(new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.12, 0.21), canvas));
+  const flap = new THREE.Mesh(new THREE.BoxGeometry(0.31, 0.022, 0.13), canvas);
+  flap.position.set(0, 0.066, -0.038); g.add(flap);
+  for (const x of [-0.10, 0.10]) {
+    const belt = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.135, 0.224), strap);
+    belt.position.x = x; g.add(belt);
+    const buckle = new THREE.Mesh(new THREE.BoxGeometry(0.038, 0.029, 0.014), metal);
+    buckle.position.set(x, 0.025, 0.115); g.add(buckle);
+  }
+  const handle = new THREE.Mesh(new THREE.TorusGeometry(0.043, 0.008, 5, 12, Math.PI), strap);
+  handle.position.set(0, 0.074, 0); g.add(handle);
+  const detonator = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.028, 0.05), metal);
+  detonator.position.set(0, 0.085, 0.03); g.add(detonator);
+  const led = new THREE.Mesh(new THREE.SphereGeometry(0.009, 6, 5), new THREE.MeshBasicMaterial({ color: 0xff5533 }));
+  led.position.set(0, 0.103, 0.03); g.add(led); g._led = led;
+  g.position.set(0.10, -0.12, -0.28);
+  return g;
+}
+
 function buildStickyCharge() {
   const g = new THREE.Group();
   const red = new THREE.MeshLambertMaterial({ color: 0xcc2222 });
@@ -28518,7 +28544,7 @@ const supportModels = [buildDonutFragGrenade(), buildMedkit(), buildStimShot(), 
   buildMiniTurret(),                         // mini_turret
   // 🪖 ADMIN supports
   buildC4(), buildClaymore(), buildStunGrenade(), buildThermite(),
-  buildPredatorUAV(), buildCarePackage(), buildTacNuke()];
+  buildPredatorUAV(), buildCarePackage(), buildTacNuke(), buildSatchel()];
 supportModels.forEach(m => { m.visible = false; camera.add(m); });
 
 // ── Roblox-style player mesh factory ──────────────────────────────────────
@@ -31822,6 +31848,9 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
 // ── Bot world-space weapon prop ────────────────────────────────────────────
 const WORLD_GUN_SCALE = 1.9;   // see the end of makeBotWeaponProp
 function makeBotWeaponProp(weaponId) {
+  if (weaponId === 'satchel') {
+    const g = buildSatchel(); g.position.set(0,0,0); g.scale.setScalar(WORLD_GUN_SCALE); return g;
+  }
   if (weaponId === 'chain_hammer') {
     const g = buildChainHammer();
     g.position.set(0, 0, 0); g.scale.setScalar(WORLD_GUN_SCALE);
@@ -35683,6 +35712,7 @@ function loadoutReady() {
 
 function resetCombatResources() {
   if (!loadoutReady()) return;
+  clearSatchels(myId);
   cancelMedkitHeal();
   for (const b of localBullets) scene.remove(b.mesh);
   localBullets.length = 0;
@@ -37625,6 +37655,9 @@ function activateMeleeAbility() {
 
 function activateAbility() {
   if (SOCIAL_VIEW.mode) return;
+  if (activeSlot === 'support' && SUPPORT_ITEMS[selectedSupportIdx]?.id === 'satchel') {
+    detonateSatchels(); return;
+  }
   const w = currentWeapon;
   // Whatever the player has equipped for this weapon — which may be a bought
   // ability rather than the one baked into the roster entry.
@@ -38510,6 +38543,14 @@ function _updateAbilityHUD() {
   const descEl = document.getElementById('ability-desc');
   const keyEl  = document.getElementById('ability-key-hint');
   if (!nameEl || !fillEl) return;
+  if (activeSlot === 'support' && SUPPORT_ITEMS[selectedSupportIdx]?.id === 'satchel') {
+    const count = activeSatchels.filter(s => s.ownerId === myId).length;
+    nameEl.textContent = 'Detonate'; fillEl.style.width = '100%';
+    fillEl.style.background = count ? '#4caf50' : '#555';
+    if (keyEl) { keyEl.textContent = '[E]'; keyEl.style.opacity = count ? '1' : '0.4'; }
+    if (descEl) descEl.textContent = `${count} deployed`;
+    return;
+  }
 
   // Show melee ability when melee slot is active
   if (activeSlot === 'melee' && selectedMeleeIdx !== null && selectedMeleeIdx >= 0) {
@@ -39349,6 +39390,7 @@ function trySupport() {
   updateAmmoHUD();
   // 🎵 Per-utility sound (mapped above). Some items override this with their own.
   if (SUPPORT_SOUND[item.id]) playSoundEvent(SUPPORT_SOUND[item.id], { volume: 1.0 });
+  if (item.id === 'satchel') { throwSatchel(item); return; }
 
   // ── Instant-use consumables ────────────────────────────────────────────────
   if (item.id === 'medkit' && item.healTime) {
@@ -39507,6 +39549,110 @@ function trySupport() {
     spawnLocalBullet(origin, shotDir, `support_${myId}_${now}_${i}`, true, item.bulletSpeed, color, item.bulletSize, item.id);
   }
 }
+
+const activeSatchels = [];
+
+function clearSatchels(ownerId = null, notify = true) {
+  for (let i = activeSatchels.length - 1; i >= 0; i--) {
+    const s = activeSatchels[i];
+    if (ownerId && s.ownerId !== ownerId) continue;
+    scene.remove(s.mesh); disposeBody(s.mesh); activeSatchels.splice(i, 1);
+  }
+  if (notify && myId) socket.emit('satchelEvent', { action: 'clear' });
+}
+
+function spawnSatchel(data, ownerId) {
+  if (activeSatchels.some(s => s.id === data.id && s.ownerId === ownerId)) return;
+  const mesh = buildSatchel(); mesh.position.set(data.x, data.y, data.z); mesh.scale.setScalar(1.5);
+  scene.add(mesh);
+  activeSatchels.push({ mesh, id: data.id, ownerId, velocity: new THREE.Vector3(data.dx, data.dy, data.dz).multiplyScalar(18),
+    settled: false, created: Date.now() });
+}
+
+function throwSatchel(item) {
+  if (inLobby) { noteLobbyHit(); supportUses[selectedSupportIdx]++; updateAmmoHUD(); return; }
+  const origin = camera.position.clone().add(new THREE.Vector3(.12,-.18,-.4).applyQuaternion(camera.quaternion));
+  const dir = new THREE.Vector3(0,.20,-1).applyQuaternion(camera.quaternion).normalize();
+  const data = { action:'throw', id:`satchel_${myId}_${Date.now()}`, x:origin.x,y:origin.y,z:origin.z, dx:dir.x,dy:dir.y,dz:dir.z };
+  spawnSatchel(data, myId); socket.emit('satchelEvent', data);
+  playSoundEvent('grenade_throw', { volume: .8 });
+  updateAmmoHUD();
+}
+
+function updateSatchels(dt) {
+  for (let i = activeSatchels.length - 1; i >= 0; i--) {
+    const s = activeSatchels[i];
+    if (Date.now() - s.created > 120000) {
+      scene.remove(s.mesh); disposeBody(s.mesh); activeSatchels.splice(i,1); continue;
+    }
+    s.mesh._led.visible = Math.floor(Date.now() / 450) % 2 === 0;
+    if (s.settled) continue;
+    const steps = Math.max(1, Math.ceil(dt / .016)), step = dt / steps;
+    for (let j = 0; j < steps && !s.settled; j++) {
+      s.velocity.y -= GRENADE_GRAVITY * step;
+      const before = s.mesh.position.clone(), next = before.clone().addScaledVector(s.velocity, step);
+      const distance = before.distanceTo(next);
+      const ray = new THREE.Ray(before, next.clone().sub(before).normalize());
+      let closest = distance, contact = null, contactBox = null;
+      for (const box of wallColliders) {
+        const expanded = box.clone().expandByScalar(.13);
+        const hit = ray.intersectBox(expanded, new THREE.Vector3());
+        if (hit && before.distanceTo(hit) <= closest) { closest = before.distanceTo(hit); contact = hit; contactBox = expanded; }
+      }
+      if (contact) {
+        next.copy(contact).addScaledVector(ray.direction, -.01);
+        if (s.velocity.y <= 0 && contact.y >= contactBox.max.y - .015) s.settled = true;
+        else { s.velocity.x = 0; s.velocity.z = 0; if (s.velocity.y > 0) s.velocity.y = 0; }
+      }
+      if (next.y <= .13) { next.y = .13; s.settled = true; }
+      s.mesh.position.copy(next);
+      if (s.settled) { s.velocity.set(0,0,0); s.mesh.rotation.set(0,s.mesh.rotation.y,0); }
+      else { s.mesh.rotation.x += step * 4; s.mesh.rotation.z += step * 2; }
+    }
+  }
+}
+
+function explodeSatchel(s, dealDamage) {
+  const pos = s.mesh.position.clone();
+  spawnExplosion(pos);
+  if (dealDamage && !inLobby) {
+    const item = SUPPORT_ITEMS.find(x => x.id === 'satchel');
+    for (const [pid, mesh] of Object.entries(remoteMeshes)) {
+      if (pid === myId || !mesh.visible || players[pid]?.dead || friendlyFireBlocked(pid, myId)) continue;
+      const target = mesh.position.clone(); target.y += .95;
+      const distance = target.distanceTo(pos);
+      if (distance >= item.radius || !hasLineOfSight(pos.x,pos.z,target.x,target.z,pos.y,target.y)) continue;
+      const damage = Math.max(1, Math.round(item.damage * (1 - distance / item.radius)));
+      const dummy = TRAINING_DUMMIES.find(d => d.id === pid);
+      if (dummy) handleDummyHit(dummy, mesh, { weaponId:'satchel', damage }, target);
+      else emitHit(pid, `${s.id}_blast_${pid}`, 'satchel', target, false, { damageOverride:damage });
+    }
+  }
+  scene.remove(s.mesh); disposeBody(s.mesh);
+}
+
+function detonateSatchels() {
+  if (!gameStarted || isDead || countdownActive || SOCIAL_VIEW.mode || inLobby) return false;
+  const own = activeSatchels.filter(s => s.ownerId === myId);
+  if (!own.length) return false;
+  socket.emit('satchelEvent', { action:'detonate' });
+  for (const s of own) { explodeSatchel(s, true); activeSatchels.splice(activeSatchels.indexOf(s), 1); }
+  playSoundEvent('c4_place', { volume:.7 });
+  updateAmmoHUD(); return true;
+}
+
+socket.on('satchelEvent', data => {
+  if (!gameStarted || !data || data.ownerId === myId) return;
+  if (data.action === 'throw') spawnSatchel(data, data.ownerId);
+  else if (data.action === 'clear') clearSatchels(data.ownerId, false);
+  else if (data.action === 'detonate') {
+    for (let i = activeSatchels.length - 1; i >= 0; i--) {
+      const s = activeSatchels[i];
+      if (s.ownerId === data.ownerId) { explodeSatchel(s, false); activeSatchels.splice(i, 1); }
+    }
+  }
+});
+socket.on('playerLeft', id => clearSatchels(id, false));
 
 function throwSupportItem(item) {
   const origin = new THREE.Vector3();
@@ -48463,7 +48609,8 @@ function updateWeaponHUD() {
     const item = SUPPORT_ITEMS[selectedSupportIdx];
     document.getElementById('ammo-gun').textContent = item.name;
     document.getElementById('ammo-count').textContent = supportUses[selectedSupportIdx];
-    document.getElementById('ammo-reserve').textContent = 'USES';
+    document.getElementById('ammo-reserve').textContent = item.id === 'satchel'
+      ? `${activeSatchels.filter(s => s.ownerId === myId).length} deployed` : 'USES';
     return;
   }
   document.getElementById('ammo-gun').textContent = displayWeaponName(currentWeapon);
@@ -48609,7 +48756,7 @@ const CLIENT_WEAPON_DAMAGE = Object.fromEntries([
   // 3rd-batch melees
   ['combat_axe', 78], ['combat_axe_throw', 120], ['shock_baton', 32],
   // 3rd-batch supports
-  ['hunter_drone', 100], ['emp_grenade', 25], ['sticky_charge', 120],
+  ['hunter_drone', 100], ['emp_grenade', 25], ['sticky_charge', 120], ['satchel', 140],
   // 😈 P2W batch
   ['swarm_rifle', 11], ['painter_beam'], ['storm_cannon', 70], ['minigun'],
   ['throwing_axes'], ['auto_revolver', 42],
@@ -55112,6 +55259,7 @@ function loop() {
 
   updateMatchTimer(dt);
   updateGrenades(dt);
+  updateSatchels(dt);
   updateDDay(dt);
   updateGrenadeWindup(dt);
   updateAbilityBuff(dt);
@@ -56810,6 +56958,7 @@ function afterDeath(ms, fn) {
 // Everything a finished match (or Lobby 13) leaves behind that the next start must not
 // inherit. Shared by the mode menu and the end-of-match buttons so they can't drift apart.
 function teardownMatchWorld() {
+  clearSatchels();
   finishChainMaulSwing();
   resetPlayerView();
   stopSocialView();

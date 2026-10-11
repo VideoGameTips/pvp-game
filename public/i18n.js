@@ -17,6 +17,9 @@
   'use strict';
 
   const ZH = {
+    'Remote Explosive': '遥控爆炸物',
+    'Detonate': '引爆',
+    '{n} deployed': '已部署 {n} 个',
     // ── Login ────────────────────────────────────────────────────────────────
     'Free 3D arena shooter · no download': '免费 3D 竞技射击 · 免下载',
     'Nickname': '昵称',

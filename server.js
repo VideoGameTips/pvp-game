@@ -321,7 +321,7 @@ const WEAPON_COSTS = {
   ammo_fountain: 180, confetti_cannon: 100, moon_mine: 220, rubber_duck: 90,
   black_hole_seed: 2200, glitch_cube: 240, vampire_syringe: 200,
   adrenaline: 220, tripwire: 200, hologram: 240, magnet_mine: 220,
-  bounce_pad: 140, hunter_drone: 460, emp_grenade: 240, sticky_charge: 320,
+  bounce_pad: 140, hunter_drone: 460, emp_grenade: 240, sticky_charge: 320, satchel: 320,
   orbital_strike: 2500, guardian_drone: 380, nano_shield: 320, mini_turret: 340,
   air_grenade: 160, land_mine: 380, air_blaster: 260, grapple_hook: 300,
   // Batch-4 utilities
@@ -1945,7 +1945,7 @@ event_horizon: 75,
   // 3rd-batch melees
   combat_axe: 78, combat_axe_throw: 120, shock_baton: 32,
   // 3rd-batch supports
-  hunter_drone: 100, emp_grenade: 25, sticky_charge: 120,
+  hunter_drone: 100, emp_grenade: 25, sticky_charge: 120, satchel: 140,
   // 😈 P2W batch
   swarm_rifle: 11,  storm_cannon: 70,
    auto_revolver: 42,
@@ -2148,6 +2148,7 @@ function movePlayerToMatch(socketId, newMatchId) {
   if (!p) return;
   const prev = p.matchId;
   if (prev === newMatchId) { sendMatchRoster(socketId); return; }
+  p._satchelIds = new Set();
   // 1. Their bots stay behind — deleted, not carried. Bots belong to the match they
   //    were spawned for and the client sends spawnBots again for every match it
   //    starts, so carrying them only ever brought frozen bodies along: Lobby 13's
@@ -2380,6 +2381,32 @@ io.on('connection', (socket) => {
       z: Math.max(-1, Math.min(1, dz / len)),
       force: Math.max(0, Math.min(26, Number(data?.force) || 0)),
     });
+  });
+
+  socket.on('satchelEvent', data => {
+    const p = players[socket.id];
+    if (!p || !p.matchId || p.matchId === HUB_MATCH || !data) return;
+    if (!p._satchelIds) p._satchelIds = new Set();
+    if (data.action === 'clear') {
+      p._satchelIds.clear();
+      emitToMatchExcept(p.matchId, socket.id, 'satchelEvent', { action:'clear', ownerId:p.id });
+      return;
+    }
+    if (p.dead) return;
+    if (data.action === 'throw') {
+      const coords = [data.x,data.y,data.z,data.dx,data.dy,data.dz];
+      if (!coords.every(Number.isFinite) || Math.hypot(data.x-p.x,data.y-p.y,data.z-p.z) > 3) return;
+      const len = Math.hypot(data.dx,data.dy,data.dz), id = String(data.id || '');
+      if (len < .01 || id.length > 100 || !id.startsWith(`satchel_${socket.id}_`) || p._satchelIds.size >= 2) return;
+      const now = Date.now();
+      if (now - (p._satchelThrownAt || 0) < 800) return;
+      p._satchelThrownAt = now; p._satchelIds.add(id);
+      emitToMatchExcept(p.matchId, socket.id, 'satchelEvent', { action:'throw', ownerId:p.id, id,
+        x:data.x,y:data.y,z:data.z,dx:data.dx/len,dy:data.dy/len,dz:data.dz/len });
+    } else if (data.action === 'detonate' && p._satchelIds.size) {
+      p._satchelIds.clear();
+      emitToMatchExcept(p.matchId, socket.id, 'satchelEvent', { action:'detonate', ownerId:p.id });
+    }
   });
 
   socket.on('hit', (data) => {
