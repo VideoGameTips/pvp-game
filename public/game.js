@@ -31417,7 +31417,9 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
   // crown straight onto the group — a wrapper would leave them hovering while
   // the head moved. Base Y is captured lazily so the crown, which is added
   // later, is picked up when it appears.
-  for (const child of mesh.children) {
+  const poseChildren = mesh._emoteRoot
+    ? [...mesh._emoteRoot.children, ...mesh.children.filter(c => c !== mesh._emoteRoot)] : mesh.children;
+  for (const child of poseChildren) {
     if (child.isSprite) continue;                 // name tag stays legible
     if (child._baseY === undefined) child._baseY = child.position.y;
     child.position.y = child._baseY + bobAmt;
@@ -33486,8 +33488,17 @@ function restoreEmotePose(mesh) {
 function poseEmote(mesh, id, seconds) {
   const r = mesh?._rig;
   if (!r || !EMOTES.some(e => e.id === id)) return;
+  // The rig's shoulders, hips and head are siblings, not torso children.
+  // Turn their shared visual parent so a body lean cannot detach its limbs.
+  if (!mesh._emoteRoot) {
+    const root = new THREE.Group();
+    for (const child of [...mesh.children]) if (child !== mesh._teamArrow) root.add(child);
+    mesh.add(root); mesh._emoteRoot = root;
+  }
+  const root = mesh._emoteRoot;
   const joints = ['torso', 'head', 'pelvis', 'armL', 'armR', 'elbowL', 'elbowR', 'wristL', 'wristR', 'legL', 'legR', 'kneeL', 'kneeR', 'footL', 'footR'];
   mesh._emotePose = joints.map(k => [r[k], r[k].position.clone(), r[k].rotation.clone()]);
+  mesh._emotePose.push([root, root.position.clone(), root.rotation.clone()]);
   if (mesh._gun) mesh._gun.visible = false;
   const beat = Math.sin(seconds * 9), lift = Math.sin(seconds * 9 + Math.PI);
   r.torso.rotation.set(0, 0, 0);
@@ -33499,12 +33510,12 @@ function poseEmote(mesh, id, seconds) {
     r.armR.rotation.z = -0.45; r.elbowR.rotation.x = -1;
     r.legL.rotation.x = Math.max(0, beat) * -0.95;
     r.legR.rotation.x = Math.max(0, lift) * -0.95;
-    r.legL.rotation.z = 0.18 + Math.max(0, beat) * 0.55;
-    r.legR.rotation.z = -0.18 - Math.max(0, lift) * 0.55;
+    r.legL.rotation.z = -0.18 - Math.max(0, beat) * 0.55;
+    r.legR.rotation.z = 0.18 + Math.max(0, lift) * 0.55;
     r.kneeL.rotation.x = Math.max(0, beat) * 1.1; r.kneeR.rotation.x = Math.max(0, lift) * 1.1;
     r.footL.rotation.x = -r.legL.rotation.x - r.kneeL.rotation.x;
     r.footR.rotation.x = -r.legR.rotation.x - r.kneeR.rotation.x;
-    r.torso.rotation.z = beat * 0.12;
+    root.rotation.z = -beat * 0.08;
     if (!mesh._emoteL) {
       const prop = new THREE.Group();
       const material = new THREE.MeshLambertMaterial({ color: r.handL.material.color });
@@ -33516,17 +33527,17 @@ function poseEmote(mesh, id, seconds) {
     }
     mesh._emoteL.visible = true;
   } else if (id === 'wave') {
-    r.armR.rotation.z = -2.4; r.elbowR.rotation.x = -0.7;
+    r.armR.rotation.z = 2.4; r.elbowR.rotation.x = -0.7;
     r.wristR.rotation.z = beat * 0.6;
   } else if (id === 'victory') {
-    r.armL.rotation.z = 2.55; r.armR.rotation.z = -2.55;
+    r.armL.rotation.z = -2.55; r.armR.rotation.z = 2.55;
     r.elbowL.rotation.x = r.elbowR.rotation.x = -0.4;
-    r.torso.position.y += Math.abs(beat) * 0.08;
+    root.position.y = Math.abs(beat) * 0.08;
   } else {
     r.legL.rotation.x = beat * 0.7; r.legR.rotation.x = -beat * 0.7;
     r.kneeL.rotation.x = Math.max(0, -beat) * 0.7; r.kneeR.rotation.x = Math.max(0, beat) * 0.7;
     r.armL.rotation.x = -beat * 0.9; r.armR.rotation.x = beat * 0.9;
-    r.torso.rotation.y = beat * 0.25;
+    root.rotation.y = beat * 0.25;
   }
 }
 function updateSocialView(dt) {

@@ -516,8 +516,16 @@ if (ok && process.argv.includes('--emotes')) {
         const before = mesh._rig.armL.rotation.clone();
         poseEmote(mesh, e.id, .37);
         if (!mesh._emotePose || mesh._rig.armL.rotation.equals(before)) issues.push(e.id + ': no distinct pose');
+        const root = mesh._emoteRoot, r = mesh._rig;
+        for (const joint of [r.head, r.torso, r.pelvis, r.armL, r.armR, r.legL, r.legR]) {
+          if (joint.parent !== root) issues.push(e.id + ': detached body turn');
+        }
+        if (e.id === 'take_l' && (r.legL.rotation.z >= 0 || r.legR.rotation.z <= 0)) issues.push('Take the L kicks inward');
+        if (e.id === 'victory' && (r.armL.rotation.z >= 0 || r.armR.rotation.z <= 0)) issues.push('Victory arms raised inward');
+        if (e.id === 'shuffle' && (Math.abs(root.rotation.y) < .01 || r.torso.rotation.y !== 0)) issues.push('Shuffle turns torso alone');
         restoreEmotePose(mesh);
         if (!mesh._rig.armL.rotation.equals(before) || mesh._emoteL?.visible) issues.push(e.id + ': restoration failed');
+        if (root.rotation.x || root.rotation.y || root.rotation.z || root.position.lengthSq()) issues.push(e.id + ': whole-body turn not restored');
       }
     } finally { disposeBody(mesh); }
     console.log('emote checks: Q/0 bindings, four distinct joint poses, temporary fingers and pose restoration');
