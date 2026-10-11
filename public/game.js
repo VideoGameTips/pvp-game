@@ -31545,37 +31545,60 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
 
   }
 
-  // Slide / crouch pose. Torso +X leans forward, but hanging limbs need -X to
-  // put their hands/feet forward because they extend downward from the pivot.
-  if (crouch > 0.01) {
-    const c = crouch;
-    const advancePose = baseCrouch < 0.5 && slide < 0.35;
-    const slideLean = Math.max(0, slide);
+  // ── Crouch and slide ─────────────────────────────────────────────────────
+  // Torso +X leans forward, but hanging limbs need -X to put their hands/feet forward because they extend downward
+  // from the pivot.
+  //
+  // Three stances, blended: the tactical low walk a bot (or anyone moving) keeps, a CROUCH, and a SLIDE. The crouch
+  // used to fold the legs a quarter of the way (hip -0.72 / -0.28, one foot behind the other), which lowered the body
+  // by about a hand's width and read as standing with bent knees; the slide was a lunge with one leg trailing. Now:
+  //   crouch -- a squat. Thighs close to horizontal, knees folded right over, boots flat, so the hips come down
+  //             about 0.3 m and the whole upper body with them (the foot plant below does that on its own).
+  //   slide  -- sat on the floor. Legs out in front and a touch above the ground, hips down on the thighs, leaning
+  //             back; it moves forward because the body does.
+  // They are weights, not a switch: the crouch amount follows the eye height (1.10 m = 0.58 = a full crouch) and
+  // the slide amount is the eased `slide`, so going in and out of either is one continuous movement.
+  if (rig.ck === undefined) rig.ck = 0;
+  rig.ck += (clamp01(baseCrouch / 0.58) - rig.ck) * Math.min(1, dt * 12);
+  const ck = rig.ck, sl = clamp01(slide);
+  const w = Math.max(crouch, ck, sl);
+  if (w > 0.01) {
+    const L = THREE.MathUtils.lerp;
     const advanceLean = 0.22 + run * 0.16 + (tacticalAdvance ? 0.04 : 0);
-    rig.legL.rotation.x = THREE.MathUtils.lerp(rig.legL.rotation.x, slideLean ? -1.35 : (advancePose ? -0.38 : -0.72), c);
-    rig.legR.rotation.x = THREE.MathUtils.lerp(rig.legR.rotation.x, slideLean ? 0.48 : (advancePose ? 0.16 : -0.28), c);
+    // adv: tactical walk · crc: crouch · sld: slide
+    const pose = (adv, crc, sld) => L(L(adv, crc, ck), sld, sl);
+    rig.legL.rotation.x = L(rig.legL.rotation.x, pose(-0.38, -1.45, -1.80), w);
+    rig.legR.rotation.x = L(rig.legR.rotation.x, pose( 0.16, -1.35, -1.62), w);
+    if (rig.kneeL) rig.kneeL.rotation.x = L(rig.kneeL.rotation.x, pose(0.62, 2.25, 0.20), w);
+    if (rig.kneeR) rig.kneeR.rotation.x = L(rig.kneeR.rotation.x, pose(0.46, 2.10, 0.32), w);
+    // Flat boots when squatting (the ankle undoes hip + knee), toes up when sat.
+    if (rig.footL) rig.footL.rotation.x = L(rig.footL.rotation.x, pose(-0.12, -0.80, 0.05), w);
+    if (rig.footR) rig.footR.rotation.x = L(rig.footR.rotation.x, pose(-0.08, -0.75, -0.05), w);
+    // Crouch-walking: the legs still step, smaller, over the squat.
+    const step = ck * (1 - sl) * 0.4;
+    if (step > 0.001) {
+      rig.legL.rotation.x += swing * step;  rig.legR.rotation.x += swingR * step;
+      if (rig.kneeL) rig.kneeL.rotation.x += knee(p) * blend * gAmp * step;
+      if (rig.kneeR) rig.kneeR.rotation.x += knee(p + Math.PI) * blend * gAmp * step;
+      if (rig.footL) rig.footL.rotation.x += roll(p) * blend * gAmp * step;
+      if (rig.footR) rig.footR.rotation.x += roll(p + Math.PI) * blend * gAmp * step;
+    }
     // An armed character keeps the weapon stance through a crouch and a slide —
     // the gun hangs off the firing hand now, so throwing the arms into a free
     // pose would throw the rifle with them.
-    const armLT = rig.holdsGun ? SUP.x + (slideLean ? -0.16 : 0) + aim * 0.55 * (1 - rk)
-                               : (slideLean ? -1.22 : (advancePose ? -1.05 : -0.8));
-    const armRT = rig.holdsGun ? (rig.firePose ? rig.firePose.x : GUN_HOLD.shoulderX) + (slideLean ? 0.12 : 0) + aim * 0.55
-                               : (slideLean ? -1.55 : (advancePose ? -1.38 : -0.8));
-    rig.armL.rotation.x = THREE.MathUtils.lerp(rig.armL.rotation.x, armLT, c);
-    rig.armR.rotation.x = THREE.MathUtils.lerp(rig.armR.rotation.x, armRT, c);
-    rig.torso.rotation.x = THREE.MathUtils.lerp(rig.torso.rotation.x, slideLean ? -0.62 : (advancePose ? advanceLean : 0.18), c);
-    rig.head.rotation.x  = THREE.MathUtils.lerp(rig.head.rotation.x, slideLean ? 0.54 : (advancePose ? -0.12 : -0.08), c);
-    // Knees have to fold hard here or a tucked slide looks like a plank.
-    if (rig.kneeL) rig.kneeL.rotation.x = THREE.MathUtils.lerp(rig.kneeL.rotation.x, slideLean ? 1.20 : (advancePose ? 0.62 : 1.05), c);
-    if (rig.kneeR) rig.kneeR.rotation.x = THREE.MathUtils.lerp(rig.kneeR.rotation.x, slideLean ? -0.35 : (advancePose ? 0.46 : 0.88), c);
-    const elbLT = rig.holdsGun ? SUP.ex : (slideLean ? -1.05 : (advancePose ? -0.85 : -0.7));
-    const elbRT = rig.holdsGun ? (rig.firePose ? rig.firePose.ex : GUN_HOLD.elbowX) : (slideLean ? -1.15 : (advancePose ? -0.9 : -0.7));
-    if (rig.elbowL) rig.elbowL.rotation.x = THREE.MathUtils.lerp(rig.elbowL.rotation.x, elbLT, c);
-    if (rig.elbowR) rig.elbowR.rotation.x = THREE.MathUtils.lerp(rig.elbowR.rotation.x, elbRT, c);
-    if (rig.footL) rig.footL.rotation.x = THREE.MathUtils.lerp(rig.footL.rotation.x, slideLean ? -0.22 : (advancePose ? -0.12 : -0.18), c);
-    if (rig.footR) rig.footR.rotation.x = THREE.MathUtils.lerp(rig.footR.rotation.x, slideLean ? 0.26 : (advancePose ? -0.08 : -0.14), c);
-    // A slide keeps its fixed lean, without side-to-side gait oscillation.
-    rig.torso.rotation.z = THREE.MathUtils.lerp(rig.torso.rotation.z, slideLean ? 0.22 : 0, c);
+    const armLT = rig.holdsGun ? SUP.x - 0.16 * sl + aim * 0.55 * (1 - rk)
+                               : pose(-1.05, -0.8, -1.22);
+    const armRT = rig.holdsGun ? (rig.firePose ? rig.firePose.x : GUN_HOLD.shoulderX) + 0.12 * sl + aim * 0.55
+                               : pose(-1.38, -0.8, -1.55);
+    rig.armL.rotation.x = L(rig.armL.rotation.x, armLT, w);
+    rig.armR.rotation.x = L(rig.armR.rotation.x, armRT, w);
+    rig.torso.rotation.x = L(rig.torso.rotation.x, pose(advanceLean, 0.30, -0.40), w);
+    rig.head.rotation.x  = L(rig.head.rotation.x, pose(-0.12, -0.20, 0.30), w);
+    const elbLT = rig.holdsGun ? SUP.ex : pose(-0.85, -0.7, -1.05);
+    const elbRT = rig.holdsGun ? (rig.firePose ? rig.firePose.ex : GUN_HOLD.elbowX) : pose(-0.9, -0.7, -1.15);
+    if (rig.elbowL) rig.elbowL.rotation.x = L(rig.elbowL.rotation.x, elbLT, w);
+    if (rig.elbowR) rig.elbowR.rotation.x = L(rig.elbowR.rotation.x, elbRT, w);
+    rig.torso.rotation.z = L(rig.torso.rotation.z, 0, w);
   }
 
   // Air pose: knees tuck and the shoulders pitch forward so jumps read as a
@@ -31701,9 +31724,14 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
   // Everything that is NOT about where the feet are: airborne bodies tuck up
   // around the hips, a slide puts the hips lower than the trailing foot alone
   // would, a landing drops through the knees, and breathing lifts a little.
-  const bobAmt = plant * (1 - jump * 0.9)
+  // Sat down in a slide, the hips rest on the floor by their thighs, not by the boots: with the legs held out the
+  // boots would let the body sink another 0.08 m, so the higher of the two wins. SIT is the hip joint's height
+  // when a thigh lies flat (half its thickness).
+  const SIT = BODY.thighD / 2 + 0.002;
+  const sitBob = SIT - BODY.hip;
+  const grounded = plant + (Math.max(plant, sitBob) - plant) * clamp01(slide);
+  const bobAmt = grounded * (1 - jump * 0.9)
                  - 0.035 * jump
-                 - 0.030 * slide
                  + br * 0.005;
   // Where the bullet spheres belong. The shot code scaled a fixed 1.65 / 1.0 by
   // rig.crouch, on its comment's assumption that crouch is a height factor
