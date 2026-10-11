@@ -313,7 +313,7 @@ const WEAPON_COSTS = {
   // Batch-4 melees
   brass_knuckles: 200, hatchet: 220, machete: 260, cane: 140, cricket_bat: 200,
   pipe: 160, wrench: 180, shovel: 280, golf_club: 200, tennis_racket: 100,
-  fire_poker: 200, meat_cleaver: 260, twin_knife: 480, scythe: 420,
+  fire_poker: 200, meat_cleaver: 260, twin_knife: 480, scythe: 420, chain_hammer: 300,
   // 🌌 Sci-fi P2W melees
   phase_blade: 18000, gravity_hammer: 22000, volt_whip: 17000,
   // Support / Utility
@@ -1918,7 +1918,7 @@ event_horizon: 75,
   // Melee
   bat: 50, sabre: 45, frying_pan: 32, sledge: 70, spear: 50,
   spear_throw: 85, pickle: 22, shield_charge: 60, knife_instakill: 9999,
-  chainsaw: 45, katana: 65, knife: 28, lightsabre: 72, twin_knife: 50, scythe: 58,
+  chainsaw: 45, katana: 65, knife: 28, lightsabre: 72, twin_knife: 50, scythe: 58, chain_hammer: 85,
   riot_shield: 18, baguette: 28, screwdriver: 20,
   // cane and shovel were missing here entirely — every hit with either one
   // fell through to the (WEAPON_DAMAGE[x] || 25) fallback, dealing 25 no
@@ -2363,7 +2363,8 @@ io.on('connection', (socket) => {
   socket.on('grapplePull', (data) => {
     const shooter = players[socket.id];
     const target = players[String(data?.targetId || '')];
-    if (!shooter || shooter.dead || !target || target.dead || target.isBot) return;
+    const chainMaul = data?.weapon === 'chain_hammer';
+    if (!shooter || shooter.dead || !target || target.dead || (target.isBot && !chainMaul)) return;
     if (shooter.matchId !== target.matchId) return;
     if (blocksFriendlyFire(shooter, target)) return;
     const dx = Number(data?.x) || 0;
@@ -2371,8 +2372,9 @@ io.on('connection', (socket) => {
     const len = Math.hypot(dx, dz);
     if (!Number.isFinite(len) || len < 0.01) return;
     const dist = dist3(shooter, target);
-    if (dist > 38) return;
-    io.to(target.id).emit('grapplePulled', {
+    if (dist > (chainMaul ? 6 : 38)) return;
+    io.to(target.isBot ? target.ownerId : target.id).emit('grapplePulled', {
+      ...(target.isBot ? { botId: target.id } : {}),
       shooterId: shooter.id,
       x: Math.max(-1, Math.min(1, dx / len)),
       z: Math.max(-1, Math.min(1, dz / len)),

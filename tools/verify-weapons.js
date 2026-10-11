@@ -73,7 +73,7 @@ function load() {
                    '_mPivot', '_eqCrystalMats', '_donutMats', '_donutSprinkleMat',
                    '_buildDonutRing', '_addDonutOrbit', 'buildDonutClassicGun',
                    // builders that take arguments are not picked up by the build*() sweep below
-                   'buildPixelGunModel', '_eqSegment',
+                   'buildPixelGunModel', '_eqSegment', 'makeChainMaulCable', 'poseChainMaulCable',
                    // the Neon Rift (cyberpunk) skins are one generator over the stock builders
                    '_cyberize']) {
     const b = fnBlock(n);

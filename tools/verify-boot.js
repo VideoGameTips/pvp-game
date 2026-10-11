@@ -624,6 +624,67 @@ if (ok && process.argv.includes('--steady-body')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+if (ok && process.argv.includes('--chain-maul')) {
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [], v = (x,y,z) => new THREE.Vector3(x,y,z);
+    const check = (condition, text) => { if (!condition) issues.push(text); };
+    check(chainMaulHitZone(v(0,1,0),v(0,1,-4),v(0,1,-4),v(0,0,-4)) === 'head', 'ball contact must damage');
+    check(chainMaulHitZone(v(0,1,0),v(0,1,-4),v(0,1,-4),v(0,0,-2)) === 'chain', 'mid-chain must only pull');
+    check(!chainMaulHitZone(v(0,1,0),v(0,1,-4),v(0,1,-4),v(2,0,-2)), 'miss counted as hit');
+    check(chainMaulHitZone(v(0,1,0),v(1,1,-4),v(-1,1,-4),v(0,0,-4)) === 'head', 'swept ball tunnels');
+    const saved = { players, remoteMeshes, selectedMeleeIdx, activeSlot, isDead, gameStarted, countdownActive,
+      inLobby, social: SOCIAL_VIEW.mode, camera: camera.position.clone(), quat: camera.quaternion.clone(),
+      boxes: wallColliders.slice(), emitHit, resolveBot, friendlyFireBlocked, playSoundEvent, spawnHitParticle,
+      swingDuration: meleeSwingDur, maulPosition: meleeModels[MELEE_ITEMS.findIndex(m => m.id === 'chain_hammer')].position.clone(),
+      maulRotation: meleeModels[MELEE_ITEMS.findIndex(m => m.id === 'chain_hammer')].rotation.clone() };
+    try {
+      selectedMeleeIdx = MELEE_ITEMS.findIndex(m => m.id === 'chain_hammer');
+      const item = MELEE_ITEMS[selectedMeleeIdx], model = meleeModels[selectedMeleeIdx];
+      check(MELEE_ITEMS.length === meleeModels.length && meleeModels.length === MELEE_SWING_TYPES.length, 'melee arrays misaligned');
+      check(item.damage === 85 && MELEE_SWING_SOUND[item.id] === 'heavy', 'stats/audio missing');
+      activeSlot = 'melee'; isDead = false; gameStarted = true; countdownActive = false; inLobby = false; SOCIAL_VIEW.mode = null;
+      camera.position.set(0,1.6,0); camera.quaternion.identity(); model.position.set(0,0,-.4); model.rotation.set(0,0,0);
+      wallColliders.length = 0;
+      let damage = 0, pulls = 0;
+      emitHit = (pid,id,weapon,pos,hs,opts) => { damage += opts.damageOverride; };
+      playSoundEvent = spawnHitParticle = () => {};
+      const bot = { dead:false, kbVX:0, kbVZ:0, yVel:0 };
+      resolveBot = () => { pulls++; return bot; };
+      friendlyFireBlocked = () => false;
+      const enemy = new THREE.Group(); enemy.position.set(0,0,-4.65);
+      players = { target:{ dead:false } }; remoteMeshes = { target:enemy };
+      meleeSwingDur = 720;
+      const swing = () => { startChainMaulSwing(item); for(let i=0;i<100;i++) updateChainMaulSwing(.008); };
+      swing(); check(damage === 85, 'head must deal exactly 85 once per swing');
+      check(!chainMaulSwing && model._chain.visible, 'swing leaked cable or hid idle model');
+      damage = 0; pulls = 0; enemy.position.set(0,0,-2);
+      swing(); check(damage === 0 && pulls === 1 && bot.kbVZ > 0, 'chain must pull once toward player, without damage');
+      friendlyFireBlocked = () => true; damage = 0; pulls = 0;
+      swing(); check(!damage && !pulls, 'teammate hit');
+      friendlyFireBlocked = () => false;
+      wallColliders.push(new THREE.Box3(v(-10,0,-1.3),v(10,5,-1)));
+      swing(); check(!damage && !pulls, 'wall allowed catch');
+      wallColliders.length = 0; inLobby = true;
+      swing(); check(!pulls, 'lobby allowed pull');
+      startChainMaulSwing(item); isDead = true; updateChainMaulSwing(.01);
+      check(!chainMaulSwing && model._chain.visible, 'death did not cancel');
+    } finally {
+      finishChainMaulSwing();
+      const maul = meleeModels[MELEE_ITEMS.findIndex(m => m.id === 'chain_hammer')];
+      maul.position.copy(saved.maulPosition); maul.rotation.copy(saved.maulRotation); meleeSwingDur = saved.swingDuration;
+      players = saved.players; remoteMeshes = saved.remoteMeshes;
+      selectedMeleeIdx = saved.selectedMeleeIdx; activeSlot = saved.activeSlot; isDead = saved.isDead;
+      gameStarted = saved.gameStarted; countdownActive = saved.countdownActive; inLobby = saved.inLobby; SOCIAL_VIEW.mode = saved.social;
+      camera.position.copy(saved.camera); camera.quaternion.copy(saved.quat); wallColliders.splice(0,wallColliders.length,...saved.boxes);
+      emitHit = saved.emitHit; resolveBot = saved.resolveBot; friendlyFireBlocked = saved.friendlyFireBlocked;
+      playSoundEvent = saved.playSoundEvent; spawnHitParticle = saved.spawnHitParticle;
+    }
+    console.log('chain maul checks: swept head/chain zones, damage, pulling, teammates, walls, lobby and cleanup');
+    return issues;
+  })()`);
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 if (ok && process.env.MAP_REVIEW_DIR) {
   fs.mkdirSync(process.env.MAP_REVIEW_DIR, { recursive: true });
   for (const name of ['forest', 'desert', 'tundra', 'refinery', 'space', 'volcano', 'titanic', 'carrier', 'pearl_harbor']) {

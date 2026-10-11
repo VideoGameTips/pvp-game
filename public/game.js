@@ -1056,6 +1056,7 @@ const MELEE_ITEMS = [
   { id: 'scythe', name: 'Scythe', type: 'Movement Reaper', damage: 58, range: 2.7, cooldown: 560, speedMult: 1.35,
     doubleJump: true,
     ability: { name: 'Reap Dash', cd: 4200, desc: 'Movement dash · slash through space', type: 'melee_mobility', speed: 30, side: 0, up: 3.5, color: 0x99ffe8 } },
+  { id: 'chain_hammer', name: 'Chain Maul', type: 'Chain Melee', damage: 85, range: 4.2, cooldown: 1100, speedMult: 1.1 },
 ];
 
 // ── 📦 Basic Skin Case generation ──────────────────────────────────────────
@@ -1487,7 +1488,7 @@ const WEAPON_COSTS = {
   // Batch-4 melees
   brass_knuckles: 200, hatchet: 220, machete: 260, cane: 140, cricket_bat: 200,
   pipe: 160, wrench: 180, shovel: 280, golf_club: 200, tennis_racket: 100,
-  fire_poker: 200, meat_cleaver: 260, twin_knife: 480, scythe: 420,
+  fire_poker: 200, meat_cleaver: 260, twin_knife: 480, scythe: 420, chain_hammer: 300,
   // 🌌 Sci-fi P2W melees
   phase_blade: 18000, gravity_hammer: 22000, volt_whip: 17000,
   // Support / Utility
@@ -1785,6 +1786,7 @@ const MELEE_SWING_TYPES = [
              //                    reach is the least wrong. Change it if it feels off.
   'punch',   // 42 twin_knife    → alternating dual-hand jabs (dual:true reuses this rig)
   'slash',   // 43 scythe        → wide reaping slash
+  'slash',   // 44 chain_hammer
 ];
 
 // ── Which swing sound each melee makes ─────────────────────────────────────
@@ -1804,6 +1806,7 @@ const MELEE_SWING_SOUND = {
   sabre:           'blade',
   frying_pan:      'heavy',   // cast iron, and it already slams
   sledge:          'heavy',
+  chain_hammer:    'heavy',
   spear:           'blade',
   katana:          'blade',
   baguette:        'generic',
@@ -27735,6 +27738,63 @@ function buildVampireBlade() {
   edge.position.set(0.008, 0.01, -0.05); g.add(edge);
   g.position.set(0.14, -0.12, -0.30); return g;
 }
+function makeChainMaulCable(count, radius, ballRadius) {
+  const g = new THREE.Group();
+  const steel = new THREE.MeshStandardMaterial({ color: 0x666e77, metalness: 0.85, roughness: 0.32 });
+  const linkGeo = new THREE.TorusGeometry(radius, radius * 0.25, 5, 10);
+  g._links = [];
+  for (let i = 0; i < count; i++) {
+    const link = new THREE.Mesh(linkGeo, steel);
+    link.scale.y = 1.45;
+    g.add(link); g._links.push(link);
+  }
+  const ball = new THREE.Group();
+  ball.add(new THREE.Mesh(new THREE.IcosahedronGeometry(ballRadius, 1), steel));
+  const spikeGeo = new THREE.ConeGeometry(ballRadius * 0.22, ballRadius * 0.65, 5);
+  for (const dir of [new THREE.Vector3(1,0,0), new THREE.Vector3(-1,0,0), new THREE.Vector3(0,1,0),
+    new THREE.Vector3(0,-1,0), new THREE.Vector3(0,0,1), new THREE.Vector3(0,0,-1)]) {
+    const spike = new THREE.Mesh(spikeGeo, steel);
+    spike.position.copy(dir).multiplyScalar(ballRadius * 1.15);
+    spike.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), dir);
+    ball.add(spike);
+  }
+  g._ball = ball; g.add(ball);
+  return g;
+}
+
+function poseChainMaulCable(g, start, end, sag = 0) {
+  const dir = end.clone().sub(start).normalize();
+  const orientation = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,1,0), dir);
+  g._links.forEach((link, i) => {
+    const t = (i + 0.5) / g._links.length;
+    link.position.copy(start).lerp(end, t);
+    link.position.y -= Math.sin(t * Math.PI) * sag;
+    link.quaternion.copy(orientation);
+    if (i % 2) link.rotateY(Math.PI / 2);
+  });
+  g._ball.position.copy(end);
+}
+
+function buildChainHammer() {
+  const g = new THREE.Group();
+  const steel = new THREE.MeshStandardMaterial({ color: 0x454c55, metalness: 0.8, roughness: 0.4 });
+  const grip = new THREE.MeshStandardMaterial({ color: 0x292027, roughness: 0.9 });
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.032, 0.44, 10), steel);
+  shaft.rotation.x = Math.PI / 2; g.add(shaft);
+  const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.037, 0.037, 0.20, 10), grip);
+  handle.rotation.x = Math.PI / 2; handle.position.z = 0.11; g.add(handle);
+  for (const z of [-0.20, 0.21]) {
+    const collar = new THREE.Mesh(new THREE.SphereGeometry(0.043, 8, 6), steel);
+    collar.position.z = z; g.add(collar);
+  }
+  g._chainAnchor = new THREE.Vector3(0, 0, -0.22);
+  g._chain = makeChainMaulCable(13, 0.018, 0.12);
+  poseChainMaulCable(g._chain, g._chainAnchor, new THREE.Vector3(-0.10, -0.19, -0.66), 0.025);
+  g.add(g._chain);
+  g.position.set(0.14, -0.12, -0.30);
+  return g;
+}
+
 function buildScythe() {
   const g = new THREE.Group();
   const shaftMat = new THREE.MeshLambertMaterial({ color: 0x243038 });
@@ -27822,6 +27882,7 @@ const meleeModels = [
   handcraftedMelee('tomahawk'), handcraftedMelee('ots04'), buildGarrote(),
   buildKnife(),  // twin_knife — same blade, dual-wielded via MELEE_ITEMS.dual
   buildScythe(), // scythe
+  buildChainHammer(), // chain_hammer
 ];
 meleeModels.forEach(m => { m.visible = false; camera.add(m); });
 
@@ -31761,6 +31822,11 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
 // ── Bot world-space weapon prop ────────────────────────────────────────────
 const WORLD_GUN_SCALE = 1.9;   // see the end of makeBotWeaponProp
 function makeBotWeaponProp(weaponId) {
+  if (weaponId === 'chain_hammer') {
+    const g = buildChainHammer();
+    g.position.set(0, 0, 0); g.scale.setScalar(WORLD_GUN_SCALE);
+    return g;
+  }
   // It only ever searched WEAPONS, so a bat or a grenade resolved to WEAPONS[0]
   // and came out a rifle — and the isMelee / isSupport branches below, which
   // tested a `slot` field that appears nowhere in this file, could never run.
@@ -38763,6 +38829,108 @@ function tryUseActive() {
   return tryShoot();
 }
 
+let chainMaulSwing = null;
+
+function finishChainMaulSwing() {
+  if (!chainMaulSwing) return;
+  const s = chainMaulSwing;
+  scene.remove(s.cable); disposeBody(s.cable);
+  s.model._chain.visible = true;
+  chainMaulSwing = null;
+}
+
+function startChainMaulSwing(item) {
+  finishChainMaulSwing();
+  const model = meleeModels[selectedMeleeIdx];
+  const cable = makeChainMaulCable(40, 0.035, 0.24);
+  model._chain.visible = false;
+  scene.add(cable);
+  chainMaulSwing = { item, model, cable, elapsed: 0, duration: meleeSwingDur / 1000,
+    epoch: matchEpoch, aim: camera.quaternion.clone(), damaged: new Set(), pulled: new Set(),
+    id: `maul_${myId}_${Date.now()}` };
+}
+
+// Both hit zones use the rendered cable, sampled along the arc to avoid frame-rate tunnelling.
+function chainMaulHitZone(start, head, previousHead, target) {
+  const headPath = new THREE.Line3(previousHead, head);
+  const cablePath = new THREE.Line3(start, head);
+  const closest = new THREE.Vector3();
+  let chainHit = false;
+  for (const y of [0.45, 0.95, 1.45]) {
+    const p = target.clone(); p.y += y;
+    const headDistance = previousHead.distanceToSquared(head) < 1e-10 ? head.distanceToSquared(p)
+      : headPath.closestPointToPoint(p, true, closest).distanceToSquared(p);
+    if (headDistance < 0.65 * 0.65) return 'head';
+    if (start.distanceToSquared(head) > 1e-10
+        && cablePath.closestPointToPoint(p, true, closest).distanceToSquared(p) < 0.39 * 0.39) chainHit = true;
+  }
+  return chainHit ? 'chain' : null;
+}
+
+function updateChainMaulSwing(dt) {
+  const s = chainMaulSwing;
+  if (!s) return;
+  if (isDead || !gameStarted || countdownActive || SOCIAL_VIEW.mode || s.epoch !== matchEpoch
+      || activeSlot !== 'melee' || meleeModels[selectedMeleeIdx] !== s.model) {
+    finishChainMaulSwing(); return;
+  }
+  const oldTime = s.elapsed;
+  s.elapsed = Math.min(s.duration, s.elapsed + dt);
+  camera.updateMatrixWorld(true);
+  const start = s.model.localToWorld(s.model._chainAnchor.clone());
+  const steps = Math.max(1, Math.ceil((s.elapsed - oldTime) / 0.008));
+  let previous = s.previousHead;
+  for (let i = 1; i <= steps; i++) {
+    const progress = (oldTime + (s.elapsed - oldTime) * i / steps) / s.duration;
+    const phase = THREE.MathUtils.clamp((progress - 0.20) / 0.52, 0, 1);
+    const angle = -1.05 + phase * 2.10;
+    const extension = 0.6 + (s.item.range - 0.6) * Math.sin(phase * Math.PI);
+    const offset = new THREE.Vector3(Math.sin(angle) * extension, -0.12, -Math.cos(angle) * extension);
+    const head = start.clone().add(offset.applyQuaternion(s.aim));
+    const ray = new THREE.Ray(start, head.clone().sub(start).normalize());
+    let distance = start.distanceTo(head);
+    for (const box of wallColliders) {
+      const hit = ray.intersectBox(box, new THREE.Vector3());
+      if (hit) distance = Math.min(distance, Math.max(0, start.distanceTo(hit) - 0.25));
+    }
+    head.copy(ray.at(distance, new THREE.Vector3()));
+    if (progress >= 0.20 && progress <= 0.72) {
+      for (const [pid, mesh] of Object.entries(remoteMeshes)) {
+        if (!mesh.visible || players[pid]?.dead || friendlyFireBlocked(pid, myId)) continue;
+        if (mesh.position.distanceToSquared(camera.position) > 36) continue;
+        const zone = chainMaulHitZone(start, head, previous || head, mesh.position);
+        if (!zone) continue;
+        const body = mesh.position.clone(); body.y += 0.95;
+        if (!hasLineOfSight(start.x, start.z, body.x, body.z, start.y, body.y)) continue;
+        if (zone === 'head' && !s.damaged.has(pid)) {
+          s.damaged.add(pid);
+          const dummy = TRAINING_DUMMIES.find(d => d.id === pid);
+          if (dummy) handleDummyHit(dummy, mesh, { weaponId: s.item.id }, body);
+          else emitHit(pid, `${s.id}_${pid}`, s.item.id, body, false, { damageOverride: s.item.damage });
+          spawnHitParticle(body);
+        } else if (zone === 'chain' && !s.pulled.has(pid) && !s.damaged.has(pid) && !inLobby
+            && !TRAINING_DUMMIES.some(d => d.id === pid)) {
+          s.pulled.add(pid);
+          const direction = camera.position.clone().sub(mesh.position); direction.y = 0;
+          if (direction.lengthSq() > 0.01) {
+            direction.normalize();
+            const bot = resolveBot(pid);
+            if (bot && !bot.dead) {
+              bot.kbVX = direction.x * 26; bot.kbVZ = direction.z * 26;
+              bot.yVel = Math.max(bot.yVel || 0, 2);
+            } else socket.emit('grapplePull', { targetId: pid, weapon: 'chain_hammer', x: direction.x, z: direction.z, force: 26 });
+            playSoundEvent('deflect_ping', { volume: 0.65, minGap: 120 });
+          }
+        }
+      }
+    }
+    previous = head;
+  }
+  s.previousHead = previous;
+  poseChainMaulCable(s.cable, start, previous, 0.015);
+  if (s.elapsed >= s.duration) finishChainMaulSwing();
+}
+
 function tryMelee() {
   if (SOCIAL_VIEW.mode) return;
   if (!gameStarted || isDead) return;
@@ -38821,6 +38989,7 @@ function tryMelee() {
     }
   }
 
+  if (soundId === 'chain_hammer') { startChainMaulSwing(item); return; }
   const forward = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion).normalize();
   let hitPos = null;
   for (const [pid, mesh] of Object.entries(remoteMeshes)) {
@@ -49377,6 +49546,15 @@ socket.on('airBlasted', data => {
   flashScreen('rgba(190,235,255,0.16)', 180);
 });
 socket.on('grapplePulled', data => {
+  if (data?.botId) {
+    const bot = resolveBot(data.botId);
+    if (!bot || bot.dead) return;
+    const direction = new THREE.Vector3(Number(data.x) || 0, 0, Number(data.z) || 0).normalize();
+    const force = Math.max(0, Math.min(26, Number(data.force) || 0));
+    bot.kbVX = direction.x * force; bot.kbVZ = direction.z * force;
+    bot.yVel = Math.max(bot.yVel || 0, 2);
+    return;
+  }
   if (isDead || match?.type === 'range') return;
   const dx = Number(data?.x) || 0;
   const dz = Number(data?.z) || 0;
@@ -50382,6 +50560,9 @@ const MELEE_SWING = {
   // two hands, over the head, a pause at the top, and everything coming down
   sledge:  { ms: 640, keys: [_MS(.30,[.02,.14,-.12],[1.25,-.05,0]), _MS(.42,[.02,.15,-.12],[1.32,0,0]), _MS(.54,[0,-.20,-.36],[-.85,0,0]),
             _MS(.66,[0,-.17,-.34],[-.60,0,0]), _MS(.90,[0,-.06,-.12],[-.10,0,0])] },
+  chain_hammer: { ms: 720, keys: [_MS(.20,[.12,.04,.06],[.25,-.75,-.25]),
+    _MS(.46,[-.04,-.04,-.18],[-.10,.15,.12]), _MS(.72,[-.18,-.07,-.12],[-.15,.85,.30]),
+    _MS(.92,[-.02,-.02,-.02],[0,.10,.04])] },
   // wound all the way round behind the back and brought through in one turn
   titan_hammer: { ms: 700, keys: [_MS(.20,[.10,.04,.00],[.40,-.90,0]), _MS(.38,[.14,.10,-.04],[.70,-1.80,0]), _MS(.56,[-.02,-.18,-.34],[-.80,.40,0]),
             _MS(.70,[0,-.15,-.30],[-.55,.30,0]), _MS(.90,[0,-.05,-.10],[-.10,.10,0])] },
@@ -54937,6 +55118,7 @@ function loop() {
   updatePendingFanFire(dt);
   updateAbilityHUD();
   updateMeleeSwing(dt);
+  updateChainMaulSwing(dt);
   updateWeaponSelector();
   updateTrashcanProximity();
   updateDamageNumbers();
@@ -56628,6 +56810,7 @@ function afterDeath(ms, fn) {
 // Everything a finished match (or Lobby 13) leaves behind that the next start must not
 // inherit. Shared by the mode menu and the end-of-match buttons so they can't drift apart.
 function teardownMatchWorld() {
+  finishChainMaulSwing();
   resetPlayerView();
   stopSocialView();
   matchEpoch++;
