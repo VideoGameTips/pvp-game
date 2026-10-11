@@ -590,6 +590,40 @@ if (ok && process.argv.includes('--perspectives')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+if (ok && process.argv.includes('--steady-body')) {
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    for (const bot of [false, true]) for (const armed of [false, true]) {
+      const mesh = makePlayerMesh('Steady body test', bot, 'ally', 'default'), r = mesh._rig;
+      r.holdsGun = armed;
+      let low = Infinity, high = -Infinity;
+      try {
+        for (const airborne of [0, 1]) for (const crouch of [0, .5]) {
+          for (let frame = 0; frame < 90; frame++) {
+            mesh.position.z += .12;
+            animateCharacterMesh(mesh, 1/60, crouch, 0, airborne, .4);
+            for (const joint of [r.torso, r.head, r.pelvis]) {
+              if (Math.abs(joint.rotation.y) > 1e-8 || Math.abs(joint.rotation.z) > 1e-8) issues.push('walking/jumping trunk oscillates');
+            }
+            low = Math.min(low, r.legL.rotation.x); high = Math.max(high, r.legL.rotation.x);
+          }
+        }
+        if (high-low < .2) issues.push('leg movement lost');
+        const aimedUp = r.head.rotation.x;
+        r.aim = -.4; animateCharacterMesh(mesh, 1/60, .5, 0, 1, -.4);
+        if (Math.abs(r.head.rotation.x - aimedUp) < .1) issues.push('aim pitch lost');
+        flinchCharacter(mesh, 60, 1, 0); animateCharacterMesh(mesh, 1/60, 0);
+        if (Math.abs(r.torso.rotation.z) < .001) issues.push('hit reaction lost');
+        r.hitK = 0; animateCharacterMesh(mesh, 1/60, 0);
+        if (r.head.rotation.y || r.head.rotation.z || r.torso.rotation.y || r.torso.rotation.z) issues.push('stale twist after hit');
+      } finally { disposeBody(mesh); }
+    }
+    console.log('steady body checks: armed/unarmed players and bots, walking, crouching, jumping, leg motion, aim and hit recovery');
+    return [...new Set(issues)];
+  })()`);
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 if (ok && process.env.MAP_REVIEW_DIR) {
   fs.mkdirSync(process.env.MAP_REVIEW_DIR, { recursive: true });
   for (const name of ['forest', 'desert', 'tundra', 'refinery', 'space', 'volcano', 'titanic', 'carrier', 'pearl_harbor']) {

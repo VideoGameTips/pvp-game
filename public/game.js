@@ -31456,7 +31456,6 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
   rig.breathe = (rig.breathe || 0) + dt * (1.05 + run * 0.9);
   const idle = (1 - blend) * (1 - slide);
   const br   = Math.sin(rig.breathe) * idle;
-  const sway = Math.sin(rig.breathe * 0.37) * idle;
 
   // Phase, offset per character. `gait()` is a sine with a touch of second
   // harmonic: a real leg's swing is quicker than its stance, and that slight
@@ -31484,8 +31483,9 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
   // back into itself: a crouching player looking down settled at 0.94 rad of
   // head pitch where the pose asks for 0.51, and saturated on the clamp going
   // the other way. The shoulder abduction froze for the same reason.
-  rig.torso.rotation.x = 0;
-  rig.head.rotation.x = 0;
+  rig.torso.rotation.set(0, 0, 0);
+  rig.head.rotation.set(0, 0, 0);
+  rig.legL.rotation.y = rig.legR.rotation.y = 0;
   if (rig.holdsGun) {
     rig.armR.rotation.z = ARM_TUCK;              // firing elbow tucked in
     rig.armL.rotation.z = SUP.z;
@@ -31543,15 +31543,6 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
     if (rig.footL) rig.footL.rotation.x = -(swing  + (rig.kneeL?.rotation.x ?? 0)) + roll(p) * blend * gAmp;
     if (rig.footR) rig.footR.rotation.x = -(swingR + (rig.kneeR?.rotation.x ?? 0)) + roll(p + Math.PI) * blend * gAmp * (rig.gaitAsym ?? 1);
 
-    // Shoulders and hips counter-rotate against each other, and the body rolls
-    // a little onto the loaded leg. The head then counters the torso so the
-    // character keeps looking where it is going instead of scanning side to side.
-    rig.torso.rotation.y = -gait(p) * 0.22 * lean;                       // shoulders drive against the hips
-    rig.torso.rotation.z =  Math.sin(p) * 0.075 * lean + sway * 0.045;
-    rig.legL.rotation.y  =  gait(p) * 0.07 * lean;   // pelvis twist, opposite the chest
-    rig.legR.rotation.y  =  gait(p) * 0.07 * lean;
-    rig.head.rotation.y  = -rig.torso.rotation.y * 0.7;
-    rig.head.rotation.z  = -rig.torso.rotation.z * 0.5;
   }
 
   // Slide / crouch pose. Torso +X leans forward, but hanging limbs need -X to
@@ -31583,8 +31574,7 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
     if (rig.elbowR) rig.elbowR.rotation.x = THREE.MathUtils.lerp(rig.elbowR.rotation.x, elbRT, c);
     if (rig.footL) rig.footL.rotation.x = THREE.MathUtils.lerp(rig.footL.rotation.x, slideLean ? -0.22 : (advancePose ? -0.12 : -0.18), c);
     if (rig.footR) rig.footR.rotation.x = THREE.MathUtils.lerp(rig.footR.rotation.x, slideLean ? 0.26 : (advancePose ? -0.08 : -0.14), c);
-    // Crouch unwinds twist; a slide gets a slight shoulder roll so it reads from a distance.
-    rig.torso.rotation.y = THREE.MathUtils.lerp(rig.torso.rotation.y, 0, c);
+    // A slide keeps its fixed lean, without side-to-side gait oscillation.
     rig.torso.rotation.z = THREE.MathUtils.lerp(rig.torso.rotation.z, slideLean ? 0.22 : 0, c);
   }
 
@@ -31630,10 +31620,9 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
   rig.head.rotation.x  -= lean * (0.03 + run * 0.09);
   rig.head.rotation.x = Math.max(-1.0, Math.min(1.0, rig.head.rotation.x + aim * 0.62));
   if (rig.pelvis) {
-    // Hip drop onto the loaded leg (the pelvis tilts down over the SWINGING
-    // side), plus the pelvic rotation that runs opposite the chest.
-    rig.pelvis.rotation.z = -Math.sin(p) * 0.055 * lean - sway * 0.045;
-    rig.pelvis.rotation.y = gait(p) * 0.07 * lean;
+    // Keep the trunk facing the same direction through strides and jumps.
+    rig.pelvis.rotation.z = 0;
+    rig.pelvis.rotation.y = 0;
   }
   if (rig.neck) rig.neck.rotation.x = aim * 0.18;
   // Breathing. The ribcage expands up and FORWARD, not sideways, so the depth
