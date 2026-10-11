@@ -32578,7 +32578,7 @@ document.addEventListener('pointerlockchange', () => {
   // needed the cursor is already up by the time this fires, and it wins.
   const vchat = document.getElementById('vchat-box');
   if (was && !pointerLocked && inLiveMatch() && !isDead && !isLoadoutOpen() && !anyDialogOpen()
-      && !(vchat && vchat.style.display === 'block')) openSettingsHub();
+      && SOCIAL_VIEW.mode !== 'picker' && !(vchat && vchat.style.display === 'block')) openSettingsHub();
 });
 // ── 🔫 Recoil ───────────────────────────────────────────────────────────────
 // There was none, anywhere. Every weapon in the game fired perfectly flat, and
@@ -32850,6 +32850,14 @@ function kickWeaponVisual(w, pellets = 1) {
 }
 
 document.addEventListener('mousemove', e => {
+  if (SOCIAL_VIEW.mode) {
+    if (pointerLocked && SOCIAL_VIEW.mode === 'free') {
+      SOCIAL_VIEW.look.y -= e.movementX * SENS * lookSensMult();
+      SOCIAL_VIEW.look.x = THREE.MathUtils.clamp(SOCIAL_VIEW.look.x - e.movementY * SENS * lookSensMult(), -1.5, 1.5);
+      SOCIAL_VIEW.camera.quaternion.setFromEuler(SOCIAL_VIEW.look);
+    }
+    return;
+  }
   if ((!pointerLocked && !gameStarted) || isDead) return;
   const lookScale = SENS * lookSensMult();
   const yawStep = e.movementX * lookScale;
@@ -33113,7 +33121,7 @@ function _resetAssistTimers() { _aimbotTimer = 0; _autoShootTimer = 0; }
 function updateAimAssist(dt) {
   const anyOn = ASSIST.autoShoot || ASSIST.aimAssist || ASSIST.aimbot || ASSIST.aiAim;
   if (!anyOn) { if (_aiAimDot) _aiAimDot.visible = false; return; }
-  if (isDead || !gameStarted || inLobby || countdownActive || KILLCAM.active) {
+  if (isDead || !gameStarted || inLobby || countdownActive || KILLCAM.active || SOCIAL_VIEW.mode) {
     _resetAssistTimers(); if (_aiAimDot) _aiAimDot.visible = false; return;
   }
   const enemies = _assistEnemies();
@@ -33184,7 +33192,7 @@ const KEY_ACTIONS = [
   ['left', 'Move left', 'KeyA'], ['right', 'Move right', 'KeyD'],
   ['jump', 'Jump', 'Space'], ['slide', 'Slide', 'ShiftLeft'], ['crouch', 'Crouch', 'ControlLeft'],
   ['reload', 'Reload', 'KeyR'], ['ability', 'Ability / aim', 'KeyE'], ['interact', 'Interact / swap gear', 'KeyF'],
-  ['cycle', 'Next weapon', 'KeyQ'], ['slot1', 'Primary weapon', 'Digit1'], ['slot2', 'Secondary weapon', 'Digit2'],
+  ['emotes', 'Emotes', 'KeyQ'], ['freecam', 'Free camera', 'Digit0'], ['slot1', 'Primary weapon', 'Digit1'], ['slot2', 'Secondary weapon', 'Digit2'],
   ['slot3', 'Melee', 'Digit3'], ['slot4', 'Support item', 'Digit4'],
   ['inspect', 'Inspect weapon', 'KeyT'], ['melee', 'Quick melee', 'KeyB'], ['chat', 'Quick chat', 'KeyV'],
   ['comms1', 'Comms wheel 1', 'KeyZ'], ['comms2', 'Comms wheel 2', 'KeyX'], ['scoreboard', 'Scoreboard', 'Tab'],
@@ -33410,6 +33418,168 @@ function openCrosshairPanel() {
 applyCrosshair();
 
 const keys = {};
+const EMOTES = [
+  { id: 'take_l', name: 'Take the L', duration: 6000 },
+  { id: 'wave', name: 'Wave', duration: 3500 },
+  { id: 'victory', name: 'Victory', duration: 4500 },
+  { id: 'shuffle', name: 'Shuffle', duration: 6000 },
+];
+// This camera never becomes the gameplay camera: physics, hits and network sync
+// continue to use the player's real position while their view is detached.
+const SOCIAL_VIEW = { mode: null, camera: null, look: new THREE.Euler(0, 0, 0, 'YXZ'), actor: null, menu: null, emote: null, started: 0 };
+function stopSocialView() {
+  SOCIAL_VIEW.mode = null;
+  SOCIAL_VIEW.emote = null;
+  if (SOCIAL_VIEW.menu) SOCIAL_VIEW.menu.style.display = 'none';
+  if (SOCIAL_VIEW.actor) { scene.remove(SOCIAL_VIEW.actor); disposeBody(SOCIAL_VIEW.actor); SOCIAL_VIEW.actor = null; }
+  shooting = false;
+  for (const k of Object.keys(keys)) keys[k] = false;
+}
+function beginSocialView(mode) {
+  if (!gameStarted || isDead || countdownActive || KILLCAM.active || spectatorState || pilotedVehicle || pilotedMortar
+      || selectedModeConfig?.type === 'builder' || THEATER.active) return false;
+  stopSocialView();
+  cancelInspect();
+  setADS(false);
+  minigunBraceHeld = false;
+  SOCIAL_VIEW.mode = mode;
+  SOCIAL_VIEW.camera = new THREE.PerspectiveCamera(70, camera.aspect, camera.near, camera.far);
+  SOCIAL_VIEW.actor = makePlayerMesh(currentUser?.username || 'You', false, 'ally', mySkin || 'default');
+  if (mode === 'free' && (activeSlot === 'primary' || activeSlot === 'secondary')) armRemoteMesh(SOCIAL_VIEW.actor, currentWeapon?.id);
+  scene.add(SOCIAL_VIEW.actor);
+  const yaw = euler.y;
+  SOCIAL_VIEW.camera.position.copy(camera.position).add(new THREE.Vector3(-Math.sin(yaw) * 4, 1.2, -Math.cos(yaw) * 4));
+  SOCIAL_VIEW.camera.lookAt(camera.position.clone().add(new THREE.Vector3(0, -0.5, 0)));
+  SOCIAL_VIEW.look.setFromQuaternion(SOCIAL_VIEW.camera.quaternion, 'YXZ');
+  return true;
+}
+function openEmotes() {
+  if (SOCIAL_VIEW.mode === 'picker') { stopSocialView(); requestPointerLockSafe(); return; }
+  if (!beginSocialView('picker')) return;
+  if (!SOCIAL_VIEW.menu) {
+    const menu = document.createElement('div');
+    menu.id = 'emote-picker';
+    menu.style.cssText = 'position:fixed;left:50%;bottom:16%;transform:translateX(-50%);width:min(420px,90vw);z-index:9950;background:rgba(12,15,20,.94);border:1px solid #657780;border-radius:8px;padding:14px;color:white;font-family:inherit;';
+    menu.innerHTML = '<div style="display:flex;justify-content:space-between;margin-bottom:12px"><strong>EMOTES</strong><button type="button" data-close aria-label="Close emotes">&#215;</button></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">' + EMOTES.map((e, i) => `<button type="button" data-emote="${e.id}" style="min-height:48px;background:#263039;color:white;border:1px solid #596b73;border-radius:4px;font:inherit">${i + 1}. ${e.name}</button>`).join('') + '</div>';
+    menu.querySelector('[data-close]').addEventListener('click', () => { stopSocialView(); requestPointerLockSafe(); });
+    menu.querySelectorAll('[data-emote]').forEach(b => b.addEventListener('click', () => startEmote(b.dataset.emote)));
+    document.body.appendChild(menu);
+    SOCIAL_VIEW.menu = menu;
+  }
+  SOCIAL_VIEW.menu.style.display = 'block';
+  document.exitPointerLock?.();
+}
+function startEmote(id) {
+  const def = EMOTES.find(e => e.id === id);
+  if (!def || !beginSocialView('emote')) return;
+  SOCIAL_VIEW.emote = id;
+  SOCIAL_VIEW.started = Date.now();
+  requestPointerLockSafe();
+}
+function restoreEmotePose(mesh) {
+  if (!mesh?._emotePose) return;
+  for (const [joint, pos, rot] of mesh._emotePose) { joint.position.copy(pos); joint.rotation.copy(rot); }
+  mesh._emotePose = null;
+  if (mesh._gun) mesh._gun.visible = true;
+  if (mesh._emoteL) mesh._emoteL.visible = false;
+}
+function poseEmote(mesh, id, seconds) {
+  const r = mesh?._rig;
+  if (!r || !EMOTES.some(e => e.id === id)) return;
+  const joints = ['torso', 'head', 'pelvis', 'armL', 'armR', 'elbowL', 'elbowR', 'wristL', 'wristR', 'legL', 'legR', 'kneeL', 'kneeR', 'footL', 'footR'];
+  mesh._emotePose = joints.map(k => [r[k], r[k].position.clone(), r[k].rotation.clone()]);
+  if (mesh._gun) mesh._gun.visible = false;
+  const beat = Math.sin(seconds * 9), lift = Math.sin(seconds * 9 + Math.PI);
+  r.torso.rotation.set(0, 0, 0);
+  r.armL.rotation.set(0, 0, 0); r.armR.rotation.set(0, 0, 0);
+  r.elbowL.rotation.x = r.elbowR.rotation.x = -0.2;
+  if (id === 'take_l') {
+    r.armL.rotation.set(-2.1, 0, 0.65); r.elbowL.rotation.x = -0.8;
+    r.wristL.rotation.set(2.9, 0, -0.65);
+    r.armR.rotation.z = -0.45; r.elbowR.rotation.x = -1;
+    r.legL.rotation.x = Math.max(0, beat) * -0.95;
+    r.legR.rotation.x = Math.max(0, lift) * -0.95;
+    r.legL.rotation.z = 0.18 + Math.max(0, beat) * 0.55;
+    r.legR.rotation.z = -0.18 - Math.max(0, lift) * 0.55;
+    r.kneeL.rotation.x = Math.max(0, beat) * 1.1; r.kneeR.rotation.x = Math.max(0, lift) * 1.1;
+    r.footL.rotation.x = -r.legL.rotation.x - r.kneeL.rotation.x;
+    r.footR.rotation.x = -r.legR.rotation.x - r.kneeR.rotation.x;
+    r.torso.rotation.z = beat * 0.12;
+    if (!mesh._emoteL) {
+      const prop = new THREE.Group();
+      const material = new THREE.MeshLambertMaterial({ color: r.handL.material.color });
+      for (const [w, h, x, y] of [[0.045, 0.2, 0, 0.08], [0.14, 0.045, 0.06, 0]]) {
+        const finger = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.045), material);
+        finger.position.set(x, y, 0.07); prop.add(finger);
+      }
+      r.handL.add(prop); mesh._emoteL = prop;
+    }
+    mesh._emoteL.visible = true;
+  } else if (id === 'wave') {
+    r.armR.rotation.z = -2.4; r.elbowR.rotation.x = -0.7;
+    r.wristR.rotation.z = beat * 0.6;
+  } else if (id === 'victory') {
+    r.armL.rotation.z = 2.55; r.armR.rotation.z = -2.55;
+    r.elbowL.rotation.x = r.elbowR.rotation.x = -0.4;
+    r.torso.position.y += Math.abs(beat) * 0.08;
+  } else {
+    r.legL.rotation.x = beat * 0.7; r.legR.rotation.x = -beat * 0.7;
+    r.kneeL.rotation.x = Math.max(0, -beat) * 0.7; r.kneeR.rotation.x = Math.max(0, beat) * 0.7;
+    r.armL.rotation.x = -beat * 0.9; r.armR.rotation.x = beat * 0.9;
+    r.torso.rotation.y = beat * 0.25;
+  }
+}
+function updateSocialView(dt) {
+  if (!SOCIAL_VIEW.mode) return;
+  if (!gameStarted || isDead || countdownActive || match?.over || KILLCAM.active || THEATER.active || isLoadoutOpen() || anyDialogOpen()) { stopSocialView(); return; }
+  const c = SOCIAL_VIEW.camera, actor = SOCIAL_VIEW.actor;
+  if (c.aspect !== camera.aspect) { c.aspect = camera.aspect; c.updateProjectionMatrix(); }
+  restoreEmotePose(actor);
+  actor.position.copy(camera.position); actor.position.y -= window._crouchEye ?? 1.65;
+  actor.rotation.y = euler.y + Math.PI;
+  animateCharacterMesh(actor, dt, 0);
+  if (SOCIAL_VIEW.mode === 'free') {
+    SOCIAL_VIEW.look.y += ((keys.ArrowLeft ? 1 : 0) - (keys.ArrowRight ? 1 : 0)) * dt * 1.8;
+    SOCIAL_VIEW.look.x = THREE.MathUtils.clamp(SOCIAL_VIEW.look.x + ((keys.ArrowUp ? 1 : 0) - (keys.ArrowDown ? 1 : 0)) * dt * 1.8, -1.5, 1.5);
+    c.quaternion.setFromEuler(SOCIAL_VIEW.look);
+    const v = new THREE.Vector3((keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0), 0, (keys.KeyS ? 1 : 0) - (keys.KeyW ? 1 : 0));
+    v.applyQuaternion(c.quaternion);
+    v.y += (keys.Space ? 1 : 0) - (keys.ControlLeft || keys.ControlRight ? 1 : 0);
+    if (v.lengthSq()) c.position.addScaledVector(v.normalize(), dt * (keys.ShiftLeft || keys.ShiftRight ? 22 : 9));
+  } else {
+    const elapsed = Date.now() - SOCIAL_VIEW.started;
+    if (SOCIAL_VIEW.emote && elapsed >= EMOTES.find(e => e.id === SOCIAL_VIEW.emote).duration) { stopSocialView(); return; }
+    if (SOCIAL_VIEW.emote) poseEmote(actor, SOCIAL_VIEW.emote, elapsed / 1000);
+    const yaw = euler.y;
+    const target = camera.position.clone().add(new THREE.Vector3(0, -0.55, 0));
+    const offset = new THREE.Vector3(-Math.sin(yaw) * 4, 1, -Math.cos(yaw) * 4);
+    const ray = new THREE.Ray(target, offset.clone().normalize());
+    let distance = offset.length();
+    for (const box of wallColliders) {
+      const hit = ray.intersectBox(box, new THREE.Vector3());
+      if (hit) distance = Math.min(distance, Math.max(0.3, hit.distanceTo(target) - 0.25));
+    }
+    offset.setLength(distance);
+    c.position.copy(target).add(offset); c.lookAt(target);
+  }
+}
+window.addEventListener('keydown', e => {
+  if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName) || !gameStarted) return;
+  if (e.code === 'Digit0' || e.code === 'KeyQ') {
+    e.preventDefault(); e.stopImmediatePropagation();
+    if (e.repeat) return;
+    if (e.code === 'KeyQ') openEmotes();
+    else if (SOCIAL_VIEW.mode) stopSocialView();
+    else if (beginSocialView('free')) requestPointerLockSafe();
+    return;
+  }
+  if (!SOCIAL_VIEW.mode) return;
+  if (e.code === 'Escape') { stopSocialView(); return; }
+  if (SOCIAL_VIEW.mode === 'picker' && /^Digit[1-4]$/.test(e.code)) startEmote(EMOTES[+e.code.slice(5) - 1].id);
+  else if (SOCIAL_VIEW.mode === 'emote' && ['KeyW','KeyA','KeyS','KeyD','Space','KeyE','KeyB','KeyR','Digit1','Digit2','Digit3','Digit4'].includes(e.code)) { stopSocialView(); return; }
+  keys[e.code] = true;
+  e.preventDefault(); e.stopImmediatePropagation();
+}, true);
 document.addEventListener('keydown', e => {
   keys[e.code] = true;
   if (!gameStarted) return;
@@ -33574,7 +33744,7 @@ document.addEventListener('keydown', e => {
   // 🔪 B — quick melee. Also on the middle mouse button, below.
   if (e.code === 'KeyB' && !e.repeat && !isDead
       && document.activeElement?.tagName !== 'INPUT') { e.preventDefault(); quickMelee(); return; }
-  if (e.code==='KeyQ' || e.code==='Digit1' || e.code==='Digit2' || e.code==='Digit3' || e.code==='Digit4') {
+  if (e.code==='Digit1' || e.code==='Digit2' || e.code==='Digit3' || e.code==='Digit4') {
     // Choosing a slot yourself cancels a quick-melee return — you meant it.
     _quickMeleeReturn = null;
     if (!loadoutReady()) return;
@@ -33583,7 +33753,6 @@ document.addEventListener('keydown', e => {
       equipActiveSlot();
       return;
     }
-    if (e.code==='KeyQ') cycleActiveSlot();
     if (e.code==='Digit1') activeSlot = 'primary';
     if (e.code==='Digit2' && !fixedKitModeActive()) activeSlot = 'secondary';
     if (e.code==='Digit3' && !fixedKitModeActive()) activeSlot = 'melee';
@@ -33601,6 +33770,10 @@ document.addEventListener('keyup', e => {
   }
 });
 document.addEventListener('mousedown', e => {
+  if (SOCIAL_VIEW.mode) {
+    if (SOCIAL_VIEW.mode === 'emote') stopSocialView();
+    return;
+  }
   // Spectator: any click cycles to next ally
   // Middle mouse is quick melee, which is where most shooters put it.
   // With the cursor free, a click on UI (a loadout card, ⚙) is not a shot: only the game view, or
@@ -36183,7 +36356,18 @@ function updateGrappleRide(dt) {
   return true;
 }
 
-function updateMovement(dt) {
+function updateMovement(dt, socialBlocked = false) {
+  if (SOCIAL_VIEW.mode && !socialBlocked) {
+    const held = { ...keys };
+    for (const k of Object.keys(keys)) keys[k] = false;
+    const joystick = joyDir;
+    const slide = window._mobileSlide, crouch = window._mobileCrouch;
+    joyDir = { x: 0, y: 0 };
+    window._mobileSlide = window._mobileCrouch = false;
+    try { updateMovement(dt, true); }
+    finally { Object.assign(keys, held); joyDir = joystick; window._mobileSlide = slide; window._mobileCrouch = crouch; }
+    return;
+  }
   if (isDead) return;
   if (match && !match.roundActive && countdownActive) return; // frozen only during countdown
   if (pilotedVehicle) return; // piloting handles its own movement
@@ -36952,6 +37136,7 @@ function activateMeleeAbility() {
 }
 
 function activateAbility() {
+  if (SOCIAL_VIEW.mode) return;
   const w = currentWeapon;
   // Whatever the player has equipped for this weapon — which may be a bought
   // ability rather than the one baked into the roster entry.
@@ -37909,6 +38094,7 @@ function startCycleBurst(wStats) {
 }
 
 function tryShoot() {
+  if (SOCIAL_VIEW.mode) return;
   if ((!pointerLocked && !gameStarted) || isDead) return;
   if (reloading) {
     const pool = weaponAmmo[currentWeaponIdx];
@@ -38156,6 +38342,7 @@ function tryUseActive() {
 }
 
 function tryMelee() {
+  if (SOCIAL_VIEW.mode) return;
   if (!gameStarted || isDead) return;
   if (countdownActive) return;
   const item = equippedMeleeItem();
@@ -49017,6 +49204,8 @@ socket.on('posUpdate', positions => {
     if (players[pid]) {
       players[pid].x = pos.x; players[pid].y = pos.y; players[pid].z = pos.z;
       players[pid].rotY = pos.rotY; players[pid].rotX = pos.rotX;
+      if (players[pid].emote !== pos.emote) players[pid]._emoteStarted = Date.now();
+      players[pid].emote = pos.emote || null;
     }
     const mesh = remoteMeshes[pid];
     if (!mesh) continue;
@@ -49036,7 +49225,8 @@ socket.on('posUpdate', positions => {
 
 setInterval(()=>{
   if (!myId || isDead) return;
-  socket.emit('move',{ x:camera.position.x, y:camera.position.y, z:camera.position.z, rotY:euler.y, rotX:euler.x });
+  socket.emit('move',{ x:camera.position.x, y:camera.position.y, z:camera.position.z, rotY:euler.y, rotX:euler.x,
+    emote: SOCIAL_VIEW.mode === 'emote' ? SOCIAL_VIEW.emote : null });
 },50);
 
 // Auto-fire now polls every render frame inside loop() — see the 'auto-fire'
@@ -54101,7 +54291,11 @@ function animateCharacters(dt) {
         if (horiz < 60) aimPitch = -Math.atan2(dyp, Math.max(0.5, horiz));
       }
     }
+    restoreEmotePose(mesh);
     animateCharacterMesh(mesh, dt, crouchTarget, slideTarget, jumpTarget, aimPitch, reloadT);
+    const p = players[id];
+    const emote = EMOTES.find(e => e.id === p?.emote);
+    if (!b && emote && Date.now() - p._emoteStarted < emote.duration) poseEmote(mesh, emote.id, (Date.now() - p._emoteStarted) / 1000);
   }
 }
 
@@ -54320,7 +54514,13 @@ function loop() {
   }
   // While the theater is active, theaterTick() owns rendering (it runs even when
   // loop() isn't, e.g. opened from the cold menu). Don't double-render here.
-  if (!THEATER.active) renderer.render(scene, camera);
+  safeLoopStep('social-camera', () => updateSocialView(dt));
+  if (!THEATER.active) {
+    const hidden = SOCIAL_VIEW.mode ? camera.children.filter(o => o.visible && !(o instanceof THREE.Light)) : [];
+    hidden.forEach(o => { o.visible = false; });
+    try { renderer.render(scene, SOCIAL_VIEW.mode ? SOCIAL_VIEW.camera : camera); }
+    finally { hidden.forEach(o => { o.visible = true; }); }
+  }
 }
 
 // ── Loadout screen ─────────────────────────────────────────────────────────
@@ -55979,6 +56179,7 @@ function afterDeath(ms, fn) {
 // Everything a finished match (or Lobby 13) leaves behind that the next start must not
 // inherit. Shared by the mode menu and the end-of-match buttons so they can't drift apart.
 function teardownMatchWorld() {
+  stopSocialView();
   matchEpoch++;
   // Tell the server too (#46). This only ever cleared the bots here, so the server kept
   // them — and moved them into the next match, where they stood frozen for everyone. It

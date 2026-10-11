@@ -2158,7 +2158,8 @@ setInterval(() => {
   const byMatch = {};
   for (const [id, p] of Object.entries(players)) {
     if (!byMatch[p.matchId]) byMatch[p.matchId] = {};
-    byMatch[p.matchId][id] = { x: p.x, y: p.y, z: p.z, rotY: p.rotY, rotX: p.rotX };
+    byMatch[p.matchId][id] = { x: p.x, y: p.y, z: p.z, rotY: p.rotY, rotX: p.rotX,
+      emote: !p.dead && Date.now() < p.emoteUntil ? p.emote : null };
   }
   for (const p of Object.values(players)) {
     if (p.isBot) continue;
@@ -2289,6 +2290,10 @@ io.on('connection', (socket) => {
     if (!p || p.dead) return;
     p.x = data.x; p.y = data.y; p.z = data.z;
     p.rotY = data.rotY; p.rotX = data.rotX;
+    const emoteDurations = { take_l: 6000, wave: 3500, victory: 4500, shuffle: 6000 };
+    const emote = Object.prototype.hasOwnProperty.call(emoteDurations, data.emote) ? data.emote : null;
+    if (emote !== p.emote) p.emoteUntil = emote ? Date.now() + emoteDurations[emote] : 0;
+    p.emote = emote;
   });
 
   socket.on('shoot', (data) => {

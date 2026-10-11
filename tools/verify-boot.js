@@ -506,6 +506,43 @@ if (ok && process.argv.includes('--combat-feedback')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+if (ok && process.argv.includes('--emotes')) {
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [], mesh = makePlayerMesh('Emote test', false, 'ally', 'default');
+    try {
+      if (keyBoundTo('emotes') !== 'KeyQ' || keyBoundTo('freecam') !== 'Digit0') issues.push('default controls wrong');
+      for (const e of EMOTES) {
+        animateCharacterMesh(mesh, .016, 0);
+        const before = mesh._rig.armL.rotation.clone();
+        poseEmote(mesh, e.id, .37);
+        if (!mesh._emotePose || mesh._rig.armL.rotation.equals(before)) issues.push(e.id + ': no distinct pose');
+        restoreEmotePose(mesh);
+        if (!mesh._rig.armL.rotation.equals(before) || mesh._emoteL?.visible) issues.push(e.id + ': restoration failed');
+      }
+    } finally { disposeBody(mesh); }
+    console.log('emote checks: Q/0 bindings, four distinct joint poses, temporary fingers and pose restoration');
+    return issues;
+  })()`);
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
+if (ok && process.argv.includes('--emotes')) {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  const handler = src.match(/socket\.on\('move', \(data\) => \{([\s\S]*?)\n  \}\);/);
+  if (!handler) throw new Error('move handler missing');
+  const player = { dead: false }, box = { players: { tester: player }, socket: { id: 'tester' }, Date };
+  const move = vm.runInNewContext('(data) => {' + handler[1] + '}', box);
+  move({ x: 1, y: 1.65, z: 2, rotY: 0, rotX: 0, emote: 'take_l' });
+  const until = player.emoteUntil;
+  move({ emote: 'take_l' });
+  if (player.emote !== 'take_l' || until !== player.emoteUntil) throw new Error('emote duration resets every position packet');
+  move({ emote: '__proto__' });
+  if (player.emote !== null || player.emoteUntil !== 0) throw new Error('invalid emote accepted');
+  move({ emote: 'wave' }); player.dead = true; move({ emote: 'shuffle' });
+  if (player.emote !== 'wave') throw new Error('dead player can start emotes');
+  console.log('emote relay checks: valid IDs, fixed duration, cancellation and dead-player guard');
+}
+
 if (ok && process.env.MAP_REVIEW_DIR) {
   fs.mkdirSync(process.env.MAP_REVIEW_DIR, { recursive: true });
   for (const name of ['forest', 'desert', 'tundra', 'refinery', 'space', 'volcano', 'titanic', 'carrier', 'pearl_harbor']) {
