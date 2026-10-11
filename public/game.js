@@ -26529,6 +26529,25 @@ const WEAPON_SKINS = [
   { id: 'meteor',   name: 'Meteor',         body: 0x2a201a, accent: 0xff5a1f, flag: null, fx: 'rock',       sw: ['#2a201a', '#ff5a1f'] },
   { id: 'matrix',   name: 'Matrix',         body: 0x050805, accent: 0x00ff66, flag: null, fx: 'data',       sw: ['#050805', '#00ff66'] },
   { id: 'smog',     name: 'Smog',           body: 0x383a3d, accent: 0x777b80, flag: null, fx: 'smoke',      sw: ['#383a3d', '#777b80'] },
+  // ── 🌊 Moving & patterned wraps, batch two ──
+  { id: 'magma',     name: 'Magma Flow',    body: 0x1a0a06, accent: 0xff5a10, flag: null, sw: ['#1a0a06', '#ff5a10'] },
+  { id: 'nebula',    name: 'Nebula',        body: 0x070718, accent: 0x8a5aff, flag: null, sw: ['#070718', '#8a5aff'] },
+  { id: 'storm',     name: 'Storm Front',   body: 0x141a26, accent: 0x9fd8ff, flag: null, sw: ['#141a26', '#9fd8ff'] },
+  { id: 'dragon',    name: 'Dragon Scale',  body: 0x0a2416, accent: 0x7fe0a0, flag: null, sw: ['#0a2416', '#7fe0a0'] },
+  { id: 'rainbow',   name: 'Rainbow',       body: 0xff4d4d, accent: 0x4d9dff, flag: null, sw: ['#ff4d4d', '#4d9dff'] },
+  { id: 'holo',      name: 'Hologram',      body: 0x9ad7ff, accent: 0xffb6f0, flag: null, sw: ['#9ad7ff', '#ffb6f0'] },
+  { id: 'checkered', name: 'Checkered',     body: 0x101010, accent: 0xf2f2f2, flag: null, sw: ['#101010', '#f2f2f2'] },
+  { id: 'hexarmor',  name: 'Hex Armor',     body: 0x0e141a, accent: 0x3ad6ff, flag: null, sw: ['#0e141a', '#3ad6ff'] },
+  { id: 'circuit',   name: 'Circuit Board', body: 0x0b3d1e, accent: 0xd8b04a, flag: null, sw: ['#0b3d1e', '#d8b04a'] },
+  { id: 'digicam',   name: 'Digital Camo',  body: 0x4b5a3c, accent: 0x2a3424, flag: null, sw: ['#4b5a3c', '#2a3424'] },
+  { id: 'tiger',     name: 'Tiger Stripe',  body: 0xe8801a, accent: 0x16100a, flag: null, sw: ['#e8801a', '#16100a'] },
+  { id: 'dazzle',    name: 'Razzle Dazzle', body: 0x0e0e10, accent: 0xe8e8e8, flag: null, sw: ['#0e0e10', '#e8e8e8'] },
+  { id: 'glitch',    name: 'Glitch',        body: 0x0a0a14, accent: 0xff2ad4, flag: null, sw: ['#0a0a14', '#ff2ad4'] },
+  { id: 'skulls',    name: 'Skulls',        body: 0x100608, accent: 0xe9dfc8, flag: null, sw: ['#100608', '#e9dfc8'] },
+  { id: 'hearts',    name: 'Hearts',        body: 0x8a1038, accent: 0xff6b9a, flag: null, sw: ['#8a1038', '#ff6b9a'] },
+  { id: 'superstar', name: 'Superstar',     body: 0x14206a, accent: 0xffd23a, flag: null, sw: ['#14206a', '#ffd23a'] },
+  { id: 'bubbles',   name: 'Bubbles',       body: 0x0a5a7a, accent: 0xbff6ff, flag: null, sw: ['#0a5a7a', '#bff6ff'] },
+  { id: 'error',     name: 'Error',         body: 0x040000, accent: 0xff2a2a, flag: null, sw: ['#040000', '#ff2a2a'] },
 ];
 const WEAPON_SKINS_BY_ID = Object.fromEntries(WEAPON_SKINS.map(s => [s.id, s]));
 let selectedWeaponSkin = 'default';
@@ -26706,6 +26725,9 @@ const _wsCache = new Map(), _wsBase = new WeakMap();
 const _wsScrollers = [];   // textures of wraps that move, and how fast (UV units a second)
 function _wsRng(seed) { let h = 2166136261; for (let i = 0; i < seed.length; i++) { h ^= seed.charCodeAt(i); h = Math.imul(h, 16777619); } return () => { h += 0x6D2B79F5; let t = h; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 const _wsCss = (n) => '#' + (n >>> 0).toString(16).padStart(6, '0');
+// Draw the same thing nine times, one tile apart each way, so whatever pokes past an edge comes back in on the other
+// side and the texture repeats without a seam.
+function _wsTile(g, N, fn) { for (const ox of [-N, 0, N]) for (const oy of [-N, 0, N]) { g.save(); g.translate(ox, oy); fn(); g.restore(); } }
 const WS_PATTERNS = {
   camo(g, N, c, r) {   // blotches of the other colours over the first
     g.fillStyle = c[0]; g.fillRect(0, 0, N, N);
@@ -26789,6 +26811,244 @@ const WS_PATTERNS = {
     }
     g.globalAlpha = 1;
   },
+  // ── second batch ──
+  lava(g, N, c, r) {   // rivers of magma through cooled crust. c[1] is the light; c[2] is the heat bleeding into the rock
+    g.fillStyle = c[0]; g.fillRect(0, 0, N, N); g.lineCap = 'butt'; g.lineJoin = 'round';   // butt ends: the copy a tile over meets this one square, no doubled glow at the seam
+    const rivers = [];
+    for (let k = 0; k < 5; k++) rivers.push({ y: (k + 0.5) * N / 5, ph: r() * 6.283, am: 8 + r() * 14, f: 1 + (r() * 2 | 0), w: 6 + r() * 8 });
+    _wsTile(g, N, () => {
+      for (const v of rivers) {
+        const path = () => { g.beginPath(); for (let x = 0; x <= N; x += 4) { const y = v.y + Math.sin(x / N * 6.283 * v.f + v.ph) * v.am; x ? g.lineTo(x, y) : g.moveTo(x, y); } };
+        g.globalAlpha = 0.5; g.strokeStyle = c[2] || c[1]; g.lineWidth = v.w + 10; path(); g.stroke();
+        g.globalAlpha = 1; g.strokeStyle = c[1]; g.lineWidth = v.w; path(); g.stroke();
+        g.strokeStyle = 'rgba(255,240,190,0.6)'; g.lineWidth = Math.max(1.5, v.w * 0.35); path(); g.stroke();
+      }
+    });
+  },
+  galaxy(g, N, c, r) {   // c[0] the void, c[1] the stars (they glow), c[2...] the clouds
+    g.fillStyle = c[0]; g.fillRect(0, 0, N, N);
+    const clouds = [], stars = [], tints = Math.max(1, c.length - 2);
+    for (let i = 0; i < 7; i++) clouds.push({ x: r() * N, y: r() * N, R: 50 + r() * 60, col: c[2 + i % tints] || c[0] });
+    for (let i = 0; i < 80; i++) stars.push({ x: r() * N, y: r() * N, s: 0.8 + r() * 1.8, a: 0.4 + r() * 0.6 });
+    const sparks = []; for (let i = 0; i < 6; i++) sparks.push({ x: r() * N, y: r() * N, s: 5 + r() * 6 });
+    _wsTile(g, N, () => {
+      for (const cl of clouds) {
+        const gr = g.createRadialGradient(cl.x, cl.y, 0, cl.x, cl.y, cl.R); gr.addColorStop(0, cl.col); gr.addColorStop(1, 'rgba(0,0,0,0)');
+        g.globalAlpha = 0.7; g.fillStyle = gr; g.fillRect(cl.x - cl.R, cl.y - cl.R, cl.R * 2, cl.R * 2);
+      }
+      g.fillStyle = c[1];
+      for (const st of stars) { g.globalAlpha = st.a; g.beginPath(); g.arc(st.x, st.y, st.s, 0, 6.3); g.fill(); }
+      g.globalAlpha = 1;
+      for (const sp of sparks) { g.fillRect(sp.x - sp.s, sp.y - 0.8, sp.s * 2, 1.6); g.fillRect(sp.x - 0.8, sp.y - sp.s, 1.6, sp.s * 2); }
+    });
+    g.globalAlpha = 1;
+  },
+  lightning(g, N, c, r) {   // dark cloud, bolts of c[1] with a halo; each bolt ends where it began so the seam hides
+    const gr = g.createLinearGradient(0, 0, N, 0); gr.addColorStop(0, c[0]); gr.addColorStop(0.5, c[2] || c[0]); gr.addColorStop(1, c[0]);
+    g.fillStyle = gr; g.fillRect(0, 0, N, N); g.lineCap = 'round'; g.lineJoin = 'round';
+    const bolts = [];
+    for (let k = 0; k < 5; k++) {
+      const n = 14, x0 = r() * N, pts = [];
+      let x = x0;
+      for (let i = 0; i <= n; i++) { pts.push([x, i / n * N]); x += (r() - 0.5) * 46; }
+      const drift = pts[n][0] - x0;
+      for (let i = 0; i <= n; i++) pts[i][0] -= drift * i / n;
+      const forks = [];
+      for (let j = 0; j < 2; j++) { const at = pts[2 + (r() * (n - 4) | 0)]; let fx = at[0], fy = at[1]; const f = [[fx, fy]]; const dir = r() < 0.5 ? -1 : 1; for (let i = 0; i < 3; i++) { fx += dir * (8 + r() * 14); fy += 10 + r() * 14; f.push([fx, fy]); } forks.push(f); }
+      bolts.push({ pts, forks });
+    }
+    _wsTile(g, N, () => {
+      const stroke = (pts) => { g.beginPath(); pts.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y)); g.stroke(); };
+      for (const b of bolts) {
+        g.globalAlpha = 0.35; g.strokeStyle = c[1]; g.lineWidth = 11; stroke(b.pts);
+        g.globalAlpha = 1; g.lineWidth = 3.4; stroke(b.pts); for (const f of b.forks) { g.lineWidth = 2; stroke(f); }
+        g.strokeStyle = 'rgba(255,255,255,0.9)'; g.lineWidth = 1.2; stroke(b.pts);
+      }
+    });
+  },
+  scales(g, N, c, r) {   // overlapping scales, each lit along its upper rim
+    g.fillStyle = c[0]; g.fillRect(0, 0, N, N);
+    const W = 32, H = 16, R = 19;
+    for (let row = -1; row <= N / H; row++) for (let col = -1; col <= N / W; col++) {
+      const cx = col * W + ((row & 1) ? W / 2 : 0) + W / 2, cy = row * H + H / 2;
+      const gr = g.createRadialGradient(cx, cy + 5, 2, cx, cy, R);
+      gr.addColorStop(0, c[2] || c[1]); gr.addColorStop(1, c[0]);
+      g.fillStyle = gr; g.beginPath(); g.arc(cx, cy, R, 0, 6.3); g.fill();
+      g.strokeStyle = c[1]; g.lineWidth = 2; g.beginPath(); g.arc(cx, cy, R - 1, 3.5, 5.9); g.stroke();
+    }
+  },
+  spectrum(g, N, c, r, look) {   // a whole turn of hue along the diagonal, so the repeat has no seam. look.steps: bands, not a blend
+    const sat = look.sat || 100, lit = look.lit || 55, n = look.steps || N / 2;
+    for (let i = 0; i < n; i++) {
+      const s0 = i * N / n, s1 = (i + 1) * N / n + 1;
+      g.fillStyle = `hsl(${Math.round(i / n * 360)},${sat}%,${lit}%)`;
+      g.beginPath(); g.moveTo(s0, 0); g.lineTo(s1, 0); g.lineTo(0, s1); g.lineTo(0, s0); g.closePath(); g.fill();
+      g.beginPath(); g.moveTo(N, s0); g.lineTo(N, s1); g.lineTo(s1, N); g.lineTo(s0, N); g.closePath(); g.fill();
+    }
+  },
+  checker(g, N, c, r) {   // the chequered flag
+    const S = N / 8;
+    for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) { g.fillStyle = (x + y) & 1 ? c[1] : c[0]; g.fillRect(x * S, y * S, S, S); }
+  },
+  hex(g, N, c, r) {   // honeycomb plate: lit seams, a few cells shaded darker
+    g.fillStyle = c[0]; g.fillRect(0, 0, N, N);
+    const cols = 4, rows = 6, W = N / cols, H = N / rows, ry = H / 1.5, shade = [];
+    for (let i = 0; i < cols * rows; i++) shade.push(r() < 0.3);
+    for (let row = -1; row <= rows; row++) for (let col = -1; col <= cols; col++) {
+      const cx = col * W + (((row % 2) + 2) % 2) * W / 2 + W / 2, cy = row * H + H / 2;
+      const pts = [[cx, cy - ry], [cx + W / 2, cy - ry / 2], [cx + W / 2, cy + ry / 2], [cx, cy + ry], [cx - W / 2, cy + ry / 2], [cx - W / 2, cy - ry / 2]];
+      g.beginPath(); pts.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y)); g.closePath();
+      if (shade[(((row % rows) + rows) % rows) * cols + (((col % cols) + cols) % cols)]) { g.fillStyle = c[2] || c[0]; g.fill(); }
+      g.strokeStyle = c[1]; g.lineWidth = 3; g.stroke();
+    }
+  },
+  circuit(g, N, c, r) {   // printed traces: straight runs, 45-degree jogs, a round pad at each end, a few chips
+    g.fillStyle = c[0]; g.fillRect(0, 0, N, N);
+    const S = 32, runs = [], chips = [];
+    for (let i = 0; i < 10; i++) {
+      let x = (r() * 8 | 0) * S, y = (r() * 8 | 0) * S; const pts = [[x, y]];
+      for (let j = 0; j < 4; j++) {
+        const len = S * (1 + (r() * 3 | 0)) * (r() < 0.5 ? 1 : -1);
+        if (r() < 0.5) x += len; else y += len;
+        pts.push([x, y]);
+        if (r() < 0.4) { const d = S / 2 * (r() < 0.5 ? 1 : -1); x += d; y += d; pts.push([x, y]); }
+      }
+      runs.push(pts);
+    }
+    for (let i = 0; i < 4; i++) chips.push({ x: (r() * 7 | 0) * S + 4, y: (r() * 7 | 0) * S + 4, w: S + 20, h: S - 6 });
+    _wsTile(g, N, () => {
+      for (const ch of chips) { g.fillStyle = c[2] || c[0]; g.fillRect(ch.x, ch.y, ch.w, ch.h); g.strokeStyle = c[1]; g.lineWidth = 2; g.strokeRect(ch.x, ch.y, ch.w, ch.h); for (let k = 0; k < 4; k++) { g.fillStyle = c[1]; g.fillRect(ch.x + 6 + k * 12, ch.y - 4, 5, 4); g.fillRect(ch.x + 6 + k * 12, ch.y + ch.h, 5, 4); } }
+      g.strokeStyle = c[1]; g.fillStyle = c[1]; g.lineWidth = 5; g.lineCap = 'round'; g.lineJoin = 'round';
+      for (const pts of runs) {
+        g.beginPath(); pts.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y)); g.stroke();
+        for (const q of [pts[0], pts[pts.length - 1]]) { g.beginPath(); g.arc(q[0], q[1], 8.5, 0, 6.3); g.fill(); g.fillStyle = c[0]; g.beginPath(); g.arc(q[0], q[1], 3, 0, 6.3); g.fill(); g.fillStyle = c[1]; }
+      }
+    });
+  },
+  digicam(g, N, c, r) {   // square blocks that clump: reads as camo, not as noise
+    const S = 16, n = N / S, cell = [];
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+      const left = x ? cell[y * n + x - 1] : -1, up = y ? cell[(y - 1) * n + x] : -1, roll = r();
+      cell.push(roll < 0.38 && left >= 0 ? left : roll < 0.7 && up >= 0 ? up : (r() * c.length) | 0);
+    }
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) { g.fillStyle = c[cell[y * n + x]]; g.fillRect(x * S, y * S, S, S); }
+  },
+  tiger(g, N, c, r) {   // wavy black stripes that swell and thin, over a coat with pale patches
+    g.fillStyle = c[0]; g.fillRect(0, 0, N, N);
+    const patches = [], bars = [];
+    for (let i = 0; i < 9; i++) patches.push({ x: r() * N, y: r() * N, R: 18 + r() * 24 });
+    for (let k = 0; k < 7; k++) bars.push({ x: (k + 0.2 + r() * 0.6) * N / 7, f: 1 + (r() * 2 | 0), ph: r() * 6.283, am: 8 + r() * 12, g2: 1 + (r() * 3 | 0), ph2: r() * 6.283 });
+    _wsTile(g, N, () => {
+      g.fillStyle = c[2] || c[0]; g.globalAlpha = 0.5;
+      for (const p of patches) { g.beginPath(); g.ellipse(p.x, p.y, p.R * 1.4, p.R * 0.7, 0.6, 0, 6.3); g.fill(); }
+      g.globalAlpha = 1; g.fillStyle = c[1];
+      for (const b of bars) {
+        const L = [], R = [];
+        for (let y = -8; y <= N + 8; y += 8) {
+          const cx = b.x + Math.sin(y / N * 6.283 * b.f + b.ph) * b.am, w = 9 + 7 * Math.sin(y / N * 6.283 * b.g2 + b.ph2);
+          L.push([cx - w / 2, y]); R.push([cx + w / 2, y]);
+        }
+        g.beginPath(); L.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y)); R.reverse().forEach(([x, y]) => g.lineTo(x, y)); g.closePath(); g.fill();
+      }
+    });
+  },
+  dazzle(g, N, c, r) {   // WW1 dazzle paint: bold stripes, a different angle in every block, built to confuse the eye
+    const B = N / 4;
+    for (let by = 0; by < 4; by++) for (let bx = 0; bx < 4; bx++) {
+      const ang = (r() * 4 | 0) * Math.PI / 4, w = 9 + (r() * 3 | 0) * 4, off = r() * w * 4;
+      g.save(); g.beginPath(); g.rect(bx * B, by * B, B, B); g.clip();
+      g.fillStyle = c[0]; g.fillRect(bx * B, by * B, B, B);
+      g.translate(bx * B + B / 2, by * B + B / 2); g.rotate(ang);
+      const pal = [c[0], c[1], c[0], c[2] || c[1]];
+      for (let i = -12, k = 0; i < 12; i++, k++) { g.fillStyle = pal[k & 3]; g.fillRect(-B, i * w + off % w - w * 6, B * 2, w); }
+      g.restore();
+    }
+  },
+  glitch(g, N, c, r) {   // torn scanlines, bars knocked sideways, a colour split
+    g.fillStyle = c[0]; g.fillRect(0, 0, N, N);
+    const bars = [];
+    for (let i = 0; i < 24; i++) bars.push({ x: r() * N, y: r() * N, w: 30 + r() * 150, h: 3 + r() * 16, col: i % 3 ? c[1] : (c[2] || c[1]), a: 0.55 + r() * 0.45 });
+    _wsTile(g, N, () => { for (const b of bars) { g.globalAlpha = b.a; g.fillStyle = b.col; g.fillRect(b.x, b.y, b.w, b.h); } });
+    g.globalAlpha = 0.25; g.fillStyle = '#000'; for (let y = 0; y < N; y += 4) g.fillRect(0, y, N, 1.5);
+    g.globalAlpha = 1;
+  },
+  skulls(g, N, c, r) {   // an eight-by-eight skull, stamped in staggered rows
+    g.fillStyle = c[0]; g.fillRect(0, 0, N, N);
+    const bmp = ['00111100', '01111110', '10011001', '10011001', '11100111', '01111110', '01011010', '00100100'], P = 3.4;
+    g.fillStyle = c[1];
+    _wsTile(g, N, () => {
+      for (let row = 0; row < 8; row++) for (let col = 0; col < 8; col++) {
+        const ox = col * 32 + (row & 1) * 16 + (32 - 8 * P) / 2, oy = row * 32 + (32 - 8 * P) / 2;
+        for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) if (bmp[y][x] === '1') g.fillRect(ox + x * P, oy + y * P, P + 0.4, P + 0.4);
+      }
+    });
+  },
+  hearts(g, N, c, r) {   // hearts in staggered rows
+    g.fillStyle = c[0]; g.fillRect(0, 0, N, N);
+    const s = 19;
+    _wsTile(g, N, () => {
+      for (let row = 0; row < 4; row++) for (let col = 0; col < 4; col++) {
+        const cx = col * 64 + (row & 1) * 32 + 32, cy = row * 64 + 32;
+        g.fillStyle = (row + col) & 1 ? (c[2] || c[1]) : c[1];
+        g.beginPath(); g.moveTo(cx, cy + s * 0.9);
+        g.bezierCurveTo(cx - s * 1.3, cy - s * 0.2, cx - s * 0.7, cy - s * 1.1, cx, cy - s * 0.4);
+        g.bezierCurveTo(cx + s * 0.7, cy - s * 1.1, cx + s * 1.3, cy - s * 0.2, cx, cy + s * 0.9);
+        g.fill();
+      }
+    });
+  },
+  stars(g, N, c, r) {   // five-pointed stars, staggered, with a speck of c[2] between them
+    g.fillStyle = c[0]; g.fillRect(0, 0, N, N);
+    _wsTile(g, N, () => {
+      for (let row = 0; row < 4; row++) for (let col = 0; col < 4; col++) {
+        const cx = col * 64 + (row & 1) * 32 + 32, cy = row * 64 + 32;
+        g.fillStyle = c[1]; g.beginPath();
+        for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i & 1 ? 8.5 : 21; g[i ? 'lineTo' : 'moveTo'](cx + Math.cos(a) * rr, cy + Math.sin(a) * rr); }
+        g.closePath(); g.fill();
+        g.fillStyle = c[2] || c[1]; g.beginPath(); g.arc(cx + 32, cy, 3, 0, 6.3); g.fill();
+      }
+    });
+  },
+  bubbles(g, N, c, r) {   // rising soap bubbles: a thin rim, a faint fill, a glint
+    g.fillStyle = c[0]; g.fillRect(0, 0, N, N);
+    const bs = [];
+    for (let i = 0; i < 24; i++) bs.push({ x: r() * N, y: r() * N, R: 6 + r() * 20 });
+    _wsTile(g, N, () => {
+      for (const b of bs) {
+        g.globalAlpha = 0.16; g.fillStyle = c[2] || c[1]; g.beginPath(); g.arc(b.x, b.y, b.R, 0, 6.3); g.fill();
+        g.globalAlpha = 1; g.strokeStyle = c[1]; g.lineWidth = 2.4; g.beginPath(); g.arc(b.x, b.y, b.R, 0, 6.3); g.stroke();
+        g.strokeStyle = 'rgba(255,255,255,0.85)'; g.lineWidth = 2; g.beginPath(); g.arc(b.x, b.y, b.R * 0.65, 3.6, 4.5); g.stroke();
+      }
+    });
+  },
+  error(g, N, c, r) {   // a crashed terminal: black, a dim field of 0s and 1s, and errors popping up somewhere new each repaint
+    g.fillStyle = c[0]; g.fillRect(0, 0, N, N); g.textBaseline = 'top';
+    const rb = _wsRng('error-field');   // the quiet layer keeps its own generator, so it stays where it is while the pop-ups move
+    g.font = 'bold 12px monospace'; g.fillStyle = c[2] || c[1]; g.globalAlpha = 0.45;
+    for (let y = 0; y < N; y += 16) for (let x = 0; x < N; x += 14) if (rb() < 0.55) g.fillText(rb() < 0.5 ? '0' : '1', x, y);
+    g.globalAlpha = 1;
+    const WORDS = ['ERROR', 'FATAL', 'FAIL', 'NULL', '0xDEAD', 'ERR 404', 'PANIC', 'NaN', 'SEGFAULT', 'X_X', 'ABORT', 'BSOD'], pops = [];
+    for (let i = 0; i < 9; i++) pops.push({ k: 0, x: r() * N, y: r() * N, s: 12 + (r() * 10 | 0), a: 0.7 + r() * 0.3, t: Array.from({ length: 3 + (r() * 6 | 0) }, () => (r() < 0.5 ? '0' : '1')).join('') });
+    for (let i = 0; i < 5; i++) pops.push({ k: 1, x: r() * N, y: r() * N, s: 14 + (r() * 12 | 0), a: 1, t: WORDS[(r() * WORDS.length) | 0] });
+    for (let i = 0; i < 2; i++) pops.push({ k: 2, x: r() * N, y: r() * N, s: 1 + r() * 0.5, a: 1, t: '' });
+    _wsTile(g, N, () => {
+      for (const p of pops) {
+        g.globalAlpha = p.a;
+        if (p.k === 2) {   // a little dialog box with a title bar and a close button
+          const w = 70 * p.s, h = 38 * p.s;
+          g.fillStyle = c[0]; g.fillRect(p.x, p.y, w, h);
+          g.fillStyle = c[1]; g.fillRect(p.x, p.y, w, 10 * p.s);
+          g.strokeStyle = c[1]; g.lineWidth = 2; g.strokeRect(p.x, p.y, w, h);
+          g.fillStyle = c[0]; g.font = 'bold ' + Math.round(9 * p.s) + 'px monospace'; g.fillText('X', p.x + w - 11 * p.s, p.y + 1);
+          g.fillStyle = c[1]; g.font = 'bold ' + Math.round(20 * p.s) + 'px monospace'; g.fillText('!', p.x + 7 * p.s, p.y + 12 * p.s);
+          g.font = 'bold ' + Math.round(11 * p.s) + 'px monospace'; g.fillText('ERROR', p.x + 24 * p.s, p.y + 18 * p.s);
+        } else {
+          g.fillStyle = c[1]; g.font = 'bold ' + p.s + 'px monospace'; g.fillText(p.t, p.x, p.y);
+        }
+      }
+      g.globalAlpha = 1;
+    });
+  },
 };
 // id -> how it is painted and finished. `glow`: which of the pattern's colours also lights up (an emissive layer).
 const WS_LOOKS = {
@@ -26818,14 +27078,57 @@ const WS_LOOKS = {
   meteor:    { pat: 'cracks', c: [0x2a201a, 0xff5a1f], metal: 0.2, rough: 0.8, glow: 1 },
   matrix:    { pat: 'code', c: [0x050805, 0x00ff66], metal: 0.5, rough: 0.3, glow: 1, scroll: [0, -0.30] },
   smog:      { pat: 'speckle', c: [0x383a3d, 0x777b80, 0x55585c], metal: 0.0, rough: 0.9 },
+  // second batch -- most of them move
+  magma:     { pat: 'lava', c: [0x1a0a06, 0xff5a10, 0xa02008], metal: 0.15, rough: 0.7, glow: 1, scroll: [0.08, 0] },
+  nebula:    { pat: 'galaxy', c: [0x070718, 0xffffff, 0x5a2a9a, 0x1a3a8a, 0xa02a7a], metal: 0.3, rough: 0.35, glow: 1, scroll: [0.02, 0.012] },
+  storm:     { pat: 'lightning', c: [0x141a26, 0x9fd8ff, 0x2a3a58], metal: 0.5, rough: 0.35, glow: 1, scroll: [0.18, 0] },
+  dragon:    { pat: 'scales', c: [0x0a2416, 0x7fe0a0, 0x1c6a3e], metal: 0.7, rough: 0.3 },
+  rainbow:   { pat: 'spectrum', c: [0xff0000, 0x0000ff], sat: 100, lit: 55, metal: 0.1, rough: 0.35, scroll: [0.10, 0.10] },
+  holo:      { pat: 'spectrum', c: [0xffffff, 0xffffff], sat: 85, lit: 74, metal: 0.8, rough: 0.12, scroll: [0.06, 0.03] },
+  checkered: { pat: 'checker', c: [0x101010, 0xf2f2f2], metal: 0.2, rough: 0.4, scroll: [0.15, 0] },
+  hexarmor:  { pat: 'hex', c: [0x0e141a, 0x3ad6ff, 0x1c2a36], metal: 0.65, rough: 0.28, glow: 1 },
+  circuit:   { pat: 'circuit', c: [0x0b3d1e, 0xd8b04a, 0x072612], metal: 0.55, rough: 0.35, scroll: [0.10, 0] },
+  digicam:   { pat: 'digicam', c: [0x4b5a3c, 0x2a3424, 0x8a9a70, 0x1c2218], metal: 0.05, rough: 0.9 },
+  tiger:     { pat: 'tiger', c: [0xe8801a, 0x16100a, 0xf6e2b0], metal: 0.1, rough: 0.7 },
+  dazzle:    { pat: 'dazzle', c: [0x0e0e10, 0xe8e8e8, 0x6f8294], metal: 0.15, rough: 0.5, scroll: [0.12, 0] },
+  glitch:    { pat: 'glitch', c: [0x0a0a14, 0xff2ad4, 0x00e5ff], metal: 0.4, rough: 0.3, glow: 1, scroll: [0.45, 0] },
+  skulls:    { pat: 'skulls', c: [0x100608, 0xe9dfc8], metal: 0.1, rough: 0.7 },
+  hearts:    { pat: 'hearts', c: [0x8a1038, 0xff6b9a, 0xffc2d6], metal: 0.05, rough: 0.4, scroll: [0, 0.10] },
+  superstar: { pat: 'stars', c: [0x14206a, 0xffd23a, 0xfff4b0], metal: 0.5, rough: 0.3, scroll: [0.10, 0] },
+  bubbles:   { pat: 'bubbles', c: [0x0a5a7a, 0xbff6ff, 0x1fa0c0], metal: 0.1, rough: 0.15, scroll: [0, 0.12] },
+  // `flicker`: seconds between repaints, each a new scatter (the shared texture is redrawn, so every gun wearing it changes at once).
+  // `noSwap`: the second material does not get the two colours swapped -- a black wrap with red text is not red with black text.
+  error:     { pat: 'error', c: [0x040000, 0xff2a2a, 0x7a0c10], metal: 0.3, rough: 0.5, glow: 1, flicker: 0.14, noSwap: true },
 };
+// A small picture of the wrap itself for the picker, so you choose by what it looks like and not by two colour chips.
+const _wsSwatchCache = new Map();
+function _wsSwatchURL(id) {
+  let u = _wsSwatchCache.get(id); if (u !== undefined) return u;
+  u = '';
+  try {
+    const look = WS_LOOKS[id];
+    if (look && WS_PATTERNS[look.pat]) {
+      const N = 256, big = document.createElement('canvas'); big.width = big.height = N;
+      WS_PATTERNS[look.pat](big.getContext('2d'), N, look.c.map(_wsCss), _wsRng(id + ':0'), look);
+      const small = document.createElement('canvas'); small.width = small.height = 128;
+      small.getContext('2d').drawImage(big, 0, 0, 128, 128);
+      u = small.toDataURL('image/jpeg', 0.85);
+    }
+  } catch (e) { u = ''; }
+  _wsSwatchCache.set(id, u);
+  return u;
+}
+const _wsFlickers = [];   // wraps that repaint themselves: { id, every, t, n, repaint(n) }
 function _wsTextures(id, variant) {
+  if (WS_LOOKS[id] && WS_LOOKS[id].noSwap) variant = 0;
   const key = id + ':' + variant;
   let t = _wsCache.get(key); if (t) return t;
-  const look = WS_LOOKS[id], N = 256, r = _wsRng(key);
+  const look = WS_LOOKS[id], N = 256;
+  // a fresh generator every time, so the glow layer lays its pattern down exactly where the painted one went
+  const paint = (cv, colors, frame) => WS_PATTERNS[look.pat](cv.getContext('2d'), N, colors, _wsRng(frame ? key + '#' + frame : key), look);
   const draw = (colors) => {
     const c = document.createElement('canvas'); c.width = c.height = N;
-    WS_PATTERNS[look.pat](c.getContext('2d'), N, colors, r, look);
+    paint(c, colors, 0);
     const tx = new THREE.CanvasTexture(c); tx.wrapS = tx.wrapT = THREE.RepeatWrapping;
     if (look.pat === 'pixels') { tx.magFilter = THREE.NearestFilter; tx.minFilter = THREE.NearestFilter; tx.generateMipmaps = false; }
     // painted in sRGB, so it has to say so: left untagged it reads as linear and every colour comes out pale
@@ -26840,9 +27143,15 @@ function _wsTextures(id, variant) {
   if (look.glow) {   // the light: only the pattern's bright colour, on black
     const glow = [ '#000000', cols[1] || cols[0], ...cols.slice(2).map(() => '#000000') ];
     t.glow = draw(glow);
+    t._glowCols = glow;
   }
+  t._cols = v;
   _wsCache.set(key, t);
   if (look.scroll) _wsScrollers.push({ id, du: look.scroll[0], dv: look.scroll[1], maps: [t.map, t.glow].filter(Boolean) });
+  if (look.flicker) _wsFlickers.push({ id, every: look.flicker, t: 0, n: 0, repaint: (n) => {
+    paint(t.map.image, t._cols, n); t.map.needsUpdate = true;
+    if (t.glow) { paint(t.glow.image, t._glowCols, n); t.glow.needsUpdate = true; }
+  } });
   return t;
 }
 // The wraps that move: every frame their textures slide along by their own speed. A texture is shared by every gun
@@ -26850,6 +27159,12 @@ function _wsTextures(id, variant) {
 function updateWrapScroll(dt) {
   for (const sc of _wsScrollers) for (const m of sc.maps) {
     m.offset.x = (m.offset.x + sc.du * dt) % 1; m.offset.y = (m.offset.y + sc.dv * dt) % 1;
+  }
+  // The ones that repaint: only while somebody is wearing it, since the texture is redrawn from scratch each time.
+  for (const f of _wsFlickers) {
+    if (selectedWeaponSkin !== f.id) continue;
+    f.t += dt; if (f.t < f.every) continue;
+    f.t = 0; f.repaint(++f.n);
   }
 }
 // Unmapped and extruded parts need a usable texture span on each face, not one corner of the wrap.
@@ -45136,10 +45451,36 @@ function noteLobbyHit() {
   _lobbyHitNoted = true;
   pushFeedLine('No damage in the lobby — ⚔️ DUEL or 🎮 MODES to fight', '', '#aaffaa', true);
 }
+// ⭐ Level and win streak under the tag. Only drawn when the server sent them (an older server does not), and only
+// rewritten when a number changed -- this runs every frame.
+let _lobbyStatsKey = '';
+function syncLobbyStats(on) {
+  const el = document.getElementById('lobby-stats');
+  if (!el) return;
+  const u = currentUser;
+  const ok = !!(on && u && !u.isAdmin && typeof u.level === 'number' && u.level > 0);
+  if ((el.style.display === 'block') !== ok) el.style.display = ok ? 'block' : 'none';
+  if (!ok) return;
+  const key = [u.level, u.xp, u.levelXp, u.nextLevelXp, u.winStreak, u.bestStreak].join(':');
+  if (key === _lobbyStatsKey) return;
+  _lobbyStatsKey = key;
+  const span = Math.max(1, (u.nextLevelXp || 0) - (u.levelXp || 0)), into = Math.max(0, Math.min(span, (u.xp || 0) - (u.levelXp || 0)));
+  const set = (id, t) => { const n = document.getElementById(id); if (n && n.textContent !== t) n.textContent = t; };
+  set('ls-lv', 'LV ' + u.level);
+  set('ls-xp', into + ' / ' + span + ' XP');
+  const fill = document.getElementById('ls-fill'); if (fill) fill.style.width = Math.round(into / span * 100) + '%';
+  const st = u.winStreak || 0;
+  set('ls-n', String(st));
+  set('ls-fire', st >= 10 ? '🔥🔥🔥' : st >= 5 ? '🔥🔥' : st >= 1 ? '🔥' : '🧊');
+  set('ls-best', (u.bestStreak || 0) > 0 ? 'BEST ' + u.bestStreak : '');
+  const row = document.getElementById('ls-streak');
+  if (row) { row.classList.toggle('hot', st >= 3); row.classList.toggle('cold', st === 0); }
+}
 function syncLobbyTag() {
   const el = document.getElementById('lobby-tag');
   const on = gameStarted && inLobby;
   if (el && (el.style.display === 'block') !== on) el.style.display = on ? 'block' : 'none';
+  syncLobbyStats(on);
   // The key list is for learning, which happens in the lobby — not over the weapon slots mid-fight (#37).
   const keys = document.getElementById('controls-hint');
   if (keys && !isTouchUI()) { const want = on ? '' : 'none'; if (keys.style.display !== want) keys.style.display = want; }
@@ -52180,7 +52521,7 @@ function endMatch(winner, reason) {
   const playerKills = (match.ffaKills?.[myId])
     ?? (players[myId]?.kills)
     ?? 0;
-  if (!match.forfeit) awardMatchCredits(playerKills, isWin);   // see opponentLeft
+  if (!match.forfeit) awardMatchCredits(playerKills, isWin, winner == null);   // see opponentLeft
   // 🧠 Match-memory: every comic-cast bot remembers whether THEIR team won, and
   // whether they were on your side or against you. (Ally bots win when you win.)
   const memBefore = loadCharMemory();
@@ -55858,6 +56199,7 @@ setTimeout(function tryAutoLogin() {
       authRequest('/auth/login', saved).then(r => {
         if (r && r.ok) {
           currentUser = { username: r.username, password: saved.password, unlocks: r.unlocks || [], purchased: r.purchased || [], credits: r.credits ?? 0, fragments: r.fragments ?? 0, chests: r.chests || { common: 0, rare: 0 }, upgrades: r.upgrades || {}, skinCases: r.skinCases || [], skinCasePacks: r.skinCasePacks || {}, skinInventory: r.skinInventory || [], freeSpinAvailable: !!r.freeSpinAvailable, adminPassExpiresAt: r.adminPassExpiresAt || 0, ffaDamage: r.ffaDamage || 0, ffaWins: r.ffaWins || 0, ffaLegend: !!r.ffaLegend, isAdmin: !!r.isAdmin };
+          applyProgress(currentUser, r);
           refreshLegendSkins();
           const wb = document.getElementById('welcome-back');
           if (wb) {
@@ -56011,6 +56353,7 @@ async function login() {
 }
 function finishLogin(result, creds) {
   currentUser = { username: result.username, password: creds.password, unlocks: result.unlocks || [], purchased: result.purchased || [], credits: result.credits ?? 0, fragments: result.fragments ?? 0, chests: result.chests || { common: 0, rare: 0 }, upgrades: result.upgrades || {}, skinCases: result.skinCases || [], skinCasePacks: result.skinCasePacks || {}, skinInventory: result.skinInventory || [], freeSpinAvailable: !!result.freeSpinAvailable, adminPassExpiresAt: result.adminPassExpiresAt || 0, ffaDamage: result.ffaDamage || 0, ffaWins: result.ffaWins || 0, ffaLegend: !!result.ffaLegend, isAdmin: !!result.isAdmin, guest: !!creds.guest };
+  applyProgress(currentUser, result);
   refreshLegendSkins();
   try { localStorage.setItem('pvp_user', JSON.stringify({ username: result.username, password: creds.password, ...(creds.guest ? { guest: true } : {}) })); } catch (e) {}
   if (result.weakPassword && !creds.guest) nudgeWeakPassword();
@@ -57009,16 +57352,26 @@ function showSkinCaseOpening(skinId, duplicate, caseId = 'gen1_basic') {
   });
 }
 
-async function awardMatchCredits(kills, won) {
+// Level, XP and win streak as the server reports them (login and every match award).
+function applyProgress(u, r) {
+  if (!u || !r || typeof r.level !== 'number') return;
+  u.xp = r.xp || 0; u.level = r.level; u.levelXp = r.levelXp || 0; u.nextLevelXp = r.nextLevelXp || 0;
+  u.winStreak = r.winStreak || 0; u.bestStreak = r.bestStreak || 0;
+}
+async function awardMatchCredits(kills, won, draw) {
   if (!currentUser || currentUser.isAdmin) return;
   try {
-    const r = await authRequest('/shop/award', { username: currentUser.username, password: currentUser.password, kills, won: !!won });
+    const r = await authRequest('/shop/award', { username: currentUser.username, password: currentUser.password, kills, won: !!won, draw: !!draw });
     if (r && r.ok) {
       currentUser.credits = r.credits ?? currentUser.credits;
       if (r.chests) currentUser.chests = r.chests;
+      const lvBefore = currentUser.level || 0;
+      applyProgress(currentUser, r);
       let msg = `${CURRENCY_ICON} +${r.awarded} donuts earned`;
       if (r.chestDrops?.common) msg += ' · 📦 +1 Common';
       if (r.chestDrops?.rare)   msg += ' · 🟣 +1 Rare';
+      if (r.winStreak >= 2)     msg += ` · 🔥 ${r.winStreak} win streak`;
+      if (lvBefore && r.level > lvBefore) msg += ` · ⭐ LEVEL ${r.level}!`;
       updateUserInfoBar();
       // Used to float over the end screen in its own corner box; it belongs in the card
       // you are already reading (#29). Outside the end screen it is a feed line.
@@ -57511,7 +57864,7 @@ function openWeaponSkinsPanel() {
   };
   const swatch = (s) => `
     <div data-skin="${s.id}" class="ws-cell" style="cursor:pointer;border:2px solid ${s.id===selectedWeaponSkin?'#ffdd55':'#444'};border-radius:6px;padding:8px;text-align:center;background:${s.id===selectedWeaponSkin?'#2a2410':'#1d1a12'};">
-      <div style="height:40px;border-radius:4px;background:${s.wrap ? `url('${getWeaponWrapSurface(s.wrap).canvas.toDataURL()}') center / 128px 128px` : `linear-gradient(90deg, ${s.sw[0]} 0 50%, ${s.sw[1]} 50% 100%)`};border:1px solid #000;margin-bottom:6px;"></div>
+      <div style="height:40px;border-radius:4px;background:${s.wrap ? `url('${getWeaponWrapSurface(s.wrap).canvas.toDataURL()}') center / 128px 128px` : _wsSwatchURL(s.id) ? `url('${_wsSwatchURL(s.id)}') center / 64px 64px` : `linear-gradient(90deg, ${s.sw[0]} 0 50%, ${s.sw[1]} 50% 100%)`};border:1px solid #000;margin-bottom:6px;"></div>
       <div style="font-size:10px;letter-spacing:1px;color:${s.id===selectedWeaponSkin?'#ffdd55':'#ccc'};">${s.name}</div>
     </div>`;
   const basicCaseSection = () => {
@@ -57858,7 +58211,7 @@ function updateUserInfoBar() {
   if (!currentUser) return;
   const nameEl = document.getElementById('user-info-name');
   const unlocksEl = document.getElementById('user-info-unlocks');
-  if (nameEl) nameEl.textContent = currentUser.isAdmin ? `🔓 ADMIN · ${currentUser.username}` : `👤 ${currentUser.username}`;
+  if (nameEl) nameEl.textContent = currentUser.isAdmin ? `🔓 ADMIN · ${currentUser.username}` : `👤 ${currentUser.username}` + (currentUser.level > 0 ? ` · LV ${currentUser.level}` : '');
   if (nameEl) nameEl.style.color = currentUser.isAdmin ? '#ff4444' : '#88ccff';
   if (unlocksEl) {
     const n = currentUser.unlocks?.length || 0;

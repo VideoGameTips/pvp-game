@@ -127,6 +127,17 @@ function saveUsersSoon() {            // damage lands many times a second; the f
   if (_saveSoonTimer) return;
   _saveSoonTimer = setTimeout(() => { _saveSoonTimer = null; saveUsers(); }, 10000);
 }
+// ── ⭐ Level and win streak ────────────────────────────────────────────────────
+// Cosmetic, shown in Lobby 13. XP is what a match was worth before the donut multiplier (5 a kill, 50 for a win, 20 for
+// playing), so it measures what you did and not what donuts happen to cost. Level L starts at 50*L*(L-1) XP: level 2
+// at 100, 3 at 300, 4 at 600, 10 at 4500. The streak is matches won in a row; losing ends it, a draw leaves it alone.
+function levelOfXp(xp) { return Math.max(1, Math.floor((1 + Math.sqrt(1 + (xp || 0) / 12.5)) / 2)); }
+function xpFloorOfLevel(level) { return 50 * level * (level - 1); }
+function levelProgressOf(u) {
+  const xp = Math.max(0, Math.floor(u.xp || 0)), level = levelOfXp(xp);
+  return { xp, level, levelXp: xpFloorOfLevel(level), nextLevelXp: xpFloorOfLevel(level + 1),
+           winStreak: u.winStreak || 0, bestStreak: u.bestStreak || 0 };
+}
 function ffaProgressOf(u) {
   return { ffaDamage: Math.floor(u.ffaDamage || 0), ffaWins: u.ffaWins || 0, ffaLegend: !!u.ffaLegend,
            ffaDamageGoal: FFA_LEGEND_DAMAGE, ffaWinsGoal: FFA_LEGEND_WINS };
@@ -1101,7 +1112,7 @@ app.post('/shop/trial', (req, res) => {
 const _lastAward = new Map();
 const AWARD_COOLDOWN_MS = 25000;
 app.post('/shop/award', (req, res) => {
-  const { kills = 0, won = false } = req.body || {};
+  const { kills = 0, won = false, draw = false } = req.body || {};
   const u = authedUser(req);
   if (!u) return res.status(401).json({ error: 'auth failed' });
   // The cap above is per CALL, not per match, and nothing tied a call to a match
@@ -1113,13 +1124,16 @@ app.post('/shop/award', (req, res) => {
   const nowMs = Date.now();
   const last = _lastAward.get(u.username) || 0;
   if (nowMs - last < AWARD_COOLDOWN_MS) {
-    return res.json({ ok: true, amount: 0, credits: u.credits, chestDrops: { common: 0, rare: 0 }, throttled: true });
+    return res.json({ ok: true, amount: 0, credits: u.credits, chestDrops: { common: 0, rare: 0 }, throttled: true, ...levelProgressOf(u) });
   }
   _lastAward.set(u.username, nowMs);
   const k = Math.max(0, Math.min(40, Number(kills) | 0));
   const baseAmount = Math.min(250, k * 5 + (won ? 50 : 20));
   const amount = baseAmount * MATCH_REWARD_MULT;
   u.credits = (u.credits || 0) + amount;
+  u.xp = (u.xp || 0) + baseAmount;
+  if (won) { u.winStreak = (u.winStreak || 0) + 1; u.bestStreak = Math.max(u.bestStreak || 0, u.winStreak); }
+  else if (!draw) u.winStreak = 0;
   // 📦 Chest drop chance — not every match. Wins boost the odds.
   const chestDrops = { common: 0, rare: 0 };
   const commonOdds = won ? 0.50 : 0.30;
@@ -1127,7 +1141,7 @@ app.post('/shop/award', (req, res) => {
   if (Math.random() < commonOdds) { u.chests.common = (u.chests.common || 0) + 1; chestDrops.common = 1; }
   if (Math.random() < rareOdds)   { u.chests.rare   = (u.chests.rare   || 0) + 1; chestDrops.rare   = 1; }
   saveUsers();
-  res.json({ ok: true, awarded: amount, credits: u.credits, chestDrops, chests: u.chests });
+  res.json({ ok: true, awarded: amount, credits: u.credits, chestDrops, chests: u.chests, ...levelProgressOf(u) });
 });
 
 // A case without weights deals evenly. With them, the numbers are relative to
@@ -1522,7 +1536,7 @@ app.post('/auth/login', (req, res) => {
   if (!checkPassword(username, password)) return res.status(401).json({ error: 'wrong password' });
   ensureShopFields(u);
   saveUsers();
-  res.json({ ok: true, username, unlocks: u.unlocks || [], purchased: u.purchased, credits: u.credits, fragments: u.fragments || 0, chests: u.chests, upgrades: u.upgrades, skinCases: u.skinCases || [], skinCasePacks: u.skinCasePacks || {}, skinInventory: u.skinInventory || [], freeSpinAvailable: u.lastFreeSpinDate !== todayUTC(), adminPassExpiresAt: u.adminPassExpiresAt || 0, kills: u.kills || 0, deaths: u.deaths || 0, ...ffaProgressOf(u), isAdmin: !!u.isAdmin, weakPassword: isWeakPassword(password, username) });
+  res.json({ ok: true, username, unlocks: u.unlocks || [], purchased: u.purchased, credits: u.credits, fragments: u.fragments || 0, chests: u.chests, upgrades: u.upgrades, skinCases: u.skinCases || [], skinCasePacks: u.skinCasePacks || {}, skinInventory: u.skinInventory || [], freeSpinAvailable: u.lastFreeSpinDate !== todayUTC(), adminPassExpiresAt: u.adminPassExpiresAt || 0, kills: u.kills || 0, deaths: u.deaths || 0, ...ffaProgressOf(u), ...levelProgressOf(u), isAdmin: !!u.isAdmin, weakPassword: isWeakPassword(password, username) });
 });
 
 // Change your own password. Needs the current one, so a borrowed session on a

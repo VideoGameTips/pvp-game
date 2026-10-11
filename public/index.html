@@ -118,6 +118,25 @@
     body.touch-ui #lobby-tag { top: 52px; font-size: 11px; }
     @media (orientation: landscape) { body.touch-ui #lobby-tag { top: 8px; } }
 
+    /* ⭐ Level and win streak, top right under the settings button: what you have been doing, at a glance.
+       Narrow on purpose -- the key list is centred across the top of the lobby and this has to clear it. */
+    #lobby-stats {
+      display: none; position: absolute; top: 54px; right: 12px; width: 176px; box-sizing: border-box;
+      padding: 6px 10px; border-radius: 8px; background: rgba(0,0,0,0.55); border: 1px solid rgba(255,214,102,0.45);
+      color: #ffe9a8; font: 700 12px/1.35 -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+      letter-spacing: 1px; white-space: nowrap; pointer-events: none;
+    }
+    #lobby-stats .ls-row { display: flex; align-items: center; gap: 8px; }
+    #ls-lv { color: #ffd23f; font-size: 14px; }
+    #ls-bar { flex: 1; height: 6px; border-radius: 3px; background: rgba(255,255,255,0.18); overflow: hidden; }
+    #ls-fill { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #ffcc33, #ff8a1f); transition: width 0.6s ease; }
+    #ls-streak { margin-top: 2px; }
+    #ls-streak.cold { color: #9aa3ad; }
+    #ls-streak.hot #ls-n { color: #ff8a1f; }
+    #ls-sub { margin-top: 1px; font-weight: 600; font-size: 10px; color: #cbb98a; gap: 5px; }
+    body.touch-ui #lobby-stats { top: 100px; width: 150px; font-size: 11px; padding: 5px 8px; }
+    @media (orientation: landscape) { body.touch-ui #lobby-stats { top: 52px; } }
+
     /* 🧭 Incoming damage (#36): an arc on the ring around the crosshair, turned toward the shooter;
        a red edge that stays while HP is low; a short edge pulse for damage with no direction. */
     #dmg-dir, #low-hp, #dmg-edge { position: fixed; inset: 0; pointer-events: none; z-index: 79; }
@@ -810,7 +829,7 @@
        A UI font instead of Courier (numbers stay tabular), one row of chips at the top with ⚙ on the
        right like the phone, the FPS readout out of the way, icon weapon slots, a slim health bar,
        and the key list only in the lobby — it used to sit half under the weapon slots in #555 grey. */
-    #hud, #match-hud, #msg-feed, #match-announce, #announce-text, #lobby-tag, #kill-confirm, #ammo-hint, #controls-hint {
+    #hud, #match-hud, #msg-feed, #match-announce, #announce-text, #lobby-tag, #lobby-stats, #kill-confirm, #ammo-hint, #controls-hint {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
     }
     #hud, #match-hud { font-variant-numeric: tabular-nums; }
@@ -1152,6 +1171,12 @@
     <div id="ammo-hint"></div>
     <!-- Lobby 13 says what it is: shooting works, nothing takes damage (#35) -->
     <div id="lobby-tag">LOBBY 13 · CHILL ZONE · NO DAMAGE</div>
+    <!-- Your level and your win streak, from the server's account record -->
+    <div id="lobby-stats">
+      <div class="ls-row"><span id="ls-lv">LV 1</span><span id="ls-bar"><span id="ls-fill"></span></span></div>
+      <div class="ls-row" id="ls-streak"><span id="ls-fire" data-no-i18n>🔥</span><b id="ls-n" data-no-i18n>0</b><span>WIN STREAK</span></div>
+      <div class="ls-row" id="ls-sub"><span id="ls-xp" data-no-i18n></span><span id="ls-best"></span></div>
+    </div>
     <!-- Where the hit came from, and when you are low (#36) -->
     <div id="dmg-dir"></div>
     <div id="low-hp"></div>
