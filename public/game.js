@@ -29371,8 +29371,65 @@ function _pxTemplateGun(baseId) {
   return { id: 'pxg_' + Math.random().toString(36).slice(2, 9), name: 'My Wrap', px };
 }
 // ── putting a saved skin into the game ──
-function _pxRegisterChar(def) {
-  const P = def.parts, id = def.id;
+// ── what goes over the wire ──
+// A skin is eleven 16x16 faces: 2816 pixels. They travel as a palette plus one byte per pixel, which is about 4 KB for a
+// hand-painted skin and comes out smaller the fewer colours it uses. Anything that arrives is untrusted: it is checked
+// on the server and again here before a single pixel is drawn.
+const _pxHexOk = c => typeof c === 'string' && /^#[0-9a-fA-F]{6}$/.test(c);
+function _pxEncode(def) {
+  const px = [];
+  for (const [k] of PX_CHAR_PARTS) { const a = def.parts[k] || []; for (let i = 0; i < 256; i++) px.push((_pxHexOk(a[i]) ? a[i] : '#808080').slice(1).toLowerCase()); }
+  const freq = new Map(); px.forEach(c => freq.set(c, (freq.get(c) || 0) + 1));
+  let pal = [...freq.keys()];
+  if (pal.length > 200) pal = [...freq.entries()].sort((a, b) => b[1] - a[1]).slice(0, 200).map(e => e[0]);   // past 200, the rare ones snap to the nearest
+  const idx = new Map(pal.map((c, i) => [c, i])), rgb = c => [parseInt(c.slice(0, 2), 16), parseInt(c.slice(2, 4), 16), parseInt(c.slice(4, 6), 16)];
+  const near = c => {
+    if (idx.has(c)) return idx.get(c);
+    const a = rgb(c); let best = 0, bd = 1e12;
+    pal.forEach((q, i) => { const b = rgb(q), d = (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2; if (d < bd) { bd = d; best = i; } });
+    idx.set(c, best); return best;
+  };
+  const bytes = new Uint8Array(px.length); px.forEach((c, i) => { bytes[i] = near(c); });
+  let bin = ''; for (let i = 0; i < bytes.length; i += 2048) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 2048));
+  return JSON.stringify({ p: pal, d: btoa(bin), h: (_pxHexOk(def.hand) ? def.hand : '#f0c8a0').slice(1).toLowerCase(), f: (_pxHexOk(def.foot) ? def.foot : '#14161a').slice(1).toLowerCase() });
+}
+function _pxDecode(str) {
+  try {
+    if (typeof str !== 'string' || str.length > 8000) return null;
+    const o = JSON.parse(str), hex6 = /^[0-9a-f]{6}$/;
+    if (!o || !Array.isArray(o.p) || o.p.length < 1 || o.p.length > 255 || !o.p.every(c => typeof c === 'string' && hex6.test(c))) return null;
+    if (typeof o.d !== 'string' || typeof o.h !== 'string' || typeof o.f !== 'string' || !hex6.test(o.h) || !hex6.test(o.f)) return null;
+    const bin = atob(o.d);
+    if (bin.length !== PX_CHAR_PARTS.length * 256) return null;
+    const parts = {}; let k = 0;
+    for (const [key] of PX_CHAR_PARTS) {
+      const a = [];
+      for (let i = 0; i < 256; i++) { const ix = bin.charCodeAt(k++); if (ix >= o.p.length) return null; a.push('#' + o.p[ix]); }
+      parts[key] = a;
+    }
+    return { parts, hand: '#' + o.h, foot: '#' + o.f };
+  } catch (e) { return null; }
+}
+// A skin another player is wearing, registered under an id of its own (a hash of the picture, so two players who happen
+// to have called theirs the same thing cannot collide). Kept out of the picker and out of storage; the oldest go first.
+const _pxRemote = new Map();
+function _pxRegisterRemote(str) {
+  let h = 2166136261; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+  const id = 'rx_' + (h >>> 0).toString(16).padStart(8, '0');
+  if (_pxRemote.has(id) && PIXEL_SKINS[id]) return id;
+  const def = _pxDecode(str);
+  if (!def) return null;
+  PIXEL_SKINS[id] = _pxMakeArt(def, id);
+  _pxRemote.set(id, 1);
+  while (_pxRemote.size > 40) { const old = _pxRemote.keys().next().value; _pxRemote.delete(old); delete PIXEL_SKINS[old]; }
+  return id;
+}
+function _pxWireFor(id) {
+  if (!/^px_/.test(String(id))) return null;
+  try { const d = _pxLoad().char.find(s => s.id === id); return d ? _pxEncode(d) : null; } catch (e) { return null; }
+}
+function _pxMakeArt(def, id) {
+  const P = def.parts;
   const art = {
     hand: parseInt(String(def.hand || '#f0c8a0').slice(1), 16), foot: def.foot || '#14161a',
     head: { front: _pxPainter(P['head.front']), back: _pxPainter(P['head.back']), side: _pxPainter(P['head.side']),
@@ -29382,7 +29439,11 @@ function _pxRegisterChar(def) {
     armU: _pxPainter(P.armU), armF: _pxPainter(P.armF), leg: _pxPainter(P.leg), shin: _pxPainter(P.shin),
   };
   art._id = id + '.' + (++_pxRev);        // the texture cache is keyed on this, so a re-save is a fresh set of textures
-  PIXEL_SKINS[id] = art;
+  return art;
+}
+function _pxRegisterChar(def) {
+  const P = def.parts, id = def.id;
+  PIXEL_SKINS[id] = _pxMakeArt(def, id);
   const entry = { id, name: def.name || 'My Skin', desc: 'Your own pixel skin.', swatch: [P['torso.front'][40] || '#444', P['head.front'][100] || '#888'], custom: true };
   const i = SKINS.findIndex(s => s.id === id);
   if (i >= 0) SKINS[i] = entry; else SKINS.push(entry);
@@ -29411,13 +29472,12 @@ function _pxRegisterGun(def) {
 
 // ── the editor ──
 let _pxUI = null;
-function openSkinPixelizer() {
-  if (!(typeof currentUser !== 'undefined' && currentUser && currentUser.isAdmin)) return;
+function openSkinPixelizer(tab) {
   try { document.exitPointerLock && document.exitPointerLock(); } catch (e) {}
   let panel = document.getElementById('pixelizer-panel');
-  if (panel) { panel.style.display = 'block'; _pxDrawAll(); return; }
+  if (panel) { panel.style.display = 'block'; if (tab && _pxUI) { _pxUI.tab = tab; _pxUI.hist = []; } _pxDrawAll(); return; }
   const db = _pxLoad();
-  _pxUI = { tab: 'char', db, char: db.char[0] ? JSON.parse(JSON.stringify(db.char[0])) : _pxTemplateChar('default'),
+  _pxUI = { tab: tab === 'gun' ? 'gun' : 'char', db, char: db.char[0] ? JSON.parse(JSON.stringify(db.char[0])) : _pxTemplateChar('default'),
             gun: db.gun[0] ? JSON.parse(JSON.stringify(db.gun[0])) : _pxTemplateGun('carbon'),
             part: 'head.front', color: '#ff4fa8', tool: 'pencil', mirror: true, hist: [], recent: [], msg: '' };
   panel = document.createElement('div');
@@ -29431,7 +29491,7 @@ function openSkinPixelizer() {
   for (const ev of ['keydown', 'keyup', 'mousedown', 'mouseup', 'click', 'wheel', 'contextmenu']) panel.addEventListener(ev, e => { e.stopPropagation(); });
   panel.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #6a2a55;padding-bottom:8px;margin-bottom:10px;">
-      <div style="font-size:16px;letter-spacing:3px;color:#ff99dd;">🎨 SKIN PIXELIZER <span style="font-size:10px;color:#8a7a90;letter-spacing:1px;">admin · saved in this browser</span></div>
+      <div style="font-size:16px;letter-spacing:3px;color:#ff99dd;">🎨 SKIN PIXELIZER <span style="font-size:10px;color:#8a7a90;letter-spacing:1px;">saved in this browser · other players see your character skin</span></div>
       <div><button id="px-tab-char" class="pxb">CHARACTER</button> <button id="px-tab-gun" class="pxb">GUN</button> <button id="px-close" class="pxb" style="color:#ff8888;border-color:#ff4444;">✕</button></div>
     </div>
     <div style="display:flex;gap:16px;flex-wrap:wrap;">
@@ -29538,7 +29598,7 @@ function _pxWire(panel) {
     if (u.tab === 'char') {
       mySkin = d.id; try { localStorage.setItem('pvp_skin', mySkin); } catch (e) {}
       try { emitMySkin(); } catch (e) {}
-      _pxMsg('Wearing "' + d.name + '". (Other players see the default skin on you.)');
+      _pxMsg('Wearing "' + d.name + '". Other players in your match see it too.');
     } else {
       selectedWeaponSkin = d.id; try { localStorage.setItem('pvp_weapon_skin', d.id); } catch (e) {}
       try { applySelectedWeaponSkinToAll(); } catch (e) {}
@@ -30133,6 +30193,12 @@ const CHARACTER_SKIN_IDS = ['cc_kingchaos','cc_bot','cc_rager','cc_mirage','cc_g
   'cc_juicebox','cc_nucleardave','cc_lorekeeper','cc_turtle','cc_casual','cc_suspicious','cc_sweat','cc_janitor','cc_timekeeper','cc_wildcard','cc_drama','cc_pixel'];
 function resolveSkinId(s) {
   return (SKIN_IDS.includes(s) || CHARACTER_SKIN_IDS.includes(s)) ? s : 'default';
+}
+// Another player's own painted skin, if they sent one and you have not switched them off in the settings.
+function _remoteCustomSkin(p, skin) {
+  if (!p || !p.skinData || !/^px_/.test(String(skin || ''))) return null;
+  if (GAMEPLAY_SETTINGS.customSkins === false) return 'default';
+  return _pxRegisterRemote(p.skinData) || 'default';
 }
 
 // ── 🪖 Head gear, built as blocks (#64) ─────────────────────────────────────
@@ -32802,6 +32868,7 @@ let GAMEPLAY_SETTINGS = {
   lookSens: 1,     // ⚙ → LOOK / MOUSE SENSITIVITY, a multiplier of the old fixed speed (#45)
   ambient: 1,      // ⚙ → AMBIENT SOUND: the wind, surf, birds and hum of each map (0 = off)
   weatherFx: true, // ⚙ → WEATHER & PARTICLES: blown sand, snow, ash, rain in the air
+  customSkins: true, // ⚙ → PLAYER-MADE SKINS: see the skins other players have painted (off: everyone in the standard skins)
 };
 try {
   const saved = JSON.parse(localStorage.getItem('pvp_gameplay_settings') || 'null');
@@ -35455,7 +35522,7 @@ function startKillcam(killerId, weaponId) {
   const killerBot = gameBots.find(b => b.id === killerId);
   const wname = weaponDisplayName(weaponId || killerBot?.weaponId);
   KILLCAM.ghosts = {
-    killer: makeKillcamActor(killerName, 'enemy', players[killerId]?.skin, true),
+    killer: makeKillcamActor(killerName, 'enemy', players[killerId] ? renderedSkinForPlayer(players[killerId]) : undefined, true),
     victim: makeKillcamActor(currentUser?.username || 'You', 'ally', mySkin, false),
   };
   if (remoteMeshes[killerId]) remoteMeshes[killerId].visible = false;   // the actor plays them
@@ -48394,14 +48461,14 @@ socket.on('weaponChanged', ({ id, weaponId }) => {
   const m = remoteMeshes[id];
   if (m) armRemoteMesh(m, armableWeaponOf(players[id] || { weaponId }));
 });
-socket.on('skinChanged', ({ id, skin, isAdmin }) => {
+socket.on('skinChanged', ({ id, skin, isAdmin, skinData }) => {
   if (id === myId) return; // local player has no body mesh
-  if (players[id]) { players[id].skin = skin; players[id].isAdmin = isAdmin; }
+  if (players[id]) { players[id].skin = skin; players[id].isAdmin = isAdmin; players[id].skinData = skinData || null; }
   const old = remoteMeshes[id];
   if (!old) return;
   const wasVisible = old.visible;
   scene.remove(old);
-  const p = players[id] || { name: '', isBot: false, team: 'enemy', x: old.position.x, z: old.position.z };
+  const p = players[id] || { name: '', isBot: false, team: 'enemy', x: old.position.x, z: old.position.z, skinData: skinData || null };
   disposeBody(old);           // the rebuild throws this whole body away, gun included
   const mesh = makePlayerMesh(p.name, p.isBot, p.team || 'enemy',
                               renderedSkinForPlayer(p, skin), { crown: !!isAdmin, tag: humanTagKind(p) });
@@ -48769,6 +48836,8 @@ function humanTagKind(p) {
 }
 function renderedSkinForPlayer(p, skin = p && p.skin) {
   if (p && p.isBot && selectedModeConfig?.type !== 'lobby') return 'default';
+  const rc = _remoteCustomSkin(p, skin);
+  if (rc) return rc;
   return resolveSkinId(skin);
 }
 // ── 🔫 What to put in another body's hands ──────────────────────────────────
@@ -55384,7 +55453,7 @@ let currentUser = null; // { username, password, unlocks: [], isAdmin: false }
 let mySkin = (() => { try { const s = localStorage.getItem('pvp_skin'); return SKIN_IDS.includes(s) ? s : 'default'; } catch(e){ return 'default'; } })();
 function emitMySkin() {
   if (!socket) return;
-  socket.emit('setSkin', { skin: mySkin, isAdmin: !!(currentUser && currentUser.isAdmin) });
+  socket.emit('setSkin', { skin: mySkin, isAdmin: !!(currentUser && currentUser.isAdmin), skinData: _pxWireFor(mySkin) });
   _sentWeaponId = null; broadcastHeldWeapon();   // a reconnect or room change clears what the server knew
 }
 // Admin cheat toggles — only active when currentUser.isAdmin
@@ -56241,6 +56310,7 @@ function openSettingsHub() {
     ${rangeRow('screenFx', 'SCREEN EFFECTS')}
     ${rangeRow('ambient', 'AMBIENT SOUND', 0, 1, 0.05)}
     ${toggleRow('weatherFx', 'WEATHER & PARTICLES', 'Blown sand, snow, ash and rain in the air. Turn off if the game runs slow.')}
+    ${toggleRow('customSkins', 'PLAYER-MADE SKINS', 'See the skins other players have painted themselves. Turn off to see everyone in the standard skins.')}
     <div style="height:1px;background:#276b55;margin:16px 0 12px;"></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0;">
       <button id="settings-controls" style="padding:12px;background:#10203a;color:#8fbfff;border:1px solid #5599ff;cursor:pointer;font-family:inherit;letter-spacing:2px;border-radius:4px;">🎮 CONTROLS</button>
@@ -57232,12 +57302,14 @@ function openWeaponSkinsPanel() {
     </div>
     ${modelSkinSection()}
     ${meleeModelSkinSection()}
-    <div style="font-size:12px;letter-spacing:2px;color:#ffdd88;margin:20px 0 6px;border-top:1px solid #6a5520;padding-top:14px;">🎨 WEAPON WRAPS</div>
+    <div style="font-size:12px;letter-spacing:2px;color:#ffdd88;margin:20px 0 6px;border-top:1px solid #6a5520;padding-top:14px;">🎨 WEAPON WRAPS <button id="ws-pixelizer" style="margin-left:10px;padding:4px 8px;background:#2a1030;color:#ff99dd;border:1px solid #ff66cc;border-radius:4px;cursor:pointer;font-family:inherit;font-size:10px;letter-spacing:1px;">🎨 PAINT YOUR OWN</button></div>
     <div style="font-size:10px;color:#aa9966;margin-bottom:12px;line-height:1.4;">One pick applies to every gun. Country themes use real national flags; the German theme is the Iron Cross military mark (no Nazi imagery).</div>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">${WEAPON_SKINS.map(swatch).join('')}</div>
     ${gen2CaseSection()}
     ${basicCaseSection()}
   `;
+  const pxBtn = panel.querySelector('#ws-pixelizer');
+  if (pxBtn) pxBtn.addEventListener('click', () => { panel.style.display = 'none'; openSkinPixelizer('gun'); });
   const buyCaseBtn = panel.querySelector('#buy-skin-case-gen1');
   if (buyCaseBtn) buyCaseBtn.addEventListener('click', async () => {
     if (await buySkinCaseGen1()) openWeaponSkinsPanel();
@@ -57343,8 +57415,10 @@ function openSkinsPanel() {
       <button id="sk-close" style="background:#1a2a3a;color:#88ccff;border:1px solid #4499ff;padding:4px 10px;cursor:pointer;font-family:inherit;border-radius:3px;">✕</button>
     </div>
     ${cards}
+    <button id="sk-pixelizer" style="display:block;width:100%;margin-top:6px;padding:10px;background:#2a1030;color:#ff99dd;border:1px solid #ff66cc;border-radius:6px;cursor:pointer;font-family:inherit;font-size:13px;letter-spacing:2px;">🎨 DESIGN YOUR OWN SKIN</button>
     <div style="margin-top:10px;font-size:10px;color:#ffd227;text-align:center;">👑 ${isAdmin ? 'As admin, you always wear the crown.' : 'The match\'s top fragger wears the crown.'}</div>`;
   panel.querySelector('#sk-close').addEventListener('click', () => { panel.style.display = 'none'; });
+  panel.querySelector('#sk-pixelizer').addEventListener('click', () => { panel.style.display = 'none'; openSkinPixelizer('char'); });
   panel.querySelectorAll('.skin-card').forEach(card => {
     card.addEventListener('click', () => {
       mySkin = card.dataset.skin;

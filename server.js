@@ -2056,6 +2056,22 @@ function maxHpForMode(mode) {
   return M4_TOWER_MODES.has(mode) ? 100 : PLAYER_MAX_HP;
 }
 
+// 🎨 A hand-painted skin, as the client encodes it: { p: [palette of 'rrggbb'], d: base64 of 2816 palette indexes
+// (eleven 16x16 faces), h: hand colour, f: boot colour }. Returned as the same string if it is exactly that and nothing
+// else, null otherwise -- it goes to every client in the match, so it is held to a strict shape and a small size.
+function cleanSkinData(v) {
+  try {
+    if (typeof v !== 'string' || v.length > 8000) return null;
+    const o = JSON.parse(v), hex6 = /^[0-9a-f]{6}$/;
+    if (!o || !Array.isArray(o.p) || o.p.length < 1 || o.p.length > 255) return null;
+    if (!o.p.every(c => typeof c === 'string' && hex6.test(c))) return null;
+    if (typeof o.d !== 'string' || o.d.length > 4200 || !/^[A-Za-z0-9+/]+=*$/.test(o.d)) return null;
+    if (Buffer.from(o.d, 'base64').length !== 11 * 256) return null;
+    if (typeof o.h !== 'string' || typeof o.f !== 'string' || !hex6.test(o.h) || !hex6.test(o.f)) return null;
+    return JSON.stringify({ p: o.p, d: o.d, h: o.h, f: o.f });
+  } catch (e) { return null; }
+}
+
 function createPlayer(id, name) {
   const spawn = nextSpawn();
   return {
@@ -2066,6 +2082,7 @@ function createPlayer(id, name) {
     kills: 0, deaths: 0,
     lastShot: 0, isBot: false,
     skin: 'default', isAdmin: false, // 🎭 cosmetic skin + crown marker
+    skinData: null,                   // 🎨 a hand-painted skin (see cleanSkinData): palette + one byte per pixel
     weaponId: null,                   // 🔫 what everyone else draws in their hands
     matchId: 'lobby', // 🌐 lobby = idle / mode-select. Set to a unique match ID when in a real match.
   };
@@ -2192,10 +2209,18 @@ io.on('connection', (socket) => {
   socket.on('setSkin', (data) => {
     const p = players[socket.id];
     if (!p) return;
+    // One broadcast every 300 ms at most: a painted skin is a few KB, and this is a button someone can hold down.
+    const now = Date.now();
+    if (p._skinAt && now - p._skinAt < 300) return;
+    p._skinAt = now;
     p.skin = String((data && data.skin) || 'default').slice(0, 24);
     p.isAdmin = !!(data && data.isAdmin);
+    // A painted skin arrives as 'px_...' plus its picture. The id alone means nothing to anyone else, so one without a
+    // well-formed picture is worn as the default.
+    p.skinData = /^px_/.test(p.skin) ? cleanSkinData(data && data.skinData) : null;
+    if (/^px_/.test(p.skin) && !p.skinData) p.skin = 'default';
     // Tell everyone in the same match so they can re-skin this player's mesh
-    emitToMatch(p.matchId, 'skinChanged', { id: socket.id, skin: p.skin, isAdmin: p.isAdmin });
+    emitToMatch(p.matchId, 'skinChanged', { id: socket.id, skin: p.skin, isAdmin: p.isAdmin, skinData: p.skinData });
   });
 
   // 🔫 What this player is holding. Cosmetic and client-trusted exactly like
