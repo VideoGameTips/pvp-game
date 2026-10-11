@@ -14796,6 +14796,289 @@ function addMapEasterEggs() {
 }
 addMapEasterEggs();
 
+// ═══ 🏗️ OUTSKIRTS ═════════════════════════════════════════════════════════════════════════════════════════════════
+// Some maps had a 12 m wall right round them: the edge of the world was a grey cliff you could see over and never get
+// past. These do not any more. The wall is gone and the ground carries on for another 30-odd metres, built up with
+// things to climb -- a tower crane whose jib you can walk out along, over the fight; a lookout; a stack of containers;
+// a half-built concrete frame; a rock mesa with a ramp up one side -- one at every corner and the middle of every edge.
+// Past that is the real edge: no wall, a line of tape and striped posts, a warning on the HUD, then the ring-out.
+//
+// Everything standable stays under 14 m, because the ground code ignores any surface higher than that (it is how a
+// wall top stops counting as a floor). Stairs are 0.45 m a step against a 0.65 m auto-step. Bots keep to the old
+// arena (MAP_BOT_BOUNDS): they have no reason to be out there and a chase should not walk one off the end.
+const MAP_BOT_BOUNDS = {};
+const OUTSKIRTS = {
+  //            how far past the old edge | what stands in each of the eight places (clockwise from the north-west) | paint
+  urban:        { m: 34, kit: ['frame', 'crane', 'stack', 'tower', 'crane', 'frame', 'stack', 'tower'],
+                  pal: { main: 0xe0a82a, acc: 0xd8d8d0, conc: 0x8f8f89, dark: 0x3b3f46, rock: 0x6f6a60 } },
+  desert:       { m: 34, kit: ['mesa', 'tower', 'mesa', 'stack', 'mesa', 'tower', 'mesa', 'frame'],
+                  pal: { main: 0x7a5a38, acc: 0xc8a050, conc: 0xb8a27a, dark: 0x4a3826, rock: 0xc2a272 } },
+  forest:       { m: 34, kit: ['tower', 'mesa', 'tower', 'tower', 'mesa', 'tower', 'frame', 'tower'],
+                  pal: { main: 0x8a6238, acc: 0xa07a48, conc: 0x8a8a80, dark: 0x5a4028, rock: 0x6e6a5c } },
+  tundra:       { m: 34, kit: ['mesa', 'tower', 'mesa', 'crane', 'mesa', 'tower', 'stack', 'mesa'],
+                  pal: { main: 0xcfd5db, acc: 0xcc4433, conc: 0xaeb8c0, dark: 0x3e4650, rock: 0xdbe6ee } },
+  airport:      { m: 34, kit: ['tower', 'crane', 'stack', 'frame', 'stack', 'tower', 'crane', 'frame'],
+                  pal: { main: 0xe4e4e0, acc: 0xd2452d, conc: 0xa0a09a, dark: 0x44484e, rock: 0x7b7a70 } },
+  refinery:     { m: 34, kit: ['tower', 'crane', 'frame', 'stack', 'tower', 'crane', 'frame', 'stack'],
+                  pal: { main: 0xc7502d, acc: 0xe6d8a8, conc: 0x7d8286, dark: 0x30343a, rock: 0x6a6258 } },
+  pearl_harbor: { m: 34, kit: ['crane', 'stack', 'crane', 'tower', 'stack', 'crane', 'tower', 'stack'],
+                  pal: { main: 0xcc3b2a, acc: 0xe8e0c8, conc: 0x8d9094, dark: 0x2e353d, rock: 0x6b6f72 } },
+  vietnam:      { m: 34, kit: ['tower', 'mesa', 'tower', 'frame', 'tower', 'mesa', 'tower', 'stack'],
+                  pal: { main: 0x8c7a44, acc: 0x6a7a3a, conc: 0x7d7a60, dark: 0x4a4026, rock: 0x6a6a52 } },
+};
+// A frame of reference for one landmark: u runs from its middle toward the middle of the map, v is 90 degrees round,
+// both axis-aligned so every piece is an ordinary box. box() is solid, deco() is for the eye only.
+function _osFrame(K, X, Z, ux, uz) {
+  const vx = -uz, vz = ux, name = K.name, alongX = Math.abs(ux) > 0.5;
+  const W = (u, v) => [X + ux * u + vx * v, Z + uz * u + vz * v];
+  const dirOf = (a) => {
+    const s = a[1] === '+' ? 1 : -1, wx = a[0] === 'u' ? ux * s : vx * s, wz = a[0] === 'u' ? uz * s : vz * s;
+    return wx > 0.5 ? 'E' : wx < -0.5 ? 'W' : wz > 0.5 ? 'S' : 'N';
+  };
+  const vec = (a) => { const s = a[1] === '+' ? 1 : -1; return a[0] === 'u' ? [ux * s, uz * s] : [vx * s, vz * s]; };
+  const dims = (u0, u1, v0, v1) => { const cu = (u0 + u1) / 2, cv = (v0 + v1) / 2, [cx, cz] = W(cu, cv); return alongX ? [cx, cz, u1 - u0, v1 - v0] : [cx, cz, v1 - v0, u1 - u0]; };
+  const F = {
+    W, vec, X, Z, ux, uz,
+    box(u0, u1, v0, v1, y0, h, c) { const [cx, cz, w, d] = dims(u0, u1, v0, v1); return K.box(cx, y0, cz, w, h, d, c); },
+    deco(u0, u1, v0, v1, y0, h, c) {
+      const [cx, cz, w, d] = dims(u0, u1, v0, v1);
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshLambertMaterial({ color: c }));
+      m.position.set(cx, y0 + h / 2, cz); m.userData.mapStatic = true; MAP_GROUPS[name].add(m); return m;
+    },
+    // a thin bar from (u0, y0) to (u1, y1) at v, turned in the plane of u and up: a cable or a brace
+    bar(u0, y0, u1, y1, v, t, c) {
+      const L = Math.hypot(u1 - u0, y1 - y0), [cx, cz] = W((u0 + u1) / 2, v);
+      const m = new THREE.Mesh(new THREE.BoxGeometry(alongX ? L : t, t, alongX ? t : L), new THREE.MeshLambertMaterial({ color: c }));
+      m.position.set(cx, (y0 + y1) / 2, cz); m.userData.mapStatic = true;
+      const a = Math.atan2(y1 - y0, u1 - u0);
+      m.rotation.order = 'YXZ';
+      if (alongX) m.rotation.z = ux > 0 ? a : -a; else m.rotation.x = uz > 0 ? -a : a;
+      MAP_GROUPS[name].add(m); return m;
+    },
+    stairs(u, v, a, rise, width, c, y0, depth, step) { const [x, z] = W(u, v); return K.stairs(x, z, dirOf(a), rise, width, c, y0, depth, step); },
+  };
+  return F;
+}
+// A switchback stair: flights climb toward +u and then -u, side by side in two lanes, with a landing at every turn.
+// `attach(k)` says what the landing at the top of flight k has to meet ({u0, u1, vEdge}: the near edge of a floor at
+// that height) -- the landing is reached in over it and, if it ends short of the floor, a plank carries on.
+function _osClimb(F, o) {
+  const lane = o.lane || 2.2, depth = o.depth || 0.9, n = Math.max(2, Math.round(o.rise / 0.45)), step = o.rise / n;
+  const landings = [];
+  let u = o.u0, d = 1;
+  for (let k = 0; k < o.levels; k++) {
+    const vc = o.v0 + (k % 2) * lane + lane / 2, y0 = k * o.rise, level = y0 + o.rise;
+    F.stairs(u, vc, d > 0 ? 'u+' : 'u-', o.rise, lane, o.c, y0, depth, step);
+    const edge = u + d * (n * depth - depth / 2), a = Math.min(edge, edge + d * 3), b = Math.max(edge, edge + d * 3);
+    const at = o.attach ? o.attach(k) : null;
+    const lv0 = at ? at.vEdge - 1.6 : o.v0 - 0.3, lv1 = o.v0 + 2 * lane;
+    F.box(a, b, lv0, lv1, level - 0.4, 0.4, o.lc);
+    if (at) {
+      if (b < at.u0) F.box(b - 0.1, at.u0 + 0.3, lv0, at.vEdge + 0.2, level - 0.4, 0.4, o.lc);
+      else if (a > at.u1) F.box(at.u1 - 0.3, a + 0.1, lv0, at.vEdge + 0.2, level - 0.4, 0.4, o.lc);
+    }
+    landings.push({ u0: a, u1: b, v0: lv0, v1: lv1, y: level });
+    u = edge + d * (3 - depth / 2); d = -d;
+  }
+  return { landings, top: landings[landings.length - 1], foot: { u: o.u0, v: o.v0 + lane / 2 } };
+}
+const _OS_KITS = {
+  // A tower crane. A stair up the side of the mast, then a jib you can walk out along over the arena, a counter-jib
+  // with its weights, a cab, and the mast carrying on above it to a head with cables down to both arms.
+  crane(F, P) {
+    const H = 13, R = H / 4;
+    F.box(-1.3, 1.3, -1.3, 1.3, 0, H, P.main);
+    const cl = _osClimb(F, { u0: -4, v0: 1.6, levels: 4, rise: R, c: P.dark, lc: P.main,
+      attach: k => (k === 3 ? { u0: -1.3, u1: 1.3, vEdge: 1.1 } : null) });
+    F.box(1.3, 25, -1.1, 1.1, H - 0.4, 0.4, P.main);                                  // jib
+    F.box(-13, -1.3, -1.1, 1.1, H - 0.4, 0.4, P.main);                                // counter-jib
+    // (nothing solid goes above 14 m: the ground code does not count a surface up there, so a block that high could
+    //  be jumped onto and fallen through. The upper parts of the cab and the weights are for the eye.)
+    F.box(-13, -9.6, -1.1, 1.1, H, 1.0, P.conc); F.box(-9.4, -6, -1.1, 1.1, H, 1.0, P.conc);
+    F.deco(-13, -9.6, -1.1, 1.1, H + 1.0, 0.6, P.conc); F.deco(-9.4, -6, -1.1, 1.1, H + 1.0, 0.6, P.conc);
+    F.box(-1.3, 1.3, -3.9, -1.3, H - 0.4, 0.4, P.dark);                               // cab floor
+    F.box(-1.3, 1.3, -3.9, -1.5, H, 1.0, P.acc);                                      // the cab
+    F.deco(-1.3, 1.3, -3.9, -1.5, H + 1.0, 1.6, P.acc);
+    F.deco(1.3, 1.5, -3.8, -1.6, H + 0.6, 1.2, 0x5a8fb8);                             // its window
+    F.deco(-0.45, 0.45, -0.45, 0.45, H, 11, P.main);                                  // mast head
+    F.deco(-1.3, 1.3, -0.15, 0.15, H + 11, 0.5, P.dark);
+    F.bar(0, H + 11, 25, H - 0.2, 0, 0.14, P.dark); F.bar(0, H + 11, -13, H - 0.2, 0, 0.14, P.dark);
+    F.deco(17.6, 19.0, -0.9, 0.9, H - 1.2, 1.2, P.dark);                              // trolley, hook line, hook
+    F.deco(18.2, 18.4, -0.1, 0.1, H - 6.6, 5.4, P.dark); F.deco(17.8, 18.8, -0.5, 0.5, H - 7.6, 1.0, P.acc);
+    return { foot: cl.foot, pois: [{ u: 24, v: 0, y: H }, { u: -4.5, v: 0, y: H }] };
+  },
+  // A lookout / water tower: four legs, a deck with a tank on it, and the stair up the side.
+  tower(F, P) {
+    const h = 9, R = h / 3;
+    for (const a of [-1, 1]) for (const b of [-1, 1]) F.box(a * 3 - 0.45, a * 3 + 0.45, b * 3 - 0.45, b * 3 + 0.45, 0, h - 0.4, P.main);
+    for (const y of [3, 6]) {
+      F.deco(-3.4, 3.4, -3.15, -2.85, y, 0.3, P.dark); F.deco(-3.4, 3.4, 2.85, 3.15, y, 0.3, P.dark);
+      F.deco(-3.15, -2.85, -3.4, 3.4, y, 0.3, P.dark); F.deco(2.85, 3.15, -3.4, 3.4, y, 0.3, P.dark);
+    }
+    F.box(-3.7, 3.7, -3.7, 3.7, h - 0.4, 0.4, P.dark);                                 // the deck
+    F.box(-1.6, 1.6, -1.6, 1.6, h, 3.4, P.conc);                                       // the tank
+    F.deco(-2.0, 2.0, -2.0, 2.0, h + 3.4, 0.5, P.acc);
+    F.deco(-3.7, 3.7, 3.55, 3.7, h, 1.0, P.acc); F.deco(-3.7, 3.7, -3.7, -3.55, h, 1.0, P.acc);   // rails
+    F.deco(-3.7, -3.55, -3.7, 3.7, h, 1.0, P.acc); F.deco(3.55, 3.7, -3.7, 3.7, h, 1.0, P.acc);
+    const cl = _osClimb(F, { u0: -9, v0: 3.9, levels: 3, rise: R, c: P.dark, lc: P.main,
+      attach: k => (k === 2 ? { u0: -3.7, u1: 3.7, vEdge: 3.7 } : null) });
+    return { foot: cl.foot, pois: [{ u: 2.6, v: 2.6, y: h }, { u: -2.6, v: -2.6, y: h }] };
+  },
+  // Shipping containers three high, stepped back, with the stair up the long side and a plank onto each tier.
+  stack(F, P) {
+    const cols = [0xb5382a, 0x2a5a9a, 0x3a7a4a, 0xd8a02a, 0x7a7e84, 0x8a4a2a], T = 2.6, off = Math.abs(Math.round(F.X + F.Z));
+    const rows = [[-2.6, 0, 2.6], [-1.3, 1.3], [0]];
+    rows.forEach((vs, t) => vs.forEach((v, i) => {
+      F.box(-6, 6, v - 1.2, v + 1.2, t * T, T, cols[(t * 3 + i + off) % cols.length]);
+      F.deco(-5.9, 5.9, v - 1.25, v + 1.25, t * T + T - 0.1, 0.1, P.dark);
+    }));
+    const edges = [3.8, 2.5, 1.2];
+    const cl = _osClimb(F, { u0: -9, v0: 4.2, levels: 3, rise: T, c: P.dark, lc: P.main, depth: 0.85,
+      attach: k => ({ u0: -6, u1: 6, vEdge: edges[k] }) });
+    return { foot: cl.foot, pois: [{ u: 0, v: 0, y: 3 * T }, { u: 5, v: 0, y: 3 * T }, { u: -5, v: 2.6, y: T }] };
+  },
+  // A half-built concrete frame: columns, three floors, a stair up one side, rebar sticking out of the top.
+  frame(F, P) {
+    const L = 4.2;
+    for (const a of [-7, 0, 7]) for (const b of [-7, 0, 7]) F.box(a - 0.5, a + 0.5, b - 0.5, b + 0.5, 0, 3 * L - 0.5, P.conc);
+    for (let f = 1; f <= 3; f++) F.box(-8, 8, -8, 8, f * L - 0.5, 0.5, P.conc);
+    F.box(-8, -3, 7.5, 8, L, 1.1, P.dark); F.box(3, 8, -8, -7.5, 2 * L, 1.1, P.dark);       // a wall or two for cover
+    F.box(-1.5, 1.5, -1.5, 1.5, 2 * L, 1.0, P.rock);                                        // a stack of blocks
+    for (const [a, b] of [[-7, -7], [7, -7], [-7, 7], [7, 7], [0, 0]]) F.deco(a - 0.05, a + 0.05, b - 0.05, b + 0.05, 3 * L, 2.4, P.dark);   // rebar
+    const cl = _osClimb(F, { u0: -14, v0: 8.2, levels: 3, rise: L, c: P.dark, lc: P.main,
+      attach: () => ({ u0: -8, u1: 8, vEdge: 8 }) });
+    return { foot: cl.foot, pois: [{ u: 0, v: 0, y: 3 * L }, { u: 6, v: -6, y: 2 * L }, { u: -6, v: -6, y: L }] };
+  },
+  // A rock mesa: three terraces. A ramp up the first (you can slide down it), stairs up the next two.
+  mesa(F, P, K) {
+    F.box(-10, 10, -7, 7, 0, 3.0, P.rock);
+    F.box(-4, 4, -5, 5, 3.0, 3.0, P.conc);
+    F.box(-1.5, 1.5, -1.0, 1.0, 6.0, 2.4, P.rock);
+    const [rx, rz] = F.W(0, -13), [dx, dz] = F.vec('v+');
+    addRamp(K.name, rx, rz, dx, dz, { width: 5, rise: 3, run: 6, landing: 0, color: P.rock, landColor: P.rock, lipColor: P.rock });
+    F.stairs(9.2, 0, 'u-', 3.0, 3, P.conc, 3.0, 0.8, 3.0 / 7);                              // onto the second terrace
+    F.stairs(0, -4.6, 'v+', 2.4, 2.4, P.rock, 6.0, 0.8, 2.4 / 5);                           // onto the third... from the second
+    return { foot: { u: 0, v: -14 }, pois: [{ u: 0, v: 0, y: 8.4 }, { u: 8, v: 4, y: 3 }, { u: -7, v: 0, y: 3 }] };
+  },
+};
+// The theme pass had already dressed the wall (a cap, a stripe, pillars, a lamp every 11 m) into the map's one merged
+// decoration mesh, so taking the wall out leaves its trimmings hanging in the air. Every triangle that lies wholly
+// within a couple of metres of the old edge goes with it.
+function _osStripEdgeDecor(group, hx, hz) {
+  let cut = 0;
+  for (const m of group.children) {
+    if (!m.isMesh || !m.userData || !m.userData.themeDecor || !m.geometry || m.geometry.index) continue;
+    const geo = m.geometry, pos = geo.attributes.position;
+    if (!pos || pos.count % 3) continue;
+    const keep = [];
+    for (let t = 0; t < pos.count; t += 3) {
+      let edge = true;
+      for (let k = 0; k < 3 && edge; k++) edge = Math.abs(pos.getX(t + k)) > hx - 1.8 || Math.abs(pos.getZ(t + k)) > hz - 1.8;
+      if (!edge) keep.push(t);
+    }
+    if (keep.length * 3 === pos.count) continue;
+    cut += pos.count / 3 - keep.length;
+    for (const name of Object.keys(geo.attributes)) {
+      const at = geo.attributes[name], n = at.itemSize, out = new Float32Array(keep.length * 3 * n);
+      keep.forEach((t, i) => { for (let k = 0; k < 3 * n; k++) out[i * 3 * n + k] = at.array[t * n + k]; });
+      geo.setAttribute(name, new THREE.BufferAttribute(out, n));
+    }
+    geo.computeBoundingSphere(); geo.computeBoundingBox();
+  }
+  return cut;
+}
+function addMapOutskirts() {
+  for (const name of Object.keys(OUTSKIRTS)) {
+    const cfg = OUTSKIRTS[name], group = MAP_GROUPS[name], old = MAP_BOUNDS[name], cols = MAP_COLLIDERS[name];
+    if (!group || !old || !cols || MAP_BOT_BOUNDS[name]) continue;
+    try {
+      const hx = old.halfX, hz = old.halfZ, M = cfg.m, nx = hx + M, nz = hz + M, rnd = _thRng(name + ':outskirts');
+      // 1) the wall: four long tall boxes at the edge, and the colliders they own
+      const walls = cols.filter(b => {
+        const w = b.max.x - b.min.x, d = b.max.z - b.min.z, h = b.max.y - b.min.y, cx = (b.max.x + b.min.x) / 2, cz = (b.max.z + b.min.z) / 2;
+        return Math.max(w, d) >= Math.min(hx, hz) * 1.4 && h >= 2.2 && Math.min(w, d) <= 3 && Math.max(Math.abs(cx) - hx, Math.abs(cz) - hz) > -6;
+      });
+      const near = (a, b) => Math.abs(a.min.x - b.min.x) + Math.abs(a.max.x - b.max.x) + Math.abs(a.min.z - b.min.z) + Math.abs(a.max.z - b.max.z) < 0.6 && Math.abs(a.max.y - b.max.y) < 0.2;
+      for (const w of walls) {
+        const i = cols.indexOf(w); if (i >= 0) cols.splice(i, 1);
+        for (const m of group.children.slice()) {
+          if (!m.isMesh || !m.geometry) continue;
+          const b = new THREE.Box3().setFromObject(m);
+          if (near(b, w)) { group.remove(m); if (m.geometry) m.geometry.dispose(); }
+        }
+      }
+      _osStripEdgeDecor(group, hx, hz);
+      // scenery that stood outside the wall was only ever to look at; with the wall gone it would be walk-through
+      for (const m of group.children.slice()) {
+        if (m.userData && m.userData.keepOutside) continue;
+        if (!(m.isMesh || m.isGroup) || (m.geometry && m.geometry.type === 'PlaneGeometry')) continue;
+        const p = m.position;
+        if ((Math.abs(p.x) > hx + 0.5 || Math.abs(p.z) > hz + 0.5) && Math.abs(p.x) < nx + 2 && Math.abs(p.z) < nz + 2 && !m.userData.mapStatic) group.remove(m);
+      }
+      // 2) ground for the ring: four strips the colour of the arena floor
+      const floor = group.children.filter(m => m.geometry && m.geometry.type === 'PlaneGeometry' && m.material && m.material.color
+        && m.geometry.parameters.width >= hx).sort((a, b) => b.geometry.parameters.width - a.geometry.parameters.width)[0];
+      const gc = floor ? floor.material.color.getHex() : 0x7a7a70;
+      const strip = (w, d, x, z) => {
+        const g = new THREE.Mesh(new THREE.PlaneGeometry(w, d), new THREE.MeshLambertMaterial({ color: gc }));
+        g.rotation.x = -Math.PI / 2; g.position.set(x, 0, z); group.add(g);
+      };
+      strip(2 * nx, M, 0, -hz - M / 2); strip(2 * nx, M, 0, hz + M / 2); strip(M, 2 * hz, -hx - M / 2, 0); strip(M, 2 * hz, hx + M / 2, 0);
+      // 3) the new edge, and the old arena kept for the bots
+      MAP_BOT_BOUNDS[name] = { halfX: hx, halfZ: hz };
+      setMapBounds(name, nx * 2, nz * 2);
+      const K = _bkit(name), P = cfg.pal;
+      // 4) eight landmarks round the ring
+      const cxm = hx + M / 2, czm = hz + M / 2;
+      const slots = [[-cxm, -czm], [(rnd() - 0.5) * 30, -czm], [cxm, -czm], [cxm, (rnd() - 0.5) * 30], [cxm, czm], [(rnd() - 0.5) * 30, czm], [-cxm, czm], [-cxm, (rnd() - 0.5) * 30]];
+      const built = [];
+      slots.forEach(([x, z], i) => {
+        const kind = cfg.kit[i % cfg.kit.length], make = _OS_KITS[kind];
+        if (!make) return;
+        // face the middle of the map along the axis that is farther from it
+        const corner = Math.abs(x) > hx * 0.6 && Math.abs(z) > hz * 0.6;
+        const alongX = corner ? (i % 4 < 2) : Math.abs(x) > Math.abs(z);
+        const ux = alongX ? -Math.sign(x || 1) : 0, uz = alongX ? 0 : -Math.sign(z || 1);
+        const F = _osFrame(K, x, z, ux, uz);
+        const r = make(F, P, K);
+        built.push({ kind, x, z, ux, uz, r });
+        const [fx, fz] = F.W(r.foot.u, r.foot.v);
+        K.poi('outskirts ' + kind, fx, fz, 0);
+        for (const p of r.pois || []) { const [px, pz] = F.W(p.u, p.v); K.poi('outskirts ' + kind + ' top', px, pz, p.y); }
+      });
+      // 5) rubble between them, kept off the way out of the arena and off the landmarks
+      const rubble = [0x6f6a60, 0x7a746a, 0x5e5a52, P.conc];
+      for (let k = 0; k < 40; k++) {
+        const side = Math.floor(rnd() * 4), t = (rnd() * 2 - 1) * (side < 2 ? nx - 4 : nz - 4), d = 5 + rnd() * (M - 10);
+        const x = side < 2 ? t : (side === 2 ? -hx - d : hx + d), z = side < 2 ? (side === 0 ? -hz - d : hz + d) : t;
+        if (built.some(b => Math.hypot(b.x - x, b.z - z) < 15)) continue;
+        const w = 1.2 + rnd() * 2.2, h = 0.6 + rnd() * 1.1;
+        K.box(x, 0, z, w, h, w * (0.7 + rnd() * 0.6), rubble[Math.floor(rnd() * rubble.length)], rnd() * 3);
+      }
+      // 6) the edge itself: tape at waist height with a striped post every ten metres
+      const tape = (x0, z0, x1, z1) => {
+        const L = Math.hypot(x1 - x0, z1 - z0), m = new THREE.Mesh(new THREE.BoxGeometry(Math.abs(x1 - x0) > 0.1 ? L : 0.06, 0.06, Math.abs(z1 - z0) > 0.1 ? L : 0.06), new THREE.MeshLambertMaterial({ color: 0xd8c43a }));
+        m.position.set((x0 + x1) / 2, 1.25, (z0 + z1) / 2); m.userData.mapStatic = true; group.add(m);
+      };
+      const eh = nx - 1.5, ez = nz - 1.5;
+      tape(-eh, -ez, eh, -ez); tape(-eh, ez, eh, ez); tape(-eh, -ez, -eh, ez); tape(eh, -ez, eh, ez);
+      let pi = 0;
+      const post = (x, z) => {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(0.3, 1.5, 0.3), new THREE.MeshLambertMaterial({ color: (pi++ & 1) ? 0xd23a2a : 0xf0f0ea }));
+        m.position.set(x, 0.75, z); m.userData.mapStatic = true; group.add(m);
+      };
+      for (let x = -eh; x <= eh + 0.1; x += 10) { post(x, -ez); post(x, ez); }
+      for (let z = -ez + 10; z < ez - 0.1; z += 10) { post(-eh, z); post(eh, z); }
+      group.userData.outskirts = built.map(b => {
+        const F = _osFrame(K, b.x, b.z, b.ux, b.uz), [fx, fz] = F.W(b.r.foot.u, b.r.foot.v);
+        return { kind: b.kind, x: b.x, z: b.z, foot: { wx: fx, wz: fz },
+                 pois: (b.r.pois || []).map(p => { const [wx, wz] = F.W(p.u, p.v); return { wx, wz, y: p.y }; }) };
+      });
+    } catch (e) { console.warn('[outskirts]', name, e); }
+  }
+}
+addMapOutskirts();
+
 weatherAllMaps();
 camera.add(_vmKey); camera.add(_vmFill);
 scene.add(camera);   // lights parented to the camera only render if it is in the scene
@@ -45883,6 +46166,26 @@ function syncLobbyStats(on) {
   const row = document.getElementById('ls-streak');
   if (row) { row.classList.toggle('hot', st >= 3); row.classList.toggle('cold', st === 0); }
 }
+// ⚠️ On a map with no wall the edge is just ground that stops: say so a few metres before it.
+let _edgeWarnEl = null;
+function syncEdgeWarning() {
+  let near = false;
+  if (MAP_BOT_BOUNDS[activeMapName] && gameStarted && !inLobby && !isDead) {
+    const b = MAP_BOUNDS[activeMapName];
+    near = Math.min(b.halfX - Math.abs(camera.position.x), b.halfZ - Math.abs(camera.position.z)) < 7;
+  }
+  if (!near && !_edgeWarnEl) return;
+  if (!_edgeWarnEl) {
+    _edgeWarnEl = document.createElement('div');
+    _edgeWarnEl.style.cssText = 'position:fixed;top:17%;left:50%;transform:translateX(-50%);z-index:60;display:none;padding:6px 16px;'
+      + 'border-radius:8px;background:rgba(110,18,18,0.82);border:1px solid #ff8a6a;color:#ffe0d4;pointer-events:none;'
+      + 'font:700 14px/1.3 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;letter-spacing:1px;white-space:nowrap;';
+    _edgeWarnEl.textContent = '⚠ EDGE OF THE ARENA — TURN BACK';
+    document.body.appendChild(_edgeWarnEl);
+  }
+  const want = near ? 'block' : 'none';
+  if (_edgeWarnEl.style.display !== want) _edgeWarnEl.style.display = want;
+}
 function syncLobbyTag() {
   const el = document.getElementById('lobby-tag');
   const on = gameStarted && inLobby;
@@ -53748,7 +54051,7 @@ function findBotCover(bot, target) {
       x: cx - (toTX / toTLen) * (bw * 0.5 + 1.0),
       z: cz - (toTZ / toTLen) * (bd * 0.5 + 1.0),
     };
-    { const bb = getMapBoundsRect(); pt.x = Math.max(-bb.halfX + 2, Math.min(bb.halfX - 2, pt.x)); pt.z = Math.max(-bb.halfZ + 2, Math.min(bb.halfZ - 2, pt.z)); }   // never outside the arena
+    { const bb = MAP_BOT_BOUNDS[activeMapName] || getMapBoundsRect(); pt.x = Math.max(-bb.halfX + 2, Math.min(bb.halfX - 2, pt.x)); pt.z = Math.max(-bb.halfZ + 2, Math.min(bb.halfZ - 2, pt.z)); }   // never outside the arena
     // Prefer close walls that are actually between bot and target
     const score = distToBot * 0.7 + Math.hypot(pt.x - bot.x, pt.z - bot.z) * 0.3;
     if (score < bestScore) { bestScore = score; bestPt = pt; }
@@ -54876,6 +55179,8 @@ function updateBotAI(dt) {
       nx = Math.max(-tb.halfX + 0.9, Math.min(tb.halfX - 0.9, nx));
       nz = Math.max(-tb.halfZ + 0.9, Math.min(tb.halfZ - 0.9, nz));
     }
+    { const bl = MAP_BOT_BOUNDS[activeMapName];   // a map with no wall: the outskirts are for players, bots stay in the arena
+      if (bl) { nx = Math.max(-bl.halfX + 0.9, Math.min(bl.halfX - 0.9, nx)); nz = Math.max(-bl.halfZ + 0.9, Math.min(bl.halfZ - 0.9, nz)); } }
     if (isOutOfBoundsXZ(nx, nz)) {
       killBotOutOfBounds(bot, (bot._ringoutKillerUntil || 0) > Date.now() ? bot._ringoutKiller : null);
       continue;
@@ -55173,7 +55478,8 @@ function loop() {
   if (inLobby) safeLoopStep('lobby-interactions', () => updateLobbyInteractions()); // duel-pad / challenge prompt
   safeLoopStep('interact-button', syncInteractButton); // every frame, so DUEL clears once you leave the lobby
   safeLoopStep('ability-button', syncAbilityButton);   // shows only while what you hold has an ability (#30)
-  safeLoopStep('lobby-tag', syncLobbyTag);             // "LOBBY 13 · CHILL ZONE · NO DAMAGE" (#35)
+  safeLoopStep('lobby-tag', syncLobbyTag);
+  safeLoopStep('edge-warning', syncEdgeWarning);             // "LOBBY 13 · CHILL ZONE · NO DAMAGE" (#35)
   safeLoopStep('admin-cheats', () => updateAdminCheats(dt));// admin cheat tick (fly, kill aura, etc.)
   safeLoopStep('admin-map-preview', updateAdminMapPreview); // green ghost where PLACE IN FRONT will drop
   safeLoopStep('uav', () => updateUAV(dt));        // Predator UAV overlay tick
