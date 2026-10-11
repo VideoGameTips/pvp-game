@@ -33510,6 +33510,7 @@ const KEY_ACTIONS = [
   ['jump', 'Jump', 'Space'], ['slide', 'Slide', 'ShiftLeft'], ['crouch', 'Crouch', 'ControlLeft'],
   ['reload', 'Reload', 'KeyR'], ['ability', 'Ability / aim', 'KeyE'], ['interact', 'Interact / swap gear', 'KeyF'],
   ['emotes', 'Emotes', 'KeyQ'], ['freecam', 'Free camera', 'Digit0'], ['slot1', 'Primary weapon', 'Digit1'], ['slot2', 'Secondary weapon', 'Digit2'],
+  ['perspective', 'Camera perspective', 'Digit9'],
   ['slot3', 'Melee', 'Digit3'], ['slot4', 'Support item', 'Digit4'],
   ['inspect', 'Inspect weapon', 'KeyT'], ['melee', 'Quick melee', 'KeyB'], ['chat', 'Quick chat', 'KeyV'],
   ['comms1', 'Comms wheel 1', 'KeyZ'], ['comms2', 'Comms wheel 2', 'KeyX'], ['scoreboard', 'Scoreboard', 'Tab'],
@@ -33744,6 +33745,79 @@ const EMOTES = [
 // This camera never becomes the gameplay camera: physics, hits and network sync
 // continue to use the player's real position while their view is detached.
 const SOCIAL_VIEW = { mode: null, camera: null, look: new THREE.Euler(0, 0, 0, 'YXZ'), actor: null, menu: null, emote: null, started: 0 };
+const PLAYER_VIEW = { mode: 'first', camera: null, actor: null, lastShot: 0 };
+function resetPlayerView() {
+  if (PLAYER_VIEW.actor) { scene.remove(PLAYER_VIEW.actor); disposeBody(PLAYER_VIEW.actor); }
+  PLAYER_VIEW.actor = null;
+  PLAYER_VIEW.camera = null;
+  PLAYER_VIEW.lastShot = 0;
+  PLAYER_VIEW.mode = 'first';
+}
+function cyclePlayerView() {
+  if (!gameStarted || isDead || KILLCAM.active || spectatorState || THEATER.active
+      || selectedModeConfig?.type === 'builder' || anyDialogOpen() || isLoadoutOpen()) return;
+  if (SOCIAL_VIEW.mode) stopSocialView();
+  const modes = ['first', 'third', 'second'];
+  PLAYER_VIEW.mode = modes[(modes.indexOf(PLAYER_VIEW.mode) + 1) % modes.length];
+  showAnnouncement(PLAYER_VIEW.mode.toUpperCase() + ' PERSON', '', '#a8d9ff', 1000);
+}
+function updatePlayerView(dt) {
+  if (PLAYER_VIEW.actor) PLAYER_VIEW.actor.visible = false;
+  if (PLAYER_VIEW.mode === 'first' || !gameStarted || isDead || SOCIAL_VIEW.mode || KILLCAM.active
+      || spectatorState || THEATER.active || pilotedVehicle || pilotedMortar || isADS
+      || selectedModeConfig?.type === 'builder' || isLoadoutOpen() || anyDialogOpen()) return camera;
+  const skin = mySkin || 'default';
+  if (PLAYER_VIEW.actor && PLAYER_VIEW.actor._skinId !== skin) {
+    scene.remove(PLAYER_VIEW.actor); disposeBody(PLAYER_VIEW.actor); PLAYER_VIEW.actor = null;
+  }
+  if (!PLAYER_VIEW.actor) {
+    PLAYER_VIEW.actor = makePlayerMesh(currentUser?.username || 'You', false, 'ally', skin);
+    scene.add(PLAYER_VIEW.actor);
+  }
+  const actor = PLAYER_VIEW.actor;
+  actor.visible = true;
+  actor.position.copy(camera.position); actor.position.y -= window._crouchEye ?? 1.65;
+  actor.rotation.y = euler.y + Math.PI;
+  armRemoteMesh(actor, (activeSlot === 'primary' || activeSlot === 'secondary') ? currentWeapon?.id : null);
+  const crouch = THREE.MathUtils.clamp((1.65 - (window._crouchEye ?? 1.65)) / .95, 0, 1);
+  const sliding = !!(window._slideUntil && Date.now() < window._slideUntil);
+  if (lastShot !== PLAYER_VIEW.lastShot) {
+    if (Date.now() - lastShot < 150) kickCharacter(actor);
+    PLAYER_VIEW.lastShot = lastShot;
+  }
+  animateCharacterMesh(actor, dt, crouch, sliding ? 1 : 0, isPlayerGrounded() ? 0 : 1, -euler.x,
+    reloading && _reloadSt ? THREE.MathUtils.clamp((Date.now() - _reloadSt.start) / _reloadSt.dur, 0, 1) : -1);
+  if (!PLAYER_VIEW.camera) PLAYER_VIEW.camera = new THREE.PerspectiveCamera(70, camera.aspect, camera.near, camera.far);
+  const c = PLAYER_VIEW.camera;
+  if (c.aspect !== camera.aspect) { c.aspect = camera.aspect; c.updateProjectionMatrix(); }
+  const forward = camera.getWorldDirection(new THREE.Vector3());
+  const target = camera.position.clone().add(new THREE.Vector3(0, -.55, 0));
+  const offset = PLAYER_VIEW.mode === 'third'
+    ? forward.clone().multiplyScalar(-3.6).add(new THREE.Vector3(Math.cos(euler.y) * .65, .9, -Math.sin(euler.y) * .65))
+    : new THREE.Vector3(-Math.sin(euler.y) * 4, 1.1, -Math.cos(euler.y) * 4);
+  const ray = new THREE.Ray(target, offset.clone().normalize());
+  let distance = offset.length();
+  for (const box of wallColliders) {
+    const hit = ray.intersectBox(box, new THREE.Vector3());
+    if (hit) distance = Math.min(distance, Math.max(.15, hit.distanceTo(target) - .25));
+  }
+  if (distance < .75) { actor.visible = false; return camera; }
+  c.position.copy(target).add(offset.setLength(distance));
+  if (PLAYER_VIEW.mode === 'second') c.lookAt(target);
+  else {
+    // Centre the shoulder camera on the same target the eye-origin shot hits.
+    const aimRay = new THREE.Ray(camera.position.clone(), forward), point = new THREE.Vector3();
+    let aimDistance = 300;
+    for (const box of wallColliders) if (aimRay.intersectBox(box, point)) aimDistance = Math.min(aimDistance, point.distanceTo(camera.position));
+    for (const [id, mesh] of Object.entries(remoteMeshes)) {
+      if (!mesh.visible || players[id]?.dead) continue;
+      const sphere = new THREE.Sphere(mesh.position.clone().add(new THREE.Vector3(0, 1.1, 0)), .5);
+      if (aimRay.intersectSphere(sphere, point)) aimDistance = Math.min(aimDistance, point.distanceTo(camera.position));
+    }
+    c.lookAt(camera.position.clone().addScaledVector(forward, Math.max(.2, aimDistance)));
+  }
+  return c;
+}
 function stopSocialView() {
   SOCIAL_VIEW.mode = null;
   SOCIAL_VIEW.emote = null;
@@ -33891,6 +33965,11 @@ function updateSocialView(dt) {
 }
 window.addEventListener('keydown', e => {
   if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName) || !gameStarted) return;
+  if (e.code === 'Digit9' && !commsMenuOpen) {
+    e.preventDefault(); e.stopImmediatePropagation();
+    if (!e.repeat) cyclePlayerView();
+    return;
+  }
   if (e.code === 'Digit0' || e.code === 'KeyQ') {
     e.preventDefault(); e.stopImmediatePropagation();
     if (e.repeat) return;
@@ -54867,10 +54946,13 @@ function loop() {
   // While the theater is active, theaterTick() owns rendering (it runs even when
   // loop() isn't, e.g. opened from the cold menu). Don't double-render here.
   safeLoopStep('social-camera', () => updateSocialView(dt));
+  let viewCamera = camera;
+  safeLoopStep('player-camera', () => { viewCamera = updatePlayerView(dt); });
+  if (SOCIAL_VIEW.mode) viewCamera = SOCIAL_VIEW.camera;
   if (!THEATER.active) {
-    const hidden = SOCIAL_VIEW.mode ? camera.children.filter(o => o.visible && !(o instanceof THREE.Light)) : [];
+    const hidden = viewCamera !== camera ? camera.children.filter(o => o.visible && !(o instanceof THREE.Light)) : [];
     hidden.forEach(o => { o.visible = false; });
-    try { renderer.render(scene, SOCIAL_VIEW.mode ? SOCIAL_VIEW.camera : camera); }
+    try { renderer.render(scene, viewCamera); }
     finally { hidden.forEach(o => { o.visible = true; }); }
   }
 }
@@ -56533,6 +56615,7 @@ function afterDeath(ms, fn) {
 // Everything a finished match (or Lobby 13) leaves behind that the next start must not
 // inherit. Shared by the mode menu and the end-of-match buttons so they can't drift apart.
 function teardownMatchWorld() {
+  resetPlayerView();
   stopSocialView();
   matchEpoch++;
   // Tell the server too (#46). This only ever cleared the bots here, so the server kept

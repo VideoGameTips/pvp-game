@@ -551,6 +551,45 @@ if (ok && process.argv.includes('--emotes')) {
   console.log('emote relay checks: valid IDs, fixed duration, cancellation and dead-player guard');
 }
 
+if (ok && process.argv.includes('--perspectives')) {
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [], saved = { gameStarted, isDead, isADS, reloading, reload: _reloadSt, mode: selectedModeConfig,
+      pos: camera.position.clone(), quat: camera.quaternion.clone(), yaw: euler.clone(), boxes: wallColliders.slice(),
+      dialogs: anyDialogOpen, loadout: isLoadoutOpen, social: SOCIAL_VIEW.mode, skin: mySkin };
+    try {
+      gameStarted = true; isDead = isADS = reloading = false; selectedModeConfig = null; SOCIAL_VIEW.mode = null;
+      anyDialogOpen = isLoadoutOpen = () => false;
+      camera.position.set(0,1.65,0); camera.quaternion.identity(); euler.set(0,0,0,'YXZ'); wallColliders.length = 0;
+      if (keyBoundTo('perspective') !== 'Digit9') issues.push('perspective binding missing');
+      PLAYER_VIEW.mode = 'third'; let c = updatePlayerView(.016);
+      if (c === camera || c.position.z <= 0 || !PLAYER_VIEW.actor.visible) issues.push('third-person framing failed');
+      PLAYER_VIEW.mode = 'second'; c = updatePlayerView(.016);
+      if (c === camera || c.position.z >= 0 || !PLAYER_VIEW.actor.visible) issues.push('second-person framing failed');
+      if (!camera.position.equals(new THREE.Vector3(0,1.65,0))) issues.push('perspective moved player');
+      isADS = true;
+      if (updatePlayerView(.016) !== camera || PLAYER_VIEW.actor.visible) issues.push('ADS fallback failed');
+      isADS = false; reloading = true; _reloadSt = { start: Date.now() - 300, dur: 2000 };
+      updatePlayerView(.016); reloading = false;
+      SOCIAL_VIEW.mode = 'free';
+      if (updatePlayerView(.016) !== camera || PLAYER_VIEW.actor.visible) issues.push('freecam duplicate body');
+      SOCIAL_VIEW.mode = null; PLAYER_VIEW.mode = 'third';
+      wallColliders.push(new THREE.Box3(new THREE.Vector3(-5,0,1), new THREE.Vector3(5,5,2)));
+      c = updatePlayerView(.016);
+      if (c !== camera && c.position.z >= 1) issues.push('camera crossed wall');
+      PLAYER_VIEW.mode = 'first';
+      if (updatePlayerView(.016) !== camera || PLAYER_VIEW.actor.visible) issues.push('first-person restoration failed');
+    } finally {
+      resetPlayerView(); gameStarted = saved.gameStarted; isDead = saved.isDead; isADS = saved.isADS; reloading = saved.reloading;
+      _reloadSt = saved.reload; selectedModeConfig = saved.mode; SOCIAL_VIEW.mode = saved.social; mySkin = saved.skin;
+      anyDialogOpen = saved.dialogs; isLoadoutOpen = saved.loadout; camera.position.copy(saved.pos); camera.quaternion.copy(saved.quat);
+      euler.copy(saved.yaw); wallColliders.splice(0,wallColliders.length,...saved.boxes);
+    }
+    console.log('perspective checks: first/third/second cameras, fixed physical position, ADS, reload, freecam, wall avoidance and cleanup');
+    return issues;
+  })()`);
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 if (ok && process.env.MAP_REVIEW_DIR) {
   fs.mkdirSync(process.env.MAP_REVIEW_DIR, { recursive: true });
   for (const name of ['forest', 'desert', 'tundra', 'refinery', 'space', 'volcano', 'titanic', 'carrier', 'pearl_harbor']) {
