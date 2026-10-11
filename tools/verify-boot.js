@@ -275,7 +275,7 @@ if (ok && process.argv.includes('--wraps')) {
       const surface = getWeaponWrapSurface(id);
       if (main.material.map !== surface.map || main.material.bumpMap !== surface.bumpMap) issues.push(id + ': wrap did not reach gun');
       if (getWeaponWrapSurface(id) !== surface) issues.push(id + ': texture cache missed');
-      if (main.geometry !== geometry || locked.material !== lockedMat || lens.material.color.getHex() !== 0x55aaff || sight.material.map) issues.push(id + ': altered geometry, locked skin, lens or sight');
+      if (main.geometry !== geometry || locked.material !== lockedMat || lens.material.color.getHex() !== 0x55aaff || sight.material.map !== surface.map) issues.push(id + ': solid trim uncovered or protected surface altered');
       if (id === 'wood' && main.material.metalness !== 0) issues.push('wood reads as metal');
       if (id === 'fire' && !main.material.emissiveMap) issues.push('fire has no glow mask');
     }
@@ -285,7 +285,41 @@ if (ok && process.argv.includes('--wraps')) {
     if (main.material.map !== getWeaponWrapSurface('cyber').map) issues.push('wrap did not replace legacy pattern');
     applyWeaponSkin(model, WEAPON_SKINS_BY_ID.default);
     if (main.material.map !== originalMap || main.material.bumpMap !== originalBump || main.material.color.getHex() !== 0x456789 || main.material.roughness !== .67 || main.material.metalness !== .8 || main.material.emissiveMap) issues.push('stock did not restore original material');
-    console.log('wrap checks: six textured materials, cache, sight/lens protection, skin locks and stock restoration');
+    const allSides = new THREE.Group();
+    const body = new THREE.MeshStandardMaterial({ color: 0x555555 }), accent = new THREE.MeshStandardMaterial({ color: 0x777777 });
+    const multi = new THREE.Mesh(new THREE.BoxGeometry(.1,.1,.1), [body, accent, new THREE.MeshStandardMaterial({ map: originalMap }), body, accent, new THREE.MeshStandardMaterial()]);
+    allSides.add(multi); allSides._bodyMat = body; allSides._accentMat = accent;
+    const shared = new THREE.BoxGeometry(.02,.1,.2); shared.deleteAttribute('uv');
+    const noUV = new THREE.Mesh(shared, body), alsoNoUV = new THREE.Mesh(shared, body); allSides.add(noUV, alsoNoUV);
+    const hand = new THREE.Group(); hand.userData.vmHand = true;
+    const handMesh = new THREE.Mesh(shared, body); hand.add(handMesh); allSides.add(hand);
+    const glass = new THREE.Mesh(shared, new THREE.MeshPhysicalMaterial({ transparent: true, opacity: .5, transmission: .8 })); allSides.add(glass);
+    const glassMat = glass.material;
+    const shape = new THREE.Shape(); shape.moveTo(0,0); shape.lineTo(.15,0); shape.lineTo(.15,.06); shape.lineTo(0,.06); shape.closePath();
+    const extruded = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth:.015, bevelEnabled:false }), accent); allSides.add(extruded);
+    const originalUV = extruded.geometry.attributes.uv.array.slice();
+    applyWeaponSkin(allSides, WEAPON_SKINS_BY_ID.ultraviolet);
+    const uvMap = getWeaponWrapSurface('ultraviolet').map;
+    if (multi.material.some(m => m.map !== uvMap) || allSides._bodyMat.map !== uvMap || allSides._accentMat.map !== uvMap) issues.push('material slots, original maps or accent faces missed wrap');
+    for (const mesh of [noUV, alsoNoUV, extruded]) {
+      if (!mesh.geometry.attributes.uv || mesh.material.map !== uvMap) issues.push('shared or extruded face lacked wrap');
+      const pos = mesh.geometry.attributes.position, nor = mesh.geometry.attributes.normal, uv = mesh.geometry.attributes.uv;
+      for (let k = 0; k + 2 < pos.count && !mesh.geometry.index; k += 3) {
+        const area = Math.abs((uv.getX(k+1)-uv.getX(k))*(uv.getY(k+2)-uv.getY(k))-(uv.getX(k+2)-uv.getX(k))*(uv.getY(k+1)-uv.getY(k)));
+        if (area < .00001) issues.push('extruded face sampled a single texture line');
+      }
+    }
+    if (handMesh.material !== body || handMesh.geometry !== shared || shared.attributes.uv || glass.material !== glassMat || glass.geometry !== shared) issues.push('wrap leaked onto hand/glass or shared geometry');
+    applyWeaponSkin(allSides, WEAPON_SKINS_BY_ID.default);
+    if (noUV.geometry.attributes.uv || alsoNoUV.geometry.attributes.uv || extruded.geometry.attributes.uv.array.some((v,i) => v !== originalUV[i]) || multi.material[2].map !== originalMap) issues.push('stock UV or authored map restoration failed');
+    const lateGeo = new THREE.BoxGeometry(.025,.03,.06); lateGeo.deleteAttribute('uv');
+    const late = new THREE.Mesh(lateGeo, accent); allSides.add(late);
+    const stableMat = multi.material[0];
+    applyWeaponSkin(allSides, WEAPON_SKINS_BY_ID.ultraviolet);
+    if (late.material.map !== uvMap || !late.geometry.attributes.uv || multi.material[0] !== stableMat) issues.push('late fittings missed wrap or existing materials recloned');
+    applyWeaponSkin(allSides, WEAPON_SKINS_BY_ID.default);
+    if (late.geometry.attributes.uv) issues.push('late fitting UV restoration failed');
+    console.log('wrap checks: six finishes, every material slot, accent/trim coverage, projected faces, protected hands/lenses and stock restoration');
     return issues;
   })()`);
   if (issues.length) { ok = false; console.log(issues.join('\n')); }

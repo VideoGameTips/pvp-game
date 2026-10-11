@@ -26842,37 +26842,43 @@ function _wsTextures(id, variant) {
   }
   _wsCache.set(key, t); return t;
 }
-// Two kinds of hand-built part do not suit a pattern as they come: ones with no UVs at all, and extruded ones whose UVs
-// are in metres (0 to 0.3 over the whole part), which sample one corner of the texture and come out a single flat
-// colour among patterned neighbours. While a pattern skin is on, the first get box-projected UVs and the second their
-// UVs scaled up; Stock puts the original UVs back, so nothing else that reads them is changed.
-function _wsUVMode(model, on) {
+// Unmapped and extruded parts need a usable texture span on each face, not one corner of the wrap.
+function _wsUVMode(model, on, meshes) {
   if (!model._wsUVParts) {
     model._wsUVParts = [];
-    const K = 6;   // pattern tiles per metre on a projected part
+    model._wsUVSeen = new WeakSet();
+  }
+  {
     model.traverse(o => {
-      if (!o.isMesh || !o.geometry || (o.userData && o.userData.vmHand) || !o.geometry.attributes.position) return;
-      const g = o.geometry, uv = g.attributes.uv;
+      if (!o.isMesh || !o.geometry || (meshes && !meshes.has(o)) || !o.geometry.attributes.position) return;
+      if (model._wsUVSeen.has(o)) return;
+      model._wsUVSeen.add(o);
+      let g = o.geometry; const uv = g.attributes.uv;
       if (g.userData._wsUV) { model._wsUVParts.push(g); return; }
-      let alt = null;
-      if (!uv) {
-        const pos = g.attributes.position, nor = g.attributes.normal; alt = new Float32Array(pos.count * 2);
+      let project = !uv || g.type === 'ExtrudeGeometry';
+      if (uv && !project) {
+        let lo = Infinity, hi = -Infinity, lv = Infinity, hv = -Infinity;
+        for (let k = 0; k < uv.count; k++) { const u = uv.getX(k), v = uv.getY(k); lo = Math.min(lo,u); hi = Math.max(hi,u); lv = Math.min(lv,v); hv = Math.max(hv,v); }
+        project = hi - lo < .5 && hv - lv < .5 && g.type !== 'BoxGeometry';
+      }
+      if (project) {
+        // UV edits belong to this weapon, never to a hand or another model sharing its geometry.
+        g = o.geometry = g.clone();
+        g.userData = { ...g.userData };
+        g.computeBoundingBox(); const b = g.boundingBox, size = b.getSize(new THREE.Vector3());
+        const pos = g.attributes.position; let nor = g.attributes.normal;
+        if (!nor) { const tmp = g.clone(); tmp.computeVertexNormals(); nor = tmp.attributes.normal; tmp.dispose(); }
+        const alt = new Float32Array(pos.count * 2);
+        const coord = (value, axis) => (value - b.min[axis]) / Math.max(.00001, size[axis]);
         for (let k = 0; k < pos.count; k++) {
           const x = pos.getX(k), y = pos.getY(k), z = pos.getZ(k);
           const nx = nor ? Math.abs(nor.getX(k)) : 0, ny = nor ? Math.abs(nor.getY(k)) : 1, nz = nor ? Math.abs(nor.getZ(k)) : 0;
-          if (nx >= ny && nx >= nz) { alt[k * 2] = z * K; alt[k * 2 + 1] = y * K; }
-          else if (ny >= nz) { alt[k * 2] = x * K; alt[k * 2 + 1] = z * K; }
-          else { alt[k * 2] = x * K; alt[k * 2 + 1] = y * K; }
+          if (nx >= ny && nx >= nz) { alt[k * 2] = coord(z,'z'); alt[k * 2 + 1] = coord(y,'y'); }
+          else if (ny >= nz) { alt[k * 2] = coord(x,'x'); alt[k * 2 + 1] = coord(z,'z'); }
+          else { alt[k * 2] = coord(x,'x'); alt[k * 2 + 1] = coord(y,'y'); }
         }
-        g.userData._wsUV = { orig: null, alt };
-      } else {
-        let lo = 1e9, hi = -1e9, lv = 1e9, hv = -1e9;
-        for (let k = 0; k < uv.count; k++) { const u = uv.getX(k), v = uv.getY(k); if (u < lo) lo = u; if (u > hi) hi = u; if (v < lv) lv = v; if (v > hv) hv = v; }
-        if (g.type === 'ExtrudeGeometry' || (hi - lo < 0.5 && hv - lv < 0.5 && g.type !== 'BoxGeometry')) {   // metres, not 0..1
-          alt = new Float32Array(uv.array.length); for (let k = 0; k < alt.length; k++) alt[k] = uv.array[k] * 5;
-          g.userData._wsUV = { orig: uv.array.slice(), alt };
-        } else g.userData._wsUV = { skip: true };
-      }
+        g.userData._wsUV = { orig: uv ? uv.array.slice() : null, alt };
+      } else g.userData._wsUV = { skip: true };
       model._wsUVParts.push(g);
     });
   }
@@ -26919,53 +26925,49 @@ function _wsApplyLook(skin, mats, wrapMats = mats) {
 }
 function applyWeaponSkin(model, skin) {
   if (!model) return;
-  if (model._bodyMat) {
-    // Generic gun: precise two-tone via the tagged per-gun materials.
-    model._bodyMat.color.setHex(skin && skin.body   != null ? skin.body   : (model._origBody   ?? 0x222222));
-    model._accentMat.color.setHex(skin && skin.accent != null ? skin.accent : (model._origAccent ?? 0x666666));
-  } else {
-    // Custom-built gun (no tags): tint all solid parts. Clone each material ONCE
-    // so we never recolor a module-shared material and bleed onto other guns.
-    if (!model._skinMats) {
-      model._skinMats = [];
-      model.traverse(o => {
-        if (o.userData && o.userData.vmHand) return;   // hands are not part of the gun
-        // `!map` used to mean "no hand-drawn art on this part, so a colour skin
-        // may repaint it". A procedural SURFACE map is grain under a colour,
-        // not art, so it stays repaintable (#53) — without this every weapon
-        // colour skin silently does nothing.
-        // skinLock: a Legend model skin IS the skin. Repainting it gold both
-        // loses the look you paid for and swaps the materials _legendize
-        // animates off every mesh, so the heat and reload glow die with it.
-        if (o.material && o.material.userData && o.material.userData.skinLock) return;
-        if (o.isMesh && o.material && o.material.color &&
-            (!o.material.map || (o.material.userData && o.material.userData.surfaceMap))) {
-          const basic = !!o.material.isMeshBasicMaterial; // glow/lens/reticle — leave colored
-          const clone = o.material.clone(); o.material = clone;
-          model._skinMats.push({ mat: clone, orig: clone.color.getHex(), basic, mesh: o });
-        }
-      });
-    }
-    for (const e of model._skinMats) {
-      if (e.basic) continue;                 // keep emissive accents (scope lenses, glow strips)
-      e.mat.color.setHex(skin && skin.body != null ? skin.body : e.orig);
-    }
+  if (!model._skinMats) {
+    model._skinMats = [];
+    model._skinMeshes = new Set();
+    model._skinClones = new Map();
+  }
+  {
+    // Fittings can be added after the first paint pass; collect those without recloning existing parts.
+    const clones = model._skinClones, body = model._bodyMat, accent = model._accentMat;
+    model.traverse(o => {
+      if (!o.isMesh || !o.material) return;
+      for (let p = o; p; p = p.parent) if (p.userData?.vmHand) return;
+      if (o.userData?.wrapLock) return;
+      const dress = original => {
+        if (!original?.color || original.isMeshBasicMaterial || original.userData?.skinLock || original.userData?.wrapLock
+            || (original.transparent && original.opacity < .95) || original.transmission > 0) return original;
+        model._skinMeshes.add(o);
+        if (clones.has(original)) return clones.get(original);
+        const mat = original.clone(); clones.set(original, mat); clones.set(mat, mat);
+        model._skinMats.push({ mat, orig: mat.color.getHex(), mesh: o,
+          tone: original === body ? 'body' : original === accent ? 'accent' : null,
+          paintable: !original.map || !!original.userData?.surfaceMap });
+        return mat;
+      };
+      o.material = Array.isArray(o.material) ? o.material.map(dress) : dress(o.material);
+    });
+    if (body && clones.has(body)) model._bodyMat = clones.get(body);
+    if (accent && clones.has(accent)) model._accentMat = clones.get(accent);
+  }
+  const activeEntries = [];
+  for (const e of model._skinMats) {
+    const eligible = skin?.wrap || e.paintable || e.tone;
+    const tint = e.tone === 'accent' ? skin?.accent : skin?.body;
+    e.mat.color.setHex(eligible && tint != null ? tint : e.orig);
+    if (eligible) activeEntries.push(e);
+    else _wsApplyLook(null, [e.mat]);
   }
   // ── ✨ FX cleanup + setup ──
   _clearModelParticles(model);
   if (model._skinExtra) { model.remove(model._skinExtra); model._skinExtra.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); }); model._skinExtra = null; }
-  const bodyMats = model._bodyMat ? [model._bodyMat, model._accentMat]
-    : (model._skinMats ? model._skinMats.filter(e => !e.basic).map(e => e.mat) : []);
+  const bodyMats = activeEntries.map(e => e.mat);
   bodyMats.forEach(m => { m.transparent = false; m.opacity = 1; });
-  _wsUVMode(model, !!(skin && (skin.wrap || WS_LOOKS[skin.id])));
-  const wrapMats = model._bodyMat ? [model._bodyMat] : (model._skinMats || []).filter(entry => {
-    if (entry.basic) return false;
-    const p = entry.mesh.geometry?.parameters;
-    const size = p ? Math.max(p.width || 0, p.height || 0, p.depth || 0, (p.radius || p.radiusTop || 0) * 2) : 1;
-    if (skin?.wrap && size < .03) entry.mat.color.setHex(entry.orig);
-    return size >= .03;
-  }).map(entry => entry.mat);
-  _wsApplyLook(skin, bodyMats, wrapMats);
+  _wsUVMode(model, !!(skin && (skin.wrap || WS_LOOKS[skin.id])), model._skinMeshes);
+  _wsApplyLook(skin, bodyMats);
   model._fx = (skin && skin.fx) || null;
   if (model._fx === 'crystal') { bodyMats.forEach(m => { m.transparent = true; m.opacity = 0.72; }); _buildSkinExtra(model, 'crystal'); }
   else if (model._fx === 'rock') { _buildSkinExtra(model, 'rock'); }
