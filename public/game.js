@@ -40178,15 +40178,14 @@ function updateGunMech(model, id, tR, evs, durMs) {
 // ── 💪 View arms ──────────────────────────────────────────────────────────────────────────────────────────────────────
 // The viewmodel was two fists and nothing behind them: no wrist, no forearm, hands hanging in the air. Each hand now has
 // the arm it belongs to, running back and out of the bottom of the screen -- the trigger arm down to the right, the
-// support arm down to the left, each leaving the fist's back face so it does not cross the gun. Forearm and upper arm wear
-// the picture that skin has for them (the same 16x16 faces the body is painted with), and the fist is the skin's hand
-// colour, so a red-and-black skin shows red-and-black sleeves in your own hands.
+// support arm down to the left, each leaving the fist's back face so it does not cross the gun. An arm is one plain block,
+// like the fist -- no elbow, no detail -- wearing the sleeve picture that skin has for it (the same 16x16 face the body is
+// painted with), and the fist is the skin's hand colour, so a red-and-black skin shows red-and-black sleeves in your hands.
 // One set of materials is shared by every gun, so a change of skin recolours them all at once (refreshViewArms).
-const _vmArmM = { f: null, u: null, hand: null };
+const _vmArmM = { f: null, hand: null };
 function _vmArmMats() {
   if (!_vmArmM.f) {
     _vmArmM.f = new THREE.MeshLambertMaterial({ color: 0x23262c });
-    _vmArmM.u = new THREE.MeshLambertMaterial({ color: 0x23262c });
     _vmArmM.hand = new THREE.MeshLambertMaterial({ color: 0xdcae86 });
   }
   return _vmArmM;
@@ -40199,7 +40198,6 @@ function refreshViewArms() {
   if (!art) return;
   const set = (m, painter, key) => { m.map = charTex(key, painter); m.color.setHex(0xffffff); m.needsUpdate = true; };
   if (art.armF) set(M.f, art.armF, 'vmf:' + art._id);
-  if (art.armU) set(M.u, art.armU, 'vmu:' + art._id);
   M.hand.color.setHex(typeof art.hand === 'number' ? art.hand : 0xdcae86);
 }
 function addViewArms(root) {
@@ -40218,11 +40216,9 @@ function addViewArms(root) {
     pivot.userData.vmHand = true;
     pivot.position.set(0, 0, 0.034);        // the back face of the fist: the wrist
     pivot.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), d);
-    const fore = new THREE.Mesh(new THREE.BoxGeometry(0.060, 0.056, 0.17), M.f); fore.position.z = 0.085;
-    const upper = new THREE.Mesh(new THREE.BoxGeometry(0.072, 0.068, 0.22), M.u); upper.position.z = 0.28;
-    fore.userData.vmHand = true; upper.userData.vmHand = true;
-    fore.castShadow = upper.castShadow = false;
-    pivot.add(fore); pivot.add(upper); hand.add(pivot);
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.080, 0.076, 0.40), M.f); arm.position.z = 0.20;   // wrist to off-screen
+    arm.userData.vmHand = true; arm.castShadow = false;
+    pivot.add(arm); hand.add(pivot);
   };
   one(H.rear, [0.30, -0.55, 0.78]);
   if (H.front && H.front !== H.rear) one(H.front, [-0.50, -0.40, 0.77]);
