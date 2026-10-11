@@ -26703,6 +26703,7 @@ function updateWeaponSkinFX(dt) {
 // ones that glow, an emissive layer drawn separately so the light sits in the pattern and not on the whole gun.
 // Everything is a small tileable canvas, built the first time a skin is worn and cached after.
 const _wsCache = new Map(), _wsBase = new WeakMap();
+const _wsScrollers = [];   // textures of wraps that move, and how fast (UV units a second)
 function _wsRng(seed) { let h = 2166136261; for (let i = 0; i < seed.length; i++) { h ^= seed.charCodeAt(i); h = Math.imul(h, 16777619); } return () => { h += 0x6D2B79F5; let t = h; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 const _wsCss = (n) => '#' + (n >>> 0).toString(16).padStart(6, '0');
 const WS_PATTERNS = {
@@ -26792,30 +26793,30 @@ const WS_PATTERNS = {
 // id -> how it is painted and finished. `glow`: which of the pattern's colours also lights up (an emissive layer).
 const WS_LOOKS = {
   gold:      { pat: 'filigree', c: [0xc8a020, 0xffe070], metal: 0.95, rough: 0.26 },
-  crimson:   { pat: 'bands', c: [0x4a0808, 0x9a1414, 0xe04444], metal: 0.45, rough: 0.4 },
+  crimson:   { pat: 'bands', c: [0x4a0808, 0x9a1414, 0xe04444], metal: 0.45, rough: 0.4, scroll: [0, 0.16] },
   arctic:    { pat: 'camo', c: [0xdfe6ee, 0x9fb6c8, 0xc8d6e2, 0xffffff], metal: 0.15, rough: 0.55 },
-  neon:      { pat: 'grid', c: [0x141425, 0x33ffcc], metal: 0.6, rough: 0.3, glow: 1 },
+  neon:      { pat: 'grid', c: [0x141425, 0x33ffcc], metal: 0.6, rough: 0.3, glow: 1, scroll: [0, -0.14] },
   woodland:  { pat: 'camo', c: [0x4a5320, 0x2e3618, 0x6b6a2a, 0x1c2210], metal: 0.1, rough: 0.85 },
   urban:     { pat: 'camo', c: [0x6a6f76, 0x3a3d42, 0x9a9fa6, 0x22252a], metal: 0.15, rough: 0.8 },
   outlaw:    { pat: 'camo', c: [0x8a7038, 0x4a3a1c, 0xb09858, 0x2f2412], metal: 0.1, rough: 0.8 },
   obsidian:  { pat: 'cracks', c: [0x08090c, 0x8a2cff], metal: 0.55, rough: 0.1, glow: 1 },
   toxic:     { pat: 'camo', c: [0x203a12, 0x8cff2a, 0x3f6a1c, 0x5aa81c], metal: 0.1, rough: 0.35, glow: 1 },
-  bubblegum: { pat: 'dots', c: [0xff7ab8, 0x74d7ff], metal: 0.05, rough: 0.35 },
+  bubblegum: { pat: 'dots', c: [0xff7ab8, 0x74d7ff], metal: 0.05, rough: 0.35, scroll: [0.07, 0.07] },
   carbon:    { pat: 'weave', c: [0x14171b, 0x4a5058], metal: 0.7, rough: 0.22 },
-  royal:     { pat: 'lattice', c: [0x3b1466, 0xffd227], metal: 0.55, rough: 0.3 },
-  sunset:    { pat: 'bands', c: [0xe0306a, 0xff6a2a, 0xffd15c], metal: 0.2, rough: 0.4 },
-  ocean:     { pat: 'waves', c: [0x0b335f, 0x36d1dc, 0x1a6aa8], metal: 0.35, rough: 0.2 },
-  candycane: { pat: 'stripes', c: [0xf5f2e8, 0xd92828], metal: 0.05, rough: 0.35 },
-  hazard:    { pat: 'stripes', c: [0x1b1b1b, 0xffc400], metal: 0.1, rough: 0.6 },
+  royal:     { pat: 'lattice', c: [0x3b1466, 0xffd227], metal: 0.55, rough: 0.3, scroll: [0.05, 0.05] },
+  sunset:    { pat: 'bands', c: [0xe0306a, 0xff6a2a, 0xffd15c], metal: 0.2, rough: 0.4, scroll: [0, 0.14] },
+  ocean:     { pat: 'waves', c: [0x0b335f, 0x36d1dc, 0x1a6aa8], metal: 0.35, rough: 0.2, scroll: [0.05, 0.10] },
+  candycane: { pat: 'stripes', c: [0xf5f2e8, 0xd92828], metal: 0.05, rough: 0.35, scroll: [0.16, 0] },
+  hazard:    { pat: 'stripes', c: [0x1b1b1b, 0xffc400], metal: 0.1, rough: 0.6, scroll: [0.20, 0] },
   copper:    { pat: 'hammered', c: [0xb46a2d, 0xe0a060, 0x3f9a7a], metal: 0.9, rough: 0.4 },
   p2w_gold:  { pat: 'filigree', c: [0xffcc00, 0xfff0a0], metal: 1.0, rough: 0.14 },
   broke:     { pat: 'speckle', c: [0x6b6256, 0x3a342c, 0x8a4a28], metal: 0.05, rough: 0.95 },
   crystal:   { pat: 'facets', c: [0x55cfe6, 0xbff6ff], metal: 0.2, rough: 0.08 },
   rock:      { pat: 'speckle', c: [0x6a6258, 0x4a443c, 0x8a8478], metal: 0.0, rough: 1.0 },
-  data:      { pat: 'code', c: [0x0a0a12, 0x2266ff], metal: 0.5, rough: 0.3, glow: 1 },
+  data:      { pat: 'code', c: [0x0a0a12, 0x2266ff], metal: 0.5, rough: 0.3, glow: 1, scroll: [0, -0.30] },
   glacier:   { pat: 'facets', c: [0x9be8ff, 0xffffff], metal: 0.15, rough: 0.1 },
   meteor:    { pat: 'cracks', c: [0x2a201a, 0xff5a1f], metal: 0.2, rough: 0.8, glow: 1 },
-  matrix:    { pat: 'code', c: [0x050805, 0x00ff66], metal: 0.5, rough: 0.3, glow: 1 },
+  matrix:    { pat: 'code', c: [0x050805, 0x00ff66], metal: 0.5, rough: 0.3, glow: 1, scroll: [0, -0.30] },
   smog:      { pat: 'speckle', c: [0x383a3d, 0x777b80, 0x55585c], metal: 0.0, rough: 0.9 },
 };
 function _wsTextures(id, variant) {
@@ -26840,7 +26841,16 @@ function _wsTextures(id, variant) {
     const glow = [ '#000000', cols[1] || cols[0], ...cols.slice(2).map(() => '#000000') ];
     t.glow = draw(glow);
   }
-  _wsCache.set(key, t); return t;
+  _wsCache.set(key, t);
+  if (look.scroll) _wsScrollers.push({ id, du: look.scroll[0], dv: look.scroll[1], maps: [t.map, t.glow].filter(Boolean) });
+  return t;
+}
+// The wraps that move: every frame their textures slide along by their own speed. A texture is shared by every gun
+// wearing that wrap, so one nudge moves them all; the offset wraps at 1 so it never grows.
+function updateWrapScroll(dt) {
+  for (const sc of _wsScrollers) for (const m of sc.maps) {
+    m.offset.x = (m.offset.x + sc.du * dt) % 1; m.offset.y = (m.offset.y + sc.dv * dt) % 1;
+  }
 }
 // Unmapped and extruded parts need a usable texture span on each face, not one corner of the wrap.
 function _wsUVMode(model, on, meshes) {
@@ -29459,8 +29469,10 @@ function _pxRegisterGun(def) {
   const i = WEAPON_SKINS.findIndex(s => s.id === id);
   if (i >= 0) WEAPON_SKINS[i] = e; else WEAPON_SKINS.push(e);
   WEAPON_SKINS_BY_ID[id] = e;
-  WS_LOOKS[id] = { pat: 'pixels', px: def.px, c: [hexN(c1), hexN(c2)], metal: 0.25, rough: 0.55 };
+  const sp = 0.16, mv = { left: [-sp, 0], right: [sp, 0], up: [0, sp], down: [0, -sp], diag: [sp * 0.7, sp * 0.7] }[def.motion];
+  WS_LOOKS[id] = { pat: 'pixels', px: def.px, c: [hexN(c1), hexN(c2)], metal: 0.25, rough: 0.55, scroll: mv || null };
   for (const k of Array.from(_wsCache.keys())) if (k.startsWith(id + ':')) _wsCache.delete(k);
+  for (let i = _wsScrollers.length - 1; i >= 0; i--) if (_wsScrollers[i].id === id) _wsScrollers.splice(i, 1);
 }
 (function loadCustomSkins() {
   const db = _pxLoad();
@@ -29674,6 +29686,14 @@ function _pxDrawAll() {
     }
   } else { const t = document.createElement('div'); t.style.color = '#aab'; t.textContent = 'One picture wraps every part of every gun.'; parts.appendChild(t); }
   const extra = p.querySelector('#px-extra'); extra.innerHTML = '';
+  if (u.tab === 'gun') {
+    const mo = u.gun.motion || 'none';
+    extra.innerHTML = `<div style="color:#aab;margin-bottom:4px;">MOTION</div>
+      <select id="px-motion" style="width:100%;padding:5px;background:#0a1220;color:#fff;border:1px solid #556;font-family:inherit;">
+        ${[['none', 'still'], ['left', 'slides left'], ['right', 'slides right'], ['up', 'rises'], ['down', 'falls'], ['diag', 'drifts diagonally']].map(([v, l]) => `<option value="${v}" ${v === mo ? 'selected' : ''}>${l}</option>`).join('')}
+      </select>`;
+    extra.querySelector('#px-motion').addEventListener('change', e => { u.gun.motion = e.target.value; });
+  }
   if (u.tab === 'char') {
     extra.innerHTML = `<div style="color:#aab;margin-bottom:4px;">HANDS &nbsp; BOOTS</div>
       <input id="px-hand" type="color" value="${u.char.hand}" style="width:44px;height:28px;padding:0;border:1px solid #888;background:none;"> 
@@ -39563,11 +39583,65 @@ function updateGunMech(model, id, tR, evs, durMs) {
   }
 }
 
+// ── 💪 View arms ──────────────────────────────────────────────────────────────────────────────────────────────────────
+// The viewmodel was two fists and nothing behind them: no wrist, no forearm, hands hanging in the air. Each hand now has
+// the arm it belongs to, running back and out of the bottom of the screen -- the trigger arm down to the right, the
+// support arm down to the left, each leaving the fist's back face so it does not cross the gun. Forearm and upper arm wear
+// the picture that skin has for them (the same 16x16 faces the body is painted with), and the fist is the skin's hand
+// colour, so a red-and-black skin shows red-and-black sleeves in your own hands.
+// One set of materials is shared by every gun, so a change of skin recolours them all at once (refreshViewArms).
+const _vmArmM = { f: null, u: null, hand: null };
+function _vmArmMats() {
+  if (!_vmArmM.f) {
+    _vmArmM.f = new THREE.MeshLambertMaterial({ color: 0x23262c });
+    _vmArmM.u = new THREE.MeshLambertMaterial({ color: 0x23262c });
+    _vmArmM.hand = new THREE.MeshLambertMaterial({ color: 0xdcae86 });
+  }
+  return _vmArmM;
+}
+function refreshViewArms() {
+  const M = _vmArmMats();
+  let id = 'default';
+  try { id = mySkin; } catch (e) {}          // mySkin is declared much later; at load there is only the default
+  const art = PIXEL_SKINS[id] || PIXEL_SKINS.default;   // comic-cast and seeded skins have no drawn art: the operator's sleeves
+  if (!art) return;
+  const set = (m, painter, key) => { m.map = charTex(key, painter); m.color.setHex(0xffffff); m.needsUpdate = true; };
+  if (art.armF) set(M.f, art.armF, 'vmf:' + art._id);
+  if (art.armU) set(M.u, art.armU, 'vmu:' + art._id);
+  M.hand.color.setHex(typeof art.hand === 'number' ? art.hand : 0xdcae86);
+}
+function addViewArms(root) {
+  const H = root && root._hands;
+  if (!H || root._throwable || root._armsDone) return;
+  root._armsDone = true;
+  const M = _vmArmMats();
+  const one = (hand, dir) => {
+    if (!hand || hand._armed) return;
+    hand._armed = true;
+    const fist = hand.children[0];
+    if (fist && fist.isMesh) fist.material = M.hand;
+    // the way the arm runs, in the weapon's own frame (-z is the muzzle), taken into the hand's: it is turned to sit on the gun
+    const d = new THREE.Vector3(dir[0], dir[1], dir[2]).normalize().applyQuaternion(hand.quaternion.clone().invert());
+    const pivot = new THREE.Group();
+    pivot.userData.vmHand = true;
+    pivot.position.set(0, 0, 0.034);        // the back face of the fist: the wrist
+    pivot.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), d);
+    const fore = new THREE.Mesh(new THREE.BoxGeometry(0.060, 0.056, 0.17), M.f); fore.position.z = 0.085;
+    const upper = new THREE.Mesh(new THREE.BoxGeometry(0.072, 0.068, 0.22), M.u); upper.position.z = 0.28;
+    fore.userData.vmHand = true; upper.userData.vmHand = true;
+    fore.castShadow = upper.castShadow = false;
+    pivot.add(fore); pivot.add(upper); hand.add(pivot);
+  };
+  one(H.rear, [0.30, -0.55, 0.78]);
+  if (H.front && H.front !== H.rear) one(H.front, [-0.50, -0.40, 0.77]);
+  refreshViewArms();
+}
 function prepViewModel(m, weaponId) {
   if (!m) return m;
   m.scale.setScalar(VM_GUN_SCALE);
   fitRestDistance(m);                          // before hands: attachViewHands captures _homePos
   try { attachViewHands(m); } catch (e) { console.warn('[hands]', e); }
+  if (typeof addViewArms === 'function') { try { addViewArms(m); } catch (e) { console.warn('[arms]', e); } }
   // A bullpup puts its magazine behind the grip, so the generic magwell anchor
   // lands in front of the trigger at nothing. A builder can say otherwise.
   if (m._anchorOverride && m._anchors) Object.assign(m._anchors, m._anchorOverride);
@@ -54138,6 +54212,7 @@ function loop() {
   safeLoopStep('admin-map-preview', updateAdminMapPreview); // green ghost where PLACE IN FRONT will drop
   safeLoopStep('uav', () => updateUAV(dt));        // Predator UAV overlay tick
   safeLoopStep('map-effects', () => updateMapEffects(dt)); // airport darkening, chernobyl gas, mortar prompt
+  safeLoopStep('wrap-anim', () => updateWrapScroll(dt));      // the wraps that keep moving
   safeLoopStep('atmosphere', () => updateAtmosphere(dt));  // wind, weather in the air, the sky, the sound of the place
   safeLoopStep('batch5', () => updateBatch5(dt));     // train scroll, vacuum, weather, lights-out, chandelier, debris
   safeLoopStep('killcam-sample', () => killcamSample(performance.now()));
@@ -55451,7 +55526,9 @@ function requestPointerLockSafe() {
 let currentUser = null; // { username, password, unlocks: [], isAdmin: false }
 // 🎭 Locally-chosen character skin (others see it via setSkin broadcast)
 let mySkin = (() => { try { const s = localStorage.getItem('pvp_skin'); return SKIN_IDS.includes(s) ? s : 'default'; } catch(e){ return 'default'; } })();
+try { refreshViewArms(); } catch (e) {}   // now that the skin is known, the arms take its colours
 function emitMySkin() {
+  try { refreshViewArms(); } catch (e) {}   // your own sleeves follow the skin you are wearing
   if (!socket) return;
   socket.emit('setSkin', { skin: mySkin, isAdmin: !!(currentUser && currentUser.isAdmin), skinData: _pxWireFor(mySkin) });
   _sentWeaponId = null; broadcastHeldWeapon();   // a reconnect or room change clears what the server knew
