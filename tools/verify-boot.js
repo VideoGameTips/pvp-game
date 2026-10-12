@@ -21,7 +21,7 @@ const noop = () => {};
 const el = () => new Proxy({
   style: {}, dataset: {}, classList: { add: noop, remove: noop, toggle: noop, contains: () => false },
   children: [], childNodes: [], value: '', textContent: '', innerHTML: '', innerText: '',
-  appendChild: x => x, removeChild: noop, insertBefore: x => x, remove: noop,
+  appendChild: x => x, prepend: x => x, append: x => x, removeChild: noop, insertBefore: x => x, remove: noop,
   addEventListener: noop, removeEventListener: noop, setAttribute: noop, getAttribute: () => null,
   querySelector: () => el(), querySelectorAll: () => [], getContext: () => ctx2d(),
   focus: noop, blur: noop, click: noop, play: () => Promise.resolve(), pause: noop,
@@ -100,7 +100,7 @@ let ok = true;
 const mapWarnings = [];
 const originalWarn = console.warn;
 console.warn = (...args) => {
-  if (/^\[(bespoke|theme)\]/.test(String(args[0]))) mapWarnings.push(args.map(String).join(' '));
+  if (/^\[(bespoke|theme|gimmick|look|upgrade)\]/.test(String(args[0]))) mapWarnings.push(args.map(String).join(' '));
   originalWarn(...args);
 };
 try {
@@ -258,6 +258,61 @@ if (ok && process.argv.includes('--props')) {
     match !== 'prop-test-match' || except !== 'shooter' || event !== 'mapPropDestroyed' || payload.ownerId !== 'shooter')) {
     ok = false; console.log('prop relay failed validation, match scoping or rate limiting');
   } else console.log('prop relay: fractional coordinates, validation, dead-player guard and match scoping passed');
+}
+
+
+// Every map's own mechanic (GIM) and look (LOOK): builds, runs a minute of the frame update with bots about, and -- where the
+// builder says where an actor has to stand (X.dbg) -- parks an actor there and waits for something to happen to it.
+if (ok && process.argv.includes('--gimmicks')) {
+  const rep = vm.runInThisContext(`(() => {
+    const issues = [], notes = [];
+    const names = Object.keys(GIM);
+    const ps = playSoundEvent, hud = updateMatchHUD; playSoundEvent = function () {}; updateMatchHUD = function () {};
+    myId = myId || 'me'; players[myId] = players[myId] || { hp: 100, dead: false };
+    inLobby = false; countdownActive = false; isDead = false;
+    try {
+      for (const n of names) {
+        try {
+          _upgradeMap(n); activateMap(n);
+          if (!_gimDone[n]) { issues.push(n + ': the gimmick never built'); continue; }
+          const M = MAP_MECH[n]; M.reset();
+          const b = MAP_BOT_BOUNDS[n] || MAP_BOUNDS[n], spot = () => [(Math.random() * 2 - 1) * (b.halfX - 8), (Math.random() * 2 - 1) * (b.halfZ - 8)];
+          gameBots.length = 0;
+          for (let k = 0; k < 16; k++) { const p = spot(); gameBots.push({ id: 'vb' + k, x: p[0], z: p[1], y: 0, yVel: 0, hp: 300, maxHp: 300, dead: false, isBot: true }); }
+          for (let s = 0; s < 1200; s++) {                       // a minute at 20 Hz, everyone somewhere new every 1.5 s
+            if (s % 30 === 0) { const p = spot(); camera.position.set(p[0], 1.65, p[1]); for (const bb of gameBots) { const q = spot(); bb.x = q[0]; bb.z = q[1]; bb.y = 0; bb.yVel = 0; } }
+            for (const bb of gameBots) { bb.hp = 300; bb.dead = false; }
+            players[myId].hp = 100; slamState = null; playerYVel = 0; isDead = false;   // a hazard that kills ends the player: stand them up again
+            M.update(0.05); updateMapGimmicks(0.05);
+          }
+          const dbg = g_gimDbg[n];
+          if (!dbg || !dbg.pts || !dbg.pts.length) { notes.push(n); continue; }
+          let effects = 0, tests = 0;
+          for (const p of (dbg.live ? [{ x: 0, z: 0 }] : dbg.pts.slice(0, 3))) {
+            tests++; M.reset(); localBullets.length = 0; gameBots.length = 0;
+            gameBots.push({ id: 'vt', x: p.x + 0.4, z: p.z, y: 0, yVel: 0, hp: 200, maxHp: 300, dead: false, isBot: true });
+            let eff = false;
+            for (let s = 0; s < 1400 && !eff; s++) {                // up to 70 s
+              let q = p;
+              if (dbg.live) { const L = dbg.live(); if (!L.length) { M.update(0.05); continue; } q = L[0]; gameBots[0].x = q.x + 0.4; gameBots[0].z = q.z; }
+              camera.position.set(q.x, 1.65, q.z); players[myId].hp = 60; slamState = null; playerRootedUntil = 0; playerYVel = 0; isDead = false;
+              const bx = gameBots[0]; bx.hp = Math.min(bx.hp, 200);
+              if (dbg.poke && s % 40 === 5) dbg.poke();
+              M.update(0.05); updateMapGimmicks(0.05);
+              if (players[myId].hp !== 60 || slamState || playerRootedUntil > Date.now() || _gimSlowState.v < 1 || _playerInLowGrav || _gimRollNow() !== 0 ||
+                  Math.hypot(camera.position.x - q.x, camera.position.z - q.z) > 1.0 || bx.hp !== 200 || bx.yVel > 0 || bx.dead || Math.hypot(bx.x - (q.x + 0.4), bx.z - q.z) > 0.6) eff = true;
+            }
+            if (eff) effects++;
+          }
+          if (!effects) issues.push(n + ': nothing happened to an actor standing where the gimmick says it works (' + tests + ' probes)');
+        } catch (e) { issues.push(n + ': ' + e.message + ' @ ' + String((e.stack || '').split('\\n')[1] || '').trim()); }
+      }
+    } finally { playSoundEvent = ps; updateMatchHUD = hud; gameBots.length = 0; }
+    const looks = Object.keys(LOOK).filter(n => !(MAP_GROUPS[n] && MAP_GROUPS[n]._upgraded)).length;
+    return { issues, notes, count: names.length, looks: Object.keys(LOOK).length, unbuiltLooks: looks };
+  })()`);
+  if (rep.issues.length) { ok = false; console.log(rep.issues.join('\n')); }
+  console.log('gimmicks: ' + rep.count + ' maps with their own mechanic, ' + rep.looks + ' with a prop pass; ' + (rep.notes.length ? 'no point-probe for ' + rep.notes.join(', ') : 'every one probed'));
 }
 
 if (ok && process.argv.includes('--wraps')) {

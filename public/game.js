@@ -17082,7 +17082,6 @@ GIM.carnival = (X) => {
 GIM.studio = (X) => {
   const spots = X.spots(6, { r: 4.4, pairs: true, sep: 16, maxR: 62, edge: 8 });
   if (!spots.length) return;
-  X.dbg(spots);
   const vents = spots.map((s, i) => {
     X.mesh(new THREE.BoxGeometry(1.2, 0.9, 1.6), _gimLam(0x23262a), s.x, 0.45, s.z);
     X.mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.7, 8), _gimLam(0x6a7078), s.x, 1.1, s.z).rotation.x = 0.4;
@@ -17168,7 +17167,6 @@ GIM.temple = (X) => {
 GIM_LABELS.coal = 'got coal in their stocking';
 GIM.holiday = (X) => {
   const b = X.arena();
-  X.dbg([{ x: 0, z: 0 }]);
   const sleigh = new THREE.Group(); sleigh.visible = false; X.G.add(sleigh);
   const add = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); sleigh.add(m); return m; };
   add(new THREE.BoxGeometry(2.6, 1.0, 1.5), _gimLam(0xc01c28), 0, 0, 0);
@@ -17238,7 +17236,6 @@ GIM.labyrinth = (X) => {
     used.add(key(g)); used.add(key(m)); picks.push(g, m);
   }
   if (!picks.length) return;
-  X.dbg(picks.map(g => ({ x: g.x, z: g.z })));
   const mat = _gimLam(0x8a8e82);
   const gates = picks.map((g, i) => {
     const w = g.rot ? S + T : T, d = g.rot ? T : S + T;
@@ -17627,7 +17624,6 @@ GIM.flying_moai = (X) => {
 GIM.big_arena = (X) => {
   const spots = X.spots(10, { r: 2.4, sep: 24, maxR: 70, edge: 14, open: true, h: 3 });
   if (spots.length < 3) return;
-  X.dbg([{ x: spots[0].x, z: spots[0].z }]);
   let S = { t: 18, drop: null, last: null, n: 0 };
   const smoke = [];
   const clear = () => { if (S.drop) { X.G.remove(S.drop.g); if (S.drop.pk) { S.drop.pk.life = 0; } } S.drop = null; smoke.forEach(m => X.G.remove(m)); smoke.length = 0; };

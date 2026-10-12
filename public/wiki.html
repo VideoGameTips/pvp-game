@@ -116,13 +116,13 @@
     <main>
       <h1 id="overview">PVP Arena</h1>
       <div class="lead">
-        Fast-paced multiplayer browser FPS built on Three.js + Socket.IO. Battle bots and other players across 13 maps, 15+ game modes, and an arsenal of 200+ weapons.<br>
+        Fast-paced multiplayer browser FPS built on Three.js + Socket.IO. Battle bots and other players across 49 maps, 15+ game modes, and an arsenal of 200+ weapons.<br>
         🌐 <a href="https://sushigamelab.com/pvp/">Play it live</a> &middot; 📦 <a href="https://github.com/VideoGameTips/pvp-game">Source code</a>
       </div>
 
       <div class="stat-grid">
         <div class="stat-box"><div class="label">Weapons</div><div class="value">200+</div></div>
-        <div class="stat-box"><div class="label">Maps</div><div class="value">13</div></div>
+        <div class="stat-box"><div class="label">Maps</div><div class="value">49</div></div>
         <div class="stat-box"><div class="label">Game Modes</div><div class="value">15+</div></div>
         <div class="stat-box"><div class="label">Bundles</div><div class="value">26</div></div>
         <div class="stat-box"><div class="label">Best Loadouts</div><div class="value">30</div></div>
@@ -183,21 +183,58 @@
       <p>Every multiplayer mode routes you through a staging lobby. Players ready up, and the undermanned side can vote to fill with bots or play short-handed. Each match runs in its own isolated bubble — concurrent games don't bleed into each other.</p>
 
       <h2 id="maps">🗺️ Maps</h2>
+      <p>Every map has one mechanic of its own that no other map has &mdash; the name and what it does is below. They are built once, on the finished layout, from <code>GIM[map]</code> in <code>game.js</code>.</p>
       <table>
-        <tr><th>Map</th><th>Theme</th><th>Notable Features</th></tr>
-        <tr><td>Blank</td><td>Open arena</td><td>Default, no obstacles</td></tr>
-        <tr><td>Urban</td><td>City</td><td>🤫 Climbable skyscraper</td></tr>
-        <tr><td>Warehouse</td><td>Industrial</td><td>Crate cover</td></tr>
-        <tr><td>Forest</td><td>Woodland</td><td>Trees + tall grass</td></tr>
-        <tr><td>Volcano</td><td>Lava field</td><td>High-damage lava and black obsidian routes</td></tr>
-        <tr><td>Cyber</td><td>Neon city</td><td>Glowing structures</td></tr>
-        <tr><td>Desert</td><td>Arid</td><td>Long sightlines</td></tr>
-        <tr><td>Tundra</td><td>Snowy</td><td>Slippery surfaces</td></tr>
-        <tr><td>Space Station</td><td>Sci-fi</td><td>Low-G zones</td></tr>
-        <tr><td>🛬 Airport</td><td>Terminal</td><td>Breakable glass + lights</td></tr>
+        <tr><th>Map</th><th>Theme</th><th>The one thing it does</th></tr>
+        <tr><td>Blank</td><td>Open arena</td><td>🪑 <strong>Hot Seat</strong>: a healing ring that moves every 40 s</td></tr>
+        <tr><td>Urban</td><td>City</td><td>🚗 <strong>Rush Hour</strong>: traffic runs the avenue · 🤫 climbable skyscraper</td></tr>
+        <tr><td>Warehouse</td><td>Industrial</td><td>🏗️ <strong>Crane Drop</strong>: the overhead crane drops crates on marked spots, and leaves them as cover</td></tr>
+        <tr><td>Forest</td><td>Woodland</td><td>🔥 <strong>Wildfire</strong>: fires start and spread through the pines</td></tr>
+        <tr><td>Vietnam</td><td>Jungle</td><td>🪤 <strong>Punji Pits</strong>: hidden spike pits root and cut</td></tr>
+        <tr><td>Volcano</td><td>Lava field</td><td>🌋 <strong>Geysers</strong>: vents bubble, then launch you 12 m up</td></tr>
+        <tr><td>Cyber</td><td>Neon city</td><td>⚡ <strong>Neon Launchers</strong>: chevron pads fire you across the map</td></tr>
+        <tr><td>Desert</td><td>Arid</td><td>🏜️ <strong>Quicksand</strong>: slow, then sinking, pits</td></tr>
+        <tr><td>Tundra</td><td>Snowy</td><td>❄️ <strong>Thin Ice</strong>: pale sheets crack if you stand on them</td></tr>
+        <tr><td>Space Station</td><td>Sci-fi</td><td>🌌 <strong>Low gravity</strong> domes</td></tr>
+        <tr><td>🛬 Airport</td><td>Terminal</td><td>Breakable glass + lights; darker as lights die</td></tr>
         <tr><td>🪖 Trenches</td><td>WWI</td><td>Pilotable mortars (hold E)</td></tr>
         <tr><td>☢️ Chernobyl</td><td>Nuclear</td><td>4 destructible reactors, toxic gas</td></tr>
-        <tr><td>🛢️/🛫/☣️/🌀/🔷</td><td>Various</td><td>Refinery, Skydock, Sewer, Gravity Lab, Glassworks</td></tr>
+        <tr><td>🛢️ Refinery</td><td>Industrial</td><td>🔥 <strong>Oil Fire</strong>: slicks make you slide; shoot one and it burns</td></tr>
+        <tr><td>🚀 Skydock</td><td>Spaceport</td><td><strong>Launch Countdown</strong>: the pad becomes a furnace · pads up to the gantries</td></tr>
+        <tr><td>☣️ Sewer</td><td>Tunnels</td><td>🚽 <strong>Flush</strong>: a wave sweeps the floor every half minute</td></tr>
+        <tr><td>🌀 Gravity Lab</td><td>Lab</td><td><strong>Gravity Wells</strong> pull everything in; the core kills</td></tr>
+        <tr><td>🔷 Glassworks</td><td>Factory</td><td>🪟 <strong>Shatter</strong>: glass sheets break into cutting shards</td></tr>
+        <tr><td>🚢 Carrier</td><td>Warship</td><td>🌊 <strong>Rolling Sea</strong>: the deck rolls the view and drifts you to the low side</td></tr>
+        <tr><td>🌲 Overgrowth</td><td>Ruined city</td><td>🌿 <strong>Strangler Vines</strong> root you; shoot the bulb</td></tr>
+        <tr><td>🛰️ Orbital Station</td><td>Sci-fi</td><td>Shoot the window and the vacuum takes the room</td></tr>
+        <tr><td>🏭 Foundry</td><td>Heavy industry</td><td><strong>Presses</strong> slam on a beat</td></tr>
+        <tr><td>🎪 Carnival</td><td>Fairground</td><td>🎠 <strong>Carousel</strong>: carries you round, then throws you off</td></tr>
+        <tr><td>🧬 Biosphere</td><td>Dome</td><td>Four climates, one dome</td></tr>
+        <tr><td>🚨 Lockdown</td><td>Prison</td><td>Shoot the fuse box: lights out</td></tr>
+        <tr><td>🎥 Studio</td><td>Film set</td><td><strong>Fog Machines</strong> whiteout the sets</td></tr>
+        <tr><td>🕍 Temple</td><td>Ruins</td><td>🪨 <strong>Rolling Boulder</strong> runs the long corridor</td></tr>
+        <tr><td>🎄 Holiday</td><td>Village</td><td>🎁 <strong>Sleigh Run</strong>: presents (and coal) fall from the sleigh</td></tr>
+        <tr><td>🧪 Labyrinth</td><td>Maze</td><td>🌀 <strong>Shifting Walls</strong> rise out of the floor</td></tr>
+        <tr><td>🏟️ Arena</td><td>Stadium</td><td>🌊 <strong>Sprinklers</strong> wet the pitch and shove you</td></tr>
+        <tr><td>🎭 Opera</td><td>Theatre</td><td>Shoot the chandelier</td></tr>
+        <tr><td>🌋 Doomsday</td><td>Ruined city</td><td>Debris, fire pillars, a heli</td></tr>
+        <tr><td>🚂 Train</td><td>Terminal</td><td><strong>The Express</strong> crosses the middle track at 40 m/s</td></tr>
+        <tr><td>🌌 Dreamscape</td><td>Surreal</td><td><strong>Portals</strong> in pairs, across the map</td></tr>
+        <tr><td>⚓ Pearl Harbor</td><td>Harbour</td><td>✈️ <strong>Air Raid</strong>: a bomber walks a line of bombs across the quay</td></tr>
+        <tr><td>🚢 Titanic</td><td>Liner</td><td>🧊 <strong>Taking Water</strong>: the flood rises; go up</td></tr>
+        <tr><td>🛒 Supermarket</td><td>Store</td><td>🛒 <strong>Cart Rush</strong>: loose trolleys run the aisles</td></tr>
+        <tr><td>🏛️ Pyongyang</td><td>Capital</td><td>🔦 <strong>Searchlights</strong> call the guns on you</td></tr>
+        <tr><td>🚧 Traffic Cone Republic</td><td>Roadworks</td><td><strong>Toll Lanes</strong>: 10 health for 5 s of speed</td></tr>
+        <tr><td>🗿 Flying Moai</td><td>Plateau</td><td><strong>Roar</strong>: a shockwave ring crosses the ground; jump it</td></tr>
+        <tr><td>🗺️ Big Arena</td><td>Fortress</td><td>🪂 <strong>Airdrop</strong>: a crate that full-heals and refills</td></tr>
+        <tr><td>🗺️ Super Arena</td><td>Twin compounds</td><td>💣 <strong>No Man's Land</strong> mines</td></tr>
+        <tr><td>🗺️ Big Harbor</td><td>Harbour</td><td>A sea channel between two quays: cross by ship, pier or crane</td></tr>
+        <tr><td>⛈️ Storm Pier</td><td>Pier</td><td>Lightning strikes; rods catch them</td></tr>
+        <tr><td>🕹️ Pinball Arcade</td><td>Table</td><td>Bumpers and launch pads</td></tr>
+        <tr><td>🔴 Laser Vault</td><td>Vault</td><td>Sweeping beams: jump red, duck cyan</td></tr>
+        <tr><td>📦 Cargo Belts</td><td>Warehouse</td><td>Conveyors carry you to the shredders</td></tr>
+        <tr><td>💨 Gale Peaks</td><td>Mountain</td><td>Wind gusts and updrafts</td></tr>
+        <tr><td>🌋 Magma Rise</td><td>Cavern</td><td>The floor turns to lava on a timer</td></tr>
         <tr><td>👑 BR Arena</td><td>Massive</td><td>250×250, vehicles + helis + mortars (KOTH only)</td></tr>
       </table>
 
