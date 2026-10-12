@@ -36093,7 +36093,6 @@ function loadoutReady() {
 function resetCombatResources() {
   if (!loadoutReady()) return;
   finishBatCrowdClear();
-  clearSatchels(myId);
   cancelMedkitHeal();
   for (const b of localBullets) scene.remove(b.mesh);
   localBullets.length = 0;
@@ -39844,6 +39843,7 @@ function trySupport() {
   const item = SUPPORT_ITEMS[selectedSupportIdx];
   const unlimited = adminInfiniteAmmoActive();
   if (!item || (!unlimited && supportUses[selectedSupportIdx] <= 0)) return;
+  if (item.id === 'satchel' && !unlimited && activeSatchels.filter(s => s.ownerId === myId).length >= item.uses) return;
   if (item.id === 'medkit' && medkitHealChannel) return;
   const now = Date.now();
   if (now - lastSupport < item.cooldown) return;
@@ -40040,7 +40040,7 @@ function spawnSatchel(data, ownerId) {
   const mesh = buildSatchel(); mesh.position.set(data.x, data.y, data.z); mesh.scale.setScalar(1.5);
   scene.add(mesh);
   activeSatchels.push({ mesh, id: data.id, ownerId, velocity: new THREE.Vector3(data.dx, data.dy, data.dz).multiplyScalar(18),
-    settled: false, created: Date.now() });
+    settled: false, attachment: null });
 }
 
 function throwSatchel(item) {
@@ -40053,13 +40053,65 @@ function throwSatchel(item) {
   updateAmmoHUD();
 }
 
+function satchelTargetFrame(id) {
+  if (players[id]?.dead || resolveBot(id)?.dead) return null;
+  if (id === myId) {
+    if (isDead) return null;
+    return { position:new THREE.Vector3(camera.position.x,playerFeetY(),camera.position.z),
+      quaternion:new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),euler.y + Math.PI) };
+  }
+  const mesh = remoteMeshes[id];
+  if (!mesh?.visible) return null;
+  return { position:mesh.position, quaternion:mesh.quaternion };
+}
+
+function updateSatchelAttachment(s) {
+  if (!s.attachment) return;
+  const frame = satchelTargetFrame(s.attachment.targetId);
+  if (!frame) { s.attachment = null; s.settled = false; s.velocity.set(0,0,0); return; }
+  s.mesh.position.copy(s.attachment.offset).applyQuaternion(frame.quaternion).add(frame.position);
+  s.mesh.quaternion.copy(frame.quaternion).multiply(s.attachment.rotation);
+}
+
+function applySatchelStick(s, data) {
+  s.settled = true; s.velocity.set(0,0,0);
+  s.mesh.position.set(data.x,data.y,data.z);
+  s.mesh.quaternion.set(data.rotation.x,data.rotation.y,data.rotation.z,data.rotation.w).normalize();
+  s.attachment = data.targetId ? { targetId:data.targetId,
+    offset:new THREE.Vector3(data.offset.x,data.offset.y,data.offset.z), rotation:s.mesh.quaternion.clone() } : null;
+  updateSatchelAttachment(s);
+}
+
+function stickSatchel(s, position, normal, targetId = null) {
+  const rotation = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,1,0), normal);
+  const data = { action:'stick', id:s.id, x:position.x,y:position.y,z:position.z, targetId:null, rotation };
+  const frame = targetId && satchelTargetFrame(targetId);
+  if (frame) {
+    const inverse = frame.quaternion.clone().invert();
+    data.targetId = targetId;
+    data.offset = position.clone().sub(frame.position).applyQuaternion(inverse);
+    data.rotation = inverse.multiply(rotation);
+  }
+  data.rotation = { x:data.rotation.x,y:data.rotation.y,z:data.rotation.z,w:data.rotation.w };
+  if (data.offset) data.offset = { x:data.offset.x,y:data.offset.y,z:data.offset.z };
+  applySatchelStick(s,data);
+  if (s.ownerId === myId) socket.emit('satchelEvent',data);
+  playSoundEvent('c4_place', { position, volume:.6, minGap:100 });
+}
+
+function satchelContactNormal(box, point) {
+  const faces = [[Math.abs(point.x-box.min.x),-1,0,0], [Math.abs(point.x-box.max.x),1,0,0],
+    [Math.abs(point.y-box.min.y),0,-1,0], [Math.abs(point.y-box.max.y),0,1,0],
+    [Math.abs(point.z-box.min.z),0,0,-1], [Math.abs(point.z-box.max.z),0,0,1]];
+  const face = faces.reduce((a,b) => a[0] < b[0] ? a : b);
+  return new THREE.Vector3(face[1],face[2],face[3]);
+}
+
 function updateSatchels(dt) {
   for (let i = activeSatchels.length - 1; i >= 0; i--) {
     const s = activeSatchels[i];
-    if (Date.now() - s.created > 120000) {
-      scene.remove(s.mesh); disposeBody(s.mesh); activeSatchels.splice(i,1); continue;
-    }
     s.mesh._led.visible = Math.floor(Date.now() / 450) % 2 === 0;
+    updateSatchelAttachment(s);
     if (s.settled) continue;
     const steps = Math.max(1, Math.ceil(dt / .016)), step = dt / steps;
     for (let j = 0; j < steps && !s.settled; j++) {
@@ -40067,18 +40119,31 @@ function updateSatchels(dt) {
       const before = s.mesh.position.clone(), next = before.clone().addScaledVector(s.velocity, step);
       const distance = before.distanceTo(next);
       const ray = new THREE.Ray(before, next.clone().sub(before).normalize());
-      let closest = distance, contact = null, contactBox = null;
+      let closest = distance, contact = null, contactBox = null, targetId = null;
       for (const box of wallColliders) {
         const expanded = box.clone().expandByScalar(.13);
         const hit = ray.intersectBox(expanded, new THREE.Vector3());
         if (hit && before.distanceTo(hit) <= closest) { closest = before.distanceTo(hit); contact = hit; contactBox = expanded; }
       }
-      if (contact) {
-        next.copy(contact).addScaledVector(ray.direction, -.01);
-        if (s.velocity.y <= 0 && contact.y >= contactBox.max.y - .015) s.settled = true;
-        else { s.velocity.x = 0; s.velocity.z = 0; if (s.velocity.y > 0) s.velocity.y = 0; }
+      if (s.ownerId === myId) {
+        for (const [pid, mesh] of Object.entries(remoteMeshes)) {
+          if (pid === s.ownerId || !mesh.visible || players[pid]?.dead || friendlyFireBlocked(pid,s.ownerId)) continue;
+          const box = new THREE.Box3(mesh.position.clone().add(new THREE.Vector3(-.48,.10,-.48)),
+            mesh.position.clone().add(new THREE.Vector3(.48,1.85,.48))).expandByScalar(.13);
+          const hit = ray.intersectBox(box,new THREE.Vector3());
+          const hitDistance = hit && before.distanceTo(hit);
+          if (hit && hitDistance < closest) { closest = hitDistance; contact = hit; contactBox = box; targetId = pid; }
+        }
       }
-      if (next.y <= .13) { next.y = .13; s.settled = true; }
+      if (contact) {
+        const normal = satchelContactNormal(contactBox,contact);
+        next.copy(contact).addScaledVector(normal,.01);
+        stickSatchel(s,next,normal,targetId);
+        break;
+      }
+      if (next.y <= .13) {
+        next.y = .13; stickSatchel(s,next,new THREE.Vector3(0,1,0)); break;
+      }
       s.mesh.position.copy(next);
       if (s.settled) { s.velocity.set(0,0,0); s.mesh.rotation.set(0,s.mesh.rotation.y,0); }
       else { s.mesh.rotation.x += step * 4; s.mesh.rotation.z += step * 2; }
@@ -40087,6 +40152,7 @@ function updateSatchels(dt) {
 }
 
 function explodeSatchel(s, dealDamage) {
+  updateSatchelAttachment(s);
   const pos = s.mesh.position.clone();
   spawnExplosion(pos);
   if (dealDamage && !inLobby) {
@@ -40118,6 +40184,10 @@ function detonateSatchels() {
 socket.on('satchelEvent', data => {
   if (!gameStarted || !data || data.ownerId === myId) return;
   if (data.action === 'throw') spawnSatchel(data, data.ownerId);
+  else if (data.action === 'stick') {
+    const s = activeSatchels.find(s => s.id === data.id && s.ownerId === data.ownerId);
+    if (s) applySatchelStick(s,data);
+  }
   else if (data.action === 'clear') clearSatchels(data.ownerId, false);
   else if (data.action === 'detonate') {
     for (let i = activeSatchels.length - 1; i >= 0; i--) {
@@ -40127,6 +40197,11 @@ socket.on('satchelEvent', data => {
   }
 });
 socket.on('playerLeft', id => clearSatchels(id, false));
+socket.on('playerDied', data => {
+  for (const s of activeSatchels) if (s.attachment?.targetId === data?.targetId) {
+    s.attachment = null; s.settled = false; s.velocity.set(0,0,0);
+  }
+});
 
 function throwSupportItem(item) {
   const origin = new THREE.Vector3();

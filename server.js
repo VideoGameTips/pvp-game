@@ -2406,7 +2406,7 @@ io.on('connection', (socket) => {
       emitToMatchExcept(p.matchId, socket.id, 'satchelEvent', { action:'clear', ownerId:p.id });
       return;
     }
-    if (p.dead) return;
+    if (p.dead && data.action !== 'stick') return;
     if (data.action === 'throw') {
       const coords = [data.x,data.y,data.z,data.dx,data.dy,data.dz];
       if (!coords.every(Number.isFinite) || Math.hypot(data.x-p.x,data.y-p.y,data.z-p.z) > 3) return;
@@ -2418,6 +2418,21 @@ io.on('connection', (socket) => {
       p._satchelThrownAt = now; p._satchelIds.add(id);
       emitToMatchExcept(p.matchId, socket.id, 'satchelEvent', { action:'throw', ownerId:p.id, id,
         x:data.x,y:data.y,z:data.z,dx:data.dx/len,dy:data.dy/len,dz:data.dz/len });
+    } else if (data.action === 'stick' && p._satchelIds.has(data.id)) {
+      const rotation = data.rotation;
+      if (![data.x,data.y,data.z,rotation?.x,rotation?.y,rotation?.z,rotation?.w].every(Number.isFinite)) return;
+      const qLength = Math.hypot(rotation.x,rotation.y,rotation.z,rotation.w);
+      if (qLength < .01 || qLength > 2) return;
+      const targetId = data.targetId ? String(data.targetId) : null;
+      if (targetId) {
+        const target = players[targetId], offset = data.offset;
+        if (!target || target.dead || target.matchId !== p.matchId || blocksFriendlyFire(p,target)) return;
+        if (![offset?.x,offset?.y,offset?.z].every(Number.isFinite) || Math.hypot(offset.x,offset.y,offset.z) > 3) return;
+        if (Math.hypot(data.x-target.x,data.y-(target.y||0),data.z-target.z) > 4) return;
+      }
+      emitToMatchExcept(p.matchId,socket.id,'satchelEvent',{ action:'stick',ownerId:p.id,id:data.id,
+        x:data.x,y:data.y,z:data.z,targetId,offset:targetId ? data.offset : null,
+        rotation:{ x:rotation.x/qLength,y:rotation.y/qLength,z:rotation.z/qLength,w:rotation.w/qLength } });
     } else if (data.action === 'detonate' && p._satchelIds.size) {
       p._satchelIds.clear();
       emitToMatchExcept(p.matchId, socket.id, 'satchelEvent', { action:'detonate', ownerId:p.id });
