@@ -2397,7 +2397,7 @@ io.on('connection', (socket) => {
       const coords = [data.x,data.y,data.z,data.dx,data.dy,data.dz];
       if (!coords.every(Number.isFinite) || Math.hypot(data.x-p.x,data.y-p.y,data.z-p.z) > 3) return;
       const len = Math.hypot(data.dx,data.dy,data.dz), id = String(data.id || '');
-      if (len < .01 || id.length > 100 || !id.startsWith(`satchel_${socket.id}_`) || p._satchelIds.size >= 2) return;
+      if (len < .01 || id.length > 100 || !id.startsWith(`satchel_${socket.id}_`) || p._satchelIds.size >= 5) return;
       const now = Date.now();
       if (now - (p._satchelThrownAt || 0) < 800) return;
       p._satchelThrownAt = now; p._satchelIds.add(id);

@@ -1320,7 +1320,7 @@ const SUPPORT_ITEMS = [
   { id: 'predator_uav', name: 'Predator UAV', type: 'Admin · Recon', uses: 1, cooldown: 2000, uavDur: 10000, adminItem: true },
   { id: 'care_package', name: 'Care Package', type: 'Admin · Random Drop', uses: 1, cooldown: 1500, adminItem: true },
   { id: 'tac_nuke', name: 'Tactical Nuke', type: 'Admin · End the Match', uses: 1, damage: 500, cooldown: 3000, nukeRadius: 25, nukeDelay: 5000, adminItem: true },
-  { id: 'satchel', name: 'Satchel Charge', type: 'Remote Explosive', uses: 2, damage: 140, radius: 6, cooldown: 900, playerOnly: true,
+  { id: 'satchel', name: 'Satchel Charge', type: 'Remote Explosive', uses: 5, damage: 140, radius: 6, cooldown: 900, playerOnly: true,
     ability: { name: 'Detonate', type: 'satchel_detonate', cd: 0 } },
 ];
 const ARCHIVED_ITEM_IDS = new Set([...WEAPONS, ...MELEE_ITEMS, ...SUPPORT_ITEMS].filter(x => x.archived).map(x => x.id));
