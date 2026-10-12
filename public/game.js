@@ -5812,6 +5812,7 @@ const obbyMapColliders        = MAP_COLLIDERS.obby;
 
 function _weatherOnActivate(name) { if (MAP_GROUPS[name]) weatherMapGroup(MAP_GROUPS[name]); }
 function activateMap(name) {
+  if (typeof _upgradeMap === 'function') _upgradeMap(name);   // the first time a map is played: see "WHEN THE UPGRADES RUN"
   for (const [n, g] of Object.entries(MAP_GROUPS)) g.visible = (n === name);
   if (typeof dressThemeMap === 'function') { try { dressThemeMap(name); } catch (e) { console.warn('[theme]', name, e); } }
   // Then bake this map's static boxes into one draw call per material (#66).
@@ -14798,15 +14799,429 @@ function _eggFloatingChain(name, rnd) {
   }
   return false;
 }
-function addMapEasterEggs() {
-  for (const name of Object.keys(MAP_THEMES)) {
-    if (EGG_SKIP.has(name) || !MAP_GROUPS[name] || !MAP_BOUNDS[name] || !MAP_COLLIDERS[name]) continue;
-    const rnd = _thRng(name + ':eggs');
-    try { _eggMessages(name, rnd); } catch (e) { console.warn('[eggs]', name, e); }
-    try { if (EGG_FLOATING.has(name)) _eggFloatingChain(name, rnd); else _eggSlideRoute(name, rnd); } catch (e) { console.warn('[eggs]', name, e); }
-  }
+function _eggsMap(name) {
+  if (EGG_SKIP.has(name) || !MAP_GROUPS[name] || !MAP_BOUNDS[name] || !MAP_COLLIDERS[name]) return;
+  const rnd = _thRng(name + ':eggs');
+  try { _eggMessages(name, rnd); } catch (e) { console.warn('[eggs]', name, e); }
+  try { if (EGG_FLOATING.has(name)) _eggFloatingChain(name, rnd); else _eggSlideRoute(name, rnd); } catch (e) { console.warn('[eggs]', name, e); }
 }
-addMapEasterEggs();
+function addMapEasterEggs() { for (const name of Object.keys(MAP_THEMES)) _eggsMap(name); }
+// ═══ 🏛️ MAP DEPTH ═════════════════════════════════════════════════════════════════════════════════════════════════
+// Three complaints about the arenas, one pass each. Run once per map, the first time it is played (_upgradeMap), before
+// the easter eggs and the outskirts, on the finished layout of every map that is not a mechanic or a closed set.
+//
+//   1. THE CEILINGS WERE LOW. A two-storey building was 4.2 m floor to floor, which is 3.8 m of air under a roof you
+//      can jump into at 3 m. A building is whatever is joined together -- walls, stair, roof, what stands on the roof --
+//      so each one is stretched upward as a whole (never past 1.55x: the 0.4 m steps have to stay under the 0.65 m
+//      auto-step), enough to give any low ceiling at least 5.9 m. Matching buildings on opposite sides of the map get the
+//      same stretch, so nobody's side is taller than the other's; the rest are all different.
+//   2. IT WAS ALL ONE FLOOR. Open maps get raised decks: 18 m long, 5-6 m up, a stair to each, cover along the edge,
+//      room underneath -- set down in opposite pairs where the ground is free.
+//   3. SIXTEEN OF THE SAME THING. Where a map repeats one block (or one tree, or one cone) six or more times, no two
+//      stay alike: some go, the rest change height, width and turn, a few become a two-step stack, none the same shade.
+//
+// Standing above 14 m only works for colliders marked .tall, so anything that was standable and ends up higher is.
+const MD_SKIP = new Set([...EGG_SKIP, 'labyrinth', 'titanic', 'carrier', 'flying_moai']);
+function _mdBox(m) { m.updateMatrixWorld(true); return new THREE.Box3().setFromObject(m); }
+function _mdSpawnRects(name, pad) {
+  const sp = MAP_SPAWNS[name], out = [];
+  for (const side of ['ally', 'enemy']) { const r = sp && sp[side]; if (r) out.push({ x0: r.x0 - pad, x1: r.x1 + pad, z0: r.z0 - pad, z1: r.z1 + pad }); }
+  return out;
+}
+const _mdHits = (b, r) => b.max.x > r.x0 && b.min.x < r.x1 && b.max.z > r.z0 && b.min.z < r.z1;
+
+// What a person can WALK to from the spawns, as the cells (1.5 m) that have a reachable surface 2 m or more up. The
+// stretching and the changes below are only kept if they do not lose any of it: a roof that moved 1.4 m up while its
+// stair stayed put is the one thing this whole pass must not do.
+function _mdReach(name) {
+  const b = MAP_BOUNDS[name], R = 0.38, CELL = 1.5, STEP = 0.65, HEAD = 1.8, cols = MAP_COLLIDERS[name].filter(c => !(c.max.y - c.min.y > 11 && Math.max(c.max.x - c.min.x, c.max.z - c.min.z) > 100));
+  const nx = Math.ceil(2 * b.halfX / CELL), nz = Math.ceil(2 * b.halfZ / CELL), x0 = -b.halfX, z0 = -b.halfZ;
+  const surf = new Array(nx * nz), idx = new Array(nx * nz);
+  for (let i = 0; i < nx * nz; i++) { surf[i] = [0]; idx[i] = []; }
+  for (const c of cols) {
+    const i0 = Math.max(0, Math.floor((c.min.x - R - x0) / CELL)), i1 = Math.min(nx - 1, Math.floor((c.max.x + R - x0) / CELL));
+    const j0 = Math.max(0, Math.floor((c.min.z - R - z0) / CELL)), j1 = Math.min(nz - 1, Math.floor((c.max.z + R - z0) / CELL));
+    const stand = c.max.y > 0.05 && (c.max.y <= 14 || c.tall === true);
+    for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) { idx[i * nz + j].push(c); if (stand) surf[i * nz + j].push(c.max.y); }
+  }
+  const clear = (i, j, y) => {
+    const x = x0 + (i + 0.5) * CELL, z = z0 + (j + 0.5) * CELL;
+    for (const c of idx[i * nz + j]) { if (x < c.min.x - R || x > c.max.x + R || z < c.min.z - R || z > c.max.z + R) continue; if (c.max.y > y + 0.05 && c.min.y < y + HEAD) return false; }
+    return true;
+  };
+  const seen = new Set(), q = [], up = new Set(), all = new Set(), sp = MAP_SPAWNS[name];
+  for (const side of ['ally', 'enemy']) { const r = sp && sp[side]; if (!r) continue;
+    for (let x = r.x0; x <= r.x1; x += CELL) for (let z = r.z0; z <= r.z1; z += CELL) {
+      const i = Math.floor((x - x0) / CELL), j = Math.floor((z - z0) / CELL);
+      if (i >= 0 && j >= 0 && i < nx && j < nz && clear(i, j, 0)) { const k = (i * nz + j) * 1000; if (!seen.has(k)) { seen.add(k); q.push([i, j, 0]); } }
+    } }
+  if (!q.length) {            // a map that names no way in: any open ground will do
+    for (let i = 0; i < nx; i += 4) for (let j = 0; j < nz; j += 4) if (clear(i, j, 0)) { const k = (i * nz + j) * 1000; seen.add(k); q.push([i, j, 0]); }
+  }
+  while (q.length) {
+    const [i, j, y] = q.pop();
+    all.add(i * 1000 + j);
+    if (y >= 2) up.add(i * 1000 + j);
+    for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const ni = i + di, nj = j + dj; if (ni < 0 || nj < 0 || ni >= nx || nj >= nz) continue;
+      for (const sf of surf[ni * nz + nj]) {
+        if (sf > y + STEP + 1e-6) continue;
+        const k = (ni * nz + nj) * 1000 + Math.round(sf * 10); if (seen.has(k)) continue;
+        if (!clear(ni, nj, sf)) continue;
+        seen.add(k); q.push([ni, nj, sf]);
+      }
+    }
+  }
+  return { up, all, x0, z0, CELL, nz };
+}
+// How many of the straight lines from one team's spawn to the other's have nothing in the way. Took away cover that was
+// hiding the spawns from each other, and the first thing anyone does is stand there and shoot.
+function _mdExposed(name) {
+  const sp = MAP_SPAWNS[name]; if (!sp || !sp.ally || !sp.enemy) return 0;
+  const cols = MAP_COLLIDERS[name], A = mapSpawnSightlineSamples(sp.ally), B = mapSpawnSightlineSamples(sp.enemy), hit = new THREE.Vector3();
+  let n = 0;
+  for (const a of A) for (const e of B) {
+    const d = e.clone().sub(a), len = d.length(), ray = new THREE.Ray(a, d.normalize());
+    let blocked = false;
+    for (const c of cols) if (c.max.y > 0.3 && ray.intersectBox(c, hit) && hit.distanceTo(a) < len) { blocked = true; break; }
+    if (!blocked) n++;
+  }
+  return n;
+}
+// Lost, in cells: ways up that went, and ground that can no longer be reached (a prop grown across a passage).
+const _mdLost = (before, after) => { let n = 0; for (const k of before.up) if (!after.up.has(k)) n++; return n; };
+const _mdBroke = (before, after) => _mdLost(before, after) > before.up.size * 0.02 || after.all.size < before.all.size * 0.97;
+
+// Union-find over boxes that touch (within E metres), found through an 8 m grid rather than every pair against every pair.
+function _mdUnion(items, E) {
+  const par = items.map((_, i) => i), find = i => { while (par[i] !== i) { par[i] = par[par[i]]; i = par[i]; } return i; };
+  const G = 8, grid = new Map(), key = (i, j) => i * 100003 + j;
+  items.forEach((it, n) => {
+    const b = it.b, i0 = Math.floor((b.min.x - E) / G), i1 = Math.floor((b.max.x + E) / G), j0 = Math.floor((b.min.z - E) / G), j1 = Math.floor((b.max.z + E) / G);
+    for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) { const k = key(i, j); (grid.get(k) || grid.set(k, []).get(k)).push(n); }
+  });
+  for (const list of grid.values()) {
+    for (let x = 0; x < list.length; x++) for (let y = x + 1; y < list.length; y++) {
+      const a = items[list[x]].b, c = items[list[y]].b;
+      if (a.min.x > c.max.x + E || c.min.x > a.max.x + E || a.min.z > c.max.z + E || c.min.z > a.max.z + E || a.min.y > c.max.y + E || c.min.y > a.max.y + E) continue;
+      const ra = find(list[x]), rc = find(list[y]); if (ra !== rc) par[ra] = rc;
+    }
+  }
+  return find;
+}
+
+// 1) buildings, stretched
+function _mdStructures(name, rnd) {
+  const group = MAP_GROUPS[name], cols = MAP_COLLIDERS[name], v = new THREE.Vector3();
+  const spawns = _mdSpawnRects(name, 2.5), dest = new Set();
+  try { for (const d of mapDestructibles) if (d.mapName === name && d.mesh) dest.add(d.mesh); } catch (e) {}
+  const items = [];
+  for (const m of group.children) {
+    if (!m.isMesh || !m.geometry || (m.userData && (m.userData.themeDecor || m.userData.eggSign)) || dest.has(m)) continue;
+    if (m.geometry.type === 'PlaneGeometry') continue;
+    const b = _mdBox(m); if (b.isEmpty()) continue;
+    const s = b.getSize(v);
+    // floors and kerbs are not part of a building -- but the first step of its stair is low and long, and is
+    if (s.y < 0.25 || (b.max.y < 0.6 && Math.min(s.x, s.z) > 12)) continue;
+    const roof = s.y <= 1.6 && b.min.y >= 3.0;                      // a slab in the air: a roof, or a floor above
+    if (!roof && Math.max(s.x, s.z) > 45) continue;
+    if (roof && Math.max(s.x, s.z) > 170) continue;
+    if (s.y < 0.3 && s.x * s.z > 120) continue;
+    items.push({ m, b: b.clone(), roof });
+  }
+  const find = _mdUnion(items, 0.9);
+  const comps = new Map();
+  items.forEach((it, i) => { const r = find(i); (comps.get(r) || comps.set(r, []).get(r)).push(it); });
+  const ramps = MAP_RAMPS[name] || [], list = [];
+  for (const members of comps.values()) {
+    const bb = new THREE.Box3(); members.forEach(it => bb.union(it.b));
+    const s = bb.getSize(v), top = bb.max.y, area = s.x * s.z;
+    if (!(top >= 3.0 && area >= 12 && (members.length >= 2 || (top >= 4 && area >= 20)))) continue;
+    if (bb.min.y > 0.4) continue;                                   // a bridge or a floating piece: it is hung off its neighbours' heights
+    if (spawns.some(r => _mdHits(bb, r))) continue;
+    if (ramps.some(r => r.x0 > bb.min.x - 3 && r.x0 < bb.max.x + 3 && r.z0 > bb.min.z - 3 && r.z0 < bb.max.z + 3)) continue;
+    const lows = members.filter(it => it.roof && it.b.min.y >= 2.0 && it.b.min.y <= 5.4).map(it => it.b.min.y);
+    if (s.x > 60 && s.z > 60 && !lows.length) continue;           // a whole map held together by one lid: leave it
+    list.push({ members, bb, top, w: s.x, d: s.z, cx: (bb.min.x + bb.max.x) / 2, cz: (bb.min.z + bb.max.z) / 2, low: lows.length ? Math.min(...lows) : 0, f: 1 });
+  }
+  // a factor for each: the same one for the building on the far side of the map, different ones among its own kind
+  const FS = [1.0, 1.35, 1.1, 1.2, 1.5, 1.05, 1.45];
+  const sig = c => Math.round(c.w / 3) + 'x' + Math.round(c.d / 3) + 'x' + Math.round(c.top / 2);
+  const bySig = new Map();
+  for (const c of list) (bySig.get(sig(c)) || bySig.set(sig(c), []).get(sig(c))).push(c);
+  for (const g of bySig.values()) {
+    const done = new Set(); let k = Math.floor(rnd() * FS.length);
+    for (const c of g) {
+      if (done.has(c)) continue;
+      const mate = g.find(o => o !== c && !done.has(o) && Math.hypot(o.cx + c.cx, o.cz + c.cz) < 2.5);
+      c.f = FS[k++ % FS.length]; done.add(c);
+      if (mate) { mate.f = c.f; done.add(mate); }
+    }
+  }
+  // what a stair in it asks of the stretch: its steps get taller by the same factor, and 0.65 m is as far as a step goes
+  const own = (b, cs) => { for (const c of cs) for (const it of c.members) {
+    const q = it.b; if (b.min.x >= q.min.x - 0.06 && b.max.x <= q.max.x + 0.06 && b.min.z >= q.min.z - 0.06 && b.max.z <= q.max.z + 0.06 && b.min.y >= q.min.y - 0.06 && b.max.y <= q.max.y + 0.06) return c; } return null; };
+  const groupsOf = new Map();                                     // comp -> { min.y rounded -> [tops] }
+  for (const col of cols) {
+    const c = own(col, list); if (!c) continue;
+    const g = groupsOf.get(c) || groupsOf.set(c, new Map()).get(c), k = Math.round(col.min.y * 10);
+    (g.get(k) || g.set(k, []).get(k)).push(col.max.y);
+  }
+  for (const c of list) {
+    let riser = 0;
+    const g = groupsOf.get(c);
+    if (g) for (const [k, tops] of g) {
+      const t = [...new Set(tops.map(v => Math.round(v * 20) / 20))].sort((p, q) => p - q), base = k / 10;
+      if (base < 0.15 && t[0] - base < 1.0) riser = Math.max(riser, t[0] - base);        // the first step off the ground
+      for (let i = 1; i < t.length; i++) if (t[i] - t[i - 1] <= 1.0) riser = Math.max(riser, t[i] - t[i - 1]);
+    }
+    c.fmax = riser > 0.05 ? Math.min(1.55, 0.62 / riser) : 2.1;
+  }
+  const done = [];
+  for (const c of list) {
+    if (c.low) c.f = Math.max(c.f, Math.min(c.fmax, 5.9 / c.low));
+    c.f = Math.max(1, Math.min(c.fmax, c.f));              // never shrunk: that takes headroom away
+    if (c.top * c.f > 24) c.f = Math.max(1, 24 / c.top);
+    if (Math.abs(c.f - 1) < 0.04) continue;
+    done.push(c);
+  }
+  if (!done.length) return 0;
+  const owner = (b) => own(b, done);
+  const before = _mdReach(name);
+  for (const c of done) c.undo = [];
+  // colliders first (the boxes below still carry their old sizes)
+  for (const col of cols) {
+    const c = owner(col); if (!c) continue;
+    const was = [col.min.y, col.max.y, col.tall];
+    col.min.y *= c.f; col.max.y *= c.f;
+    if (was[1] <= 14 && col.max.y > 14) col.tall = true;
+    c.undo.push(() => { col.min.y = was[0]; col.max.y = was[1]; if (was[2] === undefined) delete col.tall; else col.tall = was[2]; });
+  }
+  for (const c of done) for (const it of c.members) {
+    const m = it.m, py = m.position.y, sy = m.scale.y, dh = m.userData.thDims ? m.userData.thDims.h : null;
+    m.position.y *= c.f; m.scale.y *= c.f;
+    if (m.userData.thDims) m.userData.thDims.h *= c.f;
+    m.updateMatrixWorld(true);
+    c.undo.push(() => { m.position.y = py; m.scale.y = sy; if (dh !== null) m.userData.thDims.h = dh; m.updateMatrixWorld(true); });
+  }
+  // what the theme pass had already merged onto them (trim, window lights) goes up with them
+  for (const dm of group.children) {
+    if (!dm.isMesh || !dm.userData || !dm.userData.themeDecor || !dm.geometry || !dm.geometry.attributes.position) continue;
+    const pos = dm.geometry.attributes.position, orig = new Float32Array(pos.array);
+    const owned = new Map();                                          // vertex -> comp
+    for (let k = 0; k < pos.count; k++) {
+      const x = pos.getX(k), y = pos.getY(k), z = pos.getZ(k);
+      for (const c of done) {
+        if (x < c.bb.min.x - 0.5 || x > c.bb.max.x + 0.5 || z < c.bb.min.z - 0.5 || z > c.bb.max.z + 0.5 || y < -0.1 || y > c.top + 1.6) continue;
+        if (c.members.some(it => x >= it.b.min.x - 0.5 && x <= it.b.max.x + 0.5 && z >= it.b.min.z - 0.5 && z <= it.b.max.z + 0.5)) { pos.setY(k, y * c.f); owned.set(k, c); break; }
+      }
+    }
+    pos.needsUpdate = true; dm.geometry.computeBoundingSphere(); dm.geometry.computeBoundingBox();
+    const byComp = new Map();
+    for (const [k, c] of owned) (byComp.get(c) || byComp.set(c, []).get(c)).push(k);
+    for (const [c, ks] of byComp) c.undo.push(() => { for (const k of ks) pos.setY(k, orig[k * 3 + 1]); pos.needsUpdate = true; dm.geometry.computeBoundingSphere(); dm.geometry.computeBoundingBox(); });
+  }
+  // keep what keeps the ways up: any building whose stretch lost some of what could be walked to is put back
+  let kept = done.slice();
+  const dbg = group.userData.structDbg = { base: before.up.size, passes: [] };
+  for (let pass = 0; pass < 3; pass++) {
+    const now = _mdReach(name), lost = [...before.up].filter(k => !now.up.has(k));
+    dbg.passes.push({ now: now.up.size, lost: lost.length, kept: kept.length, ground: now.all.size, was: before.all.size });
+    if (!_mdBroke(before, now)) break;
+    const bad = new Set();
+    for (const k of lost) {
+      const x = before.x0 + (Math.floor(k / 1000) + 0.5) * before.CELL, z = before.z0 + (k % 1000 + 0.5) * before.CELL;
+      for (const c of kept) if (x > c.bb.min.x - 3 && x < c.bb.max.x + 3 && z > c.bb.min.z - 3 && z < c.bb.max.z + 3) bad.add(c);
+    }
+    if (!bad.size) { for (const c of kept) for (const u of c.undo.reverse()) u(); kept = []; break; }    // (it lost ground, not a way up: all of it goes back)
+    for (const c of bad) for (const u of c.undo.reverse()) u();
+    kept = kept.filter(c => !bad.has(c));
+  }
+  group.userData.stretched = kept.map(c => ({ x: Math.round(c.cx), z: Math.round(c.cz), w: Math.round(c.w), d: Math.round(c.d), top: +c.top.toFixed(1), f: +c.f.toFixed(2), low: c.low }));
+  return kept.length;
+}
+
+// 3) sixteen of the same, no longer. A "prop" is a small joined-up thing standing on the ground: a crate, a tree
+// (trunk and the cones on it, which are a group), a pillar, a cone. Where five or more of one rough size stand about,
+// no two stay alike: some go, the rest change height, width and turn, and none keeps the same shade.
+function _mdVariety(name, rnd) {
+  const group = MAP_GROUPS[name], cols = MAP_COLLIDERS[name], v = new THREE.Vector3(), spawns = _mdSpawnRects(name, 3);
+  const dest = new Set(); try { for (const d of mapDestructibles) if (d.mapName === name && d.mesh) dest.add(d.mesh); } catch (e) {}
+  const meshesOf = (o) => { const out = []; o.traverse(c => { if (c.isMesh && c.geometry && c.geometry.type !== 'PlaneGeometry') out.push(c); }); return out; };
+  const items = [];
+  for (const o of group.children) {
+    if (!(o.isMesh || o.isGroup) || !o.visible || (o.userData && (o.userData.themeDecor || o.userData.eggSign)) || dest.has(o)) continue;
+    if (o.isMesh && (!o.geometry || o.geometry.type === 'PlaneGeometry')) continue;
+    const ms = meshesOf(o); if (!ms.length || ms.some(m => dest.has(m) || (m.userData && m.userData.themeDecor))) continue;
+    const b = _mdBox(o); if (b.isEmpty()) continue;
+    const s = b.getSize(v);
+    if (s.y < 0.25 || Math.max(s.x, s.z) > 16 || b.max.y > 15) continue;
+    items.push({ o, b: b.clone(), parts: ms.map(m => ({ m, box: _mdBox(m).clone() })) });
+  }
+  const find = _mdUnion(items, 0.2);
+  const comps = new Map();
+  items.forEach((it, i) => { const r = find(i); (comps.get(r) || comps.set(r, []).get(r)).push(it); });
+  const props = [];
+  for (const members of comps.values()) {
+    const bb = new THREE.Box3(); members.forEach(it => bb.union(it.b));
+    const s = bb.getSize(v);
+    if (members.length > 9 || bb.min.y > 0.3 || s.y < 0.9 || s.y > 14 || Math.max(s.x, s.z) > 14 || Math.min(s.x, s.z) < 0.5) continue;
+    if (spawns.some(r => _mdHits(bb, r))) continue;
+    props.push({ members, bb, w: s.x, d: s.z, h: s.y, cx: (bb.min.x + bb.max.x) / 2, cz: (bb.min.z + bb.max.z) / 2,
+                 key: Math.round(s.x) + 'x' + Math.round(s.z) + 'x' + Math.round(s.y / 1.5) });
+  }
+  const groups = new Map();
+  for (const p of props) (groups.get(p.key) || groups.set(p.key, []).get(p.key)).push(p);
+  const before = _mdReach(name), undo = [], exposed0 = _mdExposed(name);
+  let changed = 0;
+  const inBox = (c, b) => c.min.x >= b.min.x - 0.06 && c.max.x <= b.max.x + 0.06 && c.min.z >= b.min.z - 0.06 && c.max.z <= b.max.z + 0.06 && c.min.y >= b.min.y - 0.06 && c.max.y <= b.max.y + 0.06;
+  for (const g of groups.values()) {
+    if (g.length < 5) continue;
+    let removed = 0;
+    for (const p of g) {
+      const r = rnd();
+      const parts = [].concat(...p.members.map(it => it.parts));
+      const own = cols.filter(c => parts.some(pt => inBox(c, pt.box)));
+      const ownedParts = parts.filter(pt => cols.some(c => inBox(c, pt.box)));
+      const dropCols = () => { for (const c of own) { const i = cols.indexOf(c); if (i >= 0) cols.splice(i, 1); } };
+      if (r < 0.16 && removed < g.length * 0.3) {
+        for (const it of p.members) group.remove(it.o);
+        dropCols(); removed++; changed++;
+        undo.push(() => { for (const it of p.members) group.add(it.o); for (const c of own) cols.push(c); });
+        continue;
+      }
+      const sx = 0.8 + rnd() * 0.55, sz = 0.8 + rnd() * 0.55, sy = Math.min(0.7 + rnd() * 0.85, 8 / p.h);
+      const yaw = rnd() < 0.4 ? (rnd() < 0.5 ? -1 : 1) * (0.15 + rnd() * 0.55) : 0, cs = Math.cos(yaw), sn = Math.sin(yaw);
+      const k = 0.88 + rnd() * 0.26;
+      // each object about the middle of the prop's footprint, and up from the ground
+      const saved = p.members.map(it => { const o = it.o; return { o, px: o.position.x, py: o.position.y, pz: o.position.z, sx: o.scale.x, sy: o.scale.y, sz: o.scale.z, ry: o.rotation.y }; });
+      for (const it of p.members) {
+        const o = it.o, dx = (o.position.x - p.cx) * sx, dz = (o.position.z - p.cz) * sz;
+        o.position.x = p.cx + dx * cs + dz * sn; o.position.z = p.cz - dx * sn + dz * cs;
+        o.position.y = p.bb.min.y + (o.position.y - p.bb.min.y) * sy;
+        o.scale.set(o.scale.x * sx, o.scale.y * sy, o.scale.z * sz);
+        o.rotation.y += yaw;
+        if (o.userData.thDims) { o.userData.thDims.w *= sx; o.userData.thDims.d *= sz; o.userData.thDims.h *= sy; }
+        o.updateMatrixWorld(true);
+      }
+      const nb = new THREE.Box3(); p.members.forEach(it => nb.union(_mdBox(it.o)));
+      // it may not grow into anything else
+      const blocked = cols.some(c => c.max.y > 0.35 && !own.includes(c) && nb.min.x < c.max.x - 0.2 && nb.max.x > c.min.x + 0.2 && nb.min.z < c.max.z - 0.2 && nb.max.z > c.min.z + 0.2 && nb.min.y < c.max.y - 0.2 && nb.max.y > c.min.y + 0.2);
+      const dims = p.members.map(it => (it.o.userData.thDims ? { ...it.o.userData.thDims } : null));
+      const restore = () => { saved.forEach((o, i) => { o.o.position.set(o.px, o.py, o.pz); o.o.scale.set(o.sx, o.sy, o.sz); o.o.rotation.y = o.ry; o.o.updateMatrixWorld(true); });
+        p.members.forEach((it, i) => { if (dims[i] && it.o.userData.thDims) Object.assign(it.o.userData.thDims, dims[i]); }); };
+      if (blocked || spawns.some(sp => _mdHits(nb, sp))) { restore(); continue; }
+      dropCols();
+      const n0 = cols.length, mats = [];
+      for (const pt of ownedParts) cols.push(new THREE.Box3().setFromObject(pt.m));
+      const added = cols.slice(n0);
+      for (const pt of parts) {
+        const m = pt.m;
+        if (m.material && m.material.color) {
+          mats.push([m, m.material]);
+          m.material = m.material.clone();
+          m.material.color.setRGB(Math.min(1, m.material.color.r * k), Math.min(1, m.material.color.g * k), Math.min(1, m.material.color.b * k));
+        }
+      }
+      undo.push(() => { for (const c of added) { const i = cols.indexOf(c); if (i >= 0) cols.splice(i, 1); } for (const c of own) cols.push(c); restore(); for (const [m, mat] of mats) m.material = mat; });
+      changed++;
+    }
+  }
+  // and if it cost a way up anywhere, none of it is kept
+  const after = changed ? _mdReach(name) : before, lostN = _mdLost(before, after);
+  group.userData.varietyDbg = { base: before.up.size, lost: lostN, ground: [before.all.size, after.all.size], changed, props: props.length, groups: [...groups.values()].filter(g => g.length >= 5).length };
+  if (changed && (_mdBroke(before, after) || _mdExposed(name) > exposed0)) { for (const u of undo.reverse()) u(); return 0; }
+  return changed;
+}
+
+// 2) a second floor, where there is room for one
+function _mdDeck(K, X, Z, ux, uz, H, P, L = 9) {
+  const W = 3.6, F = _osFrame(K, X, Z, ux, uz), F2 = _osFrame(K, X, Z, -ux, -uz);
+  F.box(-L, L, -W, W, H - 0.5, 0.5, P.conc);
+  for (const a of [-L + 1, 0, L - 1]) for (const b of [-W + 0.8, W - 0.8]) F.box(a - 0.45, a + 0.45, b - 0.45, b + 0.45, 0, H - 0.5, P.dark);
+  const o = { u0: -L + 0.5, v0: W + 0.3, levels: 2, rise: H / 2, c: P.dark, lc: P.main, attach: k => (k === 1 ? { u0: -L, u1: L, vEdge: W } : null) };
+  const a = _osClimb(F, o), b = _osClimb(F2, o);
+  // cover along the long edges, with a gap where each stair comes up
+  const gap = (side) => side > 0 ? [-L, -L + 3.6] : [L - 3.6, L];
+  for (const side of [-1, 1]) {
+    const g = gap(side), segs = [[-L, g[0]], [g[1], L]].filter(s => s[1] - s[0] > 1.2);
+    for (const [u0, u1] of segs) {
+      const m = (u0 + u1) / 2, half = (u1 - u0) / 2;
+      // a gap in the middle of each run, so the edge is cover and not a wall
+      const cut = (u0 + u1) / 2;
+      F.box(u0, cut - 1.6, side * (W - 0.3), side * W, H, 1.1, P.acc);
+      F.box(cut + 1.6, u1, side * (W - 0.3), side * W, H, 1.1, P.acc);
+    }
+  }
+  F.box(-L, -L + 0.3, -W, W, H, 1.1, P.acc);   // the closed ends: the stairs come up the sides
+  F.box(L - 0.3, L, -W, W, H, 1.1, P.acc);
+  return { pois: [{ u: 0, v: 0, y: H }, { u: 6, v: 2, y: H }, { u: -6, v: -2, y: H }], F };
+}
+function _mdDecks(name, rnd) {
+  const cols = MAP_COLLIDERS[name], b = MAP_BOUNDS[name], K = _bkit(name), th = MAP_THEMES[name];
+  const P = th ? { main: th.t, acc: th.a, conc: _thShade(th.d, 0.95), dark: _thShade(th.w2, 0.55), rock: th.c }
+               : { main: 0x8a8f98, acc: 0xb0b4ba, conc: 0x9a9ea6, dark: 0x4a4e56, rock: 0x7a7e86 };
+  const spawns = _mdSpawnRects(name, 6), area = 4 * b.halfX * b.halfZ;
+  const zones = (MAP_GIMMICKS[name] && [].concat(...Object.values(MAP_GIMMICKS[name]))) || [];
+  // anything solid between the floor and a deck's ceiling clearance, on a 2 m grid
+  const GC = 2, gx = Math.ceil(2 * b.halfX / GC) + 2, gz = Math.ceil(2 * b.halfZ / GC) + 2, occ = new Uint8Array(gx * gz);
+  for (const c of cols) {
+    if (!(c.max.y > 0.35 && c.min.y < 11)) continue;
+    const i0 = Math.max(0, Math.floor((c.min.x + b.halfX) / GC)), i1 = Math.min(gx - 1, Math.floor((c.max.x + b.halfX) / GC));
+    const j0 = Math.max(0, Math.floor((c.min.z + b.halfZ) / GC)), j1 = Math.min(gz - 1, Math.floor((c.max.z + b.halfZ) / GC));
+    for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) occ[i * gz + j] = 1;
+  }
+  const free = (cx, cz, ux, H, L) => {
+    // the deck, both stairs and a metre round them
+    const along = ux !== 0, hu = L + 1.6, hv = 9.2;
+    const r = along ? { x0: cx - hu, x1: cx + hu, z0: cz - hv, z1: cz + hv } : { x0: cx - hv, x1: cx + hv, z0: cz - hu, z1: cz + hu };
+    if (r.x0 < -b.halfX + 4 || r.x1 > b.halfX - 4 || r.z0 < -b.halfZ + 4 || r.z1 > b.halfZ - 4) return false;
+    if (spawns.some(s => r.x1 > s.x0 && r.x0 < s.x1 && r.z1 > s.z0 && r.z0 < s.z1)) return false;
+    for (const z of zones) { const zx = z.x, zz = z.z, rad = z.r || Math.max(z.w || 0, z.d || 0) / 2 + 2; if (zx > r.x0 - rad && zx < r.x1 + rad && zz > r.z0 - rad && zz < r.z1 + rad) return false; }
+    const i0 = Math.max(0, Math.floor((r.x0 + b.halfX) / GC)), i1 = Math.min(gx - 1, Math.floor((r.x1 + b.halfX) / GC));
+    const j0 = Math.max(0, Math.floor((r.z0 + b.halfZ) / GC)), j1 = Math.min(gz - 1, Math.floor((r.z1 + b.halfZ) / GC));
+    for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) if (occ[i * gz + j]) return false;
+    return true;
+  };
+  const want = area > 40000 ? 3 : area > 15000 ? 2 : 1, placed = [];
+  const heights = [5.2, 6.2, 5.6];
+  for (let pair = 0; pair < want; pair++) {
+    const H = heights[pair % heights.length];
+    let best = null, bestScore = Infinity;
+    for (const L of [9, 6]) {
+      for (let x = -b.halfX + 12; x <= b.halfX - 12; x += 4) for (let z = 0; z <= b.halfZ - 12; z += 4) {
+        for (const ux of [1, 0]) {
+          if (Math.hypot(x, z) < 12) continue;
+          if (placed.some(p => Math.hypot(p.x - x, p.z - z) < 24 || Math.hypot(p.x + x, p.z + z) < 24)) continue;
+          if (!free(x, z, ux, H, L) || !free(-x, -z, ux, H, L)) continue;
+          // not hard against the middle and not hard against the edge: a third of the way out
+          const score = Math.abs(Math.hypot(x, z) - 0.34 * Math.min(b.halfX, b.halfZ) * 1.6) + rnd() * 6;
+          if (score < bestScore) { bestScore = score; best = { x, z, ux, L }; }
+        }
+      }
+      if (best) break;
+    }
+    if (!best) continue;
+    for (const s of [1, -1]) {
+      const X = best.x * s, Z = best.z * s, ux = best.ux ? s : 0, uz = best.ux ? 0 : s;
+      const r = _mdDeck(K, X, Z, ux, uz, H, P, best.L);
+      const F = _osFrame(K, X, Z, ux, uz);
+      for (const p of r.pois) { const [wx, wz] = F.W(p.u, p.v); K.poi('deck', wx, wz, p.y); (MAP_GROUPS[name].userData.deckPois = MAP_GROUPS[name].userData.deckPois || []).push({ wx, wz, y: p.y }); }
+    }
+    placed.push(best);
+  }
+  return placed.length * 2;
+}
+function _depthMap(name) {
+  if (MD_SKIP.has(name) || !MAP_GROUPS[name] || !MAP_BOUNDS[name] || !MAP_COLLIDERS[name]) return;
+  const rnd = _thRng(name + ':depth'), got = {};
+  try { got.structures = _mdStructures(name, rnd); } catch (e) { console.warn('[depth]', name, 'structures', e); }
+  try { got.varied = _mdVariety(name, rnd); } catch (e) { console.warn('[depth]', name, 'variety', e); }
+  try { got.decks = _mdDecks(name, rnd); } catch (e) { console.warn('[depth]', name, 'decks', e); }
+  MAP_GROUPS[name].userData.depth = got;
+}
+function addMapDepth() { for (const name of Object.keys(MAP_THEMES)) _depthMap(name); }
+
 
 // ═══ 🏗️ OUTSKIRTS ═════════════════════════════════════════════════════════════════════════════════════════════════
 // Some maps had a 12 m wall right round them: the edge of the world was a grey cliff you could see over and never get
@@ -15076,10 +15491,10 @@ function _osStripEdgeDecor(group, hx, hz) {
   }
   return cut;
 }
-function addMapOutskirts() {
-  for (const name of Object.keys(OUTSKIRTS)) {
+function _outskirtsMap(name) {
+  {
     const cfg = OUTSKIRTS[name], group = MAP_GROUPS[name], old = MAP_BOUNDS[name], cols = MAP_COLLIDERS[name];
-    if (!group || !old || !cols || MAP_BOT_BOUNDS[name]) continue;
+    if (!cfg || !group || !old || !cols || MAP_BOT_BOUNDS[name]) return;
     try {
       const hx = old.halfX, hz = old.halfZ, M = cfg.m, nx = hx + M, nz = hz + M, rnd = _thRng(name + ':outskirts');
       // 1) the wall: four long tall boxes at the edge, and the colliders they own
@@ -15174,7 +15589,25 @@ function addMapOutskirts() {
     } catch (e) { console.warn('[outskirts]', name, e); }
   }
 }
-addMapOutskirts();
+function addMapOutskirts() { for (const name of Object.keys(OUTSKIRTS)) _outskirtsMap(name); }
+
+// ═══ ⏱️ WHEN THE UPGRADES RUN ═══════════════════════════════════════════════════════════════════════════════════════
+// Depth, the easter eggs and the outskirts are done to a map the first time it is played, not for all forty at load:
+// they cost a few hundred milliseconds each and a player only ever sees one. Always in this order -- the stretching has
+// to see the layout as it was built, and the outskirts go round whatever the first two leave -- and always from the
+// map's own name as the seed, so every player's copy comes out the same.
+function _upgradeMap(name) {
+  const g = MAP_GROUPS[name];
+  if (!g || g._upgraded || !MAP_THEMES[name]) return;
+  g._upgraded = true;
+  const t0 = performance.now();
+  try { _depthMap(name); } catch (e) { console.warn('[upgrade] depth', name, e); }
+  try { _eggsMap(name); } catch (e) { console.warn('[upgrade] eggs', name, e); }
+  try { _outskirtsMap(name); } catch (e) { console.warn('[upgrade] outskirts', name, e); }
+  // what was just added gets the same surface as the rest
+  try { g._weathered = false; weatherMapGroup(g); } catch (e) {}
+  g.userData.upgradeMs = Math.round(performance.now() - t0);
+}
 
 weatherAllMaps();
 camera.add(_vmKey); camera.add(_vmFill);

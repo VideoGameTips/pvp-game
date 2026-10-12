@@ -100,7 +100,16 @@ it up is Job 4 in his server-move doc. Full runbook: `docs/DEPLOY.md` in the pri
 
 - Weapons: `WEAPONS[]` (primary+secondary), `MELEE_ITEMS[]`, `SUPPORT_ITEMS[]` near top.
 - Maps: `buildXxxMap()` fns + `MAP_GROUPS`, `registerMap()`, `activateMap()`. Batch-5 maps + `_batch5` mechanics state.
-- Wall-less maps: `OUTSKIRTS` / `addMapOutskirts()` (after `addMapEasterEggs()`), 30 of them -- everything outdoor; the
+- **Map upgrades run lazily**: `_upgradeMap(name)` (first line of `activateMap`) does, once per map and in this order,
+  `_depthMap` -> `_eggsMap` -> `_outskirtsMap`, then re-weathers the group. None of it runs at load (a map costs 50-500 ms).
+  Anything that wants to inspect the finished layout headlessly must call `_upgradeMap(n)` first (`verify-boot --maps` does).
+- Map depth (`_mdStructures` / `_mdVariety` / `_mdDecks`, block "MAP DEPTH"): buildings are joined-up boxes, stretched up
+  as a whole by 1.0-1.55x (never shrunk; capped so steps stay under the 0.65 m auto-step; lows ceilings brought to >= 5.9 m;
+  the building on the far side of the map gets the same factor); props that repeat 5+ times each get their own size /
+  turn / shade; open maps get 2-6 raised decks (5-6 m) with stairs. Each pass is **validated and undone** if it loses a
+  way up (>2% of cells 2 m+ reachable), loses ground (>3%), or exposes a spawn sightline: `_mdReach`, `_mdExposed`.
+  Skipped: `MD_SKIP` (mechanic maps, labyrinth, titanic, carrier, flying_moai).
+- Wall-less maps: `OUTSKIRTS` / `_outskirtsMap`, 30 of them -- everything outdoor; the
   indoor maps (warehouse, sewer, space, orbital_station, opera, supermarket, lockdown, studio, gravity_lab, labyrinth,
   titanic) and the mechanic maps keep their walls. Takes the perimeter wall out (and the trim the theme pass had already
   merged onto it), grows `MAP_BOUNDS` by 34 m of walkable ground, puts eight climbable landmarks (`_OS_KITS`: crane,

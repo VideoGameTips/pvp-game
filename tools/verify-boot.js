@@ -126,6 +126,8 @@ try {
 if (ok && process.argv.includes('--maps')) {
   const issues = vm.runInThisContext(`(() => {
     const issues = [], names = [...Object.keys(_BESPOKE), ...M4_TOWER_MAP_NAMES];
+    // Maps are upgraded (stretched, decked, wall taken out, outskirts) the first time they are played; audit what is played.
+    for (const n of names) { try { _upgradeMap(n); } catch (e) { issues.push(n + ': upgrade threw ' + e.message); } }
     for (const rot of [-0.35, 0.35, Math.PI / 4]) {
       const rect = { x: 7, z: -11, w: 38, d: 8, rot };
       const x = rect.x + 16 * Math.cos(rot), z = rect.z - 16 * Math.sin(rot);
@@ -139,7 +141,7 @@ if (ok && process.argv.includes('--maps')) {
       if (_BESPOKE[name] && !g.userData.identityRefined) issues.push(name + ': identity pass did not finish');
       for (const col of MAP_COLLIDERS[name]) if (![col.min.x, col.min.y, col.min.z, col.max.x, col.max.y, col.max.z].every(Number.isFinite)) issues.push(name + ': invalid collider');
       const boundary = MAP_COLLIDERS[name].filter(c => c.min.y < 0.1 && c.max.y >= 12 && (Math.abs(c.min.x) > b.halfX - 4 || Math.abs(c.max.x) > b.halfX - 4 || Math.abs(c.min.z) > b.halfZ - 4 || Math.abs(c.max.z) > b.halfZ - 4));
-      if (boundary.length < 4) issues.push(name + ': missing high perimeter walls');
+      if (boundary.length < 4 && !MAP_VOID[name]) issues.push(name + ': missing high perimeter walls');   // (a void edge replaces the wall)
       const allies = mapSpawnSightlineSamples(s.ally), enemies = mapSpawnSightlineSamples(s.enemy);
       let visible = 0;
       for (const a of allies) for (const enemy of enemies) {
