@@ -15783,6 +15783,952 @@ function _outskirtsMap(name) {
 }
 function addMapOutskirts() { for (const name of Object.keys(OUTSKIRTS)) _outskirtsMap(name); }
 
+// ═══ 🎲 MAP GIMMICKS ═══════════════════════════════════════════════════════════════════════════════════════════════════
+// Every map has ONE mechanic that no other map has, and it is part of the place: traffic on the plaza, a crane over the
+// warehouse, a boulder in the temple, a flood in the sewer.
+//
+// Why this exists: the original layouts each carried a gimmick (jump pads, low-gravity domes, oil slicks, ice...). When the
+// bespoke layouts replaced them, _bkBegin -> resetMapContents wiped MAP_GIMMICKS, so the maps still ADVERTISED their
+// gimmick in MAP_DESCS and had none. This puts them back, on the finished layout, once, the first time the map is played
+// (_upgradeMap) -- after the depth pass and the outskirts, so nothing here is placed inside a wall or a stair.
+//
+// A gimmick is GIM[map] = (X) => { ... }. X is the kit: where is it free (X.free / X.spots / X.lane), what can I draw
+// (X.disc / X.ring / X.mesh / X.box), who can I hurt (X.on(dt, actors) -- the player and every living bot behind one
+// interface: hurt, heal, push, lift, root, slow). It composes with whatever MAP_MECH the layout already had.
+var GIM = {}, GIM_LABELS = {}, _gimDone = {};
+var _gimSlowState = { map: null, v: 1 };
+function _gimSlowNow() { return _gimSlowState.map === activeMapName ? _gimSlowState.v : 1; }
+const _gimV = new THREE.Vector3(), _gimActorCache = new WeakMap();
+const _gimMe = {
+  me: true, bot: null,
+  get x() { return camera.position.x; }, get z() { return camera.position.z; }, get y() { return _mechFeetY(); },
+  get id() { return myId; },
+  hurt(d, id) { return _mechHurtPlayer(d, id); },
+  heal(h) { const p = players[myId]; if (!p || isDead) return; const mx = matchMaxHp(); if (p.hp < mx) { p.hp = Math.min(mx, p.hp + h); updateHealthHUD(p.hp); } },
+  push(dx, dz) { const l = Math.hypot(dx, dz); if (l > 1e-6 && !pilotedVehicle && !pilotedMortar) moveWithWalls(_gimV.set(dx / l, 0, dz / l), l); },
+  lift(v) { if (pilotedVehicle || pilotedMortar) return; if (!slamState || slamState.vel < v) slamState = { vel: v }; },
+  root(ms) { playerRootedUntil = Math.max(playerRootedUntil, Date.now() + ms); },
+  slow(f) { if (f < _gimSlowState.v) _gimSlowState.v = f; },
+  get airborne() { return !!slamState || playerYVel > 0.5; },
+};
+function _gimBot(b) {
+  let a = _gimActorCache.get(b);
+  if (a) return a;
+  a = {
+    me: false, bot: b,
+    get x() { return b.x; }, get z() { return b.z; }, get y() { return b.y || 0; }, get id() { return b.id; },
+    hurt(d, id) { _mechHurtBot(b, d, id); return true; },
+    heal(h) { b.hp = Math.min(b.maxHp || 300, b.hp + h); },
+    push(dx, dz) { const r = resolvePosCollisions(b.x + dx, b.z + dz, b.y || 0); b.x = r[0]; b.z = r[1]; },
+    lift(v) { if (!(b.yVel > v)) b.yVel = v; b.y = b.y || 0; },
+    root(ms) { b._gimRootT = Math.max(b._gimRootT || 0, ms / 1000); },
+    slow(f) { b._gimSlow = Math.min(b._gimSlow == null ? 1 : b._gimSlow, f); },
+    get airborne() { return (b.y || 0) > 0.4 || (b.yVel || 0) > 0.5; },
+  };
+  _gimActorCache.set(b, a);
+  return a;
+}
+function _gimActors() {
+  const out = [];
+  if (_mechCanHurt()) out.push(_gimMe);
+  for (const b of gameBots) if (!b.dead) out.push(_gimBot(b));
+  return out;
+}
+const _gimBasic = (c, o = 1) => new THREE.MeshBasicMaterial({ color: c, transparent: o < 1, opacity: o, depthWrite: o >= 1, side: THREE.DoubleSide });
+const _gimLam = (c) => new THREE.MeshLambertMaterial({ color: c, flatShading: true });
+
+// A car, a bus: a body, a cabin with dark glass, four wheels, lamps. Nose is +z, origin on the ground, centre of the car.
+function _gimVehicle(color, o = {}) {
+  const len = o.len || 4.6, wid = o.wid || 2.0, hgt = o.h || 0.85, g = new THREE.Group(), glass = _gimLam(0x1c2630);
+  const add = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); g.add(m); return m; };
+  add(new THREE.BoxGeometry(wid, hgt, len), _gimLam(color), 0, 0.35 + hgt / 2, 0);
+  if (o.bus) {
+    add(new THREE.BoxGeometry(wid + 0.05, 0.9, len - 0.8), glass, 0, 0.35 + hgt + 0.45, 0);
+    add(new THREE.BoxGeometry(wid, 0.12, len - 0.2), _gimLam(0xe8e8e0), 0, 0.35 + hgt + 0.95, 0);
+  } else {
+    add(new THREE.BoxGeometry(wid - 0.15, 0.7, len * 0.5), glass, 0, 0.35 + hgt + 0.35, -len * 0.05);
+    add(new THREE.BoxGeometry(wid - 0.4, 0.1, len * 0.42), _gimLam(color), 0, 0.35 + hgt + 0.74, -len * 0.05);
+  }
+  const wheel = new THREE.CylinderGeometry(0.38, 0.38, 0.3, 10), wm = _gimLam(0x15171a);
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) { const w = add(wheel, wm, sx * (wid / 2 - 0.02), 0.38, sz * len * 0.32); w.rotation.z = Math.PI / 2; }
+  const lamp = _gimBasic(0xfff3b0), tail = _gimBasic(0xff2a1a);
+  for (const sx of [-1, 1]) { add(new THREE.BoxGeometry(0.3, 0.18, 0.06), lamp, sx * (wid / 2 - 0.3), 0.55, len / 2 + 0.02); add(new THREE.BoxGeometry(0.3, 0.16, 0.06), tail, sx * (wid / 2 - 0.3), 0.58, -len / 2 - 0.02); }
+  return g;
+}
+// Flames: a few tapering cones that flicker. Returns { group, tick(t) }.
+function _gimFlame(r, h, seed = 0) {
+  const g = new THREE.Group(), cones = [];
+  const cols = [0xff4a12, 0xff8a1e, 0xffd23a];
+  for (let i = 0; i < 5; i++) {
+    const rr = r * (0.5 + 0.5 * ((i * 37 + seed * 11) % 10) / 10) * (i < 3 ? 1 : 0.55), hh = h * (0.55 + 0.45 * ((i * 53 + seed * 7) % 10) / 10);
+    const m = new THREE.Mesh(new THREE.ConeGeometry(rr, hh, 6), _gimBasic(cols[i % 3], 0.85));
+    const a = i * 2.4 + seed;
+    m.position.set(Math.cos(a) * r * 0.45 * (i > 0), hh / 2, Math.sin(a) * r * 0.45 * (i > 0));
+    m.userData = { h0: hh, ph: i * 1.7 + seed };
+    g.add(m); cones.push(m);
+  }
+  return { group: g, tick(t) { for (const c of cones) { const s = 0.8 + 0.35 * Math.abs(Math.sin(t * 9 + c.userData.ph)); c.scale.set(1, s, 1); c.position.y = c.userData.h0 * s / 2; } } };
+}
+
+function _gimMap(name) {
+  if (_gimDone[name] || !GIM[name] || !MAP_GROUPS[name] || !MAP_BOUNDS[name]) return;
+  _gimDone[name] = true;
+  const G = MAP_GROUPS[name], rnd = _thRng(name + ':gimmick'), ups = [], rsts = [], st = { t: 0, hinted: false, hint: null };
+  let reach = null;
+  const reachable = (x, z) => {
+    if (reach === null) { try { reach = _mdReach(name); } catch (e) { reach = false; } }
+    if (!reach) return true;
+    const i = Math.floor((x - reach.x0) / reach.CELL), j = Math.floor((z - reach.z0) / reach.CELL);
+    return reach.all.has(i * 1000 + j);
+  };
+  const X = {
+    name, G, rnd, state: st, arena() { return MAP_BOT_BOUNDS[name] || MAP_BOUNDS[name]; },
+    on(fn) { ups.push(fn); }, onReset(fn) { rsts.push(fn); },
+    // where an actor has to stand for this gimmick to do something to it -- read by the headless harness, nothing else
+    dbg(pts, live, poke) { g_gimDbg[name] = { pts, live, poke }; },
+    hint(title, text, color) { st.hint = [title, text, color || '#ffd24a']; },
+    announce(title, text, color) { if (_mechCanHurt()) showAnnouncement(title, text, color || '#ffd24a', 1800); },
+    // Is this a spot to put a thing: nothing at body height within r, inside the map, not on top of a spawn.
+    //   o.open  -- nothing overhead either (sky: lightning, a falling crate, a fire)
+    //   o.h     -- how tall "in the way" is (default 2.2)
+    //   o.edge  -- keep this far in from the map edge
+    free(x, z, r = 1.5, o = {}) {
+      const b = MAP_BOT_BOUNDS[name] || MAP_BOUNDS[name], m = o.edge == null ? 6 : o.edge, y1 = o.h || 2.2;
+      if (Math.abs(x) > b.halfX - m || Math.abs(z) > b.halfZ - m) return false;
+      for (const c of MAP_COLLIDERS[name]) {
+        if (c.max.y <= 0.4) continue;
+        if (x <= c.min.x - r || x >= c.max.x + r || z <= c.min.z - r || z >= c.max.z + r) continue;
+        if (c.min.y < y1) return false;
+        if (o.open && c.min.y < 40) return false;
+      }
+      for (const dz of MAP_GIMMICKS[name].damageZones) {        // not in the lava, the acid, the gas
+        if (dz.w) {                                                  // a rect zone can have islands of safe ground in it
+          if (!_pointInRotRect(x, z, dz, r + 1)) continue;
+          if (dz.safeRects && dz.safeRects.some(sr => _pointInRotRect(x, z, sr, -(r + 0.5)))) continue;
+          return false;
+        } else if (Math.hypot(x - dz.x, z - dz.z) < (dz.r || 0) + r + 1) return false;
+      }
+      if (!o.spawns) {
+        const sp = MAP_SPAWNS[name];
+        for (const k of ['ally', 'enemy']) { const s = sp && sp[k]; if (s && x > s.x0 - 8 - r && x < s.x1 + 8 + r && z > s.z0 - 8 - r && z < s.z1 + 8 + r) return false; }
+      }
+      return true;
+    },
+    reachable,
+    // n spots spread across the map: farthest-point sampling over the free, reachable ground.
+    //   o.pairs -- every spot also has its point-mirror free, and both are returned (so the two teams get the same thing)
+    spots(n, o = {}) {
+      const b = MAP_BOT_BOUNDS[name] || MAP_BOUNDS[name], r = o.r || 2, edge = o.edge == null ? 8 : o.edge, cand = [];
+      for (let k = 0; k < 2200 && cand.length < 260; k++) {
+        const x = (rnd() * 2 - 1) * (b.halfX - edge), z = (rnd() * 2 - 1) * (b.halfZ - edge);
+        const d = Math.hypot(x, z);
+        if ((o.maxR && d > o.maxR) || (o.minR && d < o.minR)) continue;
+        if (o.half && z < 0) continue;
+        if (!X.free(x, z, r, o) || !reachable(x, z)) continue;
+        if (o.pairs && (!X.free(-x, -z, r, o) || !reachable(-x, -z))) continue;
+        cand.push([x, z]);
+      }
+      const out = [], avoid = (o.avoid || []).slice(), sep = o.sep || 14;
+      const far = (c) => { let m = 1e9; for (const p of avoid) m = Math.min(m, Math.hypot(c[0] - p[0], c[1] - p[1])); return m; };
+      while (out.length < n && cand.length) {
+        let best = -1, bd = -1;
+        for (let k = 0; k < cand.length; k++) { const d = avoid.length ? far(cand[k]) : (o.near ? -Math.hypot(cand[k][0] - o.near[0], cand[k][1] - o.near[1]) : rnd()); if (d > bd) { bd = d; best = k; } }
+        if (avoid.length && bd < sep) break;
+        const c = cand.splice(best, 1)[0];
+        out.push({ x: c[0], z: c[1] }); avoid.push(c);
+        if (o.pairs) { out.push({ x: -c[0], z: -c[1] }); avoid.push([-c[0], -c[1]]); }
+      }
+      return out;
+    },
+    // The longest clear run along a line (for a road, a rail, a rolling thing), or null.
+    lane(x0, z0, x1, z1, minLen = 20, o = {}) {
+      const L = Math.hypot(x1 - x0, z1 - z0), n = Math.max(2, Math.ceil(L / 1.5)), w = o.w || 1.7;
+      let best = null, s = -1;
+      for (let i = 0; i <= n + 1; i++) {
+        const t = Math.min(1, i / n), ok = i <= n && X.free(x0 + (x1 - x0) * t, z0 + (z1 - z0) * t, w, { edge: 0, spawns: o.spawns === true, h: o.h || 1.4, open: o.open });
+        if (ok && s < 0) s = i;
+        if ((!ok || i > n) && s >= 0) { const a = s / n, c = Math.min(1, (i - 1) / n), len = (c - a) * L; if (len >= minLen && (!best || len > best.len)) best = { a, c, len }; s = -1; }
+      }
+      if (!best) return null;
+      return { x0: x0 + (x1 - x0) * best.a, z0: z0 + (z1 - z0) * best.a, x1: x0 + (x1 - x0) * best.c, z1: z0 + (z1 - z0) * best.c, len: best.len };
+    },
+    disc(x, z, r, c, o = 0.5, y = 0.05) { const m = new THREE.Mesh(new THREE.CircleGeometry(r, 28), _gimBasic(c, o)); m.rotation.x = -Math.PI / 2; m.position.set(x, y, z); G.add(m); return m; },
+    ring(x, z, r, c, o = 0.9, w = 0.3, y = 0.07) { const m = new THREE.Mesh(new THREE.RingGeometry(Math.max(0.05, r - w), r, 36), _gimBasic(c, o)); m.rotation.x = -Math.PI / 2; m.position.set(x, y, z); G.add(m); return m; },
+    mesh(geo, mat, x, y, z) { const m = new THREE.Mesh(geo, typeof mat === 'number' ? _gimLam(mat) : mat); m.position.set(x, y, z); G.add(m); return m; },
+    box(x, y, z, w, h, d, c, rot = 0) { return addClearBox(name, x, y, z, w, h, d, c, rot); },
+    // a collider that can come and go (a dropped crate, a rising wall)
+    addCollider(mesh) { mesh.updateMatrixWorld(true); const b = new THREE.Box3().setFromObject(mesh); MAP_COLLIDERS[name].push(b); if (activeMapName === name) wallColliders.push(b); return b; },
+    // a pane / barrel / crate that shots can break: it goes on the destructible list with its collider
+    destructible(mesh, hp, type, onDestroy) {
+      const col = X.addCollider(mesh), d = { mesh, hp, maxHp: hp, type, mapName: name, colliderRef: col, onDestroy };
+      mapDestructibles.push(d); return d;
+    },
+    dropCollider(b) { for (const L of [MAP_COLLIDERS[name], wallColliders]) { const i = L.indexOf(b); if (i >= 0) L.splice(i, 1); } },
+    // kind: any MAP_GIMMICKS list, or 'avoid' -- circles that hurt nobody by themselves but that bots keep out of
+    zone(kind, o) { const g = MAP_GIMMICKS[name]; (g[kind] || (g[kind] = [])).push(o); return o; },
+    removeZone(kind, o) { const L = MAP_GIMMICKS[name][kind], i = L ? L.indexOf(o) : -1; if (i >= 0) L.splice(i, 1); },
+    near(a, x, z, r, yMax = 2.6) { return Math.abs(a.x - x) < r && Math.abs(a.z - z) < r && Math.hypot(a.x - x, a.z - z) < r && a.y < yMax; },
+    fx(x, y, z, r, c) { try { spawnAbilityAOEFX(new THREE.Vector3(x, y, z), r, c); } catch (e) {} },
+    sound(n, x, z, v = 0.7) { try { playSoundEvent(n, { position: new THREE.Vector3(x, 1, z), volume: v, minGap: 120 }); } catch (e) {} },
+    flash(c, ms = 160) { try { flashScreen(c, ms); } catch (e) {} },
+    // carry an actor along a heading for a moment: a launcher, a conveyor, a current
+    carry: (() => {
+      const live = new Map();
+      ups.push((dt) => {
+        for (const [a, c] of live) {
+          c.t -= dt;
+          if (c.t <= 0 || (a.bot && a.bot.dead)) { live.delete(a); continue; }
+          a.push(c.vx * dt, c.vz * dt);
+        }
+      });
+      rsts.push(() => live.clear());
+      return (a, vx, vz, dur) => { live.set(a, { vx, vz, t: dur }); };
+    })(),
+  };
+  g_gimX[name] = X;
+  try { GIM[name](X); } catch (e) { console.warn('[gimmick]', name, e); }
+  const prev = MAP_MECH[name];
+  MAP_MECH[name] = {
+    reset() { if (prev) prev.reset(); st.t = 0; st.hinted = false; _gimSlowState.map = null; for (const f of rsts) { try { f(); } catch (e) {} } },
+    update(dt) {
+      if (prev) prev.update(dt);
+      if (inLobby || countdownActive || !ups.length) return;
+      st.t += dt;
+      if (!st.hinted && st.hint && _mechCanHurt()) { st.hinted = true; showAnnouncement(st.hint[0], st.hint[1], st.hint[2], 2600); }
+      _gimSlowState.map = name; _gimSlowState.v = 1;
+      for (const b of gameBots) { b._gimSlow = 1; if (b._gimRootT > 0) { b._gimRootT -= dt; b._gimSlow = 0; } }
+      const A = _gimActors();
+      for (const f of ups) f(dt, A, st.t);
+    },
+  };
+  g_gimBuilt.push(name);
+}
+var g_gimBuilt = [], g_gimDbg = {}, g_gimX = {};
+// If the same actor stands in the same hazard every frame, hurt it on a beat instead of every frame.
+function _gimBeat(map, key, dt, every) {
+  const isMap = map instanceof Map, t = (isMap ? (map.get(key) || 0) : (map[key] || 0)) + dt;
+  const fire = t >= every, v = fire ? t % every : t;
+  if (isMap) map.set(key, v); else map[key] = v;
+  return fire;
+}
+
+// ── 🪑 BLANK · HOT SEAT ──────────────────────────────────────────────────────────────────────────────────────────────────
+// The classic arena had nothing to fight over but the middle. Now there is a seat in it: stand in the gold ring and you
+// heal, which is a reason to be there and a reason to be shot. It moves every 40 seconds, so the fight moves with it.
+GIM_LABELS.hotseat = 'was caught in the hot seat';
+GIM.blank = (X) => {
+  const seats = X.spots(4, { r: 3.4, sep: 18, maxR: 36, near: [0, 0] });
+  if (seats.length < 2) return;
+  X.dbg(seats);
+  const PERIOD = 40, R = 3.2;
+  const marks = seats.map(s => {
+    const g = new THREE.Group(); g.position.set(s.x, 0, s.z); X.G.add(g);
+    const add = (m) => { g.add(m); return m; };
+    const disc = add(new THREE.Mesh(new THREE.CircleGeometry(R, 32), _gimBasic(0xffd24a, 0.28))); disc.rotation.x = -Math.PI / 2; disc.position.y = 0.05;
+    const ring = add(new THREE.Mesh(new THREE.RingGeometry(R - 0.3, R, 40), _gimBasic(0xffe27a, 0.95))); ring.rotation.x = -Math.PI / 2; ring.position.y = 0.07;
+    const beam = add(new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 9, 10, 1, true), _gimBasic(0xffe27a, 0.35))); beam.position.y = 4.5;
+    for (let k = 0; k < 2; k++) {                                     // a plus: the universal "this heals"
+      const bar = add(new THREE.Mesh(new THREE.BoxGeometry(k ? 0.45 : 1.6, 0.04, k ? 1.6 : 0.45), _gimBasic(0xffffff, 0.9))); bar.position.y = 0.09;
+    }
+    return { g, ring, beam, disc };
+  });
+  let active = 0, last = -1;
+  const beat = new Map();
+  X.onReset(() => { active = 0; last = -1; });
+  X.on((dt, A, t) => {
+    active = Math.floor(t / PERIOD) % seats.length;
+    if (active !== last) {
+      if (last >= 0) X.announce('🪑 HOT SEAT', 'The healing ring moved', '#ffd24a');
+      last = active;
+      marks.forEach((m, i) => { m.g.visible = true; const on = i === active; m.disc.visible = on; m.beam.visible = on; m.ring.material.opacity = on ? 0.95 : 0.22; });
+    }
+    const pulse = 0.75 + 0.25 * Math.sin(t * 4);
+    marks[active].ring.material.opacity = pulse;
+    const s = seats[active];
+    for (const a of A) if (X.near(a, s.x, s.z, R, 2.4) && _gimBeat(beat, a.id, dt, 0.25)) a.heal(2);   // 8 hp/s
+  });
+};
+
+// ── 🚗 URBAN · RUSH HOUR ────────────────────────────────────────────────────────────────────────────────────────────────
+// The plaza had cars as low cover and nothing ever moved. Two one-way lanes run down the avenue either side of the
+// fountain and the traffic does not stop for you. Cross it, don't fight in it.
+GIM_LABELS.roadkill = 'was run over';
+GIM.urban = (X) => {
+  const find = (sx, dir) => {
+    for (const ax of [11, 10, 12, 9.5, 12.5, 13]) {
+      const x = sx * ax, ln = dir > 0 ? X.lane(x, -68, x, 68, 34, { w: 1.9 }) : X.lane(x, 68, x, -68, 34, { w: 1.9 });
+      if (ln) return ln;
+    }
+    return null;
+  };
+  const lanes = [find(1, 1), find(-1, -1)].filter(Boolean);
+  if (!lanes.length) return;
+  X.dbg(lanes.map(l => ({ x: (l.x0 + l.x1) / 2, z: (l.z0 + l.z1) / 2 })));
+  const colors = [0xb83a2a, 0x2a5aa8, 0xd8c8a0, 0x3a8a4a, 0xd88a2a, 0x5a5f66, 0x7a3a8a];
+  const cars = [];
+  lanes.forEach((ln, li) => {
+    const dx = (ln.x1 - ln.x0) / ln.len, dz = (ln.z1 - ln.z0) / ln.len, yaw = Math.atan2(dx, dz);
+    // road paint: a dashed line down the middle of the lane, so it reads as a road and not as a gap between buildings
+    for (let s = 2; s < ln.len - 1; s += 5) {
+      const d = X.mesh(new THREE.BoxGeometry(0.18, 0.02, 2.2), _gimBasic(0xe9e6d8, 0.85), ln.x0 + dx * s, 0.045, ln.z0 + dz * s); d.rotation.y = yaw;
+    }
+    const n = Math.max(1, Math.min(3, Math.round(ln.len / 30)));
+    for (let i = 0; i < n; i++) {
+      const bus = li === 0 && i === 0 && ln.len > 44;
+      const g = _gimVehicle(bus ? 0xd8b030 : colors[(li * 3 + i) % colors.length], bus ? { len: 9.5, wid: 2.5, h: 2.1, bus: true } : {});
+      g.rotation.y = yaw; X.G.add(g);
+      cars.push({ g, ln, dx, dz, s: (i / n) * ln.len, v: bus ? 8.5 : 12 + li * 1.5, half: bus ? 4.75 : 2.3, hw: bus ? 1.25 : 1.0, bus });
+    }
+  });
+  const cd = new Map();
+  X.hint('🚗 RUSH HOUR', 'Cars run the avenue both ways. Do not stand in the road.', '#ffd24a');
+  X.onReset(() => { cd.clear(); cars.forEach((c, i) => { c.s = (i % 3) * 14; }); });
+  X.on((dt, A) => {
+    for (const c of cars) {
+      c.s += c.v * dt;
+      if (c.s > c.ln.len + c.half) c.s = -c.half - 6 - Math.random() * 14;
+      const vis = c.s > -c.half && c.s < c.ln.len + c.half;
+      c.g.visible = vis;
+      const cx = c.ln.x0 + c.dx * c.s, cz = c.ln.z0 + c.dz * c.s;
+      c.g.position.set(cx, 0, cz);
+      if (!vis) continue;
+      for (const a of A) {
+        if (a.y > 1.7) continue;
+        const rx = a.x - cx, rz = a.z - cz, along = rx * c.dx + rz * c.dz, side = rx * c.dz - rz * c.dx;
+        if (Math.abs(along) > c.half + 0.45 || Math.abs(side) > c.hw + 0.45) continue;
+        const key = a.id + ':' + (c.bus ? 'b' : 'c');
+        if ((cd.get(key) || 0) > 0) continue;
+        cd.set(key, 1.0);
+        a.hurt(c.bus ? 55 : 38, 'roadkill');
+        a.push(side >= 0 ? c.dz * 3.2 : -c.dz * 3.2, side >= 0 ? -c.dx * 3.2 : c.dx * 3.2);
+        a.lift(6);
+        if (a.me) X.flash('rgba(255,60,40,0.3)', 200);
+        X.sound('melee_heavy', cx, cz, 0.8);
+      }
+    }
+    for (const k of cd.keys()) { const v = cd.get(k) - dt; if (v <= 0) cd.delete(k); else cd.set(k, v); }
+  });
+};
+
+// ── 🏗️ WAREHOUSE · CRANE DROP ───────────────────────────────────────────────────────────────────────────────────────────
+// A warehouse has an overhead crane. This one works: every so often it rolls to a spot on the floor, a red ring marks it,
+// and it puts a crate there from 8 metres up. It hurts if you are under it -- and it stays, so the floor you fought over
+// a minute ago is not the floor you are fighting over now.
+GIM_LABELS.crane = 'was flattened by a crate';
+GIM.warehouse = (X) => {
+  const b = X.arena(), Y = 9.4, rx = b.halfX - 1.4;
+  const spots = X.spots(10, { r: 2.4, sep: 11, edge: 7, h: 2.6 });
+  if (spots.length < 3) return;
+  X.dbg(spots);
+  const steel = _gimLam(0xe2b422), dark = _gimLam(0x8d949c);
+  // two rails the length of the building, the bridge across them, the trolley on the bridge, and the hook
+  for (const sx of [-1, 1]) X.mesh(new THREE.BoxGeometry(0.6, 0.6, b.halfZ * 2 - 4), dark, sx * rx, Y, 0);
+  const bridge = new THREE.Group(); X.G.add(bridge);
+  const part = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); bridge.add(m); return m; };
+  part(new THREE.BoxGeometry(rx * 2, 0.9, 1.3), steel, 0, Y + 0.7, 0);
+  part(new THREE.BoxGeometry(rx * 2, 0.25, 0.3), dark, 0, Y + 1.25, 0.55);
+  for (const sx of [-1, 1]) part(new THREE.BoxGeometry(1.2, 1.1, 2.6), dark, sx * rx, Y + 0.3, 0);
+  const trolley = new THREE.Group(); bridge.add(trolley);
+  const tm = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.8, 2.0), dark); tm.position.y = Y + 0.1; trolley.add(tm);
+  const cable = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1, 6), dark); trolley.add(cable);
+  const hook = new THREE.Group(); trolley.add(hook);
+  const hm = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.5, 0.7), steel); hook.add(hm);
+  const crate = new THREE.Mesh(new THREE.BoxGeometry(2.6, 2.6, 2.6), _gimLam(0x2a5aa8)); crate.position.y = -1.55; hook.add(crate);
+  const cols = [0xb83a2a, 0x2a5aa8, 0xd88a2a, 0x3a8a4a, 0x7a5a30];
+  let S = { phase: 'idle', t: 6, target: null, n: 0, last: null };
+  const fallen = [];
+  const warn = X.ring(0, 0, 2.7, 0xff3322, 0.9, 0.35, 0.08); warn.visible = false;
+  // the hook hangs Y - 0.7 up; `drop` lets it down. Cable runs from just under the trolley to the top of the hook.
+  const setHook = (drop) => {
+    hook.position.y = Y - 0.7 - drop;
+    const top = Y - 0.3, len = Math.max(0.1, top - (hook.position.y + 0.25));
+    cable.scale.y = len; cable.position.y = top - len / 2;
+  };
+  const home = () => { bridge.position.z = 0; trolley.position.x = 0; setHook(0); crate.visible = true; hook.visible = true; };
+  X.hint('🏗️ CRANE DROP', 'A red ring is where the crane puts the next crate. Do not be under it.', '#ffb347');
+  X.onReset(() => { for (const f of fallen) { X.G.remove(f.mesh); X.dropCollider(f.col); } fallen.length = 0; S = { phase: 'idle', t: 6, target: null, n: 0, last: null }; warn.visible = false; home(); });
+  home();
+  X.on((dt, A, t) => {
+    S.t -= dt;
+    if (S.phase === 'idle') {
+      if (S.t <= 0) {
+        // 60%: onto where somebody is standing, if there is room; otherwise anywhere
+        let tgt = null;
+        if (Math.random() < 0.6 && A.length) {
+          const a = A[Math.floor(Math.random() * A.length)];
+          let bd = 1e9; for (const s of spots) { const d = Math.hypot(s.x - a.x, s.z - a.z); if (d < bd && s !== S.last) { bd = d; tgt = s; } }
+          if (bd > 14) tgt = null;
+        }
+        if (!tgt) { do { tgt = spots[Math.floor(Math.random() * spots.length)]; } while (tgt === S.last && spots.length > 1); }
+        S.target = tgt; S.last = tgt; S.phase = 'travel'; S.t = 2.1; S.from = { z: bridge.position.z, x: trolley.position.x };
+        warn.position.set(tgt.x, 0.08, tgt.z); warn.visible = true;
+      }
+    } else if (S.phase === 'travel') {
+      const k = Math.min(1, 1 - S.t / 2.1), e = k * k * (3 - 2 * k);
+      bridge.position.z = S.from.z + (S.target.z - S.from.z) * e;
+      trolley.position.x = S.from.x + (S.target.x - S.from.x) * e;
+      warn.material.opacity = 0.35 + 0.55 * Math.abs(Math.sin(t * 12));
+      if (S.t <= 0) { S.phase = 'lower'; S.t = 0.35; }
+    } else if (S.phase === 'lower') {
+      setHook((1 - S.t / 0.35) * (Y - 3.55));
+      if (S.t <= 0) {
+        S.phase = 'rise'; S.t = 1.3; warn.visible = false;
+        const tx = S.target.x, tz = S.target.z;
+        for (const a of A) if (a.y < 3.2 && Math.hypot(a.x - tx, a.z - tz) < 2.9) {
+          a.hurt(70, 'crane'); a.lift(5); a.push(a.x - tx || 0.3, a.z - tz || 0.3);
+          if (a.me) X.flash('rgba(255,240,200,0.4)', 220);
+        }
+        X.fx(tx, 0.3, tz, 3.4, 0xd8c8a0); X.sound('explosion', tx, tz, 0.55);
+        // leave the crate on the floor as cover; the oldest one goes after three
+        const m = new THREE.Mesh(new THREE.BoxGeometry(2.6, 2.6, 2.6), _gimLam(cols[S.n++ % cols.length]));
+        m.position.set(tx, 1.3, tz); m.rotation.y = Math.random() * 0.8; X.G.add(m);
+        const col = X.addCollider(m); fallen.push({ mesh: m, col });
+        if (fallen.length > 3) { const o = fallen.shift(); X.G.remove(o.mesh); X.dropCollider(o.col); }
+        crate.visible = false;
+      }
+    } else if (S.phase === 'rise') {
+      setHook((S.t / 1.3) * (Y - 3.55));
+      if (S.t <= 0) { S.phase = 'idle'; S.t = 14 + Math.random() * 6; crate.visible = true; home(); }
+    }
+  });
+};
+
+// ── 🔥 FOREST · WILDFIRE ────────────────────────────────────────────────────────────────────────────────────────────────
+// A pine forest burns. A fire starts somewhere in the clearings and walks: every few seconds it jumps a few metres on, so
+// the cover you were behind is the next thing to burn. Smoke first, then flame -- and it is gone again in half a minute.
+GIM_LABELS.wildfire = 'burned in the wildfire';
+GIM.forest = (X) => {
+  const spots = X.spots(12, { r: 4.5, sep: 10, edge: 10, open: true, h: 3.2 });
+  if (spots.length < 4) return;
+  const fires = [], scars = [], burnT = new Map();
+  X.dbg(spots, () => fires.map(f => ({ x: f.x, z: f.z })));
+  let S = { next: 12, hops: 0, front: null, dir: 0 };
+  const mkFire = (x, z) => {
+    const g = new THREE.Group(); g.position.set(x, 0, z);
+    const fl = [];
+    for (let i = 0; i < 4; i++) {
+      const f = _gimFlame(1.2, 3.2 + (i % 2), i + x), a = i * 1.57 + 0.5;
+      f.group.position.set(Math.cos(a) * 1.8, 0, Math.sin(a) * 1.8); g.add(f.group); fl.push(f);
+    }
+    const core = _gimFlame(1.7, 4.6, z); g.add(core.group); fl.push(core);
+    const smoke = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 2.6, 12, 8, 1, true), _gimBasic(0x3a3633, 0.32)); smoke.position.y = 9; g.add(smoke);
+    X.G.add(g);
+    const scar = X.disc(x, z, 4.4, 0x15110d, 0.7, 0.045); scars.push({ m: scar, t: 40 });
+    const zn = X.zone('avoid', { x, z, r: 4.4 });                      // bots of any skill keep out of it
+    fires.push({ g, fl, t: 0, life: 14, x, z, zn });
+    X.sound('fire_sizzle', x, z, 0.7);
+  };
+  X.hint('🔥 WILDFIRE', 'Fires start in the forest and spread. Smoke means move.', '#ff7a2a');
+  X.onReset(() => { for (const f of fires) { X.G.remove(f.g); X.removeZone('avoid', f.zn); } fires.length = 0; for (const s of scars) X.G.remove(s.m); scars.length = 0; S = { next: 12, hops: 0, front: null, dir: 0 }; });
+  X.on((dt, A, t) => {
+    S.next -= dt;
+    if (S.next <= 0) {
+      if (!S.front) {                                                  // a new fire, somewhere with room
+        const s = spots[Math.floor(Math.random() * spots.length)];
+        mkFire(s.x, s.z); S.front = { x: s.x, z: s.z }; S.hops = 0; S.dir = Math.random() * 6.28; S.next = 4.2;
+        X.announce('🔥 WILDFIRE', 'A fire has started', '#ff7a2a');
+      } else if (S.hops < 3) {                                          // and it walks
+        S.hops++; S.dir += (Math.random() - 0.5) * 1.1;
+        let nx = S.front.x + Math.cos(S.dir) * 7.5, nz = S.front.z + Math.sin(S.dir) * 7.5;
+        if (!X.free(nx, nz, 2.5, { open: true, h: 3 })) {              // blocked by a tree or a wall: take the nearest clearing
+          let bd = 1e9; for (const s of spots) { const d = Math.hypot(s.x - nx, s.z - nz); if (d < bd) { bd = d; nx = s.x; nz = s.z; } }
+        }
+        mkFire(nx, nz); S.front = { x: nx, z: nz }; S.next = S.hops >= 3 ? 26 + Math.random() * 10 : 4.2;
+        if (S.hops >= 3) S.front = null;
+      }
+    }
+    for (let i = fires.length - 1; i >= 0; i--) {
+      const f = fires[i]; f.t += dt;
+      for (const fl of f.fl) fl.tick(t);
+      const k = f.t / f.life, sc = k < 0.1 ? k / 0.1 : (k > 0.8 ? Math.max(0.05, (1 - k) / 0.2) : 1);
+      f.g.scale.setScalar(sc);
+      if (f.t >= f.life) { X.G.remove(f.g); X.removeZone('avoid', f.zn); fires.splice(i, 1); }
+    }
+    if (_gimBeat(burnT, 'f', dt, 0.5)) for (const f of fires) {
+      if (f.t < 1.0 || f.t > f.life - 1.5) continue;                   // still catching / dying down
+      for (const a of A) if (a.y < 3 && Math.hypot(a.x - f.x, a.z - f.z) < 4.3) a.hurt(4, 'wildfire');
+    }
+    for (let i = scars.length - 1; i >= 0; i--) { const s = scars[i]; s.t -= dt; if (s.t < 8) s.m.material.opacity = Math.max(0, 0.7 * s.t / 8); if (s.t <= 0) { X.G.remove(s.m); scars.splice(i, 1); } }
+  });
+};
+
+// ── 🪤 VIETNAM · PUNJI PITS ─────────────────────────────────────────────────────────────────────────────────────────────
+// A jungle you cannot see into is a jungle with traps in it. A few patches of leaf litter are not what they look like:
+// step on one and the cover gives way -- stakes, a bad ankle, and a second and a half you spend not going anywhere.
+// A few bamboo tips show at the edge for anyone who looks. It re-sets after twenty seconds.
+GIM_LABELS.punji = 'was impaled on a punji stake';
+GIM.vietnam = (X) => {
+  const spots = X.spots(8, { r: 1.7, pairs: true, sep: 11, maxR: 44, edge: 8 });
+  if (!spots.length) return;
+  X.dbg(spots);
+  const pits = spots.map((s, i) => {
+    const g = new THREE.Group(); g.position.set(s.x, 0, s.z); X.G.add(g);
+    const leaf = new THREE.Mesh(new THREE.CircleGeometry(1.45, 14), _gimBasic(i % 2 ? 0x4c6a2c : 0x5a5a2a, 1)); leaf.rotation.x = -Math.PI / 2; leaf.position.y = 0.045; g.add(leaf);
+    const hole = new THREE.Mesh(new THREE.CircleGeometry(1.35, 14), _gimBasic(0x120e08, 1)); hole.rotation.x = -Math.PI / 2; hole.position.y = 0.05; hole.visible = false; g.add(hole);
+    const tips = [], stakes = [];
+    for (let k = 0; k < 5; k++) {
+      const a = k * 1.26 + i, r = 1.15;
+      const tip = new THREE.Mesh(new THREE.ConeGeometry(0.035, 0.34, 4), _gimBasic(0xc9b86a)); tip.position.set(Math.cos(a) * r, 0.17, Math.sin(a) * r); g.add(tip); tips.push(tip);
+      const st = new THREE.Mesh(new THREE.ConeGeometry(0.07, 1.0, 5), _gimBasic(0xd8c680)); st.position.set(Math.cos(a) * 0.7 * (k % 2 ? 0.6 : 1), 0.5, Math.sin(a) * 0.7 * (k % 2 ? 0.6 : 1)); st.visible = false; g.add(st); stakes.push(st);
+    }
+    return { x: s.x, z: s.z, leaf, hole, tips, stakes, open: 0 };
+  });
+  const setOpen = (p, o) => { p.open = o; p.leaf.visible = !o; p.hole.visible = !!o; p.stakes.forEach(s => { s.visible = !!o; }); p.tips.forEach(s => { s.visible = !o; }); };
+  X.hint('🪤 PUNJI PITS', 'Some leaf litter is hiding a pit. Bamboo tips give it away.', '#9bd66b');
+  X.onReset(() => pits.forEach(p => setOpen(p, 0)));
+  X.on((dt, A) => {
+    for (const p of pits) {
+      if (p.open > 0) { p.open -= dt; if (p.open <= 0) setOpen(p, 0); continue; }
+      for (const a of A) {
+        if (a.y > 0.7 || Math.hypot(a.x - p.x, a.z - p.z) > 1.25) continue;
+        setOpen(p, 20);
+        a.hurt(26, 'punji'); a.root(1500);
+        if (a.me) X.flash('rgba(200,30,20,0.35)', 260);
+        X.sound('melee_blade', p.x, p.z, 0.8); X.fx(p.x, 0.3, p.z, 2.0, 0x8a6a3a);
+        break;
+      }
+    }
+  });
+};
+
+// ── 🌋 VOLCANO · GEYSERS ────────────────────────────────────────────────────────────────────────────────────────────────
+// The lava pools sit still; the ground between them does not. Six vents bubble for a second and a half -- a ring, steam --
+// then throw a column of boiling water twelve metres up. Good for getting onto a ledge. Bad for standing on a vent.
+GIM_LABELS.geyser = 'was boiled by a geyser';
+GIM.volcano = (X) => {
+  const spots = X.spots(6, { r: 2.2, pairs: true, sep: 16, maxR: 85, edge: 10 });
+  if (!spots.length) return;
+  X.dbg(spots);
+  const vents = spots.map((s, i) => {
+    const g = new THREE.Group(); g.position.set(s.x, 0, s.z); X.G.add(g);
+    const rim = new THREE.Mesh(new THREE.CylinderGeometry(2.0, 2.4, 0.4, 14), _gimLam(0x1c1512)); rim.position.y = 0.2; g.add(rim);
+    const glow = new THREE.Mesh(new THREE.CircleGeometry(1.5, 16), _gimBasic(0xff6a1a, 0.9)); glow.rotation.x = -Math.PI / 2; glow.position.y = 0.42; g.add(glow);
+    const warn = new THREE.Mesh(new THREE.RingGeometry(2.1, 2.55, 28), _gimBasic(0xffcc55, 0.9)); warn.rotation.x = -Math.PI / 2; warn.position.y = 0.45; warn.visible = false; g.add(warn);
+    const col = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.7, 14, 12, 1, true), _gimBasic(0xfff1c8, 0.55)); col.position.y = 7; col.visible = false; g.add(col);
+    const steam = []; for (let k = 0; k < 4; k++) { const p = new THREE.Mesh(new THREE.SphereGeometry(0.55, 6, 5), _gimBasic(0xe8e8e8, 0.5)); p.visible = false; g.add(p); steam.push(p); }
+    return { x: s.x, z: s.z, g, glow, warn, col, steam, phase: 'idle', t: 4 + i * 1.7, hit: new Set() };
+  });
+  X.hint('🌋 GEYSERS', 'A bubbling ring means the vent is about to blow. Ride it or leave it.', '#ffb347');
+  X.onReset(() => vents.forEach((v, i) => { v.phase = 'idle'; v.t = 4 + i * 1.7; v.warn.visible = false; v.col.visible = false; v.steam.forEach(p => { p.visible = false; }); }));
+  X.on((dt, A, t) => {
+    for (const v of vents) {
+      v.t -= dt;
+      if (v.phase === 'idle' && v.t <= 0) { v.phase = 'warn'; v.t = 1.6; v.warn.visible = true; }
+      else if (v.phase === 'warn') {
+        v.warn.material.opacity = 0.4 + 0.5 * Math.abs(Math.sin(t * 14));
+        v.steam.forEach((p, k) => { p.visible = true; const u = ((t * 1.3 + k * 0.27) % 1); p.position.set(Math.cos(k * 1.6) * 0.8, 0.6 + u * 3.2, Math.sin(k * 1.6) * 0.8); p.scale.setScalar(0.5 + u); p.material.opacity = 0.5 * (1 - u); });
+        if (v.t <= 0) { v.phase = 'blow'; v.t = 1.15; v.warn.visible = false; v.col.visible = true; v.steam.forEach(p => { p.visible = false; }); v.hit.clear(); X.sound('explosion', v.x, v.z, 0.5); X.fx(v.x, 0.5, v.z, 3.2, 0xfff1c8); }
+      } else if (v.phase === 'blow') {
+        v.col.material.opacity = 0.55 * Math.min(1, v.t / 0.4 + 0.2);
+        for (const a of A) {
+          const d = Math.hypot(a.x - v.x, a.z - v.z);
+          if (d > 2.6 || a.y > 12) continue;
+          if (!v.hit.has(a.id)) { v.hit.add(a.id); a.hurt(14, 'geyser'); if (a.me) X.flash('rgba(255,255,255,0.35)', 200); }
+          a.lift(17);
+          if (d > 0.01) a.push(((a.x - v.x) / d) * 2.4 * dt, ((a.z - v.z) / d) * 2.4 * dt);
+        }
+        if (v.t <= 0) { v.phase = 'idle'; v.t = 7 + Math.random() * 5; v.col.visible = false; }
+      }
+    }
+  });
+};
+
+// ── ⚡ CYBER · NEON LAUNCHERS ───────────────────────────────────────────────────────────────────────────────────────────
+// Cyber Alley is supposed to have pads that throw you across it. Six lanes of chevrons: step on one and you are fired
+// fourteen metres toward the middle, over whatever is in the way. Not a jump pad -- you do not steer it, you pick where
+// you want to be and you go.
+GIM.cyber = (X) => {
+  const spots = X.spots(6, { r: 1.9, pairs: true, sep: 13, minR: 14, maxR: 46, edge: 9 });
+  if (!spots.length) return;
+  X.dbg(spots);
+  const colors = [0x33f0ff, 0xff3cc8, 0xb8ff3c];
+  const pads = spots.map((s, i) => {
+    const L = Math.hypot(s.x, s.z) || 1, ux = -s.x / L, uz = -s.z / L;          // toward the middle
+    const c = colors[i % colors.length], yaw = Math.atan2(ux, uz);
+    X.disc(s.x, s.z, 1.8, c, 0.35, 0.06); X.ring(s.x, s.z, 1.8, c, 0.95, 0.22, 0.08);
+    for (let k = 0; k < 3; k++) {                                              // chevrons point where it throws you
+      const px = s.x + ux * (0.5 + k * 0.55), pz = s.z + uz * (0.5 + k * 0.55);
+      for (const sd of [-1, 1]) { const m = X.mesh(new THREE.BoxGeometry(0.9, 0.03, 0.14), _gimBasic(0xffffff, 0.95), px - uz * sd * 0.3, 0.1, pz + ux * sd * 0.3); m.rotation.y = yaw + sd * 0.7; }
+    }
+    const tx = s.x + ux * 14, tz = s.z + uz * 14;
+    X.ring(tx, tz, 1.3, c, 0.5, 0.15, 0.06);                                    // where it puts you down
+    return { x: s.x, z: s.z, ux, uz, c };
+  });
+  const cd = new Map();
+  X.hint('⚡ NEON LAUNCHERS', 'Step on a chevron pad and it fires you toward the middle.', '#33f0ff');
+  X.onReset(() => cd.clear());
+  X.on((dt, A) => {
+    for (const k of cd.keys()) { const v = cd.get(k) - dt; if (v <= 0) cd.delete(k); else cd.set(k, v); }
+    for (const p of pads) for (const a of A) {
+      if (a.y > 1.2 || Math.hypot(a.x - p.x, a.z - p.z) > 1.8 || cd.has(a.id)) continue;
+      cd.set(a.id, 1.4);
+      a.lift(12); X.carry(a, p.ux * 15.5, p.uz * 15.5, 0.92);
+      if (a.me) X.flash('rgba(60,240,255,0.22)', 220);
+      X.sound('air_launch', p.x, p.z, 0.6);
+    }
+  });
+};
+
+// ── 🏜️ DESERT · QUICKSAND ───────────────────────────────────────────────────────────────────────────────────────────────
+// Between the dunes there are pits where the sand is wrong: darker, ringed, slowly turning. Walk in and you drag at about a
+// third of your speed -- and if you are still in it after a few seconds the sand takes you. It never hurts to go round.
+GIM_LABELS.quicksand = 'was swallowed by quicksand';
+GIM.desert = (X) => {
+  const spots = X.spots(6, { r: 4.6, pairs: true, sep: 20, maxR: 88, edge: 10 });
+  if (!spots.length) return;
+  X.dbg(spots);
+  const R = 4.2;
+  const pits = spots.map((s, i) => {
+    X.disc(s.x, s.z, R, 0x86693a, 0.96, 0.05);
+    const rings = [];
+    for (let k = 0; k < 3; k++) {
+      const rr = R - 0.5 - k * 1.15, m = X.ring(s.x, s.z, rr, k % 2 ? 0xc9a96a : 0x5e4825, 0.85, 0.28, 0.065 + k * 0.004);
+      rings.push(m);
+    }
+    // a bleached rib cage and a hat half under: the sand has done this before
+    const bone = _gimBasic(0xe8e0c8);
+    for (let k = 0; k < 3; k++) { const rib = X.mesh(new THREE.BoxGeometry(0.1, 0.5, 0.1), bone, s.x + (k - 1) * 0.5 + 1.2, 0.22, s.z - 0.6); rib.rotation.z = (k - 1) * 0.35; }
+    return { x: s.x, z: s.z, rings };
+  });
+  const sunk = new Map();
+  X.hint('🏜️ QUICKSAND', 'The dark ringed patches pull you under. Go round.', '#e0b060');
+  X.onReset(() => sunk.clear());
+  X.on((dt, A, t) => {
+    pits.forEach((p, i) => p.rings.forEach((r, k) => { r.rotation.z = t * (k % 2 ? -0.35 : 0.5); }));
+    for (const a of A) {
+      let inPit = false;
+      if (a.y < 0.9) for (const p of pits) if (Math.hypot(a.x - p.x, a.z - p.z) < R - 0.2) { inPit = true; break; }
+      const key = a.id;
+      if (inPit) {
+        a.slow(0.34);
+        const s = (sunk.get(key) || 0) + dt; sunk.set(key, s);
+        if (s > 3.5 && _gimBeat(sunk, key + ':b', dt, 0.5)) a.hurt(6, 'quicksand');
+      } else if (sunk.has(key)) { const s = sunk.get(key) - dt * 2; if (s <= 0) { sunk.delete(key); sunk.delete(key + ':b'); } else sunk.set(key, s); }
+    }
+  });
+};
+
+// ── ❄️ TUNDRA · THIN ICE ────────────────────────────────────────────────────────────────────────────────────────────────
+// Blue ice sheets on the flat: you can slide across them, and you can stand on them -- for about two and a half seconds.
+// Stand on one and it spiders, then it goes, and what is under it is not the ground. It freezes over again after nine.
+GIM_LABELS.thinice = 'fell through the ice';
+GIM.tundra = (X) => {
+  const spots = X.spots(6, { r: 5.4, pairs: true, sep: 22, maxR: 88, edge: 10 });
+  if (!spots.length) return;
+  X.dbg(spots);
+  const R = 5;
+  const sheets = spots.map((s, i) => {
+    const ice = X.disc(s.x, s.z, R, 0xbfe6ff, 0.78, 0.055);
+    const rim = X.ring(s.x, s.z, R, 0xf0fbff, 0.9, 0.3, 0.06);
+    const cracks = [];
+    for (let k = 0; k < 6; k++) {
+      const a = k * 1.05 + i, len = 2.2 + (k % 3) * 0.8;
+      const c = X.mesh(new THREE.BoxGeometry(len, 0.02, 0.07), _gimBasic(0x1c3f66, 0.9), s.x + Math.cos(a) * len / 2, 0.075, s.z + Math.sin(a) * len / 2);
+      c.rotation.y = -a; c.visible = false; cracks.push(c);
+    }
+    const zone = X.zone('iceZones', { x: s.x, z: s.z, r: R });
+    return { x: s.x, z: s.z, ice, rim, cracks, zone, state: 'ice', stress: 0, t: 0 };
+  });
+  const setState = (sh, st) => {
+    sh.state = st;
+    if (st === 'water') { X.removeZone('iceZones', sh.zone); sh.ice.material.color.setHex(0x16395e); sh.ice.material.opacity = 0.92; sh.rim.visible = false; sh.cracks.forEach(c => { c.visible = false; }); sh.t = 9; }
+    else { X.zone('iceZones', sh.zone); sh.ice.material.color.setHex(0xbfe6ff); sh.ice.material.opacity = 0.78; sh.rim.visible = true; sh.stress = 0; }
+  };
+  X.hint('❄️ THIN ICE', 'The pale sheets crack if you stand on them. Do not stop.', '#9fd8ff');
+  X.onReset(() => sheets.forEach(sh => { if (sh.state !== 'ice') setState(sh, 'ice'); sh.stress = 0; sh.cracks.forEach(c => { c.visible = false; }); }));
+  X.on((dt, A) => {
+    for (const sh of sheets) {
+      let n = 0;
+      for (const a of A) if (a.y < 0.9 && Math.hypot(a.x - sh.x, a.z - sh.z) < R - 0.3) {
+        n++;
+        if (sh.state === 'water') { a.slow(0.55); if (_gimBeat(sh, 'w' + a.id, dt, 0.5)) a.hurt(4, 'thinice'); }
+      }
+      if (sh.state === 'ice') {
+        sh.stress = n ? sh.stress + dt : Math.max(0, sh.stress - dt * 0.6);
+        const k = sh.stress / 2.5;
+        sh.cracks.forEach((c, i) => { c.visible = k > 0.25 + i * 0.1; });
+        if (sh.stress >= 2.5) {
+          setState(sh, 'water');
+          X.fx(sh.x, 0.3, sh.z, R, 0xbfe6ff); X.sound('freeze_shatter', sh.x, sh.z, 0.8);
+          for (const a of A) if (a.y < 0.9 && Math.hypot(a.x - sh.x, a.z - sh.z) < R) { a.hurt(10, 'thinice'); if (a.me) X.flash('rgba(120,190,255,0.4)', 260); }
+        }
+      } else {
+        sh.t -= dt;
+        if (sh.t <= 0) setState(sh, 'ice');
+      }
+    }
+  });
+};
+
+// ── 🌌 SPACE · LOW GRAVITY ──────────────────────────────────────────────────────────────────────────────────────────────
+// "Low gravity zones, jump higher" is on the card and was not in the map. Six violet domes on the deck plates: inside one
+// you fall at a third of the weight, so a jump is a flight -- over the cover, onto the catwalk, out of a line of fire.
+GIM.space = (X) => {
+  const spots = X.spots(6, { r: 5.4, pairs: true, sep: 16, edge: 8 });
+  if (!spots.length) return;
+  X.dbg(spots);
+  const R = 5.5;
+  const domes = spots.map((s, i) => {
+    X.zone('lowGravZones', { x: s.x, z: s.z, r: R });
+    X.disc(s.x, s.z, R, 0x8a3cff, 0.16, 0.05); X.ring(s.x, s.z, R, 0xc08cff, 0.9, 0.28, 0.07);
+    const wall = X.mesh(new THREE.CylinderGeometry(R, R, 7.5, 24, 1, true), _gimBasic(0xa05cff, 0.1), s.x, 3.75, s.z);
+    const bits = [];
+    for (let k = 0; k < 5; k++) {                               // things that have stopped falling
+      const m = X.mesh(new THREE.BoxGeometry(0.5 + (k % 2) * 0.3, 0.5, 0.5), _gimLam(k % 2 ? 0x8fa0b8 : 0xc86a3a), s.x, 2, s.z);
+      bits.push({ m, a: k * 1.26 + i, r: 1.2 + (k % 3) * 1.3, y: 1.6 + (k % 4) * 1.1, sp: 0.25 + (k % 3) * 0.12 });
+    }
+    return { s, bits };
+  });
+  X.hint('🌌 LOW GRAVITY', 'Violet domes: you fall slowly. Jump.', '#c08cff');
+  X.on((dt, A, t) => {
+    for (const d of domes) for (const b of d.bits) {
+      const a = b.a + t * b.sp;
+      b.m.position.set(d.s.x + Math.cos(a) * b.r, b.y + Math.sin(t * 0.8 + b.a) * 0.35, d.s.z + Math.sin(a) * b.r);
+      b.m.rotation.set(t * 0.4 + b.a, t * 0.3, 0);
+    }
+  });
+};
+
+// ── 🛢️ REFINERY · OIL FIRE ──────────────────────────────────────────────────────────────────────────────────────────────
+// The oil slicks were supposed to make you slide. They do -- and they burn. Put a bullet in one (or a flare, or a barrel
+// going up next to it) and the whole pool lights, and the fire walks to the next pool if it is close. Fight on the
+// slicks and you slide; fight near them and you are one shot from standing in a furnace.
+GIM_LABELS.oilfire = 'burned in an oil fire';
+GIM.refinery = (X) => {
+  const spots = X.spots(7, { r: 4.6, pairs: true, sep: 17, maxR: 88, edge: 10 });
+  if (!spots.length) return;
+  X.dbg(spots);
+  const R = 4.3;
+  const pools = spots.map((s, i) => {
+    const disc = X.disc(s.x, s.z, R, 0x0a0a0e, 0.93, 0.05);
+    const sheen = X.ring(s.x, s.z, R * 0.6, 0x5a7aa8, 0.28, 0.9, 0.055);
+    const zone = X.zone('oilZones', { x: s.x, z: s.z, r: R });
+    return { x: s.x, z: s.z, disc, sheen, zone, state: 'oil', t: 0, flames: null, fuse: 0 };
+  });
+  const ignite = (p) => {
+    if (p.state !== 'oil') return;
+    p.state = 'burn'; p.t = 11;
+    X.removeZone('oilZones', p.zone);
+    const g = new THREE.Group(); g.position.set(p.x, 0, p.z);
+    const fl = [];
+    for (let k = 0; k < 7; k++) { const f = _gimFlame(1.1, 2.6 + (k % 3) * 0.6, k + p.x); const a = k * 0.9, r = k ? R * 0.62 : 0; f.group.position.set(Math.cos(a) * r, 0, Math.sin(a) * r); g.add(f.group); fl.push(f); }
+    X.G.add(g); p.flames = { g, fl };
+    p.zn = X.zone('avoid', { x: p.x, z: p.z, r: R });
+    p.disc.material.color.setHex(0x2a1006);
+    X.sound('fire_sizzle', p.x, p.z, 0.8);
+  };
+  const out = (p) => {
+    p.state = 'dry'; p.t = 22; X.G.remove(p.flames.g); p.flames = null; X.removeZone('avoid', p.zn);
+    p.disc.material.color.setHex(0x1a0f08); p.disc.material.opacity = 0.7;
+  };
+  X.dbg(spots, null, () => { const p = pools[0]; localBullets.push({ mesh: { position: { x: p.x, y: 1, z: p.z } }, weaponId: 'x' }); setTimeout && 0; });
+  X.hint('🛢️ OIL FIRE', 'Oil slicks make you slide. Shoot one and it burns.', '#ff8a2a');
+  X.onReset(() => pools.forEach(p => {
+    if (p.flames) { X.G.remove(p.flames.g); X.removeZone('avoid', p.zn); p.flames = null; }
+    if (p.state !== 'oil') X.zone('oilZones', p.zone);
+    p.state = 'oil'; p.fuse = 0; p.disc.material.color.setHex(0x0a0a0e); p.disc.material.opacity = 0.93;
+  }));
+  X.on((dt, A, t) => {
+    // what lights them: a bullet in the pool, a burn zone (thermite, flare, molotov) on it, or a fire beside it
+    for (const p of pools) if (p.state === 'oil') {
+      for (const b of localBullets) {
+        const q = b.mesh.position;
+        if (q.y < 1.8 && Math.hypot(q.x - p.x, q.z - p.z) < R) { ignite(p); break; }
+      }
+      if (p.state === 'oil') for (const z of burnZones) if (Math.hypot(z.x - p.x, z.z - p.z) < R + z.radius) { ignite(p); break; }
+    }
+    for (const p of pools) {
+      if (p.state === 'burn') {
+        p.t -= dt;
+        for (const f of p.flames.fl) f.tick(t);
+        for (const q of pools) if (q.state === 'oil' && Math.hypot(q.x - p.x, q.z - p.z) < R * 2 + 3.5) { q.fuse += dt; if (q.fuse > 1.4) ignite(q); }
+        if (_gimBeat(p, 'dmg', dt, 0.5)) for (const a of A) if (a.y < 3 && Math.hypot(a.x - p.x, a.z - p.z) < R) a.hurt(8, 'oilfire');
+        if (p.t <= 0) out(p);
+      } else if (p.state === 'dry') {
+        p.t -= dt;
+        if (p.t <= 0) { p.state = 'oil'; p.fuse = 0; p.disc.material.color.setHex(0x0a0a0e); p.disc.material.opacity = 0.93; X.zone('oilZones', p.zone); }
+      }
+    }
+  });
+};
+
+// ── 🚀 SKYDOCK · LAUNCH COUNTDOWN ───────────────────────────────────────────────────────────────────────────────────────
+// It is called Skydock Launch and nothing launched. A rocket stands on the pad in the middle of the yard; every so often the
+// siren goes, the ring starts to flash, and eight seconds later the pad is the last place you want to be. The yard's
+// pads throw you up to the gantries -- which is also where the blast does not reach.
+GIM_LABELS.rocket = 'was caught in the rocket exhaust';
+GIM.skydock = (X) => {
+  let site = X.spots(1, { r: 7, near: [0, 0], edge: 14, open: true, h: 3, sep: 1 })[0] || X.spots(1, { r: 5, near: [0, 0], edge: 14, open: true, sep: 1 })[0];
+  if (!site) return;
+  const pads = X.spots(6, { r: 2.2, pairs: true, sep: 18, maxR: 80, edge: 10, avoid: [[site.x, site.z]] });
+  X.dbg([{ x: site.x + 3, z: site.z }].concat(pads));
+  const BLAST = 9;
+  pads.forEach(p => {
+    X.zone('jumpPads', { x: p.x, z: p.z, r: 2.0, vel: 17 });
+    X.disc(p.x, p.z, 2.0, 0xffd23a, 0.45, 0.06); X.ring(p.x, p.z, 2.0, 0xffffff, 0.95, 0.22, 0.08);
+    for (let k = 0; k < 3; k++) X.mesh(new THREE.BoxGeometry(0.9, 0.04, 0.16), _gimBasic(0xffffff, 0.9), p.x, 0.1 + k * 0.0, p.z).rotation.y = 0.78 * (k ? (k === 1 ? 1 : -1) : 0);
+  });
+  // the pad, the ring, the rocket and its tower
+  X.disc(site.x, site.z, BLAST - 1, 0x2a2c30, 0.95, 0.045);
+  const warn = X.ring(site.x, site.z, BLAST - 0.5, 0xff2a1a, 0.9, 0.5, 0.07);
+  for (let k = 0; k < 16; k++) { const a = k / 16 * 6.283; X.mesh(new THREE.BoxGeometry(1.4, 0.03, 0.4), _gimBasic(k % 2 ? 0xffd23a : 0x222222, 0.95), site.x + Math.cos(a) * (BLAST - 3), 0.07, site.z + Math.sin(a) * (BLAST - 3)).rotation.y = -a + 1.57; }
+  const rocket = new THREE.Group(); rocket.position.set(site.x, 0, site.z); X.G.add(rocket);
+  const rp = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); rocket.add(m); return m; };
+  rp(new THREE.CylinderGeometry(1.1, 1.3, 16, 12), _gimLam(0xeceeee), 0, 9, 0);
+  rp(new THREE.ConeGeometry(1.1, 3.4, 12), _gimLam(0xc82a1a), 0, 18.7, 0);
+  rp(new THREE.CylinderGeometry(1.12, 1.12, 1.4, 12), _gimLam(0x1c1c20), 0, 12, 0);
+  for (let k = 0; k < 4; k++) { const a = k * 1.571; const f = rp(new THREE.BoxGeometry(0.2, 3.4, 1.8), _gimLam(0xc82a1a), Math.cos(a) * 1.6, 2.6, Math.sin(a) * 1.6); f.rotation.y = -a; }
+  const tower = new THREE.Group(); tower.position.set(site.x + 3.2, 0, site.z); X.G.add(tower);
+  for (const z of [-0.6, 0.6]) { const m = new THREE.Mesh(new THREE.BoxGeometry(0.3, 17, 0.3), _gimLam(0xb8bcc2)); m.position.set(0, 8.5, z); tower.add(m); }
+  for (let y = 2; y < 17; y += 3) { const m = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 1.4), _gimLam(0xb8bcc2)); m.position.set(0, y, 0); tower.add(m); }
+  const flame = _gimFlame(2.2, 9, 3); flame.group.position.y = 0; flame.group.visible = false; X.G.add(flame.group); flame.group.position.set(site.x, 0, site.z);
+  let S = { phase: 'idle', t: 26, up: 0, last: -1 };
+  const reset = () => { S = { phase: 'idle', t: 26, up: 0, last: -1 }; rocket.visible = true; rocket.position.y = 0; rocket.scale.setScalar(1); flame.group.visible = false; warn.visible = false; };
+  X.hint('🚀 LAUNCH COUNTDOWN', 'When the siren goes the pad is a furnace. Use the pads to get up.', '#ff6a3a');
+  X.onReset(reset); reset();
+  X.on((dt, A, t) => {
+    S.t -= dt;
+    if (S.phase === 'idle') {
+      warn.visible = false;
+      if (S.t <= 0) { S.phase = 'count'; S.t = 8; S.last = 9; X.announce('🚀 LAUNCH IN 8', 'Get off the pad', '#ff6a3a'); }
+    } else if (S.phase === 'count') {
+      warn.visible = true; warn.material.opacity = 0.35 + 0.55 * Math.abs(Math.sin(t * (4 + (8 - S.t) * 2)));
+      rocket.position.x = site.x + Math.sin(t * 60) * 0.03 * (8 - S.t) / 8;
+      const n = Math.ceil(S.t);
+      if (n !== S.last && n <= 5 && n > 0) { S.last = n; X.announce('T-' + n, '', '#ff3a2a'); X.sound('radar_ping', site.x, site.z, 0.8); }
+      if (S.t <= 0) { S.phase = 'burn'; S.t = 3.4; flame.group.visible = true; X.fx(site.x, 0.5, site.z, BLAST, 0xffa030); X.sound('explosion', site.x, site.z, 1.0); X.flash('rgba(255,200,120,0.25)', 200); }
+    } else if (S.phase === 'burn') {
+      const k = 1 - S.t / 3.4;
+      rocket.position.y = k * k * 70; flame.tick(t);
+      flame.group.scale.setScalar(1 + k * 0.6);
+      warn.material.opacity = 0.9;
+      for (const a of A) {
+        const d = Math.hypot(a.x - site.x, a.z - site.z);
+        if (d > BLAST || a.y > 4) continue;
+        if (_gimBeat(S, 'b' + a.id, dt, 0.25)) a.hurt(13, 'rocket');
+        a.push(((a.x - site.x) / (d || 1)) * 7 * dt, ((a.z - site.z) / (d || 1)) * 7 * dt);
+      }
+      if (S.t <= 0) { S.phase = 'cool'; S.t = 9; rocket.position.x = site.x; rocket.visible = false; flame.group.visible = false; warn.visible = false; }
+    } else if (S.phase === 'cool') {
+      if (S.t <= 0) { S.phase = 'rise'; S.t = 4; rocket.visible = true; rocket.position.y = -18; }
+    } else if (S.phase === 'rise') {
+      rocket.position.y = -18 * (S.t / 4);                           // a new one comes up out of the pad
+      if (S.t <= 0) { rocket.position.y = 0; S.phase = 'idle'; S.t = 34 + Math.random() * 8; }
+    }
+  });
+};
+
+// ── 🚽 SEWER · FLUSH ────────────────────────────────────────────────────────────────────────────────────────────────────
+// The pools are acid and they sit still. Every half minute the main drain lets go: a wave the width of the tunnel, knee
+// to chest high, runs the whole length of the sewer and takes with it everything on the floor. Bridges, ledges and stairs
+// are above it. Three and a half seconds' warning -- a gurgle and a brown surge at the inlet end.
+GIM_LABELS.flush = 'was swept away by the flush';
+GIM.sewer = (X) => {
+  const b = X.arena(), W = b.halfX * 2 - 3, Z0 = -b.halfZ + 5, Z1 = b.halfZ - 5, H = 1.9;
+  const wave = new THREE.Group(); X.G.add(wave); wave.visible = false;
+  const body = new THREE.Mesh(new THREE.BoxGeometry(W, H, 3.4), _gimBasic(0x5e6e34, 0.78)); body.position.y = H / 2; wave.add(body);
+  const foam = new THREE.Mesh(new THREE.BoxGeometry(W, 0.35, 4.2), _gimBasic(0xe8f0d0, 0.9)); foam.position.y = H + 0.1; wave.add(foam);
+  const gate = []; for (const z of [Z0 - 1, Z1 + 1]) { const m = X.mesh(new THREE.BoxGeometry(W, 0.12, 2.6), _gimBasic(0xff3322, 0.0), 0, 0.09, z); gate.push(m); }
+  X.dbg([{ x: 0, z: 0 }]);
+  let S = { t: 14, phase: 'idle', dir: 1, z: 0, hit: new Set(), n: 0 };
+  X.hint('🚽 FLUSH', 'A wave runs the sewer every half minute. Get above the floor.', '#b8d060');
+  X.onReset(() => { S = { t: 14, phase: 'idle', dir: 1, z: 0, hit: new Set(), n: 0 }; wave.visible = false; gate.forEach(g => { g.material.opacity = 0; }); });
+  X.on((dt, A, t) => {
+    S.t -= dt;
+    if (S.phase === 'idle') {
+      if (S.t <= 0) { S.phase = 'warn'; S.t = 3.5; S.dir = S.n++ % 2 ? -1 : 1; X.announce('🚽 FLUSH', 'Get up off the floor!', '#b8d060'); X.sound('blackhole_collapse', 0, S.dir > 0 ? Z0 : Z1, 0.7); }
+    } else if (S.phase === 'warn') {
+      const g = gate[S.dir > 0 ? 0 : 1]; g.material.opacity = 0.35 + 0.45 * Math.abs(Math.sin(t * 10));
+      if (S.t <= 0) { S.phase = 'run'; S.z = S.dir > 0 ? Z0 : Z1; S.hit.clear(); wave.visible = true; gate.forEach(q => { q.material.opacity = 0; }); }
+    } else if (S.phase === 'run') {
+      S.z += S.dir * 11 * dt; wave.position.z = S.z; foam.position.y = H + 0.1 + Math.sin(t * 9) * 0.06;
+      for (const a of A) {
+        if (a.y > H - 0.2 || Math.abs(a.z - S.z) > 2.4) continue;
+        a.push(0, S.dir * 9 * dt);
+        if (!S.hit.has(a.id)) { S.hit.add(a.id); a.hurt(12, 'flush'); if (a.me) X.flash('rgba(110,130,60,0.45)', 300); }
+      }
+      if ((S.dir > 0 && S.z > Z1) || (S.dir < 0 && S.z < Z0)) { S.phase = 'idle'; S.t = 24 + Math.random() * 6; wave.visible = false; }
+    }
+  });
+};
+
+// ── 🌀 GRAVITY LAB · WELLS ──────────────────────────────────────────────────────────────────────────────────────────────
+// Three singularities hang in the lab. Come within fourteen metres of one and it starts to pull -- gently at the edge,
+// hard at the middle, and every dozen seconds it surges. Get to the core and it takes you apart. Use them: a well pulls a
+// grenade, a pursuer and an unsuspecting sniper exactly as well as it pulls you.
+GIM_LABELS.singularity = 'was pulled into a singularity';
+GIM.gravity_lab = (X) => {
+  const spots = X.spots(3, { r: 3.2, sep: 26, maxR: 48, edge: 10 });
+  if (spots.length < 2) return;
+  X.dbg(spots.map(s => ({ x: s.x + 5, z: s.z })));
+  const RP = 14, RC = 2.1;
+  const wells = spots.map((s, i) => {
+    X.disc(s.x, s.z, RP, 0x7a3cff, 0.07, 0.05); X.ring(s.x, s.z, RP, 0x9a6cff, 0.4, 0.2, 0.06); X.ring(s.x, s.z, RC + 0.6, 0xff4aff, 0.8, 0.3, 0.07);
+    const g = new THREE.Group(); g.position.set(s.x, 2.4, s.z); X.G.add(g);
+    const core = new THREE.Mesh(new THREE.SphereGeometry(1.0, 14, 10), _gimBasic(0x050008)); g.add(core);
+    const r1 = new THREE.Mesh(new THREE.TorusGeometry(1.9, 0.12, 6, 28), _gimBasic(0xb06cff, 0.9)); r1.rotation.x = 1.2; g.add(r1);
+    const r2 = new THREE.Mesh(new THREE.TorusGeometry(2.6, 0.08, 6, 28), _gimBasic(0x4ad8ff, 0.8)); r2.rotation.x = 1.9; r2.rotation.y = 0.6; g.add(r2);
+    return { x: s.x, z: s.z, g, r1, r2, surge: 0, next: 8 + i * 4 };
+  });
+  X.hint('🌀 GRAVITY WELLS', 'Singularities pull everything in. Do not touch the middle.', '#b06cff');
+  X.onReset(() => wells.forEach((w, i) => { w.surge = 0; w.next = 8 + i * 4; }));
+  X.on((dt, A, t) => {
+    for (const w of wells) {
+      w.next -= dt; if (w.next <= 0) { w.surge = 3; w.next = 12 + Math.random() * 3; }
+      if (w.surge > 0) w.surge -= dt;
+      const boost = w.surge > 0 ? 1.9 : 1;
+      w.r1.rotation.z += dt * (2 + boost); w.r2.rotation.z -= dt * (1.4 + boost);
+      w.g.scale.setScalar(1 + (boost - 1) * 0.25 + Math.sin(t * 3) * 0.04);
+      for (const a of A) {
+        const dx = w.x - a.x, dz = w.z - a.z, d = Math.hypot(dx, dz);
+        if (d > RP || a.y > 7) continue;
+        const f = (1 - d / RP), pull = (1.2 + 4.8 * f * f) * boost;
+        a.push((dx / (d || 1)) * pull * dt, (dz / (d || 1)) * pull * dt);
+        if (d < RC && _gimBeat(w, 'c' + a.id, dt, 0.25)) a.hurt(12, 'singularity');
+      }
+    }
+  });
+};
+
+// ── 🪟 GLASSWORKS · SHATTER ─────────────────────────────────────────────────────────────────────────────────────────────
+// Sheets of glass stand about the works the way they stand in a real one: racked, upright, waiting for a truck. They stop
+// shots from nowhere -- they are made to be shot. Break one and it is a floor of shards for ten seconds that you will not
+// run across. The cover you remove is also the ground you lose.
+GIM_LABELS.shards = 'was cut to pieces by glass';
+GIM.glassworks = (X) => {
+  const spots = X.spots(16, { r: 2.4, sep: 9, maxR: 86, edge: 10 });
+  if (spots.length < 4) return;
+  X.dbg(spots.slice(0, 6));
+  const shards = [];
+  const mat = new THREE.MeshLambertMaterial({ color: 0x9fdcff, transparent: true, opacity: 0.38, flatShading: true });
+  spots.forEach((s, i) => {
+    const rot = (i % 2 ? Math.PI / 2 : 0) + (i % 4 === 1 ? 0.35 : 0);
+    const pane = new THREE.Mesh(new THREE.BoxGeometry(3.8, 2.6, 0.18), mat);
+    pane.position.set(s.x, 1.3, s.z); pane.rotation.y = rot; X.G.add(pane);
+    for (const sy of [-1, 1]) { const fr = new THREE.Mesh(new THREE.BoxGeometry(3.9, 0.12, 0.26), _gimLam(0x3a4a58)); fr.position.set(0, sy * 1.3, 0); pane.add(fr); }
+    for (const sx of [-1, 1]) { const fr = new THREE.Mesh(new THREE.BoxGeometry(0.12, 2.6, 0.26), _gimLam(0x3a4a58)); fr.position.set(sx * 1.9, 0, 0); pane.add(fr); }
+    X.destructible(pane, 25, 'glass', () => {
+      const d = X.disc(s.x, s.z, 2.4, 0xcdeeff, 0.55, 0.055);
+      const spikes = [];
+      for (let k = 0; k < 9; k++) { const a = k * 0.7 + i, r = 0.4 + (k % 4) * 0.5; const sp = X.mesh(new THREE.ConeGeometry(0.1, 0.32, 4), _gimBasic(0xe8f8ff, 0.9), s.x + Math.cos(a) * r, 0.16, s.z + Math.sin(a) * r); sp.rotation.set(0.3 * (k % 3 - 1), a, 0.3); spikes.push(sp); }
+      const zn = X.zone('avoid', { x: s.x, z: s.z, r: 2.2 });
+      shards.push({ x: s.x, z: s.z, t: 10, d, spikes, zn });
+    });
+  });
+  X.dbg(spots.slice(0, 6), null, () => { for (const d of mapDestructibles) if (d.mapName === X.name && d.hp > 0) damageDestructible(d, 30, {}); });
+  X.hint('🪟 SHATTER', 'Shoot the glass sheets: they break into shards that cut.', '#9fdcff');
+  const clear = (sh) => { X.G.remove(sh.d); sh.spikes.forEach(m => X.G.remove(m)); X.removeZone('avoid', sh.zn); };
+  X.onReset(() => { shards.forEach(clear); shards.length = 0; });
+  X.on((dt, A) => {
+    for (let i = shards.length - 1; i >= 0; i--) {
+      const sh = shards[i]; sh.t -= dt;
+      for (const a of A) if (a.y < 0.6 && Math.hypot(a.x - sh.x, a.z - sh.z) < 2.3) { a.slow(0.6); if (_gimBeat(sh, a.id, dt, 0.5)) a.hurt(4, 'shards'); }
+      if (sh.t <= 0) { clear(sh); shards.splice(i, 1); }
+    }
+  });
+};
+
+
 // ═══ ⏱️ WHEN THE UPGRADES RUN ═══════════════════════════════════════════════════════════════════════════════════════
 // Depth, the easter eggs and the outskirts are done to a map the first time it is played, not for all forty at load:
 // they cost a few hundred milliseconds each and a player only ever sees one. Always in this order -- the stretching has
@@ -15796,6 +16742,7 @@ function _upgradeMap(name) {
   try { _depthMap(name); } catch (e) { console.warn('[upgrade] depth', name, e); }
   try { _eggsMap(name); } catch (e) { console.warn('[upgrade] eggs', name, e); }
   try { _outskirtsMap(name); } catch (e) { console.warn('[upgrade] outskirts', name, e); }
+  try { _gimMap(name); } catch (e) { console.warn('[upgrade] gimmick', name, e); }
   // what was just added gets the same surface as the rest
   try { g._weathered = false; weatherMapGroup(g); } catch (e) {}
   g.userData.upgradeMs = Math.round(performance.now() - t0);
@@ -38030,7 +38977,7 @@ function updateMovement(dt, socialBlocked = false) {
                     ? currentWeapon.moveBoost : 1;
   const rootMult = Date.now() < playerRootedUntil ? 0 : 1;
   const minigunBraceMult = minigunBraced() ? 0.04 : 1;
-  const speedMult = baseSpeedMult * (adrenalineActive ? 1.6 : 1) * frostMult * rootMult * minigunBraceMult * adminSpeedMult * crouchMult * slideMult * fireBoost;
+  const speedMult = baseSpeedMult * (adrenalineActive ? 1.6 : 1) * frostMult * rootMult * minigunBraceMult * adminSpeedMult * crouchMult * slideMult * fireBoost * _gimSlowNow();
   // Drop the camera when crouching / sliding (eased)
   if (!window._crouchEye) window._crouchEye = 1.65;
   // Slide drops the eye to 0.70 m so the view clearly dips below normal
@@ -53052,6 +53999,7 @@ const KILLFEED_MAX = 5, KILLFEED_MS = 5500;
 const KILLFEED_HAZARDS = {
   lava: 'burned in lava', lightning_strike: 'was struck by lightning', laser: 'was sliced by a laser',
   chandelier: 'was crushed by a chandelier', debris: 'was hit by falling debris',
+  ...GIM_LABELS,
 };
 const KILLFEED_TURN_WINDOW = 1400;
 const KILLFEED_360_RAD = Math.PI * 1.65;
@@ -56023,6 +56971,7 @@ function updateBotAI(dt) {
       };
       const g = activeMapGimmicks;
       if (g.damageZones) for (const z of g.damageZones) checkZone(z, 2.5);
+      if (g.avoid) for (const z of g.avoid) checkZone(z, 2.0);   // map gimmicks that hurt by their own rules (fire, traffic)
       // Active burn zones (thermite, fire poker, firework) too
       for (const z of burnZones) checkZone(z, 2.0);
       if (pushX || pushZ) {
@@ -56043,6 +56992,7 @@ function updateBotAI(dt) {
     }
     // 🎭 Drafted-teammate playstyle: per-character movement speed flavor
     if (bot.speedMult && bot.speedMult !== 1) { moveX *= bot.speedMult; moveZ *= bot.speedMult; }
+    if (bot._gimSlow != null && bot._gimSlow < 1) { moveX *= bot._gimSlow; moveZ *= bot._gimSlow; }   // map gimmicks: quicksand, vines, flood
     if (now < (bot._airCarryUntil || 0)) {
       moveX += (bot._airCarryX || 0) * dt;
       moveZ += (bot._airCarryZ || 0) * dt;
