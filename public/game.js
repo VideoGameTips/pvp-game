@@ -15885,7 +15885,7 @@ function _gimFlame(r, h, seed = 0) {
 }
 
 function _gimMap(name) {
-  if (_gimDone[name] || !GIM[name] || !MAP_GROUPS[name] || !MAP_BOUNDS[name]) return;
+  if (_gimDone[name] || (!GIM[name] && !LOOK[name]) || !MAP_GROUPS[name] || !MAP_BOUNDS[name]) return;
   _gimDone[name] = true;
   const G = MAP_GROUPS[name], rnd = _thRng(name + ':gimmick'), ups = [], rsts = [], st = { t: 0, hinted: false, hint: null };
   let reach = null;
@@ -15897,7 +15897,7 @@ function _gimMap(name) {
     return reach.all.has(i * 1000 + j);
   };
   const X = {
-    name, G, rnd, state: st, arena() { return MAP_BOT_BOUNDS[name] || MAP_BOUNDS[name]; },
+    name, G, rnd, state: st, placed: [], arena() { return MAP_BOT_BOUNDS[name] || MAP_BOUNDS[name]; },
     on(fn) { ups.push(fn); }, onReset(fn) { rsts.push(fn); },
     // where an actor has to stand for this gimmick to do something to it -- read by the headless harness, nothing else
     dbg(pts, live, poke) { g_gimDbg[name] = { pts, live, poke }; },
@@ -15986,6 +15986,22 @@ function _gimMap(name) {
     fx(x, y, z, r, c) { try { spawnAbilityAOEFX(new THREE.Vector3(x, y, z), r, c); } catch (e) {} },
     sound(n, x, z, v = 0.7) { try { playSoundEvent(n, { position: new THREE.Vector3(x, 1, z), volume: v, minGap: 120 }); } catch (e) {} },
     flash(c, ms = 160) { try { flashScreen(c, ms); } catch (e) {} },
+    // ── the look of a place (LOOK[map]): props go through these ──
+    put(g, x, z, rot = 0, solid = false) {
+      g.position.set(x, 0, z); g.rotation.y = rot; G.add(g); X.placed.push({ x, z, g });
+      if (solid) { g.updateMatrixWorld(true); const bb = new THREE.Box3().setFromObject(g); MAP_COLLIDERS[name].push(bb); if (activeMapName === name) wallColliders.push(bb); }
+      return g;
+    },
+    tryPut(g, x, z, rot = 0, r = 0.8, solid = false) {
+      if (!X.free(x, z, r + 0.5, {})) return false;
+      X.put(g, x, z, rot, solid); return true;
+    },
+    // n copies of mk(i) over free, reachable ground, spread out; keeps 1.4 m clear of whatever is solid
+    scatter(mk, n, o = {}) {
+      const sp = X.spots(n, { r: (o.r || 1.4) + 1.4, sep: o.sep || 9, maxR: o.maxR, minR: o.minR, edge: o.edge, pairs: o.pairs, open: o.open, h: o.h || 2.4 });
+      sp.forEach((s, i) => X.put(mk(i), s.x, s.z, o.rot != null ? o.rot : rnd() * 6.283, !!o.solid));
+      return sp;
+    },
     // something lying on the floor that whoever walks onto first picks up. onTake(actor) -> true to consume it.
     pickup(x, z, mesh, r, onTake, life = 60) {
       const p = { x, z, mesh, r, onTake, life }; mesh.position.set(x, mesh.position.y, z); X.G.add(mesh); pickups.push(p); return p;
@@ -16014,7 +16030,8 @@ function _gimMap(name) {
     }
   });
   rsts.push(() => { for (const p of pickups) X.G.remove(p.mesh); pickups.length = 0; });
-  try { GIM[name](X); } catch (e) { console.warn('[gimmick]', name, e); }
+  try { if (LOOK[name]) LOOK[name](X); } catch (e) { console.warn('[look]', name, e); }
+  try { if (GIM[name]) GIM[name](X); } catch (e) { console.warn('[gimmick]', name, e); }
   const prev = MAP_MECH[name];
   MAP_MECH[name] = {
     reset() { if (prev) prev.reset(); st.t = 0; st.hinted = false; _gimSlowState.map = null; _gimRollState.map = null; for (const f of rsts) { try { f(); } catch (e) {} } },
@@ -16039,6 +16056,161 @@ function _gimBeat(map, key, dt, every) {
   if (isMap) map.set(key, v); else map[key] = v;
   return fire;
 }
+
+// ═══ 🏷️ MAP LOOK — the things that make a place that place ═════════════════════════════════════════════════════════════
+// A layout is walls, floors and cover. What makes it a harbour, a supermarket or a fairground is what is lying about in it:
+// the lamp posts on the avenue, the forklift in the aisle, the flare stack over the refinery. LOOK[map] = (X) => { ... } is
+// run just before the map's gimmick (same one-time upgrade, same finished layout), and puts that in.
+//
+// Everything here is made of the same flat-shaded boxes as the rest of the game and shares one material per colour, so the
+// merge pass (mergeMapStatics) folds it all into a few draw calls. It never goes where X.free says there is something, and
+// it keeps 1.4 m clear of whatever is solid -- so a prop can narrow a passage but never close one.
+var LOOK = {};
+const _lkMats = new Map();
+function _lkL(c) { let m = _lkMats.get(c); if (!m) { m = new THREE.MeshLambertMaterial({ color: c, flatShading: true }); _lkMats.set(c, m); } return m; }
+const _lkB = (c, o = 1) => _gimBasic(c, o);
+// a part: geometry, colour (or a material), position, optional rotation
+function _lkPart(g, geo, c, x, y, z, rx = 0, ry = 0, rz = 0) {
+  const m = new THREE.Mesh(geo, typeof c === 'number' ? _lkL(c) : c);
+  m.position.set(x, y, z); if (rx || ry || rz) m.rotation.set(rx, ry, rz);
+  if (typeof c === 'number') m.userData.mapStatic = true;
+  g.add(m); return m;
+}
+const _lkBox = (g, w, h, d, c, x, y, z, ry = 0) => _lkPart(g, new THREE.BoxGeometry(w, h, d), c, x, y, z, 0, ry, 0);
+const _lkCyl = (g, rt, rb, h, c, x, y, z, seg = 10) => _lkPart(g, new THREE.CylinderGeometry(rt, rb, h, seg), c, x, y, z);
+const _lkCone = (g, r, h, c, x, y, z, seg = 7) => _lkPart(g, new THREE.ConeGeometry(r, h, seg), c, x, y, z);
+const _lkSph = (g, r, c, x, y, z, seg = 8) => _lkPart(g, new THREE.SphereGeometry(r, seg, Math.max(5, seg - 2)), c, x, y, z);
+
+// many flat boxes, one draw call: paint, stripes, marks. parts = [[w, h, d, x, y, z], ...]
+function _lkFlat(g, parts, mat) {
+  const geos = parts.map(([w, h, d, x, y, z]) => { const b = new THREE.BoxGeometry(w, h, d); b.translate(x, y, z); return b.toNonIndexed(); });
+  let n = 0; for (const b of geos) n += b.attributes.position.count;
+  const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3); let at = 0;
+  for (const b of geos) { pos.set(b.attributes.position.array, at * 3); nor.set(b.attributes.normal.array, at * 3); at += b.attributes.position.count; }
+  const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+  const m = new THREE.Mesh(geo, mat); g.add(m); return m;
+}
+// ── street ──
+function lkLamp(h = 5.2, post = 0x3a3d40, lamp = 0xfff0b0) { const g = new THREE.Group(); _lkBox(g, 0.28, h, 0.28, post, 0, h / 2, 0); _lkBox(g, 1.2, 0.18, 0.18, post, 0.5, h, 0); _lkPart(g, new THREE.BoxGeometry(0.55, 0.16, 0.34), _lkB(lamp), 1.05, h - 0.12, 0); return g; }
+function lkTrafficLight(c = 0x2a2d30) { const g = new THREE.Group(); _lkBox(g, 0.24, 4.6, 0.24, c, 0, 2.3, 0); _lkBox(g, 0.5, 1.4, 0.4, 0x1c1e20, 0, 4.5, 0); for (const [i, col] of [[0, 0xff2a1a], [1, 0xffc01a], [2, 0x2aff4a]]) _lkPart(g, new THREE.BoxGeometry(0.3, 0.3, 0.1), _lkB(col, i === 2 ? 0.95 : 0.35), 0, 4.95 - i * 0.45, 0.22); return g; }
+function lkHydrant(c = 0xc82a1a) { const g = new THREE.Group(); _lkCyl(g, 0.22, 0.26, 0.8, c, 0, 0.4, 0, 8); _lkCyl(g, 0.3, 0.3, 0.12, c, 0, 0.85, 0, 8); _lkBox(g, 0.7, 0.18, 0.18, c, 0, 0.55, 0); return g; }
+function lkBench(c = 0x7a5a30) { const g = new THREE.Group(); _lkBox(g, 2.0, 0.12, 0.55, c, 0, 0.5, 0); _lkBox(g, 2.0, 0.55, 0.1, c, 0, 0.85, -0.25); for (const sx of [-0.85, 0.85]) _lkBox(g, 0.1, 0.5, 0.5, 0x2a2d30, sx, 0.25, 0); return g; }
+function lkBin(c = 0x3a6a3a) { const g = new THREE.Group(); _lkCyl(g, 0.38, 0.32, 0.95, c, 0, 0.48, 0, 8); _lkCyl(g, 0.4, 0.4, 0.1, 0x2a2d30, 0, 1.0, 0, 8); return g; }
+function lkBusStop() { const g = new THREE.Group(); _lkBox(g, 3.6, 0.14, 1.5, 0x2a6a8a, 0, 2.6, 0); for (const sx of [-1.7, 1.7]) _lkBox(g, 0.1, 2.6, 0.1, 0x3a3d40, sx, 1.3, -0.65); _lkPart(g, new THREE.BoxGeometry(3.4, 1.9, 0.06), _lkB(0x9fd8f0, 0.35), 0, 1.5, -0.7); _lkBox(g, 2.2, 0.1, 0.5, 0x7a5a30, 0, 0.5, -0.3); _lkBox(g, 0.5, 2.2, 0.08, 0xd8a020, 2.2, 1.1, 0.2); return g; }
+function lkKiosk(c = 0xd8a050, roof = 0xc82a1a) { const g = new THREE.Group(); _lkBox(g, 2.6, 2.3, 2.0, c, 0, 1.15, 0); _lkBox(g, 3.1, 0.2, 2.5, roof, 0, 2.4, 0); _lkPart(g, new THREE.BoxGeometry(1.8, 0.9, 0.06), _lkB(0x20303a), 0, 1.5, 1.02); _lkBox(g, 2.0, 0.1, 0.5, 0x6a4a28, 0, 1.0, 1.2); return g; }
+function lkPhone(c = 0xc82a1a) { const g = new THREE.Group(); _lkBox(g, 0.95, 2.4, 0.95, c, 0, 1.2, 0); _lkPart(g, new THREE.BoxGeometry(0.7, 1.3, 0.06), _lkB(0xcfe8f0, 0.5), 0, 1.35, 0.5); _lkBox(g, 1.05, 0.15, 1.05, 0x2a2d30, 0, 2.45, 0); return g; }
+function lkBillboard(panel = 0xe8d8a0, frame = 0x3a3d40, w = 7, h = 3.4, hz = 7) { const g = new THREE.Group(); _lkBox(g, 0.4, hz, 0.4, frame, -w * 0.3, hz / 2, 0); _lkBox(g, 0.4, hz, 0.4, frame, w * 0.3, hz / 2, 0); _lkBox(g, w + 0.4, h + 0.4, 0.3, frame, 0, hz + h / 2, 0); _lkPart(g, new THREE.BoxGeometry(w, h, 0.34), _lkL(panel), 0, hz + h / 2, 0); for (let k = 0; k < 3; k++) _lkBox(g, w * 0.7 - k * 1.2, 0.34, 0.38, [0xc82a1a, 0x2a5aa8, 0x2a2d30][k], 0, hz + h * (0.7 - k * 0.3), 0); return g; }
+function lkPlanter(leaf = 0x3a7a2a, box = 0x8a8a84) { const g = new THREE.Group(); _lkBox(g, 2.0, 0.7, 2.0, box, 0, 0.35, 0); _lkBox(g, 1.7, 0.1, 1.7, 0x4a3a28, 0, 0.72, 0); _lkCyl(g, 0.12, 0.16, 1.7, 0x5a3a22, 0, 1.5, 0, 6); _lkSph(g, 1.0, leaf, 0, 2.7, 0, 7); return g; }
+function lkCrosswalk(len = 8, w = 3.4, c = 0xe8e6d8) { const g = new THREE.Group(), p = []; for (let k = 0; k < Math.floor(len / 0.9); k++) p.push([0.45, 0.02, w, -len / 2 + 0.45 + k * 0.9, 0.05, 0]); _lkFlat(g, p, _lkB(c, 0.9)); return g; }
+function lkLine(len, w = 0.2, c = 0xe8e6d8, o = 0.9) { const g = new THREE.Group(); _lkPart(g, new THREE.BoxGeometry(len, 0.02, w), _lkB(c, o), 0, 0.05, 0); return g; }
+function lkHazard(len = 8, w = 0.8) { const g = new THREE.Group(), a = [], b = []; const n = Math.floor(len / 0.9); for (let k = 0; k < n; k++) (k % 2 ? b : a).push([0.9, 0.02, w, -len / 2 + 0.45 + k * 0.9, 0.05, 0]); _lkFlat(g, a, _lkB(0xe6b422, 0.95)); _lkFlat(g, b, _lkB(0x1c1c1c, 0.95)); return g; }
+// ── industrial ──
+function lkForklift(c = 0xe6a31c) { const g = new THREE.Group(); _lkBox(g, 1.5, 0.9, 2.4, c, 0, 0.75, 0); _lkBox(g, 1.3, 1.3, 1.2, 0x2a2d30, 0, 1.7, -0.3); _lkBox(g, 1.5, 0.1, 1.5, c, 0, 2.4, -0.3); for (const sx of [-0.6, 0.6]) { _lkBox(g, 0.08, 2.4, 0.08, 0x3a3d40, sx, 1.3, 1.25); _lkBox(g, 0.12, 0.08, 1.4, 0x6a6e74, sx, 0.2, 1.9); } for (const sx of [-0.7, 0.7]) for (const sz of [-0.8, 0.8]) _lkCyl(g, 0.36, 0.36, 0.3, 0x15171a, sx, 0.36, sz, 8).rotation.z = Math.PI / 2; return g; }
+function lkPallets(n = 3, c = 0x9a7a4a, box = 0x7a5a30) { const g = new THREE.Group(); for (let k = 0; k < n; k++) { _lkBox(g, 1.4, 0.16, 1.2, c, (k % 2) * 0.1, 0.1 + k * 0.62, 0); _lkBox(g, 1.2, 0.42, 1.0, box, (k % 2) * 0.1, 0.4 + k * 0.62, 0); } return g; }
+function lkDrums(n = 3, cols = [0x2a5aa8, 0xc82a1a, 0x3a8a4a]) { const g = new THREE.Group(); for (let k = 0; k < n; k++) { const a = k * 2.1, r = k ? 0.7 : 0; _lkCyl(g, 0.34, 0.34, 0.95, cols[k % cols.length], Math.cos(a) * r, 0.48, Math.sin(a) * r, 8); _lkCyl(g, 0.36, 0.36, 0.06, 0x2a2d30, Math.cos(a) * r, 0.96, Math.sin(a) * r, 8); } return g; }
+function lkPipeRack(len = 8, h = 3.2, c = 0x6a7078, pipe = 0xc8a02a) { const g = new THREE.Group(); for (const sx of [-len / 2, 0, len / 2]) { _lkBox(g, 0.25, h, 0.25, c, sx, h / 2, -0.6); _lkBox(g, 0.25, h, 0.25, c, sx, h / 2, 0.6); _lkBox(g, 0.25, 0.25, 1.45, c, sx, h, 0); } for (let k = 0; k < 3; k++) _lkPart(g, new THREE.CylinderGeometry(0.2, 0.2, len, 8), k === 1 ? pipe : c, 0, h + 0.3, -0.5 + k * 0.5).rotation.z = Math.PI / 2; return g; }
+function lkTank(r = 3, h = 6, c = 0xb8bcc0, band = 0xc82a1a) { const g = new THREE.Group(); _lkCyl(g, r, r, h, c, 0, h / 2, 0, 16); _lkCyl(g, r + 0.05, r + 0.05, 0.5, band, 0, h * 0.6, 0, 16); _lkCyl(g, r * 0.9, r, 0.5, c, 0, h + 0.25, 0, 16); _lkBox(g, 0.5, h + 0.6, 0.15, 0x3a3d40, r + 0.05, (h + 0.6) / 2, 0); return g; }
+function lkSphereTank(r = 3.4, c = 0xd8dcdf) { const g = new THREE.Group(); _lkSph(g, r, c, 0, r + 1.6, 0, 14); for (let k = 0; k < 4; k++) { const a = k * 1.571 + 0.78; _lkCyl(g, 0.16, 0.16, r + 1.8, 0x6a7078, Math.cos(a) * r * 0.72, (r + 1.8) / 2, Math.sin(a) * r * 0.72, 6); } _lkBox(g, r * 2.2, 0.15, 0.15, 0x6a7078, 0, r + 1.6, 0); return g; }
+function lkGenerator(c = 0x3a8a4a) { const g = new THREE.Group(); _lkBox(g, 2.2, 1.4, 1.1, c, 0, 0.8, 0); _lkBox(g, 0.5, 0.6, 0.5, 0x2a2d30, 0.7, 1.7, 0); _lkBox(g, 2.4, 0.12, 1.3, 0x2a2d30, 0, 0.1, 0); return g; }
+function lkMast(h = 12, head = 0xfff6c0) { const g = new THREE.Group(); _lkBox(g, 0.34, h, 0.34, 0x4a4e54, 0, h / 2, 0); for (let k = 0; k < 4; k++) _lkPart(g, new THREE.BoxGeometry(0.6, 0.4, 0.3), _lkB(head), (k % 2 ? 0.55 : -0.55), h - 0.3 - Math.floor(k / 2) * 0.5, 0.25); _lkBox(g, 1.6, 0.12, 0.12, 0x4a4e54, 0, h - 0.1, 0); return g; }
+function lkFlare(h = 24) { const g = new THREE.Group(); _lkBox(g, 0.7, h, 0.7, 0x8a8e94, 0, h / 2, 0); for (let y = 4; y < h; y += 4) _lkBox(g, 1.2, 0.12, 0.12, 0x6a6e74, 0, y, 0); return g; }
+function lkDumpster(c = 0x2a6a3a) { const g = new THREE.Group(); _lkBox(g, 2.4, 1.3, 1.3, c, 0, 0.8, 0); _lkBox(g, 2.5, 0.12, 1.4, 0x2a2d30, 0, 1.5, 0); for (const sx of [-0.9, 0.9]) _lkCyl(g, 0.16, 0.16, 0.14, 0x15171a, sx, 0.16, 0.5, 6); return g; }
+function lkCrateStack(c = 0x8a6a3a, n = 3) { const g = new THREE.Group(); const k = [[0, 0, 0, 1.6], [1.7, 0, 0.2, 1.4], [0.6, 1.6, 0.1, 1.3], [-1.5, 0, 0.3, 1.2]]; for (let i = 0; i < Math.min(n + 1, 4); i++) { const [x, y, z, s] = k[i]; _lkBox(g, s, s, s, i % 2 ? c : (c - 0x101010), x, y + s / 2, z); _lkBox(g, s + 0.04, 0.12, s + 0.04, 0x3a2a18, x, y + s / 2, z); } return g; }
+// ── nature ──
+function lkLog(len = 4, r = 0.4, c = 0x6a4a2a) { const g = new THREE.Group(); _lkPart(g, new THREE.CylinderGeometry(r, r, len, 8), c, 0, r, 0).rotation.z = Math.PI / 2; _lkPart(g, new THREE.CircleGeometry(r * 0.8, 8), _lkB(0xc8a870), len / 2 + 0.01, r, 0).rotation.y = Math.PI / 2; return g; }
+function lkLogPile(c = 0x6a4a2a) { const g = new THREE.Group(); for (const [x, y, z] of [[0, 0.4, -0.5], [0, 0.4, 0.5], [0, 1.1, 0]]) { const l = _lkPart(g, new THREE.CylinderGeometry(0.4, 0.4, 3.4, 8), c, x, y, z); l.rotation.x = Math.PI / 2; } return g; }
+function lkStump(c = 0x5a3a22) { const g = new THREE.Group(); _lkCyl(g, 0.55, 0.7, 0.8, c, 0, 0.4, 0, 8); _lkPart(g, new THREE.CircleGeometry(0.55, 8), _lkB(0xc8a870), 0, 0.81, 0).rotation.x = -Math.PI / 2; return g; }
+function lkTent(c = 0xc8a050) { const g = new THREE.Group(); _lkPart(g, new THREE.ConeGeometry(1.9, 2.2, 4), c, 0, 1.1, 0).rotation.y = Math.PI / 4; _lkBox(g, 0.7, 1.3, 0.05, 0x1c1c1c, 0, 0.65, 1.31); return g; }
+function lkCamp() { const g = new THREE.Group(); const t = lkTent(0x6a8a4a); t.position.set(-2.4, 0, -1); g.add(t); const t2 = lkTent(0xc8a050); t2.position.set(2.4, 0, -1.3); t2.rotation.y = 0.6; g.add(t2); const f = lkFire(); f.position.set(0, 0, 1.2); g.add(f); for (const a of [0.4, 2.2, 4.0]) { const l = lkLog(1.4, 0.25); l.position.set(Math.cos(a) * 1.4, 0, 1.2 + Math.sin(a) * 1.4); l.rotation.y = a + 1.57; g.add(l); } return g; }
+function lkFire(r = 0.6) { const g = new THREE.Group(); for (let k = 0; k < 5; k++) { const a = k * 1.25; _lkPart(g, new THREE.CylinderGeometry(0.1, 0.1, 1.0, 5), 0x4a3018, Math.cos(a) * 0.35, 0.3, Math.sin(a) * 0.35).rotation.set(Math.sin(a) * 0.7, 0, -Math.cos(a) * 0.7); } _lkPart(g, new THREE.ConeGeometry(r * 0.55, 1.3, 6), _lkB(0xff7a1a, 0.9), 0, 0.8, 0); _lkPart(g, new THREE.ConeGeometry(r * 0.3, 0.9, 5), _lkB(0xffd23a, 0.95), 0, 0.7, 0); return g; }
+function lkBoulder(c = 0x7a756a, s = 1.4) { const g = new THREE.Group(); const m = _lkPart(g, new THREE.IcosahedronGeometry(s, 0), c, 0, s * 0.55, 0); m.scale.set(1, 0.75, 0.9); return g; }
+function lkSign(c = 0xd8c8a0, post = 0x5a3a22) { const g = new THREE.Group(); _lkBox(g, 0.14, 2.0, 0.14, post, 0, 1.0, 0); _lkBox(g, 1.3, 0.55, 0.1, c, 0, 1.8, 0); _lkBox(g, 1.0, 0.45, 0.1, c, 0.2, 1.2, 0); return g; }
+function lkDeadTree(c = 0x2a2420) { const g = new THREE.Group(); _lkCyl(g, 0.16, 0.3, 4.2, c, 0, 2.1, 0, 5); for (const [y, a, l] of [[2.6, 0.9, 1.6], [3.3, -1.0, 1.3], [1.8, 2.4, 1.2]]) _lkPart(g, new THREE.CylinderGeometry(0.06, 0.1, l, 4), c, Math.cos(a) * l * 0.35, y, Math.sin(a) * l * 0.35).rotation.set(Math.sin(a) * 0.9, 0, -Math.cos(a) * 0.9); return g; }
+function lkPalm(trunk = 0x8a6a3a, leaf = 0x3a8a3a) { const g = new THREE.Group(); for (let k = 0; k < 4; k++) _lkCyl(g, 0.22 - k * 0.02, 0.27 - k * 0.02, 1.4, trunk, k * 0.12, 0.7 + k * 1.35, 0, 6); for (let k = 0; k < 6; k++) { const a = k * 1.047; _lkPart(g, new THREE.BoxGeometry(0.4, 0.06, 2.4), leaf, Math.cos(a) * 1.0 + 0.4, 5.5, Math.sin(a) * 1.0).rotation.set(0, -a + 1.57, 0.35); } return g; }
+function lkBamboo(n = 5, c = 0x7aa84a) { const g = new THREE.Group(); for (let k = 0; k < n; k++) { const a = k * 2.4, r = 0.3 + (k % 3) * 0.35, h = 5.5 + (k % 3) * 1.2; _lkCyl(g, 0.09, 0.11, h, c, Math.cos(a) * r, h / 2, Math.sin(a) * r, 5); _lkCyl(g, 0.12, 0.12, 0.08, 0x4a6a2a, Math.cos(a) * r, h * 0.4, Math.sin(a) * r, 5); } return g; }
+function lkSnowman() { const g = new THREE.Group(); _lkSph(g, 0.9, 0xf6f8fa, 0, 0.85, 0, 8); _lkSph(g, 0.65, 0xf6f8fa, 0, 1.95, 0, 8); _lkSph(g, 0.45, 0xf6f8fa, 0, 2.8, 0, 8); _lkCone(g, 0.08, 0.5, 0xe8781a, 0, 2.8, 0.45, 5).rotation.x = Math.PI / 2; _lkBox(g, 0.5, 0.35, 0.5, 0x1c1c20, 0, 3.4, 0); _lkBox(g, 0.7, 0.06, 0.7, 0x1c1c20, 0, 3.25, 0); return g; }
+function lkSnowPine(h = 6) { const g = new THREE.Group(); _lkCyl(g, 0.22, 0.3, 1.4, 0x5a3a22, 0, 0.7, 0, 6); for (let k = 0; k < 3; k++) { _lkCone(g, 2.0 - k * 0.5, 2.4, 0x2a5a3a, 0, 2.0 + k * 1.3, 0, 7); _lkCone(g, 1.4 - k * 0.4, 1.0, 0xf6f8fa, 0, 2.7 + k * 1.3, 0, 7); } return g; }
+// ── military / vehicles ──
+function lkHedgehog(c = 0x5a5f66) { const g = new THREE.Group(); for (const r of [[0.7, 0, 0], [0, 0.7, 0], [0, 0, 0.7]]) _lkBox(g, 1.8, 0.14, 0.14, c, 0, 0.7, 0).rotation.set(r[0], r[1], r[2] + 0.0); _lkBox(g, 0.14, 1.8, 0.14, c, 0, 0.7, 0); return g; }
+function lkWire(len = 6, c = 0x6a6e74) { const g = new THREE.Group(); for (let k = 0; k < Math.floor(len / 1.2); k++) { const x = -len / 2 + 0.6 + k * 1.2; _lkBox(g, 0.1, 1.0, 0.1, 0x4a3a28, x, 0.5, 0); _lkPart(g, new THREE.TorusGeometry(0.42, 0.04, 4, 10), c, x + 0.6, 0.6, 0).rotation.y = 0.4; } _lkBox(g, len, 0.04, 0.04, c, 0, 0.9, 0); _lkBox(g, len, 0.04, 0.04, c, 0, 0.45, 0); return g; }
+function lkJeep(c = 0x5a6a3a) { const g = new THREE.Group(); _lkBox(g, 1.9, 0.8, 3.6, c, 0, 0.75, 0); _lkBox(g, 1.7, 0.9, 1.4, c, 0, 1.45, -0.4); _lkPart(g, new THREE.BoxGeometry(1.5, 0.6, 0.05), _lkB(0x1c2a30), 0, 1.55, 0.32); for (const sx of [-0.95, 0.95]) for (const sz of [-1.1, 1.1]) _lkCyl(g, 0.45, 0.45, 0.35, 0x15171a, sx, 0.45, sz, 8).rotation.z = Math.PI / 2; _lkBox(g, 0.3, 0.3, 0.3, 0x2a2d30, 0, 1.25, -1.8); return g; }
+function lkTruck(c = 0x4a5a3a, bed = 0x6a5a3a) { const g = new THREE.Group(); _lkBox(g, 2.4, 1.6, 1.8, c, 0, 1.4, 2.2); _lkBox(g, 2.5, 0.2, 5.0, 0x2a2d30, 0, 0.7, -0.6); _lkBox(g, 2.4, 1.8, 4.6, bed, 0, 1.8, -0.8); for (const sx of [-1.2, 1.2]) for (const sz of [-2.8, -0.8, 2.2]) _lkCyl(g, 0.55, 0.55, 0.4, 0x15171a, sx, 0.55, sz, 8).rotation.z = Math.PI / 2; return g; }
+function lkWreck(c = 0x4a3a30) { const g = _gimVehicle(c, {}); g.traverse(m => { if (m.isMesh) m.userData.mapStatic = true; }); g.rotation.z = 0.12; g.position.y = -0.05; const w = new THREE.Group(); w.add(g); return w; }
+function lkJet(c = 0x7a828a) { const g = new THREE.Group(); _lkBox(g, 1.4, 1.1, 9, c, 0, 1.3, 0); _lkCone(g, 0.55, 3, 0x2a2d30, 0, 1.3, 5.9, 6).rotation.x = Math.PI / 2; _lkBox(g, 8.5, 0.16, 2.6, c, 0, 1.2, -0.6); _lkBox(g, 3.2, 0.14, 1.4, c, 0, 1.4, -3.7); for (const sx of [-0.7, 0.7]) _lkBox(g, 0.12, 1.6, 1.6, c, sx, 2.1, -3.7); _lkBox(g, 0.9, 0.5, 2.2, 0x1c2a34, 0, 2.0, 1.6); for (const sx of [-1, 1]) _lkCyl(g, 0.07, 0.07, 0.8, 0x2a2d30, sx * 0.9, 0.4, 1.0, 5); return g; }
+function lkHelipad(r = 6, c = 0x3a3d40) { const g = new THREE.Group(); _lkPart(g, new THREE.CircleGeometry(r, 24), _lkL(c), 0, 0.04, 0).rotation.x = -Math.PI / 2; _lkPart(g, new THREE.RingGeometry(r - 0.5, r - 0.2, 28), _lkB(0xe8e6d8), 0, 0.06, 0).rotation.x = -Math.PI / 2; for (const sx of [-1, 1]) _lkPart(g, new THREE.BoxGeometry(0.5, 0.02, r * 0.9), _lkB(0xe8e6d8), sx * r * 0.28, 0.07, 0); _lkPart(g, new THREE.BoxGeometry(r * 0.56, 0.02, 0.5), _lkB(0xe8e6d8), 0, 0.07, 0); return g; }
+function lkFlag(c = 0xc82a1a, h = 9) { const g = new THREE.Group(); _lkBox(g, 0.18, h, 0.18, 0xb8bcc0, 0, h / 2, 0); _lkBox(g, 2.4, 1.5, 0.06, c, 1.3, h - 0.9, 0); return g; }
+function lkDish(c = 0xd8dcdf) { const g = new THREE.Group(); _lkBox(g, 0.5, 2.4, 0.5, 0x6a6e74, 0, 1.2, 0); const d = _lkPart(g, new THREE.SphereGeometry(2.2, 12, 5, 0, 6.283, 0, 1.0), c, 0, 3.2, 0); d.rotation.x = -0.9; _lkBox(g, 0.1, 1.6, 0.1, 0x6a6e74, 0, 4.3, 0.9); return g; }
+// ── sci-fi / fantasy / fair / sport / stage ──
+function lkConsole(c = 0x2a3a4a, glow = 0x33ddff) { const g = new THREE.Group(); _lkBox(g, 2.0, 1.0, 0.9, c, 0, 0.5, 0); _lkBox(g, 2.0, 0.7, 0.12, c, 0, 1.3, -0.35); _lkPart(g, new THREE.BoxGeometry(1.7, 0.5, 0.06), _lkB(glow, 0.9), 0, 1.32, -0.27); return g; }
+function lkPod(c = 0x8aa0b0, glow = 0x66ddff) { const g = new THREE.Group(); _lkBox(g, 1.4, 0.4, 2.8, c, 0, 0.2, 0); _lkPart(g, new THREE.CylinderGeometry(0.62, 0.62, 2.4, 10, 1, true, 0, 3.14), _lkB(glow, 0.4), 0, 0.75, 0).rotation.set(0, 0, 1.571); _lkBox(g, 1.4, 0.2, 2.8, c, 0, 1.45, 0); return g; }
+function lkTesla(c = 0x3a4a5a) { const g = new THREE.Group(); _lkCyl(g, 0.9, 1.1, 0.5, c, 0, 0.25, 0, 10); _lkCyl(g, 0.3, 0.5, 3.4, c, 0, 2.2, 0, 8); _lkPart(g, new THREE.TorusGeometry(0.9, 0.18, 6, 14), _lkB(0xb08cff, 0.9), 0, 4.2, 0).rotation.x = Math.PI / 2; _lkSph(g, 0.5, 0xb08cff, 0, 4.2, 0, 8).material = _lkB(0xe0ccff); return g; }
+function lkBrazier(flame = true) { const g = new THREE.Group(); _lkCyl(g, 0.12, 0.2, 1.2, 0x3a3228, 0, 0.6, 0, 6); _lkCyl(g, 0.5, 0.3, 0.35, 0x4a4238, 0, 1.35, 0, 8); if (flame) { _lkPart(g, new THREE.ConeGeometry(0.34, 1.0, 6), _lkB(0xff7a1a, 0.9), 0, 1.95, 0); _lkPart(g, new THREE.ConeGeometry(0.18, 0.7, 5), _lkB(0xffd23a, 0.95), 0, 1.85, 0); } return g; }
+function lkStatue(c = 0x9a948a, base = 0x6a645a) { const g = new THREE.Group(); _lkBox(g, 1.5, 0.8, 1.5, base, 0, 0.4, 0); _lkBox(g, 0.9, 1.6, 0.6, c, 0, 1.6, 0); _lkBox(g, 0.5, 0.5, 0.5, c, 0, 2.65, 0); _lkBox(g, 0.25, 1.3, 0.25, c, 0.62, 1.7, 0); _lkBox(g, 0.25, 1.1, 0.25, c, -0.62, 1.7, 0); return g; }
+function lkBanner(c = 0xa81c1c, h = 5.5) { const g = new THREE.Group(); _lkBox(g, 1.5, 0.12, 0.12, 0x3a3228, 0, h, 0); _lkBox(g, 1.3, h * 0.55, 0.05, c, 0, h - h * 0.28, 0); _lkBox(g, 0.7, 0.4, 0.06, 0xd8b030, 0, h - h * 0.15, 0.04); return g; }
+function lkObelisk(c = 0x8a8478) { const g = new THREE.Group(); _lkBox(g, 1.6, 0.6, 1.6, c - 0x101010, 0, 0.3, 0); _lkCyl(g, 0.45, 0.8, 5, c, 0, 3.1, 0, 4).rotation.y = Math.PI / 4; _lkCone(g, 0.45, 0.9, 0xd8b030, 0, 6.05, 0, 4).rotation.y = Math.PI / 4; return g; }
+function lkStall(c1 = 0xc82a1a, c2 = 0xf2f0e8) { const g = new THREE.Group(); _lkBox(g, 3.4, 1.0, 1.6, 0x7a5a30, 0, 0.5, 0); for (const sx of [-1.6, 1.6]) _lkBox(g, 0.12, 2.6, 0.12, 0x5a3a22, sx, 1.3, -0.7); for (let k = 0; k < 6; k++) _lkBox(g, 0.58, 0.1, 2.1, k % 2 ? c2 : c1, -1.45 + k * 0.58, 2.7, -0.1); _lkBox(g, 3.4, 0.9, 0.1, 0x5a3a22, 0, 1.7, -0.75); return g; }
+function lkBalloons(n = 5) { const g = new THREE.Group(); _lkBox(g, 0.1, 1.4, 0.1, 0x5a3a22, 0, 0.7, 0); const cols = [0xff3c5c, 0xffd23a, 0x3ca8ff, 0x5aff7a, 0xc86aff]; for (let k = 0; k < n; k++) { const a = k * 1.3; _lkSph(g, 0.5, cols[k % 5], Math.cos(a) * 0.7, 2.6 + (k % 3) * 0.6, Math.sin(a) * 0.7, 7); } return g; }
+function lkArch(c = 0xc82a1a, w = 8, h = 6) { const g = new THREE.Group(); for (const sx of [-1, 1]) _lkBox(g, 0.9, h, 0.9, c, sx * w / 2, h / 2, 0); _lkBox(g, w + 1.6, 1.4, 0.8, c, 0, h + 0.2, 0); _lkPart(g, new THREE.BoxGeometry(w * 0.7, 0.7, 0.86), _lkB(0xffd23a), 0, h + 0.2, 0); return g; }
+function lkGoal(c = 0xf0f0f0) { const g = new THREE.Group(); for (const sx of [-3.6, 3.6]) _lkBox(g, 0.2, 2.6, 0.2, c, sx, 1.3, 0); _lkBox(g, 7.4, 0.2, 0.2, c, 0, 2.6, 0); for (let k = -3; k <= 3; k++) _lkPart(g, new THREE.BoxGeometry(0.04, 2.5, 1.8), _lkB(0xffffff, 0.2), k, 1.3, -0.9); return g; }
+function lkFloodlight(h = 16) { const g = lkMast(h, 0xfffbe0); return g; }
+function lkLightStand(c = 0x2a2d30) { const g = new THREE.Group(); for (const a of [0, 2.1, 4.2]) _lkBox(g, 0.06, 2.8, 0.06, c, Math.cos(a) * 0.5, 1.4, Math.sin(a) * 0.5).rotation.set(Math.sin(a) * 0.2, 0, -Math.cos(a) * 0.2); _lkBox(g, 0.9, 0.9, 0.5, c, 0, 3.0, 0); _lkPart(g, new THREE.BoxGeometry(0.75, 0.75, 0.06), _lkB(0xfff6d8), 0, 3.0, 0.28); return g; }
+function lkChair(c = 0x3a2a20) { const g = new THREE.Group(); _lkBox(g, 0.8, 0.1, 0.8, c, 0, 0.55, 0); _lkBox(g, 0.8, 0.9, 0.08, c, 0, 1.05, -0.4); for (const sx of [-0.35, 0.35]) for (const sz of [-0.35, 0.35]) _lkBox(g, 0.06, 0.55, 0.06, 0x1c1c1c, sx, 0.27, sz); return g; }
+function lkGift(c = 0xd82a2a, rib = 0xe8c84a) { const g = new THREE.Group(); _lkBox(g, 0.9, 0.9, 0.9, c, 0, 0.45, 0); _lkBox(g, 0.96, 0.96, 0.16, rib, 0, 0.45, 0); _lkBox(g, 0.16, 0.96, 0.96, rib, 0, 0.45, 0); return g; }
+function lkCandy() { const g = new THREE.Group(); const h = 4.4; for (let k = 0; k < 9; k++) _lkBox(g, 0.28, h / 9, 0.28, k % 2 ? 0xf6f6f6 : 0xd8202a, 0, h / 9 * (k + 0.5), 0); _lkCyl(g, 0.14, 0.14, 0.9, 0xd8202a, 0.4, h + 0.0, 0, 6).rotation.z = 1.4; return g; }
+function lkSeats(rows = 3, cols = 6, c = 0x8a1c1c) { const g = new THREE.Group(); for (let r = 0; r < rows; r++) for (let k = 0; k < cols; k++) { _lkBox(g, 0.75, 0.2, 0.7, c, k * 0.85, 0.5 + r * 0.35, -r * 1.0); _lkBox(g, 0.75, 0.7, 0.12, c, k * 0.85, 0.95 + r * 0.35, -r * 1.0 - 0.32); } return g; }
+function lkShelf(len = 6, cols = [0xd82a2a, 0x2a8ad8, 0xe8c82a, 0x3aa84a, 0xe8e8e0]) { const g = new THREE.Group(); _lkBox(g, len, 0.1, 0.9, 0x6a6e74, 0, 0.6, 0); _lkBox(g, len, 0.1, 0.9, 0x6a6e74, 0, 1.4, 0); _lkBox(g, len, 0.1, 0.9, 0x6a6e74, 0, 2.2, 0); for (let r = 0; r < 3; r++) for (let k = 0; k < Math.floor(len / 0.5); k++) _lkBox(g, 0.4, 0.5 + (k % 3) * 0.08, 0.5, cols[(k + r * 2) % cols.length], -len / 2 + 0.3 + k * 0.5, 0.9 + r * 0.8, 0); return g; }
+function lkSignHang(c = 0xd82a2a, w = 2.2) { const g = new THREE.Group(); _lkBox(g, w, 0.7, 0.1, c, 0, 0, 0); _lkBox(g, 0.05, 0.9, 0.05, 0x3a3d40, -w * 0.4, 0.7, 0); _lkBox(g, 0.05, 0.9, 0.05, 0x3a3d40, w * 0.4, 0.7, 0); return g; }
+function lkTorch(c = 0x4a4238) { const g = new THREE.Group(); _lkBox(g, 0.14, 0.9, 0.14, c, 0, 0, 0); _lkPart(g, new THREE.ConeGeometry(0.2, 0.55, 5), _lkB(0xff7a1a, 0.9), 0, 0.65, 0); return g; }
+function lkCone(c = 0xe8782a) { const g = new THREE.Group(); _lkBox(g, 0.55, 0.06, 0.55, 0x2a2d30, 0, 0.03, 0); _lkCone(g, 0.22, 0.7, c, 0, 0.4, 0, 8); _lkCyl(g, 0.17, 0.2, 0.12, 0xf4f4f0, 0, 0.4, 0, 8); return g; }
+function lkBarricade(c1 = 0xf4f4f0, c2 = 0xe8782a) { const g = new THREE.Group(); _lkBox(g, 2.4, 0.18, 0.12, c2, 0, 0.95, 0); _lkBox(g, 2.4, 0.18, 0.12, c1, 0, 0.7, 0); for (const sx of [-1.0, 1.0]) _lkBox(g, 0.1, 1.1, 0.1, 0x3a3d40, sx, 0.55, 0); return g; }
+
+// ── more props ──
+function lkHuey(c = 0x4a5a3a) { const g = new THREE.Group(); _lkBox(g, 2.2, 1.9, 4.6, c, 0, 1.5, 0); _lkBox(g, 1.5, 1.0, 1.6, c - 0x0a0a0a, 0, 1.6, 2.7); _lkPart(g, new THREE.BoxGeometry(1.7, 0.9, 0.05), _lkB(0x1c2a30), 0, 1.9, 3.5); _lkBox(g, 0.6, 0.6, 5.2, c, 0, 1.9, -4.7); _lkBox(g, 0.15, 1.8, 0.8, c, 0, 2.7, -7.2); for (const sx of [-1.2, 1.2]) _lkBox(g, 0.1, 0.1, 4.4, 0x2a2d30, sx, 0.25, 0.3); _lkBox(g, 0.4, 0.5, 0.4, 0x2a2d30, 0, 2.6, 0); const blade = _lkBox(g, 9.5, 0.06, 0.45, 0x1c1c1c, 0, 2.9, 0); blade.rotation.set(0.0, 0.5, 0.18); _lkBox(g, 0.5, 0.06, 4.0, 0x1c1c1c, 3.2, 2.2, -2).rotation.y = 0.4; g.rotation.z = 0.14; const w = new THREE.Group(); w.add(g); return w; }
+function lkSandbags(len = 6, h = 3) { const g = new THREE.Group(); const cols = [0xb8a070, 0xa89060, 0xc0a878]; for (let r = 0; r < h; r++) for (let k = 0; k < Math.floor(len / 0.9); k++) _lkBox(g, 0.85, 0.34, 0.5, cols[(k + r) % 3], -len / 2 + 0.45 + k * 0.9 + (r % 2) * 0.45, 0.2 + r * 0.34, 0, 0); return g; }
+function lkNeonBoard(c = 0x33f0ff, w = 5, h = 2.6) { const g = new THREE.Group(); _lkBox(g, 0.25, 5, 0.25, 0x15171a, -w * 0.4, 2.5, 0); _lkBox(g, 0.25, 5, 0.25, 0x15171a, w * 0.4, 2.5, 0); _lkBox(g, w + 0.4, h + 0.4, 0.2, 0x0a0c10, 0, 5 + h / 2, 0); _lkPart(g, new THREE.BoxGeometry(w, h, 0.24), _lkB(c, 0.92), 0, 5 + h / 2, 0); for (let k = 0; k < 3; k++) _lkBox(g, w * (0.8 - k * 0.2), 0.22, 0.28, 0x0a0c10, 0, 5 + h * (0.75 - k * 0.25), 0); return g; }
+function lkHover(c = 0xff3cc8, glow = 0x33f0ff) { const g = _gimVehicle(c, { len: 4.4, wid: 1.9, h: 0.7 }); g.traverse(m => { if (m.isMesh) { m.position.y += 0.6; if (m.material && m.material.isMeshLambertMaterial) m.userData.mapStatic = true; } }); const h = new THREE.Group(); h.add(g); _lkPart(h, new THREE.CircleGeometry(1.6, 12), _lkB(glow, 0.35), 0, 0.06, 0).rotation.x = -Math.PI / 2; return h; }
+function lkCactus(c = 0x3a7a3a) { const g = new THREE.Group(); _lkCyl(g, 0.3, 0.34, 3.2, c, 0, 1.6, 0, 6); _lkCyl(g, 0.2, 0.22, 1.3, c, 0.7, 1.9, 0, 6); _lkBox(g, 0.75, 0.2, 0.2, c, 0.35, 1.45, 0); _lkCyl(g, 0.18, 0.2, 1.0, c, -0.6, 1.6, 0, 6); _lkBox(g, 0.65, 0.2, 0.2, c, -0.3, 1.2, 0); return g; }
+function lkFerris(r = 9, c = 0xd8d8d0) { const g = new THREE.Group(); const hub = r + 1.5; for (const sz of [-0.9, 0.9]) { const ring = _lkPart(g, new THREE.TorusGeometry(r, 0.12, 5, 28), c, 0, hub, sz); } for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI; _lkBox(g, r * 2, 0.1, 0.1, c, 0, hub, 0).rotation.z = a; } const cols = [0xd82a2a, 0xe8c82a, 0x2a8ad8, 0x3aa84a]; for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI * 2; _lkBox(g, 1.2, 1.0, 1.3, cols[k % 4], Math.cos(a) * r, hub + Math.sin(a) * r - 0.5, 0); } for (const sz of [-1.6, 1.6]) { _lkBox(g, 0.4, hub + 0.6, 0.4, 0x6a6e74, 0, (hub + 0.6) / 2, sz).rotation.z = 0; } _lkCyl(g, 0.5, 0.5, 3.4, 0x6a6e74, 0, hub, 0, 8).rotation.x = Math.PI / 2; return g; }
+function lkFurnace(glow = 0xff6a1a) { const g = new THREE.Group(); _lkBox(g, 4.2, 4.2, 3.4, 0x3a3228, 0, 2.1, 0); _lkPart(g, new THREE.BoxGeometry(2.0, 1.5, 0.12), _lkB(glow, 0.95), 0, 1.8, 1.72); _lkBox(g, 2.4, 0.4, 0.8, 0x2a2420, 0, 0.9, 2.0); _lkCyl(g, 0.5, 0.7, 3.6, 0x4a4238, 1.4, 6, -0.4, 8); return g; }
+function lkIngots(c = 0xb8bcc0) { const g = new THREE.Group(); for (let r = 0; r < 3; r++) for (let k = 0; k < 3 - r; k++) _lkBox(g, 1.0, 0.4, 0.6, r % 2 ? c : c - 0x181818, (k - (2 - r) / 2) * 1.05, 0.2 + r * 0.42, 0); return g; }
+function lkChimney(h = 16) { const g = new THREE.Group(); _lkCyl(g, 1.0, 1.7, h, 0x7a5a48, 0, h / 2, 0, 10); for (const y of [h * 0.35, h * 0.7]) _lkCyl(g, 1.45 - y / h * 0.6, 1.45 - y / h * 0.6, 0.35, 0x2a2420, 0, y, 0, 10); return g; }
+function lkAnvil() { const g = new THREE.Group(); _lkBox(g, 0.8, 0.8, 0.8, 0x5a3a22, 0, 0.4, 0); _lkBox(g, 0.5, 0.3, 1.6, 0x3a3d40, 0, 0.95, 0); _lkBox(g, 0.4, 0.14, 0.9, 0x3a3d40, 0, 1.17, 0.3); return g; }
+function lkCart(c = 0x7a5a30) { const g = new THREE.Group(); _lkBox(g, 2.0, 0.9, 3.0, c, 0, 1.0, 0); for (const sx of [-1.05, 1.05]) _lkCyl(g, 0.6, 0.6, 0.14, 0x4a3018, sx, 0.62, 0, 10).rotation.z = Math.PI / 2; _lkBox(g, 0.12, 0.12, 2.2, 0x4a3018, 0, 0.9, 2.2); for (let k = 0; k < 6; k++) _lkSph(g, 0.4, 0xd8c070, (k % 3 - 1) * 0.6, 1.7, (Math.floor(k / 3) - 0.5) * 1.0, 5); return g; }
+function lkCatapult() { const g = new THREE.Group(); _lkBox(g, 2.4, 0.4, 4.0, 0x5a3a22, 0, 0.5, 0); for (const sx of [-1, 1]) _lkBox(g, 0.3, 2.6, 0.3, 0x5a3a22, sx, 1.7, 0.4).rotation.x = 0.0; _lkBox(g, 0.2, 0.2, 4.6, 0x4a3018, 0, 3.0, -0.6).rotation.x = -0.45; _lkBox(g, 1.0, 0.4, 1.0, 0x3a2a18, 0, 4.3, -2.7); for (const sx of [-1.3, 1.3]) _lkCyl(g, 0.5, 0.5, 0.2, 0x3a2a18, sx, 0.5, 0, 8).rotation.z = Math.PI / 2; return g; }
+function lkWell(c = 0x8a8478) { const g = new THREE.Group(); _lkCyl(g, 1.1, 1.1, 1.0, c, 0, 0.5, 0, 10); _lkPart(g, new THREE.CircleGeometry(0.85, 10), _lkB(0x0a1a2a), 0, 1.02, 0).rotation.x = -Math.PI / 2; for (const sx of [-1, 1]) _lkBox(g, 0.18, 2.4, 0.18, 0x5a3a22, sx * 1.0, 1.7, 0); _lkBox(g, 2.4, 0.15, 1.4, 0x6a4a28, 0, 3.0, 0); return g; }
+function lkLifeboat(c = 0xf2f0e8, trim = 0xd8602a) { const g = new THREE.Group(); _lkBox(g, 2.0, 1.0, 6.4, c, 0, 1.4, 0); _lkBox(g, 2.1, 0.3, 6.6, trim, 0, 1.95, 0); _lkBox(g, 1.6, 0.4, 6.0, 0x5a3a22, 0, 0.7, 0); for (const sz of [-2.2, 2.2]) _lkBox(g, 0.12, 2.0, 0.12, 0x3a3d40, 1.1, 1.5, sz); return g; }
+function lkDeckChair(c = 0x8a5a2a) { const g = new THREE.Group(); _lkBox(g, 0.7, 0.08, 1.5, 0xe8e0c8, 0, 0.5, 0.1).rotation.x = 0.0; _lkBox(g, 0.7, 0.9, 0.08, 0xe8e0c8, 0, 0.9, -0.75).rotation.x = -0.4; for (const sx of [-0.35, 0.35]) _lkBox(g, 0.06, 0.6, 1.5, c, sx, 0.3, 0.1); return g; }
+function lkMoaiSmall(c = 0x7d756a, s = 1) { const g = new THREE.Group(); _lkBox(g, 1.4 * s, 3.4 * s, 1.2 * s, c, 0, 1.7 * s, 0); _lkBox(g, 1.6 * s, 0.5 * s, 0.5 * s, c - 0x1a1a1a, 0, 2.5 * s, 0.5 * s); _lkBox(g, 0.5 * s, 1.0 * s, 0.4 * s, c, 0, 1.9 * s, 0.7 * s); _lkBox(g, 1.9 * s, 0.5 * s, 1.6 * s, c - 0x101010, 0, 0.25 * s, 0); return g; }
+function lkTentMil(c = 0x5a6a3a) { const g = new THREE.Group(); _lkBox(g, 4.2, 2.0, 6.0, c, 0, 1.0, 0); _lkPart(g, new THREE.CylinderGeometry(2.1, 2.1, 6.0, 4, 1, false, 0, 6.283), c + 0x0a0a0a, 0, 2.0, 0).rotation.set(Math.PI / 2, 0, Math.PI / 4); _lkBox(g, 1.3, 1.6, 0.06, 0x1c1c1c, 0, 0.8, 3.02); return g; }
+function lkRubble(c = 0x7a7670) { const g = new THREE.Group(); for (let k = 0; k < 7; k++) { const a = k * 1.4, r = (k % 3) * 0.7, s = 0.5 + (k % 4) * 0.35; _lkBox(g, s, s * 0.8, s * 1.1, c - (k % 2) * 0x101010, Math.cos(a) * r, s * 0.35, Math.sin(a) * r, a); } return g; }
+function lkBurnBarrel(flame = true) { const g = new THREE.Group(); _lkCyl(g, 0.38, 0.38, 1.0, 0x4a3a30, 0, 0.5, 0, 8); if (flame) { _lkPart(g, new THREE.ConeGeometry(0.3, 1.0, 6), _lkB(0xff7a1a, 0.9), 0, 1.4, 0); _lkPart(g, new THREE.ConeGeometry(0.16, 0.7, 5), _lkB(0xffd23a, 0.95), 0, 1.3, 0); } return g; }
+function lkSolar(c = 0x1c3a6a) { const g = new THREE.Group(); _lkBox(g, 0.3, 2.0, 0.3, 0x8a8e94, 0, 1.0, 0); const p = _lkBox(g, 6.0, 0.12, 3.0, c, 0, 2.3, 0); p.rotation.x = -0.5; for (let k = -2; k <= 2; k++) _lkBox(g, 0.05, 0.14, 3.0, 0xb8bcc0, k * 1.0, 2.31, 0).rotation.x = -0.5; return g; }
+function lkSandPile(c = 0xd8c07a, r = 2.2) { const g = new THREE.Group(); _lkCone(g, r, r * 0.8, c, 0, r * 0.4, 0, 9); return g; }
+function lkAAGun(c = 0x5a6a3a) { const g = new THREE.Group(); _lkCyl(g, 1.4, 1.6, 0.5, c, 0, 0.25, 0, 10); _lkBox(g, 1.2, 1.0, 1.2, c, 0, 1.0, 0); for (const sx of [-0.35, 0.35]) _lkBox(g, 0.14, 0.14, 3.2, 0x2a2d30, sx, 1.7, 1.2).rotation.x = -0.5; return g; }
+function lkWindsock() { const g = new THREE.Group(); _lkBox(g, 0.15, 6, 0.15, 0xb8bcc0, 0, 3, 0); for (let k = 0; k < 4; k++) _lkCyl(g, 0.5 - k * 0.1, 0.6 - k * 0.1, 0.7, k % 2 ? 0xf2f0e8 : 0xe8601a, 0.4 + k * 0.65, 6, 0, 8).rotation.z = Math.PI / 2; return g; }
+function lkClockPost() { const g = new THREE.Group(); _lkBox(g, 0.3, 4.2, 0.3, 0x2a2d30, 0, 2.1, 0); _lkCyl(g, 0.8, 0.8, 0.25, 0xf2f0e8, 0, 4.7, 0, 16).rotation.x = Math.PI / 2; _lkBox(g, 0.08, 0.6, 0.1, 0x1c1c1c, 0, 4.9, 0.15); _lkBox(g, 0.5, 0.08, 0.1, 0x1c1c1c, 0.2, 4.7, 0.15); return g; }
+function lkDoor(c = 0x8a3a2a, frame = 0xd8c8a0) { const g = new THREE.Group(); _lkBox(g, 2.0, 3.4, 0.25, frame, 0, 1.7, 0); _lkBox(g, 1.6, 3.0, 0.3, c, 0, 1.5, 0); _lkSph(g, 0.1, 0xd8b030, 0.5, 1.5, 0.2, 5); return g; }
+function lkChessPawn(c = 0xe8e0d0) { const g = new THREE.Group(); _lkCyl(g, 1.2, 1.4, 0.5, c, 0, 0.25, 0, 10); _lkCyl(g, 0.5, 1.0, 3.0, c, 0, 2.0, 0, 10); _lkCyl(g, 1.0, 0.7, 0.3, c, 0, 3.6, 0, 10); _lkSph(g, 0.9, c, 0, 4.4, 0, 8); return g; }
+function lkPopcorn() { const g = new THREE.Group(); _lkBox(g, 1.6, 1.0, 1.2, 0xd82a2a, 0, 0.5, 0); _lkBox(g, 1.5, 0.9, 1.0, 0xf6f6f0, 0, 1.55, 0); for (let k = 0; k < 6; k++) _lkSph(g, 0.22, 0xfff0b0, (k % 3 - 1) * 0.4, 2.1, (Math.floor(k / 3) - 0.5) * 0.4, 5); _lkCyl(g, 0.28, 0.28, 0.3, 0x15171a, 0.9, 0.3, 0.7, 6).rotation.z = Math.PI / 2; return g; }
+function lkFlowerBed(cols = [0xff4a6a, 0xffd23a, 0xff8ad8]) { const g = new THREE.Group(); _lkBox(g, 3.2, 0.4, 3.2, 0x6a4a2a, 0, 0.2, 0); for (let k = 0; k < 10; k++) _lkSph(g, 0.2, cols[k % 3], -1.2 + (k % 4) * 0.8, 0.6, -1.0 + Math.floor(k / 4) * 1.0, 5); return g; }
+function lkCrater(r = 3) { const g = new THREE.Group(); _lkPart(g, new THREE.CircleGeometry(r, 14), _lkB(0x1c1812, 0.85), 0, 0.045, 0).rotation.x = -Math.PI / 2; _lkPart(g, new THREE.RingGeometry(r, r + 0.5, 14), _lkB(0x3a3228, 0.8), 0, 0.05, 0).rotation.x = -Math.PI / 2; return g; }
+function lkSteam(h = 6) { const g = new THREE.Group(); _lkCyl(g, 0.5, 0.7, 0.4, 0x2a2420, 0, 0.2, 0, 8); _lkPart(g, new THREE.CylinderGeometry(0.4, 1.2, h, 8, 1, true), _lkB(0xe8e8e8, 0.22), 0, h / 2 + 0.4, 0); return g; }
+function lkPaddy(w = 10, d = 6) { const g = new THREE.Group(); _lkPart(g, new THREE.PlaneGeometry(w, d), _lkB(0x6a9a5a, 0.95), 0, 0.04, 0).rotation.x = -Math.PI / 2; _lkPart(g, new THREE.PlaneGeometry(w - 1.2, d - 1.2), _lkB(0x4a8aa0, 0.55), 0, 0.05, 0).rotation.x = -Math.PI / 2; for (let k = 0; k < 8; k++) _lkBox(g, 0.08, 0.5, 0.08, 0x7aa84a, -w / 2 + 1 + (k * (w - 2) / 7), 0.3, ((k * 7) % 5 - 2) * 0.5); return g; }
+function lkLuggage() { const g = new THREE.Group(); _lkBox(g, 2.4, 0.1, 1.2, 0x3a3d40, 0, 0.55, 0); for (const sx of [-0.9, 0.9]) _lkCyl(g, 0.12, 0.12, 0.1, 0x15171a, sx, 0.15, 0.4, 6); for (let k = 0; k < 4; k++) _lkBox(g, 0.6, 0.45, 0.4, [0x2a5aa8, 0xc82a1a, 0x3a3d40, 0x8a5a2a][k], -0.8 + k * 0.55, 0.85, 0); return g; }
+function lkFuelTruck(c = 0xe8e8e0) { const g = new THREE.Group(); _lkBox(g, 2.4, 1.8, 1.8, 0x2a6aa8, 0, 1.4, 2.4); _lkPart(g, new THREE.CylinderGeometry(1.2, 1.2, 5.0, 14), c, 0, 2.0, -0.8).rotation.x = Math.PI / 2; _lkBox(g, 2.5, 0.2, 5.4, 0x2a2d30, 0, 0.7, -0.6); _lkBox(g, 2.4, 0.4, 1.0, 0xc82a1a, 0, 2.0, -0.8); for (const sx of [-1.2, 1.2]) for (const sz of [-2.8, -0.8, 2.4]) _lkCyl(g, 0.55, 0.55, 0.4, 0x15171a, sx, 0.55, sz, 8).rotation.z = Math.PI / 2; return g; }
+function lkRoadSign(c = 0xf2c81a) { const g = new THREE.Group(); _lkBox(g, 0.1, 2.0, 0.1, 0x6a6e74, 0, 1.0, 0); const d = _lkBox(g, 0.9, 0.9, 0.08, c, 0, 2.1, 0); d.rotation.z = Math.PI / 4; _lkBox(g, 0.4, 0.08, 0.1, 0x1c1c1c, 0, 2.1, 0.05); return g; }
+function lkArrowBoard() { const g = new THREE.Group(); _lkBox(g, 0.18, 1.6, 0.18, 0x3a3d40, 0, 0.8, 0); _lkBox(g, 2.6, 1.3, 0.2, 0x1c1c1c, 0, 2.2, 0); for (let k = 0; k < 5; k++) _lkPart(g, new THREE.BoxGeometry(0.28, 0.28, 0.1), _lkB(0xffb21a), -0.8 + k * 0.4, 2.2, 0.14); return g; }
+function lkTreeBroad(leaf = 0x3a7a2a, trunk = 0x5a3a22, s = 1) { const g = new THREE.Group(); _lkCyl(g, 0.35 * s, 0.5 * s, 3.4 * s, trunk, 0, 1.7 * s, 0, 7); _lkSph(g, 2.2 * s, leaf, 0, 4.6 * s, 0, 8); _lkSph(g, 1.5 * s, leaf + 0x0a1408, 1.4 * s, 3.9 * s, 0.6 * s, 7); return g; }
+function lkVineCurtain(h = 5) { const g = new THREE.Group(); for (let k = 0; k < 7; k++) _lkBox(g, 0.18, h - (k % 3) * 0.9, 0.12, k % 2 ? 0x2f6a1f : 0x3d8a2a, -1.5 + k * 0.5, h / 2 + (k % 3) * 0.45, 0); return g; }
+function lkTank2(c = 0x5a6a3a) { const g = new THREE.Group(); _lkBox(g, 3.2, 1.0, 5.6, c, 0, 0.9, 0); _lkBox(g, 2.4, 0.9, 2.6, c, 0, 1.8, -0.3); _lkBox(g, 0.2, 0.2, 3.6, 0x2a2d30, 0, 1.85, 3.0); for (const sx of [-1.7, 1.7]) _lkBox(g, 0.7, 0.8, 5.8, 0x2a2d30, sx, 0.5, 0); return g; }
+function lkLaundry() { const g = new THREE.Group(); _lkBox(g, 1.4, 0.9, 1.0, 0x6a8aa8, 0, 0.75, 0); _lkBox(g, 1.3, 0.2, 0.9, 0xe8e8e0, 0, 1.3, 0); for (const sx of [-0.6, 0.6]) _lkCyl(g, 0.12, 0.12, 0.1, 0x15171a, sx, 0.15, 0, 6); return g; }
+function lkHoop() { const g = new THREE.Group(); _lkBox(g, 0.2, 3.4, 0.2, 0x3a3d40, 0, 1.7, 0); _lkBox(g, 1.6, 1.0, 0.1, 0xf2f0e8, 0, 3.3, 0.3); _lkPart(g, new THREE.TorusGeometry(0.4, 0.04, 5, 12), _lkB(0xe8601a), 0, 3.0, 0.8).rotation.x = Math.PI / 2; return g; }
+function lkCamDolly() { const g = new THREE.Group(); _lkBox(g, 1.4, 0.2, 1.4, 0x2a2d30, 0, 0.5, 0); for (const sx of [-0.55, 0.55]) for (const sz of [-0.55, 0.55]) _lkCyl(g, 0.16, 0.16, 0.14, 0x15171a, sx, 0.2, sz, 6); _lkBox(g, 0.18, 1.2, 0.18, 0x6a6e74, 0, 1.2, 0); _lkBox(g, 0.7, 0.55, 1.1, 0x1c1c20, 0, 1.95, 0); _lkPart(g, new THREE.CylinderGeometry(0.2, 0.2, 0.4, 8), _lkB(0x9fd8f0), 0, 1.95, 0.7).rotation.x = Math.PI / 2; return g; }
+function lkOnAir() { const g = new THREE.Group(); _lkBox(g, 2.4, 0.9, 0.2, 0x1c1c20, 0, 5.2, 0); _lkPart(g, new THREE.BoxGeometry(2.0, 0.6, 0.24), _lkB(0xff2a1a, 0.95), 0, 5.2, 0); _lkBox(g, 0.12, 5, 0.12, 0x3a3d40, -1, 2.5, 0); _lkBox(g, 0.12, 5, 0.12, 0x3a3d40, 1, 2.5, 0); return g; }
+function lkPiano() { const g = new THREE.Group(); _lkBox(g, 1.6, 0.18, 2.4, 0x15171a, 0, 1.0, 0); _lkBox(g, 1.4, 0.8, 1.0, 0x15171a, 0, 0.6, -0.7); for (const [x, z] of [[-0.7, 1.0], [0.7, 1.0], [0, -1.1]]) _lkBox(g, 0.12, 1.0, 0.12, 0x15171a, x, 0.5, z); _lkBox(g, 1.3, 0.04, 0.5, 0xf2f0e8, 0, 1.12, 1.0); return g; }
+function lkCurtain(w = 8, h = 6, c = 0x8a1c1c) { const g = new THREE.Group(); for (let k = 0; k < Math.floor(w / 0.7); k++) _lkBox(g, 0.62, h - (k % 2) * 0.2, 0.3, k % 2 ? c : c - 0x180808, -w / 2 + 0.35 + k * 0.7, h / 2, 0); _lkBox(g, w + 0.4, 0.4, 0.5, 0xd8b030, 0, h + 0.1, 0); return g; }
+function lkTicketGate() { const g = new THREE.Group(); _lkBox(g, 0.5, 1.2, 1.0, 0x6a7078, 0, 0.6, 0); _lkBox(g, 0.4, 0.15, 0.4, 0x2a2d30, 0, 1.25, 0.2); _lkPart(g, new THREE.BoxGeometry(0.3, 0.14, 0.08), _lkB(0x33ff88), 0, 1.0, 0.52); return g; }
+function lkCatenary(h = 7.5) { const g = new THREE.Group(); _lkBox(g, 0.3, h, 0.3, 0x6a6e74, 0, h / 2, 0); _lkBox(g, 4.0, 0.2, 0.2, 0x6a6e74, 0, h, 0); _lkBox(g, 4.0, 0.06, 0.06, 0x2a2d30, 0, h - 0.7, 0); return g; }
 
 // ── 🪑 BLANK · HOT SEAT ──────────────────────────────────────────────────────────────────────────────────────────────────
 // The classic arena had nothing to fight over but the middle. Now there is a seat in it: stand in the gold ring and you
@@ -17583,6 +17755,387 @@ GIM.train = (X) => {
       }
     }
   });
+};
+
+// ── the look of each place ──────────────────────────────────────────────────────────────────────────────────────────────
+// Placement is seeded (X.rnd) and checked against what is already there (X.free), so a map comes out the same for everyone.
+// `solid` props are cover you can stand behind; the rest are things to see. Counts are small on purpose: a map should read
+// as a place at a glance and still be a map you can read.
+
+LOOK.blank = (X) => {                                         // a training ground: floodlit, lined, cones out
+  const b = X.arena();
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) X.tryPut(lkFloodlight(15), sx * (b.halfX - 12), sz * (b.halfZ - 12), 0, 1.2, true);
+  const ring = X.ring(0, 0, 11, 0xe8e6d8, 0.75, 0.35, 0.06); X.ring(0, 0, 1.2, 0xe8e6d8, 0.75, 1.2, 0.06);
+  X.put(lkLine(b.halfX * 2 - 20, 0.35, 0xe8e6d8, 0.7), 0, 0, 0);
+  for (const sz of [-1, 1]) X.put(lkLine(40, 0.3, 0xe6b422, 0.8), 0, sz * 22, 0);
+  X.scatter((i) => { const g = new THREE.Group(); for (let k = 0; k < 3; k++) { const c = lkCone(); c.position.set(k * 1.0, 0, (k % 2) * 0.6); g.add(c); } return g; }, 6, { r: 1.4, sep: 22 });
+  X.scatter(() => lkPallets(2, 0x6a6e74, 0x4a5560), 4, { r: 1.2, sep: 24, solid: true });
+};
+
+LOOK.urban = (X) => {                                         // an avenue with its furniture: lamps, lights, zebras, a bus stop
+  const side = (x, z) => ({ x, z });
+  for (const z of [-46, -32, -20, 20, 32, 46]) for (const sx of [-1, 1]) X.tryPut(lkLamp(5.4), sx * 13.4, z, sx > 0 ? Math.PI : 0, 0.5, true);
+  for (const x of [-46, -32, -20, 20, 32, 46]) for (const sz of [-1, 1]) X.tryPut(lkLamp(5.4), x, sz * 13.4, sz > 0 ? -Math.PI / 2 : Math.PI / 2, 0.5, true);
+  X.put(lkCrosswalk(26, 3.2), 0, 17.5, 0); X.put(lkCrosswalk(26, 3.2), 0, -17.5, 0);
+  { const g = lkCrosswalk(26, 3.2); X.put(g, 17.5, 0, Math.PI / 2); const h = lkCrosswalk(26, 3.2); X.put(h, -17.5, 0, Math.PI / 2); }
+  for (const [x, z] of [[12.5, 12.5], [-12.5, 12.5], [12.5, -12.5], [-12.5, -12.5]]) X.tryPut(lkTrafficLight(), x, z, Math.atan2(-x, -z), 0.5, true);
+  X.scatter(() => lkHydrant(), 5, { r: 0.5, sep: 20, maxR: 70 });
+  X.scatter(() => lkBench(), 5, { r: 1.2, sep: 16, maxR: 60 });
+  X.scatter(() => lkBin(), 6, { r: 0.5, sep: 14, maxR: 70 });
+  X.scatter(() => lkBusStop(), 2, { r: 2.0, sep: 40, maxR: 62, solid: true });
+  X.scatter(() => lkPhone(), 2, { r: 0.7, sep: 40, maxR: 60, solid: true });
+  X.scatter(() => lkKiosk(), 1, { r: 1.9, sep: 40, maxR: 55, solid: true });
+  X.scatter(() => lkPlanter(), 4, { r: 1.3, sep: 22, maxR: 64, solid: true });
+  X.scatter(() => lkBillboard(0xd8c8a0), 2, { r: 3.4, sep: 60, minR: 30, maxR: 70, solid: true });
+};
+
+LOOK.warehouse = (X) => {                                     // a working floor: forklifts, pallets, painted aisles, a generator
+  for (const x of [-34, -22, 22, 34]) X.put(lkLine(60, 0.28, 0xe6b422, 0.85), x, 0, Math.PI / 2);
+  for (const z of [-15.5, 15.5]) X.put(lkLine(78, 0.28, 0xe6b422, 0.85), 0, z, 0);
+  X.scatter((i) => lkForklift(i % 2 ? 0xe6a31c : 0xd8601a), 3, { r: 1.7, sep: 22, solid: true });
+  X.scatter((i) => lkPallets(2 + (i % 3), 0x9a7a4a, [0x7a5a30, 0x6a8a9a, 0xa89060][i % 3]), 9, { r: 1.2, sep: 11, solid: true });
+  X.scatter((i) => lkDrums(3 + (i % 2)), 5, { r: 1.2, sep: 16, solid: true });
+  X.scatter(() => lkGenerator(), 2, { r: 1.5, sep: 30, solid: true });
+  X.scatter(() => lkDumpster(0x3a5a4a), 2, { r: 1.6, sep: 40, solid: true });
+};
+
+LOOK.forest = (X) => {                                        // a forest somebody lives in: camps, logs, stumps, signposts
+  X.scatter(() => lkCamp(), 2, { r: 4.0, sep: 50, maxR: 70, h: 3 });
+  X.scatter((i) => lkLog(3 + (i % 3), 0.4), 10, { r: 1.8, sep: 12, solid: true });
+  X.scatter(() => lkStump(), 12, { r: 0.8, sep: 9 });
+  X.scatter(() => lkBoulder(0x6e7468, 1.2 + X.rnd() * 0.9), 8, { r: 1.6, sep: 14, solid: true });
+  X.scatter(() => lkSign(), 4, { r: 0.8, sep: 36 });
+  X.scatter(() => lkLogPile(), 3, { r: 2.0, sep: 40, solid: true });
+  X.scatter(() => lkDeadTree(0x3a2e22), 4, { r: 0.8, sep: 22, solid: true });
+};
+
+LOOK.vietnam = (X) => {                                       // a firebase gone quiet: a Huey in the grass, paddies, bamboo
+  X.scatter(() => lkHuey(), 1, { r: 5.0, sep: 1, maxR: 60, solid: true, h: 3.6 });
+  X.scatter(() => lkPaddy(11, 6), 4, { r: 3.8, sep: 22, maxR: 75 });
+  X.scatter((i) => lkBamboo(5 + (i % 3)), 14, { r: 1.2, sep: 11 });
+  X.scatter((i) => lkSandbags(4 + (i % 3) * 1.5, 3), 5, { r: 2.2, sep: 20, solid: true });
+  X.scatter(() => lkDrums(2, [0x4a5a3a, 0x6a5a3a]), 4, { r: 1.0, sep: 25, solid: true });
+  X.scatter(() => lkFlag(0xd8201c, 8), 1, { r: 0.6, sep: 1, maxR: 30 });
+  X.scatter(() => lkSign(0xc8b890), 3, { r: 0.8, sep: 40 });
+};
+
+LOOK.volcano = (X) => {                                       // scorched: black stumps, steam, boulders of cooled rock
+  X.scatter(() => lkDeadTree(0x15100c), 12, { r: 0.8, sep: 12, solid: true });
+  X.scatter(() => lkSteam(7), 6, { r: 1.2, sep: 26, maxR: 85 });
+  X.scatter(() => lkBoulder(0x2a2420, 1.5 + X.rnd()), 10, { r: 2.0, sep: 14, solid: true });
+  X.scatter(() => lkCrater(3.2), 5, { r: 3.4, sep: 24, maxR: 85 });
+};
+
+LOOK.cyber = (X) => {                                         // neon street: vending machines, hover cars, holo boards, a ramen bar
+  const cols = [0x33f0ff, 0xff3cc8, 0xb8ff3c];
+  X.scatter((i) => lkNeonBoard(cols[i % 3]), 5, { r: 3.0, sep: 34, maxR: 85, solid: true });
+  X.scatter((i) => lkConsole(0x1a1030, cols[i % 3]), 8, { r: 1.2, sep: 16, solid: true });
+  X.scatter((i) => lkHover(cols[(i + 1) % 3], cols[i % 3]), 4, { r: 2.4, sep: 28, solid: true });
+  X.scatter(() => lkStall(0xff3cc8, 0x33f0ff), 3, { r: 2.2, sep: 34, solid: true });
+  X.scatter((i) => lkMast(10, cols[i % 3]), 6, { r: 0.6, sep: 20, solid: true });
+};
+
+LOOK.desert = (X) => {                                        // a caravan stop: palms at the wells, bazaar awnings, cairns
+  X.scatter(() => lkPalm(), 12, { r: 1.2, sep: 14 });
+  X.scatter((i) => lkStall(i % 2 ? 0xc8601a : 0xd8b050, 0xf2ead8), 4, { r: 2.2, sep: 28, solid: true });
+  X.scatter(() => lkWell(0xb8a070), 2, { r: 1.6, sep: 50, solid: true });
+  X.scatter(() => lkBoulder(0xb8a070, 1.3), 8, { r: 1.6, sep: 14, solid: true });
+  X.scatter(() => lkCart(), 2, { r: 2.0, sep: 44, solid: true });
+  X.scatter(() => lkCactus(), 8, { r: 0.8, sep: 16 });
+  X.scatter(() => lkBanner(0xc8601a, 5), 4, { r: 0.8, sep: 30, solid: true });
+};
+
+LOOK.tundra = (X) => {                                        // a research camp in the snow: snowmen, a mast, a sled, drums
+  X.scatter(() => lkSnowPine(6), 14, { r: 1.8, sep: 11 });
+  X.scatter(() => lkSnowman(), 5, { r: 1.0, sep: 24 });
+  X.scatter(() => lkMast(14, 0xfff0d0), 1, { r: 0.8, sep: 1, maxR: 50, solid: true });
+  X.scatter(() => lkDrums(3, [0xc83a1a, 0xe8a31c, 0xc83a1a]), 4, { r: 1.2, sep: 28, solid: true });
+  X.scatter(() => lkCrater(1.4), 4, { r: 1.6, sep: 26 });                     // the ice-fishing holes
+  X.scatter(() => lkBoulder(0xe8eef2, 1.5), 6, { r: 1.8, sep: 18, solid: true });
+  X.scatter(() => lkSandbags(3, 2), 2, { r: 1.5, sep: 40 });
+};
+
+LOOK.space = (X) => {                                         // the deck of a station: consoles, cryo pods, hatch markings
+  X.scatter((i) => lkConsole(0x2a3a4a, i % 2 ? 0x33ddff : 0xffb33a), 10, { r: 1.2, sep: 12, solid: true });
+  X.scatter(() => lkPod(), 4, { r: 1.8, sep: 26, solid: true });
+  X.scatter(() => { const g = new THREE.Group(); _lkPart(g, new THREE.RingGeometry(1.6, 2.0, 6), _lkB(0xffd23a, 0.8), 0, 0.06, 0).rotation.x = -Math.PI / 2; return g; }, 5, { r: 2.0, sep: 24 });
+  X.scatter(() => lkTesla(0x3a4a5a), 2, { r: 1.2, sep: 40, solid: true });
+};
+
+LOOK.airport = (X) => {                                       // the apron: trolleys, a fuel truck, a windsock, taxi lines
+  X.scatter(() => lkLuggage(), 6, { r: 1.4, sep: 16, solid: true });
+  X.scatter(() => lkFuelTruck(), 2, { r: 3.0, sep: 50, solid: true });
+  X.scatter(() => lkWindsock(), 1, { r: 0.6, sep: 1 });
+  X.scatter(() => lkLine(26, 0.4, 0xf2c81a, 0.85), 3, { r: 0.4, sep: 30, rot: 0 });
+  X.scatter(() => lkTrafficLight(0x6a6e74), 3, { r: 0.5, sep: 40 });
+  X.scatter(() => lkBarricade(), 6, { r: 1.4, sep: 20, solid: true });
+};
+
+LOOK.trenches = (X) => {                                      // no man's land: craters, dead trees, wire, a field gun
+  X.scatter(() => lkCrater(2.6 + X.rnd() * 1.6), 14, { r: 3.0, sep: 12, maxR: 100 });
+  X.scatter(() => lkDeadTree(), 10, { r: 0.8, sep: 16, solid: true });
+  X.scatter(() => lkWire(6), 8, { r: 3.0, sep: 18 });
+  X.scatter(() => lkCrateStack(0x6a5a3a, 2), 6, { r: 2.0, sep: 22, solid: true });
+  X.scatter(() => lkAAGun(0x5a5a46), 2, { r: 1.8, sep: 50, solid: true });
+  X.scatter(() => lkCart(0x5a4a30), 2, { r: 2.0, sep: 40, solid: true });
+  X.scatter(() => lkHedgehog(), 6, { r: 1.2, sep: 20, solid: true });
+};
+
+LOOK.chernobyl = (X) => {                                     // the zone: a stopped wheel, rusted buses, hazard signs
+  X.scatter(() => lkFerris(8.5, 0xc8c8c0), 1, { r: 3.4, sep: 1, minR: 30, maxR: 80, solid: true, h: 3 });
+  X.scatter((i) => lkWreck([0x6a4a30, 0x4a5a4a, 0x7a6a40][i % 3]), 5, { r: 2.4, sep: 22, solid: true });
+  X.scatter(() => lkSign(0xf2c81a, 0x3a3d40), 8, { r: 0.8, sep: 22 });
+  X.scatter(() => lkDrums(3, [0xd8c81a, 0x4a4a46, 0xd8c81a]), 6, { r: 1.2, sep: 20, solid: true });
+  X.scatter(() => lkBarricade(0xf4f4f0, 0xc82a1a), 6, { r: 1.4, sep: 24, solid: true });
+  X.scatter(() => lkFlag(0xa81c1c, 7), 2, { r: 0.6, sep: 60 });
+};
+
+LOOK.refinery = (X) => {                                      // a flare over the plant, tank farm, pipe racks, loading bay
+  const fl = X.scatter(() => lkFlare(26), 1, { r: 1.0, sep: 1, minR: 30, maxR: 85, solid: true })[0];
+  if (fl) { const f = _gimFlame(1.2, 4.4, 5); f.group.position.set(fl.x, 26.2, fl.z); X.G.add(f.group); X.on((dt, A, t) => f.tick(t)); }
+  X.scatter((i) => lkTank(3.2 + (i % 2), 5.5 + (i % 2) * 1.5, 0xb8bcc0, 0xc82a1a), 3, { r: 4.4, sep: 40, solid: true, h: 3 });
+  X.scatter(() => lkSphereTank(3.0), 2, { r: 3.6, sep: 50, solid: true, h: 3 });
+  X.scatter(() => lkPipeRack(9, 3.4), 4, { r: 4.0, sep: 30, solid: true });
+  X.scatter(() => lkFuelTruck(0xd8dcdf), 2, { r: 3.0, sep: 50, solid: true });
+  X.scatter(() => lkLine(18, 0.4, 0xe6b422, 0.8), 3, { r: 0.4, sep: 30 });
+};
+
+LOOK.skydock = (X) => {                                       // a range: dishes, tanks, mast lights, hazard markings
+  X.scatter(() => lkDish(), 3, { r: 2.4, sep: 40, solid: true, h: 3 });
+  X.scatter(() => lkSphereTank(2.6, 0xe8ecef), 2, { r: 3.2, sep: 50, solid: true, h: 3 });
+  X.scatter((i) => lkMast(12, i % 2 ? 0xfff6c0 : 0xff6a3a), 5, { r: 0.6, sep: 26, solid: true });
+  X.scatter(() => lkHazard(10, 0.9), 4, { r: 0.6, sep: 26 });
+  X.scatter(() => lkGenerator(0xd8dcdf), 3, { r: 1.5, sep: 34, solid: true });
+  X.scatter(() => lkWindsock(), 1, { r: 0.6, sep: 1 });
+};
+
+LOOK.sewer = (X) => {                                         // a drain: barrels afloat, caged lamps, pipes, grates
+  X.scatter(() => lkDrums(2, [0x4a5a3a, 0x6a5a3a]), 5, { r: 1.2, sep: 14, solid: true });
+  X.scatter(() => lkMast(4.2, 0xffd860), 8, { r: 0.5, sep: 12, solid: true });
+  X.scatter(() => lkPipeRack(7, 2.4, 0x5a6a60, 0x7a6a3a), 3, { r: 3.2, sep: 28, solid: true });
+  X.scatter(() => lkCrateStack(0x5a4a38, 2), 3, { r: 2.0, sep: 24, solid: true });
+  X.scatter(() => lkRubble(0x5a5e56), 5, { r: 1.5, sep: 16 });
+};
+
+LOOK.gravity_lab = (X) => {                                   // an experiment gone ahead: tesla coils, floating cubes, rigs
+  X.scatter(() => lkTesla(), 3, { r: 1.4, sep: 28, solid: true });
+  X.scatter((i) => { const g = new THREE.Group(); const c = _lkBox(g, 0.9, 0.9, 0.9, [0xc8d8e8, 0xb08cff, 0x33ddff][i % 3], 0, 2.4 + (i % 4) * 0.6, 0); c.rotation.set(0.5, i, 0.3); return g; }, 10, { r: 1.0, sep: 12 });
+  X.scatter((i) => lkConsole(0x1c2a3a, i % 2 ? 0xb08cff : 0x33ddff), 6, { r: 1.2, sep: 18, solid: true });
+  X.scatter(() => lkCrateStack(0xc8ccd0, 2), 3, { r: 2.0, sep: 26, solid: true });
+};
+
+LOOK.glassworks = (X) => {                                    // a works: furnaces, sand heaps, racked sheets, a ladle cart
+  X.scatter(() => lkFurnace(), 2, { r: 3.0, sep: 50, solid: true, h: 3 });
+  X.scatter(() => lkSandPile(0xd8c07a, 2.4), 3, { r: 2.6, sep: 26, solid: true });
+  X.scatter(() => { const g = new THREE.Group(); for (let k = 0; k < 4; k++) _lkPart(g, new THREE.BoxGeometry(0.1, 2.4, 1.8), _lkB(0x9fdcff, 0.4), -1.0 + k * 0.7, 1.4, 0).rotation.z = 0.2; _lkBox(g, 3.2, 0.2, 2.2, 0x3a3d40, 0, 0.12, 0); return g; }, 4, { r: 2.2, sep: 24, solid: true });
+  X.scatter(() => lkDrums(3, [0x6a7078, 0x3a3d40]), 4, { r: 1.2, sep: 24, solid: true });
+  X.scatter(() => lkCart(0x4a4a46), 1, { r: 2.2, sep: 1, solid: true });
+};
+
+LOOK.carrier = (X) => {                                       // a flight deck: parked jets, a centreline, wires, tractors
+  const b = X.arena();
+  X.put(lkLine(b.halfZ * 2 - 16, 0.4, 0xf2c81a, 0.9), 0, 0, Math.PI / 2);
+  for (const sx of [-1, 1]) X.put(lkLine(b.halfZ * 2 - 20, 0.25, 0xe8e6d8, 0.8), sx * (b.halfX - 6), 0, Math.PI / 2);
+  for (const z of [-24, -18, -12]) X.put(lkLine(b.halfX * 2 - 10, 0.1, 0x2a2d30, 0.9), 0, z, 0);              // arrestor wires
+  X.scatter((i) => lkJet(i % 2 ? 0x7a828a : 0x5a626a), 5, { r: 4.6, sep: 28, solid: true, h: 3 });
+  X.scatter(() => lkTruck(0xd8c81a, 0xd8c81a), 2, { r: 3.2, sep: 40, solid: true });
+  X.scatter(() => lkCrateStack(0xe8e8e0, 1), 4, { r: 1.8, sep: 22, solid: true });
+  X.scatter(() => lkWindsock(), 1, { r: 0.6, sep: 1 });
+};
+
+LOOK.overgrowth = (X) => {                                    // taken back: wrecks with moss, trees through the road, vines
+  X.scatter(() => { const g = lkWreck(0x5a5a52); const m = _lkBox(g, 1.8, 0.2, 3.4, 0x3a6a2a, 0, 1.55, 0); return g; }, 6, { r: 2.4, sep: 20, solid: true });
+  X.scatter(() => lkTreeBroad(0x3a7a2a, 0x4a3422, 1.4), 7, { r: 2.6, sep: 20, solid: true, h: 3 });
+  X.scatter(() => lkVineCurtain(5.5), 8, { r: 1.4, sep: 18 });
+  X.scatter(() => lkFlowerBed([0xff6a8a, 0xffe23a, 0xc8a0ff]), 7, { r: 1.8, sep: 16 });
+  X.scatter(() => lkLamp(5.2, 0x4a5a3a, 0x8a9a6a), 4, { r: 0.5, sep: 30, solid: true });
+  X.scatter(() => lkRubble(0x6a6e60), 6, { r: 1.5, sep: 16 });
+};
+
+LOOK.orbital_station = (X) => {
+  X.scatter((i) => lkConsole(0x2a3a4a, i % 2 ? 0x33ddff : 0x7aff9a), 8, { r: 1.2, sep: 14, solid: true });
+  X.scatter(() => lkSolar(), 3, { r: 3.4, sep: 30, solid: true });
+  X.scatter(() => lkPod(0xb8c4d0, 0xffb33a), 3, { r: 1.8, sep: 26, solid: true });
+  X.scatter(() => lkCrateStack(0xc8ccd0, 2), 3, { r: 2.0, sep: 22, solid: true });
+};
+
+LOOK.foundry = (X) => {                                       // heavy industry: ingots, a chimney, anvils, a crucible cart
+  X.scatter(() => lkIngots(), 7, { r: 1.6, sep: 16, solid: true });
+  X.scatter(() => lkChimney(18), 2, { r: 2.2, sep: 60, minR: 30, solid: true, h: 3 });
+  X.scatter(() => lkAnvil(), 4, { r: 1.2, sep: 24, solid: true });
+  X.scatter(() => lkCart(0x3a3a3e), 2, { r: 2.0, sep: 40, solid: true });
+  X.scatter(() => lkDrums(3, [0xd8601a, 0x3a3d40]), 4, { r: 1.2, sep: 22, solid: true });
+  X.scatter(() => lkHazard(10, 0.9), 4, { r: 0.6, sep: 24 });
+};
+
+LOOK.carnival = (X) => {                                      // a fair: striped stalls, balloons, popcorn, an entrance arch
+  X.scatter((i) => lkStall(i % 2 ? 0xd82a2a : 0x2a6ad8, 0xf6f4ea), 8, { r: 2.4, sep: 18, solid: true });
+  X.scatter(() => lkBalloons(5 + (X.rnd() * 3 | 0)), 8, { r: 0.8, sep: 16 });
+  X.scatter(() => lkPopcorn(), 3, { r: 1.2, sep: 30, solid: true });
+  X.scatter(() => lkLamp(4.6, 0x6a2a8a, 0xffd23a), 8, { r: 0.5, sep: 18, solid: true });
+  X.scatter(() => lkBench(0xd8a02a), 4, { r: 1.2, sep: 22 });
+  X.scatter(() => lkBin(0xd82a2a), 4, { r: 0.5, sep: 20 });
+};
+
+LOOK.biosphere = (X) => {                                     // four climates under glass: palms, cacti, snowpines, rocks
+  const mk = (x, z) => x < 0 ? (z > 0 ? lkPalm() : lkSnowPine(5)) : (z > 0 ? lkCactus() : lkBoulder(0x6a5a46, 1.2));
+  for (let i = 0; i < 24; i++) {
+    const s = X.spots(1, { r: 1.8, sep: 1, edge: 10 })[0]; if (!s) break;
+    X.put(mk(s.x, s.z), s.x, s.z, X.rnd() * 6.28, false);
+  }
+  X.scatter(() => lkBench(0x6a5a3a), 4, { r: 1.2, sep: 30 });
+  X.scatter(() => lkConsole(0x1c3a2a, 0x7aff9a), 4, { r: 1.2, sep: 30, solid: true });
+};
+
+LOOK.lockdown = (X) => {                                      // a yard: hoops, laundry, wire, floodlights
+  X.scatter(() => lkHoop(), 2, { r: 1.2, sep: 20, solid: true });
+  X.scatter(() => lkLaundry(), 3, { r: 1.2, sep: 20, solid: true });
+  X.scatter(() => lkMast(9, 0xfffbe0), 4, { r: 0.6, sep: 26, solid: true });
+  X.scatter(() => lkWire(8, 0x8a8e94), 5, { r: 3.0, sep: 18 });
+  X.scatter(() => lkBench(0x6a6e74), 4, { r: 1.2, sep: 18 });
+};
+
+LOOK.studio = (X) => {                                        // a soundstage: lamps on stands, chairs, a dolly, an ON AIR sign
+  X.scatter(() => lkLightStand(), 10, { r: 0.8, sep: 12, solid: true });
+  X.scatter(() => lkChair(), 6, { r: 0.7, sep: 16 });
+  X.scatter(() => lkCamDolly(), 2, { r: 1.2, sep: 40, solid: true });
+  X.scatter(() => lkOnAir(), 1, { r: 1.4, sep: 1, solid: true, h: 3 });
+  X.scatter((i) => lkCrateStack(i % 2 ? 0x3a3a46 : 0x8a6a3a, 2), 4, { r: 2.0, sep: 22, solid: true });
+  X.scatter(() => lkCactus(), 3, { r: 0.8, sep: 30 });
+};
+
+LOOK.temple = (X) => {                                        // a shrine: braziers lit, guardians, banners, obelisks
+  X.scatter(() => lkBrazier(true), 12, { r: 0.8, sep: 12, solid: true });
+  X.scatter(() => lkStatue(), 6, { r: 1.2, sep: 20, solid: true });
+  X.scatter((i) => lkBanner(i % 2 ? 0xa81c1c : 0x1c4a8a, 5.5), 6, { r: 0.8, sep: 22, solid: true });
+  X.scatter(() => lkObelisk(), 3, { r: 1.2, sep: 34, solid: true, h: 3 });
+  X.scatter(() => lkRubble(0x8a8478), 6, { r: 1.5, sep: 16 });
+};
+
+LOOK.holiday = (X) => {                                       // a Christmas village: snowmen, candy canes, presents, pines
+  X.scatter(() => lkSnowman(), 7, { r: 1.0, sep: 18 });
+  X.scatter(() => lkCandy(), 12, { r: 0.4, sep: 14, solid: true });
+  X.scatter((i) => lkGift([0xd82a2a, 0x2a8a3a, 0x2a5ad8][i % 3], 0xe8c84a), 8, { r: 0.8, sep: 16 });
+  X.scatter(() => lkSnowPine(6), 10, { r: 1.8, sep: 16, solid: true });
+  X.scatter(() => lkLamp(4.6, 0x8a1c1c, 0xffd860), 8, { r: 0.5, sep: 20, solid: true });
+  X.scatter(() => lkBench(0x6a3a22), 4, { r: 1.2, sep: 26 });
+};
+
+LOOK.labyrinth = (X) => {                                     // a ruin: torches in the passages, statues at the turnings
+  X.scatter(() => lkBrazier(true), 14, { r: 0.8, sep: 12, solid: true });
+  X.scatter(() => lkStatue(0x8a9484, 0x5a645a), 4, { r: 1.2, sep: 30, solid: true });
+  X.scatter(() => lkRubble(0x7a7e72), 8, { r: 1.5, sep: 16 });
+};
+
+LOOK.arena = (X) => {                                         // a stadium: pitch markings, goals, floodlights, a scoreboard
+  const b = X.arena();
+  X.ring(0, 0, 11, 0xf4f4f0, 0.85, 0.35, 0.06); X.ring(0, 0, 0.9, 0xf4f4f0, 0.85, 0.9, 0.06);
+  X.put(lkLine(b.halfX * 1.7, 0.35, 0xf4f4f0, 0.85), 0, 0, 0);
+  for (const sz of [-1, 1]) {
+    X.put(lkLine(40, 0.35, 0xf4f4f0, 0.85), 0, sz * (b.halfZ - 22), 0);
+    X.put(lkLine(18, 0.35, 0xf4f4f0, 0.85), -20, sz * (b.halfZ - 31), Math.PI / 2); X.put(lkLine(18, 0.35, 0xf4f4f0, 0.85), 20, sz * (b.halfZ - 31), Math.PI / 2);
+    X.tryPut(lkGoal(), 0, sz * (b.halfZ - 16), 0, 3.0, false);
+  }
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) X.tryPut(lkFloodlight(18), sx * (b.halfX - 14), sz * (b.halfZ - 14), 0, 1.2, true);
+  X.scatter(() => lkBench(0xd8601a), 4, { r: 1.2, sep: 40, minR: 30 });
+};
+
+LOOK.opera = (X) => {                                         // the house: stalls of seats, a piano, curtains
+  X.scatter(() => lkSeats(3, 6), 8, { r: 3.0, sep: 12, solid: true });
+  X.scatter(() => lkPiano(), 1, { r: 1.6, sep: 1, solid: true });
+  X.scatter(() => lkCurtain(8, 6), 2, { r: 4.0, sep: 30, solid: true, h: 3 });
+  X.scatter(() => lkLamp(4.2, 0xb8902a, 0xffe8a0), 6, { r: 0.5, sep: 14, solid: true });
+};
+
+LOOK.doomsday = (X) => {                                      // the morning after: burnt wrecks, rubble, barrel fires
+  X.scatter((i) => lkWreck(0x2a2420), 6, { r: 2.4, sep: 20, solid: true });
+  X.scatter(() => lkRubble(0x6a6660), 10, { r: 1.5, sep: 14 });
+  X.scatter(() => lkBurnBarrel(true), 7, { r: 0.6, sep: 18, solid: true });
+  X.scatter(() => lkLamp(5.2, 0x3a3228, 0x6a5a3a), 4, { r: 0.5, sep: 30 });
+  X.scatter(() => lkDeadTree(0x1c1814), 4, { r: 0.8, sep: 26, solid: true });
+};
+
+LOOK.train = (X) => {                                         // a terminal: clock, signals, luggage, gates, masts
+  X.scatter(() => lkClockPost(), 2, { r: 0.8, sep: 40, solid: true });
+  X.scatter(() => lkLuggage(), 6, { r: 1.4, sep: 18, solid: true });
+  X.scatter(() => lkTicketGate(), 6, { r: 0.8, sep: 12, solid: true });
+  X.scatter(() => lkCatenary(7.5), 8, { r: 0.6, sep: 20, solid: true });
+  X.scatter((i) => lkMast(5, i % 2 ? 0xff2a1a : 0x2aff4a), 4, { r: 0.5, sep: 30, solid: true });
+};
+
+LOOK.dreamscape = (X) => {                                    // a dream: doors that go nowhere, pawns, balloons, a clock
+  X.scatter((i) => lkDoor([0x8a3a2a, 0x2a5a8a, 0xd8a02a][i % 3]), 7, { r: 1.4, sep: 22, solid: true });
+  X.scatter(() => lkChessPawn(), 4, { r: 1.5, sep: 30, solid: true });
+  X.scatter(() => lkBalloons(7), 8, { r: 0.8, sep: 20 });
+  X.scatter(() => lkClockPost(), 3, { r: 0.8, sep: 40, solid: true });
+};
+
+LOOK.pearl_harbor = (X) => {                                    // Oahu: palms, tank farm, AA guns, flags, jeeps
+  X.scatter(() => lkPalm(), 10, { r: 1.2, sep: 14 });
+  X.scatter(() => lkTank(3.4, 6, 0xc8ccd0, 0x6a6e74), 3, { r: 4.4, sep: 40, solid: true, h: 3 });
+  X.scatter(() => lkAAGun(), 4, { r: 1.8, sep: 36, solid: true });
+  X.scatter(() => lkFlag(0xf2f2f2, 10), 3, { r: 0.6, sep: 50 });
+  X.scatter(() => lkJeep(0x5a6a3a), 3, { r: 2.2, sep: 36, solid: true });
+  X.scatter(() => lkSandbags(5, 3), 4, { r: 2.2, sep: 28, solid: true });
+  X.scatter(() => lkCrateStack(0x5a6a3a, 3), 4, { r: 2.0, sep: 24, solid: true });
+};
+
+LOOK.titanic = (X) => {                                       // a liner: deck chairs, lifeboats on davits, bollards
+  X.scatter(() => lkDeckChair(), 10, { r: 1.0, sep: 9 });
+  X.scatter(() => lkLifeboat(), 4, { r: 3.4, sep: 26, solid: true, h: 3 });
+  X.scatter(() => lkDrums(1, [0x2a2d30]), 6, { r: 0.8, sep: 16 });
+  X.scatter(() => lkLamp(3.8, 0xb8902a, 0xffe8a0), 6, { r: 0.5, sep: 20, solid: true });
+};
+
+LOOK.supermarket = (X) => {                                   // a store: stocked shelving, hung signs, basket stacks, freezers
+  X.scatter((i) => lkShelf(5, i % 2 ? [0xd82a2a, 0xe8c82a, 0xe8e8e0] : [0x2a8ad8, 0x3aa84a, 0xe8e8e0]), 12, { r: 3.0, sep: 9, solid: true });
+  X.scatter((i) => lkSignHang([0xd82a2a, 0xe8c82a, 0x2a8ad8][i % 3]), 8, { r: 1.0, sep: 14 });
+  X.scatter(() => { const g = new THREE.Group(); for (let k = 0; k < 4; k++) _lkBox(g, 0.7, 0.3, 0.5, [0xd82a2a, 0x2a6ad8][k % 2], 0, 0.25 + k * 0.3, 0); return g; }, 4, { r: 0.8, sep: 22, solid: true });
+  X.scatter(() => { const g = new THREE.Group(); _lkBox(g, 2.8, 1.0, 1.2, 0xe8f0f4, 0, 0.5, 0); _lkPart(g, new THREE.BoxGeometry(2.6, 0.06, 1.0), _lkB(0xbfe8f4, 0.6), 0, 1.02, 0); return g; }, 3, { r: 1.8, sep: 26, solid: true });
+};
+
+LOOK.pyongyang = (X) => {                                     // the capital: flags, billboards, flower beds, stands
+  X.scatter(() => lkFlag(0xc81c1c, 11), 8, { r: 0.6, sep: 20, solid: true });
+  X.scatter(() => lkBillboard(0xc81c1c, 0x3a3d40, 8, 3.6, 4), 4, { r: 3.6, sep: 40, minR: 20, solid: true });
+  X.scatter(() => lkFlowerBed([0xff4a6a, 0xffd23a, 0xffffff]), 6, { r: 1.8, sep: 24 });
+  X.scatter(() => lkSeats(3, 10, 0x8a1c1c), 2, { r: 5.0, sep: 60, solid: true });
+  X.scatter(() => lkLamp(6, 0x6a6e74, 0xfff0b0), 6, { r: 0.5, sep: 24, solid: true });
+};
+
+LOOK.traffic_cone_republic = (X) => {                           // the republic: cones in their hundreds, barricades, signs
+  for (const sz of [-1, 1]) for (let i = 0; i < 16; i++) { const c = lkCone(); X.tryPut(c, -24 + i * 3.2, sz * 31, 0, 0.3, false); }
+  for (let i = 0; i < 14; i++) { const c = lkCone(); X.tryPut(c, 56 + (i % 2) * 1.2, -30 + i * 4.2, 0, 0.3, false); X.tryPut(lkCone(), -56 - (i % 2) * 1.2, -30 + i * 4.2, 0, 0.3, false); }
+  X.scatter(() => lkBarricade(), 8, { r: 1.4, sep: 16, solid: true });
+  X.scatter(() => lkRoadSign(), 8, { r: 0.7, sep: 20, solid: true });
+  X.scatter(() => lkArrowBoard(), 2, { r: 1.6, sep: 50, solid: true });
+  X.scatter(() => lkLamp(5.6, 0xe8782a, 0xfff0b0), 6, { r: 0.5, sep: 26, solid: true });
+};
+
+LOOK.flying_moai = (X) => {                                   // an island of stone: small moai, tiki torches, palms
+  X.scatter((i) => lkMoaiSmall(0x7d756a, 0.7 + (i % 3) * 0.2), 8, { r: 1.6, sep: 16, solid: true });
+  X.scatter(() => lkTorch(0x5a3a22), 10, { r: 0.4, sep: 14, solid: true });
+  X.scatter(() => lkPalm(0x8a6a3a, 0x3a9a8a), 7, { r: 1.2, sep: 18 });
+  X.scatter(() => lkBoulder(0x948e80, 1.4), 6, { r: 1.6, sep: 18, solid: true });
+};
+
+LOOK.big_arena = (X) => {                                     // a fortress yard: banners, braziers, carts, wells, a catapult
+  X.scatter((i) => lkBanner(i % 2 ? 0xa81c1c : 0x1c4a8a, 6), 8, { r: 0.8, sep: 26, solid: true });
+  X.scatter(() => lkBrazier(true), 10, { r: 0.8, sep: 20, solid: true });
+  X.scatter(() => lkCart(), 3, { r: 2.0, sep: 40, solid: true });
+  X.scatter(() => lkWell(), 2, { r: 1.6, sep: 60, solid: true });
+  X.scatter(() => lkCatapult(), 2, { r: 2.6, sep: 70, solid: true });
+  X.scatter(() => lkCrateStack(0x7a6a4a, 2), 4, { r: 2.0, sep: 30, solid: true });
+};
+
+LOOK.super_arena = (X) => {                                   // two bases: tents, masts, flags, helipads, trucks, drums
+  X.scatter(() => lkTentMil(), 8, { r: 3.4, sep: 22, solid: true });
+  X.scatter(() => lkMast(18, 0xff3a2a), 3, { r: 0.6, sep: 70, solid: true });
+  X.scatter(() => lkFlag(0x2a5aa8, 12), 2, { r: 0.6, sep: 100, solid: true });
+  X.scatter(() => lkHelipad(6), 2, { r: 6.2, sep: 80 });
+  X.scatter(() => lkJeep(0x5a6a3a), 4, { r: 2.2, sep: 34, solid: true });
+  X.scatter(() => lkTruck(), 2, { r: 3.4, sep: 60, solid: true });
+  X.scatter(() => lkDrums(3, [0x4a5a3a, 0x6a5a3a]), 6, { r: 1.2, sep: 24, solid: true });
+  X.scatter(() => lkHedgehog(), 8, { r: 1.2, sep: 20, solid: true });
 };
 
 
