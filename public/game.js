@@ -5478,7 +5478,9 @@ function playerFeetY() { return camera.position.y - (window._crouchEye || PLAYER
 // Is there floor under (x, z)? Everywhere, except on a map with a void edge, where it stops at the ground's end.
 function floorExistsAt(x, z) {
   const v = MAP_VOID[activeMapName];
-  return !v || (Math.abs(x) <= v.halfX && Math.abs(z) <= v.halfZ);
+  if (!v) return true;
+  if (v.rects) { for (const r of v.rects) if (x >= r.x0 && x <= r.x1 && z >= r.z0 && z <= r.z1) return true; return false; }   // a harbour: islands of ground
+  return Math.abs(x) <= v.halfX && Math.abs(z) <= v.halfZ;
 }
 // A surface above 14 m is not ground -- that is how a wall top, a roof or a stack stops counting as a floor. The
 // outskirts' towers are built to be stood on and say so with box.tall.
@@ -5665,7 +5667,7 @@ var MAP_BOT_BOUNDS = {}, MAP_VOID = {};
 // Every map that can be played, and the subset the random draw skips (#66).
 // Mirrors server.js — MAP_IDS and THIN_MAPS have to stay identical there
 // (CLAUDE.md #4), because the server picks the map and the client honours it.
-const MAP_IDS = ['blank', 'urban', 'warehouse', 'forest', 'vietnam', 'volcano', 'cyber', 'desert', 'tundra', 'space', 'airport', 'trenches', 'chernobyl', 'refinery', 'skydock', 'sewer', 'gravity_lab', 'glassworks', 'carrier', 'overgrowth', 'orbital_station', 'foundry', 'carnival', 'biosphere', 'lockdown', 'studio', 'temple', 'holiday', 'labyrinth', 'arena', 'opera', 'doomsday', 'train', 'dreamscape', 'pearl_harbor', 'titanic', 'supermarket', 'pyongyang', 'traffic_cone_republic', 'flying_moai', 'big_arena', 'super_arena', 'storm_pier', 'pinball_arcade', 'laser_vault', 'cargo_belts', 'gale_peaks', 'magma_rise'];
+const MAP_IDS = ['blank', 'urban', 'warehouse', 'forest', 'vietnam', 'volcano', 'cyber', 'desert', 'tundra', 'space', 'airport', 'trenches', 'chernobyl', 'refinery', 'skydock', 'sewer', 'gravity_lab', 'glassworks', 'carrier', 'overgrowth', 'orbital_station', 'foundry', 'carnival', 'biosphere', 'lockdown', 'studio', 'temple', 'holiday', 'labyrinth', 'arena', 'opera', 'doomsday', 'train', 'dreamscape', 'pearl_harbor', 'titanic', 'supermarket', 'pyongyang', 'traffic_cone_republic', 'flying_moai', 'big_arena', 'super_arena', 'big_harbor', 'storm_pier', 'pinball_arcade', 'laser_vault', 'cargo_belts', 'gale_peaks', 'magma_rise'];
 const THIN_MAPS = new Set([]);
 
 const MAP_COLLIDERS = {};
@@ -10864,6 +10866,7 @@ registerMap('br_arena');
 // being true, and #66 planned around it (#69).
 registerMap('big_arena');
 registerMap('super_arena');
+registerMap('big_harbor');
 function buildBrArenaMap() {
   const m = 'br_arena';
   const SIZE = 250; // 250x250 — 6x bigger than standard maps
@@ -11405,6 +11408,7 @@ const MAP_THEMES = {
   traffic_cone_republic: Object.assign(_T(0x6a6a6e, 0x55555a, 0xe8782a, 0xf4f4f0, 0xe8782a, 0x9a9aa0, 0xffffff, 0xe8782a, 0xb8c8d8, 'carnival', ['cones', 'cones', 'cars']), { keep: true }),
   flying_moai: Object.assign(_T(0x7a8a7a, 0x667666, 0x7a756a, 0x6a655a, 0x5a564c, 0x948e80, 0xb0a890, 0x3a9a8a, 0x9ad0e8, 'desert', ['rocks', 'pyramids']), { keep: true }),
   big_arena: Object.assign(_T(0x6b7058, 0x575c46, 0x8a8f7a, 0x6f745e, 0x5f654f, 0x959a84, 0xe0b83a, 0xc8402a, 0xa0c0d8, 'industrial', ['crates', 'sandbags', 'cars']), { keep: true }),
+  big_harbor: Object.assign(_T(0x7c8082, 0x6c7073, 0x8a8d8e, 0x5e6468, 0x6a6f74, 0x8a6a42, 0xe0a82a, 0xc7502d, 0x8cc2ea, 'industrial', []), { keep: true }),
   super_arena: Object.assign(_T(0x58606a, 0x464d56, 0x7a848e, 0x5f6a75, 0x4a535c, 0x8a949e, 0x6ad0ff, 0xff6a3a, 0x8ab0d0, 'space', ['pods', 'crates', 'pylons']), { keep: true }),
   br_arena:     _T(0x5a7440, 0x4a6234, 0x8b7355, 0x6a5540, 0x6a6a5a, 0x9a8a68, 0xd8b84a, 0xc8402a, 0x88aacc, 'nature', ['trees', 'cars', 'crates', 'sandbags']),
   // The Towers keep their own build: dressing only.
@@ -12399,6 +12403,7 @@ _ap('cyber', { ground: 'asphalt', amp: 0, mottle: [0.7, 0.8, 1], fx: ['rain', 'n
 _ap('space', { ground: 'metal', amp: 0, fx: ['stardust'], snd: { pad: 0.07, hum: [50, 0.05], ev: [['beep', 6, 14, 0.3]] } });
 _ap('orbital_station', { ground: 'metal', amp: 0, fx: ['dust'], snd: { pad: 0.04, hum: [60, 0.08], ev: [['beep', 5, 12, 0.3]] } });
 _ap('gravity_lab', { ground: 'tile', amp: 0, fx: ['glints'], snd: { pad: 0.05, hum: [60, 0.06], ev: [['beep', 5, 12, 0.3]] } });
+_ap('big_harbor', { fog: [70, 260], zen: 0x6aa2d4, sun: _SUN, cloud: _CL(9), fx: ['spray'], gusty: 0.5, snd: { waves: 0.35, wind: 0.25, windF: 520, ev: [['gull', 8, 16, 0.45], ['horn', 40, 80, 0.4]] } });
 _ap('super_arena', { ground: 'metal', amp: 0, fx: ['dust'], snd: { hum: [60, 0.06], ev: [['beep', 8, 18, 0.25]] } });
 _ap('dreamscape', { ground: 'snow', amp: 0.08, mottle: [1, 0.86, 1], fog: [60, 190], zen: 0x8a6ad0, sun: [0.9, 0.5, 0xffc8f0], cloud: _CL(10, 0xffe8ff), fx: ['glints', 'pollen'], gusty: 0.2, snd: { pad: 0.06, wind: 0.08, ev: [['chime', 2, 6, 0.35]] } });
 // an outdoor map is fog-free past what the camera can see: lift the fog out to where it ends
@@ -14075,8 +14080,193 @@ function buildSuperArenaLayout() {
   K.spawn({ x0: -34, x1: 34, z0: 116, z1: 124 }, { x0: -34, x1: 34, z0: -124, z1: -116 });
   MAP_GROUPS[name]._skyColor = 0x8ab0d0;
 }
+// ⚓ BIG HARBOR ═════════════════════════════════════════════════════════════════════════════════════════════════════
+// A sea channel 60 m wide down the middle of a 300 x 240 map, a quay on each side with a team's spawn behind it, and
+// three ways across: the deck of a ship moored in the channel (a ramp up to it from each quay), the piers that reach
+// out from both sides and stop short of each other, and the jib of a tower crane. The sea is not floor. Step off a
+// quay or a pier and you fall; under the sea level you are gone (MAP_VOID: the floor is the union of `rects`, so the
+// harbour is islands of ground, and everything standing over the water -- the ship, the gangways -- is a collider).
+//
+// Built for half the map and turned 180 degrees for the other half, so the two sides are the same for the two teams.
+// Floors are 6 m apart here (5.6 m of air), because 4.2 was too low to fight in.
+function _hbBuilding(K, x0, x1, z0, z1, o = {}) {
+  const floors = o.floors || 1, TOPH = 6.0, WH = 5.6, c = o.color || 0xd8d0bc, rc = o.roof || 0x8a8478, doors = o.doors || ['s'], B = o.base || 0, gaps = o.gaps || {};
+  const W = x1 - x0, D = z1 - z0, steps = 12, d = Math.min(1.1, (D - 4) / steps);
+  const west0 = !(doors.includes('w') && !doors.includes('e'));
+  for (let f = 0; f < floors; f++) {
+    const y0 = B + f * TOPH;
+    const along = (len, lo, door) => door
+      ? [K.door(lo + len / 2, 3.6, 4.2), K.win(lo + len * 0.2, 2.4, 1.3, 3.4), K.win(lo + len * 0.8, 2.4, 1.3, 3.4)]
+      : [K.win(lo + len * 0.25, 2.4, 1.3, 3.4), K.win(lo + len * 0.75, 2.4, 1.3, 3.4)];
+    K.wx(x0, x1, z0 + 0.4, 0.8, y0, WH, c, along(W, x0, f === 0 && doors.includes('n')));
+    K.wx(x0, x1, z1 - 0.4, 0.8, y0, WH, c, along(W, x0, f === 0 && doors.includes('s')));
+    K.wz(z0 + 0.8, z1 - 0.8, x0 + 0.4, 0.8, y0, WH, c, along(D - 1.6, z0 + 0.8, f === 0 && doors.includes('w') && !west0));
+    K.wz(z0 + 0.8, z1 - 0.8, x1 - 0.4, 0.8, y0, WH, c, along(D - 1.6, z0 + 0.8, f === 0 && doors.includes('e')));
+    const west = (f % 2 === 0) === west0, sx = west ? x0 + 2.6 : x1 - 2.6, foot = west ? z0 + 3.2 : z1 - 3.2, dir = west ? 'S' : 'N';
+    K.stairs(sx, foot, dir, TOPH, 3.2, 0x6a5a48, y0, d, TOPH / steps);
+    const run = (steps - 1) * d + 0.6;
+    const hole = { x0: sx - 1.7, x1: sx + 1.7, z0: west ? foot - 0.55 : foot - run, z1: west ? foot + run : foot + 0.55 };
+    _bkSlabHole(K, x0, x1, z0, z1, B + (f + 1) * TOPH, 0.4, f === floors - 1 ? rc : 0x9a8a72, hole);
+    K.box(x0 + W * 0.6, y0, (z0 + z1) / 2, 2.8, 1.0, 1.3, 0x7a5a38);
+    K.box(x0 + W * 0.45, y0, z0 + D * 0.3, 1.5, 1.5, 1.5, 0x8a6a3a, 0.3);
+  }
+  const top = B + floors * TOPH, gap = (list) => (list || []).map(v => ({ at: v, w: 4, sill: 0, top: 9 }));
+  K.wx(x0, x1, z0 + 0.15, 0.3, top, 1.0, rc, gap(gaps.n)); K.wx(x0, x1, z1 - 0.15, 0.3, top, 1.0, rc, gap(gaps.s));
+  K.wz(z0, z1, x0 + 0.15, 0.3, top, 1.0, rc, gap(gaps.w)); K.wz(z0, z1, x1 - 0.15, 0.3, top, 1.0, rc, gap(gaps.e));
+}
+function buildBigHarborLayout() {
+  const name = 'big_harbor', K = _bkBegin(name, 300, 240, 0x7c8082), G = MAP_GROUPS[name];
+  G.remove(G.children[G.children.length - 1]);        // the one sheet of ground _bkBegin laid: the sea runs through the middle
+  const rnd = _thRng(name + ':layout');
+  const C = { quay: 0x8a8d8e, wet: 0x5e6468, plank: 0x8a6a42, steel: 0x4c5662, dark: 0x2b3038, red: 0x7a201c, hull: 0x2a3139, white: 0xdedcd2,
+              yellow: 0xe0a82a, orange: 0xc7502d, wall: 0x9a9890, roofC: 0x4a4e52, rust: 0x8a5a3a, rail: 0xb8c0c4 };
+  const BOX = [0xb5382a, 0x2a5a9a, 0x3a7a4a, 0xd8a02a, 0x7a7e84, 0x8a4a2a, 0xe8e0c8, 0x5a3a7a, 0x2a8a8a];
+  const floor = [];
+  const plane = (x0, x1, z0, z1, color, rect = true, y = 0) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, z1 - z0), new THREE.MeshLambertMaterial({ color }));
+    m.rotation.x = -Math.PI / 2; m.position.set((x0 + x1) / 2, y, (z0 + z1) / 2); G.add(m);
+    if (rect) floor.push({ x0, x1, z0, z1 });
+  };
+  const deco = (x0, x1, y0, y1, z0, z1, color) => {   // for the eye only
+    const m = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0), new THREE.MeshLambertMaterial({ color }));
+    m.position.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2); m.userData.mapStatic = true; G.add(m);
+  };
+  // the sea: below the quay, drawn out to the horizon
+  const sea = new THREE.Mesh(new THREE.PlaneGeometry(1600, 1600), new THREE.MeshPhongMaterial({ color: 0x1f6a94, shininess: 70, specular: 0x7fb0d0 }));
+  sea.rotation.x = -Math.PI / 2; sea.position.y = -1.6; sea.userData.keepOutside = true; G.add(sea);
+
+  // ── one side of the harbour: south, z > 0. sz is +1 for it and -1 for the same thing turned round for the other team ──
+  const side = (sz) => {
+    const fx = sz, R = { n: 's', s: 'n', e: 'w', w: 'e' }, doorsOf = (l) => (sz > 0 ? l : l.map(d => R[d]));
+    const r = (a, b) => [Math.min(a, b), Math.max(a, b)];
+    const bx = (x, y0, z, w, h, d, c, rot = 0) => K.box(fx * x, y0, sz * z, w, h, d, c, rot);
+    const wx = (x0, x1, z, t, y0, h, c, open) => { const [a, b] = r(fx * x0, fx * x1); return K.wx(a, b, sz * z, t, y0, h, c, (open || []).map(o => ({ ...o, at: fx * o.at }))); };
+    const wz = (z0, z1, x, t, y0, h, c, open) => { const [a, b] = r(sz * z0, sz * z1); return K.wz(a, b, fx * x, t, y0, h, c, (open || []).map(o => ({ ...o, at: sz * o.at }))); };
+    const slab = (x0, x1, z0, z1, top, th, c) => { const [a, b] = r(fx * x0, fx * x1), [e, f] = r(sz * z0, sz * z1); return K.slab(a, b, e, f, top, th, c); };
+    const pl = (x0, x1, z0, z1, c, rect = true, y = 0) => { const [a, b] = r(fx * x0, fx * x1), [e, f] = r(sz * z0, sz * z1); plane(a, b, e, f, c, rect, y); };
+    const dc = (x0, x1, y0, y1, z0, z1, c) => { const [a, b] = r(fx * x0, fx * x1), [e, f] = r(sz * z0, sz * z1); deco(a, b, y0, y1, e, f, c); };
+    const building = (x0, x1, z0, z1, o) => { const [a, b] = r(fx * x0, fx * x1), [e, f] = r(sz * z0, sz * z1); _hbBuilding(K, a, b, e, f, { ...o, doors: doorsOf(o.doors || ['s']) }); };
+    const frame = (x, z, ux, uz) => _osFrame(K, fx * x, sz * z, ux * sz, uz * sz);
+    const P = { main: C.yellow, acc: C.white, conc: C.quay, dark: C.dark, rock: C.wet };
+
+    // the quay: ground, a darker lip, the face down to the water, bollards
+    pl(-150, 150, 30, 120, C.quay); pl(-150, 150, 30, 33, C.wet, false, 0.02);
+    dc(-150, 150, -1.6, 0, 29.4, 30, C.wet); dc(-150.6, -150, -1.6, 0, 29.4, 120, C.wet); dc(150, 150.6, -1.6, 0, 29.4, 120, C.wet);
+    for (let x = -144; x <= 144; x += 12) if (Math.abs(Math.abs(x) - 26) > 5) bx(x, 0, 31.6, 0.7, 0.8, 0.7, C.dark);
+    // two piers reaching out into the channel, planks, a bollard each 8 m, a tug moored to each
+    for (const [px0, px1] of [[-100, -86], [48, 62]]) {
+      pl(px0, px1, -14, 30, C.plank);
+      dc(px0 - 0.5, px0, -1.6, 0, -14, 30, C.wet); dc(px1, px1 + 0.5, -1.6, 0, -14, 30, C.wet); dc(px0 - 0.5, px1 + 0.5, -1.6, 0, -14.5, -14, C.wet);
+      for (let z = -10; z <= 26; z += 8) { bx(px0 + 0.8, 0, z, 0.6, 0.8, 0.6, C.dark); bx(px1 - 0.8, 0, z, 0.6, 0.8, 0.6, C.dark); }
+      bx((px0 + px1) / 2, 0, -12, 6, 1.0, 1.2, C.rust);                                           // a stack of pallets at the tip
+      const tx = px1 + 3.5;                                                                         // the tug
+      bx(tx, -1.2, 6, 5, 2.6, 15, 0x28506e); bx(tx, 1.4, 9, 3.6, 2.4, 5.5, C.white); bx(tx, 3.8, 9, 3.0, 0.4, 4.6, C.red);
+    }
+    // the container terminal, west: a block of stacks, two with a stair on to them, and a gantry crane over the aisle
+    const stacks = [];
+    for (let row = 0; row < 5; row++) for (let col = 0; col < 6; col++) {
+      const x = -140 + col * 14.5, z = 74 + row * 5.6;
+      const r = rnd();
+      if (r < 0.18 || (x > -111 && x < -80 && z > 76 && z < 99)) continue;                       // (the stack you can climb stands there)
+      stacks.push([x, z, 1 + Math.floor(rnd() * 3)]);
+    }
+    for (const [x, z, n] of stacks) for (let i = 0; i < n; i++) bx(x + (i ? (rnd() - 0.5) * 0.5 : 0), i * 2.6, z, 12, 2.6, 2.6, BOX[Math.floor(rnd() * BOX.length)]);
+    for (let col = 2; col < 5; col++) if (rnd() < 0.8) { const n = 1 + Math.floor(rnd() * 2); for (let i = 0; i < n; i++) bx(-134 + col * 14.5, i * 2.6, 40, 12, 2.6, 2.6, BOX[Math.floor(rnd() * BOX.length)]); }
+    { const F = frame(-98, 86, 0, -1); _OS_KITS.stack(F, P); }                                      // a stack you can climb, at the back
+    {                                                                                                // the gantry crane: four legs and a walk across the top
+      const X = -92, Z = 58, F = frame(X, Z, -1, 0), top = 13.6;
+      for (const a of [-14, 14]) for (const b of [-6, 6]) F.box(a - 0.8, a + 0.8, b - 0.8, b + 0.8, 0, top, C.yellow);
+      for (const b of [-6, 6]) F.box(-15.6, 15.6, b - 1.2, b + 1.2, top - 0.6, 0.6, C.yellow);
+      for (const a of [-14, 14]) F.box(a - 1.2, a + 1.2, -6, 6, top - 0.6, 0.6, C.yellow);
+      F.deco(-4, 4, -1.2, 1.2, top, 2.0, C.orange);                                                 // the trolley
+      F.deco(-0.2, 0.2, -0.2, 0.2, top - 8, 7.6, C.dark); F.deco(-1.2, 1.2, -1.2, 1.2, top - 9.6, 1.6, C.red);   // hook line and block
+      const cl = _osClimb(F, { u0: -17, v0: 8.0, levels: 3, rise: top / 3, c: C.dark, lc: C.yellow,
+        attach: k => (k === 2 ? { u0: -15.6, u1: 15.6, vEdge: 7.2 } : null) });
+      { const [px, pz] = F.W(0, -6); K.poi('gantry', px, pz, top); }
+    }
+    // the harbour master: three floors, the radar on the roof
+    building(-14, 14, 50, 72, { floors: 3, color: C.white, roof: 0x7a2a22, doors: ['n', 's', 'e', 'w'] });
+    bx(0, 18.4, 61, 0.4, 6, 0.4, C.dark); bx(0, 22.6, 61, 5, 0.3, 0.8, C.dark);
+    for (const x of [-34, 34]) { bx(x, 0, 62, 14, 5.6, 8, C.wall); slab(x - 7, x + 7, 58, 66, 6.0, 0.4, C.roofC); }   // two sheds
+    // the warehouses, east: 40 x 26, a mezzanine each side and a bridge across, the roof by a stair outside
+    const warehouse = (x0, x1, z0, z1, tint) => {
+      const cx = (x0 + x1) / 2, H = 9;
+      wx(x0, x1, z0 + 0.4, 0.8, 0, H, tint, [K.door(cx - 8, 6, 5.2), K.door(cx + 8, 6, 5.2), K.win(cx - 18, 2.4, 4.6, 7.4), K.win(cx + 18, 2.4, 4.6, 7.4)]);
+      wx(x0, x1, z1 - 0.4, 0.8, 0, H, tint, [K.door(cx, 7, 5.6), K.win(cx - 16, 2.4, 4.6, 7.4), K.win(cx + 16, 2.4, 4.6, 7.4)]);
+      wz(z0 + 0.8, z1 - 0.8, x0 + 0.4, 0.8, 0, H, tint, [K.door((z0 + z1) / 2, 5, 4.6)]);
+      wz(z0 + 0.8, z1 - 0.8, x1 - 0.4, 0.8, 0, H, tint, [K.door((z0 + z1) / 2, 5, 4.6)]);
+      slab(x0, x1, z0, z1, H + 0.4, 0.4, C.roofC);
+      slab(x0 + 0.8, x1 - 0.8, z0 + 0.8, z0 + 6, 5.0, 0.4, C.steel); slab(x0 + 0.8, x1 - 0.8, z1 - 6, z1 - 0.8, 5.0, 0.4, C.steel);
+      slab(cx - 1.6, cx + 1.6, z0 + 6, z1 - 6, 5.0, 0.4, C.steel);                               // the bridge across the hall
+      wx(x0 + 0.8, x1 - 0.8, z0 + 6.15, 0.3, 5.0, 1.1, C.rail); wx(x0 + 0.8, x1 - 0.8, z1 - 6.15, 0.3, 5.0, 1.1, C.rail);
+      K.stairs(fx * (x0 + 3), sz * (z0 + 14.5), sz > 0 ? 'N' : 'S', 5.0, 3, C.steel, 0, 0.9, 0.5);
+      K.stairs(fx * (x1 - 3), sz * (z1 - 14.5), sz > 0 ? 'S' : 'N', 5.0, 3, C.steel, 0, 0.9, 0.5);
+      for (const x of [cx - 12, cx + 12]) for (const z of [(z0 + z1) / 2 - 2, (z0 + z1) / 2 + 2]) bx(x, 0, z, 3, 3.4, 8, C.rust);
+      const F = frame(cx, (z0 + z1) / 2, 1, 0);                                                    // the roof, by two flights on the south wall
+      _osClimb(F, { u0: -8, v0: (z1 - z0) / 2 + 0.4, levels: 2, rise: (H + 0.4) / 2, c: C.steel, lc: C.quay,
+        attach: k => (k === 1 ? { u0: -(x1 - x0) / 2, u1: (x1 - x0) / 2, vEdge: (z1 - z0) / 2 } : null) });
+    };
+    warehouse(52, 92, 46, 72, 0x8a8478); warehouse(104, 144, 46, 72, 0x7a828a);
+    // the tank farm behind them, tanks joined at the top by a catwalk with a stair up
+    for (const x of [64, 96, 128]) { bx(x, 0, 96, 16, 11, 12, C.quay); dc(x - 7, x + 7, 11, 11.8, 91, 101, C.wet); }
+    for (const x of [80, 112]) slab(x - 8, x + 8, 94.8, 97.2, 11.0, 0.4, C.rail);
+    { const F = frame(96, 96, 1, 0); _osClimb(F, { u0: -8, v0: 6.6, levels: 2, rise: 5.5, c: C.steel, lc: C.quay, attach: k => (k === 1 ? { u0: -8, u1: 8, vEdge: 6 } : null) }); }
+    for (const [x, z] of [[58, 84], [70, 108], [90, 84], [122, 84], [140, 100]]) addExplosiveBarrel(name, fx * x, sz * z, 0xcc4422);
+    // the rail yard behind the harbour master: cars in two rows with gaps
+    for (const z of [82, 89]) for (let x = -58; x <= 42; x += 17) { if (rnd() < 0.2) continue; bx(x + rnd() * 2, 0.6, z, 14, 3.2, 3, BOX[Math.floor(rnd() * BOX.length)]); bx(x, 0, z, 12, 0.6, 2.2, C.dark); }
+    // spawn: two screens in front of it, a row of crates behind
+    wx(-32, -10, 97, 1.2, 0, 3.8, C.wall); wx(10, 32, 97, 1.2, 0, 3.8, C.wall);
+    for (const x of [-26, -8, 8, 26]) bx(x, 0, 118, 3, 1.4, 1.4, C.rust);
+    // the tower crane at the quay's edge, its jib out over the water (the same one as the outskirts have)
+    { const F = frame(-58, 42, 0, -1); _OS_KITS.crane(F, P); }
+    // the lighthouse: the west end of the quay, the whole map to look over
+    { const F = frame(-136, 38, 1, 0); _OS_KITS.spire(F, { main: C.white, acc: C.red, conc: C.quay, dark: C.dark, rock: C.wet }); }
+    // the tanker: moored along the east end of the quay, a stair on to her from the quay, a catwalk down her middle
+    const tx0 = 102, tx1 = 148;
+    bx((tx0 + tx1) / 2, -1.6, 20.5, tx1 - tx0, 4.8, 17, C.hull); bx((tx0 + tx1) / 2, -1.6, 20.5, tx1 - tx0, 2.0, 17.4, C.red);
+    bx(tx0 - 3.5, -1.6, 20.5, 8, 4.8, 9, C.hull);
+    bx(142, 3.2, 20.5, 12, 0.6, 15, C.steel);
+    building(134, 147, 14, 27, { floors: 2, base: 3.2, color: C.white, roof: C.red, doors: ['n', 's', 'w'] });
+    for (const [x, z] of [[116, 15.5], [116, 25.5], [124, 25.5]]) bx(x, 3.2, z, 8, 2.6, 7, 0x6a6e72);   // the tanks' domes, either side of the catwalk
+    slab(106, 130, 19.2, 21.8, 5.0, 0.4, C.rail);                                                 // the catwalk
+    K.stairs(fx * 104.4, sz * 20.5, sz > 0 ? 'E' : 'W', 1.8, 2.4, C.steel, 3.2, 0.9, 0.45);       // up to it from the deck's bow end
+    for (const x of [108, 130]) K.stairs(fx * x, sz * 34.5, sz > 0 ? 'N' : 'S', 3.2, 3, C.steel, 0, 1.0, 3.2 / 7);   // her gangways
+    // a few things to stand behind along the quay
+    for (const [x, z] of [[-60, 40], [-20, 40], [22, 40], [40, 46], [-46, 50], [4, 44]]) { bx(x, 0, z, 2.4, 2.2, 2.4, C.rust); bx(x + 2.8, 0, z + 0.8, 2, 1.8, 2, 0x6a5a3a); }
+  };
+  side(1); side(-1);
+
+  // ── the ship in the channel: the same at both ends, a house amidships ──
+  const hullBox = (x, w) => K.box(x, -1.6, 0, w, 5.6, 18, C.hull);
+  K.box(0, -1.6, 0, 126, 2.4, 18.4, C.red); K.box(0, 0.8, 0, 126, 3.2, 18, C.hull);
+  for (const s of [-1, 1]) { K.box(s * 67, -1.6, 0, 8, 5.6, 11, C.hull); K.box(s * 73.5, -1.6, 0, 5, 5.6, 5, C.hull); }
+  const rampXs = [-26, 26];
+  K.wx(-63, 63, -8.85, 0.3, 4.0, 1.1, C.rail, rampXs.map(x => ({ at: x, w: 7, sill: 0, top: 9 }))); K.wx(-63, 63, 8.85, 0.3, 4.0, 1.1, C.rail, rampXs.map(x => ({ at: x, w: 7, sill: 0, top: 9 })));
+  _hbBuilding(K, -12, 12, -8, 8, { floors: 3, base: 4.0, color: C.white, roof: C.red, doors: ['n', 's', 'e', 'w'] });
+  K.box(0, 22.0, 0, 5, 6, 5, C.red); K.box(0, 27.2, 0, 5.4, 0.8, 5.4, C.dark);                       // the funnel
+  for (const s of [-1, 1]) {
+    for (const x of [18, 32, 46, 58]) for (const z of [-5.2, 5.2]) {
+      if (rnd() < 0.15) continue;
+      const n = 1 + Math.floor(rnd() * 2);
+      for (let i = 0; i < n; i++) K.box(s * x, 4.0 + i * 2.6, z, 12, 2.6, 2.6, BOX[Math.floor(rnd() * BOX.length)]);
+    }
+    K.box(s * 40, 4.0, 7.6, 0.8, 9, 0.8, C.yellow); K.box(s * 40 + s * 4, 12.4, 7.6, 9, 0.5, 0.6, C.yellow);   // a deck crane
+  }
+  // the ramps from both quays, up to the deck: nothing in the channel is floor, so these are what you walk on
+  for (const x of rampXs) {
+    addRamp(name, x, 30, 0, -1, { width: 5, rise: 4.0, run: 21, landing: 0, color: 0x6a6e72, lipColor: 0x6a6e72 });
+    addRamp(name, x, -30, 0, 1, { width: 5, rise: 4.0, run: 21, landing: 0, color: 0x6a6e72, lipColor: 0x6a6e72 });
+  }
+  K.poi('ship deck', 40, 0, 4.0);
+  // everything up there is meant to be stood on
+  for (const c of MAP_COLLIDERS[name]) if (c.max.y > 14) c.tall = true;
+  K.spawn({ x0: -34, x1: 34, z0: 104, z1: 114 }, { x0: -34, x1: 34, z0: -114, z1: -104 });
+  MAP_BOT_BOUNDS[name] = { halfX: 150, halfZ: 120 };
+  MAP_VOID[name] = { halfX: 150, halfZ: 120, rects: floor, killY: -6, far: 90 };
+  MAP_GROUPS[name]._skyColor = 0x8cc2ea;
+}
 Object.assign(_BESPOKE, { temple: buildTempleLayout, arena: buildArenaLayout, biosphere: buildBiosphereLayout, dreamscape: buildDreamscapeLayout, pyongyang: buildPyongyangLayout,
-  traffic_cone_republic: buildTrafficConeLayout, flying_moai: buildMoaiLayout, big_arena: buildBigArenaLayout, super_arena: buildSuperArenaLayout });
+  traffic_cone_republic: buildTrafficConeLayout, flying_moai: buildMoaiLayout, big_arena: buildBigArenaLayout, super_arena: buildSuperArenaLayout, big_harbor: buildBigHarborLayout });
 
 function buildForestIdentityLayout() {
   const name = 'forest', K = _bkBegin(name, 140, 140, 0x304c28);
@@ -14182,7 +14372,7 @@ function refineMapIdentity(name) {
     const long = Math.max(w, d), thin = Math.min(w, d), alongX = w > d;
     const nature = ['forest', 'vietnam', 'overgrowth', 'biosphere', 'holiday'].includes(name);
     const masonry = ['temple', 'desert', 'arena', 'big_arena', 'labyrinth', 'flying_moai', 'doomsday'].includes(name);
-    const ships = ['titanic', 'carrier', 'pearl_harbor', 'skydock'].includes(name);
+    const ships = ['titanic', 'carrier', 'pearl_harbor', 'skydock', 'big_harbor'].includes(name);
     if (nature && h > 6 && w < 3.5 && d < 3.5) {
       for (const x of [-w * 0.3, w * 0.3]) host(x, 0, d / 2 + 0.015, 0.09, h * 0.88, 0.03, _thShade(c, 0.65));
     }
@@ -14430,7 +14620,7 @@ function mapSpawnSightlineSamples(r) {
 
 function addThemedCombatStores(name) {
   const themes = {
-    warehouse: 'munitions', refinery: 'fuel', pearl_harbor: 'naval', carrier: 'naval',
+    warehouse: 'munitions', refinery: 'fuel', pearl_harbor: 'naval', carrier: 'naval', big_harbor: 'naval',
     urban: 'munitions', airport: 'fuel', train: 'munitions', foundry: 'fuel',
     chernobyl: 'fuel', lockdown: 'munitions', sewer: 'fuel', skydock: 'naval',
     pyongyang: 'munitions', glassworks: 'munitions', construction: 'fuel',
@@ -14489,6 +14679,176 @@ function raiseThemedMapBoundaries(name) {
   }
 }
 
+// (The landmark kits -- _osFrame, _osClimb, _OS_KITS -- live here, above initMapThemes, because the Big Harbor's layout is
+//  built from them when the themes run at load; the OUTSKIRTS table that uses them is further down.)
+// A frame of reference for one landmark: u runs from its middle toward the middle of the map, v is 90 degrees round,
+// both axis-aligned so every piece is an ordinary box. box() is solid, deco() is for the eye only.
+function _osFrame(K, X, Z, ux, uz) {
+  const vx = -uz, vz = ux, name = K.name, alongX = Math.abs(ux) > 0.5;
+  const W = (u, v) => [X + ux * u + vx * v, Z + uz * u + vz * v];
+  const dirOf = (a) => {
+    const s = a[1] === '+' ? 1 : -1, wx = a[0] === 'u' ? ux * s : vx * s, wz = a[0] === 'u' ? uz * s : vz * s;
+    return wx > 0.5 ? 'E' : wx < -0.5 ? 'W' : wz > 0.5 ? 'S' : 'N';
+  };
+  const vec = (a) => { const s = a[1] === '+' ? 1 : -1; return a[0] === 'u' ? [ux * s, uz * s] : [vx * s, vz * s]; };
+  const dims = (u0, u1, v0, v1) => { const cu = (u0 + u1) / 2, cv = (v0 + v1) / 2, [cx, cz] = W(cu, cv); return alongX ? [cx, cz, u1 - u0, v1 - v0] : [cx, cz, v1 - v0, u1 - u0]; };
+  const F = {
+    W, vec, X, Z, ux, uz,
+    box(u0, u1, v0, v1, y0, h, c) { const [cx, cz, w, d] = dims(u0, u1, v0, v1); return K.box(cx, y0, cz, w, h, d, c); },
+    deco(u0, u1, v0, v1, y0, h, c) {
+      const [cx, cz, w, d] = dims(u0, u1, v0, v1);
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshLambertMaterial({ color: c }));
+      m.position.set(cx, y0 + h / 2, cz); m.userData.mapStatic = true; MAP_GROUPS[name].add(m); return m;
+    },
+    // a thin bar from (u0, y0) to (u1, y1) at v, turned in the plane of u and up: a cable or a brace
+    bar(u0, y0, u1, y1, v, t, c) {
+      const L = Math.hypot(u1 - u0, y1 - y0), [cx, cz] = W((u0 + u1) / 2, v);
+      const m = new THREE.Mesh(new THREE.BoxGeometry(alongX ? L : t, t, alongX ? t : L), new THREE.MeshLambertMaterial({ color: c }));
+      m.position.set(cx, (y0 + y1) / 2, cz); m.userData.mapStatic = true;
+      const a = Math.atan2(y1 - y0, u1 - u0);
+      m.rotation.order = 'YXZ';
+      if (alongX) m.rotation.z = ux > 0 ? a : -a; else m.rotation.x = uz > 0 ? -a : a;
+      MAP_GROUPS[name].add(m); return m;
+    },
+    stairs(u, v, a, rise, width, c, y0, depth, step) { const [x, z] = W(u, v); return K.stairs(x, z, dirOf(a), rise, width, c, y0, depth, step); },
+  };
+  return F;
+}
+// A switchback stair: flights climb toward +u and then -u, side by side in two lanes, with a landing at every turn.
+// `attach(k)` says what the landing at the top of flight k has to meet ({u0, u1, vEdge}: the near edge of a floor at
+// that height) -- the landing is reached in over it and, if it ends short of the floor, a plank carries on.
+function _osClimb(F, o) {
+  const lane = o.lane || 2.2, depth = o.depth || 0.9, n = Math.max(2, Math.round(o.rise / 0.45)), step = o.rise / n;
+  const landings = [];
+  let u = o.u0, d = 1;
+  for (let k = 0; k < o.levels; k++) {
+    const vc = o.v0 + (k % 2) * lane + lane / 2, y0 = k * o.rise, level = y0 + o.rise;
+    F.stairs(u, vc, d > 0 ? 'u+' : 'u-', o.rise, lane, o.c, y0, depth, step);
+    const edge = u + d * (n * depth - depth / 2), a = Math.min(edge, edge + d * 3), b = Math.max(edge, edge + d * 3);
+    const at = o.attach ? o.attach(k) : null;
+    const lv0 = at ? at.vEdge - 1.6 : o.v0 - 0.3, lv1 = o.v0 + 2 * lane;
+    F.box(a, b, lv0, lv1, level - 0.4, 0.4, o.lc);
+    if (at) {
+      if (b < at.u0) F.box(b - 0.1, at.u0 + 0.3, lv0, at.vEdge + 0.2, level - 0.4, 0.4, o.lc);
+      else if (a > at.u1) F.box(at.u1 - 0.3, a + 0.1, lv0, at.vEdge + 0.2, level - 0.4, 0.4, o.lc);
+    }
+    landings.push({ u0: a, u1: b, v0: lv0, v1: lv1, y: level });
+    u = edge + d * (3 - depth / 2); d = -d;
+  }
+  return { landings, top: landings[landings.length - 1], foot: { u: o.u0, v: o.v0 + lane / 2 } };
+}
+const _OS_KITS = {
+  // A tower crane. A stair up the side of the mast, then a jib you can walk out along over the arena, a counter-jib
+  // with its weights, a cab, and the mast carrying on above it to a head with cables down to both arms.
+  crane(F, P) {
+    const H = 13, R = H / 4;
+    F.box(-1.3, 1.3, -1.3, 1.3, 0, H, P.main);
+    const cl = _osClimb(F, { u0: -4, v0: 1.6, levels: 4, rise: R, c: P.dark, lc: P.main,
+      attach: k => (k === 3 ? { u0: -1.3, u1: 1.3, vEdge: 1.1 } : null) });
+    F.box(1.3, 25, -1.1, 1.1, H - 0.4, 0.4, P.main);                                  // jib
+    F.box(-13, -1.3, -1.1, 1.1, H - 0.4, 0.4, P.main);                                // counter-jib
+    // (nothing solid goes above 14 m: the ground code does not count a surface up there, so a block that high could
+    //  be jumped onto and fallen through. The upper parts of the cab and the weights are for the eye.)
+    F.box(-13, -9.6, -1.1, 1.1, H, 1.0, P.conc); F.box(-9.4, -6, -1.1, 1.1, H, 1.0, P.conc);
+    F.deco(-13, -9.6, -1.1, 1.1, H + 1.0, 0.6, P.conc); F.deco(-9.4, -6, -1.1, 1.1, H + 1.0, 0.6, P.conc);
+    F.box(-1.3, 1.3, -3.9, -1.3, H - 0.4, 0.4, P.dark);                               // cab floor
+    F.box(-1.3, 1.3, -3.9, -1.5, H, 1.0, P.acc);                                      // the cab
+    F.deco(-1.3, 1.3, -3.9, -1.5, H + 1.0, 1.6, P.acc);
+    F.deco(1.3, 1.5, -3.8, -1.6, H + 0.6, 1.2, 0x5a8fb8);                             // its window
+    F.deco(-0.45, 0.45, -0.45, 0.45, H, 11, P.main);                                  // mast head
+    F.deco(-1.3, 1.3, -0.15, 0.15, H + 11, 0.5, P.dark);
+    F.bar(0, H + 11, 25, H - 0.2, 0, 0.14, P.dark); F.bar(0, H + 11, -13, H - 0.2, 0, 0.14, P.dark);
+    F.deco(17.6, 19.0, -0.9, 0.9, H - 1.2, 1.2, P.dark);                              // trolley, hook line, hook
+    F.deco(18.2, 18.4, -0.1, 0.1, H - 6.6, 5.4, P.dark); F.deco(17.8, 18.8, -0.5, 0.5, H - 7.6, 1.0, P.acc);
+    return { foot: cl.foot, pois: [{ u: 24, v: 0, y: H }, { u: -4.5, v: 0, y: H }] };
+  },
+  // A lookout / water tower: four legs, a deck with a tank on it, and the stair up the side.
+  tower(F, P) {
+    const h = 9, R = h / 3;
+    for (const a of [-1, 1]) for (const b of [-1, 1]) F.box(a * 3 - 0.45, a * 3 + 0.45, b * 3 - 0.45, b * 3 + 0.45, 0, h - 0.4, P.main);
+    for (const y of [3, 6]) {
+      F.deco(-3.4, 3.4, -3.15, -2.85, y, 0.3, P.dark); F.deco(-3.4, 3.4, 2.85, 3.15, y, 0.3, P.dark);
+      F.deco(-3.15, -2.85, -3.4, 3.4, y, 0.3, P.dark); F.deco(2.85, 3.15, -3.4, 3.4, y, 0.3, P.dark);
+    }
+    F.box(-3.7, 3.7, -3.7, 3.7, h - 0.4, 0.4, P.dark);                                 // the deck
+    F.box(-1.6, 1.6, -1.6, 1.6, h, 3.4, P.conc);                                       // the tank
+    F.deco(-2.0, 2.0, -2.0, 2.0, h + 3.4, 0.5, P.acc);
+    F.deco(-3.7, 3.7, 3.55, 3.7, h, 1.0, P.acc); F.deco(-3.7, 3.7, -3.7, -3.55, h, 1.0, P.acc);   // rails
+    F.deco(-3.7, -3.55, -3.7, 3.7, h, 1.0, P.acc); F.deco(3.55, 3.7, -3.7, 3.7, h, 1.0, P.acc);
+    const cl = _osClimb(F, { u0: -9, v0: 3.9, levels: 3, rise: R, c: P.dark, lc: P.main,
+      attach: k => (k === 2 ? { u0: -3.7, u1: 3.7, vEdge: 3.7 } : null) });
+    return { foot: cl.foot, pois: [{ u: 2.6, v: 2.6, y: h }, { u: -2.6, v: -2.6, y: h }] };
+  },
+  // Shipping containers three high, stepped back, with the stair up the long side and a plank onto each tier.
+  stack(F, P) {
+    const cols = [0xb5382a, 0x2a5a9a, 0x3a7a4a, 0xd8a02a, 0x7a7e84, 0x8a4a2a], T = 2.6, off = Math.abs(Math.round(F.X + F.Z));
+    const rows = [[-2.6, 0, 2.6], [-1.3, 1.3], [0]];
+    rows.forEach((vs, t) => vs.forEach((v, i) => {
+      F.box(-6, 6, v - 1.2, v + 1.2, t * T, T, cols[(t * 3 + i + off) % cols.length]);
+      F.deco(-5.9, 5.9, v - 1.25, v + 1.25, t * T + T - 0.1, 0.1, P.dark);
+    }));
+    const edges = [3.8, 2.5, 1.2];
+    const cl = _osClimb(F, { u0: -9, v0: 4.2, levels: 3, rise: T, c: P.dark, lc: P.main, depth: 0.85,
+      attach: k => ({ u0: -6, u1: 6, vEdge: edges[k] }) });
+    return { foot: cl.foot, pois: [{ u: 0, v: 0, y: 3 * T }, { u: 5, v: 0, y: 3 * T }, { u: -5, v: 2.6, y: T }] };
+  },
+  // A half-built concrete frame: columns, three floors, a stair up one side, rebar sticking out of the top.
+  frame(F, P) {
+    const L = 4.2;
+    for (const a of [-7, 0, 7]) for (const b of [-7, 0, 7]) F.box(a - 0.5, a + 0.5, b - 0.5, b + 0.5, 0, 3 * L - 0.5, P.conc);
+    for (let f = 1; f <= 3; f++) F.box(-8, 8, -8, 8, f * L - 0.5, 0.5, P.conc);
+    F.box(-8, -3, 7.5, 8, L, 1.1, P.dark); F.box(3, 8, -8, -7.5, 2 * L, 1.1, P.dark);       // a wall or two for cover
+    F.box(-1.5, 1.5, -1.5, 1.5, 2 * L, 1.0, P.rock);                                        // a stack of blocks
+    for (const [a, b] of [[-7, -7], [7, -7], [-7, 7], [7, 7], [0, 0]]) F.deco(a - 0.05, a + 0.05, b - 0.05, b + 0.05, 3 * L, 2.4, P.dark);   // rebar
+    const cl = _osClimb(F, { u0: -14, v0: 8.2, levels: 3, rise: L, c: P.dark, lc: P.main,
+      attach: () => ({ u0: -8, u1: 8, vEdge: 8 }) });
+    return { foot: cl.foot, pois: [{ u: 0, v: 0, y: 3 * L }, { u: 6, v: -6, y: 2 * L }, { u: -6, v: -6, y: L }] };
+  },
+  // A tall spire: a stepped column 36 m high with a stair switchbacking up the side, ledges at every landing and a
+  // deck at the top with a mast above it. The one you climb to see the whole map from.
+  spire(F, P) {
+    const LV = 9, R = 4.0, TOP = LV * R;
+    F.box(-2.5, 2.5, -2.5, 2.5, 0, 12, P.main);
+    F.box(-1.8, 1.8, -1.8, 1.8, 12, 12, P.main);
+    F.box(-1.2, 1.2, -1.2, 1.2, 24, 12, P.main);
+    for (const y of [6, 18, 30]) F.deco(-2.9, 2.9, -2.9, 2.9, y, 0.4, P.acc);                  // bands up the shaft
+    const cl = _osClimb(F, { u0: -5.5, v0: 3.2, levels: LV, rise: R, c: P.dark, lc: P.conc,
+      attach: k => (k === LV - 1 ? { u0: -4.5, u1: 4.5, vEdge: 4.5 } : null) });
+    F.box(-4.5, 4.5, -4.5, 4.5, TOP - 0.5, 0.5, P.conc);                                     // the deck
+    for (const [a, b] of [[-4.4, -4.4], [4.4, -4.4], [-4.4, 4.4], [4.4, 4.4]]) F.deco(a - 0.1, a + 0.1, b - 0.1, b + 0.1, TOP, 1.1, P.acc);
+    F.deco(-4.5, 4.5, -4.5, -4.3, TOP + 1.0, 0.12, P.acc); F.deco(-4.5, -4.3, -4.5, 4.5, TOP + 1.0, 0.12, P.acc); F.deco(4.3, 4.5, -4.5, 4.5, TOP + 1.0, 0.12, P.acc);
+    F.box(-1.2, 1.2, -1.2, 1.2, TOP, 2.4, P.dark);                                           // a little control room on the deck
+    F.deco(-0.3, 0.3, -0.3, 0.3, TOP + 2.4, 9, P.dark);                                      // the mast
+    F.deco(-0.9, 0.9, -0.15, 0.15, TOP + 8, 0.3, P.acc);
+    return { foot: cl.foot, pois: [{ u: 3.2, v: 3.2, y: TOP }, { u: -3.2, v: -3.2, y: TOP }, { u: 3.5, v: 5, y: 5 * R }] };
+  },
+  // The bones of a tall building: six floors, columns, a stair up the side, rebar on top.
+  skeleton(F, P) {
+    const L = 4.4, N = 6;
+    for (const a of [-7, 0, 7]) for (const b of [-7, 0, 7]) F.box(a - 0.5, a + 0.5, b - 0.5, b + 0.5, 0, N * L - 0.5, P.conc);
+    for (let f = 1; f <= N; f++) {
+      F.box(-8, 8, -8, 8, f * L - 0.5, 0.5, P.conc);
+      F.deco(-8.05, 8.05, -8.05, -7.85, f * L - 0.4, 0.14, P.acc); F.deco(-8.05, 8.05, 7.85, 8.05, f * L - 0.4, 0.14, P.acc);   // an edge trim on each floor
+      F.deco(-8.05, -7.85, -7.85, 7.85, f * L - 0.4, 0.14, P.acc); F.deco(7.85, 8.05, -7.85, 7.85, f * L - 0.4, 0.14, P.acc);
+    }
+    for (const f of [2, 4]) F.box(-8, -2, 7.5, 8, f * L, 1.1, P.dark);
+    for (const [a, b] of [[-7, -7], [7, -7], [-7, 7], [7, 7], [0, 0]]) F.deco(a - 0.05, a + 0.05, b - 0.05, b + 0.05, N * L, 2.6, P.dark);
+    const cl = _osClimb(F, { u0: -14, v0: 8.2, levels: N, rise: L, c: P.dark, lc: P.main,
+      attach: () => ({ u0: -8, u1: 8, vEdge: 8 }) });
+    return { foot: cl.foot, pois: [{ u: 0, v: 0, y: N * L }, { u: 6, v: -6, y: 4 * L }, { u: -6, v: -6, y: 2 * L }] };
+  },
+  // A rock mesa: three terraces. A ramp up the first (you can slide down it), stairs up the next two.
+  mesa(F, P, K) {
+    F.box(-10, 10, -7, 7, 0, 3.0, P.rock);
+    F.box(-4, 4, -5, 5, 3.0, 3.0, P.conc);
+    F.box(-1.5, 1.5, -1.0, 1.0, 6.0, 2.4, P.rock);
+    const [rx, rz] = F.W(0, -13), [dx, dz] = F.vec('v+');
+    addRamp(K.name, rx, rz, dx, dz, { width: 5, rise: 3, run: 6, landing: 0, color: P.rock, landColor: P.rock, lipColor: P.rock });
+    F.stairs(9.2, 0, 'u-', 3.0, 3, P.conc, 3.0, 0.8, 3.0 / 7);                              // onto the second terrace
+    F.stairs(0, -4.6, 'v+', 2.4, 2.4, P.rock, 6.0, 0.8, 2.4 / 5);                           // onto the third... from the second
+    return { foot: { u: 0, v: -14 }, pois: [{ u: 0, v: 0, y: 8.4 }, { u: 8, v: 4, y: 3 }, { u: -7, v: 0, y: 3 }] };
+  },
+};
 function initMapThemes() {
   for (const name of Object.keys(MAP_THEMES)) {
     if (!MAP_GROUPS[name]) continue;
@@ -14649,7 +15009,7 @@ const EGG_LINES = {
   super_arena: ['tier 2 is tier 1 with extras', 'not a drill (a drill)', '@star'],
 };
 const EGG_CRANE = ['nice view', "don't look down", 'rope: 4 left', 'ahoy', 'tired of climbing', 'hi', 'shift ends at 5', 'hard hat: lost'];
-const EGG_SKIP = new Set(['blank', 'range', 'obby', 'm4_tower', 'm4_tower_big', 'm4_tower_super', 'storm_pier', 'pinball_arcade',
+const EGG_SKIP = new Set(['blank', 'range', 'obby', 'm4_tower', 'm4_tower_big', 'm4_tower_super', 'big_harbor', 'storm_pier', 'pinball_arcade',
   'laser_vault', 'cargo_belts', 'gale_peaks', 'magma_rise', 'br_arena', 'base_raid']);
 const EGG_FLOATING = new Set(['space', 'orbital_station', 'gravity_lab', 'dreamscape', 'flying_moai', 'cyber', 'super_arena']);
 // Hand-drawn glyphs: a few wobbly strokes in a 256 square.
@@ -15296,174 +15656,6 @@ const OUTSKIRTS = {
                   pal: { main: 0x8a6a3a, acc: 0xc8a050, conc: 0x8a8a84, dark: 0x3a3a3c, rock: 0x6a6a64 } },
   // a ship has no ground to carry on: the rails go and the edge of the deck is the edge
   carrier:      { m: 0, kit: [], pal: { main: 0x7a828a, acc: 0xd2452d, conc: 0x9aa0a6, dark: 0x3a4048, rock: 0x6a707a } },
-};
-// A frame of reference for one landmark: u runs from its middle toward the middle of the map, v is 90 degrees round,
-// both axis-aligned so every piece is an ordinary box. box() is solid, deco() is for the eye only.
-function _osFrame(K, X, Z, ux, uz) {
-  const vx = -uz, vz = ux, name = K.name, alongX = Math.abs(ux) > 0.5;
-  const W = (u, v) => [X + ux * u + vx * v, Z + uz * u + vz * v];
-  const dirOf = (a) => {
-    const s = a[1] === '+' ? 1 : -1, wx = a[0] === 'u' ? ux * s : vx * s, wz = a[0] === 'u' ? uz * s : vz * s;
-    return wx > 0.5 ? 'E' : wx < -0.5 ? 'W' : wz > 0.5 ? 'S' : 'N';
-  };
-  const vec = (a) => { const s = a[1] === '+' ? 1 : -1; return a[0] === 'u' ? [ux * s, uz * s] : [vx * s, vz * s]; };
-  const dims = (u0, u1, v0, v1) => { const cu = (u0 + u1) / 2, cv = (v0 + v1) / 2, [cx, cz] = W(cu, cv); return alongX ? [cx, cz, u1 - u0, v1 - v0] : [cx, cz, v1 - v0, u1 - u0]; };
-  const F = {
-    W, vec, X, Z, ux, uz,
-    box(u0, u1, v0, v1, y0, h, c) { const [cx, cz, w, d] = dims(u0, u1, v0, v1); return K.box(cx, y0, cz, w, h, d, c); },
-    deco(u0, u1, v0, v1, y0, h, c) {
-      const [cx, cz, w, d] = dims(u0, u1, v0, v1);
-      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshLambertMaterial({ color: c }));
-      m.position.set(cx, y0 + h / 2, cz); m.userData.mapStatic = true; MAP_GROUPS[name].add(m); return m;
-    },
-    // a thin bar from (u0, y0) to (u1, y1) at v, turned in the plane of u and up: a cable or a brace
-    bar(u0, y0, u1, y1, v, t, c) {
-      const L = Math.hypot(u1 - u0, y1 - y0), [cx, cz] = W((u0 + u1) / 2, v);
-      const m = new THREE.Mesh(new THREE.BoxGeometry(alongX ? L : t, t, alongX ? t : L), new THREE.MeshLambertMaterial({ color: c }));
-      m.position.set(cx, (y0 + y1) / 2, cz); m.userData.mapStatic = true;
-      const a = Math.atan2(y1 - y0, u1 - u0);
-      m.rotation.order = 'YXZ';
-      if (alongX) m.rotation.z = ux > 0 ? a : -a; else m.rotation.x = uz > 0 ? -a : a;
-      MAP_GROUPS[name].add(m); return m;
-    },
-    stairs(u, v, a, rise, width, c, y0, depth, step) { const [x, z] = W(u, v); return K.stairs(x, z, dirOf(a), rise, width, c, y0, depth, step); },
-  };
-  return F;
-}
-// A switchback stair: flights climb toward +u and then -u, side by side in two lanes, with a landing at every turn.
-// `attach(k)` says what the landing at the top of flight k has to meet ({u0, u1, vEdge}: the near edge of a floor at
-// that height) -- the landing is reached in over it and, if it ends short of the floor, a plank carries on.
-function _osClimb(F, o) {
-  const lane = o.lane || 2.2, depth = o.depth || 0.9, n = Math.max(2, Math.round(o.rise / 0.45)), step = o.rise / n;
-  const landings = [];
-  let u = o.u0, d = 1;
-  for (let k = 0; k < o.levels; k++) {
-    const vc = o.v0 + (k % 2) * lane + lane / 2, y0 = k * o.rise, level = y0 + o.rise;
-    F.stairs(u, vc, d > 0 ? 'u+' : 'u-', o.rise, lane, o.c, y0, depth, step);
-    const edge = u + d * (n * depth - depth / 2), a = Math.min(edge, edge + d * 3), b = Math.max(edge, edge + d * 3);
-    const at = o.attach ? o.attach(k) : null;
-    const lv0 = at ? at.vEdge - 1.6 : o.v0 - 0.3, lv1 = o.v0 + 2 * lane;
-    F.box(a, b, lv0, lv1, level - 0.4, 0.4, o.lc);
-    if (at) {
-      if (b < at.u0) F.box(b - 0.1, at.u0 + 0.3, lv0, at.vEdge + 0.2, level - 0.4, 0.4, o.lc);
-      else if (a > at.u1) F.box(at.u1 - 0.3, a + 0.1, lv0, at.vEdge + 0.2, level - 0.4, 0.4, o.lc);
-    }
-    landings.push({ u0: a, u1: b, v0: lv0, v1: lv1, y: level });
-    u = edge + d * (3 - depth / 2); d = -d;
-  }
-  return { landings, top: landings[landings.length - 1], foot: { u: o.u0, v: o.v0 + lane / 2 } };
-}
-const _OS_KITS = {
-  // A tower crane. A stair up the side of the mast, then a jib you can walk out along over the arena, a counter-jib
-  // with its weights, a cab, and the mast carrying on above it to a head with cables down to both arms.
-  crane(F, P) {
-    const H = 13, R = H / 4;
-    F.box(-1.3, 1.3, -1.3, 1.3, 0, H, P.main);
-    const cl = _osClimb(F, { u0: -4, v0: 1.6, levels: 4, rise: R, c: P.dark, lc: P.main,
-      attach: k => (k === 3 ? { u0: -1.3, u1: 1.3, vEdge: 1.1 } : null) });
-    F.box(1.3, 25, -1.1, 1.1, H - 0.4, 0.4, P.main);                                  // jib
-    F.box(-13, -1.3, -1.1, 1.1, H - 0.4, 0.4, P.main);                                // counter-jib
-    // (nothing solid goes above 14 m: the ground code does not count a surface up there, so a block that high could
-    //  be jumped onto and fallen through. The upper parts of the cab and the weights are for the eye.)
-    F.box(-13, -9.6, -1.1, 1.1, H, 1.0, P.conc); F.box(-9.4, -6, -1.1, 1.1, H, 1.0, P.conc);
-    F.deco(-13, -9.6, -1.1, 1.1, H + 1.0, 0.6, P.conc); F.deco(-9.4, -6, -1.1, 1.1, H + 1.0, 0.6, P.conc);
-    F.box(-1.3, 1.3, -3.9, -1.3, H - 0.4, 0.4, P.dark);                               // cab floor
-    F.box(-1.3, 1.3, -3.9, -1.5, H, 1.0, P.acc);                                      // the cab
-    F.deco(-1.3, 1.3, -3.9, -1.5, H + 1.0, 1.6, P.acc);
-    F.deco(1.3, 1.5, -3.8, -1.6, H + 0.6, 1.2, 0x5a8fb8);                             // its window
-    F.deco(-0.45, 0.45, -0.45, 0.45, H, 11, P.main);                                  // mast head
-    F.deco(-1.3, 1.3, -0.15, 0.15, H + 11, 0.5, P.dark);
-    F.bar(0, H + 11, 25, H - 0.2, 0, 0.14, P.dark); F.bar(0, H + 11, -13, H - 0.2, 0, 0.14, P.dark);
-    F.deco(17.6, 19.0, -0.9, 0.9, H - 1.2, 1.2, P.dark);                              // trolley, hook line, hook
-    F.deco(18.2, 18.4, -0.1, 0.1, H - 6.6, 5.4, P.dark); F.deco(17.8, 18.8, -0.5, 0.5, H - 7.6, 1.0, P.acc);
-    return { foot: cl.foot, pois: [{ u: 24, v: 0, y: H }, { u: -4.5, v: 0, y: H }] };
-  },
-  // A lookout / water tower: four legs, a deck with a tank on it, and the stair up the side.
-  tower(F, P) {
-    const h = 9, R = h / 3;
-    for (const a of [-1, 1]) for (const b of [-1, 1]) F.box(a * 3 - 0.45, a * 3 + 0.45, b * 3 - 0.45, b * 3 + 0.45, 0, h - 0.4, P.main);
-    for (const y of [3, 6]) {
-      F.deco(-3.4, 3.4, -3.15, -2.85, y, 0.3, P.dark); F.deco(-3.4, 3.4, 2.85, 3.15, y, 0.3, P.dark);
-      F.deco(-3.15, -2.85, -3.4, 3.4, y, 0.3, P.dark); F.deco(2.85, 3.15, -3.4, 3.4, y, 0.3, P.dark);
-    }
-    F.box(-3.7, 3.7, -3.7, 3.7, h - 0.4, 0.4, P.dark);                                 // the deck
-    F.box(-1.6, 1.6, -1.6, 1.6, h, 3.4, P.conc);                                       // the tank
-    F.deco(-2.0, 2.0, -2.0, 2.0, h + 3.4, 0.5, P.acc);
-    F.deco(-3.7, 3.7, 3.55, 3.7, h, 1.0, P.acc); F.deco(-3.7, 3.7, -3.7, -3.55, h, 1.0, P.acc);   // rails
-    F.deco(-3.7, -3.55, -3.7, 3.7, h, 1.0, P.acc); F.deco(3.55, 3.7, -3.7, 3.7, h, 1.0, P.acc);
-    const cl = _osClimb(F, { u0: -9, v0: 3.9, levels: 3, rise: R, c: P.dark, lc: P.main,
-      attach: k => (k === 2 ? { u0: -3.7, u1: 3.7, vEdge: 3.7 } : null) });
-    return { foot: cl.foot, pois: [{ u: 2.6, v: 2.6, y: h }, { u: -2.6, v: -2.6, y: h }] };
-  },
-  // Shipping containers three high, stepped back, with the stair up the long side and a plank onto each tier.
-  stack(F, P) {
-    const cols = [0xb5382a, 0x2a5a9a, 0x3a7a4a, 0xd8a02a, 0x7a7e84, 0x8a4a2a], T = 2.6, off = Math.abs(Math.round(F.X + F.Z));
-    const rows = [[-2.6, 0, 2.6], [-1.3, 1.3], [0]];
-    rows.forEach((vs, t) => vs.forEach((v, i) => {
-      F.box(-6, 6, v - 1.2, v + 1.2, t * T, T, cols[(t * 3 + i + off) % cols.length]);
-      F.deco(-5.9, 5.9, v - 1.25, v + 1.25, t * T + T - 0.1, 0.1, P.dark);
-    }));
-    const edges = [3.8, 2.5, 1.2];
-    const cl = _osClimb(F, { u0: -9, v0: 4.2, levels: 3, rise: T, c: P.dark, lc: P.main, depth: 0.85,
-      attach: k => ({ u0: -6, u1: 6, vEdge: edges[k] }) });
-    return { foot: cl.foot, pois: [{ u: 0, v: 0, y: 3 * T }, { u: 5, v: 0, y: 3 * T }, { u: -5, v: 2.6, y: T }] };
-  },
-  // A half-built concrete frame: columns, three floors, a stair up one side, rebar sticking out of the top.
-  frame(F, P) {
-    const L = 4.2;
-    for (const a of [-7, 0, 7]) for (const b of [-7, 0, 7]) F.box(a - 0.5, a + 0.5, b - 0.5, b + 0.5, 0, 3 * L - 0.5, P.conc);
-    for (let f = 1; f <= 3; f++) F.box(-8, 8, -8, 8, f * L - 0.5, 0.5, P.conc);
-    F.box(-8, -3, 7.5, 8, L, 1.1, P.dark); F.box(3, 8, -8, -7.5, 2 * L, 1.1, P.dark);       // a wall or two for cover
-    F.box(-1.5, 1.5, -1.5, 1.5, 2 * L, 1.0, P.rock);                                        // a stack of blocks
-    for (const [a, b] of [[-7, -7], [7, -7], [-7, 7], [7, 7], [0, 0]]) F.deco(a - 0.05, a + 0.05, b - 0.05, b + 0.05, 3 * L, 2.4, P.dark);   // rebar
-    const cl = _osClimb(F, { u0: -14, v0: 8.2, levels: 3, rise: L, c: P.dark, lc: P.main,
-      attach: () => ({ u0: -8, u1: 8, vEdge: 8 }) });
-    return { foot: cl.foot, pois: [{ u: 0, v: 0, y: 3 * L }, { u: 6, v: -6, y: 2 * L }, { u: -6, v: -6, y: L }] };
-  },
-  // A tall spire: a stepped column 36 m high with a stair switchbacking up the side, ledges at every landing and a
-  // deck at the top with a mast above it. The one you climb to see the whole map from.
-  spire(F, P) {
-    const LV = 9, R = 4.0, TOP = LV * R;
-    F.box(-2.5, 2.5, -2.5, 2.5, 0, 12, P.main);
-    F.box(-1.8, 1.8, -1.8, 1.8, 12, 12, P.main);
-    F.box(-1.2, 1.2, -1.2, 1.2, 24, 12, P.main);
-    for (const y of [6, 18, 30]) F.deco(-2.9, 2.9, -2.9, 2.9, y, 0.4, P.acc);                  // bands up the shaft
-    const cl = _osClimb(F, { u0: -5.5, v0: 3.2, levels: LV, rise: R, c: P.dark, lc: P.conc,
-      attach: k => (k === LV - 1 ? { u0: -4.5, u1: 4.5, vEdge: 4.5 } : null) });
-    F.box(-4.5, 4.5, -4.5, 4.5, TOP - 0.5, 0.5, P.conc);                                     // the deck
-    for (const [a, b] of [[-4.4, -4.4], [4.4, -4.4], [-4.4, 4.4], [4.4, 4.4]]) F.deco(a - 0.1, a + 0.1, b - 0.1, b + 0.1, TOP, 1.1, P.acc);
-    F.deco(-4.5, 4.5, -4.5, -4.3, TOP + 1.0, 0.12, P.acc); F.deco(-4.5, -4.3, -4.5, 4.5, TOP + 1.0, 0.12, P.acc); F.deco(4.3, 4.5, -4.5, 4.5, TOP + 1.0, 0.12, P.acc);
-    F.box(-1.2, 1.2, -1.2, 1.2, TOP, 2.4, P.dark);                                           // a little control room on the deck
-    F.deco(-0.3, 0.3, -0.3, 0.3, TOP + 2.4, 9, P.dark);                                      // the mast
-    F.deco(-0.9, 0.9, -0.15, 0.15, TOP + 8, 0.3, P.acc);
-    return { foot: cl.foot, pois: [{ u: 3.2, v: 3.2, y: TOP }, { u: -3.2, v: -3.2, y: TOP }, { u: 3.5, v: 5, y: 5 * R }] };
-  },
-  // The bones of a tall building: six floors, columns, a stair up the side, rebar on top.
-  skeleton(F, P) {
-    const L = 4.4, N = 6;
-    for (const a of [-7, 0, 7]) for (const b of [-7, 0, 7]) F.box(a - 0.5, a + 0.5, b - 0.5, b + 0.5, 0, N * L - 0.5, P.conc);
-    for (let f = 1; f <= N; f++) {
-      F.box(-8, 8, -8, 8, f * L - 0.5, 0.5, P.conc);
-      F.deco(-8.05, 8.05, -8.05, -7.85, f * L - 0.4, 0.14, P.acc); F.deco(-8.05, 8.05, 7.85, 8.05, f * L - 0.4, 0.14, P.acc);   // an edge trim on each floor
-      F.deco(-8.05, -7.85, -7.85, 7.85, f * L - 0.4, 0.14, P.acc); F.deco(7.85, 8.05, -7.85, 7.85, f * L - 0.4, 0.14, P.acc);
-    }
-    for (const f of [2, 4]) F.box(-8, -2, 7.5, 8, f * L, 1.1, P.dark);
-    for (const [a, b] of [[-7, -7], [7, -7], [-7, 7], [7, 7], [0, 0]]) F.deco(a - 0.05, a + 0.05, b - 0.05, b + 0.05, N * L, 2.6, P.dark);
-    const cl = _osClimb(F, { u0: -14, v0: 8.2, levels: N, rise: L, c: P.dark, lc: P.main,
-      attach: () => ({ u0: -8, u1: 8, vEdge: 8 }) });
-    return { foot: cl.foot, pois: [{ u: 0, v: 0, y: N * L }, { u: 6, v: -6, y: 4 * L }, { u: -6, v: -6, y: 2 * L }] };
-  },
-  // A rock mesa: three terraces. A ramp up the first (you can slide down it), stairs up the next two.
-  mesa(F, P, K) {
-    F.box(-10, 10, -7, 7, 0, 3.0, P.rock);
-    F.box(-4, 4, -5, 5, 3.0, 3.0, P.conc);
-    F.box(-1.5, 1.5, -1.0, 1.0, 6.0, 2.4, P.rock);
-    const [rx, rz] = F.W(0, -13), [dx, dz] = F.vec('v+');
-    addRamp(K.name, rx, rz, dx, dz, { width: 5, rise: 3, run: 6, landing: 0, color: P.rock, landColor: P.rock, lipColor: P.rock });
-    F.stairs(9.2, 0, 'u-', 3.0, 3, P.conc, 3.0, 0.8, 3.0 / 7);                              // onto the second terrace
-    F.stairs(0, -4.6, 'v+', 2.4, 2.4, P.rock, 6.0, 0.8, 2.4 / 5);                           // onto the third... from the second
-    return { foot: { u: 0, v: -14 }, pois: [{ u: 0, v: 0, y: 8.4 }, { u: 8, v: 4, y: 3 }, { u: -7, v: 0, y: 3 }] };
-  },
 };
 // The theme pass had already dressed the wall (a cap, a stripe, pillars, a lamp every 11 m) into the map's one merged
 // decoration mesh, so taking the wall out leaves its trimmings hanging in the air. Every triangle that lies wholly
@@ -55952,6 +56144,8 @@ function updateBotAI(dt) {
       killBotOutOfBounds(bot, (bot._ringoutKillerUntil || 0) > Date.now() ? bot._ringoutKiller : null);
       continue;
     }
+    { const v = MAP_VOID[activeMapName];   // a harbour: the sea between the piers is not floor, and a bot does not walk on it
+      if (v && v.rects && !floorExistsAt(nx, nz) && botGroundYAt(nx, nz, bot.y || 0, 1.05, 2.2) < 0.4) { nx = prevBotX; nz = prevBotZ; } }
     const nextGroundY = botGroundYAt(nx, nz, bot.y || 0, 1.05, 2.2);
     if ((bot.yVel || 0) === 0 && nextGroundY >= (bot.y || 0) - 0.35) bot.y = nextGroundY;
     [nx, nz] = resolvePosCollisions(nx, nz, bot.y || 0);
@@ -60331,6 +60525,7 @@ const MAP_DESCS = {
   train:      '🚂 Train Terminal — 3 tracks, platforms + canopy, footbridge, level crossing',
   dreamscape: '🌌 Dreamscape — floating stairs + impossible shapes',
   big_arena:   '🗺️ Big Arena — bigger footprint, four fortified corners, denser cover — built for 2v2/3v3',
+  big_harbor:  '🗺️ Big Harbor — a 60 m sea channel between two quays: cross by the ship, the piers or a crane jib. Step off and you fall in — 2v2/3v3',
   super_arena: '🗺️ Super Big Arena — biggest non-BR map, two full compounds face off, densest cover — 2v2/3v3',
   storm_pier:     '⛈️ Storm Pier — lightning strikes the pier: red rings warn you, lightning rods catch strikes nearby',
   pinball_arcade: '🕹️ Pinball Arcade — neon bumpers fling you across the table, corner pads launch you',

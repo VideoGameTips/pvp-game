@@ -109,6 +109,12 @@ it up is Job 4 in his server-move doc. Full runbook: `docs/DEPLOY.md` in the pri
   turn / shade; open maps get 2-6 raised decks (5-6 m) with stairs. Each pass is **validated and undone** if it loses a
   way up (>2% of cells 2 m+ reachable), loses ground (>3%), or exposes a spawn sightline: `_mdReach`, `_mdExposed`.
   Skipped: `MD_SKIP` (mechanic maps, labyrinth, titanic, carrier, flying_moai).
+- **Big Harbor** (`big_harbor`, `buildBigHarborLayout`): 300 x 240, a 60 m sea channel between two quays, built for half the map
+  and turned 180 degrees for the other. The sea is not floor: `MAP_VOID.big_harbor.rects` is the union of ground rects
+  (`floorExistsAt` reads it), so the ship, the gangway ramps, the crane jib are colliders over water, and a step off a
+  quay or pier is a fall (killY -6). Bots are held to ground they can stand on in the bot-movement code. It is in
+  `EGG_SKIP` (so also `MD_SKIP`) because eggs and decks assume a rectangular floor. Kits (`_OS_KITS`) live above
+  `initMapThemes` so layouts can use them at load. Its reachability is checked by flood-fill over `MAP_POIS`.
 - Wall-less maps: `OUTSKIRTS` / `_outskirtsMap`, 30 of them -- everything outdoor; the
   indoor maps (warehouse, sewer, space, orbital_station, opera, supermarket, lockdown, studio, gravity_lab, labyrinth,
   titanic) and the mechanic maps keep their walls. Takes the perimeter wall out (and the trim the theme pass had already
