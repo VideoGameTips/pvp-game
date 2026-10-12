@@ -15796,8 +15796,9 @@ function addMapOutskirts() { for (const name of Object.keys(OUTSKIRTS)) _outskir
 // (X.disc / X.ring / X.mesh / X.box), who can I hurt (X.on(dt, actors) -- the player and every living bot behind one
 // interface: hurt, heal, push, lift, root, slow). It composes with whatever MAP_MECH the layout already had.
 var GIM = {}, GIM_LABELS = {}, _gimDone = {};
-var _gimSlowState = { map: null, v: 1 };
-function _gimSlowNow() { return _gimSlowState.map === activeMapName ? _gimSlowState.v : 1; }
+var _gimSlowState = { map: null, v: 1 }, _gimRollState = { map: null, v: 0 }, _gimBoostUntil = 0;
+function _gimSlowNow() { return (_gimSlowState.map === activeMapName ? _gimSlowState.v : 1) * (Date.now() < _gimBoostUntil ? 1.4 : 1); }
+function _gimRollNow() { return _gimRollState.map === activeMapName ? _gimRollState.v : 0; }
 const _gimV = new THREE.Vector3(), _gimActorCache = new WeakMap();
 const _gimMe = {
   me: true, bot: null,
@@ -15809,6 +15810,16 @@ const _gimMe = {
   lift(v) { if (pilotedVehicle || pilotedMortar) return; if (!slamState || slamState.vel < v) slamState = { vel: v }; },
   root(ms) { playerRootedUntil = Math.max(playerRootedUntil, Date.now() + ms); },
   slow(f) { if (f < _gimSlowState.v) _gimSlowState.v = f; },
+  boost(ms) { _gimBoostUntil = Math.max(_gimBoostUntil, Date.now() + ms); },
+  teleport(x, z) { camera.position.x = x; camera.position.z = z; },
+  refill(frac) {
+    [selectedPrimaryIdx, selectedSecondaryIdx].forEach(idx => {
+      const w = WEAPONS[idx], pool = weaponAmmo[idx];
+      if (!w || !pool || w.noReload) return;
+      pool.ammo = w.mag; pool.reserve = Math.min(w.reserve, pool.reserve + Math.ceil(w.reserve * frac));
+    });
+    updateAmmoHUD();
+  },
   get airborne() { return !!slamState || playerYVel > 0.5; },
 };
 function _gimBot(b) {
@@ -15823,6 +15834,9 @@ function _gimBot(b) {
     lift(v) { if (!(b.yVel > v)) b.yVel = v; b.y = b.y || 0; },
     root(ms) { b._gimRootT = Math.max(b._gimRootT || 0, ms / 1000); },
     slow(f) { b._gimSlow = Math.min(b._gimSlow == null ? 1 : b._gimSlow, f); },
+    boost() {},
+    teleport(x, z) { b.x = x; b.z = z; },
+    refill() {},
     get airborne() { return (b.y || 0) > 0.4 || (b.yVel || 0) > 0.5; },
   };
   _gimActorCache.set(b, a);
@@ -15875,6 +15889,7 @@ function _gimMap(name) {
   _gimDone[name] = true;
   const G = MAP_GROUPS[name], rnd = _thRng(name + ':gimmick'), ups = [], rsts = [], st = { t: 0, hinted: false, hint: null };
   let reach = null;
+  const pickups = [];
   const reachable = (x, z) => {
     if (reach === null) { try { reach = _mdReach(name); } catch (e) { reach = false; } }
     if (!reach) return true;
@@ -15971,6 +15986,10 @@ function _gimMap(name) {
     fx(x, y, z, r, c) { try { spawnAbilityAOEFX(new THREE.Vector3(x, y, z), r, c); } catch (e) {} },
     sound(n, x, z, v = 0.7) { try { playSoundEvent(n, { position: new THREE.Vector3(x, 1, z), volume: v, minGap: 120 }); } catch (e) {} },
     flash(c, ms = 160) { try { flashScreen(c, ms); } catch (e) {} },
+    // something lying on the floor that whoever walks onto first picks up. onTake(actor) -> true to consume it.
+    pickup(x, z, mesh, r, onTake, life = 60) {
+      const p = { x, z, mesh, r, onTake, life }; mesh.position.set(x, mesh.position.y, z); X.G.add(mesh); pickups.push(p); return p;
+    },
     // carry an actor along a heading for a moment: a launcher, a conveyor, a current
     carry: (() => {
       const live = new Map();
@@ -15986,10 +16005,19 @@ function _gimMap(name) {
     })(),
   };
   g_gimX[name] = X;
+  ups.push((dt, A) => {
+    for (let i = pickups.length - 1; i >= 0; i--) {
+      const p = pickups[i]; p.life -= dt;
+      let gone = p.life <= 0;
+      if (!gone) { p.mesh.rotation.y += dt * 1.6; for (const a of A) if (a.y < 2.6 && Math.hypot(a.x - p.x, a.z - p.z) < p.r && p.onTake(a) !== false) { gone = true; break; } }
+      if (gone) { X.G.remove(p.mesh); pickups.splice(i, 1); }
+    }
+  });
+  rsts.push(() => { for (const p of pickups) X.G.remove(p.mesh); pickups.length = 0; });
   try { GIM[name](X); } catch (e) { console.warn('[gimmick]', name, e); }
   const prev = MAP_MECH[name];
   MAP_MECH[name] = {
-    reset() { if (prev) prev.reset(); st.t = 0; st.hinted = false; _gimSlowState.map = null; for (const f of rsts) { try { f(); } catch (e) {} } },
+    reset() { if (prev) prev.reset(); st.t = 0; st.hinted = false; _gimSlowState.map = null; _gimRollState.map = null; for (const f of rsts) { try { f(); } catch (e) {} } },
     update(dt) {
       if (prev) prev.update(dt);
       if (inLobby || countdownActive || !ups.length) return;
@@ -16152,14 +16180,10 @@ GIM.warehouse = (X) => {
     S.t -= dt;
     if (S.phase === 'idle') {
       if (S.t <= 0) {
-        // 60%: onto where somebody is standing, if there is room; otherwise anywhere
-        let tgt = null;
-        if (Math.random() < 0.6 && A.length) {
-          const a = A[Math.floor(Math.random() * A.length)];
-          let bd = 1e9; for (const s of spots) { const d = Math.hypot(s.x - a.x, s.z - a.z); if (d < bd && s !== S.last) { bd = d; tgt = s; } }
-          if (bd > 14) tgt = null;
-        }
-        if (!tgt) { do { tgt = spots[Math.floor(Math.random() * spots.length)]; } while (tgt === S.last && spots.length > 1); }
+        // Not random: the crates change the floor everybody fights on, so every copy of the game has to put the same one in
+        // the same place. A fixed walk through the spots, stepped on by a prime.
+        let tgt = spots[(S.n * 7 + 3) % spots.length];
+        if (tgt === S.last) tgt = spots[(S.n * 7 + 4) % spots.length];
         S.target = tgt; S.last = tgt; S.phase = 'travel'; S.t = 2.1; S.from = { z: bridge.position.z, x: trolley.position.x };
         warn.position.set(tgt.x, 0.08, tgt.z); warn.visible = true;
       }
@@ -16181,14 +16205,14 @@ GIM.warehouse = (X) => {
         X.fx(tx, 0.3, tz, 3.4, 0xd8c8a0); X.sound('explosion', tx, tz, 0.55);
         // leave the crate on the floor as cover; the oldest one goes after three
         const m = new THREE.Mesh(new THREE.BoxGeometry(2.6, 2.6, 2.6), _gimLam(cols[S.n++ % cols.length]));
-        m.position.set(tx, 1.3, tz); m.rotation.y = Math.random() * 0.8; X.G.add(m);
+        m.position.set(tx, 1.3, tz); m.rotation.y = (S.n % 5) * 0.17; X.G.add(m);
         const col = X.addCollider(m); fallen.push({ mesh: m, col });
         if (fallen.length > 3) { const o = fallen.shift(); X.G.remove(o.mesh); X.dropCollider(o.col); }
         crate.visible = false;
       }
     } else if (S.phase === 'rise') {
       setHook((S.t / 1.3) * (Y - 3.55));
-      if (S.t <= 0) { S.phase = 'idle'; S.t = 14 + Math.random() * 6; crate.visible = true; home(); }
+      if (S.t <= 0) { S.phase = 'idle'; S.t = 16; crate.visible = true; home(); }
     }
   });
 };
@@ -16724,6 +16748,839 @@ GIM.glassworks = (X) => {
       const sh = shards[i]; sh.t -= dt;
       for (const a of A) if (a.y < 0.6 && Math.hypot(a.x - sh.x, a.z - sh.z) < 2.3) { a.slow(0.6); if (_gimBeat(sh, a.id, dt, 0.5)) a.hurt(4, 'shards'); }
       if (sh.t <= 0) { clear(sh); shards.splice(i, 1); }
+    }
+  });
+};
+
+// ── 🌊 CARRIER · ROLLING SEA ────────────────────────────────────────────────────────────────────────────────────────────
+// A flat deck is the one thing a ship at sea is not. The deck rolls: the horizon tips in the view and everything
+// that is not holding on drifts to the low side, slowly, then back. Nothing hurts you except the edge.
+GIM.carrier = (X) => {
+  X.dbg([{ x: 0, z: 0 }]);
+  const AMP = 0.05;
+  X.hint('🌊 ROLLING SEA', 'The deck rolls. Everything drifts to the low side. Mind the edge.', '#7fc8ff');
+  X.onReset(() => { _gimRollState.v = 0; });
+  X.on((dt, A, t) => {
+    const th = AMP * Math.sin(t * 0.55) + 0.012 * Math.sin(t * 1.31 + 1.0);
+    _gimV.set(0, 0, -1).applyQuaternion(camera.quaternion);          // which way you are facing decides how much of the roll you see
+    _gimRollState.map = X.name; _gimRollState.v = -th * _gimV.z;
+    const drift = (th / AMP) * 1.9 * dt;
+    for (const a of A) if (!a.airborne) a.push(drift, 0);
+  });
+};
+
+// ── 🌿 OVERGROWTH · STRANGLER VINES ─────────────────────────────────────────────────────────────────────────────────────
+// The city is being taken back. Where the vines are thick they take hold of anything that walks in: a second and a half of
+// being rooted to the street. Each patch has a heart -- shoot it and the patch dies back for half a minute.
+GIM_LABELS.vines = 'was strangled by vines';
+GIM.overgrowth = (X) => {
+  const spots = X.spots(8, { r: 3.2, pairs: true, sep: 14, maxR: 88, edge: 10 });
+  if (!spots.length) return;
+  X.dbg(spots);
+  const R = 2.7;
+  const patches = spots.map((s, i) => {
+    const g = new THREE.Group(); g.position.set(s.x, 0, s.z); X.G.add(g);
+    const base = new THREE.Mesh(new THREE.CircleGeometry(R + 0.4, 18), _gimBasic(0x1f3d17, 0.9)); base.rotation.x = -Math.PI / 2; base.position.y = 0.05; g.add(base);
+    const tend = [];
+    for (let k = 0; k < 9; k++) {
+      const a = k * 0.7 + i, len = 1.8 + (k % 3) * 0.7;
+      const m = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, len), _gimLam(k % 2 ? 0x2f6a1f : 0x3d8a2a));
+      m.position.set(Math.cos(a) * len * 0.45, 0.35, Math.sin(a) * len * 0.45); m.rotation.y = -a + 1.57; m.userData = { a, len, ph: k };
+      g.add(m); tend.push(m);
+    }
+    const heart = new THREE.Mesh(new THREE.SphereGeometry(0.62, 8, 6), _gimLam(0x4a7a2a)); heart.position.set(s.x, 0.62, s.z); X.G.add(heart);
+    const bloom = new THREE.Mesh(new THREE.SphereGeometry(0.26, 6, 5), _gimBasic(0xff4a9a)); bloom.position.y = 0.55; heart.add(bloom);
+    const P = { x: s.x, z: s.z, g, tend, heart, dead: 0, cd: new Map() };
+    P.dest = X.destructible(heart, 30, 'vine', () => { P.dead = 28; g.visible = false; });
+    return P;
+  });
+  X.hint('🌿 STRANGLER VINES', 'Dark green patches grab you. Shoot the bulb in the middle.', '#7fdc5a');
+  X.onReset(() => patches.forEach(p => { p.dead = 0; p.g.visible = true; p.cd.clear(); }));
+  X.on((dt, A, t) => {
+    for (const p of patches) {
+      if (p.dead > 0) {
+        p.dead -= dt;
+        if (p.dead <= 0) { p.g.visible = true; p.dest.hp = p.dest.maxHp; p.dest.mesh.visible = true; if (!wallColliders.includes(p.dest.colliderRef) && activeMapName === X.name) wallColliders.push(p.dest.colliderRef); }
+        continue;
+      }
+      p.tend.forEach(m => { m.rotation.x = Math.sin(t * 1.6 + m.userData.ph) * 0.35; });
+      for (const [k, v] of p.cd) { if (v - dt <= 0) p.cd.delete(k); else p.cd.set(k, v - dt); }
+      for (const a of A) {
+        if (a.y > 0.9 || p.cd.has(a.id) || Math.hypot(a.x - p.x, a.z - p.z) > R) continue;
+        p.cd.set(a.id, 4.0);
+        a.root(1500); a.hurt(5, 'vines');
+        if (a.me) X.flash('rgba(40,120,30,0.35)', 240);
+      }
+    }
+  });
+};
+
+// ── 🏭 FOUNDRY · STAMPING PRESSES ───────────────────────────────────────────────────────────────────────────────────────
+// A foundry floor has presses on it, and these keep time. A yellow ring flashes on the floor, the plate drops half way
+// and hovers, then it comes down. Underneath is the last place to be. Six of them, on a beat that is not quite the same.
+GIM_LABELS.press = 'was flattened by a press';
+GIM.foundry = (X) => {
+  const spots = X.spots(6, { r: 3.4, pairs: true, sep: 16, maxR: 85, edge: 9 });
+  if (!spots.length) return;
+  X.dbg(spots);
+  const steel = _gimLam(0x6c747c), hazard = _gimLam(0xe6b422), dark = _gimLam(0x23262a);
+  const PER = 5.4, HALF = 2.4;
+  const presses = spots.map((s, i) => {
+    X.disc(s.x, s.z, 3.0, 0x1a1c1f, 0.9, 0.05);
+    const ring = X.ring(s.x, s.z, 3.1, 0xffcc22, 0.9, 0.35, 0.07); ring.visible = false;
+    const ram = new THREE.Group(); ram.position.set(s.x, 7.5, s.z); X.G.add(ram);
+    const add = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); ram.add(m); return m; };
+    add(new THREE.BoxGeometry(4.6, 0.9, 4.6), steel, 0, 0, 0);
+    add(new THREE.BoxGeometry(4.7, 0.18, 4.7), hazard, 0, -0.34, 0);
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) add(new THREE.CylinderGeometry(0.22, 0.22, 11, 8), dark, sx * 1.6, 5.5, sz * 1.6);
+    add(new THREE.BoxGeometry(5.2, 1.0, 5.2), dark, 0, 11.2, 0);
+    return { x: s.x, z: s.z, ring, ram, off: (i * 0.9) % PER, hit: false };
+  });
+  X.hint('🏭 PRESSES', 'The ring flashes, the plate drops, then it comes down.', '#ffcc22');
+  X.on((dt, A, t) => {
+    for (const p of presses) {
+      const u = (t + p.off) % PER;
+      let y = 7.5, warn = false;
+      if (u < 2.6) y = 7.5;
+      else if (u < 3.5) { y = 7.5 - (u - 2.6) / 0.9 * 2.6; warn = true; }
+      else if (u < 3.62) { y = 4.9 - (u - 3.5) / 0.12 * 4.45; }
+      else if (u < 4.4) y = 0.45;
+      else y = 0.45 + (u - 4.4) / 1.0 * 7.05;
+      p.ram.position.y = y;
+      p.ring.visible = warn || (u >= 3.5 && u < 4.4);
+      if (p.ring.visible) p.ring.material.opacity = warn ? 0.35 + 0.55 * Math.abs(Math.sin(t * 16)) : 0.95;
+      if (u >= 3.5 && u < 3.62 && !p.hit) {
+        p.hit = true;
+        X.sound('melee_heavy', p.x, p.z, 0.9); X.fx(p.x, 0.3, p.z, 3.4, 0xd8c8a0);
+        for (const a of A) if (a.y < 2.5 && Math.abs(a.x - p.x) < HALF && Math.abs(a.z - p.z) < HALF) {
+          a.hurt(90, 'press'); a.push(a.x - p.x || 0.2, a.z - p.z || 0.2); if (a.me) X.flash('rgba(255,200,80,0.4)', 220);
+        }
+      } else if (u < 3.4) p.hit = false;
+    }
+  });
+};
+
+// ── 🎠 CARNIVAL · CAROUSEL ──────────────────────────────────────────────────────────────────────────────────────────────
+// The carousel in the middle of the fair turns, and it takes everyone standing on it round with it -- sightlines sliding
+// past, the fair going by -- for about four seconds. Then it throws you off, which is what carousels do.
+GIM.carnival = (X) => {
+  const s = X.spots(1, { r: 8, near: [0, 0], edge: 14, sep: 1, h: 2.4 })[0] || X.spots(1, { r: 6, near: [0, 0], edge: 14, sep: 1 })[0];
+  if (!s) return;
+  X.dbg([{ x: s.x + 3, z: s.z }]);
+  const R = 6.2, W = 0.7;
+  const base = X.disc(s.x, s.z, R + 0.6, 0x5a4a6a, 0.95, 0.05);
+  const spin = new THREE.Group(); spin.position.set(s.x, 0, s.z); X.G.add(spin);
+  const add = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); spin.add(m); return m; };
+  const deck = add(new THREE.CylinderGeometry(R, R, 0.2, 28), _gimLam(0xd8a0c8), 0, 0.12, 0);
+  add(new THREE.CylinderGeometry(0.4, 0.4, 5, 10), _gimLam(0xe8d8a0), 0, 2.6, 0);
+  const cano = add(new THREE.ConeGeometry(R + 0.9, 1.8, 16), _gimLam(0xc83a3a), 0, 5.9, 0);
+  for (let k = 0; k < 8; k++) {
+    const a = k / 8 * Math.PI * 2, x = Math.cos(a) * (R - 1.4), z = Math.sin(a) * (R - 1.4);
+    add(new THREE.CylinderGeometry(0.06, 0.06, 4.6, 6), _gimLam(0xe8d8a0), x, 2.5, z);
+    const h = new THREE.Group(); h.position.set(x, 1.5 + (k % 2) * 0.3, z); h.rotation.y = -a; spin.add(h);
+    const hb = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.6, 1.3), _gimLam(k % 2 ? 0xf0f0e8 : 0x5a3a22)); h.add(hb);
+    const hh = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.5, 0.4), _gimLam(k % 2 ? 0xf0f0e8 : 0x5a3a22)); hh.position.set(0, 0.45, 0.65); h.add(hh);
+  }
+  const ride = new Map();
+  X.hint('🎠 CAROUSEL', 'The carousel carries you round, then throws you off.', '#ff9ad8');
+  X.onReset(() => ride.clear());
+  X.on((dt, A, t) => {
+    spin.rotation.y += W * dt;
+    const cs = Math.cos(W * dt), sn = Math.sin(W * dt);
+    for (const a of A) {
+      const rx = a.x - s.x, rz = a.z - s.z, on = a.y < 1.4 && Math.hypot(rx, rz) < R;
+      if (!on) { if (ride.has(a.id)) ride.delete(a.id); continue; }
+      // rotate the actor's offset by the turn the deck made: positive spin.rotation.y moves +x toward -z in three.js
+      const nx = rx * cs + rz * sn, nz = -rx * sn + rz * cs;
+      a.push(nx - rx, nz - rz);
+      const r = (ride.get(a.id) || 0) + dt; ride.set(a.id, r);
+      if (r > 4.2) {
+        ride.delete(a.id);
+        const d = Math.hypot(rx, rz) || 1;
+        a.push(rx / d * 3.4, rz / d * 3.4); a.lift(6);
+        if (a.me) X.flash('rgba(255,160,220,0.3)', 200);
+      }
+    }
+  });
+};
+
+// ── 🎥 STUDIO · FOG MACHINES ────────────────────────────────────────────────────────────────────────────────────────────
+// It is a film set, so there are fog machines. Every so often one of them lets go and the middle of a set goes white for
+// ten seconds -- cover that is not a wall, and a place to be that nobody can see you in. It thins out and is gone.
+GIM.studio = (X) => {
+  const spots = X.spots(6, { r: 4.4, pairs: true, sep: 16, maxR: 62, edge: 8 });
+  if (!spots.length) return;
+  X.dbg(spots);
+  const vents = spots.map((s, i) => {
+    X.mesh(new THREE.BoxGeometry(1.2, 0.9, 1.6), _gimLam(0x23262a), s.x, 0.45, s.z);
+    X.mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.7, 8), _gimLam(0x6a7078), s.x, 1.1, s.z).rotation.x = 0.4;
+    const g = new THREE.Group(); g.position.set(s.x, 0, s.z); g.visible = false; X.G.add(g);
+    const puffs = [];
+    for (let k = 0; k < 9; k++) {
+      const p = new THREE.Mesh(new THREE.SphereGeometry(1, 8, 6), _gimBasic(0xeef2f4, 0.78));
+      const a = k * 0.7, r = (k % 3) * 1.8; p.position.set(Math.cos(a) * r, 1.2 + (k % 4) * 0.55, Math.sin(a) * r); p.userData = { r0: 2.4 + (k % 3) * 0.7 }; g.add(p); puffs.push(p);
+    }
+    return { x: s.x, z: s.z, g, puffs, t: 6 + i * 3.1, phase: 'idle', k: 0 };
+  });
+  X.hint('🎥 FOG MACHINES', 'The vents let go now and then. You cannot see into the fog.', '#dfe8ee');
+  X.onReset(() => vents.forEach((v, i) => { v.phase = 'idle'; v.t = 6 + i * 3.1; v.g.visible = false; }));
+  X.on((dt, A, t) => {
+    for (const v of vents) {
+      v.t -= dt;
+      if (v.phase === 'idle' && v.t <= 0) { v.phase = 'grow'; v.t = 2.5; v.g.visible = true; v.k = 0; X.sound('smoke_hiss', v.x, v.z, 0.7); }
+      else if (v.phase === 'grow') { v.k = 1 - v.t / 2.5; if (v.t <= 0) { v.phase = 'hold'; v.t = 9; v.k = 1; } }
+      else if (v.phase === 'hold') { if (v.t <= 0) { v.phase = 'fade'; v.t = 3.5; } }
+      else if (v.phase === 'fade') { v.k = v.t / 3.5; if (v.t <= 0) { v.phase = 'idle'; v.t = 16 + Math.random() * 8; v.g.visible = false; } }
+      if (v.g.visible) {
+        const k = Math.max(0.02, v.k);
+        v.puffs.forEach((p, n) => { const s = p.userData.r0 * k * (1 + Math.sin(t * 0.8 + n) * 0.06); p.scale.setScalar(s); p.material.opacity = 0.78 * Math.min(1, k * 1.4); });
+      }
+    }
+  });
+};
+
+// ── 🪨 TEMPLE · ROLLING BOULDER ─────────────────────────────────────────────────────────────────────────────────────────
+// There is exactly one thing a temple with a giant idol and trap pits has to have. Every twenty-odd seconds the stone
+// grinds, the dust comes off the ceiling, and a boulder the size of a car runs the longest clear corridor in the place.
+// Stay out of the lane or get to the end of it before it does. It runs both ways.
+GIM_LABELS.boulder = 'was flattened by the boulder';
+GIM.temple = (X) => {
+  const b = X.arena();
+  let best = null;
+  for (const off of [0, 7, -7, 14, -14, 22, -22, 30, -30]) for (const ax of ['z', 'x']) {
+    const ln = ax === 'z' ? X.lane(off, -b.halfZ + 4, off, b.halfZ - 4, 30, { w: 2.8 }) : X.lane(-b.halfX + 4, off, b.halfX - 4, off, 30, { w: 2.8 });
+    if (ln && (!best || ln.len > best.len)) best = ln;
+  }
+  if (!best) return;
+  X.dbg([{ x: (best.x0 + best.x1) / 2, z: (best.z0 + best.z1) / 2 }]);
+  const L = best.len, dx = (best.x1 - best.x0) / L, dz = (best.z1 - best.z0) / L;
+  // the lane, marked on the floor: worn flagstones, so it reads as a path before anything has ever rolled down it
+  const mark = [];
+  for (let s = 1; s < L; s += 2.2) {
+    const m = X.mesh(new THREE.BoxGeometry(2.6, 0.02, 0.5), _gimBasic(0x6a5a3a, 0.6), best.x0 + dx * s, 0.05, best.z0 + dz * s);
+    m.rotation.y = Math.atan2(dx, dz) + 1.5708; mark.push(m);
+  }
+  const boulder = new THREE.Mesh(new THREE.IcosahedronGeometry(2.3, 1), _gimLam(0x8a8478)); boulder.visible = false; X.G.add(boulder);
+  for (let k = 0; k < 3; k++) { const m = new THREE.Mesh(new THREE.IcosahedronGeometry(0.9, 0), _gimLam(0x6a645a)); m.position.set(Math.cos(k * 2.1) * 1.7, Math.sin(k * 1.3) * 1.4, Math.sin(k * 2.1) * 1.7); boulder.add(m); }
+  let S = { phase: 'idle', t: 10, dir: 1, s: 0, n: 0, cd: new Map() };
+  X.hint('🪨 ROLLING BOULDER', 'When the stone grinds, clear the long corridor.', '#c8b890');
+  X.onReset(() => { S = { phase: 'idle', t: 10, dir: 1, s: 0, n: 0, cd: new Map() }; boulder.visible = false; mark.forEach(m => { m.material.opacity = 0.6; m.material.color.setHex(0x6a5a3a); }); });
+  X.on((dt, A, t) => {
+    S.t -= dt;
+    if (S.phase === 'idle') {
+      if (S.t <= 0) { S.phase = 'warn'; S.t = 3.2; S.dir = S.n++ % 2 ? -1 : 1; X.announce('🪨 BOULDER', 'The stone is moving — leave the corridor!', '#c8b890'); X.sound('blackhole_collapse', S.dir > 0 ? best.x0 : best.x1, S.dir > 0 ? best.z0 : best.z1, 0.8); }
+    } else if (S.phase === 'warn') {
+      const f = Math.abs(Math.sin(t * 9));
+      mark.forEach(m => { m.material.color.setHex(f > 0.5 ? 0xff4a2a : 0x6a5a3a); m.material.opacity = 0.9; });
+      if (S.t <= 0) { S.phase = 'roll'; S.s = S.dir > 0 ? -2 : L + 2; boulder.visible = true; S.cd.clear(); mark.forEach(m => { m.material.opacity = 0.6; m.material.color.setHex(0x6a5a3a); }); }
+    } else if (S.phase === 'roll') {
+      S.s += S.dir * 15 * dt;
+      const bx = best.x0 + dx * S.s, bz = best.z0 + dz * S.s;
+      boulder.position.set(bx, 2.3, bz); boulder.rotation.x += S.dir * 15 / 2.3 * dt * dz; boulder.rotation.z -= S.dir * 15 / 2.3 * dt * dx;
+      for (const a of A) {
+        if (a.y > 3.4 || Math.hypot(a.x - bx, a.z - bz) > 3.0 || (S.cd.get(a.id) || 0) > t) continue;
+        S.cd.set(a.id, t + 1.6);
+        a.hurt(130, 'boulder');
+        const nx = -dz, nz = dx, side = ((a.x - bx) * nx + (a.z - bz) * nz) >= 0 ? 1 : -1;
+        a.push(nx * side * 5, nz * side * 5); a.lift(7);
+        if (a.me) X.flash('rgba(200,180,140,0.45)', 260);
+      }
+      if ((S.dir > 0 && S.s > L + 3) || (S.dir < 0 && S.s < -3)) { S.phase = 'idle'; S.t = 20 + Math.random() * 8; boulder.visible = false; }
+    }
+  });
+};
+
+// ── 🎁 HOLIDAY · SLEIGH RUN ─────────────────────────────────────────────────────────────────────────────────────────────
+// Every forty seconds there are bells, and a sleigh crosses the village far above the roofs, letting presents go. They land
+// wherever they land. Most are what they say: health and a burst of speed. One in three is coal, and coal goes bang.
+GIM_LABELS.coal = 'got coal in their stocking';
+GIM.holiday = (X) => {
+  const b = X.arena();
+  X.dbg([{ x: 0, z: 0 }]);
+  const sleigh = new THREE.Group(); sleigh.visible = false; X.G.add(sleigh);
+  const add = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); sleigh.add(m); return m; };
+  add(new THREE.BoxGeometry(2.6, 1.0, 1.5), _gimLam(0xc01c28), 0, 0, 0);
+  add(new THREE.BoxGeometry(1.0, 1.0, 1.4), _gimLam(0xc01c28), -0.9, 0.9, 0);
+  add(new THREE.BoxGeometry(3.4, 0.12, 0.14), _gimLam(0xd8c870), 0, -0.7, 0.6); add(new THREE.BoxGeometry(3.4, 0.12, 0.14), _gimLam(0xd8c870), 0, -0.7, -0.6);
+  add(new THREE.BoxGeometry(0.9, 0.8, 0.5), _gimLam(0xf0e8d8), 0.3, 0.8, 0);
+  for (const k of [0, 1]) { add(new THREE.BoxGeometry(1.1, 0.8, 0.5), _gimLam(0x6a4a2a), 2.4 + k * 1.7, -0.1, 0.4); add(new THREE.BoxGeometry(1.1, 0.8, 0.5), _gimLam(0x6a4a2a), 2.4 + k * 1.7, -0.1, -0.4); }
+  add(new THREE.BoxGeometry(0.3, 0.3, 0.3), _gimBasic(0xff2a2a), 5.9, 0.3, 0);
+  const S = { phase: 'idle', t: 14, z: 0, dir: 1, drops: [], s: 0, n: 0 };
+  const gift = (x, z, bad) => {
+    const g = new THREE.Group(); g.position.y = 0.45;
+    const box = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.9, 0.9), _gimLam(bad ? 0x16161a : [0xd82a2a, 0x2a8a3a, 0x2a5ad8][S.n++ % 3])); g.add(box);
+    const rib1 = new THREE.Mesh(new THREE.BoxGeometry(0.96, 0.96, 0.18), _gimLam(bad ? 0xc82a2a : 0xe8c84a)); g.add(rib1);
+    const rib2 = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.96, 0.96), _gimLam(bad ? 0xc82a2a : 0xe8c84a)); g.add(rib2);
+    X.pickup(x, z, g, 1.5, (a) => {
+      if (bad) {
+        a.hurt(28, 'coal'); a.push(a.x - x || 0.3, a.z - z || 0.3); a.lift(5);
+        X.fx(x, 0.5, z, 2.6, 0x333333); X.sound('explosion', x, z, 0.55);
+      } else { a.heal(45); a.boost(5000); X.fx(x, 0.5, z, 2.2, 0xffe27a); X.sound('heal', x, z, 0.6); }
+      return true;
+    }, 30);
+  };
+  X.hint('🎁 SLEIGH RUN', 'Presents fall every forty seconds. Wrapped is good. Black is coal.', '#ff6a6a');
+  X.onReset(() => { S.phase = 'idle'; S.t = 14; sleigh.visible = false; S.drops.length = 0; });
+  X.on((dt, A, t) => {
+    S.t -= dt;
+    if (S.phase === 'idle' && S.t <= 0) {
+      S.phase = 'fly'; S.dir = S.n++ % 2 ? -1 : 1; S.z = (Math.random() * 2 - 1) * Math.min(40, b.halfZ - 20); S.s = -b.halfX - 8;
+      S.drops = []; for (let i = 0; i < 6; i++) S.drops.push({ at: -b.halfX * 0.7 + i * (b.halfX * 1.4 / 5), done: false });
+      sleigh.visible = true; sleigh.rotation.y = S.dir > 0 ? 0 : Math.PI;
+      X.announce('🎁 SLEIGH RUN', 'Listen for the bells', '#ff6a6a'); X.sound('radar_ping', 0, S.z, 0.5);
+    } else if (S.phase === 'fly') {
+      S.s += 20 * dt;
+      const px = S.dir > 0 ? S.s : -S.s;
+      sleigh.position.set(px, 26 + Math.sin(t * 2) * 0.6, S.z);
+      for (const d of S.drops) if (!d.done && S.s >= d.at) {
+        d.done = true;
+        const gx = px + (Math.random() - 0.5) * 6, gz = S.z + (Math.random() - 0.5) * 24;
+        if (X.free(gx, gz, 1.2, { open: false, h: 1.8 }) && X.reachable(gx, gz)) gift(gx, gz, Math.random() < 0.33);
+      }
+      if (S.s > b.halfX + 12) { S.phase = 'idle'; S.t = 36 + Math.random() * 8; sleigh.visible = false; }
+    }
+  });
+};
+
+// ── 🌀 LABYRINTH · SHIFTING WALLS ───────────────────────────────────────────────────────────────────────────────────────
+// A maze that stays the same is a maze you learn. These do not: eight walls come up out of the floor where the passages
+// were, stand for a while, and go back down. The route you memorised is the route that is not there any more.
+GIM.labyrinth = (X) => {
+  const N = 9, S = 12, o = -N * S / 2, H = 5, T = 1.2;
+  const cols = MAP_COLLIDERS[X.name];
+  const solidAt = (x, z) => cols.some(c => c.max.y > 2.5 && c.min.y < 1 && x > c.min.x - 0.2 && x < c.max.x + 0.2 && z > c.min.z - 0.2 && z < c.max.z + 0.2);
+  const cand = [];
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+    if (r === 0 || r === N - 1) continue;
+    if (r >= 3 && r <= 5 && c >= 3 && c <= 5) continue;
+    const x0 = o + c * S, z0 = o + r * S;
+    if (c < N - 1) { const x = x0 + S, z = z0 + S / 2; if (![-4, 0, 4].some(d => solidAt(x, z + d))) cand.push({ x, z, rot: 0 }); }
+    if (r < N - 1) { const x = x0 + S / 2, z = z0 + S; if (![-4, 0, 4].some(d => solidAt(x + d, z))) cand.push({ x, z, rot: 1 }); }
+  }
+  // opposite pairs, so both teams get the same maze
+  const picks = [], used = new Set(), key = (g) => Math.round(g.x) + ',' + Math.round(g.z);
+  const rnd = X.rnd;
+  for (let k = 0; k < 400 && picks.length < 8; k++) {
+    const g = cand[Math.floor(rnd() * cand.length)], m = cand.find(q => Math.abs(q.x + g.x) < 0.1 && Math.abs(q.z + g.z) < 0.1 && q.rot === g.rot);
+    if (!g || !m || used.has(key(g)) || used.has(key(m)) || key(g) === key(m)) continue;
+    used.add(key(g)); used.add(key(m)); picks.push(g, m);
+  }
+  if (!picks.length) return;
+  X.dbg(picks.map(g => ({ x: g.x, z: g.z })));
+  const mat = _gimLam(0x8a8e82);
+  const gates = picks.map((g, i) => {
+    const w = g.rot ? S + T : T, d = g.rot ? T : S + T;
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, H, d), mat); m.position.set(g.x, -H / 2, g.z); X.G.add(m);
+    m.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(m); cols.push(box); if (activeMapName === X.name) wallColliders.push(box);
+    const strip = X.mesh(new THREE.BoxGeometry(w, 0.03, d), _gimBasic(0xff6a2a, 0.0), g.x, 0.06, g.z);
+    return { g, m, box, strip, k: 0, up: false, t: 7 + (i % 4) * 4, w, d, state: 'down' };
+  });
+  const place = (G) => {
+    const y = -H / 2 + H * G.k;
+    G.m.position.y = y;
+    G.box.min.set(G.g.x - G.w / 2, y - H / 2, G.g.z - G.d / 2); G.box.max.set(G.g.x + G.w / 2, G.k <= 0.001 ? 0 : y + H / 2, G.g.z + G.d / 2);
+  };
+  gates.forEach(place);
+  X.hint('🌀 SHIFTING WALLS', 'Walls rise out of the floor where the passages were. Orange floor = it is coming.', '#ff8a4a');
+  X.onReset(() => gates.forEach((G, i) => { G.k = 0; G.state = 'down'; G.t = 7 + (i % 4) * 4; G.strip.material.opacity = 0; place(G); }));
+  X.on((dt, A, t) => {
+    for (const G of gates) {
+      G.t -= dt;
+      if (G.state === 'down' && G.t <= 0) { G.state = 'warn'; G.t = 1.6; }
+      else if (G.state === 'warn') {
+        G.strip.material.opacity = 0.25 + 0.5 * Math.abs(Math.sin(t * 12));
+        if (G.t <= 0) { G.state = 'rise'; G.t = 1.2; G.strip.material.opacity = 0; X.sound('blackhole_collapse', G.g.x, G.g.z, 0.5); }
+      } else if (G.state === 'rise') {
+        G.k = Math.min(1, 1 - G.t / 1.2); place(G);
+        if (G.t <= 0) { G.k = 1; G.state = 'up'; G.t = 9 + (gates.indexOf(G) % 3); place(G); }
+      } else if (G.state === 'up' && G.t <= 0) { G.state = 'sink'; G.t = 1.4; }
+      else if (G.state === 'sink') {
+        G.k = Math.max(0, G.t / 1.4); place(G);
+        if (G.t <= 0) { G.k = 0; G.state = 'down'; G.t = 8 + (gates.indexOf(G) % 4); place(G); }
+      }
+    }
+  });
+};
+
+// ── 🌊 ARENA · SPRINKLERS ───────────────────────────────────────────────────────────────────────────────────────────────
+// A stadium has a pitch, and a pitch has sprinklers. They come on during the match. The grass around each head is wet --
+// you slide -- and the arm goes round, and what it hits it shoves. Nobody dies of a sprinkler. Everybody ends up
+// somewhere they did not mean to.
+GIM.arena = (X) => {
+  const spots = X.spots(4, { r: 2.0, pairs: true, sep: 30, maxR: 70, edge: 12 });
+  if (!spots.length) return;
+  X.dbg(spots.map(s => ({ x: s.x + 3, z: s.z })));
+  const LEN = 9.5, WET = 10;
+  const heads = spots.map((s, i) => {
+    X.disc(s.x, s.z, WET, 0x3a8a4a, 0.22, 0.045);
+    X.zone('oilZones', { x: s.x, z: s.z, r: WET - 1.2 });
+    X.mesh(new THREE.CylinderGeometry(0.28, 0.4, 0.7, 8), _gimLam(0x6a7078), s.x, 0.35, s.z);
+    const arm = new THREE.Group(); arm.position.set(s.x, 0.8, s.z); X.G.add(arm);
+    for (const sd of [0, 1]) {
+      const j = new THREE.Mesh(new THREE.BoxGeometry(LEN, 0.5, 0.5), _gimBasic(0xa8d8ff, 0.5)); j.position.x = (sd ? -1 : 1) * LEN / 2; arm.add(j);
+      const tip = new THREE.Mesh(new THREE.SphereGeometry(0.5, 6, 5), _gimBasic(0xe8f6ff, 0.8)); tip.position.x = (sd ? -1 : 1) * LEN; arm.add(tip);
+    }
+    return { x: s.x, z: s.z, arm, a: i * 1.3, w: (i % 2 ? -1 : 1) * 1.15 };
+  });
+  X.hint('🌊 SPRINKLERS', 'The pitch is wet and the jets shove. Nobody dies of it.', '#a8d8ff');
+  X.on((dt, A, t) => {
+    for (const h of heads) {
+      h.a += h.w * dt; h.arm.rotation.y = -h.a;
+      const cx = Math.cos(h.a), cz = Math.sin(h.a);
+      for (const a of A) {
+        if (a.y > 1.7) continue;
+        const rx = a.x - h.x, rz = a.z - h.z, along = rx * cx + rz * cz;
+        if (Math.abs(along) > LEN + 0.5) continue;
+        const perp = -rx * cz + rz * cx;
+        if (Math.abs(perp) > 1.0) continue;
+        const sgn = h.w > 0 ? 1 : -1;
+        a.push(-cz * sgn * 9 * dt, cx * sgn * 9 * dt);
+      }
+    }
+  });
+};
+
+// ── 🌌 DREAMSCAPE · PORTALS ─────────────────────────────────────────────────────────────────────────────────────────────
+// Floating stairs and impossible shapes, and not one door that goes where it should. Three pairs of rings stand on the
+// ground: walk into one and you step out of the other, on the far side of the map -- and whoever is chasing you has to
+// work out which.
+GIM.dreamscape = (X) => {
+  const spots = X.spots(6, { r: 2.2, pairs: true, sep: 20, minR: 12, maxR: 80, edge: 10 });
+  if (spots.length < 2) return;
+  X.dbg(spots);
+  const cols = [0x33f0ff, 0xff3cc8, 0xffe23c];
+  const portals = [];
+  for (let i = 0; i + 1 < spots.length; i += 2) {
+    const c = cols[(i / 2) % cols.length], a = spots[i], b = spots[i + 1];
+    for (const [p, q] of [[a, b], [b, a]]) {
+      const g = new THREE.Group(); g.position.set(p.x, 0, p.z); X.G.add(g);
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(1.6, 0.14, 8, 24), _gimBasic(c, 0.95)); ring.position.y = 1.9; ring.rotation.y = Math.atan2(q.x - p.x, q.z - p.z); g.add(ring);
+      const film = new THREE.Mesh(new THREE.CircleGeometry(1.5, 20), _gimBasic(c, 0.28)); film.position.y = 1.9; film.rotation.y = ring.rotation.y; g.add(film);
+      const pad = new THREE.Mesh(new THREE.CircleGeometry(1.5, 20), _gimBasic(c, 0.3)); pad.rotation.x = -Math.PI / 2; pad.position.y = 0.05; g.add(pad);
+      portals.push({ x: p.x, z: p.z, to: q, ring, film });
+    }
+  }
+  const cd = new Map();
+  X.hint('🌌 PORTALS', 'Step into a ring and come out of its twin.', '#33f0ff');
+  X.onReset(() => cd.clear());
+  X.on((dt, A, t) => {
+    portals.forEach((p, i) => { p.ring.rotation.z = t * 0.8 * (i % 2 ? 1 : -1); p.film.material.opacity = 0.22 + 0.12 * Math.sin(t * 3 + i); });
+    for (const k of cd.keys()) { const v = cd.get(k) - dt; if (v <= 0) cd.delete(k); else cd.set(k, v); }
+    for (const p of portals) for (const a of A) {
+      if (a.y > 1.8 || cd.has(a.id) || Math.hypot(a.x - p.x, a.z - p.z) > 1.6) continue;
+      cd.set(a.id, 2.0);
+      a.teleport(p.to.x, p.to.z);
+      if (a.me) X.flash('rgba(200,150,255,0.45)', 240);
+      X.fx(p.to.x, 1, p.to.z, 2.4, 0xc08cff); X.sound('blink', p.to.x, p.to.z, 0.7);
+    }
+  });
+};
+
+// ── ✈️ PEARL HARBOR · AIR RAID ──────────────────────────────────────────────────────────────────────────────────────────
+// The harbour is quiet. Then the sirens: a line of red rings appears across the quay and a single bomber is coming down
+// it, a bomb to each ring a quarter of a second apart. You have a second and a half. Anywhere that is not a ring is fine.
+GIM_LABELS.bomb = 'was caught in the air raid';
+GIM.pearl_harbor = (X) => {
+  const b = X.arena();
+  X.dbg([{ x: 0, z: 0 }]);
+  const plane = new THREE.Group(); plane.visible = false; X.G.add(plane);
+  const pa = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); plane.add(m); return m; };
+  pa(new THREE.BoxGeometry(1.4, 1.2, 9), _gimLam(0x4a6a3a), 0, 0, 0);
+  pa(new THREE.BoxGeometry(14, 0.3, 2.6), _gimLam(0x4a6a3a), 0, 0, 0.4);
+  pa(new THREE.BoxGeometry(4.4, 0.25, 1.6), _gimLam(0x4a6a3a), 0, 0.1, -3.8);
+  pa(new THREE.BoxGeometry(0.2, 1.8, 1.4), _gimLam(0x4a6a3a), 0, 0.9, -3.8);
+  pa(new THREE.CylinderGeometry(0.7, 0.7, 0.18, 12), _gimBasic(0xe8e8e8), 3.8, 0.2, 0.4).rotation.x = 0;
+  pa(new THREE.CircleGeometry(0.4, 12), _gimBasic(0xd8201c), 3.8, 0.35, 0.4).rotation.x = -Math.PI / 2;
+  pa(new THREE.CircleGeometry(0.4, 12), _gimBasic(0xd8201c), -3.8, 0.35, 0.4).rotation.x = -Math.PI / 2;
+  const bombs = [], N = 7, GAP = 9, STEP = 0.28;
+  let S = { phase: 'idle', t: 18, n: 0, dir: null, p0: null };
+  const clear = () => { for (const q of bombs) { X.G.remove(q.ring); } bombs.length = 0; plane.visible = false; };
+  X.hint('✈️ AIR RAID', 'Red rings on the ground: bombs. You have a second and a half.', '#ff5a3a');
+  X.onReset(() => { clear(); S = { phase: 'idle', t: 18, n: 0, dir: null, p0: null }; });
+  X.on((dt, A, t) => {
+    S.t -= dt;
+    if (S.phase === 'idle' && S.t <= 0) {
+      const ang = [0, 1.571, 0.785, -0.785][S.n++ % 4] + (Math.random() - 0.5) * 0.3;
+      const dx = Math.cos(ang), dz = Math.sin(ang), span = (N - 1) * GAP, cx = (Math.random() - 0.5) * 30, cz = (Math.random() - 0.5) * 30;
+      S.dir = { dx, dz }; S.p0 = { x: cx - dx * span / 2, z: cz - dz * span / 2 };
+      for (let i = 0; i < N; i++) {
+        const x = S.p0.x + dx * GAP * i, z = S.p0.z + dz * GAP * i;
+        const ring = X.ring(x, z, 4.6, 0xff2a1a, 0.9, 0.4, 0.09);
+        bombs.push({ x, z, ring, at: 1.8 + i * STEP, done: false });
+      }
+      S.phase = 'raid'; S.t = 0; S.el = 0;
+      plane.visible = true; plane.rotation.y = Math.atan2(dx, dz);
+      X.announce('✈️ AIR RAID', 'Get out of the red rings!', '#ff5a3a'); X.sound('siren_loop', cx, cz, 0.7);
+    } else if (S.phase === 'raid') {
+      S.el += dt;
+      const f = 32 * (S.el - 0.6);                                         // metres along the line, from p0
+      plane.position.set(S.p0.x + S.dir.dx * f, 46, S.p0.z + S.dir.dz * f);
+      for (const q of bombs) {
+        if (q.done) continue;
+        q.ring.material.opacity = 0.4 + 0.5 * Math.abs(Math.sin(t * 14));
+        if (S.el >= q.at) {
+          q.done = true; X.G.remove(q.ring);
+          X.fx(q.x, 0.5, q.z, 5.2, 0xffa030); X.sound('explosion', q.x, q.z, 0.9);
+          X.disc(q.x, q.z, 3.2, 0x1a1410, 0.55, 0.05);
+          for (const a of A) {
+            const d = Math.hypot(a.x - q.x, a.z - q.z);
+            if (d > 5 || a.y > 3.5) continue;
+            a.hurt(d < 2.6 ? 80 : 45, 'bomb'); a.push(a.x - q.x || 0.2, a.z - q.z || 0.2); a.lift(7);
+            if (a.me) X.flash('rgba(255,180,90,0.45)', 280);
+          }
+        }
+      }
+      if (S.el > bombs[bombs.length - 1].at + 0.8) { S.phase = 'idle'; S.t = 28 + Math.random() * 10; plane.visible = false; bombs.length = 0; }
+    }
+  });
+};
+
+// ── 🧊 TITANIC · TAKING WATER ───────────────────────────────────────────────────────────────────────────────────────────
+// She is going down. From the first minute there is water on the lowest deck and it does not stop coming: ankle deep,
+// then knee, then waist. Wading is slow and cold, and the fight climbs the ship ahead of the water.
+GIM_LABELS.flooded = 'drowned in the flooding';
+GIM.titanic = (X) => {
+  const b = MAP_BOUNDS[X.name];
+  X.dbg([{ x: 0, z: 0 }]);
+  const water = new THREE.Mesh(new THREE.PlaneGeometry(b.halfX * 2, b.halfZ * 2), _gimBasic(0x0d3a5c, 0.62)); water.rotation.x = -Math.PI / 2; water.position.y = 0.04; water.visible = false; X.G.add(water);
+  const beat = new Map();
+  let lvl = 0;
+  X.hint('🧊 TAKING WATER', 'The water is rising. Wading is slow and cold. Go up.', '#5ab8ff');
+  X.onReset(() => { lvl = 0; water.visible = false; beat.clear(); });
+  X.on((dt, A, t) => {
+    lvl = Math.min(1.4, lvl + dt * 0.0045);                                 // about five minutes to the chest
+    if (lvl < 0.05) { water.visible = false; return; }
+    water.visible = true; water.position.y = lvl + Math.sin(t * 1.4) * 0.02;
+    for (const a of A) {
+      if (a.y > lvl - 0.05 || a.airborne) continue;
+      a.slow(Math.max(0.45, 1 - lvl * 0.55));
+      if (lvl > 0.6 && _gimBeat(beat, a.id, dt, 1.0)) a.hurt(1.5 + lvl, 'flooded');
+    }
+  });
+};
+
+// ── 🛒 SUPERMARKET · CART RUSH ──────────────────────────────────────────────────────────────────────────────────────────
+// The store is full of trolleys and nobody is pushing them. Down the long aisles they come, unattended, at a fair speed,
+// rattling. They do not do much damage. They do move you six metres sideways, which in a place this narrow is the
+// same thing.
+GIM_LABELS.cart = 'was run down by a shopping trolley';
+GIM.supermarket = (X) => {
+  const b = X.arena(), lanes = [];
+  for (let off = -b.halfX + 12; off <= b.halfX - 12 && lanes.length < 4; off += 5) {
+    const ln = X.lane(off, -b.halfZ + 6, off, b.halfZ - 6, 26, { w: 1.2 });
+    if (ln && !lanes.some(q => Math.abs(q.x0 - ln.x0) < 9)) lanes.push(ln);
+  }
+  if (!lanes.length) return;
+  X.dbg(lanes.map(l => ({ x: (l.x0 + l.x1) / 2, z: (l.z0 + l.z1) / 2 })));
+  const mk = () => {
+    const g = new THREE.Group(); X.G.add(g);
+    const add = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); g.add(m); return m; };
+    const wire = _gimBasic(0xc8ccd0, 0.55), steel = _gimLam(0x8a9096);
+    add(new THREE.BoxGeometry(0.9, 0.08, 1.3), steel, 0, 0.5, 0);
+    for (const sx of [-1, 1]) add(new THREE.BoxGeometry(0.05, 0.55, 1.3), wire, sx * 0.45, 0.8, 0);
+    for (const sz of [-1, 1]) add(new THREE.BoxGeometry(0.9, 0.55, 0.05), wire, 0, 0.8, sz * 0.65);
+    add(new THREE.BoxGeometry(0.9, 0.06, 0.06), steel, 0, 1.15, -0.7);
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) add(new THREE.CylinderGeometry(0.07, 0.07, 0.08, 6), _gimLam(0x15171a), sx * 0.35, 0.1, sz * 0.5).rotation.z = Math.PI / 2;
+    add(new THREE.BoxGeometry(0.55, 0.3, 0.4), _gimLam(0xd8a040), 0, 0.72, 0.2);
+    return g;
+  };
+  const carts = [];
+  lanes.forEach((ln, li) => {
+    const L = ln.len, dx = (ln.x1 - ln.x0) / L, dz = (ln.z1 - ln.z0) / L;
+    for (let k = 0; k < 2; k++) { const g = mk(); g.rotation.y = Math.atan2(dx, dz); g.visible = false; carts.push({ g, ln, dx, dz, s: -999, t: 4 + li * 3 + k * 7, dir: k ? -1 : 1, v: 11 + li }); }
+  });
+  const cd = new Map();
+  X.hint('🛒 CART RUSH', 'Loose trolleys run the long aisles. They shove, they do not kill.', '#e8c84a');
+  X.onReset(() => { cd.clear(); carts.forEach((c, i) => { c.s = -999; c.t = 4 + i * 3; c.g.visible = false; }); });
+  X.on((dt, A, t) => {
+    for (const k of cd.keys()) { const v = cd.get(k) - dt; if (v <= 0) cd.delete(k); else cd.set(k, v); }
+    for (const c of carts) {
+      if (c.s === -999) {
+        c.t -= dt;
+        if (c.t <= 0) { c.s = c.dir > 0 ? 0 : c.ln.len; c.g.visible = true; c.g.rotation.y = Math.atan2(c.dx * c.dir, c.dz * c.dir); X.sound('click', c.ln.x0, c.ln.z0, 0.6); }
+        continue;
+      }
+      c.s += c.dir * c.v * dt;
+      const x = c.ln.x0 + c.dx * c.s, z = c.ln.z0 + c.dz * c.s;
+      c.g.position.set(x, 0, z); c.g.rotation.z = Math.sin(t * 22) * 0.015;
+      for (const a of A) {
+        if (a.y > 1.4 || Math.hypot(a.x - x, a.z - z) > 1.25 || cd.has(a.id + c.dir + c.ln.x0)) continue;
+        cd.set(a.id + c.dir + c.ln.x0, 1.2);
+        const side = ((a.x - x) * -c.dz + (a.z - z) * c.dx) >= 0 ? 1 : -1;
+        a.hurt(14, 'cart'); a.push(-c.dz * side * 5.5, c.dx * side * 5.5); a.lift(4);
+        if (a.me) X.flash('rgba(220,200,120,0.3)', 180);
+      }
+      if (c.s > c.ln.len + 3 || c.s < -3) { c.s = -999; c.t = 11 + Math.random() * 8; c.g.visible = false; }
+    }
+  });
+};
+
+// ── 🔦 PYONGYANG · SEARCHLIGHTS ─────────────────────────────────────────────────────────────────────────────────────────
+// Four towers, four lamps, four pools of white light walking the squares. Stay in one for a second and somebody up there
+// has you: a red ring closes on the spot and the guns do the rest. The light is the aim -- nothing else is.
+GIM_LABELS.shell = 'was shelled from the searchlights';
+GIM.pyongyang = (X) => {
+  const towers = X.spots(4, { r: 1.8, pairs: true, sep: 36, maxR: 70, edge: 12 });
+  if (towers.length < 2) return;
+  X.dbg(towers.map(s => ({ x: s.x + 18, z: s.z })));
+  const R = 4.4, ORB = 17;
+  const lamps = towers.map((s, i) => {
+    X.mesh(new THREE.BoxGeometry(0.7, 11, 0.7), _gimLam(0x5a5f66), s.x, 5.5, s.z);
+    X.mesh(new THREE.BoxGeometry(1.8, 1.0, 1.8), _gimLam(0x2a2d30), s.x, 11.4, s.z);
+    const spot = X.disc(s.x + ORB, s.z, R, 0xfff6c0, 0.38, 0.06);
+    const rim = X.ring(s.x + ORB, s.z, R, 0xffffff, 0.8, 0.25, 0.07);
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.22, 1), _gimBasic(0xfff6c0, 0.22)); X.G.add(beam);
+    return { x: s.x, z: s.z, a: i * 1.7, w: (i % 2 ? -1 : 1) * 0.38, spot, rim, beam, lit: new Map(), sx: s.x + ORB, sz: s.z };
+  });
+  const shells = [];
+  X.hint('🔦 SEARCHLIGHTS', 'Stay in the light for a second and the guns find you.', '#fff6c0');
+  X.onReset(() => { for (const q of shells) X.G.remove(q.ring); shells.length = 0; lamps.forEach(l => l.lit.clear()); });
+  X.on((dt, A, t) => {
+    for (const l of lamps) {
+      l.a += l.w * dt;
+      l.sx = l.x + Math.cos(l.a) * ORB; l.sz = l.z + Math.sin(l.a) * ORB;
+      l.spot.position.set(l.sx, 0.06, l.sz); l.rim.position.set(l.sx, 0.07, l.sz);
+      const mx = (l.x + l.sx) / 2, mz = (l.z + l.sz) / 2, len = Math.hypot(l.sx - l.x, l.sz - l.z, 11.4);
+      l.beam.position.set(mx, 5.7, mz); l.beam.scale.z = len; l.beam.lookAt(l.sx, 0, l.sz);
+      for (const a of A) {
+        const inside = a.y < 1.9 && Math.hypot(a.x - l.sx, a.z - l.sz) < R;
+        const v = inside ? (l.lit.get(a.id) || 0) + dt : Math.max(0, (l.lit.get(a.id) || 0) - dt * 1.5);
+        l.lit.set(a.id, v);
+        if (v > 1.0) {
+          l.lit.set(a.id, -1.5);
+          const ring = X.ring(a.x, a.z, 4.0, 0xff2a1a, 0.9, 0.4, 0.08);
+          shells.push({ x: a.x, z: a.z, t: 1.5, ring });
+          if (a.me) X.sound('radar_ping', a.x, a.z, 0.9);
+        }
+      }
+    }
+    for (let i = shells.length - 1; i >= 0; i--) {
+      const q = shells[i]; q.t -= dt;
+      q.ring.material.opacity = 0.35 + 0.55 * Math.abs(Math.sin(t * 16));
+      if (q.t <= 0) {
+        X.G.remove(q.ring); shells.splice(i, 1);
+        X.fx(q.x, 0.5, q.z, 4.6, 0xffa030); X.sound('explosion', q.x, q.z, 0.85);
+        for (const a of A) {
+          const d = Math.hypot(a.x - q.x, a.z - q.z);
+          if (d < 4 && a.y < 3.5) { a.hurt(d < 2 ? 70 : 40, 'shell'); a.push(a.x - q.x || 0.2, a.z - q.z || 0.2); a.lift(6); if (a.me) X.flash('rgba(255,180,90,0.4)', 260); }
+        }
+      }
+    }
+  });
+};
+
+// ── 🚧 TRAFFIC CONE REPUBLIC · TOLL LANES ───────────────────────────────────────────────────────────────────────────────
+// The republic charges. Four toll gates stand across the lanes: walk through one and it takes ten of your health and
+// gives you the road -- a surge of speed for five seconds. Everyone else can see the gates too, and knows what you paid.
+GIM_LABELS.toll = 'could not afford the toll';
+GIM.traffic_cone_republic = (X) => {
+  const spots = X.spots(6, { r: 3.0, pairs: true, sep: 18, maxR: 85, edge: 9 });
+  if (!spots.length) return;
+  X.dbg(spots);
+  const orange = 0xe8782a, white = 0xf4f4f0;
+  const gates = spots.map((s, i) => {
+    const yaw = (i % 2 ? Math.PI / 2 : 0);
+    const g = new THREE.Group(); g.position.set(s.x, 0, s.z); g.rotation.y = yaw; X.G.add(g);
+    const add = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); g.add(m); return m; };
+    for (const sx of [-1, 1]) { add(new THREE.BoxGeometry(0.9, 3.2, 0.9), _gimLam(white), sx * 2.4, 1.6, 0); add(new THREE.BoxGeometry(1.0, 0.5, 1.0), _gimLam(orange), sx * 2.4, 3.3, 0); }
+    add(new THREE.BoxGeometry(5.8, 0.9, 0.5), _gimLam(orange), 0, 3.4, 0);
+    add(new THREE.BoxGeometry(5.0, 0.55, 0.12), _gimBasic(0xfff08a), 0, 3.4, 0.3);
+    const arm = add(new THREE.BoxGeometry(4.0, 0.16, 0.16), _gimLam(0xd82a2a), 0, 1.0, 0);
+    const pad = new THREE.Mesh(new THREE.CircleGeometry(1.7, 20), _gimBasic(0xffd24a, 0.35)); pad.rotation.x = -Math.PI / 2; pad.position.set(0, 0.06, 0); g.add(pad);
+    return { x: s.x, z: s.z, g, arm, pad, flash: 0 };
+  });
+  const cd = new Map();
+  X.hint('🚧 TOLL LANES', 'Walk through a gate: it takes 10 health and gives you 5 seconds of speed.', '#ffd24a');
+  X.onReset(() => cd.clear());
+  X.on((dt, A, t) => {
+    for (const k of cd.keys()) { const v = cd.get(k) - dt; if (v <= 0) cd.delete(k); else cd.set(k, v); }
+    for (const G of gates) {
+      G.flash = Math.max(0, G.flash - dt * 3); G.arm.position.y = 1.0 + G.flash * 1.6; G.pad.material.opacity = 0.3 + 0.2 * Math.sin(t * 3) + G.flash * 0.4;
+      for (const a of A) {
+        if (a.y > 1.8 || cd.has(a.id) || Math.hypot(a.x - G.x, a.z - G.z) > 1.7) continue;
+        cd.set(a.id, 3.5);
+        a.hurt(10, 'toll'); a.boost(5000); G.flash = 1;
+        if (a.me) { X.flash('rgba(255,210,70,0.25)', 200); }
+        X.sound('click', G.x, G.z, 0.8);
+      }
+    }
+  });
+};
+
+// ── 🗿 FLYING MOAI · ROAR ───────────────────────────────────────────────────────────────────────────────────────────────
+// A stone head on a stone pedestal in the middle of the plateau. Its eyes go white, there is a breath of quiet, and a ring
+// of stone dust goes out across the ground at eighteen metres a second. It is knee high. It is a jump.
+GIM_LABELS.roar = 'was knocked down by the roar';
+GIM.flying_moai = (X) => {
+  const s = X.spots(1, { r: 2.6, near: [0, 0], edge: 12, sep: 1 })[0];
+  if (!s) return;
+  X.dbg([{ x: s.x + 8, z: s.z }]);
+  const stone = _gimLam(0x7d756a), dark = _gimLam(0x5a564c);
+  X.mesh(new THREE.BoxGeometry(3.6, 0.9, 3.6), dark, s.x, 0.45, s.z);
+  X.mesh(new THREE.BoxGeometry(2.0, 4.6, 1.8), stone, s.x, 3.2, s.z);
+  X.mesh(new THREE.BoxGeometry(2.4, 0.9, 1.2), dark, s.x, 4.3, s.z + 0.5);
+  const eyeM = _gimBasic(0x6a645a), eyes = [-0.5, 0.5].map(sx => X.mesh(new THREE.BoxGeometry(0.4, 0.3, 0.2), eyeM, s.x + sx, 3.9, s.z + 1.0));
+  const wave = new THREE.Mesh(new THREE.RingGeometry(0.9, 1.0, 40), _gimBasic(0xd8cfb8, 0.8)); wave.rotation.x = -Math.PI / 2; wave.position.set(s.x, 0.12, s.z); wave.visible = false; X.G.add(wave);
+  const band = new THREE.Mesh(new THREE.TorusGeometry(1, 0.35, 5, 40), _gimBasic(0xd8cfb8, 0.55)); band.rotation.x = Math.PI / 2; band.position.set(s.x, 0.35, s.z); band.visible = false; X.G.add(band);
+  let S = { phase: 'idle', t: 8, r: 0, hit: new Set() };
+  X.hint('🗿 ROAR', 'When its eyes go white a ring of dust crosses the ground. Jump it.', '#d8cfb8');
+  X.onReset(() => { S = { phase: 'idle', t: 8, r: 0, hit: new Set() }; wave.visible = false; band.visible = false; eyes.forEach(e => e.material.color.setHex(0x6a645a)); });
+  X.on((dt, A, t) => {
+    S.t -= dt;
+    if (S.phase === 'idle') { if (S.t <= 0) { S.phase = 'warn'; S.t = 1.3; X.sound('blackhole_collapse', s.x, s.z, 0.7); } }
+    else if (S.phase === 'warn') {
+      const f = Math.abs(Math.sin(t * 14)); eyes.forEach(e => e.material.color.setHex(f > 0.5 ? 0xffffff : 0x6a645a));
+      if (S.t <= 0) { S.phase = 'wave'; S.r = 1.5; S.hit.clear(); wave.visible = true; band.visible = true; eyes.forEach(e => e.material.color.setHex(0xffffff)); X.sound('explosion', s.x, s.z, 0.8); }
+    } else if (S.phase === 'wave') {
+      S.r += 18 * dt;
+      wave.scale.setScalar(S.r); band.scale.set(S.r, S.r, 1);
+      wave.material.opacity = Math.max(0, 0.8 - S.r / 120); band.material.opacity = Math.max(0, 0.55 - S.r / 120);
+      for (const a of A) {
+        if (a.y > 0.9 || S.hit.has(a.id)) continue;
+        const d = Math.hypot(a.x - s.x, a.z - s.z);
+        if (Math.abs(d - S.r) > 1.5) continue;
+        S.hit.add(a.id); a.hurt(22, 'roar'); a.push((a.x - s.x) / (d || 1) * 4, (a.z - s.z) / (d || 1) * 4); a.lift(5);
+        if (a.me) X.flash('rgba(216,207,184,0.4)', 220);
+      }
+      if (S.r > 90) { S.phase = 'idle'; S.t = 14 + Math.random() * 5; wave.visible = false; band.visible = false; eyes.forEach(e => e.material.color.setHex(0x6a645a)); }
+    }
+  });
+};
+
+// ── 🪂 BIG ARENA · AIRDROP ──────────────────────────────────────────────────────────────────────────────────────────────
+// A fortress built for 2v2 and 3v3 has one thing worth fighting over. Every forty seconds a crate comes down on a
+// parachute somewhere inside the walls -- smoke so you can see it from the keep -- and whoever opens it first is fully
+// healed with a full magazine. It is out in the open on purpose.
+GIM.big_arena = (X) => {
+  const spots = X.spots(10, { r: 2.4, sep: 24, maxR: 70, edge: 14, open: true, h: 3 });
+  if (spots.length < 3) return;
+  X.dbg([{ x: spots[0].x, z: spots[0].z }]);
+  let S = { t: 18, drop: null, last: null, n: 0 };
+  const smoke = [];
+  const clear = () => { if (S.drop) { X.G.remove(S.drop.g); if (S.drop.pk) { S.drop.pk.life = 0; } } S.drop = null; smoke.forEach(m => X.G.remove(m)); smoke.length = 0; };
+  X.hint('🪂 AIRDROP', 'A crate parachutes in every forty seconds. Full health, full magazine.', '#7fdc8a');
+  X.onReset(() => { clear(); S = { t: 18, drop: null, last: null, n: 0 }; });
+  X.on((dt, A, t) => {
+    S.t -= dt;
+    if (!S.drop && S.t <= 0) {
+      let s; do { s = spots[Math.floor(Math.random() * spots.length)]; } while (s === S.last && spots.length > 1);
+      S.last = s;
+      const g = new THREE.Group(); g.position.set(s.x, 0, s.z); X.G.add(g);
+      const crate = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.2, 1.5), _gimLam(0x3a6a3a)); crate.position.y = 30; g.add(crate);
+      const cross = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.1, 0.3), _gimBasic(0xffffff)); cross.position.set(0, 0.62, 0); crate.add(cross);
+      const cross2 = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.1, 1.0), _gimBasic(0xffffff)); cross2.position.set(0, 0.62, 0); crate.add(cross2);
+      const chute = new THREE.Mesh(new THREE.SphereGeometry(2.4, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), _gimBasic(0xf0f0e0, 0.9)); chute.position.y = 3.2; crate.add(chute);
+      const flare = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.7, 24, 8, 1, true), _gimBasic(0xff4a3a, 0.4)); flare.position.y = 12; g.add(flare); smoke.push(flare);
+      S.drop = { g, crate, chute, x: s.x, z: s.z, y: 30, landed: false, pk: null };
+      X.announce('🪂 AIRDROP', 'A crate is coming down', '#7fdc8a'); X.sound('air_drop', s.x, s.z, 0.8);
+    } else if (S.drop && !S.drop.landed) {
+      S.drop.y = Math.max(0.6, S.drop.y - 7 * dt); S.drop.crate.position.y = S.drop.y; S.drop.crate.rotation.y += dt * 0.4;
+      if (S.drop.y <= 0.6) {
+        S.drop.landed = true; S.drop.chute.visible = false;
+        const d = S.drop;
+        d.pk = { x: d.x, z: d.z, life: 45 };
+        X.sound('explosion', d.x, d.z, 0.4);
+      }
+    } else if (S.drop && S.drop.landed) {
+      const d = S.drop; d.pk.life -= dt;
+      let taken = false;
+      for (const a of A) if (a.y < 2.4 && Math.hypot(a.x - d.x, a.z - d.z) < 2.0) {
+        a.heal(1000); a.refill(1); X.fx(d.x, 0.8, d.z, 3.0, 0x7fdc8a); X.sound('heal', d.x, d.z, 0.8);
+        if (a.me) { X.flash('rgba(120,255,160,0.3)', 260); showAnnouncement('🪂 AIRDROP', 'Full health, full magazine', '#7fdc8a', 1600); }
+        taken = true; break;
+      }
+      if (taken || d.pk.life <= 0) { clear(); S.t = 36 + Math.random() * 8; }
+    }
+  });
+};
+
+// ── 💣 SUPER ARENA · NO MAN'S LAND ──────────────────────────────────────────────────────────────────────────────────────
+// Two compounds, and a strip of ground between them that nobody owns. Somebody has mined it. Each mine has a red light on
+// it -- you can see them, which is the problem, because so can everyone -- and a fuse long enough to run but not long
+// enough to think about it. Walk around, or walk over one on purpose.
+GIM_LABELS.mine = 'stepped on a mine';
+GIM.super_arena = (X) => {
+  const spots = X.spots(16, { r: 1.4, sep: 9, maxR: 62, edge: 14 });
+  if (spots.length < 4) return;
+  X.dbg(spots.slice(0, 6));
+  const mines = spots.map((s, i) => {
+    const g = new THREE.Group(); g.position.set(s.x, 0, s.z); X.G.add(g);
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.55, 0.16, 12), _gimLam(0x2a2d24)); body.position.y = 0.09; g.add(body);
+    const led = new THREE.Mesh(new THREE.SphereGeometry(0.12, 6, 5), _gimBasic(0xff2a1a)); led.position.y = 0.24; g.add(led);
+    const zn = X.zone('avoid', { x: s.x, z: s.z, r: 1.7 });
+    return { x: s.x, z: s.z, g, led, zn, state: 'armed', t: 0 };
+  });
+  X.hint('💣 NO MAN\'S LAND', 'The red lights are mines. Walk round them — or do not.', '#ff5a3a');
+  X.onReset(() => mines.forEach(m => { m.state = 'armed'; m.g.visible = true; m.t = 0; X.zone('avoid', m.zn); }));
+  X.on((dt, A, t) => {
+    for (const m of mines) {
+      if (m.state === 'armed') {
+        m.led.visible = Math.sin(t * 6 + m.x) > -0.3;
+        for (const a of A) if (a.y < 0.5 && Math.hypot(a.x - m.x, a.z - m.z) < 1.0) { m.state = 'fuse'; m.t = 0.7; X.sound('click', m.x, m.z, 0.8); break; }
+      } else if (m.state === 'fuse') {
+        m.t -= dt; m.led.visible = Math.sin(t * 40) > 0;
+        if (m.t <= 0) {
+          m.state = 'gone'; m.t = 45; m.g.visible = false; X.removeZone('avoid', m.zn);
+          X.fx(m.x, 0.4, m.z, 4.2, 0xffa030); X.sound('explosion', m.x, m.z, 0.9);
+          for (const a of A) {
+            const d = Math.hypot(a.x - m.x, a.z - m.z);
+            if (d < 3.8 && a.y < 3) { a.hurt(d < 1.8 ? 75 : 40, 'mine'); a.push(a.x - m.x || 0.2, a.z - m.z || 0.2); a.lift(8); if (a.me) X.flash('rgba(255,180,90,0.45)', 260); }
+          }
+        }
+      } else if (m.state === 'gone') {
+        m.t -= dt;
+        if (m.t <= 0) { m.state = 'armed'; m.g.visible = true; X.zone('avoid', m.zn); }
+      }
+    }
+  });
+};
+
+// ── 🚂 TRAIN · THE EXPRESS ──────────────────────────────────────────────────────────────────────────────────────────────
+// Two trains stand at the platforms and the middle track is clear, and it is not. Every half minute a signal goes red at
+// both ends, the horn sounds twice, and the express comes through at forty metres a second without stopping. It does not
+// slow down for anyone standing between the trains.
+GIM_LABELS.express = 'was hit by the express';
+GIM.train = (X) => {
+  const b = X.arena();
+  const ln = X.lane(0, -b.halfZ + 3, 0, b.halfZ - 3, 60, { w: 2.2, h: 2.4, spawns: true });
+  if (!ln) return;
+  X.dbg([{ x: 0, z: (ln.z0 + ln.z1) / 2 }]);
+  const z0 = ln.z0, z1 = ln.z1, span = z1 - z0;
+  const train = new THREE.Group(); train.visible = false; X.G.add(train);
+  const LEN = 80;
+  const loco = new THREE.Mesh(new THREE.BoxGeometry(3.0, 3.6, 12), _gimLam(0xb8201c)); loco.position.set(0, 2.2, 0); train.add(loco);
+  const nose = new THREE.Mesh(new THREE.BoxGeometry(2.6, 2.2, 2.0), _gimLam(0x2a2d30)); nose.position.set(0, 1.8, 6.8); train.add(nose);
+  const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.5, 0.2), _gimBasic(0xfff6c0)); lamp.position.set(0, 2.6, 7.9); train.add(lamp);
+  for (let k = 0; k < 6; k++) { const c = new THREE.Mesh(new THREE.BoxGeometry(2.9, 3.4, 11), _gimLam(k % 2 ? 0x4a5a6a : 0x5a6a7a)); c.position.set(0, 2.1, -(k + 1) * 11.6); train.add(c);
+    const w = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.7, 9), _gimBasic(0x1c2630)); w.position.set(0, 2.9, -(k + 1) * 11.6); train.add(w); }
+  const lamps = [z0 - 1.5, z1 + 1.5].map(z => { const m = X.mesh(new THREE.BoxGeometry(0.6, 0.6, 0.6), _gimBasic(0x330000), 0, 5.2, z); X.mesh(new THREE.BoxGeometry(0.25, 5.2, 0.25), _gimLam(0x3a3d40), 0, 2.6, z); return m; });
+  const stripes = [];
+  for (let s = 2; s < span; s += 4) { const m = X.mesh(new THREE.BoxGeometry(3.2, 0.02, 0.9), _gimBasic(0xffd24a, 0.0), 0, 0.05, z0 + s); stripes.push(m); }
+  let S = { phase: 'idle', t: 16, z: 0, dir: 1, n: 0, cd: new Map() };
+  X.hint('🚂 THE EXPRESS', 'When the signals go red the express comes through the middle. Stay off the track.', '#ff6a3a');
+  X.onReset(() => { S = { phase: 'idle', t: 16, z: 0, dir: 1, n: 0, cd: new Map() }; train.visible = false; lamps.forEach(l => l.material.color.setHex(0x330000)); stripes.forEach(m => { m.material.opacity = 0; }); });
+  X.on((dt, A, t) => {
+    S.t -= dt;
+    if (S.phase === 'idle' && S.t <= 0) { S.phase = 'warn'; S.t = 4.0; S.dir = S.n++ % 2 ? -1 : 1; X.announce('🚂 EXPRESS', 'Clear the middle track!', '#ff6a3a'); }
+    else if (S.phase === 'warn') {
+      const f = Math.sin(t * 8) > 0;
+      lamps.forEach(l => l.material.color.setHex(f ? 0xff2a1a : 0x330000)); stripes.forEach((m, i) => { m.material.opacity = f ? 0.8 : 0.15; });
+      if (Math.floor(S.t * 2) !== Math.floor((S.t + dt) * 2) && S.t > 0.5) X.sound('radar_ping', 0, (z0 + z1) / 2, 0.9);
+      if (S.t <= 0) { S.phase = 'run'; S.z = S.dir > 0 ? z0 - 10 : z1 + 10; train.visible = true; train.rotation.y = S.dir > 0 ? 0 : Math.PI; S.cd.clear(); X.sound('air_launch', 0, S.z, 1.0); }
+    } else if (S.phase === 'run') {
+      S.z += S.dir * 40 * dt; train.position.set(0, 0, S.z);
+      const head = S.z + S.dir * 8, tail = S.z - S.dir * (LEN - 10);
+      const lo = Math.min(head, tail), hi = Math.max(head, tail);
+      for (const a of A) {
+        if (a.y > 4.4 || Math.abs(a.x) > 2.4 || a.z < lo || a.z > hi || (S.cd.get(a.id) || 0) > t) continue;
+        S.cd.set(a.id, t + 2.5);
+        a.hurt(200, 'express'); a.push(a.x >= 0 ? 6 : -6, 0); a.lift(7);
+        if (a.me) X.flash('rgba(255,255,255,0.5)', 300);
+      }
+      if ((S.dir > 0 && S.z - (LEN) > z1 + 6) || (S.dir < 0 && S.z + LEN < z0 - 6)) {
+        S.phase = 'idle'; S.t = 24 + Math.random() * 8; train.visible = false; lamps.forEach(l => l.material.color.setHex(0x330000)); stripes.forEach(m => { m.material.opacity = 0; });
+      }
     }
   });
 };
@@ -39233,7 +40090,7 @@ function updateMovement(dt, socialBlocked = false) {
   const fpControl = !KILLCAM.active && !THEATER.active && !pilotedVehicle && !pilotedMortar && !isDead;
   if (fpControl) {
     // Camera lean (roll about the view axis) — doesn't affect aim direction.
-    const rollTarget = sliding ? 0.14 : 0;
+    const rollTarget = (sliding ? 0.14 : 0) + _gimRollNow();
     window._viewRoll = (window._viewRoll || 0) + (rollTarget - (window._viewRoll || 0)) * Math.min(1, dt * 10);
     if (Math.abs(window._viewRoll) > 0.0005 || euler.z !== 0) {
       euler.z = Math.abs(window._viewRoll) < 0.0005 ? 0 : window._viewRoll;
@@ -61438,51 +62295,58 @@ document.querySelectorAll('.diff-card').forEach(card => {
 // Map selector
 const MAP_DESCS = {
   auto:       'Random — game picks one for you each match',
-  blank:      'Classic Arena — wider lanes, taller wall-walks, ramp routes, clean cover',
+  blank:      'Classic Arena — wide lanes, wall-walks, ramps · a HOT SEAT ring heals you and moves every 40 s',
   m4_tower:   'M4 Tower — tight two-story arena with climbable corners and upper catwalks',
   base_raid:  'Base Raid — storm a guarded compound with allied bots',
-  urban:      'Urban Plaza — corner buildings, cars as low cover',
-  warehouse:  'Warehouse — stacked crates, pipes, narrow lanes',
-  forest:     'Forest — dense pine routes, sheltered clearings and a raised timber bridge',
-  vietnam:    '🇻🇳 Vietnam — huge dense jungle, thick canopy, tight sightlines',
-  volcano:    '🔥 Volcano — high-damage lava fields with black obsidian routes',
-  cyber:      '⚡ Cyber Alley — neon city, JUMP PADS launch you up',
-  desert:     'Desert — sandstone canyons, ruined arches and climbable ridges',
-  tundra:     'Tundra — blue ice corridors, snowbanks and a two-floor research station',
+  urban:      'Urban Plaza — corner buildings, cars as low cover · RUSH HOUR traffic runs the avenue',
+  warehouse:  'Warehouse — stacked crates, pipes, narrow lanes · the overhead CRANE drops crates on red rings',
+  forest:     'Forest — dense pine routes, sheltered clearings, a timber bridge · WILDFIRE spreads through the pines',
+  vietnam:    '🇻🇳 Vietnam — huge dense jungle, tight sightlines · hidden PUNJI PITS',
+  volcano:    '🔥 Volcano — lava fields, black obsidian routes · GEYSERS blow on a timer',
+  cyber:      '⚡ Cyber Alley — neon city · NEON LAUNCHERS fire you across the map',
+  desert:     'Desert — sandstone canyons, ruined arches, climbable ridges · QUICKSAND pits',
+  tundra:     '❄️ Tundra — blue ice corridors, a research station · THIN ICE cracks under you',
   space:      '🌌 Space Station — LOW GRAVITY zones · jump higher',
   airport:    '🛬 Airport — break glass + lights · gets darker as lights die',
   trenches:   '🪖 Trenches — barbed wire + 4 PILOTABLE mortar cannons (F to use)',
   chernobyl:  '☢️ Chernobyl — toxic gas (1 dmg/s) + 4 destructible reactors (500 HP each)',
-  refinery:   'Oil Refinery — oil slicks make you slide + explosive barrels',
-  skydock:    'Skydock Launch — many jump pads + raised gantry fights',
-  sewer:      'Acid Sewer — toxic pools force bridge fights',
+  refinery:   'Oil Refinery — oil slicks make you slide + explosive barrels · shoot a slick and it BURNS',
+  skydock:    'Skydock Launch — jump pads up to the gantries · a LAUNCH COUNTDOWN turns the pad into a furnace',
+  sewer:      'Acid Sewer — toxic pools force bridge fights · a FLUSH wave sweeps the floor',
   gravity_lab:'Gravity Lab — low gravity domes + launch pads',
-  glassworks: 'Glassworks — breakable glass maze + barrel traps',
-  carrier:    '🚢 Carrier — flat runway top deck · hangars + control tower',
-  overgrowth: '🌲 Overgrowth — abandoned city reclaimed by nature',
+  glassworks: 'Glassworks — glass sheets shatter into cutting shards · barrel traps',
+  carrier:    '🚢 Carrier — flat deck that ROLLS with the sea · hangars + control tower',
+  overgrowth: '🌲 Overgrowth — abandoned city reclaimed by nature · STRANGLER VINES root you',
   orbital_station: '🛰️ Orbital Station — modular pods + central hub',
-  foundry:    '🏭 Foundry — conveyor belts, molten pools, giant gears',
-  carnival:   '🎪 Carnival — ferris wheel, tents, bumper-car arena',
+  foundry:    '🏭 Foundry — conveyor belts, molten pools · PRESSES slam on a beat',
+  carnival:   '🎪 Carnival — ferris wheel, tents · the CAROUSEL carries you round and throws you off',
   biosphere:  '🧬 Biosphere — 4-zone dome (jungle / desert / frozen / dirt)',
   lockdown:   '🚨 Lockdown — prison cell blocks + security tower',
-  studio:     '🎥 Studio — western, sci-fi, and castle sets back-to-back',
-  temple:     '🕍 Temple — stone columns, giant idol, trap pits',
-  holiday:    '🎄 Holiday — snowy village + giant tree + frozen lake',
-  labyrinth:  '🧪 Labyrinth — maze of walls, lots of corners',
-  arena:      '🏟️ Arena — green field surrounded by stadium walls',
+  studio:     '🎥 Studio — western, sci-fi and castle sets · FOG MACHINES whiteout the stage',
+  temple:     '🕍 Temple — stone columns, giant idol · a ROLLING BOULDER runs the long corridor',
+  holiday:    '🎄 Holiday — snowy village + giant tree · a SLEIGH drops presents (and coal)',
+  labyrinth:  '🧪 Labyrinth — a stone maze whose walls SHIFT and rise out of the floor',
+  arena:      '🏟️ Arena — green pitch inside stadium stands · SPRINKLERS soak the grass and shove you',
   opera:      '🎭 Opera — stage + balconies + chandelier',
   doomsday:   '🌋 Doomsday — collapsing city, fire pillars, abandoned heli',
-  train:      '🚂 Train Terminal — 3 tracks, platforms + canopy, footbridge, level crossing',
-  dreamscape: '🌌 Dreamscape — floating stairs + impossible shapes',
-  big_arena:   '🗺️ Big Arena — bigger footprint, four fortified corners, denser cover — built for 2v2/3v3',
+  train:      '🚂 Train Terminal — 3 tracks, platforms, footbridge · the EXPRESS runs the middle track',
+  dreamscape: '🌌 Dreamscape — floating stairs, impossible shapes · PORTAL rings',
+  big_arena:   '🗺️ Big Arena — four fortified corners, denser cover · AIRDROPS full-heal · built for 2v2/3v3',
   big_harbor:  '🗺️ Big Harbor — a 60 m sea channel between two quays: cross by the ship, the piers or a crane jib. Step off and you fall in — 2v2/3v3',
-  super_arena: '🗺️ Super Big Arena — biggest non-BR map, two full compounds face off, densest cover — 2v2/3v3',
+  super_arena: '🗺️ Super Big Arena — two full compounds, densest cover · a MINEFIELD in no man\'s land · 2v2/3v3',
   storm_pier:     '⛈️ Storm Pier — lightning strikes the pier: red rings warn you, lightning rods catch strikes nearby',
   pinball_arcade: '🕹️ Pinball Arcade — neon bumpers fling you across the table, corner pads launch you',
   laser_vault:    '🔴 Laser Vault — sweeping beams: jump the red ones, duck the cyan ones',
   cargo_belts:    '📦 Cargo Belts — conveyor lanes carry you toward the shredders, catwalks above',
   gale_peaks:     '💨 Gale Peaks — a stepped peak with wind gusts that shove you around, updraft thermals',
   magma_rise:     '🌋 Magma Rise — the floor turns to lava on a timer; stand on the rock',
+  gravity_lab: 'Gravity Lab — three GRAVITY WELLS pull everything in',
+  pearl_harbor: '⚓ Pearl Harbor — quays, ships and cranes · AIR RAIDS bomb a line across the harbour',
+  titanic: '🚢 Titanic — a liner going down: decks, a grand hall · the WATER keeps rising',
+  supermarket: '🛒 Supermarket — aisles, checkouts, freezer · loose TROLLEYS run the aisles',
+  pyongyang: '🏛️ Pyongyang — monuments and squares · SEARCHLIGHTS call the guns on you',
+  traffic_cone_republic: '🚧 Traffic Cone Republic — giant cones, a roundabout, a flyover · TOLL LANES charge health for speed',
+  flying_moai: '🗿 Flying Moai — a plateau of stone heads · a ROAR shockwave crosses the ground',
 };
 function selectMapPick(mapId) {
   selectedMap = pickedMap = mapId;
