@@ -28408,6 +28408,7 @@ function buildRiotShield() {
   const gripMat    = new THREE.MeshLambertMaterial({ color: 0x222222 });
   // Main shield face (wide and tall)
   const face = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.30, 0.016), shellMat);
+  g._satchelSurface = face;
   face.position.set(-0.04, 0, -0.10); g.add(face);
   // Outer frame border
   const frameL = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.30, 0.022), frameMat);
@@ -32661,6 +32662,9 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
 // ── Bot world-space weapon prop ────────────────────────────────────────────
 const WORLD_GUN_SCALE = 1.9;   // see the end of makeBotWeaponProp
 function makeBotWeaponProp(weaponId) {
+  if (weaponId === 'riot_shield') {
+    const g = buildRiotShield(); g.position.set(0,0,0); g.scale.set(3.2,4.4,3.2); return g;
+  }
   if (weaponId === 'satchel') {
     const g = buildSatchel(); g.position.set(0,0,0); g.scale.setScalar(WORLD_GUN_SCALE); return g;
   }
@@ -40486,8 +40490,44 @@ function throwSatchel(item) {
   updateAmmoHUD();
 }
 
-function satchelTargetFrame(id) {
+function satchelShieldSurface(id) {
+  if (id === myId) {
+    if (!isRiotShieldBlocking()) return null;
+    const model = meleeModels[selectedMeleeIdx];
+    return model._satchelSurface || model;
+  }
+  const mesh = remoteMeshes[id];
+  return mesh?._gunId === 'riot_shield' ? (mesh._gun?._satchelSurface || mesh._gun) : null;
+}
+
+function satchelShieldHit(id, ray) {
+  const surface = satchelShieldSurface(id);
+  if (!surface) return null;
+  surface.updateWorldMatrix(true,false);
+  const scale = surface.getWorldScale(new THREE.Vector3());
+  if (Math.min(Math.abs(scale.x),Math.abs(scale.y),Math.abs(scale.z)) < .0001) return null;
+  let box;
+  if (surface.geometry) { surface.geometry.computeBoundingBox(); box = surface.geometry.boundingBox.clone(); }
+  else box = new THREE.Box3().setFromObject(surface).applyMatrix4(surface.matrixWorld.clone().invert());
+  const padding = new THREE.Vector3(.13/Math.abs(scale.x),.13/Math.abs(scale.y),.13/Math.abs(scale.z));
+  box.min.sub(padding); box.max.add(padding);
+  const localRay = ray.clone().applyMatrix4(surface.matrixWorld.clone().invert());
+  const point = localRay.intersectBox(box,new THREE.Vector3());
+  if (!point) return null;
+  const normal = satchelContactNormal(box,point).applyQuaternion(surface.getWorldQuaternion(new THREE.Quaternion()));
+  point.applyMatrix4(surface.matrixWorld);
+  return { point, normal, distance:ray.origin.distanceTo(point) };
+}
+
+function satchelTargetFrame(id, part = 'body') {
   if (players[id]?.dead || resolveBot(id)?.dead) return null;
+  if (part === 'shield') {
+    const surface = satchelShieldSurface(id);
+    if (!surface) return null;
+    surface.updateWorldMatrix(true,false);
+    return { position:surface.getWorldPosition(new THREE.Vector3()), quaternion:surface.getWorldQuaternion(new THREE.Quaternion()),
+      scale:surface.getWorldScale(new THREE.Vector3()) };
+  }
   if (id === myId) {
     if (isDead) return null;
     return { position:new THREE.Vector3(camera.position.x,playerFeetY(),camera.position.z),
@@ -40500,9 +40540,11 @@ function satchelTargetFrame(id) {
 
 function updateSatchelAttachment(s) {
   if (!s.attachment) return;
-  const frame = satchelTargetFrame(s.attachment.targetId);
+  const frame = satchelTargetFrame(s.attachment.targetId,s.attachment.part);
   if (!frame) { s.attachment = null; s.settled = false; s.velocity.set(0,0,0); return; }
-  s.mesh.position.copy(s.attachment.offset).applyQuaternion(frame.quaternion).add(frame.position);
+  s.mesh.position.copy(s.attachment.offset);
+  if (frame.scale) s.mesh.position.multiply(frame.scale);
+  s.mesh.position.applyQuaternion(frame.quaternion).add(frame.position);
   s.mesh.quaternion.copy(frame.quaternion).multiply(s.attachment.rotation);
 }
 
@@ -40510,19 +40552,20 @@ function applySatchelStick(s, data) {
   s.settled = true; s.velocity.set(0,0,0);
   s.mesh.position.set(data.x,data.y,data.z);
   s.mesh.quaternion.set(data.rotation.x,data.rotation.y,data.rotation.z,data.rotation.w).normalize();
-  s.attachment = data.targetId ? { targetId:data.targetId,
+  s.attachment = data.targetId ? { targetId:data.targetId, part:data.part || 'body',
     offset:new THREE.Vector3(data.offset.x,data.offset.y,data.offset.z), rotation:s.mesh.quaternion.clone() } : null;
   updateSatchelAttachment(s);
 }
 
-function stickSatchel(s, position, normal, targetId = null) {
+function stickSatchel(s, position, normal, targetId = null, part = 'body') {
   const rotation = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,1,0), normal);
-  const data = { action:'stick', id:s.id, x:position.x,y:position.y,z:position.z, targetId:null, rotation };
-  const frame = targetId && satchelTargetFrame(targetId);
+  const data = { action:'stick', id:s.id, x:position.x,y:position.y,z:position.z, targetId:null, part, rotation };
+  const frame = targetId && satchelTargetFrame(targetId,part);
   if (frame) {
     const inverse = frame.quaternion.clone().invert();
     data.targetId = targetId;
     data.offset = position.clone().sub(frame.position).applyQuaternion(inverse);
+    if (frame.scale) data.offset.divide(frame.scale);
     data.rotation = inverse.multiply(rotation);
   }
   data.rotation = { x:data.rotation.x,y:data.rotation.y,z:data.rotation.z,w:data.rotation.w };
@@ -40552,7 +40595,7 @@ function updateSatchels(dt) {
       const before = s.mesh.position.clone(), next = before.clone().addScaledVector(s.velocity, step);
       const distance = before.distanceTo(next);
       const ray = new THREE.Ray(before, next.clone().sub(before).normalize());
-      let closest = distance, contact = null, contactBox = null, targetId = null;
+      let closest = distance, contact = null, contactBox = null, targetId = null, shieldContact = null;
       for (const box of wallColliders) {
         const expanded = box.clone().expandByScalar(.13);
         const hit = ray.intersectBox(expanded, new THREE.Vector3());
@@ -40565,13 +40608,17 @@ function updateSatchels(dt) {
             mesh.position.clone().add(new THREE.Vector3(.48,1.85,.48))).expandByScalar(.13);
           const hit = ray.intersectBox(box,new THREE.Vector3());
           const hitDistance = hit && before.distanceTo(hit);
-          if (hit && hitDistance < closest) { closest = hitDistance; contact = hit; contactBox = box; targetId = pid; }
+          if (hit && hitDistance < closest) { closest = hitDistance; contact = hit; contactBox = box; targetId = pid; shieldContact = null; }
+          const shieldHit = satchelShieldHit(pid,ray);
+          if (shieldHit && shieldHit.distance < closest) {
+            closest = shieldHit.distance; contact = shieldHit.point; targetId = pid; shieldContact = shieldHit;
+          }
         }
       }
       if (contact) {
-        const normal = satchelContactNormal(contactBox,contact);
+        const normal = shieldContact ? shieldContact.normal : satchelContactNormal(contactBox,contact);
         next.copy(contact).addScaledVector(normal,.01);
-        stickSatchel(s,next,normal,targetId);
+        stickSatchel(s,next,normal,targetId,shieldContact ? 'shield' : 'body');
         break;
       }
       if (next.y <= .13) {

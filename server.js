@@ -2431,7 +2431,7 @@ io.on('connection', (socket) => {
         if (Math.hypot(data.x-target.x,data.y-(target.y||0),data.z-target.z) > 4) return;
       }
       emitToMatchExcept(p.matchId,socket.id,'satchelEvent',{ action:'stick',ownerId:p.id,id:data.id,
-        x:data.x,y:data.y,z:data.z,targetId,offset:targetId ? data.offset : null,
+        x:data.x,y:data.y,z:data.z,targetId,part:data.part === 'shield' ? 'shield' : 'body',offset:targetId ? data.offset : null,
         rotation:{ x:rotation.x/qLength,y:rotation.y/qLength,z:rotation.z/qLength,w:rotation.w/qLength } });
     } else if (data.action === 'detonate' && p._satchelIds.size) {
       p._satchelIds.clear();
