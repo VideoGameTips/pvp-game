@@ -17,6 +17,8 @@
   'use strict';
 
   const ZH = {
+    'Unlimited time': '无限时间',
+    'UNLIMITED': '无限',
     'Forward charge · rising swing · 100 dmg · massive knockback': '向前冲锋 · 上挑挥击 · 100 伤害 · 强力击退',
     'Remote Explosive': '遥控爆炸物',
     'Detonate': '引爆',

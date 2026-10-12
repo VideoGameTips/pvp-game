@@ -1707,6 +1707,7 @@ function getRandomSpawn() {
   return CLIENT_SPAWN_POINTS[Math.floor(Math.random() * CLIENT_SPAWN_POINTS.length)];
 }
 function formatMatchTime(secs) {
+  if (secs === Infinity) return 'UNLIMITED';
   const s = Math.max(0, Math.ceil(secs));
   return `${Math.floor(s/60)}:${(s%60).toString().padStart(2,'0')}`;
 }
@@ -39841,7 +39842,8 @@ function trySupport() {
   if (!gameStarted || isDead) return;
   if (countdownActive) return;
   const item = SUPPORT_ITEMS[selectedSupportIdx];
-  if (!item || supportUses[selectedSupportIdx] <= 0) return;
+  const unlimited = adminInfiniteAmmoActive();
+  if (!item || (!unlimited && supportUses[selectedSupportIdx] <= 0)) return;
   if (item.id === 'medkit' && medkitHealChannel) return;
   const now = Date.now();
   if (now - lastSupport < item.cooldown) return;
@@ -39850,7 +39852,7 @@ function trySupport() {
   if (item.id === 'frag') {
     if (grenadeWindupT < 1) return;
     lastSupport = now;
-    supportUses[selectedSupportIdx]--;
+    if (!unlimited) supportUses[selectedSupportIdx]--;
     updateAmmoHUD();
     grenadeWindupT   = 0;
     grenadeThrowFired = false;
@@ -39858,7 +39860,7 @@ function trySupport() {
   }
 
   lastSupport = now;
-  supportUses[selectedSupportIdx]--;
+  if (!unlimited) supportUses[selectedSupportIdx]--;
   updateAmmoHUD();
   // 🎵 Per-utility sound (mapped above). Some items override this with their own.
   if (SUPPORT_SOUND[item.id]) playSoundEvent(SUPPORT_SOUND[item.id], { volume: 1.0 });
@@ -40042,7 +40044,7 @@ function spawnSatchel(data, ownerId) {
 }
 
 function throwSatchel(item) {
-  if (inLobby) { noteLobbyHit(); supportUses[selectedSupportIdx]++; updateAmmoHUD(); return; }
+  if (inLobby) { noteLobbyHit(); if (!adminInfiniteAmmoActive()) supportUses[selectedSupportIdx]++; updateAmmoHUD(); return; }
   const origin = camera.position.clone().add(new THREE.Vector3(.12,-.18,-.4).applyQuaternion(camera.quaternion));
   const dir = new THREE.Vector3(0,.20,-1).applyQuaternion(camera.quaternion).normalize();
   const data = { action:'throw', id:`satchel_${myId}_${Date.now()}`, x:origin.x,y:origin.y,z:origin.z, dx:dir.x,dy:dir.y,dz:dir.z };
@@ -49107,7 +49109,7 @@ function updateWeaponHUD() {
   if (activeSlot === 'support' && selectedSupportIdx !== null && selectedSupportIdx >= 0) {
     const item = SUPPORT_ITEMS[selectedSupportIdx];
     document.getElementById('ammo-gun').textContent = item.name;
-    document.getElementById('ammo-count').textContent = supportUses[selectedSupportIdx];
+    document.getElementById('ammo-count').textContent = adminInfiniteAmmoActive() ? 'UNLIMITED' : supportUses[selectedSupportIdx];
     document.getElementById('ammo-reserve').textContent = item.id === 'satchel'
       ? `${activeSatchels.filter(s => s.ownerId === myId).length} deployed` : 'USES';
     return;
@@ -52044,9 +52046,9 @@ function updateMatchHUD() {
     // Show round number + round timer countdown (when active)
     const t = match.roundTimeLeft;
     if (match.roundActive && t != null && t > 0) {
-      C.textContent = `R${match.round}  ·  ${formatMatchTime(t)}`;
+      C.textContent = `R${match.round}  ·  ${formatMatchTime(matchTimeUnlimited() ? Infinity : t)}`;
       // Tint red in the last 10 seconds
-      C.style.color = t < 10 ? '#ff5555' : '';
+      C.style.color = !matchTimeUnlimited() && t < 10 ? '#ff5555' : '';
     } else {
       C.textContent = `R${match.round}`;
       C.style.color = '';
@@ -52055,7 +52057,7 @@ function updateMatchHUD() {
   } else if (match.type === 'race') {
     const g = match.cfg.killGoal;
     L.textContent = `ALLY  ${match.teamKills.ally}/${g}`;
-    C.textContent = formatMatchTime(match.timeLeft);
+    C.textContent = formatMatchTime(matchTimeUnlimited() ? Infinity : match.timeLeft);
     R.textContent = `${match.teamKills.enemy}/${g}  ENEMY`;
   } else if (match.type === 'frontlines') {
     L.textContent = 'ALLY ◀';
@@ -52126,13 +52128,13 @@ function updateMatchHUD() {
     } else {
       L.textContent = `KILLS: ${match.ffaKills[myId] || 0}`;
       C.textContent = `🎮 ARCADE`;
-      R.textContent = formatMatchTime(match.timeLeft);
+      R.textContent = formatMatchTime(matchTimeUnlimited() ? Infinity : match.timeLeft);
     }
   } else {
     const pk = match.ffaKills[myId] || 0;
     const topBot = Object.entries(match.ffaKills).filter(([k]) => k !== myId).sort(([,a],[,b]) => b-a)[0];
     L.textContent = `YOU: ${pk} kills`;
-    C.textContent = formatMatchTime(match.timeLeft);
+    C.textContent = formatMatchTime(matchTimeUnlimited() ? Infinity : match.timeLeft);
     R.textContent = topBot ? `TOP BOT: ${topBot[1]}` : '';
   }
 }
@@ -53264,6 +53266,7 @@ function checkRaceWin() {
 
 function updateMatchTimer(dt) {
   if (!match || !match.active || match.over) return;
+  if (matchTimeUnlimited()) { updateMatchHUD(); return; }
   // ── Elim mode: per-round 60-second timer ─────────────────────────────────
   if (match.type === 'elim') {
     if (!match.roundActive) return;
@@ -53285,6 +53288,7 @@ function updateMatchTimer(dt) {
 
 // When the elim round timer hits 0: team with highest combined HP wins.
 function resolveElimRoundByHP() {
+  if (matchTimeUnlimited()) return;
   if (!match || !match.roundActive) return;
   if (mpGuest()) return;   // the host calls the timeout (#48)
   // Sum HP per side (player counts as ally team if alive)
@@ -53332,6 +53336,7 @@ function resolveElimRoundByHP() {
 }
 
 function onTimeUp() {
+  if (matchTimeUnlimited()) return;
   if (!match || match.over) return;
   if (mpGuest() && mpTeamMatch()) return;   // the host's clock decides (#48)
   if (match.type === 'race') {
@@ -57022,6 +57027,7 @@ function emitMySkin() {
   try { refreshViewArms(); } catch (e) {}   // your own sleeves follow the skin you are wearing
   if (!socket) return;
   socket.emit('setSkin', { skin: mySkin, isAdmin: !!(currentUser && currentUser.isAdmin), skinData: _pxWireFor(mySkin) });
+  syncAdminTestSettings();
   _sentWeaponId = null; broadcastHeldWeapon();   // a reconnect or room change clears what the server knew
 }
 // Admin cheat toggles — only active when currentUser.isAdmin
@@ -57029,6 +57035,7 @@ const adminCheats = {
   fly: false,
   killAura: false,
   infiniteAmmo: false,
+  unlimitedTime: false,
   godMode: false,
   aimbot: false,
   speed: false,
@@ -57042,6 +57049,10 @@ const ADMIN_CHEAT_COMMANDS = {
   ammo: 'infiniteAmmo',
   infammo: 'infiniteAmmo',
   infiniteammo: 'infiniteAmmo',
+  untime: 'unlimitedTime',
+  unlimitedtime: 'unlimitedTime',
+  infinitetime: 'unlimitedTime',
+  notimer: 'unlimitedTime',
   aura: 'killAura',
   killaura: 'killAura',
   aim: 'aimbot',
@@ -57055,12 +57066,23 @@ const ADMIN_CHEAT_LABELS = {
   fly: 'Fly mode',
   killAura: 'Kill aura',
   infiniteAmmo: 'Infinite ammo',
+  unlimitedTime: 'Unlimited time',
   godMode: 'God mode',
   aimbot: 'Aimbot',
   speed: 'Speed boost',
   freezeBots: 'Freeze bots',
 };
-const ADMIN_COMMAND_HELP = ';fly ;god ;ammo ;aura ;aimbot ;speed ;freeze ;panel ;nuke ;heal ;refill ;win ;builder';
+const ADMIN_COMMAND_HELP = ';fly ;god ;ammo ;untime ;aura ;aimbot ;speed ;freeze ;panel ;nuke ;heal ;refill ;win ;builder';
+let serverUnlimitedMatchTime = false;
+function adminInfiniteAmmoActive() { return !!(currentUser?.isAdmin && adminCheats.infiniteAmmo); }
+function matchTimeUnlimited() { return serverUnlimitedMatchTime || !!(currentUser?.isAdmin && adminCheats.unlimitedTime); }
+function syncAdminTestSettings() {
+  if (currentUser?.isAdmin) socket.emit('adminTestSettings', { infiniteAmmo:!!adminCheats.infiniteAmmo, unlimitedTime:!!adminCheats.unlimitedTime });
+}
+socket.on('matchTimeSetting', data => {
+  serverUnlimitedMatchTime = !!data?.unlimited;
+  if (gameStarted && match) updateMatchHUD();
+});
 function parseAdminToggleArg(arg) {
   if (/^(on|1|true|yes|enable|enabled)$/i.test(arg || '')) return true;
   if (/^(off|0|false|no|disable|disabled)$/i.test(arg || '')) return false;
@@ -57069,6 +57091,10 @@ function parseAdminToggleArg(arg) {
 function setAdminCheat(key, next, source) {
   if (!Object.prototype.hasOwnProperty.call(adminCheats, key)) return false;
   adminCheats[key] = !!next;
+  if (key === 'infiniteAmmo' || key === 'unlimitedTime') {
+    syncAdminTestSettings();
+    if (gameStarted && loadoutReady()) { updateAmmoHUD(); if (match) updateMatchHUD(); }
+  }
   const label = ADMIN_CHEAT_LABELS[key] || key;
   showAnnouncement(
     adminCheats[key] ? `⚡ ${label} ON` : `${label} OFF`,
@@ -57472,6 +57498,7 @@ function afterDeath(ms, fn) {
 // Everything a finished match (or Lobby 13) leaves behind that the next start must not
 // inherit. Shared by the mode menu and the end-of-match buttons so they can't drift apart.
 function teardownMatchWorld() {
+  serverUnlimitedMatchTime = false;
   finishBatCrowdClear();
   clearSatchels();
   finishChainMaulSwing();
@@ -59507,6 +59534,7 @@ function openAdminPanel() {
       ['fly',          '🪂 Fly mode',           ';fly'],
       ['godMode',      '🛡️ God mode',           ';god'],
       ['infiniteAmmo', '♾️ Infinite ammo',      ';ammo'],
+      ['unlimitedTime','Unlimited time',       ';untime'],
       ['killAura',     '☠️ Kill aura (8m)',     ';aura'],
       ['aimbot',       '🎯 Aimbot',             ';aimbot'],
       ['speed',        '⚡ Speed boost (3×)',   ';speed'],

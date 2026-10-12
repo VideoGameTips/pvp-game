@@ -2125,6 +2125,11 @@ function emitToMatchExcept(matchId, exceptId, event, data) {
     if (sid !== exceptId) io.to(sid).emit(event, data);
   }
 }
+function broadcastAdminMatchTime(matchId) {
+  const unlimited = Object.values(players).some(p => !p.isBot && p.matchId === matchId
+    && p._adminUnlimitedTime && users[p.account]?.isAdmin);
+  emitToMatch(matchId, 'matchTimeSetting', { unlimited });
+}
 // Hand a socket the authoritative list of who is in its match RIGHT NOW.
 // Changing matchId used to be silent, which meant a client kept every body it
 // had already been told about: walk from the lobby into a match and the lobby
@@ -2147,7 +2152,7 @@ function movePlayerToMatch(socketId, newMatchId) {
   const p = players[socketId];
   if (!p) return;
   const prev = p.matchId;
-  if (prev === newMatchId) { sendMatchRoster(socketId); return; }
+  if (prev === newMatchId) { sendMatchRoster(socketId); broadcastAdminMatchTime(newMatchId); return; }
   p._satchelIds = new Set();
   // 1. Their bots stay behind — deleted, not carried. Bots belong to the match they
   //    were spawned for and the client sends spawnBots again for every match it
@@ -2164,6 +2169,8 @@ function movePlayerToMatch(socketId, newMatchId) {
   emitToMatchExcept(newMatchId, socketId, 'playerJoined', p);
   // 4. And the mover gets a clean slate of who is actually here.
   sendMatchRoster(socketId);
+  broadcastAdminMatchTime(prev);
+  broadcastAdminMatchTime(newMatchId);
 }
 
 
@@ -2217,8 +2224,13 @@ io.on('connection', (socket) => {
       const old = io.sockets.sockets.get(sid);
       if (old) setTimeout(() => old.disconnect(true), 400);   // let the notice land first
     }
+    if (p.account !== username) {
+      p._adminInfiniteAmmo = false;
+      p._adminUnlimitedTime = false;
+    }
     p.account = username;
     p.name = username.slice(0, 16);
+    broadcastAdminMatchTime(p.matchId);
   });
 
   // 🎭 Cosmetic skin + admin crown marker (purely visual; client-trusted — repo is public/hobby)
@@ -2399,7 +2411,8 @@ io.on('connection', (socket) => {
       const coords = [data.x,data.y,data.z,data.dx,data.dy,data.dz];
       if (!coords.every(Number.isFinite) || Math.hypot(data.x-p.x,data.y-p.y,data.z-p.z) > 3) return;
       const len = Math.hypot(data.dx,data.dy,data.dz), id = String(data.id || '');
-      if (len < .01 || id.length > 100 || !id.startsWith(`satchel_${socket.id}_`) || p._satchelIds.size >= 5) return;
+      const unlimited = !!(users[p.account]?.isAdmin && p._adminInfiniteAmmo);
+      if (len < .01 || id.length > 100 || !id.startsWith(`satchel_${socket.id}_`) || (!unlimited && p._satchelIds.size >= 5)) return;
       const now = Date.now();
       if (now - (p._satchelThrownAt || 0) < 800) return;
       p._satchelThrownAt = now; p._satchelIds.add(id);
@@ -2507,6 +2520,14 @@ io.on('connection', (socket) => {
   });
   // The host's word on the match — a round, the team score, the end. Relayed as-is to
   // the rest of the room with who sent it; clients only take it from their match's host.
+  socket.on('adminTestSettings', data => {
+    const p = players[socket.id];
+    if (!p || !users[p.account]?.isAdmin || !data) return;
+    p._adminInfiniteAmmo = data.infiniteAmmo === true;
+    p._adminUnlimitedTime = data.unlimitedTime === true;
+    broadcastAdminMatchTime(p.matchId);
+  });
+
   socket.on('matchEvent', (evt) => {
     const me = players[socket.id];
     if (!me || me.matchId === 'lobby' || me.matchId === HUB_MATCH) return;   // matches only, not the menus or the hub
@@ -2776,6 +2797,7 @@ io.on('connection', (socket) => {
     endDuelInvitesOf(socket.id, 'gone');
     forgetDuelNos(socket.id);
     delete players[socket.id];
+    broadcastAdminMatchTime(leavingMatch);
     emitToMatch(leavingMatch, 'playerLeft', socket.id);
     // Remove bots owned by this client
     for (const [id, p] of Object.entries(players)) {
