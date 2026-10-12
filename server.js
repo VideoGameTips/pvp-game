@@ -2373,7 +2373,7 @@ io.on('connection', (socket) => {
     const len = Math.hypot(dx, dz);
     if (!Number.isFinite(len) || len < 0.01) return;
     const dist = dist3(shooter, target);
-    if (dist > (chainMaul ? 6 : 38)) return;
+    if (dist > (chainMaul ? 12 : 38)) return;
     io.to(target.isBot ? target.ownerId : target.id).emit('grapplePulled', {
       ...(target.isBot ? { botId: target.id } : {}),
       shooterId: shooter.id,

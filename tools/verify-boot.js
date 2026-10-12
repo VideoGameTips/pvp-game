@@ -651,7 +651,7 @@ if (ok && process.argv.includes('--chain-maul')) {
       const bot = { dead:false, kbVX:0, kbVZ:0, yVel:0 };
       resolveBot = () => { pulls++; return bot; };
       friendlyFireBlocked = () => false;
-      const enemy = new THREE.Group(); enemy.position.set(0,0,-4.65);
+      const enemy = new THREE.Group(); enemy.position.set(0,0,-10.65);
       players = { target:{ dead:false } }; remoteMeshes = { target:enemy };
       meleeSwingDur = 720;
       const swing = () => { startChainMaulSwing(item); for(let i=0;i<100;i++) updateChainMaulSwing(.008); };

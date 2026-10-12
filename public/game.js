@@ -1056,7 +1056,7 @@ const MELEE_ITEMS = [
   { id: 'scythe', name: 'Scythe', type: 'Movement Reaper', damage: 58, range: 2.7, cooldown: 560, speedMult: 1.35,
     doubleJump: true,
     ability: { name: 'Reap Dash', cd: 4200, desc: 'Movement dash · slash through space', type: 'melee_mobility', speed: 30, side: 0, up: 3.5, color: 0x99ffe8 } },
-  { id: 'chain_hammer', name: 'Chain Maul', type: 'Chain Melee', damage: 85, range: 4.2, cooldown: 1100, speedMult: 1.1 },
+  { id: 'chain_hammer', name: 'Chain Maul', type: 'Chain Melee', damage: 85, range: 10, cooldown: 1100, speedMult: 1.1 },
 ];
 
 // ── 📦 Basic Skin Case generation ──────────────────────────────────────────
@@ -28073,8 +28073,8 @@ function buildChainHammer() {
     collar.position.z = z; g.add(collar);
   }
   g._chainAnchor = new THREE.Vector3(0, 0, -0.22);
-  g._chain = makeChainMaulCable(13, 0.018, 0.12);
-  poseChainMaulCable(g._chain, g._chainAnchor, new THREE.Vector3(-0.10, -0.19, -0.66), 0.025);
+  g._chain = makeChainMaulCable(22, 0.018, 0.12);
+  poseChainMaulCable(g._chain, g._chainAnchor, new THREE.Vector3(-0.12, -0.28, -0.88), 0.04);
   g.add(g._chain);
   g.position.set(0.14, -0.12, -0.30);
   return g;
@@ -39166,7 +39166,7 @@ function finishChainMaulSwing() {
 function startChainMaulSwing(item) {
   finishChainMaulSwing();
   const model = meleeModels[selectedMeleeIdx];
-  const cable = makeChainMaulCable(40, 0.035, 0.24);
+  const cable = makeChainMaulCable(Math.ceil(item.range / 0.105), 0.035, 0.24);
   model._chain.visible = false;
   scene.add(cable);
   chainMaulSwing = { item, model, cable, elapsed: 0, duration: meleeSwingDur / 1000,
@@ -39221,7 +39221,7 @@ function updateChainMaulSwing(dt) {
     if (progress >= 0.20 && progress <= 0.72) {
       for (const [pid, mesh] of Object.entries(remoteMeshes)) {
         if (!mesh.visible || players[pid]?.dead || friendlyFireBlocked(pid, myId)) continue;
-        if (mesh.position.distanceToSquared(camera.position) > 36) continue;
+        if (mesh.position.distanceToSquared(camera.position) > (s.item.range + 2) ** 2) continue;
         const zone = chainMaulHitZone(start, head, previous || head, mesh.position);
         if (!zone) continue;
         const body = mesh.position.clone(); body.y += 0.95;
