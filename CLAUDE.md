@@ -100,12 +100,16 @@ it up is Job 4 in his server-move doc. Full runbook: `docs/DEPLOY.md` in the pri
 
 - Weapons: `WEAPONS[]` (primary+secondary), `MELEE_ITEMS[]`, `SUPPORT_ITEMS[]` near top.
 - Maps: `buildXxxMap()` fns + `MAP_GROUPS`, `registerMap()`, `activateMap()`. Batch-5 maps + `_batch5` mechanics state.
-- Wall-less maps: `OUTSKIRTS` / `addMapOutskirts()` (after `addMapEasterEggs()`). Takes a map's perimeter wall out (and the
-  trim the theme pass already merged onto it), grows `MAP_BOUNDS` by 34 m of walkable ground, and puts eight climbable
-  landmarks (`_OS_KITS`: crane, tower, stack, frame, mesa) round it. `MAP_BOT_BOUNDS` keeps bots in the old arena. Anything
-  standable must stay **under 14 m** -- `getGroundEyeY` / `botGroundYAt` ignore surfaces above that. Steps are 0.45 m
-  (auto-step is 0.65). To check reachability headlessly, flood-fill from the ground: every top in `userData.outskirts[].pois`
-  must be reached.
+- Wall-less maps: `OUTSKIRTS` / `addMapOutskirts()` (after `addMapEasterEggs()`), 30 of them -- everything outdoor; the
+  indoor maps (warehouse, sewer, space, orbital_station, opera, supermarket, lockdown, studio, gravity_lab, labyrinth,
+  titanic) and the mechanic maps keep their walls. Takes the perimeter wall out (and the trim the theme pass had already
+  merged onto it), grows `MAP_BOUNDS` by 34 m of walkable ground, puts eight climbable landmarks (`_OS_KITS`: crane,
+  tower, stack, frame, mesa, spire 36 m, skeleton 26 m) round it. `MAP_BOT_BOUNDS` keeps bots in the old arena.
+  **The edge is a void** (`MAP_VOID`): `floorExistsAt()` is false past the ground, `getGroundEyeY` returns nothing there, you
+  fall, and below `killY` (-45) `isPlayerFallenOff()` kills you ("YOU FELL"); the xz ring-out is only a far backstop. Bots
+  are still killed at the floor's edge (`isBotOutOfBoundsXZ`). Surfaces above 14 m are not ground unless the collider has
+  `.tall = true` (the outskirts mark theirs). Steps are 0.45 m (auto-step is 0.65). Bullets are no longer culled at 50 m.
+  Headless reachability: flood-fill from the ground; every top in `userData.outskirts[].pois` must be reached.
 - Shop/economy: `WEAPON_COSTS`, `BUNDLES`, credits/fragments/chests/wheel/upgrades, `openShop()`, `SHOOT_FX` sliders.
 - Bot AI: `updateBotAI(dt)`, `botTuning()`, spawn in `spawnGameBots()` / `makeBot()`.
 - Killcam + Kill Log theater: `KILLCAM`, `killLog`, `THEATER`, `renderTheater()`.

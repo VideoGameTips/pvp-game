@@ -5474,11 +5474,19 @@ const PLAYER_RADIUS = 0.38;
 // read as a wall to slide into, and a box you crouched on stopped counting as
 // ground.
 function playerFeetY() { return camera.position.y - (window._crouchEye || PLAYER_EYE_HEIGHT); }
+// Is there floor under (x, z)? Everywhere, except on a map with a void edge, where it stops at the ground's end.
+function floorExistsAt(x, z) {
+  const v = MAP_VOID[activeMapName];
+  return !v || (Math.abs(x) <= v.halfX && Math.abs(z) <= v.halfZ);
+}
+// A surface above 14 m is not ground -- that is how a wall top, a roof or a stack stops counting as a floor. The
+// outskirts' towers are built to be stood on and say so with box.tall.
+function _standable(box) { return box.max.y > 0.05 && (box.max.y <= 14 || box.tall === true); }
 function getGroundEyeY(px = camera.position.x, pz = camera.position.z, eyeY) {
-  let groundY = PLAYER_EYE_HEIGHT;
+  let groundY = floorExistsAt(px, pz) ? PLAYER_EYE_HEIGHT : -10000;
   const feetY = eyeY === undefined ? playerFeetY() : eyeY - PLAYER_EYE_HEIGHT;
   for (const box of wallColliders) {
-    if (box.max.y <= 0.05 || box.max.y > 14) continue;
+    if (!_standable(box)) continue;
     if (feetY + 0.35 < box.max.y) continue;
     if (px < box.min.x - PLAYER_RADIUS || px > box.max.x + PLAYER_RADIUS) continue;
     if (pz < box.min.z - PLAYER_RADIUS || pz > box.max.z + PLAYER_RADIUS) continue;
@@ -5493,7 +5501,7 @@ function getLandingEyeY(prevEyeY, px = camera.position.x, pz = camera.position.z
   const currFeetY = currEyeY - eye;
   let groundY = getGroundEyeY(px, pz, currEyeY);
   for (const box of wallColliders) {
-    if (box.max.y <= 0.05 || box.max.y > 14) continue;
+    if (!_standable(box)) continue;
     if (px < box.min.x - PLAYER_RADIUS || px > box.max.x + PLAYER_RADIUS) continue;
     if (pz < box.min.z - PLAYER_RADIUS || pz > box.max.z + PLAYER_RADIUS) continue;
     const top = box.max.y;
@@ -5650,6 +5658,9 @@ const MAP_GROUPS = {};
 // map wants called out. Declared here, with the other map registries, because
 // the builders below fill them in as they run.
 var MAP_SPAWNS = {}, MAP_POIS = {};
+// Wall-less maps (OUTSKIRTS). MAP_BOT_BOUNDS: the old arena, which is where bots stay. MAP_VOID: the map has a real
+// edge -- floor exists only inside {halfX, halfZ}; past it you fall, and below killY you are gone.
+var MAP_BOT_BOUNDS = {}, MAP_VOID = {};
 // Every map that can be played, and the subset the random draw skips (#66).
 // Mirrors server.js — MAP_IDS and THIN_MAPS have to stay identical there
 // (CLAUDE.md #4), because the server picks the map and the client honours it.
@@ -5726,7 +5737,7 @@ function botGroundYAt(x, z, fromY = 0, stepUp = 0.95, dropReach = 1.25) {
     if (y <= fromY + stepUp && fromY - y <= dropReach) ground = Math.max(ground, y);
   }
   for (const box of wallColliders) {
-    if (box.max.y <= 0.05 || box.max.y > 14) continue;
+    if (!_standable(box)) continue;
     if (x < box.min.x - PLAYER_RADIUS || x > box.max.x + PLAYER_RADIUS) continue;
     if (z < box.min.z - PLAYER_RADIUS || z > box.max.z + PLAYER_RADIUS) continue;
     const top = box.max.y;
@@ -12041,7 +12052,7 @@ function _atmoFarGround(name, group, color, relief, shape) {
     let h;
     if (shape === 'dune') { const r = 1 - Math.abs(2 * _anFbm(x * 0.012 + ox, z * 0.019 + oz, 3, 1) - 1); h = 0.7 * Math.pow(r, 1.3) + 0.3 * _anFbm(x * 0.006 + ox, z * 0.006 + oz, 3, 2); }
     else h = _anFbm(x * 0.0075 + ox, z * 0.0075 + oz, 4, 3);
-    pos.setZ(i, -0.4 + ramp * relief * h);
+    pos.setZ(i, -0.4 - (MAP_VOID[name] ? 70 : 0) + ramp * relief * h);
     const s = 0.78 + 0.34 * h * ramp + 0.12 * (_anFbm(x * 0.03 + oz, z * 0.03 + ox, 2, 4) - 0.5);
     col[i * 3] = base.r * s; col[i * 3 + 1] = base.g * s; col[i * 3 + 2] = base.b * s;
   }
@@ -14806,25 +14817,69 @@ addMapEasterEggs();
 // Everything standable stays under 14 m, because the ground code ignores any surface higher than that (it is how a
 // wall top stops counting as a floor). Stairs are 0.45 m a step against a 0.65 m auto-step. Bots keep to the old
 // arena (MAP_BOT_BOUNDS): they have no reason to be out there and a chase should not walk one off the end.
-const MAP_BOT_BOUNDS = {};
 const OUTSKIRTS = {
-  //            how far past the old edge | what stands in each of the eight places (clockwise from the north-west) | paint
-  urban:        { m: 34, kit: ['frame', 'crane', 'stack', 'tower', 'crane', 'frame', 'stack', 'tower'],
+  //            m: metres of ground past the old edge (0: none, just no wall) | kit: what stands in each of the eight
+  //            places, clockwise from the north-west | pal: the paint
+  urban:        { m: 34, kit: ['frame', 'crane', 'skeleton', 'tower', 'crane', 'spire', 'stack', 'tower'],
                   pal: { main: 0xe0a82a, acc: 0xd8d8d0, conc: 0x8f8f89, dark: 0x3b3f46, rock: 0x6f6a60 } },
-  desert:       { m: 34, kit: ['mesa', 'tower', 'mesa', 'stack', 'mesa', 'tower', 'mesa', 'frame'],
+  desert:       { m: 34, kit: ['mesa', 'spire', 'mesa', 'stack', 'mesa', 'tower', 'spire', 'frame'],
                   pal: { main: 0x7a5a38, acc: 0xc8a050, conc: 0xb8a27a, dark: 0x4a3826, rock: 0xc2a272 } },
-  forest:       { m: 34, kit: ['tower', 'mesa', 'tower', 'tower', 'mesa', 'tower', 'frame', 'tower'],
+  forest:       { m: 34, kit: ['tower', 'mesa', 'spire', 'tower', 'mesa', 'tower', 'spire', 'tower'],
                   pal: { main: 0x8a6238, acc: 0xa07a48, conc: 0x8a8a80, dark: 0x5a4028, rock: 0x6e6a5c } },
-  tundra:       { m: 34, kit: ['mesa', 'tower', 'mesa', 'crane', 'mesa', 'tower', 'stack', 'mesa'],
+  tundra:       { m: 34, kit: ['mesa', 'spire', 'mesa', 'crane', 'mesa', 'tower', 'spire', 'mesa'],
                   pal: { main: 0xcfd5db, acc: 0xcc4433, conc: 0xaeb8c0, dark: 0x3e4650, rock: 0xdbe6ee } },
-  airport:      { m: 34, kit: ['tower', 'crane', 'stack', 'frame', 'stack', 'tower', 'crane', 'frame'],
+  airport:      { m: 34, kit: ['tower', 'crane', 'spire', 'frame', 'stack', 'tower', 'crane', 'skeleton'],
                   pal: { main: 0xe4e4e0, acc: 0xd2452d, conc: 0xa0a09a, dark: 0x44484e, rock: 0x7b7a70 } },
-  refinery:     { m: 34, kit: ['tower', 'crane', 'frame', 'stack', 'tower', 'crane', 'frame', 'stack'],
+  refinery:     { m: 34, kit: ['spire', 'crane', 'frame', 'stack', 'spire', 'crane', 'skeleton', 'stack'],
                   pal: { main: 0xc7502d, acc: 0xe6d8a8, conc: 0x7d8286, dark: 0x30343a, rock: 0x6a6258 } },
-  pearl_harbor: { m: 34, kit: ['crane', 'stack', 'crane', 'tower', 'stack', 'crane', 'tower', 'stack'],
+  pearl_harbor: { m: 34, kit: ['crane', 'stack', 'crane', 'spire', 'stack', 'crane', 'tower', 'stack'],
                   pal: { main: 0xcc3b2a, acc: 0xe8e0c8, conc: 0x8d9094, dark: 0x2e353d, rock: 0x6b6f72 } },
-  vietnam:      { m: 34, kit: ['tower', 'mesa', 'tower', 'frame', 'tower', 'mesa', 'tower', 'stack'],
+  vietnam:      { m: 34, kit: ['tower', 'mesa', 'spire', 'frame', 'tower', 'mesa', 'spire', 'stack'],
                   pal: { main: 0x8c7a44, acc: 0x6a7a3a, conc: 0x7d7a60, dark: 0x4a4026, rock: 0x6a6a52 } },
+  volcano:      { m: 34, kit: ['spire', 'mesa', 'mesa', 'spire', 'mesa', 'tower', 'mesa', 'spire'],
+                  pal: { main: 0x4a3830, acc: 0xff6a1a, conc: 0x4a3a34, dark: 0x1e1614, rock: 0x3a2c28 } },
+  cyber:        { m: 34, kit: ['spire', 'skeleton', 'tower', 'spire', 'skeleton', 'tower', 'spire', 'skeleton'],
+                  pal: { main: 0x4a5ca0, acc: 0x00e5ff, conc: 0x39466e, dark: 0x141a30, rock: 0x252d4a } },
+  trenches:     { m: 34, kit: ['tower', 'mesa', 'tower', 'mesa', 'spire', 'mesa', 'frame', 'mesa'],
+                  pal: { main: 0x6a5a3a, acc: 0x8a7a50, conc: 0x7a7a6a, dark: 0x4a4030, rock: 0x6a5e48 } },
+  chernobyl:    { m: 34, kit: ['skeleton', 'tower', 'frame', 'spire', 'skeleton', 'tower', 'frame', 'spire'],
+                  pal: { main: 0x8a9482, acc: 0xd0a020, conc: 0x7a8078, dark: 0x3a403a, rock: 0x6a7062 } },
+  skydock:      { m: 34, kit: ['crane', 'spire', 'tower', 'spire', 'crane', 'tower', 'spire', 'crane'],
+                  pal: { main: 0xe6e6ee, acc: 0x3a8fd0, conc: 0xb0b8c4, dark: 0x3a4452, rock: 0x8a96a4 } },
+  glassworks:   { m: 34, kit: ['frame', 'spire', 'stack', 'tower', 'skeleton', 'spire', 'stack', 'tower'],
+                  pal: { main: 0xa8d0e0, acc: 0xffffff, conc: 0xc8d8e0, dark: 0x4a6070, rock: 0x90a8b4 } },
+  overgrowth:   { m: 34, kit: ['tower', 'mesa', 'spire', 'mesa', 'tower', 'mesa', 'spire', 'mesa'],
+                  pal: { main: 0x6a5a38, acc: 0x5a8a3a, conc: 0x7a8a6a, dark: 0x3a4a2a, rock: 0x6a7a58 } },
+  foundry:      { m: 34, kit: ['crane', 'frame', 'stack', 'spire', 'crane', 'skeleton', 'stack', 'spire'],
+                  pal: { main: 0xb8501c, acc: 0xe8a030, conc: 0x6a6560, dark: 0x2a2826, rock: 0x5a5048 } },
+  carnival:     { m: 34, kit: ['tower', 'spire', 'stack', 'tower', 'spire', 'stack', 'tower', 'spire'],
+                  pal: { main: 0xe84a8a, acc: 0xf2c93a, conc: 0xf0e0c8, dark: 0x4a2a5a, rock: 0x9a5ab0 } },
+  biosphere:    { m: 34, kit: ['spire', 'mesa', 'tower', 'mesa', 'spire', 'mesa', 'tower', 'mesa'],
+                  pal: { main: 0xc8e0d0, acc: 0x58c878, conc: 0xb0c8b8, dark: 0x3a5a48, rock: 0x7aa088 } },
+  temple:       { m: 34, kit: ['spire', 'mesa', 'spire', 'mesa', 'spire', 'mesa', 'spire', 'mesa'],
+                  pal: { main: 0xc8b080, acc: 0xd8a838, conc: 0xb8a070, dark: 0x6a5a38, rock: 0xa8946a } },
+  holiday:      { m: 34, kit: ['tower', 'spire', 'stack', 'tower', 'spire', 'stack', 'tower', 'spire'],
+                  pal: { main: 0xd83a3a, acc: 0x3a8a4a, conc: 0xe8e8f0, dark: 0x2a5a3a, rock: 0xc8d8e8 } },
+  arena:        { m: 34, kit: ['spire', 'stack', 'spire', 'frame', 'spire', 'stack', 'spire', 'frame'],
+                  pal: { main: 0xb8c0cc, acc: 0xe8b830, conc: 0x9aa0aa, dark: 0x3a404a, rock: 0x7a808a } },
+  doomsday:     { m: 34, kit: ['skeleton', 'mesa', 'spire', 'frame', 'skeleton', 'mesa', 'spire', 'frame'],
+                  pal: { main: 0x5a4a3a, acc: 0xc86a28, conc: 0x6a625a, dark: 0x2a2420, rock: 0x5a4e44 } },
+  dreamscape:   { m: 34, kit: ['spire', 'spire', 'tower', 'spire', 'spire', 'tower', 'spire', 'spire'],
+                  pal: { main: 0xf0c8ff, acc: 0x80e0ff, conc: 0xe0d0f0, dark: 0x7a5aa0, rock: 0xc0a8e0 } },
+  pyongyang:    { m: 34, kit: ['skeleton', 'tower', 'spire', 'frame', 'skeleton', 'tower', 'spire', 'stack'],
+                  pal: { main: 0xb0b8c4, acc: 0xc83a3a, conc: 0x9aa0a8, dark: 0x3a4048, rock: 0x7a828c } },
+  traffic_cone_republic: { m: 34, kit: ['tower', 'stack', 'spire', 'frame', 'tower', 'stack', 'spire', 'frame'],
+                  pal: { main: 0xe8782a, acc: 0xf0f0f0, conc: 0xa8a8a0, dark: 0x3a3a3a, rock: 0x8a8a82 } },
+  flying_moai:  { m: 34, kit: ['spire', 'mesa', 'spire', 'mesa', 'spire', 'mesa', 'spire', 'mesa'],
+                  pal: { main: 0x8a9298, acc: 0x58a8c8, conc: 0x7a828a, dark: 0x3a4248, rock: 0x6a747c } },
+  big_arena:    { m: 40, kit: ['spire', 'stack', 'skeleton', 'crane', 'spire', 'stack', 'skeleton', 'crane'],
+                  pal: { main: 0xc0c8d4, acc: 0xe8b830, conc: 0x9aa0aa, dark: 0x3a404a, rock: 0x7a808a } },
+  super_arena:  { m: 40, kit: ['spire', 'skeleton', 'spire', 'crane', 'spire', 'skeleton', 'spire', 'crane'],
+                  pal: { main: 0xb8c4d4, acc: 0xff8a2a, conc: 0x8e96a4, dark: 0x30363f, rock: 0x727a88 } },
+  train:        { m: 34, kit: ['crane', 'stack', 'tower', 'frame', 'crane', 'stack', 'spire', 'frame'],
+                  pal: { main: 0x8a6a3a, acc: 0xc8a050, conc: 0x8a8a84, dark: 0x3a3a3c, rock: 0x6a6a64 } },
+  // a ship has no ground to carry on: the rails go and the edge of the deck is the edge
+  carrier:      { m: 0, kit: [], pal: { main: 0x7a828a, acc: 0xd2452d, conc: 0x9aa0a6, dark: 0x3a4048, rock: 0x6a707a } },
 };
 // A frame of reference for one landmark: u runs from its middle toward the middle of the map, v is 90 degrees round,
 // both axis-aligned so every piece is an ordinary box. box() is solid, deco() is for the eye only.
@@ -14949,6 +15004,39 @@ const _OS_KITS = {
       attach: () => ({ u0: -8, u1: 8, vEdge: 8 }) });
     return { foot: cl.foot, pois: [{ u: 0, v: 0, y: 3 * L }, { u: 6, v: -6, y: 2 * L }, { u: -6, v: -6, y: L }] };
   },
+  // A tall spire: a stepped column 36 m high with a stair switchbacking up the side, ledges at every landing and a
+  // deck at the top with a mast above it. The one you climb to see the whole map from.
+  spire(F, P) {
+    const LV = 9, R = 4.0, TOP = LV * R;
+    F.box(-2.5, 2.5, -2.5, 2.5, 0, 12, P.main);
+    F.box(-1.8, 1.8, -1.8, 1.8, 12, 12, P.main);
+    F.box(-1.2, 1.2, -1.2, 1.2, 24, 12, P.main);
+    for (const y of [6, 18, 30]) F.deco(-2.9, 2.9, -2.9, 2.9, y, 0.4, P.acc);                  // bands up the shaft
+    const cl = _osClimb(F, { u0: -5.5, v0: 3.2, levels: LV, rise: R, c: P.dark, lc: P.conc,
+      attach: k => (k === LV - 1 ? { u0: -4.5, u1: 4.5, vEdge: 4.5 } : null) });
+    F.box(-4.5, 4.5, -4.5, 4.5, TOP - 0.5, 0.5, P.conc);                                     // the deck
+    for (const [a, b] of [[-4.4, -4.4], [4.4, -4.4], [-4.4, 4.4], [4.4, 4.4]]) F.deco(a - 0.1, a + 0.1, b - 0.1, b + 0.1, TOP, 1.1, P.acc);
+    F.deco(-4.5, 4.5, -4.5, -4.3, TOP + 1.0, 0.12, P.acc); F.deco(-4.5, -4.3, -4.5, 4.5, TOP + 1.0, 0.12, P.acc); F.deco(4.3, 4.5, -4.5, 4.5, TOP + 1.0, 0.12, P.acc);
+    F.box(-1.2, 1.2, -1.2, 1.2, TOP, 2.4, P.dark);                                           // a little control room on the deck
+    F.deco(-0.3, 0.3, -0.3, 0.3, TOP + 2.4, 9, P.dark);                                      // the mast
+    F.deco(-0.9, 0.9, -0.15, 0.15, TOP + 8, 0.3, P.acc);
+    return { foot: cl.foot, pois: [{ u: 3.2, v: 3.2, y: TOP }, { u: -3.2, v: -3.2, y: TOP }, { u: 3.5, v: 5, y: 5 * R }] };
+  },
+  // The bones of a tall building: six floors, columns, a stair up the side, rebar on top.
+  skeleton(F, P) {
+    const L = 4.4, N = 6;
+    for (const a of [-7, 0, 7]) for (const b of [-7, 0, 7]) F.box(a - 0.5, a + 0.5, b - 0.5, b + 0.5, 0, N * L - 0.5, P.conc);
+    for (let f = 1; f <= N; f++) {
+      F.box(-8, 8, -8, 8, f * L - 0.5, 0.5, P.conc);
+      F.deco(-8.05, 8.05, -8.05, -7.85, f * L - 0.4, 0.14, P.acc); F.deco(-8.05, 8.05, 7.85, 8.05, f * L - 0.4, 0.14, P.acc);   // an edge trim on each floor
+      F.deco(-8.05, -7.85, -7.85, 7.85, f * L - 0.4, 0.14, P.acc); F.deco(7.85, 8.05, -7.85, 7.85, f * L - 0.4, 0.14, P.acc);
+    }
+    for (const f of [2, 4]) F.box(-8, -2, 7.5, 8, f * L, 1.1, P.dark);
+    for (const [a, b] of [[-7, -7], [7, -7], [-7, 7], [7, 7], [0, 0]]) F.deco(a - 0.05, a + 0.05, b - 0.05, b + 0.05, N * L, 2.6, P.dark);
+    const cl = _osClimb(F, { u0: -14, v0: 8.2, levels: N, rise: L, c: P.dark, lc: P.main,
+      attach: () => ({ u0: -8, u1: 8, vEdge: 8 }) });
+    return { foot: cl.foot, pois: [{ u: 0, v: 0, y: N * L }, { u: 6, v: -6, y: 4 * L }, { u: -6, v: -6, y: 2 * L }] };
+  },
   // A rock mesa: three terraces. A ramp up the first (you can slide down it), stairs up the next two.
   mesa(F, P, K) {
     F.box(-10, 10, -7, 7, 0, 3.0, P.rock);
@@ -15023,13 +15111,17 @@ function addMapOutskirts() {
         const g = new THREE.Mesh(new THREE.PlaneGeometry(w, d), new THREE.MeshLambertMaterial({ color: gc }));
         g.rotation.x = -Math.PI / 2; g.position.set(x, 0, z); group.add(g);
       };
-      strip(2 * nx, M, 0, -hz - M / 2); strip(2 * nx, M, 0, hz + M / 2); strip(M, 2 * hz, -hx - M / 2, 0); strip(M, 2 * hz, hx + M / 2, 0);
+      if (M > 0) { strip(2 * nx, M, 0, -hz - M / 2); strip(2 * nx, M, 0, hz + M / 2); strip(M, 2 * hz, -hx - M / 2, 0); strip(M, 2 * hz, hx + M / 2, 0); }
+      // the floor is a slab, not a sheet: from the side, off the edge, there is something there that stops
+      { const sl = new THREE.Mesh(new THREE.BoxGeometry(2 * nx, 4, 2 * nz), new THREE.MeshLambertMaterial({ color: _thShade(cfg.pal.rock, 0.7) }));
+        sl.position.set(0, -2.04, 0); sl.userData.mapStatic = true; group.add(sl); }
       // 3) the new edge, and the old arena kept for the bots
       MAP_BOT_BOUNDS[name] = { halfX: hx, halfZ: hz };
       setMapBounds(name, nx * 2, nz * 2);
+      MAP_VOID[name] = { halfX: nx, halfZ: nz, killY: -45, far: 90 };
       const K = _bkit(name), P = cfg.pal;
       // 4) eight landmarks round the ring
-      const cxm = hx + M / 2, czm = hz + M / 2;
+      const cStart = cols.length, cxm = hx + M / 2, czm = hz + M / 2;
       const slots = [[-cxm, -czm], [(rnd() - 0.5) * 30, -czm], [cxm, -czm], [cxm, (rnd() - 0.5) * 30], [cxm, czm], [(rnd() - 0.5) * 30, czm], [-cxm, czm], [-cxm, (rnd() - 0.5) * 30]];
       const built = [];
       slots.forEach(([x, z], i) => {
@@ -15046,9 +15138,11 @@ function addMapOutskirts() {
         K.poi('outskirts ' + kind, fx, fz, 0);
         for (const p of r.pois || []) { const [px, pz] = F.W(p.u, p.v); K.poi('outskirts ' + kind + ' top', px, pz, p.y); }
       });
+      // what was built to be stood on, above the 14 m the ground code otherwise ignores, says so
+      for (let i = cStart; i < cols.length; i++) if (cols[i].max.y > 14) cols[i].tall = true;
       // 5) rubble between them, kept off the way out of the arena and off the landmarks
       const rubble = [0x6f6a60, 0x7a746a, 0x5e5a52, P.conc];
-      for (let k = 0; k < 40; k++) {
+      for (let k = 0; M > 0 && k < 40; k++) {
         const side = Math.floor(rnd() * 4), t = (rnd() * 2 - 1) * (side < 2 ? nx - 4 : nz - 4), d = 5 + rnd() * (M - 10);
         const x = side < 2 ? t : (side === 2 ? -hx - d : hx + d), z = side < 2 ? (side === 0 ? -hz - d : hz + d) : t;
         if (built.some(b => Math.hypot(b.x - x, b.z - z) < 15)) continue;
@@ -15061,14 +15155,16 @@ function addMapOutskirts() {
         m.position.set((x0 + x1) / 2, 1.25, (z0 + z1) / 2); m.userData.mapStatic = true; group.add(m);
       };
       const eh = nx - 1.5, ez = nz - 1.5;
-      tape(-eh, -ez, eh, -ez); tape(-eh, ez, eh, ez); tape(-eh, -ez, -eh, ez); tape(eh, -ez, eh, ez);
+      if (M > 0) { tape(-eh, -ez, eh, -ez); tape(-eh, ez, eh, ez); tape(-eh, -ez, -eh, ez); tape(eh, -ez, eh, ez); }
       let pi = 0;
       const post = (x, z) => {
         const m = new THREE.Mesh(new THREE.BoxGeometry(0.3, 1.5, 0.3), new THREE.MeshLambertMaterial({ color: (pi++ & 1) ? 0xd23a2a : 0xf0f0ea }));
         m.position.set(x, 0.75, z); m.userData.mapStatic = true; group.add(m);
       };
-      for (let x = -eh; x <= eh + 0.1; x += 10) { post(x, -ez); post(x, ez); }
-      for (let z = -ez + 10; z < ez - 0.1; z += 10) { post(-eh, z); post(eh, z); }
+      if (M > 0) {
+        for (let x = -eh; x <= eh + 0.1; x += 10) { post(x, -ez); post(x, ez); }
+        for (let z = -ez + 10; z < ez - 0.1; z += 10) { post(-eh, z); post(eh, z); }
+      }
       group.userData.outskirts = built.map(b => {
         const F = _osFrame(K, b.x, b.z, b.ux, b.uz), [fx, fz] = F.W(b.r.foot.u, b.r.foot.v);
         return { kind: b.kind, x: b.x, z: b.z, foot: { wx: fx, wz: fz },
@@ -37089,7 +37185,21 @@ function isOutOfBoundsXZ(x, z) {
   // so bots spawned against it died on the spot, over and over, and the player's respawn went with them.
   if (M4_TOWER_MAP_NAMES.has(activeMapName)) return false;
   const b = getMapBoundsRect();
+  // A void edge is not a line you die on: you walk off the floor and fall, and the fall kills you (isPlayerFallenOff).
+  // This is only the far backstop, well out under the map.
+  const m = MAP_VOID[activeMapName] ? MAP_VOID[activeMapName].far : 0;
+  return Math.abs(x) > b.halfX + m || Math.abs(z) > b.halfZ + m;
+}
+// Bots have no falling to do: they are killed at the edge of the floor, as they always were.
+function isBotOutOfBoundsXZ(x, z) {
+  if (M4_TOWER_MAP_NAMES.has(activeMapName)) return false;
+  const b = getMapBoundsRect();
   return Math.abs(x) > b.halfX || Math.abs(z) > b.halfZ;
+}
+// Fallen off the edge of a map with a void and dropped past the point of no return.
+function isPlayerFallenOff() {
+  const v = MAP_VOID[activeMapName];
+  return !!v && camera.position.y < v.killY;
 }
 
 function updateAdminBuilderFreeCam(dt) {
@@ -37402,7 +37512,7 @@ function updateMovement(dt, socialBlocked = false) {
       if (gap > 0 && gap < (ramp === r ? 1.6 : 0.6)) { camera.position.y = want; slamState = null; break; }
     }
   }
-  if (isOutOfBoundsXZ(camera.position.x, camera.position.z)) {
+  if (isOutOfBoundsXZ(camera.position.x, camera.position.z) || isPlayerFallenOff()) {
     killLocalOutOfBounds(window._lastAirBlastBy || null);
     return;
   }
@@ -37536,7 +37646,7 @@ function updateMovement(dt, socialBlocked = false) {
   }
 
   resolveWallCollisions();
-  if (isOutOfBoundsXZ(camera.position.x, camera.position.z)) {
+  if (isOutOfBoundsXZ(camera.position.x, camera.position.z) || isPlayerFallenOff()) {
     killLocalOutOfBounds(window._lastAirBlastBy || null);
     return;
   }
@@ -39529,7 +39639,7 @@ function firstGrappleSurface(origin, dir, range) {
   }
   if (dir.y < -0.08 && origin.y > GROUND_PLANE_Y) {
     const t = (origin.y - GROUND_PLANE_Y) / -dir.y;
-    if (t > 0.35 && t <= range && t < bestDist) {
+    if (t > 0.35 && t <= range && t < bestDist && floorExistsAt(origin.x + dir.x * t, origin.z + dir.z * t)) {
       best = origin.clone().addScaledVector(dir, t);
       best.y = GROUND_PLANE_Y + 0.04;
       kind = 'ground';
@@ -47203,7 +47313,7 @@ function updateBullets(dt) {
         // explosions all come out of one path instead of three.
         if (tDy < 0 && py0 > GROUND_PLANE_Y) {
           const gT = (py0 - GROUND_PLANE_Y) / (py0 - _bpos.y);
-          if (gT >= 0 && gT <= 1 && gT < wallHitT) {
+          if (gT >= 0 && gT <= 1 && gT < wallHitT && floorExistsAt(px0 + tDx * gT, pz0 + tDz * gT)) {
             wallHitT = gT;
             wallHitPt = new THREE.Vector3(px0 + tDx * gT, GROUND_PLANE_Y, pz0 + tDz * gT);
             wallHitNormal.set(0, 1, 0);
@@ -47482,9 +47592,16 @@ function updateBullets(dt) {
         removeBullet(); continue;
       }
     }
-    if (Math.abs(_bpos.x)>50||Math.abs(_bpos.z)>50||_bpos.y<0||_bpos.y>30) {
-      if (b.isPaintBomb) triggerPaintExplosion(_bpos.clone(), b);
-      removeBullet();
+    // Gone when it has gone a long way past the map, up into the sky, or under the floor -- and the floor only
+    // counts where there is one: past the edge of a void map a round keeps going down. (This was a flat 50 m box
+    // round the origin, so every shot on a bigger map vanished halfway to where it was going.)
+    {
+      const mb = getMapBoundsRect(), lim = 150;
+      const under = floorExistsAt(_bpos.x, _bpos.z) ? 0 : -150;
+      if (Math.abs(_bpos.x) > mb.halfX + lim || Math.abs(_bpos.z) > mb.halfZ + lim || _bpos.y < under || _bpos.y > 220) {
+        if (b.isPaintBomb) triggerPaintExplosion(_bpos.clone(), b);
+        removeBullet();
+      }
     }
   }
 }
@@ -49274,7 +49391,8 @@ function killLocalOutOfBounds(killerId = null) {
   abilityBuff = null; meleeAbilityBuff = null; pendingFanFire = null;
   tellServerIDied(killerId, meta);
   playSoundEvent('air_launch', { volume: 1.0, minGap: 80 });
-  showAnnouncement('RING OUT', 'You left the arena', '#aaccff', 1600);
+  if (MAP_VOID[activeMapName] && !killerId) showAnnouncement('YOU FELL', 'Off the edge of the map', '#aaccff', 1600);
+  else showAnnouncement('RING OUT', 'You left the arena', '#aaccff', 1600);
   const scope = document.getElementById('scope-overlay');
   if (scope) scope.style.display = 'none';
   const ds = document.getElementById('death-screen');
@@ -54205,7 +54323,7 @@ function updateBotAI(dt) {
     if (bot.kbVX || bot.kbVZ) {
       bot.x += bot.kbVX * dt;
       bot.z += bot.kbVZ * dt;
-      if (isOutOfBoundsXZ(bot.x, bot.z)) {
+      if (isBotOutOfBoundsXZ(bot.x, bot.z)) {
         killBotOutOfBounds(bot, (bot._ringoutKillerUntil || 0) > Date.now() ? bot._ringoutKiller : null);
         continue;
       }
@@ -55181,7 +55299,7 @@ function updateBotAI(dt) {
     }
     { const bl = MAP_BOT_BOUNDS[activeMapName];   // a map with no wall: the outskirts are for players, bots stay in the arena
       if (bl) { nx = Math.max(-bl.halfX + 0.9, Math.min(bl.halfX - 0.9, nx)); nz = Math.max(-bl.halfZ + 0.9, Math.min(bl.halfZ - 0.9, nz)); } }
-    if (isOutOfBoundsXZ(nx, nz)) {
+    if (isBotOutOfBoundsXZ(nx, nz)) {
       killBotOutOfBounds(bot, (bot._ringoutKillerUntil || 0) > Date.now() ? bot._ringoutKiller : null);
       continue;
     }
