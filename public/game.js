@@ -941,7 +941,7 @@ function falloffMultiplier(weaponId, dist) {
 const MELEE_ITEMS = [
   { id: 'bat',        name: 'Bat',        type: 'Melee',       damage: 50, range: 2.1, cooldown: 520,
     knockbackOnHit: 6, // every swing shoves the target back, not just the ability
-    ability: { name: 'Crowd Clear', cd: 9000,  desc: 'AOE swing · 3.2 m · 45 dmg · knockback', type: 'melee_pulse', radius: 3.2, damage: 45, knockback: 3.2, launchVel: 5, color: 0xffcc66 } },
+    ability: { name: 'Crowd Clear', cd: 9000, desc: 'Forward charge · rising swing · 100 dmg · massive knockback', type: 'bat_crowd_clear', damage: 100, speed: 22, launchVel: 14, knockback: 34 } },
   { id: 'sabre',      name: 'Sabre',      type: 'Melee',       damage: 45, range: 2.4, cooldown: 620,
     ability: { name: 'Lunge',        cd: 7000,  desc: 'Dash forward · hit all in path', type: 'melee_lunge', distance: 6 } },
   { id: 'frying_pan', name: 'Frying Pan', type: 'Melee',       damage: 32, range: 1.8, cooldown: 420,
@@ -36091,6 +36091,7 @@ function loadoutReady() {
 
 function resetCombatResources() {
   if (!loadoutReady()) return;
+  finishBatCrowdClear();
   clearSatchels(myId);
   cancelMedkitHeal();
   for (const b of localBullets) scene.remove(b.mesh);
@@ -37828,6 +37829,79 @@ function doMeleePulseAbility(item, ab, now) {
   }
 }
 
+let batCrowdCharge = null;
+
+function finishBatCrowdClear() {
+  if (!batCrowdCharge) return;
+  const m = batCrowdCharge.model;
+  m.position.copy(MELEE_REST_POS); m.rotation.set(0,0,0);
+  meleeSwingT = 1;
+  batCrowdCharge = null;
+}
+
+function startBatCrowdClear(item, ab) {
+  if (inLobby) { noteLobbyHit(); return; }
+  cancelInspect();
+  const direction = new THREE.Vector3(-Math.sin(euler.y), 0, -Math.cos(euler.y));
+  const model = meleeModels[selectedMeleeIdx];
+  model._park = null;
+  batCrowdCharge = { item, ab, model, direction, elapsed: 0, epoch: matchEpoch, hit: new Set(), stopped: false,
+    id: `bat_charge_${myId}_${Date.now()}` };
+  meleeSwingT = 1;
+  lastMelee = Date.now();
+  playSoundEvent('melee_heavy', { volume: 1.2 });
+}
+
+function updateBatCrowdClear(dt) {
+  const s = batCrowdCharge;
+  if (!s) return;
+  if (isDead || !gameStarted || countdownActive || SOCIAL_VIEW.mode || s.epoch !== matchEpoch
+      || activeSlot !== 'melee' || meleeModels[selectedMeleeIdx] !== s.model) { finishBatCrowdClear(); return; }
+  const steps = Math.max(1, Math.ceil(dt / .01)), step = dt / steps;
+  for (let i = 0; i < steps; i++) {
+    s.elapsed += step;
+    if (s.elapsed < .12 || s.elapsed > .42) continue;
+    if (!s.stopped) {
+      const before = camera.position.clone(), distance = (s.ab.speed || 22) * step;
+      moveWithWalls(s.direction, distance); resolveWallCollisions();
+      if (camera.position.distanceTo(before) < distance * .2) s.stopped = true;
+      if (isOutOfBoundsXZ(camera.position.x, camera.position.z)) { killLocalOutOfBounds(); finishBatCrowdClear(); return; }
+    }
+    for (const [pid, mesh] of Object.entries(remoteMeshes)) {
+      if (pid === myId || s.hit.has(pid) || !mesh.visible || players[pid]?.dead || friendlyFireBlocked(pid,myId)) continue;
+      const body = mesh.position.clone(); body.y += .95;
+      const offset = body.clone().sub(camera.position), along = offset.dot(s.direction);
+      const lateral = Math.abs(offset.x * s.direction.z - offset.z * s.direction.x);
+      if (along < 0 || along > 2.3 || lateral > 1.15 || Math.abs(offset.y) > 1.5) continue;
+      if (!hasLineOfSight(camera.position.x,camera.position.z,body.x,body.z,camera.position.y,body.y)) continue;
+      s.hit.add(pid);
+      const dummy = TRAINING_DUMMIES.find(d => d.id === pid);
+      if (dummy) handleDummyHit(dummy, mesh, { weaponId:'bat_crowd_clear', damage:100 }, body);
+      else {
+        emitHit(pid, `${s.id}_${pid}`, 'bat_crowd_clear', body, false, { damageOverride:100 });
+        const bot = resolveBot(pid);
+        if (bot && !bot.dead) {
+          bot.kbVX = s.direction.x * 34; bot.kbVZ = s.direction.z * 34;
+          bot.yVel = Math.max(bot.yVel || 0, 14);
+        } else if (!bot) socket.emit('airBlast', { targetId:pid, weapon:'bat_crowd_clear', x:s.direction.x,z:s.direction.z,y:14,force:34 });
+      }
+      spawnHitParticle(body);
+      playSoundEvent('air_launch', { volume:1.1, minGap:80 });
+    }
+  }
+  if (s.elapsed >= .68) finishBatCrowdClear();
+}
+
+function poseBatCrowdClear() {
+  const s = batCrowdCharge;
+  if (!s) return;
+  const rise = THREE.MathUtils.clamp((s.elapsed - .12) / .30, 0, 1);
+  const recover = THREE.MathUtils.clamp((s.elapsed - .46) / .22, 0, 1);
+  const weight = 1 - recover * recover * (3 - 2 * recover);
+  s.model.position.copy(MELEE_REST_POS).add(new THREE.Vector3(.10 * (1-rise), -.17 + .33*rise, -.10 - .12*Math.sin(rise*Math.PI)).multiplyScalar(weight));
+  s.model.rotation.set((-.85 + 2.05*rise)*weight, -.20*(1-rise)*weight, (-.35 + .5*rise)*weight);
+}
+
 function activateMeleeAbility() {
   const item = equippedMeleeItem();
   if (!item?.ability) return;
@@ -37837,7 +37911,11 @@ function activateMeleeAbility() {
   if (now - (abilityCDs[item.id] || 0) < abilityCooldownFor(item, ab)) return; // on cooldown
   abilityCDs[item.id] = now;
 
-  if (ab.type === 'melee_heavy') {
+  if (ab.type === 'bat_crowd_clear') {
+    startBatCrowdClear(item, ab);
+    flashAbilityName(ab.name);
+  }
+  else if (ab.type === 'melee_heavy') {
     meleeAbilityBuff = { type: 'heavy', usesLeft: 1 };
     flashAbilityName(ab.name);
     playSoundEvent('heavy_buff', { volume: 0.9 });
@@ -39366,6 +39444,7 @@ function updateChainMaulSwing(dt) {
 }
 
 function tryMelee() {
+  if (batCrowdCharge) return;
   if (SOCIAL_VIEW.mode) return;
   if (!gameStarted || isDead) return;
   if (countdownActive) return;
@@ -49148,7 +49227,7 @@ const CLIENT_WEAPON_DAMAGE = Object.fromEntries([
   ['flamethrower_skin_water', 9], ['crossbow_skin_noodle', 76], ['minigun_skin_arcade', 7],
   ['rpg_skin_soda', 118],
   ['mg42', 15], ['bat', 38], ['sabre', 45], ['frying_pan', 32], ['sledge', 70],
-  ['spear', 50], ['spear_throw', 85], ['pickle', 22], ['shield_charge', 60],
+  ['spear', 50], ['spear_throw', 85], ['pickle', 22], ['shield_charge', 60], ['bat_crowd_clear', 100],
   // Opera/Doomsday map hazards — without these, applyBotDamageToPlayer's own
   // ||25 fallback silently underdealt them too (#51).
   ['chandelier', 200], ['debris', 120], ['lightning_strike', 70],
@@ -50094,6 +50173,15 @@ socket.on('playerHit', data => {
   }
 });
 socket.on('airBlasted', data => {
+  if (data?.botId) {
+    const bot = resolveBot(data.botId);
+    if (!bot || bot.dead) return;
+    const direction = new THREE.Vector3(Number(data.x)||0,0,Number(data.z)||0).normalize();
+    const force = Math.max(0,Math.min(34,Number(data.force)||0));
+    bot.kbVX = direction.x * force; bot.kbVZ = direction.z * force;
+    bot.yVel = Math.max(bot.yVel||0,Math.max(0,Math.min(14,Number(data.y)||0)));
+    return;
+  }
   if (isDead || match?.type === 'range') return;
   const dx = Number(data?.x) || 0;
   const dz = Number(data?.z) || 0;
@@ -51203,6 +51291,7 @@ function _meleeSwingId(idx) {
 }
 
 function updateMeleeSwing(dt) {
+  if (batCrowdCharge) { poseBatCrowdClear(); return; }
   // Dual-wield companions (fists, brass knuckles) track their main hand's
   // visibility every frame, rather than touching every equip/switch/reset
   // call site individually.
@@ -55687,6 +55776,7 @@ function loop() {
   updateDDay(dt);
   updateGrenadeWindup(dt);
   updateAbilityBuff(dt);
+  updateBatCrowdClear(dt);
   updatePendingFanFire(dt);
   updateAbilityHUD();
   updateMeleeSwing(dt);
@@ -57382,6 +57472,7 @@ function afterDeath(ms, fn) {
 // Everything a finished match (or Lobby 13) leaves behind that the next start must not
 // inherit. Shared by the mode menu and the end-of-match buttons so they can't drift apart.
 function teardownMatchWorld() {
+  finishBatCrowdClear();
   clearSatchels();
   finishChainMaulSwing();
   resetPlayerView();

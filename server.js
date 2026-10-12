@@ -1917,7 +1917,7 @@ event_horizon: 75,
   mg42: 15,
   // Melee
   bat: 50, sabre: 45, frying_pan: 32, sledge: 70, spear: 50,
-  spear_throw: 85, pickle: 22, shield_charge: 60, knife_instakill: 9999,
+  spear_throw: 85, pickle: 22, shield_charge: 60, knife_instakill: 9999, bat_crowd_clear: 100,
   chainsaw: 45, katana: 65, knife: 28, lightsabre: 72, twin_knife: 50, scythe: 58, chain_hammer: 85,
   riot_shield: 18, baguette: 28, screwdriver: 20,
   // cane and shovel were missing here entirely — every hit with either one
@@ -2343,7 +2343,8 @@ io.on('connection', (socket) => {
   socket.on('airBlast', (data) => {
     const shooter = players[socket.id];
     const target = players[String(data?.targetId || '')];
-    if (!shooter || shooter.dead || !target || target.dead || target.isBot) return;
+    const crowdClear = data?.weapon === 'bat_crowd_clear';
+    if (!shooter || shooter.dead || !target || target.dead || (target.isBot && !crowdClear)) return;
     if (shooter.matchId !== target.matchId) return;
     if (blocksFriendlyFire(shooter, target)) return;
     const dx = Number(data?.x) || 0;
@@ -2351,8 +2352,9 @@ io.on('connection', (socket) => {
     const len = Math.hypot(dx, dz);
     if (!Number.isFinite(len) || len < 0.01) return;
     const dist = dist3(shooter, target);
-    if (dist > 15) return;
-    io.to(target.id).emit('airBlasted', {
+    if (dist > (crowdClear ? 5 : 15)) return;
+    io.to(target.isBot ? target.ownerId : target.id).emit('airBlasted', {
+      ...(target.isBot ? { botId:target.id } : {}),
       shooterId: shooter.id,
       x: Math.max(-1, Math.min(1, dx / len)),
       z: Math.max(-1, Math.min(1, dz / len)),

@@ -17,6 +17,7 @@
   'use strict';
 
   const ZH = {
+    'Forward charge · rising swing · 100 dmg · massive knockback': '向前冲锋 · 上挑挥击 · 100 伤害 · 强力击退',
     'Remote Explosive': '遥控爆炸物',
     'Detonate': '引爆',
     '{n} deployed': '已部署 {n} 个',
