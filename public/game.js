@@ -54987,6 +54987,25 @@ function getBotTarget(bot) {
   return null;
 }
 
+// Tactical destinations must fit this map, including rectangular arenas and water gaps.
+function botMapRepositionPoint(bot, wantedX, wantedZ) {
+  const bounds = MAP_BOT_BOUNDS[activeMapName] || getMapBoundsRect();
+  const x = THREE.MathUtils.clamp(wantedX,-bounds.halfX+.9,bounds.halfX-.9);
+  const z = THREE.MathUtils.clamp(wantedZ,-bounds.halfZ+.9,bounds.halfZ-.9);
+  const distance = Math.hypot(x-bot.x,z-bot.z);
+  if (distance > Math.hypot(wantedX-bot.x,wantedZ-bot.z) + .01) return null;
+  if (MAP_VOID[activeMapName]) {
+    const steps = Math.max(1,Math.ceil(distance));
+    let y = bot.y || 0;
+    for (let i = 1; i <= steps; i++) {
+      const px = bot.x+(x-bot.x)*i/steps, pz = bot.z+(z-bot.z)*i/steps;
+      y = botGroundYAt(px,pz,y,1.05,2.2);
+      if (!floorExistsAt(px,pz) && y < .4) return null;
+    }
+  }
+  return { x,z };
+}
+
 // ── Cover-point finder ────────────────────────────────────────────────────
 // Returns a world position behind the nearest suitable wall, relative to target
 function findBotCover(bot, target) {
@@ -55399,11 +55418,10 @@ function updateBotAI(dt) {
             const len = Math.max(0.01, Math.hypot(dx, dz));
             const perpX = -dz / len, perpZ = dx / len;
             const side = (bot.id.charCodeAt(bot.id.length - 1) & 1) ? 1 : -1;
-            bot.hitAndRunTarget = {
-              x: Math.max(-46, Math.min(46, bot.x + perpX * side * 12 + dx / len * 4)),
-              z: Math.max(-46, Math.min(46, bot.z + perpZ * side * 12 + dz / len * 4)),
-            };
-            bot.hitAndRunUntil = Math.min(cmdOv.until, now + 2500);
+            bot.hitAndRunTarget = botMapRepositionPoint(bot,
+              bot.x + perpX * side * 12 + dx / len * 4,
+              bot.z + perpZ * side * 12 + dz / len * 4);
+            bot.hitAndRunUntil = bot.hitAndRunTarget ? Math.min(cmdOv.until, now + 2500) : 0;
             bot.state = 'flank';
             break;
           }
@@ -55551,11 +55569,10 @@ function updateBotAI(dt) {
           const perpX = -dz / len, perpZ = dx / len;
           const side = Math.random() < 0.5 ? 1 : -1;
           const moveDist = 5 + Math.random() * 4;
-          bot.hitAndRunTarget = {
-            x: Math.max(-46, Math.min(46, bot.x + perpX * side * moveDist + dx / len * 2)),
-            z: Math.max(-46, Math.min(46, bot.z + perpZ * side * moveDist + dz / len * 2)),
-          };
-          bot.hitAndRunUntil = now + 1500 + Math.random() * 800;
+          bot.hitAndRunTarget = botMapRepositionPoint(bot,
+            bot.x + perpX * side * moveDist + dx / len * 2,
+            bot.z + perpZ * side * moveDist + dz / len * 2);
+          bot.hitAndRunUntil = bot.hitAndRunTarget ? now + 1500 + Math.random() * 800 : 0;
         }
       }
 
@@ -56177,10 +56194,9 @@ function updateBotAI(dt) {
       // Apply an immediate forced step along the perpendicular
       const stepX = Math.cos(chosen) * 0.30;
       const stepZ = Math.sin(chosen) * 0.30;
-      let fx = Math.max(-47, Math.min(47, bot.x + stepX));
-      let fz = Math.max(-47, Math.min(47, bot.z + stepZ));
-      [fx, fz] = resolvePosCollisions(fx, fz, bot.y || 0);
-      bot.x = fx; bot.z = fz;
+      const [fx, fz] = resolvePosCollisions(bot.x + stepX,bot.z + stepZ,bot.y || 0);
+      const escape = botMapRepositionPoint(bot,fx,fz);
+      if (escape) { bot.x = escape.x; bot.z = escape.z; }
       bot.strafeDir = -bot.strafeDir;
       bot.strafeFlipTimer = 0.8;
     }
