@@ -947,7 +947,7 @@ const MELEE_ITEMS = [
   { id: 'frying_pan', name: 'Frying Pan', type: 'Melee',       damage: 32, range: 1.8, cooldown: 420,
     ability: { name: 'Pan Clang', cd: 8500,  desc: 'AOE clang · 3 m · 28 dmg · pop-up', type: 'melee_pulse', radius: 3.0, damage: 28, knockback: 2.2, launchVel: 7, color: 0xffffaa } },
   { id: 'sledge',     name: 'Sledge',     type: 'Heavy Melee', damage: 70, range: 1.9, cooldown: 900,
-    ability: { name: 'Ground Slam',  cd: 12000, desc: 'Leap up · slam · AOE 4m · 80 dmg', type: 'melee_slam', radius: 4, damage: 80 } },
+    ability: { name: 'Ground Slam',  cd: 12000, desc: 'Leap 5 m up · hang · slam down · AOE 4m · 80 dmg', type: 'melee_slam', radius: 4, damage: 80, leap: 16.5, leapForward: 4.5, dive: 30 } },
   { id: 'spear',      name: 'Spear',      type: 'Reach Melee', damage: 50, range: 3.0, cooldown: 760,
     ability: { name: 'Throw Spear',  cd: 15000, desc: 'Hurl spear · 85 dmg · weapon gone until CD', type: 'melee_throw' } },
   { id: 'katana',     name: 'Katana',     type: 'Melee',       damage: 65, range: 2.8, cooldown: 480,
@@ -968,9 +968,9 @@ const MELEE_ITEMS = [
   { id: 'crowbar', archived: true,    name: 'Crowbar',    type: 'Utility Melee', damage: 32, range: 1.8, cooldown: 320,
     ability: { name: 'Vault Pry',    cd: 7000,  desc: 'Movement only · vault forward and up', type: 'melee_mobility', speed: 18, up: 8, color: 0xccaa66 } },
   { id: 'fire_axe', archived: true,   name: 'Fire Axe',   type: 'Heavy Melee',   damage: 85, range: 2.0, cooldown: 950,
-    ability: { name: 'Hellfire Swing', cd: 13000, desc: 'AOE flame swing · 4 m · 90 dmg + burn', type: 'melee_slam', radius: 4, damage: 90 } },
+    ability: { name: 'Hellfire Swing', cd: 13000, desc: 'AOE flame swing · 4 m · 90 dmg + burn', type: 'melee_slam', radius: 4, damage: 90, leap: 13, leapForward: 4, dive: 28 } },
   { id: 'nunchucks', archived: true,  name: 'Nunchucks',  type: 'Melee',         damage: 22, range: 1.9, cooldown: 180, speedMult: 1.7,
-    ability: { name: 'Combo Frenzy', cd: 10000, desc: '2 s · ×2 swing speed · ×1.5 dmg', type: 'melee_revup', duration: 2000 } },
+    ability: { name: 'Combo Frenzy', cd: 10000, desc: '2 s · ×2 swing speed · ×1.5 dmg', type: 'melee_revup', duration: 2000, autoMs: 100, lunge: 0.7 } },
   { id: 'umbrella', archived: true,   name: 'Umbrella',   type: 'Shield',        damage: 18, range: 1.8, cooldown: 600, shield: true,
     ability: { name: 'Gust Hop', cd: 9000,  desc: 'Movement only · floaty hop + side drift', type: 'melee_mobility', speed: 12, side: 8, up: 10, color: 0xaaccff } },
   { id: 'yoyo', archived: true,       name: 'Yo-Yo',      type: 'Reach Melee',   damage: 30, range: 3.5, cooldown: 500,
@@ -983,10 +983,10 @@ const MELEE_ITEMS = [
   // ── 😈 P2W melees ────────────────────────────────────────────────────────
   { id: 'titan_hammer', archived: true, name: 'Titan Hammer', type: 'Heavy AOE',  damage: 95, range: 2.3, cooldown: 700,
     aoeOnSwing: 3, // every swing hits in 3m AOE
-    ability: { name: 'Earthquake',   cd: 14000, desc: 'Knock down all enemies in 6 m · 120 dmg', type: 'melee_slam', radius: 6, damage: 120 } },
+    ability: { name: 'Earthquake',   cd: 14000, desc: 'Knock down all enemies in 6 m · 120 dmg', type: 'melee_slam', radius: 6, damage: 120, leap: 15, leapForward: 4, dive: 32 } },
   { id: 'vampire_blade', archived: true,name: 'Vampire Blade', type: 'Lifesteal Melee', damage: 52, range: 2.2, cooldown: 480,
     healOnHit: 20, // heals 20 HP per landed swing
-    ability: { name: 'Blood Frenzy', cd: 12000, desc: '4 s · double lifesteal (40/hit)', type: 'melee_revup', duration: 4000, lifestealMult: 2 } },
+    ability: { name: 'Blood Frenzy', cd: 12000, desc: '4 s · double lifesteal (40/hit)', type: 'melee_revup', duration: 4000, lifestealMult: 2, autoMs: 150, lunge: 0.9 } },
   // ── The Classic ──────────────────────────────────────────────────────────
   { id: 'fists',      name: 'Fists',      type: 'Brass Knuckles', damage: 24, range: 1.4, cooldown: 220, speedMult: 1.6,
     dual: true, // two separate fists, thrown alternately — not one box sliding sideways
@@ -1000,7 +1000,7 @@ const MELEE_ITEMS = [
     ability: { name: 'Throw Hatchet', cd: 11000, desc: 'Hurl · 90 dmg · weapon gone until CD', type: 'melee_throw' } },
   { id: 'machete',        name: 'Machete',        type: 'Bleed Melee', damage: 56, range: 2.4, cooldown: 520,
     bleedOnHit: { dps: 8, dur: 4000, radius: 0.8, color: 0xaa0000 },
-    ability: { name: 'Slash Combo',cd: 10000, desc: '2.5 s · auto-slash · every hit bleeds', type: 'melee_revup', duration: 2500 } },
+    ability: { name: 'Slash Combo',cd: 10000, desc: '2.5 s · auto-slash, lunging forward · every hit bleeds', type: 'melee_revup', duration: 2500, autoMs: 170, lunge: 1.1 } },
   { id: 'cane',           name: 'Walking Cane',   type: 'Reach Melee', damage: 30, range: 2.2, cooldown: 440,
     ability: { name: 'Yank',       cd: 8000,  desc: 'Pull target 4 m toward you + 30 dmg', type: 'melee_pull', distance: 4, damage: 30 } },
   { id: 'cricket_bat',    name: 'Launching Melee', type: 'Melee', damage: 42, range: 2.3, cooldown: 540,
@@ -1012,7 +1012,7 @@ const MELEE_ITEMS = [
   { id: 'wrench',         name: 'Wrench',         type: 'Utility Melee', damage: 36, range: 1.8, cooldown: 380,
     ability: { name: 'Quick Fix', cd: 8000, desc: 'Movement only · repair-hop backward', type: 'melee_mobility', speed: -14, up: 7, color: 0xffdd88 } },
   { id: 'shovel',         name: 'Shovel',         type: 'AOE Melee', damage: 55, range: 2.2, cooldown: 620,
-    ability: { name: 'Ground Slam',cd: 11000, desc: 'Slam · 4 m AOE knockback · 65 dmg', type: 'melee_slam', radius: 4, damage: 65 } },
+    ability: { name: 'Ground Slam',cd: 11000, desc: 'Leap · slam · 4 m AOE knockback · 65 dmg', type: 'melee_slam', radius: 4, damage: 65, leap: 12.5, leapForward: 4, dive: 28 } },
   { id: 'golf_club',      name: 'Golf Club',      type: 'Launching Melee', damage: 40, range: 2.4, cooldown: 500,
     launchOnHit: 6,
     ability: { name: 'Fore!',      cd: 9000,  desc: 'AOE drive · 3.4 m · 40 dmg · huge launch', type: 'melee_pulse', radius: 3.4, damage: 40, knockback: 4.5, launchVel: 15, color: 0xffffff } },
@@ -1023,13 +1023,13 @@ const MELEE_ITEMS = [
     ability: { name: 'Fire Sweep', cd: 9500,  desc: 'AOE flame sweep · 3.5 m · 38 dmg', type: 'melee_pulse', radius: 3.5, damage: 38, knockback: 2.4, launchVel: 4, color: 0xff6622 } },
   { id: 'meat_cleaver',   name: 'Meat Cleaver',   type: 'Vampiric Melee', damage: 60, range: 1.7, cooldown: 540,
     lifestealOnHit: 10,
-    ability: { name: 'Butcher',    cd: 10000, desc: '3 s · auto-chop · double lifesteal', type: 'melee_revup', duration: 3000, lifestealMult: 2 } },
+    ability: { name: 'Butcher',    cd: 10000, desc: '3 s · auto-chop, charging forward · double lifesteal', type: 'melee_revup', duration: 3000, lifestealMult: 2, autoMs: 190, lunge: 1.3 } },
   // ── 🌌 SCI-FI P2W MELEES ──────────────────────────────────────────────────
   { id: 'phase_blade', archived: true,   name: 'Phase Blade',     type: 'Phasing Melee',  damage: 90, range: 2.6, cooldown: 380, speedMult: 1.4, doubleJump: true,
     ability: { name: 'Ghost Dash', cd: 9000,  desc: 'Dash 7 m through enemies · 110 dmg', type: 'melee_lunge', distance: 7, damage: 110 } },
   { id: 'gravity_hammer', archived: true,name: 'Gravity Hammer',  type: 'Heavy AOE',      damage: 110, range: 2.3, cooldown: 700, doubleJump: true,
     aoeOnSwing: 3.5,
-    ability: { name: 'Singularity Slam', cd: 14000, desc: 'Slam · 6 m AOE · 130 dmg · huge launch', type: 'melee_slam', radius: 6, damage: 130, knockback: 5, launchVel: 14, color: 0xaa88ff } },
+    ability: { name: 'Singularity Slam', cd: 14000, desc: 'Slam · 6 m AOE · 130 dmg · huge launch', type: 'melee_slam', radius: 6, damage: 130, knockback: 5, launchVel: 14, color: 0xaa88ff, leap: 17.5, leapForward: 3, dive: 34 } },
   { id: 'volt_whip', archived: true,     name: 'Volt Whip',       type: 'Long Electric',  damage: 50, range: 4.0, cooldown: 420,
     chainOnHit: { radius: 3.0, mult: 0.6 },
     ability: { name: 'Thunder Lash', cd: 11000, desc: '3 s spin · chain electric hits', type: 'melee_spin', duration: 3000 } },
@@ -1044,10 +1044,10 @@ const MELEE_ITEMS = [
     ability: { name: 'Throw Tomahawk', cd: 11000, desc: 'Hurl · 180 dmg · weapon gone until CD', type: 'melee_throw' } },
   { id: 'ots04',      name: 'OTs-04 Bayonet', type: 'Admin · Spetsnaz Blade', damage: 90, range: 1.8, cooldown: 240, speedMult: 1.7,
     adminItem: true,
-    ability: { name: 'Spetsnaz Combo', cd: 8000,  desc: '3 s · auto-stab combo', type: 'melee_revup', duration: 3000 } },
+    ability: { name: 'Spetsnaz Combo', cd: 8000,  desc: '3 s · auto-stab combo, lunging forward', type: 'melee_revup', duration: 3000, autoMs: 120, lunge: 0.8 } },
   { id: 'garrote',    name: 'Spec-Ops Garrote', type: 'Admin · Silent Kill', damage: 9999, range: 1.5, cooldown: 1200,
     adminItem: true,
-    ability: { name: 'Lights Out',   cd: 16000, desc: '5 s · all hits instakill', type: 'melee_revup', duration: 5000 } },
+    ability: { name: 'Lights Out',   cd: 16000, desc: '5 s · all hits instakill', type: 'melee_revup', duration: 5000, autoMs: 240, lunge: 0.8 } },
   { id: 'twin_knife', name: 'Twin Knife', type: 'Dual Blade', damage: 50, range: 1.6, cooldown: 240, speedMult: 1.7,
     dual: true,    // two real knives, alternating — see the dual-wield companion system
     dualHit: true, // every swing lands BOTH blades (50 + 50), not one flat number
@@ -5064,7 +5064,7 @@ function playReloadSound(w, durMs, plan) {
   if (!sawAnything) { magOut(at(0.22)); magIn(at(0.62)); }
   if (sawMagOut || !sawAnything) metalClack(ctx, at(0.93), g, V * 0.80, 560, 0.075);
 }
-const REVERB_EVENTS = new Set(['explosion', 'freeze_shatter', 'fire_sizzle']);
+const REVERB_EVENTS = new Set(['explosion', 'freeze_shatter', 'fire_sizzle', 'slam_boom']);
 function playSoundEvent(name, opts = {}) {
   const ctx = getAudioCtx();
   if (!ctx) return;
@@ -5166,6 +5166,15 @@ function playSoundEvent(name, opts = {}) {
   } else if (name === 'melee_swing') {
     playFilteredNoise(ctx, start, 0.10, out, 0.18 * mult, 'bandpass', 1200, 1.6);
     playTone(ctx, start, 0.08, out, 880, 240, 0.04 * mult, 'sine');
+  } else if (name === 'slam_boom') {
+    // A hammer meeting the floor from five metres up: the crack of the strike, then the floor itself taking it --
+    // a sub-bass drop that is mostly felt, a thick low body, and a rumble that rolls away behind it.
+    const V = mult;
+    playFilteredNoise(ctx, start, 0.012, out, 0.80 * V, 'bandpass', 1500, 0.5, 0.0002, 0);
+    playTone(ctx, start, 0.60, out, 92, 24, 0.55 * V, 'sine');
+    playTone(ctx, start + 0.01, 0.24, out, 190, 58, 0.26 * V, 'triangle');
+    playFilteredNoise(ctx, start + 0.01, 0.50, out, 0.55 * V, 'lowpass', 260, 0.7, 0.002, 1.4);
+    playFilteredNoise(ctx, start + 0.06, 1.05, out, 0.20 * V, 'lowpass', 140, 0.6, 0.02, 1.1);
   } else if (name === 'melee_heavy') {
     playFilteredNoise(ctx, start, 0.16, out, 0.30 * mult, 'lowpass', 600, 0.8);
     playTone(ctx, start, 0.12, out, 140, 60, 0.20 * mult, 'sine');
@@ -28420,21 +28429,28 @@ function buildFryingPan() {
 function buildSledge() {
   const g = new THREE.Group();
   const headMat   = new THREE.MeshLambertMaterial({ color: 0x333333 });
+  const faceMat   = new THREE.MeshLambertMaterial({ color: 0x5c5c60 });
+  const bandMat   = new THREE.MeshLambertMaterial({ color: 0x24242a });
   const handleMat = new THREE.MeshLambertMaterial({ color: 0x6b3a20 });
-  // Heavy hammer head
-  const head = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.060, 0.055), headMat);
-  head.position.set(0, 0, -0.100); g.add(head);
-  // Metal face plates on head
-  const faceF = new THREE.Mesh(new THREE.BoxGeometry(0.072, 0.058, 0.006), new THREE.MeshLambertMaterial({ color: 0x555555 }));
-  faceF.position.set(0, 0, -0.131); g.add(faceF);
-  // Long wooden handle
-  const handle = new THREE.Mesh(new THREE.BoxGeometry(0.016, 0.016, 0.30), handleMat);
-  handle.position.set(0, 0, 0.075); g.add(handle);
-  // Handle wrap rings
-  [0.050, 0.120, 0.190].forEach(z => {
-    const ring = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.022, 0.008), headMat);
+  // A sledgehammer is mostly head. This one was 7.5 x 6 cm on a 30 cm handle -- a mallet. Twice the head, a third
+  // more handle, and a face plate and a band so the weight reads from the side as well as from the front.
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.150, 0.118, 0.112), headMat);
+  head.position.set(0, 0, -0.165); g.add(head);
+  const band = new THREE.Mesh(new THREE.BoxGeometry(0.162, 0.130, 0.026), bandMat);
+  band.position.set(0, 0, -0.165); g.add(band);
+  for (const z of [-0.226, -0.104]) {                       // the two striking faces
+    const face = new THREE.Mesh(new THREE.BoxGeometry(0.146, 0.114, 0.012), faceMat);
+    face.position.set(0, 0, z); g.add(face);
+  }
+  // Long wooden handle, running up into the head
+  const handle = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.026, 0.46), handleMat);
+  handle.position.set(0, 0, 0.065); g.add(handle);
+  [0.030, 0.130, 0.230].forEach(z => {                      // grip wraps
+    const ring = new THREE.Mesh(new THREE.BoxGeometry(0.034, 0.034, 0.010), headMat);
     ring.position.set(0, 0, z); g.add(ring);
   });
+  const butt = new THREE.Mesh(new THREE.BoxGeometry(0.042, 0.042, 0.026), headMat);
+  butt.position.set(0, 0, 0.300); g.add(butt);
   g.position.set(0.10, -0.12, -0.20); return g;
 }
 
@@ -38205,6 +38221,7 @@ function updateMovement(dt, socialBlocked = false) {
         const slamDummyDamage = slamAb?.damage ?? slamItem?.damage ?? 80;
         const slamWeaponId = slamItem?.id || 'sledge';
         spawnAbilityAOEFX(slamOrigin.clone().setY(0.15), slamRadius, slamColor);
+        meleeSlamImpact(slamOrigin, slamRadius, slamColor, slamState.vel);
         flashScreen('rgba(255,100,0,0.30)', 350);
         for (const [pid, mesh] of Object.entries(remoteMeshes)) {
           const d = slamOrigin.distanceTo(mesh.position.clone().setY(1.0));
@@ -38531,6 +38548,266 @@ function poseBatCrowdClear() {
   s.model.rotation.set((-.85 + 2.05*rise)*weight, -.20*(1-rise)*weight, (-.35 + .5*rise)*weight);
 }
 
+
+// ── 🔨 Ground Slam: leap, hang, drive down ────────────────────────────────────────────────────────────────────────────
+// The slam family (sledge, shovel, the hammers) was one line -- slamState = { vel: 9.5 }: a 1.9 m hop, the hammer
+// staying at your side, and a footstep on the way down. It is a sequence now: a crouch, a leap that clears five
+// metres and carries forward, a beat at the top with the hammer held over the head, then the whole body driven into
+// the floor -- and the floor answers (slam_boom, a shockwave, dust, the camera). The damage is still the landing code's
+// (updateMovement, the `slamState.type === 'slam'` branch); this drives the body there and shows it.
+let meleeSlam = null;
+let _slamShakeT = 0, _slamShakeAmp = 0;
+
+function finishMeleeSlam() {
+  if (!meleeSlam) return;
+  const m = meleeSlam.model;
+  m.position.copy(MELEE_REST_POS); m.rotation.set(0, 0, 0); m.rotation.order = 'XYZ';
+  meleeSwingT = 1;
+  meleeSlam = null;
+}
+
+function startMeleeSlam(item, ab) {
+  if (inLobby) { noteLobbyHit(); return; }
+  cancelInspect();
+  const model = meleeModels[selectedMeleeIdx];
+  if (!model) return;
+  model._park = null;
+  // Already in the air (a jump, a launch pad)? Skip the crouch and the climb: hang, then drive down from here.
+  const airborne = !!slamState && !pilotedVehicle && !pilotedMortar;
+  meleeSlam = { item, ab, model, dir: _meleeForwardXZ(), phase: airborne ? 'hang' : 'crouch', t: 0, epoch: matchEpoch };
+  if (airborne) slamState.type = 'slam';
+  meleeSwingT = 1;
+  lastMelee = Date.now();
+  playSoundEvent('melee_heavy', { volume: 1.1 });
+}
+
+function updateMeleeSlam(dt) {
+  const s = meleeSlam;
+  if (!s) return;
+  if (isDead || !gameStarted || countdownActive || SOCIAL_VIEW.mode || s.epoch !== matchEpoch
+      || activeSlot !== 'melee' || meleeModels[selectedMeleeIdx] !== s.model) { finishMeleeSlam(); return; }
+  s.t += dt;
+  const ab = s.ab, LEAP = ab.leap ?? 16.5, FWD = ab.leapForward ?? 4.5, DIVE = ab.dive ?? 30;
+  // forward drift: through moveWithWalls, so a wall stops it, and a void ends the run like it does anywhere else
+  const drift = (k) => {
+    moveWithWalls(s.dir, FWD * k * dt); resolveWallCollisions();
+    if (isOutOfBoundsXZ(camera.position.x, camera.position.z)) { killLocalOutOfBounds(); finishMeleeSlam(); return true; }
+    return false;
+  };
+  const stillSlam = () => !!slamState && slamState.type === 'slam';
+  if (s.phase === 'crouch') {
+    if (s.t >= 0.13) {
+      s.phase = 'rise'; s.t = 0;
+      slamState = { vel: LEAP, type: 'slam' };
+      playSoundEvent('air_launch', { volume: 0.75, pitch: 0.85, minGap: 0 });
+    }
+  } else if (s.phase === 'rise') {
+    if (!stillSlam()) { finishMeleeSlam(); return; }          // wall-climbed, caught by a launch pad, or landed early
+    if (drift(1)) return;
+    if (slamState.vel <= 1.4 || s.t > 1.6) { s.phase = 'hang'; s.t = 0; }
+  } else if (s.phase === 'hang') {
+    if (!stillSlam()) { finishMeleeSlam(); return; }
+    slamState.vel = Math.max(slamState.vel, 0.2);             // gravity is switched off for the beat at the top
+    if (s.t >= 0.11) {
+      s.phase = 'dive'; s.t = 0;
+      slamState.vel = -DIVE;
+      playSoundEvent('air_launch', { volume: 0.9, pitch: 0.55, minGap: 0 });
+      _fovPunch = Math.max(_fovPunch, 5);
+    }
+  } else if (s.phase === 'dive') {
+    if (!slamState) { s.phase = 'recover'; s.t = 0; return; } // the landing code has run: it hit, it boomed, it cleared slamState
+    if (slamState.type !== 'slam') { finishMeleeSlam(); return; }
+    if (slamState.vel > -DIVE * 0.6) slamState.vel = -DIVE * 0.6;
+    if (drift(0.3)) return;
+  } else if (s.t >= 0.46) {
+    finishMeleeSlam();
+  }
+}
+
+function poseMeleeSlam() {
+  const s = meleeSlam;
+  if (!s) return;
+  const ease = (a) => { a = Math.max(0, Math.min(1, a)); return a * a * (3 - 2 * a); };
+  const HI = { py: 0.16, pz: -0.10, rx: 1.38 }, LO = { py: -0.22, pz: -0.38, rx: -0.95 };
+  let py = 0, pz = 0, rx = 0;
+  if (s.phase === 'crouch') { const k = ease(s.t / 0.13); py = -0.07 * k; pz = 0.05 * k; rx = 0.55 * k; }
+  else if (s.phase === 'rise') { const k = ease(s.t / 0.42); py = -0.07 + (HI.py + 0.07) * k; pz = 0.05 + (HI.pz - 0.05) * k; rx = 0.55 + (HI.rx - 0.55) * k; }
+  else if (s.phase === 'hang') { py = HI.py; pz = HI.pz; rx = HI.rx + Math.sin(s.t * 80) * 0.035; }
+  else if (s.phase === 'dive') { const k = ease(s.t / 0.09); py = HI.py + (LO.py - HI.py) * k; pz = HI.pz + (LO.pz - HI.pz) * k; rx = HI.rx + (LO.rx - HI.rx) * k; }
+  else { const k = ease((s.t - 0.12) / 0.32); py = LO.py * (1 - k); pz = LO.pz * (1 - k); rx = LO.rx * (1 - k); }
+  const m = s.model;
+  m.rotation.order = 'YXZ';
+  m.position.set(MELEE_REST_POS.x, MELEE_REST_POS.y + py, MELEE_REST_POS.z + pz);
+  m.rotation.set(rx, 0, 0);
+}
+
+// What landing a slam does to the room: the boom, a ring of shockwave along the floor, dust thrown up, the camera.
+// (The damage is in the landing code that calls this.) `speed` is how hard you came down.
+function meleeSlamImpact(origin, radius, color, speed) {
+  const power = Math.min(1.4, 0.65 + Math.abs(speed || 0) / 40);
+  playSoundEvent('slam_boom', { volume: Math.min(1.3, 0.85 + power * 0.3), minGap: 0 });
+  const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false });
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.55, 0.95, 40), mat);
+  ring.rotation.x = -Math.PI / 2; ring.position.set(origin.x, 0.1, origin.z); scene.add(ring);
+  const t0 = performance.now();
+  const tick = () => {
+    const k = (performance.now() - t0) / 420;
+    if (k >= 1) { scene.remove(ring); mat.dispose(); ring.geometry.dispose(); return; }
+    ring.scale.setScalar(1 + k * (radius * 1.1));
+    mat.opacity = 0.85 * (1 - k) * (1 - k);
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+  for (let k = 0; k < 10; k++) {                                // dust and chips off the floor
+    const a = k / 10 * Math.PI * 2 + 0.3, r = radius * (0.35 + 0.35 * ((k * 7) % 5) / 4);
+    spawnHitParticle(new THREE.Vector3(origin.x + Math.cos(a) * r, 0.35, origin.z + Math.sin(a) * r));
+  }
+  _slamShakeT = 0.6; _slamShakeAmp = 0.045 * power;
+  _realismLandKick = Math.max(_realismLandKick, 1.2);
+}
+function updateSlamShake(dt) {
+  if (_slamShakeT <= 0) return;
+  _slamShakeT = Math.max(0, _slamShakeT - dt);
+  const mult = gameplaySettingMult('cameraShake');
+  if (mult <= 0) return;
+  const a = _slamShakeAmp * (_slamShakeT / 0.6) * mult;
+  const dp = (Math.random() - 0.5) * 2 * a, dy = (Math.random() - 0.5) * 2 * a * 0.7;
+  euler.x += dp; euler.y += dy;
+  euler.x = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, euler.x));
+  camera.quaternion.setFromEuler(euler);
+  _shakePitch += dp; _shakeYaw += dy;                       // the same bookkeeping a gunshot uses, so it settles back
+}
+
+// ── 🗡️ Dash abilities: a real dash, not a teleport ────────────────────────────────────────────────────────────────────
+// Sabre Lunge, Shield Charge, Shoulder Rush, Charge!, Ghost Dash all moved you the whole distance inside one frame
+// and looked at whoever was nearest afterwards -- nothing on screen between the key press and the arrival. Now the
+// body covers the ground in a fifth of a second with the weapon thrust out in front, and everything it passes
+// through is hit once.
+let meleeDash = null;
+
+function finishMeleeDash() {
+  if (!meleeDash) return;
+  const m = meleeDash.model;
+  m.position.copy(MELEE_REST_POS); m.rotation.set(0, 0, 0); m.rotation.order = 'XYZ';
+  meleeSwingT = 1;
+  meleeDash = null;
+}
+
+function startMeleeDash(item, ab, weaponId, now) {
+  cancelInspect();
+  const model = meleeModels[selectedMeleeIdx];
+  if (!model) return false;
+  model._park = null;
+  const dist = ab.distance || 6;
+  meleeDash = { item, ab, model, weaponId, dir: _meleeForwardXZ(), left: dist, speed: dist / (ab.dashTime || 0.2),
+    elapsed: 0, hit: new Set(), stopped: false, epoch: matchEpoch, now };
+  meleeSwingT = 1;
+  lastMelee = Date.now();
+  _fovPunch = Math.max(_fovPunch, 6);
+  playSoundEvent(ab.type === 'melee_charge' ? 'melee_heavy' : 'air_launch', { volume: 1.0, pitch: 1.2, minGap: 0 });
+  return true;
+}
+
+function updateMeleeDash(dt) {
+  const s = meleeDash;
+  if (!s) return;
+  if (isDead || !gameStarted || SOCIAL_VIEW.mode || s.epoch !== matchEpoch
+      || activeSlot !== 'melee' || meleeModels[selectedMeleeIdx] !== s.model) { finishMeleeDash(); return; }
+  s.elapsed += dt;
+  if (s.left > 0 && !s.stopped) {
+    const step = Math.min(s.left, s.speed * dt), before = camera.position.clone();
+    moveWithWalls(s.dir, step); resolveWallCollisions();
+    if (camera.position.distanceTo(before) < step * 0.25) s.stopped = true;
+    s.left -= step;
+    if (isOutOfBoundsXZ(camera.position.x, camera.position.z)) { killLocalOutOfBounds(); finishMeleeDash(); return; }
+    const charge = s.ab.type === 'melee_charge';
+    for (const [pid, mesh] of Object.entries(remoteMeshes)) {
+      if (pid === myId || s.hit.has(pid) || !mesh.visible || players[pid]?.dead || friendlyFireBlocked(pid, myId)) continue;
+      const body = mesh.position.clone(); body.y += 0.95;
+      const off = body.clone().sub(camera.position);
+      if (Math.hypot(off.x, off.z) > 2.1 || Math.abs(off.y) > 1.7) continue;
+      s.hit.add(pid);
+      const dummy = TRAINING_DUMMIES.find(d => d.id === pid);
+      if (dummy) handleDummyHit(dummy, mesh, { damage: s.ab.damage || s.item.damage }, body);
+      else {
+        emitHit(pid, `lunge_${myId}_${s.now}_${pid}`, s.weaponId, body);
+        if (charge) {                                          // a charge rams: the target is driven ahead of you
+          const bot = resolveBot(pid);
+          if (bot && !bot.dead) { bot.kbVX = (bot.kbVX || 0) + s.dir.x * 14; bot.kbVZ = (bot.kbVZ || 0) + s.dir.z * 14; }
+        }
+      }
+      spawnHitParticle(body);
+      playSoundEvent(charge ? 'melee_heavy' : 'melee_blade', { volume: 0.9, minGap: 40 });
+    }
+  }
+  const run = (s.ab.distance || 6) / s.speed;
+  if (s.elapsed >= run + 0.2) finishMeleeDash();
+}
+
+function poseMeleeDash() {
+  const s = meleeDash;
+  if (!s) return;
+  const run = (s.ab.distance || 6) / s.speed;
+  const ease = (a) => { a = Math.max(0, Math.min(1, a)); return a * a * (3 - 2 * a); };
+  const into = ease(s.elapsed / 0.07), out = ease((s.elapsed - run) / 0.2), w = into * (1 - out);
+  const shield = !!s.item.shield;
+  const m = s.model;
+  m.rotation.order = 'YXZ';
+  m.position.set(MELEE_REST_POS.x - 0.04 * w, MELEE_REST_POS.y + 0.02 * w, MELEE_REST_POS.z + (shield ? -0.20 : -0.30) * w);
+  m.rotation.set(shield ? 0.05 * w : -0.12 * w, 0.10 * w, 0);
+}
+
+// ── 🪓 Auto-swing abilities: swing forward, and go with it ────────────────────────────────────────────────────────────
+// Rev Up / Slash Combo / Butcher / Spetsnaz Combo swing on their own while the buff lasts. They used to retrigger
+// the swing every frame, so its animation was restarted before it moved and the weapon sat frozen at the start of
+// its wind-up while the hits landed. Each auto swing now runs its whole stroke, and carries you forward a metre
+// or two as it goes (stopping short of whoever is in front -- it closes the gap, it does not run through them).
+let autoLunge = null;
+
+function startAutoLunge(dist) {
+  if (!(dist > 0)) return;
+  const dir = _meleeForwardXZ();
+  autoLunge = { dir, left: Math.min(dist * 1.5, (autoLunge ? autoLunge.left : 0) + dist), speed: dist / 0.12, epoch: matchEpoch };
+}
+
+function updateAutoLunge(dt) {
+  const s = autoLunge;
+  if (!s) return;
+  if (isDead || !gameStarted || SOCIAL_VIEW.mode || s.epoch !== matchEpoch || meleeAbilityBuff?.type !== 'revup' || activeSlot !== 'melee') { autoLunge = null; return; }
+  for (const [pid, mesh] of Object.entries(remoteMeshes)) {
+    if (pid === myId || !mesh.visible || players[pid]?.dead || friendlyFireBlocked(pid, myId)) continue;
+    const off = mesh.position.clone().sub(camera.position); off.y = 0;
+    const along = off.dot(s.dir), lateral = Math.abs(off.x * s.dir.z - off.z * s.dir.x);
+    if (along > 0 && along < 1.15 && lateral < 0.9) { autoLunge = null; return; }
+  }
+  const step = Math.min(s.left, s.speed * dt), before = camera.position.clone();
+  moveWithWalls(s.dir, step); resolveWallCollisions();
+  if (isOutOfBoundsXZ(camera.position.x, camera.position.z)) { autoLunge = null; killLocalOutOfBounds(); return; }
+  s.left -= step;
+  if (s.left <= 0.001 || camera.position.distanceTo(before) < step * 0.3) autoLunge = null;
+}
+
+// Plays the item's own swing animation (the one tryMelee runs) without a hit test: an ability that should LOOK like
+// something being swung -- Pan Clang, Homerun, Bonk, the cane's Yank, a knife's Backstab -- and had no animation.
+function playAbilitySwing(item) {
+  if (activeSlot !== 'melee' || selectedMeleeIdx === null || batCrowdCharge || meleeSlam || meleeDash) return;
+  const model = meleeModels[selectedMeleeIdx];
+  if (!model || !model.visible) return;
+  meleeSwingType = MELEE_SWING_TYPES[selectedMeleeIdx] || 'slash';
+  const prof = MELEE_SWING[_meleeSwingId(selectedMeleeIdx)];
+  const cd = item.cooldown;
+  meleeSwingDur = prof ? Math.min(prof.ms, cd * 0.95) : Math.min(cd * 0.7, 460);
+  meleeSwingT = 0;
+  if (prof && prof.alt) model._swingSide = (model._swingSide || 1) * -1;
+  else if (meleeSwingType === 'slash') model._slashSide = (model._slashSide || 1) * -1;
+  if (prof && prof.park) {
+    const sd = model._swingSide || 1, m = model;
+    model._swingKeys = [_MS(.001, [(m.position.x - MELEE_REST_POS.x) * sd, m.position.y - MELEE_REST_POS.y, m.position.z - MELEE_REST_POS.z],
+                                  [m.rotation.x, m.rotation.y * sd, m.rotation.z * sd]), ...prof.keys];
+    model._park = null;
+  }
+}
+
 function activateMeleeAbility() {
   const item = equippedMeleeItem();
   if (!item?.ability) return;
@@ -38540,43 +38817,21 @@ function activateMeleeAbility() {
   if (now - (abilityCDs[item.id] || 0) < abilityCooldownFor(item, ab)) return; // on cooldown
   abilityCDs[item.id] = now;
 
+  // One sequence at a time: a leap in progress, a dash in progress, the bat's charge.
+  if (batCrowdCharge || meleeSlam || meleeDash) { abilityCDs[item.id] = 0; return; }
   if (ab.type === 'bat_crowd_clear') {
     startBatCrowdClear(item, ab);
     flashAbilityName(ab.name);
   }
   else if (ab.type === 'melee_heavy') {
+    playAbilitySwing(item);
     meleeAbilityBuff = { type: 'heavy', usesLeft: 1 };
     flashAbilityName(ab.name);
     playSoundEvent('heavy_buff', { volume: 0.9 });
   }
   else if (ab.type === 'melee_lunge' || ab.type === 'melee_charge') {
-    const dist    = ab.distance || 6;
-    const dmg     = ab.damage   || 0;
-    const fwd     = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
-    fwd.y = 0; fwd.normalize();
-    // Dash forward in small steps (collision-safe)
-    const lungeBounds = getMapBounds();
-    for (let step = 0; step < 14; step++) {
-      camera.position.addScaledVector(fwd, dist / 14);
-      camera.position.x = Math.max(-lungeBounds, Math.min(lungeBounds, camera.position.x));
-      camera.position.z = Math.max(-lungeBounds, Math.min(lungeBounds, camera.position.z));
-      resolveWallCollisions();
-    }
-    // Check for enemies within 2.2 units after dash
     const weaponId = ab.type === 'melee_charge' ? 'shield_charge' : item.id;
-    let hitSomething = false;
-    for (const [pid, mesh] of Object.entries(remoteMeshes)) {
-      const dist2 = camera.position.distanceTo(mesh.position.clone().setY(camera.position.y));
-      if (dist2 > 2.2) continue;
-      const hitPos = mesh.position.clone().setY(1.0);
-      const dummy = TRAINING_DUMMIES.find(d => d.id === pid);
-      if (dummy) handleDummyHit(dummy, mesh, { damage: dmg || item.damage }, hitPos);
-      else emitHit(pid, `lunge_${myId}_${now}`, weaponId, hitPos);
-      spawnHitParticle(hitPos);
-      hitSomething = true;
-      break;
-    }
-    if (!hitSomething) spawnHitParticle(camera.position.clone().setY(1.0));
+    if (!startMeleeDash(item, ab, weaponId, now)) abilityCDs[item.id] = 0;
     flashAbilityName(ab.name);
   }
   else if (ab.type === 'melee_pickle') {
@@ -38598,11 +38853,12 @@ function activateMeleeAbility() {
     flashAbilityName(ab.name);
   }
   else if (ab.type === 'melee_pulse') {
+    playAbilitySwing(item);
     doMeleePulseAbility(item, ab, now);
     flashAbilityName(ab.name);
   }
   else if (ab.type === 'melee_slam') {
-    slamState = { vel: 9.5, type: 'slam' };
+    startMeleeSlam(item, ab);
     flashAbilityName(ab.name);
   }
   else if (ab.type === 'melee_throw') {
@@ -38708,6 +38964,7 @@ function activateMeleeAbility() {
     flashScreen('rgba(255,255,0,0.15)', 300);
   }
   else if (ab.type === 'melee_pull') {
+    playAbilitySwing(item);
     playSoundEvent('pull_yank', { volume: 1.0 });
     // Walking Cane "Yank" — pull the closest enemy in melee range toward us.
     const pullDist = ab.distance || 4;
@@ -40073,14 +40330,18 @@ function updateChainMaulSwing(dt) {
 }
 
 function tryMelee() {
-  if (batCrowdCharge) return;
+  if (batCrowdCharge || meleeSlam || meleeDash) return;
   if (SOCIAL_VIEW.mode) return;
   if (!gameStarted || isDead) return;
   if (countdownActive) return;
   const item = equippedMeleeItem();
   if (!item) return;
   const now = Date.now();
-  const effectiveCooldown = meleeAbilityBuff?.type === 'revup' ? 15 : item.cooldown;
+  // An auto-swing buff (Slash Combo, Butcher...) used to swing every 15 ms -- one frame -- which restarted the swing
+  // animation before it moved. Each ability names its own cadence (autoMs); the chainsaw keeps its chainsaw rate.
+  const revving = meleeAbilityBuff?.type === 'revup';
+  const isSaw = (item.baseId || item.id) === 'chainsaw';
+  const effectiveCooldown = !revving ? item.cooldown : isSaw ? 15 : (item.ability?.autoMs || 150);
   if (now - lastMelee < effectiveCooldown) return;
   lastMelee = now;
   // A skin renames the item — equippedMeleeItem() hands back the SKIN's id, with
@@ -40101,7 +40362,7 @@ function tryMelee() {
 
   // Trigger swing animation — each swing type has its own characteristic duration
   meleeSwingType = MELEE_SWING_TYPES[selectedMeleeIdx] || 'slash';
-  const cd = item.cooldown;
+  const cd = (revving && !isSaw) ? effectiveCooldown : item.cooldown;   // a stroke that is over before the next one starts
   const _prof = MELEE_SWING[_meleeSwingId(selectedMeleeIdx)];
   meleeSwingDur = _prof ? Math.min(_prof.ms, cd * 0.95)
                 : meleeSwingType === 'slam'   ? Math.min(cd * 0.78, 600)   // slow, weighty overhead
@@ -40113,6 +40374,7 @@ function tryMelee() {
                 : meleeSwingType === 'spin'   ? Math.min(cd * 0.85, 500)   // full rotation needs more time
                 : Math.min(cd * 0.65, 440);                                // slash default
   meleeSwingT = 0;
+  if (revving && item.ability?.lunge) startAutoLunge(item.ability.lunge);   // swing forward, and go with it
   // Which side/direction this swing uses — decided ONCE here, at swing
   // start, not per-frame in updateMeleeSwing(). It used to toggle
   // _punchLeft on every frame the swing played, so the "active" hand
@@ -52041,6 +52303,8 @@ function _meleeSwingId(idx) {
 
 function updateMeleeSwing(dt) {
   if (batCrowdCharge) { poseBatCrowdClear(); return; }
+  if (meleeSlam) { poseMeleeSlam(); return; }
+  if (meleeDash) { poseMeleeDash(); return; }
   // Dual-wield companions (fists, brass knuckles) track their main hand's
   // visibility every frame, rather than touching every equip/switch/reset
   // call site individually.
@@ -55750,7 +56014,7 @@ function updateBotAI(dt) {
               const probeZ = bot.z + candZ * 4;
               const clearAhead = hasLineOfSight(bot.x, bot.z, probeX, probeZ);
               // Distance from probe to player (higher = better — we want to be farther)
-              const newDist = Math.hypot(probeX - tx, probeZ - tz);
+              const newDist = Math.hypot(probeX - target.x, probeZ - target.z);   // was tx/tz: never defined, so this threw every frame
               // Penalize directions that point TOWARD the player (cosine of angle vs away-vector)
               const awayAlignment = Math.cos(a - playerAngle); // 1 = perfectly away, -1 = straight at player
               // Score: huge bonus for clear path, bonus for distance gained, bonus for not facing player
@@ -56408,6 +56672,7 @@ function loop() {
   });
   safeLoopStep('recoil', () => updateRecoil(dt));   // the muzzle settles back between shots
   safeLoopStep('fire-shake', () => updateFireShake(dt)); // camera punch on every shot, snaps back fast
+  safeLoopStep('slam-shake', () => updateSlamShake(dt));  // the floor taking a hammer
   safeLoopStep('realism-feedback', () => updateRealismFeedback(dt));
   safeLoopStep('dots', () => updateDots());       // anything set alight keeps taking damage
   safeLoopStep('bullets', () => updateBullets(dt));
@@ -56531,6 +56796,9 @@ function loop() {
   updateGrenadeWindup(dt);
   updateAbilityBuff(dt);
   updateBatCrowdClear(dt);
+  updateMeleeSlam(dt);
+  updateMeleeDash(dt);
+  updateAutoLunge(dt);
   updatePendingFanFire(dt);
   updateAbilityHUD();
   updateMeleeSwing(dt);
