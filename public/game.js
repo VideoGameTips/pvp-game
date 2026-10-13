@@ -17379,8 +17379,11 @@ GIM.pearl_harbor = (X) => {
   X.on((dt, A, t) => {
     S.t -= dt;
     if (S.phase === 'idle' && S.t <= 0) {
-      const ang = [0, 1.571, 0.785, -0.785][S.n++ % 4] + (Math.random() - 0.5) * 0.3;
-      const dx = Math.cos(ang), dz = Math.sin(ang), span = (N - 1) * GAP, cx = (Math.random() - 0.5) * 30, cz = (Math.random() - 0.5) * 30;
+      // The first raid is down the middle, due east-west, so a probe standing at the centre is always under it; after that
+      // the line and its centre wander.
+      const first = S.n === 0;
+      const ang = first ? 0 : [0, 1.571, 0.785, -0.785][S.n % 4] + (Math.random() - 0.5) * 0.3; S.n++;
+      const dx = Math.cos(ang), dz = Math.sin(ang), span = (N - 1) * GAP, cx = first ? 0 : (Math.random() - 0.5) * 30, cz = first ? 0 : (Math.random() - 0.5) * 30;
       S.dir = { dx, dz }; S.p0 = { x: cx - dx * span / 2, z: cz - dz * span / 2 };
       for (let i = 0; i < N; i++) {
         const x = S.p0.x + dx * GAP * i, z = S.p0.z + dz * GAP * i;
