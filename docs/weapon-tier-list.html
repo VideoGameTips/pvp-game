@@ -178,7 +178,7 @@ function visible(id) { return filter === 'all' || byId[id].slot === filter; }
 function chipHTML(id, tier) {
   const d = byId[id], p = pips(d), moved = d.tier !== tier;
   const bars = [1, 2, 3, 4, 5].map(i => '<i class="' + (i <= p ? 'on' : '') + '"></i>').join('');
-  return '<button type="button" class="chip' + (moved ? ' moved' : '') + (selected === id ? ' sel' : '') + '" draggable="true" data-id="' + id + '" data-slot="' + d.slot + '"' +
+  return '<button type="button" class="chip' + (moved ? ' moved' : '') + (selected === id ? ' sel' : '') + '" draggable="true" data-id="' + id + '" data-slot="' + d.slot + '" title="' + d.name + ' (' + d.type + ')"' +
     ' aria-label="' + d.name + ', ' + d.sust + ' DPS, tier ' + tier + '">' +
     (moved ? '<span class="mv">' + d.tier + '&rarr;' + tier + '</span>' : '') +
     '<span class="nm">' + d.name + '</span>' +
@@ -212,7 +212,7 @@ function renderSide() {
   if (d.noRecoil) flags.push('No spread or recoil');
   if (d.note) d.note.split('; ').forEach(x => flags.push(x));
   el.innerHTML =
-    '<h2>' + d.name + '</h2><div class="sub">' + d.type + ' &middot; ' + d.slot + ' &middot; ' + fmt(d.cost) + ' credits' + (d.ability ? ' &middot; E: ' + d.ability : '') + '</div>' +
+    '<h2>' + d.name + '</h2><div class="sub">' + d.type + ' &middot; ' + d.slot + ' &middot; ' + fmt(d.cost) + ' credits</div>' +
     '<div class="grp"><h3>Tier</h3><dl>' + row('Computed', '<b style="color:var(--t-' + d.tier + ')">' + d.tier + '</b> (' + d.rel.toFixed(2) + '&times; median)') + row('Yours', '<b style="color:var(--t-' + t + ')">' + t + '</b>') + '</dl>' +
     '<div class="moveto">' + TIERS.map(x => '<button type="button" data-moveto="' + x + '" aria-pressed="' + (x === t) + '" style="--c:var(--t-' + x + ')">' + x + '</button>').join('') + '</div></div>' +
     '<div class="grp"><h3>Damage</h3><dl>' +
