@@ -309,6 +309,11 @@
     'was knocked down by the roar': '被怒吼震倒了',
     'stepped on a mine': '踩到了地雷',
     'was hit by the express': '被特快列车撞了',
+    '⛽ FUEL {n}': '⛽ 燃油 {n}',
+    '⛽ OUT OF FUEL': '⛽ 没油了',
+    'OUT OF FUEL': '没油了',
+    'OUT OF FUEL — RESPAWN TO REFILL': '没油了——重生后补满',
+    'The saw is dead until you respawn': '电锯在你重生之前就是一块废铁',
 
     // ── HUD / touch controls ─────────────────────────────────────────────────
     'HEALTH': '生命',

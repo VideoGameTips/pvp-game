@@ -957,7 +957,7 @@ const MELEE_ITEMS = [
   { id: 'knife',      name: 'Knife',      type: 'Melee',       damage: 28, range: 1.6, cooldown: 260, speedMult: 2.0,
     ability: { name: 'Backstab',  cd: 7500, desc: 'Lunge at a target · instant kill if it lands', type: 'melee_instakill' } },
   { id: 'chainsaw',   name: 'Chainsaw',   type: 'Heavy Melee', damage: 45, range: 1.9, cooldown: 150,
-    ability: { name: 'Rev Up',       cd: 12000, desc: '2s · 10× swing speed · 3× move speed', type: 'melee_revup', duration: 2000 } },
+    ability: { name: 'Rev Up',       cd: 12000, desc: 'Dash forward · rev 3 s · 10× swing speed · 3× move speed · burns fuel', type: 'melee_revup', duration: 3000, fuelCost: 12, fuelDrain: 12, dash: 5 } },
   { id: 'lightsabre', archived: true, name: 'Lightsabre', type: 'Melee · Jedi',  damage: 72, range: 2.5, cooldown: 420, doubleJump: true,
     ability: { name: 'Parry',        cd: 10000, desc: '1.5s · absorb all incoming bullets · DOUBLE JUMP', type: 'melee_parry', duration: 1500 } },
   { id: 'riot_shield',name: 'Riot Shield',type: 'Shield',      damage: 18, range: 1.7, cooldown: 700, shield: true,
@@ -1728,6 +1728,10 @@ let medkitHealChannel = null; // { token, timer, amount, startedAt, duration }
 
 // ── Melee swing animation state ────────────────────────────────────────────
 let meleeSwingT    = 1;       // 1 = idle/done, 0 = just started
+// ⛽ The chainsaw runs on fuel and the tank is the weapon's limit: sawing costs a little per swing, Rev Up costs a lot --
+// a burst to start it and a drain for as long as it runs. It is refilled when you respawn, and not before.
+const CHAINSAW_FUEL_MAX = 120, CHAINSAW_SWING_FUEL = 1;
+let chainsawFuel = CHAINSAW_FUEL_MAX, _chainsawDryAt = 0, _fuelHud = { last: -1, shown: null };
 let meleeAbilityBuff = null; // { type, endTime?, usesLeft?, lastSpinHits? }
 let slamState = null;        // { vel } — for sledge ground slam animation
 let spearThrown = false;     // true while spear weapon is "in the air"
@@ -3281,7 +3285,10 @@ function _metalizeMat(m) {
   const isWood  = !isMetal && _mHSL.h > 0.015 && _mHSL.h < 0.13 && _mHSL.s > 0.22 && _mHSL.l > 0.12 && _mHSL.l < 0.62;
   const isBore  = _mHSL.l < 0.10;              // bores, gaps, shadow lines
   let p;
-  if (isMetal) {
+  if (m.userData && m.userData.skinTone) {
+    // Skin. The polymer surface that suits a gun grip is a stipple of dark flecks, and on a fist it read as granite.
+    p = { roughness: 0.6, metalness: 0.0, envMapIntensity: 0.55 };
+  } else if (isMetal) {
     // A polished slide and a bead-blasted receiver are both metal; shininess
     // is what the builder already used to say which, so it still decides.
     p = { surface: G.steel, roughness: Math.max(0.14, 0.52 - (shin - 60) / 420), metalness: 0.95,
@@ -31228,6 +31235,7 @@ function buildFists() {
   // Simple skin-tone block — no knuckles, no fingers, no brass.
   const g = new THREE.Group();
   const skin = new THREE.MeshLambertMaterial({ color: 0xeac39a });
+  skin.userData.skinTone = true;   // the PBR pass gives skin a smooth matte finish, not the polymer speckle it gives a gun grip
   const block = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.10, 0.14), skin);
   block.position.set(0, 0, -0.05);
   g.add(block);
@@ -33106,6 +33114,18 @@ function _fuseModel(root) {
 [weaponModels, meleeModels, supportModels].forEach(arr => {
   arr.forEach(m => { if (!m) return; try { greebleModel(m); weldModelParts(m); blendProudSteps(m); _fuseModel(m); shinifyModel(m); } catch (e) {} });
 });
+// A dual-wield off hand is a clone taken when the models were BUILT, so it missed every pass above: one fist was rounded
+// and skin-finished and the other a sharp block with a different material. Give it the main hand's geometry and material.
+function syncOffHands() {
+  for (const m of meleeModels) {
+    const off = m && m._offHand; if (!off) continue;
+    const a = [], b = [];
+    m.traverse(o => a.push(o)); off.traverse(o => b.push(o));
+    if (a.length !== b.length) continue;
+    for (let i = 0; i < a.length; i++) if (a[i].isMesh && b[i].isMesh) { b[i].geometry = a[i].geometry; b[i].material = a[i].material; }
+  }
+}
+try { syncOffHands(); } catch (e) { console.warn('[offhand]', e); }
 
 const SKIN_IDS = SKINS.map(s => s.id);
 
@@ -39094,6 +39114,8 @@ function loadoutReady() {
 function resetCombatResources() {
   if (!loadoutReady()) return;
   finishBatCrowdClear();
+  chainsawFuel = CHAINSAW_FUEL_MAX;   // a fresh tank each life
+  finishMeleeSlam(); finishMeleeDash(); autoLunge = null;
   cancelMedkitHeal();
   for (const b of localBullets) scene.remove(b.mesh);
   localBullets.length = 0;
@@ -41143,6 +41165,51 @@ function updateAutoLunge(dt) {
   if (s.left <= 0.001 || camera.position.distanceTo(before) < step * 0.3) autoLunge = null;
 }
 
+// ⛽ The saw coughing: the message, once every couple of seconds, and a dry-fire click.
+function chainsawSputter(pressed) {
+  const now = performance.now();
+  if (now - _chainsawDryAt < 2200) return;
+  _chainsawDryAt = now;
+  playSoundEvent('dryfire', { volume: 0.8, minGap: 0 });
+  flashAbilityName(pressed ? 'OUT OF FUEL — RESPAWN TO REFILL' : 'OUT OF FUEL');
+}
+
+// Runs every frame: the rev burns fuel for as long as it lasts, and the saw dies in the middle of it if the tank does;
+// then the gauge under the ability box (only while a chainsaw is in hand).
+function updateChainsawFuel(dt) {
+  const it = (activeSlot === 'melee') ? equippedMeleeItem() : null;
+  const saw = !!it && (it.baseId || it.id) === 'chainsaw';
+  if (saw && meleeAbilityBuff?.type === 'revup' && !isDead) {
+    chainsawFuel = Math.max(0, chainsawFuel - (it.ability?.fuelDrain || 12) * dt);
+    if (chainsawFuel <= 0) {
+      meleeAbilityBuff = null;                                    // it coughs, and it is just a lump of iron now
+      playSoundEvent('dryfire', { volume: 0.9, minGap: 0 });
+      showAnnouncement('OUT OF FUEL', 'The saw is dead until you respawn', '#ff9a2a', 1600);
+      updateAbilityHUD();
+    }
+  }
+  let row = document.getElementById('fuel-row');
+  if (!saw) { if (row && row.style.display !== 'none') row.style.display = 'none'; return; }
+  const hud = document.getElementById('ability-hud');
+  if (!row) {
+    if (!hud) return;
+    row = document.createElement('div');
+    row.id = 'fuel-row';
+    row.style.cssText = 'margin-top:6px;font-size:11px;letter-spacing:1px;color:#ffb347;';
+    row.innerHTML = '<span id="fuel-label">\u26fd FUEL</span><div style="width:100%;height:6px;background:#333;border-radius:3px;overflow:hidden;margin-top:2px;">'
+      + '<div id="fuel-fill" style="height:100%;width:100%;background:#ff9a2a;border-radius:3px;transition:width .1s,background .2s"></div></div>';
+    hud.appendChild(row);
+  }
+  if (row.style.display === 'none') row.style.display = '';
+  const f = Math.max(0, Math.min(1, chainsawFuel / CHAINSAW_FUEL_MAX)), shown = Math.ceil(chainsawFuel);
+  if (shown !== _fuelHud.last) {
+    _fuelHud.last = shown;
+    const fill = document.getElementById('fuel-fill'), label = document.getElementById('fuel-label');
+    if (fill) { fill.style.width = (f * 100).toFixed(1) + '%'; fill.style.background = f > 0.5 ? '#ff9a2a' : f > 0.2 ? '#ffd23a' : '#ff3a2a'; }
+    if (label) label.textContent = chainsawFuel <= 0 ? '\u26fd OUT OF FUEL' : '\u26fd FUEL ' + shown;
+  }
+}
+
 // Plays the item's own swing animation (the one tryMelee runs) without a hit test: an ability that should LOOK like
 // something being swung -- Pan Clang, Homerun, Bonk, the cane's Yank, a knife's Backstab -- and had no animation.
 function playAbilitySwing(item) {
@@ -41308,6 +41375,14 @@ function activateMeleeAbility() {
     flashAbilityName(ab.name);
   }
   else if (ab.type === 'melee_revup') {
+    const isSaw = (item.baseId || item.id) === 'chainsaw';
+    if (isSaw) {
+      // No fuel, no rev: the pull-cord and nothing else. (The cooldown is not spent on a saw that would not start.)
+      if (chainsawFuel < (ab.fuelCost || 12)) { chainsawSputter(true); abilityCDs[item.id] = 0; return; }
+      chainsawFuel = Math.max(0, chainsawFuel - (ab.fuelCost || 12));
+      // The rev is a charge: the saw drags you five metres forward and cuts whatever it goes through.
+      startMeleeDash(item, { type: 'melee_lunge', distance: ab.dash || 5, dashTime: 0.22, quiet: true }, item.id, now);
+    }
     meleeAbilityBuff = { type: 'revup', endTime: now + (ab.duration || 2000) };
     flashAbilityName(ab.name);
     flashScreen('rgba(255,150,0,0.18)', 300);
@@ -42725,8 +42800,13 @@ function tryMelee() {
   // Chainsaw stop sounding like a chainsaw and left every skinned melee on the
   // generic swish.
   const soundId = item.baseId || item.id;
-  if (soundId === 'chainsaw') {
+  const sawDry = soundId === 'chainsaw' && chainsawFuel <= 0;
+  if (soundId === 'chainsaw' && !sawDry) {
     playSoundEvent(meleeAbilityBuff?.type === 'revup' ? 'chainsaw_rev' : 'chainsaw_idle', { volume: 1.25, minGap: 120 });
+    if (meleeAbilityBuff?.type !== 'revup') chainsawFuel = Math.max(0, chainsawFuel - CHAINSAW_SWING_FUEL);
+  } else if (sawDry) {
+    playSoundEvent('melee_heavy', { volume: 0.7, minGap: 80 });     // a lump of dead iron
+    chainsawSputter(false);
   } else {
     // Per-type swing sound for every other melee
     playSoundEvent(MELEE_SWING_EVENT[MELEE_SWING_SOUND[soundId]] || 'melee_swing', { volume: 0.85, minGap: 80 });
@@ -42799,13 +42879,14 @@ function tryMelee() {
     }
 
     const dummy = TRAINING_DUMMIES.find(d => d.id === pid);
-    if (soundId === 'chainsaw') playSoundEvent('chainsaw_hit', { volume: 1.35, minGap: 80 });
+    if (soundId === 'chainsaw' && !sawDry) playSoundEvent('chainsaw_hit', { volume: 1.35, minGap: 80 });
+    const sawOpts = sawDry ? { damageOverride: Math.round(item.damage * 0.25) } : undefined;
     if (item.dualHit) {
       // Twin Knife: two real blades, two real hits (50 + 50), not one flat 100.
       if (dummy) { handleDummyHit(dummy, mesh, { weaponId: effectiveWeaponId }, hitPos.clone()); handleDummyHit(dummy, mesh, { weaponId: effectiveWeaponId }, hitPos.clone()); }
       else { emitHit(pid, `melee_${myId}_${now}_a`, effectiveWeaponId, hitPos.clone()); emitHit(pid, `melee_${myId}_${now}_b`, effectiveWeaponId, hitPos.clone()); }
-    } else if (dummy) handleDummyHit(dummy, mesh, { weaponId: effectiveWeaponId }, hitPos.clone());
-    else emitHit(pid, `melee_${myId}_${now}`, effectiveWeaponId, hitPos.clone());
+    } else if (dummy) handleDummyHit(dummy, mesh, sawDry ? { weaponId: effectiveWeaponId, damage: sawOpts.damageOverride } : { weaponId: effectiveWeaponId }, hitPos.clone());
+    else emitHit(pid, `melee_${myId}_${now}`, effectiveWeaponId, hitPos.clone(), false, sawOpts || {});
     // Vampire Blade / Meat Cleaver: heal on hit
     const healPerHit = item.healOnHit || (item.lifestealOnHit && meleeAbilityBuff?.type === 'revup' ? item.lifestealOnHit : 0);
     if (healPerHit) {
@@ -48844,6 +48925,7 @@ function sweepModelsPBR() {
   try {
     weaponModels.forEach(metalizeModel);
     meleeModels.forEach(metalizeModel);
+    syncOffHands();                     // the off hand shares whatever the main hand ended up with
     supportModels.forEach(metalizeModel);
     for (const sk of MODEL_SKINS) if (sk._model) metalizeModel(sk._model);
   } catch (e) { console.warn('[pbr] sweep', e); }
@@ -59173,6 +59255,7 @@ function loop() {
   updateBatCrowdClear(dt);
   updateMeleeSlam(dt);
   updateMeleeDash(dt);
+  updateChainsawFuel(dt);
   updateAutoLunge(dt);
   updatePendingFanFire(dt);
   updateAbilityHUD();
