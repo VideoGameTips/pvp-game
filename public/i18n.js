@@ -170,6 +170,11 @@
     '🌋 Doomsday — collapsing city, fire pillars, abandoned heli': '🌋 末日——崩塌的城市、火柱、废弃的直升机',
     '🚂 Train Terminal — 3 tracks, platforms + canopy, footbridge, level crossing': '🚂 火车站——3 条铁轨、站台和雨棚、天桥、道口',
     '🌌 Dreamscape — floating stairs + impossible shapes': '🌌 梦境——漂浮的楼梯和不可能的形状',
+    '⛽ FUEL {n}': '⛽ 燃油 {n}',
+    '⛽ OUT OF FUEL': '⛽ 没油了',
+    'OUT OF FUEL': '没油了',
+    'OUT OF FUEL — RESPAWN TO REFILL': '没油了——重生后补满',
+    'The saw is dead until you respawn': '电锯在你重生之前就是一块废铁',
 
     // ── HUD / touch controls ─────────────────────────────────────────────────
     'HEALTH': '生命',
