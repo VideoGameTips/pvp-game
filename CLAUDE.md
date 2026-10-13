@@ -125,6 +125,12 @@ it up is Job 4 in his server-move doc. Full runbook: `docs/DEPLOY.md` in the pri
   are still killed at the floor's edge (`isBotOutOfBoundsXZ`). Surfaces above 14 m are not ground unless the collider has
   `.tall = true` (the outskirts mark theirs). Steps are 0.45 m (auto-step is 0.65). Bullets are no longer culled at 50 m.
   Headless reachability: flood-fill from the ground; every top in `userData.outskirts[].pois` must be reached.
+- Melee ability sequences (`startMeleeSlam` / `updateMeleeSlam` / `poseMeleeSlam`, `startMeleeDash`, `startAutoLunge`, next to
+  `startBatCrowdClear`): one at a time, each drives the body and the view-model pose from its own update, and `updateMeleeSwing`
+  hands the pose over while one runs. The slam's damage and boom live in the landing branch of `updateMovement`
+  (`slamState.type === 'slam'` -> `meleeSlamImpact`). Auto-swing buffs (`melee_revup`) are paced by `ability.autoMs` and move
+  you by `ability.lunge` per swing; a weapon with neither keeps the old 15 ms retrigger. `playAbilitySwing` plays a weapon's own
+  swing for abilities that had no animation.
 - Shop/economy: `WEAPON_COSTS`, `BUNDLES`, credits/fragments/chests/wheel/upgrades, `openShop()`, `SHOOT_FX` sliders.
 - Bot AI: `updateBotAI(dt)`, `botTuning()`, spawn in `spawnGameBots()` / `makeBot()`.
 - Killcam + Kill Log theater: `KILLCAM`, `killLog`, `THEATER`, `renderTheater()`.
