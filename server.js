@@ -1741,7 +1741,11 @@ function startLobbyMatch(L, extra = {}) {
   // Designate the first player as host (they spawn the bots if any)
   const host = L.players[0];
   for (const p of L.players) {
-    if (players[p.socketId]) players[p.socketId].team = p.team;
+    if (players[p.socketId]) {
+      players[p.socketId].team = p.team;
+      players[p.socketId]._structureHostId = host?.socketId;
+      players[p.socketId]._structureMapId = mapId;
+    }
     io.to(p.socketId).emit('lobbyStart', {
       mode, matchId, mapId, team: p.team, isHost: p.socketId === host?.socketId, hostId: host?.socketId || null,
       allyBots, enemyBots, opponents: L.players.filter(o => o.socketId !== p.socketId).map(o => ({ socketId: o.socketId, team: o.team, name: players[o.socketId]?.name || '' })),
@@ -2050,6 +2054,21 @@ function falloffMultiplier(weaponId, dist) {
 }
 
 const players = {};
+const mapStructureStates = new Map();
+const STRUCTURE_HP = {wood:500,support:900,wall:3000};
+function mapStructureRoom(player, mapName) {
+  if (!player?.matchId || player.matchId==='lobby' || player.matchId===HUB_MATCH ||
+      !LOBBY_MAP_POOL.includes(mapName) || (player._structureMapId && player._structureMapId!==mapName)) return null;
+  let state=mapStructureStates.get(player.matchId);
+  if (!state) {
+    state={mapName,round:1,hostId:player._structureHostId || player.id,hp:{}};
+    mapStructureStates.set(player.matchId,state);
+  }
+  return state.mapName===mapName ? state : null;
+}
+function clearEmptyStructureRoom(matchId) {
+  if (!Object.values(players).some(p=>!p.isBot && p.matchId===matchId)) mapStructureStates.delete(matchId);
+}
 
 // ── Spawn helpers ──────────────────────────────────────────────────────────
 const SPAWN_POINTS = [
@@ -2166,6 +2185,10 @@ function movePlayerToMatch(socketId, newMatchId) {
   if (prev === HUB_MATCH) endDuelInvitesOf(socketId, 'gone');   // a challenge only stands inside the hub
   // 3. Actually move, and the match being joined gains them.
   p.matchId = newMatchId;
+  if (newMatchId==='lobby' || newMatchId===HUB_MATCH) {
+    delete p._structureHostId; delete p._structureMapId;
+  }
+  clearEmptyStructureRoom(prev);
   emitToMatchExcept(newMatchId, socketId, 'playerJoined', p);
   // 4. And the mover gets a clean slate of who is actually here.
   sendMatchRoster(socketId);
@@ -2350,6 +2373,31 @@ io.on('connection', (socket) => {
     if (!p._propWindow || now - p._propWindow > 1000) { p._propWindow = now; p._propCount = 0; }
     if (++p._propCount > 32) return;
     emitToMatchExcept(p.matchId, socket.id, 'mapPropDestroyed', { mapName, propId, ownerId: socket.id });
+  });
+  socket.on('mapStructureSync', data => {
+    const p=players[socket.id], round=Number(data?.round);
+    if (!Number.isSafeInteger(round) || round<1 || round>10000) return;
+    const state=mapStructureRoom(p,String(data?.mapName || ''));
+    if(!state) return;
+    if(round>state.round && socket.id===state.hostId) {
+      state.round=round;state.hp={};
+      emitToMatch(p.matchId,'mapStructureState',{mapName:state.mapName,round,reset:true,hp:{}});
+    } else socket.emit('mapStructureState',{mapName:state.mapName,round:state.round,reset:true,hp:state.hp});
+  });
+  socket.on('mapStructureHit', data => {
+    const p=players[socket.id];
+    if(!p || p.dead) return;
+    const state=mapStructureRoom(p,String(data?.mapName || ''));
+    const id=String(data?.structureId || ''), parsed=/^(wood|support|wall):(\d{1,3})$/.exec(id);
+    const damage=Number(data?.damage), maxDamage=WEAPON_DAMAGE[String(data?.weaponId || '')];
+    if(!state || data?.round!==state.round || !parsed || Number(parsed[2])>=64 || !Number.isFinite(damage) || damage<=0 || !Number.isFinite(maxDamage) || maxDamage<=0 || damage>maxDamage) return;
+    const now=Date.now();
+    if(!p._structureWindow || now-p._structureWindow>1000){p._structureWindow=now;p._structureHits=0;}
+    if(++p._structureHits>240) return;
+    const hp=state.hp[id] ?? STRUCTURE_HP[parsed[1]];
+    if(hp<=0) return;
+    state.hp[id]=Math.max(0,hp-damage);
+    emitToMatch(p.matchId,'mapStructureState',{mapName:state.mapName,round:state.round,hp:{[id]:state.hp[id]}});
   });
 
   socket.on('airBlast', (data) => {
@@ -2812,6 +2860,7 @@ io.on('connection', (socket) => {
     endDuelInvitesOf(socket.id, 'gone');
     forgetDuelNos(socket.id);
     delete players[socket.id];
+    clearEmptyStructureRoom(leavingMatch);
     broadcastAdminMatchTime(leavingMatch);
     emitToMatch(leavingMatch, 'playerLeft', socket.id);
     // Remove bots owned by this client

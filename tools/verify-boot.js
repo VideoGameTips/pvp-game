@@ -207,7 +207,9 @@ if (ok && process.argv.includes('--props')) {
       const muzzle = a.mesh.position.clone().add(new THREE.Vector3(0, 0.8, -2));
       spawnLocalBullet(muzzle, new THREE.Vector3(0, 0, 1), 'prop-test', true, 200, 0xffffff, 0.01, 'ak20');
       updateBullets(0.02);
-      if (a.hp !== 36) issues.push('actual bullet did not damage explosive (' + a.hp + ')');
+      // One AK20 round at point blank: whatever the AK20 hits for now, not a
+      // number that goes stale every time it is rebalanced.
+      if (a.hp !== a.maxHp - getClientWeaponDamage('ak20')) issues.push('actual bullet did not damage explosive (' + a.hp + ')');
       activateMap('refinery');
       damageDestructible(a, 25, { ownerId: myId });
       if (a.hp !== 35 || !a.mesh.visible) issues.push('nonfatal prop hit destroys it');
@@ -244,7 +246,7 @@ if (ok && process.argv.includes('--props')) {
   let handler;
   const delivered = [], player = { matchId: 'prop-test-match', dead: false };
   vm.runInNewContext(serverSource.slice(begin, end), {
-    players: { shooter: player }, socket: { id: 'shooter', on: (name, fn) => { handler = fn; } },
+    players: { shooter: player }, socket: { id: 'shooter', on: (name, fn) => { if (name === 'mapPropDestroyed') handler = fn; } },
     emitToMatchExcept: (...args) => delivered.push(args),
   });
   handler({ mapName: 'refinery', propId: 'refinery:44.5:1' });

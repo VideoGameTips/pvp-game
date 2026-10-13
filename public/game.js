@@ -5125,7 +5125,11 @@ function playSoundEvent(name, opts = {}) {
     } catch (e) {}
   }
 
-  if (name === 'hitmarker') {
+  if (name === 'wood_break') {
+    playFilteredNoise(ctx,start,.11,out,.5*mult,'bandpass',1300,.8);
+    playFilteredNoise(ctx,start+.04,.38,out,.32*mult,'lowpass',850,.7);
+    for(let i=0;i<3;i++) playTone(ctx,start+i*.035,.07,out,210+i*65,65,.12*mult,'triangle');
+  } else if (name === 'hitmarker') {
     // Sharp transient "snap" — no tonal beep, just a percussive crack
     playFilteredNoise(ctx, start, 0.020, out, 0.18 * mult, 'highpass', 3200, 0.4);
     playFilteredNoise(ctx, start, 0.035, out, 0.10 * mult, 'lowpass', 1400, 0.6);
@@ -5702,7 +5706,7 @@ const MAP_GROUPS = {};
 // Where each side starts on a map that names it, and the points of interest a
 // map wants called out. Declared here, with the other map registries, because
 // the builders below fill them in as they run.
-var MAP_SPAWNS = {}, MAP_POIS = {};
+var MAP_SPAWNS = {}, MAP_POIS = {}, MAP_LADDERS = {};
 // Wall-less maps (OUTSKIRTS). MAP_BOT_BOUNDS: the old arena, which is where bots stay. MAP_VOID: the map has a real
 // edge -- floor exists only inside {halfX, halfZ}; past it you fall, and below killY you are gone.
 var MAP_BOT_BOUNDS = {}, MAP_VOID = {};
@@ -5837,6 +5841,7 @@ function resetMapContents(name) {
     if (child.parent) child.parent.remove(child);
   }
   MAP_COLLIDERS[name] = [];
+  MAP_LADDERS[name] = [];
   MAP_GIMMICKS[name] = { damageZones: [], jumpPads: [], iceZones: [], oilZones: [], lowGravZones: [] };
 }
 
@@ -5873,6 +5878,7 @@ function activateMap(name) {
     dest.hp = dest.maxHp;
     dest.mesh.visible = true;
   }
+  resetMapStructures(name);
   activeMapGimmicks = MAP_GIMMICKS[name] || { damageZones: [], jumpPads: [], iceZones: [], oilZones: [], lowGravZones: [] };
   if (typeof MAP_MECH !== 'undefined' && MAP_MECH && MAP_MECH[name]) MAP_MECH[name].reset();
   // Reset batch-5 stateful mechanics so a re-entered map starts fresh
@@ -6308,6 +6314,7 @@ function addOuterWalls(mapName, color) {
 // which works the same against merged geometry.
 function _meshesHeldByMechanics() {
   const held = new Set();
+  for (const d of mapDestructibles) if (d.mesh) d.mesh.traverse(o => { if (o.isMesh) held.add(o); });
   const seen = new Set();
   (function walk(v, depth) {
     if (!v || depth > 5 || typeof v !== 'object') return;
@@ -6335,15 +6342,15 @@ function mergeMapStatics(name, held) {
     // cost no draw call as they are, which is the whole point of merging.
     if (o.visible === false) return;
     const mat = o.material;
-    // One material, no texture: a textured or multi-material box keeps its own
-    // draw call rather than forcing a UV atlas nobody asked for.
+    // Shared metre-scaled surface textures can merge with their UVs intact.
+    // Custom artwork and multi-material objects still keep their own draw call.
     //
     // Phong as well as Lambert, and this is not hypothetical: weatherMapGroup
     // swaps every opaque Lambert on every map for a cached vertexColors Phong,
     // and it runs at load — so by the time a map is activated and merged there
     // is not one Lambert left on it. Testing for Lambert alone merged exactly
     // nothing, silently, while still setting the _merged flag.
-    if (!mat || Array.isArray(mat) || mat.map) return;
+    if (!mat || Array.isArray(mat) || (mat.map && !mat.map.userData.mapSurface)) return;
     if (!mat.isMeshLambertMaterial && !mat.isMeshPhongMaterial) return;
     const g = o.geometry;
     if (!g || !g.attributes || !g.attributes.position) return;
@@ -6351,9 +6358,11 @@ function mergeMapStatics(name, held) {
     // mesh missing it would render with whatever the merged buffer happened to
     // hold at those indices.
     if (mat.vertexColors && !g.attributes.color) return;
+    if (mat.map && !g.attributes.uv) return;
     const key = [mat.type, mat.color.getHex(), mat.transparent ? 1 : 0, +mat.opacity.toFixed(3),
                  mat.flatShading ? 1 : 0, mat.vertexColors ? 1 : 0, mat.shininess | 0,
                  mat.specular ? mat.specular.getHex() : -1, mat.side,
+                 mat.map ? mat.map.uuid : '', mat.emissive ? mat.emissive.getHex() : 0, mat.emissiveIntensity ?? 1,
                  o.castShadow ? 1 : 0, o.receiveShadow ? 1 : 0].join('|');
     let b = buckets.get(key);
     if (!b) { b = { mat, list: [] }; buckets.set(key, b); }
@@ -6375,11 +6384,13 @@ function mergeMapStatics(name, held) {
     const wantColor = !!b.mat.vertexColors;
     const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3);
     const col = wantColor ? new Float32Array(n * 3) : null;
+    const uv = b.mat.map ? new Float32Array(n * 2) : null;
     let at = 0;
     for (const g of parts) {
       pos.set(g.attributes.position.array, at * 3);
       nor.set(g.attributes.normal.array, at * 3);
       if (col) col.set(g.attributes.color.array, at * 3);
+      if (uv) uv.set(g.attributes.uv.array, at * 2);
       at += g.attributes.position.count;
       g.dispose();
     }
@@ -6387,6 +6398,7 @@ function mergeMapStatics(name, held) {
     merged.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     merged.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
     if (col) merged.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    if (uv) merged.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
     merged.computeBoundingBox(); merged.computeBoundingSphere();
     const mesh = new THREE.Mesh(merged, b.mat);
     mesh.castShadow = b.list[0].castShadow; mesh.receiveShadow = b.list[0].receiveShadow;
@@ -8526,10 +8538,10 @@ function detonateMapProp(mapName, origin, opts = {}) {
     if (damage) applyBotDamageToPlayer('explosive_barrel', opts.ownerId || null, damage);
   }
   for (const dest of mapDestructibles) {
-    if (dest.mapName !== mapName || dest.hp <= 0 || dest.type !== 'explosive_barrel') continue;
-    const target = dest.mesh.position.clone(); target.y += 0.8;
+    if (dest.mapName !== mapName || dest.hp <= 0 || (!dest.structureKind && dest.type !== 'explosive_barrel')) continue;
+    const target = dest.colliderRef ? dest.colliderRef.clampPoint(origin,new THREE.Vector3()) : dest.mesh.position.clone().add(new THREE.Vector3(0,.8,0));
     const damage = mapBlastDamage(origin, target, dest.colliderRef);
-    if (damage) damageDestructible(dest, damage, opts);
+    if (damage) damageDestructible(dest, damage, {...opts,weaponId:'explosive_barrel'});
   }
 }
 
@@ -11198,8 +11210,20 @@ function addGridClutter(name, half, s, boost = 0) {
 function addGridLadder(name, x, z, rotY, fromY, toY, width = 1.15) {
   const height = toY - fromY;
   if (height <= 0.5) return;
-  addMapBox(name, x, fromY + height / 2, z, width, height, 0.14, 0xffcc33, rotY);
+  const anchor = new THREE.Mesh(new THREE.BoxGeometry(width,height,.14),new THREE.MeshBasicMaterial({ visible:false }));
+  anchor.visible = false;
+  anchor.userData.mapStatic = true;
+  anchor.position.set(x,fromY+height/2,z); anchor.rotation.y = rotY;
+  addMapMesh(name,anchor,false);
+  const ladder = { anchor, width };
+  (MAP_LADDERS[name] ||= []).push(ladder);
   const sinR = Math.sin(rotY), cosR = Math.cos(rotY);
+  for (const side of [-1,1]) {
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(.08,height+.65,.09),new THREE.MeshLambertMaterial({ color:0xffcc33 }));
+    rail.position.set(x+side*cosR*width/2,fromY+(height+.65)/2,z-side*sinR*width/2);
+    rail.userData.mapStatic = true;
+    rail.rotation.y = rotY; addMapMesh(name,rail,false);
+  }
   const rungCount = Math.max(3, Math.floor(height / 0.5));
   for (let i = 1; i < rungCount; i++) {
     const ry = fromY + i * (height / rungCount);
@@ -11208,9 +11232,73 @@ function addGridLadder(name, x, z, rotY, fromY, toY, width = 1.15) {
       new THREE.MeshLambertMaterial({ color: 0x2a2a2a })
     );
     mesh.position.set(x + sinR * 0.1, ry, z + cosR * 0.1);
+    mesh.userData.mapStatic = true;
     mesh.rotation.y = rotY;
     addMapMesh(name, mesh, false);
   }
+  return ladder;
+}
+
+function mapLadderPose(ladder) {
+  ladder.anchor.updateWorldMatrix(true,false);
+  const box = new THREE.Box3().setFromObject(ladder.anchor);
+  const center = ladder.anchor.getWorldPosition(new THREE.Vector3());
+  const normal = ladder.anchor.getWorldDirection(new THREE.Vector3()); normal.y = 0; normal.normalize();
+  return { x:center.x,z:center.z,bottom:box.min.y,top:box.max.y,normal,width:ladder.width };
+}
+
+function updateMapLadderMove(dt, input) {
+  const ladders = MAP_LADDERS[activeMapName] || [];
+  let ladder = window._mapLadder;
+  if (isDead || slamState || pilotedMortar || (adminCheats.fly && currentUser?.isAdmin)
+      || Math.hypot(_extVel.x,_extVel.z) > 4 || (ladder && !ladders.includes(ladder))) {
+    window._mapLadder = null; return false;
+  }
+  if (Date.now() < (window._ladderDetachUntil || 0)) return false;
+  if (ladder) {
+    const p = mapLadderPose(ladder), feet = playerFeetY();
+    if (Math.hypot(camera.position.x-p.x,camera.position.z-p.z)>p.width+1.5 || feet<p.bottom-1 || feet>p.top+1) {
+      window._mapLadder = null; return false;
+    }
+  }
+  if (!ladder) {
+    for (const candidate of ladders) {
+      const p = mapLadderPose(candidate), dx = camera.position.x-p.x, dz = camera.position.z-p.z;
+      const sideways = Math.abs(dx*p.normal.z-dz*p.normal.x), front = dx*p.normal.x+dz*p.normal.z;
+      const feet = playerFeetY();
+      if (sideways > p.width/2+.25 || front < -.15 || front > 1 || feet < p.bottom-.35 || feet > p.top+.2) continue;
+      if (input.dot(p.normal) > -.15 && !(keys['KeyS'] || joyDir.y > .15)) continue;
+      ladder = candidate; window._mapLadder = ladder; break;
+    }
+  }
+  if (!ladder) return false;
+  const p = mapLadderPose(ladder), eye = window._crouchEye || PLAYER_EYE_HEIGHT;
+  if (keys['Space'] || window._mobileJump) {
+    window._mapLadder = null; window._ladderDetachUntil = Date.now()+450;
+    window._prevSpaceDown = true; window._mobileJump = false; playerYVel = 6.5;
+    _extVel.x = (input.lengthSq() ? input.x : p.normal.x)*5;
+    _extVel.z = (input.lengthSq() ? input.z : p.normal.z)*5;
+    return false;
+  }
+  const upward = (keys['KeyW'] || joyDir.y < -.15) ? 1 : 0;
+  const downward = (keys['KeyS'] || joyDir.y > .15) ? 1 : 0;
+  const speed = Date.now() < playerRootedUntil ? 0 : 9*Math.max(0,playerFrostSlow)/100;
+  playerFrostSlow = Math.min(100,playerFrostSlow+dt*2);
+  const feet = THREE.MathUtils.clamp(playerFeetY()+(upward-downward)*speed*dt,p.bottom,p.top);
+  camera.position.x = p.x+p.normal.x*.55; camera.position.z = p.z+p.normal.z*.55;
+  const previousY = camera.position.y;
+  camera.position.y = feet+eye; playerYVel = 0;
+  window._slideUntil = 0; window._climbing = true;
+  resolvePlayerCeiling(previousY);
+  if ((upward && feet >= p.top-.01 && camera.position.y >= p.top+eye-.05) || (downward && feet <= p.bottom+.01)) {
+    const top = upward > 0;
+    camera.position.x = p.x+p.normal.x*(top ? -1 : .85);
+    camera.position.z = p.z+p.normal.z*(top ? -1 : .85);
+    camera.position.y = (top ? p.top+.04 : p.bottom)+eye;
+    resolveWallCollisions();
+    window._mapLadder = null; window._climbing = false; window._ladderDetachUntil = Date.now()+400;
+  }
+  return true;
 }
 // 🏢 A grounded 2-story block: an open ground-floor colonnade (corner posts
 // only, nothing solid to get stuck behind, so bots never dead-end under it),
@@ -11719,7 +11807,7 @@ function dressThemeMap(name) {
   if (!group || !th || group._themeDressed) return;
   group._themeDressed = true;
   const S = _thBuf(), G = _thBuf(), rnd = _thRng(name + ':dress');
-  const hosts = group.children.filter(m => m.isMesh && !m.userData.themeDecor && m.visible !== false && m.userData.thCls);
+  const hosts = group.children.filter(m => m.isMesh && !m.userData.themeDecor && !m.userData.mapStructure && m.visible !== false && m.userData.thCls);
   for (const m of hosts) {
     const cls = m.userData.thCls;
     if (cls === 'floor') continue;
@@ -14735,7 +14823,7 @@ function _osFrame(K, X, Z, ux, uz) {
   const vec = (a) => { const s = a[1] === '+' ? 1 : -1; return a[0] === 'u' ? [ux * s, uz * s] : [vx * s, vz * s]; };
   const dims = (u0, u1, v0, v1) => { const cu = (u0 + u1) / 2, cv = (v0 + v1) / 2, [cx, cz] = W(cu, cv); return alongX ? [cx, cz, u1 - u0, v1 - v0] : [cx, cz, v1 - v0, u1 - u0]; };
   const F = {
-    W, vec, X, Z, ux, uz,
+    W, vec, X, Z, ux, uz, name,
     box(u0, u1, v0, v1, y0, h, c) { const [cx, cz, w, d] = dims(u0, u1, v0, v1); return K.box(cx, y0, cz, w, h, d, c); },
     deco(u0, u1, v0, v1, y0, h, c) {
       const [cx, cz, w, d] = dims(u0, u1, v0, v1);
@@ -14756,28 +14844,37 @@ function _osFrame(K, X, Z, ux, uz) {
   };
   return F;
 }
-// A switchback stair: flights climb toward +u and then -u, side by side in two lanes, with a landing at every turn.
-// `attach(k)` says what the landing at the top of flight k has to meet ({u0, u1, vEdge}: the near edge of a floor at
-// that height) -- the landing is reached in over it and, if it ends short of the floor, a plank carries on.
+// One direct ladder replaces the winding flights; each landing still connects to its original floor.
 function _osClimb(F, o) {
-  const lane = o.lane || 2.2, depth = o.depth || 0.9, n = Math.max(2, Math.round(o.rise / 0.45)), step = o.rise / n;
+  const lane = o.lane || 2.2;
   const landings = [];
-  let u = o.u0, d = 1;
+  const u = o.u0, outerV = o.v0 + 2*lane, ladderV = outerV+.6;
+  const height = o.levels*o.rise;
+  for (const edge of [u-1.4,u+1.4]) {
+    for (const v of [o.v0,outerV-.18]) {
+      F.deco(edge-.09,edge+.09,v-.09,v+.09,0,height-.4,o.c);
+      F.deco(edge-.22,edge+.22,v-.22,v+.22,0,.16,o.lc);
+    }
+  }
   for (let k = 0; k < o.levels; k++) {
-    const vc = o.v0 + (k % 2) * lane + lane / 2, y0 = k * o.rise, level = y0 + o.rise;
-    F.stairs(u, vc, d > 0 ? 'u+' : 'u-', o.rise, lane, o.c, y0, depth, step);
-    const edge = u + d * (n * depth - depth / 2), a = Math.min(edge, edge + d * 3), b = Math.max(edge, edge + d * 3);
+    const level = (k+1)*o.rise, a = u-1.5, b = u+1.5;
     const at = o.attach ? o.attach(k) : null;
     const lv0 = at ? at.vEdge - 1.6 : o.v0 - 0.3, lv1 = o.v0 + 2 * lane;
     F.box(a, b, lv0, lv1, level - 0.4, 0.4, o.lc);
+    // Braced side frames support the landings without crossing the ladder opening.
+    for (const v of [o.v0,outerV-.18]) {
+      F.bar(a+.1,k*o.rise+.2,b-.1,level-.45,v,.1,o.c);
+      F.deco(a,b,v-.1,v+.1,level-.55,.15,o.c);
+    }
     if (at) {
       if (b < at.u0) F.box(b - 0.1, at.u0 + 0.3, lv0, at.vEdge + 0.2, level - 0.4, 0.4, o.lc);
       else if (a > at.u1) F.box(at.u1 - 0.3, a + 0.1, lv0, at.vEdge + 0.2, level - 0.4, 0.4, o.lc);
     }
     landings.push({ u0: a, u1: b, v0: lv0, v1: lv1, y: level });
-    u = edge + d * (3 - depth / 2); d = -d;
   }
-  return { landings, top: landings[landings.length - 1], foot: { u: o.u0, v: o.v0 + lane / 2 } };
+  const [x,z] = F.W(u,ladderV), [nx,nz] = F.vec('v+');
+  addGridLadder(F.name,x,z,Math.atan2(nx,nz),0,o.levels*o.rise,1.25);
+  return { landings, top: landings[landings.length - 1], foot: { u, v:ladderV } };
 }
 const _OS_KITS = {
   // A tower crane. A stair up the side of the mast, then a jib you can walk out along over the arena, a counter-jib
@@ -14934,22 +15031,75 @@ function applyFlatShadingToMaps() {
 applyFlatShadingToMaps();
 
 // ══════════════════════════════════════════════════════════════════════════
-// 🏚️ MAP SURFACE PASS — reflective, and not perfectly clean
-// Map geometry was MeshLambertMaterial in flat single colours: no specular
-// term, so nothing ever caught the light, and every face of every wall was the
-// exact same shade, which is what makes a level read as untextured blocks.
-//
-// Two cheap fixes, applied once to every built map:
-//   • Phong instead of Lambert, so floors and metal pick up highlights. Ground
-//     planes get more shine than walls — a floor is the surface you actually
-//     see light travel across.
-//   • Per-vertex brightness jitter, seeded from the vertex's own position so it
-//     is stable frame to frame and identical across reloads. This is what kills
-//     the "perfect" look: edges and corners vary slightly, like wear and grime.
-//
-// Geometry is often shared between meshes, so the colour attribute is added to
-// the geometry once and every mesh using it inherits the same wear pattern.
+// MAP SURFACES: shared deterministic textures, metre-scaled UVs and material-specific sheen.
+// Preserve existing artwork/glow materials and keep Blank's concept-map finish.
 const _mapMatCache = new Map();
+function mapSurfaceTexture(kind) {
+  const texture = surfTex('map-surface:'+kind,256,(ctx,s) => {
+    const rnd = _thRng('map-surface:'+kind);
+    ctx.fillStyle = '#ededed'; ctx.fillRect(0,0,s,s);
+    _grain(ctx,s,rnd,{n:kind==='metal'?1800:6500,a:kind==='ice'?.035:.10,r:1});
+    if (kind==='wood') {
+      for (let i=0;i<130;i++) {
+        const y=rnd()*s;
+        ctx.strokeStyle='rgba(55,40,24,'+(.04+rnd()*.12)+')'; ctx.lineWidth=.4+rnd();
+        ctx.beginPath(); ctx.moveTo(0,y);
+        ctx.bezierCurveTo(s*.3,y-3,s*.7,y+3,s,y); ctx.stroke();
+      }
+      for (let y=0;y<s;y+=s/4) { ctx.fillStyle='rgba(35,27,20,.22)'; ctx.fillRect(0,y,s,1); }
+    } else if (kind==='metal') {
+      for (let i=0;i<70;i++) {
+        ctx.fillStyle='rgba(40,43,46,.035)'; ctx.fillRect(rnd()*s,rnd()*s,8+rnd()*30,.5);
+      }
+    } else if (kind==='concrete' || kind==='stone') {
+      for (let i=0;i<140;i++) {
+        ctx.fillStyle='rgba(45,43,39,.08)';
+        ctx.fillRect(rnd()*s,rnd()*s,1+rnd()*3,1+rnd()*3);
+      }
+      if (kind==='concrete') {
+        ctx.fillStyle='rgba(45,43,39,.10)'; ctx.fillRect(0,0,s,1); ctx.fillRect(0,0,1,s);
+      }
+    }
+  });
+  texture.userData.mapSurface=true;
+  return texture;
+}
+function mapSurfaceKind(mesh, name) {
+  if (mesh.userData.mapSurface) return mesh.userData.mapSurface;
+  const th = MAP_THEMES[name];
+  if (!th || name==='blank' || name==='range') return null;
+  const ground = mesh.geometry.type==='PlaneGeometry' || mesh.userData.thCls==='floor';
+  // Only architecture/ground: never turn foliage, glass, signs or effects into concrete.
+  if (!ground && !['wall','perimeter','deck','roof','cover'].includes(mesh.userData.thCls)) return null;
+  if (name==='titanic') return ground || mesh.userData.thCls==='deck' ? 'wood' : 'metal';
+  if (name==='foundry' && !ground) return 'metal';
+  if (th.motif==='ice') return 'ice';
+  if (['space','neon'].includes(th.motif)) return 'metal';
+  if (ground && ['nature','desert','fire'].includes(th.motif)) return 'earth';
+  if (th.motif==='nature') return null;
+  if (['nature','desert','fire'].includes(th.motif)) return 'stone';
+  return 'concrete';
+}
+function mapSurfaceUV(mesh) {
+  // Project in world metres rather than stretching one texture across a 300 m floor.
+  let geo = mesh.geometry.clone();
+  if (geo.index) geo=geo.toNonIndexed();
+  const pos=geo.attributes.position, uv=new Float32Array(pos.count*2);
+  const a=new THREE.Vector3(), b=new THREE.Vector3(), c=new THREE.Vector3(), n=new THREE.Vector3();
+  for (let i=0;i<pos.count;i+=3) {
+    a.fromBufferAttribute(pos,i).applyMatrix4(mesh.matrixWorld);
+    b.fromBufferAttribute(pos,i+1).applyMatrix4(mesh.matrixWorld);
+    c.fromBufferAttribute(pos,i+2).applyMatrix4(mesh.matrixWorld);
+    n.subVectors(b,a).cross(c.clone().sub(a));
+    const ax=Math.abs(n.x),ay=Math.abs(n.y),az=Math.abs(n.z);
+    for (const [j,p] of [[i,a],[i+1,b],[i+2,c]]) {
+      uv[j*2]=(ax>ay && ax>az?p.z:p.x)/2;
+      uv[j*2+1]=(ay>=ax && ay>=az?p.z:p.y)/2;
+    }
+  }
+  geo.setAttribute('uv',new THREE.BufferAttribute(uv,2));
+  mesh.geometry=geo;
+}
 function _weatherGeometry(geo) {
   if (!geo || geo.attributes.color || !geo.attributes.position) return;
   const pos = geo.attributes.position, n = pos.count;
@@ -14966,22 +15116,24 @@ function _weatherGeometry(geo) {
 function weatherMapGroup(group) {
   if (!group || group._weathered) return;
   group._weathered = true;
+  group.updateMatrixWorld(true);
+  const name=Object.keys(MAP_GROUPS).find(n => MAP_GROUPS[n]===group);
   group.traverse(o => {
     if (!o.isMesh || !o.material || !o.geometry) return;
     const m = o.material;
-    if (m.type !== 'MeshLambertMaterial' || m.transparent) return;   // glass, glows: leave alone
+    if (m.type !== 'MeshLambertMaterial' || m.transparent || m.emissive?.getHex()) return;
     _weatherGeometry(o.geometry);
-    // A ground plane lies flat and is the surface light actually rakes across,
-    // so it gets the stronger sheen.
     const isGround = o.geometry.type === 'PlaneGeometry';
-    const key = m.uuid + (isGround ? '|g' : '|w');
+    const kind = !m.map && o.visible ? mapSurfaceKind(o,name) : null;
+    if (kind) mapSurfaceUV(o);
+    const key = m.uuid + (isGround ? '|g' : '|w') + '|' + (kind || 'plain');
     let weathered = _mapMatCache.get(key);
     if (!weathered) {
       weathered = new THREE.MeshPhongMaterial({
         color: m.color.getHex(),
-        map: m.map || null,
-        shininess: isGround ? 26 : 12,
-        specular: isGround ? 0x55585c : 0x2e3033,
+        map: m.map || (kind ? mapSurfaceTexture(kind) : null),
+        shininess: kind==='metal' ? 48 : kind==='ice' ? 65 : kind ? 3 : isGround ? 26 : 12,
+        specular: kind==='metal' ? 0x737980 : kind==='ice' ? 0x89949c : kind ? 0x161616 : isGround ? 0x55585c : 0x2e3033,
         vertexColors: true,
         flatShading: true,
         side: m.side,
@@ -18185,12 +18337,170 @@ LOOK.super_arena = (X) => {                                   // two bases: tent
 // they cost a few hundred milliseconds each and a player only ever sees one. Always in this order -- the stretching has
 // to see the layout as it was built, and the outskirts go round whatever the first two leave -- and always from the
 // map's own name as the seed, so every player's copy comes out the same.
+function registerMapStructure(name, mesh, colliderRefs, kind, targetCollider = colliderRefs[0]) {
+  const hp = {wood:500,support:900,wall:3000}[kind];
+  const index = mapDestructibles.filter(d => d.mapName===name && d.structureKind===kind).length;
+  mesh.userData.mapStructure=true;
+  mesh.updateWorldMatrix(true,true);
+  const bounds=new THREE.Box3().setFromObject(mesh), size=bounds.getSize(new THREE.Vector3());
+  const points=[];
+  for (const side of [-1,1]) for (let i=0;i<6;i++) {
+    const t=i/6, next=(i+1)/6;
+    const at = f => {
+      const q=.25+f*.5+(Math.round(f*6)%2)*.10, y=bounds.min.y+size.y*(.1+f*.8);
+      return mesh.worldToLocal(size.x>=size.z
+        ? new THREE.Vector3(bounds.min.x+size.x*q,y,side>0?bounds.max.z+.02:bounds.min.z-.02)
+        : new THREE.Vector3(side>0?bounds.max.x+.02:bounds.min.x-.02,y,bounds.min.z+size.z*q));
+    };
+    points.push(at(t),at(next));
+  }
+  const cracks=new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(points),new THREE.LineBasicMaterial({color:0x291b14,transparent:true,opacity:kind==='wall'?.18:0}));
+  mesh.add(cracks);
+  const dest={mesh,hp,maxHp:hp,type:'structure',structureKind:kind,mapName:name,
+    structureId:`${kind}:${index}`,colliderRef:targetCollider,colliderRefs,cracks};
+  mapDestructibles.push(dest);
+  return dest;
+}
+function resetMapStructures(name) {
+  for (const d of mapDestructibles) if (d.mapName===name && d.structureKind) {
+    d.hp=d.maxHp; d.mesh.visible=true; d.cracks.material.opacity=d.structureKind==='wall'?.18:0;
+    for (const c of d.colliderRefs) if (!wallColliders.includes(c)) wallColliders.push(c);
+  }
+}
+function setMapStructureHP(dest, hp, effects=true) {
+  const before=dest.hp;
+  dest.hp=Math.max(0,Math.min(dest.maxHp,hp));
+  dest.cracks.material.opacity=(dest.structureKind==='wall'?.18:0)+(1-dest.hp/dest.maxHp)*.77;
+  dest.mesh.visible=dest.hp>0;
+  for (const c of dest.colliderRefs) {
+    const i=wallColliders.indexOf(c);
+    if (dest.hp<=0 && i>=0) wallColliders.splice(i,1);
+    else if (dest.hp>0 && i<0) wallColliders.push(c);
+  }
+  if (effects && before>0 && dest.hp<=0) {
+    const box=new THREE.Box3().setFromObject(dest.mesh), center=box.getCenter(new THREE.Vector3());
+    spawnStructureDebris(center,dest.structureKind);
+    playSoundEvent(dest.structureKind==='wood'?'wood_break':'explosion',{position:center,volume:.55,minGap:80});
+  }
+}
+function spawnStructureDebris(origin, kind) {
+  const shards=[], rnd=_thRng(`${origin.x}:${origin.z}:${kind}`);
+  for (let i=0;i<18;i++) {
+    const mesh=new THREE.Mesh(new THREE.BoxGeometry(.12+rnd()*.20,.08+rnd()*.12,kind==='wood'?.45:.20),
+      new THREE.MeshLambertMaterial({color:kind==='wood'?0x765434:0x696963,transparent:true}));
+    mesh.position.copy(origin); mesh.rotation.set(rnd()*3,rnd()*3,rnd()*3);scene.add(mesh);
+    shards.push({mesh,velocity:new THREE.Vector3((rnd()-.5)*7,2+rnd()*4,(rnd()-.5)*7)});
+  }
+  const born=performance.now();let prev=born;
+  const tick=()=>{
+    const now=performance.now(),age=(now-born)/1000,dt=Math.min(.05,(now-prev)/1000);prev=now;
+    if(age>1.3){for(const s of shards){scene.remove(s.mesh);s.mesh.geometry.dispose();s.mesh.material.dispose();}return;}
+    for(const s of shards){s.velocity.y-=12*dt;s.mesh.position.addScaledVector(s.velocity,dt);s.mesh.rotation.x+=dt*4;s.mesh.material.opacity=Math.min(1,(1.3-age)*3);}
+    requestAnimationFrame(tick);
+  };requestAnimationFrame(tick);
+}
+function addBreakableMapWalls(name) {
+  if (!['urban','warehouse','airport','refinery','big_arena','super_arena','big_harbor','lockdown'].includes(name)) return;
+  const group=MAP_GROUPS[name];let count=0;
+  for (const mesh of group.children.slice()) {
+    if (count>=4 || !mesh.isMesh || !['wall','cover'].includes(mesh.userData.thCls)) continue;
+    const b=new THREE.Box3().setFromObject(mesh), s=b.getSize(new THREE.Vector3());
+    if (b.min.y<-.1 || b.min.y>.3 || s.y<2.2 || s.y>7 || Math.min(s.x,s.z)>1.3 || Math.max(s.x,s.z)<4 || Math.max(s.x,s.z)>14) continue;
+    if (_mdSpawnRects(name,18).some(r => b.max.x>r.x0 && b.min.x<r.x1 && b.max.z>r.z0 && b.min.z<r.z1)) continue;
+    // No load-bearing walls, perimeter walls or walls touching spawn shielding.
+    const cols=MAP_COLLIDERS[name], refs=cols.filter(c => c.min.distanceTo(b.min)<.05 && c.max.distanceTo(b.max)<.05);
+    if(refs.length!==1 || cols.some(c=>c!==refs[0] && c.min.y>=b.max.y-.1 && c.max.y>b.max.y+.2 && c.min.x<b.max.x && c.max.x>b.min.x && c.min.z<b.max.z && c.max.z>b.min.z)) continue;
+    registerMapStructure(name,mesh,refs,'wall'); count++;
+  }
+}
+function addOpenLaneCover(name) {
+  if (!['urban','warehouse','airport','big_arena','super_arena','big_harbor','carrier','refinery','studio','lockdown'].includes(name)) return;
+  const group = MAP_GROUPS[name], bounds = MAP_BOT_BOUNDS[name] || MAP_BOUNDS[name], theme = MAP_THEMES[name];
+  if (!group || !bounds || !theme) return;
+  const placed = group.userData.laneCover = [], K = _bkit(name);
+  const floorAt = (x,z) => {
+    const v = MAP_VOID[name];
+    return !v || (v.rects ? v.rects.some(r => x>=r.x0 && x<=r.x1 && z>=r.z0 && z<=r.z1)
+      : Math.abs(x)<=v.halfX && Math.abs(z)<=v.halfZ);
+  };
+  const available = (x,z,turn) => {
+    const hx = turn ? 5.5 : 8, hz = turn ? 8 : 5.5;
+    if (Math.abs(x)+hx+3>=bounds.halfX || Math.abs(z)+hz+3>=bounds.halfZ) return false;
+    if (Object.values(MAP_SPAWNS[name] || {}).some(r => x+hx>r.x0-12 && x-hx<r.x1+12 && z+hz>r.z0-12 && z-hz<r.z1+12)) return false;
+    if ((MAP_LADDERS[name] || []).some(l => { const p=mapLadderPose(l); return Math.abs(p.x-x)<hx+3 && Math.abs(p.z-z)<hz+3; })) return false;
+    for (const dx of [-hx,0,hx]) for (const dz of [-hz,0,hz]) if (!floorAt(x+dx,z+dz)) return false;
+    if (MAP_COLLIDERS[name].some(c => c.max.y>.55 && c.min.y<4 && c.max.x>x-hx && c.min.x<x+hx && c.max.z>z-hz && c.min.z<z+hz)) return false;
+    if (MAP_GIMMICKS[name].damageZones.some(r => r.w ? _pointInRotRect(x,z,r,9) : Math.hypot(x-r.x,z-r.z)<r.r+9)) return false;
+    const origin = new THREE.Vector3(x,1.4,z);
+    const open = (dx,dz) => {
+      const ray = new THREE.Ray(origin,new THREE.Vector3(dx,0,dz)), hit = new THREE.Vector3();
+      return !MAP_COLLIDERS[name].some(c => ray.intersectBox(c,hit) && origin.distanceTo(hit)<18);
+    };
+    return (open(1,0)&&open(-1,0)) || (open(0,1)&&open(0,-1));
+  };
+  const build = (x,z,turn,side = 1) => {
+    const collect = fn => {
+      const children=new Set(group.children), start=MAP_COLLIDERS[name].length;
+      fn();
+      const root=new THREE.Group();group.add(root);
+      for (const o of group.children.slice()) if(o!==root && !children.has(o)) root.add(o);
+      return {root,refs:MAP_COLLIDERS[name].slice(start)};
+    };
+    const point = (u,v) => turn ? [x-side*v,z+side*u] : [x+side*u,z+side*v];
+    const detail = (u,y,v,w,h,d,c,surface='metal') => {
+      const [px,pz]=point(u,v);
+      const m=new THREE.Mesh(new THREE.BoxGeometry(turn?d:w,h,turn?w:d),new THREE.MeshLambertMaterial({color:c}));
+      m.position.set(px,y,pz); m.userData.mapStatic=true; m.userData.mapSurface=surface; group.add(m);
+    };
+    const box = (u,v,w,h,d,c) => {
+      const [px,pz]=point(u,v), m=K.box(px,0,pz,turn?d:w,h,turn?w:d,c);
+      const surface='wood';
+      m.userData.mapSurface=surface;
+      const trim=_thShade(theme.d,.65);
+      // Flush corner guards and straps; no extra collision edges on climbable cover.
+      for (const du of [-w/2+.07,w/2-.07]) for (const dv of [-d/2+.07,d/2-.07])
+        detail(u+du,h/2,v+dv,.16,h,.16,trim);
+      for (const y of [.14,h-.14]) {
+        detail(u,y,v,w+.025,.10,d+.025,trim);
+      }
+      for (const dv of [-d/2-.008,d/2+.008]) {
+        detail(u,h*.54,v+dv,w*.30,h*.20,.02,_thShade(c,1.20),surface);
+        for (const du of [-w*.3,w*.3]) detail(u+du,h*.55,v+dv,.18,.10,.025,trim);
+      }
+    };
+    for (const spec of [[2,-1.3,3.2,2.3,2.8,theme.c],[3.2,2.8,1.8,1,1.8,theme.c]]) {
+      const part=collect(()=>box(...spec));registerMapStructure(name,part.root,part.refs,'wood');
+    }
+    const platform=collect(()=>{
+      const [px,pz]=point(-2.5,2.2);
+      K.box(px,1.25,pz,3,.25,3,theme.w2).userData.mapSurface='metal';
+      K.box(px,0,pz,.45,1.25,.45,0xb07c28);
+      for (const y of [.3,.9]) detail(-2.5,y,2.2,.47,.12,.47,0x292923);
+      for (const du of [-1.25,1.25]) for (const dv of [-1.25,1.25]) detail(-2.5+du,.625,2.2+dv,.12,1.25,.12,theme.d);
+    });
+    registerMapStructure(name,platform.root,platform.refs,'support',platform.refs[platform.refs.length-1]);
+    const [rx,rz]=point(-7,2.2);
+    addRamp(name,rx,rz,turn?0:side,turn?side:0,{ width:2.5,run:3,rise:1.5,landing:1,color:theme.d,landColor:theme.w2,lipColor:theme.a });
+    placed.push({x,z,turn});
+  };
+  for (const fz of [.25,.5,0]) for (const fx of [-.58,-.3,0,.3,.58]) {
+    if (placed.length>=6 || (!fz && fx>=0)) continue;
+    const x=Math.round(bounds.halfX*fx), z=Math.round(bounds.halfZ*fz);
+    for (const turn of [false,true]) {
+      if (!available(x,z,turn) || !available(-x,-z,turn)) continue;
+      build(x,z,turn); build(-x,-z,turn,-1); break;
+    }
+  }
+}
+
 function _upgradeMap(name) {
   const g = MAP_GROUPS[name];
   if (!g || g._upgraded || !MAP_THEMES[name]) return;
   g._upgraded = true;
   const t0 = performance.now();
   try { _depthMap(name); } catch (e) { console.warn('[upgrade] depth', name, e); }
+  try { addOpenLaneCover(name); } catch (e) { console.warn('[upgrade] lane cover', name, e); }
+  try { addBreakableMapWalls(name); } catch (e) { console.warn('[upgrade] breakable walls', name, e); }
   try { _eggsMap(name); } catch (e) { console.warn('[upgrade] eggs', name, e); }
   try { _outskirtsMap(name); } catch (e) { console.warn('[upgrade] outskirts', name, e); }
   try { _gimMap(name); } catch (e) { console.warn('[upgrade] gimmick', name, e); }
@@ -39139,6 +39449,8 @@ function loadoutReady() {
 
 function resetCombatResources() {
   if (!loadoutReady()) return;
+  window._mapLadder = null;
+  window._ladderDetachUntil = 0;
   finishBatCrowdClear();
   chainsawFuel = CHAINSAW_FUEL_MAX;   // a fresh tank each life
   finishMeleeSlam(); finishMeleeDash(); autoLunge = null;
@@ -40354,6 +40666,7 @@ function updateMovement(dt, socialBlocked = false) {
   if (keys['KeyA'] || joyDir.x < -0.15) dir.sub(right);
   if (keys['KeyD'] || joyDir.x >  0.15) dir.add(right);
   if (dir.lengthSq()>0) dir.normalize();
+  if (updateMapLadderMove(dt,dir)) return;
   const joyMag = joyActive ? Math.max(0.3, Math.min(1, Math.sqrt(joyDir.x**2+joyDir.y**2))) : 1;
   // 🏋️ Weapon-weight slow: heavier guns drop your move speed. Computed
   // from each item's `weight` (0 = no penalty, 1 = -100%). Defaults below.
@@ -50781,9 +51094,12 @@ function rocketExplode(pos, weaponId, excludePid, opts = {}) {
   const damageRemotes = opts.damageRemotes !== false;
   const damagePlayer = !!opts.damagePlayer;
   if (damageRemotes) for (const dest of mapDestructibles) {
-    if (dest.mapName !== activeMapName || dest.hp <= 0 || dest.type !== 'explosive_barrel') continue;
-    const target = dest.mesh.position.clone(); target.y += 0.8;
-    if (pos.distanceTo(target) <= radius && mapBlastDamage(pos, target, dest.colliderRef)) damageDestructible(dest, 60, { ownerId: myId });
+    if (dest.mapName !== activeMapName || dest.hp <= 0 || (!dest.structureKind && dest.type !== 'explosive_barrel')) continue;
+    const target = dest.colliderRef ? dest.colliderRef.clampPoint(pos,new THREE.Vector3()) : dest.mesh.position.clone().add(new THREE.Vector3(0,.8,0));
+    const distance=pos.distanceTo(target);
+    if (distance <= radius && mapBlastDamage(pos, target, dest.colliderRef)) {
+      damageDestructible(dest,dest.structureKind?getClientWeaponDamage(weaponId)*(.4+.6*(1-distance/radius)):60,{ownerId:myId,weaponId});
+    }
   }
   if (damageRemotes) {
     for (const [pid, mesh] of Object.entries(remoteMeshes)) {
@@ -50868,6 +51184,7 @@ function updateBullets(dt) {
 
     // ── Wall collision (swept ray vs all wall AABBs) ─────────────────────
     let wallHitPt = null;
+    let wallHitCollider = null;
     let wallHitT = Infinity;
     const wallHitNormal = new THREE.Vector3(0, 1, 0);
     if (!b.isPaintBomb) {
@@ -50887,6 +51204,7 @@ function updateBullets(dt) {
               if (hitT < wallHitT) {
                 wallHitT = hitT;
                 wallHitPt = _wallHitPt.clone();
+                wallHitCollider = box;
                 wallHitNormal.copy(boxFaceNormal(box, wallHitPt));
                 wallHit = true;
               }
@@ -50902,6 +51220,7 @@ function updateBullets(dt) {
           const gT = (py0 - GROUND_PLANE_Y) / (py0 - _bpos.y);
           if (gT >= 0 && gT <= 1 && gT < wallHitT && floorExistsAt(px0 + tDx * gT, pz0 + tDz * gT)) {
             wallHitT = gT;
+            wallHitCollider = null;
             wallHitPt = new THREE.Vector3(px0 + tDx * gT, GROUND_PLANE_Y, pz0 + tDz * gT);
             wallHitNormal.set(0, 1, 0);
             wallHit = true;
@@ -51072,8 +51391,8 @@ function updateBullets(dt) {
           if (!dest.mesh || dest.hp <= 0 || !b.isOwn) continue;
           const dpos = new THREE.Vector3();
           dest.mesh.getWorldPosition(dpos);
-          if (dest.colliderRef ? dest.colliderRef.clone().expandByScalar(0.08).containsPoint(wallHitPt) : dpos.distanceTo(wallHitPt) < (dest.type === 'reactor' ? 4 : dest.type === 'glass' ? 6 : 1.5)) {
-            damageDestructible(dest, destDmg, { ownerId: myId });
+          if (dest.structureKind ? dest.colliderRef===wallHitCollider : dest.colliderRef ? dest.colliderRef.clone().expandByScalar(0.08).containsPoint(wallHitPt) : dpos.distanceTo(wallHitPt) < (dest.type === 'reactor' ? 4 : dest.type === 'glass' ? 6 : 1.5)) {
+            damageDestructible(dest, destDmg, { ownerId: myId, weaponId:b.weaponId });
             break;
           }
         }
@@ -51460,7 +51779,15 @@ function placeLandMine(item) {
 }
 // ── Destructible map objects (glass, lights, reactors) ───────────────────
 function damageDestructible(dest, dmg, opts = {}) {
+  if (!Number.isFinite(dmg) || dmg<=0) return;
   if (dest.hp <= 0) return;
+  if (dest.structureKind) {
+    if (!opts.remote && socket?.connected) {
+      socket.emit('mapStructureHit',{mapName:dest.mapName,structureId:dest.structureId,
+        round:match?.round || 1,damage:dmg,weaponId:opts.weaponId || 'explosive_barrel'});
+    } else setMapStructureHP(dest,dest.hp-dmg);
+    return;
+  }
   dest.hp = Math.max(0, dest.hp - dmg);
   // Show damage number above the object
   const dpos = new THREE.Vector3();
@@ -53522,6 +53849,16 @@ socket.on('mapPropDestroyed', data => {
   const dest = mapDestructibles.find(d => d.mapName === activeMapName && d.propId === data.propId);
   if (dest) damageDestructible(dest, dest.maxHp, { remote: true, ownerId: data.ownerId });
 });
+socket.on('mapStructureState', data => {
+  if (!data || data.mapName!==activeMapName || data.round!==(match?.round || 1)) return;
+  for (const [id,hp] of Object.entries(data.hp || {})) {
+    const d=mapDestructibles.find(d=>d.mapName===activeMapName && d.structureId===id);
+    if (d && Number.isFinite(hp)) setMapStructureHP(d,hp,!data.reset);
+  }
+  if (data.reset) for (const d of mapDestructibles) {
+    if(d.mapName===activeMapName && d.structureKind && !(d.structureId in (data.hp || {}))) setMapStructureHP(d,d.maxHp,false);
+  }
+});
 // 🔥 FFA Legend progress, sent as it is earned: every few seconds of FFA
 // damage, and after every FFA win the server accepts.
 socket.on('ffaProgress', data => {
@@ -55414,6 +55751,7 @@ function startMatchRound() {
       socket.emit('readyRespawn', { x: camera.position.x, z: camera.position.z, mode: currentModeId() });
       requestPointerLockSafe();
     }
+    socket.emit('mapStructureSync',{mapName:activeMapName,round:match.round || 1});
     match.roundActive = true;
     match.active = true;
     // Grant player a 2s spawn shield
@@ -56737,6 +57075,7 @@ function updateRoundScoreDisplay() {
 function restartElimRound(lastWinner) {
   if (!match || match.over) return;   // the match can end while this waits (an opponent left, #46)
   if (lastWinner !== null) match.round++;
+  resetMapStructures(activeMapName);
   resetPlayerForRound();
   grantSpawnShield(3000);
   requestPointerLockSafe();
@@ -57749,6 +58088,25 @@ function getBotTarget(bot) {
   return null;
 }
 
+// Tactical destinations must fit this map, including rectangular arenas and water gaps.
+function botMapRepositionPoint(bot, wantedX, wantedZ) {
+  const bounds = MAP_BOT_BOUNDS[activeMapName] || getMapBoundsRect();
+  const x = THREE.MathUtils.clamp(wantedX,-bounds.halfX+.9,bounds.halfX-.9);
+  const z = THREE.MathUtils.clamp(wantedZ,-bounds.halfZ+.9,bounds.halfZ-.9);
+  const distance = Math.hypot(x-bot.x,z-bot.z);
+  if (distance > Math.hypot(wantedX-bot.x,wantedZ-bot.z) + .01) return null;
+  if (MAP_VOID[activeMapName]) {
+    const steps = Math.max(1,Math.ceil(distance));
+    let y = bot.y || 0;
+    for (let i = 1; i <= steps; i++) {
+      const px = bot.x+(x-bot.x)*i/steps, pz = bot.z+(z-bot.z)*i/steps;
+      y = botGroundYAt(px,pz,y,1.05,2.2);
+      if (!floorExistsAt(px,pz) && y < .4) return null;
+    }
+  }
+  return { x,z };
+}
+
 // ── Cover-point finder ────────────────────────────────────────────────────
 // Returns a world position behind the nearest suitable wall, relative to target
 function findBotCover(bot, target) {
@@ -58161,11 +58519,10 @@ function updateBotAI(dt) {
             const len = Math.max(0.01, Math.hypot(dx, dz));
             const perpX = -dz / len, perpZ = dx / len;
             const side = (bot.id.charCodeAt(bot.id.length - 1) & 1) ? 1 : -1;
-            bot.hitAndRunTarget = {
-              x: Math.max(-46, Math.min(46, bot.x + perpX * side * 12 + dx / len * 4)),
-              z: Math.max(-46, Math.min(46, bot.z + perpZ * side * 12 + dz / len * 4)),
-            };
-            bot.hitAndRunUntil = Math.min(cmdOv.until, now + 2500);
+            bot.hitAndRunTarget = botMapRepositionPoint(bot,
+              bot.x + perpX * side * 12 + dx / len * 4,
+              bot.z + perpZ * side * 12 + dz / len * 4);
+            bot.hitAndRunUntil = bot.hitAndRunTarget ? Math.min(cmdOv.until, now + 2500) : 0;
             bot.state = 'flank';
             break;
           }
@@ -58313,11 +58670,10 @@ function updateBotAI(dt) {
           const perpX = -dz / len, perpZ = dx / len;
           const side = Math.random() < 0.5 ? 1 : -1;
           const moveDist = 5 + Math.random() * 4;
-          bot.hitAndRunTarget = {
-            x: Math.max(-46, Math.min(46, bot.x + perpX * side * moveDist + dx / len * 2)),
-            z: Math.max(-46, Math.min(46, bot.z + perpZ * side * moveDist + dz / len * 2)),
-          };
-          bot.hitAndRunUntil = now + 1500 + Math.random() * 800;
+          bot.hitAndRunTarget = botMapRepositionPoint(bot,
+            bot.x + perpX * side * moveDist + dx / len * 2,
+            bot.z + perpZ * side * moveDist + dz / len * 2);
+          bot.hitAndRunUntil = bot.hitAndRunTarget ? now + 1500 + Math.random() * 800 : 0;
         }
       }
 
@@ -58941,10 +59297,9 @@ function updateBotAI(dt) {
       // Apply an immediate forced step along the perpendicular
       const stepX = Math.cos(chosen) * 0.30;
       const stepZ = Math.sin(chosen) * 0.30;
-      let fx = Math.max(-47, Math.min(47, bot.x + stepX));
-      let fz = Math.max(-47, Math.min(47, bot.z + stepZ));
-      [fx, fz] = resolvePosCollisions(fx, fz, bot.y || 0);
-      bot.x = fx; bot.z = fz;
+      const [fx, fz] = resolvePosCollisions(bot.x + stepX,bot.z + stepZ,bot.y || 0);
+      const escape = botMapRepositionPoint(bot,fx,fz);
+      if (escape) { bot.x = escape.x; bot.z = escape.z; }
       bot.strafeDir = -bot.strafeDir;
       bot.strafeFlipTimer = 0.8;
     }
@@ -61016,6 +61371,7 @@ function afterDeath(ms, fn) {
 // Everything a finished match (or Lobby 13) leaves behind that the next start must not
 // inherit. Shared by the mode menu and the end-of-match buttons so they can't drift apart.
 function teardownMatchWorld() {
+  window._mapLadder = null;
   serverUnlimitedMatchTime = false;
   finishBatCrowdClear();
   clearSatchels();
