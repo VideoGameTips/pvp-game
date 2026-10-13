@@ -38693,18 +38693,18 @@ function finishMeleeDash() {
   meleeDash = null;
 }
 
-function startMeleeDash(item, ab, weaponId, now) {
+function startMeleeDash(item, ab, weaponId, now, skip) {
   cancelInspect();
   const model = meleeModels[selectedMeleeIdx];
   if (!model) return false;
   model._park = null;
   const dist = ab.distance || 6;
   meleeDash = { item, ab, model, weaponId, dir: _meleeForwardXZ(), left: dist, speed: dist / (ab.dashTime || 0.2),
-    elapsed: 0, hit: new Set(), stopped: false, epoch: matchEpoch, now };
+    elapsed: 0, hit: new Set(skip || []), stopped: false, epoch: matchEpoch, now };
   meleeSwingT = 1;
   lastMelee = Date.now();
   _fovPunch = Math.max(_fovPunch, 6);
-  playSoundEvent(ab.type === 'melee_charge' ? 'melee_heavy' : 'air_launch', { volume: 1.0, pitch: 1.2, minGap: 0 });
+  if (!ab.quiet) playSoundEvent(ab.type === 'melee_charge' ? 'melee_heavy' : 'air_launch', { volume: 1.0, pitch: 1.2, minGap: 0 });
   return true;
 }
 
@@ -38798,7 +38798,8 @@ function playAbilitySwing(item) {
   const cd = item.cooldown;
   meleeSwingDur = prof ? Math.min(prof.ms, cd * 0.95) : Math.min(cd * 0.7, 460);
   meleeSwingT = 0;
-  if (prof && prof.alt) model._swingSide = (model._swingSide || 1) * -1;
+  if (meleeSwingType === 'punch') model._punchLeft = !model._punchLeft;
+  else if (prof && prof.alt) model._swingSide = (model._swingSide || 1) * -1;
   else if (meleeSwingType === 'slash') model._slashSide = (model._slashSide || 1) * -1;
   if (prof && prof.park) {
     const sd = model._swingSide || 1, m = model;
@@ -38849,6 +38850,8 @@ function activateMeleeAbility() {
     flashAbilityName(ab.name);
   }
   else if (ab.type === 'melee_mobility') {
+    playAbilitySwing(item);                       // Reap Dash slashes through the space, Slip Step throws a punch
+    _fovPunch = Math.max(_fovPunch, 4);
     doMeleeMovementAbility(item, ab);
     flashAbilityName(ab.name);
   }
@@ -38871,8 +38874,11 @@ function activateMeleeAbility() {
     socket.emit('shoot', { x: origin.x, y: origin.y, z: origin.z, dx: dir.x, dy: dir.y, dz: dir.z, weapon: 'spear_throw' });
     spawnLocalBullet(origin, dir, sid, true, 110, 0xccaa66, 0.09, 'spear_throw');
     spearThrown = true;
-    // Hide spear model while it's "in flight"
-    if (meleeModels[selectedMeleeIdx]) meleeModels[selectedMeleeIdx].visible = false;
+    // The throw: the weapon's own swing plays and the model stays in hand through the release, then goes (it is
+    // "in flight" until the cooldown puts it back). It used to vanish the instant the key was pressed.
+    playAbilitySwing(item);
+    const thrownModel = meleeModels[selectedMeleeIdx];
+    setTimeout(() => { if (spearThrown && thrownModel) thrownModel.visible = false; }, 170);
     flashAbilityName(ab.name);
   }
   else if (ab.type === 'melee_multithrow') {
@@ -38933,6 +38939,10 @@ function activateMeleeAbility() {
       spawnHitParticle(hp);
       flashScreen('rgba(255,0,0,0.40)', 300);
       hitSomeone = true;
+      // ...and the body goes in after it: a quick lunge that closes the gap, the stab pose out in front. (The kill has
+      // landed already, so the dash is told to leave this target alone.)
+      const gap = dist - 0.9;
+      if (gap > 0.4) startMeleeDash(item, { type: 'melee_lunge', distance: Math.min(gap, item.range * 2.5), dashTime: 0.12, quiet: true }, item.id, now, [pid]);
       break;
     }
     if (!hitSomeone) {
@@ -39031,6 +39041,12 @@ function activateAbility() {
   // ADS first would make the ability permanently unreachable.
   if (!abilityReady(w)) return;
   abilityCDs[w.id] = Date.now();
+  // Pressing the ability key should DO something you can see. The abilities that arm a buff or a power shot (Focus Fire,
+  // Overclock, Deadeye...) change numbers and fire nothing, so nothing moved on the gun: it now flips it over in the
+  // hand -- the same spin the legend skins use -- and the dash kicks the view. The ones that shoot already kick.
+  { const fm = weaponModels[currentWeaponIdx];
+    if (fm && !isADS && !reloading && (ab.type === 'buff' || ab.type === 'powershot')) fm._spinFx = { t0: performance.now(), dur: 400 };
+    if (ab.type === 'dash') { _fovPunch = Math.max(_fovPunch, 5); _gunKick.rz += 0.18; _gunKick.x -= 0.03; } }
 
   if (ab.type === 'buff') {
     const pool = weaponAmmo[currentWeaponIdx];
