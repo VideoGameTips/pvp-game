@@ -39,12 +39,14 @@ const socket = io(SERVER.socketUrl, { path: SERVER.socketPath });
 const WEAPONS = [
   {
     id: 'ak20',  name: 'AK20',  type: 'AR', slot: 'primary',
-    // Pulled back from the 38/1333 buff, which overshot into absolute dominance.
-    // Same 200 DPS it always had (30 every 150 ms), now delivered as 24 every
-    // 120 ms: lighter, faster rounds. A headshot is 24 x 2.33 = 56. The reload
-    // goes back to 2000, because the gun has to be cocked and that takes as long
-    // as it takes.
-    mag: 30,  reserve: 90,  damage: 24, fireRate: 120,  reloadTime: 2000,
+    // Pulled back from the 38/1333 buff, which overshot into absolute dominance
+    // and then sat at 200 DPS (24 every 120 ms), which was too soft next to
+    // everything the SMGs and secondaries were doing. Now 25 every 83 ms: 12 a
+    // second, 300 DPS, still no spread and no falloff to 28 m. A headshot is
+    // 25 x 2.33 = 58. The reload stays at 2000, because the gun has to be cocked
+    // and that takes as long as it takes. (83 and not 83.3: five 60 fps frames
+    // are 83.3 ms, and the shot gate must clear on the fifth.)
+    mag: 30,  reserve: 90,  damage: 25, fireRate: 83,  reloadTime: 2000,
     headshotMult: 2.333,
     auto: true,  pellets: 1, spread: 0,    adsZoom: 45, bulletSpeed: 120, noReload: false,
     ability: { name: 'Focus Fire', cd: 8000, desc: '3s · laser-accurate · +40% dmg', type: 'buff', duration: 3000, spreadMult: 0, dmgMult: 1.4 },
@@ -76,16 +78,22 @@ const WEAPONS = [
   },
   {
     id: 'mp40', killReload: 0.4,  name: 'MP-40', type: 'SMG', slot: 'primary',
-    mag: 40,  reserve: 120, damage: 15, fireRate: 80,   reloadTime: 1600,
+    // 15 a hit was too weak to matter (a full mag barely took 50 off a player at
+    // range). 20 at 13 a second is 260 DPS and a mag that can almost kill.
+    mag: 40,  reserve: 120, damage: 20, fireRate: 77,   reloadTime: 1600,
     auto: true,  pellets: 1, spread: 0.01, adsZoom: 50, bulletSpeed: 116, noReload: false,
     ability: { name: 'Piercing Round', cd: 7000, desc: 'Entire magazine fires at 3× bullet speed', type: 'buff', duration: 99999, speedMult: 3, shotsFromMag: true },
   },
   {
     id: 'p90', killReload: 0.4,   name: 'P90',   type: 'SMG+', slot: 'primary',
-    mag: 50,  reserve: 150, damage: 15,  fireRate: 20,   reloadTime: 1400,
+    // Was 15 x 50/s = 750 DPS, which melted a player in under half a second.
+    // Now 10 x 35/s = 350 DPS: still the fastest-firing gun, and a kill takes
+    // about a second. (29 ms is two 60 fps frames, so a 60 Hz screen sees 30/s.)
+    mag: 50,  reserve: 150, damage: 10,  fireRate: 29,   reloadTime: 1400,
     auto: true,  pellets: 1, spread: 0.005,
-    // Fifty rounds a second out of a fifty-round magazine: the whole mag is gone
-    // in one second, so the per-shot kick is tiny and the CLIMB is what you feel.
+    // Thirty-five rounds a second out of a fifty-round magazine: the whole mag is
+    // gone in a second and a half, so the per-shot kick is tiny and the CLIMB is
+    // what you feel.
     // Pin accurate on the first rounds, walking up your target by the last.
     // spreadBloom stacks a little raw inconsistency on top of that climb —
     // shot 1 is always clean, shot 40 is a bit looser than shot 2 was.
@@ -95,7 +103,9 @@ const WEAPONS = [
   },
   {
     id: 'paintball', name: 'Paintball', type: 'Paintball', slot: 'primary',
-    mag: 8,   reserve: 48,  damage: 40, fireRate: 200,  reloadTime: 1600,
+    // 30 a splat, 16 to a hopper, 8 a second: it is a volume weapon now, 240 DPS,
+    // instead of a slow 40-damage marker with an 8-shot mag.
+    mag: 16,  reserve: 48,  damage: 30, fireRate: 125,  reloadTime: 1600,
     auto: true,  pellets: 1, spread: 0.018, adsZoom: 52, bulletSpeed: 50, noReload: false,
     randomBulletColor: true, bulletSize: 0.2,
     visionHit: { color: 'rgba(255,68,255,0.30)', blur: 4, duration: 1500 }, // splat on the lens
@@ -136,7 +146,9 @@ const WEAPONS = [
   },
   {
     id: 'crossbow', name: 'Crossbow', type: 'Projectile', slot: 'primary',
-    mag: 1, reserve: 18, damage: 80, fireRate: 650, reloadTime: 1200,
+    // One bolt, 100 damage, three to the body. Semi, 2 a second as far as the
+    // trigger goes; the 1.2 s reload is what really sets the pace.
+    mag: 1, reserve: 18, damage: 100, fireRate: 500, reloadTime: 1200,
     auto: false, pellets: 1, spread: 0.001, adsZoom: 42, bulletSpeed: 72, noReload: false,
     bulletColor: 0x8b5a2b, bulletSize: 0.09, arcShot: true,
     ability: { name: 'Power Charge', cd: 0, type: 'charge', desc: 'Hold fire · release to shoot · longer = more dmg' },
@@ -199,7 +211,10 @@ const WEAPONS = [
     mag: 6,   reserve: 18,  damage: 83, fireRate: 350,  reloadTime: 2200,
     auto: false, pellets: 1, spread: 0.004, adsZoom: 48, bulletSpeed: 170, noReload: false,
     recoil: { up: 0.012, side: 0.006, climb: 0.15, max: 1.8, recover: 9, adsMult: 0.6 },
-    ability: { name: 'Fan Hammer', cd: 9000, desc: 'Rapidly fire all chambers', type: 'fanfire', count: 6, delay: 70 },
+    // fanSpread: fanning is fast and wild. Every chamber goes out within a cone
+    // that opens as the hammer keeps falling (about 2.5 degrees to start,
+    // 5 degrees by the sixth), so it is a point-blank move, not a sniper's.
+    ability: { name: 'Fan Hammer', cd: 9000, desc: 'Rapidly fire all chambers · wild', type: 'fanfire', count: 6, delay: 70, fanSpread: 0.09 },
   },
   {
     id: 'flare',    name: 'Flare',    type: 'Secondary', slot: 'secondary',
@@ -243,12 +258,16 @@ const WEAPONS = [
   },
   {
     id: 'taser', name: 'Taser', type: 'Control', slot: 'secondary',
-    mag: 2, reserve: 16, damage: 10, fireRate: 450, reloadTime: 1300,
+    // Reload 1300 -> 2600: two wires and then a long fumble with the cartridge,
+    // so the player who gets wired has a real window to answer.
+    mag: 2, reserve: 16, damage: 10, fireRate: 450, reloadTime: 2600,
     auto: false, pellets: 1, spread: 0.004, adsZoom: 52, bulletSpeed: 92, noReload: false,
     recoil: { up: 0.007, side: 0.004, climb: 0.12, max: 1.6, recover: 9, adsMult: 0.6 },
     bulletColor: 0xffff55, bulletSize: 0.06,
     // damage above is per tick (see wireOnHit) — a hit wire ticks tickDmg every
-    // Six controlled ticks: 60 total damage, plus the stun/root value.
+    // Six controlled ticks: 60 total damage, plus the root. `stun` here means
+    // PLANTED, not frozen: the target cannot walk but can still turn and shoot
+    // back (an earlier version froze bots completely, which was not a fight).
     wireOnHit: { dur: 1800, tickMs: 300, tickDmg: 10, stun: true },
     ability: { name: 'Discharge', cd: 11000, desc: 'AOE electric burst 2.5 m · 70 dmg', type: 'aoe', radius: 2.5, damage: 70, color: 0xffff44 },
   },
@@ -543,14 +562,21 @@ const WEAPONS = [
   {
     id: 'machine_revolver', name: 'Machine Revolver', type: 'Secondary', slot: 'secondary',
     mag: 8, reserve: 24, damage: 36, fireRate: 75, reloadTime: 2000,
-    auto: true, pellets: 1, spread: 0.03, adsZoom: 50, bulletSpeed: 165, noReload: false,
+    // Spray weapon: 0.03 -> 0.04 base, then it loosens another 0.007 a shot (up
+    // to 0.04 more), so the back half of the mag goes everywhere.
+    auto: true, pellets: 1, spread: 0.04, adsZoom: 50, bulletSpeed: 165, noReload: false,
+    spreadBloom: { perShot: 0.007, max: 0.04 },
     recoil: { up: 0.006, side: 0.003, climb: 0.05, max: 2.2, recover: 8, adsMult: 0.55 },
-    ability: { name: 'Wild Spin', cd: 11000, desc: 'Fan-fire all rounds instantly', type: 'fanfire_all', delay: 35 },
+    ability: { name: 'Wild Spin', cd: 11000, desc: 'Fan-fire all rounds instantly · wild', type: 'fanfire_all', delay: 35, fanSpread: 0.10 },
   },
   {
     id: 'auto_revolver', name: 'Auto Revolver', type: 'Secondary', slot: 'secondary',
     mag: 6, reserve: 24, damage: 42, fireRate: 120, reloadTime: 2000,
-    auto: true, pellets: 1, spread: 0.002, adsZoom: 50, bulletSpeed: 175, noReload: false,
+    // It used to be a laser (0.002) with aim assist on top. Now it is a wild gun
+    // by default, 0.02 and loosening 0.006 a shot, which makes Deadeye (spread
+    // x0.1) the thing you actually reach for.
+    auto: true, pellets: 1, spread: 0.02, adsZoom: 50, bulletSpeed: 175, noReload: false,
+    spreadBloom: { perShot: 0.006, max: 0.035 },
     tracking: 0.10, // mild aim assist
     ability: { name: 'Deadeye', cd: 11000, desc: '3 s · strong aim assist', type: 'buff', duration: 3000, spreadMult: 0.1, trackingBoost: true },
   },
@@ -2232,7 +2258,7 @@ const ABILITY_OPTIONS = {
 
   // ── Sidearms ────────────────────────────────────────────
   revolver: [
-      { id:'revolver_fan', name:'Rapid Fan', price:90, ...{ type:'fanfire', cd:8000, count:5, delay:70 }, desc:'Five shots as fast as the hammer falls' },
+      { id:'revolver_fan', name:'Rapid Fan', price:90, ...{ type:'fanfire', cd:8000, count:5, delay:70, fanSpread:0.09 }, desc:'Five shots as fast as the hammer falls · wild' },
       { id:'revolver_quick', name:'Quick Draw', price:80, ...{ type:'buff', cd:8000, duration:4000, rateMult:0.5, dmgMult:0.85 }, desc:'4 s · double fire rate for 85% damage' },
   ],
   flare: [
@@ -2287,11 +2313,11 @@ const ABILITY_OPTIONS = {
   ],
   machine_revolver: [
       { id:'machine_revolver_trigger', name:'Hair Trigger', price:130, ...{ type:'buff', cd:9000, duration:4000, rateMult:0.55, dmgMult:0.9 }, desc:'4 s · much faster fire for 90% damage' },
-      { id:'machine_revolver_dump', name:'Mag Dump', price:140, ...{ type:'fanfire_all', cd:11000, delay:60 }, desc:'Empty the magazine as fast as it will go' },
+      { id:'machine_revolver_dump', name:'Mag Dump', price:140, ...{ type:'fanfire_all', cd:11000, delay:60, fanSpread:0.10 }, desc:'Empty the magazine as fast as it will go · wild' },
   ],
   auto_revolver: [
       { id:'auto_revolver_trigger', name:'Hair Trigger', price:120, ...{ type:'buff', cd:9000, duration:4000, rateMult:0.55, dmgMult:0.9 }, desc:'4 s · much faster fire for 90% damage' },
-      { id:'auto_revolver_dump', name:'Mag Dump', price:130, ...{ type:'fanfire_all', cd:11000, delay:60 }, desc:'Empty the magazine as fast as it will go' },
+      { id:'auto_revolver_dump', name:'Mag Dump', price:130, ...{ type:'fanfire_all', cd:11000, delay:60, fanSpread:0.09 }, desc:'Empty the magazine as fast as it will go · wild' },
   ],
   nail_gun: [
       { id:'nail_gun_trigger', name:'Hair Trigger', price:100, ...{ type:'buff', cd:9000, duration:4000, rateMult:0.55, dmgMult:0.9 }, desc:'4 s · much faster fire for 90% damage' },
@@ -41510,14 +41536,14 @@ function activateAbility() {
     flashAbilityName(ab.name);
   }
   else if (ab.type === 'fanfire') {
-    pendingFanFire = { count: ab.count, delay: ab.delay || 60, timer: 0, w };
+    pendingFanFire = { count: ab.count, total: ab.count, delay: ab.delay || 60, timer: 0, w, spread: ab.fanSpread || 0 };
     flashAbilityName(ab.name);
   }
   else if (ab.type === 'fanfire_all') {
     // Fire all remaining shots rapidly (SG100 Fan Hammer)
     const pool = weaponAmmo[currentWeaponIdx];
     if (pool.ammo > 0)
-      pendingFanFire = { count: pool.ammo, delay: ab.delay || 80, timer: 0, w };
+      pendingFanFire = { count: pool.ammo, total: pool.ammo, delay: ab.delay || 80, timer: 0, w, spread: ab.fanSpread || 0 };
     flashAbilityName(ab.name);
   }
   else if (ab.type === 'bulletwave') {
@@ -41857,7 +41883,7 @@ function fireHitscanShot(origin, dir, weaponId, wStats) {
   }
 }
 // 🔌 Taser wire: one active connection at a time. A hit roots the target in place
-// (bot._stunUntil, the same flag BOT_STUN_ON_HIT_WEAPONS already reads) and ticks
+// (bot._rootUntil: it cannot walk, but it still turns and shoots) and ticks
 // damage for the duration instead of landing one lump sum.
 let taserWire = null; // { targetId, until, lastTickAt, tickMs, tickDmg }
 function fireTaserWire(origin, dir) {
@@ -41870,7 +41896,7 @@ function fireTaserWire(origin, dir) {
   taserWire = { targetId: hit.pid, until: Date.now() + spec.dur, lastTickAt: 0, tickMs: spec.tickMs, tickDmg: spec.tickDmg };
   if (spec.stun) {
     const bot = resolveBot(hit.pid);
-    if (bot && !bot.dead) bot._stunUntil = Math.max(bot._stunUntil || 0, Date.now() + spec.dur);
+    if (bot && !bot.dead) bot._rootUntil = Math.max(bot._rootUntil || 0, Date.now() + spec.dur);
   }
   flashAbilityName('WIRED');
 }
@@ -42296,6 +42322,14 @@ function updatePendingFanFire(dt) {
     const origin = new THREE.Vector3(); camera.getWorldPosition(origin);
     origin.add(new THREE.Vector3(0, -0.12, -0.7).applyQuaternion(camera.quaternion));
     const d = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+    // Wild fanning: the cone opens from half to full fanSpread as the hammer keeps
+    // falling, and the muzzle drifts up a little with each one.
+    if (pendingFanFire.spread > 0) {
+      const prog = 1 - pendingFanFire.count / Math.max(1, pendingFanFire.total || pendingFanFire.count);
+      const s = pendingFanFire.spread * (0.5 + 0.5 * prog);
+      d.set((Math.random() * 2 - 1) * s, (Math.random() * 2 - 1) * s + prog * pendingFanFire.spread * 0.35, -1)
+        .normalize().applyQuaternion(camera.quaternion);
+    }
     const now2 = Date.now();
     const bid = `fan_${myId}_${now2}_${pendingFanFire.count}`;
     socket.emit('shoot', { x: origin.x, y: origin.y, z: origin.z, dx: d.x, dy: d.y, dz: d.z, weapon: w.id });
@@ -50300,7 +50334,10 @@ const ELECTRIC_WEAPONS = new Set(['arc_rifle','arc_torrent','taser','pistol','sh
 const FIRE_WEAPONS     = new Set(['flamethrower','firework_launcher','sg8','fire_axe','fire_poker','thermite','molotov']);
 const GRAVITY_WEAPONS  = new Set(['gravity_launcher','gravity_hammer','gravity_paint','event_horizon','magnetar','void_harvester','black_hole_seed']);
 const FROST_WEAPONS    = new Set(['freeze_gun','frost_blaster','abs_zero','cyroclasm','cyroclasm_laser']);
-const BOT_STUN_ON_HIT_WEAPONS = new Set(['arc_torrent', 'taser']);
+const BOT_STUN_ON_HIT_WEAPONS = new Set(['arc_torrent']);
+// Taser hits PLANT the target (no walking) but leave it free to turn and shoot:
+// a full stun skipped the bot's whole AI, so a wired player could never answer.
+const BOT_ROOT_ON_HIT_WEAPONS = new Map([['taser', 700]]);
 
 // Returns a synergy multiplier for damage based on map zones + weapon category.
 // Examples:
@@ -50427,6 +50464,12 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false, opts = 
       const dur = Math.max(120, Math.min(1200, wSpec?.disableOnHit || 700));
       bot._stunUntil = Math.max(bot._stunUntil || 0, Date.now() + dur);
       spawnAbilityAOEFX(hitWorldPos ? hitWorldPos.clone() : mesh.position.clone(), 0.7, 0xffffff);
+    }
+  } else if (BOT_ROOT_ON_HIT_WEAPONS.has(weaponId)) {
+    const bot = resolveBot(pid);
+    if (bot && !bot.dead) {
+      bot._rootUntil = Math.max(bot._rootUntil || 0, Date.now() + BOT_ROOT_ON_HIT_WEAPONS.get(weaponId));
+      spawnAbilityAOEFX(hitWorldPos ? hitWorldPos.clone() : mesh.position.clone(), 0.7, 0xffff55);
     }
   }
 

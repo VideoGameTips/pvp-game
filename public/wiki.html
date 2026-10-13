@@ -645,17 +645,18 @@
 <table><tr><th>Name</th><th>Type</th><th>DMG</th><th>MAG</th><th>RATE</th><th>FIRE</th><th>ABILITY</th><th>PRICE</th><th>NOTES</th></tr><tr>
     <td>AK20</td>
     <td>AR</td>
-    <td>30 <small>(70 head)</small></td>
+    <td>25 <small>(58 head)</small></td>
     <td>30/90</td>
-    <td>7/s</td>
+    <td>12/s</td>
     <td>AUTO</td>
     <td>Focus Fire</td>
     <td>250🍩</td>
-    <td><em>We wanted this to be one of the most underestimated weapons in the game.
-    It went the other way — buffed to 38 it became a damage monster with absolute
-    dominance, so it has come back down to 30. It should feel like a weapon for any
-    situation: no spread, no falloff, four to the body or two to the head, and a
-    reload you have to cock — chunk, chunk — so pick your moment.</em></td>
+    <td><em>The reference gun had fallen behind: at 200 damage a second it lost to
+    every SMG and to a good few of the secondaries, and Andy and ChatGPT both
+    called it too soft. 24 &rarr; 25 a round and 8 &rarr; 12 a second makes
+    300 dps, with the same promises as before: no spread, no falloff to 28&nbsp;m,
+    and a reload you have to cock &mdash; chunk, chunk &mdash; so pick your
+    moment. Twelve to the body is one second flat; six to the head.</em></td>
   </tr><tr>
     <td>AK30</td>
     <td>AR+</td>
@@ -708,48 +709,53 @@
   </tr><tr>
     <td>MP-40</td>
     <td>SMG</td>
-    <td>15</td>
+    <td>20</td>
     <td>40/120</td>
     <td>13/s</td>
     <td>AUTO</td>
     <td>Piercing Round</td>
     <td>200🍩</td>
+    <td><em>15 a round could barely take 50 off a player at range: the fire rate was
+    there and the damage wasn't. 15 &rarr; 20 at 13 a second is 260 dps, fifteen
+    to the body, and a 40-round mag that can nearly kill on its own. It still
+    loses its damage with range like every SMG, so it is a corridor gun, not a
+    rifle.</em></td>
   </tr><tr>
     <td>P90</td>
     <td>SMG+</td>
-    <td>15</td>
+    <td>10</td>
     <td>50/150</td>
-    <td>50/s</td>
+    <td>35/s</td>
     <td>AUTO</td>
     <td>Hyperspin</td>
     <td>350🍩</td>
-    <td><em>Pin accurate and always was — the spread is 0.005, which puts every
-    round inside a hand's width at 25&nbsp;m. What stops it is new: the P90 is the
-    first weapon in the game with real recoil. Fifty rounds a second out of a
-    fifty-round magazine means the whole mag is gone in one second, so the kick
-    per shot is tiny and the CLIMB is what you feel — 1.5&deg; after ten rounds,
-    12.7&deg; if you hold the whole thing down. It should feel like a laser for
-    the first half-second and a fight after that. Aim down sights and it kicks
-    45% less. Still, 250 damage a second was forgettable next to guns half its
-    fire rate, so damage triples: 5 &rarr; 15, 750 dps at full auto. That much
-    output earns a second cost besides the climb — a small spread bloom now
-    stacks in with every shot, roughly doubling the base spread by the time the
-    mag runs dry. Shot 1 is always clean; shot 40 is not.</em></td>
+    <td><em>Pin accurate and always was &mdash; the spread is 0.005, which puts every
+    round inside a hand's width at 25&nbsp;m. What stops it is recoil: the P90
+    was the first weapon in the game with real recoil, and with a mag of fifty
+    the kick per shot is tiny and the CLIMB is what you feel. It should feel
+    like a laser for the first half-second and a fight after that. Aim down
+    sights and it kicks 45% less. A small spread bloom stacks in with every
+    shot, so shot 1 is always clean and shot 40 is not. <b>Nerfed:</b> it was
+    15 &times; 50/s = 750 dps and melted a player in well under half a second.
+    Now 10 &times; 35/s = 350 dps: still the fastest-firing gun, and a kill
+    takes about a second. On a 60&nbsp;Hz screen the shot gate runs once a frame,
+    so you see 30/s.</em></td>
   </tr><tr>
     <td>Paintball</td>
     <td>Paintball</td>
-    <td>40</td>
-    <td>8/48</td>
-    <td>5/s</td>
+    <td>30</td>
+    <td>16/48</td>
+    <td>8/s</td>
     <td>AUTO</td>
     <td>Splat Bomb</td>
     <td>120🍩</td>
-    <td><em>Bullet speed dropped 84 &rarr; 50 &mdash; this thing lobs now, easy to
-    see coming and lead away from at range. In exchange the blob itself got real:
-    bulletSize 0.07 &rarr; 0.2, and hit detection was reworked so a bullet's own
-    radius actually counts toward landing a hit (it never did before &mdash; size
-    was purely visual, for every gun). Up close, that fat paint blob is far more
-    forgiving than the raw numbers suggest.</em></td>
+    <td><em>Bullet speed dropped 84 &rarr; 50 &mdash; this thing lobs, easy to see coming
+    and lead away from at range. In exchange the blob itself got real:
+    bulletSize 0.07 &rarr; 0.2, and hit detection counts a bullet's own radius
+    toward landing a hit. Up close, that fat paint blob is far more forgiving
+    than the raw numbers suggest. <b>Rebalanced:</b> 40 a splat from an 8-shot
+    hopper at 5/s was a slow, awkward marker. 30 &times; 8/s with a 16-shot
+    hopper is 240 dps and a volume gun: fewer big hits, more paint.</em></td>
   </tr><tr>
     <td>Burst Rifle</td>
     <td>Burst AR</td>
@@ -812,12 +818,16 @@
   </tr><tr>
     <td>Crossbow</td>
     <td>Projectile</td>
-    <td>80</td>
+    <td>100</td>
     <td>1/18</td>
     <td>2/s</td>
     <td>SEMI</td>
     <td>Power Charge</td>
     <td>280🍩</td>
+    <td><em>One bolt, a hundred damage, three to the body (it was four at 80). It is a
+    semi-auto at 2 a second as far as the trigger goes; the 1.2&nbsp;s reload
+    after every bolt is what really sets its pace, so the buff is in the hit,
+    not in the volume.</em></td>
   </tr><tr>
     <td>Flamethrower</td>
     <td>Area</td>
@@ -1424,7 +1434,10 @@
     <td>Fan Hammer</td>
     <td>150🍩</td>
     <td><em>Solid but skippable at 55. Damage up 50% (&rarr; 83) with real recoil
-    to go with it, the way a six-shooter actually feels in the hand.</em></td>
+    to go with it, the way a six-shooter actually feels in the hand. <b>Fan
+    Hammer</b> is now wild: the six shots go out in a cone that opens from about
+    2.5&deg; to 5&deg; as the hammer keeps falling, and the muzzle drifts up.
+    It is a point-blank move now, not a free six-shot snipe.</em></td>
   </tr><tr>
     <td>Flare</td>
     <td>Secondary</td>
@@ -1491,9 +1504,13 @@
     <td>SEMI</td>
     <td>Discharge</td>
     <td>200🍩</td>
-    <td><em>Damage up 50% (35 &rarr; 53) with a light kick added — nothing like
+    <td><em>Damage up 50% (35 &rarr; 53) with a light kick added &mdash; nothing like
     the Hand Cannon, but enough that you feel the jolt is coming from both
-    ends.</em></td>
+    ends. <b>Two changes:</b> the reload went 1.3 &rarr; 2.6&nbsp;s, so firing
+    both wires leaves you exposed for a real window; and a wired target is now
+    <i>planted</i>, not frozen &mdash; it cannot walk, but it can still turn and
+    shoot back. A taser that took away the other player's whole turn was not a
+    fight.</em></td>
   </tr><tr>
     <td>Machine Pistol</td>
     <td>Secondary</td>
@@ -1551,10 +1568,12 @@
     <td>AUTO</td>
     <td>Wild Spin</td>
     <td>240🍩</td>
-    <td><em>The named example of a gun that was just there — fine numbers, no
+    <td><em>The named example of a gun that was just there &mdash; fine numbers, no
     personality. Damage up 50% (24 &rarr; 36) with a P90-style climbing kick
     since it's the one full-auto gun in this batch, not a single big jolt per
-    shot.</em></td>
+    shot. <b>Less accurate:</b> spread 0.03 &rarr; 0.04 and it loosens a further
+    0.007 a shot (up to 0.08 at the back of the mag), and Wild Spin / Mag Dump
+    fan their rounds out in a cone. Keep it for the room you are standing in.</em></td>
   </tr><tr>
     <td>EMP Pistol</td>
     <td>Secondary</td>
@@ -1582,6 +1601,11 @@
     <td>AUTO</td>
     <td>Deadeye</td>
     <td>220🍩</td>
+    <td><em>It used to fire at 0.002 spread with aim assist on top &mdash; a laser with
+    a revolver's name. Base spread is now 0.02 and it loosens a little more with
+    every shot (up to 0.055), so it is a spray weapon you control with taps.
+    That makes <b>Deadeye</b> (spread &times;0.1) the reason to carry it, which
+    is the point of an ability. Mag Dump goes wild too.</em></td>
   </tr><tr>
     <td>Frost Blaster</td>
     <td>Secondary</td>
