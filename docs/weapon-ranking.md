@@ -1,7 +1,8 @@
 # Weapon ranking — primaries and secondaries
 
 Generated from the live `WEAPONS` table and `getClientWeaponDamage()`, 2026-10-13. This is a **list to react to**, not a set of
-decisions: nothing in the game was changed to produce it.
+decisions: nothing in the game was changed to produce it. Start at the **tier list**; the tables under *Full tables* are the raw
+theoretical figures it is built from.
 
 ## How to read it
 
@@ -15,6 +16,112 @@ decisions: nothing in the game was changed to produce it.
 - **DPS @30 m** is burst DPS after range falloff. Shotguns and SMGs lose most of theirs; rifles and snipers lose none.
 - Medians among the primaries: sustained **109 DPS**, kill time **1.8 s**, price **1,740**.
 
+## Tier list (actual vs theoretical DPS)
+
+The same data as an interactive page: [`weapon-tier-list.html`](weapon-tier-list.html) (open it in a browser; drag weapons between
+tiers, sort, and copy your own ranking as text). Tiers below are the **computed** ones, by rank.
+
+- **Theoretical DPS**: per-hit damage × pellets × shots per second. Full damage at every range, every shot on target, no recoil,
+  no reload. This is the maximum.
+- **Actual DPS**: theoretical × what survives at fighting distance. Evaluated at 5, 10, 20, 35 and 55 m (weights 15 / 25 / 30 / 20 / 10 %):
+  the weapon's own **falloff** (and max range), the chance a shot **lands** given its **spread** (uniform ± spread on x and y, as the game
+  fires it) against a 1.0 × 1.9 m body, and **recoil** (the game's own profile; half of the held-trigger rise is assumed pulled back by
+  the player, the rest raises the aim point, and the side kick widens the spread). Reloads are not counted in either column here.
+- **Eff.** = actual / theoretical.
+- **w/ reloads** = both numbers with the reload (heat pauses, spool-up) included. **Kill (actual)** = 300 HP over the real shots
+  needed once misses and falloff are applied, reloads and spool-up included.
+- **Tier** is by rank on *power* = √(actual DPS with reloads × 300 / actual kill time). Top 3 SS, then 6 S, 8 A, 13 B, 13 C, 6 D and the
+  bottom 3 F, so most weapons land in B and C. It is a shape on purpose: an earlier ratio-to-median cut put far too many in SS.
+- ◆ = **close-range specialist**: at its best range it does at least twice its all-range number, so judge it where it wants to be
+  (shotguns, flamethrower).
+
+### SS (3)
+
+| # | Weapon | Slot | Cost | Theoretical | Actual | Eff. | w/ reloads (theo → actual) | Kill (actual) | Notes |
+|--:|---|---|--:|--:|--:|--:|---|--:|---|
+| 1 | **P90** (`p90`) | primary | 1,400 | 750 | 520 | 69% | 315 → 219 | 0.56 s |  |
+| 2 | **Gunslinger** (`gunslinger`) | secondary | 880 | 296 | 272 | 92% | 251 → 231 | 0.84 s |  |
+| 3 | **M1 Garand** (`m1_garand`) | primary | 1,520 | 292 | 289 | 99% | 187 → 185 | 0.80 s |  |
+
+### S (6)
+
+| # | Weapon | Slot | Cost | Theoretical | Actual | Eff. | w/ reloads (theo → actual) | Kill (actual) | Notes |
+|--:|---|---|--:|--:|--:|--:|---|--:|---|
+| 4 | **Compressed Air Rifle** (`air_rifle`) | primary | 1,280 | 283 | 282 | 100% | 188 → 187 | 0.90 s | (was SS) |
+| 5 | **Vector SMG** (`vector`) | primary | 1,200 | 400 | 312 | 78% | 199 → 155 | 0.94 s | (was SS) |
+| 6 | **Minigun** (`minigun`) | primary | 2,400 | 844 | 536 | 64% | 490 → 311 | 2.54 s | 2 s spool-up before it fires; overheats after 10 s; (was SS) |
+| 7 | **Revolver** (`revolver`) | secondary | 600 | 237 | 230 | 97% | 126 → 122 | 1.05 s | (was SS) |
+| 8 | **AK20** (`ak20`) | primary | 1,000 | 200 | 191 | 96% | 131 → 126 | 1.56 s | (was SS) |
+| 9 | **Lever Rifle** (`lever`) | primary | 1,440 | 179 | 176 | 98% | 125 → 123 | 1.56 s | (was SS) |
+
+### A (8)
+
+| # | Weapon | Slot | Cost | Theoretical | Actual | Eff. | w/ reloads (theo → actual) | Kill (actual) | Notes |
+|--:|---|---|--:|--:|--:|--:|---|--:|---|
+| 10 | **Burst Rifle** (`burst`) | primary | 1,120 | 167 | 162 | 97% | 140 → 136 | 1.78 s | 3-shot bursts, 750 ms pause; (was SS) |
+| 11 | **RPD** (`rpd`) | primary | 1,800 | 167 | 151 | 90% | 167 → 151 | 1.98 s | 300-round belt, no reload, no reserve; (was SS) |
+| 12 | **Slingshot** (`slingshot`) | secondary | 400 | 180 | 148 | 82% | 180 → 148 | 2.00 s | unlimited ammo, lobbed; arcs; (was SS) |
+| 13 | **Mauser C96** (`mauser`) | secondary | 800 | 240 | 208 | 87% | 114 → 99 | 1.35 s | (was SS) |
+| 14 | **Chain Gun** (`chain_gun`) | primary | 2,240 | 220 | 179 | 82% | 136 → 111 | 1.60 s | spin-up 1.0 s -> 0.1 s between shots (full-spin figures); (was SS) |
+| 15 | **Hand Cannon** (`hand_cannon`) | secondary | 1,040 | 202 | 170 | 84% | 117 → 99 | 1.56 s | (was SS) |
+| 16 | **Nail Gun** (`nail_gun`) | secondary | 720 | 245 | 173 | 71% | 146 → 103 | 1.65 s | (was S) |
+| 17 | **Grenade Launcher** (`grenade_launcher`) | primary | 2,000 | 130 | 128 | 98% | 109 → 107 | 2.08 s | (was S) |
+
+### B (13)
+
+| # | Weapon | Slot | Cost | Theoretical | Actual | Eff. | w/ reloads (theo → actual) | Kill (actual) | Notes |
+|--:|---|---|--:|--:|--:|--:|---|--:|---|
+| 18 | **Anti-Material Rifle** (`amr`) | primary | 8,000 | 112 | 112 | 100% | 82 → 82 | 1.60 s | (was S) |
+| 19 | **MP-40** (`mp40`) | primary | 800 | 188 | 129 | 69% | 127 → 88 | 2.32 s | (was A) |
+| 20 | **Auto Revolver** (`auto_revolver`) | secondary | 880 | 350 | 335 | 96% | 97 → 93 | 2.84 s | (was A) |
+| 21 | **Continuum** (`continuum`) | secondary | 2,400 | 120 | 116 | 97% | 100 → 97 | 3.50 s | infinite reserve; (was A) |
+| 22 | **Freeze Gun** (`freeze_gun`) | primary | 1,400 | 118 | 111 | 94% | 74 → 69 | 2.64 s | (was A) |
+| 23 | **Snubnose** (`snub_revolver`) | secondary | 560 | 171 | 148 | 86% | 90 → 78 | 3.76 s |  |
+| 24 | **Paintball** (`paintball`) | primary | 480 | 200 | 135 | 68% | 107 → 72 | 3.80 s | (was A) |
+| 25 | **Throwing Knives** (`throwing_knives`) | secondary | 480 | 188 | 164 | 88% | 80 → 70 | 4.08 s |  |
+| 26 | **SR-X** (`srx`) | primary | 2,000 | 79 | 79 | 100% | 61 → 61 | 3.60 s | no spread |
+| 27 | **Machine Pistol** (`machine_pistol`) | secondary | 880 | 200 | 115 | 57% | 108 → 62 | 4.09 s |  |
+| 28 | **Pistol** (`pistol`) | secondary | 240 | 100 | 88 | 88% | 71 → 63 | 4.80 s |  |
+| 29 | **Dart Gun** (`dart_gun`) | secondary | 640 | 109 | 95 | 88% | 68 → 60 | 4.75 s | (was C) |
+| 30 | **Cream Pie** (`cream_pie`) | secondary | 560 | 121 | 104 | 86% | 73 → 63 | 5.20 s |  |
+
+### C (13)
+
+| # | Weapon | Slot | Cost | Theoretical | Actual | Eff. | w/ reloads (theo → actual) | Kill (actual) | Notes |
+|--:|---|---|--:|--:|--:|--:|---|--:|---|
+| 31 | **Crossbow** (`crossbow`) | primary | 1,120 | 123 | 123 | 100% | 67 → 67 | 5.55 s | arcs |
+| 32 | **Machine Revolver** (`machine_revolver`) | secondary | 960 | 480 | 244 | 51% | 114 → 58 | 5.20 s |  |
+| 33 | **Cycler** (`cycler`) | secondary | 560 | 160 | 149 | 93% | 24 → 22 | 2.00 s | ammo regenerates 3/s |
+| 34 | **Boombow** (`boombow`) | primary | 2,000 | 127 | 126 | 100% | 68 → 68 | 6.45 s | arcs |
+| 35 | **Traffic Cone** (`traffic_cone`) | secondary | 640 | 119 | 103 | 86% | 64 → 56 | 5.68 s | (was B) |
+| 36 | **Duelist** (`duelist_pistol`) | secondary | 1,120 | 257 | 253 | 98% | 56 → 55 | 5.85 s |  |
+| 37 | **Cyroclasm** (`cyroclasm`) | primary | 1,920 | 114 | 106 | 93% | 55 → 51 | 6.12 s | 5-shot bursts, 200 ms pause; (was B) |
+| 38 | **RPG-7** (`rpg`) | primary | 2,080 | 120 | 117 | 97% | 52 → 51 | 6.60 s |  |
+| 39 | **Mortar Rifle** (`mortar_rifle`) | primary | 1,920 | 71 | 70 | 98% | 49 → 48 | 6.40 s | arcs; (was D) |
+| 40 | **Railgun** (`railgun`) | primary | 2,400 | 71 | 71 | 100% | 52 → 52 | 7.20 s | (was B) |
+| 41 | **Bazooka** (`bazooka`) | primary | 2,480 | 127 | 125 | 98% | 54 → 53 | 7.40 s |  |
+| 42 | **SG-8** (`sg8`) | primary | 880 | 240 | 62 | 26% | 138 → 35 | 7.62 s | ◆ close range: 240 at 5 m |
+| 43 | **Flare** (`flare`) | secondary | 320 | 425 | 425 | 100% | 34 → 34 | 8.10 s | arcs; (was D) |
+
+### D (6)
+
+| # | Weapon | Slot | Cost | Theoretical | Actual | Eff. | w/ reloads (theo → actual) | Kill (actual) | Notes |
+|--:|---|---|--:|--:|--:|--:|---|--:|---|
+| 44 | **Storm Bloom** (`storm_bloom`) | primary | 2,080 | 100 | 32 | 32% | 90 → 28 | 9.50 s | ◆ close range: 100 at 5 m; (was F) |
+| 45 | **Flamethrower** (`flamethrower`) | primary | 1,680 | 343 | 38 | 11% | 161 → 18 | 14.24 s | ◆ close range: 209 at 5 m; range 12 m; (was F) |
+| 46 | **Javelin Launcher** (`javelin_launcher`) | primary | 224,000 | 21 | 21 | 100% | 18 → 18 | 17.20 s | arcs; (was F) |
+| 47 | **Shorty** (`shorty`) | secondary | 720 | 171 | 38 | 22% | 81 → 18 | 18.95 s | ◆ close range: 161 at 5 m; (was F) |
+| 48 | **Sawed-Off** (`sawed_off`) | secondary | 1,040 | 233 | 37 | 16% | 108 → 17 | 20.00 s | ◆ close range: 170 at 5 m |
+| 49 | **Gatecrasher** (`gatecrasher`) | secondary | 1,120 | 19 | 17 | 87% | 17 → 15 | 19.33 s | (was F) |
+
+### F (3)
+
+| # | Weapon | Slot | Cost | Theoretical | Actual | Eff. | w/ reloads (theo → actual) | Kill (actual) | Notes |
+|--:|---|---|--:|--:|--:|--:|---|--:|---|
+| 50 | **Laser Pointer** (`laser_pointer`) | secondary | 480 | 75 | 74 | 99% | 36 → 35 | never | ammo regenerates 6/s; (was C) |
+| 51 | **Taser** (`taser`) | secondary | 800 | 22 | 19 | 88% | 11 → 10 | 37.40 s |  |
+| 52 | **Frost Blaster** (`frost_blaster`) | secondary | 960 | 0 | 0 | 94% | 0 → 0 | never | ammo regenerates 5/s |
+
 ## Things the numbers don't show
 
 - **Frame rate changes fire rate.** The shot check is `now - lastShot < fireRate` once per frame and `lastShot` is not
@@ -25,8 +132,9 @@ decisions: nothing in the game was changed to produce it.
 - **Chain Gun** starts at one shot a second and speeds up to ten; the table is the fully-spun figure.
 - **Explosives** do splash on top of the listed hit; this table counts the direct hit only, so they look weaker than they play.
 - Damage numbers are the table value; **headshots** multiply by ~2 (AK20 2.33, Flechette 4). Only the AMR kills in one headshot.
-- Accuracy (spread) and bullet speed are not folded in. Arcing weapons (slingshot, crossbow, mortar, boombow, javelin) will
-  miss more than their numbers say.
+- The tier list above folds in falloff, spread and recoil; the **full tables further down** are the theoretical numbers only.
+  Bullet speed and lead are in neither, so arcing weapons (slingshot, crossbow, mortar, boombow, javelin) will miss more than
+  their numbers say, and explosive splash, headshots and moving targets are not counted.
 
 ## What stands out
 
