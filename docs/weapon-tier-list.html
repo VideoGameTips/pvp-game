@@ -1,0 +1,284 @@
+<title>Weapon Tier List</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Big+Shoulders+Display:wght@700;800&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a tier maker. Seven rows, each a coloured letter and a wrapping shelf of weapon chips; a stats panel sticks beside them. */
+:root {
+  --bg: #eef0f3; --surface: #ffffff; --surface2: #f4f6f8; --line: #d3d9e0; --fg: #16202b; --muted: #5d6b7a; --focus: #1f6feb;
+  --t-SS: #ff4d6d; --t-S: #ff8f3d; --t-A: #f2c230; --t-B: #6cc84a; --t-C: #2fb9a6; --t-D: #4f8df0; --t-F: #8a93a1;
+  --on-tier: #14110a;
+  --font-display: 'Big Shoulders Display', 'Arial Narrow', Impact, sans-serif;
+  --font-body: 'Barlow', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0e1217; --surface: #161c23; --surface2: #1d252e; --line: #2b3541; --fg: #e7edf3; --muted: #93a1b0; --focus: #6ea8ff; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #0e1217; --surface: #161c23; --surface2: #1d252e; --line: #2b3541; --fg: #e7edf3; --muted: #93a1b0; --focus: #6ea8ff; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 15px/1.45 var(--font-body); padding-inline: 16px; padding-block: 20px 48px; }
+.wrap { max-width: 1280px; margin: 0 auto; }
+h1 { font: 800 clamp(34px, 6vw, 54px)/0.95 var(--font-display); letter-spacing: 0.01em; margin: 0; text-transform: uppercase; }
+.lede { color: var(--muted); max-width: 70ch; margin: 8px 0 0; text-wrap: pretty; }
+.bar { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; margin: 18px 0 14px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--surface); }
+.seg button { border: 0; background: transparent; color: var(--fg); font: 600 13px var(--font-body); padding: 8px 14px; cursor: pointer; letter-spacing: 0.02em; }
+.seg button[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
+.btn { border: 1px solid var(--line); background: var(--surface); color: var(--fg); font: 600 13px var(--font-body); padding: 8px 14px; border-radius: 8px; cursor: pointer; }
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+select.btn { padding-right: 8px; }
+.spacer { flex: 1; }
+.count { font: 400 12px var(--font-mono); color: var(--muted); }
+button:focus-visible, select:focus-visible, textarea:focus-visible, .chip:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+.layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (min-width: 1000px) { .layout { grid-template-columns: minmax(0, 1fr) 320px; } .side { position: sticky; top: 12px; } }
+
+.tiers { display: flex; flex-direction: column; gap: 6px; }
+.tier { display: grid; grid-template-columns: 78px minmax(0, 1fr); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; min-height: 82px; }
+.tier .lab { background: var(--c); color: var(--on-tier); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; cursor: pointer; border: 0; padding: 6px 4px; }
+.tier .lab .l { font: 800 40px/1 var(--font-display); }
+.tier .lab .n { font: 600 11px var(--font-mono); opacity: 0.75; }
+.tier .shelf { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px; align-content: flex-start; min-height: 80px; transition: background 0.12s; }
+.tier.over .shelf { background: color-mix(in srgb, var(--c) 18%, var(--surface)); }
+.tier .empty { color: var(--muted); font-size: 13px; padding: 8px; align-self: center; }
+
+.chip { --pad: 8px; width: 148px; text-align: left; background: var(--surface2); border: 1px solid var(--line); border-left: 4px solid var(--slot); border-radius: 6px; padding: 6px var(--pad); color: var(--fg); cursor: grab; display: grid; gap: 3px; position: relative; font: inherit; }
+.chip[data-slot="primary"] { --slot: var(--t-D); }
+.chip[data-slot="secondary"] { --slot: var(--t-S); }
+.chip:hover { border-color: var(--muted); border-left-color: var(--slot); }
+.chip.sel { outline: 2px solid var(--fg); outline-offset: 1px; }
+.chip.dragging { opacity: 0.4; }
+.chip .nm { font: 600 14px/1.15 var(--font-body); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chip .row { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; }
+.chip .dps { font: 600 13px var(--font-mono); }
+.chip .dps small { font: 400 10px var(--font-mono); color: var(--muted); margin-left: 2px; }
+.chip .rc { display: inline-flex; gap: 2px; align-items: center; }
+.chip .rc i { width: 6px; height: 11px; border-radius: 1px; background: var(--line); display: block; }
+.chip .rc i.on { background: var(--fg); }
+.chip .mv { position: absolute; top: 3px; right: 5px; font: 600 10px var(--font-mono); color: var(--muted); }
+.chip.moved { border-style: dashed; }
+.drop-before { box-shadow: -3px 0 0 0 var(--fg); }
+
+.side { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px; min-width: 0; }
+.side h2 { font: 800 26px/1 var(--font-display); text-transform: uppercase; margin: 0 0 2px; letter-spacing: 0.01em; }
+.side .sub { color: var(--muted); font-size: 13px; margin-bottom: 10px; }
+.side .none { color: var(--muted); }
+.grp { margin-top: 12px; }
+.grp h3 { font: 600 11px var(--font-body); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin: 0 0 4px; }
+dl { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; margin: 0; }
+dt { color: var(--muted); }
+dd { margin: 0; font: 400 13px var(--font-mono); text-align: right; }
+.flag { display: inline-block; font: 600 11px var(--font-body); border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; margin: 6px 4px 0 0; color: var(--muted); }
+.moveto { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.moveto button { width: 40px; height: 34px; border: 0; border-radius: 6px; background: var(--c); color: var(--on-tier); font: 800 18px var(--font-display); cursor: pointer; }
+.moveto button[aria-pressed="true"] { outline: 2px solid var(--fg); outline-offset: 1px; }
+
+details.how { margin-top: 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; }
+details.how summary { cursor: pointer; font-weight: 600; }
+details.how p, details.how li { color: var(--muted); max-width: 80ch; }
+details.how table { border-collapse: collapse; margin-top: 6px; font: 400 13px var(--font-mono); }
+details.how td, details.how th { padding: 3px 14px 3px 0; text-align: left; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-top: 10px; align-items: center; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+#exportbox { width: 100%; min-height: 150px; margin-top: 10px; background: var(--surface2); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; padding: 10px; font: 400 12px/1.5 var(--font-mono); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <h1>Weapon Tier List</h1>
+  <p class="lede">52 primaries and secondaries, ranked by what they actually do to a 300 HP player: damage per second, how fast they kill, how much of that survives range, and how much ammo you get. Drag a weapon to disagree.</p>
+
+  <div class="bar">
+    <div class="seg" role="group" aria-label="Show">
+      <button type="button" data-filter="all" aria-pressed="true">All</button>
+      <button type="button" data-filter="primary" aria-pressed="false">Primaries</button>
+      <button type="button" data-filter="secondary" aria-pressed="false">Secondaries</button>
+    </div>
+    <label class="count" for="sortsel">Sort inside tiers</label>
+    <select id="sortsel" class="btn">
+      <option value="">Keep my order</option>
+      <option value="power">Power</option>
+      <option value="sust">Sustained DPS</option>
+      <option value="ttk">Kill time</option>
+      <option value="recoil">Recoil (lowest first)</option>
+      <option value="cost">Price</option>
+    </select>
+    <span class="spacer"></span>
+    <span class="count" id="changed">No changes</span>
+    <button type="button" class="btn" id="reset">Reset to computed</button>
+    <button type="button" class="btn primary" id="copy">Copy my ranking</button>
+  </div>
+
+  <div class="layout">
+    <div>
+      <div class="tiers" id="tiers"></div>
+      <div class="legend">
+        <span><i style="background: var(--t-D)"></i>Primary</span>
+        <span><i style="background: var(--t-S)"></i>Secondary</span>
+        <span>Bars under the DPS number are recoil, 1 to 5</span>
+        <span>Dashed edge = moved by you</span>
+      </div>
+      <textarea id="exportbox" hidden readonly aria-label="Your ranking as text"></textarea>
+      <details class="how">
+        <summary>How the tiers were set</summary>
+        <p>Every weapon gets a <b>power</b> number: the square root of its sustained DPS times its kill speed (300 HP divided by the time to kill, reloads included), both scaled by a range factor. The range factor is the share of damage still landing at 10, 20, 35 and 55 m, weighted 25, 35, 25 and 15 percent, with lobbed shots discounted 15 percent. Tiers are that power divided by the median weapon.</p>
+        <table>
+          <tr><th>Tier</th><th>Power / median</th></tr>
+          <tr><td>SS</td><td>1.90 and up</td></tr><tr><td>S</td><td>1.45 to 1.90</td></tr><tr><td>A</td><td>1.10 to 1.45</td></tr>
+          <tr><td>B</td><td>0.82 to 1.10</td></tr><tr><td>C</td><td>0.58 to 0.82</td></tr><tr><td>D</td><td>0.36 to 0.58</td></tr><tr><td>F</td><td>under 0.36</td></tr>
+        </table>
+        <p><b>Not counted:</b> explosive splash, headshots, accuracy beyond spread, price. Weapons that exist to slow or stun (Frost Blaster, Taser, Freeze Gun) fall to the bottom because their damage is the least of what they do. The minigun includes its 2 s spool-up; the Chain Gun is at full spin. The shot check runs once a frame, so at 60 fps the very fast guns (P90, Vector, minigun) fire about a third slower than the table says.</p>
+        <p><b>Recoil:</b> the aim kick per shot, how far it climbs while you hold the trigger, and the screen-kick strength, all from the game's own recoil profile. The bars rate the larger of the held-fire rise and the single-shot kick.</p>
+      </details>
+    </div>
+    <aside class="side" id="side" aria-live="polite"></aside>
+  </div>
+</div>
+
+<script>
+const DATA = [{"id":"ak20","name":"AK20","type":"AR","slot":"primary","cost":1000,"tier":"SS","rel":2.13,"dmg":24,"pel":1,"rps":8.3,"mag":30,"reserve":90,"reload":2000,"burst":200,"sust":131,"ttk":1.44,"reloads":0,"shots":13,"rf":0.94,"f30":0.98,"near":28,"far":70,"fmin":0.55,"kick":0.5,"upDeg":0.25,"sideDeg":0.15,"climbMax":1.64,"rise":0.4,"spread":0.0,"bspeed":120,"ability":"Focus Fire","note":"","magkill":true,"oneshot":false,"own":false,"noRecoil":false},{"id":"sg8","name":"SG-8","type":"Shotgun","slot":"primary","cost":880,"tier":"C","rel":0.58,"dmg":18,"pel":6,"rps":2.2,"mag":8,"reserve":32,"reload":3125,"burst":240,"sust":138,"ttk":0.9,"reloads":0,"shots":3,"rf":0.2,"f30":0.02,"near":7,"far":18,"fmin":0.02,"kick":2.4,"upDeg":0.63,"sideDeg":0.36,"climbMax":1.69,"rise":0.25,"spread":4.58,"bspeed":110,"ability":"Bullet Wave","note":"","magkill":true,"oneshot":false,"own":false,"noRecoil":false},{"id":"srx","name":"SR-X","type":"Sniper","slot":"primary","cost":2000,"tier":"B","rel":0.98,"dmg":95,"pel":1,"rps":0.8,"mag":5,"reserve":20,"reload":3000,"burst":79,"sust":61,"ttk":3.6,"reloads":0,"shots":4,"rf":1.0,"f30":1,"near":60,"far":135,"fmin":0.92,"kick":2.4,"upDeg":0,"sideDeg":0,"climbMax":0,"rise":0,"spread":0.0,"bspeed":200,"ability":"Light Speed","note":"no spread","magkill":true,"oneshot":false,"own":false,"noRecoil":true},{"id":"rpd","name":"RPD","type":"LMG","slot":"primary","cost":1800,"tier":"SS","rel":2.1,"dmg":10,"pel":1,"rps":16.7,"mag":300,"reserve":0,"reload":0,"burst":167,"sust":167,"ttk":1.74,"reloads":0,"shots":30,"rf":0.9,"f30":0.9,"near":22,"far":65,"fmin":0.48,"kick":0.45,"upDeg":0.24,"sideDeg":0.14,"climbMax":1.63,"rise":0.76,"spread":0.69,"bspeed":130,"ability":"Overclock","note":"300-round belt, no reload, no reserve","magkill":true,"oneshot":false,"own":false,"noRecoil":false},{"id":"mp40","name":"MP-40","type":"SMG","slot":"primary","cost":800,"tier":"A","rel":1.32,"dmg":15,"pel":1,"rps":12.5,"mag":40,"reserve":120,"reload":1600,"burst":188,"sust":127,"ttk":1.52,"reloads":0,"shots":20,"rf":0.61,"f30":0.42,"near":11,"far":36,"fmin":0.24,"kick":0.45,"upDeg":0.24,"sideDeg":0.14,"climbMax":1.63,"rise":0.57,"spread":0.57,"bspeed":116,"ability":"Piercing Round","note":"","magkill":true,"oneshot":false,"own":false,"noRecoil":false},{"id":"p90","name":"P90","type":"SMG+","slot":"primary","cost":1400,"tier":"SS","rel":4.16,"dmg":15,"pel":1,"rps":50.0,"mag":50,"reserve":150,"reload":1400,"burst":750,"sust":315,"ttk":0.38,"reloads":0,"shots":20,"rf":0.61,"f30":0.42,"near":11,"far":36,"fmin":0.24,"kick":0.45,"upDeg":0.12,"sideDeg":0.07,"climbMax":1.85,"rise":1.53,"spread":0.29,"bspeed":140,"ability":"Hyperspin","note":"","magkill":true,"oneshot":false,"own":true,"noRecoil":false},{"id":"paintball","name":"Paintball","type":"Paintball","slot":"primary","cost":480,"tier":"A","rel":1.29,"dmg":40,"pel":1,"rps":5.0,"mag":8,"reserve":48,"reload":1600,"burst":200,"sust":107,"ttk":1.4,"reloads":0,"shots":8,"rf":0.62,"f30":0.4,"near":14,"far":34,"fmin":0.25,"kick":0.61,"upDeg":0.27,"sideDeg":0.16,"climbMax":1.66,"rise":0.2,"spread":1.03,"bspeed":50,"ability":"Splat Bomb","note":"","magkill":true,"oneshot":false,"own":false,"noRecoil":false},{"id":"burst","name":"Burst Rifle","type":"Burst AR","slot":"primary","cost":1120,"tier":"SS","rel":2.04,"dmg":47,"pel":1,"rps":21.3,"mag":21,"reserve":63,"reload":1900,"burst":167,"sust":140,"ttk":1.78,"reloads":0,"shots":7,"rf":0.97,"f30":1,"near":31,"far":76,"fmin":0.68,"kick":1.11,"upDeg":0.37,"sideDeg":0.22,"climbMax":1.75,"rise":1.03,"spread":0.34,"bspeed":136,"ability":"Triple Burst","note":"3-shot bursts, 750 ms pause","magkill":true,"oneshot":false,"own":false,"noRecoil":false},{"id":"lever","name":"Lever Rifle","type":"Marksman","slot":"primary","cost":1440,"tier":"SS","rel":2.11,"dmg":93,"pel":1,"rps":1.9,"mag":8,"reserve":40,"reload":2300,"burst":179,"sust":125,"ttk":1.56,"reloads":0,"shots":4,"rf":0.99,"f30":1,"near":42,"far":100,"fmin":0.78,"kick":2.4,"upDeg":0.8,"sideDeg":0.42,"climbMax":1.9,"rise":1.52,"spread":0.11,"bspeed":184,"ability":"Deadeye","note":"","magkill":true,"oneshot":false,"own":true,"noRecoil":false},{"id":"vector","name":"Vector SMG","type":"SMG","slot":"primary","cost":1200,"tier":"SS","rel":2.89,"dmg":18,"pel":1,"rps":22.2,"mag":32,"reserve":160,"reload":1500,"burst":400,"sust":199,"ttk":0.72,"reloads":0,"shots":17,"rf":0.73,"f30":0.64,"near":14,"far":44,"fmin":0.32,"kick":0.45,"upDeg":0.24,"sideDeg":0.14,"climbMax":1.63,"rise":1.01,"spread":0.69,"bspeed":128,"ability":"Overdrive","note":"","magkill":true,"oneshot":false,"own":false,"noRecoil":false},{"id":"crossbow","name":"Crossbow","type":"Projectile","slot":"primary","cost":1120,"tier":"C","rel":0.7,"dmg":80,"pel":1,"rps":1.5,"mag":1,"reserve":18,"reload":1200,"burst":123,"sust":67,"ttk":5.55,"reloads":3,"shots":4,"rf":0.85,"f30":1,"near":9999,"far":9999,"fmin":1,"kick":1.66,"upDeg":0.48,"sideDeg":0.28,"climbMax":1.58,"rise":0.53,"spread":0.06,"bspeed":72,"ability":"Power Charge","note":"arcs","magkill":false,"oneshot":false,"own":false,"noRecoil":false},{"id":"flamethrower","name":"Flamethrower","type":"Area","slot":"primary","cost":1680,"tier":"F","rel":0.35,"dmg":3,"pel":4,"rps":28.6,"mag":80,"reserve":160,"reload":3200,"burst":343,"sust":161,"ttk":0.84,"reloads":0,"shots":25,"rf":0.11,"f30":0.08,"near":5,"far":13,"fmin":0.08,"kick":0.45,"upDeg":0.24,"sideDeg":0.14,"climbMax":1.63,"rise":1.3,"spread":9.17,"bspeed":48,"ability":"Propane Burst","note":"range 12 m","magkill":true,"oneshot":false,"own":false,"noRecoil":false},{"id":"grenade_launcher","name":"Grenade Launcher","type":"Explosive","slot":"primary","cost":2000,"tier":"S","rel":1.72,"dmg":90,"pel":1,"rps":1.4,"mag":6,"reserve":18,"reload":1500,"burst":130,"sust":109,"ttk":2.08,"reloads":0,"shots":4,"rf":1.0,"f30":1,"near":9999,"far":9999,"fmin":1,"kick":1.87,"upDeg":0.52,"sideDeg":0.3,"climbMax":1.61,"rise":0.83,"spread":0.34,"bspeed":52,"ability":"Cluster","note":"","magkill":true,"oneshot":false,"own":false,"noRecoil":false},{"id":"railgun","name":"Railgun","type":"Charge","slot":"primary","cost":2400,"tier":"B","rel":1.02,"dmg":100,"pel":1,"rps":0.7,"mag":3,"reserve":12,"reload":3000,"burst":71,"sust":52,"ttk":2.8,"reloads":0,"shots":3,"rf":1.0,"f30":1,"near":60,"far":135,"fmin":0.92,"kick":2.4,"upDeg":0.63,"sideDeg":0.36,"climbMax":1.69,"rise":0.83,"spread":0.0,"bspeed":280,"ability":"Charge Shot","note":"","magkill":true,"oneshot":false,"own":false,"noRecoil":false},{"id":"minigun","name":"Minigun","type":"Heavy","slot":"primary","cost":2400,"tier":"SS","rel":2.26,"dmg":27,"pel":1,"rps":31.2,"mag":180,"reserve":360,"reload":4200,"burst":844,"sust":490,"ttk":2.35,"reloads":0,"shots":12,"rf":0.66,"f30":0.52,"near":12,"far":40,"fmin":0.25,"kick":0.67,"upDeg":0.28,"sideDeg":0.17,"climbMax":1.67,"rise":1.74,"spread":1.49,"bspeed":144,"ability":"Spin-Up","note":"2 s spool-up before it fires; overheats after 10 s; weight 0.3","magkill":true,"oneshot":false,"own":false,"noRecoil":false},{"id":"freeze_gun","name":"Freeze Gun","type":"Control","slot":"primary","cost":1400,"tier":"A","rel":1.2,"dmg":13,"pel":1,"rps":9.1,"mag":30,"reserve":90,"reload":2100,"burst":118,"sust":74,"ttk":2.53,"reloads":0,"shots":24,"rf":0.94,"f30":0.98,"near":28,"far":70,"fmin":0.55,"kick":0.45,"upDeg":0.24,"sideDeg":0.14,"climbMax":1.63,"rise":0.41,"spread":0.57,"bspeed":116,"ability":"Cryo Nova","note":"","magkill":true,"oneshot":false,"own":false,"noRecoil":false},{"id":"boombow","name":"Boombow","type":"Explosive Bow","slot":"primary","cost":2000,"tier":"C","rel":0.66,"dmg":95,"pel":1,"rps":1.3,"mag":1,"reserve":14,"reload":1400,"burst":127,"sust":68,"ttk":6.45,"reloads":3,"shots":4,"rf":0.85,"f30":1,"near":9999,"far":9999,"fmin":1,"kick":1.98,"upDeg":0.54,"sideDeg":0.31,"climbMax":1.63,"rise":0.6,"spread":0.23,"bspeed":68,"ability":"Power Draw","note":"arcs","magkill":false,"oneshot":false,"own":false,"noRecoil":false},{"id":"revolver","name":"Revolver","type":"Secondary","slot":"secondary","cost":600,"tier":"SS","rel":2.54,"dmg":83,"pel":1,"rps":2.9,"mag":6,"reserve":18,"reload":2200,"burst":237,"sust":126,"ttk":1.05,"reloads":0,"shots":4,"rf":0.97,"f30":1,"near":32,"far":82,"fmin":0.7,"kick":2.4,"upDeg":0.63,"sideDeg":0.36,"climbMax":1.8,"rise":0.35,"spread":0.23,"bspeed":170,"ability":"Fan Hammer","note":"","magkill":true,"oneshot":false,"own":true,"noRecoil":false},{"id":"flare","name":"Flare","type":"Secondary","slot":"secondary","cost":320,"tier":"D","rel":0.41,"dmg":85,"pel":1,"rps":5.0,"mag":1,"reserve":6,"reload":2500,"burst":425,"sust":34,"ttk":8.1,"reloads":3,"shots":4,"rf":0.85,"f30":1,"near":9999,"far":9999,"fmin":1,"kick":1.77,"upDeg":0.5,"sideDeg":0.29,"climbMax":1.6,"rise":0.29,"spread":0.0,"bspeed":44,"ability":"Signal Flare","note":"arcs","magkill":false,"oneshot":false,"own":false,"noRecoil":false},{"id":"pistol","name":"Pistol","type":"Secondary","slot":"secondary","cost":240,"tier":"B","rel":1.0,"dmg":20,"pel":1,"rps":5.0,"mag":15,"reserve":45,"reload":1400,"burst":100,"sust":71,"ttk":2.8,"reloads":0,"shots":15,"rf":0.83,"f30":0.79,"near":18,"far":50,"fmin":0.45,"kick":0.71,"upDeg":0.29,"sideDeg":0.17,"climbMax":1.45,"rise":0.22,"spread":0.29,"bspeed":150,"ability":"Rapid Fire","note":"","magkill":true,"oneshot":false,"own":false,"noRecoil":false},{"id":"shorty","name":"Shorty","type":"Secondary","slot":"secondary","cost":720,"tier":"F","rel":0.22,"dmg":30,"pel":4,"rps":1.4,"mag":2,"reserve":10,"reload":2250,"burst":171,"sust":81,"ttk":3.65,"reloads":1,"shots":3,"rf":0.2,"f30":0.02,"near":7,"far":18,"fmin":0.02,"kick":2.4,"upDeg":0.63,"sideDeg":0.36,"climbMax":1.69,"rise":0.76,"spread":5.73,"bspeed":96,"ability":"Point Blank","note":"","magkill":false,"oneshot":false,"own":false,"noRecoil":false},{"id":"cycler","name":"Cycler","type":"Secondary","slot":"secondary","cost":560,"tier":"C","rel":0.77,"dmg":8,"pel":1,"rps":20.0,"mag":100,"reserve":0,"reload":0,"burst":160,"sust":24,"ttk":1.85,"reloads":0,"shots":38,"rf":0.9,"f30":0.9,"near":22,"far":65,"fmin":0.48,"kick":0.45,"upDeg":0.24,"sideDeg":0.14,"climbMax":1.63,"rise":0.91,"spread":0.0,"bspeed":160,"ability":"Surge","note":"ammo regenerates 3/s","magkill":true,"oneshot":false,"own":false,"noRecoil":false},{"id":"hand_cannon","name":"Hand Cannon","type":"Secondary+","slot":"secondary","cost":1040,"tier":"SS","rel":2.46,"dmg":105,"pel":1,"rps":1.9,"mag":5,"reserve":20,"reload":2400,"burst":202,"sust":117,"ttk":1.04,"reloads":0,"shots":3,"rf":0.97,"f30":1,"near":32,"far":82,"fmin":0.7,"kick":2.4,"upDeg":0.8,"sideDeg":0.48,"climbMax":1.9,"rise":1.34,"spread":0.8,"bspeed":164,"ability":"Execution","note":"","magkill":true,"oneshot":false,"own":true,"noRecoil":false},{"id":"throwing_knives","name":"Throwing Knives","type":"Thrown","slot":"secondary","cost":480,"tier":"B","rel":0.91,"dmg":45,"pel":1,"rps":4.2,"mag":3,"reserve":18,"reload":1200,"burst":188,"sust":80,"ttk":3.84,"reloads":2,"shots":7,"rf":0.83,"f30":0.79,"near":18,"far":50,"fmin":0.45,"kick":0.94,"upDeg":0.34,"sideDeg":0.2,"climbMax":1.48,"rise":0.18,"spread":0.34,"bspeed":88,"ability":"Volley","note":"","magkill":false,"oneshot":false,"own":false,"noRecoil":false},{"id":"taser","name":"Taser","type":"Control","slot":"secondary","cost":800,"tier":"F","rel":0.12,"dmg":10,"pel":1,"rps":2.2,"mag":2,"reserve":16,"reload":1300,"burst":22,"sust":11,"ttk":31.25,"reloads":14,"shots":30,"rf":0.83,"f30":0.79,"near":18,"far":50,"fmin":0.45,"kick":0.45,"upDeg":0.37,"sideDeg":0.24,"climbMax":1.6,"rise":0.11,"spread":0.23,"bspeed":92,"ability":"Discharge","note":"","magkill":false,"oneshot":false,"own":true,"noRecoil":false},{"id":"m1_garand","name":"M1 Garand","type":"Battle Rifle","slot":"primary","cost":1520,"tier":"SS","rel":3.61,"dmg":117,"pel":1,"rps":2.5,"mag":8,"reserve":32,"reload":2200,"burst":292,"sust":187,"ttk":0.8,"reloads":0,"shots":3,"rf":0.99,"f30":1,"near":42,"far":100,"fmin":0.78,"kick":2.4,"upDeg":0.74,"sideDeg":0.36,"climbMax":1.8,"rise":0.42,"spread":0.17,"bspeed":188,"ability":"Last Ping","note":"","magkill":true,"oneshot":false,"own":true,"noRecoil":false},{"id":"mortar_rifle","name":"Mortar Rifle","type":"Indirect Explosive","slot":"primary","cost":1920,"tier":"D","rel":0.56,"dmg":85,"pel":1,"rps":0.8,"mag":3,"reserve":12,"reload":2800,"burst":71,"sust":49,"ttk":6.4,"reloads":1,"shots":4,"rf":0.85,"f30":1,"near":9999,"far":9999,"fmin":1,"kick":1.77,"upDeg":0.5,"sideDeg":0.29,"climbMax":1.6,"rise":0.65,"spread":0.34,"bspeed":60,"ability":"Airburst","note":"arcs","magkill":false,"oneshot":false,"own":false,"noRecoil":false},{"id":"amr","name":"Anti-Material Rifle","type":"Heavy Sniper","slot":"primary","cost":8000,"tier":"S","rel":1.7,"dmg":180,"pel":1,"rps":0.6,"mag":3,"reserve":12,"reload":3400,"burst":112,"sust":82,"ttk":1.6,"reloads":0,"shots":2,"rf":1.0,"f30":1,"near":60,"far":135,"fmin":0.92,"kick":2.4,"upDeg":0.63,"sideDeg":0.36,"climbMax":1.69,"rise":0.83,"spread":0.0,"bspeed":260,"ability":"Armor Break","note":"","magkill":true,"oneshot":true,"own":false,"noRecoil":false},{"id":"air_rifle","name":"Compressed Air Rifle","type":"Silent Rifle","slot":"primary","cost":1280,"tier":"SS","rel":3.41,"dmg":51,"pel":1,"rps":5.6,"mag":20,"reserve":80,"reload":2000,"burst":283,"sust":188,"ttk":0.9,"reloads":0,"shots":6,"rf":0.99,"f30":1,"near":42,"far":100,"fmin":0.78,"kick":1.75,"upDeg":0.32,"sideDeg":0.18,"climbMax":1.6,"rise":0.31,"spread":0.23,"bspeed":145,"ability":"Silent Step","note":"","magkill":true,"oneshot":false,"own":true,"noRecoil":false},{"id":"machine_pistol","name":"Machine Pistol","type":"Secondary","slot":"secondary","cost":880,"tier":"B","rel":0.98,"dmg":14,"pel":1,"rps":14.3,"mag":24,"reserve":96,"reload":1500,"burst":200,"sust":108,"ttk":1.47,"reloads":0,"shots":22,"rf":0.48,"f30":0.18,"near":8,"far":28,"fmin":0.18,"kick":0.45,"upDeg":0.24,"sideDeg":0.14,"climbMax":1.63,"rise":0.65,"spread":0.74,"bspeed":130,"ability":"Akimbo","note":"","magkill":true,"oneshot":false,"own":false,"noRecoil":false},{"id":"gatecrasher","name":"Gatecrasher","type":"Secondary \u00b7 Piercer Burst","slot":"secondary","cost":1120,"tier":"F","rel":0.2,"dmg":5,"pel":1,"rps":3.8,"mag":36,"reserve":108,"reload":1650,"burst":19,"sust":17,"ttk":16.99,"reloads":1,"shots":60,"rf":0.83,"f30":0.79,"near":18,"far":50,"fmin":0.45,"kick":0.45,"upDeg":0.26,"sideDeg":0.18,"climbMax":1.45,"rise":0.15,"spread":0.4,"bspeed":168,"ability":null,"note":"","magkill":false,"oneshot":false,"own":true,"noRecoil":false},{"id":"sawed_off","name":"Sawed-Off","type":"Secondary","slot":"secondary","cost":1040,"tier":"D","rel":0.56,"dmg":35,"pel":5,"rps":1.3,"mag":2,"reserve":8,"reload":2500,"burst":233,"sust":108,"ttk":0.75,"reloads":0,"shots":2,"rf":0.2,"f30":0.02,"near":7,"far":18,"fmin":0.02,"kick":2.4,"upDeg":0.63,"sideDeg":0.36,"climbMax":1.69,"rise":0.76,"spread":7.45,"bspeed":88,"ability":"Double Barrel","note":"","magkill":true,"oneshot":false,"own":false,"noRecoil":false},{"id":"dart_gun","name":"Dart Gun","type":"Secondary","slot":"secondary","cost":640,"tier":"C","rel":0.81,"dmg":38,"pel":1,"rps":2.9,"mag":6,"reserve":18,"reload":1600,"burst":109,"sust":68,"ttk":4.05,"reloads":1,"shots":8,"rf":0.83,"f30":0.79,"near":18,"far":50,"fmin":0.45,"kick":0.83,"upDeg":0.26,"sideDeg":0.18,"climbMax":1.5,"rise":0.12,"spread":0.23,"bspeed":92,"ability":"Toxin Dart","note":"","magkill":false,"oneshot":false,"own":true,"noRecoil":false},{"id":"laser_pointer","name":"Laser Pointer","type":"Secondary","slot":"secondary","cost":480,"tier":"C","rel":0.71,"dmg":6,"pel":1,"rps":12.5,"mag":50,"reserve":0,"reload":0,"burst":75,"sust":36,"ttk":3.92,"reloads":0,"shots":50,"rf":0.98,"f30":0.98,"near":20,"far":90,"fmin":0.85,"kick":0.45,"upDeg":0.24,"sideDeg":0.14,"climbMax":1.63,"rise":0.57,"spread":0.0,"bspeed":240,"ability":"Blinding Flash","note":"ammo regenerates 6/s","magkill":true,"oneshot":false,"own":false,"noRecoil":false},{"id":"machine_revolver","name":"Machine Revolver","type":"Secondary","slot":"secondary","cost":960,"tier":"C","rel":0.75,"dmg":36,"pel":1,"rps":13.3,"mag":8,"reserve":24,"reload":2000,"burst":480,"sust":114,"ttk":2.6,"reloads":1,"shots":9,"rf":0.48,"f30":0.18,"near":8,"far":28,"fmin":0.18,"kick":1.03,"upDeg":0.32,"sideDeg":0.18,"climbMax":1.85,"rise":0.7,"spread":1.72,"bspeed":165,"ability":"Wild Spin","note":"","magkill":false,"oneshot":false,"own":true,"noRecoil":false},{"id":"auto_revolver","name":"Auto Revolver","type":"Secondary","slot":"secondary","cost":880,"tier":"A","rel":1.3,"dmg":42,"pel":1,"rps":8.3,"mag":6,"reserve":24,"reload":2000,"burst":350,"sust":97,"ttk":2.84,"reloads":1,"shots":8,"rf":0.94,"f30":0.98,"near":28,"far":70,"fmin":0.55,"kick":1.28,"upDeg":0.4,"sideDeg":0.23,"climbMax":1.78,"rise":0.49,"spread":0.11,"bspeed":175,"ability":"Deadeye","note":"","magkill":false,"oneshot":false,"own":false,"noRecoil":false},{"id":"frost_blaster","name":"Frost Blaster","type":"Secondary","slot":"secondary","cost":960,"tier":"F","rel":0.01,"dmg":0,"pel":1,"rps":10.0,"mag":50,"reserve":0,"reload":0,"burst":0,"sust":0,"ttk":null,"reloads":0,"shots":null,"rf":0.94,"f30":0.98,"near":28,"far":70,"fmin":0.55,"kick":0.45,"upDeg":0.24,"sideDeg":0.14,"climbMax":1.63,"rise":0.46,"spread":0.57,"bspeed":120,"ability":"Cryo Burst","note":"ammo regenerates 5/s","magkill":false,"oneshot":false,"own":false,"noRecoil":false},{"id":"snub_revolver","name":"Snubnose","type":"Secondary","slot":"secondary","cost":560,"tier":"B","rel":1.01,"dmg":48,"pel":1,"rps":3.6,"mag":6,"reserve":18,"reload":1800,"burst":171,"sust":90,"ttk":3.48,"reloads":1,"shots":7,"rf":0.83,"f30":0.79,"near":18,"far":50,"fmin":0.45,"kick":1.82,"upDeg":0.47,"sideDeg":0.3,"climbMax":1.7,"rise":0.32,"spread":0.46,"bspeed":160,"ability":"Fan","note":"","magkill":false,"oneshot":false,"own":true,"noRecoil":false},{"id":"duelist_pistol","name":"Duelist","type":"Secondary","slot":"secondary","cost":1120,"tier":"C","rel":0.72,"dmg":90,"pel":1,"rps":2.9,"mag":1,"reserve":8,"reload":1600,"burst":257,"sust":56,"ttk":5.85,"reloads":3,"shots":4,"rf":0.97,"f30":1,"near":32,"far":82,"fmin":0.7,"kick":2.4,"upDeg":0.63,"sideDeg":0.36,"climbMax":1.69,"rise":0.21,"spread":0.06,"bspeed":200,"ability":"Honor Shot","note":"","magkill":false,"oneshot":false,"own":false,"noRecoil":false},{"id":"mauser","name":"Mauser C96","type":"Secondary","slot":"secondary","cost":800,"tier":"SS","rel":1.93,"dmg":36,"pel":1,"rps":6.7,"mag":10,"reserve":30,"reload":1800,"burst":240,"sust":114,"ttk":1.2,"reloads":0,"shots":9,"rf":0.83,"f30":0.79,"near":18,"far":50,"fmin":0.45,"kick":1.28,"upDeg":0.42,"sideDeg":0.3,"climbMax":1.8,"rise":0.6,"spread":0.34,"bspeed":150,"ability":"Rapid Strip","note":"","magkill":true,"oneshot":false,"own":true,"noRecoil":false},{"id":"nail_gun","name":"Nail Gun","type":"Secondary","slot":"secondary","cost":720,"tier":"S","rel":1.62,"dmg":27,"pel":1,"rps":9.1,"mag":20,"reserve":60,"reload":1600,"burst":245,"sust":146,"ttk":1.21,"reloads":0,"shots":12,"rf":0.62,"f30":0.4,"near":14,"far":34,"fmin":0.25,"kick":0.66,"upDeg":0.37,"sideDeg":0.24,"climbMax":1.85,"rise":0.78,"spread":0.29,"bspeed":140,"ability":"Pin Down","note":"","magkill":true,"oneshot":false,"own":true,"noRecoil":false},{"id":"slingshot","name":"Slingshot","type":"Secondary","slot":"secondary","cost":400,"tier":"SS","rel":1.9,"dmg":9,"pel":1,"rps":20.0,"mag":999,"reserve":0,"reload":700,"burst":180,"sust":180,"ttk":1.65,"reloads":0,"shots":34,"rf":0.77,"f30":0.9,"near":22,"far":65,"fmin":0.48,"kick":0.45,"upDeg":0.24,"sideDeg":0.14,"climbMax":1.63,"rise":0.91,"spread":1.15,"bspeed":80,"ability":"Volley","note":"unlimited ammo, lobbed; arcs","magkill":true,"oneshot":false,"own":false,"noRecoil":false},{"id":"rpg","name":"RPG-7","type":"Rocket","slot":"primary","cost":2080,"tier":"C","rel":0.67,"dmg":120,"pel":1,"rps":1.0,"mag":1,"reserve":9,"reload":2300,"burst":120,"sust":52,"ttk":6.6,"reloads":2,"shots":3,"rf":1.0,"f30":1,"near":9999,"far":9999,"fmin":1,"kick":2.4,"upDeg":0.63,"sideDeg":0.36,"climbMax":1.69,"rise":0.7,"spread":0.34,"bspeed":70,"ability":"Triple Warhead","note":"","magkill":false,"oneshot":false,"own":false,"noRecoil":false},{"id":"bazooka","name":"Bazooka","type":"Rocket","slot":"primary","cost":2480,"tier":"C","rel":0.64,"dmg":140,"pel":1,"rps":0.9,"mag":1,"reserve":8,"reload":2600,"burst":127,"sust":54,"ttk":7.4,"reloads":2,"shots":3,"rf":1.0,"f30":1,"near":9999,"far":9999,"fmin":1,"kick":2.4,"upDeg":0.63,"sideDeg":0.36,"climbMax":1.69,"rise":0.7,"spread":0.29,"bspeed":64,"ability":"Barrage","note":"","magkill":false,"oneshot":false,"own":false,"noRecoil":false},{"id":"traffic_cone","name":"Traffic Cone","type":"Thrown","slot":"secondary","cost":640,"tier":"B","rel":0.83,"dmg":38,"pel":1,"rps":3.1,"mag":4,"reserve":16,"reload":1400,"burst":119,"sust":64,"ttk":3.64,"reloads":1,"shots":8,"rf":0.83,"f30":0.79,"near":18,"far":50,"fmin":0.45,"kick":0.79,"upDeg":0.31,"sideDeg":0.18,"climbMax":1.46,"rise":0.13,"spread":0.57,"bspeed":62,"ability":"Cone Barrage","note":"","magkill":false,"oneshot":false,"own":false,"noRecoil":false},{"id":"cream_pie","name":"Cream Pie","type":"Thrown","slot":"secondary","cost":560,"tier":"B","rel":0.91,"dmg":34,"pel":1,"rps":3.6,"mag":5,"reserve":20,"reload":1200,"burst":121,"sust":73,"ttk":3.44,"reloads":1,"shots":9,"rf":0.83,"f30":0.79,"near":18,"far":50,"fmin":0.45,"kick":0.71,"upDeg":0.29,"sideDeg":0.17,"climbMax":1.45,"rise":0.15,"spread":0.69,"bspeed":56,"ability":"Pie Platter","note":"","magkill":false,"oneshot":false,"own":false,"noRecoil":false},{"id":"cyroclasm","name":"Cyroclasm","type":"Cryo Burst","slot":"primary","cost":1920,"tier":"B","rel":1.0,"dmg":10,"pel":1,"rps":16.7,"mag":30,"reserve":150,"reload":3000,"burst":114,"sust":55,"ttk":2.74,"reloads":0,"shots":30,"rf":0.94,"f30":0.98,"near":28,"far":70,"fmin":0.55,"kick":0.45,"upDeg":0.24,"sideDeg":0.14,"climbMax":1.63,"rise":0.54,"spread":0.69,"bspeed":130,"ability":"Cryo Dump","note":"5-shot bursts, 200 ms pause","magkill":true,"oneshot":false,"own":false,"noRecoil":false},{"id":"continuum","name":"Continuum","type":"Secondary","slot":"secondary","cost":2400,"tier":"A","rel":1.4,"dmg":30,"pel":1,"rps":4.0,"mag":5,"reserve":999999,"reload":500,"burst":120,"sust":100,"ttk":2.75,"reloads":1,"shots":10,"rf":0.97,"f30":1,"near":32,"far":82,"fmin":0.7,"kick":0.78,"upDeg":0.3,"sideDeg":0.18,"climbMax":1.69,"rise":0.17,"spread":0.46,"bspeed":150,"ability":"Overcharge","note":"infinite reserve","magkill":false,"oneshot":false,"own":false,"noRecoil":false},{"id":"storm_bloom","name":"Storm Bloom","type":"Lightning Shotgun","slot":"primary","cost":2080,"tier":"F","rel":0.28,"dmg":5,"pel":10,"rps":2.0,"mag":33,"reserve":99,"reload":2400,"burst":100,"sust":90,"ttk":2.5,"reloads":0,"shots":6,"rf":0.2,"f30":0.02,"near":7,"far":18,"fmin":0.02,"kick":1.64,"upDeg":0.48,"sideDeg":0.27,"climbMax":1.58,"rise":0.75,"spread":2.98,"bspeed":138,"ability":"Ball Lightning","note":"","magkill":true,"oneshot":false,"own":false,"noRecoil":false},{"id":"chain_gun","name":"Chain Gun","type":"Spin-Up LMG","slot":"primary","cost":2240,"tier":"SS","rel":2.19,"dmg":22,"pel":1,"rps":10.0,"mag":50,"reserve":100,"reload":3200,"burst":220,"sust":136,"ttk":1.3,"reloads":0,"shots":14,"rf":0.9,"f30":0.9,"near":22,"far":65,"fmin":0.48,"kick":0.53,"upDeg":0.25,"sideDeg":0.15,"climbMax":1.65,"rise":0.49,"spread":1.26,"bspeed":140,"ability":null,"note":"spin-up 1.0 s -> 0.1 s between shots (full-spin figures)","magkill":true,"oneshot":false,"own":false,"noRecoil":false},{"id":"gunslinger","name":"Gunslinger","type":"Secondary","slot":"secondary","cost":880,"tier":"SS","rel":4.01,"dmg":83,"pel":1,"rps":3.6,"mag":30,"reserve":45,"reload":1800,"burst":296,"sust":251,"ttk":0.84,"reloads":0,"shots":4,"rf":0.97,"f30":1,"near":32,"far":82,"fmin":0.7,"kick":2.4,"upDeg":0.63,"sideDeg":0.36,"climbMax":1.69,"rise":0.4,"spread":0.57,"bspeed":170,"ability":null,"note":"","magkill":true,"oneshot":false,"own":false,"noRecoil":false},{"id":"javelin_launcher","name":"Javelin Launcher","type":"Guided Launcher","slot":"primary","cost":224000,"tier":"F","rel":0.21,"dmg":30,"pel":1,"rps":0.7,"mag":6,"reserve":36,"reload":3200,"burst":21,"sust":18,"ttk":15.8,"reloads":1,"shots":10,"rf":0.85,"f30":1,"near":9999,"far":9999,"fmin":1,"kick":0.62,"upDeg":0.27,"sideDeg":0.16,"climbMax":1.44,"rise":0.39,"spread":0.0,"bspeed":55,"ability":"Volley","note":"arcs","magkill":false,"oneshot":false,"own":false,"noRecoil":false}];
+const TIERS = ['SS', 'S', 'A', 'B', 'C', 'D', 'F'];
+const KEY = 'weapon-tier-list-v1';
+const byId = Object.fromEntries(DATA.map(d => [d.id, d]));
+const recoilScore = d => d.noRecoil ? 0 : Math.max(d.rise, d.upDeg);
+const pips = d => { const s = recoilScore(d); return d.noRecoil ? 0 : s < 0.3 ? 1 : s < 0.55 ? 2 : s < 0.85 ? 3 : s < 1.2 ? 4 : 5; };
+const fmt = n => n >= 1000 ? n.toLocaleString('en-US') : String(n);
+
+function computed() {
+  const s = {}; TIERS.forEach(t => { s[t] = []; });
+  DATA.slice().sort((a, b) => b.rel - a.rel).forEach(d => s[d.tier].push(d.id));
+  return s;
+}
+function loadState() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(KEY) || 'null');
+    if (!raw) return null;
+    const seen = new Set(), s = {};
+    for (const t of TIERS) { s[t] = (raw[t] || []).filter(id => byId[id] && !seen.has(id) && seen.add(id)); }
+    for (const d of DATA) if (!seen.has(d.id)) s[d.tier].push(d.id);
+    return s;
+  } catch (e) { return null; }
+}
+function saveState() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
+let state = loadState() || computed();
+let filter = 'all', selected = null, dragId = null;
+
+function tierOf(id) { return TIERS.find(t => state[t].includes(id)); }
+function move(id, tier, beforeId) {
+  TIERS.forEach(t => { state[t] = state[t].filter(x => x !== id); });
+  const arr = state[tier], at = beforeId ? arr.indexOf(beforeId) : -1;
+  if (at >= 0) arr.splice(at, 0, id); else arr.push(id);
+  saveState(); render();
+}
+function visible(id) { return filter === 'all' || byId[id].slot === filter; }
+
+function chipHTML(id, tier) {
+  const d = byId[id], p = pips(d), moved = d.tier !== tier;
+  const bars = [1, 2, 3, 4, 5].map(i => '<i class="' + (i <= p ? 'on' : '') + '"></i>').join('');
+  return '<button type="button" class="chip' + (moved ? ' moved' : '') + (selected === id ? ' sel' : '') + '" draggable="true" data-id="' + id + '" data-slot="' + d.slot + '"' +
+    ' aria-label="' + d.name + ', ' + d.sust + ' DPS, tier ' + tier + '">' +
+    (moved ? '<span class="mv">' + d.tier + '&rarr;' + tier + '</span>' : '') +
+    '<span class="nm">' + d.name + '</span>' +
+    '<span class="row"><span class="dps"><b>' + d.sust + '</b><small>DPS</small></span>' +
+    '<span class="rc" title="Recoil ' + p + ' of 5">' + bars + '</span></span></button>';
+}
+
+function render() {
+  const host = document.getElementById('tiers');
+  host.innerHTML = TIERS.map(t => {
+    const ids = state[t].filter(visible);
+    return '<div class="tier" data-tier="' + t + '" style="--c: var(--t-' + t + ')">' +
+      '<button type="button" class="lab" data-label="' + t + '" aria-label="Move the selected weapon to tier ' + t + '"><span class="l">' + t + '</span><span class="n">' + ids.length + '</span></button>' +
+      '<div class="shelf">' + (ids.length ? ids.map(id => chipHTML(id, t)).join('') : '<span class="empty">Drop weapons here</span>') + '</div></div>';
+  }).join('');
+  let n = 0; DATA.forEach(d => { if (tierOf(d.id) !== d.tier) n++; });
+  document.getElementById('changed').textContent = n ? n + ' moved by you' : 'No changes';
+  renderSide();
+}
+
+function renderSide() {
+  const el = document.getElementById('side');
+  if (!selected) { el.innerHTML = '<h2>Details</h2><p class="sub">Select a weapon to see its numbers.</p><p class="none">Tap a weapon, then use the tier buttons to move it, or drag it.</p>'; return; }
+  const d = byId[selected], t = tierOf(selected);
+  const row = (k, v) => '<dt>' + k + '</dt><dd>' + v + '</dd>';
+  const ttk = d.ttk == null ? 'n/a' : d.ttk.toFixed(2) + ' s' + (d.reloads ? ' (+' + d.reloads + ' reload' + (d.reloads > 1 ? 's' : '') + ')' : '');
+  const fall = d.near && d.near < 9000 ? 'full to ' + d.near + ' m, ' + Math.round(d.fmin * 100) + '% at ' + d.far + ' m' : 'none';
+  const flags = [];
+  if (d.magkill === false && d.dmg > 0) flags.push('A full magazine cannot kill 300 HP');
+  if (d.oneshot) flags.push('One-shot headshot');
+  if (d.noRecoil) flags.push('No spread or recoil');
+  if (d.note) d.note.split('; ').forEach(x => flags.push(x));
+  el.innerHTML =
+    '<h2>' + d.name + '</h2><div class="sub">' + d.type + ' &middot; ' + d.slot + ' &middot; ' + fmt(d.cost) + ' credits' + (d.ability ? ' &middot; E: ' + d.ability : '') + '</div>' +
+    '<div class="grp"><h3>Tier</h3><dl>' + row('Computed', '<b style="color:var(--t-' + d.tier + ')">' + d.tier + '</b> (' + d.rel.toFixed(2) + '&times; median)') + row('Yours', '<b style="color:var(--t-' + t + ')">' + t + '</b>') + '</dl>' +
+    '<div class="moveto">' + TIERS.map(x => '<button type="button" data-moveto="' + x + '" aria-pressed="' + (x === t) + '" style="--c:var(--t-' + x + ')">' + x + '</button>').join('') + '</div></div>' +
+    '<div class="grp"><h3>Damage</h3><dl>' +
+      row('Sustained DPS', d.sust) + row('Burst DPS', d.burst) + row('Per hit', d.dmg + (d.pel > 1 ? ' &times; ' + d.pel : '')) + row('Shots per second', d.rps) +
+      row('Time to kill 300 HP', ttk) + row('Shots to kill', d.shots == null ? 'n/a' : d.shots) +
+      row('Magazine', d.mag >= 999 ? 'unlimited' : d.mag + ' + ' + d.reserve) + row('Reload', d.reload ? (d.reload / 1000).toFixed(1) + ' s' : 'none') + '</dl></div>' +
+    '<div class="grp"><h3>Range</h3><dl>' + row('Falloff', fall) + row('DPS at 30 m', Math.round(d.burst * d.f30)) + row('Range factor', d.rf.toFixed(2)) + row('Bullet speed', d.bspeed ? d.bspeed + ' m/s' : 'n/a') + '</dl></div>' +
+    '<div class="grp"><h3>Recoil</h3><dl>' +
+      (d.noRecoil ? row('Aim recoil', 'none') : row('Kick per shot', d.upDeg.toFixed(2) + '&deg; up, &plusmn;' + d.sideDeg.toFixed(2) + '&deg;') + row('Climbs to', '&times;' + d.climbMax.toFixed(2)) + row('Rise while held', d.rise.toFixed(2) + '&deg;')) +
+      row('Screen kick', d.kick.toFixed(2)) + row('Spread', d.spread ? d.spread.toFixed(1) + '&deg;' : 'none') + '</dl></div>' +
+    (flags.length ? '<div>' + flags.map(f => '<span class="flag">' + f + '</span>').join('') + '</div>' : '');
+}
+
+function exportText() {
+  const L = [];
+  TIERS.forEach(t => { const ids = state[t]; if (ids.length) L.push(t + ': ' + ids.map(id => byId[id].name + ' (' + byId[id].sust + ')').join(', ')); });
+  const ch = DATA.filter(d => tierOf(d.id) !== d.tier).map(d => d.name + ' ' + d.tier + ' -> ' + tierOf(d.id));
+  return L.join('\n') + '\n\nMoved from the computed tiers: ' + (ch.length ? ch.join('; ') : 'nothing');
+}
+
+document.addEventListener('click', e => {
+  const f = e.target.closest('[data-filter]');
+  if (f) { filter = f.dataset.filter; document.querySelectorAll('[data-filter]').forEach(b => b.setAttribute('aria-pressed', String(b === f))); render(); return; }
+  const mt = e.target.closest('[data-moveto]');
+  if (mt && selected) { move(selected, mt.dataset.moveto); return; }
+  const lab = e.target.closest('[data-label]');
+  if (lab && selected) { move(selected, lab.dataset.label); return; }
+  const chip = e.target.closest('.chip');
+  if (chip) { selected = chip.dataset.id; render(); return; }
+});
+document.getElementById('reset').addEventListener('click', () => { state = computed(); saveState(); render(); });
+document.getElementById('sortsel').addEventListener('change', e => {
+  const k = e.target.value; if (!k) return;
+  const key = { power: d => -d.rel, sust: d => -d.sust, ttk: d => (d.ttk == null ? 999 : d.ttk), recoil: d => recoilScore(d), cost: d => d.cost }[k];
+  TIERS.forEach(t => state[t].sort((a, b) => key(byId[a]) - key(byId[b])));
+  saveState(); render(); e.target.value = '';
+});
+document.getElementById('copy').addEventListener('click', async () => {
+  const text = exportText(), box = document.getElementById('exportbox');
+  try { await navigator.clipboard.writeText(text); document.getElementById('copy').textContent = 'Copied'; setTimeout(() => { document.getElementById('copy').textContent = 'Copy my ranking'; }, 1500); }
+  catch (err) { box.hidden = false; box.value = text; box.focus(); box.select(); }
+});
+
+/* drag and drop: a chip can land on a shelf (goes to the end) or on another chip (goes before it) */
+const tiersEl = document.getElementById('tiers');
+tiersEl.addEventListener('dragstart', e => {
+  const c = e.target.closest('.chip'); if (!c) return;
+  dragId = c.dataset.id; c.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', dragId); } catch (x) {}
+});
+tiersEl.addEventListener('dragend', () => { dragId = null; document.querySelectorAll('.dragging,.over,.drop-before').forEach(n => n.classList.remove('dragging', 'over', 'drop-before')); });
+tiersEl.addEventListener('dragover', e => {
+  if (!dragId) return;
+  const tier = e.target.closest('.tier'); if (!tier) return;
+  e.preventDefault();
+  document.querySelectorAll('.over,.drop-before').forEach(n => n.classList.remove('over', 'drop-before'));
+  tier.classList.add('over');
+  const c = e.target.closest('.chip'); if (c && c.dataset.id !== dragId) c.classList.add('drop-before');
+});
+tiersEl.addEventListener('drop', e => {
+  if (!dragId) return;
+  const tier = e.target.closest('.tier'); if (!tier) return;
+  e.preventDefault();
+  const c = e.target.closest('.chip');
+  move(dragId, tier.dataset.tier, c && c.dataset.id !== dragId ? c.dataset.id : null);
+  selected = dragId; dragId = null; render();
+});
+render();
+</script>
