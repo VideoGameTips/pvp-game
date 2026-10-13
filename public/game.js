@@ -5092,7 +5092,11 @@ function playSoundEvent(name, opts = {}) {
     } catch (e) {}
   }
 
-  if (name === 'hitmarker') {
+  if (name === 'wood_break') {
+    playFilteredNoise(ctx,start,.11,out,.5*mult,'bandpass',1300,.8);
+    playFilteredNoise(ctx,start+.04,.38,out,.32*mult,'lowpass',850,.7);
+    for(let i=0;i<3;i++) playTone(ctx,start+i*.035,.07,out,210+i*65,65,.12*mult,'triangle');
+  } else if (name === 'hitmarker') {
     // Sharp transient "snap" — no tonal beep, just a percussive crack
     playFilteredNoise(ctx, start, 0.020, out, 0.18 * mult, 'highpass', 3200, 0.4);
     playFilteredNoise(ctx, start, 0.035, out, 0.10 * mult, 'lowpass', 1400, 0.6);
@@ -5832,6 +5836,7 @@ function activateMap(name) {
     dest.hp = dest.maxHp;
     dest.mesh.visible = true;
   }
+  resetMapStructures(name);
   activeMapGimmicks = MAP_GIMMICKS[name] || { damageZones: [], jumpPads: [], iceZones: [], oilZones: [], lowGravZones: [] };
   if (typeof MAP_MECH !== 'undefined' && MAP_MECH && MAP_MECH[name]) MAP_MECH[name].reset();
   // Reset batch-5 stateful mechanics so a re-entered map starts fresh
@@ -6267,6 +6272,7 @@ function addOuterWalls(mapName, color) {
 // which works the same against merged geometry.
 function _meshesHeldByMechanics() {
   const held = new Set();
+  for (const d of mapDestructibles) if (d.mesh) d.mesh.traverse(o => { if (o.isMesh) held.add(o); });
   const seen = new Set();
   (function walk(v, depth) {
     if (!v || depth > 5 || typeof v !== 'object') return;
@@ -8490,10 +8496,10 @@ function detonateMapProp(mapName, origin, opts = {}) {
     if (damage) applyBotDamageToPlayer('explosive_barrel', opts.ownerId || null, damage);
   }
   for (const dest of mapDestructibles) {
-    if (dest.mapName !== mapName || dest.hp <= 0 || dest.type !== 'explosive_barrel') continue;
-    const target = dest.mesh.position.clone(); target.y += 0.8;
+    if (dest.mapName !== mapName || dest.hp <= 0 || (!dest.structureKind && dest.type !== 'explosive_barrel')) continue;
+    const target = dest.colliderRef ? dest.colliderRef.clampPoint(origin,new THREE.Vector3()) : dest.mesh.position.clone().add(new THREE.Vector3(0,.8,0));
     const damage = mapBlastDamage(origin, target, dest.colliderRef);
-    if (damage) damageDestructible(dest, damage, opts);
+    if (damage) damageDestructible(dest, damage, {...opts,weaponId:'explosive_barrel'});
   }
 }
 
@@ -11759,7 +11765,7 @@ function dressThemeMap(name) {
   if (!group || !th || group._themeDressed) return;
   group._themeDressed = true;
   const S = _thBuf(), G = _thBuf(), rnd = _thRng(name + ':dress');
-  const hosts = group.children.filter(m => m.isMesh && !m.userData.themeDecor && m.visible !== false && m.userData.thCls);
+  const hosts = group.children.filter(m => m.isMesh && !m.userData.themeDecor && !m.userData.mapStructure && m.visible !== false && m.userData.thCls);
   for (const m of hosts) {
     const cls = m.userData.thCls;
     if (cls === 'floor') continue;
@@ -15934,6 +15940,82 @@ function addMapOutskirts() { for (const name of Object.keys(OUTSKIRTS)) _outskir
 // they cost a few hundred milliseconds each and a player only ever sees one. Always in this order -- the stretching has
 // to see the layout as it was built, and the outskirts go round whatever the first two leave -- and always from the
 // map's own name as the seed, so every player's copy comes out the same.
+function registerMapStructure(name, mesh, colliderRefs, kind, targetCollider = colliderRefs[0]) {
+  const hp = {wood:500,support:900,wall:3000}[kind];
+  const index = mapDestructibles.filter(d => d.mapName===name && d.structureKind===kind).length;
+  mesh.userData.mapStructure=true;
+  mesh.updateWorldMatrix(true,true);
+  const bounds=new THREE.Box3().setFromObject(mesh), size=bounds.getSize(new THREE.Vector3());
+  const points=[];
+  for (const side of [-1,1]) for (let i=0;i<6;i++) {
+    const t=i/6, next=(i+1)/6;
+    const at = f => {
+      const q=.25+f*.5+(Math.round(f*6)%2)*.10, y=bounds.min.y+size.y*(.1+f*.8);
+      return mesh.worldToLocal(size.x>=size.z
+        ? new THREE.Vector3(bounds.min.x+size.x*q,y,side>0?bounds.max.z+.02:bounds.min.z-.02)
+        : new THREE.Vector3(side>0?bounds.max.x+.02:bounds.min.x-.02,y,bounds.min.z+size.z*q));
+    };
+    points.push(at(t),at(next));
+  }
+  const cracks=new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(points),new THREE.LineBasicMaterial({color:0x291b14,transparent:true,opacity:kind==='wall'?.18:0}));
+  mesh.add(cracks);
+  const dest={mesh,hp,maxHp:hp,type:'structure',structureKind:kind,mapName:name,
+    structureId:`${kind}:${index}`,colliderRef:targetCollider,colliderRefs,cracks};
+  mapDestructibles.push(dest);
+  return dest;
+}
+function resetMapStructures(name) {
+  for (const d of mapDestructibles) if (d.mapName===name && d.structureKind) {
+    d.hp=d.maxHp; d.mesh.visible=true; d.cracks.material.opacity=d.structureKind==='wall'?.18:0;
+    for (const c of d.colliderRefs) if (!wallColliders.includes(c)) wallColliders.push(c);
+  }
+}
+function setMapStructureHP(dest, hp, effects=true) {
+  const before=dest.hp;
+  dest.hp=Math.max(0,Math.min(dest.maxHp,hp));
+  dest.cracks.material.opacity=(dest.structureKind==='wall'?.18:0)+(1-dest.hp/dest.maxHp)*.77;
+  dest.mesh.visible=dest.hp>0;
+  for (const c of dest.colliderRefs) {
+    const i=wallColliders.indexOf(c);
+    if (dest.hp<=0 && i>=0) wallColliders.splice(i,1);
+    else if (dest.hp>0 && i<0) wallColliders.push(c);
+  }
+  if (effects && before>0 && dest.hp<=0) {
+    const box=new THREE.Box3().setFromObject(dest.mesh), center=box.getCenter(new THREE.Vector3());
+    spawnStructureDebris(center,dest.structureKind);
+    playSoundEvent(dest.structureKind==='wood'?'wood_break':'explosion',{position:center,volume:.55,minGap:80});
+  }
+}
+function spawnStructureDebris(origin, kind) {
+  const shards=[], rnd=_thRng(`${origin.x}:${origin.z}:${kind}`);
+  for (let i=0;i<18;i++) {
+    const mesh=new THREE.Mesh(new THREE.BoxGeometry(.12+rnd()*.20,.08+rnd()*.12,kind==='wood'?.45:.20),
+      new THREE.MeshLambertMaterial({color:kind==='wood'?0x765434:0x696963,transparent:true}));
+    mesh.position.copy(origin); mesh.rotation.set(rnd()*3,rnd()*3,rnd()*3);scene.add(mesh);
+    shards.push({mesh,velocity:new THREE.Vector3((rnd()-.5)*7,2+rnd()*4,(rnd()-.5)*7)});
+  }
+  const born=performance.now();let prev=born;
+  const tick=()=>{
+    const now=performance.now(),age=(now-born)/1000,dt=Math.min(.05,(now-prev)/1000);prev=now;
+    if(age>1.3){for(const s of shards){scene.remove(s.mesh);s.mesh.geometry.dispose();s.mesh.material.dispose();}return;}
+    for(const s of shards){s.velocity.y-=12*dt;s.mesh.position.addScaledVector(s.velocity,dt);s.mesh.rotation.x+=dt*4;s.mesh.material.opacity=Math.min(1,(1.3-age)*3);}
+    requestAnimationFrame(tick);
+  };requestAnimationFrame(tick);
+}
+function addBreakableMapWalls(name) {
+  if (!['urban','warehouse','airport','refinery','big_arena','super_arena','big_harbor','lockdown'].includes(name)) return;
+  const group=MAP_GROUPS[name];let count=0;
+  for (const mesh of group.children.slice()) {
+    if (count>=4 || !mesh.isMesh || !['wall','cover'].includes(mesh.userData.thCls)) continue;
+    const b=new THREE.Box3().setFromObject(mesh), s=b.getSize(new THREE.Vector3());
+    if (b.min.y<-.1 || b.min.y>.3 || s.y<2.2 || s.y>7 || Math.min(s.x,s.z)>1.3 || Math.max(s.x,s.z)<4 || Math.max(s.x,s.z)>14) continue;
+    if (_mdSpawnRects(name,18).some(r => b.max.x>r.x0 && b.min.x<r.x1 && b.max.z>r.z0 && b.min.z<r.z1)) continue;
+    // No load-bearing walls, perimeter walls or walls touching spawn shielding.
+    const cols=MAP_COLLIDERS[name], refs=cols.filter(c => c.min.distanceTo(b.min)<.05 && c.max.distanceTo(b.max)<.05);
+    if(refs.length!==1 || cols.some(c=>c!==refs[0] && c.min.y>=b.max.y-.1 && c.max.y>b.max.y+.2 && c.min.x<b.max.x && c.max.x>b.min.x && c.min.z<b.max.z && c.max.z>b.min.z)) continue;
+    registerMapStructure(name,mesh,refs,'wall'); count++;
+  }
+}
 function addOpenLaneCover(name) {
   if (!['urban','warehouse','airport','big_arena','super_arena','big_harbor','carrier','refinery','studio','lockdown'].includes(name)) return;
   const group = MAP_GROUPS[name], bounds = MAP_BOT_BOUNDS[name] || MAP_BOUNDS[name], theme = MAP_THEMES[name];
@@ -15960,6 +16042,13 @@ function addOpenLaneCover(name) {
     return (open(1,0)&&open(-1,0)) || (open(0,1)&&open(0,-1));
   };
   const build = (x,z,turn,side = 1) => {
+    const collect = fn => {
+      const children=new Set(group.children), start=MAP_COLLIDERS[name].length;
+      fn();
+      const root=new THREE.Group();group.add(root);
+      for (const o of group.children.slice()) if(o!==root && !children.has(o)) root.add(o);
+      return {root,refs:MAP_COLLIDERS[name].slice(start)};
+    };
     const point = (u,v) => turn ? [x-side*v,z+side*u] : [x+side*u,z+side*v];
     const detail = (u,y,v,w,h,d,c,surface='metal') => {
       const [px,pz]=point(u,v);
@@ -15968,7 +16057,7 @@ function addOpenLaneCover(name) {
     };
     const box = (u,v,w,h,d,c) => {
       const [px,pz]=point(u,v), m=K.box(px,0,pz,turn?d:w,h,turn?w:d,c);
-      const surface=name==='super_arena'?'metal':'wood';
+      const surface='wood';
       m.userData.mapSurface=surface;
       const trim=_thShade(theme.d,.65);
       // Flush corner guards and straps; no extra collision edges on climbable cover.
@@ -15982,9 +16071,17 @@ function addOpenLaneCover(name) {
         for (const du of [-w*.3,w*.3]) detail(u+du,h*.55,v+dv,.18,.10,.025,trim);
       }
     };
-    box(2,-1.3,3.2,2.3,2.8,theme.c);
-    box(-2.5,2.2,3,1.5,3,theme.w2);
-    box(3.2,2.8,1.8,1.0,1.8,theme.c);
+    for (const spec of [[2,-1.3,3.2,2.3,2.8,theme.c],[3.2,2.8,1.8,1,1.8,theme.c]]) {
+      const part=collect(()=>box(...spec));registerMapStructure(name,part.root,part.refs,'wood');
+    }
+    const platform=collect(()=>{
+      const [px,pz]=point(-2.5,2.2);
+      K.box(px,1.25,pz,3,.25,3,theme.w2).userData.mapSurface='metal';
+      K.box(px,0,pz,.45,1.25,.45,0xb07c28);
+      for (const y of [.3,.9]) detail(-2.5,y,2.2,.47,.12,.47,0x292923);
+      for (const du of [-1.25,1.25]) for (const dv of [-1.25,1.25]) detail(-2.5+du,.625,2.2+dv,.12,1.25,.12,theme.d);
+    });
+    registerMapStructure(name,platform.root,platform.refs,'support',platform.refs[platform.refs.length-1]);
     const [rx,rz]=point(-7,2.2);
     addRamp(name,rx,rz,turn?0:side,turn?side:0,{ width:2.5,run:3,rise:1.5,landing:1,color:theme.d,landColor:theme.w2,lipColor:theme.a });
     placed.push({x,z,turn});
@@ -16006,6 +16103,7 @@ function _upgradeMap(name) {
   const t0 = performance.now();
   try { _depthMap(name); } catch (e) { console.warn('[upgrade] depth', name, e); }
   try { addOpenLaneCover(name); } catch (e) { console.warn('[upgrade] lane cover', name, e); }
+  try { addBreakableMapWalls(name); } catch (e) { console.warn('[upgrade] breakable walls', name, e); }
   try { _eggsMap(name); } catch (e) { console.warn('[upgrade] eggs', name, e); }
   try { _outskirtsMap(name); } catch (e) { console.warn('[upgrade] outskirts', name, e); }
   // what was just added gets the same surface as the rest
@@ -48237,9 +48335,12 @@ function rocketExplode(pos, weaponId, excludePid, opts = {}) {
   const damageRemotes = opts.damageRemotes !== false;
   const damagePlayer = !!opts.damagePlayer;
   if (damageRemotes) for (const dest of mapDestructibles) {
-    if (dest.mapName !== activeMapName || dest.hp <= 0 || dest.type !== 'explosive_barrel') continue;
-    const target = dest.mesh.position.clone(); target.y += 0.8;
-    if (pos.distanceTo(target) <= radius && mapBlastDamage(pos, target, dest.colliderRef)) damageDestructible(dest, 60, { ownerId: myId });
+    if (dest.mapName !== activeMapName || dest.hp <= 0 || (!dest.structureKind && dest.type !== 'explosive_barrel')) continue;
+    const target = dest.colliderRef ? dest.colliderRef.clampPoint(pos,new THREE.Vector3()) : dest.mesh.position.clone().add(new THREE.Vector3(0,.8,0));
+    const distance=pos.distanceTo(target);
+    if (distance <= radius && mapBlastDamage(pos, target, dest.colliderRef)) {
+      damageDestructible(dest,dest.structureKind?getClientWeaponDamage(weaponId)*(.4+.6*(1-distance/radius)):60,{ownerId:myId,weaponId});
+    }
   }
   if (damageRemotes) {
     for (const [pid, mesh] of Object.entries(remoteMeshes)) {
@@ -48324,6 +48425,7 @@ function updateBullets(dt) {
 
     // ── Wall collision (swept ray vs all wall AABBs) ─────────────────────
     let wallHitPt = null;
+    let wallHitCollider = null;
     let wallHitT = Infinity;
     const wallHitNormal = new THREE.Vector3(0, 1, 0);
     if (!b.isPaintBomb) {
@@ -48343,6 +48445,7 @@ function updateBullets(dt) {
               if (hitT < wallHitT) {
                 wallHitT = hitT;
                 wallHitPt = _wallHitPt.clone();
+                wallHitCollider = box;
                 wallHitNormal.copy(boxFaceNormal(box, wallHitPt));
                 wallHit = true;
               }
@@ -48358,6 +48461,7 @@ function updateBullets(dt) {
           const gT = (py0 - GROUND_PLANE_Y) / (py0 - _bpos.y);
           if (gT >= 0 && gT <= 1 && gT < wallHitT && floorExistsAt(px0 + tDx * gT, pz0 + tDz * gT)) {
             wallHitT = gT;
+            wallHitCollider = null;
             wallHitPt = new THREE.Vector3(px0 + tDx * gT, GROUND_PLANE_Y, pz0 + tDz * gT);
             wallHitNormal.set(0, 1, 0);
             wallHit = true;
@@ -48528,8 +48632,8 @@ function updateBullets(dt) {
           if (!dest.mesh || dest.hp <= 0 || !b.isOwn) continue;
           const dpos = new THREE.Vector3();
           dest.mesh.getWorldPosition(dpos);
-          if (dest.colliderRef ? dest.colliderRef.clone().expandByScalar(0.08).containsPoint(wallHitPt) : dpos.distanceTo(wallHitPt) < (dest.type === 'reactor' ? 4 : dest.type === 'glass' ? 6 : 1.5)) {
-            damageDestructible(dest, destDmg, { ownerId: myId });
+          if (dest.structureKind ? dest.colliderRef===wallHitCollider : dest.colliderRef ? dest.colliderRef.clone().expandByScalar(0.08).containsPoint(wallHitPt) : dpos.distanceTo(wallHitPt) < (dest.type === 'reactor' ? 4 : dest.type === 'glass' ? 6 : 1.5)) {
+            damageDestructible(dest, destDmg, { ownerId: myId, weaponId:b.weaponId });
             break;
           }
         }
@@ -48916,7 +49020,15 @@ function placeLandMine(item) {
 }
 // ── Destructible map objects (glass, lights, reactors) ───────────────────
 function damageDestructible(dest, dmg, opts = {}) {
+  if (!Number.isFinite(dmg) || dmg<=0) return;
   if (dest.hp <= 0) return;
+  if (dest.structureKind) {
+    if (!opts.remote && socket?.connected) {
+      socket.emit('mapStructureHit',{mapName:dest.mapName,structureId:dest.structureId,
+        round:match?.round || 1,damage:dmg,weaponId:opts.weaponId || 'explosive_barrel'});
+    } else setMapStructureHP(dest,dest.hp-dmg);
+    return;
+  }
   dest.hp = Math.max(0, dest.hp - dmg);
   // Show damage number above the object
   const dpos = new THREE.Vector3();
@@ -50978,6 +51090,16 @@ socket.on('mapPropDestroyed', data => {
   const dest = mapDestructibles.find(d => d.mapName === activeMapName && d.propId === data.propId);
   if (dest) damageDestructible(dest, dest.maxHp, { remote: true, ownerId: data.ownerId });
 });
+socket.on('mapStructureState', data => {
+  if (!data || data.mapName!==activeMapName || data.round!==(match?.round || 1)) return;
+  for (const [id,hp] of Object.entries(data.hp || {})) {
+    const d=mapDestructibles.find(d=>d.mapName===activeMapName && d.structureId===id);
+    if (d && Number.isFinite(hp)) setMapStructureHP(d,hp,!data.reset);
+  }
+  if (data.reset) for (const d of mapDestructibles) {
+    if(d.mapName===activeMapName && d.structureKind && !(d.structureId in (data.hp || {}))) setMapStructureHP(d,d.maxHp,false);
+  }
+});
 // 🔥 FFA Legend progress, sent as it is earned: every few seconds of FFA
 // damage, and after every FFA win the server accepts.
 socket.on('ffaProgress', data => {
@@ -52868,6 +52990,7 @@ function startMatchRound() {
       socket.emit('readyRespawn', { x: camera.position.x, z: camera.position.z, mode: currentModeId() });
       requestPointerLockSafe();
     }
+    socket.emit('mapStructureSync',{mapName:activeMapName,round:match.round || 1});
     match.roundActive = true;
     match.active = true;
     // Grant player a 2s spawn shield
@@ -54190,6 +54313,7 @@ function updateRoundScoreDisplay() {
 function restartElimRound(lastWinner) {
   if (!match || match.over) return;   // the match can end while this waits (an opponent left, #46)
   if (lastWinner !== null) match.round++;
+  resetMapStructures(activeMapName);
   resetPlayerForRound();
   grantSpawnShield(3000);
   requestPointerLockSafe();
