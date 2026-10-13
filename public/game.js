@@ -5660,7 +5660,7 @@ const MAP_GROUPS = {};
 // Where each side starts on a map that names it, and the points of interest a
 // map wants called out. Declared here, with the other map registries, because
 // the builders below fill them in as they run.
-var MAP_SPAWNS = {}, MAP_POIS = {};
+var MAP_SPAWNS = {}, MAP_POIS = {}, MAP_LADDERS = {};
 // Wall-less maps (OUTSKIRTS). MAP_BOT_BOUNDS: the old arena, which is where bots stay. MAP_VOID: the map has a real
 // edge -- floor exists only inside {halfX, halfZ}; past it you fall, and below killY you are gone.
 var MAP_BOT_BOUNDS = {}, MAP_VOID = {};
@@ -5795,6 +5795,7 @@ function resetMapContents(name) {
     if (child.parent) child.parent.remove(child);
   }
   MAP_COLLIDERS[name] = [];
+  MAP_LADDERS[name] = [];
   MAP_GIMMICKS[name] = { damageZones: [], jumpPads: [], iceZones: [], oilZones: [], lowGravZones: [] };
 }
 
@@ -11156,8 +11157,20 @@ function addGridClutter(name, half, s, boost = 0) {
 function addGridLadder(name, x, z, rotY, fromY, toY, width = 1.15) {
   const height = toY - fromY;
   if (height <= 0.5) return;
-  addMapBox(name, x, fromY + height / 2, z, width, height, 0.14, 0xffcc33, rotY);
+  const anchor = new THREE.Mesh(new THREE.BoxGeometry(width,height,.14),new THREE.MeshBasicMaterial({ visible:false }));
+  anchor.visible = false;
+  anchor.userData.mapStatic = true;
+  anchor.position.set(x,fromY+height/2,z); anchor.rotation.y = rotY;
+  addMapMesh(name,anchor,false);
+  const ladder = { anchor, width };
+  (MAP_LADDERS[name] ||= []).push(ladder);
   const sinR = Math.sin(rotY), cosR = Math.cos(rotY);
+  for (const side of [-1,1]) {
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(.08,height+.65,.09),new THREE.MeshLambertMaterial({ color:0xffcc33 }));
+    rail.position.set(x+side*cosR*width/2,fromY+(height+.65)/2,z-side*sinR*width/2);
+    rail.userData.mapStatic = true;
+    rail.rotation.y = rotY; addMapMesh(name,rail,false);
+  }
   const rungCount = Math.max(3, Math.floor(height / 0.5));
   for (let i = 1; i < rungCount; i++) {
     const ry = fromY + i * (height / rungCount);
@@ -11166,9 +11179,73 @@ function addGridLadder(name, x, z, rotY, fromY, toY, width = 1.15) {
       new THREE.MeshLambertMaterial({ color: 0x2a2a2a })
     );
     mesh.position.set(x + sinR * 0.1, ry, z + cosR * 0.1);
+    mesh.userData.mapStatic = true;
     mesh.rotation.y = rotY;
     addMapMesh(name, mesh, false);
   }
+  return ladder;
+}
+
+function mapLadderPose(ladder) {
+  ladder.anchor.updateWorldMatrix(true,false);
+  const box = new THREE.Box3().setFromObject(ladder.anchor);
+  const center = ladder.anchor.getWorldPosition(new THREE.Vector3());
+  const normal = ladder.anchor.getWorldDirection(new THREE.Vector3()); normal.y = 0; normal.normalize();
+  return { x:center.x,z:center.z,bottom:box.min.y,top:box.max.y,normal,width:ladder.width };
+}
+
+function updateMapLadderMove(dt, input) {
+  const ladders = MAP_LADDERS[activeMapName] || [];
+  let ladder = window._mapLadder;
+  if (isDead || slamState || pilotedMortar || (adminCheats.fly && currentUser?.isAdmin)
+      || Math.hypot(_extVel.x,_extVel.z) > 4 || (ladder && !ladders.includes(ladder))) {
+    window._mapLadder = null; return false;
+  }
+  if (Date.now() < (window._ladderDetachUntil || 0)) return false;
+  if (ladder) {
+    const p = mapLadderPose(ladder), feet = playerFeetY();
+    if (Math.hypot(camera.position.x-p.x,camera.position.z-p.z)>p.width+1.5 || feet<p.bottom-1 || feet>p.top+1) {
+      window._mapLadder = null; return false;
+    }
+  }
+  if (!ladder) {
+    for (const candidate of ladders) {
+      const p = mapLadderPose(candidate), dx = camera.position.x-p.x, dz = camera.position.z-p.z;
+      const sideways = Math.abs(dx*p.normal.z-dz*p.normal.x), front = dx*p.normal.x+dz*p.normal.z;
+      const feet = playerFeetY();
+      if (sideways > p.width/2+.25 || front < -.15 || front > 1 || feet < p.bottom-.35 || feet > p.top+.2) continue;
+      if (input.dot(p.normal) > -.15 && !(keys['KeyS'] || joyDir.y > .15)) continue;
+      ladder = candidate; window._mapLadder = ladder; break;
+    }
+  }
+  if (!ladder) return false;
+  const p = mapLadderPose(ladder), eye = window._crouchEye || PLAYER_EYE_HEIGHT;
+  if (keys['Space'] || window._mobileJump) {
+    window._mapLadder = null; window._ladderDetachUntil = Date.now()+450;
+    window._prevSpaceDown = true; window._mobileJump = false; playerYVel = 6.5;
+    _extVel.x = (input.lengthSq() ? input.x : p.normal.x)*5;
+    _extVel.z = (input.lengthSq() ? input.z : p.normal.z)*5;
+    return false;
+  }
+  const upward = (keys['KeyW'] || joyDir.y < -.15) ? 1 : 0;
+  const downward = (keys['KeyS'] || joyDir.y > .15) ? 1 : 0;
+  const speed = Date.now() < playerRootedUntil ? 0 : 9*Math.max(0,playerFrostSlow)/100;
+  playerFrostSlow = Math.min(100,playerFrostSlow+dt*2);
+  const feet = THREE.MathUtils.clamp(playerFeetY()+(upward-downward)*speed*dt,p.bottom,p.top);
+  camera.position.x = p.x+p.normal.x*.55; camera.position.z = p.z+p.normal.z*.55;
+  const previousY = camera.position.y;
+  camera.position.y = feet+eye; playerYVel = 0;
+  window._slideUntil = 0; window._climbing = true;
+  resolvePlayerCeiling(previousY);
+  if ((upward && feet >= p.top-.01 && camera.position.y >= p.top+eye-.05) || (downward && feet <= p.bottom+.01)) {
+    const top = upward > 0;
+    camera.position.x = p.x+p.normal.x*(top ? -1 : .85);
+    camera.position.z = p.z+p.normal.z*(top ? -1 : .85);
+    camera.position.y = (top ? p.top+.04 : p.bottom)+eye;
+    resolveWallCollisions();
+    window._mapLadder = null; window._climbing = false; window._ladderDetachUntil = Date.now()+400;
+  }
+  return true;
 }
 // 🏢 A grounded 2-story block: an open ground-floor colonnade (corner posts
 // only, nothing solid to get stuck behind, so bots never dead-end under it),
@@ -14693,7 +14770,7 @@ function _osFrame(K, X, Z, ux, uz) {
   const vec = (a) => { const s = a[1] === '+' ? 1 : -1; return a[0] === 'u' ? [ux * s, uz * s] : [vx * s, vz * s]; };
   const dims = (u0, u1, v0, v1) => { const cu = (u0 + u1) / 2, cv = (v0 + v1) / 2, [cx, cz] = W(cu, cv); return alongX ? [cx, cz, u1 - u0, v1 - v0] : [cx, cz, v1 - v0, u1 - u0]; };
   const F = {
-    W, vec, X, Z, ux, uz,
+    W, vec, X, Z, ux, uz, name,
     box(u0, u1, v0, v1, y0, h, c) { const [cx, cz, w, d] = dims(u0, u1, v0, v1); return K.box(cx, y0, cz, w, h, d, c); },
     deco(u0, u1, v0, v1, y0, h, c) {
       const [cx, cz, w, d] = dims(u0, u1, v0, v1);
@@ -14714,17 +14791,13 @@ function _osFrame(K, X, Z, ux, uz) {
   };
   return F;
 }
-// A switchback stair: flights climb toward +u and then -u, side by side in two lanes, with a landing at every turn.
-// `attach(k)` says what the landing at the top of flight k has to meet ({u0, u1, vEdge}: the near edge of a floor at
-// that height) -- the landing is reached in over it and, if it ends short of the floor, a plank carries on.
+// One direct ladder replaces the winding flights; each landing still connects to its original floor.
 function _osClimb(F, o) {
-  const lane = o.lane || 2.2, depth = o.depth || 0.9, n = Math.max(2, Math.round(o.rise / 0.45)), step = o.rise / n;
+  const lane = o.lane || 2.2;
   const landings = [];
-  let u = o.u0, d = 1;
+  const u = o.u0, outerV = o.v0 + 2*lane, ladderV = outerV+.6;
   for (let k = 0; k < o.levels; k++) {
-    const vc = o.v0 + (k % 2) * lane + lane / 2, y0 = k * o.rise, level = y0 + o.rise;
-    F.stairs(u, vc, d > 0 ? 'u+' : 'u-', o.rise, lane, o.c, y0, depth, step);
-    const edge = u + d * (n * depth - depth / 2), a = Math.min(edge, edge + d * 3), b = Math.max(edge, edge + d * 3);
+    const level = (k+1)*o.rise, a = u-1.5, b = u+1.5;
     const at = o.attach ? o.attach(k) : null;
     const lv0 = at ? at.vEdge - 1.6 : o.v0 - 0.3, lv1 = o.v0 + 2 * lane;
     F.box(a, b, lv0, lv1, level - 0.4, 0.4, o.lc);
@@ -14733,9 +14806,10 @@ function _osClimb(F, o) {
       else if (a > at.u1) F.box(at.u1 - 0.3, a + 0.1, lv0, at.vEdge + 0.2, level - 0.4, 0.4, o.lc);
     }
     landings.push({ u0: a, u1: b, v0: lv0, v1: lv1, y: level });
-    u = edge + d * (3 - depth / 2); d = -d;
   }
-  return { landings, top: landings[landings.length - 1], foot: { u: o.u0, v: o.v0 + lane / 2 } };
+  const [x,z] = F.W(u,ladderV), [nx,nz] = F.vec('v+');
+  addGridLadder(F.name,x,z,Math.atan2(nx,nz),0,o.levels*o.rise,1.25);
+  return { landings, top: landings[landings.length - 1], foot: { u, v:ladderV } };
 }
 const _OS_KITS = {
   // A tower crane. A stair up the side of the mast, then a jib you can walk out along over the arena, a counter-jib
@@ -15788,12 +15862,58 @@ function addMapOutskirts() { for (const name of Object.keys(OUTSKIRTS)) _outskir
 // they cost a few hundred milliseconds each and a player only ever sees one. Always in this order -- the stretching has
 // to see the layout as it was built, and the outskirts go round whatever the first two leave -- and always from the
 // map's own name as the seed, so every player's copy comes out the same.
+function addOpenLaneCover(name) {
+  if (!['urban','warehouse','airport','big_arena','super_arena','big_harbor','carrier','refinery','studio','lockdown'].includes(name)) return;
+  const group = MAP_GROUPS[name], bounds = MAP_BOT_BOUNDS[name] || MAP_BOUNDS[name], theme = MAP_THEMES[name];
+  if (!group || !bounds || !theme) return;
+  const placed = group.userData.laneCover = [], K = _bkit(name);
+  const floorAt = (x,z) => {
+    const v = MAP_VOID[name];
+    return !v || (v.rects ? v.rects.some(r => x>=r.x0 && x<=r.x1 && z>=r.z0 && z<=r.z1)
+      : Math.abs(x)<=v.halfX && Math.abs(z)<=v.halfZ);
+  };
+  const available = (x,z,turn) => {
+    const hx = turn ? 5.5 : 8, hz = turn ? 8 : 5.5;
+    if (Math.abs(x)+hx+3>=bounds.halfX || Math.abs(z)+hz+3>=bounds.halfZ) return false;
+    if (Object.values(MAP_SPAWNS[name] || {}).some(r => x+hx>r.x0-12 && x-hx<r.x1+12 && z+hz>r.z0-12 && z-hz<r.z1+12)) return false;
+    if ((MAP_LADDERS[name] || []).some(l => { const p=mapLadderPose(l); return Math.abs(p.x-x)<hx+3 && Math.abs(p.z-z)<hz+3; })) return false;
+    for (const dx of [-hx,0,hx]) for (const dz of [-hz,0,hz]) if (!floorAt(x+dx,z+dz)) return false;
+    if (MAP_COLLIDERS[name].some(c => c.max.y>.55 && c.min.y<4 && c.max.x>x-hx && c.min.x<x+hx && c.max.z>z-hz && c.min.z<z+hz)) return false;
+    if (MAP_GIMMICKS[name].damageZones.some(r => r.w ? _pointInRotRect(x,z,r,9) : Math.hypot(x-r.x,z-r.z)<r.r+9)) return false;
+    const origin = new THREE.Vector3(x,1.4,z);
+    const open = (dx,dz) => {
+      const ray = new THREE.Ray(origin,new THREE.Vector3(dx,0,dz)), hit = new THREE.Vector3();
+      return !MAP_COLLIDERS[name].some(c => ray.intersectBox(c,hit) && origin.distanceTo(hit)<18);
+    };
+    return (open(1,0)&&open(-1,0)) || (open(0,1)&&open(0,-1));
+  };
+  const build = (x,z,turn,side = 1) => {
+    const point = (u,v) => turn ? [x-side*v,z+side*u] : [x+side*u,z+side*v];
+    const box = (u,v,w,h,d,c) => { const [px,pz]=point(u,v); K.box(px,0,pz,turn?d:w,h,turn?w:d,c); };
+    box(2,-1.3,3.2,2.3,2.8,theme.c);
+    box(-2.5,2.2,3,1.5,3,theme.w2);
+    box(3.2,2.8,1.8,1.0,1.8,theme.c);
+    const [rx,rz]=point(-7,2.2);
+    addRamp(name,rx,rz,turn?0:side,turn?side:0,{ width:2.5,run:3,rise:1.5,landing:1,color:theme.d,landColor:theme.w2,lipColor:theme.a });
+    placed.push({x,z,turn});
+  };
+  for (const fz of [.25,.5,0]) for (const fx of [-.58,-.3,0,.3,.58]) {
+    if (placed.length>=6 || (!fz && fx>=0)) continue;
+    const x=Math.round(bounds.halfX*fx), z=Math.round(bounds.halfZ*fz);
+    for (const turn of [false,true]) {
+      if (!available(x,z,turn) || !available(-x,-z,turn)) continue;
+      build(x,z,turn); build(-x,-z,turn,-1); break;
+    }
+  }
+}
+
 function _upgradeMap(name) {
   const g = MAP_GROUPS[name];
   if (!g || g._upgraded || !MAP_THEMES[name]) return;
   g._upgraded = true;
   const t0 = performance.now();
   try { _depthMap(name); } catch (e) { console.warn('[upgrade] depth', name, e); }
+  try { addOpenLaneCover(name); } catch (e) { console.warn('[upgrade] lane cover', name, e); }
   try { _eggsMap(name); } catch (e) { console.warn('[upgrade] eggs', name, e); }
   try { _outskirtsMap(name); } catch (e) { console.warn('[upgrade] outskirts', name, e); }
   // what was just added gets the same surface as the rest
@@ -36721,6 +36841,8 @@ function loadoutReady() {
 
 function resetCombatResources() {
   if (!loadoutReady()) return;
+  window._mapLadder = null;
+  window._ladderDetachUntil = 0;
   finishBatCrowdClear();
   cancelMedkitHeal();
   for (const b of localBullets) scene.remove(b.mesh);
@@ -37934,6 +38056,7 @@ function updateMovement(dt, socialBlocked = false) {
   if (keys['KeyA'] || joyDir.x < -0.15) dir.sub(right);
   if (keys['KeyD'] || joyDir.x >  0.15) dir.add(right);
   if (dir.lengthSq()>0) dir.normalize();
+  if (updateMapLadderMove(dt,dir)) return;
   const joyMag = joyActive ? Math.max(0.3, Math.min(1, Math.sqrt(joyDir.x**2+joyDir.y**2))) : 1;
   // 🏋️ Weapon-weight slow: heavier guns drop your move speed. Computed
   // from each item's `weight` (0 = no penalty, 1 = -100%). Defaults below.
@@ -58263,6 +58386,7 @@ function afterDeath(ms, fn) {
 // Everything a finished match (or Lobby 13) leaves behind that the next start must not
 // inherit. Shared by the mode menu and the end-of-match buttons so they can't drift apart.
 function teardownMatchWorld() {
+  window._mapLadder = null;
   serverUnlimitedMatchTime = false;
   finishBatCrowdClear();
   clearSatchels();
