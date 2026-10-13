@@ -6294,15 +6294,15 @@ function mergeMapStatics(name, held) {
     // cost no draw call as they are, which is the whole point of merging.
     if (o.visible === false) return;
     const mat = o.material;
-    // One material, no texture: a textured or multi-material box keeps its own
-    // draw call rather than forcing a UV atlas nobody asked for.
+    // Shared metre-scaled surface textures can merge with their UVs intact.
+    // Custom artwork and multi-material objects still keep their own draw call.
     //
     // Phong as well as Lambert, and this is not hypothetical: weatherMapGroup
     // swaps every opaque Lambert on every map for a cached vertexColors Phong,
     // and it runs at load — so by the time a map is activated and merged there
     // is not one Lambert left on it. Testing for Lambert alone merged exactly
     // nothing, silently, while still setting the _merged flag.
-    if (!mat || Array.isArray(mat) || mat.map) return;
+    if (!mat || Array.isArray(mat) || (mat.map && !mat.map.userData.mapSurface)) return;
     if (!mat.isMeshLambertMaterial && !mat.isMeshPhongMaterial) return;
     const g = o.geometry;
     if (!g || !g.attributes || !g.attributes.position) return;
@@ -6310,9 +6310,11 @@ function mergeMapStatics(name, held) {
     // mesh missing it would render with whatever the merged buffer happened to
     // hold at those indices.
     if (mat.vertexColors && !g.attributes.color) return;
+    if (mat.map && !g.attributes.uv) return;
     const key = [mat.type, mat.color.getHex(), mat.transparent ? 1 : 0, +mat.opacity.toFixed(3),
                  mat.flatShading ? 1 : 0, mat.vertexColors ? 1 : 0, mat.shininess | 0,
                  mat.specular ? mat.specular.getHex() : -1, mat.side,
+                 mat.map ? mat.map.uuid : '', mat.emissive ? mat.emissive.getHex() : 0, mat.emissiveIntensity ?? 1,
                  o.castShadow ? 1 : 0, o.receiveShadow ? 1 : 0].join('|');
     let b = buckets.get(key);
     if (!b) { b = { mat, list: [] }; buckets.set(key, b); }
@@ -6334,11 +6336,13 @@ function mergeMapStatics(name, held) {
     const wantColor = !!b.mat.vertexColors;
     const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3);
     const col = wantColor ? new Float32Array(n * 3) : null;
+    const uv = b.mat.map ? new Float32Array(n * 2) : null;
     let at = 0;
     for (const g of parts) {
       pos.set(g.attributes.position.array, at * 3);
       nor.set(g.attributes.normal.array, at * 3);
       if (col) col.set(g.attributes.color.array, at * 3);
+      if (uv) uv.set(g.attributes.uv.array, at * 2);
       at += g.attributes.position.count;
       g.dispose();
     }
@@ -6346,6 +6350,7 @@ function mergeMapStatics(name, held) {
     merged.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     merged.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
     if (col) merged.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    if (uv) merged.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
     merged.computeBoundingBox(); merged.computeBoundingSphere();
     const mesh = new THREE.Mesh(merged, b.mat);
     mesh.castShadow = b.list[0].castShadow; mesh.receiveShadow = b.list[0].receiveShadow;
@@ -14796,11 +14801,23 @@ function _osClimb(F, o) {
   const lane = o.lane || 2.2;
   const landings = [];
   const u = o.u0, outerV = o.v0 + 2*lane, ladderV = outerV+.6;
+  const height = o.levels*o.rise;
+  for (const edge of [u-1.4,u+1.4]) {
+    for (const v of [o.v0,outerV-.18]) {
+      F.deco(edge-.09,edge+.09,v-.09,v+.09,0,height-.4,o.c);
+      F.deco(edge-.22,edge+.22,v-.22,v+.22,0,.16,o.lc);
+    }
+  }
   for (let k = 0; k < o.levels; k++) {
     const level = (k+1)*o.rise, a = u-1.5, b = u+1.5;
     const at = o.attach ? o.attach(k) : null;
     const lv0 = at ? at.vEdge - 1.6 : o.v0 - 0.3, lv1 = o.v0 + 2 * lane;
     F.box(a, b, lv0, lv1, level - 0.4, 0.4, o.lc);
+    // Braced side frames support the landings without crossing the ladder opening.
+    for (const v of [o.v0,outerV-.18]) {
+      F.bar(a+.1,k*o.rise+.2,b-.1,level-.45,v,.1,o.c);
+      F.deco(a,b,v-.1,v+.1,level-.55,.15,o.c);
+    }
     if (at) {
       if (b < at.u0) F.box(b - 0.1, at.u0 + 0.3, lv0, at.vEdge + 0.2, level - 0.4, 0.4, o.lc);
       else if (a > at.u1) F.box(at.u1 - 0.3, a + 0.1, lv0, at.vEdge + 0.2, level - 0.4, 0.4, o.lc);
@@ -14966,22 +14983,75 @@ function applyFlatShadingToMaps() {
 applyFlatShadingToMaps();
 
 // ══════════════════════════════════════════════════════════════════════════
-// 🏚️ MAP SURFACE PASS — reflective, and not perfectly clean
-// Map geometry was MeshLambertMaterial in flat single colours: no specular
-// term, so nothing ever caught the light, and every face of every wall was the
-// exact same shade, which is what makes a level read as untextured blocks.
-//
-// Two cheap fixes, applied once to every built map:
-//   • Phong instead of Lambert, so floors and metal pick up highlights. Ground
-//     planes get more shine than walls — a floor is the surface you actually
-//     see light travel across.
-//   • Per-vertex brightness jitter, seeded from the vertex's own position so it
-//     is stable frame to frame and identical across reloads. This is what kills
-//     the "perfect" look: edges and corners vary slightly, like wear and grime.
-//
-// Geometry is often shared between meshes, so the colour attribute is added to
-// the geometry once and every mesh using it inherits the same wear pattern.
+// MAP SURFACES: shared deterministic textures, metre-scaled UVs and material-specific sheen.
+// Preserve existing artwork/glow materials and keep Blank's concept-map finish.
 const _mapMatCache = new Map();
+function mapSurfaceTexture(kind) {
+  const texture = surfTex('map-surface:'+kind,256,(ctx,s) => {
+    const rnd = _thRng('map-surface:'+kind);
+    ctx.fillStyle = '#ededed'; ctx.fillRect(0,0,s,s);
+    _grain(ctx,s,rnd,{n:kind==='metal'?1800:6500,a:kind==='ice'?.035:.10,r:1});
+    if (kind==='wood') {
+      for (let i=0;i<130;i++) {
+        const y=rnd()*s;
+        ctx.strokeStyle='rgba(55,40,24,'+(.04+rnd()*.12)+')'; ctx.lineWidth=.4+rnd();
+        ctx.beginPath(); ctx.moveTo(0,y);
+        ctx.bezierCurveTo(s*.3,y-3,s*.7,y+3,s,y); ctx.stroke();
+      }
+      for (let y=0;y<s;y+=s/4) { ctx.fillStyle='rgba(35,27,20,.22)'; ctx.fillRect(0,y,s,1); }
+    } else if (kind==='metal') {
+      for (let i=0;i<70;i++) {
+        ctx.fillStyle='rgba(40,43,46,.035)'; ctx.fillRect(rnd()*s,rnd()*s,8+rnd()*30,.5);
+      }
+    } else if (kind==='concrete' || kind==='stone') {
+      for (let i=0;i<140;i++) {
+        ctx.fillStyle='rgba(45,43,39,.08)';
+        ctx.fillRect(rnd()*s,rnd()*s,1+rnd()*3,1+rnd()*3);
+      }
+      if (kind==='concrete') {
+        ctx.fillStyle='rgba(45,43,39,.10)'; ctx.fillRect(0,0,s,1); ctx.fillRect(0,0,1,s);
+      }
+    }
+  });
+  texture.userData.mapSurface=true;
+  return texture;
+}
+function mapSurfaceKind(mesh, name) {
+  if (mesh.userData.mapSurface) return mesh.userData.mapSurface;
+  const th = MAP_THEMES[name];
+  if (!th || name==='blank' || name==='range') return null;
+  const ground = mesh.geometry.type==='PlaneGeometry' || mesh.userData.thCls==='floor';
+  // Only architecture/ground: never turn foliage, glass, signs or effects into concrete.
+  if (!ground && !['wall','perimeter','deck','roof','cover'].includes(mesh.userData.thCls)) return null;
+  if (name==='titanic') return ground || mesh.userData.thCls==='deck' ? 'wood' : 'metal';
+  if (name==='foundry' && !ground) return 'metal';
+  if (th.motif==='ice') return 'ice';
+  if (['space','neon'].includes(th.motif)) return 'metal';
+  if (ground && ['nature','desert','fire'].includes(th.motif)) return 'earth';
+  if (th.motif==='nature') return null;
+  if (['nature','desert','fire'].includes(th.motif)) return 'stone';
+  return 'concrete';
+}
+function mapSurfaceUV(mesh) {
+  // Project in world metres rather than stretching one texture across a 300 m floor.
+  let geo = mesh.geometry.clone();
+  if (geo.index) geo=geo.toNonIndexed();
+  const pos=geo.attributes.position, uv=new Float32Array(pos.count*2);
+  const a=new THREE.Vector3(), b=new THREE.Vector3(), c=new THREE.Vector3(), n=new THREE.Vector3();
+  for (let i=0;i<pos.count;i+=3) {
+    a.fromBufferAttribute(pos,i).applyMatrix4(mesh.matrixWorld);
+    b.fromBufferAttribute(pos,i+1).applyMatrix4(mesh.matrixWorld);
+    c.fromBufferAttribute(pos,i+2).applyMatrix4(mesh.matrixWorld);
+    n.subVectors(b,a).cross(c.clone().sub(a));
+    const ax=Math.abs(n.x),ay=Math.abs(n.y),az=Math.abs(n.z);
+    for (const [j,p] of [[i,a],[i+1,b],[i+2,c]]) {
+      uv[j*2]=(ax>ay && ax>az?p.z:p.x)/2;
+      uv[j*2+1]=(ay>=ax && ay>=az?p.z:p.y)/2;
+    }
+  }
+  geo.setAttribute('uv',new THREE.BufferAttribute(uv,2));
+  mesh.geometry=geo;
+}
 function _weatherGeometry(geo) {
   if (!geo || geo.attributes.color || !geo.attributes.position) return;
   const pos = geo.attributes.position, n = pos.count;
@@ -14998,22 +15068,24 @@ function _weatherGeometry(geo) {
 function weatherMapGroup(group) {
   if (!group || group._weathered) return;
   group._weathered = true;
+  group.updateMatrixWorld(true);
+  const name=Object.keys(MAP_GROUPS).find(n => MAP_GROUPS[n]===group);
   group.traverse(o => {
     if (!o.isMesh || !o.material || !o.geometry) return;
     const m = o.material;
-    if (m.type !== 'MeshLambertMaterial' || m.transparent) return;   // glass, glows: leave alone
+    if (m.type !== 'MeshLambertMaterial' || m.transparent || m.emissive?.getHex()) return;
     _weatherGeometry(o.geometry);
-    // A ground plane lies flat and is the surface light actually rakes across,
-    // so it gets the stronger sheen.
     const isGround = o.geometry.type === 'PlaneGeometry';
-    const key = m.uuid + (isGround ? '|g' : '|w');
+    const kind = !m.map && o.visible ? mapSurfaceKind(o,name) : null;
+    if (kind) mapSurfaceUV(o);
+    const key = m.uuid + (isGround ? '|g' : '|w') + '|' + (kind || 'plain');
     let weathered = _mapMatCache.get(key);
     if (!weathered) {
       weathered = new THREE.MeshPhongMaterial({
         color: m.color.getHex(),
-        map: m.map || null,
-        shininess: isGround ? 26 : 12,
-        specular: isGround ? 0x55585c : 0x2e3033,
+        map: m.map || (kind ? mapSurfaceTexture(kind) : null),
+        shininess: kind==='metal' ? 48 : kind==='ice' ? 65 : kind ? 3 : isGround ? 26 : 12,
+        specular: kind==='metal' ? 0x737980 : kind==='ice' ? 0x89949c : kind ? 0x161616 : isGround ? 0x55585c : 0x2e3033,
         vertexColors: true,
         flatShading: true,
         side: m.side,
@@ -15889,7 +15961,27 @@ function addOpenLaneCover(name) {
   };
   const build = (x,z,turn,side = 1) => {
     const point = (u,v) => turn ? [x-side*v,z+side*u] : [x+side*u,z+side*v];
-    const box = (u,v,w,h,d,c) => { const [px,pz]=point(u,v); K.box(px,0,pz,turn?d:w,h,turn?w:d,c); };
+    const detail = (u,y,v,w,h,d,c,surface='metal') => {
+      const [px,pz]=point(u,v);
+      const m=new THREE.Mesh(new THREE.BoxGeometry(turn?d:w,h,turn?w:d),new THREE.MeshLambertMaterial({color:c}));
+      m.position.set(px,y,pz); m.userData.mapStatic=true; m.userData.mapSurface=surface; group.add(m);
+    };
+    const box = (u,v,w,h,d,c) => {
+      const [px,pz]=point(u,v), m=K.box(px,0,pz,turn?d:w,h,turn?w:d,c);
+      const surface=name==='super_arena'?'metal':'wood';
+      m.userData.mapSurface=surface;
+      const trim=_thShade(theme.d,.65);
+      // Flush corner guards and straps; no extra collision edges on climbable cover.
+      for (const du of [-w/2+.07,w/2-.07]) for (const dv of [-d/2+.07,d/2-.07])
+        detail(u+du,h/2,v+dv,.16,h,.16,trim);
+      for (const y of [.14,h-.14]) {
+        detail(u,y,v,w+.025,.10,d+.025,trim);
+      }
+      for (const dv of [-d/2-.008,d/2+.008]) {
+        detail(u,h*.54,v+dv,w*.30,h*.20,.02,_thShade(c,1.20),surface);
+        for (const du of [-w*.3,w*.3]) detail(u+du,h*.55,v+dv,.18,.10,.025,trim);
+      }
+    };
     box(2,-1.3,3.2,2.3,2.8,theme.c);
     box(-2.5,2.2,3,1.5,3,theme.w2);
     box(3.2,2.8,1.8,1.0,1.8,theme.c);
