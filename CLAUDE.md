@@ -131,6 +131,16 @@ it up is Job 4 in his server-move doc. Full runbook: `docs/DEPLOY.md` in the pri
   (`slamState.type === 'slam'` -> `meleeSlamImpact`). Auto-swing buffs (`melee_revup`) are paced by `ability.autoMs` and move
   you by `ability.lunge` per swing; a weapon with neither keeps the old 15 ms retrigger. `playAbilitySwing` plays a weapon's own
   swing for abilities that had no animation.
+- **Map gimmicks** (`GIM[map]`, block "MAP GIMMICKS" above `_upgradeMap`): every map has one mechanic no other map has, and
+  `LOOK[map]` (block "MAP LOOK") puts the place's props in. Both are built once from `_upgradeMap` -> `_gimMap(name)`, after the
+  outskirts, on the finished layout (the layouts' `_bkBegin` wiped the original MAP_GIMMICKS, which is why the cards advertised
+  jump pads and oil slicks that were not there). A builder is `(X) => {...}`: `X.free/spots/lane` find room (seeded, so every
+  client gets the same map), `X.on((dt, actors, t) => ...)` runs per frame and sees the player and every living bot through
+  one interface (`hurt/heal/push/lift/root/slow/boost/teleport`), `X.zone` adds to MAP_GIMMICKS lists (`avoid` = circles bots keep
+  out of), `X.destructible` / `X.addCollider` for things shots can break or that come and go. It composes with the layout's own
+  `MAP_MECH`. New hazard kill-feed text goes in `GIM_LABELS`; zh strings go in `public/i18n.js`. Anything that changes
+  colliders must be deterministic (no `Math.random`) -- clients build their own copy. Headless: `scratchpad/gimsim.js`-style
+  harnesses call `MAP_MECH[n].update(dt)`; `X.dbg(pts, live, poke)` says where an actor has to stand for it to do something.
 - Shop/economy: `WEAPON_COSTS`, `BUNDLES`, credits/fragments/chests/wheel/upgrades, `openShop()`, `SHOOT_FX` sliders.
 - Bot AI: `updateBotAI(dt)`, `botTuning()`, spawn in `spawnGameBots()` / `makeBot()`.
 - Killcam + Kill Log theater: `KILLCAM`, `killLog`, `THEATER`, `renderTheater()`.
