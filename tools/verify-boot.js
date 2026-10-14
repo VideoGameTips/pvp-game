@@ -980,6 +980,59 @@ if (ok && process.argv.includes('--duel')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+if (ok && process.argv.includes('--util')) {
+  // Wraps on melees and utilities, and the utility skins: a wrap really goes on a melee and comes off again, the
+  // fists keep their skin, and every utility skin builds, swaps in, swaps back and is dressed too.
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const colors = m => { const out = []; m.traverse(o => { if (o.isMesh) for (const x of [].concat(o.material)) if (x && x.color) out.push(x.color.getHex()); }); return out.join(','); };
+    const savedWrap = selectedWeaponSkin;
+    try {
+      const bi = MELEE_ITEMS.findIndex(m => m.id === 'bat'), bat = meleeModels[bi];
+      selectedWeaponSkin = 'default'; ensureHeldWrap(bat);
+      const before = colors(bat);
+      selectedWeaponSkin = 'gold'; ensureHeldWrap(bat);
+      if (bat._wrapKey !== 'gold' || colors(bat) === before) issues.push('a wrap did not go on the bat');
+      selectedWeaponSkin = 'default'; ensureHeldWrap(bat);
+      if (colors(bat) !== before) issues.push('going back to stock did not give the bat back its colours');
+      // fists: skin stays skin
+      const fi = MELEE_ITEMS.findIndex(m => m.id === 'fists');
+      if (fi >= 0) {
+        const f = meleeModels[fi], tone = [];
+        f.traverse(o => { if (o.isMesh) for (const x of [].concat(o.material)) if (x && x.userData && x.userData.skinTone) tone.push([x, x.color.getHex()]); });
+        selectedWeaponSkin = 'gold'; ensureHeldWrap(f);
+        if (tone.some(([x, c]) => x.color.getHex() !== c)) issues.push('a wrap recoloured the fists');
+        selectedWeaponSkin = 'default'; ensureHeldWrap(f);
+      }
+      // a utility
+      const si = SUPPORT_ITEMS.findIndex(m => m.id === 'smoke'), sm = supportModels[si];
+      selectedWeaponSkin = 'default'; ensureHeldWrap(sm);
+      const sb = colors(sm);
+      selectedWeaponSkin = 'carbon'; ensureHeldWrap(sm);
+      if (sm._wrapKey !== 'carbon') issues.push('a wrap did not go on the smoke bomb');
+      selectedWeaponSkin = 'default'; ensureHeldWrap(sm);
+      if (colors(sm) !== sb) issues.push('stock did not restore the smoke bomb');
+    } finally { selectedWeaponSkin = savedWrap; }
+    // utility skins
+    for (const sk of SUPPORT_MODEL_SKINS) {
+      const idx = SUPPORT_ITEMS.findIndex(m => m.id === sk.support);
+      if (idx < 0) { issues.push(sk.id + ': no such utility ' + sk.support); continue; }
+      let meshes = 0, bad = false;
+      try { const m = sk.build(); m.traverse(o => { if (o.isMesh) { meshes++; const p = o.position; if (![p.x, p.y, p.z].every(Number.isFinite)) bad = true; } }); } catch (e) { issues.push(sk.id + ' threw: ' + e.message); continue; }
+      if (meshes < 3) issues.push(sk.id + ': only ' + meshes + ' meshes');
+      if (bad) issues.push(sk.id + ': a part is at NaN');
+      const base = supportModels[idx];
+      setSupportModelSkin(sk.support, sk.id);
+      if (supportModels[idx] === base || !sk._model) issues.push(sk.id + ': did not swap in');
+      setSupportModelSkin(sk.support, null);
+      if (supportModels[idx] !== base) issues.push(sk.id + ': did not swap back');
+    }
+    return issues;
+  })()`);
+  console.log('utility checks: wraps on melees and utilities, utility skins');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 if (ok && process.env.MAP_REVIEW_DIR) {
   fs.mkdirSync(process.env.MAP_REVIEW_DIR, { recursive: true });
   for (const name of ['forest', 'desert', 'tundra', 'refinery', 'space', 'volcano', 'titanic', 'carrier', 'pearl_harbor']) {

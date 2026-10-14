@@ -31903,7 +31903,7 @@ function applyWeaponSkin(model, skin) {
       for (let p = o; p; p = p.parent) if (p.userData?.vmHand) return;
       if (o.userData?.wrapLock) return;
       const dress = original => {
-        if (!original?.color || original.isMeshBasicMaterial || original.userData?.skinLock || original.userData?.wrapLock
+        if (!original?.color || original.isMeshBasicMaterial || original.userData?.skinLock || original.userData?.wrapLock || original.userData?.skinTone
             || (original.transparent && original.opacity < .95) || original.transmission > 0) return original;
         model._skinMeshes.add(o);
         if (clones.has(original)) return clones.get(original);
@@ -31975,8 +31975,28 @@ function applySelectedWeaponSkinToAll() {
     if (!weaponModels[i]) continue;
     applyWeaponSkin(weaponModels[i], gunSkinLookFor(WEAPONS[i] ? WEAPONS[i].id : ''));
   }
+  try {                                  // and the melee / utility in hand (not built yet when this first runs at load)
+    for (const m of meleeModels) if (m && m.visible) ensureHeldWrap(m);
+    for (const m of supportModels) if (m && m.visible) ensureHeldWrap(m);
+  } catch (e) {}
+}
+// 🔪🧪 The wrap you picked goes on melees and utilities too, not only guns. They are dressed when they are first held
+// (and again if the wrap changes while they are put away), so nothing is done for the ninety models you never carry.
+// Skin-tone parts (the fists' hands) are left as they are.
+function ensureHeldWrap(model) {
+  if (!model) return;
+  const skin = WEAPON_SKINS_BY_ID[selectedWeaponSkin] || WEAPON_SKINS_BY_ID.default;
+  if ((model._wrapKey || 'default') === skin.id) return;     // already wearing it; stock and never touched counts too
+  model._wrapKey = skin.id;
+  try { applyWeaponSkin(model, skin); } catch (e) { console.warn('[wrap]', e); }
+  try { syncOffHands(); } catch (e) {}                        // a dual-wield off hand follows its main hand
 }
 applySelectedWeaponSkinToAll();
+// whatever is in your hand right now changes at once; the rest follow when they are next equipped
+try {
+  for (const m of meleeModels) if (m && m.visible) ensureHeldWrap(m);
+  for (const m of supportModels) if (m && m.visible) ensureHeldWrap(m);
+} catch (e) { /* the models are built further down: at load there is nothing in hand yet */ }
 scene.add(camera);
 
 // ── Melee item model builders ─────────────────────────────────────────────
@@ -40629,11 +40649,13 @@ function equipActiveSlot() {
   } else if (activeSlot === 'melee') {
     if (selectedMeleeIdx !== null && selectedMeleeIdx >= 0) {
       meleeModels[selectedMeleeIdx].visible = true;
+      ensureHeldWrap(meleeModels[selectedMeleeIdx]);
       startMeleeEquipAnim(selectedMeleeIdx);
     }
   } else if (activeSlot === 'support') {
     if (selectedSupportIdx !== null && selectedSupportIdx >= 0) {
       supportModels[selectedSupportIdx].visible = true;
+      ensureHeldWrap(supportModels[selectedSupportIdx]);
       startSupportEquipAnim(selectedSupportIdx);
     }
   }
@@ -48398,6 +48420,7 @@ function applyMeleeModelSkin(baseId) {
   cur.visible = false;
   next.visible = wasVisible;
   meleeModels[idx] = next;
+  if (wasVisible) ensureHeldWrap(next);
 }
 function setMeleeModelSkin(baseId, skinId) {
   if (skinId) equippedMeleeModelSkins[baseId] = skinId;
@@ -48413,6 +48436,190 @@ function setMeleeModelSkin(baseId, skinId) {
 // module scope: a throw here kills the rest of the file and the game never boots.
 try { Object.keys(equippedMeleeModelSkins).forEach(applyMeleeModelSkin); }
 catch (e) { console.warn('[melee skin restore]', e); }
+
+// ── 🧪 Utility skins ─────────────────────────────────────────────────────────────────────────────────────
+// A different object in your hand for a utility, the way a melee can be a toothbrush or a gun a fishing rod. Same
+// throw, same blast, same uses; only what you are holding (and what it looks like in your hand) changes. They are
+// free and kept per utility, like the melee models.
+function buildPineappleGrenade() {
+  const g = new THREE.Group();
+  const gold = new THREE.MeshLambertMaterial({ color: 0xe3b522 });
+  const rind = new THREE.MeshLambertMaterial({ color: 0x9a6a14 });
+  const leaf = new THREE.MeshLambertMaterial({ color: 0x3f8f2c });
+  const steel = new THREE.MeshPhongMaterial({ color: 0x8a9096, shininess: 60 });
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.046, 14, 12), gold);
+  body.scale.set(1, 1.28, 1); g.add(body);
+  for (let ring = 0; ring < 4; ring++) {                       // the diamonds of the rind: studs in staggered rings
+    const y = -0.045 + ring * 0.03, k = y / (0.046 * 1.28), r = 0.046 * Math.sqrt(Math.max(0, 1 - k * k));
+    for (let i = 0; i < 8; i++) {
+      const a = i / 8 * Math.PI * 2 + (ring % 2) * 0.39;
+      const stud = new THREE.Mesh(new THREE.BoxGeometry(0.013, 0.013, 0.013), rind);
+      stud.position.set(Math.cos(a) * r, y, Math.sin(a) * r); stud.rotation.set(0.6, a, 0.6); g.add(stud);
+    }
+  }
+  for (let i = 0; i < 6; i++) {                                // the crown
+    const a = i / 6 * Math.PI * 2, lf = new THREE.Mesh(new THREE.ConeGeometry(0.011, 0.07, 4), leaf);
+    lf.position.set(Math.cos(a) * 0.014, 0.09, Math.sin(a) * 0.014); lf.rotation.set(Math.sin(a) * 0.5, 0, -Math.cos(a) * 0.5); g.add(lf);
+  }
+  const lever = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.075, 0.016), steel); lever.position.set(0.05, 0.015, 0); g.add(lever);
+  const pin = new THREE.Mesh(new THREE.TorusGeometry(0.012, 0.0022, 6, 12), steel); pin.position.set(0.03, 0.062, 0); g.add(pin);
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+function buildDiscoBall() {
+  const g = new THREE.Group();
+  const mirror = new THREE.MeshPhongMaterial({ color: 0xdfe7f0, shininess: 140, specular: 0xffffff, flatShading: true });
+  g.add(new THREE.Mesh(new THREE.IcosahedronGeometry(0.052, 1), mirror));
+  const cols = [0xff4fd8, 0x4fe8ff, 0xffe14f, 0x7dff6a];
+  for (let i = 0; i < 12; i++) {                               // a few facets catching coloured light
+    const u = (i * 0.618034) % 1, v = (i * 0.3819) % 1;
+    const th = u * Math.PI * 2, ph = Math.acos(1 - 2 * v), r = 0.0525;
+    const chip = new THREE.Mesh(new THREE.BoxGeometry(0.013, 0.013, 0.004), new THREE.MeshBasicMaterial({ color: cols[i % cols.length] }));
+    chip.position.set(Math.sin(ph) * Math.cos(th) * r, Math.cos(ph) * r, Math.sin(ph) * Math.sin(th) * r);
+    chip.lookAt(chip.position.clone().multiplyScalar(2)); g.add(chip);
+  }
+  const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.016, 0.012, 10), new THREE.MeshLambertMaterial({ color: 0x2a2a2e })); cap.position.y = 0.056; g.add(cap);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.012, 0.0022, 6, 12), new THREE.MeshPhongMaterial({ color: 0xb8bec6, shininess: 80 })); ring.position.y = 0.072; g.add(ring);
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+function buildTeaKettle() {
+  const g = new THREE.Group();
+  const steel = new THREE.MeshPhongMaterial({ color: 0xb9c2cc, shininess: 90, specular: 0xffffff });
+  const dark = new THREE.MeshLambertMaterial({ color: 0x2a2a2e });
+  const steam = new THREE.MeshBasicMaterial({ color: 0xf0f0f0, transparent: true, opacity: 0.55, depthWrite: false });
+  g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.040, 0.052, 0.07, 16), steel));
+  const lid = new THREE.Mesh(new THREE.CylinderGeometry(0.030, 0.038, 0.012, 16), steel); lid.position.y = 0.041; g.add(lid);
+  const knob = new THREE.Mesh(new THREE.SphereGeometry(0.008, 8, 6), dark); knob.position.y = 0.054; g.add(knob);
+  const spout = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.013, 0.06, 8), steel);
+  spout.position.set(0, 0.018, -0.058); spout.rotation.x = -(Math.PI / 2 - 0.65); g.add(spout);
+  const handle = new THREE.Mesh(new THREE.TorusGeometry(0.044, 0.005, 6, 16, Math.PI), dark);
+  handle.position.set(0, 0.034, 0); handle.rotation.y = Math.PI / 2; g.add(handle);
+  [[0, 0.060, -0.095, 0.011], [0.004, 0.080, -0.100, 0.014], [-0.003, 0.103, -0.104, 0.017]].forEach(([x, y, z, r]) => {
+    const w = new THREE.Mesh(new THREE.SphereGeometry(r, 8, 6), steam); w.position.set(x, y, z); g.add(w);
+  });
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+function buildPizzaBox() {
+  const g = new THREE.Group();
+  const board = new THREE.MeshLambertMaterial({ color: 0xc9a268 });
+  const lidMat = new THREE.MeshLambertMaterial({ color: 0xdcbf86 });
+  const sauce = new THREE.MeshLambertMaterial({ color: 0xc0342a });
+  const cheese = new THREE.MeshLambertMaterial({ color: 0xf2c84a });
+  const pep = new THREE.MeshLambertMaterial({ color: 0x8a1e1a });
+  g.add(new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.026, 0.15), board));
+  const lid = new THREE.Mesh(new THREE.BoxGeometry(0.152, 0.004, 0.152), lidMat); lid.position.y = 0.015; g.add(lid);
+  const s = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.052, 0.003, 22), sauce); s.position.y = 0.0185; g.add(s);
+  const c = new THREE.Mesh(new THREE.CylinderGeometry(0.042, 0.042, 0.003, 22), cheese); c.position.y = 0.0205; g.add(c);
+  [[0.02, 0.012], [-0.02, 0.018], [0.004, -0.024], [-0.026, -0.01], [0.028, -0.014]].forEach(([x, z]) => {
+    const p = new THREE.Mesh(new THREE.CylinderGeometry(0.0075, 0.0075, 0.003, 10), pep); p.position.set(x, 0.0225, z); g.add(p);
+  });
+  const cross = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.0015, 0.006), new THREE.MeshLambertMaterial({ color: 0xffffff })); cross.position.set(0.058, 0.0175, 0.062); g.add(cross);
+  g.rotation.set(0.35, 0.25, 0.0);
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+function buildJuiceBox() {
+  const g = new THREE.Group();
+  const orange = new THREE.MeshLambertMaterial({ color: 0xff9a1f });
+  const white = new THREE.MeshLambertMaterial({ color: 0xfdfdfd });
+  const green = new THREE.MeshLambertMaterial({ color: 0x3fb04a });
+  const straw = new THREE.MeshLambertMaterial({ color: 0xff4a4a });
+  g.add(new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.075, 0.032), orange));
+  const band = new THREE.Mesh(new THREE.BoxGeometry(0.0508, 0.022, 0.0328), white); band.position.y = -0.004; g.add(band);
+  const leaf = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.014, 0.0332), green); leaf.position.set(0, -0.004, 0); leaf.rotation.z = 0.78; g.add(leaf);
+  const fin = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.004, 0.01), orange); fin.position.y = 0.0395; g.add(fin);
+  const s1 = new THREE.Mesh(new THREE.CylinderGeometry(0.0028, 0.0028, 0.05, 6), straw); s1.position.set(0.012, 0.062, 0); s1.rotation.z = -0.15; g.add(s1);
+  const s2 = new THREE.Mesh(new THREE.CylinderGeometry(0.0028, 0.0028, 0.022, 6), straw); s2.position.set(0.02, 0.088, 0); s2.rotation.z = Math.PI / 2 - 0.3; g.add(s2);
+  g.rotation.set(0.25, -0.3, 0.1);
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+function buildEightBall() {
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(new THREE.SphereGeometry(0.05, 18, 14), new THREE.MeshPhongMaterial({ color: 0x08080c, shininess: 130, specular: 0xffffff })));
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const x = c.getContext('2d');
+  x.fillStyle = '#ffffff'; x.beginPath(); x.arc(32, 32, 31, 0, 6.3); x.fill();
+  x.fillStyle = '#000000'; x.font = 'bold 44px Arial'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('8', 32, 35);
+  const tex = new THREE.CanvasTexture(c);
+  const patch = new THREE.Mesh(new THREE.CircleGeometry(0.021, 22), new THREE.MeshBasicMaterial({ map: tex, transparent: true }));
+  patch.position.z = 0.0492;                                   // facing you: it is the side you are looking at
+  g.add(patch);
+  const halo = new THREE.Mesh(new THREE.SphereGeometry(0.066, 14, 10), new THREE.MeshBasicMaterial({ color: 0xb98cff, transparent: true, opacity: 0.22, depthWrite: false }));
+  g.add(halo);
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+function buildWhoopeeCushion() {
+  const g = new THREE.Group();
+  const pink = new THREE.MeshLambertMaterial({ color: 0xff7aa8 });
+  const dark = new THREE.MeshLambertMaterial({ color: 0xd04a7a });
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.062, 16, 10), pink); body.scale.set(1.3, 0.32, 1.0); g.add(body);
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(0.066, 0.0055, 6, 24), dark); rim.rotation.x = Math.PI / 2; rim.scale.set(1.28, 1.0, 0.98); g.add(rim);
+  const nozzle = new THREE.Mesh(new THREE.CylinderGeometry(0.0085, 0.012, 0.034, 8), dark); nozzle.position.set(0.085, 0, 0); nozzle.rotation.z = Math.PI / 2; g.add(nozzle);
+  const cap = new THREE.Mesh(new THREE.SphereGeometry(0.0095, 8, 6), pink); cap.position.set(0.104, 0, 0); g.add(cap);
+  g.rotation.set(0.5, 0.2, 0);
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+const SUPPORT_MODEL_SKINS = [
+  { id: 'frag_pineapple',  support: 'frag',        name: 'Pineapple',        rarity: 'good', sw: ['#e3b522', '#3f8f2c'], build: buildPineappleGrenade,
+    blurb: 'Army slang, taken literally. The pin is real.' },
+  { id: 'frag_disco',      support: 'frag',        name: 'Disco Ball',       rarity: 'good', sw: ['#dfe7f0', '#ff4fd8'], build: buildDiscoBall,
+    blurb: 'Everybody dances. One of them leaves early.' },
+  { id: 'smoke_kettle',    support: 'smoke',       name: 'Tea Kettle',       rarity: 'good', sw: ['#b9c2cc', '#2a2a2e'], build: buildTeaKettle,
+    blurb: 'It was always going to be a bit of a cloud.' },
+  { id: 'medkit_pizza',    support: 'medkit',      name: 'Pizza Box',        rarity: 'good', sw: ['#c9a268', '#c0342a'], build: buildPizzaBox,
+    blurb: 'Heals the way pizza heals: completely, and with some regret.' },
+  { id: 'stim_juice',      support: 'stim',        name: 'Juice Box',        rarity: 'good', sw: ['#ff9a1f', '#ff4a4a'], build: buildJuiceBox,
+    blurb: 'Tiny straw. Instant recovery. Nobody asks.' },
+  { id: 'blink_eightball', support: 'blink_pearl', name: 'Eight Ball',       rarity: 'good', sw: ['#08080c', '#b98cff'], build: buildEightBall,
+    blurb: 'Corner pocket. You go with it.' },
+  { id: 'mine_whoopee',    support: 'land_mine',   name: 'Whoopee Cushion',  rarity: 'good', sw: ['#ff7aa8', '#d04a7a'], build: buildWhoopeeCushion,
+    blurb: 'Somebody is about to sit down.' },
+];
+const SUPPORT_MODEL_SKINS_BY_BASE = {};
+for (const ms of SUPPORT_MODEL_SKINS) (SUPPORT_MODEL_SKINS_BY_BASE[ms.support] ||= []).push(ms);
+let equippedSupportModelSkins = (() => {
+  try { return JSON.parse(localStorage.getItem('pvp_support_model_skins')) || {}; } catch (e) { return {}; }
+})();
+const _baseSupportModels = {};
+function applySupportModelSkin(baseId) {
+  const idx = SUPPORT_ITEMS.findIndex(m => m.id === baseId);
+  if (idx < 0 || !supportModels[idx]) return;
+  if (!(idx in _baseSupportModels)) _baseSupportModels[idx] = supportModels[idx];
+  const want = equippedSupportModelSkins[baseId];
+  const skin = SUPPORT_MODEL_SKINS.find(s => s.id === want && s.support === baseId);
+  let next;
+  if (!skin) next = _baseSupportModels[idx];
+  else {
+    if (!skin._model) {                      // built once, on first use, then kept
+      try {
+        const m = _smoothModelSkin(skin.build());
+        try { greebleModel(m); } catch (e) {}
+        try { weldModelParts(m); } catch (e) {}
+        try { shinifyModel(m); } catch (e) {}
+        m.visible = false;
+        camera.add(m);
+        skin._model = m;
+      } catch (e) { console.warn('[utility skin]', e); return; }
+    }
+    next = skin._model;
+  }
+  const cur = supportModels[idx];
+  if (next === cur) return;
+  const wasVisible = cur.visible;
+  cur.visible = false;
+  next.visible = wasVisible;
+  supportModels[idx] = next;
+  if (wasVisible) ensureHeldWrap(next);
+}
+function setSupportModelSkin(baseId, skinId) {
+  if (skinId) equippedSupportModelSkins[baseId] = skinId;
+  else delete equippedSupportModelSkins[baseId];
+  try { localStorage.setItem('pvp_support_model_skins', JSON.stringify(equippedSupportModelSkins)); } catch (e) {}
+  applySupportModelSkin(baseId);
+  if (activeSlot === 'support' && SUPPORT_ITEMS[selectedSupportIdx]?.id === baseId) startSupportEquipAnim(selectedSupportIdx);
+  updateAmmoHUD();
+  updateWeaponSelector();
+}
+try { Object.keys(equippedSupportModelSkins).forEach(applySupportModelSkin); }
+catch (e) { console.warn('[utility skin restore]', e); }
 
 
 // ── 🔁 Reload choreography ───────────────────────────────────────────────────
@@ -64308,6 +64515,38 @@ function openWeaponSkinsPanel() {
       ${rows.join("")}
     </div>`;
   };
+  const supportModelSkinSection = () => {
+    const rows = [];
+    for (const bid of Object.keys(SUPPORT_MODEL_SKINS_BY_BASE)) {
+      const base = SUPPORT_ITEMS.find(x => x.id === bid);
+      if (!base) continue;
+      const on = equippedSupportModelSkins[bid];
+      const cells = SUPPORT_MODEL_SKINS_BY_BASE[bid].map(ms => `
+        <div data-smskin="${ms.id}" data-smbase="${bid}" class="sms-cell"
+             style="cursor:pointer;border:2px solid ${on === ms.id ? '#99e0ff' : '#444'};border-radius:6px;padding:8px;background:${on === ms.id ? '#10222a' : '#12191c'};">
+          <div style="height:26px;border-radius:4px;background:linear-gradient(90deg, ${ms.sw[0]} 0 50%, ${ms.sw[1]} 50% 100%);border:1px solid #000;margin-bottom:6px;"></div>
+          <div style="font-size:11px;letter-spacing:1px;color:${on === ms.id ? '#99e0ff' : '#ddd'};">${ms.name}</div>
+          <div style="font-size:9px;color:#7a8a90;margin-top:3px;line-height:1.3;">${ms.blurb}</div>
+        </div>`).join('');
+      rows.push(`
+        <div style="margin-top:14px;">
+          <div style="font-size:11px;letter-spacing:2px;color:#99e0ff;margin-bottom:6px;">${base.name.toUpperCase()}</div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
+            ${cells}
+            <div data-smskin="" data-smbase="${bid}" class="sms-cell"
+                 style="cursor:pointer;border:2px solid ${!on ? '#99e0ff' : '#444'};border-radius:6px;padding:8px;background:${!on ? '#10222a' : '#12191c'};display:flex;align-items:center;justify-content:center;">
+              <div style="font-size:10px;letter-spacing:1px;color:${!on ? '#99e0ff' : '#999'};">STOCK</div>
+            </div>
+          </div>
+        </div>`);
+    }
+    if (!rows.length) return '';
+    return `<div style="margin-top:18px;border-top:1px solid #6a5520;padding-top:12px;">
+      <div style="font-size:14px;letter-spacing:2px;color:#bfeaff;">🧪 UTILITY SKINS</div>
+      <div style="font-size:10px;color:#7a8a90;margin:5px 0 2px;line-height:1.4;">A different thing in your hand. The same throw, the same blast, the same number of uses. Your weapon wrap goes on these too.</div>
+      ${rows.join('')}
+    </div>`;
+  };
   const swatch = (s) => `
     <div data-skin="${s.id}" class="ws-cell" style="cursor:pointer;border:2px solid ${s.id===selectedWeaponSkin?'#ffdd55':'#444'};border-radius:6px;padding:8px;text-align:center;background:${s.id===selectedWeaponSkin?'#2a2410':'#1d1a12'};">
       <div style="height:40px;border-radius:4px;background:${s.wrap ? `url('${getWeaponWrapSurface(s.wrap).canvas.toDataURL()}') center / 128px 128px` : _wsSwatchURL(s.id) ? `url('${_wsSwatchURL(s.id)}') center / 64px 64px` : `linear-gradient(90deg, ${s.sw[0]} 0 50%, ${s.sw[1]} 50% 100%)`};border:1px solid #000;margin-bottom:6px;"></div>
@@ -64390,8 +64629,9 @@ function openWeaponSkinsPanel() {
     </div>
     ${modelSkinSection()}
     ${meleeModelSkinSection()}
+    ${supportModelSkinSection()}
     <div style="font-size:12px;letter-spacing:2px;color:#ffdd88;margin:20px 0 6px;border-top:1px solid #6a5520;padding-top:14px;">🎨 WEAPON WRAPS <button id="ws-pixelizer" style="margin-left:10px;padding:4px 8px;background:#2a1030;color:#ff99dd;border:1px solid #ff66cc;border-radius:4px;cursor:pointer;font-family:inherit;font-size:10px;letter-spacing:1px;">🎨 PAINT YOUR OWN</button></div>
-    <div style="font-size:10px;color:#aa9966;margin-bottom:12px;line-height:1.4;">One pick applies to every gun. Country themes use real national flags; the German theme is the Iron Cross military mark (no Nazi imagery).</div>
+    <div style="font-size:10px;color:#aa9966;margin-bottom:12px;line-height:1.4;">One pick applies to every gun, melee and utility. Country themes use real national flags; the German theme is the Iron Cross military mark (no Nazi imagery).</div>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">${WEAPON_SKINS.filter(s => !s.contract).map(swatch).join('')}</div>
     ${contractsSectionHTML()}
     ${gen2CaseSection()}
@@ -64426,6 +64666,12 @@ function openWeaponSkinsPanel() {
     cell.addEventListener('click', () => {
       if (!ownsSkin(cell.dataset.mskin2)) { alert('You have not pulled that skin yet. Open Gen 1 cases in Lobby 13.'); return; }
       setMeleeSkin(cell.dataset.mbase, cell.dataset.mskin2 || null);
+      openWeaponSkinsPanel();
+    });
+  });
+  panel.querySelectorAll('.sms-cell').forEach(cell => {
+    cell.addEventListener('click', () => {
+      setSupportModelSkin(cell.dataset.smbase, cell.dataset.smskin || null);
       openWeaponSkinsPanel();
     });
   });

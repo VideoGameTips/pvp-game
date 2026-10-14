@@ -141,6 +141,8 @@
     '🎲 DICE DUEL ': '🎲 骰子对决 ', '🔄 NEW GUNS': '🔄 换新枪', '💥 ROCKET RUMBLE ': '💥 火箭大乱斗 ',
     'Whirlwind': '旋风斩', 'Spin 360° and dash 6.5 m · hits everyone around you · 85 dmg': '原地旋转 360° 并冲刺 6.5 米 · 命中周围所有人 · 85 伤害',
     'Battle Axe': '战斧',
+    '🧪 UTILITY SKINS': '🧪 道具外观', 'Pineapple': '菠萝', 'Disco Ball': '迪斯科球', 'Tea Kettle': '茶壶', 'Pizza Box': '披萨盒',
+    'Juice Box': '果汁盒', 'Eight Ball': '八号球', 'Whoopee Cushion': '放屁垫',
     'DUEL GRID': '对决网格', 'CROSSROADS': '十字路口', 'PILLAR HALL': '石柱大厅', 'HIGH GROUND': '制高点',
     '🎖 CONTRACT WRAPS': '🎖 契约涂装', 'Not for sale. Finish the contract in real matches and the wrap is yours.': '不出售。在正式对局里完成契约，涂装就是你的。',
     '🎖 CONTRACT COMPLETE': '🎖 契约完成', '🔒 CONTRACT': '🔒 契约',
