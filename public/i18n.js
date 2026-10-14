@@ -141,6 +141,7 @@
     '🎲 DICE DUEL ': '🎲 骰子对决 ', '🔄 NEW GUNS': '🔄 换新枪', '💥 ROCKET RUMBLE ': '💥 火箭大乱斗 ',
     'Whirlwind': '旋风斩', 'Spin 360° and dash 6.5 m · hits everyone around you · 85 dmg': '原地旋转 360° 并冲刺 6.5 米 · 命中周围所有人 · 85 伤害',
     'Battle Axe': '战斧',
+    'DUEL GRID': '对决网格', 'CROSSROADS': '十字路口', 'PILLAR HALL': '石柱大厅', 'HIGH GROUND': '制高点',
     '🎖 CONTRACT WRAPS': '🎖 契约涂装', 'Not for sale. Finish the contract in real matches and the wrap is yours.': '不出售。在正式对局里完成契约，涂装就是你的。',
     '🎖 CONTRACT COMPLETE': '🎖 契约完成', '🔒 CONTRACT': '🔒 契约',
     'Dark Matter': '暗物质', 'Singularity': '奇点', 'Aurora': '极光', 'Plasma Storm': '等离子风暴', 'Absolute Zero': '绝对零度',

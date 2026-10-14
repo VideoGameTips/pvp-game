@@ -917,6 +917,69 @@ if (ok && process.argv.includes('--status')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+if (ok && process.argv.includes('--duel')) {
+  // The 1v1 duel maps: small enough to find each other in about six seconds, spawns clear and joined by a walkable
+  // route, cover that is the same for both sides, and wired so only 1v1 is dealt them.
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const walk = SPEED * DEFAULT_MOVE_MULT;                     // m/s, plain walking
+    for (const name of DUEL_MAP_IDS) {
+      const b = MAP_BOUNDS[name], sp = MAP_SPAWNS[name], cols = MAP_COLLIDERS[name] || [];
+      if (!MAP_IDS.includes(name)) issues.push(name + ': not in MAP_IDS');
+      if (!b || !sp) { issues.push(name + ': no bounds or spawns'); continue; }
+      if (b.halfX * 2 > 40 || b.halfZ * 2 > 60) issues.push(name + ': bigger than a duel map should be (' + b.halfX * 2 + ' x ' + b.halfZ * 2 + ')');
+      const ca = { x: (sp.ally.x0 + sp.ally.x1) / 2, z: (sp.ally.z0 + sp.ally.z1) / 2 }, ce = { x: (sp.enemy.x0 + sp.enemy.x1) / 2, z: (sp.enemy.z0 + sp.enemy.z1) / 2 };
+      const secs = Math.hypot(ca.x - ce.x, ca.z - ce.z) / walk;
+      if (secs < 4.5 || secs > 8.5) issues.push(name + ': spawn to spawn takes ' + secs.toFixed(1) + ' s at a walk, want 4.5 to 8.5');
+      for (const side of [sp.ally, sp.enemy]) {
+        if (side.x0 < -b.halfX + 1 || side.x1 > b.halfX - 1 || side.z0 < -b.halfZ + 1 || side.z1 > b.halfZ - 1) issues.push(name + ': a spawn rectangle is outside the walls');
+        for (const c of cols) {
+          if (c.max.y < 0.3 || c.min.y > 1.8) continue;
+          if (c.min.x < side.x1 + 0.5 && c.max.x > side.x0 - 0.5 && c.min.z < side.z1 + 0.5 && c.max.z > side.z0 - 0.5) { issues.push(name + ': cover inside a spawn'); break; }
+        }
+      }
+      // inside cover only: the four border walls start outside the bounds
+      const inner = cols.filter(c => c.min.x > -b.halfX - 0.01 && c.max.x < b.halfX + 0.01 && c.min.z > -b.halfZ - 0.01 && c.max.z < b.halfZ + 0.01);
+      if (inner.length < 4) issues.push(name + ': only ' + inner.length + ' pieces of cover');
+      for (const c of inner) {
+        const hit = inner.some(d => Math.abs(d.min.x + c.max.x) < 0.02 && Math.abs(d.max.x + c.min.x) < 0.02
+                                  && Math.abs(d.min.z + c.max.z) < 0.02 && Math.abs(d.max.z + c.min.z) < 0.02
+                                  && Math.abs(d.min.y - c.min.y) < 0.02 && Math.abs(d.max.y - c.max.y) < 0.02);
+        if (!hit) { issues.push(name + ': a piece of cover has no mirror image (not fair to both sides)'); break; }
+      }
+      // a walkable route between the spawns: boxes you cannot hop (taller than 1.6 m) block, a 0.4 m body
+      const R = 0.4, step = 0.5, solid = cols.filter(c => c.max.y > 1.6 && c.min.y < 1.5);
+      const free = (x, z) => !solid.some(c => x > c.min.x - R && x < c.max.x + R && z > c.min.z - R && z < c.max.z + R);
+      const gx = Math.round(b.halfX * 2 / step), gz = Math.round(b.halfZ * 2 / step), key = (i, j) => i * 10000 + j;
+      const toI = x => Math.round((x + b.halfX) / step), toJ = z => Math.round((z + b.halfZ) / step);
+      const seen = new Set([key(toI(ca.x), toJ(ca.z))]), q = [[toI(ca.x), toJ(ca.z)]];
+      let reached = false;
+      while (q.length) {
+        const [i, j] = q.pop();
+        if (i === toI(ce.x) && j === toJ(ce.z)) { reached = true; break; }
+        for (const [di, dj] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+          const ni = i + di, nj = j + dj;
+          if (ni < 1 || nj < 1 || ni >= gx || nj >= gz || seen.has(key(ni, nj))) continue;
+          if (!free(ni * step - b.halfX, nj * step - b.halfZ)) continue;
+          seen.add(key(ni, nj)); q.push([ni, nj]);
+        }
+      }
+      if (!reached) issues.push(name + ': no walkable route between the spawns');
+      if (!MAP_DESCS[name]) issues.push(name + ': no description');
+    }
+    return issues;
+  })()`);
+  const serverSrc = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  for (const id of ['duel_grid', 'duel_crossroads', 'duel_pillars', 'duel_platform']) {
+    if (!serverSrc.includes("'" + id + "'")) issues.push('server does not know ' + id);
+  }
+  if (!/LOBBY_MAP_POOL = MAP_IDS\.filter\(.*DUEL_ONLY_MAPS/.test(serverSrc)) issues.push('server random pool does not exclude the duel maps');
+  if (!/mapPoolFor\(mode\)/.test(serverSrc)) issues.push('server does not deal 1v1 its own pool');
+  if (!/data-map="duel_grid"[^>]*data-duel="1"/.test(fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8'))) issues.push('map picker has no duel cards');
+  console.log('duel map checks: size, spawns, route, mirror symmetry, 1v1-only wiring');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 if (ok && process.env.MAP_REVIEW_DIR) {
   fs.mkdirSync(process.env.MAP_REVIEW_DIR, { recursive: true });
   for (const name of ['forest', 'desert', 'tundra', 'refinery', 'space', 'volcano', 'titanic', 'carrier', 'pearl_harbor']) {

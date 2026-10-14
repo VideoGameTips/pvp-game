@@ -1663,7 +1663,7 @@ const MAP_IDS = ['blank','urban','warehouse','forest','vietnam','volcano','cyber
                         'sewer','gravity_lab','glassworks','carrier','overgrowth','orbital_station',
                         'foundry','carnival','biosphere','lockdown','studio','temple','holiday',
                         'labyrinth','arena','opera','doomsday','train','dreamscape',
-                        'pearl_harbor','titanic','supermarket','pyongyang','traffic_cone_republic','flying_moai','big_arena','super_arena','big_harbor','storm_pier','pinball_arcade','laser_vault','cargo_belts','gale_peaks','magma_rise'];
+                        'pearl_harbor','titanic','supermarket','pyongyang','traffic_cone_republic','flying_moai','big_arena','super_arena','big_harbor','storm_pier','pinball_arcade','laser_vault','cargo_belts','gale_peaks','magma_rise','duel_grid','duel_crossroads','duel_pillars','duel_platform'];
 // 🗺️ Dealt at RANDOM when nobody picks, which is not the same list (#66): a
 // map that is not worth landing on by accident goes in THIN_MAPS and stays
 // pickable by name from the map cards. Empty right now — the five that were in
@@ -1672,7 +1672,13 @@ const MAP_IDS = ['blank','urban','warehouse','forest','vietnam','volcano','cyber
 // on purpose: they moved three times while #66 was being reviewed and a comment
 // nobody re-measures is worse than no comment. #66 has the method.
 const THIN_MAPS = new Set([]);
-const LOBBY_MAP_POOL = MAP_IDS.filter(m => !THIN_MAPS.has(m));
+// ⚔️ The 1v1 duel maps (mirrors DUEL_MAP_IDS in public/game.js): small arenas dealt only to 1v1, never at random
+// to anything else. They are in MAP_IDS so a client that is told one by id will load it.
+const DUEL_MAP_IDS = ['duel_grid','duel_crossroads','duel_pillars','duel_platform'];
+const DUEL_ONLY_MAPS = new Set(DUEL_MAP_IDS);
+const LOBBY_MAP_POOL = MAP_IDS.filter(m => !THIN_MAPS.has(m) && !DUEL_ONLY_MAPS.has(m));
+// A map for the mode: 1v1 draws from the duel maps, everything else from the main pool.
+function mapPoolFor(mode) { return mode === '1v1' ? DUEL_MAP_IDS : LOBBY_MAP_POOL; }
 // The lobby plays the map of the first player (in join order) who picked a specific one.
 function lobbyMapPick(L) {
   return L.players.find(p => p.map)?.map || null;
@@ -1737,7 +1743,8 @@ function startLobbyMatch(L, extra = {}) {
   // chose a map (#17 — the picker used to be ignored here), else random.
   const mapId = M4_TOWER_MODES.has(mode)
     ? mode   // each tower mode is also the name of its map
-    : (lobbyMapPick(L) || LOBBY_MAP_POOL[Math.floor(Math.random() * LOBBY_MAP_POOL.length)]);
+    : ((p => (p && (mode === '1v1' || !DUEL_ONLY_MAPS.has(p))) ? p : null)(lobbyMapPick(L))
+        || mapPoolFor(mode)[Math.floor(Math.random() * mapPoolFor(mode).length)]);
   // Designate the first player as host (they spawn the bots if any)
   const host = L.players[0];
   for (const p of L.players) {
@@ -1841,7 +1848,7 @@ function tryPairPvpQueue(mode) {
     else { teamA = Math.random() < 0.5 ? 'ally' : 'enemy'; teamB = teamA; }
   }
   // 🗺️ Server picks ONE map for both players so they don't diverge
-  const mapId = LOBBY_MAP_POOL[Math.floor(Math.random() * LOBBY_MAP_POOL.length)];
+  const mapId = mapPoolFor(mode)[Math.floor(Math.random() * mapPoolFor(mode).length)];
   io.to(a.socketId).emit('pvpResult', {
     mode, paired: true, team: teamA, mapId,
     opponents: [{ socketId: b.socketId, team: teamB }],

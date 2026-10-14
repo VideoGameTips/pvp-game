@@ -5768,8 +5768,14 @@ var MAP_BOT_BOUNDS = {}, MAP_VOID = {};
 // Every map that can be played, and the subset the random draw skips (#66).
 // Mirrors server.js — MAP_IDS and THIN_MAPS have to stay identical there
 // (CLAUDE.md #4), because the server picks the map and the client honours it.
-const MAP_IDS = ['blank', 'urban', 'warehouse', 'forest', 'vietnam', 'volcano', 'cyber', 'desert', 'tundra', 'space', 'airport', 'trenches', 'chernobyl', 'refinery', 'skydock', 'sewer', 'gravity_lab', 'glassworks', 'carrier', 'overgrowth', 'orbital_station', 'foundry', 'carnival', 'biosphere', 'lockdown', 'studio', 'temple', 'holiday', 'labyrinth', 'arena', 'opera', 'doomsday', 'train', 'dreamscape', 'pearl_harbor', 'titanic', 'supermarket', 'pyongyang', 'traffic_cone_republic', 'flying_moai', 'big_arena', 'super_arena', 'big_harbor', 'storm_pier', 'pinball_arcade', 'laser_vault', 'cargo_belts', 'gale_peaks', 'magma_rise'];
+const MAP_IDS = ['blank', 'urban', 'warehouse', 'forest', 'vietnam', 'volcano', 'cyber', 'desert', 'tundra', 'space', 'airport', 'trenches', 'chernobyl', 'refinery', 'skydock', 'sewer', 'gravity_lab', 'glassworks', 'carrier', 'overgrowth', 'orbital_station', 'foundry', 'carnival', 'biosphere', 'lockdown', 'studio', 'temple', 'holiday', 'labyrinth', 'arena', 'opera', 'doomsday', 'train', 'dreamscape', 'pearl_harbor', 'titanic', 'supermarket', 'pyongyang', 'traffic_cone_republic', 'flying_moai', 'big_arena', 'super_arena', 'big_harbor', 'storm_pier', 'pinball_arcade', 'laser_vault', 'cargo_belts', 'gale_peaks', 'magma_rise', 'duel_grid', 'duel_crossroads', 'duel_pillars', 'duel_platform'];
 const THIN_MAPS = new Set([]);
+// ⚔️ 1v1 duel maps: small and plain, 36 x 56 m (about six seconds spawn to spawn), dealt only to 1v1. They are in
+// MAP_IDS so that a server-sent id activates, and kept out of the random pool of every other mode.
+const DUEL_MAP_IDS = ['duel_grid', 'duel_crossroads', 'duel_pillars', 'duel_platform'];
+const DUEL_ONLY_MAPS = new Set(DUEL_MAP_IDS);
+// A picked map only counts in the mode it was made for: a duel map left over from a 1v1 is 'auto' anywhere else.
+function effectivePickedMap(modeId, map) { return DUEL_ONLY_MAPS.has(map) && modeId !== '1v1' ? 'auto' : map; }
 
 const MAP_COLLIDERS = {};
 const MAP_BOUNDS = {};
@@ -6347,6 +6353,93 @@ function addOuterWalls(mapName, color) {
     addMapBox(mapName, x, y, z, w, h, d, color);
   });
 }
+
+// ── ⚔️ 1v1 duel maps ────────────────────────────────────────────────────────────────────────────────────
+// A 1v1 on a map built for ten players is five-sixths of a match spent finding the other person. These are four
+// plain arenas, 36 x 56 m, with the two spawns 44 m apart (about six seconds at a walk, less sliding) and just enough
+// cover to make a fight of it. A grid floor, flat colours, nothing to look up: layouts are point-symmetric so neither
+// spawn has the better side. They are built here with the same boxes as everything else, so a layout is a short
+// list and an easy thing to add to.
+const DUEL_W = 36, DUEL_D = 56;
+function _duelGridTexture(floor, fine, bold) {
+  const N = 512, c = document.createElement('canvas'); c.width = c.height = N;
+  const g = c.getContext('2d');
+  g.fillStyle = floor; g.fillRect(0, 0, N, N);
+  g.strokeStyle = fine; g.lineWidth = 2;                      // a 4 m tile cut into 1 m squares
+  for (let i = 0; i <= N; i += N / 4) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i, N); g.moveTo(0, i); g.lineTo(N, i); g.stroke(); }
+  g.strokeStyle = bold; g.lineWidth = 6;                      // the tile edge, heavier
+  g.strokeRect(0, 0, N, N);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  if ('colorSpace' in t && THREE.SRGBColorSpace !== undefined) t.colorSpace = THREE.SRGBColorSpace;
+  else if (THREE.sRGBEncoding !== undefined) t.encoding = THREE.sRGBEncoding;
+  return t;
+}
+function buildDuelMap(name, o) {
+  registerMap(name);
+  setMapBounds(name, DUEL_W, DUEL_D);
+  const G = MAP_GROUPS[name];
+  const tex = _duelGridTexture(o.floor, o.fine, o.bold);
+  tex.repeat.set(DUEL_W / 4, DUEL_D / 4);
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(DUEL_W, DUEL_D), new THREE.MeshLambertMaterial({ map: tex }));
+  ground.rotation.x = -Math.PI / 2;
+  G.add(ground);
+  // The border: a wall too tall to be anything but a wall.
+  const T = 1, H = 7;
+  addMapBox(name, 0, H / 2, -DUEL_D / 2 - T / 2, DUEL_W + 2 * T, H, T, o.wall);
+  addMapBox(name, 0, H / 2,  DUEL_D / 2 + T / 2, DUEL_W + 2 * T, H, T, o.wall);
+  addMapBox(name, -DUEL_W / 2 - T / 2, H / 2, 0, T, H, DUEL_D, o.wall);
+  addMapBox(name,  DUEL_W / 2 + T / 2, H / 2, 0, T, H, DUEL_D, o.wall);
+  // Cover is listed once and placed twice: where it is, and turned half a circle about the middle.
+  for (const [x, z, w, h, d, tone] of o.cover) {
+    const col = tone === 'hi' ? o.accent : tone === 'tall' ? o.tall : o.cover_;
+    addMapBox(name, x, h / 2, z, w, h, d, col);
+    if (x !== 0 || z !== 0) addMapBox(name, -x, h / 2, -z, w, h, d, col);
+  }
+  // Where each of you starts: a flat pad, blue and red.
+  for (const [z, col] of [[23, 0x3a6aff], [-23, 0xff4a4a]]) {
+    const pad = new THREE.Mesh(new THREE.BoxGeometry(14, 0.04, 5), new THREE.MeshLambertMaterial({ color: col, transparent: true, opacity: 0.55 }));
+    pad.position.set(0, 0.03, z); G.add(pad);
+  }
+  MAP_SPAWNS[name] = { ally: { x0: -6, x1: 6, z0: 21, z1: 25 }, enemy: { x0: -6, x1: 6, z0: -25, z1: -21 } };
+  G._skyColor = o.sky;
+}
+// [x, z, width, height, depth, tone]; the mirror image is added for you.
+buildDuelMap('duel_grid', {
+  floor: '#222a40', fine: '#39466a', bold: '#6a80bc', wall: 0x3a4466, cover_: 0x77839e, tall: 0x5a6688, accent: 0x6aa0ff, sky: 0x10131c,
+  cover: [
+    [0, 0, 3, 4, 3, 'tall'],            // one pillar in the middle: go round it or break line of sight with it
+    [-7, -6, 6, 1.3, 1, 'cover'], [7, -6, 6, 1.3, 1, 'cover'],   // low walls to crouch behind, a third of the way up each side
+    [-12, 0, 2, 2, 2, 'hi'],            // a crate on each flank
+    [-3, 13, 2, 1.2, 2, 'cover'], [4, 12, 2.4, 1.6, 1.4, 'cover'],
+  ],
+});
+buildDuelMap('duel_crossroads', {
+  floor: '#2d241e', fine: '#4a3a2e', bold: '#9a7248', wall: 0x4a3a2c, cover_: 0x9a7a58, tall: 0x6c5440, accent: 0xffb060, sky: 0x17120e,
+  cover: [
+    [-9, 0, 10, 3, 1, 'tall'],          // the cross: two long walls with the middle left open
+    [0, 10, 1, 3, 10, 'tall'],
+    [13, 14, 3, 2, 3, 'cover'],         // a block in each far corner
+    [-13, 6, 2, 1.2, 2, 'hi'],
+  ],
+});
+buildDuelMap('duel_pillars', {
+  floor: '#1d2e2b', fine: '#305450', bold: '#52a89e', wall: 0x2f4a46, cover_: 0x5f8f88, tall: 0x4a7a74, accent: 0x66ffd8, sky: 0x0c1514,
+  cover: [
+    [-8, 5, 2.4, 6, 2.4, 'tall'], [8, 5, 2.4, 6, 2.4, 'tall'],     // four tall pillars either side of centre
+    [-8, 16, 2.4, 6, 2.4, 'tall'], [8, 16, 2.4, 6, 2.4, 'tall'],
+    [0, 10, 5, 1.2, 1, 'cover'],        // a low rail across each lane
+    [0, 0, 2, 1, 2, 'hi'],              // a step in the dead middle
+  ],
+});
+buildDuelMap('duel_platform', {
+  floor: '#271f35', fine: '#40335e', bold: '#9a74d0', wall: 0x3c2f55, cover_: 0x8c74b8, tall: 0x5f4a88, accent: 0xd08aff, sky: 0x120d1a,
+  cover: [
+    [0, 0, 12, 1.4, 9, 'hi'],           // a platform in the middle you can jump up on: the high ground
+    [-11, 8, 3, 1.5, 3, 'cover'],       // and a block each side of it
+    [-6, 17, 2, 4, 2, 'tall'],
+  ],
+});
 
 // ── 🧵 One draw call per colour, per map (#66) ──────────────────────────────
 // A map is cheap in triangles and ruinous in draw calls: super_arena is 3,080
@@ -58862,8 +58955,11 @@ function spawnGameBots() {
     // Mirrors server.js MAP_IDS / THIN_MAPS (CLAUDE.md #4): a specific pick
     // activates any map, and the random draw skips whatever is in THIN_MAPS —
     // which is empty now that the five flat ones have been rebuilt (#66).
-    const pool = MAP_IDS.filter(m => !THIN_MAPS.has(m));
-    const chosen = (selectedMap === 'auto' || !MAP_GROUPS[selectedMap]) ? pool[Math.floor(Math.random()*pool.length)] : selectedMap;
+    // 1v1 plays the duel maps; everything else the rest (a duel map you picked for 1v1 is 'auto' anywhere else).
+    const duel = currentModeId() === '1v1';
+    const pool = duel ? DUEL_MAP_IDS : MAP_IDS.filter(m => !THIN_MAPS.has(m) && !DUEL_ONLY_MAPS.has(m));
+    const picked = effectivePickedMap(currentModeId(), selectedMap);
+    const chosen = (picked === 'auto' || !MAP_GROUPS[picked]) ? pool[Math.floor(Math.random()*pool.length)] : picked;
     activateMap(chosen);
     // Update sky color if the map specifies one
     const sky = MAP_GROUPS[chosen]?._skyColor;
@@ -62119,7 +62215,7 @@ function confirmLoadout() {
     if (modeId && lobbyEligible.includes(modeId)) {
       // Route through staging lobby — wait for others to ready up
       stagingLobbyMode = modeId;
-      socket.emit('joinStagingLobby', { mode: modeId, map: pickedMap }); // the server honours it (#17)
+      socket.emit('joinStagingLobby', { mode: modeId, map: effectivePickedMap(modeId, pickedMap) }); // the server honours it (#17)
       // 1v1 has no teams to sort out, so READY on the loadout is the ready (#46): the server
       // looks for a real opponent for a few seconds, then gives you a bot.
       if (modeId === '1v1') socket.emit('setLobbyReady', { ready: true, fillBots: true });
@@ -64852,7 +64948,17 @@ moreMenu.addEventListener('click', () => setMoreMenu(false)); // an item was pic
 document.addEventListener('click', e => { if (!moreMenu.hidden && !e.target.closest('#more-menu, #more-btn')) setMoreMenu(false); });
 // 🗺️ MAP / 🤖 BOT DIFFICULTY (#24): the same cards as before, in a dialog behind a row that shows
 // the current pick. Picking closes it.
-function openPickDialog(id) { closeOtherDialogs(id); document.getElementById(id).style.display = 'block'; }
+// The duel maps are 1v1's: their cards are in the map list only while 1v1 is the mode being set up.
+function syncDuelMapCards() {
+  const is1v1 = currentModeId() === '1v1';
+  document.querySelectorAll('.map-card[data-duel="1"]').forEach(c => { c.style.display = is1v1 ? '' : 'none'; });
+  if (!is1v1 && DUEL_ONLY_MAPS.has(selectedMap)) selectMapPick('auto');
+}
+function openPickDialog(id) {
+  closeOtherDialogs(id);
+  if (id === 'map-dialog') { try { syncDuelMapCards(); } catch (e) {} }
+  document.getElementById(id).style.display = 'block';
+}
 function closePickDialogs() { for (const id of ['map-dialog', 'diff-dialog']) document.getElementById(id).style.display = 'none'; }
 document.getElementById('map-pick-btn').addEventListener('click', () => openPickDialog('map-dialog'));
 document.getElementById('diff-pick-btn').addEventListener('click', () => openPickDialog('diff-dialog'));
@@ -64951,6 +65057,10 @@ const MAP_DESCS = {
   pyongyang: 'Pyongyang — monuments, squares and wide-sweeping live-fire searchlights',
   traffic_cone_republic: '🚧 Traffic Cone Republic — giant cones, a roundabout, a flyover · TOLL LANES charge health for speed',
   flying_moai: '🗿 Flying Moai — a plateau of stone heads · a ROAR shockwave crosses the ground',
+  duel_grid:      '⚔️ Duel Grid — 1v1 only · a small grid arena, one pillar, low walls, six seconds to the other side',
+  duel_crossroads:'⚔️ Crossroads — 1v1 only · two long walls cross in the middle, the centre stays open',
+  duel_pillars:   '⚔️ Pillar Hall — 1v1 only · tall pillars down both sides, a low rail across each lane',
+  duel_platform:  '⚔️ High Ground — 1v1 only · a platform in the middle you can jump up on',
 };
 function selectMapPick(mapId) {
   selectedMap = pickedMap = mapId;
