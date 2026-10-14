@@ -5451,7 +5451,10 @@ function playSoundEvent(name, opts = {}) {
 }
 
 // ── Lighting ───────────────────────────────────────────────────────────────
-scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+const mapAmbient = new THREE.AmbientLight(0xffffff, 0.6);
+scene.add(mapAmbient);
+const mapSkyFill = new THREE.HemisphereLight(0xc5ddf2, 0x544c3d, 0);
+scene.add(mapSkyFill);
 // 🔦 Viewmodel rig. A directional light lights every point of a flat face
 // identically, so the gun in your hands rendered as flat blocks of colour. These
 // travel with the camera: the point light falls off ACROSS a face and Phong's
@@ -5476,6 +5479,25 @@ sun.shadow.normalBias = 0.02;
 sun.shadow.bias = -0.0004;
 sun.shadow.radius = 2.5;
 scene.add(sun);
+
+function applyMapLighting(name) {
+  const concept = name === 'blank' || name === 'range' || name === 'lobby13';
+  const indoor = ['space','orbital_station','sewer','gravity_lab','lockdown','studio','opera','labyrinth','m4_tower','m4_tower_big','m4_tower_super'].includes(name);
+  const dark = indoor || ['volcano','doomsday','cyber','laser_vault'].includes(name);
+  mapAmbient.intensity = concept ? .6 : dark ? .34 : .24;
+  mapSkyFill.intensity = concept ? 0 : dark ? .22 : .58;
+  mapSkyFill.color.setHex(dark ? 0x8495b5 : 0xc5ddf2);
+  mapSkyFill.groundColor.setHex(dark ? 0x39313a : 0x645a43);
+  sun.color.setHex(concept || dark ? 0xffffff : 0xffefd5);
+  sun.intensity = concept ? 1.2 : dark ? .85 : 1.45;
+  const b = MAP_BOUNDS[name], reach = concept ? 60 : Math.min(180, Math.max(b?.halfX || 60, b?.halfZ || 60) + 12);
+  if (concept) sun.position.set(30, 50, 20);
+  else sun.position.set(reach * .65, reach * 1.35, reach * .4);
+  sun.shadow.camera.left = sun.shadow.camera.bottom = -reach;
+  sun.shadow.camera.right = sun.shadow.camera.top = reach;
+  sun.shadow.camera.far = concept ? 200 : reach * 4;
+  sun.shadow.camera.updateProjectionMatrix();
+}
 
 // ── Wall collision boxes ────────────────────────────────────────────────────
 // Populated by buildMap(); used by resolveWallCollisions() each frame.
@@ -5895,6 +5917,7 @@ function activateMap(name) {
   // The haze takes the colour of the sky it hangs under, so a dark map is not wrapped in pale blue.
   if (scene.fog && scene.fog.color && MAP_GROUPS[name] && MAP_GROUPS[name]._skyColor != null) scene.fog.color.setHex(MAP_GROUPS[name]._skyColor);
   if (typeof atmoActivate === 'function') { try { atmoActivate(name); } catch (e) { console.warn('[atmo]', name, e); } }
+  applyMapLighting(name);
   wallColliders.length = 0;
   if (MAP_COLLIDERS[name]) wallColliders.push(...MAP_COLLIDERS[name]);
   activeMapName = name;
@@ -12137,16 +12160,20 @@ function _atmoTex(kind) {
 }
 // The ground mesh the layout built, made uneven and given its surface. Heights only ever go DOWN from the floor.
 function _atmoGround(name, prof) {
-  const g = MAP_GROUPS[name]; if (!g || g._atmoGround || !prof.ground) return; g._atmoGround = true;
+  const g = MAP_GROUPS[name]; if (!g || g._atmoGround || !prof.ground) return;
   const b = MAP_BOUNDS[name] || { halfX: 70, halfZ: 70 };
   let ground = null, gw = 0, gd = 0;
   for (const o of g.children) {
-    if (!o.isMesh || !o.geometry || o.geometry.type !== 'PlaneGeometry' || Math.abs(o.position.y) > 0.05 || Math.abs(o.rotation.x + Math.PI / 2) > 0.01) continue;
+    // Flat shading converts PlaneGeometry to BufferGeometry before activation.
+    if (!o.isMesh || !o.geometry || Math.abs(o.position.y) > 0.05 || Math.abs(o.rotation.x + Math.PI / 2) > 0.01) continue;
     o.geometry.computeBoundingBox(); const bb = o.geometry.boundingBox, w = bb.max.x - bb.min.x, d = bb.max.y - bb.min.y;
     if (w >= b.halfX * 1.2 && w < 600 && w * d > gw * gd) { ground = o; gw = w; gd = d; }
   }
   if (!ground) return;
-  const old = ground.material, kind = prof.ground, amp = prof.amp ?? 0.1;
+  g._atmoGround = true;
+  const old = ground.material, kind = prof.ground;
+  // Outskirts have a decorative foundation at -0.04 m; keep the living surface above it.
+  const amp = Math.min(prof.amp ?? .1, MAP_BOT_BOUNDS[name] ? .03 : .18);
   const cell = amp > 0 ? 2.4 : 6, sx = Math.max(2, Math.min(110, Math.round(gw / cell))), sz = Math.max(2, Math.min(110, Math.round(gd / cell)));
   const geo = new THREE.PlaneGeometry(gw, gd, sx, sz), pos = geo.attributes.position, uv = geo.attributes.uv, col = new Float32Array(pos.count * 3);
   const rnd = _thRng(name + ':ground'), ox = rnd() * 90, oz = rnd() * 90, tile = prof.tile || ATMO_TILE[kind] || 8;
@@ -12162,8 +12189,83 @@ function _atmoGround(name, prof) {
     uv.setXY(i, (lx + gw / 2) / tile, (ly + gd / 2) / tile);
   }
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3)); geo.computeVertexNormals();
-  const mat = new THREE.MeshPhongMaterial({ color: old.color ? old.color.clone().multiplyScalar(1.22) : 0xffffff, map: _atmoTex(kind), vertexColors: true, flatShading: true, shininess: kind === 'metal' || kind === 'tile' ? 22 : 5, specular: kind === 'metal' || kind === 'tile' ? 0x44484c : 0x16161a });
+  const surface = _atmoTex(kind);
+  const mat = new THREE.MeshStandardMaterial({
+    color: old.color ? old.color.clone().multiplyScalar(1.12) : 0xffffff,
+    map: surface, bumpMap: surface, bumpScale: kind === 'grass' ? .065 : kind === 'rock' ? .10 : .035,
+    roughness: kind === 'metal' ? .36 : kind === 'tile' ? .28 : kind === 'rock' ? .48 : kind === 'mud' ? .57 : .88,
+    metalness: kind === 'metal' ? .65 : 0, envMapIntensity: .4,
+    vertexColors: true, flatShading: false,
+  });
   ground.geometry = geo; ground.material = mat; ground.receiveShadow = true;
+  ground.userData.surfaceKind = kind;
+  // The open maps extend their floor with separate strips; don't leave a bare ring around the finished terrain.
+  for (const o of g.children) {
+    if (o===ground || !o.isMesh || !o.geometry || Math.abs(o.position.y)>.05 || Math.abs(o.rotation.x+Math.PI/2)>.01) continue;
+    o.geometry.computeBoundingBox();const bb=o.geometry.boundingBox,w=bb.max.x-bb.min.x,d=bb.max.y-bb.min.y;
+    if(w<8 || d<8 || Math.max(w,d)<60 || Math.max(w,d)>=600)continue;
+    o.geometry=o.geometry.clone();const p=o.geometry.attributes.position,u=new Float32Array(p.count*2);
+    for(let i=0;i<p.count;i++){u[i*2]=(p.getX(i)+o.position.x)/tile;u[i*2+1]=(p.getY(i)-o.position.z)/tile;}
+    o.geometry.setAttribute('uv',new THREE.BufferAttribute(u,2));
+    o.material=mat.clone();o.material.vertexColors=!!o.geometry.attributes.color;o.receiveShadow=true;o.userData.surfaceKind=kind;
+  }
+  _atmoSurfaceDetails(name, prof, ground, gw, gd, (x,z) => -amp * (1 - _anFbm(x * .09 + ox, z * .09 + oz, 3, 3)));
+}
+
+// Batched, non-colliding dressing: never changes the playable floor or hides a target.
+function _atmoSurfaceDetails(name, prof, ground, width, depth, heightAt) {
+  if (['blank','range','lobby13'].includes(name)) return;
+  const group = MAP_GROUPS[name], rnd = _thRng(name + ':surface-detail');
+  const boxes = (MAP_COLLIDERS[name] || []).filter(b => b.min.y < 3 && b.max.y > .08);
+  const free = (x,z,r) => !boxes.some(b => x > b.min.x-r && x < b.max.x+r && z > b.min.z-r && z < b.max.z+r);
+  const point = () => ({x: ground.position.x + (rnd()-.5)*(width-8), z: ground.position.z + (rnd()-.5)*(depth-8)});
+  if (prof.ground === 'grass') {
+    const positions = [], colors = [], c = new THREE.Color();
+    for (let i=0;i<900;i++) {
+      const p=point(); if(!free(p.x,p.z,.35))continue;
+      for(let j=0;j<5;j++) {
+        const a=rnd()*Math.PI*2, x=p.x+(rnd()-.5)*1.2, z=p.z+(rnd()-.5)*1.2;
+        if(!free(x,z,.12))continue;
+        const y=heightAt(x,z), h=.14+rnd()*.22, w=.025+rnd()*.025, dx=Math.cos(a)*w,dz=Math.sin(a)*w;
+        positions.push(x-dx,y,z-dz,x+dx,y,z+dz,x+Math.sin(a)*h*.35,y+h,z+Math.cos(a)*h*.35);
+        c.setHex([0x4d7135,0x6c8d40,0x879853,0x385c2a][Math.floor(rnd()*4)]);
+        colors.push(c.r*.55,c.g*.55,c.b*.55,c.r*.65,c.g*.65,c.b*.65,c.r,c.g,c.b);
+      }
+    }
+    const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));geo.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));geo.computeVertexNormals();
+    const grass=new THREE.Mesh(geo,new THREE.MeshStandardMaterial({vertexColors:true,roughness:1,side:THREE.DoubleSide}));
+    grass.receiveShadow=true;grass.userData.surfaceDetail='grass';group.add(grass);
+  }
+  const wet = ['urban','warehouse','refinery','chernobyl','trenches','vietnam','forest','overgrowth','pearl_harbor','storm_pier','sewer','big_harbor'].includes(name);
+  if (!wet) return;
+  const ripple=surfTex('map-water-ripple',128,(ctx,s)=>{
+    ctx.fillStyle='#808080';ctx.fillRect(0,0,s,s);
+    for(let y=0;y<s;y++) {
+      const v=Math.round(128+10*Math.sin(y*Math.PI/8)+5*Math.sin(y*Math.PI/16));
+      ctx.fillStyle='rgb('+v+','+v+','+v+')';ctx.fillRect(0,y,s,1);
+    }
+  });
+  const water=new THREE.MeshStandardMaterial({color:0x3b4c49,bumpMap:ripple,bumpScale:.018,roughness:.19,metalness:.02,envMapIntensity:.65,side:THREE.DoubleSide});
+  const rim=new THREE.MeshStandardMaterial({color:ground.material.color.clone().multiplyScalar(.68),roughness:.68,side:THREE.DoubleSide});
+  let count=0;
+  for(let i=0;i<160 && count<14;i++) {
+    const p=point(), rx=1.1+rnd()*2.3,rz=.6+rnd()*1.5;
+    if(!free(p.x,p.z,Math.max(rx,rz)+.3))continue;
+    const v=MAP_VOID[name];
+    if(v?.rects && !v.rects.some(r=>p.x-rx>=r.x0 && p.x+rx<=r.x1 && p.z-rz>=r.z0 && p.z+rz<=r.z1))continue;
+    if(v && !v.rects && (Math.abs(p.x)+rx>v.halfX || Math.abs(p.z)+rz>v.halfZ))continue;
+    const shape=new THREE.Shape();
+    for(let k=0;k<24;k++) {
+      const a=k/24*Math.PI*2,r=.8+rnd()*.2,x=Math.cos(a)*rx*r,z=Math.sin(a)*rz*r;
+      if(k===0)shape.moveTo(x,z);else shape.lineTo(x,z);
+    }
+    shape.closePath();const geo=new THREE.ShapeGeometry(shape);
+    for(const edge of [true,false]) {
+      const m=new THREE.Mesh(geo,edge?rim:water);m.rotation.x=-Math.PI/2;m.position.set(p.x,edge?.003:.006,p.z);
+      if(edge)m.scale.set(1.04,1.04,1);m.receiveShadow=true;m.userData.surfaceDetail=edge?'damp-edge':'puddle';group.add(m);
+    }
+    count++;
+  }
 }
 // Small things on the ground, merged into one mesh, kept off every collider. Knee-high at most.
 function _atmoClutter(name, prof) {
@@ -15099,7 +15201,6 @@ function mapSurfaceKind(mesh, name) {
   if (th.motif==='ice') return 'ice';
   if (['space','neon'].includes(th.motif)) return 'metal';
   if (ground && ['nature','desert','fire'].includes(th.motif)) return 'earth';
-  if (th.motif==='nature') return null;
   if (['nature','desert','fire'].includes(th.motif)) return 'stone';
   return 'concrete';
 }
@@ -15144,6 +15245,10 @@ function weatherMapGroup(group) {
   group.traverse(o => {
     if (!o.isMesh || !o.material || !o.geometry) return;
     const m = o.material;
+    if (['wall','perimeter','deck','roof','cover'].includes(o.userData.thCls) && !m.transparent) {
+      o.castShadow = true;
+      o.receiveShadow = true;
+    }
     if (m.type !== 'MeshLambertMaterial' || m.transparent || m.emissive?.getHex()) return;
     _weatherGeometry(o.geometry);
     const isGround = o.geometry.type === 'PlaneGeometry';
@@ -15155,8 +15260,10 @@ function weatherMapGroup(group) {
       weathered = new THREE.MeshPhongMaterial({
         color: m.color.getHex(),
         map: m.map || (kind ? mapSurfaceTexture(kind) : null),
-        shininess: kind==='metal' ? 48 : kind==='ice' ? 65 : kind ? 3 : isGround ? 26 : 12,
-        specular: kind==='metal' ? 0x737980 : kind==='ice' ? 0x89949c : kind ? 0x161616 : isGround ? 0x55585c : 0x2e3033,
+        bumpMap: kind ? mapSurfaceTexture(kind) : null,
+        bumpScale: kind==='stone' ? .075 : kind==='concrete' ? .025 : .015,
+        shininess: kind==='metal' ? 48 : kind==='ice' ? 65 : kind==='stone' ? 34 : kind ? 7 : isGround ? 26 : 12,
+        specular: kind==='metal' ? 0x737980 : kind==='ice' ? 0x89949c : kind==='stone' ? 0x555d62 : kind ? 0x242424 : isGround ? 0x55585c : 0x2e3033,
         vertexColors: true,
         flatShading: true,
         side: m.side,
