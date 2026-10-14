@@ -1084,7 +1084,8 @@ const MELEE_ITEMS = [
     ability: { name: 'Throw Knife', cd: 350, desc: 'Hurl a knife · 30 dmg · 10 in reserve', type: 'melee_multithrow', damage: 30, maxCharges: 10 } },
   { id: 'scythe', name: 'Scythe', type: 'Movement Reaper', damage: 58, range: 2.7, cooldown: 560, speedMult: 1.35,
     doubleJump: true,
-    ability: { name: 'Reap Dash', cd: 4200, desc: 'Movement dash · slash through space', type: 'melee_mobility', speed: 30, side: 0, up: 3.5, color: 0x99ffe8 } },
+    // Reap Dash goes where you are pointing, up and down included, and covers twice what it did (about 13 m, now 26).
+    ability: { name: 'Reap Dash', cd: 4200, desc: 'Movement dash · twice as far · goes where you aim, up included', type: 'melee_mobility', speed: 30, side: 0, up: 3.5, color: 0x99ffe8, aimDash: true, distance: 26, dashTime: 0.42 } },
   { id: 'chain_hammer', name: 'Chain Maul', type: 'Chain Melee', damage: 85, range: 10, cooldown: 1100, speedMult: 1.1 },
 ];
 
@@ -1997,8 +1998,7 @@ const SLIDE_JUMP_LIFT  = 0.88; // slide jumps go farther, so they go a little lo
 // With exponential decay the ground covered is v / ln(1/BLAST_DECAY), so 17 m/s
 // buys a ~7.4 m lunge. 26 looked reasonable as a speed and turned out to be an
 // 11 m flight across half a courtyard.
-const DASH_SPEED    = 34;    // m/s horizontal impulse for the air dash (17 until the double jump was dropped; the shove decays, so distance scales with it: ~7 m -> ~15 m)
-const DASH_UP_SPEED = 19;    // m/s straight up when you dash while looking straight up; less as you look lower, none looking level or down
+const DASH_SPEED    = 17;    // m/s horizontal impulse for the blade dash
 const BLAST_RADIUS  = 7.5;   // m — how far an explosion can still shove you
 // 19 was a polite nudge — a rocket at your feet lifted you a storey and a shove
 // slid you 7 m. The 5× pass took it to 95 and overshot; 0.7× of that lands on
@@ -2617,7 +2617,6 @@ const SHARP_IDS = new Set(['screwdriver', 'lancer', 'spear', 'chainsaw']);
 function grantsDash(w) {
   if (!w) return false;
   if (w.dash) return true;                    // explicit opt-in on the item
-  if (grantsDoubleJump(w)) return true;       // whoever used to get a second jump gets the dash instead
   if (SHARP_IDS.has(w.id)) return true;
   // kni(f|v)e catches the plural "throwing knives", which /knife/ missed.
   return /blade|kni(f|v)e|katana|sabre|sword|axe|machete|karambit|bayonet|tomahawk|shuriken|glaive|scythe|dagger|cleaver/i
@@ -2630,9 +2629,6 @@ function grantsDash(w) {
 // Extra jumps your loadout buys: one per carried item that grants a double jump, so two such
 // items give you a triple jump (a jump from each, then the ground again to reset).
 function loadoutAirJumps() {
-  // No more double jump from what you carry: the air dash took its place (and goes twice as far).
-  // The one place it stays is the Obby, whose stages are built around a second jump.
-  if ((selectedModeConfig?.fixedKit || match?.cfg?.fixedKit) !== 'obby_doublejump') return 0;
   let n = 0;
   const gear = [WEAPONS[selectedPrimaryIdx], WEAPONS[selectedSecondaryIdx], MELEE_ITEMS[selectedMeleeIdx], SUPPORT_ITEMS[selectedSupportIdx]];
   for (const it of gear) if (grantsDoubleJump(it)) n++;
@@ -40800,7 +40796,7 @@ function resetCombatResources() {
   window._ladderDetachUntil = 0;
   finishBatCrowdClear();
   chainsawFuel = CHAINSAW_FUEL_MAX;   // a fresh tank each life
-  finishMeleeSlam(); finishMeleeDash(); autoLunge = null;
+  finishMeleeSlam(); finishMeleeDash(); autoLunge = null; scytheDash = null;
   clearBlinkPearls();
   cancelMedkitHeal();
   for (const b of localBullets) scene.remove(b.mesh);
@@ -42061,26 +42057,17 @@ function updateMovement(dt, socialBlocked = false) {
     // 🗡️ Air dash — bladed weapons only, one per airborne stretch. Shift on the
     // ground is already the slide, so the dash lives on the same key in the air
     // rather than claiming a new binding: every letter key is spoken for.
-    const look = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
-    const d = dir.lengthSq() > 0.001 ? dir.clone() : look.clone();
+    const d = dir.lengthSq() > 0.001
+      ? dir.clone()
+      : new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
     d.y = 0;
     if (d.lengthSq() > 0.000001) {
       d.normalize();
-      // 🔼 Looking up lifts the dash: the more you look up, the more of it goes up and the less
-      // goes forward (straight up is a pure climb). Looking level or down is the flat dash.
-      const upLook = Math.max(0, Math.min(1, look.y));
-      const flat = Math.sqrt(1 - upLook * upLook);
-      _extVel.x += d.x * DASH_SPEED * flat;
-      _extVel.z += d.z * DASH_SPEED * flat;
+      _extVel.x += d.x * DASH_SPEED;
+      _extVel.z += d.z * DASH_SPEED;
       window._dashLeft = 0;
-      if (upLook > 0.05) {
-        const up = DASH_UP_SPEED * upLook;
-        if (slamState) slamState.vel = Math.max(slamState.vel, up);
-        else if (typeof playerYVel === 'number') playerYVel = Math.max(playerYVel, up);
-      } else if (slamState && slamState.vel < 0) {
-        // Take some of the fall out so the dash reads as a lunge, not a stumble.
-        slamState.vel *= 0.35;
-      }
+      // Take some of the fall out so the dash reads as a lunge, not a stumble.
+      if (slamState && slamState.vel < 0) slamState.vel *= 0.35;
       spawnAbilityAOEFX(camera.position.clone().setY(camera.position.y - 1.2), 1.0, 0x99ffee);
       playSoundEvent('footstep', { volume: 0.45, pitch: 0.8, minGap: 60 });
     }
@@ -42505,7 +42492,54 @@ function isKnifeBackstabTarget(mesh) {
   return targetForward.dot(toAttacker) < -0.45;
 }
 
+// 🌀 A dash along the look direction, not along the ground: pointing up carries you up, pointing down drives you into
+// the floor, level stays level. A straight line at a fixed speed for a fixed distance (gravity is held off while it
+// lasts), stopped early by a wall, and it hands back a little momentum when it ends so it does not stop dead.
+let scytheDash = null;   // { dir, left, speed, epoch }
+function startScytheDash(item, ab) {
+  const look = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+  const dist = ab.distance || 26, time = ab.dashTime || 0.42;
+  scytheDash = { dir: look, left: dist, speed: dist / time, epoch: matchEpoch };
+  if (!slamState) slamState = { vel: Math.max(0, look.y) * 4, type: 'jump' };   // off the ground
+  slamState.type = 'jump';
+  _fovPunch = Math.max(_fovPunch, 8);
+}
+function finishScytheDash(carry = true) {
+  const s = scytheDash; scytheDash = null;
+  if (!s || !carry) return;
+  const h = Math.hypot(s.dir.x, s.dir.z);
+  if (h > 0.01) { _extVel.x += (s.dir.x / h) * 9; _extVel.z += (s.dir.z / h) * 9; }
+  if (slamState) slamState.vel = Math.max(-6, Math.min(10, s.dir.y * 12));
+}
+function updateScytheDash(dt) {
+  const s = scytheDash;
+  if (!s) return;
+  if (isDead || !gameStarted || SOCIAL_VIEW.mode || s.epoch !== matchEpoch) { scytheDash = null; return; }
+  const step = Math.min(s.left, s.speed * dt);
+  const h = Math.hypot(s.dir.x, s.dir.z);
+  let blocked = false;
+  if (h > 0.001) {
+    const before = camera.position.clone();
+    moveWithWalls(new THREE.Vector3(s.dir.x / h, 0, s.dir.z / h), step * h);
+    resolveWallCollisions();
+    const movedH = Math.hypot(camera.position.x - before.x, camera.position.z - before.z);
+    if (h > 0.5 && movedH < step * h * 0.25) blocked = true;      // ran into something
+    if (isOutOfBoundsXZ(camera.position.x, camera.position.z)) { killLocalOutOfBounds(); scytheDash = null; return; }
+  }
+  if (!slamState) slamState = { vel: 0, type: 'jump' };
+  slamState.type = 'jump';
+  slamState.vel = s.dir.y * s.speed;                             // the physics step carries it, and the ceiling stops it
+  s.left -= step;
+  if (s.left <= 0.001 || blocked) finishScytheDash(true);
+}
 function doMeleeMovementAbility(item, ab) {
+  if (ab.aimDash) {
+    startScytheDash(item, ab);
+    spawnAbilityAOEFX(camera.position.clone().setY(Math.max(0.15, camera.position.y - 1.5)), 1.4, ab.color || 0xaaccff);
+    flashScreen('rgba(180,255,235,0.20)', 200);
+    playSoundEvent('footstep', { volume: 0.8, pitch: 1.7, minGap: 40 });
+    return;
+  }
   const fwd = _meleeForwardXZ();
   const side = new THREE.Vector3(fwd.z, 0, -fwd.x);
   const speed = ab.speed ?? 18;
@@ -61883,6 +61917,7 @@ function loop() {
   updateBatCrowdClear(dt);
   updateMeleeSlam(dt);
   updateMeleeDash(dt);
+  updateScytheDash(dt);
   updateChainsawFuel(dt);
   updateAutoLunge(dt);
   updatePendingFanFire(dt);

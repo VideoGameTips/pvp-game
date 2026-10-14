@@ -1157,6 +1157,56 @@ if (ok && process.argv.includes('--thirdperson')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+if (ok && process.argv.includes('--movement')) {
+  // Double jump is back (whoever grants one gets one, in any mode), the blade air dash is the original, and the
+  // Scythe's Reap Dash goes where you aim: up when you look up, level when you look level, twice as far as it did.
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const savedSel = [selectedPrimaryIdx, selectedSecondaryIdx, selectedMeleeIdx, selectedSupportIdx];
+    const savedMode = selectedModeConfig, savedMatch = match, savedStarted = gameStarted, savedDead = isDead;
+    try {
+      selectedModeConfig = GAME_MODE_CONFIGS['1v1']; match = null; gameStarted = true; isDead = false;
+      const sc = MELEE_ITEMS.findIndex(m => m.id === 'scythe');
+      selectedMeleeIdx = sc;
+      if (loadoutAirJumps() < 1) issues.push('a scythe in the loadout should give a double jump');
+      if (DASH_SPEED !== 17) issues.push('the air dash should be back at 17, not ' + DASH_SPEED);
+      if (grantsDash(WEAPONS.find(w => w.id === 'fists') || {})) issues.push('the air dash should not have been opened to fists');
+      const ab = MELEE_ITEMS[sc].ability;
+      if (!ab.aimDash || ab.distance < 24) issues.push('Reap Dash should be an aimed dash of about 26 m');
+      // aim straight up, then level, and run the dash to the end
+      const run = (pitch) => {
+        camera.position.set(0, 1.65, 0);
+        camera.quaternion.setFromEuler(new THREE.Euler(pitch, 0, 0, 'YXZ'));
+        slamState = null; scytheDash = null; _extVel.x = 0; _extVel.z = 0;
+        const y0 = camera.position.y, z0 = camera.position.z;
+        startScytheDash(MELEE_ITEMS[sc], ab);
+        let guard = 0;
+        while (scytheDash && guard++ < 600) {
+          updateScytheDash(1 / 60);
+          if (slamState) camera.position.y += slamState.vel / 60;     // the part updateMovement would do
+        }
+        return { up: camera.position.y - y0, fwd: -(camera.position.z - z0) };
+      };
+      const keepWalls = wallColliders.slice(); wallColliders.length = 0;       // open ground: nothing in the way
+      let level, up, straight;
+      try { level = run(0); up = run(Math.PI / 4); straight = run(Math.PI / 2 - 0.05); }
+      finally { wallColliders.push(...keepWalls); }
+      if (level.fwd < 20) issues.push('a level Reap Dash only covered ' + level.fwd.toFixed(1) + ' m');
+      if (Math.abs(level.up) > 2.5) issues.push('a level Reap Dash climbed ' + level.up.toFixed(1) + ' m');
+      if (up.up < 10) issues.push('aiming 45 degrees up should climb a lot, got ' + up.up.toFixed(1) + ' m');
+      if (straight.up < 18) issues.push('aiming straight up should climb about the whole dash, got ' + straight.up.toFixed(1) + ' m');
+      if (!(up.fwd > 10 && up.fwd < level.fwd)) issues.push('aiming up should trade some forward distance for height');
+    } finally {
+      [selectedPrimaryIdx, selectedSecondaryIdx, selectedMeleeIdx, selectedSupportIdx] = savedSel;
+      selectedModeConfig = savedMode; match = savedMatch; gameStarted = savedStarted; isDead = savedDead; scytheDash = null; slamState = null;
+      camera.position.set(0, 1.65, 0); camera.quaternion.set(0, 0, 0, 1);
+    }
+    return issues;
+  })()`);
+  console.log('movement checks: double jump back, original air dash, Reap Dash follows the aim');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 if (ok && process.env.MAP_REVIEW_DIR) {
   fs.mkdirSync(process.env.MAP_REVIEW_DIR, { recursive: true });
   for (const name of ['forest', 'desert', 'tundra', 'refinery', 'space', 'volcano', 'titanic', 'carrier', 'pearl_harbor']) {
