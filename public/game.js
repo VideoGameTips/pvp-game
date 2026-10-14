@@ -11682,9 +11682,9 @@ const MAP_THEMES = {
   blank:        _T(0xb9bec2, 0x9aa0a6, 0xdfe3e6, 0xc9cfd4, 0xaab2b8, 0xe9edf0, 0xf2c14e, 0x4a90d9, 0xa5b6c4, 'industrial', ['crates', 'barrels']),
   battlefield: Object.assign(_T(0x5f7a45, 0x4f6a39, 0x7b705f, 0x6a6050, 0x6b5d49, 0x8a7d66, 0xc2a45a, 0xb23a2e, 0x9cc4e4, 'nature', ['sandbags', 'trees', 'crates']), { keep: true }),
   range:        _T(0x6b7076, 0x565b61, 0x8c929a, 0x777d85, 0x5a6068, 0x9aa0a8, 0xe8c43a, 0xd04a3a, 0x8a929c, 'industrial', ['crates', 'barrels']),
-  urban: Object.assign(_T(0x4a4d52, 0x3d4044, 0x8a6f5d, 0x6f7b86, 0x5a5f66, 0x9a9a98, 0xd8c8a0, 0xd9822b, 0x8fa2b4, 'urban', ['cars', 'crates', 'barrels']), { keep: true }),
-  warehouse: Object.assign(_T(0x6d6a64, 0x57544f, 0x6f7d86, 0x8a6a46, 0x7a5a38, 0x8d8f91, 0xe8b932, 0xc8402a, 0x8fa2b4, 'industrial', ['crates', 'crates', 'barrels']), { keep: true }),
-  forest: Object.assign(_T(0x4d6b35, 0x3f5a2b, 0x6b5a45, 0x56693a, 0x6b6b5f, 0x8a7352, 0x9bb86a, 0xe0c24a, 0xa8d3e8, 'nature', ['trees', 'trees', 'rocks', 'logs']), { keep: true }),
+  urban: Object.assign(_T(0x4a4d52, 0x3d4044, 0x8a6f5d, 0x6f7b86, 0x5a5f66, 0x9a9a98, 0x969a98, 0x6a7d84, 0x8fa2b4, 'urban', ['cars', 'crates', 'barrels']), { keep: true }),
+  warehouse: Object.assign(_T(0x6d6a64, 0x57544f, 0x6f7d86, 0x8a6a46, 0x7a5a38, 0x8d8f91, 0x818b91, 0x697b83, 0x8fa2b4, 'industrial', ['crates', 'crates', 'barrels']), { keep: true }),
+  forest: Object.assign(_T(0x4d6b35, 0x3f5a2b, 0x6b5a45, 0x56693a, 0x6b6b5f, 0x8a7352, 0x718366, 0x455a3d, 0xa8d3e8, 'nature', ['trees', 'trees', 'rocks', 'logs']), { keep: true }),
   vietnam: Object.assign(_T(0x5a6b3a, 0x4a5a2e, 0x7d6a45, 0x5a6a38, 0x6a5a3a, 0x8a7a54, 0xb8a05a, 0xc8402a, 0xb8c8a0, 'nature', ['trees', 'sandbags', 'crates']), { keep: true }),
   volcano: Object.assign(_T(0x2a1f1c, 0x4a1f10, 0x3a2b26, 0x4a3028, 0x2f2522, 0x5a4036, 0xff7a2a, 0xff4a12, 0x3a1208, 'fire', ['rocks', 'rocks']), { keep: true }),
   cyber: Object.assign(_T(0x10141f, 0x1a8aa8, 0x1b2338, 0x242b45, 0x2a3355, 0x1d2840, 0x00e5ff, 0xff2bd6, 0x0b0e1c, 'neon', ['crates', 'pylons'], 0x66f0ff), { keep: true }),
@@ -13348,7 +13348,7 @@ function buildWarehouseLayout() {
   const wallC = 0x6f7d86, rackC = 0x8a5a2a, rackB = 0x3a5a8a, off = 0xb8b2a4, TOP = 4.6;
   K.wx(-50, 50, -59.6, 0.8, 0, 10, wallC); K.wx(-50, 50, 59.6, 0.8, 0, 10, wallC); K.wz(-60, 60, -49.6, 0.8, 0, 10, wallC); K.wz(-60, 60, 49.6, 0.8, 0, 10, wallC);
   for (const x of [-40, -28, -16, 16, 28, 40]) for (const [z0, z1] of [[-34, -18], [-13, 13], [18, 34]]) {   // rack rows
-    K.box(x, 0, (z0 + z1) / 2, 3.2, 4.0, z1 - z0, x % 24 === 16 || x === -40 ? rackC : rackB);
+    K.box(x, 0, (z0 + z1) / 2, 3.2, 4.0, z1 - z0, x % 24 === 16 || x === -40 ? rackC : rackB).userData.warehouseRack=true;
   }
   // the office
   K.room(-9, 9, -14, 14, 0, 4.2, off, { n: [K.door(0)], s: [K.door(0)], w: [K.door(-7), K.door(7)], e: [K.door(-7), K.door(7)] });
@@ -14759,7 +14759,7 @@ function buildForestIdentityLayout() {
   const name = 'forest', K = _bkBegin(name, 140, 140, 0x304c28);
   K.perim(11, 0x364632);
   const tree = (x, z, h = 12) => {
-    K.box(x, 0, z, 2.8, h, 2.8, 0x493526);
+    K.box(x, 0, z, 2.8, h, 2.8, 0x493526).userData.realTree=true;
     const mesh = new THREE.Mesh(new THREE.ConeGeometry(6.5, 9, 7), new THREE.MeshLambertMaterial({ color: 0x245d36 }));
     mesh.position.set(x, h + 1, z); MAP_GROUPS[name].add(mesh);
     const top = new THREE.Mesh(new THREE.ConeGeometry(4.2, 7, 7), new THREE.MeshLambertMaterial({ color: 0x387c45 }));
@@ -19039,6 +19039,129 @@ function addOpenLaneCover(name) {
   }
 }
 
+function mapRealismTexture(kind) {
+  const tex=surfTex('map-realism:'+kind,512,(ctx,s)=>{
+    const rnd=_thRng('realism:'+kind);
+    ctx.fillStyle=kind==='brick'?'#9b958a':kind==='bark'?'#b5aa98':'#bfc5c8';ctx.fillRect(0,0,s,s);
+    if(kind==='brick'){
+      const h=32,w=96;
+      for(let row=0;row<s/h;row++)for(let x=-w;x<s+w;x+=w){
+        const v=150+Math.floor(rnd()*65),xx=x+(row%2)*w/2;
+        ctx.fillStyle='rgb('+v+','+(v-8)+','+(v-16)+')';ctx.fillRect(xx+2,row*h+2,w-4,h-4);
+        ctx.fillStyle='rgba(255,255,255,.12)';ctx.fillRect(xx+3,row*h+3,w-6,1);
+      }
+      _grain(ctx,s,rnd,{n:10000,a:.12,r:1});
+    }else if(kind==='bark'){
+      for(let i=0;i<160;i++){
+        const x=rnd()*s;ctx.strokeStyle=i%3?'rgba(40,32,22,.28)':'rgba(245,232,198,.22)';ctx.lineWidth=1+rnd()*4;
+        ctx.beginPath();ctx.moveTo(x,0);ctx.bezierCurveTo(x-12,rnd()*s,x+12,rnd()*s,x,s);ctx.stroke();
+      }
+      _grain(ctx,s,rnd,{n:7000,a:.18,r:2});
+    }else{
+      for(let y=0;y<s;y+=16){ctx.fillStyle='#8d969b';ctx.fillRect(0,y,s,3);ctx.fillStyle='#e1e5e6';ctx.fillRect(0,y+4,s,2);}
+      for(let x=32;x<s;x+=128)for(let y=8;y<s;y+=128){ctx.fillStyle='#626e75';ctx.fillRect(x,y,4,4);}
+      _grain(ctx,s,rnd,{n:4000,a:.08,r:1});
+    }
+  });
+  tex.userData.mapSurface=true;return tex;
+}
+
+// Detail hugs existing surfaces. It never adds cover, narrows a doorway, or changes a collider.
+function addMapRealism(name) {
+  if(!['urban','warehouse','forest'].includes(name))return;
+  const G=MAP_GROUPS[name];if(!G || G.userData.realism)return;
+  const stats=G.userData.realism={surfaces:0,fixtures:0,racks:0,trees:0,drains:0};
+  G.updateMatrixWorld(true);
+  const detail=_thBuf(),leafPositions=[],leafUV=[],rnd=_thRng(name+':realism');
+  const box=(x,y,z,w,h,d,c)=>_thBox(detail,_TH_WORLD,x,y,z,w,h,d,c);
+  const surface=(m,kind)=>{
+    mapSurfaceUV(m);
+    const old=m.material,mat=new THREE.MeshPhongMaterial({color:old.color,side:old.side,vertexColors:!!m.geometry.attributes.color,
+      map:mapRealismTexture(kind),bumpMap:mapRealismTexture(kind),bumpScale:kind==='bark'?.09:.035,
+      shininess:kind==='sheet'?35:8,specular:kind==='sheet'?0x606970:0x292a25});
+    m.material=mat;m.receiveShadow=true;stats.surfaces++;
+  };
+  const groundFree=(x,z,r)=>!(MAP_COLLIDERS[name]||[]).some(b=>b.min.y<1.8 && b.max.y>.15 && x>b.min.x-r && x<b.max.x+r && z>b.min.z-r && z<b.max.z+r);
+  for(const m of G.children.slice()){
+    const p=m.userData.thDims;
+    if(!m.isMesh || !p || Array.isArray(m.material) || m.material.transparent || m.userData.mapStructure)continue;
+    const b=new THREE.Box3().setFromObject(m),sz=b.getSize(new THREE.Vector3()),c=b.getCenter(new THREE.Vector3());
+    const thin=Math.min(sz.x,sz.z),long=Math.max(sz.x,sz.z),alongX=sz.x>sz.z;
+    if(name==='urban' && thin<1.3 && long>4 && sz.y>3 && m.userData.thCls!=='perimeter'){
+      surface(m,'brick');
+      if(stats.fixtures>=28 || b.min.y>10)continue;
+      const nx=alongX?0:-Math.sign(c.x||1),nz=alongX?-Math.sign(c.z||1):0;
+      const face=thin/2,at=(u,y,v,w,h,d,col)=>box(c.x+(alongX?u:nx*(face+v)),y,c.z+(alongX?nz*(face+v):u),alongX?w:d,h,alongX?d:w,col);
+      const y=Math.max(b.min.y+sz.y*.64,2.9);
+      at(0,y,.22,1.45,.8,.42,0xb1b6b4);at(0,y,.44,1.16,.57,.025,0x354149);
+      for(let k=-3;k<=3;k++)at(k*.15,y,.46,.035,.53,.025,0x7b868b);
+      at(-.53,y-.52,.12,.12,.35,.24,0x687478);at(.53,y-.52,.12,.12,.35,.24,0x687478);
+      const u=long/2-.3;
+      at(u,b.min.y+sz.y/2,.1,.12,sz.y,.12,0x555f61);
+      for(let yy=b.min.y+.5;yy<b.max.y;yy+=1.8)at(u,yy,.12,.22,.08,.16,0x919a97);
+      stats.fixtures++;
+    }
+    if(name==='warehouse' && m.userData.thCls==='perimeter')surface(m,'sheet');
+    if(name==='warehouse' && m.userData.warehouseRack){
+      stats.racks++;
+      const x0=b.min.x,x1=b.max.x,z0=b.min.z,z1=b.max.z,h=sz.y;
+      m.material=m.material.clone();m.material.color.setHex(0x4f5558);
+      for(let z=z0+.15;z<z1;z+=3.2)for(const x of [x0+.08,x1-.08])box(x,b.min.y+h/2,z,.14,h,.14,0x416377);
+      for(let level=0;level<3;level++){
+        const y=b.min.y+.15+level*h/3;
+        for(const x of [x0-.025,x1+.025]){
+          box(x,y,(z0+z1)/2,.13,.19,sz.z,0xc18432);
+          for(let z=z0+.9;z<z1-.45;z+=1.65){
+            const hh=.5+rnd()*.35,col=[0xa98b61,0x8e7659,0xb49a74][Math.floor(rnd()*3)];
+            box(x,y+.18+hh/2,z,.17,hh,1.4,col);
+            box(x+(x<c.x?-.095:.095),y+.18+hh/2,z,.025,.13,.42,0xd9d2bb);
+          }
+        }
+      }
+    }
+    if(name==='forest' && m.userData.realTree){
+      surface(m,'bark');stats.trees++;
+      for(let k=0;k<6;k++){
+        const a=k*Math.PI/3,dx=Math.cos(a),dz=Math.sin(a);
+        const r=Math.max(sz.x,sz.z)*.44,x=c.x+dx*r,z=c.z+dz*r;
+        const points=[new THREE.Vector3(x-dz*.2,.005,z+dx*.2),new THREE.Vector3(x+dz*.2,.005,z-dx*.2),new THREE.Vector3(x+dx*.9,.005,z+dz*.9),new THREE.Vector3(x,.28,z)];
+        for(const indices of [[0,1,3],[1,2,3],[2,0,3]]){
+          const v=indices.map(i=>points[i]),n=new THREE.Vector3().subVectors(v[1],v[0]).cross(new THREE.Vector3().subVectors(v[2],v[0])).normalize();
+          for(const p of v){detail.p.push(p.x,p.y,p.z);detail.n.push(n.x,n.y,n.z);detail.c.push(.27,.23,.16);}
+        }
+      }
+      const r=Math.max(sz.x,sz.z)*1.2;
+      for(const [u,v] of [[0,0],[1,0],[1,1],[0,0],[1,1],[0,1]]){
+        leafPositions.push(c.x+(u-.5)*r*2,.006,c.z+(v-.5)*r*2);leafUV.push(u,v);
+      }
+    }
+  }
+  if(name==='urban' || name==='warehouse'){
+    const points=name==='urban'?[-48,-30,30,48].flatMap(z=>[[-10.8,z],[10.8,z],[z,-10.8],[z,10.8]]):[-42,0,42].flatMap(z=>[[-22,z],[22,z],[-34,z],[34,z]]);
+    for(const [x,z] of points){
+      if(!groundFree(x,z,1))continue;stats.drains++;
+      box(x,.012,z,1.3,.018,.75,0x666d6b);box(x,.023,z,1.1,.018,.56,0x242d30);
+      for(let i=-4;i<=4;i++)box(x+i*.11,.038,z,.045,.025,.55,0x737b78);
+      if(name==='warehouse')for(const s of [-1,1])for(let k=0;k<4;k++)box(x+s*.8,.015,z-.4+k*.25,.22,.02,.13,k%2?0x323638:0xbd9c45);
+    }
+  }
+  if(leafPositions.length){
+    const tex=surfTex('forest-leaf-litter',256,(ctx,s)=>{
+      ctx.clearRect(0,0,s,s);const r=_thRng('leaf-litter');
+      for(let i=0;i<1100;i++){
+        const x=r()*s,y=r()*s,fade=Math.max(0,1-Math.pow(Math.hypot(x-s/2,y-s/2)/(s*.48),2));
+        ctx.globalAlpha=fade*.65;ctx.fillStyle=['#6d6240','#8b764c','#53603c','#a18a58'][i%4];
+        ctx.beginPath();ctx.ellipse(x,y,1+r()*3,.6+r()*1.5,r()*Math.PI,0,Math.PI*2);ctx.fill();
+      }ctx.globalAlpha=1;
+    });
+    const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(leafPositions,3));geo.setAttribute('uv',new THREE.Float32BufferAttribute(leafUV,2));geo.computeVertexNormals();
+    const m=new THREE.Mesh(geo,new THREE.MeshPhongMaterial({map:tex,transparent:true,opacity:.85,depthWrite:false,side:THREE.DoubleSide,shininess:1,polygonOffset:true,polygonOffsetFactor:-1}));
+    m.receiveShadow=true;m.userData.themeDecor=true;G.add(m);
+  }
+  _thMesh(G,detail,false);
+  stats.detailBoxes=detail.boxes;
+}
+
 function _upgradeMap(name) {
   const g = MAP_GROUPS[name];
   if (!g || g._upgraded || !MAP_THEMES[name]) return;
@@ -19051,6 +19174,7 @@ function _upgradeMap(name) {
   try { _eggsMap(name); } catch (e) { console.warn('[upgrade] eggs', name, e); }
   try { _outskirtsMap(name); } catch (e) { console.warn('[upgrade] outskirts', name, e); }
   try { _gimMap(name); } catch (e) { console.warn('[upgrade] gimmick', name, e); }
+  try { addMapRealism(name); } catch (e) { console.warn('[upgrade] realism', name, e); }
   // what was just added gets the same surface as the rest
   try { g._weathered = false; weatherMapGroup(g); } catch (e) {}
   g.userData.upgradeMs = Math.round(performance.now() - t0);
@@ -33373,7 +33497,7 @@ const SHIRT_COLORS = [0xb03a2e, 0x1f4e79, 0x4a5d23, 0xc1720b, 0x37474f, 0x146356
 // and true to life — the cut has a brim, sideburns and a shell, so it reads.
 const HAIR_COLORS  = [0x241a12, 0x4a4640, 0x553318, 0xa9762e, 0xc9a227, 0x8f2f10, 0x8e9098];
 const SKIN_TONES   = [0xffcc99, 0xeab183, 0xc2895a, 0x8a5a36];
-const HAIR_STYLES  = ['crop', 'buzz', 'messy', 'swoop', 'curls', 'tail'];
+const HAIR_STYLES  = ['crop', 'buzz', 'messy', 'swoop', 'curls', 'tail', 'spiky'];
 // 'none' twice on purpose: about a third of people carry nothing, so the ones
 // who do read as carrying something rather than as the uniform.
 const KITS         = ['none', 'none', 'pack', 'pauldrons', 'vest', 'belt', 'bandolier'];
@@ -33436,23 +33560,26 @@ function appearanceFor(name) {
 // Every tint that used to be a fixed peach value is derived from the tone now,
 // so a darker recruit doesn't get pale cheeks and invisible brows (#50).
 function makeFaceTexture(tone = 0xffcc99) {
-  const c = document.createElement('canvas'); c.width = 32; c.height = 32;
+  const c = document.createElement('canvas'); c.width = 64; c.height = 64;
   const ctx = c.getContext('2d');
   const px = (col, x, y, w = 1, h = 1) => { ctx.fillStyle = col; ctx.fillRect(x, y, w, h); };
   const sk    = _cssHex(tone);
   const jaw   = _cssHex(darkenColor(tone, 0.93));
   const iris  = _cssHex(_mixColor(tone, 0x2f7fd6, 0.92));       // blue, faintly warmed by the tone
   const deep  = _cssHex(_mixColor(tone, 0x17539c, 0.94));
-  // Same rules as the drawn skins: flat blocks on a coarse grid, big eyes low
-  // on the face, no nose and no cheeks. A modelled nose at this size is three
-  // brown pixels that read as damage, and the smile made everyone a doll.
-  px(sk, 0, 0, 32, 32);                                         // skin
-  px(jaw, 0, 28, 32, 4);                                        // jaw shade
-  px('#ffffff', 4, 14, 6, 6);   px('#ffffff', 22, 14, 6, 6);    // whites — the outer edge
-  px(iris, 6, 14, 4, 6);        px(iris, 22, 14, 4, 6);         // iris — the inner two thirds
-  px(deep, 6, 18, 4, 2);        px(deep, 22, 18, 4, 2);         // …deeper along the bottom
+  // Draw at the real 64-pixel resolution, including single-pixel eye detail.
+  px(sk,0,0,64,64);
+  for(let y=57;y<64;y++)px(_cssHex(_mixColor(tone,parseInt(jaw.slice(1),16),(y-56)/7)),0,y,64,1);
+  for(const x of [9,43]){
+    px('#e8e8e5',x,28,12,1);px('#ffffff',x,29,12,10);px('#d2d8d9',x,39,12,1);
+    const ix=x===9?13:43;
+    px(iris,ix,29,8,10);px(deep,ix,36,8,3);
+    px('#142c43',ix+2,30,3,7);px('#ffffff',ix+1,30,2,2);px('#a8d7f1',ix+5,35,1,2);
+  }
   const tex = new THREE.CanvasTexture(c);
   tex.magFilter = THREE.NearestFilter;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.userData.characterResolution=64;
   return tex;
 }
 // One texture per TONE, not per character — skins swap faceMat.map, they never
@@ -33501,8 +33628,7 @@ const BODY = (() => {
   const B = {
     h: 1.78,
     fitScale: +S.toFixed(5),                 // what GEAR_FIT scales the old library by
-    // Head: a cube, like it was. 25% of stature — 4 heads tall, which is the
-    // blocky proportion, not the realistic 7.5.
+    // Chunky head proportions; the render mesh rounds its edges inside these unchanged bounds.
     crown: f(2.100), chin: f(1.600), headY: f(1.850),
     headH: d(0.500), headHalfW: d(0.250), headHalfD: d(0.250),
     // Neck: just enough to close the gap a floating cube head leaves.
@@ -33598,12 +33724,8 @@ const GEAR_FIT = {
 // ══════════════════════════════════════════════════════════════════════════
 // 🎽 PIXEL KIT ART (#64)
 // ══════════════════════════════════════════════════════════════════════════
-// #53 repainted every character texture as 320 px of linear-filtered art,
-// because a 16x16 pixel grid is the wrong art for an anatomical skull. The
-// skull is gone again (#64), so the art is back to what the blocky bodies
-// wear: a 16x16 grid of whole pixels, magnified with NearestFilter and no
-// mipmaps. That rule is the whole look — one gradient in here and a character
-// stops reading as pixel art and starts reading as a small drawing.
+// Built-in kit art keeps its authored layout but renders at 64x64, with fine fabric,
+// panel edges and mipmaps so the smaller texels remain stable at a distance.
 
 // ── 🧱 Minecraft-style character blocks ─────────────────────────────────────
 // The bodies were bevelled boxes wearing a drawn-on face: soft edges, a nose,
@@ -33618,24 +33740,40 @@ function mcBoxGeo(w, h, d) {
   return geo;
 }
 
-// Every character texture is a 16×16 grid of whole pixels, magnified with
-// NearestFilter and no mipmaps. That rule is the whole look: one gradient, one
-// curve or one half-pixel edge in here and the character stops reading as pixel
-// art and starts reading as a small drawing, which is worse than either.
+// Painters use 16-unit design coordinates; fractional units now reach individual 64x64 texels.
 const _charTexCache = new Map();
 function charTex(key, draw) {
   let t = _charTexCache.get(key);
   if (t) return t;
-  const c = document.createElement('canvas'); c.width = 16; c.height = 16;
+  const c = document.createElement('canvas'); c.width = 64; c.height = 64;
   const ctx = c.getContext('2d');
-  const p = (col, x, y, w = 1, h = 1) => { ctx.fillStyle = col; ctx.fillRect(x | 0, y | 0, w | 0, h | 0); };
+  const p = (col, x, y, w = 1, h = 1) => { ctx.fillStyle = col; ctx.fillRect(Math.round(x*4),Math.round(y*4),Math.round(w*4),Math.round(h*4)); };
   draw(p);
+  refineCharacterTexels(ctx,key);
   t = new THREE.CanvasTexture(c);
   t.magFilter = THREE.NearestFilter;
-  t.minFilter = THREE.NearestFilter;     // no mip smear at range either
-  t.generateMipmaps = false;
+  t.minFilter = THREE.LinearMipmapLinearFilter;
+  t.generateMipmaps = true;
+  t.userData.characterResolution=64;
   _charTexCache.set(key, t);
   return t;
+}
+function refineCharacterTexels(ctx,key) {
+  const img=ctx.getImageData(0,0,64,64),data=img?.data;
+  if(!data?.length)return;
+  const original=new Uint8ClampedArray(data),head=key.startsWith('h:') || key.startsWith('n:');
+  const seed=_nameHash(key);
+  for(let y=0;y<64;y++)for(let x=0;x<64;x++){
+    const i=(y*64+x)*4;
+    if(!original[i+3])continue;
+    const prev=(y*64+Math.max(0,x-1))*4,above=(Math.max(0,y-1)*64+x)*4;
+    const contrast=j=>Math.abs(original[i]-original[j])+Math.abs(original[i+1]-original[j+1])+Math.abs(original[i+2]-original[j+2]);
+    const edge=x>0 && contrast(prev)>55 || y>0 && contrast(above)>55;
+    const hash=(Math.imul(x+seed,374761393)^Math.imul(y+17,668265263))>>>0;
+    const weave=head?0:((x+y)%3===0?2:-1),grain=(hash%5-2)*(head?.35:.7);
+    for(let k=0;k<3;k++)data[i+k]=Math.max(0,Math.min(255,original[i+k]*(edge?.92:1)+weave+grain));
+  }
+  ctx.putImageData(img,0,0);
 }
 function charMat(key, draw) { return new THREE.MeshLambertMaterial({ map: charTex(key, draw) }); }
 // BoxGeometry material order is +X −X +Y −Y +Z −Z: right, left, top, bottom,
@@ -33931,7 +34069,7 @@ function applyPixelSkin(art, parts) {
     badge.position.set(0, 2.16, 0.275); gh.add(badge);
   }
   if (art.helmet) {
-    const helm = new THREE.Mesh(mcBoxGeo(0.58, 0.26, 0.58), new THREE.MeshLambertMaterial({ color: art.helmet.color }));
+    const helm = new THREE.Mesh(characterShapeGeo(0.58, 0.26, 0.58,.055), new THREE.MeshLambertMaterial({ color: art.helmet.color }));
     helm.position.set(0, 2.15, 0); helm.castShadow = true; gh.add(helm);
   }
 }for (const k of Object.keys(PIXEL_SKINS)) PIXEL_SKINS[k]._id = k;
@@ -34425,9 +34563,9 @@ for (let i = 0; i < WEAPONS.length; i++) {
 //   • faceted rocks and gems raised to a smooth detail level, and flat shading switched off.
 // Identical parts share one geometry, so a belt of fifty rounds costs one.
 const _smoothGeoCache = new Map();
-function _roundedBox(w, h, d) {
+function _roundedBox(w, h, d, radius) {
   const hw = w / 2, hh = h / 2, hd = d / 2;   // (callers pass the size they want, grown or not)
-  const m3 = Math.min(w, h, d), r = Math.max(0.0008, Math.min(0.016, m3 * 0.32));
+  const m3 = Math.min(w, h, d), r = Math.max(0.0008, Math.min(radius ?? 0.016, m3 * (radius === undefined ? .32 : .45)));
   const g = new THREE.BoxGeometry(w, h, d, 6, 6, 6), pos = g.attributes.position, nor = g.attributes.normal;
   // 7 vertices an axis: centre, the two that end the flat face, the two half-way round the bevel, the edge.
   const map = (v, a) => { const t = Math.abs(v) / a, s = Math.sign(v);
@@ -34442,6 +34580,24 @@ function _roundedBox(w, h, d) {
   }
   g.computeBoundingBox(); g.computeBoundingSphere();
   return g;
+}
+const _characterShapeCache = new Map();
+function characterShapeGeo(w,h,d,radius=.025) {
+  const key=[w,h,d,radius].join(',');
+  let geo=_characterShapeCache.get(key);
+  if(!geo){
+    geo=_roundedBox(w,h,d,radius);
+    // Reproject after beveling: the gun helper preserves old UVs, which pushes eyes off a rounded face.
+    const p=geo.attributes.position,uv=geo.attributes.uv;
+    for(const group of geo.groups)for(let j=group.start;j<group.start+group.count;j++){
+      const i=geo.index?geo.index.getX(j):j,x=p.getX(i),y=p.getY(i),z=p.getZ(i);
+      const face=group.materialIndex;
+      uv.setXY(i,face===0?-z/d+.5:face===1?z/d+.5:face===5?-x/w+.5:x/w+.5,
+        face===2?-z/d+.5:face===3?z/d+.5:y/h+.5);
+    }
+    _characterShapeCache.set(key,geo);
+  }
+  return geo;
 }
 function _smoothGeometry(g, grow = 0) {
   const p = g.parameters; if (!p) return null;
@@ -35710,7 +35866,7 @@ function _gearMat(kind, color, extra) {
 
 function _addHelmet(group, color) {
   const host = group._gearHead || group;
-  const helm = new THREE.Mesh(mcBoxGeo(0.56, 0.22, 0.56), _gearMat('plate', color));
+  const helm = new THREE.Mesh(characterShapeGeo(0.56, 0.22, 0.56,.05), _gearMat('plate', color));
   helm.position.set(0, 2.13, 0); helm.castShadow = true; host.add(helm);
 }
 
@@ -35718,7 +35874,7 @@ function _addHelmet(group, color) {
 function _addCap(group, color) {
   const host = group._gearHead || group;
   const mat = _gearMat('cloth', color);
-  const dome = new THREE.Mesh(mcBoxGeo(0.54, 0.16, 0.54), mat);
+  const dome = new THREE.Mesh(characterShapeGeo(0.54, 0.16, 0.54,.04), mat);
   dome.position.set(0, 2.10, 0); dome.castShadow = true; host.add(dome);
   const brim = new THREE.Mesh(mcBoxGeo(0.50, 0.05, 0.20), mat);
   brim.position.set(0, 2.04, 0.32); brim.castShadow = true; host.add(brim);
@@ -35765,6 +35921,7 @@ function _addHeadphones(group, color) {
 let _hairSphereGeo = null;
 function _addSeedHair(head, style, color) {
   const host = head._gear || head;
+  if(style==='spiky'){_addSpikyHair(host,color);return;}
   const mat = _gearMat('hair', color);
   const put = (geo, x, y, z) => {
     const m = new THREE.Mesh(geo, mat);
@@ -35775,15 +35932,15 @@ function _addSeedHair(head, style, color) {
   // rather than hair on a head — the scalp slab alone leaves bare skin in the
   // whole silhouette below it.
   const capH = style === 'buzz' ? 0.07 : 0.11;
-  put(mcBoxGeo(0.53, capH, 0.53), 0, 0.17 + capH / 2, 0);
+  put(characterShapeGeo(0.53, capH, 0.53,.03), 0, 0.17 + capH / 2, 0);
   // The back comes down further than the sides: sideburns should stop about
   // ear height, but anything short of the jaw at the BACK leaves a bare patch of
   // scalp that is the whole silhouette when a character is running away from you.
   const backH = style === 'buzz' ? 0.34 : 0.42;       // head box runs -0.25 → +0.25
   const sideH = style === 'buzz' ? 0.15 : 0.24;
-  put(mcBoxGeo(0.53, backH, 0.045), 0, 0.18 - backH / 2, -0.247);         // back
+  put(characterShapeGeo(0.53, backH, 0.045,.018), 0, 0.18 - backH / 2, -0.247);         // back
   [-0.247, 0.247].forEach(x =>
-    put(mcBoxGeo(0.045, sideH, 0.50), x, 0.18 - sideH / 2, 0));           // sideburns
+    put(characterShapeGeo(0.045, sideH, 0.50,.018), x, 0.18 - sideH / 2, 0));           // sideburns
   switch (style) {
     case 'buzz':                                            // that IS the whole cut
       break;
@@ -35816,19 +35973,25 @@ function _addSeedHair(head, style, color) {
   }
 }
 
-// Spiky hair — a cluster of little cones on top of the head (no helmet)
+// Connected swept tufts sit on a fitted scalp, all in the head's accessory frame.
 function _addSpikyHair(group, color) {
   const host = group._gearHead || group;
-  const mat = _gearMat('hair', color);
-  // a thin base layer so the scalp isn't bald skin
-  const base = new THREE.Mesh(mcBoxGeo(0.52, 0.10, 0.52), mat);
-  base.position.set(0, 2.07, 0); host.add(base);
-  const spikes = [[-0.15,0.07,-0.1],[0.16,0.06,-0.12],[0,0.10,0.0],[-0.12,0.06,0.14],[0.13,0.07,0.13],[0,0.08,-0.16],[-0.05,0.09,0.05]];
-  spikes.forEach(([x,yy,z]) => {
-    const s = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.20, 5), mat);
-    s.position.set(x, 2.12 + yy, z);
-    s.rotation.z = (x) * 0.8; s.rotation.x = (-z) * 0.8; // fan outward
-    s.castShadow = true; host.add(s);
+  const hair=new THREE.Group();hair.userData.hairstyle='spiky';host.add(hair);
+  const mat = _gearMat('hair', color),highlight=_gearMat('hair',_mixColor(color,0xa18c6b,.16));
+  const base = new THREE.Mesh(characterShapeGeo(.52,.16,.51,.05),mat);
+  base.position.set(0,2.065,-.012);base.castShadow=true;hair.add(base);
+  for(const sx of [-1,1]){
+    const side=new THREE.Mesh(characterShapeGeo(.055,.21,.37,.02),mat);
+    side.position.set(sx*.233,1.985,-.04);hair.add(side);
+  }
+  const spikes=[[-.17,-.13,.21],[0,-.16,.28],[.17,-.13,.24],[-.16,.04,.25],[.015,.01,.32],[.17,.05,.27],[-.13,.19,.20],[.04,.18,.25],[.18,.17,.19]];
+  spikes.forEach(([x,z,h],i) => {
+    const geo=new THREE.ConeGeometry(.10,h,5),pos=geo.attributes.position;
+    for(let j=0;j<pos.count;j++)pos.setX(j,pos.getX(j)+Math.max(0,pos.getY(j)/h+.5)*.045);
+    geo.computeVertexNormals();
+    const s=new THREE.Mesh(geo,i%3===1?highlight:mat);
+    s.position.set(x,2.105+h/2,z-.025);s.rotation.x=-.18-z*.5;s.rotation.z=-x*.7;
+    s.castShadow=true;hair.add(s);
   });
 }
 
@@ -36104,17 +36267,15 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
   const skin  = look.tone;
   const B = BODY;
 
-  // Hard-edged blocks wearing a pixel texture, flat-shaded (#64). Lambert, not
-  // a PBR surface: a block lit by an environment map picks up a soft gradient
-  // across each face, and a gradient is the one thing that stops a cube
-  // reading as a cube.
+  // Flat faces with softly rounded silhouettes; dimensions and joint anchors stay unchanged.
   const mkMat = c => new THREE.MeshLambertMaterial({ color: c });
+  const mkCloth = c => new THREE.MeshLambertMaterial({color:c,map:charTex('cloth:plain',p=>p('#f8f8f8',0,0,16,16))});
 
   // ── Head ──────────────────────────────────────────────────────────────────
-  // A cube, with the face on the +Z material slot so skins can reface it.
+  // Six material slots are preserved, including the face on +Z.
   const faceMat  = new THREE.MeshLambertMaterial({ map: faceTextureFor(skin) });
   const headMats = [mkMat(skin), mkMat(skin), mkMat(skin), mkMat(skin), faceMat, mkMat(skin)];
-  const head = new THREE.Mesh(mcBoxGeo(B.headHalfW * 2, B.headH, B.headHalfD * 2), headMats);
+  const head = new THREE.Mesh(characterShapeGeo(B.headHalfW * 2, B.headH, B.headHalfD * 2,.08), headMats);
   head.position.set(0, B.headY, 0); head.castShadow = true; group.add(head);
 
   // Neck. The blocky body had none and its head floated; this is a short block
@@ -36130,13 +36291,13 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
   // ── Torso ─────────────────────────────────────────────────────────────────
   // One 0.55 x 0.65 x 0.30 block in the old model; two here, because the rig
   // twists the chest and the hips must not come with it.
-  const torsoMat = mkMat(shirt);
-  const torso = new THREE.Mesh(mcBoxGeo(B.chestW, B.torsoH, B.chestD), torsoMat);
+  const torsoMat = mkCloth(shirt);
+  const torso = new THREE.Mesh(characterShapeGeo(B.chestW, B.torsoH, B.chestD,.045), torsoMat);
   torso.position.set(0, B.torsoY, 0); torso.castShadow = true; group.add(torso);
 
   // Pelvis — trousers, so it takes the LEG colour.
-  const pelvisMat = mkMat(pant);
-  const pelvis = new THREE.Mesh(mcBoxGeo(B.pelvisW, B.pelvisH, B.chestD), pelvisMat);
+  const pelvisMat = mkCloth(pant);
+  const pelvis = new THREE.Mesh(characterShapeGeo(B.pelvisW, B.pelvisH, B.chestD,.03), pelvisMat);
   pelvis.position.set(0, B.pelvisY, 0); pelvis.castShadow = true; group.add(pelvis);
 
   // ── Arms ──────────────────────────────────────────────────────────────────
@@ -36148,13 +36309,13 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
   [-1, 1].forEach(side => {
     const pivot = new THREE.Group();
     pivot.position.set(side * B.shoulderHalf, B.shoulder, 0);
-    const upper = new THREE.Mesh(mcBoxGeo(B.upperArmW, B.upperArm, B.upperArmW), mkMat(shirt));
+    const upper = new THREE.Mesh(characterShapeGeo(B.upperArmW, B.upperArm, B.upperArmW), mkCloth(shirt));
     upper.position.y = -B.upperArm / 2; upper.castShadow = true; pivot.add(upper);
     const elbow = new THREE.Group(); elbow.position.y = -B.upperArm; pivot.add(elbow);
-    const fore = new THREE.Mesh(mcBoxGeo(B.foreArmW, B.foreArm, B.foreArmW), mkMat(shirt));
+    const fore = new THREE.Mesh(characterShapeGeo(B.foreArmW, B.foreArm, B.foreArmW), mkCloth(shirt));
     fore.position.y = -B.foreArm / 2; fore.castShadow = true; elbow.add(fore);
     const wrist = new THREE.Group(); wrist.position.y = -B.foreArm; elbow.add(wrist);
-    const hand = new THREE.Mesh(mcBoxGeo(B.handW, B.handH, B.handW), mkMat(skin));
+    const hand = new THREE.Mesh(characterShapeGeo(B.handW, B.handH, B.handW,.025), mkMat(skin));
     hand.position.y = -B.handH / 2; wrist.add(hand);   // no shadow: it is inside the forearm's
     hands.push(hand);
     group.add(pivot);
@@ -36173,10 +36334,10 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
   [-1, 1].forEach(side => {
     const pivot = new THREE.Group();
     pivot.position.set(side * B.hipHalf, B.hip, 0);
-    const thigh = new THREE.Mesh(mcBoxGeo(B.thighW, B.thigh, B.thighD), mkMat(pant));
+    const thigh = new THREE.Mesh(characterShapeGeo(B.thighW, B.thigh, B.thighD), mkCloth(pant));
     thigh.position.y = -B.thigh / 2; thigh.castShadow = true; pivot.add(thigh);
     const knee = new THREE.Group(); knee.position.y = -B.thigh; pivot.add(knee);
-    const shin = new THREE.Mesh(mcBoxGeo(B.shinW, B.shin, B.shinD), mkMat(pant));
+    const shin = new THREE.Mesh(characterShapeGeo(B.shinW, B.shin, B.shinD), mkCloth(pant));
     shin.position.y = -B.shin / 2; shin.castShadow = true; knee.add(shin);
     // A real ankle joint, so the foot ROLLS about the ankle instead of spinning
     // about the middle of the boot the way it did when the mesh was the pivot.
