@@ -1570,7 +1570,7 @@ app.post('/auth/redeem', (req, res) => {
 });
 
 const PLAYER_MAX_HP  = 300;
-const SPAWN_SHIELD_MS = 1500;   // the client's grantSpawnShield cap (#22)
+const SPAWN_SHIELD_MS = 2500;   // the client's RESPAWN_SHIELD_MS: a hit during it must cost no HP here either (#22)
 const shielded = p => Date.now() < (p.shieldUntil || 0);
 const RESPAWN_DELAY  = 3000;
 const POS_BROADCAST_RATE = 50; // ms
@@ -2633,7 +2633,8 @@ io.on('connection', (socket) => {
     if (!p) return;
     const x = data.x != null ? Number(data.x) : p.x;
     const z = data.z != null ? Number(data.z) : p.z;
-    Object.assign(p, { x, y: 1, z, hp: maxHpForMode(p.matchMode), dead: false });
+    // A reset (a new round) is a respawn too, and gets the same protection as readyRespawn.
+    Object.assign(p, { x, y: 1, z, hp: maxHpForMode(p.matchMode), dead: false, shieldUntil: Date.now() + SPAWN_SHIELD_MS });
     emitToMatch(p.matchId, 'playerRespawned', { ...p, forcedReset: true });
   });
 

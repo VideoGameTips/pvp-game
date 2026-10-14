@@ -1386,10 +1386,13 @@ let lobbyPlayerSide = null;     // which pad the player chose: 'blue' or 'red'
 let spawnShieldUntil = 0; // timestamp: player is invincible until this time
 let spectatorState = null; // { idx, lastSwitch } — set when dead and watching teammates
 
+// Protection while you come back: RESPAWN_SHIELD_MS, whichever of the ~18 respawn paths brought you back. A shot on
+// the first frame, a hazard you spawned in, a DoT from the last life, or a bullet already in flight must not take
+// anything off you. It still ends the moment you fire (see expireSpawnShield), so it is not a way to fight.
+const RESPAWN_SHIELD_MS = 2500;
 function grantSpawnShield(ms) {
-  // Cap at 1.5s — long enough to orient, short enough that you can still be killed
-  const cap = Math.min(ms, 1500);
-  spawnShieldUntil = performance.now() + cap;
+  const cap = Math.min(ms, 3000);
+  spawnShieldUntil = Math.max(spawnShieldUntil, performance.now() + cap);   // never cut short a longer one
   const el = document.getElementById('spawn-shield');
   if (el) el.style.display = 'block';
   setTimeout(() => {
@@ -1406,7 +1409,12 @@ function expireSpawnShield() {
   if (el) el.style.display = 'none';
 }
 
+let _ssWasDead = false;
 function isShielded() {
+  // The first time anything asks after you have come back from being dead, you are given the respawn shield.
+  // Every damage path asks before it does anything, so there is no frame in which a hit can get in first.
+  if (isDead) _ssWasDead = true;
+  else if (_ssWasDead) { _ssWasDead = false; grantSpawnShield(RESPAWN_SHIELD_MS); }
   return performance.now() < spawnShieldUntil;
 }
 
@@ -1952,6 +1960,12 @@ let _fxWasDead = false;
 function watchStatusReset() {
   if (isDead && !_fxWasDead) clearPlayerStatusEffects();   // dying ends it all, so nothing is waiting for you when you come back
   _fxWasDead = isDead;
+  if (isDead) _ssWasDead = true;
+  // and the bots, the moment they go down: no fire, slow, root, stun or burn carried into the next life
+  for (const b of gameBots) {
+    if (b.dead && !b._fxDead) { b._fxDead = true; clearBotStatusEffects(b); }
+    else if (!b.dead && b._fxDead) b._fxDead = false;
+  }
 }
 let playerYVel = 0;               // Player vertical velocity (for air grenades launching the player)
 
@@ -10414,7 +10428,7 @@ function updateMapMechanics(dt) {
   const M = MAP_MECH[activeMapName];
   if (M) M.update(Math.min(dt, 0.1));
 }
-function _mechCanHurt() { return !isDead && !inLobby && match?.type !== 'range' && !countdownActive; }
+function _mechCanHurt() { return !isDead && !inLobby && match?.type !== 'range' && !countdownActive && !isShielded(); }
 const _mechFeetY = () => camera.position.y - (window._crouchEye || PLAYER_EYE_HEIGHT);
 // A map hazard that hurts the player: tick damage with the normal death path.
 function _mechHurtPlayer(dmg, id) {
@@ -37651,14 +37665,19 @@ const ADS_RECOIL_DAMPING = {
 function addFireShake(strength) {
   const mult = gameplaySettingMult('cameraShake');
   if (mult <= 0) return;
-  const mag = Math.min(hyperrealisticOn() ? 0.058 : 0.026, (strength || 1) * mult * 0.0088);
+  const mag = Math.min(hyperrealisticOn() ? 0.020 : 0.010, (strength || 1) * mult * 0.0034);
   const pitchDamp = isADS ? ADS_RECOIL_DAMPING.shakePitch : 1;
   const yawDamp = isADS ? ADS_RECOIL_DAMPING.shakeYaw : 1;
   // Less of the shot goes UP (was 0.72-1.34 of mag): a real gun shoves back into the
   // shoulder first, and a camera that jumps upward on every round reads as a toy.
   // The push-back itself is the viewmodel's z kick and the small FOV punch.
-  const dp = mag * (0.38 + Math.random() * 0.34) * pitchDamp;
-  const dy = (Math.random() - 0.5) * mag * 1.05 * yawDamp;
+  // It does not build up: the shake still outstanding plus this shot's is never more than SHAKE_CAP, so a fast
+  // gun is a steady small tremble and not a view that climbs.
+  const SHAKE_CAP = hyperrealisticOn() ? 0.012 : 0.0065;
+  let dp = mag * (0.38 + Math.random() * 0.34) * pitchDamp;
+  let dy = (Math.random() - 0.5) * mag * 1.05 * yawDamp;
+  dp = Math.max(0, Math.min(dp, SHAKE_CAP - _shakePitch));
+  dy = Math.max(-SHAKE_CAP - _shakeYaw, Math.min(SHAKE_CAP - _shakeYaw, dy));
   euler.x += dp; euler.y += dy;
   euler.x = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, euler.x));
   camera.quaternion.setFromEuler(euler);
@@ -37893,8 +37912,16 @@ function weaponKickStrength(w, pellets = 1) {
 // system) the player can do to fight it. Clamp the ACCUMULATED total, not
 // just each shot's contribution, so sustained fire settles at a fixed kick
 // instead of walking off the top of the screen.
-const _GUN_KICK_MAX = { x: 0.074, y: 0.021, z: 0.42, rx: 0.060, ry: 0.096, rz: 0.115 };
-const _GUN_KICK_HYPER_MAX = { x: 0.120, y: 0.036, z: 0.66, rx: 0.105, ry: 0.165, rz: 0.190 };
+// 🔫 The viewmodel kick is small and it does not stack. It used to add a shot's worth on top of what was still
+// there, up to a cap of 0.42 m back and 6-11 degrees of twist, so a fast gun walked the whole model into your
+// face and off the edge of the screen and you could not see its details. Now a shot SETS the kick (it is never
+// added to what is left of the last one), at about a third of the old size, under a cap that keeps the gun in
+// frame: a few centimetres back, a couple of degrees of tilt.
+const _GUN_KICK_MAX = { x: 0.016, y: 0.006, z: 0.085, rx: 0.022, ry: 0.026, rz: 0.032 };
+const _GUN_KICK_HYPER_MAX = { x: 0.026, y: 0.009, z: 0.125, rx: 0.034, ry: 0.040, rz: 0.048 };
+const GUN_KICK_SCALE = 0.34;
+// kick = what this shot does; hold = keep whichever is bigger of it and what is still left (never their sum)
+function _kickHold(key, v) { _gunKick[key] = Math.abs(v) >= Math.abs(_gunKick[key]) || Math.sign(v) !== Math.sign(_gunKick[key]) ? v : _gunKick[key]; }
 let _fovPunch = 0;   // degrees of momentary FOV widening per shot: the camera being shoved back
 function kickWeaponVisual(w, pellets = 1) {
   { const mm = weaponModels[currentWeaponIdx]; if (mm && mm._mech) mm._mech.kick = 1; }   // bolt / slide cycles
@@ -37923,15 +37950,15 @@ function kickWeaponVisual(w, pellets = 1) {
   const adsGunTilt = isADS ? ADS_RECOIL_DAMPING.gunTilt : 1;
   const adsGunSide = isADS ? ADS_RECOIL_DAMPING.gunSide : 1;
   if (w?.id === 'throwing_knives') {
-    _gunKick.z -= Math.min(0.32, 0.16 + s * 0.060);
-    _gunKick.y += Math.min(0.012, 0.004 + s * 0.002);
-    _gunKick.x += side * Math.min(0.026, 0.004 + s * 0.004);
-    _gunKick.rx -= Math.min(0.105, 0.045 + s * 0.010);
+    _kickHold('z', -Math.min(0.32, 0.16 + s * 0.060) * GUN_KICK_SCALE);
+    _kickHold('y', Math.min(0.012, 0.004 + s * 0.002) * GUN_KICK_SCALE);
+    _gunKick.x = side * Math.min(0.026, 0.004 + s * 0.004) * GUN_KICK_SCALE;
+    _kickHold('rx', -Math.min(0.105, 0.045 + s * 0.010) * GUN_KICK_SCALE);
     if (!isADS) {
-      _gunKick.ry += side * Math.min(0.050, 0.016 + s * 0.006);
-      _gunKick.rz += side * Math.min(0.060, 0.018 + s * 0.007);
+      _gunKick.ry = side * Math.min(0.050, 0.016 + s * 0.006) * GUN_KICK_SCALE;
+      _gunKick.rz = side * Math.min(0.060, 0.018 + s * 0.007) * GUN_KICK_SCALE;
     }
-    _fovPunch = Math.min(1.8, _fovPunch + 0.35 * Math.sqrt(Math.max(0.3, s)));
+    _fovPunch = Math.max(_fovPunch, Math.min(0.9, 0.35 * Math.sqrt(Math.max(0.3, s))));
     for (const key of ['x', 'y', 'z', 'rx', 'ry', 'rz']) {
       const max = (hyperrealisticOn() ? _GUN_KICK_HYPER_MAX : _GUN_KICK_MAX)[key];
       _gunKick[key] = Math.max(-max, Math.min(max, _gunKick[key]));
@@ -37940,16 +37967,16 @@ function kickWeaponVisual(w, pellets = 1) {
   }
   // Backwards, not upwards: the gun is driven into your shoulder (z, toward the
   // camera) much harder than before, and climbs (y) and muzzle-flips (rx) much less.
-  _gunKick.z += Math.min(0.39, (model._kickZ || 0.015) * (9.2 + s * 3.3)) * adsGunBack;
-  _gunKick.y += Math.min(0.017, 0.0022 + s * 0.0044) * adsGunUp;
-  _gunKick.x += side * Math.min(0.066, 0.008 + s * 0.012) * adsGunSide;
-  _gunKick.rx += Math.min(0.092, 0.012 + s * 0.021) * adsGunTilt;
-  _fovPunch = Math.min(3.6, _fovPunch + (isADS ? ADS_RECOIL_DAMPING.fov : 1.22) * Math.sqrt(Math.max(0.3, s)));
+  _kickHold('z', Math.min(0.39, (model._kickZ || 0.015) * (9.2 + s * 3.3)) * adsGunBack * GUN_KICK_SCALE);
+  _kickHold('y', Math.min(0.017, 0.0022 + s * 0.0044) * adsGunUp * GUN_KICK_SCALE);
+  _gunKick.x = side * Math.min(0.066, 0.008 + s * 0.012) * adsGunSide * GUN_KICK_SCALE;
+  _kickHold('rx', Math.min(0.092, 0.012 + s * 0.021) * adsGunTilt * GUN_KICK_SCALE);
+  _fovPunch = Math.max(_fovPunch, Math.min(1.4, (isADS ? ADS_RECOIL_DAMPING.fov : 0.55) * Math.sqrt(Math.max(0.3, s))));
   // Down the sights the gun stays LEVEL: it still kicks back and up, but it does not twist or roll,
   // because a canted gun is what covers the ring you are trying to see through.
   if (!isADS) {
-    _gunKick.ry += side * Math.min(0.102, 0.014 + s * 0.020) * adsGunTilt;
-    _gunKick.rz += -side * Math.min(0.136, 0.020 + s * 0.026) * adsGunTilt;
+    _gunKick.ry = side * Math.min(0.102, 0.014 + s * 0.020) * adsGunTilt * GUN_KICK_SCALE;
+    _gunKick.rz = -side * Math.min(0.136, 0.020 + s * 0.026) * adsGunTilt * GUN_KICK_SCALE;
   }
   for (const key of ['x', 'y', 'z', 'rx', 'ry', 'rz']) {
     const max = (hyperrealisticOn() ? _GUN_KICK_HYPER_MAX : _GUN_KICK_MAX)[key];
@@ -45353,7 +45380,7 @@ function updateMapGimmicks(dt) {
   if (g.damageZones && g.damageZones.length && now - _lavaTickAt >= 500) {
     _lavaTickAt = now;
     // Player
-    if (!isDead && match?.type !== 'range') {
+    if (!isDead && match?.type !== 'range' && !isShielded()) {
       for (const z of g.damageZones) {
         if (inDamageZone(z, camera.position.x, camera.position.z)) {
           // Apply half a second's worth (since tick is 500ms)
@@ -54741,6 +54768,8 @@ function scheduleAutoRespawnLocal() {
   });
 }
 function applyBotDamageToPlayer(weaponId, botId, damageOverride) {
+  // While you are protected nothing lands: no damage, and none of the slow, root or fire that rides on it.
+  if (!isDead && isShielded()) return;
   if (!botId && KILLFEED_HAZARDS[weaponId]) noteKillInfo(myId, null, null, false, { cause: 'hazard', label: KILLFEED_HAZARDS[weaponId] });
   else noteKillInfo(myId, botId, weaponId, _botHitHead);   // for the kill feed, should this be the one that kills
   // 🛋️ Lobby 13 is a no-combat chill zone — nobody takes damage.
@@ -55263,6 +55292,8 @@ socket.on('playerHit', data => {
   }
   // If it's us and we have spawn shield, absorb the hit visually but ignore HP change
   if (data.targetId === myId && isShielded()) {
+    const lost = Math.max(0, (players[myId]?.hp ?? data.hp) - data.hp);
+    if (lost > 0) socket.emit('healSelf', { amount: lost });   // give it back: the server took it before the shield could say no
     flashHitIndicator(); // show we were hit but shield absorbed it
     if (data.bulletId) {
       for (let i=localBullets.length-1; i>=0; i--) {

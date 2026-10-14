@@ -910,10 +910,33 @@ if (ok && process.argv.includes('--status')) {
       _dotTargets.bx = { until: Date.now() + 9999, dps: 5, weaponId: 'flame_burn' };
       clearBotStatusEffects(b);
       if (b.frostSlow !== 100 || b._chillUntil || b._fireUntil || b._stunUntil || b._rootUntil || b.kbVX || b.kbVZ || _dotTargets.bx) issues.push('clearBotStatusEffects left something behind');
+      // a bot clears its effects the moment it dies
+      const db = { id: 'dbx', dead: true, frostSlow: 4, _chillUntil: 9e12, _fireUntil: 9e12, _stunUntil: 9e12, _rootUntil: 9e12, kbVX: 3, kbVZ: 3 };
+      gameBots.push(db);
+      watchStatusReset();
+      gameBots.splice(gameBots.indexOf(db), 1);
+      if (db.frostSlow !== 100 || db._fireUntil || db._rootUntil || db._chillUntil || db._stunUntil) issues.push('a bot that died kept its status effects');
+      // respawn protection: coming back from the dead gives you the shield, and hazards honour it
+      const savedMatch = match, savedLobby = inLobby, savedCd = countdownActive, savedShield = spawnShieldUntil;
+      try {
+        match = { type: 'ffa' }; inLobby = false; countdownActive = false;
+        spawnShieldUntil = 0; isDead = true; isShielded();          // dead: noted
+        isDead = false;
+        if (!isShielded()) issues.push('coming back from the dead did not give the respawn shield');
+        if (_mechCanHurt()) issues.push('a map hazard could hurt you during the respawn shield');
+        if (spawnShieldUntil - performance.now() < RESPAWN_SHIELD_MS - 100) issues.push('the respawn shield is too short');
+        const keep = spawnShieldUntil; grantSpawnShield(500);
+        if (spawnShieldUntil !== keep) issues.push('a short shield cut a longer one short');
+        spawnShieldUntil = 0;
+        if (!_mechCanHurt()) issues.push('a hazard cannot hurt you with no shield');
+      } finally { match = savedMatch; inLobby = savedLobby; countdownActive = savedCd; spawnShieldUntil = savedShield; }
     } finally { isDead = wasDead; clearPlayerStatusEffects(); }
     return issues;
   })()`);
-  console.log('status checks: frost blaster damage, chill, root chain guard, round/death/bot reset');
+  const serverSrc2 = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  if (!/SPAWN_SHIELD_MS = 2500/.test(serverSrc2)) issues.push('server respawn shield should match the client (2500 ms)');
+  if (!/resetSelf[\s\S]{0,500}shieldUntil: Date\.now\(\) \+ SPAWN_SHIELD_MS/.test(serverSrc2)) issues.push('server resetSelf (a new round) gives no shield');
+  console.log('status checks: frost blaster damage, chill, root chain guard, round/death/bot reset, respawn shield');
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
