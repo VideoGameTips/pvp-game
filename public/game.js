@@ -10372,7 +10372,7 @@ function buildStormPierMap() {
       if (_mechCanHurt() && !S.hinted) { S.hinted = true; showAnnouncement('⛈️ STORM PIER', 'Red rings = lightning. Rods catch strikes nearby.', '#9fd8ff', 2600); }
       S.next -= dt;
       if (S.next <= 0 && _mechCanHurt()) {
-        S.next = 2.0 + Math.random() * 1.6;
+        S.next = 1.1 + Math.random() * 0.7;
         const actors = [];
         if (!isDead) actors.push([camera.position.x, camera.position.z]);
         for (const b of gameBots) if (!b.dead) actors.push([b.x, b.z]);
@@ -10381,7 +10381,7 @@ function buildStormPierMap() {
           const a = actors[Math.floor(Math.random() * actors.length)];
           x = a[0] + (Math.random() - 0.5) * 6; z = a[1] + (Math.random() - 0.5) * 6;
         } else { x = (Math.random() - 0.5) * 80; z = (Math.random() - 0.5) * 80; }
-        let r = 3.6, onRod = false, best = RODS_PULL;
+        let r = 4.8, onRod = false, best = RODS_PULL;
         for (const [rx, rz] of rods) {
           const d = Math.hypot(rx - x, rz - z);
           if (d < best) { best = d; x = rx; z = rz; r = 2.2; onRod = true; }
@@ -10404,11 +10404,11 @@ function buildStormPierMap() {
             if (!isDead && _mechCanHurt()) {
               if (camera.position.distanceTo(new THREE.Vector3(k.x, camera.position.y, k.z)) < 30) flashScreen('rgba(255,255,255,0.35)', 160);
               if (Math.hypot(camera.position.x - k.x, camera.position.z - k.z) < k.r && _mechFeetY() < 3) {
-                applyBotDamageToPlayer('lightning_strike', null);
+                _mechHurtPlayer(150, 'lightning_strike');
                 applyBlastImpulse(flash, { radius: k.r + 2.5, power: 12 });
               }
             }
-            for (const b of gameBots) if (!b.dead && Math.hypot(b.x - k.x, b.z - k.z) < k.r) _mechHurtBot(b, 80, 'lightning_strike');
+            for (const b of gameBots) if (!b.dead && Math.hypot(b.x - k.x, b.z - k.z) < k.r) _mechHurtBot(b, 150, 'lightning_strike');
           }
         } else if (k.t >= 1.55) {
           G.remove(k.beam); S.strikes.splice(i, 1);
@@ -10447,7 +10447,7 @@ function buildPinballArcadeMap() {
   [[-40,-40],[40,-40],[-40,40],[40,40]].forEach(([x, z]) => {
     const pad = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.2, 0.15, 24), _MECH_BASIC(0xffdd33));
     pad.position.set(x, 0.08, z); G.add(pad);
-    MAP_GIMMICKS[m].jumpPads.push({ x, z, r: 2.2, vel: 18 });
+    MAP_GIMMICKS[m].jumpPads.push({ x, z, r: 2.2, vel: 24 });
   });
   G._skyColor = 0x0c0818;
   const botCd = {};
@@ -10460,7 +10460,7 @@ function buildPinballArcadeMap() {
         const s = 1 + b.pulse * 0.3; b.mesh.scale.set(s, 1, s); b.cap.scale.set(s, 1, s);
         if (!isDead && b.cd <= 0 && Math.hypot(camera.position.x - b.x, camera.position.z - b.z) < 2.7 && _mechFeetY() < 2.4) {
           b.cd = 0.45; b.pulse = 1;
-          applyBlastImpulse(new THREE.Vector3(b.x, _mechFeetY() + 0.2, b.z), { radius: 6, power: 24 });
+          applyBlastImpulse(new THREE.Vector3(b.x, _mechFeetY() + 0.2, b.z), { radius: 6, power: 34 });
           flashScreen('rgba(255,255,255,0.12)', 120);
           playSoundEvent('click', { volume: 0.5, pitch: 0.6 + Math.random() * 0.4, minGap: 0 });
         }
@@ -10471,7 +10471,7 @@ function buildPinballArcadeMap() {
             botCd[bot.id] = 0.6; b.pulse = 1;
             const nx = d > 0.01 ? dx / d : 1, nz = d > 0.01 ? dz / d : 0;
             bot.x += nx * 3.2; bot.z += nz * 3.2;
-            bot.yVel = 6; bot.y = bot.y || 0;
+            bot.yVel = 10; bot.y = bot.y || 0;
           }
         }
       }
@@ -10579,14 +10579,14 @@ function buildLaserVaultMap() {
       if (_mechCanHurt() && S.cd <= 0) {
         const feet = _mechFeetY(), head = camera.position.y + 0.1;
         for (const ar of arms) if (hitArm(camera.position.x, camera.position.z, ar, feet, head)) {
-          S.cd = 0.4; _mechHurtPlayer(32, 'laser'); flashScreen('rgba(255,40,40,0.25)', 140); break;
+          S.cd = 0.4; _mechHurtPlayer(75, 'laser'); flashScreen('rgba(255,40,40,0.25)', 140); break;
         }
       }
       for (const id in S.botCd) S.botCd[id] = Math.max(0, S.botCd[id] - dt);
       for (const bot of gameBots) {
         if (bot.dead || (S.botCd[bot.id] || 0) > 0) continue;
         for (const ar of arms) if (hitArm(bot.x, bot.z, ar, bot.y || 0, (bot.y || 0) + 1.6)) {
-          S.botCd[bot.id] = 0.5; _mechHurtBot(bot, 32, 'laser'); break;
+          S.botCd[bot.id] = 0.5; _mechHurtBot(bot, 75, 'laser'); break;
         }
       }
     },
@@ -10602,7 +10602,7 @@ function buildCargoBeltsMap() {
   addOuterWalls(m, 0x24272a);
   const LEN = 60, W = 5.5;
   const lanes = [{ z: -20, dir: 1 }, { z: 0, dir: -1 }, { z: 20, dir: 1 }];
-  const SPEED = 5;
+  const SPEED = 8;
   lanes.forEach((ln, li) => {
     const belt = new THREE.Mesh(new THREE.BoxGeometry(LEN, 0.1, W), new THREE.MeshLambertMaterial({ color: 0x1d2024 }));
     belt.position.set(0, 0.05, ln.z); G.add(belt);
@@ -10618,7 +10618,7 @@ function buildCargoBeltsMap() {
       drum.rotation.x = Math.PI / 2; drum.position.set(ex + sd * 0.9, 0.9, ln.z); G.add(drum);
       (ln.drums || (ln.drums = [])).push({ mesh: drum, sd });
     });
-    MAP_GIMMICKS[m].damageZones.push({ x: ex, z: ln.z, r: 2.6, dps: 45, type: 'lava' });
+    MAP_GIMMICKS[m].damageZones.push({ x: ex, z: ln.z, r: 2.6, dps: 100, type: 'lava' });
   });
   // Crates on and between the lanes (they don't move; the belt carries you past them).
   [[-12,-20],[14,-20],[-6,0],[18,0],[-20,20],[8,20],[-30,-10],[30,10],[-2,-10],[4,10],[-26,10],[26,-10]]
@@ -10766,7 +10766,7 @@ function buildGalePeaksMap() {
   }
   const DIRS = [[1,0,'east'],[-1,0,'west'],[0,1,'south'],[0,-1,'north'],[0.707,0.707,'south-east'],[-0.707,-0.707,'north-west']];
   const S = { phase: 'calm', t: 9, dir: DIRS[0] };
-  const GUST = 5.5;
+  const GUST = 9;
   MAP_MECH[m] = {
     reset() { S.phase = 'calm'; S.t = 9; streaks.forEach(s => { s.visible = false; }); },
     update(dt) {
@@ -10778,7 +10778,7 @@ function buildGalePeaksMap() {
         for (const s of streaks) { s.visible = true; s.rotation.y = Math.atan2(-S.dir[1], S.dir[0]); }
       } else if (S.phase === 'warn' && S.t <= 0) { S.phase = 'gust'; S.t = 5;
       } else if (S.phase === 'gust' && S.t <= 0) {
-        S.phase = 'calm'; S.t = 11 + Math.random() * 5; streaks.forEach(s => { s.visible = false; });
+        S.phase = 'calm'; S.t = 7 + Math.random() * 4; streaks.forEach(s => { s.visible = false; });
       }
       if (S.phase !== 'calm') {
         const speed = S.phase === 'gust' ? 42 : 12;
@@ -10789,8 +10789,8 @@ function buildGalePeaksMap() {
         }
       }
       if (S.phase === 'gust') {
-        if (!isDead && _mechCanHurt()) { camera.position.x += S.dir[0] * GUST * dt; camera.position.z += S.dir[1] * GUST * dt; }
-        for (const bot of gameBots) if (!bot.dead) { bot.x += S.dir[0] * GUST * 0.6 * dt; bot.z += S.dir[1] * GUST * 0.6 * dt; }
+        if (!isDead && _mechCanHurt()) _gimMe.push(S.dir[0] * GUST * dt, S.dir[1] * GUST * dt);
+        for (const bot of gameBots) if (!bot.dead) _gimBot(bot).push(S.dir[0] * GUST * .8 * dt, S.dir[1] * GUST * .8 * dt);
       }
     },
   };
@@ -10914,16 +10914,16 @@ function buildMagmaRiseMap() {
         setPhase('warn', 3);
         showAnnouncement('🌋 LAVA RISING', 'Get off the floor — stand on the rock!', '#ff7733', 2200);
         lava.visible = true;
-      } else if (S.phase === 'warn' && S.t <= 0) setPhase('lava', 8);
-      else if (S.phase === 'lava' && S.t <= 0) { setPhase('safe', 13); lava.visible = false; }
+      } else if (S.phase === 'warn' && S.t <= 0) setPhase('lava', 11);
+      else if (S.phase === 'lava' && S.t <= 0) { setPhase('safe', 9); lava.visible = false; }
       if (S.phase === 'warn') lava.material.opacity = 0.18 + 0.14 * Math.abs(Math.sin(S.t * 8));
       if (S.phase === 'lava') lava.material.opacity = 0.62 + 0.1 * Math.sin(performance.now() / 160);
       if (S.phase === 'lava') {
         S.tick += dt;
         if (S.tick >= 0.5) {
           S.tick = 0;
-          if (!isDead && _mechFeetY() < 0.45) _mechHurtPlayer(9, 'lava');
-          for (const bot of gameBots) if (!bot.dead && (bot.y || 0) < 0.45) _mechHurtBot(bot, 4, 'lava');
+          if (!isDead && _mechFeetY() < 0.45) _mechHurtPlayer(30, 'lava');
+          for (const bot of gameBots) if (!bot.dead && (bot.y || 0) < 0.45) _mechHurtBot(bot, 30, 'lava');
         }
       }
     },
@@ -11523,7 +11523,7 @@ const MAP_THEMES = {
   battlefield: Object.assign(_T(0x5f7a45, 0x4f6a39, 0x7b705f, 0x6a6050, 0x6b5d49, 0x8a7d66, 0xc2a45a, 0xb23a2e, 0x9cc4e4, 'nature', ['sandbags', 'trees', 'crates']), { keep: true }),
   range:        _T(0x6b7076, 0x565b61, 0x8c929a, 0x777d85, 0x5a6068, 0x9aa0a8, 0xe8c43a, 0xd04a3a, 0x8a929c, 'industrial', ['crates', 'barrels']),
   urban: Object.assign(_T(0x4a4d52, 0x3d4044, 0x8a6f5d, 0x6f7b86, 0x5a5f66, 0x9a9a98, 0xd8c8a0, 0xd9822b, 0x8fa2b4, 'urban', ['cars', 'crates', 'barrels']), { keep: true }),
-  warehouse: Object.assign(_T(0x6d6a64, 0x57544f, 0x6f7d86, 0x8a6a46, 0x7a5a38, 0x8d8f91, 0xe8b932, 0xc8402a, 0x2f3338, 'industrial', ['crates', 'crates', 'barrels']), { keep: true }),
+  warehouse: Object.assign(_T(0x6d6a64, 0x57544f, 0x6f7d86, 0x8a6a46, 0x7a5a38, 0x8d8f91, 0xe8b932, 0xc8402a, 0x8fa2b4, 'industrial', ['crates', 'crates', 'barrels']), { keep: true }),
   forest: Object.assign(_T(0x4d6b35, 0x3f5a2b, 0x6b5a45, 0x56693a, 0x6b6b5f, 0x8a7352, 0x9bb86a, 0xe0c24a, 0xa8d3e8, 'nature', ['trees', 'trees', 'rocks', 'logs']), { keep: true }),
   vietnam: Object.assign(_T(0x5a6b3a, 0x4a5a2e, 0x7d6a45, 0x5a6a38, 0x6a5a3a, 0x8a7a54, 0xb8a05a, 0xc8402a, 0xb8c8a0, 'nature', ['trees', 'sandbags', 'crates']), { keep: true }),
   volcano: Object.assign(_T(0x2a1f1c, 0x4a1f10, 0x3a2b26, 0x4a3028, 0x2f2522, 0x5a4036, 0xff7a2a, 0xff4a12, 0x3a1208, 'fire', ['rocks', 'rocks']), { keep: true }),
@@ -13008,12 +13008,11 @@ function _bkTruck(K, x, z, rot, c) {                                            
   let p = at(0, 2.2); K.box(p[0], 0.5, p[1], 2.6, 3.0, 6.4, c, rot); p = at(0, -2.6); K.box(p[0], 0.5, p[1], 2.4, 1.8, 2.2, 0x2a3038, rot);
 }
 // 🏭 Warehouse: a long hall. Rack aisles and crossings on the floor, a two-storey office in the middle, catwalks
-// round both walls joined to it by bridges, loading docks at each end.
+// round both walls joined to it by bridges, loading docks at each end. The main hall is open to the sky.
 function buildWarehouseLayout() {
   const name = 'warehouse', K = _bkBegin(name, 100, 120, 0x6d6a64);
   const wallC = 0x6f7d86, rackC = 0x8a5a2a, rackB = 0x3a5a8a, off = 0xb8b2a4, TOP = 4.6;
   K.wx(-50, 50, -59.6, 0.8, 0, 10, wallC); K.wx(-50, 50, 59.6, 0.8, 0, 10, wallC); K.wz(-60, 60, -49.6, 0.8, 0, 10, wallC); K.wz(-60, 60, 49.6, 0.8, 0, 10, wallC);
-  K.slab(-50, 50, -60, 60, 10.4, 0.4, 0x3a3d40);
   for (const x of [-40, -28, -16, 16, 28, 40]) for (const [z0, z1] of [[-34, -18], [-13, 13], [18, 34]]) {   // rack rows
     K.box(x, 0, (z0 + z1) / 2, 3.2, 4.0, z1 - z0, x % 24 === 16 || x === -40 ? rackC : rackB);
   }
@@ -13041,7 +13040,7 @@ function buildWarehouseLayout() {
   [[-44, 41, 0, 0xb83a2a], [-38, 41, 0, 0x2a5aa8], [38, 41, 0, 0xd88a2a], [44, 41, 0, 0x3a8a4a], [-44, -41, 0, 0x2a5aa8], [-38, -41, 0, 0xb83a2a], [38, -41, 0, 0x3a8a4a], [44, -41, 0, 0xd88a2a]].forEach(([x, z, r, c]) => cont(x, z, r, c));
   for (const z of [-51, 51]) for (const x of [-32, -20, 20, 32]) K.box(x, 0, z + (z > 0 ? 3.6 : -3.6), 5, 1.2, 1.4, 0x5a5f66);   // dock benches
   MAP_SPAWNS[name] = { ally: { x0: -14, x1: 14, z0: 47, z1: 57 }, enemy: { x0: -14, x1: 14, z0: -57, z1: -47 } };
-  MAP_GROUPS[name]._skyColor = 0x2f3338;
+  MAP_GROUPS[name]._skyColor = 0x8fa2b4;
 }
 // 🏙️ Urban: two streets crossing at a plaza, four blocks of buildings you can walk through and climb to the roof.
 function buildUrbanLayout() {
@@ -16438,7 +16437,7 @@ GIM.blank = (X) => {
   const seats = X.spots(4, { r: 3.4, sep: 18, maxR: 36, near: [0, 0] });
   if (seats.length < 2) return;
   X.dbg(seats);
-  const PERIOD = 40, R = 3.2;
+  const PERIOD = 40, R = 4.2;
   const marks = seats.map(s => {
     const g = new THREE.Group(); g.position.set(s.x, 0, s.z); X.G.add(g);
     const add = (m) => { g.add(m); return m; };
@@ -16463,7 +16462,7 @@ GIM.blank = (X) => {
     const pulse = 0.75 + 0.25 * Math.sin(t * 4);
     marks[active].ring.material.opacity = pulse;
     const s = seats[active];
-    for (const a of A) if (X.near(a, s.x, s.z, R, 2.4) && _gimBeat(beat, a.id, dt, 0.25)) a.heal(2);   // 8 hp/s
+    for (const a of A) if (X.near(a, s.x, s.z, R, 2.4) && _gimBeat(beat, a.id, dt, 0.25)) a.heal(6);   // 24 hp/s
   });
 };
 
@@ -16490,7 +16489,7 @@ GIM.urban = (X) => {
     for (let s = 2; s < ln.len - 1; s += 5) {
       const d = X.mesh(new THREE.BoxGeometry(0.18, 0.02, 2.2), _gimBasic(0xe9e6d8, 0.85), ln.x0 + dx * s, 0.045, ln.z0 + dz * s); d.rotation.y = yaw;
     }
-    const n = Math.max(1, Math.min(3, Math.round(ln.len / 30)));
+    const n = Math.max(2, Math.min(5, Math.round(ln.len / 20)));
     for (let i = 0; i < n; i++) {
       const bus = li === 0 && i === 0 && ln.len > 44;
       const g = _gimVehicle(bus ? 0xd8b030 : colors[(li * 3 + i) % colors.length], bus ? { len: 9.5, wid: 2.5, h: 2.1, bus: true } : {});
@@ -16517,7 +16516,7 @@ GIM.urban = (X) => {
         const key = a.id + ':' + (c.bus ? 'b' : 'c');
         if ((cd.get(key) || 0) > 0) continue;
         cd.set(key, 1.0);
-        a.hurt(c.bus ? 55 : 38, 'roadkill');
+        a.hurt(c.bus ? 140 : 90, 'roadkill');
         a.push(side >= 0 ? c.dz * 3.2 : -c.dz * 3.2, side >= 0 ? -c.dx * 3.2 : c.dx * 3.2);
         a.lift(6);
         if (a.me) X.flash('rgba(255,60,40,0.3)', 200);
@@ -16589,7 +16588,7 @@ GIM.warehouse = (X) => {
         S.phase = 'rise'; S.t = 1.3; warn.visible = false;
         const tx = S.target.x, tz = S.target.z;
         for (const a of A) if (a.y < 3.2 && Math.hypot(a.x - tx, a.z - tz) < 2.9) {
-          a.hurt(70, 'crane'); a.lift(5); a.push(a.x - tx || 0.3, a.z - tz || 0.3);
+          a.hurt(150, 'crane'); a.lift(7); a.push(a.x - tx || 0.3, a.z - tz || 0.3);
           if (a.me) X.flash('rgba(255,240,200,0.4)', 220);
         }
         X.fx(tx, 0.3, tz, 3.4, 0xd8c8a0); X.sound('explosion', tx, tz, 0.55);
@@ -16602,7 +16601,7 @@ GIM.warehouse = (X) => {
       }
     } else if (S.phase === 'rise') {
       setHook((S.t / 1.3) * (Y - 3.55));
-      if (S.t <= 0) { S.phase = 'idle'; S.t = 16; crate.visible = true; home(); }
+      if (S.t <= 0) { S.phase = 'idle'; S.t = 8; crate.visible = true; home(); }
     }
   });
 };
@@ -16629,7 +16628,7 @@ GIM.forest = (X) => {
     X.G.add(g);
     const scar = X.disc(x, z, 4.4, 0x15110d, 0.7, 0.045); scars.push({ m: scar, t: 40 });
     const zn = X.zone('avoid', { x, z, r: 4.4 });                      // bots of any skill keep out of it
-    fires.push({ g, fl, t: 0, life: 14, x, z, zn });
+    fires.push({ g, fl, t: 0, life: 18, x, z, zn });
     X.sound('fire_sizzle', x, z, 0.7);
   };
   X.hint('🔥 WILDFIRE', 'Fires start in the forest and spread. Smoke means move.', '#ff7a2a');
@@ -16639,16 +16638,16 @@ GIM.forest = (X) => {
     if (S.next <= 0) {
       if (!S.front) {                                                  // a new fire, somewhere with room
         const s = spots[Math.floor(Math.random() * spots.length)];
-        mkFire(s.x, s.z); S.front = { x: s.x, z: s.z }; S.hops = 0; S.dir = Math.random() * 6.28; S.next = 4.2;
+        mkFire(s.x, s.z); S.front = { x: s.x, z: s.z }; S.hops = 0; S.dir = Math.random() * 6.28; S.next = 3;
         X.announce('🔥 WILDFIRE', 'A fire has started', '#ff7a2a');
-      } else if (S.hops < 3) {                                          // and it walks
+      } else if (S.hops < 5) {                                          // and it walks
         S.hops++; S.dir += (Math.random() - 0.5) * 1.1;
         let nx = S.front.x + Math.cos(S.dir) * 7.5, nz = S.front.z + Math.sin(S.dir) * 7.5;
         if (!X.free(nx, nz, 2.5, { open: true, h: 3 })) {              // blocked by a tree or a wall: take the nearest clearing
           let bd = 1e9; for (const s of spots) { const d = Math.hypot(s.x - nx, s.z - nz); if (d < bd) { bd = d; nx = s.x; nz = s.z; } }
         }
-        mkFire(nx, nz); S.front = { x: nx, z: nz }; S.next = S.hops >= 3 ? 26 + Math.random() * 10 : 4.2;
-        if (S.hops >= 3) S.front = null;
+        mkFire(nx, nz); S.front = { x: nx, z: nz }; S.next = S.hops >= 5 ? 16 + Math.random() * 6 : 3;
+        if (S.hops >= 5) S.front = null;
       }
     }
     for (let i = fires.length - 1; i >= 0; i--) {
@@ -16660,7 +16659,7 @@ GIM.forest = (X) => {
     }
     if (_gimBeat(burnT, 'f', dt, 0.5)) for (const f of fires) {
       if (f.t < 1.0 || f.t > f.life - 1.5) continue;                   // still catching / dying down
-      for (const a of A) if (a.y < 3 && Math.hypot(a.x - f.x, a.z - f.z) < 4.3) a.hurt(4, 'wildfire');
+      for (const a of A) if (a.y < 3 && Math.hypot(a.x - f.x, a.z - f.z) < 4.3) a.hurt(15, 'wildfire');
     }
     for (let i = scars.length - 1; i >= 0; i--) { const s = scars[i]; s.t -= dt; if (s.t < 8) s.m.material.opacity = Math.max(0, 0.7 * s.t / 8); if (s.t <= 0) { X.G.remove(s.m); scars.splice(i, 1); } }
   });
@@ -16695,8 +16694,8 @@ GIM.vietnam = (X) => {
       if (p.open > 0) { p.open -= dt; if (p.open <= 0) setOpen(p, 0); continue; }
       for (const a of A) {
         if (a.y > 0.7 || Math.hypot(a.x - p.x, a.z - p.z) > 1.25) continue;
-        setOpen(p, 20);
-        a.hurt(26, 'punji'); a.root(1500);
+        setOpen(p, 12);
+        a.hurt(85, 'punji'); a.root(1800);
         if (a.me) X.flash('rgba(200,30,20,0.35)', 260);
         X.sound('melee_blade', p.x, p.z, 0.8); X.fx(p.x, 0.3, p.z, 2.0, 0x8a6a3a);
         break;
@@ -16710,7 +16709,7 @@ GIM.vietnam = (X) => {
 // then throw a column of boiling water twelve metres up. Good for getting onto a ledge. Bad for standing on a vent.
 GIM_LABELS.geyser = 'was boiled by a geyser';
 GIM.volcano = (X) => {
-  const spots = X.spots(6, { r: 2.2, pairs: true, sep: 16, maxR: 85, edge: 10 });
+  const spots = X.spots(10, { r: 2.2, pairs: true, sep: 14, maxR: 85, edge: 10 });
   if (!spots.length) return;
   X.dbg(spots);
   const vents = spots.map((s, i) => {
@@ -16737,11 +16736,11 @@ GIM.volcano = (X) => {
         for (const a of A) {
           const d = Math.hypot(a.x - v.x, a.z - v.z);
           if (d > 2.6 || a.y > 12) continue;
-          if (!v.hit.has(a.id)) { v.hit.add(a.id); a.hurt(14, 'geyser'); if (a.me) X.flash('rgba(255,255,255,0.35)', 200); }
-          a.lift(17);
+          if (!v.hit.has(a.id)) { v.hit.add(a.id); a.hurt(65, 'geyser'); if (a.me) X.flash('rgba(255,255,255,0.35)', 200); }
+          a.lift(22);
           if (d > 0.01) a.push(((a.x - v.x) / d) * 2.4 * dt, ((a.z - v.z) / d) * 2.4 * dt);
         }
-        if (v.t <= 0) { v.phase = 'idle'; v.t = 7 + Math.random() * 5; v.col.visible = false; }
+        if (v.t <= 0) { v.phase = 'idle'; v.t = 4 + Math.random() * 3; v.col.visible = false; }
       }
     }
   });
@@ -16749,7 +16748,7 @@ GIM.volcano = (X) => {
 
 // ── ⚡ CYBER · NEON LAUNCHERS ───────────────────────────────────────────────────────────────────────────────────────────
 // Cyber Alley is supposed to have pads that throw you across it. Six lanes of chevrons: step on one and you are fired
-// fourteen metres toward the middle, over whatever is in the way. Not a jump pad -- you do not steer it, you pick where
+// twenty-four metres toward the middle, over whatever is in the way. Not a jump pad -- you do not steer it, you pick where
 // you want to be and you go.
 GIM.cyber = (X) => {
   const spots = X.spots(6, { r: 1.9, pairs: true, sep: 13, minR: 14, maxR: 46, edge: 9 });
@@ -16764,7 +16763,7 @@ GIM.cyber = (X) => {
       const px = s.x + ux * (0.5 + k * 0.55), pz = s.z + uz * (0.5 + k * 0.55);
       for (const sd of [-1, 1]) { const m = X.mesh(new THREE.BoxGeometry(0.9, 0.03, 0.14), _gimBasic(0xffffff, 0.95), px - uz * sd * 0.3, 0.1, pz + ux * sd * 0.3); m.rotation.y = yaw + sd * 0.7; }
     }
-    const tx = s.x + ux * 14, tz = s.z + uz * 14;
+    const tx = s.x + ux * 24, tz = s.z + uz * 24;
     X.ring(tx, tz, 1.3, c, 0.5, 0.15, 0.06);                                    // where it puts you down
     return { x: s.x, z: s.z, ux, uz, c };
   });
@@ -16776,7 +16775,7 @@ GIM.cyber = (X) => {
     for (const p of pads) for (const a of A) {
       if (a.y > 1.2 || Math.hypot(a.x - p.x, a.z - p.z) > 1.8 || cd.has(a.id)) continue;
       cd.set(a.id, 1.4);
-      a.lift(12); X.carry(a, p.ux * 15.5, p.uz * 15.5, 0.92);
+      a.lift(16); X.carry(a, p.ux * 22, p.uz * 22, 1.1);
       if (a.me) X.flash('rgba(60,240,255,0.22)', 220);
       X.sound('air_launch', p.x, p.z, 0.6);
     }
@@ -16814,9 +16813,9 @@ GIM.desert = (X) => {
       if (a.y < 0.9) for (const p of pits) if (Math.hypot(a.x - p.x, a.z - p.z) < R - 0.2) { inPit = true; break; }
       const key = a.id;
       if (inPit) {
-        a.slow(0.34);
+        a.slow(0.27);
         const s = (sunk.get(key) || 0) + dt; sunk.set(key, s);
-        if (s > 3.5 && _gimBeat(sunk, key + ':b', dt, 0.5)) a.hurt(6, 'quicksand');
+        if (s > 2.5 && _gimBeat(sunk, key + ':b', dt, 0.5)) a.hurt(20, 'quicksand');
       } else if (sunk.has(key)) { const s = sunk.get(key) - dt * 2; if (s <= 0) { sunk.delete(key); sunk.delete(key + ':b'); } else sunk.set(key, s); }
     }
   });
@@ -16855,7 +16854,7 @@ GIM.tundra = (X) => {
       let n = 0;
       for (const a of A) if (a.y < 0.9 && Math.hypot(a.x - sh.x, a.z - sh.z) < R - 0.3) {
         n++;
-        if (sh.state === 'water') { a.slow(0.55); if (_gimBeat(sh, 'w' + a.id, dt, 0.5)) a.hurt(4, 'thinice'); }
+        if (sh.state === 'water') { a.slow(0.4); if (_gimBeat(sh, 'w' + a.id, dt, 0.5)) a.hurt(14, 'thinice'); }
       }
       if (sh.state === 'ice') {
         sh.stress = n ? sh.stress + dt : Math.max(0, sh.stress - dt * 0.6);
@@ -16864,7 +16863,7 @@ GIM.tundra = (X) => {
         if (sh.stress >= 2.5) {
           setState(sh, 'water');
           X.fx(sh.x, 0.3, sh.z, R, 0xbfe6ff); X.sound('freeze_shatter', sh.x, sh.z, 0.8);
-          for (const a of A) if (a.y < 0.9 && Math.hypot(a.x - sh.x, a.z - sh.z) < R) { a.hurt(10, 'thinice'); if (a.me) X.flash('rgba(120,190,255,0.4)', 260); }
+          for (const a of A) if (a.y < 0.9 && Math.hypot(a.x - sh.x, a.z - sh.z) < R) { a.hurt(45, 'thinice'); if (a.me) X.flash('rgba(120,190,255,0.4)', 260); }
         }
       } else {
         sh.t -= dt;
@@ -16881,7 +16880,7 @@ GIM.space = (X) => {
   const spots = X.spots(6, { r: 5.4, pairs: true, sep: 16, edge: 8 });
   if (!spots.length) return;
   X.dbg(spots);
-  const R = 5.5;
+  const R = 8;
   const domes = spots.map((s, i) => {
     X.zone('lowGravZones', { x: s.x, z: s.z, r: R });
     X.disc(s.x, s.z, R, 0x8a3cff, 0.16, 0.05); X.ring(s.x, s.z, R, 0xc08cff, 0.9, 0.28, 0.07);
@@ -16921,7 +16920,7 @@ GIM.refinery = (X) => {
   });
   const ignite = (p) => {
     if (p.state !== 'oil') return;
-    p.state = 'burn'; p.t = 11;
+    p.state = 'burn'; p.t = 18;
     X.removeZone('oilZones', p.zone);
     const g = new THREE.Group(); g.position.set(p.x, 0, p.z);
     const fl = [];
@@ -16955,8 +16954,8 @@ GIM.refinery = (X) => {
       if (p.state === 'burn') {
         p.t -= dt;
         for (const f of p.flames.fl) f.tick(t);
-        for (const q of pools) if (q.state === 'oil' && Math.hypot(q.x - p.x, q.z - p.z) < R * 2 + 3.5) { q.fuse += dt; if (q.fuse > 1.4) ignite(q); }
-        if (_gimBeat(p, 'dmg', dt, 0.5)) for (const a of A) if (a.y < 3 && Math.hypot(a.x - p.x, a.z - p.z) < R) a.hurt(8, 'oilfire');
+        for (const q of pools) if (q.state === 'oil' && Math.hypot(q.x - p.x, q.z - p.z) < R * 2 + 3.5) { q.fuse += dt; if (q.fuse > .8) ignite(q); }
+        if (_gimBeat(p, 'dmg', dt, 0.5)) for (const a of A) if (a.y < 3 && Math.hypot(a.x - p.x, a.z - p.z) < R) a.hurt(20, 'oilfire');
         if (p.t <= 0) out(p);
       } else if (p.state === 'dry') {
         p.t -= dt;
@@ -17019,7 +17018,7 @@ GIM.skydock = (X) => {
       for (const a of A) {
         const d = Math.hypot(a.x - site.x, a.z - site.z);
         if (d > BLAST || a.y > 4) continue;
-        if (_gimBeat(S, 'b' + a.id, dt, 0.25)) a.hurt(13, 'rocket');
+        if (_gimBeat(S, 'b' + a.id, dt, 0.25)) a.hurt(30, 'rocket');
         a.push(((a.x - site.x) / (d || 1)) * 7 * dt, ((a.z - site.z) / (d || 1)) * 7 * dt);
       }
       if (S.t <= 0) { S.phase = 'cool'; S.t = 9; rocket.position.x = site.x; rocket.visible = false; flame.group.visible = false; warn.visible = false; }
@@ -17027,7 +17026,7 @@ GIM.skydock = (X) => {
       if (S.t <= 0) { S.phase = 'rise'; S.t = 4; rocket.visible = true; rocket.position.y = -18; }
     } else if (S.phase === 'rise') {
       rocket.position.y = -18 * (S.t / 4);                           // a new one comes up out of the pad
-      if (S.t <= 0) { rocket.position.y = 0; S.phase = 'idle'; S.t = 34 + Math.random() * 8; }
+      if (S.t <= 0) { rocket.position.y = 0; S.phase = 'idle'; S.t = 20 + Math.random() * 6; }
     }
   });
 };
@@ -17058,16 +17057,16 @@ GIM.sewer = (X) => {
       S.z += S.dir * 11 * dt; wave.position.z = S.z; foam.position.y = H + 0.1 + Math.sin(t * 9) * 0.06;
       for (const a of A) {
         if (a.y > H - 0.2 || Math.abs(a.z - S.z) > 2.4) continue;
-        a.push(0, S.dir * 9 * dt);
-        if (!S.hit.has(a.id)) { S.hit.add(a.id); a.hurt(12, 'flush'); if (a.me) X.flash('rgba(110,130,60,0.45)', 300); }
+        a.push(0, S.dir * 14 * dt);
+        if (!S.hit.has(a.id)) { S.hit.add(a.id); a.hurt(65, 'flush'); if (a.me) X.flash('rgba(110,130,60,0.45)', 300); }
       }
-      if ((S.dir > 0 && S.z > Z1) || (S.dir < 0 && S.z < Z0)) { S.phase = 'idle'; S.t = 24 + Math.random() * 6; wave.visible = false; }
+      if ((S.dir > 0 && S.z > Z1) || (S.dir < 0 && S.z < Z0)) { S.phase = 'idle'; S.t = 15 + Math.random() * 5; wave.visible = false; }
     }
   });
 };
 
 // ── 🌀 GRAVITY LAB · WELLS ──────────────────────────────────────────────────────────────────────────────────────────────
-// Three singularities hang in the lab. Come within fourteen metres of one and it starts to pull -- gently at the edge,
+// Three singularities hang in the lab. Come within eighteen metres of one and it starts to pull -- gently at the edge,
 // hard at the middle, and every dozen seconds it surges. Get to the core and it takes you apart. Use them: a well pulls a
 // grenade, a pursuer and an unsuspecting sniper exactly as well as it pulls you.
 GIM_LABELS.singularity = 'was pulled into a singularity';
@@ -17075,7 +17074,7 @@ GIM.gravity_lab = (X) => {
   const spots = X.spots(3, { r: 3.2, sep: 26, maxR: 48, edge: 10 });
   if (spots.length < 2) return;
   X.dbg(spots.map(s => ({ x: s.x + 5, z: s.z })));
-  const RP = 14, RC = 2.1;
+  const RP = 18, RC = 2.1;
   const wells = spots.map((s, i) => {
     X.disc(s.x, s.z, RP, 0x7a3cff, 0.07, 0.05); X.ring(s.x, s.z, RP, 0x9a6cff, 0.4, 0.2, 0.06); X.ring(s.x, s.z, RC + 0.6, 0xff4aff, 0.8, 0.3, 0.07);
     const g = new THREE.Group(); g.position.set(s.x, 2.4, s.z); X.G.add(g);
@@ -17096,9 +17095,9 @@ GIM.gravity_lab = (X) => {
       for (const a of A) {
         const dx = w.x - a.x, dz = w.z - a.z, d = Math.hypot(dx, dz);
         if (d > RP || a.y > 7) continue;
-        const f = (1 - d / RP), pull = (1.2 + 4.8 * f * f) * boost;
+        const f = (1 - d / RP), pull = (2 + 8 * f * f) * boost;
         a.push((dx / (d || 1)) * pull * dt, (dz / (d || 1)) * pull * dt);
-        if (d < RC && _gimBeat(w, 'c' + a.id, dt, 0.25)) a.hurt(12, 'singularity');
+        if (d < RC && _gimBeat(w, 'c' + a.id, dt, 0.25)) a.hurt(30, 'singularity');
       }
     }
   });
@@ -17136,7 +17135,7 @@ GIM.glassworks = (X) => {
   X.on((dt, A) => {
     for (let i = shards.length - 1; i >= 0; i--) {
       const sh = shards[i]; sh.t -= dt;
-      for (const a of A) if (a.y < 0.6 && Math.hypot(a.x - sh.x, a.z - sh.z) < 2.3) { a.slow(0.6); if (_gimBeat(sh, a.id, dt, 0.5)) a.hurt(4, 'shards'); }
+      for (const a of A) if (a.y < 0.6 && Math.hypot(a.x - sh.x, a.z - sh.z) < 2.3) { a.slow(0.45); if (_gimBeat(sh, a.id, dt, 0.5)) a.hurt(16, 'shards'); }
       if (sh.t <= 0) { clear(sh); shards.splice(i, 1); }
     }
   });
@@ -17154,7 +17153,7 @@ GIM.carrier = (X) => {
     const th = AMP * Math.sin(t * 0.55) + 0.012 * Math.sin(t * 1.31 + 1.0);
     _gimV.set(0, 0, -1).applyQuaternion(camera.quaternion);          // which way you are facing decides how much of the roll you see
     _gimRollState.map = X.name; _gimRollState.v = -th * _gimV.z;
-    const drift = (th / AMP) * 1.9 * dt;
+    const drift = (th / AMP) * 4.5 * dt;
     for (const a of A) if (!a.airborne) a.push(drift, 0);
   });
 };
@@ -17198,7 +17197,7 @@ GIM.overgrowth = (X) => {
       for (const a of A) {
         if (a.y > 0.9 || p.cd.has(a.id) || Math.hypot(a.x - p.x, a.z - p.z) > R) continue;
         p.cd.set(a.id, 4.0);
-        a.root(1500); a.hurt(5, 'vines');
+        a.root(2000); a.hurt(35, 'vines');
         if (a.me) X.flash('rgba(40,120,30,0.35)', 240);
       }
     }
@@ -17243,7 +17242,7 @@ GIM.foundry = (X) => {
         p.hit = true;
         X.sound('melee_heavy', p.x, p.z, 0.9); X.fx(p.x, 0.3, p.z, 3.4, 0xd8c8a0);
         for (const a of A) if (a.y < 2.5 && Math.abs(a.x - p.x) < HALF && Math.abs(a.z - p.z) < HALF) {
-          a.hurt(90, 'press'); a.push(a.x - p.x || 0.2, a.z - p.z || 0.2); if (a.me) X.flash('rgba(255,200,80,0.4)', 220);
+          a.hurt(180, 'press'); a.push(a.x - p.x || 0.2, a.z - p.z || 0.2); if (a.me) X.flash('rgba(255,200,80,0.4)', 220);
         }
       } else if (u < 3.4) p.hit = false;
     }
@@ -17257,7 +17256,7 @@ GIM.carnival = (X) => {
   const s = X.spots(1, { r: 8, near: [0, 0], edge: 14, sep: 1, h: 2.4 })[0] || X.spots(1, { r: 6, near: [0, 0], edge: 14, sep: 1 })[0];
   if (!s) return;
   X.dbg([{ x: s.x + 3, z: s.z }]);
-  const R = 6.2, W = 0.7;
+  const R = 6.2, W = 1.1;
   const base = X.disc(s.x, s.z, R + 0.6, 0x5a4a6a, 0.95, 0.05);
   const spin = new THREE.Group(); spin.position.set(s.x, 0, s.z); X.G.add(spin);
   const add = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); spin.add(m); return m; };
@@ -17284,10 +17283,10 @@ GIM.carnival = (X) => {
       const nx = rx * cs + rz * sn, nz = -rx * sn + rz * cs;
       a.push(nx - rx, nz - rz);
       const r = (ride.get(a.id) || 0) + dt; ride.set(a.id, r);
-      if (r > 4.2) {
+      if (r > 3.2) {
         ride.delete(a.id);
         const d = Math.hypot(rx, rz) || 1;
-        a.push(rx / d * 3.4, rz / d * 3.4); a.lift(6);
+        a.push(rx / d * 6.5, rz / d * 6.5); a.lift(10);
         if (a.me) X.flash('rgba(255,160,220,0.3)', 200);
       }
     }
@@ -17307,7 +17306,7 @@ GIM.studio = (X) => {
     const puffs = [];
     for (let k = 0; k < 9; k++) {
       const p = new THREE.Mesh(new THREE.SphereGeometry(1, 8, 6), _gimBasic(0xeef2f4, 0.78));
-      const a = k * 0.7, r = (k % 3) * 1.8; p.position.set(Math.cos(a) * r, 1.2 + (k % 4) * 0.55, Math.sin(a) * r); p.userData = { r0: 2.4 + (k % 3) * 0.7 }; g.add(p); puffs.push(p);
+      const a = k * 0.7, r = (k % 3) * 1.8; p.position.set(Math.cos(a) * r, 1.2 + (k % 4) * 0.55, Math.sin(a) * r); p.userData = { r0: 3.2 + (k % 3) * 0.7 }; g.add(p); puffs.push(p);
     }
     return { x: s.x, z: s.z, g, puffs, t: 6 + i * 3.1, phase: 'idle', k: 0 };
   });
@@ -17317,9 +17316,9 @@ GIM.studio = (X) => {
     for (const v of vents) {
       v.t -= dt;
       if (v.phase === 'idle' && v.t <= 0) { v.phase = 'grow'; v.t = 2.5; v.g.visible = true; v.k = 0; X.sound('smoke_hiss', v.x, v.z, 0.7); }
-      else if (v.phase === 'grow') { v.k = 1 - v.t / 2.5; if (v.t <= 0) { v.phase = 'hold'; v.t = 9; v.k = 1; } }
+      else if (v.phase === 'grow') { v.k = 1 - v.t / 2.5; if (v.t <= 0) { v.phase = 'hold'; v.t = 14; v.k = 1; } }
       else if (v.phase === 'hold') { if (v.t <= 0) { v.phase = 'fade'; v.t = 3.5; } }
-      else if (v.phase === 'fade') { v.k = v.t / 3.5; if (v.t <= 0) { v.phase = 'idle'; v.t = 16 + Math.random() * 8; v.g.visible = false; } }
+      else if (v.phase === 'fade') { v.k = v.t / 3.5; if (v.t <= 0) { v.phase = 'idle'; v.t = 10 + Math.random() * 6; v.g.visible = false; } }
       if (v.g.visible) {
         const k = Math.max(0.02, v.k);
         v.puffs.forEach((p, n) => { const s = p.userData.r0 * k * (1 + Math.sin(t * 0.8 + n) * 0.06); p.scale.setScalar(s); p.material.opacity = 0.78 * Math.min(1, k * 1.4); });
@@ -17369,12 +17368,12 @@ GIM.temple = (X) => {
       for (const a of A) {
         if (a.y > 3.4 || Math.hypot(a.x - bx, a.z - bz) > 3.0 || (S.cd.get(a.id) || 0) > t) continue;
         S.cd.set(a.id, t + 1.6);
-        a.hurt(130, 'boulder');
+        a.hurt(210, 'boulder');
         const nx = -dz, nz = dx, side = ((a.x - bx) * nx + (a.z - bz) * nz) >= 0 ? 1 : -1;
         a.push(nx * side * 5, nz * side * 5); a.lift(7);
         if (a.me) X.flash('rgba(200,180,140,0.45)', 260);
       }
-      if ((S.dir > 0 && S.s > L + 3) || (S.dir < 0 && S.s < -3)) { S.phase = 'idle'; S.t = 20 + Math.random() * 8; boulder.visible = false; }
+      if ((S.dir > 0 && S.s > L + 3) || (S.dir < 0 && S.s < -3)) { S.phase = 'idle'; S.t = 12 + Math.random() * 6; boulder.visible = false; }
     }
   });
 };
@@ -17401,9 +17400,9 @@ GIM.holiday = (X) => {
     const rib2 = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.96, 0.96), _gimLam(bad ? 0xc82a2a : 0xe8c84a)); g.add(rib2);
     X.pickup(x, z, g, 1.5, (a) => {
       if (bad) {
-        a.hurt(28, 'coal'); a.push(a.x - x || 0.3, a.z - z || 0.3); a.lift(5);
+        a.hurt(65, 'coal'); a.push(a.x - x || 0.3, a.z - z || 0.3); a.lift(7);
         X.fx(x, 0.5, z, 2.6, 0x333333); X.sound('explosion', x, z, 0.55);
-      } else { a.heal(45); a.boost(5000); X.fx(x, 0.5, z, 2.2, 0xffe27a); X.sound('heal', x, z, 0.6); }
+      } else { a.heal(90); a.boost(8000); X.fx(x, 0.5, z, 2.2, 0xffe27a); X.sound('heal', x, z, 0.6); }
       return true;
     }, 30);
   };
@@ -17413,7 +17412,7 @@ GIM.holiday = (X) => {
     S.t -= dt;
     if (S.phase === 'idle' && S.t <= 0) {
       S.phase = 'fly'; S.dir = S.n++ % 2 ? -1 : 1; S.z = (Math.random() * 2 - 1) * Math.min(40, b.halfZ - 20); S.s = -b.halfX - 8;
-      S.drops = []; for (let i = 0; i < 6; i++) S.drops.push({ at: -b.halfX * 0.7 + i * (b.halfX * 1.4 / 5), done: false });
+      S.drops = []; for (let i = 0; i < 12; i++) S.drops.push({ at: -b.halfX * 0.7 + i * (b.halfX * 1.4 / 11), done: false });
       sleigh.visible = true; sleigh.rotation.y = S.dir > 0 ? 0 : Math.PI;
       X.announce('🎁 SLEIGH RUN', 'Listen for the bells', '#ff6a6a'); X.sound('radar_ping', 0, S.z, 0.5);
     } else if (S.phase === 'fly') {
@@ -17484,7 +17483,7 @@ GIM.labyrinth = (X) => {
       } else if (G.state === 'up' && G.t <= 0) { G.state = 'sink'; G.t = 1.4; }
       else if (G.state === 'sink') {
         G.k = Math.max(0, G.t / 1.4); place(G);
-        if (G.t <= 0) { G.k = 0; G.state = 'down'; G.t = 8 + (gates.indexOf(G) % 4); place(G); }
+        if (G.t <= 0) { G.k = 0; G.state = 'down'; G.t = 5 + (gates.indexOf(G) % 4); place(G); }
       }
     }
   });
@@ -17498,7 +17497,7 @@ GIM.arena = (X) => {
   const spots = X.spots(4, { r: 2.0, pairs: true, sep: 30, maxR: 70, edge: 12 });
   if (!spots.length) return;
   X.dbg(spots.map(s => ({ x: s.x + 3, z: s.z })));
-  const LEN = 9.5, WET = 10;
+  const LEN = 14, WET = 15;
   const heads = spots.map((s, i) => {
     X.disc(s.x, s.z, WET, 0x3a8a4a, 0.22, 0.045);
     X.zone('oilZones', { x: s.x, z: s.z, r: WET - 1.2 });
@@ -17522,7 +17521,7 @@ GIM.arena = (X) => {
         const perp = -rx * cz + rz * cx;
         if (Math.abs(perp) > 1.0) continue;
         const sgn = h.w > 0 ? 1 : -1;
-        a.push(-cz * sgn * 9 * dt, cx * sgn * 9 * dt);
+        a.push(-cz * sgn * 16 * dt, cx * sgn * 16 * dt);
       }
     }
   });
@@ -17533,10 +17532,10 @@ GIM.arena = (X) => {
 // ground: walk into one and you step out of the other, on the far side of the map -- and whoever is chasing you has to
 // work out which.
 GIM.dreamscape = (X) => {
-  const spots = X.spots(6, { r: 2.2, pairs: true, sep: 20, minR: 12, maxR: 80, edge: 10 });
+  const spots = X.spots(8, { r: 2.2, pairs: true, sep: 18, minR: 12, maxR: 80, edge: 10 });
   if (spots.length < 2) return;
   X.dbg(spots);
-  const cols = [0x33f0ff, 0xff3cc8, 0xffe23c];
+  const cols = [0x33f0ff, 0xff3cc8, 0xffe23c, 0xa5ff55];
   const portals = [];
   for (let i = 0; i + 1 < spots.length; i += 2) {
     const c = cols[(i / 2) % cols.length], a = spots[i], b = spots[i + 1];
@@ -17556,7 +17555,7 @@ GIM.dreamscape = (X) => {
     for (const k of cd.keys()) { const v = cd.get(k) - dt; if (v <= 0) cd.delete(k); else cd.set(k, v); }
     for (const p of portals) for (const a of A) {
       if (a.y > 1.8 || cd.has(a.id) || Math.hypot(a.x - p.x, a.z - p.z) > 1.6) continue;
-      cd.set(a.id, 2.0);
+      cd.set(a.id, 0.9);
       a.teleport(p.to.x, p.to.z);
       if (a.me) X.flash('rgba(200,150,255,0.45)', 240);
       X.fx(p.to.x, 1, p.to.z, 2.4, 0xc08cff); X.sound('blink', p.to.x, p.to.z, 0.7);
@@ -17565,63 +17564,84 @@ GIM.dreamscape = (X) => {
 };
 
 // ── ✈️ PEARL HARBOR · AIR RAID ──────────────────────────────────────────────────────────────────────────────────────────
-// The harbour is quiet. Then the sirens: a line of red rings appears across the quay and a single bomber is coming down
-// it, a bomb to each ring a quarter of a second apart. You have a second and a half. Anywhere that is not a ring is fine.
+// A three-plane formation carpets three separated runs. Rings appear at least 2.2 seconds before impact;
+// the gaps between runs, spawn shelters and roofs remain safe.
 GIM_LABELS.bomb = 'was caught in the air raid';
 GIM.pearl_harbor = (X) => {
   const b = X.arena();
-  X.dbg([{ x: 0, z: 0 }]);
   const plane = new THREE.Group(); plane.visible = false; X.G.add(plane);
   const pa = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); plane.add(m); return m; };
   pa(new THREE.BoxGeometry(1.4, 1.2, 9), _gimLam(0x4a6a3a), 0, 0, 0);
   pa(new THREE.BoxGeometry(14, 0.3, 2.6), _gimLam(0x4a6a3a), 0, 0, 0.4);
   pa(new THREE.BoxGeometry(4.4, 0.25, 1.6), _gimLam(0x4a6a3a), 0, 0.1, -3.8);
   pa(new THREE.BoxGeometry(0.2, 1.8, 1.4), _gimLam(0x4a6a3a), 0, 0.9, -3.8);
-  pa(new THREE.CylinderGeometry(0.7, 0.7, 0.18, 12), _gimBasic(0xe8e8e8), 3.8, 0.2, 0.4).rotation.x = 0;
-  pa(new THREE.CircleGeometry(0.4, 12), _gimBasic(0xd8201c), 3.8, 0.35, 0.4).rotation.x = -Math.PI / 2;
-  pa(new THREE.CircleGeometry(0.4, 12), _gimBasic(0xd8201c), -3.8, 0.35, 0.4).rotation.x = -Math.PI / 2;
-  const bombs = [], N = 7, GAP = 9, STEP = 0.28;
-  let S = { phase: 'idle', t: 18, n: 0, dir: null, p0: null };
-  const clear = () => { for (const q of bombs) { X.G.remove(q.ring); } bombs.length = 0; plane.visible = false; };
-  X.hint('✈️ AIR RAID', 'Red rings on the ground: bombs. You have a second and a half.', '#ff5a3a');
-  X.onReset(() => { clear(); S = { phase: 'idle', t: 18, n: 0, dir: null, p0: null }; });
-  X.on((dt, A, t) => {
-    S.t -= dt;
-    if (S.phase === 'idle' && S.t <= 0) {
-      // The first raid is down the middle, due east-west, so a probe standing at the centre is always under it; after that
-      // the line and its centre wander.
-      const first = S.n === 0;
-      const ang = first ? 0 : [0, 1.571, 0.785, -0.785][S.n % 4] + (Math.random() - 0.5) * 0.3; S.n++;
-      const dx = Math.cos(ang), dz = Math.sin(ang), span = (N - 1) * GAP, cx = first ? 0 : (Math.random() - 0.5) * 30, cz = first ? 0 : (Math.random() - 0.5) * 30;
-      S.dir = { dx, dz }; S.p0 = { x: cx - dx * span / 2, z: cz - dz * span / 2 };
-      for (let i = 0; i < N; i++) {
-        const x = S.p0.x + dx * GAP * i, z = S.p0.z + dz * GAP * i;
-        const ring = X.ring(x, z, 4.6, 0xff2a1a, 0.9, 0.4, 0.09);
-        bombs.push({ x, z, ring, at: 1.8 + i * STEP, done: false });
-      }
-      S.phase = 'raid'; S.t = 0; S.el = 0;
-      plane.visible = true; plane.rotation.y = Math.atan2(dx, dz);
-      X.announce('✈️ AIR RAID', 'Get out of the red rings!', '#ff5a3a'); X.sound('siren_loop', cx, cz, 0.7);
-    } else if (S.phase === 'raid') {
-      S.el += dt;
-      const f = 32 * (S.el - 0.6);                                         // metres along the line, from p0
-      plane.position.set(S.p0.x + S.dir.dx * f, 46, S.p0.z + S.dir.dz * f);
-      for (const q of bombs) {
-        if (q.done) continue;
-        q.ring.material.opacity = 0.4 + 0.5 * Math.abs(Math.sin(t * 14));
-        if (S.el >= q.at) {
-          q.done = true; X.G.remove(q.ring);
-          X.fx(q.x, 0.5, q.z, 5.2, 0xffa030); X.sound('explosion', q.x, q.z, 0.9);
-          X.disc(q.x, q.z, 3.2, 0x1a1410, 0.55, 0.05);
-          for (const a of A) {
-            const d = Math.hypot(a.x - q.x, a.z - q.z);
-            if (d > 5 || a.y > 3.5) continue;
-            a.hurt(d < 2.6 ? 80 : 45, 'bomb'); a.push(a.x - q.x || 0.2, a.z - q.z || 0.2); a.lift(7);
-            if (a.me) X.flash('rgba(255,180,90,0.45)', 280);
-          }
+  for (const side of [-1,1]) pa(new THREE.CircleGeometry(0.4, 12), _gimBasic(0xd8201c), side*3.8, 0.35, 0.4).rotation.x = -Math.PI / 2;
+  const planes=[plane,plane.clone(true),plane.clone(true)];
+  planes.slice(1).forEach(p=>X.G.add(p));
+  const bombs=[],scars=[],N=9,GAP=9,STEP=.24,LANES=[-13,0,13],RADIUS=5.5;
+  const spawns=_mdSpawnRects(X.name,RADIUS+3);
+  const safeTarget=(x,z)=>Math.abs(x)<=b.halfX-RADIUS-3 && Math.abs(z)<=b.halfZ-RADIUS-3 && !spawns.some(r=>x>=r.x0 && x<=r.x1 && z>=r.z0 && z<=r.z1);
+  const probes=[];
+  for(const z of LANES)for(let i=0;i<N;i++){
+    const x=(i-(N-1)/2)*GAP;
+    if(safeTarget(x,z) && !(MAP_COLLIDERS[X.name] || []).some(c=>c.max.y>.2 && c.min.x<x && c.max.x>x && c.min.z<z && c.max.z>z))probes.push({x,z});
+  }
+  X.dbg(probes);
+  const bombGeo=new THREE.CylinderGeometry(.18,.22,.8,8),bombMat=_gimLam(0x292d24);
+  let S={phase:'idle',t:12,n:0,dir:null,p0:null,el:0};
+  const removeMark=m=>{X.G.remove(m);m.geometry.dispose();m.material.dispose();};
+  const clear=()=>{
+    for(const q of bombs){if(!q.done)removeMark(q.ring);X.G.remove(q.mesh);}
+    bombs.length=0;for(const s of scars)removeMark(s);scars.length=0;planes.forEach(p=>{p.visible=false;});
+  };
+  X.hint('✈️ AIR RAID','Bomber formation inbound.','#ff5a3a');
+  X.onReset(()=>{clear();S={phase:'idle',t:12,n:0,dir:null,p0:null,el:0};});
+  X.on((dt,A,t)=>{
+    S.t-=dt;
+    if(S.phase==='idle' && S.t<=0){
+      const first=S.n===0,ang=first?0:[0,Math.PI/2,Math.PI/4,-Math.PI/4][S.n%4];S.n++;
+      const dx=Math.cos(ang),dz=Math.sin(ang),span=(N-1)*GAP;
+      const cx=first?0:(X.rnd()-.5)*24,cz=first?0:(X.rnd()-.5)*24;
+      S.dir={dx,dz};S.p0={x:cx-dx*span/2,z:cz-dz*span/2};
+      LANES.forEach((offset,lane)=>{
+        for(let i=0;i<N;i++){
+          const x=S.p0.x+dx*GAP*i-dz*offset,z=S.p0.z+dz*GAP*i+dx*offset;
+          if(!safeTarget(x,z))continue;
+          const ring=X.ring(x,z,RADIUS,0xff2a1a,.9,.4,.09);
+          const mesh=new THREE.Mesh(bombGeo,bombMat);mesh.position.set(x,38,z);mesh.visible=false;X.G.add(mesh);
+          bombs.push({x,z,ring,mesh,at:2.2+i*STEP+lane*.45,done:false});
+        }
+        planes[lane].visible=true;planes[lane].rotation.y=Math.atan2(dx,dz);
+      });
+      S.phase='raid';S.el=0;
+      X.announce('✈️ AIR RAID','Bomber formation inbound.','#ff5a3a');X.sound('siren_loop',cx,cz,.8);
+    }else if(S.phase==='raid'){
+      S.el+=dt;
+      planes.forEach((p,lane)=>{
+        const f=GAP/STEP*(S.el-1.2-lane*.45),offset=LANES[lane];
+        p.position.set(S.p0.x+S.dir.dx*f-S.dir.dz*offset,44+lane*2,S.p0.z+S.dir.dz*f+S.dir.dx*offset);
+      });
+      for(const q of bombs){
+        if(q.done)continue;
+        q.ring.material.opacity=.4+.5*Math.abs(Math.sin(t*14));
+        q.mesh.visible=S.el>=q.at-1;q.mesh.position.y=Math.max(.4,(q.at-S.el)*38);
+        if(S.el<q.at)continue;
+        q.done=true;removeMark(q.ring);X.G.remove(q.mesh);
+        X.fx(q.x,.5,q.z,RADIUS,0xffa030);X.sound('explosion',q.x,q.z,.9);
+        scars.push(X.disc(q.x,q.z,3.2,0x1a1410,.55,.05));
+        if(scars.length>54)removeMark(scars.shift());
+        for(const a of A){
+          const d=Math.hypot(a.x-q.x,a.z-q.z);
+          if(d>RADIUS || a.y>3.5)continue;
+          const roof=wallColliders.some(c=>c.min.y>a.y+1.7 && c.min.x<a.x && c.max.x>a.x && c.min.z<a.z && c.max.z>a.z);
+          if(roof)continue;
+          a.hurt(d<2.8?140:80,'bomb');a.push(a.x-q.x || .2,a.z-q.z || .2);a.lift(9);
+          if(a.me)X.flash('rgba(255,180,90,0.45)',280);
         }
       }
-      if (S.el > bombs[bombs.length - 1].at + 0.8) { S.phase = 'idle'; S.t = 28 + Math.random() * 10; plane.visible = false; bombs.length = 0; }
+      if(bombs.every(q=>q.done) && S.el>5.5){
+        S.phase='idle';S.t=14+X.rnd()*6;planes.forEach(p=>{p.visible=false;});bombs.length=0;
+      }
     }
   });
 };
@@ -17639,13 +17659,13 @@ GIM.titanic = (X) => {
   X.hint('🧊 TAKING WATER', 'The water is rising. Wading is slow and cold. Go up.', '#5ab8ff');
   X.onReset(() => { lvl = 0; water.visible = false; beat.clear(); });
   X.on((dt, A, t) => {
-    lvl = Math.min(1.4, lvl + dt * 0.0045);                                 // about five minutes to the chest
+    lvl = Math.min(2.2, lvl + dt * 0.018);                                  // lower decks become dangerous within a round
     if (lvl < 0.05) { water.visible = false; return; }
     water.visible = true; water.position.y = lvl + Math.sin(t * 1.4) * 0.02;
     for (const a of A) {
       if (a.y > lvl - 0.05 || a.airborne) continue;
-      a.slow(Math.max(0.45, 1 - lvl * 0.55));
-      if (lvl > 0.6 && _gimBeat(beat, a.id, dt, 1.0)) a.hurt(1.5 + lvl, 'flooded');
+      a.slow(Math.max(0.3, 1 - lvl * 0.55));
+      if (lvl > 0.6 && _gimBeat(beat, a.id, dt, 1.0)) a.hurt(8 + lvl * 4, 'flooded');
     }
   });
 };
@@ -17698,10 +17718,10 @@ GIM.supermarket = (X) => {
         if (a.y > 1.4 || Math.hypot(a.x - x, a.z - z) > 1.25 || cd.has(a.id + c.dir + c.ln.x0)) continue;
         cd.set(a.id + c.dir + c.ln.x0, 1.2);
         const side = ((a.x - x) * -c.dz + (a.z - z) * c.dx) >= 0 ? 1 : -1;
-        a.hurt(14, 'cart'); a.push(-c.dz * side * 5.5, c.dx * side * 5.5); a.lift(4);
+        a.hurt(55, 'cart'); a.push(-c.dz * side * 7.5, c.dx * side * 7.5); a.lift(6);
         if (a.me) X.flash('rgba(220,200,120,0.3)', 180);
       }
-      if (c.s > c.ln.len + 3 || c.s < -3) { c.s = -999; c.t = 11 + Math.random() * 8; c.g.visible = false; }
+      if (c.s > c.ln.len + 3 || c.s < -3) { c.s = -999; c.t = 6 + Math.random() * 5; c.g.visible = false; }
     }
   });
 };
@@ -17765,7 +17785,7 @@ GIM.traffic_cone_republic = (X) => {
     return { x: s.x, z: s.z, g, arm, pad, flash: 0 };
   });
   const cd = new Map();
-  X.hint('🚧 TOLL LANES', 'Walk through a gate: it takes 10 health and gives you 5 seconds of speed.', '#ffd24a');
+  X.hint('🚧 TOLL LANES', 'Walk through a gate: it takes 10 health and gives you 8 seconds of speed.', '#ffd24a');
   X.onReset(() => cd.clear());
   X.on((dt, A, t) => {
     for (const k of cd.keys()) { const v = cd.get(k) - dt; if (v <= 0) cd.delete(k); else cd.set(k, v); }
@@ -17774,7 +17794,7 @@ GIM.traffic_cone_republic = (X) => {
       for (const a of A) {
         if (a.y > 1.8 || cd.has(a.id) || Math.hypot(a.x - G.x, a.z - G.z) > 1.7) continue;
         cd.set(a.id, 3.5);
-        a.hurt(10, 'toll'); a.boost(5000); G.flash = 1;
+        a.hurt(10, 'toll'); a.boost(8000); G.flash = 1;
         if (a.me) { X.flash('rgba(255,210,70,0.25)', 200); }
         X.sound('click', G.x, G.z, 0.8);
       }
@@ -17814,10 +17834,10 @@ GIM.flying_moai = (X) => {
         if (a.y > 0.9 || S.hit.has(a.id)) continue;
         const d = Math.hypot(a.x - s.x, a.z - s.z);
         if (Math.abs(d - S.r) > 1.5) continue;
-        S.hit.add(a.id); a.hurt(22, 'roar'); a.push((a.x - s.x) / (d || 1) * 4, (a.z - s.z) / (d || 1) * 4); a.lift(5);
+        S.hit.add(a.id); a.hurt(80, 'roar'); a.push((a.x - s.x) / (d || 1) * 6, (a.z - s.z) / (d || 1) * 6); a.lift(7);
         if (a.me) X.flash('rgba(216,207,184,0.4)', 220);
       }
-      if (S.r > 90) { S.phase = 'idle'; S.t = 14 + Math.random() * 5; wave.visible = false; band.visible = false; eyes.forEach(e => e.material.color.setHex(0x6a645a)); }
+      if (S.r > 90) { S.phase = 'idle'; S.t = 9 + Math.random() * 4; wave.visible = false; band.visible = false; eyes.forEach(e => e.material.color.setHex(0x6a645a)); }
     }
   });
 };
@@ -17832,7 +17852,7 @@ GIM.big_arena = (X) => {
   let S = { t: 18, drop: null, last: null, n: 0 };
   const smoke = [];
   const clear = () => { if (S.drop) { X.G.remove(S.drop.g); if (S.drop.pk) { S.drop.pk.life = 0; } } S.drop = null; smoke.forEach(m => X.G.remove(m)); smoke.length = 0; };
-  X.hint('🪂 AIRDROP', 'A crate parachutes in every forty seconds. Full health, full magazine.', '#7fdc8a');
+  X.hint('🪂 AIRDROP', 'Full resupply inbound.', '#7fdc8a');
   X.onReset(() => { clear(); S = { t: 18, drop: null, last: null, n: 0 }; });
   X.on((dt, A, t) => {
     S.t -= dt;
@@ -17859,11 +17879,11 @@ GIM.big_arena = (X) => {
       const d = S.drop; d.pk.life -= dt;
       let taken = false;
       for (const a of A) if (a.y < 2.4 && Math.hypot(a.x - d.x, a.z - d.z) < 2.0) {
-        a.heal(1000); a.refill(1); X.fx(d.x, 0.8, d.z, 3.0, 0x7fdc8a); X.sound('heal', d.x, d.z, 0.8);
+        a.heal(1000); a.refill(1); a.boost(6000); X.fx(d.x, 0.8, d.z, 3.0, 0x7fdc8a); X.sound('heal', d.x, d.z, 0.8);
         if (a.me) { X.flash('rgba(120,255,160,0.3)', 260); showAnnouncement('🪂 AIRDROP', 'Full health, full magazine', '#7fdc8a', 1600); }
         taken = true; break;
       }
-      if (taken || d.pk.life <= 0) { clear(); S.t = 36 + Math.random() * 8; }
+      if (taken || d.pk.life <= 0) { clear(); S.t = 18 + Math.random() * 6; }
     }
   });
 };
@@ -17874,7 +17894,7 @@ GIM.big_arena = (X) => {
 // enough to think about it. Walk around, or walk over one on purpose.
 GIM_LABELS.mine = 'stepped on a mine';
 GIM.super_arena = (X) => {
-  const spots = X.spots(16, { r: 1.4, sep: 9, maxR: 62, edge: 14 });
+  const spots = X.spots(24, { r: 1.4, sep: 8, maxR: 62, edge: 14 });
   if (spots.length < 4) return;
   X.dbg(spots.slice(0, 6));
   const mines = spots.map((s, i) => {
@@ -17894,11 +17914,11 @@ GIM.super_arena = (X) => {
       } else if (m.state === 'fuse') {
         m.t -= dt; m.led.visible = Math.sin(t * 40) > 0;
         if (m.t <= 0) {
-          m.state = 'gone'; m.t = 45; m.g.visible = false; X.removeZone('avoid', m.zn);
+          m.state = 'gone'; m.t = 24; m.g.visible = false; X.removeZone('avoid', m.zn);
           X.fx(m.x, 0.4, m.z, 4.2, 0xffa030); X.sound('explosion', m.x, m.z, 0.9);
           for (const a of A) {
             const d = Math.hypot(a.x - m.x, a.z - m.z);
-            if (d < 3.8 && a.y < 3) { a.hurt(d < 1.8 ? 75 : 40, 'mine'); a.push(a.x - m.x || 0.2, a.z - m.z || 0.2); a.lift(8); if (a.me) X.flash('rgba(255,180,90,0.45)', 260); }
+            if (d < 3.8 && a.y < 3) { a.hurt(d < 1.8 ? 150 : 90, 'mine'); a.push(a.x - m.x || 0.2, a.z - m.z || 0.2); a.lift(10); if (a.me) X.flash('rgba(255,180,90,0.45)', 260); }
           }
         }
       } else if (m.state === 'gone') {
@@ -17948,11 +17968,11 @@ GIM.train = (X) => {
       for (const a of A) {
         if (a.y > 4.4 || Math.abs(a.x) > 2.4 || a.z < lo || a.z > hi || (S.cd.get(a.id) || 0) > t) continue;
         S.cd.set(a.id, t + 2.5);
-        a.hurt(200, 'express'); a.push(a.x >= 0 ? 6 : -6, 0); a.lift(7);
+        a.hurt(280, 'express'); a.push(a.x >= 0 ? 8 : -8, 0); a.lift(9);
         if (a.me) X.flash('rgba(255,255,255,0.5)', 300);
       }
       if ((S.dir > 0 && S.z - (LEN) > z1 + 6) || (S.dir < 0 && S.z + LEN < z0 - 6)) {
-        S.phase = 'idle'; S.t = 24 + Math.random() * 8; train.visible = false; lamps.forEach(l => l.material.color.setHex(0x330000)); stripes.forEach(m => { m.material.opacity = 0; });
+        S.phase = 'idle'; S.t = 14 + Math.random() * 6; train.visible = false; lamps.forEach(l => l.material.color.setHex(0x330000)); stripes.forEach(m => { m.material.opacity = 0; });
       }
     }
   });
@@ -44591,9 +44611,7 @@ function updateMapGimmicks(dt) {
       if (bot.dead) continue;
       for (const z of g.damageZones) {
         if (inDamageZone(z, bot.x, bot.z)) {
-          const mesh = remoteMeshes[bot.id];
-          const hp = mesh ? mesh.position.clone().setY(1.0) : new THREE.Vector3(bot.x, 1, bot.z);
-          emitHit(bot.id, `lava_${bot.id}_${now}`, z.type || 'lava', hp);
+          _mechHurtBot(bot, (z.dps || 4) / 2, z.type || 'lava');
           break;
         }
       }
@@ -64482,7 +64500,7 @@ const MAP_DESCS = {
   gale_peaks:     '💨 Gale Peaks — a stepped peak with wind gusts that shove you around, updraft thermals',
   magma_rise:     '🌋 Magma Rise — the floor turns to lava on a timer; stand on the rock',
   gravity_lab: 'Gravity Lab — three GRAVITY WELLS pull everything in',
-  pearl_harbor: '⚓ Pearl Harbor — quays, ships and cranes · AIR RAIDS bomb a line across the harbour',
+  pearl_harbor: 'Pearl Harbor — three-bomber raids across the quays and shipyards',
   titanic: '🚢 Titanic — a liner going down: decks, a grand hall · the WATER keeps rising',
   supermarket: '🛒 Supermarket — aisles, checkouts, freezer · loose TROLLEYS run the aisles',
   pyongyang: 'Pyongyang — monuments, squares and wide-sweeping live-fire searchlights',
