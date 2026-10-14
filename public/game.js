@@ -17683,54 +17683,38 @@ GIM.supermarket = (X) => {
 };
 
 // ── 🔦 PYONGYANG · SEARCHLIGHTS ─────────────────────────────────────────────────────────────────────────────────────────
-// Four towers, four lamps, four pools of white light walking the squares. Stay in one for a second and somebody up there
-// has you: a red ring closes on the spot and the guns do the rest. The light is the aim -- nothing else is.
-GIM_LABELS.shell = 'was shelled from the searchlights';
+// The visible light pool deals contact damage; one shared cooldown prevents overlapping lamps stacking hits.
+GIM_LABELS.shell = 'was caught in a searchlight';
 GIM.pyongyang = (X) => {
   const towers = X.spots(4, { r: 1.8, pairs: true, sep: 36, maxR: 70, edge: 12 });
   if (towers.length < 2) return;
-  X.dbg(towers.map(s => ({ x: s.x + 18, z: s.z })));
-  const R = 4.4, ORB = 17;
+  X.dbg(towers.map(s => ({ x: s.x + 30, z: s.z })));
+  const R = 7.5, ORB = 30, DAMAGE = 100, HIT_GAP = 1.5;
+  const arena = X.arena(), hitAt = new Map();
   const lamps = towers.map((s, i) => {
     X.mesh(new THREE.BoxGeometry(0.7, 11, 0.7), _gimLam(0x5a5f66), s.x, 5.5, s.z);
     X.mesh(new THREE.BoxGeometry(1.8, 1.0, 1.8), _gimLam(0x2a2d30), s.x, 11.4, s.z);
     const spot = X.disc(s.x + ORB, s.z, R, 0xfff6c0, 0.38, 0.06);
     const rim = X.ring(s.x + ORB, s.z, R, 0xffffff, 0.8, 0.25, 0.07);
     const beam = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.22, 1), _gimBasic(0xfff6c0, 0.22)); X.G.add(beam);
-    return { x: s.x, z: s.z, a: i * 1.7, w: (i % 2 ? -1 : 1) * 0.38, spot, rim, beam, lit: new Map(), sx: s.x + ORB, sz: s.z };
+    return { x: s.x, z: s.z, a0: i * 1.7, a: i * 1.7, w: (i % 2 ? -1 : 1) * 0.38, spot, rim, beam };
   });
-  const shells = [];
-  X.hint('🔦 SEARCHLIGHTS', 'Stay in the light for a second and the guns find you.', '#fff6c0');
-  X.onReset(() => { for (const q of shells) X.G.remove(q.ring); shells.length = 0; lamps.forEach(l => l.lit.clear()); });
+  X.hint('🔦 SEARCHLIGHTS', 'Live-fire perimeter.', '#fff6c0');
+  X.onReset(() => { hitAt.clear(); lamps.forEach(l => { l.a = l.a0; }); });
   X.on((dt, A, t) => {
     for (const l of lamps) {
       l.a += l.w * dt;
-      l.sx = l.x + Math.cos(l.a) * ORB; l.sz = l.z + Math.sin(l.a) * ORB;
-      l.spot.position.set(l.sx, 0.06, l.sz); l.rim.position.set(l.sx, 0.07, l.sz);
-      const mx = (l.x + l.sx) / 2, mz = (l.z + l.sz) / 2, len = Math.hypot(l.sx - l.x, l.sz - l.z, 11.4);
-      l.beam.position.set(mx, 5.7, mz); l.beam.scale.z = len; l.beam.lookAt(l.sx, 0, l.sz);
+      const sx = Math.max(-arena.halfX + R + 2, Math.min(arena.halfX - R - 2, l.x + Math.cos(l.a) * ORB));
+      const sz = Math.max(-arena.halfZ + R + 2, Math.min(arena.halfZ - R - 2, l.z + Math.sin(l.a) * ORB));
+      l.spot.position.set(sx, 0.06, sz); l.rim.position.set(sx, 0.07, sz);
+      const len = Math.hypot(sx - l.x, sz - l.z, 11.4);
+      l.beam.position.set((l.x + sx) / 2, 5.7, (l.z + sz) / 2);
+      l.beam.scale.z = len; l.beam.lookAt(sx, 0, sz);
       for (const a of A) {
-        const inside = a.y < 1.9 && Math.hypot(a.x - l.sx, a.z - l.sz) < R;
-        const v = inside ? (l.lit.get(a.id) || 0) + dt : Math.max(0, (l.lit.get(a.id) || 0) - dt * 1.5);
-        l.lit.set(a.id, v);
-        if (v > 1.0) {
-          l.lit.set(a.id, -1.5);
-          const ring = X.ring(a.x, a.z, 4.0, 0xff2a1a, 0.9, 0.4, 0.08);
-          shells.push({ x: a.x, z: a.z, t: 1.5, ring });
-          if (a.me) X.sound('radar_ping', a.x, a.z, 0.9);
-        }
-      }
-    }
-    for (let i = shells.length - 1; i >= 0; i--) {
-      const q = shells[i]; q.t -= dt;
-      q.ring.material.opacity = 0.35 + 0.55 * Math.abs(Math.sin(t * 16));
-      if (q.t <= 0) {
-        X.G.remove(q.ring); shells.splice(i, 1);
-        X.fx(q.x, 0.5, q.z, 4.6, 0xffa030); X.sound('explosion', q.x, q.z, 0.85);
-        for (const a of A) {
-          const d = Math.hypot(a.x - q.x, a.z - q.z);
-          if (d < 4 && a.y < 3.5) { a.hurt(d < 2 ? 70 : 40, 'shell'); a.push(a.x - q.x || 0.2, a.z - q.z || 0.2); a.lift(6); if (a.me) X.flash('rgba(255,180,90,0.4)', 260); }
-        }
+        if (a.y < 0 || a.y >= 3.5 || Math.hypot(a.x - sx, a.z - sz) >= R || t < (hitAt.get(a.id) ?? -Infinity)) continue;
+        hitAt.set(a.id, t + HIT_GAP);
+        a.hurt(DAMAGE, 'shell');
+        if (a.me) { X.sound('radar_ping', a.x, a.z, 0.9); X.flash('rgba(255,235,160,0.3)', 180); }
       }
     }
   });
@@ -63854,7 +63838,7 @@ const MAP_DESCS = {
   pearl_harbor: '⚓ Pearl Harbor — quays, ships and cranes · AIR RAIDS bomb a line across the harbour',
   titanic: '🚢 Titanic — a liner going down: decks, a grand hall · the WATER keeps rising',
   supermarket: '🛒 Supermarket — aisles, checkouts, freezer · loose TROLLEYS run the aisles',
-  pyongyang: '🏛️ Pyongyang — monuments and squares · SEARCHLIGHTS call the guns on you',
+  pyongyang: 'Pyongyang — monuments, squares and wide-sweeping live-fire searchlights',
   traffic_cone_republic: '🚧 Traffic Cone Republic — giant cones, a roundabout, a flyover · TOLL LANES charge health for speed',
   flying_moai: '🗿 Flying Moai — a plateau of stone heads · a ROAR shockwave crosses the ground',
 };
