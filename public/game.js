@@ -30446,6 +30446,15 @@ const WEAPON_SKINS = [
   { id: 'superstar', name: 'Superstar',     body: 0x14206a, accent: 0xffd23a, flag: null, sw: ['#14206a', '#ffd23a'] },
   { id: 'bubbles',   name: 'Bubbles',       body: 0x0a5a7a, accent: 0xbff6ff, flag: null, sw: ['#0a5a7a', '#bff6ff'] },
   { id: 'error',     name: 'Error',         body: 0x040000, accent: 0xff2a2a, flag: null, sw: ['#040000', '#ff2a2a'] },
+  // ── 🎖 Contract wraps: not in the shop, each earned by a contract (CONTRACTS, below) ──
+  { id: 'darkmatter',   name: 'Dark Matter',   body: 0x05030f, accent: 0xb36bff, flag: null, contract: true, sw: ['#05030f', '#b36bff'] },
+  { id: 'singularity',  name: 'Singularity',   body: 0x000000, accent: 0xffd9a0, flag: null, contract: true, sw: ['#000000', '#ff8a2a'] },
+  { id: 'aurora',       name: 'Aurora',        body: 0x04101c, accent: 0x5dffb4, flag: null, contract: true, sw: ['#04101c', '#5dffb4'] },
+  { id: 'plasma',       name: 'Plasma Storm',  body: 0x0a0620, accent: 0x7fe9ff, flag: null, contract: true, sw: ['#0a0620', '#7fe9ff'] },
+  { id: 'absolutezero', name: 'Absolute Zero', body: 0x07213a, accent: 0xe8fbff, flag: null, contract: true, sw: ['#07213a', '#e8fbff'] },
+  { id: 'reaper',       name: 'Reaper',        body: 0x060104, accent: 0xff2a3a, flag: null, contract: true, sw: ['#060104', '#ff2a3a'] },
+  { id: 'prismatic',    name: 'Prismatic',     body: 0x1a1a22, accent: 0xffffff, flag: null, contract: true, sw: ['#ff4d6d', '#4dd2ff'] },
+  { id: 'warpdrive',    name: 'Warp Drive',    body: 0x02040e, accent: 0x9fe2ff, flag: null, contract: true, sw: ['#02040e', '#9fe2ff'] },
 ];
 const WEAPON_SKINS_BY_ID = Object.fromEntries(WEAPON_SKINS.map(s => [s.id, s]));
 let selectedWeaponSkin = 'default';
@@ -30948,6 +30957,197 @@ const WS_PATTERNS = {
     });
   },
 };
+// ── 🌌 Contract wraps ───────────────────────────────────────────────────────────────────────────────────
+// Eight wraps that are not for sale: each is earned by finishing a contract (see CONTRACTS). Same rules as the
+// rest: c[0] is the ground, c[1] is the colour that also glows, the others are tones that stay dark in the glow
+// layer, and every tile repeats without a seam.
+Object.assign(WS_PATTERNS, {
+  darkmatter(g, N, c, r) {   // the void; haze you cannot quite see; rings bent round things that are not there; threads of light
+    g.fillStyle = c[0]; g.fillRect(0, 0, N, N);
+    const haze = [], rings = [], strands = [], stars = [], holes = [];
+    for (let i = 0; i < 9; i++) haze.push({ x: r() * N, y: r() * N, R: 40 + r() * 70, col: c[2 + (i % 2)] || c[2] || c[0] });
+    for (let i = 0; i < 4; i++) rings.push({ x: r() * N, y: r() * N, R0: 16 + r() * 20, n: 5 + (r() * 4 | 0), step: 9 + r() * 7, a0: r() * 6.28 });
+    for (let i = 0; i < 7; i++) strands.push({ x: r() * N, y: r() * N, a: r() * 6.28, len: 60 + r() * 90, bend: (r() - 0.5) * 1.6 });
+    for (let i = 0; i < 70; i++) stars.push({ x: r() * N, y: r() * N, s: 0.6 + r() * 1.4, a: 0.35 + r() * 0.65 });
+    for (let i = 0; i < 4; i++) holes.push({ x: r() * N, y: r() * N, R: 16 + r() * 22 });
+    _wsTile(g, N, () => {
+      for (const h of haze) {
+        const gr = g.createRadialGradient(h.x, h.y, 0, h.x, h.y, h.R); gr.addColorStop(0, h.col); gr.addColorStop(1, 'rgba(0,0,0,0)');
+        g.globalAlpha = 0.75; g.fillStyle = gr; g.fillRect(h.x - h.R, h.y - h.R, h.R * 2, h.R * 2);
+      }
+      g.lineWidth = 2;
+      for (const q of rings) for (let k = 0; k < q.n; k++) {
+        g.globalAlpha = Math.max(0.1, 0.5 - k * 0.07); g.strokeStyle = k % 2 ? (c[3] || c[2] || c[1]) : (c[2] || c[1]);
+        g.beginPath(); g.arc(q.x, q.y, q.R0 + k * q.step, q.a0 + k * 0.9, q.a0 + k * 0.9 + 2.2 + (k % 3) * 0.7); g.stroke();
+      }
+      for (const v of holes) {
+        const gr = g.createRadialGradient(v.x, v.y, 0, v.x, v.y, v.R); gr.addColorStop(0, '#000'); gr.addColorStop(0.7, 'rgba(0,0,0,0.9)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+        g.globalAlpha = 1; g.fillStyle = gr; g.fillRect(v.x - v.R, v.y - v.R, v.R * 2, v.R * 2);
+      }
+      g.lineCap = 'round';
+      for (const s of strands) {
+        const ex = s.x + Math.cos(s.a) * s.len, ey = s.y + Math.sin(s.a) * s.len;
+        const mx = (s.x + ex) / 2 + Math.cos(s.a + 1.57) * s.len * s.bend * 0.5, my = (s.y + ey) / 2 + Math.sin(s.a + 1.57) * s.len * s.bend * 0.5;
+        g.strokeStyle = c[1];
+        g.globalAlpha = 0.28; g.lineWidth = 7; g.beginPath(); g.moveTo(s.x, s.y); g.quadraticCurveTo(mx, my, ex, ey); g.stroke();
+        g.globalAlpha = 0.9; g.lineWidth = 1.6; g.beginPath(); g.moveTo(s.x, s.y); g.quadraticCurveTo(mx, my, ex, ey); g.stroke();
+      }
+      g.fillStyle = c[1];
+      for (const st of stars) { g.globalAlpha = st.a; g.beginPath(); g.arc(st.x, st.y, st.s, 0, 6.3); g.fill(); }
+      g.globalAlpha = 1;
+    });
+  },
+  accretion(g, N, c, r) {   // c[0] black · c[1] the white-hot inner edge (glows) · c[2] the disc · c[3] the heat further out
+    g.fillStyle = c[0]; g.fillRect(0, 0, N, N);
+    const hubs = [{ x: N * 0.26, y: N * 0.28, R: 104, tilt: -0.25 }, { x: N * 0.80, y: N * 0.66, R: 90, tilt: 0.30 }, { x: N * 0.42, y: N * 0.94, R: 58, tilt: -0.1 }];
+    _wsTile(g, N, () => {
+      for (const h of hubs) {
+        g.save(); g.translate(h.x, h.y); g.rotate(h.tilt); g.scale(1, 0.34);
+        const gr = g.createRadialGradient(0, 0, h.R * 0.18, 0, 0, h.R);
+        gr.addColorStop(0, c[1]); gr.addColorStop(0.22, c[2] || c[1]); gr.addColorStop(0.6, c[3] || c[2] || c[1]); gr.addColorStop(1, 'rgba(0,0,0,0)');
+        g.fillStyle = gr; g.beginPath(); g.arc(0, 0, h.R, 0, 6.3); g.fill();
+        for (let k = 0; k < 5; k++) { g.strokeStyle = k % 2 ? (c[2] || c[1]) : c[1]; g.globalAlpha = 0.35; g.lineWidth = 2; g.beginPath(); g.arc(0, 0, h.R * (0.3 + k * 0.13), 0, 6.3); g.stroke(); }
+        g.globalAlpha = 1; g.fillStyle = c[0]; g.beginPath(); g.arc(0, 0, h.R * 0.2, 0, 6.3); g.fill();
+        g.restore();
+        // the far side of the disc, bent up and over the hole
+        g.save(); g.translate(h.x, h.y); g.rotate(h.tilt * 0.4); g.strokeStyle = c[1]; g.lineWidth = 3; g.globalAlpha = 0.9;
+        g.beginPath(); g.ellipse(0, -2, h.R * 0.28, h.R * 0.2, 0, Math.PI * 1.05, Math.PI * 1.95); g.stroke(); g.restore();
+      }
+      g.globalAlpha = 1;
+    });
+    g.fillStyle = c[1];
+    for (let i = 0; i < 40; i++) { g.globalAlpha = 0.3 + r() * 0.5; g.fillRect(r() * N, r() * N, 1.5, 1.5); }
+    g.globalAlpha = 1;
+  },
+  aurora(g, N, c, r) {   // c[0] the night · c[1] the green curtain (glows) · c[2] violet · c[3] blue
+    g.fillStyle = c[0]; g.fillRect(0, 0, N, N);
+    const cols = [c[1], c[3] || c[1], c[2] || c[1]];
+    for (let band = 0; band < 3; band++) {
+      const cy = N * (0.25 + band * 0.28), ph = r() * 6.28, f = 2 + band, amp = 14 + r() * 10, col = cols[band];
+      for (let x = 0; x < N; x += 2) {
+        const t = x / N * 6.2832;
+        const y = cy + Math.sin(t * f + ph) * amp + Math.sin(t * (f + 3) + ph * 2) * amp * 0.35;
+        const h = 46 + Math.sin(t * (f + 1) + ph * 1.7) * 18 + r() * 6;
+        const gr = g.createLinearGradient(0, y - h, 0, y + h * 0.25);
+        gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(0.75, col); gr.addColorStop(1, 'rgba(0,0,0,0)');
+        g.globalAlpha = 0.55; g.fillStyle = gr; g.fillRect(x, y - h, 2, h * 1.25);
+      }
+    }
+    g.fillStyle = c[1];
+    for (let i = 0; i < 50; i++) { g.globalAlpha = 0.3 + r() * 0.6; const s = 0.8 + r() * 1.2; g.fillRect(r() * N, r() * N, s, s); }
+    g.globalAlpha = 1;
+  },
+  plasma(g, N, c, r) {   // c[0] the dark glass · c[1] the filaments (glow) · c[2], c[3] what they bleed into. Repaints: the threads move.
+    g.fillStyle = c[0]; g.fillRect(0, 0, N, N);
+    const rh = _wsRng('plasma-hubs');       // the hubs stay where they are; only the filaments change from one repaint to the next
+    const hubs = []; for (let i = 0; i < 4; i++) hubs.push({ x: rh() * N, y: rh() * N, col: c[2 + (i % 2)] || c[2] || c[1] });
+    _wsTile(g, N, () => {
+      for (const h of hubs) {
+        const gr = g.createRadialGradient(h.x, h.y, 0, h.x, h.y, 48); gr.addColorStop(0, h.col); gr.addColorStop(1, 'rgba(0,0,0,0)');
+        g.globalAlpha = 0.8; g.fillStyle = gr; g.fillRect(h.x - 48, h.y - 48, 96, 96);
+      }
+    });
+    g.lineCap = 'round'; g.lineJoin = 'round';
+    const fil = [];
+    for (const h of hubs) for (let k = 0; k < 7; k++) {
+      let a = r() * 6.28, x = h.x, y = h.y; const pts = [[x, y]];
+      for (let j = 0; j < 9; j++) { a += (r() - 0.5) * 1.2; x += Math.cos(a) * (9 + r() * 9); y += Math.sin(a) * (9 + r() * 9); pts.push([x, y]); }
+      fil.push({ pts, col: h.col });
+    }
+    _wsTile(g, N, () => {
+      for (const f of fil) {
+        g.beginPath(); f.pts.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y));
+        g.globalAlpha = 0.30; g.strokeStyle = f.col; g.lineWidth = 7; g.stroke();
+        g.globalAlpha = 0.95; g.strokeStyle = c[1]; g.lineWidth = 1.8; g.stroke();
+      }
+      for (const h of hubs) {
+        g.globalAlpha = 0.5; g.fillStyle = c[1]; g.beginPath(); g.arc(h.x, h.y, 6, 0, 6.3); g.fill();
+        g.globalAlpha = 0.9; g.fillStyle = 'rgba(255,255,255,0.95)'; g.beginPath(); g.arc(h.x, h.y, 3, 0, 6.3); g.fill();
+      }
+      g.globalAlpha = 1;
+    });
+  },
+  frost(g, N, c, r) {   // c[0] deep ice · c[1] the frost (glows) · c[2] mid blue · c[3] pale breath
+    const gr = g.createLinearGradient(0, 0, N, N); gr.addColorStop(0, c[0]); gr.addColorStop(0.5, c[2] || c[0]); gr.addColorStop(1, c[0]);
+    g.fillStyle = gr; g.fillRect(0, 0, N, N);
+    const breath = []; for (let i = 0; i < 14; i++) breath.push({ x: r() * N, y: r() * N, R: 20 + r() * 34 });
+    const flakes = [];
+    const grow = (x, y, a, len, d, out) => {
+      const ex = x + Math.cos(a) * len, ey = y + Math.sin(a) * len; out.push([x, y, ex, ey, d]);
+      if (d < 3) { grow(ex, ey, a - 0.7, len * 0.55, d + 1, out); grow(ex, ey, a + 0.7, len * 0.55, d + 1, out); if (d < 2) grow(ex, ey, a, len * 0.6, d + 1, out); }
+    };
+    for (let i = 0; i < 9; i++) { const out = [], cx = r() * N, cy = r() * N, L = 12 + r() * 10; for (let k = 0; k < 6; k++) grow(cx, cy, k * Math.PI / 3 + r() * 0.1, L, 0, out); flakes.push(out); }
+    g.lineCap = 'round';
+    _wsTile(g, N, () => {
+      for (const b of breath) {
+        const rg = g.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.R); rg.addColorStop(0, c[3] || c[1]); rg.addColorStop(1, 'rgba(0,0,0,0)');
+        g.globalAlpha = 0.28; g.fillStyle = rg; g.fillRect(b.x - b.R, b.y - b.R, b.R * 2, b.R * 2);
+      }
+      g.strokeStyle = c[1];
+      for (const fl of flakes) for (const s of fl) {
+        g.globalAlpha = Math.max(0.2, 0.95 - s[4] * 0.16); g.lineWidth = Math.max(0.7, 2.2 - s[4] * 0.5);
+        g.beginPath(); g.moveTo(s[0], s[1]); g.lineTo(s[2], s[3]); g.stroke();
+      }
+    });
+    g.fillStyle = c[1];
+    for (let i = 0; i < 60; i++) { g.globalAlpha = 0.35 + r() * 0.65; const s = 0.8 + r() * 1.4; g.fillRect(r() * N, r() * N, s, s); }
+    g.globalAlpha = 1;
+  },
+  runes(g, N, c, r) {   // c[0] black · c[1] the red marks (glow) · c[2] dark red haze
+    g.fillStyle = c[0]; g.fillRect(0, 0, N, N);
+    for (let x = 0; x < N; x += 64) {
+      const gr = g.createLinearGradient(x, 0, x + 64, 0); gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(0.5, c[2] || c[0]); gr.addColorStop(1, 'rgba(0,0,0,0)');
+      g.globalAlpha = 0.6; g.fillStyle = gr; g.fillRect(x, 0, 64, N);
+    }
+    g.globalAlpha = 1; g.strokeStyle = c[1]; g.lineCap = 'round'; g.lineJoin = 'round'; g.lineWidth = 2;
+    const S = 32;
+    for (let y = 0; y < N / S; y++) for (let x = 0; x < N / S; x++) {
+      if (r() < 0.38) continue;
+      const ox = x * S + 6, oy = y * S + 2, pts = [];
+      for (let i = 0; i < 4; i++) pts.push([ox + (r() * 3 | 0) * 8, oy + (r() * 4 | 0) * 8]);
+      g.globalAlpha = 0.55 + r() * 0.45; g.beginPath(); pts.forEach(([px, py], i) => i ? g.lineTo(px, py) : g.moveTo(px, py)); g.stroke();
+      if (r() < 0.3) { g.beginPath(); g.arc(ox + 8, oy + 12, 5, 0, 6.3); g.stroke(); }
+    }
+    _wsTile(g, N, () => {     // one ring sigil a tile: two circles, a tick border and a triangle
+      const cx = N * 0.62, cy = N * 0.40;
+      g.strokeStyle = c[1]; g.lineWidth = 3; g.globalAlpha = 0.9;
+      g.beginPath(); g.arc(cx, cy, 34, 0, 6.3); g.stroke(); g.lineWidth = 1.6; g.beginPath(); g.arc(cx, cy, 26, 0, 6.3); g.stroke();
+      for (let i = 0; i < 24; i++) { const a = i / 24 * 6.2832, o = i % 2 ? 39 : 42; g.beginPath(); g.moveTo(cx + Math.cos(a) * 34, cy + Math.sin(a) * 34); g.lineTo(cx + Math.cos(a) * o, cy + Math.sin(a) * o); g.stroke(); }
+      g.beginPath(); for (let i = 0; i < 3; i++) { const a = -1.5708 + i * 2.0944, px = cx + Math.cos(a) * 24, py = cy + Math.sin(a) * 24; i ? g.lineTo(px, py) : g.moveTo(px, py); }
+      g.closePath(); g.stroke(); g.globalAlpha = 1;
+    });
+  },
+  prism(g, N, c, r, look) {   // cut facets, each a hue of its own, white along the edges and a few glints
+    g.fillStyle = c[0]; g.fillRect(0, 0, N, N);
+    const S = 32, off = r() * 360;
+    for (let y = 0; y < N; y += S) for (let x = 0; x < N; x += S) for (const t of [0, 1]) {
+      const hue = (off + (x / N) * 360 + (y / N) * 180 + t * 35 + r() * 30) % 360;
+      g.fillStyle = 'hsl(' + hue.toFixed(0) + ',' + ((look && look.sat) || 88) + '%,' + (48 + r() * 22).toFixed(0) + '%)';
+      g.globalAlpha = 0.92; g.beginPath();
+      if (t) { g.moveTo(x, y); g.lineTo(x + S, y); g.lineTo(x + S, y + S); } else { g.moveTo(x, y); g.lineTo(x + S, y + S); g.lineTo(x, y + S); }
+      g.closePath(); g.fill();
+      g.globalAlpha = 0.5; g.strokeStyle = 'rgba(255,255,255,0.8)'; g.lineWidth = 1.2; g.stroke();
+    }
+    g.fillStyle = '#fff';
+    for (let i = 0; i < 14; i++) { const x = r() * N, y = r() * N; g.globalAlpha = 0.6 + r() * 0.4; g.fillRect(x - 6, y - 0.7, 12, 1.4); g.fillRect(x - 0.7, y - 6, 1.4, 12); }
+    g.globalAlpha = 1;
+  },
+  warp(g, N, c, r) {   // c[0] the dark · c[1] the streaks (glow) · c[2] blue haze · c[3] white heads
+    const bg = g.createLinearGradient(0, 0, 0, N); bg.addColorStop(0, c[0]); bg.addColorStop(0.5, c[2] || c[0]); bg.addColorStop(1, c[0]);
+    g.fillStyle = bg; g.fillRect(0, 0, N, N);
+    const lines = [];
+    for (let i = 0; i < 46; i++) lines.push({ y: r() * N, x: r() * N, len: 40 + r() * 150, w: 0.8 + r() * 2, a: 0.35 + r() * 0.65 });
+    _wsTile(g, N, () => {
+      for (const l of lines) {
+        const gr = g.createLinearGradient(l.x - l.len, 0, l.x, 0); gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(1, c[1]);
+        g.globalAlpha = l.a; g.fillStyle = gr; g.fillRect(l.x - l.len, l.y, l.len, l.w);
+        g.globalAlpha = Math.min(1, l.a + 0.2); g.fillStyle = c[3] || c[1]; g.fillRect(l.x - 1.5, l.y - 0.3, 3, l.w + 0.6);
+      }
+      g.globalAlpha = 1;
+    });
+  },
+});
+
 // id -> how it is painted and finished. `glow`: which of the pattern's colours also lights up (an emissive layer).
 const WS_LOOKS = {
   gold:      { pat: 'filigree', c: [0xc8a020, 0xffe070], metal: 0.95, rough: 0.26 },
@@ -30997,7 +31197,138 @@ const WS_LOOKS = {
   // `flicker`: seconds between repaints, each a new scatter (the shared texture is redrawn, so every gun wearing it changes at once).
   // `noSwap`: the second material does not get the two colours swapped -- a black wrap with red text is not red with black text.
   error:     { pat: 'error', c: [0x040000, 0xff2a2a, 0x7a0c10], metal: 0.3, rough: 0.5, glow: 1, flicker: 0.14, noSwap: true },
+  // contract wraps -- all of them glow, all of them move
+  darkmatter:   { pat: 'darkmatter', c: [0x03020a, 0xb36bff, 0x2a0b5c, 0x0a2a6a], metal: 0.4, rough: 0.22, glow: 1, scroll: [0.012, 0.006] },
+  singularity:  { pat: 'accretion',  c: [0x000000, 0xffe3b0, 0xff7a22, 0x6a1a00], metal: 0.5, rough: 0.3, glow: 1, scroll: [0.03, 0] },
+  aurora:       { pat: 'aurora',     c: [0x04101c, 0x5dffb4, 0xb050ff, 0x2a8fff], metal: 0.3, rough: 0.25, glow: 1, scroll: [0.045, 0] },
+  plasma:       { pat: 'plasma',     c: [0x0a0620, 0x7fe9ff, 0xb04bff, 0xff4fd8], metal: 0.45, rough: 0.12, glow: 1, flicker: 0.11 },
+  absolutezero: { pat: 'frost',      c: [0x06203a, 0xe8fbff, 0x2f8fd0, 0x9be8ff], metal: 0.25, rough: 0.1, glow: 1, scroll: [0.0, -0.02] },
+  reaper:       { pat: 'runes',      c: [0x060104, 0xff2a3a, 0x3a0610, 0x8a1020], metal: 0.5, rough: 0.35, glow: 1, scroll: [0, -0.05] },
+  prismatic:    { pat: 'prism',      c: [0x1a1a22, 0xffffff], sat: 88, metal: 0.85, rough: 0.1, scroll: [0.05, 0.03] },
+  warpdrive:    { pat: 'warp',       c: [0x02040e, 0x9fe2ff, 0x1a3a8a, 0xffffff], metal: 0.4, rough: 0.3, glow: 1, scroll: [0.9, 0] },
 };
+
+// ── 🎖 Contracts ────────────────────────────────────────────────────────────────────────────────────────
+// The wraps above cannot be bought. Each one is a contract: do the thing, and it is yours for good. They count in
+// real matches (not the range, the obby or the lobby), and the numbers live in this browser, next to your other
+// settings.
+//   weaponKills  n kills with one weapon          headshots   n kills that were head hits
+//   tag          n kills with a killfeed tag      lifeStreak  n kills in a single life
+//   winStreak    n matches won in a row (a loss ends it; a draw does not)
+const CONTRACTS = [
+  { id: 'ct_aurora',   wrap: 'aurora',       kind: 'weaponKills', weapon: 'vector',     n: 30, text: 'Get 30 kills with the Vector SMG' },
+  { id: 'ct_plasma',   wrap: 'plasma',       kind: 'weaponKills', weapon: 'railgun',    n: 25, text: 'Get 25 kills with the Railgun' },
+  { id: 'ct_zero',     wrap: 'absolutezero', kind: 'weaponKills', weapon: 'freeze_gun', n: 25, text: 'Get 25 kills with the Freeze Gun' },
+  { id: 'ct_reaper',   wrap: 'reaper',       kind: 'headshots',                         n: 40, text: 'Land 40 headshot kills' },
+  { id: 'ct_warp',     wrap: 'warpdrive',    kind: 'tag',         tag: 'AIR',          n: 15, text: 'Get 15 kills while airborne' },
+  { id: 'ct_sing',     wrap: 'singularity',  kind: 'lifeStreak',                        n: 10, text: 'Get 10 kills in a single life' },
+  { id: 'ct_prism',    wrap: 'prismatic',    kind: 'winStreak',                         n: 3,  text: 'Win 3 matches in a row' },
+  { id: 'ct_dark',     wrap: 'darkmatter',   kind: 'winStreak',                         n: 5,  text: 'Win 5 matches in a row' },
+];
+const CONTRACT_KEY = 'pvp_contracts_v1';
+function _contractFresh() { return { wk: {}, heads: 0, tags: {}, kills: 0, life: 0, bestLife: 0, streak: 0, bestStreak: 0, done: {} }; }
+let contractState = _contractFresh();
+try {
+  const raw = JSON.parse(localStorage.getItem(CONTRACT_KEY) || 'null');
+  if (raw && typeof raw === 'object') contractState = Object.assign(_contractFresh(), raw);
+} catch (e) {}
+function contractsSave() { try { localStorage.setItem(CONTRACT_KEY, JSON.stringify(contractState)); } catch (e) {} }
+function contractFor(wrapId) { return CONTRACTS.find(c => c.wrap === wrapId) || null; }
+// A wrap that is not behind a contract is always open; one that is, is open once its contract is done (admins see all).
+function wrapUnlocked(id) {
+  const c = contractFor(id);
+  if (!c) return true;
+  return !!contractState.done[c.id] || !!(typeof currentUser !== 'undefined' && currentUser && currentUser.isAdmin);
+}
+function contractProgress(c) {
+  const s = contractState;
+  if (c.kind === 'weaponKills') return s.wk[c.weapon] || 0;
+  if (c.kind === 'headshots')   return s.heads;
+  if (c.kind === 'tag')         return s.tags[c.tag] || 0;
+  if (c.kind === 'lifeStreak')  return s.bestLife;
+  if (c.kind === 'winStreak')   return Math.max(s.streak, s.done[c.id] ? c.n : 0);
+  return 0;
+}
+function contractToast(title, sub, color) {
+  const el = document.createElement('div');
+  el.style.cssText = 'position:fixed;left:50%;top:14%;transform:translateX(-50%);z-index:100002;background:rgba(10,10,18,.94);'
+    + 'border:2px solid ' + color + ';border-radius:12px;padding:12px 22px;text-align:center;font-family:Arial Black,Arial,sans-serif;'
+    + 'color:#fff;box-shadow:0 0 28px ' + color + '66;pointer-events:none;transition:opacity .5s,transform .5s;max-width:90vw;';
+  const t = document.createElement('div'); t.style.cssText = 'font-size:12px;letter-spacing:.2em;color:' + color; t.textContent = title;
+  const s = document.createElement('div'); s.style.cssText = 'font-size:20px;margin-top:4px'; s.textContent = sub;
+  el.appendChild(t); el.appendChild(s); document.body.appendChild(el);
+  setTimeout(() => { el.style.opacity = '0'; el.style.transform = 'translateX(-50%) translateY(-12px)'; }, 3600);
+  setTimeout(() => el.remove(), 4200);
+}
+function contractsCheck() {
+  let any = false;
+  for (const c of CONTRACTS) {
+    if (contractState.done[c.id] || contractProgress(c) < c.n) continue;
+    contractState.done[c.id] = true; any = true;
+    const sk = WEAPON_SKINS_BY_ID[c.wrap];
+    try {
+      contractToast('🎖 CONTRACT COMPLETE', (sk ? sk.name : c.wrap) + ' wrap unlocked', '#7fe0a0');
+      playSoundEvent('headshot', { volume: 1.1, minGap: 0, tier: 'blue' });
+      pushFeedLine('🎖 Contract complete: ' + (sk ? sk.name : c.wrap) + ' wrap unlocked', '', '#7fe0a0', true);
+    } catch (e) {}
+  }
+  if (any) contractsSave();
+}
+let _ctLast = { id: null, t: 0 };
+function _contractsCount() {
+  const t = match && match.type;
+  return !!match && !inLobby && t !== 'range' && t !== 'obby' && t !== 'wave_dash' && t !== 'lobby' && t !== 'builder';
+}
+// One kill of yours. The weapon, the head and the tags come from the same record the killfeed reads.
+function contractsOnKill(targetId) {
+  if (!_contractsCount()) return;
+  const now = performance.now();
+  if (_ctLast.id === targetId && now - _ctLast.t < 1500) return;      // the echo of a kill already counted
+  _ctLast = { id: targetId, t: now };
+  const s = contractState, info = _killInfo[targetId];
+  const fresh = info && now - info.t < 4000 && info.killer === myId ? info : null;
+  s.kills++; s.life++; s.bestLife = Math.max(s.bestLife, s.life);
+  if (fresh) {
+    if (fresh.weapon) s.wk[fresh.weapon] = (s.wk[fresh.weapon] || 0) + 1;
+    if (fresh.head) s.heads++;
+    for (const t of (fresh.tags || [])) s.tags[t] = (s.tags[t] || 0) + 1;
+  }
+  contractsSave();
+  contractsCheck();
+}
+function contractsOnDeath() { if (contractState.life) { contractState.life = 0; contractsSave(); } }
+function contractsOnMatchEnd(winner) {
+  if (!_contractsCount()) return;
+  const s = contractState;
+  if (winner === 'ally') { s.streak++; s.bestStreak = Math.max(s.bestStreak, s.streak); }
+  else if (winner === 'enemy') s.streak = 0;
+  contractsSave();
+  contractsCheck();
+}
+// The picker: a section of locked and unlocked wraps with how far along each contract is.
+function contractsSectionHTML() {
+  const cells = CONTRACTS.map(ct => {
+    const sk = WEAPON_SKINS_BY_ID[ct.wrap]; if (!sk) return '';
+    const have = Math.min(ct.n, contractProgress(ct)), open = wrapUnlocked(ct.wrap), on = selectedWeaponSkin === ct.wrap;
+    const pct = Math.round(have / ct.n * 100), img = _wsSwatchURL(ct.wrap);
+    const acc = open ? '#4cff9a' : '#ffb347';
+    return `<div data-ctwrap="${ct.wrap}" class="ct-cell" style="cursor:${open ? 'pointer' : 'not-allowed'};border:2px solid ${on ? '#ffdd55' : open ? '#3f9a66' : '#444'};border-radius:8px;padding:8px;background:${on ? '#2a2410' : '#14130f'};">
+      <div style="height:56px;border-radius:5px;border:1px solid #000;position:relative;background:${img ? `url('${img}') center / 96px 96px` : 'linear-gradient(90deg,' + sk.sw[0] + ',' + sk.sw[1] + ')'};${open ? '' : 'filter:grayscale(.65) brightness(.7);'}">
+        ${open ? '' : '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:22px;filter:none;">🔒</div>'}
+      </div>
+      <div style="font-size:11px;letter-spacing:1px;color:${on ? '#ffdd55' : '#eee'};margin-top:6px;">${sk.name}</div>
+      <div style="font-size:10px;color:#aab;margin-top:2px;line-height:1.35;">${ct.text}</div>
+      <div style="height:6px;background:#222;border-radius:3px;margin-top:6px;overflow:hidden;"><div style="height:100%;width:${pct}%;background:${acc};"></div></div>
+      <div style="font-size:10px;color:${acc};margin-top:3px;">${open ? (on ? '✔ EQUIPPED' : '✔ UNLOCKED · tap to equip') : have + ' / ' + ct.n}</div>
+    </div>`;
+  }).join('');
+  return `<div style="font-size:12px;letter-spacing:2px;color:#ffdd88;margin:20px 0 6px;border-top:1px solid #6a5520;padding-top:14px;">🎖 CONTRACT WRAPS</div>
+    <div style="font-size:10px;color:#aa9966;margin-bottom:10px;line-height:1.4;">Not for sale. Finish the contract in real matches and the wrap is yours.</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">${cells}</div>`;
+}
+
+// a contract wrap that is still locked cannot be the one you are wearing (an old save, a hand-edited storage key)
+if (contractFor(selectedWeaponSkin) && !contractState.done[contractFor(selectedWeaponSkin).id]) selectedWeaponSkin = 'default';
 // A small picture of the wrap itself for the picker, so you choose by what it looks like and not by two colour chips.
 const _wsSwatchCache = new Map();
 function _wsSwatchURL(id) {
@@ -56463,6 +56794,7 @@ function gunGameAdvance(killerId) {
 function initMatch() {
   const cfg = selectedModeConfig;
   if (!cfg) return;
+  contractState.life = 0;               // a new match is a new life
   frontlineState = null;
   lastStandState = null;
   match = {
@@ -57447,6 +57779,8 @@ function onEntityDied(targetId, killerId) {
     seen[targetId] = now;
   }
   pushKillfeed(targetId, killerId);
+  if (killerId === myId && targetId !== myId) contractsOnKill(targetId);
+  if (targetId === myId) contractsOnDeath();
   if (killerId) matchScore[killerId]  = (matchScore[killerId]  || 0) + 1;   // #31: who is having the good match
   if (targetId) matchDeaths[targetId] = (matchDeaths[targetId] || 0) + 1;
   if (match.tiebreaker) {
@@ -58079,6 +58413,7 @@ function endMatch(winner, reason) {
   if (!match || match.over) return;
   match.over   = true;
   match.active = false;
+  contractsOnMatchEnd(winner);          // a win streak, and the contracts that were waiting on this match
   // The host's result is everyone's (#48). Not when players leaving ended it — they say so themselves.
   if (mpHost() && mpTeamMatch() && !match.forfeit) mpSend({ t: 'end', winner: winner ? absTeam(winner) : null, reason: reason || '' });
   // An FFA win counts toward FFA Legend. Sent before leaveMatch, while the
@@ -63631,7 +63966,8 @@ function openWeaponSkinsPanel() {
     ${meleeModelSkinSection()}
     <div style="font-size:12px;letter-spacing:2px;color:#ffdd88;margin:20px 0 6px;border-top:1px solid #6a5520;padding-top:14px;">🎨 WEAPON WRAPS <button id="ws-pixelizer" style="margin-left:10px;padding:4px 8px;background:#2a1030;color:#ff99dd;border:1px solid #ff66cc;border-radius:4px;cursor:pointer;font-family:inherit;font-size:10px;letter-spacing:1px;">🎨 PAINT YOUR OWN</button></div>
     <div style="font-size:10px;color:#aa9966;margin-bottom:12px;line-height:1.4;">One pick applies to every gun. Country themes use real national flags; the German theme is the Iron Cross military mark (no Nazi imagery).</div>
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">${WEAPON_SKINS.map(swatch).join('')}</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">${WEAPON_SKINS.filter(s => !s.contract).map(swatch).join('')}</div>
+    ${contractsSectionHTML()}
     ${gen2CaseSection()}
     ${basicCaseSection()}
   `;
@@ -63686,8 +64022,19 @@ function openWeaponSkinsPanel() {
       openWeaponSkinsPanel();      // redraw so the selection moves
     });
   });
+  panel.querySelectorAll('.ct-cell').forEach(cell => {
+    cell.addEventListener('click', () => {
+      const id = cell.dataset.ctwrap, ct = contractFor(id);
+      if (!wrapUnlocked(id)) { contractToast('🔒 CONTRACT', ct ? ct.text : 'Locked', '#ffb347'); return; }
+      selectedWeaponSkin = id;
+      try { localStorage.setItem('pvp_weapon_skin', selectedWeaponSkin); } catch (e) {}
+      applySelectedWeaponSkinToAll();
+      openWeaponSkinsPanel();
+    });
+  });
   panel.querySelectorAll('.ws-cell').forEach(cell => {
     cell.addEventListener('click', () => {
+      if (!wrapUnlocked(cell.dataset.skin)) return;
       selectedWeaponSkin = cell.dataset.skin;
       try { localStorage.setItem('pvp_weapon_skin', selectedWeaponSkin); } catch (e) {}
       applySelectedWeaponSkinToAll();

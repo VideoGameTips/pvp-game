@@ -783,6 +783,68 @@ if (ok && process.argv.includes('--modes')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+if (ok && process.argv.includes('--wraps')) {
+  // The contract wraps: every one has a contract, a look and a pattern that paints without throwing, and the
+  // contracts count the way the picker says they do (weapon kills, headshots, tags, a life, a streak) and do not
+  // count where they should not (the range, an echoed kill).
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [], seen = new Set();
+    for (const c of CONTRACTS) {
+      if (seen.has(c.id)) issues.push('duplicate contract ' + c.id); seen.add(c.id);
+      const sk = WEAPON_SKINS_BY_ID[c.wrap];
+      if (!sk || !sk.contract) issues.push(c.id + ': ' + c.wrap + ' is not a contract wrap');
+      const look = WS_LOOKS[c.wrap];
+      if (!look || !WS_PATTERNS[look.pat]) issues.push(c.id + ': no look or pattern for ' + c.wrap);
+      if (c.kind === 'weaponKills' && !WEAPONS.some(w => w.id === c.weapon)) issues.push(c.id + ': unknown weapon ' + c.weapon);
+      if (!(c.n > 0) || !c.text) issues.push(c.id + ': needs a target and a text');
+      if (look && WS_PATTERNS[look.pat]) {
+        const cols = look.c.map(_wsCss), glow = ['#000000', cols[1] || cols[0], ...cols.slice(2).map(() => '#000000')];
+        for (const set of [cols, glow]) {
+          try { WS_PATTERNS[look.pat](document.createElement('canvas').getContext('2d'), 256, set, _wsRng(c.wrap), look); }
+          catch (e) { issues.push(c.wrap + ' pattern threw: ' + e.message); }
+        }
+      }
+    }
+    for (const s of WEAPON_SKINS) if (s.contract && !contractFor(s.id)) issues.push('contract wrap with no contract: ' + s.id);
+    if (wrapUnlocked('darkmatter') && !(currentUser && currentUser.isAdmin)) issues.push('a locked wrap reads as unlocked');
+    const savedState = contractState, savedMatch = match, savedInfo = Object.assign({}, _killInfo), savedLobby = inLobby;
+    try {
+      contractState = _contractFresh(); inLobby = false; match = { type: 'ffa' };
+      for (let i = 0; i < 30; i++) {
+        _killInfo['k' + i] = { killer: myId, weapon: 'vector', head: i % 2 === 0, tags: ['AIR'], t: performance.now() };
+        contractsOnKill('k' + i);
+      }
+      const d = contractState;
+      if (d.wk.vector !== 30 || !d.done.ct_aurora) issues.push('30 Vector kills should finish Aurora (' + d.wk.vector + ')');
+      if (d.heads !== 15 || d.done.ct_reaper) issues.push('headshots counted wrong: ' + d.heads);
+      if (d.tags.AIR !== 30 || !d.done.ct_warp) issues.push('AIR kills should finish Warp Drive');
+      if (d.bestLife !== 30 || !d.done.ct_sing) issues.push('a 30-kill life should finish Singularity');
+      contractsOnKill('k29');
+      if (contractState.kills !== 30) issues.push('an echoed kill was counted twice');
+      contractsOnDeath();
+      if (contractState.life !== 0) issues.push('dying should end the life streak');
+      match = { type: 'range' }; _killInfo.r1 = { killer: myId, weapon: 'vector', head: false, tags: [], t: performance.now() };
+      contractsOnKill('r1');
+      if (contractState.kills !== 30) issues.push('the range should not count');
+      match = { type: 'ffa' };
+      for (let i = 0; i < 3; i++) contractsOnMatchEnd('ally');
+      if (!contractState.done.ct_prism || contractState.done.ct_dark) issues.push('three wins in a row: Prismatic yes, Dark Matter no');
+      contractsOnMatchEnd('enemy');
+      if (contractState.streak !== 0) issues.push('a loss should end the streak');
+      for (let i = 0; i < 5; i++) contractsOnMatchEnd('ally');
+      if (!contractState.done.ct_dark) issues.push('five wins in a row should finish Dark Matter');
+      if (!wrapUnlocked('darkmatter')) issues.push('a finished contract should unlock its wrap');
+    } finally {
+      contractState = savedState; match = savedMatch; inLobby = savedLobby;
+      for (const k of Object.keys(_killInfo)) delete _killInfo[k];
+      Object.assign(_killInfo, savedInfo);
+    }
+    return issues;
+  })()`);
+  console.log('wrap checks: contracts, looks, patterns, progression');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 if (ok && process.env.MAP_REVIEW_DIR) {
   fs.mkdirSync(process.env.MAP_REVIEW_DIR, { recursive: true });
   for (const name of ['forest', 'desert', 'tundra', 'refinery', 'space', 'volcano', 'titanic', 'carrier', 'pearl_harbor']) {
