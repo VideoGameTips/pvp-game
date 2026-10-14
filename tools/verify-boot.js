@@ -808,32 +808,60 @@ if (ok && process.argv.includes('--wraps')) {
     for (const s of WEAPON_SKINS) if (s.contract && !contractFor(s.id)) issues.push('contract wrap with no contract: ' + s.id);
     if (wrapUnlocked('darkmatter') && !(currentUser && currentUser.isAdmin)) issues.push('a locked wrap reads as unlocked');
     const savedState = contractState, savedMatch = match, savedInfo = Object.assign({}, _killInfo), savedLobby = inLobby;
+    const need = id => CONTRACTS.find(c => c.id === id).n;
+    let seq = 0;
+    const kill = (weapon, head, tags) => { const id = 'k' + (++seq); _killInfo[id] = { killer: myId, weapon, head, tags: tags || [], t: performance.now() }; contractsOnKill(id); };
     try {
       contractState = _contractFresh(); inLobby = false; match = { type: 'ffa' };
-      for (let i = 0; i < 30; i++) {
-        _killInfo['k' + i] = { killer: myId, weapon: 'vector', head: i % 2 === 0, tags: ['AIR'], t: performance.now() };
-        contractsOnKill('k' + i);
-      }
-      const d = contractState;
-      if (d.wk.vector !== 30 || !d.done.ct_aurora) issues.push('30 Vector kills should finish Aurora (' + d.wk.vector + ')');
-      if (d.heads !== 15 || d.done.ct_reaper) issues.push('headshots counted wrong: ' + d.heads);
-      if (d.tags.AIR !== 30 || !d.done.ct_warp) issues.push('AIR kills should finish Warp Drive');
-      if (d.bestLife !== 30 || !d.done.ct_sing) issues.push('a 30-kill life should finish Singularity');
-      contractsOnKill('k29');
-      if (contractState.kills !== 30) issues.push('an echoed kill was counted twice');
+      // the hard ones really are hard: nothing is done after a few dozen kills
+      for (let i = 0; i < 40; i++) kill('vector', i % 2 === 0, ['AIR']);
+      if (Object.keys(contractState.done).length) issues.push('40 kills finished a contract: ' + Object.keys(contractState.done));
+      for (let i = 40; i < need('ct_aurora'); i++) kill('vector', false, []);
+      if (!contractState.done.ct_aurora) issues.push('Aurora should finish at ' + need('ct_aurora') + ' Vector kills');
+      for (let i = 0; i < need('ct_warp'); i++) kill('ak20', false, ['AIR']);
+      if (!contractState.done.ct_warp) issues.push('AIR kills should finish Warp Drive');
+      if (contractState.bestLife < need('ct_sing') || !contractState.done.ct_sing) issues.push('a long enough life should finish Singularity');
+      const heads = contractState.heads;
+      for (let i = heads; i < need('ct_reaper'); i++) kill('pistol', true, []);
+      if (!contractState.done.ct_reaper) issues.push('headshots should finish Reaper');
+      const before = contractState.kills;
+      contractsOnKill('k' + seq);                                  // an echo of the last kill
+      if (contractState.kills !== before) issues.push('an echoed kill was counted twice');
+      // ability shots count for their weapon
+      const rg = contractState.wk.railgun || 0;
+      kill('railgun_ab', false, []);
+      if ((contractState.wk.railgun || 0) !== rg + 1) issues.push('a railgun_ab kill should count for the railgun');
       contractsOnDeath();
       if (contractState.life !== 0) issues.push('dying should end the life streak');
-      match = { type: 'range' }; _killInfo.r1 = { killer: myId, weapon: 'vector', head: false, tags: [], t: performance.now() };
-      contractsOnKill('r1');
-      if (contractState.kills !== 30) issues.push('the range should not count');
+      match = { type: 'range' }; kill('vector', false, []);
+      if (contractState.kills !== before + 1) issues.push('the range should not count');
       match = { type: 'ffa' };
-      for (let i = 0; i < 3; i++) contractsOnMatchEnd('ally');
-      if (!contractState.done.ct_prism || contractState.done.ct_dark) issues.push('three wins in a row: Prismatic yes, Dark Matter no');
+      // streaks
+      for (let i = 0; i < need('ct_prism') - 1; i++) contractsOnMatchEnd('ally');
+      if (contractState.done.ct_prism) issues.push('Prismatic finished a win early');
+      contractsOnMatchEnd('draw');
+      contractsOnMatchEnd('ally');
+      if (!contractState.done.ct_prism || contractState.done.ct_dark) issues.push('100 in a row: Prismatic yes, Dark Matter no');
       contractsOnMatchEnd('enemy');
       if (contractState.streak !== 0) issues.push('a loss should end the streak');
-      for (let i = 0; i < 5; i++) contractsOnMatchEnd('ally');
-      if (!contractState.done.ct_dark) issues.push('five wins in a row should finish Dark Matter');
-      if (!wrapUnlocked('darkmatter')) issues.push('a finished contract should unlock its wrap');
+      for (let i = 0; i < need('ct_dark') - 1; i++) contractsOnMatchEnd('ally');
+      if (contractState.done.ct_dark) issues.push('Dark Matter finished a win early');
+      contractsOnMatchEnd('ally');
+      if (!contractState.done.ct_dark || !wrapUnlocked('darkmatter')) issues.push('500 in a row should finish Dark Matter');
+      // Xpert: every weapon, 100 each. One short, then done.
+      const ids = contractWeaponIds();
+      if (ids.length < 40) issues.push('Xpert only asks for ' + ids.length + ' weapons');
+      if (ids.some(id => !WEAPONS.some(w => w.id === id) && !MELEE_ITEMS.some(m => m.id === id))) issues.push('Xpert lists an unknown weapon');
+      if (contractWeaponIds().some(id => { const w = WEAPONS.find(x => x.id === id); return w && w.damage <= 0; })) issues.push('Xpert asks for a weapon that does no damage');
+      contractState.wk = {};
+      for (const id of ids) for (let i = 0; i < need('ct_xpert'); i++) { if (id === ids[ids.length - 1] && i === need('ct_xpert') - 1) break; kill(id, false, []); }
+      if (contractState.done.ct_xpert) issues.push('Xpert finished with one kill missing');
+      kill(ids[ids.length - 1], false, []);
+      if (!contractState.done.ct_xpert || !wrapUnlocked('xpert')) issues.push('Xpert should finish on the last weapon');
+      // an unlock the numbers do not support is taken back on load
+      contractState.done.ct_aurora = true; contractState.wk.vector = 3;
+      contractsRevalidate();
+      if (contractState.done.ct_aurora) issues.push('an unearned unlock survived revalidation');
     } finally {
       contractState = savedState; match = savedMatch; inLobby = savedLobby;
       for (const k of Object.keys(_killInfo)) delete _killInfo[k];

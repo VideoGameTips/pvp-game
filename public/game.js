@@ -30455,6 +30455,7 @@ const WEAPON_SKINS = [
   { id: 'reaper',       name: 'Reaper',        body: 0x060104, accent: 0xff2a3a, flag: null, contract: true, sw: ['#060104', '#ff2a3a'] },
   { id: 'prismatic',    name: 'Prismatic',     body: 0x1a1a22, accent: 0xffffff, flag: null, contract: true, sw: ['#ff4d6d', '#4dd2ff'] },
   { id: 'warpdrive',    name: 'Warp Drive',    body: 0x02040e, accent: 0x9fe2ff, flag: null, contract: true, sw: ['#02040e', '#9fe2ff'] },
+  { id: 'xpert',        name: 'Xpert',         body: 0x0b0b0e, accent: 0xffc83a, flag: null, contract: true, sw: ['#0b0b0e', '#ffc83a'] },
 ];
 const WEAPON_SKINS_BY_ID = Object.fromEntries(WEAPON_SKINS.map(s => [s.id, s]));
 let selectedWeaponSkin = 'default';
@@ -31132,6 +31133,26 @@ Object.assign(WS_PATTERNS, {
     for (let i = 0; i < 14; i++) { const x = r() * N, y = r() * N; g.globalAlpha = 0.6 + r() * 0.4; g.fillRect(x - 6, y - 0.7, 12, 1.4); g.fillRect(x - 0.7, y - 6, 1.4, 12); }
     g.globalAlpha = 1;
   },
+  xpert(g, N, c, r) {   // c[0] black · c[1] the gold (glows) · c[2] dark gold · c[3] pale gold. A diamond lattice, a cross at every crossing
+    g.fillStyle = c[0]; g.fillRect(0, 0, N, N);
+    const S = 8;                                              // a carbon twill underneath, barely there
+    g.fillStyle = c[2]; g.globalAlpha = 0.22;
+    for (let y = 0; y < N / S; y++) for (let x = 0; x < N / S; x++) if (((x >> 1) + (y >> 1)) & 1) g.fillRect(x * S, y * S, S, S);
+    g.globalAlpha = 1;
+    const lines = () => { for (let i = -N; i < N * 2; i += 64) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i + N, N); g.moveTo(i + N, 0); g.lineTo(i, N); g.stroke(); } };
+    g.lineCap = 'round';
+    g.strokeStyle = c[1]; g.lineWidth = 4; lines();
+    g.strokeStyle = c[3] || c[1]; g.lineWidth = 1.2; lines();
+    for (let y = 0; y <= N; y += 64) for (let x = 0; x <= N; x += 64) {
+      g.fillStyle = c[0]; g.beginPath(); g.arc(x, y, 9, 0, 6.3); g.fill();
+      g.strokeStyle = c[1]; g.lineWidth = 2.5; g.beginPath(); g.arc(x, y, 9, 0, 6.3); g.stroke();
+      g.strokeStyle = c[3] || c[1]; g.lineWidth = 2; g.beginPath();
+      g.moveTo(x - 4, y - 4); g.lineTo(x + 4, y + 4); g.moveTo(x + 4, y - 4); g.lineTo(x - 4, y + 4); g.stroke();   // the X
+    }
+    g.fillStyle = c[3] || c[1];
+    for (let i = 0; i < 16; i++) { const x = r() * N, y = r() * N; g.globalAlpha = 0.5 + r() * 0.5; g.fillRect(x - 5, y - 0.6, 10, 1.2); g.fillRect(x - 0.6, y - 5, 1.2, 10); }
+    g.globalAlpha = 1;
+  },
   warp(g, N, c, r) {   // c[0] the dark · c[1] the streaks (glow) · c[2] blue haze · c[3] white heads
     const bg = g.createLinearGradient(0, 0, 0, N); bg.addColorStop(0, c[0]); bg.addColorStop(0.5, c[2] || c[0]); bg.addColorStop(1, c[0]);
     g.fillStyle = bg; g.fillRect(0, 0, N, N);
@@ -31206,6 +31227,7 @@ const WS_LOOKS = {
   reaper:       { pat: 'runes',      c: [0x060104, 0xff2a3a, 0x3a0610, 0x8a1020], metal: 0.5, rough: 0.35, glow: 1, scroll: [0, -0.05] },
   prismatic:    { pat: 'prism',      c: [0x1a1a22, 0xffffff], sat: 88, metal: 0.85, rough: 0.1, scroll: [0.05, 0.03] },
   warpdrive:    { pat: 'warp',       c: [0x02040e, 0x9fe2ff, 0x1a3a8a, 0xffffff], metal: 0.4, rough: 0.3, glow: 1, scroll: [0.9, 0] },
+  xpert:        { pat: 'xpert',      c: [0x0b0b0e, 0xffc83a, 0x7a5a0c, 0xfff2b0], metal: 1.0, rough: 0.14, glow: 1, scroll: [0.02, 0.02] },
 };
 
 // ── 🎖 Contracts ────────────────────────────────────────────────────────────────────────────────────────
@@ -31216,14 +31238,16 @@ const WS_LOOKS = {
 //   tag          n kills with a killfeed tag      lifeStreak  n kills in a single life
 //   winStreak    n matches won in a row (a loss ends it; a draw does not)
 const CONTRACTS = [
-  { id: 'ct_aurora',   wrap: 'aurora',       kind: 'weaponKills', weapon: 'vector',     n: 30, text: 'Get 30 kills with the Vector SMG' },
-  { id: 'ct_plasma',   wrap: 'plasma',       kind: 'weaponKills', weapon: 'railgun',    n: 25, text: 'Get 25 kills with the Railgun' },
-  { id: 'ct_zero',     wrap: 'absolutezero', kind: 'weaponKills', weapon: 'freeze_gun', n: 25, text: 'Get 25 kills with the Freeze Gun' },
-  { id: 'ct_reaper',   wrap: 'reaper',       kind: 'headshots',                         n: 40, text: 'Land 40 headshot kills' },
-  { id: 'ct_warp',     wrap: 'warpdrive',    kind: 'tag',         tag: 'AIR',          n: 15, text: 'Get 15 kills while airborne' },
-  { id: 'ct_sing',     wrap: 'singularity',  kind: 'lifeStreak',                        n: 10, text: 'Get 10 kills in a single life' },
-  { id: 'ct_prism',    wrap: 'prismatic',    kind: 'winStreak',                         n: 3,  text: 'Win 3 matches in a row' },
-  { id: 'ct_dark',     wrap: 'darkmatter',   kind: 'winStreak',                         n: 5,  text: 'Win 5 matches in a row' },
+  // `rank` is only a label: HARD, BRUTAL, LEGENDARY. These are meant to take weeks, not an evening.
+  { id: 'ct_aurora', wrap: 'aurora',       kind: 'weaponKills', weapon: 'vector',     n: 500,  rank: 'HARD',      text: 'Get 500 kills with the Vector SMG' },
+  { id: 'ct_warp',   wrap: 'warpdrive',    kind: 'tag',         tag: 'AIR',          n: 250,  rank: 'HARD',      text: 'Get 250 kills while airborne' },
+  { id: 'ct_plasma', wrap: 'plasma',       kind: 'weaponKills', weapon: 'railgun',    n: 300,  rank: 'BRUTAL',    text: 'Get 300 kills with the Railgun' },
+  { id: 'ct_zero',   wrap: 'absolutezero', kind: 'weaponKills', weapon: 'freeze_gun', n: 300,  rank: 'BRUTAL',    text: 'Get 300 kills with the Freeze Gun' },
+  { id: 'ct_reaper', wrap: 'reaper',       kind: 'headshots',                         n: 1000, rank: 'BRUTAL',    text: 'Land 1,000 headshot kills' },
+  { id: 'ct_sing',   wrap: 'singularity',  kind: 'lifeStreak',                        n: 50,   rank: 'BRUTAL',    text: 'Get 50 kills in a single life' },
+  { id: 'ct_prism',  wrap: 'prismatic',    kind: 'winStreak',                         n: 100,  rank: 'BRUTAL',    text: 'Win 100 matches in a row' },
+  { id: 'ct_dark',   wrap: 'darkmatter',   kind: 'winStreak',                         n: 500,  rank: 'LEGENDARY', text: 'Win 500 matches in a row' },
+  { id: 'ct_xpert',  wrap: 'xpert',        kind: 'everyWeapon',                       n: 100,  rank: 'LEGENDARY', text: 'Get 100 kills with every single weapon' },
 ];
 const CONTRACT_KEY = 'pvp_contracts_v1';
 function _contractFresh() { return { wk: {}, heads: 0, tags: {}, kills: 0, life: 0, bestLife: 0, streak: 0, bestStreak: 0, done: {} }; }
@@ -31233,6 +31257,11 @@ try {
   if (raw && typeof raw === 'object') contractState = Object.assign(_contractFresh(), raw);
 } catch (e) {}
 function contractsSave() { try { localStorage.setItem(CONTRACT_KEY, JSON.stringify(contractState)); } catch (e) {} }
+// The first version of these contracts was far easier. Anything unlocked under it that the new numbers do not
+// support is taken back (the counts themselves are kept, so real progress carries over).
+function contractsRevalidate() {
+  for (const c of CONTRACTS) if (contractState.done[c.id] && contractRaw(c) < contractNeed(c)) delete contractState.done[c.id];
+}
 function contractFor(wrapId) { return CONTRACTS.find(c => c.wrap === wrapId) || null; }
 // A wrap that is not behind a contract is always open; one that is, is open once its contract is done (admins see all).
 function wrapUnlocked(id) {
@@ -31240,14 +31269,34 @@ function wrapUnlocked(id) {
   if (!c) return true;
   return !!contractState.done[c.id] || !!(typeof currentUser !== 'undefined' && currentUser && currentUser.isAdmin);
 }
-function contractProgress(c) {
+// Every weapon you could actually pick up and kill with: the guns and melees that are in play (the ones the bots
+// are allowed to carry), minus a gun that does no damage at all.
+function contractWeaponIds() {
+  return [...WEAPONS.filter(w => botLegalGun(w) && w.damage > 0), ...MELEE_ITEMS.filter(botLegalMelee)].map(w => w.id);
+}
+// An ability shot is the weapon's kill: srx_ab, lever_ab, boombow_c1...
+function contractWeaponKey(id) {
+  if (!id) return null;
+  if (WEAPONS.some(w => w.id === id) || MELEE_ITEMS.some(m => m.id === id)) return id;
+  const base = String(id).replace(/_(ab|c\d)$/, '');
+  return base !== id && (WEAPONS.some(w => w.id === base) || MELEE_ITEMS.some(m => m.id === base)) ? base : id;
+}
+// What the bar fills against. For 'every weapon' that is how many weapons there are.
+function contractNeed(c) { return c.kind === 'everyWeapon' ? contractWeaponIds().length : c.n; }
+// Progress without the 'already done' shortcut: used both for the bar and to re-check old unlocks.
+function contractRaw(c) {
   const s = contractState;
   if (c.kind === 'weaponKills') return s.wk[c.weapon] || 0;
   if (c.kind === 'headshots')   return s.heads;
   if (c.kind === 'tag')         return s.tags[c.tag] || 0;
   if (c.kind === 'lifeStreak')  return s.bestLife;
-  if (c.kind === 'winStreak')   return Math.max(s.streak, s.done[c.id] ? c.n : 0);
+  if (c.kind === 'winStreak')   return s.bestStreak;
+  if (c.kind === 'everyWeapon') return contractWeaponIds().filter(id => (s.wk[id] || 0) >= c.n).length;
   return 0;
+}
+function contractProgress(c) {
+  if (c.kind === 'winStreak') return Math.max(contractState.streak, contractState.done[c.id] ? c.n : 0);
+  return contractRaw(c);
 }
 function contractToast(title, sub, color) {
   const el = document.createElement('div');
@@ -31263,7 +31312,8 @@ function contractToast(title, sub, color) {
 function contractsCheck() {
   let any = false;
   for (const c of CONTRACTS) {
-    if (contractState.done[c.id] || contractProgress(c) < c.n) continue;
+    if (contractState.done[c.id] || contractRaw(c) < contractNeed(c)) continue;
+    if (c.kind === 'winStreak' && contractState.streak < c.n) continue;   // a streak is the one you are on now, not your best
     contractState.done[c.id] = true; any = true;
     const sk = WEAPON_SKINS_BY_ID[c.wrap];
     try {
@@ -31289,7 +31339,8 @@ function contractsOnKill(targetId) {
   const fresh = info && now - info.t < 4000 && info.killer === myId ? info : null;
   s.kills++; s.life++; s.bestLife = Math.max(s.bestLife, s.life);
   if (fresh) {
-    if (fresh.weapon) s.wk[fresh.weapon] = (s.wk[fresh.weapon] || 0) + 1;
+    const wkey = contractWeaponKey(fresh.weapon);
+    if (wkey) s.wk[wkey] = (s.wk[wkey] || 0) + 1;
     if (fresh.head) s.heads++;
     for (const t of (fresh.tags || [])) s.tags[t] = (s.tags[t] || 0) + 1;
   }
@@ -31309,17 +31360,20 @@ function contractsOnMatchEnd(winner) {
 function contractsSectionHTML() {
   const cells = CONTRACTS.map(ct => {
     const sk = WEAPON_SKINS_BY_ID[ct.wrap]; if (!sk) return '';
-    const have = Math.min(ct.n, contractProgress(ct)), open = wrapUnlocked(ct.wrap), on = selectedWeaponSkin === ct.wrap;
-    const pct = Math.round(have / ct.n * 100), img = _wsSwatchURL(ct.wrap);
+    const need = contractNeed(ct), have = Math.min(need, contractProgress(ct)), open = wrapUnlocked(ct.wrap), on = selectedWeaponSkin === ct.wrap;
+    const pct = Math.round(have / need * 100), img = _wsSwatchURL(ct.wrap);
+    const rankColor = ct.rank === 'LEGENDARY' ? '#ffcc33' : ct.rank === 'BRUTAL' ? '#ff6a4a' : '#9ad';
+    const extra = ct.kind === 'winStreak' ? ` · best ${contractState.bestStreak}` : '';
+    const text = ct.kind === 'everyWeapon' ? `Get ${ct.n} kills with every single weapon (${need} of them)` : ct.text;
     const acc = open ? '#4cff9a' : '#ffb347';
     return `<div data-ctwrap="${ct.wrap}" class="ct-cell" style="cursor:${open ? 'pointer' : 'not-allowed'};border:2px solid ${on ? '#ffdd55' : open ? '#3f9a66' : '#444'};border-radius:8px;padding:8px;background:${on ? '#2a2410' : '#14130f'};">
       <div style="height:56px;border-radius:5px;border:1px solid #000;position:relative;background:${img ? `url('${img}') center / 96px 96px` : 'linear-gradient(90deg,' + sk.sw[0] + ',' + sk.sw[1] + ')'};${open ? '' : 'filter:grayscale(.65) brightness(.7);'}">
         ${open ? '' : '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:22px;filter:none;">🔒</div>'}
       </div>
-      <div style="font-size:11px;letter-spacing:1px;color:${on ? '#ffdd55' : '#eee'};margin-top:6px;">${sk.name}</div>
-      <div style="font-size:10px;color:#aab;margin-top:2px;line-height:1.35;">${ct.text}</div>
+      <div style="font-size:11px;letter-spacing:1px;color:${on ? '#ffdd55' : '#eee'};margin-top:6px;">${sk.name} <span style="font-size:9px;color:${rankColor};letter-spacing:1px;">${ct.rank || ''}</span></div>
+      <div style="font-size:10px;color:#aab;margin-top:2px;line-height:1.35;">${text}</div>
       <div style="height:6px;background:#222;border-radius:3px;margin-top:6px;overflow:hidden;"><div style="height:100%;width:${pct}%;background:${acc};"></div></div>
-      <div style="font-size:10px;color:${acc};margin-top:3px;">${open ? (on ? '✔ EQUIPPED' : '✔ UNLOCKED · tap to equip') : have + ' / ' + ct.n}</div>
+      <div style="font-size:10px;color:${acc};margin-top:3px;">${open ? (on ? '✔ EQUIPPED' : '✔ UNLOCKED · tap to equip') : have.toLocaleString() + ' / ' + need.toLocaleString() + extra}</div>
     </div>`;
   }).join('');
   return `<div style="font-size:12px;letter-spacing:2px;color:#ffdd88;margin:20px 0 6px;border-top:1px solid #6a5520;padding-top:14px;">🎖 CONTRACT WRAPS</div>
@@ -31327,6 +31381,7 @@ function contractsSectionHTML() {
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">${cells}</div>`;
 }
 
+contractsRevalidate();
 // a contract wrap that is still locked cannot be the one you are wearing (an old save, a hand-edited storage key)
 if (contractFor(selectedWeaponSkin) && !contractState.done[contractFor(selectedWeaponSkin).id]) selectedWeaponSkin = 'default';
 // A small picture of the wrap itself for the picker, so you choose by what it looks like and not by two colour chips.
@@ -64025,7 +64080,7 @@ function openWeaponSkinsPanel() {
   panel.querySelectorAll('.ct-cell').forEach(cell => {
     cell.addEventListener('click', () => {
       const id = cell.dataset.ctwrap, ct = contractFor(id);
-      if (!wrapUnlocked(id)) { contractToast('🔒 CONTRACT', ct ? ct.text : 'Locked', '#ffb347'); return; }
+      if (!wrapUnlocked(id)) { contractToast('🔒 CONTRACT', ct ? (ct.kind === 'everyWeapon' ? `${ct.n} kills with every weapon: ${contractRaw(ct)} / ${contractNeed(ct)} done` : ct.text) : 'Locked', '#ffb347'); return; }
       selectedWeaponSkin = id;
       try { localStorage.setItem('pvp_weapon_skin', selectedWeaponSkin); } catch (e) {}
       applySelectedWeaponSkinToAll();
