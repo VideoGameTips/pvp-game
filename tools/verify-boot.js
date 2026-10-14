@@ -1086,6 +1086,37 @@ if (ok && process.argv.includes('--glow')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+if (ok && process.argv.includes('--teams')) {
+  // Team fights are fair: an enemy bot with one of your allies close and you far away shoots the ally, not you.
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const savedMatch = match, savedDead = isDead, savedLobby = inLobby, savedBots = gameBots.slice(), savedPos = camera.position.clone();
+    try {
+      inLobby = false; isDead = false;
+      camera.position.set(30, 1.65, 0);                      // you, far from the action
+      const mk = (id, team, x, z) => ({ id, team, x, z, dead: false, hp: 300, difficulty: 'medium' });
+      const foe = mk('tf_foe', 'enemy', 0, 0), ally = mk('tf_ally', 'ally', 4, 0);
+      gameBots.length = 0; gameBots.push(foe, ally);
+      for (const type of ['race', 'elim', 'frontlines']) {
+        match = { type, cfg: {} };
+        const t = getBotTarget(foe);
+        if (!t || t.isPlayer || !t.botRef || t.botRef.id !== 'tf_ally') issues.push(type + ': the enemy bot went for the player instead of the ally standing next to it');
+        const near = getBotTarget(Object.assign(mk('tf_foe2', 'enemy', 28, 0), {}));
+        if (!near || !near.isPlayer) issues.push(type + ': an enemy bot next to the player should still target the player');
+      }
+      match = { type: 'race', cfg: { forcedMap: 'base_raid' } };
+      const raid = getBotTarget(foe);
+      if (!raid || !raid.isPlayer) issues.push('base raid guards should still go for the player');
+    } finally {
+      match = savedMatch; isDead = savedDead; inLobby = savedLobby;
+      gameBots.length = 0; gameBots.push(...savedBots); camera.position.copy(savedPos);
+    }
+    return issues;
+  })()`);
+  console.log('team checks: enemy bots pick the nearest opponent, Base Raid unchanged');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 if (ok && process.env.MAP_REVIEW_DIR) {
   fs.mkdirSync(process.env.MAP_REVIEW_DIR, { recursive: true });
   for (const name of ['forest', 'desert', 'tundra', 'refinery', 'space', 'volcano', 'titanic', 'carrier', 'pearl_harbor']) {

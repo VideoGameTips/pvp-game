@@ -59975,7 +59975,14 @@ function getBotTarget(bot) {
   // M4 Tower is a team kill-race, not "protect/ignore the human" mode. Enemy
   // bots used to hard-prioritize the player, which meant they could ignore allied
   // bots while allied bots farmed them. Here every opponent is just a target.
-  const fairTeamTargeting = selectedModeConfig?.fixedKit === 'm4_tower' || match?.cfg?.fixedKit === 'm4_tower';
+  // Every team fight is a fair fight now, not only the towers: 5v5, 10v10, 1v1/2v2/3v3 rounds and Frontlines. Enemy
+  // bots used to be hard-wired to go for the player whenever he was alive (below), so ALL of them walked past his
+  // allies to shoot at him while those allies, whose bot-vs-bot shots land instantly, shot them in the back for free:
+  // the player's side won almost every match, by a lot. Now each bot picks the nearest opponent, you included.
+  // (Base Raid stays as it was: its guards are there for you.)
+  const teamFight = !!match && (match.type === 'race' || match.type === 'elim' || match.type === 'frontlines')
+                    && match.cfg?.forcedMap !== 'base_raid';
+  const fairTeamTargeting = teamFight || selectedModeConfig?.fixedKit === 'm4_tower' || match?.cfg?.fixedKit === 'm4_tower';
   if (fairTeamTargeting) {
     let best = null, bestDist = Infinity, bestKind = null;
     if (bot.team === 'enemy' && !isDead) {
