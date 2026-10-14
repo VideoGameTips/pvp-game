@@ -1663,7 +1663,7 @@ const MAP_IDS = ['blank','urban','warehouse','forest','vietnam','volcano','cyber
                         'sewer','gravity_lab','glassworks','carrier','overgrowth','orbital_station',
                         'foundry','carnival','biosphere','lockdown','studio','temple','holiday',
                         'labyrinth','arena','opera','doomsday','train','dreamscape',
-                        'pearl_harbor','titanic','supermarket','pyongyang','traffic_cone_republic','flying_moai','big_arena','super_arena','big_harbor','storm_pier','pinball_arcade','laser_vault','cargo_belts','gale_peaks','magma_rise','duel_grid','duel_crossroads','duel_pillars','duel_platform'];
+                        'pearl_harbor','titanic','supermarket','pyongyang','traffic_cone_republic','flying_moai','big_arena','super_arena','big_harbor','storm_pier','pinball_arcade','laser_vault','cargo_belts','gale_peaks','magma_rise','neon_tokyo','duel_grid','duel_crossroads','duel_pillars','duel_platform'];
 // 🗺️ Dealt at RANDOM when nobody picks, which is not the same list (#66): a
 // map that is not worth landing on by accident goes in THIN_MAPS and stays
 // pickable by name from the map cards. Empty right now — the five that were in
