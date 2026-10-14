@@ -120,6 +120,7 @@ const FFA_LEGEND_WINS = 5000;
 const FFA_MODES = new Set(['ffa5', 'ffa15']);
 const FRIENDLY_FIRE_FREE_FOR_ALL_MODES = new Set([
   'ffa5', 'ffa15', 'gungame', 'oitc', 'juggernaut', 'infection', 'sniper_only', 'speedrun', 'piefight',
+  'dice_duel', 'roulette', 'rocket_rumble',
 ]);
 const FFA_WIN_MIN_MS = 30000;
 let _saveSoonTimer = null;
@@ -485,7 +486,6 @@ const ARCHIVED_ITEM_IDS = new Set([
   'nunchucks',
   'umbrella',
   'yoyo',
-  'combat_axe',
   'shock_baton',
   'titan_hammer',
   'vampire_blade',
@@ -1805,6 +1805,9 @@ const MODE_TEAM_SIZES = {
   'sniper_only': { ally: 1, enemy: 5 },
   'speedrun':    { ally: 1, enemy: 20 },
   'piefight':    { ally: 1, enemy: 7 },
+  'dice_duel':   { ally: 1, enemy: 1 },
+  'roulette':    { ally: 1, enemy: 5 },
+  'rocket_rumble': { ally: 1, enemy: 5 },
 };
 
 function flushPvpSolo(socketId) {

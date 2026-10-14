@@ -744,6 +744,45 @@ if (ok && process.argv.includes('--chain-maul')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+if (ok && process.argv.includes('--modes')) {
+  // The pure parts of the dice / roulette / rumble modes and of hit grading: pool ids really are
+  // weapons, the die maps to tiers the way the page says, the bot re-rolls junk and keeps gold, and
+  // every grade comes out of the thresholds it is documented to.
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    for (const t of Object.keys(DICE_POOL)) for (const id of DICE_POOL[t]) if (!WEAPONS.some(w => w.id === id)) issues.push('dice pool: ' + t + ' has unknown weapon ' + id);
+    const want = { 1: 'F', 2: 'D', 3: 'D', 4: 'C', 8: 'C', 9: 'B', 14: 'B', 15: 'A', 17: 'A', 18: 'S', 19: 'S', 20: 'SS' };
+    for (const [v, t] of Object.entries(want)) if (diceTierOf(+v) !== t) issues.push('die ' + v + ' should be ' + t + ', got ' + diceTierOf(+v));
+    const counts = {};
+    for (let i = 0; i < 4000; i++) { const r = diceRollOnce(); counts[r.tier] = (counts[r.tier] || 0) + 1;
+      if (!WEAPONS.some(w => w.id === r.weaponId)) { issues.push('roll gave unknown weapon ' + r.weaponId); break; } }
+    if (!(counts.B > counts.SS * 3 && counts.SS > 0 && counts.F > 0)) issues.push('d20 tier spread looks wrong: ' + JSON.stringify(counts));
+    const rate = (own, opp, used) => { let n = 0; for (let i = 0; i < 2000; i++) if (diceBotWantsReroll(own, opp, used)) n++; return n / 2000; };
+    const F = { tier: 'F' }, C = { tier: 'C' }, B = { tier: 'B' }, A = { tier: 'A' }, SS = { tier: 'SS' };
+    if (rate(F, B, 0) < 0.95) issues.push('bot should nearly always re-roll an F');
+    if (rate(SS, B, 0) > 0.02) issues.push('bot should keep an SS');
+    if (rate(A, B, 0) > 0.15) issues.push('bot should mostly keep an A');
+    if (rate(B, SS, 0) < 0.4) issues.push('bot should gamble on a B when you rolled an SS');
+    if (rate(F, SS, DICE_MAX_REROLLS) !== 0) issues.push('bot re-rolled past the limit');
+    if (rate(C, C, 3) > rate(C, C, 0)) issues.push('re-roll appetite should fall as the price climbs');
+    const g = (h, f, m) => gradeHit(h, f, m);
+    const grades = [g(false, 1), g(false, 0.4), g(false, 0.7), g(true, 0.7, 0.2), g(true, 0.3, 0.2), g(true, 1, 0.2), g(true, 1, 0.05), g(true, 0.8, 0.05)];
+    if (grades.join() !== 'yellow,white,yellow,orange,orange,red,blue,orange') issues.push('hit grades: ' + grades.join());
+    for (const id of ['dice_duel', 'roulette', 'rocket_rumble']) {
+      const c = GAME_MODE_CONFIGS[id];
+      if (!c || c.type !== 'arcade' || !c.arcade) issues.push('mode config missing or wrong: ' + id);
+    }
+    return issues;
+  })()`);
+  const serverSrc = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  for (const id of ['dice_duel', 'roulette', 'rocket_rumble']) {
+    if (!new RegExp("'" + id + "'\\s*:\\s*\\{\\s*ally").test(serverSrc)) issues.push('server has no team size for ' + id);
+    if (!new RegExp("FRIENDLY_FIRE_FREE_FOR_ALL_MODES[\\s\\S]{0,400}'" + id + "'").test(serverSrc)) issues.push('server FFA list is missing ' + id);
+  }
+  console.log('mode checks: dice pool and tiers, bot re-roll judgement, hit grades, mode wiring');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 if (ok && process.env.MAP_REVIEW_DIR) {
   fs.mkdirSync(process.env.MAP_REVIEW_DIR, { recursive: true });
   for (const name of ['forest', 'desert', 'tundra', 'refinery', 'space', 'volcano', 'titanic', 'carrier', 'pearl_harbor']) {

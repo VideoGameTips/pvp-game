@@ -1002,8 +1002,10 @@ const MELEE_ITEMS = [
   { id: 'yoyo', archived: true,       name: 'Yo-Yo',      type: 'Reach Melee',   damage: 30, range: 3.5, cooldown: 500,
     ability: { name: 'Loop the World', cd: 11000, desc: '3 m spin · auto-hit nearby foes · 150 dmg/s', type: 'melee_spin', duration: 2500 } },
   // ── 3rd-batch melees ─────────────────────────────────────────────────────
-  { id: 'combat_axe', archived: true, name: 'Combat Axe', type: 'Heavy Melee',   damage: 78, range: 2.2, cooldown: 820,
-    ability: { name: 'Throw Axe',    cd: 14000, desc: 'Hurl axe · 120 dmg · weapon gone until CD', type: 'melee_throw' } },
+  // Back from the archive as the Battle Axe (same id, so every skin and owner carries over). The throw
+  // is gone: the axe now spins a full circle as you rush forward, taking everyone around you with it.
+  { id: 'combat_axe', name: 'Battle Axe', type: 'Heavy Melee',   damage: 78, range: 2.2, cooldown: 820,
+    ability: { name: 'Whirlwind',    cd: 11000, desc: 'Spin 360° and dash 6.5 m · hits everyone around you · 85 dmg', type: 'melee_spinslash', distance: 6.5, dashTime: 0.45, damage: 85, reach: 2.8, spins: 1 } },
   { id: 'shock_baton', archived: true,name: 'Shock Baton',type: 'Melee',         damage: 32, range: 2.0, cooldown: 300,
     ability: { name: 'Static Burst', cd: 9000,  desc: 'AOE zap · 3.4 m · 30 dmg · pop-up', type: 'melee_pulse', radius: 3.4, damage: 30, knockback: 1.8, launchVel: 5, color: 0xffff44 } },
   // ── 😈 P2W melees ────────────────────────────────────────────────────────
@@ -1451,6 +1453,9 @@ const GAME_MODE_CONFIGS = {
   'sniper_only':{ type: 'arcade', subtype: 'sniper',   allies: 0, enemies: 5, timeLimit: 240, arcade: true },
   'speedrun':   { type: 'arcade', subtype: 'speedrun', allies: 0, enemies: 20,timeLimit: 0,   arcade: true }, // solo
   'piefight':   { type: 'arcade', subtype: 'piefight', allies: 0, enemies: 7, timeLimit: 240, arcade: true }, // 🥧 everyone throws pies
+  'dice_duel':  { type: 'arcade', subtype: 'dice',     allies: 0, enemies: 1, timeLimit: 0,   arcade: true }, // 🎲 roll a weapon, re-roll at a price
+  'roulette':   { type: 'arcade', subtype: 'roulette', allies: 0, enemies: 5, timeLimit: 240, arcade: true }, // 🔄 a new random gun every 20 s
+  'rocket_rumble': { type: 'arcade', subtype: 'rumble', allies: 0, enemies: 5, timeLimit: 240, arcade: true }, // 💥 rockets only
 };
 let selectedModeConfig = null;
 const gameBots = [];       // {id, team, weaponId, x, z, rotY, hp, dead, state, wanderAngle, wanderTimer, lastShot, lastBotMove}
@@ -1947,7 +1952,8 @@ const SLIDE_JUMP_LIFT  = 0.88; // slide jumps go farther, so they go a little lo
 // With exponential decay the ground covered is v / ln(1/BLAST_DECAY), so 17 m/s
 // buys a ~7.4 m lunge. 26 looked reasonable as a speed and turned out to be an
 // 11 m flight across half a courtyard.
-const DASH_SPEED    = 17;    // m/s horizontal impulse for the blade dash
+const DASH_SPEED    = 34;    // m/s horizontal impulse for the air dash (17 until the double jump was dropped; the shove decays, so distance scales with it: ~7 m -> ~15 m)
+const DASH_UP_SPEED = 19;    // m/s straight up when you dash while looking straight up; less as you look lower, none looking level or down
 const BLAST_RADIUS  = 7.5;   // m — how far an explosion can still shove you
 // 19 was a polite nudge — a rocket at your feet lifted you a storey and a shove
 // slid you 7 m. The 5× pass took it to 95 and overshot; 0.7× of that lands on
@@ -2566,6 +2572,7 @@ const SHARP_IDS = new Set(['screwdriver', 'lancer', 'spear', 'chainsaw']);
 function grantsDash(w) {
   if (!w) return false;
   if (w.dash) return true;                    // explicit opt-in on the item
+  if (grantsDoubleJump(w)) return true;       // whoever used to get a second jump gets the dash instead
   if (SHARP_IDS.has(w.id)) return true;
   // kni(f|v)e catches the plural "throwing knives", which /knife/ missed.
   return /blade|kni(f|v)e|katana|sabre|sword|axe|machete|karambit|bayonet|tomahawk|shuriken|glaive|scythe|dagger|cleaver/i
@@ -2578,6 +2585,9 @@ function grantsDash(w) {
 // Extra jumps your loadout buys: one per carried item that grants a double jump, so two such
 // items give you a triple jump (a jump from each, then the ground again to reset).
 function loadoutAirJumps() {
+  // No more double jump from what you carry: the air dash took its place (and goes twice as far).
+  // The one place it stays is the Obby, whose stages are built around a second jump.
+  if ((selectedModeConfig?.fixedKit || match?.cfg?.fixedKit) !== 'obby_doublejump') return 0;
   let n = 0;
   const gear = [WEAPONS[selectedPrimaryIdx], WEAPONS[selectedSecondaryIdx], MELEE_ITEMS[selectedMeleeIdx], SUPPORT_ITEMS[selectedSupportIdx]];
   for (const it of gear) if (grantsDoubleJump(it)) n++;
@@ -39468,6 +39478,7 @@ function resetCombatResources() {
   finishBatCrowdClear();
   chainsawFuel = CHAINSAW_FUEL_MAX;   // a fresh tank each life
   finishMeleeSlam(); finishMeleeDash(); autoLunge = null;
+  clearBlinkPearls();
   cancelMedkitHeal();
   for (const b of localBullets) scene.remove(b.mesh);
   localBullets.length = 0;
@@ -40725,17 +40736,26 @@ function updateMovement(dt, socialBlocked = false) {
     // 🗡️ Air dash — bladed weapons only, one per airborne stretch. Shift on the
     // ground is already the slide, so the dash lives on the same key in the air
     // rather than claiming a new binding: every letter key is spoken for.
-    const d = dir.lengthSq() > 0.001
-      ? dir.clone()
-      : new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+    const look = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+    const d = dir.lengthSq() > 0.001 ? dir.clone() : look.clone();
     d.y = 0;
     if (d.lengthSq() > 0.000001) {
       d.normalize();
-      _extVel.x += d.x * DASH_SPEED;
-      _extVel.z += d.z * DASH_SPEED;
+      // 🔼 Looking up lifts the dash: the more you look up, the more of it goes up and the less
+      // goes forward (straight up is a pure climb). Looking level or down is the flat dash.
+      const upLook = Math.max(0, Math.min(1, look.y));
+      const flat = Math.sqrt(1 - upLook * upLook);
+      _extVel.x += d.x * DASH_SPEED * flat;
+      _extVel.z += d.z * DASH_SPEED * flat;
       window._dashLeft = 0;
-      // Take some of the fall out so the dash reads as a lunge, not a stumble.
-      if (slamState && slamState.vel < 0) slamState.vel *= 0.35;
+      if (upLook > 0.05) {
+        const up = DASH_UP_SPEED * upLook;
+        if (slamState) slamState.vel = Math.max(slamState.vel, up);
+        else if (typeof playerYVel === 'number') playerYVel = Math.max(playerYVel, up);
+      } else if (slamState && slamState.vel < 0) {
+        // Take some of the fall out so the dash reads as a lunge, not a stumble.
+        slamState.vel *= 0.35;
+      }
       spawnAbilityAOEFX(camera.position.clone().setY(camera.position.y - 1.2), 1.0, 0x99ffee);
       playSoundEvent('footstep', { volume: 0.45, pitch: 0.8, minGap: 60 });
     }
@@ -41456,12 +41476,14 @@ function updateMeleeDash(dt) {
       if (pid === myId || s.hit.has(pid) || !mesh.visible || players[pid]?.dead || friendlyFireBlocked(pid, myId)) continue;
       const body = mesh.position.clone(); body.y += 0.95;
       const off = body.clone().sub(camera.position);
-      if (Math.hypot(off.x, off.z) > 2.1 || Math.abs(off.y) > 1.7) continue;
+      if (Math.hypot(off.x, off.z) > (s.ab.reach || 2.1) || Math.abs(off.y) > 1.7) continue;
       s.hit.add(pid);
       const dummy = TRAINING_DUMMIES.find(d => d.id === pid);
       if (dummy) handleDummyHit(dummy, mesh, { damage: s.ab.damage || s.item.damage }, body);
       else {
-        emitHit(pid, `lunge_${myId}_${s.now}_${pid}`, s.weaponId, body);
+        // The spin-slash has its own number (the axe's own table value is the plain swing's).
+        const spinOpts = s.ab.type === 'melee_spinslash' ? { damageOverride: s.ab.damage } : {};
+        emitHit(pid, `lunge_${myId}_${s.now}_${pid}`, s.weaponId, body, false, spinOpts);
         if (charge) {                                          // a charge rams: the target is driven ahead of you
           const bot = resolveBot(pid);
           if (bot && !bot.dead) { bot.kbVX = (bot.kbVX || 0) + s.dir.x * 14; bot.kbVZ = (bot.kbVZ || 0) + s.dir.z * 14; }
@@ -41484,6 +41506,23 @@ function poseMeleeDash() {
   const shield = !!s.item.shield;
   const m = s.model;
   m.rotation.order = 'YXZ';
+  if (s.ab.type === 'melee_spinslash') {
+    // 🌀 The axe goes once round the player in a flat circle (right, across the front, left, behind,
+    // and back to the right), blade out, laid flat. It eases into the circle and out to rest.
+    const p = Math.max(0, Math.min(1, s.elapsed / run));
+    const th = 1.05 - ease(p) * Math.PI * 2 * (s.ab.spins || 1);
+    const r = 0.42, cy = -0.17, cz = -0.12;
+    const o = out;                                    // 0 -> 1 over the recovery
+    const blend = (a, b) => a + (b - a) * o;
+    const into2 = ease(s.elapsed / 0.08);
+    const px = r * Math.sin(th), pz = cz - r * Math.cos(th);
+    m.position.set(
+      MELEE_REST_POS.x + (blend(px, MELEE_REST_POS.x) - MELEE_REST_POS.x) * into2,
+      MELEE_REST_POS.y + (cy - MELEE_REST_POS.y) * into2 * (1 - o),
+      MELEE_REST_POS.z + (blend(pz, MELEE_REST_POS.z) - MELEE_REST_POS.z) * into2);
+    m.rotation.set(0.15 * into2 * (1 - o), -th * (1 - o), 1.15 * into2 * (1 - o));
+    return;
+  }
   m.position.set(MELEE_REST_POS.x - 0.04 * w, MELEE_REST_POS.y + 0.02 * w, MELEE_REST_POS.z + (shield ? -0.20 : -0.30) * w);
   m.rotation.set(shield ? 0.05 * w : -0.12 * w, 0.10 * w, 0);
 }
@@ -41609,6 +41648,12 @@ function activateMeleeAbility() {
   else if (ab.type === 'melee_lunge' || ab.type === 'melee_charge') {
     const weaponId = ab.type === 'melee_charge' ? 'shield_charge' : item.id;
     if (!startMeleeDash(item, ab, weaponId, now)) abilityCDs[item.id] = 0;
+    flashAbilityName(ab.name);
+  }
+  else if (ab.type === 'melee_spinslash') {
+    // 🌀 Battle Axe: the whole axe goes round once while you rush forward. It is a dash that hits in a full circle.
+    if (!startMeleeDash(item, ab, item.id, now)) abilityCDs[item.id] = 0;
+    else playSoundEvent('melee_heavy', { volume: 0.9, pitch: 1.35, minGap: 0 });
     flashAbilityName(ab.name);
   }
   else if (ab.type === 'melee_pickle') {
@@ -43617,12 +43662,7 @@ function trySupport() {
   }
 
   if (item.blink) {
-    playSoundEvent('blink', { volume: 1.15 });
-    const dir = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion).normalize();
-    moveWithWalls(dir, item.blink);
-    if (isOutOfBoundsXZ(camera.position.x, camera.position.z)) { killLocalOutOfBounds(); return; }
-    resolveWallCollisions();
-    spawnHitParticle(camera.position.clone().setY(1.4));
+    throwBlinkPearl(item);   // thrown now, not a fixed hop: you go where it lands
     return;
   }
 
@@ -43950,6 +43990,100 @@ socket.on('playerDied', data => {
     s.attachment = null; s.settled = false; s.velocity.set(0,0,0);
   }
 });
+
+// 🔮 Blink Pearl. It used to hop you a fixed distance the instant you pressed the key. It is a
+// thrown stone now: it flies in an arc, stops on the first wall, body or floor it meets, and you
+// are teleported to that spot. Aim up for distance, aim down to land at your feet; it will not
+// carry you off the map or into a wall, and a pearl that falls into the void fizzles.
+const activePearls = [];
+const PEARL_GRAVITY = 20;
+const PEARL_LIFE_MS = 4500;
+function _pearlBlocker(x, y, z) {
+  for (const b of wallColliders) {
+    if (x > b.min.x && x < b.max.x && z > b.min.z && z < b.max.z && y > b.min.y && y < b.max.y) return b;
+  }
+  return null;
+}
+function throwBlinkPearl(item) {
+  const origin = new THREE.Vector3();
+  camera.getWorldPosition(origin);
+  origin.add(new THREE.Vector3(0.12, -0.18, -0.30).applyQuaternion(camera.quaternion));
+  const aim = new THREE.Vector3(0, 0.14, -1).applyQuaternion(camera.quaternion).normalize();
+  const speed = 22 + (item.blink || 10);              // the item's old hop distance is now how hard it is thrown
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.15, 10, 8),
+    new THREE.MeshBasicMaterial({ color: 0xc08cff }));
+  const halo = new THREE.Mesh(new THREE.SphereGeometry(0.26, 10, 8),
+    new THREE.MeshBasicMaterial({ color: 0x7a4cff, transparent: true, opacity: 0.35, depthWrite: false }));
+  mesh.add(halo);
+  mesh.position.copy(origin);
+  scene.add(mesh);
+  activePearls.push({ mesh, born: Date.now(), vx: aim.x * speed, vy: aim.y * speed, vz: aim.z * speed, trailAt: 0, item });
+  playEquipSound('whoosh');
+}
+function _blinkPearlLand(pl, x, y, z) {
+  const eye = getGroundEyeY(x, z, y + PLAYER_EYE_HEIGHT);
+  if (eye < -9000) {                                   // nothing to stand on: it fizzles instead of dropping you into the void
+    spawnAbilityAOEFX(new THREE.Vector3(x, Math.max(0.2, y), z), 1.0, 0x7a4cff);
+    playSoundEvent('dry_fire', { volume: 0.8, minGap: 0 });
+    showAnnouncement('🔮 PEARL LOST', 'It fell into the void', '#c08cff', 900);
+    return;
+  }
+  const from = camera.position.clone();
+  spawnAbilityAOEFX(from.clone().setY(Math.max(0.2, from.y - 1.4)), 1.4, 0xc08cff);   // where you left
+  camera.position.set(x, eye, z);
+  window._crouchEye = PLAYER_EYE_HEIGHT;
+  slamState = null; playerYVel = 0;
+  _extVel.x = 0; _extVel.z = 0; window._blastCarry = false; window._slideUntil = 0;
+  resolveWallCollisions();
+  if (isOutOfBoundsXZ(camera.position.x, camera.position.z)) { killLocalOutOfBounds(); return; }
+  spawnAbilityAOEFX(camera.position.clone().setY(Math.max(0.2, camera.position.y - 1.4)), 1.6, 0xc08cff);   // where you arrive
+  playSoundEvent('blink', { volume: 1.15 });
+  flashScreen('rgba(176,120,255,0.22)', 200);
+  _fovPunch = Math.max(_fovPunch, 5);
+}
+function updateBlinkPearls(dt) {
+  for (let i = activePearls.length - 1; i >= 0; i--) {
+    const pl = activePearls[i];
+    if (isDead || !gameStarted) { scene.remove(pl.mesh); activePearls.splice(i, 1); continue; }
+    pl.vy -= PEARL_GRAVITY * dt;
+    // Small sub-steps so a fast pearl cannot skip through a thin wall.
+    const steps = Math.max(1, Math.ceil(Math.hypot(pl.vx, pl.vy, pl.vz) * dt / 0.25));
+    const sdt = dt / steps;
+    let px = pl.mesh.position.x, py = pl.mesh.position.y, pz = pl.mesh.position.z;
+    let land = null;
+    for (let s = 0; s < steps && !land; s++) {
+      const nx = px + pl.vx * sdt, ny = py + pl.vy * sdt, nz = pz + pl.vz * sdt;
+      if (isOutOfBoundsXZ(nx, nz)) { land = { x: px, y: py, z: pz }; break; }
+      const blocker = _pearlBlocker(nx, ny, nz);
+      if (blocker) {
+        // Came down onto the top of something: land on it. Otherwise it hit a side, so land where it was.
+        land = (pl.vy < 0 && py >= blocker.max.y - 0.02) ? { x: nx, y: blocker.max.y, z: nz } : { x: px, y: py, z: pz };
+        break;
+      }
+      if (ny <= 0.1 && pl.vy < 0) { land = { x: nx, y: 0, z: nz }; break; }
+      // A body stops it too (you would otherwise arrive standing inside them).
+      for (const mesh of Object.values(remoteMeshes)) {
+        if (!mesh.visible) continue;
+        if (Math.hypot(mesh.position.x - nx, mesh.position.z - nz) < 0.75 && ny > mesh.position.y && ny < mesh.position.y + 1.9) { land = { x: px, y: py, z: pz }; break; }
+      }
+      if (land) break;
+      px = nx; py = ny; pz = nz;
+    }
+    if (!land && Date.now() - pl.born > PEARL_LIFE_MS) land = { x: px, y: py, z: pz };   // timed out in the air: it comes down where it is
+    if (land) {
+      scene.remove(pl.mesh); activePearls.splice(i, 1);
+      _blinkPearlLand(pl, land.x, land.y, land.z);
+      continue;
+    }
+    pl.mesh.position.set(px, py, pz);
+    pl.mesh.rotation.x += dt * 9; pl.mesh.rotation.y += dt * 7;
+    if (Date.now() >= pl.trailAt) { pl.trailAt = Date.now() + 70; spawnAbilityAOEFX(pl.mesh.position.clone(), 0.28, 0xc08cff); }
+  }
+}
+function clearBlinkPearls() {
+  for (const pl of activePearls) scene.remove(pl.mesh);
+  activePearls.length = 0;
+}
 
 function throwSupportItem(item) {
   const origin = new THREE.Vector3();
@@ -55690,6 +55824,30 @@ function setupArcadeStart(subtype) {
       showAnnouncement('🥧 PIE FIGHT', 'Cream pies only · splat everyone · most pies wins!', '#ffcc66', 3000);
       return;
     }
+    case 'dice': {
+      match.dice = { goal: DICE_GOAL, round: 0, score: { me: 0, bot: 0 }, phase: 'idle', orig: null };
+      for (const b of gameBots) b.team = 'enemy';
+      showAnnouncement('🎲 DICE DUEL', `Roll for your weapon · re-rolls cost ${DICE_REROLL_HP} HP · first to ${DICE_GOAL}`, '#ffffff', 3000);
+      diceStartRound();
+      return;
+    }
+    case 'roulette': {
+      for (const b of gameBots) b.team = 'enemy';   // FFA — everyone is fair game
+      match.rouletteNext = Date.now() + ROULETTE_MS;
+      showAnnouncement('🔄 WEAPON ROULETTE', `Everyone is dealt a new gun every ${ROULETTE_MS / 1000} s · most kills wins`, '#66ddff', 3000);
+      rouletteShuffle();
+      return;
+    }
+    case 'rumble': {
+      // 💥 Everyone has the RPG-7. The splash is the whole mode: ride your own blast.
+      forcePlayerWeapon('rpg');
+      for (const b of gameBots) {
+        b.weaponId = 'rpg'; b.primaryId = b.secondaryId = 'rpg'; b.team = 'enemy';
+        if (players[b.id]) players[b.id].weaponId = 'rpg';
+      }
+      showAnnouncement('💥 ROCKET RUMBLE', 'RPG-7 only · rocket-jump · most kills wins', '#ff7733', 3000);
+      return;
+    }
     case 'speedrun': {
       match.speedrunStart = 0;
       match.speedrunKills = 0;
@@ -55727,6 +55885,345 @@ function forcePlayerWeapon(weaponId, slot = 'primary') {
   weaponModels.forEach(m => m.visible = false);
   if (weaponModels[idx]) weaponModels[idx].visible = true;
   updateAmmoHUD(); updateWeaponHUD(); updateWeaponSelector();
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// 🎲 DICE DUEL — you and a bot each roll a d20 for your weapon, and either of you can keep
+// rolling. The die picks the TIER (1 is a junk-drawer F, 20 is an SS), then a weapon from it.
+// Re-rolling is not free: each one takes DICE_REROLL_HP off your life bar for the fight, so a
+// bad weapon is a real choice between a gamble and a bleed. The bot weighs exactly that: what
+// it is holding, what it would cost, how far behind it is against what you rolled.
+// First to DICE_GOAL kills wins; every kill sends both of you back to the dice.
+//
+// 🔄 WEAPON ROULETTE and 💥 ROCKET RUMBLE are the cheap relatives: the whole lobby is re-dealt
+// a random gun every ROULETTE_MS, or everyone has a rocket launcher and the map does the rest.
+// ══════════════════════════════════════════════════════════════════════════
+const DICE_POOL = {
+  SS: ['gunslinger', 'm1_garand', 'ak20'],
+  S:  ['air_rifle', 'vector', 'minigun', 'revolver', 'lever', 'p90'],
+  A:  ['burst', 'rpd', 'slingshot', 'mauser', 'chain_gun', 'hand_cannon', 'nail_gun', 'grenade_launcher', 'mp40'],
+  B:  ['amr', 'auto_revolver', 'continuum', 'freeze_gun', 'snub_revolver', 'paintball', 'throwing_knives', 'srx',
+       'machine_pistol', 'pistol', 'dart_gun', 'cream_pie', 'crossbow'],
+  C:  ['machine_revolver', 'cycler', 'boombow', 'traffic_cone', 'duelist_pistol', 'cyroclasm', 'rpg', 'mortar_rifle',
+       'railgun', 'bazooka', 'sg8', 'flare'],
+  D:  ['storm_bloom', 'flamethrower', 'javelin_launcher', 'shorty', 'sawed_off', 'gatecrasher'],
+  F:  ['laser_pointer', 'taser', 'frost_blaster'],
+};
+const DICE_TIER_COLOR = { SS: '#f0566e', S: '#f29a52', A: '#e8c547', B: '#8bcf5a', C: '#4fbfa8', D: '#5b86e8', F: '#8a919c' };
+const DICE_TIER_VALUE = { F: 0, D: 1, C: 2, B: 3, A: 4, S: 5, SS: 6 };
+const DICE_REROLL_HP = 40;        // off your life bar for the fight, per re-roll
+const DICE_MAX_REROLLS = 4;       // 300 -> 140 at the very worst
+const DICE_GOAL = 5;
+const DICE_ROLL_MS = 700;
+const DICE_AUTO_LOCK_MS = 25000;
+const DICE_AVG_TIER = 2.9;        // what a fresh d20 is worth on average, in tier steps (F 0 ... SS 6)
+const ROULETTE_MS = 20000;
+function diceTierOf(v) { return v >= 20 ? 'SS' : v >= 18 ? 'S' : v >= 15 ? 'A' : v >= 9 ? 'B' : v >= 4 ? 'C' : v >= 2 ? 'D' : 'F'; }
+function dicePoolIds(tier) { return (DICE_POOL[tier] || []).filter(id => WEAPONS.some(w => w.id === id)); }
+function diceName(id) { const w = WEAPONS.find(x => x.id === id); return w ? w.name : id; }
+function diceRollOnce(avoidId) {
+  const v = 1 + Math.floor(Math.random() * 20);
+  const tier = diceTierOf(v);
+  let ids = dicePoolIds(tier);
+  if (ids.length > 1) ids = ids.filter(id => id !== avoidId);
+  const weaponId = ids.length ? ids[Math.floor(Math.random() * ids.length)] : 'pistol';
+  return { v, tier, weaponId };
+}
+// Would the bot roll again? A fresh roll is worth DICE_AVG_TIER on average and costs HP, and the
+// price climbs with every re-roll it has already taken. If you rolled far above it, it gambles
+// harder (it is losing anyway); if it rolled far above you, it holds.
+function diceBotWantsReroll(own, opp, used) {
+  if (used >= DICE_MAX_REROLLS) return false;
+  const v = DICE_TIER_VALUE[own.tier];
+  const ov = opp && opp.tier ? DICE_TIER_VALUE[opp.tier] : DICE_AVG_TIER;
+  const cost = 0.5 + 0.25 * used;
+  const behind = Math.max(0, ov - v);                  // how much worse than yours it is holding
+  const ahead  = Math.max(0, v - ov);
+  const need = DICE_AVG_TIER - cost + behind * 0.5 - ahead * 0.5;   // keep it if it is worth at least this
+  const wobble = (Math.random() - 0.5) * 0.7;          // a little personality
+  return v + wobble < need;
+}
+
+function diceEnsureUi() {
+  if (document.getElementById('dice-overlay')) return;
+  const st = document.createElement('style');
+  st.id = 'dice-style';
+  st.textContent = `
+  #dice-overlay{position:fixed;left:50%;top:10%;transform:translateX(-50%);z-index:100001;width:min(640px,94vw);
+    background:rgba(10,12,18,.93);border:2px solid #556;border-radius:14px;padding:16px 18px 14px;color:#fff;
+    font-family:Arial Black,Arial,sans-serif;text-align:center;box-shadow:0 10px 40px rgba(0,0,0,.6);display:none}
+  #dice-overlay .dice-title{font-size:20px;letter-spacing:.12em;margin-bottom:10px}
+  #dice-overlay .dice-cols{display:flex;align-items:stretch;justify-content:center;gap:12px}
+  #dice-overlay .dice-col{flex:1;border:2px solid #334;border-radius:12px;padding:10px 6px;background:rgba(255,255,255,.04)}
+  #dice-overlay .dice-who{font-size:12px;letter-spacing:.14em;opacity:.7}
+  #dice-overlay .dice-die{margin:6px auto;width:74px;height:74px;display:flex;align-items:center;justify-content:center;
+    font-size:34px;background:#1d2230;border:3px solid #667;border-radius:14px;transition:border-color .15s,color .15s}
+  #dice-overlay .dice-die.rolling{animation:diceShake .12s infinite}
+  @keyframes diceShake{0%{transform:rotate(-6deg)}50%{transform:rotate(6deg) translateY(-3px)}100%{transform:rotate(-6deg)}}
+  #dice-overlay .dice-tier{font-size:22px;min-height:26px}
+  #dice-overlay .dice-wname{font-size:15px;min-height:20px;margin-top:2px}
+  #dice-overlay .dice-sub{font-size:11px;opacity:.65;margin-top:4px;font-family:Arial,sans-serif;font-weight:700}
+  #dice-overlay .dice-vs{align-self:center;font-size:16px;opacity:.5}
+  #dice-overlay .dice-log{margin:10px 0 8px;min-height:18px;font:700 13px Arial,sans-serif;opacity:.9}
+  #dice-overlay .dice-btns{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+  #dice-overlay button{font:900 14px Arial Black,Arial,sans-serif;letter-spacing:.06em;padding:10px 16px;border-radius:10px;
+    border:2px solid #889;background:#222836;color:#fff;cursor:pointer}
+  #dice-overlay button:disabled{opacity:.35;cursor:default}
+  #dice-overlay #dice-keep{border-color:#4cff4c;color:#4cff4c}
+  #dice-overlay #dice-reroll{border-color:#ffcc44;color:#ffcc44}`;
+  document.head.appendChild(st);
+  const el = document.createElement('div');
+  el.id = 'dice-overlay';
+  el.innerHTML = `
+    <div class="dice-title">🎲 ROLL FOR YOUR WEAPON</div>
+    <div class="dice-cols">
+      <div class="dice-col" id="dice-me"><div class="dice-who">YOU</div><div class="dice-die">?</div><div class="dice-tier"></div><div class="dice-wname"></div><div class="dice-sub"></div></div>
+      <div class="dice-vs">VS</div>
+      <div class="dice-col" id="dice-bot"><div class="dice-who">BOT</div><div class="dice-die">?</div><div class="dice-tier"></div><div class="dice-wname"></div><div class="dice-sub"></div></div>
+    </div>
+    <div class="dice-log" id="dice-log"></div>
+    <div class="dice-btns"><button id="dice-reroll" type="button">🎲 RE-ROLL (R)</button><button id="dice-keep" type="button">✔ KEEP (ENTER)</button></div>`;
+  document.body.appendChild(el);
+  el.querySelector('#dice-reroll').addEventListener('click', e => { e.stopPropagation(); dicePlayerReroll(); });
+  el.querySelector('#dice-keep').addEventListener('click', e => { e.stopPropagation(); dicePlayerKeep(); });
+}
+function diceLog(msg) { const el = document.getElementById('dice-log'); if (el) el.textContent = msg; }
+function diceRender() {
+  const d = match && match.dice; if (!d) return;
+  for (const [who, id] of [['me', 'dice-me'], ['bot', 'dice-bot']]) {
+    const s = d[who], col = document.getElementById(id); if (!col) continue;
+    const die = col.querySelector('.dice-die'), tier = col.querySelector('.dice-tier');
+    const color = s.tier && !s.rolling ? DICE_TIER_COLOR[s.tier] : '#667';
+    die.classList.toggle('rolling', !!s.rolling);
+    die.textContent = s.shown != null ? s.shown : '?';
+    die.style.borderColor = color; die.style.color = s.rolling ? '#fff' : color;
+    col.style.borderColor = s.locked ? '#4cff4c' : '#334';
+    tier.textContent = s.rolling || !s.tier ? '' : s.tier + ' TIER';
+    tier.style.color = color;
+    col.querySelector('.dice-wname').textContent = s.rolling || !s.weaponId ? '' : diceName(s.weaponId);
+    const hp = 300 - s.rerolls * DICE_REROLL_HP;
+    col.querySelector('.dice-sub').textContent = (s.locked ? '🔒 LOCKED · ' : '') + `${s.rerolls} re-roll${s.rerolls === 1 ? '' : 's'} · ${hp} HP`;
+  }
+  const me = d.me;
+  const canRoll = d.phase === 'rolling' && !me.rolling && !me.locked && me.rerolls < DICE_MAX_REROLLS;
+  const rr = document.getElementById('dice-reroll'), kp = document.getElementById('dice-keep');
+  if (rr) { rr.disabled = !canRoll; rr.textContent = me.rerolls >= DICE_MAX_REROLLS ? '🎲 NO RE-ROLLS LEFT' : `🎲 RE-ROLL (R) · −${DICE_REROLL_HP} HP`; }
+  if (kp) kp.disabled = !(d.phase === 'rolling' && !me.rolling && !me.locked && me.weaponId);
+}
+// Rattles for the dice, a ring for a good roll, a dull click for a bad one.
+function diceSound(tier) {
+  const v = DICE_TIER_VALUE[tier] ?? 2;
+  playSoundEvent(v >= 4 ? 'headshot' : v <= 1 ? 'dry_fire' : 'hitmarker', { volume: 0.9, minGap: 0, tier: v >= 6 ? 'blue' : v >= 5 ? 'red' : 'orange' });
+}
+function diceRollFor(who, done) {
+  const d = match && match.dice; if (!d) return;
+  const s = d[who];
+  s.rolling = true; s.locked = false;
+  const res = diceRollOnce(s.weaponId);
+  const t0 = performance.now();
+  clearInterval(s._tick);
+  s._tick = setInterval(() => {
+    if (!match || !match.dice || match.over) { clearInterval(s._tick); return; }
+    if (performance.now() - t0 < DICE_ROLL_MS) {
+      s.shown = 1 + Math.floor(Math.random() * 20);
+      playSoundEvent('hitmarker', { volume: 0.35, minGap: 0, tier: 'white' });
+    } else {
+      clearInterval(s._tick);
+      s.rolling = false; s.shown = res.v; s.v = res.v; s.tier = res.tier; s.weaponId = res.weaponId;
+      diceSound(res.tier);
+      diceRender();
+      if (done) done();
+    }
+    diceRender();
+  }, 75);
+  diceRender();
+}
+function diceStartRound() {
+  const d = match && match.dice; if (!d || match.over) return;
+  d.round++;
+  d.phase = 'rolling'; d.starting = false;
+  for (const who of ['me', 'bot']) d[who] = { rerolls: 0, locked: false, rolling: false, shown: null, v: 0, tier: null, weaponId: null };
+  match.roundActive = false; countdownActive = true;
+  try { releasePointer(); } catch (e) {}
+  diceEnsureUi();
+  document.getElementById('dice-overlay').style.display = 'block';
+  d.autoLockAt = Date.now() + DICE_AUTO_LOCK_MS;
+  clearInterval(d._ui);
+  d._ui = setInterval(() => {
+    if (!match || !match.dice || match.over || d.phase !== 'rolling') { clearInterval(d._ui); return; }
+    const left = Math.max(0, Math.ceil((d.autoLockAt - Date.now()) / 1000));
+    if (!d.me.locked && !d.me.rolling && d.me.weaponId) {
+      if (left <= 0) dicePlayerKeep();
+      else if (d.me.rerolls < DICE_MAX_REROLLS && !d.bot.rolling) diceLog(`Re-roll or keep · auto-keep in ${left}s`);
+    }
+  }, 250);
+  diceLog(`ROUND ${d.round} · first to ${DICE_GOAL} · re-rolls cost ${DICE_REROLL_HP} HP`);
+  diceRollFor('me', () => diceBotSoon(1100));
+  diceRollFor('bot');
+  diceRender();
+}
+function diceBotSoon(ms) {
+  const d = match && match.dice; if (!d) return;
+  clearTimeout(d._botT);
+  d._botT = setTimeout(diceBotThink, ms);
+}
+function diceBotThink() {
+  const d = match && match.dice; if (!d || match.over || d.phase !== 'rolling') return;
+  const b = d.bot, me = d.me;
+  if (b.locked) return;
+  if (b.rolling || me.rolling) { diceBotSoon(400); return; }
+  if (diceBotWantsReroll(b, me, b.rerolls)) {
+    b.rerolls++;
+    diceLog(`Bot isn't happy with the ${diceName(b.weaponId)}… re-rolling (−${DICE_REROLL_HP} HP)`);
+    diceRollFor('bot', () => {
+      diceLog(`Bot rolled a ${b.v}: ${diceName(b.weaponId)} (${b.tier})`);
+      diceBotSoon(1000);
+    });
+  } else {
+    b.locked = true;
+    diceLog(`Bot keeps the ${diceName(b.weaponId)} (${b.tier})${b.rerolls ? ` after ${b.rerolls} re-roll${b.rerolls > 1 ? 's' : ''}` : ''}`);
+    diceRender();
+    diceMaybeFight();
+  }
+}
+function dicePlayerReroll() {
+  const d = match && match.dice; if (!d || d.phase !== 'rolling') return;
+  const me = d.me;
+  if (me.rolling || me.locked || me.rerolls >= DICE_MAX_REROLLS) return;
+  me.rerolls++;
+  d.autoLockAt = Date.now() + DICE_AUTO_LOCK_MS;
+  diceRollFor('me', () => {
+    diceLog(`You rolled a ${me.v}: ${diceName(me.weaponId)} (${me.tier})`);
+    if (!d.bot.locked) diceBotSoon(900);
+  });
+}
+function dicePlayerKeep() {
+  const d = match && match.dice; if (!d || d.phase !== 'rolling') return;
+  const me = d.me;
+  if (me.rolling || me.locked || !me.weaponId) return;
+  me.locked = true;
+  try { requestPointerLockSafe(); } catch (e) {}    // inside the key press / click, so the browser allows it
+  diceLog(d.bot.locked ? 'Both locked in…' : 'Locked in · waiting for the bot to decide');
+  diceRender();
+  if (!d.bot.locked) diceBotSoon(500);
+  diceMaybeFight();
+}
+function diceMaybeFight() {
+  const d = match && match.dice; if (!d || d.starting || match.over) return;
+  if (!(d.me.locked && d.bot.locked) || d.me.rolling || d.bot.rolling) return;
+  d.starting = true;
+  setTimeout(diceBeginFight, 700);
+}
+function diceBeginFight() {
+  const d = match && match.dice; if (!d || match.over) return;
+  d.phase = 'fight';
+  clearInterval(d._ui);
+  // The kit: your rolled gun in BOTH gun slots, so Digit1/Digit2 cannot dodge the dice; your
+  // melee and support are yours. The life bar carries the price of every re-roll.
+  const idx = WEAPONS.findIndex(w => w.id === d.me.weaponId);
+  if (idx >= 0) {
+    if (!d.orig) d.orig = { primary: selectedPrimaryIdx, secondary: selectedSecondaryIdx };
+    const slot = WEAPONS[idx].slot === 'secondary' ? 'secondary' : 'primary';
+    selectedPrimaryIdx = idx; selectedSecondaryIdx = idx;
+    forcePlayerWeapon(d.me.weaponId, slot);
+  }
+  const myHp = Math.max(60, 300 - d.me.rerolls * DICE_REROLL_HP);
+  const me = players[myId]; if (me) { me.hp = myHp; me.dead = false; }
+  updateHealthHUD(myHp);
+  const bot = gameBots[0];
+  if (bot) {
+    const w = WEAPONS.find(x => x.id === d.bot.weaponId);
+    bot.weaponId = d.bot.weaponId; bot.primaryId = bot.secondaryId = d.bot.weaponId; bot.activeSlot = 'primary';
+    bot.team = 'enemy';
+    if (w) { bot.botMag = w.mag; bot.botAmmo = w.mag; bot.botReserve = w.reserve || 90; }
+    bot.reloadUntil = 0; bot.burstLeft = 0;
+    bot.maxHp = 300; bot.hp = Math.max(60, 300 - d.bot.rerolls * DICE_REROLL_HP); bot.prevHp = bot.hp;
+    if (players[bot.id]) { players[bot.id].weaponId = bot.weaponId; players[bot.id].hp = bot.hp; }
+  }
+  const ov = document.getElementById('dice-overlay'); if (ov) ov.style.display = 'none';
+  showAnnouncement(`🎲 ${diceName(d.me.weaponId)} vs ${diceName(d.bot.weaponId)}`, `${d.me.tier} tier vs ${d.bot.tier} tier · ${myHp} HP vs ${bot ? bot.hp : '?'} HP`, '#ffffff', 2400);
+  runCountdown(3, () => {
+    if (!match || match.over) return;
+    match.roundActive = true; countdownActive = false;
+    grantSpawnShield(1500);
+    updateMatchHUD();
+  });
+}
+// A kill ends the round: score it, and if nobody is at the goal, back to the dice.
+function diceOnKill(targetId, killerId) {
+  const d = match && match.dice; if (!d || match.over) return;
+  if (d.phase !== 'fight') return;
+  d.phase = 'between';
+  const meWon = targetId !== myId;      // whoever is still standing took the round
+  if (meWon) d.score.me++; else d.score.bot++;
+  match.ffaKills[myId] = d.score.me;
+  updateMatchHUD();
+  if (d.score.me >= DICE_GOAL) { endMatch('ally', `🎲 DICE DUEL WON · ${d.score.me}–${d.score.bot}`); return; }
+  if (d.score.bot >= DICE_GOAL) { endMatch('enemy', `🎲 THE DICE TURNED · ${d.score.me}–${d.score.bot}`); return; }
+  showAnnouncement(meWon ? '🎲 ROUND WON' : '🎲 ROUND LOST', `${d.score.me} – ${d.score.bot} · first to ${DICE_GOAL}`, meWon ? '#4cff4c' : '#ff5555', 1800);
+  d._nextT = setTimeout(diceNextRound, 2200);
+}
+function diceNextRound() {
+  const d = match && match.dice; if (!d || match.over) return;
+  // Everyone back on their feet, then the dice again.
+  if (isDead) {
+    isDead = false;
+    const dsc = document.getElementById('death-screen'); if (dsc) dsc.style.display = 'none';
+    const ws = document.getElementById('waiting-screen'); if (ws) ws.style.display = 'none';
+  }
+  placePlayerAtTeamSpawn(localPlayerTeam(), 24, 38);
+  socket.emit('readyRespawn', { x: camera.position.x, z: camera.position.z, mode: currentModeId() });
+  const me = players[myId]; if (me) { me.hp = 300; me.dead = false; }
+  updateHealthHUD(300);
+  const bot = gameBots[0];
+  if (bot) {
+    const ang = Math.random() * Math.PI * 2, r = 30 + Math.random() * 15;
+    bot.x = Math.cos(ang) * r; bot.z = Math.sin(ang) * r;
+    bot.hp = 300; bot.maxHp = 300; bot.prevHp = 300; bot.dead = false; bot.stuckTimer = 0;
+    if (players[bot.id]) { players[bot.id].hp = 300; players[bot.id].dead = false; }
+    syncBotMesh(bot, { visible: true, resetPose: true });
+    socket.emit('forceRespawnBot', { botId: bot.id, x: bot.x, z: bot.z });
+  }
+  diceStartRound();
+}
+function diceCleanup() {
+  const d = match && match.dice; if (!d) return;
+  clearInterval(d._ui); clearTimeout(d._botT); clearTimeout(d._nextT);
+  for (const who of ['me', 'bot']) if (d[who]) clearInterval(d[who]._tick);
+  const ov = document.getElementById('dice-overlay'); if (ov) ov.style.display = 'none';
+  if (d.orig) { selectedPrimaryIdx = d.orig.primary; selectedSecondaryIdx = d.orig.secondary; d.orig = null; }
+  countdownActive = false;
+}
+// R re-rolls, Enter / F / Space keeps. Captured, so the game's own bindings for those keys stay quiet
+// while the dice are on the table.
+window.addEventListener('keydown', e => {
+  const d = match && match.dice;
+  if (!d || d.phase !== 'rolling' || e.repeat) return;
+  if (e.code === 'KeyR') { e.preventDefault(); e.stopImmediatePropagation(); dicePlayerReroll(); }
+  else if (e.code === 'Enter' || e.code === 'KeyF' || e.code === 'Space') { e.preventDefault(); e.stopImmediatePropagation(); dicePlayerKeep(); }
+}, true);
+
+// 🔄 Roulette: everyone is dealt a random gun, again every ROULETTE_MS.
+function rouletteShuffle() {
+  const all = [];
+  for (const t of Object.keys(DICE_POOL)) all.push(...dicePoolIds(t));
+  const pick = () => all[Math.floor(Math.random() * all.length)];
+  for (const b of gameBots) {
+    const id = pick(), w = WEAPONS.find(x => x.id === id);
+    b.weaponId = id; b.primaryId = b.secondaryId = id; b.activeSlot = 'primary';
+    if (w) { b.botMag = w.mag; b.botAmmo = w.mag; b.botReserve = w.reserve || 90; }
+    b.reloadUntil = 0; b.burstLeft = 0;
+    if (players[b.id]) players[b.id].weaponId = id;
+  }
+  const mine = pick();
+  const idx = WEAPONS.findIndex(w => w.id === mine);
+  if (idx >= 0) {
+    if (!match.rouletteOrig) match.rouletteOrig = { primary: selectedPrimaryIdx, secondary: selectedSecondaryIdx };
+    selectedPrimaryIdx = idx; selectedSecondaryIdx = idx;
+    forcePlayerWeapon(mine, WEAPONS[idx].slot === 'secondary' ? 'secondary' : 'primary');
+  }
+  showAnnouncement('🔄 NEW GUNS', `You: ${diceName(mine)}`, '#66ddff', 2000);
+  playSoundEvent('hitmarker', { volume: 0.9, minGap: 0, tier: 'blue' });
 }
 
 // Advance a player's or bot's gun tier (called on any kill in Gun Game)
@@ -56092,6 +56589,16 @@ function updateMatchHUD() {
       L.textContent = `🧟 ${zCount} INFECTED`;
       C.textContent = `INFECTION`;
       R.textContent = match.infectedIds[myId] ? 'YOU ARE ZOMBIE' : 'YOU ARE HUMAN';
+    } else if (sub === 'dice') {
+      const d = match.dice || { score: { me: 0, bot: 0 }, goal: DICE_GOAL };
+      L.textContent = `YOU ${d.score.me} – ${d.score.bot} BOT`;
+      C.textContent = `🎲 DICE DUEL`;
+      R.textContent = `FIRST TO ${d.goal}`;
+    } else if (sub === 'roulette') {
+      const left = Math.max(0, Math.ceil(((match.rouletteNext || 0) - Date.now()) / 1000));
+      L.textContent = `KILLS: ${match.ffaKills[myId] || 0}`;
+      C.textContent = `🔄 NEW GUNS IN ${left}s`;
+      R.textContent = formatMatchTime(matchTimeUnlimited() ? Infinity : match.timeLeft);
     } else if (sub === 'oitc') {
       const idx = WEAPONS.findIndex(w => w.id === 'pistol');
       const ammo = idx >= 0 ? weaponAmmo[idx]?.ammo : 0;
@@ -56186,8 +56693,12 @@ function handleArcadeKill(targetId, killerId) {
     else scheduleBotArcadeRespawn(targetId);
     return;
   }
-  // Sniper Only: standard FFA kill counting + respawn
-  if (sub === 'sniper') {
+  // Dice duel: the one still standing took the round
+  if (sub === 'dice') { diceOnKill(targetId, killerId); return; }
+  // Sniper Only, Pie Fight, Roulette, Rocket Rumble: standard FFA kill counting + respawn.
+  // (Pie Fight had no branch at all: its kills were never counted and a dead player was never
+  // brought back.)
+  if (sub === 'sniper' || sub === 'piefight' || sub === 'roulette' || sub === 'rumble') {
     match.ffaKills[killerId] = (match.ffaKills[killerId] || 0) + 1;
     if (targetId === myId) scheduleArcadeRespawn();
     else scheduleBotArcadeRespawn(targetId);
@@ -57241,6 +57752,10 @@ function checkRaceWin() {
 
 function updateMatchTimer(dt) {
   if (!match || !match.active || match.over) return;
+  if (match.arcade === 'roulette' && match.roundActive && !isDead && Date.now() >= (match.rouletteNext || Infinity)) {
+    match.rouletteNext = Date.now() + ROULETTE_MS;
+    rouletteShuffle();
+  }
   if (matchTimeUnlimited()) { updateMatchHUD(); return; }
   // ── Elim mode: per-round 60-second timer ─────────────────────────────────
   if (match.type === 'elim') {
@@ -57386,6 +57901,8 @@ function endMatch(winner, reason) {
     if (currentWeapon && currentWeapon.id === 'pistol') currentWeapon.damage = match._oitcOrigDmg;
   }
   if (match.type === 'wave_dash') stopWaveDash();
+  if (match.dice) diceCleanup();
+  if (match.rouletteOrig) { selectedPrimaryIdx = match.rouletteOrig.primary; selectedSecondaryIdx = match.rouletteOrig.secondary; match.rouletteOrig = null; }
   const isWin  = winner === 'ally';
   releasePointer(); // PLAY AGAIN / CHANGE MODE / BACK TO LOBBY need the cursor
   const el     = document.getElementById('match-over-screen');
@@ -59773,6 +60290,7 @@ function loop() {
 
   updateMatchTimer(dt);
   updateGrenades(dt);
+  updateBlinkPearls(dt);
   updateSatchels(dt);
   updateDDay(dt);
   updateGrenadeWindup(dt);
@@ -61518,6 +62036,8 @@ function teardownMatchWorld() {
   exitSpectator();
   gameStarted = false;
   inLobby = false;
+  if (match && match.dice) diceCleanup();
+  if (match && match.rouletteOrig) { selectedPrimaryIdx = match.rouletteOrig.primary; selectedSecondaryIdx = match.rouletteOrig.secondary; }
   match = null;
   pvpMatch = null; // else the next non-lobby mode spawns the previous lobby's bot counts
   try { document.exitPointerLock && document.exitPointerLock(); } catch (e) {}

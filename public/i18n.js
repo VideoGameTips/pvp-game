@@ -134,6 +134,13 @@
     '🔭 SNIPER ONLY': '🔭 狙击专场', 'SR-X only · long-range chess': '只有 SR-X · 远距离斗智',
     '⏱️ SPEEDRUN': '⏱️ 速通', 'Kill 20 bots as fast as possible · solo': '尽快击败 20 个机器人 · 单人',
     '🥧 PIE FIGHT': '🥧 奶油派大战', 'Cream pies only · splat everyone · FFA': '只有奶油派 · 糊所有人一脸 · 混战',
+    '🎲 DICE DUEL': '🎲 骰子对决', 'Roll a d20 for your weapon · re-roll costs HP · bot judges too': '掷 d20 决定武器 · 重掷要扣血 · 机器人也会权衡',
+    '🔄 WEAPON ROULETTE': '🔄 武器轮盘', 'A new random gun for everyone every 20 s · FFA': '每 20 秒所有人换一把随机枪 · 混战',
+    '💥 ROCKET RUMBLE': '💥 火箭大乱斗', 'RPG-7 only · ride your own blast · FFA': '只有 RPG-7 · 借自己的爆炸飞 · 混战',
+    '🎲 ROLL FOR YOUR WEAPON': '🎲 掷骰选武器', '✔ KEEP (ENTER)': '✔ 保留（回车）',
+    '🎲 DICE DUEL ': '🎲 骰子对决 ', '🔄 NEW GUNS': '🔄 换新枪', '💥 ROCKET RUMBLE ': '💥 火箭大乱斗 ',
+    'Whirlwind': '旋风斩', 'Spin 360° and dash 6.5 m · hits everyone around you · 85 dmg': '原地旋转 360° 并冲刺 6.5 米 · 命中周围所有人 · 85 伤害',
+    'Battle Axe': '战斧',
     // map descriptions (the names themselves stay)
     'Random — game picks one for you each match': '随机——每局帮你挑一张图',
     'Classic — open arena with crosshatch walls (original)': '经典——开阔的场地和网格墙（最初的地图）',
