@@ -5961,6 +5961,7 @@ function activateMap(name) {
   if (typeof _upgradeMap === 'function') _upgradeMap(name);   // the first time a map is played: see "WHEN THE UPGRADES RUN"
   for (const [n, g] of Object.entries(MAP_GROUPS)) g.visible = (n === name);
   if (typeof dressThemeMap === 'function') { try { dressThemeMap(name); } catch (e) { console.warn('[theme]', name, e); } }
+  try { buildMapGlow(name); } catch (e) { console.warn('[glow]', name, e); }      // once per map, after its dressing
   // Then bake this map's static boxes into one draw call per material (#66).
   // After the dressing, because the dressing is what reads the per-box tags;
   // before atmoActivate, so the weather and ambience it adds stay separate.
@@ -13269,7 +13270,7 @@ function buildNeonTokyoLayout() {
       else{ctx.font='bold 48px sans-serif';ctx.fillText(text,s/2,s*.45);ctx.font='20px sans-serif';ctx.fillText('OPEN 24H',s/2,s*.77);}
     });
     const m=new THREE.Mesh(new THREE.PlaneGeometry(vertical?1.6:4.2,vertical?5:1.7),new THREE.MeshBasicMaterial({map:tex,side:THREE.DoubleSide}));
-    m.position.set(x,y,z);m.rotation.y=rot;m.userData.tokyoSign=true;G.add(m);
+    m.position.set(x,y,z);m.rotation.y=rot;m.userData.tokyoSign=true;m.userData.glowColor=color;G.add(m);
   };
   // Tall shop backs frame three connected street routes; dressing is batched separately.
   for(const sx of [-1,1])for(let i=0;i<4;i++){
@@ -19057,6 +19058,139 @@ function _upgradeMap(name) {
   // what was just added gets the same surface as the rest
   try { g._weathered = false; weatherMapGroup(g); } catch (e) {}
   g.userData.upgradeMs = Math.round(performance.now() - t0);
+}
+
+// ── 💡 Light glow ───────────────────────────────────────────────────────────────────────────────────────
+// Lamps, lit windows, neon strips and signs were flat bright boxes: nothing in the picture said they were light.
+// Every map now gets a glow pass the first time it is played (after its dressing, so the themed windows and signs
+// are in): each lit surface gets a soft additive halo, drawn as one batch of sprites per map, and the brightest
+// pockets get a real point light so the walls and floor around them pick up the colour. Existing point lights are
+// brightened instead of added to. Nothing here has a collider and nothing changes what you can see through.
+var _glowTex = null;
+function _glowSpriteTex() {
+  if (_glowTex) return _glowTex;
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d');
+  const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.18, 'rgba(255,255,255,0.75)');
+  gr.addColorStop(0.5, 'rgba(255,255,255,0.22)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+  _glowTex = new THREE.CanvasTexture(c);
+  return _glowTex;
+}
+var GLOW_MAX_POINTS = 1800;
+var GLOW_LIGHT_BOOST = 1.9;
+function buildMapGlow(name) {
+  const g = MAP_GROUPS[name];
+  if (!g || g._glowBuilt) return;
+  g._glowBuilt = true;
+  const P = [], C = [], S = [];
+  const lum = (r, gg, b) => Math.max(r, gg, b);
+  const push = (x, y, z, r, gg, b, size) => { P.push(x, y, z); C.push(r, gg, b); S.push(size); };
+  const tmp = new THREE.Vector3(), col = new THREE.Color();
+  g.updateMatrixWorld(true);
+  g.traverse(o => {
+    if (!o.isMesh || !o.geometry || !o.material || o.userData.mapGlow) return;
+    const m = Array.isArray(o.material) ? o.material[0] : o.material;
+    if (!m || m.side === THREE.BackSide || (m.transparent && m.opacity < 0.85)) return;
+    const geo = o.geometry;
+    // 1. a batch of lit boxes (themed windows, strips, lamps): one halo per box, long strips get a few along them
+    if (o.userData.themeDecor && m.isMeshBasicMaterial && m.vertexColors && geo.attributes.position && geo.attributes.color) {
+      const A = geo.attributes.position, K = geo.attributes.color;
+      for (let i = 0; i + 35 < A.count; i += 36) {
+        const r = K.getX(i), gg = K.getY(i), b = K.getZ(i);
+        if (lum(r, gg, b) < 0.55) continue;                          // a dark pane, not a light
+        let x0 = 1e9, y0 = 1e9, z0 = 1e9, x1 = -1e9, y1 = -1e9, z1 = -1e9;
+        for (let k = 0; k < 36; k++) {
+          tmp.set(A.getX(i + k), A.getY(i + k), A.getZ(i + k)).applyMatrix4(o.matrixWorld);
+          x0 = Math.min(x0, tmp.x); y0 = Math.min(y0, tmp.y); z0 = Math.min(z0, tmp.z);
+          x1 = Math.max(x1, tmp.x); y1 = Math.max(y1, tmp.y); z1 = Math.max(z1, tmp.z);
+        }
+        const d = [x1 - x0, y1 - y0, z1 - z0], span = Math.max(d[0], d[1], d[2]);
+        if (span < 0.12 || span > 40) continue;
+        const sorted = d.slice().sort((p, q) => q - p), face = Math.max(sorted[1], 0.3);
+        const size = Math.max(0.9, Math.min(5, face * 2.4 + 0.6));
+        const axis = d[0] === span ? 0 : d[1] === span ? 1 : 2;
+        const n = Math.max(1, Math.min(6, Math.ceil(span / Math.max(face * 2, 1.5))));
+        const lo = [x0, y0, z0], hi = [x1, y1, z1];
+        for (let q = 0; q < n; q++) {
+          const t = n === 1 ? 0.5 : (q + 0.5) / n, p = [(x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2];
+          p[axis] = lo[axis] + (hi[axis] - lo[axis]) * t;
+          push(p[0], p[1], p[2], r, gg, b, size);
+        }
+      }
+      return;
+    }
+    // 2. a single light object: an unlit-material lamp or lantern, a sign (which names its own colour), an emissive part
+    let r, gg, b;
+    if (o.userData.glowColor != null) { col.setHex(o.userData.glowColor); r = col.r; gg = col.g; b = col.b; }
+    else if (m.isMeshBasicMaterial && !m.map && m.color && !m.vertexColors) { r = m.color.r; gg = m.color.g; b = m.color.b; }
+    else if (m.emissive && m.emissiveIntensity > 0 && m.emissive.getHex() !== 0 && !m.map) { r = m.emissive.r; gg = m.emissive.g; b = m.emissive.b; }
+    else return;
+    if (lum(r, gg, b) < 0.55) return;
+    geo.computeBoundingBox();
+    const bb = geo.boundingBox; if (!bb) return;
+    const dim = Math.max(bb.max.x - bb.min.x, bb.max.y - bb.min.y, bb.max.z - bb.min.z);
+    const world = dim * Math.max(o.scale.x, o.scale.y, o.scale.z);
+    if (world < 0.08 || world > 6) return;                           // a speck, or a sky dome / floor / wall: not a lamp
+    bb.getCenter(tmp); tmp.applyMatrix4(o.matrixWorld);
+    push(tmp.x, tmp.y, tmp.z, r, gg, b, Math.max(1.0, Math.min(5, world * 3.0 + 0.5)));
+  });
+  const total = S.length;
+  g.userData.glowPoints = Math.min(total, GLOW_MAX_POINTS);
+  if (!total) return;
+  // keep the brightest and biggest if a map is very busy
+  let order = S.map((_, i) => i);
+  if (total > GLOW_MAX_POINTS) {
+    order.sort((a, c) => (S[c] * lum(C[c * 3], C[c * 3 + 1], C[c * 3 + 2])) - (S[a] * lum(C[a * 3], C[a * 3 + 1], C[a * 3 + 2])));
+    order = order.slice(0, GLOW_MAX_POINTS);
+  }
+  const pos = new Float32Array(order.length * 3), cols = new Float32Array(order.length * 3), sizes = new Float32Array(order.length);
+  order.forEach((i, k) => {
+    pos[k * 3] = P[i * 3]; pos[k * 3 + 1] = P[i * 3 + 1]; pos[k * 3 + 2] = P[i * 3 + 2];
+    cols[k * 3] = C[i * 3]; cols[k * 3 + 1] = C[i * 3 + 1]; cols[k * 3 + 2] = C[i * 3 + 2];
+    sizes[k] = S[i];
+  });
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+  geo.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+  const uniforms = { map: { value: _glowSpriteTex() }, uScale: { value: 600 }, uGain: { value: 0.85 } };
+  const mat = new THREE.ShaderMaterial({
+    uniforms, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    vertexShader: 'attribute float size; attribute vec3 color; varying vec3 vC; uniform float uScale;' +
+      'void main(){ vC = color; vec4 mv = modelViewMatrix * vec4(position, 1.0); gl_PointSize = clamp(size * uScale / max(0.5, -mv.z), 2.0, 260.0); gl_Position = projectionMatrix * mv; }',
+    fragmentShader: 'uniform sampler2D map; uniform float uGain; varying vec3 vC;' +
+      'void main(){ float a = texture2D(map, gl_PointCoord).a; gl_FragColor = vec4(vC * uGain, a); }',
+  });
+  // the sprite is sized in metres: pixels = metres * (half the screen height / tan(half the field of view)) / distance
+  mat.onBeforeRender = (renderer, scene, cam) => { uniforms.uScale.value = renderer.domElement.height * 0.5 / Math.tan((cam.fov || 75) * Math.PI / 360); };
+  const pts = new THREE.Points(geo, mat);
+  pts.frustumCulled = false; pts.renderOrder = 5; pts.userData.mapGlow = true;
+  g.add(pts);
+  // light: brighten what is there, or add up to four where the lit surfaces are densest
+  const lights = [];
+  g.traverse(o => { if (o.isPointLight) lights.push(o); });
+  for (const L of lights) if (!L.userData._glowBoosted) { L.userData._glowBoosted = true; L.intensity *= GLOW_LIGHT_BOOST; L.distance = L.distance ? L.distance * 1.3 : L.distance; }
+  if (lights.length < 4) {
+    const cell = 22, bins = new Map();
+    order.forEach((i, k) => {
+      const key = Math.floor(P[i * 3] / cell) + ',' + Math.floor(P[i * 3 + 2] / cell);
+      const w = S[i] * lum(C[i * 3], C[i * 3 + 1], C[i * 3 + 2]);
+      let bn = bins.get(key); if (!bn) bins.set(key, bn = { w: 0, x: 0, y: 0, z: 0, r: 0, g: 0, b: 0 });
+      bn.w += w; bn.x += P[i * 3] * w; bn.y += P[i * 3 + 1] * w; bn.z += P[i * 3 + 2] * w;
+      bn.r += C[i * 3] * w; bn.g += C[i * 3 + 1] * w; bn.b += C[i * 3 + 2] * w;
+    });
+    const best = [...bins.values()].sort((a, c) => c.w - a.w).slice(0, 4 - lights.length);
+    for (const bn of best) {
+      if (bn.w < 6) continue;
+      col.setRGB(bn.r / bn.w, bn.g / bn.w, bn.b / bn.w);
+      const L = new THREE.PointLight(col.getHex(), 2.0, 26, 1.5);
+      L.position.set(bn.x / bn.w, Math.max(3, Math.min(8, bn.y / bn.w)), bn.z / bn.w);
+      L.userData._glowBoosted = true;
+      g.add(L);
+    }
+  }
 }
 
 weatherAllMaps();

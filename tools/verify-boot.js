@@ -1056,6 +1056,36 @@ if (ok && process.argv.includes('--util')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+if (ok && process.argv.includes('--glow')) {
+  // The light pass: it builds on real maps without throwing, finds the lit surfaces, stays inside its budget, adds
+  // no more than four point lights to a map, and does not build twice.
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const names = ['neon_tokyo', 'urban', 'cyber', 'pearl_harbor', 'blank', 'duel_grid', 'refinery'];
+    const saved = activeMapName;
+    try {
+      for (const n of names) {
+        if (!MAP_GROUPS[n]) { issues.push(n + ': no such map'); continue; }
+        try { activateMap(n); } catch (e) { issues.push(n + ' did not activate: ' + e.message); continue; }
+        const g = MAP_GROUPS[n];
+        if (!g._glowBuilt) issues.push(n + ': glow pass did not run');
+        const pts = g.children.filter(c => c.userData && c.userData.mapGlow);
+        if (pts.length > 1) issues.push(n + ': ' + pts.length + ' glow batches (one per map)');
+        if (g.userData.glowPoints > GLOW_MAX_POINTS) issues.push(n + ': over the point budget');
+        let lights = 0; g.traverse(o => { if (o.isPointLight) lights++; });
+        if (lights > 8) issues.push(n + ': ' + lights + ' point lights (too many for forward rendering)');
+        if (n === 'neon_tokyo' && !(g.userData.glowPoints >= 40)) issues.push('neon_tokyo only found ' + g.userData.glowPoints + ' lit surfaces');
+        if (n === 'duel_grid' && g.userData.glowPoints) issues.push('duel_grid has lights it should not');
+        const before = g.children.length; buildMapGlow(n);
+        if (g.children.length !== before) issues.push(n + ': the glow pass built twice');
+      }
+    } finally { activateMap(saved || 'blank'); }
+    return issues;
+  })()`);
+  console.log('glow checks: neon_tokyo and six more maps build their light pass once, within budget');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 if (ok && process.env.MAP_REVIEW_DIR) {
   fs.mkdirSync(process.env.MAP_REVIEW_DIR, { recursive: true });
   for (const name of ['forest', 'desert', 'tundra', 'refinery', 'space', 'volcano', 'titanic', 'carrier', 'pearl_harbor']) {
