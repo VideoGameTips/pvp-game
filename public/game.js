@@ -5130,15 +5130,29 @@ function playSoundEvent(name, opts = {}) {
     playFilteredNoise(ctx,start+.04,.38,out,.32*mult,'lowpass',850,.7);
     for(let i=0;i<3;i++) playTone(ctx,start+i*.035,.07,out,210+i*65,65,.12*mult,'triangle');
   } else if (name === 'hitmarker') {
-    // Sharp transient "snap" — no tonal beep, just a percussive crack
-    playFilteredNoise(ctx, start, 0.020, out, 0.18 * mult, 'highpass', 3200, 0.4);
-    playFilteredNoise(ctx, start, 0.035, out, 0.10 * mult, 'lowpass', 1400, 0.6);
-    playTone(ctx, start, 0.028, out, 220, 80, 0.10 * mult, 'sine'); // tiny low thud body
+    // A click, not a beep: a hard 3 ms edge, a short pitched tick that falls away, and a small
+    // wooden thock underneath so it lands with some weight. `tier` nudges the pitch (a far,
+    // weak hit is duller than a point-blank one).
+    const k = (HIT_TIERS[opts.tier] || HIT_TIERS.yellow).click;
+    playFilteredNoise(ctx, start, 0.006, out, 0.20 * mult, 'highpass', 3600 * k, 0.5, 0.0002, 0);
+    playTone(ctx, start, 0.030, out, 2100 * k, 1250 * k, 0.15 * mult, 'sine');
+    playTone(ctx, start, 0.040, out, 290, 130, 0.11 * mult, 'sine');
+    playFilteredNoise(ctx, start, 0.018, out, 0.08 * mult, 'bandpass', 1700 * k, 1.2, 0.0004, 2.0);
   } else if (name === 'headshot') {
-    // Sharper snap + brief metallic ring
-    playFilteredNoise(ctx, start, 0.022, out, 0.22 * mult, 'highpass', 4200, 0.35);
-    playTone(ctx, start, 0.10, out, 1860, 940, 0.10 * mult, 'triangle');
-    playTone(ctx, start, 0.05, out, 280, 110, 0.14 * mult, 'sine');
+    // The metallic click of a critical: the same hard edge, then three inharmonic partials
+    // (ratios 1 : 1.49 : 2.14, the way a struck bar rings) that die off in about a tenth of a
+    // second. A dead-on hit (blue) rings an octave-ish higher and gets a second, brighter ting.
+    const k = (HIT_TIERS[opts.tier] || HIT_TIERS.orange).click;
+    playFilteredNoise(ctx, start, 0.005, out, 0.24 * mult, 'highpass', 4600, 0.5, 0.0002, 0);
+    playTone(ctx, start, 0.115, out, 2480 * k, 2440 * k, 0.15 * mult, 'sine');
+    playTone(ctx, start, 0.085, out, 3700 * k, 3640 * k, 0.10 * mult, 'sine');
+    playTone(ctx, start, 0.060, out, 5310 * k, 5200 * k, 0.065 * mult, 'sine');
+    playTone(ctx, start, 0.050, out, 310, 120, 0.13 * mult, 'sine');   // the thunk it was hit with
+    if (opts.tier === 'blue') {
+      playTone(ctx, start + 0.055, 0.14, out, 3720 * k, 3680 * k, 0.12 * mult, 'sine');
+      playTone(ctx, start + 0.055, 0.10, out, 5560 * k, 5500 * k, 0.07 * mult, 'sine');
+      playTone(ctx, start + 0.055, 0.07, out, 7900, 7600, 0.04 * mult, 'sine');
+    }
   } else if (name === 'kill') {
     playTone(ctx, start, 0.18, out, 125, 48, 0.22 * mult, 'sine');
     playNoise(ctx, start, 0.07, out, 0.08 * mult, 0.45);
@@ -41944,7 +41958,7 @@ function _nearestAbilityRayHit(origin, dir, range, radius = 0.65) {
       if (t < 0 || t > range) continue;
       const closest = origin.clone().addScaledVector(dir, t);
       if (closest.distanceToSquared(s.p) <= s.r2 && (!best || t < best.t)) {
-        best = { pid, mesh, t, pos: closest, headshot: s.head };
+        best = { pid, mesh, t, pos: closest, headshot: s.head, miss: s.head ? Math.sqrt(closest.distanceToSquared(s.p)) : null };
       }
     }
   }
@@ -42190,8 +42204,8 @@ function fireHitscanShot(origin, dir, weaponId, wStats) {
   if (hit) {
     const mesh = remoteMeshes[hit.pid];
     const dummy = TRAINING_DUMMIES.find(d => d.id === hit.pid);
-    if (dummy) handleDummyHit(dummy, mesh, { weaponId }, hit.pos.clone());
-    else emitHit(hit.pid, `hitscan_${myId}_${Date.now()}`, weaponId, hit.pos.clone(), hit.headshot);
+    if (dummy) handleDummyHit(dummy, mesh, { weaponId, headshot: hit.headshot, headMiss: hit.miss }, hit.pos.clone());
+    else emitHit(hit.pid, `hitscan_${myId}_${Date.now()}`, weaponId, hit.pos.clone(), hit.headshot, { headMiss: hit.miss });
     spawnHitParticle(hit.pos.clone());
   }
 }
@@ -42280,8 +42294,8 @@ function fireRailgunCharge() {
     const finalDmg = (hit.headshot && INSTAKILL_HS_WEAPONS.has('railgun')) ? 999 : chargeDmg;
     const mesh = remoteMeshes[hit.pid];
     const dummy = TRAINING_DUMMIES.find(d => d.id === hit.pid);
-    if (dummy) handleDummyHit(dummy, mesh, { damage: finalDmg }, hit.pos.clone());
-    else emitHit(hit.pid, `railgun_${myId}_${now}`, 'railgun', hit.pos.clone(), hit.headshot, { damageOverride: finalDmg });
+    if (dummy) handleDummyHit(dummy, mesh, { damage: finalDmg, headshot: hit.headshot, headMiss: hit.miss }, hit.pos.clone());
+    else emitHit(hit.pid, `railgun_${myId}_${now}`, 'railgun', hit.pos.clone(), hit.headshot, { damageOverride: finalDmg, headMiss: hit.miss });
     spawnHitParticle(hit.pos.clone());
   }
   flashAbilityName(`${Math.round(t * 100)}% CHARGE · ${chargeDmg} DMG`);
@@ -42307,7 +42321,7 @@ function doCyroclasmLaser(w, ab) {
   kickWeaponVisual(w, 2);
   socket.emit('shoot', { x: origin.x, y: origin.y, z: origin.z, dx: dir.x, dy: dir.y, dz: dir.z, weapon: 'cyroclasm_laser' });
   if (hit) {
-    emitHit(hit.pid, `cyro_${myId}_${Date.now()}`, 'cyroclasm_laser', hit.pos, hit.headshot, { damageOverride: dmg });
+    emitHit(hit.pid, `cyro_${myId}_${Date.now()}`, 'cyroclasm_laser', hit.pos, hit.headshot, { damageOverride: dmg, headMiss: hit.miss });
     _applyRootToTarget(hit.pid, 3000, 0xbdf3ff);
     const bot = resolveBot(hit.pid);
     if (bot && !bot.dead) bot.frostSlow = Math.min(bot.frostSlow || 100, 50);
@@ -50136,6 +50150,89 @@ const DMG_BASE_STYLE = [
   'transform:translate(-50%,-50%)',
 ].join(';');
 
+// ── 🎯 Hit grades ───────────────────────────────────────────────────────────
+// Every hit is graded by two things the player can act on: was it a CRITICAL
+// (a head hit) and how much of the damage survived the range (falloff 1.0 = all
+// of it). The grade sets the colour of the number that flies off the target and
+// the pitch/ring of the click.
+//
+//   white   normal hit, most of the damage lost to range   (falloff < 0.60)
+//   yellow  normal hit, medium or no drop-off
+//   orange  critical, a fair amount lost to range           (falloff < 0.90)
+//   red     critical, nearly no drop-off                    (falloff >= 0.90)
+//   blue    critical dead on the head centre, no drop-off   (rare)
+//
+// 'Dead on' is within PERFECT_HEAD_MISS metres of the head sphere's centre (the
+// sphere is 0.28 m, so about one head hit in twelve at a normal spread).
+const HIT_TIERS = {
+  white:  { color: '#ffffff', size: 0,  rank: 0, click: 0.86 },
+  yellow: { color: '#ffd83a', size: 2,  rank: 1, click: 1.00 },
+  orange: { color: '#ff8a1f', size: 5,  rank: 2, click: 1.00 },
+  red:    { color: '#ff2b2b', size: 7,  rank: 3, click: 1.12 },
+  blue:   { color: '#3db4ff', size: 11, rank: 4, click: 1.30 },
+};
+const PERFECT_HEAD_MISS = 0.085;
+function gradeHit(headshot, falloff, headMiss) {
+  if (headshot) {
+    if (falloff >= 0.97 && headMiss != null && headMiss <= PERFECT_HEAD_MISS) return 'blue';
+    return falloff >= 0.9 ? 'red' : 'orange';
+  }
+  return falloff < 0.6 ? 'white' : 'yellow';
+}
+
+// Numbers that fly off the target. They are anchored to the world point that was hit and fling
+// themselves sideways, AWAY from the crosshair (left of centre goes left, right goes right), up
+// and then down under a little gravity. The old per-hit number sat up and to the right and
+// stacked five-deep on the kill confirm (#40); this one never goes near the middle of the screen.
+const _flyNums = [];
+let _flyFlip = 0;
+const _flyGate = {};          // targetId -> { t, rank }: a fast gun does not need 35 numbers a second
+function spawnHitNumber(targetId, worldPos, damage, tier) {
+  if (!(damage > 0) || !worldPos) return;
+  const T = HIT_TIERS[tier] || HIT_TIERS.white;
+  const now = performance.now();
+  const g = _flyGate[targetId];
+  if (g && now - g.t < 45 && T.rank <= g.rank) return;
+  _flyGate[targetId] = { t: now, rank: T.rank };
+  const sc = worldToScreen(worldPos);
+  if (!sc) return;
+  while (_flyNums.length >= 18) { const o = _flyNums.shift(); o.el.remove(); }
+  const el = document.createElement('div');
+  el.setAttribute('style', DMG_BASE_STYLE);
+  el.style.color = T.color;
+  el.style.fontSize = Math.min(42, 14 + T.size + Math.floor(damage / 9)) + 'px';
+  if (tier === 'blue') el.style.textShadow = '-1px -1px 0 #002a55,1px -1px 0 #002a55,-1px 1px 0 #002a55,1px 1px 0 #002a55,0 0 12px #3db4ff';
+  el.textContent = damage;
+  document.body.appendChild(el);
+  const mid = window.innerWidth / 2;
+  const side = Math.abs(sc.x - mid) < 40 ? ((_flyFlip++ & 1) ? 1 : -1) : (sc.x < mid ? -1 : 1);
+  _flyNums.push({
+    el, pos: worldPos.clone(), t0: now, tier,
+    vx: side * (120 + Math.random() * 80),
+    vy: -(170 + Math.random() * 70),
+    life: tier === 'blue' ? 1150 : tier === 'white' || tier === 'yellow' ? 780 : 950,
+  });
+}
+function updateFlyNumbers() {
+  if (!_flyNums.length) return;
+  const now = performance.now();
+  for (let i = _flyNums.length - 1; i >= 0; i--) {
+    const o = _flyNums[i];
+    const age = now - o.t0;
+    if (age >= o.life) { o.el.remove(); _flyNums.splice(i, 1); continue; }
+    const sc = worldToScreen(o.pos);
+    if (!sc) { o.el.style.display = 'none'; continue; }
+    const s = age / 1000;
+    o.el.style.display = 'block';
+    o.el.style.left = (sc.x + o.vx * s) + 'px';
+    o.el.style.top  = (sc.y + o.vy * s + 520 * s * s * 0.5) + 'px';
+    const pop = age < 110 ? 1 + 0.45 * (1 - age / 110) : 1;      // lands with a little punch
+    o.el.style.transform = 'translate(-50%,-50%) scale(' + pop.toFixed(2) + ')';
+    const fadeAt = o.life * 0.55;
+    o.el.style.opacity = age < fadeAt ? '1' : String(Math.max(0, 1 - (age - fadeAt) / (o.life - fadeAt)));
+  }
+}
+
 let _lobbyHitNoted = false;
 function noteLobbyHit() {
   if (_lobbyHitNoted) return;
@@ -50607,7 +50704,7 @@ const DMG_TOTAL_STYLE = [
   'transform:translate(-50%,-100%)',
 ].join(';');
 
-function trackTotalDamage(targetId, damage, targetMesh) {
+function trackTotalDamage(targetId, damage, targetMesh, tier) {
   if (!(damage > 0) || !targetMesh) return;
   if (!damageTracker[targetId]) {
     const el = document.createElement('div');
@@ -50621,9 +50718,29 @@ function trackTotalDamage(targetId, damage, targetMesh) {
   tr.lastHit = performance.now();
   tr.el.textContent  = tr.total;
   tr.el.style.opacity = '1';
+  // The running total wears the grade of the latest hit, so a string of crits reads red/orange.
+  const T = tier && HIT_TIERS[tier];
+  if (T) tr.el.style.color = T.color;
+}
+
+// One call per landed hit, from emitHit and from the training dummies: grade it, fling the
+// number, tint the running total, and click. Returns the grade.
+function hitFeedback(targetId, mesh, hitPos, damage, headshot, falloff, headMiss) {
+  const tier = gradeHit(headshot, falloff == null ? 1 : falloff, headMiss);
+  const at = hitPos || (mesh ? mesh.position.clone().setY(mesh.position.y + 1.2) : null);
+  spawnHitNumber(targetId, at, damage, tier);
+  if (mesh) trackTotalDamage(targetId, damage, mesh, tier);
+  if (damage > 0) {
+    const crit = headshot;
+    playSoundEvent(crit ? 'headshot' : 'hitmarker', {
+      volume: crit ? 1.1 : 0.8, minGap: crit ? 60 : 35, tier,
+    });
+  }
+  return tier;
 }
 
 function updateDamageNumbers() {
+  updateFlyNumbers();
   if (!gameStarted) return;
   const now = performance.now();
   for (const [id, tr] of Object.entries(damageTracker)) {
@@ -50745,8 +50862,14 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false, opts = 
       FIRE_WEAPONS.has(weaponId)     ? 0xff6622 :
       GRAVITY_WEAPONS.has(weaponId)  ? 0xaa44ff : 0x99eeff);
   }
-  if (mesh)        trackTotalDamage(pid, dmg, mesh);
-  playSoundEvent(headshot ? 'headshot' : 'hitmarker', { volume: headshot ? 1.15 : 0.75, minGap: headshot ? 60 : 35 });
+  // 🎯 Grade, number, click. A head hit is "dead on" when it lands near the middle of the head sphere;
+  // callers that know the miss distance pass it, otherwise it is measured from the impact point.
+  let headMiss = Number.isFinite(opts.headMiss) ? opts.headMiss : null;
+  if (headshot && headMiss == null && hitWorldPos && mesh) {
+    const off = (mesh._rig && mesh._rig.hitHeadOff !== undefined) ? mesh._rig.hitHeadOff : 1.65;
+    headMiss = Math.hypot(hitWorldPos.x - mesh.position.x, hitWorldPos.y - (mesh.position.y + off), hitWorldPos.z - mesh.position.z);
+  }
+  hitFeedback(pid, mesh, hitWorldPos, dmg, headshot, Number.isFinite(opts.damageOverride) ? 1 : falloff, headMiss);
   // Switchblade Gun: any successful hit re-charges to the 100-dmg shot
   if (weaponId === 'switchblade_gun' || weaponId === 'switchblade_charged') {
     switchbladeCharged = true;
@@ -50948,7 +51071,7 @@ spawnTrainingDummies(); // safe here — TRAINING_DUMMIES const is already initi
 
 function handleDummyHit(dummy, mesh, opts, hitPos) {
   const dmg = opts.damage ?? getClientWeaponDamage(opts.weaponId);
-  trackTotalDamage(dummy.id, dmg, mesh);
+  hitFeedback(dummy.id, mesh, hitPos, dmg, !!opts.headshot, opts.falloff, opts.headMiss);
   if (dummy.infinite) {
     flashDummyMesh(mesh);
     return;
@@ -51327,7 +51450,7 @@ function updateBullets(dt) {
         // then tests distance. Falls back to point-test if bullet didn't move.
         let isHeadshot = false, isBodyHit = false;
         let hitX = _bpos.x, hitY = _bpos.y, hitZ = _bpos.z;
-        let hitT = 1;
+        let hitT = 1, headMissD = null;   // headMissD: how far the shot passed from the head's centre
 
         // 🛹 Both heights are published every frame by animateCharacterMesh from
         // the pose it just applied, so the spheres sit where the body is drawn.
@@ -51345,6 +51468,7 @@ function updateBullets(dt) {
           if (cx*cx + cy*cy + cz*cz < headR*headR) {
             isHeadshot = true; hitX = px0+t*sx; hitY = py0+t*sy; hitZ = pz0+t*sz;
             hitT = t;
+            headMissD = Math.sqrt(cx*cx + cy*cy + cz*cz);
           }
           if (!isHeadshot) {
             // --- Body sphere: center at (mesh.x, mesh.y+bodyOff, mesh.z), r=0.65 (+ bullet radius)
@@ -51360,13 +51484,14 @@ function updateBullets(dt) {
           // Bullet didn't travel this frame — plain point test
           const headPos = _ppos.set(mesh.position.x, mesh.position.y + headOff, mesh.position.z);
           isHeadshot = _bpos.distanceTo(headPos) < headR;
+          if (isHeadshot) headMissD = _bpos.distanceTo(headPos);
           _ppos.set(mesh.position.x, mesh.position.y + bodyOff, mesh.position.z);
           isBodyHit = !isHeadshot && _bpos.distanceTo(_ppos) < bodyR;
         }
         if (!isHeadshot && !isBodyHit) continue;
 
         if (!bestHit || hitT < bestHit.t) {
-          bestHit = { pid, mesh, t: hitT, pos: new THREE.Vector3(hitX, hitY, hitZ), headshot: isHeadshot };
+          bestHit = { pid, mesh, t: hitT, pos: new THREE.Vector3(hitX, hitY, hitZ), headshot: isHeadshot, miss: headMissD };
         }
       }
 
@@ -51468,14 +51593,16 @@ function updateBullets(dt) {
           if (b.isPaintBomb) triggerPaintExplosion(_bpos.clone(), b);
           else {
             const baseDmg = getClientWeaponDamage(b.weaponId);
-            const dmg = Math.round(bestHit.headshot ? baseDmg * headshotMultFor(b.weaponId) : baseDmg);
-            handleDummyHit(dummy, bestHit.mesh, { damage: dmg }, _bpos.clone());
+            // The range's dummies take what a player would: the same falloff, and they are graded the same.
+            const dFall = falloffMultiplier(b.weaponId, camera.position.distanceTo(_bpos));
+            const dmg = Math.round((bestHit.headshot ? baseDmg * headshotMultFor(b.weaponId) : baseDmg) * dFall);
+            handleDummyHit(dummy, bestHit.mesh, { damage: dmg, headshot: bestHit.headshot, falloff: dFall, headMiss: bestHit.miss }, _bpos.clone());
             if (bestHit.headshot) showHitmarker('head');
           }
         } else if (b.isPaintBomb) {
           triggerPaintExplosion(_bpos.clone(), b);
         } else {
-          emitHit(bestHit.pid, b.id, b.weaponId || currentWeapon.id, _bpos.clone(), bestHit.headshot);
+          emitHit(bestHit.pid, b.id, b.weaponId || currentWeapon.id, _bpos.clone(), bestHit.headshot, { headMiss: bestHit.miss });
           applyDotOnHit(b.weaponId || currentWeapon.id, bestHit.pid);
         }
         // Firework Launcher: also spawn burn zone on direct hit
