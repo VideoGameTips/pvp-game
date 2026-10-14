@@ -17707,54 +17707,38 @@ GIM.supermarket = (X) => {
 };
 
 // ── 🔦 PYONGYANG · SEARCHLIGHTS ─────────────────────────────────────────────────────────────────────────────────────────
-// Four towers, four lamps, four pools of white light walking the squares. Stay in one for a second and somebody up there
-// has you: a red ring closes on the spot and the guns do the rest. The light is the aim -- nothing else is.
-GIM_LABELS.shell = 'was shelled from the searchlights';
+// The visible light pool deals contact damage; one shared cooldown prevents overlapping lamps stacking hits.
+GIM_LABELS.shell = 'was caught in a searchlight';
 GIM.pyongyang = (X) => {
   const towers = X.spots(4, { r: 1.8, pairs: true, sep: 36, maxR: 70, edge: 12 });
   if (towers.length < 2) return;
-  X.dbg(towers.map(s => ({ x: s.x + 18, z: s.z })));
-  const R = 4.4, ORB = 17;
+  X.dbg(towers.map(s => ({ x: s.x + 30, z: s.z })));
+  const R = 7.5, ORB = 30, DAMAGE = 100, HIT_GAP = 1.5;
+  const arena = X.arena(), hitAt = new Map();
   const lamps = towers.map((s, i) => {
     X.mesh(new THREE.BoxGeometry(0.7, 11, 0.7), _gimLam(0x5a5f66), s.x, 5.5, s.z);
     X.mesh(new THREE.BoxGeometry(1.8, 1.0, 1.8), _gimLam(0x2a2d30), s.x, 11.4, s.z);
     const spot = X.disc(s.x + ORB, s.z, R, 0xfff6c0, 0.38, 0.06);
     const rim = X.ring(s.x + ORB, s.z, R, 0xffffff, 0.8, 0.25, 0.07);
     const beam = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.22, 1), _gimBasic(0xfff6c0, 0.22)); X.G.add(beam);
-    return { x: s.x, z: s.z, a: i * 1.7, w: (i % 2 ? -1 : 1) * 0.38, spot, rim, beam, lit: new Map(), sx: s.x + ORB, sz: s.z };
+    return { x: s.x, z: s.z, a0: i * 1.7, a: i * 1.7, w: (i % 2 ? -1 : 1) * 0.38, spot, rim, beam };
   });
-  const shells = [];
-  X.hint('🔦 SEARCHLIGHTS', 'Stay in the light for a second and the guns find you.', '#fff6c0');
-  X.onReset(() => { for (const q of shells) X.G.remove(q.ring); shells.length = 0; lamps.forEach(l => l.lit.clear()); });
+  X.hint('🔦 SEARCHLIGHTS', 'Live-fire perimeter.', '#fff6c0');
+  X.onReset(() => { hitAt.clear(); lamps.forEach(l => { l.a = l.a0; }); });
   X.on((dt, A, t) => {
     for (const l of lamps) {
       l.a += l.w * dt;
-      l.sx = l.x + Math.cos(l.a) * ORB; l.sz = l.z + Math.sin(l.a) * ORB;
-      l.spot.position.set(l.sx, 0.06, l.sz); l.rim.position.set(l.sx, 0.07, l.sz);
-      const mx = (l.x + l.sx) / 2, mz = (l.z + l.sz) / 2, len = Math.hypot(l.sx - l.x, l.sz - l.z, 11.4);
-      l.beam.position.set(mx, 5.7, mz); l.beam.scale.z = len; l.beam.lookAt(l.sx, 0, l.sz);
+      const sx = Math.max(-arena.halfX + R + 2, Math.min(arena.halfX - R - 2, l.x + Math.cos(l.a) * ORB));
+      const sz = Math.max(-arena.halfZ + R + 2, Math.min(arena.halfZ - R - 2, l.z + Math.sin(l.a) * ORB));
+      l.spot.position.set(sx, 0.06, sz); l.rim.position.set(sx, 0.07, sz);
+      const len = Math.hypot(sx - l.x, sz - l.z, 11.4);
+      l.beam.position.set((l.x + sx) / 2, 5.7, (l.z + sz) / 2);
+      l.beam.scale.z = len; l.beam.lookAt(sx, 0, sz);
       for (const a of A) {
-        const inside = a.y < 1.9 && Math.hypot(a.x - l.sx, a.z - l.sz) < R;
-        const v = inside ? (l.lit.get(a.id) || 0) + dt : Math.max(0, (l.lit.get(a.id) || 0) - dt * 1.5);
-        l.lit.set(a.id, v);
-        if (v > 1.0) {
-          l.lit.set(a.id, -1.5);
-          const ring = X.ring(a.x, a.z, 4.0, 0xff2a1a, 0.9, 0.4, 0.08);
-          shells.push({ x: a.x, z: a.z, t: 1.5, ring });
-          if (a.me) X.sound('radar_ping', a.x, a.z, 0.9);
-        }
-      }
-    }
-    for (let i = shells.length - 1; i >= 0; i--) {
-      const q = shells[i]; q.t -= dt;
-      q.ring.material.opacity = 0.35 + 0.55 * Math.abs(Math.sin(t * 16));
-      if (q.t <= 0) {
-        X.G.remove(q.ring); shells.splice(i, 1);
-        X.fx(q.x, 0.5, q.z, 4.6, 0xffa030); X.sound('explosion', q.x, q.z, 0.85);
-        for (const a of A) {
-          const d = Math.hypot(a.x - q.x, a.z - q.z);
-          if (d < 4 && a.y < 3.5) { a.hurt(d < 2 ? 70 : 40, 'shell'); a.push(a.x - q.x || 0.2, a.z - q.z || 0.2); a.lift(6); if (a.me) X.flash('rgba(255,180,90,0.4)', 260); }
-        }
+        if (a.y < 0 || a.y >= 3.5 || Math.hypot(a.x - sx, a.z - sz) >= R || t < (hitAt.get(a.id) ?? -Infinity)) continue;
+        hitAt.set(a.id, t + HIT_GAP);
+        a.hurt(DAMAGE, 'shell');
+        if (a.me) { X.sound('radar_ping', a.x, a.z, 0.9); X.flash('rgba(255,235,160,0.3)', 180); }
       }
     }
   });
@@ -17973,6 +17957,124 @@ GIM.train = (X) => {
     }
   });
 };
+
+// Restore the remaining maps' gameplay, not just their old advertised scenery.
+GIM.trenches = X => {
+  const spots=X.spots(4,{r:1.8,sep:18,pairs:true,maxR:65});
+  const mortars=spots.map(s=>{
+    const g=new THREE.Group();
+    const base=new THREE.Mesh(new THREE.CylinderGeometry(.7,.95,.25,10),_gimLam(0x49503d));base.position.y=.125;g.add(base);
+    const tube=new THREE.Mesh(new THREE.CylinderGeometry(.16,.22,1.4,10),_gimLam(0x242a23));tube.position.y=.9;tube.rotation.x=-.5;g.add(tube);
+    X.put(g,s.x,s.z,s.z>0?0:Math.PI,true);
+    const mortar={mesh:g,x:s.x,z:s.z,side:'neutral',ammo:8,maxAmmo:8,hp:100,maxHp:100,pilotedBy:null,lastShot:0,mapName:X.name};
+    mapMortars.push(mortar);return mortar;
+  });
+  X.onReset(()=>mortars.forEach(m=>{m.ammo=m.maxAmmo;m.hp=m.maxHp;m.pilotedBy=null;}));
+};
+GIM.airport = X => {
+  const spots=X.spots(2,{r:3,sep:22,pairs:true,maxR:55});
+  X.dbg(spots);
+  const rings=spots.map(s=>X.ring(s.x,s.z,5,0xe8bc38,.2));
+  spots.forEach((s,i)=>{
+    const engine=X.mesh(new THREE.CylinderGeometry(.65,.9,2,12),_gimLam(0x6a7078),s.x+(i%2?1.8:-1.8),1,s.z);
+    engine.rotation.z=Math.PI/2;X.addCollider(engine);
+    X.mesh(new THREE.BoxGeometry(2.4,.25,1.8),_gimLam(0x3c4148),engine.position.x,.125,s.z);
+  });
+  X.on((dt,A,t)=>{
+    const phase=t%16,active=phase>=4 && phase<9;
+    rings.forEach(r=>{r.material.opacity=active?.85:phase<4?.25+.2*Math.sin(t*6):.12;});
+    spots.forEach((s,i)=>{if(active)for(const a of A)if(X.near(a,s.x,s.z,5,2.5))a.push((i%2?-1:1)*13*dt,0);});
+  });
+};
+GIM.chernobyl = X => {
+  const spots=X.spots(4,{r:2.5,sep:20,maxR:70});X.dbg(spots);
+  const rings=spots.map(s=>X.ring(s.x,s.z,6,0x92cf38,.15));
+  const gas=spots.map(s=>{X.mesh(new THREE.CylinderGeometry(.9,.9,.12,12),_gimLam(0x41463d),s.x,.08,s.z);return X.mesh(new THREE.CylinderGeometry(.4,1.2,2.5,10,1,true),_gimBasic(0xa5d54a,.12),s.x,1.3,s.z);});
+  const cd=new Map();X.onReset(()=>cd.clear());
+  X.on((dt,A,t)=>{
+    const active=t%18>=4 && t%18<10;
+    rings.forEach(r=>{r.material.opacity=active?.8:.15;});
+    gas.forEach(g=>{g.material.opacity=active?.28:.04;});
+    if(active)for(const s of spots)for(const a of A)if(X.near(a,s.x,s.z,6,2.2) && _gimBeat(cd,a.id,dt,.5))a.hurt(9,'chernobyl_gas');
+  });
+};
+GIM.orbital_station = X => {
+  const spots=X.spots(2,{r:2,sep:20,pairs:true,maxR:40});X.dbg(spots.map(s=>({x:s.x+3,z:s.z})));
+  const rings=spots.map(s=>X.ring(s.x,s.z,7,0x68d5ff,.25));
+  spots.forEach(s=>{for(let i=-2;i<=2;i++)X.mesh(new THREE.BoxGeometry(1.6,.06,.10),_gimLam(0x60798b),s.x,.07,s.z+i*.3);});
+  X.on((dt,A,t)=>{
+    const active=t%20>=4 && t%20<12;
+    rings.forEach(r=>{r.material.opacity=active?.8:.2;});
+    if(active)for(const s of spots)for(const a of A){
+      const dx=s.x-a.x,dz=s.z-a.z,d=Math.hypot(dx,dz);
+      if(d<7 && d>.2 && a.y<4){a.push(dx/d*5*dt,dz/d*5*dt);if(d<1.1)a.lift(8);}
+    }
+  });
+};
+GIM.biosphere = X => {
+  const spots=X.spots(4,{r:2,sep:16,maxR:50});X.dbg(spots);
+  const colors=[0x64ad47,0xe8b85a,0x9ddbec,0xb8cc99],cd=new Map();
+  const patches=spots.map(s=>X.disc(s.x,s.z,4,colors[0],.22));
+  spots.forEach(s=>X.mesh(new THREE.CylinderGeometry(.6,.6,.16,10),_gimLam(0x798f7a),s.x,.08,s.z));
+  X.onReset(()=>cd.clear());
+  X.on((dt,A,t)=>{
+    const climate=Math.floor(t/16)%4;
+    patches.forEach(p=>p.material.color.setHex(colors[climate]));
+    for(const s of spots)for(const a of A)if(X.near(a,s.x,s.z,4,2.2)){
+      if(climate===0)a.heal(4*dt);
+      else if(climate===1)a.push(3*dt,0);
+      else if(climate===2)a.slow(.55);
+      else if(_gimBeat(cd,a.id,dt,1.8))a.lift(10);
+    }
+  });
+};
+GIM.lockdown = X => {
+  const spots=X.spots(3,{r:2,sep:18,maxR:50});X.dbg(spots);
+  const cd=new Map(),rings=spots.map(s=>X.ring(s.x,s.z,5,0xd83832,.35));
+  const scanners=spots.map(s=>{const m=X.mesh(new THREE.BoxGeometry(.12,.06,4.5),_gimBasic(0xe33229,.65),s.x,.10,s.z);return m;});
+  X.onReset(()=>cd.clear());
+  X.on((dt,A,t)=>{
+    const active=t%12>=3 && t%12<7;
+    rings.forEach(r=>{r.material.opacity=active?.8:.15;});
+    scanners.forEach(m=>{m.rotation.y=t*1.5;m.visible=active || t%12<3;});
+    if(active)for(const s of spots)for(const a of A)if(X.near(a,s.x,s.z,5,2) && _gimBeat(cd,a.id,dt,2.5)){
+      a.root(450);X.sound('radar_ping',s.x,s.z,.45);
+    }
+  });
+};
+GIM.opera = X => {
+  const spots=X.spots(2,{r:2,sep:18,pairs:true,maxR:35});X.dbg(spots.map(s=>({x:s.x+4,z:s.z})));
+  const rings=spots.map(s=>X.ring(s.x,s.z,1,0xe2bb57,.1)),hit=new Set();
+  spots.forEach(s=>{const drum=X.mesh(new THREE.CylinderGeometry(.65,.6,.7,12),_gimLam(0x6e2b32),s.x,.35,s.z);X.addCollider(drum);X.mesh(new THREE.CylinderGeometry(.66,.66,.05,12),_gimLam(0xd9c49a),s.x,.73,s.z);});
+  X.onReset(()=>hit.clear());let last=-1;
+  X.on((dt,A,t)=>{
+    const cycle=Math.floor(t/15),phase=t%15;
+    if(cycle!==last){last=cycle;hit.clear();}
+    const radius=phase<3?1:1+(phase-3)*5,active=phase>=3 && phase<5.5;
+    spots.forEach((s,i)=>{
+      rings[i].scale.setScalar(active?radius:1);rings[i].material.opacity=active?.9:phase<3?.3:.05;
+      if(active)for(const a of A){const key=i+':'+a.id;if(a.y<.8 && Math.abs(Math.hypot(a.x-s.x,a.z-s.z)-radius)<.8 && !hit.has(key)){hit.add(key);a.hurt(25,'shockwave');a.lift(5);}}
+    });
+  });
+};
+GIM.doomsday = X => {
+  const spots=X.spots(5,{r:3,sep:18,open:true,maxR:60});X.dbg(spots);
+  if(!spots.length)return;
+  const rings=spots.map(s=>X.ring(s.x,s.z,3.5,0xff622d,0));
+  const meteor=X.mesh(new THREE.IcosahedronGeometry(1.2,0),_gimLam(0x483629),0,35,0);
+  X.onReset(()=>{previousImpact=-1;meteor.visible=false;rings.forEach(r=>{r.material.opacity=0;});});
+  let previousImpact=-1;
+  X.on((dt,A,t)=>{
+    const cycle=Math.floor(t/12),phase=t%12,index=cycle%spots.length,s=spots[index];
+    rings.forEach((r,i)=>{r.material.opacity=i===index && phase<4?.25+.4*Math.abs(Math.sin(t*6)):0;});
+    meteor.visible=phase<4;meteor.position.set(s.x,phase<3?32:Math.max(.5,32*(4-phase)),s.z);
+    if(phase>=4 && previousImpact!==cycle){previousImpact=cycle;
+      X.fx(s.x,.5,s.z,3.5,0xff6329);X.sound('explosion',s.x,s.z,.8);
+      for(const a of A)if(X.near(a,s.x,s.z,3.5,4)){a.hurt(80,'meteor');a.lift(6);}
+    }
+  });
+};
+GIM_LABELS.shockwave='was caught by a stage shockwave';GIM_LABELS.meteor='was struck by a meteor';
 
 // ── the look of each place ──────────────────────────────────────────────────────────────────────────────────────────────
 // Placement is seeded (X.rnd) and checked against what is already there (X.free), so a map comes out the same for everyone.
@@ -18361,6 +18463,39 @@ LOOK.super_arena = (X) => {                                   // two bases: tent
 // they cost a few hundred milliseconds each and a player only ever sees one. Always in this order -- the stretching has
 // to see the layout as it was built, and the outskirts go round whatever the first two leave -- and always from the
 // map's own name as the seed, so every player's copy comes out the same.
+function mapFeatureSpotFree(name,x,z,half,height=3.5) {
+  const bounds=MAP_BOT_BOUNDS[name] || MAP_BOUNDS[name], v=MAP_VOID[name];
+  if(!bounds || Math.abs(x)+half>bounds.halfX-7 || Math.abs(z)+half>bounds.halfZ-7)return false;
+  if(_mdSpawnRects(name,12).some(r=>x+half>r.x0 && x-half<r.x1 && z+half>r.z0 && z-half<r.z1))return false;
+  for(const dx of [-half,0,half])for(const dz of [-half,0,half]){
+    if(v && !(v.rects?v.rects.some(r=>x+dx>=r.x0 && x+dx<=r.x1 && z+dz>=r.z0 && z+dz<=r.z1):Math.abs(x+dx)<=v.halfX && Math.abs(z+dz)<=v.halfZ))return false;
+  }
+  if(MAP_GIMMICKS[name].damageZones.some(r=>r.w?_pointInRotRect(x,z,r,half):Math.hypot(x-r.x,z-r.z)<r.r+half))return false;
+  return !MAP_COLLIDERS[name].some(c=>c.max.y>.12 && c.min.y<height && c.min.x<x+half && c.max.x>x-half && c.min.z<z+half && c.max.z>z-half);
+}
+function addCentralMapStructure(name) {
+  if(!['blank','urban','forest','desert','airport','refinery','big_arena','super_arena'].includes(name))return;
+  const g=MAP_GROUPS[name], b=MAP_BOT_BOUNDS[name] || MAP_BOUNDS[name],th=MAP_THEMES[name];
+  const candidates=[];
+  for(let x=-Math.floor(b.halfX*.4/5)*5;x<=b.halfX*.4;x+=5)for(let z=-Math.floor(b.halfZ*.4/5)*5;z<=b.halfZ*.4;z+=5)candidates.push([x,z]);
+  candidates.sort((a,b)=>Math.hypot(...a)-Math.hypot(...b));
+  const spot=candidates.find(([x,z])=>mapFeatureSpotFree(name,x,z,5.2,21));
+  if(!spot)return;
+  const [x,z]=spot,K=_bkit(name),first=MAP_COLLIDERS[name].length;
+  for(const dx of [-2.7,2.7])for(const dz of [-2.7,2.7]){
+    K.box(x+dx,0,z+dz,.5,18,.5,th.w);K.box(x+dx,0,z+dz,.9,.25,.9,th.c);
+  }
+  for(let level=1;level<=3;level++){
+    const y=level*6,side=level%2?1:-1;
+    K.box(x,y-.4,z,6.4,.4,6.4,th.d);
+    // Opposite ladders between floors; both the centre and the ground floor remain open.
+    addGridLadder(name,x+side*3.65,z,side*Math.PI/2,y-6,y,1.25);
+    for(const dz of [-3,3])K.box(x,y,z+dz,5.6,1.1,.3,th.w2);
+    K.poi('central tower level '+level,x,z,y);
+  }
+  for(const c of MAP_COLLIDERS[name].slice(first))if(c.max.y>14)c.tall=true;
+  g.userData.centralStructure={x,z,height:18,levels:3};
+}
 function registerMapStructure(name, mesh, colliderRefs, kind, targetCollider = colliderRefs[0]) {
   const hp = {wood:500,support:900,wall:3000}[kind];
   const index = mapDestructibles.filter(d => d.mapName===name && d.structureKind===kind).length;
@@ -18523,6 +18658,7 @@ function _upgradeMap(name) {
   g._upgraded = true;
   const t0 = performance.now();
   try { _depthMap(name); } catch (e) { console.warn('[upgrade] depth', name, e); }
+  try { addCentralMapStructure(name); } catch (e) { console.warn('[upgrade] central structure', name, e); }
   try { addOpenLaneCover(name); } catch (e) { console.warn('[upgrade] lane cover', name, e); }
   try { addBreakableMapWalls(name); } catch (e) { console.warn('[upgrade] breakable walls', name, e); }
   try { _eggsMap(name); } catch (e) { console.warn('[upgrade] eggs', name, e); }
@@ -44490,7 +44626,7 @@ function updateMapGimmicks(dt) {
   if (g.lowGravZones && g.lowGravZones.length) {
     for (const z of g.lowGravZones) {
       const dx = camera.position.x - z.x, dz = camera.position.z - z.z;
-      if (dx*dx + dz*dz < z.r * z.r) { _playerInLowGrav = true; break; }
+      if (dx*dx + dz*dz < z.r * z.r && (z.yMax==null || playerFeetY()<z.yMax)) { _playerInLowGrav = true; break; }
     }
   }
   // Ice and oil slicks are handled inline in updateMovement (friction reduction)
@@ -44504,7 +44640,7 @@ function playerOnIce() {
   if (g.oilZones && g.oilZones.length) slicks.push(...g.oilZones);
   for (const z of slicks) {
     const dx = camera.position.x - z.x, dz = camera.position.z - z.z;
-    if (dx*dx + dz*dz < z.r * z.r) return true;
+    if (dx*dx + dz*dz < z.r * z.r && (z.yMax==null || playerFeetY()<z.yMax)) return true;
   }
   return false;
 }
@@ -51650,7 +51786,7 @@ function updateBullets(dt) {
           if (!dest.mesh || dest.hp <= 0 || !b.isOwn) continue;
           const dpos = new THREE.Vector3();
           dest.mesh.getWorldPosition(dpos);
-          if (dest.structureKind ? dest.colliderRef===wallHitCollider : dest.colliderRef ? dest.colliderRef.clone().expandByScalar(0.08).containsPoint(wallHitPt) : dpos.distanceTo(wallHitPt) < (dest.type === 'reactor' ? 4 : dest.type === 'glass' ? 6 : 1.5)) {
+          if (dest.structureKind ? (dest.hitColliders || [dest.colliderRef]).includes(wallHitCollider) : dest.colliderRef ? dest.colliderRef.clone().expandByScalar(0.08).containsPoint(wallHitPt) : dpos.distanceTo(wallHitPt) < (dest.type === 'reactor' ? 4 : dest.type === 'glass' ? 6 : 1.5)) {
             damageDestructible(dest, destDmg, { ownerId: myId, weaponId:b.weaponId });
             break;
           }
@@ -54753,42 +54889,71 @@ function doThrowGrenade() {
   });
 }
 
+function sweepGrenadeContact(start, delta, radius) {
+  const length=delta.length();
+  if(length<1e-7)return null;
+  const ray=new THREE.Ray(start,delta.clone().divideScalar(length)), hit=new THREE.Vector3(),end=start.clone().add(delta);
+  let best=null;
+  for(const collider of wallColliders){
+    if(Math.min(start.x,end.x)-radius>collider.max.x || Math.max(start.x,end.x)+radius<collider.min.x ||
+       Math.min(start.y,end.y)-radius>collider.max.y || Math.max(start.y,end.y)+radius<collider.min.y ||
+       Math.min(start.z,end.z)-radius>collider.max.z || Math.max(start.z,end.z)+radius<collider.min.z)continue;
+    const box=collider.clone().expandByScalar(radius);
+    if(box.containsPoint(start)){
+      const faces=[['x',box.min.x,-1],['x',box.max.x,1],['y',box.min.y,-1],['y',box.max.y,1],['z',box.min.z,-1],['z',box.max.z,1]];
+      faces.sort((a,b)=>Math.abs(start[a[0]]-a[1])-Math.abs(start[b[0]]-b[1]));
+      const [axis,edge,sign]=faces[0],normal=new THREE.Vector3();normal[axis]=sign;
+      if(delta.dot(normal)>=0)continue;
+      const point=start.clone();point[axis]=edge;
+      best={t:0,point,normal};break;
+    }
+    if(!ray.intersectBox(box,hit))continue;
+    const t=start.distanceTo(hit)/length;
+    if(t<=1 && (!best || t<best.t))best={t,point:hit.clone(),normal:boxFaceNormal(box,hit)};
+  }
+  if(delta.y<0 && start.y>=radius){
+    const t=(radius-start.y)/delta.y;
+    if(t>=0 && t<=1 && (!best || t<best.t)){
+      const point=start.clone().addScaledVector(delta,t);
+      if(floorExistsAt(point.x,point.z))best={t,point,normal:new THREE.Vector3(0,1,0)};
+    }
+  }
+  return best;
+}
+function moveGrenadeWithCollision(g, dt) {
+  const radius=Math.max(.06,Math.min(.35,g.itemRef?.bulletSize || .10));
+  let remaining=Math.min(dt,.1);
+  for(let step=0;step<5 && remaining>1e-6;step++){
+    const velocity=new THREE.Vector3(g.velX,g.velY,g.velZ),delta=velocity.clone().multiplyScalar(remaining);
+    const contact=sweepGrenadeContact(g.mesh.position,delta,radius);
+    if(!contact){g.mesh.position.add(delta);return false;}
+    g.mesh.position.copy(contact.point).addScaledVector(contact.normal,.002);
+    g.bounceCount=(g.bounceCount || 0)+1;
+    if(g.explodeOnImpact || (g.maxBounces && g.bounceCount>g.maxBounces))return true;
+    const incoming=velocity.dot(contact.normal);
+    if(incoming<0)velocity.addScaledVector(contact.normal,-1.38*incoming);
+    // Lose tangential energy too, so a grenade comes to rest on roofs/ledges.
+    const normalPart=contact.normal.clone().multiplyScalar(velocity.dot(contact.normal));
+    velocity.sub(normalPart).multiplyScalar(.70).add(normalPart);
+    if(contact.normal.y>.5 && Math.abs(velocity.y)<.6){velocity.y=0;if(velocity.length()<.35)velocity.set(0,0,0);}
+    g.velX=velocity.x;g.velY=velocity.y;g.velZ=velocity.z;
+    remaining*=1-contact.t;
+    if(velocity.lengthSq()<1e-6)return false;
+  }
+  return false;
+}
 function updateGrenades(dt) {
+  dt=Math.min(dt,.1);
   const now = Date.now();
   for (let i = activeGrenades.length - 1; i >= 0; i--) {
     const g = activeGrenades[i];
     const grav = GRENADE_GRAVITY * (g.gravMult ?? 1);
     // Gravity
     g.velY -= grav * dt;
-    // Move
-    g.mesh.position.x += g.velX * dt;
-    g.mesh.position.y += g.velY * dt;
-    g.mesh.position.z += g.velZ * dt;
-
-    // Ground interaction
-    const groundY = g.isSupport ? (g.itemRef?.bulletSize || 0.12) : 0.10;
-    if (g.mesh.position.y < groundY) {
-      g.mesh.position.y = groundY;
-      if (g.explodeOnImpact) {
-        // Explode on first ground contact
-        explodeSupport(g);
-        scene.remove(g.mesh);
-        activeGrenades.splice(i, 1);
-        continue;
-      }
-      // Bounce
-      g.bounceCount = (g.bounceCount || 0) + 1;
-      if (g.maxBounces && g.bounceCount > g.maxBounces) {
-        // Rubber duck: explode after max bounces
-        explodeSupport(g);
-        scene.remove(g.mesh);
-        activeGrenades.splice(i, 1);
-        continue;
-      }
-      g.velY = Math.abs(g.velY) * 0.38;
-      g.velX *= 0.70;
-      g.velZ *= 0.70;
+    if (moveGrenadeWithCollision(g,dt)) {
+      explodeSupport(g);scene.remove(g.mesh);activeGrenades.splice(i,1);continue;
     }
+    if(g.mesh.position.y < -100){scene.remove(g.mesh);activeGrenades.splice(i,1);continue;}
 
     // Tumble spin
     g.mesh.rotation.x += dt * 5;
@@ -54813,11 +54978,21 @@ function updateGrenades(dt) {
   }
 }
 
+function damageStructuresInBlast(pos,weaponId,radius) {
+  for(const d of mapDestructibles){
+    if(!d.structureKind || d.mapName!==activeMapName || d.hp<=0)continue;
+    const target=d.colliderRef.clampPoint(pos,new THREE.Vector3()),distance=pos.distanceTo(target);
+    if(distance<=radius && mapBlastDamage(pos,target,d.colliderRef)){
+      damageDestructible(d,getClientWeaponDamage(weaponId)*(1-distance/radius),{ownerId:myId,weaponId});
+    }
+  }
+}
 function explodeGrenade(g) {
   const pos = g.mesh.position.clone();
   spawnExplosion(pos);
   const RADIUS = 5.5;
   if (g.isOwn) {
+    damageStructuresInBlast(pos,'frag',RADIUS);
     for (const [pid, mesh] of Object.entries(remoteMeshes)) {
       const target = mesh.position.clone(); target.y += 1.0;
       const dist = pos.distanceTo(target);
@@ -54840,6 +55015,7 @@ function explodeSupport(g) {
   const item = g.itemRef;
   if (!item) return;
   const pos = g.mesh.position.clone();
+  if(g.isOwn && item.damage>0)damageStructuresInBlast(pos,item.id,item.explosionRadius || item.radius || 5.5);
 
   // 🪖 Admin stun grenade — flash + temporarily stop bot AI in radius
   if (item.id === 'stun_grenade') {
@@ -64272,9 +64448,9 @@ const MAP_DESCS = {
   desert:     'Desert — sandstone canyons, ruined arches, climbable ridges · QUICKSAND pits',
   tundra:     '❄️ Tundra — blue ice corridors, a research station · THIN ICE cracks under you',
   space:      '🌌 Space Station — LOW GRAVITY zones · jump higher',
-  airport:    '🛬 Airport — break glass + lights · gets darker as lights die',
+  airport:    'Airport — central tower, aircraft and timed jet wash',
   trenches:   '🪖 Trenches — barbed wire + 4 PILOTABLE mortar cannons (F to use)',
-  chernobyl:  '☢️ Chernobyl — toxic gas (1 dmg/s) + 4 destructible reactors (500 HP each)',
+  chernobyl:  'Chernobyl — radiation vents with periodic toxic leaks',
   refinery:   'Oil Refinery — oil slicks make you slide + explosive barrels · shoot a slick and it BURNS',
   skydock:    'Skydock Launch — jump pads up to the gantries · a LAUNCH COUNTDOWN turns the pad into a furnace',
   sewer:      'Acid Sewer — toxic pools force bridge fights · a FLUSH wave sweeps the floor',
@@ -64282,18 +64458,18 @@ const MAP_DESCS = {
   glassworks: 'Glassworks — glass sheets shatter into cutting shards · barrel traps',
   carrier:    '🚢 Carrier — flat deck that ROLLS with the sea · hangars + control tower',
   overgrowth: '🌲 Overgrowth — abandoned city reclaimed by nature · STRANGLER VINES root you',
-  orbital_station: '🛰️ Orbital Station — modular pods + central hub',
+  orbital_station: 'Orbital Station — modular pods and cycling decompression vents',
   foundry:    '🏭 Foundry — conveyor belts, molten pools · PRESSES slam on a beat',
   carnival:   '🎪 Carnival — ferris wheel, tents · the CAROUSEL carries you round and throws you off',
-  biosphere:  '🧬 Biosphere — 4-zone dome (jungle / desert / frozen / dirt)',
-  lockdown:   '🚨 Lockdown — prison cell blocks + security tower',
+  biosphere:  'Biosphere — changing climates: growth, wind, frost and thermals',
+  lockdown:   'Lockdown — prison blocks and timed security scanners',
   studio:     '🎥 Studio — western, sci-fi and castle sets · FOG MACHINES whiteout the stage',
   temple:     '🕍 Temple — stone columns, giant idol · a ROLLING BOULDER runs the long corridor',
   holiday:    '🎄 Holiday — snowy village + giant tree · a SLEIGH drops presents (and coal)',
   labyrinth:  '🧪 Labyrinth — a stone maze whose walls SHIFT and rise out of the floor',
   arena:      '🏟️ Arena — green pitch inside stadium stands · SPRINKLERS soak the grass and shove you',
-  opera:      '🎭 Opera — stage + balconies + chandelier',
-  doomsday:   '🌋 Doomsday — collapsing city, fire pillars, abandoned heli',
+  opera:      'Opera — balconies, percussion platforms and stage shockwaves',
+  doomsday:   'Doomsday — ruined streets and warned meteor strikes',
   train:      '🚂 Train Terminal — 3 tracks, platforms, footbridge · the EXPRESS runs the middle track',
   dreamscape: '🌌 Dreamscape — floating stairs, impossible shapes · PORTAL rings',
   big_arena:   '🗺️ Big Arena — four fortified corners, denser cover · AIRDROPS full-heal · built for 2v2/3v3',
@@ -64309,7 +64485,7 @@ const MAP_DESCS = {
   pearl_harbor: '⚓ Pearl Harbor — quays, ships and cranes · AIR RAIDS bomb a line across the harbour',
   titanic: '🚢 Titanic — a liner going down: decks, a grand hall · the WATER keeps rising',
   supermarket: '🛒 Supermarket — aisles, checkouts, freezer · loose TROLLEYS run the aisles',
-  pyongyang: '🏛️ Pyongyang — monuments and squares · SEARCHLIGHTS call the guns on you',
+  pyongyang: 'Pyongyang — monuments, squares and wide-sweeping live-fire searchlights',
   traffic_cone_republic: '🚧 Traffic Cone Republic — giant cones, a roundabout, a flyover · TOLL LANES charge health for speed',
   flying_moai: '🗿 Flying Moai — a plateau of stone heads · a ROAR shockwave crosses the ground',
 };
