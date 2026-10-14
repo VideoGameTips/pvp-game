@@ -11686,9 +11686,9 @@ const MAP_THEMES = {
   blank:        _T(0xb9bec2, 0x9aa0a6, 0xdfe3e6, 0xc9cfd4, 0xaab2b8, 0xe9edf0, 0xf2c14e, 0x4a90d9, 0xa5b6c4, 'industrial', ['crates', 'barrels']),
   battlefield: Object.assign(_T(0x5f7a45, 0x4f6a39, 0x7b705f, 0x6a6050, 0x6b5d49, 0x8a7d66, 0xc2a45a, 0xb23a2e, 0x9cc4e4, 'nature', ['sandbags', 'trees', 'crates']), { keep: true }),
   range:        _T(0x6b7076, 0x565b61, 0x8c929a, 0x777d85, 0x5a6068, 0x9aa0a8, 0xe8c43a, 0xd04a3a, 0x8a929c, 'industrial', ['crates', 'barrels']),
-  urban: Object.assign(_T(0x4a4d52, 0x3d4044, 0x8a6f5d, 0x6f7b86, 0x5a5f66, 0x9a9a98, 0xd8c8a0, 0xd9822b, 0x8fa2b4, 'urban', ['cars', 'crates', 'barrels']), { keep: true }),
-  warehouse: Object.assign(_T(0x6d6a64, 0x57544f, 0x6f7d86, 0x8a6a46, 0x7a5a38, 0x8d8f91, 0xe8b932, 0xc8402a, 0x8fa2b4, 'industrial', ['crates', 'crates', 'barrels']), { keep: true }),
-  forest: Object.assign(_T(0x4d6b35, 0x3f5a2b, 0x6b5a45, 0x56693a, 0x6b6b5f, 0x8a7352, 0x9bb86a, 0xe0c24a, 0xa8d3e8, 'nature', ['trees', 'trees', 'rocks', 'logs']), { keep: true }),
+  urban: Object.assign(_T(0x4a4d52, 0x3d4044, 0x8a6f5d, 0x6f7b86, 0x5a5f66, 0x9a9a98, 0x969a98, 0x6a7d84, 0x8fa2b4, 'urban', ['cars', 'crates', 'barrels']), { keep: true }),
+  warehouse: Object.assign(_T(0x6d6a64, 0x57544f, 0x6f7d86, 0x8a6a46, 0x7a5a38, 0x8d8f91, 0x818b91, 0x697b83, 0x8fa2b4, 'industrial', ['crates', 'crates', 'barrels']), { keep: true }),
+  forest: Object.assign(_T(0x4d6b35, 0x3f5a2b, 0x6b5a45, 0x56693a, 0x6b6b5f, 0x8a7352, 0x718366, 0x455a3d, 0xa8d3e8, 'nature', ['trees', 'trees', 'rocks', 'logs']), { keep: true }),
   vietnam: Object.assign(_T(0x5a6b3a, 0x4a5a2e, 0x7d6a45, 0x5a6a38, 0x6a5a3a, 0x8a7a54, 0xb8a05a, 0xc8402a, 0xb8c8a0, 'nature', ['trees', 'sandbags', 'crates']), { keep: true }),
   volcano: Object.assign(_T(0x2a1f1c, 0x4a1f10, 0x3a2b26, 0x4a3028, 0x2f2522, 0x5a4036, 0xff7a2a, 0xff4a12, 0x3a1208, 'fire', ['rocks', 'rocks']), { keep: true }),
   cyber: Object.assign(_T(0x10141f, 0x1a8aa8, 0x1b2338, 0x242b45, 0x2a3355, 0x1d2840, 0x00e5ff, 0xff2bd6, 0x0b0e1c, 'neon', ['crates', 'pylons'], 0x66f0ff), { keep: true }),
@@ -13352,7 +13352,7 @@ function buildWarehouseLayout() {
   const wallC = 0x6f7d86, rackC = 0x8a5a2a, rackB = 0x3a5a8a, off = 0xb8b2a4, TOP = 4.6;
   K.wx(-50, 50, -59.6, 0.8, 0, 10, wallC); K.wx(-50, 50, 59.6, 0.8, 0, 10, wallC); K.wz(-60, 60, -49.6, 0.8, 0, 10, wallC); K.wz(-60, 60, 49.6, 0.8, 0, 10, wallC);
   for (const x of [-40, -28, -16, 16, 28, 40]) for (const [z0, z1] of [[-34, -18], [-13, 13], [18, 34]]) {   // rack rows
-    K.box(x, 0, (z0 + z1) / 2, 3.2, 4.0, z1 - z0, x % 24 === 16 || x === -40 ? rackC : rackB);
+    K.box(x, 0, (z0 + z1) / 2, 3.2, 4.0, z1 - z0, x % 24 === 16 || x === -40 ? rackC : rackB).userData.warehouseRack=true;
   }
   // the office
   K.room(-9, 9, -14, 14, 0, 4.2, off, { n: [K.door(0)], s: [K.door(0)], w: [K.door(-7), K.door(7)], e: [K.door(-7), K.door(7)] });
@@ -14763,7 +14763,7 @@ function buildForestIdentityLayout() {
   const name = 'forest', K = _bkBegin(name, 140, 140, 0x304c28);
   K.perim(11, 0x364632);
   const tree = (x, z, h = 12) => {
-    K.box(x, 0, z, 2.8, h, 2.8, 0x493526);
+    K.box(x, 0, z, 2.8, h, 2.8, 0x493526).userData.realTree=true;
     const mesh = new THREE.Mesh(new THREE.ConeGeometry(6.5, 9, 7), new THREE.MeshLambertMaterial({ color: 0x245d36 }));
     mesh.position.set(x, h + 1, z); MAP_GROUPS[name].add(mesh);
     const top = new THREE.Mesh(new THREE.ConeGeometry(4.2, 7, 7), new THREE.MeshLambertMaterial({ color: 0x387c45 }));
@@ -19043,6 +19043,129 @@ function addOpenLaneCover(name) {
   }
 }
 
+function mapRealismTexture(kind) {
+  const tex=surfTex('map-realism:'+kind,512,(ctx,s)=>{
+    const rnd=_thRng('realism:'+kind);
+    ctx.fillStyle=kind==='brick'?'#9b958a':kind==='bark'?'#b5aa98':'#bfc5c8';ctx.fillRect(0,0,s,s);
+    if(kind==='brick'){
+      const h=32,w=96;
+      for(let row=0;row<s/h;row++)for(let x=-w;x<s+w;x+=w){
+        const v=150+Math.floor(rnd()*65),xx=x+(row%2)*w/2;
+        ctx.fillStyle='rgb('+v+','+(v-8)+','+(v-16)+')';ctx.fillRect(xx+2,row*h+2,w-4,h-4);
+        ctx.fillStyle='rgba(255,255,255,.12)';ctx.fillRect(xx+3,row*h+3,w-6,1);
+      }
+      _grain(ctx,s,rnd,{n:10000,a:.12,r:1});
+    }else if(kind==='bark'){
+      for(let i=0;i<160;i++){
+        const x=rnd()*s;ctx.strokeStyle=i%3?'rgba(40,32,22,.28)':'rgba(245,232,198,.22)';ctx.lineWidth=1+rnd()*4;
+        ctx.beginPath();ctx.moveTo(x,0);ctx.bezierCurveTo(x-12,rnd()*s,x+12,rnd()*s,x,s);ctx.stroke();
+      }
+      _grain(ctx,s,rnd,{n:7000,a:.18,r:2});
+    }else{
+      for(let y=0;y<s;y+=16){ctx.fillStyle='#8d969b';ctx.fillRect(0,y,s,3);ctx.fillStyle='#e1e5e6';ctx.fillRect(0,y+4,s,2);}
+      for(let x=32;x<s;x+=128)for(let y=8;y<s;y+=128){ctx.fillStyle='#626e75';ctx.fillRect(x,y,4,4);}
+      _grain(ctx,s,rnd,{n:4000,a:.08,r:1});
+    }
+  });
+  tex.userData.mapSurface=true;return tex;
+}
+
+// Detail hugs existing surfaces. It never adds cover, narrows a doorway, or changes a collider.
+function addMapRealism(name) {
+  if(!['urban','warehouse','forest'].includes(name))return;
+  const G=MAP_GROUPS[name];if(!G || G.userData.realism)return;
+  const stats=G.userData.realism={surfaces:0,fixtures:0,racks:0,trees:0,drains:0};
+  G.updateMatrixWorld(true);
+  const detail=_thBuf(),leafPositions=[],leafUV=[],rnd=_thRng(name+':realism');
+  const box=(x,y,z,w,h,d,c)=>_thBox(detail,_TH_WORLD,x,y,z,w,h,d,c);
+  const surface=(m,kind)=>{
+    mapSurfaceUV(m);
+    const old=m.material,mat=new THREE.MeshPhongMaterial({color:old.color,side:old.side,vertexColors:!!m.geometry.attributes.color,
+      map:mapRealismTexture(kind),bumpMap:mapRealismTexture(kind),bumpScale:kind==='bark'?.09:.035,
+      shininess:kind==='sheet'?35:8,specular:kind==='sheet'?0x606970:0x292a25});
+    m.material=mat;m.receiveShadow=true;stats.surfaces++;
+  };
+  const groundFree=(x,z,r)=>!(MAP_COLLIDERS[name]||[]).some(b=>b.min.y<1.8 && b.max.y>.15 && x>b.min.x-r && x<b.max.x+r && z>b.min.z-r && z<b.max.z+r);
+  for(const m of G.children.slice()){
+    const p=m.userData.thDims;
+    if(!m.isMesh || !p || Array.isArray(m.material) || m.material.transparent || m.userData.mapStructure)continue;
+    const b=new THREE.Box3().setFromObject(m),sz=b.getSize(new THREE.Vector3()),c=b.getCenter(new THREE.Vector3());
+    const thin=Math.min(sz.x,sz.z),long=Math.max(sz.x,sz.z),alongX=sz.x>sz.z;
+    if(name==='urban' && thin<1.3 && long>4 && sz.y>3 && m.userData.thCls!=='perimeter'){
+      surface(m,'brick');
+      if(stats.fixtures>=28 || b.min.y>10)continue;
+      const nx=alongX?0:-Math.sign(c.x||1),nz=alongX?-Math.sign(c.z||1):0;
+      const face=thin/2,at=(u,y,v,w,h,d,col)=>box(c.x+(alongX?u:nx*(face+v)),y,c.z+(alongX?nz*(face+v):u),alongX?w:d,h,alongX?d:w,col);
+      const y=Math.max(b.min.y+sz.y*.64,2.9);
+      at(0,y,.22,1.45,.8,.42,0xb1b6b4);at(0,y,.44,1.16,.57,.025,0x354149);
+      for(let k=-3;k<=3;k++)at(k*.15,y,.46,.035,.53,.025,0x7b868b);
+      at(-.53,y-.52,.12,.12,.35,.24,0x687478);at(.53,y-.52,.12,.12,.35,.24,0x687478);
+      const u=long/2-.3;
+      at(u,b.min.y+sz.y/2,.1,.12,sz.y,.12,0x555f61);
+      for(let yy=b.min.y+.5;yy<b.max.y;yy+=1.8)at(u,yy,.12,.22,.08,.16,0x919a97);
+      stats.fixtures++;
+    }
+    if(name==='warehouse' && m.userData.thCls==='perimeter')surface(m,'sheet');
+    if(name==='warehouse' && m.userData.warehouseRack){
+      stats.racks++;
+      const x0=b.min.x,x1=b.max.x,z0=b.min.z,z1=b.max.z,h=sz.y;
+      m.material=m.material.clone();m.material.color.setHex(0x4f5558);
+      for(let z=z0+.15;z<z1;z+=3.2)for(const x of [x0+.08,x1-.08])box(x,b.min.y+h/2,z,.14,h,.14,0x416377);
+      for(let level=0;level<3;level++){
+        const y=b.min.y+.15+level*h/3;
+        for(const x of [x0-.025,x1+.025]){
+          box(x,y,(z0+z1)/2,.13,.19,sz.z,0xc18432);
+          for(let z=z0+.9;z<z1-.45;z+=1.65){
+            const hh=.5+rnd()*.35,col=[0xa98b61,0x8e7659,0xb49a74][Math.floor(rnd()*3)];
+            box(x,y+.18+hh/2,z,.17,hh,1.4,col);
+            box(x+(x<c.x?-.095:.095),y+.18+hh/2,z,.025,.13,.42,0xd9d2bb);
+          }
+        }
+      }
+    }
+    if(name==='forest' && m.userData.realTree){
+      surface(m,'bark');stats.trees++;
+      for(let k=0;k<6;k++){
+        const a=k*Math.PI/3,dx=Math.cos(a),dz=Math.sin(a);
+        const r=Math.max(sz.x,sz.z)*.44,x=c.x+dx*r,z=c.z+dz*r;
+        const points=[new THREE.Vector3(x-dz*.2,.005,z+dx*.2),new THREE.Vector3(x+dz*.2,.005,z-dx*.2),new THREE.Vector3(x+dx*.9,.005,z+dz*.9),new THREE.Vector3(x,.28,z)];
+        for(const indices of [[0,1,3],[1,2,3],[2,0,3]]){
+          const v=indices.map(i=>points[i]),n=new THREE.Vector3().subVectors(v[1],v[0]).cross(new THREE.Vector3().subVectors(v[2],v[0])).normalize();
+          for(const p of v){detail.p.push(p.x,p.y,p.z);detail.n.push(n.x,n.y,n.z);detail.c.push(.27,.23,.16);}
+        }
+      }
+      const r=Math.max(sz.x,sz.z)*1.2;
+      for(const [u,v] of [[0,0],[1,0],[1,1],[0,0],[1,1],[0,1]]){
+        leafPositions.push(c.x+(u-.5)*r*2,.006,c.z+(v-.5)*r*2);leafUV.push(u,v);
+      }
+    }
+  }
+  if(name==='urban' || name==='warehouse'){
+    const points=name==='urban'?[-48,-30,30,48].flatMap(z=>[[-10.8,z],[10.8,z],[z,-10.8],[z,10.8]]):[-42,0,42].flatMap(z=>[[-22,z],[22,z],[-34,z],[34,z]]);
+    for(const [x,z] of points){
+      if(!groundFree(x,z,1))continue;stats.drains++;
+      box(x,.012,z,1.3,.018,.75,0x666d6b);box(x,.023,z,1.1,.018,.56,0x242d30);
+      for(let i=-4;i<=4;i++)box(x+i*.11,.038,z,.045,.025,.55,0x737b78);
+      if(name==='warehouse')for(const s of [-1,1])for(let k=0;k<4;k++)box(x+s*.8,.015,z-.4+k*.25,.22,.02,.13,k%2?0x323638:0xbd9c45);
+    }
+  }
+  if(leafPositions.length){
+    const tex=surfTex('forest-leaf-litter',256,(ctx,s)=>{
+      ctx.clearRect(0,0,s,s);const r=_thRng('leaf-litter');
+      for(let i=0;i<1100;i++){
+        const x=r()*s,y=r()*s,fade=Math.max(0,1-Math.pow(Math.hypot(x-s/2,y-s/2)/(s*.48),2));
+        ctx.globalAlpha=fade*.65;ctx.fillStyle=['#6d6240','#8b764c','#53603c','#a18a58'][i%4];
+        ctx.beginPath();ctx.ellipse(x,y,1+r()*3,.6+r()*1.5,r()*Math.PI,0,Math.PI*2);ctx.fill();
+      }ctx.globalAlpha=1;
+    });
+    const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(leafPositions,3));geo.setAttribute('uv',new THREE.Float32BufferAttribute(leafUV,2));geo.computeVertexNormals();
+    const m=new THREE.Mesh(geo,new THREE.MeshPhongMaterial({map:tex,transparent:true,opacity:.85,depthWrite:false,side:THREE.DoubleSide,shininess:1,polygonOffset:true,polygonOffsetFactor:-1}));
+    m.receiveShadow=true;m.userData.themeDecor=true;G.add(m);
+  }
+  _thMesh(G,detail,false);
+  stats.detailBoxes=detail.boxes;
+}
+
 function _upgradeMap(name) {
   const g = MAP_GROUPS[name];
   if (!g || g._upgraded || !MAP_THEMES[name]) return;
@@ -19055,6 +19178,7 @@ function _upgradeMap(name) {
   try { _eggsMap(name); } catch (e) { console.warn('[upgrade] eggs', name, e); }
   try { _outskirtsMap(name); } catch (e) { console.warn('[upgrade] outskirts', name, e); }
   try { _gimMap(name); } catch (e) { console.warn('[upgrade] gimmick', name, e); }
+  try { addMapRealism(name); } catch (e) { console.warn('[upgrade] realism', name, e); }
   // what was just added gets the same surface as the rest
   try { g._weathered = false; weatherMapGroup(g); } catch (e) {}
   g.userData.upgradeMs = Math.round(performance.now() - t0);
