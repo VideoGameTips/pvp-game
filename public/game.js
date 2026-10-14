@@ -33559,23 +33559,26 @@ function appearanceFor(name) {
 // Every tint that used to be a fixed peach value is derived from the tone now,
 // so a darker recruit doesn't get pale cheeks and invisible brows (#50).
 function makeFaceTexture(tone = 0xffcc99) {
-  const c = document.createElement('canvas'); c.width = 32; c.height = 32;
+  const c = document.createElement('canvas'); c.width = 64; c.height = 64;
   const ctx = c.getContext('2d');
   const px = (col, x, y, w = 1, h = 1) => { ctx.fillStyle = col; ctx.fillRect(x, y, w, h); };
   const sk    = _cssHex(tone);
   const jaw   = _cssHex(darkenColor(tone, 0.93));
   const iris  = _cssHex(_mixColor(tone, 0x2f7fd6, 0.92));       // blue, faintly warmed by the tone
   const deep  = _cssHex(_mixColor(tone, 0x17539c, 0.94));
-  // Same rules as the drawn skins: flat blocks on a coarse grid, big eyes low
-  // on the face, no nose and no cheeks. A modelled nose at this size is three
-  // brown pixels that read as damage, and the smile made everyone a doll.
-  px(sk, 0, 0, 32, 32);                                         // skin
-  px(jaw, 0, 28, 32, 4);                                        // jaw shade
-  px('#ffffff', 4, 14, 6, 6);   px('#ffffff', 22, 14, 6, 6);    // whites — the outer edge
-  px(iris, 6, 14, 4, 6);        px(iris, 22, 14, 4, 6);         // iris — the inner two thirds
-  px(deep, 6, 18, 4, 2);        px(deep, 22, 18, 4, 2);         // …deeper along the bottom
+  // Draw at the real 64-pixel resolution, including single-pixel eye detail.
+  px(sk,0,0,64,64);
+  for(let y=57;y<64;y++)px(_cssHex(_mixColor(tone,parseInt(jaw.slice(1),16),(y-56)/7)),0,y,64,1);
+  for(const x of [9,43]){
+    px('#e8e8e5',x,28,12,1);px('#ffffff',x,29,12,10);px('#d2d8d9',x,39,12,1);
+    const ix=x===9?13:43;
+    px(iris,ix,29,8,10);px(deep,ix,36,8,3);
+    px('#142c43',ix+2,30,3,7);px('#ffffff',ix+1,30,2,2);px('#a8d7f1',ix+5,35,1,2);
+  }
   const tex = new THREE.CanvasTexture(c);
   tex.magFilter = THREE.NearestFilter;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.userData.characterResolution=64;
   return tex;
 }
 // One texture per TONE, not per character — skins swap faceMat.map, they never
@@ -33720,12 +33723,8 @@ const GEAR_FIT = {
 // ══════════════════════════════════════════════════════════════════════════
 // 🎽 PIXEL KIT ART (#64)
 // ══════════════════════════════════════════════════════════════════════════
-// #53 repainted every character texture as 320 px of linear-filtered art,
-// because a 16x16 pixel grid is the wrong art for an anatomical skull. The
-// skull is gone again (#64), so the art is back to what the blocky bodies
-// wear: a 16x16 grid of whole pixels, magnified with NearestFilter and no
-// mipmaps. That rule is the whole look — one gradient in here and a character
-// stops reading as pixel art and starts reading as a small drawing.
+// Built-in kit art keeps its authored layout but renders at 64x64, with fine fabric,
+// panel edges and mipmaps so the smaller texels remain stable at a distance.
 
 // ── 🧱 Minecraft-style character blocks ─────────────────────────────────────
 // The bodies were bevelled boxes wearing a drawn-on face: soft edges, a nose,
@@ -33740,24 +33739,40 @@ function mcBoxGeo(w, h, d) {
   return geo;
 }
 
-// Every character texture is a 16×16 grid of whole pixels, magnified with
-// NearestFilter and no mipmaps. That rule is the whole look: one gradient, one
-// curve or one half-pixel edge in here and the character stops reading as pixel
-// art and starts reading as a small drawing, which is worse than either.
+// Painters use 16-unit design coordinates; fractional units now reach individual 64x64 texels.
 const _charTexCache = new Map();
 function charTex(key, draw) {
   let t = _charTexCache.get(key);
   if (t) return t;
-  const c = document.createElement('canvas'); c.width = 16; c.height = 16;
+  const c = document.createElement('canvas'); c.width = 64; c.height = 64;
   const ctx = c.getContext('2d');
-  const p = (col, x, y, w = 1, h = 1) => { ctx.fillStyle = col; ctx.fillRect(x | 0, y | 0, w | 0, h | 0); };
+  const p = (col, x, y, w = 1, h = 1) => { ctx.fillStyle = col; ctx.fillRect(Math.round(x*4),Math.round(y*4),Math.round(w*4),Math.round(h*4)); };
   draw(p);
+  refineCharacterTexels(ctx,key);
   t = new THREE.CanvasTexture(c);
   t.magFilter = THREE.NearestFilter;
-  t.minFilter = THREE.NearestFilter;     // no mip smear at range either
-  t.generateMipmaps = false;
+  t.minFilter = THREE.LinearMipmapLinearFilter;
+  t.generateMipmaps = true;
+  t.userData.characterResolution=64;
   _charTexCache.set(key, t);
   return t;
+}
+function refineCharacterTexels(ctx,key) {
+  const img=ctx.getImageData(0,0,64,64),data=img?.data;
+  if(!data?.length)return;
+  const original=new Uint8ClampedArray(data),head=key.startsWith('h:') || key.startsWith('n:');
+  const seed=_nameHash(key);
+  for(let y=0;y<64;y++)for(let x=0;x<64;x++){
+    const i=(y*64+x)*4;
+    if(!original[i+3])continue;
+    const prev=(y*64+Math.max(0,x-1))*4,above=(Math.max(0,y-1)*64+x)*4;
+    const contrast=j=>Math.abs(original[i]-original[j])+Math.abs(original[i+1]-original[j+1])+Math.abs(original[i+2]-original[j+2]);
+    const edge=x>0 && contrast(prev)>55 || y>0 && contrast(above)>55;
+    const hash=(Math.imul(x+seed,374761393)^Math.imul(y+17,668265263))>>>0;
+    const weave=head?0:((x+y)%3===0?2:-1),grain=(hash%5-2)*(head?.35:.7);
+    for(let k=0;k<3;k++)data[i+k]=Math.max(0,Math.min(255,original[i+k]*(edge?.92:1)+weave+grain));
+  }
+  ctx.putImageData(img,0,0);
 }
 function charMat(key, draw) { return new THREE.MeshLambertMaterial({ map: charTex(key, draw) }); }
 // BoxGeometry material order is +X −X +Y −Y +Z −Z: right, left, top, bottom,
@@ -36015,6 +36030,7 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
 
   // Flat faces with softly rounded silhouettes; dimensions and joint anchors stay unchanged.
   const mkMat = c => new THREE.MeshLambertMaterial({ color: c });
+  const mkCloth = c => new THREE.MeshLambertMaterial({color:c,map:charTex('cloth:plain',p=>p('#f8f8f8',0,0,16,16))});
 
   // ── Head ──────────────────────────────────────────────────────────────────
   // Six material slots are preserved, including the face on +Z.
@@ -36036,12 +36052,12 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
   // ── Torso ─────────────────────────────────────────────────────────────────
   // One 0.55 x 0.65 x 0.30 block in the old model; two here, because the rig
   // twists the chest and the hips must not come with it.
-  const torsoMat = mkMat(shirt);
+  const torsoMat = mkCloth(shirt);
   const torso = new THREE.Mesh(characterShapeGeo(B.chestW, B.torsoH, B.chestD,.045), torsoMat);
   torso.position.set(0, B.torsoY, 0); torso.castShadow = true; group.add(torso);
 
   // Pelvis — trousers, so it takes the LEG colour.
-  const pelvisMat = mkMat(pant);
+  const pelvisMat = mkCloth(pant);
   const pelvis = new THREE.Mesh(characterShapeGeo(B.pelvisW, B.pelvisH, B.chestD,.03), pelvisMat);
   pelvis.position.set(0, B.pelvisY, 0); pelvis.castShadow = true; group.add(pelvis);
 
@@ -36054,10 +36070,10 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
   [-1, 1].forEach(side => {
     const pivot = new THREE.Group();
     pivot.position.set(side * B.shoulderHalf, B.shoulder, 0);
-    const upper = new THREE.Mesh(characterShapeGeo(B.upperArmW, B.upperArm, B.upperArmW), mkMat(shirt));
+    const upper = new THREE.Mesh(characterShapeGeo(B.upperArmW, B.upperArm, B.upperArmW), mkCloth(shirt));
     upper.position.y = -B.upperArm / 2; upper.castShadow = true; pivot.add(upper);
     const elbow = new THREE.Group(); elbow.position.y = -B.upperArm; pivot.add(elbow);
-    const fore = new THREE.Mesh(characterShapeGeo(B.foreArmW, B.foreArm, B.foreArmW), mkMat(shirt));
+    const fore = new THREE.Mesh(characterShapeGeo(B.foreArmW, B.foreArm, B.foreArmW), mkCloth(shirt));
     fore.position.y = -B.foreArm / 2; fore.castShadow = true; elbow.add(fore);
     const wrist = new THREE.Group(); wrist.position.y = -B.foreArm; elbow.add(wrist);
     const hand = new THREE.Mesh(characterShapeGeo(B.handW, B.handH, B.handW,.025), mkMat(skin));
@@ -36079,10 +36095,10 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
   [-1, 1].forEach(side => {
     const pivot = new THREE.Group();
     pivot.position.set(side * B.hipHalf, B.hip, 0);
-    const thigh = new THREE.Mesh(characterShapeGeo(B.thighW, B.thigh, B.thighD), mkMat(pant));
+    const thigh = new THREE.Mesh(characterShapeGeo(B.thighW, B.thigh, B.thighD), mkCloth(pant));
     thigh.position.y = -B.thigh / 2; thigh.castShadow = true; pivot.add(thigh);
     const knee = new THREE.Group(); knee.position.y = -B.thigh; pivot.add(knee);
-    const shin = new THREE.Mesh(characterShapeGeo(B.shinW, B.shin, B.shinD), mkMat(pant));
+    const shin = new THREE.Mesh(characterShapeGeo(B.shinW, B.shin, B.shinD), mkCloth(pant));
     shin.position.y = -B.shin / 2; shin.castShadow = true; knee.add(shin);
     // A real ankle joint, so the foot ROLLS about the ankle instead of spinning
     // about the middle of the boot the way it did when the mesh was the pivot.
