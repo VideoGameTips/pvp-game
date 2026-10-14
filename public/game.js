@@ -5483,7 +5483,7 @@ scene.add(sun);
 function applyMapLighting(name) {
   const concept = name === 'blank' || name === 'range' || name === 'lobby13';
   const indoor = ['space','orbital_station','sewer','gravity_lab','lockdown','studio','opera','labyrinth','m4_tower','m4_tower_big','m4_tower_super'].includes(name);
-  const dark = indoor || ['volcano','doomsday','cyber','laser_vault'].includes(name);
+  const dark = indoor || ['volcano','doomsday','cyber','laser_vault','neon_tokyo'].includes(name);
   mapAmbient.intensity = concept ? .6 : dark ? .34 : .24;
   mapSkyFill.intensity = concept ? 0 : dark ? .22 : .58;
   mapSkyFill.color.setHex(dark ? 0x8495b5 : 0xc5ddf2);
@@ -5759,7 +5759,7 @@ var MAP_BOT_BOUNDS = {}, MAP_VOID = {};
 // Every map that can be played, and the subset the random draw skips (#66).
 // Mirrors server.js — MAP_IDS and THIN_MAPS have to stay identical there
 // (CLAUDE.md #4), because the server picks the map and the client honours it.
-const MAP_IDS = ['blank', 'urban', 'warehouse', 'forest', 'vietnam', 'volcano', 'cyber', 'desert', 'tundra', 'space', 'airport', 'trenches', 'chernobyl', 'refinery', 'skydock', 'sewer', 'gravity_lab', 'glassworks', 'carrier', 'overgrowth', 'orbital_station', 'foundry', 'carnival', 'biosphere', 'lockdown', 'studio', 'temple', 'holiday', 'labyrinth', 'arena', 'opera', 'doomsday', 'train', 'dreamscape', 'pearl_harbor', 'titanic', 'supermarket', 'pyongyang', 'traffic_cone_republic', 'flying_moai', 'big_arena', 'super_arena', 'big_harbor', 'storm_pier', 'pinball_arcade', 'laser_vault', 'cargo_belts', 'gale_peaks', 'magma_rise'];
+const MAP_IDS = ['blank', 'urban', 'warehouse', 'forest', 'vietnam', 'volcano', 'cyber', 'desert', 'tundra', 'space', 'airport', 'trenches', 'chernobyl', 'refinery', 'skydock', 'sewer', 'gravity_lab', 'glassworks', 'carrier', 'overgrowth', 'orbital_station', 'foundry', 'carnival', 'biosphere', 'lockdown', 'studio', 'temple', 'holiday', 'labyrinth', 'arena', 'opera', 'doomsday', 'train', 'dreamscape', 'pearl_harbor', 'titanic', 'supermarket', 'pyongyang', 'traffic_cone_republic', 'flying_moai', 'big_arena', 'super_arena', 'big_harbor', 'storm_pier', 'pinball_arcade', 'laser_vault', 'cargo_belts', 'gale_peaks', 'magma_rise', 'neon_tokyo'];
 const THIN_MAPS = new Set([]);
 
 const MAP_COLLIDERS = {};
@@ -11541,7 +11541,9 @@ buildGeneratedLayoutMaps();
 // it is dressing, not geometry), so a map nobody plays costs nothing.
 //   [ground, grid, wall, wall2, cover, deck, trim, accent, sky, motif, props, lit-window]
 const _T = (g, gr, w, w2, c, d, t, a, sky, motif, props, wl) => ({ g, gr, w, w2, c, d, t, a, sky, motif, props: props || [], wl: wl ?? 0xffd98a });
+registerMap('neon_tokyo');
 const MAP_THEMES = {
+  neon_tokyo: Object.assign(_T(0x444950, 0x343940, 0x666a74, 0x404650, 0x71534c, 0x505962, 0xffb048, 0x28d9cd, 0x111b2b, 'urban', []), { keep: true, customDetail: true }),
   blank:        _T(0xb9bec2, 0x9aa0a6, 0xdfe3e6, 0xc9cfd4, 0xaab2b8, 0xe9edf0, 0xf2c14e, 0x4a90d9, 0xa5b6c4, 'industrial', ['crates', 'barrels']),
   battlefield: Object.assign(_T(0x5f7a45, 0x4f6a39, 0x7b705f, 0x6a6050, 0x6b5d49, 0x8a7d66, 0xc2a45a, 0xb23a2e, 0x9cc4e4, 'nature', ['sandbags', 'trees', 'crates']), { keep: true }),
   range:        _T(0x6b7076, 0x565b61, 0x8c929a, 0x777d85, 0x5a6068, 0x9aa0a8, 0xe8c43a, 0xd04a3a, 0x8a929c, 'industrial', ['crates', 'barrels']),
@@ -11851,7 +11853,7 @@ function _thFloorDecals(S, G, name, th) {
 }
 function dressThemeMap(name) {
   const group = MAP_GROUPS[name], th = MAP_THEMES[name];
-  if (!group || !th || group._themeDressed) return;
+  if (!group || !th || group._themeDressed || th.customDetail) return;
   group._themeDressed = true;
   const S = _thBuf(), G = _thBuf(), rnd = _thRng(name + ':dress');
   const hosts = group.children.filter(m => m.isMesh && !m.userData.themeDecor && !m.userData.mapStructure && m.visible !== false && m.userData.thCls);
@@ -12236,7 +12238,7 @@ function _atmoSurfaceDetails(name, prof, ground, width, depth, heightAt) {
     const grass=new THREE.Mesh(geo,new THREE.MeshStandardMaterial({vertexColors:true,roughness:1,side:THREE.DoubleSide}));
     grass.receiveShadow=true;grass.userData.surfaceDetail='grass';group.add(grass);
   }
-  const wet = ['urban','warehouse','refinery','chernobyl','trenches','vietnam','forest','overgrowth','pearl_harbor','storm_pier','sewer','big_harbor'].includes(name);
+  const wet = ['urban','warehouse','refinery','chernobyl','trenches','vietnam','forest','overgrowth','pearl_harbor','storm_pier','sewer','big_harbor','neon_tokyo'].includes(name);
   if (!wet) return;
   const ripple=surfTex('map-water-ripple',128,(ctx,s)=>{
     ctx.fillStyle='#808080';ctx.fillRect(0,0,s,s);
@@ -12664,6 +12666,7 @@ _ap('super_arena', { ground: 'metal', amp: 0, fx: ['dust'], snd: { hum: [60, 0.0
 _ap('dreamscape', { ground: 'snow', amp: 0.08, mottle: [1, 0.86, 1], fog: [60, 190], zen: 0x8a6ad0, sun: [0.9, 0.5, 0xffc8f0], cloud: _CL(10, 0xffe8ff), fx: ['glints', 'pollen'], gusty: 0.2, snd: { pad: 0.06, wind: 0.08, ev: [['chime', 2, 6, 0.35]] } });
 // an outdoor map is fog-free past what the camera can see: lift the fog out to where it ends
 // ── switching on, and the per-frame tick ──────────────────────────────────────────────────────────────────────────
+_ap('neon_tokyo', { ground:'asphalt', amp:.025, tile:5, mottle:[.84,.9,1], fog:[38,150], zen:0x101b30, fx:['rain'], snd:{rain:.22,city:.18,hum:[60,.03],ev:[['honk',20,40,.18]]} });
 function atmoActivate(name) {
   const prof = ATMO_PROFILES[name], g = MAP_GROUPS[name];
   ATMO.name = name; ATMO.prof = prof || null; ATMO.gust = 0; ATMO.gustTarget = 0; ATMO.gustT = 3 + Math.random() * 4;
@@ -13111,6 +13114,100 @@ function _bkTruck(K, x, z, rot, c) {                                            
 }
 // 🏭 Warehouse: a long hall. Rack aisles and crossings on the floor, a two-storey office in the middle, catwalks
 // round both walls joined to it by bridges, loading docks at each end. The main hall is open to the sky.
+function buildNeonTokyoLayout() {
+  const name='neon_tokyo',K=_bkBegin(name,96,112,0x444950),G=MAP_GROUPS[name];
+  K.perim(18,0x303842);
+  const detail=_thBuf(),glow=_thBuf();
+  const deco=(x,y,z,w,h,d,c,lit=false)=>_thBox(lit?glow:detail,_TH_WORLD,x,y,z,w,h,d,c);
+  const neon=[0xff6654,0x36e0d3,0xffc249,0xe978bb];
+  const labels=['ラーメン','カラオケ','ゲーム','寿司','ホテル','東京'];
+  const sign=(x,y,z,rot,index,vertical=true)=>{
+    const color=neon[index%neon.length],text=labels[index%labels.length];
+    const tex=surfTex('tokyo-sign:'+index%labels.length+':'+vertical,256,(ctx,s)=>{
+      ctx.fillStyle='#151a22';ctx.fillRect(0,0,s,s);
+      ctx.strokeStyle='#'+color.toString(16).padStart(6,'0');ctx.lineWidth=9;ctx.strokeRect(5,5,s-10,s-10);
+      ctx.fillStyle=ctx.strokeStyle;ctx.textAlign='center';ctx.textBaseline='middle';ctx.shadowColor=ctx.fillStyle;ctx.shadowBlur=8;
+      if(vertical){ctx.font='bold 47px sans-serif';[...text].forEach((c,i,a)=>ctx.fillText(c,s/2,30+(i+.5)*(s-60)/a.length));}
+      else{ctx.font='bold 48px sans-serif';ctx.fillText(text,s/2,s*.45);ctx.font='20px sans-serif';ctx.fillText('OPEN 24H',s/2,s*.77);}
+    });
+    const m=new THREE.Mesh(new THREE.PlaneGeometry(vertical?1.6:4.2,vertical?5:1.7),new THREE.MeshBasicMaterial({map:tex,side:THREE.DoubleSide}));
+    m.position.set(x,y,z);m.rotation.y=rot;m.userData.tokyoSign=true;G.add(m);
+  };
+  // Tall shop backs frame three connected street routes; dressing is batched separately.
+  for(const sx of [-1,1])for(let i=0;i<4;i++){
+    const z=-36+i*24,h=16+(i%3)*3,c=[0x5b626c,0x605958,0x4c5c64,0x68696a][i];
+    K.box(sx*38,0,z,18,h,18,c);
+    deco(sx*28.8,3,z,.45,1.1,16,neon[i],true);
+    for(let f=0;f<4;f++)for(let w=-2;w<=2;w++)deco(sx*28.9,6+f*3,z+w*2.8,.08,1.35,1.5,(w+f+i)%3===0?0x263444:0xffd6a0,(w+f+i)%3!==0);
+    sign(sx*28.6,9,z-5,-sx*Math.PI/2,i);
+    deco(sx*28.6,1.7,z,.15,2.4,4.5,0x1c2830);
+    for(let n=-2;n<=2;n++)deco(sx*28.45,1.7,z+n*.85,.1,2.2,.05,0x9aabb4);
+    deco(sx*29.7,h+.4,z,3,.8,5,0x373d44);
+  }
+  for(const sx of [-1,1])for(const sz of [-1,1]){
+    const x0=sx>0?8:-24,x1=sx>0?24:-8,z0=sz>0?10:-32,z1=sz>0?32:-10;
+    const doors={n:[K.door(sx*16)],s:[K.door(sx*16)]};
+    doors[sx>0?'w':'e']=[K.door(sz*21,4)];
+    K.room(x0,x1,z0,z1,0,4.2,sx===sz?0x796559:0x586b70,doors);
+    K.slab(x0,x1,z0,z1,4.6,.4,0x48505b);
+    const opening=[{at:sx*11,w:4,sill:0,top:2}];
+    K.wx(x0,x1,z0+.15,.3,4.6,.9,0x687782,opening);K.wx(x0,x1,z1-.15,.3,4.6,.9,0x687782,opening);
+    K.wz(z0,z1,sx*8.15,.3,4.6,.9,0x687782);
+    K.box(sx*18,0,sz*25,5,1.1,1,0x4e3532);
+    // Setback upper floors leave a connected, playable balcony below the windows.
+    K.box(sx*19.5,4.6,sz*21,8,10,17,0x4e5865);
+    for(const y of [7,10,13])for(const z of [sz*16,sz*21,sz*26])deco(sx*15.4,y,z,.1,1.3,2.2,0xffc789,true);
+    sign(sx*7.8,6.6,sz*23,-sx*Math.PI/2,sx+sz+5);
+    for(const z of [sz*16,sz*27]){
+      sign(sx*6.3,8.4,z,0,sx+sz+(z>0?7:8));
+      deco(sx*7.1,11,z,2.2,.12,.12,0x6f7b83);
+      deco(sx*7.8,10.5,z,.14,1.2,.14,0x6f7b83);
+    }
+    sign(sx*16,3.65,sz*9.5,sz>0?Math.PI:0,sx+sz+6,false);
+    deco(sx*7.4,3.5,sz*19,1.5,.22,9,0x7c363a);
+    for(let n=0;n<5;n++)deco(sx*7.4,3.64,sz*(15+n*1.6),1.5,.04,.65,0xcdbb99);
+    for(const z of [sz*14,sz*27]){deco(sx*24.4,5.5,z,.8,.9,1.3,0xa5adb1);deco(sx*24.85,5.5,z,.05,.6,.85,0x303b44);}
+    deco(sx*24.5,7.4,sz*29,.12,14.8,.12,0x798790);
+    addGridLadder(name,sx*11,sz*8.8,sz>0?Math.PI:0,0,4.6,1.25);
+    K.poi('shop balcony',sx*11,sz*16,4.6);
+  }
+  // Central arcade is an actual room; its roof links all four shop balconies.
+  K.room(-6,6,-6,6,0,4.2,0x6d5965,{n:[K.door(0,4)],s:[K.door(0,4)],e:[K.door(0,4)],w:[K.door(0,4)]});
+  K.slab(-6,6,-6,6,4.6,.4,0x555c64);
+  for(const sx of [-1,1]){
+    K.slab(sx>0?6:-13,sx>0?13:-6,-1.7,1.7,4.6,.35,0x485663);
+    for(const sz of [-1,1]){
+      K.slab(sx>0?9:-13,sx>0?13:-9,sz>0?1.5:-10,sz>0?10:-1.5,4.6,.35,0x485663);
+      K.box(sx*12.9,4.6,sz*5.7,.14,1,8.3,0x6c7f8a);
+    }
+    for(const z of [-1.6,1.6])K.box(sx*9.5,4.6,z,7,1,.14,0x71818c);
+  }
+  for(const sz of [-1,1]){
+    sign(0,3.35,sz*6.05,sz>0?0:Math.PI,2,false);
+    // Both spawn courts have full-height screens with two flanking exits.
+    K.box(0,0,sz*38,17,9,5,0x414b57);
+    sign(0,4.5,sz*35.4,sz>0?Math.PI:0,5,false);
+    for(const sx of [-1,1]){K.box(sx*16,0,sz*43,4,1.4,2,0x67675f);deco(sx*16,1.52,sz*43,3.4,.24,1.4,0x375c43);}
+    for(let x=-20;x<=20;x+=5)deco(x,.018,sz*34,2.8,.02,2,0xc0bba5);
+    for(let x=-6;x<=6;x+=3){
+      const lantern=new THREE.Mesh(new THREE.CylinderGeometry(.28,.28,.6,10),new THREE.MeshBasicMaterial({color:0xffa45a}));lantern.position.set(x,5.5,sz*29);G.add(lantern);
+      deco(x,6.1,sz*29,.025,.6,.025,0x7a7167);
+    }
+    deco(0,6.4,sz*29,14,.04,.04,0x615a5c);
+  }
+  for(const z of [-27,27])deco(0,15,z,80,.05,.05,0x272d33);
+  for(const z of [-1.5,1.5])deco(0,18,z,94,.35,.3,0x454e59);
+  for(const x of [-26,26]){K.box(x,0,0,.8,17.8,.8,0x4b545e);deco(x,18,0,3,.4,4,0x78808a);}
+  for(const [x,z,c] of [[-7,20,0xff684c],[7,-20,0x39cfc9],[-27,-24,0xe770ba],[27,24,0xffbc66]]){
+    const light=new THREE.PointLight(c,1.5,19,1.6);light.position.set(x,4,z);G.add(light);
+  }
+  _thMesh(G,detail,false);_thMesh(G,glow,true);
+  MAP_SPAWNS[name]={ally:{x0:-7,x1:7,z0:47,z1:52},enemy:{x0:-7,x1:7,z0:-52,z1:-47}};
+  G.userData.identityRefined=true;
+  G._skyColor=0x111b2b;
+}
+_BESPOKE.neon_tokyo=buildNeonTokyoLayout;
+
 function buildWarehouseLayout() {
   const name = 'warehouse', K = _bkBegin(name, 100, 120, 0x6d6a64);
   const wallC = 0x6f7d86, rackC = 0x8a5a2a, rackB = 0x3a5a8a, off = 0xb8b2a4, TOP = 4.6;
@@ -14607,7 +14704,7 @@ function buildTundraIdentityLayout() {
 Object.assign(_BESPOKE, { forest: buildForestIdentityLayout, desert: buildDesertIdentityLayout, tundra: buildTundraIdentityLayout });
 
 function refineMapIdentity(name) {
-  if (!_BESPOKE[name]) return;
+  if (!_BESPOKE[name] || MAP_THEMES[name]?.customDetail) return;
   const group = MAP_GROUPS[name], K = _bkit(name), th = MAP_THEMES[name];
   const detail = _thBuf(), glow = _thBuf();
   const box = (x, y, z, w, h, d, c, lit = false) => _thBox(lit ? glow : detail, _TH_WORLD, x, y + h / 2, z, w, h, d, c);
@@ -15334,7 +15431,7 @@ const EGG_LINES = {
 };
 const EGG_CRANE = ['nice view', "don't look down", 'rope: 4 left', 'ahoy', 'tired of climbing', 'hi', 'shift ends at 5', 'hard hat: lost'];
 const EGG_SKIP = new Set(['blank', 'range', 'obby', 'm4_tower', 'm4_tower_big', 'm4_tower_super', 'big_harbor', 'storm_pier', 'pinball_arcade',
-  'laser_vault', 'cargo_belts', 'gale_peaks', 'magma_rise', 'br_arena', 'base_raid']);
+  'laser_vault', 'cargo_belts', 'gale_peaks', 'magma_rise', 'br_arena', 'base_raid', 'neon_tokyo']);
 const EGG_FLOATING = new Set(['space', 'orbital_station', 'gravity_lab', 'dreamscape', 'flying_moai', 'cyber', 'super_arena']);
 // Hand-drawn glyphs: a few wobbly strokes in a 256 square.
 function _eggGlyph(g, kind, rnd) {
@@ -17836,6 +17933,34 @@ GIM.supermarket = (X) => {
 // ── 🔦 PYONGYANG · SEARCHLIGHTS ─────────────────────────────────────────────────────────────────────────────────────────
 // The visible light pool deals contact damage; one shared cooldown prevents overlapping lamps stacking hits.
 GIM_LABELS.shell = 'was caught in a searchlight';
+GIM.neon_tokyo = (X) => {
+  const machines=[];
+  for(const sx of [-1,1])for(const sz of [-1,1]){
+    const g=new THREE.Group();
+    _lkBox(g,1.25,2.45,1,sz>0?0xad3b36:0xd7dcda,0,1.225,0);
+    _lkPart(g,new THREE.BoxGeometry(.9,1.35,.04),_lkB(0xb9e8ed),-.08,1.55,.52);
+    for(let r=0;r<3;r++)for(let c=0;c<4;c++)_lkBox(g,.13,.22,.05,[0xff6948,0x50c5d5,0xf3d16e,0x80bb62][c],-.4+c*.22,1.12+r*.38,.56);
+    _lkBox(g,.75,.18,.08,0x182631,0,.4,.54);
+    _lkPart(g,new THREE.BoxGeometry(.08,.1,.04),_lkB(0x6aff9a),.47,1.1,.54);
+    X.put(g,sx*26.1,sz*15,-sx*Math.PI/2,true);
+    const ring=X.ring(sx*25.1,sz*15,1.7,0x5de6c9,.4,.08,.03);
+    machines.push({x:sx*25.1,z:sz*15,ring,ready:0});
+  }
+  X.dbg(machines.map(m=>({x:m.x,z:m.z})));
+  X.hint('NIGHT MARKET','Lit vending machines restore 60 health and some ammo. Each machine recharges in 18 seconds.','#5de6c9');
+  X.onReset(()=>machines.forEach(m=>{m.ready=0;}));
+  X.on((dt,A,t)=>{
+    for(const m of machines){
+      m.ready=Math.max(0,m.ready-dt);m.ring.material.opacity=m.ready>0?.08:.35+.15*Math.sin(t*3);
+      if(m.ready>0)continue;
+      for(const a of A){
+        if(a.y>1.4 || Math.hypot(a.x-m.x,a.z-m.z)>1.7)continue;
+        a.heal(60);a.refill(.25);m.ready=18;X.sound('heal',m.x,m.z,.4);X.fx(m.x,1,m.z,1.6,0x5de6c9);break;
+      }
+    }
+  });
+};
+
 GIM.pyongyang = (X) => {
   const towers = X.spots(4, { r: 1.8, pairs: true, sep: 36, maxR: 70, edge: 12 });
   if (towers.length < 2) return;
@@ -64962,6 +65087,7 @@ document.querySelectorAll('.diff-card').forEach(card => {
 
 // Map selector
 const MAP_DESCS = {
+  neon_tokyo: 'Neon Tokyo — Japanese night streets, wet alleys, shop balconies and vending-machine resupplies',
   auto:       'Random — game picks one for you each match',
   blank:      'Classic Arena — wide lanes, wall-walks, ramps · a HOT SEAT ring heals you and moves every 40 s',
   m4_tower:   'M4 Tower — tight two-story arena with climbable corners and upper catwalks',
