@@ -1117,6 +1117,46 @@ if (ok && process.argv.includes('--teams')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+if (ok && process.argv.includes('--thirdperson')) {
+  // Third-person guns are the weapon's own model, hands off, at world size; the owner's wrap goes on them; a prop
+  // built from shared geometry can be thrown away without taking the viewmodel's geometry with it.
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    for (const id of ['ak20', 'minigun', 'pistol', 'sg8', 'srx', 'bat', 'frag', 'knife']) {
+      let g = null;
+      try { g = makeRealWorldGun(id); } catch (e) { issues.push(id + ' threw: ' + e.message); continue; }
+      if (!g) { issues.push(id + ': no real model (would fall back to the stand-in)'); continue; }
+      let meshes = 0, hand = false, len = 0;
+      const box = new THREE.Box3(); g.updateMatrixWorld(true); box.setFromObject(g);
+      g.traverse(o => { if (o.isMesh) { meshes++; for (let p = o; p; p = p.parent) if (p.userData && p.userData.vmHand) hand = true; } });
+      len = Math.max(box.max.x - box.min.x, box.max.y - box.min.y, box.max.z - box.min.z);
+      if (meshes < 1) issues.push(id + ': no meshes');
+      if (hand) issues.push(id + ': a hand came along');
+      if (!(len > 0.08 && len < 2.2)) issues.push(id + ': ' + len.toFixed(2) + ' m long, not a held weapon size');
+      let shared = true; g.traverse(o => { if (o.isMesh && !(o.userData && o.userData.sharedGeo)) shared = false; });
+      if (!shared) issues.push(id + ': geometry is not marked shared (it would be disposed with the body)');
+    }
+    // a body with a gun, and a wrap on it
+    const mesh = makePlayerMesh('Tester', false, 'enemy', 'default', {});
+    mesh._ownerId = 'tp_owner';
+    players.tp_owner = { id: 'tp_owner', wrap: 'gold' };
+    try {
+      armRemoteMesh(mesh, 'ak20');
+      if (!mesh._gun || !mesh._gun.userData.realGun) issues.push('the body did not get the real gun');
+      if (mesh._gun && mesh._gun._wrapKey !== 'gold') issues.push('the owner\\'s wrap was not put on the gun');
+      const geo = [];
+      mesh._gun.traverse(o => { if (o.isMesh) geo.push(o.geometry); });
+      armRemoteMesh(mesh, 'pistol');                          // a swap throws the old prop away
+      if (geo.some(g => g.attributes === undefined)) issues.push('shared geometry was disposed');
+      players.tp_owner.wrap = null; dressRemoteGun(mesh);
+      if (mesh._gun._wrapKey !== 'default') issues.push('taking the wrap off did not reach the gun');
+    } finally { delete players.tp_owner; }
+    return issues;
+  })()`);
+  console.log('third-person checks: real models at world size, hands off, wraps follow the owner');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 if (ok && process.env.MAP_REVIEW_DIR) {
   fs.mkdirSync(process.env.MAP_REVIEW_DIR, { recursive: true });
   for (const name of ['forest', 'desert', 'tundra', 'refinery', 'space', 'volcano', 'titanic', 'carrier', 'pearl_harbor']) {

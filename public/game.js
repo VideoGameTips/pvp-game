@@ -31769,9 +31769,14 @@ function contractsRevalidate() {
 function contractFor(wrapId) { return CONTRACTS.find(c => c.wrap === wrapId) || null; }
 // A wrap that is not behind a contract is always open; one that is, is open once its contract is done (admins see all).
 function wrapUnlocked(id) {
+  let me = null; try { me = currentUser; } catch (e) { me = null; }       // declared further down the file: not there yet at load
+  const admin = !!(me && me.isAdmin);
+  const sk = WEAPON_SKINS_BY_ID[id];
+  if (sk && sk.approvedBy) return admin || !!(me && me.username === sk.approvedBy);   // an approved wrap is its author's
+  if (sk && sk.custom) return admin;                                            // one you painted: a draft until an admin says yes
   const c = contractFor(id);
   if (!c) return true;
-  return !!contractState.done[c.id] || !!(typeof currentUser !== 'undefined' && currentUser && currentUser.isAdmin);
+  return !!contractState.done[c.id] || admin;
 }
 // Every weapon you could actually pick up and kill with: the guns and melees that are in play (the ones the bots
 // are allowed to carry), minus a gun that does no damage at all.
@@ -34708,6 +34713,225 @@ function _pxRegisterGun(def) {
   try { if (WEAPON_SKINS_BY_ID[selectedWeaponSkin] && WEAPON_SKINS_BY_ID[selectedWeaponSkin].custom) applySelectedWeaponSkinToAll(); } catch (e) {}
 })();
 
+
+// ── 🌐 Wraps over the wire, approvals and weapon ideas ──────────────────────────────────────────────────────
+// What is shared: the wrap you have on is sent with you, and anyone in your match sees it on your gun. What is
+// gated: a wrap you PAINTED is a draft until an admin approves it; only then can you use it and only then does
+// anybody else get to see it. Admins' own wraps go straight through. Weapon ideas are plain text to the admin.
+const _approvedWraps = new Map();     // id -> { id, name, by }
+let _myWrapSubs = [];                 // this account's submissions: { id, name, status, px }
+let _pxWantWear = false;              // an admin pressed USE IT: wear the approved copy as soon as it exists
+function registerApprovedWrap(def) {
+  if (!def || !/^ap_[a-z0-9]+$/.test(String(def.id)) || !Array.isArray(def.px) || def.px.length !== 256) return;
+  if (!def.px.every(c => typeof c === 'string' && /^#[0-9a-fA-F]{6}$/.test(c))) return;
+  _pxRegisterGun({ id: def.id, name: String(def.name || 'Wrap').slice(0, 20), px: def.px, motion: def.motion || null });
+  const e = WEAPON_SKINS_BY_ID[def.id];
+  if (e) { e.custom = false; e.approved = true; e.approvedBy = String(def.by || ''); }
+  _approvedWraps.set(def.id, { id: def.id, name: def.name, by: def.by });
+}
+socket.on('approvedWraps', list => {
+  if (!Array.isArray(list)) return;
+  for (const d of list) { try { registerApprovedWrap(d); } catch (e) { console.warn('[wraps] approved', e); } }
+  // an admin who pressed USE IT on a draft: its approved copy is the one to wear now
+  if (_pxWantWear && _pxLastSubmitted && _approvedWraps.has(_pxLastSubmitted)) {
+    selectedWeaponSkin = _pxLastSubmitted; try { localStorage.setItem('pvp_weapon_skin', selectedWeaponSkin); } catch (e) {}
+    _pxWantWear = false;
+    try { applySelectedWeaponSkinToAll(); } catch (e) {}
+    try { _pxMsg('"' + (WEAPON_SKINS_BY_ID[selectedWeaponSkin]?.name || 'Wrap') + '" is on your guns, and everyone can see it.'); } catch (e) {}
+  }
+  // a wrap I was wearing that turned out to be one I may not wear
+  try { if (!wrapUnlocked(selectedWeaponSkin)) { selectedWeaponSkin = 'default'; applySelectedWeaponSkinToAll(); } } catch (e) {}
+});
+socket.on('myWraps', list => { _myWrapSubs = Array.isArray(list) ? list : []; _pxShowSubs(); });
+let _pxLastSubmitted = null;
+socket.on('wrapSubmitResult', r => {
+  if (r && r.ok) {
+    _pxLastSubmitted = r.id;
+    _pxMsg(r.status === 'approved' ? 'Published: everyone can see it now.' : 'Sent. An admin has to approve it before you can use it.');
+    socket.emit('getWraps');
+  } else _pxMsg((r && r.error) || 'Could not send that.');
+});
+socket.on('wrapDecision', d => {
+  if (!d) return;
+  contractToast(d.status === 'approved' ? '✅ WRAP APPROVED' : '❌ WRAP NOT APPROVED', String(d.name || 'Your wrap'), d.status === 'approved' ? '#7fe0a0' : '#ff8888');
+  socket.emit('getWraps');
+});
+socket.on('conceptResult', r => {
+  const m = document.getElementById('idea-msg');
+  if (m) m.textContent = r && r.ok ? 'Sent. Thank you: an admin will read it.' : ((r && r.error) || 'Could not send that.');
+  if (r && r.ok) { const t = document.getElementById('idea-title'), x = document.getElementById('idea-text'); if (t) t.value = ''; if (x) x.value = ''; }
+});
+function _pxShowSubs() {
+  const el = document.getElementById('px-subs'); if (!el) return;
+  const rows = _myWrapSubs.slice(-8).reverse().map(s => {
+    const col = s.status === 'approved' ? '#7fe0a0' : s.status === 'rejected' ? '#ff8888' : '#ffcc66';
+    const label = s.status === 'approved' ? '✔ approved' : s.status === 'rejected' ? '✖ not approved' : '⏳ waiting';
+    return '<div style="display:flex;justify-content:space-between;gap:8px;"><span>' + String(s.name).replace(/[<>&]/g, '') + '</span><span style="color:' + col + ';">' + label + '</span></div>';
+  }).join('');
+  el.innerHTML = rows ? '<div style="color:#aab;margin-bottom:3px;">SENT FOR APPROVAL</div>' + rows : '';
+}
+// What wrap I have on, as the others should see it: a draft I painted does not count.
+let _sentWrapId;
+function emitMyWrap() {
+  let id = 'default';
+  try { if (wrapUnlocked(selectedWeaponSkin)) id = selectedWeaponSkin; } catch (e) {}
+  const sk = WEAPON_SKINS_BY_ID[id];
+  if (sk && sk.custom && !sk.approvedBy) id = 'default';
+  if (id === _sentWrapId) return;
+  _sentWrapId = id;
+  try { socket.emit('setWrap', { wrap: id }); } catch (e) {}
+}
+socket.on('playerWrap', ({ id, wrap }) => {
+  if (id === myId) return;
+  if (players[id]) players[id].wrap = wrap || null;
+  const m = remoteMeshes[id];
+  if (m) dressRemoteGun(m);
+});
+// Put the owner's wrap on the gun a body is holding.
+function dressRemoteGun(mesh) {
+  const gun = mesh && mesh._gun;
+  if (!gun) return;
+  const wrapId = mesh._ownerId && players[mesh._ownerId] && players[mesh._ownerId].wrap;
+  const skin = (wrapId && WEAPON_SKINS_BY_ID[wrapId]) || WEAPON_SKINS_BY_ID.default;
+  if ((gun._wrapKey || 'default') === skin.id) return;
+  gun._wrapKey = skin.id;
+  try { applyWeaponSkin(gun, skin); } catch (e) { console.warn('[wrap] remote gun', e); }
+}
+
+// ── 🔫 The real gun in a third-person hand ─────────────────────────────────────────────────────────────────
+// A body used to hold one of four stand-in shapes (a rifle, a shotgun, a sniper, an LMG) tinted by the weapon's bullet
+// colour, so whatever you carried, everyone saw the same gun. It now holds the weapon's own model, hands removed, at
+// world size; a body that has no model to copy, or past the budget (heavy models, a crowded match), keeps the stand-in.
+const REAL_GUN_BUDGET = 10;
+function _realGunsInUse() {
+  let n = 0;
+  for (const m of Object.values(remoteMeshes)) if (m && m._gun && m._gun.userData && m._gun.userData.realGun) n++;
+  return n;
+}
+function makeRealWorldGun(weaponId) {
+  let src = null;
+  const wi = WEAPONS.findIndex(w => w.id === weaponId);
+  if (wi >= 0) src = (typeof _baseWeaponModels !== 'undefined' && _baseWeaponModels[wi]) || weaponModels[wi];
+  else if (weaponId !== 'fists') {
+    const mi = MELEE_ITEMS.findIndex(m => m.id === weaponId);
+    if (mi >= 0) src = (typeof _baseMeleeModels !== 'undefined' && _baseMeleeModels[mi]) || meleeModels[mi];
+    else { const si = SUPPORT_ITEMS.findIndex(s => s.id === weaponId); if (si >= 0) src = (typeof _baseSupportModels !== 'undefined' && _baseSupportModels[si]) || supportModels[si]; }
+  }
+  if (!src || !src.traverse) return null;
+  src.updateMatrixWorld(true);
+  const inv = new THREE.Matrix4().copy(src.matrixWorld).invert();
+  const WORLD = new THREE.Matrix4().makeScale(WORLD_GUN_SCALE, WORLD_GUN_SCALE, WORLD_GUN_SCALE);
+  const root = new THREE.Group();
+  let parts = 0;
+  src.traverse(o => {
+    if (!o.isMesh || !o.geometry || !o.material) return;
+    for (let p = o; p; p = p.parent) if (p.userData && (p.userData.vmHand || p.userData.noWorld)) return;
+    if (o.visible === false) return;
+    // a part that is hidden by an ancestor (a spare magazine, a muzzle flash) stays out too
+    for (let p = o.parent; p && p !== src; p = p.parent) if (p.visible === false) return;
+    const mat = Array.isArray(o.material) ? o.material.map(m => m.clone()) : o.material.clone();
+    const m = new THREE.Mesh(o.geometry, mat);          // the geometry is shared with the viewmodel, so it is never disposed here
+    m.matrix.copy(WORLD).multiply(inv).multiply(o.matrixWorld);   // world size is baked into each part, not left on the root:
+    m.matrix.decompose(m.position, m.quaternion, m.scale);          // fitWeaponPose measures the parts, and must see the real length
+    m.userData.sharedGeo = true;
+    m.castShadow = false;
+    root.add(m); parts++;
+  });
+  if (!parts || parts > 140) return null;
+  root.userData.realGun = true;
+  return root;
+}
+
+
+// ── 💡 Weapon ideas, and the admin's queue ──────────────────────────────────────────────────────────────────
+const _uiBox = 'position:fixed;left:50%;transform:translateX(-50%);z-index:9850;background:#0d1622;border:2px solid #4a8ac0;border-radius:8px;'
+  + 'padding:16px;color:#fff;font-family:"Courier New",monospace;font-size:12px;box-shadow:0 8px 40px rgba(0,0,0,0.7);max-height:88vh;overflow:auto;';
+function _uiStopKeys(el) { for (const ev of ['keydown', 'keyup', 'mousedown', 'mouseup', 'click', 'wheel', 'contextmenu']) el.addEventListener(ev, e => e.stopPropagation()); }
+function openIdeaDialog() {
+  try { document.exitPointerLock && document.exitPointerLock(); } catch (e) {}
+  let d = document.getElementById('idea-dialog');
+  if (!d) {
+    d = document.createElement('div'); d.id = 'idea-dialog'; d.setAttribute('data-no-i18n', '');
+    d.style.cssText = _uiBox + 'top:12%;width:min(520px,92vw);';
+    d.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <div style="font-size:15px;letter-spacing:2px;color:#bfe6ff;">💡 A WEAPON IDEA</div>
+        <button id="idea-close" style="background:#1a2a3a;color:#88ccff;border:1px solid #4499ff;padding:3px 9px;cursor:pointer;font-family:inherit;border-radius:3px;">✕</button>
+      </div>
+      <div style="color:#8fa6b8;line-height:1.5;margin-bottom:8px;">Tell the admin what the weapon is, how it should feel and what makes it different. It is read by a person.</div>
+      <input id="idea-title" maxlength="40" placeholder="Name of the weapon" style="width:100%;box-sizing:border-box;padding:7px;background:#0a1220;color:#fff;border:1px solid #556;font-family:inherit;margin-bottom:8px;">
+      <textarea id="idea-text" rows="6" maxlength="600" placeholder="What it does, how it fires, when you would pick it…" style="width:100%;box-sizing:border-box;padding:7px;background:#0a1220;color:#fff;border:1px solid #556;font-family:inherit;"></textarea>
+      <div style="margin-top:8px;display:flex;gap:8px;align-items:center;">
+        <button id="idea-send" style="padding:7px 14px;background:#12301f;color:#9affc6;border:1px solid #44cc88;border-radius:4px;cursor:pointer;font-family:inherit;">📨 SEND</button>
+        <span id="idea-msg" style="color:#88ffcc;"></span>
+      </div>`;
+    document.body.appendChild(d); _uiStopKeys(d);
+    d.querySelector('#idea-close').addEventListener('click', () => { d.style.display = 'none'; });
+    d.querySelector('#idea-send').addEventListener('click', () => {
+      if (!currentUser) { d.querySelector('#idea-msg').textContent = 'Sign in first.'; return; }
+      socket.emit('submitConcept', { title: d.querySelector('#idea-title').value, text: d.querySelector('#idea-text').value });
+      d.querySelector('#idea-msg').textContent = 'Sending…';
+    });
+  }
+  d.style.display = 'block';
+}
+function _wrapQueueRender(q) {
+  const panel = document.getElementById('wrapq-panel'); if (!panel) return;
+  const esc = t => String(t == null ? '' : t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const wraps = (q && q.wraps) || [], concepts = (q && q.concepts) || [];
+  panel.querySelector('#wrapq-body').innerHTML = `
+    <div style="color:#ffdd88;letter-spacing:2px;margin:4px 0 8px;">WRAPS WAITING (${wraps.length})</div>
+    ${wraps.length ? '' : '<div style="color:#778;">Nothing waiting.</div>'}
+    <div style="display:flex;flex-wrap:wrap;gap:10px;">
+      ${wraps.map(w => `<div style="width:150px;border:1px solid #556;border-radius:6px;padding:8px;background:#101a28;">
+        <canvas data-px="${esc(w.id)}" width="16" height="16" style="width:128px;height:128px;image-rendering:pixelated;border:1px solid #000;display:block;"></canvas>
+        <div style="margin-top:6px;color:#fff;">${esc(w.name)}</div>
+        <div style="color:#8fa6b8;font-size:10px;">by ${esc(w.owner)}${w.motion ? ' · ' + esc(w.motion) : ''}</div>
+        <div style="margin-top:6px;display:flex;gap:6px;">
+          <button data-ap="${esc(w.id)}" style="flex:1;padding:5px;background:#12301f;color:#9affc6;border:1px solid #44cc88;border-radius:4px;cursor:pointer;font-family:inherit;">✔ APPROVE</button>
+          <button data-rj="${esc(w.id)}" style="flex:1;padding:5px;background:#301212;color:#ff9a9a;border:1px solid #cc4444;border-radius:4px;cursor:pointer;font-family:inherit;">✖</button>
+        </div></div>`).join('')}
+    </div>
+    <div style="color:#ffdd88;letter-spacing:2px;margin:16px 0 8px;">WEAPON IDEAS (${concepts.length})</div>
+    ${concepts.length ? '' : '<div style="color:#778;">None new.</div>'}
+    ${concepts.map(c => `<div style="border:1px solid #445;border-radius:6px;padding:8px;margin-bottom:8px;background:#101a28;">
+        <div style="color:#bfe6ff;">${esc(c.title)} <span style="color:#778;font-size:10px;">by ${esc(c.owner)}</span></div>
+        <div style="color:#cfd8e0;margin-top:4px;line-height:1.5;white-space:pre-wrap;">${esc(c.text)}</div>
+        <button data-done="${esc(c.id)}" style="margin-top:6px;padding:4px 10px;background:#1a2433;color:#cfe8ff;border:1px solid #5577aa;border-radius:4px;cursor:pointer;font-family:inherit;">MARK READ</button>
+      </div>`).join('')}`;
+  panel.querySelectorAll('canvas[data-px]').forEach(cv => {
+    const w = wraps.find(x => x.id === cv.dataset.px); if (!w) return;
+    const g = cv.getContext('2d'); w.px.forEach((c, i) => { g.fillStyle = c; g.fillRect(i & 15, i >> 4, 1, 1); });
+  });
+  panel.querySelectorAll('[data-ap]').forEach(b => b.addEventListener('click', () => socket.emit('adminWrapDecision', { id: b.dataset.ap, approve: true })));
+  panel.querySelectorAll('[data-rj]').forEach(b => b.addEventListener('click', () => socket.emit('adminWrapDecision', { id: b.dataset.rj, approve: false })));
+  panel.querySelectorAll('[data-done]').forEach(b => b.addEventListener('click', () => socket.emit('adminConceptDone', { id: b.dataset.done })));
+}
+function openWrapQueue() {
+  if (!currentUser || !currentUser.isAdmin) return;
+  try { document.exitPointerLock && document.exitPointerLock(); } catch (e) {}
+  let panel = document.getElementById('wrapq-panel');
+  if (!panel) {
+    panel = document.createElement('div'); panel.id = 'wrapq-panel'; panel.setAttribute('data-no-i18n', '');
+    panel.style.cssText = _uiBox + 'top:5%;width:min(760px,94vw);border-color:#ff66cc;';
+    panel.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #6a2a55;padding-bottom:8px;">
+      <div style="font-size:15px;letter-spacing:3px;color:#ff99dd;">📥 WRAP & IDEA QUEUE</div>
+      <button id="wrapq-close" style="background:#1a2a3a;color:#88ccff;border:1px solid #4499ff;padding:3px 9px;cursor:pointer;font-family:inherit;border-radius:3px;">✕</button></div>
+      <div id="wrapq-body"></div>`;
+    document.body.appendChild(panel); _uiStopKeys(panel);
+    panel.querySelector('#wrapq-close').addEventListener('click', () => { panel.style.display = 'none'; });
+  }
+  panel.style.display = 'block';
+  socket.emit('adminWrapQueue');
+}
+socket.on('wrapQueue', q => _wrapQueueRender(q));
+socket.on('wrapQueueDirty', () => {
+  if (!currentUser || !currentUser.isAdmin) return;
+  const panel = document.getElementById('wrapq-panel');
+  if (panel && panel.style.display === 'block') socket.emit('adminWrapQueue');
+  else contractToast('📥 NEW IN THE QUEUE', 'A wrap or weapon idea is waiting (F2 → WRAP QUEUE)', '#ff99dd');
+});
+
 // ── the editor ──
 let _pxUI = null;
 function openSkinPixelizer(tab) {
@@ -34764,6 +34988,7 @@ function openSkinPixelizer(tab) {
             <div style="margin-top:8px;color:#aab;">START A NEW ONE FROM</div>
             <select id="px-base" style="width:100%;margin-top:4px;padding:5px;background:#0a1220;color:#fff;border:1px solid #556;font-family:inherit;"></select>
             <div id="px-msg" style="margin-top:8px;color:#88ffcc;min-height:16px;"></div>
+            <div id="px-subs" style="margin-top:8px;font-size:11px;"></div>
           </div>
         </div>
         <div style="margin-top:12px;color:#aab;">SAVED</div>
@@ -34838,9 +35063,20 @@ function _pxWire(panel) {
       try { emitMySkin(); } catch (e) {}
       _pxMsg('Wearing "' + d.name + '". Other players in your match see it too.');
     } else {
-      selectedWeaponSkin = d.id; try { localStorage.setItem('pvp_weapon_skin', d.id); } catch (e) {}
-      try { applySelectedWeaponSkinToAll(); } catch (e) {}
-      _pxMsg('"' + d.name + '" is on your guns now.');
+      const admin = !!(currentUser && currentUser.isAdmin);
+      const motion = d.motion && d.motion !== 'none' ? d.motion : null;
+      if (!currentUser) { _pxMsg('Sign in first: wraps are sent under your account.'); return; }
+      if (admin) {
+        // yours to wear at once; and published (approved on the spot) so that everyone else can see it on your gun
+        selectedWeaponSkin = d.id; try { localStorage.setItem('pvp_weapon_skin', d.id); } catch (e) {}
+        try { applySelectedWeaponSkinToAll(); } catch (e) {}
+        _pxWantWear = true;
+        socket.emit('submitWrap', { name: d.name, px: d.px, motion });
+        _pxMsg('"' + d.name + '" is on your guns now. Publishing it for the other players…');
+      } else {
+        socket.emit('submitWrap', { name: d.name, px: d.px, motion });
+        _pxMsg('Sending "' + d.name + '" to the admin…');
+      }
     }
   });
   $('px-new').addEventListener('click', () => {
@@ -34912,6 +35148,13 @@ function _pxDrawAll() {
     }
   } else { const t = document.createElement('div'); t.style.color = '#aab'; t.textContent = 'One picture wraps every part of every gun.'; parts.appendChild(t); }
   const extra = p.querySelector('#px-extra'); extra.innerHTML = '';
+  {
+    // the same button does a different job on the gun tab for someone who is not an admin
+    const wear = p.querySelector('#px-wear');
+    if (wear) wear.textContent = u.tab === 'gun' && !(currentUser && currentUser.isAdmin) ? '📨 SUBMIT FOR APPROVAL' : '✅ USE IT';
+    if (!_pxDrawAll._subsAt || Date.now() - _pxDrawAll._subsAt > 8000) { _pxDrawAll._subsAt = Date.now(); try { socket.emit('getWraps'); } catch (e) {} }
+    _pxShowSubs();
+  }
   if (u.tab === 'gun') {
     const mo = u.gun.motion || 'none';
     extra.innerHTML = `<div style="color:#aab;margin-bottom:4px;">MOTION</div>
@@ -55364,6 +55607,7 @@ socket.on('skinChanged', ({ id, skin, isAdmin, skinData }) => {
   const mesh = makePlayerMesh(p.name, p.isBot, p.team || 'enemy',
                               renderedSkinForPlayer(p, skin), { crown: !!isAdmin, tag: humanTagKind(p) });
   mesh.position.copy(old.position); mesh.rotation.y = old.rotation.y; mesh.visible = wasVisible;
+  mesh._ownerId = id;
   armRemoteMesh(mesh, armableWeaponOf(p));
   setMeshTeamArrow(mesh, shouldShowTeamArrow(id, p));
   scene.add(mesh); remoteMeshes[id] = mesh;
@@ -55782,7 +56026,7 @@ function armableWeaponOf(p) {
 function disposeBody(obj) {
   if (!obj || !obj.traverse) return;
   obj.traverse(o => {
-    if (o.geometry) o.geometry.dispose();
+    if (o.geometry && !(o.userData && o.userData.sharedGeo)) o.geometry.dispose();
     const ms = Array.isArray(o.material) ? o.material : (o.material ? [o.material] : []);
     for (const m of ms) m.dispose();
   });
@@ -55800,7 +56044,7 @@ function armRemoteMesh(mesh, weaponId) {
     const old = mesh._gun;
     old.parent && old.parent.remove(old);
     old.traverse(o => {
-      if (o.geometry) o.geometry.dispose();
+      if (o.geometry && !(o.userData && o.userData.sharedGeo)) o.geometry.dispose();
       const ms = Array.isArray(o.material) ? o.material : (o.material ? [o.material] : []);
       for (const m of ms) m.dispose();
     });
@@ -55808,11 +56052,16 @@ function armRemoteMesh(mesh, weaponId) {
   }
   if (mesh._rig) mesh._rig.holdsGun = false;
   if (!weaponId) return;
-  const gun = makeBotWeaponProp(weaponId);
+  // The weapon's own model if there is one and there is room for it (real people first: they are few); the
+  // stand-in otherwise.
+  let gun = null;
+  try { if (_realGunsInUse() < REAL_GUN_BUDGET) gun = makeRealWorldGun(weaponId); } catch (e) { gun = null; }
+  if (!gun) gun = makeBotWeaponProp(weaponId);
   gun.position.set(0, -0.02, 0.055);
   gun.rotation.y = Math.PI;
   ((mesh._rig && mesh._rig.gripR) || mesh).add(gun);
   mesh._gun = gun; mesh._gunId = weaponId;
+  try { dressRemoteGun(mesh); } catch (e) {}                 // and whatever wrap its owner has on
   // The arms are solved from the weapon's own measured length, so a swap has to
   // re-solve: a pistol pose on a sniper rifle leaves the support hand in the air.
   if (mesh._rig) { mesh._rig.holdsGun = true; fitWeaponPose(mesh, gun, weaponId); }
@@ -55821,6 +56070,7 @@ function spawnRemotePlayer(p) {
   const skinId = renderedSkinForPlayer(p);
   const mesh = makePlayerMesh(p.name, p.isBot, p.team || 'enemy', skinId, { crown: !!p.isAdmin, tag: humanTagKind(p) });
   mesh.position.set(p.x,0,p.z);
+  mesh._ownerId = p.id;
   armRemoteMesh(mesh, armableWeaponOf(p));
   setMeshTeamArrow(mesh, shouldShowTeamArrow(p.id, p));
   scene.add(mesh); remoteMeshes[p.id]=mesh;
@@ -61507,6 +61757,7 @@ function loop() {
   safeLoopStep('slam-shake', () => updateSlamShake(dt));  // the floor taking a hammer
   safeLoopStep('realism-feedback', () => updateRealismFeedback(dt));
   safeLoopStep('status-reset', () => watchStatusReset());
+  safeLoopStep('wrap-sync', () => emitMyWrap());   // a changed wrap reaches the other players
   safeLoopStep('dots', () => updateDots());       // anything set alight keeps taking damage
   safeLoopStep('bullets', () => updateBullets(dt));
   safeLoopStep('donut-trails', () => updateDonutMotionTrails(dt));
@@ -62881,6 +63132,8 @@ function emitMySkin() {
   socket.emit('setSkin', { skin: mySkin, isAdmin: !!(currentUser && currentUser.isAdmin), skinData: _pxWireFor(mySkin) });
   syncAdminTestSettings();
   _sentWeaponId = null; broadcastHeldWeapon();   // a reconnect or room change clears what the server knew
+  _sentWrapId = undefined; try { emitMyWrap(); } catch (e) {}
+  try { socket.emit('getWraps'); } catch (e) {}
 }
 // Admin cheat toggles — only active when currentUser.isAdmin
 const adminCheats = {
@@ -64722,7 +64975,7 @@ function openWeaponSkinsPanel() {
   const swatch = (s) => `
     <div data-skin="${s.id}" class="ws-cell" style="cursor:pointer;border:2px solid ${s.id===selectedWeaponSkin?'#ffdd55':'#444'};border-radius:6px;padding:8px;text-align:center;background:${s.id===selectedWeaponSkin?'#2a2410':'#1d1a12'};">
       <div style="height:40px;border-radius:4px;background:${s.wrap ? `url('${getWeaponWrapSurface(s.wrap).canvas.toDataURL()}') center / 128px 128px` : _wsSwatchURL(s.id) ? `url('${_wsSwatchURL(s.id)}') center / 64px 64px` : `linear-gradient(90deg, ${s.sw[0]} 0 50%, ${s.sw[1]} 50% 100%)`};border:1px solid #000;margin-bottom:6px;"></div>
-      <div style="font-size:10px;letter-spacing:1px;color:${s.id===selectedWeaponSkin?'#ffdd55':'#ccc'};">${s.name}</div>
+      <div style="font-size:10px;letter-spacing:1px;color:${s.id===selectedWeaponSkin?'#ffdd55':'#ccc'};">${s.custom && !wrapUnlocked(s.id) ? '🔒 ' : ''}${s.name}${s.custom && !wrapUnlocked(s.id) ? ' <span style="color:#ffb347;font-size:9px;">DRAFT</span>' : ''}</div>
     </div>`;
   const basicCaseSection = () => {
     const unopened = currentUser?.isAdmin ? 99 : (currentUser?.skinCasePacks?.gen1_basic || 0);
@@ -64804,13 +65057,17 @@ function openWeaponSkinsPanel() {
     ${supportModelSkinSection()}
     <div style="font-size:12px;letter-spacing:2px;color:#ffdd88;margin:20px 0 6px;border-top:1px solid #6a5520;padding-top:14px;">🎨 WEAPON WRAPS <button id="ws-pixelizer" style="margin-left:10px;padding:4px 8px;background:#2a1030;color:#ff99dd;border:1px solid #ff66cc;border-radius:4px;cursor:pointer;font-family:inherit;font-size:10px;letter-spacing:1px;">🎨 PAINT YOUR OWN</button></div>
     <div style="font-size:10px;color:#aa9966;margin-bottom:12px;line-height:1.4;">One pick applies to every gun, melee and utility. Country themes use real national flags; the German theme is the Iron Cross military mark (no Nazi imagery).</div>
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">${WEAPON_SKINS.filter(s => !s.contract).map(swatch).join('')}</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">${WEAPON_SKINS.filter(s => !s.contract && (!s.approvedBy || wrapUnlocked(s.id))).map(swatch).join('')}</div>
+    <div style="font-size:10px;color:#9a8aa8;margin:8px 0 2px;line-height:1.45;">🔒 A wrap you paint yourself is a draft: send it for approval in the pixelizer, and once an admin has said yes it is yours to use and everyone sees it on your gun.
+      <button id="ws-idea" style="margin-left:6px;padding:3px 8px;background:#1a2430;color:#bfe6ff;border:1px solid #4a8ac0;border-radius:3px;cursor:pointer;font-family:inherit;font-size:10px;">💡 SEND A WEAPON IDEA</button></div>
     ${contractsSectionHTML()}
     ${gen2CaseSection()}
     ${basicCaseSection()}
   `;
   const pxBtn = panel.querySelector('#ws-pixelizer');
   if (pxBtn) pxBtn.addEventListener('click', () => { panel.style.display = 'none'; openSkinPixelizer('gun'); });
+  const ideaBtn = panel.querySelector('#ws-idea');
+  if (ideaBtn) ideaBtn.addEventListener('click', () => { panel.style.display = 'none'; openIdeaDialog(); });
   const buyCaseBtn = panel.querySelector('#buy-skin-case-gen1');
   if (buyCaseBtn) buyCaseBtn.addEventListener('click', async () => {
     if (await buySkinCaseGen1()) openWeaponSkinsPanel();
@@ -64878,7 +65135,7 @@ function openWeaponSkinsPanel() {
   });
   panel.querySelectorAll('.ws-cell').forEach(cell => {
     cell.addEventListener('click', () => {
-      if (!wrapUnlocked(cell.dataset.skin)) return;
+      if (!wrapUnlocked(cell.dataset.skin)) { contractToast('⏳ NOT APPROVED YET', 'An admin has to approve a wrap you painted before you can use it', '#ffb347'); return; }
       selectedWeaponSkin = cell.dataset.skin;
       try { localStorage.setItem('pvp_weapon_skin', selectedWeaponSkin); } catch (e) {}
       applySelectedWeaponSkinToAll();
@@ -65458,6 +65715,7 @@ function openAdminPanel() {
     <button data-action="heal"     style="width:100%;padding:8px;margin-bottom:4px;background:#116611;color:#fff;border:1px solid #44ff44;cursor:pointer;font-family:inherit;font-size:12px;border-radius:4px;">❤️ FULL HEAL</button>
     <button data-action="ammo"     style="width:100%;padding:8px;margin-bottom:4px;background:#222288;color:#fff;border:1px solid #88aaff;cursor:pointer;font-family:inherit;font-size:12px;border-radius:4px;">📦 REFILL AMMO</button>
     <button data-action="endRound" style="width:100%;padding:8px;margin-bottom:4px;background:#444411;color:#ffcc44;border:1px solid #ffcc44;cursor:pointer;font-family:inherit;font-size:12px;border-radius:4px;">🏁 INSTANT WIN ROUND</button>
+    <button data-action="wrapQueue" style="width:100%;padding:8px;margin-bottom:4px;background:#102030;color:#9fd8ff;border:1px solid #4a8ac0;cursor:pointer;font-family:inherit;font-size:12px;border-radius:4px;">📥 Wrap &amp; idea queue</button>
     <button data-action="pixelizer" style="width:100%;padding:8px;margin-bottom:4px;background:#2a1030;color:#ff99dd;border:1px solid #ff66cc;cursor:pointer;font-family:inherit;font-size:12px;border-radius:4px;">🎨 SKIN PIXELIZER</button>
     <button data-action="mapBuilder" style="width:100%;padding:8px;background:#1f1018;color:#ff99bb;border:1px solid #ff6688;cursor:pointer;font-family:inherit;font-size:12px;border-radius:4px;">🧱 MAP LOADER / BUILDER</button>
   `;
@@ -65481,6 +65739,7 @@ function adminAction(act) {
   if (!currentUser?.isAdmin) return;
   switch (act) {
     case 'pixelizer': openSkinPixelizer(); break;
+    case 'wrapQueue': openWrapQueue(); break;
     case 'nuke': {
       // Kill all bots instantly via emitHit with insane damage
       for (const bot of gameBots) {

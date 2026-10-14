@@ -107,6 +107,34 @@ function saveUsers() {
   } catch (e) { console.error('saveUsers:', e); }
 }
 
+// ── 🎨 Weapon-wrap submissions and weapon concepts ─────────────────────────────────────────────────────
+// Anyone can paint a weapon wrap, but a wrap is only usable once an admin has approved it: it goes into this queue,
+// and an approved one is sent to everybody (so they can see it on its owner's gun). Weapon CONCEPTS are plain text
+// ideas for the admin to read. Both are kept in a file next to users.json.
+const SUBMISSIONS_FILE = path.join(DATA_DIR, 'wrap-submissions.json');
+let submissions = { wraps: [], concepts: [] };
+try { const s = JSON.parse(fs.readFileSync(SUBMISSIONS_FILE, 'utf-8')); submissions = { wraps: s.wraps || [], concepts: s.concepts || [] }; }
+catch (e) { /* none yet */ }
+function saveSubmissions() {
+  try {
+    const tmp = SUBMISSIONS_FILE + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(submissions, null, 2));
+    fs.renameSync(tmp, SUBMISSIONS_FILE);
+  } catch (e) { console.error('saveSubmissions:', e); }
+}
+const WRAP_HEX = /^#[0-9a-f]{6}$/i;
+const WRAP_MOTIONS = new Set(['left', 'right', 'up', 'down', 'diag']);
+function cleanWrapPx(px) {
+  if (!Array.isArray(px) || px.length !== 256) return null;
+  for (const c of px) if (typeof c !== 'string' || !WRAP_HEX.test(c)) return null;
+  return px.map(c => c.toLowerCase());
+}
+const plainText = (s, n) => String(s == null ? '' : s).replace(/[\u0000-\u001f\u007f<>]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, n);
+function approvedWrapList() {
+  return submissions.wraps.filter(w => w.status === 'approved')
+    .map(w => ({ id: w.id, name: w.name, px: w.px, motion: w.motion || null, by: w.owner }));
+}
+
 // ── 🔥 FFA Legend ───────────────────────────────────────────────────────────
 // The FFA Legend skins unlock from FFA alone, and it is meant to take forever:
 // a million damage dealt in FFA, or five thousand FFA wins -- whichever lands
@@ -2282,6 +2310,101 @@ io.on('connection', (socket) => {
     if (/^px_/.test(p.skin) && !p.skinData) p.skin = 'default';
     // Tell everyone in the same match so they can re-skin this player's mesh
     emitToMatch(p.matchId, 'skinChanged', { id: socket.id, skin: p.skin, isAdmin: p.isAdmin, skinData: p.skinData });
+  });
+
+  // 🎨 What wrap this player has on. Anyone in the match sees it on their gun. A painted wrap ('ap_...') has to be one
+  // an admin approved AND this account's own; everything else is a name the clients already know.
+  socket.on('setWrap', (data) => {
+    const p = players[socket.id];
+    if (!p) return;
+    const now = Date.now();
+    if (p._wrapAt && now - p._wrapAt < 250) return;
+    p._wrapAt = now;
+    let id = String((data && data.wrap) || 'default').slice(0, 40);
+    if (!/^[a-z0-9_]{1,40}$/.test(id)) id = 'default';
+    if (/^ap_/.test(id)) {
+      const w = submissions.wraps.find(x => x.id === id && x.status === 'approved');
+      if (!w || (w.owner !== p.account && !users[p.account]?.isAdmin)) id = 'default';
+    }
+    p.wrap = id === 'default' ? null : id;
+    emitToMatch(p.matchId, 'playerWrap', { id: socket.id, wrap: p.wrap });
+  });
+
+  // The wraps that are approved, for everybody, and this account's own submissions.
+  socket.on('getWraps', () => {
+    const p = players[socket.id];
+    socket.emit('approvedWraps', approvedWrapList());
+    if (p && p.account) {
+      socket.emit('myWraps', submissions.wraps.filter(w => w.owner === p.account)
+        .map(w => ({ id: w.id, name: w.name, status: w.status, px: w.px, motion: w.motion || null, t: w.t })));
+    }
+  });
+  socket.on('submitWrap', (data) => {
+    const p = players[socket.id];
+    const fail = error => socket.emit('wrapSubmitResult', { ok: false, error });
+    if (!p || !p.account) return fail('Sign in to submit a wrap.');
+    const now = Date.now();
+    if (p._subAt && now - p._subAt < 8000) return fail('Slow down: one submission every few seconds.');
+    p._subAt = now;
+    const px = cleanWrapPx(data && data.px);
+    if (!px) return fail('That wrap is not a 16 x 16 picture.');
+    const name = plainText(data && data.name, 20) || 'My Wrap';
+    const motion = WRAP_MOTIONS.has(data && data.motion) ? data.motion : null;
+    const mine = submissions.wraps.filter(w => w.owner === p.account);
+    if (mine.filter(w => w.status === 'pending').length >= 5) return fail('You already have 5 waiting for approval.');
+    if (mine.length >= 40) return fail('You have submitted a lot of wraps already.');
+    const admin = !!users[p.account]?.isAdmin;                    // an admin's own wraps need nobody's say-so
+    const rec = { id: 'ap_' + Math.random().toString(36).slice(2, 10), owner: p.account, name, px, motion,
+                  status: admin ? 'approved' : 'pending', t: now };
+    submissions.wraps.push(rec);
+    saveSubmissions();
+    socket.emit('wrapSubmitResult', { ok: true, id: rec.id, status: rec.status });
+    if (rec.status === 'approved') io.emit('approvedWraps', approvedWrapList());
+    else for (const q of Object.values(players)) if (!q.isBot && q.account && users[q.account]?.isAdmin) io.to(q.id).emit('wrapQueueDirty');
+  });
+  socket.on('submitConcept', (data) => {
+    const p = players[socket.id];
+    const fail = error => socket.emit('conceptResult', { ok: false, error });
+    if (!p || !p.account) return fail('Sign in to send a weapon idea.');
+    const now = Date.now();
+    if (p._conceptAt && now - p._conceptAt < 20000) return fail('One idea every twenty seconds.');
+    const title = plainText(data && data.title, 40), text = plainText(data && data.text, 600);
+    if (title.length < 3 || text.length < 10) return fail('Give it a title and a few sentences.');
+    if (submissions.concepts.filter(c => c.owner === p.account).length >= 30) return fail('You have sent a lot of ideas already.');
+    p._conceptAt = now;
+    submissions.concepts.push({ id: 'wc_' + Math.random().toString(36).slice(2, 10), owner: p.account, title, text, status: 'new', t: now });
+    saveSubmissions();
+    socket.emit('conceptResult', { ok: true });
+    for (const q of Object.values(players)) if (!q.isBot && q.account && users[q.account]?.isAdmin) io.to(q.id).emit('wrapQueueDirty');
+  });
+  // Admin only: the queue, and the decision.
+  socket.on('adminWrapQueue', () => {
+    const p = players[socket.id];
+    if (!p || !users[p.account]?.isAdmin) return;
+    socket.emit('wrapQueue', {
+      wraps: submissions.wraps.filter(w => w.status === 'pending'),
+      concepts: submissions.concepts.filter(c => c.status === 'new').slice(-60),
+    });
+  });
+  socket.on('adminWrapDecision', (data) => {
+    const p = players[socket.id];
+    if (!p || !users[p.account]?.isAdmin || !data) return;
+    const w = submissions.wraps.find(x => x.id === data.id);
+    if (!w || w.status !== 'pending') return;
+    w.status = data.approve ? 'approved' : 'rejected';
+    w.decidedBy = p.account; w.decidedAt = Date.now();
+    saveSubmissions();
+    io.emit('approvedWraps', approvedWrapList());
+    for (const q of Object.values(players)) if (!q.isBot && q.account === w.owner) io.to(q.id).emit('wrapDecision', { id: w.id, name: w.name, status: w.status });
+    socket.emit('wrapQueue', { wraps: submissions.wraps.filter(x => x.status === 'pending'), concepts: submissions.concepts.filter(c => c.status === 'new').slice(-60) });
+  });
+  socket.on('adminConceptDone', (data) => {
+    const p = players[socket.id];
+    if (!p || !users[p.account]?.isAdmin || !data) return;
+    const c = submissions.concepts.find(x => x.id === data.id);
+    if (!c) return;
+    c.status = 'read'; saveSubmissions();
+    socket.emit('wrapQueue', { wraps: submissions.wraps.filter(x => x.status === 'pending'), concepts: submissions.concepts.filter(c2 => c2.status === 'new').slice(-60) });
   });
 
   // 🔫 What this player is holding. Cosmetic and client-trusted exactly like
