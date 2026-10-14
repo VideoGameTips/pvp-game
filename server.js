@@ -1960,7 +1960,7 @@ event_horizon: 75,
   orbital_strike: 250, guardian_drone: 14, nano_shield: 0,
   thunderstorm: 60,
   // Lazy weapons
-  frost_blaster: 0, air_grenade: 15, land_mine: 298, frost_freeze: 9999,
+  frost_blaster: 2, air_grenade: 15, land_mine: 298, frost_freeze: 9999,
   // 🪖 ADMIN — Military OP weapons (unlock codes required)
   gau19: 50, mk44: 25, xm7: 60, barrett: 250, m134: 15, hkmp7: 30, p90_spec: 22,
   desert_eagle: 65, m1911: 50,  glock18: 30, five_seven: 40,

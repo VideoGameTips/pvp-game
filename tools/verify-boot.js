@@ -873,6 +873,50 @@ if (ok && process.argv.includes('--wraps')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+if (ok && process.argv.includes('--status')) {
+  // Status effects: a chill is timed and does not stack, a root cannot be chained, a new round or a death leaves
+  // nothing of the last one behind (for you or for a bot), and the Frost Blaster does its 2 damage.
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const fb = WEAPONS.find(w => w.id === 'frost_blaster');
+    if (!fb || fb.damage !== 2) issues.push('Frost Blaster should do 2 damage a bullet, not ' + (fb && fb.damage));
+    const wasDead = isDead; isDead = false;
+    try {
+      clearPlayerStatusEffects();
+      const before = playerFrostSlow;
+      for (let i = 0; i < 50; i++) chillPlayer();
+      if (playerFrostSlow !== before) issues.push('a chill should not touch the frost slow');
+      if (!(playerChillUntil > Date.now() && playerChillUntil - Date.now() <= CHILL_MS + 50)) issues.push('chill should be one short window, not a growing one');
+      rootPlayer(3000);
+      const first = playerRootedUntil;
+      if (!(first > Date.now())) issues.push('rootPlayer should root');
+      playerRootedUntil = 0;                       // pretend it just ended
+      rootPlayer(3000);
+      if (playerRootedUntil !== 0) issues.push('a root straight after a root should be ignored (no chaining)');
+      // everything on at once, then cleared
+      playerFrostSlow = 5; playerChillUntil = Date.now() + 9999; playerRootedUntil = Date.now() + 9999;
+      playerFireUntil = Date.now() + 9999; _playerDot = { until: Date.now() + 9999, dps: 5, weaponId: 'flame_burn' };
+      adrenalineUntil = Date.now() + 9999; nanoShieldUntil = Date.now() + 9999;
+      clearPlayerStatusEffects();
+      if (playerFrostSlow !== 100 || playerChillUntil !== 0 || playerRootedUntil !== 0 || playerRootImmuneUntil !== 0
+          || playerFireUntil !== 0 || _playerDot !== null || adrenalineUntil !== 0 || nanoShieldUntil !== 0) issues.push('clearPlayerStatusEffects left something behind');
+      // dying clears it too
+      playerFrostSlow = 5; playerFireUntil = Date.now() + 9999; _fxWasDead = false; isDead = true;
+      watchStatusReset();
+      if (playerFrostSlow !== 100 || playerFireUntil !== 0) issues.push('dying should clear status effects');
+      isDead = false; watchStatusReset();
+      // bots
+      const b = { id: 'bx', frostSlow: 3, _chillUntil: 9e12, _fireUntil: 9e12, _stunUntil: 9e12, _rootUntil: 9e12, kbVX: 4, kbVZ: 4 };
+      _dotTargets.bx = { until: Date.now() + 9999, dps: 5, weaponId: 'flame_burn' };
+      clearBotStatusEffects(b);
+      if (b.frostSlow !== 100 || b._chillUntil || b._fireUntil || b._stunUntil || b._rootUntil || b.kbVX || b.kbVZ || _dotTargets.bx) issues.push('clearBotStatusEffects left something behind');
+    } finally { isDead = wasDead; clearPlayerStatusEffects(); }
+    return issues;
+  })()`);
+  console.log('status checks: frost blaster damage, chill, root chain guard, round/death/bot reset');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 if (ok && process.env.MAP_REVIEW_DIR) {
   fs.mkdirSync(process.env.MAP_REVIEW_DIR, { recursive: true });
   for (const name of ['forest', 'desert', 'tundra', 'refinery', 'space', 'volcano', 'titanic', 'carrier', 'pearl_harbor']) {

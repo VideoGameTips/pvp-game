@@ -582,7 +582,8 @@ const WEAPONS = [
   },
   {
     id: 'frost_blaster', name: 'Frost Blaster', type: 'Secondary', slot: 'secondary',
-    mag: 50, reserve: 0, damage: 0, fireRate: 100, reloadTime: 99999,
+    // 2 damage a bullet on top of the slow (it used to do none at all: the slow was the whole weapon).
+    mag: 50, reserve: 0, damage: 2, fireRate: 100, reloadTime: 99999,
     auto: true, pellets: 1, spread: 0.01, adsZoom: 50, bulletSpeed: 120, noReload: true,
     bulletColor: 0x99eeff, bulletSize: 0.05,
     ammoRegen: 5, // recovers 5/sec
@@ -1922,6 +1923,36 @@ const beeSwarms      = [];        // 🐝 {mesh, x, y, z, until, lastSting, fire
 const orbitalMarkers = [];        // {mesh, x, z, fireAt, damage, radius}
 let playerFrostSlow = 100;        // 100 = full speed, 0 = frozen + dead. Frost Blaster reduces this on hit.
 let playerRootedUntil = 0;        // timestamp: movement locked, shooting/look still allowed
+let playerChillUntil = 0;         // Cyroclasm's slow: a timed 40% off that does NOT stack, only stays alive
+let playerRootImmuneUntil = 0;    // after a Cyroclasm root, a short grace: it cannot be chained
+const CHILL_MULT = 0.6, CHILL_MS = 1500;
+function chillPlayer(ms = CHILL_MS) { if (!isDead) playerChillUntil = Date.now() + ms; }
+function rootPlayer(ms) {
+  const now = Date.now();
+  if (now < playerRootImmuneUntil) return;                 // just came out of one: no second helping
+  playerRootedUntil = Math.max(playerRootedUntil, now + ms);
+  playerRootImmuneUntil = now + ms + 2000;
+}
+// Everything that was done to you, undone. A round, a respawn and a death all call this: you do not carry the
+// last round's fire, slow, root or buffs into the next one.
+function clearPlayerStatusEffects() {
+  playerFrostSlow = 100; playerChillUntil = 0;
+  playerRootedUntil = 0; playerRootImmuneUntil = 0;
+  adrenalineUntil = 0; nanoShieldUntil = 0;
+  try { playerFireUntil = 0; _playerDot = null; } catch (e) {}   // declared further down the file
+  try { cancelMedkitHeal(); } catch (e) {}
+}
+function clearBotStatusEffects(bot) {
+  if (!bot) return;
+  bot.frostSlow = 100; bot._chillUntil = 0; bot._fireUntil = 0; bot._stunUntil = 0; bot._rootUntil = 0;
+  bot.kbVX = 0; bot.kbVZ = 0;
+  try { delete _dotTargets[bot.id]; } catch (e) {}
+}
+let _fxWasDead = false;
+function watchStatusReset() {
+  if (isDead && !_fxWasDead) clearPlayerStatusEffects();   // dying ends it all, so nothing is waiting for you when you come back
+  _fxWasDead = isDead;
+}
 let playerYVel = 0;               // Player vertical velocity (for air grenades launching the player)
 
 // ── 🏃 Movement tuning ──────────────────────────────────────────────────────
@@ -40014,6 +40045,7 @@ function loadoutReady() {
 }
 
 function resetCombatResources() {
+  clearPlayerStatusEffects();
   if (!loadoutReady()) return;
   window._mapLadder = null;
   window._ladderDetachUntil = 0;
@@ -41250,7 +41282,7 @@ function updateMovement(dt, socialBlocked = false) {
     : 1) * weightMult;
   const adrenalineActive = Date.now() < adrenalineUntil;
   // Frost slow: 100 = normal, 0 = frozen. Linear scale.
-  const frostMult = Math.max(0, playerFrostSlow) / 100;
+  const frostMult = Math.max(0, playerFrostSlow) / 100 * (Date.now() < playerChillUntil ? CHILL_MULT : 1);
   // ⚡ Admin speed boost: 3× speed
   const adminSpeedMult = (adminCheats.speed && currentUser?.isAdmin) ? 3 : 1;
   // 🏃 Sprint (Shift): +50% speed.  🦆 Crouch (Ctrl/C): -45% speed.
@@ -42910,8 +42942,6 @@ function doCyroclasmLaser(w, ab) {
   if (hit) {
     emitHit(hit.pid, `cyro_${myId}_${Date.now()}`, 'cyroclasm_laser', hit.pos, hit.headshot, { damageOverride: dmg, headMiss: hit.miss });
     _applyRootToTarget(hit.pid, 3000, 0xbdf3ff);
-    const bot = resolveBot(hit.pid);
-    if (bot && !bot.dead) bot.frostSlow = Math.min(bot.frostSlow || 100, 50);
   }
   setTimeout(() => { if (!reloading && pool.reserve > 0 && currentWeaponIdx >= 0 && currentWeapon?.id === 'cyroclasm') startReload(); }, 160);
 }
@@ -51078,6 +51108,7 @@ function syncBotMesh(bot, opts = {}) {
     bot.yVel = 0;
     bot._airCarryX = 0; bot._airCarryZ = 0; bot._airCarryUntil = 0;
     bot._slideUntil = 0; bot._rootUntil = 0;
+    clearBotStatusEffects(bot);                       // a respawned body is not still on fire or frozen
     // Left set, animateCharacters reads it again next frame and the fresh body
     // stands up still groping for a magazine.
     bot.reloadUntil = 0; bot.reloadFrom = 0;
@@ -51557,8 +51588,14 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false, opts = 
   if (_hitKind === 'ice') {
     const bot = resolveBot(pid);
     if (bot && !bot.dead) {
-      const chill = weaponId === 'cyroclasm_laser' ? 50 : weaponId === 'frost_blaster' ? 3 : 8;   // the dedicated chiller ticks
-      bot.frostSlow = Math.max(0, (bot.frostSlow || 100) - chill);
+      if (weaponId === 'cyroclasm' || weaponId === 'cyroclasm_laser') {
+        // Cyroclasm chills; it does not stack. Sixteen shots a second at -8 each used to freeze a target
+        // solid inside a second. Now a hit just keeps the chill alive for a moment more.
+        bot._chillUntil = Date.now() + (weaponId === 'cyroclasm_laser' ? 2500 : CHILL_MS);
+      } else {
+        const chill = weaponId === 'frost_blaster' ? 3 : 8;   // the dedicated chiller ticks
+        bot.frostSlow = Math.max(0, (bot.frostSlow || 100) - chill);
+      }
       spawnAbilityAOEFX(hitWorldPos ? hitWorldPos.clone() : mesh.position.clone(), 0.5, 0x9fe8ff);
     }
   }
@@ -54182,16 +54219,18 @@ function applyBotDamageToPlayer(weaponId, botId, damageOverride) {
   // Frost Blaster: doesn't deal HP damage, just reduces speed (lethal at 0)
   if (weaponId === 'frost_blaster') {
     if (isDead || match?.type === 'range') return;
-    playerFrostSlow = Math.max(0, playerFrostSlow - 3);
-    flashHitIndicator();
-    return;
+    playerFrostSlow = Math.max(0, playerFrostSlow - 3);     // and then its 2 damage lands like any other hit, below
   }
   // ❄️⚡ The same effects, pointed at us. Ice bleeds our speed on top of its
   // damage; energy whites out the screen for a moment. Both fall through to the
   // normal damage path below — only the Frost Blaster above deals no HP.
   {
     const k = projectileKind(weaponId, WEAPONS.find(w => w.id === weaponId));
-    if (k === 'ice' && !isDead) playerFrostSlow = Math.max(0, playerFrostSlow - 8);
+    if (k === 'ice' && !isDead) {
+      if (weaponId === 'frost_blaster') { /* stacked above */ }
+      else if (weaponId === 'cyroclasm' || weaponId === 'cyroclasm_laser') chillPlayer();   // a chill, not a stack
+      else playerFrostSlow = Math.max(0, playerFrostSlow - 8);
+    }
     if (k === 'energy' && !isDead) flashScreen('rgba(255,255,255,0.55)', 260);
   }
   // 🎨 Weapon-specific vision effect (paintball splatter, etc.) on top of the normal flash.
@@ -54202,8 +54241,8 @@ function applyBotDamageToPlayer(weaponId, botId, damageOverride) {
   if (weaponId === 'storm_bloom_ball') playerRootedUntil = Math.max(playerRootedUntil, Date.now() + 3000);
   else if (weaponId === 'storm_bloom_aura') playerRootedUntil = Math.max(playerRootedUntil, Date.now() + 1000);
   else if (weaponId === 'cyroclasm_laser') {
-    playerFrostSlow = Math.min(playerFrostSlow, 50);
-    playerRootedUntil = Math.max(playerRootedUntil, Date.now() + 3000);
+    chillPlayer(2500);
+    rootPlayer(3000);
   }
   // Frost-freeze death routes via this function with a special weapon ID
   if (weaponId === 'frost_freeze') {
@@ -54705,8 +54744,8 @@ socket.on('playerHit', data => {
     if (data.weapon === 'storm_bloom_ball') playerRootedUntil = Math.max(playerRootedUntil, Date.now() + 3000);
     else if (data.weapon === 'storm_bloom_aura') playerRootedUntil = Math.max(playerRootedUntil, Date.now() + 1000);
     else if (data.weapon === 'cyroclasm_laser') {
-      playerFrostSlow = Math.min(playerFrostSlow, 50);
-      playerRootedUntil = Math.max(playerRootedUntil, Date.now() + 3000);
+      chillPlayer(2500);
+      rootPlayer(3000);
     }
   }
   // Lightsabre parry: absorb incoming damage
@@ -56949,6 +56988,9 @@ function startMatchRound() {
     if (!match || match.over) return;   // it ended during the countdown (an opponent left, #46)
     // Hard guard: if loadout opened between countdown end and now, wait for confirm
     if (isLoadoutOpen()) { setTimeout(doStart, 400); return; }
+    // A new round starts clean for everyone: no fire, slow, root or stun carried over from the last one.
+    clearPlayerStatusEffects();
+    for (const b of gameBots) clearBotStatusEffects(b);
     // For elim rounds: respawn the player now (after countdown)
     if (isDead) {
       isDead = false;
@@ -60585,7 +60627,7 @@ function updateBotAI(dt) {
     // Frost slow folds into the same multiply. Note the AI's own distance checks
     // above run on the UNSCALED movement, which is what we want: they measure
     // intent (am I stuck, am I kiting), not ground actually covered.
-    const frostMult = (bot.frostSlow || 100) / 100;
+    const frostMult = (bot.frostSlow || 100) / 100 * (Date.now() < (bot._chillUntil || 0) ? CHILL_MULT : 1);
     const rootMult = Date.now() < (bot._rootUntil || 0) ? 0 : 1;
     const moveScale = BOT_SPEED_MULT * frostMult * rootMult;
     if (moveScale !== 1) {
@@ -60757,6 +60799,7 @@ function loop() {
   safeLoopStep('fire-shake', () => updateFireShake(dt)); // camera punch on every shot, snaps back fast
   safeLoopStep('slam-shake', () => updateSlamShake(dt));  // the floor taking a hammer
   safeLoopStep('realism-feedback', () => updateRealismFeedback(dt));
+  safeLoopStep('status-reset', () => watchStatusReset());
   safeLoopStep('dots', () => updateDots());       // anything set alight keeps taking damage
   safeLoopStep('bullets', () => updateBullets(dt));
   safeLoopStep('donut-trails', () => updateDonutMotionTrails(dt));
