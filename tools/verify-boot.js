@@ -833,6 +833,43 @@ if (ok && process.argv.includes('--douse')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+if (ok && process.argv.includes('--loadout')) {
+  // A kit never has two primaries (a new player's Lobby 13 default was the AK-20 and the SG-8) or two secondaries.
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const saved = [selectedPrimaryIdx, selectedSecondaryIdx, selectedMeleeIdx, selectedSupportIdx];
+    try {
+      const ak = WEAPONS.findIndex(w => w.id === 'ak20'), sg = WEAPONS.findIndex(w => w.id === 'sg8');
+      if (WEAPONS[ak].slot === 'secondary' || WEAPONS[sg].slot === 'secondary') issues.push('the test assumes the AK-20 and the SG-8 are primaries');
+      const d = defaultLoadoutIdx();
+      if (WEAPONS[d.p].slot === 'secondary') issues.push('the default primary is a secondary: ' + WEAPONS[d.p].id);
+      if (WEAPONS[d.s].slot !== 'secondary') issues.push('the default secondary is a primary: ' + WEAPONS[d.s].id);
+      if (!isOwned(WEAPONS[d.p].id) || !isOwned(WEAPONS[d.s].id)) issues.push('the default kit holds something the player does not own');
+      // the old Lobby 13 default
+      selectedPrimaryIdx = 0; selectedSecondaryIdx = 1; selectedMeleeIdx = 0; selectedSupportIdx = 0;
+      sanitizeLoadoutSlots();
+      if (WEAPONS[selectedPrimaryIdx].slot === 'secondary') issues.push('sanitize left a secondary in the primary slot');
+      if (WEAPONS[selectedSecondaryIdx].slot !== 'secondary') issues.push('indices 0 and 1 (AK-20 and SG-8) survived as primary and secondary');
+      // a secondary in the primary slot
+      selectedPrimaryIdx = d.s; selectedSecondaryIdx = d.s;
+      sanitizeLoadoutSlots();
+      if (WEAPONS[selectedPrimaryIdx].slot === 'secondary' || WEAPONS[selectedSecondaryIdx].slot !== 'secondary') issues.push('a secondary in the primary slot was not put right');
+      // a proper kit is left alone
+      selectedPrimaryIdx = ak; selectedSecondaryIdx = d.s;
+      sanitizeLoadoutSlots();
+      if (selectedPrimaryIdx !== ak || selectedSecondaryIdx !== d.s) issues.push('sanitize changed a proper kit');
+      // nothing picked stays nothing picked (the loadout screen fills it in)
+      selectedPrimaryIdx = null; selectedSecondaryIdx = null;
+      sanitizeLoadoutSlots();
+      if (selectedPrimaryIdx !== null || selectedSecondaryIdx !== null) issues.push('sanitize invented a kit for nobody');
+    } finally { [selectedPrimaryIdx, selectedSecondaryIdx, selectedMeleeIdx, selectedSupportIdx] = saved; }
+    return issues;
+  })()`);
+  if (/selectedPrimaryIdx\s*=\s*0;\s*\n\s*selectedSecondaryIdx\s*=\s*1;/.test(src)) issues.push('a hard-coded primary 0 / secondary 1 default is back in game.js');
+  console.log('loadout checks: a kit never has two primaries; the Lobby 13 default is a real kit');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 if (ok && process.argv.includes('--chain-maul')) {
   const issues = vm.runInThisContext(`(() => {
     const issues = [], v = (x,y,z) => new THREE.Vector3(x,y,z);

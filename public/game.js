@@ -41206,6 +41206,30 @@ function syncHeldAmmoModelForIndex(idx) {
   for (let i = 0; i < kids.length; i++) kids[i].visible = i < shown;
 }
 
+// The kit someone who has picked nothing starts from: the first thing they own in each slot. Lobby 13 used to
+// hard-code indices 0 and 1 here, which are the AK-20 and the SG-8: both primaries, so a new player who went from
+// Lobby 13 straight into a match had two primaries and no secondary.
+function defaultLoadoutIdx() {
+  const usable = w => !w.ddayOnly && !w.skinOnly && !w.modeOnly && !w.archived && isOwned(w.id);
+  const p = WEAPONS.findIndex(w => w.slot !== 'secondary' && usable(w));
+  const s = WEAPONS.findIndex(w => w.slot === 'secondary' && usable(w));
+  const m = MELEE_ITEMS.findIndex(x => !x.skinOnly && !x.archived && isOwned(x.id));
+  const u = SUPPORT_ITEMS.findIndex(x => isOwned(x.id));
+  return {
+    p: p < 0 ? WEAPONS.findIndex(w => w.slot !== 'secondary') : p,
+    s: s < 0 ? WEAPONS.findIndex(w => w.slot === 'secondary') : s,
+    m: m < 0 ? 0 : m, u: u < 0 ? 0 : u,
+  };
+}
+// A primary slot holds a primary and a secondary slot holds a secondary: whatever got in there (an old default, a
+// mode that forced a weapon and left it behind) is replaced with the first one the player owns of the right kind.
+function sanitizeLoadoutSlots() {
+  const d = defaultLoadoutIdx();
+  const p = WEAPONS[selectedPrimaryIdx], s = WEAPONS[selectedSecondaryIdx];
+  if (selectedPrimaryIdx != null && selectedPrimaryIdx >= 0 && (!p || p.slot === 'secondary')) selectedPrimaryIdx = d.p;
+  if (selectedSecondaryIdx != null && selectedSecondaryIdx >= 0 && (!s || s.slot !== 'secondary')) selectedSecondaryIdx = d.s;
+  if (selectedPrimaryIdx != null && selectedPrimaryIdx >= 0 && selectedPrimaryIdx === selectedSecondaryIdx) selectedSecondaryIdx = d.s;
+}
 function loadoutReady() {
   return selectedPrimaryIdx !== null && selectedSecondaryIdx !== null &&
     selectedMeleeIdx !== null && selectedSupportIdx !== null &&
@@ -63658,6 +63682,7 @@ function showLoadoutScreen(mode) {
     if (r.skin) setGunStatSkin(r.id, r.skin);
   }
   if (selectedPrimaryIdx != null && WEAPONS[selectedPrimaryIdx]?.modeOnly) selectedPrimaryIdx = null;
+  sanitizeLoadoutSlots();       // never two primaries (or two secondaries) in a kit
   if (selectedMeleeIdx != null && MELEE_ITEMS[selectedMeleeIdx]?.skinOnly) {
     const r = resolveMeleeLoadoutId(MELEE_ITEMS[selectedMeleeIdx].id);
     selectedMeleeIdx = findMeleeIdx(r.id);
@@ -63674,14 +63699,8 @@ function showLoadoutScreen(mode) {
   } else {
     // First-time entry: apply defaults — pick first OWNED item per slot so
     // we don't auto-select something the user can't actually afford.
-    selectedPrimaryIdx   = WEAPONS.findIndex(w => w.slot !== 'secondary' && !w.ddayOnly && !w.skinOnly && !w.modeOnly && !w.archived && isOwned(w.id));
-    selectedSecondaryIdx = WEAPONS.findIndex(w => w.slot === 'secondary' && isOwned(w.id));
-    selectedMeleeIdx     = MELEE_ITEMS.findIndex(m => !m.skinOnly && !m.archived && isOwned(m.id));
-    selectedSupportIdx   = SUPPORT_ITEMS.findIndex(s => isOwned(s.id));
-    if (selectedPrimaryIdx   < 0) selectedPrimaryIdx   = 0;
-    if (selectedSecondaryIdx < 0) selectedSecondaryIdx = WEAPONS.findIndex(w => w.slot === 'secondary');
-    if (selectedMeleeIdx     < 0) selectedMeleeIdx     = 0;
-    if (selectedSupportIdx   < 0) selectedSupportIdx   = 0;
+    const d = defaultLoadoutIdx();
+    selectedPrimaryIdx = d.p; selectedSecondaryIdx = d.s; selectedMeleeIdx = d.m; selectedSupportIdx = d.u;
     cardEls[selectedPrimaryIdx] && cardEls[selectedPrimaryIdx].classList.add('selected');
     cardEls[selectedSecondaryIdx] && cardEls[selectedSecondaryIdx].classList.add('selected');
     meleeEls[selectedMeleeIdx] && meleeEls[selectedMeleeIdx].classList.add('selected');
@@ -64214,6 +64233,7 @@ function confirmLoadout() {
   cancelAutoRespawn();
   // Guard: both slots must be chosen (belt-and-suspenders against spurious mobile touch events)
   if (!loadoutReady()) return;
+  sanitizeLoadoutSlots();       // and the right kind in each: a primary in the secondary slot is put right here
 
   document.getElementById('loadout-screen').style.display = 'none';
   resetCombatResources();
@@ -65884,6 +65904,7 @@ function applyUpgrades(w) {
 
 function selectMode(modeId) {
   selectedModeConfig = GAME_MODE_CONFIGS[modeId] || GAME_MODE_CONFIGS['ffa5'];
+  sanitizeLoadoutSlots();       // (D-Day sets its own forced kit below)
   document.getElementById('mode-screen').style.display = 'none';
   if (modeId === 'dday') {
     // D-Day: skip loadout, force MG42 + infinite AK20
@@ -65910,10 +65931,10 @@ function selectMode(modeId) {
     showFloatingSettingsButton(true);
   } else if (modeId === 'range' || modeId === 'aim_trainer') {
     // Shooting range / aim trainer: skip loadout, give infinite ammo on all weapons
-    selectedPrimaryIdx   = 0;
-    selectedSecondaryIdx = 1;
-    selectedMeleeIdx     = 0;
-    selectedSupportIdx   = 0;
+    if (!loadoutReady()) {          // keep a kit that was picked; never invent one with two primaries (indices 0 and 1)
+      const d = defaultLoadoutIdx();
+      selectedPrimaryIdx = d.p; selectedSecondaryIdx = d.s; selectedMeleeIdx = d.m; selectedSupportIdx = d.u;
+    }
     // Infinite ammo for all weapons
     weaponAmmo.forEach((_, idx) => { weaponAmmo[idx] = { ammo: 999999, reserve: 999999 }; });
     activeSlot = 'primary';
@@ -65938,10 +65959,10 @@ function selectMode(modeId) {
     startLoop();
     showFloatingSettingsButton(true);
   } else if (modeId === 'wave_dash') {
-    selectedPrimaryIdx   = 0;
-    selectedSecondaryIdx = 1;
-    selectedMeleeIdx     = 0;
-    selectedSupportIdx   = 0;
+    if (!loadoutReady()) {          // keep a kit that was picked; never invent one with two primaries (indices 0 and 1)
+      const d = defaultLoadoutIdx();
+      selectedPrimaryIdx = d.p; selectedSecondaryIdx = d.s; selectedMeleeIdx = d.m; selectedSupportIdx = d.u;
+    }
     activeSlot = 'primary';
     weaponModels.forEach(m => m.visible = false);
     meleeModels.forEach(m  => m.visible = false);
@@ -65959,10 +65980,11 @@ function selectMode(modeId) {
     // can mess around / duel freely. No enemies, no scoring. Keep a picked kit
     // when returning from loadout/trashcan so lobby duels use what you chose.
     if (!loadoutReady()) {
-      selectedPrimaryIdx   = 0;
-      selectedSecondaryIdx = 1;
-      selectedMeleeIdx     = 0;
-      selectedSupportIdx   = 0;
+      const d = defaultLoadoutIdx();
+      selectedPrimaryIdx   = d.p;
+      selectedSecondaryIdx = d.s;
+      selectedMeleeIdx     = d.m;
+      selectedSupportIdx   = d.u;
     }
     weaponAmmo.forEach((_, idx) => { weaponAmmo[idx] = { ammo: 999999, reserve: 999999 }; });
     activeSlot = 'primary';
