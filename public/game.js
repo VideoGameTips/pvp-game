@@ -47104,7 +47104,6 @@ weaponModels.forEach(metalizeModel);
 // Melee and utility builders use their own handle coordinates, not gun trigger
 // guards. Keep those coordinates intact inside a held assembly so procedural
 // chains, orbiting parts and their animation hooks still share the same space.
-const MELEE_HOLD_TILT = { pitch: 0.14, yaw: -0.10 };
 function attachEquipmentHands(model, item, support = false) {
   if (!model || !item || model._equipmentHands) return;
   model._equipmentHands = true;
@@ -47147,7 +47146,7 @@ function attachEquipmentHands(model, item, support = false) {
       if (handle) { handle.box.getCenter(grip); grip.z += 0.012; }
     }
     const supports = {
-      sledge: [0,0,0.06], spear: [0,0,-0.04], katana: [0,0,0.085],
+      sledge: [0,0,0.06], spear: [0,0,-0.04],
       chainsaw: [-0.025,0.055,0.055], scythe: [0,0,-0.06],
       gravity_hammer: [0,0,-0.035], titan_hammer: [0,0,-0.02],
       garrote: [-0.06,0,-0.04],
@@ -47161,20 +47160,12 @@ function attachEquipmentHands(model, item, support = false) {
   for (const child of [...model.children]) held.add(child);
   model.add(held);
   model._heldItem = held;
-  // How the thing sits in the hand. A melee used to be tipped up 0.65 rad (37 degrees: held almost upright, a sword
-  // like a torch), which also tilted the start of every authored swing and thrust. It sits close to the way it was
-  // drawn now: a few degrees of tip-up and a touch of yaw so it reads as held, not posed.
-  const tilt = new THREE.Quaternion().setFromEuler(new THREE.Euler(
-    support ? 0.12 : id === 'riot_shield' || id === 'fists' ? 0 : MELEE_HOLD_TILT.pitch,
-    support ? -0.22 : id === 'riot_shield' ? 0.12 : MELEE_HOLD_TILT.yaw, 0));
-  held.quaternion.copy(tilt);
-  const offset = new THREE.Vector3(0, -0.008, -0.115).sub(grip.clone().applyQuaternion(tilt));
-  held.position.copy(offset);
+  // The weapon keeps its original transform. Only the hand is fitted to it.
   const handAt = (at, left) => {
     const hand = _makeViewHand(left ? -1 : 1);
-    hand.position.copy(at).applyQuaternion(tilt).add(offset);
+    hand.position.copy(at);
     hand.rotation.set(0.12, 0, left ? -0.12 : 0.12);
-    hand.quaternion.premultiply(tilt);
+    if (id === 'katana') hand.rotation.set(0.18, 0.90, 0.22);
     model.add(hand);
     return hand;
   };
@@ -47182,32 +47173,34 @@ function attachEquipmentHands(model, item, support = false) {
   const front = second ? handAt(second, true) : rear;
   model._hands = { rear, front, rearHome: rear.position.clone(), frontHome: front.position.clone(),
     rearRot: rear.rotation.clone(), frontRot: front.rotation.clone(),
-    gripAt: grip.clone().applyQuaternion(tilt).add(offset), single: !second, pistolish: !second };
+    gripAt: grip.clone(), single: !second, pistolish: !second };
   if (id === 'fists') {
     // Keep one actual hand, not the old fist prop sitting in a gripping hand.
     held.clear();
     rear.children[0].userData.vmFist = true;
   }
   addViewArms(model);
-  updateEquipmentFraming(model);
-}
-function updateEquipmentFraming(model) {
-  if (!model._heldItem || !model._hands) return;
-  const narrow = THREE.MathUtils.clamp((1 - camera.aspect) / 0.5, 0, 1);
-  const size = new THREE.Box3().setFromObject(model._heldItem).getSize(new THREE.Vector3());
-  const old = model._equipmentFrameOffset || new THREE.Vector3();
-  const next = new THREE.Vector3(-0.055 * narrow, 0, -(size.x > 0.22 ? 0.20 : 0.045) * narrow);
-  const delta = next.clone().sub(old), H = model._hands;
-  model._heldItem.position.add(delta);
-  for (const hand of new Set([H.rear, H.front])) hand.position.add(delta);
-  H.rearHome.add(delta); H.frontHome.add(delta); H.gripAt.add(delta);
-  model._equipmentFrameOffset = next;
 }
 meleeModels.forEach((m, i) => {
   attachEquipmentHands(m, MELEE_ITEMS[i]);
   if (m._offHand) attachEquipmentHands(m._offHand, MELEE_ITEMS[i]);
 });
 supportModels.forEach((m, i) => attachEquipmentHands(m, SUPPORT_ITEMS[i], true));
+
+function updateMeleeGripPose() {
+  if (activeSlot !== 'melee' || MELEE_ITEMS[selectedMeleeIdx]?.id !== 'katana') return;
+  const model = meleeModels[selectedMeleeIdx], H = model?._hands;
+  if (!model?._equipmentHands || !H) return;
+  const hand = H.rear;
+  hand.rotation.copy(H.rearRot);
+  // Flex the wrist around the grip, rather than sliding the palm off the hilt.
+  if (meleeAbilityBuff?.type !== 'deflect' && meleeSwingT < 1) {
+    const flex = Math.sin(Math.PI * meleeSwingT), side = model._swingSide || 1;
+    hand.rotateX(-0.28 * flex);
+    hand.rotateY(0.20 * flex * side);
+    hand.rotateZ(-0.30 * flex * side);
+  }
+}
 
 const equipmentSwayModels = [];
 function resetEquipmentSway() {
@@ -63175,6 +63168,7 @@ function loop() {
   updateAbilityHUD();
   updateMeleeSwing(dt);
   updateChainMaulSwing(dt);
+  updateMeleeGripPose();
   safeLoopStep('equipment-sway', updateEquipmentSway);
   updateWeaponSelector();
   updateTrashcanProximity();
@@ -67799,7 +67793,6 @@ renderer.domElement.addEventListener('click', ()=>{
 });
 window.addEventListener('resize', ()=>{
   camera.aspect=window.innerWidth/window.innerHeight;
-  camera.children.forEach(updateEquipmentFraming);
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
