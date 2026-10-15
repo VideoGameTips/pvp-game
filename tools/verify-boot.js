@@ -124,6 +124,17 @@ try {
   console.log('   this is a runtime failure during module evaluation, not a syntax error.');
 }
 
+if (ok && process.argv.includes('--ability-cooldowns')) {
+  const valid = vm.runInThisContext(`(() => {
+    const item = MELEE_ITEMS.find(m => m.id === 'baguette');
+    return item.ability.cd === 10000 && abilityCooldownFor(item) === 10000
+      && abilityCooldownFor(item, { ...item.ability, cd: 0 }) === 10000
+      && abilityCooldownFor(item, null) === 0;
+  })()`);
+  if (!valid) { ok = false; console.log('baguette cooldown override failed'); }
+  else console.log('baguette: 10-second ability cooldown overrides global fast/zero cooldown');
+}
+
 if (ok && process.argv.includes('--equipment-hands')) {
   const issues = vm.runInThisContext(`(() => {
     const issues = [];

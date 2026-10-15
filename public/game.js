@@ -983,7 +983,7 @@ const MELEE_ITEMS = [
   { id: 'katana',     name: 'Katana',     type: 'Melee',       damage: 65, range: 2.8, cooldown: 480,
     ability: { name: 'Deflect',      cd: 14000, desc: '2s · reflect bullets back at enemies', type: 'melee_deflect', duration: 2000 } },
   { id: 'baguette',   name: 'Baguette',   type: 'Melee',       damage: 28, range: 2.0, cooldown: 300,
-    ability: { name: 'Eat It',       cd: 20000, desc: 'Munch the baguette · restore 40 HP', type: 'melee_eat', heal: 40 } },
+    ability: { name: 'Eat It',       cd: 10000, desc: 'Munch the baguette · restore 40 HP', type: 'melee_eat', heal: 40 } },
   { id: 'knife',      name: 'Knife',      type: 'Melee',       damage: 28, range: 1.6, cooldown: 260, speedMult: 2.0,
     ability: { name: 'Backstab',  cd: 7500, desc: 'Lunge at a target · instant kill if it lands', type: 'melee_instakill' } },
   { id: 'chainsaw',   name: 'Chainsaw',   type: 'Heavy Melee', damage: 45, range: 1.9, cooldown: 150,
@@ -42978,6 +42978,7 @@ function abilityReady(w) {
 
 function abilityCooldownFor(item, ab = equippedAbility(item) || item?.ability) {
   if (!ab) return 0;
+  if (item?.id === 'baguette') return 10000;
   const isMelee = MELEE_ITEMS.some(m => m.id === item?.id);
   if (item?.id === 'chainsaw') return 10000;
   if (item?.id === 'katana') return 7000;
