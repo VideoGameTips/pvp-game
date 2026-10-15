@@ -5528,7 +5528,7 @@ sun.shadow.radius = 2.5;
 scene.add(sun);
 
 function applyMapLighting(name) {
-  const concept = name === 'blank' || name === 'range' || name === 'lobby13';
+  const concept = name === 'blank' || name === 'range';
   const indoor = ['space','orbital_station','sewer','gravity_lab','lockdown','studio','opera','labyrinth','m4_tower','m4_tower_big','m4_tower_super'].includes(name);
   const dark = indoor || ['volcano','doomsday','cyber','laser_vault','neon_tokyo'].includes(name);
   mapAmbient.intensity = concept ? .6 : dark ? .34 : .24;
@@ -8745,70 +8745,155 @@ function detonateMapProp(mapName, origin, opts = {}) {
 // ──────────────────────────────────────────────────────────────────────────
 registerMap('lobby13');
 function buildLobby13Map() {
-  const m = 'lobby13';
-  addMapGround(m, 0x2b2233, null); // dark lounge carpet
-  MAP_GROUPS[m]._skyColor = 0x14101c;
+  const m = 'lobby13', group = MAP_GROUPS[m];
+  addMapGround(m, 0xc4ccce, null);
+  group._skyColor = 0xb8d6e4;
+  const shell = 0xdce2e2, steel = 0x303e43, teal = 0x197f85;
+  const box = (x, y, z, w, h, d, color) => {
+    const mesh = addMapBox(m, x, y, z, w, h, d, color);
+    mesh.castShadow = mesh.receiveShadow = true;
+    return mesh;
+  };
+  const ground = group.children.find(o => o.isMesh);
+  ground.receiveShadow = true;
+  // Decorative trim stays out of navigation and is merged with the static shell.
+  const detail = (x, y, z, w, h, d, color) => {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d),
+      new THREE.MeshPhongMaterial({ color, shininess: 35 }));
+    mesh.position.set(x, y, z); mesh.userData.mapStatic = true;
+    mesh.castShadow = mesh.receiveShadow = true; group.add(mesh);
+    return mesh;
+  };
+  const paving = document.createElement('canvas'); paving.width = paving.height = 256;
+  const pavingCtx = paving.getContext('2d');
+  pavingCtx.fillStyle = '#ededed'; pavingCtx.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 6000; i++) {
+    const shade = 180 + (i * 17 % 65);
+    pavingCtx.fillStyle = 'rgb(' + shade + ',' + shade + ',' + shade + ')';
+    pavingCtx.fillRect(i * 73 % 256, (i * 137 + Math.floor(i / 256) * 29) % 256, 1, 1);
+  }
+  const pavingTex = new THREE.CanvasTexture(paving);
+  pavingTex.wrapS = pavingTex.wrapT = THREE.RepeatWrapping;
+  pavingTex.repeat.set(12, 12); pavingTex.colorSpace = THREE.SRGBColorSpace;
+  pavingTex.userData.mapSurface = true;
+  const floor = (x, z, w, d, color, y = .065) => {
+    const mesh = detail(x, y, z, w, .035, d, color);
+    if (w > 10 && d > 10) {
+      mesh.material.map = pavingTex; mesh.material.bumpMap = pavingTex;
+      mesh.material.bumpScale = .025; mesh.material.shininess = 18;
+    }
+    return mesh;
+  };
+  const sign = (title, sub, x, y, z, width, angle = 0) => {
+    const cv = document.createElement('canvas'); cv.width = 1024; cv.height = 256;
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#172b31'; ctx.fillRect(0, 0, 1024, 256);
+    ctx.fillStyle = '#51dfcf'; ctx.fillRect(32, 30, 10, 196);
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.font = 'bold 104px Arial'; ctx.fillStyle = '#f1f8f6'; ctx.fillText(title, 72, 102, 910);
+    ctx.font = '32px Arial'; ctx.fillStyle = '#a8c8cd'; ctx.fillText(sub, 76, 194, 900);
+    const texture = new THREE.CanvasTexture(cv); texture.colorSpace = THREE.SRGBColorSpace;
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, width / 4),
+      new THREE.MeshBasicMaterial({ map: texture }));
+    mesh.position.set(x, y, z); mesh.rotation.y = angle; group.add(mesh);
+  };
 
-  // Soft inlaid "rug" in the central hangout area
-  const rug = new THREE.Mesh(new THREE.PlaneGeometry(22, 22),
-    new THREE.MeshLambertMaterial({ color: 0x4a3a66 }));
-  rug.rotation.x = -Math.PI / 2; rug.position.set(0, 0.02, 0);
-  MAP_GROUPS[m].add(rug);
+  // A clerestory hall: shaded side wings, an open skylight and a clear central aisle.
+  box(0, 5, -32, 70, 10, 1.2, shell);
+  box(0, 5, 32, 70, 10, 1.2, shell);
+  [-35, 35].forEach(x => box(x, 5, 0, 1.2, 10, 66, shell));
+  [-31.3, 31.3].forEach(z => {
+    detail(0, 1.1, z, 69, 2.2, .15, steel);
+    detail(0, 8.7, z, 69, .18, .2, teal);
+    for (let x = -30; x <= 30; x += 6) {
+      detail(x, 5.8, z, 4.8, 3.4, .18, 0x66959e);
+      for (const dx of [-2.4, 0, 2.4]) detail(x + dx, 5.8, z + (z < 0 ? .12 : -.12), .09, 3.5, .12, steel);
+    }
+  });
+  [-33.9, 33.9].forEach(x => {
+    for (let z = -27; z <= 27; z += 9) {
+      box(x, 4.9, z, .8, 9.8, .8, steel);
+      detail(x + (x < 0 ? .44 : -.44), 3, z, .08, 4, .22, 0x51b9b0);
+    }
+  });
+  [-24, 24].forEach(x => box(x, 9.8, 0, 22, .45, 64, shell));
+  for (let z = -28; z <= 28; z += 7) {
+    box(0, 10.2, z, 70, .45, .38, steel);
+    detail(-24, 9.54, z, 16, .07, .32, 0xe4f6f0);
+    detail(24, 9.54, z, 16, .07, .32, 0xe4f6f0);
+  }
+  floor(0, 0, 25, 61, 0xe5e8e5, .025);
+  for (let z = -30; z <= 30; z += 3) floor(0, z, 25, .035, 0xaab5b5);
+  [-12.6, 12.6].forEach(x => floor(x, 0, .14, 61, teal));
+  for (let z = 14; z <= 26; z += 3) {
+    floor(-.7, z, .14, 1.2, teal); floor(.7, z, .14, 1.2, teal);
+  }
+  sign('PVP ARENA', 'LOBBY 13  /  TRAIN. EQUIP. CHALLENGE.', 0, 6.3, -31.05, 23);
+  sign('SEE YOU IN THE ARENA', 'LOBBY 13', 0, 5.7, 31.05, 18, Math.PI);
 
-  // Outer room walls (warm wood tone)
-  const wallCol = 0x3a2e24;
-  addMapBox(m, 0, 3, -32, 70, 6, 1.2, wallCol);
-  addMapBox(m, 0, 3,  32, 70, 6, 1.2, wallCol);
-  addMapBox(m, -35, 3, 0, 1.2, 6, 66, wallCol);
-  addMapBox(m,  35, 3, 0, 1.2, 6, 66, wallCol);
+  // Seating pockets leave the spawn, ramp and both loadout-can approaches open.
+  const bench = (x, z, flip) => {
+    box(x, .24, z, 5, .48, 1.6, steel);
+    box(x, .65, z, 4.8, .35, 1.5, 0x257e85);
+    box(x, 1.1, z + flip * .65, 5, .8, .25, 0x257e85);
+    [-2.3, 2.3].forEach(dx => box(x + dx, .85, z, .25, .7, 1.65, steel));
+  };
+  [-7.8, 7.8].forEach(x => { bench(x, -18, -1); bench(x, 23, 1); });
+  const planter = (x, z) => {
+    box(x, .6, z, 2.6, 1.2, 2.6, shell);
+    detail(x, 1.22, z, 2.3, .1, 2.3, 0x38483b);
+    for (let i = 0; i < 7; i++) {
+      const a = i * 2.4, h = 1.1 + (i % 3) * .35;
+      detail(x + Math.cos(a) * .7, 1.25 + h / 2, z + Math.sin(a) * .7,
+        .22, h, .22, i % 2 ? 0x487d50 : 0x325e43);
+    }
+  };
+  [[-11,-26],[11,-26],[-11,28],[11,28],[-31,-17],[-31,17]].forEach(([x,z]) => planter(x,z));
 
-  // ── Central lounge: low couches + coffee tables (low cover, comfy vibe) ──
-  const couch = 0x884466, table = 0x5a4632;
-  addMapBox(m, -7, 0.5,  6, 6, 1.0, 2, couch);
-  addMapBox(m,  7, 0.5,  6, 6, 1.0, 2, couch);
-  addMapBox(m, -7, 0.5, -6, 6, 1.0, 2, couch);
-  addMapBox(m,  7, 0.5, -6, 6, 1.0, 2, couch);
-  addMapBox(m, 0, 0.4, 0, 4, 0.8, 4, table);     // central coffee table
-  addMapBox(m, 0, 1.1, 0, 1.4, 0.6, 1.4, 0xffcc55); // glowy lamp on the table
+  // Keep the slide circuit in its own wing, leaving the arrival sightline open.
+  addRamp(m, -22, 2, 0, 1, { width: 5, rise: 3, landing: 2.5,
+    color: 0x3d646b, landColor: 0x527b80, lipColor: 0xe1b63d });
+  floor(-22, 5, 6.2, 9, 0x43545b);
+  [-25.2, -18.8].forEach(x => floor(x, 5, .16, 9, 0xe1b63d));
+  sign('MOVEMENT LAB', 'SLIDE / JUMP / REPEAT', -22, 4.9, -13.7, 13);
+  floor(-22, 0, 17, 25, 0x50676b, .025);
+  [-12.7, 12.7].forEach(z => {
+    box(-22, .65, z, 17, 1.3, .3, steel);
+    detail(-22, 1.35, z, 17, .09, .35, 0x57c9b5);
+  });
+  box(-30.5, .65, 0, .3, 1.3, 25, steel);
+  for (let z = -9; z <= -3; z += 6) {
+    floor(-22, z, 16, .06, 0x88a4a4);
+    box(-25 + ((z + 9) % 12 ? 5 : 0), .55, z, 2.4, 1.1, 2.4, 0x829596);
+  }
 
-  // ── 45° test ramp (middle lane, just past the coffee table) ─────────────
-  // For testing slides and slide-jumps: see addRamp() for how it is built.
-  addRamp(m, 0, 4, 0, 1, { width: 5, rise: 3, landing: 2.5 });
-
-  // ── A few bar stools / pillars around the edges to break sightlines ──
-  [[-20, 14], [20, 14], [-20, -14], [20, -14], [-26, 0], [26, 0]].forEach(([x, z]) => {
-    addMapBox(m, x, 1.5, z, 1.4, 3, 1.4, 0x4a3c30);
+  // Armory display alcoves flank the entrance, rather than obstructing the cans.
+  [-21, 21].forEach(x => {
+    box(x, 1.4, 28.5, 11, 2.8, 2, steel);
+    detail(x, 2.85, 28.5, 11.2, .14, 2.2, 0x99acac);
+    sign('ARMORY', 'LOADOUT / CUSTOMIZE', x, 4.5, 31.05, 10, Math.PI);
+    for (let i = -2; i <= 2; i++) {
+      detail(x + i * 1.8, 1.4, 27.45, 1.45, 1.8, .08, 0x1c292d);
+      detail(x + i * 1.8, 1.4, 27.37, .12, 1.15, .12, 0x8ca2a5);
+      detail(x + i * 1.8 + .25, 1.15, 27.37, .5, .22, .12, 0x8ca2a5);
+    }
+  });
+  [[6,3],[-6,-3]].forEach(([x,z]) => {
+    floor(x,z,2.6,2.6,0x2f6564);
+    floor(x,z-1.35,2.6,.1,0x70d4b7);
+    sign('LOADOUT', 'EQUIP STATION', x, 2.4, z-.7, 3.2);
   });
 
-  // ── 1v1 DUEL PIT (left side): a fenced square arena with a lighter floor ──
-  const pitX = -22, pitZ = 0;
-  const pitFloor = new THREE.Mesh(new THREE.PlaneGeometry(16, 24),
-    new THREE.MeshLambertMaterial({ color: 0x223a2a }));
-  pitFloor.rotation.x = -Math.PI / 2; pitFloor.position.set(pitX, 0.03, pitZ);
-  MAP_GROUPS[m].add(pitFloor);
-  // low fence rails around the pit (waist-high cover; gap on the inner side for entry)
-  addMapBox(m, pitX, 0.7, pitZ - 12, 16, 1.4, 0.5, 0x6688aa);
-  addMapBox(m, pitX, 0.7, pitZ + 12, 16, 1.4, 0.5, 0x6688aa);
-  addMapBox(m, pitX - 8, 0.7, pitZ, 0.5, 1.4, 24, 0x6688aa);
-  // one center block for cover in the duel pit
-  addMapBox(m, pitX, 0.9, pitZ, 2, 1.8, 2, 0x335544);
-
-  // ── Big neon "LOBBY 13" sign on the back wall ──
-  const signMat = new THREE.MeshBasicMaterial({ color: 0x66ddff });
-  const sign = new THREE.Mesh(new THREE.BoxGeometry(20, 3, 0.4), signMat);
-  sign.position.set(0, 5, -31.2);
-  MAP_GROUPS[m].add(sign);
-  const sign2 = new THREE.Mesh(new THREE.BoxGeometry(6, 2, 0.5),
-    new THREE.MeshBasicMaterial({ color: 0xff66bb }));
-  sign2.position.set(0, 5, -31.0); // "13" accent
-  MAP_GROUPS[m].add(sign2);
-
-  // Ambient glow blocks (purely decorative light strips along the floor)
-  [-30, -15, 0, 15, 30].forEach(x => {
-    const strip = new THREE.Mesh(new THREE.BoxGeometry(1, 0.1, 60),
-      new THREE.MeshBasicMaterial({ color: 0x3355aa }));
-    strip.position.set(x, 0.06, 0);
-    MAP_GROUPS[m].add(strip);
+  // Three open-front staging bays retain the exact interaction-pad coordinates.
+  floor(24, 0, 18, 34, 0x6e8188, .025);
+  [-16.5,-5.5,5.5,16.5].forEach(z => {
+    box(24, 3.6, z, 19, 7.2, .45, shell);
+    box(14.7, 3.6, z, .65, 7.2, .8, steel);
+    detail(14.32, 3.6, z, .12, 5.7, .3, teal);
+  });
+  [-11,0,11].forEach((z,i) => {
+    sign(['01 / DUEL','02 / DUOS','03 / TRIOS'][i], 'BLUE TEAM          RED TEAM', 33.9, 4.8, z, 9, -Math.PI/2);
+    [-3.5,3.5].forEach(dz => floor(24,z+dz,16,.07,0xb7c9ce));
   });
 
   // ── 3D DUEL SLOTS (right side): each mode has a BLUE pad (your team) and a RED
@@ -8838,7 +8923,7 @@ function buildLobby13Map() {
     ctx.fillStyle = color; ctx.font = 'bold 64px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.shadowColor = '#000'; ctx.shadowBlur = 10;
     ctx.fillText(text, 128, 48);
-    const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, depthTest: false }));
+    const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, depthTest: true }));
     spr.scale.set(scale, scale * 0.375, 1); spr.position.set(x, y, z);
     MAP_GROUPS[m].add(spr);
   };
