@@ -45,7 +45,7 @@ fi
 # Files the game actually needs. Listed explicitly rather than globbing public/,
 # so a stray file (a scratch map, an editor backup) can never ride along into a
 # public upload.
-FILES=(index.html game.js chat.js i18n.js three.min.js socket.io.min.js wiki.html equipment-models.js)
+FILES=(index.html game.js chat.js i18n.js three.min.js socket.io.min.js wiki.html equipment-models.js shop-catalog.js)
 
 echo "==> staging"
 rm -rf "$STAGE" "$ZIP"
