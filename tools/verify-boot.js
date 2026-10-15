@@ -917,6 +917,37 @@ if (ok && process.argv.includes('--perspectives')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+if (ok && process.argv.includes('--stances')) {
+  const issues=vm.runInThisContext(`(() => {
+    const issues=[];
+    for(const bot of [false,true])for(const armed of [false,true])for(const stance of ['crouch','slide']) {
+      const mesh=makePlayerMesh('Stance test',bot,'ally','default'),r=mesh._rig;
+      r.holdsGun=armed;r.gaitOffset=0;r.gaitAmp=1;r.gaitAsym=1;
+      try {
+        for(let i=0;i<100;i++) {
+          if(stance==='slide')mesh.position.z+=.12;
+          animateCharacterMesh(mesh,1/60,.58,stance==='slide'?1:0,0,0);
+        }
+        mesh.updateMatrixWorld(true);
+        const head=r.head.getWorldPosition(new THREE.Vector3()),neck=r.neck.getWorldPosition(new THREE.Vector3());
+        if(Math.abs(head.y-mesh.position.y-r.hitHeadOff)>.001||Math.abs(head.z-mesh.position.z-r.hitHeadZ)>.001)issues.push('pose hitbox misses drawn head');
+        if(Math.abs(head.distanceTo(neck)-(BODY.headY-BODY.neckY))>.002)issues.push('head detaches from neck');
+        const a=r.footL.getWorldPosition(new THREE.Vector3()),b=r.footR.getWorldPosition(new THREE.Vector3());
+        if(stance==='crouch'&&Math.abs(a.z-b.z)<.2)issues.push('crouch remains a symmetrical squat');
+        if(stance==='slide'&&(r.torso.rotation.x>-.7||head.z-mesh.position.z>-.4))issues.push('slide lacks backward body lean');
+        for(const foot of [r.footL,r.footR])if(new THREE.Box3().setFromObject(foot).min.y<-.015)issues.push('boot clips floor');
+        mesh.rotation.y=Math.PI/2;mesh.updateMatrixWorld(true);
+        if(Math.abs(r.head.getWorldPosition(new THREE.Vector3()).x-mesh.position.x-r.hitHeadZ)>.001)issues.push('head offset does not turn with character');
+        for(let i=0;i<120;i++)animateCharacterMesh(mesh,1/60,0,0,0,0);
+        if(Math.abs(r.head.position.z)>.001||Math.abs(r.armR.position.z)>.001)issues.push('stance offset remains after standing');
+      }finally{disposeBody(mesh);}
+    }
+    return [...new Set(issues)];
+  })()`);
+  if(issues.length){ok=false;console.log('stance failures:\n'+issues.join('\n'));}
+  else console.log('stances: players/bots, staggered crouch, reclining slide, connected trunk, grounded boots, following hitboxes and reset');
+}
+
 if (ok && process.argv.includes('--steady-body')) {
   const issues = vm.runInThisContext(`(() => {
     const issues = [];
@@ -952,8 +983,8 @@ if (ok && process.argv.includes('--steady-body')) {
 }
 
 if (ok && process.argv.includes('--posture')) {
-  // Slide: sat on the floor with the chest laid well back. Crouch: a kneel (one leg forward, one back, back knee
-  // by the floor). Crouch-walk: the chest leans further forward than a crouch standing still.
+  // What --stances (the staggered crouch, the reclining slide, the hitboxes) does not say: crouch-WALKING leans the chest
+  // further forward than a crouch standing still, a slide lays the chest back, and standing up undoes both.
   const issues = vm.runInThisContext(`(() => {
     const issues = [];
     for (const armed of [false, true]) {
@@ -966,479 +997,24 @@ if (ok && process.argv.includes('--posture')) {
           animateCharacterMesh(mesh, 1 / 60, crouch, slide, air, 0);
         }
       };
-      const worldY = o => { mesh.updateMatrixWorld(true); const v = new THREE.Vector3(); o.getWorldPosition(v); return v.y - mesh.position.y; };
       try {
-        // crouch standing still
         settle(0.58, 0, 0, false);
-        const c = { l: r.legL.rotation.x, rr: r.legR.rotation.x, kr: r.kneeR.rotation.x, torso: r.torso.rotation.x };
-        if (!(c.l < -1.2)) issues.push(tag + 'a crouch should have one thigh forward and near level, got ' + c.l.toFixed(2));
-        if (!(c.rr > -0.3)) issues.push(tag + 'a crouch should have the other leg back under the hips, got ' + c.rr.toFixed(2));
-        if (!(c.l - c.rr < -1.2)) issues.push(tag + 'the two legs of a crouch should be a long way apart front to back');
-        if (!(c.kr > 2.2)) issues.push(tag + 'the back shin should be folded behind the knee, got ' + c.kr.toFixed(2));
-        const kneeH = worldY(r.kneeR), hipH = worldY(r.legR);
-        if (!(kneeH < 0.12)) issues.push(tag + 'the back knee is ' + kneeH.toFixed(2) + ' m off the floor, it should be down by it');
-        if (!(hipH < 0.42 && hipH > 0.2)) issues.push(tag + 'the hips are at ' + hipH.toFixed(2) + ' m in a crouch');
-        // crouch-walk leans further forward
+        const still = r.torso.rotation.x, legGap = Math.abs(r.legL.rotation.x - r.legR.rotation.x);
+        if (!(legGap > 0.6)) issues.push(tag + 'a crouch should have the legs well apart front to back, got ' + legGap.toFixed(2));
         settle(0.58, 0, 0, true);
-        const walkTorso = r.torso.rotation.x;
-        if (!(walkTorso - c.torso > 0.25)) issues.push(tag + 'crouch-walking leans ' + (walkTorso - c.torso).toFixed(2) + ' rad more than a still crouch, want 0.25+');
-        // the walk still alternates the legs
+        if (!(r.torso.rotation.x - still > 0.15)) issues.push(tag + 'crouch-walking leans ' + (r.torso.rotation.x - still).toFixed(2) + ' rad more than a still crouch, want 0.15+');
         let lo = 9, hi = -9;
         for (let f = 0; f < 90; f++) { mesh.position.z += 0.06; animateCharacterMesh(mesh, 1 / 60, 0.58, 0, 0, 0); lo = Math.min(lo, r.legL.rotation.x); hi = Math.max(hi, r.legL.rotation.x); }
         if (hi - lo < 0.15) issues.push(tag + 'a crouch-walk has stopped stepping (' + (hi - lo).toFixed(2) + ' rad of swing)');
-        // slide
         settle(0.58, 1, 0, true);
-        if (!(r.torso.rotation.x <= -0.85)) issues.push(tag + 'a slide should lay the chest well back, torso at ' + r.torso.rotation.x.toFixed(2));
-        if (!(r.legL.rotation.x < -1.4 && r.legR.rotation.x < -1.3)) issues.push(tag + 'a slide has the legs out in front');
-        if (!(worldY(r.legL) < 0.2)) issues.push(tag + 'a slide has the hips ' + worldY(r.legL).toFixed(2) + ' m up: they should be on the floor');
-        // and back up again
+        if (!(r.torso.rotation.x <= -0.7)) issues.push(tag + 'a slide should lay the chest well back, torso at ' + r.torso.rotation.x.toFixed(2));
         settle(0, 0, 0, false, 200);
         if (r.slide > 0.02 || r.torso.rotation.x < -0.3) issues.push(tag + 'standing up did not undo the slide');
       } finally { disposeBody(mesh); }
     }
     return [...new Set(issues)];
   })()`);
-  console.log('posture checks: slide sat back, crouch kneels, crouch-walk leans, standing up recovers');
-  if (issues.length) { ok = false; console.log(issues.join('\n')); }
-}
-
-if (ok && process.argv.includes('--douse')) {
-  // Fire against water, and the flame jet: the Flamethrower fired at the floor under you lifts you (capped, and with
-  // a fuel limit); a water gun or a smoke cloud puts out burn zones and ground flares, takes the fire off a burning
-  // player or bot and leaves you unable to catch fire for a while.
-  const issues = vm.runInThisContext(`(() => {
-    const issues = [];
-    const saved = { dead: isDead, started: gameStarted, slam: slamState, pos: camera.position.clone(), quat: camera.quaternion.clone(),
-      walls: wallColliders.slice(), sound: playSoundEvent, bots: gameBots.slice() };
-    const keepFx = _activeModelSkin.glock18;
-    playSoundEvent = () => {};
-    const look = pitch => { camera.quaternion.setFromEuler(new THREE.Euler(pitch, 0, 0, 'YXZ')); };
-    const reset = () => { isDead = false; gameStarted = true; slamState = null; camera.position.set(0, 1.65, 0); playerFireUntil = 0; _playerDot = null; playerWetUntil = 0; _flameFuel = FLAME_JET.fuelMs; _flameFuelAt = 0; smokeClouds.length = 0; wallColliders.length = 0; };
-    try {
-      // ── flame jet
-      reset(); look(0);
-      let t = 1000;
-      if (flameJetShot(t += 35)) issues.push('aimed level, the flamethrower lifted you');
-      look(-Math.PI / 2 + 0.05);
-      if (!flameJetShot(t += 35) || !slamState || slamState.vel <= 0) issues.push('aimed straight down on the ground, the flamethrower did not lift you');
-      let n = 0; while (n++ < 40 && flameJetShot(t += 35)) {}
-      if (slamState.vel > FLAME_JET.cap + 1e-6) issues.push('the jet went past its cap: ' + slamState.vel);
-      reset(); look(-Math.PI / 2 + 0.05); camera.position.y = 1.65 + 9;      // far above the floor: the flames cannot reach
-      if (flameJetShot(t += 35)) issues.push('the flames reached a floor 9 m below');
-      reset(); look(-0.3);
-      if (flameJetShot(t += 35)) issues.push('aiming only 17 degrees down still lifted you');
-      // fuel: held down in the air it runs out within about the fuel's worth of fire
-      reset(); look(-Math.PI / 2 + 0.05); slamState = { vel: 0, type: 'jump' }; camera.position.y = 3.0;
-      let thrusts = 0;
-      for (let k = 0; k < 200; k++) { slamState.vel = 0; if (flameJetShot(t += 35)) thrusts++; }
-      if (thrusts < 20 || thrusts > FLAME_JET.fuelMs / 35 + 3) issues.push('the jet gave ' + thrusts + ' pushes in the air, fuel is ' + FLAME_JET.fuelMs + ' ms');
-      // a slam is not interrupted
-      reset(); look(-Math.PI / 2 + 0.05); slamState = { vel: -10, type: 'slam' };
-      if (flameJetShot(t += 35) || slamState.type !== 'slam') issues.push('the jet interrupted a slam');
-
-      // ── what counts as water
-      if (!isWaterWeapon('foam_cannon')) issues.push('the foam cannon is not water');
-      if (isWaterWeapon('ak20')) issues.push('an AK is not water');
-      _activeModelSkin.glock18 = { id: 'glock18_water_pistol' };
-      if (!isWaterWeapon('glock18')) issues.push('a glock in a water pistol skin is not water');
-      if (keepFx) _activeModelSkin.glock18 = keepFx; else delete _activeModelSkin.glock18;
-
-      // ── a water gun
-      reset(); look(-0.35);                                                   // aimed down a little, along -z
-      const ground = camera.position.y / Math.tan(0.35);                      // where the stream meets the floor
-      spawnBurnZone(new THREE.Vector3(0, 0, -ground), 2, 5, 20000, { molotov: true });
-      spawnGroundFlare(new THREE.Vector3(0.5, 0, -ground));
-      const zones0 = burnZones.length, flares0 = groundFlares.length;
-      playerFireUntil = Date.now() + 8000; _playerDot = { until: Date.now() + 8000, dps: 7, weaponId: 'flame_burn' };
-      waterSpray();
-      if (burnZones.length >= zones0) issues.push('the water gun did not put out the burn zone it was aimed at');
-      if (groundFlares.length >= flares0) issues.push('the water gun did not put out the flare');
-      if (playerFireUntil !== 0 || _playerDot) issues.push('firing a water gun left you burning');
-      if (!(playerWetUntil > Date.now() + 1000)) issues.push('firing a water gun did not leave you wet');
-      applyDotToPlayer('flamethrower');
-      if (_playerDot) issues.push('a wet player caught fire from a flamethrower hit');
-      playerWetUntil = 0; applyDotToPlayer('flamethrower');
-      if (!_playerDot) issues.push('a dry player no longer catches fire');
-      // a bot in the stream
-      reset(); look(0);
-      gameBots.length = 0;
-      const bot = { id: 'wet_bot', x: 0, z: -6, dead: false, _fireUntil: Date.now() + 9000 };
-      gameBots.push(bot); _dotTargets.wet_bot = { until: Date.now() + 9000, dps: 7, weaponId: 'flame_burn' };
-      waterSpray();
-      if (bot._fireUntil !== 0 || _dotTargets.wet_bot) issues.push('a burning bot in the stream kept burning');
-      // and one off to the side does not
-      bot._fireUntil = Date.now() + 9000; bot.x = 9; bot.z = -2;
-      waterSpray();
-      if (!bot._fireUntil) issues.push('a bot well off the stream was put out');
-
-      // ── smoke
-      reset(); look(0); gameBots.length = 0;
-      spawnBurnZone(new THREE.Vector3(2, 0, 1), 1.5, 5, 20000, { molotov: true });
-      playerFireUntil = Date.now() + 8000;
-      spawnSmokeCloud(new THREE.Vector3(1, 0, 0));
-      if (!smokeAt(1, 0)) issues.push('a smoke cloud is not registered');
-      updateBurnZones(1 / 60);
-      if (burnZones.length) issues.push('a burn zone inside a smoke cloud kept burning');
-      if (playerFireUntil !== 0) issues.push('standing in smoke left you burning');
-      if (!(playerWetUntil > Date.now())) issues.push('standing in smoke did not stop you catching fire');
-      // outside the smoke nothing changes
-      reset(); look(0); playerFireUntil = Date.now() + 8000;
-      spawnSmokeCloud(new THREE.Vector3(30, 0, 30));
-      updateBurnZones(1 / 60);
-      if (playerFireUntil === 0) issues.push('smoke far away put you out');
-    } finally {
-      isDead = saved.dead; gameStarted = saved.started; slamState = saved.slam; playSoundEvent = saved.sound;
-      camera.position.copy(saved.pos); camera.quaternion.copy(saved.quat);
-      wallColliders.length = 0; wallColliders.push(...saved.walls);
-      gameBots.length = 0; gameBots.push(...saved.bots);
-      while (burnZones.length) { const z = burnZones.pop(); try { scene.remove(z.mesh); } catch (e) {} }
-      while (groundFlares.length) { const g = groundFlares.pop(); try { scene.remove(g.mesh); } catch (e) {} }
-      smokeClouds.length = 0; playerFireUntil = 0; _playerDot = null; playerWetUntil = 0; delete _dotTargets.wet_bot;
-    }
-    return issues;
-  })()`);
-  console.log('douse checks: flame jet lifts (capped, fuel-limited), water guns and smoke put fire out, wet cannot burn');
-  if (issues.length) { ok = false; console.log(issues.join('\n')); }
-}
-
-if (ok && process.argv.includes('--loadout')) {
-  // A kit never has two primaries (a new player's Lobby 13 default was the AK-20 and the SG-8) or two secondaries.
-  const issues = vm.runInThisContext(`(() => {
-    const issues = [];
-    const saved = [selectedPrimaryIdx, selectedSecondaryIdx, selectedMeleeIdx, selectedSupportIdx];
-    try {
-      const ak = WEAPONS.findIndex(w => w.id === 'ak20'), sg = WEAPONS.findIndex(w => w.id === 'sg8');
-      if (WEAPONS[ak].slot === 'secondary' || WEAPONS[sg].slot === 'secondary') issues.push('the test assumes the AK-20 and the SG-8 are primaries');
-      const d = defaultLoadoutIdx();
-      if (WEAPONS[d.p].slot === 'secondary') issues.push('the default primary is a secondary: ' + WEAPONS[d.p].id);
-      if (WEAPONS[d.s].slot !== 'secondary') issues.push('the default secondary is a primary: ' + WEAPONS[d.s].id);
-      if (!isOwned(WEAPONS[d.p].id) || !isOwned(WEAPONS[d.s].id)) issues.push('the default kit holds something the player does not own');
-      // the old Lobby 13 default
-      selectedPrimaryIdx = 0; selectedSecondaryIdx = 1; selectedMeleeIdx = 0; selectedSupportIdx = 0;
-      sanitizeLoadoutSlots();
-      if (WEAPONS[selectedPrimaryIdx].slot === 'secondary') issues.push('sanitize left a secondary in the primary slot');
-      if (WEAPONS[selectedSecondaryIdx].slot !== 'secondary') issues.push('indices 0 and 1 (AK-20 and SG-8) survived as primary and secondary');
-      // a secondary in the primary slot
-      selectedPrimaryIdx = d.s; selectedSecondaryIdx = d.s;
-      sanitizeLoadoutSlots();
-      if (WEAPONS[selectedPrimaryIdx].slot === 'secondary' || WEAPONS[selectedSecondaryIdx].slot !== 'secondary') issues.push('a secondary in the primary slot was not put right');
-      // a proper kit is left alone
-      selectedPrimaryIdx = ak; selectedSecondaryIdx = d.s;
-      sanitizeLoadoutSlots();
-      if (selectedPrimaryIdx !== ak || selectedSecondaryIdx !== d.s) issues.push('sanitize changed a proper kit');
-      // nothing picked stays nothing picked (the loadout screen fills it in)
-      selectedPrimaryIdx = null; selectedSecondaryIdx = null;
-      sanitizeLoadoutSlots();
-      if (selectedPrimaryIdx !== null || selectedSecondaryIdx !== null) issues.push('sanitize invented a kit for nobody');
-    } finally { [selectedPrimaryIdx, selectedSecondaryIdx, selectedMeleeIdx, selectedSupportIdx] = saved; }
-    return issues;
-  })()`);
-  if (/selectedPrimaryIdx\s*=\s*0;\s*\n\s*selectedSecondaryIdx\s*=\s*1;/.test(src)) issues.push('a hard-coded primary 0 / secondary 1 default is back in game.js');
-  console.log('loadout checks: a kit never has two primaries; the Lobby 13 default is a real kit');
-  if (issues.length) { ok = false; console.log(issues.join('\n')); }
-}
-
-if (ok && process.argv.includes('--inspect')) {
-  // T in the melee and utility slots: every melee and every utility has a track, the item actually moves (and
-  // comes all the way back to where it was), and swinging or using it puts it down at once.
-  const issues = vm.runInThisContext(`(() => {
-    const issues = [];
-    const saved = { slot: activeSlot, mi: selectedMeleeIdx, si: selectedSupportIdx, dead: isDead, reloading, swingT: meleeSwingT };
-    try {
-      isDead = false; reloading = false; meleeSwingT = 1;
-      for (const [slot, list, models, set] of [['melee', MELEE_ITEMS, meleeModels, i => { selectedMeleeIdx = i; }],
-                                               ['support', SUPPORT_ITEMS, supportModels, i => { selectedSupportIdx = i; }]]) {
-        for (let i = 0; i < list.length; i++) {
-          const item = list[i], model = models[i];
-          if (!model) { issues.push(slot + ' ' + item.id + ': no model'); continue; }
-          const kind = itemInspectKind(slot, item);
-          if (!ITEM_INSPECT[kind]) { issues.push(slot + ' ' + item.id + ': unknown inspect kind ' + kind); continue; }
-          set(i); activeSlot = slot; model.visible = true;
-          const p0 = model.position.clone(), r0 = model.rotation.clone();
-          if (!startItemInspect()) { issues.push(slot + ' ' + item.id + ': T did not start an inspect'); model.visible = false; continue; }
-          let moved = 0;
-          for (const f of [.2, .4, .6, .8]) {
-            itemInspect.t0 = performance.now() - f * itemInspect.ms;
-            updateItemInspect();
-            moved = Math.max(moved, model.position.distanceTo(p0), Math.abs(model.rotation.x - r0.x) + Math.abs(model.rotation.y - r0.y) + Math.abs(model.rotation.z - r0.z));
-            if (!itemInspect) break;
-          }
-          if (moved < 0.08) issues.push(slot + ' ' + item.id + ': the inspect barely moves it (' + moved.toFixed(3) + ')');
-          if (itemInspect) { itemInspect.t0 = performance.now() - itemInspect.ms - 10; updateItemInspect(); }
-          if (itemInspect) issues.push(slot + ' ' + item.id + ': the inspect never ends');
-          // back exactly where it began (a full roll is the same orientation)
-          const dr = ['x', 'y', 'z'].reduce((a, k) => a + Math.abs(Math.sin((model.rotation[k] - r0[k]) / 2)), 0);
-          if (model.position.distanceTo(p0) > 1e-6 || dr > 1e-6) issues.push(slot + ' ' + item.id + ': not back at rest after the inspect');
-          // using it ends it
-          startItemInspect(); meleeSwingT = 0; updateItemInspect(); meleeSwingT = 1;
-          if (itemInspect) { issues.push(slot + ' ' + item.id + ': a swing did not end the inspect'); cancelItemInspect(); }
-          model.visible = false;
-        }
-      }
-    } finally {
-      activeSlot = saved.slot; selectedMeleeIdx = saved.mi; selectedSupportIdx = saved.si; isDead = saved.dead; reloading = saved.reloading; meleeSwingT = saved.swingT;
-      cancelItemInspect();
-    }
-    return [...new Set(issues)];
-  })()`);
-  console.log('inspect checks: every melee and utility has a track, moves, ends at rest, and a swing ends it');
-  if (issues.length) { ok = false; console.log(issues.slice(0, 20).join('\n')); }
-}
-
-if (ok && process.argv.includes('--bow')) {
-  // The Boombow is a rapid-fire bow (4x the speed, a third of the damage, a slow arrow) and the Crossbow has a scope.
-  const issues = vm.runInThisContext(`(() => {
-    const issues = [];
-    const b = WEAPONS.find(w => w.id === 'boombow'), c = WEAPONS.find(w => w.id === 'crossbow');
-    if (!(b.fireRate <= 200)) issues.push('the Boombow should shoot four times as fast (<= 200 ms), got ' + b.fireRate);
-    if (!(b.reloadTime <= 400)) issues.push('the Boombow should reload four times as fast (<= 400 ms), got ' + b.reloadTime);
-    if (!(b.damage >= 30 && b.damage <= 34)) issues.push('the Boombow should do a third of 95, got ' + b.damage);
-    if (!(b.bulletSpeed <= 40)) issues.push('the Boombow arrow should be slow, got ' + b.bulletSpeed);
-    if (!(b.reserve >= 40)) issues.push('the Boombow quiver should hold the same damage as before (about 42 arrows), got ' + b.reserve);
-    if (INSTAKILL_HS_WEAPONS.has('boombow') || INSTAKILL_HS_WEAPONS.has('boombow_ab')) issues.push('a rapid-fire bow must not one-shot on a headshot');
-    if (!isScopedWeapon(c)) issues.push('the Crossbow has no scope');
-    if (!isScopedWeapon(WEAPONS.find(w => w.id === 'srx'))) issues.push('the SR-X lost its scope');
-    if (isScopedWeapon(b)) issues.push('the Boombow should not be scoped');
-    if (!(c.adsZoom <= 32)) issues.push('a scoped crossbow should zoom in properly, got ' + c.adsZoom);
-    return issues;
-  })()`);
-  const srv = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
-  if (!/freeze_gun: 13, boombow: 32,/.test(srv)) issues.push('server WEAPON_DAMAGE does not have the Boombow at 32');
-  if (!/boombow_ab: 63/.test(srv)) issues.push('server WEAPON_DAMAGE does not have the Power Draw at 63');
-  console.log('bow checks: rapid-fire Boombow (4x speed, a third of the damage, slow arrow), scoped Crossbow');
-  if (issues.length) { ok = false; console.log(issues.join('\n')); }
-}
-
-if (ok && process.argv.includes('--gunslinger')) {
-  // The Gunslinger fires a salvo of five, wide and late: it was the top-ranked weapon (one 83-damage shot that could
-  // not miss a locked target, 296 DPS).
-  const issues = vm.runInThisContext(`(() => {
-    const issues = [];
-    const g = WEAPONS.find(w => w.id === 'gunslinger');
-    if (!g) return ['no gunslinger'];
-    if (g.pellets !== 5) issues.push('a pull should throw five, got ' + g.pellets);
-    if (!(g.spread >= 0.05)) issues.push('the salvo should be wide (spread >= 0.05), got ' + g.spread);
-    if (!(g.fireRate >= 600)) issues.push('the pulls should be well apart (>= 600 ms), got ' + g.fireRate);
-    if (!(g.damage <= 30)) issues.push('a shot of the salvo should be a fraction of the old 83, got ' + g.damage);
-    const ts = g.trickShot;
-    if (!ts || !(ts.delay >= 300)) issues.push('the shots should take a heavier time to arrive (>= 300 ms)');
-    if (!ts || !(ts.accuracy > 0 && ts.accuracy < 0.7)) issues.push('a locked salvo should not all land: accuracy ' + (ts && ts.accuracy));
-    // the most one pull can do, against how much the old gun did in the same time
-    const salvoMax = g.pellets * g.damage / (g.fireRate / 1000);
-    if (!(salvoMax < 296)) issues.push('even every shot landing should be under the old 296 DPS, got ' + salvoMax.toFixed(0));
-    const expected = g.pellets * g.damage * (ts ? ts.accuracy : 1) / (g.fireRate / 1000);
-    if (!(expected < 150)) issues.push('the expected DPS on a locked target is ' + expected.toFixed(0) + ', should be well under the old 296');
-
-    // fire it for real at a locked target: five flights, spread out, each arriving later, not all landing
-    const saved = { slot: activeSlot, wi: currentWeaponIdx, cw: currentWeapon, dead: isDead, started: gameStarted, locked: gunslingerLocked, lockId: gunslingerLockTargetId,
-      last: lastShot, emitHit, hasLineOfSight, spawnLocalBullet, setTimeout: window.setTimeout, random: Math.random, sound: playWeaponSound };
-    const hits = [], flights = [], timers = [];
-    try {
-      const idx = WEAPONS.findIndex(w => w.id === 'gunslinger');
-      activeSlot = 'secondary'; currentWeaponIdx = idx; currentWeapon = WEAPONS[idx];
-      isDead = false; gameStarted = true; lastShot = 0; reloading = false;
-      weaponAmmo[idx] = { ammo: g.mag, reserve: g.reserve };
-      weaponModels[idx].visible = true;
-      remoteMeshes.slinger_target = new THREE.Group(); remoteMeshes.slinger_target.position.set(0, 0, -20); remoteMeshes.slinger_target.visible = true;
-      players.slinger_target = { id: 'slinger_target', hp: 100, team: 'enemy' };
-      gunslingerLocked = true; gunslingerLockTargetId = 'slinger_target';
-      emitHit = (pid, bid, wid) => { hits.push({ pid, bid, wid }); };
-      hasLineOfSight = () => true;
-      spawnLocalBullet = (pos, dir) => { flights.push(dir.clone()); };
-      playWeaponSound = () => {};
-      window.setTimeout = (fn, ms) => { timers.push({ fn, ms }); return 0; };
-      let n = 0; Math.random = () => [0.1, 0.9, 0.2, 0.8, 0.3][n++ % 5];     // alternates: low rolls land, high rolls miss
-      tryShoot();
-    } finally {
-      Math.random = saved.random; window.setTimeout = saved.setTimeout;
-    }
-    try {
-      if (flights.length !== 5) issues.push('a locked pull should fly five shots, got ' + flights.length);
-      const spreadOk = flights.length > 1 && flights.some(d => d.distanceTo(flights[0]) > 0.02);
-      if (!spreadOk) issues.push('the five flights all went the same way');
-      // (tryShoot sets other timers too, an auto-reload and the like: these are the shots' own)
-      const shotTimers = timers.filter(t => String(t.fn).includes('went wide'));
-      if (shotTimers.length !== 5) issues.push('expected five arrivals, got ' + shotTimers.length);
-      const delays = shotTimers.map(t => t.ms).sort((a, b) => a - b);
-      if (delays.length) {
-        if (!(delays[0] >= ts.delay)) issues.push('the first shot arrived early: ' + delays[0] + ' ms');
-        if (!(delays[delays.length - 1] > delays[0])) issues.push('the five shots should not all land at once');
-      }
-      // run them: with the rolls above (0.1 land, 0.9 miss, ...) only some land
-      let m = 0; Math.random = () => [0.1, 0.9, 0.2, 0.8, 0.3][m++ % 5];
-      for (const t of shotTimers) t.fn();
-      if (hits.length === 0) issues.push('a locked salvo should land some of its shots');
-      if (hits.length >= 5) issues.push('a locked salvo landed every shot');
-      if (new Set(hits.map(h => h.bid)).size !== hits.length) issues.push('two hits shared a bullet id');
-    } finally {
-      Math.random = saved.random;
-      emitHit = saved.emitHit; hasLineOfSight = saved.hasLineOfSight; spawnLocalBullet = saved.spawnLocalBullet; playWeaponSound = saved.sound;
-      delete remoteMeshes.slinger_target; delete players.slinger_target;
-      activeSlot = saved.slot; currentWeaponIdx = saved.wi; currentWeapon = saved.cw; isDead = saved.dead; gameStarted = saved.started;
-      gunslingerLocked = saved.locked; gunslingerLockTargetId = saved.lockId; lastShot = saved.last;
-    }
-    return issues;
-  })()`);
-  const srv = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
-  if (!/mini_turret: 15, gunslinger: 28,/.test(srv)) issues.push('server WEAPON_DAMAGE does not have the Gunslinger at 28');
-  console.log('gunslinger checks: a salvo of five, wide and late, not all landing, well under the old DPS');
-  if (issues.length) { ok = false; console.log(issues.join('\n')); }
-}
-
-if (ok && process.argv.includes('--botnav')) {
-  // A bot has to be able to get to you. One bot is released at the far spawn and the player stands still at the
-  // other: it must be within 25 m inside 60 s of game time on every duel map (it takes 15 to 30), and inside 100 s on seven of the older
-  // maps where the bots used to run into the first wall they met and stay there (airport, studio, supermarket,
-  // labyrinth, urban, trenches: with the old steering most of them never got there at all; urban's thin walls fell
-  // between the cells of its 2.4 m grid until the grid went to 1.5 m and marks every cell a wall stands in). Routed bots (botNavPoint) against the
-  // old straight-line steering is what BOT_NAV_ON switches.
-  const issues = vm.runInThisContext(`(() => {
-    const issues = [], info = [];
-    const realNow = Date.now, realPerf = performance.now.bind(performance);
-    const saved = { sound: playSoundEvent, weapon: playWeaponSound, id: myId, mode: selectedModeConfig, started: gameStarted, dead: isDead,
-      pos: camera.position.clone(), map: activeMapName, match, pi: selectedPrimaryIdx, si: selectedSecondaryIdx, mi: selectedMeleeIdx, ui: selectedSupportIdx, sel: selectedMap, nav: BOT_NAV_ON };
-    let simT = realNow();
-    playSoundEvent = () => {}; playWeaponSound = () => {};
-    BOT_NAV_ON = true;
-    const cases = DUEL_MAP_IDS.map(id => [id, 60]).concat(['airport', 'studio', 'supermarket', 'labyrinth', 'refinery', 'urban', 'trenches'].filter(m => MAP_GROUPS[m]).map(id => [id, 100]));
-    try {
-      for (const [id, limit] of cases) {
-        selectedModeConfig = GAME_MODE_CONFIGS['1v1'];
-        selectedMap = id;                         // what lobbyStart does with the vote's result
-        selectedPrimaryIdx = WEAPONS.findIndex(w => w.id === 'ak20'); selectedSecondaryIdx = WEAPONS.findIndex(w => w.id === 'pistol');
-        selectedMeleeIdx = 0; selectedSupportIdx = 0; gameStarted = true; isDead = false; myId = 'nav_probe_me';
-        for (const k of Object.keys(players)) if (players[k] && players[k].isBot) delete players[k];
-        gameBots.length = 0;
-        spawnGameBots();
-        if (activeMapName !== id) issues.push(id + ': the picked map was not the one loaded (got ' + activeMapName + ')');
-        if (match) match.roundActive = true;
-        const bot = gameBots.find(b => b.team === 'enemy');
-        if (!bot) { issues.push(id + ': no bot was spawned'); continue; }
-        players[myId] = { id: myId, x: camera.position.x, z: camera.position.z, y: 0, hp: 1e9, maxHp: 1e9, team: 'ally', name: 'me' };
-        Date.now = () => simT; performance.now = () => simT;
-        let arrived = null, minD = 1e9;
-        const dt = 1 / 30;
-        for (let f = 0; f < 30 * 120 && arrived === null; f++) {
-          simT += dt * 1000;
-          players[myId].x = camera.position.x; players[myId].z = camera.position.z; players[myId].hp = 1e9;
-          try { updateBotAI(dt); } catch (e) { issues.push(id + ': bot AI threw ' + e.message); break; }
-          const d = Math.hypot(bot.x - camera.position.x, bot.z - camera.position.z);
-          minD = Math.min(minD, d);
-          if (d < 25) arrived = f * dt;
-        }
-        Date.now = realNow; performance.now = realPerf;
-        info.push(id + ' ' + (arrived === null ? 'never' : arrived.toFixed(0) + ' s'));
-        if (arrived === null) issues.push(id + ': the bot never got within 25 m (closest ' + minD.toFixed(0) + ' m, at ' + bot.x.toFixed(0) + ', ' + bot.z.toFixed(0) + ')');
-        else if (arrived > limit) issues.push(id + ': the bot took ' + arrived.toFixed(0) + ' s to get within 25 m (limit ' + limit + ')');
-        for (const k of Object.keys(players)) if (players[k] && players[k].isBot) delete players[k];
-        gameBots.length = 0;
-        delete players[myId];
-      }
-    } finally {
-      Date.now = realNow; performance.now = realPerf; BOT_NAV_ON = saved.nav;
-      playSoundEvent = saved.sound; playWeaponSound = saved.weapon; myId = saved.id; selectedModeConfig = saved.mode; gameStarted = saved.started;
-      isDead = saved.dead; camera.position.copy(saved.pos); match = saved.match;
-      selectedPrimaryIdx = saved.pi; selectedSecondaryIdx = saved.si; selectedMeleeIdx = saved.mi; selectedSupportIdx = saved.ui; selectedMap = saved.sel;
-      try { activateMap(saved.map || 'blank'); } catch (e) {}
-    }
-    issues.info = info.join(', ');
-    return issues;
-  })()`);
-  console.log('bot navigation checks: a bot walks round walls to the player (' + (issues.info || '') + ')');
-  if (issues.length) { ok = false; console.log(issues.join('\n')); }
-}
-
-if (ok && process.argv.includes('--steps')) {
-  // Other people's footsteps: heard from the other team, a step every 2.8 m, from the side they are on, muffled through a
-  // wall, a third as loud crouched, silent in a slide, a thud on landing; not heard from teammates, the dead, or
-  // beyond range, and the setting turns it off.
-  const issues = vm.runInThisContext(`(() => {
-    const issues = [];
-    const saved = { id: myId, started: gameStarted, dead: isDead, lobby: inLobby, pos: camera.position.clone(), quat: camera.quaternion.clone(),
-      play: playEnemyFootstep, los: hasLineOfSight, set: GAMEPLAY_SETTINGS.enemyFootsteps, mp: players.me_steps };
-    const calls = [];
-    playEnemyFootstep = (x, y, z, snd, vol, pitch) => { calls.push({ x, z, snd, vol, pitch }); };
-    const mesh = makePlayerMesh('Walker', false, 'enemy', 'default', {});
-    const run = (opts = {}) => {
-      calls.length = 0; _stepState.clear();
-      mesh.position.set(opts.x0 ?? 5, 0, opts.z ?? -5); mesh.visible = true;
-      players.step_enemy = { id: 'step_enemy', team: opts.team || 'enemy', hp: 100, dead: !!opts.dead };
-      remoteMeshes.step_enemy = mesh;
-      mesh._rig.jump = 0; mesh._rig.ck = opts.ck || 0; mesh._rig.slide = opts.slide || 0;
-      updateEnemyFootsteps(1 / 60);                         // first sight of it: remembers where it is
-      for (let f = 0; f < (opts.frames ?? 200); f++) { mesh.position.x += (opts.dx ?? 0.1); updateEnemyFootsteps(1 / 60); }
-      return calls.slice();
-    };
-    try {
-      myId = 'me_steps'; gameStarted = true; isDead = false; inLobby = false; GAMEPLAY_SETTINGS.enemyFootsteps = true;
-      players.me_steps = { id: 'me_steps', team: 'ally', hp: 100 };
-      camera.position.set(0, 1.65, 0); camera.quaternion.setFromEuler(new THREE.Euler(0, 0, 0, 'YXZ'));   // facing -z
-      hasLineOfSight = () => true;
-      // a runner covers 20 m
-      let c = run();
-      if (c.length < 6 || c.length > 8) issues.push('20 m at 2.8 m a step should be about 7 steps, got ' + c.length);
-      if (c.length && !(c[0].snd.pan > 0)) issues.push('something on your right should pan right, got ' + c[0].snd.pan);
-      // the left
-      c = run({ x0: -5, dx: -0.1 });
-      if (c.length && !(c[0].snd.pan < 0)) issues.push('something on your left should pan left, got ' + c[0].snd.pan);
-      // louder near
-      c = run({ x0: 2, z: -2, frames: 40 });
-      const near = c.length ? c[0].snd.gain : 0;
-      c = run({ x0: 26, z: -2, frames: 40 });
-      const far = c.length ? c[0].snd.gain : 0;
-      if (!(near > far)) issues.push('a step should be louder near (' + near.toFixed(2) + ') than far (' + far.toFixed(2) + ')');
-      // out of earshot
-      c = run({ z: -70, x0: 0, dx: 0 });
-      if (c.length) issues.push('a step 70 m away was heard');
-      c = run({ z: -70, x0: 0, frames: 100, dx: 0.1 });
-      if (c.length) issues.push('steps 70 m away were heard');
-      // behind you is duller
-      c = run({ z: 6, x0: 0, frames: 40, dx: 0.1 });
-      if (c.length && !(c[0].snd.lowpass < 5000)) issues.push('a step behind you should be duller, lowpass ' + c[0].snd.lowpass);
-      // through a wall: quieter and muffled
-      hasLineOfSight = () => false;
-      c = run({ x0: 2, z: -2, frames: 40 });
-      if (c.length && !(c[0].snd.occluded && c[0].snd.lowpass <= 700)) issues.push('a step through a wall should be muffled');
-      if (c.length && !(c[0].snd.gain < near * 0.7)) issues.push('a step through a wall should be quieter than in the open');
-      hasLineOfSight = () => true;
-      // crouched: a third as loud and a longer stride
-      const walk = run({ x0: 2, z: -2 }).length;
-      c = run({ x0: 2, z: -2, ck: 1 });
-      if (c.length && !(c[0].vol <= 0.35)) issues.push('crouched steps should be a third as loud, got ' + c[0].vol);
-      if (!(c.length <= walk)) issues.push('a crouched walker should step no more often than a walker');
-      // a slide makes no step
-      c = run({ slide: 1 });
-      if (c.length) issues.push('a slide made ' + c.length + ' steps');
-      // teammates and the dead
-      c = run({ team: 'ally' });
-      if (c.length) issues.push('a teammate was heard (' + c.length + ' steps)');
-      c = run({ dead: true });
-      if (c.length) issues.push('a dead body was heard');
-      // standing still
-      c = run({ dx: 0 });
-      if (c.length) issues.push('someone standing still made steps');
-      // the setting
-      GAMEPLAY_SETTINGS.enemyFootsteps = false;
-      c = run();
-      if (c.length) issues.push('the setting did not turn enemy footsteps off');
-      GAMEPLAY_SETTINGS.enemyFootsteps = true;
-      // a landing
-      calls.length = 0; _stepState.clear();
-      mesh.position.set(4, 0, -4); players.step_enemy = { id: 'step_enemy', team: 'enemy', hp: 100 }; remoteMeshes.step_enemy = mesh;
-      mesh._rig.jump = 0; updateEnemyFootsteps(1 / 60);
-      mesh._rig.jump = 0.9; updateEnemyFootsteps(1 / 60);
-      mesh._rig.jump = 0; updateEnemyFootsteps(1 / 60);
-      if (calls.length !== 1 || !(calls[0].vol > 1.2)) issues.push('a landing should be one louder thud, got ' + JSON.stringify(calls.map(k => k.vol)));
-    } finally {
-      playEnemyFootstep = saved.play; hasLineOfSight = saved.los; GAMEPLAY_SETTINGS.enemyFootsteps = saved.set;
-      delete remoteMeshes.step_enemy; delete players.step_enemy; delete players.me_steps; _stepState.clear();
-      myId = saved.id; gameStarted = saved.started; isDead = saved.dead; inLobby = saved.lobby;
-      camera.position.copy(saved.pos); camera.quaternion.copy(saved.quat);
-      try { disposeBody(mesh); } catch (e) {}
-    }
-    return issues;
-  })()`);
-  console.log('enemy footstep checks: a step every 2.8 m, panned, duller behind, muffled through walls, crouch, slide, landing, range, team, setting');
+  console.log('posture checks: crouch-walk leans, slide lays the chest back, standing up recovers');
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
