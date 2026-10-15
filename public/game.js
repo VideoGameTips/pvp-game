@@ -1600,92 +1600,8 @@ const FREE_WEAPONS = new Set([
 const TRIAL_DIVISOR = 20;
 const trialingThisMatch = new Set(); // ids the player paid a trial for this match
 
-// ── 💼 Loadout BUNDLES — 20-60% off the sum of individual prices ───────
-// Bumped ~30% (Andy: bundles were too cheap after the economy rebalance —
-// deep bundle discounts on top of "real" per-weapon prices was a loophole
-// around the grind). Royalty/Cosmic P2W barely discount on purpose.
-// Mirrors server.js BUNDLES (server is authoritative on price/contents).
-const BUNDLES = [
-  { id: 'pitiful',     name: 'Pitiful Pack', icon: '🪖', price: 495,
-    desc: 'Classic loadout: AR · shotgun · pistol · melee',
-    items: ['ak20','sg8','revolver','bat'] },
-  { id: 'retro',       name: 'Retro Pack',   icon: '🕹️', price: 150,
-    desc: 'Quirky old-school weapons · ~60% off',
-    items: ['paintball','laser_pointer','baguette','rubber_duck'] },
-  { id: 'starter_pro', name: 'Starter Pro',  icon: '🎯', price: 430,
-    desc: 'Upgrade past the freebies',
-    items: ['ak20','revolver','bat','stim'] },
-  { id: 'heavy_duty',  name: 'Heavy Duty',   icon: '💥', price: 755,
-    desc: 'Minigun · GL · machine revolver',
-    items: ['minigun','grenade_launcher','machine_revolver','crowbar'] },
-  { id: 'wwii',        name: 'WWII Arsenal', icon: '🎖️', price: 730,
-    desc: 'Vintage warfare: SMG · battle rifle · sidearm · blade',
-    items: ['mp40','m1_garand','mauser','katana'] },
-  { id: 'sniper_pack', name: 'Sniper Pack',  icon: '🎯', price: 755,
-    desc: 'Long-range duelist kit',
-    items: ['srx','revolver','knife','smoke'] },
-  { id: 'run_n_gun',   name: 'Run & Gun',    icon: '⚡', price: 560,
-    desc: 'Fast SMGs + speed boost',
-    items: ['p90','machine_pistol','knife','adrenaline'] },
-  { id: 'melee_master',name: 'Melee Master', icon: '⚔️', price: 625,
-    desc: 'Get up close and stay there',
-    items: ['sg8','revolver','fire_axe','smoke'] },
-  { id: 'shotgun_pack',name: 'Shotgun Pack', icon: '🔫', price: 560,
-    desc: 'Close-range chaos',
-    items: ['sg8','sawed_off','crowbar','frag'] },
-  { id: 'scifi',       name: 'Sci-Fi Arsenal', icon: '🔬', price: 650,
-    desc: 'Energy weapons & EMP',
-    items: ['plasma_carbine','arc_rifle','dart_gun','emp_grenade'] },
-  { id: 'demolition',  name: 'Demolition',   icon: '💣', price: 780,
-    desc: 'Blow stuff up',
-    items: ['grenade_launcher','throwing_axes','sledge','sticky_charge'] },
-  { id: 'archery',     name: "Archer's Kit", icon: '🏹', price: 755,
-    desc: 'Bows, knives, traps',
-    items: ['crossbow','boombow','throwing_knives','tripwire'] },
-  { id: 'marksman',    name: 'Marksman',     icon: '🎯', price: 560,
-    desc: 'Patient precision shooter',
-    items: ['lever','hand_cannon','knife','ammo_fountain'] },
-  { id: 'pyro',        name: 'Pyromaniac',   icon: '🔥', price: 805,
-    desc: 'Burn it all down',
-    items: ['flamethrower','sg8','fire_axe','sticky_charge'] },
-  { id: 'chaos',       name: 'Chaos Mode',   icon: '🤡', price: 195,
-    desc: 'Goofy weapons only',
-    items: ['paintball','confetti_cannon','baguette','rubber_duck'] },
-  { id: 'stealth',     name: 'Stealth Ops',  icon: '🥷', price: 470,
-    desc: 'Silent, deadly, hidden',
-    items: ['air_rifle','throwing_knives','knife','smoke'] },
-  { id: 'storm',       name: 'Storm Pack',   icon: '⚡', price: 545,
-    desc: 'Electricity and shocks',
-    items: ['arc_rifle','taser','shock_baton','emp_grenade'] },
-  { id: 'defensive',   name: 'Defensive',    icon: '🛡️', price: 585,
-    desc: 'Tank-style survival',
-    items: ['sg8','taser','riot_shield','nano_shield'] },
-  { id: 'royalty',     name: 'Royalty',      icon: '💎', price: 5400,
-    desc: 'High-end P2W power fantasy · barely a discount',
-    items: ['minigun','vampire_blade','hand_cannon','orbital_strike'] },
-  { id: 'kitchen',     name: 'Kitchen Catastrophe', icon: '🍳', price: 170,
-    desc: 'Household weapons only',
-    items: ['paintball','baguette','frying_pan','rubber_duck'] },
-  { id: 'knight',      name: "Knight's Honor", icon: '🤺', price: 535,
-    desc: 'Swords and shotguns',
-    items: ['sg8','sabre','katana','smoke'] },
-  { id: 'frostbite',   name: 'Frostbite',    icon: '🧊', price: 495,
-    desc: 'Freeze, blast, finish',
-    items: ['freeze_gun','frost_blaster','knife','smoke'] },
-  { id: 'knockback',   name: 'Knockback',    icon: '🌪️', price: 650,
-    desc: 'Send them flying',
-    items: ['shockwave_launcher','sawed_off','sledge','air_grenade'] },
-  { id: 'smart_tech',  name: 'Smart Tech',   icon: '👁️', price: 795,
-    desc: 'Tracking, drones, mines',
-    items: ['ak20','smart_smg','hunter_drone','magnet_mine'] },
-  { id: 'mortar',      name: 'Mortar Squad', icon: '🪂', price: 715,
-    desc: 'Indirect fire specialists',
-    items: ['mortar_rifle','grenade_launcher','hand_cannon','frag'] },
-  { id: 'cosmic_p2w',  name: 'Cosmic P2W',   icon: '🌌', price: 390000,   // ~10% off; mirrors server.js
-    desc: 'Every sci-fi P2W item · barely a discount',
-    items: ['event_horizon','storm_core','abs_zero','solar_lance','quantum_repeater','magnetar','nebula_mortar','prism_engine','void_harvester','pulse_needle','revolver','phase_blade','gravity_hammer','volt_whip','nano_swarm','warp_beacon','stasis_mine','specter_drone','quantum_barrier'] },
-];
-for (const b of BUNDLES) b.price *= b.id === 'cosmic_p2w' ? WEAPON_PRICE_MULT : NORMAL_WEAPON_PRICE_MULT;
+// Shared catalog; the server remains authoritative on purchases and cosmetic grants.
+const BUNDLES = PVP_SHOP_CATALOG.bundles.map(b => ({...b,price:PVP_SHOP_CATALOG.price(b,WEAPON_COSTS,FREE_WEAPONS)}));
 
 function shopCost(id)      { return WEAPON_COSTS[id]; }
 function shopTrialCost(id) { const c = WEAPON_COSTS[id]; return c == null ? null : Math.max(1, Math.ceil(c / TRIAL_DIVISOR)); }
@@ -47231,7 +47147,34 @@ function buildCyberPistol()   { return _cyberize(buildPistol(),    { palette: 'v
 function buildCyberMP40()     { return _cyberize(buildMP40(),      { palette: 'pink' }); }
 function buildCyberRevolver() { return _cyberize(buildRevolver(),  { palette: 'violet' }); }
 
+function buildSnackSkin(kind){
+  const g=kind==='pizza'?buildShorty():kind==='soda'?buildMachinePistol():buildSG8();
+  const mat=color=>new THREE.MeshPhongMaterial({color,shininess:45});
+  if(kind==='pizza'){
+    gpPlate(g,mat(0xd29242),[[-.16,.005],[.09,.065],[.09,-.055]],.06);
+    gpPlate(g,mat(0xf1d372),[[-.145,.005],[.075,.05],[.075,-.041]],.063);
+    for(const side of [-1,1])for(const [z,y] of [[.045,.025],[.04,-.02],[-.02,.008]])
+      gpCyl(g,mat(0xa32e25),.012,.012,.003,12,side*.033,y,z,0,Math.PI/2);
+    gpCyl(g,mat(0xb56d32),.014,.014,.12,12,0,.006,.085,Math.PI/2,Math.PI/2);
+  }else if(kind==='soda'){
+    gpCyl(g,mat(0x24a798),.038,.038,.15,24,0,.014,-.03);
+    for(const z of [-.108,.048])gpCyl(g,mat(0xc8d5d4),.039,.039,.009,24,0,.014,z);
+    for(const side of [-1,1])gpBox(g,mat(0xf1f3d6),.005,.032,.085,side*.037,.014,-.025);
+    const tab=new THREE.Mesh(new THREE.TorusGeometry(.01,.0025,6,14),mat(0xd9e5df));
+    tab.position.set(0,.019,.055);g.add(tab);
+  }else{
+    gpBox(g,mat(0xd99a48),.054,.07,.16,0,.008,.03);
+    for(const side of [-1,1])for(let y=0;y<4;y++)for(let z=0;z<6;z++)
+      gpBox(g,mat(0x8e532c),.003,.01,.016,side*.028,-.015+y*.016,-.03+z*.024);
+    gpBox(g,mat(0xffdf76),.036,.014,.036,0,.049,.075);
+    gpBox(g,mat(0xb96a2f),.058,.006,.075,0,.046,.01);
+  }
+  g._greebled=true;g._handDetailed=true;return g;
+}
 const MODEL_SKINS = [
+  {id:'shorty_pizza',weapon:'shorty',name:'Pizza Shorty',rarity:'good',sw:['#f1d372','#a32e25'],build:()=>buildSnackSkin('pizza'),blurb:'Pepperoni armor, a toasted crust and the original Shorty action. Pizza Party bundle.'},
+  {id:'machine_pistol_soda',weapon:'machine_pistol',name:'Soda Pop',rarity:'good',sw:['#24a798','#d9e5df'],build:()=>buildSnackSkin('soda'),blurb:'An aluminum soda-can receiver with a pull tab. Soda Rush bundle.'},
+  {id:'sg8_waffle',weapon:'sg8',name:'Waffle Iron',rarity:'good',sw:['#d99a48','#ffdf76'],build:()=>buildSnackSkin('waffle'),blurb:'Toasted waffle panels, syrup and a pat of butter. Breakfast Club bundle.'},
   { id: 'aug', weapon: 'ak20', name: 'AUG', rarity: 'rare',
     sw: ['#4c5339', '#6c7a46'], build: buildAUG,
     blurb: 'Bullpup. The magazine sits behind the trigger.' },
@@ -47835,7 +47778,7 @@ const GEN2_MELEE_MODEL_SKIN_IDS = new Set([
   'spear_thunder', 'knife_balloon', 'bat_inflatable', 'frying_pan_pizza_cutter',
   'sabre_balloon',
 ]);
-const GATED_MODEL_SKIN_IDS = new Set([...GEN1_GATED_MODEL_SKIN_IDS, ...GEN2_MODEL_SKIN_IDS]);
+const GATED_MODEL_SKIN_IDS = new Set([...GEN1_GATED_MODEL_SKIN_IDS, ...GEN2_MODEL_SKIN_IDS,...PVP_SHOP_CATALOG.exclusiveSkins]);
 const GATED_MELEE_MODEL_SKIN_IDS = new Set([...GEN2_MELEE_MODEL_SKIN_IDS]);
 for (const id of GEN1_GATED_MODEL_SKIN_IDS) {
   const ms = MODEL_SKINS.find(m => m.id === id);
@@ -59276,7 +59219,7 @@ let _lastBotShotHead = false;   // set by botShotHitsPlayer, picked up when the 
 // renderer into a render target because the models' materials carry an
 // environment map that belongs to that GL context.
 const _iconCache = {};
-let _iconRT = null, _iconScene = null, _iconCam = null;
+let _iconRT = null, _iconScene = null, _iconCam = null, _largeIconRT = null;
 const ICON_W = 240, ICON_H = 96;
 function _iconModelFor(id, mine) {
   let i = WEAPONS.findIndex(w => w.id === id);
@@ -59298,7 +59241,8 @@ function weaponIconURL(id, mine) {
 }
 let _loadoutIconObserver = null;
 function loadoutPreviewHTML(id) {
-  return `<div class="lc-preview"><img data-loadout-icon="${id}" alt="" loading="lazy"></div>`;
+  const locked=!isOwned(id);
+  return `<div class="lc-preview ${locked?'catalog-locked':''}"><img data-loadout-icon="${id}" alt="${locked?'Locked weapon':'Weapon model'}" loading="lazy">${locked?'<span class="catalog-lock" role="img" aria-label="Locked"></span>':''}</div>`;
 }
 function hydrateLoadoutPreviews(root = document) {
   const imgs = [...root.querySelectorAll('img[data-loadout-icon]:not([src])')];
@@ -59322,7 +59266,7 @@ function hydrateLoadoutPreviews(root = document) {
   }
   imgs.forEach(img => _loadoutIconObserver.observe(img));
 }
-function _renderWeaponIcon(model) {
+function _renderWeaponIcon(model,options={}) {
   if (!_iconScene) {
     _iconScene = new THREE.Scene();
     // The weapon materials are metalness 0.82-0.95 now, and metal has no
@@ -59337,8 +59281,12 @@ function _renderWeaponIcon(model) {
     _iconCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.01, 50);
     _iconRT = new THREE.WebGLRenderTarget(ICON_W, ICON_H, { samples: 4 });
   }
+  const W=options.large?640:ICON_W,H=options.large?320:ICON_H;
+  const target=options.large?(_largeIconRT ||= new THREE.WebGLRenderTarget(W,H,{samples:4})):_iconRT;
   const clone = model.clone(true);
-  clone.position.set(0, 0, 0); clone.rotation.set(0, 0, 0); clone.scale.set(1, 1, 1); clone.visible = true;
+  clone.position.set(0, 0, 0); clone.rotation.set(0, options.yaw||0, 0); clone.scale.set(1, 1, 1); clone.visible = true;
+  const temporaryMaterials=[];
+  if(options.locked)clone.traverse(o=>{if(o.isMesh){const m=new THREE.MeshBasicMaterial({color:0x111b1b});temporaryMaterials.push(m);o.material=m;}});
   clone.traverse(o => {                      // hands, effects and the muzzle flash are not the weapon
     if (o.userData && (o.userData.vmHand || o.userData.eqFx || o.userData.legendFx)) o.visible = false;
     if (model._flash && o.name && o.name === model._flash.name && o !== clone && o.material && o.material.transparent) o.visible = false;
@@ -59347,11 +59295,11 @@ function _renderWeaponIcon(model) {
   clone.updateMatrixWorld(true);
   const box = new THREE.Box3();
   clone.traverse(o => { if (o.isMesh && o.visible && o.geometry) box.expandByObject(o); });
-  if (box.isEmpty()) { _iconScene.remove(clone); return null; }
+  if (box.isEmpty()) { _iconScene.remove(clone); temporaryMaterials.forEach(m=>m.dispose()); return null; }
   const c = box.getCenter(new THREE.Vector3()), sz = box.getSize(new THREE.Vector3());
   // Viewed from the right, muzzle pointing right (weapons point down -Z).
   // A fixed minimum width keeps a grenade from filling the picture like a rifle.
-  const aspect = ICON_W / ICON_H;
+  const aspect = W / H;
   let halfW = Math.max(sz.z * 0.5, 0.17) * 1.1;
   halfW = Math.max(halfW, sz.y * 0.5 * aspect * 1.1);
   const halfH = halfW / aspect;
@@ -59359,25 +59307,26 @@ function _renderWeaponIcon(model) {
   _iconCam.position.set(c.x + 5, c.y, c.z); _iconCam.up.set(0, 1, 0); _iconCam.lookAt(c);
   _iconCam.updateProjectionMatrix();
   const prevRT = renderer.getRenderTarget(), prevColor = renderer.getClearColor(new THREE.Color()), prevAlpha = renderer.getClearAlpha();
-  const buf = new Uint8Array(ICON_W * ICON_H * 4);
+  const buf = new Uint8Array(W * H * 4);
   try {
-    renderer.setRenderTarget(_iconRT);
+    renderer.setRenderTarget(target);
     renderer.setClearColor(0x000000, 0);
     renderer.clear();
     renderer.render(_iconScene, _iconCam);
-    renderer.readRenderTargetPixels(_iconRT, 0, 0, ICON_W, ICON_H, buf);
+    renderer.readRenderTargetPixels(target, 0, 0, W, H, buf);
   } finally {
     renderer.setRenderTarget(prevRT); renderer.setClearColor(prevColor, prevAlpha);
     _iconScene.remove(clone);
+    temporaryMaterials.forEach(m=>m.dispose());
   }
   // Rendering into a target leaves the pixels linear and premultiplied: undo
   // both, flip (rows come bottom-up) and hand back a PNG.
-  const cv = document.createElement('canvas'); cv.width = ICON_W; cv.height = ICON_H;
-  const g = cv.getContext('2d'), img = g.createImageData(ICON_W, ICON_H);
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const g = cv.getContext('2d'), img = g.createImageData(W, H);
   const enc = (v) => Math.round(255 * (v <= 0.0031308 ? 12.92 * v : 1.055 * Math.pow(v, 1 / 2.4) - 0.055));
   let seen = 0;
-  for (let y = 0; y < ICON_H; y++) for (let x = 0; x < ICON_W; x++) {
-    const s = ((ICON_H - 1 - y) * ICON_W + x) * 4, d = (y * ICON_W + x) * 4, a = buf[s + 3];
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const s = ((H - 1 - y) * W + x) * 4, d = (y * W + x) * 4, a = buf[s + 3];
     if (a) { seen++; for (let k = 0; k < 3; k++) img.data[d + k] = Math.min(255, enc(Math.min(1, (buf[s + k] / 255) / (a / 255)))); }
     img.data[d + 3] = a;
   }
@@ -62686,6 +62635,7 @@ function loop() {
 // ── Loadout screen ─────────────────────────────────────────────────────────
 // ── 🛒 Standalone SHOP screen (separate from the loadout / ready flow) ──
 let shopTab = 'bundles'; // 'bundles' | 'primary' | 'secondary' | 'melee' | 'utility'
+let shopMediaObserver=null;
 function openShop() {
   if (!currentUser) { alert('Log in first.'); return; }
   closeOtherDialogs();
@@ -62708,6 +62658,7 @@ function closeShop() {
 }
 
 function renderShop() {
+  shopMediaObserver?.disconnect();
   const scr = document.getElementById('shop-screen');
   if (!scr || !currentUser) return;
   const credits = currentUser.isAdmin ? '∞' : (currentUser.credits ?? 0);
@@ -62715,23 +62666,23 @@ function renderShop() {
   const ch = currentUser.chests || { common: 0, rare: 0 };
   const tabs = [
     ...(PAYMENT_STATE && PAYMENT_STATE.enabled ? [['donuts', '💳 GET DONUTS']] : []),
-    ['bundles',   '💼 BUNDLES'],
-    ['abilities', '🎛️ ABILITIES'],
-    ['primary',   '🔫 PRIMARY'],
-    ['secondary', '🔫 SECONDARY'],
-    ['melee',     '⚔️ MELEE'],
-    ['utility',   '🧰 UTILITY'],
-    ['chests',    '📦 CHESTS'],
-    ['wheel',     '🎡 WHEEL'],
-    ['upgrade',   '✨ UPGRADES'],
+    ['bundles',   'BUNDLES'],
+    ['abilities', 'ABILITIES'],
+    ['primary',   'PRIMARY'],
+    ['secondary', 'SECONDARY'],
+    ['melee',     'MELEE'],
+    ['utility',   'UTILITY'],
+    ['chests',    'CASES'],
+    ['wheel',     'WHEEL'],
+    ['upgrade',   'UPGRADES'],
   ];
   scr.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #444;padding-bottom:10px;margin-bottom:14px;">
-      <div style="font-size:22px;letter-spacing:6px;color:#aaccff;">🛒 WEAPON SHOP</div>
+      <div class="shop-title">SUPPLY SHOP</div>
       <div style="display:flex;gap:14px;align-items:center;">
-        <span style="font-size:13px;color:#ffdd55;">${CURRENCY_ICON} ${credits}</span>
-        <span style="font-size:13px;color:#aaccff;">🧩 ${frags}</span>
-        <span style="font-size:13px;color:#ddccff;">📦 ${ch.common}/${ch.rare}</span>
+        <span class="shop-wallet">${credits} donuts</span>
+        <span>${frags} fragments</span>
+        <span>${ch.common}/${ch.rare} cases</span>
         <button id="shop-close" style="padding:6px 14px;background:#3a1a1a;color:#ff8888;border:1px solid #ff4444;cursor:pointer;font-family:inherit;font-size:11px;letter-spacing:2px;border-radius:4px;">✕ CLOSE</button>
       </div>
     </div>
@@ -62743,6 +62694,7 @@ function renderShop() {
     const b = document.createElement('button');
     const active = shopTab === id;
     b.textContent = label;
+    b.setAttribute('role','tab');b.setAttribute('aria-selected',String(active));
     b.style.cssText = `padding:7px 14px;background:${active ? '#2a2a4a' : '#1a1a1a'};color:${active ? '#aaccff' : '#888'};border:1px solid ${active ? '#6699ff' : '#444'};cursor:pointer;font-family:inherit;font-size:11px;letter-spacing:2px;border-radius:4px;`;
     b.addEventListener('click', () => { shopTab = id; renderShop(); });
     tabsEl.appendChild(b);
@@ -63042,30 +62994,92 @@ function renderShopAbilities(body) {
     body.appendChild(card);
   });
 }
+function catalogPrice(n){return Number(n).toLocaleString('en-US')+' donuts';}
+function catalogSkin(id){return MODEL_SKINS.find(s=>s.id===id)||MELEE_MODEL_SKINS.find(s=>s.id===id);}
+const catalogSkinArt={};
+function catalogSkinImage(id){
+  if(catalogSkinArt[id])return catalogSkinArt[id];
+  const def=catalogSkin(id);if(!def)return '';
+  const model=def.build();
+  try{return (catalogSkinArt[id]=_renderWeaponIcon(model));}finally{disposeBody(model);}
+}
+function openShopWeaponPreview(id){
+  const item=WEAPONS.find(w=>w.id===id)||MELEE_ITEMS.find(w=>w.id===id)||SUPPORT_ITEMS.find(w=>w.id===id);
+  if(!item)return;
+  closeOtherDialogs();releasePointer();
+  let panel=document.getElementById('weapon-inspect-panel');
+  if(!panel){panel=document.createElement('section');panel.id='weapon-inspect-panel';document.body.appendChild(panel);}
+  panel.style.display='block';panel.setAttribute('role','dialog');panel.setAttribute('aria-label',item.name);
+  panel.innerHTML='<button class="inspect-close" aria-label="Close">&#215;</button><h2></h2><div class="inspect-stage"><img alt="Weapon model"></div><label>Rotation <input type="range" min="-180" max="180" value="0"></label><p class="inspect-state"></p><button class="inspect-buy"></button>';
+  panel.querySelector('h2').textContent=item.name;
+  const img=panel.querySelector('img'),slider=panel.querySelector('input'),button=panel.querySelector('.inspect-buy');
+  let yaw=0,drag=null,scheduled=false;
+  const render=()=>{
+    const owned=isOwned(id),model=_iconModelFor(id,owned)?.model;
+    if(model)img.src=_renderWeaponIcon(model,{yaw,locked:!owned,large:true});
+    img.classList.toggle('inspect-silhouette',!owned);
+    panel.querySelector('.inspect-state').textContent=owned?'UNLOCKED':'LOCKED';
+    button.textContent=owned?'OWNED':'UNLOCK / '+catalogPrice(shopCost(id));button.disabled=owned||shopCost(id)==null;
+  };
+  const queue=()=>{if(scheduled)return;scheduled=true;requestAnimationFrame(()=>{scheduled=false;if(panel.style.display!=='none')render();});};
+  slider.oninput=()=>{yaw=Number(slider.value)*Math.PI/180;queue();};
+  const stage=panel.querySelector('.inspect-stage');
+  stage.onpointerdown=e=>{drag={x:e.clientX,yaw};stage.setPointerCapture(e.pointerId);};
+  stage.onpointermove=e=>{if(!drag)return;yaw=drag.yaw+(e.clientX-drag.x)*.012;slider.value=Math.max(-180,Math.min(180,yaw*180/Math.PI));queue();};
+  stage.onpointerup=stage.onpointercancel=()=>{drag=null;};
+  button.onclick=async()=>{if(await buyWeapon(id)){render();if(document.getElementById('shop-screen')?.style.display==='block')renderShop();}};
+  panel.querySelector('.inspect-close').onclick=()=>{panel.style.display='none';if(isLoadoutOpen())showLoadoutScreen(loadoutMode);};
+  panel.onkeydown=e=>{if(e.code==='Escape'){e.stopPropagation();panel.querySelector('.inspect-close').click();}};
+  render();panel.querySelector('.inspect-close').focus();
+}
+function drawBundleArt(canvas,bundle){
+  canvas.width=640;canvas.height=300;const c=canvas.getContext('2d');
+  c.fillStyle='#d8e3dd';c.fillRect(0,0,640,300);
+  c.fillStyle='#284233';c.font='bold 22px Arial';c.fillText(bundle.name.toUpperCase(),28,32,570);
+  c.fillStyle='#64786d';c.beginPath();c.moveTo(45,75);c.lineTo(580,75);c.lineTo(610,263);c.lineTo(25,263);c.closePath();c.fill();
+  c.fillStyle='#243b32';c.fillRect(38,87,560,160);
+  c.strokeStyle='#9db3a5';c.lineWidth=4;c.strokeRect(47,96,542,142);
+  c.strokeStyle='#243b32';c.lineWidth=12;c.strokeRect(275,49,85,27);
+  c.fillStyle='#b5c7ba';for(const x of [72,535])c.fillRect(x,246,30,24);
+  bundle.items.forEach((id,i)=>{const src=weaponIconURL(id,false);if(!src)return;
+    const img=new Image();img.onload=()=>{if(i===0)c.drawImage(img,130,87,370,148);else c.drawImage(img,i===1?40:345,170,250,100);canvas.dispatchEvent(new Event('bundle-art-updated'));};img.src=src;
+  });
+}
 function renderShopBundles(body) {
+  body.dataset.layout='catalog';
   for (const b of BUNDLES) {
-    const totalSum = b.items.reduce((s, id) => s + (shopCost(id) ?? 0), 0);
+    const totalSum = b.items.reduce((s, id) => s + (FREE_WEAPONS.has(id)?0:(shopCost(id) ?? 0)), 0);
     const ownedCt = b.items.filter(id => isOwned(id)).length;
-    const allOwned = ownedCt === b.items.length;
+    const allOwned = ownedCt === b.items.length && b.skins.every(ownsSkin);
     const card = document.createElement('div');
-    card.style.cssText = `min-width:200px;max-width:240px;background:#1a1424;border:2px solid ${allOwned ? '#666' : '#aa66ff'};border-radius:6px;padding:12px 14px;`;
+    card.className='shop-bundle';
     card.innerHTML = `
-      <div style="font-size:15px;font-weight:bold;color:${allOwned ? '#88ff99' : '#ddccff'};margin-bottom:4px;">${b.icon} ${b.name}</div>
-      <div style="font-size:10px;color:#aaa;margin-bottom:8px;">${b.desc}</div>
-      <div style="font-size:10px;color:#ccc;line-height:1.5;margin-bottom:10px;">${b.items.map(id => isOwned(id) ? `<s style="color:#666">${id}</s>` : id).join(' · ')}</div>
-      <div style="font-size:9px;color:#aaccff;margin-bottom:8px;">${ownedCt}/${b.items.length} owned · save ${totalSum - b.price} (was ${totalSum})</div>
+      <canvas class="bundle-art" width="640" height="300" aria-label="${b.name} weapon case"></canvas>
+      <h3>${b.name}</h3><p class="catalog-status">${b.items.length} WEAPONS / ${b.skins.length} SKIN</p>
+      <div class="bundle-contents">${b.items.map(id=>'<button data-inspect-id="'+id+'" aria-label="Inspect '+weaponDisplayName(id)+'">'+weaponDisplayName(id)+(isOwned(id)?' / OWNED':'')+'</button>').join('')}</div>
+      <div class="bundle-skins">${b.skins.map(id=>'<img data-catalog-skin="'+id+'" alt="'+catalogSkin(id)?.name+'"><span>'+catalogSkin(id)?.name+(ownsSkin(id)?' / OWNED':'')+'</span>').join('')}</div>
+      <p class="catalog-status">${ownedCt}/${b.items.length} weapons owned${totalSum>b.price?' / save '+catalogPrice(totalSum-b.price):''}</p>
       ${allOwned
-        ? '<div style="text-align:center;color:#88ff99;font-size:12px;padding:6px 0;">✓ FULLY OWNED</div>'
-        : `<button class="shop-buy-bundle" style="width:100%;padding:8px;background:#1a2a1a;color:#88ff99;border:1px solid #88ff99;font-size:13px;cursor:pointer;border-radius:4px;font-family:inherit;letter-spacing:1px;">BUY · ${money(b.price)}</button>`
+        ? '<div class="catalog-status">FULLY OWNED</div>'
+        : `<button class="shop-buy-bundle">UNLOCK / ${catalogPrice(b.price)}</button>`
       }
     `;
     const btn = card.querySelector('.shop-buy-bundle');
+    card.querySelectorAll('[data-inspect-id]').forEach(el=>el.onclick=()=>openShopWeaponPreview(el.dataset.inspectId));
     if (btn) btn.addEventListener('click', async () => { if (await buyBundle(b.id)) renderShop(); });
     body.appendChild(card);
+    card.querySelector('canvas').dataset.bundleId=b.id;
   }
+  const fill=el=>{if(el.dataset.bundleId)drawBundleArt(el,BUNDLES.find(b=>b.id===el.dataset.bundleId));else el.src=catalogSkinImage(el.dataset.catalogSkin);};
+  const media=body.querySelectorAll('canvas[data-bundle-id],img[data-catalog-skin]');
+  if('IntersectionObserver' in window){
+    shopMediaObserver=new IntersectionObserver(entries=>{for(const e of entries)if(e.isIntersecting){shopMediaObserver.unobserve(e.target);fill(e.target);}},{rootMargin:'160px'});
+    media.forEach(el=>shopMediaObserver.observe(el));
+  }else media.forEach(fill);
 }
 
 function renderShopItems(body, slot) {
+  body.dataset.layout='catalog';
   // Decide which source list + how each card describes itself
   let source, descFn, pickIsAdmin;
   if (slot === 'primary') {
@@ -63094,6 +63108,7 @@ function renderShopItems(body, slot) {
     const card = document.createElement('div');
     card.style.cssText = `min-width:170px;max-width:200px;background:#0f1018;border:1px solid ${owned ? '#88ff99' : '#444'};border-radius:5px;padding:10px 12px;`;
     card.innerHTML = `
+      ${loadoutPreviewHTML(id)}
       <div style="font-size:13px;font-weight:bold;color:${owned ? '#88ff99' : '#ddd'};">${item.name}</div>
       <div style="font-size:9px;color:#888;margin:2px 0 4px;">${item.type}</div>
       <div style="font-size:10px;color:#bbb;margin-bottom:8px;">${descFn(item)}</div>
@@ -63109,13 +63124,17 @@ function renderShopItems(body, slot) {
       }
     `;
     const b = card.querySelector('.sbuy');
+    card.classList.add('shop-item');
+    const preview=card.querySelector('.lc-preview');preview.tabIndex=0;preview.setAttribute('role','button');preview.setAttribute('aria-label','Inspect '+item.name);
+    preview.onclick=()=>openShopWeaponPreview(id);preview.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openShopWeaponPreview(id);}};
     const t = card.querySelector('.strial');
     const f = card.querySelector('.sfrag');
-    if (b) b.addEventListener('click', async () => { if (await buyWeapon(id)) renderShop(); });
+    if (b) b.addEventListener('click', async () => { if (await buyWeapon(id)) {renderShop();openShopWeaponPreview(id);} });
     if (t) t.addEventListener('click', async () => { if (await trialWeapon(id)) renderShop(); });
-    if (f) f.addEventListener('click', async () => { if (await unlockWithFragments(id)) renderShop(); });
+    if (f) f.addEventListener('click', async () => { if (await unlockWithFragments(id)) {renderShop();openShopWeaponPreview(id);} });
     body.appendChild(card);
   }
+  hydrateLoadoutPreviews(body);
 }
 
 // ── 📋 Balanced rankings + Best Loadouts ────────────────────────────────
@@ -63348,22 +63367,25 @@ function showLoadoutScreen(mode) {
   // Helper: is this admin item unlocked for the current user?
   const isUnlocked = (id) => adminPassActive() || !!(currentUser && currentUser.unlocks && currentUser.unlocks.includes(id));
 
-  // Loadout screen only shows items the player can equip RIGHT NOW.
-  // Buying / trialing happens in the dedicated shop (open from mode-select).
+  // Locked items stay visible; only owned items can be selected.
   function decorateOwnedBadge(card, id, isAdminItem) {
     if (isAdminItem) return isUnlocked(id);
-    if (!isOwned(id)) return false; // caller will skip rendering
+    if (!isOwned(id)) {
+      card.classList.add('catalog-card-locked');card.setAttribute('aria-label',weaponDisplayName(id)+' - locked');
+      const badge=document.createElement('div');badge.className='catalog-status';badge.textContent='LOCKED';card.querySelector('.lc-copy').appendChild(badge);
+      return false;
+    }
     const badge = document.createElement('div');
     badge.style.cssText = 'font-size:9px;color:#88ff99;letter-spacing:1px;margin-top:3px;';
     badge.textContent = FREE_WEAPONS.has(id) ? 'FREE' : trialingThisMatch.has(id) ? '🧪 TRIAL' : '✓ OWNED';
-    card.appendChild(badge);
+    card.querySelector('.lc-copy').appendChild(badge);
     // 🏆 Mastery title (if any) — shown below the OWNED badge
     const tier = weaponTitleFor(id);
     if (tier) {
       const tb = document.createElement('div');
       tb.style.cssText = `font-size:9px;color:${tier.color};letter-spacing:1px;margin-top:2px;font-weight:bold;`;
       tb.textContent = `🏆 ${tier.title} · ${weaponKills[id] || 0} kills`;
-      card.appendChild(tb);
+      card.querySelector('.lc-copy').appendChild(tb);
     }
     return true;
   }
@@ -63436,10 +63458,9 @@ function showLoadoutScreen(mode) {
       <div class="lc-type">${dw.type}${dw.skinName ? ' · SKIN' : ''}</div>
       <div class="lc-stats">DMG ${dw.damage}${w.pellets > 1 ? '×' + w.pellets : ''} · MAG ${w.mag} · ${fireTag} · ${rateTag}</div>
     </div>`;
-    if (!w.adminItem && !isOwned(w.id)) return; // not yet bought — hidden from loadout
     const usable = decorateOwnedBadge(card, w.id, !!w.adminItem);
-    addGunSkinChips(card, w);
-    const handler = () => { if (usable) pickLoadoutWeapon(i, isPrimary, card); };
+    if(usable)addGunSkinChips(card, w);
+    const handler = () => { if (usable) pickLoadoutWeapon(i, isPrimary, card);else openShopWeaponPreview(w.id); };
     card.addEventListener('click',      handler);
     card.addEventListener('touchstart', e => { e.stopPropagation(); e.preventDefault(); handler(); }, { passive: false });
     (isPrimary ? pList : sList).appendChild(card);
@@ -63460,10 +63481,9 @@ function showLoadoutScreen(mode) {
       <div class="lc-type">${dm.type}${dm.skinId ? ' · SKIN' : ''}</div>
       <div class="lc-stats">DMG ${dm.damage} · RANGE ${dm.range} · ${Math.round(1000/dm.cooldown)}/s</div>
     </div>`;
-    if (!m.adminItem && !isOwned(m.id)) return;
     const usable = decorateOwnedBadge(card, m.id, !!m.adminItem);
-    addMeleeSkinChips(card, m);
-    const handler = () => { if (usable) pickMelee(i, card); };
+    if(usable)addMeleeSkinChips(card, m);
+    const handler = () => { if (usable) pickMelee(i, card);else openShopWeaponPreview(m.id); };
     card.addEventListener('click',      handler);
     card.addEventListener('touchstart', e => { e.stopPropagation(); e.preventDefault(); handler(); }, { passive: false });
     mList.appendChild(card);
@@ -63483,9 +63503,8 @@ function showLoadoutScreen(mode) {
       <div class="lc-type">${s.type}</div>
       <div class="lc-stats">${stat} · USES ${s.uses}</div>
     </div>`;
-    if (!s.adminItem && !isOwned(s.id)) return;
     const usable = decorateOwnedBadge(card, s.id, !!s.adminItem);
-    const handler = () => { if (usable) pickSupport(i, card); };
+    const handler = () => { if (usable) pickSupport(i, card);else openShopWeaponPreview(s.id); };
     card.addEventListener('click',      handler);
     card.addEventListener('touchstart', e => { e.stopPropagation(); e.preventDefault(); handler(); }, { passive: false });
     uList.appendChild(card);
@@ -64716,7 +64735,7 @@ document.addEventListener('langchange', () => {
 // different sizes. Closing is only hiding — every dialog rebuilds from current state when it opens.
 // index.html gives them one shared frame.
 const DIALOG_IDS = ['settings-hub-panel', 'controls-panel', 'crosshair-panel', 'shoot-fx-panel', 'aim-assist-panel', 'weapon-skins-panel',
-                    'skins-panel', 'kill-log-panel', 'char-chat-panel', 'map-dialog', 'diff-dialog', 'duel-panel', 'lobby-service-panel'];
+                    'skins-panel', 'kill-log-panel', 'char-chat-panel', 'map-dialog', 'diff-dialog', 'duel-panel', 'lobby-service-panel','weapon-inspect-panel'];
 function anyDialogOpen() {
   return DIALOG_IDS.some(id => { const el = document.getElementById(id); return el && getComputedStyle(el).display !== 'none'; });
 }
@@ -65053,6 +65072,17 @@ function openLobbyArcade(){
 }
 function updateLobbyServices(){
   const group=MAP_GROUPS.lobby13;
+  if(!group._shopDisplay && Math.hypot(camera.position.x+21,camera.position.z-21)<16){
+    group._shopDisplay=true;
+    ['pizza','soda','waffle'].forEach((kind,i)=>{
+      const x=-24+i*3,model=buildSnackSkin(kind);model.position.set(x,1.6,22.9);model.rotation.set(0,Math.PI/2,0);model.scale.setScalar(2);group.add(model);
+      const plinth=new THREE.Mesh(new THREE.BoxGeometry(1.8,.2,.7),new THREE.MeshPhongMaterial({color:0x32483b}));plinth.position.set(x,1.37,22.9);group.add(plinth);
+      const cv=document.createElement('canvas');drawBundleArt(cv,BUNDLES.find(b=>b.id===['pizza_party','soda_rush','breakfast'][i]));
+      const texture=new THREE.CanvasTexture(cv);texture.colorSpace=THREE.SRGBColorSpace;
+      cv.addEventListener('bundle-art-updated',()=>{texture.needsUpdate=true;});
+      const screen=new THREE.Mesh(new THREE.PlaneGeometry(1.55,.78),new THREE.MeshBasicMaterial({map:texture}));screen.position.set(x,2,23.36);screen.rotation.y=Math.PI;group.add(screen);
+    });
+  }
   if(!group._adminNPC){
     const npc=makePlayerMesh('',false,'ally','swat',{crown:true});npc.position.set(-5,0,-27.5);group.add(npc);group._adminNPC=npc;
   }
@@ -65193,16 +65223,17 @@ async function buyBundle(bundleId) {
   if (!b) return false;
   if (currentUser.isAdmin) return true;
   const remaining = b.items.filter(id => !isOwned(id));
-  if (remaining.length === 0) { alert('You already own every item in this bundle!'); return false; }
+  const missingSkins=b.skins.filter(id=>!ownsSkin(id));
+  if (!remaining.length && !missingSkins.length) { alert('You already own every item and skin in this bundle!'); return false; }
   if ((currentUser.credits ?? 0) < b.price) { alert(`Not enough donuts.\nBundle costs ${money(b.price)} · You have ${currentUser.credits ?? 0}`); return false; }
-  const sumIndividual = b.items.reduce((s, id) => s + (shopCost(id) ?? 0), 0);
-  if (!await uiConfirm(`Buy "${b.name}" bundle for ${money(b.price)}?\n\nIncludes: ${b.items.join(', ')}\nValue: ${money(sumIndividual)} (saving ${money(sumIndividual - b.price)})\nNew items: ${remaining.length}`)) return false;
+  if (!await uiConfirm('Unlock '+b.name+' for '+catalogPrice(b.price)+'?\n\nWeapons: '+b.items.map(weaponDisplayName).join(', ')+'\nSkins: '+b.skins.map(id=>catalogSkin(id)?.name||id).join(', ')+'\nNew weapons: '+remaining.length+' / New skins: '+missingSkins.length)) return false;
   const r = await authRequest('/shop/buy-bundle', { username: currentUser.username, password: currentUser.password, bundleId });
   if (!r || r.error) { alert('❌ ' + (r?.error || 'shop error')); return false; }
   currentUser.purchased = r.purchased || currentUser.purchased;
+  currentUser.skinInventory=r.skinInventory || currentUser.skinInventory;
   currentUser.credits = r.credits ?? currentUser.credits;
   updateUserInfoBar();
-  alert(`✅ Unlocked ${r.added?.length || 0} new items! Balance: ${currentUser.credits} donuts`);
+  alert('Unlocked '+(r.added?.length||0)+' weapons and '+(r.addedSkins?.length||0)+' skins. Balance: '+currentUser.credits+' donuts');
   return true;
 }
 
@@ -65777,7 +65808,7 @@ function openWeaponSkinsPanel() {
         return `
         <div data-mskin="${ms.id}" data-mweapon="${wid}" class="ms-cell"
              style="cursor:${locked?'not-allowed':'pointer'};opacity:${locked?0.45:1};filter:${locked?'grayscale(0.8)':'none'};border:2px solid ${on===ms.id?'#88ff99':'#444'};border-radius:6px;padding:8px;background:${on===ms.id?'#162a18':'#1d1a12'};">
-          <div style="height:26px;border-radius:4px;background:linear-gradient(90deg, ${ms.sw[0]} 0 50%, ${ms.sw[1]} 50% 100%);border:1px solid #000;margin-bottom:6px;"></div>
+          ${PVP_SHOP_CATALOG.exclusiveSkins.includes(ms.id)?'<img src="'+catalogSkinImage(ms.id)+'" alt="'+ms.name+'" style="width:100%;height:64px;object-fit:contain;background:#dce5dd;">':`<div style="height:26px;border-radius:4px;background:linear-gradient(90deg, ${ms.sw[0]} 0 50%, ${ms.sw[1]} 50% 100%);border:1px solid #000;margin-bottom:6px;"></div>`}
           <div style="font-size:11px;letter-spacing:1px;color:${on===ms.id?'#88ff99':'#ddd'};">${locked ? '🔒 ' + ms.name : ms.name}</div>
           <div style="font-size:9px;color:#8a8a7a;margin-top:3px;line-height:1.3;">${ms.blurb}</div>
           ${legendLocked ? `<div style="font-size:9px;color:#ff6a4a;margin-top:4px;line-height:1.3;">${ffaLegendProgressText()}</div>` : ''}
