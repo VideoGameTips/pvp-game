@@ -8766,7 +8766,7 @@ function buildLobby13Map() {
   ground.receiveShadow = true;
   const footprint = [[-13,-32],[5,-32],[12,-25],[18,-25],[18,-18],[35,-18],
     [35,18],[29,18],[29,32],[16,32],[10,38],[-6,38],[-12,32],[-12,27],
-    [-29,27],[-29,18],[-35,18],[-35,-15],[-25,-15],[-25,-23],[-13,-23]];
+    [-29,27],[-29,18],[-35,18],[-35,-37],[-13,-37]];
   group.userData.lobbyFootprint = footprint;
   const outlineGeometry = points => {
     const shape = new THREE.Shape();
@@ -8861,6 +8861,11 @@ function buildLobby13Map() {
   }
   sign('PVP ARENA', 'LOBBY 13  /  TRAIN. EQUIP. CHALLENGE.', -3.5, 6.3, -30.8, 18);
   sign('SEE YOU IN THE ARENA', 'LOBBY 13', 2, 5.7, 37.4, 14, Math.PI);
+  sign('SQUAD HALL', '5 V 5   /   10 V 10', -24, 5.5, -35.8, 17);
+  floor(-24,-26,21,21,0x50676b,.025);
+  box(-24,8.4,-31.5,22,.35,11,shell);
+  for(const x of [-34,-14])box(x,4.2,-27,.5,8.4,.5,steel);
+  floor(-24,-27,20,.12,0xe1b63d);
 
   // Seating pockets leave the spawn, ramp and both loadout-can approaches open.
   const bench = (x, z, flip) => {
@@ -8879,7 +8884,7 @@ function buildLobby13Map() {
         .22, h, .22, i % 2 ? 0x487d50 : 0x325e43);
     }
   };
-  [[-11,-26],[5,-28],[-10,28],[11,28],[-32,-11],[-32,15]].forEach(([x,z]) => planter(x,z));
+  [[-11,-26],[5,-28],[-10,28],[11,28],[-10,14],[-28,15]].forEach(([x,z]) => planter(x,z));
 
   // Keep the slide circuit in its own wing, leaving the arrival sightline open.
   addRamp(m, -22, 2, 0, 1, { width: 5, rise: 3, landing: 2.5,
@@ -8901,13 +8906,20 @@ function buildLobby13Map() {
   // Armory display alcoves flank the entrance, rather than obstructing the cans.
   [-21, 21].forEach(x => {
     const z=x<0?23.5:28.5;
-    box(x, 1.4, z, 11, 2.8, 2, steel);
-    detail(x, 2.85, z, 11.2, .14, 2.2, 0x99acac);
-    sign('ARMORY', 'LOADOUT / CUSTOMIZE', x, 4.5, x<0?26.4:31.4, 10, Math.PI);
+    box(x, .575, z, 11, 1.15, 2, steel);
+    detail(x, 1.22, z, 11.2, .14, 2.2, 0x99acac);
+    sign(x<0?'THE SUPPLY SHOP':'ARCADE', x<0?'WEAPONS / CASES / UPGRADES':'AIM TRAINER / OBBY / RANGE', x, 4.5, x<0?25.8:30.8, 10, Math.PI);
     for (let i = -2; i <= 2; i++) {
-      detail(x + i * 1.8, 1.4, z-1.05, 1.45, 1.8, .08, 0x1c292d);
-      detail(x + i * 1.8, 1.4, z-1.13, .12, 1.15, .12, 0x8ca2a5);
-      detail(x + i * 1.8 + .25, 1.15, z-1.13, .5, .22, .12, 0x8ca2a5);
+      detail(x + i * 1.8, .65, z-1.05, 1.45, .8, .08, 0x1c292d);
+      detail(x + i * 1.8, .65, z-1.13, .12, .5, .12, 0x8ca2a5);
+      detail(x + i * 1.8 + .25, .55, z-1.13, .5, .12, .12, 0x8ca2a5);
+    }
+    for(const dx of [-3,0,3]){
+      detail(x+dx,1.5,z,.15,.5,.35,steel);
+      detail(x+dx,2,z,1.8,1.05,.18,steel);
+      detail(x+dx,2,z-.11,1.6,.85,.04,x<0?0x479f79:0x3a91b3);
+      detail(x+dx,1.32,z-.6,1.45,.06,.5,0x4d6264);
+      for(let k=0;k<3;k++)detail(x+dx-.5+k*.5,1.365,z-.6,.2,.04,.18,k===1?0xe6bf64:0x9bd5ca);
     }
   });
   [[6,3],[-6,-3]].forEach(([x,z]) => {
@@ -8915,6 +8927,13 @@ function buildLobby13Map() {
     floor(x,z-1.35,2.6,.1,0x70d4b7);
     sign('LOADOUT', 'EQUIP STATION', x, 2.4, z-.7, 3.2);
   });
+  // Walk-up services occupy the old display alcoves and two quiet corners.
+  box(-5, .475, -26, 5, .95, 1.2, steel);
+  detail(-5, 1.015, -26, 5.2, .12, 1.4, 0xc3b17b);
+  sign('THE ADMIN', 'LOBBY KEEPER / STORIES', -5, 2.95, -28.3, 5.8);
+  box(15,1,-23,3,2,1,steel);
+  detail(15,1.8,-22.43,2.5,1.2,.1,0x40958c);
+  sign('STYLE STUDIO', 'HAIR / OUTFITS',15,3.8,-24.35,5);
 
   // Three open-front staging bays retain the exact interaction-pad coordinates.
   floor(24, 0, 18, 34, 0x6e8188, .025);
@@ -8937,6 +8956,8 @@ function buildLobby13Map() {
     { modeId: '1v1', label: '1V1', perTeam: 1, z: -11 },
     { modeId: '2v2', label: '2V2', perTeam: 2, z:   0 },
     { modeId: '3v3', label: '3V3', perTeam: 3, z:  11 },
+    { modeId: '5v5', label: '5V5', perTeam: 5, z: -21, blueX: -30, redX: -19, radius: 3.6 },
+    { modeId: '10v10', label: '10V10', perTeam: 10, z: -32, blueX: -30, redX: -19, radius: 3.6 },
   ];
   const BLUE = 0x3a7bff, RED = 0xff3a3a;
   const mkPad = (x, z, color, radius) => {
@@ -8960,10 +8981,10 @@ function buildLobby13Map() {
     MAP_GROUPS[m].add(spr);
   };
   padDefs.forEach(pd => {
-    const blueX = 20, redX = 28, radius = 2.6;
+    const blueX = pd.blueX ?? 20, redX = pd.redX ?? 28, radius = pd.radius || 2.6;
     mkPad(blueX, pd.z, BLUE, radius);
     mkPad(redX,  pd.z, RED,  radius);
-    mkLabel(pd.label, '#ffffff', 24, pd.z, 3.4, 4.0);   // mode label, centered above
+    mkLabel(pd.label, '#ffffff', (blueX+redX)/2, pd.z, 3.4, 4.0);
     mkLabel('BLUE',  '#88bbff', blueX, pd.z, 2.1, 2.2); // team markers
     mkLabel('RED',   '#ff9999', redX,  pd.z, 2.1, 2.2);
     LOBBY_DUEL_PADS.push({
@@ -56912,9 +56933,10 @@ function syncInteractButton() {
   const btn = document.getElementById('btn-interact');
   if (!btn) return;
   const pilot = pilotableHere();
-  const duel = !pilot && inLobby && !nearTrashcan && !!lobbyPadHere;   // pads only now (#31)
-  const label = I18N.t(pilot === 'exit' ? 'EXIT' : (pilot && !nearTrashcan) ? 'PILOT' : duel ? 'START' : 'SWAP'); // compare with what's shown, which may be translated
-  const display = (nearTrashcan || duel || pilot) ? 'flex' : 'none';
+  const service=inLobby && !nearTrashcan && lobbyServiceHere;
+  const duel = !pilot && inLobby && !nearTrashcan && !!lobbyPadHere;
+  const label = I18N.t(pilot === 'exit' ? 'EXIT' : (pilot && !nearTrashcan) ? 'PILOT' : service ? 'OPEN' : duel ? 'START' : 'SWAP');
+  const display = (nearTrashcan || duel || pilot || service) ? 'flex' : 'none';
   if (btn.textContent !== label) btn.textContent = label;
   if (btn.style.display !== display) btn.style.display = display;
 }
@@ -60258,11 +60280,13 @@ function endMatch(winner, reason) {
   }
   // Trials are one-match only — clear them so they re-cost next time.
   trialingThisMatch.clear();
+  if(!match.forfeit && ['elim','race','ffa','arcade','br','frontlines','laststand','dday'].includes(match.type))noteLobbyStory('finished');
   startMatchFinale(winner);
 }
 
 // ── Bot AI ─────────────────────────────────────────────────────────────────
 function botSideSpawn(idx, count, team) {
+  if(selectedModeConfig?.type==='lobby')return lobbySpawnPoint(idx);
   { const S = MAP_SPAWNS[activeMapName]; if (S) {   // a hand-built map names where each side starts
     const r = absTeam(team) === 'ally' ? S.ally : S.enemy, f = count <= 1 ? Math.random() : idx / (count - 1);
     return { x: r.x0 + (r.x1 - r.x0) * (0.1 + 0.8 * f) + (Math.random() - 0.5) * 2, z: r.z0 + Math.random() * (r.z1 - r.z0) }; } }
@@ -60603,9 +60627,9 @@ function spawnGameBots() {
   // 🛋️ Lobby 13: the ENTIRE chat cast hangs out as chill ally NPCs (no draft needed).
   // They become ally-team bots so they never attack you — with no enemies present
   // they just wander/idle around the lounge while you organize 1v1s in the duel pit.
-  if (selectedModeConfig.type === 'lobby' && window.CHAT_CAST) {
-    draftedAllies = Object.keys(window.CHAT_CAST);
-    allies  = draftedAllies.length;
+  if (selectedModeConfig.type === 'lobby') {
+    draftedAllies = Object.keys(window.CHAT_CAST || {});
+    allies  = draftedAllies.length + LOBBY_VISITOR_NAMES.length;
     enemies = 0;
   }
 
@@ -60633,7 +60657,10 @@ function spawnGameBots() {
     let _playstyle = null;
     const _draftList = isAlly ? draftedAllies : draftedEnemies;
     const drafted = idx < _draftList.length;
-    const tmId = drafted ? _draftList[idx] : (castPool.pop() || null);
+    const lobbyPick=window.PVP_LOBBY_DRAFT?.[team]?.[idx];
+    const tmId = lobbyPick ? (lobbyPick.charId || null) : drafted ? _draftList[idx] : (castPool.pop() || null);
+    const visitorIndex=selectedModeConfig.type==='lobby'?idx-draftedAllies.length:-1;
+    const isLobbyVisitor=visitorIndex>=0;
     {
       const tmChar = tmId && window.CHAT_CAST && window.CHAT_CAST[tmId];
       if (tmChar) {
@@ -60644,6 +60671,8 @@ function spawnGameBots() {
         if (drafted) _playstyle = { ...DEFAULT_TEAMMATE_PLAYSTYLE, ...(TEAMMATE_PLAYSTYLES[tmId] || {}) };
       }
     }
+    if(isLobbyVisitor)name=LOBBY_VISITOR_NAMES[visitorIndex];
+    else if(lobbyPick?.isVisitor)name=lobbyPick.name;
     // 🆕 Full bot loadout — only public, normal picks. Drafted character
     // signatures are sanitized too, so archived/admin toys never leak into bots.
     // 🎭 Drafted teammate uses their signature loadout; everyone else rolls random.
@@ -60660,6 +60689,8 @@ function spawnGameBots() {
     let botSkin;
     if (selectedModeConfig.type === 'lobby' && _teammateChar && tmId) {
       botSkin = TEAMMATE_SKINS[tmId] || (isAlly ? 'soldier' : 'swat');
+    } else if(isLobbyVisitor) {
+      botSkin=['recruit','spiky','swat','default'][visitorIndex%4];
     } else {
       botSkin = 'default';
     }
@@ -60705,9 +60736,9 @@ function spawnGameBots() {
     gameBots.push({ id, team, weaponId, spawnWeaponId: weaponId, x: sx, z: sz, rotY: 0, hp: startHp, maxHp: startHp,
                     // 🎭 Teammate playstyle flavor + which drafted character (if any) this bot is
                     speedMult: (_playstyle && _playstyle.speedMult) || 1, playstyle: _playstyle, charId: tmId || null,
-                    // 🛋️ ~45% of the lobby cast are "down to duel" — they'll walk to a duel
-                    // slot to join you when you step onto a pad. (no effect outside lobby)
-                    _wantsDuel: (selectedModeConfig.type === 'lobby' && Math.random() < 0.45),
+                    // Every lobby regular can join a pad, including a full 10v10 roster.
+                    _lobbyVisitor: isLobbyVisitor,
+                    _wantsDuel: selectedModeConfig.type === 'lobby',
                     // 🆕 Full loadout — bot will switch between these based on engagement range
                     primaryId: weaponId, secondaryId: botSecondaryId,
                     meleeId: botMeleeId, utilityId: botUtilityId,
@@ -60754,7 +60785,16 @@ function spawnGameBots() {
     match = null;
     inLobby = true;
     const hud = document.getElementById('match-hud'); if (hud) hud.style.display = 'none';
-    setTimeout(() => { try { showAnnouncement('🛋️ LOBBY 13', 'Chill zone · ⚔️ DUEL picks your 1V1 · the blue/red pads run 2V2 and 3V3', '#aaffaa', 3200); } catch (e) {} }, 600);
+    updateLobbyServices();
+    for(const b of gameBots)if(b._lobbyVisitor){
+      const body=remoteMeshes[b.id];if(!body)continue;
+      const cv=document.createElement('canvas');cv.width=512;cv.height=96;
+      const ctx=cv.getContext('2d');ctx.textAlign='center';ctx.font='bold 32px Arial';ctx.fillStyle='#f2fffa';ctx.fillText(players[b.id].name,256,37);
+      ctx.font='20px Arial';ctx.fillStyle='#82c9b5';ctx.fillText('NPC VISITOR',256,72);
+      const tag=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(cv),transparent:true,depthTest:true}));
+      tag.scale.set(3,.56,1);tag.position.y=2.4;body.add(tag);
+    }
+    setTimeout(() => { try { showAnnouncement('LOBBY 13', 'Shop / The Admin / Arcade / Team pads: 1V1 to 10V10', '#aaffaa', 3200); } catch (e) {} }, 600);
     grantSpawnShield(0);
     return;
   }
@@ -61333,24 +61373,20 @@ function updateBotAI(dt) {
 
     if (!target) {
       // 🛋️ Lobby duel staging: a willing bot assigned to a slot walks there, then idles.
-      if (inLobby && bot._duelGoto) {
-        const gdx = bot._duelGoto.x - bot.x, gdz = bot._duelGoto.z - bot.z;
-        const gd = Math.hypot(gdx, gdz);
-        if (gd > 0.35) {
-          const sp = Math.min(8 * dt, gd); // brisk walk over to the slot
-          moveX = (gdx / gd) * sp;
-          moveZ = (gdz / gd) * sp;
-          // NEGATED, like every other facing in this file. `mesh.rotation.y`
-          // is `bot.rotY + Math.PI`, so the convention that points a face along
-          // a direction is atan2(-x, -z) — which is what the target-facing
-          // lines use. These two movement lines did not, so a bot walking to a
-          // slot or wandering faced exactly 180 degrees away from where it was
-          // going. It has always moonwalked; you could not see it because an
-          // armed character's legs were frozen (that gate is gone now), and
-          // every character in Lobby 13 is armed.
-          bot.rotY = Math.atan2(-moveX, -moveZ);
+      if(inLobby){
+        if(!bot._duelGoto && (!bot._lobbyGoal || Math.hypot(bot.x-bot._lobbyGoal.x,bot.z-bot._lobbyGoal.z)<.5)){
+          if(!bot._lobbyIdleUntil)bot._lobbyIdleUntil=now+2000+Math.random()*4000;
+          if(now>bot._lobbyIdleUntil){
+            const points=lobbyNavigation().nodes;
+            bot._lobbyGoal=points[Math.floor(Math.random()*points.length)];bot._lobbyIdleUntil=0;
+            if(bot._lobbyVisitor && Math.random()<.12)showBotSpeech(bot,['Checking the squad hall.','The Admin knows something.','One more match, probably.','Saving up for a new skin.'][Math.floor(Math.random()*4)],2600,'#ade6d2');
+          }
         }
-        bot.state = 'duel_stage';
+        const goal=bot._duelGoto || bot._lobbyGoal;
+        const step=goal?lobbyWalk(bot,goal,dt):{x:0,z:0};
+        moveX=step.x;moveZ=step.z;
+        if(moveX||moveZ)bot.rotY=Math.atan2(-moveX,-moveZ);
+        bot.state=bot._duelGoto?'duel_stage':'wander';
       } else {
         // Wander
         bot.state = 'wander';
@@ -64409,9 +64445,8 @@ function finishLogin(result, creds) {
   updateUserInfoBar(); // populate user info for the mode screen
   // 🥚 Easter eggs on login (cursed password / secret name)
   try { checkLoginEggs(name, creds.guest ? '' : creds.password); } catch (e) {}
-  // Go straight to the mode page on login. Lobby 13 is still available from
-  // the mode screen, but login should not spawn you there first.
-  openModeMenu();
+  // The playable hub is home now; the full mode list remains a fallback.
+  selectMode('lobby13');
 }
 
 // "N online" on the login screen, so nobody walks into an empty game unwarned (#11).
@@ -64910,7 +64945,7 @@ document.addEventListener('langchange', () => {
 // different sizes. Closing is only hiding — every dialog rebuilds from current state when it opens.
 // index.html gives them one shared frame.
 const DIALOG_IDS = ['settings-hub-panel', 'controls-panel', 'crosshair-panel', 'shoot-fx-panel', 'aim-assist-panel', 'weapon-skins-panel',
-                    'skins-panel', 'kill-log-panel', 'char-chat-panel', 'map-dialog', 'diff-dialog', 'duel-panel'];
+                    'skins-panel', 'kill-log-panel', 'char-chat-panel', 'map-dialog', 'diff-dialog', 'duel-panel', 'lobby-service-panel'];
 function anyDialogOpen() {
   return DIALOG_IDS.some(id => { const el = document.getElementById(id); return el && getComputedStyle(el).display !== 'none'; });
 }
@@ -65079,13 +65114,14 @@ function showLobbyPrompt(txt) {
 }
 // Clear every bot's duel-slot assignment so they go back to wandering.
 function releaseDuelBots() {
-  for (const b of gameBots) { b._duelGoto = null; b._duelTeam = null; }
+  for (const b of gameBots) { b._duelGoto = null; b._duelTeam = null; b._lobbyPathKey = null; }
 }
 // Small spread so multiple bots on the same pad don't stack on one point.
 function duelSlotPoint(pt, i) {
   if (i <= 0) return { x: pt.x, z: pt.z };
   const ang = i * 2.4;
-  return { x: pt.x + Math.cos(ang) * 1.1, z: pt.z + Math.sin(ang) * 1.1 };
+  const radius=i<=6?1.4:2.7;
+  return { x: pt.x + Math.cos(ang) * radius, z: pt.z + Math.sin(ang) * radius };
 }
 // Assign willing cast members to fill the open slots. `playerSide` is the pad the
 // player chose ('blue' or 'red'); their side gets teammates ('mate'), the other
@@ -65096,7 +65132,7 @@ function stageDuelBots(area, playerSide) {
   const mates = gameBots.filter(b => !b.dead && b._duelTeam === 'mate');
   const foes  = gameBots.filter(b => !b.dead && b._duelTeam === 'foe');
   const freeWilling = (pad) => gameBots
-    .filter(b => !b.dead && b._wantsDuel && !b._duelTeam && b.charId)
+    .filter(b => !b.dead && b._wantsDuel && !b._duelTeam && (b.charId || b._lobbyVisitor))
     .sort((a, b) => (Math.hypot(a.x - pad.x, a.z - pad.z))
                   - (Math.hypot(b.x - pad.x, b.z - pad.z)));
   while (foes.length < area.perTeam) {
@@ -65131,8 +65167,131 @@ function countSeated(area, playerSide) {
 }
 // Per-frame (only while inLobby): stage duels on the blue/red pads, or offer a
 // proximity 1V1 challenge against the nearest cast member.
+const LOBBY_SERVICES = [
+  {id:'admin',x:-5,z:-24,label:'Talk to The Admin',action:()=>openLobbyAdmin()},
+  {id:'shop',x:-21,z:21,label:'Browse the supply shop',action:()=>{noteLobbyStory('shop');openShop();releasePointer();}},
+  {id:'style',x:15,z:-21,label:'Open the style studio',action:()=>{openSkinsPanel();releasePointer();}},
+  {id:'arcade',x:21,z:26,label:'Choose an arcade activity',action:()=>openLobbyArcade()},
+];
+const LOBBY_VISITOR_NAMES = ['PRogame567','ToastOnWifi','xXPixelRushXx','NotAFryingPan','CloudyAim42','CtrlAltYeet',
+  'MintyReload','LaggyLegend07','BeanWithAK','NeonNoodle','RamenRunner9','tinyBoss300'];
+let lobbyServiceHere = null, lobbyNav = null;
+function lobbyStoryKey(){return 'pvp_lobby_story_'+(currentUser?.username||'guest');}
+function readLobbyStory(){
+  try{
+    const saved=JSON.parse(localStorage.getItem(lobbyStoryKey())||'{}');
+    return Object.fromEntries(['met','shop','training','duel','finished'].map(k=>[k,saved?.[k]===true]));
+  }catch(e){return {};}
+}
+function noteLobbyStory(key){
+  if(!['met','shop','training','duel','finished'].includes(key))return;
+  const state=readLobbyStory();if(state[key])return;
+  state[key]=true;try{localStorage.setItem(lobbyStoryKey(),JSON.stringify(state));}catch(e){}
+  if(state.met && key!=='met')showAnnouncement('LOBBY JOURNAL UPDATED','The Admin has something new to say.','#83e4c4',1800);
+}
+function lobbyClear(x,z,r=.65){
+  const poly=MAP_GROUPS.lobby13.userData.lobbyFootprint;
+  let inside=false;
+  for(let i=0,j=poly.length-1;i<poly.length;j=i++){
+    const [ax,az]=poly[i],[bx,bz]=poly[j];
+    if((az>z)!==(bz>z)&&x<(bx-ax)*(z-az)/(bz-az)+ax)inside=!inside;
+  }
+  return inside && !MAP_COLLIDERS.lobby13.some(b=>b.min.y<2.2 && b.max.y>.2 && b.min.x<x+r && b.max.x>x-r && b.min.z<z+r && b.max.z>z-r);
+}
+function lobbyNavigation(){
+  if(lobbyNav)return lobbyNav;
+  const nodes=[],byKey=new Map();
+  for(let x=-34;x<=34;x+=2)for(let z=-36;z<=36;z+=2)if(lobbyClear(x,z)){
+    const node={x,z,links:[]};nodes.push(node);byKey.set(x+','+z,node);
+  }
+  for(const node of nodes)for(const [dx,dz] of [[2,0],[-2,0],[0,2],[0,-2]]){
+    const other=byKey.get((node.x+dx)+','+(node.z+dz));
+    if(other && lobbyClear(node.x+dx/2,node.z+dz/2))node.links.push(other);
+  }
+  // Narrow decoration pockets are not valid visitor spawns or destinations.
+  const remaining=new Set(nodes);let main=[];
+  while(remaining.size){
+    const component=[remaining.values().next().value];remaining.delete(component[0]);
+    for(let i=0;i<component.length;i++)for(const next of component[i].links)if(remaining.delete(next))component.push(next);
+    if(component.length>main.length)main=component;
+  }
+  return (lobbyNav={nodes:main});
+}
+function lobbySpawnPoint(i){
+  const nodes=lobbyNavigation().nodes.filter(n=>Math.hypot(n.x,n.z-18)>4);
+  const p=nodes[(i*17)%nodes.length];return p?{x:p.x,z:p.z}:{x:0,z:18};
+}
+function lobbyWalk(bot,goal,dt){
+  const nodes=lobbyNavigation().nodes,key=goal.x+','+goal.z;
+  const gap=Math.hypot(bot.x-goal.x,bot.z-goal.z);
+  if(bot._lobbyPathKey===key && !bot._lobbyPath?.length && gap>.3){
+    if(gap<2)bot._lobbyPath=[goal];
+    else bot._lobbyPathKey=null;
+  }
+  if(bot._lobbyPathKey!==key){
+    const nearest=p=>nodes.reduce((a,b)=>Math.hypot(b.x-p.x,b.z-p.z)<Math.hypot(a.x-p.x,a.z-p.z)?b:a,nodes[0]);
+    const start=nearest(bot),end=nearest(goal),queue=[start],prev=new Map([[start,null]]);
+    for(let i=0;i<queue.length && !prev.has(end);i++)for(const next of queue[i].links)if(!prev.has(next)){prev.set(next,queue[i]);queue.push(next);}
+    const path=[];
+    if(prev.has(end)){for(let p=end;p;p=prev.get(p))path.unshift(p);path.push(goal);}
+    bot._lobbyPath=path;bot._lobbyPathKey=key;
+  }
+  const path=bot._lobbyPath||[];
+  while(path.length && Math.hypot(path[0].x-bot.x,path[0].z-bot.z)<.3)path.shift();
+  if(!path.length)return {x:0,z:0};
+  const dx=path[0].x-bot.x,dz=path[0].z-bot.z,d=Math.hypot(dx,dz),speed=bot._duelGoto?5:2.5;
+  const step=Math.min(d,speed*dt);return{x:dx/d*step,z:dz/d*step};
+}
+function lobbyPanel(title){
+  closeOtherDialogs();releasePointer();
+  let panel=document.getElementById('lobby-service-panel');
+  if(!panel){panel=document.createElement('section');panel.id='lobby-service-panel';document.body.appendChild(panel);}
+  panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');panel.setAttribute('aria-label',title);
+  panel.style.display='block';panel.innerHTML='<button class="lobby-panel-close" aria-label="Close">&#215;</button><small>LOBBY 13</small><h2></h2><div class="lobby-panel-content"></div>';
+  panel.querySelector('h2').textContent=title;
+  panel.querySelector('button').onclick=()=>{panel.style.display='none';if(inLobby)requestPointerLockSafe();};
+  panel.onkeydown=e=>{if(e.code==='Escape'){e.stopPropagation();panel.querySelector('button').click();}};
+  panel.querySelector('button').focus();
+  return panel.querySelector('.lobby-panel-content');
+}
+function lobbyPanelChoice(host,label,fn){const button=document.createElement('button');button.textContent=label;button.onclick=fn;host.appendChild(button);}
+function openLobbyAdmin(topic='story'){
+  noteLobbyStory('met');const state=readLobbyStory(),host=lobbyPanel('The Admin');
+  const chapters=[
+    ['Opening Shift','This place used to be a loading screen. I kept the lights on until people came back. Visit the supply shop; the quartermaster left something strange in the delivery log.','Visit the supply shop.',state.shop],
+    ['A Signal Underfoot','Every time somebody lands on the training ramp, an old transmitter wakes up. Get onto the upper landing. Let us see if it still remembers us.','Reach the top of the movement ramp.',state.training],
+    ['The Missing Squad','The signal is a roll call. An old squad never signed out. Start a fight from any team pad; maybe the arena will answer.','Start a match from a team pad.',state.duel],
+    ['Keep the Lights On','There it is. Not a distress call: a replay of their last victory. Finish a match. Win or lose, somebody has to bring the story home.','Finish a combat match.',state.finished],
+    ['Next Shift','The transmission is quiet now. Their names are back on the roster. We keep playing, and nobody gets erased by an empty server.','Story complete. The next chapter is yours.',true],
+  ];
+  const chapter=chapters.find(c=>!c[3])||chapters[4];
+  const lines={origin:'I built the first arena out of spare walls. Everyone complained about the walls. They were right. We kept rebuilding.',
+    visitors:'Those wandering regulars are NPC sparring partners, not people secretly connected to your server. Real players can still join the hub. The regulars just make sure you never have to warm up alone.',
+    rules:'No damage in the lobby. The blue and red pads organize teams. The supply shop sells the same gear as before; I do not conjure free currency just because I wear a crown.'};
+  const badge=document.createElement('small');badge.textContent='ADMINISTRATOR / NPC';host.appendChild(badge);
+  const heading=document.createElement('h3');heading.textContent=topic==='story'?chapter[0]:'Between Matches';host.appendChild(heading);
+  const text=document.createElement('p');text.textContent=lines[topic]||chapter[1];host.appendChild(text);
+  const objective=document.createElement('p');objective.className='lobby-objective';objective.textContent=chapter[2];host.appendChild(objective);
+  for(const [label,key] of [['Continue the story','story'],['Who built this place?','origin'],['Who are the regulars?','visitors'],['How does this hub work?','rules']])lobbyPanelChoice(host,label,()=>openLobbyAdmin(key));
+}
+function openLobbyArcade(){
+  const host=lobbyPanel('Arcade');
+  for(const [label,mode] of [['Aim Trainer','aim_trainer'],['Obstacle Course','obby'],['Shooting Range','range']])lobbyPanelChoice(host,label,()=>{closeOtherDialogs();teardownMatchWorld();selectMode(mode);});
+  lobbyPanelChoice(host,'All game modes',openModeMenu);
+}
+function updateLobbyServices(){
+  const group=MAP_GROUPS.lobby13;
+  if(!group._adminNPC){
+    const npc=makePlayerMesh('',false,'ally','swat',{crown:true});npc.position.set(-5,0,-27.5);group.add(npc);group._adminNPC=npc;
+  }
+  const npc=group._adminNPC,dist=Math.hypot(camera.position.x+5,camera.position.z+27.5);
+  npc.rotation.y=dist<7?Math.atan2(camera.position.x+5,camera.position.z+27.5):0;
+  if(camera.position.x>-25 && camera.position.x<-19 && camera.position.z>4 && camera.position.z<9 && playerFeetY()>2.5)noteLobbyStory('training');
+  lobbyServiceHere=nearTrashcan||anyDialogOpen()?null:LOBBY_SERVICES.find(s=>Math.hypot(camera.position.x-s.x,camera.position.z-s.z)<2.6)||null;
+}
 function updateLobbyInteractions() {
   if (!inLobby) { showLobbyPrompt(null); return; }
+  updateLobbyServices();
   // Near a trashcan? Let its own "press F to change weapons" prompt take over and
   // don't offer a duel/challenge here — F swaps your loadout instead.
   if (nearTrashcan) { releaseDuelBots(); lobbyActiveArea = null; lobbyPlayerSide = null; lobbyPadHere = null; showLobbyPrompt(null); return; }
@@ -65156,17 +65315,22 @@ function updateLobbyInteractions() {
     stageDuelBots(area, side);
     const s = countSeated(area, side);
     showLobbyPrompt(`⚔️ ${area.label} · 🟦 ${s.blue}/${area.perTeam} · 🟥 ${s.red}/${area.perTeam} · ${fKeyHint(false)} to start`);
-  } else showLobbyPrompt(null);
+  } else showLobbyPrompt(lobbyServiceHere?lobbyServiceHere.label+' / '+fKeyHint(false):null);
 }
 // F pressed in the lobby → start the staged duel, or challenge the nearest member.
 function lobbyInteract() {
   if (!inLobby) return;
+  updateLobbyServices();
+  if(lobbyServiceHere){lobbyServiceHere.action();return;}
   if (lobbyPadHere) {   // the pads are the only proximity duel left (#31)
     // Your side's bots are teammates, the other side's are opponents — regardless
     // of whether you stood on blue or red.
     const mates = gameBots.filter(b => !b.dead && b._duelTeam === 'mate').map(b => b.charId).filter(Boolean);
     const foes  = gameBots.filter(b => !b.dead && b._duelTeam === 'foe').map(b => b.charId).filter(Boolean);
-    startDuel(lobbyPadHere.modeId, { allies: mates, enemies: foes });
+    const identity=b=>({charId:b.charId,name:players[b.id]?.name,isVisitor:!!b._lobbyVisitor});
+    const lobbyRoster={ally:gameBots.filter(b=>b._duelTeam==='mate').map(identity),enemy:gameBots.filter(b=>b._duelTeam==='foe').map(identity)};
+    noteLobbyStory('duel');
+    startDuel(lobbyPadHere.modeId, { allies: mates, enemies: foes, lobbyRoster });
   }
 }
 // Leave the lobby and start a real match (the duel itself IS a normal match on a
@@ -65200,7 +65364,9 @@ function startDuel(modeId, picks, opts = {}) {
     : (picks.enemies || []).map(id => window.CHAT_CAST?.[id]?.name).filter(Boolean);
   const sub = oppNames.length ? `vs ${oppNames.join(', ')}` : modeId.toUpperCase();
   showAnnouncement('⚔️ DUEL', sub, '#ffcc44', 2200);
-  spawnGameBots();        // tears down the lobby cast + builds the elim match
+  const oldLobbyDraft=window.PVP_LOBBY_DRAFT;
+  window.PVP_LOBBY_DRAFT=picks.lobbyRoster || null;
+  try{spawnGameBots();}finally{window.PVP_LOBBY_DRAFT=oldLobbyDraft;}
   window.PVP_OPPONENTS = _prevOpponents; window.PVP_TEAMMATES = _prevTeammates;   // one duel, not forever
   requestPointerLockSafe();
   startLoop();
@@ -67205,7 +67371,7 @@ if (btnInteract) {
     else if (nearTrashcan && !isDead && gameStarted && !fixedKitModeActive()) showLoadoutScreen('swap');
     else if (pilot === 'vehicle') tryEnterVehicle();
     else if (pilot === 'mortar') tryEnterMortar();
-    else if (inLobby && lobbyPadHere) lobbyInteract();
+    else if (inLobby && (lobbyPadHere || lobbyServiceHere)) lobbyInteract();
   };
   btnInteract.addEventListener('touchstart', e => { e.stopPropagation(); e.preventDefault(); interact(); }, { passive: false });
   btnInteract.addEventListener('click', interact);

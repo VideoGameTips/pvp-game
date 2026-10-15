@@ -938,6 +938,23 @@
       #match-finale h2 { font-size: 25px; }
     }
 
+    #lobby-service-panel {
+      display: none; position: fixed; z-index: 9900; left: 50%; top: 50%; transform: translate(-50%,-50%);
+      width: min(480px, calc(100vw - 28px)); max-height: 84vh; overflow: auto; box-sizing: border-box;
+      padding: 26px; border: 1px solid #638d82; border-radius: 8px; background: #142623; color: #eef6ef;
+      box-shadow: 0 12px 70px #0009; font-family: Arial, sans-serif;
+    }
+    #lobby-service-panel h2 { font-size: 24px; margin: 6px 30px 18px 0; }
+    #lobby-service-panel h3 { font-size: 17px; margin: 15px 0 8px; }
+    #lobby-service-panel p { font-size: 15px; line-height: 1.55; }
+    #lobby-service-panel small { font-size: 11px; color: #99d6c3; }
+    #lobby-service-panel .lobby-objective { border-left: 3px solid #d6bd76; padding-left: 12px; color: #f5dfab; }
+    #lobby-service-panel button { display: block; width: 100%; min-height: 44px; margin-top: 8px; padding: 10px 12px;
+      border: 1px solid #47665c; background: #223c34; border-radius: 4px; color: #fff; cursor: pointer; font: inherit; text-align: left; }
+    #lobby-service-panel button:hover { background: #305446; }
+    #lobby-service-panel .lobby-panel-close { position: absolute; top: 10px; right: 12px; width: 36px; min-height: 36px;
+      padding: 0; margin: 0; text-align: center; font-size: 24px; border: 0; background: transparent; }
+
     /* ── Frontlines HUD ── */
     #frontline-hud {
       display: none; position: absolute; top: 58px; left: 50%; transform: translateX(-50%);
