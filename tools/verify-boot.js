@@ -133,6 +133,9 @@ if (ok && process.argv.includes('--equipment-hands')) {
         if (!m._equipmentHands || !m._heldItem || !H || !H.rear._armed) {
           issues.push(item.id + ': missing grip or sleeve'); return;
         }
+        if (m._heldItem.position.lengthSq() > 1e-12 || m._heldItem.quaternion.angleTo(new THREE.Quaternion()) > 1e-7) {
+          issues.push(item.id + ': arms changed original weapon position/angle');
+        }
         if (m._offHand && !m._offHand._hands) issues.push(item.id + ': missing dual hand');
         const count = m.children.length;
         attachEquipmentHands(m, item, items === SUPPORT_ITEMS);
@@ -174,6 +177,16 @@ if (ok && process.argv.includes('--equipment-hands')) {
     if (position.distanceTo(hand.position) > 1e-8) issues.push('katana: hand slips off grip');
     meleeSwingT = 1; updateMeleeGripPose();
     if (home.angleTo(hand.quaternion) > 1e-7) issues.push('katana: wrist does not return to rest');
+    const rootP = katana.position.clone(), rootR = katana.rotation.clone();
+    const pulseAt = meleeDeflectPulseAt, dir = meleeDeflectDir;
+    meleeDeflectPulseAt = performance.now() - 1000; meleeDeflectDir = 1;
+    applyMeleeDeflectPose(katana);
+    if (katana.position.distanceTo(new THREE.Vector3(0.045,-0.075,-0.315)) > 1e-8
+        || Math.abs(katana.rotation.x + 0.32) > 1e-8 || Math.abs(katana.rotation.z - Math.PI/4) > 1e-8) {
+      issues.push('katana: original deflect pose changed');
+    }
+    katana.position.copy(rootP); katana.rotation.copy(rootR);
+    meleeDeflectPulseAt = pulseAt; meleeDeflectDir = dir;
     activeSlot = oldSlot; selectedMeleeIdx = oldIdx; meleeSwingT = oldT;
     return issues;
   })()`);
