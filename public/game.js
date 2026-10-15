@@ -5882,7 +5882,29 @@ const obbyMapColliders        = MAP_COLLIDERS.obby;
 function _weatherOnActivate(name) { if (MAP_GROUPS[name]) weatherMapGroup(MAP_GROUPS[name]); }
 function activateMap(name) {
   if (typeof _upgradeMap === 'function') _upgradeMap(name);   // the first time a map is played: see "WHEN THE UPGRADES RUN"
-  for (const [n, g] of Object.entries(MAP_GROUPS)) g.visible = (n === name);
+  // ⚡ DETACH the other maps, do not merely hide them (#73). three.js skips an
+  // invisible subtree when it builds the render list, but updateMatrixWorld
+  // recurses unconditionally and renderer.render calls it once a frame — so
+  // sixty-three maps sitting in the scene cost 23,287 nodes of matrix walk
+  // every frame whether or not anyone can see them. Measured on blank, same
+  // camera, identical 171 draw calls either way: 8.0 ms attached, 3.5 ms
+  // detached, and scene.updateMatrixWorld alone 5.56 ms → 1.01 ms.
+  //
+  // Nothing here depends on a map group being in the scene: colliders live in
+  // MAP_COLLIDERS and are built at addMapBox time, the killcam raycasts
+  // MAP_GROUPS[activeMapName] directly, and nothing iterates scene.children.
+  // (matrixWorldAutoUpdate = false on the inactive groups was measured and does
+  // nothing — 9.40 → 9.60 ms. Don't.)
+  const _target = MAP_GROUPS[name];
+  for (const [n, g] of Object.entries(MAP_GROUPS)) {
+    const on = (n === name);
+    g.visible = on;
+    // Only re-home anything if the map asked for actually exists, so a bad
+    // name cannot detach all sixty-three and leave a black screen.
+    if (!_target) continue;
+    if (on) { if (!g.parent) scene.add(g); }
+    else if (g.parent) g.parent.remove(g);
+  }
   if (typeof dressThemeMap === 'function') { try { dressThemeMap(name); } catch (e) { console.warn('[theme]', name, e); } }
   try { buildMapGlow(name); } catch (e) { console.warn('[glow]', name, e); }      // once per map, after its dressing
   // Then bake this map's static boxes into one draw call per material (#66).
@@ -35113,7 +35135,7 @@ function makeRealWorldGun(weaponId) {
   }
   if (!src || !src.traverse) return null;
   src.updateMatrixWorld(true);
-  const inv = new THREE.Matrix4().copy(src.matrixWorld).invert();
+  const inv = new THREE.Matrix4().copy((src._heldItem || src).matrixWorld).invert();
   const WORLD = new THREE.Matrix4().makeScale(WORLD_GUN_SCALE, WORLD_GUN_SCALE, WORLD_GUN_SCALE);
   const root = new THREE.Group();
   let parts = 0;
@@ -40389,6 +40411,7 @@ function startSupportEquipAnim(idx) {
   try {
     const model = supportModels[idx], item = SUPPORT_ITEMS[idx];
     if (!model || !item) return;
+    if (model._heldItem) model._heldItem.visible = true;
     if (model._supportEquip === 'donutbuild') {
       _beginEquip(model, { equip: 'donutbuild', equipMs: 1450, equipSfx: ['whoosh', 'chime'], equipBeats: [[.88,'snapin'],[.88,'cling']] }, false, true);
     } else {
@@ -40400,6 +40423,7 @@ function startSupportEquipAnim(idx) {
 function _beginEquip(model, spec, melee, support = false) {
   if (model._calm) model._calm();     // put back anything an ambient effect has moved first
   const type = spec.equip;
+  const piecesRoot = model._heldItem || model;
   // A whole-object move acts on the one part the model names for it -- the
   // pivot it is tossed about, the blade that ignites, the two handles of a
   // butterfly knife. Everything else acts on every piece.
@@ -40408,7 +40432,7 @@ function _beginEquip(model, spec, melee, support = false) {
   const targets = type === 'balisong' ? [...(model._bali || []), ...(model._pivot ? [model._pivot] : [])]
                 : type === 'flip'     ? (model._pivot ? [model._pivot] : [])
                 : type === 'ignite'   ? (model._blade ? [model._blade] : [])
-                : _equipPieces(model);
+                : _equipPieces(piecesRoot);
   if (!targets.length) return;
   targets.forEach(_eqHomeOf);
   const ctr = new THREE.Vector3();
@@ -40456,11 +40480,11 @@ function _beginEquip(model, spec, melee, support = false) {
     ring = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.008, 8, 32),
       new THREE.MeshBasicMaterial({ color: 0x66ccff, transparent: true, opacity: 0.9 }));
     ring.position.copy(ctr);
-    model.add(ring);
+    piecesRoot.add(ring);
   }
   const glow = (model._equipGlow || []).map(m => [m, m.emissiveIntensity]);
-  const box = _eqLocalBox(model, targets);
-  const temp = _eqMakeProps(model, type, ctr, box, targets);
+  const box = _eqLocalBox(piecesRoot, targets);
+  const temp = _eqMakeProps(piecesRoot, type, ctr, box, targets);
   // The prism entrance sends each piece along its own colour's beam: bands of
   // seven by where the piece sits, red at the back to violet at the front.
   const span = Math.max(0.001, box.max.z - box.min.z);
@@ -40504,10 +40528,10 @@ function finishEquip() {
   for (const p of e.ps) {
     p.c.position.copy(p.h.p); p.c.quaternion.copy(p.h.q); p.c.scale.copy(p.h.s); p.c.visible = true;
   }
-  if (e.ring) { e.model.remove(e.ring); e.ring.geometry.dispose(); e.ring.material.dispose(); }
+  if (e.ring) { e.ring.removeFromParent(); e.ring.geometry.dispose(); e.ring.material.dispose(); }
   for (const [m, v] of e.glow) m.emissiveIntensity = v;
   for (const o of e.temp || []) {
-    e.model.remove(o);
+    o.removeFromParent();
     o.traverse(x => { if (x.geometry) x.geometry.dispose(); if (x.material) x.material.dispose(); });
   }
   e.model._fireGate = 1; e.model._fireBoost = 0;
@@ -47040,7 +47064,7 @@ function addViewArms(root) {
     pivot.userData.vmHand = true;
     pivot.position.set(0, 0, 0.034);        // the back face of the fist: the wrist
     pivot.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), d);
-    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.080, 0.076, 0.40), M.f); arm.position.z = 0.20;   // wrist to off-screen
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(root._equipmentHands ? 0.055 : 0.080, root._equipmentHands ? 0.052 : 0.076, 0.40), M.f); arm.position.z = 0.20;   // wrist to off-screen
     arm.userData.vmHand = true; arm.castShadow = false;
     pivot.add(arm); hand.add(pivot);
   };
@@ -47068,6 +47092,152 @@ weaponModels.forEach((m, i) => prepViewModel(m, WEAPONS[i] && WEAPONS[i].id));
 // receiver that had been converted (#53). Converted materials carry metalDone,
 // so a second sweep only touches what is new.
 weaponModels.forEach(metalizeModel);
+
+// Melee and utility builders use their own handle coordinates, not gun trigger
+// guards. Keep those coordinates intact inside a held assembly so procedural
+// chains, orbiting parts and their animation hooks still share the same space.
+function attachEquipmentHands(model, item, support = false) {
+  if (!model || !item || model._equipmentHands) return;
+  model._equipmentHands = true;
+  const id = item.id;
+  let grip = new THREE.Vector3(0, 0, 0.11), second = null;
+  if (support) {
+    const parts = _localPartBoxes(model), box = new THREE.Box3();
+    parts.forEach(p => box.union(p.box));
+    if (box.isEmpty()) return;
+    const size = box.getSize(new THREE.Vector3()), center = box.getCenter(new THREE.Vector3());
+    // Cradle small throwables from below/back, leaving the fuse and face clear.
+    grip.set(center.x, center.y - Math.min(0.045, size.y * 0.38), center.z + size.z * 0.24);
+    if (['air_blaster', 'grapple_hook', 'heal_gun', 'confetti_cannon'].includes(id)) {
+      grip.set(0, -0.048, 0.05);
+    } else if (['stim', 'vampire_syringe', 'berserker_serum'].includes(id)) {
+      grip.copy(center);
+    } else if (['medkit', 'satchel', 'hamburger', 'ammo_fountain', 'mini_turret', 'care_package'].includes(id) || size.x > 0.20) {
+      grip.set(center.x + size.x * 0.40, center.y - size.y * 0.24, center.z + size.z * 0.18);
+      second = new THREE.Vector3(center.x - size.x * 0.40, grip.y, grip.z);
+    }
+  } else {
+    const grips = {
+      bat: [0,0,0.17], sabre: [0,0,0.112], frying_pan: [0,0,0.16],
+      sledge: [0,0,0.23], spear: [0,0,0.19], katana: [0,0,0.16],
+      baguette: [0,-0.012,0.18], knife: [0,0,0.108], twin_knife: [0,0,0.108],
+      chainsaw: [0,0,0.195], lightsabre: [0,0,0.125], riot_shield: [0.055,0,0.025],
+      screwdriver: [0,0,0.128], crowbar: [0,0,0.025], fire_axe: [0,0,0.08],
+      nunchucks: [0.055,0,0.025], umbrella: [0,0,0.12], yoyo: [0,0.08,-0.13],
+      combat_axe: [0,0,0.07], brass_knuckles: [0,-0.01,0.025],
+      hatchet: [0,0,0.08], machete: [0,0,0.11], gravity_hammer: [0,0,0.15],
+      volt_whip: [0,0,0.13], garrote: [0.06,0,-0.04],
+      scythe: [0,0,0.175], chain_hammer: [0,0,0.11],
+    };
+    if (grips[id]) grip.fromArray(grips[id]);
+    if (id === 'riot_shield') {
+      const handle = _localPartBoxes(model).find(p => {
+        const s = p.box.getSize(new THREE.Vector3());
+        return s.x < 0.05 && s.y > 0.08 && s.z < 0.05 && p.box.getCenter(new THREE.Vector3()).x > 0;
+      });
+      if (handle) { handle.box.getCenter(grip); grip.z += 0.012; }
+    }
+    const supports = {
+      sledge: [0,0,0.06], spear: [0,0,-0.04], katana: [0,0,0.085],
+      chainsaw: [-0.025,0.055,0.055], scythe: [0,0,-0.06],
+      gravity_hammer: [0,0,-0.035], titan_hammer: [0,0,-0.02],
+      garrote: [-0.06,0,-0.04],
+    };
+    if (supports[id]) second = new THREE.Vector3().fromArray(supports[id]);
+  }
+  // Fists already ARE hands. Give them sleeves without stacking another fist.
+  if (id === 'fists') grip.set(0, 0, -0.05);
+  const held = new THREE.Group();
+  held.name = 'held-equipment';
+  for (const child of [...model.children]) held.add(child);
+  model.add(held);
+  model._heldItem = held;
+  const tilt = new THREE.Quaternion().setFromEuler(new THREE.Euler(
+    support ? 0.12 : id === 'riot_shield' || id === 'fists' ? 0 : 0.65,
+    support ? -0.22 : id === 'riot_shield' ? 0.12 : -0.35, 0));
+  held.quaternion.copy(tilt);
+  const offset = new THREE.Vector3(0, -0.008, -0.115).sub(grip.clone().applyQuaternion(tilt));
+  held.position.copy(offset);
+  const handAt = (at, left) => {
+    const hand = _makeViewHand(left ? -1 : 1);
+    hand.position.copy(at).applyQuaternion(tilt).add(offset);
+    hand.rotation.set(0.12, 0, left ? -0.12 : 0.12);
+    hand.quaternion.premultiply(tilt);
+    model.add(hand);
+    return hand;
+  };
+  const rear = handAt(grip, false);
+  const front = second ? handAt(second, true) : rear;
+  model._hands = { rear, front, rearHome: rear.position.clone(), frontHome: front.position.clone(),
+    rearRot: rear.rotation.clone(), frontRot: front.rotation.clone(),
+    gripAt: grip.clone().applyQuaternion(tilt).add(offset), single: !second, pistolish: !second };
+  if (id === 'fists') {
+    // Keep one actual hand, not the old fist prop sitting in a gripping hand.
+    held.clear();
+    rear.children[0].userData.vmFist = true;
+  }
+  addViewArms(model);
+  updateEquipmentFraming(model);
+}
+function updateEquipmentFraming(model) {
+  if (!model._heldItem || !model._hands) return;
+  const narrow = THREE.MathUtils.clamp((1 - camera.aspect) / 0.5, 0, 1);
+  const size = new THREE.Box3().setFromObject(model._heldItem).getSize(new THREE.Vector3());
+  const old = model._equipmentFrameOffset || new THREE.Vector3();
+  const next = new THREE.Vector3(-0.055 * narrow, 0, -(size.x > 0.22 ? 0.20 : 0.045) * narrow);
+  const delta = next.clone().sub(old), H = model._hands;
+  model._heldItem.position.add(delta);
+  for (const hand of new Set([H.rear, H.front])) hand.position.add(delta);
+  H.rearHome.add(delta); H.frontHome.add(delta); H.gripAt.add(delta);
+  model._equipmentFrameOffset = next;
+}
+meleeModels.forEach((m, i) => {
+  attachEquipmentHands(m, MELEE_ITEMS[i]);
+  if (m._offHand) attachEquipmentHands(m._offHand, MELEE_ITEMS[i]);
+});
+supportModels.forEach((m, i) => attachEquipmentHands(m, SUPPORT_ITEMS[i], true));
+
+const equipmentSwayModels = [];
+function resetEquipmentSway() {
+  for (const model of equipmentSwayModels) {
+    const state = model._equipmentSway;
+    if (!state) continue;
+    // Input handlers may have started an attack or switched slots since the
+    // previous render. Restore only axes that still contain our own offset.
+    for (const axis of ['x', 'y', 'z']) {
+      if (Math.abs(model.position[axis] - state.shownP[axis]) < 1e-7) model.position[axis] = state.baseP[axis];
+      if (Math.abs(model.rotation[axis] - state.shownR[axis]) < 1e-7) model.rotation[axis] = state.baseR[axis];
+    }
+    model._equipmentSway = null;
+  }
+  equipmentSwayModels.length = 0;
+}
+function updateEquipmentSway() {
+  resetEquipmentSway();
+  if (!gameStarted || isDead || SOCIAL_VIEW.mode) return;
+  const melee = activeSlot === 'melee';
+  const model = melee ? meleeModels[selectedMeleeIdx]
+    : activeSlot === 'support' ? supportModels[selectedSupportIdx] : null;
+  if (!model?.visible || _equip?.model === model) return;
+  if (melee && (meleeSwingT < 1 || model._park || meleeAbilityBuff?.type === 'deflect'
+      || batCrowdCharge || meleeSlam || meleeDash || scytheDash || chainMaulSwing)) return;
+  if (!melee && (grenadeWindupT < 1 || medkitHealChannel)) return;
+  const moving = Math.min(1, Math.hypot(playerVelocity.x, playerVelocity.z) / 8);
+  const t = performance.now() * 0.001;
+  const crouch = (window._crouchEye || 1.65) < 1.4 ? 0.55 : 1;
+  const amp = (0.0035 + moving * 0.010) * crouch;
+  const pose = (m, phase) => {
+    const baseP = m.position.clone(), baseR = m.rotation.clone();
+    m.position.x += Math.sin(t * 1.8 + phase) * amp + Math.sin(t * 8.2 + phase) * amp * moving * 0.35;
+    m.position.y += Math.cos(t * 2.2 + phase) * amp * 0.65 + Math.cos(t * 16.4) * 0.005 * moving * crouch;
+    m.rotation.x += Math.sin(t * 8.2 + phase) * 0.012 * moving * crouch;
+    m.rotation.z += Math.sin(t * 1.8 + phase) * 0.004 + Math.sin(t * 8.2 + phase) * 0.018 * moving * crouch;
+    m._equipmentSway = { baseP, baseR, shownP: m.position.clone(), shownR: m.rotation.clone() };
+    equipmentSwayModels.push(m);
+  };
+  pose(model, 0);
+  if (model._offHand?.visible) pose(model._offHand, Math.PI);
+}
 
 // ── 🔫 Model skins ──────────────────────────────────────────────────────────
 // A skin that is a different GUN, not a different colour. The weapon keeps its
@@ -57684,7 +57854,8 @@ function updateGrenadeWindup(dt) {
     // Spawn the actual grenade at ~70% of the throw arc
     if (!grenadeThrowFired && e >= 0.70) {
       grenadeThrowFired = true;
-      model.visible = false; // hand "releases" grenade
+      if (model._heldItem) model._heldItem.visible = false;
+      else model.visible = false;
       playSoundEvent('grenade_throw', { volume: 0.85 });
       doThrowGrenade();
     }
@@ -57704,6 +57875,7 @@ function updateGrenadeWindup(dt) {
     model.rotation.set(rx, 0, rz);
   }
   if (t >= 1) {
+    if (model._heldItem) model._heldItem.visible = true;
     model.position.set(0.10, -0.12, -0.20);
     model.rotation.set(0, 0, 0);
   }
@@ -59672,10 +59844,12 @@ function _renderWeaponIcon(model,options={}) {
   const target=options.large?(_largeIconRT ||= new THREE.WebGLRenderTarget(W,H,{samples:4})):_iconRT;
   const clone = model.clone(true);
   clone.position.set(0, 0, 0); clone.rotation.set(0, options.yaw||0, 0); clone.scale.set(1, 1, 1); clone.visible = true;
+  const held = clone.getObjectByName('held-equipment');
+  if (held) { held.position.set(0,0,0); held.quaternion.identity(); held.visible = true; }
   const temporaryMaterials=[];
   if(options.locked)clone.traverse(o=>{if(o.isMesh){const m=new THREE.MeshBasicMaterial({color:0x111b1b});temporaryMaterials.push(m);o.material=m;}});
   clone.traverse(o => {                      // hands, effects and the muzzle flash are not the weapon
-    if (o.userData && (o.userData.vmHand || o.userData.eqFx || o.userData.legendFx)) o.visible = false;
+    if (o.userData && ((o.userData.vmHand && !o.userData.vmFist) || o.userData.eqFx || o.userData.legendFx)) o.visible = false;
     if (model._flash && o.name && o.name === model._flash.name && o !== clone && o.material && o.material.transparent) o.visible = false;
   });
   _iconScene.add(clone);
@@ -62829,6 +63003,7 @@ function loop() {
   updateFPSCounter(now);
   const dt = Math.min((now-lastTime)/1000, 0.05);
   lastTime = now;
+  safeLoopStep('equipment-sway-reset', resetEquipmentSway);
   if (MATCH_FINALE.active) {
     try { updateMatchFinale(now); }
     catch (error) { console.error('[match-finale]', error); stopMatchFinale(true); }
@@ -62987,6 +63162,7 @@ function loop() {
   updateAbilityHUD();
   updateMeleeSwing(dt);
   updateChainMaulSwing(dt);
+  safeLoopStep('equipment-sway', updateEquipmentSway);
   updateWeaponSelector();
   updateTrashcanProximity();
   updateDamageNumbers();
@@ -67610,6 +67786,7 @@ renderer.domElement.addEventListener('click', ()=>{
 });
 window.addEventListener('resize', ()=>{
   camera.aspect=window.innerWidth/window.innerHeight;
+  camera.children.forEach(updateEquipmentFraming);
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
