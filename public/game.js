@@ -47059,10 +47059,9 @@ function attachEquipmentHands(model, item, support = false) {
     rearRot: rear.rotation.clone(), frontRot: front.rotation.clone(),
     gripAt: grip.clone().applyQuaternion(tilt).add(offset), single: !second, pistolish: !second };
   if (id === 'fists') {
-    rear.children[0].visible = false;
-    held.children.forEach(c => c.traverse(o => {
-      if (o.isMesh) { o.userData.vmHand = true; o.userData.vmFist = true; o.material = _vmArmMats().hand; }
-    }));
+    // Keep one actual hand, not the old fist prop sitting in a gripping hand.
+    held.clear();
+    rear.children[0].userData.vmFist = true;
   }
   addViewArms(model);
   updateEquipmentFraming(model);
@@ -47084,6 +47083,48 @@ meleeModels.forEach((m, i) => {
   if (m._offHand) attachEquipmentHands(m._offHand, MELEE_ITEMS[i]);
 });
 supportModels.forEach((m, i) => attachEquipmentHands(m, SUPPORT_ITEMS[i], true));
+
+const equipmentSwayModels = [];
+function resetEquipmentSway() {
+  for (const model of equipmentSwayModels) {
+    const state = model._equipmentSway;
+    if (!state) continue;
+    // Input handlers may have started an attack or switched slots since the
+    // previous render. Restore only axes that still contain our own offset.
+    for (const axis of ['x', 'y', 'z']) {
+      if (Math.abs(model.position[axis] - state.shownP[axis]) < 1e-7) model.position[axis] = state.baseP[axis];
+      if (Math.abs(model.rotation[axis] - state.shownR[axis]) < 1e-7) model.rotation[axis] = state.baseR[axis];
+    }
+    model._equipmentSway = null;
+  }
+  equipmentSwayModels.length = 0;
+}
+function updateEquipmentSway() {
+  resetEquipmentSway();
+  if (!gameStarted || isDead || SOCIAL_VIEW.mode) return;
+  const melee = activeSlot === 'melee';
+  const model = melee ? meleeModels[selectedMeleeIdx]
+    : activeSlot === 'support' ? supportModels[selectedSupportIdx] : null;
+  if (!model?.visible || _equip?.model === model) return;
+  if (melee && (meleeSwingT < 1 || model._park || meleeAbilityBuff?.type === 'deflect'
+      || batCrowdCharge || meleeSlam || meleeDash || scytheDash || chainMaulSwing)) return;
+  if (!melee && (grenadeWindupT < 1 || medkitHealChannel)) return;
+  const moving = Math.min(1, Math.hypot(playerVelocity.x, playerVelocity.z) / 8);
+  const t = performance.now() * 0.001;
+  const crouch = (window._crouchEye || 1.65) < 1.4 ? 0.55 : 1;
+  const amp = (0.0035 + moving * 0.010) * crouch;
+  const pose = (m, phase) => {
+    const baseP = m.position.clone(), baseR = m.rotation.clone();
+    m.position.x += Math.sin(t * 1.8 + phase) * amp + Math.sin(t * 8.2 + phase) * amp * moving * 0.35;
+    m.position.y += Math.cos(t * 2.2 + phase) * amp * 0.65 + Math.cos(t * 16.4) * 0.005 * moving * crouch;
+    m.rotation.x += Math.sin(t * 8.2 + phase) * 0.012 * moving * crouch;
+    m.rotation.z += Math.sin(t * 1.8 + phase) * 0.004 + Math.sin(t * 8.2 + phase) * 0.018 * moving * crouch;
+    m._equipmentSway = { baseP, baseR, shownP: m.position.clone(), shownR: m.rotation.clone() };
+    equipmentSwayModels.push(m);
+  };
+  pose(model, 0);
+  if (model._offHand?.visible) pose(model._offHand, Math.PI);
+}
 
 // ── 🔫 Model skins ──────────────────────────────────────────────────────────
 // A skin that is a different GUN, not a different colour. The weapon keeps its
@@ -62575,6 +62616,7 @@ function loop() {
   updateFPSCounter(now);
   const dt = Math.min((now-lastTime)/1000, 0.05);
   lastTime = now;
+  safeLoopStep('equipment-sway-reset', resetEquipmentSway);
   if (MATCH_FINALE.active) {
     try { updateMatchFinale(now); }
     catch (error) { console.error('[match-finale]', error); stopMatchFinale(true); }
@@ -62732,6 +62774,7 @@ function loop() {
   updateAbilityHUD();
   updateMeleeSwing(dt);
   updateChainMaulSwing(dt);
+  safeLoopStep('equipment-sway', updateEquipmentSway);
   updateWeaponSelector();
   updateTrashcanProximity();
   updateDamageNumbers();

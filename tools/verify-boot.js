@@ -138,7 +138,10 @@ if (ok && process.argv.includes('--equipment-hands')) {
         attachEquipmentHands(m, item, items === SUPPORT_ITEMS);
         if (count !== m.children.length) issues.push(item.id + ': duplicated hands');
         if (item.id === 'fists') {
-          if (H.rear.children[0].visible) issues.push('fists: duplicated fist');
+          const fists = [];
+          m.traverse(o => { if (o.isMesh && o.userData.vmFist) fists.push(o); });
+          if (fists.length !== 1 || m._heldItem.children.length) issues.push('fists: fist holding another fist');
+          if (!H.rear.children[0].visible) issues.push('fists: actual hand hidden');
           return;
         }
         m.updateMatrixWorld(true);
@@ -165,6 +168,48 @@ if (ok && process.argv.includes('--equipment-hands')) {
   })()`);
   if (issues.length) { ok = false; console.log('equipment hand failures:\n' + issues.join('\n')); }
   else console.log('equipment hands: grips, sleeves, dual weapons, contact, wrap protection and grenade assembly');
+}
+
+if (ok && process.argv.includes('--equipment-sway')) {
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [], saved = { gameStarted, isDead, activeSlot, selectedMeleeIdx, selectedSupportIdx,
+      meleeSwingT, grenadeWindupT, velocity: playerVelocity.clone() };
+    try {
+      gameStarted = true; isDead = false; meleeSwingT = 1; grenadeWindupT = 1;
+      for (const slot of ['melee', 'support']) {
+        activeSlot = slot;
+        selectedMeleeIdx = MELEE_ITEMS.findIndex(x => x.id === 'fists');
+        selectedSupportIdx = SUPPORT_ITEMS.findIndex(x => x.id === 'medkit');
+        const m = slot === 'melee' ? meleeModels[selectedMeleeIdx] : supportModels[selectedSupportIdx];
+        const visible = m.visible; m.visible = true;
+        const p = m.position.clone(), r = m.rotation.clone();
+        playerVelocity.set(0,0,0); updateEquipmentSway();
+        if (m.position.distanceTo(p) < 0.0001) issues.push(slot + ': no idle motion');
+        resetEquipmentSway();
+        if (m.position.distanceTo(p) > 1e-8) issues.push(slot + ': idle motion drifts');
+        playerVelocity.set(8,0,0); updateEquipmentSway();
+        if (Math.abs(m.rotation.x-r.x) + Math.abs(m.rotation.z-r.z) < 0.001) issues.push(slot + ': no running motion');
+        for (let n=0;n<120;n++) updateEquipmentSway();
+        if (m.position.distanceTo(p) > 0.04) issues.push(slot + ': running motion accumulates');
+        m.position.x = 0.72; resetEquipmentSway();
+        if (m.position.x !== 0.72) issues.push(slot + ': motion overwrites external animation');
+        m.position.copy(p); m.rotation.copy(r);
+        if (slot === 'melee') meleeSwingT = 0.5; else grenadeWindupT = 0.5;
+        updateEquipmentSway();
+        if (m._equipmentSway) issues.push(slot + ': motion interferes with attack/use');
+        meleeSwingT = 1; grenadeWindupT = 1; m.visible = visible;
+      }
+    } finally {
+      resetEquipmentSway();
+      gameStarted = saved.gameStarted; isDead = saved.isDead; activeSlot = saved.activeSlot;
+      selectedMeleeIdx = saved.selectedMeleeIdx; selectedSupportIdx = saved.selectedSupportIdx;
+      meleeSwingT = saved.meleeSwingT; grenadeWindupT = saved.grenadeWindupT;
+      playerVelocity.copy(saved.velocity);
+    }
+    return issues;
+  })()`);
+  if (issues.length) { ok = false; console.log('equipment sway failures:\n' + issues.join('\n')); }
+  else console.log('equipment sway: idle, running, no accumulated drift and attack/use ownership');
 }
 
 if (ok && process.argv.includes('--maps')) {
