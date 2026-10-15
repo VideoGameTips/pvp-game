@@ -988,6 +988,13 @@ if (ok && process.argv.includes('--duel')) {
         }
       }
       if (!reached) issues.push(name + ': no walkable route between the spawns');
+      // RULE ONE: nothing in one spawn can see anything in the other (the same 15 x 15 rays --maps casts, eye height)
+      let exposed = 0;
+      for (const a of mapSpawnSightlineSamples(sp.ally)) for (const e of mapSpawnSightlineSamples(sp.enemy)) {
+        const dir = e.clone().sub(a), dist = dir.length(), ray = new THREE.Ray(a, dir.normalize()), hit = new THREE.Vector3();
+        if (!cols.some(c => ray.intersectBox(c, hit) && hit.distanceTo(a) < dist)) exposed++;
+      }
+      if (exposed) issues.push(name + ': ' + exposed + ' exposed starting sightlines (you can see your opponent at the start)');
       if (!MAP_DESCS[name]) issues.push(name + ': no description');
     }
     return issues;

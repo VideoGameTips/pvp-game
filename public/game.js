@@ -6445,38 +6445,44 @@ function buildDuelMap(name, o) {
   G._skyColor = o.sky;
 }
 // [x, z, width, height, depth, tone]; the mirror image is added for you.
+// RULE ONE, as for every map: from anywhere in one spawn you must not be able to see anywhere in the other (the same
+// 15 x 15 sample rays as verify-boot --maps, at eye height). A wall across the middle does it: every line from one
+// spawn rectangle (12 m wide) to the other crosses the centre line inside the rectangle's own width, so a divider at
+// least that wide and taller than the eye (1.65 m) at the centre cuts them all. Each layout below has one, or two
+// staggered ones (a line that dodges the first has to bend more than any straight line can to dodge the second).
 buildDuelMap('duel_grid', {
   floor: '#222a40', fine: '#39466a', bold: '#6a80bc', wall: 0x3a4466, cover_: 0x77839e, tall: 0x5a6688, accent: 0x6aa0ff, sky: 0x10131c,
   cover: [
-    [0, 0, 3, 4, 3, 'tall'],            // one pillar in the middle: go round it or break line of sight with it
-    [-7, -6, 6, 1.3, 1, 'cover'], [7, -6, 6, 1.3, 1, 'cover'],   // low walls to crouch behind, a third of the way up each side
-    [-12, 0, 2, 2, 2, 'hi'],            // a crate on each flank
+    [0, 0, 13.4, 3.4, 1.4, 'tall'],     // the divider: a wide wall across the middle, so go round either end
+    [-8, -9, 6, 1.3, 1, 'cover'], [8, -9, 6, 1.3, 1, 'cover'],     // low walls to crouch behind on each approach
+    [-13, 4, 2, 2, 2, 'hi'],            // a crate on each flank
     [-3, 13, 2, 1.2, 2, 'cover'], [4, 12, 2.4, 1.6, 1.4, 'cover'],
   ],
 });
 buildDuelMap('duel_crossroads', {
   floor: '#2d241e', fine: '#4a3a2e', bold: '#9a7248', wall: 0x4a3a2c, cover_: 0x9a7a58, tall: 0x6c5440, accent: 0xffb060, sky: 0x17120e,
   cover: [
-    [-9, 0, 10, 3, 1, 'tall'],          // the cross: two long walls with the middle left open
-    [0, 10, 1, 3, 10, 'tall'],
-    [13, 14, 3, 2, 3, 'cover'],         // a block in each far corner
-    [-13, 6, 2, 1.2, 2, 'hi'],
+    [-6.5, -3.4, 17, 3.2, 1, 'tall'],   // two long walls, staggered: the way through is a chicane, left past one, right past the other
+    [0, 12, 1, 3, 9, 'tall'],           // and a spine down each end
+    [13, 15, 3, 2, 3, 'cover'],         // a block in each far corner
+    [-13, 7, 2, 1.2, 2, 'hi'],
   ],
 });
 buildDuelMap('duel_pillars', {
   floor: '#1d2e2b', fine: '#305450', bold: '#52a89e', wall: 0x2f4a46, cover_: 0x5f8f88, tall: 0x4a7a74, accent: 0x66ffd8, sky: 0x0c1514,
   cover: [
-    [-8, 5, 2.4, 6, 2.4, 'tall'], [8, 5, 2.4, 6, 2.4, 'tall'],     // four tall pillars either side of centre
+    [0, 0, 13.4, 3.4, 1.2, 'tall'],     // the hall's centre wall
+    [-8, 6, 2.4, 6, 2.4, 'tall'], [8, 6, 2.4, 6, 2.4, 'tall'],     // tall pillars either side of centre
     [-8, 16, 2.4, 6, 2.4, 'tall'], [8, 16, 2.4, 6, 2.4, 'tall'],
     [0, 10, 5, 1.2, 1, 'cover'],        // a low rail across each lane
-    [0, 0, 2, 1, 2, 'hi'],              // a step in the dead middle
   ],
 });
 buildDuelMap('duel_platform', {
   floor: '#271f35', fine: '#40335e', bold: '#9a74d0', wall: 0x3c2f55, cover_: 0x8c74b8, tall: 0x5f4a88, accent: 0xd08aff, sky: 0x120d1a,
   cover: [
     [0, 0, 12, 1.4, 9, 'hi'],           // a platform in the middle you can jump up on: the high ground
-    [-11, 8, 3, 1.5, 3, 'cover'],       // and a block each side of it
+    [0, 0, 13.4, 3.4, 1.0, 'tall'],     // with a wall standing along its middle, so each side of it is a fight of its own
+    [-11, 8, 3, 1.5, 3, 'cover'],       // a block each side of it
     [-6, 17, 2, 4, 2, 'tall'],
   ],
 });
@@ -66329,10 +66335,10 @@ const MAP_DESCS = {
   pyongyang: 'Pyongyang — monuments, squares and wide-sweeping live-fire searchlights',
   traffic_cone_republic: '🚧 Traffic Cone Republic — giant cones, a roundabout, a flyover · TOLL LANES charge health for speed',
   flying_moai: '🗿 Flying Moai — a plateau of stone heads · a ROAR shockwave crosses the ground',
-  duel_grid:      '⚔️ Duel Grid — 1v1 only · a small grid arena, one pillar, low walls, six seconds to the other side',
-  duel_crossroads:'⚔️ Crossroads — 1v1 only · two long walls cross in the middle, the centre stays open',
-  duel_pillars:   '⚔️ Pillar Hall — 1v1 only · tall pillars down both sides, a low rail across each lane',
-  duel_platform:  '⚔️ High Ground — 1v1 only · a platform in the middle you can jump up on',
+  duel_grid:      '⚔️ Duel Grid — 1v1 only · a small grid arena with a wall across the middle, low walls, six seconds to the other side',
+  duel_crossroads:'⚔️ Crossroads — 1v1 only · two long staggered walls make a chicane through the middle',
+  duel_pillars:   '⚔️ Pillar Hall — 1v1 only · a centre wall, tall pillars down both sides, a low rail across each lane',
+  duel_platform:  '⚔️ High Ground — 1v1 only · a platform in the middle you can jump up on, with a wall along its middle',
 };
 function selectMapPick(mapId) {
   selectedMap = pickedMap = mapId;
