@@ -16,6 +16,7 @@ const vm = require('vm');
 const GAME = path.join(__dirname, '..', 'public', 'game.js');
 const src = fs.readFileSync(GAME, 'utf8');
 const THREE = require('../public/three.min.js');
+global.PVP_SHOP_CATALOG = require('../public/shop-catalog.js');
 
 const noop = () => {};
 const el = () => new Proxy({
@@ -1617,6 +1618,63 @@ if (ok && process.argv.includes('--quickmelee')) {
   })()`);
   console.log('quick melee checks: every melee equips, uses its ability or swings, and sequences finish');
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
+if (ok && process.argv.includes('--shop')) {
+  const issues=vm.runInThisContext(`(() => {
+    const issues=[],saved=currentUser;
+    const check=(v,m)=>{if(!v)issues.push(m);};
+    for(const b of BUNDLES){
+      check(b.items.length===3 && b.skins.length>0,'Bundle must have three weapons and skins: '+b.id);
+      for(const id of b.items){
+        const w=WEAPONS.find(w=>w.id===id)||MELEE_ITEMS.find(w=>w.id===id);
+        check(w && !w.archived && !w.adminItem && !w.skinOnly && !w.modeOnly,'Unavailable bundle item: '+id);
+      }
+      for(const id of b.skins){const skin=catalogSkin(id);check(!!skin,'Unknown bundle skin: '+id);
+        check(b.items.includes(skin?.weapon||skin?.melee),'Skin must fit a bundled weapon: '+id);}
+    }
+    try{
+      currentUser={purchased:[],skinInventory:[]};
+      check(loadoutPreviewHTML('minigun').includes('catalog-lock'),'Locked selection needs a lock');
+      currentUser.purchased.push('minigun');
+      check(!loadoutPreviewHTML('minigun').includes('catalog-lock'),'Owned selection must not show a lock');
+      for(const id of PVP_SHOP_CATALOG.exclusiveSkins){
+        const s=catalogSkin(id),model=s.build();model.updateMatrixWorld(true);
+        check(!new THREE.Box3().setFromObject(model).isEmpty(),'Empty food skin: '+id);
+        check(isCaseSkinLocked(s),'Food skin must require acquisition: '+id);
+        currentUser.skinInventory.push(id);check(!isCaseSkinLocked(s),'Owned food skin must equip: '+id);
+        disposeBody(model);
+      }
+    }finally{currentUser=saved;}
+    return issues;
+  })()`);
+  console.log('shop catalog checks: current weapons, compatible cosmetics, locked selection and food-skin acquisition');
+  if(issues.length){ok=false;console.log(issues.join('\n'));}
+}
+
+if (ok && process.argv.includes('--range')) {
+  const issues=vm.runInThisContext(`(() => {
+    const issues=[],check=(v,m)=>{if(!v)issues.push(m);};
+    check(!GENERATED_LAYOUT_MAPS.has('range'),'Range must not be overwritten by generated combat layout');
+    check(MAP_BOUNDS.range.halfX===20 && MAP_BOUNDS.range.halfZ===45,'Range bounds must match its physical perimeter');
+    check(rangeMapGroup.userData.trainingBays===5,'Range must have five firing bays');
+    check(MAP_THEMES.range.keep && MAP_THEMES.range.customDetail,'Range dressing must preserve clear lanes');
+    const count=rangeMapColliders.length;_upgradeMap('range');
+    check(rangeMapColliders.length===count,'Range cannot receive automatic combat cover');
+    for(const [x,z] of [[-14,26],[-7,26],[0,26],[7,26],[14,26],[-10,14],[10,14],[-8,10],[8,10],[-15,-10],[6,-22],[15,-32]]){
+      const origin=new THREE.Vector3(x,1.65,38),delta=new THREE.Vector3(x,2,z).sub(origin),len=delta.length();
+      rangeMapGroup.updateMatrixWorld(true);
+      const hits=new THREE.Raycaster(origin,delta.normalize(),.1,len-.6).intersectObject(rangeMapGroup,true);
+      check(!hits.some(h=>h.object.visible),'Blocked firing lane '+x+','+z);
+    }
+    const target=buildRangeTargetMesh();
+    const rings=target.children.filter(o=>o.geometry?.type==='CylinderGeometry' && o.geometry.parameters.radiusTop>.08);
+    check(rings.length===3 && rings.every(o=>o.position.z>0),'Bullseyes must face the firing house');
+    disposeBody(target);
+    return issues;
+  })()`);
+  console.log('range checks: dedicated layout, bounds, five booths, clear firing lines and visible bullseyes');
+  if(issues.length){ok=false;console.log(issues.join('\n'));}
 }
 
 if (ok && process.argv.includes('--lobby')) {

@@ -595,37 +595,12 @@ const FREE_WEAPONS = new Set([
 
 // ── 💼 Bundles — ~60% off the sum of individual prices ─────────────
 // Keep in sync with public/game.js BUNDLES table.
-const BUNDLES = {
-  pitiful:      { name: 'Pitiful Pack', price: 495, items: ['ak20','sg8','revolver','bat'] },
-  retro:        { name: 'Retro Pack',   price: 150, items: ['paintball','laser_pointer','baguette','rubber_duck'] },
-  starter_pro:  { name: 'Starter Pro',  price: 430, items: ['ak20','revolver','bat','stim'] },
-  heavy_duty:   { name: 'Heavy Duty',   price: 755, items: ['minigun','grenade_launcher','machine_revolver','crowbar'] },
-  wwii:         { name: 'WWII Arsenal', price: 730, items: ['mp40','m1_garand','mauser','katana'] },
-  sniper_pack:  { name: 'Sniper Pack',  price: 755, items: ['srx','revolver','knife','smoke'] },
-  run_n_gun:    { name: 'Run & Gun',    price: 560, items: ['p90','machine_pistol','knife','adrenaline'] },
-  melee_master: { name: 'Melee Master', price: 625, items: ['sg8','revolver','fire_axe','smoke'] },
-  shotgun_pack: { name: 'Shotgun Pack', price: 560, items: ['sg8','sawed_off','crowbar','frag'] },
-  scifi:        { name: 'Sci-Fi Arsenal',     price: 650, items: ['plasma_carbine','arc_rifle','dart_gun','emp_grenade'] },
-  demolition:   { name: 'Demolition',         price: 780, items: ['grenade_launcher','throwing_axes','sledge','sticky_charge'] },
-  archery:      { name: "Archer's Kit",       price: 755, items: ['crossbow','boombow','throwing_knives','tripwire'] },
-  marksman:     { name: 'Marksman',           price: 560, items: ['lever','hand_cannon','knife','ammo_fountain'] },
-  pyro:         { name: 'Pyromaniac',         price: 805, items: ['flamethrower','sg8','fire_axe','sticky_charge'] },
-  chaos:        { name: 'Chaos Mode',         price: 195, items: ['paintball','confetti_cannon','baguette','rubber_duck'] },
-  stealth:      { name: 'Stealth Ops',        price: 470, items: ['air_rifle','throwing_knives','knife','smoke'] },
-  storm:        { name: 'Storm Pack',         price: 545, items: ['arc_rifle','taser','shock_baton','emp_grenade'] },
-  defensive:    { name: 'Defensive',          price: 585, items: ['sg8','taser','riot_shield','nano_shield'] },
-  royalty:      { name: 'Royalty',            price: 5400, items: ['minigun','vampire_blade','hand_cannon','orbital_strike'] },
-  kitchen:      { name: 'Kitchen Catastrophe',price: 170, items: ['paintball','baguette','frying_pan','rubber_duck'] },
-  knight:       { name: "Knight's Honor",     price: 535, items: ['sg8','sabre','katana','smoke'] },
-  frostbite:    { name: 'Frostbite',          price: 495, items: ['freeze_gun','frost_blaster','knife','smoke'] },
-  knockback:    { name: 'Knockback',          price: 650, items: ['shockwave_launcher','sawed_off','sledge','air_grenade'] },
-  smart_tech:   { name: 'Smart Tech',         price: 795, items: ['ak20','smart_smg','hunter_drone','magnet_mine'] },
-  mortar:       { name: 'Mortar Squad',       price: 715, items: ['mortar_rifle','grenade_launcher','hand_cannon','frag'] },
-  // ~10% off the nineteen items bought one at a time (215,150 at P2W prices).
-  // It used to be priced at nearly 80% off, which made it the only sane buy.
-  cosmic_p2w:   { name: 'Cosmic P2W',         price: 390000, items: ['event_horizon','storm_core','abs_zero','solar_lance','quantum_repeater','magnetar','nebula_mortar','prism_engine','void_harvester','pulse_needle','revolver','phase_blade','gravity_hammer','volt_whip','nano_swarm','warp_beacon','stasis_mine','specter_drone','quantum_barrier'] },
-};
-for (const [id, b] of Object.entries(BUNDLES)) b.price *= id === 'cosmic_p2w' ? WEAPON_PRICE_MULT : NORMAL_WEAPON_PRICE_MULT;
+const SHOP_CATALOG = require('./public/shop-catalog.js');
+const BUNDLES = Object.fromEntries(SHOP_CATALOG.bundles.map(b=>[b.id,{...b,price:SHOP_CATALOG.price(b,WEAPON_COSTS,FREE_WEAPONS)}]));
+for(const b of Object.values(BUNDLES)){
+  if(b.items.length!==3 || b.items.some(id=>WEAPON_COSTS[id]==null || ARCHIVED_ITEM_IDS.has(id) || ADMIN_ITEM_IDS.has(id)))throw new Error('Invalid bundle weapons: '+b.id);
+  if(b.skins.some(id=>![...GEN1_SKIN_IDS,...GEN2_SKIN_IDS,...SHOP_CATALOG.exclusiveSkins].includes(id)))throw new Error('Invalid bundle skins: '+b.id);
+}
 
 const STARTER_CREDITS = 500;       // a first weapon or two, not the shop
 const TRIAL_DIVISOR = 20; // trial costs 1/20 of buy price (min 1)
@@ -1357,12 +1332,15 @@ app.post('/shop/buy-bundle', (req, res) => {
   // Skip any items already owned (free, unlocked, or previously purchased)
   const owned = new Set([...FREE_WEAPONS, ...(u.purchased || []), ...(u.unlocks || [])]);
   const toAdd = b.items.filter(id => !owned.has(id));
-  if (toAdd.length === 0) return res.json({ ok: true, already: true, credits: u.credits, purchased: u.purchased, added: [] });
+  u.skinInventory ||= [];
+  const addedSkins=b.skins.filter(id=>!u.skinInventory.includes(id));
+  if (!toAdd.length && !addedSkins.length) return res.json({ ok: true, already: true, credits: u.credits, purchased: u.purchased, skinInventory:u.skinInventory, added: [],addedSkins:[] });
   if ((u.credits || 0) < b.price) return res.status(402).json({ error: 'not enough donuts', credits: u.credits, cost: b.price });
   u.credits -= b.price;
   for (const id of toAdd) u.purchased.push(id);
+  u.skinInventory.push(...addedSkins);
   saveUsers();
-  res.json({ ok: true, bundleId, price: b.price, added: toAdd, credits: u.credits, purchased: u.purchased });
+  res.json({ ok: true, bundleId, price: b.price, added: toAdd, addedSkins,skinInventory:u.skinInventory, credits: u.credits, purchased: u.purchased });
 });
 
 app.get('/shop/bundles', (req, res) => res.json({ bundles: BUNDLES }));

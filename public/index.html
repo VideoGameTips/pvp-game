@@ -481,7 +481,7 @@
       background: rgba(255,255,255,0.05); border: 1px solid #333; border-radius: 6px;
       padding: 7px 10px; cursor: pointer; transition: all 0.1s;
       display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 9px; align-items: center;
-      min-height: 58px;
+      min-height: 78px; flex-shrink: 0; box-sizing: border-box;
     }
     .loadout-card:hover  { background: rgba(255,255,255,0.1); border-color: #666; }
     .loadout-card.selected { background: rgba(231,76,60,0.25); border-color: #e74c3c; }
@@ -492,7 +492,8 @@
     }
     .lc-preview img { width: 100%; height: 100%; object-fit: contain; image-rendering: auto; filter: drop-shadow(0 3px 5px rgba(0,0,0,0.6)); }
     .lc-preview.empty::after { content: "?"; color: #777; font-size: 18px; font-weight: bold; }
-    .lc-copy { min-width: 0; }
+    .lc-copy { min-width: 0; overflow-wrap: anywhere; line-height: 1.25; }
+    .loadout-card > :nth-child(n+3) { grid-column: 1 / -1; }
     .lc-name  { font-size: 15px; font-weight: bold; }
     .lc-type  { font-size: 10px; color: #888; margin: 1px 0; }
     .lc-stats { font-size: 10px; color: #aaa; }
@@ -513,7 +514,7 @@
       #loadout-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
       .lc-name { font-size: 13px; }
       .lc-stats { font-size: 9px; }
-      .loadout-card { grid-template-columns: 52px minmax(0, 1fr); gap: 7px; min-height: 50px; padding: 6px 7px; }
+      .loadout-card { grid-template-columns: 52px minmax(0, 1fr); gap: 7px; min-height: 74px; padding: 6px 7px; }
       .lc-preview { height: 34px; }
       #loadout-ready-btn { width: min(280px, 100%); padding: 11px 24px; }
     }
@@ -954,6 +955,45 @@
     #lobby-service-panel button:hover { background: #305446; }
     #lobby-service-panel .lobby-panel-close { position: absolute; top: 10px; right: 12px; width: 36px; min-height: 36px;
       padding: 0; margin: 0; text-align: center; font-size: 24px; border: 0; background: transparent; }
+
+    #shop-screen { box-sizing: border-box; background: #edf1ed !important; color: #263b32 !important; font-family: Arial,sans-serif !important; padding: 24px !important; }
+    #shop-screen > div:first-child { gap: 14px; flex-wrap: wrap; border-color: #b4c6ba !important; }
+    #shop-screen > div:first-child > div:last-child { flex-wrap: wrap; font-size: 12px; }
+    #shop-screen .shop-title { font-size: 24px; font-weight: 800; color: #1c4235; }
+    #shop-screen .shop-wallet { color: #725718; font-weight: 700; }
+    #shop-tabs { flex-wrap: nowrap !important; overflow-x: auto; padding: 4px 0 12px; }
+    #shop-tabs button { white-space: nowrap; flex-shrink: 0; letter-spacing: 0 !important; border-radius: 4px !important; min-height: 40px; background: #dce5dd !important; color: #274937 !important; border-color: #a8bcae !important; }
+    #shop-tabs button[aria-selected="true"] { background: #264e3b !important; color: #fff !important; }
+    #shop-close { min-height: 40px; background: #fff !important; color: #294938 !important; border-color: #a8bcae !important; }
+    #shop-body[data-layout="catalog"] { display: grid !important; grid-template-columns: repeat(auto-fill,minmax(min(260px,100%),1fr)); gap: 16px !important; align-items: stretch; }
+    .shop-bundle,#shop-body .shop-item { min-width: 0 !important; max-width: none !important; border: 1px solid #b4c6ba !important; border-radius: 6px !important; padding: 14px !important; background: #fff !important; display: flex; flex-direction: column; color: #243c30; }
+    .shop-bundle h3 { font-size: 18px; margin: 12px 0 3px; }
+    .bundle-art { width: 100%; height: auto; aspect-ratio: 640/300; display: block; border-radius: 4px; }
+    .bundle-contents { display: grid; gap: 6px; padding: 10px 0; font-size: 13px; }
+    .bundle-contents button { text-align: left; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+    .bundle-contents button:hover { text-decoration: underline; }
+    .bundle-skins { display: flex; align-items: center; gap: 8px; border-top: 1px solid #dbe3dc; padding: 9px 0; font-size: 12px; }
+    .bundle-skins img { width: 86px; height: 40px; object-fit: contain; background: #e5ece6; }
+    .catalog-status { font-size: 11px; color: #526d5b; line-height: 1.5; }
+    .shop-buy-bundle { margin-top: auto; width: 100%; padding: 12px; background: #244b38; color: #fff; border: 0; border-radius: 4px; cursor: pointer; font-weight: 700; min-height: 44px; }
+    #shop-body .shop-item > div { color: #355240 !important; }
+    #shop-body .shop-item .lc-preview { height: 110px; flex: none; margin: 0 0 12px; background: #e5ece6; cursor: grab; border-radius: 4px; }
+    .catalog-locked { position: relative; background: #d0ded5 !important; }
+    .catalog-locked img { filter: brightness(0); opacity: .8; }
+    .catalog-lock { position: absolute; right: 10px; bottom: 10px; width: 16px; height: 12px; background: #264b39; border: 2px solid #eaf3ed; border-radius: 3px; box-sizing: content-box; }
+    .catalog-lock::before { content: ''; position: absolute; width: 8px; height: 8px; border: 2px solid #264b39; border-bottom: 0; left: 2px; top: -10px; border-radius: 6px 6px 0 0; }
+    .catalog-card-locked { cursor: pointer !important; border-style: dashed !important; }
+    .catalog-card-locked .catalog-status { color: #c8d7ca; }
+    #weapon-inspect-panel { display: none; position: fixed; z-index: 9950; left: 50%; top: 50%; transform: translate(-50%,-50%); width: min(680px,calc(100vw - 24px)); max-height: 90vh; overflow: auto; padding: 20px; box-sizing: border-box; background: #f3f6f0; border: 1px solid #8da797; border-radius: 8px; color: #243d30; font-family: Arial,sans-serif; box-shadow: 0 16px 80px #0009; }
+    #weapon-inspect-panel h2 { font-size: 22px; margin: 0 36px 16px 0; }
+    .inspect-stage { aspect-ratio: 2/1; background: #d6e3d8; cursor: grab; touch-action: none; }
+    .inspect-stage img { width: 100%; height: 100%; object-fit: contain; pointer-events: none; user-select: none; }
+    #weapon-inspect-panel label { display: flex; gap: 12px; align-items: center; margin-top: 14px; font-size: 12px; }
+    #weapon-inspect-panel input { flex: 1; min-width: 0; }
+    .inspect-close { position: absolute; right: 12px; top: 10px; border: 0; background: transparent; font-size: 26px; cursor: pointer; width: 36px; height: 36px; }
+    .inspect-buy { width: 100%; min-height: 44px; border: 0; border-radius: 4px; background: #264b39; color: white; font-weight: 700; cursor: pointer; }
+    .inspect-buy:disabled { opacity: .6; cursor: default; }
+    @media(max-width:600px){ #shop-screen { padding: 14px !important; } #shop-screen > div:first-child > div:last-child { gap: 8px !important; } }
 
     /* ── Frontlines HUD ── */
     #frontline-hud {
@@ -1473,6 +1513,7 @@
   </script>
   <script src="equipment-models.js"></script>
   <script src="i18n.js"></script>
+  <script src="shop-catalog.js"></script>
   <script src="game.js"></script>
   <script src="chat.js"></script>
 </body>
