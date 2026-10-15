@@ -137,7 +137,10 @@ function load() {
   // melee rest position. They get their own table and their own comparison.
   const mms = src.match(/^const MELEE_MODEL_SKINS = \[[\s\S]*?\n\];/m);
   code += (mms ? mms[0] : "const MELEE_MODEL_SKINS = [];") + "\n";
-  for (const m of src.matchAll(/^function (build\w+)\(\)/gm)) {
+  // `\(\)` here meant zero-argument builders only, so the day a model skin was
+  // built by `buildSnackSkin(kind)` the sandbox simply did not have it and
+  // three shop skins reported "failed to build" forever. Any parameter list.
+  for (const m of src.matchAll(/^function (build\w+)\(/gm)) {
     const b = fnBlock(m[1]);
     if (b) code += b + '\n';
   }

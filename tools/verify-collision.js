@@ -33,10 +33,37 @@ function fnBlock(name) {
 }
 const line = re => { const m = src.match(re); if (!m) throw new Error('cannot find ' + re); return m[0]; };
 
+// The four functions below reference SHOUTY top-level constants, and the list of
+// which ones changes whenever the movement code does. Hand-listing them meant
+// this whole harness died silently the day PLAYER_HEAD_CLEARANCE was added —
+// node --check still passed, the 46 checks simply stopped running. So resolve
+// them from the code itself, transitively: pull every CONST_NAME the lifted
+// source mentions, then every one THOSE mention, until it closes.
+function constsNeededBy(code, depth = 0) {
+  const want = new Set(code.match(/\b[A-Z][A-Z0-9_]{2,}\b/g) || []);
+  const out = [];
+  const taken = new Set();
+  let frontier = [...want];
+  while (frontier.length && depth++ < 12) {
+    const next = [];
+    for (const name of frontier) {
+      if (taken.has(name)) continue;
+      taken.add(name);
+      // a one-line `const NAME = ...;` at top level — not a function, not a block
+      const m = src.match(new RegExp('^const ' + name + ' = .*$', 'm'));
+      if (!m) continue;
+      out.push(m[0]);
+      for (const dep of m[0].match(/\b[A-Z][A-Z0-9_]{2,}\b/g) || []) if (!taken.has(dep)) next.push(dep);
+    }
+    frontier = next;
+  }
+  return out;
+}
+const fns = [fnBlock('playerFeetY'), fnBlock('resolveWallCollisions'), fnBlock('moveWithWalls'), fnBlock('turnedBoxColliders')];
+const consts = constsNeededBy(fns.join('\n'));
 const code = [
-  line(/^const PLAYER_EYE_HEIGHT = .*$/m), line(/^const PLAYER_RADIUS = .*$/m),
-  line(/^const TURNED_BOX_SLACK = .*$/m), line(/^const MAX_MOVE_STEP = .*$/m),
-  fnBlock('playerFeetY'), fnBlock('resolveWallCollisions'), fnBlock('moveWithWalls'), fnBlock('turnedBoxColliders'),
+  ...consts,
+  ...fns,
   'return { resolveWallCollisions, moveWithWalls, turnedBoxColliders, PLAYER_RADIUS };',
 ].join('\n');
 
