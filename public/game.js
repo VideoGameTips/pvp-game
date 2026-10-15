@@ -35078,13 +35078,19 @@ function makeRealWorldGun(weaponId) {
   const WORLD = new THREE.Matrix4().makeScale(WORLD_GUN_SCALE, WORLD_GUN_SCALE, WORLD_GUN_SCALE);
   const root = new THREE.Group();
   let parts = 0;
+  // The viewmodel wears MY wrap: applyWeaponSkin swaps each part's material for a painted clone and keeps
+  // original -> clone in _skinClones. Copying the dressed material put my wrap on every bot and every other
+  // player's gun, so go back to the original material and let dressRemoteGun paint the owner's own wrap on top.
+  const undressed = new Map();
+  if (src._skinClones) for (const [orig, c] of src._skinClones) if (orig !== c) undressed.set(c, orig);
+  const baseMat = m => undressed.get(m) || m;
   src.traverse(o => {
     if (!o.isMesh || !o.geometry || !o.material) return;
     for (let p = o; p; p = p.parent) if (p.userData && (p.userData.vmHand || p.userData.noWorld)) return;
     if (o.visible === false) return;
     // a part that is hidden by an ancestor (a spare magazine, a muzzle flash) stays out too
     for (let p = o.parent; p && p !== src; p = p.parent) if (p.visible === false) return;
-    const mat = Array.isArray(o.material) ? o.material.map(m => m.clone()) : o.material.clone();
+    const mat = Array.isArray(o.material) ? o.material.map(m => baseMat(m).clone()) : baseMat(o.material).clone();
     const m = new THREE.Mesh(o.geometry, mat);          // the geometry is shared with the viewmodel, so it is never disposed here
     m.matrix.copy(WORLD).multiply(inv).multiply(o.matrixWorld);   // world size is baked into each part, not left on the root:
     m.matrix.decompose(m.position, m.quaternion, m.scale);          // fitWeaponPose measures the parts, and must see the real length

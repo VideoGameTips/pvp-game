@@ -1160,6 +1160,28 @@ if (ok && process.argv.includes('--thirdperson')) {
       players.tp_owner.wrap = null; dressRemoteGun(mesh);
       if (mesh._gun._wrapKey !== 'default') issues.push('taking the wrap off did not reach the gun');
     } finally { delete players.tp_owner; }
+    // MY wrap is on MY viewmodel; a body that wears nothing must not inherit it (it used to: the prop was cloned
+    // from the dressed viewmodel's materials, so every bot held the local player's wrap). Compare what a plain body
+    // looks like before and after the viewmodel is dressed: it has to be identical.
+    const wi = WEAPONS.findIndex(w => w.id === 'pistol');
+    const sig = () => {
+      players.tp_plain = { id: 'tp_plain', wrap: null };
+      const m2 = makePlayerMesh('Plain', false, 'enemy', 'default', {});
+      m2._ownerId = 'tp_plain';
+      armRemoteMesh(m2, 'pistol');
+      const out = [];
+      if (m2._gun) m2._gun.traverse(o => { if (o.isMesh) for (const m of (Array.isArray(o.material) ? o.material : [o.material])) out.push((m.color ? m.color.getHex() : 0) + ':' + (m.map ? 'map' : '-') + ':' + (m.emissive ? m.emissive.getHex() : 0)); });
+      delete players.tp_plain;
+      return out.join(',');
+    };
+    let before = '', after = '';
+    try {
+      before = sig();
+      applyWeaponSkin(weaponModels[wi], WEAPON_SKINS_BY_ID.gold);
+      after = sig();
+    } finally { applyWeaponSkin(weaponModels[wi], WEAPON_SKINS_BY_ID.default); delete players.tp_plain; }
+    if (!before) issues.push('the plain body got no gun parts');
+    if (before !== after) issues.push('a body with no wrap changed when the local player put a wrap on their own gun');
     return issues;
   })()`);
   console.log('third-person checks: real models at world size, hands off, wraps follow the owner');
