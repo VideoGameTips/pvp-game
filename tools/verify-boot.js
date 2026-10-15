@@ -124,6 +124,49 @@ try {
   console.log('   this is a runtime failure during module evaluation, not a syntax error.');
 }
 
+if (ok && process.argv.includes('--equipment-hands')) {
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    for (const [items, models] of [[MELEE_ITEMS, meleeModels], [SUPPORT_ITEMS, supportModels]]) {
+      models.forEach((m, i) => {
+        const item = items[i], H = m._hands;
+        if (!m._equipmentHands || !m._heldItem || !H || !H.rear._armed) {
+          issues.push(item.id + ': missing grip or sleeve'); return;
+        }
+        if (m._offHand && !m._offHand._hands) issues.push(item.id + ': missing dual hand');
+        const count = m.children.length;
+        attachEquipmentHands(m, item, items === SUPPORT_ITEMS);
+        if (count !== m.children.length) issues.push(item.id + ': duplicated hands');
+        if (item.id === 'fists') {
+          if (H.rear.children[0].visible) issues.push('fists: duplicated fist');
+          return;
+        }
+        m.updateMatrixWorld(true);
+        for (const hand of new Set([H.rear, H.front])) {
+          const at = new THREE.Box3().setFromObject(hand.children[0]).getCenter(new THREE.Vector3());
+          let nearest = Infinity;
+          m._heldItem.traverse(o => {
+            if (o.isMesh && !o.userData.eqFx && !o.userData.legendFx) {
+              nearest = Math.min(nearest, new THREE.Box3().setFromObject(o).distanceToPoint(at));
+            }
+          });
+          if (nearest > 0.045) issues.push(item.id + ': hand disconnected by ' + nearest.toFixed(3));
+        }
+        if (!H.rear.children[0].userData.vmHand) issues.push(item.id + ': wrap can repaint hand');
+      });
+    }
+    const frag = supportModels[SUPPORT_ITEMS.findIndex(x => x.id === 'frag')];
+    const children = frag._heldItem.children.length;
+    _beginEquip(frag, { equip: 'donutbuild', equipMs: 1450 }, false, true);
+    if (_equip.ps.length < 3) issues.push('grenade: lost individual assembly parts');
+    _equipStep(_equip, 0.7); finishEquip();
+    if (frag._heldItem.children.length !== children) issues.push('grenade: leaked equip props');
+    return issues;
+  })()`);
+  if (issues.length) { ok = false; console.log('equipment hand failures:\n' + issues.join('\n')); }
+  else console.log('equipment hands: grips, sleeves, dual weapons, contact, wrap protection and grenade assembly');
+}
+
 if (ok && process.argv.includes('--maps')) {
   const issues = vm.runInThisContext(`(() => {
     const issues = [], names = [...Object.keys(_BESPOKE), ...M4_TOWER_MAP_NAMES];
