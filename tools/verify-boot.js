@@ -1277,6 +1277,70 @@ if (ok && process.argv.includes('--flare')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+if (ok && process.argv.includes('--mappick')) {
+  // The 1v1 map vote: a picture of every duel map (a grid drawn from its real colliders), a bot that decides by
+  // reading that picture, no pre-pick on the mode screen, and the server settling the vote.
+  const out = vm.runInThisContext(`(() => {
+    const issues = [], info = [];
+    const grids = {};
+    for (const id of DUEL_MAP_IDS) {
+      const g = mapPictureGrid(id);
+      if (!g) { issues.push(id + ': no picture'); continue; }
+      grids[id] = g;
+      const n = { 0: 0, 1: 0, 2: 0, 4: 0, 5: 0 };
+      for (const c of g.cells) n[c] = (n[c] || 0) + 1;
+      if (n[1] + n[2] < 20) issues.push(id + ': the picture shows hardly any cover (' + (n[1] + n[2]) + ' cells)');
+      if (!n[4] || !n[5]) issues.push(id + ': a spawn pad is missing from the picture');
+      if (!g.look) issues.push(id + ': no palette for the picture');
+      // fair: the cover is the same turned half a circle about the middle
+      let asym = 0;
+      for (let j = 0; j < g.h; j++) for (let i = 0; i < g.w; i++) {
+        const a = g.cells[j * g.w + i], b = g.cells[(g.h - 1 - j) * g.w + (g.w - 1 - i)];
+        if ((a === 1 || a === 2 || b === 1 || b === 2) && a !== b) asym++;
+      }
+      if (asym) issues.push(id + ': the picture is not the same both ways round (' + asym + ' cells differ)');
+      const f = mapPictureFeel(g);
+      for (const k of Object.keys(f)) if (!(f[k] >= 0 && f[k] <= 1)) issues.push(id + ': feel ' + k + ' = ' + f[k]);
+      info.push(id + ' ' + Object.entries(f).map(([k, v]) => k + ' ' + v.toFixed(2)).join(' '));
+    }
+    const ids = Object.keys(grids);
+    for (let a = 0; a < ids.length; a++) for (let b = a + 1; b < ids.length; b++) {
+      if (grids[ids[a]].cells.join() === grids[ids[b]].cells.join()) issues.push(ids[a] + ' and ' + ids[b] + ' look identical');
+    }
+    // the bot reads the picture: its taste decides, and it is a different map for different tastes
+    const picks = {};
+    for (const t of Object.keys(MAP_BOT_TASTES)) {
+      const r = botPickMap(DUEL_MAP_IDS, t, 'hard', () => 0.5);
+      if (!DUEL_MAP_IDS.includes(r.mapId)) issues.push(t + ' picked ' + r.mapId + ', not one of the options');
+      picks[t] = r.mapId;
+    }
+    info.push('picks ' + JSON.stringify(picks));
+    if (picks.climber !== 'duel_platform') issues.push('a bot that wants the high ground picked ' + picks.climber + ', not duel_platform');
+    if (new Set(Object.values(picks)).size < 3) issues.push('bots with different tastes should not all agree: ' + JSON.stringify(picks));
+    // an easy bot wanders: over many looks it does not always say the same thing
+    const easy = new Set();
+    for (let k = 0; k < 60; k++) easy.add(botPickMap(DUEL_MAP_IDS, 'rusher', 'easy').mapId);
+    if (easy.size < 2) issues.push('an easy bot never changed its mind in 60 looks');
+    // the pre-pick is gone: a duel map picked on the mode screen counts as random everywhere, 1v1 included
+    if (effectivePickedMap('1v1', 'duel_grid') !== 'auto') issues.push('1v1 still takes a pre-picked duel map');
+    if (effectivePickedMap('2v2', 'duel_grid') !== 'auto') issues.push('a duel map pre-picked for another mode should be random');
+    if (effectivePickedMap('1v1', 'volcano') !== 'volcano') issues.push('an ordinary map pick got lost');
+    return { issues, info };
+  })()`);
+  const srv = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  const more = [];
+  if (!/mode === '1v1' && !extra\.pickedMap && beginMapPick\(L, extra\)/.test(srv)) more.push('startLobbyMatch does not hand a 1v1 to the map vote');
+  if (!/socket\.on\('mapPickVote'/.test(srv)) more.push('server has no mapPickVote handler');
+  if (!/leaveMapPick\(socket\.id\);\s*\/\/ a map vote in progress/.test(srv)) more.push('a disconnect does not leave the map vote');
+  if (!/options: DUEL_MAP_IDS\.slice\(\)/.test(srv)) more.push('the vote is not over the duel maps');
+  const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  if (!/function syncDuelMapCards\(\) \{\s*document\.querySelectorAll\('\.map-card\[data-duel="1"\], \[data-duel-label="1"\]'\)\.forEach\(c => \{ c\.style\.display = 'none'/.test(src)) more.push('the duel cards are still in the mode-screen map list');
+  console.log('map vote checks: pictures, a bot that reads them, no pre-pick, server wiring');
+  for (const l of out.info) console.log('  ' + l);
+  const all = out.issues.concat(more);
+  if (all.length) { ok = false; console.log(all.join('\n')); }
+}
+
 if (ok && process.argv.includes('--quickmelee')) {
   // Quick melee (B / middle mouse) for every melee in play: it equips, uses the ability or swings, and a multi-part
   // ability (crowd charge, slam, dash, spin, aimed dash) is allowed to finish before the gun comes back.

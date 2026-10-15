@@ -5817,7 +5817,8 @@ const THIN_MAPS = new Set([]);
 const DUEL_MAP_IDS = ['duel_grid', 'duel_crossroads', 'duel_pillars', 'duel_platform'];
 const DUEL_ONLY_MAPS = new Set(DUEL_MAP_IDS);
 // A picked map only counts in the mode it was made for: a duel map left over from a 1v1 is 'auto' anywhere else.
-function effectivePickedMap(modeId, map) { return DUEL_ONLY_MAPS.has(map) && modeId !== '1v1' ? 'auto' : map; }
+// The duel maps are never pre-picked: 1v1 votes for its map once the opponent is found (see the map vote, below).
+function effectivePickedMap(modeId, map) { return DUEL_ONLY_MAPS.has(map) ? 'auto' : map; }
 
 const MAP_COLLIDERS = {};
 const MAP_BOUNDS = {};
@@ -6447,6 +6448,9 @@ function buildDuelMap(name, o) {
   }
   MAP_SPAWNS[name] = { ally: { x0: -6, x1: 6, z0: 21, z1: 25 }, enemy: { x0: -6, x1: 6, z0: -25, z1: -21 } };
   G._skyColor = o.sky;
+  // the palette the map-vote picture is drawn in (mapPictureGrid / drawMapPicture)
+  const css = n => '#' + n.toString(16).padStart(6, '0');
+  G._duelLook = { floor: o.floor, fine: o.fine, bold: o.bold, low: css(o.cover_), tall: css(o.tall), accent: css(o.accent), wall: css(o.wall) };
 }
 // [x, z, width, height, depth, tone]; the mirror image is added for you.
 // RULE ONE, as for every map: from anywhere in one spawn you must not be able to see anywhere in the other (the same
@@ -63652,6 +63656,240 @@ function tickLobbySearch() {
     if (el) el.textContent = lobbySearchText();
   }, 500);
 }
+// ── 🖼️ The 1v1 map vote ────────────────────────────────────────────────────────
+// After the opponent is found (a person, or a bot), both sides vote for a map from a PICTURE of each one: a top-down
+// plan drawn from the map's real colliders and spawns. The picture is a plain grid of cells first, and the canvas is
+// only that grid painted, so a bot can "look at" exactly what the player looks at: it reads the same grid, works out
+// how much cover there is, how long the sightlines run, whether there is high ground, and picks the map its taste
+// likes. The server settles two different votes with a coin flip (see beginMapPick in server.js).
+function mapPictureGrid(mapId, W = 36, H = 56) {
+  const b = MAP_BOUNDS[mapId], cols = MAP_COLLIDERS[mapId];
+  if (!b || !cols) return null;
+  const cells = new Uint8Array(W * H);                      // 0 floor · 1 low cover · 2 tall cover · 4 ally pad · 5 enemy pad
+  const cw = b.halfX * 2 / W, ch = b.halfZ * 2 / H;
+  for (const c of cols) {
+    // the border walls stand just outside the bounds and are not part of the plan
+    if (c.min.x < -b.halfX - 0.01 || c.max.x > b.halfX + 0.01 || c.min.z < -b.halfZ - 0.01 || c.max.z > b.halfZ + 0.01) continue;
+    if (c.max.y < 0.3) continue;
+    const code = c.max.y > 1.8 ? 2 : 1;                     // you can hop or crouch behind a 1: a 2 you have to go round
+    const i0 = Math.max(0, Math.floor((c.min.x + b.halfX) / cw + 1e-6)), i1 = Math.min(W - 1, Math.ceil((c.max.x + b.halfX) / cw - 1e-6) - 1);
+    const j0 = Math.max(0, Math.floor((c.min.z + b.halfZ) / ch + 1e-6)), j1 = Math.min(H - 1, Math.ceil((c.max.z + b.halfZ) / ch - 1e-6) - 1);
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) if (code > cells[j * W + i]) cells[j * W + i] = code;
+  }
+  const sp = MAP_SPAWNS[mapId];
+  if (sp) for (const [rect, code] of [[sp.ally, 4], [sp.enemy, 5]]) {
+    for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+      const x = -b.halfX + (i + 0.5) * cw, z = -b.halfZ + (j + 0.5) * ch;
+      if (x >= rect.x0 && x <= rect.x1 && z >= rect.z0 && z <= rect.z1 && cells[j * W + i] === 0) cells[j * W + i] = code;
+    }
+  }
+  const g = typeof MAP_GROUPS !== 'undefined' ? MAP_GROUPS[mapId] : null;
+  return { w: W, h: H, cells, look: (g && g._duelLook) || null };
+}
+// What a bot (or a person) can read off the picture, each 0..1: how much of the plan is cover, how much of that is
+// tall, how long the clear lanes run, how far a spot in the open is from anything to stand behind, and whether there
+// is one big low block to climb onto.
+function mapPictureFeel(grid) {
+  const { w, h, cells } = grid, n = w * h;
+  let low = 0, tall = 0;
+  for (let k = 0; k < n; k++) { if (cells[k] === 1) low++; else if (cells[k] === 2) tall++; }
+  let laneSum = 0;                                          // per column, the longest run with no tall cover in it
+  for (let i = 0; i < w; i++) {
+    let run = 0, best = 0;
+    for (let j = 0; j < h; j++) { if (cells[j * w + i] === 2) run = 0; else { run++; if (run > best) best = run; } }
+    laneSum += best / h;
+  }
+  const dist = new Int16Array(n).fill(-1), q = [];          // steps from each open cell to the nearest cover
+  for (let k = 0; k < n; k++) if (cells[k] === 1 || cells[k] === 2) { dist[k] = 0; q.push(k); }
+  for (let qi = 0; qi < q.length; qi++) {
+    const k = q[qi], i = k % w, j = (k - i) / w;
+    for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const x = i + di, y = j + dj;
+      if (x < 0 || y < 0 || x >= w || y >= h) continue;
+      const m = y * w + x;
+      if (dist[m] < 0) { dist[m] = dist[k] + 1; q.push(m); }
+    }
+  }
+  let dSum = 0, dN = 0;
+  for (let k = 0; k < n; k++) if (cells[k] !== 1 && cells[k] !== 2 && dist[k] >= 0) { dSum += Math.min(dist[k], 12); dN++; }
+  const seen = new Uint8Array(n);                           // the biggest connected block of low cover
+  let blob = 0;
+  for (let k = 0; k < n; k++) {
+    if (cells[k] !== 1 || seen[k]) continue;
+    let size = 0; const st = [k]; seen[k] = 1;
+    while (st.length) {
+      const c = st.pop(); size++;
+      const i = c % w, j = (c - i) / w;
+      for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const x = i + di, y = j + dj;
+        if (x < 0 || y < 0 || x >= w || y >= h) continue;
+        const m = y * w + x;
+        if (cells[m] === 1 && !seen[m]) { seen[m] = 1; st.push(m); }
+      }
+    }
+    if (size > blob) blob = size;
+  }
+  return {
+    cover: (low + tall) / n, tall: tall / n, lanes: laneSum / w,
+    exposure: dN ? dSum / dN / 12 : 1, platform: Math.min(1, blob / (n * 0.05)),
+  };
+}
+// Four tastes a bot can have, as weights on the features above.
+const MAP_BOT_TASTES = {
+  rusher:  { text: 'likes to fight close to cover',         w: { cover: 1.4, exposure: -1.2, tall: 0.6 } },
+  sniper:  { text: 'wants long sightlines',                 w: { lanes: 1.6, exposure: 0.5, cover: -0.8 } },
+  climber: { text: 'wants the high ground',                 w: { platform: 1.7, cover: 0.3 } },
+  brawler: { text: 'likes tall walls to break up the lines', w: { tall: 1.5, lanes: -0.8 } },
+};
+// Look at every option's picture and choose one. `noise` is how much the bot's mind wanders: more on easy, almost
+// none on hard. Returns the choice and the reason it would give.
+function botPickMap(options, tasteId, difficulty = 'medium', rng = Math.random) {
+  const taste = MAP_BOT_TASTES[tasteId] || MAP_BOT_TASTES.rusher;
+  const feels = options.map(id => { const g = mapPictureGrid(id); return g ? mapPictureFeel(g) : null; });
+  const keys = ['cover', 'tall', 'lanes', 'exposure', 'platform'];
+  const range = {};
+  for (const k of keys) {
+    const vs = feels.filter(Boolean).map(f => f[k]);
+    range[k] = { lo: Math.min(...vs), span: (Math.max(...vs) - Math.min(...vs)) || 1 };
+  }
+  const amp = difficulty === 'easy' ? 0.7 : difficulty === 'hard' || difficulty === 'expert' ? 0.05 : 0.25;
+  let best = null;
+  options.forEach((id, i) => {
+    const f = feels[i]; if (!f) return;
+    let score = 0;
+    for (const [k, wt] of Object.entries(taste.w)) score += wt * (f[k] - range[k].lo) / range[k].span;
+    score += (rng() - 0.5) * 2 * amp;
+    if (!best || score > best.score) best = { mapId: id, score };
+  });
+  return best ? { mapId: best.mapId, why: taste.text, taste: tasteId } : { mapId: options[0], why: 'no preference', taste: tasteId };
+}
+// A few words a person can use to compare the pictures.
+function mapPictureBlurb(feel) {
+  const bits = [];
+  bits.push(feel.platform >= 0.3 ? 'high ground' : feel.tall >= 0.065 ? 'tall walls' : 'low cover');
+  bits.push(feel.lanes >= 0.78 ? 'long lanes' : feel.lanes >= 0.65 ? 'open lanes' : 'broken lanes');
+  return bits.join(' · ');
+}
+function drawMapPicture(canvas, grid, opts = {}) {
+  if (!canvas || !grid) return;
+  const g = canvas.getContext('2d'); if (!g) return;
+  const look = grid.look || { floor: '#222a40', fine: '#39466a', bold: '#6a80bc', low: '#77839e', tall: '#5a6688', accent: '#6aa0ff', wall: '#3a4466' };
+  const W = canvas.width, H = canvas.height, sx = W / grid.w, sy = H / grid.h;
+  g.save();
+  if (opts.flip) { g.translate(W, H); g.rotate(Math.PI); }   // your own side is always the bottom of the picture
+  g.fillStyle = look.floor; g.fillRect(0, 0, W, H);
+  g.strokeStyle = look.fine; g.lineWidth = 1;
+  for (let i = 0; i <= grid.w; i += 4) { g.beginPath(); g.moveTo(i * sx, 0); g.lineTo(i * sx, H); g.stroke(); }
+  for (let j = 0; j <= grid.h; j += 4) { g.beginPath(); g.moveTo(0, j * sy); g.lineTo(W, j * sy); g.stroke(); }
+  for (let j = 0; j < grid.h; j++) for (let i = 0; i < grid.w; i++) {
+    const c = grid.cells[j * grid.w + i];
+    if (!c) continue;
+    g.fillStyle = c === 1 ? look.low : c === 2 ? look.tall : c === 4 ? 'rgba(58,106,255,0.55)' : 'rgba(255,74,74,0.55)';
+    g.fillRect(i * sx, j * sy, sx + 0.5, sy + 0.5);
+  }
+  g.strokeStyle = look.bold; g.lineWidth = 3; g.strokeRect(1.5, 1.5, W - 3, H - 3);
+  g.restore();
+}
+let _mapPick = null;   // { pickId, options, mine, bot, until, timer, el, vsBot }
+function hideMapPick() {
+  if (_mapPick && _mapPick.timer) clearInterval(_mapPick.timer);
+  const el = document.getElementById('map-pick');
+  if (el && el.parentNode) el.parentNode.removeChild(el);
+  _mapPick = null;
+}
+function showMapPick(d) {
+  hideMapPick();
+  try { document.exitPointerLock && document.exitPointerLock(); } catch (e) {}
+  hideStagingLobby();
+  const options = (d.options || []).filter(id => MAP_BOUNDS[id]);
+  if (!options.length) return;
+  const vsBot = !d.vs;
+  const tastes = Object.keys(MAP_BOT_TASTES);
+  const bot = vsBot ? botPickMap(options, tastes[Math.floor(Math.random() * tastes.length)], selectedDifficulty) : null;
+  const el = document.createElement('div');
+  el.id = 'map-pick'; el.setAttribute('data-no-i18n', '');
+  el.style.cssText = 'position:fixed;inset:0;z-index:9700;background:rgba(5,9,16,0.96);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:16px;box-sizing:border-box;font-family:"Courier New",monospace;overflow:auto;';
+  const vsName = vsBot ? '🤖 BOT' : escHtml(d.vs.name);
+  el.innerHTML = `
+    <div style="font-size:clamp(20px,5vw,30px);letter-spacing:6px;color:#ffaa44;">🗺️ PICK THE MAP</div>
+    <div style="font-size:14px;letter-spacing:3px;color:#9fb4c8;">YOU  ⚔  ${vsName}</div>
+    <div id="mp-status" style="min-height:18px;font-size:13px;letter-spacing:1px;color:#9fe8b0;"></div>
+    <div id="mp-cards" style="display:flex;flex-wrap:wrap;justify-content:center;gap:14px;max-width:760px;"></div>
+    <div id="mp-note" style="font-size:11px;color:#7a8da0;letter-spacing:1px;max-width:520px;text-align:center;">Same pick: that map. Different picks: a coin flip decides. Nobody picks in time: it is random.</div>
+    <button id="mp-leave" style="padding:8px 18px;background:#222;color:#aaa;border:1px solid #555;cursor:pointer;font-family:inherit;font-size:12px;letter-spacing:2px;border-radius:4px;">LEAVE</button>`;
+  document.body.appendChild(el);
+  _uiStopKeys(el);
+  _mapPick = { pickId: d.pickId, options, mine: null, bot, vsBot, until: performance.now() + (d.ms || 15000), timer: null, el };
+  const cards = el.querySelector('#mp-cards');
+  for (const id of options) {
+    const grid = mapPictureGrid(id), feel = grid ? mapPictureFeel(grid) : null;
+    const card = document.createElement('div');
+    card.dataset.mpMap = id;
+    card.style.cssText = 'width:min(150px,40vw);border:2px solid #4a5a70;border-radius:8px;padding:8px;background:#0e1622;cursor:pointer;text-align:center;box-sizing:border-box;';
+    card.innerHTML = `
+      <canvas width="144" height="224" style="width:100%;aspect-ratio:144/224;border:1px solid #000;display:block;image-rendering:pixelated;"></canvas>
+      <div style="margin-top:6px;font-size:12px;letter-spacing:2px;">${escHtml(mapCardLabel(id))}</div>
+      <div style="font-size:10px;color:#8fa6b8;margin-top:2px;">${feel ? escHtml(mapPictureBlurb(feel)) : ''}</div>
+      <div class="mp-tags" style="min-height:14px;font-size:10px;margin-top:4px;letter-spacing:1px;"></div>`;
+    drawMapPicture(card.querySelector('canvas'), grid, { flip: d.team === 'enemy' });
+    card.addEventListener('click', () => voteMapPick(id));
+    cards.appendChild(card);
+  }
+  const status = el.querySelector('#mp-status');
+  const tick = () => {
+    if (!_mapPick || _mapPick.result) return;
+    const left = Math.max(0, Math.ceil((_mapPick.until - performance.now()) / 1000));
+    if (!_mapPick.mine) status.textContent = `Pick a map · ${left}s`;
+  };
+  tick(); _mapPick.timer = setInterval(tick, 250);
+  el.querySelector('#mp-leave').addEventListener('click', () => {
+    socket.emit('leaveMapPick');
+    hideMapPick(); stagingLobbyMode = null; stagingLobbyState = null;
+    document.getElementById('mode-screen').style.display = 'flex';
+  });
+}
+function _mapPickTag(id, text, color) {
+  const card = _mapPick && _mapPick.el && _mapPick.el.querySelector(`[data-mp-map="${id}"] .mp-tags`);
+  if (!card) return;
+  const span = document.createElement('div'); span.textContent = text; span.style.color = color;
+  card.appendChild(span);
+}
+function voteMapPick(id) {
+  const mp = _mapPick;
+  if (!mp || mp.mine || mp.result || !mp.options.includes(id)) return;
+  mp.mine = id;
+  socket.emit('mapPickVote', { pickId: mp.pickId, mapId: id, botMapId: mp.bot ? mp.bot.mapId : null });
+  _mapPickTag(id, '✔ YOU', '#9fe8b0');
+  const card = mp.el.querySelector(`[data-mp-map="${id}"]`);
+  if (card) card.style.borderColor = '#44ff88';
+  mp.el.querySelector('#mp-status').textContent = mp.vsBot ? '🤖 The bot is looking at the maps…' : 'Locked in · waiting for your opponent…';
+  if (mp.vsBot) setTimeout(() => {
+    if (_mapPick !== mp || mp.result) return;
+    _mapPickTag(mp.bot.mapId, '🤖 BOT', '#ffcc66');
+    mp.el.querySelector('#mp-status').textContent = `🤖 The bot ${mp.bot.why}: it picked ${mapCardLabel(mp.bot.mapId)}`;
+  }, 700);
+}
+socket.on('mapPickStart', showMapPick);
+socket.on('mapPickLocked', () => {
+  const mp = _mapPick; if (!mp || mp.result || mp.vsBot) return;
+  if (mp.mine) mp.el.querySelector('#mp-status').textContent = 'Both locked in…';
+  else mp.el.querySelector('#mp-status').textContent = 'Your opponent has locked in · pick a map';
+});
+socket.on('mapPickResult', d => {
+  const mp = _mapPick; if (!mp) return;
+  mp.result = d;
+  if (mp.timer) { clearInterval(mp.timer); mp.timer = null; }
+  mp.el.querySelectorAll('.mp-tags').forEach(t => { t.textContent = ''; });
+  for (const pk of d.picks || []) _mapPickTag(pk.mapId, pk.bot ? '🤖 BOT' : `✔ ${pk.name}`, pk.bot ? '#ffcc66' : '#9fe8b0');
+  const win = mp.el.querySelector(`[data-mp-map="${d.mapId}"]`);
+  mp.el.querySelectorAll('[data-mp-map]').forEach(c => { if (c !== win) c.style.opacity = '0.35'; });
+  if (win) { win.style.borderColor = '#ffaa44'; win.style.boxShadow = '0 0 22px rgba(255,170,68,0.6)'; }
+  const name = mapCardLabel(d.mapId);
+  mp.el.querySelector('#mp-status').textContent = d.coin ? `🪙 Coin flip → ${name}`
+    : (d.picks || []).length ? `Same pick → ${name}` : `Nobody picked → ${name}`;
+});
+socket.on('lobbyStart', hideMapPick);
+
 function renderStagingLobby() {
   const el = document.getElementById('staging-lobby');
   if (!el) return;
@@ -63669,7 +63907,7 @@ function renderStagingLobby() {
   el.innerHTML = `
     <div style="font-size:clamp(22px,7vw,32px);letter-spacing:clamp(3px,1.5vw,8px);color:#ffaa44;margin-bottom:6px;">🏛️ MATCH LOBBY</div>
     <div style="font-size:14px;color:#888;letter-spacing:3px;margin-bottom:8px;">${modeCardLabel(mode)} · WAITING FOR PLAYERS</div>
-    <div id="lobby-map" style="font-size:13px;color:#cfd8e3;letter-spacing:2px;margin-bottom:22px;">MAP: ${mapCardLabel(s && s.map)}</div>
+    <div id="lobby-map" style="font-size:13px;color:#cfd8e3;letter-spacing:2px;margin-bottom:22px;">${mode === '1v1' ? 'MAP: you vote for it once your opponent is found' : 'MAP: ' + mapCardLabel(s && s.map)}</div>
     <div style="display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:12px 60px;margin-bottom:24px;max-width:100%;">
       <div style="text-align:center;min-width:min(200px,100%);">
         <div style="font-size:11px;color:#88ccff;letter-spacing:3px;margin-bottom:8px;">TEAM ALLY (${allyPlayers.length}/${cfg.allies != null ? cfg.allies + 1 : '?'})</div>
@@ -66581,8 +66819,10 @@ document.addEventListener('click', e => { if (!moreMenu.hidden && !e.target.clos
 // The duel maps are 1v1's, and they are always in the map list, under a label. (They used to be hidden unless 1v1 was
 // the mode you had last opened, and the map list is on the screen BEFORE a mode is chosen: so they were never seen.)
 // Picked for any other mode, the pick counts as random there (effectivePickedMap), and their description says so.
+// They were made always-visible so people could find them; now they are not picked here at all: 1v1 asks
+// for the map once the opponent is found, so they stay out of this list (the cards remain in the page for their labels).
 function syncDuelMapCards() {
-  document.querySelectorAll('.map-card[data-duel="1"], [data-duel-label="1"]').forEach(c => { c.style.display = ''; });
+  document.querySelectorAll('.map-card[data-duel="1"], [data-duel-label="1"]').forEach(c => { c.style.display = 'none'; });
 }
 function openPickDialog(id) {
   closeOtherDialogs(id);

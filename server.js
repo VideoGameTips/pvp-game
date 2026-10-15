@@ -1757,6 +1757,9 @@ function checkLobbyStart(L, { now = false } = {}) {
 // Everyone is ready — start the match. `extra` rides along on lobbyStart.
 function startLobbyMatch(L, extra = {}) {
   const mode = L.mode;
+  // 🗺️ 1v1: the opponent is known by now (a person, or a bot is about to be), so THIS is when the map is picked.
+  if (mode === '1v1' && !extra.pickedMap && beginMapPick(L, extra)) return;
+  const { pickedMap, ...lobbyExtra } = extra;
   const fillBots = L.players.every(p => p.fillBots);
   const cfg = MODE_TEAM_SIZES[mode] || { ally: 1, enemy: 1 };
   // Count humans per team
@@ -1771,6 +1774,7 @@ function startLobbyMatch(L, extra = {}) {
   // chose a map (#17 — the picker used to be ignored here), else random.
   const mapId = M4_TOWER_MODES.has(mode)
     ? mode   // each tower mode is also the name of its map
+    : (pickedMap && mapPoolFor(mode).includes(pickedMap)) ? pickedMap
     : ((p => (p && (mode === '1v1' || !DUEL_ONLY_MAPS.has(p))) ? p : null)(lobbyMapPick(L))
         || mapPoolFor(mode)[Math.floor(Math.random() * mapPoolFor(mode).length)]);
   // Designate the first player as host (they spawn the bots if any)
@@ -1784,11 +1788,71 @@ function startLobbyMatch(L, extra = {}) {
     io.to(p.socketId).emit('lobbyStart', {
       mode, matchId, mapId, team: p.team, isHost: p.socketId === host?.socketId, hostId: host?.socketId || null,
       allyBots, enemyBots, opponents: L.players.filter(o => o.socketId !== p.socketId).map(o => ({ socketId: o.socketId, team: o.team, name: players[o.socketId]?.name || '' })),
-      ...extra,
+      ...lobbyExtra,
     });
   }
   // Remove this lobby instance now that it has launched
   stagingLobbies[mode] = (stagingLobbies[mode] || []).filter(x => x !== L);
+}
+
+// ── 🗺️ The 1v1 map vote ──────────────────────────────────────────────────────
+// It used to be chosen on the mode screen, before anyone was found. Now the opponent is known first, then each side
+// votes for one of the duel maps: the same vote plays, two different votes are settled by a coin flip between them.
+// A bot opponent votes too: its client looks at a picture of each map and sends the bot's choice along with yours.
+const MAP_PICK_MS = 15000, MAP_PICK_REVEAL_MS = 2600;
+const mapPicks = {};   // id → { id, L, extra, options, votes, botVote, sids, vsBot, done, closing, timer }
+let _mapPickSeq = 0;
+function beginMapPick(L, extra) {
+  const sids = L.players.map(p => p.socketId).filter(sid => players[sid]);
+  if (!sids.length) return false;
+  const pick = { id: `pick-${++_mapPickSeq}`, L, extra, options: DUEL_MAP_IDS.slice(), votes: {}, botVote: null, sids, vsBot: sids.length < 2, done: false, closing: false, timer: null };
+  // Off the open list: nobody else can walk into a lobby that is already choosing its map.
+  stagingLobbies[L.mode] = (stagingLobbies[L.mode] || []).filter(x => x !== L);
+  mapPicks[pick.id] = pick;
+  for (const sid of sids) {
+    players[sid]._mapPickId = pick.id;
+    const other = sids.find(o => o !== sid);
+    io.to(sid).emit('mapPickStart', {
+      pickId: pick.id, options: pick.options, ms: MAP_PICK_MS,
+      team: (L.players.find(p => p.socketId === sid) || {}).team || 'ally',
+      vs: other ? { name: players[other].name || '?' } : null,   // null: it is a bot
+    });
+  }
+  pick.timer = setTimeout(() => resolveMapPick(pick), MAP_PICK_MS);
+  return true;
+}
+function resolveMapPick(pick) {
+  if (pick.done) return;
+  pick.done = true; clearTimeout(pick.timer); delete mapPicks[pick.id];
+  // Only those still here and still choosing (someone may have left, or closed the tab).
+  const sids = pick.sids.filter(sid => players[sid] && players[sid]._mapPickId === pick.id);
+  for (const sid of pick.sids) if (players[sid]) delete players[sid]._mapPickId;
+  if (!sids.length) return;
+  const rand = list => list[Math.floor(Math.random() * list.length)];
+  const picks = [];
+  for (const sid of sids) if (pick.votes[sid]) picks.push({ name: players[sid].name || '?', mapId: pick.votes[sid] });
+  if (pick.vsBot) picks.push({ name: 'BOT', mapId: pick.botVote || rand(pick.options), bot: true });
+  const distinct = [...new Set(picks.map(x => x.mapId))];
+  const mapId = distinct.length ? rand(distinct) : rand(pick.options);
+  const L = pick.L;
+  L.players = L.players.filter(p => sids.includes(p.socketId));
+  for (const sid of sids) io.to(sid).emit('mapPickResult', { mapId, picks, coin: distinct.length > 1 });
+  // Show the result for a moment, then go. Anyone who vanished meanwhile is replaced by a bot.
+  setTimeout(() => {
+    L.players = L.players.filter(p => players[p.socketId]);
+    if (!L.players.length) return;
+    if (L.players.length < 2) for (const p of L.players) p.fillBots = true;
+    startLobbyMatch(L, { ...pick.extra, pickedMap: mapId });
+  }, MAP_PICK_REVEAL_MS);
+}
+// Leave the vote (the LEAVE button, or the socket going away): whoever is left plays on against a bot.
+function leaveMapPick(socketId) {
+  const me = players[socketId];
+  const pick = me && me._mapPickId && mapPicks[me._mapPickId];
+  if (!pick || pick.done) return false;
+  delete me._mapPickId;
+  resolveMapPick(pick);
+  return true;
 }
 
 // ── ⚔️ Challenge a real player from Lobby 13 (#46) ──────────────────────────
@@ -2786,6 +2850,22 @@ io.on('connection', (socket) => {
     L.players.push({ socketId: socket.id, team, ready: false, fillBots: true, map });
     broadcastLobbyState(L);
   });
+  socket.on('mapPickVote', (data) => {
+    const me = players[socket.id];
+    const pick = me && me._mapPickId && mapPicks[me._mapPickId];
+    if (!pick || pick.done || pick.votes[socket.id]) return;   // a vote is locked in
+    const mapId = String(data?.mapId || '');
+    if (!pick.options.includes(mapId)) return;
+    pick.votes[socket.id] = mapId;
+    if (pick.vsBot) { const b = String(data?.botMapId || ''); if (pick.options.includes(b)) pick.botVote = b; }
+    for (const sid of pick.sids) if (sid !== socket.id) io.to(sid).emit('mapPickLocked', { name: me.name || '?' });
+    // Everyone is in: settle it in a moment (a bot is given a beat to be seen deciding).
+    if (!pick.closing && pick.sids.every(sid => players[sid] && pick.votes[sid])) {
+      pick.closing = true;
+      setTimeout(() => resolveMapPick(pick), pick.vsBot ? 1800 : 500);
+    }
+  });
+  socket.on('leaveMapPick', () => { leaveMapPick(socket.id); });
   socket.on('leaveStagingLobby', () => {
     const L = removeSocketFromLobbies(socket.id);
     if (L) broadcastLobbyState(L);
@@ -2999,6 +3079,7 @@ io.on('connection', (socket) => {
         pvpQueues[m].splice(i, 1);
       }
     }
+    leaveMapPick(socket.id);   // a map vote in progress carries on without them
     // Clean up any staging lobby memberships
     const _leftLobby = removeSocketFromLobbies(socket.id);
     if (_leftLobby) broadcastLobbyState(_leftLobby);
