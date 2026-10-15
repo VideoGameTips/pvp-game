@@ -38828,6 +38828,7 @@ let GAMEPLAY_SETTINGS = {
   ambient: 1,      // ⚙ → AMBIENT SOUND: the wind, surf, birds and hum of each map (0 = off)
   weatherFx: true, // ⚙ → WEATHER & PARTICLES: blown sand, snow, ash, rain in the air
   customSkins: true, // ⚙ → PLAYER-MADE SKINS: see the skins other players have painted (off: everyone in the standard skins)
+  enemyFootsteps: true, // ⚙ → ENEMY FOOTSTEPS: hear other people's steps, from the side they are on
 };
 try {
   const saved = JSON.parse(localStorage.getItem('pvp_gameplay_settings') || 'null');
@@ -55554,6 +55555,100 @@ function spawnBurnZone(pos, radius, dps, durationMs, opts = {}) {
 }
 // 🔥 Lingering "on fire" status — Molotov sets this when you touch the flames; it
 // keeps ticking after you leave (5/sec for ~10s). Player + per-bot timers.
+// ── 👣 Hearing other people ────────────────────────────────────────────────────────────────────────────────
+// Only your OWN footsteps were ever played, so the one sound that finds an opponent in a real shooter was missing and
+// a 72 x 112 m duel map was a long silent walk (Andy: "one of the reasons I cannot find my opponents"). Every other
+// body now steps out loud, and what you hear is what a person would:
+//   · a step every 2.8 m walked (so a runner is quick and a creeper slow), at the speed it is actually moving;
+//   · louder near, gone past ENEMY_STEPS.range, and from the side it is on (a stereo pan from where it is relative
+//     to where you face), duller from behind you, and muffled and quieter through a wall;
+//   · crouched is a third as loud, a slide makes no step, and a drop is heard as a thud when it lands;
+//   · teammates are quiet company and not announced: only the other team (everyone, in a free-for-all) is heard.
+// It is a setting (⚙ → ENEMY FOOTSTEPS) for anyone who finds it busy.
+const ENEMY_STEPS = { range: 34, stride: 2.8, crouchStride: 3.6, minSpeed: 1.8, maxPerFrame: 4, base: 0.9 };
+const _stepState = new Map();          // body id -> { x, z, acc, air }
+const _stepFwd = new THREE.Vector3(), _stepDir = new THREE.Vector3();
+// How a step at (x, z) sounds from where the camera is: { gain, pan, lowpass }, or null if it is out of earshot.
+function enemyStepSound(x, z, opts = {}) {
+  const dx = x - camera.position.x, dz = z - camera.position.z, d = Math.hypot(dx, dz);
+  if (d > ENEMY_STEPS.range) return null;
+  camera.getWorldDirection(_stepFwd);
+  const fl = Math.hypot(_stepFwd.x, _stepFwd.z) || 1, fx = _stepFwd.x / fl, fz = _stepFwd.z / fl;
+  const ux = d > 0.001 ? dx / d : 0, uz = d > 0.001 ? dz / d : 0;
+  const right = ux * -fz + uz * fx;                       // +1 on your right, -1 on your left
+  const ahead = ux * fx + uz * fz;                        // +1 straight ahead, -1 right behind you
+  const occluded = opts.occluded === undefined ? !hasLineOfSight(camera.position.x, camera.position.z, x, z, 1.0) : opts.occluded;
+  let gain = Math.pow(1 - d / ENEMY_STEPS.range, 1.4) * (occluded ? 0.5 : 1);
+  if (d < 1.2) gain = Math.max(gain, 0.8);
+  return { gain, pan: Math.max(-0.9, Math.min(0.9, right)), lowpass: occluded ? 650 : ahead < -0.25 ? 2600 : 9000, dist: d, occluded };
+}
+function playEnemyFootstep(x, y, z, snd, vol = 1, pitch = 1) {
+  const ctx = getAudioCtx();
+  if (!ctx || !snd || snd.gain <= 0.005) return;
+  unlockAudio();
+  const out = ctx.createGain();
+  out.gain.value = 1;
+  let tail = out;
+  const lp = ctx.createBiquadFilter();
+  lp.type = 'lowpass'; lp.frequency.value = snd.lowpass; lp.Q.value = 0.7;
+  tail.connect(lp); tail = lp;
+  if (ctx.createStereoPanner) {
+    const pan = ctx.createStereoPanner();
+    pan.pan.value = snd.pan;
+    tail.connect(pan); tail = pan;
+  }
+  tail.connect(ctx.destination);
+  const start = ctx.currentTime + 0.002;
+  const m = snd.gain * vol * ENEMY_STEPS.base * SOUND_MIX;
+  playFilteredNoise(ctx, start, 0.07, out, 0.30 * m, 'lowpass', 420 * pitch, 0.7);
+  playFilteredNoise(ctx, start, 0.025, out, 0.10 * m, 'bandpass', 1500 * pitch, 0.9, 0.001, 0);
+  playTone(ctx, start, 0.05, out, 130 * pitch, 60 * pitch, 0.18 * m, 'sine');
+}
+function updateEnemyFootsteps(dt) {
+  if (!(dt > 0) || GAMEPLAY_SETTINGS.enemyFootsteps === false) return;
+  if (inLobby || isDead || !gameStarted || SOCIAL_VIEW.mode) { _stepState.clear(); return; }
+  const myTeam = localEntityTeam(myId);
+  let played = 0;
+  const live = new Set();
+  for (const [id, mesh] of Object.entries(remoteMeshes)) {
+    if (!mesh || id === myId) continue;
+    live.add(id);
+    const p = players[id];
+    if (!p || p.dead || !mesh.visible) { _stepState.delete(id); continue; }
+    const theirTeam = localEntityTeam(id);
+    if (myTeam && theirTeam && myTeam === theirTeam) { _stepState.delete(id); continue; }
+    const x = mesh.position.x, z = mesh.position.z;
+    let st = _stepState.get(id);
+    if (!st) { _stepState.set(id, { x, z, acc: 0, air: false }); continue; }
+    const moved = Math.hypot(x - st.x, z - st.z);
+    st.x = x; st.z = z;
+    const rig = mesh._rig;
+    const airborne = !!(rig && rig.jump > 0.35);
+    const sliding = !!(rig && rig.slide > 0.4);
+    const crouched = !!(rig && rig.ck > 0.5);
+    // a landing: heard as a thud (once, a little louder than a step)
+    if (st.air && !airborne && played < ENEMY_STEPS.maxPerFrame) {
+      const snd = enemyStepSound(x, z);
+      if (snd) { playEnemyFootstep(x, mesh.position.y, z, snd, 1.4, 0.72); played++; }
+    }
+    st.air = airborne;
+    if (moved > 3 || airborne || sliding) { st.acc = 0; continue; }       // a respawn or a teleport; in the air; sliding
+    if (moved / dt < ENEMY_STEPS.minSpeed) continue;                       // standing, or just shuffling
+    st.acc += moved;
+    const stride = crouched ? ENEMY_STEPS.crouchStride : ENEMY_STEPS.stride;
+    if (st.acc >= stride) {
+      st.acc -= stride;
+      if (played >= ENEMY_STEPS.maxPerFrame) continue;
+      const snd = enemyStepSound(x, z);
+      if (!snd) continue;
+      st.alt = !st.alt;
+      playEnemyFootstep(x, mesh.position.y, z, snd, crouched ? 0.3 : 1, st.alt ? 1.0 : 1.15);
+      played++;
+    }
+  }
+  for (const id of _stepState.keys()) if (!live.has(id)) _stepState.delete(id);
+}
+
 // ── 🔥💧 Fire against water, and the flame jet ─────────────────────────────────────────────────────────────────
 // Water puts fire out. Two things count as water: a water gun (the Foam Cannon, and any gun wearing a skin that
 // squirts or sprinkles: water pistol, fire extinguisher, lawn sprinkler, soap, slush) and a smoke cloud. Each does
@@ -63559,6 +63654,7 @@ function loop() {
   updateChainMaulSwing(dt);
   updateMeleeGripPose();
   safeLoopStep('equipment-sway', updateEquipmentSway);
+  safeLoopStep('enemy-footsteps', () => updateEnemyFootsteps(dt));
   safeLoopStep('action-wind', () => updateActionWind(dt));
   updateWeaponSelector();
   updateTrashcanProximity();
@@ -66002,6 +66098,7 @@ function openSettingsHub() {
     ${rangeRow('screenFx', 'SCREEN EFFECTS')}
     ${rangeRow('ambient', 'AMBIENT SOUND', 0, 1, 0.05)}
     ${toggleRow('weatherFx', 'WEATHER & PARTICLES', 'Blown sand, snow, ash and rain in the air. Turn off if the game runs slow.')}
+    ${toggleRow('enemyFootsteps', 'ENEMY FOOTSTEPS', 'Hear other people\'s footsteps, from the side they are on: louder when they run, quieter crouched, muffled through walls.')}
     ${toggleRow('customSkins', 'PLAYER-MADE SKINS', 'See the skins other players have painted themselves. Turn off to see everyone in the standard skins.')}
     <div style="height:1px;background:#276b55;margin:16px 0 12px;"></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0;">

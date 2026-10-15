@@ -1339,6 +1339,100 @@ if (ok && process.argv.includes('--botnav')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+if (ok && process.argv.includes('--steps')) {
+  // Other people's footsteps: heard from the other team, a step every 2.8 m, from the side they are on, muffled through a
+  // wall, a third as loud crouched, silent in a slide, a thud on landing; not heard from teammates, the dead, or
+  // beyond range, and the setting turns it off.
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const saved = { id: myId, started: gameStarted, dead: isDead, lobby: inLobby, pos: camera.position.clone(), quat: camera.quaternion.clone(),
+      play: playEnemyFootstep, los: hasLineOfSight, set: GAMEPLAY_SETTINGS.enemyFootsteps, mp: players.me_steps };
+    const calls = [];
+    playEnemyFootstep = (x, y, z, snd, vol, pitch) => { calls.push({ x, z, snd, vol, pitch }); };
+    const mesh = makePlayerMesh('Walker', false, 'enemy', 'default', {});
+    const run = (opts = {}) => {
+      calls.length = 0; _stepState.clear();
+      mesh.position.set(opts.x0 ?? 5, 0, opts.z ?? -5); mesh.visible = true;
+      players.step_enemy = { id: 'step_enemy', team: opts.team || 'enemy', hp: 100, dead: !!opts.dead };
+      remoteMeshes.step_enemy = mesh;
+      mesh._rig.jump = 0; mesh._rig.ck = opts.ck || 0; mesh._rig.slide = opts.slide || 0;
+      updateEnemyFootsteps(1 / 60);                         // first sight of it: remembers where it is
+      for (let f = 0; f < (opts.frames ?? 200); f++) { mesh.position.x += (opts.dx ?? 0.1); updateEnemyFootsteps(1 / 60); }
+      return calls.slice();
+    };
+    try {
+      myId = 'me_steps'; gameStarted = true; isDead = false; inLobby = false; GAMEPLAY_SETTINGS.enemyFootsteps = true;
+      players.me_steps = { id: 'me_steps', team: 'ally', hp: 100 };
+      camera.position.set(0, 1.65, 0); camera.quaternion.setFromEuler(new THREE.Euler(0, 0, 0, 'YXZ'));   // facing -z
+      hasLineOfSight = () => true;
+      // a runner covers 20 m
+      let c = run();
+      if (c.length < 6 || c.length > 8) issues.push('20 m at 2.8 m a step should be about 7 steps, got ' + c.length);
+      if (c.length && !(c[0].snd.pan > 0)) issues.push('something on your right should pan right, got ' + c[0].snd.pan);
+      // the left
+      c = run({ x0: -5, dx: -0.1 });
+      if (c.length && !(c[0].snd.pan < 0)) issues.push('something on your left should pan left, got ' + c[0].snd.pan);
+      // louder near
+      c = run({ x0: 2, z: -2, frames: 40 });
+      const near = c.length ? c[0].snd.gain : 0;
+      c = run({ x0: 26, z: -2, frames: 40 });
+      const far = c.length ? c[0].snd.gain : 0;
+      if (!(near > far)) issues.push('a step should be louder near (' + near.toFixed(2) + ') than far (' + far.toFixed(2) + ')');
+      // out of earshot
+      c = run({ z: -70, x0: 0, dx: 0 });
+      if (c.length) issues.push('a step 70 m away was heard');
+      c = run({ z: -70, x0: 0, frames: 100, dx: 0.1 });
+      if (c.length) issues.push('steps 70 m away were heard');
+      // behind you is duller
+      c = run({ z: 6, x0: 0, frames: 40, dx: 0.1 });
+      if (c.length && !(c[0].snd.lowpass < 5000)) issues.push('a step behind you should be duller, lowpass ' + c[0].snd.lowpass);
+      // through a wall: quieter and muffled
+      hasLineOfSight = () => false;
+      c = run({ x0: 2, z: -2, frames: 40 });
+      if (c.length && !(c[0].snd.occluded && c[0].snd.lowpass <= 700)) issues.push('a step through a wall should be muffled');
+      if (c.length && !(c[0].snd.gain < near * 0.7)) issues.push('a step through a wall should be quieter than in the open');
+      hasLineOfSight = () => true;
+      // crouched: a third as loud and a longer stride
+      const walk = run({ x0: 2, z: -2 }).length;
+      c = run({ x0: 2, z: -2, ck: 1 });
+      if (c.length && !(c[0].vol <= 0.35)) issues.push('crouched steps should be a third as loud, got ' + c[0].vol);
+      if (!(c.length <= walk)) issues.push('a crouched walker should step no more often than a walker');
+      // a slide makes no step
+      c = run({ slide: 1 });
+      if (c.length) issues.push('a slide made ' + c.length + ' steps');
+      // teammates and the dead
+      c = run({ team: 'ally' });
+      if (c.length) issues.push('a teammate was heard (' + c.length + ' steps)');
+      c = run({ dead: true });
+      if (c.length) issues.push('a dead body was heard');
+      // standing still
+      c = run({ dx: 0 });
+      if (c.length) issues.push('someone standing still made steps');
+      // the setting
+      GAMEPLAY_SETTINGS.enemyFootsteps = false;
+      c = run();
+      if (c.length) issues.push('the setting did not turn enemy footsteps off');
+      GAMEPLAY_SETTINGS.enemyFootsteps = true;
+      // a landing
+      calls.length = 0; _stepState.clear();
+      mesh.position.set(4, 0, -4); players.step_enemy = { id: 'step_enemy', team: 'enemy', hp: 100 }; remoteMeshes.step_enemy = mesh;
+      mesh._rig.jump = 0; updateEnemyFootsteps(1 / 60);
+      mesh._rig.jump = 0.9; updateEnemyFootsteps(1 / 60);
+      mesh._rig.jump = 0; updateEnemyFootsteps(1 / 60);
+      if (calls.length !== 1 || !(calls[0].vol > 1.2)) issues.push('a landing should be one louder thud, got ' + JSON.stringify(calls.map(k => k.vol)));
+    } finally {
+      playEnemyFootstep = saved.play; hasLineOfSight = saved.los; GAMEPLAY_SETTINGS.enemyFootsteps = saved.set;
+      delete remoteMeshes.step_enemy; delete players.step_enemy; delete players.me_steps; _stepState.clear();
+      myId = saved.id; gameStarted = saved.started; isDead = saved.dead; inLobby = saved.lobby;
+      camera.position.copy(saved.pos); camera.quaternion.copy(saved.quat);
+      try { disposeBody(mesh); } catch (e) {}
+    }
+    return issues;
+  })()`);
+  console.log('enemy footstep checks: a step every 2.8 m, panned, duller behind, muffled through walls, crouch, slide, landing, range, team, setting');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 if (ok && process.argv.includes('--chain-maul')) {
   const issues = vm.runInThisContext(`(() => {
     const issues = [], v = (x,y,z) => new THREE.Vector3(x,y,z);
