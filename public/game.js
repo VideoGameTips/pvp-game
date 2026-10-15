@@ -66219,11 +66219,11 @@ moreMenu.addEventListener('click', () => setMoreMenu(false)); // an item was pic
 document.addEventListener('click', e => { if (!moreMenu.hidden && !e.target.closest('#more-menu, #more-btn')) setMoreMenu(false); });
 // 🗺️ MAP / 🤖 BOT DIFFICULTY (#24): the same cards as before, in a dialog behind a row that shows
 // the current pick. Picking closes it.
-// The duel maps are 1v1's: their cards are in the map list only while 1v1 is the mode being set up.
+// The duel maps are 1v1's, and they are always in the map list, under a label. (They used to be hidden unless 1v1 was
+// the mode you had last opened, and the map list is on the screen BEFORE a mode is chosen: so they were never seen.)
+// Picked for any other mode, the pick counts as random there (effectivePickedMap), and their description says so.
 function syncDuelMapCards() {
-  const is1v1 = currentModeId() === '1v1';
-  document.querySelectorAll('.map-card[data-duel="1"]').forEach(c => { c.style.display = is1v1 ? '' : 'none'; });
-  if (!is1v1 && DUEL_ONLY_MAPS.has(selectedMap)) selectMapPick('auto');
+  document.querySelectorAll('.map-card[data-duel="1"], [data-duel-label="1"]').forEach(c => { c.style.display = ''; });
 }
 function openPickDialog(id) {
   closeOtherDialogs(id);

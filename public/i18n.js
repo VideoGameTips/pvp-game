@@ -144,6 +144,7 @@
     '🧪 UTILITY SKINS': '🧪 道具外观', 'Pineapple': '菠萝', 'Disco Ball': '迪斯科球', 'Tea Kettle': '茶壶', 'Pizza Box': '披萨盒',
     'Juice Box': '果汁盒', 'Eight Ball': '八号球', 'Whoopee Cushion': '放屁垫',
     'Meteor Hammer': '流星锤', 'Nothing in reach': '够不着任何东西', 'Reeled in': '拉过来了', 'Hauling': '拖拽中',
+    'small duel maps': '小型对决地图', '1 enemy · small duel maps': '1 个敌人 · 小型对决地图', '⚔️ SMALL 1v1 MAPS ▸': '⚔️ 1v1 小地图 ▸',
     'DUEL GRID': '对决网格', 'CROSSROADS': '十字路口', 'PILLAR HALL': '石柱大厅', 'HIGH GROUND': '制高点',
     '🎖 CONTRACT WRAPS': '🎖 契约涂装', 'Not for sale. Finish the contract in real matches and the wrap is yours.': '不出售。在正式对局里完成契约，涂装就是你的。',
     '🎖 CONTRACT COMPLETE': '🎖 契约完成', '🔒 CONTRACT': '🔒 契约',

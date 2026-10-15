@@ -998,7 +998,9 @@ if (ok && process.argv.includes('--duel')) {
   }
   if (!/LOBBY_MAP_POOL = MAP_IDS\.filter\(.*DUEL_ONLY_MAPS/.test(serverSrc)) issues.push('server random pool does not exclude the duel maps');
   if (!/mapPoolFor\(mode\)/.test(serverSrc)) issues.push('server does not deal 1v1 its own pool');
-  if (!/data-map="duel_grid"[^>]*data-duel="1"/.test(fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8'))) issues.push('map picker has no duel cards');
+  const idx = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  if (!/data-map="duel_grid"[^>]*data-duel="1"/.test(idx)) issues.push('map picker has no duel cards');
+  if (/data-duel="1" style="display:none/.test(idx)) issues.push('the duel map cards are hidden in the picker: nobody would ever see them');
   console.log('duel map checks: size, spawns, route, mirror symmetry, 1v1-only wiring');
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
