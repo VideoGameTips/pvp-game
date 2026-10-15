@@ -10535,7 +10535,7 @@ function _mechHurtPlayer(dmg, id) {
   if (adminCheats.godMode && currentUser?.isAdmin) { flashHitIndicator(); return false; }
   const me = players[myId];
   if (!me) return false;
-  me.hp = Math.max(0, me.hp - dmg);
+  applyEnvironmentDamage(dmg, id);
   updateHealthHUD(me.hp);
   flashHitIndicator();
   if (me.hp <= 0 && !isDead) applyBotDamageToPlayer(id, null);
@@ -41110,6 +41110,7 @@ function loadoutReady() {
 }
 
 function resetCombatResources() {
+  pendingEnvironmentDamage.length = 0;
   clearCombatFeedback();
   clearPlayerStatusEffects();
   if (!loadoutReady()) return;
@@ -46516,7 +46517,7 @@ function updateMapGimmicks(dt) {
           const dmg = (z.dps || 4) / 2;
           const me = players[myId];
           if (me) {
-            me.hp = Math.max(0, me.hp - dmg);
+            applyEnvironmentDamage(dmg, z.type || 'lava');
             updateHealthHUD(me.hp);
             flashHitIndicator();
             if (me.hp <= 0 && !isDead) applyBotDamageToPlayer(z.type || 'lava', null);
@@ -54689,7 +54690,7 @@ function updateMapEffects(dt) {
       lastChernobylTick = now;
       const me = players[myId];
       if (me && !isShielded() && !(adminCheats.godMode && currentUser?.isAdmin)) {
-        me.hp = Math.max(0, me.hp - 1);
+        applyEnvironmentDamage(1, 'chernobyl_gas');
         updateHealthHUD(me.hp);
         if (me.hp <= 0) applyBotDamageToPlayer('chernobyl_gas', null);
       }
@@ -55400,10 +55401,39 @@ function spawnBurnZone(pos, radius, dps, durationMs, opts = {}) {
 // keeps ticking after you leave (5/sec for ~10s). Player + per-bot timers.
 let playerFireUntil = 0;
 let _lastFireTick = 0;
+let environmentDamageSeq = 0, environmentDamageAck = 0;
+const pendingEnvironmentDamage = [];
+function reportEnvironmentDamage(amount, source) {
+  if (!(amount > 0) || !Number.isFinite(amount)) return;
+  const seq = ++environmentDamageSeq;
+  pendingEnvironmentDamage.push({ seq, amount });
+  socket.emit('environmentDamage', { seq, amount, source: String(source || 'hazard').slice(0,64),
+    matchId: currentRoom || players[myId]?.matchId });
+}
+function applyEnvironmentDamage(amount, source) {
+  const me = players[myId];
+  if (!me || !Number.isFinite(amount) || amount <= 0) return 0;
+  const before = me.hp;
+  me.hp = Math.max(0, before-amount);
+  const lost = before-me.hp;
+  if (lost > 0) { cancelMedkitHeal('interrupted by damage'); reportEnvironmentDamage(lost, source); }
+  return lost;
+}
+function reconcileEnvironmentHealth(data, currentHp) {
+  const ack = Number.isSafeInteger(data.environmentSeq) ? data.environmentSeq : environmentDamageAck;
+  if (ack < environmentDamageAck) return currentHp;
+  environmentDamageAck = ack;
+  for (let i=pendingEnvironmentDamage.length-1;i>=0;i--) {
+    if (pendingEnvironmentDamage[i].seq <= ack) pendingEnvironmentDamage.splice(i,1);
+  }
+  const pending = pendingEnvironmentDamage.reduce((sum,x) => sum+x.amount,0);
+  const hp = Math.max(0,data.hp-pending);
+  return data.healthEvent === 'heal' ? hp : Math.min(currentHp,hp);
+}
 function damagePlayerDOT(amount, deathWeapon) {
   const me = players[myId];
   if (!me || isDead || isShielded() || isRiotShieldBlocking() || match?.type === 'range') return;
-  me.hp = Math.max(0, me.hp - amount);
+  applyEnvironmentDamage(amount, deathWeapon || 'firework_launcher');
   updateHealthHUD(me.hp);
   flashHitIndicator();
   if (me.hp <= 0 && !isDead) applyBotDamageToPlayer(deathWeapon || 'firework_launcher', null);
@@ -56172,6 +56202,7 @@ function applyBotDamageToPlayer(weaponId, botId, damageOverride) {
   if (!me || !dmg) { console.warn('[damage] no me or dmg', me, dmg); return; }
   const oldHp = me.hp;
   me.hp = Math.max(0, me.hp - dmg);
+  if (!botId) reportEnvironmentDamage(oldHp-me.hp, weaponId);
   console.log(`[damage] bot hit: ${weaponId}(${dmg}dmg) ${oldHp}→${me.hp}`);
   updateHealthHUD(me.hp);
   if (oldHp > 75 && me.hp <= 75 && me.hp > 0) playSoundEvent('low_hp', { volume: 1.0, minGap: 2500 });
@@ -56325,6 +56356,7 @@ function updateWeaponSelector() {
 const WEAPON_DAMAGE = Object.fromEntries(WEAPONS.map(w=>[w.id, w.damage]));
 
 socket.on('init', data => {
+  pendingEnvironmentDamage.length = 0; environmentDamageSeq = 0; environmentDamageAck = 0;
   myId = data.id; players = data.players;
   Object.entries(players).forEach(([pid,p]) => { if(pid!==myId) spawnRemotePlayer(p); });
   const me = players[myId];
@@ -56632,6 +56664,7 @@ socket.on('sessionReplaced', async () => {
 socket.on('nameRefused', () => console.warn('[auth] the server refused this name — sign in again'));
 
 socket.on('playerHit', data => {
+  const healthOnly = data.healthEvent === 'environment' || data.healthEvent === 'heal';
   if (data.shooterId && data.weapon) noteKillInfo(data.targetId, data.shooterId, data.weapon, data.headshot, { tags: data.tags });   // for the kill feed
   // Range mode: player is invincible — just ignore any damage (no healSelf to avoid server loop)
   if (data.targetId === myId && match?.type === 'range') {
@@ -56640,7 +56673,7 @@ socket.on('playerHit', data => {
     return;
   }
   // If it's us and we have spawn shield, absorb the hit visually but ignore HP change
-  if (data.targetId === myId && isShielded()) {
+  if (data.targetId === myId && !healthOnly && isShielded()) {
     const lost = Math.max(0, (players[myId]?.hp ?? data.hp) - data.hp);
     if (lost > 0) socket.emit('healSelf', { amount: lost });   // give it back: the server took it before the shield could say no
     flashHitIndicator('guard'); // shield absorbed it; no health-damage flash
@@ -56661,7 +56694,7 @@ socket.on('playerHit', data => {
     }
   }
   // Lightsabre parry: absorb incoming damage
-  if (data.targetId === myId && !incomingPiercesDefense && meleeAbilityBuff?.type === 'parry') {
+  if (data.targetId === myId && !healthOnly && !incomingPiercesDefense && meleeAbilityBuff?.type === 'parry') {
     const oldHp = players[myId]?.hp ?? data.hp;
     const dmgAbsorbed = Math.max(0, oldHp - data.hp);
     flashHitIndicator('guard');
@@ -56674,7 +56707,7 @@ socket.on('playerHit', data => {
     return;
   }
   // Katana deflect: absorb AND reflect damage back to nearest enemy
-  if (data.targetId === myId && !incomingPiercesDefense && meleeAbilityBuff?.type === 'deflect') {
+  if (data.targetId === myId && !healthOnly && !incomingPiercesDefense && meleeAbilityBuff?.type === 'deflect') {
     const oldHp = players[myId]?.hp ?? data.hp;
     const dmgAbsorbed = Math.max(0, oldHp - data.hp);
     flashHitIndicator('guard');
@@ -56701,7 +56734,7 @@ socket.on('playerHit', data => {
     return;
   }
   // Riot shield blocks frontal hits when not swinging
-  if (data.targetId === myId && !incomingPiercesDefense && isRiotShieldBlocking()) {
+  if (data.targetId === myId && !healthOnly && !incomingPiercesDefense && isRiotShieldBlocking()) {
     const oldHp = players[myId]?.hp ?? data.hp;
     const dmgAbsorbed = Math.max(0, oldHp - data.hp);
     depleteRiotShield(dmgAbsorbed);
@@ -56714,6 +56747,7 @@ socket.on('playerHit', data => {
     return;
   }
   const hpBeforeServerHit = data.targetId === myId ? (players[myId]?.hp ?? 300) : null;
+  if (data.targetId === myId) data = { ...data, hp: reconcileEnvironmentHealth(data,hpBeforeServerHit) };
   if (data.targetId === myId && hpBeforeServerHit != null && data.hp < hpBeforeServerHit) {
     cancelMedkitHeal('interrupted by damage');
   }
@@ -56758,7 +56792,7 @@ socket.on('playerHit', data => {
   if (data.targetId===myId) {
     updateHealthHUD(data.hp);
     if (hpBeforeServerHit != null && data.hp < hpBeforeServerHit) flashDamageScreen(hpBeforeServerHit - data.hp);
-    if (data.shooterId) showDamageDirection(data.shooterId); else flashHitIndicator();
+    if (!healthOnly) { if (data.shooterId) showDamageDirection(data.shooterId); else flashHitIndicator(); }
     const _vfx = WEAPONS.find(w => w.id === data.weapon)?.visionHit;
     if (_vfx) applyVisionHitEffect(_vfx);
   }

@@ -124,6 +124,34 @@ try {
   console.log('   this is a runtime failure during module evaluation, not a syntax error.');
 }
 
+if (ok && process.argv.includes('--environment-health')) {
+  const issues = vm.runInThisContext(`(() => {
+    const issues=[],saved={me:players[myId],seq:environmentDamageSeq,ack:environmentDamageAck,pending:pendingEnvironmentDamage.slice()};
+    try {
+      pendingEnvironmentDamage.length=0;environmentDamageSeq=0;environmentDamageAck=0;
+      players[myId]={hp:300,matchId:'health-test'};
+      applyEnvironmentDamage(100,'lava');
+      if(players[myId].hp!==200||pendingEnvironmentDamage.length!==1)issues.push('environment damage not recorded');
+      const afterShot=reconcileEnvironmentHealth({hp:270,environmentSeq:0},200);
+      if(afterShot!==170)issues.push('player shot restores pending environmental damage');
+      if(reconcileEnvironmentHealth({hp:170,environmentSeq:1,healthEvent:'environment'},170)!==170||pendingEnvironmentDamage.length)issues.push('ack double-applies damage');
+      if(reconcileEnvironmentHealth({hp:220,environmentSeq:1,healthEvent:'heal'},170)!==220)issues.push('healing is blocked');
+      if(reconcileEnvironmentHealth({hp:300,environmentSeq:0},220)!==220)issues.push('older snapshot restores HP');
+      pendingEnvironmentDamage.push({seq:2,amount:20},{seq:3,amount:30});
+      if(reconcileEnvironmentHealth({hp:200,environmentSeq:2},200)!==170)issues.push('partial ack loses pending tick');
+      if(pendingEnvironmentDamage.length!==1||pendingEnvironmentDamage[0].seq!==3)issues.push('partial ack clears wrong ticks');
+      players[myId].hp=25;const lost=applyEnvironmentDamage(100,'lava');
+      if(lost!==25||players[myId].hp!==0)issues.push('lethal hazard reports more HP than lost');
+    } finally {
+      if(saved.me===undefined)delete players[myId];else players[myId]=saved.me;
+      environmentDamageSeq=saved.seq;environmentDamageAck=saved.ack;pendingEnvironmentDamage.splice(0,pendingEnvironmentDamage.length,...saved.pending);
+    }
+    return issues;
+  })()`);
+  if(issues.length){ok=false;console.log('environment health failures:\n'+issues.join('\n'));}
+  else console.log('environment health: hazard + shot, pending ticks, partial/stale acks, real healing and lethal damage');
+}
+
 if (ok && process.argv.includes('--combat-feedback')) {
   const issues = vm.runInThisContext(`(() => {
     const issues=[],saved={gameStarted,isDead,yaw:euler.y,position:camera.position.clone(),inLobby,
