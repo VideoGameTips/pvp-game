@@ -36537,7 +36537,7 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
     elbowL: armElbows[0], elbowR: armElbows[1],
     wristL: armWrists[0], wristR: armWrists[1],
     handL: hands[0], handR: hands[1],
-    head, torso, neck, pelvis, gripR,
+    head, torso, neck, pelvis, gripR, gearBody,
     // Everything that wears the shirt colour, for callers that tint a whole
     // body at once (the killcam paints the killer blue and the victim red).
     // Read AFTER the skin has been applied, and flattened: a drawn skin
@@ -37004,10 +37004,8 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
   // Three stances, blended: the tactical low walk a bot (or anyone moving) keeps, a CROUCH, and a SLIDE. The crouch
   // used to fold the legs a quarter of the way (hip -0.72 / -0.28, one foot behind the other), which lowered the body
   // by about a hand's width and read as standing with bent knees; the slide was a lunge with one leg trailing. Now:
-  //   crouch -- a squat. Thighs close to horizontal, knees folded right over, boots flat, so the hips come down
-  //             about 0.3 m and the whole upper body with them (the foot plant below does that on its own).
-  //   slide  -- sat on the floor. Legs out in front and a touch above the ground, hips down on the thighs, leaning
-  //             back; it moves forward because the body does.
+  //   crouch -- a staggered low combat stance: front knee loaded, rear knee low, chest over the weapon.
+  //   slide  -- one leg leads, the other folds close, and the whole upper body reclines from the waist.
   // They are weights, not a switch: the crouch amount follows the eye height (1.10 m = 0.58 = a full crouch) and
   // the slide amount is the eased `slide`, so going in and out of either is one continuous movement.
   if (rig.ck === undefined) rig.ck = 0;
@@ -37019,13 +37017,12 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
     const advanceLean = 0.22 + run * 0.16 + (tacticalAdvance ? 0.04 : 0);
     // adv: tactical walk · crc: crouch · sld: slide
     const pose = (adv, crc, sld) => L(L(adv, crc, ck), sld, sl);
-    rig.legL.rotation.x = L(rig.legL.rotation.x, pose(-0.38, -1.45, -1.80), w);
-    rig.legR.rotation.x = L(rig.legR.rotation.x, pose( 0.16, -1.35, -1.62), w);
-    if (rig.kneeL) rig.kneeL.rotation.x = L(rig.kneeL.rotation.x, pose(0.62, 2.25, 0.20), w);
-    if (rig.kneeR) rig.kneeR.rotation.x = L(rig.kneeR.rotation.x, pose(0.46, 2.10, 0.32), w);
-    // Flat boots when squatting (the ankle undoes hip + knee), toes up when sat.
-    if (rig.footL) rig.footL.rotation.x = L(rig.footL.rotation.x, pose(-0.12, -0.80, 0.05), w);
-    if (rig.footR) rig.footR.rotation.x = L(rig.footR.rotation.x, pose(-0.08, -0.75, -0.05), w);
+    rig.legL.rotation.x = L(rig.legL.rotation.x, pose(-0.38, -1.05, -1.48), w);
+    rig.legR.rotation.x = L(rig.legR.rotation.x, pose( 0.16, -0.10, -2.05), w);
+    if (rig.kneeL) rig.kneeL.rotation.x = L(rig.kneeL.rotation.x, pose(0.62, 1.90, 0.12), w);
+    if (rig.kneeR) rig.kneeR.rotation.x = L(rig.kneeR.rotation.x, pose(0.46, 1.75, 2.00), w);
+    if (rig.footL) rig.footL.rotation.x = L(rig.footL.rotation.x, pose(-0.12, -0.85, 1.02), w);
+    if (rig.footR) rig.footR.rotation.x = L(rig.footR.rotation.x, pose(-0.08, -1.65, 0.05), w);
     // Crouch-walking: the legs still step, smaller, over the squat.
     const step = ck * (1 - sl) * 0.4;
     if (step > 0.001) {
@@ -37044,8 +37041,8 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
                                : pose(-1.38, -0.8, -1.55);
     rig.armL.rotation.x = L(rig.armL.rotation.x, armLT, w);
     rig.armR.rotation.x = L(rig.armR.rotation.x, armRT, w);
-    rig.torso.rotation.x = L(rig.torso.rotation.x, pose(advanceLean, 0.30, -0.40), w);
-    rig.head.rotation.x  = L(rig.head.rotation.x, pose(-0.12, -0.20, 0.30), w);
+    rig.torso.rotation.x = L(rig.torso.rotation.x, pose(advanceLean, 0.50, -0.82), w);
+    rig.head.rotation.x  = L(rig.head.rotation.x, pose(-0.12, -0.10, 0.02), w);
     const elbLT = rig.holdsGun ? SUP.ex : pose(-0.85, -0.7, -1.05);
     const elbRT = rig.holdsGun ? (rig.firePose ? rig.firePose.ex : GUN_HOLD.elbowX) : pose(-0.9, -0.7, -1.15);
     if (rig.elbowL) rig.elbowL.rotation.x = L(rig.elbowL.rotation.x, elbLT, w);
@@ -37091,8 +37088,8 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
   rig.torso.rotation.x += aim * 0.26 + rk * 0.10;      // a reload bows the chest over the weapon
   // Intent. Nobody in a firefight walks upright: the chest is thrown forward into the move (more the faster it is), the
   // chin comes down behind the shoulders, and a body holding a gun stands braced rather than at ease.
-  rig.torso.rotation.x += lean * (0.07 + run * 0.20) + (rig.holdsGun ? idle * 0.06 : 0);
-  rig.head.rotation.x  -= lean * (0.03 + run * 0.09);
+  rig.torso.rotation.x += (lean * (0.07 + run * 0.20) + (rig.holdsGun ? idle * 0.06 : 0)) * (1-slide);
+  rig.head.rotation.x  -= lean * (0.03 + run * 0.09) * (1-slide);
   rig.head.rotation.x = Math.max(-1.0, Math.min(1.0, rig.head.rotation.x + aim * 0.62));
   if (rig.pelvis) {
     // Keep the trunk facing the same direction through strides and jumps.
@@ -37193,8 +37190,13 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
   // a chasing bot, shots at its head passed straight through and shots at its
   // chest came back as headshots. These follow the art instead, bob and all, so
   // a target that really is lower really does have a lower hitbox.
-  rig.hitHeadOff = BODY.headY + bobAmt;
-  rig.hitBodyOff = 1.02 + bobAmt;
+  const stancePitch = rig.torso.rotation.x * Math.max(ck,sl) * (1-jump);
+  if (rig.neck) rig.neck.rotation.x += stancePitch;
+  const upperY = y => BODY.waist + (y-BODY.waist)*Math.cos(stancePitch);
+  rig.hitHeadOff = upperY(BODY.headY) + bobAmt;
+  rig.hitBodyOff = upperY(1.02) + bobAmt;
+  rig.hitHeadZ = (BODY.headY-BODY.waist)*Math.sin(stancePitch);
+  rig.hitBodyZ = (1.02-BODY.waist)*Math.sin(stancePitch);
 
   // This drives EVERY direct child off a captured base Y rather than bobbing a
   // wrapper group, because the skin code parents helmets, visors, ears and the
@@ -37206,7 +37208,13 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
   for (const child of poseChildren) {
     if (child.isSprite) continue;                 // name tag stays legible
     if (child._baseY === undefined) child._baseY = child.position.y;
+    if (child._stanceBaseZ === undefined) child._stanceBaseZ = child.position.z;
     child.position.y = child._baseY + bobAmt;
+    if (child===rig.torso || child===rig.head || child===rig.neck || child===rig.armL || child===rig.armR || child===rig.gearBody) {
+      child.position.y = upperY(child._baseY) + bobAmt;
+      child.position.z = child._stanceBaseZ + (child._baseY-BODY.waist)*Math.sin(stancePitch);
+      if (child === rig.gearBody) child.rotation.x = stancePitch;
+    }
   }
 }
 
@@ -53453,7 +53461,8 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false, opts = 
   let headMiss = Number.isFinite(opts.headMiss) ? opts.headMiss : null;
   if (headshot && headMiss == null && hitWorldPos && mesh) {
     const off = (mesh._rig && mesh._rig.hitHeadOff !== undefined) ? mesh._rig.hitHeadOff : 1.65;
-    headMiss = Math.hypot(hitWorldPos.x - mesh.position.x, hitWorldPos.y - (mesh.position.y + off), hitWorldPos.z - mesh.position.z);
+    const z = mesh._rig?.hitHeadZ || 0;
+    headMiss = Math.hypot(hitWorldPos.x - (mesh.position.x+Math.sin(mesh.rotation.y)*z), hitWorldPos.y - (mesh.position.y + off), hitWorldPos.z - (mesh.position.z+Math.cos(mesh.rotation.y)*z));
   }
   hitFeedback(pid, mesh, hitWorldPos, dmg, headshot, Number.isFinite(opts.damageOverride) ? 1 : falloff, headMiss);
   // Switchblade Gun: any successful hit re-charges to the 100-dmg shot
@@ -54054,12 +54063,15 @@ function updateBullets(dt) {
         const _rg = mesh._rig;
         const headOff = (_rg && _rg.hitHeadOff !== undefined) ? _rg.hitHeadOff : 1.65;
         const bodyOff = (_rg && _rg.hitBodyOff !== undefined) ? _rg.hitBodyOff : 1.0;
+        const headZ = _rg?.hitHeadZ || 0, bodyZ = _rg?.hitBodyZ || 0;
+        const hx = mesh.position.x+Math.sin(mesh.rotation.y)*headZ, hz = mesh.position.z+Math.cos(mesh.rotation.y)*headZ;
+        const bx = mesh.position.x+Math.sin(mesh.rotation.y)*bodyZ, bz = mesh.position.z+Math.cos(mesh.rotation.y)*bodyZ;
 
         if (segLenSq > 0.0001) {
           // --- Head sphere: center at (mesh.x, mesh.y+headOff, mesh.z), r=0.28
-          let dox = mesh.position.x - px0, doy = mesh.position.y + headOff - py0, doz = mesh.position.z - pz0;
+          let dox = hx - px0, doy = mesh.position.y + headOff - py0, doz = hz - pz0;
           let t = Math.max(0, Math.min(1, (dox*sx + doy*sy + doz*sz) / segLenSq));
-          let cx = px0 + t*sx - mesh.position.x, cy = py0 + t*sy - (mesh.position.y+headOff), cz = pz0 + t*sz - mesh.position.z;
+          let cx = px0 + t*sx - hx, cy = py0 + t*sy - (mesh.position.y+headOff), cz = pz0 + t*sz - hz;
           if (cx*cx + cy*cy + cz*cz < headR*headR) {
             isHeadshot = true; hitX = px0+t*sx; hitY = py0+t*sy; hitZ = pz0+t*sz;
             hitT = t;
@@ -54067,9 +54079,9 @@ function updateBullets(dt) {
           }
           if (!isHeadshot) {
             // --- Body sphere: center at (mesh.x, mesh.y+bodyOff, mesh.z), r=0.65 (+ bullet radius)
-            dox = mesh.position.x - px0; doy = mesh.position.y + bodyOff - py0; doz = mesh.position.z - pz0;
+            dox = bx - px0; doy = mesh.position.y + bodyOff - py0; doz = bz - pz0;
             t = Math.max(0, Math.min(1, (dox*sx + doy*sy + doz*sz) / segLenSq));
-            cx = px0+t*sx - mesh.position.x; cy = py0+t*sy - (mesh.position.y+bodyOff); cz = pz0+t*sz - mesh.position.z;
+            cx = px0+t*sx - bx; cy = py0+t*sy - (mesh.position.y+bodyOff); cz = pz0+t*sz - bz;
             if (cx*cx + cy*cy + cz*cz < bodyR*bodyR) {
               isBodyHit = true; hitX = px0+t*sx; hitY = py0+t*sy; hitZ = pz0+t*sz;
               hitT = t;
@@ -54077,10 +54089,10 @@ function updateBullets(dt) {
           }
         } else {
           // Bullet didn't travel this frame — plain point test
-          const headPos = _ppos.set(mesh.position.x, mesh.position.y + headOff, mesh.position.z);
+          const headPos = _ppos.set(hx, mesh.position.y + headOff, hz);
           isHeadshot = _bpos.distanceTo(headPos) < headR;
           if (isHeadshot) headMissD = _bpos.distanceTo(headPos);
-          _ppos.set(mesh.position.x, mesh.position.y + bodyOff, mesh.position.z);
+          _ppos.set(bx, mesh.position.y + bodyOff, bz);
           isBodyHit = !isHeadshot && _bpos.distanceTo(_ppos) < bodyR;
         }
         if (!isHeadshot && !isBodyHit) continue;

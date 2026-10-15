@@ -917,6 +917,37 @@ if (ok && process.argv.includes('--perspectives')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+if (ok && process.argv.includes('--stances')) {
+  const issues=vm.runInThisContext(`(() => {
+    const issues=[];
+    for(const bot of [false,true])for(const armed of [false,true])for(const stance of ['crouch','slide']) {
+      const mesh=makePlayerMesh('Stance test',bot,'ally','default'),r=mesh._rig;
+      r.holdsGun=armed;r.gaitOffset=0;r.gaitAmp=1;r.gaitAsym=1;
+      try {
+        for(let i=0;i<100;i++) {
+          if(stance==='slide')mesh.position.z+=.12;
+          animateCharacterMesh(mesh,1/60,.58,stance==='slide'?1:0,0,0);
+        }
+        mesh.updateMatrixWorld(true);
+        const head=r.head.getWorldPosition(new THREE.Vector3()),neck=r.neck.getWorldPosition(new THREE.Vector3());
+        if(Math.abs(head.y-mesh.position.y-r.hitHeadOff)>.001||Math.abs(head.z-mesh.position.z-r.hitHeadZ)>.001)issues.push('pose hitbox misses drawn head');
+        if(Math.abs(head.distanceTo(neck)-(BODY.headY-BODY.neckY))>.002)issues.push('head detaches from neck');
+        const a=r.footL.getWorldPosition(new THREE.Vector3()),b=r.footR.getWorldPosition(new THREE.Vector3());
+        if(stance==='crouch'&&Math.abs(a.z-b.z)<.2)issues.push('crouch remains a symmetrical squat');
+        if(stance==='slide'&&(r.torso.rotation.x>-.7||head.z-mesh.position.z>-.4))issues.push('slide lacks backward body lean');
+        for(const foot of [r.footL,r.footR])if(new THREE.Box3().setFromObject(foot).min.y<-.015)issues.push('boot clips floor');
+        mesh.rotation.y=Math.PI/2;mesh.updateMatrixWorld(true);
+        if(Math.abs(r.head.getWorldPosition(new THREE.Vector3()).x-mesh.position.x-r.hitHeadZ)>.001)issues.push('head offset does not turn with character');
+        for(let i=0;i<120;i++)animateCharacterMesh(mesh,1/60,0,0,0,0);
+        if(Math.abs(r.head.position.z)>.001||Math.abs(r.armR.position.z)>.001)issues.push('stance offset remains after standing');
+      }finally{disposeBody(mesh);}
+    }
+    return [...new Set(issues)];
+  })()`);
+  if(issues.length){ok=false;console.log('stance failures:\n'+issues.join('\n'));}
+  else console.log('stances: players/bots, staggered crouch, reclining slide, connected trunk, grounded boots, following hitboxes and reset');
+}
+
 if (ok && process.argv.includes('--steady-body')) {
   const issues = vm.runInThisContext(`(() => {
     const issues = [];
