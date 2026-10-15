@@ -2734,7 +2734,11 @@ io.on('connection', (socket) => {
   socket.on('matchEvent', (evt) => {
     const me = players[socket.id];
     if (!me || me.matchId === 'lobby' || me.matchId === HUB_MATCH) return;   // matches only, not the menus or the hub
-    if (!evt || typeof evt !== 'object' || JSON.stringify(evt).length > 2000) return;
+    if (!evt || typeof evt !== 'object') return;
+    // A final replay includes two actors' position samples; ordinary score events stay small.
+    const maxBytes = evt.t === 'end' ? 16384 : 2000;
+    if (JSON.stringify(evt).length > maxBytes) return;
+    if (evt.finale && (!Array.isArray(evt.finale.frames) || evt.finale.frames.length > 11)) return;
     emitToMatchExcept(me.matchId, socket.id, 'matchEvent', { from: socket.id, evt });
   });
 

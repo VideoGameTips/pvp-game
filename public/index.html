@@ -912,6 +912,32 @@
     body.killcam-on #match-announce, body.killcam-on #match-hud, body.killcam-on #floating-settings-btn,
     body.killcam-on .bot-speech { visibility: hidden; }
 
+    #match-finale {
+      position: fixed; inset: 0; z-index: 9800; display: none; flex-direction: column;
+      justify-content: space-between; align-items: center; pointer-events: none;
+      box-sizing: border-box; padding: 28px 20px 22px;
+      border-top: 18px solid #050909; border-bottom: 18px solid #050909;
+      color: #fff; font-family: Arial, sans-serif; text-align: center;
+      text-shadow: 0 2px 8px #000, 0 1px 2px #000;
+    }
+    #match-finale header { max-width: 100%; }
+    #match-finale small { font-size: 12px; color: #ffe4a0; font-weight: 700; letter-spacing: 0; }
+    #match-finale h2 { font-size: 32px; line-height: 1.1; margin: 8px 0; overflow-wrap: anywhere; }
+    #match-finale p { font-size: 13px; margin: 0; overflow-wrap: anywhere; }
+    #match-finale footer { display: flex; gap: 16px; align-items: center; max-width: 100%; }
+    #match-finale .finale-progress { width: min(260px, 38vw); height: 3px; background: #ffffff40; }
+    #match-finale i { display: block; height: 100%; width: 0; background: #75e5ca; }
+    #match-finale button { pointer-events: auto; min-height: 44px; padding: 8px 14px; cursor: pointer;
+      border: 1px solid #b3c4bf; border-radius: 4px; background: #0c1a19dd; color: #fff; font-weight: 700; }
+    body.match-finale-on .dmg-number, body.match-finale-on #scope-overlay,
+    body.match-finale-on #weapon-selector, body.match-finale-on #killcam-ui,
+    body.match-finale-on #death-screen, body.match-finale-on #waiting-screen,
+    body.match-finale-on #loadout-screen { visibility: hidden !important; }
+    @media (max-width: 600px) {
+      #match-finale { padding: 20px 12px 16px; border-width: 12px 0; }
+      #match-finale h2 { font-size: 25px; }
+    }
+
     /* ── Frontlines HUD ── */
     #frontline-hud {
       display: none; position: absolute; top: 58px; left: 50%; transform: translateX(-50%);

@@ -1311,6 +1311,45 @@ if (ok && process.argv.includes('--quickmelee')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+if (ok && process.argv.includes('--match-finale')) {
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [], check = (v, m) => { if (!v) issues.push(m); };
+    myId = 'finale-self'; currentUser = { username: 'Finale Tester' };
+    players[myId] = { id: myId, team: 'ally', skin: 'default' };
+    players['finale-mate'] = { id: 'finale-mate', name: 'Teammate', team: 'ally', skin: 'spiky', weaponId: 'pistol' };
+    players['finale-enemy'] = { id: 'finale-enemy', name: 'Enemy', team: 'enemy', skin: 'default', weaponId: 'pistol', x: 6, z: 2 };
+    pvpMatch = null;
+    match = { type: 'race', active: false, over: true, cfg: {} };
+    matchScore = { [myId]: 7, 'finale-mate': 7, 'finale-enemy': 4 };
+    matchDeaths = { [myId]: 1, 'finale-mate': 2 };
+    check(finaleRoster()[0].id === myId, 'MVP must use match kills, then deaths');
+    noteKillInfo('finale-enemy', myId, 'pistol', true);
+    captureFinalKill('finale-enemy', myId);
+    const clip = MATCH_FINALE.lastKill;
+    captureFinalKill(myId, myId);
+    check(MATCH_FINALE.lastKill === clip, 'Self elimination must not replace final combat kill');
+    check(JSON.parse(JSON.stringify(clip)).frames.length > 0, 'Final kill must be network serializable');
+    MATCH_FINALE.lastKill = null;
+    check(startMatchFinale('ally'), 'Scored match should start finale without a replay');
+    check(MATCH_FINALE.phase === 'lineup', 'No recorded kill should go straight to MVP');
+    updateMatchFinale(MATCH_FINALE.startedAt + 200);
+    check(MATCH_FINALE.lineup.slice(1).every(x => !x.body.visible), 'Teammates should not appear immediately');
+    updateMatchFinale(MATCH_FINALE.startedAt + 4000);
+    check(MATCH_FINALE.lineup.length === 2, 'MVP lineup must exclude the other team');
+    check(MATCH_FINALE.lineup.every(x => x.body.visible), 'Teammates should reveal after MVP');
+    stopMatchFinale(true);
+    check(!MATCH_FINALE.active && !MATCH_FINALE.stage && !MATCH_FINALE.replay, 'Finale resources must clear');
+    resetMatchRivals();
+    check(!MATCH_FINALE.lastKill && KILLCAM.buf.length === 0, 'New matches must clear old replays');
+    match.type = 'wave_dash';
+    check(!startMatchFinale('ally'), 'Wave Dash must keep its own results');
+    match = null;
+    return issues;
+  })()`);
+  console.log('match finale checks: ranking, self kills, network clip, staggered team reveal, cleanup and non-combat modes');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 if (ok && process.env.MAP_REVIEW_DIR) {
   fs.mkdirSync(process.env.MAP_REVIEW_DIR, { recursive: true });
   for (const name of ['forest', 'desert', 'tundra', 'refinery', 'space', 'volcano', 'titanic', 'carrier', 'pearl_harbor']) {

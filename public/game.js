@@ -41574,6 +41574,11 @@ function killcamSample(now) {
     if (!b) continue;
     ents[b.id] = { x: b.x, y: (b.y || 0) + 1, z: b.z, rotY: b.rotY || 0, rotX: b.rotX || 0 };
   }
+  for (const [id, mesh] of Object.entries(remoteMeshes)) {
+    if (ents[id] || !mesh.visible) continue;
+    ents[id] = { x: mesh.position.x, y: mesh.position.y + PLAYER_EYE_HEIGHT,
+      z: mesh.position.z, rotY: players[id]?.rotY || 0 };
+  }
   KILLCAM.buf.push({ t: now, entities: ents });
   if (KILLCAM.buf.length > KILLCAM.capacity) KILLCAM.buf.shift();
 }
@@ -41747,6 +41752,243 @@ function updateKillcam(now) {
   const label = (shot === KILLCAM_SHOTS[0] && KILLCAM.povBlocked) ? 'BEHIND THE KILLER' : shot.label;
   if (lbl._label !== label) { lbl._label = label; lbl.textContent = label; }
   ui.querySelector('.kc-fill').style.width = (t * 100).toFixed(1) + '%';
+}
+
+// Match finales use their own camera and presentation scene, never live player meshes.
+const MATCH_FINALE = { active: false, lastKill: null, ui: null };
+function finaleParticipant(id) {
+  const p = players[id], b = resolveBot(id);
+  if (!p && !b && id !== myId) return null;
+  return { id, name: id === myId ? (currentUser?.username || 'You') : (p?.name || 'Player'),
+    skin: id === myId ? mySkin : renderedSkinForPlayer(p || { skin: 'default' }),
+    hair: id === myId ? myHair : p?.hair,
+    team: id === myId ? 'ally' : b ? b.team : relTeam(p?.team),
+    weapon: id === myId ? (currentEquippedId() || currentWeapon?.id) : b?.weaponId || p?.weaponId,
+    kills: matchScore[id] || 0, deaths: matchDeaths[id] || 0 };
+}
+function finalePosition(id) {
+  if (id === myId) return { x: camera.position.x, y: playerFeetY(), z: camera.position.z, rotY: euler.y };
+  const b = resolveBot(id), mesh = remoteMeshes[id], p = players[id];
+  return { x: mesh?.position.x ?? b?.x ?? p?.x ?? 0, y: mesh?.position.y ?? b?.y ?? 0,
+    z: mesh?.position.z ?? b?.z ?? p?.z ?? 0, rotY: b?.rotY ?? p?.rotY ?? 0 };
+}
+function captureFinalKill(victimId, killerId) {
+  if (!killerId || killerId === victimId) return;
+  const killer = finaleParticipant(killerId), victim = finaleParticipant(victimId);
+  if (!killer || !victim) return;
+  const info = _killInfo[victimId];
+  const frames = KILLCAM.buf.slice(-10).map(f => {
+    const out = {};
+    for (const id of [killerId, victimId]) {
+      const e = f.entities[id];
+      if (e) out[id] = { ...e, y: Math.max(0, e.y - (resolveBot(id) ? 1 : PLAYER_EYE_HEIGHT)) };
+    }
+    return out;
+  });
+  frames.push({ [killerId]: finalePosition(killerId), [victimId]: finalePosition(victimId) });
+  MATCH_FINALE.lastKill = { killer, victim, weapon: info?.weapon || killer.weapon,
+    head: !!info?.head, frames, at: performance.now() };
+}
+function finaleRoster() {
+  return [...new Set([myId, ...gameBots.map(b => b.id), ...Object.keys(remoteMeshes), ...Object.keys(matchScore)])]
+    .map(finaleParticipant).filter(Boolean)
+    .sort((a,b) => b.kills - a.kills || a.deaths - b.deaths || String(a.id).localeCompare(String(b.id)));
+}
+function finaleUI() {
+  if (MATCH_FINALE.ui) return MATCH_FINALE.ui;
+  const ui = document.createElement('section'); ui.id = 'match-finale';
+  ui.setAttribute('aria-label', 'Match highlights');
+  ui.innerHTML = '<header><small></small><h2></h2><p></p></header><footer><div class="finale-progress"><i></i></div><button type="button" aria-label="Skip highlight">SKIP REPLAY &#9654;&#9654;</button></footer>';
+  document.body.appendChild(ui);
+  bindTap(ui.querySelector('button'), () => {
+    if (MATCH_FINALE.phase === 'kill') beginFinaleLineup(performance.now());
+    else stopMatchFinale(true);
+  });
+  return (MATCH_FINALE.ui = ui);
+}
+function finaleCaption(label, title, sub) {
+  const ui = finaleUI();
+  ui.querySelector('small').textContent = label;
+  ui.querySelector('h2').textContent = title;
+  ui.querySelector('p').textContent = sub;
+}
+function finaleActor(person, host, armed = true) {
+  const body = makePlayerMesh('', false, 'ally', person.skin, { hair: person.hair });
+  if (armed && person.weapon) armRemoteMesh(body, person.weapon);
+  if (body._rig) body._rig.tacticalAdvance = false;
+  host.add(body); MATCH_FINALE.actors.push(body);
+  return body;
+}
+function startMatchFinale(winner) {
+  if (match?.forfeit || !['elim','race','ffa','arcade','br','frontlines','laststand','dday'].includes(match?.type)) return false;
+  const roster = finaleRoster();
+  if (!roster.length || !roster[0].kills) return false;
+  // Clear death work before stopping the personal killcam, which releases queued callbacks.
+  matchEpoch++; cancelAutoRespawn(); _pendingDeathJobs.clear(); _afterKillcam.length = 0;
+  stopKillcam(); exitSpectator(); resetPlayerView(); stopSocialView();
+  const f = MATCH_FINALE;
+  f.active = true; f.owner = match; f.roster = roster; f.mvp = roster[0]; f.actors = [];
+  f.savedPos = camera.position.clone(); f.savedQuat = camera.quaternion.clone(); f.savedFov = camera.fov;
+  f.camera = new THREE.PerspectiveCamera(58, camera.aspect, .08, 600);
+  f.hidden = [];
+  for (const mesh of [...Object.values(remoteMeshes), ...camera.children]) {
+    if (mesh.visible) { f.hidden.push(mesh); mesh.visible = false; }
+  }
+  shooting = false; isADS = false; releasePointer();
+  document.body.classList.add('killcam-on', 'match-finale-on');
+  for (const id of ['match-over-screen','death-screen','waiting-screen','loadout-screen']) {
+    const el = document.getElementById(id); if (el) el.style.display = 'none';
+  }
+  finaleUI().style.display = 'flex';
+  finaleUI().querySelector('button').textContent = 'SKIP REPLAY >>';
+  const clip = f.lastKill;
+  if (clip && performance.now() - clip.at < 15000 && clip.frames.length > 1) {
+    f.phase = 'kill'; f.startedAt = performance.now(); f.clip = clip;
+    f.replay = new THREE.Group(); scene.add(f.replay);
+    f.shooter = finaleActor({ ...clip.killer, weapon: clip.weapon }, f.replay);
+    f.victim = finaleActor(clip.victim, f.replay, false);
+    const hitGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(.85, 1.85, .65));
+    f.hitbox = new THREE.LineSegments(hitGeo, new THREE.LineBasicMaterial({ color: 0xff5555, transparent: true, opacity: .75 }));
+    f.replay.add(f.hitbox);
+    f.trail = new THREE.Group(); f.replay.add(f.trail);
+    // One shared cylinder shape, a white core and a deliberately excessive light sleeve.
+    for (const [radius, opacity, color] of [[.035,1,0xffffff],[.13,.38,0x62ffe1],[.3,.12,0x62ffe1]]) {
+      f.trail.add(new THREE.Mesh(new THREE.CylinderGeometry(radius,radius,1,10),
+        new THREE.MeshBasicMaterial({color,transparent:opacity<1,opacity,depthWrite:false,blending:THREE.AdditiveBlending})));
+    }
+    f.projectile = new THREE.Mesh(new THREE.SphereGeometry(.15,12,8),new THREE.MeshBasicMaterial({color:0xfff4a2}));
+    f.replay.add(f.projectile);
+    f.impact = new THREE.Mesh(new THREE.RingGeometry(.18,.28,24),new THREE.MeshBasicMaterial({color:0xffe699,transparent:true,opacity:0,side:THREE.DoubleSide,depthWrite:false}));
+    f.replay.add(f.impact);
+    const sparks = new THREE.BufferGeometry(); sparks.setAttribute('position',new THREE.Float32BufferAttribute(new Float32Array(72),3));
+    f.sparks = new THREE.Points(sparks,new THREE.PointsMaterial({color:0xffe8a3,size:.07,transparent:true,opacity:.8,depthWrite:false,blending:THREE.AdditiveBlending}));
+    f.replay.add(f.sparks);
+    finaleCaption('FINAL ELIMINATION / 0.2x', clip.killer.name,
+      weaponDisplayName(clip.weapon) + '  /  ' + clip.victim.name + (clip.head ? '  /  HEADSHOT' : ''));
+  } else beginFinaleLineup(performance.now());
+  return true;
+}
+function beginFinaleLineup(now) {
+  const f = MATCH_FINALE; if (!f.active) return;
+  if (f.replay) { scene.remove(f.replay); f.replay.visible = false; }
+  f.phase = 'lineup'; f.startedAt = now;
+  f.stage = new THREE.Scene(); f.stage.background = new THREE.Color(0x101a1c);
+  f.stage.add(new THREE.HemisphereLight(0xe7faff, 0x44504a, 2));
+  const key = new THREE.DirectionalLight(0xffe1b0, 3); key.position.set(-3,7,5); f.stage.add(key);
+  const rim = new THREE.DirectionalLight(0x52d8cc, 3); rim.position.set(4,3,-3); f.stage.add(rim);
+  const solo = ['ffa','br'].includes(f.owner.type);
+  const team = solo ? [] : f.roster.filter(p=>p.id!==f.mvp.id && p.team===f.mvp.team);
+  const radius = team.length > 4 ? Math.max(6.5, 3 + Math.floor(team.length/8)*1.6) : 4;
+  const platform = new THREE.Mesh(new THREE.CylinderGeometry(radius,radius+.3,.28,64),new THREE.MeshStandardMaterial({color:0x536261,roughness:.3,metalness:.5}));
+  platform.position.y=-.15; f.stage.add(platform);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(radius-.2,.025,6,64),new THREE.MeshBasicMaterial({color:0xe9c570}));
+  ring.rotation.x=Math.PI/2; ring.position.y=.005; f.stage.add(ring);
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(160,160),new THREE.MeshStandardMaterial({color:0x263331,roughness:.65}));
+  ground.rotation.x=-Math.PI/2; ground.position.y=-.3; f.stage.add(ground);
+  f.lineup = [f.mvp,...team].map((person,i)=>({person,body:finaleActor(person,f.stage),i}));
+  f.lineup.forEach(({body,i})=>{
+    animateCharacterMesh(body,0,0);
+    if(body._rig){
+      body._rig.legL.rotation.z=.09;body._rig.legR.rotation.z=-.09;body._rig.head.rotation.x=-.08;
+      if(!i){body._rig.armR.rotation.z=-.2;body._rig.armL.rotation.z=.15;}
+    }
+    if(!i)body.scale.setScalar(1.08);
+  });
+  finaleCaption('MATCH MVP', f.mvp.name, f.mvp.kills+' KILLS  /  '+f.mvp.deaths+' DEATHS');
+  finaleUI().querySelector('button').textContent='RESULTS >>';
+}
+function finaleFrame(clip,id,r) {
+  const frames=clip.frames, index=Math.min(frames.length-1,Math.max(0,r)*(frames.length-1));
+  const a=frames[Math.floor(index)][id] || frames[frames.length-1][id];
+  const b=frames[Math.min(frames.length-1,Math.ceil(index))][id] || a;
+  const t=index-Math.floor(index), mix=(x,y)=>x+(y-x)*t;
+  return {x:mix(a.x,b.x),y:mix(a.y,b.y),z:mix(a.z,b.z),rotY:a.rotY+Math.atan2(Math.sin(b.rotY-a.rotY),Math.cos(b.rotY-a.rotY))*t};
+}
+function updateMatchFinale(now) {
+  const f=MATCH_FINALE;
+  if(!f.active)return;
+  if(match!==f.owner){stopMatchFinale(false);return;}
+  const t=(now-f.startedAt)/1000, reduced=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  f.camera.aspect=camera.aspect; f.camera.updateProjectionMatrix();
+  if(f.phase==='kill'){
+    if(t>=4.8){beginFinaleLineup(now);return;}
+    const r=Math.min(1,t/4),clip=f.clip;
+    const k=finaleFrame(clip,clip.killer.id,r),v=finaleFrame(clip,clip.victim.id,r);
+    const place=(body,p)=>{body.position.set(p.x,p.y,p.z);body.rotation.y=p.rotY+Math.PI;animateCharacterMesh(body,.004,0);};
+    place(f.shooter,k);place(f.victim,v);
+    f.shooter.updateMatrixWorld(true);
+    const from=new THREE.Vector3(k.x,k.y+1.2,k.z),to=new THREE.Vector3(v.x,v.y+(clip.head?1.65:1.05),v.z);
+    if(f.shooter._rig?.gripR)f.shooter._rig.gripR.getWorldPosition(from);
+    from.addScaledVector(to.clone().sub(from).normalize(),.35);
+    const direction=to.clone().sub(from).normalize(),side=new THREE.Vector3(-direction.z,0,direction.x).normalize();
+    const distance=from.distanceTo(to),progress=Math.max(0,Math.min(1,(t-1.3)/2.5));
+    const longShot=distance>20;
+    const mid=from.clone().lerp(to,longShot?progress:.5);
+    const sideDistance=longShot?6:Math.max(5,distance*.9,(distance/2+1)/(Math.tan(58*Math.PI/360)*camera.aspect));
+    const desired=mid.clone().addScaledVector(side,sideDistance).addScaledVector(direction,reduced?0:Math.sin(t*.35)*.7);
+    desired.y=longShot?mid.y+.7:Math.max(k.y,v.y)+2.2;
+    // Pull the side camera in before a wall, rather than filming through solid scenery.
+    const offset=desired.clone().sub(mid),len=offset.length();
+    const obstruction=new THREE.Raycaster(mid,offset.normalize(),.1,len).intersectObject(MAP_GROUPS[activeMapName],true).find(h=>h.object.visible && !h.object.material?.transparent);
+    f.camera.position.copy(obstruction?mid.clone().addScaledVector(offset,Math.max(.4,obstruction.distance-.3)):desired);
+    f.camera.lookAt(mid);
+    const tip=from.clone().lerp(to,progress);
+    const melee=MELEE_ITEMS.some(w=>w.id===clip.weapon);
+    f.trail.visible=f.projectile.visible=!melee && progress>0;
+    f.trail.position.copy(from).lerp(tip,.5);f.trail.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),direction);
+    for(const mesh of f.trail.children)mesh.scale.y=Math.max(.01,from.distanceTo(tip));
+    f.projectile.position.copy(tip);
+    f.sparks.visible=!melee && progress>0;
+    const points=f.sparks.geometry.attributes.position;
+    for(let i=0;i<points.count;i++){
+      const q=(i+1)/points.count,p=from.clone().lerp(tip,q),a=i*2.4+t*2;
+      p.addScaledVector(side,Math.sin(a)*.18*(1-q));p.y+=Math.cos(a)*.18*(1-q);
+      points.setXYZ(i,p.x,p.y,p.z);
+    }
+    points.needsUpdate=true;f.sparks.geometry.computeBoundingSphere();
+    f.impact.visible=t>=3.8;f.impact.position.copy(to);f.impact.quaternion.copy(f.camera.quaternion);
+    f.impact.scale.setScalar(1+Math.max(0,t-3.8)*3);f.impact.material.opacity=Math.max(0,1-(t-3.8));
+    f.hitbox.position.set(v.x,v.y+.95,v.z);f.hitbox.rotation.y=v.rotY;
+    f.hitbox.material.opacity=t>3.8?.9:.2;
+    if(t>3.8)f.victim.rotation.z=-Math.min(.45,(t-3.8)*.45);
+    renderer.render(scene,f.camera);
+    finaleUI().querySelector('i').style.width=Math.min(100,t/4.8*100)+'%';
+  }else{
+    if(t>=7){stopMatchFinale(true);return;}
+    const count=f.lineup.length,spread=Math.min(5,Math.max(1,Math.ceil(Math.min(count,9)/2)));
+    f.lineup.forEach(({body,i})=>{
+      const delay=i===0?0:1.2+(i-1)*.22;
+      const reveal=Math.max(0,Math.min(1,(t-delay)/.8)),ease=reduced?Number(reveal>0):1-Math.pow(1-reveal,3);
+      const row=Math.floor(Math.max(0,i-1)/8),slot=((i-1)%8),sign=slot%2?-1:1;
+      const x=i?sign*(1.3+Math.floor(slot/2)*1.2):0,z=i?-1.2-row*1.6:0;
+      body.visible=i===0||reveal>0;body.position.set(x+(i?sign*(1-ease)*4:0),i?0:.03,z);
+      body.rotation.y=i?-sign*.12:Math.sin(t*.3)*.06;
+      body.updateMatrixWorld(true);
+      body.position.y-=new THREE.Box3().setFromObject(body).min.y;
+    });
+    const pullback=1-Math.pow(1-Math.min(1,Math.max(0,t-1)/3),2);
+    f.camera.fov=camera.aspect<.8?64:48;
+    const halfWidth=count>1?1.9+Math.floor((Math.min(count-1,8)-1)/2)*1.2:1;
+    const fitDistance=(halfWidth+.6)/(Math.tan(f.camera.fov*Math.PI/360)*camera.aspect);
+    const distance=Math.max(4.8+spread*1.15,fitDistance);
+    f.camera.position.set(reduced?0:Math.sin(t*.18)*.4,.95+Math.max(0,count-9)*.055,4.8+pullback*(distance-4.8));
+    f.camera.updateProjectionMatrix();f.camera.lookAt(0,1.05,-.3);
+    renderer.render(f.stage,f.camera);
+    finaleUI().querySelector('i').style.width=Math.min(100,t/7*100)+'%';
+  }
+}
+function stopMatchFinale(showResults=false) {
+  const f=MATCH_FINALE;if(!f.active)return;
+  f.active=false;document.body.classList.remove('killcam-on','match-finale-on');
+  if(f.ui)f.ui.style.display='none';
+  for(const mesh of f.hidden||[])mesh.visible=mesh._ownerId ? !players[mesh._ownerId]?.dead : true;
+  if(f.replay){scene.remove(f.replay);disposeBody(f.replay);}
+  if(f.stage)disposeBody(f.stage);
+  f.actors=[];f.replay=f.stage=null;f.hidden=[];
+  if(f.savedPos)camera.position.copy(f.savedPos);
+  if(f.savedQuat)camera.quaternion.copy(f.savedQuat);
+  camera.fov=f.savedFov||75;camera.updateProjectionMatrix();
+  if(showResults && match===f.owner && match?.over)document.getElementById('match-over-screen').style.display='flex';
 }
 
 // ── 📹 KILL LOG — save your kills and replay them from 6 cameras at once ──
@@ -55925,7 +56167,14 @@ socket.on('matchEvent', ({ from, evt } = {}) => {
   if (!mpGuest() || !mpTeamMatch() || !evt || from !== pvpMatch.hostId || match.over) return;
   if (evt.t === 'score' && match.type === 'race') { match.teamKills = relPair(evt.kills); updateMatchHUD(); }
   else if (evt.t === 'round' && match.type === 'elim') mpApplyRound(evt);
-  else if (evt.t === 'end') endMatch(evt.winner ? relTeam(evt.winner) : null, evt.reason || '');
+  else if (evt.t === 'end') {
+    if (evt.finale?.frames?.length && evt.finale.killer && evt.finale.victim) {
+      MATCH_FINALE.lastKill = { ...evt.finale, at: performance.now() };
+    }
+    if (evt.scores && typeof evt.scores === 'object') matchScore = { ...evt.scores };
+    if (evt.deaths && typeof evt.deaths === 'object') matchDeaths = { ...evt.deaths };
+    endMatch(evt.winner ? relTeam(evt.winner) : null, evt.reason || '');
+  }
 });
 // The host's bots' shots: flown here through our own hitbox test (updateBullets), so a
 // dodge counts on our screen and a hit is ours to report (botHitsMe) — as the host does (#48).
@@ -59226,8 +59475,9 @@ function onEntityDied(targetId, killerId) {
   pushKillfeed(targetId, killerId);
   if (killerId === myId && targetId !== myId) contractsOnKill(targetId);
   if (targetId === myId) contractsOnDeath();
-  if (killerId) matchScore[killerId]  = (matchScore[killerId]  || 0) + 1;   // #31: who is having the good match
+  if (killerId && killerId !== targetId) matchScore[killerId] = (matchScore[killerId] || 0) + 1;
   if (targetId) matchDeaths[targetId] = (matchDeaths[targetId] || 0) + 1;
+  captureFinalKill(targetId, killerId);
   if (match.tiebreaker) {
     // Whoever dies first loses the match
     if (targetId === myId) endMatch('enemy', 'TIEBREAKER — You fell first');
@@ -59860,7 +60110,8 @@ function endMatch(winner, reason) {
   match.active = false;
   contractsOnMatchEnd(winner);          // a win streak, and the contracts that were waiting on this match
   // The host's result is everyone's (#48). Not when players leaving ended it — they say so themselves.
-  if (mpHost() && mpTeamMatch() && !match.forfeit) mpSend({ t: 'end', winner: winner ? absTeam(winner) : null, reason: reason || '' });
+  if (mpHost() && mpTeamMatch() && !match.forfeit) mpSend({ t: 'end', winner: winner ? absTeam(winner) : null, reason: reason || '',
+    finale: MATCH_FINALE.lastKill, scores: matchScore, deaths: matchDeaths });
   // An FFA win counts toward FFA Legend. Sent before leaveMatch, while the
   // server still knows which match this was; it checks the rest itself.
   if (match.type === 'ffa' && winner === 'ally') socket.emit('ffaWin');
@@ -59944,6 +60195,7 @@ function endMatch(winner, reason) {
   }
   // Trials are one-match only — clear them so they re-cost next time.
   trialingThisMatch.clear();
+  startMatchFinale(winner);
 }
 
 // ── Bot AI ─────────────────────────────────────────────────────────────────
@@ -60110,7 +60362,7 @@ function recordCharMemory(charId, patch) {
 let matchRivals = {};   // charId → { charId, name, youKilled, killedYou }
 let matchScore  = {};   // entityId → kills this match (every mode; ffaKills only counts FFA)
 let matchDeaths = {};   // entityId → deaths this match
-function resetMatchRivals() { matchRivals = {}; matchScore = {}; matchDeaths = {}; }
+function resetMatchRivals() { matchRivals = {}; matchScore = {}; matchDeaths = {}; MATCH_FINALE.lastKill = null; KILLCAM.buf.length = 0; }
 function noteRival(bot, field) {
   if (!bot || !bot.charId) return;
   const r = matchRivals[bot.charId]
@@ -62139,6 +62391,11 @@ function loop() {
   updateFPSCounter(now);
   const dt = Math.min((now-lastTime)/1000, 0.05);
   lastTime = now;
+  if (MATCH_FINALE.active) {
+    try { updateMatchFinale(now); }
+    catch (error) { console.error('[match-finale]', error); stopMatchFinale(true); }
+    return;
+  }
   safeLoopStep('movement', () => updateMovement(dt));
   safeLoopStep('player-vel', () => updatePlayerVel(dt)); // measured speed, read by applyBlastImpulse's blast surf
   safeLoopStep('quick-melee', () => updateQuickMelee());  // and back to what you were holding
@@ -64014,6 +64271,7 @@ function afterDeath(ms, fn) {
 // Everything a finished match (or Lobby 13) leaves behind that the next start must not
 // inherit. Shared by the mode menu and the end-of-match buttons so they can't drift apart.
 function teardownMatchWorld() {
+  stopMatchFinale(false);
   window._mapLadder = null;
   serverUnlimitedMatchTime = false;
   finishBatCrowdClear();
