@@ -1311,6 +1311,31 @@ if (ok && process.argv.includes('--quickmelee')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+if (ok && process.argv.includes('--range')) {
+  const issues=vm.runInThisContext(`(() => {
+    const issues=[],check=(v,m)=>{if(!v)issues.push(m);};
+    check(!GENERATED_LAYOUT_MAPS.has('range'),'Range must not be overwritten by generated combat layout');
+    check(MAP_BOUNDS.range.halfX===20 && MAP_BOUNDS.range.halfZ===45,'Range bounds must match its physical perimeter');
+    check(rangeMapGroup.userData.trainingBays===5,'Range must have five firing bays');
+    check(MAP_THEMES.range.keep && MAP_THEMES.range.customDetail,'Range dressing must preserve clear lanes');
+    const count=rangeMapColliders.length;_upgradeMap('range');
+    check(rangeMapColliders.length===count,'Range cannot receive automatic combat cover');
+    for(const [x,z] of [[-14,26],[-7,26],[0,26],[7,26],[14,26],[-10,14],[10,14],[-8,10],[8,10],[-15,-10],[6,-22],[15,-32]]){
+      const origin=new THREE.Vector3(x,1.65,38),delta=new THREE.Vector3(x,2,z).sub(origin),len=delta.length();
+      rangeMapGroup.updateMatrixWorld(true);
+      const hits=new THREE.Raycaster(origin,delta.normalize(),.1,len-.6).intersectObject(rangeMapGroup,true);
+      check(!hits.some(h=>h.object.visible),'Blocked firing lane '+x+','+z);
+    }
+    const target=buildRangeTargetMesh();
+    const rings=target.children.filter(o=>o.geometry?.type==='CylinderGeometry' && o.geometry.parameters.radiusTop>.08);
+    check(rings.length===3 && rings.every(o=>o.position.z>0),'Bullseyes must face the firing house');
+    disposeBody(target);
+    return issues;
+  })()`);
+  console.log('range checks: dedicated layout, bounds, five booths, clear firing lines and visible bullseyes');
+  if(issues.length){ok=false;console.log(issues.join('\n'));}
+}
+
 if (ok && process.argv.includes('--lobby')) {
   const issues = vm.runInThisContext(`(() => {
     const issues=[],poly=MAP_GROUPS.lobby13.userData.lobbyFootprint,cols=MAP_COLLIDERS.lobby13;

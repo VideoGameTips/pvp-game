@@ -5528,7 +5528,7 @@ sun.shadow.radius = 2.5;
 scene.add(sun);
 
 function applyMapLighting(name) {
-  const concept = name === 'blank' || name === 'range';
+  const concept = name === 'blank';
   const indoor = ['space','orbital_station','sewer','gravity_lab','lockdown','studio','opera','labyrinth','m4_tower','m4_tower_big','m4_tower_super'].includes(name);
   const dark = indoor || ['volcano','doomsday','cyber','laser_vault','neon_tokyo'].includes(name);
   mapAmbient.intensity = concept ? .6 : dark ? .34 : .24;
@@ -6222,64 +6222,81 @@ function buildBattlefieldMap() {
 
 function buildRangeMap() {
   setMapBounds('range', 40, 90);
-  const addRM = (x, y, z, w, h, d, mat, collide) => {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
-    m.position.set(x, y, z);
-    rangeMapGroup.add(m);
-    m.castShadow = true; m.receiveShadow = true;
-    if (collide) { m.updateMatrixWorld(true); pushMeshColliders(rangeMapColliders, m); }
+  rangeMapGroup._skyColor = 0xb3d4df;
+  const shell=0xc9d2d2,steel=0x354449,teal=0x267b79,rubber=0x293632;
+  const part=(x,y,z,w,h,d,color,collide=false)=>{
+    const mesh=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),
+      new THREE.MeshPhongMaterial({color,shininess:color===steel?45:12}));
+    mesh.position.set(x,y,z);mesh.castShadow=mesh.receiveShadow=true;mesh.userData.mapStatic=true;
+    rangeMapGroup.add(mesh);
+    if(collide){mesh.updateMatrixWorld(true);pushMeshColliders(rangeMapColliders,mesh);}
+    return mesh;
   };
+  const label=(text,sub,x,y,z,width,turn=0)=>{
+    const cv=document.createElement('canvas');cv.width=1024;cv.height=256;
+    const ctx=cv.getContext('2d');ctx.fillStyle='#1c3031';ctx.fillRect(0,0,1024,256);
+    ctx.fillStyle='#7be1c7';ctx.fillRect(24,24,8,208);
+    ctx.fillStyle='#f3f5eb';ctx.font='bold 100px Arial';ctx.textBaseline='middle';ctx.fillText(text,60,100,920);
+    ctx.fillStyle='#b9d5d1';ctx.font='32px Arial';ctx.fillText(sub,64,193,900);
+    const texture=new THREE.CanvasTexture(cv);texture.colorSpace=THREE.SRGBColorSpace;
+    const mesh=new THREE.Mesh(new THREE.PlaneGeometry(width,width/4),new THREE.MeshBasicMaterial({map:texture}));
+    mesh.position.set(x,y,z);mesh.rotation.y=turn;rangeMapGroup.add(mesh);
+  };
+  const cv=document.createElement('canvas');cv.width=cv.height=256;
+  const ctx=cv.getContext('2d');ctx.fillStyle='#d1d7d6';ctx.fillRect(0,0,256,256);
+  for(let i=0;i<6000;i++){
+    ctx.fillStyle=i%3?'#c0c9c8':'#e1e5e1';
+    ctx.fillRect(i*73%256,(i*137+Math.floor(i/256)*31)%256,1,1);
+  }
+  const texture=new THREE.CanvasTexture(cv);texture.wrapS=texture.wrapT=THREE.RepeatWrapping;texture.repeat.set(10,22.5);
+  texture.colorSpace=THREE.SRGBColorSpace;
+  const floor=new THREE.Mesh(new THREE.PlaneGeometry(40,90),
+    new THREE.MeshPhongMaterial({color:0xffffff,map:texture,bumpMap:texture,bumpScale:.025,shininess:14}));
+  floor.rotation.x=-Math.PI/2;floor.receiveShadow=true;rangeMapGroup.add(floor);
 
-  // Floor — concrete/tan
-  const floorMat = new THREE.MeshLambertMaterial({ color: 0xb8a88a });
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(40, 90), floorMat);
-  floor.rotation.x = -Math.PI / 2;
-  floor.receiveShadow = true;
-  rangeMapGroup.add(floor);
-
-  // Faint grid
-  const grid = new THREE.GridHelper(90, 45, 0x999080, 0x999080);
-  grid.position.y = 0.02;
-  rangeMapGroup.add(grid);
-
-  // Wall materials
-  const wallMat  = new THREE.MeshLambertMaterial({ color: 0x7a7060 });
-  const bermMat  = new THREE.MeshLambertMaterial({ color: 0x4a7a30 });
-  const roofMat  = new THREE.MeshLambertMaterial({ color: 0x555045 });
-  const divMat   = new THREE.MeshLambertMaterial({ color: 0x9a8a70 });
-
-  // Outer side walls x=±20
-  addRM(-20, 2, 0,  1, 4, 90, wallMat, true);
-  addRM( 20, 2, 0,  1, 4, 90, wallMat, true);
-  // Back wall behind shooter z=45
-  addRM(0, 2, 45, 40, 4, 1, wallMat, true);
-  // Safety berm at back z=-42, tall green earth wall
-  addRM(0, 3, -42, 40, 6, 4, bermMat, true);
-
-  // Shooter canopy roof (visual only) — covers z=38 to 45, y=3.0
-  const canopyMesh = new THREE.Mesh(new THREE.BoxGeometry(40, 0.3, 7), roofMat);
-  canopyMesh.position.set(0, 3.0, 41.5);
-  rangeMapGroup.add(canopyMesh);
-
-  // Lane dividers — half-walls at x=-12, 0, +12, z from -10 to z=26, h=1.5 (visual only)
-  [-12, 0, 12].forEach(lx => {
-    const dm = new THREE.Mesh(new THREE.BoxGeometry(0.2, 1.5, 36), divMat);
-    dm.position.set(lx, 0.75, 8);
-    rangeMapGroup.add(dm);
+  // An outdoor downrange with a shaded firing house, never dividers through target paths.
+  for(const x of [-20,20]){
+    part(x,3.5,0,1,7,90,shell,true);
+    part(x+(x<0?.56:-.56),.85,0,.12,1.7,89,steel);
+    for(let z=-39;z<44;z+=6)part(x+(x<0?.6:-.6),3.7,z,.25,6.5,.3,steel);
+    for(const z of [-34,-14,6,16,26])label((36-z)+' M','DISTANCE FROM FIRING LINE',x<0?-19.32:19.32,3.5,z,5,x<0?Math.PI/2:-Math.PI/2);
+  }
+  part(0,3.5,45,40,7,1,shell,true);
+  part(0,3.8,-42,40,7.6,4,rubber,true);
+  // Angled-looking overlapping rubber fins and a steel backstop cap.
+  for(let x=-18;x<=18;x+=2)part(x,3.5,-39.85,1.55,6.7,.3,x%4?0x3c4b45:0x46554e);
+  part(0,7.7,-41,40,.35,3,steel,true);
+  label('PRECISION RANGE','STATIC / MOVING / LONG RANGE',0,5.6,-39.55,22);
+  part(0,5.85,39.5,40,.35,11,shell,true);
+  for(const x of [-19,-10.5,10.5,19])part(x,2.9,34.4,.3,5.8,.3,steel,true);
+  for(const z of [35.5,39,43]){
+    part(0,5.58,z,38,.09,.32,0xe9f5e8);
+    part(0,5.35,z,40,.3,.2,steel);
+  }
+  // Five booths with low rests, rear access and clear shooting corridors.
+  [-14,-7,0,7,14].forEach((x,i)=>{
+    part(x,.03,39,5.8,.05,9,0x4b625d);
+    part(x,.52,35.2,4.2,1.04,1,steel,true);
+    part(x,1.1,35.2,4.45,.12,1.15,0x7e9891,true);
+    part(x,1.19,35.25,2.5,.06,.6,rubber);
+    label('0'+(i+1),'FIRING BAY',x,3.9,34.15,3);
+    for(const dx of [-1,1])part(x+dx,4.9,34.2,.06,1.7,.06,steel);
+    part(x,5.32,34.5,2.8,.08,.2,0xf2dc9c);
   });
-
-  // Distance marker bands on floor
-  const markerColors = [0x44cc88, 0x4488cc, 0xcc8844, 0xcc4444];
-  const markerZs     = [28, 18, 8, -2];
-  markerZs.forEach((mz, i) => {
-    const mm = new THREE.Mesh(
-      new THREE.PlaneGeometry(40, 0.4),
-      new THREE.MeshLambertMaterial({ color: markerColors[i] })
-    );
-    mm.rotation.x = -Math.PI / 2;
-    mm.position.set(0, 0.02, mz);
-    rangeMapGroup.add(mm);
-  });
+  for(const x of [-17.5,-3.5,3.5,17.5])part(x,1.3,39,.18,2.6,7,0x718a88,true);
+  for(const [z,d] of [[26,10],[16,20],[6,30],[-14,50],[-34,70]]){
+    part(0,.025,z,38,.03,.18,d===10?0xd7ba59:0x547b76);
+    for(const x of [-17.8,17.8])label(d+' M','',x,1.8,z-.5,2.7);
+  }
+  part(0,.035,36,38,.04,.16,0xe6c760);
+  for(let x=-18;x<=18;x+=2)part(x,.04,33.5,1,.05,.15,0xa5bcb5);
+  // Recessed-looking rails underneath moving targets remain purely decorative.
+  for(const x of [-8,8]){part(x,.045,10,20,.05,.24,steel);part(x,.075,10,20,.025,.05,0xb6c8c1);}
+  part(-16,2,44.4,4,4,.2,steel);
+  part(-16,2,44.25,3.1,3.4,.08,teal);
+  label('LOBBY','RETURN TO THE CLUBHOUSE',-16,4.4,44.12,5.5,Math.PI);
+  label('SHOOTING RANGE','PVP ARENA / TRAINING DIVISION',5,4.5,44.12,18,Math.PI);
+  rangeMapGroup.userData.trainingBays=5;
 }
 
 function buildRangeTargetMesh() {
@@ -6305,9 +6322,9 @@ function buildRangeTargetMesh() {
 
   // Bullseye rings — using flat discs (CylinderGeometry rotated x=PI/2)
   const rings = [
-    { r: 0.30, color: 0xcc2222, z: -0.035 },
-    { r: 0.20, color: 0x2244cc, z: -0.038 },
-    { r: 0.09, color: 0xffdd00, z: -0.040 },
+    { r: 0.30, color: 0x242e32, z: 0.035 },
+    { r: 0.20, color: 0xf5f2e6, z: 0.075 },
+    { r: 0.09, color: 0xe2ac42, z: 0.115 },
   ];
   rings.forEach(({ r, color, z }) => {
     const rm = new THREE.Mesh(
@@ -8852,7 +8869,6 @@ function buildLobby13Map() {
     floor(-.7, z, .14, 1.2, teal); floor(.7, z, .14, 1.2, teal);
   }
   sign('PVP ARENA', 'LOBBY 13  /  TRAIN. EQUIP. CHALLENGE.', -3.5, 6.3, -30.8, 18);
-  sign('SEE YOU IN THE ARENA', 'LOBBY 13', 2, 5.7, 37.4, 14, Math.PI);
   sign('SQUAD HALL', '5 V 5   /   10 V 10', -24, 5.5, -35.8, 17);
   floor(-24,-26,21,21,0x50676b,.025);
   box(-24,8.4,-31.5,22,.35,11,shell);
@@ -8926,6 +8942,12 @@ function buildLobby13Map() {
   box(15,1,-23,3,2,1,steel);
   detail(15,1.8,-22.43,2.5,1.2,.1,0x40958c);
   sign('STYLE STUDIO', 'HAIR / OUTFITS',15,3.8,-24.35,5);
+  // A dedicated walk-up range entrance, separate from the arcade counter.
+  box(1,2.1,36.8,5,4.2,.45,steel);
+  detail(1,1.8,36.51,3.6,3.4,.12,teal);
+  detail(1,3.55,36.4,3.8,.12,.12,0xc8eada);
+  sign('SHOOTING RANGE','TRAINING WING',1,5,36.3,8,Math.PI);
+  floor(1,34,5,3.5,0x365e58,.025);
 
   // Three open-front staging bays retain the exact interaction-pad coordinates.
   floor(24, 0, 18, 34, 0x6e8188, .025);
@@ -11395,7 +11417,8 @@ const GRID_MAP_ARCHETYPES = [
 // mirrored in server.js), range is the shooting range and br_arena is King of
 // the Hill. All three also re-roll their clutter on every page load. Whether
 // they deserve hand-built layouts instead is #69.
-const GENERATED_LAYOUT_MAPS = new Set(['blank', 'range', 'br_arena']);
+// The shooting range keeps its purpose-built lanes instead of a generated combat layout.
+const GENERATED_LAYOUT_MAPS = new Set(['blank', 'br_arena']);
 function addGridConceptGround(name, size = 140) {
   const group = MAP_GROUPS[name];
   setMapBounds(name, size, size);
@@ -11823,7 +11846,7 @@ const MAP_THEMES = {
   neon_tokyo: Object.assign(_T(0x444950, 0x343940, 0x666a74, 0x404650, 0x71534c, 0x505962, 0xffb048, 0x28d9cd, 0x111b2b, 'urban', []), { keep: true, customDetail: true }),
   blank:        _T(0xb9bec2, 0x9aa0a6, 0xdfe3e6, 0xc9cfd4, 0xaab2b8, 0xe9edf0, 0xf2c14e, 0x4a90d9, 0xa5b6c4, 'industrial', ['crates', 'barrels']),
   battlefield: Object.assign(_T(0x5f7a45, 0x4f6a39, 0x7b705f, 0x6a6050, 0x6b5d49, 0x8a7d66, 0xc2a45a, 0xb23a2e, 0x9cc4e4, 'nature', ['sandbags', 'trees', 'crates']), { keep: true }),
-  range:        _T(0x6b7076, 0x565b61, 0x8c929a, 0x777d85, 0x5a6068, 0x9aa0a8, 0xe8c43a, 0xd04a3a, 0x8a929c, 'industrial', ['crates', 'barrels']),
+  range: Object.assign(_T(0x6b7076, 0x565b61, 0x8c929a, 0x777d85, 0x5a6068, 0x9aa0a8, 0xe8c43a, 0xd04a3a, 0xb3d4df, 'industrial', []), {keep:true,customDetail:true}),
   urban: Object.assign(_T(0x4a4d52, 0x3d4044, 0x8a6f5d, 0x6f7b86, 0x5a5f66, 0x9a9a98, 0x969a98, 0x6a7d84, 0x8fa2b4, 'urban', ['cars', 'crates', 'barrels']), { keep: true }),
   warehouse: Object.assign(_T(0x6d6a64, 0x57544f, 0x6f7d86, 0x8a6a46, 0x7a5a38, 0x8d8f91, 0x818b91, 0x697b83, 0x8fa2b4, 'industrial', ['crates', 'crates', 'barrels']), { keep: true }),
   forest: Object.assign(_T(0x4d6b35, 0x3f5a2b, 0x6b5a45, 0x56693a, 0x6b6b5f, 0x8a7352, 0x718366, 0x455a3d, 0xa8d3e8, 'nature', ['trees', 'trees', 'rocks', 'logs']), { keep: true }),
@@ -12918,7 +12941,7 @@ _ap('pyongyang', { ground: 'asphalt', amp: 0.03, mottle: [0.92, 0.92, 0.9], clut
 _ap('traffic_cone_republic', { ground: 'asphalt', amp: 0.03, mottle: [0.9, 0.9, 0.92], clutter: { n: 200, parts: [['scrap', [0xe8782a, 0xf4f4f0], 0.5], ['rubble', 0x7a7a7e, 0.3], ['rock', 0x6a6a6e, 0.2]] }, fog: [60, 190], zen: 0x7aa4cc, sun: _SUN, cloud: _CL(8), fx: ['dust'], gusty: 0.3, snd: { city: 0.1, wind: 0.1, windF: 500, ev: [['honk', 4, 10, 0.4], ['siren', 30, 60, 0.3]] } });
 _ap('airport', { ground: 'asphalt', amp: 0.03, mottle: [0.9, 0.9, 0.92], clutter: { n: 160, parts: [['scrap', [0xf2b01e, 0xd0d4d8], 0.5], ['rubble', 0x7a7f84, 0.3], ['tuft', 0x7a8a4a, 0.2]] }, fog: [60, 200], zen: 0x6a9ed8, sun: _SUN, cloud: _CL(10), fx: ['dust'], gusty: 0.5, snd: { wind: 0.25, windF: 520, hum: [50, 0.04], ev: [['jet', 18, 40, 0.5], ['ding', 30, 60, 0.3]] } });
 _ap('train', { ground: 'dirt', amp: 0.06, mottle: [0.86, 0.86, 0.84], clutter: { n: 220, parts: [['rock', [0x7a7a76, 0x5a5a56], 0.5], ['scrap', 0x5a4a38, 0.3], ['tuft', 0x7a8a4a, 0.2]] }, fog: [60, 190], zen: 0x7a9ab4, sun: _SUN, cloud: _CL(8), fx: ['dust'], gusty: 0.4, snd: { wind: 0.25, windF: 500, rumble: 0.06, ev: [['rails', 12, 25, 0.4], ['horn', 30, 70, 0.4]] } });
-_ap('range', { ground: 'concrete', amp: 0.04, mottle: [0.9, 0.9, 0.9], clutter: { n: 100, parts: [['scrap', 0x8a8e94, 0.5], ['rubble', 0x7a7e84, 0.5]] }, fog: [60, 180], zen: 0x7a96b4, sun: _SUN, cloud: _CL(6), fx: ['dust'], gusty: 0.3, snd: { wind: 0.15, windF: 500, ev: [['gun', 8, 20, 0.35]] } });
+_ap('range', { ground: 'concrete', amp: 0.01, mottle: [0.97, 0.97, 0.97], clutter: { n: 0, parts: [] }, fog: [80, 200], zen: 0xb3d4df, sun: _SUN, cloud: _CL(6), fx: [], gusty: 0.15, snd: { wind: 0.12, windF: 500, ev: [] } });
 // sea
 _ap('carrier', { ground: 'metal', amp: 0, fog: [60, 200], zen: 0x5a90c8, sun: _SUN, cloud: _CL(10), fx: ['spray'], gusty: 0.6, snd: { waves: 0.35, wind: 0.35, windF: 520, rumble: 0.08, ev: [['gull', 8, 18, 0.45], ['clank', 12, 25, 0.4]] } });
 _ap('pearl_harbor', { ground: 'concrete', amp: 0.03, mottle: [0.9, 0.9, 0.86], clutter: { n: 120, parts: [['scrap', [0x8a7a5a, 0x6a6a5a], 0.5], ['rubble', 0x7a7a6a, 0.5]] }, fog: [60, 200], zen: 0x6aa2d4, sun: _SUN, cloud: _CL(9), fx: ['spray'], gusty: 0.5, snd: { waves: 0.3, wind: 0.25, windF: 520, ev: [['gull', 8, 16, 0.45], ['horn', 40, 80, 0.4], ['jet', 25, 50, 0.3]] } });
@@ -19305,6 +19328,7 @@ function addMapRealism(name) {
 }
 
 function _upgradeMap(name) {
+  if(name==='range')return; // Training lanes must stay clear of automatic combat cover and props.
   const g = MAP_GROUPS[name];
   if (!g || g._upgraded || !MAP_THEMES[name]) return;
   g._upgraded = true;
@@ -39648,6 +39672,7 @@ document.addEventListener('keydown', e => {
   // 🛋️ F in the lobby: start the duel pad you're on, or challenge the nearest cast
   // member to a 1V1 — BUT the trashcan (weapon swap) always takes priority when near it.
   if (e.code==='KeyF' && inLobby && !nearTrashcan && !e.repeat) { e.preventDefault(); lobbyInteract(); return; }
+  if(e.code==='KeyF' && rangeExitNearby() && !e.repeat){e.preventDefault();returnFromRange();return;}
   if (e.code==='KeyF' && nearTrashcan && !isDead && !fixedKitModeActive()) { showLoadoutScreen('swap'); }
   // F = enter/exit a mortar (trench map)
   if (e.code==='KeyF' && !nearTrashcan && !isDead && activeMapName === 'trenches' && !e.repeat) {
@@ -56896,8 +56921,9 @@ function syncInteractButton() {
   const pilot = pilotableHere();
   const service=inLobby && !nearTrashcan && lobbyServiceHere;
   const duel = !pilot && inLobby && !nearTrashcan && !!lobbyPadHere;
-  const label = I18N.t(pilot === 'exit' ? 'EXIT' : (pilot && !nearTrashcan) ? 'PILOT' : service ? 'OPEN' : duel ? 'START' : 'SWAP');
-  const display = (nearTrashcan || duel || pilot || service) ? 'flex' : 'none';
+  const rangeExit=rangeExitNearby();
+  const label = I18N.t(pilot === 'exit' || rangeExit ? 'EXIT' : (pilot && !nearTrashcan) ? 'PILOT' : service ? 'OPEN' : duel ? 'START' : 'SWAP');
+  const display = (nearTrashcan || duel || pilot || service || rangeExit) ? 'flex' : 'none';
   if (btn.textContent !== label) btn.textContent = label;
   if (btn.style.display !== display) btn.style.display = display;
 }
@@ -58588,13 +58614,19 @@ function isLoadoutOpen() {
 }
 
 let countdownActive = false; // gates firing/abilities during pre-round countdown
+let countdownGeneration = 0;
 function runCountdown(seconds, onDone) {
+  const generation=++countdownGeneration,owner=match,epoch=matchEpoch;
   const overlay = document.getElementById('countdown-overlay');
   const lblEl   = document.getElementById('countdown-label');
   let remaining  = seconds;
   countdownActive = true;
 
   function tick() {
+    if(generation!==countdownGeneration)return;
+    if(match!==owner || matchEpoch!==epoch || owner?.over){
+      overlay.style.display='none';countdownActive=false;return;
+    }
     // PAUSE: if the loadout screen is open, hide countdown + re-check every 0.5s without ticking down
     if (isLoadoutOpen()) {
       overlay.style.display = 'none';
@@ -58626,9 +58658,10 @@ function runCountdown(seconds, onDone) {
 
 function startMatchRound() {
   if (!match) return;
+  const owner=match,epoch=matchEpoch;
   // Show countdown, then actually start
   const doStart = () => {
-    if (!match || match.over) return;   // it ended during the countdown (an opponent left, #46)
+    if (!match || match.over || match!==owner || matchEpoch!==epoch) return;
     // Hard guard: if loadout opened between countdown end and now, wait for confirm
     if (isLoadoutOpen()) { setTimeout(doStart, 400); return; }
     // A new round starts clean for everyone: no fire, slow, root or stun carried over from the last one.
@@ -60762,7 +60795,8 @@ function spawnGameBots() {
 
   inLobby = false;
   initMatch();
-  setTimeout(() => startMatchRound(), 400 + (allies + enemies) * 40);
+  const spawnedMatch=match;
+  setTimeout(() => {if(match===spawnedMatch)startMatchRound();}, 400 + (allies + enemies) * 40);
 }
 
 // ── Shooting Range: target spawning ────────────────────────────────────────
@@ -60785,6 +60819,9 @@ function spawnRangeTargets() {
     // Moving targets at z=10
     { tx:  -8, tz: 10, moving: true },
     { tx:   8, tz: 10, moving: true },
+    { tx: -15, tz: -10, moving: false },
+    { tx:   6, tz: -22, moving: false },
+    { tx:  15, tz: -32, moving: false },
   ];
 
   targetDefs.forEach(({ tx, tz, moving }, i) => {
@@ -60823,6 +60860,7 @@ function initRange() {
   rangeTargets = [];
   rangeStats = { shots: 0, hits: 0 };
   activateMap('range');
+  scene.background.setHex(rangeMapGroup._skyColor);
   spawnRangeTargets();
   updateRangeHUD();
   const hud = document.getElementById('range-hud');
@@ -60835,7 +60873,11 @@ function updateRangeHUD() {
   if (el) el.textContent = `SHOTS ${rangeStats.shots}  ·  HITS ${rangeStats.hits}  ·  ACC ${acc}%`;
 }
 
+function rangeExitNearby(){return gameStarted && match?.type==='range' && !isDead && Math.hypot(camera.position.x+16,camera.position.z-41)<2.8;}
+function returnFromRange(){teardownMatchWorld();selectMode('lobby13');}
+function enterShootingRange(){teardownMatchWorld();selectMode('range');}
 function updateRange(dt) {
+  showLobbyPrompt(rangeExitNearby()?'Return to lobby / '+fKeyHint(false):null);
   const now = Date.now();
   for (const rt of rangeTargets) {
     const pData = players[rt.id];
@@ -64330,6 +64372,8 @@ function afterDeath(ms, fn) {
 // Everything a finished match (or Lobby 13) leaves behind that the next start must not
 // inherit. Shared by the mode menu and the end-of-match buttons so they can't drift apart.
 function teardownMatchWorld() {
+  countdownGeneration++;countdownActive=false;
+  const countdown=document.getElementById('countdown-overlay');if(countdown)countdown.style.display='none';
   stopMatchFinale(false);
   window._mapLadder = null;
   serverUnlimitedMatchTime = false;
@@ -64899,6 +64943,7 @@ const LOBBY_SERVICES = [
   {id:'shop',x:-21,z:21,label:'Browse the supply shop',action:()=>{noteLobbyStory('shop');openShop();releasePointer();}},
   {id:'style',x:15,z:-21,label:'Open the style studio',action:()=>{openSkinsPanel();releasePointer();}},
   {id:'arcade',x:21,z:26,label:'Choose an arcade activity',action:()=>openLobbyArcade()},
+  {id:'range',x:1,z:34,label:'Enter the shooting range',action:()=>enterShootingRange()},
 ];
 const LOBBY_VISITOR_NAMES = ['PRogame567','ToastOnWifi','xXPixelRushXx','NotAFryingPan','CloudyAim42','CtrlAltYeet',
   'MintyReload','LaggyLegend07','BeanWithAK','NeonNoodle','RamenRunner9','tinyBoss300'];
@@ -67096,6 +67141,7 @@ if (btnInteract) {
     else if (nearTrashcan && !isDead && gameStarted && !fixedKitModeActive()) showLoadoutScreen('swap');
     else if (pilot === 'vehicle') tryEnterVehicle();
     else if (pilot === 'mortar') tryEnterMortar();
+    else if (rangeExitNearby()) returnFromRange();
     else if (inLobby && (lobbyPadHere || lobbyServiceHere)) lobbyInteract();
   };
   btnInteract.addEventListener('touchstart', e => { e.stopPropagation(); e.preventDefault(); interact(); }, { passive: false });
