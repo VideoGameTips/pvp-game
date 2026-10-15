@@ -47104,6 +47104,7 @@ weaponModels.forEach(metalizeModel);
 // Melee and utility builders use their own handle coordinates, not gun trigger
 // guards. Keep those coordinates intact inside a held assembly so procedural
 // chains, orbiting parts and their animation hooks still share the same space.
+const MELEE_HOLD_TILT = { pitch: 0.14, yaw: -0.10 };
 function attachEquipmentHands(model, item, support = false) {
   if (!model || !item || model._equipmentHands) return;
   model._equipmentHands = true;
@@ -47160,9 +47161,12 @@ function attachEquipmentHands(model, item, support = false) {
   for (const child of [...model.children]) held.add(child);
   model.add(held);
   model._heldItem = held;
+  // How the thing sits in the hand. A melee used to be tipped up 0.65 rad (37 degrees: held almost upright, a sword
+  // like a torch), which also tilted the start of every authored swing and thrust. It sits close to the way it was
+  // drawn now: a few degrees of tip-up and a touch of yaw so it reads as held, not posed.
   const tilt = new THREE.Quaternion().setFromEuler(new THREE.Euler(
-    support ? 0.12 : id === 'riot_shield' || id === 'fists' ? 0 : 0.65,
-    support ? -0.22 : id === 'riot_shield' ? 0.12 : -0.35, 0));
+    support ? 0.12 : id === 'riot_shield' || id === 'fists' ? 0 : MELEE_HOLD_TILT.pitch,
+    support ? -0.22 : id === 'riot_shield' ? 0.12 : MELEE_HOLD_TILT.yaw, 0));
   held.quaternion.copy(tilt);
   const offset = new THREE.Vector3(0, -0.008, -0.115).sub(grip.clone().applyQuaternion(tilt));
   held.position.copy(offset);
@@ -47226,7 +47230,7 @@ function updateEquipmentSway() {
   const melee = activeSlot === 'melee';
   const model = melee ? meleeModels[selectedMeleeIdx]
     : activeSlot === 'support' ? supportModels[selectedSupportIdx] : null;
-  if (!model?.visible || _equip?.model === model) return;
+  if (!model?.visible || _equip?.model === model || itemInspect) return;
   if (melee && (meleeSwingT < 1 || model._park || meleeAbilityBuff?.type === 'deflect'
       || batCrowdCharge || meleeSlam || meleeDash || scytheDash || chainMaulSwing)) return;
   if (!melee && (grenadeWindupT < 1 || medkitHealChannel)) return;
