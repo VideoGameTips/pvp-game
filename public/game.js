@@ -37049,13 +37049,30 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
     const advanceLean = 0.22 + run * 0.16 + (tacticalAdvance ? 0.04 : 0);
     // adv: tactical walk · crc: crouch · sld: slide
     const pose = (adv, crc, sld) => L(L(adv, crc, ck), sld, sl);
-    rig.legL.rotation.x = L(rig.legL.rotation.x, pose(-0.38, -1.45, -1.80), w);
-    rig.legR.rotation.x = L(rig.legR.rotation.x, pose( 0.16, -1.35, -1.62), w);
-    if (rig.kneeL) rig.kneeL.rotation.x = L(rig.kneeL.rotation.x, pose(0.62, 2.25, 0.20), w);
-    if (rig.kneeR) rig.kneeR.rotation.x = L(rig.kneeR.rotation.x, pose(0.46, 2.10, 0.32), w);
+    // A crouch STANDING STILL is a kneel: the left foot planted out in front with the thigh near level, the right
+    // knee down by it and the shin laid back along the floor with the toes tucked, so one leg is forward and one
+    // is back (a squat with both legs folded the same read as sitting on a toilet). Worked from BODY: with these
+    // angles the hip comes down to 0.30 m, the planted sole is on the floor and the back knee is within 2 mm of
+    // it. Crouch-WALKING is a different thing: the legs have to alternate, so as the body starts to move the
+    // kneel opens into the symmetric low squat the stride is added to (`blend` is how much it is moving).
+    const kneelL = L(-1.45, -1.45, blend), kneelR = L(0.10, -1.35, blend);
+    const kneeKL = L(2.09, 2.25, blend),   kneeKR = L(2.50, 2.10, blend);
+    const kneeFL = L(-0.64, -0.80, blend), kneeFR = L(-1.00, -0.75, blend);
+    // SLIDE: sat on the floor, legs out flat in front, and the chest laid right back (it was 0.40 rad; a body
+    // scooting along on its backside leans well past that). The chest and head numbers are SLIDE_BACK / SLIDE_HEAD.
+    // (Thighs level and shins nearly straight: a foot hanging lower than the hip is what held the hips off the
+    // floor, since the body is lowered only until the LOWER of the two soles and the thighs both rest.)
+    rig.legL.rotation.x = L(rig.legL.rotation.x, pose(-0.38, kneelL, -1.70), w);
+    rig.legR.rotation.x = L(rig.legR.rotation.x, pose( 0.16, kneelR, -1.66), w);
+    if (rig.kneeL) rig.kneeL.rotation.x = L(rig.kneeL.rotation.x, pose(0.62, kneeKL, 0.06), w);
+    if (rig.kneeR) rig.kneeR.rotation.x = L(rig.kneeR.rotation.x, pose(0.46, kneeKR, 0.08), w);
     // Flat boots when squatting (the ankle undoes hip + knee), toes up when sat.
-    if (rig.footL) rig.footL.rotation.x = L(rig.footL.rotation.x, pose(-0.12, -0.80, 0.05), w);
-    if (rig.footR) rig.footR.rotation.x = L(rig.footR.rotation.x, pose(-0.08, -0.75, -0.05), w);
+    if (rig.footL) rig.footL.rotation.x = L(rig.footL.rotation.x, pose(-0.12, kneeFL, 0.05), w);
+    if (rig.footR) rig.footR.rotation.x = L(rig.footR.rotation.x, pose(-0.08, kneeFR, -0.05), w);
+    // Scooting: the legs shuffle a little as the body goes, nothing like a stride.
+    if (sl > 0.001) {
+      rig.legL.rotation.x += swing * 0.06 * sl;  rig.legR.rotation.x += swingR * 0.06 * sl;
+    }
     // Crouch-walking: the legs still step, smaller, over the squat.
     const step = ck * (1 - sl) * 0.4;
     if (step > 0.001) {
@@ -37068,16 +37085,23 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
     // An armed character keeps the weapon stance through a crouch and a slide —
     // the gun hangs off the firing hand now, so throwing the arms into a free
     // pose would throw the rifle with them.
-    const armLT = rig.holdsGun ? SUP.x - 0.16 * sl + aim * 0.55 * (1 - rk)
-                               : pose(-1.05, -0.8, -1.22);
-    const armRT = rig.holdsGun ? (rig.firePose ? rig.firePose.x : GUN_HOLD.shoulderX) + 0.12 * sl + aim * 0.55
-                               : pose(-1.38, -0.8, -1.55);
+    // The arms hang off the chest, so a chest laid back by SLIDE_BACK carries them with it: an armed body adds the
+    // difference back so the gun still points where it did (the old slide had the chest at -0.40), and a body with
+    // empty hands props itself on them behind its hips.
+    const SLIDE_BACK = -1.0, SLIDE_HEAD = 0.85, SLIDE_GUN_FIX = -0.40 - SLIDE_BACK;
+    const armLT = rig.holdsGun ? SUP.x - 0.16 * sl + SLIDE_GUN_FIX * sl + aim * 0.55 * (1 - rk)
+                               : pose(-1.05, -0.8, 1.05);
+    const armRT = rig.holdsGun ? (rig.firePose ? rig.firePose.x : GUN_HOLD.shoulderX) + 0.12 * sl + SLIDE_GUN_FIX * sl + aim * 0.55
+                               : pose(-1.38, -0.8, 0.95);
     rig.armL.rotation.x = L(rig.armL.rotation.x, armLT, w);
     rig.armR.rotation.x = L(rig.armR.rotation.x, armRT, w);
-    rig.torso.rotation.x = L(rig.torso.rotation.x, pose(advanceLean, 0.30, -0.40), w);
-    rig.head.rotation.x  = L(rig.head.rotation.x, pose(-0.12, -0.20, 0.30), w);
-    const elbLT = rig.holdsGun ? SUP.ex : pose(-0.85, -0.7, -1.05);
-    const elbRT = rig.holdsGun ? (rig.firePose ? rig.firePose.ex : GUN_HOLD.elbowX) : pose(-0.9, -0.7, -1.15);
+    // Crouch-walking leans well forward (on top of the 0.30 of the crouch): the chest over the knees, the chin
+    // coming back up so the eyes stay level.
+    const crouchWalkLean = ck * (1 - sl) * blend * 0.34;
+    rig.torso.rotation.x = L(rig.torso.rotation.x, pose(advanceLean, 0.30 + crouchWalkLean, SLIDE_BACK), w);
+    rig.head.rotation.x  = L(rig.head.rotation.x, pose(-0.12, -0.20 - crouchWalkLean * 0.7, SLIDE_HEAD), w);
+    const elbLT = rig.holdsGun ? SUP.ex : pose(-0.85, -0.7, -0.15);
+    const elbRT = rig.holdsGun ? (rig.firePose ? rig.firePose.ex : GUN_HOLD.elbowX) : pose(-0.9, -0.7, -0.15);
     if (rig.elbowL) rig.elbowL.rotation.x = L(rig.elbowL.rotation.x, elbLT, w);
     if (rig.elbowR) rig.elbowR.rotation.x = L(rig.elbowR.rotation.x, elbRT, w);
     rig.torso.rotation.z = L(rig.torso.rotation.z, 0, w);
@@ -37121,8 +37145,9 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
   rig.torso.rotation.x += aim * 0.26 + rk * 0.10;      // a reload bows the chest over the weapon
   // Intent. Nobody in a firefight walks upright: the chest is thrown forward into the move (more the faster it is), the
   // chin comes down behind the shoulders, and a body holding a gun stands braced rather than at ease.
-  rig.torso.rotation.x += lean * (0.07 + run * 0.20) + (rig.holdsGun ? idle * 0.06 : 0);
-  rig.head.rotation.x  -= lean * (0.03 + run * 0.09);
+  // (Not while sat in a slide: it would pull the laid-back chest upright again.)
+  rig.torso.rotation.x += (lean * (0.07 + run * 0.20) + (rig.holdsGun ? idle * 0.06 : 0)) * (1 - sl);
+  rig.head.rotation.x  -= lean * (0.03 + run * 0.09) * (1 - sl);
   rig.head.rotation.x = Math.max(-1.0, Math.min(1.0, rig.head.rotation.x + aim * 0.62));
   if (rig.pelvis) {
     // Keep the trunk facing the same direction through strides and jumps.

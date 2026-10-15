@@ -683,6 +683,57 @@ if (ok && process.argv.includes('--steady-body')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+if (ok && process.argv.includes('--posture')) {
+  // Slide: sat on the floor with the chest laid well back. Crouch: a kneel (one leg forward, one back, back knee
+  // by the floor). Crouch-walk: the chest leans further forward than a crouch standing still.
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    for (const armed of [false, true]) {
+      const mesh = makePlayerMesh('Posture', false, 'ally', 'default'), r = mesh._rig;
+      r.holdsGun = armed;
+      const tag = armed ? 'armed ' : 'unarmed ';
+      const settle = (crouch, slide, air, moving, frames = 150) => {
+        for (let f = 0; f < frames; f++) {
+          if (moving) mesh.position.z += 0.06;
+          animateCharacterMesh(mesh, 1 / 60, crouch, slide, air, 0);
+        }
+      };
+      const worldY = o => { mesh.updateMatrixWorld(true); const v = new THREE.Vector3(); o.getWorldPosition(v); return v.y - mesh.position.y; };
+      try {
+        // crouch standing still
+        settle(0.58, 0, 0, false);
+        const c = { l: r.legL.rotation.x, rr: r.legR.rotation.x, kr: r.kneeR.rotation.x, torso: r.torso.rotation.x };
+        if (!(c.l < -1.2)) issues.push(tag + 'a crouch should have one thigh forward and near level, got ' + c.l.toFixed(2));
+        if (!(c.rr > -0.3)) issues.push(tag + 'a crouch should have the other leg back under the hips, got ' + c.rr.toFixed(2));
+        if (!(c.l - c.rr < -1.2)) issues.push(tag + 'the two legs of a crouch should be a long way apart front to back');
+        if (!(c.kr > 2.2)) issues.push(tag + 'the back shin should be folded behind the knee, got ' + c.kr.toFixed(2));
+        const kneeH = worldY(r.kneeR), hipH = worldY(r.legR);
+        if (!(kneeH < 0.12)) issues.push(tag + 'the back knee is ' + kneeH.toFixed(2) + ' m off the floor, it should be down by it');
+        if (!(hipH < 0.42 && hipH > 0.2)) issues.push(tag + 'the hips are at ' + hipH.toFixed(2) + ' m in a crouch');
+        // crouch-walk leans further forward
+        settle(0.58, 0, 0, true);
+        const walkTorso = r.torso.rotation.x;
+        if (!(walkTorso - c.torso > 0.25)) issues.push(tag + 'crouch-walking leans ' + (walkTorso - c.torso).toFixed(2) + ' rad more than a still crouch, want 0.25+');
+        // the walk still alternates the legs
+        let lo = 9, hi = -9;
+        for (let f = 0; f < 90; f++) { mesh.position.z += 0.06; animateCharacterMesh(mesh, 1 / 60, 0.58, 0, 0, 0); lo = Math.min(lo, r.legL.rotation.x); hi = Math.max(hi, r.legL.rotation.x); }
+        if (hi - lo < 0.15) issues.push(tag + 'a crouch-walk has stopped stepping (' + (hi - lo).toFixed(2) + ' rad of swing)');
+        // slide
+        settle(0.58, 1, 0, true);
+        if (!(r.torso.rotation.x <= -0.85)) issues.push(tag + 'a slide should lay the chest well back, torso at ' + r.torso.rotation.x.toFixed(2));
+        if (!(r.legL.rotation.x < -1.4 && r.legR.rotation.x < -1.3)) issues.push(tag + 'a slide has the legs out in front');
+        if (!(worldY(r.legL) < 0.2)) issues.push(tag + 'a slide has the hips ' + worldY(r.legL).toFixed(2) + ' m up: they should be on the floor');
+        // and back up again
+        settle(0, 0, 0, false, 200);
+        if (r.slide > 0.02 || r.torso.rotation.x < -0.3) issues.push(tag + 'standing up did not undo the slide');
+      } finally { disposeBody(mesh); }
+    }
+    return [...new Set(issues)];
+  })()`);
+  console.log('posture checks: slide sat back, crouch kneels, crouch-walk leans, standing up recovers');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 if (ok && process.argv.includes('--chain-maul')) {
   const issues = vm.runInThisContext(`(() => {
     const issues = [], v = (x,y,z) => new THREE.Vector3(x,y,z);
