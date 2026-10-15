@@ -61936,9 +61936,13 @@ function _botNavGrid() {
   if (_botNav.blocked && _botNav.sig === sig) return _botNav;
   if (_botNav.blocked && _botNav.map === activeMapName && now - _botNav.builtAt < 1500) return _botNav;
   const b = getMapBoundsRect();
-  const cell = Math.max(1.5, Math.min(3, Math.max(b.halfX, b.halfZ) * 2 / 90));
+  // 1.5 m cells wherever that is affordable (up to about 300 x 300 m: 40,000 cells), coarser beyond. Urban is 218 m
+  // across and had 2.4 m cells: a 0.8 m wall plus its margin (1.9 m) can sit wholly between two cell centres, and
+  // then it is not in the grid at all and the route goes straight through it (that is the urban stall).
+  let cell = 1.5;
+  while ((b.halfX * 2 / cell) * (b.halfZ * 2 / cell) > 40000 && cell < 6) cell += 0.25;
   const W = Math.ceil(b.halfX * 2 / cell), H = Math.ceil(b.halfZ * 2 / cell);
-  if (W < 4 || H < 4 || W * H > 20000) return null;
+  if (W < 4 || H < 4 || W * H > 45000) return null;
   // R: how far off a wall the middle of a cell has to be. A body is 0.38 and the route is followed through the
   // middles of cells (corners are cut only where a body-wide line is clear), so 0.55 keeps a 2 m corridor open;
   // the first version used 0.95 and closed the narrow ones of the older maps.
@@ -61955,6 +61959,11 @@ function _botNavGrid() {
         if (cx > c.min.x - R && cx < c.max.x + R) blocked[j * W + i] = 1;
       }
     }
+    // and every cell the wall itself stands in, whatever its margin does at the cell centres: a thin wall can never
+    // fall between them
+    const wi0 = Math.max(0, Math.floor((c.min.x - x0) / cell)), wi1 = Math.min(W - 1, Math.floor((c.max.x - x0) / cell));
+    const wj0 = Math.max(0, Math.floor((c.min.z - z0) / cell)), wj1 = Math.min(H - 1, Math.floor((c.max.z - z0) / cell));
+    for (let j = wj0; j <= wj1; j++) for (let i = wi0; i <= wi1; i++) blocked[j * W + i] = 1;
   };
   // What stops a bot is anything taller than a kerb that is at body height: resolvePosCollisions lets a body pass only
   // what is under its feet (or over its head), and a bot does not step up onto things, so a 0.4 m kerb, a 1 m sill
@@ -63259,14 +63268,23 @@ function updateBotAI(dt) {
     if ((bot.yVel || 0) === 0) bot.y = botGroundYAt(bot.x, bot.z, bot.y || 0, 1.05, 2.2);
 
     // ── Stuck detection: if chasing but collision ate all movement, trigger detour ─
+    // A routed bot's detour is aimed at its WAYPOINT with a little jitter (a quarter turn off the straight line to the
+    // target, as an unrouted bot's is, walked it away from the route for the best part of a second every time it
+    // brushed a corner), and is shorter.
     if (target && (bot.stuckTimer || 0) <= 0) {
       const actualMoved = Math.hypot(bot.x - prevBotX, bot.z - prevBotZ);
       const intendedMoved = Math.hypot(moveX, moveZ);
       if (intendedMoved > 0.001 && actualMoved < intendedMoved * 0.2) {
-        // Blocked by wall — detour sideways for 0.5s
-        const dx2 = target.x - bot.x, dz2 = target.z - bot.z;
-        bot.wanderAngle = Math.atan2(dx2, dz2) + (Math.PI / 2) * (Math.random() < 0.5 ? 1 : -1) + (Math.random()-0.5) * 0.6;
-        bot.stuckTimer = 0.5;
+        const routed = bot._navWp && bot._navUsedAt && now - bot._navUsedAt < 400;
+        if (routed) {
+          bot.wanderAngle = Math.atan2(bot._navWp.x - bot.x, bot._navWp.z - bot.z) + (Math.random() - 0.5) * 1.6;
+          bot.stuckTimer = 0.3;
+        } else {
+          // Blocked by wall — detour sideways for 0.5s
+          const dx2 = target.x - bot.x, dz2 = target.z - bot.z;
+          bot.wanderAngle = Math.atan2(dx2, dz2) + (Math.PI / 2) * (Math.random() < 0.5 ? 1 : -1) + (Math.random()-0.5) * 0.6;
+          bot.stuckTimer = 0.5;
+        }
       }
     }
 

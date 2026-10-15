@@ -304,7 +304,10 @@
       one fill from your position, rebuilt as you move or as cover is destroyed): it cuts across open floor and only
       turns at corners, keeps a body's width off them, treats anything taller than a kerb as a wall (a ramp's own steps
       included), steers clear of damage zones, and if it finds itself caught it goes cell by cell for a few seconds.
-      It still falls back to the old steering wherever it has no route. Bots use the ramps on the new duel maps.</p>
+      It still falls back to the old steering wherever it has no route. The grid is 1.5&nbsp;m wherever it can be (a
+      thin wall can never fall between its cells; on Urban they used to, and a bot walked straight into the wall and
+      stayed there). In a test of one bot sent across each map, 64 of 64 runs on eight maps (the four duel maps, Urban,
+      Trenches, Airport, Supermarket) arrived.</p>
 
       <h2 id="bot-targeting">🤖 Who the bots shoot</h2>
       <p>In team fights (1v1 to 3v3 rounds, 5v5, 10v10 and Frontlines) every bot, on either side, goes for the

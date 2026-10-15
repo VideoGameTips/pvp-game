@@ -1287,10 +1287,10 @@ if (ok && process.argv.includes('--gunslinger')) {
 
 if (ok && process.argv.includes('--botnav')) {
   // A bot has to be able to get to you. One bot is released at the far spawn and the player stands still at the
-  // other: it must be within 25 m inside 60 s of game time on every duel map (it takes 15 to 30), and inside 100 s on five of the older
+  // other: it must be within 25 m inside 60 s of game time on every duel map (it takes 15 to 30), and inside 100 s on seven of the older
   // maps where the bots used to run into the first wall they met and stay there (airport, studio, supermarket,
-  // labyrinth: with the old steering none of them got there at all). Urban (traffic lanes carry a bot sideways)
-  // and trenches (a maze of lanes) are left out: a routed bot gets across both most of the time, not every time. Routed bots (botNavPoint) against the
+  // labyrinth, urban, trenches: with the old steering most of them never got there at all; urban's thin walls fell
+  // between the cells of its 2.4 m grid until the grid went to 1.5 m and marks every cell a wall stands in). Routed bots (botNavPoint) against the
   // old straight-line steering is what BOT_NAV_ON switches.
   const issues = vm.runInThisContext(`(() => {
     const issues = [], info = [];
@@ -1300,7 +1300,7 @@ if (ok && process.argv.includes('--botnav')) {
     let simT = realNow();
     playSoundEvent = () => {}; playWeaponSound = () => {};
     BOT_NAV_ON = true;
-    const cases = DUEL_MAP_IDS.map(id => [id, 60]).concat(['airport', 'studio', 'supermarket', 'labyrinth', 'refinery'].filter(m => MAP_GROUPS[m]).map(id => [id, 100]));
+    const cases = DUEL_MAP_IDS.map(id => [id, 60]).concat(['airport', 'studio', 'supermarket', 'labyrinth', 'refinery', 'urban', 'trenches'].filter(m => MAP_GROUPS[m]).map(id => [id, 100]));
     try {
       for (const [id, limit] of cases) {
         selectedModeConfig = GAME_MODE_CONFIGS['1v1'];
