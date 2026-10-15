@@ -124,6 +124,90 @@ try {
   console.log('   this is a runtime failure during module evaluation, not a syntax error.');
 }
 
+if (ok && process.argv.includes('--environment-health')) {
+  const issues = vm.runInThisContext(`(() => {
+    const issues=[],saved={me:players[myId],seq:environmentDamageSeq,ack:environmentDamageAck,pending:pendingEnvironmentDamage.slice()};
+    try {
+      pendingEnvironmentDamage.length=0;environmentDamageSeq=0;environmentDamageAck=0;
+      players[myId]={hp:300,matchId:'health-test'};
+      applyEnvironmentDamage(100,'lava');
+      if(players[myId].hp!==200||pendingEnvironmentDamage.length!==1)issues.push('environment damage not recorded');
+      const afterShot=reconcileEnvironmentHealth({hp:270,environmentSeq:0},200);
+      if(afterShot!==170)issues.push('player shot restores pending environmental damage');
+      if(reconcileEnvironmentHealth({hp:170,environmentSeq:1,healthEvent:'environment'},170)!==170||pendingEnvironmentDamage.length)issues.push('ack double-applies damage');
+      if(reconcileEnvironmentHealth({hp:220,environmentSeq:1,healthEvent:'heal'},170)!==220)issues.push('healing is blocked');
+      if(reconcileEnvironmentHealth({hp:300,environmentSeq:0},220)!==220)issues.push('older snapshot restores HP');
+      pendingEnvironmentDamage.push({seq:2,amount:20},{seq:3,amount:30});
+      if(reconcileEnvironmentHealth({hp:200,environmentSeq:2},200)!==170)issues.push('partial ack loses pending tick');
+      if(pendingEnvironmentDamage.length!==1||pendingEnvironmentDamage[0].seq!==3)issues.push('partial ack clears wrong ticks');
+      players[myId].hp=25;const lost=applyEnvironmentDamage(100,'lava');
+      if(lost!==25||players[myId].hp!==0)issues.push('lethal hazard reports more HP than lost');
+    } finally {
+      if(saved.me===undefined)delete players[myId];else players[myId]=saved.me;
+      environmentDamageSeq=saved.seq;environmentDamageAck=saved.ack;pendingEnvironmentDamage.splice(0,pendingEnvironmentDamage.length,...saved.pending);
+    }
+    return issues;
+  })()`);
+  if(issues.length){ok=false;console.log('environment health failures:\n'+issues.join('\n'));}
+  else console.log('environment health: hazard + shot, pending ticks, partial/stale acks, real healing and lethal damage');
+}
+
+if (ok && process.argv.includes('--combat-feedback')) {
+  const issues = vm.runInThisContext(`(() => {
+    const issues=[],saved={gameStarted,isDead,yaw:euler.y,position:camera.position.clone(),inLobby,
+      activeSlot,selectedMeleeIdx,meleeSwingT,riotShieldHp,spawnShieldUntil,me:players[myId]};
+    const id='feedback_test_source';
+    try {
+      clearCombatFeedback();gameStarted=true;isDead=false;inLobby=false;spawnShieldUntil=0;
+      camera.position.set(0,1.65,0);euler.y=0;players[id]={x:0,z:-10};
+      showDamageDirection(id);const entry=damageDirectionEntries[0],first=entry.el.style.transform;
+      for(let n=0;n<20;n++)showDamageDirection(id);
+      if(damageDirectionEntries.length!==1)issues.push('automatic hits flood directional arcs');
+      players[id].x=10;players[id].z=0;updateDamageDirections(entry.at);
+      if(entry.el.style.transform!==first)issues.push('direction arc tracks hidden enemy movement');
+      euler.y=Math.PI/2;updateDamageDirections(entry.at);
+      if(entry.el.style.transform===first)issues.push('direction arc ignores camera turns');
+      updateDamageDirections(entry.at+1100);
+      if(damageDirectionEntries.length)issues.push('expired hit arc persists');
+      showHitmarker('kill');showHitmarker('hit');
+      if(hitmarkerPriority!==3)issues.push('body hit overwrites kill confirmation');
+      clearCombatFeedback();showHitmarker('head');showHitmarker('hit');
+      if(hitmarkerPriority!==2)issues.push('body hit overwrites headshot confirmation');
+      activeSlot='melee';selectedMeleeIdx=MELEE_ITEMS.findIndex(x=>x.id==='riot_shield');meleeSwingT=1;
+      players[myId]={hp:300,team:'ally'};riotShieldHp=1;
+      const landed=applyBotDamageToPlayer('ak20',null);
+      if(riotShieldHp!==0||players[myId].hp!==300||landed)issues.push('shield-breaking hit damages health');
+    } finally {
+      clearCombatFeedback();delete players[id];players[myId]=saved.me;gameStarted=saved.gameStarted;isDead=saved.isDead;
+      euler.y=saved.yaw;camera.position.copy(saved.position);inLobby=saved.inLobby;activeSlot=saved.activeSlot;
+      selectedMeleeIdx=saved.selectedMeleeIdx;meleeSwingT=saved.meleeSwingT;riotShieldHp=saved.riotShieldHp;spawnShieldUntil=saved.spawnShieldUntil;
+    }
+    return issues;
+  })()`);
+  if(issues.length){ok=false;console.log('combat feedback failures:\n'+issues.join('\n'));}
+  else console.log('combat feedback: last-hit bearing, camera turns, deduplication, marker priority and shield break');
+}
+
+if (ok && process.argv.includes('--action-wind')) {
+  const issues = vm.runInThisContext(`(() => {
+    const issues=[], saved={gameStarted,isDead,activeSlot,velocity:playerVelocity.clone()};
+    try {
+      gameStarted=true;isDead=false;activeSlot='primary';clearActionWind();
+      playerVelocity.set(0,0,-SPEED*DEFAULT_MOVE_MULT);updateActionWind(0.05);
+      if(actionWind.speed>0.01)issues.push('normal walking triggers speed ring');
+      playerVelocity.set(0,0,-25);for(let i=0;i<20;i++)updateActionWind(0.05);
+      if(actionWind.speed<0.9||actionWind.canvas?.style.display!=='block')issues.push('fast movement has no ring');
+      playerVelocity.set(0,0,0);for(let i=0;i<60;i++)updateActionWind(0.05);
+      if(actionWind.canvas.style.display!=='none')issues.push('ring does not fade after stopping');
+      playerVelocity.set(0,0,-25);updateActionWind(0.05);isDead=true;updateActionWind(0.05);
+      if(actionWind.speed||actionWind.points.length||actionWind.canvas.style.display!=='none')issues.push('wind persists after death');
+    } finally {clearActionWind();gameStarted=saved.gameStarted;isDead=saved.isDead;activeSlot=saved.activeSlot;playerVelocity.copy(saved.velocity);}
+    return issues;
+  })()`);
+  if(issues.length){ok=false;console.log('action wind failures:\n'+issues.join('\n'));}
+  else console.log('action wind: extra-speed threshold, fade, death cleanup and pointer-transparent overlay');
+}
+
 if (ok && process.argv.includes('--battle-axe')) {
   const valid = vm.runInThisContext(`(() => {
     const m = meleeModels[MELEE_ITEMS.findIndex(x => x.id === 'combat_axe')];
@@ -225,9 +309,22 @@ if (ok && process.argv.includes('--equipment-sway')) {
   const issues = vm.runInThisContext(`(() => {
     const issues = [], saved = { gameStarted, isDead, activeSlot, selectedMeleeIdx, selectedSupportIdx,
       meleeSwingT, grenadeWindupT, velocity: playerVelocity.clone(), yaw: euler.y,
-      currentWeaponIdx, reloading, isADS, kick: { ..._gunKick }, land: _realismLandKick };
+      currentWeaponIdx, reloading, isADS, kick: { ..._gunKick }, land: _realismLandKick, heldWalkLean };
     try {
       gameStarted = true; isDead = false; meleeSwingT = 1; grenadeWindupT = 1;
+      heldWalkLean = 0; playerVelocity.set(0,0,-5.2);updateHeldWalkLean(1/60);
+      const firstLean=heldWalkLean;
+      if(firstLean<=0||firstLean>=0.3)issues.push('walking tilt snaps instead of easing in');
+      for(let i=0;i<60;i++)updateHeldWalkLean(1/60);
+      if(heldWalkLean<0.99)issues.push('walking tilt never reaches the carrying pose');
+      euler.y=0;
+      const carry=heldWalkPose(0),offCarry=heldWalkPose(0,Math.PI);
+      if(carry.ry<0.25)issues.push('walking carry lacks vertical-axis turn');
+      if(Math.abs(carry.ry+offCarry.ry)>1e-8)issues.push('dual hands do not mirror vertical-axis turn');
+      playerVelocity.set(0,0,0);updateHeldWalkLean(1/60);
+      if(heldWalkLean<=0.5||heldWalkLean>=0.99)issues.push('walking tilt snaps when stopping');
+      for(let i=0;i<120;i++)updateHeldWalkLean(1/60);
+      if(heldWalkLean!==0)issues.push('walking tilt does not return to original pose');
       euler.y = 0; playerVelocity.set(0,0,0);
       if (Object.values(heldWalkPose(0)).some(x => x !== 0)) issues.push('walking: changes stationary pose');
       playerVelocity.set(5.2,0,0); const right = heldWalkPose(0);
@@ -277,6 +374,7 @@ if (ok && process.argv.includes('--equipment-sway')) {
       playerVelocity.copy(saved.velocity);
       euler.y = saved.yaw; currentWeaponIdx = saved.currentWeaponIdx; reloading = saved.reloading; isADS = saved.isADS;
       Object.assign(_gunKick, saved.kick); _realismLandKick = saved.land;
+      heldWalkLean = saved.heldWalkLean;
     }
     return issues;
   })()`);

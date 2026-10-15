@@ -10603,7 +10603,7 @@ function _mechHurtPlayer(dmg, id) {
   if (adminCheats.godMode && currentUser?.isAdmin) { flashHitIndicator(); return false; }
   const me = players[myId];
   if (!me) return false;
-  me.hp = Math.max(0, me.hp - dmg);
+  applyEnvironmentDamage(dmg, id);
   updateHealthHUD(me.hp);
   flashHitIndicator();
   if (me.hp <= 0 && !isDead) applyBotDamageToPlayer(id, null);
@@ -32768,6 +32768,7 @@ function isRiotShieldBlocking() {
 }
 function depleteRiotShield(dmg) {
   if (!(dmg > 0) || riotShieldHp <= 0) return;
+  flashHitIndicator('guard');
   riotShieldHp = Math.max(0, riotShieldHp - dmg);
   if (riotShieldHp <= 0) showAnnouncement('SHIELD BROKEN', 'Your riot shield is spent', '#ff8844', 1400);
   updateWeaponHUD();
@@ -38635,19 +38636,26 @@ function gunSpinAngle(m) {
   const k = (t - 0.7) / 0.3;
   return full + over * (1 - k * k * (3 - 2 * k));
 }
+let heldWalkLean = 0;
+function updateHeldWalkLean(dt) {
+  const target = gameStarted && !isDead ? Math.min(1,Math.hypot(playerVelocity.x,playerVelocity.z)/5.2) : 0;
+  heldWalkLean += (target-heldWalkLean)*(1-Math.exp(-Math.max(0,dt)*9));
+  if (target === 0 && heldWalkLean < 0.0001) heldWalkLean = 0;
+}
 function heldWalkPose(t, phase = 0) {
   const vx = playerVelocity.x, vz = playerVelocity.z;
   const moving = Math.min(1, Math.hypot(vx, vz) / 5.2);
   const strafe = THREE.MathUtils.clamp((vx * Math.cos(euler.y) - vz * Math.sin(euler.y)) / 5.2, -1, 1);
   const forward = THREE.MathUtils.clamp(-(vx * Math.sin(euler.y) + vz * Math.cos(euler.y)) / 5.2, -1, 1);
   const step = t * 8.2 + phase;
+  const side = phase === Math.PI ? -1 : 1;
   return {
-    x: Math.sin(step) * 0.012 * moving - strafe * 0.018,
-    y: Math.cos(step * 2) * 0.010 * moving - Math.abs(forward) * 0.012,
+    x: Math.sin(step) * 0.012 * moving - strafe * 0.018 + heldWalkLean * 0.014 * side,
+    y: Math.cos(step * 2) * 0.010 * moving - Math.abs(forward) * 0.012 - heldWalkLean * 0.008,
     z: forward * 0.012 + Math.sin(step * 2) * 0.004 * moving,
     rx: Math.sin(step) * 0.025 * moving + Math.abs(forward) * 0.018,
-    ry: -strafe * 0.045,
-    rz: -strafe * 0.065 + Math.sin(step) * 0.025 * moving,
+    ry: -strafe * 0.045 + heldWalkLean * 0.28 * side,
+    rz: -strafe * 0.065 + Math.sin(step) * 0.025 * moving - heldWalkLean * 0.20 * side,
   };
 }
 function updateRealismFeedback(dt) {
@@ -41235,6 +41243,8 @@ function loadoutReady() {
 }
 
 function resetCombatResources() {
+  pendingEnvironmentDamage.length = 0;
+  clearCombatFeedback();
   clearPlayerStatusEffects();
   if (!loadoutReady()) return;
   window._mapLadder = null;
@@ -43544,6 +43554,89 @@ function updateSlamShake(dt) {
   euler.x = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, euler.x));
   camera.quaternion.setFromEuler(euler);
   _shakePitch += dp; _shakeYaw += dy;                       // the same bookkeeping a gunshot uses, so it settles back
+}
+
+const actionWind = { canvas: null, points: [], model: null, speed: 0, broken: true };
+function clearActionWind() {
+  actionWind.points.length = 0; actionWind.model = null; actionWind.speed = 0; actionWind.broken = true;
+  if (actionWind.canvas) actionWind.canvas.style.display = 'none';
+}
+function updateActionWind(dt) {
+  if (!gameStarted || isDead || SOCIAL_VIEW.mode || MATCH_FINALE.active || match?.type === 'wave_dash') {
+    clearActionWind(); return;
+  }
+  const now = performance.now(), reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  const model = activeSlot === 'melee' ? meleeModels[selectedMeleeIdx] : null;
+  const swinging = PLAYER_VIEW.mode === 'first' && model?.visible && (meleeDash || batCrowdCharge || meleeSlam || chainMaulSwing
+    || (meleeSwingT < 1 && ['revup', 'spin'].includes(meleeAbilityBuff?.type)));
+  if (model !== actionWind.model) { actionWind.points.length = 0; actionWind.model = model; actionWind.broken = true; }
+  if (swinging) {
+    if (!model._windTipLocal) {
+      const box = new THREE.Box3(); _mechAllParts(model).forEach(p => box.union(p.box));
+      if (!box.isEmpty()) {
+        model._windTipLocal = box.getCenter(new THREE.Vector3());
+        model._windTipLocal.z = box.min.z + Math.min(0.04, (box.max.z-box.min.z)*0.12);
+      }
+    }
+    if (model._windTipLocal) {
+      model.updateWorldMatrix(true, true);
+      const world = model.localToWorld(model._windTipLocal.clone());
+      const local = camera.worldToLocal(world.clone()), p = world.project(camera);
+      if (local.z < -0.035 && Math.abs(p.x) < 1.6 && Math.abs(p.y) < 1.6) {
+        actionWind.points.push({ x: p.x, y: p.y, t: now, start: actionWind.broken });
+        actionWind.broken = false;
+      } else actionWind.broken = true;
+    }
+  } else actionWind.broken = true;
+  actionWind.points = actionWind.points.filter(p => now-p.t < 190).slice(-32);
+  const speed = Math.hypot(playerVelocity.x, playerVelocity.z);
+  const target = THREE.MathUtils.clamp((speed-Math.max(9,SPEED*DEFAULT_MOVE_MULT*1.25))/10,0,1);
+  actionWind.speed += (target-actionWind.speed)*Math.min(1,dt*10);
+  if (actionWind.points.length < 2 && actionWind.speed < 0.01) {
+    if (actionWind.canvas) actionWind.canvas.style.display = 'none';
+    return;
+  }
+  if (!actionWind.canvas) {
+    const canvas = document.createElement('canvas'); canvas.id = 'action-wind';
+    canvas.setAttribute('aria-hidden','true');
+    canvas.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:70';
+    document.body.appendChild(canvas); actionWind.canvas = canvas;
+  }
+  const canvas = actionWind.canvas, w = window.innerWidth, h = window.innerHeight;
+  const dpr = Math.min(window.devicePixelRatio || 1,1.5);
+  if (canvas.width !== Math.round(w*dpr) || canvas.height !== Math.round(h*dpr)) {
+    canvas.width = Math.round(w*dpr); canvas.height = Math.round(h*dpr);
+  }
+  canvas.style.display = 'block';
+  const ctx = canvas.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,w,h);
+  ctx.strokeStyle = '#ffffff'; ctx.lineCap = 'round';
+  const points = actionWind.points;
+  for (let i=1;i<points.length;i++) {
+    const a=points[i-1], b=points[i]; if (b.start) continue;
+    const life=1-(now-b.t)/190, x=(a.x+1)*w/2, y=(1-a.y)*h/2, bx=(b.x+1)*w/2, by=(1-b.y)*h/2;
+    if (Math.hypot(bx-x,by-y)>Math.max(w,h)*0.65) continue;
+    for (const [width,alpha] of [[32,0.15],[10,0.65]]) {
+      ctx.globalAlpha=alpha*life*(reduced?0.5:1); ctx.lineWidth=width*life*Math.min(1,h/800)+0.5;
+      ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(bx,by); ctx.stroke();
+    }
+  }
+  const power=actionWind.speed;
+  if (power>0.01) {
+    ctx.lineWidth=1.5; ctx.globalAlpha=power*(reduced?0.15:0.30);
+    // A peripheral, broken white ring: the crosshair and target area stay clear.
+    for (let i=0;i<4;i++) {
+      const a=i*Math.PI/2+0.22;
+      ctx.beginPath(); ctx.ellipse(w/2,h/2,w*0.47,h*0.46,0,a,a+0.85); ctx.stroke();
+    }
+    if (!reduced) for (let i=0;i<22;i++) {
+      const a=i/22*Math.PI*2, pulse=(now*0.001*(1.8+power)+i*0.618)%1;
+      const r=0.84+pulse*0.40, length=0.045+power*0.10;
+      ctx.globalAlpha=power*(1-pulse)*0.52; ctx.lineWidth=1+(i%3)*0.6;
+      ctx.beginPath();ctx.moveTo(w/2+Math.cos(a)*w*0.48*r,h/2+Math.sin(a)*h*0.48*r);
+      ctx.lineTo(w/2+Math.cos(a)*w*0.48*(r+length),h/2+Math.sin(a)*h*0.48*(r+length));ctx.stroke();
+    }
+  }
+  ctx.globalAlpha=1;
 }
 
 // ── 🗡️ Dash abilities: a real dash, not a teleport ────────────────────────────────────────────────────────────────────
@@ -46578,7 +46671,7 @@ function updateMapGimmicks(dt) {
           const dmg = (z.dps || 4) / 2;
           const me = players[myId];
           if (me) {
-            me.hp = Math.max(0, me.hp - dmg);
+            applyEnvironmentDamage(dmg, z.type || 'lava');
             updateHealthHUD(me.hp);
             flashHitIndicator();
             if (me.hp <= 0 && !isDead) applyBotDamageToPlayer(z.type || 'lava', null);
@@ -52966,9 +53059,15 @@ window.alert = m => { uiAlert(m); };   // the ~50 fire-and-forget alerts
 // Before this a hit showed only a small number at the target (and a sound a muted phone never
 // plays); a kill made the body vanish and left one line in the corner feed; an empty gun did
 // nothing at all. Shooters answer all three where the eyes already are: on the crosshair.
+let hitmarkerPriorityUntil = 0, hitmarkerPriority = 0;
 function showHitmarker(kind) {
   const el = document.getElementById('hitmarker');
   if (!el) return;
+  const priority = kind === 'kill' ? 3 : kind === 'head' ? 2 : 1;
+  const now = performance.now();
+  if (now < hitmarkerPriorityUntil && priority < hitmarkerPriority) return;
+  hitmarkerPriority = priority;
+  hitmarkerPriorityUntil = now + (kind === 'kill' ? 380 : 110);
   el.className = kind === 'hit' ? '' : kind;          // '' = white; head / kill / lobby recolour it
   el.style.transition = 'none'; el.style.opacity = '1';
   clearTimeout(el._t);
@@ -54024,6 +54123,7 @@ function updateBullets(dt) {
             if (!isShielded() && (piercesDefense || !isRiotShieldBlocking())) {
               const _mp = meleeAbilityBuff?.type;
               if (!piercesDefense && _mp === 'deflect') {
+                flashHitIndicator('guard');
                 triggerDeflectImpact(at);
                 const dp = remoteMeshes[b.botId] ? remoteMeshes[b.botId].position.clone().setY(1.0)
                                                  : camera.position.clone().setY(1.0);
@@ -54033,7 +54133,7 @@ function updateBullets(dt) {
                 // wasHead is known here, but bot damage is not scaled by
                 // location yet, so it is deliberately not passed as if it were.
                 botHitsMe(b.botId, b.weaponId);
-              }
+              } else flashHitIndicator('guard');
             } else if (!isShielded() && !piercesDefense && isRiotShieldBlocking()) {
               depleteRiotShield(CLIENT_WEAPON_DAMAGE[b.weaponId] || 25);
             }
@@ -54745,7 +54845,7 @@ function updateMapEffects(dt) {
       lastChernobylTick = now;
       const me = players[myId];
       if (me && !isShielded() && !(adminCheats.godMode && currentUser?.isAdmin)) {
-        me.hp = Math.max(0, me.hp - 1);
+        applyEnvironmentDamage(1, 'chernobyl_gas');
         updateHealthHUD(me.hp);
         if (me.hp <= 0) applyBotDamageToPlayer('chernobyl_gas', null);
       }
@@ -55566,10 +55666,39 @@ function afterPlayerShot(weaponId, now) {
 }
 let playerFireUntil = 0;
 let _lastFireTick = 0;
+let environmentDamageSeq = 0, environmentDamageAck = 0;
+const pendingEnvironmentDamage = [];
+function reportEnvironmentDamage(amount, source) {
+  if (!(amount > 0) || !Number.isFinite(amount)) return;
+  const seq = ++environmentDamageSeq;
+  pendingEnvironmentDamage.push({ seq, amount });
+  socket.emit('environmentDamage', { seq, amount, source: String(source || 'hazard').slice(0,64),
+    matchId: currentRoom || players[myId]?.matchId });
+}
+function applyEnvironmentDamage(amount, source) {
+  const me = players[myId];
+  if (!me || !Number.isFinite(amount) || amount <= 0) return 0;
+  const before = me.hp;
+  me.hp = Math.max(0, before-amount);
+  const lost = before-me.hp;
+  if (lost > 0) { cancelMedkitHeal('interrupted by damage'); reportEnvironmentDamage(lost, source); }
+  return lost;
+}
+function reconcileEnvironmentHealth(data, currentHp) {
+  const ack = Number.isSafeInteger(data.environmentSeq) ? data.environmentSeq : environmentDamageAck;
+  if (ack < environmentDamageAck) return currentHp;
+  environmentDamageAck = ack;
+  for (let i=pendingEnvironmentDamage.length-1;i>=0;i--) {
+    if (pendingEnvironmentDamage[i].seq <= ack) pendingEnvironmentDamage.splice(i,1);
+  }
+  const pending = pendingEnvironmentDamage.reduce((sum,x) => sum+x.amount,0);
+  const hp = Math.max(0,data.hp-pending);
+  return data.healthEvent === 'heal' ? hp : Math.min(currentHp,hp);
+}
 function damagePlayerDOT(amount, deathWeapon) {
   const me = players[myId];
   if (!me || isDead || isShielded() || isRiotShieldBlocking() || match?.type === 'range') return;
-  me.hp = Math.max(0, me.hp - amount);
+  applyEnvironmentDamage(amount, deathWeapon || 'firework_launcher');
   updateHealthHUD(me.hp);
   flashHitIndicator();
   if (me.hp <= 0 && !isDead) applyBotDamageToPlayer(deathWeapon || 'firework_launcher', null);
@@ -55828,27 +55957,53 @@ function updateWeaponHUD() {
 // Damage with no known direction (lava, burning, a shield soaking a hit): a short red pulse at the
 // screen edge. The ring that used to flash here sat on the crosshair, where a shooter looks for
 // their OWN hits — the hitmarker lives there now (#34, #36).
-function flashHitIndicator() {
+function flashHitIndicator(kind = 'damage') {
   const el = document.getElementById('dmg-edge');
   if (!el) return;
+  el.classList.toggle('guard', kind === 'guard');
   el.style.transition = 'none'; el.style.opacity = '1';
   clearTimeout(el._t);
   el._t = setTimeout(() => { el.style.transition = 'opacity 0.25s'; el.style.opacity = '0'; }, 120);
 }
 // An arc around the crosshair, turned toward whoever hit you: up = in front, down = behind (#36).
+const damageDirectionEntries = [];
+function clearCombatFeedback() {
+  for (const entry of damageDirectionEntries) entry.el.remove();
+  damageDirectionEntries.length = 0;
+  hitmarkerPriority = 0; hitmarkerPriorityUntil = 0;
+  for (const id of ['hitmarker','dmg-edge']) {
+    const el = document.getElementById(id);
+    if (el) { clearTimeout(el._t); el.style.opacity = '0'; }
+  }
+}
 function showDamageDirection(fromId) {
   const layer = document.getElementById('dmg-dir');
   const src = players[fromId] || gameBots.find(b => b.id === fromId);
-  if (!layer || !src || src.x == null) return;
-  const toYaw = Math.atan2(camera.position.x - src.x, camera.position.z - src.z);   // the yaw that would face them
-  let rel = toYaw - euler.y;                                                          // how far to turn, + = left
-  rel = Math.atan2(Math.sin(rel), Math.cos(rel));
-  const arc = document.createElement('div');
-  arc.className = 'dmg-arc';
-  arc.style.transform = `rotate(${(-rel * 180 / Math.PI).toFixed(1)}deg)`;
-  layer.appendChild(arc);
-  while (layer.children.length > 4) layer.firstElementChild.remove();
-  setTimeout(() => { arc.style.opacity = '0'; setTimeout(() => arc.remove(), 650); }, 450);
+  if (!layer || !src || !Number.isFinite(src.x) || !Number.isFinite(src.z)) { flashHitIndicator(); return; }
+  let entry = damageDirectionEntries.find(x => x.id === fromId);
+  if (!entry) {
+    if (damageDirectionEntries.length >= 4) damageDirectionEntries.shift().el.remove();
+    const el = document.createElement('div'); el.className = 'dmg-arc'; layer.appendChild(el);
+    entry = { id: fromId, el }; damageDirectionEntries.push(entry);
+  }
+  // Remember the shot origin, not a live enemy position: this is feedback,
+  // never a tracker for someone moving behind cover.
+  entry.x = src.x; entry.z = src.z; entry.at = performance.now();
+  updateDamageDirections(entry.at);
+}
+function updateDamageDirections(now = performance.now()) {
+  if (!gameStarted || isDead || MATCH_FINALE.active) {
+    for (const entry of damageDirectionEntries) entry.el.remove();
+    damageDirectionEntries.length = 0; return;
+  }
+  for (let i=damageDirectionEntries.length-1;i>=0;i--) {
+    const entry = damageDirectionEntries[i], age = now-entry.at;
+    if (age >= 1050) { entry.el.remove(); damageDirectionEntries.splice(i,1); continue; }
+    const yaw = Math.atan2(camera.position.x-entry.x,camera.position.z-entry.z)-euler.y;
+    const rel = Math.atan2(Math.sin(yaw),Math.cos(yaw));
+    entry.el.style.transform = `rotate(${(-rel*180/Math.PI).toFixed(1)}deg)`;
+    entry.el.style.opacity = String(age < 400 ? 1 : Math.max(0,1-(age-400)/650));
+  }
 }
 function updateHealthHUD(hp) {
   // The bar is a share of THIS mode's health: the Towers are 100 HP, and a full bar there read as a third.
@@ -56301,15 +56456,21 @@ function applyBotDamageToPlayer(weaponId, botId, damageOverride) {
     return true;
   }
   const piercesDefense = weaponPiercesDefenses(weaponId);
-  if (!isDead && !isShielded() && !piercesDefense && isRiotShieldBlocking()) depleteRiotShield(CLIENT_WEAPON_DAMAGE[weaponId] || 25);
-  if (isDead || isShielded() || (!piercesDefense && isRiotShieldBlocking())) return;
-  if (!piercesDefense && (meleeAbilityBuff?.type === 'parry' || meleeAbilityBuff?.type === 'deflect')) return;
+  if (!isDead && !isShielded() && !piercesDefense && isRiotShieldBlocking()) {
+    depleteRiotShield(CLIENT_WEAPON_DAMAGE[weaponId] || 25);
+    return; // The shot that breaks the shield was still absorbed by it.
+  }
+  if (isDead || isShielded()) return;
+  if (!piercesDefense && (meleeAbilityBuff?.type === 'parry' || meleeAbilityBuff?.type === 'deflect')) {
+    flashHitIndicator('guard'); return;
+  }
   if (match?.type === 'range') return;
   const dmg = Number.isFinite(damageOverride) ? Math.max(0, Math.min(CLIENT_WEAPON_DAMAGE[weaponId] || 25, Math.round(damageOverride))) : CLIENT_WEAPON_DAMAGE[weaponId] || 25;
   const me = players[myId];
   if (!me || !dmg) { console.warn('[damage] no me or dmg', me, dmg); return; }
   const oldHp = me.hp;
   me.hp = Math.max(0, me.hp - dmg);
+  if (!botId) reportEnvironmentDamage(oldHp-me.hp, weaponId);
   console.log(`[damage] bot hit: ${weaponId}(${dmg}dmg) ${oldHp}→${me.hp}`);
   updateHealthHUD(me.hp);
   if (oldHp > 75 && me.hp <= 75 && me.hp > 0) playSoundEvent('low_hp', { volume: 1.0, minGap: 2500 });
@@ -56463,6 +56624,7 @@ function updateWeaponSelector() {
 const WEAPON_DAMAGE = Object.fromEntries(WEAPONS.map(w=>[w.id, w.damage]));
 
 socket.on('init', data => {
+  pendingEnvironmentDamage.length = 0; environmentDamageSeq = 0; environmentDamageAck = 0;
   myId = data.id; players = data.players;
   Object.entries(players).forEach(([pid,p]) => { if(pid!==myId) spawnRemotePlayer(p); });
   const me = players[myId];
@@ -56770,6 +56932,7 @@ socket.on('sessionReplaced', async () => {
 socket.on('nameRefused', () => console.warn('[auth] the server refused this name — sign in again'));
 
 socket.on('playerHit', data => {
+  const healthOnly = data.healthEvent === 'environment' || data.healthEvent === 'heal';
   if (data.shooterId && data.weapon) noteKillInfo(data.targetId, data.shooterId, data.weapon, data.headshot, { tags: data.tags });   // for the kill feed
   // Range mode: player is invincible — just ignore any damage (no healSelf to avoid server loop)
   if (data.targetId === myId && match?.type === 'range') {
@@ -56778,10 +56941,10 @@ socket.on('playerHit', data => {
     return;
   }
   // If it's us and we have spawn shield, absorb the hit visually but ignore HP change
-  if (data.targetId === myId && isShielded()) {
+  if (data.targetId === myId && !healthOnly && isShielded()) {
     const lost = Math.max(0, (players[myId]?.hp ?? data.hp) - data.hp);
     if (lost > 0) socket.emit('healSelf', { amount: lost });   // give it back: the server took it before the shield could say no
-    flashHitIndicator(); // show we were hit but shield absorbed it
+    flashHitIndicator('guard'); // shield absorbed it; no health-damage flash
     if (data.bulletId) {
       for (let i=localBullets.length-1; i>=0; i--) {
         if (localBullets[i].id===data.bulletId) { scene.remove(localBullets[i].mesh); localBullets.splice(i,1); break; }
@@ -56799,10 +56962,10 @@ socket.on('playerHit', data => {
     }
   }
   // Lightsabre parry: absorb incoming damage
-  if (data.targetId === myId && !incomingPiercesDefense && meleeAbilityBuff?.type === 'parry') {
+  if (data.targetId === myId && !healthOnly && !incomingPiercesDefense && meleeAbilityBuff?.type === 'parry') {
     const oldHp = players[myId]?.hp ?? data.hp;
     const dmgAbsorbed = Math.max(0, oldHp - data.hp);
-    flashHitIndicator();
+    flashHitIndicator('guard');
     if (dmgAbsorbed > 0) socket.emit('healSelf', { amount: dmgAbsorbed });
     if (data.bulletId) {
       for (let i=localBullets.length-1; i>=0; i--) {
@@ -56812,10 +56975,10 @@ socket.on('playerHit', data => {
     return;
   }
   // Katana deflect: absorb AND reflect damage back to nearest enemy
-  if (data.targetId === myId && !incomingPiercesDefense && meleeAbilityBuff?.type === 'deflect') {
+  if (data.targetId === myId && !healthOnly && !incomingPiercesDefense && meleeAbilityBuff?.type === 'deflect') {
     const oldHp = players[myId]?.hp ?? data.hp;
     const dmgAbsorbed = Math.max(0, oldHp - data.hp);
-    flashHitIndicator();
+    flashHitIndicator('guard');
     triggerDeflectImpact(_bulletWorldPosById(data.bulletId) || _fallbackDeflectWorldPos());
     if (dmgAbsorbed > 0) socket.emit('healSelf', { amount: dmgAbsorbed });
     // Reflect: hit nearest enemy bot
@@ -56839,10 +57002,9 @@ socket.on('playerHit', data => {
     return;
   }
   // Riot shield blocks frontal hits when not swinging
-  if (data.targetId === myId && !incomingPiercesDefense && isRiotShieldBlocking()) {
+  if (data.targetId === myId && !healthOnly && !incomingPiercesDefense && isRiotShieldBlocking()) {
     const oldHp = players[myId]?.hp ?? data.hp;
     const dmgAbsorbed = Math.max(0, oldHp - data.hp);
-    flashHitIndicator(); // shield clang
     depleteRiotShield(dmgAbsorbed);
     if (dmgAbsorbed > 0) socket.emit('healSelf', { amount: dmgAbsorbed });
     if (data.bulletId) {
@@ -56853,6 +57015,7 @@ socket.on('playerHit', data => {
     return;
   }
   const hpBeforeServerHit = data.targetId === myId ? (players[myId]?.hp ?? 300) : null;
+  if (data.targetId === myId) data = { ...data, hp: reconcileEnvironmentHealth(data,hpBeforeServerHit) };
   if (data.targetId === myId && hpBeforeServerHit != null && data.hp < hpBeforeServerHit) {
     cancelMedkitHeal('interrupted by damage');
   }
@@ -56897,7 +57060,7 @@ socket.on('playerHit', data => {
   if (data.targetId===myId) {
     updateHealthHUD(data.hp);
     if (hpBeforeServerHit != null && data.hp < hpBeforeServerHit) flashDamageScreen(hpBeforeServerHit - data.hp);
-    if (data.shooterId) showDamageDirection(data.shooterId); else flashHitIndicator();
+    if (!healthOnly) { if (data.shooterId) showDamageDirection(data.shooterId); else flashHitIndicator(); }
     const _vfx = WEAPONS.find(w => w.id === data.weapon)?.visionHit;
     if (_vfx) applyVisionHitEffect(_vfx);
   }
@@ -63234,12 +63397,15 @@ function loop() {
   lastTime = now;
   safeLoopStep('equipment-sway-reset', resetEquipmentSway);
   if (MATCH_FINALE.active) {
+    clearActionWind();
+    clearCombatFeedback();
     try { updateMatchFinale(now); }
     catch (error) { console.error('[match-finale]', error); stopMatchFinale(true); }
     return;
   }
   safeLoopStep('movement', () => updateMovement(dt));
   safeLoopStep('player-vel', () => updatePlayerVel(dt)); // measured speed, read by applyBlastImpulse's blast surf
+  safeLoopStep('walk-lean', () => updateHeldWalkLean(dt));
   safeLoopStep('quick-melee', () => updateQuickMelee());  // and back to what you were holding
   safeLoopStep('held-item', () => broadcastHeldWeapon());   // no-op unless it actually changed
   // Auto-fire used to poll on a fixed 50ms setInterval, independent of the
@@ -63393,9 +63559,11 @@ function loop() {
   updateChainMaulSwing(dt);
   updateMeleeGripPose();
   safeLoopStep('equipment-sway', updateEquipmentSway);
+  safeLoopStep('action-wind', () => updateActionWind(dt));
   updateWeaponSelector();
   updateTrashcanProximity();
   updateDamageNumbers();
+  updateDamageDirections();
   // Spin barrel clusters around the forward (Z) axis. The minigun now visibly
   // spools before it fires, and E-bracing holds it at full speed.
   if (currentWeaponIdx !== null && weaponModels[currentWeaponIdx]?._barrelCluster) {
@@ -65412,6 +65580,8 @@ function afterDeath(ms, fn) {
 // Everything a finished match (or Lobby 13) leaves behind that the next start must not
 // inherit. Shared by the mode menu and the end-of-match buttons so they can't drift apart.
 function teardownMatchWorld() {
+  clearCombatFeedback();
+  clearActionWind();
   countdownGeneration++;countdownActive=false;
   const countdown=document.getElementById('countdown-overlay');if(countdown)countdown.style.display='none';
   stopMatchFinale(false);

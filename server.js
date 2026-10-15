@@ -2685,7 +2685,7 @@ io.on('connection', (socket) => {
     creditFfaDamage(shooter, hpBefore - target.hp);
     // shooterId: the victim's screen points an arc at whoever fired (#36)
     const killTags = cleanKillTags(data.tags);
-    emitToMatch(target.matchId, 'playerHit', { targetId: target.id, hp: target.hp, bulletId: data.bulletId, shooterId: socket.id, weapon: data.weapon, headshot: !!data.headshot, tags: killTags });
+    emitToMatch(target.matchId, 'playerHit', { targetId: target.id, hp: target.hp, environmentSeq: target.environmentSeq || 0, bulletId: data.bulletId, shooterId: socket.id, weapon: data.weapon, headshot: !!data.headshot, tags: killTags });
     if (target.hp <= 0) {
       target.dead = true; target.deaths++; shooter.kills++;
       shooter.matchKills = (shooter.matchKills || 0) + 1;
@@ -2783,12 +2783,28 @@ io.on('connection', (socket) => {
     emitToMatchExcept(me.matchId, socket.id, 'matchEvent', { from: socket.id, evt });
   });
 
+  socket.on('environmentDamage', (data) => {
+    const p = players[socket.id];
+    if (!p || p.dead || p.matchMode === 'range' || p.matchId === 'lobby' || p.matchId === HUB_MATCH) return;
+    if (!data || !Number.isSafeInteger(data.seq) || data.seq <= (p.environmentSeq || 0)) return;
+    if (data.matchId != null && data.matchId !== p.matchId) return;
+    if (!Number.isFinite(data.amount) || data.amount <= 0 || data.amount > maxHpForMode(p.matchMode)) return;
+    p.environmentSeq = data.seq;
+    p.hp = Math.max(0,p.hp-data.amount);
+    emitToMatch(p.matchId, 'playerHit', { targetId:p.id,hp:p.hp,environmentSeq:p.environmentSeq,healthEvent:'environment',bulletId:null });
+    if (p.hp <= 0) {
+      p.dead = true; p.deaths++;
+      const weapon = typeof data.source === 'string' ? data.source.slice(0,64) : 'hazard';
+      emitToMatch(p.matchId,'playerDied',{targetId:p.id,killerId:null,weapon});
+    }
+  });
+
   socket.on('healSelf', (data) => {
     const p = players[socket.id];
     if (!p || p.dead) return;
     const amount = Math.max(0, Math.min(150, Number(data.amount) || 0));
     p.hp = Math.min(maxHpForMode(p.matchMode), p.hp + amount);
-    emitToMatch(p.matchId, 'playerHit', { targetId: p.id, hp: p.hp, bulletId: null });
+    emitToMatch(p.matchId, 'playerHit', { targetId: p.id, hp: p.hp, environmentSeq: p.environmentSeq || 0, healthEvent: 'heal', bulletId: null });
   });
 
   socket.on('readyRespawn', (data = {}) => {
@@ -3022,7 +3038,7 @@ io.on('connection', (socket) => {
     if (blocksFriendlyFire(bot, player)) return;
     let dmg = Math.round((WEAPON_DAMAGE[data.weapon] || 25) * falloffMultiplier(data.weapon, dist3(bot, player)));
     player.hp = Math.max(0, player.hp - dmg);
-    emitToMatch(player.matchId, 'playerHit', { targetId: player.id, hp: player.hp, bulletId: null, shooterId: bot.id, weapon: data.weapon, headshot: !!data.headshot });
+    emitToMatch(player.matchId, 'playerHit', { targetId: player.id, hp: player.hp, environmentSeq: player.environmentSeq || 0, bulletId: null, shooterId: bot.id, weapon: data.weapon, headshot: !!data.headshot });
     if (player.hp <= 0) {
       player.dead = true; player.deaths++;
       bot.kills++;
