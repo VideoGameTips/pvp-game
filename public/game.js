@@ -1089,7 +1089,10 @@ const MELEE_ITEMS = [
     doubleJump: true,
     // Reap Dash goes where you are pointing, up and down included, and covers twice what it did (about 13 m, now 26).
     ability: { name: 'Reap Dash', cd: 4200, desc: 'Movement dash · twice as far · goes where you aim, up included', type: 'melee_mobility', speed: 30, side: 0, up: 3.5, color: 0x99ffe8, aimDash: true, distance: 26, dashTime: 0.42 } },
-  { id: 'chain_hammer', name: 'Chain Maul', type: 'Chain Melee', damage: 85, range: 10, cooldown: 1100, speedMult: 1.1 },
+  // Meteor Hammer: the weighted-chain weapon of old China, flung rather than swung. At a person it wraps and reels
+  // them in; at a wall, a ceiling or the floor it bites, and the chain hauls YOU there.
+  { id: 'chain_hammer', name: 'Chain Maul', type: 'Chain Melee', damage: 85, range: 10, cooldown: 1100, speedMult: 1.1,
+    ability: { name: 'Meteor Hammer', cd: 7000, desc: 'Fling the weight 12 m: hit a person and they are reeled in (60 dmg); hit a surface and the chain hauls you there', type: 'melee_meteor', range: 12, damage: 60, pull: 24, root: 900, color: 0xffcc66 } },
 ];
 
 // ── 📦 Basic Skin Case generation ──────────────────────────────────────────
@@ -41171,6 +41174,7 @@ function cycleActiveSlot() {
 // gravity hammer stay useful in the air without switching to them.
 let _quickMeleeReturn = null;      // slot to go back to
 let _quickMeleeUntil  = 0;         // hard stop, so a held buff cannot strand you
+let _quickMeleeStart  = 0;
 
 function quickMelee() {
   if (fixedKitModeActive()) return;
@@ -41188,12 +41192,27 @@ function quickMelee() {
     return;
   }
   _quickMeleeReturn = activeSlot;
-  _quickMeleeUntil  = Date.now() + 3000;   // never stuck in melee longer than this
+  _quickMeleeStart  = Date.now();
+  _quickMeleeUntil  = _quickMeleeStart + 3000;   // never stuck in melee longer than this (a running sequence gets more)
   activeSlot = 'melee';
   equipActiveSlot();
-  // Use the ability if it has one, otherwise just swing.
-  if (hasAbility(m)) activateAbility();
+  // Use the ability if it has one and it is ready; otherwise just swing. (A melee whose ability was still cooling down
+  // used to do nothing at all.)
+  if (hasAbility(m) && meleeAbilityReady(m)) activateAbility();
   else tryMelee();
+}
+function meleeAbilityReady(item) {
+  const ab = item && item.ability;
+  if (!ab) return false;
+  return Date.now() - (abilityCDs[item.id] || 0) >= abilityCooldownFor(item, ab);
+}
+// Is a melee ability still playing out? The bat's crowd charge, a slam, a dash, the Scythe's aimed dash, a lunge, a
+// hook on its way: all of them stop the moment the slot changes (they check that melee is still held), so putting the
+// gun back while one is running cancelled it. That is what stopped quick melee for the bat, the Battle Axe, the
+// Sledge, the Shield and the rest.
+function meleeSequenceBusy() {
+  return !!(batCrowdCharge || meleeSlam || meleeDash || scytheDash || autoLunge || _grappleRide
+            || (typeof chainMaulSwing !== 'undefined' && chainMaulSwing));
 }
 
 function updateQuickMelee() {
@@ -41202,9 +41221,12 @@ function updateQuickMelee() {
   // Wait for the ability to actually finish: a timed buff until it expires, a
   // charge-based one until it is spent, and a plain swing until it lands.
   const buff = meleeAbilityBuff;
+  const seq = meleeSequenceBusy();
   const busy = !!(buff && ((buff.endTime && buff.endTime > now) || buff.usesLeft > 0))
-            || meleeSwingT < 1;
-  if (busy && now < _quickMeleeUntil) return;
+            || meleeSwingT < 1 || seq;
+  // a buff or a plain swing is held to the original three seconds; a sequence in progress gets up to six
+  const stop = seq ? Math.max(_quickMeleeUntil, _quickMeleeStart + 6000) : _quickMeleeUntil;
+  if (busy && now < stop) return;
   const back = _quickMeleeReturn;
   _quickMeleeReturn = null;
   if (isDead) return;
@@ -42732,6 +42754,53 @@ function updateScytheDash(dt) {
   s.left -= step;
   if (s.left <= 0.001 || blocked) finishScytheDash(true);
 }
+// 🌠 The weight goes out along the look direction. A person in the way is hit, wrapped and reeled in; a surface
+// takes the hook and the chain pulls you along it (the same ride the Grapple Hook uses).
+function doMeteorHammer(item, ab, now) {
+  const origin = camera.position.clone();
+  const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+  const range = ab.range || 12;
+  const enemyHit = _nearestAbilityRayHit(origin, dir, range, 0.9);
+  const surfaceHit = firstGrappleSurface(origin, dir, range);
+  const body = enemyHit ? enemyHit.mesh.position.clone().setY(enemyHit.mesh.position.y + 1.0) : null;
+  const enemyDist = body ? body.distanceTo(origin) : Infinity;
+  const surfaceDist = surfaceHit ? surfaceHit.point.distanceTo(origin) : Infinity;
+  const hitEnemy = !!enemyHit && enemyDist <= surfaceDist + 1.0;
+  if (!hitEnemy && !surfaceHit) {
+    showAnnouncement('METEOR HAMMER', 'Nothing in reach', '#ffcc66', 650);
+    playSoundEvent('dry_fire', { volume: 0.6, minGap: 80 });
+    return false;
+  }
+  const target = hitEnemy ? body : surfaceHit.point.clone();
+  spawnGrappleCable(origin.clone().addScaledVector(dir, 0.35), target);
+  spawnAbilityAOEFX(target.clone(), hitEnemy ? 0.9 : 0.6, ab.color || 0xffcc66);
+  playSoundEvent('melee_heavy', { volume: 0.95, pitch: 1.1, minGap: 0 });
+  _fovPunch = Math.max(_fovPunch, 4);
+  if (hitEnemy) {
+    const pid = enemyHit.pid, mesh = enemyHit.mesh;
+    const dummy = TRAINING_DUMMIES.find(d => d.id === pid);
+    if (dummy) handleDummyHit(dummy, mesh, { damage: ab.damage }, body);
+    else emitHit(pid, `meteor_${myId}_${now}`, item.id, body, false, { damageOverride: ab.damage });
+    spawnHitParticle(body);
+    if (!dummy) {                                              // reeled in, and held a moment
+      const toMe = origin.clone().sub(body); toMe.y = 0;
+      if (toMe.lengthSq() > 0.001) {
+        toMe.normalize();
+        const bot = resolveBot(pid);
+        if (bot && !bot.dead) {
+          bot.kbVX = toMe.x * (ab.pull || 24); bot.kbVZ = toMe.z * (ab.pull || 24);
+          bot.yVel = Math.max(bot.yVel || 0, 2.5);
+          bot._rootUntil = Math.max(bot._rootUntil || 0, Date.now() + (ab.root || 900));
+        } else socket.emit('grapplePull', { targetId: pid, weapon: 'chain_hammer', x: toMe.x, z: toMe.z, force: Math.min(26, ab.pull || 24) });
+      }
+    }
+    showAnnouncement('METEOR HAMMER', 'Reeled in', '#ffcc66', 650);
+  } else {
+    startPlayerGrappleRide(target, dir, surfaceHit.kind || 'wall');
+    showAnnouncement('METEOR HAMMER', 'Hauling', '#ffcc66', 650);
+  }
+  return true;
+}
 function doMeleeMovementAbility(item, ab) {
   if (ab.aimDash) {
     startScytheDash(item, ab);
@@ -43208,6 +43277,11 @@ function activateMeleeAbility() {
     const weaponId = ab.type === 'melee_charge' ? 'shield_charge' : item.id;
     if (!startMeleeDash(item, ab, weaponId, now)) abilityCDs[item.id] = 0;
     flashAbilityName(ab.name);
+  }
+  else if (ab.type === 'melee_meteor') {
+    // 🌠 Meteor Hammer: nothing to hook means nothing spent.
+    if (!doMeteorHammer(item, ab, now)) abilityCDs[item.id] = 0;
+    else { playAbilitySwing(item); flashAbilityName(ab.name); }
   }
   else if (ab.type === 'melee_spinslash') {
     // 🌀 Battle Axe: the whole axe goes round once while you rush forward. It is a dash that hits in a full circle.

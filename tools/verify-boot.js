@@ -1246,6 +1246,62 @@ if (ok && process.argv.includes('--flare')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+if (ok && process.argv.includes('--quickmelee')) {
+  // Quick melee (B / middle mouse) for every melee in play: it equips, uses the ability or swings, and a multi-part
+  // ability (crowd charge, slam, dash, spin, aimed dash) is allowed to finish before the gun comes back.
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const S = { started: gameStarted, dead: isDead, slot: activeSlot, mel: selectedMeleeIdx, match, mode: selectedModeConfig,
+                sound: playSoundEvent, anim: showAnnouncement, cd: countdownActive, pri: selectedPrimaryIdx, sec: selectedSecondaryIdx, sup: selectedSupportIdx };
+    const keepWalls = wallColliders.slice();
+    const reset = () => {
+      try { finishMeleeSlam(); } catch (e) {} try { finishMeleeDash(); } catch (e) {} try { finishBatCrowdClear(); } catch (e) {}
+      scytheDash = null; autoLunge = null; meleeAbilityBuff = null; _quickMeleeReturn = null; _grappleRide = null;
+      slamState = null; activeSlot = 'primary'; meleeSwingT = 1; lastMelee = 0;
+      for (const k of Object.keys(abilityCDs)) delete abilityCDs[k];
+    };
+    try {
+      gameStarted = true; isDead = false; match = { type: 'ffa', cfg: {} }; selectedModeConfig = GAME_MODE_CONFIGS['ffa5']; countdownActive = false;
+      selectedPrimaryIdx = WEAPONS.findIndex(w => w.id === 'ak20'); selectedSecondaryIdx = WEAPONS.findIndex(w => w.id === 'pistol'); selectedSupportIdx = 0;
+      playSoundEvent = () => {}; showAnnouncement = () => {};
+      const sequence = new Set(['melee_slam', 'melee_charge', 'melee_lunge', 'melee_spinslash', 'bat_crowd_clear']);
+      for (let i = 0; i < MELEE_ITEMS.length; i++) {
+        const m = MELEE_ITEMS[i];
+        if (m.archived || m.adminItem || m.skinOnly || !meleeModels[i]) continue;
+        reset();
+        selectedMeleeIdx = i;
+        camera.position.set(0, 1.65, 0); camera.quaternion.set(0, 0, 0, 1);
+        try { quickMelee(); } catch (e) { issues.push(m.id + ': quick melee threw: ' + e.message); continue; }
+        if (!_quickMeleeReturn || activeSlot !== 'melee') { issues.push(m.id + ': quick melee did not equip the melee'); continue; }
+        try { updateQuickMelee(); } catch (e) { issues.push(m.id + ': update threw: ' + e.message); }
+        const ab = m.ability;
+        if (ab && sequence.has(ab.type) && activeSlot !== 'melee') issues.push(m.id + ' (' + ab.type + '): the gun came back while the ability was still running');
+        if (ab && ab.type === 'melee_mobility' && ab.aimDash && activeSlot !== 'melee') issues.push(m.id + ': the aimed dash was cancelled by the slot change');
+        // with the ability cooling down it must still swing
+        reset();
+        selectedMeleeIdx = i;
+        if (ab) abilityCDs[m.id] = Date.now();
+        const before = lastMelee;
+        try { quickMelee(); } catch (e) { issues.push(m.id + ': cooldown quick melee threw: ' + e.message); continue; }
+        if (ab && !(meleeSwingT < 1 || lastMelee !== before)) issues.push(m.id + ': with the ability cooling down, quick melee did nothing');
+      }
+      // the Chain Maul has an ability now, and nothing in play is without one
+      const cm = MELEE_ITEMS.find(m => m.id === 'chain_hammer');
+      if (!cm || !cm.ability || cm.ability.type !== 'melee_meteor') issues.push('the Chain Maul has no ability');
+      for (const m of MELEE_ITEMS) if (!m.archived && !m.adminItem && !m.skinOnly && !m.ability) issues.push(m.id + ': a melee in play with no ability');
+    } finally {
+      reset();
+      gameStarted = S.started; isDead = S.dead; activeSlot = S.slot; selectedMeleeIdx = S.mel; match = S.match;
+      selectedModeConfig = S.mode; playSoundEvent = S.sound; showAnnouncement = S.anim; countdownActive = S.cd;
+      selectedPrimaryIdx = S.pri; selectedSecondaryIdx = S.sec; selectedSupportIdx = S.sup;
+      wallColliders.length = 0; wallColliders.push(...keepWalls);
+    }
+    return issues;
+  })()`);
+  console.log('quick melee checks: every melee equips, uses its ability or swings, and sequences finish');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 if (ok && process.env.MAP_REVIEW_DIR) {
   fs.mkdirSync(process.env.MAP_REVIEW_DIR, { recursive: true });
   for (const name of ['forest', 'desert', 'tundra', 'refinery', 'space', 'volcano', 'titanic', 'carrier', 'pearl_harbor']) {
