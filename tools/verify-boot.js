@@ -734,6 +734,105 @@ if (ok && process.argv.includes('--posture')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+if (ok && process.argv.includes('--douse')) {
+  // Fire against water, and the flame jet: the Flamethrower fired at the floor under you lifts you (capped, and with
+  // a fuel limit); a water gun or a smoke cloud puts out burn zones and ground flares, takes the fire off a burning
+  // player or bot and leaves you unable to catch fire for a while.
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const saved = { dead: isDead, started: gameStarted, slam: slamState, pos: camera.position.clone(), quat: camera.quaternion.clone(),
+      walls: wallColliders.slice(), sound: playSoundEvent, bots: gameBots.slice() };
+    const keepFx = _activeModelSkin.glock18;
+    playSoundEvent = () => {};
+    const look = pitch => { camera.quaternion.setFromEuler(new THREE.Euler(pitch, 0, 0, 'YXZ')); };
+    const reset = () => { isDead = false; gameStarted = true; slamState = null; camera.position.set(0, 1.65, 0); playerFireUntil = 0; _playerDot = null; playerWetUntil = 0; _flameFuel = FLAME_JET.fuelMs; _flameFuelAt = 0; smokeClouds.length = 0; wallColliders.length = 0; };
+    try {
+      // ── flame jet
+      reset(); look(0);
+      let t = 1000;
+      if (flameJetShot(t += 35)) issues.push('aimed level, the flamethrower lifted you');
+      look(-Math.PI / 2 + 0.05);
+      if (!flameJetShot(t += 35) || !slamState || slamState.vel <= 0) issues.push('aimed straight down on the ground, the flamethrower did not lift you');
+      let n = 0; while (n++ < 40 && flameJetShot(t += 35)) {}
+      if (slamState.vel > FLAME_JET.cap + 1e-6) issues.push('the jet went past its cap: ' + slamState.vel);
+      reset(); look(-Math.PI / 2 + 0.05); camera.position.y = 1.65 + 9;      // far above the floor: the flames cannot reach
+      if (flameJetShot(t += 35)) issues.push('the flames reached a floor 9 m below');
+      reset(); look(-0.3);
+      if (flameJetShot(t += 35)) issues.push('aiming only 17 degrees down still lifted you');
+      // fuel: held down in the air it runs out within about the fuel's worth of fire
+      reset(); look(-Math.PI / 2 + 0.05); slamState = { vel: 0, type: 'jump' }; camera.position.y = 3.0;
+      let thrusts = 0;
+      for (let k = 0; k < 200; k++) { slamState.vel = 0; if (flameJetShot(t += 35)) thrusts++; }
+      if (thrusts < 20 || thrusts > FLAME_JET.fuelMs / 35 + 3) issues.push('the jet gave ' + thrusts + ' pushes in the air, fuel is ' + FLAME_JET.fuelMs + ' ms');
+      // a slam is not interrupted
+      reset(); look(-Math.PI / 2 + 0.05); slamState = { vel: -10, type: 'slam' };
+      if (flameJetShot(t += 35) || slamState.type !== 'slam') issues.push('the jet interrupted a slam');
+
+      // ── what counts as water
+      if (!isWaterWeapon('foam_cannon')) issues.push('the foam cannon is not water');
+      if (isWaterWeapon('ak20')) issues.push('an AK is not water');
+      _activeModelSkin.glock18 = { id: 'glock18_water_pistol' };
+      if (!isWaterWeapon('glock18')) issues.push('a glock in a water pistol skin is not water');
+      if (keepFx) _activeModelSkin.glock18 = keepFx; else delete _activeModelSkin.glock18;
+
+      // ── a water gun
+      reset(); look(-0.35);                                                   // aimed down a little, along -z
+      const ground = camera.position.y / Math.tan(0.35);                      // where the stream meets the floor
+      spawnBurnZone(new THREE.Vector3(0, 0, -ground), 2, 5, 20000, { molotov: true });
+      spawnGroundFlare(new THREE.Vector3(0.5, 0, -ground));
+      const zones0 = burnZones.length, flares0 = groundFlares.length;
+      playerFireUntil = Date.now() + 8000; _playerDot = { until: Date.now() + 8000, dps: 7, weaponId: 'flame_burn' };
+      waterSpray();
+      if (burnZones.length >= zones0) issues.push('the water gun did not put out the burn zone it was aimed at');
+      if (groundFlares.length >= flares0) issues.push('the water gun did not put out the flare');
+      if (playerFireUntil !== 0 || _playerDot) issues.push('firing a water gun left you burning');
+      if (!(playerWetUntil > Date.now() + 1000)) issues.push('firing a water gun did not leave you wet');
+      applyDotToPlayer('flamethrower');
+      if (_playerDot) issues.push('a wet player caught fire from a flamethrower hit');
+      playerWetUntil = 0; applyDotToPlayer('flamethrower');
+      if (!_playerDot) issues.push('a dry player no longer catches fire');
+      // a bot in the stream
+      reset(); look(0);
+      gameBots.length = 0;
+      const bot = { id: 'wet_bot', x: 0, z: -6, dead: false, _fireUntil: Date.now() + 9000 };
+      gameBots.push(bot); _dotTargets.wet_bot = { until: Date.now() + 9000, dps: 7, weaponId: 'flame_burn' };
+      waterSpray();
+      if (bot._fireUntil !== 0 || _dotTargets.wet_bot) issues.push('a burning bot in the stream kept burning');
+      // and one off to the side does not
+      bot._fireUntil = Date.now() + 9000; bot.x = 9; bot.z = -2;
+      waterSpray();
+      if (!bot._fireUntil) issues.push('a bot well off the stream was put out');
+
+      // ── smoke
+      reset(); look(0); gameBots.length = 0;
+      spawnBurnZone(new THREE.Vector3(2, 0, 1), 1.5, 5, 20000, { molotov: true });
+      playerFireUntil = Date.now() + 8000;
+      spawnSmokeCloud(new THREE.Vector3(1, 0, 0));
+      if (!smokeAt(1, 0)) issues.push('a smoke cloud is not registered');
+      updateBurnZones(1 / 60);
+      if (burnZones.length) issues.push('a burn zone inside a smoke cloud kept burning');
+      if (playerFireUntil !== 0) issues.push('standing in smoke left you burning');
+      if (!(playerWetUntil > Date.now())) issues.push('standing in smoke did not stop you catching fire');
+      // outside the smoke nothing changes
+      reset(); look(0); playerFireUntil = Date.now() + 8000;
+      spawnSmokeCloud(new THREE.Vector3(30, 0, 30));
+      updateBurnZones(1 / 60);
+      if (playerFireUntil === 0) issues.push('smoke far away put you out');
+    } finally {
+      isDead = saved.dead; gameStarted = saved.started; slamState = saved.slam; playSoundEvent = saved.sound;
+      camera.position.copy(saved.pos); camera.quaternion.copy(saved.quat);
+      wallColliders.length = 0; wallColliders.push(...saved.walls);
+      gameBots.length = 0; gameBots.push(...saved.bots);
+      while (burnZones.length) { const z = burnZones.pop(); try { scene.remove(z.mesh); } catch (e) {} }
+      while (groundFlares.length) { const g = groundFlares.pop(); try { scene.remove(g.mesh); } catch (e) {} }
+      smokeClouds.length = 0; playerFireUntil = 0; _playerDot = null; playerWetUntil = 0; delete _dotTargets.wet_bot;
+    }
+    return issues;
+  })()`);
+  console.log('douse checks: flame jet lifts (capped, fuel-limited), water guns and smoke put fire out, wet cannot burn');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 if (ok && process.argv.includes('--chain-maul')) {
   const issues = vm.runInThisContext(`(() => {
     const issues = [], v = (x,y,z) => new THREE.Vector3(x,y,z);

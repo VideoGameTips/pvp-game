@@ -157,6 +157,7 @@
     'long lanes': '长视线',
     'open lanes': '开阔通道',
     'broken lanes': '被打断的通道',
+    'FIRE PUT OUT': '火已熄灭',
     'small duel maps': '小型对决地图', '1 enemy · small duel maps': '1 个敌人 · 小型对决地图', '⚔️ SMALL 1v1 MAPS ▸': '⚔️ 1v1 小地图 ▸',
     'DUEL GRID': '对决网格', 'CROSSROADS': '十字路口', 'PILLAR HALL': '石柱大厅', 'HIGH GROUND': '制高点',
     '🎖 CONTRACT WRAPS': '🎖 契约涂装', 'Not for sale. Finish the contract in real matches and the wrap is yours.': '不出售。在正式对局里完成契约，涂装就是你的。',

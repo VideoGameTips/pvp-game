@@ -1954,7 +1954,7 @@ function clearPlayerStatusEffects() {
   playerFrostSlow = 100; playerChillUntil = 0;
   playerRootedUntil = 0; playerRootImmuneUntil = 0;
   adrenalineUntil = 0; nanoShieldUntil = 0;
-  try { playerFireUntil = 0; _playerDot = null; } catch (e) {}   // declared further down the file
+  try { playerFireUntil = 0; _playerDot = null; playerWetUntil = 0; _flameFuel = FLAME_JET.fuelMs; } catch (e) {}   // declared further down the file
   try { cancelMedkitHeal(); } catch (e) {}
 }
 function clearBotStatusEffects(bot) {
@@ -44996,6 +44996,7 @@ function tryShoot() {
     }, 120);
   }
   expireSpawnShield(); // firing breaks the spawn shield
+  try { afterPlayerShot(currentWeapon.id, now); } catch (e) { console.warn('[shot fx]', e); }   // flame jet, water spray
   if (match?.type === 'range') { rangeStats.shots++; updateRangeHUD(); updateMatchHUD(); }
 
   const shotViolence = weaponKickStrength(wStats, wStats.pellets || 1);
@@ -55192,6 +55193,116 @@ function spawnBurnZone(pos, radius, dps, durationMs, opts = {}) {
 }
 // 🔥 Lingering "on fire" status — Molotov sets this when you touch the flames; it
 // keeps ticking after you leave (5/sec for ~10s). Player + per-bot timers.
+// ── 🔥💧 Fire against water, and the flame jet ─────────────────────────────────────────────────────────────────
+// Water puts fire out. Two things count as water: a water gun (the Foam Cannon, and any gun wearing a skin that
+// squirts or sprinkles: water pistol, fire extinguisher, lawn sprinkler, soap, slush) and a smoke cloud. Each does
+// three things: it extinguishes burn zones and ground flares it touches, it takes the fire off anyone burning in it
+// (a bot's burn too), and it leaves YOU wet for a few seconds, which cannot catch fire and takes only a third of the
+// heat of a burn zone. Spraying yourself down is a real defence against the Flamethrower and a Molotov.
+//   And the other way round: the Flamethrower, fired at the ground under you, is a jet. Each round shoves you up a
+// little, up to a cap, for as long as the fuel lasts (about two seconds of fire in the air; the ground refills it).
+// It has to be the flames reaching the floor, so the steeper you aim the higher you can hover.
+let playerWetUntil = 0;
+const FLAME_JET = { pitch: -0.5, reach: 4.6, perShot: 1.5, cap: 5.6, fuelMs: 2200, refill: 2.5 };
+let _flameFuel = FLAME_JET.fuelMs, _flameFuelAt = 0;
+const _jetDir = new THREE.Vector3();
+function flameJetShot(now) {
+  const dt = _flameFuelAt ? Math.min(250, now - _flameFuelAt) : 0;
+  _flameFuelAt = now;
+  if (isDead || pilotedVehicle || pilotedMortar) return false;
+  if (isPlayerGrounded()) _flameFuel = Math.min(FLAME_JET.fuelMs, _flameFuel + dt * FLAME_JET.refill);
+  camera.getWorldDirection(_jetDir);
+  if (_jetDir.y > FLAME_JET.pitch) return false;              // not aimed down
+  const h = camera.position.y - (getGroundEyeY() - PLAYER_EYE_HEIGHT);
+  if (h / -_jetDir.y > FLAME_JET.reach) return false;         // the flames do not reach the floor from here
+  if (_flameFuel <= 0) return false;
+  if (slamState && slamState.type && slamState.type !== 'jump' && slamState.type !== 'fall') return false;   // a slam, a dash...
+  const v0 = slamState ? slamState.vel : 0;
+  if (v0 >= FLAME_JET.cap) return false;
+  _flameFuel = Math.max(0, _flameFuel - Math.max(dt, 20));
+  slamState = { vel: Math.min(FLAME_JET.cap, v0 + FLAME_JET.perShot), type: 'jump' };
+  window._slideUntil = 0;
+  return true;
+}
+const WATER_WEAPONS = new Set(['foam_cannon']);
+function isWaterWeapon(weaponId) {
+  if (WATER_WEAPONS.has(weaponId)) return true;
+  let fx = null;
+  try { fx = _skinFxFor(weaponId); } catch (e) {}
+  return !!(fx && fx.sound && (fx.sound.kind === 'squirt' || fx.sound.kind === 'sprinkle'));
+}
+function dousePlayer(ms) {
+  const now = Date.now();
+  const burning = playerFireUntil > now || (_playerDot && _playerDot.weaponId === 'flame_burn');
+  playerFireUntil = 0;
+  if (_playerDot && _playerDot.weaponId === 'flame_burn') _playerDot = null;
+  playerWetUntil = Math.max(playerWetUntil, now + ms);
+  if (burning) { try { flashAbilityName('FIRE PUT OUT'); } catch (e) {} }
+}
+function douseBot(bot) {
+  if (!bot) return;
+  bot._fireUntil = 0;
+  try { delete _dotTargets[bot.id]; } catch (e) {}
+}
+// Put out every burn zone (not acid: that is not fire) and ground flare within r of (x, z).
+function extinguishAt(x, z, r) {
+  let n = 0;
+  for (let i = burnZones.length - 1; i >= 0; i--) {
+    const bz = burnZones[i];
+    if (bz.acid) continue;
+    const d = Math.hypot(bz.x - x, bz.z - z);
+    if (d < bz.radius + r) { scene.remove(bz.mesh); burnZones.splice(i, 1); n++; }
+  }
+  for (let i = groundFlares.length - 1; i >= 0; i--) {
+    const f = groundFlares[i];
+    if (Math.hypot(f.mesh.position.x - x, f.mesh.position.z - z) < r + 0.6) {
+      scene.remove(f.mesh); f.ember.dispose(); f.halo.dispose(); groundFlares.splice(i, 1); n++;
+    }
+  }
+  if (n) playSoundEvent('fire_sizzle', { position: new THREE.Vector3(x, 0, z), volume: 0.9, pitch: 1.6, minGap: 120 });
+  return n;
+}
+const _spray = new THREE.Vector3();
+function waterSpray() {
+  dousePlayer(3000);                                           // you are wet the moment you fire it
+  camera.getWorldDirection(_spray);
+  let t = 14;                                                  // the stream lands on the floor along your aim
+  if (_spray.y < -0.05) t = Math.min(t, (camera.position.y - (getGroundEyeY() - PLAYER_EYE_HEIGHT)) / -_spray.y);
+  extinguishAt(camera.position.x + _spray.x * t, camera.position.z + _spray.z * t, 2.4);
+  const hl = Math.hypot(_spray.x, _spray.z) || 1;
+  for (const bot of gameBots) {                                // and whoever is in the stream
+    if (bot.dead) continue;
+    const dx = bot.x - camera.position.x, dz = bot.z - camera.position.z, d = Math.hypot(dx, dz);
+    if (d < 0.01 || d > 14) continue;
+    if ((dx * _spray.x + dz * _spray.z) / (d * hl) > 0.93) douseBot(bot);
+  }
+}
+const smokeClouds = [];       // { x, z, r, until }: where smoke is right now (spawnSmokeCloud registers each one)
+function smokeAt(x, z) {
+  const now = Date.now();
+  for (let i = smokeClouds.length - 1; i >= 0; i--) {
+    const c = smokeClouds[i];
+    if (now >= c.until) { smokeClouds.splice(i, 1); continue; }
+    if (Math.hypot(c.x - x, c.z - z) < c.r) return c;
+  }
+  return null;
+}
+function updateSmokeDouse() {
+  if (!smokeClouds.length) return;
+  const now = Date.now();
+  for (let i = smokeClouds.length - 1; i >= 0; i--) {
+    const c = smokeClouds[i];
+    if (now >= c.until) { smokeClouds.splice(i, 1); continue; }
+    extinguishAt(c.x, c.z, c.r);
+    if (!isDead && Math.hypot(camera.position.x - c.x, camera.position.z - c.z) < c.r) dousePlayer(2500);
+    for (const bot of gameBots) if (!bot.dead && Math.hypot(bot.x - c.x, bot.z - c.z) < c.r) douseBot(bot);
+  }
+}
+// Called once for every round the player fires.
+function afterPlayerShot(weaponId, now) {
+  if (weaponId === 'flamethrower') flameJetShot(now);
+  if (isWaterWeapon(weaponId)) waterSpray();
+}
 let playerFireUntil = 0;
 let _lastFireTick = 0;
 function damagePlayerDOT(amount, deathWeapon) {
@@ -55204,6 +55315,7 @@ function damagePlayerDOT(amount, deathWeapon) {
 }
 function updateBurnZones(dt) {
   const now = Date.now();
+  updateSmokeDouse();
   let playerInMolotov = false;
   for (let i = burnZones.length - 1; i >= 0; i--) {
     const z = burnZones[i];
@@ -55228,8 +55340,9 @@ function updateBurnZones(dt) {
       if (!z.acid) playSoundEvent('fire_sizzle', { position: new THREE.Vector3(z.x, 0, z.z), remote: true, volume: 0.55, minGap: 260 });
       const botTickWeapon = z.tickWeapon || (z.molotov ? 'molotov_burn' : 'firework_launcher');
       if (pInside) {
-        damagePlayerDOT(z.dps, 'firework_launcher');
-        if (z.molotov) playerFireUntil = now + (z.igniteDur || 10000); // catch fire
+        const wet = now < playerWetUntil && !z.acid;             // wet: a third of the heat, and nothing to catch
+        damagePlayerDOT(wet ? z.dps / 3 : z.dps, 'firework_launcher');
+        if (z.molotov && !wet) playerFireUntil = now + (z.igniteDur || 10000); // catch fire
       }
       for (const bot of gameBots) {
         if (bot.dead) continue;
@@ -55281,6 +55394,7 @@ function applyDotToPlayer(weaponId) {
   const w = WEAPONS.find(x => x.id === weaponId);
   const d = w && (w.burnOnHit || w.poisonOnHit);
   if (!d) return;
+  if (w.burnOnHit && Date.now() < playerWetUntil) return;       // wet: fire does not take
   const until = Date.now() + d.dur;
   _playerDot = { until: Math.max(until, _playerDot ? _playerDot.until : 0), dps: d.dps,
                  weaponId: w.burnOnHit ? 'flame_burn' : 'caustic_burn' };
@@ -57248,6 +57362,7 @@ function getSupportRadius(item) {
 }
 
 function spawnSmokeCloud(pos) {
+  smokeClouds.push({ x: pos.x, z: pos.z, r: 4.5, until: Date.now() + 1400 + 7000 });   // fire cannot live in it (updateSmokeDouse)
   // Round 1 took 5 thin see-through puffs to 18 on a spiral (~15x volume).
   // Still read as small, so round 2 scales that same spiral up another 3x by
   // volume (radius/spread × cbrt(3) ≈ 1.44) — ~45x the original puff volume.
