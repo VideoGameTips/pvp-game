@@ -8749,13 +8749,24 @@ function buildLobby13Map() {
   addMapGround(m, 0xc4ccce, null);
   group._skyColor = 0xb8d6e4;
   const shell = 0xdce2e2, steel = 0x303e43, teal = 0x197f85;
-  const box = (x, y, z, w, h, d, color) => {
-    const mesh = addMapBox(m, x, y, z, w, h, d, color);
+  const box = (x, y, z, w, h, d, color, turn = 0) => {
+    const mesh = addMapBox(m, x, y, z, w, h, d, color, turn);
     mesh.castShadow = mesh.receiveShadow = true;
     return mesh;
   };
   const ground = group.children.find(o => o.isMesh);
   ground.receiveShadow = true;
+  const footprint = [[-13,-32],[5,-32],[12,-25],[18,-25],[18,-18],[35,-18],
+    [35,18],[29,18],[29,32],[16,32],[10,38],[-6,38],[-12,32],[-12,27],
+    [-29,27],[-29,18],[-35,18],[-35,-15],[-25,-15],[-25,-23],[-13,-23]];
+  group.userData.lobbyFootprint = footprint;
+  const outlineGeometry = points => {
+    const shape = new THREE.Shape();
+    points.forEach(([x,z],i) => i ? shape.lineTo(x,-z) : shape.moveTo(x,-z));
+    shape.closePath(); return new THREE.ShapeGeometry(shape);
+  };
+  ground.geometry.dispose(); ground.geometry = outlineGeometry(footprint);
+  setMapBounds(m, 74, 80);
   // Decorative trim stays out of navigation and is merged with the static shell.
   const detail = (x, y, z, w, h, d, color) => {
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d),
@@ -8798,38 +8809,50 @@ function buildLobby13Map() {
     mesh.position.set(x, y, z); mesh.rotation.y = angle; group.add(mesh);
   };
 
-  // A clerestory hall: shaded side wings, an open skylight and a clear central aisle.
-  box(0, 5, -32, 70, 10, 1.2, shell);
-  box(0, 5, 32, 70, 10, 1.2, shell);
-  [-35, 35].forEach(x => box(x, 5, 0, 1.2, 10, 66, shell));
-  [-31.3, 31.3].forEach(z => {
-    detail(0, 1.1, z, 69, 2.2, .15, steel);
-    detail(0, 8.7, z, 69, .18, .2, teal);
-    for (let x = -30; x <= 30; x += 6) {
-      detail(x, 5.8, z, 4.8, 3.4, .18, 0x66959e);
-      for (const dx of [-2.4, 0, 2.4]) detail(x + dx, 5.8, z + (z < 0 ? .12 : -.12), .09, 3.5, .12, steel);
+  // A real stepped footprint, with chamfered entrance and separate-height wings.
+  footprint.forEach(([ax,az],i) => {
+    const [bx,bz] = footprint[(i+1)%footprint.length];
+    const dx=bx-ax,dz=bz-az,len=Math.hypot(dx,dz),turn=-Math.atan2(dz,dx);
+    const nx=-dz/len,nz=dx/len,x=(ax+bx)/2,z=(az+bz)/2;
+    const height = x < -13 ? 8.4 : x > 18 && Math.abs(z)<19 ? 10 : 8.8;
+    box(x,height/2,z,len+.3,height,.8,shell,turn);
+    const trim = (along,y,w,h,color) => {
+      const mesh=detail(x+dx*along/len+nx*.46,y,z+dz*along/len+nz*.46,w,h,.12,color);
+      mesh.rotation.y=turn;
+    };
+    trim(0,1,len,2,steel);trim(0,height-.65,len,.14,teal);
+    const count=Math.floor((len-1)/4.5);
+    for(let j=0;j<count;j++){
+      const along=(j-(count-1)/2)*4.5;
+      trim(along,5.6,3.8,2.6,0x66959e);
+      trim(along,5.6,.08,2.7,steel);
+      box(x+dx*along/len+nx*.8,height/2,z+dz*along/len+nz*.8,.35,height,.35,steel);
     }
   });
-  [-33.9, 33.9].forEach(x => {
-    for (let z = -27; z <= 27; z += 9) {
-      box(x, 4.9, z, .8, 9.8, .8, steel);
-      detail(x + (x < 0 ? .44 : -.44), 3, z, .08, 4, .22, 0x51b9b0);
-    }
+  // Roofs follow each wing instead of bridging the entire building with one lid.
+  [[-25,0,20,29,8.4],[-20.5,22.5,16,9,8.4],[25,0,20,36,10],
+    [21.5,25,14.5,14,8.8],[-3, -27.5,19,8,8.8],[2,33,13,8,8.8]].forEach(([x,z,w,d,h])=>{
+    box(x,h,z,w,.35,d,shell);
+    for(let q=-d/2+2;q<d/2;q+=4)detail(x,h-.22,z+q,w-2,.06,.2,0xe4f6f0);
   });
-  [-24, 24].forEach(x => box(x, 9.8, 0, 22, .45, 64, shell));
-  for (let z = -28; z <= 28; z += 7) {
-    box(0, 10.2, z, 70, .45, .38, steel);
-    detail(-24, 9.54, z, 16, .07, .32, 0xe4f6f0);
-    detail(24, 9.54, z, 16, .07, .32, 0xe4f6f0);
+  for(const z of [-18,-6,6,18]){
+    box(0,10.5,z,31,.3,.25,steel);
+    for(const x of [-13,13]){
+      box(x,5.25,z,.6,10.5,.6,steel);
+      detail(x,4,z+.32,.18,6,.08,teal);
+    }
   }
-  floor(0, 0, 25, 61, 0xe5e8e5, .025);
-  for (let z = -30; z <= 30; z += 3) floor(0, z, 25, .035, 0xaab5b5);
-  [-12.6, 12.6].forEach(x => floor(x, 0, .14, 61, teal));
+  const atrium= new THREE.Mesh(outlineGeometry([[-12.5,-31],[4.5,-31],[7.5,-28],
+    [7.5,-24],[12.5,-24],[12.5,26],[7.5,31],[7.5,36.5],[-5.5,36.5],[-11.5,30.5],[-11.5,26],[-12.5,26]]),
+    new THREE.MeshPhongMaterial({color:0xe5e8e5,map:pavingTex,bumpMap:pavingTex,bumpScale:.025,shininess:18}));
+  atrium.rotation.x=-Math.PI/2;atrium.position.y=.043;atrium.receiveShadow=true;group.add(atrium);
+  for(let z=-30;z<=30;z+=3)floor(z<-24||z>24?-2.5:0,z,z<-24||z>24?18:25,.035,0xaab5b5);
+  [-12.6,12.6].forEach(x=>floor(x,0,.14,48,teal));
   for (let z = 14; z <= 26; z += 3) {
     floor(-.7, z, .14, 1.2, teal); floor(.7, z, .14, 1.2, teal);
   }
-  sign('PVP ARENA', 'LOBBY 13  /  TRAIN. EQUIP. CHALLENGE.', 0, 6.3, -31.05, 23);
-  sign('SEE YOU IN THE ARENA', 'LOBBY 13', 0, 5.7, 31.05, 18, Math.PI);
+  sign('PVP ARENA', 'LOBBY 13  /  TRAIN. EQUIP. CHALLENGE.', -3.5, 6.3, -30.8, 18);
+  sign('SEE YOU IN THE ARENA', 'LOBBY 13', 2, 5.7, 37.4, 14, Math.PI);
 
   // Seating pockets leave the spawn, ramp and both loadout-can approaches open.
   const bench = (x, z, flip) => {
@@ -8848,7 +8871,7 @@ function buildLobby13Map() {
         .22, h, .22, i % 2 ? 0x487d50 : 0x325e43);
     }
   };
-  [[-11,-26],[11,-26],[-11,28],[11,28],[-31,-17],[-31,17]].forEach(([x,z]) => planter(x,z));
+  [[-11,-26],[5,-28],[-10,28],[11,28],[-32,-11],[-32,15]].forEach(([x,z]) => planter(x,z));
 
   // Keep the slide circuit in its own wing, leaving the arrival sightline open.
   addRamp(m, -22, 2, 0, 1, { width: 5, rise: 3, landing: 2.5,
@@ -8869,13 +8892,14 @@ function buildLobby13Map() {
 
   // Armory display alcoves flank the entrance, rather than obstructing the cans.
   [-21, 21].forEach(x => {
-    box(x, 1.4, 28.5, 11, 2.8, 2, steel);
-    detail(x, 2.85, 28.5, 11.2, .14, 2.2, 0x99acac);
-    sign('ARMORY', 'LOADOUT / CUSTOMIZE', x, 4.5, 31.05, 10, Math.PI);
+    const z=x<0?23.5:28.5;
+    box(x, 1.4, z, 11, 2.8, 2, steel);
+    detail(x, 2.85, z, 11.2, .14, 2.2, 0x99acac);
+    sign('ARMORY', 'LOADOUT / CUSTOMIZE', x, 4.5, x<0?26.4:31.4, 10, Math.PI);
     for (let i = -2; i <= 2; i++) {
-      detail(x + i * 1.8, 1.4, 27.45, 1.45, 1.8, .08, 0x1c292d);
-      detail(x + i * 1.8, 1.4, 27.37, .12, 1.15, .12, 0x8ca2a5);
-      detail(x + i * 1.8 + .25, 1.15, 27.37, .5, .22, .12, 0x8ca2a5);
+      detail(x + i * 1.8, 1.4, z-1.05, 1.45, 1.8, .08, 0x1c292d);
+      detail(x + i * 1.8, 1.4, z-1.13, .12, 1.15, .12, 0x8ca2a5);
+      detail(x + i * 1.8 + .25, 1.15, z-1.13, .5, .22, .12, 0x8ca2a5);
     }
   });
   [[6,3],[-6,-3]].forEach(([x,z]) => {
