@@ -208,6 +208,34 @@ if (ok && process.argv.includes('--action-wind')) {
   else console.log('action wind: extra-speed threshold, fade, death cleanup and pointer-transparent overlay');
 }
 
+if (ok && process.argv.includes('--melee-feedback')) {
+  const issues = vm.runInThisContext(`(() => {
+    const issues=[], saved={getAudioCtx,unlockAudio,playFilteredNoise,playTone,meleeDash};
+    const noise=[],tones=[], node={connect(){return this;}};
+    try {
+      getAudioCtx=()=>({currentTime:0,createGain:()=>node,createDynamicsCompressor:()=>node,destination:node});
+      unlockAudio=()=>{};playFilteredNoise=(...args)=>noise.push(args);playTone=(...args)=>tones.push(args);
+      for(const event of ['melee_swing','melee_blade','melee_heavy','melee_fist','melee_chain','melee_whirlwind']) {
+        noise.length=0;tones.length=0;playSoundEvent(event,{minGap:0});
+        if(noise.length<2||tones.length)issues.push(event+' lacks layered noise or still has a tonal bleep');
+        if(event==='melee_whirlwind' && !noise.some(args=>args[1]>.16))issues.push('second spin has no sound');
+      }
+      noise.length=0;playSoundEvent('melee_impact',{material:'heavy',minGap:0});
+      if(noise.length<2)issues.push('impact has no crack/thump layers');
+      const item=MELEE_ITEMS.find(x=>x.id==='combat_axe'),ab=item.ability;
+      if(ab.spins!==2||ab.distance<=6.5||ab.dashTime>=.45||ab.damage!==85)issues.push('axe ability not upgraded or damage changed');
+      const model=new THREE.Group();
+      meleeDash={item,ab,model,speed:ab.distance/ab.dashTime,elapsed:ab.dashTime};poseMeleeDash();
+      if(Math.abs(model.rotation.y-(Math.PI*4-1.05))>.001)issues.push('axe does not complete 720 degrees');
+      meleeDash.elapsed+=.05;poseMeleeDash();
+      if(Math.abs(model.rotation.y)>Math.PI)issues.push('recovery unwinds extra full turns');
+    } finally {getAudioCtx=saved.getAudioCtx;unlockAudio=saved.unlockAudio;playFilteredNoise=saved.playFilteredNoise;playTone=saved.playTone;meleeDash=saved.meleeDash;}
+    return issues;
+  })()`);
+  if(issues.length){ok=false;console.log('melee feedback failures:\\n'+issues.join('\\n'));}
+  else console.log('melee feedback: noise-based swings, two spin passes, physical impacts, faster 720 and short recovery');
+}
+
 if (ok && process.argv.includes('--battle-axe')) {
   const valid = vm.runInThisContext(`(() => {
     const m = meleeModels[MELEE_ITEMS.findIndex(x => x.id === 'combat_axe')];
