@@ -38537,10 +38537,14 @@ function gunSpinAngle(m) {
   const k = (t - 0.7) / 0.3;
   return full + over * (1 - k * k * (3 - 2 * k));
 }
-let heldWalkLean = 0;
+let heldWalkLean = 0, weaponReadyUntil = 0;
+function heldWeaponReady() {
+  return shooting || isADS || performance.now() < weaponReadyUntil || (lastShot > 0 && Date.now()-lastShot < 220);
+}
 function updateHeldWalkLean(dt) {
-  const target = gameStarted && !isDead ? Math.min(1,Math.hypot(playerVelocity.x,playerVelocity.z)/5.2) : 0;
-  heldWalkLean += (target-heldWalkLean)*(1-Math.exp(-Math.max(0,dt)*9));
+  const ready = heldWeaponReady();
+  const target = gameStarted && !isDead && !ready ? Math.min(1,Math.hypot(playerVelocity.x,playerVelocity.z)/5.2) : 0;
+  heldWalkLean += (target-heldWalkLean)*(1-Math.exp(-Math.max(0,dt)*(ready?30:9)));
   if (target === 0 && heldWalkLean < 0.0001) heldWalkLean = 0;
 }
 function heldWalkPose(t, phase = 0) {
@@ -38551,11 +38555,11 @@ function heldWalkPose(t, phase = 0) {
   const step = t * 8.2 + phase;
   const side = phase === Math.PI ? -1 : 1;
   return {
-    x: Math.sin(step) * 0.012 * moving - strafe * 0.018 + heldWalkLean * 0.014 * side,
-    y: Math.cos(step * 2) * 0.010 * moving - Math.abs(forward) * 0.012 - heldWalkLean * 0.008,
-    z: forward * 0.012 + Math.sin(step * 2) * 0.004 * moving,
-    rx: Math.sin(step) * 0.025 * moving + Math.abs(forward) * 0.018,
-    ry: -strafe * 0.045 + heldWalkLean * 0.28 * side,
+    x: Math.sin(step) * 0.012 * moving - strafe * 0.018 - heldWalkLean * 0.045 * side,
+    y: Math.cos(step * 2) * 0.010 * moving - Math.abs(forward) * 0.012 - heldWalkLean * 0.045,
+    z: forward * 0.012 + Math.sin(step * 2) * 0.004 * moving - heldWalkLean * 0.020,
+    rx: Math.sin(step) * 0.025 * moving + Math.abs(forward) * 0.018 - heldWalkLean * 0.10,
+    ry: -strafe * 0.045 + heldWalkLean * 0.60 * side,
     rz: -strafe * 0.065 + Math.sin(step) * 0.025 * moving - heldWalkLean * 0.20 * side,
   };
 }
@@ -38570,16 +38574,18 @@ function updateRealismFeedback(dt) {
     const ads = isADS ? 0.34 : 1;
     const crouch = (window._crouchEye || 1.65) < 1.4 ? 0.55 : 1;
     const amp = 0.0035 * ads * crouch;
-    const walk = heldWalkPose(t), walkScale = (isADS ? 0.12 : 1) * crouch;
+    const ready = heldWeaponReady();
+    const walk = heldWalkPose(t), walkScale = (ready ? 0.12 : 1) * crouch;
+    const readyBlend = 1-Math.exp(-Math.max(0,dt)*38);
     const targetX = model._homePos.x + Math.sin(t * 1.8) * amp + walk.x * walkScale + _gunKick.x;
     const targetY = model._homePos.y + Math.cos(t * 2.2) * amp * 0.65 + walk.y * walkScale - _realismLandKick * 0.035 + _gunKick.y;
     const targetZ = model._homePos.z + walk.z * walkScale + _gunKick.z;
-    model.position.x += (targetX - model.position.x) * Math.min(1, dt * 7);
-    model.position.y += (targetY - model.position.y) * Math.min(1, dt * 7);
-    model.position.z += (targetZ - model.position.z) * Math.min(1, dt * 18);
-    model.rotation.x += (_gunKick.rx + walk.rx * walkScale - model.rotation.x) * Math.min(1, dt * 22);
-    model.rotation.y += (_gunKick.ry + walk.ry * walkScale - model.rotation.y) * Math.min(1, dt * 18);
-    model.rotation.z += (_gunKick.rz + walk.rz * walkScale - model.rotation.z) * Math.min(1, dt * 18);
+    model.position.x += (targetX - model.position.x) * (ready?readyBlend:Math.min(1, dt * 7));
+    model.position.y += (targetY - model.position.y) * (ready?readyBlend:Math.min(1, dt * 7));
+    model.position.z += (targetZ - model.position.z) * (ready?readyBlend:Math.min(1, dt * 18));
+    model.rotation.x += (_gunKick.rx + walk.rx * walkScale - model.rotation.x) * (ready?readyBlend:Math.min(1, dt * 22));
+    model.rotation.y += (_gunKick.ry + walk.ry * walkScale - model.rotation.y) * (ready?readyBlend:Math.min(1, dt * 18));
+    model.rotation.z += (_gunKick.rz + walk.rz * walkScale - model.rotation.z) * (ready?readyBlend:Math.min(1, dt * 18));
     if (model._spinFx && !isADS && !_equip) { const sa = gunSpinAngle(model); if (sa) { model.rotation.x += sa; model._spinApplied = sa; } }
   }
   const settle = Math.pow(0.018, dt);
@@ -44918,6 +44924,7 @@ function startCycleBurst(wStats) {
 function tryShoot() {
   if (SOCIAL_VIEW.mode) return;
   if ((!pointerLocked && !gameStarted) || isDead) return;
+  weaponReadyUntil = performance.now()+220;
   if (reloading) {
     const pool = weaponAmmo[currentWeaponIdx];
     if (pool && pool.ammo > 0) {

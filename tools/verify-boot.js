@@ -309,9 +309,10 @@ if (ok && process.argv.includes('--equipment-sway')) {
   const issues = vm.runInThisContext(`(() => {
     const issues = [], saved = { gameStarted, isDead, activeSlot, selectedMeleeIdx, selectedSupportIdx,
       meleeSwingT, grenadeWindupT, velocity: playerVelocity.clone(), yaw: euler.y,
-      currentWeaponIdx, reloading, isADS, kick: { ..._gunKick }, land: _realismLandKick, heldWalkLean };
+      currentWeaponIdx, reloading, isADS, shooting, lastShot, weaponReadyUntil, kick: { ..._gunKick }, land: _realismLandKick, heldWalkLean };
     try {
       gameStarted = true; isDead = false; meleeSwingT = 1; grenadeWindupT = 1;
+      shooting=false;isADS=false;weaponReadyUntil=0;lastShot=0;
       heldWalkLean = 0; playerVelocity.set(0,0,-5.2);updateHeldWalkLean(1/60);
       const firstLean=heldWalkLean;
       if(firstLean<=0||firstLean>=0.3)issues.push('walking tilt snaps instead of easing in');
@@ -319,8 +320,15 @@ if (ok && process.argv.includes('--equipment-sway')) {
       if(heldWalkLean<0.99)issues.push('walking tilt never reaches the carrying pose');
       euler.y=0;
       const carry=heldWalkPose(0),offCarry=heldWalkPose(0,Math.PI);
-      if(carry.ry<0.25)issues.push('walking carry lacks vertical-axis turn');
+      if(carry.ry<0.55||carry.y>-.04||carry.x>-.04)issues.push('walking carry is not across the chest');
       if(Math.abs(carry.ry+offCarry.ry)>1e-8)issues.push('dual hands do not mirror vertical-axis turn');
+      shooting=true;updateHeldWalkLean(1/60);
+      if(heldWalkLean<=0||heldWalkLean>=0.8)issues.push('firing carry return is slow or teleports');
+      for(let i=0;i<12;i++)updateHeldWalkLean(1/60);
+      if(heldWalkLean>.01)issues.push('firing does not restore the ready pose');
+      shooting=false;heldWalkLean=1;weaponReadyUntil=performance.now()+220;updateHeldWalkLean(1/60);
+      if(!heldWeaponReady()||heldWalkLean>=0.8)issues.push('single-click firing does not hold ready pose');
+      weaponReadyUntil=0;heldWalkLean=1;
       playerVelocity.set(0,0,0);updateHeldWalkLean(1/60);
       if(heldWalkLean<=0.5||heldWalkLean>=0.99)issues.push('walking tilt snaps when stopping');
       for(let i=0;i<120;i++)updateHeldWalkLean(1/60);
@@ -375,6 +383,7 @@ if (ok && process.argv.includes('--equipment-sway')) {
       euler.y = saved.yaw; currentWeaponIdx = saved.currentWeaponIdx; reloading = saved.reloading; isADS = saved.isADS;
       Object.assign(_gunKick, saved.kick); _realismLandKick = saved.land;
       heldWalkLean = saved.heldWalkLean;
+      shooting=saved.shooting;weaponReadyUntil=saved.weaponReadyUntil;lastShot=saved.lastShot;
     }
     return issues;
   })()`);
