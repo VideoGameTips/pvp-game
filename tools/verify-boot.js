@@ -317,6 +317,10 @@ if (ok && process.argv.includes('--equipment-sway')) {
       if(firstLean<=0||firstLean>=0.3)issues.push('walking tilt snaps instead of easing in');
       for(let i=0;i<60;i++)updateHeldWalkLean(1/60);
       if(heldWalkLean<0.99)issues.push('walking tilt never reaches the carrying pose');
+      euler.y=0;
+      const carry=heldWalkPose(0),offCarry=heldWalkPose(0,Math.PI);
+      if(carry.ry<0.25)issues.push('walking carry lacks vertical-axis turn');
+      if(Math.abs(carry.ry+offCarry.ry)>1e-8)issues.push('dual hands do not mirror vertical-axis turn');
       playerVelocity.set(0,0,0);updateHeldWalkLean(1/60);
       if(heldWalkLean<=0.5||heldWalkLean>=0.99)issues.push('walking tilt snaps when stopping');
       for(let i=0;i<120;i++)updateHeldWalkLean(1/60);

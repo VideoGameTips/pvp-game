@@ -38555,7 +38555,7 @@ function heldWalkPose(t, phase = 0) {
     y: Math.cos(step * 2) * 0.010 * moving - Math.abs(forward) * 0.012 - heldWalkLean * 0.008,
     z: forward * 0.012 + Math.sin(step * 2) * 0.004 * moving,
     rx: Math.sin(step) * 0.025 * moving + Math.abs(forward) * 0.018,
-    ry: -strafe * 0.045 + heldWalkLean * 0.035 * side,
+    ry: -strafe * 0.045 + heldWalkLean * 0.28 * side,
     rz: -strafe * 0.065 + Math.sin(step) * 0.025 * moving - heldWalkLean * 0.20 * side,
   };
 }
