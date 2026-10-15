@@ -1327,7 +1327,7 @@ if (ok && process.argv.includes('--lobby')) {
     };
     const clear=(x,z,r=.45)=>!cols.some(b=>b.max.y>.2 && b.min.y<2 &&
       b.min.x<x+r && b.max.x>x-r && b.min.z<z+r && b.max.z>z-r);
-    for(const p of [[-33,-29],[32,30],[-22,32],[22,-28]])check(!inside(...p),'Old square corner remains');
+    for(const p of [[-33,30],[32,30],[-22,32],[22,-28]])check(!inside(...p),'Old square corner remains');
     check(clear(0,18),'Lobby arrival is blocked');
     const todo=[[0,18]],seen=new Set(['0,18']);
     for(let i=0;i<todo.length;i++){
@@ -1337,12 +1337,36 @@ if (ok && process.argv.includes('--lobby')) {
         if(!seen.has(key)&&inside(nx,nz)&&clear(nx,nz)){seen.add(key);todo.push([nx,nz]);}
       }
     }
-    check(LOBBY_DUEL_PADS.length===3,'Missing duel bays');
+    check(LOBBY_DUEL_PADS.length===5,'Missing duel bays');
     for(const p of LOBBY_DUEL_PADS)for(const side of ['blue','red']){
       check(clear(p[side].x,p[side].z,p.radius),'Duel staging area blocked');
       check(seen.has(p[side].x+','+p[side].z),'Duel pad unreachable from spawn');
     }
     for(const p of TRASHCAN_POSITIONS)check(seen.has(p.x+','+p.z),'Loadout station unreachable from spawn');
+    for(const p of LOBBY_SERVICES)check(seen.has(p.x+','+p.z),'Lobby service unreachable: '+p.id);
+    const nav=lobbyNavigation();check(nav.nodes.length>100,'Lobby visitors need walkable navigation');
+    for(let i=0;i<50;i++){const p=lobbySpawnPoint(i);check(lobbyClear(p.x,p.z),'Lobby visitor spawn blocked');}
+    const squad=LOBBY_DUEL_PADS.find(p=>p.modeId==='10v10');
+    const b={...lobbySpawnPoint(0),_duelGoto:true};
+    for(let i=0;i<4000 && Math.hypot(b.x-squad.red.x,b.z-squad.red.z)>.35;i++){
+      const move=lobbyWalk(b,squad.red,.05);b.x+=move.x;b.z+=move.z;
+    }
+    check(Math.hypot(b.x-squad.red.x,b.z-squad.red.z)<.4,'NPC cannot route to squad hall');
+    const savedBots=gameBots.slice(),savedUser=currentUser;
+    try{
+      gameBots.length=0;
+      for(let i=0;i<19;i++)gameBots.push({id:'visitor-test-'+i,x:0,z:0,_lobbyVisitor:true,_wantsDuel:true});
+      stageDuelBots(squad,'blue');
+      check(gameBots.filter(b=>b._duelTeam==='mate').length===9,'10v10 needs nine teammates');
+      check(gameBots.filter(b=>b._duelTeam==='foe').length===10,'10v10 needs ten opponents');
+      for(const b of gameBots){b.x=b._duelGoto.x;b.z=b._duelGoto.z;}
+      const seated=countSeated(squad,'blue');check(seated.blue===10 && seated.red===10,'Physical team counts must include player');
+      currentUser={username:'lobby-story-check'};
+      noteLobbyStory('met');noteLobbyStory('shop');
+      check(readLobbyStory().met && readLobbyStory().shop,'Story progress must persist');
+      currentUser={username:'lobby-other-account'};
+      check(!readLobbyStory().shop,'Story progress must be account scoped');
+    }finally{gameBots.length=0;gameBots.push(...savedBots);currentUser=savedUser;}
     return issues;
   })()`);
   console.log('lobby checks: irregular perimeter, removed square corners, spawn clearance, walkable routes to all duel pads and loadouts');
