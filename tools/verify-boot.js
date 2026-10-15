@@ -124,6 +124,22 @@ try {
   console.log('   this is a runtime failure during module evaluation, not a syntax error.');
 }
 
+if (ok && process.argv.includes('--battle-axe')) {
+  const valid = vm.runInThisContext(`(() => {
+    const m = meleeModels[MELEE_ITEMS.findIndex(x => x.id === 'combat_axe')];
+    m.updateMatrixWorld(true);
+    const a = m.getObjectByName('battle-axe-blade-left'), b = m.getObjectByName('battle-axe-blade-right');
+    if (!a || !b) return false;
+    const left = new THREE.Box3().setFromObject(a), right = new THREE.Box3().setFromObject(b);
+    const width = left.getSize(new THREE.Vector3());
+    return Math.abs(left.min.x + right.max.x - 2*m.position.x) < 0.001
+      && Math.abs(left.max.x + right.min.x - 2*m.position.x) < 0.001
+      && width.x > 0.15 && width.z > 0.20 && m._heldItem.position.lengthSq() === 0;
+  })()`);
+  if (!valid) { ok = false; console.log('battle axe: missing, asymmetric or misplaced blades'); }
+  else console.log('battle axe: two symmetric crescent blades, original held position');
+}
+
 if (ok && process.argv.includes('--ability-cooldowns')) {
   const valid = vm.runInThisContext(`(() => {
     const item = MELEE_ITEMS.find(m => m.id === 'baguette');
