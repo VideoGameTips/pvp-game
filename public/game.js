@@ -38536,6 +38536,21 @@ function gunSpinAngle(m) {
   const k = (t - 0.7) / 0.3;
   return full + over * (1 - k * k * (3 - 2 * k));
 }
+function heldWalkPose(t, phase = 0) {
+  const vx = playerVelocity.x, vz = playerVelocity.z;
+  const moving = Math.min(1, Math.hypot(vx, vz) / 5.2);
+  const strafe = THREE.MathUtils.clamp((vx * Math.cos(euler.y) - vz * Math.sin(euler.y)) / 5.2, -1, 1);
+  const forward = THREE.MathUtils.clamp(-(vx * Math.sin(euler.y) + vz * Math.cos(euler.y)) / 5.2, -1, 1);
+  const step = t * 8.2 + phase;
+  return {
+    x: Math.sin(step) * 0.012 * moving - strafe * 0.018,
+    y: Math.cos(step * 2) * 0.010 * moving - Math.abs(forward) * 0.012,
+    z: forward * 0.012 + Math.sin(step * 2) * 0.004 * moving,
+    rx: Math.sin(step) * 0.025 * moving + Math.abs(forward) * 0.018,
+    ry: -strafe * 0.045,
+    rz: -strafe * 0.065 + Math.sin(step) * 0.025 * moving,
+  };
+}
 function updateRealismFeedback(dt) {
   const model = weaponModels[currentWeaponIdx];
   if (model && model._spinApplied) {
@@ -38543,20 +38558,20 @@ function updateRealismFeedback(dt) {
     model._spinApplied = 0;
   }
   if (model && model.visible && model._homePos && !reloading && activeSlot !== 'melee' && activeSlot !== 'support') {
-    const moving = Math.min(1, Math.hypot(playerVelocity.x, playerVelocity.z) / 8);
     const t = performance.now() * 0.001;
     const ads = isADS ? 0.34 : 1;
     const crouch = (window._crouchEye || 1.65) < 1.4 ? 0.55 : 1;
-    const amp = (0.0035 + moving * 0.010) * ads * crouch;
-    const targetX = model._homePos.x + Math.sin(t * 1.8) * amp + Math.sin(t * 8.2) * amp * moving * 0.35 + _gunKick.x;
-    const targetY = model._homePos.y + Math.cos(t * 2.2) * amp * 0.65 - _realismLandKick * 0.035 + _gunKick.y;
-    const targetZ = model._homePos.z + _gunKick.z;
+    const amp = 0.0035 * ads * crouch;
+    const walk = heldWalkPose(t), walkScale = (isADS ? 0.12 : 1) * crouch;
+    const targetX = model._homePos.x + Math.sin(t * 1.8) * amp + walk.x * walkScale + _gunKick.x;
+    const targetY = model._homePos.y + Math.cos(t * 2.2) * amp * 0.65 + walk.y * walkScale - _realismLandKick * 0.035 + _gunKick.y;
+    const targetZ = model._homePos.z + walk.z * walkScale + _gunKick.z;
     model.position.x += (targetX - model.position.x) * Math.min(1, dt * 7);
     model.position.y += (targetY - model.position.y) * Math.min(1, dt * 7);
     model.position.z += (targetZ - model.position.z) * Math.min(1, dt * 18);
-    model.rotation.x += (_gunKick.rx - model.rotation.x) * Math.min(1, dt * 22);
-    model.rotation.y += (_gunKick.ry - model.rotation.y) * Math.min(1, dt * 18);
-    model.rotation.z += (_gunKick.rz - model.rotation.z) * Math.min(1, dt * 18);
+    model.rotation.x += (_gunKick.rx + walk.rx * walkScale - model.rotation.x) * Math.min(1, dt * 22);
+    model.rotation.y += (_gunKick.ry + walk.ry * walkScale - model.rotation.y) * Math.min(1, dt * 18);
+    model.rotation.z += (_gunKick.rz + walk.rz * walkScale - model.rotation.z) * Math.min(1, dt * 18);
     if (model._spinFx && !isADS && !_equip) { const sa = gunSpinAngle(model); if (sa) { model.rotation.x += sa; model._spinApplied = sa; } }
   }
   const settle = Math.pow(0.018, dt);
@@ -47106,16 +47121,18 @@ function updateEquipmentSway() {
   if (melee && (meleeSwingT < 1 || model._park || meleeAbilityBuff?.type === 'deflect'
       || batCrowdCharge || meleeSlam || meleeDash || scytheDash || chainMaulSwing)) return;
   if (!melee && (grenadeWindupT < 1 || medkitHealChannel)) return;
-  const moving = Math.min(1, Math.hypot(playerVelocity.x, playerVelocity.z) / 8);
   const t = performance.now() * 0.001;
   const crouch = (window._crouchEye || 1.65) < 1.4 ? 0.55 : 1;
-  const amp = (0.0035 + moving * 0.010) * crouch;
+  const amp = 0.0035 * crouch;
   const pose = (m, phase) => {
     const baseP = m.position.clone(), baseR = m.rotation.clone();
-    m.position.x += Math.sin(t * 1.8 + phase) * amp + Math.sin(t * 8.2 + phase) * amp * moving * 0.35;
-    m.position.y += Math.cos(t * 2.2 + phase) * amp * 0.65 + Math.cos(t * 16.4) * 0.005 * moving * crouch;
-    m.rotation.x += Math.sin(t * 8.2 + phase) * 0.012 * moving * crouch;
-    m.rotation.z += Math.sin(t * 1.8 + phase) * 0.004 + Math.sin(t * 8.2 + phase) * 0.018 * moving * crouch;
+    const walk = heldWalkPose(t, phase);
+    m.position.x += Math.sin(t * 1.8 + phase) * amp + walk.x * crouch;
+    m.position.y += Math.cos(t * 2.2 + phase) * amp * 0.65 + walk.y * crouch;
+    m.position.z += walk.z * crouch;
+    m.rotation.x += walk.rx * crouch;
+    m.rotation.y += walk.ry * crouch;
+    m.rotation.z += Math.sin(t * 1.8 + phase) * 0.004 + walk.rz * crouch;
     m._equipmentSway = { baseP, baseR, shownP: m.position.clone(), shownR: m.rotation.clone() };
     equipmentSwayModels.push(m);
   };
