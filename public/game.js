@@ -4495,7 +4495,7 @@ function longReport(ctx, start, outNode, volume, scale) {
 // holds the ceiling at the reference peak. Whole-shot level only -- the sounds
 // themselves are unchanged. GUN_BUS_GAIN is the one number that sets the level.
 const GUN_BUS_KINDS = new Set(['rifle', 'auto_blast', 'auto_blast_heavy', 'pistol', 'crack', 'boom', 'ak_metal', 'smg_metal', 'p90_metal']);
-const GUN_BUS_GAIN = 25, GUN_BUS_CEIL = 0.56;
+const GUN_BUS_GAIN = 25, GUN_BUS_CEIL = 0.36;   // was 0.56: with the volume high enough to hear a footstep, a shot hurt
 function gunBus(ctx) {
   if (ctx._gunBus) return ctx._gunBus;
   const input = ctx.createGain(); input.gain.value = GUN_BUS_GAIN;
@@ -5292,9 +5292,13 @@ function playSoundEvent(name, opts = {}) {
   }
   // 🦶 Footsteps — short low thud, alternates pitch for L/R variation
   else if (name === 'footstep') {
+    // Three times the level it had, and a brighter shoe-on-floor edge on top of the thud: at the old
+    // 0.10 / 0.06 a step sat ~25 dB under a gunshot, so it could only be heard with the volume pinned,
+    // which then made every shot painful. The gun bus ceiling came down at the same time (GUN_BUS_CEIL).
     const f = opts.pitch || 1.0;
-    playFilteredNoise(ctx, start, 0.06, out, 0.10 * mult, 'lowpass', 240 * f, 0.7);
-    playTone(ctx, start, 0.04, out, 120 * f, 60 * f, 0.06 * mult, 'sine');
+    playFilteredNoise(ctx, start, 0.07, out, 0.30 * mult, 'lowpass', 420 * f, 0.7);
+    playFilteredNoise(ctx, start, 0.025, out, 0.10 * mult, 'bandpass', 1500 * f, 0.9, 0.001, 0);
+    playTone(ctx, start, 0.05, out, 130 * f, 60 * f, 0.18 * mult, 'sine');
   }
   // ⚔️ Specific weapon ability sounds
   else if (name === 'katana_deflect') {
