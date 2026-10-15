@@ -1009,7 +1009,7 @@ const MELEE_ITEMS = [
   // Back from the archive as the Battle Axe (same id, so every skin and owner carries over). The throw
   // is gone: the axe now spins a full circle as you rush forward, taking everyone around you with it.
   { id: 'combat_axe', name: 'Battle Axe', type: 'Heavy Melee',   damage: 78, range: 2.2, cooldown: 820,
-    ability: { name: 'Whirlwind',    cd: 11000, desc: 'Spin 360° and dash 6.5 m · hits everyone around you · 85 dmg', type: 'melee_spinslash', distance: 6.5, dashTime: 0.45, damage: 85, reach: 2.8, spins: 1 } },
+    ability: { name: 'Whirlwind',    cd: 11000, desc: 'Spin 720° and dash 10 m · hits everyone around you · 85 dmg', type: 'melee_spinslash', distance: 10, dashTime: 0.34, damage: 85, reach: 2.8, spins: 2 } },
   { id: 'shock_baton', archived: true,name: 'Shock Baton',type: 'Melee',         damage: 32, range: 2.0, cooldown: 300,
     ability: { name: 'Static Burst', cd: 9000,  desc: 'AOE zap · 3.4 m · 30 dmg · pop-up', type: 'melee_pulse', radius: 3.4, damage: 30, knockback: 1.8, launchVel: 5, color: 0xffff44 } },
   // ── 😈 P2W melees ────────────────────────────────────────────────────────
@@ -5188,8 +5188,27 @@ function playSoundEvent(name, opts = {}) {
     playNoise(ctx, start, 0.32, out, 0.10 * mult, 0.75);
     playTone(ctx, start + 0.04, 0.08, out, 720, 980, 0.035 * mult, 'triangle');
   } else if (name === 'melee_swing') {
-    playFilteredNoise(ctx, start, 0.10, out, 0.18 * mult, 'bandpass', 1200, 1.6);
-    playTone(ctx, start, 0.08, out, 880, 240, 0.04 * mult, 'sine');
+    playFilteredNoise(ctx, start, 0.19, out, 0.42 * mult, 'bandpass', 950, 0.55, 0.025, 0);
+    playFilteredNoise(ctx, start + 0.025, 0.12, out, 0.20 * mult, 'highpass', 2600, 0.5, 0.012, 0);
+  } else if (name === 'melee_fist') {
+    playFilteredNoise(ctx, start, 0.13, out, 0.46 * mult, 'lowpass', 850, 0.6, 0.018, 0);
+    playFilteredNoise(ctx, start + 0.015, 0.07, out, 0.18 * mult, 'bandpass', 1900, 0.5, 0.008, 0);
+  } else if (name === 'melee_chain') {
+    playFilteredNoise(ctx, start, 0.24, out, 0.48 * mult, 'bandpass', 700, 0.6, 0.025, 0);
+    for (let i = 0; i < 5; i++) {
+      playFilteredNoise(ctx, start + i * 0.027, 0.038, out, 0.22 * mult, 'bandpass', 2600 + i * 430, 2.1, 0.001, 1);
+    }
+  } else if (name === 'melee_whirlwind') {
+    // Two blade passes, scheduled on the audio clock to match the two rotations.
+    for (let i = 0; i < 2; i++) {
+      playFilteredNoise(ctx, start + i * 0.17, 0.17, out, 0.65 * mult, 'bandpass', 780, 0.5, 0.016, 0);
+      playFilteredNoise(ctx, start + i * 0.17 + 0.025, 0.13, out, 0.35 * mult, 'highpass', 2200, 0.5, 0.01, 0);
+    }
+  } else if (name === 'melee_impact') {
+    const heavy = opts.material === 'heavy', blade = opts.material === 'blade';
+    playFilteredNoise(ctx, start, 0.025, out, 0.62 * mult, 'bandpass', blade ? 2300 : 1250, 0.65, 0.0005, 0);
+    playFilteredNoise(ctx, start + 0.005, heavy ? 0.22 : 0.13, out, 0.60 * mult, 'lowpass', heavy ? 520 : 900, 0.6, 0.001, 1);
+    playTone(ctx, start, 0.085, out, heavy ? 105 : 150, 42, 0.20 * mult, 'sine');
   } else if (name === 'slam_boom') {
     // A hammer meeting the floor from five metres up: the crack of the strike, then the floor itself taking it --
     // a sub-bass drop that is mostly felt, a thick low body, and a rumble that rolls away behind it.
@@ -5200,11 +5219,11 @@ function playSoundEvent(name, opts = {}) {
     playFilteredNoise(ctx, start + 0.01, 0.50, out, 0.55 * V, 'lowpass', 260, 0.7, 0.002, 1.4);
     playFilteredNoise(ctx, start + 0.06, 1.05, out, 0.20 * V, 'lowpass', 140, 0.6, 0.02, 1.1);
   } else if (name === 'melee_heavy') {
-    playFilteredNoise(ctx, start, 0.16, out, 0.30 * mult, 'lowpass', 600, 0.8);
-    playTone(ctx, start, 0.12, out, 140, 60, 0.20 * mult, 'sine');
+    playFilteredNoise(ctx, start, 0.27, out, 0.66 * mult, 'lowpass', 650, 0.6, 0.035, 0);
+    playFilteredNoise(ctx, start + 0.025, 0.19, out, 0.42 * mult, 'bandpass', 1350, 0.5, 0.025, 0);
   } else if (name === 'melee_blade') {
-    playFilteredNoise(ctx, start, 0.10, out, 0.16 * mult, 'highpass', 2400, 0.5);
-    playTone(ctx, start, 0.06, out, 1480, 380, 0.06 * mult, 'triangle');
+    playFilteredNoise(ctx, start, 0.18, out, 0.48 * mult, 'bandpass', 1750, 0.5, 0.018, 0);
+    playFilteredNoise(ctx, start + 0.025, 0.13, out, 0.30 * mult, 'highpass', 3800, 0.5, 0.012, 0);
   }
   // 🦶 Footsteps — short low thud, alternates pitch for L/R variation
   else if (name === 'footstep') {
@@ -43472,7 +43491,7 @@ function updateActionWind(dt) {
       } else actionWind.broken = true;
     }
   } else actionWind.broken = true;
-  actionWind.points = actionWind.points.filter(p => now-p.t < 190).slice(-32);
+  actionWind.points = actionWind.points.filter(p => now-p.t < 260).slice(-48);
   const speed = Math.hypot(playerVelocity.x, playerVelocity.z);
   const target = THREE.MathUtils.clamp((speed-Math.max(9,SPEED*DEFAULT_MOVE_MULT*1.25))/10,0,1);
   actionWind.speed += (target-actionWind.speed)*Math.min(1,dt*10);
@@ -43497,25 +43516,25 @@ function updateActionWind(dt) {
   const points = actionWind.points;
   for (let i=1;i<points.length;i++) {
     const a=points[i-1], b=points[i]; if (b.start) continue;
-    const life=1-(now-b.t)/190, x=(a.x+1)*w/2, y=(1-a.y)*h/2, bx=(b.x+1)*w/2, by=(1-b.y)*h/2;
+    const life=1-(now-b.t)/260, x=(a.x+1)*w/2, y=(1-a.y)*h/2, bx=(b.x+1)*w/2, by=(1-b.y)*h/2;
     if (Math.hypot(bx-x,by-y)>Math.max(w,h)*0.65) continue;
-    for (const [width,alpha] of [[32,0.15],[10,0.65]]) {
+    for (const [width,alpha] of [[58,0.12],[25,0.35],[7,0.92]]) {
       ctx.globalAlpha=alpha*life*(reduced?0.5:1); ctx.lineWidth=width*life*Math.min(1,h/800)+0.5;
       ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(bx,by); ctx.stroke();
     }
   }
   const power=actionWind.speed;
   if (power>0.01) {
-    ctx.lineWidth=1.5; ctx.globalAlpha=power*(reduced?0.15:0.30);
+    ctx.lineWidth=2.8; ctx.globalAlpha=power*(reduced?0.18:0.48);
     // A peripheral, broken white ring: the crosshair and target area stay clear.
     for (let i=0;i<4;i++) {
       const a=i*Math.PI/2+0.22;
       ctx.beginPath(); ctx.ellipse(w/2,h/2,w*0.47,h*0.46,0,a,a+0.85); ctx.stroke();
     }
-    if (!reduced) for (let i=0;i<22;i++) {
-      const a=i/22*Math.PI*2, pulse=(now*0.001*(1.8+power)+i*0.618)%1;
-      const r=0.84+pulse*0.40, length=0.045+power*0.10;
-      ctx.globalAlpha=power*(1-pulse)*0.52; ctx.lineWidth=1+(i%3)*0.6;
+    if (!reduced) for (let i=0;i<32;i++) {
+      const a=i/32*Math.PI*2, pulse=(now*0.001*(1.8+power)+i*0.618)%1;
+      const r=0.84+pulse*0.40, length=0.06+power*0.14;
+      ctx.globalAlpha=power*(1-pulse)*0.72; ctx.lineWidth=1.5+(i%3)*0.9;
       ctx.beginPath();ctx.moveTo(w/2+Math.cos(a)*w*0.48*r,h/2+Math.sin(a)*h*0.48*r);
       ctx.lineTo(w/2+Math.cos(a)*w*0.48*(r+length),h/2+Math.sin(a)*h*0.48*(r+length));ctx.stroke();
     }
@@ -43549,7 +43568,7 @@ function startMeleeDash(item, ab, weaponId, now, skip) {
   meleeSwingT = 1;
   lastMelee = Date.now();
   _fovPunch = Math.max(_fovPunch, 6);
-  if (!ab.quiet) playSoundEvent(ab.type === 'melee_charge' ? 'melee_heavy' : 'air_launch', { volume: 1.0, pitch: 1.2, minGap: 0 });
+  if (!ab.quiet) playSoundEvent(ab.type === 'melee_spinslash' ? 'melee_whirlwind' : ab.type === 'melee_charge' ? 'melee_heavy' : 'melee_blade', { volume: 1.0, minGap: 0 });
   return true;
 }
 
@@ -43584,7 +43603,7 @@ function updateMeleeDash(dt) {
         }
       }
       spawnHitParticle(body);
-      playSoundEvent(charge ? 'melee_heavy' : 'melee_blade', { volume: 0.9, minGap: 40 });
+      playSoundEvent('melee_impact', { material: charge ? 'heavy' : (MELEE_SWING_SOUND[s.item.baseId || s.item.id] || 'blade'), volume: 0.9, minGap: 40 });
     }
   }
   const run = (s.ab.distance || 6) / s.speed;
@@ -43601,7 +43620,7 @@ function poseMeleeDash() {
   const m = s.model;
   m.rotation.order = 'YXZ';
   if (s.ab.type === 'melee_spinslash') {
-    // 🌀 The axe goes once round the player in a flat circle (right, across the front, left, behind,
+    // 🌀 The axe circles the player (right, across the front, left, behind,
     // and back to the right), blade out, laid flat. It eases into the circle and out to rest.
     const p = Math.max(0, Math.min(1, s.elapsed / run));
     const th = 1.05 - ease(p) * Math.PI * 2 * (s.ab.spins || 1);
@@ -43614,7 +43633,9 @@ function poseMeleeDash() {
       MELEE_REST_POS.x + (blend(px, MELEE_REST_POS.x) - MELEE_REST_POS.x) * into2,
       MELEE_REST_POS.y + (cy - MELEE_REST_POS.y) * into2 * (1 - o),
       MELEE_REST_POS.z + (blend(pz, MELEE_REST_POS.z) - MELEE_REST_POS.z) * into2);
-    m.rotation.set(0.15 * into2 * (1 - o), -th * (1 - o), 1.15 * into2 * (1 - o));
+    // Recover by the shortest angle, rather than unwinding both turns backwards.
+    const yaw = s.elapsed > run ? Math.atan2(Math.sin(-th), Math.cos(-th)) * (1 - o) : -th;
+    m.rotation.set(0.15 * into2 * (1 - o), yaw, 1.15 * into2 * (1 - o));
     return;
   }
   m.position.set(MELEE_REST_POS.x - 0.04 * w, MELEE_REST_POS.y + 0.02 * w, MELEE_REST_POS.z + (shield ? -0.20 : -0.30) * w);
@@ -45257,6 +45278,7 @@ function updateChainMaulSwing(dt) {
           if (dummy) handleDummyHit(dummy, mesh, { weaponId: s.item.id }, body);
           else emitHit(pid, `${s.id}_${pid}`, s.item.id, body, false, { damageOverride: s.item.damage });
           spawnHitParticle(body);
+          playSoundEvent('melee_impact', { material: 'heavy', volume: 1, minGap: 60 });
         } else if (zone === 'chain' && !s.pulled.has(pid) && !s.damaged.has(pid) && !inLobby
             && !TRAINING_DUMMIES.some(d => d.id === pid)) {
           s.pulled.add(pid);
@@ -45313,7 +45335,10 @@ function tryMelee() {
     chainsawSputter(false);
   } else {
     // Per-type swing sound for every other melee
-    playSoundEvent(MELEE_SWING_EVENT[MELEE_SWING_SOUND[soundId]] || 'melee_swing', { volume: 0.85, minGap: 80 });
+    const swingEvent = ['fists', 'brass_knuckles'].includes(soundId) ? 'melee_fist'
+      : ['chain_hammer', 'nunchucks', 'garrote'].includes(soundId) ? 'melee_chain'
+      : MELEE_SWING_EVENT[MELEE_SWING_SOUND[soundId]] || 'melee_swing';
+    playSoundEvent(swingEvent, { volume: 0.95, minGap: 80 });
   }
 
   // Trigger swing animation — each swing type has its own characteristic duration
@@ -45353,6 +45378,7 @@ function tryMelee() {
   const forward = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion).normalize();
   let hitPos = null;
   for (const [pid, mesh] of Object.entries(remoteMeshes)) {
+    if (!mesh.visible || players[pid]?.dead || friendlyFireBlocked(pid, myId)) continue;
     const toTarget = mesh.position.clone().sub(camera.position);
     toTarget.y = 0;
     const dist = toTarget.length();
@@ -45360,6 +45386,9 @@ function tryMelee() {
     const dir = toTarget.normalize();
     if (forward.dot(dir) < 0.55) continue;
     hitPos = mesh.position.clone(); hitPos.y += 1.0;
+    if (soundId !== 'chainsaw' || sawDry) {
+      playSoundEvent('melee_impact', { material: MELEE_SWING_SOUND[soundId], volume: 0.95, minGap: 60 });
+    }
 
     // Determine effective weapon ID and handle buffs
     let effectiveWeaponId = item.id;
