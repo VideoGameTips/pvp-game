@@ -43416,6 +43416,89 @@ function updateSlamShake(dt) {
   _shakePitch += dp; _shakeYaw += dy;                       // the same bookkeeping a gunshot uses, so it settles back
 }
 
+const actionWind = { canvas: null, points: [], model: null, speed: 0, broken: true };
+function clearActionWind() {
+  actionWind.points.length = 0; actionWind.model = null; actionWind.speed = 0; actionWind.broken = true;
+  if (actionWind.canvas) actionWind.canvas.style.display = 'none';
+}
+function updateActionWind(dt) {
+  if (!gameStarted || isDead || SOCIAL_VIEW.mode || MATCH_FINALE.active || match?.type === 'wave_dash') {
+    clearActionWind(); return;
+  }
+  const now = performance.now(), reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  const model = activeSlot === 'melee' ? meleeModels[selectedMeleeIdx] : null;
+  const swinging = PLAYER_VIEW.mode === 'first' && model?.visible && (meleeDash || batCrowdCharge || meleeSlam || chainMaulSwing
+    || (meleeSwingT < 1 && ['revup', 'spin'].includes(meleeAbilityBuff?.type)));
+  if (model !== actionWind.model) { actionWind.points.length = 0; actionWind.model = model; actionWind.broken = true; }
+  if (swinging) {
+    if (!model._windTipLocal) {
+      const box = new THREE.Box3(); _mechAllParts(model).forEach(p => box.union(p.box));
+      if (!box.isEmpty()) {
+        model._windTipLocal = box.getCenter(new THREE.Vector3());
+        model._windTipLocal.z = box.min.z + Math.min(0.04, (box.max.z-box.min.z)*0.12);
+      }
+    }
+    if (model._windTipLocal) {
+      model.updateWorldMatrix(true, true);
+      const world = model.localToWorld(model._windTipLocal.clone());
+      const local = camera.worldToLocal(world.clone()), p = world.project(camera);
+      if (local.z < -0.035 && Math.abs(p.x) < 1.6 && Math.abs(p.y) < 1.6) {
+        actionWind.points.push({ x: p.x, y: p.y, t: now, start: actionWind.broken });
+        actionWind.broken = false;
+      } else actionWind.broken = true;
+    }
+  } else actionWind.broken = true;
+  actionWind.points = actionWind.points.filter(p => now-p.t < 190).slice(-32);
+  const speed = Math.hypot(playerVelocity.x, playerVelocity.z);
+  const target = THREE.MathUtils.clamp((speed-Math.max(9,SPEED*DEFAULT_MOVE_MULT*1.25))/10,0,1);
+  actionWind.speed += (target-actionWind.speed)*Math.min(1,dt*10);
+  if (actionWind.points.length < 2 && actionWind.speed < 0.01) {
+    if (actionWind.canvas) actionWind.canvas.style.display = 'none';
+    return;
+  }
+  if (!actionWind.canvas) {
+    const canvas = document.createElement('canvas'); canvas.id = 'action-wind';
+    canvas.setAttribute('aria-hidden','true');
+    canvas.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:70';
+    document.body.appendChild(canvas); actionWind.canvas = canvas;
+  }
+  const canvas = actionWind.canvas, w = window.innerWidth, h = window.innerHeight;
+  const dpr = Math.min(window.devicePixelRatio || 1,1.5);
+  if (canvas.width !== Math.round(w*dpr) || canvas.height !== Math.round(h*dpr)) {
+    canvas.width = Math.round(w*dpr); canvas.height = Math.round(h*dpr);
+  }
+  canvas.style.display = 'block';
+  const ctx = canvas.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,w,h);
+  ctx.strokeStyle = '#ffffff'; ctx.lineCap = 'round';
+  const points = actionWind.points;
+  for (let i=1;i<points.length;i++) {
+    const a=points[i-1], b=points[i]; if (b.start) continue;
+    const life=1-(now-b.t)/190, x=(a.x+1)*w/2, y=(1-a.y)*h/2, bx=(b.x+1)*w/2, by=(1-b.y)*h/2;
+    if (Math.hypot(bx-x,by-y)>Math.max(w,h)*0.65) continue;
+    for (const [width,alpha] of [[32,0.15],[10,0.65]]) {
+      ctx.globalAlpha=alpha*life*(reduced?0.5:1); ctx.lineWidth=width*life*Math.min(1,h/800)+0.5;
+      ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(bx,by); ctx.stroke();
+    }
+  }
+  const power=actionWind.speed;
+  if (power>0.01) {
+    ctx.lineWidth=1.5; ctx.globalAlpha=power*(reduced?0.15:0.30);
+    // A peripheral, broken white ring: the crosshair and target area stay clear.
+    for (let i=0;i<4;i++) {
+      const a=i*Math.PI/2+0.22;
+      ctx.beginPath(); ctx.ellipse(w/2,h/2,w*0.47,h*0.46,0,a,a+0.85); ctx.stroke();
+    }
+    if (!reduced) for (let i=0;i<22;i++) {
+      const a=i/22*Math.PI*2, pulse=(now*0.001*(1.8+power)+i*0.618)%1;
+      const r=0.84+pulse*0.40, length=0.045+power*0.10;
+      ctx.globalAlpha=power*(1-pulse)*0.52; ctx.lineWidth=1+(i%3)*0.6;
+      ctx.beginPath();ctx.moveTo(w/2+Math.cos(a)*w*0.48*r,h/2+Math.sin(a)*h*0.48*r);
+      ctx.lineTo(w/2+Math.cos(a)*w*0.48*(r+length),h/2+Math.sin(a)*h*0.48*(r+length));ctx.stroke();
+    }
+  }
+  ctx.globalAlpha=1;
+}
+
 // ── 🗡️ Dash abilities: a real dash, not a teleport ────────────────────────────────────────────────────────────────────
 // Sabre Lunge, Shield Charge, Shoulder Rush, Charge!, Ghost Dash all moved you the whole distance inside one frame
 // and looked at whoever was nearest afterwards -- nothing on screen between the key press and the arrival. Now the
@@ -62633,6 +62716,7 @@ function loop() {
   lastTime = now;
   safeLoopStep('equipment-sway-reset', resetEquipmentSway);
   if (MATCH_FINALE.active) {
+    clearActionWind();
     try { updateMatchFinale(now); }
     catch (error) { console.error('[match-finale]', error); stopMatchFinale(true); }
     return;
@@ -62791,6 +62875,7 @@ function loop() {
   updateChainMaulSwing(dt);
   updateMeleeGripPose();
   safeLoopStep('equipment-sway', updateEquipmentSway);
+  safeLoopStep('action-wind', () => updateActionWind(dt));
   updateWeaponSelector();
   updateTrashcanProximity();
   updateDamageNumbers();
@@ -64583,6 +64668,7 @@ function afterDeath(ms, fn) {
 // Everything a finished match (or Lobby 13) leaves behind that the next start must not
 // inherit. Shared by the mode menu and the end-of-match buttons so they can't drift apart.
 function teardownMatchWorld() {
+  clearActionWind();
   countdownGeneration++;countdownActive=false;
   const countdown=document.getElementById('countdown-overlay');if(countdown)countdown.style.display='none';
   stopMatchFinale(false);

@@ -124,6 +124,26 @@ try {
   console.log('   this is a runtime failure during module evaluation, not a syntax error.');
 }
 
+if (ok && process.argv.includes('--action-wind')) {
+  const issues = vm.runInThisContext(`(() => {
+    const issues=[], saved={gameStarted,isDead,activeSlot,velocity:playerVelocity.clone()};
+    try {
+      gameStarted=true;isDead=false;activeSlot='primary';clearActionWind();
+      playerVelocity.set(0,0,-SPEED*DEFAULT_MOVE_MULT);updateActionWind(0.05);
+      if(actionWind.speed>0.01)issues.push('normal walking triggers speed ring');
+      playerVelocity.set(0,0,-25);for(let i=0;i<20;i++)updateActionWind(0.05);
+      if(actionWind.speed<0.9||actionWind.canvas?.style.display!=='block')issues.push('fast movement has no ring');
+      playerVelocity.set(0,0,0);for(let i=0;i<60;i++)updateActionWind(0.05);
+      if(actionWind.canvas.style.display!=='none')issues.push('ring does not fade after stopping');
+      playerVelocity.set(0,0,-25);updateActionWind(0.05);isDead=true;updateActionWind(0.05);
+      if(actionWind.speed||actionWind.points.length||actionWind.canvas.style.display!=='none')issues.push('wind persists after death');
+    } finally {clearActionWind();gameStarted=saved.gameStarted;isDead=saved.isDead;activeSlot=saved.activeSlot;playerVelocity.copy(saved.velocity);}
+    return issues;
+  })()`);
+  if(issues.length){ok=false;console.log('action wind failures:\n'+issues.join('\n'));}
+  else console.log('action wind: extra-speed threshold, fade, death cleanup and pointer-transparent overlay');
+}
+
 if (ok && process.argv.includes('--battle-axe')) {
   const valid = vm.runInThisContext(`(() => {
     const m = meleeModels[MELEE_ITEMS.findIndex(x => x.id === 'combat_axe')];
