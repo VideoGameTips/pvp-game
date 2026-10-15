@@ -309,9 +309,18 @@ if (ok && process.argv.includes('--equipment-sway')) {
   const issues = vm.runInThisContext(`(() => {
     const issues = [], saved = { gameStarted, isDead, activeSlot, selectedMeleeIdx, selectedSupportIdx,
       meleeSwingT, grenadeWindupT, velocity: playerVelocity.clone(), yaw: euler.y,
-      currentWeaponIdx, reloading, isADS, kick: { ..._gunKick }, land: _realismLandKick };
+      currentWeaponIdx, reloading, isADS, kick: { ..._gunKick }, land: _realismLandKick, heldWalkLean };
     try {
       gameStarted = true; isDead = false; meleeSwingT = 1; grenadeWindupT = 1;
+      heldWalkLean = 0; playerVelocity.set(0,0,-5.2);updateHeldWalkLean(1/60);
+      const firstLean=heldWalkLean;
+      if(firstLean<=0||firstLean>=0.3)issues.push('walking tilt snaps instead of easing in');
+      for(let i=0;i<60;i++)updateHeldWalkLean(1/60);
+      if(heldWalkLean<0.99)issues.push('walking tilt never reaches the carrying pose');
+      playerVelocity.set(0,0,0);updateHeldWalkLean(1/60);
+      if(heldWalkLean<=0.5||heldWalkLean>=0.99)issues.push('walking tilt snaps when stopping');
+      for(let i=0;i<120;i++)updateHeldWalkLean(1/60);
+      if(heldWalkLean!==0)issues.push('walking tilt does not return to original pose');
       euler.y = 0; playerVelocity.set(0,0,0);
       if (Object.values(heldWalkPose(0)).some(x => x !== 0)) issues.push('walking: changes stationary pose');
       playerVelocity.set(5.2,0,0); const right = heldWalkPose(0);
@@ -361,6 +370,7 @@ if (ok && process.argv.includes('--equipment-sway')) {
       playerVelocity.copy(saved.velocity);
       euler.y = saved.yaw; currentWeaponIdx = saved.currentWeaponIdx; reloading = saved.reloading; isADS = saved.isADS;
       Object.assign(_gunKick, saved.kick); _realismLandKick = saved.land;
+      heldWalkLean = saved.heldWalkLean;
     }
     return issues;
   })()`);

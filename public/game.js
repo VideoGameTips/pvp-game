@@ -38537,19 +38537,26 @@ function gunSpinAngle(m) {
   const k = (t - 0.7) / 0.3;
   return full + over * (1 - k * k * (3 - 2 * k));
 }
+let heldWalkLean = 0;
+function updateHeldWalkLean(dt) {
+  const target = gameStarted && !isDead ? Math.min(1,Math.hypot(playerVelocity.x,playerVelocity.z)/5.2) : 0;
+  heldWalkLean += (target-heldWalkLean)*(1-Math.exp(-Math.max(0,dt)*9));
+  if (target === 0 && heldWalkLean < 0.0001) heldWalkLean = 0;
+}
 function heldWalkPose(t, phase = 0) {
   const vx = playerVelocity.x, vz = playerVelocity.z;
   const moving = Math.min(1, Math.hypot(vx, vz) / 5.2);
   const strafe = THREE.MathUtils.clamp((vx * Math.cos(euler.y) - vz * Math.sin(euler.y)) / 5.2, -1, 1);
   const forward = THREE.MathUtils.clamp(-(vx * Math.sin(euler.y) + vz * Math.cos(euler.y)) / 5.2, -1, 1);
   const step = t * 8.2 + phase;
+  const side = phase === Math.PI ? -1 : 1;
   return {
-    x: Math.sin(step) * 0.012 * moving - strafe * 0.018,
-    y: Math.cos(step * 2) * 0.010 * moving - Math.abs(forward) * 0.012,
+    x: Math.sin(step) * 0.012 * moving - strafe * 0.018 + heldWalkLean * 0.014 * side,
+    y: Math.cos(step * 2) * 0.010 * moving - Math.abs(forward) * 0.012 - heldWalkLean * 0.008,
     z: forward * 0.012 + Math.sin(step * 2) * 0.004 * moving,
     rx: Math.sin(step) * 0.025 * moving + Math.abs(forward) * 0.018,
-    ry: -strafe * 0.045,
-    rz: -strafe * 0.065 + Math.sin(step) * 0.025 * moving,
+    ry: -strafe * 0.045 + heldWalkLean * 0.035 * side,
+    rz: -strafe * 0.065 + Math.sin(step) * 0.025 * moving - heldWalkLean * 0.20 * side,
   };
 }
 function updateRealismFeedback(dt) {
@@ -62797,6 +62804,7 @@ function loop() {
   }
   safeLoopStep('movement', () => updateMovement(dt));
   safeLoopStep('player-vel', () => updatePlayerVel(dt)); // measured speed, read by applyBlastImpulse's blast surf
+  safeLoopStep('walk-lean', () => updateHeldWalkLean(dt));
   safeLoopStep('quick-melee', () => updateQuickMelee());  // and back to what you were holding
   safeLoopStep('held-item', () => broadcastHeldWeapon());   // no-op unless it actually changed
   // Auto-fire used to poll on a fixed 50ms setInterval, independent of the
