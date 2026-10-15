@@ -30,12 +30,18 @@
     {id:'marksman',name:'Marksman',items:['lever','hand_cannon','knife'],skins:['knife_singularity']},
     {id:'stealth',name:'Stealth Ops',items:['air_rifle','throwing_knives','knife'],skins:['knife_hyperspace']},
     {id:'kitchen',name:'Kitchen Catastrophe',items:['paintball','baguette','frying_pan'],skins:['frying_pan_pizza_cutter']},
-    // NOT restored, both needing a decision rather than a rule:
-    //  · `mortar` (mortar_rifle + grenade_launcher + hand_cannon) — not one of
-    //    those three has a skin in GEN1/GEN2, so it cannot carry one.
-    //  · `chaos` (paintball + confetti_cannon + baguette + rubber_duck) — two of
-    //    its four are support items, so the three-item shape leaves only two and
-    //    the third would be a weapon the pack never had.
+    // `mortar` keeps its identity — two indirect-fire weapons — and loses the
+    // hand cannon, which was the least of the three and a pistol besides. None
+    // of mortar_rifle / grenade_launcher / hand_cannon can carry a bundle skin,
+    // so the melee slot every other pack has is what lets this one have a skin
+    // at all; combat_axe came back out of the archive in this same fortnight.
+    {id:'mortar',name:'Mortar Squad',items:['mortar_rifle','grenade_launcher','combat_axe'],skins:['combat_axe_frost']},
+    // `chaos` stays retired, and this is a decision, not an oversight. It was
+    // paintball + confetti_cannon + baguette + rubber_duck: the pack IS the two
+    // joke SUPPORT items, and support items are the one thing the rebuilt shape
+    // does not take. Anything buildable from what is left would be a different
+    // pack wearing the name — paintball and baguette alone are two thirds of
+    // `kitchen`. Its four items all remain individually purchasable.
   ];
   // Free starter gear adds no cost; cosmetics add a flat premium to the discounted weapons.
   const price=(b,costs,free)=>Math.ceil(b.items.reduce((sum,id)=>sum+(free?.has(id)?0:(costs[id]||0)),0)*.82)+b.skins.length*300;
