@@ -1996,7 +1996,7 @@ event_horizon: 75,
   m4a1_arena: 50,
 
   // ⚡ Tesla Coil zap · 🧪 acid pool · 🐝 bee sting
-  tesla_coil: 16, acid_pool: 8, bee_sting: 5, mini_turret: 15, gunslinger: 83,
+  tesla_coil: 16, acid_pool: 8, bee_sting: 5, mini_turret: 15, gunslinger: 28,
   // MG
   mg42: 15,
   // Melee

@@ -862,11 +862,16 @@ const WEAPONS = [
   },
   {
     // 🤠 Gunslinger: locks onto a target, then fires an upward trick shot that still lands.
+    // It was the top weapon in the ranking: one 83-damage shot every 280 ms that could not miss a locked target
+    // (296 DPS, 30 rounds). Now a pull throws a salvo of FIVE at once: each shot is 28, the salvo goes out
+    // wide (spread 0.01 -> 0.07; a locked salvo is only `accuracy` of the way to landing), and every shot takes
+    // a heavier time to arrive (115 ms -> 380 ms, staggered), with 700 ms between pulls. A magazine is six
+    // salvos (30 rounds, five at a time), the reserve nine.
     id: 'gunslinger', name: 'Gunslinger', type: 'Secondary', slot: 'secondary',
-    mag: 30, reserve: 45, damage: 83, fireRate: 280, reloadTime: 1800,
-    auto: false, pellets: 1, spread: 0.01, adsZoom: 50, bulletSpeed: 170, noReload: false,
+    mag: 6, reserve: 9, damage: 28, fireRate: 700, reloadTime: 1800,
+    auto: false, pellets: 5, spread: 0.07, adsZoom: 50, bulletSpeed: 170, noReload: false,
     bulletColor: 0xffcc44, bulletSize: 0.05,
-    trickShot: { lockTime: 90, range: 72, radius: 0.95, lift: 0.42, delay: 115 },
+    trickShot: { lockTime: 90, range: 72, radius: 0.95, lift: 0.42, delay: 380, stagger: 70, accuracy: 0.45 },
   },
   {
     // 🚀🔒 Javelin Launcher: hold the crosshair on someone for lockOn.lockTime
@@ -45102,9 +45107,11 @@ function tryShoot() {
       if (direct.lengthSq() > 0.0001) {
         direct.normalize();
         baseDir.copy(direct).add(new THREE.Vector3(0, spec.lift || 0.42, 0)).normalize();
-        trickShotTarget = { pid: lockedPid, delay: spec.delay || 115 };
+        trickShotTarget = { pid: lockedPid, delay: spec.delay || 115, stagger: spec.stagger || 0,
+                            accuracy: spec.accuracy == null ? 1 : spec.accuracy, count: Math.max(1, shotPellets | 0) };
       }
-    } else {
+    } else if (spec.accuracy == null) {
+      // (a salvo with no lock just goes out level and wide, through the pellet loop below: no trick to it)
       baseDir.y = Math.max(baseDir.y, spec.lift || 0.42);
       baseDir.normalize();
     }
@@ -45147,19 +45154,33 @@ function tryShoot() {
     const bColor = wStats.randomBulletColor
       ? PAINTBALL_COLORS[Math.floor(Math.random() * PAINTBALL_COLORS.length)]
       : (forcedShot?.bulletColor ?? wStats.bulletColor);
-    const id = `trick_${myId}_${now}`;
-    spawnLocalBullet(muzzleWorld, baseDir, id, true, shotSpeed, bColor, forcedShot?.bulletSize ?? wStats.bulletSize, shotWeaponId, {
-      visualOnly: true,
-      maxRange: 90,
-    });
-    setTimeout(() => {
-      const mesh = remoteMeshes[trickShotTarget.pid];
-      if (!mesh || !mesh.visible || players[trickShotTarget.pid]?.dead || friendlyFireBlocked(trickShotTarget.pid, myId)) return;
-      const hitPos = mesh.position.clone().setY(mesh.position.y + 1.05);
-      if (!hasLineOfSight(camera.position.x, camera.position.z, mesh.position.x, mesh.position.z)) return;
-      spawnHitParticle(hitPos);
-      emitHit(trickShotTarget.pid, id, shotWeaponId, hitPos, false);
-    }, trickShotTarget.delay);
+    // One flight per round in the salvo: each its own way (spread), arriving after its own delay, and each only
+    // lands `accuracy` of the time (a single trick shot has accuracy 1 and count 1, as it always did).
+    const T = trickShotTarget;
+    for (let i = 0; i < T.count; i++) {
+      const dir = baseDir.clone();
+      if (T.count > 1 && shotSpread > 0) {
+        dir.x += (Math.random() - 0.5) * shotSpread * 2;
+        dir.y += (Math.random() - 0.5) * shotSpread * 2;
+        dir.z += (Math.random() - 0.5) * shotSpread * 2;
+        dir.normalize();
+      }
+      const id = `trick_${myId}_${now}_${i}`;
+      spawnLocalBullet(muzzleWorld, dir, id, true, shotSpeed, bColor, forcedShot?.bulletSize ?? wStats.bulletSize, shotWeaponId, {
+        visualOnly: true,
+        maxRange: 90,
+      });
+      const wait = T.delay + i * T.stagger + (T.count > 1 ? Math.random() * T.stagger : 0);
+      setTimeout(() => {
+        if (T.accuracy < 1 && Math.random() >= T.accuracy) return;       // this one went wide
+        const mesh = remoteMeshes[T.pid];
+        if (!mesh || !mesh.visible || players[T.pid]?.dead || friendlyFireBlocked(T.pid, myId)) return;
+        const hitPos = mesh.position.clone().setY(mesh.position.y + 1.05);
+        if (!hasLineOfSight(camera.position.x, camera.position.z, mesh.position.x, mesh.position.z)) return;
+        spawnHitParticle(hitPos);
+        emitHit(T.pid, id, shotWeaponId, hitPos, false);
+      }, wait);
+    }
   } else {
     for (let p = 0; p < shotPellets; p++) {
       const spreadDir = baseDir.clone();

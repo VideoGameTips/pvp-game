@@ -1086,6 +1086,82 @@ if (ok && process.argv.includes('--bow')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+if (ok && process.argv.includes('--gunslinger')) {
+  // The Gunslinger fires a salvo of five, wide and late: it was the top-ranked weapon (one 83-damage shot that could
+  // not miss a locked target, 296 DPS).
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const g = WEAPONS.find(w => w.id === 'gunslinger');
+    if (!g) return ['no gunslinger'];
+    if (g.pellets !== 5) issues.push('a pull should throw five, got ' + g.pellets);
+    if (!(g.spread >= 0.05)) issues.push('the salvo should be wide (spread >= 0.05), got ' + g.spread);
+    if (!(g.fireRate >= 600)) issues.push('the pulls should be well apart (>= 600 ms), got ' + g.fireRate);
+    if (!(g.damage <= 30)) issues.push('a shot of the salvo should be a fraction of the old 83, got ' + g.damage);
+    const ts = g.trickShot;
+    if (!ts || !(ts.delay >= 300)) issues.push('the shots should take a heavier time to arrive (>= 300 ms)');
+    if (!ts || !(ts.accuracy > 0 && ts.accuracy < 0.7)) issues.push('a locked salvo should not all land: accuracy ' + (ts && ts.accuracy));
+    // the most one pull can do, against how much the old gun did in the same time
+    const salvoMax = g.pellets * g.damage / (g.fireRate / 1000);
+    if (!(salvoMax < 296)) issues.push('even every shot landing should be under the old 296 DPS, got ' + salvoMax.toFixed(0));
+    const expected = g.pellets * g.damage * (ts ? ts.accuracy : 1) / (g.fireRate / 1000);
+    if (!(expected < 150)) issues.push('the expected DPS on a locked target is ' + expected.toFixed(0) + ', should be well under the old 296');
+
+    // fire it for real at a locked target: five flights, spread out, each arriving later, not all landing
+    const saved = { slot: activeSlot, wi: currentWeaponIdx, cw: currentWeapon, dead: isDead, started: gameStarted, locked: gunslingerLocked, lockId: gunslingerLockTargetId,
+      last: lastShot, emitHit, hasLineOfSight, spawnLocalBullet, setTimeout: window.setTimeout, random: Math.random, sound: playWeaponSound };
+    const hits = [], flights = [], timers = [];
+    try {
+      const idx = WEAPONS.findIndex(w => w.id === 'gunslinger');
+      activeSlot = 'secondary'; currentWeaponIdx = idx; currentWeapon = WEAPONS[idx];
+      isDead = false; gameStarted = true; lastShot = 0; reloading = false;
+      weaponAmmo[idx] = { ammo: g.mag, reserve: g.reserve };
+      weaponModels[idx].visible = true;
+      remoteMeshes.slinger_target = new THREE.Group(); remoteMeshes.slinger_target.position.set(0, 0, -20); remoteMeshes.slinger_target.visible = true;
+      players.slinger_target = { id: 'slinger_target', hp: 100, team: 'enemy' };
+      gunslingerLocked = true; gunslingerLockTargetId = 'slinger_target';
+      emitHit = (pid, bid, wid) => { hits.push({ pid, bid, wid }); };
+      hasLineOfSight = () => true;
+      spawnLocalBullet = (pos, dir) => { flights.push(dir.clone()); };
+      playWeaponSound = () => {};
+      window.setTimeout = (fn, ms) => { timers.push({ fn, ms }); return 0; };
+      let n = 0; Math.random = () => [0.1, 0.9, 0.2, 0.8, 0.3][n++ % 5];     // alternates: low rolls land, high rolls miss
+      tryShoot();
+    } finally {
+      Math.random = saved.random; window.setTimeout = saved.setTimeout;
+    }
+    try {
+      if (flights.length !== 5) issues.push('a locked pull should fly five shots, got ' + flights.length);
+      const spreadOk = flights.length > 1 && flights.some(d => d.distanceTo(flights[0]) > 0.02);
+      if (!spreadOk) issues.push('the five flights all went the same way');
+      // (tryShoot sets other timers too, an auto-reload and the like: these are the shots' own)
+      const shotTimers = timers.filter(t => String(t.fn).includes('went wide'));
+      if (shotTimers.length !== 5) issues.push('expected five arrivals, got ' + shotTimers.length);
+      const delays = shotTimers.map(t => t.ms).sort((a, b) => a - b);
+      if (delays.length) {
+        if (!(delays[0] >= ts.delay)) issues.push('the first shot arrived early: ' + delays[0] + ' ms');
+        if (!(delays[delays.length - 1] > delays[0])) issues.push('the five shots should not all land at once');
+      }
+      // run them: with the rolls above (0.1 land, 0.9 miss, ...) only some land
+      let m = 0; Math.random = () => [0.1, 0.9, 0.2, 0.8, 0.3][m++ % 5];
+      for (const t of shotTimers) t.fn();
+      if (hits.length === 0) issues.push('a locked salvo should land some of its shots');
+      if (hits.length >= 5) issues.push('a locked salvo landed every shot');
+      if (new Set(hits.map(h => h.bid)).size !== hits.length) issues.push('two hits shared a bullet id');
+    } finally {
+      Math.random = saved.random;
+      emitHit = saved.emitHit; hasLineOfSight = saved.hasLineOfSight; spawnLocalBullet = saved.spawnLocalBullet; playWeaponSound = saved.sound;
+      delete remoteMeshes.slinger_target; delete players.slinger_target;
+      activeSlot = saved.slot; currentWeaponIdx = saved.wi; currentWeapon = saved.cw; isDead = saved.dead; gameStarted = saved.started;
+      gunslingerLocked = saved.locked; gunslingerLockTargetId = saved.lockId; lastShot = saved.last;
+    }
+    return issues;
+  })()`);
+  const srv = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  if (!/mini_turret: 15, gunslinger: 28,/.test(srv)) issues.push('server WEAPON_DAMAGE does not have the Gunslinger at 28');
+  console.log('gunslinger checks: a salvo of five, wide and late, not all landing, well under the old DPS');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 if (ok && process.argv.includes('--chain-maul')) {
   const issues = vm.runInThisContext(`(() => {
     const issues = [], v = (x,y,z) => new THREE.Vector3(x,y,z);
