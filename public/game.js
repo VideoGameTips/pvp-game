@@ -32700,6 +32700,7 @@ function isRiotShieldBlocking() {
 }
 function depleteRiotShield(dmg) {
   if (!(dmg > 0) || riotShieldHp <= 0) return;
+  flashHitIndicator('guard');
   riotShieldHp = Math.max(0, riotShieldHp - dmg);
   if (riotShieldHp <= 0) showAnnouncement('SHIELD BROKEN', 'Your riot shield is spent', '#ff8844', 1400);
   updateWeaponHUD();
@@ -41109,6 +41110,7 @@ function loadoutReady() {
 }
 
 function resetCombatResources() {
+  clearCombatFeedback();
   clearPlayerStatusEffects();
   if (!loadoutReady()) return;
   window._mapLadder = null;
@@ -52902,9 +52904,15 @@ window.alert = m => { uiAlert(m); };   // the ~50 fire-and-forget alerts
 // Before this a hit showed only a small number at the target (and a sound a muted phone never
 // plays); a kill made the body vanish and left one line in the corner feed; an empty gun did
 // nothing at all. Shooters answer all three where the eyes already are: on the crosshair.
+let hitmarkerPriorityUntil = 0, hitmarkerPriority = 0;
 function showHitmarker(kind) {
   const el = document.getElementById('hitmarker');
   if (!el) return;
+  const priority = kind === 'kill' ? 3 : kind === 'head' ? 2 : 1;
+  const now = performance.now();
+  if (now < hitmarkerPriorityUntil && priority < hitmarkerPriority) return;
+  hitmarkerPriority = priority;
+  hitmarkerPriorityUntil = now + (kind === 'kill' ? 380 : 110);
   el.className = kind === 'hit' ? '' : kind;          // '' = white; head / kill / lobby recolour it
   el.style.transition = 'none'; el.style.opacity = '1';
   clearTimeout(el._t);
@@ -53959,6 +53967,7 @@ function updateBullets(dt) {
             if (!isShielded() && (piercesDefense || !isRiotShieldBlocking())) {
               const _mp = meleeAbilityBuff?.type;
               if (!piercesDefense && _mp === 'deflect') {
+                flashHitIndicator('guard');
                 triggerDeflectImpact(at);
                 const dp = remoteMeshes[b.botId] ? remoteMeshes[b.botId].position.clone().setY(1.0)
                                                  : camera.position.clone().setY(1.0);
@@ -53968,7 +53977,7 @@ function updateBullets(dt) {
                 // wasHead is known here, but bot damage is not scaled by
                 // location yet, so it is deliberately not passed as if it were.
                 botHitsMe(b.botId, b.weaponId);
-              }
+              } else flashHitIndicator('guard');
             } else if (!isShielded() && !piercesDefense && isRiotShieldBlocking()) {
               depleteRiotShield(CLIENT_WEAPON_DAMAGE[b.weaponId] || 25);
             }
@@ -55650,27 +55659,53 @@ function updateWeaponHUD() {
 // Damage with no known direction (lava, burning, a shield soaking a hit): a short red pulse at the
 // screen edge. The ring that used to flash here sat on the crosshair, where a shooter looks for
 // their OWN hits — the hitmarker lives there now (#34, #36).
-function flashHitIndicator() {
+function flashHitIndicator(kind = 'damage') {
   const el = document.getElementById('dmg-edge');
   if (!el) return;
+  el.classList.toggle('guard', kind === 'guard');
   el.style.transition = 'none'; el.style.opacity = '1';
   clearTimeout(el._t);
   el._t = setTimeout(() => { el.style.transition = 'opacity 0.25s'; el.style.opacity = '0'; }, 120);
 }
 // An arc around the crosshair, turned toward whoever hit you: up = in front, down = behind (#36).
+const damageDirectionEntries = [];
+function clearCombatFeedback() {
+  for (const entry of damageDirectionEntries) entry.el.remove();
+  damageDirectionEntries.length = 0;
+  hitmarkerPriority = 0; hitmarkerPriorityUntil = 0;
+  for (const id of ['hitmarker','dmg-edge']) {
+    const el = document.getElementById(id);
+    if (el) { clearTimeout(el._t); el.style.opacity = '0'; }
+  }
+}
 function showDamageDirection(fromId) {
   const layer = document.getElementById('dmg-dir');
   const src = players[fromId] || gameBots.find(b => b.id === fromId);
-  if (!layer || !src || src.x == null) return;
-  const toYaw = Math.atan2(camera.position.x - src.x, camera.position.z - src.z);   // the yaw that would face them
-  let rel = toYaw - euler.y;                                                          // how far to turn, + = left
-  rel = Math.atan2(Math.sin(rel), Math.cos(rel));
-  const arc = document.createElement('div');
-  arc.className = 'dmg-arc';
-  arc.style.transform = `rotate(${(-rel * 180 / Math.PI).toFixed(1)}deg)`;
-  layer.appendChild(arc);
-  while (layer.children.length > 4) layer.firstElementChild.remove();
-  setTimeout(() => { arc.style.opacity = '0'; setTimeout(() => arc.remove(), 650); }, 450);
+  if (!layer || !src || !Number.isFinite(src.x) || !Number.isFinite(src.z)) { flashHitIndicator(); return; }
+  let entry = damageDirectionEntries.find(x => x.id === fromId);
+  if (!entry) {
+    if (damageDirectionEntries.length >= 4) damageDirectionEntries.shift().el.remove();
+    const el = document.createElement('div'); el.className = 'dmg-arc'; layer.appendChild(el);
+    entry = { id: fromId, el }; damageDirectionEntries.push(entry);
+  }
+  // Remember the shot origin, not a live enemy position: this is feedback,
+  // never a tracker for someone moving behind cover.
+  entry.x = src.x; entry.z = src.z; entry.at = performance.now();
+  updateDamageDirections(entry.at);
+}
+function updateDamageDirections(now = performance.now()) {
+  if (!gameStarted || isDead || MATCH_FINALE.active) {
+    for (const entry of damageDirectionEntries) entry.el.remove();
+    damageDirectionEntries.length = 0; return;
+  }
+  for (let i=damageDirectionEntries.length-1;i>=0;i--) {
+    const entry = damageDirectionEntries[i], age = now-entry.at;
+    if (age >= 1050) { entry.el.remove(); damageDirectionEntries.splice(i,1); continue; }
+    const yaw = Math.atan2(camera.position.x-entry.x,camera.position.z-entry.z)-euler.y;
+    const rel = Math.atan2(Math.sin(yaw),Math.cos(yaw));
+    entry.el.style.transform = `rotate(${(-rel*180/Math.PI).toFixed(1)}deg)`;
+    entry.el.style.opacity = String(age < 400 ? 1 : Math.max(0,1-(age-400)/650));
+  }
 }
 function updateHealthHUD(hp) {
   // The bar is a share of THIS mode's health: the Towers are 100 HP, and a full bar there read as a third.
@@ -56123,9 +56158,14 @@ function applyBotDamageToPlayer(weaponId, botId, damageOverride) {
     return true;
   }
   const piercesDefense = weaponPiercesDefenses(weaponId);
-  if (!isDead && !isShielded() && !piercesDefense && isRiotShieldBlocking()) depleteRiotShield(CLIENT_WEAPON_DAMAGE[weaponId] || 25);
-  if (isDead || isShielded() || (!piercesDefense && isRiotShieldBlocking())) return;
-  if (!piercesDefense && (meleeAbilityBuff?.type === 'parry' || meleeAbilityBuff?.type === 'deflect')) return;
+  if (!isDead && !isShielded() && !piercesDefense && isRiotShieldBlocking()) {
+    depleteRiotShield(CLIENT_WEAPON_DAMAGE[weaponId] || 25);
+    return; // The shot that breaks the shield was still absorbed by it.
+  }
+  if (isDead || isShielded()) return;
+  if (!piercesDefense && (meleeAbilityBuff?.type === 'parry' || meleeAbilityBuff?.type === 'deflect')) {
+    flashHitIndicator('guard'); return;
+  }
   if (match?.type === 'range') return;
   const dmg = Number.isFinite(damageOverride) ? Math.max(0, Math.min(CLIENT_WEAPON_DAMAGE[weaponId] || 25, Math.round(damageOverride))) : CLIENT_WEAPON_DAMAGE[weaponId] || 25;
   const me = players[myId];
@@ -56603,7 +56643,7 @@ socket.on('playerHit', data => {
   if (data.targetId === myId && isShielded()) {
     const lost = Math.max(0, (players[myId]?.hp ?? data.hp) - data.hp);
     if (lost > 0) socket.emit('healSelf', { amount: lost });   // give it back: the server took it before the shield could say no
-    flashHitIndicator(); // show we were hit but shield absorbed it
+    flashHitIndicator('guard'); // shield absorbed it; no health-damage flash
     if (data.bulletId) {
       for (let i=localBullets.length-1; i>=0; i--) {
         if (localBullets[i].id===data.bulletId) { scene.remove(localBullets[i].mesh); localBullets.splice(i,1); break; }
@@ -56624,7 +56664,7 @@ socket.on('playerHit', data => {
   if (data.targetId === myId && !incomingPiercesDefense && meleeAbilityBuff?.type === 'parry') {
     const oldHp = players[myId]?.hp ?? data.hp;
     const dmgAbsorbed = Math.max(0, oldHp - data.hp);
-    flashHitIndicator();
+    flashHitIndicator('guard');
     if (dmgAbsorbed > 0) socket.emit('healSelf', { amount: dmgAbsorbed });
     if (data.bulletId) {
       for (let i=localBullets.length-1; i>=0; i--) {
@@ -56637,7 +56677,7 @@ socket.on('playerHit', data => {
   if (data.targetId === myId && !incomingPiercesDefense && meleeAbilityBuff?.type === 'deflect') {
     const oldHp = players[myId]?.hp ?? data.hp;
     const dmgAbsorbed = Math.max(0, oldHp - data.hp);
-    flashHitIndicator();
+    flashHitIndicator('guard');
     triggerDeflectImpact(_bulletWorldPosById(data.bulletId) || _fallbackDeflectWorldPos());
     if (dmgAbsorbed > 0) socket.emit('healSelf', { amount: dmgAbsorbed });
     // Reflect: hit nearest enemy bot
@@ -56664,7 +56704,6 @@ socket.on('playerHit', data => {
   if (data.targetId === myId && !incomingPiercesDefense && isRiotShieldBlocking()) {
     const oldHp = players[myId]?.hp ?? data.hp;
     const dmgAbsorbed = Math.max(0, oldHp - data.hp);
-    flashHitIndicator(); // shield clang
     depleteRiotShield(dmgAbsorbed);
     if (dmgAbsorbed > 0) socket.emit('healSelf', { amount: dmgAbsorbed });
     if (data.bulletId) {
@@ -62717,6 +62756,7 @@ function loop() {
   safeLoopStep('equipment-sway-reset', resetEquipmentSway);
   if (MATCH_FINALE.active) {
     clearActionWind();
+    clearCombatFeedback();
     try { updateMatchFinale(now); }
     catch (error) { console.error('[match-finale]', error); stopMatchFinale(true); }
     return;
@@ -62879,6 +62919,7 @@ function loop() {
   updateWeaponSelector();
   updateTrashcanProximity();
   updateDamageNumbers();
+  updateDamageDirections();
   // Spin barrel clusters around the forward (Z) axis. The minigun now visibly
   // spools before it fires, and E-bracing holds it at full speed.
   if (currentWeaponIdx !== null && weaponModels[currentWeaponIdx]?._barrelCluster) {
@@ -64668,6 +64709,7 @@ function afterDeath(ms, fn) {
 // Everything a finished match (or Lobby 13) leaves behind that the next start must not
 // inherit. Shared by the mode menu and the end-of-match buttons so they can't drift apart.
 function teardownMatchWorld() {
+  clearCombatFeedback();
   clearActionWind();
   countdownGeneration++;countdownActive=false;
   const countdown=document.getElementById('countdown-overlay');if(countdown)countdown.style.display='none';

@@ -124,6 +124,42 @@ try {
   console.log('   this is a runtime failure during module evaluation, not a syntax error.');
 }
 
+if (ok && process.argv.includes('--combat-feedback')) {
+  const issues = vm.runInThisContext(`(() => {
+    const issues=[],saved={gameStarted,isDead,yaw:euler.y,position:camera.position.clone(),inLobby,
+      activeSlot,selectedMeleeIdx,meleeSwingT,riotShieldHp,spawnShieldUntil,me:players[myId]};
+    const id='feedback_test_source';
+    try {
+      clearCombatFeedback();gameStarted=true;isDead=false;inLobby=false;spawnShieldUntil=0;
+      camera.position.set(0,1.65,0);euler.y=0;players[id]={x:0,z:-10};
+      showDamageDirection(id);const entry=damageDirectionEntries[0],first=entry.el.style.transform;
+      for(let n=0;n<20;n++)showDamageDirection(id);
+      if(damageDirectionEntries.length!==1)issues.push('automatic hits flood directional arcs');
+      players[id].x=10;players[id].z=0;updateDamageDirections(entry.at);
+      if(entry.el.style.transform!==first)issues.push('direction arc tracks hidden enemy movement');
+      euler.y=Math.PI/2;updateDamageDirections(entry.at);
+      if(entry.el.style.transform===first)issues.push('direction arc ignores camera turns');
+      updateDamageDirections(entry.at+1100);
+      if(damageDirectionEntries.length)issues.push('expired hit arc persists');
+      showHitmarker('kill');showHitmarker('hit');
+      if(hitmarkerPriority!==3)issues.push('body hit overwrites kill confirmation');
+      clearCombatFeedback();showHitmarker('head');showHitmarker('hit');
+      if(hitmarkerPriority!==2)issues.push('body hit overwrites headshot confirmation');
+      activeSlot='melee';selectedMeleeIdx=MELEE_ITEMS.findIndex(x=>x.id==='riot_shield');meleeSwingT=1;
+      players[myId]={hp:300,team:'ally'};riotShieldHp=1;
+      const landed=applyBotDamageToPlayer('ak20',null);
+      if(riotShieldHp!==0||players[myId].hp!==300||landed)issues.push('shield-breaking hit damages health');
+    } finally {
+      clearCombatFeedback();delete players[id];players[myId]=saved.me;gameStarted=saved.gameStarted;isDead=saved.isDead;
+      euler.y=saved.yaw;camera.position.copy(saved.position);inLobby=saved.inLobby;activeSlot=saved.activeSlot;
+      selectedMeleeIdx=saved.selectedMeleeIdx;meleeSwingT=saved.meleeSwingT;riotShieldHp=saved.riotShieldHp;spawnShieldUntil=saved.spawnShieldUntil;
+    }
+    return issues;
+  })()`);
+  if(issues.length){ok=false;console.log('combat feedback failures:\n'+issues.join('\n'));}
+  else console.log('combat feedback: last-hit bearing, camera turns, deduplication, marker priority and shield break');
+}
+
 if (ok && process.argv.includes('--action-wind')) {
   const issues = vm.runInThisContext(`(() => {
     const issues=[], saved={gameStarted,isDead,activeSlot,velocity:playerVelocity.clone()};

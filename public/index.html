@@ -146,7 +146,7 @@
       background: conic-gradient(from -32deg, rgba(255,40,40,0.9) 0deg 64deg, transparent 64deg);
       -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 7px), #000 calc(100% - 6px));
               mask: radial-gradient(farthest-side, transparent calc(100% - 7px), #000 calc(100% - 6px));
-      transition: opacity 0.6s; filter: drop-shadow(0 0 4px rgba(255,0,0,0.6));
+      filter: drop-shadow(0 0 4px rgba(255,0,0,0.6));
     }
     #low-hp {
       opacity: 0; transition: opacity 0.4s;
@@ -157,6 +157,9 @@
     #dmg-edge {
       opacity: 0; transition: opacity 0.25s;
       background: radial-gradient(ellipse at center, transparent 62%, rgba(255,30,30,0.35) 100%);
+    }
+    #dmg-edge.guard {
+      background: radial-gradient(ellipse at center, transparent 68%, rgba(100,220,255,0.40) 100%);
     }
     @keyframes reloadPulse { 50% { box-shadow: 0 0 0 7px rgba(255,154,60,0.55); border-color: #ffb46b; } }
 
