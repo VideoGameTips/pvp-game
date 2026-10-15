@@ -1300,7 +1300,7 @@ const SUPPORT_ITEMS = [
   { id: 'glitch_cube', archived: true, name: 'Glitch Cube', type: 'Wild Card', uses: 2, damage: 42, burst: 5, spread: 0.55, cooldown: 780, bulletSpeed: 92, randomBulletColor: true, bulletSize: 0.10 },
   { id: 'vampire_syringe', archived: true, name: 'Vampire Syringe', type: 'Risk Heal', uses: 2, heal: 35, selfDamage: 10, cooldown: 700 },
   // ── New supports ─────────────────────────────────────────────────────────
-  { id: 'adrenaline', archived: true, name: 'Adrenaline Pack', type: 'Buff', uses: 1, cooldown: 1500, speedBuff: 1.6, reloadBuff: 0.5, buffDur: 5000 },
+  { id: 'adrenaline', name: 'Adrenaline Pack', type: 'Buff', uses: 1, cooldown: 1500, speedBuff: 1.6, reloadBuff: 0.5, buffDur: 5000 },
   { id: 'tripwire', archived: true, name: 'Tripwire', type: 'Trap', uses: 2, damage: 60, cooldown: 1100, bulletSpeed: 30, bulletColor: 0xff3344, bulletSize: 0.05, isTripwire: true },
   { id: 'hologram', archived: true, name: 'Hologram Decoy', type: 'Decoy', uses: 1, cooldown: 2000, decoyDur: 8000 },
   { id: 'magnet_mine', archived: true, name: 'Magnet Mine', type: 'Magnet', uses: 2, damage: 40, cooldown: 900, bulletSpeed: 36, bulletColor: 0xff8844, bulletSize: 0.12, magnetRadius: 5 },

@@ -1450,16 +1450,35 @@
     links.forEach(([x,z],i)=>torus(g,steel,0.013,0.003,[x,0,z],[i%2?0:PI/2,PI/2,0]));
   });
 
-  // Combat Axe: skeletonized tactical haft, hooked beard, rear spike, wrapped
-  // grip, and three cutout holes in the head.
+  // Battle Axe: mirrored crescent blades forged around a single haft socket.
   defineMelee('combat_axe', g => {
     cyl(g,dark,[0.014,0.020],0.45,[0,0,-0.08]);
     cyl(g,rubber,0.025,0.18,[0,0,0.07]);
     for(let z=-0.01;z<=0.13;z+=0.035) torus(g,lambert(0x41464b),0.027,0.003,[0,0,z],[PI/2,0,0]);
-    box(g,steel,[0.15,0.090,0.030],[-0.015,0.025,-0.35]);
-    triangle(g,brightSteel,0.085,0.16,[-0.11,0.020,-0.35],[0,0,PI/2]);
-    triangle(g,steel,0.045,0.13,[0.11,0.040,-0.35],[0,0,-PI/2]);
-    for(const x of [-0.045,0,0.045]) cyl(g,dark,0.012,0.035,[x,0.030,-0.35],[0,0,PI/2]);
+    const blade = new THREE.Shape();
+    blade.moveTo(0.012,-0.045); blade.lineTo(0.070,-0.050);
+    blade.quadraticCurveTo(0.110,-0.085,0.170,-0.120);
+    blade.quadraticCurveTo(0.225,0,0.170,0.120);
+    blade.quadraticCurveTo(0.110,0.085,0.070,0.050);
+    blade.lineTo(0.012,0.045); blade.closePath();
+    const edge = new THREE.Shape();
+    edge.moveTo(0.170,-0.120); edge.quadraticCurveTo(0.225,0,0.170,0.120);
+    edge.lineTo(0.145,0.095); edge.quadraticCurveTo(0.192,0,0.145,-0.095); edge.closePath();
+    const forge = (shape,depth) => {
+      const geo = new THREE.ExtrudeGeometry(shape,{depth,bevelEnabled:true,bevelSize:0.002,bevelThickness:0.002,bevelSegments:2,steps:1,curveSegments:12});
+      geo.translate(0,0,-depth/2); geo.rotateX(PI/2);
+      return geo;
+    };
+    const bladeGeo = forge(blade,0.032), edgeGeo = forge(edge,0.037);
+    for(const side of [-1,1]) {
+      const cheek = place(new THREE.Mesh(bladeGeo,steel),[0,0,-0.35]);
+      cheek.scale.x=side; cheek.name=side<0?'battle-axe-blade-left':'battle-axe-blade-right'; g.add(cheek);
+      const bevel = place(new THREE.Mesh(edgeGeo,brightSteel),[0,0,-0.35]);
+      bevel.scale.x=side; g.add(bevel);
+      for(const y of [-0.024,0.024]) cyl(g,brass,0.007,0.010,[side*0.055,y,-0.35],[0,0,0],8);
+    }
+    box(g,dark,[0.052,0.047,0.105],[0,0,-0.35]);
+    cyl(g,steel,0.027,0.125,[0,0,-0.35]);
     box(g,orange,[0.020,0.016,0.060],[0,-0.020,-0.12]);
   });
 

@@ -522,7 +522,6 @@ const ARCHIVED_ITEM_IDS = new Set([
   'volt_whip',
   'glitch_cube',
   'vampire_syringe',
-  'adrenaline',
   'tripwire',
   'hologram',
   'magnet_mine',
