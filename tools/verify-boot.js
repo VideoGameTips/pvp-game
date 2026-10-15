@@ -1397,6 +1397,44 @@ if (ok && process.argv.includes('--quickmelee')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+if (ok && process.argv.includes('--lobby')) {
+  const issues = vm.runInThisContext(`(() => {
+    const issues=[],poly=MAP_GROUPS.lobby13.userData.lobbyFootprint,cols=MAP_COLLIDERS.lobby13;
+    const check=(v,m)=>{if(!v)issues.push(m);};
+    check(poly && poly.length>12,'Lobby must have an irregular perimeter');
+    if(!poly)return issues;
+    const inside=(x,z)=>{
+      let v=false;
+      for(let i=0,j=poly.length-1;i<poly.length;j=i++){
+        const [ax,az]=poly[i],[bx,bz]=poly[j];
+        if((az>z)!==(bz>z)&&x<(bx-ax)*(z-az)/(bz-az)+ax)v=!v;
+      }
+      return v;
+    };
+    const clear=(x,z,r=.45)=>!cols.some(b=>b.max.y>.2 && b.min.y<2 &&
+      b.min.x<x+r && b.max.x>x-r && b.min.z<z+r && b.max.z>z-r);
+    for(const p of [[-33,-29],[32,30],[-22,32],[22,-28]])check(!inside(...p),'Old square corner remains');
+    check(clear(0,18),'Lobby arrival is blocked');
+    const todo=[[0,18]],seen=new Set(['0,18']);
+    for(let i=0;i<todo.length;i++){
+      const [x,z]=todo[i];
+      for(const [dx,dz] of [[1,0],[-1,0],[0,1],[0,-1]]){
+        const nx=x+dx,nz=z+dz,key=nx+','+nz;
+        if(!seen.has(key)&&inside(nx,nz)&&clear(nx,nz)){seen.add(key);todo.push([nx,nz]);}
+      }
+    }
+    check(LOBBY_DUEL_PADS.length===3,'Missing duel bays');
+    for(const p of LOBBY_DUEL_PADS)for(const side of ['blue','red']){
+      check(clear(p[side].x,p[side].z,p.radius),'Duel staging area blocked');
+      check(seen.has(p[side].x+','+p[side].z),'Duel pad unreachable from spawn');
+    }
+    for(const p of TRASHCAN_POSITIONS)check(seen.has(p.x+','+p.z),'Loadout station unreachable from spawn');
+    return issues;
+  })()`);
+  console.log('lobby checks: irregular perimeter, removed square corners, spawn clearance, walkable routes to all duel pads and loadouts');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 if (ok && process.argv.includes('--match-finale')) {
   const issues = vm.runInThisContext(`(() => {
     const issues = [], check = (v, m) => { if (!v) issues.push(m); };
