@@ -33501,6 +33501,12 @@ const SHIRT_COLORS = [0xb03a2e, 0x1f4e79, 0x4a5d23, 0xc1720b, 0x37474f, 0x146356
 const HAIR_COLORS  = [0x241a12, 0x4a4640, 0x553318, 0xa9762e, 0xc9a227, 0x8f2f10, 0x8e9098];
 const SKIN_TONES   = [0xffcc99, 0xeab183, 0xc2895a, 0x8a5a36];
 const HAIR_STYLES  = ['crop', 'buzz', 'messy', 'swoop', 'curls', 'tail', 'spiky'];
+const HAIR_CHOICES=[['pixel_spikes','Pixel Spikes'],['pixel_curtains','Pixel Curtains'],['pixel_afro','Pixel Afro'],['pixel_mohawk','Pixel Mohawk'],['pixel_sidepart','Pixel Side Part'],['spiky','Spiky'],['crop','Short Crop'],['buzz','Buzz Cut'],['messy','Messy'],['swoop','Side Swoop'],['curls','Curls'],['tail','Ponytail'],['none','Bald']];
+const HAIR_COMPATIBLE=new Set(['recruit','spiky','riot_chad']);
+function cleanHairChoice(v){
+  return v && HAIR_CHOICES.some(([id])=>id===v.style) && typeof v.color==='string' && /^[0-9a-f]{6}$/i.test(v.color)
+    ? {style:v.style,color:v.color.toLowerCase()}:null;
+}
 // 'none' twice on purpose: about a third of people carry nothing, so the ones
 // who do read as carrying something rather than as the uniform.
 const KITS         = ['none', 'none', 'pack', 'pauldrons', 'vest', 'belt', 'bandolier'];
@@ -35924,6 +35930,10 @@ function _addHeadphones(group, color) {
 let _hairSphereGeo = null;
 function _addSeedHair(head, style, color) {
   const host = head._gear || head;
+  const choice=host.userData.hairChoice;
+  if(choice){style=choice.style;color=parseInt(choice.color,16);}
+  if(style==='none')return;
+  if(style.startsWith('pixel_')){_addPixelHair(host,style,color);return;}
   if(style==='spiky'){_addSpikyHair(host,color);return;}
   const mat = _gearMat('hair', color);
   const put = (geo, x, y, z) => {
@@ -35977,8 +35987,33 @@ function _addSeedHair(head, style, color) {
 }
 
 // Connected swept tufts sit on a fitted scalp, all in the head's accessory frame.
+function _addPixelHair(host,style,color){
+  const hair=new THREE.Group();hair.userData.hairstyle=style;host.add(hair);
+  const parts=[[.52,.12,.52,0,2.10,0],[.52,.28,.045,0,1.98,-.245]];
+  for(const x of [-.242,.242])parts.push([.045,.17,.45,x,2.005,0]);
+  if(style==='pixel_spikes')for(const [x,z,h] of [[-.16,-.13,.18],[0,-.14,.28],[.16,-.13,.22],[-.16,.1,.22],[0,.08,.32],[.16,.1,.26]]){
+    for(let k=0;k<3;k++)parts.push([.14-k*.035,h/3,.14-k*.035,x+k*.012,2.13+(k+.5)*h/3,z-k*.012]);
+  }
+  if(style==='pixel_curtains')for(const s of [-1,1]){
+    parts.push([.20,.10,.30,s*.14,2.18,.09],[.14,.17,.12,s*.17,2.075,.22],[.08,.25,.13,s*.22,1.99,.18]);
+  }
+  if(style==='pixel_afro')for(let y=0;y<3;y++)for(let x=-2;x<=2;x++)for(let z=-2;z<=2;z++){
+    if(x*x+z*z>(y===2?4:7))continue;
+    parts.push([.115,.11,.115,x*.105,2.15+y*.10,z*.105]);
+  }
+  if(style==='pixel_mohawk')for(let z=-2;z<=2;z++){
+    parts.push([.13,.20-Math.abs(z)*.02,.115,0,2.22,z*.10],[.075,.07,.10,0,2.34-Math.abs(z)*.01,z*.10]);
+  }
+  if(style==='pixel_sidepart')for(let x=-2;x<=2;x++)parts.push([.11,.10+(2-x)*.025,.43,x*.10,2.18+(2-x)*.0125,.015]);
+  const mesh=_lkFlat(hair,parts,_gearMat('pixel-hair',color));mesh.castShadow=true;
+}
 function _addSpikyHair(group, color) {
   const host = group._gearHead || group;
+  const choice=host.userData.hairChoice;
+  if(choice){
+    color=parseInt(choice.color,16);
+    if(choice.style!=='spiky'){_addSeedHair({_gear:host},choice.style,color);return;}
+  }
   const hair=new THREE.Group();hair.userData.hairstyle='spiky';host.add(hair);
   const mat = _gearMat('hair', color),highlight=_gearMat('hair',_mixColor(color,0xa18c6b,.16));
   const base = new THREE.Mesh(characterShapeGeo(.52,.16,.51,.05),mat);
@@ -36358,6 +36393,7 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
   // ── Gear containers (see GEAR_FIT) ────────────────────────────────────────
   const hf = GEAR_FIT.head, tf = GEAR_FIT.torso;
   const gearHead = new THREE.Group();            // group space, head gear
+  gearHead.userData.hairChoice=HAIR_COMPATIBLE.has(skinId)?cleanHairChoice(opts.hair):null;
   gearHead.scale.set(hf.s[0], hf.s[1], hf.s[2]);
   // Parented to the HEAD, not the body. Everything in here — helmet, cap,
   // visor, headphones, antenna — was a sibling of the skull in body space, so
@@ -39126,7 +39162,7 @@ function updatePlayerView(dt) {
     scene.remove(PLAYER_VIEW.actor); disposeBody(PLAYER_VIEW.actor); PLAYER_VIEW.actor = null;
   }
   if (!PLAYER_VIEW.actor) {
-    PLAYER_VIEW.actor = makePlayerMesh(currentUser?.username || 'You', false, 'ally', skin);
+    PLAYER_VIEW.actor = makePlayerMesh(currentUser?.username || 'You', false, 'ally', skin, {hair:myHair});
     scene.add(PLAYER_VIEW.actor);
   }
   const actor = PLAYER_VIEW.actor;
@@ -39190,7 +39226,7 @@ function beginSocialView(mode) {
   minigunBraceHeld = false;
   SOCIAL_VIEW.mode = mode;
   SOCIAL_VIEW.camera = new THREE.PerspectiveCamera(70, camera.aspect, camera.near, camera.far);
-  SOCIAL_VIEW.actor = makePlayerMesh(currentUser?.username || 'You', false, 'ally', mySkin || 'default');
+  SOCIAL_VIEW.actor = makePlayerMesh(currentUser?.username || 'You', false, 'ally', mySkin || 'default', {hair:myHair});
   if (mode === 'free' && (activeSlot === 'primary' || activeSlot === 'secondary')) armRemoteMesh(SOCIAL_VIEW.actor, currentWeapon?.id);
   scene.add(SOCIAL_VIEW.actor);
   const yaw = euler.y;
@@ -41439,8 +41475,8 @@ function killcamAt(id, r) {
   const dy = Math.atan2(Math.sin(e1.rotY - e0.rotY), Math.cos(e1.rotY - e0.rotY));
   return { x: mix(e0.x, e1.x), y: mix(e0.y, e1.y), z: mix(e0.z, e1.z), rotY: e0.rotY + dy * a };
 }
-function makeKillcamActor(name, team, skin, armed) {
-  const body = makePlayerMesh(name, false, team, skin || 'default', {});
+function makeKillcamActor(name, team, skin, armed, hair=null) {
+  const body = makePlayerMesh(name, false, team, skin || 'default', {hair});
   if (armed) {
     if (body._rig) body._rig.holdsGun = true;
     const gun = _genericGun({ bodyShape: 'classic', bodyColor: 0x222222, accentColor: 0x6a6a6a, magType: 'banana', topRail: true });
@@ -41484,8 +41520,8 @@ function startKillcam(killerId, weaponId) {
   const killerBot = gameBots.find(b => b.id === killerId);
   const wname = weaponDisplayName(weaponId || killerBot?.weaponId);
   KILLCAM.ghosts = {
-    killer: makeKillcamActor(killerName, 'enemy', players[killerId] ? renderedSkinForPlayer(players[killerId]) : undefined, true),
-    victim: makeKillcamActor(currentUser?.username || 'You', 'ally', mySkin, false),
+    killer: makeKillcamActor(killerName, 'enemy', players[killerId] ? renderedSkinForPlayer(players[killerId]) : undefined, true, players[killerId]?.hair),
+    victim: makeKillcamActor(currentUser?.username || 'You', 'ally', mySkin, false, myHair),
   };
   if (remoteMeshes[killerId]) remoteMeshes[killerId].visible = false;   // the actor plays them
   // Through the killer's eyes only if they could see you from there; a wall or crate right by
@@ -55795,9 +55831,9 @@ socket.on('weaponChanged', ({ id, weaponId }) => {
   const m = remoteMeshes[id];
   if (m) armRemoteMesh(m, armableWeaponOf(players[id] || { weaponId }));
 });
-socket.on('skinChanged', ({ id, skin, isAdmin, skinData }) => {
+socket.on('skinChanged', ({ id, skin, isAdmin, skinData, hair }) => {
   if (id === myId) return; // local player has no body mesh
-  if (players[id]) { players[id].skin = skin; players[id].isAdmin = isAdmin; players[id].skinData = skinData || null; }
+  if (players[id]) { players[id].skin = skin; players[id].isAdmin = isAdmin; players[id].skinData = skinData || null; players[id].hair=cleanHairChoice(hair); }
   const old = remoteMeshes[id];
   if (!old) return;
   const wasVisible = old.visible;
@@ -55805,7 +55841,7 @@ socket.on('skinChanged', ({ id, skin, isAdmin, skinData }) => {
   const p = players[id] || { name: '', isBot: false, team: 'enemy', x: old.position.x, z: old.position.z, skinData: skinData || null };
   disposeBody(old);           // the rebuild throws this whole body away, gun included
   const mesh = makePlayerMesh(p.name, p.isBot, p.team || 'enemy',
-                              renderedSkinForPlayer(p, skin), { crown: !!isAdmin, tag: humanTagKind(p) });
+                              renderedSkinForPlayer(p, skin), { crown: !!isAdmin, tag: humanTagKind(p), hair });
   mesh.position.copy(old.position); mesh.rotation.y = old.rotation.y; mesh.visible = wasVisible;
   mesh._ownerId = id;
   armRemoteMesh(mesh, armableWeaponOf(p));
@@ -56268,7 +56304,7 @@ function armRemoteMesh(mesh, weaponId) {
 }
 function spawnRemotePlayer(p) {
   const skinId = renderedSkinForPlayer(p);
-  const mesh = makePlayerMesh(p.name, p.isBot, p.team || 'enemy', skinId, { crown: !!p.isAdmin, tag: humanTagKind(p) });
+  const mesh = makePlayerMesh(p.name, p.isBot, p.team || 'enemy', skinId, { crown: !!p.isAdmin, tag: humanTagKind(p), hair:p.hair });
   mesh.position.set(p.x,0,p.z);
   mesh._ownerId = p.id;
   armRemoteMesh(mesh, armableWeaponOf(p));
@@ -63326,11 +63362,20 @@ function requestPointerLockSafe() {
 let currentUser = null; // { username, password, unlocks: [], isAdmin: false }
 // 🎭 Locally-chosen character skin (others see it via setSkin broadcast)
 let mySkin = (() => { try { const s = localStorage.getItem('pvp_skin'); return SKIN_IDS.includes(s) ? s : 'default'; } catch(e){ return 'default'; } })();
+let myHair=(()=>{try{return cleanHairChoice(JSON.parse(localStorage.getItem('pvp_hair')||'null'));}catch(e){return null;}})();
+let _hairSyncTimer=null;
+function setMyHair(choice){
+  myHair=cleanHairChoice(choice);
+  try{localStorage.setItem('pvp_hair',JSON.stringify(myHair));}catch(e){}
+  if(PLAYER_VIEW.actor){scene.remove(PLAYER_VIEW.actor);disposeBody(PLAYER_VIEW.actor);PLAYER_VIEW.actor=null;}
+  if(SOCIAL_VIEW.mode)stopSocialView();
+  clearTimeout(_hairSyncTimer);_hairSyncTimer=setTimeout(()=>emitMySkin(),350);
+}
 try { refreshViewArms(); } catch (e) {}   // now that the skin is known, the arms take its colours
 function emitMySkin() {
   try { refreshViewArms(); } catch (e) {}   // your own sleeves follow the skin you are wearing
   if (!socket) return;
-  socket.emit('setSkin', { skin: mySkin, isAdmin: !!(currentUser && currentUser.isAdmin), skinData: _pxWireFor(mySkin) });
+  socket.emit('setSkin', { skin: mySkin, isAdmin: !!(currentUser && currentUser.isAdmin), skinData: _pxWireFor(mySkin), hair:myHair });
   syncAdminTestSettings();
   _sentWeaponId = null; broadcastHeldWeapon();   // a reconnect or room change clears what the server knew
   _sentWrapId = undefined; try { emitMyWrap(); } catch (e) {}
@@ -65361,17 +65406,36 @@ const SKIN_SWATCH = {
   green_cap:   ['#6b5d3a', '#3f6b2f'],
   shadow:      ['#141414', '#f4f4f4'],
 };
+let _hairPreview=null;
+function drawHairPreview(host,yaw=.2){
+  if(!_hairPreview){
+    const renderer=new THREE.WebGLRenderer({alpha:true,antialias:true});renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));renderer.setSize(160,190);
+    renderer.domElement.style.cssText='display:block;width:160px;max-width:100%;height:auto;aspect-ratio:160 / 190;margin:auto;';
+    const scene=new THREE.Scene();scene.add(new THREE.HemisphereLight(0xe6f0ff,0x61574b,1.1));
+    const key=new THREE.DirectionalLight(0xfff1dd,1.4);key.position.set(2,4,3);scene.add(key);
+    const camera=new THREE.PerspectiveCamera(31,160/190,.05,20);camera.position.set(.85,1.85,2.5);camera.lookAt(0,1.43,0);
+    _hairPreview={renderer,scene,camera,body:null,key:null};
+  }
+  const P=_hairPreview,key=mySkin+JSON.stringify(myHair)+(currentUser?.username||'You');
+  if(P.key!==key){
+    if(P.body){P.scene.remove(P.body);disposeBody(P.body);}
+    P.body=makePlayerMesh(currentUser?.username||'You',false,'ally',mySkin,{hair:myHair});P.scene.add(P.body);P.key=key;
+  }
+  P.body.rotation.y=yaw;host.appendChild(P.renderer.domElement);P.renderer.render(P.scene,P.camera);
+}
 function openSkinsPanel() {
   closeOtherDialogs('skins-panel');
   let panel = document.getElementById('skins-panel');
   if (!panel) {
     panel = document.createElement('div');
     panel.id = 'skins-panel';
-    panel.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9550;background:#0d1622;border:2px solid #55bbff;border-radius:8px;padding:20px;color:#fff;font-family:"Courier New",monospace;min-width:360px;max-width:520px;max-height:78vh;overflow-y:auto;';
+    panel.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9550;background:#0d1622;border:2px solid #55bbff;border-radius:8px;padding:16px;color:#fff;font-family:"Courier New",monospace;width:min(520px,calc(100vw - 24px));box-sizing:border-box;max-height:82vh;overflow-y:auto;';
     document.body.appendChild(panel);
   }
   panel.style.display = 'block';
   const isAdmin = !!(currentUser && currentUser.isAdmin);
+  const hairOn=HAIR_COMPATIBLE.has(mySkin),hairColor=myHair?.color||appearanceFor(currentUser?.username||'You').hair.toString(16).padStart(6,'0');
+  const hairPalette=['241a12','553318','c9a227','b8beca','a43728','3189c8','4e9859','d85b9e'];
   const cards = SKINS.map(s => {
     const [c1, c2] = SKIN_SWATCH[s.id] || s.swatch || ['#444', '#888'];
     const sel = s.id === mySkin;
@@ -65390,10 +65454,33 @@ function openSkinsPanel() {
       <div style="font-size:16px;color:#88ddff;letter-spacing:3px;">🎭 SKINS</div>
       <button id="sk-close" style="background:#1a2a3a;color:#88ccff;border:1px solid #4499ff;padding:4px 10px;cursor:pointer;font-family:inherit;border-radius:3px;">✕</button>
     </div>
+    <section style="border-bottom:1px solid #314451;padding-bottom:12px;margin-bottom:12px;">
+      <h3 style="font-size:14px;margin:0 0 8px;color:#d9e8ee;">Hair</h3>
+      <div style="display:grid;grid-template-columns:minmax(120px,1fr) minmax(120px,1fr);gap:12px;align-items:center;">
+        <div><div id="hair-preview" style="height:190px;"></div><input id="hair-turn" type="range" min="-150" max="150" value="12" aria-label="Turn preview" title="Turn preview" style="width:100%;box-sizing:border-box;"></div>
+        <div style="min-width:0;">
+          <label for="hair-style" style="font-size:11px;display:block;margin-bottom:6px;">Hairstyle</label>
+          <select id="hair-style" ${hairOn?'':'disabled'} style="width:100%;min-width:0;padding:8px 4px;box-sizing:border-box;background:#182732;color:white;border:1px solid #637b89;border-radius:4px;font:inherit;font-size:12px;">
+            <option value="" ${!myHair?'selected':''}>Skin Default</option>${HAIR_CHOICES.map(([id,name])=>`<option value="${id}" ${myHair?.style===id?'selected':''}>${name}</option>`).join('')}
+          </select>
+          <label for="hair-color" style="font-size:11px;display:block;margin:12px 0 6px;">Hair color</label>
+          <input id="hair-color" type="color" value="#${hairColor}" ${hairOn && myHair?.style!=='none'?'':'disabled'} aria-label="Hair color" style="width:100%;height:32px;padding:2px;background:#182732;border:1px solid #637b89;border-radius:4px;box-sizing:border-box;">
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-top:7px;">${hairPalette.map(c=>`<button type="button" data-hair-color="${c}" title="#${c}" aria-label="#${c}" aria-pressed="${hairColor===c}" ${hairOn && myHair?.style!=='none'?'':'disabled'} style="height:24px;min-width:0;cursor:pointer;background:#${c};border:2px solid ${hairColor===c?'#f1f7f8':'#60707b'};border-radius:3px;"></button>`).join('')}</div>
+          ${hairOn?'':'<div style="font-size:11px;color:#a6bac6;margin-top:10px;">Covered by headwear.</div><button id="hair-recruit" type="button" style="margin-top:6px;width:100%;padding:7px;background:#263e38;color:#bce4ce;border:1px solid #698d7a;border-radius:4px;cursor:pointer;">Use Recruit</button>'}
+        </div>
+      </div>
+    </section>
     ${cards}
     <button id="sk-pixelizer" style="display:block;width:100%;margin-top:6px;padding:10px;background:#2a1030;color:#ff99dd;border:1px solid #ff66cc;border-radius:6px;cursor:pointer;font-family:inherit;font-size:13px;letter-spacing:2px;">🎨 DESIGN YOUR OWN SKIN</button>
     <div style="margin-top:10px;font-size:10px;color:#ffd227;text-align:center;">👑 ${isAdmin ? 'As admin, you always wear the crown.' : 'The match\'s top fragger wears the crown.'}</div>`;
   panel.querySelector('#sk-close').addEventListener('click', () => { panel.style.display = 'none'; });
+  drawHairPreview(panel.querySelector('#hair-preview'));
+  panel.querySelector('#hair-turn').addEventListener('input',e=>drawHairPreview(panel.querySelector('#hair-preview'),Number(e.target.value)*Math.PI/180));
+  panel.querySelector('#hair-style').addEventListener('change',e=>{setMyHair(e.target.value?{style:e.target.value,color:hairColor}:null);openSkinsPanel();});
+  const colorChange=color=>{setMyHair({style:myHair?.style||(mySkin==='spiky'?'spiky':appearanceFor(currentUser?.username||'You').style),color});openSkinsPanel();};
+  panel.querySelector('#hair-color').addEventListener('change',e=>colorChange(e.target.value.slice(1)));
+  panel.querySelectorAll('[data-hair-color]').forEach(b=>b.addEventListener('click',()=>colorChange(b.dataset.hairColor)));
+  panel.querySelector('#hair-recruit')?.addEventListener('click',()=>{mySkin='recruit';try{localStorage.setItem('pvp_skin',mySkin);}catch(e){}setMyHair(myHair||{style:'pixel_spikes',color:hairColor});openSkinsPanel();});
   panel.querySelector('#sk-pixelizer').addEventListener('click', () => { panel.style.display = 'none'; openSkinPixelizer('char'); });
   panel.querySelectorAll('.skin-card').forEach(card => {
     card.addEventListener('click', () => {

@@ -2143,6 +2143,11 @@ function cleanSkinData(v) {
   } catch (e) { return null; }
 }
 
+const HAIR_STYLE_IDS=new Set(['pixel_spikes','pixel_curtains','pixel_afro','pixel_mohawk','pixel_sidepart','spiky','crop','buzz','messy','swoop','curls','tail','none']);
+function cleanHairChoice(v){
+  return v && HAIR_STYLE_IDS.has(v.style) && typeof v.color==='string' && /^[0-9a-f]{6}$/i.test(v.color)
+    ? {style:v.style,color:v.color.toLowerCase()}:null;
+}
 function createPlayer(id, name) {
   const spawn = nextSpawn();
   return {
@@ -2154,6 +2159,7 @@ function createPlayer(id, name) {
     lastShot: 0, isBot: false,
     skin: 'default', isAdmin: false, // 🎭 cosmetic skin + crown marker
     skinData: null,                   // 🎨 a hand-painted skin (see cleanSkinData): palette + one byte per pixel
+    hair: null,
     weaponId: null,                   // 🔫 what everyone else draws in their hands
     matchId: 'lobby', // 🌐 lobby = idle / mode-select. Set to a unique match ID when in a real match.
   };
@@ -2307,9 +2313,10 @@ io.on('connection', (socket) => {
     // A painted skin arrives as 'px_...' plus its picture. The id alone means nothing to anyone else, so one without a
     // well-formed picture is worn as the default.
     p.skinData = /^px_/.test(p.skin) ? cleanSkinData(data && data.skinData) : null;
+    p.hair=cleanHairChoice(data?.hair);
     if (/^px_/.test(p.skin) && !p.skinData) p.skin = 'default';
     // Tell everyone in the same match so they can re-skin this player's mesh
-    emitToMatch(p.matchId, 'skinChanged', { id: socket.id, skin: p.skin, isAdmin: p.isAdmin, skinData: p.skinData });
+    emitToMatch(p.matchId, 'skinChanged', { id: socket.id, skin: p.skin, isAdmin: p.isAdmin, skinData: p.skinData, hair:p.hair });
   });
 
   // 🎨 What wrap this player has on. Anyone in the match sees it on their gun. A painted wrap ('ap_...') has to be one
