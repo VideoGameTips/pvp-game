@@ -5812,7 +5812,7 @@ var MAP_BOT_BOUNDS = {}, MAP_VOID = {};
 // (CLAUDE.md #4), because the server picks the map and the client honours it.
 const MAP_IDS = ['blank', 'urban', 'warehouse', 'forest', 'vietnam', 'volcano', 'cyber', 'desert', 'tundra', 'space', 'airport', 'trenches', 'chernobyl', 'refinery', 'skydock', 'sewer', 'gravity_lab', 'glassworks', 'carrier', 'overgrowth', 'orbital_station', 'foundry', 'carnival', 'biosphere', 'lockdown', 'studio', 'temple', 'holiday', 'labyrinth', 'arena', 'opera', 'doomsday', 'train', 'dreamscape', 'pearl_harbor', 'titanic', 'supermarket', 'pyongyang', 'traffic_cone_republic', 'flying_moai', 'big_arena', 'super_arena', 'big_harbor', 'storm_pier', 'pinball_arcade', 'laser_vault', 'cargo_belts', 'gale_peaks', 'magma_rise', 'neon_tokyo', 'duel_grid', 'duel_crossroads', 'duel_pillars', 'duel_platform'];
 const THIN_MAPS = new Set([]);
-// ⚔️ 1v1 duel maps: small and plain, 36 x 56 m (about six seconds spawn to spawn), dealt only to 1v1. They are in
+// ⚔️ 1v1 duel maps: plain arenas, 72 x 112 m (about fourteen seconds spawn to spawn), dealt only to 1v1. They are in
 // MAP_IDS so that a server-sent id activates, and kept out of the random pool of every other mode.
 const DUEL_MAP_IDS = ['duel_grid', 'duel_crossroads', 'duel_pillars', 'duel_platform'];
 const DUEL_ONLY_MAPS = new Set(DUEL_MAP_IDS);
@@ -6399,13 +6399,16 @@ function addOuterWalls(mapName, color) {
   });
 }
 
-// ── ⚔️ 1v1 duel maps ────────────────────────────────────────────────────────────────────────────────────
+// ── ⚔️ 1v1 duel maps ────────────────────────────────────────────────────────�
 // A 1v1 on a map built for ten players is five-sixths of a match spent finding the other person. These are four
-// plain arenas, 36 x 56 m, with the two spawns 44 m apart (about six seconds at a walk, less sliding) and just enough
-// cover to make a fight of it. A grid floor, flat colours, nothing to look up: layouts are point-symmetric so neither
-// spawn has the better side. They are built here with the same boxes as everything else, so a layout is a short
-// list and an easy thing to add to.
-const DUEL_W = 36, DUEL_D = 56;
+// plain arenas for two, built from the same boxes as everything else, so a layout is a short list and an easy
+// thing to add to. They were 36 x 56 m and Andy's verdict was "too tiny": they are now 72 x 112 m (four times the
+// floor), the spawns 100 m apart, about fourteen seconds at a walk (less sliding, and the ramps are fast). Every
+// layout is rotationally symmetric (turn it half a circle about the middle and it is the same map), so neither
+// spawn has the better side; every one has ramps that lead somewhere worth standing; and no two share a recipe:
+// long walls, waist-high walls, windowed walls (a sill and a lintel with a gap you can shoot through), arches,
+// L-shaped bunkers, crate stacks and decks, with pillars only one ingredient of one map. The numbers are metres.
+const DUEL_W = 72, DUEL_D = 112, DUEL_SPAWN_Z = 50;
 function _duelGridTexture(floor, fine, bold) {
   const N = 512, c = document.createElement('canvas'); c.width = c.height = N;
   const g = c.getContext('2d');
@@ -6430,68 +6433,111 @@ function buildDuelMap(name, o) {
   ground.rotation.x = -Math.PI / 2;
   G.add(ground);
   // The border: a wall too tall to be anything but a wall.
-  const T = 1, H = 7;
+  const T = 1, H = 8;
   addMapBox(name, 0, H / 2, -DUEL_D / 2 - T / 2, DUEL_W + 2 * T, H, T, o.wall);
   addMapBox(name, 0, H / 2,  DUEL_D / 2 + T / 2, DUEL_W + 2 * T, H, T, o.wall);
   addMapBox(name, -DUEL_W / 2 - T / 2, H / 2, 0, T, H, DUEL_D, o.wall);
   addMapBox(name,  DUEL_W / 2 + T / 2, H / 2, 0, T, H, DUEL_D, o.wall);
   // Cover is listed once and placed twice: where it is, and turned half a circle about the middle.
-  for (const [x, z, w, h, d, tone] of o.cover) {
+  // [x, z, width, height, depth, tone, elevation]: elevation is how far off the floor its bottom is (a lintel, a
+  // parapet on a deck, a crate on a crate); left out it sits on the floor.
+  for (const [x, z, w, h, d, tone, e = 0] of o.cover) {
     const col = tone === 'hi' ? o.accent : tone === 'tall' ? o.tall : o.cover_;
-    addMapBox(name, x, h / 2, z, w, h, d, col);
-    if (x !== 0 || z !== 0) addMapBox(name, -x, h / 2, -z, w, h, d, col);
+    addMapBox(name, x, e + h / 2, z, w, h, d, col);
+    if (x !== 0 || z !== 0) addMapBox(name, -x, e + h / 2, -z, w, h, d, col);
+  }
+  // Ramps likewise: a foot edge, the way it climbs, and the same turned half a circle. A ramp with no landing runs
+  // straight onto whatever block it was built against (the same height by construction: rise = that block's top).
+  for (const r of o.ramps || []) {
+    const opt = { width: r.w, rise: r.rise, run: r.run, landing: r.land || 0, color: o.cover_, landColor: o.tall, lipColor: o.accent };
+    addRamp(name, r.x, r.z, r.ux, r.uz, opt);
+    addRamp(name, -r.x, -r.z, -r.ux, -r.uz, opt);
   }
   // Where each of you starts: a flat pad, blue and red.
-  for (const [z, col] of [[23, 0x3a6aff], [-23, 0xff4a4a]]) {
+  for (const [z, col] of [[DUEL_SPAWN_Z, 0x3a6aff], [-DUEL_SPAWN_Z, 0xff4a4a]]) {
     const pad = new THREE.Mesh(new THREE.BoxGeometry(14, 0.04, 5), new THREE.MeshLambertMaterial({ color: col, transparent: true, opacity: 0.55 }));
     pad.position.set(0, 0.03, z); G.add(pad);
   }
-  MAP_SPAWNS[name] = { ally: { x0: -6, x1: 6, z0: 21, z1: 25 }, enemy: { x0: -6, x1: 6, z0: -25, z1: -21 } };
+  MAP_SPAWNS[name] = { ally: { x0: -6, x1: 6, z0: DUEL_SPAWN_Z - 2, z1: DUEL_SPAWN_Z + 2 }, enemy: { x0: -6, x1: 6, z0: -DUEL_SPAWN_Z - 2, z1: -DUEL_SPAWN_Z + 2 } };
   G._skyColor = o.sky;
   // the palette the map-vote picture is drawn in (mapPictureGrid / drawMapPicture)
   const css = n => '#' + n.toString(16).padStart(6, '0');
   G._duelLook = { floor: o.floor, fine: o.fine, bold: o.bold, low: css(o.cover_), tall: css(o.tall), accent: css(o.accent), wall: css(o.wall) };
 }
-// [x, z, width, height, depth, tone]; the mirror image is added for you.
 // RULE ONE, as for every map: from anywhere in one spawn you must not be able to see anywhere in the other (the same
-// 15 x 15 sample rays as verify-boot --maps, at eye height). A wall across the middle does it: every line from one
-// spawn rectangle (12 m wide) to the other crosses the centre line inside the rectangle's own width, so a divider at
-// least that wide and taller than the eye (1.65 m) at the centre cuts them all. Each layout below has one, or two
-// staggered ones (a line that dodges the first has to bend more than any straight line can to dodge the second).
+// 15 x 15 sample rays as verify-boot --maps, at eye height). Every ray from one spawn rectangle (12 m wide) to the
+// other crosses the centre line inside that width, so something solid at least that wide and taller than the eye
+// (1.65 m) at the centre cuts them all: each layout has one, and it is not always a wall.
+//
+// 1. DUEL GRID: galleries. A windowed wall, a lane-splitter, an L bunker and crate stacks on the floor; down each
+//    edge a ramp up onto a long gallery with a parapet, so you can fight from above the lane.
 buildDuelMap('duel_grid', {
   floor: '#222a40', fine: '#39466a', bold: '#6a80bc', wall: 0x3a4466, cover_: 0x77839e, tall: 0x5a6688, accent: 0x6aa0ff, sky: 0x10131c,
   cover: [
-    [0, 0, 13.4, 3.4, 1.4, 'tall'],     // the divider: a wide wall across the middle, so go round either end
-    [-8, -9, 6, 1.3, 1, 'cover'], [8, -9, 6, 1.3, 1, 'cover'],     // low walls to crouch behind on each approach
-    [-13, 4, 2, 2, 2, 'hi'],            // a crate on each flank
-    [-3, 13, 2, 1.2, 2, 'cover'], [4, 12, 2.4, 1.6, 1.4, 'cover'],
+    [0, 0, 16, 3.6, 1.6, 'tall'],                 // the divider across the middle
+    [-14, 0, 8, 1.2, 1.2, 'cover'],               // a low wall each side of it, so the middle is broken up
+    [-24, -14, 2, 3.4, 1.4, 'tall'], [-8, -14, 2, 3.4, 1.4, 'tall'],            // a windowed wall: two piers,
+    [-16, -14, 14, 1.0, 1.4, 'cover'], [-16, -14, 14, 0.9, 1.4, 'tall', 2.5],   // a sill and a lintel between them
+    [10, -27, 1.4, 3.6, 20, 'tall'],              // a long wall splitting a lane
+    [-26, -38, 3.4, 2.2, 3.4, 'hi'], [-26, -38, 2.2, 2.0, 2.2, 'cover', 2.2],   // a crate with a crate on it
+    [22, -36, 10, 2.4, 1.4, 'cover'], [26.3, -41.2, 1.4, 2.4, 9, 'cover'],     // an L-shaped bunker
+    [-8, -30, 7, 1.2, 1, 'cover'], [14, -47, 6, 1.0, 1, 'cover'],              // low walls to crouch behind
+    [-28.3, -14.5, 0.4, 1.0, 14, 'cover', 2.5],   // the gallery's parapet
   ],
+  ramps: [{ x: -31, z: -30, ux: 0, uz: 1, w: 6, rise: 2.5, run: 7.5, land: 16 }],
 });
+// 2. CROSSROADS: a bridge over the middle. Two staggered long walls (one with a window) make an S through the field;
+//    in the centre a ramp each side carries you up and over a low wall on a deck, with a view down both lanes.
 buildDuelMap('duel_crossroads', {
   floor: '#2d241e', fine: '#4a3a2e', bold: '#9a7248', wall: 0x4a3a2c, cover_: 0x9a7a58, tall: 0x6c5440, accent: 0xffb060, sky: 0x17120e,
   cover: [
-    [-6.5, -3.4, 17, 3.2, 1, 'tall'],   // two long walls, staggered: the way through is a chicane, left past one, right past the other
-    [0, 12, 1, 3, 9, 'tall'],           // and a spine down each end
-    [13, 15, 3, 2, 3, 'cover'],         // a block in each far corner
-    [-13, 7, 2, 1.2, 2, 'hi'],
+    [0, 0, 15, 2.4, 1.6, 'tall'],                 // under the bridge: cuts every starting sightline
+    [0, 0, 16.2, 0.5, 5, 'tall', 2.5],            // the bridge deck itself, between the two landings
+    [-30, -16, 12, 3.4, 1.2, 'tall'], [-9, -16, 6, 3.4, 1.2, 'tall'],           // the staggered wall, with a window:
+    [-18, -16, 12, 1.0, 1.2, 'cover'], [-18, -16, 12, 0.9, 1.2, 'tall', 2.5],   // sill and lintel
+    [0, 38, 1.2, 3.2, 14, 'tall'],                // a spine down each spawn's lane
+    [26, 36, 5, 2.2, 5, 'cover'], [-28, 24, 3, 1.2, 3, 'hi'],                   // a block and a crate
+    [-18, 32, 9, 1.4, 1.2, 'cover'], [-22.4, 35.2, 1.2, 1.4, 7.6, 'cover'],    // an L wall
+    [14, 46, 6, 1.0, 1, 'cover'],
   ],
+  ramps: [{ x: -27, z: 0, ux: 1, uz: 0, w: 5, rise: 3, run: 8, land: 11 }],
 });
+// 3. PILLAR HALL: colonnades with arches over them (the pillars are only the posts of the arches), a long alcove wall
+//    and low rails; in each lane a raised stage reached by a broad ramp, with a rail along its front.
 buildDuelMap('duel_pillars', {
   floor: '#1d2e2b', fine: '#305450', bold: '#52a89e', wall: 0x2f4a46, cover_: 0x5f8f88, tall: 0x4a7a74, accent: 0x66ffd8, sky: 0x0c1514,
   cover: [
-    [0, 0, 13.4, 3.4, 1.2, 'tall'],     // the hall's centre wall
-    [-8, 6, 2.4, 6, 2.4, 'tall'], [8, 6, 2.4, 6, 2.4, 'tall'],     // tall pillars either side of centre
-    [-8, 16, 2.4, 6, 2.4, 'tall'], [8, 16, 2.4, 6, 2.4, 'tall'],
-    [0, 10, 5, 1.2, 1, 'cover'],        // a low rail across each lane
+    [0, 0, 15, 3.6, 1.4, 'tall'],                 // the hall's centre wall
+    [-12, -4, 6, 1.0, 0.8, 'cover'],              // a low rail near it
+    [-12, 14, 2.4, 5.5, 2.4, 'tall'], [12, 14, 2.4, 5.5, 2.4, 'tall'],         // two colonnades of two posts each...
+    [-12, 30, 2.4, 5.5, 2.4, 'tall'], [12, 30, 2.4, 5.5, 2.4, 'tall'],
+    [-12, 22, 2.4, 1.0, 13.6, 'tall', 3.4], [12, 22, 2.4, 1.0, 13.6, 'tall', 3.4],   // ...with an arch across each pair
+    [-22, 40, 10, 3.2, 1.2, 'tall'],              // a long wall across the lane's far end
+    [-31, -14, 1.4, 3.4, 16, 'tall'],             // a long wall down the left, an alcove behind it
+    [-27, -26, 3, 1.4, 3, 'cover'],               // and a crate in the alcove
+    [24, 44, 8, 2.2, 1.4, 'cover'], [27.3, 47, 1.4, 2.2, 6.4, 'cover'],        // an L bunker by the spawn
+    [0, 22.4, 8, 1.0, 0.4, 'cover', 2.5],         // the stage's rail
   ],
+  ramps: [{ x: 0, z: 42, ux: 0, uz: -1, w: 8, rise: 2.5, run: 8, land: 12 }],
 });
+// 4. HIGH GROUND: a plateau in the middle with a ramp up each end and a wall along its top; a tower in each far
+//    corner with its own ramp; a windowed wall and long walls on the floor between.
 buildDuelMap('duel_platform', {
   floor: '#271f35', fine: '#40335e', bold: '#9a74d0', wall: 0x3c2f55, cover_: 0x8c74b8, tall: 0x5f4a88, accent: 0xd08aff, sky: 0x120d1a,
   cover: [
-    [0, 0, 12, 1.4, 9, 'hi'],           // a platform in the middle you can jump up on: the high ground
-    [0, 0, 13.4, 3.4, 1.0, 'tall'],     // with a wall standing along its middle, so each side of it is a fight of its own
-    [-11, 8, 3, 1.5, 3, 'cover'],       // a block each side of it
-    [-6, 17, 2, 4, 2, 'tall'],
+    [0, 0, 24, 2.6, 16, 'hi'],                    // the plateau
+    [0, 0, 14, 1.6, 1.0, 'tall', 2.6],            // a wall along its top: each side of it is a fight of its own
+    [-28, -36, 8, 3.0, 8, 'tall'],                // a tower in the corner (its ramp is below)
+    [-8, -28, 2, 3.2, 1.2, 'tall'], [8, -28, 2, 3.2, 1.2, 'tall'],             // a windowed wall: piers,
+    [0, -28, 14, 1.0, 1.2, 'cover'], [0, -28, 14, 0.9, 1.2, 'tall', 2.5],      // sill and lintel
+    [16, -14, 1.2, 3.4, 14, 'tall'],              // a long wall
+    [-12, -20, 7, 1.2, 1, 'cover'], [14, -38, 6, 1.2, 1, 'cover'],             // low walls
+    [-20, -46, 3.2, 2.0, 3.2, 'hi'],              // a crate
+    [-28, -40.4, 8, 1.0, 0.4, 'cover', 3.0],      // the tower's parapet
+  ],
+  ramps: [
+    { x: 0, z: -16, ux: 0, uz: 1, w: 8, rise: 2.6, run: 8, land: 0 },       // onto the plateau (its top is 2.6)
+    { x: -28, z: -24, ux: 0, uz: -1, w: 5, rise: 3.0, run: 8, land: 0 },    // onto the tower (its top is 3.0)
   ],
 });
 
@@ -63862,19 +63908,31 @@ function tickLobbySearch() {
 // only that grid painted, so a bot can "look at" exactly what the player looks at: it reads the same grid, works out
 // how much cover there is, how long the sightlines run, whether there is high ground, and picks the map its taste
 // likes. The server settles two different votes with a coin flip (see beginMapPick in server.js).
-function mapPictureGrid(mapId, W = 36, H = 56) {
+function mapPictureGrid(mapId, W, H) {
   const b = MAP_BOUNDS[mapId], cols = MAP_COLLIDERS[mapId];
   if (!b || !cols) return null;
-  const cells = new Uint8Array(W * H);                      // 0 floor · 1 low cover · 2 tall cover · 4 ally pad · 5 enemy pad
+  W = W || Math.round(b.halfX * 2); H = H || Math.round(b.halfZ * 2);        // a cell is about a metre
+  // 0 floor · 1 low cover · 2 tall cover · 3 ramp · 4 ally pad · 5 enemy pad · 6 raised deck (a landing, a plateau, a tower)
+  const cells = new Uint8Array(W * H);
   const cw = b.halfX * 2 / W, ch = b.halfZ * 2 / H;
   for (const c of cols) {
     // the border walls stand just outside the bounds and are not part of the plan
     if (c.min.x < -b.halfX - 0.01 || c.max.x > b.halfX + 0.01 || c.min.z < -b.halfZ - 0.01 || c.max.z > b.halfZ + 0.01) continue;
     if (c.max.y < 0.3) continue;
-    const code = c.max.y > 1.8 ? 2 : 1;                     // you can hop or crouch behind a 1: a 2 you have to go round
+    // a block you can stand on top of (a landing, a plateau, a tower: 6+ m each way and 2 to 4 m high, from the
+    // floor up) is a deck; otherwise you can hop or crouch behind a 1, and a 2 you have to go round
+    const wide = c.max.x - c.min.x >= 6 && c.max.z - c.min.z >= 5;
+    const code = (wide && c.min.y < 0.1 && c.max.y >= 2 && c.max.y <= 4) ? 6 : c.max.y > 1.8 ? 2 : 1;
     const i0 = Math.max(0, Math.floor((c.min.x + b.halfX) / cw + 1e-6)), i1 = Math.min(W - 1, Math.ceil((c.max.x + b.halfX) / cw - 1e-6) - 1);
     const j0 = Math.max(0, Math.floor((c.min.z + b.halfZ) / ch + 1e-6)), j1 = Math.min(H - 1, Math.ceil((c.max.z + b.halfZ) / ch - 1e-6) - 1);
     for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) if (code > cells[j * W + i]) cells[j * W + i] = code;
+  }
+  // ramps go on top of their own hidden steps (which were drawn as cover)
+  for (const r of MAP_RAMPS[mapId] || []) {
+    for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+      const x = -b.halfX + (i + 0.5) * cw, z = -b.halfZ + (j + 0.5) * ch;
+      if (rampSurfaceAt(r, x, z) != null) cells[j * W + i] = 3;
+    }
   }
   const sp = MAP_SPAWNS[mapId];
   if (sp) for (const [rect, code] of [[sp.ally, 4], [sp.enemy, 5]]) {
@@ -63887,20 +63945,21 @@ function mapPictureGrid(mapId, W = 36, H = 56) {
   return { w: W, h: H, cells, look: (g && g._duelLook) || null };
 }
 // What a bot (or a person) can read off the picture, each 0..1: how much of the plan is cover, how much of that is
-// tall, how long the clear lanes run, how far a spot in the open is from anything to stand behind, and whether there
-// is one big low block to climb onto.
+// tall, how long the clear lanes run, how far a spot in the open is from anything to stand behind, and how much of
+// it is high ground (ramps and the decks they climb to).
 function mapPictureFeel(grid) {
   const { w, h, cells } = grid, n = w * h;
-  let low = 0, tall = 0;
-  for (let k = 0; k < n; k++) { if (cells[k] === 1) low++; else if (cells[k] === 2) tall++; }
-  let laneSum = 0;                                          // per column, the longest run with no tall cover in it
+  let low = 0, tall = 0, high = 0;
+  for (let k = 0; k < n; k++) { const c = cells[k]; if (c === 1) low++; else if (c === 2) tall++; else if (c === 3 || c === 6) high++; }
+  let laneSum = 0;                                          // per column, the longest run with nothing tall in it
   for (let i = 0; i < w; i++) {
     let run = 0, best = 0;
-    for (let j = 0; j < h; j++) { if (cells[j * w + i] === 2) run = 0; else { run++; if (run > best) best = run; } }
+    for (let j = 0; j < h; j++) { const c = cells[j * w + i]; if (c === 2 || c === 6) run = 0; else { run++; if (run > best) best = run; } }
     laneSum += best / h;
   }
+  const solid = c => c === 1 || c === 2 || c === 6;
   const dist = new Int16Array(n).fill(-1), q = [];          // steps from each open cell to the nearest cover
-  for (let k = 0; k < n; k++) if (cells[k] === 1 || cells[k] === 2) { dist[k] = 0; q.push(k); }
+  for (let k = 0; k < n; k++) if (solid(cells[k])) { dist[k] = 0; q.push(k); }
   for (let qi = 0; qi < q.length; qi++) {
     const k = q[qi], i = k % w, j = (k - i) / w;
     for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
@@ -63911,27 +63970,10 @@ function mapPictureFeel(grid) {
     }
   }
   let dSum = 0, dN = 0;
-  for (let k = 0; k < n; k++) if (cells[k] !== 1 && cells[k] !== 2 && dist[k] >= 0) { dSum += Math.min(dist[k], 12); dN++; }
-  const seen = new Uint8Array(n);                           // the biggest connected block of low cover
-  let blob = 0;
-  for (let k = 0; k < n; k++) {
-    if (cells[k] !== 1 || seen[k]) continue;
-    let size = 0; const st = [k]; seen[k] = 1;
-    while (st.length) {
-      const c = st.pop(); size++;
-      const i = c % w, j = (c - i) / w;
-      for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-        const x = i + di, y = j + dj;
-        if (x < 0 || y < 0 || x >= w || y >= h) continue;
-        const m = y * w + x;
-        if (cells[m] === 1 && !seen[m]) { seen[m] = 1; st.push(m); }
-      }
-    }
-    if (size > blob) blob = size;
-  }
+  for (let k = 0; k < n; k++) if (!solid(cells[k]) && dist[k] >= 0) { dSum += Math.min(dist[k], 12); dN++; }
   return {
     cover: (low + tall) / n, tall: tall / n, lanes: laneSum / w,
-    exposure: dN ? dSum / dN / 12 : 1, platform: Math.min(1, blob / (n * 0.05)),
+    exposure: dN ? dSum / dN / 12 : 1, platform: Math.min(1, high / (n * 0.05)),
   };
 }
 // Four tastes a bot can have, as weights on the features above.
@@ -63952,7 +63994,7 @@ function botPickMap(options, tasteId, difficulty = 'medium', rng = Math.random) 
     const vs = feels.filter(Boolean).map(f => f[k]);
     range[k] = { lo: Math.min(...vs), span: (Math.max(...vs) - Math.min(...vs)) || 1 };
   }
-  const amp = difficulty === 'easy' ? 0.7 : difficulty === 'hard' || difficulty === 'expert' ? 0.05 : 0.25;
+  const amp = difficulty === 'easy' ? 1.1 : difficulty === 'hard' || difficulty === 'expert' ? 0.05 : 0.35;
   let best = null;
   options.forEach((id, i) => {
     const f = feels[i]; if (!f) return;
@@ -63966,8 +64008,8 @@ function botPickMap(options, tasteId, difficulty = 'medium', rng = Math.random) 
 // A few words a person can use to compare the pictures.
 function mapPictureBlurb(feel) {
   const bits = [];
-  bits.push(feel.platform >= 0.3 ? 'high ground' : feel.tall >= 0.065 ? 'tall walls' : 'low cover');
-  bits.push(feel.lanes >= 0.78 ? 'long lanes' : feel.lanes >= 0.65 ? 'open lanes' : 'broken lanes');
+  bits.push(feel.platform >= 0.55 ? 'lots of high ground' : feel.platform >= 0.3 ? 'ramps and decks' : 'mostly ground level');
+  bits.push(feel.lanes >= 0.62 ? 'long lanes' : feel.lanes >= 0.52 ? 'open lanes' : 'broken lanes');
   return bits.join(' · ');
 }
 function drawMapPicture(canvas, grid, opts = {}) {
@@ -63984,7 +64026,8 @@ function drawMapPicture(canvas, grid, opts = {}) {
   for (let j = 0; j < grid.h; j++) for (let i = 0; i < grid.w; i++) {
     const c = grid.cells[j * grid.w + i];
     if (!c) continue;
-    g.fillStyle = c === 1 ? look.low : c === 2 ? look.tall : c === 4 ? 'rgba(58,106,255,0.55)' : 'rgba(255,74,74,0.55)';
+    g.fillStyle = c === 1 ? look.low : c === 2 ? look.tall : c === 3 ? look.accent : c === 6 ? look.wall
+      : c === 4 ? 'rgba(58,106,255,0.55)' : 'rgba(255,74,74,0.55)';
     g.fillRect(i * sx, j * sy, sx + 0.5, sy + 0.5);
   }
   g.strokeStyle = look.bold; g.lineWidth = 3; g.strokeRect(1.5, 1.5, W - 3, H - 3);
@@ -67258,10 +67301,10 @@ const MAP_DESCS = {
   pyongyang: 'Pyongyang — monuments, squares and wide-sweeping live-fire searchlights',
   traffic_cone_republic: '🚧 Traffic Cone Republic — giant cones, a roundabout, a flyover · TOLL LANES charge health for speed',
   flying_moai: '🗿 Flying Moai — a plateau of stone heads · a ROAR shockwave crosses the ground',
-  duel_grid:      '⚔️ Duel Grid — 1v1 only · a small grid arena with a wall across the middle, low walls, six seconds to the other side',
-  duel_crossroads:'⚔️ Crossroads — 1v1 only · two long staggered walls make a chicane through the middle',
-  duel_pillars:   '⚔️ Pillar Hall — 1v1 only · a centre wall, tall pillars down both sides, a low rail across each lane',
-  duel_platform:  '⚔️ High Ground — 1v1 only · a platform in the middle you can jump up on, with a wall along its middle',
+  duel_grid:      '⚔️ Duel Grid — 1v1 only · 72 × 112 m grid arena: a windowed wall, an L bunker, crates, and a gallery up a ramp down each edge',
+  duel_crossroads:'⚔️ Crossroads — 1v1 only · two staggered long walls make an S through the field; a ramp each side takes you over the middle on a bridge',
+  duel_pillars:   '⚔️ Pillar Hall — 1v1 only · colonnades with arches, an alcove wall, and a raised stage up a broad ramp in each lane',
+  duel_platform:  '⚔️ High Ground — 1v1 only · a plateau in the middle with a ramp at each end, towers in the far corners, a windowed wall between',
 };
 function selectMapPick(mapId) {
   selectedMap = pickedMap = mapId;

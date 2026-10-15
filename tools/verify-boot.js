@@ -1095,15 +1095,18 @@ if (ok && process.argv.includes('--duel')) {
   // route, cover that is the same for both sides, and wired so only 1v1 is dealt them.
   const issues = vm.runInThisContext(`(() => {
     const issues = [];
+    const MAP_RECIPES = {};
     const walk = SPEED * DEFAULT_MOVE_MULT;                     // m/s, plain walking
     for (const name of DUEL_MAP_IDS) {
       const b = MAP_BOUNDS[name], sp = MAP_SPAWNS[name], cols = MAP_COLLIDERS[name] || [];
       if (!MAP_IDS.includes(name)) issues.push(name + ': not in MAP_IDS');
       if (!b || !sp) { issues.push(name + ': no bounds or spawns'); continue; }
-      if (b.halfX * 2 > 40 || b.halfZ * 2 > 60) issues.push(name + ': bigger than a duel map should be (' + b.halfX * 2 + ' x ' + b.halfZ * 2 + ')');
+      // four times the floor of the first duel maps (36 x 56): "too tiny" was the verdict
+      if (b.halfX * 2 < 70 || b.halfZ * 2 < 110) issues.push(name + ': smaller than a duel map should be (' + b.halfX * 2 + ' x ' + b.halfZ * 2 + ', want 72 x 112)');
+      if (b.halfX * 2 > 90 || b.halfZ * 2 > 140) issues.push(name + ': bigger than a duel map should be (' + b.halfX * 2 + ' x ' + b.halfZ * 2 + ')');
       const ca = { x: (sp.ally.x0 + sp.ally.x1) / 2, z: (sp.ally.z0 + sp.ally.z1) / 2 }, ce = { x: (sp.enemy.x0 + sp.enemy.x1) / 2, z: (sp.enemy.z0 + sp.enemy.z1) / 2 };
       const secs = Math.hypot(ca.x - ce.x, ca.z - ce.z) / walk;
-      if (secs < 4.5 || secs > 8.5) issues.push(name + ': spawn to spawn takes ' + secs.toFixed(1) + ' s at a walk, want 4.5 to 8.5');
+      if (secs < 10 || secs > 18) issues.push(name + ': spawn to spawn takes ' + secs.toFixed(1) + ' s at a walk, want 10 to 18');
       for (const side of [sp.ally, sp.enemy]) {
         if (side.x0 < -b.halfX + 1 || side.x1 > b.halfX - 1 || side.z0 < -b.halfZ + 1 || side.z1 > b.halfZ - 1) issues.push(name + ': a spawn rectangle is outside the walls');
         for (const c of cols) {
@@ -1146,7 +1149,39 @@ if (ok && process.argv.includes('--duel')) {
       }
       if (exposed) issues.push(name + ': ' + exposed + ' exposed starting sightlines (you can see your opponent at the start)');
       if (!MAP_DESCS[name]) issues.push(name + ': no description');
+      // RAMPS: every duel map has some, in rotationally mirrored pairs, and each one leads onto something solid
+      // whose top is the ramp's own height (a deck, a bridge, a plateau, a tower) rather than into the air.
+      const ramps = MAP_RAMPS[name] || [];
+      if (ramps.length < 2) issues.push(name + ': only ' + ramps.length + ' ramps, every duel map needs them');
+      for (const r of ramps) {
+        if (r.rise < 2) issues.push(name + ': a ramp that only rises ' + r.rise + ' m is not worth the climb');
+        const m = ramps.find(q => Math.abs(q.x0 + r.x0) < 0.02 && Math.abs(q.z0 + r.z0) < 0.02 && Math.abs(q.ux + r.ux) < 0.02 && Math.abs(q.uz + r.uz) < 0.02 && Math.abs(q.rise - r.rise) < 0.02);
+        if (!m) issues.push(name + ': a ramp has no rotated twin');
+        const ex = r.x0 + r.ux * (r.run + 0.6), ez = r.z0 + r.uz * (r.run + 0.6);
+        const top = cols.some(c => Math.abs(c.max.y - r.rise) < 0.06 && ex > c.min.x && ex < c.max.x && ez > c.min.z && ez < c.max.z);
+        if (!top) issues.push(name + ': a ramp at (' + r.x0 + ', ' + r.z0 + ') leads nowhere: nothing at ' + r.rise + ' m beyond its top');
+      }
+      // WALLS: not just pillars. Long walls, low walls, something overhead (a lintel, an arch, a bridge deck) and a
+      // block or crate must all be there, and pillars are never most of what is on the floor.
+      const dims = c => { const dx = c.max.x - c.min.x, dz = c.max.z - c.min.z, h = c.max.y - c.min.y; return { dx, dz, h, long: Math.max(dx, dz), thin: Math.min(dx, dz) }; };
+      const kinds = { longWall: 0, lowWall: 0, overhead: 0, block: 0, pillar: 0 };
+      for (const c of inner) {
+        const d = dims(c);
+        if (c.min.y >= 1.9 && d.h <= 1.3) kinds.overhead++;
+        else if (c.min.y < 0.1 && d.long >= 6 && d.thin <= 1.8 && d.h >= 2.8) kinds.longWall++;
+        else if (c.min.y < 0.1 && d.long >= 5 && d.thin <= 1.5 && d.h <= 1.5) kinds.lowWall++;
+        else if (c.min.y < 0.1 && d.long <= 4 && d.thin >= 1.8 && d.h >= 1.8 && d.h <= 3) kinds.block++;
+        else if (c.min.y < 0.1 && d.long <= 2.8 && d.h >= 4) kinds.pillar++;
+      }
+      if (kinds.longWall < 2) issues.push(name + ': only ' + kinds.longWall + ' long walls');
+      if (kinds.lowWall < 2) issues.push(name + ': only ' + kinds.lowWall + ' low walls');
+      if (kinds.overhead < 2) issues.push(name + ': nothing overhead (windows, arches, a bridge): ' + kinds.overhead);
+      if (kinds.pillar > 8 || kinds.pillar > (kinds.longWall + kinds.lowWall + kinds.overhead + kinds.block) * 0.7) issues.push(name + ': mostly pillars (' + kinds.pillar + ')');
+      // each map reads differently: no two share a wall recipe
+      MAP_RECIPES[name] = JSON.stringify(kinds);
     }
+    const recipes = Object.values(MAP_RECIPES);
+    if (new Set(recipes).size < recipes.length) issues.push('two duel maps have the same wall recipe: ' + JSON.stringify(MAP_RECIPES));
     return issues;
   })()`);
   const serverSrc = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
@@ -1446,7 +1481,7 @@ if (ok && process.argv.includes('--mappick')) {
       let asym = 0;
       for (let j = 0; j < g.h; j++) for (let i = 0; i < g.w; i++) {
         const a = g.cells[j * g.w + i], b = g.cells[(g.h - 1 - j) * g.w + (g.w - 1 - i)];
-        if ((a === 1 || a === 2 || b === 1 || b === 2) && a !== b) asym++;
+        if ((a === 1 || a === 2 || a === 3 || a === 6 || b === 1 || b === 2 || b === 3 || b === 6) && a !== b) asym++;
       }
       if (asym) issues.push(id + ': the picture is not the same both ways round (' + asym + ' cells differ)');
       const f = mapPictureFeel(g);
