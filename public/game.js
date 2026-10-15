@@ -6516,7 +6516,7 @@ buildDuelMap('duel_pillars', {
     [-31, -14, 1.4, 3.4, 16, 'tall'],             // a long wall down the left, an alcove behind it
     [-27, -26, 3, 1.4, 3, 'cover'],               // and a crate in the alcove
     [24, 44, 8, 2.2, 1.4, 'cover'], [27.3, 47, 1.4, 2.2, 6.4, 'cover'],        // an L bunker by the spawn
-    [0, 22.4, 8, 1.0, 0.4, 'cover', 2.5],         // the stage's rail
+    [0, 22.3, 8, 1.0, 0.4, 'cover', 2.5],         // the stage's rail
   ],
   ramps: [{ x: 0, z: 42, ux: 0, uz: -1, w: 8, rise: 2.5, run: 8, land: 12 }],
 });
@@ -6533,7 +6533,7 @@ buildDuelMap('duel_platform', {
     [16, -14, 1.2, 3.4, 14, 'tall'],              // a long wall
     [-12, -20, 7, 1.2, 1, 'cover'], [14, -38, 6, 1.2, 1, 'cover'],             // low walls
     [-20, -46, 3.2, 2.0, 3.2, 'hi'],              // a crate
-    [-28, -40.4, 8, 1.0, 0.4, 'cover', 3.0],      // the tower's parapet
+    [-28, -39.8, 8, 1.0, 0.4, 'cover', 3.0],      // the tower's parapet
   ],
   ramps: [
     { x: 0, z: -16, ux: 0, uz: 1, w: 8, rise: 2.6, run: 8, land: 0 },       // onto the plateau (its top is 2.6)
