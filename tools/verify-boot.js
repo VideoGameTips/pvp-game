@@ -124,6 +124,17 @@ try {
   console.log('   this is a runtime failure during module evaluation, not a syntax error.');
 }
 
+if (ok && process.argv.includes('--ability-cooldowns')) {
+  const valid = vm.runInThisContext(`(() => {
+    const item = MELEE_ITEMS.find(m => m.id === 'baguette');
+    return item.ability.cd === 10000 && abilityCooldownFor(item) === 10000
+      && abilityCooldownFor(item, { ...item.ability, cd: 0 }) === 10000
+      && abilityCooldownFor(item, null) === 0;
+  })()`);
+  if (!valid) { ok = false; console.log('baguette cooldown override failed'); }
+  else console.log('baguette: 10-second ability cooldown overrides global fast/zero cooldown');
+}
+
 if (ok && process.argv.includes('--equipment-hands')) {
   const issues = vm.runInThisContext(`(() => {
     const issues = [];
@@ -197,9 +208,28 @@ if (ok && process.argv.includes('--equipment-hands')) {
 if (ok && process.argv.includes('--equipment-sway')) {
   const issues = vm.runInThisContext(`(() => {
     const issues = [], saved = { gameStarted, isDead, activeSlot, selectedMeleeIdx, selectedSupportIdx,
-      meleeSwingT, grenadeWindupT, velocity: playerVelocity.clone() };
+      meleeSwingT, grenadeWindupT, velocity: playerVelocity.clone(), yaw: euler.y,
+      currentWeaponIdx, reloading, isADS, kick: { ..._gunKick }, land: _realismLandKick };
     try {
       gameStarted = true; isDead = false; meleeSwingT = 1; grenadeWindupT = 1;
+      euler.y = 0; playerVelocity.set(0,0,0);
+      if (Object.values(heldWalkPose(0)).some(x => x !== 0)) issues.push('walking: changes stationary pose');
+      playerVelocity.set(5.2,0,0); const right = heldWalkPose(0);
+      playerVelocity.set(-5.2,0,0); const left = heldWalkPose(0);
+      if (Math.abs(left.x + right.x) > 1e-8 || Math.abs(left.rz + right.rz) > 1e-8) issues.push('walking: strafe does not mirror');
+      playerVelocity.set(0,0,-5.2); const forward = heldWalkPose(0.5);
+      euler.y = Math.PI/2; playerVelocity.set(-5.2,0,0); const turned = heldWalkPose(0.5);
+      if (Math.abs(forward.z - turned.z) > 1e-8 || Math.abs(forward.x - turned.x) > 1e-8) issues.push('walking: not relative to view');
+      euler.y = 0;
+      for (const slot of ['primary', 'secondary']) {
+        activeSlot = slot; currentWeaponIdx = WEAPONS.findIndex(x => x.slot === slot && !x.archived);
+        const m = weaponModels[currentWeaponIdx], p = m.position.clone(), r = m.rotation.clone(), visible = m.visible;
+        m.visible = true; reloading = false; isADS = false;
+        Object.keys(_gunKick).forEach(k => _gunKick[k] = 0); _realismLandKick = 0;
+        playerVelocity.set(0,0,-5.2); updateRealismFeedback(1/30);
+        if (m.position.distanceTo(p) < 0.001) issues.push(slot + ': no walking displacement');
+        m.position.copy(p); m.rotation.copy(r); m.visible = visible;
+      }
       for (const slot of ['melee', 'support']) {
         activeSlot = slot;
         selectedMeleeIdx = MELEE_ITEMS.findIndex(x => x.id === 'fists');
@@ -229,6 +259,8 @@ if (ok && process.argv.includes('--equipment-sway')) {
       selectedMeleeIdx = saved.selectedMeleeIdx; selectedSupportIdx = saved.selectedSupportIdx;
       meleeSwingT = saved.meleeSwingT; grenadeWindupT = saved.grenadeWindupT;
       playerVelocity.copy(saved.velocity);
+      euler.y = saved.yaw; currentWeaponIdx = saved.currentWeaponIdx; reloading = saved.reloading; isADS = saved.isADS;
+      Object.assign(_gunKick, saved.kick); _realismLandKick = saved.land;
     }
     return issues;
   })()`);
