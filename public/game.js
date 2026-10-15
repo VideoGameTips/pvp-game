@@ -39067,7 +39067,7 @@ const KEY_ACTIONS = [
   ['emotes', 'Emotes', 'KeyQ'], ['freecam', 'Free camera', 'Digit0'], ['slot1', 'Primary weapon', 'Digit1'], ['slot2', 'Secondary weapon', 'Digit2'],
   ['perspective', 'Camera perspective', 'Digit9'],
   ['slot3', 'Melee', 'Digit3'], ['slot4', 'Support item', 'Digit4'],
-  ['inspect', 'Inspect weapon', 'KeyT'], ['melee', 'Quick melee', 'KeyB'], ['chat', 'Quick chat', 'KeyV'],
+  ['inspect', 'Inspect weapon or item', 'KeyT'], ['melee', 'Quick melee', 'KeyB'], ['chat', 'Quick chat', 'KeyV'],
   ['comms1', 'Comms wheel 1', 'KeyZ'], ['comms2', 'Comms wheel 2', 'KeyX'], ['scoreboard', 'Scoreboard', 'Tab'],
 ];
 const KEY_RESERVED = new Set(['Escape', 'F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12', 'Enter', 'MetaLeft', 'MetaRight']);
@@ -39555,6 +39555,9 @@ document.addEventListener('keydown', e => {
   // 🔎 T — look the gun over. Cancelled by anything that needs the weapon.
   if (e.code === 'KeyT' && !e.repeat && !isDead && document.activeElement?.tagName !== 'INPUT'
       && (activeSlot === 'primary' || activeSlot === 'secondary')) { e.preventDefault(); startInspect(); return; }
+  // ...and a melee or a utility gets its own (startItemInspect: one flourish per kind of item)
+  if (e.code === 'KeyT' && !e.repeat && !isDead && document.activeElement?.tagName !== 'INPUT'
+      && (activeSlot === 'melee' || activeSlot === 'support')) { e.preventDefault(); startItemInspect(); return; }
   // Spacebar — jump (only when on the ground)
   if (e.code === 'Space') {
     e.preventDefault();
@@ -57851,6 +57854,166 @@ function _meleeSwingId(idx) {
   return it ? (it.baseId || it.id) : null;
 }
 
+// ── 🔎 Inspecting a melee or a utility (T) ───────────────────────────────────────────────────────────────────
+// Guns have had T for a long time: the weapon is brought up, turned over and looked at, and goes back. A melee and a
+// utility had nothing, so T did nothing in those slots. They get their own now, one flourish per KIND of thing, since
+// forty-five melees and fifty-nine utilities each with their own motion would be a hundred and four tracks; the
+// kinds are what you do with the thing in your hand:
+//   blade   turn it edge-on, roll it over to see both sides, tip up, back          (knives, swords, cleavers)
+//   heavy   heft it, lift the head into view, turn it to the light, weigh it        (hammers, axes, shovel, tools)
+//   long    hold it across, then twirl it once the whole way round                  (bats, clubs, spear, cane)
+//   flex    a figure of eight, the whole thing swinging on its link                 (nunchucks, yoyo, whip)
+//   fist    guard up, fists together, a wrist roll                                  (knuckles, fists)
+//   shield  face to you, then two knocks on it                                      (riot shield, umbrella)
+//   toss    up in the air and caught again, tumbling                                (grenades, mines you throw, pearls)
+//   open    up to your face, tipped to look inside, a shake                          (medkits, syringes, food, serums)
+//   device  turned over to look at the underside, a press of the button             (turrets, drones, beacons, traps)
+// Offsets are from the item's resting pose (right, low, forward of the camera), keyed like a swing: _MS(t, [right,
+// up, back], [pitch, yaw, roll]). A track that rolls the item all the way round ends on a key at .9995 with the
+// roll at 2 pi, since a track's end is the rest pose and would otherwise unwind it.
+const _TAU = Math.PI * 2;
+const ITEM_INSPECT = {
+  blade: { ms: 2700, beats: [[.30, 700, .16], [.64, 540, .14], [.80, 760, .12]], keys: [
+    _MS(.14, [-.06, .06, .06], [.35, 0, .10]), _MS(.30, [-.12, .10, .08], [.60, -.25, .35]),
+    _MS(.46, [-.12, .10, .08], [.55, -1.15, .35]), _MS(.64, [-.12, .09, .07], [.45, -1.15, 3.30]),
+    _MS(.80, [-.08, .05, .04], [.30, -.30, _TAU]), _MS(.9995, [0, 0, 0], [0, 0, _TAU])] },
+  heavy: { ms: 3000, beats: [[.36, 150, .22], [.72, 120, .26]], keys: [
+    _MS(.18, [-.04, .10, .04], [-.30, 0, .20]), _MS(.36, [-.10, .12, .08], [.95, .30, .10]),
+    _MS(.54, [-.10, .12, .08], [.95, -.70, .10]), _MS(.72, [-.06, .05, .02], [.40, -.20, 0]),
+    _MS(.86, [-.02, -.01, 0], [.10, 0, 0]), _MS(.9995, [0, 0, 0], [0, 0, 0])] },
+  long: { ms: 2800, beats: [[.34, 520, .12], [.72, 640, .10]], keys: [
+    _MS(.16, [-.05, .05, .03], [0, -.60, .10]), _MS(.34, [-.08, .06, .04], [0, -1.35, .20]),
+    _MS(.55, [-.08, .06, .04], [0, -3.60, .20]), _MS(.72, [-.07, .05, .03], [0, -5.20, .10]),
+    _MS(.86, [-.03, .01, 0], [0, -6.10, 0]), _MS(.9995, [0, 0, 0], [0, -_TAU, 0])] },
+  flex: { ms: 2600, beats: [[.30, 480, .10], [.46, 520, .10], [.62, 480, .10]], keys: [
+    _MS(.14, [.04, .03, .03], [.20, 0, .60]), _MS(.30, [-.10, .06, -.02], [.10, -.90, -.80]),
+    _MS(.46, [.08, .04, -.02], [.20, .90, .80]), _MS(.62, [-.10, .06, -.02], [.10, -.90, -.80]),
+    _MS(.78, [.04, .02, 0], [.10, .20, .20]), _MS(.9995, [0, 0, 0], [0, 0, 0])] },
+  fist: { ms: 2500, beats: [[.45, 160, .22]], keys: [
+    _MS(.20, [-.04, .08, -.06], [.30, .35, -.15]), _MS(.45, [-.06, .10, -.10], [.10, .60, -.50]),
+    _MS(.65, [-.04, .06, -.04], [.20, -.30, .40]), _MS(.85, [-.01, .01, -.01], [.05, 0, 0]),
+    _MS(.9995, [0, 0, 0], [0, 0, 0])] },
+  shield: { ms: 2600, beats: [[.52, 170, .26], [.64, 190, .24]], keys: [
+    _MS(.20, [-.14, .04, .02], [.10, -.50, 0]), _MS(.42, [-.12, .05, .04], [.05, -.90, .10]),
+    _MS(.52, [-.12, .05, .02], [.10, -.85, 0]), _MS(.58, [-.12, .05, .07], [.05, -.90, .10]),
+    _MS(.64, [-.12, .05, .02], [.10, -.85, 0]), _MS(.70, [-.12, .05, .07], [.05, -.90, .10]),
+    _MS(.88, [-.03, .01, 0], [.05, -.15, 0]), _MS(.9995, [0, 0, 0], [0, 0, 0])] },
+  toss: { ms: 2200, beats: [[.30, 900, .10], [.56, 640, .12]], keys: [
+    _MS(.14, [-.07, .09, .05], [.20, 0, 0]), _MS(.30, [-.08, .30, .02], [-1.40, 0, 0]),
+    _MS(.42, [-.08, .38, .00], [-3.30, 0, 0]), _MS(.56, [-.08, .10, .05], [-_TAU, 0, 0]),
+    _MS(.76, [-.04, .03, .02], [-_TAU, .25, 0]), _MS(.9995, [0, 0, 0], [-_TAU, 0, 0])] },
+  open: { ms: 2400, beats: [[.34, 760, .10], [.62, 600, .10]], keys: [
+    _MS(.18, [-.06, .12, .10], [.90, 0, 0]), _MS(.38, [-.07, .13, .11], [1.10, -.45, .15]),
+    _MS(.55, [-.07, .12, .10], [.95, -.80, -.15]), _MS(.68, [-.06, .12, .10], [1.00, -.70, .15]),
+    _MS(.76, [-.06, .12, .10], [.95, -.70, -.15]), _MS(.9, [-.02, .02, .02], [.20, 0, 0]),
+    _MS(.9995, [0, 0, 0], [0, 0, 0])] },
+  device: { ms: 2600, beats: [[.30, 540, .12], [.62, 880, .10]], keys: [
+    _MS(.16, [-.07, .08, .06], [.30, 0, 0]), _MS(.40, [-.09, .10, .08], [3.0, -.40, 0]),
+    _MS(.56, [-.09, .10, .08], [3.14, -.90, 0]), _MS(.72, [-.07, .08, .06], [3.14, -.30, 0]),
+    _MS(.86, [-.03, .02, .02], [_TAU - .3, 0, 0]), _MS(.9995, [0, 0, 0], [_TAU, 0, 0])] },
+};
+const MELEE_INSPECT_KIND = {
+  katana: 'blade', sabre: 'blade', knife: 'blade', machete: 'blade', lightsabre: 'blade', vampire_blade: 'blade',
+  phase_blade: 'blade', karambit: 'blade', bayonet: 'blade', ots04: 'blade', twin_knife: 'blade', meat_cleaver: 'blade',
+  hatchet: 'blade', tomahawk: 'blade', garrote: 'blade', fire_poker: 'blade', screwdriver: 'blade',
+  sledge: 'heavy', fire_axe: 'heavy', combat_axe: 'heavy', titan_hammer: 'heavy', gravity_hammer: 'heavy', shovel: 'heavy',
+  crowbar: 'heavy', wrench: 'heavy', chain_hammer: 'heavy', chainsaw: 'heavy', scythe: 'heavy', frying_pan: 'heavy',
+  bat: 'long', cricket_bat: 'long', golf_club: 'long', spear: 'long', cane: 'long', pipe: 'long', baguette: 'long',
+  tennis_racket: 'long', shock_baton: 'long',
+  nunchucks: 'flex', yoyo: 'flex', volt_whip: 'flex',
+  fists: 'fist', brass_knuckles: 'fist',
+  riot_shield: 'shield', umbrella: 'shield',
+};
+const SUPPORT_INSPECT_KIND = {
+  frag: 'toss', smoke: 'toss', emp_grenade: 'toss', air_grenade: 'toss', flashbang_basic: 'toss', stun_grenade: 'toss',
+  taser_grenade: 'toss', ink_bomb: 'toss', acid_grenade: 'toss', molotov: 'toss', thermite: 'toss', dynamite: 'toss',
+  sticky_charge: 'toss', black_hole_seed: 'toss', moon_mine: 'toss', glitch_cube: 'toss', rubber_duck: 'toss',
+  bee_jar: 'toss', blink_pearl: 'toss', confetti_cannon: 'toss',
+  medkit: 'open', stim: 'open', adrenaline: 'open', vampire_syringe: 'open', berserker_serum: 'open', hamburger: 'open',
+  nano_shield: 'open', healing_pulse: 'open', cloak: 'open', heal_gun: 'open',
+};
+function itemInspectKind(slot, item) {
+  if (!item) return slot === 'melee' ? 'blade' : 'device';
+  const id = item.baseId || item.id;
+  if (slot === 'melee') {
+    if (MELEE_INSPECT_KIND[id]) return MELEE_INSPECT_KIND[id];
+    const ty = String(item.type || '').toLowerCase();
+    if (/shield/.test(ty)) return 'shield';
+    if (/heavy|aoe/.test(ty)) return 'heavy';
+    if (/reach|chain|long/.test(ty)) return 'long';
+    if (/knuckle|punch|fist/.test(ty)) return 'fist';
+    return 'blade';
+  }
+  if (SUPPORT_INSPECT_KIND[id]) return SUPPORT_INSPECT_KIND[id];
+  const ty = String(item.type || '').toLowerCase();
+  if (/heal|buff|tasty/.test(ty)) return 'open';
+  if (/explosive|stun|disable|goo|fire|burn|void|launch/.test(ty)) return 'toss';
+  return 'device';
+}
+let itemInspect = null;       // { model, slot, kind, t0, ms, keys, beats, beat, base, baseRot, order }
+function _itemInspectBeat(freq, vol) {
+  const ctx = getAudioCtx(); if (!ctx) return;
+  try {
+    const g = ctx.createGain(); g.connect(ctx.destination);
+    metalClack(ctx, ctx.currentTime + 0.002, g, vol, freq, 0.05);
+  } catch (e) {}
+}
+function startItemInspect() {
+  if (isDead || reloading) return false;
+  if (itemInspect) { cancelItemInspect(); return false; }     // T again puts it away
+  const slot = activeSlot;
+  if (slot !== 'melee' && slot !== 'support') return false;
+  const idx = slot === 'melee' ? selectedMeleeIdx : selectedSupportIdx;
+  if (idx == null || idx < 0) return false;
+  const model = slot === 'melee' ? meleeModels[idx] : supportModels[idx];
+  const item = slot === 'melee' ? MELEE_ITEMS[idx] : SUPPORT_ITEMS[idx];
+  if (!model || !model.visible) return false;
+  // not over the top of something that is already moving it
+  if (meleeSwingT < 1 || meleeSlam || meleeDash || batCrowdCharge || scytheDash || meleeAbilityBuff
+      || grenadeWindupT < 1 || _equip || spearThrown) return false;
+  const kind = itemInspectKind(slot, item), spec = ITEM_INSPECT[kind];
+  if (model._park) model._park = null;
+  itemInspect = { model, slot, idx, kind, t0: performance.now(), ms: spec.ms, keys: spec.keys, beats: spec.beats, beat: 0,
+                  base: model.position.clone(), baseRot: model.rotation.clone(), order: model.rotation.order };
+  return true;
+}
+function cancelItemInspect() {
+  const s = itemInspect;
+  if (!s) return;
+  itemInspect = null;
+  const m = s.model;
+  m.position.copy(s.base); m.rotation.copy(s.baseRot); m.rotation.order = s.order;
+  if (m._offHand) { m._offHand.position.copy(MELEE_OFFHAND_REST_POS); m._offHand.rotation.set(0, 0, 0); }
+}
+function updateItemInspect() {
+  const s = itemInspect;
+  if (!s) return;
+  const m = s.model;
+  const held = activeSlot === s.slot && m.visible && !isDead && !reloading
+    && (s.slot === 'melee' ? meleeModels[selectedMeleeIdx] === m : supportModels[selectedSupportIdx] === m);
+  const busy = meleeSwingT < 1 || meleeSlam || meleeDash || batCrowdCharge || scytheDash || meleeAbilityBuff
+    || grenadeWindupT < 1 || _equip;
+  if (!held || busy) { cancelItemInspect(); return; }
+  const t = Math.min(1, (performance.now() - s.t0) / s.ms);
+  const P = _reloadPose(s.keys, t);
+  m.rotation.order = 'YXZ';
+  m.position.set(s.base.x + P.px, s.base.y + P.py, s.base.z + P.pz);
+  m.rotation.set(s.baseRot.x + P.rx, s.baseRot.y + P.ry, s.baseRot.z + P.rz);
+  if (m._offHand) {                       // a pair (fists, knuckles): the other hand mirrors the first
+    m._offHand.rotation.order = 'YXZ';
+    m._offHand.position.set(MELEE_OFFHAND_REST_POS.x - P.px, MELEE_OFFHAND_REST_POS.y + P.py, MELEE_OFFHAND_REST_POS.z + P.pz);
+    m._offHand.rotation.set(P.rx, -P.ry, -P.rz);
+  }
+  while (s.beat < s.beats.length && t >= s.beats[s.beat][0]) {
+    const b = s.beats[s.beat++];
+    _itemInspectBeat(b[1], b[2]);
+  }
+  if (t >= 1) cancelItemInspect();
+}
+// Using the item (a click) or its ability (E) puts it down at once.
+document.addEventListener('mousedown', () => { if (itemInspect) cancelItemInspect(); }, true);
+document.addEventListener('keydown', e => { if (itemInspect && (e.code === 'KeyE' || e.code === 'KeyR' || e.code === 'KeyB')) cancelItemInspect(); }, true);
+
 function updateMeleeSwing(dt) {
   if (batCrowdCharge) { poseBatCrowdClear(); return; }
   if (meleeSlam) { poseMeleeSlam(); return; }
@@ -62812,6 +62975,7 @@ function loop() {
   updateSatchels(dt);
   updateDDay(dt);
   updateGrenadeWindup(dt);
+  updateItemInspect();
   updateAbilityBuff(dt);
   updateBatCrowdClear(dt);
   updateMeleeSlam(dt);

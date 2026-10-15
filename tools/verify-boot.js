@@ -871,6 +871,53 @@ if (ok && process.argv.includes('--loadout')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+if (ok && process.argv.includes('--inspect')) {
+  // T in the melee and utility slots: every melee and every utility has a track, the item actually moves (and
+  // comes all the way back to where it was), and swinging or using it puts it down at once.
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const saved = { slot: activeSlot, mi: selectedMeleeIdx, si: selectedSupportIdx, dead: isDead, reloading, swingT: meleeSwingT };
+    try {
+      isDead = false; reloading = false; meleeSwingT = 1;
+      for (const [slot, list, models, set] of [['melee', MELEE_ITEMS, meleeModels, i => { selectedMeleeIdx = i; }],
+                                               ['support', SUPPORT_ITEMS, supportModels, i => { selectedSupportIdx = i; }]]) {
+        for (let i = 0; i < list.length; i++) {
+          const item = list[i], model = models[i];
+          if (!model) { issues.push(slot + ' ' + item.id + ': no model'); continue; }
+          const kind = itemInspectKind(slot, item);
+          if (!ITEM_INSPECT[kind]) { issues.push(slot + ' ' + item.id + ': unknown inspect kind ' + kind); continue; }
+          set(i); activeSlot = slot; model.visible = true;
+          const p0 = model.position.clone(), r0 = model.rotation.clone();
+          if (!startItemInspect()) { issues.push(slot + ' ' + item.id + ': T did not start an inspect'); model.visible = false; continue; }
+          let moved = 0;
+          for (const f of [.2, .4, .6, .8]) {
+            itemInspect.t0 = performance.now() - f * itemInspect.ms;
+            updateItemInspect();
+            moved = Math.max(moved, model.position.distanceTo(p0), Math.abs(model.rotation.x - r0.x) + Math.abs(model.rotation.y - r0.y) + Math.abs(model.rotation.z - r0.z));
+            if (!itemInspect) break;
+          }
+          if (moved < 0.08) issues.push(slot + ' ' + item.id + ': the inspect barely moves it (' + moved.toFixed(3) + ')');
+          if (itemInspect) { itemInspect.t0 = performance.now() - itemInspect.ms - 10; updateItemInspect(); }
+          if (itemInspect) issues.push(slot + ' ' + item.id + ': the inspect never ends');
+          // back exactly where it began (a full roll is the same orientation)
+          const dr = ['x', 'y', 'z'].reduce((a, k) => a + Math.abs(Math.sin((model.rotation[k] - r0[k]) / 2)), 0);
+          if (model.position.distanceTo(p0) > 1e-6 || dr > 1e-6) issues.push(slot + ' ' + item.id + ': not back at rest after the inspect');
+          // using it ends it
+          startItemInspect(); meleeSwingT = 0; updateItemInspect(); meleeSwingT = 1;
+          if (itemInspect) { issues.push(slot + ' ' + item.id + ': a swing did not end the inspect'); cancelItemInspect(); }
+          model.visible = false;
+        }
+      }
+    } finally {
+      activeSlot = saved.slot; selectedMeleeIdx = saved.mi; selectedSupportIdx = saved.si; isDead = saved.dead; reloading = saved.reloading; meleeSwingT = saved.swingT;
+      cancelItemInspect();
+    }
+    return [...new Set(issues)];
+  })()`);
+  console.log('inspect checks: every melee and utility has a track, moves, ends at rest, and a swing ends it');
+  if (issues.length) { ok = false; console.log(issues.slice(0, 20).join('\n')); }
+}
+
 if (ok && process.argv.includes('--chain-maul')) {
   const issues = vm.runInThisContext(`(() => {
     const issues = [], v = (x,y,z) => new THREE.Vector3(x,y,z);

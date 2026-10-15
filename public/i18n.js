@@ -383,7 +383,7 @@
     'Move forward': '前进', 'Move back': '后退', 'Move left': '向左', 'Move right': '向右', 'Jump': '跳跃', 'Slide': '滑铲',
     'Crouch': '蹲下', 'Reload': '换弹', 'Ability / aim': '技能 / 瞄准', 'Interact / swap gear': '互动 / 换装备',
     'Next weapon': '下一把武器', 'Primary weapon': '主武器', 'Secondary weapon': '副武器', 'Support item': '辅助道具',
-    'Inspect weapon': '检视武器', 'Quick melee': '快速近战', 'Quick chat': '快捷聊天', 'Comms wheel 1': '通讯轮盘 1',
+    'Inspect weapon': '检视武器', 'Inspect weapon or item': '检视武器或道具', 'Quick melee': '快速近战', 'Quick chat': '快捷聊天', 'Comms wheel 1': '通讯轮盘 1',
     'Comms wheel 2': '通讯轮盘 2', 'Scoreboard': '计分板', 'PRESS A KEY…': '请按键…',
     'RESET ALL TO DEFAULT': '全部恢复默认', 'RESET TO DEFAULT': '恢复默认', 'SIZE': '大小', 'THICKNESS': '粗细',
     'CENTER GAP': '中心间隙', 'DOT SIZE': '圆点大小', 'OPACITY': '透明度', 'BLACK OUTLINE': '黑色描边',
