@@ -94,6 +94,13 @@ for (const [id, fx] of Object.entries(api.SKIN_FX)) {
   const r = fx.reload;
   if (!r) continue;
   reloads++;
+  // A reload whose keys never arrived is exactly the kind of thing this file
+  // exists to catch — so say which skin it is, instead of throwing on
+  // `for (const k of undefined)` and taking every remaining check with it.
+  if (!Array.isArray(r.keys)) {
+    problems.push(id.padEnd(28) + 'reload has no keys[] (got ' + (r.keys === undefined ? 'undefined' : typeof r.keys) + ')');
+    continue;
+  }
   let last = 0;
   for (const k of r.keys) {
     if (!(k.t > last - 1e-9 && k.t <= 1)) problems.push(id.padEnd(28) + 'reload keyframes out of order at t=' + k.t);

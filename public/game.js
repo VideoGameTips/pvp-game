@@ -5877,7 +5877,29 @@ const obbyMapColliders        = MAP_COLLIDERS.obby;
 function _weatherOnActivate(name) { if (MAP_GROUPS[name]) weatherMapGroup(MAP_GROUPS[name]); }
 function activateMap(name) {
   if (typeof _upgradeMap === 'function') _upgradeMap(name);   // the first time a map is played: see "WHEN THE UPGRADES RUN"
-  for (const [n, g] of Object.entries(MAP_GROUPS)) g.visible = (n === name);
+  // ⚡ DETACH the other maps, do not merely hide them (#73). three.js skips an
+  // invisible subtree when it builds the render list, but updateMatrixWorld
+  // recurses unconditionally and renderer.render calls it once a frame — so
+  // sixty-three maps sitting in the scene cost 23,287 nodes of matrix walk
+  // every frame whether or not anyone can see them. Measured on blank, same
+  // camera, identical 171 draw calls either way: 8.0 ms attached, 3.5 ms
+  // detached, and scene.updateMatrixWorld alone 5.56 ms → 1.01 ms.
+  //
+  // Nothing here depends on a map group being in the scene: colliders live in
+  // MAP_COLLIDERS and are built at addMapBox time, the killcam raycasts
+  // MAP_GROUPS[activeMapName] directly, and nothing iterates scene.children.
+  // (matrixWorldAutoUpdate = false on the inactive groups was measured and does
+  // nothing — 9.40 → 9.60 ms. Don't.)
+  const _target = MAP_GROUPS[name];
+  for (const [n, g] of Object.entries(MAP_GROUPS)) {
+    const on = (n === name);
+    g.visible = on;
+    // Only re-home anything if the map asked for actually exists, so a bad
+    // name cannot detach all sixty-three and leave a black screen.
+    if (!_target) continue;
+    if (on) { if (!g.parent) scene.add(g); }
+    else if (g.parent) g.parent.remove(g);
+  }
   if (typeof dressThemeMap === 'function') { try { dressThemeMap(name); } catch (e) { console.warn('[theme]', name, e); } }
   try { buildMapGlow(name); } catch (e) { console.warn('[glow]', name, e); }      // once per map, after its dressing
   // Then bake this map's static boxes into one draw call per material (#66).
