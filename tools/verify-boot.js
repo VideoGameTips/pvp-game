@@ -1207,6 +1207,45 @@ if (ok && process.argv.includes('--movement')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+if (ok && process.argv.includes('--flare')) {
+  // The flare: slow, big, and it falls gently: still in the air well past the 1.8 s a normal shot lives, and it has
+  // dropped far less than a plain lob would have.
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const f = WEAPONS.find(w => w.id === 'flare');
+    if (!f || !(f.bulletSize >= 0.15)) issues.push('the flare should be large (bulletSize >= 0.15)');
+    if (!f || !(f.arcGravity > 0 && f.arcGravity < 0.6)) issues.push('the flare should fall slower than the usual arc');
+    if (!f || !(f.flightMs >= 3500)) issues.push('the flare has to be allowed to stay up for a few seconds');
+    if (!f || !(f.bulletSpeed <= 30)) issues.push('the flare should be slow');
+    const keepWalls = wallColliders.slice(); wallColliders.length = 0;
+    const savedSound = playSoundEvent; playSoundEvent = () => {};
+    const savedFlares = groundFlares.length;
+    try {
+      const flight = (spec) => {
+        localBullets.length = 0;
+        spawnLocalBullet(new THREE.Vector3(0, 1.65, 0), new THREE.Vector3(0, 0.15, -1), 'flare_test', true, spec.bulletSpeed, spec.bulletColor, spec.bulletSize || 0.05, spec.id);
+        let steps = 0, dist = 0;
+        while (localBullets.length && steps < 60 * 8) { const b = localBullets[0]; dist = -b.mesh.position.z; updateBullets(1 / 60); steps++; }
+        return { secs: steps / 60, dist };
+      };
+      const r = flight(f);
+      if (r.secs < 1.0) issues.push('the flare lands in ' + r.secs.toFixed(2) + ' s: too quick, it should hang in the air');
+      // the same shot on the ordinary arc and speed, for comparison
+      const keep = { g: f.arcGravity, s: f.bulletSpeed };
+      f.arcGravity = 1; f.bulletSpeed = 44;
+      let old; try { old = flight(f); } finally { f.arcGravity = keep.g; f.bulletSpeed = keep.s; }
+      if (!(r.secs > old.secs)) issues.push('the flare is not slower to land than a speed-44 lob would be');
+      if (groundFlares.length <= savedFlares) issues.push('the landed flare did not leave a ground flare');
+    } finally {
+      wallColliders.push(...keepWalls); localBullets.length = 0; playSoundEvent = savedSound;
+      while (groundFlares.length > savedFlares) { const g = groundFlares.pop(); try { scene.remove(g.mesh); } catch (e) {} }
+    }
+    return issues;
+  })()`);
+  console.log('flare checks: slow, large, long-lived, gentle fall');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 if (ok && process.env.MAP_REVIEW_DIR) {
   fs.mkdirSync(process.env.MAP_REVIEW_DIR, { recursive: true });
   for (const name of ['forest', 'desert', 'tundra', 'refinery', 'space', 'volcano', 'titanic', 'carrier', 'pearl_harbor']) {

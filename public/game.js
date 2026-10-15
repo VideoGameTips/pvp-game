@@ -219,8 +219,11 @@ const WEAPONS = [
   {
     id: 'flare',    name: 'Flare',    type: 'Secondary', slot: 'secondary',
     mag: 1,   reserve: 6,   damage: 85, fireRate: 200,  reloadTime: 2500,
-    auto: false, pellets: 1, spread: 0,    adsZoom: 55, bulletSpeed: 44, noReload: false,
-    bulletColor: 0xff5500, arcShot: true, // lobs and falls, doesn't fly flat like a bullet
+    // A flare you can see coming and could walk into: slower (44 -> 26), falling at about a third of the usual
+    // arc gravity so it drifts down instead of dropping, and a big glowing body (the bullet's size is also its
+    // hit radius). It stays up for up to five seconds instead of the 1.8 a normal shot lives.
+    auto: false, pellets: 1, spread: 0,    adsZoom: 55, bulletSpeed: 26, noReload: false,
+    bulletColor: 0xff5500, bulletSize: 0.22, arcShot: true, arcGravity: 0.36, flightMs: 5000, // lobs and falls, doesn't fly flat like a bullet
     ability: { name: 'Signal Flare', cd: 22000, desc: 'Reveal all enemies 4 s + AOE 50 dmg', type: 'aoe', radius: 8, damage: 50, color: 0xff5500, reveal: true, revealDur: 4000 },
   },
   {
@@ -53091,7 +53094,8 @@ function updateBullets(dt) {
       localBullets.splice(i, 1);
     };
     if (b._lingerMs === undefined) b._lingerMs = projectileWeaponSpec(b.weaponId)?.linger?.ms || 0;
-    const maxAge = b._lingerMs || (b.weaponId === 'frag' ? 3500 : b.ballLightning ? 4200 : 1800);
+    if (b._flightMs === undefined) b._flightMs = projectileWeaponSpec(b.weaponId)?.flightMs || 0;
+    const maxAge = b._lingerMs || b._flightMs || (b.weaponId === 'frag' ? 3500 : b.ballLightning ? 4200 : 1800);
     if (b._cull) { removeBullet(); continue; }
     if (now - b.createdAt > maxAge) {
       if (b.isPaintBomb) triggerPaintExplosion(b.mesh.position.clone(), b);
@@ -53106,7 +53110,8 @@ function updateBullets(dt) {
     const _wArc = b._arc !== undefined ? b._arc : (b._arc =
       (projectileWeaponSpec(b.weaponId)?.arcShot ? 1 : 0));
     if (_wArc && !b.isPaintBomb) {
-      b.dir.y -= (BULLET_GRAVITY / Math.max(20, b.speed)) * dt;
+      if (b._arcG === undefined) b._arcG = projectileWeaponSpec(b.weaponId)?.arcGravity ?? 1;   // a weapon can fall slower than the rest
+      b.dir.y -= (BULLET_GRAVITY * b._arcG / Math.max(20, b.speed)) * dt;
     }
     b.mesh.position.addScaledVector(b.dir, b.speed * dt);
     if (b.mesh._donutTrail) _emitDonutTrail(b.mesh._donutTrail.tint, b.mesh._donutTrail.r, _bulletPrevTrail.set(px0, py0, pz0), b.mesh.position);
@@ -54591,21 +54596,21 @@ const groundFlares = [];
 function spawnGroundFlare(pos, opts = {}) {
   const color = opts.color || 0xff5500;
   const g = new THREE.Group();
-  const ember = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 7),
+  const ember = new THREE.Mesh(new THREE.SphereGeometry(0.2, 10, 8),
     new THREE.MeshBasicMaterial({ color }));
   g.add(ember);
-  const halo = new THREE.Mesh(new THREE.SphereGeometry(0.17, 8, 7),
+  const halo = new THREE.Mesh(new THREE.SphereGeometry(0.62, 10, 8),
     new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.5,
       blending: THREE.AdditiveBlending, depthWrite: false }));
   g.add(halo);
-  const light = new THREE.PointLight(color, 1.8, 7, 2);
-  light.position.y = 0.12;
+  const light = new THREE.PointLight(color, 2.6, 13, 2);
+  light.position.y = 0.3;
   g.add(light);
-  g.position.copy(pos).setY(0.08);
+  g.position.copy(pos).setY(0.2);
   scene.add(g);
   playSoundEvent('fire_sizzle', { position: pos, volume: 0.7, minGap: 200 });
   groundFlares.push({ mesh: g, ember: ember.material, halo: halo.material, light,
-    born: performance.now(), duration: 15000, puffTimer: 0 });
+    born: performance.now(), duration: 20000, puffTimer: 0 });
 }
 function updateGroundFlares(dt) {
   const now = performance.now();
@@ -54619,7 +54624,7 @@ function updateGroundFlares(dt) {
     // Fades out over the last 2.5 s instead of just vanishing.
     const fadeT = Math.max(0, 1 - Math.max(0, age - (f.duration - 2500)) / 2500);
     const flicker = (0.82 + Math.random() * 0.32) * fadeT;
-    f.light.intensity = 1.8 * flicker;
+    f.light.intensity = 2.6 * flicker;
     f.halo.opacity = 0.5 * flicker;
     f.ember.opacity = fadeT < 1 ? fadeT : 1;
     f.ember.transparent = fadeT < 1;
