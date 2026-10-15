@@ -1178,6 +1178,69 @@ if (ok && process.argv.includes('--gunslinger')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+if (ok && process.argv.includes('--botnav')) {
+  // A bot has to be able to get to you. One bot is released at the far spawn and the player stands still at the
+  // other: it must be within 25 m inside 60 s of game time on every duel map (it takes 15 to 30), and inside 100 s on five of the older
+  // maps where the bots used to run into the first wall they met and stay there (airport, studio, supermarket,
+  // labyrinth: with the old steering none of them got there at all). Urban (traffic lanes carry a bot sideways)
+  // and trenches (a maze of lanes) are left out: a routed bot gets across both most of the time, not every time. Routed bots (botNavPoint) against the
+  // old straight-line steering is what BOT_NAV_ON switches.
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [], info = [];
+    const realNow = Date.now, realPerf = performance.now.bind(performance);
+    const saved = { sound: playSoundEvent, weapon: playWeaponSound, id: myId, mode: selectedModeConfig, started: gameStarted, dead: isDead,
+      pos: camera.position.clone(), map: activeMapName, match, pi: selectedPrimaryIdx, si: selectedSecondaryIdx, mi: selectedMeleeIdx, ui: selectedSupportIdx, sel: selectedMap, nav: BOT_NAV_ON };
+    let simT = realNow();
+    playSoundEvent = () => {}; playWeaponSound = () => {};
+    BOT_NAV_ON = true;
+    const cases = DUEL_MAP_IDS.map(id => [id, 60]).concat(['airport', 'studio', 'supermarket', 'labyrinth', 'refinery'].filter(m => MAP_GROUPS[m]).map(id => [id, 100]));
+    try {
+      for (const [id, limit] of cases) {
+        selectedModeConfig = GAME_MODE_CONFIGS['1v1'];
+        selectedMap = id;                         // what lobbyStart does with the vote's result
+        selectedPrimaryIdx = WEAPONS.findIndex(w => w.id === 'ak20'); selectedSecondaryIdx = WEAPONS.findIndex(w => w.id === 'pistol');
+        selectedMeleeIdx = 0; selectedSupportIdx = 0; gameStarted = true; isDead = false; myId = 'nav_probe_me';
+        for (const k of Object.keys(players)) if (players[k] && players[k].isBot) delete players[k];
+        gameBots.length = 0;
+        spawnGameBots();
+        if (activeMapName !== id) issues.push(id + ': the picked map was not the one loaded (got ' + activeMapName + ')');
+        if (match) match.roundActive = true;
+        const bot = gameBots.find(b => b.team === 'enemy');
+        if (!bot) { issues.push(id + ': no bot was spawned'); continue; }
+        players[myId] = { id: myId, x: camera.position.x, z: camera.position.z, y: 0, hp: 1e9, maxHp: 1e9, team: 'ally', name: 'me' };
+        Date.now = () => simT; performance.now = () => simT;
+        let arrived = null, minD = 1e9;
+        const dt = 1 / 30;
+        for (let f = 0; f < 30 * 120 && arrived === null; f++) {
+          simT += dt * 1000;
+          players[myId].x = camera.position.x; players[myId].z = camera.position.z; players[myId].hp = 1e9;
+          try { updateBotAI(dt); } catch (e) { issues.push(id + ': bot AI threw ' + e.message); break; }
+          const d = Math.hypot(bot.x - camera.position.x, bot.z - camera.position.z);
+          minD = Math.min(minD, d);
+          if (d < 25) arrived = f * dt;
+        }
+        Date.now = realNow; performance.now = realPerf;
+        info.push(id + ' ' + (arrived === null ? 'never' : arrived.toFixed(0) + ' s'));
+        if (arrived === null) issues.push(id + ': the bot never got within 25 m (closest ' + minD.toFixed(0) + ' m, at ' + bot.x.toFixed(0) + ', ' + bot.z.toFixed(0) + ')');
+        else if (arrived > limit) issues.push(id + ': the bot took ' + arrived.toFixed(0) + ' s to get within 25 m (limit ' + limit + ')');
+        for (const k of Object.keys(players)) if (players[k] && players[k].isBot) delete players[k];
+        gameBots.length = 0;
+        delete players[myId];
+      }
+    } finally {
+      Date.now = realNow; performance.now = realPerf; BOT_NAV_ON = saved.nav;
+      playSoundEvent = saved.sound; playWeaponSound = saved.weapon; myId = saved.id; selectedModeConfig = saved.mode; gameStarted = saved.started;
+      isDead = saved.dead; camera.position.copy(saved.pos); match = saved.match;
+      selectedPrimaryIdx = saved.pi; selectedSecondaryIdx = saved.si; selectedMeleeIdx = saved.mi; selectedSupportIdx = saved.ui; selectedMap = saved.sel;
+      try { activateMap(saved.map || 'blank'); } catch (e) {}
+    }
+    issues.info = info.join(', ');
+    return issues;
+  })()`);
+  console.log('bot navigation checks: a bot walks round walls to the player (' + (issues.info || '') + ')');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 if (ok && process.argv.includes('--chain-maul')) {
   const issues = vm.runInThisContext(`(() => {
     const issues = [], v = (x,y,z) => new THREE.Vector3(x,y,z);
@@ -1852,9 +1915,15 @@ if (ok && process.argv.includes('--mappick')) {
     for (let k = 0; k < 60; k++) easy.add(botPickMap(DUEL_MAP_IDS, 'rusher', 'easy').mapId);
     if (easy.size < 2) issues.push('an easy bot never changed its mind in 60 looks');
     // the pre-pick is gone: a duel map picked on the mode screen counts as random everywhere, 1v1 included
-    if (effectivePickedMap('1v1', 'duel_grid') !== 'auto') issues.push('1v1 still takes a pre-picked duel map');
-    if (effectivePickedMap('2v2', 'duel_grid') !== 'auto') issues.push('a duel map pre-picked for another mode should be random');
-    if (effectivePickedMap('1v1', 'volcano') !== 'volcano') issues.push('an ordinary map pick got lost');
+    // what the lobby is asked for: never a pre-picked duel map (the vote comes after the opponent is found)
+    if (lobbyPrePick('1v1', 'duel_grid') !== 'auto') issues.push('1v1 still asks the lobby for a pre-picked duel map');
+    if (lobbyPrePick('1v1', 'volcano') !== 'auto') issues.push('1v1 only plays the duel maps, whatever was picked');
+    if (lobbyPrePick('2v2', 'duel_grid') !== 'auto') issues.push('a duel map pre-picked for another mode should be random');
+    if (lobbyPrePick('2v2', 'volcano') !== 'volcano') issues.push('an ordinary map pick got lost');
+    // and what spawnGameBots resolves a map from: the duel map the VOTE picked has to survive for 1v1 (it did not:
+    // it was re-rolled at random, so the vote was ignored, and two players could load different maps)
+    if (effectivePickedMap('1v1', 'duel_crossroads') !== 'duel_crossroads') issues.push('the voted duel map is thrown away for 1v1');
+    if (effectivePickedMap('2v2', 'duel_crossroads') !== 'auto') issues.push('a duel map should be random in any other mode');
     return { issues, info };
   })()`);
   const srv = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');

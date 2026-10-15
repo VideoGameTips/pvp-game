@@ -278,6 +278,17 @@
       ability shot (a Railgun's charge, a Lever's power shot) counts for its weapon. Every gun in play is on the Xpert
       list, the Frost Blaster included now that it does damage.</p>
 
+      <h2 id="bot-routing">🧭 How the bots get round walls</h2>
+      <p>Bots used to steer straight at you and feel their way round whatever was in the way, which was fine for a
+      pillar and not for a long wall: on Duel Grid and Crossroads a bot ran back and forth along the centre divider
+      for a whole minute, and on seven of sixteen older maps (urban, airport, trenches, studio, supermarket,
+      labyrinth, sewer) a bot sent across the map simply did not arrive. When the straight line to you is blocked at
+      kerb height a bot now follows a <strong>route</strong> over a grid of what a body can walk (every bot shares
+      one fill from your position, rebuilt as you move or as cover is destroyed): it cuts across open floor and only
+      turns at corners, keeps a body's width off them, treats anything taller than a kerb as a wall (a ramp's own steps
+      included), steers clear of damage zones, and if it finds itself caught it goes cell by cell for a few seconds.
+      It still falls back to the old steering wherever it has no route. Bots use the ramps on the new duel maps.</p>
+
       <h2 id="bot-targeting">🤖 Who the bots shoot</h2>
       <p>In team fights (1v1 to 3v3 rounds, 5v5, 10v10 and Frontlines) every bot, on either side, goes for the
       <strong>nearest opponent</strong>: your allies are as much a target for the enemy as you are. It used to be that

@@ -5742,8 +5742,13 @@ const THIN_MAPS = new Set([]);
 const DUEL_MAP_IDS = ['duel_grid', 'duel_crossroads', 'duel_pillars', 'duel_platform'];
 const DUEL_ONLY_MAPS = new Set(DUEL_MAP_IDS);
 // A picked map only counts in the mode it was made for: a duel map left over from a 1v1 is 'auto' anywhere else.
-// The duel maps are never pre-picked: 1v1 votes for its map once the opponent is found (see the map vote, below).
-function effectivePickedMap(modeId, map) { return DUEL_ONLY_MAPS.has(map) ? 'auto' : map; }
+// Which map a pick means in a mode: a duel map is 1v1's (anywhere else the pick counts as random). It is what
+// spawnGameBots resolves the map from, so it has to keep the duel map the VOTE chose (lobbyStart puts it in
+// selectedMap); returning 'auto' for it here re-rolled a random duel map and ignored the vote.
+function effectivePickedMap(modeId, map) { return DUEL_ONLY_MAPS.has(map) && modeId !== '1v1' ? 'auto' : map; }
+// What a player asks the lobby for before anyone is found. The duel maps are never pre-picked: 1v1 votes for its
+// map once the opponent is known (see the map vote, below), so for 1v1 the lobby is told 'auto'.
+function lobbyPrePick(modeId, map) { return modeId === '1v1' || DUEL_ONLY_MAPS.has(map) ? 'auto' : effectivePickedMap(modeId, map); }
 
 const MAP_COLLIDERS = {};
 const MAP_BOUNDS = {};
@@ -61650,6 +61655,177 @@ function botMapRepositionPoint(bot, wantedX, wantedZ) {
 
 // ── Cover-point finder ────────────────────────────────────────────────────
 // Returns a world position behind the nearest suitable wall, relative to target
+// ── 🧭 Bot routing ─────────────────────────────────────────────────────────────────────────────────────────
+// Bots steer straight at their target and feel their way round whatever is in the way, which is enough for a pillar
+// and not for a wall wider than the sideways shuffle they do: in the new 72 x 112 m duel maps a bot ran back and
+// forth along a 16 m divider for a whole minute and never went round it (found by running bots on all four maps:
+// two of them never reached the player). When the straight line to the target is blocked a bot now follows a
+// route over a coarse grid of what can be walked: one breadth-first fill from the target, shared by every bot
+// that wants to get there, rebuilt when the target changes cell or the colliders change (destructible cover).
+// Anything it does not know how to route (the bot is up on a deck, the target cannot be reached on the flat) it
+// hands straight back to the old steering, which is why this only ever adds a way round, never takes one away.
+const _botNav = { map: null, sig: '', cell: 1.5, W: 0, H: 0, x0: 0, z0: 0, blocked: null, builtAt: 0, goal: -1, goalAt: 0, dist: null };
+function _botNavGrid() {
+  const now = performance.now();
+  const sig = activeMapName + ':' + wallColliders.length;
+  if (_botNav.blocked && _botNav.sig === sig) return _botNav;
+  if (_botNav.blocked && _botNav.map === activeMapName && now - _botNav.builtAt < 1500) return _botNav;
+  const b = getMapBoundsRect();
+  const cell = Math.max(1.5, Math.min(3, Math.max(b.halfX, b.halfZ) * 2 / 90));
+  const W = Math.ceil(b.halfX * 2 / cell), H = Math.ceil(b.halfZ * 2 / cell);
+  if (W < 4 || H < 4 || W * H > 20000) return null;
+  // R: how far off a wall the middle of a cell has to be. A body is 0.38 and the route is followed through the
+  // middles of cells (corners are cut only where a body-wide line is clear), so 0.55 keeps a 2 m corridor open;
+  // the first version used 0.95 and closed the narrow ones of the older maps.
+  const blocked = new Uint8Array(W * H), x0 = -b.halfX, z0 = -b.halfZ, R = 0.55;
+  const mark = c => {
+    if (c.max.x < x0 - R || c.min.x > b.halfX + R || c.max.z < z0 - R || c.min.z > b.halfZ + R) return;
+    const i0 = Math.max(0, Math.floor((c.min.x - R - x0) / cell)), i1 = Math.min(W - 1, Math.floor((c.max.x + R - x0) / cell));
+    const j0 = Math.max(0, Math.floor((c.min.z - R - z0) / cell)), j1 = Math.min(H - 1, Math.floor((c.max.z + R - z0) / cell));
+    for (let j = j0; j <= j1; j++) {
+      const cz = z0 + (j + 0.5) * cell;
+      if (cz <= c.min.z - R || cz >= c.max.z + R) continue;
+      for (let i = i0; i <= i1; i++) {
+        const cx = x0 + (i + 0.5) * cell;
+        if (cx > c.min.x - R && cx < c.max.x + R) blocked[j * W + i] = 1;
+      }
+    }
+  };
+  // What stops a bot is anything taller than a kerb that is at body height: resolvePosCollisions lets a body pass only
+  // what is under its feet (or over its head), and a bot does not step up onto things, so a 0.4 m kerb, a 1 m sill
+  // or a ramp's own steps are all walls to it. (A first version let it walk over anything under 1.15 m and routed a
+  // bot over the foot of a ramp, where it stuck.) What is overhead -- a lintel, an arch, a bridge deck -- is not.
+  for (const c of wallColliders) {
+    if (c.max.y > 0.3 && c.min.y < 1.7) mark(c);
+  }
+  // And what the bots will not walk into: damage zones (lava, acid, fire, traffic). The steering pushes a medium or
+  // better bot out of them, so a route through one is a route it stalls at the edge of (urban: a bot stood at a hazard
+  // for thirty-five seconds with nothing at all in the grid).
+  const gz = activeMapGimmicks || {};
+  for (const z of [...(gz.damageZones || []), ...(gz.avoid || [])]) {
+    if (z.safeRects && z.safeRects.length) continue;
+    const pad = 1.2;
+    if (z.w && z.d) {
+      const a = -(z.rot || 0), cs = Math.cos(a), sn = Math.sin(a), hx = z.w * 0.5 + pad, hz = z.d * 0.5 + pad;
+      const reach = Math.hypot(hx, hz);
+      const i0 = Math.max(0, Math.floor((z.x - reach - x0) / cell)), i1 = Math.min(W - 1, Math.floor((z.x + reach - x0) / cell));
+      const j0 = Math.max(0, Math.floor((z.z - reach - z0) / cell)), j1 = Math.min(H - 1, Math.floor((z.z + reach - z0) / cell));
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+        const dx = x0 + (i + 0.5) * cell - z.x, dz = z0 + (j + 0.5) * cell - z.z;
+        const lx = dx * cs - dz * sn, lz = dx * sn + dz * cs;
+        if (Math.abs(lx) < hx && Math.abs(lz) < hz) blocked[j * W + i] = 1;
+      }
+    } else {
+      const r = (z.r || z.radius || 2) + pad;
+      const i0 = Math.max(0, Math.floor((z.x - r - x0) / cell)), i1 = Math.min(W - 1, Math.floor((z.x + r - x0) / cell));
+      const j0 = Math.max(0, Math.floor((z.z - r - z0) / cell)), j1 = Math.min(H - 1, Math.floor((z.z + r - z0) / cell));
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+        if (Math.hypot(x0 + (i + 0.5) * cell - z.x, z0 + (j + 0.5) * cell - z.z) < r) blocked[j * W + i] = 1;
+      }
+    }
+  }
+  Object.assign(_botNav, { map: activeMapName, sig, cell, W, H, x0, z0, blocked, builtAt: now, goal: -1, dist: null });
+  return _botNav;
+}
+const _NAV_STEPS = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
+function _botNavFill(g, goal) {
+  const { W, H, blocked } = g;
+  const dist = new Int16Array(W * H).fill(-1), q = new Int32Array(W * H);
+  let qh = 0, qt = 0;
+  dist[goal] = 0; q[qt++] = goal;
+  while (qh < qt) {
+    const k = q[qh++], i = k % W, j = (k - i) / W;
+    for (const [di, dj] of _NAV_STEPS) {
+      const x = i + di, y = j + dj;
+      if (x < 0 || y < 0 || x >= W || y >= H) continue;
+      const m = y * W + x;
+      if (dist[m] >= 0 || blocked[m]) continue;
+      if (di && dj && (blocked[j * W + x] || blocked[y * W + i])) continue;   // no cutting a corner
+      dist[m] = dist[k] + 1; q[qt++] = m;
+    }
+  }
+  g.dist = dist; g.goal = goal; g.goalAt = performance.now();
+}
+// Where a bot that cannot see its target should be heading: a point along the route (null: just use the old steering).
+let BOT_NAV_ON = true;      // (a switch for tools/verify-boot.js, which compares routed bots with the old steering)
+function botNavPoint(bot, target) {
+  if (!BOT_NAV_ON || (bot.y || 0) > 0.6 || !target) return null;
+  const nowMs = performance.now();
+  // Is the route working? A bot that has covered under 2 m in three seconds of following it is caught on something the
+  // grid did not know about: for the next four seconds it goes cell by cell (no cutting corners, no long looks ahead).
+  if (!bot._navPosT) { bot._navPosT = nowMs; bot._navPosX = bot.x; bot._navPosZ = bot.z; }
+  else if (nowMs - bot._navPosT > 3000) {
+    if (Math.hypot(bot.x - bot._navPosX, bot.z - bot._navPosZ) < 2 && bot._navWp) { bot._navCareful = nowMs + 4000; bot._navWp = null; }
+    bot._navPosT = nowMs; bot._navPosX = bot.x; bot._navPosZ = bot.z;
+  }
+  const careful = nowMs < (bot._navCareful || 0);
+  if (bot._navWp && nowMs - bot._navWp.t < 140 && Math.hypot(bot._navWp.x - bot.x, bot._navWp.z - bot.z) > 0.9) return bot._navWp;
+  // (at kerb height, not eye height: a bot is stopped by a 0.6 m crate that it can see over, so the route has to be
+  // judged against what stops a body, which is the same 0.3 m the grid blocks at)
+  if (hasLineOfSight(bot.x, bot.z, target.x, target.z, 0.4)) { bot._navWp = null; return null; }
+  const g = _botNavGrid();
+  if (!g) return null;
+  const at = (x, z) => { const i = Math.floor((x - g.x0) / g.cell), j = Math.floor((z - g.z0) / g.cell); return (i < 0 || j < 0 || i >= g.W || j >= g.H) ? -1 : j * g.W + i; };
+  const goal = at(target.x, target.z), here = at(bot.x, bot.z);
+  if (goal < 0 || here < 0) return null;
+  if (g.goal !== goal || !g.dist || nowMs - g.goalAt > 700) _botNavFill(g, goal);
+  const dist = g.dist, W = g.W;
+  // A bot that is in a cell the grid calls blocked (spawned against a shelf, pressed into a wall: the margin makes the
+  // cell beside a wall blocked) is led to the nearest routable cell it can actually WALK to: close by, and in line of
+  // sight at kerb height, so it is never sent through the wall it is standing at (that was the first version: the
+  // nearest cell by the grid was on the far side of an 8 m wall, and the bot pushed on it for a minute).
+  let k = here;
+  if (dist[here] < 0) {
+    const i0 = here % W, j0 = (here - i0) / W;
+    let found = -1, foundD = 1e9;
+    for (let r = 1; r <= 4 && found < 0; r++) {
+      for (let dj = -r; dj <= r; dj++) for (let di = -r; di <= r; di++) {
+        if (Math.max(Math.abs(di), Math.abs(dj)) !== r) continue;
+        const x = i0 + di, y = j0 + dj;
+        if (x < 0 || y < 0 || x >= W || y >= g.H) continue;
+        const m = y * W + x;
+        if (dist[m] < 0) continue;
+        const ex = g.x0 + (x + 0.5) * g.cell, ez = g.z0 + (y + 0.5) * g.cell;
+        const dd = Math.hypot(ex - bot.x, ez - bot.z);
+        if (dd < foundD && hasLineOfSight(bot.x, bot.z, ex, ez, 0.4)) { found = m; foundD = dd; }
+      }
+    }
+    if (found < 0) return null;
+    const ex = g.x0 + ((found % W) + 0.5) * g.cell, ez = g.z0 + (Math.floor(found / W) + 0.5) * g.cell;
+    bot._navWp = { x: ex, z: ez, t: nowMs };
+    return bot._navWp;
+  }
+  // down the gradient, as far as the bot can still see: so it cuts across open floor and only turns at corners
+  let best = null;
+  for (let step = 0; step < 10; step++) {
+    const i = k % W, j = (k - i) / W;
+    let nk = -1, nd = dist[k] >= 0 ? dist[k] : 1e9;
+    for (const [di, dj] of _NAV_STEPS) {
+      const x = i + di, y = j + dj;
+      if (x < 0 || y < 0 || x >= W || y >= g.H) continue;
+      const m = y * W + x;
+      if (dist[m] < 0 || dist[m] >= nd) continue;
+      if (di && dj && (g.blocked[j * W + x] || g.blocked[y * W + i])) continue;
+      nd = dist[m]; nk = m;
+    }
+    if (nk < 0) break;
+    k = nk;
+    const px = g.x0 + ((k % W) + 0.5) * g.cell, pz = g.z0 + (Math.floor(k / W) + 0.5) * g.cell;
+    // seen along a body's width, not a hair: a corner that a line just misses still catches a shoulder
+    let clear = step === 0;
+    if (!clear) {
+      const ex = px - bot.x, ez = pz - bot.z, el = Math.hypot(ex, ez) || 1, nx = -ez / el * 0.45, nz = ex / el * 0.45;
+      clear = hasLineOfSight(bot.x, bot.z, px, pz, 0.4) && hasLineOfSight(bot.x + nx, bot.z + nz, px + nx, pz + nz, 0.4)
+        && hasLineOfSight(bot.x - nx, bot.z - nz, px - nx, pz - nz, 0.4);
+    }
+    if (careful) { best = { x: px, z: pz, t: nowMs }; break; }       // one cell at a time
+    if (clear) best = { x: px, z: pz, t: nowMs };
+    else break;
+    if (dist[k] === 0) break;
+  }
+  bot._navWp = best;
+  return best;
+}
 function findBotCover(bot, target) {
   const tx = target ? (target.isPlayer ? camera.position.x : target.x) : bot.x;
   const tz = target ? (target.isPlayer ? camera.position.z : target.z) : bot.z;
@@ -62450,8 +62626,16 @@ function updateBotAI(dt) {
           moveZ = Math.cos(bot.wanderAngle) * 7 * dt;
         } else if (dist > 4) {
           const spd = 9 * dt;
-          moveX = (dx / dist) * spd;
-          moveZ = (dz / dist) * spd;
+          // Round the wall, not along it: with no line to the target, go to the next point of the route.
+          const wp = botNavPoint(bot, target);
+          if (wp) {
+            const wx = wp.x - bot.x, wz = wp.z - bot.z, wl = Math.hypot(wx, wz) || 1;
+            moveX = (wx / wl) * spd; moveZ = (wz / wl) * spd;
+            bot._navUsedAt = now;
+          } else {
+            moveX = (dx / dist) * spd;
+            moveZ = (dz / dist) * spd;
+          }
         }
       }
 
@@ -62708,7 +62892,7 @@ function updateBotAI(dt) {
     // 🧭 Wall feeler: if the planned step points into a collider, bias toward the
     // clearer side before collision clamps it. This makes bots round corners
     // instead of running face-first into the same wall until the stuck timer fires.
-    if (target && Math.hypot(moveX, moveZ) > 0.001) {
+    if (target && Math.hypot(moveX, moveZ) > 0.001 && bot._navUsedAt !== now) {      // (a routed step is already round it)
       const mLen = Math.hypot(moveX, moveZ) || 1;
       const fX = moveX / mLen, fZ = moveZ / mLen;
       const probe = 3.2;
@@ -64694,7 +64878,7 @@ function confirmLoadout() {
     if (modeId && lobbyEligible.includes(modeId)) {
       // Route through staging lobby — wait for others to ready up
       stagingLobbyMode = modeId;
-      socket.emit('joinStagingLobby', { mode: modeId, map: effectivePickedMap(modeId, pickedMap) }); // the server honours it (#17)
+      socket.emit('joinStagingLobby', { mode: modeId, map: lobbyPrePick(modeId, pickedMap) }); // the server honours it (#17)
       // 1v1 has no teams to sort out, so READY on the loadout is the ready (#46): the server
       // looks for a real opponent for a few seconds, then gives you a bot.
       if (modeId === '1v1') socket.emit('setLobbyReady', { ready: true, fillBots: true });
