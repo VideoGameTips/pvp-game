@@ -1006,6 +1006,30 @@ if (ok && process.argv.includes('--inspect')) {
   if (issues.length) { ok = false; console.log(issues.slice(0, 20).join('\n')); }
 }
 
+if (ok && process.argv.includes('--bow')) {
+  // The Boombow is a rapid-fire bow (4x the speed, a third of the damage, a slow arrow) and the Crossbow has a scope.
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const b = WEAPONS.find(w => w.id === 'boombow'), c = WEAPONS.find(w => w.id === 'crossbow');
+    if (!(b.fireRate <= 200)) issues.push('the Boombow should shoot four times as fast (<= 200 ms), got ' + b.fireRate);
+    if (!(b.reloadTime <= 400)) issues.push('the Boombow should reload four times as fast (<= 400 ms), got ' + b.reloadTime);
+    if (!(b.damage >= 30 && b.damage <= 34)) issues.push('the Boombow should do a third of 95, got ' + b.damage);
+    if (!(b.bulletSpeed <= 40)) issues.push('the Boombow arrow should be slow, got ' + b.bulletSpeed);
+    if (!(b.reserve >= 40)) issues.push('the Boombow quiver should hold the same damage as before (about 42 arrows), got ' + b.reserve);
+    if (INSTAKILL_HS_WEAPONS.has('boombow') || INSTAKILL_HS_WEAPONS.has('boombow_ab')) issues.push('a rapid-fire bow must not one-shot on a headshot');
+    if (!isScopedWeapon(c)) issues.push('the Crossbow has no scope');
+    if (!isScopedWeapon(WEAPONS.find(w => w.id === 'srx'))) issues.push('the SR-X lost its scope');
+    if (isScopedWeapon(b)) issues.push('the Boombow should not be scoped');
+    if (!(c.adsZoom <= 32)) issues.push('a scoped crossbow should zoom in properly, got ' + c.adsZoom);
+    return issues;
+  })()`);
+  const srv = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  if (!/freeze_gun: 13, boombow: 32,/.test(srv)) issues.push('server WEAPON_DAMAGE does not have the Boombow at 32');
+  if (!/boombow_ab: 63/.test(srv)) issues.push('server WEAPON_DAMAGE does not have the Power Draw at 63');
+  console.log('bow checks: rapid-fire Boombow (4x speed, a third of the damage, slow arrow), scoped Crossbow');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 if (ok && process.argv.includes('--chain-maul')) {
   const issues = vm.runInThisContext(`(() => {
     const issues = [], v = (x,y,z) => new THREE.Vector3(x,y,z);

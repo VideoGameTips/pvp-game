@@ -149,7 +149,8 @@ const WEAPONS = [
     // One bolt, 100 damage, three to the body. Semi, 2 a second as far as the
     // trigger goes; the 1.2 s reload is what really sets the pace.
     mag: 1, reserve: 18, damage: 100, fireRate: 500, reloadTime: 1200,
-    auto: false, pellets: 1, spread: 0.001, adsZoom: 42, bulletSpeed: 72, noReload: false,
+    // adsZoom 42 -> 30: it has a SCOPE now (SCOPED_WEAPONS), so aiming looks down the glass at about 2.5x.
+    auto: false, pellets: 1, spread: 0.001, adsZoom: 30, bulletSpeed: 72, noReload: false,
     bulletColor: 0x8b5a2b, bulletSize: 0.09, arcShot: true,
     ability: { name: 'Power Charge', cd: 0, type: 'charge', desc: 'Hold fire · release to shoot · longer = more dmg' },
   },
@@ -201,10 +202,13 @@ const WEAPONS = [
   },
   {
     id: 'boombow', name: 'Boombow', type: 'Explosive Bow', slot: 'primary',
-    mag: 1, reserve: 14, damage: 95, fireRate: 750, reloadTime: 1400,
-    auto: false, pellets: 1, spread: 0.004, adsZoom: 42, bulletSpeed: 68, noReload: false,
+    // A rapid-fire bow now: four times the draw and reload speed it had (750 / 1400 ms), a third of the damage
+    // (95), and a slow arrow you have to lead (68 m/s -> 34). The reserve went 14 -> 42 so the same arrows' worth
+    // of damage is still in the quiver: at four times the pace, 14 would have been gone in five seconds.
+    mag: 1, reserve: 42, damage: 32, fireRate: 188, reloadTime: 350,
+    auto: false, pellets: 1, spread: 0.004, adsZoom: 42, bulletSpeed: 34, noReload: false,
     bulletColor: 0xffaa22, bulletSize: 0.10, splashRadius: 4.5, arcShot: true,
-    ability: { name: 'Power Draw', cd: 17000, desc: 'Next arrow · 190 dmg', type: 'powershot', pellets: 1, spreadMult: 0, weaponAbId: 'boombow_ab' },
+    ability: { name: 'Power Draw', cd: 17000, desc: 'Next arrow · 63 dmg', type: 'powershot', pellets: 1, spreadMult: 0, weaponAbId: 'boombow_ab' },
   },
   {
     id: 'revolver', activeReload: true, name: 'Revolver', type: 'Secondary', slot: 'secondary',
@@ -41504,6 +41508,10 @@ function toggleADS() {
   setADS(!isADS);
 }
 
+// Guns that are aimed down a scope: the lens fills the screen, with no crosshair and no gun in view.
+const SCOPED_WEAPONS = new Set(['srx', 'crossbow']);
+function isScopedWeapon(w) { return !!w && SCOPED_WEAPONS.has(w.baseId || w.id); }
+
 function setADS(on) {
   if (isDead) return;
   // Aiming is a GUN action. This function ends by forcing
@@ -41515,7 +41523,7 @@ function setADS(on) {
   isADS = !!on;
   targetFOV = isADS ? currentWeapon.adsZoom : 75;
   setWeaponADSPos(isADS);
-  const isSniperADS = isADS && currentWeapon.id === 'srx';
+  const isSniperADS = isADS && isScopedWeapon(currentWeapon);
   const overlay = document.getElementById('scope-overlay');
   overlay.style.display = isSniperADS ? 'block' : 'none';
   if (isSniperADS) drawScope();
@@ -41575,7 +41583,7 @@ function drawScope() {
 }
 
 window.addEventListener('resize', () => {
-  if (isADS && currentWeapon.id === 'srx') drawScope();
+  if (isADS && isScopedWeapon(currentWeapon)) drawScope();
 });
 
 function setWeaponADSPos(ads) {
@@ -53335,7 +53343,8 @@ function updateDamageNumbers() {
 }
 
 // Weapons that one-shot on headshot
-const INSTAKILL_HS_WEAPONS = new Set(['srx', 'railgun', 'lever', 'boombow', 'boombow_ab', 'boombow_c1', 'railgun_ab']);
+// (The Boombow used to be here. At a third of the damage and four times the pace it is not a one-shot weapon.)
+const INSTAKILL_HS_WEAPONS = new Set(['srx', 'railgun', 'lever', 'railgun_ab']);
 
 // 🤫 Secret weapon category sets used for hidden synergy mechanics
 const ELECTRIC_WEAPONS = new Set(['arc_rifle','arc_torrent','taser','pistol','shock_baton','storm_core','revolver','freeze_gun','coilgun','plasma_carbine','storm_bloom','storm_bloom_ball','storm_bloom_aura','gatecrasher_beam']);
@@ -53575,7 +53584,7 @@ function getClientWeaponDamage(weaponId) {
   const s = SUPPORT_ITEMS.find(x => x.id === weaponId && x.damage);
   if (s) return s.damage;
   const ab = { sg8_wave:20, crossbow_ab:220, crossbow_c1:140, sg100_ab:140, lever_ab:150,
-               railgun_ab:330, boombow_ab:250, boombow_c1:160, cycler_ab:32, hand_cannon_ab:175 };
+               railgun_ab:330, boombow_ab:83, boombow_c1:53, cycler_ab:32, hand_cannon_ab:175 };
   if (ab[weaponId] != null) return ab[weaponId];
   // Fall through to the big table the bot->player path uses, so synthetic ids
   // like '<weapon>_splash' resolve in BOTH directions. Without this every splash

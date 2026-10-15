@@ -1972,7 +1972,7 @@ event_horizon: 75,
   paintball: 30, burst: 47, lever: 93,
   vector: 18, crossbow: 100, flamethrower: 3,
   grenade_launcher: 90, railgun: 200, minigun: 27, chain_gun: 22, javelin_launcher: 30,
-  freeze_gun: 13, boombow: 95,
+  freeze_gun: 13, boombow: 32,
   // Secondaries
   revolver: 83, flare: 85, pistol: 20, shorty: 30, cycler: 8,
   hand_cannon: 105, throwing_knives: 45, taser: 10,
@@ -1982,7 +1982,7 @@ event_horizon: 75,
   // Ability shots
   sg100_ab: 140, lever_ab: 150, crossbow_ab: 220, crossbow_c1: 140,
   sg8_wave: 20,
-  railgun_ab: 330, boombow_ab: 190, cycler_ab: 32,
+  railgun_ab: 330, boombow_ab: 63, cycler_ab: 32,
   hand_cannon_ab: 175,
   // ⚔️ Lancer (single-shot blade rifle) + its bayonet-charge hit
   lancer: 95, lancer_blade: 50,
