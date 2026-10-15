@@ -164,6 +164,17 @@ if (ok && process.argv.includes('--equipment-hands')) {
     if (_equip.ps.length < 3) issues.push('grenade: lost individual assembly parts');
     _equipStep(_equip, 0.7); finishEquip();
     if (frag._heldItem.children.length !== children) issues.push('grenade: leaked equip props');
+    const oldSlot = activeSlot, oldIdx = selectedMeleeIdx, oldT = meleeSwingT;
+    activeSlot = 'melee'; selectedMeleeIdx = MELEE_ITEMS.findIndex(x => x.id === 'katana');
+    const katana = meleeModels[selectedMeleeIdx], hand = katana._hands.rear;
+    if (!katana._hands.single || katana._hands.front !== hand) issues.push('katana: must use one hand');
+    const position = hand.position.clone(), home = hand.quaternion.clone();
+    meleeSwingT = 0.5; updateMeleeGripPose();
+    if (home.angleTo(hand.quaternion) < 0.1) issues.push('katana: wrist does not flex during strike');
+    if (position.distanceTo(hand.position) > 1e-8) issues.push('katana: hand slips off grip');
+    meleeSwingT = 1; updateMeleeGripPose();
+    if (home.angleTo(hand.quaternion) > 1e-7) issues.push('katana: wrist does not return to rest');
+    activeSlot = oldSlot; selectedMeleeIdx = oldIdx; meleeSwingT = oldT;
     return issues;
   })()`);
   if (issues.length) { ok = false; console.log('equipment hand failures:\n' + issues.join('\n')); }

@@ -47025,7 +47025,7 @@ function attachEquipmentHands(model, item, support = false) {
       if (handle) { handle.box.getCenter(grip); grip.z += 0.012; }
     }
     const supports = {
-      sledge: [0,0,0.06], spear: [0,0,-0.04], katana: [0,0,0.085],
+      sledge: [0,0,0.06], spear: [0,0,-0.04],
       chainsaw: [-0.025,0.055,0.055], scythe: [0,0,-0.06],
       gravity_hammer: [0,0,-0.035], titan_hammer: [0,0,-0.02],
       garrote: [-0.06,0,-0.04],
@@ -47049,6 +47049,7 @@ function attachEquipmentHands(model, item, support = false) {
     const hand = _makeViewHand(left ? -1 : 1);
     hand.position.copy(at).applyQuaternion(tilt).add(offset);
     hand.rotation.set(0.12, 0, left ? -0.12 : 0.12);
+    if (id === 'katana') hand.rotation.set(0.18, 0.90, 0.22);
     hand.quaternion.premultiply(tilt);
     model.add(hand);
     return hand;
@@ -47083,6 +47084,23 @@ meleeModels.forEach((m, i) => {
   if (m._offHand) attachEquipmentHands(m._offHand, MELEE_ITEMS[i]);
 });
 supportModels.forEach((m, i) => attachEquipmentHands(m, SUPPORT_ITEMS[i], true));
+
+function updateMeleeGripPose() {
+  if (activeSlot !== 'melee' || MELEE_ITEMS[selectedMeleeIdx]?.id !== 'katana') return;
+  const model = meleeModels[selectedMeleeIdx], H = model?._hands;
+  if (!model?._equipmentHands || !H) return;
+  const hand = H.rear;
+  hand.rotation.copy(H.rearRot);
+  // Flex the wrist around the grip, rather than sliding the palm off the hilt.
+  if (meleeAbilityBuff?.type === 'deflect') {
+    hand.rotateX(-0.20); hand.rotateZ(0.18 * (meleeDeflectDir || 1));
+  } else if (meleeSwingT < 1) {
+    const flex = Math.sin(Math.PI * meleeSwingT), side = model._swingSide || 1;
+    hand.rotateX(-0.28 * flex);
+    hand.rotateY(0.20 * flex * side);
+    hand.rotateZ(-0.30 * flex * side);
+  }
+}
 
 const equipmentSwayModels = [];
 function resetEquipmentSway() {
@@ -62774,6 +62792,7 @@ function loop() {
   updateAbilityHUD();
   updateMeleeSwing(dt);
   updateChainMaulSwing(dt);
+  updateMeleeGripPose();
   safeLoopStep('equipment-sway', updateEquipmentSway);
   updateWeaponSelector();
   updateTrashcanProximity();
