@@ -35105,6 +35105,11 @@ function makeRealWorldGun(weaponId) {
   const inv = new THREE.Matrix4().copy((src._heldItem || src).matrixWorld).invert();
   const WORLD = new THREE.Matrix4().makeScale(WORLD_GUN_SCALE, WORLD_GUN_SCALE, WORLD_GUN_SCALE);
   const root = new THREE.Group();
+  // The viewmodel origin is usually in the receiver, not in the firing palm.
+  // Use the authored hand's rest anchor, never its animated reload position.
+  const gripPoint = src._hands?.rearHome
+    ? src._hands.rearHome.clone().applyMatrix4(src.matrixWorld).applyMatrix4(inv).multiplyScalar(WORLD_GUN_SCALE)
+    : null;
   let parts = 0;
   src.traverse(o => {
     if (!o.isMesh || !o.geometry || !o.material) return;
@@ -35116,12 +35121,14 @@ function makeRealWorldGun(weaponId) {
     const m = new THREE.Mesh(o.geometry, mat);          // the geometry is shared with the viewmodel, so it is never disposed here
     m.matrix.copy(WORLD).multiply(inv).multiply(o.matrixWorld);   // world size is baked into each part, not left on the root:
     m.matrix.decompose(m.position, m.quaternion, m.scale);          // fitWeaponPose measures the parts, and must see the real length
+    if (gripPoint) m.position.sub(gripPoint);
     m.userData.sharedGeo = true;
     m.castShadow = false;
     root.add(m); parts++;
   });
   if (!parts || parts > 140) return null;
   root.userData.realGun = true;
+  root.userData.gripCentered = !!gripPoint;
   return root;
 }
 
@@ -36485,7 +36492,7 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
   // parented here comes out level in the ready stance and then travels with the
   // arm through every other one.
   const gripR = new THREE.Group();
-  gripR.position.set(0, -0.085, 0.015);
+  gripR.position.copy(hands[1].position);
   gripR.rotation.set(GUN_HOLD.gripPitch, GUN_HOLD.gripYaw, 0);
   armWrists[1].add(gripR);
 
@@ -36647,7 +36654,8 @@ function fitWeaponPose(mesh, gun, key) {
   // keyed on rather than its name. A cold Lobby 13 holds seventeen different
   // weapons but only a handful of silhouettes, and the grid scan below is about
   // 4 ms each — keying by id paid for every one of the seventeen.
-  const known = key && _weaponGeoKey.get(key);
+  const cacheKey = key && key + (gun.userData.realGun ? ':real' : ':proxy');
+  const known = cacheKey && _weaponGeoKey.get(cacheKey);
   if (known && _weaponPoseCache.has(known)) { apply(_weaponPoseCache.get(known)); return; }
   // Upright at the origin, on EVERY axis. dropBody pitches a corpse to -PI/2 for
   // 1600 ms, and solving in that frame aims the IK at a point the shoulder
@@ -36678,7 +36686,7 @@ function fitWeaponPose(mesh, gun, key) {
   // that arrives over the wire, and an unknown one resolves to WEAPONS[0]
   // anyway, so remembering it would grow the map on remote input forever.
   if (key && (WEAPONS.some(x => x.id === key) || MELEE_ITEMS.some(x => x.id === key)
-              || SUPPORT_ITEMS.some(x => x.id === key))) _weaponGeoKey.set(key, gk);
+              || SUPPORT_ITEMS.some(x => x.id === key))) _weaponGeoKey.set(cacheKey, gk);
   if (_weaponPoseCache.has(gk)) {
     mesh.position.copy(keep.pos); mesh.rotation.copy(keep.rot);
     apply(_weaponPoseCache.get(gk));
@@ -37280,6 +37288,7 @@ function makeBotWeaponProp(weaponId) {
   const isLMG      = w.type === 'LMG';
   const isMelee    = MELEE_ITEMS.indexOf(w) >= 0;
   const isSupport  = SUPPORT_ITEMS.indexOf(w) >= 0;
+  const gripPoint = new THREE.Vector3();
 
   if (isMelee) {
     // Club/bat: a tapered shaft with a wrapped grip and a heavier head, rather
@@ -37288,6 +37297,7 @@ function makeBotWeaponProp(weaponId) {
     shaft.rotation.x = Math.PI / 2; shaft.position.z = -0.05; g.add(shaft);
     const wrap = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.024, 0.10, 8), polyMat);
     wrap.rotation.x = Math.PI / 2; wrap.position.z = 0.11; g.add(wrap);
+    gripPoint.copy(wrap.position);
     const head = new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.030, 0.09, 8), metalMat);
     head.rotation.x = Math.PI / 2; head.position.z = -0.24; g.add(head);
     const pommel = new THREE.Mesh(new THREE.SphereGeometry(0.024, 7, 6), metalMat);
@@ -37322,6 +37332,7 @@ function makeBotWeaponProp(weaponId) {
     const grip = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.085, 0.038), woodMat);
     grip.rotation.x = 0.25;
     grip.position.set(0, -0.065, bd * 0.1);
+    gripPoint.copy(grip.position);
     g.add(grip);
 
     // LMG drum mag
@@ -37370,7 +37381,9 @@ function makeBotWeaponProp(weaponId) {
   // The props were authored for a rifle about 0.45 m long, which is a toy beside a 0.56 m wide body. The size is
   // baked into the PARTS rather than put on the group, so everything that measures the prop -- fitWeaponPose's
   // length and muzzle, the flash -- sees the real size and solves the hands for it.
-  for (const c of g.children) { c.position.multiplyScalar(WORLD_GUN_SCALE); c.scale.multiplyScalar(WORLD_GUN_SCALE); }
+  gripPoint.multiplyScalar(WORLD_GUN_SCALE);
+  for (const c of g.children) { c.position.multiplyScalar(WORLD_GUN_SCALE).sub(gripPoint); c.scale.multiplyScalar(WORLD_GUN_SCALE); }
+  g.userData.gripCentered = true;
   metalizeModel(g);
   return g;
 }
@@ -57163,7 +57176,8 @@ function armRemoteMesh(mesh, weaponId) {
   let gun = null;
   try { if (_realGunsInUse() < REAL_GUN_BUDGET) gun = makeRealWorldGun(weaponId); } catch (e) { gun = null; }
   if (!gun) gun = makeBotWeaponProp(weaponId);
-  gun.position.set(0, -0.02, 0.055);
+  if (gun.userData.gripCentered) gun.position.set(0, 0, 0);
+  else gun.position.set(0, -0.02, 0.055);
   gun.rotation.y = Math.PI;
   ((mesh._rig && mesh._rig.gripR) || mesh).add(gun);
   mesh._gun = gun; mesh._gunId = weaponId;

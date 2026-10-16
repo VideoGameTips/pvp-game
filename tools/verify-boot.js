@@ -1695,6 +1695,35 @@ if (ok && process.argv.includes('--range')) {
   if(issues.length){ok=false;console.log(issues.join('\n'));}
 }
 
+if (ok && process.argv.includes('--remote-grips')) {
+  const issues=vm.runInThisContext(`(() => {
+    const issues=[],palm=new THREE.Vector3(),grip=new THREE.Vector3();
+    const items=WEAPONS.filter(w=>!w.archived);
+    for(const item of items){
+      const body=makePlayerMesh('Grip check',true);
+      armRemoteMesh(body,item.id);
+      if(!body._gun.userData.gripCentered){disposeBody(body);continue;}
+      for(const [crouch,slide,jump,aim] of [[0,0,0,0],[.58,0,0,0],[.58,1,0,0],[0,0,1,0],[0,0,0,.75]]){
+        body.position.set(12,3,-8);body.rotation.y=1.3;
+        for(let i=0;i<20;i++){
+          body.position.x+=.08;animateCharacterMesh(body,1/60,crouch,slide,jump,aim);
+          body.updateMatrixWorld(true);body._rig.handR.getWorldPosition(palm);body._gun.getWorldPosition(grip);
+          if(palm.distanceTo(grip)>1e-6){issues.push(item.id+': grip left palm during animation');break;}
+        }
+      }
+      const before=body._gun;armRemoteMesh(body,item.id);
+      if(body._gun!==before||body._gun.parent!==body._rig.gripR)issues.push(item.id+': duplicate or detached attachment');
+      disposeBody(body);
+    }
+    const fallback=makeBotWeaponProp('ak20');
+    if(!fallback.userData.gripCentered)issues.push('fallback rifle still uses receiver origin');
+    disposeBody(fallback);
+    return issues;
+  })()`);
+  if(issues.length){ok=false;console.log(issues.join('\n'));}
+  else console.log('remote grips: active guns stay in palm through walking, crouching, sliding, jumping, aiming and duplicate equip');
+}
+
 if (ok && process.argv.includes('--admin-chat')) {
   const issues=vm.runInThisContext(`(() => {
     const issues=[],seen=new Set(),queue=['hello'];
