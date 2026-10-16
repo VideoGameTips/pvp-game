@@ -67,7 +67,7 @@ function load() {
                    '_rng', '_grain', '_weave', '_blotches', '_shade', 'surfTex', 'pbrMat',
                    'charSurf', 'gunSurf', 'sculptBox',
                    '_throwableHolder', '_gunDetails', '_makeViewHand',
-                   '_localPartBoxes', 'attachViewHands', '_reloadPose',
+                   '_localPartBoxes', 'attachViewHands', 'attachAkimboHands', 'placeAkimboHand', '_reloadPose',
                    '_meleeOffset', '_collarGeometry', 'blendProudSteps',
                    '_emoStroke', '_emoMats', '_legendMats', '_legendize',
                    '_mPivot', '_eqCrystalMats', '_donutMats', '_donutSprinkleMat',
@@ -334,6 +334,21 @@ built.forEach((g, i) => {
 built.forEach((g, i) => {
   if (!g) return;
   g.position.set(0, 0, 0); g.updateMatrixWorld(true);
+  // A pair (the Akimbo) is two guns either side of the middle: each is centred on its own holder, not on the model.
+  if (g._akimbo) {
+    let off = 0;
+    g._akimbo.holders.forEach((h, k) => {
+      const gun = g._akimbo.guns[k];
+      gun.traverse(o => {
+        if (!o.isMesh || o.geometry.type !== 'ExtrudeGeometry' || o.userData.vmHand) return;
+        const b = new THREE.Box3().setFromObject(o);
+        const hx = new THREE.Vector3().setFromMatrixPosition(h.matrixWorld).x;
+        off = Math.max(off, Math.abs((b.min.x + b.max.x) / 2 - hx));
+      });
+    });
+    if (off > 0.004) fail(rows[i].id, 'a pistol of the pair has its profile plate off-centre by ' + off.toFixed(4));
+    return;
+  }
   let worst = 0;
   g.traverse(o => {
     if (!o.isMesh || o.geometry.type !== 'ExtrudeGeometry' || o.userData.vmHand) return;

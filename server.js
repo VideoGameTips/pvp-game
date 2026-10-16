@@ -323,7 +323,7 @@ const WEAPON_COSTS = {
   nebula_mortar: 35000, prism_engine: 27000, void_harvester: 40000,
   // Secondaries
   revolver: 150, flare: 80, pistol: 60, shorty: 180, cycler: 140,
-  hand_cannon: 260, throwing_knives: 120, taser: 200, traffic_cone: 160, cream_pie: 140, gunslinger: 220,
+  hand_cannon: 260, throwing_knives: 120, taser: 200, traffic_cone: 160, cream_pie: 140, gunslinger: 220, akimbo: 280,
   machine_pistol: 220, gatecrasher: 280, sawed_off: 260, machine_revolver: 240,
   dart_gun: 160, laser_pointer: 120, continuum: 600,
   auto_revolver: 220, frost_blaster: 240,
@@ -1995,7 +1995,7 @@ event_horizon: 75,
   m4a1_arena: 50,
 
   // ⚡ Tesla Coil zap · 🧪 acid pool · 🐝 bee sting
-  tesla_coil: 16, acid_pool: 8, bee_sting: 5, mini_turret: 15, gunslinger: 28,
+  tesla_coil: 16, acid_pool: 8, bee_sting: 5, mini_turret: 15, gunslinger: 28, akimbo: 24,
   // MG
   mg42: 15,
   // Melee
@@ -2089,6 +2089,7 @@ const FALLOFF_POINTBLANK = { near: 7,  far: 18,  min: 0.02 };
 const FALLOFF_FLAME      = { near: 5,  far: 13,  min: 0.08 };
 const FALLOFF_SMG        = { near: 11, far: 36,  min: 0.24 };
 const FALLOFF_MACHINEPISTOL = { near: 8, far: 28, min: 0.18 };
+const FALLOFF_AKIMBO = { near: 10, far: 32, min: 0.30 };   // mirrors public/game.js
 const FALLOFF_AR         = { near: 28, far: 70,  min: 0.55 };
 const FALLOFF_ARENA_AR   = { near: 34, far: 82,  min: 0.78 };
 const FALLOFF_LMG        = { near: 22, far: 65,  min: 0.48 };
@@ -2111,7 +2112,7 @@ const WEAPON_FALLOFF = {
   paintball: FALLOFF_PAINT, nail_gun: FALLOFF_PAINT, sticker_blaster: FALLOFF_PAINT,
   srx: FALLOFF_SNIPER, railgun: FALLOFF_SNIPER, coilgun: FALLOFF_SNIPER, amr: FALLOFF_SNIPER, barrett: FALLOFF_SNIPER,
   lever: FALLOFF_MARKSMAN, m1_garand: FALLOFF_MARKSMAN, air_rifle: FALLOFF_MARKSMAN, harpoon_gun: FALLOFF_MARKSMAN,
-  revolver: FALLOFF_HEAVY_PISTOL, hand_cannon: FALLOFF_HEAVY_PISTOL, duelist_pistol: FALLOFF_HEAVY_PISTOL, desert_eagle: FALLOFF_HEAVY_PISTOL, m1911: FALLOFF_HEAVY_PISTOL, gunslinger: FALLOFF_HEAVY_PISTOL,
+  revolver: FALLOFF_HEAVY_PISTOL, hand_cannon: FALLOFF_HEAVY_PISTOL, duelist_pistol: FALLOFF_HEAVY_PISTOL, desert_eagle: FALLOFF_HEAVY_PISTOL, m1911: FALLOFF_HEAVY_PISTOL, gunslinger: FALLOFF_HEAVY_PISTOL, akimbo: FALLOFF_AKIMBO,
   pistol: FALLOFF_SIDEARM, five_seven: FALLOFF_SIDEARM, mauser: FALLOFF_SIDEARM, snub_revolver: FALLOFF_SIDEARM, throwing_knives: FALLOFF_SIDEARM, taser: FALLOFF_SIDEARM, gatecrasher: FALLOFF_SIDEARM,
   gatecrasher_slug: FALLOFF_MARKSMAN, gatecrasher_beam: FALLOFF_NONE, continuum: FALLOFF_HEAVY_PISTOL, lancer: FALLOFF_MARKSMAN, laser_pointer: { near: 20, far: 90, min: 0.85 },
   event_horizon: FALLOFF_ENERGY, storm_core: FALLOFF_ENERGY, abs_zero: FALLOFF_ENERGY, quantum_repeater: FALLOFF_ENERGY, pulse_needle: FALLOFF_ENERGY, magnetar: FALLOFF_MARKSMAN, void_harvester: FALLOFF_MARKSMAN, solar_lance: FALLOFF_LMG, arc_torrent: FALLOFF_LMG, slingshot: FALLOFF_LMG,

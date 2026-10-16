@@ -890,6 +890,21 @@ const WEAPONS = [
     lockOn: { lockTime: 250, lockRange: 60, homingDelay: 450, homingSpeed: 55, turnRate: 2.6, hitRadius: 1.6 },
     ability: { name: 'Volley', cd: 500, desc: 'Launch the whole magazine at the locked target', type: 'javelin_volley', noADS: true },
   },
+  {
+    // 🔫🔫 Akimbo: two pistols, one in each hand, firing in turn. A sidearm, so it is lean on damage and heavy on
+    // rate: 24 a bullet at 8 a second alternating (about 190 DPS, under the Machine Pistol's 285 and the AK's 300),
+    // accurate to start with and loosening as you hold the trigger (spreadBloom), falling off past 10 m and nearly
+    // gone by 32 (FALLOFF_AKIMBO). Twenty rounds, ten to a gun. CROSSFIRE is the other half: it empties the lot
+    // forward in about two thirds of a second in a wild cone (fanfire, 0.20 wide): murderous across a room and
+    // mostly wasted past it.
+    id: 'akimbo', name: 'Akimbo', type: 'Dual Pistols', slot: 'secondary',
+    mag: 20, reserve: 60, damage: 24, fireRate: 125, reloadTime: 1800,
+    auto: true, pellets: 1, spread: 0.009, adsZoom: 55, bulletSpeed: 150, noReload: false,
+    bulletColor: 0xffaa44, bulletSize: 0.04, moveBoost: 1.05,
+    spreadBloom: { perShot: 0.0012, max: 0.012 },
+    recoil: { up: 0.008, side: 0.006, climb: 0.12, max: 1.6, recover: 9, adsMult: 0.6 },
+    ability: { name: 'Crossfire', cd: 14000, desc: 'Empty both guns forward · a wild spray', type: 'fanfire', count: 20, delay: 32, fanSpread: 0.20, noADS: true },
+  },
 ];
 
 // ── Damage drop-off by range ────────────────────────────────────────────────
@@ -903,6 +918,7 @@ const FALLOFF_POINTBLANK = { near: 7,  far: 18,  min: 0.02 };
 const FALLOFF_FLAME      = { near: 5,  far: 13,  min: 0.08 };
 const FALLOFF_SMG        = { near: 11, far: 36,  min: 0.24 };
 const FALLOFF_MACHINEPISTOL = { near: 8, far: 28, min: 0.18 };
+const FALLOFF_AKIMBO = { near: 10, far: 32, min: 0.30 };   // two pistols: better than a machine pistol at range, nowhere near a rifle
 const FALLOFF_AR         = { near: 28, far: 70,  min: 0.55 };
 const FALLOFF_ARENA_AR   = { near: 34, far: 82,  min: 0.78 };
 const FALLOFF_LMG        = { near: 22, far: 65,  min: 0.48 };
@@ -953,7 +969,7 @@ Object.assign(WEAPON_FALLOFF, {
   srx: FALLOFF_SNIPER, railgun: FALLOFF_SNIPER, coilgun: FALLOFF_SNIPER, amr: FALLOFF_SNIPER, barrett: FALLOFF_SNIPER,
   lever: FALLOFF_MARKSMAN, m1_garand: FALLOFF_MARKSMAN, air_rifle: FALLOFF_MARKSMAN, harpoon_gun: FALLOFF_MARKSMAN,
   revolver: FALLOFF_HEAVY_PISTOL, hand_cannon: FALLOFF_HEAVY_PISTOL, duelist_pistol: FALLOFF_HEAVY_PISTOL,
-  desert_eagle: FALLOFF_HEAVY_PISTOL, m1911: FALLOFF_HEAVY_PISTOL, gunslinger: FALLOFF_HEAVY_PISTOL,
+  desert_eagle: FALLOFF_HEAVY_PISTOL, m1911: FALLOFF_HEAVY_PISTOL, gunslinger: FALLOFF_HEAVY_PISTOL, akimbo: FALLOFF_AKIMBO,
   pistol: FALLOFF_SIDEARM, five_seven: FALLOFF_SIDEARM, mauser: FALLOFF_SIDEARM, snub_revolver: FALLOFF_SIDEARM,
   throwing_knives: FALLOFF_SIDEARM, taser: FALLOFF_SIDEARM, gatecrasher: FALLOFF_SIDEARM,
   gatecrasher_slug: FALLOFF_MARKSMAN, gatecrasher_beam: FALLOFF_NONE, continuum: FALLOFF_HEAVY_PISTOL,
@@ -1527,7 +1543,7 @@ const WEAPON_COSTS = {
   nebula_mortar: 35000, prism_engine: 27000, void_harvester: 40000,
   // Secondaries
   revolver: 150, flare: 80, pistol: 60, shorty: 180, cycler: 140,
-  hand_cannon: 260, throwing_knives: 120, taser: 200, traffic_cone: 160, cream_pie: 140, gunslinger: 220,
+  hand_cannon: 260, throwing_knives: 120, taser: 200, traffic_cone: 160, cream_pie: 140, gunslinger: 220, akimbo: 280,
   machine_pistol: 220, gatecrasher: 280, sawed_off: 260, machine_revolver: 240,
   dart_gun: 160, laser_pointer: 120, continuum: 600,
   auto_revolver: 220, frost_blaster: 240,
@@ -3924,6 +3940,7 @@ function weaponAudioProfile(id, baseWeapon) {
   if (lowerId === 'arc_rifle')   return { kind:'arc', vol:0.30, dur:0.13, f1:1240, f2:380 };
   if (lowerId === 'freeze_gun' || lowerId === 'frost_blaster') return { kind:'freeze', vol:0.24, dur:0.16, f1:680, f2:420 };
   if (lowerId === 'gunslinger') return { kind:'pistol', vol:0.34, dur:0.12, f1:540, f2:120, action:'revolver' };
+  if (lowerId === 'akimbo') return { kind:'pistol', vol:0.30, dur:0.10, f1:620, f2:170 };
   if (lowerId === 'javelin_launcher') return { kind:'thump', vol:0.46, dur:0.30, f1:100, f2:40, action:'single' };
   if (lowerId === 'flamethrower') return { kind:'flamethrower', vol:0.24, dur:0.18, f1:95, f2:58 };
   if (lowerId === 'plasma_carbine') return { kind:'energy', vol:0.30, dur:0.14, f1:880, f2:540 };
@@ -19991,6 +20008,7 @@ const GUN_MATS = {
   grip:    () => new THREE.MeshPhongMaterial({ color: 0x272b30, shininess: 30,  specular: 0x4a5057 }),
   wood:    () => new THREE.MeshPhongMaterial({ color: 0x6b4a2c, shininess: 46,  specular: 0x8a7256 }),
   inner:   () => new THREE.MeshPhongMaterial({ color: 0x1c1f23, shininess: 20,  specular: 0x33373c }),
+  hot:     () => new THREE.MeshPhongMaterial({ color: 0xe8561a, shininess: 90,  specular: 0xffb080 }),   // the Akimbo's orange trim
 };
 // Detail passes (greebles, collars, fittings) build parts with these AFTER the
 // model has already been added to the camera, so metalize at creation too.
@@ -28705,6 +28723,139 @@ function buildPistol() {
   g.position.set(0.1, -0.1, -0.22); return g;
 }
 
+// ── 🔫🔫 Akimbo ────────────────────────────────────────────────────────────────────────────────────────────
+// One pistol of the pair: compact and black with an orange stripe along the slide and an orange base on a long stick
+// magazine, a ported muzzle and light rail. `_slide` is its own group so the slide can run back on every shot.
+function buildAkimboGun() {
+  const g = new THREE.Group();
+  const poly = GUN_MATS.polymer(), blued = GUN_MATS.blued(), bright = GUN_MATS.bright(), inner = GUN_MATS.inner(), grip = GUN_MATS.grip();
+  const hot = GUN_MATS.hot();
+  const slide = new THREE.Group(); g.add(slide);
+  gpBox(slide, blued, 0.026, 0.030, 0.150, 0, 0.020, -0.040);                       // slide
+  gpBox(slide, inner, 0.027, 0.006, 0.120, 0, 0.036, -0.044);                       // top flat
+  for (let i = 0; i < 5; i++) gpBox(slide, inner, 0.027, 0.020, 0.0035, 0, 0.020, 0.016 - i * 0.007);     // rear serrations
+  for (let i = 0; i < 4; i++) gpBox(slide, inner, 0.027, 0.020, 0.0035, 0, 0.020, -0.074 - i * 0.007);    // front serrations
+  gpBox(slide, hot, 0.0275, 0.006, 0.058, 0, 0.012, -0.022);                       // the orange stripe
+  [-1, 1].forEach(sd => gpBox(slide, hot, 0.0035, 0.0012, 0.100, sd * 0.0095, 0.0394, -0.046));   // and two on the top, so it shows from behind
+  gpBox(slide, inner, 0.005, 0.014, 0.040, 0.013, 0.026, -0.040);                   // ejection port
+  for (let i = 0; i < 3; i++) gpBox(slide, inner, 0.012, 0.0045, 0.010, 0, 0.0365, -0.094 - i * 0.015);   // compensator ports
+  gpBox(slide, bright, 0.008, 0.008, 0.008, 0, 0.044, 0.030);                       // rear sight
+  gpBox(slide, bright, 0.004, 0.008, 0.004, 0, 0.044, -0.108);                      // front sight
+  gpBox(g, poly, 0.024, 0.026, 0.100, 0, -0.004, -0.020);                           // frame
+  gpBox(g, poly, 0.022, 0.010, 0.050, 0, -0.016, -0.074);                           // dust cover with a light rail
+  for (let i = 0; i < 3; i++) gpBox(g, inner, 0.023, 0.003, 0.004, 0, -0.0105, -0.058 - i * 0.012);
+  gpCyl(g, bright, 0.0062, 0.0062, 0.026, 14, 0, 0.020, -0.122);                    // muzzle
+  gpCyl(g, inner, 0.0042, 0.0042, 0.012, 12, 0, 0.020, -0.136);                     // bore
+  gpPlate(g, poly, [[0.030,-0.014],[0.052,-0.036],[0.056,-0.104],[0.030,-0.112],[0.014,-0.052],[0.012,-0.018]], 0.026, 0);   // grip
+  [-0.014, 0.014].forEach(x => {
+    gpBox(g, grip, 0.004, 0.060, 0.028, x, -0.062, 0.034, 0.30);
+    for (let i = 0; i < 4; i++) gpBox(g, inner, 0.005, 0.0025, 0.026, x, -0.042 - i * 0.014, 0.038 - i * 0.004, 0.30);
+  });
+  gpBox(g, blued, 0.021, 0.044, 0.028, 0, -0.130, 0.047, 0.30);                     // the long stick magazine
+  gpBox(g, hot, 0.026, 0.008, 0.032, 0, -0.156, 0.054, 0.30);                       // its orange base
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.016, 0.003, 6, 12, Math.PI * 1.05), blued);
+  guard.rotation.set(0, Math.PI / 2, -0.35); guard.position.set(0, -0.026, 0.000); g.add(guard);
+  gpBox(g, bright, 0.004, 0.013, 0.004, 0, -0.020, 0.000, 0.2);                     // trigger
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.020, -0.150); g.add(flash);
+  g._flash = flash; g._slide = slide; g._kickZ = 0.016; g._greebled = true; g._handDetailed = true;
+  return g;
+}
+// The pair, in one model: a holder per hand (the left one is the right one mirrored) toed in a few degrees so the
+// barrels meet far ahead. Everything about the pair lives on `_akimbo`: the shot alternates between the hands
+// (akimboFire), each gun kicks and runs its own slide (updateAkimboHands), and the hands are fitted to the grips
+// (attachAkimboHands, called from attachViewHands).
+function buildAkimbo() {
+  const root = new THREE.Group();
+  const A = { holders: [], guns: [], flashes: [], hand: 1, kick: [0, 0], handLocal: [], handRot: [], rest: [] };
+  [1, -1].forEach((side, i) => {
+    const holder = new THREE.Group();
+    holder.position.set(side * 0.062, 0, 0);
+    holder.rotation.y = side * 0.05;
+    if (side < 0) holder.scale.x = -1;
+    const gun = buildAkimboGun();
+    holder.add(gun); root.add(holder);
+    A.holders.push(holder); A.guns.push(gun); A.flashes.push(gun._flash);
+    A.rest.push(holder.position.clone());
+  });
+  root._akimbo = A;
+  root._flash = A.flashes[0];
+  root._kickZ = 0.012; root._greebled = true; root._handDetailed = true;
+  // None of the passes that decorate a gun is for a pair: the collar pass put a ring round a sight on one slide, and the
+  // auto-weapon one (addDefaultAutoAimer) picked ONE slide for its stripes and aperture ring.
+  root.userData.realismDetailed = true; root._blended = true; root._hasDefaultAimer = true;
+  root.position.set(0, -0.1, -0.24);
+  return root;
+}
+// A hand's place and turn for the gun it holds, in the model's space (a hand is a child of the model, not of the
+// holder, so that addViewArms can run an arm out of it the way it does for every other gun).
+function placeAkimboHand(A, hand, i) {
+  const holder = A.holders[i], gun = A.guns[i];
+  holder.updateMatrix(); gun.updateMatrix();
+  hand.position.copy(A.handLocal[i]).applyMatrix4(gun.matrix).applyMatrix4(holder.matrix);
+  hand.rotation.set(A.handRot[i].x + holder.rotation.x, A.handRot[i].y, A.handRot[i].z + holder.rotation.z);
+}
+function attachAkimboHands(root) {
+  const A = root._akimbo;
+  root._handsDone = true;
+  const handScale = 1 / (root.scale.x || 1);
+  const make = (side, i) => {
+    const h = _makeViewHand(side);
+    h.scale.setScalar(handScale);
+    A.handLocal[i] = new THREE.Vector3(0.004, -0.046, 0.036);      // the trigger hand on the grip, a little behind it
+    A.handRot[i] = new THREE.Euler(0.26, 0, side * 0.10);
+    root.add(h);
+    placeAkimboHand(A, h, i);
+    return h;
+  };
+  const rear = make(1, 0), front = make(-1, 1);
+  const parts = _localPartBoxes(root), full = new THREE.Box3();
+  parts.forEach(p => full.union(p.box));
+  const size = full.getSize(new THREE.Vector3());
+  // Where the reload parts come from and go to: a magazine out of EACH gun.
+  const at = (i, x, y, z) => { const holder = A.holders[i], gun = A.guns[i]; holder.updateMatrix(); gun.updateMatrix();
+    const v = new THREE.Vector3(x, y, z).applyMatrix4(gun.matrix).applyMatrix4(holder.matrix); return { x: v.x, y: v.y, z: v.z }; };
+  root._anchors = {
+    mag: at(0, 0, -0.150, 0.050), magR: at(0, 0, -0.150, 0.050), magL: at(1, 0, -0.150, 0.050),
+    breech: at(0, 0.013, 0.026, -0.040), muzzle: at(0, 0, 0.020, -0.150), rear: at(0, 0, 0.040, 0.030),
+  };
+  root._homePos = root.position.clone();
+  // `single`: the reload code then moves only the trigger hand (and by nothing, the track has no hand offsets); both
+  // hands are kept on their guns by updateAkimboHands.
+  root._hands = { rear, front, rearHome: rear.position.clone(), frontHome: front.position.clone(),
+                  rearRot: rear.rotation.clone(), frontRot: front.rotation.clone(),
+                  gripAt: new THREE.Vector3(0, -0.026, 0), size, pistolish: false, single: true, akimbo: true };
+  if (typeof addViewArms === 'function') addViewArms(root);
+}
+// The next shot comes from the other hand: its muzzle flash, its kick, its slide.
+function akimboFire(model) {
+  const A = model && model._akimbo;
+  if (!A) return;
+  A.hand = 1 - A.hand;
+  model._flash = A.flashes[A.hand];
+  A.kick[A.hand] = 1;
+}
+function updateAkimboHands(dt) {
+  const model = currentWeaponIdx != null ? weaponModels[currentWeaponIdx] : null;       // (only the one in your hands moves)
+  {
+    const A = model && model._akimbo;
+    if (!A || !model.visible) return;
+    const reloading = model._reloadStart && model._reloadDur && !model._inspectMode;
+    const rt = reloading ? Math.min(1, (Date.now() - model._reloadStart) / model._reloadDur) : 0;
+    const roll = reloading ? Math.sin(Math.PI * rt) : 0;
+    for (let i = 0; i < 2; i++) {
+      A.kick[i] *= Math.exp(-dt * 16);
+      if (A.kick[i] < 0.002) A.kick[i] = 0;
+      const k = A.kick[i], side = i === 0 ? 1 : -1, holder = A.holders[i];
+      holder.position.set(A.rest[i].x, A.rest[i].y, A.rest[i].z + k * 0.018);
+      holder.rotation.x = -k * 0.07;
+      holder.rotation.z = side * 0.42 * roll;                    // a reload rolls each gun in toward the other
+      A.guns[i]._slide.position.z = k * 0.024;                   // and every shot runs the slide back
+    }
+    const H = model._hands;
+    if (H) { placeAkimboHand(A, H.rear, 0); placeAkimboHand(A, H.front, 1); }
+  }
+}
+
 function buildFartGun() {
   const g = new THREE.Group();
   const green = new THREE.MeshPhongMaterial({ color: 0x4f7f24, shininess: 62, specular: 0xa0c86a });
@@ -31172,6 +31323,7 @@ const weaponModels = [
   buildChainGun(),  // chain_gun
   buildGunslinger(),  // gunslinger
   buildRPG(),  // javelin_launcher
+  buildAkimbo(),  // akimbo
 ];
 function addWeaponRealismDetails(model, weapon) {
   if (!model || !model.add || (model.userData && model.userData.realismDetailed)) return;
@@ -45088,6 +45240,7 @@ function updatePendingFanFire(dt) {
     playWeaponSound(w.id, { baseWeapon: w, minGap: 25, violence });
     spawnLocalBullet(origin, d, bid, true, w.bulletSpeed, w.bulletColor, w.bulletSize, w.id);
     const model = weaponModels[currentWeaponIdx];
+    if (model && model._akimbo) akimboFire(model);
     if (model) triggerMuzzleBlast(model, { duration: 78 + violence * 18 * hyperrealismFactor('muzzle'), scale: Math.min(hyperrealisticOn() ? 3.1 : 1.9, 0.92 + violence * 0.28 * hyperrealismFactor('muzzle')), weapon: w });
     kickWeaponVisual(w, w.pellets || 1);
     pool.ammo--; ammo = pool.ammo; updateAmmoHUD();
@@ -45333,6 +45486,7 @@ function tryShoot() {
 
   const shotViolence = weaponKickStrength(wStats, wStats.pellets || 1);
   const model = weaponModels[currentWeaponIdx];
+  if (model && model._akimbo) akimboFire(model);       // the other hand: its flash, its kick, and the bullet leaves its muzzle
   triggerMuzzleBlast(model, { duration: 92 + shotViolence * 24 * hyperrealismFactor('muzzle'), scale: Math.min(hyperrealisticOn() ? 3.55 : 2.25, 1.05 + shotViolence * 0.34 * hyperrealismFactor('muzzle')), weapon: wStats });
   kickWeaponVisual(wStats, wStats.pellets || 1);
 
@@ -46978,6 +47132,7 @@ function _localPartBoxes(root) {
 function attachViewHands(root) {
   const handScale = 1 / (root.scale.x || 1);   // hands stay the size they were measured at
   if (!root || root._handsDone) return;
+  if (root._akimbo) { attachAkimboHands(root); return; }   // two guns, two hands: fitted on their own
   root._handsDone = true;
   const parts = _localPartBoxes(root);
   if (!parts.length) return;
@@ -50409,6 +50564,9 @@ hand_cannon:[K(.09,{py:.06,rx:.36,rz:.38,hy:-.05}), K(.23,{py:.09,rx:.46,rz:.42,
              K(.60,{py:.10,rx:.48,rz:.42,hy:-.13,hz:.05}), K(.71,{py:.09,rx:.50,rz:.42,hy:-.03,hz:.06}),
              K(.79,{py:.15,rx:.44,rz:.36,hy:0,hz:.03}), K(.90,{py:.07,rx:.34,rz:.48,hx:-.07,hy:.05,hz:.07,hr:-.7}),
              K(.97,{py:.06,rx:.26,rz:.30})],
+// Akimbo: both guns tip back and in at once (updateAkimboHands rolls each toward the other), the magazines drop out of
+// both and two fresh ones come up; the hands stay on their grips, so there are no hand offsets in it.
+akimbo:[K(.14,{py:.03,rx:.22}), K(.30,{py:.05,rx:.34}), K(.52,{py:.06,rx:.38}), K(.70,{py:.05,rx:.36}), K(.84,{py:.06,rx:.30}), K(.95,{py:.03,rx:.22})],
 pistol:[K(.12,{py:.03,rx:.28,rz:.28,hy:-.04}), K(.27,{py:.05,rx:.34,rz:.30,hy:-.13,hz:.01}),
         K(.37,{py:.05,rx:.36,rz:.30,hx:-.06,hy:-.18,hr:.7}), K(.51,{py:.06,rx:.36,rz:.30,hx:.03,hy:-.22,hz:.01}),
         K(.64,{py:.06,rx:.36,rz:.30,hy:-.10,hz:.03}), K(.75,{py:.05,rx:.38,rz:.30,hy:-.02,hz:.04}),
@@ -51738,6 +51896,7 @@ const RELOAD_PROPS = {
   desert_eagle:[RP(.34,'mag'),RP(.61,'mag','arrive')],
   hand_cannon:[RP(.33,'mag'),RP(.60,'mag','arrive')],
   pistol:[RP(.37,'mag'),RP(.64,'mag','arrive')],
+  akimbo:[RP(.34,'mag',null,1,'magR'),RP(.37,'mag',null,1,'magL'),RP(.62,'mag','arrive',1,'magR'),RP(.66,'mag','arrive',1,'magL')],
   switchblade_gun:[RP(.34,'mag'),RP(.59,'mag','arrive')],
   burst_cannon:[RP(.29,'mag'),RP(.55,'mag','arrive'),RP(.29,'link',null,3,'breech')],
   barrett:[RP(.30,'mag'),RP(.55,'mag','arrive'),RP(.92,'case',null,1,'breech')],
@@ -63852,6 +64011,7 @@ function loop() {
   safeLoopStep('equipment-sway', updateEquipmentSway);
   safeLoopStep('enemy-footsteps', () => updateEnemyFootsteps(dt));
   safeLoopStep('muzzle-fx', () => updateMuzzleFx(dt));
+  safeLoopStep('akimbo-hands', () => updateAkimboHands(dt));
   safeLoopStep('action-wind', () => updateActionWind(dt));
   updateWeaponSelector();
   updateTrashcanProximity();

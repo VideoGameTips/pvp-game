@@ -1097,6 +1097,89 @@ if (ok && process.argv.includes('--muzzle')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+if (ok && process.argv.includes('--akimbo')) {
+  // Akimbo: a secondary with the stats it was planned with, a model of two guns with a hand on each, shots that leave
+  // from alternating muzzles, and Crossfire (the whole magazine forward in a wild cone).
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const idx = WEAPONS.findIndex(w => w.id === 'akimbo');
+    if (idx < 0) return ['no akimbo weapon'];
+    const w = WEAPONS[idx];
+    if (w.slot !== 'secondary') issues.push('it is a secondary, got ' + w.slot);
+    if (!(w.mag === 20 && w.damage === 24 && w.fireRate === 125)) issues.push('stats drifted: ' + w.mag + ' / ' + w.damage + ' / ' + w.fireRate);
+    if (!(w.ability && w.ability.name === 'Crossfire' && w.ability.type === 'fanfire' && w.ability.count >= w.mag && w.ability.fanSpread >= 0.15)) issues.push('Crossfire should empty the magazine in a wide fan');
+    const burst = w.damage * 1000 / w.fireRate;
+    if (!(burst > 150 && burst < 230)) issues.push('burst DPS ' + burst.toFixed(0) + ' is outside the plan (150 to 230)');
+    // (the table is the base price: a multiplier is applied to all of them once, so compare it with a neighbour)
+    if (Math.abs(WEAPON_COSTS.akimbo - WEAPON_COSTS.gunslinger / 220 * 280) > 0.5) issues.push('price should be 280 against the Gunslingers 220, got ' + WEAPON_COSTS.akimbo + ' against ' + WEAPON_COSTS.gunslinger);
+    const fo = WEAPON_FALLOFF.akimbo;
+    if (!fo || fo.near !== 10 || fo.far !== 32 || fo.min !== 0.30) issues.push('falloff should be 10 / 32 / 0.30, got ' + JSON.stringify(fo));
+    if (weaponModels.length !== WEAPONS.length) issues.push('weaponModels and WEAPONS are out of step: ' + weaponModels.length + ' / ' + WEAPONS.length);
+    const m = weaponModels[idx];
+    if (!m || !m._akimbo) return issues.concat(['the model is not a pair']);
+    const A = m._akimbo;
+    if (A.guns.length !== 2 || A.flashes.length !== 2 || A.flashes[0] === A.flashes[1]) issues.push('it should be two guns with a flash each');
+    if (!m._hands || m._hands.rear === m._hands.front) issues.push('it needs a hand on each gun');
+    else {
+      m.updateMatrixWorld(true);
+      const hr = m._hands.rear.position, hl = m._hands.front.position;
+      if (!(hr.x > 0.03 && hl.x < -0.03)) issues.push('the hands are not on their own guns: right ' + hr.x.toFixed(3) + ', left ' + hl.x.toFixed(3));
+      if (!m._hands.rear.children.some(c => c.userData && c.userData.vmHand && c.children && c.children.length) && !m._hands.rear.children.some(c => c.isGroup)) issues.push('the right hand has no arm');
+    }
+    if (!(m._anchors && m._anchors.magR && m._anchors.magL && m._anchors.magR.x > 0 && m._anchors.magL.x < 0)) issues.push('a magazine should come out of each gun');
+    const style = Object.keys(MUZZLE_STYLES).find(k => MUZZLE_STYLES[k] === muzzleStyleFor(w));
+    if (style !== 'pistol') issues.push('it should have the pistol muzzle blast, has ' + style);
+
+    // firing: shots leave from alternating muzzles
+    const saved = { slot: activeSlot, wi: currentWeaponIdx, cw: currentWeapon, dead: isDead, started: gameStarted, last: lastShot, slb: spawnLocalBullet, sound: playWeaponSound,
+      pos: camera.position.clone(), quat: camera.quaternion.clone(), pfd: pendingFanFire, ammo: weaponAmmo[idx] };
+    const origins = [];
+    try {
+      activeSlot = 'secondary'; currentWeaponIdx = idx; currentWeapon = w; isDead = false; gameStarted = true; reloading = false;
+      camera.position.set(0, 1.65, 0); camera.quaternion.set(0, 0, 0, 1); camera.updateMatrixWorld(true);
+      weaponAmmo[idx] = { ammo: w.mag, reserve: w.reserve };
+      for (const wm of weaponModels) wm.visible = false; m.visible = true;
+      spawnLocalBullet = (pos) => { origins.push(pos.clone()); };
+      playWeaponSound = () => {};
+      for (let k = 0; k < 4; k++) { lastShot = 0; tryShoot(); }
+      if (origins.length !== 4) issues.push('four trigger pulls should be four bullets, got ' + origins.length);
+      else {
+        const sides = origins.map(o => Math.sign(o.x));
+        if (!(sides[0] !== sides[1] && sides[0] === sides[2] && sides[1] === sides[3])) issues.push('shots should alternate hands, muzzle x: ' + origins.map(o => o.x.toFixed(2)).join(' '));
+      }
+      if (weaponAmmo[idx].ammo !== w.mag - 4) issues.push('each pull should cost one round, ammo ' + weaponAmmo[idx].ammo);
+      // the kick: hand 0 kicked, decays, slide returns
+      A.kick[0] = 1; updateAkimboHands(0.016);
+      if (!(A.guns[0]._slide.position.z > 0.01)) issues.push('the slide should run back on a shot');
+      for (let k = 0; k < 40; k++) updateAkimboHands(0.05);
+      if (Math.abs(A.guns[0]._slide.position.z) > 1e-3) issues.push('the slide should return');
+      // Crossfire: the whole magazine in a wild cone
+      weaponAmmo[idx] = { ammo: w.mag, reserve: w.reserve };
+      origins.length = 0;
+      const dirs = [];
+      spawnLocalBullet = (pos, dir) => { origins.push(pos.clone()); dirs.push(dir.clone()); };
+      pendingFanFire = { count: w.ability.count, timer: 0, delay: w.ability.delay, w, spread: w.ability.fanSpread, total: w.ability.count };
+      for (let f = 0; f < 200 && pendingFanFire; f++) updatePendingFanFire(0.05);
+      if (dirs.length !== w.mag) issues.push('Crossfire should fire the whole magazine (' + w.mag + '), fired ' + dirs.length);
+      if (weaponAmmo[idx].ammo !== 0) issues.push('Crossfire should empty the magazine, ' + weaponAmmo[idx].ammo + ' left');
+      const xs = dirs.map(d => d.x), ys = dirs.map(d => d.y);
+      const spreadX = Math.max(...xs) - Math.min(...xs), spreadY = Math.max(...ys) - Math.min(...ys);
+      if (!(spreadX > 0.15 && spreadY > 0.15)) issues.push('Crossfire should be a wild spray, spread ' + spreadX.toFixed(2) + ' x ' + spreadY.toFixed(2));
+    } finally {
+      activeSlot = saved.slot; currentWeaponIdx = saved.wi; currentWeapon = saved.cw; isDead = saved.dead; gameStarted = saved.started; lastShot = saved.last;
+      spawnLocalBullet = saved.slb; playWeaponSound = saved.sound; pendingFanFire = saved.pfd; weaponAmmo[idx] = saved.ammo;
+      camera.position.copy(saved.pos); camera.quaternion.copy(saved.quat); m.visible = false;
+    }
+    return issues;
+  })()`);
+  const srv = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  if (!/gunslinger: 28, akimbo: 24,/.test(srv)) issues.push('server WEAPON_DAMAGE does not have Akimbo at 24');
+  if (!/gunslinger: 220, akimbo: 280,/.test(srv)) issues.push('server WEAPON_COSTS does not have Akimbo at 280');
+  if (!/akimbo: FALLOFF_AKIMBO/.test(srv) || !/const FALLOFF_AKIMBO = \{ near: 10, far: 32, min: 0\.30 \}/.test(srv)) issues.push('server falloff does not mirror Akimbo');
+  console.log('akimbo checks: a secondary, two guns with a hand each, alternating muzzles, kick, Crossfire');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 if (ok && process.argv.includes('--chain-maul')) {
   const issues = vm.runInThisContext(`(() => {
     const issues = [], v = (x,y,z) => new THREE.Vector3(x,y,z);
