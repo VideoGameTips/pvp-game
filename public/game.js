@@ -43756,31 +43756,48 @@ function updateActionWind(dt) {
   }
   canvas.style.display = 'block';
   const ctx = canvas.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,w,h);
-  ctx.strokeStyle = '#ffffff'; ctx.lineCap = 'round';
+  ctx.fillStyle = '#ffffff';
   const points = actionWind.points;
   for (let i=1;i<points.length;i++) {
     const a=points[i-1], b=points[i]; if (b.start) continue;
     const life=1-(now-b.t)/260, x=(a.x+1)*w/2, y=(1-a.y)*h/2, bx=(b.x+1)*w/2, by=(1-b.y)*h/2;
-    if (Math.hypot(bx-x,by-y)>Math.max(w,h)*0.65) continue;
-    for (const [width,alpha] of [[58,0.12],[25,0.35],[7,0.92]]) {
-      ctx.globalAlpha=alpha*life*(reduced?0.5:1); ctx.lineWidth=width*life*Math.min(1,h/800)+0.5;
-      ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(bx,by); ctx.stroke();
+    const distance=Math.hypot(bx-x,by-y);
+    if (distance<0.5 || distance>Math.max(w,h)*0.65) continue;
+    const nx=-(by-y)/distance, ny=(bx-x)/distance;
+    const tail=a.start?0:Math.max(0,1-(now-a.t)/260);
+    for (const [width,alpha] of [[82,0.12],[42,0.40],[18,0.94]]) {
+      const scale=width*0.5*Math.min(1,h/800), wa=scale*tail*tail, wb=scale*life*life;
+      ctx.globalAlpha=alpha*life*(reduced?0.5:1);
+      // A broad blade ribbon with a pointed tail, not a round-ended light tube.
+      ctx.beginPath(); ctx.moveTo(x+nx*wa,y+ny*wa); ctx.lineTo(bx+nx*wb,by+ny*wb);
+      ctx.lineTo(bx-nx*wb,by-ny*wb); ctx.lineTo(x-nx*wa,y-ny*wa); ctx.closePath(); ctx.fill();
     }
   }
   const power=actionWind.speed;
   if (power>0.01) {
-    ctx.lineWidth=2.8; ctx.globalAlpha=power*(reduced?0.18:0.48);
+    ctx.globalAlpha=power*(reduced?0.18:0.48);
     // A peripheral, broken white ring: the crosshair and target area stay clear.
     for (let i=0;i<4;i++) {
       const a=i*Math.PI/2+0.22;
-      ctx.beginPath(); ctx.ellipse(w/2,h/2,w*0.47,h*0.46,0,a,a+0.85); ctx.stroke();
+      ctx.beginPath();
+      for (const side of [1,-1]) for (let j=0;j<=16;j++) {
+        const t=side===1?j/16:1-j/16, angle=a+t*0.85;
+        const thickness=Math.sin(t*Math.PI)*7*Math.min(1,h/800)*power*side;
+        const x=w/2+Math.cos(angle)*(w*0.47+thickness), y=h/2+Math.sin(angle)*(h*0.46+thickness);
+        if(side===1&&j===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
+      }
+      ctx.closePath();ctx.fill();
     }
     if (!reduced) for (let i=0;i<32;i++) {
       const a=i/32*Math.PI*2, pulse=(now*0.001*(1.8+power)+i*0.618)%1;
       const r=0.84+pulse*0.40, length=0.06+power*0.14;
-      ctx.globalAlpha=power*(1-pulse)*0.72; ctx.lineWidth=1.5+(i%3)*0.9;
-      ctx.beginPath();ctx.moveTo(w/2+Math.cos(a)*w*0.48*r,h/2+Math.sin(a)*h*0.48*r);
-      ctx.lineTo(w/2+Math.cos(a)*w*0.48*(r+length),h/2+Math.sin(a)*h*0.48*(r+length));ctx.stroke();
+      ctx.globalAlpha=power*(1-pulse)*0.80;
+      const tx=w/2+Math.cos(a)*w*0.48*r, ty=h/2+Math.sin(a)*h*0.48*r;
+      const bx=w/2+Math.cos(a)*w*0.48*(r+length), by=h/2+Math.sin(a)*h*0.48*(r+length);
+      const size=(6+(i%3)*3)*Math.min(1,h/800)*(0.5+power*0.5);
+      const dx=bx-tx,dy=by-ty,distance=Math.hypot(dx,dy),nx=-dy/distance,ny=dx/distance;
+      ctx.beginPath();ctx.moveTo(tx,ty);ctx.lineTo(bx+nx*size,by+ny*size);
+      ctx.lineTo(bx-nx*size,by-ny*size);ctx.closePath();ctx.fill();
     }
   }
   ctx.globalAlpha=1;
