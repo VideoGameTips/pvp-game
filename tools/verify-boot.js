@@ -1129,6 +1129,22 @@ if (ok && process.argv.includes('--akimbo')) {
     if (!(m._anchors && m._anchors.magR && m._anchors.magL && m._anchors.magR.x > 0 && m._anchors.magL.x < 0)) issues.push('a magazine should come out of each gun');
     const style = Object.keys(MUZZLE_STYLES).find(k => MUZZLE_STYLES[k] === muzzleStyleFor(w));
     if (style !== 'pistol') issues.push('it should have the pistol muzzle blast, has ' + style);
+    // what everyone else sees: a body can hold it (both guns are in its prop), at a believable size, with no first-person hand
+    try {
+      const prop = makeRealWorldGun('akimbo');
+      if (!prop) issues.push('no third-person prop for the pair');
+      else {
+        const box = new THREE.Box3(); prop.updateMatrixWorld(true); box.setFromObject(prop);
+        const len = Math.max(box.max.x - box.min.x, box.max.y - box.min.y, box.max.z - box.min.z);
+        if (!(len > 0.08 && len < 2.2)) issues.push('the pair is ' + len.toFixed(2) + ' m across as a third-person prop');
+        let hand = false; prop.traverse(o => { for (let p = o; p; p = p.parent) if (p.userData && p.userData.vmHand) hand = true; });
+        if (hand) issues.push('a first-person hand came along into the third-person prop');
+      }
+      const body = makePlayerMesh('Pair', false, 'enemy', 'default', {});
+      body._ownerId = 'pair_owner'; players.pair_owner = { id: 'pair_owner', wrap: null };
+      try { armRemoteMesh(body, 'akimbo'); if (!body._gun) issues.push('a body could not take the pair in hand'); }
+      finally { delete players.pair_owner; try { disposeBody(body); } catch (e) {} }
+    } catch (e) { issues.push('third-person threw: ' + e.message); }
 
     // firing: shots leave from alternating muzzles
     const saved = { slot: activeSlot, wi: currentWeaponIdx, cw: currentWeapon, dead: isDead, started: gameStarted, last: lastShot, slb: spawnLocalBullet, sound: playWeaponSound,
