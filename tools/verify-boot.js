@@ -1909,6 +1909,33 @@ if (ok && process.argv.includes('--range')) {
   if(issues.length){ok=false;console.log(issues.join('\n'));}
 }
 
+if (ok && process.argv.includes('--admin-chat')) {
+  const issues=vm.runInThisContext(`(() => {
+    const issues=[],seen=new Set(),queue=['hello'];
+    for(let i=0;i<queue.length;i++){
+      const id=queue[i];if(seen.has(id))continue;seen.add(id);
+      const node=ADMIN_CONVERSATION[id];
+      if(!node){issues.push('Missing dialogue: '+id);continue;}
+      if(!node.line||!node.replies.length||node.replies.length>3)issues.push('Empty or overloaded dialogue: '+id);
+      if(/hellfire/i.test(JSON.stringify(node)))issues.push('Secret weapon name revealed: '+id);
+      for(const [label,next] of node.replies){if(!label)issues.push('Empty player reply: '+id);queue.push(next);}
+    }
+    if(seen.size!==Object.keys(ADMIN_CONVERSATION).length)issues.push('Unreachable dialogue');
+    for(const id of Object.keys(ADMIN_CONVERSATION)){
+      const back=[id],visited=new Set();
+      for(let i=0;i<back.length;i++){
+        const next=back[i];if(visited.has(next))continue;visited.add(next);
+        for(const reply of ADMIN_CONVERSATION[next]?.replies||[])back.push(reply[1]);
+      }
+      if(!visited.has('hello'))issues.push('Conversation trap: '+id);
+    }
+    if(!seen.has('hint')||!seen.has('name')||!seen.has('test'))issues.push('Missing prototype hint branches');
+    return issues;
+  })()`);
+  if(issues.length){ok=false;console.log(issues.join('\n'));}
+  else console.log('admin chat: reachable branches, real replies, exits and unreleased weapon name kept secret');
+}
+
 if (ok && process.argv.includes('--lobby')) {
   const issues = vm.runInThisContext(`(() => {
     const issues=[],poly=MAP_GROUPS.lobby13.userData.lobbyFootprint,cols=MAP_COLLIDERS.lobby13;
