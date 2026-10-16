@@ -529,7 +529,7 @@ const WEAPONS = [
   },
   {
     id: 'machine_pistol', killReload: 0.5, name: 'Machine Pistol', type: 'Secondary', slot: 'secondary',
-    mag: 24, reserve: 96, damage: 14, fireRate: 70, reloadTime: 1500,
+    mag: 24, reserve: 96, damage: 20, fireRate: 70, reloadTime: 1500,   // 14 -> 20
     auto: true, pellets: 1, spread: 0.013, adsZoom: 50, bulletSpeed: 130, noReload: false,
     ability: { name: 'Akimbo', cd: 8000, desc: 'Dual-wield · 2 shots per trigger for 4 s', type: 'buff', duration: 4000, rateMult: 0.5, akimbo: true },
   },

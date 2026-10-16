@@ -2051,7 +2051,7 @@ event_horizon: 75,
   lava: 12,
   fists: 24,
   // NEW SECONDARIES
-  machine_pistol: 14, sawed_off: 35, dart_gun: 38, laser_pointer: 6,
+  machine_pistol: 20, sawed_off: 35, dart_gun: 38, laser_pointer: 6,
   // NEW MELEES
   crowbar: 32, fire_axe: 85, nunchucks: 22, umbrella: 18, yoyo: 30,
   // NEW ABILITY SHOTS
