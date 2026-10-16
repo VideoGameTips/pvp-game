@@ -1725,8 +1725,9 @@ let slamState = null;        // { vel } — for sledge ground slam animation
 let spearThrown = false;     // true while spear weapon is "in the air"
 let twinKnifeCharges = 10;   // Twin Knife: thrown knives left this life, see melee_multithrow
 let meleeSwingDur  = 400;     // ms for full swing arc
-let meleeDeflectDir = 1;      // alternates the katana guard each time it catches a round
+let meleeDeflectDir = 1;      // resting guard side; impacts add a randomized pose
 let meleeDeflectPulseAt = 0;  // short extra twitch layered on the held deflect pose
+let meleeDeflectKick = null;
 let meleeSwingType = 'slash'; // 'slash' | 'slam' | 'thrust' | 'spin' | 'stab' | 'bash' | 'chop'
 // Swing style per MELEE_ITEMS index — must align with MELEE_ITEMS order!
 const MELEE_SWING_TYPES = [
@@ -35456,6 +35457,11 @@ function makeRealWorldGun(weaponId) {
   const inv = new THREE.Matrix4().copy((src._heldItem || src).matrixWorld).invert();
   const WORLD = new THREE.Matrix4().makeScale(WORLD_GUN_SCALE, WORLD_GUN_SCALE, WORLD_GUN_SCALE);
   const root = new THREE.Group();
+  // The viewmodel origin is usually in the receiver, not in the firing palm.
+  // Use the authored hand's rest anchor, never its animated reload position.
+  const gripPoint = src._hands?.rearHome
+    ? src._hands.rearHome.clone().applyMatrix4(src.matrixWorld).applyMatrix4(inv).multiplyScalar(WORLD_GUN_SCALE)
+    : null;
   let parts = 0;
   // The viewmodel wears MY wrap: applyWeaponSkin swaps each part's material for a painted clone and keeps
   // original -> clone in _skinClones. Copying the dressed material put my wrap on every bot and every other
@@ -35473,12 +35479,14 @@ function makeRealWorldGun(weaponId) {
     const m = new THREE.Mesh(o.geometry, mat);          // the geometry is shared with the viewmodel, so it is never disposed here
     m.matrix.copy(WORLD).multiply(inv).multiply(o.matrixWorld);   // world size is baked into each part, not left on the root:
     m.matrix.decompose(m.position, m.quaternion, m.scale);          // fitWeaponPose measures the parts, and must see the real length
+    if (gripPoint) m.position.sub(gripPoint);
     m.userData.sharedGeo = true;
     m.castShadow = false;
     root.add(m); parts++;
   });
   if (!parts || parts > 140) return null;
   root.userData.realGun = true;
+  root.userData.gripCentered = !!gripPoint;
   return root;
 }
 
@@ -36842,7 +36850,7 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
   // parented here comes out level in the ready stance and then travels with the
   // arm through every other one.
   const gripR = new THREE.Group();
-  gripR.position.set(0, -0.085, 0.015);
+  gripR.position.copy(hands[1].position);
   gripR.rotation.set(GUN_HOLD.gripPitch, GUN_HOLD.gripYaw, 0);
   armWrists[1].add(gripR);
 
@@ -37004,7 +37012,8 @@ function fitWeaponPose(mesh, gun, key) {
   // keyed on rather than its name. A cold Lobby 13 holds seventeen different
   // weapons but only a handful of silhouettes, and the grid scan below is about
   // 4 ms each — keying by id paid for every one of the seventeen.
-  const known = key && _weaponGeoKey.get(key);
+  const cacheKey = key && key + (gun.userData.realGun ? ':real' : ':proxy');
+  const known = cacheKey && _weaponGeoKey.get(cacheKey);
   if (known && _weaponPoseCache.has(known)) { apply(_weaponPoseCache.get(known)); return; }
   // Upright at the origin, on EVERY axis. dropBody pitches a corpse to -PI/2 for
   // 1600 ms, and solving in that frame aims the IK at a point the shoulder
@@ -37035,7 +37044,7 @@ function fitWeaponPose(mesh, gun, key) {
   // that arrives over the wire, and an unknown one resolves to WEAPONS[0]
   // anyway, so remembering it would grow the map on remote input forever.
   if (key && (WEAPONS.some(x => x.id === key) || MELEE_ITEMS.some(x => x.id === key)
-              || SUPPORT_ITEMS.some(x => x.id === key))) _weaponGeoKey.set(key, gk);
+              || SUPPORT_ITEMS.some(x => x.id === key))) _weaponGeoKey.set(cacheKey, gk);
   if (_weaponPoseCache.has(gk)) {
     mesh.position.copy(keep.pos); mesh.rotation.copy(keep.rot);
     apply(_weaponPoseCache.get(gk));
@@ -37381,7 +37390,7 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
   // Three stances, blended: the tactical low walk a bot (or anyone moving) keeps, a CROUCH, and a SLIDE. The crouch
   // used to fold the legs a quarter of the way (hip -0.72 / -0.28, one foot behind the other), which lowered the body
   // by about a hand's width and read as standing with bent knees; the slide was a lunge with one leg trailing. Now:
-  //   crouch -- a staggered low combat stance: front knee loaded, rear knee low, chest over the weapon.
+  //   crouch -- a staggered low combat stance: front knee loaded, rear knee low, torso upright.
   //   slide  -- one leg leads, the other folds close, and the whole upper body reclines from the waist.
   // They are weights, not a switch: the crouch amount follows the eye height (1.10 m = 0.58 = a full crouch) and
   // the slide amount is the eased `slide`, so going in and out of either is one continuous movement.
@@ -37416,16 +37425,14 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
     // difference back so the gun still points where it did (the old slide had the chest at -0.40), and a body with
     // empty hands props itself on them behind its hips.
     const SLIDE_BACK = -0.82, SLIDE_GUN_FIX = -0.40 - SLIDE_BACK;
-    // Crouch-walking leans well forward on top of the crouch's own 0.50 (a creeper's chest is over its knees).
-    const crouchWalkLean = ck * (1 - sl) * blend * 0.24;
     const armLT = rig.holdsGun ? SUP.x - 0.16 * sl + SLIDE_GUN_FIX * sl + aim * 0.55 * (1 - rk)
                                : pose(-1.05, -0.8, 1.05);
     const armRT = rig.holdsGun ? (rig.firePose ? rig.firePose.x : GUN_HOLD.shoulderX) + 0.12 * sl + SLIDE_GUN_FIX * sl + aim * 0.55
                                : pose(-1.38, -0.8, 0.95);
     rig.armL.rotation.x = L(rig.armL.rotation.x, armLT, w);
     rig.armR.rotation.x = L(rig.armR.rotation.x, armRT, w);
-    rig.torso.rotation.x = L(rig.torso.rotation.x, pose(advanceLean, 0.50 + crouchWalkLean, SLIDE_BACK), w);
-    rig.head.rotation.x  = L(rig.head.rotation.x, pose(-0.12, -0.10 - crouchWalkLean * 0.6, 0.02), w);
+    rig.torso.rotation.x = L(rig.torso.rotation.x, pose(advanceLean, 0, -0.82), w);
+    rig.head.rotation.x  = L(rig.head.rotation.x, pose(-0.12, -0.10, 0.02), w);
     const elbLT = rig.holdsGun ? SUP.ex : pose(-0.85, -0.7, -1.05);
     const elbRT = rig.holdsGun ? (rig.firePose ? rig.firePose.ex : GUN_HOLD.elbowX) : pose(-0.9, -0.7, -1.15);
     if (rig.elbowL) rig.elbowL.rotation.x = L(rig.elbowL.rotation.x, elbLT, w);
@@ -37471,7 +37478,7 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
   rig.torso.rotation.x += aim * 0.26 + rk * 0.10;      // a reload bows the chest over the weapon
   // Intent. Nobody in a firefight walks upright: the chest is thrown forward into the move (more the faster it is), the
   // chin comes down behind the shoulders, and a body holding a gun stands braced rather than at ease.
-  rig.torso.rotation.x += (lean * (0.07 + run * 0.20) + (rig.holdsGun ? idle * 0.06 : 0)) * (1-slide);
+  rig.torso.rotation.x += (lean * (0.07 + run * 0.20) + (rig.holdsGun ? idle * 0.06 : 0)) * (1-slide) * (1-ck);
   rig.head.rotation.x  -= lean * (0.03 + run * 0.09) * (1-slide);
   rig.head.rotation.x = Math.max(-1.0, Math.min(1.0, rig.head.rotation.x + aim * 0.62));
   if (rig.pelvis) {
@@ -37643,6 +37650,7 @@ function makeBotWeaponProp(weaponId) {
   const isLMG      = w.type === 'LMG';
   const isMelee    = MELEE_ITEMS.indexOf(w) >= 0;
   const isSupport  = SUPPORT_ITEMS.indexOf(w) >= 0;
+  const gripPoint = new THREE.Vector3();
 
   if (isMelee) {
     // Club/bat: a tapered shaft with a wrapped grip and a heavier head, rather
@@ -37651,6 +37659,7 @@ function makeBotWeaponProp(weaponId) {
     shaft.rotation.x = Math.PI / 2; shaft.position.z = -0.05; g.add(shaft);
     const wrap = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.024, 0.10, 8), polyMat);
     wrap.rotation.x = Math.PI / 2; wrap.position.z = 0.11; g.add(wrap);
+    gripPoint.copy(wrap.position);
     const head = new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.030, 0.09, 8), metalMat);
     head.rotation.x = Math.PI / 2; head.position.z = -0.24; g.add(head);
     const pommel = new THREE.Mesh(new THREE.SphereGeometry(0.024, 7, 6), metalMat);
@@ -37685,6 +37694,7 @@ function makeBotWeaponProp(weaponId) {
     const grip = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.085, 0.038), woodMat);
     grip.rotation.x = 0.25;
     grip.position.set(0, -0.065, bd * 0.1);
+    gripPoint.copy(grip.position);
     g.add(grip);
 
     // LMG drum mag
@@ -37733,7 +37743,9 @@ function makeBotWeaponProp(weaponId) {
   // The props were authored for a rifle about 0.45 m long, which is a toy beside a 0.56 m wide body. The size is
   // baked into the PARTS rather than put on the group, so everything that measures the prop -- fitWeaponPose's
   // length and muzzle, the flash -- sees the real size and solves the hands for it.
-  for (const c of g.children) { c.position.multiplyScalar(WORLD_GUN_SCALE); c.scale.multiplyScalar(WORLD_GUN_SCALE); }
+  gripPoint.multiplyScalar(WORLD_GUN_SCALE);
+  for (const c of g.children) { c.position.multiplyScalar(WORLD_GUN_SCALE).sub(gripPoint); c.scale.multiplyScalar(WORLD_GUN_SCALE); }
+  g.userData.gripCentered = true;
   metalizeModel(g);
   return g;
 }
@@ -44250,6 +44262,7 @@ function activateMeleeAbility() {
   else if (ab.type === 'melee_deflect') {
     meleeAbilityBuff = { type: 'deflect', endTime: now + (ab.duration || 2000) };
     meleeDeflectDir = 1;
+    meleeDeflectKick = null;
     meleeDeflectPulseAt = performance.now() - 220;
     meleeSwingT = 1;
     if (activeSlot === 'melee' && meleeModels[selectedMeleeIdx]) applyMeleeDeflectPose(meleeModels[selectedMeleeIdx]);
@@ -56308,9 +56321,20 @@ function _bulletWorldPosById(bulletId) {
 }
 
 function triggerDeflectImpact(pos, opts = {}) {
-  const at = (pos && Number.isFinite(pos.x)) ? pos.clone() : _fallbackDeflectWorldPos();
-  meleeDeflectDir *= -1;
-  meleeDeflectPulseAt = performance.now();
+  const at = (pos && [pos.x,pos.y,pos.z].every(Number.isFinite)) ? pos.clone() : _fallbackDeflectWorldPos();
+  if (!opts.shield) {
+    const model=activeSlot==='melee'?meleeModels[selectedMeleeIdx]:null;
+    const previous=meleeDeflectKick?.target[5] ?? Math.PI/4;
+    let roll=(Math.random()<0.5?-1:1)*(0.50+Math.random()*0.95);
+    if(Math.abs(roll-previous)<0.4)roll=-roll;
+    meleeDeflectKick={
+      from:model?[model.position.x,model.position.y,model.position.z,model.rotation.x,model.rotation.y,model.rotation.z]
+        :[0.045,-0.075,-0.315,-0.32,0.20,Math.PI/4],
+      target:[(Math.random()-0.5)*0.38,-0.13+Math.random()*0.18,-0.34-Math.random()*0.12,
+        -0.65+Math.random()*0.80,(Math.random()-0.5)*1.0,roll]
+    };
+    meleeDeflectPulseAt = performance.now();
+  }
   playSoundEvent(opts.shield ? 'parry_deflect' : 'deflect_ping', { volume: opts.shield ? 0.85 : 1.05, minGap: 18 });
   spawnHitParticle(at);
 
@@ -56319,37 +56343,54 @@ function triggerDeflectImpact(pos, opts = {}) {
     transparent: true,
     opacity: 0.92,
     depthWrite: false,
+    depthTest: false,
+    blending: THREE.AdditiveBlending,
     side: THREE.DoubleSide
   });
-  const ring = new THREE.Mesh(new THREE.RingGeometry(0.045, 0.18, 20), ringMat);
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.135, 0.16, 24), ringMat);
   ring.position.copy(at);
   ring.quaternion.copy(camera.quaternion);
+  ring.renderOrder=1000;
   scene.add(ring);
 
   const sparkMat = new THREE.MeshBasicMaterial({
     color: opts.shield ? 0x99ddff : 0xffffff,
     transparent: true,
     opacity: 0.95,
-    depthWrite: false
+    depthWrite: false,
+    depthTest: false,
+    blending: THREE.AdditiveBlending
   });
-  const spark = new THREE.Mesh(new THREE.SphereGeometry(0.075, 10, 8), sparkMat);
+  const spark = new THREE.Mesh(new THREE.SphereGeometry(0.032, 10, 8), sparkMat);
   spark.position.copy(at);
+  spark.renderOrder=1001;
   scene.add(spark);
 
-  let t = 0;
+  const shape=new THREE.Shape();
+  for(let i=0;i<16;i++){
+    const angle=i*Math.PI/8,r=i%2?0.035:(i%4===0?0.27:0.15);
+    if(i===0)shape.moveTo(Math.cos(angle)*r,Math.sin(angle)*r);
+    else shape.lineTo(Math.cos(angle)*r,Math.sin(angle)*r);
+  }
+  shape.closePath();
+  const flare=new THREE.Mesh(new THREE.ShapeGeometry(shape),sparkMat.clone());
+  flare.position.copy(at);flare.quaternion.copy(camera.quaternion);flare.renderOrder=1002;scene.add(flare);
+  const born=performance.now(),epoch=matchEpoch;
   const tick = () => {
-    t += 0.08;
+    const t=Math.min(1,(performance.now()-born)/180);
     const fade = Math.max(0, 1 - t);
     ring.scale.setScalar(1 + t * 2.6);
     ring.rotation.z += 0.34;
     ringMat.opacity = 0.92 * fade;
     spark.scale.setScalar(1 + t * 3.2);
     sparkMat.opacity = 0.95 * fade;
-    if (t < 1) requestAnimationFrame(tick);
+    flare.scale.setScalar(1+t*1.4);flare.material.opacity=fade*fade;
+    if (t < 1 && epoch===matchEpoch) requestAnimationFrame(tick);
     else {
-      scene.remove(ring); scene.remove(spark);
+      scene.remove(ring); scene.remove(spark);scene.remove(flare);
       ring.geometry.dispose(); ringMat.dispose();
       spark.geometry.dispose(); sparkMat.dispose();
+      flare.geometry.dispose();flare.material.dispose();
     }
   };
   requestAnimationFrame(tick);
@@ -57761,7 +57802,8 @@ function armRemoteMesh(mesh, weaponId) {
   let gun = null;
   try { if (_realGunsInUse() < REAL_GUN_BUDGET) gun = makeRealWorldGun(weaponId); } catch (e) { gun = null; }
   if (!gun) gun = makeBotWeaponProp(weaponId);
-  gun.position.set(0, -0.02, 0.055);
+  if (gun.userData.gripCentered) gun.position.set(0, 0, 0);
+  else gun.position.set(0, -0.02, 0.055);
   gun.rotation.y = Math.PI;
   ((mesh._rig && mesh._rig.gripR) || mesh).add(gun);
   mesh._gun = gun; mesh._gunId = weaponId;
@@ -58534,6 +58576,15 @@ function applyMeleeDeflectPose(model) {
   const age = Math.max(0, performance.now() - (meleeDeflectPulseAt || 0));
   const pulse = age < 180 ? (1 - age / 180) : 0;
   const side = meleeDeflectDir || 1;
+  if(meleeDeflectKick && age<260){
+    const smooth=t=>{t=Math.max(0,Math.min(1,t));return t*t*(3-2*t);};
+    const recovery=age>105,s=recovery?smooth((age-105)/155):smooth(age/45);
+    const a=recovery?meleeDeflectKick.target:meleeDeflectKick.from;
+    const b=recovery?[0.045*side,-0.075,-0.315,-0.32,0.20*side,side*Math.PI/4]:meleeDeflectKick.target;
+    const pose=a.map((v,i)=>v+(b[i]-v)*s);
+    model.position.set(...pose.slice(0,3));model.rotation.set(...pose.slice(3));return;
+  }
+  meleeDeflectKick=null;
   model.position.set(0.045 * side, -0.075 - pulse * 0.018, -0.315 - pulse * 0.055);
   model.rotation.set(
     -0.32 - pulse * 0.18,

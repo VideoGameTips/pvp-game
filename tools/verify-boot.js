@@ -948,12 +948,12 @@ if (ok && process.argv.includes('--perspectives')) {
 if (ok && process.argv.includes('--stances')) {
   const issues=vm.runInThisContext(`(() => {
     const issues=[];
-    for(const bot of [false,true])for(const armed of [false,true])for(const stance of ['crouch','slide']) {
+    for(const bot of [false,true])for(const armed of [false,true])for(const stance of ['crouch','crouch-walk','slide']) {
       const mesh=makePlayerMesh('Stance test',bot,'ally','default'),r=mesh._rig;
       r.holdsGun=armed;r.gaitOffset=0;r.gaitAmp=1;r.gaitAsym=1;
       try {
         for(let i=0;i<100;i++) {
-          if(stance==='slide')mesh.position.z+=.12;
+          if(stance==='slide'||stance==='crouch-walk')mesh.position.z+=.12;
           animateCharacterMesh(mesh,1/60,.58,stance==='slide'?1:0,0,0);
         }
         mesh.updateMatrixWorld(true);
@@ -962,6 +962,7 @@ if (ok && process.argv.includes('--stances')) {
         if(Math.abs(head.distanceTo(neck)-(BODY.headY-BODY.neckY))>.002)issues.push('head detaches from neck');
         const a=r.footL.getWorldPosition(new THREE.Vector3()),b=r.footR.getWorldPosition(new THREE.Vector3());
         if(stance==='crouch'&&Math.abs(a.z-b.z)<.2)issues.push('crouch remains a symmetrical squat');
+        if(stance!=='slide'&&Math.abs(r.torso.rotation.x)>.01)issues.push('crouched torso leans instead of staying upright');
         if(stance==='slide'&&(r.torso.rotation.x>-.7||head.z-mesh.position.z>-.4))issues.push('slide lacks backward body lean');
         for(const foot of [r.footL,r.footR])if(new THREE.Box3().setFromObject(foot).min.y<-.015)issues.push('boot clips floor');
         mesh.rotation.y=Math.PI/2;mesh.updateMatrixWorld(true);
@@ -1011,8 +1012,8 @@ if (ok && process.argv.includes('--steady-body')) {
 }
 
 if (ok && process.argv.includes('--posture')) {
-  // What --stances (the staggered crouch, the reclining slide, the hitboxes) does not say: crouch-WALKING leans the chest
-  // further forward than a crouch standing still, a slide lays the chest back, and standing up undoes both.
+  // What --stances (the staggered crouch, the reclining slide, the hitboxes) does not say: a crouch-walk keeps stepping, a
+  // slide lays the chest back, and standing up undoes both.
   const issues = vm.runInThisContext(`(() => {
     const issues = [];
     for (const armed of [false, true]) {
@@ -1029,8 +1030,7 @@ if (ok && process.argv.includes('--posture')) {
         settle(0.58, 0, 0, false);
         const still = r.torso.rotation.x, legGap = Math.abs(r.legL.rotation.x - r.legR.rotation.x);
         if (!(legGap > 0.6)) issues.push(tag + 'a crouch should have the legs well apart front to back, got ' + legGap.toFixed(2));
-        settle(0.58, 0, 0, true);
-        if (!(r.torso.rotation.x - still > 0.15)) issues.push(tag + 'crouch-walking leans ' + (r.torso.rotation.x - still).toFixed(2) + ' rad more than a still crouch, want 0.15+');
+        settle(0.58, 0, 0, true);                                         // (the chest stays upright when crouched: --stances)
         let lo = 9, hi = -9;
         for (let f = 0; f < 90; f++) { mesh.position.z += 0.06; animateCharacterMesh(mesh, 1 / 60, 0.58, 0, 0, 0); lo = Math.min(lo, r.legL.rotation.x); hi = Math.max(hi, r.legL.rotation.x); }
         if (hi - lo < 0.15) issues.push(tag + 'a crouch-walk has stopped stepping (' + (hi - lo).toFixed(2) + ' rad of swing)');
@@ -1042,7 +1042,7 @@ if (ok && process.argv.includes('--posture')) {
     }
     return [...new Set(issues)];
   })()`);
-  console.log('posture checks: crouch-walk leans, slide lays the chest back, standing up recovers');
+  console.log('posture checks: crouch-walk keeps stepping, slide lays the chest back, standing up recovers');
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
@@ -1990,6 +1990,35 @@ if (ok && process.argv.includes('--range')) {
   })()`);
   console.log('range checks: dedicated layout, bounds, five booths, clear firing lines and visible bullseyes');
   if(issues.length){ok=false;console.log(issues.join('\n'));}
+}
+
+if (ok && process.argv.includes('--remote-grips')) {
+  const issues=vm.runInThisContext(`(() => {
+    const issues=[],palm=new THREE.Vector3(),grip=new THREE.Vector3();
+    const items=WEAPONS.filter(w=>!w.archived);
+    for(const item of items){
+      const body=makePlayerMesh('Grip check',true);
+      armRemoteMesh(body,item.id);
+      if(!body._gun.userData.gripCentered){disposeBody(body);continue;}
+      for(const [crouch,slide,jump,aim] of [[0,0,0,0],[.58,0,0,0],[.58,1,0,0],[0,0,1,0],[0,0,0,.75]]){
+        body.position.set(12,3,-8);body.rotation.y=1.3;
+        for(let i=0;i<20;i++){
+          body.position.x+=.08;animateCharacterMesh(body,1/60,crouch,slide,jump,aim);
+          body.updateMatrixWorld(true);body._rig.handR.getWorldPosition(palm);body._gun.getWorldPosition(grip);
+          if(palm.distanceTo(grip)>1e-6){issues.push(item.id+': grip left palm during animation');break;}
+        }
+      }
+      const before=body._gun;armRemoteMesh(body,item.id);
+      if(body._gun!==before||body._gun.parent!==body._rig.gripR)issues.push(item.id+': duplicate or detached attachment');
+      disposeBody(body);
+    }
+    const fallback=makeBotWeaponProp('ak20');
+    if(!fallback.userData.gripCentered)issues.push('fallback rifle still uses receiver origin');
+    disposeBody(fallback);
+    return issues;
+  })()`);
+  if(issues.length){ok=false;console.log(issues.join('\n'));}
+  else console.log('remote grips: active guns stay in palm through walking, crouching, sliding, jumping, aiming and duplicate equip');
 }
 
 if (ok && process.argv.includes('--admin-chat')) {
