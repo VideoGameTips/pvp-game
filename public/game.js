@@ -37032,7 +37032,7 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
   // Three stances, blended: the tactical low walk a bot (or anyone moving) keeps, a CROUCH, and a SLIDE. The crouch
   // used to fold the legs a quarter of the way (hip -0.72 / -0.28, one foot behind the other), which lowered the body
   // by about a hand's width and read as standing with bent knees; the slide was a lunge with one leg trailing. Now:
-  //   crouch -- a staggered low combat stance: front knee loaded, rear knee low, chest over the weapon.
+  //   crouch -- a staggered low combat stance: front knee loaded, rear knee low, torso upright.
   //   slide  -- one leg leads, the other folds close, and the whole upper body reclines from the waist.
   // They are weights, not a switch: the crouch amount follows the eye height (1.10 m = 0.58 = a full crouch) and
   // the slide amount is the eased `slide`, so going in and out of either is one continuous movement.
@@ -37069,7 +37069,7 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
                                : pose(-1.38, -0.8, -1.55);
     rig.armL.rotation.x = L(rig.armL.rotation.x, armLT, w);
     rig.armR.rotation.x = L(rig.armR.rotation.x, armRT, w);
-    rig.torso.rotation.x = L(rig.torso.rotation.x, pose(advanceLean, 0.50, -0.82), w);
+    rig.torso.rotation.x = L(rig.torso.rotation.x, pose(advanceLean, 0, -0.82), w);
     rig.head.rotation.x  = L(rig.head.rotation.x, pose(-0.12, -0.10, 0.02), w);
     const elbLT = rig.holdsGun ? SUP.ex : pose(-0.85, -0.7, -1.05);
     const elbRT = rig.holdsGun ? (rig.firePose ? rig.firePose.ex : GUN_HOLD.elbowX) : pose(-0.9, -0.7, -1.15);
@@ -37116,7 +37116,7 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
   rig.torso.rotation.x += aim * 0.26 + rk * 0.10;      // a reload bows the chest over the weapon
   // Intent. Nobody in a firefight walks upright: the chest is thrown forward into the move (more the faster it is), the
   // chin comes down behind the shoulders, and a body holding a gun stands braced rather than at ease.
-  rig.torso.rotation.x += (lean * (0.07 + run * 0.20) + (rig.holdsGun ? idle * 0.06 : 0)) * (1-slide);
+  rig.torso.rotation.x += (lean * (0.07 + run * 0.20) + (rig.holdsGun ? idle * 0.06 : 0)) * (1-slide) * (1-ck);
   rig.head.rotation.x  -= lean * (0.03 + run * 0.09) * (1-slide);
   rig.head.rotation.x = Math.max(-1.0, Math.min(1.0, rig.head.rotation.x + aim * 0.62));
   if (rig.pelvis) {

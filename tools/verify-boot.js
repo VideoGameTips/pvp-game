@@ -948,12 +948,12 @@ if (ok && process.argv.includes('--perspectives')) {
 if (ok && process.argv.includes('--stances')) {
   const issues=vm.runInThisContext(`(() => {
     const issues=[];
-    for(const bot of [false,true])for(const armed of [false,true])for(const stance of ['crouch','slide']) {
+    for(const bot of [false,true])for(const armed of [false,true])for(const stance of ['crouch','crouch-walk','slide']) {
       const mesh=makePlayerMesh('Stance test',bot,'ally','default'),r=mesh._rig;
       r.holdsGun=armed;r.gaitOffset=0;r.gaitAmp=1;r.gaitAsym=1;
       try {
         for(let i=0;i<100;i++) {
-          if(stance==='slide')mesh.position.z+=.12;
+          if(stance==='slide'||stance==='crouch-walk')mesh.position.z+=.12;
           animateCharacterMesh(mesh,1/60,.58,stance==='slide'?1:0,0,0);
         }
         mesh.updateMatrixWorld(true);
@@ -962,6 +962,7 @@ if (ok && process.argv.includes('--stances')) {
         if(Math.abs(head.distanceTo(neck)-(BODY.headY-BODY.neckY))>.002)issues.push('head detaches from neck');
         const a=r.footL.getWorldPosition(new THREE.Vector3()),b=r.footR.getWorldPosition(new THREE.Vector3());
         if(stance==='crouch'&&Math.abs(a.z-b.z)<.2)issues.push('crouch remains a symmetrical squat');
+        if(stance!=='slide'&&Math.abs(r.torso.rotation.x)>.01)issues.push('crouched torso leans instead of staying upright');
         if(stance==='slide'&&(r.torso.rotation.x>-.7||head.z-mesh.position.z>-.4))issues.push('slide lacks backward body lean');
         for(const foot of [r.footL,r.footR])if(new THREE.Box3().setFromObject(foot).min.y<-.015)issues.push('boot clips floor');
         mesh.rotation.y=Math.PI/2;mesh.updateMatrixWorld(true);
