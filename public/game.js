@@ -65405,7 +65405,6 @@ function noteLobbyStory(key){
   if(!['met','shop','training','duel','finished'].includes(key))return;
   const state=readLobbyStory();if(state[key])return;
   state[key]=true;try{localStorage.setItem(lobbyStoryKey(),JSON.stringify(state));}catch(e){}
-  if(state.met && key!=='met')showAnnouncement('LOBBY JOURNAL UPDATED','The Admin has something new to say.','#83e4c4',1800);
 }
 function lobbyClear(x,z,r=.65){
   const poly=MAP_GROUPS.lobby13.userData.lobbyFootprint;
@@ -65464,6 +65463,7 @@ function lobbyPanel(title){
   closeOtherDialogs();releasePointer();
   let panel=document.getElementById('lobby-service-panel');
   if(!panel){panel=document.createElement('section');panel.id='lobby-service-panel';document.body.appendChild(panel);}
+  panel.classList.remove('admin-conversation');
   panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');panel.setAttribute('aria-label',title);
   panel.style.display='block';panel.innerHTML='<button class="lobby-panel-close" aria-label="Close">&#215;</button><small>LOBBY 13</small><h2></h2><div class="lobby-panel-content"></div>';
   panel.querySelector('h2').textContent=title;
@@ -65473,24 +65473,67 @@ function lobbyPanel(title){
   return panel.querySelector('.lobby-panel-content');
 }
 function lobbyPanelChoice(host,label,fn){const button=document.createElement('button');button.textContent=label;button.onclick=fn;host.appendChild(button);}
-function openLobbyAdmin(topic='story'){
-  noteLobbyStory('met');const state=readLobbyStory(),host=lobbyPanel('The Admin');
-  const chapters=[
-    ['Opening Shift','This place used to be a loading screen. I kept the lights on until people came back. Visit the supply shop; the quartermaster left something strange in the delivery log.','Visit the supply shop.',state.shop],
-    ['A Signal Underfoot','Every time somebody lands on the training ramp, an old transmitter wakes up. Get onto the upper landing. Let us see if it still remembers us.','Reach the top of the movement ramp.',state.training],
-    ['The Missing Squad','The signal is a roll call. An old squad never signed out. Start a fight from any team pad; maybe the arena will answer.','Start a match from a team pad.',state.duel],
-    ['Keep the Lights On','There it is. Not a distress call: a replay of their last victory. Finish a match. Win or lose, somebody has to bring the story home.','Finish a combat match.',state.finished],
-    ['Next Shift','The transmission is quiet now. Their names are back on the roster. We keep playing, and nobody gets erased by an empty server.','Story complete. The next chapter is yours.',true],
-  ];
-  const chapter=chapters.find(c=>!c[3])||chapters[4];
-  const lines={origin:'I built the first arena out of spare walls. Everyone complained about the walls. They were right. We kept rebuilding.',
-    visitors:'Those wandering regulars are NPC sparring partners, not people secretly connected to your server. Real players can still join the hub. The regulars just make sure you never have to warm up alone.',
-    rules:'No damage in the lobby. The blue and red pads organize teams. The supply shop sells the same gear as before; I do not conjure free currency just because I wear a crown.'};
-  const badge=document.createElement('small');badge.textContent='ADMINISTRATOR / NPC';host.appendChild(badge);
-  const heading=document.createElement('h3');heading.textContent=topic==='story'?chapter[0]:'Between Matches';host.appendChild(heading);
-  const text=document.createElement('p');text.textContent=lines[topic]||chapter[1];host.appendChild(text);
-  const objective=document.createElement('p');objective.className='lobby-objective';objective.textContent=chapter[2];host.appendChild(objective);
-  for(const [label,key] of [['Continue the story','story'],['Who built this place?','origin'],['Who are the regulars?','visitors'],['How does this hub work?','rules']])lobbyPanelChoice(host,label,()=>openLobbyAdmin(key));
+const ADMIN_CONVERSATION = {
+  hello:{line:'Hey. Taking a break, or here to ask me something?',replies:[
+    ['Anything interesting going on?','shift'],['Who built this place?','origin'],['How does this lobby work?','rules']]},
+  shift:{line:'Mostly repairs. Someone keeps turning the workshop ventilation up at night. Apparently opening a window is no longer enough.',replies:[
+    ['What are they working on?','workshop'],['Why only at night?','night'],['Sounds like your problem.','joke']]},
+  night:{line:'Fewer people around to ask why the test-room lights are glowing orange. You, for example.',replies:[
+    ['Orange? What are they testing?','workshop'],['Fair. What else is new?','hello']]},
+  workshop:{line:'Something that is not ready for the weapon rack. The last delivery was all heat shielding. Not a single spare magazine.',replies:[
+    ['So it is a weapon?','prototype'],['Heat shielding?','heat'],['I will leave it alone.','hello']]},
+  heat:{line:'The technician left a wrench beside it. Came back wearing oven gloves. That is the part of the report I am allowed to repeat.',replies:[
+    ['What happened during the test?','test'],['What kind of weapon needs that?','prototype'],['You are definitely hiding something.','guarded']]},
+  prototype:{line:'An unfinished one. Before you ask: no, I cannot give you one. There is a difference between a prototype and something I would let you carry into a match.',replies:[
+    ['What does it do?','test'],['Does it have a name?','name'],['Who is building it?','builder']]},
+  test:{line:'I watched through the safety glass. There was a low roar, then the camera went white. The target was still standing afterward. Its shadow was on the wrong wall.',replies:[
+    ['That sounds dangerously hot.','scorch'],['Can I see the test room?','sealed'],['Tell me the name, at least.','name']]},
+  scorch:{line:'They repainted the scorch marks. Twice. You can still see them when the room gets warm. Anyway, that is quite enough shop talk.',replies:[
+    ['One last hint?','hint'],['All right. Something else, then.','hello']]},
+  sealed:{line:'Not yet. The door stays shut until the engineers stop arguing about how far back everyone should stand.',replies:[
+    ['One last hint?','hint'],['Does it have a name?','name'],['I will keep my distance.','hello']]},
+  name:{line:'Nice try. The name is the one thing they made me promise not to say. Even the crate label is facing the wall.',replies:[
+    ['Give me a hint instead.','hint'],['What happened during testing?','test'],['Fine, keep your secrets.','hello']]},
+  hint:{line:'Let us just say... if that workshop ever gets cold, it will not stay cold for long. That is all you are getting out of me.',replies:[
+    ['I will be watching that weapon rack.','wait'],['All right. How is the lobby doing?','hello']]},
+  wait:{line:'Watch all you like. Nothing is released until it is ready. And if anyone asks, we were discussing the ventilation.',replies:[
+    ['Right. The ventilation.','hello'],['Who are the regulars around here?','visitors']]},
+  guarded:{line:'I am an administrator. Hiding unfinished things behind locked doors is practically half the job.',replies:[
+    ['Just one hint, then.','hint'],['Fair enough.','hello']]},
+  builder:{line:'People who now put their coffee on the other side of the room. Sensible people, mostly.',replies:[
+    ['How bad was the test?','test'],['I will let them work.','hello']]},
+  joke:{line:'That is what I said. Then they sent me the electricity bill.',replies:[
+    ['Okay, now I have to know what they are building.','workshop'],['Let me ask about something else.','hello']]},
+  origin:{line:'I built the first arena out of spare walls. Everyone complained about the walls. They were right. We kept rebuilding.',replies:[
+    ['Still building anything new?','shift'],['Who are the regulars?','visitors'],['Something else.','hello']]},
+  visitors:{line:'The wandering regulars are NPC sparring partners. Real players can join too. The regulars just make sure you never have to warm up alone.',replies:[
+    ['How do I start a match?','rules'],['Heard any interesting rumors?','shift'],['Something else.','hello']]},
+  rules:{line:'No fighting in here. Blue and red pads organize teams. The shop handles supplies, the studio handles your look, and the range is open if you want to warm up.',replies:[
+    ['Anything you are not telling me?','shift'],['Who built all this?','origin'],['Something else.','hello']]},
+};
+function openLobbyAdmin(){
+  noteLobbyStory('met');
+  const host=lobbyPanel('The Admin'),panel=document.getElementById('lobby-service-panel');
+  panel.classList.add('admin-conversation');
+  const log=document.createElement('div');log.className='admin-chat-log';log.tabIndex=0;
+  log.setAttribute('role','log');log.setAttribute('aria-label','Conversation with The Admin');log.setAttribute('aria-live','polite');
+  const replies=document.createElement('div');replies.className='admin-chat-replies';replies.setAttribute('role','group');replies.setAttribute('aria-label','Your replies');
+  host.appendChild(log);host.appendChild(replies);
+  const say=(speaker,line)=>{
+    const entry=document.createElement('div');entry.className=speaker==='You'?'admin-chat-player':'admin-chat-npc';
+    const label=document.createElement('small');label.textContent=speaker;
+    const text=document.createElement('p');text.textContent=line;entry.appendChild(label);entry.appendChild(text);log.appendChild(entry);
+    while(log.children.length>24)log.firstElementChild.remove();
+  };
+  const visit=(id,reply)=>{
+    const node=ADMIN_CONVERSATION[id];if(!node)return;
+    if(reply)say('You',reply);say('The Admin',node.line);
+    replies.replaceChildren();
+    for(const [label,next] of node.replies)lobbyPanelChoice(replies,label,()=>visit(next,label));
+    log.scrollTop=log.scrollHeight;
+    if(reply)replies.querySelector('button')?.focus({preventScroll:true});
+  };
+  visit('hello');
 }
 function openLobbyArcade(){
   const host=lobbyPanel('Arcade');
