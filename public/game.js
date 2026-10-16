@@ -1700,8 +1700,9 @@ let slamState = null;        // { vel } — for sledge ground slam animation
 let spearThrown = false;     // true while spear weapon is "in the air"
 let twinKnifeCharges = 10;   // Twin Knife: thrown knives left this life, see melee_multithrow
 let meleeSwingDur  = 400;     // ms for full swing arc
-let meleeDeflectDir = 1;      // alternates the katana guard each time it catches a round
+let meleeDeflectDir = 1;      // resting guard side; impacts add a randomized pose
 let meleeDeflectPulseAt = 0;  // short extra twitch layered on the held deflect pose
+let meleeDeflectKick = null;
 let meleeSwingType = 'slash'; // 'slash' | 'slam' | 'thrust' | 'spin' | 'stab' | 'bash' | 'chop'
 // Swing style per MELEE_ITEMS index — must align with MELEE_ITEMS order!
 const MELEE_SWING_TYPES = [
@@ -43854,6 +43855,7 @@ function activateMeleeAbility() {
   else if (ab.type === 'melee_deflect') {
     meleeAbilityBuff = { type: 'deflect', endTime: now + (ab.duration || 2000) };
     meleeDeflectDir = 1;
+    meleeDeflectKick = null;
     meleeDeflectPulseAt = performance.now() - 220;
     meleeSwingT = 1;
     if (activeSlot === 'melee' && meleeModels[selectedMeleeIdx]) applyMeleeDeflectPose(meleeModels[selectedMeleeIdx]);
@@ -55680,9 +55682,20 @@ function _bulletWorldPosById(bulletId) {
 }
 
 function triggerDeflectImpact(pos, opts = {}) {
-  const at = (pos && Number.isFinite(pos.x)) ? pos.clone() : _fallbackDeflectWorldPos();
-  meleeDeflectDir *= -1;
-  meleeDeflectPulseAt = performance.now();
+  const at = (pos && [pos.x,pos.y,pos.z].every(Number.isFinite)) ? pos.clone() : _fallbackDeflectWorldPos();
+  if (!opts.shield) {
+    const model=activeSlot==='melee'?meleeModels[selectedMeleeIdx]:null;
+    const previous=meleeDeflectKick?.target[5] ?? Math.PI/4;
+    let roll=(Math.random()<0.5?-1:1)*(0.50+Math.random()*0.95);
+    if(Math.abs(roll-previous)<0.4)roll=-roll;
+    meleeDeflectKick={
+      from:model?[model.position.x,model.position.y,model.position.z,model.rotation.x,model.rotation.y,model.rotation.z]
+        :[0.045,-0.075,-0.315,-0.32,0.20,Math.PI/4],
+      target:[(Math.random()-0.5)*0.38,-0.13+Math.random()*0.18,-0.34-Math.random()*0.12,
+        -0.65+Math.random()*0.80,(Math.random()-0.5)*1.0,roll]
+    };
+    meleeDeflectPulseAt = performance.now();
+  }
   playSoundEvent(opts.shield ? 'parry_deflect' : 'deflect_ping', { volume: opts.shield ? 0.85 : 1.05, minGap: 18 });
   spawnHitParticle(at);
 
@@ -55691,37 +55704,54 @@ function triggerDeflectImpact(pos, opts = {}) {
     transparent: true,
     opacity: 0.92,
     depthWrite: false,
+    depthTest: false,
+    blending: THREE.AdditiveBlending,
     side: THREE.DoubleSide
   });
-  const ring = new THREE.Mesh(new THREE.RingGeometry(0.045, 0.18, 20), ringMat);
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.135, 0.16, 24), ringMat);
   ring.position.copy(at);
   ring.quaternion.copy(camera.quaternion);
+  ring.renderOrder=1000;
   scene.add(ring);
 
   const sparkMat = new THREE.MeshBasicMaterial({
     color: opts.shield ? 0x99ddff : 0xffffff,
     transparent: true,
     opacity: 0.95,
-    depthWrite: false
+    depthWrite: false,
+    depthTest: false,
+    blending: THREE.AdditiveBlending
   });
-  const spark = new THREE.Mesh(new THREE.SphereGeometry(0.075, 10, 8), sparkMat);
+  const spark = new THREE.Mesh(new THREE.SphereGeometry(0.032, 10, 8), sparkMat);
   spark.position.copy(at);
+  spark.renderOrder=1001;
   scene.add(spark);
 
-  let t = 0;
+  const shape=new THREE.Shape();
+  for(let i=0;i<16;i++){
+    const angle=i*Math.PI/8,r=i%2?0.035:(i%4===0?0.27:0.15);
+    if(i===0)shape.moveTo(Math.cos(angle)*r,Math.sin(angle)*r);
+    else shape.lineTo(Math.cos(angle)*r,Math.sin(angle)*r);
+  }
+  shape.closePath();
+  const flare=new THREE.Mesh(new THREE.ShapeGeometry(shape),sparkMat.clone());
+  flare.position.copy(at);flare.quaternion.copy(camera.quaternion);flare.renderOrder=1002;scene.add(flare);
+  const born=performance.now(),epoch=matchEpoch;
   const tick = () => {
-    t += 0.08;
+    const t=Math.min(1,(performance.now()-born)/180);
     const fade = Math.max(0, 1 - t);
     ring.scale.setScalar(1 + t * 2.6);
     ring.rotation.z += 0.34;
     ringMat.opacity = 0.92 * fade;
     spark.scale.setScalar(1 + t * 3.2);
     sparkMat.opacity = 0.95 * fade;
-    if (t < 1) requestAnimationFrame(tick);
+    flare.scale.setScalar(1+t*1.4);flare.material.opacity=fade*fade;
+    if (t < 1 && epoch===matchEpoch) requestAnimationFrame(tick);
     else {
-      scene.remove(ring); scene.remove(spark);
+      scene.remove(ring); scene.remove(spark);scene.remove(flare);
       ring.geometry.dispose(); ringMat.dispose();
       spark.geometry.dispose(); sparkMat.dispose();
+      flare.geometry.dispose();flare.material.dispose();
     }
   };
   requestAnimationFrame(tick);
@@ -57905,6 +57935,15 @@ function applyMeleeDeflectPose(model) {
   const age = Math.max(0, performance.now() - (meleeDeflectPulseAt || 0));
   const pulse = age < 180 ? (1 - age / 180) : 0;
   const side = meleeDeflectDir || 1;
+  if(meleeDeflectKick && age<260){
+    const smooth=t=>{t=Math.max(0,Math.min(1,t));return t*t*(3-2*t);};
+    const recovery=age>105,s=recovery?smooth((age-105)/155):smooth(age/45);
+    const a=recovery?meleeDeflectKick.target:meleeDeflectKick.from;
+    const b=recovery?[0.045*side,-0.075,-0.315,-0.32,0.20*side,side*Math.PI/4]:meleeDeflectKick.target;
+    const pose=a.map((v,i)=>v+(b[i]-v)*s);
+    model.position.set(...pose.slice(0,3));model.rotation.set(...pose.slice(3));return;
+  }
+  meleeDeflectKick=null;
   model.position.set(0.045 * side, -0.075 - pulse * 0.018, -0.315 - pulse * 0.055);
   model.rotation.set(
     -0.32 - pulse * 0.18,
