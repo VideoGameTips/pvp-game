@@ -556,6 +556,7 @@ const ARCHIVED_ITEM_IDS = new Set([
 ]);
 
 const ADMIN_ITEM_IDS = new Set([
+  'hellfire',
   'gau19', 'mk44', 'xm7', 'barrett', 'm134', 'hkmp7', 'p90_spec',
   'desert_eagle', 'm1911', 'glock18', 'five_seven',
   'karambit', 'bayonet', 'tomahawk', 'ots04', 'garrote',
@@ -1913,6 +1914,7 @@ event_horizon: 75,
   hand_cannon: 105, throwing_knives: 45, taser: 10,
   gatecrasher: 5, gatecrasher_slug: 40, gatecrasher_beam: 40,
   cyroclasm: 10, cyroclasm_laser: 10, continuum: 30,
+  hellfire:8, hellfire_burn:7, hellfire_pool:10,
   storm_bloom: 5, storm_bloom_ball: 100, storm_bloom_aura: 10,
   // Ability shots
   sg100_ab: 140, lever_ab: 150, crossbow_ab: 220, crossbow_c1: 140,
@@ -2005,7 +2007,10 @@ const DAMAGE_OVERRIDE_CAPS = {
 };
 WEAPON_DAMAGE.explosive_barrel = 100;
 
+function canUseHellfire(p) { return !!(p && !p.isBot && users[p.account]?.isAdmin); }
+function hellfireWeapon(id) { return typeof id==='string' && id.startsWith('hellfire'); }
 function serverHitDamage(data, shooter, target) {
+  if(hellfireWeapon(data?.weapon)&&!canUseHellfire(shooter))return 0;
   const weapon = data?.weapon;
   const base = WEAPON_DAMAGE[weapon] || 25;
   const tableDmg = Math.round(base * falloffMultiplier(weapon, dist3(shooter, target)));
@@ -2400,6 +2405,7 @@ io.on('connection', (socket) => {
     const p = players[socket.id];
     if (!p) return;
     const id = data && data.weaponId;
+    if(hellfireWeapon(id)&&!canUseHellfire(p))return;
     p.weaponId = id ? String(id).slice(0, 32) : null;
     emitToMatch(p.matchId, 'weaponChanged', { id: socket.id, weaponId: p.weaponId });
   });
@@ -2468,6 +2474,7 @@ io.on('connection', (socket) => {
     if (!p || p.dead) return;
     const now = Date.now();
     const w = data.weapon || 'ak20';
+    if(hellfireWeapon(w)&&!canUseHellfire(p))return;
     const minInterval = 15; // generous server-side rate limit
     if (now - p.lastShot < minInterval) return;
     p.lastShot = now;
@@ -2478,6 +2485,19 @@ io.on('connection', (socket) => {
       dx: data.dx, dy: data.dy, dz: data.dz,
       weapon: w,
     });
+  });
+
+  socket.on('hellfireCore', data => {
+    const p=players[socket.id];
+    if(!canUseHellfire(p)||p.dead||!data)return;
+    const values=['x','y','z','dx','dy','dz'].map(k=>data[k]);
+    if(!values.every(Number.isFinite)||values.some(v=>Math.abs(v)>10000))return;
+    const length=Math.hypot(data.dx,data.dy,data.dz);
+    if(length<.5||length>1.5)return;
+    const remaining=p._hellfireCores??3;if(remaining<=0)return;
+    p._hellfireCores=remaining-1;
+    emitToMatch(p.matchId,'hellfireCore',{ownerId:p.id,remaining:p._hellfireCores,
+      x:data.x,y:data.y,z:data.z,dx:data.dx/length,dy:data.dy/length,dz:data.dz/length});
   });
 
   // Destructible identities are deterministic; relay only inside the shooter's match.
@@ -2608,6 +2628,7 @@ io.on('connection', (socket) => {
     if (!data || typeof data !== 'object') return;
     const target  = players[data.targetId];
     const shooter = players[socket.id];
+    if(hellfireWeapon(data.weapon)&&!canUseHellfire(shooter))return;
     if (!target || !shooter || target.dead || target.isBot || shielded(target)) return;
     // airBlast and grapplePull both have this line; the two handlers that
     // actually deal gunfire did not. blocksFriendlyFire is not a substitute —
@@ -2639,6 +2660,7 @@ io.on('connection', (socket) => {
       ? requestedKiller
       : players[socket.id];
     if (!bot || !bot.isBot || bot.dead || !shooter) return;
+    if(hellfireWeapon(data.weapon)&&!canUseHellfire(shooter))return;
     if (shooter.matchId !== bot.matchId) return;
     if (blocksFriendlyFire(shooter, bot)) return;
     let dmg = serverHitDamage(data, shooter, bot);
@@ -2751,7 +2773,7 @@ io.on('connection', (socket) => {
     const z = data.z != null ? Number(data.z) : s.z;
     // The same spawn shield the client shows (grantSpawnShield caps it at 1.5 s), kept here so hits
     // during it cost no HP — the server used to take it anyway and kill players showing full health (#22).
-    Object.assign(p, { x, y: s.y, z, hp: maxHpForMode(p.matchMode), dead: false, shieldUntil: Date.now() + SPAWN_SHIELD_MS });
+    Object.assign(p, { x, y: s.y, z, hp: maxHpForMode(p.matchMode), dead: false, _hellfireCores:3, shieldUntil: Date.now() + SPAWN_SHIELD_MS });
     emitToMatch(p.matchId, 'playerRespawned', { ...p, clientSpawn: data.x != null && data.z != null });
   });
 
@@ -2761,7 +2783,7 @@ io.on('connection', (socket) => {
     const x = data.x != null ? Number(data.x) : p.x;
     const z = data.z != null ? Number(data.z) : p.z;
     // A reset (a new round) is a respawn too, and gets the same protection as readyRespawn.
-    Object.assign(p, { x, y: 1, z, hp: maxHpForMode(p.matchMode), dead: false, shieldUntil: Date.now() + SPAWN_SHIELD_MS });
+    Object.assign(p, { x, y: 1, z, hp: maxHpForMode(p.matchMode), dead: false, _hellfireCores:3, shieldUntil: Date.now() + SPAWN_SHIELD_MS });
     emitToMatch(p.matchId, 'playerRespawned', { ...p, forcedReset: true });
   });
 

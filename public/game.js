@@ -881,6 +881,11 @@ const WEAPONS = [
     lockOn: { lockTime: 250, lockRange: 60, homingDelay: 450, homingSpeed: 55, turnRate: 2.6, hitRadius: 1.6 },
     ability: { name: 'Volley', cd: 500, desc: 'Launch the whole magazine at the locked target', type: 'javelin_volley', noADS: true },
   },
+  { id:'hellfire', name:'Hellfire', type:'Admin Prototype · Fire Beam', slot:'primary',
+    adminItem:true, prototype:true, mag:120, reserve:240, damage:8, fireRate:75, reloadTime:2600,
+    auto:true, pellets:1, spread:0, adsZoom:75, bulletSpeed:260, bulletColor:0xff5418, bulletSize:0.06,
+    hitscan:true, hitscanRange:28, burnOnHit:{dps:7,dur:4000},
+    ability:{name:'Hellfire Core',type:'hellfire_core',cd:0,noADS:true,desc:'Aim / E · 3 incendiary cores per life · no cooldown'} },
 ];
 
 // ── Damage drop-off by range ────────────────────────────────────────────────
@@ -1606,6 +1611,7 @@ const BUNDLES = PVP_SHOP_CATALOG.bundles.map(b => ({...b,price:PVP_SHOP_CATALOG.
 function shopCost(id)      { return WEAPON_COSTS[id]; }
 function shopTrialCost(id) { const c = WEAPON_COSTS[id]; return c == null ? null : Math.max(1, Math.ceil(c / TRIAL_DIVISOR)); }
 function isOwned(id) {
+  if (id === 'hellfire') return !!currentUser?.isAdmin;
   if (!id) return true;
   if (FREE_WEAPONS.has(id)) return true;
   if (trialingThisMatch.has(id)) return true;
@@ -2509,7 +2515,7 @@ const DOUBLE_JUMP_IDS = new Set(['fists','crossbow','air_rifle','dart_gun']);
 //   • guns that genuinely can't aim, or are one of a kind: the paintball marker
 //     (that hopper sits right where the sights should be) and the revolver
 // Ordinary guns lost theirs. They can aim; that IS their thing.
-const ABILITY_GUNS = new Set(['paintball', 'revolver', 'cyroclasm', 'storm_bloom', 'javelin_launcher', 'railgun']);
+const ABILITY_GUNS = new Set(['paintball', 'revolver', 'cyroclasm', 'storm_bloom', 'javelin_launcher', 'railgun', 'hellfire']);
 function hasAbility(w) {
   if (!w) return false;
   // A marketplace ability counts even on a gun that has none of its own — that
@@ -3917,6 +3923,7 @@ function weaponAudioProfile(id, baseWeapon) {
   if (lowerId === 'freeze_gun' || lowerId === 'frost_blaster') return { kind:'freeze', vol:0.24, dur:0.16, f1:680, f2:420 };
   if (lowerId === 'gunslinger') return { kind:'pistol', vol:0.34, dur:0.12, f1:540, f2:120, action:'revolver' };
   if (lowerId === 'javelin_launcher') return { kind:'thump', vol:0.46, dur:0.30, f1:100, f2:40, action:'single' };
+  if (lowerId === 'hellfire') return { kind:'flamethrower', vol:0.42, dur:0.17, f1:72, f2:40 };
   if (lowerId === 'flamethrower') return { kind:'flamethrower', vol:0.24, dur:0.18, f1:95, f2:58 };
   if (lowerId === 'plasma_carbine') return { kind:'energy', vol:0.30, dur:0.14, f1:880, f2:540 };
   if (lowerId === 'railgun')        return { kind:'energy', vol:0.42, dur:0.32, f1:1620, f2:120 };
@@ -30973,7 +30980,27 @@ const weaponModels = [
   buildChainGun(),  // chain_gun
   buildGunslinger(),  // gunslinger
   buildRPG(),  // javelin_launcher
+  buildHellfire(),  // hellfire
 ];
+function buildHellfire() {
+  const g=new THREE.Group(),steel=GUN_MATS.steel(),dark=GUN_MATS.inner();
+  const red=new THREE.MeshPhongMaterial({color:0x4c1418,shininess:90,specular:0xba7770});
+  const glow=new THREE.MeshBasicMaterial({color:0xff731c});
+  gpBox(g,red,.075,.085,.22,0,0,.015);
+  gpBox(g,dark,.038,.095,.045,0,-.075,.075,.2);
+  gpBox(g,dark,.064,.060,.12,0,-.012,.18);
+  gpCyl(g,steel,.037,.037,.19,14,0,.015,-.18);
+  for(let i=0;i<4;i++){
+    gpCyl(g,red,.046,.046,.015,12,0,.015,-.10-i*.052);
+    gpCyl(g,glow,.039,.039,.007,12,0,.015,-.11-i*.052);
+  }
+  for(const side of [-1,1]){
+    gpBox(g,steel,.014,.03,.25,side*.043,.046,-.10);
+    gpBox(g,glow,.005,.025,.11,side*.040,-.005,.012);
+  }
+  const flash=makeMuzzleFlash();flash.position.set(0,.015,-.29);g.add(flash);g._flash=flash;
+  g._kickZ=.006;g._greebled=true;g._handDetailed=true;g.position.set(.12,-.1,-.29);return g;
+}
 function addWeaponRealismDetails(model, weapon) {
   if (!model || !model.add || (model.userData && model.userData.realismDetailed)) return;
   model.userData = model.userData || {};
@@ -37444,7 +37471,7 @@ const PROJECTILE_KIND_BY_ID = {
   // as a sphere. Each has its own shape and its own tumble now.
   throwing_knives:'knife', throwing_axes:'axe', boomerang:'boomerang', twin_knife_throw:'knife',
   traffic_cone:'cone', cream_pie:'pie',
-  flamethrower:'flame',
+  flamethrower:'flame', hellfire:'flame', hellfire_burn:'flame', hellfire_pool:'flame',
   freeze_gun:'ice', abs_zero:'ice', frost_blaster:'ice',
   paintball:'paintball', glassmaker:'blob', gravity_paint:'blob',
   foam_cannon:'blob', sticker_blaster:'blob',
@@ -39754,6 +39781,9 @@ document.addEventListener('mousedown', e => {
   // Vehicle: LMB fires the vehicle's gun
   if (pilotedVehicle && e.button === 0) { fireVehicleGun(); return; }
   if (spectatorState && e.button === 2) { spectatorCycle(-1); return; }
+  if(e.button===2&&aimed&&activeSlot==='primary'&&currentWeapon?.id==='hellfire'){
+    e.preventDefault();fireHellfireCore();return;
+  }
   if (e.button !== 0 || !aimed) return;
   shooting = true;
   // Crossbow charge: start charging instead of shooting
@@ -41076,6 +41106,7 @@ function switchWeapon(idx) {
   // Upper bound too: WEAPONS / weaponModels are parallel arrays (tools/verify-weapons.js checks
   // their lengths), and a stray index used to crash on weaponModels[idx].visible (#4).
   if (idx === null || idx === undefined || idx < 0 || idx >= WEAPONS.length || !weaponModels[idx]) return;
+  if (WEAPONS[idx].prototype && !currentUser?.isAdmin) return;
   if (idx === currentWeaponIdx) return;
   minigunBraceHeld = false; resetMinigunSpool();
   chainGunSpin = 0; chainGunLastShotAt = 0;
@@ -41164,6 +41195,7 @@ function loadoutReady() {
 }
 
 function resetCombatResources() {
+  hellfireCores=3;
   pendingEnvironmentDamage.length = 0;
   clearCombatFeedback();
   clearPlayerStatusEffects();
@@ -41472,6 +41504,10 @@ function setADS(on) {
   // actually holding — the knife vanished and a gun appeared. Any entry point
   // reaching here with melee/support equipped (E, right-click) hits this guard.
   if (activeSlot !== 'primary' && activeSlot !== 'secondary') return;
+  if(currentWeapon.id==='hellfire'){
+    if(on)fireHellfireCore();
+    isADS=false;return;
+  }
   isADS = !!on;
   targetFOV = isADS ? currentWeapon.adsZoom : 75;
   setWeaponADSPos(isADS);
@@ -44095,6 +44131,7 @@ function activateAbility() {
     doBallLightning(w, ab);
     flashAbilityName(ab.name);
   }
+  else if (ab.type === 'hellfire_core') { fireHellfireCore(); }
   else if (ab.type === 'javelin_volley') {
     fireJavelinVolley(w);
   }
@@ -44393,7 +44430,61 @@ function _spawnAbilityBeam(from, to, color = 0x9fe8ff, radius = 0.04, life = 160
 // Generic instant hitscan: any weapon flagged `hitscan: true` (Laser Pointer) resolves
 // the moment it's fired instead of spawning a travelling bullet. Reusable by future
 // hitscan weapons without touching tryShoot() again.
+let hellfireCores=3;
+function hellfireTrace(origin,dir) {
+  const ray=new THREE.Ray(origin,dir),point=new THREE.Vector3();let range=28,wall=null;
+  for(const box of wallColliders)if(ray.intersectBox(box,point)){
+    const distance=origin.distanceTo(point);if(distance<range){range=distance;wall=box;}
+  }
+  return {range,wall,end:origin.clone().addScaledVector(dir,range)};
+}
+function fireHellfireBeam(origin,dir,damage=false) {
+  const trace=hellfireTrace(origin,dir);
+  _spawnAbilityBeam(origin,trace.end,0xff3810,.13,105);
+  _spawnAbilityBeam(origin,trace.end,0xffab26,.065,95);
+  _spawnAbilityBeam(origin,trace.end,0xfff3bd,.023,85);
+  if(!damage||!currentUser?.isAdmin||inLobby)return;
+  for(const [pid,mesh] of Object.entries(remoteMeshes)){
+    if(!mesh.visible||players[pid]?.dead||friendlyFireBlocked(pid,myId))continue;
+    let body=null;
+    for(const [height,radius] of [[mesh._rig?.hitBodyOff??1.0,.48],[mesh._rig?.hitHeadOff??1.6,.32]]){
+      const center=mesh.position.clone().setY(mesh.position.y+height),t=center.clone().sub(origin).dot(dir);
+      const closest=origin.clone().addScaledVector(dir,t);
+      if(t>=0&&t<trace.range&&closest.distanceTo(center)<=radius){body=closest;break;}
+    }
+    if(!body)continue;
+    const dummy=TRAINING_DUMMIES.find(d=>d.id===pid);
+    if(dummy)handleDummyHit(dummy,mesh,{damage:8},body);
+    else {emitHit(pid,`hellfire_${myId}_${Date.now()}_${pid}`,'hellfire',body,false,{damageOverride:8});applyDotOnHit('hellfire',pid);}
+  }
+  const dest=trace.wall&&mapDestructibles.find(d=>d.hp>0&&(d.colliderRef===trace.wall||d.colliderRefs?.includes(trace.wall)));
+  if(dest)damageDestructible(dest,8,{ownerId:myId,weaponId:'hellfire'});
+}
+function spawnHellfireCore(origin,dir,ownerId) {
+  const mesh=new THREE.Mesh(new THREE.IcosahedronGeometry(.14,1),new THREE.MeshBasicMaterial({color:0xffa322}));
+  const halo=new THREE.Mesh(new THREE.SphereGeometry(.21,12,8),new THREE.MeshBasicMaterial({color:0xff3810,transparent:true,opacity:.35,depthWrite:false,blending:THREE.AdditiveBlending}));
+  mesh.add(halo);mesh.position.copy(origin);scene.add(mesh);
+  activeGrenades.push({mesh,id:`hellfire_core_${ownerId}_${Date.now()}`,ownerId,isOwn:ownerId===myId,isSupport:true,
+    itemRef:{id:'hellfire_core',damage:0,burnRadius:3.2,burnDur:5000},velX:dir.x*30,velY:dir.y*30,velZ:dir.z*30,
+    gravMult:1,explodeOnImpact:true,maxBounces:0,bounceCount:0,explodeAt:Date.now()+3500});
+}
+function fireHellfireCore() {
+  if(!currentUser?.isAdmin||currentWeapon?.id!=='hellfire'||activeSlot!=='primary'||!gameStarted||isDead||countdownActive||inLobby||SOCIAL_VIEW.mode||KILLCAM.active||reloading)return false;
+  if(hellfireCores<=0){flashAbilityName('NO CORES LEFT');return false;}
+  cancelInspect();hellfireCores--;
+  const origin=_abilityMuzzleOrigin(new THREE.Vector3(0,-.08,-.42));
+  const dir=new THREE.Vector3(0,.12,-1).applyQuaternion(camera.quaternion).normalize();
+  spawnHellfireCore(origin,dir,myId);
+  socket.emit('hellfireCore',{x:origin.x,y:origin.y,z:origin.z,dx:dir.x,dy:dir.y,dz:dir.z});
+  playSoundEvent('air_burst',{volume:1,minGap:0});kickWeaponVisual(currentWeapon,1.1);
+  flashAbilityName(`HELLFIRE CORE · ${hellfireCores}/3`);updateAbilityHUD();return true;
+}
+socket.on('hellfireCore',data=>{
+  if(data.ownerId===myId){hellfireCores=Math.min(hellfireCores,data.remaining);updateAbilityHUD();return;}
+  spawnHellfireCore(new THREE.Vector3(data.x,data.y,data.z),new THREE.Vector3(data.dx,data.dy,data.dz),data.ownerId);
+});
 function fireHitscanShot(origin, dir, weaponId, wStats) {
+  if(weaponId==='hellfire'){fireHellfireBeam(origin,dir,true);return;}
   const range = wStats.hitscanRange || 70;
   const hit = _nearestAbilityRayHit(origin, dir, range, 0.6);
   const end = hit ? hit.pos.clone() : origin.clone().addScaledVector(dir, range);
@@ -44903,6 +44994,12 @@ function _updateAbilityHUD() {
   const descEl = document.getElementById('ability-desc');
   const keyEl  = document.getElementById('ability-key-hint');
   if (!nameEl || !fillEl) return;
+  if(activeSlot==='primary'&&currentWeapon?.id==='hellfire'){
+    nameEl.textContent=`Hellfire Core · ${hellfireCores}/3`;fillEl.style.width=(hellfireCores/3*100)+'%';
+    fillEl.style.background=hellfireCores?'#ff7527':'#555';
+    if(descEl)descEl.textContent='Three cores per life · no cooldown';
+    if(keyEl)keyEl.textContent='[AIM / E]';return;
+  }
   if (activeSlot === 'support' && SUPPORT_ITEMS[selectedSupportIdx]?.id === 'satchel') {
     const count = activeSatchels.filter(s => s.ownerId === myId).length;
     nameEl.textContent = 'Detonate'; fillEl.style.width = '100%';
@@ -44983,6 +45080,7 @@ function startCycleBurst(wStats) {
 }
 
 function tryShoot() {
+  if(currentWeapon?.prototype && !currentUser?.isAdmin)return;
   if (SOCIAL_VIEW.mode) return;
   if ((!pointerLocked && !gameStarted) || isDead) return;
   weaponReadyUntil = performance.now()+220;
@@ -51571,6 +51669,7 @@ const RELOAD_PROPS = {
                     RP(.76,'ball','arrive',1,'breech'),RP(.96,'ball','arrive',1,'breech')],
   // ── Tanks, bottles, hoppers ──────────────────────────────────────────────
   flamethrower:[RP(.29,'bottle'),RP(.52,'bottle','arrive')],
+  hellfire:[RP(.29,'bottle'),RP(.52,'bottle','arrive')],
   freeze_gun:[RP(.30,'bottle'),RP(.54,'bottle','arrive')],
   abs_zero:[RP(.29,'bottle'),RP(.53,'bottle','arrive')],
   foam_cannon:[RP(.29,'bottle'),RP(.50,'bottle','arrive'),RP(.70,'bottle'),RP(.80,'bottle','arrive')],
@@ -51778,6 +51877,7 @@ Object.assign(_STYLE_RK, {
     K(.85,{py:.03,pz:.04,rx:-.40,rz:.10,hy:.02,hz:-.04}), K(.95,{py:.01,pz:.02,rx:-.20,rz:.06})],
   // cyroclasm: slides out the frozen core, slams in a fresh one, shakes the frost off
   cyroclasm: _variant(RELOAD_KEYS.freeze_gun, { amp: 1.1, tip: .02 }),
+  hellfire: _variant(RELOAD_KEYS.flamethrower, { amp: .9, tip: .01 }),
   // continuum: a quick flip of the cell — it's a 0.5 s reload, so one flick
   continuum: [K(.20,{py:.04,rx:.20,rz:.30,hy:-.08,hr:.5}), K(.45,{py:.05,rx:.28,rz:.50,hy:-.16,hz:.02}), K(.70,{py:.04,rx:.20,rz:.30,hy:-.04,hz:.04}), K(.90,{py:.02,rx:.08,rz:.10})],
   // storm bloom: twists a capacitor out, claps it, drops a charged one in, and the shotgun thumps shut
@@ -53416,7 +53516,7 @@ const INSTAKILL_HS_WEAPONS = new Set(['srx', 'railgun', 'lever', 'boombow', 'boo
 
 // 🤫 Secret weapon category sets used for hidden synergy mechanics
 const ELECTRIC_WEAPONS = new Set(['arc_rifle','arc_torrent','taser','pistol','shock_baton','storm_core','revolver','freeze_gun','coilgun','plasma_carbine','storm_bloom','storm_bloom_ball','storm_bloom_aura','gatecrasher_beam']);
-const FIRE_WEAPONS     = new Set(['flamethrower','firework_launcher','sg8','fire_axe','fire_poker','thermite','molotov']);
+const FIRE_WEAPONS     = new Set(['flamethrower','hellfire','hellfire_burn','hellfire_pool','firework_launcher','sg8','fire_axe','fire_poker','thermite','molotov']);
 const GRAVITY_WEAPONS  = new Set(['gravity_launcher','gravity_hammer','gravity_paint','event_horizon','magnetar','void_harvester','black_hole_seed']);
 const FROST_WEAPONS    = new Set(['freeze_gun','frost_blaster','abs_zero','cyroclasm','cyroclasm_laser']);
 const BOT_STUN_ON_HIT_WEAPONS = new Set(['arc_torrent']);
@@ -55482,7 +55582,16 @@ function spawnBurnZone(pos, radius, dps, durationMs, opts = {}) {
   if (!opts.silent) playSoundEvent('fire_sizzle', { position: pos, volume: 0.85, minGap: 180 });
   burnZones.push({ x: pos.x, z: pos.z, radius, dps, until: Date.now() + durationMs, mesh: ring, lastTick: 0,
     tickMs: opts.tickMs || 1000, molotov: !!opts.molotov, igniteDur: opts.igniteDur || 0,
-    acid: !!opts.acid, slowFloor: opts.slowFloor || 40, acidRate: opts.acidRate || 70, tickWeapon: opts.tickWeapon || null });
+    acid: !!opts.acid, slowFloor: opts.slowFloor || 40, acidRate: opts.acidRate || 70, tickWeapon: opts.tickWeapon || null,
+    hellfire:!!opts.hellfire,ownerId:opts.ownerId,y:pos.y });
+  if(opts.hellfire){
+    ring.position.y=pos.y+.04;
+    for(let i=0;i<10;i++){
+      const angle=i*Math.PI/5,r=radius*(i%2?.7:.35);
+      const flame=new THREE.Mesh(new THREE.ConeGeometry(.13,.65,5),new THREE.MeshBasicMaterial({color:i%2?0xff6b16:0xffba37,transparent:true,opacity:.75,depthWrite:false,blending:THREE.AdditiveBlending}));
+      flame.rotation.x=Math.PI/2;flame.position.set(Math.cos(angle)*r,Math.sin(angle)*r,.30);ring.add(flame);
+    }
+  }
 }
 // 🔥 Lingering "on fire" status — Molotov sets this when you touch the flames; it
 // keeps ticking after you leave (5/sec for ~10s). Player + per-bot timers.
@@ -55530,8 +55639,24 @@ function updateBurnZones(dt) {
   let playerInMolotov = false;
   for (let i = burnZones.length - 1; i >= 0; i--) {
     const z = burnZones[i];
-    if (now >= z.until) { scene.remove(z.mesh); burnZones.splice(i, 1); continue; }
+    if (now >= z.until) { scene.remove(z.mesh); if(z.hellfire)_disposeFinisherObject(z.mesh); burnZones.splice(i, 1); continue; }
     z.mesh.material.opacity = 0.35 + 0.2 * Math.sin(now * 0.008);
+    if(z.hellfire){
+      z.mesh.children.forEach((flame,i)=>{flame.scale.y=.75+Math.sin(now*.018+i*2.1)*.25;});
+      if(z.ownerId===myId&&currentUser?.isAdmin&&now-z.lastTick>=200){
+        z.lastTick=now;
+        for(const [pid,mesh] of Object.entries(remoteMeshes)){
+          if(!mesh.visible||players[pid]?.dead||friendlyFireBlocked(pid,myId)||Math.abs(mesh.position.y-z.y)>2)continue;
+          if(Math.hypot(mesh.position.x-z.x,mesh.position.z-z.z)>z.radius)continue;
+          const at=mesh.position.clone().setY(mesh.position.y+1);
+          if(!hasLineOfSight(z.x,z.z,at.x,at.z,z.y+.4,at.y))continue;
+          const dummy=TRAINING_DUMMIES.find(d=>d.id===pid);
+          if(dummy)handleDummyHit(dummy,mesh,{damage:10},at);
+          else {emitHit(pid,`hellfire_pool_${now}_${pid}`,'hellfire_pool',at,false,{damageOverride:10});applyDotOnHit('hellfire',pid);}
+        }
+      }
+      continue;
+    }
     const pdx = camera.position.x - z.x, pdz = camera.position.z - z.z;
     const pInside = (pdx*pdx + pdz*pdz < z.radius * z.radius);
     if (z.molotov && pInside) playerInMolotov = true;
@@ -55598,7 +55723,7 @@ function applyDotOnHit(weaponId, targetPid) {
   const cur = _dotTargets[targetPid];
   // Refresh, never add. A longer burn already running is left alone.
   _dotTargets[targetPid] = { until: Math.max(until, cur ? cur.until : 0),
-                             dps: d.dps, weaponId: w.burnOnHit ? 'flame_burn' : 'caustic_burn' };
+                             dps: d.dps, weaponId: weaponId==='hellfire'?'hellfire_burn':w.burnOnHit ? 'flame_burn' : 'caustic_burn' };
 }
 function applyDotToPlayer(weaponId) {
   const w = WEAPONS.find(x => x.id === weaponId);
@@ -55953,6 +56078,7 @@ const CLIENT_WEAPON_DAMAGE = Object.fromEntries([
   ['chain_pull', 60], ['airburst', 95], ['toxin_dart', 30], ['blind_flash', 0],
   ['gatecrasher_slug', 40], ['gatecrasher_beam', 40],
   ['cyroclasm_laser', 10], ['storm_bloom_ball', 100], ['storm_bloom_aura', 10],
+  ['hellfire_burn',7],['hellfire_pool',10],
   ['arc_torrent', 5], ['firework_launcher', 50], ['switchblade_gun', 50], ['switchblade_charged', 100],
   ['lancer_blade', 50],   // ⚔️ Lancer bayonet-charge hit (main shot uses the WEAPONS 'lancer' damage)
   ['molotov_burn', 10], ['molotov_fire', 5],  // 🔥 inside-the-flames tick / lingering on-fire DOT
@@ -56734,6 +56860,10 @@ socket.on('bulletFired', b => {
   if (b.ownerId===myId) return;
   const w = projectileWeaponSpec(b.weapon) || WEAPONS[0];
   const origin = new THREE.Vector3(b.x,b.y,b.z);
+  if(b.weapon==='hellfire'){
+    fireHellfireBeam(origin,new THREE.Vector3(b.dx,b.dy,b.dz));
+    playWeaponSound('hellfire',{baseWeapon:w,remote:true,position:origin});return;
+  }
   playWeaponSound(b.weapon || w.id, { baseWeapon: w, remote: true, position: origin });
   kickCharacter(remoteMeshes[b.ownerId]);
   const opts = b.weapon === 'storm_bloom_ball'
@@ -57527,6 +57657,13 @@ function explodeSupport(g) {
   const item = g.itemRef;
   if (!item) return;
   const pos = g.mesh.position.clone();
+  if(item.id==='hellfire_core'){
+    const ground=getGroundEyeY(pos.x,pos.z,pos.y+PLAYER_EYE_HEIGHT)-PLAYER_EYE_HEIGHT;
+    if(ground < -1000)return;
+    pos.y=ground;
+    spawnAbilityAOEFX(pos,3.2,0xff5a18);
+    spawnBurnZone(pos,3.2,10,5000,{hellfire:true,ownerId:g.ownerId,tickMs:200});return;
+  }
   if(g.isOwn && item.damage>0)damageStructuresInBlast(pos,item.id,item.explosionRadius || item.radius || 5.5);
 
   // 🪖 Admin stun grenade — flash + temporarily stop bot AI in radius
@@ -63843,7 +63980,7 @@ function showLoadoutScreen(mode) {
   const meleeEls = {};
   const supportEls = {};
   // Helper: is this admin item unlocked for the current user?
-  const isUnlocked = (id) => adminPassActive() || !!(currentUser && currentUser.unlocks && currentUser.unlocks.includes(id));
+  const isUnlocked = (id) => id==='hellfire' ? !!currentUser?.isAdmin : adminPassActive() || !!(currentUser && currentUser.unlocks && currentUser.unlocks.includes(id));
 
   // Locked items stay visible; only owned items can be selected.
   function decorateOwnedBadge(card, id, isAdminItem) {
