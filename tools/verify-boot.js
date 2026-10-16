@@ -1046,6 +1046,57 @@ if (ok && process.argv.includes('--posture')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+if (ok && process.argv.includes('--muzzle')) {
+  // The muzzle blast has a style per kind of gun: the right style is chosen, sparks and a shock ring appear where they
+  // should (and not on a suppressed gun), they fall and fade and are cleaned up, and an automatic gun cannot flood the
+  // scene with them.
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const W = id => WEAPONS.find(w => w.id === id);
+    const styleOf = id => { const w = W(id); const s = muzzleStyleFor(w); return Object.keys(MUZZLE_STYLES).find(k => MUZZLE_STYLES[k] === s); };
+    const want = { ak20: 'rifle', sg8: 'shotgun', pistol: 'pistol', srx: 'heavy', amr: 'heavy', railgun: 'heavy', air_rifle: 'quiet', plasma_carbine: 'energy', minigun: 'rapid' };
+    for (const [id, s] of Object.entries(want)) if (W(id) && styleOf(id) !== s) issues.push(id + ' should have the ' + s + ' blast, has ' + styleOf(id));
+    if (MUZZLE_STYLES.shotgun.wid <= MUZZLE_STYLES.rifle.wid) issues.push('a shotgun flash should be wider than a rifle flash');
+    if (MUZZLE_STYLES.heavy.len <= MUZZLE_STYLES.pistol.len) issues.push('a heavy sniper flash should be longer than a pistol flash');
+    if (MUZZLE_STYLES.quiet.sparks !== 0 || MUZZLE_STYLES.quiet.ring) issues.push('a suppressed gun should throw no sparks and no ring');
+
+    const idx = WEAPONS.findIndex(w => w.id === 'ak20');
+    const model = weaponModels[idx];
+    const count = kind => _muzzleFx.filter(f => f.kind === kind).length;
+    const fire = (id, n = 1) => { for (let i = 0; i < n; i++) triggerMuzzleBlast(model, { scale: 1.2, weapon: W(id) }); };
+    const reset = () => { _muzzleFx.length = 0; for (const m of [..._sparkPool, ..._ringPool]) { m.visible = false; m.material.opacity = 0; } };
+    try {
+      reset(); fire('sg8');
+      if (count('spark') < 6) issues.push('a shotgun should throw a spread of sparks, got ' + count('spark'));
+      if (count('ring') !== 1) issues.push('a shotgun should throw a shock ring, got ' + count('ring'));
+      reset(); fire('pistol');
+      if (count('ring') !== 0) issues.push('a pistol should not throw a shock ring');
+      if (count('spark') < 1 || count('spark') > 5) issues.push('a pistol should throw a few sparks, got ' + count('spark'));
+      reset(); fire('srx');
+      if (count('ring') !== 1 || count('spark') < 5) issues.push('a sniper should throw sparks and a ring, got ' + count('spark') + ' / ' + count('ring'));
+      reset(); fire('air_rifle');
+      if (_muzzleFx.length) issues.push('a suppressed gun threw ' + _muzzleFx.length + ' effects');
+      // they move, fall, fade and are cleaned up
+      reset(); fire('ak20');
+      const sp = _muzzleFx.find(f => f.kind === 'spark');
+      const y0 = sp.sprite.position.y, z0 = sp.sprite.position.z;
+      updateMuzzleFx(0.05);
+      if (!(sp.sprite.material.opacity < 1)) issues.push('a spark should fade');
+      if (Math.abs(sp.sprite.position.z - z0) < 1e-6 && Math.abs(sp.sprite.position.y - y0) < 1e-6) issues.push('a spark should move');
+      for (let i = 0; i < 20; i++) updateMuzzleFx(0.05);
+      if (_muzzleFx.length) issues.push('sparks outlived their life: ' + _muzzleFx.length);
+      if (_sparkPool.some(m => m.visible)) issues.push('a spark sprite was left visible');
+      // an automatic gun held down for a while stays inside the pool
+      reset(); fire('minigun', 300);
+      if (_sparkPool.length > 48 || _ringPool.length > 8) issues.push('the spark pool grew: ' + _sparkPool.length + ' / ' + _ringPool.length);
+      if (_muzzleFx.length > 56) issues.push('too many live effects: ' + _muzzleFx.length);
+    } finally { reset(); model._flash.visible = false; }
+    return issues;
+  })()`);
+  console.log('muzzle blast checks: a style per kind of gun, sparks and rings where they belong, cleaned up, bounded');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 if (ok && process.argv.includes('--chain-maul')) {
   const issues = vm.runInThisContext(`(() => {
     const issues = [], v = (x,y,z) => new THREE.Vector3(x,y,z);

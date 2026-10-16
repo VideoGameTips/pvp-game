@@ -19618,7 +19618,7 @@ function _getPuffTexture() {
 function _getSmokePuff() {
   // Pool is bigger than it was because each puff now lives longer; at a
   // minigun's fire rate the old ten were being stolen back mid-fade.
-  if (_smokePool.length < 14) {
+  if (_smokePool.length < 24) {
     const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: _getPuffTexture(), color: 0x9a9a9a,
       transparent: true, opacity: 0, depthWrite: false }));
     m.visible = false; scene.add(m); _smokePool.push(m);
@@ -19668,17 +19668,137 @@ function ejectFiredCase(model) {
   try { spawnReloadProp(model, k, 'eject', 'breech', { life: 0.70, eject: true }); } catch (e) {}
 }
 
+// ── 💥 Muzzle blast styles ──────────────────────────────────────────────────────────────────────────────────
+// Every gun used to go off the same way, one orange spike with a puff, scaled up or down: a pistol and an
+// anti-material rifle differed in size and nothing else. A blast is now chosen for the kind of gun, and has more in it
+// than the spike:
+//   · the FLASH is shaped (length and width) for the barrel: a long narrow jet for a rifle, a wide short fan for a
+//     shotgun, a fat short pop for a pistol, a long hard lance for a heavy sniper;
+//   · SPARKS: a few embers thrown forward in a cone, falling as they go (more and wider from a shotgun, fewer and
+//     faster from a rifle, none from a suppressed gun);
+//   · a SHOCK RING on the loud ones: the blast front, a thin ring racing out ahead of the muzzle and gone in 80 ms;
+//   · SMOKE in layers: a dense quick puff at the crown and, from the big guns, a second larger slower one behind it;
+//   · the LIGHT leads with a white-hot kick and settles to the gun's colour.
+// None of it lasts long or sits in the middle of the screen: the view has to stay clear of the target.
+const MUZZLE_STYLES = {
+  rifle:   { len: 1.20, wid: 0.95, sparks: 4, spd: 5.5, cone: 0.20, spark: 0.020, ring: 0,    puffs: 1, smoke: 1.0, light: 1.00 },
+  rapid:   { len: 1.00, wid: 0.85, sparks: 1, spd: 4.5, cone: 0.28, spark: 0.016, ring: 0,    puffs: 1, smoke: 0.8, light: 0.85 },
+  pistol:  { len: 0.85, wid: 1.15, sparks: 3, spd: 4.5, cone: 0.34, spark: 0.018, ring: 0,    puffs: 1, smoke: 0.8, light: 0.90 },
+  shotgun: { len: 0.95, wid: 1.75, sparks: 8, spd: 6.0, cone: 0.50, spark: 0.022, ring: 0.42, puffs: 2, smoke: 1.4, light: 1.15 },
+  heavy:   { len: 1.55, wid: 1.25, sparks: 7, spd: 8.0, cone: 0.16, spark: 0.026, ring: 0.62, puffs: 2, smoke: 1.7, light: 1.35 },
+  energy:  { len: 1.00, wid: 1.00, sparks: 3, spd: 3.5, cone: 0.45, spark: 0.016, ring: 0.30, puffs: 0, smoke: 0,   light: 1.10, energy: true },
+  quiet:   { len: 0.60, wid: 0.70, sparks: 0, spd: 0,   cone: 0,    spark: 0,     ring: 0,    puffs: 1, smoke: 0.5, light: 0.30 },
+};
+function muzzleStyleFor(w) {
+  if (!w) return MUZZLE_STYLES.rifle;
+  const id = String(w.baseId || w.id || ''), type = String(w.type || '').toLowerCase();
+  let kind = '';
+  try { kind = weaponAudioProfile(id, w).kind || ''; } catch (e) {}
+  if (w.silentShots || /silent|suppress/.test(type)) return MUZZLE_STYLES.quiet;
+  if (/^(throwing_|cream_pie|traffic_cone|slingshot|dart_gun|boomerang|sticker)/.test(id)) return MUZZLE_STYLES.quiet;   // thrown or flung: no powder
+  if (id === 'flamethrower') return MUZZLE_STYLES.rapid;                                                              // (a stream, not a bang)
+  if (/shotgun/.test(type) || (w.pellets || 1) >= 4) return MUZZLE_STYLES.shotgun;
+  if (/^(railgun|coilgun|barrett|amr|srx)/.test(id)) return MUZZLE_STYLES.heavy;        // (a railgun sounds like energy, and fires like artillery)
+  if (kind === 'energy' || kind === 'arc' || kind === 'freeze' || kind === 'pop') return MUZZLE_STYLES.energy;
+  if (/sniper|marksman|anti-material|anti material|cannon|railgun/.test(type) || kind === 'crack' || kind === 'boom' || (w.damage || 0) >= 90) return MUZZLE_STYLES.heavy;
+  if (w.auto && (w.fireRate || 999) <= 75) return MUZZLE_STYLES.rapid;                    // 13+ rounds a second: an SMG, a minigun
+  if (/pistol|revolver|secondary/.test(type) || w.slot === 'secondary' || kind === 'pistol') return MUZZLE_STYLES.pistol;
+  return MUZZLE_STYLES.rifle;
+}
+// Sparks and shock rings are pooled sprites in world space, advanced by one shared updater (no animation loop per
+// shot: an automatic gun fires twenty a second).
+let _sparkTex = null, _ringTex = null;
+function _getSparkTexture() {
+  if (_sparkTex) return _sparkTex;
+  const c = document.createElement('canvas'); c.width = 32; c.height = 32;
+  const x = c.getContext('2d');
+  const gr = x.createRadialGradient(16, 16, 0, 16, 16, 15);
+  gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.25, 'rgba(255,255,255,0.85)');
+  gr.addColorStop(0.6, 'rgba(255,255,255,0.25)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  x.fillStyle = gr; x.fillRect(0, 0, 32, 32);
+  _sparkTex = new THREE.CanvasTexture(c);
+  return _sparkTex;
+}
+function _getRingTexture() {
+  if (_ringTex) return _ringTex;
+  const c = document.createElement('canvas'); c.width = 64; c.height = 64;
+  const x = c.getContext('2d');
+  const gr = x.createRadialGradient(32, 32, 18, 32, 32, 31);
+  gr.addColorStop(0, 'rgba(255,255,255,0)'); gr.addColorStop(0.55, 'rgba(255,255,255,0.9)');
+  gr.addColorStop(0.8, 'rgba(255,255,255,0.35)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  x.fillStyle = gr; x.fillRect(0, 0, 64, 64);
+  _ringTex = new THREE.CanvasTexture(c);
+  return _ringTex;
+}
+const _muzzleFx = [];                  // live sparks and rings: { sprite, kind, age, life, v: Vector3, size0, size1, op }
+const _sparkPool = [], _ringPool = [];
+function _fxSprite(pool, max, tex) {
+  if (pool.length < max) {
+    const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color: 0xffd890, transparent: true, opacity: 0,
+      blending: THREE.AdditiveBlending, depthWrite: false }));
+    m.visible = false; scene.add(m); pool.push(m);
+    return m;
+  }
+  let oldest = pool[0];                   // all busy: take the one that has been going longest
+  for (const m of pool) if (!m.visible) return m;
+  for (const m of pool) if ((m.userData.fxAge || 0) > (oldest.userData.fxAge || 0)) oldest = m;
+  const i = _muzzleFx.findIndex(f => f.sprite === oldest);
+  if (i >= 0) _muzzleFx.splice(i, 1);
+  return oldest;
+}
+function spawnMuzzleSparks(world, fwd, st, tint, scale) {
+  const n = Math.round(st.sparks * (hyperrealisticOn() ? 1.6 : 1) * Math.min(1.3, 0.8 + scale * 0.25));
+  for (let i = 0; i < n; i++) {
+    const sp = _fxSprite(_sparkPool, 48, _getSparkTexture());
+    const v = fwd.clone();
+    v.x += (Math.random() - 0.5) * st.cone * 2; v.y += (Math.random() - 0.3) * st.cone * 1.6; v.z += (Math.random() - 0.5) * st.cone * 2;
+    v.normalize().multiplyScalar(st.spd * (0.55 + Math.random() * 0.9));
+    sp.visible = true; sp.position.copy(world).addScaledVector(fwd, 0.03);
+    sp.material.color.setHex(st.energy ? tint : (Math.random() < 0.35 ? 0xfff2c0 : 0xffb050));
+    const size = st.spark * (0.7 + Math.random() * 0.7);
+    sp.scale.setScalar(size); sp.material.opacity = 1; sp.userData.fxAge = 0;
+    _muzzleFx.push({ sprite: sp, kind: 'spark', age: 0, life: 0.10 + Math.random() * 0.12, v, size0: size, size1: size * 0.3, op: 1 });
+  }
+}
+function spawnMuzzleRing(world, fwd, st, tint) {
+  if (!st.ring) return;
+  const sp = _fxSprite(_ringPool, 8, _getRingTexture());
+  sp.visible = true; sp.position.copy(world).addScaledVector(fwd, 0.05);
+  sp.material.color.setHex(st.energy ? tint : 0xffe6c0);
+  sp.scale.setScalar(0.04); sp.material.opacity = 0.55; sp.userData.fxAge = 0;
+  _muzzleFx.push({ sprite: sp, kind: 'ring', age: 0, life: 0.085, v: fwd.clone().multiplyScalar(1.2), size0: 0.04, size1: st.ring, op: 0.55 });
+}
+function updateMuzzleFx(dt) {
+  for (let i = _muzzleFx.length - 1; i >= 0; i--) {
+    const f = _muzzleFx[i];
+    f.age += dt; f.sprite.userData.fxAge = f.age;
+    const t = f.age / f.life;
+    if (t >= 1) { f.sprite.visible = false; f.sprite.material.opacity = 0; _muzzleFx.splice(i, 1); continue; }
+    if (f.kind === 'spark') {
+      f.v.y -= 7 * dt;                                     // they fall as they go
+      f.sprite.position.addScaledVector(f.v, dt);
+      f.sprite.scale.setScalar(f.size0 + (f.size1 - f.size0) * t);
+      f.sprite.material.opacity = f.op * (1 - t) * (1 - t);
+    } else {
+      f.sprite.position.addScaledVector(f.v, dt);
+      const e = 1 - (1 - t) * (1 - t);                     // a front: fast at first, then it stops
+      f.sprite.scale.setScalar(f.size0 + (f.size1 - f.size0) * e);
+      f.sprite.material.opacity = f.op * (1 - t) * (1 - t);
+    }
+  }
+}
 function triggerMuzzleBlast(model, opts = {}) {
   if (!model || !model._flash) return;
   ejectFiredCase(model);
   indexCylinder(model);
   const flash = model._flash;
+  const st = muzzleStyleFor(opts.weapon);
   const tint = opts.color || (flash.material && flash.material.color ? flash.material.color.getHex() : 0xffcc66);
   // No two shots look alike: random roll and a size jitter.
   const s0 = (opts.scale || 1) * hyperrealismFactor('muzzle') * (1.12 + Math.random() * 0.46);   // steadier, harder: less size lottery
   flash.visible = true;
   flash.rotation.z = Math.random() * Math.PI * 2;
-  flash.scale.setScalar(s0);
+  flash.scale.set(s0 * st.wid, s0 * st.wid, s0 * st.len);
 
   const world = new THREE.Vector3(); flash.getWorldPosition(world);
   const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
@@ -19686,12 +19806,8 @@ function triggerMuzzleBlast(model, opts = {}) {
   light.color.setHex(tint);
   light.position.copy(world);
 
-  const puff = _getSmokePuff();
-  puff.visible = true;
-  puff.position.copy(world).addScaledVector(fwd, 0.05);
-  puff.scale.setScalar(0.02);
-  puff.material.opacity = 0.42;
-  puff.material.rotation = Math.random() * Math.PI * 2;   // no two puffs the same way up
+  // Sparks thrown forward and (on the loud guns) the blast front racing out ahead of the muzzle.
+  try { spawnMuzzleSparks(world, fwd, st, tint, opts.scale || 1); spawnMuzzleRing(world, fwd, st, tint); } catch (e) {}
 
   const dur = opts.duration || 46;   // a spike: shorter than it was (62) so it reads as a flash, not a glow
   const start = performance.now();
@@ -19700,39 +19816,55 @@ function triggerMuzzleBlast(model, opts = {}) {
     if (t >= 1) {
       flash.visible = false; flash.scale.setScalar(1);
       light.intensity = 0;
+      light.color.setHex(tint);
     } else {
       // A blast is a spike: full size almost at once, then gone. The old curve
       // grew the flash to triple size across the whole 95 ms, which is a bubble
       // inflating on the end of the barrel rather than a shot going off.
       const k = t < 0.10 ? t / 0.10 : 1 - (t - 0.10) / 0.90;
-      flash.scale.setScalar(s0 * (0.32 + 1.08 * k));
-      light.intensity = 8.6 * s0 * (1 - t) * (1 - t) * (1 - t) * (1 - t);
+      const f = s0 * (0.32 + 1.08 * k);
+      flash.scale.set(f * st.wid, f * st.wid, f * st.len);
+      // The light leads white-hot and settles to the gun's own colour.
+      if (t < 0.22) light.color.setHex(0xfff4dc); else if (t < 0.40) light.color.setHex(tint);
+      light.intensity = 8.6 * s0 * st.light * (1 - t) * (1 - t) * (1 - t) * (1 - t);
       requestAnimationFrame(step);
     }
   };
   requestAnimationFrame(step);
 
-  // Smoke outlives the flash: it keeps expanding and drifting as it thins.
-  const sStart = performance.now(), sDur = 520;
-  const spin = (Math.random() * 2 - 1) * 0.9;
-  const smoke = () => {
-    const t = (performance.now() - sStart) / sDur;
-    if (t >= 1) { puff.visible = false; puff.material.opacity = 0; return; }
-    // Gas leaves the bore fast and the air stops it almost at once, so the
-    // puff grows quickly and then barely at all, and its drift decays to
-    // nothing instead of continuing at a constant speed. Once it has slowed it
-    // starts to rise, because it is hotter than the air around it. The old
-    // version grew and travelled at a fixed rate for its whole life, which is
-    // a ball being pushed along a rail.
-    const e = Math.sqrt(t);
-    puff.scale.setScalar((0.03 + e * 0.26) * (opts.scale || 1));
-    puff.position.addScaledVector(fwd, 0.011 * (1 - t) * (1 - t));
-    puff.position.y += 0.0018 * t;
-    puff.material.rotation += spin * 0.016;
-    puff.material.opacity = 0.40 * (1 - t) * (1 - t) * (1 + t * 0.6);
+  // Smoke outlives the flash: it keeps expanding and drifting as it thins. A dense quick puff at the crown and, from
+  // the big guns, a second larger and slower one behind it (and lower in opacity, so it never fills the view).
+  const smokeScale = opts.scale || 1;
+  const runPuff = (puff, o) => {
+    puff.visible = true;
+    puff.position.copy(world).addScaledVector(fwd, o.start);
+    puff.scale.setScalar(0.02);
+    puff.material.opacity = o.op;
+    puff.material.rotation = Math.random() * Math.PI * 2;   // no two puffs the same way up
+    puff.material.color.setHex(o.color);
+    const sStart = performance.now(), sDur = o.dur;
+    const spin = (Math.random() * 2 - 1) * 0.9;
+    const smoke = () => {
+      const t = (performance.now() - sStart) / sDur;
+      if (t >= 1) { puff.visible = false; puff.material.opacity = 0; puff.material.color.setHex(0x9a9a9a); return; }
+      // Gas leaves the bore fast and the air stops it almost at once, so the
+      // puff grows quickly and then barely at all, and its drift decays to
+      // nothing instead of continuing at a constant speed. Once it has slowed it
+      // starts to rise, because it is hotter than the air around it. The old
+      // version grew and travelled at a fixed rate for its whole life, which is
+      // a ball being pushed along a rail.
+      const e = Math.sqrt(t);
+      puff.scale.setScalar((0.03 + e * o.grow) * smokeScale);
+      puff.position.addScaledVector(fwd, o.drift * (1 - t) * (1 - t));
+      puff.position.y += o.rise * t;
+      puff.material.rotation += spin * 0.016;
+      puff.material.opacity = o.op * (1 - t) * (1 - t) * (1 + t * 0.6);
+      requestAnimationFrame(smoke);
+    };
     requestAnimationFrame(smoke);
   };
-  requestAnimationFrame(smoke);
+  if (st.puffs >= 1) runPuff(_getSmokePuff(), { start: 0.05, op: 0.42 * Math.min(1.3, st.smoke), dur: 520, grow: 0.26 * st.smoke, drift: 0.011, rise: 0.0018, color: 0x9a9a9a });
+  if (st.puffs >= 2) runPuff(_getSmokePuff(), { start: 0.16, op: 0.24, dur: 760, grow: 0.34 * st.smoke, drift: 0.006, rise: 0.0026, color: 0x7c7c7c });
 }
 function makeMuzzleFlash() {
   // 💥 A muzzle flash is burning propellant leaving the bore, so it is a jet
@@ -44555,7 +44687,7 @@ function fireRailgunCharge() {
     }, 120);
   }
   const model = weaponModels[currentWeaponIdx];
-  triggerMuzzleBlast(model, { duration: 120 + t * 80, scale: 1.4 + t * 1.6 });
+  triggerMuzzleBlast(model, { duration: 120 + t * 80, scale: 1.4 + t * 1.6, weapon: currentWeapon });
   kickWeaponVisual(currentWeapon, 1 + t * 2);
   const muzzleWorld = new THREE.Vector3();
   model._flash.getWorldPosition(muzzleWorld);
@@ -44713,7 +44845,7 @@ function fireCrossbowCharge() {
   }
 
   const model = weaponModels[currentWeaponIdx];
-  triggerMuzzleBlast(model);
+  triggerMuzzleBlast(model, { weapon: currentWeapon });
   kickWeaponVisual(currentWeapon, 1 + chargeMs / 900);
 
   const muzzleWorld = new THREE.Vector3();
@@ -44939,7 +45071,7 @@ function updatePendingFanFire(dt) {
     playWeaponSound(w.id, { baseWeapon: w, minGap: 25, violence });
     spawnLocalBullet(origin, d, bid, true, w.bulletSpeed, w.bulletColor, w.bulletSize, w.id);
     const model = weaponModels[currentWeaponIdx];
-    if (model) triggerMuzzleBlast(model, { duration: 78 + violence * 18 * hyperrealismFactor('muzzle'), scale: Math.min(hyperrealisticOn() ? 3.1 : 1.9, 0.92 + violence * 0.28 * hyperrealismFactor('muzzle')) });
+    if (model) triggerMuzzleBlast(model, { duration: 78 + violence * 18 * hyperrealismFactor('muzzle'), scale: Math.min(hyperrealisticOn() ? 3.1 : 1.9, 0.92 + violence * 0.28 * hyperrealismFactor('muzzle')), weapon: w });
     kickWeaponVisual(w, w.pellets || 1);
     pool.ammo--; ammo = pool.ammo; updateAmmoHUD();
     pendingFanFire.count--;
@@ -45184,7 +45316,7 @@ function tryShoot() {
 
   const shotViolence = weaponKickStrength(wStats, wStats.pellets || 1);
   const model = weaponModels[currentWeaponIdx];
-  triggerMuzzleBlast(model, { duration: 92 + shotViolence * 24 * hyperrealismFactor('muzzle'), scale: Math.min(hyperrealisticOn() ? 3.55 : 2.25, 1.05 + shotViolence * 0.34 * hyperrealismFactor('muzzle')) });
+  triggerMuzzleBlast(model, { duration: 92 + shotViolence * 24 * hyperrealismFactor('muzzle'), scale: Math.min(hyperrealisticOn() ? 3.55 : 2.25, 1.05 + shotViolence * 0.34 * hyperrealismFactor('muzzle')), weapon: wStats });
   kickWeaponVisual(wStats, wStats.pellets || 1);
 
   const muzzleWorld = new THREE.Vector3();
@@ -63702,6 +63834,7 @@ function loop() {
   updateMeleeGripPose();
   safeLoopStep('equipment-sway', updateEquipmentSway);
   safeLoopStep('enemy-footsteps', () => updateEnemyFootsteps(dt));
+  safeLoopStep('muzzle-fx', () => updateMuzzleFx(dt));
   safeLoopStep('action-wind', () => updateActionWind(dt));
   updateWeaponSelector();
   updateTrashcanProximity();
