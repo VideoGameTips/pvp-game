@@ -39133,7 +39133,10 @@ let GAMEPLAY_SETTINGS = {
   adsMode: 'toggle',
   cameraShake: 1,
   screenFx: 1,
-  touchScale: 1,   // ⚙ → BUTTON SIZE on phones: 0.85 / 1 / 1.2 (#29)
+  touchScale: 1,   // ⚙ → 🎮 CONTROLS → BUTTON SIZE on phones: a slider, 0.7–1.5 (#29)
+  touchOpacity: 1, // …→ BUTTON OPACITY: how see-through the touch buttons are
+  joySize: 1,      // …→ JOYSTICK SIZE: the floating stick's ring and how far a thumb has to travel
+  crouchMode: 'toggle', // …→ CROUCH BUTTON: 'toggle' (tap down, tap up) or 'hold' (down only while touched)
   lookSens: 1,     // ⚙ → LOOK / MOUSE SENSITIVITY, a multiplier of the old fixed speed (#45)
   ambient: 1,      // ⚙ → AMBIENT SOUND: the wind, surf, birds and hum of each map (0 = off)
   weatherFx: true, // ⚙ → WEATHER & PARTICLES: blown sand, snow, ash, rain in the air
@@ -39153,15 +39156,21 @@ try {
     GAMEPLAY_SETTINGS.autoReload = (navigator.maxTouchPoints > 0 || 'ontouchstart' in window);
   }
 } catch (e) {}
-const TOUCH_SCALES = [['SMALL', 0.85], ['NORMAL', 1], ['BIG', 1.2]];
 // Aim speed was fixed (SENS for the mouse, TOUCH_SENS for a thumb) — every hand is different (#45).
 function lookSensMult() {
   const v = Number(GAMEPLAY_SETTINGS.lookSens);
   return Number.isFinite(v) ? Math.max(0.3, Math.min(2.5, v)) : 1;
 }
+const _touchNum = (v, lo, hi) => { v = Number(v); return Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : 1; };
+function joySizeMult() { return _touchNum(GAMEPLAY_SETTINGS.joySize, 0.7, 1.6); }
+// The three CSS variables the touch layout reads (index.html): --tbs size, --tbo opacity, --tjs joystick.
 function applyTouchScale() {
-  const v = Number(GAMEPLAY_SETTINGS.touchScale);
-  document.documentElement.style.setProperty('--tbs', Number.isFinite(v) ? Math.max(0.7, Math.min(1.4, v)) : 1);
+  const root = document.documentElement.style;
+  // The button clusters are 250 px tall, so a short screen caps the size instead of pushing buttons off it.
+  const room = Math.max(0.7, window.innerHeight * 0.95 / 250);
+  root.setProperty('--tbs', Math.min(_touchNum(GAMEPLAY_SETTINGS.touchScale, 0.7, 1.5), room));
+  root.setProperty('--tbo', _touchNum(GAMEPLAY_SETTINGS.touchOpacity, 0.3, 1));
+  root.setProperty('--tjs', joySizeMult());
 }
 function saveGameplaySettings() {
   try { localStorage.setItem('pvp_gameplay_settings', JSON.stringify(GAMEPLAY_SETTINGS)); } catch (e) {}
@@ -39910,6 +39919,68 @@ window.addEventListener('keydown', e => {
   keys[e.code] = true;
   e.preventDefault(); e.stopImmediatePropagation();
 }, true);
+// The jump itself, for the Space key and the touch JUMP button alike. The button used to only set a flag
+// that the retired jump code in updateMovement read, and that code can no longer launch anyone — so on a
+// phone JUMP did nothing at all.
+function doJump(repeat) {
+  if (adminMapBuilderOpen && selectedModeConfig?.type === 'builder') return;
+  if (!isDead && isPlayerGrounded()) {
+    // 🛹 Slide jump: leaving the ground out of a slide trades a little height
+    // for the slide's speed carried into the air. The slide ends on the jump,
+    // so you cannot hold the boost and hop repeatedly on it.
+    const slidingNow = !!(window._slideUntil && Date.now() < window._slideUntil);
+    if (slidingNow && window._slideDir) {
+      const t = (window._slideUntil - Date.now()) / SLIDE_MS;   // 1 -> 0
+      const carry = SLIDE_JUMP_CARRY * (0.55 + 0.45 * Math.max(0, t));
+      _extVel.x += window._slideDir.x * carry;
+      _extVel.z += window._slideDir.z * carry;
+      window._slideUntil = 0;
+      // You are 0.95 m lower than standing when you push off, so the eye has
+      // that to climb before it is even level with where a normal jump
+      // STARTS. Pay for it in the launch, or the apex lands barely above your
+      // own head and the whole thing reads as standing up.
+      const standGap = Math.max(0, 1.65 - (window._crouchEye ?? 1.65));
+      const base = JUMP_VEL * SLIDE_JUMP_LIFT;
+      slamState = { vel: Math.sqrt(base * base + 2 * GRAVITY * standGap), type: 'jump' };
+      // 🚀 Climbing a ramp when you jump out of the slide turns the slide's
+      // speed into height, as if launched off it: the faster the slide and the
+      // steeper the slope, the higher. Downhill, or off a ramp, nothing changes.
+      const ramp = rampUnderPlayer();
+      const up = ramp ? window._slideDir.x * ramp.ux + window._slideDir.z * ramp.uz : 0;
+      if (ramp && up > 0.25) {
+        const h = Math.hypot(playerVelocity.x, playerVelocity.z);
+        slamState.vel += Math.min(RAMP_LAUNCH_MAX, h * ramp.tan * up * 0.3);
+        spawnAbilityAOEFX(camera.position.clone().setY(camera.position.y - 1.4), 1.6, 0xffcc66);
+        playEquipSound('whoosh');
+      }
+      window._crouchEye = 1.65;          // you stand up as you leave the ground
+      playSoundEvent('footstep', { volume: 0.5, pitch: 1.3, minGap: 60 });
+    } else {
+      // Same debt for a crouch jump, which had the same problem more quietly.
+      const standGap = Math.max(0, 1.65 - (window._crouchEye ?? 1.65));
+      slamState = { vel: Math.sqrt(JUMP_VEL * JUMP_VEL + 2 * GRAVITY * standGap), type: 'jump' };
+      window._crouchEye = 1.65;
+    }
+    // A light weapon buys one extra jump in the air. Charge it here, on the
+    // jump itself, so walking off a ledge doesn't hand you a free one.
+    window._airJumpsLeft = loadoutAirJumps();
+    window._blastJumpsLeft = 0;
+  } else if (!isDead && !repeat
+             && ((window._airJumpsLeft || 0) > 0 || (window._blastJumpsLeft || 0) > 0)) {
+    // 🦘 Second jump. Replace vertical velocity outright instead of adding to
+    // it, so the kick feels identical whether you tap it at the top of the arc
+    // or halfway back down.
+    if (slamState) slamState.vel = AIR_JUMP_VEL;
+    else slamState = { vel: AIR_JUMP_VEL, type: 'jump' };
+    // Spend the weapon's jump first and keep the blast one in reserve, so
+    // riding a charge while holding a light weapon really does leave you two.
+    if ((window._airJumpsLeft || 0) > 0) window._airJumpsLeft--;
+    else window._blastJumpsLeft--;
+    boostBlastCarryOnAirJump();
+    spawnAbilityAOEFX(camera.position.clone().setY(camera.position.y - 1.4), 1.2, 0xaaccff);
+    playSoundEvent('footstep', { volume: 0.5, pitch: 1.6, minGap: 60 });
+  }
+}
 document.addEventListener('keydown', e => {
   keys[e.code] = true;
   if (!gameStarted) return;
@@ -39931,63 +40002,7 @@ document.addEventListener('keydown', e => {
   // Spacebar — jump (only when on the ground)
   if (e.code === 'Space') {
     e.preventDefault();
-    if (adminMapBuilderOpen && selectedModeConfig?.type === 'builder') return;
-    if (!isDead && isPlayerGrounded()) {
-      // 🛹 Slide jump: leaving the ground out of a slide trades a little height
-      // for the slide's speed carried into the air. The slide ends on the jump,
-      // so you cannot hold the boost and hop repeatedly on it.
-      const slidingNow = !!(window._slideUntil && Date.now() < window._slideUntil);
-      if (slidingNow && window._slideDir) {
-        const t = (window._slideUntil - Date.now()) / SLIDE_MS;   // 1 -> 0
-        const carry = SLIDE_JUMP_CARRY * (0.55 + 0.45 * Math.max(0, t));
-        _extVel.x += window._slideDir.x * carry;
-        _extVel.z += window._slideDir.z * carry;
-        window._slideUntil = 0;
-        // You are 0.95 m lower than standing when you push off, so the eye has
-        // that to climb before it is even level with where a normal jump
-        // STARTS. Pay for it in the launch, or the apex lands barely above your
-        // own head and the whole thing reads as standing up.
-        const standGap = Math.max(0, 1.65 - (window._crouchEye ?? 1.65));
-        const base = JUMP_VEL * SLIDE_JUMP_LIFT;
-        slamState = { vel: Math.sqrt(base * base + 2 * GRAVITY * standGap), type: 'jump' };
-        // 🚀 Climbing a ramp when you jump out of the slide turns the slide's
-        // speed into height, as if launched off it: the faster the slide and the
-        // steeper the slope, the higher. Downhill, or off a ramp, nothing changes.
-        const ramp = rampUnderPlayer();
-        const up = ramp ? window._slideDir.x * ramp.ux + window._slideDir.z * ramp.uz : 0;
-        if (ramp && up > 0.25) {
-          const h = Math.hypot(playerVelocity.x, playerVelocity.z);
-          slamState.vel += Math.min(RAMP_LAUNCH_MAX, h * ramp.tan * up * 0.3);
-          spawnAbilityAOEFX(camera.position.clone().setY(camera.position.y - 1.4), 1.6, 0xffcc66);
-          playEquipSound('whoosh');
-        }
-        window._crouchEye = 1.65;          // you stand up as you leave the ground
-        playSoundEvent('footstep', { volume: 0.5, pitch: 1.3, minGap: 60 });
-      } else {
-        // Same debt for a crouch jump, which had the same problem more quietly.
-        const standGap = Math.max(0, 1.65 - (window._crouchEye ?? 1.65));
-        slamState = { vel: Math.sqrt(JUMP_VEL * JUMP_VEL + 2 * GRAVITY * standGap), type: 'jump' };
-        window._crouchEye = 1.65;
-      }
-      // A light weapon buys one extra jump in the air. Charge it here, on the
-      // jump itself, so walking off a ledge doesn't hand you a free one.
-      window._airJumpsLeft = loadoutAirJumps();
-      window._blastJumpsLeft = 0;
-    } else if (!isDead && !e.repeat
-               && ((window._airJumpsLeft || 0) > 0 || (window._blastJumpsLeft || 0) > 0)) {
-      // 🦘 Second jump. Replace vertical velocity outright instead of adding to
-      // it, so the kick feels identical whether you tap it at the top of the arc
-      // or halfway back down.
-      if (slamState) slamState.vel = AIR_JUMP_VEL;
-      else slamState = { vel: AIR_JUMP_VEL, type: 'jump' };
-      // Spend the weapon's jump first and keep the blast one in reserve, so
-      // riding a charge while holding a light weapon really does leave you two.
-      if ((window._airJumpsLeft || 0) > 0) window._airJumpsLeft--;
-      else window._blastJumpsLeft--;
-      boostBlastCarryOnAirJump();
-      spawnAbilityAOEFX(camera.position.clone().setY(camera.position.y - 1.4), 1.2, 0xaaccff);
-      playSoundEvent('footstep', { volume: 0.5, pitch: 1.6, minGap: 60 });
-    }
+    doJump(e.repeat);
   }
   // ── Admin panel shortcut (cheats are typed in V chat: ;help) ─────────────
   if (currentUser?.isAdmin && !e.repeat && !commsMenuOpen) {
@@ -43018,7 +43033,7 @@ function updateMovement(dt, socialBlocked = false) {
     finally { Object.assign(keys, held); joyDir = joystick; window._mobileSlide = slide; window._mobileCrouch = crouch; }
     return;
   }
-  if (isDead) return;
+  if (isDead) { window._setMobileCrouch?.(false); return; }   // a latched touch crouch does not outlive you
   if (match && !match.roundActive && countdownActive) return; // frozen only during countdown
   if (pilotedVehicle) return; // piloting handles its own movement
 
@@ -43043,6 +43058,8 @@ function updateMovement(dt, socialBlocked = false) {
   if (keys['KeyA'] || joyDir.x < -0.15) dir.sub(right);
   if (keys['KeyD'] || joyDir.x >  0.15) dir.add(right);
   if (dir.lengthSq()>0) dir.normalize();
+  // Remember where the stick last pointed, so a SLIDE tap a moment after letting go still knows where to go.
+  if (joyActive && dir.lengthSq() > 0) window._joyRecent = { x: joyDir.x, y: joyDir.y, t: Date.now() };
   if (updateMapLadderMove(dt,dir)) return;
   const joyMag = joyActive ? Math.max(0.3, Math.min(1, Math.sqrt(joyDir.x**2+joyDir.y**2))) : 1;
   // 🏋️ Weapon-weight slow: heavier guns drop your move speed. Computed
@@ -43068,10 +43085,22 @@ function updateMovement(dt, socialBlocked = false) {
   const crouchHeld = !!(keys['ControlLeft'] || keys['ControlRight'] || keys['KeyC'] || window._mobileCrouch);
   // 🛹 Slide: edge-detect SHIFT (or mobile slide button) → 0.8s slide burst.
   // No sustained sprint — SHIFT only triggers a slide while you're moving.
-  const shiftHeld = !!(keys['ShiftLeft'] || keys['ShiftRight'] || window._mobileSlide);
-  const shiftEdge = shiftHeld && !window._prevShiftHeld;
-  window._prevShiftHeld = shiftHeld;
+  // The SLIDE button is a tap, not a held key: it latches `_mobileSlide` (with a time) and this reads it once.
+  // It used to be a 100 ms pulse that one slow frame could step right over, and it only slid if the stick
+  // was already held — but the thumb that holds the stick is not the one that reaches the button.
+  const shiftHeld = !!(keys['ShiftLeft'] || keys['ShiftRight']);
   const nowMs = Date.now();
+  const slideTap = !!window._mobileSlide && nowMs - (window._mobileSlideAt || 0) < 300;
+  window._mobileSlide = false;
+  const shiftEdge = (shiftHeld && !window._prevShiftHeld) || slideTap;
+  window._prevShiftHeld = shiftHeld;
+  if (slideTap && dir.lengthSq() < 0.001) {
+    // Nothing is held: slide the way the stick was last pushed (if that was just now), else straight ahead.
+    const j = window._joyRecent && nowMs - window._joyRecent.t < 700 ? window._joyRecent : null;
+    if (j) { dir.addScaledVector(fwd, -j.y).addScaledVector(right, j.x); if (dir.lengthSq() < 0.001) dir.copy(fwd); }
+    else dir.copy(fwd);
+    dir.normalize();
+  }
   const groundedNow = isPlayerGrounded();
   if (groundedNow) window._dashLeft = 1;    // dash recharges on landing
   // 🛹 Easy slide: crouch WHILE MOVING slides, exactly as Shift does. Standing
@@ -66429,7 +66458,7 @@ document.addEventListener('langchange', () => {
 // One dialog at a time (#21): each of these used to open on top of whatever was already open, all in
 // different sizes. Closing is only hiding — every dialog rebuilds from current state when it opens.
 // index.html gives them one shared frame.
-const DIALOG_IDS = ['settings-hub-panel', 'controls-panel', 'crosshair-panel', 'shoot-fx-panel', 'aim-assist-panel', 'weapon-skins-panel',
+const DIALOG_IDS = ['settings-hub-panel', 'controls-panel', 'touch-controls-panel', 'crosshair-panel', 'shoot-fx-panel', 'aim-assist-panel', 'weapon-skins-panel',
                     'skins-panel', 'kill-log-panel', 'char-chat-panel', 'map-dialog', 'diff-dialog', 'duel-panel', 'lobby-service-panel','weapon-inspect-panel'];
 function anyDialogOpen() {
   return DIALOG_IDS.some(id => { const el = document.getElementById(id); return el && getComputedStyle(el).display !== 'none'; });
@@ -66493,10 +66522,7 @@ function openSettingsHub() {
     ${toggleRow('showFPS', 'SHOW FPS')}
     ${toggleRow('autoReload', 'AUTO RELOAD')}
     ${toggleRow('hyperrealistic', 'HYPERREALISTIC', 'For fun: huge shake, flash, smoke, impacts, and pressure. Not recommended for competitive play.')}
-    ${isTouchUI() ? `<div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin:10px 0;padding:10px;background:rgba(255,255,255,0.035);border:1px solid #244c42;border-radius:6px;">
-      <div style="font-size:12px;letter-spacing:2px;color:#d8fff2;">BUTTON SIZE</div>
-      <div style="display:flex;gap:6px;">${TOUCH_SCALES.map(([label, v]) => `<button type="button" data-touch-scale="${v}" style="min-width:46px;min-height:36px;padding:0 8px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:bold;letter-spacing:1px;border-radius:5px;border:1px solid ${GAMEPLAY_SETTINGS.touchScale == v ? '#88ffcc' : '#2e5f52'};background:${GAMEPLAY_SETTINGS.touchScale == v ? '#1f5a3a' : '#16241f'};color:${GAMEPLAY_SETTINGS.touchScale == v ? '#aaffdd' : '#79a094'};">${label}</button>`).join('')}</div>
-    </div>` : ''}
+    ${isTouchUI() ? `<button id="settings-touch-controls" style="display:block;width:100%;min-height:52px;margin:10px 0;padding:10px;background:#10203a;color:#8fbfff;border:1px solid #5599ff;cursor:pointer;font-family:inherit;font-size:13px;letter-spacing:2px;border-radius:6px;">🎮 TOUCH CONTROLS ›</button>` : ''}
     <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin:10px 0;padding:10px;background:rgba(255,255,255,0.035);border:1px solid #244c42;border-radius:6px;">
       <div style="font-size:12px;letter-spacing:2px;color:#d8fff2;">ADS MODE</div>
       <button id="settings-ads-mode" style="min-width:92px;padding:7px 10px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:bold;letter-spacing:2px;border-radius:4px;background:#132a24;color:#88ffcc;border:2px solid #44cc99;">${String(GAMEPLAY_SETTINGS.adsMode).toUpperCase()}</button>
@@ -66531,14 +66557,8 @@ function openSettingsHub() {
       openSettingsHub();
     });
   });
-  panel.querySelectorAll('[data-touch-scale]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      GAMEPLAY_SETTINGS.touchScale = Number(btn.dataset.touchScale);
-      saveGameplaySettings();
-      applyTouchScale();
-      openSettingsHub();
-    });
-  });
+  const _tcBtn = document.getElementById('settings-touch-controls');
+  if (_tcBtn) _tcBtn.addEventListener('click', () => { panel.style.display = 'none'; openTouchControlsPanel(); });
   document.getElementById('settings-ads-mode').addEventListener('click', () => {
     GAMEPLAY_SETTINGS.adsMode = GAMEPLAY_SETTINGS.adsMode === 'hold' ? 'toggle' : 'hold';
     if (GAMEPLAY_SETTINGS.adsMode === 'toggle' && isADS) setADS(false);
@@ -66554,7 +66574,7 @@ function openSettingsHub() {
       saveGameplaySettings();
     });
   });
-  document.getElementById('settings-controls').addEventListener('click', () => { panel.style.display = 'none'; openControlsPanel(); });
+  document.getElementById('settings-controls').addEventListener('click', () => { panel.style.display = 'none'; if (isTouchUI()) openTouchControlsPanel(); else openControlsPanel(); });  // a phone has no keys to rebind
   document.getElementById('settings-crosshair').addEventListener('click', () => { panel.style.display = 'none'; openCrosshairPanel(); });
   document.getElementById('settings-shoot-fx').addEventListener('click', () => { panel.style.display = 'none'; openShootFxPanel(); });
   document.getElementById('settings-aim-assist').addEventListener('click', () => { panel.style.display = 'none'; openAimAssistPanel(); });
@@ -68802,9 +68822,10 @@ document.addEventListener('touchmove', e => {
       let dx = t.clientX - joyOrigin.x;
       let dy = t.clientY - joyOrigin.y;
       const dist = Math.sqrt(dx*dx + dy*dy);
-      if (dist > JOYSTICK_RADIUS) { dx *= JOYSTICK_RADIUS/dist; dy *= JOYSTICK_RADIUS/dist; }
-      joyDir.x = dx / JOYSTICK_RADIUS;
-      joyDir.y = dy / JOYSTICK_RADIUS;
+      const R = JOYSTICK_RADIUS * joySizeMult();     // ⚙ → 🎮 CONTROLS → JOYSTICK SIZE
+      if (dist > R) { dx *= R/dist; dy *= R/dist; }
+      joyDir.x = dx / R;
+      joyDir.y = dy / R;
       joystickThumb.style.left = (50 + joyDir.x * 50) + '%';
       joystickThumb.style.top  = (50 + joyDir.y * 50) + '%';
     } else if (t.identifier === lookTouchId) {
@@ -68935,29 +68956,235 @@ if (btnAbility) {
   btnAbility.addEventListener('click', useAbility);
 }
 
-// Mobile sprint / crouch buttons — set window._mobileSprint / _mobileCrouch flags
-function _wireHold(id, prop) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  const on  = e => { e?.preventDefault?.(); el.classList.add('pressed'); window[prop] = true; };
-  const off = e => { e?.preventDefault?.(); el.classList.remove('pressed'); window[prop] = false; };
-  el.addEventListener('touchstart', on,  { passive: false });
-  el.addEventListener('touchend',   off, { passive: false });
-  el.addEventListener('touchcancel',off, { passive: false });
-  el.addEventListener('mousedown',  on);
-  el.addEventListener('mouseup',    off);
-  el.addEventListener('mouseleave', off);
+// ── ✋ Touch control layout ──────────────────────────────────────────────────────────
+// Every button can be dragged somewhere else (⚙ → 🎮 CONTROLS → MOVE BUTTONS). A move is stored as an
+// offset from the button's own default place, in cluster pixels (the unit --tbs scales), once for
+// landscape ('l') and once for portrait ('p') — the two layouts have different thumb room.
+const TC_BTN_IDS = ['btn-fire', 'btn-ads', 'btn-reload-mobile', 'btn-jump', 'btn-slide', 'btn-crouch', 'btn-interact', 'btn-ability'];
+let TOUCH_LAYOUT = { l: {}, p: {} };
+try {
+  const saved = JSON.parse(localStorage.getItem('pvp_touch_layout') || 'null');
+  if (saved && typeof saved === 'object') TOUCH_LAYOUT = { l: saved.l || {}, p: saved.p || {} };
+} catch (e) {}
+function saveTouchLayout() { try { localStorage.setItem('pvp_touch_layout', JSON.stringify(TOUCH_LAYOUT)); } catch (e) {} }
+const tcOrient = () => window.innerWidth >= window.innerHeight ? 'l' : 'p';
+const tcScale = () => parseFloat(document.documentElement.style.getPropertyValue('--tbs')) || 1;
+const tcEditing = () => document.body.classList.contains('tc-editing');
+// How far (screen px) a button sticks out past the screen edge, as the shift that would bring it back.
+function tcClamp(el) {
+  const r = el.getBoundingClientRect();
+  if (!r.width) return null;                       // not shown right now (⚡ / SWAP between uses)
+  const m = 4, vw = window.innerWidth, vh = window.innerHeight;
+  let dx = 0, dy = 0;
+  if (r.left < m) dx = m - r.left; else if (r.right > vw - m) dx = vw - m - r.right;
+  if (r.top < m) dy = m - r.top; else if (r.bottom > vh - m) dy = vh - m - r.bottom;
+  return dx || dy ? { dx, dy } : null;
 }
-_wireHold('btn-crouch', '_mobileCrouch');
-// Slide is edge-triggered like jump — single tap = single slide burst
+// Put the saved offset on a button, pulling it back on screen if this screen is smaller than the one it was set on.
+function tcPlace(el, off) {
+  const k = tcScale();
+  let x = off ? off.x : 0, y = off ? off.y : 0;
+  el.style.translate = off ? `${x}px ${y}px` : '';
+  const c = tcClamp(el);
+  if (c) { x += c.dx / k; y += c.dy / k; el.style.translate = `${x}px ${y}px`; }
+  return { x, y };
+}
+function applyTouchLayout() {
+  if (!isTouchUI()) return;
+  const lay = TOUCH_LAYOUT[tcOrient()] || {};
+  for (const id of TC_BTN_IDS) { const el = document.getElementById(id); if (el) tcPlace(el, lay[id]); }
+}
+if (isTouchUI()) {
+  applyTouchLayout();
+  window.addEventListener('resize', () => { applyTouchScale(); applyTouchLayout(); });
+  window.addEventListener('orientationchange', () => setTimeout(() => { applyTouchScale(); applyTouchLayout(); }, 120));
+}
+
+// Dragging. Everything is caught in the capture phase on #mobile-controls while editing, so no button
+// fires (FIRE would shoot, JUMP would jump) and the stick / look handlers on the document never see it.
+(function wireTouchLayoutEdit() {
+  const root = document.getElementById('mobile-controls');
+  if (!root) return;
+  let drag = null;
+  const pt = (e, id) => {
+    if (!e.changedTouches) return e;
+    for (const t of e.changedTouches) if (id === undefined || t.identifier === id) return t;
+    return null;
+  };
+  const down = e => {
+    if (!tcEditing()) return;
+    e.stopPropagation(); e.preventDefault();
+    if (drag) return;
+    const el = e.target.closest && e.target.closest('#mobile-controls .tc > div');
+    if (!el || !TC_BTN_IDS.includes(el.id)) return;
+    const p = pt(e); if (!p) return;
+    const o = (TOUCH_LAYOUT[tcOrient()] || {})[el.id] || { x: 0, y: 0 };
+    drag = { el, id: el.id, sx: p.clientX, sy: p.clientY, ox: o.x, oy: o.y, tid: p.identifier, cur: null };
+    el.classList.add('tc-grab');
+  };
+  const move = e => {
+    if (!tcEditing()) return;
+    e.stopPropagation(); e.preventDefault();
+    if (!drag) return;
+    const p = pt(e, drag.tid); if (!p) return;
+    const k = tcScale();
+    drag.cur = tcPlace(drag.el, { x: drag.ox + (p.clientX - drag.sx) / k, y: drag.oy + (p.clientY - drag.sy) / k });
+  };
+  const up = e => {
+    if (!tcEditing()) return;
+    e.stopPropagation(); if (e.cancelable) e.preventDefault();
+    if (!drag || (e.changedTouches && !pt(e, drag.tid))) return;
+    if (drag.cur) {
+      (TOUCH_LAYOUT[tcOrient()] || (TOUCH_LAYOUT[tcOrient()] = {}))[drag.id] = { x: Math.round(drag.cur.x * 10) / 10, y: Math.round(drag.cur.y * 10) / 10 };
+      saveTouchLayout();
+    }
+    drag.el.classList.remove('tc-grab'); drag = null;
+  };
+  for (const [ev, fn] of [['touchstart', down], ['touchmove', move], ['touchend', up], ['touchcancel', up], ['mousedown', down]]) {
+    root.addEventListener(ev, fn, { capture: true, passive: false });
+  }
+  root.addEventListener('click', e => { if (tcEditing()) { e.stopPropagation(); e.preventDefault(); } }, true);
+  window.addEventListener('mousemove', e => { if (drag) move(e); });   // a mouse keeps dragging off the button
+  window.addEventListener('mouseup', e => { if (drag) up(e); });
+})();
+
+function enterTouchEdit() {
+  closeOtherDialogs();
+  document.body.classList.add('tc-editing');
+  let bar = document.getElementById('tc-edit-bar');
+  if (!bar) { bar = document.createElement('div'); bar.id = 'tc-edit-bar'; document.body.appendChild(bar); }
+  bar.style.display = 'flex';
+  bar.innerHTML = `<span class="tc-edit-hint">✋ DRAG A BUTTON TO MOVE IT</span>
+    <label style="display:flex;align-items:center;gap:6px;">SIZE <input id="tc-edit-size" type="range" min="0.7" max="1.5" step="0.05" value="${_touchNum(GAMEPLAY_SETTINGS.touchScale, 0.7, 1.5)}"></label>
+    <button id="tc-edit-reset" type="button">RESET</button>
+    <button id="tc-edit-done" type="button">DONE</button>`;
+  document.getElementById('tc-edit-size').addEventListener('input', e => {
+    GAMEPLAY_SETTINGS.touchScale = parseFloat(e.target.value);
+    saveGameplaySettings(); applyTouchScale(); applyTouchLayout();
+  });
+  document.getElementById('tc-edit-reset').addEventListener('click', () => {
+    TOUCH_LAYOUT[tcOrient()] = {}; saveTouchLayout(); applyTouchLayout();
+  });
+  document.getElementById('tc-edit-done').addEventListener('click', exitTouchEdit);
+}
+function exitTouchEdit() {
+  document.body.classList.remove('tc-editing');
+  const bar = document.getElementById('tc-edit-bar');
+  if (bar) bar.style.display = 'none';
+  applyTouchLayout();
+  openTouchControlsPanel();
+}
+
+function openTouchControlsPanel() {
+  closeOtherDialogs('touch-controls-panel');
+  let panel = document.getElementById('touch-controls-panel');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'touch-controls-panel';
+    panel.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9900;background:#0f1520;border:2px solid #5599ff;border-radius:8px;padding:22px;color:#fff;font-family:"Courier New",monospace;';
+    document.body.appendChild(panel);
+  }
+  panel.style.display = 'block';
+  panel.style.opacity = '1';
+  const box = 'margin:8px 0;padding:8px 10px;background:rgba(255,255,255,0.035);border:1px solid #22304a;border-radius:6px;';
+  const slider = (key, label, min, max, step) => `
+    <div style="${box}">
+      <div style="display:flex;justify-content:space-between;font-size:12px;letter-spacing:2px;color:#cfe0ff;">
+        <span>${label}</span><span id="tcp-${key}-val" style="color:#8fbfff;">${Math.round(GAMEPLAY_SETTINGS[key] * 100)}%</span>
+      </div>
+      <input data-tcp-range="${key}" type="range" min="${min}" max="${max}" step="${step}" value="${GAMEPLAY_SETTINGS[key]}" style="width:100%;height:32px;margin-top:6px;">
+    </div>`;
+  const hold = GAMEPLAY_SETTINGS.crouchMode === 'hold';
+  panel.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;border-bottom:1px solid #2c4a80;padding-bottom:10px;">
+      <div style="font-size:18px;letter-spacing:3px;color:#8fbfff;">🎮 TOUCH CONTROLS</div>
+      <button id="tcp-close" style="background:#1f2a3a;color:#ffaaaa;border:1px solid #ff6666;padding:8px 14px;cursor:pointer;font-family:inherit;border-radius:3px;">✕</button>
+    </div>
+    <div style="font-size:10px;color:#8da2c8;margin-bottom:6px;line-height:1.5;">Drag a slider and this window fades so you can watch the buttons change. Saved on this device.</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:0 12px;">
+      ${slider('touchScale', 'BUTTON SIZE', 0.7, 1.5, 0.05)}
+      ${slider('touchOpacity', 'BUTTON OPACITY', 0.3, 1, 0.05)}
+      ${slider('joySize', 'JOYSTICK SIZE', 0.7, 1.6, 0.05)}
+      ${slider('lookSens', 'LOOK SENSITIVITY', 0.3, 2.5, 0.05)}
+    </div>
+    <div style="${box}display:flex;align-items:center;justify-content:space-between;gap:14px;">
+      <div>
+        <div style="font-size:12px;letter-spacing:2px;color:#cfe0ff;">CROUCH BUTTON</div>
+        <div style="font-size:10px;color:#8da2c8;margin-top:4px;line-height:1.4;">${hold ? 'Crouched only while your finger is on it.' : 'Tap to crouch, tap again to stand. JUMP also stands you up.'}</div>
+      </div>
+      <button id="tcp-crouch-mode" style="min-width:92px;min-height:40px;padding:0 10px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:bold;letter-spacing:2px;border-radius:4px;background:#132a24;color:#88ffcc;border:1px solid #2e5f52;">${hold ? 'HOLD' : 'TOGGLE'}</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-top:14px;">
+      <button id="tcp-edit" style="min-height:52px;background:#1f3a5a;color:#bfdcff;border:2px solid #5599ff;cursor:pointer;font-family:inherit;font-size:14px;font-weight:bold;letter-spacing:2px;border-radius:6px;">✋ MOVE BUTTONS</button>
+      <button id="tcp-reset" style="min-height:52px;background:#2a1a1a;color:#ff9988;border:1px solid #ff5544;cursor:pointer;font-family:inherit;letter-spacing:2px;border-radius:6px;">RESET TO DEFAULT</button>
+    </div>
+  `;
+  document.getElementById('tcp-close').addEventListener('click', () => { panel.style.display = 'none'; });
+  // Fade the whole window while a slider is held, so the buttons underneath can be seen changing.
+  const fade = on => { panel.style.opacity = on ? '0.18' : '1'; };
+  panel.querySelectorAll('[data-tcp-range]').forEach(input => {
+    input.addEventListener('input', () => {
+      const key = input.dataset.tcpRange;
+      GAMEPLAY_SETTINGS[key] = parseFloat(input.value);
+      const val = document.getElementById(`tcp-${key}-val`);
+      if (val) val.textContent = Math.round(GAMEPLAY_SETTINGS[key] * 100) + '%';
+      saveGameplaySettings(); applyTouchScale(); applyTouchLayout();
+    });
+    for (const ev of ['touchstart', 'mousedown', 'pointerdown']) input.addEventListener(ev, () => fade(true), { passive: true });
+    for (const ev of ['touchend', 'touchcancel', 'mouseup', 'pointerup', 'pointercancel', 'change']) input.addEventListener(ev, () => fade(false), { passive: true });
+  });
+  document.getElementById('tcp-crouch-mode').addEventListener('click', () => {
+    GAMEPLAY_SETTINGS.crouchMode = hold ? 'toggle' : 'hold';
+    setMobileCrouch(false);
+    saveGameplaySettings(); openTouchControlsPanel();
+  });
+  document.getElementById('tcp-edit').addEventListener('click', enterTouchEdit);
+  document.getElementById('tcp-reset').addEventListener('click', async () => {
+    if (!await uiConfirm('Put every touch control back the way it came?')) return;
+    Object.assign(GAMEPLAY_SETTINGS, { touchScale: 1, touchOpacity: 1, joySize: 1, crouchMode: 'toggle' });
+    TOUCH_LAYOUT = { l: {}, p: {} }; saveTouchLayout(); saveGameplaySettings();
+    setMobileCrouch(false); applyTouchScale(); applyTouchLayout();
+    openTouchControlsPanel();
+  });
+}
+
+// CROUCH: tap to go down, tap again to stand. The left thumb is on the stick, so a button that only works
+// while it is held could never be used on the move; ⚙ → 🎮 CONTROLS can turn it back into hold-to-crouch.
+const _crouchBtn = document.getElementById('btn-crouch');
+function setMobileCrouch(on) {
+  window._mobileCrouch = !!on;
+  if (_crouchBtn) _crouchBtn.classList.toggle('latched', !!on);
+}
+window._setMobileCrouch = setMobileCrouch;
+if (_crouchBtn) {
+  const down = e => {
+    e?.preventDefault?.(); e?.stopPropagation?.();
+    if (GAMEPLAY_SETTINGS.crouchMode === 'hold') { _crouchBtn.classList.add('pressed'); setMobileCrouch(true); return; }
+    setMobileCrouch(!window._mobileCrouch);
+    _crouchBtn.classList.add('pressed');
+    setTimeout(() => _crouchBtn.classList.remove('pressed'), 120);
+  };
+  const up = e => {
+    e?.preventDefault?.();
+    if (GAMEPLAY_SETTINGS.crouchMode !== 'hold') return;
+    _crouchBtn.classList.remove('pressed'); setMobileCrouch(false);
+  };
+  _crouchBtn.addEventListener('touchstart', down, { passive: false });
+  _crouchBtn.addEventListener('touchend', up, { passive: false });
+  _crouchBtn.addEventListener('touchcancel', up, { passive: false });
+  _crouchBtn.addEventListener('mousedown', down);
+  _crouchBtn.addEventListener('mouseup', up);
+  _crouchBtn.addEventListener('mouseleave', up);
+}
+// Slide is a tap = one slide burst. It latches (see updateMovement) rather than pulsing for 100 ms.
 const _slideBtn = document.getElementById('btn-slide');
 if (_slideBtn) {
   const trigger = e => {
-    e?.preventDefault?.();
+    e?.preventDefault?.(); e?.stopPropagation?.();
     _slideBtn.classList.add('pressed');
     window._mobileSlide = true;
-    // Clear the flag next frame so it edge-triggers exactly once
-    setTimeout(() => { window._mobileSlide = false; _slideBtn.classList.remove('pressed'); }, 100);
+    window._mobileSlideAt = Date.now();
+    setTimeout(() => _slideBtn.classList.remove('pressed'), 160);
   };
   _slideBtn.addEventListener('touchstart', trigger, { passive: false });
   _slideBtn.addEventListener('mousedown',  trigger);
@@ -68966,9 +69193,15 @@ if (_slideBtn) {
 const _jumpBtn = document.getElementById('btn-jump');
 if (_jumpBtn) {
   const trigger = e => {
-    e?.preventDefault?.();
+    e?.preventDefault?.(); e?.stopPropagation?.();
     _jumpBtn.classList.add('pressed');
+    // JUMP stands you up first: a jump is refused while crouched, so a latched crouch would swallow the tap.
+    if (window._mobileCrouch && GAMEPLAY_SETTINGS.crouchMode !== 'hold') setMobileCrouch(false);
     window._mobileJump = true;
+    if (gameStarted && !pilotedVehicle && !pilotedMortar) doJump(false);   // (in a helicopter JUMP climbs instead: _mobileUp)
+    // …and the tap expires: it used to stay queued if it could not be used (in the air), and then jump on landing.
+    clearTimeout(window._mobileJumpT);
+    window._mobileJumpT = setTimeout(() => { window._mobileJump = false; }, 180);
     setTimeout(() => _jumpBtn.classList.remove('pressed'), 120);
   };
   _jumpBtn.addEventListener('touchstart', trigger, { passive: false });

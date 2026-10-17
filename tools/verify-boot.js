@@ -1786,6 +1786,90 @@ if (ok && process.argv.includes('--movement')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+if (ok && process.argv.includes('--touch')) {
+  // The phone controls. The JUMP button only set a flag that the retired jump code in updateMovement read, so it
+  // never launched anyone; SLIDE needed the stick held (with a thumb that is not the one tapping SLIDE). Now both
+  // act on a tap, the buttons are finger-sized, and SLIDE sits beside JUMP.
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const savedMode = selectedModeConfig, savedMatch = match, savedStarted = gameStarted, savedDead = isDead;
+    const keepWalls = wallColliders.slice(); wallColliders.length = 0;
+    const reset = () => {
+      camera.position.set(0, 1.65, 0); camera.quaternion.set(0, 0, 0, 1);
+      slamState = null; playerYVel = 0; window._slideUntil = 0; window._slideDir = null; window._crouchEye = 1.65;
+      window._mobileSlide = false; window._mobileJump = false; window._mobileCrouch = false; window._joyRecent = null;
+      window._prevShiftHeld = false; window._prevCrouchHeld = false; window._prevSpaceDown = false;
+      joyActive = false; joyDir = { x: 0, y: 0 };
+    };
+    try {
+      selectedModeConfig = GAME_MODE_CONFIGS['1v1']; match = null; gameStarted = true; isDead = false;
+      // JUMP: a tap on the ground launches; a dead player does not
+      reset();
+      doJump(false);
+      if (!slamState || slamState.type !== 'jump' || !(slamState.vel > 5)) issues.push('doJump on the ground did not launch');
+      reset(); isDead = true; doJump(false); isDead = false;
+      if (slamState) issues.push('a dead player jumped');
+      // a latched crouch is stood out of by the jump (the button does this before it jumps)
+      reset(); window._crouchEye = 1.1; doJump(false);
+      if (!slamState || window._crouchEye !== 1.65) issues.push('a crouched jump should launch and stand you up');
+
+      // SLIDE: one tap, nothing held, goes straight ahead
+      reset();
+      window._mobileSlide = true; window._mobileSlideAt = Date.now();
+      updateMovement(1 / 60);
+      if (!(window._slideUntil > Date.now())) issues.push('a SLIDE tap with the stick idle did not slide');
+      else if (!(window._slideDir && window._slideDir.z < -0.9 && Math.abs(window._slideDir.x) < 0.1)) issues.push('a standing slide should go straight ahead, got ' + (window._slideDir && window._slideDir.toArray().map(v => v.toFixed(2))));
+      if (window._mobileSlide) issues.push('the SLIDE tap should be used up by the frame that read it');
+      // …in the direction the stick was last pushed, if that was a moment ago
+      reset();
+      joyActive = true; joyDir = { x: 1, y: 0 }; updateMovement(1 / 60); updateMovement(1 / 60);
+      joyActive = false; joyDir = { x: 0, y: 0 };
+      window._slideUntil = 0; window._prevShiftHeld = false;
+      window._mobileSlide = true; window._mobileSlideAt = Date.now();
+      updateMovement(1 / 60);
+      if (!(window._slideDir && window._slideDir.x > 0.9)) issues.push('a slide just after letting go of the stick should go that way (right)');
+      // …but not off a stick that was let go of long ago
+      reset();
+      window._joyRecent = { x: 1, y: 0, t: Date.now() - 5000 };
+      window._mobileSlide = true; window._mobileSlideAt = Date.now();
+      updateMovement(1 / 60);
+      if (!(window._slideDir && window._slideDir.z < -0.9)) issues.push('a stale stick direction should not steer a slide');
+      // a tap older than the window is not replayed (a frame stall must not turn into a late slide)
+      reset();
+      window._mobileSlide = true; window._mobileSlideAt = Date.now() - 2000;
+      updateMovement(1 / 60);
+      if (window._slideUntil) issues.push('a stale SLIDE tap slid anyway');
+      // the Shift key keeps its old rule: standing still it does nothing
+      reset();
+      keys['ShiftLeft'] = true; updateMovement(1 / 60); keys['ShiftLeft'] = false;
+      if (window._slideUntil) issues.push('Shift with no direction should still not slide');
+      // dying puts a latched crouch back
+      reset(); setMobileCrouch(true); isDead = true; updateMovement(1 / 60); isDead = false;
+      if (window._mobileCrouch) issues.push('a latched crouch survived death');
+    } finally {
+      reset(); wallColliders.push(...keepWalls);
+      selectedModeConfig = savedMode; match = savedMatch; gameStarted = savedStarted; isDead = savedDead;
+      camera.position.set(0, 1.65, 0); camera.quaternion.set(0, 0, 0, 1);
+    }
+    return issues;
+  })()`);
+  // The layout (index.html): finger-sized buttons, SLIDE in the right cluster, CROUCH in the left.
+  const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const size = (css, id) => { const m = css.match(new RegExp('body\\.touch-ui #' + id + '\\s*\\{[^}]*?width:\\s*(\\d+)px')); return m ? +m[1] : 0; };
+  const narrowAt = html.indexOf('@media (max-width: 350px)');
+  const wide = html.slice(0, narrowAt), narrow = html.slice(narrowAt, html.indexOf('}\n    /* Landscape', narrowAt));
+  const need = { 'btn-fire': 84, 'btn-jump': 60, 'btn-slide': 54, 'btn-ads': 58, 'btn-reload-mobile': 52, 'btn-crouch': 54, 'btn-interact': 54, 'btn-ability': 52 };
+  for (const [id, min] of Object.entries(need)) {
+    if (size(narrow, id) < min) issues.push(id + ' is ' + size(narrow, id) + 'px on a narrow phone; fingers need at least ' + min);
+    if (size(wide, id) < min + 4) issues.push(id + ' is ' + size(wide, id) + 'px; fingers need at least ' + (min + 4));
+  }
+  const right = html.slice(html.indexOf('<div class="tc tc-right">'), html.indexOf('<!-- Loadout selection screen -->'));
+  if (!right.includes('id="btn-slide"')) issues.push('SLIDE should sit in the right cluster, beside JUMP');
+  if (html.slice(html.indexOf('<div class="tc tc-left">'), html.indexOf('<div class="tc tc-right">')).includes('btn-slide')) issues.push('SLIDE is still in the left cluster');
+  console.log('touch checks: JUMP launches on a tap, SLIDE works from standing and from a let-go stick, buttons are finger-sized');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 if (ok && process.argv.includes('--flare')) {
   // The flare: slow, big, and it falls gently: still in the air well past the 1.8 s a normal shot lives, and it has
   // dropped far less than a plain lob would have.

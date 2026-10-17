@@ -556,12 +556,12 @@
     #mobile-controls.active { display: block; }
 
     #joystick-base {
-      position: absolute; width:110px; height:110px; border-radius:50%;
+      position: absolute; width:calc(110px * var(--tjs, 1)); height:calc(110px * var(--tjs, 1)); border-radius:50%;
       background: rgba(255,255,255,0.08); border: 2px solid rgba(255,255,255,0.3);
       display: none; transform: translate(-50%,-50%); pointer-events: none;
     }
     #joystick-thumb {
-      position: absolute; width:48px; height:48px; border-radius:50%;
+      position: absolute; width:calc(48px * var(--tjs, 1)); height:calc(48px * var(--tjs, 1)); border-radius:50%;
       background: rgba(255,255,255,0.5); border: 2px solid rgba(255,255,255,0.8);
       transform: translate(-50%,-50%); top:50%; left:50%;
     }
@@ -644,7 +644,7 @@
        Same width and the same top edge, so the header and its ✕ stay put from one dialog to the next;
        a short dialog keeps its own height instead of becoming a mostly empty box. Never taller than the
        screen: long content scrolls inside (#18). !important because game.js sizes them inline. */
-    #settings-hub-panel, #controls-panel, #crosshair-panel, #shoot-fx-panel, #aim-assist-panel, #weapon-skins-panel, #skins-panel, #kill-log-panel, #char-chat-panel,
+    #settings-hub-panel, #controls-panel, #touch-controls-panel, #crosshair-panel, #shoot-fx-panel, #aim-assist-panel, #weapon-skins-panel, #skins-panel, #kill-log-panel, #char-chat-panel,
     #map-dialog, #diff-dialog {
       top: max(8px, 6vh) !important; left: 50% !important; transform: translateX(-50%) !important;
       width: min(640px, calc(100vw - 16px)) !important; min-width: 0 !important; max-width: none !important;
@@ -652,7 +652,7 @@
       box-sizing: border-box !important;
     }
     /* The chat panel scrolls inside its own columns; the others scroll as a whole. */
-    #settings-hub-panel, #controls-panel, #crosshair-panel, #shoot-fx-panel, #aim-assist-panel, #weapon-skins-panel, #skins-panel, #kill-log-panel,
+    #settings-hub-panel, #controls-panel, #touch-controls-panel, #crosshair-panel, #shoot-fx-panel, #aim-assist-panel, #weapon-skins-panel, #skins-panel, #kill-log-panel,
     #map-dialog, #diff-dialog { overflow-y: auto !important; padding: 20px !important; }
     @media (max-width: 460px) { #best-loadouts-panel { width: 100vw !important; } }
 
@@ -665,7 +665,11 @@
     #mobile-controls .tc {
       position: absolute; bottom: 0; width: 300px; height: 250px; pointer-events: none;
       transform: scale(var(--tbs, 1));
+      opacity: var(--tbo, 1);              /* ⚙ → 🎮 CONTROLS → BUTTON OPACITY */
     }
+    /* A little invisible slop around every button, so a thumb that lands near it still counts.
+       Kept under half the gap between neighbours so two buttons never fight over one touch. */
+    #mobile-controls .tc > div::after { content: ''; position: absolute; inset: -4px; border-radius: 50%; }
     #mobile-controls .tc-left  { left: 0;  transform-origin: 0 100%; }
     #mobile-controls .tc-right { right: 0; transform-origin: 100% 100%; }
     /* The word inside each button gives way to an icon drawn as a mask, so the
@@ -679,7 +683,7 @@
       content: ''; position: absolute; inset: 0; background: #fff;
       -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
       -webkit-mask-position: center; mask-position: center;
-      -webkit-mask-size: 50% 50%; mask-size: 50% 50%;
+      -webkit-mask-size: 54% 54%; mask-size: 54% 54%;
     }
     body.touch-ui #btn-fire::before {
       -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M12 2.5c2.2 2.2 3.3 4.8 3.3 7.6V18H8.7v-7.9c0-2.8 1.1-5.4 3.3-7.6z'/><rect x='8' y='19.2' width='8' height='2.3' rx='.8'/></svg>");
@@ -709,20 +713,26 @@
       -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M13.5 2L4.5 13.5h6.5L10 22l9.5-12H13z'/></svg>");
               mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M13.5 2L4.5 13.5h6.5L10 22l9.5-12H13z'/></svg>");
     }
-    /* Sizes and places (same corners as before, so the thumbs keep their habits). */
-    body.touch-ui #btn-fire          { right: 20px;  bottom: 24px;  width: 72px; height: 72px; background: rgba(215,50,50,0.45); border-color: rgba(255,130,130,0.85); }
-    body.touch-ui #btn-jump          { left: auto; right: 106px; bottom: 18px; width: 48px; height: 48px; background: rgba(20,24,32,0.36); border-color: rgba(255,255,255,0.55); }
-    body.touch-ui #btn-ads           { right: 104px; bottom: 78px; width: 48px; height: 48px; background: rgba(20,24,32,0.36); border-color: rgba(255,255,255,0.55); }
+    /* Sizes and places. Phones kept asking for BIGGER buttons: fire is 96 px now and nothing a thumb
+       needs is under 56 px (the old 44-48 px ones were smaller than a fingertip). SLIDE moved to the
+       right cluster beside JUMP: the left thumb is always on the stick, so a button over there could
+       only be pressed by letting go of it — and slide needs you moving. CROUCH stays on the left, lifted
+       off the corner where the stick starts. Numbers are in cluster pixels (--tbs scales them all). */
+    body.touch-ui #btn-fire          { right: 14px;  bottom: 18px;  width: 96px; height: 96px; background: rgba(215,50,50,0.45); border-color: rgba(255,130,130,0.85); }
+    body.touch-ui #btn-jump          { left: auto; right: 126px; bottom: 12px; width: 68px; height: 68px; background: rgba(20,24,32,0.36); border-color: rgba(255,255,255,0.55); }
+    body.touch-ui #btn-slide         { left: auto; right: 206px; bottom: 20px; width: 62px; height: 62px; background: rgba(100,170,255,0.4); border-color: rgba(150,210,255,0.8); }
+    body.touch-ui #btn-ads           { right: 126px; bottom: 92px;  width: 66px; height: 66px; background: rgba(20,24,32,0.36); border-color: rgba(255,255,255,0.55); }
     body.touch-ui #btn-ads.active-ads { background: rgba(255,210,0,0.55); }
-    body.touch-ui #btn-reload-mobile { right: 26px;  bottom: 108px; width: 44px; height: 44px; background: rgba(20,24,32,0.36); border-color: rgba(255,255,255,0.55); }
-    body.touch-ui #btn-interact      { right: 170px; bottom: 42px;  width: 48px; height: 48px; font-size: 10px; background: rgba(40,160,70,0.5); border-color: rgba(120,240,150,0.9); }
-    body.touch-ui #btn-ability       { position: absolute; right: 168px; bottom: 104px; width: 44px; height: 44px; border-radius: 50%;
+    body.touch-ui #btn-reload-mobile { right: 24px;  bottom: 124px; width: 58px; height: 58px; background: rgba(20,24,32,0.36); border-color: rgba(255,255,255,0.55); }
+    body.touch-ui #btn-interact      { right: 206px; bottom: 168px; width: 62px; height: 62px; font-size: 11px; background: rgba(40,160,70,0.5); border-color: rgba(120,240,150,0.9); }
+    body.touch-ui #btn-ability       { position: absolute; right: 210px; bottom: 100px; width: 58px; height: 58px; border-radius: 50%;
                                        background: rgba(120,70,220,0.45); border: 2px solid rgba(190,150,255,0.9); pointer-events: all;
                                        display: none; align-items: center; justify-content: center; touch-action: none; }
     body.touch-ui #btn-ability.ready { display: flex; }
     body.touch-ui #btn-ability.cooling::before { opacity: 0.45; }
-    body.touch-ui #btn-crouch        { left: 16px;   bottom: 20px;  width: 48px; height: 48px; background: rgba(170,140,80,0.4); border-color: rgba(220,180,120,0.8); }
-    body.touch-ui #btn-slide         { left: 78px;   bottom: 20px;  width: 48px; height: 48px; background: rgba(100,170,255,0.4); border-color: rgba(150,210,255,0.8); }
+    body.touch-ui #btn-crouch        { left: 14px;   bottom: 118px; width: 62px; height: 62px; background: rgba(170,140,80,0.4); border-color: rgba(220,180,120,0.8); }
+    /* CROUCH is a toggle on a phone (⚙ → 🎮 CONTROLS can make it hold again): lit while you are down. */
+    body.touch-ui #btn-crouch.latched { background: rgba(220,180,120,0.8); border-color: #fff; }
     body.touch-ui #btn-prev-weapon, body.touch-ui #btn-next-weapon { display: none !important; } /* the slot icons switch weapons now */
     body.touch-ui #ability-hud       { display: none !important; }  /* [E] is a keyboard hint; touch has the button (#30) */
     body.touch-ui #fps-counter       { display: none; }             /* ⚙ → 显示 FPS brings it back */
@@ -786,11 +796,11 @@
     }
     /* Ammo sits with the gun, right above ↻ — where the eye and the thumb already are. Up in the
        corner under the weapon icons it was, in the playtester's words, basically invisible. */
-    body.touch-ui #ammo              { top: auto; bottom: 158px; right: 18px; }
+    body.touch-ui #ammo              { top: auto; bottom: calc(190px * var(--tbs, 1)); right: 18px; }
     body.touch-ui #ammo-gun          { font-size: 11px; }
     body.touch-ui #ammo-count        { font-size: 26px; letter-spacing: 1px; line-height: 1; }
     body.touch-ui #ammo-reserve      { font-size: 12px; }
-    body.touch-ui #spawn-shield      { top: auto !important; bottom: 112px; left: 12px; transform: none; font-size: 11px; padding: 3px 9px;
+    body.touch-ui #spawn-shield      { top: auto !important; bottom: 124px; left: 86px; transform: none; font-size: 11px; padding: 3px 9px;
                                        letter-spacing: 1px; white-space: nowrap; max-width: 130px; overflow: hidden; text-overflow: ellipsis; }
     body.touch-ui #lobby-prompt      { top: auto !important; bottom: 170px !important; max-width: calc(100vw - 32px); font-size: 13px; padding: 5px 12px; }
     body.touch-ui #interact-hint     { display: none !important; } /* the SWAP / DUEL button replaces it */
@@ -803,19 +813,19 @@
     body.touch-ui .mf-s              { font-size: 11px; }
     /* Narrow phones (Galaxy S9+ class, 320px): the same layout, one size down. */
     @media (max-width: 350px) {
-      body.touch-ui #btn-fire          { right: 14px; bottom: 20px;  width: 64px; height: 64px; }
-      body.touch-ui #btn-jump          { right: 92px; bottom: 16px;  width: 44px; height: 44px; }
-      body.touch-ui #btn-ads           { right: 90px; bottom: 72px;  width: 44px; height: 44px; }
-      body.touch-ui #btn-reload-mobile { right: 20px; bottom: 96px;  width: 44px; height: 44px; }
-      body.touch-ui #btn-interact      { right: 148px; bottom: 34px; width: 44px; height: 44px; }
-      body.touch-ui #btn-ability       { right: 146px; bottom: 94px; width: 44px; height: 44px; }
-      body.touch-ui #btn-crouch        { left: 12px;  bottom: 18px;  width: 44px; height: 44px; }
-      body.touch-ui #btn-slide         { left: 68px;  bottom: 18px;  width: 44px; height: 44px; }
+      body.touch-ui #btn-fire          { right: 10px;  bottom: 16px;  width: 84px; height: 84px; }
+      body.touch-ui #btn-jump          { right: 108px; bottom: 10px;  width: 60px; height: 60px; }
+      body.touch-ui #btn-slide         { right: 178px; bottom: 16px;  width: 54px; height: 54px; }
+      body.touch-ui #btn-ads           { right: 108px; bottom: 80px;  width: 58px; height: 58px; }
+      body.touch-ui #btn-reload-mobile { right: 18px;  bottom: 108px; width: 52px; height: 52px; }
+      body.touch-ui #btn-interact      { right: 178px; bottom: 146px; width: 54px; height: 54px; }
+      body.touch-ui #btn-ability       { right: 180px; bottom: 86px;  width: 52px; height: 52px; }
+      body.touch-ui #btn-crouch        { left: 10px;  bottom: 104px; width: 54px; height: 54px; }
       body.touch-ui #health-bar        { left: 12px;  bottom: 72px; }
       body.touch-ui #health-track      { width: 104px; }
       body.touch-ui #weapon-selector   { gap: 4px; }
       body.touch-ui .ws-slot           { width: 32px; height: 32px; }
-      body.touch-ui #ammo              { bottom: 146px; right: 14px; }
+      body.touch-ui #ammo              { bottom: calc(168px * var(--tbs, 1)); right: 12px; }
     }
     /* Landscape (by orientation, not width — a portrait tablet is wide too): the top row
        has to share with the score strip, so it sits a little higher. */
@@ -824,10 +834,38 @@
       body.touch-ui #match-center    { font-size: 15px; }
       body.touch-ui #weapon-selector { top: 46px; flex-direction: row; }
 
-      body.touch-ui #msg-feed        { top: 48px; width: 240px; max-height: calc(100vh - 188px); }
+      body.touch-ui #msg-feed        { top: 48px; width: 240px; max-height: calc(100vh - 232px); }
       body.touch-ui #spawn-shield    { bottom: 80px; left: 146px; }   /* beside the health bar: the feed owns the upper left */
       body.touch-ui #lobby-prompt    { top: 118px !important; bottom: auto !important; }
     }
+
+    /* ── ✋ Move-the-buttons mode (⚙ → 🎮 CONTROLS → MOVE BUTTONS) ─────────────────────────
+       The controls rise above everything, a dashed ring marks what can be dragged, and the two
+       buttons that normally appear only when they are needed (SWAP, ⚡) are shown so they can be
+       placed too. game.js catches every touch in the capture phase, so nothing fires meanwhile. */
+    body.tc-editing #mobile-controls { z-index: 9000; background: rgba(0,0,0,0.45); visibility: visible !important; }
+    body.tc-editing #mobile-controls .tc > div { outline: 2px dashed rgba(255,255,255,0.85); outline-offset: 3px; }
+    body.tc-editing #mobile-controls .tc > div.tc-grab { outline-color: #ffd866; background-color: rgba(255,216,102,0.4); }
+    body.tc-editing #mobile-controls .tc { opacity: 1; }
+    body.tc-editing #btn-interact, body.tc-editing #btn-ability { display: flex !important; }
+    body.tc-editing #btn-prev-weapon, body.tc-editing #btn-next-weapon { display: none !important; }
+    #tc-edit-bar {
+      position: fixed; top: 8px; left: 8px; z-index: 9100;
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-start;
+      max-width: min(440px, calc(100vw - 16px)); box-sizing: border-box; padding: 8px 12px;
+      pointer-events: none;   /* a button parked under the bar can still be grabbed through it */
+      background: rgba(10,24,22,0.94); border: 2px solid #44cc99; border-radius: 10px;
+      color: #d8fff2; font-family: 'Courier New', monospace; font-size: 12px; letter-spacing: 1px;
+    }
+    #tc-edit-bar button {
+      min-height: 40px; min-width: 76px; padding: 0 14px; border-radius: 6px; cursor: pointer;
+      font-family: inherit; font-size: 12px; font-weight: bold; letter-spacing: 2px;
+    }
+    #tc-edit-done  { background: #1f5a3a; color: #aaffdd; border: 2px solid #44cc99; }
+    #tc-edit-reset { background: #2a1a1a; color: #ff9988; border: 1px solid #ff5544; }
+    #tc-edit-bar input[type=range] { width: 130px; }
+    #tc-edit-bar .tc-edit-hint { opacity: 0.85; flex: 1 1 100%; }
+    #tc-edit-bar button, #tc-edit-bar label { pointer-events: auto; }
 
     /* ── 🖥️ Desktop HUD (#37) ──────────────────────────────────────────────────────────
        A UI font instead of Courier (numbers stay tabular), one row of chips at the top with ⚙ on the
@@ -1444,11 +1482,11 @@
   <div id="mobile-controls">
     <div id="joystick-base"><div id="joystick-thumb"></div></div>
     <div class="tc tc-left">
-      <div id="btn-slide">SLIDE</div>
       <div id="btn-crouch">CROUCH</div>
     </div>
     <div class="tc tc-right">
       <div id="btn-fire">FIRE</div>
+      <div id="btn-slide">SLIDE</div>
       <div id="btn-ads">ADS</div>
       <div id="btn-reload-mobile">R</div>
       <div id="btn-prev-weapon">&#8249;</div>

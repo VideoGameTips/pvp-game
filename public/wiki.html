@@ -312,6 +312,34 @@
       <p><em>Why:</em> it is the sound a shooter uses to find an opponent, and it rewards the quiet play it asks for
       (crouch to creep up on someone). Turn it off in &#9881; &rarr; <b>ENEMY FOOTSTEPS</b> if it is too busy.</p>
 
+      <h2 id="touch-controls">📱 Touch controls</h2>
+      <p>Phone players said two things: the buttons were too small, and some did not work. Both were true. The
+      <b>JUMP</b> button set a flag that only an old, retired piece of the jump code read, so tapping it launched no
+      one; and <b>SLIDE</b> only started if the stick was already being held, but the thumb that holds the stick is not
+      the one that reaches the button.</p>
+      <table>
+        <tr><th>What</th><th>Now</th></tr>
+        <tr><td>Size</td><td>FIRE is 96&nbsp;px (was 72); every other button is at least 56&nbsp;px (they were 44&ndash;48,
+          smaller than a fingertip), with a little invisible slop around each so a near miss still counts.</td></tr>
+        <tr><td>JUMP</td><td>Uses the same jump as the Space key: slide-jump, crouch-jump and the double jump all work. A
+          tap that cannot be used no longer waits and fires when you land.</td></tr>
+        <tr><td>SLIDE</td><td>Moved next to JUMP, under the right thumb. One tap slides the way the stick was last pushed
+          (if that was a moment ago), otherwise straight ahead; the old rule still held the Shift key to &ldquo;moving
+          only&rdquo;. A bladed weapon's air dash works from the button too.</td></tr>
+        <tr><td>CROUCH</td><td>A toggle (tap down, tap up); JUMP also stands you up and dying clears it. It can be set back
+          to hold-to-crouch.</td></tr>
+      </table>
+      <p>&#9881; &rarr; <b>TOUCH CONTROLS</b> (the CONTROLS button on a phone, where there are no keys to rebind) has
+      sliders for <b>button size</b> (0.7&ndash;1.5&times;, held to what the screen can fit), <b>button opacity</b>,
+      <b>joystick size</b> and <b>look sensitivity</b> &mdash; the window fades while a slider is held so you can watch
+      the buttons change &mdash; and <b>MOVE BUTTONS</b>, which lets you drag every button (including the ability and SWAP
+      ones that only appear when needed) wherever your hands are. Positions are saved on the device, separately for
+      landscape and portrait, and are pulled back on screen if the screen is smaller than the one they were set on.
+      <b>RESET TO DEFAULT</b> undoes all of it.</p>
+      <p><em>Why:</em> a layout that does not fit the hand is the first thing a new phone player runs into, and a button
+      that does nothing teaches them the game is broken. Letting them place the buttons is the fix that works for every
+      hand and every phone.</p>
+
       <h2 id="bot-routing">🧭 How the bots get round walls</h2>
       <p>Bots used to steer straight at you and feel their way round whatever was in the way, which was fine for a
       pillar and not for a long wall: on Duel Grid and Crossroads a bot ran back and forth along the centre divider
