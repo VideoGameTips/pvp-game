@@ -556,7 +556,7 @@ const ARCHIVED_ITEM_IDS = new Set([
 ]);
 
 const ADMIN_ITEM_IDS = new Set([
-  'hellfire',
+  'hellfire','omega_pistol',
   'gau19', 'mk44', 'xm7', 'barrett', 'm134', 'hkmp7', 'p90_spec',
   'desert_eagle', 'm1911', 'glock18', 'five_seven',
   'karambit', 'bayonet', 'tomahawk', 'ots04', 'garrote',
@@ -1978,7 +1978,7 @@ event_horizon: 75,
   hand_cannon: 105, throwing_knives: 45, taser: 10,
   gatecrasher: 5, gatecrasher_slug: 40, gatecrasher_beam: 40,
   cyroclasm: 10, cyroclasm_laser: 10, continuum: 30,
-  hellfire:8, hellfire_burn:7, hellfire_pool:10,
+  hellfire:8, hellfire_burn:7, hellfire_pool:10, omega_pistol:9999,
   storm_bloom: 5, storm_bloom_ball: 100, storm_bloom_aura: 10,
   // Ability shots
   sg100_ab: 140, lever_ab: 150, crossbow_ab: 220, crossbow_c1: 140,
@@ -2074,6 +2074,10 @@ WEAPON_DAMAGE.explosive_barrel = 100;
 function canUseHellfire(p) { return !!(p && !p.isBot && users[p.account]?.isAdmin); }
 function hellfireWeapon(id) { return typeof id==='string' && id.startsWith('hellfire'); }
 function serverHitDamage(data, shooter, target) {
+  if(data?.weapon==='omega_pistol'){
+    if(!canUseHellfire(shooter)||!shooter._omegaPermit||Date.now()>shooter._omegaPermit)return 0;
+    shooter._omegaPermit=0;return target.hp;
+  }
   if(hellfireWeapon(data?.weapon)&&!canUseHellfire(shooter))return 0;
   const weapon = data?.weapon;
   const base = WEAPON_DAMAGE[weapon] || 25;
@@ -2471,6 +2475,7 @@ io.on('connection', (socket) => {
     if (!p) return;
     const id = data && data.weaponId;
     if(hellfireWeapon(id)&&!canUseHellfire(p))return;
+    if(id==='omega_pistol'&&!canUseHellfire(p))return;
     p.weaponId = id ? String(id).slice(0, 32) : null;
     emitToMatch(p.matchId, 'weaponChanged', { id: socket.id, weaponId: p.weaponId });
   });
@@ -2540,8 +2545,10 @@ io.on('connection', (socket) => {
     const now = Date.now();
     const w = data.weapon || 'ak20';
     if(hellfireWeapon(w)&&!canUseHellfire(p))return;
+    if(w==='omega_pistol'&&(!canUseHellfire(p)||p._omegaSpent))return;
     const minInterval = 15; // generous server-side rate limit
     if (now - p.lastShot < minInterval) return;
+    if(w==='omega_pistol'){p._omegaSpent=true;p._omegaPermit=now+1200;}
     p.lastShot = now;
     emitToMatch(p.matchId, 'bulletFired', {
       id: `${socket.id}_${now}_${Math.random()}`,
@@ -2694,6 +2701,7 @@ io.on('connection', (socket) => {
     const target  = players[data.targetId];
     const shooter = players[socket.id];
     if(hellfireWeapon(data.weapon)&&!canUseHellfire(shooter))return;
+    if(data.weapon==='omega_pistol'&&(!canUseHellfire(shooter)||!shooter._omegaPermit||Date.now()>shooter._omegaPermit))return;
     if (!target || !shooter || target.dead || target.isBot || shielded(target)) return;
     // airBlast and grapplePull both have this line; the two handlers that
     // actually deal gunfire did not. blocksFriendlyFire is not a substitute —
@@ -2726,6 +2734,7 @@ io.on('connection', (socket) => {
       : players[socket.id];
     if (!bot || !bot.isBot || bot.dead || !shooter) return;
     if(hellfireWeapon(data.weapon)&&!canUseHellfire(shooter))return;
+    if(data.weapon==='omega_pistol'&&(!canUseHellfire(shooter)||!shooter._omegaPermit||Date.now()>shooter._omegaPermit))return;
     if (shooter.matchId !== bot.matchId) return;
     if (blocksFriendlyFire(shooter, bot)) return;
     let dmg = serverHitDamage(data, shooter, bot);
@@ -2833,6 +2842,7 @@ io.on('connection', (socket) => {
   socket.on('readyRespawn', (data = {}) => {
     const p = players[socket.id];
     if (!p || !p.dead) return;
+    p._omegaSpent=false;p._omegaPermit=0;
     const s = nextSpawn();
     const x = data.x != null ? Number(data.x) : s.x;
     const z = data.z != null ? Number(data.z) : s.z;
@@ -2845,6 +2855,7 @@ io.on('connection', (socket) => {
   socket.on('resetSelf', (data = {}) => {
     const p = players[socket.id];
     if (!p) return;
+    p._omegaSpent=false;p._omegaPermit=0;
     const x = data.x != null ? Number(data.x) : p.x;
     const z = data.z != null ? Number(data.z) : p.z;
     // A reset (a new round) is a respawn too, and gets the same protection as readyRespawn.

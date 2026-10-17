@@ -26,6 +26,9 @@ for(const identity of [{account:'regular'},{account:'regular',isAdmin:true,admin
   handlers.hit({targetId:'target',weapon:'hellfire'});
   handlers.hitBot({botId:'bot',weapon:'hellfire_pool',fatal:true,instakill:true});
   assert.equal(context.players.target.hp,300);assert.equal(context.players.bot.hp,300);
+  handlers.setWeapon({weaponId:'omega_pistol'});handlers.shoot({...core,weapon:'omega_pistol'});
+  handlers.hitBot({botId:'bot',weapon:'omega_pistol',fatal:true,instakill:true});
+  assert.equal(context.players.bot.hp,300);assert.notEqual(p.weaponId,'omega_pistol');
 }
 Object.assign(p,{account:'admin',isBot:false,dead:false,lastShot:0});events.length=0;
 handlers.setWeapon({weaponId:'hellfire'});assert.equal(p.weaponId,'hellfire');
@@ -38,3 +41,13 @@ p.dead=true;handlers.readyRespawn({});assert.equal(p._hellfireCores,3);
 handlers.hellfireCore({...core,dx:Infinity});assert.equal(p._hellfireCores,3);
 handlers.hellfireCore(core);assert.equal(p._hellfireCores,2);
 console.log('Hellfire server: authenticated admin only, cosmetic/pass/bot rejection, shot/hit gates, three immediate cores, damage and respawn reset');
+events.length=0;p.lastShot=0;
+handlers.shoot({...core,weapon:'omega_pistol'});
+assert.equal(events.filter(e=>e.event==='bulletFired').length,1);
+assert.equal(context.serverHitDamage({weapon:'omega_pistol'},p,{hp:1000000}),1000000);
+assert.equal(context.serverHitDamage({weapon:'omega_pistol'},p,{hp:300}),0);
+p.lastShot=0;handlers.shoot({...core,weapon:'omega_pistol'});
+assert.equal(events.filter(e=>e.event==='bulletFired').length,1);
+p.dead=true;handlers.readyRespawn({});p.lastShot=0;handlers.shoot({...core,weapon:'omega_pistol'});
+assert.equal(events.filter(e=>e.event==='bulletFired').length,2);
+console.log('Omega server: admin-only, one shot and one hit per life, arbitrary-health elimination, respawn replenishment');
