@@ -2661,6 +2661,61 @@ if (ok && process.argv.includes('--match-finale')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+if (ok && process.argv.includes('--pearl')) {
+  // Teleports (Blink Pearl, Teleport Beacon, Warp Beacon) must never put you outside the map: thrown from inside every map,
+  // in every direction, as hard as the hardest one is thrown, a pearl lands within the play area (the map's own bounds, with
+  // an edge margin), not on the scenery that stands out past a void edge or on a perimeter wall, and it never kills you. A pearl
+  // thrown from the very edge still goes somewhere.
+  const out = vm.runInThisContext(`(() => {
+    const issues = [], notes = [];
+    const saved = { sound: playSoundEvent, anim: showAnnouncement, audio: getAudioCtx, wsound: playWeaponSound, eq: playEquipSound, fx: spawnAbilityAOEFX, flash: flashScreen,
+                    kill: killLocalOutOfBounds, started: gameStarted, dead: isDead, map: activeMapName, pos: camera.position.clone(), q: camera.quaternion.clone() };
+    playSoundEvent = () => {}; showAnnouncement = () => {}; getAudioCtx = () => null; playWeaponSound = () => {}; playEquipSound = () => {};
+    spawnAbilityAOEFX = () => {}; flashScreen = () => {};
+    let killed = 0; killLocalOutOfBounds = () => { killed++; return true; };
+    const skip = new Set(['range', 'lobby13', 'obby']);
+    let thrown = 0, worst = { over: 0, map: '' };
+    try {
+      gameStarted = true; isDead = false;
+      for (const n of MAP_IDS) {
+        if (!MAP_BOUNDS[n] || skip.has(n) || M4_TOWER_MAP_NAMES.has(n)) continue;
+        try { activateMap(n); } catch (e) { issues.push(n + ' did not activate: ' + e.message); continue; }
+        const b = MAP_BOT_BOUNDS[n] || MAP_BOUNDS[n];       // the arena (a themed map's MAP_BOUNDS also holds its outskirts)
+        const starts = [[0, 0], [b.halfX * 0.8, b.halfZ * 0.8], [-b.halfX * 0.8, b.halfZ * 0.8], [b.halfX * 0.8, -b.halfZ * 0.8], [-b.halfX * 0.8, -b.halfZ * 0.8],
+                        [b.halfX * 0.95, 0], [-b.halfX * 0.95, 0], [0, b.halfZ * 0.95], [0, -b.halfZ * 0.95]];
+        let bad = 0, example = '';
+        for (const [sx, sz] of starts) {
+          for (let yaw = 0; yaw < 360; yaw += 30) for (const pitch of [-0.1, 0.35, 0.8, 1.2]) {
+            camera.position.set(sx, getGroundEyeY(sx, sz, 30), sz);
+            camera.quaternion.setFromEuler(new THREE.Euler(pitch, yaw * Math.PI / 180, 0, 'YXZ'));
+            activePearls.length = 0;
+            throwBlinkPearl({ blink: 20 }); thrown++;
+            const from = camera.position.clone();
+            for (let i = 0; i < 700 && activePearls.length; i++) updateBlinkPearls(1 / 60);
+            if (activePearls.length) { activePearls.length = 0; continue; }
+            const p = camera.position;
+            if (p.distanceTo(from) < 0.01) continue;                  // fizzled: it went nowhere
+            const over = Math.max(Math.abs(p.x) - (b.halfX - 1.0), Math.abs(p.z) - (b.halfZ - 1.0));   // the pearl keeps 1.5 m in; 1.0 leaves room for wall push-out
+            if (over > 0) { bad++; if (over > worst.over) worst = { over, map: n }; if (!example) example = '(' + p.x.toFixed(0) + ', ' + p.y.toFixed(1) + ', ' + p.z.toFixed(0) + ')'; }
+          }
+        }
+        if (bad) issues.push(n + ': ' + bad + ' pearls landed outside the play area, e.g. ' + example + ' (bounds ' + b.halfX + ' x ' + b.halfZ + ')');
+      }
+      if (killed) issues.push('a pearl killed the thrower ' + killed + ' times: it should stop at the edge, not carry you out');
+      notes.push(thrown + ' pearls thrown');
+    } finally {
+      playSoundEvent = saved.sound; showAnnouncement = saved.anim; getAudioCtx = saved.audio; playWeaponSound = saved.wsound; playEquipSound = saved.eq;
+      spawnAbilityAOEFX = saved.fx; flashScreen = saved.flash; killLocalOutOfBounds = saved.kill;
+      gameStarted = saved.started; isDead = saved.dead; activePearls.length = 0;
+      try { activateMap(saved.map); } catch (e) {}
+      camera.position.copy(saved.pos); camera.quaternion.copy(saved.q);
+    }
+    return { issues, notes };
+  })()`);
+  console.log('pearl checks: ' + out.notes.join(' · '));
+  if (out.issues.length) { ok = false; console.log(out.issues.join('\n')); }
+}
+
 if (ok && process.argv.includes('--netinterp')) {
   // Remote players on the network: packets arrive ~30 times a second, with jitter; the body must glide between them at
   // the screen's own frame rate (it used to move only when a packet landed -- one frame in three at 60 fps -- and trail by

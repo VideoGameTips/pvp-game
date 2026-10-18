@@ -46803,7 +46803,7 @@ function startPlayerGrappleRide(point, incomingDir, kind = 'wall') {
   } else {
     dest.y = Math.max(dest.y, getGroundEyeY(dest.x, dest.z, dest.y));
   }
-  const bounds = getMapBoundsRect();
+  const bounds = MAP_BOT_BOUNDS[activeMapName] || getMapBoundsRect();   // the arena, not the scenery out past its wall
   dest.x = Math.max(-bounds.halfX + PLAYER_RADIUS, Math.min(bounds.halfX - PLAYER_RADIUS, dest.x));
   dest.z = Math.max(-bounds.halfZ + PLAYER_RADIUS, Math.min(bounds.halfZ - PLAYER_RADIUS, dest.z));
   _extVel.x = 0; _extVel.z = 0; window._blastCarry = false;
@@ -47364,6 +47364,17 @@ function _pearlBlocker(x, y, z) {
   }
   return null;
 }
+// The edge of the map is a wall to a pearl. It used to be checked only against the far backstop (90 m out under a void
+// map) and the colliders, so an arc over a perimeter wall landed you on top of it, or out on the scenery that stands past
+// a void edge, which nobody can walk to. Like the grapple, a teleport can only take you where your feet could be.
+const PEARL_EDGE_MARGIN = 1.5;
+function pearlLimits() {
+  if (M4_TOWER_MAP_NAMES.has(activeMapName)) return null;   // walled, roofed rooms: the colliders are the edge
+  // MAP_BOUNDS of a themed map includes its outskirts (scenery past the perimeter wall that nobody can walk to);
+  // MAP_BOT_BOUNDS is the arena itself, which is where a body can really be.
+  const b = MAP_BOT_BOUNDS[activeMapName] || getMapBoundsRect();
+  return { x: Math.max(1, b.halfX - PEARL_EDGE_MARGIN), z: Math.max(1, b.halfZ - PEARL_EDGE_MARGIN) };
+}
 function throwBlinkPearl(item) {
   const origin = new THREE.Vector3();
   camera.getWorldPosition(origin);
@@ -47388,6 +47399,8 @@ function _blinkPearlLand(pl, x, y, z) {
     showAnnouncement('🔮 PEARL LOST', 'It fell into the void', '#c08cff', 900);
     return;
   }
+  const lim = pearlLimits();
+  if (lim) { x = Math.max(-lim.x, Math.min(lim.x, x)); z = Math.max(-lim.z, Math.min(lim.z, z)); }
   const from = camera.position.clone();
   spawnAbilityAOEFX(from.clone().setY(Math.max(0.2, from.y - 1.4)), 1.4, 0xc08cff);   // where you left
   camera.position.set(x, eye, z);
@@ -47395,7 +47408,7 @@ function _blinkPearlLand(pl, x, y, z) {
   slamState = null; playerYVel = 0;
   _extVel.x = 0; _extVel.z = 0; window._blastCarry = false; window._slideUntil = 0;
   resolveWallCollisions();
-  if (isOutOfBoundsXZ(camera.position.x, camera.position.z)) { killLocalOutOfBounds(); return; }
+  if (lim) { camera.position.x = Math.max(-lim.x, Math.min(lim.x, camera.position.x)); camera.position.z = Math.max(-lim.z, Math.min(lim.z, camera.position.z)); }
   spawnAbilityAOEFX(camera.position.clone().setY(Math.max(0.2, camera.position.y - 1.4)), 1.6, 0xc08cff);   // where you arrive
   playSoundEvent('blink', { volume: 1.15 });
   flashScreen('rgba(176,120,255,0.22)', 200);
@@ -47412,7 +47425,12 @@ function updateBlinkPearls(dt) {
     let px = pl.mesh.position.x, py = pl.mesh.position.y, pz = pl.mesh.position.z;
     let land = null;
     for (let s = 0; s < steps && !land; s++) {
-      const nx = px + pl.vx * sdt, ny = py + pl.vy * sdt, nz = pz + pl.vz * sdt;
+      let nx = px + pl.vx * sdt, ny = py + pl.vy * sdt, nz = pz + pl.vz * sdt;
+      const lim = pearlLimits();
+      if (lim) {   // the edge of the map: the pearl slides down it instead of flying over
+        if (Math.abs(nx) > lim.x) { nx = Math.sign(nx) * lim.x; pl.vx = 0; }
+        if (Math.abs(nz) > lim.z) { nz = Math.sign(nz) * lim.z; pl.vz = 0; }
+      }
       if (isOutOfBoundsXZ(nx, nz)) { land = { x: px, y: py, z: pz }; break; }
       const blocker = _pearlBlocker(nx, ny, nz);
       if (blocker) {
