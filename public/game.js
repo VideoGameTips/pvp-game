@@ -46245,7 +46245,7 @@ function tryShoot() {
   const shotPellets  = ab?.pellets      ?? wStats.pellets;
   const shotSpread   = (wStats.spread + bloomAdd) * (ab?.spreadMult ?? 1) * (forcedShot?.spreadMult ?? 1);
   let shotWeaponId   = forcedShot?.weaponId ?? ab?.weaponAbId ?? (wStats.damageId || currentWeapon.id);
-  const shotSpeed    = wStats.bulletSpeed * (ab?.speedMult ?? 1);
+  const shotSpeed    = wStats.bulletSpeed * (ab?.speedMult ?? 1) * (wStats.randomSpeed ? wStats.randomSpeed.min + Math.random() * (wStats.randomSpeed.max - wStats.randomSpeed.min) : 1);   // the Potato Cannon: a different speed every shot
   if (wStats.trickShot) {
     const spec = wStats.trickShot;
     const lockedPid = gunslingerLocked ? gunslingerLockTargetId : null;
@@ -54619,6 +54619,50 @@ function friendlyFireBlocked(targetId, shooterId = myId) {
 }
 
 // Helper: emit hit to server AND show damage numbers AND apply damage client-authoritatively
+// ── 🎲 Gimmick on-hit effects ──────────────────────────────────────────────────────────────────────────────────────
+// The retired guns that now live only in the RNG modes each carried a special, written as a flag on the weapon
+// (knockback, pinOnHit, slowOnHit, gravityPull, leaveBurnZone, chainLightning, launchOnHit) that nothing ever read, so
+// a Harpoon Gun was a slow rifle and a Shockwave Launcher a quiet one. They are read here, on the player's own shot
+// landing on a bot (a real player's position is theirs to move, so against one they only deal their damage).
+function gimmickOnHit(weaponId, pid, hitPos, dmg, opts) {
+  const w = WEAPONS.find(x => x.id === weaponId);
+  if (!w || !(w.knockback || w.pinOnHit || w.slowOnHit || w.gravityPull || w.leaveBurnZone || w.chainLightning || w.launchOnHit)) return;
+  const bot = resolveBot(pid);
+  if (!bot || bot.dead || !players[pid] || !players[pid].isBot) return;
+  const now = Date.now();
+  const p = hitPos ? hitPos.clone() : new THREE.Vector3(bot.x, 1.2, bot.z);
+  const dx = bot.x - camera.position.x, dz = bot.z - camera.position.z, dl = Math.hypot(dx, dz) || 1, ux = dx / dl, uz = dz / dl;
+  // shoved back along the shot (Shockwave Launcher 8, Airburst Projector 5)
+  if (w.knockback) { bot.kbVX = (bot.kbVX || 0) + ux * w.knockback * 2; bot.kbVZ = (bot.kbVZ || 0) + uz * w.knockback * 2; spawnAbilityAOEFX(p, 0.7, 0xffffff); }
+  // pinned where it stands, free to turn and shoot (Harpoon Gun)
+  if (w.pinOnHit) { bot._rootUntil = Math.max(bot._rootUntil || 0, now + 2500); spawnAbilityAOEFX(p, 0.9, 0xd8d8d8); }
+  // slowed for a moment (Sticker Blaster, Foam Cannon)
+  if (w.slowOnHit) { bot._chillUntil = Math.max(bot._chillUntil || 0, now + (w.slowOnHit.dur || 1000)); spawnAbilityAOEFX(p, 0.5, 0xffd0f0); }
+  // popped into the air (Seismic Hammer)
+  if (w.launchOnHit) { bot.yVel = Math.max(bot.yVel || 0, w.launchOnHit); bot.y = bot.y || 0; spawnAbilityAOEFX(p.clone().setY(0.3), 1.2, 0xc8a070); }
+  // everything within 8 m of the impact is dragged in towards it (Gravity Launcher)
+  if (w.gravityPull) {
+    for (const b of gameBots) {
+      if (b.dead) continue;
+      const bx = p.x - b.x, bz = p.z - b.z, bl = Math.hypot(bx, bz);
+      if (bl > 8 || bl < 0.3) continue;
+      b.kbVX = (b.kbVX || 0) + bx / bl * w.gravityPull * 2.4; b.kbVZ = (b.kbVZ || 0) + bz / bl * w.gravityPull * 2.4;
+    }
+    spawnAbilityAOEFX(p, 2.2, 0xaa44ff);
+  }
+  // a pool of fire where it lands (Firework Launcher)
+  if (w.leaveBurnZone) spawnBurnZone(p.clone().setY(0), 3, 9, 4000);
+  // arcs to the two nearest other bots within 9 m for half damage (Arc Rifle)
+  if (w.chainLightning && !opts.chained) {
+    const near = gameBots.filter(b => !b.dead && b.id !== pid && Math.hypot(b.x - bot.x, b.z - bot.z) <= 9)
+      .sort((a, b) => Math.hypot(a.x - bot.x, a.z - bot.z) - Math.hypot(b.x - bot.x, b.z - bot.z)).slice(0, 2);
+    for (const b of near) {
+      const bp = new THREE.Vector3(b.x, 1.2, b.z);
+      spawnAbilityAOEFX(bp, 0.8, 0x88ccff);
+      emitHit(b.id, `chain_${myId}_${now}_${b.id}`, weaponId, bp, false, { damageOverride: Math.max(1, Math.round(dmg * 0.5)), chained: true });
+    }
+  }
+}
 function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false, opts = {}) {
   // 🛋️ Lobby 13 is a no-combat chill zone — the cast is neutral and can't be hurt. The hit still
   // shows (grey), and the first one says why nothing happened: a gun that seems to do nothing reads
@@ -54639,8 +54683,10 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false, opts = 
   const hitDist = hitWorldPos ? camera.position.distanceTo(hitWorldPos)
                  : mesh ? camera.position.distanceTo(mesh.position) : null;
   const falloff = falloffMultiplier(weaponId, hitDist);
+  // 🔥 Plasma Carbine: the bolt grows as it travels, up to +80% at 45 m (it gives up what the other guns lose over distance)
+  const plasmaGrow = WEAPONS.find(w => w.id === weaponId)?.plasmaGrows && hitDist != null ? 1 + 0.8 * Math.min(1, hitDist / 45) : 1;
   const dmg = Number.isFinite(opts.damageOverride) ? Math.max(0, Math.min(999, Math.round(opts.damageOverride))) : (headshot && instakill) ? 999 : Math.round(
-    (headshot ? baseDmg * headshotMultFor(weaponId) : baseDmg) * synergy * falloff * (opts.wallPenetrated && gatecrasherPiercesWalls(weaponId) ? .5 : 1));
+    (headshot ? baseDmg * headshotMultFor(weaponId) : baseDmg) * synergy * falloff * plasmaGrow * (opts.wallPenetrated && gatecrasherPiercesWalls(weaponId) ? .5 : 1));
   // With other real players in the match, a bot this hit kills on our screen is dead on
   // everyone's (#48): the server takes `fatal` as the kill. (Guests know a bot's HP from
   // the server's playerHit; the host from its own simulation.)
@@ -54695,6 +54741,7 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false, opts = 
   }
   if (weaponId === 'storm_bloom_ball') _applyRootToTarget(pid, 3000, 0x9fe8ff);
   else if (weaponId === 'storm_bloom_aura') _applyRootToTarget(pid, 1000, 0x9fe8ff);
+  if (isBot) gimmickOnHit(weaponId, pid, hitWorldPos, dmg, opts);   // 🎲 the retired guns' specials
   // ⚡ Only explicit stun weapons should interrupt bot AI. Cycler and Laser
   // Pointer are also "energy" visuals and fire rapidly; treating every energy
   // hit as a stun chain-locked bots forever and skipped their gravity updates.

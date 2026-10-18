@@ -2176,6 +2176,53 @@ if (ok && process.argv.includes('--wear')) {
   if (out.issues.length) { ok = false; console.log(out.issues.slice(0, 30).join('\n')); }
 }
 
+if (ok && process.argv.includes('--gimmick')) {
+  // The retired guns' specials (they sat on the weapons as flags that nothing read): each now does what it says on a bot,
+  // a plain gun does nothing extra, and they are read only against a bot.
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const saved = { bots: gameBots.slice(), fx: spawnAbilityAOEFX, burn: spawnBurnZone, hit: emitHit, cam: camera.position.clone(), pl: { ...players } };
+    const calls = { burn: [], hit: [] };
+    spawnAbilityAOEFX = () => {}; spawnBurnZone = (pos, r, dps, ms) => { calls.burn.push([pos.x, r, dps, ms]); };
+    emitHit = (pid, bid, wid, pos, hs, opts) => { calls.hit.push({ pid, wid, opts }); };
+    try {
+      camera.position.set(0, 1.65, 0);
+      const mk = (id, x, z) => { const b = { id, x, z, hp: 300, dead: false }; players[id] = { isBot: true }; return b; };
+      const run = (wid, extra, opts) => {
+        gameBots.length = 0;
+        const a = mk('gimA', 10, 0), b = mk('gimB', 12, 4);
+        gameBots.push(a, b); if (extra) extra(a, b);
+        calls.burn.length = 0; calls.hit.length = 0;
+        gimmickOnHit(wid, 'gimA', new THREE.Vector3(10, 1.2, 0), 40, opts || {});
+        return { a, b };
+      };
+      let r = run('shockwave_launcher'); if (!(r.a.kbVX > 10 && Math.abs(r.a.kbVZ) < 1)) issues.push('shockwave_launcher: no shove along the shot (kbVX ' + r.a.kbVX + ')');
+      r = run('airburst_projector'); if (!(r.a.kbVX > 6)) issues.push('airburst_projector: no shove');
+      r = run('harpoon_gun'); if (!(r.a._rootUntil > Date.now() + 2000)) issues.push('harpoon_gun: the target is not pinned');
+      r = run('sticker_blaster'); if (!(r.a._chillUntil > Date.now())) issues.push('sticker_blaster: no slow');
+      r = run('foam_cannon'); if (!(r.a._chillUntil > Date.now())) issues.push('foam_cannon: no slow');
+      r = run('seismic_hammer'); if (!(r.a.yVel >= 8)) issues.push('seismic_hammer: the target is not launched');
+      r = run('gravity_launcher'); if (!(r.b.kbVX < -5 && r.b.kbVZ < -1)) issues.push('gravity_launcher: a bot 4 m away is not pulled in (' + r.b.kbVX + ', ' + r.b.kbVZ + ')');
+      r = run('firework_launcher'); if (calls.burn.length !== 1 || calls.burn[0][1] !== 3) issues.push('firework_launcher: should leave one burn zone');
+      r = run('arc_rifle'); if (calls.hit.length !== 2 && calls.hit.length !== 1) issues.push('arc_rifle: should arc to the other bot'); else if (!calls.hit.every(h => h.opts.chained && h.opts.damageOverride === 20 && h.pid !== 'gimA')) issues.push('arc_rifle: the arc should be half damage, flagged chained, on another bot');
+      r = run('arc_rifle', null, { chained: true }); if (calls.hit.length) issues.push('arc_rifle: an arc must not arc again');
+      // a plain gun gets nothing
+      r = run('ak20'); if (r.a.kbVX || r.a._rootUntil || r.a._chillUntil || r.a.yVel || calls.burn.length || calls.hit.length) issues.push('a plain gun got a special');
+      // against a real player nothing is moved
+      gameBots.length = 0; players.realP = { isBot: false }; gimmickOnHit('shockwave_launcher', 'realP', new THREE.Vector3(10, 1, 0), 40, {});
+      // data the other two rely on
+      const pc = WEAPONS.find(w => w.id === 'potato_cannon'); if (!(pc.randomSpeed && pc.randomSpeed.max > pc.randomSpeed.min)) issues.push('potato_cannon lost its random speed');
+      if (!WEAPONS.find(w => w.id === 'plasma_carbine').plasmaGrows) issues.push('plasma_carbine lost plasmaGrows');
+    } finally {
+      spawnAbilityAOEFX = saved.fx; spawnBurnZone = saved.burn; emitHit = saved.hit; camera.position.copy(saved.cam);
+      gameBots.length = 0; gameBots.push(...saved.bots); for (const k of ['gimA', 'gimB', 'realP']) delete players[k];
+    }
+    return issues;
+  })()`);
+  console.log('gimmick checks: knockback, pin, slow, launch, gravity pull, burn zone and chain lightning do what they say on a bot, and nothing on a plain gun');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 if (ok && process.argv.includes('--flare')) {
   // The flare: slow, big, and it falls gently: still in the air well past the 1.8 s a normal shot lives, and it has
   // dropped far less than a plain lob would have.
