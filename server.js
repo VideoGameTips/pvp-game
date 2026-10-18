@@ -2093,11 +2093,12 @@ function serverHitDamage(data, shooter, target) {
   if(hellfireWeapon(data?.weapon)&&!canUseHellfire(shooter))return 0;
   const weapon = data?.weapon;
   const base = WEAPON_DAMAGE[weapon] || 25;
-  const tableDmg = Math.round(base * falloffMultiplier(weapon, dist3(shooter, target)));
+  const wallScale = data?.wallPenetrated && ['gatecrasher', 'gatecrasher_slug', 'gatecrasher_beam'].includes(weapon) ? .5 : 1;
+  const tableDmg = Math.round(base * falloffMultiplier(weapon, dist3(shooter, target)) * wallScale);
   const override = Number(data?.damageOverride);
   if (Number.isFinite(override)) {
     const headMax = data?.instakill ? 999 : Math.max(tableDmg, base) * (WEAPON_HS_MULT[weapon] || 2);
-    const hardMax = Math.max(1, Math.min(999, Math.max(DAMAGE_OVERRIDE_CAPS[weapon] || 0, Math.ceil(headMax * 1.6 + 4))));
+    const hardMax = Math.max(1, Math.min(999, Math.max(DAMAGE_OVERRIDE_CAPS[weapon] || 0, Math.ceil(headMax * 1.6 + 4)))) * wallScale;
     return Math.max(0, Math.min(hardMax, Math.round(override)));
   }
   if (data?.headshot) return data?.instakill ? target.hp : Math.round(tableDmg * (WEAPON_HS_MULT[weapon] || 2));
@@ -2559,16 +2560,57 @@ io.on('connection', (socket) => {
     if(hellfireWeapon(w)&&!canUseHellfire(p))return;
     if(w==='omega_pistol'&&(!canUseHellfire(p)||p._omegaSpent))return;
     const minInterval = 15; // generous server-side rate limit
-    if (now - p.lastShot < minInterval) return;
+    const batch = w === 'traffic_cone' && data.coneBatch;
+    const validBatch = batch && typeof batch.id === 'string' && batch.id.startsWith(`local_${p.id}_`)
+      && batch.id.length < 130 && Number.isInteger(batch.count) && batch.count >= 1 && batch.count <= 4
+      && Number.isInteger(batch.index) && batch.index >= 0 && batch.index < batch.count
+      && data.projectileId === `${batch.id}_${batch.index}`;
+    const continuingBatch = validBatch && p._coneBatch?.id === batch.id && p._coneBatch.count === batch.count
+      && now - p._coneBatch.at < 100 && !p._coneBatch.indices.has(batch.index);
+    if (now - p.lastShot < minInterval && !continuingBatch) return;
+    if (batch) {
+      if (!validBatch || batch.index !== 0 && !continuingBatch) return;
+      if (batch.index === 0) p._coneBatch = { id: batch.id, count: batch.count, at: now, indices: new Set() };
+      p._coneBatch.indices.add(batch.index);
+    }
     if(w==='omega_pistol'){p._omegaSpent=true;p._omegaPermit=now+1200;}
     p.lastShot = now;
+    let projectileId = `${socket.id}_${now}_${Math.random()}`;
+    if ((w === 'rpg' || w === 'traffic_cone') && typeof data.projectileId === 'string'
+        && data.projectileId.startsWith(`local_${p.id}_`) && data.projectileId.length < 150
+        && [data.x, data.y, data.z, data.dx, data.dy, data.dz].every(Number.isFinite)) {
+      projectileId = data.projectileId;
+      if (!p._counterShots) p._counterShots = new Map();
+      for (const [id, shot] of p._counterShots) if (now - shot.at > 2500) p._counterShots.delete(id);
+      if (p._counterShots.size < 150) p._counterShots.set(projectileId, { weapon: w, at: now, matchId: p.matchId,
+        x: data.x, y: data.y, z: data.z, dx: data.dx, dy: data.dy, dz: data.dz });
+    }
     emitToMatch(p.matchId, 'bulletFired', {
-      id: `${socket.id}_${now}_${Math.random()}`,
+      id: projectileId,
       ownerId: socket.id,
       x: data.x, y: data.y, z: data.z,
       dx: data.dx, dy: data.dy, dz: data.dz,
       weapon: w,
     });
+  });
+
+  socket.on('projectileIntercept', data => {
+    const p = players[socket.id], owner = players[data?.rocketOwnerId];
+    if (!p || !owner || p.matchId !== owner.matchId || p.matchId === HUB_MATCH) return;
+    const cone = p._counterShots?.get(data.coneId), rocket = owner._counterShots?.get(data.rocketId);
+    if (cone?.weapon !== 'traffic_cone' || rocket?.weapon !== 'rpg') return;
+    if (cone.matchId !== p.matchId || rocket.matchId !== p.matchId) return;
+    const now = Date.now();
+    if (now - cone.at > 2500 || now - rocket.at > 2500 || ![data.x, data.y, data.z].every(Number.isFinite)) return;
+    if ([cone, rocket].some(s => {
+      const x = data.x-s.x, y = data.y-s.y, z = data.z-s.z, len = Math.hypot(s.dx, s.dy, s.dz);
+      if (len < .001) return true;
+      const along = (x*s.dx + y*s.dy + z*s.dz) / len;
+      return along < -1 || along > 500 || Math.hypot(x-s.dx/len*along, y-s.dy/len*along, z-s.dz/len*along) > 1.5;
+    })) return;
+    p._counterShots.delete(data.coneId); owner._counterShots.delete(data.rocketId);
+    emitToMatch(p.matchId, 'projectileIntercept', { coneId: data.coneId, rocketId: data.rocketId,
+      ownerId: owner.id, x: data.x, y: data.y, z: data.z });
   });
 
   socket.on('hellfireCore', data => {
@@ -3083,6 +3125,7 @@ io.on('connection', (socket) => {
     if (!player || player.dead || !bot || !bot.isBot || shielded(player)) return;
     if (blocksFriendlyFire(bot, player)) return;
     let dmg = Math.round((WEAPON_DAMAGE[data.weapon] || 25) * falloffMultiplier(data.weapon, dist3(bot, player)));
+    if (data.wallPenetrated && ['gatecrasher', 'gatecrasher_slug', 'gatecrasher_beam'].includes(data.weapon)) dmg = Math.round(dmg * .5);
     player.hp = Math.max(0, player.hp - dmg);
     emitToMatch(player.matchId, 'playerHit', { targetId: player.id, hp: player.hp, environmentSeq: player.environmentSeq || 0, bulletId: null, shooterId: bot.id, weapon: data.weapon, headshot: !!data.headshot });
     if (player.hp <= 0) {

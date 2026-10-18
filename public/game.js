@@ -45495,9 +45495,11 @@ function doMultishot(w, ab) {
     d.x += (Math.random() - 0.5) * (ab.spread || 0.08);
     d.y += (Math.random() - 0.5) * (ab.spread || 0.08);
     d.normalize();
-    const bid = `mshot_${myId}_${now}_${i}`;
+    const batchId = `local_${myId}_${now}_cone_barrage`;
+    const bid = w.id === 'traffic_cone' ? `${batchId}_${i}` : `mshot_${myId}_${now}_${i}`;
     const wid = ab.weaponAbId || w.id;
-    socket.emit('shoot', { x: origin.x, y: origin.y, z: origin.z, dx: d.x, dy: d.y, dz: d.z, weapon: wid });
+    socket.emit('shoot', { x: origin.x, y: origin.y, z: origin.z, dx: d.x, dy: d.y, dz: d.z, weapon: wid,
+      projectileId: bid, coneBatch: w.id === 'traffic_cone' ? { id: batchId, index: i, count: shots } : undefined });
     spawnLocalBullet(origin.clone(), d, bid, true, w.bulletSpeed, w.bulletColor, w.bulletSize, wid);
   }
   // Deduct from mag first, overflow into reserve
@@ -45914,7 +45916,7 @@ function tryShoot() {
       socket.emit('shoot', {
         x: muzzleWorld.x, y: muzzleWorld.y, z: muzzleWorld.z,
         dx: spreadDir.x, dy: spreadDir.y, dz: spreadDir.z,
-        weapon: shotWeaponId,
+        weapon: shotWeaponId, projectileId: `local_${myId}_${now}_${p}`,
       });
       if (wStats.hitscan) {
         fireHitscanShot(muzzleWorld, spreadDir, shotWeaponId, wStats);
@@ -53485,7 +53487,7 @@ function spawnLocalBullet(origin, dir, id, isOwn, speed, color, size, weaponId, 
   // Track origin and max range for short-range weapons (arc torrent)
   const wSpec = projectileWeaponSpec(weaponId);
   const maxRange = opts.maxRange || wSpec?.maxRange;
-  localBullets.push({ mesh, dir: flightDir, createdAt: Date.now(), id, isOwn,
+  localBullets.push({ mesh, dir: flightDir, createdAt: Date.now(), id, isOwn, ownerId: isOwn ? myId : opts.botId,
     speed: projectileBaseSpeed(weaponId, wSpec, speed) * BULLET_SPEED_MULTIPLIER * (wSpec?.bulletSpeedMult || 1), weaponId, size,
     spawnX: origin.x, spawnY: origin.y, spawnZ: origin.z, maxRange, ...opts });
 }
@@ -54212,7 +54214,7 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false, opts = 
                  : mesh ? camera.position.distanceTo(mesh.position) : null;
   const falloff = falloffMultiplier(weaponId, hitDist);
   const dmg = Number.isFinite(opts.damageOverride) ? Math.max(0, Math.min(999, Math.round(opts.damageOverride))) : (headshot && instakill) ? 999 : Math.round(
-    (headshot ? baseDmg * headshotMultFor(weaponId) : baseDmg) * synergy * falloff);
+    (headshot ? baseDmg * headshotMultFor(weaponId) : baseDmg) * synergy * falloff * (opts.wallPenetrated && gatecrasherPiercesWalls(weaponId) ? .5 : 1));
   // With other real players in the match, a bot this hit kills on our screen is dead on
   // everyone's (#48): the server takes `fatal` as the kill. (Guests know a bot's HP from
   // the server's playerHit; the host from its own simulation.)
@@ -54221,7 +54223,7 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false, opts = 
   socket.emit(isBot ? 'hitBot' : 'hit', {
     [isBot ? 'botId' : 'targetId']: pid,
     bulletId, weapon: weaponId,
-    headshot, instakill, fatal, tags: killTags,
+    headshot, instakill, fatal, tags: killTags, wallPenetrated: !!opts.wallPenetrated,
     damageOverride: dmg,
   });
   showHitmarker(headshot ? 'head' : 'hit');   // a kill below turns it red
@@ -54384,6 +54386,13 @@ function weaponPiercesDefenses(weaponId) {
   if (weaponId === 'gatecrasher_slug' || weaponId === 'gatecrasher_beam') return true;
   const w = WEAPONS.find(x => x.id === weaponId);
   return !!w?.ignoreDefenses;
+}
+
+function gatecrasherPiercesWalls(id) {
+  return id === 'gatecrasher' || id === 'gatecrasher_slug' || id === 'gatecrasher_beam';
+}
+function projectileWallDamageScale(b, hitT = 1) {
+  return gatecrasherPiercesWalls(b.weaponId) && (b.wallPenetrated || hitT >= b._wallEntryT) ? .5 : 1;
 }
 
 function makeTrainingDummyMesh(dummy) {
@@ -54615,10 +54624,51 @@ function rocketExplode(pos, weaponId, excludePid, opts = {}) {
     applyBotDamageToPlayer(splashId, null);
   }
 }
+// Relative-motion CCD catches two fast projectiles crossing between frames.
+function coneRocketContact(cone, rocket, dt) {
+  const start = cone.mesh.position.clone().sub(rocket.mesh.position);
+  const motion = cone.dir.clone().multiplyScalar(cone.speed * dt).addScaledVector(rocket.dir, -rocket.speed * dt);
+  const radius = Math.max(.12, cone.size || 0) + Math.max(.10, rocket.size || 0);
+  const c = start.lengthSq() - radius * radius;
+  if (c <= 0) return 0;
+  const a = motion.lengthSq(), b = 2 * start.dot(motion), disc = b * b - 4 * a * c;
+  if (a < 1e-10 || disc < 0) return null;
+  const t = (-b - Math.sqrt(disc)) / (2 * a);
+  return t >= 0 && t <= 1 ? t : null;
+}
+function interceptConeRockets(dt) {
+  const cones = localBullets.filter(b => b.weaponId === 'traffic_cone' && b.isOwn && !b._cull);
+  if (!cones.length) return;
+  for (const cone of cones) {
+    let best = null;
+    for (const rocket of localBullets) {
+      if (rocket.weaponId !== 'rpg' || rocket._cull) continue;
+      const t = coneRocketContact(cone, rocket, dt);
+      if (t == null || best && t >= best.t) continue;
+      const cp = cone.mesh.position.clone().addScaledVector(cone.dir, cone.speed * dt * t);
+      const rp = rocket.mesh.position.clone().addScaledVector(rocket.dir, rocket.speed * dt * t);
+      const clear = (a, b) => hasLineOfSight(a.x, a.z, b.x, b.z, a.y, b.y);
+      if (!clear(cone.mesh.position, cp) || !clear(rocket.mesh.position, rp) || !clear(cp, rp)) continue;
+      best = { rocket, t, pos: rp };
+    }
+    if (!best) continue;
+    const { rocket, pos } = best;
+    cone._cull = rocket._cull = true;
+    scene.remove(cone.mesh); scene.remove(rocket.mesh);
+    if (rocket.botId || !socket.connected) {
+      rocketExplode(pos, 'rpg', null, { damageRemotes: rocket.isOwn,
+        damagePlayer: !rocket.isOwn && !friendlyFireBlocked(myId, rocket.botId) });
+    } else {
+      socket.emit('projectileIntercept', { coneId: cone.id, rocketId: rocket.id, rocketOwnerId: rocket.ownerId,
+        x: pos.x, y: pos.y, z: pos.z });
+    }
+  }
+}
 function updateBullets(dt) {
   const now = Date.now();
   _updateDonutPuffs(dt);
   _updateLegendEmbers(dt);
+  interceptConeRockets(dt);
   for (let i = localBullets.length-1; i>=0; i--) {
     const b = localBullets[i];
     const removeBullet = () => {
@@ -54689,6 +54739,7 @@ function updateBullets(dt) {
     let wallHitCollider = null;
     let wallHitT = Infinity;
     const wallHitNormal = new THREE.Vector3(0, 1, 0);
+    b._wallEntryT = Infinity;
     if (!b.isPaintBomb) {
       const tDx = _bpos.x - px0, tDy = _bpos.y - py0, tDz = _bpos.z - pz0;
       const travelDist = Math.sqrt(tDx*tDx + tDy*tDy + tDz*tDz);
@@ -54701,8 +54752,12 @@ function updateBullets(dt) {
           if (_bulletRay.intersectBox(box, _wallHitPt)) {
             // intersectBox gives closest entry; accept if within travel distance
             const hitDistSq = _wallHitPt.distanceToSquared(_bulletPrev);
-            if (hitDistSq <= (travelDist + 0.1) * (travelDist + 0.1)) {
+            if (hitDistSq <= (travelDist + 0.1) * (travelDist + 0.1) || gatecrasherPiercesWalls(b.weaponId) && box.containsPoint(_bulletPrev)) {
               const hitT = Math.sqrt(hitDistSq) / travelDist;
+              if (gatecrasherPiercesWalls(b.weaponId)) {
+                b._wallEntryT = Math.min(b._wallEntryT, box.containsPoint(_bulletPrev) ? 0 : hitT);
+                continue;
+              }
               if (hitT < wallHitT) {
                 wallHitT = hitT;
                 wallHitPt = _wallHitPt.clone();
@@ -54776,7 +54831,7 @@ function updateBullets(dt) {
                 applyDotToPlayer(b.weaponId);
                 // wasHead is known here, but bot damage is not scaled by
                 // location yet, so it is deliberately not passed as if it were.
-                botHitsMe(b.botId, b.weaponId);
+                botHitsMe(b.botId, b.weaponId, false, projectileWallDamageScale(b, bestT) < 1);
               } else flashHitIndicator('guard');
             } else if (!isShielded() && !piercesDefense && isRiotShieldBlocking()) {
               depleteRiotShield(CLIENT_WEAPON_DAMAGE[b.weaponId] || 25);
@@ -54962,7 +55017,7 @@ function updateBullets(dt) {
       }
 
       // Secondary 2D LOS check: catches bullets that arced OVER short walls (e.g. flamethrower's vertical spread)
-      if (bestHit && !hasLineOfSight(px0, pz0, bestHit.pos.x, bestHit.pos.z, py0, bestHit.pos.y)) {
+      if (bestHit && !gatecrasherPiercesWalls(b.weaponId) && !hasLineOfSight(px0, pz0, bestHit.pos.x, bestHit.pos.z, py0, bestHit.pos.y)) {
         // There's a wall between the bullet origin and the target in 2D — reject the hit
         spawnHitParticle(_bpos);
         removeBullet();
@@ -54978,14 +55033,14 @@ function updateBullets(dt) {
             const baseDmg = getClientWeaponDamage(b.weaponId);
             // The range's dummies take what a player would: the same falloff, and they are graded the same.
             const dFall = falloffMultiplier(b.weaponId, camera.position.distanceTo(_bpos));
-            const dmg = Math.round((bestHit.headshot ? baseDmg * headshotMultFor(b.weaponId) : baseDmg) * dFall);
+            const dmg = Math.round((bestHit.headshot ? baseDmg * headshotMultFor(b.weaponId) : baseDmg) * dFall * projectileWallDamageScale(b, bestHit.t));
             handleDummyHit(dummy, bestHit.mesh, { damage: dmg, headshot: bestHit.headshot, falloff: dFall, headMiss: bestHit.miss }, _bpos.clone());
             if (bestHit.headshot) showHitmarker('head');
           }
         } else if (b.isPaintBomb) {
           triggerPaintExplosion(_bpos.clone(), b);
         } else {
-          emitHit(bestHit.pid, b.id, b.weaponId || currentWeapon.id, _bpos.clone(), bestHit.headshot, { headMiss: bestHit.miss });
+          emitHit(bestHit.pid, b.id, b.weaponId || currentWeapon.id, _bpos.clone(), bestHit.headshot, { headMiss: bestHit.miss, wallPenetrated: projectileWallDamageScale(b, bestHit.t) < 1 });
           applyDotOnHit(b.weaponId || currentWeapon.id, bestHit.pid);
         }
         // Firework Launcher: also spawn burn zone on direct hit
@@ -55001,6 +55056,7 @@ function updateBullets(dt) {
         continue;
       }
     }
+    if (Number.isFinite(b._wallEntryT)) b.wallPenetrated = true;
     // Short-range weapons (Arc Torrent): cull bullet past maxRange
     if (b.maxRange) {
       const dx = _bpos.x - b.spawnX, dy = _bpos.y - b.spawnY, dz = _bpos.z - b.spawnZ;
@@ -57047,11 +57103,11 @@ function resolveBotHitsInFlight() {
 // A bot's hit on the local player. The server subtracts HP on botHitMe knowing nothing of the spawn
 // shield, a riot shield, a parry, Lobby 13 or the range, so it only hears of hits that land here —
 // it used to hear of every one, and killed shielded players showing full health (#22).
-function botHitsMe(botId, weaponId, head) {
+function botHitsMe(botId, weaponId, head, wallPenetrated = false) {
   _botHitHead = !!head;
-  const landed = applyBotDamageToPlayer(weaponId, botId);
+  const landed = applyBotDamageToPlayer(weaponId, botId, wallPenetrated && gatecrasherPiercesWalls(weaponId) ? Math.round(getClientWeaponDamage(weaponId) * .5) : undefined);
   _botHitHead = false;
-  if (landed) socket.emit('botHitMe', { botId, weapon: weaponId, headshot: !!head });
+  if (landed) socket.emit('botHitMe', { botId, weapon: weaponId, headshot: !!head, wallPenetrated });
 }
 // A death played out here — a bot's bullet, a hazard — told to the server when other real
 // players are in the match (#48): its own sums can still say we're alive, and then nobody
@@ -57706,7 +57762,18 @@ socket.on('bulletFired', b => {
   const opts = b.weapon === 'storm_bloom_ball'
     ? { ballLightning: true, auraRadius: 3.0, auraCooldown: 1000, directRootMs: 3000, auraRootMs: 1000, maxRange: 42 }
     : {};
+  opts.ownerId = b.ownerId;
   spawnLocalBullet(origin, new THREE.Vector3(b.dx,b.dy,b.dz), b.id, false, w.bulletSpeed, w.bulletColor, w.bulletSize, b.weapon || w.id, opts);
+});
+socket.on('projectileIntercept', data => {
+  if (!data || ![data.x, data.y, data.z].every(Number.isFinite)) return;
+  for (const b of localBullets) if (b.id === data.rocketId || b.id === data.coneId) {
+    b._cull = true; scene.remove(b.mesh);
+  }
+  rocketExplode(new THREE.Vector3(data.x, data.y, data.z), 'rpg', null, {
+    damageRemotes: data.ownerId === myId,
+    damagePlayer: data.ownerId !== myId && !friendlyFireBlocked(myId, data.ownerId)
+  });
 });
 socket.on('mapPropDestroyed', data => {
   if (!data || data.mapName !== activeMapName) return;
