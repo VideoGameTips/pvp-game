@@ -1504,6 +1504,7 @@ const GAME_MODE_CONFIGS = {
   'dice_duel':  { type: 'arcade', subtype: 'dice',     allies: 0, enemies: 1, timeLimit: 0,   arcade: true }, // 🎲 roll a weapon, re-roll at a price
   'roulette':   { type: 'arcade', subtype: 'roulette', allies: 0, enemies: 5, timeLimit: 240, arcade: true }, // 🔄 a new random gun every 20 s
   'rocket_rumble': { type: 'arcade', subtype: 'rumble', allies: 0, enemies: 5, timeLimit: 240, arcade: true }, // 💥 rockets only
+  'zombies':    { type: 'arcade', subtype: 'zombie',  allies: 0, enemies: 0, timeLimit: 0,   arcade: true, playerHp: 300 }, // 🧟 endless waves, fists only, the dead drop the rest
 };
 let selectedModeConfig = null;
 const gameBots = [];       // {id, team, weaponId, x, z, rotY, hp, dead, state, wanderAngle, wanderTimer, lastShot, lastBotMove}
@@ -54965,6 +54966,7 @@ function clientRespawnBot(botId) {
   const bot = resolveBot(botId);
   if (!bot || !bot.dead) return;
   if (bot.campaignActor) return;
+  if (bot.zombie) { zombieRemove(bot); return; }   // the wave director makes new ones
   // Only respawn in modes where bots should respawn (not elim - that handles rounds separately)
   if (match?.type === 'elim') return;
   const teamBots = gameBots.filter(b => b.team === bot.team);
@@ -57587,7 +57589,7 @@ const CLIENT_WEAPON_DAMAGE = Object.fromEntries([
   ['flamethrower_skin_water', 9], ['crossbow_skin_noodle', 76], ['minigun_skin_arcade', 7],
   ['rpg_skin_soda', 118],
   ['mg42', 15], ['bat', 38], ['sabre', 45], ['frying_pan', 32], ['sledge', 70],
-  ['spear', 50], ['spear_throw', 85], ['pickle', 22], ['shield_charge', 60], ['bat_crowd_clear', 100], ['fists_uppercut', 50],
+  ['spear', 50], ['spear_throw', 85], ['pickle', 22], ['shield_charge', 60], ['bat_crowd_clear', 100], ['fists_uppercut', 50], ['zombie_claw', 15],
   // Opera/Doomsday map hazards — without these, applyBotDamageToPlayer's own
   // ||25 fallback silently underdealt them too (#51).
   ['chandelier', 200], ['debris', 120], ['lightning_strike', 70],
@@ -60424,6 +60426,10 @@ function setupArcadeStart(subtype) {
       showAnnouncement('🥧 PIE FIGHT', 'Cream pies only · splat everyone · most pies wins!', '#ffcc66', 3000);
       return;
     }
+    case 'zombie': {
+      zombieStart();
+      return;
+    }
     case 'dice': {
       match.dice = { goal: DICE_GOAL, round: 0, score: { me: 0, bot: 0 }, phase: 'idle', kit: rngNewKit() };
       for (const b of gameBots) b.team = 'enemy';
@@ -60664,12 +60670,13 @@ function rngApplyKit(kit) {
 }
 // A roll arrives: into an empty slot, else over the one you are not holding, and into your hand (no equip time: the
 // roll was the wait). Returns the kind it was.
-function rngRollIn(id, kit, tier) {
+function rngRollIn(id, kit, tier, forceSlot) {
   const info = diceInfo(id);
   if (!info) return null;
   if (!kit.orig) kit.orig = { primary: selectedPrimaryIdx, secondary: selectedSecondaryIdx, melee: selectedMeleeIdx, support: selectedSupportIdx };
   let target = kit.slots.findIndex(x => !x);
   if (target < 0) target = 1 - kit.hand;
+  if (forceSlot != null) target = forceSlot;   // Zombie Survival: your fists keep slot 1, whatever you find goes in slot 2
   kit.slots[target] = id; kit.tiers[target] = tier || null; kit.hand = target;
   if (info.kind === 'gun') weaponAmmo[WEAPONS.indexOf(info.item)] = { ammo: info.item.mag, reserve: info.item.reserve };
   else if (info.kind === 'util') supportUses[SUPPORT_ITEMS.indexOf(info.item)] = info.item.uses || 1;
@@ -61305,6 +61312,11 @@ function updateMatchHUD() {
       L.textContent = `🧟 ${zCount} INFECTED`;
       C.textContent = `INFECTION`;
       R.textContent = match.infectedIds[myId] ? 'YOU ARE ZOMBIE' : 'YOU ARE HUMAN';
+    } else if (sub === 'zombie') {
+      const Z = match.zombie || { wave: 0, kills: 0 };
+      L.textContent = Z.wave ? `WAVE ${Z.wave}` : 'GET READY';
+      C.textContent = `🧟 ${gameBots.filter(b => b.zombie && !b.dead).length + (Z.toSpawn || 0)} LEFT`;
+      R.textContent = `KILLS ${Z.kills}`;
     } else if (sub === 'dice') {
       const d = match.dice || { score: { me: 0, bot: 0 }, goal: DICE_GOAL };
       L.textContent = `YOU ${d.score.me} – ${d.score.bot} BOT`;
@@ -61409,6 +61421,8 @@ function handleArcadeKill(targetId, killerId) {
     else scheduleBotArcadeRespawn(targetId);
     return;
   }
+  // Zombie Survival: you die and it is over; a zombie dies and it may drop something, then it is cleared away
+  if (sub === 'zombie') { zombieOnKill(targetId, killerId); return; }
   // Dice duel: the one still standing took the round
   if (sub === 'dice') { diceOnKill(targetId, killerId); return; }
   // Sniper Only, Pie Fight, Roulette, Rocket Rumble: standard FFA kill counting + respawn.
@@ -62485,6 +62499,7 @@ function updateMatchTimer(dt) {
     match.rouletteNext = Date.now() + ROULETTE_MS;
     rouletteShuffle();
   }
+  if (match.arcade === 'zombie' && match.roundActive) updateZombieMode(dt);
   if (matchTimeUnlimited()) { updateMatchHUD(); return; }
   // ── Elim mode: per-round 60-second timer ─────────────────────────────────
   if (match.type === 'elim') {
@@ -62633,6 +62648,7 @@ function endMatch(winner, reason) {
   }
   if (match.type === 'wave_dash') stopWaveDash();
   if (match.dice) diceCleanup();
+  if (match.zombie) zombieCleanup();
   rngRestore(match.roulette);
   const isWin  = winner === 'ally';
   releasePointer(); // PLAY AGAIN / CHANGE MODE / BACK TO LOBBY need the cursor
@@ -62656,6 +62672,8 @@ function endMatch(winner, reason) {
   } else if (match.type === 'dday') {
     const dd = ddayState;
     scoreText = dd ? `Waves survived: ${dd.wavesSent}/3  ·  Enemies killed: ${dd.totalKills || 0}` : '';
+  } else if (match.arcade === 'zombie' && match.zombie) {
+    scoreText = `Waves survived: ${Math.max(0, match.zombie.wave - 1)}  ·  Zombies killed: ${match.zombie.kills}  ·  Best: wave ${match.zombie.best}`;
   } else if (match.type === 'wave_dash') {
     scoreText = `Wave Dash score: ${match.waveScore || 0}  ·  Best: ${match.waveBest || waveDash.best || 0}`;
   } else {
@@ -62924,6 +62942,7 @@ function spawnGameBots() {
     delete players[bot.id];
   }
   gameBots.length = 0;
+  zombieClearPickups();
   rangeTargets = [];
   const rangeHud = document.getElementById('range-hud');
   if (rangeHud && selectedModeConfig.type !== 'range') rangeHud.style.display = 'none';
@@ -63224,6 +63243,250 @@ function spawnGameBots() {
   initMatch();
   const spawnedMatch=match;
   setTimeout(() => {if(match===spawnedMatch)startMatchRound();}, 400 + (allies + enemies) * 40);
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// 🧟 ZOMBIE SURVIVAL. Endless waves of zombies, solo, and you begin with your fists and nothing else. Every zombie has a
+// small chance to drop ammo or a new weapon, so the kit is whatever the dead give you: slot 1 stays your fists, slot 2 is
+// the latest thing you picked up (walk over it; what you were holding drops at your feet and is yours again once you step
+// away from it). The kit is the same two-slot kit as Dice Duel and Weapon Roulette, held in match.roulette so every rule
+// of it (keys 1 and 2, the HUD, getting your own loadout back at the end) is already there.
+// A zombie is a bot that skips the whole bot AI: no aim, no cover, no plan. It walks the nav route to you at its wave's
+// speed, winds up a claw swing when it is close and hits if you have not stepped away. A wave is bigger, tougher and
+// quicker than the last; there is no last one.
+// ══════════════════════════════════════════════════════════════════════════
+const ZOMBIE_CAP = 26;                  // alive at once, however big the wave
+const ZOMBIE_FIRST_MS = 3500, ZOMBIE_BREAK_MS = 4500, ZOMBIE_WAVE_MAX_MS = 55000;   // the first wave, the breather, and the longest a wave can hang on before the next one comes anyway
+const ZOMBIE_DROP_WEAPON = 0.035, ZOMBIE_DROP_AMMO = 0.06, ZOMBIE_DROP_PITY = 0.0015, ZOMBIE_DROP_MAX = 0.12;   // per zombie; the weapon chance grows with every zombie that gave nothing
+const ZOMBIE_PICKUP_LIFE_MS = 30000, ZOMBIE_PICKUP_RADIUS = 1.7;
+const ZOMBIE_HEAL = 25;                 // a breath between waves
+function zombieWaveSize(w) { return 5 + Math.floor(w * 2.2); }
+function zombieHpFor(w) { return Math.min(420, 55 + w * 13); }
+function zombieSpeedFor(w) { return Math.min(6.0, 2.9 + w * 0.2) * (0.9 + Math.random() * 0.2); }
+const zombiePickups = [];
+function zombieStart() {
+  const holder = { kit: rngNewKit(), id: null };
+  match.roulette = holder;                                   // (see above: the shared two-slot kit)
+  const best = parseInt((() => { try { return localStorage.getItem('pvp_zombie_best') || '0'; } catch (e) { return '0'; } })(), 10) || 0;
+  match.zombie = { wave: 0, kills: 0, toSpawn: 0, nextWaveAt: Date.now() + ZOMBIE_FIRST_MS, waveStartedAt: 0, nextSpawnAt: 0, phase: 'break',
+                   sinceDrop: 0, best, n: 0, holder };
+  rngRollIn('m:fists', holder.kit, null, 0);                  // you begin with your fists
+  for (const b of gameBots) b.team = 'enemy';
+  showAnnouncement('🧟 ZOMBIE SURVIVAL', 'Endless · you only have your fists · the dead drop ammo and weapons', '#66dd66', 3200);
+}
+function zombieSpawnPoint() {
+  const b = MAP_BOT_BOUNDS[activeMapName] || getMapBoundsRect();
+  const hx = Math.max(6, b.halfX - 4), hz = Math.max(6, b.halfZ - 4);
+  const minFar = Math.min(26, Math.min(hx, hz) * 0.5);
+  for (let i = 0; i < 50; i++) {
+    const x = (Math.random() * 2 - 1) * hx, zz = (Math.random() * 2 - 1) * hz;
+    if (Math.hypot(x - camera.position.x, zz - camera.position.z) < minFar) continue;
+    if (!floorExistsAt(x, zz)) continue;
+    const [rx, rz] = resolvePosCollisions(x, zz, 0);
+    if (Math.hypot(rx - x, rz - zz) > 0.05) continue;       // inside a wall
+    if (botGroundYAt(x, zz, 0, 1.05, 2.2) > 0.6) continue;  // on top of something
+    return { x, z: zz };
+  }
+  const sp = botSideSpawn(0, 1, 'enemy');
+  return { x: sp.x, z: sp.z };
+}
+function zombieSpawn() {
+  const Z = match.zombie, sp = zombieSpawnPoint(), id = `zombie_${Date.now()}_${Z.n++}`;
+  const hp = zombieHpFor(Z.wave);
+  const pData = { id, name: 'Zombie', isBot: true, team: 'enemy', weaponId: null, ownerId: myId, skin: 'default',
+                  x: sp.x, y: 1, z: sp.z, rotY: 0, rotX: 0, hp, maxHp: hp, dead: false, kills: 0, deaths: 0 };
+  players[id] = pData;
+  spawnRemotePlayer(pData);
+  const mesh = remoteMeshes[id];
+  if (mesh) {
+    mesh.position.set(sp.x, 0, sp.z);
+    const tint = new THREE.Color(0x6f9a58);                  // the dead are green
+    const green = m => { const c = m.clone(); if (c.color) c.color.lerp(tint, 0.6); return c; };
+    mesh.traverse(o => { if (o.isMesh && o.material) o.material = Array.isArray(o.material) ? o.material.map(green) : green(o.material); });
+  }
+  const bot = { id, team: 'enemy', weaponId: null, x: sp.x, z: sp.z, rotY: 0, hp, maxHp: hp, prevHp: hp, dead: false, state: 'chase',
+                zombie: true, zSpeed: zombieSpeedFor(Z.wave), lastAtk: 0, y: 0, yVel: 0, frostSlow: 100, kbVX: 0, kbVZ: 0,
+                wanderAngle: Math.random() * Math.PI * 2, wanderTimer: 0, lastShot: 0, stuckTimer: 0, strafeDir: 1, strafeFlipTimer: 0, tacTimer: 0, coverPt: null,
+                difficulty: selectedDifficulty, tune: botTuning(selectedDifficulty), activeSlot: 'melee' };
+  gameBots.push(bot);
+  socket.emit('spawnBots', [{ id, name: 'Zombie', team: absTeam('enemy'), weaponId: null, spawnX: sp.x, spawnZ: sp.z, hp, skin: 'default' }]);
+  return bot;
+}
+function zombieRemove(bot) {
+  if (!bot) return;
+  const i = gameBots.indexOf(bot); if (i >= 0) gameBots.splice(i, 1);
+  const m = remoteMeshes[bot.id];
+  if (m) { scene.remove(m); try { disposeBody(m); } catch (e) {} delete remoteMeshes[bot.id]; }
+  delete players[bot.id];
+  if (socket && socket.connected) socket.emit('despawnBots', [bot.id]);
+}
+function zombieThink(bot, dt, now) {
+  if (isDead || !match || match.over) { syncBotMesh(bot); return; }
+  let spd = bot.zSpeed || 3.4;
+  if (bot.frostSlow != null) spd *= Math.max(0.15, bot.frostSlow / 100);
+  if (now < (bot._chillUntil || 0)) spd *= 0.5;
+  if (now < (bot._rootUntil || 0)) spd = 0;
+  const me = camera.position;
+  const dx = me.x - bot.x, dz = me.z - bot.z, dist = Math.hypot(dx, dz) || 0.001;
+  bot.rotY = Math.atan2(-dx, -dz);
+  if (dist > 1.25 && spd > 0 && (bot.y || 0) < 0.6) {
+    let tx = me.x, tz = me.z;
+    const wp = botNavPoint(bot, { x: me.x, z: me.z, isPlayer: true });
+    if (wp) { tx = wp.x; tz = wp.z; }
+    const ddx = tx - bot.x, ddz = tz - bot.z, dd = Math.hypot(ddx, ddz) || 1;
+    let nx = bot.x + ddx / dd * spd * dt, nz = bot.z + ddz / dd * spd * dt;
+    for (const o of gameBots) {                              // bodies do not stack: lean off the one in front
+      if (o === bot || o.dead || !o.zombie) continue;
+      const ox = nx - o.x, oz = nz - o.z, od = Math.hypot(ox, oz);
+      if (od < 0.7 && od > 0.001) { nx += ox / od * (0.7 - od) * 0.5; nz += oz / od * (0.7 - od) * 0.5; }
+    }
+    [nx, nz] = resolvePosCollisions(nx, nz, bot.y || 0);
+    if (!isBotOutOfBoundsXZ(nx, nz)) { bot.x = nx; bot.z = nz; }
+  }
+  // a claw: it winds up, and lands only if you are still there
+  const sameLevel = Math.abs((me.y - 1.65) - (bot.y || 0)) < 1.6;
+  if (!bot._windup && dist < 1.75 && sameLevel && now - (bot.lastAtk || 0) > 900) bot._windup = now + 320;
+  if (bot._windup && now >= bot._windup) {
+    bot._windup = 0; bot.lastAtk = now;
+    if (dist < 2.2 && sameLevel) {
+      botHitsMe(bot.id, 'zombie_claw');
+      spawnHitParticle(new THREE.Vector3(bot.x + dx / dist * 0.9, 1.3, bot.z + dz / dist * 0.9));
+    }
+  }
+  syncBotMesh(bot);
+}
+// The wave director: counts down to a wave, trickles its zombies in (never more than ZOMBIE_CAP at once), and when the last
+// one is down gives you a breather and a little health.
+function updateZombieMode(dt) {
+  const Z = match.zombie; if (!Z) return;
+  const now = Date.now();
+  updateZombiePickups(dt);
+  if (isDead) return;
+  const alive = gameBots.filter(b => b.zombie && !b.dead).length;
+  if (Z.phase === 'break') {
+    if (now >= Z.nextWaveAt) {
+      Z.wave++; Z.phase = 'fight'; Z.toSpawn = zombieWaveSize(Z.wave); Z.waveStartedAt = now; Z.nextSpawnAt = now;
+      if (Z.wave > Z.best) { Z.best = Z.wave; try { localStorage.setItem('pvp_zombie_best', String(Z.best)); } catch (e) {} }
+      showAnnouncement(`🧟 WAVE ${Z.wave}`, `${Z.toSpawn} zombies · ${Math.round(zombieHpFor(Z.wave))} HP each`, '#66dd66', 2200);
+      playSoundEvent('hitmarker', { volume: 0.8, minGap: 0, tier: 'orange' });
+    }
+    return;
+  }
+  if (Z.toSpawn > 0 && alive < ZOMBIE_CAP && now >= Z.nextSpawnAt) {
+    zombieSpawn(); Z.toSpawn--;
+    Z.nextSpawnAt = now + Math.max(350, 1000 - Z.wave * 40);
+  }
+  const waveOver = Z.toSpawn === 0 && alive === 0;
+  if (waveOver || (Z.toSpawn === 0 && now - Z.waveStartedAt > ZOMBIE_WAVE_MAX_MS)) {
+    Z.phase = 'break'; Z.nextWaveAt = now + (waveOver ? ZOMBIE_BREAK_MS : 800);
+    if (waveOver) {
+      const me = players[myId];
+      if (me && me.hp > 0) { const to = Math.min(matchMaxHp(), me.hp + ZOMBIE_HEAL); socket.emit('healSelf', { amount: to - me.hp }); me.hp = to; updateHealthHUD(to); }
+      showAnnouncement(`WAVE ${Z.wave} CLEARED`, `+${ZOMBIE_HEAL} HP · next wave coming`, '#aaffaa', 1800);
+    }
+  }
+  updateMatchHUD();
+}
+function zombieHoldsAmmoUser() {
+  const kit = rngKit(); if (!kit) return false;
+  return kit.slots.some(id => { const i = diceInfo(id); return i && (i.kind === 'util' || (i.kind === 'gun' && !i.item.noReload && i.item.mag)); });
+}
+function zombieOnKill(targetId, killerId) {
+  const Z = match.zombie;
+  if (targetId === myId) {                                   // you are the one who fell
+    endMatch('enemy', `🧟 THE DEAD GOT YOU · wave ${Z.wave} · ${Z.kills} zombies killed`);
+    return;
+  }
+  const bot = gameBots.find(b => b.id === targetId);
+  if (!bot || !bot.zombie) return;
+  if (killerId === myId) { Z.kills++; match.ffaKills[myId] = Z.kills; zombieRollDrop(bot); }
+  setTimeout(() => zombieRemove(bot), 2600);                  // the body lies there a moment
+  updateMatchHUD();
+}
+// Per zombie: a small chance for a new weapon (it grows with every zombie that gave nothing), a smaller one for ammo.
+function zombieRollDrop(bot) {
+  const Z = match.zombie;
+  const wChance = Math.min(ZOMBIE_DROP_MAX, ZOMBIE_DROP_WEAPON + ZOMBIE_DROP_PITY * Z.sinceDrop);
+  const r = Math.random();
+  if (r < wChance) {
+    Z.sinceDrop = 0;
+    const kit = rngKit();
+    const haveGun = kit && kit.slots.some(id => { const i = diceInfo(id); return i && i.kind === 'gun'; });
+    let roll = diceRollOnce(null, false);
+    for (let k = 0; k < 4 && !haveGun && diceInfo(roll.weaponId)?.kind !== 'gun'; k++) roll = diceRollOnce(null, false);   // with no gun yet, you are more likely to be given one
+    zombieDropPickup('weapon', bot.x, bot.z, roll.weaponId, roll.tier);
+  } else {
+    Z.sinceDrop++;
+    if (r < wChance + ZOMBIE_DROP_AMMO && zombieHoldsAmmoUser()) zombieDropPickup('ammo', bot.x, bot.z, null, null);
+  }
+}
+function zombieLabelSprite(text, color) {
+  const cv = document.createElement('canvas'); cv.width = 256; cv.height = 64;
+  const c = cv.getContext('2d');
+  c.font = 'bold 30px Arial'; c.textAlign = 'center'; c.lineWidth = 6; c.strokeStyle = 'rgba(0,0,0,.85)'; c.strokeText(text, 128, 42); c.fillStyle = color; c.fillText(text, 128, 42);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, depthTest: false }));
+  sp.scale.set(2.2, 0.55, 1); sp.position.y = 0.85;
+  return sp;
+}
+function zombieDropPickup(kind, x, z, id, tier, grace) {
+  const color = kind === 'ammo' ? '#ffd84a' : (DICE_TIER_COLOR[tier] || '#ffffff');
+  const g = new THREE.Group();
+  const box = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.42, 0.42), new THREE.MeshBasicMaterial({ color: new THREE.Color(color) }));
+  g.add(box);
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 6, 6), new THREE.MeshBasicMaterial({ color: new THREE.Color(color), transparent: true, opacity: 0.35, depthWrite: false }));
+  beam.position.y = 3; g.add(beam);
+  g.add(zombieLabelSprite(kind === 'ammo' ? 'AMMO' : `${diceName(id)} · ${tier}`, color));
+  const gy = botGroundYAt(x, z, 0, 1.05, 2.2);
+  g.position.set(x, gy, z);
+  scene.add(g);
+  zombiePickups.push({ kind, id, tier, mesh: g, box, born: Date.now(), x, z, y: gy, leaveFirst: !!grace });
+  playSoundEvent('hitmarker', { volume: 0.6, minGap: 0, tier: kind === 'ammo' ? 'orange' : 'blue' });
+}
+function zombieRemovePickup(i) {
+  const pk = zombiePickups[i]; if (!pk) return;
+  scene.remove(pk.mesh);
+  pk.mesh.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); } });
+  zombiePickups.splice(i, 1);
+}
+function zombieClearPickups() { while (zombiePickups.length) zombieRemovePickup(zombiePickups.length - 1); }
+function zombieCleanup() {
+  zombieClearPickups();
+  for (const b of gameBots.slice()) if (b.zombie) zombieRemove(b);
+}
+function updateZombiePickups(dt) {
+  const now = Date.now(), t = now / 1000;
+  for (let i = zombiePickups.length - 1; i >= 0; i--) {
+    const pk = zombiePickups[i], age = now - pk.born;
+    if (age > ZOMBIE_PICKUP_LIFE_MS) { zombieRemovePickup(i); continue; }
+    pk.box.rotation.y += dt * 2.2; pk.box.position.y = 0.55 + Math.sin(t * 3 + i) * 0.12;
+    pk.mesh.visible = age < ZOMBIE_PICKUP_LIFE_MS - 6000 || Math.floor(age / 220) % 2 === 0;   // blinks out in its last seconds
+    if (isDead) continue;
+    const d = Math.hypot(camera.position.x - pk.x, camera.position.z - pk.z);
+    if (pk.leaveFirst) { if (d > ZOMBIE_PICKUP_RADIUS + 0.9) pk.leaveFirst = false; continue; }
+    if (d > ZOMBIE_PICKUP_RADIUS || Math.abs(camera.position.y - 1.65 - pk.y) > 2.2) continue;
+    zombieRemovePickup(i);
+    zombieTake(pk);
+  }
+}
+function zombieTake(pk) {
+  const kit = rngKit(); if (!kit) return;
+  if (pk.kind === 'ammo') {
+    let any = false;
+    for (const id of kit.slots) {
+      const info = diceInfo(id); if (!info) continue;
+      if (info.kind === 'gun' && info.item.mag) { weaponAmmo[WEAPONS.indexOf(info.item)] = { ammo: info.item.mag, reserve: info.item.reserve }; any = true; }
+      else if (info.kind === 'util') { supportUses[SUPPORT_ITEMS.indexOf(info.item)] = info.item.uses || 1; any = true; }
+    }
+    updateAmmoHUD();
+    showAnnouncement('AMMO', any ? 'Everything you carry is full again' : 'Nothing to reload', '#ffd84a', 1300);
+    playSoundEvent('reload_finish', { volume: 0.7, minGap: 0 });
+    return;
+  }
+  const old = kit.slots[1];
+  if (old && old !== pk.id) zombieDropPickup('weapon', camera.position.x, camera.position.z, old, kit.tiers[1], true);   // what you held is on the floor, yours again once you step away
+  const k = rngRollIn(pk.id, kit, pk.tier, 1);
+  showAnnouncement(`${pk.tier} · ${diceName(pk.id)}${DICE_KIND_TAG[k] || ''}`, old ? 'swapped in (the old one is on the floor)' : 'new weapon', DICE_TIER_COLOR[pk.tier] || '#fff', 1600);
+  diceSound(pk.tier);
 }
 
 // ── Shooting Range: target spawning ────────────────────────────────────────
@@ -63922,6 +64185,7 @@ function updateBotAI(dt) {
 
     // During countdown: bots walk toward the centre so they're in position when it ends
     if (!roundLive) continue; // frozen during countdown
+    if (bot.zombie) { zombieThink(bot, dt, now); continue; }   // 🧟 a zombie has no aim, no cover and no plan: it comes for you
     try {
 
     // ── Turret mode: stationary, rotates and fires only ──────────────────────
@@ -67402,6 +67666,7 @@ function teardownMatchWorld() {
   gameStarted = false;
   inLobby = false;
   if (match && match.dice) diceCleanup();
+  if (match && match.zombie) zombieCleanup();
   if (match && match.roulette) rngRestore(match.roulette);
   match = null;
   pvpMatch = null; // else the next non-lobby mode spawns the previous lobby's bot counts

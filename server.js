@@ -148,7 +148,7 @@ const FFA_LEGEND_WINS = 5000;
 const FFA_MODES = new Set(['ffa5', 'ffa15']);
 const FRIENDLY_FIRE_FREE_FOR_ALL_MODES = new Set([
   'ffa5', 'ffa15', 'gungame', 'oitc', 'juggernaut', 'infection', 'sniper_only', 'speedrun', 'piefight',
-  'dice_duel', 'roulette', 'rocket_rumble',
+  'dice_duel', 'roulette', 'rocket_rumble', 'zombies',
 ]);
 const FFA_WIN_MIN_MS = 30000;
 let _saveSoonTimer = null;
@@ -1898,6 +1898,7 @@ const MODE_TEAM_SIZES = {
   'dice_duel':   { ally: 1, enemy: 1 },
   'roulette':    { ally: 1, enemy: 5 },
   'rocket_rumble': { ally: 1, enemy: 5 },
+  'zombies':     { ally: 1, enemy: 0 },
 };
 
 function flushPvpSolo(socketId) {
@@ -2015,7 +2016,7 @@ event_horizon: 75,
   mg42: 15,
   // Melee
   bat: 50, sabre: 45, frying_pan: 32, sledge: 70, spear: 50,
-  spear_throw: 85, pickle: 22, shield_charge: 60, knife_instakill: 9999, bat_crowd_clear: 100, fists_uppercut: 50,
+  spear_throw: 85, pickle: 22, shield_charge: 60, knife_instakill: 9999, bat_crowd_clear: 100, fists_uppercut: 50, zombie_claw: 15,
   chainsaw: 45, katana: 65, knife: 28, lightsabre: 72, twin_knife: 50, scythe: 58, chain_hammer: 85,
   riot_shield: 18, baguette: 28, screwdriver: 20,
   // cane and shovel were missing here entirely — every hit with either one

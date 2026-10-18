@@ -2828,6 +2828,120 @@ if (ok && process.argv.includes('--uppercut')) {
   if (out.length) { ok = false; console.log(out.join('\n')); }
 }
 
+if (ok && process.argv.includes('--zombie')) {
+  // Zombie Survival: you begin with fists only, waves come endlessly (bigger, tougher and quicker each time, never more than
+  // the cap at once), a zombie walks to you and claws you, the dead drop ammo and weapons (rarely), a weapon goes in your
+  // second slot (and what you held drops at your feet), ammo fills what you carry, dying ends it, and it all cleans up.
+  const out = vm.runInThisContext(`(() => {
+    const issues = [];
+    const saved = { cfg: selectedModeConfig, match, started: gameStarted, dead: isDead, sound: playSoundEvent, anim: showAnnouncement, fx: spawnAbilityAOEFX,
+                    audio: getAudioCtx, ws: playWeaponSound, bots: gameBots.slice(), me: players[myId], pos: camera.position.clone(), walls: wallColliders.slice(),
+                    sel: [selectedPrimaryIdx, selectedSecondaryIdx, selectedMeleeIdx, selectedSupportIdx], rnd: Math.random, map: activeMapName, end: endMatch };
+    playSoundEvent = () => {}; showAnnouncement = () => {}; spawnAbilityAOEFX = () => {}; getAudioCtx = () => null; playWeaponSound = () => {};
+    let ended = null; endMatch = (w, why) => { ended = { w, why }; if (match) match.over = true; };
+    try {
+      gameStarted = true; isDead = false; gameBots.length = 0; wallColliders.length = 0;
+      activateMap('blank'); wallColliders.length = 0;
+      players[myId] = { hp: 300, team: 'ally' };
+      selectedModeConfig = GAME_MODE_CONFIGS.zombies;
+      if (!selectedModeConfig || selectedModeConfig.subtype !== 'zombie') { issues.push('there is no zombies mode'); return issues; }
+      initMatch(); match.roundActive = true; match.active = true;
+      setupArcadeStart('zombie');
+      const Z = match.zombie, kit = rngKit();
+      if (!kit || kit.slots[0] !== 'm:fists' || kit.slots[1]) issues.push('you should begin with your fists and nothing else: ' + JSON.stringify(kit && kit.slots));
+      if (activeSlot !== 'melee' || MELEE_ITEMS[selectedMeleeIdx].id !== 'fists') issues.push('the fists should be in your hands');
+      camera.position.set(0, 1.65, 0);
+      // waves: the first one, never past the cap, bigger and tougher each time
+      const sizes = [1, 2, 6, 12].map(zombieWaveSize);
+      if (!(sizes[0] < sizes[1] && sizes[1] < sizes[2] && sizes[2] < sizes[3])) issues.push('waves should keep growing: ' + sizes);
+      if (!(zombieHpFor(10) > zombieHpFor(1) && zombieHpFor(1) >= 50)) issues.push('zombies should get tougher');
+      Z.nextWaveAt = 0; updateZombieMode(0.016);
+      if (Z.wave !== 1 || Z.phase !== 'fight' || Z.toSpawn !== zombieWaveSize(1)) issues.push('wave 1 did not start: ' + JSON.stringify({ w: Z.wave, p: Z.phase, n: Z.toSpawn }));
+      let guard = 0; while (Z.toSpawn > 0 && guard++ < 200) { Z.nextSpawnAt = 0; updateZombieMode(0.016); }
+      let zs = gameBots.filter(b => b.zombie);
+      if (zs.length !== zombieWaveSize(1)) issues.push('wave 1 should field ' + zombieWaveSize(1) + ' zombies, got ' + zs.length);
+      if (zs.some(b => !(b.hp >= 60 && b.hp === b.maxHp && b.team === 'enemy' && remoteMeshes[b.id]))) issues.push('a zombie is missing its body, team or health');
+      if (zs.some(b => Math.hypot(b.x, b.z) < 12)) issues.push('a zombie spawned right next to you');
+      // a big wave is capped
+      for (let i = 0; i < 40; i++) zombieSpawn();
+      Z.toSpawn = 10; Z.nextSpawnAt = 0; const before = gameBots.filter(b => b.zombie && !b.dead).length; updateZombieMode(0.016);
+      if (before > ZOMBIE_CAP && gameBots.filter(b => b.zombie && !b.dead).length > before) issues.push('spawned past the cap');
+      for (const b of gameBots.slice()) zombieRemove(b);
+      Z.toSpawn = 0;
+      // a zombie walks to you ...
+      const z1 = zombieSpawn(); z1.x = 8; z1.z = 0; z1.zSpeed = 3; remoteMeshes[z1.id].position.set(8, 0, 0);
+      match.roundActive = true;
+      for (let f = 0; f < 60; f++) updateBotAI(1 / 60);
+      if (!(z1.x < 6 && z1.x > 3.5)) issues.push('a zombie should close about 3 m in a second at 3 m/s, x is ' + z1.x.toFixed(2));
+      // ... and claws you, once it has wound up, and not if you got away
+      z1.x = 1.4; z1.z = 0; z1.lastAtk = 0; z1._windup = 0;
+      players[myId].hp = 300; clearPlayerStatusEffects(); try { grantSpawnShield(0); } catch (e) {}
+      let hits = 0; const realHit = botHitsMe; botHitsMe = (id, w) => { if (w === 'zombie_claw') hits++; };
+      const realNow = Date.now; let T = realNow.call(Date); Date.now = () => T;   // the wind-up is in real time: tick a clock by hand
+      for (let f = 0; f < 40; f++) { T += 1000 / 60; z1.x = 1.4; z1.z = 0; updateBotAI(1 / 60); }
+      if (hits !== 1) issues.push('a zombie in reach should land one claw in 0.67 s, landed ' + hits);
+      hits = 0; z1.lastAtk = 0; z1._windup = 0;
+      for (let f = 0; f < 40; f++) { T += 1000 / 60; z1.x = f === 5 ? 8 : (f < 5 ? 1.4 : 8); z1.z = 0; updateBotAI(1 / 60); }
+      if (hits) issues.push('you stepped away from the wind-up and still got clawed');
+      botHitsMe = realHit; Date.now = realNow;
+      // drops: a weapon (rare), ammo (rarer, only if you carry something that uses it)
+      zombiePickups.length && zombieClearPickups();
+      Math.random = () => 0.001; Z.sinceDrop = 0; zombieRollDrop(z1);
+      if (zombiePickups.length !== 1 || zombiePickups[0].kind !== 'weapon') issues.push('a lucky zombie should drop a weapon');
+      const first = zombiePickups[0].id;
+      camera.position.set(zombiePickups[0].x, 1.65, zombiePickups[0].z); updateZombiePickups(0.016);
+      if (kit.slots[0] !== 'm:fists' || kit.slots[1] !== first || kit.hand !== 1) issues.push('a pickup should go in slot 2 and into your hand, fists kept: ' + JSON.stringify(kit.slots) + ' hand ' + kit.hand);
+      if (zombiePickups.length) issues.push('the pickup should be gone once taken');
+      // a second one swaps, the old one drops at your feet and cannot be re-taken until you step off it
+      zombieDropPickup('weapon', 12, 0, 'ak20', 'SS');
+      camera.position.set(12, 1.65, 0); updateZombiePickups(0.016);
+      if (kit.slots[1] !== 'ak20' || kit.slots[0] !== 'm:fists') issues.push('the second pickup should replace slot 2 only: ' + JSON.stringify(kit.slots));
+      const dropped = zombiePickups.find(p => p.id === first);
+      if (!dropped) issues.push('the weapon you swapped out should be on the floor');
+      else { updateZombiePickups(0.016); if (!zombiePickups.includes(dropped)) issues.push('you took the swapped-out weapon straight back'); }
+      if (!(weaponAmmo[WEAPONS.findIndex(w => w.id === 'ak20')].ammo === WEAPONS.find(w => w.id === 'ak20').mag)) issues.push('a pickup should come loaded');
+      // ammo
+      zombieClearPickups();
+      const ai = WEAPONS.findIndex(w => w.id === 'ak20'); weaponAmmo[ai] = { ammo: 3, reserve: 0 };
+      Math.random = () => 0.05; Z.sinceDrop = 0; zombieRollDrop(z1);
+      if (zombiePickups.length !== 1 || zombiePickups[0].kind !== 'ammo') issues.push('an ammo drop was expected, got ' + JSON.stringify(zombiePickups.map(p => p.kind)));
+      camera.position.set(zombiePickups[0].x, 1.65, zombiePickups[0].z); updateZombiePickups(0.016);
+      if (!(weaponAmmo[ai].ammo === WEAPONS[ai].mag && weaponAmmo[ai].reserve === WEAPONS[ai].reserve)) issues.push('ammo should fill what you carry: ' + JSON.stringify(weaponAmmo[ai]));
+      // nothing to reload (fists only): no ammo drop
+      kit.slots[1] = null; Math.random = () => 0.05; zombieClearPickups(); zombieRollDrop(z1);
+      if (zombiePickups.length) issues.push('with only fists nothing uses ammo, so none should drop');
+      // the odds are small
+      Math.random = saved.rnd; Z.sinceDrop = 0; let w = 0, a = 0; kit.slots[1] = 'ak20';
+      for (let i = 0; i < 4000; i++) { zombieClearPickups(); Z.sinceDrop = 0; zombieRollDrop(z1); const k = zombiePickups[0] && zombiePickups[0].kind; if (k === 'weapon') w++; else if (k === 'ammo') a++; }
+      zombieClearPickups();
+      if (w < 4000 * 0.02 || w > 4000 * 0.055) issues.push('weapon drops should be a few percent, got ' + (w / 40).toFixed(1) + '%');
+      if (a < 4000 * 0.04 || a > 4000 * 0.085) issues.push('ammo drops should be about 6%, got ' + (a / 40).toFixed(1) + '%');
+      // a cleared wave: a breather and a little health
+      for (const b of gameBots.slice()) zombieRemove(b);
+      Z.phase = 'fight'; Z.toSpawn = 0; players[myId].hp = 200; updateZombieMode(0.016);
+      if (Z.phase !== 'break' || players[myId].hp !== 225) issues.push('clearing a wave should start a breather and heal 25: ' + Z.phase + ' ' + players[myId].hp);
+      // dying ends it
+      zombieOnKill(myId, 'zzz');
+      if (!ended || ended.w !== 'enemy') issues.push('dying should end the match');
+      // and it cleans up
+      zombieSpawn(); zombieDropPickup('ammo', 3, 3); zombieCleanup();
+      if (gameBots.some(b => b.zombie) || zombiePickups.length) issues.push('zombies and pickups should be cleared at the end');
+    } finally {
+      Math.random = saved.rnd; endMatch = saved.end; zombieClearPickups();
+      for (const b of gameBots.slice()) if (b.zombie) zombieRemove(b);
+      selectedModeConfig = saved.cfg; match = saved.match; gameStarted = saved.started; isDead = saved.dead;
+      playSoundEvent = saved.sound; showAnnouncement = saved.anim; spawnAbilityAOEFX = saved.fx; getAudioCtx = saved.audio; playWeaponSound = saved.ws;
+      gameBots.length = 0; gameBots.push(...saved.bots); if (saved.me) players[myId] = saved.me; else delete players[myId];
+      wallColliders.length = 0; wallColliders.push(...saved.walls); camera.position.copy(saved.pos);
+      [selectedPrimaryIdx, selectedSecondaryIdx, selectedMeleeIdx, selectedSupportIdx] = saved.sel;
+      try { activateMap(saved.map); } catch (e) {}
+    }
+    return issues;
+  })()`);
+  console.log('zombie checks: fists only, endless growing waves (capped), walking + clawing zombies, rare weapon and ammo drops, swap rules, a breather, death ends it, clean-up');
+  if (out.length) { ok = false; console.log(out.join('\n')); }
+}
+
 if (ok && process.argv.includes('--netinterp')) {
   // Remote players on the network: packets arrive ~30 times a second, with jitter; the body must glide between them at
   // the screen's own frame rate (it used to move only when a packet landed -- one frame in three at 60 fps -- and trail by
