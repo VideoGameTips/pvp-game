@@ -40848,16 +40848,43 @@ function updateEquipBar() {
   bar.firstChild.style.width = Math.max(0, Math.min(100, (1 - left / _equipDur) * 100)) + '%';
 }
 
+const DEFAULT_EQUIP_POSES = {
+  slide: [.12, -.26, -.25], rack: [.10, -.18, -.18], bolt: [.16, .28, -.22],
+  cylinder: [.08, .35, -.32], pump: [-.18, .08, -.12], string: [.06, -.32, .14],
+  heavy: [-.20, .12, .14], energy: [.04, -.24, .22], blade: [.22, .30, -.32],
+  fists: [-.18, -.12, .18], utility: [.16, -.20, .22]
+};
+function startDefaultEquip(model, item, slot, ms) {
+  const now = performance.now();
+  const duration = ms == null ? equipMsFor(item, slot) : Math.max(0, Math.min(ms, equipMsFor(item, slot)));
+  if (!duration) return;
+  const id = item.baseId || item.id;
+  let profile = slot === 'melee' ? 'blade' : slot === 'support' ? 'utility' : 'rack';
+  if (id === 'fists') profile = 'fists';
+  else if (/revolver|cycler|gunslinger/.test(id)) profile = 'cylinder';
+  else if (/bow|slingshot/.test(id)) profile = 'string';
+  else if (/sg8|shorty|sawed_off|shotgun|storm_bloom/.test(id)) profile = 'pump';
+  else if (/sniper|srx|amr|railgun|lever/.test(id)) profile = 'bolt';
+  else if (/minigun|chain_gun|rpd|mg42|rpg|bazooka|mortar|javelin/.test(id)) profile = 'heavy';
+  else if (/freeze|frost|cyroclasm|continuum|taser|hellfire|laser/.test(id)) profile = 'energy';
+  else if (slot === 'secondary') profile = 'slide';
+  const sound = slot === 'melee' ? (id === 'fists' ? 'rustle' : 'shing')
+    : slot === 'support' ? 'rustle' : profile === 'energy' ? 'click' : 'rack';
+  const deadline = equipReadyAt > now && _equipDur === ms ? Math.min(now + duration, equipReadyAt) : now + duration;
+  _beginEquip(model, { equip: id === 'ak20' ? 'draw' : 'ready', defaultEquip: true,
+    profile, itemId: id, equipMs: duration, deadline,
+    equipBeats: [[.42, sound], [.72, slot === 'melee' || slot === 'support' ? 'rustle' : 'click']] }, slot === 'melee', slot === 'support');
+}
+
 function startEquipAnim(idx, ms) {
   finishEquip();
   try {
     const model = weaponModels[idx], w = WEAPONS[idx];
     if (!model || !w) return;
     const fx = _skinFxFor(w.id);
-    // A skin with an entrance of its own plays that; everything else is drawn
-    // from the hip, which is most of the roster — over exactly the equip time.
+    // Skin entrances keep their choreography; stock draws share the gameplay deadline.
     if (fx && fx.equip) _beginEquip(model, fx, false);
-    else _beginEquip(model, { equip: 'draw', equipMs: ms || drawMsFor(w) }, false);
+    else startDefaultEquip(model, w, w.slot || (w.type === 'secondary' ? 'secondary' : 'primary'), ms);
   } catch (e) { finishEquip(); }
 }
 // Melee skins carry their entrance on their own table entry. Only the skin
@@ -40869,7 +40896,7 @@ function startMeleeEquipAnim(idx, ms) {
     const want = base && equippedMeleeModelSkins[base.id];
     const skin = want && MELEE_MODEL_SKINS.find(s => s.id === want && s.melee === base.id);
     if (skin && skin.equip && skin._model === model) _beginEquip(model, skin, true);
-    else if (model && base) _beginEquip(model, { equip: 'draw', equipMs: ms || drawMsFor(base) }, true);
+    else if (model && base) startDefaultEquip(model, base, 'melee', ms);
   } catch (e) { finishEquip(); }
 }
 
@@ -40880,17 +40907,26 @@ function startSupportEquipAnim(idx, ms) {
     if (!model || !item) return;
     if (model._heldItem) model._heldItem.visible = true;
     if (model._supportEquip === 'donutbuild') {
-      _beginEquip(model, { equip: 'donutbuild', equipMs: 1450, equipSfx: ['whoosh', 'chime'], equipBeats: [[.88,'snapin'],[.88,'cling']] }, false, true);
+      // The stock grenade is a donut too, but its entrance must fit the utility draw.
+      const duration = ms == null ? equipMsFor(item, 'support') : Math.max(0, Math.min(ms, equipMsFor(item, 'support')));
+      if (!duration) return;
+      const now = performance.now();
+      const deadline = equipReadyAt > now && _equipDur === ms ? Math.min(now + duration, equipReadyAt) : now + duration;
+      _beginEquip(model, { equip: 'donutbuild', defaultEquip: true, equipMs: duration, deadline,
+        equipSfx: ['whoosh', 'chime'], equipBeats: [[.88,'snapin'],[.88,'cling']] }, false, true);
     } else {
-      _beginEquip(model, { equip: 'draw', equipMs: ms || drawMsFor(item) }, false, true);
+      startDefaultEquip(model, item, 'support', ms);
     }
   } catch (e) { finishEquip(); }
 }
 
 function _beginEquip(model, spec, melee, support = false) {
+  if (spec.defaultEquip && performance.now() >= spec.deadline) return;
   if (model._calm) model._calm();     // put back anything an ambient effect has moved first
   const type = spec.equip;
-  const piecesRoot = model._heldItem || model;
+  const mech = type === 'ready' && !melee && !support ? ensureMech(model, spec.itemId) : null;
+  const action = spec.profile === 'slide' ? mech && mech.slide : spec.profile === 'rack' || spec.profile === 'bolt' ? mech && mech.knob : null;
+  const piecesRoot = type === 'ready' ? model : model._heldItem || model;
   // A whole-object move acts on the one part the model names for it -- the
   // pivot it is tossed about, the blade that ignites, the two handles of a
   // butterfly knife. Everything else acts on every piece.
@@ -40899,6 +40935,7 @@ function _beginEquip(model, spec, melee, support = false) {
   const targets = type === 'balisong' ? [...(model._bali || []), ...(model._pivot ? [model._pivot] : [])]
                 : type === 'flip'     ? (model._pivot ? [model._pivot] : [])
                 : type === 'ignite'   ? (model._blade ? [model._blade] : [])
+                : type === 'ready' ? model.children.filter(c => c !== model._flash && !c.userData.legendFx && !c.userData.eqFx)
                 : _equipPieces(piecesRoot);
   if (!targets.length) return;
   targets.forEach(_eqHomeOf);
@@ -40964,16 +41001,20 @@ function _beginEquip(model, spec, melee, support = false) {
   // honest tie-breaker, and only for guns: melee models are scaled differently
   // and their weights are hand-set anyway.
   let dur = spec.equipMs || 900;
-  if (type === 'draw' && !melee && !support) {
+  if (type === 'draw' && !melee && !support && !spec.defaultEquip) {
     const L = box.max.z - box.min.z;
     dur = Math.max(dur, Math.round(67 + _eqClamp((L - 0.18) / 0.67) * 133));
   }
-  _equip = { model, melee, support, type, t0: performance.now(), dur, magic: !!spec.magic,
+  const t0 = performance.now();
+  if (spec.defaultEquip) dur = Math.max(0, Math.min(dur, spec.deadline - t0));
+  _equip = { model, melee, support, type, t0, dur, profile: spec.profile, magic: !!spec.magic,
+             action: action && { g: action.g, p: action.g.position.clone(), q: action.g.quaternion.clone() },
              ps, ctr, ring, glow, sfx: spec.equipSfx || null, box, temp,
              prismPos: prismProp ? prismProp.userData.prism.pos.clone() : ctr.clone(),
              beats: (spec.equipBeats || []).map(([t, name]) => ({ t, name, done: false })),
              turns: spec.spinTurns || 1, pivot: (model._spinPivot || ctr).clone(),
              grip: new THREE.Vector3(ctr.x, ctr.y - 0.02, ctr.z + (box.max.z - ctr.z) * 0.65) };
+  if (spec.defaultEquip && !dur) { finishEquip(); return; }
   // One metallic cling per landing -- thinned to no more than one every ~18ms
   // so a fast cascade still reads as individual hits, not a smear.
   if (type === 'donutbuild') {
@@ -40994,6 +41035,9 @@ function finishEquip() {
   _equip = null;
   for (const p of e.ps) {
     p.c.position.copy(p.h.p); p.c.quaternion.copy(p.h.q); p.c.scale.copy(p.h.s); p.c.visible = true;
+  }
+  if (e.action && !e.ps.some(p => p.c === e.action.g)) {
+    e.action.g.position.copy(e.action.p); e.action.g.quaternion.copy(e.action.q);
   }
   if (e.ring) { e.ring.removeFromParent(); e.ring.geometry.dispose(); e.ring.material.dispose(); }
   for (const [m, v] of e.glow) m.emissiveIntensity = v;
@@ -41031,6 +41075,22 @@ function _equipStep(e, t) {
     const { c, h } = p;
     c.visible = true;
     switch (e.type) {
+      case 'ready': {
+        const back = 1 - _eqEase(_eqClamp(t / .78));
+        const check = Math.sin(Math.PI * _eqClamp((t - .18) / .64));
+        const a = DEFAULT_EQUIP_POSES[e.profile] || DEFAULT_EQUIP_POSES.rack;
+        const compact = e.melee || e.support ? .35 : 1;
+        const rot = new THREE.Quaternion().setFromEuler(new THREE.Euler(
+          (-.42 * back + a[0] * check) * compact, (.18 * back + a[1] * check) * compact, (.25 * back + a[2] * check) * compact));
+        c.position.copy(h.p).sub(e.ctr).applyQuaternion(rot).add(e.ctr);
+        c.position.y -= .20 * back * compact;
+        c.position.z += .10 * back * compact + (e.profile === 'pump' ? .045 * check : 0);
+        c.quaternion.copy(rot).multiply(h.q); c.scale.copy(h.s);
+        if (e.action && e.action.g === c) {
+          const pull = Math.sin(Math.PI * _eqClamp((t - .20) / .50));
+          c.position.add(new THREE.Vector3(0, 0, .038 * pull).applyQuaternion(rot));
+        }
+        break; }
       case 'draw': {
         // Pulled up from off-screen bottom-right into the hand. The whole
         // weapon moves as ONE rigid object — every piece keeps its exact offset
