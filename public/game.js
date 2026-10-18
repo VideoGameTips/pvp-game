@@ -201,7 +201,7 @@ const WEAPONS = [
     ability: { name: 'Cryo Nova', cd: 14000, desc: 'AOE freeze blast 4 m · 50 dmg each', type: 'aoe', radius: 4, damage: 50, color: 0x99ddff },
   },
   {
-    id: 'boombow', name: 'Bow', type: 'Explosive Bow', slot: 'primary',
+    id: 'boombow', name: 'Bow', type: 'Explosive Bow', slot: 'primary', doubleJump: true,
     // Half the previous base damage, with three times the reload duration.
     mag: 1, reserve: 42, damage: 16, fireRate: 188, reloadTime: 1050,
     auto: false, pellets: 1, spread: 0.004, adsZoom: 42, bulletSpeed: 34, noReload: false,
@@ -255,7 +255,7 @@ const WEAPONS = [
     ability: { name: 'Execution', cd: 16000, desc: 'Next shot · 175 dmg', type: 'powershot', pellets: 1, spreadMult: 0, weaponAbId: 'hand_cannon_ab' },
   },
   {
-    id: 'throwing_knives', name: 'Throwing Knives', type: 'Thrown', slot: 'secondary',
+    id: 'throwing_knives', name: 'Throwing Knives', type: 'Thrown', slot: 'secondary', doubleJump: true,
     mag: 3, reserve: 18, damage: 45, fireRate: 240, reloadTime: 1200,
     auto: false, pellets: 1, spread: 0.006, adsZoom: 55, bulletSpeed: 88, noReload: false,
     bulletColor: 0xd8d8d8, bulletSize: 0.045,
@@ -1118,7 +1118,6 @@ const MELEE_ITEMS = [
     doubleJump: true, // light and quick — an extra jump mid-air, no new code needed (grantsDoubleJump)
     ability: { name: 'Throw Knife', cd: 350, desc: 'Hurl a knife · 30 dmg · 10 in reserve', type: 'melee_multithrow', damage: 30, maxCharges: 10 } },
   { id: 'scythe', name: 'Scythe', type: 'Movement Reaper', damage: 58, range: 2.7, cooldown: 560, speedMult: 1.35,
-    doubleJump: true,
     // Reap Dash goes where you are pointing, up and down included, and covers twice what it did (about 13 m, now 26).
     ability: { name: 'Reap Dash', cd: 4200, desc: 'Movement dash · twice as far · goes where you aim, up included', type: 'melee_mobility', speed: 30, side: 0, up: 3.5, color: 0x99ffe8, aimDash: true, distance: 26, dashTime: 0.42 } },
   // Meteor Hammer: the weighted-chain weapon of old China, flung rather than swung. At a person it wraps and reels
@@ -2530,9 +2529,9 @@ function equippedAbility(w) {
 // bare fists did not. What qualifies is being unburdened or carrying something
 // that isn't a firearm at all:
 //   • fists — nothing in your hands, the lightest possible loadout
-//   • crossbow and the compressed-air weapons — no powder, no recoil, no weight
+//   • Bow, throwing daggers and the compressed-air weapons
 // Sidearms and SMGs used to qualify wholesale and no longer do.
-const DOUBLE_JUMP_IDS = new Set(['fists','crossbow','air_rifle','dart_gun']);
+const DOUBLE_JUMP_IDS = new Set(['fists','air_rifle','dart_gun']);
 
 // ── 🅴 Abilities ────────────────────────────────────────────────────────────
 // Nearly everything used to carry an ability (120 of 121 guns, all 42 melee) on
@@ -28313,12 +28312,30 @@ function _donutSprinkleMat(i) {
   return new THREE.MeshPhongMaterial({ color: c, shininess: 240, specular: 0xffffff, emissive: c, emissiveIntensity: 1.0 });
 }
 
+function _donutOctPart(g, mat, w, h, d, x, y, z, rx = 0, ry = 0, rz = 0) {
+  const bevel = Math.min(w, h, d) * .08;
+  const hw = w / 2 - bevel, hh = h / 2 - bevel, cut = Math.min(hw, hh) * .48;
+  const shape = new THREE.Shape();
+  shape.moveTo(-hw + cut, -hh);
+  shape.lineTo(hw - cut, -hh); shape.lineTo(hw, -hh + cut);
+  shape.lineTo(hw, hh - cut); shape.lineTo(hw - cut, hh);
+  shape.lineTo(-hw + cut, hh); shape.lineTo(-hw, hh - cut);
+  shape.lineTo(-hw, -hh + cut); shape.closePath();
+  const geometry = new THREE.ExtrudeGeometry(shape, { depth: d - 2 * bevel, steps: 1,
+    bevelEnabled: true, bevelSegments: 1, bevelSize: bevel, bevelThickness: bevel, curveSegments: 1 });
+  geometry.translate(0, 0, -d / 2 + bevel);
+  const part = new THREE.Mesh(geometry, mat);
+  part.userData.donutOctagonal = true;
+  part.position.set(x, y, z); part.rotation.set(rx, ry, rz);
+  part.castShadow = true; g.add(part); return part;
+}
+
 function _buildDonutRing(radius = 0.038, tube = 0.010, glazeScale = 0.92, flavor = 'strawberry') {
   const mats = _donutMats(flavor);
   const ring = new THREE.Group();
-  const dough = new THREE.Mesh(new THREE.TorusGeometry(radius, tube, 16, 36), mats.dough);
+  const dough = new THREE.Mesh(new THREE.TorusGeometry(radius, tube, 8, 8), mats.dough);
   dough.castShadow = true; ring.add(dough);
-  const glaze = new THREE.Mesh(new THREE.TorusGeometry(radius, tube * 0.42, 10, 36, Math.PI * 2), mats.glaze);
+  const glaze = new THREE.Mesh(new THREE.TorusGeometry(radius, tube * 0.42, 8, 8, Math.PI * 2), mats.glaze);
   glaze.scale.set(glazeScale, glazeScale, 1.03);
   glaze.position.z = tube * 0.36;
   glaze.castShadow = true; ring.add(glaze);
@@ -28378,8 +28395,8 @@ function _addDonutOrbit(g, radius = 0.075, z = -0.060) {
 function buildDonutRevolver() {
   const g = new THREE.Group();
   const M = _donutMats('strawberry');
-  gpBox(g, M.deep, 0.034, 0.050, 0.088, 0, 0.018, 0.036);           // magenta frame
-  gpBox(g, M.dark, 0.035, 0.006, 0.070, 0, 0.044, 0.038);           // rear sight groove
+  _donutOctPart(g, M.deep, 0.034, 0.050, 0.088, 0, 0.018, 0.036);  // magenta frame
+  _donutOctPart(g, M.dark, 0.035, 0.006, 0.070, 0, 0.044, 0.038);  // rear sight groove
   const drum = gpPart(g, 'main', () => {
     const ring = _buildDonutRing(0.033, 0.010, 0.94, 'strawberry');
     ring.position.set(0, 0.018, -0.030);
@@ -28392,17 +28409,17 @@ function buildDonutRevolver() {
   }, { x: 0, y: 0.018, z: -0.030 });
   g._parts.main._chambers = 6;
   drum.userData.donutMain = true;   // the donut the equip entrance threads on
-  gpCyl(g, M.steel, 0.0105, 0.0105, 0.126, 14, 0, 0.021, -0.126);
-  gpCyl(g, M.dark, 0.0060, 0.0060, 0.010, 10, 0, 0.021, -0.188);
-  gpBox(g, M.deep, 0.020, 0.014, 0.118, 0, 0.004, -0.122);          // frosting-smeared underlug
-  gpBox(g, M.cream, 0.016, 0.006, 0.080, 0, 0.036, -0.128);         // vanilla sight rib
-  gpBox(g, M.cream, 0.005, 0.012, 0.007, 0, 0.044, -0.180);         // front sight
+  gpCyl(g, M.steel, 0.0105, 0.0105, 0.126, 8, 0, 0.021, -0.126);
+  gpCyl(g, M.dark, 0.0060, 0.0060, 0.010, 8, 0, 0.021, -0.188);
+  _donutOctPart(g, M.deep, 0.020, 0.014, 0.118, 0, 0.004, -0.122);
+  _donutOctPart(g, M.cream, 0.016, 0.006, 0.080, 0, 0.036, -0.128);
+  _donutOctPart(g, M.cream, 0.005, 0.012, 0.007, 0, 0.044, -0.180);
   gpPlate(g, M.grip, [[0.040,-0.006],[0.070,-0.020],[0.074,-0.096],[0.044,-0.112],[0.020,-0.052],[0.018,-0.012]], 0.038, 0);
-  for (let i = 0; i < 4; i++) gpBox(g, M.deep, 0.040, 0.004, 0.024, 0, -0.030 - i * 0.018, 0.040 + i * 0.006, 0.27);
+  for (let i = 0; i < 4; i++) _donutOctPart(g, M.deep, 0.040, 0.004, 0.024, 0, -0.030 - i * 0.018, 0.040 + i * 0.006, 0.27);
   const guard = new THREE.Mesh(new THREE.TorusGeometry(0.018, 0.0034, 6, 12, Math.PI * 1.05), M.steel);
   guard.rotation.set(0, Math.PI/2, -0.4); guard.position.set(0, -0.024, 0.018); g.add(guard);
-  gpBox(g, M.cream, 0.005, 0.014, 0.005, 0, -0.016, 0.018, 0.2);
-  gpBox(g, M.steel, 0.010, 0.014, 0.012, 0, 0.056, 0.076, -0.40);
+  _donutOctPart(g, M.cream, 0.005, 0.014, 0.005, 0, -0.016, 0.018, 0.2);
+  _donutOctPart(g, M.steel, 0.010, 0.014, 0.012, 0, 0.056, 0.076, -0.40);
   const flash = makeMuzzleFlash(); flash.position.set(0, 0.021, -0.196); g.add(flash);
   _addDonutOrbit(g, 0.070, -0.040);
   g._flash = flash; g._kickZ = 0.022; g._greebled = true; g._handDetailed = true;
@@ -28417,19 +28434,19 @@ function buildDonutKatana() {
   guard.position.set(0, 0.006, 0.050);
   guard.userData.donutMain = true;   // the donut the equip entrance threads on
   g.add(guard);
-  gpBox(g, M.deep, 0.026, 0.038, 0.135, 0, -0.055, 0.095, 0.10);    // magenta grip
-  for (let i = 0; i < 5; i++) gpBox(g, M.cream, 0.028, 0.005, 0.018, 0, -0.022 - i * 0.020, 0.076 + i * 0.010, 0.10);
-  gpBox(g, M.cream, 0.022, 0.028, 0.020, 0, -0.130, 0.142, 0.10);   // pommel icing
-  gpBox(g, M.steel, 0.018, 0.020, 0.385, 0, 0.036, -0.170, -0.06);  // blade core
-  gpBox(g, M.glaze, 0.020, 0.006, 0.350, 0, 0.051, -0.185, -0.06);  // frosting ridge
-  gpBox(g, M.dark, 0.004, 0.024, 0.370, -0.012, 0.037, -0.175, -0.06);
+  _donutOctPart(g, M.deep, 0.026, 0.038, 0.135, 0, -0.055, 0.095, 0.10);
+  for (let i = 0; i < 5; i++) _donutOctPart(g, M.cream, 0.028, 0.005, 0.018, 0, -0.022 - i * 0.020, 0.076 + i * 0.010, 0.10);
+  _donutOctPart(g, M.cream, 0.022, 0.028, 0.020, 0, -0.130, 0.142, 0.10);
+  _donutOctPart(g, M.steel, 0.018, 0.020, 0.385, 0, 0.036, -0.170, -0.06);
+  _donutOctPart(g, M.glaze, 0.020, 0.006, 0.350, 0, 0.051, -0.185, -0.06);
+  _donutOctPart(g, M.dark, 0.004, 0.024, 0.370, -0.012, 0.037, -0.175, -0.06);
   for (let i = 0; i < 14; i++) {
     const s = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.003, 0.004), _donutSprinkleMat(i));
     s.position.set((i % 2 ? 0.006 : -0.006), 0.057, -0.025 - i * 0.023);
     s.rotation.z = (i % 3 - 1) * 0.7;
     g.add(s);   // an ordinary piece (no eqFx) so it flies in with the blade instead of hanging in mid-air
   }
-  const tip = new THREE.Mesh(new THREE.ConeGeometry(0.015, 0.046, 4), M.steel);
+  const tip = new THREE.Mesh(new THREE.ConeGeometry(0.015, 0.046, 8), M.steel);
   tip.rotation.x = -Math.PI / 2 - 0.06; tip.position.set(0, 0.036, -0.392); g.add(tip);
   _addDonutOrbit(g, 0.082, -0.135);
   g._greebled = true; g._handDetailed = true;
@@ -28450,27 +28467,27 @@ function buildDonutClassicGun(kind = 'rifle', flavor = 'strawberry') {
   }[kind] || {};
   const [bw,bh,bd,bx,by,bz] = cfg.body;
   const [br, bl, bz2] = cfg.barrel;
-  gpBox(g, M.deep, bw, bh, bd, bx, by, bz);
-  gpBox(g, M.cream, bw * 0.82, 0.010, bd * 0.82, bx, by + bh * 0.53, bz - 0.006);
-  gpBox(g, M.dark, bw * 1.02, 0.008, bd * 0.65, bx, by - bh * 0.50, bz + 0.006);
-  gpCyl(g, M.steel, br, br, bl, 16, 0, by + bh * 0.03, bz2);
-  gpCyl(g, M.dark, br * 0.58, br * 0.58, 0.016, 12, 0, by + bh * 0.03, bz2 - bl * 0.52 - 0.008);
+  _donutOctPart(g, M.deep, bw, bh, bd, bx, by, bz);
+  _donutOctPart(g, M.cream, bw * 0.82, 0.010, bd * 0.82, bx, by + bh * 0.53, bz - 0.006);
+  _donutOctPart(g, M.dark, bw * 1.02, 0.008, bd * 0.65, bx, by - bh * 0.50, bz + 0.006);
+  gpCyl(g, M.steel, br, br, bl, 8, 0, by + bh * 0.03, bz2);
+  gpCyl(g, M.dark, br * 0.58, br * 0.58, 0.016, 8, 0, by + bh * 0.03, bz2 - bl * 0.52 - 0.008);
   if (kind === 'launcher') {
-    gpCyl(g, M.glaze, 0.060, 0.032, 0.090, 16, 0, by + 0.002, bz2 - bl * 0.54);
-    gpCyl(g, M.dark, 0.052, 0.052, 0.016, 16, 0, by + 0.002, bz2 + bl * 0.50);
+    gpCyl(g, M.glaze, 0.060, 0.032, 0.090, 8, 0, by + 0.002, bz2 - bl * 0.54);
+    gpCyl(g, M.dark, 0.052, 0.052, 0.016, 8, 0, by + 0.002, bz2 + bl * 0.50);
   }
   if (cfg.stock) {
-    gpBox(g, M.grip, bw * 0.95, bh * 0.55, 0.140, 0, by - 0.004, bz + bd * 0.58);
-    gpBox(g, M.cream, bw * 0.70, 0.012, 0.110, 0, by + bh * 0.31, bz + bd * 0.58);
+    _donutOctPart(g, M.grip, bw * 0.95, bh * 0.55, 0.140, 0, by - 0.004, bz + bd * 0.58);
+    _donutOctPart(g, M.cream, bw * 0.70, 0.012, 0.110, 0, by + bh * 0.31, bz + bd * 0.58);
   }
   gpPlate(g, M.grip, [[0.020,-0.020],[0.052,-0.034],[0.056,-0.108],[0.028,-0.122],[0.004,-0.070],[0.000,-0.026]], 0.038, 0);
   if (cfg.mag) {
-    gpBox(g, M.deep, 0.036, 0.095, 0.040, 0, -0.074, bz + bd * 0.04, -0.16);
-    gpBox(g, M.cream, 0.038, 0.010, 0.042, 0, -0.124, bz + bd * 0.045, -0.16);
+    _donutOctPart(g, M.deep, 0.036, 0.095, 0.040, 0, -0.074, bz + bd * 0.04, -0.16);
+    _donutOctPart(g, M.cream, 0.038, 0.010, 0.042, 0, -0.124, bz + bd * 0.045, -0.16);
   }
   const guard = new THREE.Mesh(new THREE.TorusGeometry(0.019, 0.0038, 6, 12, Math.PI * 1.05), M.steel);
   guard.rotation.set(0, Math.PI/2, -0.4); guard.position.set(0, -0.032, bz + bd * 0.22); g.add(guard);
-  gpBox(g, M.steel, 0.006, 0.018, 0.006, 0, -0.023, bz + bd * 0.22, 0.2);
+  _donutOctPart(g, M.steel, 0.006, 0.018, 0.006, 0, -0.023, bz + bd * 0.22, 0.2);
   for (let i = 0; i < 9; i++) {
     const s = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.003, 0.004), _donutSprinkleMat(i));
     s.position.set((i % 3 - 1) * bw * 0.22, by + bh * 0.62, bz - bd * 0.32 + i * bd * 0.07);
@@ -28508,9 +28525,9 @@ function buildDonutFragGrenade() {
   body.rotation.x = Math.PI / 2;
   body.userData.donutMain = true;
   g.add(body);
-  gpCyl(g, M.dark, 0.016, 0.018, 0.020, 10, 0, 0.053, 0, 0);
-  gpBox(g, M.steel, 0.030, 0.006, 0.014, 0.012, 0.061, 0);
-  gpBox(g, M.steel, 0.007, 0.066, 0.014, 0.031, 0.026, 0, 0, 0, 0.24);
+  gpCyl(g, M.dark, 0.016, 0.018, 0.020, 8, 0, 0.053, 0, 0);
+  _donutOctPart(g, M.steel, 0.030, 0.006, 0.014, 0.012, 0.061, 0);
+  _donutOctPart(g, M.steel, 0.007, 0.066, 0.014, 0.031, 0.026, 0, 0, 0, 0.24);
   gpCyl(g, M.steel, 0.0022, 0.0022, 0.036, 6, -0.010, 0.059, 0, 0, Math.PI / 2);
   const pull = new THREE.Mesh(new THREE.TorusGeometry(0.014, 0.0025, 6, 14), M.steel);
   pull.rotation.y = Math.PI / 2; pull.position.set(-0.030, 0.059, 0); g.add(pull);
