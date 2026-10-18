@@ -1,6 +1,8 @@
 #!/usr/bin/env node
-// The 1v1 map vote, end to end against a real server: two people with different votes (a coin flip), a person against
-// a bot (the bot's pick travels with the vote), an opponent leaving the vote, and nobody voting (random after 15 s).
+// The map vote, end to end against a real server: two people with different votes (a coin flip), a person against
+// a bot (the bot's pick travels with the vote), an opponent leaving the vote, nobody voting (random after 15 s), and
+// the other lobby modes: a free-for-all over the whole pool (a lone voter's pick is final, the most votes of three
+// wins) and King of the Hill, which has its own arena and skips it.
 // Starts its own server on a spare port with an empty data directory. Takes about 25 s. Needs socket.io-client
 // (a dev dependency of the server's own socket.io install).
 const { spawn } = require('child_process');
@@ -119,8 +121,63 @@ const until = async (f, ms = 20000) => { const t = Date.now(); while (Date.now()
     }
     a.close();
   }
+  await sleep(300);
+  // E: a free-for-all with one human: the vote is over the whole pool (not the duel maps) and the pick is final
+  {
+    const a = client('A');
+    await until(() => a.connected);
+    a.emit('joinStagingLobby', { mode: 'ffa5', map: 'volcano' }); await sleep(100);   // an up-front pick means nothing now
+    a.emit('setLobbyReady', { ready: true, fillBots: true });
+    if (!await until(() => a.ev.mapPickStart, 3000)) fail('E: no map vote in a free-for-all');
+    else {
+      const o = a.ev.mapPickStart.options;
+      if (o.length < 40) fail('E: the vote should be over the whole pool, got ' + o.length + ' maps');
+      if (o.some(id => id.startsWith('duel_'))) fail('E: duel maps are 1v1 only');
+      if (a.ev.mapPickStart.vsBot) fail('E: bots do not vote outside 1v1');
+      a.emit('mapPickVote', { mapId: 'urban' });
+      if (!await until(() => a.ev.lobbyStart, 6000)) fail('E: never started');
+      else {
+        if (a.ev.lobbyStart.mapId !== 'urban') fail('E: a lone voter\'s pick is final, got ' + a.ev.lobbyStart.mapId);
+        if (a.ev.lobbyStart.enemyBots < 1) fail('E: bots should still fill the match');
+        if (a.ev.mapPickResult.coin) fail('E: one vote is not a coin flip');
+      }
+    }
+    a.close();
+  }
+  await sleep(300);
+  // F: three people in a free-for-all: the most votes plays
+  {
+    const [a, b, c] = [client('A'), client('B'), client('C')];
+    await until(() => a.connected && b.connected && c.connected);
+    for (const x of [a, b, c]) x.emit('joinStagingLobby', { mode: 'ffa5', map: null });
+    await sleep(300);
+    for (const x of [a, b, c]) x.emit('setLobbyReady', { ready: true, fillBots: true });
+    if (!await until(() => a.ev.mapPickStart && b.ev.mapPickStart && c.ev.mapPickStart, 3000)) fail('F: not every human was asked');
+    else {
+      if ((a.ev.mapPickStart.others || []).length !== 2) fail('F: a should be told about 2 others');
+      a.emit('mapPickVote', { mapId: 'volcano' }); b.emit('mapPickVote', { mapId: 'volcano' }); c.emit('mapPickVote', { mapId: 'urban' });
+      if (!await until(() => a.ev.lobbyStart && b.ev.lobbyStart && c.ev.lobbyStart, 6000)) fail('F: never started');
+      else {
+        const r = a.ev.mapPickResult;
+        if (r.mapId !== 'volcano' || r.coin) fail('F: two votes beat one, got ' + JSON.stringify({ m: r.mapId, coin: r.coin }));
+        if (new Set([a, b, c].map(x => x.ev.lobbyStart.mapId)).size !== 1) fail('F: players got different maps');
+      }
+    }
+    for (const x of [a, b, c]) x.close();
+  }
+  await sleep(300);
+  // G: King of the Hill plays its own arena: no vote
+  {
+    const a = client('A');
+    await until(() => a.connected);
+    a.emit('joinStagingLobby', { mode: 'koth', map: null }); await sleep(100);
+    a.emit('setLobbyReady', { ready: true, fillBots: true });
+    if (!await until(() => a.ev.lobbyStart || a.ev.mapPickStart, 4000)) fail('G: koth never started');
+    else if (a.ev.mapPickStart) fail('G: koth has its own arena and should not vote');
+    a.close();
+  }
   server.kill();
   try { fs.rmSync(DATA, { recursive: true, force: true }); } catch (e) {}
-  console.log(log.length ? log.join('\n') : 'map vote server checks: two humans, a bot, a leaver, a timeout: all OK');
+  console.log(log.length ? log.join('\n') : 'map vote server checks: two humans, a bot, a leaver, a timeout: all OK (plus free-for-all and koth)');
   process.exit(log.length ? 1 : 0);
 })();

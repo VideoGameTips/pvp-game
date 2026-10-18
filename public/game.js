@@ -5790,9 +5790,9 @@ const DUEL_ONLY_MAPS = new Set(DUEL_MAP_IDS);
 // spawnGameBots resolves the map from, so it has to keep the duel map the VOTE chose (lobbyStart puts it in
 // selectedMap); returning 'auto' for it here re-rolled a random duel map and ignored the vote.
 function effectivePickedMap(modeId, map) { return DUEL_ONLY_MAPS.has(map) && modeId !== '1v1' ? 'auto' : map; }
-// What a player asks the lobby for before anyone is found. The duel maps are never pre-picked: 1v1 votes for its
-// map once the opponent is known (see the map vote, below), so for 1v1 the lobby is told 'auto'.
-function lobbyPrePick(modeId, map) { return modeId === '1v1' || DUEL_ONLY_MAPS.has(map) ? 'auto' : effectivePickedMap(modeId, map); }
+// What a player asks the lobby for before anyone is found: nothing. Every lobby match picks its map by a vote once the
+// people are known (see the map vote, below), so there is no map to ask for up front.
+function lobbyPrePick(modeId, map) { return 'auto'; }
 
 const MAP_COLLIDERS = {};
 const MAP_BOUNDS = {};
@@ -65528,41 +65528,68 @@ function hideMapPick() {
   if (el && el.parentNode) el.parentNode.removeChild(el);
   _mapPick = null;
 }
+// One card of the vote: a screenshot of the map (public/map-previews, made by tools/render-map-previews.js), its name,
+// and, when there are only a few to choose between, what the plan says about it. A map with no screenshot yet (a new
+// one) falls back to the plan drawn from its colliders.
+const MAP_PREVIEW_DIR = 'map-previews/';
+function mapPickCard(id, { flip = false, blurb = true } = {}) {
+  const card = document.createElement('div');
+  card.dataset.mpMap = id;
+  card.style.cssText = 'border:2px solid #4a5a70;border-radius:8px;padding:6px;background:#0e1622;cursor:pointer;text-align:center;box-sizing:border-box;';
+  const grid = blurb ? mapPictureGrid(id) : null, feel = grid ? mapPictureFeel(grid) : null;
+  card.innerHTML = `
+    <div class="mp-pic" style="width:100%;aspect-ratio:8/5;background:#05080e;border:1px solid #000;overflow:hidden;">
+      <img alt="" loading="lazy" draggable="false" src="${MAP_PREVIEW_DIR}${id}.jpg" style="width:100%;height:100%;object-fit:cover;display:block;">
+    </div>
+    <div style="margin-top:5px;font-size:12px;letter-spacing:2px;">${escHtml(mapCardLabel(id))}</div>
+    ${feel ? `<div style="font-size:10px;color:#8fa6b8;margin-top:2px;">${escHtml(mapPictureBlurb(feel))}</div>` : ''}
+    <div class="mp-tags" style="min-height:14px;font-size:10px;margin-top:3px;letter-spacing:1px;"></div>`;
+  card.querySelector('img').addEventListener('error', e => {
+    const g = mapPictureGrid(id); if (!g) return;
+    const c = document.createElement('canvas'); c.width = 144; c.height = 224;
+    c.style.cssText = 'height:100%;width:auto;margin:0 auto;display:block;image-rendering:pixelated;';
+    drawMapPicture(c, g, { flip });
+    e.target.replaceWith(c);
+  }, { once: true });
+  return card;
+}
+function mapPickGridStyle(count) {
+  const big = count > 8;
+  return `display:grid;grid-template-columns:repeat(auto-fill,minmax(${big ? 150 : 170}px,1fr));gap:10px;width:min(${big ? 1000 : 760}px,100%);`
+    + (big ? 'max-height:62vh;overflow-y:auto;padding:4px;' : '');
+}
 function showMapPick(d) {
   hideMapPick();
   try { document.exitPointerLock && document.exitPointerLock(); } catch (e) {}
   hideStagingLobby();
   const options = (d.options || []).filter(id => MAP_BOUNDS[id]);
   if (!options.length) return;
-  const vsBot = !d.vs;
+  const others = d.others || (d.vs ? [d.vs.name] : []);
+  const vsBot = d.vsBot !== undefined ? !!d.vsBot : !d.vs;
   const tastes = Object.keys(MAP_BOT_TASTES);
   const bot = vsBot ? botPickMap(options, tastes[Math.floor(Math.random() * tastes.length)], selectedDifficulty) : null;
   const el = document.createElement('div');
   el.id = 'map-pick'; el.setAttribute('data-no-i18n', '');
   el.style.cssText = 'position:fixed;inset:0;z-index:9700;background:rgba(5,9,16,0.96);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:16px;box-sizing:border-box;font-family:"Courier New",monospace;overflow:auto;';
-  const vsName = vsBot ? '🤖 BOT' : escHtml(d.vs.name);
+  const who = d.mode === '1v1' ? `YOU  ⚔  ${vsBot ? '🤖 BOT' : escHtml(others[0] || '?')}`
+    : others.length ? `YOU + ${others.length} ${others.length === 1 ? 'OTHER' : 'OTHERS'} VOTING` : 'YOUR PICK';
+  const note = d.mode === '1v1' ? 'Same pick: that map. Different picks: a coin flip decides. Nobody picks in time: it is random.'
+    : others.length ? 'The map with the most votes plays; a tie is a coin flip. Nobody picks in time: it is random.'
+    : 'Tap the map you want. Nobody picks in time: it is random.';
   el.innerHTML = `
     <div style="font-size:clamp(20px,5vw,30px);letter-spacing:6px;color:#ffaa44;">🗺️ PICK THE MAP</div>
-    <div style="font-size:14px;letter-spacing:3px;color:#9fb4c8;">YOU  ⚔  ${vsName}</div>
+    <div style="font-size:14px;letter-spacing:3px;color:#9fb4c8;">${who}</div>
     <div id="mp-status" style="min-height:18px;font-size:13px;letter-spacing:1px;color:#9fe8b0;"></div>
-    <div id="mp-cards" style="display:flex;flex-wrap:wrap;justify-content:center;gap:14px;max-width:760px;"></div>
-    <div id="mp-note" style="font-size:11px;color:#7a8da0;letter-spacing:1px;max-width:520px;text-align:center;">Same pick: that map. Different picks: a coin flip decides. Nobody picks in time: it is random.</div>
+    <div id="mp-cards" style="${mapPickGridStyle(options.length)}"></div>
+    <div id="mp-note" style="font-size:11px;color:#7a8da0;letter-spacing:1px;max-width:520px;text-align:center;">${note}</div>
     <button id="mp-leave" style="padding:8px 18px;background:#222;color:#aaa;border:1px solid #555;cursor:pointer;font-family:inherit;font-size:12px;letter-spacing:2px;border-radius:4px;">LEAVE</button>`;
   document.body.appendChild(el);
   _uiStopKeys(el);
   _mapPick = { pickId: d.pickId, options, mine: null, bot, vsBot, until: performance.now() + (d.ms || 15000), timer: null, el };
   const cards = el.querySelector('#mp-cards');
+  const showBlurb = options.length <= 8;
   for (const id of options) {
-    const grid = mapPictureGrid(id), feel = grid ? mapPictureFeel(grid) : null;
-    const card = document.createElement('div');
-    card.dataset.mpMap = id;
-    card.style.cssText = 'width:min(150px,40vw);border:2px solid #4a5a70;border-radius:8px;padding:8px;background:#0e1622;cursor:pointer;text-align:center;box-sizing:border-box;';
-    card.innerHTML = `
-      <canvas width="144" height="224" style="width:100%;aspect-ratio:144/224;border:1px solid #000;display:block;image-rendering:pixelated;"></canvas>
-      <div style="margin-top:6px;font-size:12px;letter-spacing:2px;">${escHtml(mapCardLabel(id))}</div>
-      <div style="font-size:10px;color:#8fa6b8;margin-top:2px;">${feel ? escHtml(mapPictureBlurb(feel)) : ''}</div>
-      <div class="mp-tags" style="min-height:14px;font-size:10px;margin-top:4px;letter-spacing:1px;"></div>`;
-    drawMapPicture(card.querySelector('canvas'), grid, { flip: d.team === 'enemy' });
+    const card = mapPickCard(id, { flip: d.team === 'enemy', blurb: showBlurb });
     card.addEventListener('click', () => voteMapPick(id));
     cards.appendChild(card);
   }
@@ -65593,7 +65620,7 @@ function voteMapPick(id) {
   _mapPickTag(id, '✔ YOU', '#9fe8b0');
   const card = mp.el.querySelector(`[data-mp-map="${id}"]`);
   if (card) card.style.borderColor = '#44ff88';
-  mp.el.querySelector('#mp-status').textContent = mp.vsBot ? '🤖 The bot is looking at the maps…' : 'Locked in · waiting for your opponent…';
+  mp.el.querySelector('#mp-status').textContent = mp.vsBot ? '🤖 The bot is looking at the maps…' : 'Locked in · waiting for the others…';
   if (mp.vsBot) setTimeout(() => {
     if (_mapPick !== mp || mp.result) return;
     _mapPickTag(mp.bot.mapId, '🤖 BOT', '#ffcc66');
@@ -65604,7 +65631,7 @@ socket.on('mapPickStart', showMapPick);
 socket.on('mapPickLocked', () => {
   const mp = _mapPick; if (!mp || mp.result || mp.vsBot) return;
   if (mp.mine) mp.el.querySelector('#mp-status').textContent = 'Both locked in…';
-  else mp.el.querySelector('#mp-status').textContent = 'Your opponent has locked in · pick a map';
+  else mp.el.querySelector('#mp-status').textContent = 'Someone has locked in · pick a map';
 });
 socket.on('mapPickResult', d => {
   const mp = _mapPick; if (!mp) return;
@@ -65614,11 +65641,45 @@ socket.on('mapPickResult', d => {
   for (const pk of d.picks || []) _mapPickTag(pk.mapId, pk.bot ? '🤖 BOT' : `✔ ${pk.name}`, pk.bot ? '#ffcc66' : '#9fe8b0');
   const win = mp.el.querySelector(`[data-mp-map="${d.mapId}"]`);
   mp.el.querySelectorAll('[data-mp-map]').forEach(c => { if (c !== win) c.style.opacity = '0.35'; });
-  if (win) { win.style.borderColor = '#ffaa44'; win.style.boxShadow = '0 0 22px rgba(255,170,68,0.6)'; }
+  if (win) { win.style.borderColor = '#ffaa44'; win.style.boxShadow = '0 0 22px rgba(255,170,68,0.6)'; try { win.scrollIntoView({ block: 'center' }); } catch (e) {} }
   const name = mapCardLabel(d.mapId);
   mp.el.querySelector('#mp-status').textContent = d.coin ? `🪙 Coin flip → ${name}`
-    : (d.picks || []).length ? `Same pick → ${name}` : `Nobody picked → ${name}`;
+    : (d.picks || []).length ? ((d.picks || []).length > 1 ? `Most votes → ${name}` : `Your pick → ${name}`) : `Nobody picked → ${name}`;
 });
+// A mode with nobody to vote with (it is you and bots, in a private match) asks the same way: a picture of each map,
+// one tap, or RANDOM. It replaces the MAP button that used to sit on the mode screen before anything had started.
+function modeUsesMapChoice(cfg) {
+  return !!cfg && !['br', 'lobby', 'dday', 'range', 'obby'].includes(cfg.type) && !cfg.forcedMap;
+}
+function pickMapSolo(modeId, done) {
+  hideMapPick();
+  const options = (modeId === '1v1' ? DUEL_MAP_IDS : MAP_IDS.filter(m => !THIN_MAPS.has(m) && !DUEL_ONLY_MAPS.has(m))).filter(id => MAP_BOUNDS[id]);
+  const el = document.createElement('div');
+  el.id = 'map-pick'; el.setAttribute('data-no-i18n', '');
+  el.style.cssText = 'position:fixed;inset:0;z-index:9700;background:rgba(5,9,16,0.96);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:16px;box-sizing:border-box;font-family:"Courier New",monospace;overflow:auto;';
+  el.innerHTML = `
+    <div style="font-size:clamp(20px,5vw,30px);letter-spacing:6px;color:#ffaa44;">🗺️ PICK THE MAP</div>
+    <div id="mp-cards" style="${mapPickGridStyle(options.length)}"></div>
+    <div style="display:flex;gap:10px;">
+      <button id="mp-random" style="padding:10px 20px;background:#553311;color:#fff;border:2px solid #ffaa44;cursor:pointer;font-family:inherit;font-size:13px;font-weight:bold;letter-spacing:2px;border-radius:4px;">🎲 RANDOM</button>
+      <button id="mp-leave" style="padding:10px 18px;background:#222;color:#aaa;border:1px solid #555;cursor:pointer;font-family:inherit;font-size:12px;letter-spacing:2px;border-radius:4px;">← BACK</button>
+    </div>`;
+  document.body.appendChild(el);
+  _uiStopKeys(el);
+  _mapPick = { solo: true, options, el, timer: null };
+  const choose = id => { hideMapPick(); selectedMap = pickedMap = id; done(); };
+  const cards = el.querySelector('#mp-cards');
+  for (const id of options) {
+    const card = mapPickCard(id, { blurb: options.length <= 8 });
+    card.addEventListener('click', () => choose(id));
+    cards.appendChild(card);
+  }
+  el.querySelector('#mp-random').addEventListener('click', () => choose('auto'));
+  el.querySelector('#mp-leave').addEventListener('click', () => {
+    hideMapPick();
+    document.getElementById('mode-screen').style.display = 'flex';
+  });
+}
 socket.on('lobbyStart', hideMapPick);
 
 function renderStagingLobby() {
@@ -65638,7 +65699,7 @@ function renderStagingLobby() {
   el.innerHTML = `
     <div style="font-size:clamp(22px,7vw,32px);letter-spacing:clamp(3px,1.5vw,8px);color:#ffaa44;margin-bottom:6px;">🏛️ MATCH LOBBY</div>
     <div style="font-size:14px;color:#888;letter-spacing:3px;margin-bottom:8px;">${modeCardLabel(mode)} · WAITING FOR PLAYERS</div>
-    <div id="lobby-map" style="font-size:13px;color:#cfd8e3;letter-spacing:2px;margin-bottom:22px;">${mode === '1v1' ? 'MAP: you vote for it once your opponent is found' : 'MAP: ' + mapCardLabel(s && s.map)}</div>
+    <div id="lobby-map" style="font-size:13px;color:#cfd8e3;letter-spacing:2px;margin-bottom:22px;">MAP: everyone votes for it once the match is found</div>
     <div style="display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:12px 60px;margin-bottom:24px;max-width:100%;">
       <div style="text-align:center;min-width:min(200px,100%);">
         <div style="font-size:11px;color:#88ccff;letter-spacing:3px;margin-bottom:8px;">TEAM ALLY (${allyPlayers.length}/${cfg.allies != null ? cfg.allies + 1 : '?'})</div>
@@ -65724,10 +65785,9 @@ function confirmLoadout() {
       return;
     }
     // Non-lobby modes (frontlines, dday, laststand, range, etc.): spawn bots immediately
-    gameStarted = true;
-    spawnGameBots();
-    requestPointerLockSafe();
-    startLoop();
+    const startSolo = () => { gameStarted = true; spawnGameBots(); requestPointerLockSafe(); startLoop(); };
+    if (modeUsesMapChoice(selectedModeConfig)) pickMapSolo(modeId, startSolo);   // nobody to vote with: you pick alone
+    else startSolo();
   } else if (loadoutMode === 'swap') {
     // Mid-game swap via trashcan — player is still alive, no respawn needed
     requestPointerLockSafe();
@@ -66322,7 +66382,8 @@ function currentModeId() {
 // The name a map card shows ("VOLCANO"); 'auto' / unknown → RANDOM.
 function mapCardLabel(mapId) {
   const card = mapId && mapId !== 'auto' && document.querySelector(`.map-card[data-map="${mapId}"]`);
-  return card ? card.textContent.trim() : 'RANDOM';
+  if (card) return card.textContent.trim();
+  return mapId && mapId !== 'auto' ? String(mapId).replace(/_/g, ' ').toUpperCase() : 'RANDOM';
 }
 // The name its mode card shows ("1v1", "FFA · 5 Bots") — the config table has no labels.
 function modeCardLabel(modeId) {
@@ -68746,7 +68807,7 @@ function openPickDialog(id) {
   document.getElementById(id).style.display = 'block';
 }
 function closePickDialogs() { for (const id of ['map-dialog', 'diff-dialog']) document.getElementById(id).style.display = 'none'; }
-document.getElementById('map-pick-btn').addEventListener('click', () => openPickDialog('map-dialog'));
+// (the 🗺️ MAP button is gone: the map is voted for once the match is found, see showMapPick)
 document.getElementById('diff-pick-btn').addEventListener('click', () => openPickDialog('diff-dialog'));
 document.querySelectorAll('.ms-dialog-close').forEach(b => b.addEventListener('click', closePickDialogs));
 // ← LOBBY / Esc: the mode screen had no way back except picking a mode.
@@ -68859,7 +68920,7 @@ function selectMapPick(mapId) {
   });
   const desc = document.getElementById('map-desc');
   if (desc) desc.textContent = MAP_DESCS[mapId] || '';
-  document.getElementById('map-pick-value').textContent = mapCardLabel(mapId);
+  const mpv = document.getElementById('map-pick-value'); if (mpv) mpv.textContent = mapCardLabel(mapId);
 }
 document.querySelectorAll('.map-card').forEach(card => {
   card.addEventListener('click', () => { selectMapPick(card.dataset.map); closePickDialogs(); });

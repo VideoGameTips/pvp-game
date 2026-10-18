@@ -1735,8 +1735,9 @@ function checkLobbyStart(L, { now = false } = {}) {
 // Everyone is ready — start the match. `extra` rides along on lobbyStart.
 function startLobbyMatch(L, extra = {}) {
   const mode = L.mode;
-  // 🗺️ 1v1: the opponent is known by now (a person, or a bot is about to be), so THIS is when the map is picked.
-  if (mode === '1v1' && !extra.pickedMap && beginMapPick(L, extra)) return;
+  // 🗺️ The opponents are known by now (people, or bots about to be), so THIS is when the map is picked: by a vote
+  // of everyone in the lobby, from a picture of each map. There is no picking before the search.
+  if (!extra.pickedMap && !MAP_VOTE_SKIP.has(mode) && !M4_TOWER_MODES.has(mode) && beginMapPick(L, extra)) return;
   const { pickedMap, ...lobbyExtra } = extra;
   const fillBots = L.players.every(p => p.fillBots);
   const cfg = MODE_TEAM_SIZES[mode] || { ally: 1, enemy: 1 };
@@ -1773,30 +1774,37 @@ function startLobbyMatch(L, extra = {}) {
   stagingLobbies[mode] = (stagingLobbies[mode] || []).filter(x => x !== L);
 }
 
-// ── 🗺️ The 1v1 map vote ──────────────────────────────────────────────────────
-// It used to be chosen on the mode screen, before anyone was found. Now the opponent is known first, then each side
-// votes for one of the duel maps: the same vote plays, two different votes are settled by a coin flip between them.
-// A bot opponent votes too: its client looks at a picture of each map and sends the bot's choice along with yours.
-const MAP_PICK_MS = 15000, MAP_PICK_REVEAL_MS = 2600;
+// ── 🗺️ The map vote ──────────────────────────────────────────────────────────
+// It used to be chosen on the mode screen, before anyone was found, and only 1v1 had a vote at all. Now every lobby
+// match asks once the people are known: each human votes for a map from a picture of it (a screenshot, see
+// tools/render-map-previews.js), the most votes plays, and a tie is a coin flip between the tied maps. 1v1 votes among
+// the four duel maps; everything else among the whole pool. A bot opponent in a 1v1 votes too: its client looks at
+// a picture of each map and sends the bot's choice along with yours. In every other mode bots do not vote.
+const MAP_PICK_MS = 15000, MAP_PICK_BIG_MS = 25000, MAP_PICK_REVEAL_MS = 2600;
+const MAP_VOTE_SKIP = new Set(['koth']);   // plays its own arena (the M4 tower modes too, see M4_TOWER_MODES)
 const mapPicks = {};   // id → { id, L, extra, options, votes, botVote, sids, vsBot, done, closing, timer }
 let _mapPickSeq = 0;
 function beginMapPick(L, extra) {
   const sids = L.players.map(p => p.socketId).filter(sid => players[sid]);
   if (!sids.length) return false;
-  const pick = { id: `pick-${++_mapPickSeq}`, L, extra, options: DUEL_MAP_IDS.slice(), votes: {}, botVote: null, sids, vsBot: sids.length < 2, done: false, closing: false, timer: null };
+  const options = mapPoolFor(L.mode).slice();
+  const ms = options.length > 8 ? MAP_PICK_BIG_MS : MAP_PICK_MS;
+  const pick = { id: `pick-${++_mapPickSeq}`, L, extra, options, votes: {}, botVote: null, sids, vsBot: L.mode === '1v1' && sids.length < 2, done: false, closing: false, timer: null };
   // Off the open list: nobody else can walk into a lobby that is already choosing its map.
   stagingLobbies[L.mode] = (stagingLobbies[L.mode] || []).filter(x => x !== L);
   mapPicks[pick.id] = pick;
   for (const sid of sids) {
     players[sid]._mapPickId = pick.id;
-    const other = sids.find(o => o !== sid);
+    const others = sids.filter(o => o !== sid).map(o => players[o].name || '?');
     io.to(sid).emit('mapPickStart', {
-      pickId: pick.id, options: pick.options, ms: MAP_PICK_MS,
+      pickId: pick.id, options: pick.options, ms, mode: L.mode,
       team: (L.players.find(p => p.socketId === sid) || {}).team || 'ally',
-      vs: other ? { name: players[other].name || '?' } : null,   // null: it is a bot
+      vs: others.length === 1 && L.mode === '1v1' ? { name: others[0] } : null,   // null: it is a bot (1v1) or nobody in particular
+      others,                                                                      // everyone else who is voting
+      vsBot: pick.vsBot,
     });
   }
-  pick.timer = setTimeout(() => resolveMapPick(pick), MAP_PICK_MS);
+  pick.timer = setTimeout(() => resolveMapPick(pick), ms);
   return true;
 }
 function resolveMapPick(pick) {
@@ -1810,11 +1818,15 @@ function resolveMapPick(pick) {
   const picks = [];
   for (const sid of sids) if (pick.votes[sid]) picks.push({ name: players[sid].name || '?', mapId: pick.votes[sid] });
   if (pick.vsBot) picks.push({ name: 'BOT', mapId: pick.botVote || rand(pick.options), bot: true });
-  const distinct = [...new Set(picks.map(x => x.mapId))];
-  const mapId = distinct.length ? rand(distinct) : rand(pick.options);
+  // The most votes wins; maps with the same count are a coin flip (two different votes: a flip between them).
+  const tally = {};
+  for (const x of picks) tally[x.mapId] = (tally[x.mapId] || 0) + 1;
+  const top = Math.max(0, ...Object.values(tally));
+  const winners = top ? Object.keys(tally).filter(m => tally[m] === top) : [];
+  const mapId = winners.length ? rand(winners) : rand(pick.options);
   const L = pick.L;
   L.players = L.players.filter(p => sids.includes(p.socketId));
-  for (const sid of sids) io.to(sid).emit('mapPickResult', { mapId, picks, coin: distinct.length > 1 });
+  for (const sid of sids) io.to(sid).emit('mapPickResult', { mapId, picks, coin: winners.length > 1, tally });
   // Show the result for a moment, then go. Anyone who vanished meanwhile is replaced by a bot.
   setTimeout(() => {
     L.players = L.players.filter(p => players[p.socketId]);

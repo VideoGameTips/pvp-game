@@ -272,7 +272,7 @@
     .quick-card b { font-size: 17px; letter-spacing: 2px; }
     .quick-card span:last-child { font-size: 11px; color: #d9b3ad; letter-spacing: 1px; }
     .quick-card:hover { border-color: #e74c3c; }
-    #match-settings { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 12px; }
+    #match-settings { display: grid; grid-template-columns: 1fr; gap: 10px; margin-top: 12px; }
     #match-settings button {
       min-width: 0; min-height: 48px; display: flex; align-items: center; gap: 8px; padding: 6px 12px;
       background: #15151c; color: #ddd; border: 1px solid #34343f; border-radius: 8px; cursor: pointer;
@@ -291,7 +291,7 @@
     .mode-group .mode-card { min-width: 0; padding: 12px 10px; font-size: 16px; }
     @media (min-width: 700px) {
       #quick-row, .mode-group { grid-template-columns: repeat(4, 1fr); }
-      #match-settings { grid-template-columns: repeat(2, minmax(0, 340px)); }
+      #match-settings { grid-template-columns: minmax(0, 340px); }
       #mode-tabs { grid-template-columns: repeat(4, minmax(0, 200px)); }
     }
     /* MAP and BOT DIFFICULTY open in the shared dialog frame (see #21 below). */
@@ -1172,7 +1172,7 @@
       </div>
     </div>
     <h2 style="font-size:32px; letter-spacing:6px; color:#e74c3c; margin:16px 0 4px;">SELECT MODE</h2>
-    <p style="color:#666; font-size:12px; letter-spacing:2px; margin:0;">BOTS FILL EVERY SLOT · RANDOM LOADOUTS</p>
+    <p style="color:#666; font-size:12px; letter-spacing:2px; margin:0;">BOTS FILL EVERY SLOT · RANDOM LOADOUTS · THE MAP IS VOTED ONCE THE MATCH IS FOUND</p>
     <div id="mode-body">
       <div class="ms-label">QUICK START</div>
       <div id="quick-row">
@@ -1182,7 +1182,6 @@
         <div class="quick-card" data-mode="gungame"><span class="ic">🔫</span><b>GUN GAME</b><span>Each kill upgrades weapon · knife wins</span></div>
       </div>
       <div id="match-settings">
-        <button id="map-pick-btn" aria-haspopup="dialog">🗺️ MAP<b id="map-pick-value">RANDOM</b>▾</button>
         <button id="diff-pick-btn" aria-haspopup="dialog">🤖 BOT DIFFICULTY<b id="diff-pick-value">MEDIUM</b>▾</button>
       </div>
       <div class="ms-label">ALL MODES</div>

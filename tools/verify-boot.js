@@ -1910,8 +1910,9 @@ if (ok && process.argv.includes('--flare')) {
 }
 
 if (ok && process.argv.includes('--mappick')) {
-  // The 1v1 map vote: a picture of every duel map (a grid drawn from its real colliders), a bot that decides by
-  // reading that picture, no pre-pick on the mode screen, and the server settling the vote.
+  // The map vote: a picture of every duel map (a grid drawn from its real colliders), a bot that decides by
+  // reading that picture, no pre-pick on the mode screen, a screenshot of every map for the cards, a vote in every
+  // lobby mode (not only 1v1), and the server settling it.
   const out = vm.runInThisContext(`(() => {
     const issues = [], info = [];
     const grids = {};
@@ -1958,7 +1959,13 @@ if (ok && process.argv.includes('--mappick')) {
     if (lobbyPrePick('1v1', 'duel_grid') !== 'auto') issues.push('1v1 still asks the lobby for a pre-picked duel map');
     if (lobbyPrePick('1v1', 'volcano') !== 'auto') issues.push('1v1 only plays the duel maps, whatever was picked');
     if (lobbyPrePick('2v2', 'duel_grid') !== 'auto') issues.push('a duel map pre-picked for another mode should be random');
-    if (lobbyPrePick('2v2', 'volcano') !== 'volcano') issues.push('an ordinary map pick got lost');
+    if (lobbyPrePick('2v2', 'volcano') !== 'auto') issues.push('no mode asks the lobby for a map up front any more: the vote picks it');
+    if (lobbyPrePick('ffa5', 'auto') !== 'auto') issues.push('ffa5 asked for a map');
+    // modes with nobody to vote with ask alone; modes with their own arena are not asked at all
+    for (const [m, want] of [['dice_duel', true], ['roulette', true], ['piefight', true], ['range', false], ['lobby13', false], ['koth', false], ['m4_tower', false], ['obby', false]]) {
+      if (GAME_MODE_CONFIGS[m] && modeUsesMapChoice(GAME_MODE_CONFIGS[m]) !== want) issues.push(m + ': modeUsesMapChoice should be ' + want);
+    }
+    if (mapCardLabel('vietnam') === 'RANDOM') issues.push('a real map is labelled RANDOM (vietnam has no card)');
     // and what spawnGameBots resolves a map from: the duel map the VOTE picked has to survive for 1v1 (it did not:
     // it was re-rolled at random, so the vote was ignored, and two players could load different maps)
     if (effectivePickedMap('1v1', 'duel_crossroads') !== 'duel_crossroads') issues.push('the voted duel map is thrown away for 1v1');
@@ -1967,10 +1974,20 @@ if (ok && process.argv.includes('--mappick')) {
   })()`);
   const srv = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
   const more = [];
-  if (!/mode === '1v1' && !extra\.pickedMap && beginMapPick\(L, extra\)/.test(srv)) more.push('startLobbyMatch does not hand a 1v1 to the map vote');
+  if (!/!extra\.pickedMap && !MAP_VOTE_SKIP\.has\(mode\) && !M4_TOWER_MODES\.has\(mode\) && beginMapPick\(L, extra\)/.test(srv)) more.push('startLobbyMatch does not hand a lobby match to the map vote');
   if (!/socket\.on\('mapPickVote'/.test(srv)) more.push('server has no mapPickVote handler');
   if (!/leaveMapPick\(socket\.id\);\s*\/\/ a map vote in progress/.test(srv)) more.push('a disconnect does not leave the map vote');
-  if (!/options: DUEL_MAP_IDS\.slice\(\)/.test(srv)) more.push('the vote is not over the duel maps');
+  if (!/const options = mapPoolFor\(L\.mode\)\.slice\(\)/.test(srv)) more.push('the vote is not over the mode\'s map pool');
+  if (!/const MAP_VOTE_SKIP = new Set\(\['koth'\]\)/.test(srv)) more.push('koth plays its own arena and should skip the vote');
+  // a screenshot for every map that can be voted for, and none of them an empty file
+  const previewDir = path.join(__dirname, '..', 'public', 'map-previews');
+  const ids = vm.runInThisContext('MAP_IDS.filter(id => MAP_GROUPS[id] && MAP_BOUNDS[id] && !THIN_MAPS.has(id))');
+  for (const id of ids) {
+    const f = path.join(previewDir, id + '.jpg');
+    if (!fs.existsSync(f)) more.push('no map-previews/' + id + '.jpg: run tools/render-map-previews.js');
+    else if (fs.statSync(f).size < 1500) more.push('map-previews/' + id + '.jpg is nearly empty (' + fs.statSync(f).size + ' bytes)');
+  }
+  if (/id="map-pick-btn"/.test(fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8'))) more.push('the MAP button is back on the mode screen');
   const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
   if (!/function syncDuelMapCards\(\) \{\s*document\.querySelectorAll\('\.map-card\[data-duel="1"\], \[data-duel-label="1"\]'\)\.forEach\(c => \{ c\.style\.display = 'none'/.test(src)) more.push('the duel cards are still in the mode-screen map list');
   console.log('map vote checks: pictures, a bot that reads them, no pre-pick, server wiring');

@@ -55,6 +55,14 @@ for f in "${FILES[@]}"; do
   cp "$SRC/$f" "$STAGE/$f"
 done
 
+# The screenshot on each map's card in the map vote (tools/render-map-previews.js). A folder, not a list entry:
+# one .jpg per map, and the game falls back to a drawn plan for any map without one.
+mkdir -p "$STAGE/map-previews"
+for f in "$SRC"/map-previews/*.jpg; do
+  [ -f "$f" ] || { echo "MISSING: public/map-previews/*.jpg (run tools/render-map-previews.js)" >&2; exit 1; }
+  cp "$f" "$STAGE/map-previews/"
+done
+
 # Say plainly when the bundle contains work that isn't committed, so nobody
 # uploads a colleague's half-built map by accident.
 if [ "$FROM_HEAD" = 0 ]; then
