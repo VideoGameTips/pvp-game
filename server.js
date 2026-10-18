@@ -1877,6 +1877,7 @@ function forgetDuelNos(socketId) {
 }
 // Team sizes per mode (used to determine how many bots to fill)
 const MODE_TEAM_SIZES = {
+  'underworld': { ally: 1, enemy: 0 },
   '1v1': { ally: 1, enemy: 1 },
   '2v2': { ally: 2, enemy: 2 },
   '3v3': { ally: 3, enemy: 3 },
@@ -2810,6 +2811,7 @@ io.on('connection', (socket) => {
       emitToMatch(bot.matchId, 'playerDied', { targetId: bot.id, killerId: shooter.id, weapon: data.weapon, headshot: !!data.headshot, tags: killTags });
       setTimeout(() => {
         if (!bot.dead) return; // already respawned via forceRespawnBot (elim round restart)
+        if (bot.matchMode === 'underworld') return;
         respawnBot(bot);
         // autoRespawn flag — client ignores this for elim modes
         emitToMatch(bot.matchId, 'playerRespawned', { ...bot, autoRespawn: true });
@@ -3025,6 +3027,7 @@ io.on('connection', (socket) => {
   socket.on('enterMatch', (data) => {
     const p = players[socket.id];
     if (!p) return;
+    if (data?.mode === 'underworld') p.team = 'ally';
     const matchId = String(data?.matchId || `match-${socket.id}`).slice(0, 64);
     // Announces the move in both directions and hands this socket a fresh
     // roster; see movePlayerToMatch.

@@ -1458,6 +1458,7 @@ function isShielded() {
 
 // ── Game mode / bot system ─────────────────────────────────────────────────
 const GAME_MODE_CONFIGS = {
+  'underworld': { type: 'campaign', allies: 0, enemies: 0, playerHp: 300 },
   // Elimination: no respawn, rounds, first to winsNeeded rounds wins
   '1v1':   { type: 'elim', allies: 0, enemies: 1,  winsNeeded: 4, roundTimeLimit: 60 },
   '2v2':   { type: 'elim', allies: 1, enemies: 2,  winsNeeded: 4, roundTimeLimit: 60 },
@@ -46231,6 +46232,7 @@ function startCycleBurst(wStats) {
 }
 
 function tryShoot() {
+  if (window.PVP_UNDERWORLD?.paused) return;
   if (match && match.dice && match.dice.me && match.dice.me.rolling) return;   // 🎲 the dice are in your hand
   if (!equipReady()) { if (shooting) equipNudge(); return; }                   // ⏱️ it is still coming up
   if(currentWeapon?.prototype && !currentUser?.isAdmin)return;
@@ -54962,6 +54964,7 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false, opts = 
 function clientRespawnBot(botId) {
   const bot = resolveBot(botId);
   if (!bot || !bot.dead) return;
+  if (bot.campaignActor) return;
   // Only respawn in modes where bots should respawn (not elim - that handles rounds separately)
   if (match?.type === 'elim') return;
   const teamBots = gameBots.filter(b => b.team === bot.team);
@@ -58728,6 +58731,7 @@ socket.on('playerDied', data => {
 });
 socket.on('playerRespawned', p => {
   p = fromWire(p);
+  if (p.autoRespawn && match?.type === 'campaign' && resolveBot(p.id)?.campaignActor) return;
   // Elim modes (1v1, 2v2, 3v3): bots stay dead until the round ends. Ignore server auto-respawns.
   if (p.autoRespawn && p.isBot && match?.type === 'elim') return;
   players[p.id]=p;
@@ -61066,6 +61070,7 @@ function runCountdown(seconds, onDone) {
 
 function startMatchRound() {
   if (!match) return;
+  if (match.type === 'campaign') return;
   const owner=match,epoch=matchEpoch;
   // Show countdown, then actually start
   const doStart = () => {
@@ -61215,6 +61220,7 @@ function clearFeed() {
 
 function updateMatchHUD() {
   if (!match) return;
+  if (match.type === 'campaign') { document.getElementById('match-hud').style.display = 'none'; return; }
   const hud = document.getElementById('match-hud');
   hud.style.display = 'flex';
   const L = document.getElementById('match-left');
@@ -61971,6 +61977,7 @@ function onEntityDied(targetId, killerId) {
     seen[targetId] = now;
   }
   pushKillfeed(targetId, killerId);
+  if (match.type === 'campaign') { window.PVP_UNDERWORLD?.death(targetId); return; }
   if (killerId === myId && targetId !== myId) contractsOnKill(targetId);
   if (targetId === myId) contractsOnDeath();
   if (killerId && killerId !== targetId) matchScore[killerId] = (matchScore[killerId] || 0) + 1;
@@ -62473,6 +62480,7 @@ function checkRaceWin() {
 
 function updateMatchTimer(dt) {
   if (!match || !match.active || match.over) return;
+  if (match.type === 'campaign') return;
   if (match.arcade === 'roulette' && match.roundActive && !isDead && Date.now() >= (match.rouletteNext || Infinity)) {
     match.rouletteNext = Date.now() + ROULETTE_MS;
     rouletteShuffle();
@@ -63408,7 +63416,7 @@ function getBotTarget(bot) {
   // allies to shoot at him while those allies, whose bot-vs-bot shots land instantly, shot them in the back for free:
   // the player's side won almost every match, by a lot. Now each bot picks the nearest opponent, you included.
   // (Base Raid stays as it was: its guards are there for you.)
-  const teamFight = !!match && (match.type === 'race' || match.type === 'elim' || match.type === 'frontlines')
+  const teamFight = !!match && (match.type === 'race' || match.type === 'elim' || match.type === 'frontlines' || match.type === 'campaign')
                     && match.cfg?.forcedMap !== 'base_raid';
   const fairTeamTargeting = teamFight || selectedModeConfig?.fixedKit === 'm4_tower' || match?.cfg?.fixedKit === 'm4_tower';
   if (fairTeamTargeting) {
@@ -63806,6 +63814,7 @@ function updateBotAI(dt) {
     try {
     if (bot.dead) continue;
     if (bot.state === 'target') continue; // range targets don't move or shoot
+    if (bot._campaignCompanion) continue;
 
     // 🎒 Auto loadout-swap based on engagement distance (NEW)
     // < 4 m → secondary if it's a pistol/shotgun
@@ -65110,6 +65119,7 @@ function loop() {
   updateFPSCounter(now);
   const dt = Math.min((now-lastTime)/1000, 0.05);
   lastTime = now;
+  if (window.PVP_UNDERWORLD?.paused) return;
   safeLoopStep('equipment-sway-reset', resetEquipmentSway);
   if (MATCH_FINALE.active) {
     clearActionWind();
@@ -65162,6 +65172,7 @@ function loop() {
   safeLoopStep('bee-swarms', () => updateBeeSwarms(dt));  // bee swarms home + sting the nearest enemy
   safeLoopStep('map-mechanics', () => updateMapMechanics(dt)); // moving map hazards (lightning, lasers, belts, wind, lava)
   safeLoopStep('map-gimmicks', () => updateMapGimmicks(dt)); // lava DOT, jump pads, low-grav zones, ice friction
+  safeLoopStep('underworld', () => window.PVP_UNDERWORLD?.tick(dt));
   safeLoopStep('obby', () => updateObby(dt));              // floor reset + finish pads for Obby stages
   safeLoopStep('wave-dash', () => updateWaveDash(dt));     // endless hold/release spike runner
   safeLoopStep('bot-speech', () => updateBotSpeech(dt));  // bot speech bubbles follow their heads
@@ -67350,6 +67361,7 @@ let matchEpoch = 0;
 // was the pause these delays gave you.
 const _pendingDeathJobs = new Set();
 function afterDeath(ms, fn) {
+  if (match?.type === 'campaign') return;
   const epoch = matchEpoch;
   let timer = null;
   const job = () => {
@@ -67363,6 +67375,7 @@ function afterDeath(ms, fn) {
 // Everything a finished match (or Lobby 13) leaves behind that the next start must not
 // inherit. Shared by the mode menu and the end-of-match buttons so they can't drift apart.
 function teardownMatchWorld() {
+  window.PVP_UNDERWORLD?.stop();
   clearCombatFeedback();
   clearActionWind();
   countdownGeneration++;countdownActive=false;
@@ -68077,7 +68090,7 @@ function openLobbyAdmin(){
 }
 function openLobbyArcade(){
   const host=lobbyPanel('Arcade');
-  for(const [label,mode] of [['Aim Trainer','aim_trainer'],['Obstacle Course','obby'],['Shooting Range','range']])lobbyPanelChoice(host,label,()=>{closeOtherDialogs();teardownMatchWorld();selectMode(mode);});
+  for(const [label,mode] of [['Underworld Campaign','underworld'],['Aim Trainer','aim_trainer'],['Obstacle Course','obby'],['Shooting Range','range']])lobbyPanelChoice(host,label,()=>{closeOtherDialogs();teardownMatchWorld();selectMode(mode);});
   lobbyPanelChoice(host,'All game modes',openModeMenu);
 }
 function updateLobbyServices(){
@@ -68538,6 +68551,7 @@ function applyUpgrades(w) {
 }
 
 function selectMode(modeId) {
+  if (modeId === 'underworld' && window.PVP_UNDERWORLD) { window.PVP_UNDERWORLD.open(); return; }
   selectedModeConfig = GAME_MODE_CONFIGS[modeId] || GAME_MODE_CONFIGS['ffa5'];
   sanitizeLoadoutSlots();       // (D-Day sets its own forced kit below)
   document.getElementById('mode-screen').style.display = 'none';
