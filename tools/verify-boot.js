@@ -1871,8 +1871,8 @@ if (ok && process.argv.includes('--touch')) {
 }
 
 if (ok && process.argv.includes('--equip')) {
-  // Equip time: a real wait after switching, by class — sidearms and small blades quickest (the pistol quickest of
-  // all), a rifle about 0.7 s, the heavy things slowest, nothing past 1.5 s — and the new item really cannot be used
+  // Equip time: a real wait after switching, by class — small blades quickest, sidearms 0.3-0.5 s (the pistol the
+  // least), a rifle about 0.7 s, the heavy things slowest, nothing past 1.5 s — and the new item really cannot be used
   // until it is up. Re-pressing the key for what you hold costs nothing; quick melee takes no time.
   const issues = vm.runInThisContext(`(() => {
     const issues = [];
@@ -1891,6 +1891,8 @@ if (ok && process.argv.includes('--equip')) {
       const pistol = gunMs('pistol');
       for (const [id, ms, slot] of all) if ((slot === 'primary' || slot === 'secondary') && ms < pistol) issues.push(id + ' comes up faster than the pistol (' + ms + ' < ' + pistol + ')');
       if (Math.max(...sec.map(x => x[1])) >= Math.min(...prim.map(x => x[1]))) issues.push('the slowest sidearm should still be quicker than the quickest primary');
+      for (const [id, ms] of sec) if (!(ms >= 300 && ms <= 500)) issues.push(id + ': a secondary should come up in 0.3-0.5 s, got ' + ms);
+      if (pistol !== 300) issues.push('the pistol should be the quickest gun at 0.3 s, got ' + pistol);
       if (Math.max(...prim.map(x => x[1])) !== 1500 || gunMs('minigun') !== 1500) issues.push('the minigun should be the slowest, at 1.5 s');
       const ak = gunMs('ak20'); if (!(ak >= 600 && ak <= 800)) issues.push('the AK should be a medium 0.6-0.8 s, got ' + ak);
       if (!(equipMsFor(MELEE_ITEMS.find(m => m.id === 'knife'), 'melee') <= 200 && equipMsFor(MELEE_ITEMS.find(m => m.id === 'fists'), 'melee') <= 200)) issues.push('small blades should be nearly instant');
@@ -1907,7 +1909,7 @@ if (ok && process.argv.includes('--equip')) {
       if (equipReadyAt - performance.now() > 20) issues.push('pressing the key for what you already hold should cost nothing');
       activeSlot = 'secondary'; equipActiveSlot();
       left = equipReadyAt - performance.now();
-      if (!(left > 60 && left <= 130)) issues.push('drawing the pistol should cost about 0.11 s, got ' + Math.round(left));
+      if (!(left > 230 && left <= 320)) issues.push('drawing the pistol should cost about 0.3 s, got ' + Math.round(left));
       // while it is coming up it cannot shoot; once up it can
       activeSlot = 'primary'; equipActiveSlot();
       const before = weaponAmmo[selectedPrimaryIdx].ammo;

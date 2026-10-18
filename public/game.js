@@ -40792,21 +40792,21 @@ function drawMsFor(item) {
 
 // ⏱️ EQUIP TIME. Switching used to be only a picture: the gun rose over a fifth of a second and you could shoot the
 // instant you pressed the key. Now it is real: the new item cannot shoot, swing, be thrown, reload or use its ability
-// until it is up, and the draw animation lasts exactly that long. Sidearms and small blades are the quickest (the
-// pistol is the quickest thing in the game); a rifle is about 0.7 s; the long, heavy things take most of a second or
+// until it is up, and the draw animation lasts exactly that long. Small blades are the quickest; sidearms take 0.3-0.5 s
+// (the pistol the least); a rifle is about 0.7 s; the long, heavy things take most of a second or
 // more; nothing takes longer than EQUIP_MS_MAX. The game's own "weight" cannot say which is which (every sidearm and
 // utility is the same 0.05, and the minigun shares a 0.30 with the sledge), so this is a table, by id, with a
 // default for each slot for anything new.
 const EQUIP_MS_MAX = 1500;
 const EQUIP_MS = {
-  // sidearms: a flick of the wrist
-  pistol: 110, laser_pointer: 110, duelist_pistol: 130, snub_revolver: 130, machine_pistol: 140, taser: 140,
-  revolver: 150, auto_revolver: 150, cycler: 150, dart_gun: 150, throwing_knives: 150,
-  machine_revolver: 160, mauser: 160, slingshot: 160, flare: 170, frost_blaster: 170, cream_pie: 180,
-  nail_gun: 190, gunslinger: 190, continuum: 200, shorty: 220, sawed_off: 220, gatecrasher: 240, traffic_cone: 260,
-  hand_cannon: 280, akimbo: 280,
-  // primaries: SMGs first, a rifle in about 0.7 s, then the long and the heavy
-  mp40: 420, vector: 420, p90: 450, paintball: 480, crossbow: 620, boombow: 620, burst: 650, sg8: 650,
+  // sidearms: 0.3-0.5 s, the plain pistol the quickest gun there is
+  pistol: 300, laser_pointer: 310, duelist_pistol: 310, snub_revolver: 320, machine_pistol: 330, taser: 330,
+  throwing_knives: 330, revolver: 340, cycler: 340, dart_gun: 340, auto_revolver: 350, slingshot: 360,
+  machine_revolver: 370, mauser: 370, flare: 380, cream_pie: 380, gunslinger: 380, frost_blaster: 390,
+  nail_gun: 400, continuum: 420, shorty: 440, sawed_off: 440, gatecrasher: 460, traffic_cone: 470,
+  akimbo: 480, hand_cannon: 500,
+  // primaries: all slower than any sidearm. SMGs first, a rifle in about 0.7 s, then the long and the heavy
+  mp40: 520, vector: 520, p90: 550, paintball: 560, crossbow: 650, boombow: 650, burst: 680, sg8: 680,
   air_rifle: 700, ak20: 700, m4a1_arena: 700, lever: 750, twin_ar: 760, swarm_rifle: 760,
   m1_garand: 800, storm_bloom: 800, freeze_gun: 800, cyroclasm: 850, srx: 900, flamethrower: 900,
   grenade_launcher: 950, railgun: 1000, rpd: 1000, rpg: 1100, mg42: 1150, bazooka: 1150,
@@ -40815,7 +40815,7 @@ const EQUIP_MS = {
   fists: 100, knife: 120, baguette: 130, twin_knife: 140, katana: 170, sabre: 170, spear: 220, bat: 220,
   frying_pan: 240, scythe: 300, combat_axe: 380, chain_hammer: 400, riot_shield: 450, sledge: 520, chainsaw: 600,
 };
-const EQUIP_MS_DEFAULT = { primary: 800, secondary: 170, melee: 220, support: 250 };
+const EQUIP_MS_DEFAULT = { primary: 800, secondary: 400, melee: 220, support: 250 };
 function equipMsFor(item, slot) {
   const id = item && (item.baseId || item.id);
   const ms = (id && EQUIP_MS[id] != null) ? EQUIP_MS[id] : (EQUIP_MS_DEFAULT[slot] || 300);
@@ -40835,7 +40835,7 @@ function equipNudge() {
 function updateEquipBar() {
   let bar = document.getElementById('equip-bar');
   const left = equipReadyAt - performance.now();
-  if (!(left > 0 && _equipDur >= 260 && gameStarted && !isDead)) { if (bar) bar.style.display = 'none'; return; }
+  if (!(left > 0 && _equipDur >= 350 && gameStarted && !isDead)) { if (bar) bar.style.display = 'none'; return; }
   if (!bar) {
     bar = document.createElement('div'); bar.id = 'equip-bar';
     bar.style.cssText = 'position:fixed;left:50%;top:calc(50% + 38px);width:84px;height:5px;margin-left:-42px;z-index:60;pointer-events:none;background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.35);border-radius:3px;overflow:hidden;';
