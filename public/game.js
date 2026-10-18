@@ -53402,7 +53402,7 @@ function gradeHit(headshot, falloff, headMiss) {
 const _flyNums = [];
 let _flyFlip = 0;
 const _flyGate = {};          // targetId -> { t, rank }: a fast gun does not need 35 numbers a second
-function spawnHitNumber(targetId, worldPos, damage, tier) {
+function spawnHitNumber(targetId, worldPos, damage, tier, label = null) {
   if (!(damage > 0) || !worldPos) return;
   const T = HIT_TIERS[tier] || HIT_TIERS.white;
   const now = performance.now();
@@ -53417,7 +53417,7 @@ function spawnHitNumber(targetId, worldPos, damage, tier) {
   el.style.color = T.color;
   el.style.fontSize = Math.min(42, 14 + T.size + Math.floor(damage / 9)) + 'px';
   if (tier === 'blue') el.style.textShadow = '-1px -1px 0 #002a55,1px -1px 0 #002a55,-1px 1px 0 #002a55,1px 1px 0 #002a55,0 0 12px #3db4ff';
-  el.textContent = damage;
+  el.textContent = label ?? damage;
   document.body.appendChild(el);
   const mid = window.innerWidth / 2;
   const side = Math.abs(sc.x - mid) < 40 ? ((_flyFlip++ & 1) ? 1 : -1) : (sc.x < mid ? -1 : 1);
@@ -53926,7 +53926,7 @@ const DMG_TOTAL_STYLE = [
   'transform:translate(-50%,-100%)',
 ].join(';');
 
-function trackTotalDamage(targetId, damage, targetMesh, tier) {
+function trackTotalDamage(targetId, damage, targetMesh, tier, label = null) {
   if (!(damage > 0) || !targetMesh) return;
   if (!damageTracker[targetId]) {
     const el = document.createElement('div');
@@ -53938,7 +53938,7 @@ function trackTotalDamage(targetId, damage, targetMesh, tier) {
   const tr = damageTracker[targetId];
   tr.total  += damage;
   tr.lastHit = performance.now();
-  tr.el.textContent  = tr.total;
+  tr.el.textContent  = label ?? tr.total;
   tr.el.style.opacity = '1';
   // The running total wears the grade of the latest hit, so a string of crits reads red/orange.
   const T = tier && HIT_TIERS[tier];
@@ -53947,11 +53947,12 @@ function trackTotalDamage(targetId, damage, targetMesh, tier) {
 
 // One call per landed hit, from emitHit and from the training dummies: grade it, fling the
 // number, tint the running total, and click. Returns the grade.
-function hitFeedback(targetId, mesh, hitPos, damage, headshot, falloff, headMiss) {
+function hitFeedback(targetId, mesh, hitPos, damage, headshot, falloff, headMiss, weaponId = null) {
   const tier = gradeHit(headshot, falloff == null ? 1 : falloff, headMiss);
   const at = hitPos || (mesh ? mesh.position.clone().setY(mesh.position.y + 1.2) : null);
-  spawnHitNumber(targetId, at, damage, tier);
-  if (mesh) trackTotalDamage(targetId, damage, mesh, tier);
+  const label = weaponId === 'omega_pistol' ? '\u03a9' : null;
+  spawnHitNumber(targetId, at, damage, tier, label);
+  if (mesh) trackTotalDamage(targetId, damage, mesh, tier, label);
   if (damage > 0) {
     const crit = headshot;
     playSoundEvent(crit ? 'headshot' : 'hitmarker', {
@@ -54093,7 +54094,7 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false, opts = 
     const z = mesh._rig?.hitHeadZ || 0;
     headMiss = Math.hypot(hitWorldPos.x - (mesh.position.x+Math.sin(mesh.rotation.y)*z), hitWorldPos.y - (mesh.position.y + off), hitWorldPos.z - (mesh.position.z+Math.cos(mesh.rotation.y)*z));
   }
-  hitFeedback(pid, mesh, hitWorldPos, dmg, headshot, Number.isFinite(opts.damageOverride) ? 1 : falloff, headMiss);
+  hitFeedback(pid, mesh, hitWorldPos, dmg, headshot, Number.isFinite(opts.damageOverride) ? 1 : falloff, headMiss, weaponId);
   // Switchblade Gun: any successful hit re-charges to the 100-dmg shot
   if (weaponId === 'switchblade_gun' || weaponId === 'switchblade_charged') {
     switchbladeCharged = true;
@@ -54301,7 +54302,7 @@ spawnTrainingDummies(); // safe here — TRAINING_DUMMIES const is already initi
 
 function handleDummyHit(dummy, mesh, opts, hitPos) {
   const dmg = opts.damage ?? getClientWeaponDamage(opts.weaponId);
-  hitFeedback(dummy.id, mesh, hitPos, dmg, !!opts.headshot, opts.falloff, opts.headMiss);
+  hitFeedback(dummy.id, mesh, hitPos, dmg, !!opts.headshot, opts.falloff, opts.headMiss, opts.weaponId);
   if (dummy.infinite) {
     flashDummyMesh(mesh);
     return;

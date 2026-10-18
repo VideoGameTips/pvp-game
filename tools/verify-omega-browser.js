@@ -35,6 +35,17 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
         lastShot=0;tryShoot();startReload();
         check(shots.length===1&&!reloading,'Infinite ammo or reload bypasses single round');
       }finally{socket.emit=savedEmit;emitHit=savedHit;}
+      camera.updateMatrixWorld(true);camera.updateProjectionMatrix();
+      const hitPos=new THREE.Vector3(0,1,-5);
+      hitFeedback('omega-label-test',target,hitPos,9999,false,1,null,'omega_pistol');
+      check(_flyNums.at(-1)?.el.textContent==='\u03a9','Omega popup shows numeric damage');
+      check(damageTracker['omega-label-test'].el.textContent==='\u03a9','Omega running total shows numeric damage');
+      check(damageTracker['omega-label-test'].total===9999,'Display symbol changed numeric accounting');
+      hitFeedback('normal-label-test',target,hitPos,25,false,1,null,'pistol');
+      check(_flyNums.at(-1)?.el.textContent==='25','Normal hit displays Omega');
+      const dummy=TRAINING_DUMMIES.find(d=>d.infinite);
+      handleDummyHit(dummy,target,{weaponId:'omega_pistol'},hitPos);
+      check(damageTracker[dummy.id].el.textContent==='\u03a9','Training dummy hit lacks Omega');
       return {rounds:1,reserve:0,damageSymbol:w.damageLabel,shots:shots.length,adminOnly:true};
     }));
     await page.evaluate(()=>{
