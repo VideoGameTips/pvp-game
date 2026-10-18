@@ -2067,7 +2067,7 @@ if (ok && process.argv.includes('--rng')) {
           if (!i) { issues.push(t + ': unknown ' + id); continue; }
           if (seen.has(id)) issues.push(id + ' is in both ' + seen.get(id) + ' and ' + t);
           seen.set(id, t); ks[i.kind]++; kinds[i.kind]++;
-          if (i.item.adminItem) issues.push(id + ' is an admin item: it must not be rollable');
+          if (i.item.adminItem && id !== 'omega_pistol') issues.push(id + ' is an admin item: it must not be rollable');
         }
         for (const k of Object.keys(ks)) if (!ks[k]) issues.push('tier ' + t + ' holds no ' + k);
         if (!dicePoolIds(t, true).length) issues.push('tier ' + t + ' has no gun for a bot');
@@ -2083,12 +2083,36 @@ if (ok && process.argv.includes('--rng')) {
       const archived = [...seen.keys()].filter(id => diceInfo(id).item.archived);
       notes.push(archived.length + ' of them are retired gimmicks that only these modes deal');
       if (archived.length < 40) issues.push('only ' + archived.length + ' retired gimmicks in the pool');
+      // the Omega Pistol is rollable by you, never by a bot; retired items turn up a quarter as often as the rest of their tier
+      if (!seen.has('omega_pistol')) issues.push('the Omega Pistol should be in the pool');
+      let omega = 0, botOmega = 0; const hits = {};
+      for (let i = 0; i < 60000; i++) { const r = diceRollOnce(); hits[r.weaponId] = (hits[r.weaponId] || 0) + 1; if (r.weaponId === 'omega_pistol') omega++; }
+      for (let i = 0; i < 20000; i++) if (diceRollOnce(null, true).weaponId === 'omega_pistol') botOmega++;
+      if (omega < 100) issues.push('the Omega Pistol came up ' + omega + ' times in 60000 rolls');
+      if (botOmega) issues.push('a bot rolled the Omega Pistol ' + botOmega + ' times');
+      let arch = 0, arch_n = 0, norm = 0, norm_n = 0;
+      for (const t of Object.keys(DICE_POOL)) {
+        const ids = DICE_POOL[t].filter(id => diceInfo(id)); const a = ids.filter(id => diceInfo(id).item.archived), n = ids.filter(id => !diceInfo(id).item.archived);
+        if (!a.length || !n.length) continue;
+        for (const id of a) { arch += hits[id] || 0; arch_n++; } for (const id of n) { norm += hits[id] || 0; norm_n++; }
+      }
+      const ratio = (arch / arch_n) / (norm / norm_n);
+      notes.push('a retired item comes up ' + ratio.toFixed(2) + 'x as often as a normal one in its tier; the Omega Pistol ' + omega + '/60000');
+      if (ratio < 0.2 || ratio > 0.31) issues.push('retired items should come up a quarter as often, got ' + ratio.toFixed(2));
       // put every one in your hands, use it, give it back
       gameStarted = true; isDead = false; pointerLocked = true;
       selectedPrimaryIdx = WEAPONS.findIndex(w => w.id === 'ak20'); selectedSecondaryIdx = WEAPONS.findIndex(w => w.id === 'pistol');
       selectedMeleeIdx = MELEE_ITEMS.findIndex(m => m.id === 'knife'); selectedSupportIdx = 0;
       players[myId] = { hp: 300 }; gameBots.length = 0;
       const keepWalls = wallColliders.slice(); wallColliders.length = 0;
+      // Weapon Roulette deals the bots from the same pool: never the Omega Pistol
+      gameBots.push({ id: 'roulettebot', hp: 300, maxHp: 300, dead: false });
+      match = { type: 'arcade', arcade: 'roulette', over: false, roundActive: true, ffaKills: {}, roulette: { kit: rngNewKit(), id: null } };
+      let rb = 0, mine = 0;
+      for (let i = 0; i < 1500; i++) { rouletteShuffle(); if (gameBots[0].weaponId === 'omega_pistol') rb++; if (match.roulette.id === 'omega_pistol') mine++; }
+      if (rb) issues.push('Weapon Roulette dealt a bot the Omega Pistol ' + rb + ' times');
+      notes.push('roulette dealt you the Omega Pistol ' + mine + '/1500');
+      rngRestore(match.roulette); gameBots.length = 0;
       for (const [id] of seen) {
         const holder = { kit: rngNewKit() };
         match = { type: 'arcade', arcade: 'roulette', over: false, roundActive: true, ffaKills: {}, roulette: holder };

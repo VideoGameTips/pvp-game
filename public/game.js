@@ -60417,7 +60417,7 @@ function forcePlayerWeapon(weaponId, slot = 'primary') {
 // nowhere else. Tiers are how good the thing is in a duel against a gun, so melees and most utilities sit low: rolling
 // a Frying Pan is a bad day, which is the point.
 const DICE_POOL = {
-  SS: ['gunslinger', 'm1_garand', 'ak20', 'event_horizon', 'm:lightsabre', 'u:orbital_strike'],
+  SS: ['gunslinger', 'm1_garand', 'ak20', 'event_horizon', 'omega_pistol', 'm:lightsabre', 'u:orbital_strike'],
   S:  ['air_rifle', 'vector', 'minigun', 'revolver', 'lever', 'p90', 'storm_core', 'quantum_repeater', 'abs_zero', 'prism_engine',
        'solar_lance', 'm:titan_hammer', 'u:specter_drone', 'u:hunter_drone'],
   A:  ['burst', 'rpd', 'slingshot', 'mauser', 'chain_gun', 'hand_cannon', 'nail_gun', 'grenade_launcher', 'mp40', 'akimbo',
@@ -60446,6 +60446,18 @@ const DICE_POOL = {
        'u:smoke', 'u:stim', 'u:ammo_fountain', 'u:adrenaline', 'u:cloak', 'u:berserker_serum', 'u:hologram', 'u:siren', 'u:hamburger',
        'u:healing_pulse', 'u:nano_swarm', 'u:vampire_syringe', 'u:nano_shield', 'u:quantum_barrier', 'u:teleport_beacon', 'u:warp_beacon', 'u:heal_gun'],
 };
+// The admin one-shot is in the pool (a roll is the one way anybody but an admin gets to fire it: one bullet, any hit kills),
+// but it is YOURS: a bot dealt a 9999-damage hitscan with a bot's endless reserve would not be a roll, it would be a loss.
+const DICE_PLAYER_ONLY = new Set(['omega_pistol']);
+// Retired (archived) items are the odd leftovers, so they turn up a quarter as often as everything else in their tier.
+const DICE_ARCHIVED_WEIGHT = 0.25;
+function diceWeight(id) { const i = diceInfo(id); return i && i.item.archived ? DICE_ARCHIVED_WEIGHT : 1; }
+function dicePickWeighted(ids) {
+  let total = 0; for (const id of ids) total += diceWeight(id);
+  let r = Math.random() * total;
+  for (const id of ids) { r -= diceWeight(id); if (r < 0) return id; }
+  return ids[ids.length - 1];
+}
 const DICE_TIER_COLOR = { SS: '#f0566e', S: '#f29a52', A: '#e8c547', B: '#8bcf5a', C: '#4fbfa8', D: '#5b86e8', F: '#8a919c' };
 const DICE_TIER_VALUE = { F: 0, D: 1, C: 2, B: 3, A: 4, S: 5, SS: 6 };
 const DICE_COOLDOWN_MS = 5000;    // a roll costs nothing, but the dice need this long to be rolled again (or it would be rolled until SS)
@@ -60464,7 +60476,7 @@ function diceInfo(id) {
   return w ? { kind: 'gun', item: w } : null;
 }
 // `gunsOnly`: a bot can only fight with a gun, so for it the pool is the guns in it.
-function dicePoolIds(tier, gunsOnly) { return (DICE_POOL[tier] || []).filter(id => { const i = diceInfo(id); return i && (!gunsOnly || i.kind === 'gun'); }); }
+function dicePoolIds(tier, gunsOnly) { return (DICE_POOL[tier] || []).filter(id => { const i = diceInfo(id); return i && (!gunsOnly || i.kind === 'gun' && !DICE_PLAYER_ONLY.has(id)); }); }
 function diceName(id) { const i = diceInfo(id); return i ? i.item.name : String(id); }
 const DICE_KIND_TAG = { gun: '', melee: ' (melee)', util: ' (utility)' };
 function diceRollOnce(avoidId, gunsOnly) {
@@ -60472,7 +60484,7 @@ function diceRollOnce(avoidId, gunsOnly) {
   const tier = diceTierOf(v);
   let ids = dicePoolIds(tier, gunsOnly);
   if (ids.length > 1) ids = ids.filter(id => id !== avoidId);
-  const weaponId = ids.length ? ids[Math.floor(Math.random() * ids.length)] : 'pistol';
+  const weaponId = ids.length ? dicePickWeighted(ids) : 'pistol';
   return { v, tier, weaponId };
 }
 // Would the bot roll again? A re-roll costs nothing but a second of not shooting and a wait for the dice, so it
@@ -60800,9 +60812,9 @@ window.addEventListener('keydown', e => {
 // fight with one); you get a gun 70% of the time, a melee 15% and a utility 15%, from the same pool as the dice, gimmicks
 // included, into the same two-slot kit (it replaces the item you are not holding).
 function rouletteShuffle() {
-  const pool = kind => { const all = []; for (const t of Object.keys(DICE_POOL)) all.push(...dicePoolIds(t).filter(id => diceInfo(id).kind === kind)); return all; };
-  const guns = pool('gun');
-  const pick = list => list[Math.floor(Math.random() * list.length)];
+  const pool = (kind, forBot) => { const all = []; for (const t of Object.keys(DICE_POOL)) all.push(...dicePoolIds(t, forBot).filter(id => diceInfo(id).kind === kind)); return all; };
+  const guns = pool('gun', true);   // what a bot may carry
+  const pick = dicePickWeighted;
   for (const b of gameBots) {
     const id = pick(guns), w = WEAPONS.find(x => x.id === id);
     b.weaponId = id; b.primaryId = b.secondaryId = id; b.activeSlot = 'primary';
