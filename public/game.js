@@ -1509,7 +1509,7 @@ const gameBots = [];       // {id, team, weaponId, x, z, rotY, hp, dead, state, 
 let botMoveTimer = 0;
 let rangeTargets = []; // { id, baseX, z, moving, dir, speed, respawnAt }
 let rangeStats   = { shots: 0, hits: 0 };
-const BOT_MOVE_INTERVAL = 0.05; // send position updates every 50ms
+const BOT_MOVE_INTERVAL = 0.033; // send position updates every 33ms (30 Hz, like the players' own)
 
 // ── 🛒 Shop: weapon cost table (mirrors server.js WEAPON_COSTS) ────────────
 // Admin items are NOT priced — they're claimed via promo codes only.
@@ -58796,8 +58796,88 @@ function mpSend(evt) { if (mpHost()) socket.emit('matchEvent', evt); }
 // KOTH and the arcade modes are still decided on each client, as they always were.
 function mpTeamMatch() { return mpMatch() && !!match && (match.type === 'elim' || match.type === 'race'); }
 
-// Position sync — server broadcasts all positions every 50ms
+// Position sync — the server relays every player's position ~30 times a second, and we play it back
+// as an INTERPOLATED timeline. This used to nudge the mesh 35% of the way to the newest position
+// inside this handler, which meant a remote body moved only when a packet arrived (20 times a second),
+// froze on the frames in between, and trailed its real position by a couple of packets. On a 60 fps
+// screen that is one frame in three; the walk cycle measures distance per frame, so it stuttered too.
+// Now each packet is a keyframe, and every frame we show where the player was NET_INTERP_MS ago.
+const NET_SEND_MS = 33;          // how often this client reports its own position (matches the server relay)
+const NET_INTERP_MS = 70;        // how far behind real time remote bodies are drawn — about two packets of cushion (the old nudge trailed ~110 ms)
+const NET_EXTRAP_MS = 90;        // if the cushion runs dry (a dropped packet) keep gliding this long before holding still
+const NET_SNAP_DIST = 7;         // a jump bigger than this between two packets is a teleport (respawn), not a sprint
+const NET_SNAP_KEEP = 14;        // keyframes remembered per player
+let _netOffset = null;           // (my clock) minus (server clock) as of the quickest packet lately
+function netPushSnapshot(pid, pos, arrival) {
+  const p = players[pid];
+  if (!p) return;
+  // A position the server never stamped (an older server, or a body that has not moved yet) is dated by
+  // its arrival, converted into the stamped clock so the two kinds can share one timeline.
+  const at = (typeof pos.at === 'number') ? pos.at : arrival - (_netOffset || 0);
+  const snaps = p._snaps || (p._snaps = []);
+  const last = snaps[snaps.length - 1];
+  if (last && at <= last.at) return;                                 // the same keyframe re-sent (the two 30 Hz clocks beat)
+  if (typeof pos.at === 'number') {
+    const sample = arrival - at;
+    if (_netOffset === null || sample < _netOffset) _netOffset = sample;
+    else _netOffset += (sample - _netOffset) * 0.01;                 // drift back up slowly so a better route can't lock in forever
+  }
+  snaps.push({ at, x: pos.x, y: pos.y, z: pos.z, rotY: pos.rotY });
+  if (snaps.length > NET_SNAP_KEEP) snaps.shift();
+}
+function netAngleLerp(a, b, t) {
+  let d = (b - a) % (Math.PI * 2);
+  if (d > Math.PI) d -= Math.PI * 2; else if (d < -Math.PI) d += Math.PI * 2;
+  return a + d * t;
+}
+// Called every frame (before the walk cycle reads the body's movement).
+function updateRemoteInterp() {
+  const now = performance.now();
+  const renderAt = now - (_netOffset || 0) - NET_INTERP_MS;
+  for (const pid in remoteMeshes) {
+    const p = players[pid];
+    const snaps = p && p._snaps;
+    if (!snaps || !snaps.length || p.isBot && gameBots.some(b => b.id === pid)) continue;
+    const mesh = remoteMeshes[pid];
+    let x, y, z, rot;
+    const first = snaps[0], last = snaps[snaps.length - 1];
+    if (renderAt <= first.at) { x = first.x; y = first.y; z = first.z; rot = first.rotY; }
+    else if (renderAt >= last.at) {
+      // Out of keyframes: carry on at the last observed velocity for a moment, then hold.
+      x = last.x; y = last.y; z = last.z; rot = last.rotY;
+      const prev = snaps[snaps.length - 2];
+      if (prev && Math.hypot(last.x - prev.x, last.z - prev.z) < NET_SNAP_DIST) {
+        const span = Math.max(1, last.at - prev.at), ahead = Math.min(NET_EXTRAP_MS, renderAt - last.at);
+        const k = ahead / span;
+        x += (last.x - prev.x) * k; z += (last.z - prev.z) * k;
+        if (typeof last.y === 'number' && typeof prev.y === 'number') y += (last.y - prev.y) * k;
+      }
+    } else {
+      let i = snaps.length - 2;
+      while (i > 0 && snaps[i].at > renderAt) i--;
+      const a = snaps[i], b = snaps[i + 1];
+      if (Math.hypot(b.x - a.x, b.z - a.z) > NET_SNAP_DIST) { x = b.x; y = b.y; z = b.z; rot = b.rotY; }   // teleport: don't slide across the map
+      else {
+        const t = (renderAt - a.at) / Math.max(1, b.at - a.at);
+        x = a.x + (b.x - a.x) * t; z = a.z + (b.z - a.z) * t;
+        y = (typeof a.y === 'number' && typeof b.y === 'number') ? a.y + (b.y - a.y) * t : b.y;
+        rot = netAngleLerp(a.rotY, b.rotY, t);
+      }
+    }
+    mesh.position.x = x; mesh.position.z = z;
+    mesh._netEyeY = y;
+    if (typeof y === 'number') {
+      const groundY = (typeof botGroundYAt === 'function') ? botGroundYAt(x, z, mesh.position.y || 0, 0.9, 2.4) : 0;
+      const eyeAboveGround = y - groundY;
+      const poseEye = Math.max(0.70, Math.min(1.65, eyeAboveGround));
+      const airborne = Math.max(0, eyeAboveGround - poseEye);
+      mesh.position.y = groundY + airborne;
+    }
+    mesh.rotation.y = rot + Math.PI;
+  }
+}
 socket.on('posUpdate', positions => {
+  const arrival = performance.now();
   for (const [pid, pos] of Object.entries(positions)) {
     if (pid === myId) continue;
     // Skip bots we own — the bot AI drives their mesh directly; server data always lags
@@ -58810,17 +58890,7 @@ socket.on('posUpdate', positions => {
     }
     const mesh = remoteMeshes[pid];
     if (!mesh) continue;
-    mesh.position.x += (pos.x - mesh.position.x) * 0.35;
-    mesh.position.z += (pos.z - mesh.position.z) * 0.35;
-    if (typeof pos.y === 'number') {
-      const groundY = (typeof botGroundYAt === 'function') ? botGroundYAt(pos.x, pos.z, mesh.position.y || 0, 0.9, 2.4) : 0;
-      const eyeAboveGround = pos.y - groundY;
-      const poseEye = Math.max(0.70, Math.min(1.65, eyeAboveGround));
-      const airborne = Math.max(0, eyeAboveGround - poseEye);
-      const targetY = groundY + airborne;
-      mesh.position.y += (targetY - mesh.position.y) * 0.35;
-    }
-    mesh.rotation.y  = pos.rotY + Math.PI;
+    netPushSnapshot(pid, pos, arrival);
   }
 });
 
@@ -58828,7 +58898,7 @@ setInterval(()=>{
   if (!myId || isDead) return;
   socket.emit('move',{ x:camera.position.x, y:camera.position.y, z:camera.position.z, rotY:euler.y, rotX:euler.x,
     emote: SOCIAL_VIEW.mode === 'emote' ? SOCIAL_VIEW.emote : null });
-},50);
+},NET_SEND_MS);
 
 // Auto-fire now polls every render frame inside loop() — see the 'auto-fire'
 // safeLoopStep — instead of this fixed 50ms interval, which silently capped
@@ -64843,9 +64913,10 @@ function animateCharacters(dt) {
       // drawn it, so every remote player stood bolt upright while shooting at a
       // roof. Camera pitch is negative looking down; the rig's is positive.
       if (p && typeof p.rotX === 'number') aimPitch = -p.rotX;
-      if (p && typeof p.y === 'number') {
-        const groundY = (typeof botGroundYAt === 'function') ? botGroundYAt(p.x ?? mesh.position.x, p.z ?? mesh.position.z, mesh.position.y || 0, 0.9, 2.4) : 0;
-        const eyeAboveGround = p.y - groundY;
+      const eyeY = typeof mesh._netEyeY === 'number' ? mesh._netEyeY : p && p.y;
+      if (p && typeof eyeY === 'number') {
+        const groundY = (typeof botGroundYAt === 'function') ? botGroundYAt(mesh.position.x, mesh.position.z, mesh.position.y || 0, 0.9, 2.4) : 0;
+        const eyeAboveGround = eyeY - groundY;
         // 1.65 standing → 0.70 sliding. Use eye height above the local floor, not
         // raw world Y, so second floors do not make everyone look upright.
         crouchTarget = Math.max(0, Math.min(1, (1.65 - eyeAboveGround) / (1.65 - 0.70)));
@@ -64973,6 +65044,7 @@ function loop() {
   safeLoopStep('donut-trails', () => updateDonutMotionTrails(dt));
   safeLoopStep('impact-marks', () => updateImpactMarks());
   safeLoopStep('bot-ai', () => updateBotAI(dt));
+  safeLoopStep('remote-interp', () => updateRemoteInterp()); // remote bodies play back the last packets smoothly
   safeLoopStep('characters', () => animateCharacters(dt)); // walk-cycle + slide pose for bots & remote players
   safeLoopStep('team-arrows', () => updateTeamArrows());    // blue arrows over teammates only
   safeLoopStep('king-crown', () => updateKingCrown(dt));   // crown the current top fragger

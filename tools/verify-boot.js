@@ -2637,6 +2637,92 @@ if (ok && process.argv.includes('--match-finale')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+if (ok && process.argv.includes('--netinterp')) {
+  // Remote players on the network: packets arrive ~30 times a second, with jitter; the body must glide between them at
+  // the screen's own frame rate (it used to move only when a packet landed -- one frame in three at 60 fps -- and trail by
+  // two packets), keep gliding through a dropped packet, not slide across the map on a teleport, take the short way
+  // round on a turn, and still work against a server that does not stamp packets.
+  const out = vm.runInThisContext(`(() => {
+    const issues = [];
+    const realNow = performance.now.bind(performance);
+    let T = 0;
+    Object.defineProperty(performance, 'now', { value: () => T, configurable: true, writable: true });
+    const SPEED = 6, OFFSET = 12345;                       // m/s along x; my clock minus the server's
+    const saved = { bots: gameBots.length };
+    const run = (name, opts) => {
+      _netOffset = null;
+      const pid = 'net_' + name;
+      players[pid] = { id: pid, isBot: false, x: 0, y: 1.65, z: 0, rotY: 0 };
+      const mesh = new THREE.Group(); remoteMeshes[pid] = mesh;
+      let lastPacket = 0, seed = 7;
+      const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+      const frames = [], FRAME = 1000 / opts.fps;
+      let nextPacket = 0, nowS = 0;
+      const pending = [];
+      for (let t = 0; t < 3000; t += FRAME) {
+        nowS = t;
+        // the player moves in real (server) time; a packet is sent every 33 ms and arrives after 30 +/- 12 ms
+        while (nextPacket <= nowS) {
+          const sent = nextPacket; nextPacket += 33;
+          if (opts.drop && sent > 1500 && sent < 1500 + opts.drop) continue;
+          let x = SPEED * sent / 1000, rotY = opts.turn ? (sent < 1500 ? 3.0 : -3.0) : 0;
+          if (opts.teleport && sent >= 2000) x += 40;
+          pending.push({ arrive: sent + 30 + (rnd() - .5) * 24, sent, x, rotY });
+        }
+        pending.sort((a, b) => a.arrive - b.arrive);
+        while (pending.length && pending[0].arrive <= nowS) {
+          const k = pending.shift();
+          T = k.arrive + OFFSET;
+          const pos = { x: k.x, y: 1.65, z: 0, rotY: k.rotY };
+          if (!opts.unstamped) pos.at = k.sent + 100000;          // the server's clock
+          players[pid].x = pos.x;
+          netPushSnapshot(pid, pos, T);
+        }
+        T = nowS + OFFSET;
+        updateRemoteInterp();
+        frames.push({ t: nowS, x: mesh.position.x, rot: mesh.rotation.y - Math.PI });
+      }
+      delete remoteMeshes[pid]; delete players[pid];
+      return frames;
+    };
+    try {
+      for (const fps of [60, 144]) {
+        const f = run('smooth' + fps, { fps }).filter(r => r.t > 600 && r.t < 1400);
+        const want = SPEED / fps, steps = f.slice(1).map((r, i) => r.x - f[i].x);
+        const worst = Math.max(...steps.map(d => Math.abs(d - want)));
+        if (worst > want * 0.35) issues.push(fps + ' fps: a frame moved ' + (worst + want).toFixed(3) + ' m, wanted ' + want.toFixed(3) + ' (stutter)');
+        const lag = f.map(r => (SPEED * r.t / 1000 - r.x) / SPEED * 1000);
+        const mean = lag.reduce((a, b) => a + b, 0) / lag.length;
+        if (typeof process !== 'undefined' && process.env.NETINTERP_DEBUG) console.log(fps + ' fps: worst step ' + (worst + want).toFixed(3) + ' m (wanted ' + want.toFixed(3) + '), lag ' + mean.toFixed(0) + ' ms');
+        if (mean < 40 || mean > 140) issues.push(fps + ' fps: bodies trail by ' + mean.toFixed(0) + ' ms (want ~70)');
+      }
+      // a dropped stretch of packets: keep going, then catch up without jumping back
+      const d = run('drop', { fps: 60, drop: 100 }).filter(r => r.t > 1450 && r.t < 1800);
+      const dsteps = d.slice(1).map((r, i) => r.x - d[i].x);
+      if (dsteps.some(s => s < -0.0001)) issues.push('a dropped packet made the body go backwards');
+      if (Math.min(...dsteps) < SPEED / 60 * 0.3 && d.slice(0, 8).every((r, i, a) => i === 0 || r.x === a[i - 1].x)) issues.push('a dropped packet froze the body at once');
+      // a teleport must not be a slide
+      const tp = run('tp', { fps: 60, teleport: true });
+      const mid = tp.filter(r => r.x > 20 && r.x < 40);
+      if (mid.length) issues.push('a teleport slid the body across ' + mid.length + ' frames');
+      // a turn through +-pi goes the short way
+      const tr = run('turn', { fps: 60, turn: true }).filter(r => r.t > 1400 && r.t < 1900);
+      if (tr.some(r => Math.abs(r.rot) < 2.5)) issues.push('a turn from 3.0 to -3.0 went the long way round');
+      // a server that does not stamp packets still plays smoothly
+      const un = run('old', { fps: 60, unstamped: true }).filter(r => r.t > 800 && r.t < 1600);
+      const usteps = un.slice(1).map((r, i) => r.x - un[i].x);
+      if (Math.max(...usteps) > SPEED / 60 * 2.2) issues.push('unstamped packets: a frame jumped ' + Math.max(...usteps).toFixed(3) + ' m');
+      if (!usteps.some(s => s > 0)) issues.push('unstamped packets: the body never moved');
+    } finally {
+      Object.defineProperty(performance, 'now', { value: realNow, configurable: true, writable: true });
+      _netOffset = null;
+    }
+    return issues;
+  })()`);
+  console.log('netinterp checks: smooth at 60/144 fps, ~70 ms behind, dropped packets, teleports, turns, unstamped server');
+  if (out.length) { ok = false; console.log(out.join('\n')); }
+}
+
 if (ok && process.env.MAP_REVIEW_DIR) {
   fs.mkdirSync(process.env.MAP_REVIEW_DIR, { recursive: true });
   for (const name of ['forest', 'desert', 'tundra', 'refinery', 'space', 'volcano', 'titanic', 'carrier', 'pearl_harbor']) {

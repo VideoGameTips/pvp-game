@@ -1579,7 +1579,7 @@ const PLAYER_MAX_HP  = 300;
 const SPAWN_SHIELD_MS = 2500;   // the client's RESPAWN_SHIELD_MS: a hit during it must cost no HP here either (#22)
 const shielded = p => Date.now() < (p.shieldUntil || 0);
 const RESPAWN_DELAY  = 3000;
-const POS_BROADCAST_RATE = 50; // ms
+const POS_BROADCAST_RATE = 33; // ms (30 Hz; was 50) — clients interpolate between these, so each one is a keyframe
 
 // ── 🌐 PVP MATCHMAKING — pair up humans when they pick the same elim mode ──
 // Each queue entry: { socketId, mode, joinedAt, timeoutId }
@@ -2311,7 +2311,7 @@ setInterval(() => {
   const byMatch = {};
   for (const [id, p] of Object.entries(players)) {
     if (!byMatch[p.matchId]) byMatch[p.matchId] = {};
-    byMatch[p.matchId][id] = { x: p.x, y: p.y, z: p.z, rotY: p.rotY, rotX: p.rotX,
+    byMatch[p.matchId][id] = { x: p.x, y: p.y, z: p.z, rotY: p.rotY, rotX: p.rotX, at: p.at,
       emote: !p.dead && Date.now() < p.emoteUntil ? p.emote : null };
   }
   for (const p of Object.values(players)) {
@@ -2546,6 +2546,7 @@ io.on('connection', (socket) => {
     if (!p || p.dead) return;
     p.x = data.x; p.y = data.y; p.z = data.z;
     p.rotY = data.rotY; p.rotX = data.rotX;
+    p.at = Date.now();   // when this position was true — clients interpolate on this, not on when the broadcast happened to fire
     const emoteDurations = { take_l: 6000, wave: 3500, victory: 4500, shuffle: 6000 };
     const emote = Object.prototype.hasOwnProperty.call(emoteDurations, data.emote) ? data.emote : null;
     if (emote !== p.emote) p.emoteUntil = emote ? Date.now() + emoteDurations[emote] : 0;
@@ -3114,7 +3115,7 @@ io.on('connection', (socket) => {
       const bot = players[m.id];
       if (bot && bot.isBot && bot.ownerId === socket.id) {
         bot.x = m.x; bot.y = 1; bot.z = m.z;
-        bot.rotY = m.rotY; bot.rotX = 0;
+        bot.rotY = m.rotY; bot.rotX = 0; bot.at = Date.now();
       }
     }
   });
