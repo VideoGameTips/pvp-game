@@ -168,7 +168,7 @@
         <tr><td>Infection</td><td>Zombies vs. humans; zombies convert on kill</td></tr>
         <tr><td>Sniper Only</td><td>Snipers forced, no secondaries</td></tr>
         <tr><td>Speedrun</td><td>Solo race to 20 kills, personal best tracked</td></tr>
-        <tr><td>🎲 Dice Duel</td><td>You and a bot each carry a d20, and you roll it <em>during the round</em>, not before it. The die sets the tier (1 is junk, 20 is an SS), then a gun from it. You start each round holding your melee and the dice: <kbd>G</kbd> (or the 🎲 button on a phone) rolls. The first roll is free; every re-roll costs 40 HP on the spot (up to four, and never enough to kill you), and while the dice are rolling (0.7&nbsp;s) you cannot shoot, so a gamble in the middle of a fight can cost you the fight. The bot has the same dice and the same rules: it rolls at GO, and re-rolls only when what it holds is worth less than a fresh roll, when it can afford the health, and when nobody has just hit it. First to 5 kills; every kill starts a fresh round with a fresh dice.</td></tr>
+        <tr><td>🎲 Dice Duel</td><td>You and a bot each carry a d20, and you roll it <em>during the round</em>, not before it (<kbd>G</kbd>, or the 🎲 button on a phone). The die sets the tier (1 is junk, 20 is an SS), then a thing from it: a gun, a melee or a utility, from a pool that includes the retired gimmick weapons (see <a href="#rng-pool">The RNG pool</a>). You start each round with empty hands, and <strong>nothing from your loadout</strong> (no melee, no utility). <strong>You hold two things at once</strong> (keys <kbd>1</kbd> and <kbd>2</kbd>): a roll goes in an empty slot, otherwise it <strong>replaces the one you are not holding</strong> and goes straight into your hand, so to throw a bad one away, switch to the good one and roll. Rolling costs nothing, but you cannot shoot while the dice rattle (0.7&nbsp;s) and they need 5&nbsp;s before they can be rolled again. The bot has the same dice (a gun at a time; it re-rolls when what it holds is worth less than a fresh roll, when the dice are ready and nobody has just hit it). First to 5 kills; every kill starts a fresh round with empty hands and a fresh dice.</td></tr>
         <tr><td>🔄 Weapon Roulette</td><td>FFA where everyone, bots included, is dealt a new random gun every 20 seconds</td></tr>
         <tr><td>💥 Rocket Rumble</td><td>FFA with the RPG-7 and nothing else: ride your own blast</td></tr>
       </table>
@@ -311,6 +311,18 @@
       </table>
       <p><em>Why:</em> it is the sound a shooter uses to find an opponent, and it rewards the quiet play it asks for
       (crouch to creep up on someone). Turn it off in &#9881; &rarr; <b>ENEMY FOOTSTEPS</b> if it is too busy.</p>
+
+      <h2 id="rng-pool">🎲 The RNG pool</h2>
+      <p>Dice Duel and Weapon Roulette deal from one pool, by tier, and it holds three kinds of thing: <strong>guns,
+      melees and utilities</strong>. Most of it is the <strong>retired gimmick weapons</strong>: items taken out of the
+      shop and the loadout because they are too odd, too strong or too silly for a normal match (Potato Cannon, Portal
+      Launcher, Pinball Launcher, Lightsabre, Orbital Strike, Hunter Drone, Rubber Duck...) are exactly what a dice
+      roll is for, so they come up in these modes and nowhere else. The tier is how good the thing is in a duel against
+      a gun, so melees and most utilities sit low: rolling a Frying Pan is a bad day, which is the point. Every tier holds
+      all three kinds, and a roll is a melee or a utility about one time in five. Weapon Roulette deals you a gun 70% of
+      the time, a melee 15% and a utility 15% (a new one every 20&nbsp;seconds into the same two-slot kit), and bots in
+      either mode can only fight with guns. The test (<code>verify-boot.js --rng</code>) puts every item in the pool
+      in your hands, uses it and gives your own kit back.</p>
 
       <h2 id="map-vote">🗺️ Voting for the map</h2>
       <p>The map used to be chosen on the mode screen before anyone was found, and only 1v1 had a vote. Now there is no

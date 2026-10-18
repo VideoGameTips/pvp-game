@@ -40139,6 +40139,8 @@ document.addEventListener('keydown', e => {
   if (e.code==='Digit1' || e.code==='Digit2' || e.code==='Digit3' || e.code==='Digit4') {
     // Choosing a slot yourself cancels a quick-melee return — you meant it.
     _quickMeleeReturn = null;
+    // 🎲 Dice Duel / Weapon Roulette: 1 and 2 are the two things the dice gave you; 3 and 4 are nothing.
+    if (rngKit()) { if (e.code === 'Digit1') rngSwitchHand(0); else if (e.code === 'Digit2') rngSwitchHand(1); return; }
     if (!loadoutReady()) return;
     if ((selectedModeConfig?.fixedKit || match?.cfg?.fixedKit) === 'obby_doublejump') {
       activeSlot = 'melee';
@@ -41840,6 +41842,8 @@ function resetPlayerForRound(x = null, z = null) {
 }
 
 function cycleActiveSlot() {
+  const kit = rngKit();
+  if (kit) { const o = 1 - kit.hand; if (kit.slots[o]) kit.hand = o; return; }   // 🎲 the other thing the dice gave you
   if (fixedKitModeActive()) {
     if ((selectedModeConfig?.fixedKit || match?.cfg?.fixedKit) === 'obby_doublejump') {
       activeSlot = 'melee';
@@ -41865,6 +41869,7 @@ let _quickMeleeStart  = 0;
 
 function quickMelee() {
   if (fixedKitModeActive()) return;
+  if (rngKit()) return;   // 🎲 there is no melee but the one the dice gave you
   if (isDead || !gameStarted || activeSlot === 'melee' || _quickMeleeReturn) return;
   const m = equippedMeleeItem();
   if (!m) return;
@@ -41922,8 +41927,9 @@ function updateQuickMelee() {
 }
 
 function equipActiveSlot() {
-  // 🎲 Dice Duel: until the first roll of the round there is no gun to hold, whatever key or tap asked for one.
-  if (match && match.dice && match.dice.me && !match.dice.me.weaponId && (activeSlot === 'primary' || activeSlot === 'secondary')) activeSlot = 'melee';
+  // 🎲 Dice Duel / Weapon Roulette: what is in your hands is whatever the kit says, whoever called this.
+  const _kit = rngKit();
+  const _kitHeld = _kit ? rngApplyKit(_kit) : true;   // 🎲 the kit decides what is in your hands (false: nothing)
   // ⏱️ Equip time: only a CHANGE of item costs any (pressing the key for what is already in your hand costs nothing), and
   // quick melee and the dice take no time of their own.
   const _eqSlot = activeSlot;
@@ -41934,6 +41940,7 @@ function equipActiveSlot() {
   const _eqMs = (_eqKey !== _heldEquipKey && !_equipInstant && gameStarted && _eqItem) ? equipMsFor(_eqItem, _eqSlot) : 0;
   _heldEquipKey = _eqKey;
   equipReadyAt = performance.now() + _eqMs; _equipDur = _eqMs;
+  if (!_kitHeld) { equipReadyAt = Infinity; _equipDur = 0; }   // empty hands cannot shoot, swing or throw anything
   finishEquip();   // whatever was assembling is put back together before it is hidden
   minigunBraceHeld = false; resetMinigunSpool();
   chainGunSpin = 0; chainGunLastShotAt = 0;
@@ -41953,7 +41960,9 @@ function equipActiveSlot() {
   supportModels.forEach(m => m.visible = false);
   if (isADS) { isADS = false; targetFOV = 75; setWeaponADSPos(false); }
 
-  if (activeSlot === 'primary') {
+  if (!_kitHeld) {
+    // nothing in the hands: every model is already hidden
+  } else if (activeSlot === 'primary') {
     currentWeaponIdx = selectedPrimaryIdx;
     currentWeapon = applyUpgrades(WEAPONS[selectedPrimaryIdx]);
     weaponModels[selectedPrimaryIdx].visible = true;
@@ -57330,6 +57339,19 @@ function updateWeaponSelector() {
   const sSlot = document.getElementById('ws-secondary');
   const mSlot = document.getElementById('ws-melee');
   const uSlot = document.getElementById('ws-support');
+  // 🎲 Dice Duel / Weapon Roulette: two slots, whatever the dice gave you; the melee and utility slots are gone.
+  const kit = rngKit();
+  if (mSlot) mSlot.style.display = kit ? 'none' : '';
+  if (uSlot) uSlot.style.display = kit ? 'none' : '';
+  if (kit) {
+    [pSlot, sSlot].forEach((slot, i) => {
+      if (!slot) return;
+      const it = diceInfo(kit.slots[i]);
+      slot.querySelector('.ws-name').textContent = it ? it.item.name : '—';
+      slot.classList.toggle('active', kit.hand === i);
+    });
+    return;
+  }
   if (pSlot) {
     pSlot.querySelector('.ws-name').textContent = selectedPrimaryIdx !== null ? displayWeaponName(WEAPONS[selectedPrimaryIdx]) : '—';
     pSlot.classList.toggle('active', activeSlot === 'primary');
@@ -59570,16 +59592,17 @@ function setupArcadeStart(subtype) {
       return;
     }
     case 'dice': {
-      match.dice = { goal: DICE_GOAL, round: 0, score: { me: 0, bot: 0 }, phase: 'idle', orig: null };
+      match.dice = { goal: DICE_GOAL, round: 0, score: { me: 0, bot: 0 }, phase: 'idle', kit: rngNewKit() };
       for (const b of gameBots) b.team = 'enemy';
-      showAnnouncement('🎲 DICE DUEL', `You carry a dice: roll it in the fight for a gun · re-rolls cost ${DICE_REROLL_HP} HP · first to ${DICE_GOAL}`, '#ffffff', 3000);
+      showAnnouncement('🎲 DICE DUEL', `You carry a dice: roll it in the fight for weapons (you can hold two) · rolling is free · first to ${DICE_GOAL}`, '#ffffff', 3000);
       diceStartRound();
       return;
     }
     case 'roulette': {
       for (const b of gameBots) b.team = 'enemy';   // FFA — everyone is fair game
       match.rouletteNext = Date.now() + ROULETTE_MS;
-      showAnnouncement('🔄 WEAPON ROULETTE', `Everyone is dealt a new gun every ${ROULETTE_MS / 1000} s · most kills wins`, '#66ddff', 3000);
+      match.roulette = { kit: rngNewKit(), id: null };
+      showAnnouncement('🔄 WEAPON ROULETTE', `Everyone is dealt something new every ${ROULETTE_MS / 1000} s · bots get guns, you might get anything · most kills wins`, '#66ddff', 3000);
       rouletteShuffle();
       return;
     }
@@ -59635,54 +59658,90 @@ function forcePlayerWeapon(weaponId, slot = 'primary') {
 // ══════════════════════════════════════════════════════════════════════════
 // 🎲 DICE DUEL — you and a bot each carry a d20, and you roll it DURING the round for your weapon (it used to be
 // a screen before each round). The die picks the TIER (1 is a junk-drawer F, 20 is an SS), then a weapon from it.
-// Each round starts with your melee and the dice: the first roll is free, every re-roll costs DICE_REROLL_HP of
-// your health right then, and while the dice are rolling you cannot shoot, so when to gamble is the game. The bot
-// has the same dice and weighs exactly that: what it is holding, what a re-roll would cost, how far behind it is
-// against what you rolled, and whether anyone has just hit it.
+// Each round starts with empty hands and the dice. Rolling costs nothing, but you cannot shoot while the dice rattle
+// (0.7 s) and they need 5 s before they can be rolled again, so when to gamble is the game. You can hold TWO things
+// (any mix of guns, melees and utilities, and nothing from your loadout): a roll replaces the one you are not holding,
+// so a bad one is thrown away by switching to the good one and rolling. The bot has the same dice, with a gun at a
+// time: it weighs what it holds against a fresh roll, how far behind it is against what you hold, and whether
+// anyone has just hit it.
 // First to DICE_GOAL kills wins; every kill sends both of you back to a fresh round and a fresh dice.
 //
 // 🔄 WEAPON ROULETTE and 💥 ROCKET RUMBLE are the cheap relatives: the whole lobby is re-dealt
 // a random gun every ROULETTE_MS, or everyone has a rocket launcher and the map does the rest.
 // ══════════════════════════════════════════════════════════════════════════
+// 🎲 THE RNG POOL. Dice Duel and Weapon Roulette deal from this, by tier, and it holds three kinds of thing: guns (a plain
+// id), melees ('m:' + id) and utilities ('u:' + id). The retired GIMMICK weapons live here: items taken out of the shop and
+// the loadout (archived) because they are too odd, too strong or too silly for a normal match are exactly what a dice
+// roll is for, so a Portal Launcher, a Potato Cannon, a Lightsabre or an Orbital Strike can turn up in these modes and
+// nowhere else. Tiers are how good the thing is in a duel against a gun, so melees and most utilities sit low: rolling
+// a Frying Pan is a bad day, which is the point.
 const DICE_POOL = {
-  SS: ['gunslinger', 'm1_garand', 'ak20'],
-  S:  ['air_rifle', 'vector', 'minigun', 'revolver', 'lever', 'p90'],
-  A:  ['burst', 'rpd', 'slingshot', 'mauser', 'chain_gun', 'hand_cannon', 'nail_gun', 'grenade_launcher', 'mp40'],
+  SS: ['gunslinger', 'm1_garand', 'ak20', 'event_horizon', 'm:lightsabre', 'u:orbital_strike'],
+  S:  ['air_rifle', 'vector', 'minigun', 'revolver', 'lever', 'p90', 'storm_core', 'quantum_repeater', 'abs_zero', 'prism_engine',
+       'solar_lance', 'm:titan_hammer', 'u:specter_drone', 'u:hunter_drone'],
+  A:  ['burst', 'rpd', 'slingshot', 'mauser', 'chain_gun', 'hand_cannon', 'nail_gun', 'grenade_launcher', 'mp40', 'akimbo',
+       'flechette', 'magnetar', 'void_harvester', 'boomstick', 'pinball_launcher', 'seismic_hammer',
+       'm:chainsaw', 'm:katana', 'm:gravity_hammer',
+       'u:black_hole_seed', 'u:satchel', 'u:mini_turret', 'u:drone_strike', 'u:guardian_drone', 'u:tesla_coil'],
   B:  ['amr', 'auto_revolver', 'continuum', 'freeze_gun', 'snub_revolver', 'paintball', 'throwing_knives', 'srx',
-       'machine_pistol', 'pistol', 'dart_gun', 'cream_pie', 'crossbow'],
+       'machine_pistol', 'pistol', 'dart_gun', 'cream_pie', 'crossbow',
+       'plasma_carbine', 'arc_rifle', 'switchblade_gun', 'burst_cannon', 'coilgun', 'smart_smg', 'storm_cannon', 'glassmaker', 'nebula_mortar',
+       'm:scythe', 'm:sledge', 'm:combat_axe', 'm:vampire_blade', 'm:phase_blade', 'm:fire_axe', 'm:sabre', 'm:chain_hammer',
+       'u:frag', 'u:dynamite', 'u:sticky_charge', 'u:bee_jar', 'u:land_mine', 'u:glitch_cube', 'u:moon_mine'],
   C:  ['machine_revolver', 'cycler', 'boombow', 'traffic_cone', 'duelist_pistol', 'cyroclasm', 'rpg', 'mortar_rifle',
-       'railgun', 'bazooka', 'sg8', 'flare'],
-  D:  ['storm_bloom', 'flamethrower', 'javelin_launcher', 'shorty', 'sawed_off', 'gatecrasher'],
-  F:  ['laser_pointer', 'taser', 'frost_blaster'],
+       'railgun', 'bazooka', 'sg8', 'flare',
+       'gravity_launcher', 'harpoon_gun', 'firework_launcher', 'shockwave_launcher', 'prism_launcher', 'airburst_projector',
+       'throwing_axes', 'pulse_needle', 'lancer',
+       'm:spear', 'm:knife', 'm:twin_knife', 'm:riot_shield', 'm:nunchucks', 'm:volt_whip', 'm:bat', 'm:shock_baton',
+       'u:molotov', 'u:acid_grenade', 'u:emp_grenade', 'u:taser_grenade', 'u:magnet_mine', 'u:proximity_mine', 'u:stasis_mine',
+       'u:tripwire', 'u:grapple_hook', 'u:blink_pearl'],
+  D:  ['storm_bloom', 'flamethrower', 'javelin_launcher', 'shorty', 'sawed_off', 'gatecrasher',
+       'potato_cannon', 'sticker_blaster', 'arc_torrent', 'foam_cannon', 'portal_launcher', 'signal_pistol', 'boomerang',
+       'm:frying_pan', 'm:baguette', 'm:screwdriver', 'm:yoyo', 'm:crowbar',
+       'u:caltrops', 'u:air_grenade', 'u:rubber_duck', 'u:confetti_cannon', 'u:air_blaster', 'u:flashbang_basic', 'u:ink_bomb',
+       'u:bounce_pad', 'u:medkit'],
+  F:  ['laser_pointer', 'taser', 'frost_blaster', 'painter_beam', 'gravity_paint', 'traffic_controller',
+       'm:fists', 'm:umbrella',
+       'u:smoke', 'u:stim', 'u:ammo_fountain', 'u:adrenaline', 'u:cloak', 'u:berserker_serum', 'u:hologram', 'u:siren', 'u:hamburger',
+       'u:healing_pulse', 'u:nano_swarm', 'u:vampire_syringe', 'u:nano_shield', 'u:quantum_barrier', 'u:teleport_beacon', 'u:warp_beacon', 'u:heal_gun'],
 };
 const DICE_TIER_COLOR = { SS: '#f0566e', S: '#f29a52', A: '#e8c547', B: '#8bcf5a', C: '#4fbfa8', D: '#5b86e8', F: '#8a919c' };
 const DICE_TIER_VALUE = { F: 0, D: 1, C: 2, B: 3, A: 4, S: 5, SS: 6 };
-const DICE_REROLL_HP = 40;        // off your life bar for the fight, per re-roll
-const DICE_MAX_REROLLS = 4;       // 300 -> 140 at the very worst
+const DICE_COOLDOWN_MS = 5000;    // a roll costs nothing, but the dice need this long to be rolled again (or it would be rolled until SS)
 const DICE_GOAL = 5;
 const DICE_ROLL_MS = 700;
 const DICE_BOT_FIRST_MS = [600, 1500];   // how long the bot takes to reach for the dice at GO
 const DICE_AVG_TIER = 2.9;        // what a fresh d20 is worth on average, in tier steps (F 0 ... SS 6)
 const ROULETTE_MS = 20000;
 function diceTierOf(v) { return v >= 20 ? 'SS' : v >= 18 ? 'S' : v >= 15 ? 'A' : v >= 9 ? 'B' : v >= 4 ? 'C' : v >= 2 ? 'D' : 'F'; }
-function dicePoolIds(tier) { return (DICE_POOL[tier] || []).filter(id => WEAPONS.some(w => w.id === id)); }
-function diceName(id) { const w = WEAPONS.find(x => x.id === id); return w ? w.name : id; }
-function diceRollOnce(avoidId) {
+// What a pool id is: { kind: 'gun' | 'melee' | 'util', item } (null if the item is gone from the game).
+function diceInfo(id) {
+  if (typeof id !== 'string') return null;
+  if (id.startsWith('m:')) { const m = MELEE_ITEMS.find(x => x.id === id.slice(2)); return m ? { kind: 'melee', item: m } : null; }
+  if (id.startsWith('u:')) { const u = SUPPORT_ITEMS.find(x => x.id === id.slice(2)); return u ? { kind: 'util', item: u } : null; }
+  const w = WEAPONS.find(x => x.id === id);
+  return w ? { kind: 'gun', item: w } : null;
+}
+// `gunsOnly`: a bot can only fight with a gun, so for it the pool is the guns in it.
+function dicePoolIds(tier, gunsOnly) { return (DICE_POOL[tier] || []).filter(id => { const i = diceInfo(id); return i && (!gunsOnly || i.kind === 'gun'); }); }
+function diceName(id) { const i = diceInfo(id); return i ? i.item.name : String(id); }
+const DICE_KIND_TAG = { gun: '', melee: ' (melee)', util: ' (utility)' };
+function diceRollOnce(avoidId, gunsOnly) {
   const v = 1 + Math.floor(Math.random() * 20);
   const tier = diceTierOf(v);
-  let ids = dicePoolIds(tier);
+  let ids = dicePoolIds(tier, gunsOnly);
   if (ids.length > 1) ids = ids.filter(id => id !== avoidId);
   const weaponId = ids.length ? ids[Math.floor(Math.random() * ids.length)] : 'pistol';
   return { v, tier, weaponId };
 }
-// Would the bot roll again? A fresh roll is worth DICE_AVG_TIER on average and costs HP, and the
-// price climbs with every re-roll it has already taken. If you rolled far above it, it gambles
-// harder (it is losing anyway); if it rolled far above you, it holds.
+// Would the bot roll again? A re-roll costs nothing but a second of not shooting and a wait for the dice, so it
+// rolls again whenever what it holds is worth less than a fresh roll (DICE_AVG_TIER on average), and a little less
+// keenly each time. If you rolled far above it, it gambles harder (it is losing anyway); if it rolled far above
+// you, it holds.
 function diceBotWantsReroll(own, opp, used) {
-  if (used >= DICE_MAX_REROLLS) return false;
   const v = DICE_TIER_VALUE[own.tier];
   const ov = opp && opp.tier ? DICE_TIER_VALUE[opp.tier] : DICE_AVG_TIER;
-  const cost = 0.5 + 0.25 * used;
+  const cost = 0.35 + 0.1 * used;
   const behind = Math.max(0, ov - v);                  // how much worse than yours it is holding
   const ahead  = Math.max(0, v - ov);
   const need = DICE_AVG_TIER - cost + behind * 0.5 - ahead * 0.5;   // keep it if it is worth at least this
@@ -59705,6 +59764,7 @@ function diceEnsureUi() {
   #dice-hud .dh-weapon{font-size:14px;letter-spacing:.06em}
   #dice-hud .dh-sub{font:700 11px Arial,sans-serif;opacity:.8;margin-top:3px}
   #dice-hud .dh-sub.note{color:#ffcc44;opacity:1}
+  #dice-hud .dh-kit{font:700 11px Arial,sans-serif;margin-top:3px}
   #dice-hud .dh-bot{font:700 11px Arial,sans-serif;opacity:.65;margin-top:2px}
   body.touch-ui #dice-hud{bottom:auto;top:56px;min-width:0}
   @media (orientation: portrait){ body.touch-ui #dice-hud{top:214px} }
@@ -59713,7 +59773,7 @@ function diceEnsureUi() {
   document.head.appendChild(st);
   const el = document.createElement('div');
   el.id = 'dice-hud';
-  el.innerHTML = `<div class="dh-die">?</div><div><div class="dh-weapon"></div><div class="dh-sub"></div><div class="dh-bot"></div></div>`;
+  el.innerHTML = `<div class="dh-die">?</div><div><div class="dh-weapon"></div><div class="dh-sub"></div><div class="dh-kit"></div><div class="dh-bot"></div></div>`;
   document.body.appendChild(el);
 }
 // A short message in place of the hint line ("Too hurt to re-roll").
@@ -59725,53 +59785,112 @@ function diceRollBlock(who) {
   const s = d[who]; if (!s) return 'over';
   if (s.rolling) return 'busy';
   if (who === 'me' && isDead) return 'dead';
-  if (s.rolls >= 1) {
-    if (s.rerolls >= DICE_MAX_REROLLS) return 'none';
-    const hp = who === 'me' ? (players[myId] ? players[myId].hp : 0) : (gameBots[0] ? gameBots[0].hp : 0);
-    if (!(hp > DICE_REROLL_HP)) return 'hurt';
-  }
+  if (Date.now() < (s.readyAt || 0)) return 'cool';
   return '';
+}
+// ── 🎲 The RNG kit ─────────────────────────────────────────────────────────────────────────────────────────────────
+// In Dice Duel and Weapon Roulette your WHOLE kit is what the dice dealt you: two items, any mix of guns, melees and
+// utilities, and nothing from your loadout (it used to leave your own melee and utility in your hands on top of the roll).
+// A roll goes in an empty slot first, otherwise it REPLACES THE ONE YOU ARE NOT HOLDING and goes straight into your
+// hand, so to throw away a bad weapon, switch to the good one and roll. Keys 1 and 2 are the two slots; 3 and 4 do
+// nothing. The kit lives on the mode's state (match.dice.kit / match.roulette.kit) and equipActiveSlot always equips
+// what it says, so no other code path can put a loadout item back in your hands.
+function rngNewKit(orig) { return { slots: [null, null], tiers: [null, null], hand: 0, orig: orig || null }; }
+function rngKit() {
+  const d = match && match.dice; if (d && d.kit) return d.kit;
+  const r = match && match.roulette; if (r && r.kit) return r.kit;
+  return null;
+}
+// Make the selection indices and the active slot say what is in the hand. false: the hands are empty.
+function rngApplyKit(kit) {
+  if (!kit.orig) kit.orig = { primary: selectedPrimaryIdx, secondary: selectedSecondaryIdx, melee: selectedMeleeIdx, support: selectedSupportIdx };
+  const info = diceInfo(kit.slots[kit.hand]);
+  if (!info) { activeSlot = 'melee'; return false; }
+  if (info.kind === 'gun') {
+    const idx = WEAPONS.indexOf(info.item);
+    selectedPrimaryIdx = idx; selectedSecondaryIdx = idx;
+    activeSlot = info.item.slot === 'secondary' ? 'secondary' : 'primary';
+  } else if (info.kind === 'melee') {
+    selectedMeleeIdx = MELEE_ITEMS.indexOf(info.item); activeSlot = 'melee';
+  } else {
+    selectedSupportIdx = SUPPORT_ITEMS.indexOf(info.item); activeSlot = 'support';
+  }
+  return true;
+}
+// A roll arrives: into an empty slot, else over the one you are not holding, and into your hand (no equip time: the
+// roll was the wait). Returns the kind it was.
+function rngRollIn(id, kit, tier) {
+  const info = diceInfo(id);
+  if (!info) return null;
+  if (!kit.orig) kit.orig = { primary: selectedPrimaryIdx, secondary: selectedSecondaryIdx, melee: selectedMeleeIdx, support: selectedSupportIdx };
+  let target = kit.slots.findIndex(x => !x);
+  if (target < 0) target = 1 - kit.hand;
+  kit.slots[target] = id; kit.tiers[target] = tier || null; kit.hand = target;
+  if (info.kind === 'gun') weaponAmmo[WEAPONS.indexOf(info.item)] = { ammo: info.item.mag, reserve: info.item.reserve };
+  else if (info.kind === 'util') supportUses[SUPPORT_ITEMS.indexOf(info.item)] = info.item.uses || 1;
+  _equipInstant = true;
+  try { equipActiveSlot(); } finally { _equipInstant = false; }
+  return info.kind;
+}
+// Take the other slot out (keys 1 and 2, the slot icons, the prev/next buttons). It takes the usual equip time.
+function rngSwitchHand(i) {
+  const kit = rngKit();
+  if (!kit || i === kit.hand || !kit.slots[i]) return;
+  kit.hand = i;
+  equipActiveSlot();
+}
+// Your own kit back when the mode is over. `holder` is match.dice or match.roulette.
+function rngRestore(holder) {
+  const kit = holder && holder.kit;
+  if (!kit) return;
+  const o = kit.orig;
+  if (o) {
+    selectedPrimaryIdx = o.primary; selectedSecondaryIdx = o.secondary;
+    if (o.melee != null) selectedMeleeIdx = o.melee;
+    if (o.support != null) selectedSupportIdx = o.support;
+  }
+  holder.kit = null;
 }
 function diceRender() {
   const hud = document.getElementById('dice-hud'); if (!hud) return;
   const d = match && match.dice;
   if (!d || match.over || d.phase === 'idle') { hud.style.display = 'none'; document.body.classList.remove('dice-on'); return; }
   hud.style.display = 'flex'; document.body.classList.add('dice-on');
-  const me = d.me, bot = d.bot;
-  const color = me.tier && !me.rolling ? DICE_TIER_COLOR[me.tier] : '#667';
+  const me = d.me, bot = d.bot, kit = d.kit || rngNewKit();
+  const heldId = kit.slots[kit.hand], heldTier = kit.tiers[kit.hand];
+  const color = heldTier && !me.rolling ? DICE_TIER_COLOR[heldTier] : '#667';
   const die = hud.querySelector('.dh-die');
   die.classList.toggle('rolling', !!me.rolling);
   die.textContent = me.shown != null ? me.shown : '?';
   die.style.borderColor = color; die.style.color = me.rolling ? '#fff' : color;
   hud.style.borderColor = color;
-  hud.querySelector('.dh-weapon').textContent = me.rolling ? 'ROLLING…' : me.weaponId ? `${diceName(me.weaponId)} · ${me.tier}` : 'NO GUN · ROLL THE DICE';
+  const info = diceInfo(heldId);
+  hud.querySelector('.dh-weapon').textContent = me.rolling ? 'ROLLING…' : info ? `${info.item.name}${DICE_KIND_TAG[info.kind] || ''} · ${heldTier}` : 'EMPTY HANDS · ROLL THE DICE';
   const key = isTouchUI() ? 'TAP 🎲' : 'G';
   const sub = hud.querySelector('.dh-sub');
   const note = d.note && d.note.until > Date.now() ? d.note.text : '';
   const why = diceRollBlock('me');
   sub.classList.toggle('note', !!note);
+  const wait = Math.max(0, Math.ceil(((me.readyAt || 0) - Date.now()) / 1000));
   sub.textContent = note ? note
     : !match.roundActive ? 'Get ready…'
     : me.rolling ? ''
-    : why === 'none' ? 'No re-rolls left'
-    : why === 'hurt' ? 'Too hurt to re-roll'
-    : !me.rolls ? `${key} · your first roll is free`
-    : `${key} · re-roll −${DICE_REROLL_HP} HP · ${DICE_MAX_REROLLS - me.rerolls} left`;
+    : why === 'cool' ? `Dice recharging · ${wait}s`
+    : !kit.slots[0] ? `${key} · roll for a weapon`
+    : !kit.slots[1] ? `${key} · roll for a second one`
+    : `${key} · roll: replaces the weapon you are NOT holding`;
+  // Both of your weapons, the one in your hand lit.
+  hud.querySelector('.dh-kit').innerHTML = [0, 1].map(i => {
+    const it = diceInfo(kit.slots[i]);
+    const c = kit.tiers[i] ? DICE_TIER_COLOR[kit.tiers[i]] : '#667';
+    return `<span style="color:${c};${i === kit.hand ? 'font-weight:900;text-decoration:underline' : 'opacity:.7'}">${i + 1}: ${it ? it.item.name : '—'}</span>`;
+  }).join('&nbsp;&nbsp;');
   hud.querySelector('.dh-bot').textContent = 'BOT: ' + (bot.rolling ? 'rolling…' : bot.weaponId ? `${diceName(bot.weaponId)} · ${bot.tier}` : 'no gun yet');
 }
 // Rattles for the dice, a ring for a good roll, a dull click for a bad one.
 function diceSound(tier) {
   const v = DICE_TIER_VALUE[tier] ?? 2;
   playSoundEvent(v >= 4 ? 'headshot' : v <= 1 ? 'dry_fire' : 'hitmarker', { volume: 0.9, minGap: 0, tier: v >= 6 ? 'blue' : v >= 5 ? 'red' : 'orange' });
-}
-// Your rolled gun goes in BOTH gun slots, so the number keys cannot dodge the dice.
-function diceEquipMe(id) {
-  const d = match && match.dice, idx = WEAPONS.findIndex(w => w.id === id);
-  if (!d || idx < 0) return;
-  if (!d.orig) d.orig = { primary: selectedPrimaryIdx, secondary: selectedSecondaryIdx };
-  selectedPrimaryIdx = idx; selectedSecondaryIdx = idx;
-  forcePlayerWeapon(id, WEAPONS[idx].slot === 'secondary' ? 'secondary' : 'primary');
-  _equipInstant = true; try { equipActiveSlot(); } finally { _equipInstant = false; }   // the roll was the wait; forcePlayerWeapon hides the other guns, this also puts the melee away
 }
 function diceEquipBot(id) {
   const bot = gameBots[0], w = WEAPONS.find(x => x.id === id);
@@ -59781,20 +59900,15 @@ function diceEquipBot(id) {
   bot.reloadUntil = 0; bot.burstLeft = 0; bot.diceHold = false;
   if (players[bot.id]) players[bot.id].weaponId = id;
 }
-// Roll for one side: a re-roll costs health on the spot, the dice rattle for DICE_ROLL_MS (no shooting meanwhile),
-// then the gun arrives.
+// Roll for one side. A roll costs nothing: the dice rattle for DICE_ROLL_MS (no shooting meanwhile), the thing arrives,
+// and the dice need DICE_COOLDOWN_MS before they can be rolled again.
 function diceRollFor(who, done) {
   const d = match && match.dice; if (!d) return;
   const s = d[who];
-  const cost = s.rolls >= 1 ? DICE_REROLL_HP : 0;
-  s.rolls++; if (cost) s.rerolls++;
-  if (cost) {
-    if (who === 'me') { const me = players[myId]; if (me) { me.hp = Math.max(1, me.hp - cost); updateHealthHUD(me.hp); } }
-    else { const bot = gameBots[0]; if (bot) { bot.hp = Math.max(1, bot.hp - cost); bot.prevHp = bot.hp; if (players[bot.id]) players[bot.id].hp = bot.hp; } }
-  }
+  s.rolls++;
   s.rolling = true;
-  if (who === 'me') { cancelReload(); weaponModels.forEach(m => { m.visible = false; }); }   // the gun is put away while the dice are in your hand
-  const res = diceRollOnce(s.weaponId);
+  if (who === 'me') { cancelReload(); weaponModels.forEach(m => { m.visible = false; }); }   // what is in your hand is put away while the dice are
+  const res = diceRollOnce(s.weaponId, who === 'bot');   // a bot can only fight with a gun
   const t0 = performance.now();
   clearInterval(s._tick);
   s._tick = setInterval(() => {
@@ -59805,10 +59919,11 @@ function diceRollFor(who, done) {
     } else {
       clearInterval(s._tick);
       s.rolling = false; s.shown = res.v; s.v = res.v; s.tier = res.tier; s.weaponId = res.weaponId;
+      s.readyAt = Date.now() + DICE_COOLDOWN_MS;
       if (who === 'me') {
-        diceEquipMe(res.weaponId);
+        s.kind = rngRollIn(res.weaponId, d.kit, res.tier);
         diceSound(res.tier);
-        showAnnouncement(`🎲 ${res.v} · ${res.tier} TIER`, diceName(res.weaponId), DICE_TIER_COLOR[res.tier], 1100);
+        showAnnouncement(`🎲 ${res.v} · ${res.tier} TIER`, diceName(res.weaponId) + (DICE_KIND_TAG[s.kind] || ''), DICE_TIER_COLOR[res.tier], 1100);
       } else diceEquipBot(res.weaponId);
       if (done) done();
     }
@@ -59821,8 +59936,7 @@ function diceRollMe() {
   const d = match && match.dice; if (!d) return;
   const why = diceRollBlock('me');
   if (why === 'wait') { diceNote('Wait for GO'); return; }
-  if (why === 'none') { diceNote('No re-rolls left'); return; }
-  if (why === 'hurt') { diceNote('Too hurt to re-roll'); return; }
+  if (why === 'cool') { diceNote(`Dice recharging · ${Math.max(1, Math.ceil((d.me.readyAt - Date.now()) / 1000))}s`); return; }
   if (why) return;
   diceRollFor('me');
 }
@@ -59831,9 +59945,10 @@ function diceStartRound() {
   d.round++;
   d.phase = 'fight'; d.note = null;
   clearTimeout(d._botT);
-  for (const who of ['me', 'bot']) { clearInterval(d[who] && d[who]._tick); d[who] = { rolls: 0, rerolls: 0, rolling: false, shown: null, v: 0, tier: null, weaponId: null }; }
+  for (const who of ['me', 'bot']) { clearInterval(d[who] && d[who]._tick); d[who] = { rolls: 0, rolling: false, shown: null, v: 0, tier: null, weaponId: null, kind: null, readyAt: 0 }; }
+  d.kit = rngNewKit(d.kit && d.kit.orig);   // a fresh round: empty hands and a fresh dice
   match.roundActive = false; countdownActive = true;
-  // Everyone starts the round on 300 and with no gun: you hold your melee and the dice, the bot holds fire until it rolls.
+  // Everyone starts the round on 300 and with nothing: you have empty hands and the dice, the bot holds fire until it rolls.
   const me = players[myId]; if (me) { me.hp = 300; me.dead = false; }
   updateHealthHUD(300);
   const bot = gameBots[0];
@@ -59842,12 +59957,12 @@ function diceStartRound() {
     bot.hp = 300; bot.maxHp = 300; bot.prevHp = 300; bot.reloadUntil = 0; bot.burstLeft = 0;
     if (players[bot.id]) { players[bot.id].weaponId = 'pistol'; players[bot.id].hp = 300; }
   }
-  activeSlot = 'melee'; equipActiveSlot();
+  equipActiveSlot();   // the kit is empty: nothing in your hands
   diceEnsureUi();
   clearInterval(d._ui);
   d._ui = setInterval(() => { if (!match || !match.dice || match.over) { clearInterval(d._ui); diceRender(); return; } diceRender(); }, 300);
   diceRender();
-  showAnnouncement(`🎲 ROUND ${d.round}`, `First to ${DICE_GOAL} · roll the dice (${isTouchUI() ? '🎲 button' : 'G'}) to get a gun`, '#ffffff', 1800);
+  showAnnouncement(`🎲 ROUND ${d.round}`, `First to ${DICE_GOAL} · roll the dice (${isTouchUI() ? '🎲 button' : 'G'}) for a weapon, and again for a second one`, '#ffffff', 1900);
   const go = () => {
     if (!match || match.over || d !== match.dice) return;
     match.roundActive = true; countdownActive = false;
@@ -59864,9 +59979,9 @@ function diceBotSoon(ms) {
   clearTimeout(d._botT);
   d._botT = setTimeout(diceBotThink, ms);
 }
-// The bot's turn at the dice. The first roll is free and it takes it right away; after that it re-rolls only if
-// what it holds is worth less than a fresh roll (diceBotWantsReroll), it can afford the health, and nobody has hit
-// it in the last two seconds (a re-roll is a second of not shooting). Once it keeps its gun it stops thinking.
+// The bot's turn at the dice. It rolls right away; after that it rolls again if what it holds is worth less than a
+// fresh roll (diceBotWantsReroll, judged against what you are holding), when the dice are ready and nobody has hit it
+// in the last two seconds (a roll is a second of not shooting). Once it keeps its gun it stops thinking.
 function diceBotThink() {
   const d = match && match.dice; if (!d || match.over || d.phase !== 'fight' || !match.roundActive) return;
   const b = d.bot, bot = gameBots[0];
@@ -59875,7 +59990,11 @@ function diceBotThink() {
   if (bot.hp < (b._lastHp != null ? b._lastHp : bot.hp)) b._hitAt = Date.now();
   b._lastHp = bot.hp;
   if (!b.weaponId) { diceRollFor('bot', () => diceBotSoon(1000)); return; }
-  if (diceBotWantsReroll(b, d.me, b.rerolls) && bot.hp > DICE_REROLL_HP + 70 && diceRollBlock('bot') === '') {
+  const kit = d.kit, mine = kit ? { tier: kit.tiers[kit.hand] } : null;
+  if (diceBotWantsReroll(b, mine, b.rolls - 1)) {
+    const why = diceRollBlock('bot');
+    if (why === 'cool') { diceBotSoon(Math.max(300, (b.readyAt || 0) - Date.now() + 100)); return; }
+    if (why) return;
     if (Date.now() - (b._hitAt || 0) < 2000 && (b._waits = (b._waits || 0) + 1) < 6) { diceBotSoon(600); return; }
     b._waits = 0;
     diceRollFor('bot', () => diceBotSoon(1000));
@@ -59924,7 +60043,7 @@ function diceCleanup() {
   const hud = document.getElementById('dice-hud'); if (hud) hud.style.display = 'none';
   document.body.classList.remove('dice-on');
   const bot = gameBots[0]; if (bot) bot.diceHold = false;
-  if (d.orig) { selectedPrimaryIdx = d.orig.primary; selectedSecondaryIdx = d.orig.secondary; d.orig = null; }
+  rngRestore(d);
   countdownActive = false;
 }
 // G rolls (in this mode only; E is the ability key, and G stays its old alias everywhere else). Captured, so nothing
@@ -59936,26 +60055,29 @@ window.addEventListener('keydown', e => {
   diceRollMe();
 }, true);
 
-// 🔄 Roulette: everyone is dealt a random gun, again every ROULETTE_MS.
+// 🔄 Roulette: everyone is dealt a random item, again every ROULETTE_MS. The bots get a gun from the pool (a bot can only
+// fight with one); you get a gun 70% of the time, a melee 15% and a utility 15%, from the same pool as the dice, gimmicks
+// included, into the same two-slot kit (it replaces the item you are not holding).
 function rouletteShuffle() {
-  const all = [];
-  for (const t of Object.keys(DICE_POOL)) all.push(...dicePoolIds(t));
-  const pick = () => all[Math.floor(Math.random() * all.length)];
+  const pool = kind => { const all = []; for (const t of Object.keys(DICE_POOL)) all.push(...dicePoolIds(t).filter(id => diceInfo(id).kind === kind)); return all; };
+  const guns = pool('gun');
+  const pick = list => list[Math.floor(Math.random() * list.length)];
   for (const b of gameBots) {
-    const id = pick(), w = WEAPONS.find(x => x.id === id);
+    const id = pick(guns), w = WEAPONS.find(x => x.id === id);
     b.weaponId = id; b.primaryId = b.secondaryId = id; b.activeSlot = 'primary';
     if (w) { b.botMag = w.mag; b.botAmmo = w.mag; b.botReserve = w.reserve || 90; }
     b.reloadUntil = 0; b.burstLeft = 0;
     if (players[b.id]) players[b.id].weaponId = id;
   }
-  const mine = pick();
-  const idx = WEAPONS.findIndex(w => w.id === mine);
-  if (idx >= 0) {
-    if (!match.rouletteOrig) match.rouletteOrig = { primary: selectedPrimaryIdx, secondary: selectedSecondaryIdx };
-    selectedPrimaryIdx = idx; selectedSecondaryIdx = idx;
-    forcePlayerWeapon(mine, WEAPONS[idx].slot === 'secondary' ? 'secondary' : 'primary');
-  }
-  showAnnouncement('🔄 NEW GUNS', `You: ${diceName(mine)}`, '#66ddff', 2000);
+  const r = Math.random(), kind = r < 0.7 ? 'gun' : r < 0.85 ? 'melee' : 'util';
+  let list = pool(kind);
+  const R = match.roulette || (match.roulette = { kit: rngNewKit(), id: null });
+  if (!R.kit) R.kit = rngNewKit();
+  if (list.length > 1) list = list.filter(id => id !== R.id);
+  const mine = pick(list);
+  R.id = mine;
+  const k = rngRollIn(mine, R.kit, null);   // into your second slot, then over the one you are not holding
+  showAnnouncement('🔄 NEW ITEMS', `You: ${diceName(mine)}${DICE_KIND_TAG[k] || ''}`, '#66ddff', 2000);
   playSoundEvent('hitmarker', { volume: 0.9, minGap: 0, tier: 'blue' });
 }
 
@@ -61662,7 +61784,7 @@ function endMatch(winner, reason) {
   }
   if (match.type === 'wave_dash') stopWaveDash();
   if (match.dice) diceCleanup();
-  if (match.rouletteOrig) { selectedPrimaryIdx = match.rouletteOrig.primary; selectedSecondaryIdx = match.rouletteOrig.secondary; match.rouletteOrig = null; }
+  rngRestore(match.roulette);
   const isWin  = winner === 'ally';
   releasePointer(); // PLAY AGAIN / CHANGE MODE / BACK TO LOBBY need the cursor
   const el     = document.getElementById('match-over-screen');
@@ -66424,7 +66546,7 @@ function teardownMatchWorld() {
   gameStarted = false;
   inLobby = false;
   if (match && match.dice) diceCleanup();
-  if (match && match.rouletteOrig) { selectedPrimaryIdx = match.rouletteOrig.primary; selectedSecondaryIdx = match.rouletteOrig.secondary; }
+  if (match && match.roulette) rngRestore(match.roulette);
   match = null;
   pvpMatch = null; // else the next non-lobby mode spawns the previous lobby's bot counts
   try { document.exitPointerLock && document.exitPointerLock(); } catch (e) {}
@@ -69066,7 +69188,7 @@ if (navigator.maxTouchPoints > 0 || 'ontouchstart' in window) {
 
 // Button IDs that should NOT trigger look/joystick. Jump / slide / crouch were missing,
 // so pressing them on a phone also swung the camera.
-const BTN_IDS = new Set(['btn-fire','btn-ads','btn-reload-mobile','btn-prev-weapon','btn-next-weapon','btn-interact','btn-jump','btn-slide','btn-crouch','btn-ability']);
+const BTN_IDS = new Set(['btn-fire','btn-ads','btn-reload-mobile','btn-prev-weapon','btn-next-weapon','btn-interact','btn-jump','btn-slide','btn-crouch','btn-ability','btn-dice']);
 
 let joyTouchId  = null, joyOrigin = { x: 0, y: 0 };
 let lookTouchId = null, lastLookPos = null;
@@ -69210,6 +69332,7 @@ document.getElementById('btn-next-weapon').addEventListener('touchstart', e => {
   const handler = e => {
     e.stopPropagation(); e.preventDefault();
     if (!gameStarted || !loadoutReady()) return;
+    if (rngKit()) { if (slotIdx < 2) rngSwitchHand(slotIdx); return; }   // 🎲 the two things the dice gave you
     activeSlot = ['primary','secondary','melee','support'][slotIdx];
     equipActiveSlot();
   };
@@ -69248,11 +69371,19 @@ if (btnAbility) {
   btnAbility.addEventListener('click', useAbility);
 }
 
+// 🎲 The dice button (Dice Duel only; index.html shows it while body.dice-on).
+const btnDice = document.getElementById('btn-dice');
+if (btnDice) {
+  const roll = e => { e?.preventDefault?.(); e?.stopPropagation?.(); btnDice.classList.add('pressed'); setTimeout(() => btnDice.classList.remove('pressed'), 140); diceRollMe(); };
+  btnDice.addEventListener('touchstart', roll, { passive: false });
+  btnDice.addEventListener('click', roll);
+}
+
 // ── ✋ Touch control layout ──────────────────────────────────────────────────────────
 // Every button can be dragged somewhere else (⚙ → 🎮 CONTROLS → MOVE BUTTONS). A move is stored as an
 // offset from the button's own default place, in cluster pixels (the unit --tbs scales), once for
 // landscape ('l') and once for portrait ('p') — the two layouts have different thumb room.
-const TC_BTN_IDS = ['btn-fire', 'btn-ads', 'btn-reload-mobile', 'btn-jump', 'btn-slide', 'btn-crouch', 'btn-interact', 'btn-ability'];
+const TC_BTN_IDS = ['btn-fire', 'btn-ads', 'btn-reload-mobile', 'btn-jump', 'btn-slide', 'btn-crouch', 'btn-interact', 'btn-ability', 'btn-dice'];
 let TOUCH_LAYOUT = { l: {}, p: {} };
 try {
   const saved = JSON.parse(localStorage.getItem('pvp_touch_layout') || 'null');

@@ -725,6 +725,19 @@
                                        background: rgba(120,70,220,0.45); border: 2px solid rgba(190,150,255,0.9); pointer-events: all;
                                        display: none; align-items: center; justify-content: center; touch-action: none; }
     body.touch-ui #btn-ability.ready { display: flex; }
+    /* 🎲 Dice Duel: the roll button, shown only while that mode is on (game.js sets body.dice-on). */
+    #btn-dice { position: absolute; pointer-events: all; z-index: 60; display: none; align-items: center; justify-content: center;
+                user-select: none; -webkit-user-select: none; touch-action: none; font-weight: bold; color: #fff; border-radius: 50%; }
+    body.touch-ui #btn-dice { right: 126px; bottom: 164px; width: 62px; height: 62px; font-size: 0 !important;
+                              background: rgba(255,200,60,0.42); border: 2px solid rgba(255,225,130,0.9); }
+    body.touch-ui #btn-dice.pressed { background: rgba(255,225,130,0.9); transform: scale(0.92); }
+    body.touch-ui #btn-dice::before {
+      content: ''; position: absolute; inset: 0; background: #fff;
+      -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-position: center; mask-position: center;
+      -webkit-mask-size: 56% 56%; mask-size: 56% 56%;
+      -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill-rule='evenodd' d='M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm3 4a1.4 1.4 0 1 0 0 2.8A1.4 1.4 0 0 0 8 7zm8 0a1.4 1.4 0 1 0 0 2.8A1.4 1.4 0 0 0 16 7zm-4 5a1.4 1.4 0 1 0 0 2.8A1.4 1.4 0 0 0 12 12zm-4 5a1.4 1.4 0 1 0 0 2.8A1.4 1.4 0 0 0 8 17zm8 0a1.4 1.4 0 1 0 0 2.8A1.4 1.4 0 0 0 16 17z'/></svg>");
+              mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill-rule='evenodd' d='M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm3 4a1.4 1.4 0 1 0 0 2.8A1.4 1.4 0 0 0 8 7zm8 0a1.4 1.4 0 1 0 0 2.8A1.4 1.4 0 0 0 16 7zm-4 5a1.4 1.4 0 1 0 0 2.8A1.4 1.4 0 0 0 12 12zm-4 5a1.4 1.4 0 1 0 0 2.8A1.4 1.4 0 0 0 8 17zm8 0a1.4 1.4 0 1 0 0 2.8A1.4 1.4 0 0 0 16 17z'/></svg>");
+    }
     body.touch-ui #btn-ability.cooling::before { opacity: 0.45; }
     body.touch-ui #btn-crouch        { left: 14px;   bottom: 118px; width: 62px; height: 62px; background: rgba(170,140,80,0.4); border-color: rgba(220,180,120,0.8); }
     /* CROUCH is a toggle on a phone (⚙ → 🎮 CONTROLS can make it hold again): lit while you are down. */
@@ -816,6 +829,7 @@
       body.touch-ui #btn-reload-mobile { right: 18px;  bottom: 108px; width: 52px; height: 52px; }
       body.touch-ui #btn-interact      { right: 178px; bottom: 146px; width: 54px; height: 54px; }
       body.touch-ui #btn-ability       { right: 180px; bottom: 86px;  width: 52px; height: 52px; }
+      body.touch-ui #btn-dice          { right: 108px; bottom: 144px; width: 54px; height: 54px; }
       body.touch-ui #btn-crouch        { left: 10px;  bottom: 104px; width: 54px; height: 54px; }
       body.touch-ui #health-bar        { left: 12px;  bottom: 72px; }
       body.touch-ui #health-track      { width: 104px; }
@@ -843,7 +857,7 @@
     body.tc-editing #mobile-controls .tc > div { outline: 2px dashed rgba(255,255,255,0.85); outline-offset: 3px; }
     body.tc-editing #mobile-controls .tc > div.tc-grab { outline-color: #ffd866; background-color: rgba(255,216,102,0.4); }
     body.tc-editing #mobile-controls .tc { opacity: 1; }
-    body.tc-editing #btn-interact, body.tc-editing #btn-ability { display: flex !important; }
+    body.tc-editing #btn-interact, body.tc-editing #btn-ability, body.tc-editing #btn-dice { display: flex !important; }
     body.tc-editing #btn-prev-weapon, body.tc-editing #btn-next-weapon { display: none !important; }
     #tc-edit-bar {
       position: fixed; top: 8px; left: 8px; z-index: 9100;
@@ -1490,6 +1504,8 @@
       <div id="btn-prev-weapon">&#8249;</div>
       <div id="btn-next-weapon">&#8250;</div>
       <div id="btn-interact">SWAP</div>
+      <!-- Dice Duel only (body.dice-on): roll the dice -->
+      <div id="btn-dice">DICE</div>
       <div id="btn-jump">JUMP</div>
       <!-- Only while what you hold has an ability — the E key's job, which touch never had (#30) -->
       <div id="btn-ability"><div id="ability-ring"></div></div>

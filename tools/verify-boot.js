@@ -1263,12 +1263,12 @@ if (ok && process.argv.includes('--modes')) {
   // every grade comes out of the thresholds it is documented to.
   const issues = vm.runInThisContext(`(() => {
     const issues = [];
-    for (const t of Object.keys(DICE_POOL)) for (const id of DICE_POOL[t]) if (!WEAPONS.some(w => w.id === id)) issues.push('dice pool: ' + t + ' has unknown weapon ' + id);
+    for (const t of Object.keys(DICE_POOL)) for (const id of DICE_POOL[t]) if (!diceInfo(id)) issues.push('dice pool: ' + t + ' has unknown item ' + id);
     const want = { 1: 'F', 2: 'D', 3: 'D', 4: 'C', 8: 'C', 9: 'B', 14: 'B', 15: 'A', 17: 'A', 18: 'S', 19: 'S', 20: 'SS' };
     for (const [v, t] of Object.entries(want)) if (diceTierOf(+v) !== t) issues.push('die ' + v + ' should be ' + t + ', got ' + diceTierOf(+v));
     const counts = {};
     for (let i = 0; i < 4000; i++) { const r = diceRollOnce(); counts[r.tier] = (counts[r.tier] || 0) + 1;
-      if (!WEAPONS.some(w => w.id === r.weaponId)) { issues.push('roll gave unknown weapon ' + r.weaponId); break; } }
+      if (!diceInfo(r.weaponId)) { issues.push('roll gave unknown item ' + r.weaponId); break; } }
     if (!(counts.B > counts.SS * 3 && counts.SS > 0 && counts.F > 0)) issues.push('d20 tier spread looks wrong: ' + JSON.stringify(counts));
     const rate = (own, opp, used) => { let n = 0; for (let i = 0; i < 2000; i++) if (diceBotWantsReroll(own, opp, used)) n++; return n / 2000; };
     const F = { tier: 'F' }, C = { tier: 'C' }, B = { tier: 'B' }, A = { tier: 'A' }, SS = { tier: 'SS' };
@@ -1276,7 +1276,7 @@ if (ok && process.argv.includes('--modes')) {
     if (rate(SS, B, 0) > 0.02) issues.push('bot should keep an SS');
     if (rate(A, B, 0) > 0.15) issues.push('bot should mostly keep an A');
     if (rate(B, SS, 0) < 0.4) issues.push('bot should gamble on a B when you rolled an SS');
-    if (rate(F, SS, DICE_MAX_REROLLS) !== 0) issues.push('bot re-rolled past the limit');
+    if (rate(SS, F, 0) > 0.02) issues.push('bot should keep an SS even against an F');
     if (rate(C, C, 3) > rate(C, C, 0)) issues.push('re-roll appetite should fall as the price climbs');
     const g = (h, f, m) => gradeHit(h, f, m);
     const grades = [g(false, 1), g(false, 0.4), g(false, 0.7), g(true, 0.7, 0.2), g(true, 0.3, 0.2), g(true, 1, 0.2), g(true, 1, 0.05), g(true, 0.8, 0.05)];
@@ -1938,60 +1938,177 @@ if (ok && process.argv.includes('--equip')) {
 }
 
 if (ok && process.argv.includes('--dice')) {
-  // Dice Duel: the dice are rolled DURING the round now (no screen before it): who may roll and why not, no gun before
-  // the first roll, no shooting while the dice are in the hand, a re-roll that costs health and can never kill.
+  // Dice Duel: the dice are rolled DURING the round (no screen before it), a roll costs no health but the dice need a
+  // few seconds to recharge, you hold TWO things at once (a roll replaces the one you are NOT holding), nothing from your
+  // loadout is in your hands, and you cannot shoot while the dice rattle.
   const issues = vm.runInThisContext(`(() => {
     const issues = [];
-    const saved = { match, slot: activeSlot, bots: gameBots.slice(), me: players[myId], pri: selectedPrimaryIdx, sec: selectedSecondaryIdx, started: gameStarted, dead: isDead,
-                    sound: playSoundEvent, anim: showAnnouncement };
-    playSoundEvent = () => {}; showAnnouncement = () => {};
+    const saved = { match, slot: activeSlot, bots: gameBots.slice(), me: players[myId], pri: selectedPrimaryIdx, sec: selectedSecondaryIdx, mel: selectedMeleeIdx, sup: selectedSupportIdx,
+                    started: gameStarted, dead: isDead, sound: playSoundEvent, anim: showAnnouncement, audio: getAudioCtx, wsound: playWeaponSound, locked: pointerLocked };
+    playSoundEvent = () => {}; showAnnouncement = () => {}; getAudioCtx = () => null; playWeaponSound = () => {};
     try {
-      gameStarted = true; isDead = false;
+      gameStarted = true; isDead = false; pointerLocked = true;
       selectedPrimaryIdx = WEAPONS.findIndex(w => w.id === 'ak20'); selectedSecondaryIdx = WEAPONS.findIndex(w => w.id === 'pistol');
+      selectedMeleeIdx = MELEE_ITEMS.findIndex(m => m.id === 'knife'); selectedSupportIdx = SUPPORT_ITEMS.findIndex(u => u.id === 'frag');
+      const ownMelee = selectedMeleeIdx, ownSupport = selectedSupportIdx;
       weaponAmmo[selectedPrimaryIdx] = { ammo: 30, reserve: 90 }; weaponAmmo[selectedSecondaryIdx] = { ammo: 12, reserve: 36 };
       players[myId] = { hp: 300 };
       gameBots.length = 0; gameBots.push({ id: 'dicebot', hp: 300, maxHp: 300, dead: false });
-      const fresh = () => ({ rolls: 0, rerolls: 0, rolling: false, shown: null, v: 0, tier: null, weaponId: null });
-      match = { over: false, roundActive: true, dice: { goal: 5, round: 1, score: { me: 0, bot: 0 }, phase: 'fight', orig: null, me: fresh(), bot: fresh() }, ffaKills: {} };
+      const fresh = () => ({ rolls: 0, rolling: false, shown: null, v: 0, tier: null, weaponId: null, kind: null, readyAt: 0 });
+      match = { over: false, roundActive: true, dice: { goal: 5, round: 1, score: { me: 0, bot: 0 }, phase: 'fight', kit: rngNewKit(), me: fresh(), bot: fresh() }, ffaKills: {} };
       const d = match.dice;
-      if (diceRollBlock('me') !== '') issues.push('the first roll of a round should be free and allowed, got ' + diceRollBlock('me'));
+      // who may roll, and why not
+      if (diceRollBlock('me') !== '') issues.push('the first roll of a round should be allowed, got ' + diceRollBlock('me'));
       match.roundActive = false; if (diceRollBlock('me') !== 'wait') issues.push('no rolling before GO'); match.roundActive = true;
       d.me.rolling = true; if (diceRollBlock('me') !== 'busy') issues.push('no rolling while rolling'); d.me.rolling = false;
-      d.me.rolls = 1; if (diceRollBlock('me') !== '') issues.push('a re-roll with full health should be allowed');
-      players[myId].hp = DICE_REROLL_HP; if (diceRollBlock('me') !== 'hurt') issues.push('a re-roll must never be allowed to kill you (hp ' + DICE_REROLL_HP + ')');
-      players[myId].hp = DICE_REROLL_HP + 1; if (diceRollBlock('me') !== '') issues.push('hp ' + (DICE_REROLL_HP + 1) + ' can afford a re-roll');
-      players[myId].hp = 300; d.me.rolls = 1 + DICE_MAX_REROLLS; d.me.rerolls = DICE_MAX_REROLLS; if (diceRollBlock('me') !== 'none') issues.push('re-rolls should run out after ' + DICE_MAX_REROLLS);
-      d.me = fresh(); d.phase = 'between'; if (diceRollBlock('me') !== 'wait') issues.push('no rolling between rounds'); d.phase = 'fight';
+      d.me.readyAt = Date.now() + 3000; if (diceRollBlock('me') !== 'cool') issues.push('the dice should need to recharge after a roll'); d.me.readyAt = 0;
+      if (diceRollBlock('me') !== '') issues.push('a recharged dice may be rolled');
+      d.phase = 'between'; if (diceRollBlock('me') !== 'wait') issues.push('no rolling between rounds'); d.phase = 'fight';
       isDead = true; if (diceRollBlock('me') !== 'dead') issues.push('the dead do not roll'); isDead = false;
-      // no gun before the first roll, whatever asked for one
-      activeSlot = 'primary'; equipActiveSlot();
-      if (activeSlot !== 'melee') issues.push('before the first roll the primary slot should fall back to the melee, got ' + activeSlot);
-      activeSlot = 'secondary'; equipActiveSlot();
-      if (activeSlot !== 'melee') issues.push('before the first roll the secondary slot should fall back to the melee, got ' + activeSlot);
-      d.me.weaponId = 'ak20'; activeSlot = 'primary'; equipActiveSlot();
-      if (activeSlot !== 'primary') issues.push('after a roll the gun slot should work');
+      // a roll costs nothing: not a point of health, and no limit on how many
+      players[myId].hp = 300;
+      diceRollFor('me'); clearInterval(d.me._tick); d.me.rolling = false;
+      if (players[myId].hp !== 300) issues.push('a roll cost health (hp ' + players[myId].hp + ')');
+      if (d.me.rolls !== 1) issues.push('rolls should count');
+      d.me.rolls = 50; d.me.readyAt = 0; if (diceRollBlock('me') !== '') issues.push('there is no limit on rolls, only the recharge');
+      d.me.rolls = 0;
+      // empty hands: nothing can be used and the loadout is not a way out of it
+      d.kit = rngNewKit(); equipActiveSlot();
+      if (equipReady()) issues.push('empty hands should not be able to use anything');
+      let a0 = weaponAmmo[selectedPrimaryIdx].ammo; activeSlot = 'primary'; equipActiveSlot(); tryShoot();
+      if (weaponAmmo[selectedPrimaryIdx].ammo !== a0) issues.push('fired the loadout gun with empty hands');
+      _quickMeleeReturn = null; quickMelee(); if (_quickMeleeReturn) issues.push('quick melee put the loadout melee in empty hands');
+      // two things at once, a roll replaces the one you are NOT holding
+      const kit = d.kit;
+      rngRollIn('ak20', kit, 'SS');
+      if (kit.slots[0] !== 'ak20' || kit.hand !== 0 || activeSlot !== 'primary' || WEAPONS[selectedPrimaryIdx].id !== 'ak20') issues.push('the first roll should fill slot 1 and be in the hand');
+      if (!equipReady()) issues.push('a roll is in the hand at once (the roll was the wait)');
+      rngRollIn('m:sledge', kit, 'B');
+      if (kit.slots[0] !== 'ak20' || kit.slots[1] !== 'm:sledge' || kit.hand !== 1) issues.push('the second roll should fill slot 2 and keep slot 1: ' + JSON.stringify(kit.slots) + ' hand ' + kit.hand);
+      if (activeSlot !== 'melee' || MELEE_ITEMS[selectedMeleeIdx].id !== 'sledge') issues.push('a rolled melee should be in the hand');
+      rngRollIn('u:black_hole_seed', kit, 'A');
+      if (kit.slots[0] !== 'u:black_hole_seed' || kit.slots[1] !== 'm:sledge') issues.push('a third roll should replace the one NOT in the hand (the first), got ' + JSON.stringify(kit.slots));
+      if (kit.hand !== 0 || activeSlot !== 'support' || SUPPORT_ITEMS[selectedSupportIdx].id !== 'black_hole_seed') issues.push('a rolled utility should be in the hand');
+      if (supportUses[selectedSupportIdx] !== SUPPORT_ITEMS[selectedSupportIdx].uses) issues.push('a rolled utility should come with all its uses');
+      rngSwitchHand(1);
+      if (kit.hand !== 1 || activeSlot !== 'melee') issues.push('switching to slot 2 should take out the melee');
+      rngRollIn('pistol', kit, 'B');
+      if (kit.slots[0] !== 'pistol' || kit.slots[1] !== 'm:sledge') issues.push('holding the sledge, a roll should replace slot 1 (the utility), got ' + JSON.stringify(kit.slots));
+      if (kit.hand !== 0 || activeSlot !== 'secondary') issues.push('the new pistol should be in the hand');
+      cycleActiveSlot(); if (kit.hand !== 1) issues.push('prev/next should switch to the other thing the dice gave you');
+      cycleActiveSlot(); if (kit.hand !== 0) issues.push('prev/next should switch back');
+      // the loadout melee and utility are not reachable: whatever is in the hand, the selection says so
+      equipActiveSlot();
+      if (MELEE_ITEMS[selectedMeleeIdx].id === 'knife' && activeSlot === 'melee') issues.push('the loadout melee is in the hand');
       // no shooting while the dice are in the hand
-      selectedPrimaryIdx = WEAPONS.findIndex(w => w.id === 'ak20'); weaponAmmo[selectedPrimaryIdx] = { ammo: 30, reserve: 90 };
-      activeSlot = 'primary'; equipActiveSlot(); equipReadyAt = 0; pointerLocked = true;
-      d.me.rolling = true; const a0 = weaponAmmo[selectedPrimaryIdx].ammo;
+      rngRollIn('ak20', kit, 'SS'); equipReadyAt = 0; lastShot = 0;
+      d.me.rolling = true; const a1 = weaponAmmo[WEAPONS.findIndex(w => w.id === 'ak20')].ammo;
       try { tryShoot(); } catch (e) { issues.push('tryShoot threw: ' + e.message); }
-      if (weaponAmmo[selectedPrimaryIdx].ammo !== a0) issues.push('fired while the dice were rolling');
+      if (weaponAmmo[WEAPONS.findIndex(w => w.id === 'ak20')].ammo !== a1) issues.push('fired while the dice were rolling');
       d.me.rolling = false;
-      // the bot has the same rules and judges the same way
-      d.bot.rolls = 1; d.bot.rerolls = 1; gameBots[0].hp = DICE_REROLL_HP; if (diceRollBlock('bot') !== 'hurt') issues.push('a bot at ' + DICE_REROLL_HP + ' hp should be too hurt to re-roll');
-      gameBots[0].hp = 300; if (diceRollBlock('bot') !== '') issues.push('a healthy bot may re-roll');
-      // the old pre-round screen is gone
-      for (const f of ['dicePlayerKeep', 'dicePlayerReroll', 'diceBeginFight', 'diceMaybeFight']) if (typeof eval('typeof ' + f) === 'string' && eval('typeof ' + f) === 'function') issues.push(f + ' (the roll-before-the-round screen) is still there');
+      // the bot has the same recharge and judges the same way
+      d.bot.readyAt = Date.now() + 2000; if (diceRollBlock('bot') !== 'cool') issues.push('the bot dice should recharge too'); d.bot.readyAt = 0;
+      if (diceRollBlock('bot') !== '') issues.push('a ready bot may roll');
+      // the end of it: your own kit back
+      rngRestore(d);
+      if (selectedMeleeIdx !== ownMelee || selectedSupportIdx !== ownSupport || selectedPrimaryIdx !== WEAPONS.findIndex(w => w.id === 'ak20')) issues.push('your own kit did not come back');
+      if (d.kit) issues.push('the kit should be gone when the mode ends');
+      // the old pre-round screen and the health price are gone
+      for (const f of ['dicePlayerKeep', 'dicePlayerReroll', 'diceBeginFight', 'diceMaybeFight', 'rngNoGun', 'rngEquipPlayer']) if (eval('typeof ' + f) === 'function') issues.push(f + ' is still there');
+      if (typeof DICE_REROLL_HP !== 'undefined' || typeof DICE_MAX_REROLLS !== 'undefined') issues.push('the re-roll price and limit should be gone');
     } finally {
-      playSoundEvent = saved.sound; showAnnouncement = saved.anim;
+      playSoundEvent = saved.sound; showAnnouncement = saved.anim; getAudioCtx = saved.audio; playWeaponSound = saved.wsound;
       match = saved.match; activeSlot = saved.slot; gameBots.length = 0; gameBots.push(...saved.bots);
       if (saved.me) players[myId] = saved.me; else delete players[myId];
-      selectedPrimaryIdx = saved.pri; selectedSecondaryIdx = saved.sec; gameStarted = saved.started; isDead = saved.dead; equipReadyAt = 0;
+      selectedPrimaryIdx = saved.pri; selectedSecondaryIdx = saved.sec; selectedMeleeIdx = saved.mel; selectedSupportIdx = saved.sup;
+      gameStarted = saved.started; isDead = saved.dead; pointerLocked = saved.locked; equipReadyAt = 0; _quickMeleeReturn = null;
     }
     return issues;
   })()`);
-  console.log('dice checks: rolled during the round, free first roll, re-rolls cost health and cannot kill, no gun before the roll, no shooting while rolling');
+  console.log('dice checks: rolled during the round, free rolls (they recharge), two things at once, a roll replaces the one you are not holding, empty hands first, no loadout melee or utility');
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
+if (ok && process.argv.includes('--rng')) {
+  // The RNG pool (Dice Duel and Weapon Roulette): guns, melees and utilities, every tier holding all three, the retired
+  // gimmick weapons in it and only in it, and every item in it can be put in your hands, used without throwing, and
+  // handed back.
+  const out = vm.runInThisContext(`(() => {
+    const issues = [], notes = [];
+    const saved = { match, slot: activeSlot, pri: selectedPrimaryIdx, sec: selectedSecondaryIdx, mel: selectedMeleeIdx, sup: selectedSupportIdx,
+                    started: gameStarted, dead: isDead, sound: playSoundEvent, anim: showAnnouncement, bots: gameBots.slice(), me: players[myId], locked: pointerLocked,
+                    audio: getAudioCtx, wsound: playWeaponSound };
+    playSoundEvent = () => {}; showAnnouncement = () => {}; getAudioCtx = () => null; playWeaponSound = () => {};
+    const seen = new Map();
+    const kinds = { gun: 0, melee: 0, util: 0 };
+    try {
+      for (const t of Object.keys(DICE_POOL)) {
+        const ks = { gun: 0, melee: 0, util: 0 };
+        for (const id of DICE_POOL[t]) {
+          const i = diceInfo(id);
+          if (!i) { issues.push(t + ': unknown ' + id); continue; }
+          if (seen.has(id)) issues.push(id + ' is in both ' + seen.get(id) + ' and ' + t);
+          seen.set(id, t); ks[i.kind]++; kinds[i.kind]++;
+          if (i.item.adminItem) issues.push(id + ' is an admin item: it must not be rollable');
+        }
+        for (const k of Object.keys(ks)) if (!ks[k]) issues.push('tier ' + t + ' holds no ' + k);
+        if (!dicePoolIds(t, true).length) issues.push('tier ' + t + ' has no gun for a bot');
+        for (const id of dicePoolIds(t, true)) if (diceInfo(id).kind !== 'gun') issues.push('gunsOnly let ' + id + ' through');
+      }
+      notes.push('pool: ' + kinds.gun + ' guns, ' + kinds.melee + ' melees, ' + kinds.util + ' utilities');
+      // a fair share of rolls are not guns
+      const n = { gun: 0, melee: 0, util: 0 };
+      for (let i = 0; i < 6000; i++) n[diceInfo(diceRollOnce().weaponId).kind]++;
+      if (n.melee < 6000 * 0.08 || n.util < 6000 * 0.1) issues.push('too few melees or utilities in the rolls: ' + JSON.stringify(n));
+      for (let i = 0; i < 600; i++) if (diceInfo(diceRollOnce(null, true).weaponId).kind !== 'gun') { issues.push('a bot rolled a non-gun'); break; }
+      // the gimmicks: archived items are in the pool, and a few are not in the normal game any more
+      const archived = [...seen.keys()].filter(id => diceInfo(id).item.archived);
+      notes.push(archived.length + ' of them are retired gimmicks that only these modes deal');
+      if (archived.length < 40) issues.push('only ' + archived.length + ' retired gimmicks in the pool');
+      // put every one in your hands, use it, give it back
+      gameStarted = true; isDead = false; pointerLocked = true;
+      selectedPrimaryIdx = WEAPONS.findIndex(w => w.id === 'ak20'); selectedSecondaryIdx = WEAPONS.findIndex(w => w.id === 'pistol');
+      selectedMeleeIdx = MELEE_ITEMS.findIndex(m => m.id === 'knife'); selectedSupportIdx = 0;
+      players[myId] = { hp: 300 }; gameBots.length = 0;
+      const keepWalls = wallColliders.slice(); wallColliders.length = 0;
+      for (const [id] of seen) {
+        const holder = { kit: rngNewKit() };
+        match = { type: 'arcade', arcade: 'roulette', over: false, roundActive: true, ffaKills: {}, roulette: holder };
+        const i = diceInfo(id);
+        try {
+          const kind = rngRollIn(id, holder.kit, null);
+          if (kind !== i.kind) issues.push(id + ': equipped as ' + kind);
+          const want = i.kind === 'gun' ? (i.item.slot === 'secondary' ? 'secondary' : 'primary') : i.kind === 'melee' ? 'melee' : 'support';
+          if (activeSlot !== want) issues.push(id + ': the ' + want + ' slot should be active, got ' + activeSlot);
+          if (i.kind === 'melee' && MELEE_ITEMS[selectedMeleeIdx] !== i.item) issues.push(id + ': not the melee in hand');
+          if (i.kind === 'util' && SUPPORT_ITEMS[selectedSupportIdx] !== i.item) issues.push(id + ': not the utility in hand');
+          if (i.kind === 'util' && supportUses[selectedSupportIdx] !== (i.item.uses || 1)) issues.push(id + ': the utility should come with all its uses');
+          if (i.kind === 'gun' && WEAPONS[selectedPrimaryIdx] !== i.item) issues.push(id + ': not the gun in hand');
+          if (!equipReady()) issues.push(id + ': a roll should be usable at once');
+          // use it
+          equipReadyAt = 0; lastShot = 0; lastMelee = 0; meleeSwingT = 1; camera.position.set(0, 1.65, 0); camera.quaternion.set(0, 0, 0, 1);
+          if (i.kind === 'gun') { const a0 = weaponAmmo[WEAPONS.indexOf(i.item)].ammo; tryShoot(); if (!(weaponAmmo[WEAPONS.indexOf(i.item)].ammo < a0) && !i.item.noReload && !i.item.spinUp && !i.item.lockOn && !i.item.burstSize && !i.item.cycleBurst && i.item.id !== 'minigun') issues.push(id + ': firing did not use a round'); }
+          else if (i.kind === 'melee') tryMelee();
+          else trySupport();
+        } catch (e) { issues.push(id + ' (' + i.kind + ') threw: ' + e.message.slice(0, 90)); }
+        // back to the loadout
+        rngRestore(match.roulette);
+        for (const f of ['finishMeleeSlam', 'finishMeleeDash', 'finishBatCrowdClear']) { try { eval(f + '()'); } catch (e) {} }
+        meleeAbilityBuff = null; slamState = null; autoLunge = null; scytheDash = null;
+        if (selectedMeleeIdx !== MELEE_ITEMS.findIndex(m => m.id === 'knife') || selectedSupportIdx !== 0) issues.push(id + ': your own melee and utility did not come back');
+        if (selectedPrimaryIdx !== WEAPONS.findIndex(w => w.id === 'ak20')) issues.push(id + ': your own primary did not come back');
+      }
+      wallColliders.push(...keepWalls);
+    } finally {
+      playSoundEvent = saved.sound; showAnnouncement = saved.anim; getAudioCtx = saved.audio; playWeaponSound = saved.wsound; match = saved.match; activeSlot = saved.slot;
+      selectedPrimaryIdx = saved.pri; selectedSecondaryIdx = saved.sec; selectedMeleeIdx = saved.mel; selectedSupportIdx = saved.sup;
+      gameStarted = saved.started; isDead = saved.dead; pointerLocked = saved.locked; equipReadyAt = 0;
+      gameBots.length = 0; gameBots.push(...saved.bots); if (saved.me) players[myId] = saved.me; else delete players[myId];
+    }
+    return { issues, notes };
+  })()`);
+  console.log('rng checks: ' + out.notes.join(' · '));
+  if (out.issues.length) { ok = false; console.log(out.issues.join('\n')); }
 }
 
 if (ok && process.argv.includes('--flare')) {
