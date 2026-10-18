@@ -40174,12 +40174,12 @@ document.addEventListener('mousedown', e => {
   // anything while the pointer is locked (then every click lands on the canvas anyway) (#25).
   const aimed = pointerLocked || onGameView(e.target);
   if (e.button === 1 && !isDead && gameStarted && aimed) { e.preventDefault(); quickMelee(); return; }
-  if (spectatorState && e.button === 0) { spectatorCycle(1); return; }
+  if (spectatorState && aimed && e.button === 0) { spectatorCycle(1); return; }
   // Mortar: LMB fires a grenade instead of the equipped weapon
   if (pilotedMortar && e.button === 0) { fireMortar(); return; }
   // Vehicle: LMB fires the vehicle's gun
   if (pilotedVehicle && e.button === 0) { fireVehicleGun(); return; }
-  if (spectatorState && e.button === 2) { spectatorCycle(-1); return; }
+  if (spectatorState && aimed && e.button === 2) { spectatorCycle(-1); return; }
   if(e.button===2&&aimed&&activeSlot==='primary'&&currentWeapon?.id==='hellfire'){
     e.preventDefault();fireHellfireCore();return;
   }
@@ -41762,6 +41762,9 @@ function placePlayerAtTeamSpawn(team = localPlayerTeam(), spread = 36, depth = 3
 }
 
 function resetPlayerForRound(x = null, z = null) {
+  exitSpectator();
+  cancelAutoRespawn();
+  document.getElementById('loadout-screen').style.display='none';
   isDead = false;
   if (players[myId]) {
     players[myId].hp = matchMaxHp();
@@ -42088,6 +42091,7 @@ function currentEquippedId() {
 // (interpolated) recording, who and with what big enough to read, SKIP — and nothing else opens on
 // top of it until it ends (afterDeath / runAfterKillcam wait).
 const KILLCAM = {
+  archived: true,          // death replay archived; match-final cinematics remain separate
   buf: [],                // ring of frames { t, entities: { id: {x,y,z,rotY} } }
   capacity: 100,          // 100 frames × 100 ms = 10 s (the kill log keeps all of it)
   lastSampleAt: 0,
@@ -42169,6 +42173,7 @@ function killcamUI() {
   return (KILLCAM.ui = ui);
 }
 function startKillcam(killerId, weaponId) {
+  if (KILLCAM.archived) return;
   if (KILLCAM.active) return;
   if (!killerId || killerId === myId) return; // no self-kill killcam
   if (match && match.over) return;             // the end screen is already up
@@ -56665,12 +56670,22 @@ function updateHealthHUD(hp) {
 
 // ── Spectator mode (watch teammates after dying) ────────────────────────────
 function getLiveAllies() {
-  return gameBots.filter(b => b.team === 'ally' && !b.dead);
+  const allies=gameBots.filter(b=>b.team==='ally'&&!b.dead);
+  const ids=new Set(gameBots.map(b=>b.id));
+  for(const [id,mesh] of Object.entries(remoteMeshes)){
+    if(id===myId||ids.has(id)||!mesh.visible||players[id]?.dead||localEntityTeam(id)!==localEntityTeam(myId))continue;
+    allies.push({id,x:mesh.position.x,y:mesh.position.y,z:mesh.position.z,rotY:mesh.rotation.y});
+  }
+  return allies;
+}
+function watchEliminationRound() {
+  if(!isDead||match?.type!=='elim'||match.over)return;
+  for(const id of ['waiting-screen','death-screen'])document.getElementById(id).style.display='none';
+  enterSpectator();releasePointer();
 }
 function enterSpectator() {
-  const allies = getLiveAllies();
-  if (allies.length === 0) return; // nobody to spectate
-  spectatorState = { idx: 0, lastSwitch: 0 };
+  spectatorState ||= { idx: 0, lastSwitch: 0 };
+  weaponModels.forEach(m=>m.visible=false);meleeModels.forEach(m=>m.visible=false);supportModels.forEach(m=>m.visible=false);
   showSpectatorHUD();
   updateSpectatorHUD();
 }
@@ -56683,7 +56698,7 @@ function exitSpectator() {
 function spectatorCycle(dir) {
   if (!spectatorState) return;
   const allies = getLiveAllies();
-  if (allies.length === 0) { exitSpectator(); return; }
+  if (allies.length === 0) return;
   spectatorState.idx = ((spectatorState.idx + dir) % allies.length + allies.length) % allies.length;
   spectatorState.lastSwitch = performance.now();
   updateSpectatorHUD();
@@ -56692,15 +56707,15 @@ function updateSpectatorCamera(dt) {
   if (!spectatorState) return;
   if (!isDead) { exitSpectator(); return; } // auto-exit on respawn
   const allies = getLiveAllies();
-  if (allies.length === 0) { exitSpectator(); return; }
+  if (allies.length === 0) return;
   // Clamp idx in case allies died
   if (spectatorState.idx >= allies.length) spectatorState.idx = 0;
   const ally = allies[spectatorState.idx];
   // Third-person follow camera: behind and slightly above the ally
   const back = 3.5, height = 2.5;
-  const ax = ally.x, az = ally.z, ay = 1.0;
-  const camX = ax - Math.sin(ally.rotY) * (-back);
-  const camZ = az - Math.cos(ally.rotY) * (-back);
+  const ax = ally.x, az = ally.z, ay = (ally.y || 0)+1.0;
+  const camX = ax - Math.sin(ally.rotY) * back;
+  const camZ = az - Math.cos(ally.rotY) * back;
   camera.position.set(camX, ay + height, camZ);
   // Look at the ally's chest level
   camera.lookAt(ax, ay + 1.0, az);
@@ -56710,24 +56725,23 @@ function showSpectatorHUD() {
   if (!hud) {
     hud = document.createElement('div');
     hud.id = 'spectator-hud';
-    // z 90: over the elimination waiting / death screens it belongs to, under the loadout and end screen (#27)
-    hud.style.cssText = 'position:fixed;top:18%;left:50%;transform:translateX(-50%);z-index:90;'
-      + 'background:rgba(0,0,0,0.7);border:2px solid #4cf;color:#fff;font-family:monospace;'
-      + 'padding:10px 18px;border-radius:6px;text-align:center;pointer-events:none;font-size:14px;';
+    hud.innerHTML='<span id="spectator-info"></span>';
     document.body.appendChild(hud);
   }
   hud.style.display = 'block';
+  const loadout=document.getElementById('change-loadout-btn');
+  if(loadout)loadout.style.display=match?.type==='elim'?'':'none';
 }
 function updateSpectatorHUD() {
   const hud = document.getElementById('spectator-hud');
   if (!hud || !spectatorState) return;
   const allies = getLiveAllies();
-  if (allies.length === 0) { hud.style.display = 'none'; return; }
+  const info=document.getElementById('spectator-info');
+  if (allies.length === 0) { if(info)info.textContent='Waiting for next round';return; }
+  spectatorState.idx%=allies.length;
   const ally = allies[spectatorState.idx];
   const name = players[ally.id]?.name || 'Ally';
-  hud.innerHTML = `<div style="font-size:11px;opacity:0.7;letter-spacing:2px;">SPECTATING</div>`
-    + `<div style="font-size:22px;color:#4cf;font-weight:bold;margin:2px 0;">${name}</div>`
-    + `<div style="font-size:11px;opacity:0.8;">[ ← / → ] or [ CLICK ] to cycle · ${spectatorState.idx + 1}/${allies.length}</div>`;
+  if(info)info.textContent=`Watching ${name} · ${spectatorState.idx+1}/${allies.length}`;
 }
 
 // Client-side bot damage to player (applies immediately; server also processes for auth)
@@ -56965,7 +56979,7 @@ function scheduleLocalOutOfBoundsRecovery() {
     return;
   }
   if (match?.type === 'elim') {
-    if (dm) dm.textContent = 'Waiting for round to end...';
+    watchEliminationRound();
     return;
   }
   if (dm) dm.textContent = 'Select your loadout...';
@@ -57101,6 +57115,7 @@ function applyBotDamageToPlayer(weaponId, botId, damageOverride) {
     const ds = document.getElementById('death-screen');
     if (ds) ds.style.display = 'flex';
     onEntityDied(myId, botId || null);
+    if(match?.type==='elim')watchEliminationRound();
     if (match?.cfg?.autoRespawn) scheduleAutoRespawnLocal();
     return true;
   }
@@ -57135,7 +57150,6 @@ function applyBotDamageToPlayer(weaponId, botId, damageOverride) {
     const scope = document.getElementById('scope-overlay');
     if (scope) scope.style.display = 'none';
     const ds = document.getElementById('death-screen');
-    const ws = document.getElementById('waiting-screen');
     const killerName = (botId && players[botId]?.name) || 'Enemy';
     showAnnouncement('YOU DIED', `Killed by ${killerName}`, '#ff4444', 1800);
     // Speech bubble: killer bot taunts
@@ -57153,20 +57167,13 @@ function applyBotDamageToPlayer(weaponId, botId, damageOverride) {
     }
     // Notify match logic (round end / kill tracking)
     onEntityDied(myId, botId || null);
-    // 🎬 Straight into the killcam — not whenever the server's echo arrives (#42)
+    // The death replay is archived; this compatibility call is a no-op.
     startKillcam(botId, weaponId);
     if (match && match.type === 'elim' && !match.over) {
       if (ds) ds.style.display = 'none';
       const dmEl = document.getElementById('death-msg');
       if (dmEl) dmEl.textContent = 'Waiting for round to end...';
-      // The spectator camera would fight the killcam for the screen: after it (#42)
-      runAfterKillcam(() => {
-        if (!isDead || !match || match.over) return;
-        if (ws) ws.style.display = 'flex';
-        updateRoundScoreDisplay && updateRoundScoreDisplay();
-        enterSpectator(); // watch live teammates while waiting
-        releasePointer(); // CHANGE LOADOUT on the waiting screen needs the cursor
-      });
+      watchEliminationRound();
     } else if (match && match.type === 'arcade') {
       // Arcade: brief death screen, scheduleArcadeRespawn handles the actual respawn
       if (ds) {
@@ -57796,7 +57803,7 @@ socket.on('playerDied', data => {
     // Clear lingering buffs so bots resume normal AI
     abilityBuff=null; meleeAbilityBuff=null; pendingFanFire=null;
     document.getElementById('scope-overlay').style.display='none';
-    // 🎬 Start killcam — overrides camera + hides death screen for ~2.2s
+    // Death replay is archived; proceed straight to live viewing or respawn.
     startKillcam(data.killerId, data.weapon || resolveBot(data.killerId)?.weaponId);   // no-op if the local death started it (#42)
     const ds = document.getElementById('death-screen');
     if (!KILLCAM.active) ds.style.display='flex';
@@ -57804,14 +57811,7 @@ socket.on('playerDied', data => {
       // No respawn in elimination — wait for round to end
       document.getElementById('death-msg').textContent = 'Waiting for round to end...';
       ds.style.display = 'none';
-      runAfterKillcam(() => {
-        if (!isDead || !match || match.over) return;
-        document.getElementById('waiting-screen').style.display = 'flex';
-        showFunFact('waiting-screen');
-        updateRoundScoreDisplay();
-        enterSpectator(); // watch live teammates while waiting
-        releasePointer(); // CHANGE LOADOUT on the waiting screen needs the cursor
-      });
+      watchEliminationRound();
     } else if (match && match.tiebreaker) {
       document.getElementById('death-msg').textContent = 'Tiebreaker — eliminated!';
       // endMatch called via onEntityDied
@@ -60054,6 +60054,9 @@ function startMatchRound() {
     for (const b of gameBots) clearBotStatusEffects(b);
     // For elim rounds: respawn the player now (after countdown)
     if (isDead) {
+      exitSpectator();
+      document.getElementById('waiting-screen').style.display='none';
+      document.getElementById('death-screen').style.display='none';
       isDead = false;
       placePlayerAtTeamSpawn(localPlayerTeam(), 24, 38);
       socket.emit('readyRespawn', { x: camera.position.x, z: camera.position.z, mode: currentModeId() });
@@ -65726,6 +65729,14 @@ function confirmLoadout() {
   sanitizeLoadoutSlots();       // and the right kind in each: a primary in the secondary slot is put right here
 
   document.getElementById('loadout-screen').style.display = 'none';
+  if(gameStarted&&isDead&&match?.type==='elim'&&!match.over){
+    watchEliminationRound();
+    showAnnouncement('LOADOUT UPDATED','Active next round','#4cf',1400);return;
+  }
+  if(gameStarted&&!isDead){
+    exitSpectator();
+    for(const id of ['death-screen','waiting-screen'])document.getElementById(id).style.display='none';
+  }
   resetCombatResources();
 
   if (!gameStarted) {
@@ -65749,14 +65760,9 @@ function confirmLoadout() {
     spawnGameBots();
     requestPointerLockSafe();
     startLoop();
-  } else if (loadoutMode === 'swap') {
+  } else if (loadoutMode === 'swap' || loadoutMode === 'waiting') {
     // Mid-game swap via trashcan — player is still alive, no respawn needed
     requestPointerLockSafe();
-  } else if (loadoutMode === 'waiting') {
-    // Player changed loadout mid-elim-round while waiting — they stay dead, just return to waiting screen
-    // Their new loadout will be active when the next round respawns them (resetPlayerForRound in startMatchRound)
-    document.getElementById('waiting-screen').style.display = 'flex';
-    showAnnouncement('LOADOUT UPDATED', 'Active next round', '#4cf', 1400);
   } else {
     // Respawn after death on this player's team side, don't rely on the server's center spawn.
     resetPlayerForRound();
@@ -68892,13 +68898,19 @@ document.getElementById('loadout-exit-btn').addEventListener('click', () => {
   if (loadoutBefore) ({ p: selectedPrimaryIdx, s: selectedSecondaryIdx, m: selectedMeleeIdx, u: selectedSupportIdx } = loadoutBefore);
   document.getElementById('loadout-screen').style.display = 'none';
   if (!gameStarted) { openModeMenu(); return; }                       // before a match: back to the modes
-  if (loadoutMode === 'waiting') { document.getElementById('waiting-screen').style.display = 'flex'; return; }
+  if (loadoutMode === 'waiting' && isDead) { watchEliminationRound(); return; }
+  if(!isDead){
+    exitSpectator();
+    for(const id of ['death-screen','waiting-screen'])document.getElementById(id).style.display='none';
+  }
   requestPointerLockSafe();                                           // SWAP: back to the fight, kit unchanged
 });
 document.getElementById('loadout-ready-btn').addEventListener('click', confirmLoadout);
 document.getElementById('loadout-ready-btn').addEventListener('touchstart', e => { e.preventDefault(); confirmLoadout(); }, { passive: false });
 // Change loadout while waiting between rounds in elim mode
 const _changeBtn = document.getElementById('change-loadout-btn');
+document.getElementById('spectator-prev')?.addEventListener('click',()=>spectatorCycle(-1));
+document.getElementById('spectator-next')?.addEventListener('click',()=>spectatorCycle(1));
 if (_changeBtn) {
   const openLoadoutFromWaiting = () => {
     document.getElementById('waiting-screen').style.display = 'none';
