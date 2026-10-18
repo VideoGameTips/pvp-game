@@ -168,7 +168,7 @@
         <tr><td>Infection</td><td>Zombies vs. humans; zombies convert on kill</td></tr>
         <tr><td>Sniper Only</td><td>Snipers forced, no secondaries</td></tr>
         <tr><td>Speedrun</td><td>Solo race to 20 kills, personal best tracked</td></tr>
-        <tr><td>🎲 Dice Duel</td><td>You and a bot each roll a d20 for your weapon (the die sets the tier: 1 is junk, 20 is an SS) and either of you can keep rolling. Every re-roll costs 40 HP for the fight, up to four, so a bad gun is a real choice between a gamble and a bleed. The bot weighs what it holds against the price and against what you rolled. First to 5 kills; every kill sends you both back to the dice. <kbd>R</kbd> re-rolls, <kbd>Enter</kbd> keeps.</td></tr>
+        <tr><td>🎲 Dice Duel</td><td>You and a bot each carry a d20, and you roll it <em>during the round</em>, not before it. The die sets the tier (1 is junk, 20 is an SS), then a gun from it. You start each round holding your melee and the dice: <kbd>G</kbd> (or the 🎲 button on a phone) rolls. The first roll is free; every re-roll costs 40 HP on the spot (up to four, and never enough to kill you), and while the dice are rolling (0.7&nbsp;s) you cannot shoot, so a gamble in the middle of a fight can cost you the fight. The bot has the same dice and the same rules: it rolls at GO, and re-rolls only when what it holds is worth less than a fresh roll, when it can afford the health, and when nobody has just hit it. First to 5 kills; every kill starts a fresh round with a fresh dice.</td></tr>
         <tr><td>🔄 Weapon Roulette</td><td>FFA where everyone, bots included, is dealt a new random gun every 20 seconds</td></tr>
         <tr><td>💥 Rocket Rumble</td><td>FFA with the RPG-7 and nothing else: ride your own blast</td></tr>
       </table>
@@ -241,11 +241,11 @@
       a different mix of walls (long walls, waist-high walls, windowed walls with a sill and a lintel, arches, L-shaped
       bunkers, crate stacks, decks), with pillars only a small part of one. They are dealt only to 1v1 (they never come
       up at random in anything else). <strong>You vote for the map once your opponent
-      is found</strong>, not before: each side picks from a <em>picture</em> of every map (a top-down plan drawn from
-      its real walls, ramps and spawns), the same pick plays, and two different picks are settled by a coin flip. A bot
-      votes too: it reads the same picture and judges how much cover there is, how long the lanes run and how much
-      high ground there is, then picks the map its taste likes (an easy bot changes its mind more). Nobody voting in
-      15 seconds is a random map. <strong>You cannot see your opponent at the start:</strong> something solid and
+      is found</strong>, not before (see <a href="#map-vote">Voting for the map</a>): the same pick plays and two
+      different picks are settled by a coin flip. A bot votes too: it reads a plan drawn from the map's real walls,
+      ramps and spawns and judges how much cover there is, how long the lanes run and how much high ground there is,
+      then picks the map its taste likes (an easy bot changes its mind more). Nobody voting in 15 seconds is a
+      random map. <strong>You cannot see your opponent at the start:</strong> something solid and
       wider than the spawn stands across the middle of every one, and the build check fails if any line from one spawn
       to the other is clear.</p>
       <table>
@@ -311,6 +311,21 @@
       </table>
       <p><em>Why:</em> it is the sound a shooter uses to find an opponent, and it rewards the quiet play it asks for
       (crouch to creep up on someone). Turn it off in &#9881; &rarr; <b>ENEMY FOOTSTEPS</b> if it is too busy.</p>
+
+      <h2 id="map-vote">🗺️ Voting for the map</h2>
+      <p>The map used to be chosen on the mode screen before anyone was found, and only 1v1 had a vote. Now there is no
+      picking up front: <strong>every lobby match asks once the people are known</strong>. Each human votes for a map
+      from a <strong>screenshot of it</strong> (taken from a corner, about three-quarters, through a first-person lens),
+      the map with the most votes plays and a tie is a coin flip. 1v1 chooses among the four duel maps; everything else
+      among the whole pool, in a scrolling grid. A bot only votes when it is your opponent in a 1v1; in any other
+      mode only people do, so alone against bots your pick is final. Nobody voting in 15&ndash;25&nbsp;seconds is a
+      random map. King of the Hill and the M4 towers play their own arena and skip the vote. A mode with nobody to
+      vote with (Dice Duel, Weapon Roulette, Pie Fight: you and bots) shows the same screen to you alone, with a
+      RANDOM button.</p>
+      <p><em>Why:</em> a map chosen before you know who you are fighting is a guess; chosen after, it is a negotiation, and
+      a picture of the place says more than its name. The screenshots are made by
+      <code>tools/render-map-previews.js</code>, which loads every map in a headless browser and picks the best of
+      about 48 cameras for each (not facing a wall, lit, plenty to see); run it again when a map changes.</p>
 
       <h2 id="touch-controls">📱 Touch controls</h2>
       <p>Phone players said two things: the buttons were too small, and some did not work. Both were true. The
@@ -752,13 +767,18 @@
       Skins that are real guns &mdash; the AUG, the Dragunov, the M249 &mdash; keep their gun&rsquo;s
       reload, because they take the same ammunition, but each has its own voice. All of it is heard
       only by you: other players hear your gun, not your skin.</p>
-      <p><strong>Everything you draw is pulled up from the hip.</strong> A weapon used to simply
-      appear in your hands, fully placed, the instant you switched to it. Now it swings up from
-      off-screen bottom-right as one rigid object, in 0.09&ndash;0.3 seconds depending on how heavy
-      it is: a pistol is up in under a tenth of a second, an AK-20 in under a fifth, an M134 in three
-      tenths. The timing comes from the movement penalty each weapon already carries, with a
-      floor set by the weapon&rsquo;s actual length &mdash; without that an RPG would come up as fast
-      as a pistol, because the weight table is really damage &times; magazine.</p>
+      <p><strong>Everything you draw is pulled up from the hip, and it takes time.</strong> A weapon swings up
+      from off-screen bottom-right as one rigid object, and until it is up you cannot shoot, swing, throw, reload or
+      use its ability (a thin bar under the crosshair drains while you wait; the quick ones show none). The time
+      depends on what it is, from the table in the game: the <strong>pistol is the quickest thing there is (0.11&nbsp;s)</strong>,
+      sidearms are 0.11&ndash;0.28&nbsp;s and small blades about the same (fists 0.10, knife 0.12, katana 0.17),
+      SMGs about 0.42&ndash;0.45&nbsp;s, an <strong>AK-20 0.7&nbsp;s</strong>, rifles and shotguns 0.65&ndash;0.9&nbsp;s,
+      launchers and machine guns about a second to 1.25&nbsp;s, and the <strong>minigun 1.5&nbsp;s</strong>, the
+      slowest and the cap: nothing takes longer. A big melee is in between (a sledge 0.52, a chainsaw 0.6).
+      Pressing the key for what you are already holding costs nothing, <strong>quick melee (B) takes no time, there or
+      back</strong>, and a Dice Duel roll is its own wait. The old weight table could not say which gun is
+      heavy (every sidearm and utility is the same 0.05, and the minigun shares a 0.30 with the sledge), so this is a
+      table by weapon, with a default per slot for anything new.</p>
       <p><strong>Some skins make a better entrance.</strong> Draw the <strong>Hyperspace AK</strong> and
       it arrives as crystal shards hanging in space around your hands, which then fuse into a rifle.
       The <strong>Origami Pistol</strong> folds itself up out of a sheet of paper, the <strong>Brick

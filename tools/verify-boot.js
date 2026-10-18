@@ -1870,6 +1870,128 @@ if (ok && process.argv.includes('--touch')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+if (ok && process.argv.includes('--equip')) {
+  // Equip time: a real wait after switching, by class — sidearms and small blades quickest (the pistol quickest of
+  // all), a rifle about 0.7 s, the heavy things slowest, nothing past 1.5 s — and the new item really cannot be used
+  // until it is up. Re-pressing the key for what you hold costs nothing; quick melee takes no time.
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const saved = { slot: activeSlot, pri: selectedPrimaryIdx, sec: selectedSecondaryIdx, mel: selectedMeleeIdx, sup: selectedSupportIdx,
+                    started: gameStarted, dead: isDead, held: _heldEquipKey, ready: equipReadyAt, dur: _equipDur, match, mode: selectedModeConfig,
+                    sound: playSoundEvent, anim: showAnnouncement };
+    playSoundEvent = () => {}; showAnnouncement = () => {};
+    try {
+      const gunMs = id => equipMsFor(WEAPONS.find(w => w.id === id), WEAPONS.find(w => w.id === id).slot);
+      const all = [];
+      for (const w of WEAPONS) if (!w.archived && !w.adminItem) all.push([w.id, equipMsFor(w, w.slot), w.slot]);
+      for (const m of MELEE_ITEMS) if (!m.archived && !m.adminItem && !m.skinOnly) all.push([m.id, equipMsFor(m, 'melee'), 'melee']);
+      for (const u of SUPPORT_ITEMS) all.push([u.id, equipMsFor(u, 'support'), 'support']);
+      for (const [id, ms, slot] of all) if (!(ms >= 60 && ms <= 1500)) issues.push(id + ' (' + slot + '): equip time ' + ms + ' ms is outside 60..1500');
+      const prim = all.filter(x => x[2] === 'primary'), sec = all.filter(x => x[2] === 'secondary'), mel = all.filter(x => x[2] === 'melee');
+      const pistol = gunMs('pistol');
+      for (const [id, ms, slot] of all) if ((slot === 'primary' || slot === 'secondary') && ms < pistol) issues.push(id + ' comes up faster than the pistol (' + ms + ' < ' + pistol + ')');
+      if (Math.max(...sec.map(x => x[1])) >= Math.min(...prim.map(x => x[1]))) issues.push('the slowest sidearm should still be quicker than the quickest primary');
+      if (Math.max(...prim.map(x => x[1])) !== 1500 || gunMs('minigun') !== 1500) issues.push('the minigun should be the slowest, at 1.5 s');
+      const ak = gunMs('ak20'); if (!(ak >= 600 && ak <= 800)) issues.push('the AK should be a medium 0.6-0.8 s, got ' + ak);
+      if (!(equipMsFor(MELEE_ITEMS.find(m => m.id === 'knife'), 'melee') <= 200 && equipMsFor(MELEE_ITEMS.find(m => m.id === 'fists'), 'melee') <= 200)) issues.push('small blades should be nearly instant');
+      if (!(Math.max(...mel.map(x => x[1])) <= 700)) issues.push('no melee needs more than 0.7 s');
+      for (const w of WEAPONS) if (!w.archived && !w.adminItem && w.slot === 'primary' && EQUIP_MS[w.id] == null) issues.push(w.id + ' has no entry in EQUIP_MS (it would get the slot default)');
+      // the wait itself
+      gameStarted = true; isDead = false; match = null;
+      selectedPrimaryIdx = WEAPONS.findIndex(w => w.id === 'ak20'); selectedSecondaryIdx = WEAPONS.findIndex(w => w.id === 'pistol');
+      weaponAmmo[selectedPrimaryIdx] = { ammo: 30, reserve: 90 }; weaponAmmo[selectedSecondaryIdx] = { ammo: 12, reserve: 36 };
+      _heldEquipKey = ''; activeSlot = 'primary'; equipActiveSlot();
+      let left = equipReadyAt - performance.now();
+      if (!(left > 500 && left <= 720)) issues.push('taking out the AK should cost about 0.7 s, got ' + Math.round(left));
+      activeSlot = 'primary'; equipActiveSlot();
+      if (equipReadyAt - performance.now() > 20) issues.push('pressing the key for what you already hold should cost nothing');
+      activeSlot = 'secondary'; equipActiveSlot();
+      left = equipReadyAt - performance.now();
+      if (!(left > 60 && left <= 130)) issues.push('drawing the pistol should cost about 0.11 s, got ' + Math.round(left));
+      // while it is coming up it cannot shoot; once up it can
+      activeSlot = 'primary'; equipActiveSlot();
+      const before = weaponAmmo[selectedPrimaryIdx].ammo;
+      pointerLocked = true; lastShot = 0;
+      try { tryShoot(); } catch (e) { issues.push('tryShoot threw while equipping: ' + e.message); }
+      if (weaponAmmo[selectedPrimaryIdx].ammo !== before) issues.push('the AK fired while it was still coming up');
+      if (!equipReady() === false) issues.push('equipReady should be false mid-draw');
+      equipReadyAt = 0;
+      if (!equipReady()) issues.push('equipReady should be true once the time is up');
+      // quick melee takes no time, there or back
+      _quickMeleeReturn = null; activeSlot = 'primary'; equipActiveSlot(); equipReadyAt = 0;
+      selectedMeleeIdx = MELEE_ITEMS.findIndex(m => m.id === 'sledge');
+      try { quickMelee(); } catch (e) { issues.push('quickMelee threw: ' + e.message); }
+      if (equipReadyAt - performance.now() > 20) issues.push('quick melee should take no equip time (sledge: ' + Math.round(equipReadyAt - performance.now()) + ' ms)');
+      _quickMeleeReturn = null;
+    } finally {
+      playSoundEvent = saved.sound; showAnnouncement = saved.anim;
+      activeSlot = saved.slot; selectedPrimaryIdx = saved.pri; selectedSecondaryIdx = saved.sec; selectedMeleeIdx = saved.mel; selectedSupportIdx = saved.sup;
+      gameStarted = saved.started; isDead = saved.dead; _heldEquipKey = saved.held; equipReadyAt = saved.ready; _equipDur = saved.dur; match = saved.match;
+      _quickMeleeReturn = null; meleeSwingT = 1; lastMelee = 0;
+    }
+    return issues;
+  })()`);
+  console.log('equip checks: a table of times (pistol quickest, AK medium, minigun 1.5 s at most), a real wait, no cost for the same item or quick melee');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
+if (ok && process.argv.includes('--dice')) {
+  // Dice Duel: the dice are rolled DURING the round now (no screen before it): who may roll and why not, no gun before
+  // the first roll, no shooting while the dice are in the hand, a re-roll that costs health and can never kill.
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const saved = { match, slot: activeSlot, bots: gameBots.slice(), me: players[myId], pri: selectedPrimaryIdx, sec: selectedSecondaryIdx, started: gameStarted, dead: isDead,
+                    sound: playSoundEvent, anim: showAnnouncement };
+    playSoundEvent = () => {}; showAnnouncement = () => {};
+    try {
+      gameStarted = true; isDead = false;
+      selectedPrimaryIdx = WEAPONS.findIndex(w => w.id === 'ak20'); selectedSecondaryIdx = WEAPONS.findIndex(w => w.id === 'pistol');
+      weaponAmmo[selectedPrimaryIdx] = { ammo: 30, reserve: 90 }; weaponAmmo[selectedSecondaryIdx] = { ammo: 12, reserve: 36 };
+      players[myId] = { hp: 300 };
+      gameBots.length = 0; gameBots.push({ id: 'dicebot', hp: 300, maxHp: 300, dead: false });
+      const fresh = () => ({ rolls: 0, rerolls: 0, rolling: false, shown: null, v: 0, tier: null, weaponId: null });
+      match = { over: false, roundActive: true, dice: { goal: 5, round: 1, score: { me: 0, bot: 0 }, phase: 'fight', orig: null, me: fresh(), bot: fresh() }, ffaKills: {} };
+      const d = match.dice;
+      if (diceRollBlock('me') !== '') issues.push('the first roll of a round should be free and allowed, got ' + diceRollBlock('me'));
+      match.roundActive = false; if (diceRollBlock('me') !== 'wait') issues.push('no rolling before GO'); match.roundActive = true;
+      d.me.rolling = true; if (diceRollBlock('me') !== 'busy') issues.push('no rolling while rolling'); d.me.rolling = false;
+      d.me.rolls = 1; if (diceRollBlock('me') !== '') issues.push('a re-roll with full health should be allowed');
+      players[myId].hp = DICE_REROLL_HP; if (diceRollBlock('me') !== 'hurt') issues.push('a re-roll must never be allowed to kill you (hp ' + DICE_REROLL_HP + ')');
+      players[myId].hp = DICE_REROLL_HP + 1; if (diceRollBlock('me') !== '') issues.push('hp ' + (DICE_REROLL_HP + 1) + ' can afford a re-roll');
+      players[myId].hp = 300; d.me.rolls = 1 + DICE_MAX_REROLLS; d.me.rerolls = DICE_MAX_REROLLS; if (diceRollBlock('me') !== 'none') issues.push('re-rolls should run out after ' + DICE_MAX_REROLLS);
+      d.me = fresh(); d.phase = 'between'; if (diceRollBlock('me') !== 'wait') issues.push('no rolling between rounds'); d.phase = 'fight';
+      isDead = true; if (diceRollBlock('me') !== 'dead') issues.push('the dead do not roll'); isDead = false;
+      // no gun before the first roll, whatever asked for one
+      activeSlot = 'primary'; equipActiveSlot();
+      if (activeSlot !== 'melee') issues.push('before the first roll the primary slot should fall back to the melee, got ' + activeSlot);
+      activeSlot = 'secondary'; equipActiveSlot();
+      if (activeSlot !== 'melee') issues.push('before the first roll the secondary slot should fall back to the melee, got ' + activeSlot);
+      d.me.weaponId = 'ak20'; activeSlot = 'primary'; equipActiveSlot();
+      if (activeSlot !== 'primary') issues.push('after a roll the gun slot should work');
+      // no shooting while the dice are in the hand
+      selectedPrimaryIdx = WEAPONS.findIndex(w => w.id === 'ak20'); weaponAmmo[selectedPrimaryIdx] = { ammo: 30, reserve: 90 };
+      activeSlot = 'primary'; equipActiveSlot(); equipReadyAt = 0; pointerLocked = true;
+      d.me.rolling = true; const a0 = weaponAmmo[selectedPrimaryIdx].ammo;
+      try { tryShoot(); } catch (e) { issues.push('tryShoot threw: ' + e.message); }
+      if (weaponAmmo[selectedPrimaryIdx].ammo !== a0) issues.push('fired while the dice were rolling');
+      d.me.rolling = false;
+      // the bot has the same rules and judges the same way
+      d.bot.rolls = 1; d.bot.rerolls = 1; gameBots[0].hp = DICE_REROLL_HP; if (diceRollBlock('bot') !== 'hurt') issues.push('a bot at ' + DICE_REROLL_HP + ' hp should be too hurt to re-roll');
+      gameBots[0].hp = 300; if (diceRollBlock('bot') !== '') issues.push('a healthy bot may re-roll');
+      // the old pre-round screen is gone
+      for (const f of ['dicePlayerKeep', 'dicePlayerReroll', 'diceBeginFight', 'diceMaybeFight']) if (typeof eval('typeof ' + f) === 'string' && eval('typeof ' + f) === 'function') issues.push(f + ' (the roll-before-the-round screen) is still there');
+    } finally {
+      playSoundEvent = saved.sound; showAnnouncement = saved.anim;
+      match = saved.match; activeSlot = saved.slot; gameBots.length = 0; gameBots.push(...saved.bots);
+      if (saved.me) players[myId] = saved.me; else delete players[myId];
+      selectedPrimaryIdx = saved.pri; selectedSecondaryIdx = saved.sec; gameStarted = saved.started; isDead = saved.dead; equipReadyAt = 0;
+    }
+    return issues;
+  })()`);
+  console.log('dice checks: rolled during the round, free first roll, re-rolls cost health and cannot kill, no gun before the roll, no shooting while rolling');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 if (ok && process.argv.includes('--flare')) {
   // The flare: slow, big, and it falls gently: still in the air well past the 1.8 s a normal shot lives, and it has
   // dropped far less than a plain lob would have.
