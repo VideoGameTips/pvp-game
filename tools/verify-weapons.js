@@ -70,7 +70,7 @@ function load() {
                    '_localPartBoxes', 'attachViewHands', 'attachAkimboHands', 'placeAkimboHand', '_reloadPose',
                    '_meleeOffset', '_collarGeometry', 'blendProudSteps',
                    '_emoStroke', '_emoMats', '_legendMats', '_legendize',
-                   '_mPivot', '_eqCrystalMats', '_donutMats', '_donutSprinkleMat',
+                   '_mPivot', '_eqCrystalMats', '_donutMats', '_donutSprinkleMat', '_donutOctPart',
                    '_buildDonutRing', '_addDonutOrbit', 'buildDonutClassicGun',
                    // builders that take arguments are not picked up by the build*() sweep below
                    'buildPixelGunModel', '_eqSegment', 'makeChainMaulCable', 'poseChainMaulCable',
