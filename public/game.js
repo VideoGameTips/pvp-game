@@ -202,10 +202,8 @@ const WEAPONS = [
   },
   {
     id: 'boombow', name: 'Boombow', type: 'Explosive Bow', slot: 'primary',
-    // A rapid-fire bow now: four times the draw and reload speed it had (750 / 1400 ms), a third of the damage
-    // (95), and a slow arrow you have to lead (68 m/s -> 34). The reserve went 14 -> 42 so the same arrows' worth
-    // of damage is still in the quiver: at four times the pace, 14 would have been gone in five seconds.
-    mag: 1, reserve: 42, damage: 32, fireRate: 188, reloadTime: 350,
+    // Half the previous base damage, with three times the reload duration.
+    mag: 1, reserve: 42, damage: 16, fireRate: 188, reloadTime: 1050,
     auto: false, pellets: 1, spread: 0.004, adsZoom: 42, bulletSpeed: 34, noReload: false,
     bulletColor: 0xffaa22, bulletSize: 0.10, splashRadius: 4.5, arcShot: true,
     ability: { name: 'Power Draw', cd: 17000, desc: 'Next arrow · 63 dmg', type: 'powershot', pellets: 1, spreadMult: 0, weaponAbId: 'boombow_ab' },
