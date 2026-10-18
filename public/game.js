@@ -202,10 +202,10 @@ const WEAPONS = [
   },
   {
     id: 'boombow', name: 'Bow', type: 'Explosive Bow', slot: 'primary', doubleJump: true,
-    // Half the previous base damage, with three times the reload duration.
-    mag: 1, reserve: 42, damage: 16, fireRate: 188, reloadTime: 1050,
-    auto: false, pellets: 1, spread: 0.004, adsZoom: 42, bulletSpeed: 34, noReload: false,
-    bulletColor: 0xffaa22, bulletSize: 0.10, splashRadius: 4.5, arcShot: true,
+    mag: 1, reserve: 42, damage: 32, fireRate: 188, reloadTime: 525,
+    // Counter the shared bolt speed boost so the arrow has a readable, gentle arc.
+    auto: false, pellets: 1, spread: 0.004, adsZoom: 42, bulletSpeed: 34, bulletSpeedMult: .4, noReload: false,
+    bulletColor: 0xffaa22, bulletSize: 0.10, splashRadius: 4.5, arcShot: true, arcGravity: .65,
     ability: { name: 'Power Draw', cd: 17000, desc: 'Next arrow · 63 dmg', type: 'powershot', pellets: 1, spreadMult: 0, weaponAbId: 'boombow_ab' },
   },
   {
@@ -38327,7 +38327,7 @@ const PROJECTILE_KIND_BY_ID = {
   grenade_launcher:'grenade', firework_launcher:'grenade', mortar_rifle:'grenade',
   nebula_mortar:'grenade', pinball_launcher:'grenade', shockwave_launcher:'grenade',
   storm_cannon:'grenade', gravity_launcher:'grenade', potato_cannon:'grenade',
-  crossbow:'bolt', boombow:'bolt', dart_gun:'bolt', harpoon_gun:'bolt',
+  crossbow:'bolt', boombow:'bolt', boombow_ab:'bolt', boombow_c1:'bolt', dart_gun:'bolt', harpoon_gun:'bolt',
   slingshot:'stone', air_rifle:'bullet',
   // These five used to share the generic 'solid' ball, so a thrown knife flew
   // as a sphere. Each has its own shape and its own tumble now.
@@ -55225,6 +55225,9 @@ function updateBullets(dt) {
     if (_wArc && !b.isPaintBomb) {
       if (b._arcG === undefined) b._arcG = projectileWeaponSpec(b.weaponId)?.arcGravity ?? 1;   // a weapon can fall slower than the rest
       b.dir.y -= (BULLET_GRAVITY * b._arcG / Math.max(20, b.speed)) * dt;
+      if (projectileWeaponSpec(b.weaponId)?.id === 'boombow' && b.mesh._alignToDir) {
+        b.mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.dir.clone().normalize());
+      }
     }
     b.mesh.position.addScaledVector(b.dir, b.speed * dt);
     if (b.mesh._donutTrail) _emitDonutTrail(b.mesh._donutTrail.tint, b.mesh._donutTrail.r, _bulletPrevTrail.set(px0, py0, pz0), b.mesh.position);
