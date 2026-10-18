@@ -201,7 +201,7 @@ const WEAPONS = [
     ability: { name: 'Cryo Nova', cd: 14000, desc: 'AOE freeze blast 4 m · 50 dmg each', type: 'aoe', radius: 4, damage: 50, color: 0x99ddff },
   },
   {
-    id: 'boombow', name: 'Bow', type: 'Explosive Bow', slot: 'primary',
+    id: 'boombow', name: 'Bow', type: 'Explosive Bow', slot: 'primary', doubleJump: true,
     // Half the previous base damage, with three times the reload duration.
     mag: 1, reserve: 42, damage: 16, fireRate: 188, reloadTime: 1050,
     auto: false, pellets: 1, spread: 0.004, adsZoom: 42, bulletSpeed: 34, noReload: false,
@@ -255,7 +255,7 @@ const WEAPONS = [
     ability: { name: 'Execution', cd: 16000, desc: 'Next shot · 175 dmg', type: 'powershot', pellets: 1, spreadMult: 0, weaponAbId: 'hand_cannon_ab' },
   },
   {
-    id: 'throwing_knives', name: 'Throwing Knives', type: 'Thrown', slot: 'secondary',
+    id: 'throwing_knives', name: 'Throwing Knives', type: 'Thrown', slot: 'secondary', doubleJump: true,
     mag: 3, reserve: 18, damage: 45, fireRate: 240, reloadTime: 1200,
     auto: false, pellets: 1, spread: 0.006, adsZoom: 55, bulletSpeed: 88, noReload: false,
     bulletColor: 0xd8d8d8, bulletSize: 0.045,
@@ -1118,7 +1118,6 @@ const MELEE_ITEMS = [
     doubleJump: true, // light and quick — an extra jump mid-air, no new code needed (grantsDoubleJump)
     ability: { name: 'Throw Knife', cd: 350, desc: 'Hurl a knife · 30 dmg · 10 in reserve', type: 'melee_multithrow', damage: 30, maxCharges: 10 } },
   { id: 'scythe', name: 'Scythe', type: 'Movement Reaper', damage: 58, range: 2.7, cooldown: 560, speedMult: 1.35,
-    doubleJump: true,
     // Reap Dash goes where you are pointing, up and down included, and covers twice what it did (about 13 m, now 26).
     ability: { name: 'Reap Dash', cd: 4200, desc: 'Movement dash · twice as far · goes where you aim, up included', type: 'melee_mobility', speed: 30, side: 0, up: 3.5, color: 0x99ffe8, aimDash: true, distance: 26, dashTime: 0.42 } },
   // Meteor Hammer: the weighted-chain weapon of old China, flung rather than swung. At a person it wraps and reels
@@ -2530,9 +2529,9 @@ function equippedAbility(w) {
 // bare fists did not. What qualifies is being unburdened or carrying something
 // that isn't a firearm at all:
 //   • fists — nothing in your hands, the lightest possible loadout
-//   • crossbow and the compressed-air weapons — no powder, no recoil, no weight
+//   • Bow, throwing daggers and the compressed-air weapons
 // Sidearms and SMGs used to qualify wholesale and no longer do.
-const DOUBLE_JUMP_IDS = new Set(['fists','crossbow','air_rifle','dart_gun']);
+const DOUBLE_JUMP_IDS = new Set(['fists','air_rifle','dart_gun']);
 
 // ── 🅴 Abilities ────────────────────────────────────────────────────────────
 // Nearly everything used to carry an ability (120 of 121 guns, all 42 melee) on

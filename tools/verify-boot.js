@@ -1747,7 +1747,25 @@ if (ok && process.argv.includes('--movement')) {
       selectedModeConfig = GAME_MODE_CONFIGS['1v1']; match = null; gameStarted = true; isDead = false;
       const sc = MELEE_ITEMS.findIndex(m => m.id === 'scythe');
       selectedMeleeIdx = sc;
-      if (loadoutAirJumps() < 1) issues.push('a scythe in the loadout should give a double jump');
+      const bow = WEAPONS.findIndex(w => w.id === 'boombow');
+      const crossbow = WEAPONS.findIndex(w => w.id === 'crossbow');
+      const daggers = WEAPONS.findIndex(w => w.id === 'throwing_knives');
+      for (const item of [MELEE_ITEMS[sc], WEAPONS[crossbow]]) {
+        if (grantsDoubleJump(item)) issues.push(item.id + ' must not grant double jump');
+      }
+      for (const item of [WEAPONS[bow], WEAPONS[daggers], MELEE_ITEMS.find(m => m.id === 'twin_knife')]) {
+        if (!grantsDoubleJump(item)) issues.push(item.id + ' must grant double jump');
+      }
+      selectedPrimaryIdx = crossbow;
+      selectedSecondaryIdx = WEAPONS.findIndex(w => w.id === 'pistol');
+      selectedSupportIdx = SUPPORT_ITEMS.findIndex(w => w.id === 'frag');
+      if (loadoutAirJumps() !== 0) issues.push('Crossbow + Scythe must not bank an air jump');
+      selectedPrimaryIdx = bow;
+      if (loadoutAirJumps() !== 1) issues.push('Bow must bank one air jump');
+      selectedSecondaryIdx = daggers;
+      if (loadoutAirJumps() !== 2) issues.push('Bow + daggers must bank two air jumps');
+      selectedPrimaryIdx = crossbow;
+      if (loadoutAirJumps() !== 1) issues.push('Daggers alone must bank one air jump');
       if (DASH_SPEED !== 17) issues.push('the air dash should be back at 17, not ' + DASH_SPEED);
       if (grantsDash(WEAPONS.find(w => w.id === 'fists') || {})) issues.push('the air dash should not have been opened to fists');
       const ab = MELEE_ITEMS[sc].ability;
@@ -1782,7 +1800,7 @@ if (ok && process.argv.includes('--movement')) {
     }
     return issues;
   })()`);
-  console.log('movement checks: double jump back, original air dash, Reap Dash follows the aim');
+  console.log('movement checks: Bow/daggers gain double jump, Scythe/Crossbow lose it, original air dash and aimed Reap Dash preserved');
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
