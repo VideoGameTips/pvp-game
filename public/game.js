@@ -19434,13 +19434,13 @@ function _wearAtlas() {
   });
   // 5-7 stains: several soft lobes and a dried edge
   for (let k = 0; k < 3; k++) cell(5 + k, () => {
-    for (let i = 0; i < 5 + k * 2; i++) { const a = R(0, 6.28), d = R(0, 60); blob(128 + Math.cos(a) * d, 128 + Math.sin(a) * d, R(26, 62), R(0.25, 0.5)); }
-    g.strokeStyle = W(0.28); g.lineWidth = 2; g.beginPath(); g.ellipse(128 + R(-12, 12), 128 + R(-12, 12), R(46, 64), R(36, 54), R(0, 3), 0, 6.28); g.stroke();
+    for (let i = 0; i < 5 + k * 2; i++) { const a = R(0, 6.28), d = R(0, 60); blob(128 + Math.cos(a) * d, 128 + Math.sin(a) * d, R(26, 62), R(0.35, 0.65)); }
+    g.strokeStyle = W(0.3); g.lineWidth = 2; g.beginPath(); g.ellipse(128 + R(-12, 12), 128 + R(-12, 12), R(46, 64), R(36, 54), R(0, 3), 0, 6.28); g.stroke();
   });
   // 8 streaks: runs of grime from the top, tapering and wobbling as they fall
   cell(8, () => {
-    for (let i = 0; i < 16; i++) {
-      const x = R(14, 242), w = R(2, 9), len = R(110, 250), y0 = R(0, 40);
+    for (let i = 0; i < 5; i++) {
+      const x = 30 + i * 46 + R(-12, 12), w = R(5, 15), len = R(120, 250), y0 = R(0, 40);
       const gr = g.createLinearGradient(0, y0, 0, y0 + len);
       gr.addColorStop(0, W(R(0.4, 0.7))); gr.addColorStop(0.7, W(0.18)); gr.addColorStop(1, W(0));
       g.fillStyle = gr; g.beginPath(); g.moveTo(x - w / 2, y0);
@@ -19510,7 +19510,7 @@ function _wearAtlas() {
   cell(15, () => {
     g.save(); g.translate(128, 128); g.scale(1, 0.42);
     const gr = g.createRadialGradient(0, 0, 0, 0, 0, 120);
-    gr.addColorStop(0, W(0.6)); gr.addColorStop(0.6, W(0.28)); gr.addColorStop(1, W(0));
+    gr.addColorStop(0, W(0.85)); gr.addColorStop(0.6, W(0.42)); gr.addColorStop(1, W(0));
     g.fillStyle = gr; g.beginPath(); g.arc(0, 0, 120, 0, 6.28); g.fill(); g.restore();
     for (let i = 0; i < 40; i++) blob(R(20, 236), R(88, 168), R(6, 16), R(0.05, 0.15));
   });
@@ -19559,7 +19559,8 @@ function _wearProfileFor(name, th) {
   for (const k of ['grime', 'crack', 'chip', 'stain', 'scorch', 'rubble']) p[k] = Math.max(0, Math.min(1.6, base[k] * (tw[k] != null ? tw[k] : 1)));
   return p;
 }
-var WEAR_MAX_QUADS = 10000, WEAR_GRIME_QUADS = 4200, WEAR_WALL_QUADS = 8000;   // the whole map, the foot-of-wall dirt, and everything else on walls: so the dirt cannot eat the rest
+var WEAR_GAIN = 1.5;   // how strong every mark is, overall: the knob to turn if the maps come out too clean or too grubby
+var WEAR_MAX_QUADS = 17000, WEAR_GRIME_QUADS = 5200, WEAR_MOTTLE_QUADS = 10400, WEAR_WALL_QUADS = 15200;   // the whole map, then how far each layer of wall wear may take the count: so no layer eats the next
 // The maps built since the theme table that have none of their own: how worn they are, and the colour of their floor
 const WEAR_UNTHEMED = { storm_pier: 'industrial', cargo_belts: 'industrial', laser_vault: 'space', gale_peaks: 'nature', magma_rise: 'fire' };
 function addMapWear(name) {
@@ -19589,6 +19590,7 @@ function addMapWear(name) {
   // a colour and an alpha, and whether to mirror it (so one picture is not obviously the same picture).
   const emit = (cx, cy, cz, ux, uy, uz, vx, vy, vz, hu, hv, nx, ny, nz, cellId, col, a, fu, fv) => {
     if (D.q >= WEAR_MAX_QUADS || a < 0.02) return false;
+    a = Math.min(0.95, a * WEAR_GAIN);
     const [u0, v0, u1, v1] = cellUV(cellId), ua = fu ? u1 : u0, ub = fu ? u0 : u1, va = fv ? v1 : v0, vb = fv ? v0 : v1;
     const K = [[-1, -1, ua, va], [1, -1, ub, va], [1, 1, ub, vb], [-1, 1, ua, vb]];
     const P = K.map(([su, sv, tu, tv]) => [cx + ux * hu * su + vx * hv * sv, cy + uy * hu * su + vy * hv * sv, cz + uz * hu * su + vz * hv * sv, tu, tv]);
@@ -19599,7 +19601,7 @@ function addMapWear(name) {
   const shade = (hex, f) => rgb(_thShade(hex, f)), mix = (a, b, f) => rgb(_thMix(a, b, f));
   const lum = hex => (((hex >> 16) & 255) * 0.299 + ((hex >> 8) & 255) * 0.587 + (hex & 255) * 0.114) / 255;
   // dirt on a dark surface does not show: there the wear is the pale kind (dust, lime, scuffed paint)
-  const dirtOn = (hex, f) => lum(hex) < 0.4 ? mix(hex, 0xb9b1a2, 0.45 * f + 0.1) : mix(_thShade(hex, 0.3), tint.dirt, 0.55);
+  const dirtOn = (hex, f) => lum(hex) < 0.4 ? mix(hex, 0xc4bcad, 0.6 * f + 0.2) : mix(_thShade(hex, 0.3), tint.dirt, 0.55);
   // ── every box that is a real, opaque, upright surface
   G.updateMatrixWorld(true);
   const boxes = [];
@@ -19637,70 +19639,107 @@ function addMapWear(name) {
     }
   }
   // wall decals pick their spot ON the face: u along it (-len/2..len/2), y up (bottom..top)
-  const face = (f, u, y, hu, hv, cellId, col, a, layer = 0) => {
+  const lift = f => f.b.y - f.b.h / 2;        // the bottom of the box
+  const face = (f, u, y, hu, hv, cellId, col, a, layer = 0, flipV = false) => {
     // the theme dressing stands a base band 6 cm proud of every wall's foot: dirt there has to sit in front of it
     const banded = (f.b.cls === 'wall' || f.b.cls === 'perimeter') && y - hv < lift(f) + 0.62;
     const o = (banded ? 0.075 : 0.008) + layer * 0.004;
-    return emit(f.fx + f.ux * u + f.nx * o, y, f.fz + f.uz * u + f.nz * o, f.ux, 0, f.uz, 0, 1, 0, hu, hv, f.nx, 0, f.nz, cellId, col, a, rnd() < 0.5, false);
+    return emit(f.fx + f.ux * u + f.nx * o, y, f.fz + f.uz * u + f.nz * o, f.ux, 0, f.uz, 0, 1, 0, hu, hv, f.nx, 0, f.nz, cellId, col, a, rnd() < 0.5, flipV);
   };
-  const lift = f => f.b.y - f.b.h / 2;        // the bottom of the box
-  // 1a. dirt at the foot of every wall (and moss, or dust drifted against it) — the one thing that is on every wall
-  // (shuffled, so that if the budget runs out it is spread over the whole map and not the first walls built)
-  if (prof.grime > 0.1) for (const f of faces.slice().sort(() => rnd() - 0.5)) {
+  const keyed = faces.map(f => [f.len * f.b.h * (0.85 + rnd() * 0.3), f]).sort((p, q) => q[0] - p[0]).map(p => p[1]);   // biggest first
+  const grimeK = Math.min(1.3, 0.5 + prof.grime * 0.75);
+  // The point of the layers is that NO part of a wall is left clean: dirt is laid over the whole face, in layers that each
+  // reach right across it (a foot, a top, a mottling), and only then do the marks that are in one place (a patch, a crack).
+  // A. dirt at the foot of every wall, along its whole length (and moss, or dust drifted against it)
+  if (prof.grime > 0.1) for (const f of keyed) {
     if (D.q >= WEAR_GRIME_QUADS) break;
-    const base = lift(f), seg = 4.5, n = Math.min(10, Math.ceil(f.len / seg));
+    const base = lift(f), n = Math.max(1, Math.min(8, Math.ceil(f.len / 7)));
     const dirt = prof.tint === 'dust' ? mix(f.b.col, tint.light, 0.55) : dirtOn(f.b.col, prof.grime);
-    for (let i = 0; i < n && D.q < WEAR_GRIME_QUADS; i++) {
-      const u = -f.len / 2 + (i + 0.5) * f.len / n, hh = R(0.8, 1.7) * (0.7 + prof.grime * 0.5);
-      face(f, u, base + hh * 0.55, f.len / n / 2 * 1.05, hh * 0.6, 9, dirt, Math.min(0.92, (0.45 + prof.grime * 0.45) * R(0.8, 1.1)), 0);
-      if (prof.tint === 'moss' && rnd() < 0.6) face(f, u + R(-0.4, 0.4), base + 0.28, R(0.5, 1.1), 0.3, 9, rgb(tint.run), 0.5 * prof.grime, 1);
+    for (let i = 0; i < n; i++) {
+      const w = f.len / n, u = -f.len / 2 + (i + 0.5) * w, hh = R(1.0, 1.9) * (0.7 + prof.grime * 0.5);
+      face(f, u, base + hh * 0.55, w / 2 * 1.04, hh * 0.6, 9, dirt, Math.min(0.95, (0.5 + prof.grime * 0.5) * R(0.85, 1.15)), 0);
+      if (f.b.h > 2.4) { const h2 = Math.min(f.b.h * 0.8, R(2.6, 4.8)); face(f, u + R(-0.3, 0.3) * w / 2, base + h2 * 0.55, w / 2 * 1.04, h2 * 0.6, 9, dirt, R(0.22, 0.4) * grimeK, 0); }
+      if (prof.tint === 'moss' && rnd() < 0.6) face(f, u + R(-0.4, 0.4) * w / 2, base + 0.28, R(0.8, 1.6), 0.3, 9, rgb(tint.run), 0.5 * prof.grime, 1);
     }
   }
-  // 1b. the rest, in a shuffled order so the budget runs out evenly across the map, not map-wall by map-wall
-  const order = faces.slice().sort(() => rnd() - 0.5);
-  for (const f of order) {
-    if (D.q >= WEAR_WALL_QUADS) break;
-    const hgt = f.b.h, base = lift(f), top = base + hgt, area = f.len * hgt;
-    const cnt = (k, per, cap) => Math.min(cap, Math.floor(area / per * k + rnd()));
-    // big soft blotches of a different tone: what breaks a wall up from across the map
-    for (let i = cnt(1, 36, 4); i > 0; i--) {
-      const sw = R(3, 7), sh = R(1.6, 3.4), u = R(-f.len / 2 + 1, f.len / 2 - 1), y = base + R(0.8, Math.max(1, hgt - 0.8));
-      const lightOne = rnd() < 0.4;
-      face(f, u, y, sw / 2, sh / 2, 15, lightOne ? mix(f.b.col, tint.light, 0.35) : shade(f.b.col, 0.5), R(0.22, 0.4), 0);
+  // B. and a band of age under the top of every tall wall (soot, damp, the edge of the roof's rain), as long as the wall
+  if (prof.grime > 0.1) for (const f of keyed) {
+    if (D.q >= WEAR_GRIME_QUADS + 1500) break;
+    if (f.b.h < 3.2) continue;
+    const top = lift(f) + f.b.h, n = Math.max(1, Math.min(8, Math.ceil(f.len / 7)));
+    const dirt = dirtOn(f.b.col, 0.8);
+    for (let i = 0; i < n; i++) {
+      const w = f.len / n, u = -f.len / 2 + (i + 0.5) * w, hh = R(0.7, 1.5);
+      face(f, u, top - hh * 0.5, w / 2 * 1.04, hh * 0.55, 9, dirt, R(0.35, 0.6) * grimeK, 0, true);
     }
-    // streaks of rain and rust from the top (and from every ledge the dressing left)
-    for (let i = cnt(prof.grime, 7, 20); i > 0; i--) {
-      const hh = R(1.2, Math.min(5, hgt * 0.6)), u = R(-f.len / 2 + 0.3, f.len / 2 - 0.3);
-      const pale = lum(f.b.col) < 0.3;
+  }
+  // C. mottling: soft blotches of a different tone on a loose grid over the whole face, so the paint and plaster are never one
+  // even colour; a few cells are left as they were (a wall is not uniformly dirty either), never a whole wall
+  for (const f of keyed) {
+    if (D.q >= WEAR_MOTTLE_QUADS) break;
+    const hgt = f.b.h, base = lift(f);
+    const cw = Math.max(3.2, f.len / 7), ch = Math.max(2.4, hgt / 4);
+    const nu = Math.max(1, Math.round(f.len / cw)), nv = Math.max(1, Math.round(hgt / ch));
+    for (let iu = 0; iu < nu; iu++) for (let iv = 0; iv < nv; iv++) {
+      if (nu * nv > 4 && rnd() < 0.1) continue;
+      const u = -f.len / 2 + (iu + 0.5 + R(-0.3, 0.3)) * f.len / nu, y = base + (iv + 0.5 + R(-0.3, 0.3)) * hgt / nv;
+      const sw = f.len / nu * R(1.2, 1.9), sh = hgt / nv * R(1.1, 1.8);
+      const low = iv === 0, light = rnd() < (low ? 0.2 : 0.38);
+      face(f, u, y, sw / 2, sh / 2, rnd() < 0.55 ? 15 : pick(WEAR_CELL.stain),
+        light ? mix(f.b.col, tint.light, R(0.25, 0.4)) : (rnd() < 0.3 ? rgb(tint.run) : dirtOn(f.b.col, 0.75)),
+        Math.min(0.85, R(0.3, 0.62) * (0.6 + prof.grime * 0.6) * (low ? 1.2 : 1)), 0);
+    }
+  }
+  // D. rain and rust running down from the top, all the way along it, one every metre or two
+  for (const f of keyed) {
+    if (D.q >= WEAR_WALL_QUADS - 1500) break;
+    const hgt = f.b.h, top = lift(f) + hgt, pale = lum(f.b.col) < 0.3;
+    if (hgt < 2.2) continue;
+    const sp = R(1.7, 3.2) / Math.max(0.5, grimeK);
+    let made = 0;
+    for (let u = -f.len / 2 + R(0.3, sp); u < f.len / 2 - 0.3 && made < 30; u += sp * R(0.7, 1.4)) {
+      if (rnd() < 0.2) continue;
+      const hh = R(1.2, Math.min(5.5, hgt * 0.65));
       const col = prof.tint === 'rust' || prof.tint === 'moss' || rnd() < 0.3 ? (rnd() < 0.55 ? rgb(tint.run) : dirtOn(f.b.col, 0.8)) : dirtOn(f.b.col, 1);
-      face(f, u, top - hh / 2 - R(0, 0.5), R(0.5, 1.3), hh / 2, 8, col, R(0.45, 0.8) * Math.min(1, 0.6 + prof.grime) * (pale ? 0.85 : 1), 1);
+      face(f, u, top - hh / 2 - R(0, 0.4), R(0.6, 1.4), hh / 2, 8, col, Math.min(0.95, R(0.55, 0.95) * Math.min(1, 0.6 + prof.grime) * (pale ? 0.9 : 1)), 1);
+      made++;
     }
-    // plaster and paint come away: lighter ground underneath, with a darker shadow behind it
-    for (let i = cnt(prof.chip, 9, 10); i > 0; i--) {
-      const s = R(0.55, 1.9), u = R(-f.len / 2 + s, f.len / 2 - s), y = base + (rnd() < 0.5 ? R(0.3, 1.4) : R(0.5, Math.max(0.6, hgt - 0.4)));
-      const under = prof.tint === 'rust' && rnd() < 0.5 ? rgb(0x7a4220) : mix(f.b.col, tint.light, R(0.35, 0.6));
-      face(f, u + 0.03, y - 0.03, s * 0.55, s * 0.5, 10, shade(f.b.col, 0.25), 0.65, 1);
-      face(f, u, y, s * 0.5, s * 0.46, rnd() < 0.7 ? 10 : 12, under, R(0.8, 0.98), 2);
-    }
-    // repairs: a patch of other material, a different tone
-    for (let i = cnt(prof.chip * 0.8, 28, 3); i > 0; i--) {
-      const sw = R(0.8, 2.2), sh = R(0.6, 1.6), u = R(-f.len / 2 + sw, f.len / 2 - sw), y = base + R(0.6, Math.max(0.7, hgt - 0.8));
-      face(f, u, y, sw / 2, sh / 2, 11, shade(f.b.col, R(0.78, 1.22)), R(0.6, 0.85), 1);
-    }
-    // cracks, from the top of a wall or up from its foot
-    for (let i = cnt(prof.crack, 17, 10); i > 0; i--) {
-      const s = R(1.1, 3.2), u = R(-f.len / 2 + s, f.len / 2 - s), y = base + R(0.5, Math.max(0.6, hgt - 0.6));
-      face(f, u, y, s / 2, s / 2, pick(WEAR_CELL.crack), rgb(_thShade(f.b.col, 0.1)), R(0.75, 0.95), 3);
-    }
-    // stains, blast marks, bullet holes
-    for (let i = cnt(prof.stain, 19, 6); i > 0; i--) {
-      const s = R(0.7, 2.2), u = R(-f.len / 2 + s, f.len / 2 - s), y = base + R(0.4, Math.max(0.5, hgt * 0.7));
-      face(f, u, y, s / 2, s / 2 * R(0.6, 1), pick(WEAR_CELL.stain), rnd() < 0.35 ? rgb(tint.run) : dirtOn(f.b.col, 0.9), R(0.3, 0.55), 1);
-    }
-    for (let i = cnt(prof.scorch, 26, 4); i > 0; i--) {
-      const s = R(0.9, 2.2), u = R(-f.len / 2 + s, f.len / 2 - s), y = base + R(0.7, Math.max(0.8, Math.min(hgt - 0.5, 3.4)));
-      face(f, u, y, s / 2, s / 2, pick(WEAR_CELL.scorch), rgb(0x0e0c0a), R(0.45, 0.7), 2);
-      if (rnd() < 0.7) face(f, u + R(-0.3, 0.3), y + R(-0.3, 0.3), R(0.4, 0.8), R(0.4, 0.8), 13, rgb(0x0c0b0a), 0.85, 3);
+  }
+  // E. the marks that are in one place: a patch of plaster gone, a repair, a crack, a stain, a blast mark. One chance per cell of
+  // the face (about 5 x 3.5 m), so they are spread right across it and not heaped where the dice fell
+  for (const f of keyed) {
+    if (D.q >= WEAR_WALL_QUADS) break;
+    const hgt = f.b.h, base = lift(f);
+    const nu = Math.max(1, Math.round(f.len / 5)), nv = Math.max(1, Math.round(hgt / 3.5));
+    const wChip = prof.chip, wRep = prof.chip * 0.35, wCrack = prof.crack * 0.75, wStain = prof.stain * 0.6, wScorch = prof.scorch * 0.5;
+    const wSum = wChip + wRep + wCrack + wStain + wScorch;
+    if (wSum <= 0.01) continue;
+    let made = 0;
+    for (let iu = 0; iu < nu && made < 30; iu++) for (let iv = 0; iv < nv && made < 30; iv++) {
+      if (rnd() < 0.22) continue;
+      const cwid = f.len / nu, chei = hgt / nv;
+      const u = -f.len / 2 + (iu + 0.5 + R(-0.35, 0.35)) * cwid, y = base + Math.max(0.4, (iv + 0.5 + R(-0.35, 0.35)) * chei);
+      let r = rnd() * wSum;
+      made++;
+      if ((r -= wChip) < 0) {                                   // plaster and paint come away: lighter ground, a darker shadow behind it
+        const sz = R(0.55, 1.9);
+        const under = prof.tint === 'rust' && rnd() < 0.5 ? rgb(0x7a4220) : mix(f.b.col, tint.light, R(0.3, 0.55));
+        face(f, u + 0.03, y - 0.03, sz * 0.55, sz * 0.5, 10, shade(f.b.col, 0.25), 0.65, 1);
+        face(f, u, y, sz * 0.5, sz * 0.46, rnd() < 0.7 ? 10 : 12, under, R(0.75, 0.95), 2);
+      } else if ((r -= wRep) < 0) {                             // a repair: a patch of other material
+        const sw = R(0.8, 2.2), sh = R(0.6, 1.6);
+        face(f, u, y, sw / 2, sh / 2, 11, shade(f.b.col, R(0.78, 1.22)), R(0.6, 0.85), 1);
+      } else if ((r -= wCrack) < 0) {                           // a crack
+        const sz = R(1.1, 3.2);
+        face(f, u, y, sz / 2, sz / 2, pick(WEAR_CELL.crack), rgb(_thShade(f.b.col, 0.1)), R(0.75, 0.95), 3);
+      } else if ((r -= wStain) < 0) {                           // a stain
+        const sz = R(0.8, 2.4);
+        face(f, u, y, sz / 2, sz / 2 * R(0.6, 1), pick(WEAR_CELL.stain), rnd() < 0.35 ? rgb(tint.run) : dirtOn(f.b.col, 0.9), R(0.3, 0.55), 1);
+      } else {                                                  // a blast mark, and bullet holes
+        const sz = R(0.9, 2.2);
+        face(f, u, y, sz / 2, sz / 2, pick(WEAR_CELL.scorch), rgb(0x0e0c0a), R(0.45, 0.7), 2);
+        if (rnd() < 0.7) face(f, u + R(-0.3, 0.3), y + R(-0.3, 0.3), R(0.4, 0.8), R(0.4, 0.8), 13, rgb(0x0c0b0a), 0.85, 3);
+      }
     }
   }
   // ── 2. FLOORS: the open ground, and the tops of decks and roofs you can see from the ground
@@ -19725,22 +19764,24 @@ function addMapWear(name) {
   };
   const groundCol = th.g;
   const area = bounds.halfX * bounds.halfZ * 4;
-  const nFloor = Math.round(Math.max(90, Math.min(760, area / 42)) * Math.min(1.25, 0.4 + prof.stain * 0.65));
-  let placed = 0, tries = 0;
-  while (placed < nFloor && tries++ < nFloor * 6 && D.q < WEAR_MAX_QUADS - 700) {
-    const x = R(-bounds.halfX + 2.5, bounds.halfX - 2.5), z = R(-bounds.halfZ + 2.5, bounds.halfZ - 2.5);
-    if (inVoid(x, z)) continue;
-    const roll = rnd(), size0 = R(1.1, 3.6);
-    if (!clear(x, z, size0 * 0.3)) continue;
-    const y = groundAt(x, z);
-    placed++;
-    if (roll < 0.26)      floor(x, y, z, size0, pick(WEAR_CELL.stain), rnd() < 0.25 ? rgb(tint.run) : dirtOn(groundCol, 0.9), R(0.38, 0.62) * Math.min(1, 0.5 + prof.stain));
-    else if (roll < 0.46) floor(x, y, z, size0 * 1.4, pick(WEAR_CELL.crack), rgb(_thShade(groundCol, 0.1)), R(0.7, 0.92) * Math.min(1, 0.5 + prof.crack));
-    else if (roll < 0.6)  floor(x, y, z, R(6, 14), 15, rnd() < 0.55 ? shade(groundCol, 0.55) : mix(groundCol, tint.light, 0.3), R(0.2, 0.36));    // a big blotch
-    else if (roll < 0.7)  floor(x, y, z, size0 * 1.2, 14, dirtOn(groundCol, 0.8), R(0.4, 0.65));                                                      // scuffs, all one way
-    else if (roll < 0.82) floor(x, y, z, size0 * 1.3, rnd() < 0.55 ? 11 : 10, shade(groundCol, rnd() < 0.5 ? R(0.6, 0.85) : R(1.2, 1.5)), R(0.6, 0.9));        // a patched bit of floor
-    else if (roll < 0.92) floor(x, y, z, size0 * 1.1, 15, mix(groundCol, 0x20262c, 0.6), R(0.4, 0.65));                                               // damp
-    else if (prof.scorch > 0.1) floor(x, y, z, size0 * 0.9, pick(WEAR_CELL.scorch), rgb(0x0e0c0a), R(0.4, 0.65) * Math.min(1, prof.scorch + 0.3));
+  // Spread over the whole floor on a jittered grid (about one cell in 6.5 m), a mark or two in every cell, so no big stretch of
+  // ground is left clean and none is heaped: random points leave bald patches and clumps.
+  const cellS = Math.max(5.5, Math.min(9, 6.5 / Math.sqrt(0.55 + prof.stain * 0.5)));
+  for (let gx = -bounds.halfX + 2; gx < bounds.halfX - 2 && D.q < WEAR_MAX_QUADS - 700; gx += cellS) for (let gz = -bounds.halfZ + 2; gz < bounds.halfZ - 2 && D.q < WEAR_MAX_QUADS - 700; gz += cellS) {
+    for (let k = rnd() < 0.55 ? 2 : 1; k > 0; k--) {
+      const x = gx + R(0, cellS), z = gz + R(0, cellS);
+      if (Math.abs(x) > bounds.halfX - 2.5 || Math.abs(z) > bounds.halfZ - 2.5 || inVoid(x, z)) continue;
+      const roll = rnd(), size0 = R(1.2, 3.8);
+      if (!clear(x, z, size0 * 0.3)) continue;
+      const y = groundAt(x, z);
+      if (roll < 0.24)      floor(x, y, z, size0, pick(WEAR_CELL.stain), rnd() < 0.25 ? rgb(tint.run) : dirtOn(groundCol, 0.9), R(0.38, 0.62) * Math.min(1, 0.5 + prof.stain));
+      else if (roll < 0.42) floor(x, y, z, size0 * 1.4, pick(WEAR_CELL.crack), rgb(_thShade(groundCol, 0.1)), R(0.7, 0.92) * Math.min(1, 0.5 + prof.crack));
+      else if (roll < 0.58) floor(x, y, z, R(6, 14), 15, rnd() < 0.55 ? shade(groundCol, 0.55) : mix(groundCol, tint.light, 0.3), R(0.2, 0.36));    // a big blotch
+      else if (roll < 0.68) floor(x, y, z, size0 * 1.2, 14, dirtOn(groundCol, 0.8), R(0.4, 0.65));                                                      // scuffs, all one way
+      else if (roll < 0.8)  floor(x, y, z, size0 * 1.3, rnd() < 0.55 ? 11 : 10, shade(groundCol, rnd() < 0.5 ? R(0.6, 0.85) : R(1.2, 1.5)), R(0.6, 0.9));        // a patched bit of floor
+      else if (roll < 0.92) floor(x, y, z, size0 * 1.1, 15, mix(groundCol, 0x20262c, 0.6), R(0.4, 0.65));                                               // damp
+      else if (prof.scorch > 0.1) floor(x, y, z, size0 * 0.9, pick(WEAR_CELL.scorch), rgb(0x0e0c0a), R(0.4, 0.65) * Math.min(1, prof.scorch + 0.3));
+    }
   }
   // dirt against the foot of a wall on the floor side too, and the odd crack running along it
   for (const f of faces.slice().sort(() => rnd() - 0.5).slice(0, 160)) {
