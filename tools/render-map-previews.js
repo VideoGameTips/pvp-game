@@ -11,7 +11,7 @@ const fs = require('fs');
 const path = require('path');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 
-const OUT = path.join(__dirname, '..', 'public', 'map-previews');
+const OUT = process.env.PREVIEW_OUT || path.join(__dirname, '..', 'public', 'map-previews');
 const W = 960, H = 600, OUT_W = 400, OUT_H = 250;
 
 // Hand-placed views for the maps whose corner is indoors, walled in, or has nothing to look at. { from: [x, y, z],

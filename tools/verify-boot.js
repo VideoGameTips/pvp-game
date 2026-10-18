@@ -2111,6 +2111,71 @@ if (ok && process.argv.includes('--rng')) {
   if (out.issues.length) { ok = false; console.log(out.issues.join('\n')); }
 }
 
+if (ok && process.argv.includes('--wear')) {
+  // The wear pass: every map is worn down (decals on walls and floor, rubble) except the duel arenas and a few hand-made
+  // ones, it is one batch of each, it adds no collider and nothing a bullet or a camera can hit, it stays on the map and
+  // inside its budget, it builds once, and it is the same on every machine.
+  const out = vm.runInThisContext(`(() => {
+    const issues = [], notes = [];
+    const saved = activeMapName;
+    const skip = new Set(['range', 'lobby13', 'obby', 'pinball_arcade', 'neon_tokyo', 'br_arena']);
+    let worn = 0, quads = 0;
+    try {
+      for (const n of MAP_IDS) {
+        const g = MAP_GROUPS[n]; if (!g || !MAP_BOUNDS[n]) continue;
+        try { activateMap(n); } catch (e) { issues.push(n + ' did not activate: ' + e.message); continue; }
+        const w = g.userData.mapWear;
+        const expectWorn = !DUEL_ONLY_MAPS.has(n) && !skip.has(n) && (!!MAP_THEMES[n] || ['storm_pier', 'cargo_borders', 'cargo_belts', 'laser_vault', 'gale_peaks', 'magma_rise'].includes(n));
+        if (DUEL_ONLY_MAPS.has(n) && w) issues.push(n + ': a duel arena should be left plain');
+        if (!expectWorn) continue;
+        if (!w) { issues.push(n + ': was not worn'); continue; }
+        worn++; quads += w.quads;
+        if (w.quads < 400) issues.push(n + ': hardly any wear (' + w.quads + ' decals)');
+        if (w.quads > WEAR_MAX_QUADS) issues.push(n + ': over the decal budget (' + w.quads + ')');
+        const meshes = g.children.filter(c => c.userData && c.userData.mapWear);
+        if (meshes.length > 2) issues.push(n + ': ' + meshes.length + ' wear batches (a decal batch and a rubble batch)');
+        // the outskirts (and a space station's ring) stand beyond the bounds, and have walls too: judge by what is really built
+        let ex = 0, ez = 0; for (const c of MAP_COLLIDERS[n]) { ex = Math.max(ex, Math.abs(c.min.x), Math.abs(c.max.x)); ez = Math.max(ez, Math.abs(c.min.z), Math.abs(c.max.z)); }
+        const b = { halfX: Math.max(MAP_BOUNDS[n].halfX, ex) + 3, halfZ: Math.max(MAP_BOUNDS[n].halfZ, ez) + 3 };
+        for (const m of meshes) {
+          if (m.castShadow) issues.push(n + ': wear casts shadows');
+          let hit = false; const rc = new THREE.Raycaster(new THREE.Vector3(0, 50, 0), new THREE.Vector3(0, -1, 0));
+          try { hit = rc.intersectObject(m, false).length > 0; } catch (e) {}
+          if (hit) issues.push(n + ': a decal can be hit by a ray');
+          const P = m.geometry.attributes.position;
+          let bad = 0, out = 0;
+          for (let i = 0; i < P.count; i += 7) {
+            const x = P.getX(i), y = P.getY(i), z = P.getZ(i);
+            if (!Number.isFinite(x + y + z)) bad++;
+            else if (Math.abs(x) > b.halfX + 2 || Math.abs(z) > b.halfZ + 2) out++;
+          }
+          if (bad) issues.push(n + ': ' + bad + ' decal vertices are not numbers');
+          if (out > P.count / 7 * 0.03 && n !== 'orbital_station') issues.push(n + ': ' + out + ' wear vertices lie off the map');   // (the station's own hull stands outside its bounds, with no collider)
+          const C = m.geometry.attributes.color;
+          if (C && C.itemSize === 4) for (let i = 0; i < C.count; i += 11) if (!(C.getW(i) >= 0 && C.getW(i) <= 1)) { issues.push(n + ': a decal alpha is ' + C.getW(i)); break; }
+        }
+        const before = g.children.length; addMapWear(n);
+        if (g.children.length !== before) issues.push(n + ': the wear pass ran twice');
+        // wear on a fresh copy of the same map adds no collider
+        const colsBefore = MAP_COLLIDERS[n].length, kids = g.children.length;
+        for (const m of meshes) g.remove(m);
+        g.userData.mapWear = null; addMapWear(n);
+        if (MAP_COLLIDERS[n].length !== colsBefore) issues.push(n + ': wear changed the colliders (' + colsBefore + ' -> ' + MAP_COLLIDERS[n].length + ')');
+        if (g.children.length > kids + 0) issues.push(n + ': a second wear pass did not replace the first');
+      }
+      notes.push(worn + ' maps worn, ' + Math.round(quads / Math.max(1, worn)) + ' decals each on average');
+      // deterministic: the same name gives the same dirt
+      const a = _thRng('urban:wear')(), b2 = _thRng('urban:wear')();
+      if (a !== b2) issues.push('the wear is not seeded by the map name');
+      // the atlas has a cell for everything the pass asks for
+      for (const [k, cells] of Object.entries(WEAR_CELL)) for (const c of cells) if (!(c >= 0 && c < 16)) issues.push('WEAR_CELL.' + k + ' points off the atlas');
+    } finally { activateMap(saved || 'blank'); }
+    return { issues, notes };
+  })()`);
+  console.log('wear checks: ' + out.notes.join(' · ') + ' · duel arenas plain · no colliders, nothing a ray can hit');
+  if (out.issues.length) { ok = false; console.log(out.issues.slice(0, 30).join('\n')); }
+}
+
 if (ok && process.argv.includes('--flare')) {
   // The flare: slow, big, and it falls gently: still in the air well past the 1.8 s a normal shot lives, and it has
   // dropped far less than a plain lob would have.

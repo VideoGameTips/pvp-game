@@ -5943,6 +5943,7 @@ const obbyMapColliders        = MAP_COLLIDERS.obby;
 function _weatherOnActivate(name) { if (MAP_GROUPS[name]) weatherMapGroup(MAP_GROUPS[name]); }
 function activateMap(name) {
   if (typeof _upgradeMap === 'function') _upgradeMap(name);   // the first time a map is played: see "WHEN THE UPGRADES RUN"
+  if (typeof addMapWear === 'function' && !MAP_THEMES[name]) { try { addMapWear(name); } catch (e) { console.warn('[wear]', name, e); } }   // (a themed map is worn inside its upgrade; these have no theme to upgrade)
   // ⚡ DETACH the other maps, do not merely hide them (#73). three.js skips an
   // invisible subtree when it builds the render list, but updateMatrixWorld
   // recurses unconditionally and renderer.render calls it once a frame — so
@@ -19380,6 +19381,430 @@ function addMapRealism(name) {
   stats.detailBoxes=detail.boxes;
 }
 
+// ═══ 🧱 WEAR ═══════════════════════════════════════════════════════════════════════════════════════════════════════
+// The maps were too perfect: clean walls, clean floors, every edge square, every surface one flat colour. This is the
+// pass that wears them down, done to a map the first time it is played (after its dressing, with the other upgrades):
+//   • decals, laid on the real faces of the real boxes and on the floor: dirt that gathers at the foot of every wall,
+//     rain streaks and rust runs from the top, patches of paint and plaster peeled away, repair patches, cracks,
+//     stains, scorch marks and bullet holes, tyre scuffs, big faint blotches that break up a flat floor;
+//   • rubble: small loose chunks heaped at the bottom of walls and scattered on the floor.
+// All of it is visual only: no collider, nothing you can stand on or shoot, no change to any route. The decals are
+// one batch per map (one draw call, drawn before everything else that is see-through) and the rubble another, from
+// the map's own name as the seed, so everybody's copy is worn the same way. How much, and in what dirt, depends on
+// the place: a trench is filthy, a space station is scuffed, a duel arena (plain grid, flat colours) is left alone.
+var _wearAtlasTex = null;
+function _wearAtlas() {
+  if (_wearAtlasTex) return _wearAtlasTex;
+  const S = 256, N = 4, cv = document.createElement('canvas');
+  cv.width = cv.height = S * N;
+  const g = cv.getContext('2d'), rnd = _thRng('wear-atlas');
+  const R = (a, b) => a + rnd() * (b - a);
+  const W = a => 'rgba(255,255,255,' + a + ')';
+  const cell = (i, fn) => { g.save(); g.beginPath(); g.rect((i % N) * S, Math.floor(i / N) * S, S, S); g.clip(); g.translate((i % N) * S, Math.floor(i / N) * S); fn(); g.restore(); };
+  const blob = (x, y, r, a) => {
+    const gr = g.createRadialGradient(x, y, 0, x, y, r);
+    gr.addColorStop(0, W(a)); gr.addColorStop(0.55, W(a * 0.55)); gr.addColorStop(1, W(0));
+    g.fillStyle = gr; g.beginPath(); g.arc(x, y, r, 0, 6.2832); g.fill();
+  };
+  const dot = (x, y, r, a) => { g.fillStyle = W(a); g.beginPath(); g.arc(x, y, r, 0, 6.2832); g.fill(); };
+  // 0-2 cracks: a hairline that wanders and forks, with a soft lip either side of it
+  for (let k = 0; k < 3; k++) cell(k, () => {
+    g.lineCap = 'round'; g.lineJoin = 'round';
+    const branch = (x, y, ang, len, w, depth) => {
+      let px = x, py = y;
+      const steps = Math.max(3, Math.floor(len / 9));
+      for (let s = 0; s < steps; s++) {
+        ang += R(-0.5, 0.5);
+        const nx = px + Math.cos(ang) * R(5, 12), ny = py + Math.sin(ang) * R(5, 12);
+        g.strokeStyle = W(0.28); g.lineWidth = w * 2.6; g.beginPath(); g.moveTo(px, py); g.lineTo(nx, ny); g.stroke();
+        g.strokeStyle = W(0.95); g.lineWidth = Math.max(0.8, w); g.beginPath(); g.moveTo(px, py); g.lineTo(nx, ny); g.stroke();
+        px = nx; py = ny;
+        if (depth < 2 && rnd() < 0.2) branch(px, py, ang + R(0.5, 1.2) * (rnd() < 0.5 ? -1 : 1), len * R(0.3, 0.55), w * 0.7, depth + 1);
+        if (px < 8 || px > S - 8 || py < 8 || py > S - 8) break;
+      }
+    };
+    for (let i = 0; i < 1 + (k % 2); i++) branch(R(40, 215), R(40, 215), R(0, 6.28), R(90, 150), R(1.6, 2.6), 0);
+  });
+  // 3-4 scorch: a soot bloom with a ragged edge and a spatter of flecks
+  for (let k = 0; k < 2; k++) cell(3 + k, () => {
+    blob(128, 128, 112, 0.5);
+    for (let i = 0; i < 70; i++) { const a = R(0, 6.28), d = R(10, 85); blob(128 + Math.cos(a) * d, 128 + Math.sin(a) * d, R(10, 34), R(0.1, 0.34)); }
+    blob(128, 128, 54, 0.62);
+    for (let i = 0; i < 40; i++) { const a = R(0, 6.28), d = R(80, 118); dot(128 + Math.cos(a) * d, 128 + Math.sin(a) * d, R(1.2, 3.2), R(0.3, 0.8)); }
+  });
+  // 5-7 stains: several soft lobes and a dried edge
+  for (let k = 0; k < 3; k++) cell(5 + k, () => {
+    for (let i = 0; i < 5 + k * 2; i++) { const a = R(0, 6.28), d = R(0, 60); blob(128 + Math.cos(a) * d, 128 + Math.sin(a) * d, R(26, 62), R(0.25, 0.5)); }
+    g.strokeStyle = W(0.28); g.lineWidth = 2; g.beginPath(); g.ellipse(128 + R(-12, 12), 128 + R(-12, 12), R(46, 64), R(36, 54), R(0, 3), 0, 6.28); g.stroke();
+  });
+  // 8 streaks: runs of grime from the top, tapering and wobbling as they fall
+  cell(8, () => {
+    for (let i = 0; i < 16; i++) {
+      const x = R(14, 242), w = R(2, 9), len = R(110, 250), y0 = R(0, 40);
+      const gr = g.createLinearGradient(0, y0, 0, y0 + len);
+      gr.addColorStop(0, W(R(0.4, 0.7))); gr.addColorStop(0.7, W(0.18)); gr.addColorStop(1, W(0));
+      g.fillStyle = gr; g.beginPath(); g.moveTo(x - w / 2, y0);
+      let xx = x;
+      for (let y = y0; y < y0 + len; y += 12) { xx += R(-1.2, 1.2); g.lineTo(xx + w / 2 * (1 - (y - y0) / len * 0.5), y); }
+      for (let y = y0 + len; y >= y0; y -= 12) g.lineTo(x - w / 2 * (1 - (y - y0) / len * 0.5) + R(-1, 1), y);
+      g.closePath(); g.fill();
+    }
+  });
+  // 9 the foot of a wall: dirt that climbs unevenly, with a few splashes higher up
+  cell(9, () => {
+    const ph = [R(0, 6.28), R(0, 6.28), R(0, 6.28)];
+    for (let x = 0; x < S; x += 2) {
+      const n = 0.5 + 0.28 * Math.sin(x * 0.045 + ph[0]) + 0.18 * Math.sin(x * 0.13 + ph[1]) + 0.1 * Math.sin(x * 0.31 + ph[2]) + R(-0.05, 0.05);
+      const hgt = S * Math.max(0.12, Math.min(1, n)), gr = g.createLinearGradient(0, S, 0, S - hgt);
+      gr.addColorStop(0, W(0.92)); gr.addColorStop(0.45, W(0.5)); gr.addColorStop(1, W(0));
+      g.fillStyle = gr; g.fillRect(x, S - hgt, 2, hgt);
+    }
+    for (let i = 0; i < 26; i++) dot(R(0, S), R(S * 0.1, S * 0.55), R(1, 3.5), R(0.2, 0.5));
+  });
+  // 10 a patch where the paint or plaster has come away: ragged edge, mottled inside, a few flakes round it
+  cell(10, () => {
+    const pts = [], n = Math.floor(R(10, 15));
+    for (let i = 0; i < n; i++) { const a = (i / n) * 6.28, r = R(52, 112); pts.push([128 + Math.cos(a) * r * R(0.9, 1.2), 128 + Math.sin(a) * r * R(0.7, 1)]); }
+    g.fillStyle = W(0.92); g.beginPath(); pts.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y)); g.closePath(); g.fill();
+    g.globalCompositeOperation = 'destination-out';
+    for (let i = 0; i < 60; i++) dot(R(30, 226), R(30, 226), R(1.5, 7), R(0.25, 0.8));
+    g.globalCompositeOperation = 'source-over';
+    for (let i = 0; i < 12; i++) { const a = R(0, 6.28); dot(128 + Math.cos(a) * R(95, 120), 128 + Math.sin(a) * R(80, 108), R(3, 9), 0.85); }
+  });
+  // 11 a repair: a square-ish patch of different material, rough at the edges
+  cell(11, () => {
+    const x0 = R(22, 40), y0 = R(26, 46), x1 = R(216, 234), y1 = R(210, 230);
+    g.fillStyle = W(0.9); g.beginPath(); g.moveTo(x0, y0);
+    const edge = (xa, ya, xb, yb) => { for (let i = 0; i <= 12; i++) { const t = i / 12; g.lineTo(xa + (xb - xa) * t + R(-4, 4), ya + (yb - ya) * t + R(-4, 4)); } };
+    edge(x0, y0, x1, y0); edge(x1, y0, x1, y1); edge(x1, y1, x0, y1); edge(x0, y1, x0, y0);
+    g.closePath(); g.fill();
+    g.globalCompositeOperation = 'destination-out';
+    for (let i = 0; i < 40; i++) dot(R(30, 226), R(30, 226), R(1, 5), R(0.15, 0.55));
+    g.globalCompositeOperation = 'source-over';
+  });
+  // 12 plaster lost in a tall ragged patch (damp, falling away from the top), with flakes beneath it
+  cell(12, () => {
+    const L = 78 + R(-10, 10), top = R(14, 40), bot = R(190, 226), pts = [];
+    for (let y = top; y <= bot; y += 14) pts.push([128 - L * (0.45 + 0.55 * Math.sin((y - top) / (bot - top) * 3.1)) + R(-8, 8), y]);
+    for (let y = bot; y >= top; y -= 14) pts.push([128 + L * (0.45 + 0.55 * Math.sin((y - top) / (bot - top) * 3.1)) + R(-8, 8), y + R(-5, 5)]);
+    g.fillStyle = W(0.9); g.beginPath(); pts.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y)); g.closePath(); g.fill();
+    g.globalCompositeOperation = 'destination-out';
+    for (let i = 0; i < 50; i++) dot(R(50, 206), R(30, 226), R(1.5, 6), R(0.2, 0.7));
+    g.globalCompositeOperation = 'source-over';
+    for (let i = 0; i < 16; i++) dot(128 + R(-70, 70), R(bot - 10, 244), R(1.5, 5), R(0.5, 0.9));
+  });
+  // 13 bullet holes: a cluster of dark pits with a dusty halo
+  cell(13, () => {
+    const cx = R(90, 166), cy = R(90, 166), n = Math.floor(R(7, 12));
+    for (let i = 0; i < n; i++) { const x = cx + R(-70, 70), y = cy + R(-60, 60); blob(x, y, R(6, 11), 0.35); dot(x, y, R(2.2, 4.2), 0.95); }
+  });
+  // 14 scuffs and scratches, all running one way
+  cell(14, () => {
+    g.lineCap = 'round';
+    for (let i = 0; i < 18; i++) {
+      const x = R(20, 236), y = R(20, 236), a = -0.5 + R(-0.18, 0.18), l = R(25, 120);
+      g.strokeStyle = W(R(0.25, 0.7)); g.lineWidth = R(0.8, 3); g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke();
+    }
+  });
+  // 15 a long soft smear (dust, a damp patch, a faint blotch of a different shade)
+  cell(15, () => {
+    g.save(); g.translate(128, 128); g.scale(1, 0.42);
+    const gr = g.createRadialGradient(0, 0, 0, 0, 0, 120);
+    gr.addColorStop(0, W(0.6)); gr.addColorStop(0.6, W(0.28)); gr.addColorStop(1, W(0));
+    g.fillStyle = gr; g.beginPath(); g.arc(0, 0, 120, 0, 6.28); g.fill(); g.restore();
+    for (let i = 0; i < 40; i++) blob(R(20, 236), R(88, 168), R(6, 16), R(0.05, 0.15));
+  });
+  const tex = new THREE.CanvasTexture(cv);
+  tex.anisotropy = Math.min(4, (typeof renderer !== 'undefined' && renderer.capabilities.getMaxAnisotropy) ? renderer.capabilities.getMaxAnisotropy() : 1);
+  if ('colorSpace' in tex && THREE.SRGBColorSpace !== undefined) tex.colorSpace = THREE.SRGBColorSpace;
+  tex.needsUpdate = true;
+  _wearAtlasTex = tex;
+  return tex;
+}
+const WEAR_CELL = { crack: [0, 1, 2], scorch: [3, 4], stain: [5, 6, 7], streak: [8], base: [9], chip: [10], patch: [11], peel: [12], holes: [13], scuff: [14], smear: [15] };
+// How worn, and in what dirt, by the kind of place (MAP_THEMES motif), then adjusted for the war-torn and the sterile.
+// grime: dirt at the foot of walls and the streaks down them · crack · chip: peeled and repaired patches · stain: the
+// floor · scorch: blast marks and bullet holes · rubble: loose chunks · tint: what the dirt is (soot, rust, moss, dust)
+const WEAR_PROFILE = {
+  urban:      { grime: .8,  crack: .8,  chip: .85, stain: .85, scorch: .35, rubble: .8,  tint: 'soot' },
+  industrial: { grime: .85, crack: .65, chip: .75, stain: .95, scorch: .2,  rubble: .65, tint: 'rust' },
+  nature:     { grime: .6,  crack: .4,  chip: .5,  stain: .65, scorch: .2,  rubble: .55, tint: 'moss' },
+  desert:     { grime: .55, crack: .75, chip: .75, stain: .45, scorch: .15, rubble: .85, tint: 'dust' },
+  fire:       { grime: .95, crack: .75, chip: .65, stain: .75, scorch: .55, rubble: .75, tint: 'soot' },
+  ice:        { grime: .4,  crack: .55, chip: .4,  stain: .35, scorch: .05, rubble: .4,  tint: 'slush' },
+  space:      { grime: .4,  crack: .3,  chip: .4,  stain: .35, scorch: .1,  rubble: .2,  tint: 'grey' },
+  neon:       { grime: .55, crack: .35, chip: .4,  stain: .45, scorch: .1,  rubble: .3,  tint: 'soot' },
+  carnival:   { grime: .5,  crack: .35, chip: .7,  stain: .55, scorch: .05, rubble: .4,  tint: 'dust' },
+};
+const WEAR_MAP_TWEAK = {
+  trenches: { grime: 1.2, scorch: 2.4, rubble: 1.4 }, pearl_harbor: { scorch: 2, grime: 1.1 }, chernobyl: { grime: 1.2, crack: 1.3, rubble: 1.3, tint: 'moss' },
+  doomsday: { scorch: 2, rubble: 1.5, crack: 1.3 }, lockdown: { grime: 1.15, scorch: 1.6 }, labyrinth: { grime: 1.2, tint: 'moss', crack: 1.3 },
+  sewer: { grime: 1.3, stain: 1.4, tint: 'moss' }, foundry: { scorch: 1.4 }, refinery: { stain: 1.3, scorch: 1.3 }, urban: { scorch: 1.5 },
+  overgrowth: { tint: 'moss', grime: 1.2 }, biosphere: { grime: .7, crack: .6 }, temple: { crack: 1.3, rubble: 1.2 }, vietnam: { scorch: 1.8, tint: 'moss' },
+  forest: { tint: 'moss' }, battlefield: { scorch: 2, rubble: 1.3 }, big_arena: { scorch: 1.4, rubble: 1.2 }, super_arena: { scorch: 1.2 },
+  gravity_lab: { grime: .8 }, glassworks: { grime: .8, crack: 1.3 }, orbital_station: { grime: .8 }, holiday: { grime: .6 }, dreamscape: { grime: .3, crack: .3, stain: .3, rubble: .2 },
+};
+const WEAR_TINT = {
+  soot:  { dirt: 0x14110e, run: 0x2a241d, light: 0xcfc6b4 },
+  rust:  { dirt: 0x1c1712, run: 0x6a3a1c, light: 0xcdc6b6 },
+  moss:  { dirt: 0x233420, run: 0x3a5a2b, light: 0xc4bea6 },
+  dust:  { dirt: 0x8a7550, run: 0x9c8660, light: 0xe6d8b0 },
+  slush: { dirt: 0x55595c, run: 0x6a7074, light: 0xf2f6f8 },
+  grey:  { dirt: 0x15171b, run: 0x2a2e36, light: 0xc8ccd4 },
+};
+function _wearProfileFor(name, th) {
+  if (!th) return null;
+  const base = WEAR_PROFILE[th.motif] || WEAR_PROFILE.industrial, tw = WEAR_MAP_TWEAK[name] || {};
+  const p = { ...base, tint: tw.tint || base.tint };
+  for (const k of ['grime', 'crack', 'chip', 'stain', 'scorch', 'rubble']) p[k] = Math.max(0, Math.min(1.6, base[k] * (tw[k] != null ? tw[k] : 1)));
+  return p;
+}
+var WEAR_MAX_QUADS = 10000, WEAR_GRIME_QUADS = 4200, WEAR_WALL_QUADS = 8000;   // the whole map, the foot-of-wall dirt, and everything else on walls: so the dirt cannot eat the rest
+// The maps built since the theme table that have none of their own: how worn they are, and the colour of their floor
+const WEAR_UNTHEMED = { storm_pier: 'industrial', cargo_belts: 'industrial', laser_vault: 'space', gale_peaks: 'nature', magma_rise: 'fire' };
+function addMapWear(name) {
+  const G = MAP_GROUPS[name];
+  if (!G || G.userData.mapWear || DUEL_ONLY_MAPS.has(name) || ['range', 'lobby13', 'obby', 'pinball_arcade', 'neon_tokyo'].includes(name)) return;
+  let th = MAP_THEMES[name];
+  if (!th) {
+    if (!WEAR_UNTHEMED[name]) return;
+    let floorCol = 0x585d63, best = 0;
+    G.updateMatrixWorld(true);
+    G.traverse(m => {   // the biggest flat slab is the floor
+      if (!m.isMesh || !m.geometry || !m.material || Array.isArray(m.material) || !m.material.color || m.material.transparent) return;
+      if (!m.geometry.boundingBox) m.geometry.computeBoundingBox();
+      const sz = m.geometry.boundingBox.getSize(new THREE.Vector3());
+      if (sz.y < 0.8 && sz.x * sz.z > best && m.geometry.attributes.position.count <= 36) { best = sz.x * sz.z; floorCol = m.material.color.getHex(); }
+    });
+    th = { g: floorCol, motif: WEAR_UNTHEMED[name] };
+  }
+  const prof = _wearProfileFor(name, th); if (!prof) return;
+  const bounds = MAP_BOUNDS[name]; if (!bounds) return;
+  const rnd = _thRng(name + ':wear'), R = (a, b) => a + rnd() * (b - a), pick = arr => arr[Math.floor(rnd() * arr.length)];
+  const tint = WEAR_TINT[prof.tint] || WEAR_TINT.soot;
+  const rgb = hex => [((hex >> 16) & 255) / 255, ((hex >> 8) & 255) / 255, (hex & 255) / 255];
+  const D = { p: [], n: [], uv: [], c: [], q: 0 };
+  const cellUV = i => { const col = i % 4, row = Math.floor(i / 4), e = 0.006; return [col / 4 + e, 1 - (row + 1) / 4 + e, (col + 1) / 4 - e, 1 - row / 4 - e]; };
+  // One quad: centre, the two axes it spans (u across, v up the face), half sizes, the face normal, which cell of the atlas,
+  // a colour and an alpha, and whether to mirror it (so one picture is not obviously the same picture).
+  const emit = (cx, cy, cz, ux, uy, uz, vx, vy, vz, hu, hv, nx, ny, nz, cellId, col, a, fu, fv) => {
+    if (D.q >= WEAR_MAX_QUADS || a < 0.02) return false;
+    const [u0, v0, u1, v1] = cellUV(cellId), ua = fu ? u1 : u0, ub = fu ? u0 : u1, va = fv ? v1 : v0, vb = fv ? v0 : v1;
+    const K = [[-1, -1, ua, va], [1, -1, ub, va], [1, 1, ub, vb], [-1, 1, ua, vb]];
+    const P = K.map(([su, sv, tu, tv]) => [cx + ux * hu * su + vx * hv * sv, cy + uy * hu * su + vy * hv * sv, cz + uz * hu * su + vz * hv * sv, tu, tv]);
+    for (const i of [0, 1, 2, 0, 2, 3]) { D.p.push(P[i][0], P[i][1], P[i][2]); D.n.push(nx, ny, nz); D.uv.push(P[i][3], P[i][4]); D.c.push(col[0], col[1], col[2], a); }
+    D.q++;
+    return true;
+  };
+  const shade = (hex, f) => rgb(_thShade(hex, f)), mix = (a, b, f) => rgb(_thMix(a, b, f));
+  const lum = hex => (((hex >> 16) & 255) * 0.299 + ((hex >> 8) & 255) * 0.587 + (hex & 255) * 0.114) / 255;
+  // dirt on a dark surface does not show: there the wear is the pale kind (dust, lime, scuffed paint)
+  const dirtOn = (hex, f) => lum(hex) < 0.4 ? mix(hex, 0xb9b1a2, 0.45 * f + 0.1) : mix(_thShade(hex, 0.3), tint.dirt, 0.55);
+  // ── every box that is a real, opaque, upright surface
+  G.updateMatrixWorld(true);
+  const boxes = [];
+  G.traverse(m => {
+    if (!m.isMesh || !m.geometry || m.userData.themeDecor || m.userData.mapWear || m.userData.mapGlow || m.visible === false) return;
+    // a box's size: noted by the theme pass before the flat-shading pass rebuilt every geometry (which forgets it), or, for a box
+    // added since, still on the geometry
+    let P = m.userData.thDims ? { width: m.userData.thDims.w, height: m.userData.thDims.h, depth: m.userData.thDims.d }
+          : (m.geometry.type === 'BoxGeometry' ? m.geometry.parameters : null);
+    // …or neither (a map with no theme, whose boxes the flat-shading pass rebuilt): a box is 24 or 36 vertices, and its size is its bounds
+    if (!P && m.geometry.attributes && m.geometry.attributes.position && [24, 36].includes(m.geometry.attributes.position.count)) {
+      if (!m.geometry.boundingBox) m.geometry.computeBoundingBox();
+      const bb = m.geometry.boundingBox, sz = bb.getSize(new THREE.Vector3());
+      if (Math.abs((bb.max.x + bb.min.x) / 2) < 0.01 && Math.abs((bb.max.y + bb.min.y) / 2) < 0.01 && Math.abs((bb.max.z + bb.min.z) / 2) < 0.01) P = { width: sz.x, height: sz.y, depth: sz.z };
+    }
+    const mat = m.material;
+    if (!P || !mat || Array.isArray(mat) || mat.transparent || mat.isMeshBasicMaterial || (mat.emissive && mat.emissive.getHex()) || !mat.color) return;
+    const e = m.matrixWorld.elements;
+    if (Math.abs(e[5]) < 0.99) return;
+    const sx = Math.hypot(e[0], e[1], e[2]) || 1, sy = Math.hypot(e[4], e[5], e[6]) || 1, sz = Math.hypot(e[8], e[9], e[10]) || 1;
+    boxes.push({ x: e[12], y: e[13], z: e[14], w: P.width * sx, h: P.height * sy, d: P.depth * sz, ax: [e[0] / sx, e[2] / sx], az: [e[8] / sz, e[10] / sz], col: mat.color.getHex(), cls: m.userData.thCls || null });
+  });
+  const inside = (x, z, m = 0) => Math.abs(x) <= bounds.halfX - m && Math.abs(z) <= bounds.halfZ - m;
+  // ── 1. WALLS: the four sides of everything that stands up
+  const faces = [];
+  for (const b of boxes) {
+    if (b.h < 1.3) continue;
+    for (const [axis, sgn] of [['x', 1], ['x', -1], ['z', 1], ['z', -1]]) {
+      const dir = axis === 'x' ? b.ax : b.az, half = (axis === 'x' ? b.w : b.d) / 2, len = axis === 'x' ? b.d : b.w;
+      const nx = dir[0] * sgn, nz = dir[1] * sgn;
+      const fx = b.x + nx * half, fz = b.z + nz * half;
+      if (!inside(fx + nx * 0.6, fz + nz * 0.6, -0.5)) continue;          // the outside of a perimeter wall
+      if (len < 0.9) continue;
+      faces.push({ b, nx, nz, fx, fz, len, ux: nz, uz: -nx });              // u runs along the face: cross(up, n), so u x up = n and the quad faces out
+    }
+  }
+  // wall decals pick their spot ON the face: u along it (-len/2..len/2), y up (bottom..top)
+  const face = (f, u, y, hu, hv, cellId, col, a, layer = 0) => {
+    // the theme dressing stands a base band 6 cm proud of every wall's foot: dirt there has to sit in front of it
+    const banded = (f.b.cls === 'wall' || f.b.cls === 'perimeter') && y - hv < lift(f) + 0.62;
+    const o = (banded ? 0.075 : 0.008) + layer * 0.004;
+    return emit(f.fx + f.ux * u + f.nx * o, y, f.fz + f.uz * u + f.nz * o, f.ux, 0, f.uz, 0, 1, 0, hu, hv, f.nx, 0, f.nz, cellId, col, a, rnd() < 0.5, false);
+  };
+  const lift = f => f.b.y - f.b.h / 2;        // the bottom of the box
+  // 1a. dirt at the foot of every wall (and moss, or dust drifted against it) — the one thing that is on every wall
+  // (shuffled, so that if the budget runs out it is spread over the whole map and not the first walls built)
+  if (prof.grime > 0.1) for (const f of faces.slice().sort(() => rnd() - 0.5)) {
+    if (D.q >= WEAR_GRIME_QUADS) break;
+    const base = lift(f), seg = 4.5, n = Math.min(10, Math.ceil(f.len / seg));
+    const dirt = prof.tint === 'dust' ? mix(f.b.col, tint.light, 0.55) : dirtOn(f.b.col, prof.grime);
+    for (let i = 0; i < n && D.q < WEAR_GRIME_QUADS; i++) {
+      const u = -f.len / 2 + (i + 0.5) * f.len / n, hh = R(0.8, 1.7) * (0.7 + prof.grime * 0.5);
+      face(f, u, base + hh * 0.55, f.len / n / 2 * 1.05, hh * 0.6, 9, dirt, Math.min(0.92, (0.45 + prof.grime * 0.45) * R(0.8, 1.1)), 0);
+      if (prof.tint === 'moss' && rnd() < 0.6) face(f, u + R(-0.4, 0.4), base + 0.28, R(0.5, 1.1), 0.3, 9, rgb(tint.run), 0.5 * prof.grime, 1);
+    }
+  }
+  // 1b. the rest, in a shuffled order so the budget runs out evenly across the map, not map-wall by map-wall
+  const order = faces.slice().sort(() => rnd() - 0.5);
+  for (const f of order) {
+    if (D.q >= WEAR_WALL_QUADS) break;
+    const hgt = f.b.h, base = lift(f), top = base + hgt, area = f.len * hgt;
+    const cnt = (k, per, cap) => Math.min(cap, Math.floor(area / per * k + rnd()));
+    // big soft blotches of a different tone: what breaks a wall up from across the map
+    for (let i = cnt(1, 36, 4); i > 0; i--) {
+      const sw = R(3, 7), sh = R(1.6, 3.4), u = R(-f.len / 2 + 1, f.len / 2 - 1), y = base + R(0.8, Math.max(1, hgt - 0.8));
+      const lightOne = rnd() < 0.4;
+      face(f, u, y, sw / 2, sh / 2, 15, lightOne ? mix(f.b.col, tint.light, 0.35) : shade(f.b.col, 0.5), R(0.22, 0.4), 0);
+    }
+    // streaks of rain and rust from the top (and from every ledge the dressing left)
+    for (let i = cnt(prof.grime, 7, 20); i > 0; i--) {
+      const hh = R(1.2, Math.min(5, hgt * 0.6)), u = R(-f.len / 2 + 0.3, f.len / 2 - 0.3);
+      const pale = lum(f.b.col) < 0.3;
+      const col = prof.tint === 'rust' || prof.tint === 'moss' || rnd() < 0.3 ? (rnd() < 0.55 ? rgb(tint.run) : dirtOn(f.b.col, 0.8)) : dirtOn(f.b.col, 1);
+      face(f, u, top - hh / 2 - R(0, 0.5), R(0.5, 1.3), hh / 2, 8, col, R(0.45, 0.8) * Math.min(1, 0.6 + prof.grime) * (pale ? 0.85 : 1), 1);
+    }
+    // plaster and paint come away: lighter ground underneath, with a darker shadow behind it
+    for (let i = cnt(prof.chip, 9, 10); i > 0; i--) {
+      const s = R(0.55, 1.9), u = R(-f.len / 2 + s, f.len / 2 - s), y = base + (rnd() < 0.5 ? R(0.3, 1.4) : R(0.5, Math.max(0.6, hgt - 0.4)));
+      const under = prof.tint === 'rust' && rnd() < 0.5 ? rgb(0x7a4220) : mix(f.b.col, tint.light, R(0.35, 0.6));
+      face(f, u + 0.03, y - 0.03, s * 0.55, s * 0.5, 10, shade(f.b.col, 0.25), 0.65, 1);
+      face(f, u, y, s * 0.5, s * 0.46, rnd() < 0.7 ? 10 : 12, under, R(0.8, 0.98), 2);
+    }
+    // repairs: a patch of other material, a different tone
+    for (let i = cnt(prof.chip * 0.8, 28, 3); i > 0; i--) {
+      const sw = R(0.8, 2.2), sh = R(0.6, 1.6), u = R(-f.len / 2 + sw, f.len / 2 - sw), y = base + R(0.6, Math.max(0.7, hgt - 0.8));
+      face(f, u, y, sw / 2, sh / 2, 11, shade(f.b.col, R(0.78, 1.22)), R(0.6, 0.85), 1);
+    }
+    // cracks, from the top of a wall or up from its foot
+    for (let i = cnt(prof.crack, 17, 10); i > 0; i--) {
+      const s = R(1.1, 3.2), u = R(-f.len / 2 + s, f.len / 2 - s), y = base + R(0.5, Math.max(0.6, hgt - 0.6));
+      face(f, u, y, s / 2, s / 2, pick(WEAR_CELL.crack), rgb(_thShade(f.b.col, 0.1)), R(0.75, 0.95), 3);
+    }
+    // stains, blast marks, bullet holes
+    for (let i = cnt(prof.stain, 19, 6); i > 0; i--) {
+      const s = R(0.7, 2.2), u = R(-f.len / 2 + s, f.len / 2 - s), y = base + R(0.4, Math.max(0.5, hgt * 0.7));
+      face(f, u, y, s / 2, s / 2 * R(0.6, 1), pick(WEAR_CELL.stain), rnd() < 0.35 ? rgb(tint.run) : dirtOn(f.b.col, 0.9), R(0.3, 0.55), 1);
+    }
+    for (let i = cnt(prof.scorch, 26, 4); i > 0; i--) {
+      const s = R(0.9, 2.2), u = R(-f.len / 2 + s, f.len / 2 - s), y = base + R(0.7, Math.max(0.8, Math.min(hgt - 0.5, 3.4)));
+      face(f, u, y, s / 2, s / 2, pick(WEAR_CELL.scorch), rgb(0x0e0c0a), R(0.45, 0.7), 2);
+      if (rnd() < 0.7) face(f, u + R(-0.3, 0.3), y + R(-0.3, 0.3), R(0.4, 0.8), R(0.4, 0.8), 13, rgb(0x0c0b0a), 0.85, 3);
+    }
+  }
+  // ── 2. FLOORS: the open ground, and the tops of decks and roofs you can see from the ground
+  const colliders = (MAP_COLLIDERS[name] || []).filter(c => c.max.y > 0.18 && c.min.y < 1.9 && (c.max.x - c.min.x) * (c.max.z - c.min.z) > 0.04);
+  const inVoid = (x, z) => {
+    const v = MAP_VOID[name];
+    if (v && (v.rects ? v.rects.some(r => x >= r.x0 && x <= r.x1 && z >= r.z0 && z <= r.z1) : Math.abs(x) <= v.halfX && Math.abs(z) <= v.halfZ)) return true;
+    const gz = MAP_GIMMICKS[name] && MAP_GIMMICKS[name].damageZones;
+    return !!(gz && gz.some(r => r.w ? _pointInRotRect(x, z, r, 1) : Math.hypot(x - r.x, z - r.z) < r.r + 1));
+  };
+  // the ground's height at a point: the thin floor slabs a map lays over y = 0 raise it
+  const slabs = (MAP_COLLIDERS[name] || []).filter(c => c.max.y > 0.01 && c.max.y < 0.8 && c.min.y < 0.25 && (c.max.x - c.min.x) >= 3 && (c.max.z - c.min.z) >= 3);
+  const groundAt = (x, z) => { let y = 0; for (const c of slabs) if (x > c.min.x && x < c.max.x && z > c.min.z && z < c.max.z && c.max.y > y) y = c.max.y; return y; };
+  const clear = (x, z, r) => {
+    const gy = groundAt(x, z) + 0.3;
+    for (const c of colliders) if (c.max.y > gy && x > c.min.x - r && x < c.max.x + r && z > c.min.z - r && z < c.max.z + r) return false;
+    return true;
+  };
+  const floor = (x, y, z, size, cellId, col, a, layer = 0, yaw = null) => {
+    const t = yaw == null ? R(0, 6.28) : yaw, c = Math.cos(t), s = Math.sin(t);
+    return emit(x, y + 0.012 + layer * 0.003, z, c, 0, s, s, 0, -c, size / 2, size / 2 * R(0.75, 1), 0, 1, 0, cellId, col, a, rnd() < 0.5, rnd() < 0.5);
+  };
+  const groundCol = th.g;
+  const area = bounds.halfX * bounds.halfZ * 4;
+  const nFloor = Math.round(Math.max(90, Math.min(760, area / 42)) * Math.min(1.25, 0.4 + prof.stain * 0.65));
+  let placed = 0, tries = 0;
+  while (placed < nFloor && tries++ < nFloor * 6 && D.q < WEAR_MAX_QUADS - 700) {
+    const x = R(-bounds.halfX + 2.5, bounds.halfX - 2.5), z = R(-bounds.halfZ + 2.5, bounds.halfZ - 2.5);
+    if (inVoid(x, z)) continue;
+    const roll = rnd(), size0 = R(1.1, 3.6);
+    if (!clear(x, z, size0 * 0.3)) continue;
+    const y = groundAt(x, z);
+    placed++;
+    if (roll < 0.26)      floor(x, y, z, size0, pick(WEAR_CELL.stain), rnd() < 0.25 ? rgb(tint.run) : dirtOn(groundCol, 0.9), R(0.38, 0.62) * Math.min(1, 0.5 + prof.stain));
+    else if (roll < 0.46) floor(x, y, z, size0 * 1.4, pick(WEAR_CELL.crack), rgb(_thShade(groundCol, 0.1)), R(0.7, 0.92) * Math.min(1, 0.5 + prof.crack));
+    else if (roll < 0.6)  floor(x, y, z, R(6, 14), 15, rnd() < 0.55 ? shade(groundCol, 0.55) : mix(groundCol, tint.light, 0.3), R(0.2, 0.36));    // a big blotch
+    else if (roll < 0.7)  floor(x, y, z, size0 * 1.2, 14, dirtOn(groundCol, 0.8), R(0.4, 0.65));                                                      // scuffs, all one way
+    else if (roll < 0.82) floor(x, y, z, size0 * 1.3, rnd() < 0.55 ? 11 : 10, shade(groundCol, rnd() < 0.5 ? R(0.6, 0.85) : R(1.2, 1.5)), R(0.6, 0.9));        // a patched bit of floor
+    else if (roll < 0.92) floor(x, y, z, size0 * 1.1, 15, mix(groundCol, 0x20262c, 0.6), R(0.4, 0.65));                                               // damp
+    else if (prof.scorch > 0.1) floor(x, y, z, size0 * 0.9, pick(WEAR_CELL.scorch), rgb(0x0e0c0a), R(0.4, 0.65) * Math.min(1, prof.scorch + 0.3));
+  }
+  // dirt against the foot of a wall on the floor side too, and the odd crack running along it
+  for (const f of faces.slice().sort(() => rnd() - 0.5).slice(0, 160)) {
+    if (D.q >= WEAR_MAX_QUADS) break;
+    if (f.b.h < 2 || f.len < 3 || rnd() > 0.6 * prof.grime + 0.15) continue;
+    const gy = groundAt(f.fx + f.nx * 0.4, f.fz + f.nz * 0.4), u = R(-f.len / 2 + 1, f.len / 2 - 1);
+    if (!clear(f.fx + f.nx * 0.7 + f.ux * u, f.fz + f.nz * 0.7 + f.uz * u, 0.2)) continue;
+    const ang = Math.atan2(f.uz, f.ux);
+    floor(f.fx + f.nx * 0.55 + f.ux * u, gy, f.fz + f.nz * 0.55 + f.uz * u, R(2, 4.5), 15, prof.tint === 'dust' ? mix(groundCol, tint.light, 0.5) : shade(groundCol, 0.5), R(0.25, 0.5), 1, ang);
+  }
+  // raised floors that can be seen from the ground: decks, platforms, flat roofs below five metres
+  for (const b of boxes) {
+    if (D.q >= WEAR_MAX_QUADS) break;
+    const top = b.y + b.h / 2;
+    if (b.h > 1.6 || top > 5 || top < 0.5 || b.w * b.d < 10 || Math.min(b.w, b.d) < 2.4 || rnd() > 0.7) continue;
+    for (let i = 0; i < Math.min(5, Math.floor(b.w * b.d / 40) + 1); i++) {
+      const lu = R(-b.w / 2 + 0.8, b.w / 2 - 0.8), lv = R(-b.d / 2 + 0.8, b.d / 2 - 0.8);
+      const px = b.x + b.ax[0] * lu + b.az[0] * lv, pz = b.z + b.ax[1] * lu + b.az[1] * lv;
+      const roll = rnd();
+      floor(px, top, pz, R(1.2, 3), roll < 0.4 ? pick(WEAR_CELL.stain) : roll < 0.75 ? pick(WEAR_CELL.crack) : 14, shade(b.col, roll < 0.75 ? 0.25 : 0.4), R(0.3, 0.6), 2);
+    }
+  }
+  // ── 3. RUBBLE: loose chunks heaped at the foot of walls and scattered about (small boxes, no colliders)
+  const rub = _thBuf(), nRub = Math.round(Math.min(760, 140 + area / 40) * prof.rubble);
+  const piece = (x, y, z, hex) => {
+    const sx = R(0.03, 0.13), sz = R(0.03, 0.13), sy = R(0.02, 0.08);
+    _thBox(rub, { position: { x, y: y + sy / 2, z }, rotation: { y: R(0, 6.28) } }, 0, 0, 0, sx, sy, sz, _thShade(hex, R(0.7, 1.2)));
+  };
+  let heaps = 0;
+  for (const f of faces.slice().sort(() => rnd() - 0.5)) {
+    if (heaps * 5 > nRub * 0.7) break;
+    if (f.b.h < 1.8 || f.len < 2.5 || rnd() > 0.5) continue;
+    const u = R(-f.len / 2 + 0.4, f.len / 2 - 0.4), cx = f.fx + f.nx * 0.2 + f.ux * u, cz = f.fz + f.nz * 0.2 + f.uz * u;
+    if (!clear(cx + f.nx * 0.4, cz + f.nz * 0.4, 0.15)) continue;
+    const gy = groundAt(cx, cz), n = 4 + Math.floor(rnd() * 5);
+    for (let i = 0; i < n; i++) piece(cx + f.nx * R(0, 0.55) + f.ux * R(-0.4, 0.4), gy, cz + f.nz * R(0, 0.55) + f.uz * R(-0.4, 0.4), rnd() < 0.55 ? f.b.col : groundCol);
+    heaps++;
+  }
+  for (let i = 0, t = 0; i < nRub * 0.3 && t < nRub * 4; t++) {
+    const x = R(-bounds.halfX + 2, bounds.halfX - 2), z = R(-bounds.halfZ + 2, bounds.halfZ - 2);
+    if (inVoid(x, z) || !clear(x, z, 0.2)) continue;
+    piece(x, groundAt(x, z), z, rnd() < 0.5 ? groundCol : tint.run);
+    i++;
+  }
+  // ── build
+  G.userData.mapWear = { quads: D.q, rubble: rub.boxes, faces: faces.length };
+  if (D.q) {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(D.p, 3));
+    geo.setAttribute('normal', new THREE.Float32BufferAttribute(D.n, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(D.uv, 2));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(D.c, 4));
+    const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ map: _wearAtlas(), vertexColors: true, transparent: true, depthWrite: false,
+      polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+    mesh.renderOrder = -1; mesh.receiveShadow = true; mesh.castShadow = false;
+    mesh.userData.themeDecor = true; mesh.userData.mapWear = true;
+    mesh.raycast = () => {};            // a stain is not a wall: nothing aims at, or is blocked by, a decal
+    G.add(mesh);
+  }
+  _thMesh(G, rub, false);
+  const last = G.children[G.children.length - 1];
+  if (rub.p.length && last) { last.userData.mapWear = true; last.raycast = () => {}; }
+}
+
 function _upgradeMap(name) {
   if(name==='range')return; // Training lanes must stay clear of automatic combat cover and props.
   const g = MAP_GROUPS[name];
@@ -19394,6 +19819,7 @@ function _upgradeMap(name) {
   try { _outskirtsMap(name); } catch (e) { console.warn('[upgrade] outskirts', name, e); }
   try { _gimMap(name); } catch (e) { console.warn('[upgrade] gimmick', name, e); }
   try { addMapRealism(name); } catch (e) { console.warn('[upgrade] realism', name, e); }
+  try { addMapWear(name); } catch (e) { console.warn('[upgrade] wear', name, e); }
   // what was just added gets the same surface as the rest
   try { g._weathered = false; weatherMapGroup(g); } catch (e) {}
   g.userData.upgradeMs = Math.round(performance.now() - t0);
