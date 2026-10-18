@@ -1054,7 +1054,7 @@ const MELEE_ITEMS = [
   // ── The Classic ──────────────────────────────────────────────────────────
   { id: 'fists',      name: 'Fists',      type: 'Brass Knuckles', damage: 24, range: 1.4, cooldown: 220, speedMult: 1.6,
     dual: true, // two separate fists, thrown alternately — not one box sliding sideways
-    ability: { name: 'Slip Step',    cd: 6000,  desc: 'Movement only · burst dash + hop', type: 'melee_mobility', speed: 21, up: 4, color: 0xffffff } },
+    ability: { name: 'Uppercut',     cd: 6000,  desc: 'Rising punch · launches you up · 50 dmg and a pop-up if it lands', type: 'melee_uppercut', damage: 50, up: 8.5, hop: 3.5, reach: 2.6, popVel: 9, color: 0xffd9a0 } },
   // ── 🪖 ADMIN MELEES (locked behind unlock codes) ─────────────────────────
   // ── 🆕 More melees — batch 4 ─────────────────────────────────────────────
   { id: 'brass_knuckles', name: 'Brass Knuckles', type: 'Punch',     damage: 28, range: 1.5, cooldown: 200, speedMult: 1.6,
@@ -19555,9 +19555,6 @@ const WEAR_PROFILE = {
   desert:     { grime: .55, crack: .75, chip: .75, stain: .45, scorch: .15, rubble: .85, tint: 'dust' },
   fire:       { grime: .95, crack: .75, chip: .65, stain: .75, scorch: .55, rubble: .75, tint: 'soot' },
   ice:        { grime: .4,  crack: .55, chip: .4,  stain: .35, scorch: .05, rubble: .4,  tint: 'slush' },
-  space:      { grime: .4,  crack: .3,  chip: .4,  stain: .35, scorch: .1,  rubble: .2,  tint: 'grey' },
-  neon:       { grime: .55, crack: .35, chip: .4,  stain: .45, scorch: .1,  rubble: .3,  tint: 'soot' },
-  carnival:   { grime: .5,  crack: .35, chip: .7,  stain: .55, scorch: .05, rubble: .4,  tint: 'dust' },
 };
 const WEAR_MAP_TWEAK = {
   trenches: { grime: 1.2, scorch: 2.4, rubble: 1.4 }, pearl_harbor: { scorch: 2, grime: 1.1 }, chernobyl: { grime: 1.2, crack: 1.3, rubble: 1.3, tint: 'moss' },
@@ -19565,7 +19562,7 @@ const WEAR_MAP_TWEAK = {
   sewer: { grime: 1.3, stain: 1.4, tint: 'moss' }, foundry: { scorch: 1.4 }, refinery: { stain: 1.3, scorch: 1.3 }, urban: { scorch: 1.5 },
   overgrowth: { tint: 'moss', grime: 1.2 }, biosphere: { grime: .7, crack: .6 }, temple: { crack: 1.3, rubble: 1.2 }, vietnam: { scorch: 1.8, tint: 'moss' },
   forest: { tint: 'moss' }, battlefield: { scorch: 2, rubble: 1.3 }, big_arena: { scorch: 1.4, rubble: 1.2 }, super_arena: { scorch: 1.2 },
-  gravity_lab: { grime: .8 }, glassworks: { grime: .8, crack: 1.3 }, orbital_station: { grime: .8 }, holiday: { grime: .6 }, dreamscape: { grime: .3, crack: .3, stain: .3, rubble: .2 },
+  glassworks: { grime: .8, crack: 1.3 },
 };
 const WEAR_TINT = {
   soot:  { dirt: 0x14110e, run: 0x2a241d, light: 0xcfc6b4 },
@@ -19586,9 +19583,17 @@ var WEAR_GAIN = 1.5;   // how strong every mark is, overall: the knob to turn if
 var WEAR_MAX_QUADS = 17000, WEAR_GRIME_QUADS = 5200, WEAR_MOTTLE_QUADS = 10400, WEAR_WALL_QUADS = 15200;   // the whole map, then how far each layer of wall wear may take the count: so no layer eats the next
 // The maps built since the theme table that have none of their own: how worn they are, and the colour of their floor
 const WEAR_UNTHEMED = { storm_pier: 'industrial', cargo_belts: 'industrial', laser_vault: 'space', gale_peaks: 'nature', magma_rise: 'fire' };
+// Places that are not meant to look used: the neon and sci-fi maps (Cyber City, the station, the labs), the fairground
+// ones, an opera house and a shop. Rust, soot and grime on a hard-light city read as a different map; they get no wear.
+const WEAR_CLEAN_MOTIFS = new Set(['space', 'neon', 'carnival']);
+const WEAR_CLEAN_MAPS = new Set(['opera', 'supermarket']);
+function wearIsClean(name) {
+  const th = MAP_THEMES[name];
+  return WEAR_CLEAN_MAPS.has(name) || WEAR_CLEAN_MOTIFS.has(th ? th.motif : WEAR_UNTHEMED[name]);
+}
 function addMapWear(name) {
   const G = MAP_GROUPS[name];
-  if (!G || G.userData.mapWear || DUEL_ONLY_MAPS.has(name) || ['range', 'lobby13', 'obby', 'pinball_arcade', 'neon_tokyo'].includes(name)) return;
+  if (!G || G.userData.mapWear || DUEL_ONLY_MAPS.has(name) || wearIsClean(name) || ['range', 'lobby13', 'obby', 'pinball_arcade', 'neon_tokyo'].includes(name)) return;
   let th = MAP_THEMES[name];
   if (!th) {
     if (!WEAR_UNTHEMED[name]) return;
@@ -44384,6 +44389,42 @@ function doMeleeMovementAbility(item, ab) {
   playSoundEvent(item.id === 'knife' ? 'instakill_zip' : 'footstep', { volume: 0.75, pitch: 1.55, minGap: 40 });
 }
 
+// 🥊 Uppercut (the Fists' ability): a rising punch. It throws YOU up and a little forward, and whoever is in front of you,
+// close, takes a flat 50 and is popped into the air. Nothing in front of you and it is a hop with a swing.
+function doUppercutAbility(item, ab, now) {
+  const fwd = _meleeForwardXZ();
+  const origin = camera.position.clone();
+  // you rise: up like a short jump, a lunge forward into the punch
+  _extVel.x += fwd.x * (ab.hop || 0); _extVel.z += fwd.z * (ab.hop || 0);
+  const lift = Math.max(slamState?.vel || 0, ab.up || 8);
+  if (slamState) { slamState.vel = lift; slamState.type = 'jump'; } else slamState = { vel: lift, type: 'jump' };
+  window._slideUntil = 0;
+  const reach = ab.reach || 2.6;
+  let landed = 0;
+  for (const [pid, mesh] of Object.entries(remoteMeshes)) {
+    if (!mesh.visible) continue;
+    const dx = mesh.position.x - origin.x, dz = mesh.position.z - origin.z, d = Math.hypot(dx, dz);
+    if (d > reach) continue;
+    if (d > 0.5 && (dx * fwd.x + dz * fwd.z) / d < 0.35) continue;              // in front of you, not behind
+    const dy = mesh.position.y + 1.0 - origin.y;
+    if (dy < -2.2 || dy > 2.0) continue;
+    const p = players[pid];
+    const dummy = TRAINING_DUMMIES.find(dd => dd.id === pid);
+    if (!dummy && p && p.team && players[myId]?.team && p.team === players[myId].team) continue;
+    const hp = mesh.position.clone().setY(1.2);
+    if (dummy) handleDummyHit(dummy, mesh, { damage: ab.damage }, hp);
+    else emitHit(pid, `uppercut_${myId}_${now}_${pid}`, 'fists_uppercut', hp, false, { damageOverride: ab.damage });
+    _nudgeBotFromPoint(pid, mesh, origin, 1.2, ab.popVel || 9);
+    spawnHitParticle(hp);
+    landed++;
+  }
+  spawnAbilityAOEFX(origin.clone().setY(Math.max(0.15, origin.y - 1.5)), landed ? 1.8 : 1.1, ab.color || 0xffd9a0);
+  flashScreen(landed ? 'rgba(255,200,120,0.28)' : 'rgba(255,230,190,0.14)', landed ? 260 : 160);
+  _fovPunch = Math.max(_fovPunch, landed ? 7 : 4);
+  playSoundEvent(landed ? 'melee_heavy' : 'footstep', { volume: landed ? 1.0 : 0.7, pitch: landed ? 0.85 : 1.6, minGap: 40 });
+  return landed;
+}
+
 function doMeleePulseAbility(item, ab, now) {
   const origin = camera.position.clone();
   const radius = ab.radius || 3.5;
@@ -44962,6 +45003,11 @@ function activateMeleeAbility() {
     playAbilitySwing(item);                       // Reap Dash slashes through the space, Slip Step throws a punch
     _fovPunch = Math.max(_fovPunch, 4);
     doMeleeMovementAbility(item, ab);
+    flashAbilityName(ab.name);
+  }
+  else if (ab.type === 'melee_uppercut') {
+    playAbilitySwing(item);
+    doUppercutAbility(item, ab, now);
     flashAbilityName(ab.name);
   }
   else if (ab.type === 'melee_pulse') {
@@ -57538,7 +57584,7 @@ const CLIENT_WEAPON_DAMAGE = Object.fromEntries([
   ['flamethrower_skin_water', 9], ['crossbow_skin_noodle', 76], ['minigun_skin_arcade', 7],
   ['rpg_skin_soda', 118],
   ['mg42', 15], ['bat', 38], ['sabre', 45], ['frying_pan', 32], ['sledge', 70],
-  ['spear', 50], ['spear_throw', 85], ['pickle', 22], ['shield_charge', 60], ['bat_crowd_clear', 100],
+  ['spear', 50], ['spear_throw', 85], ['pickle', 22], ['shield_charge', 60], ['bat_crowd_clear', 100], ['fists_uppercut', 50],
   // Opera/Doomsday map hazards — without these, applyBotDamageToPlayer's own
   // ||25 fallback silently underdealt them too (#51).
   ['chandelier', 200], ['debris', 120], ['lightning_strike', 70],

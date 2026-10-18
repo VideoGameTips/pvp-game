@@ -2014,7 +2014,7 @@ event_horizon: 75,
   mg42: 15,
   // Melee
   bat: 50, sabre: 45, frying_pan: 32, sledge: 70, spear: 50,
-  spear_throw: 85, pickle: 22, shield_charge: 60, knife_instakill: 9999, bat_crowd_clear: 100,
+  spear_throw: 85, pickle: 22, shield_charge: 60, knife_instakill: 9999, bat_crowd_clear: 100, fists_uppercut: 50,
   chainsaw: 45, katana: 65, knife: 28, lightsabre: 72, twin_knife: 50, scythe: 58, chain_hammer: 85,
   riot_shield: 18, baguette: 28, screwdriver: 20,
   // cane and shovel were missing here entirely — every hit with either one

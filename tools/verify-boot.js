@@ -2167,7 +2167,8 @@ if (ok && process.argv.includes('--wear')) {
         const g = MAP_GROUPS[n]; if (!g || !MAP_BOUNDS[n]) continue;
         try { activateMap(n); } catch (e) { issues.push(n + ' did not activate: ' + e.message); continue; }
         const w = g.userData.mapWear;
-        const expectWorn = !DUEL_ONLY_MAPS.has(n) && !skip.has(n) && (!!MAP_THEMES[n] || ['storm_pier', 'cargo_borders', 'cargo_belts', 'laser_vault', 'gale_peaks', 'magma_rise'].includes(n));
+        if (wearIsClean(n) && w) issues.push(n + ': a clean place (neon, sci-fi, fairground, opera, shop) should have no rust or dirt on it');
+        const expectWorn = !DUEL_ONLY_MAPS.has(n) && !skip.has(n) && !wearIsClean(n) && (!!MAP_THEMES[n] || ['storm_pier', 'cargo_borders', 'cargo_belts', 'laser_vault', 'gale_peaks', 'magma_rise'].includes(n));
         if (DUEL_ONLY_MAPS.has(n) && w) issues.push(n + ': a duel arena should be left plain');
         if (!expectWorn) continue;
         if (!w) { issues.push(n + ': was not worn'); continue; }
@@ -2770,6 +2771,61 @@ if (ok && process.argv.includes('--ceiling')) {
   })()`);
   console.log('ceiling checks: slide-jump, crouch-jump and standing up under low ceilings (no ejection, no head in the slab)');
   if (out.length) { ok = false; console.log(out.slice(0, 20).join('\n')); }
+}
+
+if (ok && process.argv.includes('--uppercut')) {
+  // The Fists' ability is an Uppercut: it throws you up (and a little forward), and whoever is in front of you, close, takes
+  // 50 and is popped into the air. Behind you, too far or on your team: nothing but the hop.
+  const out = vm.runInThisContext(`(() => {
+    const issues = [];
+    const saved = { sel: selectedMeleeIdx, slot: activeSlot, sound: playSoundEvent, fx: spawnAbilityAOEFX, flash: flashScreen, anim: showAnnouncement, hit: emitHit,
+                    started: gameStarted, dead: isDead, slam: slamState, cam: camera.position.clone(), y: euler.y, cd: { ...abilityCDs }, me: players[myId], match, cdown: countdownActive, bots: gameBots.slice() };
+    playSoundEvent = () => {}; spawnAbilityAOEFX = () => {}; flashScreen = () => {}; showAnnouncement = () => {};
+    const hits = []; emitHit = (pid, bid, wid, pos, hs, opts) => { hits.push({ pid, wid, dmg: opts && opts.damageOverride }); };
+    try {
+      gameStarted = true; isDead = false; match = null; countdownActive = false; gameBots.length = 0;
+      players[myId] = { hp: 300, team: 'ally' };
+      const fi = MELEE_ITEMS.findIndex(m => m.id === 'fists'); selectedMeleeIdx = fi; activeSlot = 'melee';
+      const ab = MELEE_ITEMS[fi].ability;
+      if (ab.type !== 'melee_uppercut' || ab.damage !== 50) issues.push('the Fists ability should be a 50-damage uppercut, got ' + ab.type + ' ' + ab.damage);
+      const put = (id, x, z, team) => { const m = new THREE.Group(); m.position.set(x, 0, z); m.visible = true; remoteMeshes[id] = m; players[id] = { id, isBot: false, team: team || 'enemy', hp: 300 }; };
+      const clear = () => { for (const k of ['upA', 'upB', 'upC', 'upD']) { delete remoteMeshes[k]; delete players[k]; } };
+      const fire = () => { abilityCDs.fists = 0; slamState = null; _extVel.x = 0; _extVel.z = 0; hits.length = 0; camera.position.set(0, 1.65, 0); euler.y = 0; camera.quaternion.setFromEuler(euler); activateMeleeAbility(); };
+      // in front: -z is forward at yaw 0
+      clear(); put('upA', 0, -1.8);
+      fire();
+      if (!(slamState && slamState.vel >= 8)) issues.push('no launch upward (vel ' + (slamState && slamState.vel) + ')');
+      if (!(_extVel.z < -1)) issues.push('no hop forward into the punch (extVel.z ' + _extVel.z + ')');
+      if (hits.length !== 1 || hits[0].pid !== 'upA' || hits[0].wid !== 'fists_uppercut' || hits[0].dmg !== 50) issues.push('a target 1.8 m ahead should take one 50-damage uppercut, got ' + JSON.stringify(hits));
+      // behind / too far / ally / below the floor: no hit, still a hop
+      clear(); put('upA', 0, 1.8); put('upB', 0, -5); put('upC', 1, -1.5, 'ally');
+      fire();
+      if (hits.length) issues.push('behind, far away and allies must not be hit: ' + JSON.stringify(hits));
+      if (!(slamState && slamState.vel >= 8)) issues.push('with nobody to hit it should still launch you');
+      // the cooldown
+      clear(); put('upA', 0, -1.8); fire(); hits.length = 0; activateMeleeAbility();
+      if (hits.length) issues.push('the uppercut fired again with no cooldown');
+      // the real hit path on a bot: 50 off its health, popped up
+      emitHit = saved.hit;
+      clear(); gameBots.length = 0;
+      const bot = { id: 'upBotX', x: 0, z: -1.8, hp: 300, maxHp: 300, dead: false, state: 'chase', team: 'enemy' };
+      gameBots.push(bot); players.upBotX = { id: 'upBotX', isBot: true, team: 'enemy', hp: 300 }; const bm = new THREE.Group(); bm.position.set(0, 0, -1.8); bm.visible = true; remoteMeshes.upBotX = bm;
+      fire();
+      if (!(bot.hp <= 250 && bot.hp >= 240)) issues.push('the bot should lose 50 (hp ' + bot.hp + ')');
+      if (!((bot.yVel || 0) >= 6)) issues.push('the bot should be popped into the air (yVel ' + bot.yVel + ')');
+      delete remoteMeshes.upBotX; delete players.upBotX;
+    } finally {
+      for (const k of ['upA', 'upB', 'upC', 'upD']) { delete remoteMeshes[k]; delete players[k]; }
+      playSoundEvent = saved.sound; spawnAbilityAOEFX = saved.fx; flashScreen = saved.flash; showAnnouncement = saved.anim; emitHit = saved.hit;
+      selectedMeleeIdx = saved.sel; activeSlot = saved.slot; gameStarted = saved.started; isDead = saved.dead; slamState = saved.slam; match = saved.match; countdownActive = saved.cdown;
+      camera.position.copy(saved.cam); euler.y = saved.y; Object.assign(abilityCDs, saved.cd);
+      if (saved.me) players[myId] = saved.me; else delete players[myId];
+      gameBots.length = 0; gameBots.push(...saved.bots);
+    }
+    return issues;
+  })()`);
+  console.log('uppercut checks: launches you, 50 damage and a pop-up on a target in front, nothing behind / far / on your team, has a cooldown');
+  if (out.length) { ok = false; console.log(out.join('\n')); }
 }
 
 if (ok && process.argv.includes('--netinterp')) {
