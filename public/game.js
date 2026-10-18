@@ -5648,6 +5648,24 @@ function resolvePlayerCeiling(prevEyeY) {
   return true;
 }
 
+// How tall the body may stand right here: the underside of whatever is overhead, less the head's clearance. Sliding or
+// crouching under a low ceiling and then standing up (or jumping, which also stands you up) used to put the eye back at
+// 1.65 INSIDE the slab; the wall pass then saw a body inside a box and threw it out through the nearest side of that
+// box, which for a roof is the edge of the building. Standing now stops where the ceiling does.
+const MIN_EYE_HEIGHT = 0.5;
+function playerHeadroomEye(px = camera.position.x, pz = camera.position.z) {
+  const floorY = getGroundEyeY(px, pz) - PLAYER_EYE_HEIGHT;
+  let limit = PLAYER_EYE_HEIGHT;
+  for (const box of wallColliders) {
+    if (box.min.y <= floorY + 0.5) continue;                       // a step or a wall base, not a ceiling
+    if (box.min.y - floorY - PLAYER_HEAD_CLEARANCE - 0.02 >= limit) continue;
+    if (px <= box.min.x - PLAYER_RADIUS || px >= box.max.x + PLAYER_RADIUS
+        || pz <= box.min.z - PLAYER_RADIUS || pz >= box.max.z + PLAYER_RADIUS) continue;
+    limit = box.min.y - floorY - PLAYER_HEAD_CLEARANCE - 0.02;
+  }
+  return Math.max(MIN_EYE_HEIGHT, limit);
+}
+
 function tryWallClimbMove(dt, dir) {
   if (!window._climbArmed || (window._climbBudget || 0) <= 0 || !dir || dir.lengthSq() <= 0.01) return false;
   const wall = nearClimbableWall();
@@ -5736,6 +5754,12 @@ function resolveWallCollisions() {
     const dFront = pz - exMinZ;
     const dBack  = exMaxZ - pz;
     const minD = Math.min(dLeft, dRight, dFront, dBack);
+    // Deep inside something that starts above the knees is a head in a ceiling, not a body in a wall (a walk into a
+    // wall is at most a step deep): lower the head under it. The way out sideways is the far edge of a roof.
+    if (minD > 0.6 && box.min.y > feetY + 0.5) {
+      camera.position.y = Math.min(camera.position.y, box.min.y - PLAYER_HEAD_CLEARANCE - 0.015);
+      continue;
+    }
     if      (minD === dLeft)  px = exMinX;
     else if (minD === dRight) px = exMaxX;
     else if (minD === dFront) pz = exMinZ;
@@ -40490,13 +40514,13 @@ function doJump(repeat) {
         spawnAbilityAOEFX(camera.position.clone().setY(camera.position.y - 1.4), 1.6, 0xffcc66);
         playEquipSound('whoosh');
       }
-      window._crouchEye = 1.65;          // you stand up as you leave the ground
+      window._crouchEye = Math.min(1.65, playerHeadroomEye());          // you stand up as you leave the ground (as far as the ceiling lets you)
       playSoundEvent('footstep', { volume: 0.5, pitch: 1.3, minGap: 60 });
     } else {
       // Same debt for a crouch jump, which had the same problem more quietly.
       const standGap = Math.max(0, 1.65 - (window._crouchEye ?? 1.65));
       slamState = { vel: Math.sqrt(JUMP_VEL * JUMP_VEL + 2 * GRAVITY * standGap), type: 'jump' };
-      window._crouchEye = 1.65;
+      window._crouchEye = Math.min(1.65, playerHeadroomEye());
     }
     // A light weapon buys one extra jump in the air. Charge it here, on the
     // jump itself, so walking off a ledge doesn't hand you a free one.
@@ -43863,7 +43887,7 @@ function updateMovement(dt, socialBlocked = false) {
   // Drop the camera when crouching / sliding (eased)
   if (!window._crouchEye) window._crouchEye = 1.65;
   // Slide drops the eye to 0.70 m so the view clearly dips below normal
-  const targetEye = sliding ? 0.70 : (crouchHeld ? 1.10 : 1.65);
+  const targetEye = Math.min(sliding ? 0.70 : (crouchHeld ? 1.10 : 1.65), playerHeadroomEye());   // (no standing up into a ceiling)
   // Slide transitions faster (~25/sec rate) so the drop is snappy at start of slide
   const easeRate = sliding ? 25 : 12;
   window._crouchEye += (targetEye - window._crouchEye) * Math.min(1, dt * easeRate);

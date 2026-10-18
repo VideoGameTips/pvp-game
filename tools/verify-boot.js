@@ -2716,6 +2716,62 @@ if (ok && process.argv.includes('--pearl')) {
   if (out.issues.length) { ok = false; console.log(out.issues.join('\n')); }
 }
 
+if (ok && process.argv.includes('--ceiling')) {
+  // Low ceilings: slide (or crouch) under a slab, then jump or stand up. The eye used to be put back at standing height
+  // INSIDE the slab, and the wall pass then ejected you sideways to the slab's nearest edge: out of the building, out of
+  // the map. Now there is no standing up into a ceiling, and a body that is somehow in one is lowered, not thrown.
+  const out = vm.runInThisContext(`(() => {
+    const issues = [];
+    const saved = { cols: wallColliders.slice(), started: gameStarted, dead: isDead, map: activeMapName, pos: camera.position.clone(), slam: slamState,
+                    sound: playSoundEvent, fx: spawnAbilityAOEFX, anim: showAnnouncement, audio: getAudioCtx, ws: playWeaponSound, match };
+    playSoundEvent = () => {}; spawnAbilityAOEFX = () => {}; showAnnouncement = () => {}; getAudioCtx = () => null; playWeaponSound = () => {};
+    try {
+      gameStarted = true; isDead = false; match = null;
+      activateMap('blank');
+      const slabY = [1.10, 1.30, 1.60, 1.95];
+      for (const low of slabY) {
+        for (const how of ['slide-jump', 'stand-up', 'crouch-jump']) {
+          wallColliders.length = 0;
+          // a hall roof, 24 m across, on nothing: you can slide under it from any side
+          wallColliders.push(new THREE.Box3(new THREE.Vector3(-12, low, -12), new THREE.Vector3(12, low + 0.8, 12)));
+          for (const k of Object.keys(keys)) keys[k] = false;
+          slamState = null; playerYVel = 0; _extVel.x = 0; _extVel.z = 0; window._blastCarry = false;
+          const lowEye = Math.min(0.70, low - 0.2);
+          window._crouchEye = lowEye; window._prevCrouchHeld = false; window._prevShiftHeld = false;
+          camera.position.set(2, lowEye, 0);
+          camera.quaternion.set(0, 0, 0, 1);
+          if (how === 'slide-jump') { window._slideUntil = Date.now() + 900; window._slideDir = new THREE.Vector3(1, 0, 0); }
+          else { window._slideUntil = 0; }
+          if (how === 'crouch-jump') keys['ControlLeft'] = true;
+          if (how !== 'stand-up') { if (how === 'crouch-jump') keys['ControlLeft'] = false; doJump(false); }
+          let worstStep = 0, headIn = 0, lastX = camera.position.x, lastZ = camera.position.z, below = 0;
+          for (let f = 0; f < 150; f++) {
+            updateMovement(1 / 60);
+            const step = Math.hypot(camera.position.x - lastX, camera.position.z - lastZ);
+            worstStep = Math.max(worstStep, step); lastX = camera.position.x; lastZ = camera.position.z;
+            if (camera.position.y + 0.1 > low && Math.abs(camera.position.x) < 12.4 && Math.abs(camera.position.z) < 12.4) headIn++;
+            if (camera.position.y < 0.3) below++;
+          }
+          const tag = how + ' under a ' + low.toFixed(2) + ' m ceiling: ';
+          if (worstStep > 0.9) issues.push(tag + 'thrown ' + worstStep.toFixed(1) + ' m in one frame');
+          if (Math.abs(camera.position.x) > 12.3 || Math.abs(camera.position.z) > 12.3) issues.push(tag + 'ended outside the slab footprint at (' + camera.position.x.toFixed(1) + ', ' + camera.position.z.toFixed(1) + ')');
+          if (headIn) issues.push(tag + 'the head was inside the ceiling for ' + headIn + ' frames');
+          if (below) issues.push(tag + 'fell through the floor');
+        }
+      }
+    } finally {
+      wallColliders.length = 0; wallColliders.push(...saved.cols);
+      gameStarted = saved.started; isDead = saved.dead; slamState = saved.slam; match = saved.match;
+      playSoundEvent = saved.sound; spawnAbilityAOEFX = saved.fx; showAnnouncement = saved.anim; getAudioCtx = saved.audio; playWeaponSound = saved.ws;
+      try { activateMap(saved.map); } catch (e) {}
+      camera.position.copy(saved.pos); window._crouchEye = 1.65; window._slideUntil = 0;
+    }
+    return issues;
+  })()`);
+  console.log('ceiling checks: slide-jump, crouch-jump and standing up under low ceilings (no ejection, no head in the slab)');
+  if (out.length) { ok = false; console.log(out.slice(0, 20).join('\n')); }
+}
+
 if (ok && process.argv.includes('--netinterp')) {
   // Remote players on the network: packets arrive ~30 times a second, with jitter; the body must glide between them at
   // the screen's own frame rate (it used to move only when a packet landed -- one frame in three at 60 fps -- and trail by
