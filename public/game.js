@@ -201,7 +201,7 @@ const WEAPONS = [
     ability: { name: 'Cryo Nova', cd: 14000, desc: 'AOE freeze blast 4 m · 50 dmg each', type: 'aoe', radius: 4, damage: 50, color: 0x99ddff },
   },
   {
-    id: 'boombow', name: 'Boombow', type: 'Explosive Bow', slot: 'primary',
+    id: 'boombow', name: 'Bow', type: 'Explosive Bow', slot: 'primary',
     // Half the previous base damage, with three times the reload duration.
     mag: 1, reserve: 42, damage: 16, fireRate: 188, reloadTime: 1050,
     auto: false, pellets: 1, spread: 0.004, adsZoom: 42, bulletSpeed: 34, noReload: false,
@@ -65397,7 +65397,7 @@ const FUN_FACTS = [
   '🎯 Vampire Blade heals you per hit — duel multiple enemies.',
   '🎯 RPD has no reload — perfect for prolonged firefights.',
   '🎯 Knife users move 2× as fast — close gaps fast.',
-  '🎯 Boombow charges up — a fully-drawn shot ignores armor.',
+  '🎯 Bow charges up — a fully-drawn shot ignores armor.',
   '🎯 Throwing a frag at your feet during a finisher kills you and them.',
   '🎯 KOTH gives 3 lives — don\'t waste them rushing the center first.',
   // 🤫 Secretive
