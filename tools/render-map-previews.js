@@ -41,11 +41,12 @@ const VIEWS = {
     const todo = ids.length ? ids : all;
     const sheet = [];
     for (const id of todo) {
-      const data = await page.evaluate(([id, views, OUT_W, OUT_H]) => {
+      const data = await page.evaluate(([id, views, OUT_W, OUT_H, RED]) => {
         document.querySelectorAll('body > :not(canvas)').forEach(e => { e.style.display = 'none'; });
         try { weaponModels.forEach(m => { m.visible = false; }); } catch (e) {}
         camera.children.forEach(c => { if (!c.isLight) c.visible = false; });
         activateMap(id);
+        if (RED) for (const m of MAP_GROUPS[id].children) if (m.userData && m.userData.mapWear && m.material && m.material.map) { m.material.vertexColors = false; m.material.color.setHex(0xff0000); m.material.needsUpdate = true; }   // PREVIEW_RED: show where the wear is
         const sky = MAP_GROUPS[id] && MAP_GROUPS[id]._skyColor;
         if (sky != null && scene.background && scene.background.setHex) scene.background.setHex(sky);
         const b = MAP_BOUNDS[id], cols = MAP_COLLIDERS[id] || [];
@@ -110,8 +111,9 @@ const VIEWS = {
         const small = document.createElement('canvas'); small.width = OUT_W; small.height = OUT_H;
         small.getContext('2d').drawImage(renderer.domElement, 0, 0, OUT_W, OUT_H);
         if (scene.userData._previewLift) { scene.remove(scene.userData._previewLift); scene.userData._previewLift = null; }
+        if (RED) window.__lastView = best;
         return small.toDataURL('image/jpeg', 0.8);
-      }, [id, VIEWS, OUT_W, OUT_H]);
+      }, [id, VIEWS, OUT_W, OUT_H, !!process.env.PREVIEW_RED]);
       const buf = Buffer.from(data.split(',')[1], 'base64');
       fs.writeFileSync(path.join(OUT, id + '.jpg'), buf);
       sheet.push(id);

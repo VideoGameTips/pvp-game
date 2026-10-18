@@ -19606,21 +19606,26 @@ function addMapWear(name) {
   const boxes = [];
   G.traverse(m => {
     if (!m.isMesh || !m.geometry || m.userData.themeDecor || m.userData.mapWear || m.userData.mapGlow || m.visible === false) return;
-    // a box's size: noted by the theme pass before the flat-shading pass rebuilt every geometry (which forgets it), or, for a box
-    // added since, still on the geometry
-    let P = m.userData.thDims ? { width: m.userData.thDims.w, height: m.userData.thDims.h, depth: m.userData.thDims.d }
-          : (m.geometry.type === 'BoxGeometry' ? m.geometry.parameters : null);
-    // …or neither (a map with no theme, whose boxes the flat-shading pass rebuilt): a box is 24 or 36 vertices, and its size is its bounds
-    if (!P && m.geometry.attributes && m.geometry.attributes.position && [24, 36].includes(m.geometry.attributes.position.count)) {
+    // a box's size is its geometry's bounds (times its scale): the sizes the theme pass noted (thDims) go stale when a later pass
+    // resizes the geometry and scales the mesh to make up the difference, and a decal sized from them floats off the face
+    let P = null;
+    const pc = m.geometry.attributes && m.geometry.attributes.position ? m.geometry.attributes.position.count : 0;
+    if (m.geometry.type === 'BoxGeometry' || pc === 24 || pc === 36) {
       if (!m.geometry.boundingBox) m.geometry.computeBoundingBox();
       const bb = m.geometry.boundingBox, sz = bb.getSize(new THREE.Vector3());
+      // only a box about its own centre: the face positions assume it
       if (Math.abs((bb.max.x + bb.min.x) / 2) < 0.01 && Math.abs((bb.max.y + bb.min.y) / 2) < 0.01 && Math.abs((bb.max.z + bb.min.z) / 2) < 0.01) P = { width: sz.x, height: sz.y, depth: sz.z };
     }
     const mat = m.material;
-    if (!P || !mat || Array.isArray(mat) || mat.transparent || mat.isMeshBasicMaterial || (mat.emissive && mat.emissive.getHex()) || !mat.color) return;
+    // nothing you cannot see: a box can be invisible through its material (the height limits, the walls round the edge of the sky),
+    // and a decal laid on one would float in mid-air
+    if (!P || !mat || Array.isArray(mat) || mat.transparent || mat.visible === false || mat.colorWrite === false || mat.alphaTest > 0 || (mat.opacity != null && mat.opacity < 0.98)) return;
+    if (mat.isMeshBasicMaterial || (mat.emissive && mat.emissive.getHex()) || !mat.color) return;
     const e = m.matrixWorld.elements;
     if (Math.abs(e[5]) < 0.99) return;
     const sx = Math.hypot(e[0], e[1], e[2]) || 1, sy = Math.hypot(e[4], e[5], e[6]) || 1, sz = Math.hypot(e[8], e[9], e[10]) || 1;
+    // scenery is not a wall: the clouds and floating islands high above the map, and the mountains and far buildings beyond its edge
+    if (e[13] - P.height * sy / 2 > 28 || Math.abs(e[12]) > bounds.halfX + 2 || Math.abs(e[14]) > bounds.halfZ + 2) return;
     boxes.push({ x: e[12], y: e[13], z: e[14], w: P.width * sx, h: P.height * sy, d: P.depth * sz, ax: [e[0] / sx, e[2] / sx], az: [e[8] / sz, e[10] / sz], col: mat.color.getHex(), cls: m.userData.thCls || null });
   });
   const inside = (x, z, m = 0) => Math.abs(x) <= bounds.halfX - m && Math.abs(z) <= bounds.halfZ - m;
@@ -19640,6 +19645,11 @@ function addMapWear(name) {
   // wall decals pick their spot ON the face: u along it (-len/2..len/2), y up (bottom..top)
   const lift = f => f.b.y - f.b.h / 2;        // the bottom of the box
   const face = (f, u, y, hu, hv, cellId, col, a, layer = 0, flipV = false) => {
+    // keep the whole decal ON the face: one that hangs past an edge floats in the air (a smudge against the sky)
+    const hgt = f.b.h, bot = lift(f);
+    hu = Math.min(hu, f.len / 2); hv = Math.min(hv, hgt / 2);
+    u = Math.max(-f.len / 2 + hu, Math.min(f.len / 2 - hu, u));
+    y = Math.max(bot + hv, Math.min(bot + hgt - hv, y));
     // the theme dressing stands a base band 6 cm proud of every wall's foot: dirt there has to sit in front of it
     const banded = (f.b.cls === 'wall' || f.b.cls === 'perimeter') && y - hv < lift(f) + 0.62;
     const o = (banded ? 0.075 : 0.008) + layer * 0.004;
