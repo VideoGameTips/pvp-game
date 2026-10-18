@@ -910,6 +910,10 @@ const WEAPONS = [
     auto:true, pellets:1, spread:0, adsZoom:75, bulletSpeed:260, bulletColor:0xff5418, bulletSize:0.06,
     hitscan:true, hitscanRange:28, burnOnHit:{dps:7,dur:4000},
     ability:{name:'Hellfire Core',type:'hellfire_core',cd:0,noADS:true,desc:'Aim / E · 3 incendiary cores per life · no cooldown'} },
+  { id:'omega_pistol', name:'Omega Pistol', type:'Admin · One-Shot Pistol', slot:'secondary',
+    adminItem:true,prototype:true,damageLabel:'\u03a9',mag:1,reserve:0,damage:9999,fireRate:900,reloadTime:0,
+    auto:false,pellets:1,spread:0,adsZoom:45,bulletSpeed:300,bulletColor:0xffffff,bulletSize:.06,
+    noReload:true,hitscan:true,hitscanRange:100 },
 ];
 
 // ── Damage drop-off by range ────────────────────────────────────────────────
@@ -1636,7 +1640,7 @@ const BUNDLES = PVP_SHOP_CATALOG.bundles.map(b => ({...b,price:PVP_SHOP_CATALOG.
 function shopCost(id)      { return WEAPON_COSTS[id]; }
 function shopTrialCost(id) { const c = WEAPON_COSTS[id]; return c == null ? null : Math.max(1, Math.ceil(c / TRIAL_DIVISOR)); }
 function isOwned(id) {
-  if (id === 'hellfire') return !!currentUser?.isAdmin;
+  if (id === 'hellfire' || id === 'omega_pistol') return !!currentUser?.isAdmin;
   if (!id) return true;
   if (FREE_WEAPONS.has(id)) return true;
   if (trialingThisMatch.has(id)) return true;
@@ -3950,6 +3954,7 @@ function weaponAudioProfile(id, baseWeapon) {
   if (lowerId === 'akimbo') return { kind:'pistol', vol:0.30, dur:0.10, f1:620, f2:170 };
   if (lowerId === 'javelin_launcher') return { kind:'thump', vol:0.46, dur:0.30, f1:100, f2:40, action:'single' };
   if (lowerId === 'hellfire') return { kind:'flamethrower', vol:0.42, dur:0.17, f1:72, f2:40 };
+  if (lowerId === 'omega_pistol') return { kind:'crack', vol:.50, dur:.22, f1:110, f2:35, action:'single' };
   if (lowerId === 'flamethrower') return { kind:'flamethrower', vol:0.24, dur:0.18, f1:95, f2:58 };
   if (lowerId === 'plasma_carbine') return { kind:'energy', vol:0.30, dur:0.14, f1:880, f2:540 };
   if (lowerId === 'railgun')        return { kind:'energy', vol:0.42, dur:0.32, f1:1620, f2:120 };
@@ -31333,7 +31338,20 @@ const weaponModels = [
   buildRPG(),  // javelin_launcher
   buildAkimbo(),  // akimbo
   buildHellfire(),  // hellfire
+  buildOmegaPistol(),  // omega_pistol
 ];
+function buildOmegaPistol() {
+  const g=new THREE.Group(),dark=GUN_MATS.inner(),chrome=GUN_MATS.bright();
+  const red=new THREE.MeshBasicMaterial({color:0xff3344});
+  gpBox(g,chrome,.066,.065,.19,0,.015,-.025);
+  gpBox(g,dark,.070,.016,.15,0,.054,-.015);
+  gpCyl(g,dark,.022,.022,.045,12,0,.015,-.135);
+  gpBox(g,dark,.042,.105,.058,0,-.060,.045,.23);
+  for(const side of [-1,1])gpBox(g,red,.004,.018,.065,side*.035,.014,.01);
+  gpBox(g,chrome,.012,.016,.012,0,.062,-.098);
+  const flash=makeMuzzleFlash();flash.position.set(0,.015,-.165);g.add(flash);g._flash=flash;
+  g._kickZ=.018;g._greebled=true;g._handDetailed=true;g.position.set(.12,-.1,-.25);return g;
+}
 function buildHellfire() {
   const g=new THREE.Group(),steel=GUN_MATS.steel(),dark=GUN_MATS.inner();
   const red=new THREE.MeshPhongMaterial({color:0x4c1418,shininess:90,specular:0xba7770});
@@ -40156,12 +40174,12 @@ document.addEventListener('mousedown', e => {
   // anything while the pointer is locked (then every click lands on the canvas anyway) (#25).
   const aimed = pointerLocked || onGameView(e.target);
   if (e.button === 1 && !isDead && gameStarted && aimed) { e.preventDefault(); quickMelee(); return; }
-  if (spectatorState && e.button === 0) { spectatorCycle(1); return; }
+  if (spectatorState && aimed && e.button === 0) { spectatorCycle(1); return; }
   // Mortar: LMB fires a grenade instead of the equipped weapon
   if (pilotedMortar && e.button === 0) { fireMortar(); return; }
   // Vehicle: LMB fires the vehicle's gun
   if (pilotedVehicle && e.button === 0) { fireVehicleGun(); return; }
-  if (spectatorState && e.button === 2) { spectatorCycle(-1); return; }
+  if (spectatorState && aimed && e.button === 2) { spectatorCycle(-1); return; }
   if(e.button===2&&aimed&&activeSlot==='primary'&&currentWeapon?.id==='hellfire'){
     e.preventDefault();fireHellfireCore();return;
   }
@@ -41693,6 +41711,8 @@ function resetCombatResources() {
     weaponAmmo[selectedPrimaryIdx]   = { ammo: pw.mag, reserve: pw.reserve };
     weaponAmmo[selectedSecondaryIdx] = { ammo: sw.mag, reserve: sw.reserve };
   }
+  const omegaIdx=WEAPONS.findIndex(w=>w.id==='omega_pistol');
+  if(omegaIdx>=0)weaponAmmo[omegaIdx]={ammo:1,reserve:0};
   supportUses[selectedSupportIdx] = isObby ? 0 : SUPPORT_ITEMS[selectedSupportIdx].uses;
   reloading = false; shooting = false; isADS = false; targetFOV = 75;
   abilityBuff = null; meleeAbilityBuff = null; pendingFanFire = null;
@@ -41798,6 +41818,9 @@ function placePlayerAtTeamSpawn(team = localPlayerTeam(), spread = 36, depth = 3
 }
 
 function resetPlayerForRound(x = null, z = null) {
+  exitSpectator();
+  cancelAutoRespawn();
+  document.getElementById('loadout-screen').style.display='none';
   isDead = false;
   if (players[myId]) {
     players[myId].hp = matchMaxHp();
@@ -42136,6 +42159,7 @@ function currentEquippedId() {
 // (interpolated) recording, who and with what big enough to read, SKIP — and nothing else opens on
 // top of it until it ends (afterDeath / runAfterKillcam wait).
 const KILLCAM = {
+  archived: true,          // death replay archived; match-final cinematics remain separate
   buf: [],                // ring of frames { t, entities: { id: {x,y,z,rotY} } }
   capacity: 100,          // 100 frames × 100 ms = 10 s (the kill log keeps all of it)
   lastSampleAt: 0,
@@ -42217,6 +42241,7 @@ function killcamUI() {
   return (KILLCAM.ui = ui);
 }
 function startKillcam(killerId, weaponId) {
+  if (KILLCAM.archived) return;
   if (KILLCAM.active) return;
   if (!killerId || killerId === myId) return; // no self-kill killcam
   if (match && match.over) return;             // the end screen is already up
@@ -45644,7 +45669,7 @@ function tryShoot() {
     }
   }
   const pool = weaponAmmo[currentWeaponIdx];
-  const adminInfAmmo = adminCheats.infiniteAmmo && currentUser?.isAdmin;
+  const adminInfAmmo = adminCheats.infiniteAmmo && currentUser?.isAdmin && currentWeapon.id!=='omega_pistol';
   if (pool.ammo <= 0 && !adminInfAmmo) { if (pool.reserve > 0 && !wStats.noReload) startReload(); else dryFire(); return; }
   const preShotAmmo = pool.ammo;
 
@@ -53456,7 +53481,7 @@ function gradeHit(headshot, falloff, headMiss) {
 const _flyNums = [];
 let _flyFlip = 0;
 const _flyGate = {};          // targetId -> { t, rank }: a fast gun does not need 35 numbers a second
-function spawnHitNumber(targetId, worldPos, damage, tier) {
+function spawnHitNumber(targetId, worldPos, damage, tier, label = null) {
   if (!(damage > 0) || !worldPos) return;
   const T = HIT_TIERS[tier] || HIT_TIERS.white;
   const now = performance.now();
@@ -53471,7 +53496,7 @@ function spawnHitNumber(targetId, worldPos, damage, tier) {
   el.style.color = T.color;
   el.style.fontSize = Math.min(42, 14 + T.size + Math.floor(damage / 9)) + 'px';
   if (tier === 'blue') el.style.textShadow = '-1px -1px 0 #002a55,1px -1px 0 #002a55,-1px 1px 0 #002a55,1px 1px 0 #002a55,0 0 12px #3db4ff';
-  el.textContent = damage;
+  el.textContent = label ?? damage;
   document.body.appendChild(el);
   const mid = window.innerWidth / 2;
   const side = Math.abs(sc.x - mid) < 40 ? ((_flyFlip++ & 1) ? 1 : -1) : (sc.x < mid ? -1 : 1);
@@ -53980,7 +54005,7 @@ const DMG_TOTAL_STYLE = [
   'transform:translate(-50%,-100%)',
 ].join(';');
 
-function trackTotalDamage(targetId, damage, targetMesh, tier) {
+function trackTotalDamage(targetId, damage, targetMesh, tier, label = null) {
   if (!(damage > 0) || !targetMesh) return;
   if (!damageTracker[targetId]) {
     const el = document.createElement('div');
@@ -53992,7 +54017,7 @@ function trackTotalDamage(targetId, damage, targetMesh, tier) {
   const tr = damageTracker[targetId];
   tr.total  += damage;
   tr.lastHit = performance.now();
-  tr.el.textContent  = tr.total;
+  tr.el.textContent  = label ?? tr.total;
   tr.el.style.opacity = '1';
   // The running total wears the grade of the latest hit, so a string of crits reads red/orange.
   const T = tier && HIT_TIERS[tier];
@@ -54001,11 +54026,12 @@ function trackTotalDamage(targetId, damage, targetMesh, tier) {
 
 // One call per landed hit, from emitHit and from the training dummies: grade it, fling the
 // number, tint the running total, and click. Returns the grade.
-function hitFeedback(targetId, mesh, hitPos, damage, headshot, falloff, headMiss) {
+function hitFeedback(targetId, mesh, hitPos, damage, headshot, falloff, headMiss, weaponId = null) {
   const tier = gradeHit(headshot, falloff == null ? 1 : falloff, headMiss);
   const at = hitPos || (mesh ? mesh.position.clone().setY(mesh.position.y + 1.2) : null);
-  spawnHitNumber(targetId, at, damage, tier);
-  if (mesh) trackTotalDamage(targetId, damage, mesh, tier);
+  const label = weaponId === 'omega_pistol' ? '\u03a9' : null;
+  spawnHitNumber(targetId, at, damage, tier, label);
+  if (mesh) trackTotalDamage(targetId, damage, mesh, tier, label);
   if (damage > 0) {
     const crit = headshot;
     playSoundEvent(crit ? 'headshot' : 'hitmarker', {
@@ -54108,7 +54134,7 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false, opts = 
   if (friendlyFireBlocked(pid, myId)) return;
   const killTags = killfeedShotTags(weaponId, { ...opts, targetId: pid });
   noteKillInfo(pid, myId, weaponId, headshot, { tags: killTags });
-  const instakill = headshot && INSTAKILL_HS_WEAPONS.has(weaponId);
+  const instakill = weaponId==='omega_pistol' || headshot && INSTAKILL_HS_WEAPONS.has(weaponId);
   const baseDmg = getClientWeaponDamage(weaponId);
   // 🤫 Secret synergy: certain weapons get a damage bonus in matching map zones
   const synergy = getSecretSynergy(weaponId, hitWorldPos);
@@ -54147,7 +54173,7 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false, opts = 
     const z = mesh._rig?.hitHeadZ || 0;
     headMiss = Math.hypot(hitWorldPos.x - (mesh.position.x+Math.sin(mesh.rotation.y)*z), hitWorldPos.y - (mesh.position.y + off), hitWorldPos.z - (mesh.position.z+Math.cos(mesh.rotation.y)*z));
   }
-  hitFeedback(pid, mesh, hitWorldPos, dmg, headshot, Number.isFinite(opts.damageOverride) ? 1 : falloff, headMiss);
+  hitFeedback(pid, mesh, hitWorldPos, dmg, headshot, Number.isFinite(opts.damageOverride) ? 1 : falloff, headMiss, weaponId);
   // Switchblade Gun: any successful hit re-charges to the 100-dmg shot
   if (weaponId === 'switchblade_gun' || weaponId === 'switchblade_charged') {
     switchbladeCharged = true;
@@ -54197,7 +54223,7 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false, opts = 
   if (isBot) {
     const bot = resolveBot(pid);
     if (bot && !bot.dead) {
-      const effective = instakill ? 9999 : dmg;
+      const effective = weaponId==='omega_pistol' ? bot.hp : instakill ? 9999 : dmg;
       bot.hp = Math.max(0, bot.hp - effective);
       if (players[pid]) players[pid].hp = bot.hp;
       // Flee-trigger metrics: track recent damage + consecutive hits
@@ -54355,7 +54381,7 @@ spawnTrainingDummies(); // safe here — TRAINING_DUMMIES const is already initi
 
 function handleDummyHit(dummy, mesh, opts, hitPos) {
   const dmg = opts.damage ?? getClientWeaponDamage(opts.weaponId);
-  hitFeedback(dummy.id, mesh, hitPos, dmg, !!opts.headshot, opts.falloff, opts.headMiss);
+  hitFeedback(dummy.id, mesh, hitPos, dmg, !!opts.headshot, opts.falloff, opts.headMiss, opts.weaponId);
   if (dummy.infinite) {
     flashDummyMesh(mesh);
     return;
@@ -56718,12 +56744,22 @@ function updateHealthHUD(hp) {
 
 // ── Spectator mode (watch teammates after dying) ────────────────────────────
 function getLiveAllies() {
-  return gameBots.filter(b => b.team === 'ally' && !b.dead);
+  const allies=gameBots.filter(b=>b.team==='ally'&&!b.dead);
+  const ids=new Set(gameBots.map(b=>b.id));
+  for(const [id,mesh] of Object.entries(remoteMeshes)){
+    if(id===myId||ids.has(id)||!mesh.visible||players[id]?.dead||localEntityTeam(id)!==localEntityTeam(myId))continue;
+    allies.push({id,x:mesh.position.x,y:mesh.position.y,z:mesh.position.z,rotY:mesh.rotation.y});
+  }
+  return allies;
+}
+function watchEliminationRound() {
+  if(!isDead||match?.type!=='elim'||match.over)return;
+  for(const id of ['waiting-screen','death-screen'])document.getElementById(id).style.display='none';
+  enterSpectator();releasePointer();
 }
 function enterSpectator() {
-  const allies = getLiveAllies();
-  if (allies.length === 0) return; // nobody to spectate
-  spectatorState = { idx: 0, lastSwitch: 0 };
+  spectatorState ||= { idx: 0, lastSwitch: 0 };
+  weaponModels.forEach(m=>m.visible=false);meleeModels.forEach(m=>m.visible=false);supportModels.forEach(m=>m.visible=false);
   showSpectatorHUD();
   updateSpectatorHUD();
 }
@@ -56736,7 +56772,7 @@ function exitSpectator() {
 function spectatorCycle(dir) {
   if (!spectatorState) return;
   const allies = getLiveAllies();
-  if (allies.length === 0) { exitSpectator(); return; }
+  if (allies.length === 0) return;
   spectatorState.idx = ((spectatorState.idx + dir) % allies.length + allies.length) % allies.length;
   spectatorState.lastSwitch = performance.now();
   updateSpectatorHUD();
@@ -56745,15 +56781,15 @@ function updateSpectatorCamera(dt) {
   if (!spectatorState) return;
   if (!isDead) { exitSpectator(); return; } // auto-exit on respawn
   const allies = getLiveAllies();
-  if (allies.length === 0) { exitSpectator(); return; }
+  if (allies.length === 0) return;
   // Clamp idx in case allies died
   if (spectatorState.idx >= allies.length) spectatorState.idx = 0;
   const ally = allies[spectatorState.idx];
   // Third-person follow camera: behind and slightly above the ally
   const back = 3.5, height = 2.5;
-  const ax = ally.x, az = ally.z, ay = 1.0;
-  const camX = ax - Math.sin(ally.rotY) * (-back);
-  const camZ = az - Math.cos(ally.rotY) * (-back);
+  const ax = ally.x, az = ally.z, ay = (ally.y || 0)+1.0;
+  const camX = ax - Math.sin(ally.rotY) * back;
+  const camZ = az - Math.cos(ally.rotY) * back;
   camera.position.set(camX, ay + height, camZ);
   // Look at the ally's chest level
   camera.lookAt(ax, ay + 1.0, az);
@@ -56763,24 +56799,23 @@ function showSpectatorHUD() {
   if (!hud) {
     hud = document.createElement('div');
     hud.id = 'spectator-hud';
-    // z 90: over the elimination waiting / death screens it belongs to, under the loadout and end screen (#27)
-    hud.style.cssText = 'position:fixed;top:18%;left:50%;transform:translateX(-50%);z-index:90;'
-      + 'background:rgba(0,0,0,0.7);border:2px solid #4cf;color:#fff;font-family:monospace;'
-      + 'padding:10px 18px;border-radius:6px;text-align:center;pointer-events:none;font-size:14px;';
+    hud.innerHTML='<span id="spectator-info"></span>';
     document.body.appendChild(hud);
   }
   hud.style.display = 'block';
+  const loadout=document.getElementById('change-loadout-btn');
+  if(loadout)loadout.style.display=match?.type==='elim'?'':'none';
 }
 function updateSpectatorHUD() {
   const hud = document.getElementById('spectator-hud');
   if (!hud || !spectatorState) return;
   const allies = getLiveAllies();
-  if (allies.length === 0) { hud.style.display = 'none'; return; }
+  const info=document.getElementById('spectator-info');
+  if (allies.length === 0) { if(info)info.textContent='Waiting for next round';return; }
+  spectatorState.idx%=allies.length;
   const ally = allies[spectatorState.idx];
   const name = players[ally.id]?.name || 'Ally';
-  hud.innerHTML = `<div style="font-size:11px;opacity:0.7;letter-spacing:2px;">SPECTATING</div>`
-    + `<div style="font-size:22px;color:#4cf;font-weight:bold;margin:2px 0;">${name}</div>`
-    + `<div style="font-size:11px;opacity:0.8;">[ ← / → ] or [ CLICK ] to cycle · ${spectatorState.idx + 1}/${allies.length}</div>`;
+  if(info)info.textContent=`Watching ${name} · ${spectatorState.idx+1}/${allies.length}`;
 }
 
 // Client-side bot damage to player (applies immediately; server also processes for auth)
@@ -57018,7 +57053,7 @@ function scheduleLocalOutOfBoundsRecovery() {
     return;
   }
   if (match?.type === 'elim') {
-    if (dm) dm.textContent = 'Waiting for round to end...';
+    watchEliminationRound();
     return;
   }
   if (dm) dm.textContent = 'Select your loadout...';
@@ -57154,6 +57189,7 @@ function applyBotDamageToPlayer(weaponId, botId, damageOverride) {
     const ds = document.getElementById('death-screen');
     if (ds) ds.style.display = 'flex';
     onEntityDied(myId, botId || null);
+    if(match?.type==='elim')watchEliminationRound();
     if (match?.cfg?.autoRespawn) scheduleAutoRespawnLocal();
     return true;
   }
@@ -57188,7 +57224,6 @@ function applyBotDamageToPlayer(weaponId, botId, damageOverride) {
     const scope = document.getElementById('scope-overlay');
     if (scope) scope.style.display = 'none';
     const ds = document.getElementById('death-screen');
-    const ws = document.getElementById('waiting-screen');
     const killerName = (botId && players[botId]?.name) || 'Enemy';
     showAnnouncement('YOU DIED', `Killed by ${killerName}`, '#ff4444', 1800);
     // Speech bubble: killer bot taunts
@@ -57206,20 +57241,13 @@ function applyBotDamageToPlayer(weaponId, botId, damageOverride) {
     }
     // Notify match logic (round end / kill tracking)
     onEntityDied(myId, botId || null);
-    // 🎬 Straight into the killcam — not whenever the server's echo arrives (#42)
+    // The death replay is archived; this compatibility call is a no-op.
     startKillcam(botId, weaponId);
     if (match && match.type === 'elim' && !match.over) {
       if (ds) ds.style.display = 'none';
       const dmEl = document.getElementById('death-msg');
       if (dmEl) dmEl.textContent = 'Waiting for round to end...';
-      // The spectator camera would fight the killcam for the screen: after it (#42)
-      runAfterKillcam(() => {
-        if (!isDead || !match || match.over) return;
-        if (ws) ws.style.display = 'flex';
-        updateRoundScoreDisplay && updateRoundScoreDisplay();
-        enterSpectator(); // watch live teammates while waiting
-        releasePointer(); // CHANGE LOADOUT on the waiting screen needs the cursor
-      });
+      watchEliminationRound();
     } else if (match && match.type === 'arcade') {
       // Arcade: brief death screen, scheduleArcadeRespawn handles the actual respawn
       if (ds) {
@@ -57849,7 +57877,7 @@ socket.on('playerDied', data => {
     // Clear lingering buffs so bots resume normal AI
     abilityBuff=null; meleeAbilityBuff=null; pendingFanFire=null;
     document.getElementById('scope-overlay').style.display='none';
-    // 🎬 Start killcam — overrides camera + hides death screen for ~2.2s
+    // Death replay is archived; proceed straight to live viewing or respawn.
     startKillcam(data.killerId, data.weapon || resolveBot(data.killerId)?.weaponId);   // no-op if the local death started it (#42)
     const ds = document.getElementById('death-screen');
     if (!KILLCAM.active) ds.style.display='flex';
@@ -57857,14 +57885,7 @@ socket.on('playerDied', data => {
       // No respawn in elimination — wait for round to end
       document.getElementById('death-msg').textContent = 'Waiting for round to end...';
       ds.style.display = 'none';
-      runAfterKillcam(() => {
-        if (!isDead || !match || match.over) return;
-        document.getElementById('waiting-screen').style.display = 'flex';
-        showFunFact('waiting-screen');
-        updateRoundScoreDisplay();
-        enterSpectator(); // watch live teammates while waiting
-        releasePointer(); // CHANGE LOADOUT on the waiting screen needs the cursor
-      });
+      watchEliminationRound();
     } else if (match && match.tiebreaker) {
       document.getElementById('death-msg').textContent = 'Tiebreaker — eliminated!';
       // endMatch called via onEntityDied
@@ -60095,6 +60116,9 @@ function startMatchRound() {
     for (const b of gameBots) clearBotStatusEffects(b);
     // For elim rounds: respawn the player now (after countdown)
     if (isDead) {
+      exitSpectator();
+      document.getElementById('waiting-screen').style.display='none';
+      document.getElementById('death-screen').style.display='none';
       isDead = false;
       placePlayerAtTeamSpawn(localPlayerTeam(), 24, 38);
       socket.emit('readyRespawn', { x: camera.position.x, z: camera.position.z, mode: currentModeId() });
@@ -65060,7 +65084,7 @@ function showLoadoutScreen(mode) {
   const meleeEls = {};
   const supportEls = {};
   // Helper: is this admin item unlocked for the current user?
-  const isUnlocked = (id) => id==='hellfire' ? !!currentUser?.isAdmin : adminPassActive() || !!(currentUser && currentUser.unlocks && currentUser.unlocks.includes(id));
+  const isUnlocked = (id) => ['hellfire','omega_pistol'].includes(id) ? !!currentUser?.isAdmin : adminPassActive() || !!(currentUser && currentUser.unlocks && currentUser.unlocks.includes(id));
 
   // Locked items stay visible; only owned items can be selected.
   function decorateOwnedBadge(card, id, isAdminItem) {
@@ -65151,7 +65175,7 @@ function showLoadoutScreen(mode) {
     card.innerHTML = `${loadoutPreviewHTML(w.id)}<div class="lc-copy">
       <div class="lc-name">${displayWeaponName(w)}${adminTag}</div>
       <div class="lc-type">${dw.type}${dw.skinName ? ' · SKIN' : ''}</div>
-      <div class="lc-stats">DMG ${dw.damage}${w.pellets > 1 ? '×' + w.pellets : ''} · MAG ${w.mag} · ${fireTag} · ${rateTag}</div>
+      <div class="lc-stats">DMG ${w.damageLabel||dw.damage}${w.pellets > 1 ? '×' + w.pellets : ''} · MAG ${w.mag} · ${fireTag} · ${rateTag}</div>
     </div>`;
     const usable = decorateOwnedBadge(card, w.id, !!w.adminItem);
     if(usable)addGunSkinChips(card, w);
@@ -65829,6 +65853,14 @@ function confirmLoadout() {
   sanitizeLoadoutSlots();       // and the right kind in each: a primary in the secondary slot is put right here
 
   document.getElementById('loadout-screen').style.display = 'none';
+  if(gameStarted&&isDead&&match?.type==='elim'&&!match.over){
+    watchEliminationRound();
+    showAnnouncement('LOADOUT UPDATED','Active next round','#4cf',1400);return;
+  }
+  if(gameStarted&&!isDead){
+    exitSpectator();
+    for(const id of ['death-screen','waiting-screen'])document.getElementById(id).style.display='none';
+  }
   resetCombatResources();
 
   if (!gameStarted) {
@@ -65851,14 +65883,9 @@ function confirmLoadout() {
     const startSolo = () => { gameStarted = true; spawnGameBots(); requestPointerLockSafe(); startLoop(); };
     if (modeUsesMapChoice(selectedModeConfig)) pickMapSolo(modeId, startSolo);   // nobody to vote with: you pick alone
     else startSolo();
-  } else if (loadoutMode === 'swap') {
+  } else if (loadoutMode === 'swap' || loadoutMode === 'waiting') {
     // Mid-game swap via trashcan — player is still alive, no respawn needed
     requestPointerLockSafe();
-  } else if (loadoutMode === 'waiting') {
-    // Player changed loadout mid-elim-round while waiting — they stay dead, just return to waiting screen
-    // Their new loadout will be active when the next round respawns them (resetPlayerForRound in startMatchRound)
-    document.getElementById('waiting-screen').style.display = 'flex';
-    showAnnouncement('LOADOUT UPDATED', 'Active next round', '#4cf', 1400);
   } else {
     // Respawn after death on this player's team side, don't rely on the server's center spawn.
     resetPlayerForRound();
@@ -68995,13 +69022,19 @@ document.getElementById('loadout-exit-btn').addEventListener('click', () => {
   if (loadoutBefore) ({ p: selectedPrimaryIdx, s: selectedSecondaryIdx, m: selectedMeleeIdx, u: selectedSupportIdx } = loadoutBefore);
   document.getElementById('loadout-screen').style.display = 'none';
   if (!gameStarted) { openModeMenu(); return; }                       // before a match: back to the modes
-  if (loadoutMode === 'waiting') { document.getElementById('waiting-screen').style.display = 'flex'; return; }
+  if (loadoutMode === 'waiting' && isDead) { watchEliminationRound(); return; }
+  if(!isDead){
+    exitSpectator();
+    for(const id of ['death-screen','waiting-screen'])document.getElementById(id).style.display='none';
+  }
   requestPointerLockSafe();                                           // SWAP: back to the fight, kit unchanged
 });
 document.getElementById('loadout-ready-btn').addEventListener('click', confirmLoadout);
 document.getElementById('loadout-ready-btn').addEventListener('touchstart', e => { e.preventDefault(); confirmLoadout(); }, { passive: false });
 // Change loadout while waiting between rounds in elim mode
 const _changeBtn = document.getElementById('change-loadout-btn');
+document.getElementById('spectator-prev')?.addEventListener('click',()=>spectatorCycle(-1));
+document.getElementById('spectator-next')?.addEventListener('click',()=>spectatorCycle(1));
 if (_changeBtn) {
   const openLoadoutFromWaiting = () => {
     document.getElementById('waiting-screen').style.display = 'none';
