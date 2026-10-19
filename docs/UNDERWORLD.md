@@ -56,8 +56,9 @@ clears campaign progress. The journal labels the device save explicitly.
 Every objective starts a checkpoint. A retry restarts that objective with a
 restored kit and health, rather than restoring a potentially unwinnable battle.
 Conversations and the pause menu stop simulation; the full-screen menus also
-skip world rendering. Losing browser visibility pauses the operation. The
-journal's New Campaign action requires confirmation and resets only this
+skip world rendering. Showing the cursor or pressing Escape does not pause the
+operation; use Journal to pause explicitly. Losing browser visibility still
+pauses the operation. The journal's New Campaign action requires confirmation and resets only this
 account's campaign data on this device.
 
 ## Source Layout

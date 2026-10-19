@@ -39343,15 +39343,7 @@ function updateFireShake(dt) {
 const ARROW_SENS = 0.03;
 
 document.addEventListener('pointerlockchange', () => {
-  const was = pointerLocked;
   pointerLocked = document.pointerLockElement === renderer.domElement;
-  // Desktop: Esc is how a player gets the cursor back. Mid-match it now opens the ⚙ match menu
-  // (RESUME / settings / leave) instead of leaving a screen that looks the same but ignores the
-  // mouse (#26). When the game lets go itself (releasePointer, the voice-chat box) the screen that
-  // needed the cursor is already up by the time this fires, and it wins.
-  const vchat = document.getElementById('vchat-box');
-  if (was && !pointerLocked && inLiveMatch() && !isDead && !isLoadoutOpen() && !anyDialogOpen()
-      && SOCIAL_VIEW.mode !== 'picker' && !(vchat && vchat.style.display === 'block')) openSettingsHub();
 });
 // ── 🔫 Recoil ───────────────────────────────────────────────────────────────
 // There was none, anywhere. Every weapon in the game fired perfectly flat, and
