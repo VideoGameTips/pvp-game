@@ -63286,8 +63286,7 @@ function spawnGameBots() {
 // ══════════════════════════════════════════════════════════════════════════
 // 🧟 ZOMBIE SURVIVAL. Endless waves of zombies, solo, and you begin with your fists and nothing else. Every zombie has a
 // small chance to drop ammo or a new weapon, so the kit is whatever the dead give you: slot 1 stays your fists, slot 2 is
-// the latest thing you picked up (walk over it; what you were holding drops at your feet and is yours again once you step
-// away from it). The kit is the same two-slot kit as Dice Duel and Weapon Roulette, held in match.roulette so every rule
+// the latest thing you picked up (walk over it; what you were holding disappears). The kit is the same two-slot kit as Dice Duel and Weapon Roulette, held in match.roulette so every rule
 // of it (keys 1 and 2, the HUD, getting your own loadout back at the end) is already there.
 // A zombie is a bot that skips the whole bot AI: no aim, no cover, no plan. It walks the nav route to you at its wave's
 // speed, winds up a claw swing when it is close and hits if you have not stepped away. A wave is bigger, tougher and
@@ -63499,7 +63498,7 @@ function zombieLabelSprite(text, color) {
   sp.scale.set(2.2, 0.55, 1); sp.position.y = 0.85;
   return sp;
 }
-function zombieDropPickup(kind, x, z, id, tier, grace) {
+function zombieDropPickup(kind, x, z, id, tier) {
   const color = kind === 'ammo' ? '#ffd84a' : (DICE_TIER_COLOR[tier] || '#ffffff');
   const g = new THREE.Group();
   const box = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.42, 0.42), new THREE.MeshBasicMaterial({ color: new THREE.Color(color) }));
@@ -63510,7 +63509,7 @@ function zombieDropPickup(kind, x, z, id, tier, grace) {
   const gy = botGroundYAt(x, z, 0, 1.05, 2.2);
   g.position.set(x, gy, z);
   scene.add(g);
-  zombiePickups.push({ kind, id, tier, mesh: g, box, born: Date.now(), x, z, y: gy, leaveFirst: !!grace });
+  zombiePickups.push({ kind, id, tier, mesh: g, box, born: Date.now(), x, z, y: gy });
   playSoundEvent('hitmarker', { volume: 0.6, minGap: 0, tier: kind === 'ammo' ? 'orange' : 'blue' });
 }
 function zombieRemovePickup(i) {
@@ -63534,7 +63533,6 @@ function updateZombiePickups(dt) {
     pk.mesh.visible = age < ZOMBIE_PICKUP_LIFE_MS - 6000 || Math.floor(age / 220) % 2 === 0;   // blinks out in its last seconds
     if (isDead) continue;
     const d = Math.hypot(camera.position.x - pk.x, camera.position.z - pk.z);
-    if (pk.leaveFirst) { if (d > ZOMBIE_PICKUP_RADIUS + 0.9) pk.leaveFirst = false; continue; }
     if (d > ZOMBIE_PICKUP_RADIUS || Math.abs(camera.position.y - 1.65 - pk.y) > 2.2) continue;
     zombieRemovePickup(i);
     zombieTake(pk);
@@ -63554,10 +63552,11 @@ function zombieTake(pk) {
     playSoundEvent('reload_finish', { volume: 0.7, minGap: 0 });
     return;
   }
+  // What you were holding is gone: it does not drop on the floor, it just disappears (a puff where it left your hands).
   const old = kit.slots[1];
-  if (old && old !== pk.id) zombieDropPickup('weapon', camera.position.x, camera.position.z, old, kit.tiers[1], true);   // what you held is on the floor, yours again once you step away
+  if (old) spawnAbilityAOEFX(camera.position.clone().setY(Math.max(0.15, camera.position.y - 1.4)), 1.0, DICE_TIER_COLOR[kit.tiers[1]] ? parseInt(DICE_TIER_COLOR[kit.tiers[1]].slice(1), 16) : 0xffffff);
   const k = rngRollIn(pk.id, kit, pk.tier, 1);
-  showAnnouncement(`${pk.tier} · ${diceName(pk.id)}${DICE_KIND_TAG[k] || ''}`, old ? 'swapped in (the old one is on the floor)' : 'new weapon', DICE_TIER_COLOR[pk.tier] || '#fff', 1600);
+  showAnnouncement(`${pk.tier} · ${diceName(pk.id)}${DICE_KIND_TAG[k] || ''}`, old ? `new weapon · ${diceName(old)} is gone` : 'new weapon', DICE_TIER_COLOR[pk.tier] || '#fff', 1600);
   diceSound(pk.tier);
 }
 

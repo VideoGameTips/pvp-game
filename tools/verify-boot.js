@@ -2900,13 +2900,13 @@ if (ok && process.argv.includes('--zombie')) {
       camera.position.set(zombiePickups[0].x, 1.65, zombiePickups[0].z); updateZombiePickups(0.016);
       if (kit.slots[0] !== 'm:fists' || kit.slots[1] !== first || kit.hand !== 1) issues.push('a pickup should go in slot 2 and into your hand, fists kept: ' + JSON.stringify(kit.slots) + ' hand ' + kit.hand);
       if (zombiePickups.length) issues.push('the pickup should be gone once taken');
-      // a second one swaps, the old one drops at your feet and cannot be re-taken until you step off it
+      // a second one replaces it, and what you were holding is simply gone: nothing is left on the floor
       zombieDropPickup('weapon', 12, 0, 'ak20', 'SS');
       camera.position.set(12, 1.65, 0); updateZombiePickups(0.016);
       if (kit.slots[1] !== 'ak20' || kit.slots[0] !== 'm:fists') issues.push('the second pickup should replace slot 2 only: ' + JSON.stringify(kit.slots));
-      const dropped = zombiePickups.find(p => p.id === first);
-      if (!dropped) issues.push('the weapon you swapped out should be on the floor');
-      else { updateZombiePickups(0.016); if (!zombiePickups.includes(dropped)) issues.push('you took the swapped-out weapon straight back'); }
+      if (zombiePickups.length) issues.push('the weapon you swapped out should disappear, not land on the floor: ' + JSON.stringify(zombiePickups.map(p => p.id)));
+      updateZombiePickups(0.016); updateZombiePickups(0.016);
+      if (kit.slots[1] !== 'ak20') issues.push('standing there must not change the kit');
       if (!(weaponAmmo[WEAPONS.findIndex(w => w.id === 'ak20')].ammo === WEAPONS.find(w => w.id === 'ak20').mag)) issues.push('a pickup should come loaded');
       // ammo
       zombieClearPickups();
