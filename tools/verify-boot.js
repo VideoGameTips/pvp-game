@@ -2845,7 +2845,10 @@ if (ok && process.argv.includes('--zombie')) {
       players[myId] = { hp: 300, team: 'ally' };
       selectedModeConfig = GAME_MODE_CONFIGS.zombies;
       if (!selectedModeConfig || selectedModeConfig.subtype !== 'zombie') { issues.push('there is no zombies mode'); return issues; }
+      if (selectedModeConfig.forcedMap !== 'blank' || modeUsesMapChoice(selectedModeConfig)) issues.push('Zombie Survival should be stuck to the Classic map (no map vote)');
+      const lightBefore = { amb: mapAmbient.intensity, sun: sun.intensity, bg: scene.background.getHex() };
       initMatch(); match.roundActive = true; match.active = true;
+      if (!(mapAmbient.intensity <= 0.1 && sun.intensity <= 0.2 && scene.background.getHex() < 0x101018)) issues.push('the map should be dark: ambient ' + mapAmbient.intensity + ' sun ' + sun.intensity + ' sky ' + scene.background.getHex().toString(16));
       setupArcadeStart('zombie');
       const Z = match.zombie, kit = rngKit();
       if (!kit || kit.slots[0] !== 'm:fists' || kit.slots[1]) issues.push('you should begin with your fists and nothing else: ' + JSON.stringify(kit && kit.slots));
@@ -2868,6 +2871,11 @@ if (ok && process.argv.includes('--zombie')) {
       if (before > ZOMBIE_CAP && gameBots.filter(b => b.zombie && !b.dead).length > before) issues.push('spawned past the cap');
       for (const b of gameBots.slice()) zombieRemove(b);
       Z.toSpawn = 0;
+      // its own skin, and a claw that hurts
+      if (!PIXEL_SKINS.zombie || SKIN_IDS.includes('zombie')) issues.push('the zombie needs a skin of its own that nobody can wear');
+      const zz = gameBots.find(b => b.zombie) || zombieSpawn();
+      if (players[zz.id].skin !== 'zombie' || renderedSkinForPlayer(players[zz.id]) !== 'zombie') issues.push('a zombie should be drawn in the zombie skin');
+      if (getClientWeaponDamage('zombie_claw') < 30) issues.push('the claw should hit for 30, got ' + getClientWeaponDamage('zombie_claw'));
       // a zombie walks to you ...
       const z1 = zombieSpawn(); z1.x = 8; z1.z = 0; z1.zSpeed = 3; remoteMeshes[z1.id].position.set(8, 0, 0);
       match.roundActive = true;
@@ -2910,6 +2918,15 @@ if (ok && process.argv.includes('--zombie')) {
       // nothing to reload (fists only): no ammo drop
       kit.slots[1] = null; Math.random = () => 0.05; zombieClearPickups(); zombieRollDrop(z1);
       if (zombiePickups.length) issues.push('with only fists nothing uses ammo, so none should drop');
+      // only some types of weapon, never the gimmick pile
+      Math.random = saved.rnd; const seen = new Set(); let bad = '';
+      for (let i = 0; i < 6000; i++) { const r = zombieDropRoll(null, false); seen.add(r.weaponId); const inf = diceInfo(r.weaponId);
+        if (!inf || inf.item.archived || inf.item.adminItem) bad = r.weaponId; if (!Object.values(ZOMBIE_DROP_POOL).some(l => l.includes(r.weaponId))) bad = r.weaponId; }
+      if (bad) issues.push('a drop came from outside the zombie pool: ' + bad);
+      const kinds = new Set([...seen].map(id => diceInfo(id).kind));
+      if (kinds.size !== 3) issues.push('the pool should hold guns, melees and throwables: ' + [...kinds]);
+      for (const id of ['potato_cannon', 'portal_launcher', 'laser_pointer', 'omega_pistol', 'm:lightsabre', 'u:orbital_strike']) if (seen.has(id)) issues.push(id + ' is not a weapon the dead carry');
+      for (let i = 0; i < 400; i++) if (diceInfo(zombieDropRoll(null, true).weaponId).kind !== 'gun') { issues.push('with no gun yet, the first drop must be a gun'); break; }
       // the odds are small
       Math.random = saved.rnd; Z.sinceDrop = 0; let w = 0, a = 0; kit.slots[1] = 'ak20';
       for (let i = 0; i < 4000; i++) { zombieClearPickups(); Z.sinceDrop = 0; zombieRollDrop(z1); const k = zombiePickups[0] && zombiePickups[0].kind; if (k === 'weapon') w++; else if (k === 'ammo') a++; }
@@ -2926,6 +2943,7 @@ if (ok && process.argv.includes('--zombie')) {
       // and it cleans up
       zombieSpawn(); zombieDropPickup('ammo', 3, 3); zombieCleanup();
       if (gameBots.some(b => b.zombie) || zombiePickups.length) issues.push('zombies and pickups should be cleared at the end');
+      if (!(Math.abs(mapAmbient.intensity - lightBefore.amb) < 0.01 && Math.abs(sun.intensity - lightBefore.sun) < 0.01 && scene.background.getHex() === lightBefore.bg)) issues.push('the light should come back when it ends: ambient ' + mapAmbient.intensity + ' sun ' + sun.intensity);
     } finally {
       Math.random = saved.rnd; endMatch = saved.end; zombieClearPickups();
       for (const b of gameBots.slice()) if (b.zombie) zombieRemove(b);

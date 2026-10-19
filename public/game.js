@@ -1504,7 +1504,7 @@ const GAME_MODE_CONFIGS = {
   'dice_duel':  { type: 'arcade', subtype: 'dice',     allies: 0, enemies: 1, timeLimit: 0,   arcade: true }, // 🎲 roll a weapon, re-roll at a price
   'roulette':   { type: 'arcade', subtype: 'roulette', allies: 0, enemies: 5, timeLimit: 240, arcade: true }, // 🔄 a new random gun every 20 s
   'rocket_rumble': { type: 'arcade', subtype: 'rumble', allies: 0, enemies: 5, timeLimit: 240, arcade: true }, // 💥 rockets only
-  'zombies':    { type: 'arcade', subtype: 'zombie',  allies: 0, enemies: 0, timeLimit: 0,   arcade: true, playerHp: 300 }, // 🧟 endless waves, fists only, the dead drop the rest
+  'zombies':    { type: 'arcade', subtype: 'zombie',  allies: 0, enemies: 0, timeLimit: 0,   arcade: true, playerHp: 300, forcedMap: 'blank' }, // 🧟 endless waves on the Classic arena, in the dark; fists only, the dead drop the rest
 };
 let selectedModeConfig = null;
 const gameBots = [];       // {id, team, weaponId, x, z, rotY, hp, dead, state, wanderAngle, wanderTimer, lastShot, lastBotMove}
@@ -35763,6 +35763,51 @@ try { syncOffHands(); } catch (e) { console.warn('[offhand]', e); }
 
 const SKIN_IDS = SKINS.map(s => s.id);
 
+// 🧟 The zombie's own skin: nobody can wear it (it is not in SKINS), it is only what the dead in Zombie Survival look like.
+// Grey-green flesh with sunken, glowing red eyes and a torn, bloodied shirt and trousers: nothing like the operator.
+PIXEL_SKINS.zombie = (() => {
+  const FL = '#7fa66a', FS = '#628a52', FD = '#3f5c36', RAG = '#4b4439', RAGD = '#352f27', RAGL = '#5e5646', BL = '#7a1414', PANT = '#2c2f38', PANTD = '#1f2128';
+  const face = gridFace({ '.': FL, 's': FS, 'd': FD, 'K': '#0d0f0d', 'R': '#ff3030', 'r': '#a31818', 'B': BL, 'H': '#26261f', 'M': '#240c0c', 'T': '#cfd0a8' }, [
+    'dHHHHHHHHHHHHHHd',
+    'HHHsHHHHHHsHHHHH',
+    '.s.....s.....s..',
+    '................',
+    '..KKKK....KKKK..',
+    '..KRRK....KRRK..',
+    '..KKKK....KKKK..',
+    '....s......s....',
+    '.....s.BB.s.....',
+    '......BB........',
+    '..dd........dd..',
+    '...MMMMMMMMMM...',
+    '...MTMTMMTMTM...',
+    '...MMMMMMMMMM...',
+    '..s....BB....s..',
+    'ds............sd',
+  ]);
+  const tears = (p, base, tear, blood, spots) => { p(base, 0, 0, 16, 16); for (const [x, y, w, h, c] of spots) p(c === 'f' ? tear : c === 'b' ? blood : base, x, y, w, h); };
+  return {
+    hand: parseInt(FL.slice(1), 16), foot: '#2a2520',
+    head: {
+      front: face,
+      back: p => { p(FL, 0, 0, 16, 16); p('#26261f', 0, 0, 16, 5); p(FS, 3, 8, 3, 2); p(FD, 9, 10, 4, 2); },
+      side: p => { p(FL, 0, 0, 16, 16); p('#26261f', 0, 0, 16, 4); p(FS, 6, 8, 4, 3); p(BL, 10, 5, 2, 3); },
+      top: _solid('#26261f'), bottom: _solid(FS),
+    },
+    torso: {
+      front: p => tears(p, RAG, FL, BL, [[0, 0, 16, 2, 'x'], [2, 3, 5, 4, 'f'], [3, 5, 3, 2, 'b'], [9, 8, 5, 5, 'f'], [10, 9, 2, 2, 'b'], [0, 12, 16, 4, 'x'], [1, 13, 4, 3, 'f'], [11, 14, 5, 2, 'f']]),
+      back: p => tears(p, RAG, FL, BL, [[3, 2, 4, 5, 'f'], [8, 6, 5, 6, 'f'], [4, 4, 2, 2, 'b']]),
+      side: p => { p(RAG, 0, 0, 16, 16); p(RAGD, 0, 5, 16, 1); p(FL, 3, 9, 6, 4); },
+      top: _solid(RAG), bottom: _solid(PANTD),
+    },
+    armU: p => { p(RAG, 0, 0, 16, 7); p(FL, 0, 7, 16, 9); p(BL, 3, 9, 4, 3); p(RAGD, 0, 6, 16, 1); },
+    armF: p => { p(FL, 0, 0, 16, 16); p(FS, 0, 5, 16, 2); p(BL, 8, 9, 5, 3); p(FD, 2, 12, 3, 2); },
+    leg: p => { p(PANT, 0, 0, 16, 16); p(PANTD, 0, 7, 16, 1); p(FL, 4, 9, 5, 5); p(BL, 5, 10, 2, 2); },
+    shin: p => { p(PANT, 0, 0, 16, 9); p(FL, 0, 9, 16, 7); p(FS, 0, 12, 16, 1); p(BL, 9, 5, 4, 3); },
+  };
+})();
+PIXEL_SKINS.zombie._id = 'zombie';
+
 // ═══ 🎨 SKIN PIXELIZER ═══════════════════════════════════════════════════════════════════════════════════════════════
 // An editor for pixel skins, for the admin account (F2 -> SKIN PIXELIZER). Two kinds of skin, one grid:
 //   CHARACTER   every face of the body as its own 16x16 picture -- head front / back / side / top, torso front / back /
@@ -57589,7 +57634,7 @@ const CLIENT_WEAPON_DAMAGE = Object.fromEntries([
   ['flamethrower_skin_water', 9], ['crossbow_skin_noodle', 76], ['minigun_skin_arcade', 7],
   ['rpg_skin_soda', 118],
   ['mg42', 15], ['bat', 38], ['sabre', 45], ['frying_pan', 32], ['sledge', 70],
-  ['spear', 50], ['spear_throw', 85], ['pickle', 22], ['shield_charge', 60], ['bat_crowd_clear', 100], ['fists_uppercut', 50], ['zombie_claw', 15],
+  ['spear', 50], ['spear_throw', 85], ['pickle', 22], ['shield_charge', 60], ['bat_crowd_clear', 100], ['fists_uppercut', 50], ['zombie_claw', 30],
   // Opera/Doomsday map hazards — without these, applyBotDamageToPlayer's own
   // ||25 fallback silently underdealt them too (#51).
   ['chandelier', 200], ['debris', 120], ['lightning_strike', 70],
@@ -58784,7 +58829,7 @@ function humanTagKind(p) {
   return null;
 }
 function renderedSkinForPlayer(p, skin = p && p.skin) {
-  if (p && p.isBot && selectedModeConfig?.type !== 'lobby') return 'default';
+  if (p && p.isBot && selectedModeConfig?.type !== 'lobby') return p.skin === 'zombie' && PIXEL_SKINS.zombie ? 'zombie' : 'default';   // (a zombie has a skin of its own)
   const rc = _remoteCustomSkin(p, skin);
   if (rc) return rc;
   return resolveSkinId(skin);
@@ -60469,6 +60514,7 @@ function setupArcadeStart(subtype) {
 
 function initArcadeMode(subtype) {
   if (!match) return;
+  if (subtype === 'zombie') zombieDarken(true);   // the whole map goes dark the moment the match exists, countdown included
   // Gun Game: everyone starts at tier 0
   if (subtype === 'gungame') {
     match.gunTier[myId] = 0;
@@ -62648,7 +62694,7 @@ function endMatch(winner, reason) {
   }
   if (match.type === 'wave_dash') stopWaveDash();
   if (match.dice) diceCleanup();
-  if (match.zombie) zombieCleanup();
+  if (match.arcade === 'zombie') zombieCleanup();
   rngRestore(match.roulette);
   const isWin  = winner === 'ally';
   releasePointer(); // PLAY AGAIN / CHANGE MODE / BACK TO LOBBY need the cursor
@@ -63264,6 +63310,46 @@ function zombieWaveSize(w) { return 5 + Math.floor(w * 2.2); }
 function zombieHpFor(w) { return Math.min(420, 55 + w * 13); }
 function zombieSpeedFor(w) { return Math.min(6.0, 2.9 + w * 0.2) * (0.9 + Math.random() * 0.2); }
 const zombiePickups = [];
+// The whole map goes dark: a night with a thin moon, and a small headlamp of your own for what is right in front of you.
+let _zombieLights = null, _zombieLamp = null;
+function zombieDarken(on) {
+  if (on) {
+    if (!_zombieLights) _zombieLights = { bg: scene.background && scene.background.getHex ? scene.background.getHex() : null,
+      fog: scene.fog && scene.fog.isFog ? { c: scene.fog.color.getHex(), n: scene.fog.near, f: scene.fog.far } : null, ambCol: mapAmbient.color.getHex(), fog0: typeof ATMO !== 'undefined' && ATMO.fog0 ? ATMO.fog0.slice() : null };
+    mapAmbient.intensity = 0.07; mapAmbient.color.setHex(0x8fa0d8);
+    mapSkyFill.intensity = 0.03;
+    sun.intensity = 0.11; sun.color.setHex(0x8095d0);
+    if (scene.background && scene.background.setHex) scene.background.setHex(0x020309);
+    if (scene.fog && scene.fog.isFog) { scene.fog.color.setHex(0x020309); scene.fog.near = 6; scene.fog.far = 48; if (typeof ATMO !== 'undefined') ATMO.fog0 = [6, 48]; }
+    if (typeof ATMO !== 'undefined' && ATMO.dome) ATMO.dome.visible = false;
+    if (!_zombieLamp) { _zombieLamp = new THREE.PointLight(0xdfe8ff, 0, 17, 1.5); _zombieLamp.position.set(0.05, 0.1, -0.6); camera.add(_zombieLamp); }
+    _zombieLamp.intensity = 1.25;
+  } else if (_zombieLights) {
+    try { applyMapLighting(activeMapName); } catch (e) {}
+    mapAmbient.color.setHex(_zombieLights.ambCol);
+    if (_zombieLights.bg != null && scene.background && scene.background.setHex) scene.background.setHex(_zombieLights.bg);
+    if (_zombieLights.fog && scene.fog) { scene.fog.color.setHex(_zombieLights.fog.c); scene.fog.near = _zombieLights.fog.n; scene.fog.far = _zombieLights.fog.f; }
+    if (_zombieLights.fog0 && typeof ATMO !== 'undefined') ATMO.fog0 = _zombieLights.fog0;
+    if (_zombieLamp) _zombieLamp.intensity = 0;
+    _zombieLights = null;
+  }
+}
+// What the dead may drop, by type. Not the whole armoury: no gimmick guns, no energy toys, nothing from the archive. Sidearms,
+// shotguns, SMGs, rifles, a few heavies and explosives, some melee and a handful of throwables, in four steps of rarity.
+const ZOMBIE_DROP_POOL = {
+  C: ['pistol', 'machine_pistol', 'snub_revolver', 'shorty', 'sawed_off', 'mp40', 'm:bat', 'm:knife', 'm:sabre', 'u:frag', 'u:medkit', 'u:molotov'],
+  B: ['revolver', 'mauser', 'duelist_pistol', 'auto_revolver', 'sg8', 'vector', 'burst', 'ak20', 'lever', 'm:katana', 'm:combat_axe', 'u:stim', 'u:land_mine'],
+  A: ['hand_cannon', 'akimbo', 'p90', 'm1_garand', 'srx', 'rpd', 'grenade_launcher', 'm:chainsaw', 'm:sledge', 'u:mini_turret', 'u:smoke'],
+  S: ['minigun', 'chain_gun', 'rpg', 'amr', 'm:chain_hammer', 'u:satchel'],
+};
+const ZOMBIE_DROP_TIER_WEIGHT = { C: 52, B: 31, A: 13, S: 4 };
+function zombieDropRoll(avoidId, gunsOnly) {
+  let r = Math.random() * 100, tier = 'C';
+  for (const t of ['C', 'B', 'A', 'S']) { r -= ZOMBIE_DROP_TIER_WEIGHT[t]; if (r < 0) { tier = t; break; } }
+  let ids = ZOMBIE_DROP_POOL[tier].filter(id => diceInfo(id) && id !== avoidId && (!gunsOnly || diceInfo(id).kind === 'gun'));
+  if (!ids.length) ids = ZOMBIE_DROP_POOL[tier].filter(id => diceInfo(id));
+  return { tier, weaponId: ids[Math.floor(Math.random() * ids.length)] };
+}
 function zombieStart() {
   const holder = { kit: rngNewKit(), id: null };
   match.roulette = holder;                                   // (see above: the shared two-slot kit)
@@ -63293,23 +63379,17 @@ function zombieSpawnPoint() {
 function zombieSpawn() {
   const Z = match.zombie, sp = zombieSpawnPoint(), id = `zombie_${Date.now()}_${Z.n++}`;
   const hp = zombieHpFor(Z.wave);
-  const pData = { id, name: 'Zombie', isBot: true, team: 'enemy', weaponId: null, ownerId: myId, skin: 'default',
+  const pData = { id, name: 'Zombie', isBot: true, team: 'enemy', weaponId: null, ownerId: myId, skin: 'zombie',
                   x: sp.x, y: 1, z: sp.z, rotY: 0, rotX: 0, hp, maxHp: hp, dead: false, kills: 0, deaths: 0 };
   players[id] = pData;
   spawnRemotePlayer(pData);
-  const mesh = remoteMeshes[id];
-  if (mesh) {
-    mesh.position.set(sp.x, 0, sp.z);
-    const tint = new THREE.Color(0x6f9a58);                  // the dead are green
-    const green = m => { const c = m.clone(); if (c.color) c.color.lerp(tint, 0.6); return c; };
-    mesh.traverse(o => { if (o.isMesh && o.material) o.material = Array.isArray(o.material) ? o.material.map(green) : green(o.material); });
-  }
+  if (remoteMeshes[id]) remoteMeshes[id].position.set(sp.x, 0, sp.z);
   const bot = { id, team: 'enemy', weaponId: null, x: sp.x, z: sp.z, rotY: 0, hp, maxHp: hp, prevHp: hp, dead: false, state: 'chase',
                 zombie: true, zSpeed: zombieSpeedFor(Z.wave), lastAtk: 0, y: 0, yVel: 0, frostSlow: 100, kbVX: 0, kbVZ: 0,
                 wanderAngle: Math.random() * Math.PI * 2, wanderTimer: 0, lastShot: 0, stuckTimer: 0, strafeDir: 1, strafeFlipTimer: 0, tacTimer: 0, coverPt: null,
                 difficulty: selectedDifficulty, tune: botTuning(selectedDifficulty), activeSlot: 'melee' };
   gameBots.push(bot);
-  socket.emit('spawnBots', [{ id, name: 'Zombie', team: absTeam('enemy'), weaponId: null, spawnX: sp.x, spawnZ: sp.z, hp, skin: 'default' }]);
+  socket.emit('spawnBots', [{ id, name: 'Zombie', team: absTeam('enemy'), weaponId: null, spawnX: sp.x, spawnZ: sp.z, hp, skin: 'default' }]);   // (the server has no use for the skin)
   return bot;
 }
 function zombieRemove(bot) {
@@ -63412,8 +63492,7 @@ function zombieRollDrop(bot) {
     Z.sinceDrop = 0;
     const kit = rngKit();
     const haveGun = kit && kit.slots.some(id => { const i = diceInfo(id); return i && i.kind === 'gun'; });
-    let roll = diceRollOnce(null, false);
-    for (let k = 0; k < 4 && !haveGun && diceInfo(roll.weaponId)?.kind !== 'gun'; k++) roll = diceRollOnce(null, false);   // with no gun yet, you are more likely to be given one
+    const roll = zombieDropRoll(kit && kit.slots[1], !haveGun);   // (with no gun yet, the first thing you are given is one)
     zombieDropPickup('weapon', bot.x, bot.z, roll.weaponId, roll.tier);
   } else {
     Z.sinceDrop++;
@@ -63450,6 +63529,7 @@ function zombieRemovePickup(i) {
 }
 function zombieClearPickups() { while (zombiePickups.length) zombieRemovePickup(zombiePickups.length - 1); }
 function zombieCleanup() {
+  zombieDarken(false);
   zombieClearPickups();
   for (const b of gameBots.slice()) if (b.zombie) zombieRemove(b);
 }
@@ -67666,7 +67746,7 @@ function teardownMatchWorld() {
   gameStarted = false;
   inLobby = false;
   if (match && match.dice) diceCleanup();
-  if (match && match.zombie) zombieCleanup();
+  if (match && match.arcade === 'zombie') zombieCleanup();
   if (match && match.roulette) rngRestore(match.roulette);
   match = null;
   pvpMatch = null; // else the next non-lobby mode spawns the previous lobby's bot counts
