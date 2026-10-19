@@ -31,13 +31,9 @@
         return;
       }
       if (!run || run.status !== 'active') return;
-      if (e.code === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); pauseMenu(); }
-      else if (e.code === 'KeyF' && !e.repeat && canInteract()) { e.preventDefault(); e.stopImmediatePropagation(); interact(); }
+      if (e.code === 'KeyF' && !e.repeat && canInteract()) { e.preventDefault(); e.stopImmediatePropagation(); interact(); }
     }, true);
     document.addEventListener('visibilitychange', () => { if (document.hidden && run?.status === 'active' && !paused) pauseMenu(); });
-    document.addEventListener('pointerlockchange', () => {
-      if (run?.status === 'active' && !paused && !document.pointerLockElement && !api.touch()) pauseMenu();
-    });
   }
   function pause(value) { paused = value; api.halt(value); }
   function show(view) { panel.hidden = false; panel.dataset.view = view; panel.replaceChildren(); pause(true); }
