@@ -202,9 +202,9 @@ const WEAPONS = [
   },
   {
     id: 'boombow', name: 'Bow', type: 'Explosive Bow', slot: 'primary', doubleJump: true,
-    mag: 1, reserve: 42, damage: 32, fireRate: 188, reloadTime: 525,
+    mag: 1, reserve: 42, damage: 50, fireRate: 188, reloadTime: 525,
     // Counter the shared bolt speed boost so the arrow has a readable, gentle arc.
-    auto: false, pellets: 1, spread: 0.004, adsZoom: 42, bulletSpeed: 34, bulletSpeedMult: .4, noReload: false,
+    auto: false, pellets: 1, spread: 0.004, adsZoom: 42, bulletSpeed: 34, bulletSpeedMult: .54, noReload: false,
     bulletColor: 0xffaa22, bulletSize: 0.10, splashRadius: 4.5, arcShot: true, arcGravity: .65,
     ability: { name: 'Power Draw', cd: 17000, desc: 'Next arrow · 63 dmg', type: 'powershot', pellets: 1, spreadMult: 0, weaponAbId: 'boombow_ab' },
   },
