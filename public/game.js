@@ -65955,6 +65955,7 @@ function loop() {
   updateFPSCounter(now);
   const dt = Math.min((now-lastTime)/1000, 0.05);
   lastTime = now;
+  if (window.PVP_BACKROOMS?.active) { safeLoopStep('backrooms', () => window.PVP_BACKROOMS.tick(dt)); return; }
   if (window.PVP_UNDERWORLD?.paused) return;
   safeLoopStep('equipment-sway-reset', resetEquipmentSway);
   if (MATCH_FINALE.active) {
@@ -68211,6 +68212,7 @@ function afterDeath(ms, fn) {
 // Everything a finished match (or Lobby 13) leaves behind that the next start must not
 // inherit. Shared by the mode menu and the end-of-match buttons so they can't drift apart.
 function teardownMatchWorld() {
+  window.PVP_BACKROOMS?.stop();
   window.PVP_UNDERWORLD?.stop();
   clearCombatFeedback();
   clearActionWind();
@@ -68927,7 +68929,7 @@ function openLobbyAdmin(){
 }
 function openLobbyArcade(){
   const host=lobbyPanel('Arcade');
-  for(const [label,mode] of [['Underworld Campaign','underworld'],['Aim Trainer','aim_trainer'],['Obstacle Course','obby'],['Shooting Range','range']])lobbyPanelChoice(host,label,()=>{closeOtherDialogs();teardownMatchWorld();selectMode(mode);});
+  for(const [label,mode] of [['Underworld Campaign','underworld'],['Backrooms Expedition','backrooms'],['Aim Trainer','aim_trainer'],['Obstacle Course','obby'],['Shooting Range','range']])lobbyPanelChoice(host,label,()=>{closeOtherDialogs();teardownMatchWorld();selectMode(mode);});
   lobbyPanelChoice(host,'All game modes',openModeMenu);
 }
 function updateLobbyServices(){
@@ -69388,6 +69390,7 @@ function applyUpgrades(w) {
 }
 
 function selectMode(modeId) {
+  if (modeId === 'backrooms' && window.PVP_BACKROOMS) { window.PVP_BACKROOMS.open(); return; }
   if (modeId === 'underworld' && window.PVP_UNDERWORLD) { window.PVP_UNDERWORLD.open(); return; }
   selectedModeConfig = GAME_MODE_CONFIGS[modeId] || GAME_MODE_CONFIGS['ffa5'];
   sanitizeLoadoutSlots();       // (D-Day sets its own forced kit below)
