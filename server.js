@@ -1993,7 +1993,7 @@ event_horizon: 75,
   paintball: 30, burst: 47, lever: 93,
   vector: 18, crossbow: 100, flamethrower: 3,
   grenade_launcher: 90, railgun: 200, minigun: 27, chain_gun: 22, javelin_launcher: 30,
-  freeze_gun: 13, boombow: 32,
+  freeze_gun: 13, boombow: 50,
   // Secondaries
   revolver: 83, flare: 85, pistol: 20, shorty: 30, cycler: 8,
   hand_cannon: 105, throwing_knives: 45, taser: 10,
