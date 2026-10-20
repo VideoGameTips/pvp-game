@@ -1456,20 +1456,20 @@ if (ok && process.argv.includes('--status')) {
 if (ok && process.argv.includes('--duel')) {
   // The 1v1 duel maps: small enough to find each other in about six seconds, spawns clear and joined by a walkable
   // route, cover that is the same for both sides, and wired so only 1v1 is dealt them.
-  const issues = vm.runInThisContext(`(() => {
-    const issues = [];
-    const MAP_RECIPES = {};
+  const duelOut = vm.runInThisContext(`(() => {
+    const issues = [], notes = [];
+    const MAP_RECIPES = {}, HIGH_COUNTS = {};
     const walk = SPEED * DEFAULT_MOVE_MULT;                     // m/s, plain walking
     for (const name of DUEL_MAP_IDS) {
       const b = MAP_BOUNDS[name], sp = MAP_SPAWNS[name], cols = MAP_COLLIDERS[name] || [];
       if (!MAP_IDS.includes(name)) issues.push(name + ': not in MAP_IDS');
       if (!b || !sp) { issues.push(name + ': no bounds or spawns'); continue; }
-      // four times the floor of the first duel maps (36 x 56): "too tiny" was the verdict
-      if (b.halfX * 2 < 70 || b.halfZ * 2 < 110) issues.push(name + ': smaller than a duel map should be (' + b.halfX * 2 + ' x ' + b.halfZ * 2 + ', want 72 x 112)');
-      if (b.halfX * 2 > 90 || b.halfZ * 2 > 140) issues.push(name + ': bigger than a duel map should be (' + b.halfX * 2 + ' x ' + b.halfZ * 2 + ')');
+      // sixteen times the floor of the first duel maps (36 x 56): "too tiny" was the verdict, then twice the length and breadth again
+      if (b.halfX * 2 < 140 || b.halfZ * 2 < 220) issues.push(name + ': smaller than a duel map should be (' + b.halfX * 2 + ' x ' + b.halfZ * 2 + ', want 144 x 224)');
+      if (b.halfX * 2 > 150 || b.halfZ * 2 > 232) issues.push(name + ': bigger than a duel map should be (' + b.halfX * 2 + ' x ' + b.halfZ * 2 + ')');
       const ca = { x: (sp.ally.x0 + sp.ally.x1) / 2, z: (sp.ally.z0 + sp.ally.z1) / 2 }, ce = { x: (sp.enemy.x0 + sp.enemy.x1) / 2, z: (sp.enemy.z0 + sp.enemy.z1) / 2 };
       const secs = Math.hypot(ca.x - ce.x, ca.z - ce.z) / walk;
-      if (secs < 10 || secs > 18) issues.push(name + ': spawn to spawn takes ' + secs.toFixed(1) + ' s at a walk, want 10 to 18');
+      if (secs < 20 || secs > 36) issues.push(name + ': spawn to spawn takes ' + secs.toFixed(1) + ' s at a walk, want 20 to 36');
       for (const side of [sp.ally, sp.enemy]) {
         if (side.x0 < -b.halfX + 1 || side.x1 > b.halfX - 1 || side.z0 < -b.halfZ + 1 || side.z1 > b.halfZ - 1) issues.push(name + ': a spawn rectangle is outside the walls');
         for (const c of cols) {
@@ -1539,15 +1539,40 @@ if (ok && process.argv.includes('--duel')) {
       if (kinds.longWall < 2) issues.push(name + ': only ' + kinds.longWall + ' long walls');
       if (kinds.lowWall < 2) issues.push(name + ': only ' + kinds.lowWall + ' low walls');
       if (kinds.overhead < 2) issues.push(name + ': nothing overhead (windows, arches, a bridge): ' + kinds.overhead);
-      if (kinds.pillar > 8 || kinds.pillar > (kinds.longWall + kinds.lowWall + kinds.overhead + kinds.block) * 0.7) issues.push(name + ': mostly pillars (' + kinds.pillar + ')');
+      if (kinds.pillar > 36 || kinds.pillar > (kinds.longWall + kinds.lowWall + kinds.overhead + kinds.block) * 0.7) issues.push(name + ': mostly pillars (' + kinds.pillar + ')');
+      // HIGH walls: "some maps just don't have enough". A high wall is a long wall too tall to see over from the floor (4.5 m or
+      // more); every map needs plenty, spread over the whole floor (every quarter of the map has some), and one across the
+      // middle (which is also what cuts the two spawns off from each other).
+      const high = inner.filter(c => { const d = dims(c); return c.min.y < 0.1 && d.h >= 4.5 && d.long >= 10 && d.thin <= 2; });
+      if (high.length < 24) issues.push(name + ': only ' + high.length + ' high walls (want 24 or more)');
+      for (const [qx, qz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+        const n = high.filter(c => ((c.min.x + c.max.x) / 2) * qx > 0 && ((c.min.z + c.max.z) / 2) * qz > 0).length;
+        if (n < 5) issues.push(name + ': a quarter of the map has only ' + n + ' high walls');
+      }
+      if (!high.some(c => c.min.x < -9 && c.max.x > 9 && c.min.z < 2 && c.max.z > -2)) issues.push(name + ': no high wall across the middle');
+      HIGH_COUNTS[name] = high.length;
       // each map reads differently: no two share a wall recipe
       MAP_RECIPES[name] = JSON.stringify(kinds);
     }
     const recipes = Object.values(MAP_RECIPES);
     if (new Set(recipes).size < recipes.length) issues.push('two duel maps have the same wall recipe: ' + JSON.stringify(MAP_RECIPES));
-    return issues;
+    // 2v2 is dealt the duel maps now and then (1v1 only them, nobody else any), on the vote screen and in the random draw
+    if (effectivePickedMap('2v2', 'duel_grid') !== 'duel_grid') issues.push('a duel map picked for 2v2 should stay itself');
+    if (effectivePickedMap('5v5', 'duel_grid') !== 'auto') issues.push('a duel map picked for 5v5 should be random (they are not dealt to it)');
+    if (!DUEL_MAP_IDS.every(m => mapPoolForMode('2v2').includes(m))) issues.push('2v2 pool should include the duel maps');
+    if (mapPoolForMode('5v5').some(m => DUEL_ONLY_MAPS.has(m))) issues.push('only 1v1 and 2v2 deal duel maps');
+    const draws = { '1v1': 0, '2v2': 0, '5v5': 0 };
+    for (let i = 0; i < 4000; i++) for (const k of Object.keys(draws)) if (DUEL_ONLY_MAPS.has(randomMapForMode(k))) draws[k]++;
+    if (draws['1v1'] !== 4000) issues.push('1v1 should always be dealt a duel map');
+    if (draws['5v5'] !== 0) issues.push('5v5 must never be dealt a duel map');
+    if (draws['2v2'] < 4000 * 0.2 || draws['2v2'] > 4000 * 0.4) issues.push('2v2 should be dealt a duel map about 3 times in 10, got ' + (draws['2v2'] / 40).toFixed(0) + '%');
+    notes.push('high walls ' + JSON.stringify(HIGH_COUNTS) + ' · 2v2 duel share ' + (draws['2v2'] / 40).toFixed(0) + '%');
+    return { issues, notes };
   })()`);
+  const issues = duelOut.issues;
   const serverSrc = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  if (!/mode === '2v2' \? LOBBY_MAP_POOL\.concat\(DUEL_MAP_IDS\)/.test(serverSrc)) issues.push('server does not deal 2v2 the duel maps');
+  if (!/function randomMapFor\(mode\)/.test(serverSrc) || /const mapId = mapPoolFor\(mode\)\[Math\.floor/.test(serverSrc)) issues.push('server random draws should go through randomMapFor');
   for (const id of ['duel_grid', 'duel_crossroads', 'duel_pillars', 'duel_platform']) {
     if (!serverSrc.includes("'" + id + "'")) issues.push('server does not know ' + id);
   }
@@ -1556,7 +1581,7 @@ if (ok && process.argv.includes('--duel')) {
   const idx = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
   if (!/data-map="duel_grid"[^>]*data-duel="1"/.test(idx)) issues.push('map picker has no duel cards');
   if (/data-duel="1" style="display:none/.test(idx)) issues.push('the duel map cards are hidden in the picker: nobody would ever see them');
-  console.log('duel map checks: size, spawns, route, mirror symmetry, 1v1-only wiring');
+  console.log('duel map checks: size, spawns, route, mirror symmetry, high walls, 1v1 + 2v2 wiring · ' + duelOut.notes.join(' · '));
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
@@ -2365,7 +2390,8 @@ if (ok && process.argv.includes('--mappick')) {
     // and what spawnGameBots resolves a map from: the duel map the VOTE picked has to survive for 1v1 (it did not:
     // it was re-rolled at random, so the vote was ignored, and two players could load different maps)
     if (effectivePickedMap('1v1', 'duel_crossroads') !== 'duel_crossroads') issues.push('the voted duel map is thrown away for 1v1');
-    if (effectivePickedMap('2v2', 'duel_crossroads') !== 'auto') issues.push('a duel map should be random in any other mode');
+    if (effectivePickedMap('5v5', 'duel_crossroads') !== 'auto') issues.push('a duel map should be random in any other mode (2v2 is dealt them too)');
+    if (effectivePickedMap('2v2', 'duel_crossroads') !== 'duel_crossroads') issues.push('a voted duel map is thrown away for 2v2');
     return { issues, info };
   })()`);
   const srv = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');

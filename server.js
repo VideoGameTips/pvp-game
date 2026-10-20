@@ -1678,13 +1678,20 @@ const MAP_IDS = ['blank','urban','warehouse','forest','vietnam','volcano','cyber
 // on purpose: they moved three times while #66 was being reviewed and a comment
 // nobody re-measures is worse than no comment. #66 has the method.
 const THIN_MAPS = new Set([]);
-// ⚔️ The 1v1 duel maps (mirrors DUEL_MAP_IDS in public/game.js): small arenas dealt only to 1v1, never at random
-// to anything else. They are in MAP_IDS so a client that is told one by id will load it.
+// ⚔️ The duel maps (mirrors DUEL_MAP_IDS in public/game.js): arenas for two, dealt to 1v1 and, now and then, to 2v2;
+// never at random to anything else. They are in MAP_IDS so a client that is told one by id will load it.
 const DUEL_MAP_IDS = ['duel_grid','duel_crossroads','duel_pillars','duel_platform'];
 const DUEL_ONLY_MAPS = new Set(DUEL_MAP_IDS);
 const LOBBY_MAP_POOL = MAP_IDS.filter(m => !THIN_MAPS.has(m) && !DUEL_ONLY_MAPS.has(m));
 // A map for the mode: 1v1 draws from the duel maps, everything else from the main pool.
-function mapPoolFor(mode) { return mode === '1v1' ? DUEL_MAP_IDS : LOBBY_MAP_POOL; }
+// 2v2 draws from the main pool AND the duel arenas (they are 144 x 224 m now: room for four), so they are on its vote
+// screen and a draw lands on one about three times in ten (DUEL_SHARE_2V2, mirrored in public/game.js).
+const DUEL_SHARE_2V2 = 0.3;
+function mapPoolFor(mode) { return mode === '1v1' ? DUEL_MAP_IDS : mode === '2v2' ? LOBBY_MAP_POOL.concat(DUEL_MAP_IDS) : LOBBY_MAP_POOL; }
+function randomMapFor(mode) {
+  const pool = mode === '2v2' ? (Math.random() < DUEL_SHARE_2V2 ? DUEL_MAP_IDS : LOBBY_MAP_POOL) : mapPoolFor(mode);
+  return pool[Math.floor(Math.random() * pool.length)];
+}
 // The lobby plays the map of the first player (in join order) who picked a specific one.
 function lobbyMapPick(L) {
   return L.players.find(p => p.map)?.map || null;
@@ -1754,8 +1761,8 @@ function startLobbyMatch(L, extra = {}) {
   const mapId = M4_TOWER_MODES.has(mode)
     ? mode   // each tower mode is also the name of its map
     : (pickedMap && mapPoolFor(mode).includes(pickedMap)) ? pickedMap
-    : ((p => (p && (mode === '1v1' || !DUEL_ONLY_MAPS.has(p))) ? p : null)(lobbyMapPick(L))
-        || mapPoolFor(mode)[Math.floor(Math.random() * mapPoolFor(mode).length)]);
+    : ((p => (p && (mode === '1v1' || mode === '2v2' || !DUEL_ONLY_MAPS.has(p))) ? p : null)(lobbyMapPick(L))
+        || randomMapFor(mode));
   // Designate the first player as host (they spawn the bots if any)
   const host = L.players[0];
   for (const p of L.players) {
@@ -1823,7 +1830,7 @@ function resolveMapPick(pick) {
   for (const x of picks) tally[x.mapId] = (tally[x.mapId] || 0) + 1;
   const top = Math.max(0, ...Object.values(tally));
   const winners = top ? Object.keys(tally).filter(m => tally[m] === top) : [];
-  const mapId = winners.length ? rand(winners) : rand(pick.options);
+  const mapId = winners.length ? rand(winners) : randomMapFor(pick.L.mode);
   const L = pick.L;
   L.players = L.players.filter(p => sids.includes(p.socketId));
   for (const sid of sids) io.to(sid).emit('mapPickResult', { mapId, picks, coin: winners.length > 1, tally });
@@ -1932,7 +1939,7 @@ function tryPairPvpQueue(mode) {
     else { teamA = Math.random() < 0.5 ? 'ally' : 'enemy'; teamB = teamA; }
   }
   // 🗺️ Server picks ONE map for both players so they don't diverge
-  const mapId = mapPoolFor(mode)[Math.floor(Math.random() * mapPoolFor(mode).length)];
+  const mapId = randomMapFor(mode);
   io.to(a.socketId).emit('pvpResult', {
     mode, paired: true, team: teamA, mapId,
     opponents: [{ socketId: b.socketId, team: teamB }],
