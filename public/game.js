@@ -43867,6 +43867,7 @@ function updateMovement(dt, socialBlocked = false) {
     return;
   }
   if (isDead) { window._setMobileCrouch?.(false); return; }   // a latched touch crouch does not outlive you
+  if (match && match.zombie && match.zombie.storyLock) return; // Zombie Survival's opening: the floor has gone and you are on the ground
   if (match && !match.roundActive && countdownActive) return; // frozen only during countdown
   if (pilotedVehicle) return; // piloting handles its own movement
 
@@ -61427,8 +61428,8 @@ function updateMatchHUD() {
       R.textContent = match.infectedIds[myId] ? 'YOU ARE ZOMBIE' : 'YOU ARE HUMAN';
     } else if (sub === 'zombie') {
       const Z = match.zombie || { wave: 0, kills: 0 };
-      L.textContent = Z.wave ? `WAVE ${Z.wave}` : 'GET READY';
-      C.textContent = `🧟 ${gameBots.filter(b => b.zombie && !b.dead).length + (Z.toSpawn || 0)} LEFT`;
+      L.textContent = Z.phase === 'story' ? 'THE RAID' : Z.wave ? `WAVE ${Z.wave}` : 'GET READY';
+      C.textContent = Z.phase === 'story' ? '🧟 ZOMBIE SURVIVAL' : `🧟 ${gameBots.filter(b => b.zombie && !b.dead).length + (Z.toSpawn || 0)} LEFT`;
       R.textContent = `KILLS ${Z.kills}`;
     } else if (sub === 'dice') {
       const d = match.dice || { score: { me: 0, bot: 0 }, goal: DICE_GOAL };
@@ -63418,11 +63419,11 @@ function zombieStart() {
   const holder = { kit: rngNewKit(), id: null };
   match.roulette = holder;                                   // (see above: the shared two-slot kit)
   const best = parseInt((() => { try { return localStorage.getItem('pvp_zombie_best') || '0'; } catch (e) { return '0'; } })(), 10) || 0;
-  match.zombie = { wave: 0, kills: 0, toSpawn: 0, nextWaveAt: Date.now() + ZOMBIE_FIRST_MS, waveStartedAt: 0, nextSpawnAt: 0, phase: 'break',
-                   sinceDrop: 0, best, n: 0, holder };
+  match.zombie = { wave: 0, kills: 0, toSpawn: 0, nextWaveAt: Infinity, waveStartedAt: 0, nextSpawnAt: 0, phase: 'story',
+                   sinceDrop: 0, best, n: 0, holder, story: null, storyLock: false };
   rngRollIn('m:fists', holder.kit, null, 0);                  // you begin with your fists
   for (const b of gameBots) b.team = 'enemy';
-  showAnnouncement('🧟 ZOMBIE SURVIVAL', 'Endless · you only have your fists · the dead drop ammo and weapons', '#66dd66', 3200);
+  zombieStoryStart();                                         // the story first; the waves begin when it is over
 }
 function zombieSpawnPoint() {
   const b = MAP_BOT_BOUNDS[activeMapName] || getMapBoundsRect();
@@ -63455,6 +63456,245 @@ function zombieSpawn() {
   gameBots.push(bot);
   socket.emit('spawnBots', [{ id, name: 'Zombie', team: absTeam('enemy'), weaponId: null, spawnX: sp.x, spawnZ: sp.z, hp, skin: 'default' }]);   // (the server has no use for the skin)
   return bot;
+}
+// ══════════════════════════════════════════════════════════════════════════
+// 📻 THE STORY. Zombie Survival does not start with zombies. You start with a squad, walking into the place you were sent to
+// raid; a few seconds in the floor caves in, the screen goes black, and when the radio crackles on you are the one talking:
+// the squad is lying dead around you, something is wrong with this place, and you are the only one left. Then the lights
+// come back and the first wave comes. It can be skipped (Enter or Space, or the SKIP button on a phone).
+// ══════════════════════════════════════════════════════════════════════════
+const ZOMBIE_SQUAD = [
+  { name: 'Reyes', weapon: 'ak20' }, { name: 'Okafor', weapon: 'mp40' }, { name: 'Brandt', weapon: 'sg8' }, { name: 'Kim', weapon: 'p90' },
+];
+const ZOMBIE_APPROACH_LINES = [      // [ms into the walk-in, who, what]
+  [900,  'REYES',  'This is the place. Stay tight, eyes up, everybody.'],
+  [4600, 'OKAFOR', 'The plans say the main hall is dead ahead. It looks... empty.'],
+  [8200, 'BRANDT', 'Too quiet. I do not like how quiet it is.'],
+  [11300, 'KIM',   'Hold on. Do you feel that? The floor is...'],
+];
+const ZOMBIE_RADIO_LINES = [         // [how long it stays up in ms, what you say]
+  [3400, '...krrrk... Command, do you copy? ...Command?'],
+  [2800, 'Nothing. Only static.'],
+  [3900, 'Okay. Okay. Think. I will keep recording, in case somebody finds this.'],
+  [4200, 'This is it. This is the place we were sent to raid.'],
+  [4200, 'It looked empty. Quiet. We should have known right then.'],
+  [4600, 'The floor just went. All of it, at once. One second we were moving, the next: black.'],
+  [4400, 'I woke up on the concrete. The others were all around me. Not moving.'],
+  [4000, 'Reyes. Okafor. Brandt. Kim. ...Nobody is answering.'],
+  [5400, 'Something is horribly wrong with this place. I cannot tell what. But I can hear it down here, in the dark. Moving.'],
+  [5000, 'I cannot give up. If I am the only one left, then I am the one who walks out of here.'],
+  [3400, 'No weapon. Just my hands. ...That will have to do.'],
+  [2600, 'Here they come.'],
+];
+const ZOMBIE_STORY_WALK_MS = 15000, ZOMBIE_STORY_FALL_MS = 1500, ZOMBIE_STORY_WAKE_MS = 2600;
+let _storyUi = null, _storyNoiseBuf = null;
+function storyAudio(o) {                       // a burst of filtered noise: static, a rumble, a crack, a thud
+  const ctx = getAudioCtx(); if (!ctx) return;
+  try {
+    if (!_storyNoiseBuf || _storyNoiseBuf.sampleRate !== ctx.sampleRate) {
+      const len = ctx.sampleRate * 2, b = ctx.createBuffer(1, len, ctx.sampleRate), d = b.getChannelData(0);
+      for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+      _storyNoiseBuf = b;
+    }
+    const src = ctx.createBufferSource(); src.buffer = _storyNoiseBuf; src.loop = true;
+    const f = ctx.createBiquadFilter(); f.type = o.type || 'bandpass'; f.frequency.value = o.freq || 1800; f.Q.value = o.q || 0.8;
+    const g = ctx.createGain(), t0 = ctx.currentTime, t1 = t0 + o.ms / 1000, at = o.attack || 0.02, peak = o.gain || 0.2;
+    g.gain.setValueAtTime(0.0001, t0); g.gain.linearRampToValueAtTime(peak, t0 + at);
+    if (o.crackle) for (let t = t0 + at + 0.03; t < t1; t += 0.03 + Math.random() * 0.07) g.gain.setValueAtTime(peak * (Math.random() < o.crackle ? 0.15 + Math.random() * 1.5 : 0.3), t);
+    g.gain.linearRampToValueAtTime(0.0001, t1 + (o.release || 0.1));
+    src.connect(f); f.connect(g); g.connect(ctx.destination);
+    src.start(t0, Math.random()); src.stop(t1 + (o.release || 0.1) + 0.05);
+  } catch (e) {}
+}
+function storyUi() {
+  if (_storyUi) return _storyUi;
+  const root = document.createElement('div');
+  root.id = 'story-overlay'; root.setAttribute('data-no-i18n', '');
+  root.style.cssText = 'position:fixed;inset:0;z-index:9800;pointer-events:none;display:none;font-family:"Courier New",monospace';
+  const dark = document.createElement('div');
+  dark.style.cssText = 'position:absolute;inset:0;background:#000;opacity:0';
+  const noise = document.createElement('canvas'); noise.width = 96; noise.height = 54;
+  noise.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated;opacity:0;mix-blend-mode:screen';
+  const line = document.createElement('div');
+  line.style.cssText = 'position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(760px,88vw);text-align:center;color:#a8ffa8;font-size:clamp(16px,2.6vw,26px);line-height:1.5;letter-spacing:1px;text-shadow:0 0 10px rgba(120,255,140,.55);white-space:pre-wrap';
+  const sub = document.createElement('div');
+  sub.style.cssText = 'position:absolute;left:50%;bottom:16%;transform:translateX(-50%);width:min(820px,90vw);text-align:center;font-size:clamp(14px,2vw,20px);color:#fff;text-shadow:0 2px 6px #000,0 0 3px #000;opacity:0;transition:opacity .35s';
+  const skip = document.createElement('button');
+  skip.textContent = 'SKIP ▶  (Enter)';
+  skip.style.cssText = 'position:absolute;right:18px;bottom:18px;pointer-events:auto;background:rgba(0,0,0,.55);color:#9fdc9f;border:1px solid #4a7a4a;padding:8px 14px;font:700 12px "Courier New",monospace;letter-spacing:2px;cursor:pointer;border-radius:3px';
+  const onSkip = e => { try { e.preventDefault(); e.stopPropagation(); } catch (x) {} zombieStorySkip(); };
+  skip.addEventListener('click', onSkip); skip.addEventListener('touchstart', onSkip, { passive: false });
+  for (const el of [dark, noise, line, sub, skip]) root.appendChild(el);
+  document.body.appendChild(root);
+  _storyUi = { root, dark, noise, line, sub, skip };
+  return _storyUi;
+}
+function storyShowSub(who, text, ms) {
+  const U = storyUi(); if (!U) return;
+  U.sub.textContent = '';
+  const b = document.createElement('b'), t = document.createElement('span');
+  b.textContent = who + '  '; b.style.color = '#ffcc66'; t.textContent = text;
+  U.sub.appendChild(b); U.sub.appendChild(t);
+  U.sub.style.opacity = '1';
+  const S = match && match.zombie && match.zombie.story; if (S) S.subUntil = S.t + ms;
+}
+function storyNoiseFrame(U, strength) {
+  const c = U.noise.getContext && U.noise.getContext('2d'); if (!c || !c.createImageData) return;
+  const img = c.createImageData(96, 54), d = img.data;
+  for (let i = 0; i < d.length; i += 4) { const v = Math.random() * 255; d[i] = v * 0.6; d[i + 1] = v; d[i + 2] = v * 0.7; d[i + 3] = 255; }
+  c.putImageData(img, 0, 0); U.noise.style.opacity = String(strength);
+}
+function zombieSpawnSquad(i) {
+  const def = ZOMBIE_SQUAD[i], id = `squad_${Date.now()}_${i}`, a = Math.PI + (i - 1.5) * 0.8, r = 2.6 + (i % 2) * 1.1;
+  let x = camera.position.x + Math.sin(euler.y + a) * r, z = camera.position.z + Math.cos(euler.y + a) * r;
+  [x, z] = resolvePosCollisions(x, z, 0);
+  const pData = { id, name: def.name, isBot: true, team: 'ally', weaponId: def.weapon, ownerId: myId, skin: 'default',
+                  x, y: 1, z, rotY: euler.y, rotX: 0, hp: 300, maxHp: 300, dead: false, kills: 0, deaths: 0 };
+  players[id] = pData;
+  spawnRemotePlayer(pData);
+  const mesh = remoteMeshes[id];
+  if (mesh) { mesh.position.set(x, 0, z); armRemoteMesh(mesh, def.weapon); }
+  const bot = { id, team: 'ally', weaponId: def.weapon, x, z, rotY: euler.y, hp: 300, maxHp: 300, prevHp: 300, dead: false, state: 'idle', squad: true, squadIdx: i,
+                y: 0, yVel: 0, frostSlow: 100, kbVX: 0, kbVZ: 0, wanderAngle: 0, wanderTimer: 0, lastShot: 0, stuckTimer: 0, strafeDir: 1, strafeFlipTimer: 0, tacTimer: 0, coverPt: null,
+                difficulty: selectedDifficulty, tune: botTuning(selectedDifficulty), activeSlot: 'primary' };
+  gameBots.push(bot);
+  socket.emit('spawnBots', [{ id, name: def.name, team: absTeam('ally'), weaponId: def.weapon, spawnX: x, spawnZ: z, hp: 300, skin: 'default' }]);
+  return bot;
+}
+// The squad walks with you: fanned out behind you, at your pace, facing where you face.
+function zombieSquadThink(bot, dt) {
+  if (bot.dead || !match || !match.zombie) { return; }
+  const me = camera.position, yaw = euler.y;
+  const ang = (bot.squadIdx - 1.5) * 0.75, rad = 2.6 + (bot.squadIdx % 2) * 1.1;
+  const tx = me.x + Math.sin(yaw + ang) * rad, tz = me.z + Math.cos(yaw + ang) * rad;
+  const dx = tx - bot.x, dz = tz - bot.z, d = Math.hypot(dx, dz);
+  if (d > 0.5) {
+    const spd = Math.min(7, 1.5 + d * 2.2);
+    let nx = bot.x + dx / d * spd * dt, nz = bot.z + dz / d * spd * dt;
+    [nx, nz] = resolvePosCollisions(nx, nz, bot.y || 0);
+    bot.x = nx; bot.z = nz;
+    bot.rotY = d > 1.6 ? Math.atan2(-dx, -dz) : yaw;
+  } else bot.rotY = yaw;
+  syncBotMesh(bot);
+}
+function zombieStoryStart() {
+  const Z = match.zombie;
+  for (let i = 0; i < ZOMBIE_SQUAD.length; i++) zombieSpawnSquad(i);
+  Z.story = { phase: 'approach', t: 0, t0: 0, line: 0, props: [], at: null, subUntil: 0, lineAt: 0, nextCrackle: 0, keyPrev: true, fallV: 0, rumble: false, skipped: false };
+  const U = storyUi(); U.root.style.display = 'block'; U.dark.style.opacity = '0'; U.noise.style.opacity = '0'; U.line.textContent = ''; U.sub.style.opacity = '0';
+  U.skip.style.display = '';
+  showAnnouncement('🧟 ZOMBIE SURVIVAL', 'Endless waves · a squad, a raid, and something wrong with the place', '#66dd66', 2600);
+}
+function zombieStoryBodies() {                   // the squad, on the ground around where you are
+  const Z = match.zombie, S = Z.story;
+  const at = S.at || { x: camera.position.x, z: camera.position.z };
+  gameBots.filter(b => b.squad).forEach((bot, i) => {
+    const a = i * (Math.PI * 2 / ZOMBIE_SQUAD.length) + 0.6, r = 2.3 + (i % 2) * 0.8;
+    let x = at.x + Math.cos(a) * r, z = at.z + Math.sin(a) * r;
+    [x, z] = resolvePosCollisions(x, z, 0);
+    bot.x = x; bot.z = z; bot.dead = true; bot.hp = 0;
+    if (players[bot.id]) { players[bot.id].dead = true; players[bot.id].hp = 0; }
+    const m = remoteMeshes[bot.id];
+    if (m) {
+      m.visible = true; m.rotation.order = 'YXZ'; m.rotation.set(-Math.PI / 2, Math.random() * Math.PI * 2, (Math.random() - 0.5) * 0.2); m.position.set(x, 0.2, z);
+      m.traverse(o => { if (o.isSprite) o.visible = false; });   // no floating name over a body
+      try { setMeshTeamArrow(m, false); } catch (e) {}              // and no blue arrow either
+    }
+    const pool = new THREE.Mesh(new THREE.CircleGeometry(0.75 + Math.random() * 0.25, 14), new THREE.MeshBasicMaterial({ color: 0x4a0a0a, transparent: true, opacity: 0.6, depthWrite: false }));
+    pool.rotation.x = -Math.PI / 2; pool.position.set(x, 0.035, z); scene.add(pool); S.props.push(pool);
+  });
+  for (let i = 0; i < 2; i++) { const g = new THREE.Mesh(new THREE.CircleGeometry(0.4, 10), new THREE.MeshBasicMaterial({ color: 0x090909 })); g.rotation.x = -Math.PI / 2; g.position.set(at.x + (Math.random() - 0.5) * 6, 0.03, at.z + (Math.random() - 0.5) * 6); scene.add(g); S.props.push(g); }
+}
+function zombieStoryEnterBlack() {
+  const Z = match.zombie, S = Z.story, U = storyUi();
+  S.phase = 'black'; S.t0 = S.t; S.line = 0; S.lineAt = S.t; S.nextCrackle = S.t + 900;
+  Z.storyLock = true;
+  for (const p of S.props) if (p.userData && p.userData.crack) scene.remove(p);
+  S.props = S.props.filter(p => !(p.userData && p.userData.crack));
+  zombieStoryBodies();
+  camera.position.set((S.at || camera.position).x, PLAYER_EYE_HEIGHT, (S.at || camera.position).z);
+  window._crouchEye = PLAYER_EYE_HEIGHT; slamState = null; playerYVel = 0; _extVel.x = 0; _extVel.z = 0;
+  U.dark.style.opacity = '1'; U.sub.style.opacity = '0';
+  storyAudio({ ms: 700, freq: 60, type: 'lowpass', gain: 0.7, attack: 0.01, release: 0.4 });          // the landing
+  U.line.textContent = '';
+}
+function zombieStoryFinish() {
+  const Z = match.zombie, S = Z.story, U = storyUi();
+  Z.storyLock = false; Z.story = null; Z.phase = 'break'; Z.nextWaveAt = Date.now() + 2800;
+  U.root.style.display = 'none'; U.dark.style.opacity = '0'; U.noise.style.opacity = '0'; U.line.textContent = ''; U.sub.style.opacity = '0';
+  const me = players[myId]; if (me && me.hp > 0 && me.hp < 300) { socket.emit('healSelf', { amount: 300 - me.hp }); me.hp = 300; updateHealthHUD(300); }
+  showAnnouncement('SURVIVE', 'Fists only. The dead drop the rest.', '#ff6666', 2600);
+}
+function zombieStorySkip() {
+  const Z = match && match.zombie, S = Z && Z.story; if (!S || S.phase === 'wake') return;
+  if (S.phase === 'approach' || S.phase === 'fall') { if (!S.at) S.at = { x: camera.position.x, z: camera.position.z }; zombieStoryEnterBlack(); }
+  S.phase = 'wake'; S.t0 = S.t; S.skipped = true;
+  const U = storyUi(); U.line.textContent = ''; U.noise.style.opacity = '0';
+}
+function updateZombieStory(dt) {
+  const Z = match.zombie, S = Z && Z.story; if (!S) { if (Z) { Z.phase = 'break'; Z.nextWaveAt = Date.now() + 1000; } return; }
+  const U = storyUi(), ms = dt * 1000;
+  S.t += ms;
+  if (keys['Enter'] || keys['Space']) { if (!S.keyPrev) { S.keyPrev = true; zombieStorySkip(); return; } } else S.keyPrev = false;
+  if (S.subUntil && S.t > S.subUntil) { S.subUntil = 0; U.sub.style.opacity = '0'; }
+  if (S.phase === 'approach') {
+    const next = ZOMBIE_APPROACH_LINES[S.line];
+    if (next && S.t >= next[0]) { storyShowSub(next[1], next[2], 3300); S.line++; playSoundEvent('hitmarker', { volume: 0.35, minGap: 0, tier: 'white' }); }
+    if (S.t >= ZOMBIE_STORY_WALK_MS - 3300 && !S.rumble) {                      // the ground starts to shake
+      S.rumble = true; S.at = { x: camera.position.x, z: camera.position.z };
+      storyAudio({ ms: 3600, freq: 85, type: 'lowpass', gain: 0.55, attack: 1.2, release: 0.5 });
+    }
+    if (S.rumble) {
+      const k = Math.min(1, (S.t - (ZOMBIE_STORY_WALK_MS - 3300)) / 3300);
+      _slamShakeT = 0.6; _slamShakeAmp = 0.006 + 0.02 * k;
+      if (Math.random() < dt * (2 + k * 8)) {                                    // cracks run out from under your feet
+        const len = 1.5 + Math.random() * 3 * (0.5 + k), ang = Math.random() * Math.PI * 2;
+        const cr = new THREE.Mesh(new THREE.BoxGeometry(0.07 + k * 0.12, 0.02, len), new THREE.MeshBasicMaterial({ color: 0x050505 }));
+        cr.position.set(S.at.x + Math.cos(ang) * len * 0.5, 0.045, S.at.z + Math.sin(ang) * len * 0.5); cr.rotation.y = -ang + Math.PI / 2; cr.userData.crack = true;
+        scene.add(cr); S.props.push(cr);
+        storyAudio({ ms: 140, freq: 900, q: 1.4, gain: 0.35, release: 0.08 });
+        spawnAbilityAOEFX(new THREE.Vector3(S.at.x + Math.cos(ang) * len, 0.2, S.at.z + Math.sin(ang) * len), 0.8 + k, 0x6a5a48);
+      }
+    }
+    if (S.t >= ZOMBIE_STORY_WALK_MS) { S.phase = 'fall'; S.t0 = S.t; S.fallV = 0; Z.storyLock = true; }
+    return;
+  }
+  if (S.phase === 'fall') {
+    const f = (S.t - S.t0) / ZOMBIE_STORY_FALL_MS;
+    S.fallV += 26 * dt; camera.position.y -= S.fallV * dt;
+    _slamShakeT = 0.6; _slamShakeAmp = 0.03;
+    U.dark.style.transition = 'opacity 1.2s'; U.dark.style.opacity = String(Math.min(1, f * 1.1));
+    if (f >= 1) { U.dark.style.transition = ''; zombieStoryEnterBlack(); }
+    return;
+  }
+  if (S.phase === 'black') {
+    const ln = ZOMBIE_RADIO_LINES[S.line];
+    if (!ln) { S.phase = 'wake'; S.t0 = S.t; return; }
+    const lt = S.t - S.lineAt;
+    if (lt === 0 || S.lastLine !== S.line) {                                     // a new line: a burst of static, then the words
+      S.lastLine = S.line; storyAudio({ ms: 650, freq: 2300, q: 0.6, gain: 0.2, crackle: 0.5, release: 0.15 });
+    }
+    const shown = Math.min(ln[1].length, Math.floor(lt / 32));
+    U.line.textContent = ln[1].slice(0, shown);
+    storyNoiseFrame(U, lt < 700 ? 0.22 : 0.05 + Math.random() * 0.05);           // snow on the screen while it crackles
+    if (S.t >= S.nextCrackle) { S.nextCrackle = S.t + 900 + Math.random() * 1700; storyAudio({ ms: 120 + Math.random() * 260, freq: 1500 + Math.random() * 1800, q: 0.7, gain: 0.1 + Math.random() * 0.1, crackle: 0.6, release: 0.05 }); }
+    if (lt >= ln[0] + 500) { S.line++; S.lineAt = S.t; }
+    return;
+  }
+  if (S.phase === 'wake') {
+    const w = (S.t - S.t0) / ZOMBIE_STORY_WAKE_MS;
+    U.dark.style.transition = 'opacity 2.2s'; U.dark.style.opacity = String(Math.max(0, 1 - w * 1.05));
+    U.noise.style.opacity = String(Math.max(0, 0.06 * (1 - w)));
+    if (w > 0.5) U.line.textContent = '';
+    if (w >= 1) { U.dark.style.transition = ''; zombieStoryFinish(); }
+  }
+}
+function zombieStoryCleanup() {
+  const Z = match && match.zombie;
+  if (_storyUi) { _storyUi.root.style.display = 'none'; _storyUi.dark.style.opacity = '0'; _storyUi.line.textContent = ''; }
+  if (Z && Z.story) { for (const p of Z.story.props) scene.remove(p); Z.story = null; }
+  if (Z) Z.storyLock = false;
+  for (const b of gameBots.slice()) if (b.squad) zombieRemove(b);
 }
 function zombieRemove(bot) {
   if (!bot) return;
@@ -63505,6 +63745,7 @@ function updateZombieMode(dt) {
   const Z = match.zombie; if (!Z) return;
   const now = Date.now();
   updateZombiePickups(dt);
+  if (Z.phase === 'story') { updateZombieStory(dt); return; }
   if (isDead) return;
   const alive = gameBots.filter(b => b.zombie && !b.dead).length;
   if (Z.phase === 'break') {
@@ -63593,6 +63834,7 @@ function zombieRemovePickup(i) {
 }
 function zombieClearPickups() { while (zombiePickups.length) zombieRemovePickup(zombiePickups.length - 1); }
 function zombieCleanup() {
+  zombieStoryCleanup();
   zombieDarken(false);
   zombieClearPickups();
   for (const b of gameBots.slice()) if (b.zombie) zombieRemove(b);
@@ -64329,6 +64571,7 @@ function updateBotAI(dt) {
 
     // During countdown: bots walk toward the centre so they're in position when it ends
     if (!roundLive) continue; // frozen during countdown
+    if (bot.squad) { zombieSquadThink(bot, dt); continue; }    // 🪖 the squad in Zombie Survival's opening: they walk with you
     if (bot.zombie) { zombieThink(bot, dt, now); continue; }   // 🧟 a zombie has no aim, no cover and no plan: it comes for you
     try {
 

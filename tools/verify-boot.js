@@ -2877,6 +2877,31 @@ if (ok && process.argv.includes('--zombie')) {
       if (!(mapAmbient.intensity <= 0.1 && sun.intensity <= 0.2 && scene.background.getHex() < 0x101018)) issues.push('the map should be dark: ambient ' + mapAmbient.intensity + ' sun ' + sun.intensity + ' sky ' + scene.background.getHex().toString(16));
       setupArcadeStart('zombie');
       const Z = match.zombie, kit = rngKit();
+      // the story comes first: a squad walks with you, then the floor goes, black, a radio, bodies around you, then the waves
+      if (Z.phase !== 'story' || !Z.story || Z.story.phase !== 'approach') issues.push('the match should open with the story, got ' + Z.phase);
+      const squad = gameBots.filter(b => b.squad);
+      if (squad.length !== 4 || squad.some(b => b.team !== 'ally' || b.dead || !remoteMeshes[b.id])) issues.push('four living squad mates should walk in with you: ' + squad.length);
+      if (ZOMBIE_APPROACH_LINES.length < 3 || ZOMBIE_RADIO_LINES.length < 8) issues.push('the story has too few lines');
+      if (!ZOMBIE_RADIO_LINES.some(l => /place we were sent to raid/.test(l[1])) || !ZOMBIE_RADIO_LINES.some(l => /horribly wrong/.test(l[1])) || !ZOMBIE_RADIO_LINES.some(l => /cannot give up/.test(l[1]))) issues.push('the radio monologue lost its key lines');
+      // they follow you
+      camera.position.set(0, 1.65, 0); for (let i = 0; i < 90; i++) updateBotAI(1 / 30);
+      if (squad.some(b => Math.hypot(b.x - camera.position.x, b.z - camera.position.z) > 6)) issues.push('the squad should keep up with you: ' + squad.map(b => Math.hypot(b.x, b.z).toFixed(1)));
+      // the walk-in, the rumble, the fall, the black
+      let steps = 0; const phases = new Set();
+      while (Z.story && Z.story.phase !== 'wake' && steps++ < 400) { phases.add(Z.story.phase); updateZombieMode(0.25); if (Z.story && Z.story.phase === 'black' && !Z.storyLock) issues.push('you should be pinned down while the radio plays'); }
+      for (const ph of ['approach', 'fall', 'black']) if (!phases.has(ph)) issues.push('the story skipped its ' + ph + ' phase');
+      if (!Z.story || Z.story.phase !== 'wake') issues.push('the story never reached the wake-up');
+      if (squad.some(b => !b.dead || remoteMeshes[b.id].rotation.x > -1.4 || Math.hypot(b.x - camera.position.x, b.z - camera.position.z) > 5.5)) issues.push('the squad should be lying dead around you after the fall');
+      if (!(camera.position.y > 1.5)) issues.push('after the fall you are back on your feet, y ' + camera.position.y);
+      let sg = 0; while (Z.phase === 'story' && sg++ < 40) updateZombieMode(0.25);
+      if (Z.phase !== 'break' || Z.storyLock || Z.story) issues.push('the story should end in a break before wave 1 with you free to move');
+      // skipping: the same place, at once
+      zombieCleanup(); zombieStoryStart();
+      if (!Z.story || gameBots.filter(b => b.squad).length !== 4) issues.push('a fresh story should bring a fresh squad');
+      zombieStorySkip();
+      if (!gameBots.filter(b => b.squad).every(b => b.dead)) issues.push('skipping should still lay the squad down');
+      let sk = 0; while (Z.phase === 'story' && sk++ < 40) updateZombieMode(0.25);
+      if (Z.phase !== 'break') issues.push('skipping should end the story');
       if (!kit || kit.slots[0] !== 'm:fists' || kit.slots[1]) issues.push('you should begin with your fists and nothing else: ' + JSON.stringify(kit && kit.slots));
       if (activeSlot !== 'melee' || MELEE_ITEMS[selectedMeleeIdx].id !== 'fists') issues.push('the fists should be in your hands');
       camera.position.set(0, 1.65, 0);
