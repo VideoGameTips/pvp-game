@@ -2869,7 +2869,7 @@ if (ok && process.argv.includes('--zombie')) {
       gameStarted = true; isDead = false; gameBots.length = 0; wallColliders.length = 0;
       // the map: one straight tunnel about eighteen times an ordinary map, connected from end to end
       {
-        const tb = MAP_BOUNDS.zombie_tunnel, areas = MAP_IDS.filter(m => !DUEL_ONLY_MAPS.has(m) && MAP_BOUNDS[m]).map(m => MAP_BOUNDS[m].halfX * MAP_BOUNDS[m].halfZ * 4).sort((a, b) => a - b);
+        const tb = MAP_BOUNDS.zombie_tunnel, areas = MAP_IDS.filter(m => !DUEL_ONLY_MAPS.has(m) && MAP_BOUNDS[m]).map(m => { const bb = MAP_BOT_BOUNDS[m] || MAP_BOUNDS[m]; return bb.halfX * bb.halfZ * 4; }).sort((a, b) => a - b);   // (the arena: a map that has been played has had its outskirts added to MAP_BOUNDS)
         const ratio = tb ? tb.halfX * tb.halfZ * 4 / areas[Math.floor(areas.length / 2)] : 0;
         if (!tb || ratio < 16 || ratio > 21) issues.push('the tunnel should be about 18 times an ordinary map, got x' + ratio.toFixed(1));
         if (tb && tb.halfZ < tb.halfX * 20) issues.push('the tunnel should be long and straight, not ' + tb.halfX * 2 + ' x ' + tb.halfZ * 2);
