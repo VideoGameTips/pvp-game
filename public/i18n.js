@@ -19,6 +19,7 @@
   const ZH = {
     'BACKROOMS': '后室',
     'Backrooms Expedition': '后室探索',
+    'PUNCH': '出拳',
     'Solo expedition / Levels 0-9 / Survival': '单人探索 / 层级 0-9 / 生存',
     'The Backrooms': '后室',
     'Continue expedition': '继续探索',

@@ -3,8 +3,8 @@
   'use strict';
   const D=window.BACKROOMS_DATA,T=THREE;
   let root,view,cam,world,menu,hud,readout,prompt,hurt,flash,fill,ambient,water,guide;
-  let active=false,paused=false,state=null,save=null,saveKey='',yaw=0,pitch=0,frame=0,clock=0,hudClock=0;
-  let materials=[],textures=[],geometries=[],items=[],hazards=[],entities=[],lamps=[],steps=0,keys={},drag=null,sound=null;
+  let active=false,paused=false,state=null,save=null,saveKey='',frame=0,clock=0,hudClock=0,original=null;
+  let materials=[],textures=[],geometries=[],items=[],hazards=[],entities=[],lamps=[],sound=null;
   const v=new T.Vector3();
   const node=(tag,text,cls)=>{const e=document.createElement(tag);if(text!=null)e.textContent=text;if(cls)e.className=cls;return e;};
   const button=(label,action,title)=>{const b=node('button',label);b.type='button';b.onclick=action;if(title){b.title=title;b.setAttribute('aria-label',title);}return b;};
@@ -25,10 +25,6 @@
     menu=node('section',null,'br-menu');menu.hidden=true;menu.setAttribute('role','dialog');menu.setAttribute('aria-modal','true');menu.setAttribute('aria-label','Backrooms journal');root.append(menu);
     hud=node('header',null,'br-top');readout=node('footer',null,'br-bottom');prompt=node('div',null,'br-prompt');hurt=node('div',null,'br-hurt');
     root.append(hud,readout,prompt,node('div',null,'br-cross'),node('div',null,'br-shade'),hurt);document.body.append(root);
-    const touch=node('div',null,'br-touch'),pad=node('div',null,'br-pad'),actions=node('div',null,'br-touch-actions');
-    for(const [symbol,key,title] of [['\u2191','KeyW','Forward'],['\u2190','KeyA','Left'],['\u2193','KeyS','Back'],['\u2192','KeyD','Right']])pad.append(hold(symbol,key,title));
-    actions.append(button('\u270b',interact,'Interact / feel surfaces (F)'),button('\u25c9',toggleFlash,'Flashlight (L)'),hold('\u21e7','Space','Ascend (Space)'),hold('\u21e9','ControlLeft','Crouch / descend (Ctrl)'));
-    touch.append(pad,actions);root.append(touch);
     document.addEventListener('keydown',e=>{
       if(!active||e.metaKey||e.altKey)return;
       if(e.ctrlKey&&!['ControlLeft','ControlRight','KeyW','KeyA','KeyS','KeyD','Space','KeyC'].includes(e.code))return;
@@ -39,21 +35,16 @@
           else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}}
         return;
       }
-      if(!menu.hidden){if(e.code==='Escape'&&state?.status==='active'){e.preventDefault();e.stopImmediatePropagation();resume();}return;}
-      if(e.code==='Escape')return;
-      e.stopImmediatePropagation();keys[e.code]=true;
-      if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();
-      if(!e.repeat){if(e.code==='KeyF')interact();if(e.code==='KeyL')toggleFlash();}
+      if(!menu.hidden){if(e.code==='Escape'&&state?.status==='active'){e.preventDefault();resume();}e.stopImmediatePropagation();return;}
+      if(e.code==='KeyF'||e.code==='KeyL'){e.preventDefault();e.stopImmediatePropagation();if(!e.repeat){if(e.code==='KeyF')interact();else toggleFlash();}}
+      // Movement, jump, slide, crouch, inspect and ability input stay with game.js.
+      if(/^Digit[1-4]$/.test(e.code)){e.preventDefault();e.stopImmediatePropagation();}
     },true);
-    document.addEventListener('keyup',e=>{if(active){keys[e.code]=false;if(e.code!=='Escape')e.stopImmediatePropagation();}},true);
-    document.addEventListener('mousemove',e=>{if(active&&!paused&&view&&document.pointerLockElement===view.domElement)look(e.movementX,e.movementY);});
-    window.addEventListener('blur',()=>{keys={};drag=null;});
+    window.addEventListener('blur',()=>{if(active)clearInput();});
     document.addEventListener('visibilitychange',()=>{if(active&&document.hidden&&state?.status==='active')journal();});
-    window.addEventListener('resize',resize);
   }
-  function hold(symbol,key,title){const b=button(symbol,()=>{},title);b.onpointerdown=e=>{e.preventDefault();b.setPointerCapture(e.pointerId);keys[key]=true;};for(const ev of ['pointerup','pointercancel','lostpointercapture'])b.addEventListener(ev,()=>keys[key]=false);return b;}
-  function look(dx,dy){yaw-=dx*.0024;pitch=Math.max(-1.4,Math.min(1.4,pitch-dy*.0024));}
-  function capture(){if(!view||paused)return;try{const p=view.domElement.requestPointerLock?.();p?.catch?.(()=>{});}catch(_){}audio();}
+  function clearInput(){for(const k of Object.keys(keys))keys[k]=false;shooting=false;isADS=false;joyDir={x:0,y:0};joyActive=false;joyTouchId=lookTouchId=null;lastLookPos=null;window._mobileJump=window._mobileUp=window._mobileSlide=false;setMobileCrouch(false);joystickBase.style.display='none';}
+  function capture(){if(!view||paused)return;requestPointerLockSafe();audio();}
   function audio(){
     if(sound){sound.ctx.resume().catch(()=>{});return;}
     try{const ctx=new (window.AudioContext||window.webkitAudioContext)(),gain=ctx.createGain(),filter=ctx.createBiquadFilter(),buffer=ctx.createBuffer(1,ctx.sampleRate*2,ctx.sampleRate),a=buffer.getChannelData(0),rng=D.random(77);
@@ -62,19 +53,21 @@
     }catch(_){}
   }
   function tone(freq=180,duration=.12,volume=.035){if(!sound)return;const c=sound.ctx,o=c.createOscillator(),g=c.createGain();o.type='sine';o.frequency.setValueAtTime(freq,c.currentTime);o.frequency.exponentialRampToValueAtTime(Math.max(25,freq*.45),c.currentTime+duration);g.gain.setValueAtTime(volume,c.currentTime);g.gain.exponentialRampToValueAtTime(.001,c.currentTime+duration);o.connect(g);g.connect(c.destination);o.start();o.stop(c.currentTime+duration);}
-  function resize(){if(!view)return;view.setSize(innerWidth,innerHeight);cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();}
   function open(){
     teardownMatchWorld();init();load();active=true;paused=true;root.hidden=false;
-    try{view=new T.WebGLRenderer({antialias:true,powerPreference:'low-power'});view.setPixelRatio(Math.min(devicePixelRatio,1.25));view.outputColorSpace=T.SRGBColorSpace;view.domElement.className='br-world';root.prepend(view.domElement);
-      cam=new T.PerspectiveCamera(72,innerWidth/innerHeight,.07,230);resize();
-      view.domElement.addEventListener('click',capture);
-      view.domElement.addEventListener('pointerdown',e=>{if(e.pointerType!=='mouse'){drag={id:e.pointerId,x:e.clientX,y:e.clientY};view.domElement.setPointerCapture(e.pointerId);audio();}});
-      view.domElement.addEventListener('pointermove',e=>{if(drag?.id===e.pointerId&&!paused){look(e.clientX-drag.x,e.clientY-drag.y);drag.x=e.clientX;drag.y=e.clientY;}});
-      for(const ev of ['pointerup','pointercancel'])view.domElement.addEventListener(ev,()=>drag=null);
+    try{view=renderer;cam=camera;
+      const mobile=document.getElementById('mobile-controls');
+      original={parent:view.domElement.parentNode,next:view.domElement.nextSibling,className:view.domElement.className,pixelRatio:view.getPixelRatio(),mobileParent:mobile.parentNode,mobileNext:mobile.nextSibling,
+        map:activeMapName,colliders:wallColliders.slice(),background:scene.background,fog:scene.fog,visibility:new Map(scene.children.map(o=>[o,o.visible])),
+        primary:selectedPrimaryIdx,secondary:selectedSecondaryIdx,melee:selectedMeleeIdx,support:selectedSupportIdx,slot:activeSlot,cfg:selectedModeConfig,hp:players[myId]?.hp,
+        position:camera.position.clone(),rotation:euler.clone(),fov:camera.fov,fireLabel:btnFire.textContent};
+      for(const o of scene.children)if(o!==camera)o.visible=false;
+      view.setPixelRatio(Math.min(devicePixelRatio,1.25));view.domElement.classList.add('br-world');root.prepend(view.domElement);root.append(mobile);
+      btnFire.textContent='PUNCH';
       journal();startLoop();
     }catch(e){stop();throw e;}
   }
-  function panel(title,text){paused=true;keys={};drag=null;if(document.pointerLockElement===view?.domElement)document.exitPointerLock();menu.hidden=false;menu.replaceChildren(node('small','EXPEDITION / DEVICE SAVE'),node('h1',title));if(text)menu.append(node('p',text));menu.scrollTop=0;if(sound)sound.gain.gain.value=0;}
+  function panel(title,text){paused=true;gameStarted=false;root.dataset.paused='yes';clearInput();if(document.pointerLockElement===view?.domElement)document.exitPointerLock();menu.hidden=false;menu.replaceChildren(node('small','EXPEDITION / DEVICE SAVE'),node('h1',title));if(text)menu.append(node('p',text));menu.scrollTop=0;if(sound)sound.gain.gain.value=0;}
   function journal(){
     panel('The Backrooms',state?.status==='active'?`Level ${state.level.id} / ${state.level.name}`:'Ten levels beneath reality.');
     const actions=node('div',null,'br-actions');if(state?.status==='active')actions.append(button('Resume',resume));
@@ -86,15 +79,28 @@
     for(const l of D.levels){const p=node('div'),a=node('a',`Level ${l.id}: ${l.name}`);a.href=l.source;a.target='_blank';a.rel='noopener';p.append(a,document.createTextNode(' - '+l.author));details.append(p);}
     const license=node('a','Creative Commons Attribution-ShareAlike 3.0');license.href='https://creativecommons.org/licenses/by-sa/3.0/';license.target='_blank';license.rel='noopener';details.append(license);credits.append(details);menu.append(credits);menu.querySelector('button')?.focus();
   }
-  function resume(){if(state?.status!=='active')return;menu.hidden=true;paused=false;capture();}
+  function resume(){if(state?.status!=='active')return;clearInput();menu.hidden=true;paused=false;gameStarted=true;root.dataset.paused='no';capture();}
   function clean(){
     const gs=new Set(geometries),ms=new Set(materials);if(world)world.traverse(o=>{if(o.geometry)gs.add(o.geometry);});for(const g of gs)g.dispose();for(const m of ms)m.dispose();for(const t of textures)t.dispose();
+    if(world)scene.remove(world);
     geometries=[];materials=[];textures=[];items=[];hazards=[];entities=[];lamps=[];world=null;water=null;guide=null;
   }
   function stop(){
-    active=false;paused=false;keys={};drag=null;state=null;
+    active=false;paused=false;clearInput();state=null;
     if(document.pointerLockElement===view?.domElement)document.exitPointerLock();
-    clean();if(view){view.dispose();view.forceContextLoss();view.domElement.remove();view=null;}
+    clean();if(original){
+      const s=original;scene.background=s.background;scene.fog=s.fog;for(const [o,visible] of s.visibility)o.visible=visible;
+      activeMapName=s.map;wallColliders.splice(0,wallColliders.length,...s.colliders);delete MAP_BOUNDS._backrooms;delete MAP_COLLIDERS._backrooms;
+      selectedPrimaryIdx=s.primary;selectedSecondaryIdx=s.secondary;selectedMeleeIdx=s.melee;selectedSupportIdx=s.support;activeSlot=s.slot;selectedModeConfig=s.cfg;
+      gameStarted=false;match=null;isDead=false;slamState=null;playerYVel=0;_extVel.x=_extVel.z=0;window._slideUntil=0;
+      camera.position.copy(s.position);euler.copy(s.rotation);camera.quaternion.setFromEuler(euler);camera.fov=s.fov;camera.updateProjectionMatrix();
+      if(players[myId]){players[myId].hp=s.hp;players[myId].dead=false;}
+      if(loadoutReady())equipActiveSlot();else for(const model of [...weaponModels,...meleeModels,...supportModels])model.visible=false;
+      view.setPixelRatio(s.pixelRatio);view.domElement.className=s.className;s.parent.insertBefore(view.domElement,s.next?.parentNode===s.parent?s.next:null);
+      const mobile=document.getElementById('mobile-controls');s.mobileParent.insertBefore(mobile,s.mobileNext?.parentNode===s.mobileParent?s.mobileNext:null);
+      btnFire.textContent=s.fireLabel;
+      original=null;
+    }view=null;
     if(sound){sound.ctx.close().catch(()=>{});sound=null;}if(root)root.hidden=true;
   }
   function texture(kind){
@@ -115,8 +121,8 @@
   function launch(id){
     if(!active||!view||!save||!Number.isInteger(id)||id<0||id>save.unlocked||id>9)return false;
     clean();const level=D.levels[id],grid=D.generate(id),assistance=root.dataset.assistance==='yes';
-    state={level,grid,hp:100,stamina:100,air:100,battery:100,flash:true,done:0,status:'active',elapsed:0,assistance,tactile:0,warning:'',warningUntil:0,lastHurt:-10,visited:new Set(),yVel:0};
-    world=new T.Scene();world.background=new T.Color(level.fog);world.fog=new T.FogExp2(level.fog,id===6?.32:id===7?.018:id===9?.035:.023);unit=boxGeo();
+    state={level,grid,hp:100,air:100,battery:100,flash:true,done:0,status:'active',elapsed:0,assistance,tactile:0,warning:'',warningUntil:0,lastHurt:-10,visited:new Set()};
+    world=new T.Group();scene.add(world);scene.background=new T.Color(level.fog);scene.fog=new T.FogExp2(level.fog,id===6?.32:id===7?.018:id===9?.035:.023);unit=boxGeo();
     const wallTex=texture('wall'),floorTex=texture('floor'),ceilingTex=texture('ceiling');floorTex.repeat.set(grid.size*1.8,grid.size*1.8);ceilingTex.repeat.set(grid.size,grid.size);
     const wm=mat(0xffffff,false,{map:wallTex}),fm=mat(0xffffff,false,{map:floorTex,roughness:[1,7,9].includes(id)?.3:.95}),cm=mat(id===7?0x32454b:0xffffff,false,{map:ceilingTex});
     const extent=grid.size*grid.cell;
@@ -138,10 +144,32 @@
     grid.tasks.forEach((k,i)=>addItem(k,level.tasks[i],'task',i));addItem(grid.exit,level.exit,'exit');
     const supplyCells=grid.spawnCells.filter((k,i)=>i%19===7).slice(0,8);if(id!==0&&id!==6)for(const k of supplyCells)if(!grid.tasks.includes(k))addItem(k,'Almond water','supply');
     addEntities();
-    const p=point(grid.start);cam.position.set(p.x,id===7?3.85:1.65,p.z);yaw=0;pitch=0;clock=0;hudClock=0;steps=0;keys={};
-    const next=point(D.neighbors(grid,grid.start)[0]);yaw=Math.atan2(-(next.x-p.x),-(next.z-p.z));cam.rotation.set(0,yaw,0,'YXZ');
+    installPlayer();
+    const p=point(grid.start);cam.position.set(p.x,id===7?3.85:1.65,p.z);clock=0;hudClock=0;clearInput();
+    const next=point(D.neighbors(grid,grid.start)[0]);euler.set(0,Math.atan2(-(next.x-p.x),-(next.z-p.z)),0,'YXZ');cam.quaternion.setFromEuler(euler);
+    lastPlayerPos.copy(cam.position);playerVelocity.set(0,0,0);playerPosHistory.length=0;
     guide=new T.Line(new T.BufferGeometry(),new T.LineBasicMaterial({color:0xaddbcc,transparent:true,opacity:.5}));materials.push(guide.material);world.add(guide);
-    menu.hidden=true;paused=false;notice(level.note,14);drawHUD();capture();view.render(world,cam);return true;
+    menu.hidden=true;paused=false;root.dataset.paused='no';notice(level.note,14);drawHUD();capture();view.render(scene,cam);return true;
+  }
+  function installPlayer(){
+    const {grid:g,level:l}=state,extent=g.size*g.cell,cols=[];
+    const solid=(x,y,z,w,h,d)=>cols.push(new T.Box3(new T.Vector3(x-w/2,y-h/2,z-d/2),new T.Vector3(x+w/2,y+h/2,z+d/2)));
+    for(let k=0;k<g.cells.length;k++)if(!g.cells[k]){const p=point(k),bottom=l.id===7?-18:0,top=l.id===9?5.8:l.height;solid(p.x,(top+bottom)/2,p.z,g.cell,top-bottom,g.cell);}
+    if(l.id!==9)solid(extent/2,l.height+.12,extent/2,extent,.24,extent);
+    if(l.id===7){const p=point(g.start);solid(p.x,1.1,p.z,3.3,2.2,3.3);}
+    activeMapName='_backrooms';MAP_BOUNDS._backrooms={halfX:extent+2,halfZ:extent+2};MAP_COLLIDERS._backrooms=cols;wallColliders.splice(0,wallColliders.length,...cols);
+    if(!loadoutReady()){const d=defaultLoadoutIdx();selectedPrimaryIdx=d.p;selectedSecondaryIdx=d.s;selectedMeleeIdx=d.m;selectedSupportIdx=d.u;}
+    resetCombatResources();clearPlayerStatusEffects();
+    selectedPrimaryIdx=selectedSecondaryIdx=selectedSupportIdx=null;selectedMeleeIdx=MELEE_ITEMS.findIndex(i=>i.id==='fists');activeSlot='melee';
+    selectedModeConfig={type:'backrooms',fixedKit:'backrooms_fists',playerHp:100};match={type:'backrooms',cfg:selectedModeConfig,active:true,roundActive:true};
+    gameStarted=true;isDead=false;playerYVel=0;slamState=null;_extVel.x=_extVel.z=0;window._slideUntil=0;window._crouchEye=1.65;window._prevShiftHeld=window._prevCrouchHeld=window._prevSpaceDown=false;
+    if(players[myId]){players[myId].hp=100;players[myId].dead=false;}updateHealthHUD(100);equipActiveSlot();
+    for(const id of ['mode-screen','overlay','loadout-screen','waiting-screen','death-screen','match-over-screen']){const e=document.getElementById(id);if(e)e.style.display='none';}
+    document.body.classList.remove('login-open');
+  }
+  function swimming(){
+    if(!active||paused||state?.level.id!==7||!cam)return false;
+    const p=point(state.grid.start);return cam.position.y<1.8&&Math.hypot(cam.position.x-p.x,cam.position.z-p.z)>1.95;
   }
   function decorate(){
     const {grid:g,level:l}=state,rng=D.random(23+l.id),metal=mat(0x59615c,false,{metalness:.55,roughness:.4}),trim=mat(l.id===5?0xbd9a56:0x666754),lampMat=mat(l.light,true),dark=mat(0x16211c);
@@ -232,7 +260,7 @@
         for(const s of [-1,1]){box(s*.19,.5,0,.13,1,.14,black,body);const arm=box(s*.44,1.3,0,.1,1.3,.1,black,body);arm.rotation.z=s*.2;}
       }
       for(const x of [-.1,.1])box(x,type==='spider'?.5:type==='leviathan'?0:1.95,type==='leviathan'?-5.5:-.18,.055,.04,.035,eye,body);
-      body.position.x=p.x;body.position.z=p.z;world.add(body);entities.push({k,x:p.x,z:p.z,mesh:body,type,cooldown:0,stun:0,target:k,route:[],pathAt:0});
+      body.position.x=p.x;body.position.z=p.z;world.add(body);entities.push({k,x:p.x,z:p.z,mesh:body,type,hp:72,dead:false,hitAt:-10,cooldown:0,stun:0,target:k,route:[],pathAt:0});
     }
   }
   function notice(text,seconds=4){state.warning=text;state.warningUntil=state.elapsed+seconds;}
@@ -256,7 +284,7 @@
     if(item.kind==='supply'){state.hp=Math.min(100,state.hp+30);state.battery=Math.min(100,state.battery+35);notice('Almond water / +30 health / +35 battery');}
     else{state.done++;notice(item.name+' secured');if(state.level.id===4){state.hp=100;state.battery=100;}if(state.level.id===7)state.air=100;
       if(state.level.id===3)hazards.slice(0,state.done).forEach(h=>h.disabled=true);}
-    drawHUD();
+    if(players[myId])players[myId].hp=state.hp;updateHealthHUD(state.hp);drawHUD();
   }
   function toggleFlash(){if(!state||paused)return;if(state.level.id===6){notice('The flashlight produces no light here. Feel the passage.',4);return;}state.flash=!state.flash;}
   function finish(){
@@ -265,11 +293,13 @@
     if(!saved)menu.append(node('p','Device storage is unavailable. Keep this session open to retain your checkpoint.'));
     const actions=node('div',null,'br-actions');if(id<9)actions.append(button('Enter Level '+(id+1),()=>launch(id+1)));actions.append(button('Expedition journal',journal));menu.append(actions);menu.querySelector('button')?.focus();
   }
-  function damage(amount){if(state.status!=='active')return;state.hp=Math.max(0,state.hp-amount);state.lastHurt=state.elapsed;if(state.hp>0)return;
+  function damage(amount){if(state.status!=='active')return;state.hp=Math.max(0,state.hp-amount);state.lastHurt=state.elapsed;if(players[myId])players[myId].hp=state.hp;updateHealthHUD(state.hp);if(state.hp>0)return;
     state.status='dead';panel('Lost in the Backrooms','Your floor checkpoint is intact.');const actions=node('div',null,'br-actions');actions.append(button('Retry Level '+state.level.id,()=>launch(state.level.id)),button('Expedition journal',journal));menu.append(actions);menu.querySelector('button')?.focus();}
   function path(from,to){const g=state.grid,d=D.distances(g,to),out=[];let k=from;
     if(k<0||d[k]<0)return out;while(k!==to&&out.length<g.cells.length){const n=D.neighbors(g,k).find(n=>d[n]===d[k]-1);if(n==null)break;out.push(n);k=n;}return out;}
   function entityTick(e,dt){
+    if(e.dead)return;
+    e.mesh.traverse(o=>{if(o.material?.emissive)o.material.emissive.setHex(state.elapsed-e.hitAt<.12?0x582b20:0);});
     e.cooldown=Math.max(0,e.cooldown-dt);e.stun=Math.max(0,e.stun-dt);
     const d=Math.hypot(e.x-cam.position.x,e.z-cam.position.z),l=state.level.id;
     const blacked=l===1&&Math.sin(state.elapsed*.24)>.75;
@@ -286,7 +316,8 @@
     e.mesh.position.x=e.x;e.mesh.position.z=e.z;e.mesh.rotation.y=Math.atan2(-(cam.position.x-e.x),-(cam.position.z-e.z));
     if(e.type==='moth'){e.mesh.position.y=Math.sin(state.elapsed*3)*.2;for(let i=1;i<3;i++)e.mesh.children[i].rotation.y=Math.sin(state.elapsed*12)*.7;}
     if(e.type==='leviathan')e.mesh.position.y+=((hunting?cam.position.y-1:-2)-e.mesh.position.y)*Math.min(1,dt*.6);
-    const closeHeight=e.type!=='leviathan'||Math.abs(e.mesh.position.y-cam.position.y)<3;
+    const bodyHeight=e.mesh.position.y+(e.type==='spider'?.4:e.type==='leviathan'?0:1.3);
+    const closeHeight=Math.abs(bodyHeight-cam.position.y)<(e.type==='leviathan'?3:1.65);
     if(hunting&&closeHeight&&d<(e.type==='leviathan'?3:1.2)&&e.cooldown<=0){damage(e.type==='leviathan'?35:18);e.cooldown=1.4;notice(e.type==='leviathan'?'Something brushes beneath you.':'Keep moving.',2);tone(48,.3,.06);}
   }
   function drawHUD(){
@@ -294,37 +325,36 @@
     hud.replaceChildren();const heading=node('div');heading.append(node('div','LEVEL '+String(l.id).padStart(2,'0'),'br-level'),node('h2',l.name,'br-name'),node('div',state.done<l.tasks.length?`${state.done}/${l.tasks.length} / ${l.tasks.filter((_,i)=>!items.find(t=>t.kind==='task'&&t.index===i)?.done).join(' / ')}`:l.exit,'br-objective'));
     const actions=node('div',null,'br-top-actions');actions.append(button('\u25c9',toggleFlash,'Flashlight (L)'),button('\u270b',interact,'Interact / feel surfaces (F)'),button('\u2630',journal,'Expedition journal (Tab)'));hud.append(heading,actions);
     readout.replaceChildren();const meters=node('div',null,'br-meters');
-    for(const [label,value] of [['Health',state.hp],['Stamina',state.stamina],[l.id===7?'Air':'Battery',l.id===7?state.air:state.battery]]){const e=node('label',label),meter=node('meter');meter.min=0;meter.max=100;meter.value=value;meter.setAttribute('aria-label',label);e.append(meter);meters.append(e);}readout.append(meters);
+    for(const [label,value] of [['Health',state.hp],[l.id===7?'Air':'Battery',l.id===7?state.air:state.battery]]){const e=node('label',label),meter=node('meter');meter.min=0;meter.max=100;meter.value=value;meter.setAttribute('aria-label',label);e.append(meter);meters.append(e);}meters.append(node('span','Fists'));readout.append(meters);
     if(state.warningUntil>state.elapsed)readout.append(node('div',state.warning));
     if(!document.pointerLockElement&&!matchMedia('(pointer:coarse)').matches)readout.append(button('Return to view',capture));
   }
   function tick(dt){
     if(!active||!world||!state||paused)return;
     dt=Math.min(.05,Math.max(0,dt));state.elapsed+=dt;clock+=dt;frame++;
-    const l=state.level,g=state.grid,crouch=keys.ControlLeft||keys.KeyC,sprint=keys.ShiftLeft&&state.stamina>0&&!crouch;
-    let x=(keys.KeyD||keys.ArrowRight?1:0)-(keys.KeyA||keys.ArrowLeft?1:0),z=(keys.KeyW||keys.ArrowUp?1:0)-(keys.KeyS||keys.ArrowDown?1:0),moving=!!(x||z);
-    const length=Math.hypot(x,z)||1,speed=l.id===7?4.2:crouch?1.8:sprint?6:3.6;
-    x/=length;z/=length;move(cam.position,(Math.cos(yaw)*x-Math.sin(yaw)*z)*speed*dt,(-Math.sin(yaw)*x-Math.cos(yaw)*z)*speed*dt);
-    state.stamina=Math.max(0,Math.min(100,state.stamina+(sprint&&moving?-21:16)*dt));
+    const l=state.level,g=state.grid;
+    resetEquipmentSway();updateMovement(dt);updatePlayerVel(dt);updateHeldWalkLean(dt);
+    updateEquipAnim();updateItemInspect();updateAbilityBuff(dt);updateAutoLunge(dt);updateMeleeSwing(dt);updateMeleeGripPose();updateEquipmentSway();updateActionWind(dt);updateEquipBar();
+    updateDamageNumbers();updateDamageDirections();updateImpactMarks();syncAbilityButton();syncInteractButton();
     if(l.id===7){
-      const start=point(g.start),onPlatform=Math.hypot(cam.position.x-start.x,cam.position.z-start.z)<1.65;
-      cam.position.y=Math.max(-16.35,Math.min(4,cam.position.y+((keys.Space?1:0)-(crouch?1:0))*3*dt));
-      if(onPlatform)cam.position.y=Math.max(3.85,cam.position.y);else if(!keys.Space&&!crouch&&cam.position.y>1.45)cam.position.y=Math.max(1.45,cam.position.y-dt*2);
+      if(swimming()){
+        const ascend=keys.Space||window._mobileUp,descend=keys.ControlLeft||keys.ControlRight||keys.KeyC||window._mobileCrouch;
+        cam.position.y=Math.max(-16.35,Math.min(1.75,cam.position.y+((ascend?1:0)-(descend?1:0))*3*dt));
+        playerYVel=0;slamState=null;
+      }
       state.air=Math.max(0,Math.min(100,state.air+(cam.position.y<.9?-3.5:25)*dt));if(state.air<=0)damage(12*dt);
-    }else{const target=crouch?1.05:1.65;cam.position.y+=(target-cam.position.y)*Math.min(1,dt*12);}
-    cam.rotation.set(pitch,yaw+(moving?Math.sin(clock*9)*.002:0),0,'YXZ');
+    }
     state.visited.add(cellAt(cam.position.x,cam.position.z));
-    if(moving){steps+=dt*speed;if(steps>2.5){steps=0;tone(l.id===7?75:95,.055,crouch?.006:.018);}}
     fill.position.copy(cam.position);flash.position.copy(cam.position);cam.getWorldDirection(v);flash.target.position.copy(cam.position).add(v);
     const enabled=state.flash&&state.battery>0&&l.id!==6;
     flash.intensity=enabled?3.5:0;if(enabled)state.battery=Math.max(0,state.battery-dt*.12);fill.intensity=l.id===6?0:l.id===7?.65:.8;
-    if(water){water.material.map.offset.set(state.elapsed*.008,state.elapsed*.004);world.fog.density=cam.position.y<.9?.045:.018;}
+    if(water){water.material.map.offset.set(state.elapsed*.008,state.elapsed*.004);scene.fog.density=cam.position.y<.9?.045:.018;}
     const blackout=l.id===1&&Math.sin(state.elapsed*.24)>.75;ambient.intensity=blackout?.04:l.ambient;
     for(const lamp of lamps)lamp.intensity=blackout?.03:1.4;
     if(l.id===0){const exit=items.find(i=>i.kind==='exit');if(exit)exit.mesh.visible=state.elapsed%2.4>.12;}
     for(const h of hazards){const phase=(state.elapsed+h.phase)%7,warning=phase>3.2&&phase<4.8,danger=!h.disabled&&(h.kind==='pool'||phase>=4.8);
       h.mesh.material.opacity=h.disabled?.05:danger?.7:warning?.45:.12;h.mesh.material.color.setHex(h.disabled?0x6e9d80:h.kind==='pool'?0x234b29:danger?0xf06c31:warning?0xe5b953:0x64765d);
-      if(danger&&cellAt(cam.position.x,cam.position.z)===h.k){damage((h.kind==='steam'?24:h.kind==='surge'?36:16)*dt);if(h.kind!=='pool')notice(h.kind==='steam'?'Scalding steam':'Live circuit',1);}}
+      if(danger&&cellAt(cam.position.x,cam.position.z)===h.k&&playerFeetY()<(h.kind==='steam'?2.2:.25)){damage((h.kind==='steam'?24:h.kind==='surge'?36:16)*dt);if(h.kind!=='pool')notice(h.kind==='steam'?'Scalding steam':'Live circuit',1);}}
     for(const e of entities)entityTick(e,dt);
     state.tactile=Math.max(0,state.tactile-dt);
     const target=items.find(i=>i.kind==='task'&&!i.done)||items.find(i=>i.kind==='exit');
@@ -341,8 +371,21 @@
     if(sound){sound.gain.gain.value=l.id===6?0:l.id===7?.035:.018;sound.filter.frequency.value=l.id===2?450:l.id===7?100:180;}
     hudClock+=dt;if(hudClock>.25){hudClock=0;drawHUD();}
     if(state.status!=='active'||paused)return;
-    // One capped render loop; the ordinary PvP renderer is suspended while this mode owns the screen.
-    if(clock>=1/45){clock%=1/45;view.render(world,cam);}
+    if(clock>=1/45){clock%=1/45;view.render(scene,cam);}
   }
-  window.PVP_BACKROOMS={open,stop,launch,tick,interact,journal,resume,get active(){return active;},get state(){return state;},get camera(){return cam;},get renderer(){return view;},get entities(){return entities;},get items(){return items;},get hazards(){return hazards;},data:D};
+  function melee(item,forward){
+    if(!active||paused||state?.status!=='active')return false;
+    const target=entities.filter(e=>!e.dead).map(e=>({e,dx:e.x-cam.position.x,dz:e.z-cam.position.z})).filter(({e,dx,dz})=>{
+      const d=Math.hypot(dx,dz),height=e.mesh.position.y+(e.type==='spider'?.4:e.type==='leviathan'?0:1.3);
+      return d<=item.range&&Math.abs(height-cam.position.y)<2.5&&(d<.05||(dx*forward.x+dz*forward.z)/d>.55)&&lineClear(cam.position,e);
+    }).sort((a,b)=>Math.hypot(a.dx,a.dz)-Math.hypot(b.dx,b.dz))[0]?.e;
+    if(target){
+      if(target.type!=='leviathan')target.hp=Math.max(0,target.hp-item.damage);
+      target.hitAt=state.elapsed;target.stun=.8;target.cooldown=Math.max(target.cooldown,.8);move(target,forward.x,forward.z);
+      playSoundEvent('melee_impact',{volume:.9,minGap:60});spawnHitParticle(new T.Vector3(target.x,cam.position.y-.25,target.z));
+      if(target.hp<=0){target.dead=true;target.mesh.visible=false;notice('The passage falls quiet.',3);}
+    }
+    return !!target;
+  }
+  window.PVP_BACKROOMS={open,stop,launch,tick,interact,journal,resume,melee,get active(){return active;},get paused(){return paused;},get swimming(){return swimming();},get state(){return state;},get camera(){return cam;},get renderer(){return view;},get entities(){return entities;},get items(){return items;},get hazards(){return hazards;},data:D};
 })();

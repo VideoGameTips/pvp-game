@@ -1,6 +1,9 @@
 # Backrooms expedition
 
-Access: Special -> Backrooms. Solo, separate from PvP equipment, damage and accounts.
+Access: Special -> Backrooms. Solo, with a temporary fists-only kit. Uses the game's
+existing camera, player movement, collision physics, hands, punch animations,
+slide/slide-jump, wall climbing, uppercut and mobile joystick/action controls.
+The previous loadout is restored when leaving; no purchases or account unlocks change.
 Levels 0-9 are a first playable adaptation, not an exhaustive simulation of an
 infinite setting. All ten can be traversed in one run. Each entrance is a device-local,
 per-username checkpoint (`pvp_backrooms_v1:<username>`); cleared levels can be replayed.
@@ -40,10 +43,16 @@ not full simulations of every creature listed on each source page.
 
 ## Controls / lifecycle
 
-WASD/arrows move, mouse looks, Shift sprints, Ctrl/C crouches, F interacts, L toggles
-flashlight, Tab opens journal. In Level 6 F feels the passage; in Level 7 Space
-ascends and Ctrl/C descends. Touch has directional, interaction, light and depth
-buttons plus drag-to-look. Escape only releases the cursor; Journal explicitly
+Normal game controls apply: WASD moves, mouse/arrows look, Space jumps, Shift
+slides, Ctrl/C crouches (or initiates a slide while moving), mouse/fire punches,
+E uses the existing fist uppercut, T inspects. F interacts, L toggles the flashlight,
+Tab opens the journal. In Level 6 F feels the passage; underwater in Level 7,
+Space/held Jump ascends and Ctrl/C/Crouch descends. Swimming only replaces the
+vertical gravity step while submerged; horizontal movement still uses the game
+controller. Touch uses the existing joystick, look, fire, jump, slide and crouch
+controls, with the normal interaction button wired to objectives. Fists can hurt
+and stagger small entities; the ocean creature can only be briefly staggered.
+Escape only releases the cursor; Journal explicitly
 pauses. Hidden tabs pause and clear held input. Continue/Retry restore supplies.
 
 The layout generator uses a seeded spanning maze plus level-specific rooms or
@@ -51,8 +60,11 @@ streets. A flood fill selects reachable objectives and exits. Entity paths use
 the same walkable grid; diagonals do not cut walls. Hazards provide a warning
 phase and never occupy the starting square, objectives or exits.
 
-The ordinary PvP loop is suspended while the expedition owns the screen.
-The expedition renderer is capped at 45 FPS and 1.25 pixel ratio; walls and cave
+The expedition calls the game's existing movement and equipment update functions
+from the normal loop, and uses the same camera, renderer and scene. Other map
+visibility, colliders, scene lighting, controls and loadout are restored on exit.
+Rendering is capped at 45 FPS and 1.25 pixel ratio in this mode; walls and cave
 surfaces use instancing. Only the current level is retained. Leaving disposes
-geometries, materials, textures, WebGL context and ambient audio. No persistent
-extra animation loop or timers are created.
+only expedition geometry, materials, textures and ambient audio, never the shared
+renderer or player models. No extra WebGL context, movement controller, animation
+loop or timers are created.

@@ -40724,6 +40724,7 @@ window.addEventListener('keydown', e => {
 // that the retired jump code in updateMovement read, and that code can no longer launch anyone — so on a
 // phone JUMP did nothing at all.
 function doJump(repeat) {
+  if (window.PVP_BACKROOMS?.swimming) return;
   if (adminMapBuilderOpen && selectedModeConfig?.type === 'builder') return;
   if (!isDead && isPlayerGrounded()) {
     // 🛹 Slide jump: leaving the ground out of a slide trades a little height
@@ -42745,6 +42746,10 @@ function updateQuickMelee() {
 }
 
 function equipActiveSlot() {
+  if (window.PVP_BACKROOMS?.active && window.PVP_BACKROOMS.state) {
+    activeSlot = 'melee';
+    selectedMeleeIdx = MELEE_ITEMS.findIndex(i => i.id === 'fists');
+  }
   // 🎲 Dice Duel / Weapon Roulette: what is in your hands is whatever the kit says, whoever called this.
   const _kit = rngKit();
   const _kitHeld = _kit ? rngApplyKit(_kit) : true;   // 🎲 the kit decides what is in your hands (false: nothing)
@@ -43988,6 +43993,8 @@ function updateMovement(dt, socialBlocked = false) {
     return;
   }
   if (isDead) { window._setMobileCrouch?.(false); return; }   // a latched touch crouch does not outlive you
+  const aquatic = !!window.PVP_BACKROOMS?.swimming;
+  if (aquatic) { slamState = null; playerYVel = 0; }
   if (match && match.zombie && match.zombie.storyLock) return; // Zombie Survival's opening: the floor has gone and you are on the ground
   if (match && !match.roundActive && countdownActive) return; // frozen only during countdown
   if (pilotedVehicle) return; // piloting handles its own movement
@@ -44056,7 +44063,7 @@ function updateMovement(dt, socialBlocked = false) {
     else dir.copy(fwd);
     dir.normalize();
   }
-  const groundedNow = isPlayerGrounded();
+  const groundedNow = !aquatic && isPlayerGrounded();
   if (groundedNow) window._dashLeft = 1;    // dash recharges on landing
   // 🛹 Easy slide: crouch WHILE MOVING slides, exactly as Shift does. Standing
   // still it still just crouches, so nothing is taken away — you get the slide
@@ -44134,7 +44141,7 @@ function updateMovement(dt, socialBlocked = false) {
   window._crouchEye += (targetEye - window._crouchEye) * Math.min(1, dt * easeRate);
   // 🦘 Jump physics — Space (or mobile button). Skip in slam/heli/mortar states.
   // ✨ Some weapons grant a mid-air double jump (sci-fi / gravity / jedi).
-  if (!slamState && !pilotedVehicle && !pilotedMortar) {
+  if (!aquatic && !slamState && !pilotedVehicle && !pilotedMortar) {
     const groundEyeY = getGroundEyeY() + (window._crouchEye - 1.65);
     const isGrounded = camera.position.y <= groundEyeY + 0.05 && playerYVel <= 0;
     // Edge-detect Space so a held key doesn't auto-trigger the air jump
@@ -44315,7 +44322,7 @@ function updateMovement(dt, socialBlocked = false) {
       }
       slamState = null;
     }
-  } else {
+  } else if (!aquatic) {
     // Crouch / slide eye-height delta. window._crouchEye is the *target* eye
     // height (1.65 standing, 1.10 crouched, 0.95 sliding); subtract from
     // 1.65 to get the y offset to apply on top of the ground.
@@ -44637,6 +44644,7 @@ function doUppercutAbility(item, ab, now) {
   window._slideUntil = 0;
   const reach = ab.reach || 2.6;
   let landed = 0;
+  if (window.PVP_BACKROOMS?.active) landed = window.PVP_BACKROOMS.melee({ ...item, damage: ab.damage, range: reach }, fwd) ? 1 : 0;
   for (const [pid, mesh] of Object.entries(remoteMeshes)) {
     if (!mesh.visible) continue;
     const dx = mesh.position.x - origin.x, dz = mesh.position.z - origin.z, d = Math.hypot(dx, dz);
@@ -46841,6 +46849,7 @@ function updateChainMaulSwing(dt) {
 }
 
 function tryMelee() {
+  if (window.PVP_BACKROOMS?.active && window.PVP_BACKROOMS.paused) return;
   if (batCrowdCharge || meleeSlam || meleeDash) return;
   if (!equipReady()) { equipNudge(); return; }   // ⏱️ it is still coming up
   if (SOCIAL_VIEW.mode) return;
@@ -46915,6 +46924,7 @@ function tryMelee() {
 
   if (soundId === 'chain_hammer') { startChainMaulSwing(item); return; }
   const forward = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion).normalize();
+  if (window.PVP_BACKROOMS?.active) { window.PVP_BACKROOMS.melee(item, forward); return; }
   let hitPos = null;
   for (const [pid, mesh] of Object.entries(remoteMeshes)) {
     if (!mesh.visible || players[pid]?.dead || friendlyFireBlocked(pid, myId)) continue;
@@ -59287,6 +59297,11 @@ function pilotableHere() {
 function syncInteractButton() {
   const btn = document.getElementById('btn-interact');
   if (!btn) return;
+  if (window.PVP_BACKROOMS?.active) {
+    btn.textContent = I18N.t('INTERACT');
+    btn.style.display = isTouchUI() && gameStarted ? 'flex' : 'none';
+    return;
+  }
   const pilot = pilotableHere();
   const service=inLobby && !nearTrashcan && lobbyServiceHere;
   const duel = !pilot && inLobby && !nearTrashcan && !!lobbyPadHere;
@@ -61312,7 +61327,7 @@ function runCountdown(seconds, onDone) {
 
 function startMatchRound() {
   if (!match) return;
-  if (match.type === 'campaign') return;
+  if (match.type === 'campaign' || match.type === 'backrooms') return;
   const owner=match,epoch=matchEpoch;
   // Show countdown, then actually start
   const doStart = () => {
@@ -61462,7 +61477,7 @@ function clearFeed() {
 
 function updateMatchHUD() {
   if (!match) return;
-  if (match.type === 'campaign') { document.getElementById('match-hud').style.display = 'none'; return; }
+  if (match.type === 'campaign' || match.type === 'backrooms') { document.getElementById('match-hud').style.display = 'none'; return; }
   const hud = document.getElementById('match-hud');
   hud.style.display = 'flex';
   const L = document.getElementById('match-left');
@@ -62730,7 +62745,7 @@ function checkRaceWin() {
 
 function updateMatchTimer(dt) {
   if (!match || !match.active || match.over) return;
-  if (match.type === 'campaign') return;
+  if (match.type === 'campaign' || match.type === 'backrooms') return;
   if (match.arcade === 'roulette' && match.roundActive && !isDead && Date.now() >= (match.rouletteNext || Infinity)) {
     match.rouletteNext = Date.now() + ROULETTE_MS;
     rouletteShuffle();
@@ -71043,6 +71058,7 @@ const btnInteract = document.getElementById('btn-interact');
 if (btnInteract) {
   // Same two jobs as the F key: swap loadout at a trashcan, or start / accept a lobby duel.
   const interact = () => {
+    if (window.PVP_BACKROOMS?.active) { window.PVP_BACKROOMS.interact(); return; }
     const pilot = pilotableHere();
     if (pilot === 'exit') { if (pilotedVehicle) exitVehicle(); else exitMortar(); }
     else if (nearTrashcan && !isDead && gameStarted && !fixedKitModeActive()) showLoadoutScreen('swap');
