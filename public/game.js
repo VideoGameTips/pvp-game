@@ -35838,50 +35838,57 @@ try { syncOffHands(); } catch (e) { console.warn('[offhand]', e); }
 
 const SKIN_IDS = SKINS.map(s => s.id);
 
-// 🧟 The zombie's own skin: nobody can wear it (it is not in SKINS), it is only what the dead in Zombie Survival look like.
-// Grey-green flesh with sunken, glowing red eyes and a torn, bloodied shirt and trousers: nothing like the operator.
-PIXEL_SKINS.zombie = (() => {
-  const FL = '#7fa66a', FS = '#628a52', FD = '#3f5c36', RAG = '#4b4439', RAGD = '#352f27', RAGL = '#5e5646', BL = '#7a1414', PANT = '#2c2f38', PANTD = '#1f2128';
-  const face = gridFace({ '.': FL, 's': FS, 'd': FD, 'K': '#0d0f0d', 'R': '#ff3030', 'r': '#a31818', 'B': BL, 'H': '#26261f', 'M': '#240c0c', 'T': '#cfd0a8' }, [
-    'dHHHHHHHHHHHHHHd',
-    'HHHsHHHHHHsHHHHH',
-    '.s.....s.....s..',
-    '................',
-    '..KKKK....KKKK..',
-    '..KRRK....KRRK..',
-    '..KKKK....KKKK..',
-    '....s......s....',
-    '.....s.BB.s.....',
-    '......BB........',
-    '..dd........dd..',
-    '...MMMMMMMMMM...',
-    '...MTMTMMTMTM...',
-    '...MMMMMMMMMM...',
-    '..s....BB....s..',
-    'ds............sd',
-  ]);
-  const tears = (p, base, tear, blood, spots) => { p(base, 0, 0, 16, 16); for (const [x, y, w, h, c] of spots) p(c === 'f' ? tear : c === 'b' ? blood : base, x, y, w, h); };
-  return {
-    hand: parseInt(FL.slice(1), 16), foot: '#2a2520',
-    head: {
-      front: face,
-      back: p => { p(FL, 0, 0, 16, 16); p('#26261f', 0, 0, 16, 5); p(FS, 3, 8, 3, 2); p(FD, 9, 10, 4, 2); },
-      side: p => { p(FL, 0, 0, 16, 16); p('#26261f', 0, 0, 16, 4); p(FS, 6, 8, 4, 3); p(BL, 10, 5, 2, 3); },
-      top: _solid('#26261f'), bottom: _solid(FS),
-    },
-    torso: {
-      front: p => tears(p, RAG, FL, BL, [[0, 0, 16, 2, 'x'], [2, 3, 5, 4, 'f'], [3, 5, 3, 2, 'b'], [9, 8, 5, 5, 'f'], [10, 9, 2, 2, 'b'], [0, 12, 16, 4, 'x'], [1, 13, 4, 3, 'f'], [11, 14, 5, 2, 'f']]),
-      back: p => tears(p, RAG, FL, BL, [[3, 2, 4, 5, 'f'], [8, 6, 5, 6, 'f'], [4, 4, 2, 2, 'b']]),
-      side: p => { p(RAG, 0, 0, 16, 16); p(RAGD, 0, 5, 16, 1); p(FL, 3, 9, 6, 4); },
-      top: _solid(RAG), bottom: _solid(PANTD),
-    },
-    armU: p => { p(RAG, 0, 0, 16, 7); p(FL, 0, 7, 16, 9); p(BL, 3, 9, 4, 3); p(RAGD, 0, 6, 16, 1); },
-    armF: p => { p(FL, 0, 0, 16, 16); p(FS, 0, 5, 16, 2); p(BL, 8, 9, 5, 3); p(FD, 2, 12, 3, 2); },
-    leg: p => { p(PANT, 0, 0, 16, 16); p(PANTD, 0, 7, 16, 1); p(FL, 4, 9, 5, 5); p(BL, 5, 10, 2, 2); },
-    shin: p => { p(PANT, 0, 0, 16, 9); p(FL, 0, 9, 16, 7); p(FS, 0, 12, 16, 1); p(BL, 9, 5, 4, 3); },
+// 🧟 The zombies' own skins: nobody can wear them (they are not in SKINS), they are only what the dead in Zombie Survival look like.
+// Plain green people in ordinary clothes: a T-shirt (four colours, so a crowd is not one body), trousers, short dark hair, and a
+// face that is nothing but two black dashes for eyes and a flat, downturned mouth. Nobody is happy to be here.
+const ZOMBIE_SKIN_IDS = ['zombie', 'zombie_b', 'zombie_c', 'zombie_d'];
+(() => {
+  const SK = '#74b95b', SS = '#5f9f48', HAIR = '#2b2a22', EYE = '#0d0f0d';
+  const mk = (shirt, shirtDk, pants) => {
+    const face = gridFace({ '.': SK, 's': SS, 'H': HAIR, 'K': EYE }, [
+      'HHHHHHHHHHHHHHHH',
+      'HHHHHHHHHHHHHHHH',
+      'HH............HH',
+      '................',
+      '................',
+      '................',
+      '..KKK......KKK..',
+      '................',
+      '.......ss.......',
+      '................',
+      '................',
+      '....KKKKKKKK....',
+      '...K........K...',
+      '................',
+      '................',
+      'ss............ss',
+    ]);
+    return {
+      hand: parseInt(SK.slice(1), 16), foot: '#2a2622',
+      head: {
+        front: face,
+        back: p => { p(SK, 0, 0, 16, 16); p(HAIR, 0, 0, 16, 7); },
+        side: p => { p(SK, 0, 0, 16, 16); p(HAIR, 0, 0, 16, 5); p(SS, 6, 9, 4, 2); },
+        top: _solid(HAIR), bottom: _solid(SS),
+      },
+      torso: {
+        front: p => { p(shirt, 0, 0, 16, 16); p(SK, 5, 0, 6, 2); p(shirtDk, 5, 2, 6, 1); },      // a plain T-shirt with a round neck
+        back: p => { p(shirt, 0, 0, 16, 16); p(shirtDk, 4, 0, 8, 1); },
+        side: p => { p(shirt, 0, 0, 16, 16); },
+        top: _solid(shirt), bottom: _solid(pants),
+      },
+      armU: p => { p(shirt, 0, 0, 16, 9); p(SK, 0, 9, 16, 7); p(shirtDk, 0, 8, 16, 1); },       // a short sleeve
+      armF: p => { p(SK, 0, 0, 16, 16); },
+      leg: p => { p(pants, 0, 0, 16, 16); },
+      shin: p => { p(pants, 0, 0, 16, 16); p('#1d2028', 0, 13, 16, 3); },
+    };
   };
+  PIXEL_SKINS.zombie   = mk('#3b6fb6', '#2f5a96', '#3a4258');
+  PIXEL_SKINS.zombie_b = mk('#c4453a', '#a23a31', '#4b4638');
+  PIXEL_SKINS.zombie_c = mk('#d4b63e', '#b29a34', '#3a4258');
+  PIXEL_SKINS.zombie_d = mk('#7b818b', '#646a74', '#2f3340');
+  for (const id of ZOMBIE_SKIN_IDS) PIXEL_SKINS[id]._id = id;
 })();
-PIXEL_SKINS.zombie._id = 'zombie';
 
 // ═══ 🎨 SKIN PIXELIZER ═══════════════════════════════════════════════════════════════════════════════════════════════
 // An editor for pixel skins, for the admin account (F2 -> SKIN PIXELIZER). Two kinds of skin, one grid:
@@ -58897,7 +58904,7 @@ function humanTagKind(p) {
   return null;
 }
 function renderedSkinForPlayer(p, skin = p && p.skin) {
-  if (p && p.isBot && selectedModeConfig?.type !== 'lobby') return p.skin === 'zombie' && PIXEL_SKINS.zombie ? 'zombie' : 'default';   // (a zombie has a skin of its own)
+  if (p && p.isBot && selectedModeConfig?.type !== 'lobby') return ZOMBIE_SKIN_IDS.includes(p.skin) && PIXEL_SKINS[p.skin] ? p.skin : 'default';   // (a zombie has a skin of its own)
   const rc = _remoteCustomSkin(p, skin);
   if (rc) return rc;
   return resolveSkinId(skin);
@@ -63444,7 +63451,7 @@ function zombieSpawnPoint() {
 function zombieSpawn() {
   const Z = match.zombie, sp = zombieSpawnPoint(), id = `zombie_${Date.now()}_${Z.n++}`;
   const hp = zombieHpFor(Z.wave);
-  const pData = { id, name: 'Zombie', isBot: true, team: 'enemy', weaponId: null, ownerId: myId, skin: 'zombie',
+  const pData = { id, name: 'Zombie', isBot: true, team: 'enemy', weaponId: null, ownerId: myId, skin: ZOMBIE_SKIN_IDS[Math.floor(Math.random() * ZOMBIE_SKIN_IDS.length)],
                   x: sp.x, y: 1, z: sp.z, rotY: 0, rotX: 0, hp, maxHp: hp, dead: false, kills: 0, deaths: 0 };
   players[id] = pData;
   spawnRemotePlayer(pData);

@@ -2923,9 +2923,10 @@ if (ok && process.argv.includes('--zombie')) {
       for (const b of gameBots.slice()) zombieRemove(b);
       Z.toSpawn = 0;
       // its own skin, and a claw that hurts
-      if (!PIXEL_SKINS.zombie || SKIN_IDS.includes('zombie')) issues.push('the zombie needs a skin of its own that nobody can wear');
+      if (!ZOMBIE_SKIN_IDS.every(id => PIXEL_SKINS[id] && !SKIN_IDS.includes(id))) issues.push('the zombies need skins of their own that nobody can wear');
       const zz = gameBots.find(b => b.zombie) || zombieSpawn();
-      if (players[zz.id].skin !== 'zombie' || renderedSkinForPlayer(players[zz.id]) !== 'zombie') issues.push('a zombie should be drawn in the zombie skin');
+      if (!ZOMBIE_SKIN_IDS.includes(players[zz.id].skin) || renderedSkinForPlayer(players[zz.id]) !== players[zz.id].skin) issues.push('a zombie should be drawn in a zombie skin');
+      { const kinds = new Set(); for (let i = 0; i < 40; i++) { const zq = zombieSpawn(); kinds.add(players[zq.id].skin); zombieRemove(zq); } if (kinds.size < 3) issues.push('a crowd of zombies should not all wear one shirt: ' + [...kinds]); }
       if (getClientWeaponDamage('zombie_claw') < 30) issues.push('the claw should hit for 30, got ' + getClientWeaponDamage('zombie_claw'));
       // a zombie walks to you ...
       const z1 = zombieSpawn(); z1.x = 8; z1.z = 0; z1.zSpeed = 3; remoteMeshes[z1.id].position.set(8, 0, 0);
