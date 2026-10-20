@@ -2867,11 +2867,41 @@ if (ok && process.argv.includes('--zombie')) {
     let ended = null; endMatch = (w, why) => { ended = { w, why }; if (match) match.over = true; };
     try {
       gameStarted = true; isDead = false; gameBots.length = 0; wallColliders.length = 0;
-      activateMap('blank'); wallColliders.length = 0;
+      // the map: one straight tunnel about eighteen times an ordinary map, connected from end to end
+      {
+        const tb = MAP_BOUNDS.zombie_tunnel, areas = MAP_IDS.filter(m => !DUEL_ONLY_MAPS.has(m) && MAP_BOUNDS[m]).map(m => MAP_BOUNDS[m].halfX * MAP_BOUNDS[m].halfZ * 4).sort((a, b) => a - b);
+        const ratio = tb ? tb.halfX * tb.halfZ * 4 / areas[Math.floor(areas.length / 2)] : 0;
+        if (!tb || ratio < 16 || ratio > 21) issues.push('the tunnel should be about 18 times an ordinary map, got x' + ratio.toFixed(1));
+        if (tb && tb.halfZ < tb.halfX * 20) issues.push('the tunnel should be long and straight, not ' + tb.halfX * 2 + ' x ' + tb.halfZ * 2);
+        activateMap('zombie_tunnel');
+        if (wallColliders.length < 600 || wallColliders.length > 4000) issues.push('the tunnel has ' + wallColliders.length + ' colliders');
+        const g = _botNavGrid();
+        if (!g) issues.push('no nav grid on the tunnel');
+        else {
+          const at = (x, z) => Math.floor((z - g.z0) / g.cell) * g.W + Math.floor((x - g.x0) / g.cell);
+          _botNavFill(g, at(0, -tb.halfZ + 56));
+          if (!(g.dist[at(0, tb.halfZ - 56)] >= 0)) issues.push('the tunnel is not walkable from one end to the other');
+        }
+        const sp0 = MAP_SPAWNS.zombie_tunnel.ally, wk = MAP_ZOMBIE_WAKE.zombie_tunnel;
+        if (!sp0 || !wk || wk.z > sp0.z0 || wk.z < tb.halfZ - 600) issues.push('you should wake a few hundred metres into the tunnel from the start');
+        // around the player the dead appear ahead and behind (never at the far end)
+        camera.position.set(0, 1.65, 700);
+        let tooFar = 0, tooNear = 0, ahead = 0, behind = 0;
+        for (let i = 0; i < 200; i++) { const p = zombieSpawnPoint(); const d = Math.hypot(p.x, p.z - 700); if (d > 100) tooFar++; if (d < 30) tooNear++; if (p.z < 700) ahead++; else behind++; }
+        if (tooFar) issues.push('zombies spawned far from you in the tunnel (' + tooFar + ' of 200)');
+        if (tooNear) issues.push('zombies spawned on top of you (' + tooNear + ' of 200)');
+        if (ahead < 40 || behind < 40) issues.push('the dead should come from both directions: ' + ahead + ' ahead, ' + behind + ' behind');
+        // what is left far behind is let go
+        { const keep = match; match = { type: 'arcade', cfg: GAME_MODE_CONFIGS.zombies, ffaKills: {}, teamKills: { ally: 0, enemy: 0 }, zombie: { phase: 'fight', toSpawn: 3, wave: 1, waveStartedAt: Date.now(), nextSpawnAt: Date.now() + 99999, kills: 0, best: 0 }, arcade: 'zombie', roundActive: true, over: false };
+          const far = zombieSpawn(); far.x = 0; far.z = 1200; camera.position.set(0, 1.65, 700); updateZombieMode(0.016);
+          if (gameBots.includes(far)) issues.push('a zombie 500 m behind you should be let go'); for (const b of gameBots.slice()) if (b.zombie) zombieRemove(b); match = keep; }
+      }
+      activateMap('blank'); wallColliders.length = 0; camera.position.set(0, 1.65, 0);
       players[myId] = { hp: 300, team: 'ally' };
       selectedModeConfig = GAME_MODE_CONFIGS.zombies;
       if (!selectedModeConfig || selectedModeConfig.subtype !== 'zombie') { issues.push('there is no zombies mode'); return issues; }
-      if (selectedModeConfig.forcedMap !== 'blank' || modeUsesMapChoice(selectedModeConfig)) issues.push('Zombie Survival should be stuck to the Classic map (no map vote)');
+      if (selectedModeConfig.forcedMap !== 'zombie_tunnel' || modeUsesMapChoice(selectedModeConfig)) issues.push('Zombie Survival should be stuck to its own map, the tunnel (no map vote)');
+      if (MAP_IDS.includes('zombie_tunnel')) issues.push('the tunnel must not be in MAP_IDS: no other mode may be dealt it');
       const lightBefore = { amb: mapAmbient.intensity, sun: sun.intensity, bg: scene.background.getHex() };
       initMatch(); match.roundActive = true; match.active = true;
       if (!(mapAmbient.intensity <= 0.1 && sun.intensity <= 0.2 && scene.background.getHex() < 0x101018)) issues.push('the map should be dark: ambient ' + mapAmbient.intensity + ' sun ' + sun.intensity + ' sky ' + scene.background.getHex().toString(16));

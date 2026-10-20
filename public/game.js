@@ -1504,7 +1504,7 @@ const GAME_MODE_CONFIGS = {
   'dice_duel':  { type: 'arcade', subtype: 'dice',     allies: 0, enemies: 1, timeLimit: 0,   arcade: true }, // 🎲 roll a weapon, re-roll at a price
   'roulette':   { type: 'arcade', subtype: 'roulette', allies: 0, enemies: 5, timeLimit: 240, arcade: true }, // 🔄 a new random gun every 20 s
   'rocket_rumble': { type: 'arcade', subtype: 'rumble', allies: 0, enemies: 5, timeLimit: 240, arcade: true }, // 💥 rockets only
-  'zombies':    { type: 'arcade', subtype: 'zombie',  allies: 0, enemies: 0, timeLimit: 0,   arcade: true, playerHp: 300, forcedMap: 'blank' }, // 🧟 endless waves on the Classic arena, in the dark; fists only, the dead drop the rest
+  'zombies':    { type: 'arcade', subtype: 'zombie',  allies: 0, enemies: 0, timeLimit: 0,   arcade: true, playerHp: 300, forcedMap: 'zombie_tunnel' }, // 🧟 endless waves down a giant straight tunnel, in the dark; fists only, the dead drop the rest
 };
 let selectedModeConfig = null;
 const gameBots = [];       // {id, team, weaponId, x, z, rotY, hp, dead, state, wanderAngle, wanderTimer, lastShot, lastBotMove}
@@ -6657,6 +6657,120 @@ buildDuelMap('duel_platform', {
     [40, -50, 16, DUEL_HIGH_WALL, 1.6, 'tall'], [-36, -90, 1.6, DUEL_HIGH_WALL, 16, 'tall'], [58, 20, 1.6, DUEL_HIGH_WALL, 16, 'tall'],
   ],
 });
+
+// ── 🧟 THE TUNNEL: the map Zombie Survival is played on ──────────────────────────────────────────────────
+// One straight tunnel, 72 m wide and 4.6 km long: about eighteen times the floor of an ordinary map, all in a line. It is
+// built from 44 m sections drawn from a seeded list (so it is the same for everyone): pillar rows, staggered barricades,
+// fallen rubble, a raised walkway with ramps at both ends, container yards, side alcoves and a wide open stretch, with a
+// high checkpoint wall (a 12 m door) every ten sections. You start in the intact entrance hall at the south end; after the
+// fall in the story you wake 260 m into the tunnel proper, and the dead come at you from ahead and behind.
+// It is not in MAP_IDS on purpose: it is only ever the forced map of Zombie Survival, so no other mode is dealt it.
+const ZOMBIE_MAP = 'zombie_tunnel';
+const TUNNEL_W = 72, TUNNEL_L = 4620, TUNNEL_H = 16, TUNNEL_MOD = 44;
+const MAP_ZOMBIE_WAKE = {};
+const MAP_ZOMBIE_LAMPS = {};   // where the tunnel's lamps hang (z of each section): a few real lights are moved to the ones nearest you
+function buildZombieTunnel() {
+  const name = ZOMBIE_MAP;
+  registerMap(name);
+  setMapBounds(name, TUNNEL_W, TUNNEL_L);
+  const G = MAP_GROUPS[name], HX = TUNNEL_W / 2, HZ = TUNNEL_L / 2;
+  const rnd = _thRng(name + ':layout');
+  const R = (a, b) => a + rnd() * (b - a), pickOf = arr => arr[Math.floor(rnd() * arr.length)];
+  const C = { wall: 0x262a2f, cover: 0x3a3f46, tall: 0x2f343b, rust: 0x4a3426, hi: 0x64583f, dark: 0x101214 };
+  const tex = _duelGridTexture('#16181b', '#1f2226', '#2c3036');
+  tex.repeat.set(TUNNEL_W / 4, TUNNEL_L / 4);
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(TUNNEL_W, TUNNEL_L), new THREE.MeshLambertMaterial({ map: tex }));
+  ground.rotation.x = -Math.PI / 2; G.add(ground);
+  const hallFloor = new THREE.Mesh(new THREE.PlaneGeometry(TUNNEL_W, TUNNEL_MOD * 3 + 4), new THREE.MeshLambertMaterial({ color: 0x3a3f46 }));   // the entrance hall's floor is lighter: it is the part that still holds
+  hallFloor.rotation.x = -Math.PI / 2; hallFloor.position.set(0, 0.012, HZ - (TUNNEL_MOD * 3 + 4) / 2); G.add(hallFloor);
+  // the long walls, the end walls and the ceiling (a ceiling you can see from inside and cannot rocket-jump through)
+  addMapBox(name, -HX - 1, (TUNNEL_H + 1) / 2, 0, 2, TUNNEL_H + 1, TUNNEL_L + 4, C.wall);
+  addMapBox(name,  HX + 1, (TUNNEL_H + 1) / 2, 0, 2, TUNNEL_H + 1, TUNNEL_L + 4, C.wall);
+  addMapBox(name, 0, (TUNNEL_H + 1) / 2, -HZ - 1, TUNNEL_W + 4, TUNNEL_H + 1, 2, C.wall);
+  addMapBox(name, 0, (TUNNEL_H + 1) / 2,  HZ + 1, TUNNEL_W + 4, TUNNEL_H + 1, 2, C.wall);
+  addMapBox(name, 0, TUNNEL_H + 0.5, 0, TUNNEL_W + 4, 1, TUNNEL_L + 4, C.dark);
+  const box = (x, z, w, h, d, col, e = 0, rot = 0) => addMapBox(name, x, e + h / 2, z, w, h, d, col, rot);
+  const lamp = (x, z, len = 7) => {                      // an emissive strip on the ceiling: the only light the tunnel has of its own
+    const m = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.3, len), new THREE.MeshLambertMaterial({ color: 0x1c1c1c, emissive: 0xffc46a, emissiveIntensity: 1.15 }));
+    m.position.set(x, TUNNEL_H - 0.35, z); m.userData.mapStatic = true; G.add(m);
+  };
+  const SECTION = {
+    hall(zc) {                                            // the intact entrance hall: pillars, benches, bright strips
+      for (const x of [-26, -12, 12, 26]) for (const dz of [-14, 14]) box(x, zc + dz, 2.4, TUNNEL_H, 2.4, C.tall);
+      for (const s of [-1, 1]) for (const dz of [-8, 8]) box(s * 31, zc + dz, 3, 0.9, 9, C.cover);
+      for (const x of [-22, 0, 22]) lamp(x, zc, 12);
+    },
+    gate(zc) {                                            // a checkpoint wall with a 12 m door
+      box(-21, zc, 30, 11.5, 2, C.wall); box(21, zc, 30, 11.5, 2, C.wall);
+      box(-6.6, zc, 2.4, 14, 3, C.tall); box(6.6, zc, 2.4, 14, 3, C.tall);
+      box(0, zc, 12, 4, 2, C.rust, 11.5);                 // a lintel over the door
+      lamp(-10, zc + 4, 5); lamp(10, zc + 4, 5); lamp(-10, zc - 4, 5); lamp(10, zc - 4, 5);
+    },
+    pillars(zc) {
+      for (const x of [-26, -14, 14, 26]) for (const dz of [-16, -8, 0, 8, 16]) if (rnd() > 0.25) box(x, zc + dz, 2.4, TUNNEL_H, 2.4, C.tall);
+      if (rnd() > 0.4) box(R(-6, 6), zc + R(-12, 12), 6, 1.2, 1.2, C.cover);
+      for (const x of [-22, 0, 22]) lamp(x, zc);
+    },
+    barricade(zc) {
+      box(-19, zc - 14, 34, 1.3, 1.4, C.cover); box(19, zc, 34, 1.3, 1.4, C.cover); box(-19, zc + 14, 34, 1.3, 1.4, C.cover);
+      box(-30, zc + 6, 3.4, 2.2, 3.4, C.hi); box(30, zc - 8, 3.4, 2.2, 3.4, C.rust);
+      for (const x of [-22, 0, 22]) lamp(x, zc);
+    },
+    rubble(zc) {
+      const n = 12 + Math.floor(rnd() * 6);
+      for (let i = 0; i < n; i++) {
+        const w = R(2, 6.5), d = R(2, 6), h = R(0.8, 2.6), x = R(-31, 31), z = zc + R(-19, 19);
+        box(x, z, w, h, d, pickOf([C.cover, C.rust, C.tall]), 0, rnd() < 0.25 ? R(-0.7, 0.7) : 0);
+      }
+      lamp(R(-24, 24), zc + R(-10, 10));
+    },
+    deck(zc) {                                            // a raised walkway down the middle: high ground, with a ramp up at each end
+      box(0, zc, 12, 2.6, 28, C.hi);
+      box(-5.8, zc, 0.4, 1.0, 28, C.cover, 2.6); box(5.8, zc, 0.4, 1.0, 28, C.cover, 2.6);
+      const opt = { width: 8, rise: 2.6, run: 8, landing: 0, color: C.cover, landColor: C.hi, lipColor: 0xffc46a };
+      addRamp(name, 0, zc + 22, 0, -1, opt); addRamp(name, 0, zc - 22, 0, 1, opt);
+      box(-28, zc - 8, 3.4, 2.2, 3.4, C.rust); box(28, zc + 8, 3.4, 2.2, 3.4, C.hi);
+      for (const x of [-22, 0, 22]) lamp(x, zc);
+    },
+    containers(zc) {
+      for (const s of [-1, 1]) for (let i = 0; i < 4; i++) {
+        if (rnd() < 0.2) continue;
+        box(s * (i % 2 ? 25 : 12), zc + (i - 1.5) * 9, 3.2, 2.6, R(7, 11), pickOf([C.rust, C.hi, C.cover]));
+      }
+      box(R(-5, 5), zc + R(-8, 8), 3.4, 1.4, 3.4, C.cover);
+      for (const x of [-22, 0, 22]) lamp(x, zc);
+    },
+    alcoves(zc) {
+      for (const s of [-1, 1]) for (const dz of [-14, 0, 14]) {
+        box(s * 28, zc + dz - 5, 9, 4.5, 1.2, C.tall); box(s * 28, zc + dz + 5, 9, 4.5, 1.2, C.tall);
+        if (rnd() > 0.3) box(s * 33, zc + dz, 3, 1.6, 3, C.rust);
+      }
+      lamp(0, zc, 10);
+    },
+    open(zc) {
+      for (const x of [-18, 18]) for (const dz of [-10, 10]) box(x, zc + dz, 3.2, TUNNEL_H, 3.2, C.tall);
+      box(R(-8, 8), zc + R(-6, 6), 5, 1.3, 1.3, C.cover);
+      for (const x of [-22, 0, 22]) lamp(x, zc);
+    },
+  };
+  const SEQ = ['pillars', 'barricade', 'rubble', 'rubble', 'deck', 'containers', 'alcoves', 'open'];
+  const COUNT = Math.floor(TUNNEL_L / TUNNEL_MOD);
+  let prev = '';
+  const lampZs = [];
+  for (let k = 0; k < COUNT; k++) {
+    const zc = HZ - k * TUNNEL_MOD - TUNNEL_MOD / 2;
+    let kind;
+    if (k < 3) kind = 'hall';
+    else if (k === 3 || k % 10 === 0) kind = 'gate';
+    else { do { kind = pickOf(SEQ); } while (kind === prev); }
+    SECTION[kind](zc); prev = kind; lampZs.push(zc);
+  }
+  MAP_ZOMBIE_LAMPS[name] = lampZs;
+  MAP_SPAWNS[name] = { ally: { x0: -6, x1: 6, z0: HZ - 62, z1: HZ - 52 }, enemy: { x0: -6, x1: 6, z0: -HZ + 52, z1: -HZ + 62 } };
+  MAP_ZOMBIE_WAKE[name] = { x: 0, z: HZ - TUNNEL_MOD * 3 - 140 };
+  G._skyColor = 0x020309;
+}
+buildZombieTunnel();
 
 // ── 🧵 One draw call per colour, per map (#66) ──────────────────────────────
 // A map is cheap in triangles and ruinous in draw calls: super_arena is 3,080
@@ -61437,7 +61551,8 @@ function updateMatchHUD() {
       const Z = match.zombie || { wave: 0, kills: 0 };
       L.textContent = Z.phase === 'story' ? 'THE RAID' : Z.wave ? `WAVE ${Z.wave}` : 'GET READY';
       C.textContent = Z.phase === 'story' ? '🧟 ZOMBIE SURVIVAL' : `🧟 ${gameBots.filter(b => b.zombie && !b.dead).length + (Z.toSpawn || 0)} LEFT`;
-      R.textContent = `KILLS ${Z.kills}`;
+      const longMap = Math.max(getMapBoundsRect().halfX, getMapBoundsRect().halfZ) > 300;
+      R.textContent = `KILLS ${Z.kills}` + (longMap && Z.phase !== 'story' ? ` · ${Math.max(0, Math.round(getMapBoundsRect().halfZ - 62 - camera.position.z))} m` : '');
     } else if (sub === 'dice') {
       const d = match.dice || { score: { me: 0, bot: 0 }, goal: DICE_GOAL };
       L.textContent = `YOU ${d.score.me} – ${d.score.bot} BOT`;
@@ -63383,7 +63498,15 @@ function zombieHpFor(w) { return Math.min(420, 55 + w * 13); }
 function zombieSpeedFor(w) { return Math.min(6.0, 2.9 + w * 0.2) * (0.9 + Math.random() * 0.2); }
 const zombiePickups = [];
 // The whole map goes dark: a night with a thin moon, and a small headlamp of your own for what is right in front of you.
-let _zombieLights = null, _zombieLamp = null;
+let _zombieLights = null, _zombieLamp = null, _zombiePool = null;
+// A tunnel kilometres long cannot have a real light for every lamp, so four are moved along with you: each frame they hang on
+// the four lamps nearest to where you are (two ahead, two behind), and everything else is the dark.
+function zombieUpdateLamps() {
+  const zs = MAP_ZOMBIE_LAMPS[activeMapName];
+  if (!_zombiePool || !zs) return;
+  const z = camera.position.z, near = zs.map(v => [Math.abs(v - z), v]).sort((a, b) => a[0] - b[0]).slice(0, _zombiePool.length);
+  for (let i = 0; i < _zombiePool.length; i++) { const l = _zombiePool[i], n = near[i]; if (n) { l.position.set(0, 13.5, n[1]); l.intensity = 42; } else l.intensity = 0; }
+}
 function zombieDarken(on) {
   if (on) {
     if (!_zombieLights) _zombieLights = { bg: scene.background && scene.background.getHex ? scene.background.getHex() : null,
@@ -63396,6 +63519,8 @@ function zombieDarken(on) {
     if (typeof ATMO !== 'undefined' && ATMO.dome) ATMO.dome.visible = false;
     if (!_zombieLamp) { _zombieLamp = new THREE.PointLight(0xdfe8ff, 0, 17, 1.5); _zombieLamp.position.set(0.05, 0.1, -0.6); camera.add(_zombieLamp); }
     _zombieLamp.intensity = 1.25;
+    if (!_zombiePool) { _zombiePool = [0, 1, 2, 3].map(() => { const l = new THREE.PointLight(0xffc27a, 0, 58, 1.3); scene.add(l); return l; }); }
+    zombieUpdateLamps();
   } else if (_zombieLights) {
     try { applyMapLighting(activeMapName); } catch (e) {}
     mapAmbient.color.setHex(_zombieLights.ambCol);
@@ -63403,6 +63528,7 @@ function zombieDarken(on) {
     if (_zombieLights.fog && scene.fog) { scene.fog.color.setHex(_zombieLights.fog.c); scene.fog.near = _zombieLights.fog.n; scene.fog.far = _zombieLights.fog.f; }
     if (_zombieLights.fog0 && typeof ATMO !== 'undefined') ATMO.fog0 = _zombieLights.fog0;
     if (_zombieLamp) _zombieLamp.intensity = 0;
+    if (_zombiePool) for (const l of _zombiePool) l.intensity = 0;
     _zombieLights = null;
   }
 }
@@ -63435,9 +63561,12 @@ function zombieStart() {
 function zombieSpawnPoint() {
   const b = MAP_BOT_BOUNDS[activeMapName] || getMapBoundsRect();
   const hx = Math.max(6, b.halfX - 4), hz = Math.max(6, b.halfZ - 4);
-  const minFar = Math.min(26, Math.min(hx, hz) * 0.5);
-  for (let i = 0; i < 50; i++) {
-    const x = (Math.random() * 2 - 1) * hx, zz = (Math.random() * 2 - 1) * hz;
+  const long = Math.max(b.halfX, b.halfZ) > 300;         // a tunnel kilometres long: they come out of the dark ahead of you and behind you, never from the far end
+  const minFar = long ? 34 : Math.min(26, Math.min(hx, hz) * 0.5);
+  for (let i = 0; i < 60; i++) {
+    let x, zz;
+    if (long) { x = (Math.random() * 2 - 1) * hx; zz = camera.position.z + (Math.random() < 0.5 ? -1 : 1) * (34 + Math.random() * 56); zz = Math.max(-hz, Math.min(hz, zz)); }
+    else { x = (Math.random() * 2 - 1) * hx; zz = (Math.random() * 2 - 1) * hz; }
     if (Math.hypot(x - camera.position.x, zz - camera.position.z) < minFar) continue;
     if (!floorExistsAt(x, zz)) continue;
     const [rx, rz] = resolvePosCollisions(x, zz, 0);
@@ -63522,34 +63651,65 @@ function storyUi() {
   dark.style.cssText = 'position:absolute;inset:0;background:#000;opacity:0';
   const noise = document.createElement('canvas'); noise.width = 96; noise.height = 54;
   noise.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated;opacity:0;mix-blend-mode:screen';
-  const line = document.createElement('div');
-  line.style.cssText = 'position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(760px,88vw);text-align:center;color:#a8ffa8;font-size:clamp(16px,2.6vw,26px);line-height:1.5;letter-spacing:1px;text-shadow:0 0 10px rgba(120,255,140,.55);white-space:pre-wrap';
-  const sub = document.createElement('div');
-  sub.style.cssText = 'position:absolute;left:50%;bottom:16%;transform:translateX(-50%);width:min(820px,90vw);text-align:center;font-size:clamp(14px,2vw,20px);color:#fff;text-shadow:0 2px 6px #000,0 0 3px #000;opacity:0;transition:opacity .35s';
+  // The radio: a panel across the top with a face on it and the words beside it. The face is yours when you are the one
+  // talking, and the squad member's when one of them is.
+  const comm = document.createElement('div');
+  comm.style.cssText = 'position:absolute;left:50%;top:3.5%;transform:translateX(-50%);width:min(780px,92vw);box-sizing:border-box;display:flex;gap:14px;align-items:stretch;padding:10px 14px 10px 10px;background:rgba(5,16,9,.88);border:2px solid #3f8a4e;border-radius:6px;box-shadow:0 0 22px rgba(80,255,120,.18),inset 0 0 30px rgba(0,0,0,.6);opacity:0;transition:opacity .2s';
+  const faceBox = document.createElement('div');
+  faceBox.style.cssText = 'position:relative;flex:none;width:72px;height:72px;border:2px solid #5fbf70;background:#0a140c;overflow:hidden';
+  const face = document.createElement('canvas'); face.width = 64; face.height = 64;
+  face.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated;filter:saturate(.7) contrast(1.1) brightness(.95)';
+  const faceNoise = document.createElement('canvas'); faceNoise.width = 24; faceNoise.height = 24;
+  faceNoise.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated;opacity:0;mix-blend-mode:screen';
+  faceBox.appendChild(face); faceBox.appendChild(faceNoise);
+  const col = document.createElement('div');
+  col.style.cssText = 'flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center';
+  const who = document.createElement('div');
+  who.style.cssText = 'font:700 11px "Courier New",monospace;letter-spacing:3px;color:#ffcc66;margin-bottom:5px';
+  const text = document.createElement('div');
+  text.style.cssText = 'color:#b8ffb8;font-size:clamp(14px,2.1vw,21px);line-height:1.4;letter-spacing:.5px;text-shadow:0 0 8px rgba(120,255,140,.45);min-height:2.8em;white-space:pre-wrap';
+  col.appendChild(who); col.appendChild(text);
+  comm.appendChild(faceBox); comm.appendChild(col);
   const skip = document.createElement('button');
   skip.textContent = 'SKIP ▶  (Enter)';
   skip.style.cssText = 'position:absolute;right:18px;bottom:18px;pointer-events:auto;background:rgba(0,0,0,.55);color:#9fdc9f;border:1px solid #4a7a4a;padding:8px 14px;font:700 12px "Courier New",monospace;letter-spacing:2px;cursor:pointer;border-radius:3px';
   const onSkip = e => { try { e.preventDefault(); e.stopPropagation(); } catch (x) {} zombieStorySkip(); };
   skip.addEventListener('click', onSkip); skip.addEventListener('touchstart', onSkip, { passive: false });
-  for (const el of [dark, noise, line, sub, skip]) root.appendChild(el);
+  for (const el of [dark, noise, comm, skip]) root.appendChild(el);
   document.body.appendChild(root);
-  _storyUi = { root, dark, noise, line, sub, skip };
+  _storyUi = { root, dark, noise, comm, face, faceNoise, who, text, skip };
   return _storyUi;
+}
+// Draw somebody's face (the front of their head texture, 16 x 16 texels) into the panel. YOUR face is your own skin's.
+function storyDrawFace(U, who) {
+  const c = U.face.getContext && U.face.getContext('2d'); if (!c) return;
+  let art = null;
+  if (who === 'YOU') { try { art = PIXEL_SKINS[resolveSkinId(mySkin)] || PIXEL_SKINS[mySkin]; } catch (e) {} }
+  art = art || PIXEL_SKINS.default;
+  c.imageSmoothingEnabled = false;
+  c.fillStyle = '#16301b'; c.fillRect(0, 0, 64, 64);
+  try { art.head.front((col, x, y, w, h) => { c.fillStyle = col; c.fillRect(x * 4, y * 4, w * 4, h * 4); }); } catch (e) {}
+}
+// A line comes over the radio: the face and the name go up with a crackle, and the words come after.
+function storyComm(who, label, visible) {
+  const U = storyUi(); if (!U) return;
+  if (U.shownWho !== who) { U.shownWho = who; storyDrawFace(U, who); }
+  U.who.textContent = label;
+  U.comm.style.opacity = visible ? '1' : '0';
 }
 function storyShowSub(who, text, ms) {
   const U = storyUi(); if (!U) return;
-  U.sub.textContent = '';
-  const b = document.createElement('b'), t = document.createElement('span');
-  b.textContent = who + '  '; b.style.color = '#ffcc66'; t.textContent = text;
-  U.sub.appendChild(b); U.sub.appendChild(t);
-  U.sub.style.opacity = '1';
+  storyComm(who === 'YOU' ? 'YOU' : who, who === 'YOU' ? 'YOU · RADIO LOG' : who + ' · SQUAD RADIO', true);
+  U.text.textContent = text;
   const S = match && match.zombie && match.zombie.story; if (S) S.subUntil = S.t + ms;
 }
-function storyNoiseFrame(U, strength) {
-  const c = U.noise.getContext && U.noise.getContext('2d'); if (!c || !c.createImageData) return;
-  const img = c.createImageData(96, 54), d = img.data;
-  for (let i = 0; i < d.length; i += 4) { const v = Math.random() * 255; d[i] = v * 0.6; d[i + 1] = v; d[i + 2] = v * 0.7; d[i + 3] = 255; }
-  c.putImageData(img, 0, 0); U.noise.style.opacity = String(strength);
+function storyNoiseFrame(U, strength, faceStrength) {
+  for (const [cv, w, h, st] of [[U.noise, 96, 54, strength], [U.faceNoise, 24, 24, faceStrength == null ? 0 : faceStrength]]) {
+    const c = cv.getContext && cv.getContext('2d'); if (!c || !c.createImageData) continue;
+    const img = c.createImageData(w, h), d = img.data;
+    for (let i = 0; i < d.length; i += 4) { const v = Math.random() * 255; d[i] = v * 0.6; d[i + 1] = v; d[i + 2] = v * 0.7; d[i + 3] = 255; }
+    c.putImageData(img, 0, 0); cv.style.opacity = String(st);
+  }
 }
 function zombieSpawnSquad(i) {
   const def = ZOMBIE_SQUAD[i], id = `squad_${Date.now()}_${i}`, a = Math.PI + (i - 1.5) * 0.8, r = 2.6 + (i % 2) * 1.1;
@@ -63588,9 +63748,21 @@ function zombieStoryStart() {
   const Z = match.zombie;
   for (let i = 0; i < ZOMBIE_SQUAD.length; i++) zombieSpawnSquad(i);
   Z.story = { phase: 'approach', t: 0, t0: 0, line: 0, props: [], at: null, subUntil: 0, lineAt: 0, nextCrackle: 0, keyPrev: true, fallV: 0, rumble: false, skipped: false };
-  const U = storyUi(); U.root.style.display = 'block'; U.dark.style.opacity = '0'; U.noise.style.opacity = '0'; U.line.textContent = ''; U.sub.style.opacity = '0';
+  const U = storyUi(); U.root.style.display = 'block'; U.dark.style.opacity = '0'; U.noise.style.opacity = '0'; U.comm.style.opacity = '0'; U.text.textContent = ''; U.shownWho = null;
   U.skip.style.display = '';
   showAnnouncement('🧟 ZOMBIE SURVIVAL', 'Endless waves · a squad, a raid, and something wrong with the place', '#66dd66', 2600);
+}
+// The nearest spot to (x, z) with nothing solid on it, searched outward.
+function zombieFreeSpot(x, z) {
+  for (let r = 0; r < 30; r += 1.5) for (let a = 0; a < (r ? 12 : 1); a++) {
+    const px = x + Math.cos(a * Math.PI / 6) * r, pz = z + Math.sin(a * Math.PI / 6) * r, [rx, rz] = resolvePosCollisions(px, pz, 0);
+    if (Math.hypot(rx - px, rz - pz) < 0.02 && floorExistsAt(px, pz) && botGroundYAt(px, pz, 0, 1.05, 2.2) < 0.4) {
+      // and room for a squad around it
+      let ok = true; for (let q = 0; q < 8 && ok; q++) { const bx = px + Math.cos(q * Math.PI / 4) * 3, bz = pz + Math.sin(q * Math.PI / 4) * 3, [cx, cz] = resolvePosCollisions(bx, bz, 0); if (Math.hypot(cx - bx, cz - bz) > 0.3) ok = false; }
+      if (ok || r > 20) return { x: px, z: pz };
+    }
+  }
+  return { x, z };
 }
 function zombieStoryBodies() {                   // the squad, on the ground around where you are
   const Z = match.zombie, S = Z.story;
@@ -63618,17 +63790,18 @@ function zombieStoryEnterBlack() {
   Z.storyLock = true;
   for (const p of S.props) if (p.userData && p.userData.crack) scene.remove(p);
   S.props = S.props.filter(p => !(p.userData && p.userData.crack));
+  if (MAP_ZOMBIE_WAKE[activeMapName]) S.at = zombieFreeSpot(MAP_ZOMBIE_WAKE[activeMapName].x, MAP_ZOMBIE_WAKE[activeMapName].z);   // the fall takes you down into the tunnel
   zombieStoryBodies();
   camera.position.set((S.at || camera.position).x, PLAYER_EYE_HEIGHT, (S.at || camera.position).z);
   window._crouchEye = PLAYER_EYE_HEIGHT; slamState = null; playerYVel = 0; _extVel.x = 0; _extVel.z = 0;
-  U.dark.style.opacity = '1'; U.sub.style.opacity = '0';
+  U.dark.style.opacity = '1'; U.comm.style.opacity = '0';
   storyAudio({ ms: 700, freq: 60, type: 'lowpass', gain: 0.7, attack: 0.01, release: 0.4 });          // the landing
-  U.line.textContent = '';
+  U.text.textContent = '';
 }
 function zombieStoryFinish() {
   const Z = match.zombie, S = Z.story, U = storyUi();
   Z.storyLock = false; Z.story = null; Z.phase = 'break'; Z.nextWaveAt = Date.now() + 2800;
-  U.root.style.display = 'none'; U.dark.style.opacity = '0'; U.noise.style.opacity = '0'; U.line.textContent = ''; U.sub.style.opacity = '0';
+  U.root.style.display = 'none'; U.dark.style.opacity = '0'; U.noise.style.opacity = '0'; U.comm.style.opacity = '0'; U.text.textContent = '';
   const me = players[myId]; if (me && me.hp > 0 && me.hp < 300) { socket.emit('healSelf', { amount: 300 - me.hp }); me.hp = 300; updateHealthHUD(300); }
   showAnnouncement('SURVIVE', 'Fists only. The dead drop the rest.', '#ff6666', 2600);
 }
@@ -63636,14 +63809,14 @@ function zombieStorySkip() {
   const Z = match && match.zombie, S = Z && Z.story; if (!S || S.phase === 'wake') return;
   if (S.phase === 'approach' || S.phase === 'fall') { if (!S.at) S.at = { x: camera.position.x, z: camera.position.z }; zombieStoryEnterBlack(); }
   S.phase = 'wake'; S.t0 = S.t; S.skipped = true;
-  const U = storyUi(); U.line.textContent = ''; U.noise.style.opacity = '0';
+  const U = storyUi(); U.text.textContent = ''; U.noise.style.opacity = '0'; U.comm.style.opacity = '0';
 }
 function updateZombieStory(dt) {
   const Z = match.zombie, S = Z && Z.story; if (!S) { if (Z) { Z.phase = 'break'; Z.nextWaveAt = Date.now() + 1000; } return; }
   const U = storyUi(), ms = dt * 1000;
   S.t += ms;
   if (keys['Enter'] || keys['Space']) { if (!S.keyPrev) { S.keyPrev = true; zombieStorySkip(); return; } } else S.keyPrev = false;
-  if (S.subUntil && S.t > S.subUntil) { S.subUntil = 0; U.sub.style.opacity = '0'; }
+  if (S.subUntil && S.t > S.subUntil) { S.subUntil = 0; U.comm.style.opacity = '0'; }
   if (S.phase === 'approach') {
     const next = ZOMBIE_APPROACH_LINES[S.line];
     if (next && S.t >= next[0]) { storyShowSub(next[1], next[2], 3300); S.line++; playSoundEvent('hitmarker', { volume: 0.35, minGap: 0, tier: 'white' }); }
@@ -63678,12 +63851,13 @@ function updateZombieStory(dt) {
     const ln = ZOMBIE_RADIO_LINES[S.line];
     if (!ln) { S.phase = 'wake'; S.t0 = S.t; return; }
     const lt = S.t - S.lineAt;
-    if (lt === 0 || S.lastLine !== S.line) {                                     // a new line: a burst of static, then the words
-      S.lastLine = S.line; storyAudio({ ms: 650, freq: 2300, q: 0.6, gain: 0.2, crackle: 0.5, release: 0.15 });
+    if (S.lastLine !== S.line) {                                                 // a new line: static first (the face is up, snowy, and the words are not)
+      S.lastLine = S.line; storyComm('YOU', 'YOU · RADIO LOG', true); U.text.textContent = '';
+      storyAudio({ ms: 700, freq: 2300, q: 0.6, gain: 0.22, crackle: 0.5, release: 0.15 });
     }
-    const shown = Math.min(ln[1].length, Math.floor(lt / 32));
-    U.line.textContent = ln[1].slice(0, shown);
-    storyNoiseFrame(U, lt < 700 ? 0.22 : 0.05 + Math.random() * 0.05);           // snow on the screen while it crackles
+    const shown = Math.max(0, Math.min(ln[1].length, Math.floor((lt - 700) / 32)));   // ...and then the words come through
+    U.text.textContent = ln[1].slice(0, shown);
+    storyNoiseFrame(U, lt < 700 ? 0.26 : 0.05 + Math.random() * 0.05, lt < 700 ? 0.8 : lt < 900 ? 0.3 : (Math.random() < 0.06 ? 0.5 : 0));   // snow on the screen and over the face while it crackles
     if (S.t >= S.nextCrackle) { S.nextCrackle = S.t + 900 + Math.random() * 1700; storyAudio({ ms: 120 + Math.random() * 260, freq: 1500 + Math.random() * 1800, q: 0.7, gain: 0.1 + Math.random() * 0.1, crackle: 0.6, release: 0.05 }); }
     if (lt >= ln[0] + 500) { S.line++; S.lineAt = S.t; }
     return;
@@ -63692,13 +63866,13 @@ function updateZombieStory(dt) {
     const w = (S.t - S.t0) / ZOMBIE_STORY_WAKE_MS;
     U.dark.style.transition = 'opacity 2.2s'; U.dark.style.opacity = String(Math.max(0, 1 - w * 1.05));
     U.noise.style.opacity = String(Math.max(0, 0.06 * (1 - w)));
-    if (w > 0.5) U.line.textContent = '';
+    if (w > 0.35) U.comm.style.opacity = '0';
     if (w >= 1) { U.dark.style.transition = ''; zombieStoryFinish(); }
   }
 }
 function zombieStoryCleanup() {
   const Z = match && match.zombie;
-  if (_storyUi) { _storyUi.root.style.display = 'none'; _storyUi.dark.style.opacity = '0'; _storyUi.line.textContent = ''; }
+  if (_storyUi) { _storyUi.root.style.display = 'none'; _storyUi.dark.style.opacity = '0'; _storyUi.text.textContent = ''; _storyUi.comm.style.opacity = '0'; }
   if (Z && Z.story) { for (const p of Z.story.props) scene.remove(p); Z.story = null; }
   if (Z) Z.storyLock = false;
   for (const b of gameBots.slice()) if (b.squad) zombieRemove(b);
@@ -63751,9 +63925,13 @@ function zombieThink(bot, dt, now) {
 function updateZombieMode(dt) {
   const Z = match.zombie; if (!Z) return;
   const now = Date.now();
+  zombieUpdateLamps();
   updateZombiePickups(dt);
   if (Z.phase === 'story') { updateZombieStory(dt); return; }
   if (isDead) return;
+  if (Math.max(getMapBoundsRect().halfX, getMapBoundsRect().halfZ) > 300) {                  // the ones you have left far behind are let go
+    for (const b of gameBots.slice()) if (b.zombie && !b.dead && Math.hypot(b.x - camera.position.x, b.z - camera.position.z) > 170) zombieRemove(b);
+  }
   const alive = gameBots.filter(b => b.zombie && !b.dead).length;
   if (Z.phase === 'break') {
     if (now >= Z.nextWaveAt) {
