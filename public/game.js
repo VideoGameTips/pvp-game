@@ -40724,6 +40724,7 @@ window.addEventListener('keydown', e => {
 // that the retired jump code in updateMovement read, and that code can no longer launch anyone — so on a
 // phone JUMP did nothing at all.
 function doJump(repeat) {
+  if (window.PVP_RAGDOLL?.controlling) return;
   if (window.PVP_BACKROOMS?.swimming) return;
   if (adminMapBuilderOpen && selectedModeConfig?.type === 'builder') return;
   if (!isDead && isPlayerGrounded()) {
@@ -42493,6 +42494,7 @@ function loadoutReady() {
 }
 
 function resetCombatResources() {
+  window.PVP_RAGDOLL?.resetLocal();
   hellfireCores=3;
   pendingEnvironmentDamage.length = 0;
   clearCombatFeedback();
@@ -43981,6 +43983,7 @@ function updateGrappleRide(dt) {
 }
 
 function updateMovement(dt, socialBlocked = false) {
+  if (window.PVP_RAGDOLL?.controlling) return;
   if (SOCIAL_VIEW.mode && !socialBlocked) {
     const held = { ...keys };
     for (const k of Object.keys(keys)) keys[k] = false;
@@ -45429,6 +45432,7 @@ function activateMeleeAbility() {
 }
 
 function activateAbility() {
+  if (window.PVP_RAGDOLL?.controlling) return;
   if (SOCIAL_VIEW.mode) return;
   if (!equipReady()) return;   // ⏱️ it is still coming up
   if (activeSlot === 'support' && SUPPORT_ITEMS[selectedSupportIdx]?.id === 'satchel') {
@@ -46475,6 +46479,7 @@ function startCycleBurst(wStats) {
 }
 
 function tryShoot() {
+  if (window.PVP_RAGDOLL?.controlling) return;
   if (window.PVP_UNDERWORLD?.paused) return;
   if (match && match.dice && match.dice.me && match.dice.me.rolling) return;   // 🎲 the dice are in your hand
   if (!equipReady()) { if (shooting) equipNudge(); return; }                   // ⏱️ it is still coming up
@@ -46849,6 +46854,7 @@ function updateChainMaulSwing(dt) {
 }
 
 function tryMelee() {
+  if (window.PVP_RAGDOLL?.controlling) return;
   if (window.PVP_BACKROOMS?.active && window.PVP_BACKROOMS.paused) return;
   if (batCrowdCharge || meleeSlam || meleeDash) return;
   if (!equipReady()) { equipNudge(); return; }   // ⏱️ it is still coming up
@@ -46927,7 +46933,7 @@ function tryMelee() {
   if (window.PVP_BACKROOMS?.active) { window.PVP_BACKROOMS.melee(item, forward); return; }
   let hitPos = null;
   for (const [pid, mesh] of Object.entries(remoteMeshes)) {
-    if (!mesh.visible || players[pid]?.dead || friendlyFireBlocked(pid, myId)) continue;
+    if ((!mesh.visible && !mesh._ragdoll) || players[pid]?.dead || friendlyFireBlocked(pid, myId)) continue;
     const toTarget = mesh.position.clone().sub(camera.position);
     toTarget.y = 0;
     const dist = toTarget.length();
@@ -47264,6 +47270,7 @@ function doAirBlaster(item) {
 }
 
 function trySupport() {
+  if (window.PVP_RAGDOLL?.controlling) return;
   if (!gameStarted || isDead) return;
   if (!equipReady()) { equipNudge(); return; }   // ⏱️ it is still coming up
   if (countdownActive) return;
@@ -54571,6 +54578,7 @@ function confirmKill(id, name) {
 // itself rather than trust that timeout to have run. Yaw (rotation.y) is left
 // alone; only the fall-over's x/z tilt is cleared.
 function resetDeathPose(mesh) {
+  window.PVP_RAGDOLL?.reset(mesh);
   if (!mesh) return;
   mesh._drop = null;
   mesh.rotation.x = 0;
@@ -54619,6 +54627,7 @@ function syncBotMesh(bot, opts = {}) {
 }
 
 function dropBody(id) {
+  if (window.PVP_RAGDOLL?.death(id)) return;
   const mesh = remoteMeshes[id];
   if (!mesh || mesh._drop || !mesh.visible) return;
   const token = (mesh._drop = {});
@@ -54764,6 +54773,7 @@ function _pickFinisher(weaponId) {
   return FINISHERS[Math.floor(Math.random() * FINISHERS.length)];
 }
 function triggerFinisher(targetId, weaponId) {
+  if (window.PVP_RAGDOLL?.death(targetId)) return;
   const now = performance.now();
   if (_lastFinisher.id === targetId && now - _lastFinisher.t < 1400) return;
   _lastFinisher = { id: targetId, t: now };
@@ -55759,6 +55769,11 @@ function updateBullets(dt) {
       const headR = 0.28 + bulletR, bodyR = 0.65 + bulletR;
 
       for (const [pid, mesh] of Object.entries(remoteMeshes)) {
+        if (mesh._ragdoll && !players[pid]?.dead) {
+          const hit = window.PVP_RAGDOLL?.hit(mesh, new THREE.Vector3(px0,py0,pz0), _bpos, bulletR);
+          if (hit && (!bestHit || hit.t < bestHit.t)) bestHit = { pid, mesh, ...hit };
+          continue;
+        }
         if (!mesh.visible) continue;           // skip dead/hidden entities
         if (players[pid]?.dead) continue;      // skip server-confirmed dead
         // ── Swept sphere-segment test (CCD) ──────────────────────────────
@@ -59177,6 +59192,7 @@ function updateRemoteInterp() {
     const snaps = p && p._snaps;
     if (!snaps || !snaps.length || p.isBot && gameBots.some(b => b.id === pid)) continue;
     const mesh = remoteMeshes[pid];
+    if (mesh?._ragdoll) continue;
     let x, y, z, rot;
     const first = snaps[0], last = snaps[snaps.length - 1];
     if (renderAt <= first.at) { x = first.x; y = first.y; z = first.z; rot = first.rotY; }
@@ -59792,6 +59808,7 @@ function spawnExplosion(pos) {
   // 💥 Boom — positional volume based on distance from camera
   playSoundEvent('explosion', { position: pos, remote: pos.distanceTo(camera.position) > 5, volume: 1.1, minGap: 80 });
   applyBlastImpulse(pos);
+  window.PVP_RAGDOLL?.blast(pos);
   // ── Fireball (grows + fades) ──
   const fbMat = new THREE.MeshBasicMaterial({ color: 0xff7700, transparent: true, opacity: 0.92 });
   const fb = new THREE.Mesh(new THREE.SphereGeometry(0.30, 8, 6), fbMat);
@@ -62233,6 +62250,7 @@ function pushKillfeed(targetId, killerId) {
 }
 
 function onEntityDied(targetId, killerId) {
+  window.PVP_RAGDOLL?.death(targetId);
   if (!match || match.over) return;
   if (mpMatch()) {
     // With other real players a death can reach us twice — played out here, then the
@@ -64165,7 +64183,7 @@ function updateRange(dt) {
       pData.dead = false;
       pData.hp   = 100;
       if (bot)  { bot.dead = false; bot.hp = 100; bot.prevHp = 100; }
-      if (mesh) { mesh.visible = true; mesh.rotation.x = 0; }
+      if (mesh) { resetDeathPose(mesh); mesh.visible = true; }
       rt.respawnAt = 0;
       socket.emit('forceRespawnBot', { botId: rt.id, x: bot ? bot.x : rt.baseX, z: rt.z, hp: 100 });
     }
@@ -64662,6 +64680,7 @@ function updateBotAI(dt) {
     // lost AI AND physics for that frame — permanently, if the throw repeats.
     try {
     if (bot.dead) continue;
+    if (remoteMeshes[bot.id]?._ragdoll) continue;
     if (bot.state === 'target') continue; // range targets don't move or shoot
     if (bot._campaignCompanion) continue;
 
@@ -65970,6 +65989,7 @@ function loop() {
   updateFPSCounter(now);
   const dt = Math.min((now-lastTime)/1000, 0.05);
   lastTime = now;
+  safeLoopStep('ragdoll', () => window.PVP_RAGDOLL?.tick(dt));
   if (window.PVP_BACKROOMS?.active) { safeLoopStep('backrooms', () => window.PVP_BACKROOMS.tick(dt)); return; }
   if (window.PVP_UNDERWORLD?.paused) return;
   safeLoopStep('equipment-sway-reset', resetEquipmentSway);
@@ -66167,7 +66187,11 @@ function loop() {
   // loop() isn't, e.g. opened from the cold menu). Don't double-render here.
   safeLoopStep('social-camera', () => updateSocialView(dt));
   let viewCamera = camera;
-  safeLoopStep('player-camera', () => { viewCamera = updatePlayerView(dt); });
+  safeLoopStep('player-camera', () => {
+    if (!window.PVP_RAGDOLL?.controlling) viewCamera = updatePlayerView(dt);
+    else if (PLAYER_VIEW.actor) PLAYER_VIEW.actor.visible = false;
+  });
+  viewCamera = window.PVP_RAGDOLL?.viewCamera() || viewCamera;
   if (SOCIAL_VIEW.mode) viewCamera = SOCIAL_VIEW.camera;
   if (!THEATER.active) {
     const hidden = viewCamera !== camera ? camera.children.filter(o => o.visible && !(o instanceof THREE.Light)) : [];
@@ -68227,6 +68251,7 @@ function afterDeath(ms, fn) {
 // Everything a finished match (or Lobby 13) leaves behind that the next start must not
 // inherit. Shared by the mode menu and the end-of-match buttons so they can't drift apart.
 function teardownMatchWorld() {
+  window.PVP_RAGDOLL?.clear();
   window.PVP_BACKROOMS?.stop();
   window.PVP_UNDERWORLD?.stop();
   clearCombatFeedback();
