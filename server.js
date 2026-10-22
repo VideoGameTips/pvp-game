@@ -91,6 +91,7 @@ app.use((req, res, next) => {
 // Storage location is configurable via env var so we can point at a persistent
 // volume on Railway. Without that, every redeploy wipes the file.
 // Set DATA_DIR=/data in Railway, attach a volume mounted at /data.
+const contentFilter = require('./content-filter');   // what chat and names may not contain (see that file)
 const DATA_DIR = process.env.DATA_DIR || __dirname;
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (e) {}
@@ -223,6 +224,7 @@ function fastKey(pw) { return crypto.createHash('sha256').update(String(pw)).dig
 function checkPassword(username, pw) {
   const u = users[username];
   if (!u || !pw) return false;
+  if (isRetiredAdminCode(pw)) return false;   // an account made with the retired admin code does not open with it any more
 
   const key = fastKey(pw);
   if (verifiedPasswords.get(username) === key) return true;
@@ -1474,6 +1476,8 @@ function nameTaken(name) {
 app.get('/auth/available', (req, res) => {
   const name = String(req.query.username || '').trim().slice(0, 16);
   if (name.length < 2) return res.status(400).json({ error: 'username 2-16 chars' });
+  const unfit = contentFilter.nameProblem(name);
+  if (unfit) return res.json({ available: false, error: unfit });
   if (!nameTaken(name)) return res.json({ available: true });
   let suggestion = null;
   for (let i = 0; i < 40 && !suggestion; i++) {
@@ -1487,6 +1491,8 @@ app.post('/auth/register', (req, res) => {
   const { username, password } = req.body || {};
   if (!username || !password) return res.status(400).json({ error: 'username and password required' });
   if (username.length < 2 || username.length > 16) return res.status(400).json({ error: 'username 2-16 chars' });
+  const unfit = contentFilter.nameProblem(username);
+  if (unfit) return res.status(400).json({ error: unfit });
   const weak = passwordProblem(password, username);
   if (weak) return res.status(400).json({ error: weak });
   if (nameTaken(username)) return res.status(409).json({ error: 'username taken' });   // "tom" when "Tom" exists too (#38)
@@ -1503,13 +1509,23 @@ const ADMIN_MASTER_PASS = process.env.ADMIN_MASTER_PASS || '';
 if (!ADMIN_MASTER_PASS) {
   console.warn('[auth] ADMIN_MASTER_PASS env var is not set — master-password backdoor is DISABLED.');
 }
-// Baked-in admin login codes (repo is public — user accepts these are visible).
-// Used as a login password, they grant admin + all unlocks, just like the env master pass.
-const ADMIN_LOGIN_CODES = ['wwssadadba///op∑!'];
+// Admin login codes live OUTSIDE the repository, which is public: the ADMIN_MASTER_PASS variable above, and/or a file called
+// admin-codes.txt next to users.json (one code per line; it is in .gitignore). Used as a login password, a code grants admin
+// and all unlocks. The code that used to be written here was retired: it is in the repository's history for good, so the
+// server now refuses it everywhere, both as an admin code and as the password of any account that was made with it, and
+// all that is kept of it is this one-way fingerprint.
+const RETIRED_ADMIN_CODE_SHA256 = ['ec136bf14a72928473cc924d205f30683da221eb64e94597eadc9c8bad343c3a'];
+const ADMIN_CODES_FILE = path.join(DATA_DIR, 'admin-codes.txt');
+function adminCodesFromFile() {
+  try { return fs.readFileSync(ADMIN_CODES_FILE, 'utf8').split(/\r?\n/).map(l => l.trim()).filter(l => l && !l.startsWith('#')); }
+  catch (e) { return []; }
+}
+if (!ADMIN_MASTER_PASS && !adminCodesFromFile().length) console.warn('[auth] no admin code is set (ADMIN_MASTER_PASS, or ' + ADMIN_CODES_FILE + '): nobody can become an admin.');
+function isRetiredAdminCode(pw) { return !!pw && RETIRED_ADMIN_CODE_SHA256.includes(fastKey(pw)); }
 function isAdminPass(pw) {
-  if (!pw) return false;
+  if (!pw || isRetiredAdminCode(pw)) return false;
   if (ADMIN_MASTER_PASS && pw === ADMIN_MASTER_PASS) return true;
-  return ADMIN_LOGIN_CODES.includes(pw);
+  return adminCodesFromFile().includes(String(pw));
 }
 
 // Headcount for the login screen (#11): real people connected right now (bots excluded).
@@ -2370,7 +2386,7 @@ io.on('connection', (socket) => {
       p._adminUnlimitedTime = false;
     }
     p.account = username;
-    p.name = username.slice(0, 16);
+    p.name = contentFilter.safeDisplayName(username.slice(0, 16));   // an old account with a name that would not be allowed now is shown as PlayerNNNN
     broadcastAdminMatchTime(p.matchId);
   });
 
@@ -2540,14 +2556,20 @@ io.on('connection', (socket) => {
   socket.on('chatLine', (data) => {
     const p = players[socket.id];
     if (!p) return;
+    data = data && typeof data === 'object' ? data : {};
     const now = Date.now();
     if (p._lastChatAt && now - p._lastChatAt < 800) return; // throttle to ~1/0.8s
     p._lastChatAt = now;
+    // Everything here is what a (possibly modified) client says it is, so it is cleaned HERE, not in the browser: the text is
+    // filtered, the colour has to be a plain hex colour, and the emoji slot cannot carry letters.
+    const text = contentFilter.cleanChat(String(data.text || '').slice(0, 60));
+    if (!text) return;
+    const emoji = String(data.emoji || '').slice(0, 4);
     const payload = {
       id: socket.id,
-      text: String(data.text || '').slice(0, 60),
-      color: String(data.color || '#fff').slice(0, 12),
-      emoji: String(data.emoji || '').slice(0, 4),
+      text,
+      color: /^#[0-9a-fA-F]{3,8}$/.test(String(data.color || '')) ? String(data.color) : '#fff',
+      emoji: /[a-z0-9]/i.test(emoji) || contentFilter.isBlocked(emoji) ? '' : emoji,
     };
     if (p.matchId) emitToMatchExcept(p.matchId, socket.id, 'chatLine', payload);
     else socket.broadcast.emit('chatLine', payload);

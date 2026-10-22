@@ -9,3 +9,5 @@ users.json
 .venv/
 # itch.io upload staging + zip (build artifact)
 dist/
+# Admin login codes: the repository is public, so they live in this file (or in ADMIN_MASTER_PASS), never in git
+admin-codes.txt

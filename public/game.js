@@ -68070,7 +68070,7 @@ async function login() {
     if (av && av.available === false) {
       const input = document.getElementById('name-input');
       if (av.suggestion && input) input.value = av.suggestion;
-      setAuthStatus(av.suggestion ? `"${name}" is taken — try ${av.suggestion}, or type another` : `"${name}" is taken — pick another nickname`, '#ffcc66');
+      setAuthStatus(av.error ? av.error : av.suggestion ? `"${name}" is taken — try ${av.suggestion}, or type another` : `"${name}" is taken — pick another nickname`, '#ffcc66');
       return;
     }
   }
