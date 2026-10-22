@@ -3042,6 +3042,45 @@ if (ok && process.argv.includes('--zombie')) {
   if (out.length) { ok = false; console.log(out.join('\n')); }
 }
 
+if (ok && process.argv.includes('--hair')) {
+  // Hair on every skin. It used to be refused on every skin but three because of the headwear: now a chosen hairstyle goes on
+  // any skin and the headwear (helmet, cap, goggles, visor) comes off; "Skin Default" keeps the skin's own head.
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const gearOf = m => m._gearHead;
+    const meshesIn = g => { const out = []; g.traverse(o => { if (o.isMesh) out.push(o); }); return out; };
+    const COLOR = 0x553318;
+    let withGear = 0;
+    for (const s of SKINS) {
+      if (/^px_/.test(s.id)) continue;
+      let plain, styled, bald;
+      try {
+        plain = makePlayerMesh('t', false, 'ally', s.id, {});
+        styled = makePlayerMesh('t', false, 'ally', s.id, { hair: { style: 'crop', color: '553318' } });
+        bald = makePlayerMesh('t', false, 'ally', s.id, { hair: { style: 'none', color: '553318' } });
+      } catch (e) { issues.push(s.id + ' did not build with a hairstyle: ' + e.message); continue; }
+      const g0 = gearOf(plain), g1 = gearOf(styled), g2 = gearOf(bald);
+      if (!g0 || !g1 || !g2) { issues.push(s.id + ': no head gear container'); continue; }
+      if (HAIR_COMPATIBLE.has(s.id)) {
+        if (!meshesIn(g1).some(m => m.material && m.material.color && m.material.color.getHex() === COLOR)) issues.push(s.id + ': a hairstyle did not show');
+        continue;
+      }
+      if (meshesIn(g0).length) withGear++;
+      const hairMeshes = meshesIn(g1);
+      if (!hairMeshes.length) issues.push(s.id + ': a hairstyle chosen on this skin did not show');
+      else if (hairMeshes.some(m => !m.material || !m.material.color || m.material.color.getHex() !== COLOR)) issues.push(s.id + ': headwear is still on under the hair (' + hairMeshes.filter(m => !m.material || !m.material.color || m.material.color.getHex() !== COLOR).length + ' pieces)');
+      if (meshesIn(g2).length) issues.push(s.id + ': Bald should leave nothing on the head');
+      // with no choice the skin is untouched
+      const again = makePlayerMesh('t', false, 'ally', s.id, { hair: null });
+      if (meshesIn(gearOf(again)).length !== meshesIn(g0).length) issues.push(s.id + ': Skin Default changed the head');
+    }
+    if (withGear < 3) issues.push('expected several skins with headwear to test, found ' + withGear);
+    return issues;
+  })()`);
+  console.log('hair checks: a hairstyle goes on every skin (headwear comes off), Bald is bald, Skin Default leaves the head alone');
+  if (issues.length) { ok = false; console.log(issues.slice(0, 20).join('\n')); }
+}
+
 if (ok && process.argv.includes('--netinterp')) {
   // Remote players on the network: packets arrive ~30 times a second, with jitter; the body must glide between them at
   // the screen's own frame rate (it used to move only when a packet landed -- one frame in three at 60 fps -- and trail by

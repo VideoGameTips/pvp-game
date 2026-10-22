@@ -37715,6 +37715,20 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
     armLimbs, legLimbs, look, hands, feet: legFeet,
     gearHead, gearBody,
   });
+  // A hairstyle chosen on a skin that has headwear (a helmet, a cap, goggles, a visor): the choice wins. Hair used to be refused on
+  // every skin but three (HAIR_COMPATIBLE) because it poked through what was already on the head; now the headwear comes off and the
+  // hair goes on. Choosing nothing ("Skin Default") keeps the skin's own head exactly as it was.
+  {
+    const _hc = cleanHairChoice(opts.hair);
+    if (_hc && !HAIR_COMPATIBLE.has(skinId)) {
+      for (const c of gearHead.children.slice()) {
+        gearHead.remove(c);
+        c.traverse(o => { if (o.geometry && !(o.userData && o.userData.sharedGeo)) o.geometry.dispose(); });
+      }
+      gearHead.userData.hairChoice = _hc;
+      if (_hc.style !== 'none') _addSeedHair({ _gear: gearHead }, _hc.style, parseInt(_hc.color, 16));
+    }
+  }
   if (opts.crown) setMeshCrown(group, true);
   // Hands take the head's colour: skin on most skins, gloves on the armoured
   // ones. A drawn skin has already said what its hands are; only the recoloured
@@ -70038,7 +70052,7 @@ function openSkinsPanel() {
   }
   panel.style.display = 'block';
   const isAdmin = !!(currentUser && currentUser.isAdmin);
-  const hairOn=HAIR_COMPATIBLE.has(mySkin),hairColor=myHair?.color||appearanceFor(currentUser?.username||'You').hair.toString(16).padStart(6,'0');
+  const hairOn=true,hairColor=myHair?.color||appearanceFor(currentUser?.username||'You').hair.toString(16).padStart(6,'0');
   const hairPalette=['241a12','553318','c9a227','b8beca','a43728','3189c8','4e9859','d85b9e'];
   const cards = SKINS.map(s => {
     const [c1, c2] = SKIN_SWATCH[s.id] || s.swatch || ['#444', '#888'];
@@ -70070,7 +70084,7 @@ function openSkinsPanel() {
           <label for="hair-color" style="font-size:11px;display:block;margin:12px 0 6px;">Hair color</label>
           <input id="hair-color" type="color" value="#${hairColor}" ${hairOn && myHair?.style!=='none'?'':'disabled'} aria-label="Hair color" style="width:100%;height:32px;padding:2px;background:#182732;border:1px solid #637b89;border-radius:4px;box-sizing:border-box;">
           <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-top:7px;">${hairPalette.map(c=>`<button type="button" data-hair-color="${c}" title="#${c}" aria-label="#${c}" aria-pressed="${hairColor===c}" ${hairOn && myHair?.style!=='none'?'':'disabled'} style="height:24px;min-width:0;cursor:pointer;background:#${c};border:2px solid ${hairColor===c?'#f1f7f8':'#60707b'};border-radius:3px;"></button>`).join('')}</div>
-          ${hairOn?'':'<div style="font-size:11px;color:#a6bac6;margin-top:10px;">Covered by headwear.</div><button id="hair-recruit" type="button" style="margin-top:6px;width:100%;padding:7px;background:#263e38;color:#bce4ce;border:1px solid #698d7a;border-radius:4px;cursor:pointer;">Use Recruit</button>'}
+          <div style="font-size:11px;color:#a6bac6;margin-top:10px;line-height:1.4;">${HAIR_COMPATIBLE.has(mySkin)?'':'On this skin a hairstyle replaces the headwear. Pick Skin Default to keep it.'}</div>
         </div>
       </div>
     </section>
@@ -70084,7 +70098,6 @@ function openSkinsPanel() {
   const colorChange=color=>{setMyHair({style:myHair?.style||(mySkin==='spiky'?'spiky':appearanceFor(currentUser?.username||'You').style),color});openSkinsPanel();};
   panel.querySelector('#hair-color').addEventListener('change',e=>colorChange(e.target.value.slice(1)));
   panel.querySelectorAll('[data-hair-color]').forEach(b=>b.addEventListener('click',()=>colorChange(b.dataset.hairColor)));
-  panel.querySelector('#hair-recruit')?.addEventListener('click',()=>{mySkin='recruit';try{localStorage.setItem('pvp_skin',mySkin);}catch(e){}setMyHair(myHair||{style:'pixel_spikes',color:hairColor});openSkinsPanel();});
   panel.querySelector('#sk-pixelizer').addEventListener('click', () => { panel.style.display = 'none'; openSkinPixelizer('char'); });
   panel.querySelectorAll('.skin-card').forEach(card => {
     card.addEventListener('click', () => {
