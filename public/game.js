@@ -1423,6 +1423,7 @@ let lobbyActiveArea = null;     // duel area currently being staged (player on o
 let lobbyPlayerSide = null;     // which pad the player chose: 'blue' or 'red'
 let spawnShieldUntil = 0; // timestamp: player is invincible until this time
 let spectatorState = null; // { idx, lastSwitch } — set when dead and watching teammates
+let spectatorDeathAt = null;
 
 // Protection while you come back: RESPAWN_SHIELD_MS, whichever of the ~18 respawn paths brought you back. A shot on
 // the first frame, a hazard you spawned in, a DoT from the last life, or a bullet already in flight must not take
@@ -54776,7 +54777,7 @@ function _pickFinisher(weaponId) {
   return FINISHERS[Math.floor(Math.random() * FINISHERS.length)];
 }
 function triggerFinisher(targetId, weaponId) {
-  if (window.PVP_RAGDOLL?.death(targetId)) return;
+  if (window.PVP_RAGDOLL?.death(targetId, weaponId)) return;
   const now = performance.now();
   if (_lastFinisher.id === targetId && now - _lastFinisher.t < 1400) return;
   _lastFinisher = { id: targetId, t: now };
@@ -57777,15 +57778,19 @@ function getLiveAllies() {
 function watchEliminationRound() {
   if(!isDead||match?.type!=='elim'||match.over)return;
   for(const id of ['waiting-screen','death-screen'])document.getElementById(id).style.display='none';
+  spectatorDeathAt ??= performance.now();
+  if(!match.roundActive || performance.now()-spectatorDeathAt<3000)return;
   enterSpectator();releasePointer();
 }
 function enterSpectator() {
+  if (window.PVP_RAGDOLL?.controlling) return;
   spectatorState ||= { idx: 0, lastSwitch: 0 };
   weaponModels.forEach(m=>m.visible=false);meleeModels.forEach(m=>m.visible=false);supportModels.forEach(m=>m.visible=false);
   showSpectatorHUD();
   updateSpectatorHUD();
 }
 function exitSpectator() {
+  spectatorDeathAt = null;
   if (!spectatorState) return;
   spectatorState = null;
   const hud = document.getElementById('spectator-hud');
@@ -57800,21 +57805,17 @@ function spectatorCycle(dir) {
   updateSpectatorHUD();
 }
 function updateSpectatorCamera(dt) {
+  if (!isDead) { exitSpectator(); return; }
+  if (!spectatorState && match?.type==='elim' && !match.over) watchEliminationRound();
+  if (window.PVP_RAGDOLL?.controlling) return;
   if (!spectatorState) return;
-  if (!isDead) { exitSpectator(); return; } // auto-exit on respawn
   const allies = getLiveAllies();
   if (allies.length === 0) return;
   // Clamp idx in case allies died
   if (spectatorState.idx >= allies.length) spectatorState.idx = 0;
   const ally = allies[spectatorState.idx];
-  // Third-person follow camera: behind and slightly above the ally
-  const back = 3.5, height = 2.5;
-  const ax = ally.x, az = ally.z, ay = (ally.y || 0)+1.0;
-  const camX = ax - Math.sin(ally.rotY) * back;
-  const camZ = az - Math.cos(ally.rotY) * back;
-  camera.position.set(camX, ay + height, camZ);
-  // Look at the ally's chest level
-  camera.lookAt(ax, ay + 1.0, az);
+  camera.position.set(ally.x, (ally.y || 0) + 1.65, ally.z);
+  camera.rotation.set(players[ally.id]?.rotX || 0, ally.rotY - Math.PI, 0, 'YXZ');
 }
 function showSpectatorHUD() {
   let hud = document.getElementById('spectator-hud');
@@ -58530,6 +58531,11 @@ function mpSendRound(winner, timeoutSub = null) {
   mpSend({ t: 'round', winner: winner ? absTeam(winner) : null, wins: absPair(match.roundWins), timeoutSub,
            final: !!winner && match.roundWins[winner] >= match.cfg.winsNeeded });
 }
+function scheduleElimRestart(winner) {
+  const owner=match,epoch=matchEpoch;
+  const delay=match?.cfg.allies===0 && match?.cfg.enemies===1 ? 6000 : 2600;
+  setTimeout(()=>{if(match===owner && matchEpoch===epoch && !match.over)restartElimRound(winner);},delay);
+}
 // …and a guest playing it out: the same banners and timings checkElimRound uses, from our side.
 function mpApplyRound(e) {
   match.roundActive = false;
@@ -58539,14 +58545,14 @@ function mpApplyRound(e) {
   const win = w === 'ally', col = win ? '#4cff4c' : '#ff5555';
   if (!w) {
     showAnnouncement('DRAW', e.timeoutSub || 'Round replayed', '#aaaaaa', 2500);
-    setTimeout(() => restartElimRound(null), 2600);
+    scheduleElimRestart(null);
   } else if (e.final) {
     showAnnouncement(win ? 'YOUR TEAM WINS!' : 'ENEMY WINS!', e.timeoutSub || `${match.roundWins.ally} – ${match.roundWins.enemy}`, col, 3000);
     const m = match;   // the host's 'end' normally beats this — and PLAY AGAIN may have started another match by then
     setTimeout(() => { if (match === m && !m.over) endMatch(w); }, 4000);
   } else {
     showAnnouncement(win ? 'ROUND WIN!' : 'ROUND LOST', e.timeoutSub || `Score ${match.roundWins.ally} – ${match.roundWins.enemy}`, col, 2500);
-    setTimeout(() => restartElimRound(w), 2600);
+    scheduleElimRestart(w);
   }
 }
 socket.on('matchEvent', ({ from, evt } = {}) => {
@@ -62398,7 +62404,7 @@ function checkElimRound() {
   if (!allyAlive && !enemyAlive) {
     mpSendRound(null);
     showAnnouncement('DRAW', 'Round replayed', '#aaaaaa', 2500);
-    setTimeout(() => restartElimRound(null), 2600);
+    scheduleElimRestart(null);
   } else if (!enemyAlive) {
     match.roundWins.ally++;
     mpSendRound('ally');
@@ -62409,7 +62415,7 @@ function checkElimRound() {
       setTimeout(() => endMatch('ally'), 3100);
     } else {
       showAnnouncement('ROUND WIN!', `Score ${match.roundWins.ally} – ${match.roundWins.enemy}`, '#4cff4c', 2500);
-      setTimeout(() => restartElimRound('ally'), 2600);
+      scheduleElimRestart('ally');
     }
   } else {
     match.roundWins.enemy++;
@@ -62421,7 +62427,7 @@ function checkElimRound() {
       setTimeout(() => endMatch('enemy'), 3100);
     } else {
       showAnnouncement('ROUND LOST', `Score ${match.roundWins.ally} – ${match.roundWins.enemy}`, '#ff5555', 2500);
-      setTimeout(() => restartElimRound('enemy'), 2600);
+      scheduleElimRestart('enemy');
     }
   }
 }
@@ -62820,7 +62826,7 @@ function resolveElimRoundByHP() {
       setTimeout(() => endMatch('ally'), 3100);
     } else {
       showAnnouncement('ROUND WIN!', `TIMEOUT · HP ${Math.round(allyHP)} vs ${Math.round(enemyHP)}`, '#4cff4c', 2500);
-      setTimeout(() => restartElimRound('ally'), 2600);
+      scheduleElimRestart('ally');
     }
   } else if (enemyHP > allyHP) {
     match.roundWins.enemy++;
@@ -62831,13 +62837,13 @@ function resolveElimRoundByHP() {
       setTimeout(() => endMatch('enemy'), 3100);
     } else {
       showAnnouncement('ROUND LOST', `TIMEOUT · HP ${Math.round(enemyHP)} vs ${Math.round(allyHP)}`, '#ff5555', 2500);
-      setTimeout(() => restartElimRound('enemy'), 2600);
+      scheduleElimRestart('enemy');
     }
   } else {
     // Exact tie → replay
     mpSendRound(null, `TIMEOUT · Both at ${Math.round(allyHP)} HP`);
     showAnnouncement('DRAW', `TIMEOUT · Both at ${Math.round(allyHP)} HP`, '#aaaaaa', 2500);
-    setTimeout(() => restartElimRound(null), 2600);
+    scheduleElimRestart(null);
   }
 }
 

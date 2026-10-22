@@ -65,27 +65,25 @@
     const mesh=makePlayerMesh(currentUser?.username||'You',false,localPlayerTeam(),mySkin||'default',{hair:myHair});
     mesh.position.copy(camera.position);mesh.position.y-=window._crouchEye||1.65;mesh.rotation.y=euler.y+Math.PI;return mesh;
   }
-  function death(id){
+  function death(id,weaponId){
     if(!C)return false;
     const previous=active.find(e=>e.id===id);if(previous){previous.dead=true;previous.life=Math.max(previous.life,previous.age+4);return true;}
     const source=sourceFor(id);if(!source||(!source.visible&&id!==myId))return false;
     const bot=resolveBot(id),velocity=new THREE.Vector3(bot?.kbVX||0,Math.max(0,bot?.yVel||0),bot?.kbVZ||0);
-    if(lastBlast&&performance.now()-lastBlast.time<350){const d=source.position.clone().sub(lastBlast.pos);const strength=20*Math.max(0,1-d.length()/BLAST_RADIUS);if(strength>1){d.y=Math.max(.5,d.y);velocity.add(d.normalize().multiplyScalar(strength));}}
+    const info=_killInfo[id],weapon=info?.weapon||weaponId||'',base=weapon.replace(/_splash$/,''),explosive=EXPLOSIVE_KINDS.has(projectileKind(base,projectileWeaponSpec(base)))||/^(frag|c4|satchel|explosive_barrel|airburst|mortar)(_|$)/.test(weapon)||info?.cause==='hazard'&&/bomb|explos|air.?raid|mortar/i.test(info.label||'');
+    if(explosive){
+      const recent=lastBlast&&performance.now()-lastBlast.time<500&&source.position.distanceTo(lastBlast.pos)<BLAST_RADIUS;
+      const killer=players[info?.killer],origin=recent?lastBlast.pos:new THREE.Vector3(killer?.x??source.position.x-1,source.position.y-.5,killer?.z??source.position.z);
+      const kick=impulse(origin,source.position.clone().add(new THREE.Vector3(0,.3,0)),24,recent?BLAST_RADIUS:100);if(kick)velocity.add(kick);
+    }
     if(velocity.length()<.5)velocity.set((Math.random()-.5)*1.8,.7,(Math.random()-.5)*1.8);
-    const entry=create(source,id,true,velocity);if(entry&&id===myId)entry.owned=true;return !!entry;
+    const entry=create(source,id,true,velocity);if(entry){entry.explosive=!!explosive;if(id===myId){entry.owned=true;exitSpectator();stopSocialView();if(PLAYER_VIEW.actor)PLAYER_VIEW.actor.visible=false;}}return !!entry;
   }
   function impulse(pos,point,power,radius){const away=point.clone().sub(pos),d=away.length();if(d>=radius)return null;away.y=Math.max(.7,away.y);return away.normalize().multiplyScalar(power*(1-d/radius));}
   function blast(pos){
     if(!C||!gameStarted||inLobby)return;lastBlast={pos:pos.clone(),time:performance.now()};
-    for(const entry of [...active]){const p=entry.byName.pelvis.body.position,kick=impulse(pos,new THREE.Vector3(p.x,p.y,p.z),24,BLAST_RADIUS);if(kick)for(const part of entry.parts){part.body.wakeUp();part.body.velocity.vadd(vec(kick),part.body.velocity);}}
-    for(const [id,source] of Object.entries(remoteMeshes)){
-      if(!source.visible||source._ragdoll||players[id]?.dead)continue;
-      const kick=impulse(pos,source.position.clone().add(new THREE.Vector3(0,.3,0)),24,BLAST_RADIUS);if(kick&&kick.length()>2)create(source,id,false,kick);
-    }
-    if(!isDead&&!pilotedVehicle&&!pilotedMortar&&!active.some(e=>e.id===myId)){
-      const kick=impulse(pos,camera.position.clone().add(new THREE.Vector3(0,-1.4,0)),24,BLAST_RADIUS);
-      if(kick&&kick.length()>2){const source=sourceFor(myId),entry=create(source,myId,false,new THREE.Vector3(_extVel.x,Math.max(5,slamState?.vel||kick.y),_extVel.z));if(entry){entry.owned=true;stopSocialView();if(PLAYER_VIEW.actor)PLAYER_VIEW.actor.visible=false;shooting=false;isADS=false;window._slideUntil=0;}}
-    }
+    // Surviving a blast keeps ordinary knockback and control, never a knockdown.
+    for(const entry of active){if(!entry.dead||!entry.explosive||entry.age>.75)continue;const p=entry.byName.pelvis.body.position,kick=impulse(pos,new THREE.Vector3(p.x,p.y,p.z),24,BLAST_RADIUS);if(kick)for(const part of entry.parts){part.body.wakeUp();part.body.velocity.vadd(vec(kick),part.body.velocity);const speed=part.body.velocity.length();if(speed>30)part.body.velocity.scale(30/speed,part.body.velocity);}}
   }
   function recover(entry){
     if(entry.dead){release(entry,false);return;}
@@ -110,6 +108,7 @@
         part.node.parent.updateWorldMatrix(true,false);part.node.position.copy(part.node.parent.worldToLocal(p));part.node.parent.getWorldQuaternion(parentQ);part.node.quaternion.copy(parentQ.invert().multiply(q));part.node.updateWorldMatrix(false,true);
       }
       const root=entry.byName.pelvis.body,bot=resolveBot(entry.id);
+      if(entry.id===myId){const eye=viewCamera();if(eye){camera.position.copy(eye.position);camera.quaternion.copy(eye.quaternion);}}
       if(!entry.dead){
         if(entry.id===myId){camera.position.set(root.position.x,root.position.y+.8,root.position.z);shooting=false;}
         else {entry.source.position.set(root.position.x,root.position.y-.8,root.position.z);if(bot){bot.x=root.position.x;bot.z=root.position.z;bot.y=root.position.y-.8;if(players[entry.id])Object.assign(players[entry.id],{x:bot.x,y:bot.y+1.65,z:bot.z});}}
@@ -117,7 +116,7 @@
       if(entry.age>entry.life||root.position.y < -80||!entry.dead&&entry.age>1.2&&entry.parts.every(p=>p.body.sleepState===C.Body.SLEEPING))recover(entry);
     }
   }
-  const followCamera=new THREE.PerspectiveCamera(70,1,.08,1000);
+  const followCamera=new THREE.PerspectiveCamera(75,1,.04,1000);
   function hit(mesh,start,end,radius=0){
     const entry=mesh?._ragdoll;if(!entry||entry.dead)return null;
     const direction=end.clone().sub(start),length=direction.length();if(length<1e-6)return null;direction.normalize();let best=null;
@@ -129,11 +128,16 @@
     }return best;
   }
   function viewCamera(){
-    const entry=active.find(e=>e.id===myId&&!e.dead);if(!entry||isDead)return null;
-    const b=entry.byName.pelvis.body,target=new THREE.Vector3(b.position.x,b.position.y+.35,b.position.z),offset=new THREE.Vector3(3,1.8,4.5).applyAxisAngle(new THREE.Vector3(0,1,0),euler.y);
-    const desired=target.clone().add(offset),ray=new THREE.Ray(target,offset.clone().normalize());let distance=offset.length();
-    for(const box of wallColliders){const hit=ray.intersectBox(box,new THREE.Vector3());if(hit)distance=Math.min(distance,Math.max(.7,target.distanceTo(hit)-.2));}
-    followCamera.position.copy(target).addScaledVector(offset.normalize(),distance);followCamera.aspect=camera.aspect;followCamera.updateProjectionMatrix();followCamera.lookAt(target);return followCamera;
+    const entry=localCameraEntry();if(!entry)return null;
+    const head=entry.byName.head,b=head.body,q=new THREE.Quaternion(b.quaternion.x,b.quaternion.y,b.quaternion.z,b.quaternion.w);
+    followCamera.position.set(b.position.x,b.position.y,b.position.z).add(new THREE.Vector3(0,.02,BODY.headHalfD+.035).applyQuaternion(q));
+    followCamera.quaternion.copy(q).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),Math.PI)).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),euler.x));
+    head.node.visible=false;followCamera.aspect=camera.aspect;followCamera.fov=camera.fov;followCamera.updateProjectionMatrix();return followCamera;
   }
-  window.PVP_RAGDOLL={ready,death,blast,tick,clear,viewCamera,hit,reset:mesh=>{if(mesh?._ragdoll)release(mesh._ragdoll,false);},resetLocal:()=>{for(const e of [...active])if(e.id===myId)release(e,false);},get entries(){return active;},get controlling(){return active.some(e=>e.id===myId&&!e.dead);}};
+  function localCameraEntry(){
+    const entry=active.find(e=>e.id===myId);if(!entry)return null;
+    if(entry.dead && entry.age>=3 && match?.type==='elim' && match.roundActive && !match.over && getLiveAllies().length)return null;
+    return entry;
+  }
+  window.PVP_RAGDOLL={ready,death,blast,tick,clear,viewCamera,hit,reset:mesh=>{if(mesh?._ragdoll)release(mesh._ragdoll,false);},resetLocal:()=>{for(const e of [...active])if(e.id===myId)release(e,false);},get entries(){return active;},get controlling(){return !!localCameraEntry();}};
 })();
