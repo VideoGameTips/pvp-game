@@ -2203,6 +2203,7 @@ function maxHpForMode(mode) {
 // 🎨 A hand-painted skin, as the client encodes it: { p: [palette of 'rrggbb'], d: base64 of 2816 palette indexes
 // (eleven 16x16 faces), h: hand colour, f: boot colour }. Returned as the same string if it is exactly that and nothing
 // else, null otherwise -- it goes to every client in the match, so it is held to a strict shape and a small size.
+function mayWearPaintedSkin(p) { return !!(p && !p.isBot && p.account && users[p.account] && users[p.account].isAdmin); }
 function cleanSkinData(v) {
   try {
     if (typeof v !== 'string' || v.length > 8000) return null;
@@ -2384,8 +2385,10 @@ io.on('connection', (socket) => {
     p.skin = String((data && data.skin) || 'default').slice(0, 24);
     p.isAdmin = !!(data && data.isAdmin);
     // A painted skin arrives as 'px_...' plus its picture. The id alone means nothing to anyone else, so one without a
-    // well-formed picture is worn as the default.
-    p.skinData = /^px_/.test(p.skin) ? cleanSkinData(data && data.skinData) : null;
+    // well-formed picture is worn as the default. And a painted skin is a picture of whatever its painter chose, put on
+    // every screen in the match (children's included): it is not taken from just any client. Only an admin account, as the
+    // SERVER knows it, may wear one; for anybody else it is the default skin, whatever the client says it is.
+    p.skinData = /^px_/.test(p.skin) && mayWearPaintedSkin(p) ? cleanSkinData(data && data.skinData) : null;
     p.hair=cleanHairChoice(data?.hair);
     if (/^px_/.test(p.skin) && !p.skinData) p.skin = 'default';
     // Tell everyone in the same match so they can re-skin this player's mesh

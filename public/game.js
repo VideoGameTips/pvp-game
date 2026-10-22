@@ -39941,12 +39941,15 @@ let GAMEPLAY_SETTINGS = {
   lookSens: 1,     // ⚙ → LOOK / MOUSE SENSITIVITY, a multiplier of the old fixed speed (#45)
   ambient: 1,      // ⚙ → AMBIENT SOUND: the wind, surf, birds and hum of each map (0 = off)
   weatherFx: true, // ⚙ → WEATHER & PARTICLES: blown sand, snow, ash, rain in the air
-  customSkins: true, // ⚙ → PLAYER-MADE SKINS: see the skins other players have painted (off: everyone in the standard skins)
+  customSkins: false, // ⚙ → PLAYER-MADE SKINS: see the skins other players have painted (OFF unless you turn it on: everyone is in the standard skins)
   enemyFootsteps: true, // ⚙ → ENEMY FOOTSTEPS: hear other people's steps, from the side they are on
 };
 try {
   const saved = JSON.parse(localStorage.getItem('pvp_gameplay_settings') || 'null');
   if (saved) GAMEPLAY_SETTINGS = { ...GAMEPLAY_SETTINGS, ...saved };
+  // Painted skins used to be on for everybody. A skin is a picture anyone with the admin pixelizer chose to paint, so the
+  // default is now off, and once, everybody who had it on from before is set to off (turn it on again in the settings).
+  if (!saved || !saved.skinsHiddenByDefault) { GAMEPLAY_SETTINGS.customSkins = false; GAMEPLAY_SETTINGS.skinsHiddenByDefault = true; try { localStorage.setItem('pvp_gameplay_settings', JSON.stringify(GAMEPLAY_SETTINGS)); } catch (e) {} }
   // A phone has the least screen to spare, so the FPS readout starts off there — until
   // someone turns it on in ⚙ (#29). Desktop keeps it on as before.
   if (!saved || saved.showFPS === undefined) {
@@ -68676,7 +68679,7 @@ function openSettingsHub() {
     ${rangeRow('ambient', 'AMBIENT SOUND', 0, 1, 0.05)}
     ${toggleRow('weatherFx', 'WEATHER & PARTICLES', 'Blown sand, snow, ash and rain in the air. Turn off if the game runs slow.')}
     ${toggleRow('enemyFootsteps', 'ENEMY FOOTSTEPS', 'Hear other people\'s footsteps, from the side they are on: louder when they run, quieter crouched, muffled through walls.')}
-    ${toggleRow('customSkins', 'PLAYER-MADE SKINS', 'See the skins other players have painted themselves. Turn off to see everyone in the standard skins.')}
+    ${toggleRow('customSkins', 'PLAYER-MADE SKINS', 'Off unless you choose: see the skins other players have painted themselves. Off, everyone is in the standard skins.')}
     <div style="height:1px;background:#276b55;margin:16px 0 12px;"></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0;">
       <button id="settings-controls" style="padding:12px;background:#10203a;color:#8fbfff;border:1px solid #5599ff;cursor:pointer;font-family:inherit;letter-spacing:2px;border-radius:4px;">🎮 CONTROLS</button>
