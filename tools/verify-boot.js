@@ -3081,6 +3081,82 @@ if (ok && process.argv.includes('--hair')) {
   if (issues.length) { ok = false; console.log(issues.slice(0, 20).join('\n')); }
 }
 
+if (ok && process.argv.includes('--finisher')) {
+  // Selectable finishers: each one takes the body away from the ragdoll (the ragdoll never starts while one owns it), moves the body in
+  // a way of its own, ends with the body put back and gone, and aborts cleanly if the body comes back to life. "Automatic" is the old
+  // behaviour (the ragdoll). Another player's choice plays for their kills, and with none chosen nothing of ours plays.
+  const out = vm.runInThisContext(`(() => {
+    const issues = [];
+    const saved = { sound: playSoundEvent, flash: flashScreen, feed: pushFeedLine, splat: spawnSplatBombFX, raf: requestAnimationFrame, st: setTimeout, rd: window.PVP_RAGDOLL, mine: myFinisher, now: performance.now };
+    playSoundEvent = () => {}; flashScreen = () => {}; pushFeedLine = () => {}; spawnSplatBombFX = () => {};
+    let clock = 1000, rafQ = [], timers = [];
+    Object.defineProperty(performance, 'now', { value: () => clock, configurable: true, writable: true });
+    requestAnimationFrame = cb => { rafQ.push(cb); return rafQ.length; };
+    setTimeout = (fn, ms) => { timers.push([clock + (ms || 0), fn]); return timers.length; };
+    const pump = ms => { const end = clock + ms; while (clock < end) { clock += 16; const q = rafQ; rafQ = []; q.forEach(f => f()); const due = timers.filter(t => t[0] <= clock); timers = timers.filter(t => t[0] > clock); due.forEach(t => t[1]()); } };
+    let ragdollCalls = 0;
+    window.PVP_RAGDOLL = { death: () => { ragdollCalls++; return true; }, reset() {}, blast() {}, tick() {}, clear() {}, hit: () => null };
+    const make = key => { const m = makePlayerMesh('Dummy', true, 'enemy', 'default', {}); m.position.set(10, 0, 10); m.rotation.y = 0.7; m.visible = true; scene.add(m); remoteMeshes[key] = m; players[key] = { id: key, name: 'D', isBot: true, dead: true, team: 'enemy' }; return m; };
+    const drop = key => { scene.remove(remoteMeshes[key]); delete remoteMeshes[key]; delete players[key]; };
+    try {
+      if (FINISHER_IDS.length < 15) issues.push('only ' + FINISHER_IDS.length + ' finishers to choose from');
+      for (const f of FINISHERS) if (!f.name || !f.title || !(f.desc || FINISHER_DESC[f.id])) issues.push(f.id + ': a finisher needs a name, a title and a description');
+      for (const id of FINISHER_IDS) {
+        const key = 'fin_' + id, mesh = make(key);
+        const start = mesh.position.clone(), sr = mesh.rotation.clone(), ss = mesh.scale.clone();
+        myFinisher = id; ragdollCalls = 0;
+        triggerFinisher(key, 'ak20'); dropBody(key); ragdollDeath(key);
+        if (ragdollCalls) issues.push(id + ': the ragdoll started although this finisher was chosen (' + ragdollCalls + ' calls)');
+        if (!mesh._finisher) { issues.push(id + ': the finisher did not take the body'); drop(key); continue; }
+        let moved = false;
+        for (let i = 0; i < 400 && mesh.visible; i++) {
+          pump(16);
+          if (mesh.position.distanceTo(start) > 0.3 || Math.abs(mesh.rotation.x - sr.x) > 0.3 || Math.abs(mesh.rotation.z - sr.z) > 0.3 || Math.abs(mesh.rotation.y - sr.y) > 0.5 || mesh.scale.distanceTo(ss) > 0.1) moved = true;
+        }
+        if (mesh.visible) issues.push(id + ': the body never went away');
+        if (!moved && id !== 'shatter' && id !== 'confetti') issues.push(id + ': the body did not move');
+        if (mesh._finisher) issues.push(id + ': still owns the body at the end');
+        if (mesh.position.distanceTo(start) > 0.01 || mesh.scale.distanceTo(ss) > 0.01) issues.push(id + ': the body was not put back');
+        if (mesh._finisherMats) issues.push(id + ': the materials of the body were not put back');
+        drop(key);
+      }
+      // it comes back to life half way: put right, and visible
+      { const key = 'fin_alive', mesh = make(key), start = mesh.position.clone(); myFinisher = 'balloon';
+        triggerFinisher(key, 'ak20'); pump(500); players[key].dead = false; pump(200);
+        if (!mesh.visible || mesh.position.distanceTo(start) > 0.01 || mesh.scale.x > 1.01) issues.push('a finished body that came back to life should be put right and stay: visible ' + mesh.visible + ' scale ' + mesh.scale.x.toFixed(2));
+        drop(key); }
+      // Automatic: the ragdoll, as before
+      { const key = 'fin_auto', mesh = make(key); myFinisher = 'auto'; ragdollCalls = 0;
+        triggerFinisher(key, 'ak20');
+        if (!ragdollCalls) issues.push('Automatic should leave the body to the ragdoll');
+        if (mesh._finisher) issues.push('Automatic should not own the body');
+        drop(key); }
+      // another player's choice plays for their kill; with none chosen, nothing of ours
+      { const key = 'fin_other', mesh = make(key); myFinisher = 'auto'; ragdollCalls = 0;
+        players.finOtherA = { id: 'finOtherA', finisher: 'ghost' }; players.finOtherB = { id: 'finOtherB', finisher: 'auto' };
+        triggerFinisher(key, 'ak20', 'finOtherB');
+        if (mesh._finisher || ragdollCalls) issues.push('a kill by a player with no finisher chosen must not play ours');
+        triggerFinisher(key, 'ak20', 'finOtherA'); dropBody(key);
+        if (!mesh._finisher || mesh._finisher.id !== 'ghost') issues.push('the finisher another player chose should play on their kill');
+        if (ragdollCalls) issues.push('the ragdoll started although the killer chose a finisher');
+        delete players.finOtherA; delete players.finOtherB; pump(4000); drop(key); }
+      // the pick is only ever a finisher we know
+      myFinisher = 'nonsense'; if (finisherChoiceOf(myId) !== null) issues.push('an unknown finisher must count as Automatic');
+    } finally {
+      playSoundEvent = saved.sound; flashScreen = saved.flash; pushFeedLine = saved.feed; spawnSplatBombFX = saved.splat; requestAnimationFrame = saved.raf; setTimeout = saved.st;
+      window.PVP_RAGDOLL = saved.rd; myFinisher = saved.mine;
+      Object.defineProperty(performance, 'now', { value: saved.now, configurable: true, writable: true });
+    }
+    return { issues, ids: FINISHER_IDS };
+  })()`);
+  const serverSrc = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  const m = serverSrc.match(/const FINISHER_IDS = new Set\(\[([^\]]*)\]\)/);
+  const serverIds = m ? m[1].split(',').map(x => x.trim().replace(/^'|'$/g, '')).filter(Boolean) : [];
+  if (!m || serverIds.slice().sort().join() !== out.ids.slice().sort().join()) out.issues.push('the server\'s FINISHER_IDS must match the client\'s FINISHERS: ' + serverIds.join(' '));
+  console.log('finisher checks: ' + out.ids.length + ' finishers take the body from the ragdoll, move it their own way and put it back; Automatic is the ragdoll; other players\' choices play for their kills; server list matches');
+  if (out.issues.length) { ok = false; console.log(out.issues.slice(0, 24).join('\n')); }
+}
+
 if (ok && process.argv.includes('--netinterp')) {
   // Remote players on the network: packets arrive ~30 times a second, with jitter; the body must glide between them at
   // the screen's own frame rate (it used to move only when a packet landed -- one frame in three at 60 fps -- and trail by

@@ -2219,6 +2219,8 @@ function maxHpForMode(mode) {
 // 🎨 A hand-painted skin, as the client encodes it: { p: [palette of 'rrggbb'], d: base64 of 2816 palette indexes
 // (eleven 16x16 faces), h: hand colour, f: boot colour }. Returned as the same string if it is exactly that and nothing
 // else, null otherwise -- it goes to every client in the match, so it is held to a strict shape and a small size.
+// The finishers a player may pick (mirrors FINISHERS in public/game.js; tools/verify-boot.js --finisher checks they match).
+const FINISHER_IDS = new Set(['launch', 'spin', 'shatter', 'confetti', 'lightning', 'collapse', 'raincloud', 'moonwalk', 'backflip', 'helicopter', 'balloon', 'freeze', 'tumbleweed', 'rocket', 'ghost', 'sink', 'disco']);
 function mayWearPaintedSkin(p) { return !!(p && !p.isBot && p.account && users[p.account] && users[p.account].isAdmin); }
 function cleanSkinData(v) {
   try {
@@ -2247,7 +2249,7 @@ function createPlayer(id, name) {
     hp: PLAYER_MAX_HP, dead: false,
     kills: 0, deaths: 0,
     lastShot: 0, isBot: false,
-    skin: 'default', isAdmin: false, // 🎭 cosmetic skin + crown marker
+    skin: 'default', isAdmin: false, finisher: 'auto', // 🎭 cosmetic skin + crown marker, and how this player finishes people
     skinData: null,                   // 🎨 a hand-painted skin (see cleanSkinData): palette + one byte per pixel
     hair: null,
     weaponId: null,                   // 🔫 what everyone else draws in their hands
@@ -2406,9 +2408,10 @@ io.on('connection', (socket) => {
     // SERVER knows it, may wear one; for anybody else it is the default skin, whatever the client says it is.
     p.skinData = /^px_/.test(p.skin) && mayWearPaintedSkin(p) ? cleanSkinData(data && data.skinData) : null;
     p.hair=cleanHairChoice(data?.hair);
+    p.finisher = FINISHER_IDS.has(data && data.finisher) ? data.finisher : 'auto';   // how this player finishes people (a name the clients know, or automatic)
     if (/^px_/.test(p.skin) && !p.skinData) p.skin = 'default';
     // Tell everyone in the same match so they can re-skin this player's mesh
-    emitToMatch(p.matchId, 'skinChanged', { id: socket.id, skin: p.skin, isAdmin: p.isAdmin, skinData: p.skinData, hair:p.hair });
+    emitToMatch(p.matchId, 'skinChanged', { id: socket.id, skin: p.skin, isAdmin: p.isAdmin, skinData: p.skinData, hair:p.hair, finisher: p.finisher });
   });
 
   // 🎨 What wrap this player has on. Anyone in the match sees it on their gun. A painted wrap ('ap_...') has to be one

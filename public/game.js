@@ -54644,8 +54644,15 @@ function syncBotMesh(bot, opts = {}) {
   return mesh;
 }
 
+// The ragdoll takes a body over the moment it dies. A finisher the killer chose wins over it: while one owns the body the
+// ragdoll is told it already has it (true), so it never starts, and dropBody does not tip the body over either.
+function ragdollDeath(id, weaponId) {
+  const m = remoteMeshes[id];
+  if (m && m._finisher && performance.now() < m._finisher.until) return true;
+  return window.PVP_RAGDOLL?.death(id, weaponId);
+}
 function dropBody(id) {
-  if (window.PVP_RAGDOLL?.death(id)) return;
+  if (ragdollDeath(id)) return;
   const mesh = remoteMeshes[id];
   if (!mesh || mesh._drop || !mesh.visible) return;
   const token = (mesh._drop = {});
@@ -54788,18 +54795,11 @@ function _pickFinisher(weaponId) {
   if (/black|void|gravity|event_horizon|magnetar|quantum/.test(id)) return FINISHERS.find(f => f.id === 'collapse');
   if (/confetti|paintball|sticker|firework/.test(id)) return FINISHERS.find(f => f.id === 'confetti');
   if (/melee|knife|katana|sabre|axe|blade|chainsaw|fists|bat|sledge|hammer/.test(id)) return FINISHERS.find(f => f.id === 'spin');
-  return FINISHERS[Math.floor(Math.random() * FINISHERS.length)];
+  const classic = FINISHERS.filter(f => !f.extra);
+  return classic[Math.floor(Math.random() * classic.length)];
 }
-function triggerFinisher(targetId, weaponId) {
-  if (window.PVP_RAGDOLL?.death(targetId, weaponId)) return;
-  const now = performance.now();
-  if (_lastFinisher.id === targetId && now - _lastFinisher.t < 1400) return;
-  _lastFinisher = { id: targetId, t: now };
-  const mesh = remoteMeshes[targetId];
-  if (!mesh || !mesh.visible) return;
-  const fin = _pickFinisher(weaponId || currentEquippedId());
+function _playClassicFinisher(mesh, targetId, fin, pos) {
   const color = fin.color || 0xffffff;
-  const pos = mesh.position.clone().add(new THREE.Vector3(0, 1.05, 0));
   _spawnFinisherRing(pos.clone().setY(mesh.position.y), color, fin.id === 'collapse' ? 2.8 : 1.9);
   for (let i = 0; i < (fin.id === 'confetti' ? 24 : 12); i++) {
     const c = fin.id === 'confetti' ? [0xff4477, 0xffdd55, 0x55ddff, 0x88ff66][i % 4] : color;
@@ -54861,7 +54861,223 @@ function triggerFinisher(targetId, weaponId) {
   } else if (fin.id === 'raincloud') {
     _spawnRaincloudFinisher(mesh, pos);
   }
+}
+function triggerFinisher(targetId, weaponId, killerId = myId) {
+  const chosen = finisherChoiceOf(killerId);                   // the finisher its killer picked, if they picked one
+  if (chosen && playChosenFinisher(targetId, chosen, killerId)) return;
+  if (killerId !== myId) return;                                // someone else's kill with no finisher chosen: nothing of ours to play
+  if (ragdollDeath(targetId, weaponId)) return;
+  const now = performance.now();
+  if (_lastFinisher.id === targetId && now - _lastFinisher.t < 1400) return;
+  _lastFinisher = { id: targetId, t: now };
+  const mesh = remoteMeshes[targetId];
+  if (!mesh || !mesh.visible) return;
+  const fin = _pickFinisher(weaponId || currentEquippedId());
+  const color = fin.color || 0xffffff;
+  const pos = mesh.position.clone().add(new THREE.Vector3(0, 1.05, 0));
+  _playClassicFinisher(mesh, targetId, fin, pos);
   pushFeedLine(fin.title, players[targetId]?.name || 'Enemy', '#' + color.toString(16).padStart(6, '0'));
+}
+// ══════════════════════════════════════════════════════════════════════════
+// 🎬 SELECTABLE FINISHERS. A finisher is what happens to the body of the person you finish: it moves in a way of its own, and it
+// takes the body away from the ragdoll (see ragdollDeath). You pick yours in 🎭 SKINS → FINISHER (and can preview it); "Automatic"
+// is how it always was: by weapon, and the ragdoll. The pick is sent with your skin, so everybody who watches you finish someone
+// sees yours. These are the new ones; the seven above them can be picked too.
+// ══════════════════════════════════════════════════════════════════════════
+const FINISHER_EXTRA = [
+  { id: 'moonwalk',   name: 'Moonwalk',    color: 0xff77dd, title: 'MOONWALKED',  desc: 'Slides backwards, upright and smooth, then falls over.' },
+  { id: 'backflip',   name: 'Backflip',    color: 0xffcc44, title: 'FLIPPED',     desc: 'A big jump and two backflips.' },
+  { id: 'helicopter', name: 'Helicopter',  color: 0x88ddff, title: 'CHOPPERED',   desc: 'Spins up like a rotor, lifts off, drops.' },
+  { id: 'balloon',    name: 'Balloon',     color: 0xff88aa, title: 'POPPED',      desc: 'Blows up like a balloon and floats away, then pops.' },
+  { id: 'freeze',     name: 'Ice Block',   color: 0x9fe8ff, title: 'FROZEN SOLID', desc: 'Freezes stiff, shivers, then shatters.' },
+  { id: 'tumbleweed', name: 'Tumbleweed',  color: 0xd9b36a, title: 'TUMBLED',     desc: 'Curls into a ball and rolls away, bouncing.' },
+  { id: 'rocket',     name: 'Rocket Man',  color: 0xff8844, title: 'LAUNCHED SKYWARD', desc: 'Straight up on a trail of fire, then fireworks.' },
+  { id: 'ghost',      name: 'Ghost',       color: 0xe6f0ff, title: 'HAUNTED',     desc: 'Turns into a pale ghost, floats up and fades.' },
+  { id: 'sink',       name: 'Trapdoor',    color: 0xb89c70, title: 'SWALLOWED',   desc: 'Spins as the floor swallows them whole.' },
+  { id: 'disco',      name: 'Disco Fever', color: 0xff44ff, title: 'DISCO FEVER', desc: 'Cannot help dancing, in coloured light, then drops.' },
+];
+FINISHERS.push(...FINISHER_EXTRA.map(f => ({ ...f, extra: true })));
+const FINISHER_DESC = { launch: 'Flung sideways in a tumbling arc.', spin: 'Spins out like a top.', shatter: 'Bursts into ice shards.', confetti: 'A burst of confetti.', lightning: 'Struck by lightning.', collapse: 'Shrinks into nothing, spinning.', raincloud: 'A little rain cloud rains junk on them.' };
+const FINISHER_IDS = FINISHERS.map(f => f.id);
+let myFinisher = (() => { try { const v = localStorage.getItem('pvp_finisher'); return FINISHER_IDS.includes(v) ? v : 'auto'; } catch (e) { return 'auto'; } })();
+function setMyFinisher(id) {
+  myFinisher = FINISHER_IDS.includes(id) ? id : 'auto';
+  try { localStorage.setItem('pvp_finisher', myFinisher); } catch (e) {}
+  try { emitMySkin(); } catch (e) {}
+}
+// The id of the finisher the killer chose (null: Automatic, or not one we know).
+function finisherChoiceOf(killerId) {
+  const v = killerId === myId ? myFinisher : players[killerId] && players[killerId].finisher;
+  return v && v !== 'auto' && FINISHER_IDS.includes(v) ? v : null;
+}
+const _finisherMats = {};
+function _finisherMat(key, color, opacity = 1) {
+  const m = _finisherMats[key] || (_finisherMats[key] = new THREE.MeshLambertMaterial({ color }));
+  m.opacity = opacity; m.transparent = opacity < 1; return m;
+}
+function _finisherSwap(mesh, mat) {                    // the whole body in one material (frozen, a balloon, a ghost); put back at the end
+  mesh._finisherMats = mesh._finisherMats || [];
+  mesh.traverse(o => { if (o.isMesh && o.material && !mesh._finisherMats.some(e => e[0] === o)) { mesh._finisherMats.push([o, o.material]); o.material = mat; } });
+}
+function _finisherEnd(mesh, st, hide, id) {
+  mesh.rotation.order = st.order; mesh.position.copy(st.p); mesh.rotation.copy(st.r); mesh.scale.copy(st.s);
+  if (mesh._finisherMats) { for (const [o, m] of mesh._finisherMats) o.material = m; mesh._finisherMats = null; }
+  mesh._finisher = null;
+  if (hide && (!players[id] || players[id].dead !== false)) mesh.visible = false;        // still dead: now it can go
+}
+// Runs `step(t 0..1, dt, start)` on the body for `ms`, then puts it back and hides it; `done` runs at the very end (a burst).
+function _finisherDrive(mesh, id, ms, step, done) {
+  const st = { p: mesh.position.clone(), r: mesh.rotation.clone(), s: mesh.scale.clone(), order: mesh.rotation.order };
+  const token = mesh._finisher, born = performance.now(); let last = born;
+  const tick = () => {
+    if (mesh._finisher !== token) return;
+    const now = performance.now(), t = Math.min(1, (now - born) / ms), dt = Math.min(0.05, (now - last) / 1000); last = now;
+    if (players[id] && players[id].dead === false) { _finisherEnd(mesh, st, false, id); return; }   // it came back to life: put it right
+    step(t, dt, st);
+    if (t < 1) requestAnimationFrame(tick);
+    else { try { if (done) done(st); } finally { _finisherEnd(mesh, st, true, id); } }
+  };
+  requestAnimationFrame(tick);
+}
+function _finisherBurst(pos, color, n = 18, colors = null) {
+  for (let i = 0; i < n; i++) _spawnFinisherSpark(pos, colors ? colors[i % colors.length] : color, { size: 0.06, vel: new THREE.Vector3((Math.random() - 0.5) * 8, 2 + Math.random() * 6, (Math.random() - 0.5) * 8), life: 560 + Math.random() * 400 });
+}
+const _ease = t => 1 - (1 - t) * (1 - t);
+const FINISHER_MOVES = {
+  moonwalk(mesh, id, c) {
+    const fwd = new THREE.Vector3(Math.sin(mesh.rotation.y), 0, Math.cos(mesh.rotation.y));
+    _finisherDrive(mesh, id, 2100, (t, dt, st) => {
+      mesh.position.copy(st.p).addScaledVector(fwd, -6.5 * _ease(Math.min(1, t / 0.9)));
+      mesh.position.y = st.p.y + Math.abs(Math.sin(t * Math.PI * 7)) * 0.1;
+      mesh.rotation.x = st.r.x + (t < 0.82 ? -0.12 : -0.12 - (t - 0.82) / 0.18 * (Math.PI / 2 - 0.12));
+      if (Math.random() < 0.35) _spawnFinisherSpark(mesh.position.clone().setY(st.p.y + 0.1), c, { size: 0.045, life: 380, vel: new THREE.Vector3((Math.random() - 0.5) * 1.5, 1 + Math.random(), (Math.random() - 0.5) * 1.5) });
+    });
+  },
+  backflip(mesh, id, c) {
+    const fwd = new THREE.Vector3(Math.sin(mesh.rotation.y), 0, Math.cos(mesh.rotation.y));
+    mesh.rotation.order = 'YXZ';
+    _finisherDrive(mesh, id, 1400, (t, dt, st) => {
+      mesh.position.copy(st.p).addScaledVector(fwd, -1.8 * t); mesh.position.y = st.p.y + Math.sin(Math.min(1, t * 1.05) * Math.PI) * 2.6;
+      mesh.rotation.x = st.r.x - t * Math.PI * 4;
+    }, st => _finisherBurst(st.p.clone().setY(st.p.y + 0.3), c, 8));
+  },
+  helicopter(mesh, id, c) {
+    _finisherDrive(mesh, id, 1900, (t, dt, st) => {
+      const up = t < 0.65 ? 3.4 * _ease(t / 0.65) : 3.4 * (1 - Math.pow((t - 0.65) / 0.35, 2));
+      mesh.position.y = st.p.y + up; mesh.rotation.y += 26 * dt * (0.4 + Math.min(1, t * 3)); mesh.rotation.z = 0.32 * Math.min(1, t * 4);
+      if (Math.random() < 0.4) _spawnFinisherRing(mesh.position.clone(), c, 1.2);
+    }, st => _spawnFinisherRing(st.p.clone(), c, 2.4));
+  },
+  balloon(mesh, id, c) {
+    _finisherSwap(mesh, _finisherMat('balloon', 0xff6f9a));
+    const drift = new THREE.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5).normalize();
+    _finisherDrive(mesh, id, 2800, (t, dt, st) => {
+      const grow = 1 + 0.9 * _ease(Math.min(1, t / 0.18));
+      mesh.scale.set(st.s.x * grow, st.s.y * grow, st.s.z * grow);
+      mesh.position.copy(st.p).addScaledVector(drift, 3.5 * t); mesh.position.y = st.p.y + 15 * Math.pow(t, 1.35);
+      mesh.rotation.y += 1.2 * dt; mesh.rotation.z = Math.sin(t * 9) * 0.12;
+    }, st => _finisherBurst(mesh.position.clone().setY(mesh.position.y + 1.2), c, 28, [0xff4477, 0xffdd55, 0x55ddff, 0x88ff66]));
+  },
+  freeze(mesh, id, c) {
+    _finisherSwap(mesh, _finisherMat('ice', 0x8fdcff, 0.9));
+    flashScreen('rgba(160,230,255,0.14)', 160);
+    mesh.rotation.order = 'YXZ';
+    _finisherDrive(mesh, id, 1100, (t, dt, st) => {
+      const shiver = t < 0.4 ? 0.03 * Math.sin(t * 120) : 0; mesh.position.x = st.p.x + shiver; mesh.position.z = st.p.z - shiver;   // it shivers, then topples over stiff as a statue
+      mesh.rotation.x = st.r.x - (t < 0.4 ? 0 : Math.pow((t - 0.4) / 0.6, 2) * 1.3);
+      if (Math.random() < 0.25) _spawnFinisherSpark(mesh.position.clone().setY(st.p.y + 1 + Math.random()), c, { size: 0.04, life: 420, vel: new THREE.Vector3((Math.random() - 0.5), 0.6, (Math.random() - 0.5)) });
+    }, st => { _finisherBurst(st.p.clone().setY(st.p.y + 1), c, 30); _spawnFinisherRing(st.p.clone(), c, 2.2); playSoundEvent('freeze_shatter', { position: st.p, volume: 0.9, minGap: 80 }); });
+  },
+  tumbleweed(mesh, id, c) {
+    const fwd = new THREE.Vector3(Math.sin(mesh.rotation.y), 0, Math.cos(mesh.rotation.y)), sign = Math.random() < 0.5 ? 1 : -1, dir = fwd.clone().multiplyScalar(sign);
+    mesh.rotation.order = 'YXZ';
+    _finisherDrive(mesh, id, 1900, (t, dt, st) => {
+      mesh.position.copy(st.p).addScaledVector(dir, 8 * _ease(t)); mesh.position.y = st.p.y + 0.5 + Math.abs(Math.sin(t * Math.PI * 5)) * 0.4 * (1 - t * 0.5);
+      mesh.rotation.x = st.r.x + t * Math.PI * 9 * sign;
+      const k = 1 - 0.35 * t; mesh.scale.set(st.s.x * k, st.s.y * k, st.s.z * k);
+      if (Math.random() < 0.3) _spawnFinisherSpark(mesh.position.clone().setY(st.p.y + 0.1), c, { size: 0.05, life: 450, vel: new THREE.Vector3((Math.random() - 0.5), 1.2, (Math.random() - 0.5)) });
+    });
+  },
+  rocket(mesh, id, c) {
+    playSoundEvent('air_launch', { position: mesh.position, volume: 0.9, minGap: 80 });
+    _finisherDrive(mesh, id, 1500, (t, dt, st) => {
+      mesh.position.y = st.p.y + 32 * Math.pow(t, 2.2); mesh.rotation.y += 9 * dt;
+      for (let i = 0; i < 2; i++) _spawnFinisherSpark(mesh.position.clone(), i ? 0xffdd55 : c, { size: 0.09, life: 520, vel: new THREE.Vector3((Math.random() - 0.5) * 1.5, -3 - Math.random() * 3, (Math.random() - 0.5) * 1.5) });
+    }, st => { const top = mesh.position.clone(); _finisherBurst(top, c, 40, [0xff4477, 0xffdd55, 0x55ddff, 0x88ff66, 0xffffff]); _spawnFinisherRing(top, 0xffdd55, 4); playSoundEvent('confetti_blast', { position: top, volume: 0.9, minGap: 80 }); });
+  },
+  ghost(mesh, id, c) {
+    const mat = _finisherMat('ghost', 0xe9f2ff, 0.62);
+    _finisherSwap(mesh, mat);
+    _finisherDrive(mesh, id, 2300, (t, dt, st) => {
+      mat.opacity = 0.62 * (1 - t * t);
+      mesh.position.y = st.p.y + 3.4 * _ease(t); mesh.position.x = st.p.x + Math.sin(t * 11) * 0.22;
+      mesh.rotation.y += 1.6 * dt; mesh.rotation.z = Math.sin(t * 8) * 0.12;
+      if (Math.random() < 0.3) _spawnFinisherSpark(mesh.position.clone().setY(mesh.position.y + 0.8), c, { size: 0.05, life: 600, opacity: 0.6, vel: new THREE.Vector3((Math.random() - 0.5) * 0.8, 0.8, (Math.random() - 0.5) * 0.8) });
+    });
+  },
+  sink(mesh, id, c) {
+    _spawnFinisherRing(mesh.position.clone(), c, 2.2);
+    _finisherBurst(mesh.position.clone().setY(mesh.position.y + 0.1), c, 10);
+    _finisherDrive(mesh, id, 1300, (t, dt, st) => {
+      mesh.position.y = st.p.y - 2.5 * Math.pow(t, 1.6); mesh.rotation.y += 5 * dt * (1 - t * 0.4);
+      if (Math.random() < 0.4) _spawnFinisherSpark(st.p.clone().setY(st.p.y + 0.05), c, { size: 0.05, life: 400, vel: new THREE.Vector3((Math.random() - 0.5) * 2.4, 1.4, (Math.random() - 0.5) * 2.4) });
+    });
+  },
+  disco(mesh, id, c) {
+    const cols = [0xff44ff, 0x44ffff, 0xffff44, 0x66ff66, 0xff6644];
+    let next = 0;
+    _finisherDrive(mesh, id, 2200, (t, dt, st) => {
+      const dance = t < 0.86;
+      mesh.position.y = st.p.y + (dance ? Math.abs(Math.sin(t * Math.PI * 9)) * 0.28 : 0);
+      mesh.rotation.y = st.r.y + (dance ? Math.sin(t * Math.PI * 9) * 0.9 : 0);
+      mesh.rotation.z = dance ? Math.sin(t * Math.PI * 4.5) * 0.16 : 0;
+      mesh.rotation.x = dance ? 0 : -((t - 0.86) / 0.14) * (Math.PI / 2);
+      if (t >= next) { next = t + 0.06; _spawnFinisherRing(mesh.position.clone().setY(st.p.y), cols[Math.floor(t * 40) % cols.length], 1.4); }
+    }, st => _finisherBurst(st.p.clone().setY(st.p.y + 0.3), c, 20, cols));
+  },
+};
+// Plays the chosen finisher on a body. The seven classic ones run the classic effect (see _playClassicFinisher); the others have a move
+// of their own above. Returns false if there is nothing to play it on.
+function playChosenFinisher(targetId, id, killerId) {
+  const mesh = remoteMeshes[targetId];
+  const fin = FINISHERS.find(f => f.id === id);
+  if (!mesh || !mesh.visible || !fin) return false;
+  if (mesh._finisher && performance.now() < mesh._finisher.until) return true;           // already being finished
+  const color = fin.color || 0xffffff, pos = mesh.position.clone().add(new THREE.Vector3(0, 1.05, 0));
+  mesh._finisher = { id, until: performance.now() + 4200 };                               // owns the body: the ragdoll keeps off it
+  if (fin.extra) {
+    _spawnFinisherRing(pos.clone().setY(mesh.position.y), color, 1.9);
+    FINISHER_MOVES[id](mesh, targetId, color);
+  } else {
+    _playClassicFinisher(mesh, targetId, fin, pos);
+    // the classic ones that do not move the body shatter it at once or let it fall as before
+    const st = { p: mesh.position.clone(), r: mesh.rotation.clone(), s: mesh.scale.clone(), order: mesh.rotation.order };
+    const token = mesh._finisher;
+    if (id === 'shatter' || id === 'confetti') setTimeout(() => { if (mesh._finisher === token) _finisherEnd(mesh, st, true, targetId); }, 160);
+    else if (id === 'lightning' || id === 'raincloud') {
+      const from = mesh.rotation.x, t0 = performance.now();
+      const fall = () => { if (mesh._finisher !== token) return; const t = Math.min(1, (performance.now() - t0) / 320); mesh.rotation.x = from - (Math.PI / 2) * t * t; if (t < 1) requestAnimationFrame(fall); };
+      requestAnimationFrame(fall);
+      setTimeout(() => { if (mesh._finisher === token) _finisherEnd(mesh, st, true, targetId); }, 1500);
+    } else setTimeout(() => { if (mesh._finisher === token) _finisherEnd(mesh, st, true, targetId); }, 1000);   // launch, spin, collapse: their own tick has finished by then
+  }
+  pushFeedLine(fin.title, players[targetId]?.name || 'Enemy', '#' + color.toString(16).padStart(6, '0'));
+  return true;
+}
+// A dummy in front of you, finished the way you picked, so you can see it (🎭 SKINS → FINISHER → PREVIEW).
+function previewFinisher(id) {
+  if (!gameStarted) return false;
+  const key = 'finisher_preview';
+  if (remoteMeshes[key]) { scene.remove(remoteMeshes[key]); delete remoteMeshes[key]; }
+  const fwd = new THREE.Vector3(-Math.sin(euler.y), 0, -Math.cos(euler.y));
+  const x = camera.position.x + fwd.x * 5.5, z = camera.position.z + fwd.z * 5.5;
+  const y = typeof botGroundYAt === 'function' ? botGroundYAt(x, z, camera.position.y - 1.65, 1.2, 4) : camera.position.y - 1.65;
+  const mesh = makePlayerMesh('Dummy', true, 'enemy', 'default', {});
+  mesh.position.set(x, y, z); mesh.rotation.y = euler.y; mesh.visible = true; scene.add(mesh);
+  remoteMeshes[key] = mesh; players[key] = { id: key, name: 'Dummy', isBot: true, dead: true, team: 'enemy' };
+  playChosenFinisher(key, id, myId);
+  setTimeout(() => { if (remoteMeshes[key] === mesh) { scene.remove(mesh); try { disposeBody(mesh); } catch (e) {} delete remoteMeshes[key]; delete players[key]; } }, 5200);
+  return true;
 }
 // One line under the crosshair: LOW AMMO / RELOAD / OUT OF AMMO. RELOADING... takes the same spot.
 function updateAmmoHint() {
@@ -58651,7 +58867,8 @@ socket.on('weaponChanged', ({ id, weaponId }) => {
   const m = remoteMeshes[id];
   if (m) armRemoteMesh(m, armableWeaponOf(players[id] || { weaponId }));
 });
-socket.on('skinChanged', ({ id, skin, isAdmin, skinData, hair }) => {
+socket.on('skinChanged', ({ id, skin, isAdmin, skinData, hair, finisher }) => {
+  if (players[id]) players[id].finisher = FINISHER_IDS.includes(finisher) ? finisher : 'auto';   // how this player finishes people
   if (id === myId) return; // local player has no body mesh
   if (players[id]) { players[id].skin = skin; players[id].isAdmin = isAdmin; players[id].skinData = skinData || null; players[id].hair=cleanHairChoice(hair); }
   const old = remoteMeshes[id];
@@ -58841,6 +59058,7 @@ socket.on('playerHit', data => {
       // falls here; the credit comes with the server's playerDied, which names the killer.
       hitBot.dead = true;
       if (players[data.targetId]) players[data.targetId].dead = true;
+      if (finisherChoiceOf(data.shooterId)) triggerFinisher(data.targetId, data.weapon, data.shooterId);   // their finisher, as they chose it
       dropBody(data.targetId);
     } else if (hitBot.hp <= 0) {
       hitBot.dead = true;
@@ -59000,6 +59218,7 @@ socket.on('playerDied', data => {
   }
   if (remoteMeshes[data.targetId]) {
     if (data.killerId === myId && data.targetId !== myId) triggerFinisher(data.targetId, data.weapon || currentEquippedId());
+    else if (data.killerId && data.killerId !== myId && data.targetId !== myId && finisherChoiceOf(data.killerId)) triggerFinisher(data.targetId, data.weapon, data.killerId);   // another player's finisher
     dropBody(data.targetId);   // falls, then hides (#34)
   }
   const bot = resolveBot(data.targetId);
@@ -59215,7 +59434,7 @@ function updateRemoteInterp() {
     const snaps = p && p._snaps;
     if (!snaps || !snaps.length || p.isBot && gameBots.some(b => b.id === pid)) continue;
     const mesh = remoteMeshes[pid];
-    if (mesh?._ragdoll) continue;
+    if (mesh?._ragdoll || mesh?._finisher) continue;      // a ragdoll or a finisher is moving this body
     let x, y, z, rot;
     const first = snaps[0], last = snaps[snaps.length - 1];
     if (renderAt <= first.at) { x = first.x; y = first.y; z = first.z; rot = first.rotY; }
@@ -62273,7 +62492,7 @@ function pushKillfeed(targetId, killerId) {
 }
 
 function onEntityDied(targetId, killerId) {
-  window.PVP_RAGDOLL?.death(targetId);
+  ragdollDeath(targetId);
   if (!match || match.over) return;
   if (mpMatch()) {
     // With other real players a death can reach us twice — played out here, then the
@@ -67800,7 +68019,7 @@ try { refreshViewArms(); } catch (e) {}   // now that the skin is known, the arm
 function emitMySkin() {
   try { refreshViewArms(); } catch (e) {}   // your own sleeves follow the skin you are wearing
   if (!socket) return;
-  socket.emit('setSkin', { skin: mySkin, isAdmin: !!(currentUser && currentUser.isAdmin), skinData: _pxWireFor(mySkin), hair:myHair });
+  socket.emit('setSkin', { skin: mySkin, isAdmin: !!(currentUser && currentUser.isAdmin), skinData: _pxWireFor(mySkin), hair:myHair, finisher: myFinisher });
   syncAdminTestSettings();
   _sentWeaponId = null; broadcastHeldWeapon();   // a reconnect or room change clears what the server knew
   _sentWrapId = undefined; try { emitMyWrap(); } catch (e) {}
@@ -70088,10 +70307,33 @@ function openSkinsPanel() {
         </div>
       </div>
     </section>
+    <section style="border-bottom:1px solid #314451;padding-bottom:12px;margin-bottom:12px;">
+      <h3 style="font-size:14px;margin:0 0 6px;color:#d9e8ee;">Finisher</h3>
+      <div style="font-size:11px;color:#a6bac6;margin-bottom:8px;line-height:1.4;">What happens to the body of the person you finish. Yours takes over from the ragdoll, and everyone who watches sees it.</div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <select id="finisher-select" style="flex:1;min-width:0;padding:8px 4px;box-sizing:border-box;background:#182732;color:white;border:1px solid #637b89;border-radius:4px;font:inherit;font-size:12px;">
+          <option value="auto" ${myFinisher === 'auto' ? 'selected' : ''}>Automatic (by weapon, and the ragdoll)</option>${FINISHERS.map(f => `<option value="${f.id}" ${myFinisher === f.id ? 'selected' : ''}>${f.name}</option>`).join('')}
+        </select>
+        <button id="finisher-preview" type="button" style="flex:none;padding:8px 12px;background:#263e38;color:#bce4ce;border:1px solid #698d7a;border-radius:4px;cursor:pointer;font:inherit;font-size:12px;letter-spacing:1px;">▶ PREVIEW</button>
+      </div>
+      <div id="finisher-desc" style="font-size:11px;color:#8fb0c4;margin-top:6px;min-height:2.6em;line-height:1.4;"></div>
+    </section>
     ${cards}
     <button id="sk-pixelizer" style="display:block;width:100%;margin-top:6px;padding:10px;background:#2a1030;color:#ff99dd;border:1px solid #ff66cc;border-radius:6px;cursor:pointer;font-family:inherit;font-size:13px;letter-spacing:2px;">🎨 DESIGN YOUR OWN SKIN</button>
     <div style="margin-top:10px;font-size:10px;color:#ffd227;text-align:center;">👑 ${isAdmin ? 'As admin, you always wear the crown.' : 'The match\'s top fragger wears the crown.'}</div>`;
   panel.querySelector('#sk-close').addEventListener('click', () => { panel.style.display = 'none'; });
+  {
+    const sel = panel.querySelector('#finisher-select'), desc = panel.querySelector('#finisher-desc');
+    const describe = () => { const f = FINISHERS.find(x => x.id === sel.value); desc.textContent = f ? (f.desc || FINISHER_DESC[f.id] || '') : 'The finisher follows your weapon (ice shatters, energy zaps, blades spin) and the body falls as a ragdoll.'; };
+    describe();
+    sel.addEventListener('change', () => { setMyFinisher(sel.value); describe(); });
+    panel.querySelector('#finisher-preview').addEventListener('click', () => {
+      if (sel.value === 'auto') { desc.textContent = 'Automatic depends on the weapon you kill with: pick one finisher to preview it.'; return; }
+      if (!gameStarted) { desc.textContent = 'Previews play on a dummy in front of you once you are in the game (Lobby 13 is fine).'; return; }
+      panel.style.display = 'none';
+      previewFinisher(sel.value);
+    });
+  }
   drawHairPreview(panel.querySelector('#hair-preview'));
   panel.querySelector('#hair-turn').addEventListener('input',e=>drawHairPreview(panel.querySelector('#hair-preview'),Number(e.target.value)*Math.PI/180));
   panel.querySelector('#hair-style').addEventListener('change',e=>{setMyHair(e.target.value?{style:e.target.value,color:hairColor}:null);openSkinsPanel();});
