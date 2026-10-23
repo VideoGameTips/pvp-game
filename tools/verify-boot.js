@@ -2816,7 +2816,7 @@ if (ok && process.argv.includes('--uppercut')) {
       if (ab.type !== 'melee_uppercut' || ab.damage !== 50) issues.push('the Fists ability should be a 50-damage uppercut, got ' + ab.type + ' ' + ab.damage);
       const put = (id, x, z, team) => { const m = new THREE.Group(); m.position.set(x, 0, z); m.visible = true; remoteMeshes[id] = m; players[id] = { id, isBot: false, team: team || 'enemy', hp: 300 }; };
       const clear = () => { for (const k of ['upA', 'upB', 'upC', 'upD']) { delete remoteMeshes[k]; delete players[k]; } };
-      const fire = () => { abilityCDs.fists = 0; slamState = null; _extVel.x = 0; _extVel.z = 0; hits.length = 0; camera.position.set(0, 1.65, 0); euler.y = 0; camera.quaternion.setFromEuler(euler); activateMeleeAbility(); };
+      const fire = () => { meleeCombo = null; abilityCDs.fists = 0; slamState = null; _extVel.x = 0; _extVel.z = 0; hits.length = 0; camera.position.set(0, 1.65, 0); euler.y = 0; camera.quaternion.setFromEuler(euler); activateMeleeAbility(); };
       // in front: -z is forward at yaw 0
       clear(); put('upA', 0, -1.8);
       fire();
@@ -3155,6 +3155,112 @@ if (ok && process.argv.includes('--finisher')) {
   if (!m || serverIds.slice().sort().join() !== out.ids.slice().sort().join()) out.issues.push('the server\'s FINISHER_IDS must match the client\'s FINISHERS: ' + serverIds.join(' '));
   console.log('finisher checks: ' + out.ids.length + ' finishers take the body from the ragdoll, move it their own way and put it back; Automatic is the ragdoll; other players\' choices play for their kills; server list matches');
   if (out.issues.length) { ok = false; console.log(out.issues.slice(0, 24).join('\n')); }
+}
+
+if (ok && process.argv.includes('--combo')) {
+  // Melee combos (sledge, fists, battle axe) and the katana's deflect. A combo: each E is the next step, a press that comes early is
+  // remembered, the full cooldown starts only with the finishing blow, a half-thrown chain costs a short cooldown instead, and a weapon
+  // switch ends it. The katana has NO combo: a 1 s deflect on a 4 s cooldown, +0.1 s for every shot it blocks (a burst counts once, up to
+  // +2 s), the blade meets the shot from one of eight sides, and the block flashes hard.
+  const out = vm.runInThisContext(`(() => {
+    const issues = [];
+    const saved = { sound: playSoundEvent, fx: spawnAbilityAOEFX, flash: flashScreen, feed: pushFeedLine, hit: emitHit, st: setTimeout, now: performance.now, dnow: Date.now,
+                    started: gameStarted, dead: isDead, slot: activeSlot, sel: selectedMeleeIdx, cd: { ...abilityCDs }, cdown: countdownActive, match, cam: camera.position.clone(), q: camera.quaternion.clone(), ey: euler.y, slam: slamState };
+    playSoundEvent = () => {}; spawnAbilityAOEFX = () => {}; showAnnouncement = () => {};
+    const hits = [], feed = [], flashes = [];
+    emitHit = (pid, bid, wid, pos, hs, opts) => { hits.push({ pid, wid, dmg: opts && opts.damageOverride }); };
+    pushFeedLine = (a) => { feed.push(String(a)); }; flashScreen = (c) => { flashes.push(String(c)); };
+    let clock = 50000, timers = [];
+    Date.now = () => clock; Object.defineProperty(performance, 'now', { value: () => clock, configurable: true, writable: true });
+    setTimeout = (fn, ms) => { timers.push([clock + (ms || 0), fn]); return timers.length; };
+    const adv = ms => { for (let t = 0; t < ms; t += 16) { clock += 16; if (remoteMeshes.cmbT) remoteMeshes.cmbT.position.set(camera.position.x, 0, camera.position.z - 2); const due = timers.filter(x => x[0] <= clock); timers = timers.filter(x => x[0] > clock); due.forEach(x => x[1]()); updateMeleeCombo(0.016); updateMeleeSlam(0.016); updateMeleeDash(0.016); } };
+    try {
+      gameStarted = true; isDead = false; countdownActive = false; match = null; activeSlot = 'melee';
+      camera.position.set(0, 1.65, 0); camera.quaternion.set(0, 0, 0, 1); euler.y = 0; euler.x = 0;
+      const tgt = new THREE.Group(); tgt.position.set(0, 0, -2); tgt.visible = true; remoteMeshes.cmbT = tgt; players.cmbT = { id: 'cmbT', isBot: true, team: 'enemy', hp: 300, dead: false };
+      const reset = id => { meleeCombo = null; meleeSlam = null; meleeDash = null; slamState = null; abilityCDs[id] = 0; hits.length = 0; feed.length = 0; timers = []; tgt.position.set(0, 0, -2); camera.position.set(0, 1.65, 0); _extVel.x = _extVel.z = 0; };
+      const spec = [['sledge', 3, ['sledge_hop', 'sledge_spin']], ['fists', 3, ['fists_uppercut', 'fists_cross']], ['combat_axe', 4, ['axe_upper', 'axe_airwhirl', 'axe_chop']]];
+      for (const [id, n, wanted] of spec) {
+        const item = MELEE_ITEMS.find(m => m.id === id), ab = item && item.ability;
+        if (!ab || !ab.combo || ab.combo.length !== n) { issues.push(id + ': should be a ' + n + '-step combo'); continue; }
+        if (ab.combo.some(st => !COMBO_RUN[st.kind])) issues.push(id + ': a step has no move');
+        selectedMeleeIdx = MELEE_ITEMS.indexOf(item);
+        reset(id);
+        activateMeleeAbility();
+        if (!meleeCombo || meleeCombo.step !== 0) { issues.push(id + ': E should start step 1'); continue; }
+        if (abilityCDs[id]) issues.push(id + ': the cooldown must not start with the first step');
+        activateMeleeAbility();                                         // too early: remembered
+        if (meleeCombo.step !== 0) issues.push(id + ': an early press should wait for the step to let go');
+        adv(900);
+        if (!meleeCombo || meleeCombo.step < 1) issues.push(id + ': an early press should fire by itself');
+        let guard = 0;
+        while (meleeCombo && !meleeCombo.final && guard++ < 8) { activateMeleeAbility(); adv(800); try { updateAbilityHUD(); } catch (e) { issues.push(id + ': the ability HUD threw: ' + e.message); break; } }
+        const names = ab.combo.map(st => st.name);
+        for (let i = 0; i < n; i++) if (!feed.some(f => f.includes(names[i]))) issues.push(id + ': step ' + (i + 1) + ' (' + names[i] + ') never ran');
+        if (id !== 'sledge' || true) for (const w of wanted) if (!hits.some(h => h.wid === w)) issues.push(id + ': ' + w + ' never hit the target in front');
+        if (id === 'sledge' && !(meleeSlam && meleeSlam.flip)) issues.push('sledge: the last step should be a BACKFLIP slam');
+        if (id !== 'combat_axe' && !meleeSlam && !abilityCDs[id]) issues.push(id + ': the last step should be a slam');
+        if (!(abilityCDs[id] && Date.now() - abilityCDs[id] < abilityCooldownFor(item, ab))) issues.push(id + ': the full cooldown should start with the finishing blow');
+        meleeSlam = null; meleeDash = null; slamState = null; adv(2000);
+        if (meleeCombo) issues.push(id + ': the combo should be over after the finishing blow');
+        activateMeleeAbility(); if (meleeCombo) issues.push(id + ': E during the cooldown should do nothing');
+        // a half-thrown chain: the window runs out, a short cooldown, not the full one
+        reset(id); activateMeleeAbility(); adv(ab.comboWindow + 800);
+        const remain = abilityCooldownFor(item, ab) - (Date.now() - abilityCDs[id]);
+        if (meleeCombo) issues.push(id + ': the window should run out');
+        if (!(remain > 0 && remain <= (ab.comboPartialCd || 1500) + 40)) issues.push(id + ': a half-thrown chain should cost a short cooldown (' + Math.round(remain) + ' ms left of ' + abilityCooldownFor(item, ab) + ')');
+        // a weapon switch ends it
+        reset(id); activateMeleeAbility(); activeSlot = 'primary'; adv(32); activeSlot = 'melee';
+        if (meleeCombo) issues.push(id + ': switching weapon should end the combo');
+      }
+      // the katana: no combo, a short deflect, a window that grows
+      {
+        const k = MELEE_ITEMS.find(m => m.id === 'katana'), ab = k.ability;
+        if (ab.combo) issues.push('the katana has no combo');
+        if (ab.duration !== 1000 || abilityCooldownFor(k, ab) !== 4000 || ab.extendPerHit !== 100) issues.push('the katana deflect should be 1 s on a 4 s cooldown, +0.1 s a hit: ' + JSON.stringify({ d: ab.duration, cd: abilityCooldownFor(k, ab), e: ab.extendPerHit }));
+        selectedMeleeIdx = MELEE_ITEMS.indexOf(k); activeSlot = 'melee'; abilityCDs.katana = 0; meleeAbilityBuff = null; meleeDeflectKick = null;
+        activateMeleeAbility();
+        const b = meleeAbilityBuff;
+        if (!b || b.type !== 'deflect' || b.endTime - clock !== 1000) { issues.push('the katana deflect window should be 1 s'); }
+        else {
+          const base = b.endTime, at = new THREE.Vector3(1, 1.65, -3);
+          triggerDeflectImpact(at);
+          if (b.endTime - base !== 100) issues.push('a blocked hit should add 0.1 s (' + (b.endTime - base) + ')');
+          triggerDeflectImpact(at);
+          if (b.endTime - base !== 100) issues.push('a burst of pellets in one instant should count once');
+          for (let i = 0; i < 40; i++) { clock += 100; triggerDeflectImpact(at); }
+          if (b.endTime - base !== 2000) issues.push('the extra time should stop at +2 s, got +' + (b.endTime - base));
+          // the cooldown after it
+          meleeAbilityBuff = null;
+        }
+        // eight guards, and a hard flash for the katana only
+        camera.position.set(0, 1.65, 0); camera.quaternion.set(0, 0, 0, 1); camera.updateMatrixWorld();
+        const dirs = [[3, 0], [2, 2], [0, 3], [-2, 2], [-3, 0], [-2, -2], [0, -3], [2, -2]], sectors = [], poses = [];
+        for (const [x, y] of dirs) {
+          meleeAbilityBuff = { type: 'deflect', endTime: clock + 5000, extendPer: 0, extendLeft: 0 }; flashes.length = 0;
+          triggerDeflectImpact(new THREE.Vector3(x, 1.65 + y, -4));
+          sectors.push(meleeDeflectKick.sector); poses.push(meleeDeflectKick.target.slice());
+          if (!flashes.some(f => /0[.]3[0-9]/.test(f))) issues.push('the katana block should flash hard (' + flashes.join(' ') + ')');
+        }
+        if (new Set(sectors).size !== 8) issues.push('the katana should guard from eight sides, got ' + sectors.join(','));
+        let near = 0; for (let i = 0; i < poses.length; i++) for (let j = i + 1; j < poses.length; j++) if (poses[i].reduce((a, v, q) => a + Math.abs(v - poses[j][q]), 0) < 0.5) near++;
+        if (near) issues.push(near + ' pairs of katana guards look alike');
+        selectedMeleeIdx = MELEE_ITEMS.findIndex(m => m.id === 'tennis_racket'); flashes.length = 0; meleeAbilityBuff = { type: 'deflect', endTime: clock + 5000 };
+        triggerDeflectImpact(new THREE.Vector3(1, 1.65, -3));
+        if (flashes.some(f => /0[.]3[0-9]/.test(f))) issues.push('only the katana flashes that hard');
+      }
+    } finally {
+      delete remoteMeshes.cmbT; delete players.cmbT;
+      playSoundEvent = saved.sound; spawnAbilityAOEFX = saved.fx; flashScreen = saved.flash; pushFeedLine = saved.feed; emitHit = saved.hit; setTimeout = saved.st; Date.now = saved.dnow;
+      Object.defineProperty(performance, 'now', { value: saved.now, configurable: true, writable: true });
+      gameStarted = saved.started; isDead = saved.dead; activeSlot = saved.slot; selectedMeleeIdx = saved.sel; countdownActive = saved.cdown; match = saved.match; slamState = saved.slam;
+      meleeCombo = null; meleeSlam = null; meleeDash = null; meleeAbilityBuff = null; Object.assign(abilityCDs, saved.cd);
+      camera.position.copy(saved.cam); camera.quaternion.copy(saved.q); euler.y = saved.ey;
+    }
+    return issues;
+  })()`);
+  console.log('combo checks: sledge 3 steps, fists 3, battle axe 4 (early press queued, cooldown after the last, short one if half thrown, switch ends it); katana: no combo, 1 s deflect / 4 s cooldown, +0.1 s a hit (cap +2 s), eight guards, hard flash');
+  if (out.length) { ok = false; console.log(out.slice(0, 24).join('\n')); }
 }
 
 if (ok && process.argv.includes('--netinterp')) {
