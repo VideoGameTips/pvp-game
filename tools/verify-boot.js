@@ -865,7 +865,9 @@ if (ok && process.argv.includes('--emotes')) {
   const issues = vm.runInThisContext(`(() => {
     const issues = [], mesh = makePlayerMesh('Emote test', false, 'ally', 'default');
     try {
-      if (keyBoundTo('emotes') !== 'KeyQ' || keyBoundTo('freecam') !== 'Digit0') issues.push('default controls wrong');
+      if (keyBoundTo('freecam') !== 'Digit0') issues.push('default controls wrong');
+      if (!EMOTES_ARCHIVED || keyBoundTo('emotes') !== null) issues.push('emotes are archived: no key should be bound to them');
+      openEmotes(); startEmote('wave'); if (SOCIAL_VIEW.mode) { issues.push('an archived emote started'); stopSocialView(); }
       for (const e of EMOTES) {
         animateCharacterMesh(mesh, .016, 0);
         const before = mesh._rig.armL.rotation.clone();
@@ -883,7 +885,7 @@ if (ok && process.argv.includes('--emotes')) {
         if (root.rotation.x || root.rotation.y || root.rotation.z || root.position.lengthSq()) issues.push(e.id + ': whole-body turn not restored');
       }
     } finally { disposeBody(mesh); }
-    console.log('emote checks: Q/0 bindings, four distinct joint poses, temporary fingers and pose restoration');
+    console.log('emote checks: ARCHIVED (no Q binding, nothing starts); the four poses still build and restore');
     return issues;
   })()`);
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
@@ -893,7 +895,7 @@ if (ok && process.argv.includes('--emotes')) {
   const src = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
   const handler = src.match(/socket\.on\('move', \(data\) => \{([\s\S]*?)\n  \}\);/);
   if (!handler) throw new Error('move handler missing');
-  const player = { dead: false }, box = { players: { tester: player }, socket: { id: 'tester' }, Date };
+  const player = { dead: false }, box = { players: { tester: player }, socket: { id: 'tester' }, Date, EMOTES_ARCHIVED: false };   // (the relay logic is kept working for when they come back)
   const move = vm.runInNewContext('(data) => {' + handler[1] + '}', box);
   move({ x: 1, y: 1.65, z: 2, rotY: 0, rotX: 0, emote: 'take_l' });
   const until = player.emoteUntil;
@@ -903,7 +905,12 @@ if (ok && process.argv.includes('--emotes')) {
   if (player.emote !== null || player.emoteUntil !== 0) throw new Error('invalid emote accepted');
   move({ emote: 'wave' }); player.dead = true; move({ emote: 'shuffle' });
   if (player.emote !== 'wave') throw new Error('dead player can start emotes');
-  console.log('emote relay checks: valid IDs, fixed duration, cancellation and dead-player guard');
+  box.EMOTES_ARCHIVED = true;
+  const player2 = { dead: false }; box.players.tester = player2;
+  move({ x: 1, y: 1.65, z: 2, rotY: 0, rotX: 0, emote: 'wave' });
+  if (player2.emote !== null) throw new Error('an emote got through while emotes are archived');
+  if (!/const EMOTES_ARCHIVED = true;/.test(src)) throw new Error('the server should have emotes archived');
+  console.log('emote relay checks: valid IDs, fixed duration, cancellation and dead-player guard (when un-archived); archived: every emote dropped');
 }
 
 if (ok && process.argv.includes('--perspectives')) {
@@ -3261,6 +3268,19 @@ if (ok && process.argv.includes('--combo')) {
   })()`);
   console.log('combo checks: sledge 3 steps, fists 3, battle axe 4 (early press queued, cooldown after the last, short one if half thrown, switch ends it); katana: no combo, 1 s deflect / 4 s cooldown, +0.1 s a hit (cap +2 s), eight guards, hard flash');
   if (out.length) { ok = false; console.log(out.slice(0, 24).join('\n')); }
+}
+
+if (ok && process.argv.includes('--archive')) {
+  // Archived: the emote wheel and King of the Hill. Off the screen, refused by the server, a stale pick falls back, code kept.
+  const issues = [];
+  const idx = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const srv = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  if (!/data-mode="koth"[^>]*style="display:none/.test(idx)) issues.push('the King of the Hill card should be hidden on the mode screen');
+  if (/MODE_TEAM_SIZES = \{[\s\S]*?\n  'koth':/.test(srv)) issues.push('the server should not open a lobby for King of the Hill');
+  if (!vm.runInThisContext("ARCHIVED_MODES.has('koth') && EMOTES_ARCHIVED && !!GAME_MODE_CONFIGS.koth")) issues.push('KOTH and the emotes should be archived in the client with their code kept');
+  if (vm.runInThisContext("KEY_ACTIONS.some(a => a[0] === 'emotes')")) issues.push('the emote key should not be rebindable while they are archived');
+  console.log('archive checks: King of the Hill and the emote wheel are off the screen, refused by the server, their code kept');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
 if (ok && process.argv.includes('--netinterp')) {

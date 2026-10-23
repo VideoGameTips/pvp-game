@@ -166,14 +166,13 @@ const until = async (f, ms = 20000) => { const t = Date.now(); while (Date.now()
     for (const x of [a, b, c]) x.close();
   }
   await sleep(300);
-  // G: King of the Hill plays its own arena: no vote
+  // G: King of the Hill is archived: the server refuses to open a lobby for it
   {
     const a = client('A');
     await until(() => a.connected);
-    a.emit('joinStagingLobby', { mode: 'koth', map: null }); await sleep(100);
-    a.emit('setLobbyReady', { ready: true, fillBots: true });
-    if (!await until(() => a.ev.lobbyStart || a.ev.mapPickStart, 4000)) fail('G: koth never started');
-    else if (a.ev.mapPickStart) fail('G: koth has its own arena and should not vote');
+    a.ev.err = null; a.on('lobbyError', d => { a.ev.err = d; });
+    a.emit('joinStagingLobby', { mode: 'koth', map: null }); await sleep(300);
+    if (!a.ev.err) fail('G: King of the Hill is archived and should be refused');
     a.close();
   }
   server.kill();

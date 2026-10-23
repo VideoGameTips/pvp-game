@@ -40277,12 +40277,15 @@ function updateAimAssist(dt) {
 // event. Bind Reload to G and pressing G reaches the game as KeyR; R itself goes dead.
 // Typing in a text box is never touched.
 // ═════════════════════════════════════════════════════════════════════════════
+// 🗄️ ARCHIVED (the owner's call, kept in the code so it can come back): the emote wheel, and King of the Hill. Flip these to bring them back.
+const EMOTES_ARCHIVED = true;                 // no emote wheel (Q), nobody's emote is played, the server drops them
+const ARCHIVED_MODES = new Set(['koth']);     // off the mode screen, and a stale pick of one falls back to FFA 5
 const KEY_ACTIONS = [
   ['forward', 'Move forward', 'KeyW'], ['back', 'Move back', 'KeyS'],
   ['left', 'Move left', 'KeyA'], ['right', 'Move right', 'KeyD'],
   ['jump', 'Jump', 'Space'], ['slide', 'Slide', 'ShiftLeft'], ['crouch', 'Crouch', 'ControlLeft'],
   ['reload', 'Reload', 'KeyR'], ['ability', 'Ability / aim', 'KeyE'], ['interact', 'Interact / swap gear', 'KeyF'],
-  ['emotes', 'Emotes', 'KeyQ'], ['freecam', 'Free camera', 'Digit0'], ['slot1', 'Primary weapon', 'Digit1'], ['slot2', 'Secondary weapon', 'Digit2'],
+  ...(EMOTES_ARCHIVED ? [] : [['emotes', 'Emotes', 'KeyQ']]), ['freecam', 'Free camera', 'Digit0'], ['slot1', 'Primary weapon', 'Digit1'], ['slot2', 'Secondary weapon', 'Digit2'],
   ['perspective', 'Camera perspective', 'Digit9'],
   ['slot3', 'Melee', 'Digit3'], ['slot4', 'Support item', 'Digit4'],
   ['inspect', 'Inspect weapon or item', 'KeyT'], ['melee', 'Quick melee', 'KeyB'], ['chat', 'Quick chat', 'KeyV'],
@@ -40618,6 +40621,7 @@ function beginSocialView(mode) {
   return true;
 }
 function openEmotes() {
+  if (EMOTES_ARCHIVED) return;
   if (SOCIAL_VIEW.mode === 'picker') { stopSocialView(); requestPointerLockSafe(); return; }
   if (!beginSocialView('picker')) return;
   if (!SOCIAL_VIEW.menu) {
@@ -40634,6 +40638,7 @@ function openEmotes() {
   document.exitPointerLock?.();
 }
 function startEmote(id) {
+  if (EMOTES_ARCHIVED) return;
   const def = EMOTES.find(e => e.id === id);
   if (!def || !beginSocialView('emote')) return;
   SOCIAL_VIEW.emote = id;
@@ -40743,7 +40748,7 @@ window.addEventListener('keydown', e => {
     if (!e.repeat) cyclePlayerView();
     return;
   }
-  if (e.code === 'Digit0' || e.code === 'KeyQ') {
+  if (e.code === 'Digit0' || (e.code === 'KeyQ' && !EMOTES_ARCHIVED)) {
     e.preventDefault(); e.stopImmediatePropagation();
     if (e.repeat) return;
     if (e.code === 'KeyQ') openEmotes();
@@ -59744,7 +59749,7 @@ socket.on('posUpdate', positions => {
       players[pid].x = pos.x; players[pid].y = pos.y; players[pid].z = pos.z;
       players[pid].rotY = pos.rotY; players[pid].rotX = pos.rotX;
       if (players[pid].emote !== pos.emote) players[pid]._emoteStarted = Date.now();
-      players[pid].emote = pos.emote || null;
+      players[pid].emote = EMOTES_ARCHIVED ? null : (pos.emote || null);
     }
     const mesh = remoteMeshes[pid];
     if (!mesh) continue;
@@ -68223,7 +68228,7 @@ function confirmLoadout() {
     // ── Find the mode ID and decide whether to route through the staging lobby ──
     const modeId = currentModeId();
     // Lobby-eligible modes: 1v1/2v2/3v3 (elim) + 5v5/10v10 (race) + FFA + KOTH
-    const lobbyEligible = ['1v1','2v2','3v3','5v5','10v10','ffa5','ffa15','koth',
+    const lobbyEligible = ['1v1','2v2','3v3','5v5','10v10','ffa5','ffa15',
                             'gungame','oitc','juggernaut','infection','sniper_only','speedrun'];
     if (modeId && lobbyEligible.includes(modeId)) {
       // Route through staging lobby — wait for others to ready up
@@ -69936,6 +69941,7 @@ function applyUpgrades(w) {
 }
 
 function selectMode(modeId) {
+  if (ARCHIVED_MODES.has(modeId)) { try { showAnnouncement('ARCHIVED', 'That mode has been retired · here is FFA instead', '#ffcc66', 2600); } catch (e) {} modeId = 'ffa5'; }
   if (modeId === 'backrooms' && window.PVP_BACKROOMS) { window.PVP_BACKROOMS.open(); return; }
   if (modeId === 'underworld' && window.PVP_UNDERWORLD) { window.PVP_UNDERWORLD.open(); return; }
   selectedModeConfig = GAME_MODE_CONFIGS[modeId] || GAME_MODE_CONFIGS['ffa5'];

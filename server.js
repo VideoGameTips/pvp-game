@@ -1804,6 +1804,7 @@ function startLobbyMatch(L, extra = {}) {
 // the four duel maps; everything else among the whole pool. A bot opponent in a 1v1 votes too: its client looks at
 // a picture of each map and sends the bot's choice along with yours. In every other mode bots do not vote.
 const MAP_PICK_MS = 15000, MAP_PICK_BIG_MS = 25000, MAP_PICK_REVEAL_MS = 2600;
+const EMOTES_ARCHIVED = true;      // the emote wheel is archived: the server drops every emote (see public/game.js EMOTES_ARCHIVED)
 const MAP_VOTE_SKIP = new Set(['koth']);   // plays its own arena (the M4 tower modes too, see M4_TOWER_MODES)
 const mapPicks = {};   // id → { id, L, extra, options, votes, botVote, sids, vsBot, done, closing, timer }
 let _mapPickSeq = 0;
@@ -1909,7 +1910,7 @@ const MODE_TEAM_SIZES = {
   'm4_tower': { ally: 5, enemy: 5 },
   'ffa5':  { ally: 1, enemy: 5 },
   'ffa15': { ally: 1, enemy: 15 },
-  'koth':  { ally: 1, enemy: 9 },
+  // 'koth': King of the Hill is archived (kept in the client's mode table; the server no longer opens a lobby for it)
   // 🎮 Arcade
   'gungame':     { ally: 1, enemy: 7 },
   'oitc':        { ally: 1, enemy: 5 },
@@ -2585,7 +2586,7 @@ io.on('connection', (socket) => {
     p.rotY = data.rotY; p.rotX = data.rotX;
     p.at = Date.now();   // when this position was true — clients interpolate on this, not on when the broadcast happened to fire
     const emoteDurations = { take_l: 6000, wave: 3500, victory: 4500, shuffle: 6000 };
-    const emote = Object.prototype.hasOwnProperty.call(emoteDurations, data.emote) ? data.emote : null;
+    const emote = !EMOTES_ARCHIVED && Object.prototype.hasOwnProperty.call(emoteDurations, data.emote) ? data.emote : null;   // (archived: nobody emotes)
     if (emote !== p.emote) p.emoteUntil = emote ? Date.now() + emoteDurations[emote] : 0;
     p.emote = emote;
   });
