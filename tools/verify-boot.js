@@ -222,13 +222,17 @@ if (ok && process.argv.includes('--melee-feedback')) {
       }
       noise.length=0;playSoundEvent('melee_impact',{material:'heavy',minGap:0});
       if(noise.length<2)issues.push('impact has no crack/thump layers');
-      const item=MELEE_ITEMS.find(x=>x.id==='combat_axe'),ab=item.ability;
+      const item=MELEE_ITEMS.find(x=>x.id==='combat_axe'),ab=item.plainAbility||item.ability;   // the regular Whirlwind (default mode); the combo's own whirl step is checked below
       if(ab.spins!==2||ab.distance<=6.5||ab.dashTime>=.45||ab.damage!==85)issues.push('axe ability not upgraded or damage changed');
       const model=new THREE.Group();
       meleeDash={item,ab,model,speed:ab.distance/ab.dashTime,elapsed:ab.dashTime};poseMeleeDash();
       if(Math.abs(model.rotation.y-(Math.PI*4-1.05))>.001)issues.push('axe does not complete 720 degrees');
       meleeDash.elapsed+=.05;poseMeleeDash();
       if(Math.abs(model.rotation.y)>Math.PI)issues.push('recovery unwinds extra full turns');
+      const whirl=item.ability.combo&&item.ability.combo[0];
+      if(!whirl||whirl.kind!=='whirl'||whirl.spins!==1)issues.push('the combo should open with a one-spin whirlwind');
+      else{const m2=new THREE.Group();meleeDash={item,ab:{type:'melee_spinslash',distance:whirl.distance,dashTime:whirl.dashTime,damage:whirl.damage,reach:whirl.reach,spins:whirl.spins},model:m2,speed:whirl.distance/whirl.dashTime,elapsed:whirl.dashTime};poseMeleeDash();
+        if(Math.abs(m2.rotation.y-(Math.PI*2-1.05))>.001)issues.push('the combo whirlwind does not complete one turn');}
     } finally {getAudioCtx=saved.getAudioCtx;unlockAudio=saved.unlockAudio;playFilteredNoise=saved.playFilteredNoise;playTone=saved.playTone;meleeDash=saved.meleeDash;}
     return issues;
   })()`);
@@ -2430,12 +2434,12 @@ if (ok && process.argv.includes('--quickmelee')) {
   // ability (crowd charge, slam, dash, spin, aimed dash) is allowed to finish before the gun comes back.
   const issues = vm.runInThisContext(`(() => {
     const issues = [];
-    const S = { started: gameStarted, dead: isDead, slot: activeSlot, mel: selectedMeleeIdx, match, mode: selectedModeConfig,
+    const S = { combo: MELEE_COMBO_MODE, started: gameStarted, dead: isDead, slot: activeSlot, mel: selectedMeleeIdx, match, mode: selectedModeConfig,
                 sound: playSoundEvent, anim: showAnnouncement, cd: countdownActive, pri: selectedPrimaryIdx, sec: selectedSecondaryIdx, sup: selectedSupportIdx };
     const keepWalls = wallColliders.slice();
     const reset = () => {
       try { finishMeleeSlam(); } catch (e) {} try { finishMeleeDash(); } catch (e) {} try { finishBatCrowdClear(); } catch (e) {}
-      scytheDash = null; autoLunge = null; meleeAbilityBuff = null; _quickMeleeReturn = null; _grappleRide = null;
+      scytheDash = null; autoLunge = null; meleeAbilityBuff = null; _quickMeleeReturn = null; _grappleRide = null; meleeCombo = null;
       slamState = null; activeSlot = 'primary'; meleeSwingT = 1; lastMelee = 0;
       for (const k of Object.keys(abilityCDs)) delete abilityCDs[k];
     };
@@ -2444,6 +2448,7 @@ if (ok && process.argv.includes('--quickmelee')) {
       selectedPrimaryIdx = WEAPONS.findIndex(w => w.id === 'ak20'); selectedSecondaryIdx = WEAPONS.findIndex(w => w.id === 'pistol'); selectedSupportIdx = 0;
       playSoundEvent = () => {}; showAnnouncement = () => {};
       const sequence = new Set(['melee_slam', 'melee_charge', 'melee_lunge', 'melee_spinslash', 'bat_crowd_clear']);
+      setMeleeComboMode(false);          // the regular abilities are the ones that must run to the end before the gun comes back
       for (let i = 0; i < MELEE_ITEMS.length; i++) {
         const m = MELEE_ITEMS[i];
         if (m.archived || m.adminItem || m.skinOnly || !meleeModels[i]) continue;
@@ -2464,12 +2469,21 @@ if (ok && process.argv.includes('--quickmelee')) {
         try { quickMelee(); } catch (e) { issues.push(m.id + ': cooldown quick melee threw: ' + e.message); continue; }
         if (ab && !(meleeSwingT < 1 || lastMelee !== before)) issues.push(m.id + ': with the ability cooling down, quick melee did nothing');
       }
+      // combo mode: B on the ground is the first step (then the gun returns); B in the AIR is the sledge's slam, and that one is let finish
+      setMeleeComboMode(true);
+      const sl = MELEE_ITEMS.findIndex(m => m.id === 'sledge');
+      reset(); selectedMeleeIdx = sl; camera.position.set(0, 1.65, 0);
+      try { quickMelee(); updateQuickMelee(); } catch (e) { issues.push('combo mode: quick melee on the ground threw: ' + e.message); }
+      reset(); selectedMeleeIdx = sl; camera.position.set(0, 7, 0); slamState = { vel: 0, type: 'jump' };
+      try { quickMelee(); updateQuickMelee(); } catch (e) { issues.push('combo mode: quick melee in the air threw: ' + e.message); }
+      if (!meleeSlam) issues.push('combo mode: quick melee with the sledge in the air should slam down');
+      else if (activeSlot !== 'melee') issues.push('combo mode: the gun came back while the sledge was still slamming');
       // the Chain Maul has an ability now, and nothing in play is without one
       const cm = MELEE_ITEMS.find(m => m.id === 'chain_hammer');
       if (!cm || !cm.ability || cm.ability.type !== 'melee_meteor') issues.push('the Chain Maul has no ability');
       for (const m of MELEE_ITEMS) if (!m.archived && !m.adminItem && !m.skinOnly && !m.ability) issues.push(m.id + ': a melee in play with no ability');
     } finally {
-      reset();
+      reset(); setMeleeComboMode(S.combo);
       gameStarted = S.started; isDead = S.dead; activeSlot = S.slot; selectedMeleeIdx = S.mel; match = S.match;
       selectedModeConfig = S.mode; playSoundEvent = S.sound; showAnnouncement = S.anim; countdownActive = S.cd;
       selectedPrimaryIdx = S.pri; selectedSecondaryIdx = S.sec; selectedSupportIdx = S.sup;
@@ -3186,7 +3200,9 @@ if (ok && process.argv.includes('--combo')) {
       camera.position.set(0, 1.65, 0); camera.quaternion.set(0, 0, 0, 1); euler.y = 0; euler.x = 0;
       const tgt = new THREE.Group(); tgt.position.set(0, 0, -2); tgt.visible = true; remoteMeshes.cmbT = tgt; players.cmbT = { id: 'cmbT', isBot: true, team: 'enemy', hp: 300, dead: false };
       const reset = id => { meleeCombo = null; meleeSlam = null; meleeDash = null; slamState = null; abilityCDs[id] = 0; hits.length = 0; feed.length = 0; timers = []; tgt.position.set(0, 0, -2); camera.position.set(0, 1.65, 0); _extVel.x = _extVel.z = 0; };
-      const spec = [['sledge', 3, ['sledge_hop', 'sledge_spin']], ['fists', 3, ['fists_uppercut', 'fists_cross']], ['combat_axe', 4, ['axe_upper', 'axe_airwhirl', 'axe_chop']]];
+      const spec = [['sledge', 3, ['sledge_hop', 'sledge_spin']], ['fists', 3, ['fists_uppercut', 'fists_cross']], ['combat_axe', 4, ['axe_upper', 'axe_airwhirl', 'axe_chop']],
+                    ['sabre', 3, ['sabre', 'sabre_slash', 'sabre_rise']], ['bat', 3, ['bat_swing', 'bat_back', 'bat_homerun']], ['frying_pan', 3, ['pan_clang', 'pan_dong']],
+                    ['riot_shield', 3, ['shield_bash', 'shield_charge']], ['spear', 3, ['spear_thrust', 'spear_sweep', 'spear_skewer']]];
       for (const [id, n, wanted] of spec) {
         const item = MELEE_ITEMS.find(m => m.id === id), ab = item && item.ability;
         if (!ab || !ab.combo || ab.combo.length !== n) { issues.push(id + ': should be a ' + n + '-step combo'); continue; }
@@ -3208,9 +3224,12 @@ if (ok && process.argv.includes('--combo')) {
         if (id === 'sledge' && !(meleeSlam && meleeSlam.flip)) issues.push('sledge: the last step should be a BACKFLIP slam');
         if (id !== 'combat_axe' && !meleeSlam && !abilityCDs[id]) issues.push(id + ': the last step should be a slam');
         if (!(abilityCDs[id] && Date.now() - abilityCDs[id] < abilityCooldownFor(item, ab))) issues.push(id + ': the full cooldown should start with the finishing blow');
-        meleeSlam = null; meleeDash = null; slamState = null; adv(2000);
+        meleeSlam = null; meleeDash = null; slamState = null; adv(300);
         if (meleeCombo) issues.push(id + ': the combo should be over after the finishing blow');
+        if (abilityCooldownFor(item, ab) !== 1500) issues.push(id + ': the full cooldown should be 1.5 s, it is ' + abilityCooldownFor(item, ab));
         activateMeleeAbility(); if (meleeCombo) issues.push(id + ': E during the cooldown should do nothing');
+        adv(700); meleeSlam = null; meleeDash = null; slamState = null;
+        activateMeleeAbility(); if (!meleeCombo) issues.push(id + ': E should work again once the 1.5 s cooldown is over');
         // a half-thrown chain: the window runs out, a short cooldown, not the full one
         reset(id); activateMeleeAbility(); adv(ab.comboWindow + 800);
         const remain = abilityCooldownFor(item, ab) - (Date.now() - abilityCDs[id]);
@@ -3256,6 +3275,19 @@ if (ok && process.argv.includes('--combo')) {
         triggerDeflectImpact(new THREE.Vector3(1, 1.65, -3));
         if (flashes.some(f => /0[.]3[0-9]/.test(f))) issues.push('only the katana flashes that hard');
       }
+      // every combo animation gives real numbers, starts and ends at rest
+      {
+        const sl0 = MELEE_ITEMS.findIndex(m => m.id === 'sledge'); selectedMeleeIdx = sl0; activeSlot = 'melee'; reset('sledge');
+        const mdl = meleeModels[sl0];
+        for (const kind of ['raise', 'spin', 'upper', 'chop', 'cross', 'sweep', 'sweepL']) {
+          for (const t of [0, 0.1, 0.25, 0.4, 0.6, 0.8, 1]) {
+            meleeCombo = { itemId: 'sledge', anim: { kind, t: t * 0.5, ms: 0.5 } }; poseMeleeComboAnim();
+            if (![mdl.position.x, mdl.position.y, mdl.position.z, mdl.rotation.x, mdl.rotation.y, mdl.rotation.z].every(Number.isFinite)) issues.push('combo animation ' + kind + ' gave a non-number at ' + t);
+          }
+          if (kind === 'sweep' || kind === 'sweepL') for (const t of [0, 1]) { meleeCombo = { itemId: 'sledge', anim: { kind, t: t * 0.5, ms: 0.5 } }; poseMeleeComboAnim(); if (Math.abs(mdl.position.x - MELEE_REST_POS.x) > 1e-6 || Math.abs(mdl.rotation.y) > 1e-6) issues.push('the ' + kind + ' swing should start and end at rest'); }
+        }
+        meleeCombo = null; comboRestModel();
+      }
       // combo mode / default mode, and how the slam grows with the fall
       {
         const sl = MELEE_ITEMS.find(m => m.id === 'sledge'), fi = MELEE_ITEMS.find(m => m.id === 'fists'), ax = MELEE_ITEMS.find(m => m.id === 'combat_axe');
@@ -3267,7 +3299,9 @@ if (ok && process.argv.includes('--combo')) {
         else if (setMeleeComboMode(false) !== false || !MELEE_COMBO_MODE) issues.push('the mode must not switch in the middle of a combo');
         reset('sledge');
         if (setMeleeComboMode(false) !== true || MELEE_COMBO_MODE) issues.push('could not switch to default mode');
-        for (const [it, nm] of [[sl, 'Ground Slam'], [fi, 'Uppercut'], [ax, 'Whirlwind']]) if (it.ability.combo || it.ability.name !== nm) issues.push('default mode: ' + it.id + ' should have its regular ' + nm + ', has ' + it.ability.name);
+        const regular = { sledge: 'Ground Slam', fists: 'Uppercut', combat_axe: 'Whirlwind', sabre: 'Lunge', bat: 'Crowd Clear', frying_pan: 'Pan Clang', riot_shield: 'Shield Charge', spear: 'Throw Spear' };
+        if (MELEE_ITEMS.filter(m => m.plainAbility).length !== Object.keys(regular).length) issues.push('eight melees should have a combo and a regular ability, found ' + MELEE_ITEMS.filter(m => m.plainAbility).length);
+        for (const [id, nm] of Object.entries(regular)) { const it = MELEE_ITEMS.find(m => m.id === id); if (!it || it.ability.combo || it.ability.name !== nm) issues.push('default mode: ' + id + ' should have its regular ' + nm + ', has ' + (it && it.ability.name)); }
         if (effectiveMeleeItem(sl).ability.name !== 'Ground Slam') issues.push('default mode: the ability a skinned or plain item reports should follow the mode');
         // default mode: one E is the old move, no chain
         selectedMeleeIdx = MELEE_ITEMS.indexOf(fi); reset('fists'); activateMeleeAbility();
@@ -3285,6 +3319,23 @@ if (ok && process.argv.includes('--combo')) {
           const plainHit = hits.find(h => h.wid === 'sledge');
           if (!plainHit || plainHit.dmg < 74 || plainHit.dmg > 86) issues.push('default mode: a ground slam from its own leap should do about 80, did ' + (plainHit && plainHit.dmg));
           if (isDead) issues.push('the slam test killed the player (out of bounds?)');
+          // the sledge slams straight down from the air, in both modes (no hop, no climb), and it is the finishing blow
+          for (const mode of [true, false]) {
+            selectedMeleeIdx = MELEE_ITEMS.indexOf(sl); reset('sledge');
+            if (setMeleeComboMode(mode) !== true) { issues.push('could not switch mode for the air slam'); continue; }
+            const tag = mode ? 'combo mode' : 'default mode';
+            camera.position.set(0, 7, 0); slamState = { vel: 0, type: 'jump' };
+            activateMeleeAbility();
+            if (!meleeSlam) { issues.push(tag + ': E in the air should slam down'); continue; }
+            if (meleeSlam.phase === 'crouch' || meleeSlam.phase === 'rise' || meleeSlam.flip) issues.push(tag + ': from the air the slam should not crouch, climb or flip first (phase ' + meleeSlam.phase + ')');
+            if (mode && (!meleeCombo || !meleeCombo.final)) issues.push('combo mode: the air slam is the finishing blow, not step one');
+            if (!(abilityCDs.sledge && Date.now() - abilityCDs.sledge < 1500)) issues.push(tag + ': the air slam should start the 1.5 s cooldown');
+            let gg = 0; while (meleeSlam && gg++ < 900) { clock += 16; updateMeleeSlam(0.016); updateMovement(1 / 60); }
+            const ah = hits.find(h => h.wid === 'sledge');
+            if (!ah) issues.push(tag + ': the air slam never hit the target');
+            else if (mode && ah.dmg < 125) issues.push('combo mode: a slam from about 5 m should beat the 110 base (more the higher), did ' + ah.dmg);
+            else if (!mode && (ah.dmg < 60 || ah.dmg > 90)) issues.push('default mode: a slam from about 5 m should do about 80, did ' + ah.dmg);
+          }
           // combo mode: the damage follows the drop
           if (setMeleeComboMode(true) !== true) issues.push('could not switch back to combo mode');
           selectedMeleeIdx = MELEE_ITEMS.indexOf(sl); reset('sledge');
@@ -3315,6 +3366,17 @@ if (ok && process.argv.includes('--combo')) {
     }
     return issues;
   })()`);
+  {
+    // every hit a combo makes must have its own entry, at least as big, in BOTH damage tables (the server clips an unknown id to 25)
+    const need = vm.runInThisContext("(() => { const m = {}; for (const it of MELEE_ITEMS) { const c = it.ability && it.ability.combo; if (!c) continue; for (const st of c) { const id = st.id || (st.aoe && st.aoe.id), d = st.damage != null ? st.damage : (st.aoe && st.aoe.damage); if (id && d != null) m[id] = { d: Math.max(m[id] ? m[id].d : 0, d), client: CLIENT_WEAPON_DAMAGE[id] }; } } return m; })()");
+    const srvTxt = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+    for (const [id, v] of Object.entries(need)) {
+      if (id === 'fists_uppercut') continue;
+      const mm = srvTxt.match(new RegExp('[ {,]' + id + ': (\\d+)'));
+      if (!mm || Number(mm[1]) < v.d) out.push('server damage table: ' + id + ' needs an entry of at least ' + v.d + ' (has ' + (mm && mm[1]) + ')');
+      if (!(v.client >= v.d)) out.push('client damage table: ' + id + ' needs an entry of at least ' + v.d + ' (has ' + v.client + ')');
+    }
+  }
   console.log('combo checks: sledge 3 steps, fists 3, battle axe 4 (early press queued, cooldown after the last, short one if half thrown, switch ends it); katana: no combo, 1 s deflect / 4 s cooldown, +0.1 s a hit (cap +2 s), eight guards, hard flash; combo mode / default mode (regular abilities back, no switching mid-move); the slam grows with the fall (x2 cap, skins hit as the base sledge)');
   if (out.length) { ok = false; console.log(out.slice(0, 24).join('\n')); }
 }

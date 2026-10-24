@@ -1000,8 +1000,8 @@ function falloffMultiplier(weaponId, dist) {
   return 1 - t * (1 - f.min);
 }
 
-// 🥊 COMBO MODE / DEFAULT MODE. In combo mode the Sledge, the Fists and the Battle Axe turn E into a chain (hop → spin → slam, ...).
-// In default mode they keep the one regular ability they always had. Each of the three carries both: `ability` answers with
+// 🥊 COMBO MODE / DEFAULT MODE. In combo mode the Sledge, Fists, Battle Axe, Sabre, Bat, Frying Pan, Riot Shield and Spear turn E into a chain (hop → spin → slam, ...).
+// In default mode they keep the one regular ability they always had. Each of the eight carries both: `ability` answers with
 // whichever the mode picks (see the loop under the table), so the HUD, the shop and the cooldowns all follow without knowing.
 let MELEE_COMBO_MODE = true;
 try { MELEE_COMBO_MODE = localStorage.getItem('pvp_melee_combo') !== '0'; } catch (e) {}
@@ -1009,15 +1009,37 @@ try { MELEE_COMBO_MODE = localStorage.getItem('pvp_melee_combo') !== '0'; } catc
 const MELEE_ITEMS = [
   { id: 'bat',        name: 'Bat',        type: 'Melee',       damage: 50, range: 2.1, cooldown: 520,
     knockbackOnHit: 6, // every swing shoves the target back, not just the ability
-    ability: { name: 'Crowd Clear', cd: 9000, desc: 'Forward charge · rising swing · 100 dmg · massive knockback', type: 'bat_crowd_clear', damage: 100, speed: 22, launchVel: 14, knockback: 34 } },
+    ability: { name: 'Bat Combo', cd: 1500, desc: 'E swing · E backswing · E home run', type: 'melee_combo',
+      comboCd: 1500, comboWindow: 1200, comboPartialCd: 700,
+      combo: [
+        { name: 'SWING', kind: 'swing', lock: 300, ms: 300, anim: 'sweep', fwd: 1.5, aoe: { id: 'bat_swing', radius: 3.0, arc: 0.15, damage: 32, knock: 6, launch: 1, color: 0xffe0b0 } },
+        { name: 'BACKSWING', kind: 'swing', lock: 300, ms: 300, anim: 'sweepL', fwd: 1.5, aoe: { id: 'bat_back', radius: 3.0, arc: 0.15, damage: 38, knock: 7, launch: 1, color: 0xffe0b0 } },
+        { name: 'HOME RUN', kind: 'swing', lock: 520, ms: 560, anim: 'sweep', delay: 230, fwd: 2, aoe: { id: 'bat_homerun', radius: 3.8, arc: 0, damage: 70, knock: 26, launch: 9, color: 0xffffff } },
+      ] },
+    plainAbility: { name: 'Crowd Clear', cd: 9000, desc: 'Forward charge · rising swing · 100 dmg · massive knockback', type: 'bat_crowd_clear', damage: 100, speed: 22, launchVel: 14, knockback: 34 } },
   { id: 'sabre',      name: 'Sabre',      type: 'Melee',       damage: 45, range: 2.4, cooldown: 620,
-    ability: { name: 'Lunge',        cd: 7000,  desc: 'Dash forward · hit all in path', type: 'melee_lunge', distance: 6 } },
+    ability: { name: 'Sabre Combo', cd: 1500, desc: 'E lunge · E cross slash · E rising slash', type: 'melee_combo',
+      comboCd: 1500, comboWindow: 1200, comboPartialCd: 700,
+      combo: [
+        { name: 'LUNGE', kind: 'dash', lock: 340, distance: 6, dashTime: 0.2 },
+        { name: 'CROSS SLASH', kind: 'swing', lock: 300, ms: 320, anim: 'sweep', fwd: 3, sound: 'melee_blade', aoe: { id: 'sabre_slash', radius: 3.2, arc: 0.2, damage: 40, knock: 3, launch: 2, color: 0xcfe8ff } },
+        { name: 'RISING SLASH', kind: 'uppercut', lock: 340, ms: 400, id: 'sabre_rise', damage: 55, up: 8, hop: 2.5, reach: 3.0, popVel: 9, color: 0xe0f0ff },
+      ] },
+    plainAbility: { name: 'Lunge',        cd: 7000,  desc: 'Dash forward · hit all in path', type: 'melee_lunge', distance: 6 } },
   { id: 'frying_pan', name: 'Frying Pan', type: 'Melee',       damage: 32, range: 1.8, cooldown: 420,
-    ability: { name: 'Pan Clang', cd: 8500,  desc: 'AOE clang · 3 m · 28 dmg · pop-up', type: 'melee_pulse', radius: 3.0, damage: 28, knockback: 2.2, launchVel: 7, color: 0xffffaa } },
+    ability: { name: 'Pan Combo', cd: 1500, desc: 'E clang · E clang · E DONG (the last one pops them up)', type: 'melee_combo',
+      comboCd: 1500, comboWindow: 1200, comboPartialCd: 700,
+      combo: [
+        { name: 'CLANG', kind: 'swing', lock: 280, ms: 280, anim: 'sweep', aoe: { id: 'pan_clang', radius: 2.8, arc: 0.2, damage: 18, knock: 2, launch: 1.5, color: 0xffffaa } },
+        { name: 'CLANG', kind: 'swing', lock: 280, ms: 280, anim: 'sweepL', aoe: { id: 'pan_clang', radius: 2.8, arc: 0.2, damage: 22, knock: 2, launch: 1.5, color: 0xffffaa } },
+        { name: 'DONG', kind: 'chop', ms: 520, lock: 480, delay: 160, aoe: { id: 'pan_dong', radius: 3.4, arc: 0, damage: 50, knock: 5, launch: 9, color: 0xffffaa } },
+      ] },
+    plainAbility: { name: 'Pan Clang', cd: 8500,  desc: 'AOE clang · 3 m · 28 dmg · pop-up', type: 'melee_pulse', radius: 3.0, damage: 28, knockback: 2.2, launchVel: 7, color: 0xffffaa } },
   { id: 'sledge',     name: 'Sledge',     type: 'Heavy Melee', damage: 70, range: 1.9, cooldown: 900,
-    ability: { name: 'Sledge Combo', cd: 7000, desc: 'E hop · E 360° spin · E backflip slam (110 — more the higher you fall from)', type: 'melee_slam', radius: 5, damage: 110, slamDamage: 110, leap: 16.5, leapForward: 4.5, dive: 32,
+    ability: { name: 'Sledge Combo', cd: 1500, desc: 'E hop · E 360° spin · E backflip slam (110, more from higher up) · already in the air: E slams down', type: 'melee_slam', radius: 5, damage: 110, slamDamage: 110, leap: 16.5, leapForward: 4.5, dive: 32,
       heightScale: { ref: 2.4, perM: 0.12, min: 0.5, max: 2 },      // the damage grows with the drop: ×1 at a hop's height (the combo's own), up to ×2 from ~11 m
-      comboCd: 7000, comboWindow: 1200, comboPartialCd: 1800,
+      airSlam: true,                                                // pressed in the air with no chain going: straight down, as it always was
+      comboCd: 1500, comboWindow: 1200, comboPartialCd: 700,
       combo: [
         { name: 'HOP', kind: 'hop', ms: 420, lock: 320, hop: 10.5, fwd: 3, aoe: { id: 'sledge_hop', radius: 2.6, damage: 20, knock: 2, launch: 4, color: 0xffcc88 } },
         { name: '360° SPIN', kind: 'spin', ms: 460, lock: 400, hang: 280, aoe: { id: 'sledge_spin', radius: 3.8, damage: 40, knock: 4, launch: 6, color: 0xffaa55 } },
@@ -1026,7 +1048,14 @@ const MELEE_ITEMS = [
     plainAbility: { name: 'Ground Slam', cd: 12000, desc: 'Leap 5 m up · hang · slam down · AOE 4m · 80 dmg (more the higher you fall from)', type: 'melee_slam', radius: 4, damage: 80, slamDamage: 80, leap: 16.5, leapForward: 4.5, dive: 30,
       heightScale: { ref: 5.7, perM: 0.12, min: 0.5, max: 2 } } },
   { id: 'spear',      name: 'Spear',      type: 'Reach Melee', damage: 50, range: 3.0, cooldown: 760,
-    ability: { name: 'Throw Spear',  cd: 15000, desc: 'Hurl spear · 85 dmg · weapon gone until CD', type: 'melee_throw' } },
+    ability: { name: 'Spear Combo', cd: 1500, desc: 'E thrust · E sweep · E skewer', type: 'melee_combo',
+      comboCd: 1500, comboWindow: 1200, comboPartialCd: 700,
+      combo: [
+        { name: 'THRUST', kind: 'swing', lock: 300, ms: 300, anim: 'cross', fwd: 3, sound: 'melee_blade', aoe: { id: 'spear_thrust', radius: 3.8, arc: 0.8, damage: 40, knock: 4, launch: 1, color: 0xdde6ee } },
+        { name: 'SWEEP', kind: 'spin', ms: 460, lock: 400, hang: 0, aoe: { id: 'spear_sweep', radius: 3.6, damage: 38, knock: 4, launch: 3, color: 0xdde6ee } },
+        { name: 'SKEWER', kind: 'chop', ms: 520, lock: 480, delay: 170, aoe: { id: 'spear_skewer', radius: 3.6, arc: 0.3, damage: 65, knock: 5, launch: 5, color: 0xffffff } },
+      ] },
+    plainAbility: { name: 'Throw Spear',  cd: 15000, desc: 'Hurl spear · 85 dmg · weapon gone until CD', type: 'melee_throw' } },
   { id: 'katana',     name: 'Katana',     type: 'Melee',       damage: 65, range: 2.8, cooldown: 480,
     ability: { name: 'Deflect',      cd: 4000, desc: '1s · reflect bullets · every hit blocked adds 0.1s', type: 'melee_deflect', duration: 1000, extendPerHit: 100, maxExtend: 2000 } },
   { id: 'baguette',   name: 'Baguette',   type: 'Melee',       damage: 28, range: 2.0, cooldown: 300,
@@ -1038,7 +1067,14 @@ const MELEE_ITEMS = [
   { id: 'lightsabre', archived: true, name: 'Lightsabre', type: 'Melee · Jedi',  damage: 72, range: 2.5, cooldown: 420, doubleJump: true,
     ability: { name: 'Parry',        cd: 10000, desc: '1.5s · absorb all incoming bullets · DOUBLE JUMP', type: 'melee_parry', duration: 1500 } },
   { id: 'riot_shield',name: 'Riot Shield',type: 'Shield',      damage: 18, range: 1.7, cooldown: 700, shield: true,
-    ability: { name: 'Shield Charge',cd: 9000,  desc: 'Charge forward · ram enemies · 60 dmg', type: 'melee_charge', distance: 7, damage: 60 } },
+    ability: { name: 'Shield Combo', cd: 1500, desc: 'E bash · E charge · E shield slam', type: 'melee_combo', radius: 3.4, damage: 50, slamDamage: 50, leap: 11, leapForward: 3, dive: 28,
+      comboCd: 1500, comboWindow: 1200, comboPartialCd: 700,
+      combo: [
+        { name: 'BASH', kind: 'swing', lock: 300, ms: 300, anim: 'cross', fwd: 2, sound: 'melee_heavy', aoe: { id: 'shield_bash', radius: 2.8, arc: 0.3, damage: 25, knock: 9, launch: 1, color: 0xaaccff } },
+        { name: 'CHARGE', kind: 'dash', lock: 380, type: 'melee_charge', weaponId: 'shield_charge', distance: 6, dashTime: 0.2 },
+        { name: 'SHIELD SLAM', kind: 'slam', dive: 28 },
+      ] },
+    plainAbility: { name: 'Shield Charge',cd: 9000,  desc: 'Charge forward · ram enemies · 60 dmg', type: 'melee_charge', distance: 7, damage: 60 } },
   { id: 'screwdriver', archived: true,name: 'Screwdriver',type: 'Melee',       damage: 20, range: 1.5, cooldown: 220,
     ability: { name: 'Spin Mode',    cd: 15000, desc: '3s · auto-damage nearby foes · 180 dmg/s', type: 'melee_spin', duration: 3000 } },
   // ── New melees ───────────────────────────────────────────────────────────
@@ -1056,8 +1092,8 @@ const MELEE_ITEMS = [
   // Back from the archive as the Battle Axe (same id, so every skin and owner carries over). The throw
   // is gone: the axe now spins a full circle as you rush forward, taking everyone around you with it.
   { id: 'combat_axe', name: 'Battle Axe', type: 'Heavy Melee',   damage: 78, range: 2.2, cooldown: 820,
-    ability: { name: 'Axe Combo', cd: 9000, desc: 'E whirlwind · E upper cut · E hop & whirl · E final slash', type: 'melee_spinslash', distance: 6, dashTime: 0.30, damage: 55, reach: 2.8, spins: 1,
-      comboCd: 9000, comboWindow: 1200, comboPartialCd: 2000,
+    ability: { name: 'Axe Combo', cd: 1500, desc: 'E whirlwind · E upper cut · E hop & whirl · E final slash', type: 'melee_spinslash', distance: 6, dashTime: 0.30, damage: 55, reach: 2.8, spins: 1,
+      comboCd: 1500, comboWindow: 1200, comboPartialCd: 700,
       combo: [
         { name: 'WHIRLWIND', kind: 'whirl', lock: 520, distance: 6, dashTime: 0.30, damage: 55, reach: 2.8, spins: 1 },
         { name: 'UPPER CUT', kind: 'uppercut', lock: 380, ms: 420, id: 'axe_upper', damage: 45, up: 8, hop: 2.5, reach: 3.2, popVel: 10, color: 0xddeeff },
@@ -1077,9 +1113,9 @@ const MELEE_ITEMS = [
   // ── The Classic ──────────────────────────────────────────────────────────
   { id: 'fists',      name: 'Fists',      type: 'Brass Knuckles', damage: 24, range: 1.4, cooldown: 220, speedMult: 1.6,
     dual: true, // two separate fists, thrown alternately — not one box sliding sideways
-    ability: { name: 'Boxing Combo', cd: 6000, desc: 'E uppercut · E rising cross · E ground pound', type: 'melee_uppercut', damage: 50, up: 8.5, hop: 3.5, reach: 2.6, popVel: 9, color: 0xffd9a0,
+    ability: { name: 'Boxing Combo', cd: 1500, desc: 'E uppercut · E rising cross · E ground pound', type: 'melee_uppercut', damage: 50, up: 8.5, hop: 3.5, reach: 2.6, popVel: 9, color: 0xffd9a0,
       radius: 3.4, slamDamage: 60, leap: 12, leapForward: 3, dive: 28,
-      comboCd: 6000, comboWindow: 1200, comboPartialCd: 1500,
+      comboCd: 1500, comboWindow: 1200, comboPartialCd: 700,
       combo: [
         { name: 'UPPERCUT', kind: 'uppercut', lock: 300, ms: 400, damage: 50, up: 8.5, hop: 3.5, reach: 2.6, popVel: 9, color: 0xffd9a0 },
         { name: 'RISING CROSS', kind: 'cross', lock: 300, ms: 320, lift: 4.5, fwd: 4, aoe: { id: 'fists_cross', radius: 3, arc: 0.3, damage: 35, knock: 4, launch: 3, color: 0xffe0b0 } },
@@ -1156,7 +1192,7 @@ const MELEE_ITEMS = [
   { id: 'chain_hammer', name: 'Chain Maul', type: 'Chain Melee', damage: 85, range: 10, cooldown: 1100, speedMult: 1.1,
     ability: { name: 'Meteor Hammer', cd: 7000, desc: 'Fling the weight 12 m: hit a person and they are reeled in (60 dmg); hit a surface and the chain hauls you there', type: 'melee_meteor', range: 12, damage: 60, pull: 24, root: 900, color: 0xffcc66 } },
 ];
-// The three with a chain: `ability` is the combo while combo mode is on, and `plainAbility` (what they had before) when it is off.
+// The eight with a chain: `ability` is the combo while combo mode is on, and `plainAbility` (what they had before) when it is off.
 for (const _it of MELEE_ITEMS) {
   if (!_it.plainAbility) continue;
   const _chain = _it.ability;
@@ -1174,7 +1210,7 @@ function setMeleeComboMode(on) {
 function toggleMeleeComboMode() {
   const to = !MELEE_COMBO_MODE;
   if (!setMeleeComboMode(to)) { pushFeedLine('Finish the move first', 'then switch combo / default mode', '#ffcc66', false); return false; }
-  pushFeedLine(to ? 'COMBO MODE' : 'DEFAULT MODE', to ? 'Sledge · Fists · Battle Axe: E chains the combo' : 'Sledge · Fists · Battle Axe: E is the regular ability', '#ffcc66', false);
+  pushFeedLine(to ? 'COMBO MODE' : 'DEFAULT MODE', to ? 'Sledge · Fists · Axe · Sabre · Bat · Pan · Shield · Spear: E chains a combo' : 'E is each melee\'s regular ability', '#ffcc66', false);
   try { updateAbilityHUD(); } catch (e) {}
   return true;
 }
@@ -45391,16 +45427,27 @@ const COMBO_RUN = {
     }, st.delay ?? 170);
   },
   slam(item, ab, st, now) { startMeleeSlam(item, { ...ab, dive: st.dive ?? ab.dive }, { flip: !!st.flip }); },   // the existing leap, hang and slam (a backflip first, if asked)
+  swing(item, ab, st, now) {                    // a flat blow in front of you, no jump: a shove forward and an arc of damage (a wind-up first, if `delay`)
+    const f = _meleeForwardXZ(); _extVel.x += f.x * (st.fwd || 0); _extVel.z += f.z * (st.fwd || 0);
+    comboAnim(st.anim || 'sweep', st.ms || 320);
+    playSoundEvent(st.sound || 'melee_heavy', { volume: 1.0, minGap: 0 });
+    if (!st.delay) { comboAoe(item, now, st.aoe); return; }
+    const epoch = matchEpoch;
+    setTimeout(() => { if (epoch !== matchEpoch || isDead) return; comboAoe(item, Date.now(), st.aoe); }, st.delay);
+  },
+  dash(item, ab, st, now) {                     // a rush forward that hits everything on the way (the sabre's lunge, the shield's charge)
+    startMeleeDash(item, { type: st.type || 'melee_lunge', distance: st.distance, dashTime: st.dashTime, reach: st.reach }, st.weaponId || item.id, now);
+  },
   whirl(item, ab, st, now) {                    // the axe's spinning dash
     startMeleeDash(item, { type: 'melee_spinslash', distance: st.distance, dashTime: st.dashTime, damage: st.damage, reach: st.reach, spins: st.spins }, item.id, now);
   },
 };
-function comboFire(item, ab, idx, now) {
+function comboFire(item, ab, idx, now, stepOverride) {
   if (meleeSlam || meleeDash || batCrowdCharge) { if (meleeCombo && meleeCombo.itemId === item.id) meleeCombo.queued = true; return true; }
-  const st = ab.combo[idx], n = ab.combo.length, final = idx === n - 1;
+  const st = stepOverride || ab.combo[idx], n = ab.combo.length, final = idx === n - 1;
   const lock = st.lock ?? 380;
   meleeCombo = { itemId: item.id, step: idx, lockUntil: now + lock, windowUntil: now + lock + (final ? 0 : (ab.comboWindow ?? 1200)), final, queued: false, anim: null, hangUntil: 0, epoch: matchEpoch };
-  flashAbilityName(`${ab.name} ${idx + 1}/${n} · ${st.name}`);
+  flashAbilityName(stepOverride ? `${ab.name} · ${st.name}` : `${ab.name} ${idx + 1}/${n} · ${st.name}`);
   COMBO_RUN[st.kind](item, ab, st, now);
   if (final) abilityCDs[item.id] = now;               // the full cooldown starts with the finishing blow
   return true;
@@ -45417,6 +45464,12 @@ function activateMeleeCombo(item, ab, now) {
   }
   if (now - (abilityCDs[item.id] || 0) < abilityCooldownFor(item, ab)) return true;       // on cooldown
   if (batCrowdCharge || meleeSlam || meleeDash) return true;
+  // 🦅 Already in the air (a jump, a launch pad, a fall) with no chain going? The Sledge does not start a hop from there: it slams straight down,
+  // as it always did. It counts as the finishing blow (the full cooldown), and skips the backflip so it is quick.
+  if (ab.airSlam && slamState && !pilotedVehicle && !pilotedMortar) {
+    const last = ab.combo.length - 1;
+    return comboFire(item, ab, last, now, { ...ab.combo[last], name: 'AIR SLAM', flip: false });
+  }
   return comboFire(item, ab, 0, now);
 }
 function comboAbort(C, hard) {
@@ -45458,6 +45511,11 @@ function poseMeleeComboAnim() {
     else if (p < 0.55) { const k = ease((p - 0.4) / 0.15); py = 0.16 - 0.38 * k; pz = -0.10 - 0.28 * k; rx = 1.38 - 2.33 * k; }
     else if (p < 0.8) { py = -0.22; pz = -0.38; rx = -0.95; }
     else { const k = 1 - ease((p - 0.8) / 0.2); py = -0.22 * k; pz = -0.38 * k; rx = -0.95 * k; }
+  }
+  else if (a.kind === 'sweep' || a.kind === 'sweepL') {   // a flat swing across the front: wind up out wide, cut across, follow through, ease home (sweepL runs the other way)
+    const d = a.kind === 'sweep' ? 1 : -1;
+    const k = p < 0.2 ? ease(p / 0.2) : p < 0.6 ? 1 - 2 * ease((p - 0.2) / 0.4) : -1 + ease((p - 0.6) / 0.4);     // 0 → 1 (wind-up) → -1 (follow-through) → 0
+    px = d * 0.28 * k; py = 0.02 * Math.abs(k); pz = -0.22 * Math.abs(k); ry = d * 0.9 * k; rz = d * 0.35 * k;
   }
   else if (a.kind === 'cross') { const k = p < 0.35 ? ease(p / 0.35) : 1 - ease((p - 0.35) / 0.65); pz = -0.36 * k; py = 0.03 * k; rx = -0.2 * k; }
   m.position.set(R.x + px, R.y + py, R.z + pz); m.rotation.set(rx, ry, rz);
@@ -58397,7 +58455,7 @@ const CLIENT_WEAPON_DAMAGE = Object.fromEntries([
   ['flamethrower_skin_water', 9], ['crossbow_skin_noodle', 76], ['minigun_skin_arcade', 7],
   ['rpg_skin_soda', 118],
   ['mg42', 15], ['bat', 38], ['sabre', 45], ['frying_pan', 32], ['sledge', 70],
-  ['spear', 50], ['spear_throw', 85], ['pickle', 22], ['shield_charge', 60], ['bat_crowd_clear', 100], ['fists_uppercut', 50], ['zombie_claw', 30], ['sledge_hop', 20], ['sledge_spin', 40], ['fists_cross', 35], ['axe_upper', 45], ['axe_airwhirl', 50], ['axe_chop', 70],
+  ['spear', 50], ['spear_throw', 85], ['pickle', 22], ['shield_charge', 60], ['bat_crowd_clear', 100], ['fists_uppercut', 50], ['zombie_claw', 30], ['sledge_hop', 20], ['sledge_spin', 40], ['fists_cross', 35], ['axe_upper', 45], ['axe_airwhirl', 50], ['axe_chop', 70], ['sabre_slash', 40], ['sabre_rise', 55], ['bat_swing', 32], ['bat_back', 38], ['bat_homerun', 70], ['pan_clang', 22], ['pan_dong', 50], ['shield_bash', 25], ['spear_thrust', 40], ['spear_sweep', 38], ['spear_skewer', 65],
   // Opera/Doomsday map hazards — without these, applyBotDamageToPlayer's own
   // ||25 fallback silently underdealt them too (#51).
   ['chandelier', 200], ['debris', 120], ['lightning_strike', 70],
@@ -66692,7 +66750,7 @@ function loop() {
   if (spearThrown && selectedMeleeIdx === 4) { // 4 = spear index
     const spearItem = MELEE_ITEMS[4];
     const elapsed = Date.now() - (abilityCDs[spearItem.id] || 0);
-    if (elapsed >= spearItem.ability.cd) {
+    if (elapsed >= (spearItem.plainAbility || spearItem.ability).cd) {   // the throw's own cooldown, not the combo's
       spearThrown = false;
       if (activeSlot === 'melee' && meleeModels[4]) meleeModels[4].visible = true;
     }
@@ -69234,7 +69292,7 @@ function openSettingsHub() {
     <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin:10px 0;padding:10px;background:rgba(255,255,255,0.035);border:1px solid #244c42;border-radius:6px;">
       <div>
         <div style="font-size:12px;letter-spacing:2px;color:#d8fff2;">MELEE MODE</div>
-        <div style="font-size:10px;letter-spacing:1px;color:#89b5a8;margin-top:4px;max-width:285px;line-height:1.35;">COMBO: the Sledge, Fists and Battle Axe chain E presses into a combo. DEFAULT: one regular ability each. Quick switch: H (rebind in Controls).</div>
+        <div style="font-size:10px;letter-spacing:1px;color:#89b5a8;margin-top:4px;max-width:285px;line-height:1.35;">COMBO: the Sledge, Fists, Battle Axe, Sabre, Bat, Frying Pan, Riot Shield and Spear chain E presses into a combo. DEFAULT: one regular ability each. Quick switch: H (rebind in Controls).</div>
       </div>
       <button id="settings-melee-mode" style="min-width:92px;padding:7px 10px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:bold;letter-spacing:2px;border-radius:4px;background:${MELEE_COMBO_MODE ? '#2a2410' : '#132a24'};color:${MELEE_COMBO_MODE ? '#ffd866' : '#88ffcc'};border:2px solid ${MELEE_COMBO_MODE ? '#ffcc44' : '#44cc99'};">${MELEE_COMBO_MODE ? 'COMBO' : 'DEFAULT'}</button>
     </div>

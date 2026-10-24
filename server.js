@@ -2041,6 +2041,7 @@ event_horizon: 75,
   // Melee
   bat: 50, sabre: 45, frying_pan: 32, sledge: 70, spear: 50,
   spear_throw: 85, pickle: 22, shield_charge: 60, knife_instakill: 9999, bat_crowd_clear: 100, fists_uppercut: 50, zombie_claw: 30, sledge_hop: 20, sledge_spin: 40, fists_cross: 35, axe_upper: 45, axe_airwhirl: 50, axe_chop: 70,
+  sabre_slash: 40, sabre_rise: 55, bat_swing: 32, bat_back: 38, bat_homerun: 70, pan_clang: 22, pan_dong: 50, shield_bash: 25, spear_thrust: 40, spear_sweep: 38, spear_skewer: 65,
   chainsaw: 45, katana: 65, knife: 28, lightsabre: 72, twin_knife: 50, scythe: 58, chain_hammer: 85,
   riot_shield: 18, baguette: 28, screwdriver: 20,
   // cane and shovel were missing here entirely — every hit with either one
