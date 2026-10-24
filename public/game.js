@@ -34824,21 +34824,26 @@ function buildFragGrenade() {
 }
 
 function buildMedkit() {
+  // 12 x 7.5 x 5 cm, a tray open at the top and a lid hinged along its far top edge (g._lid): using it opens the lid (see USE ANIMATIONS), and
+  // there is a roll of bandage and a tube of gel inside (g._bandage lifts out while it heals).
   const g = new THREE.Group();
-  const whiteMat = new THREE.MeshLambertMaterial({ color: 0xeeeeee });
-  const redMat   = new THREE.MeshBasicMaterial({ color: 0xcc1111 });
-  // White box
-  const box = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.08, 0.05), whiteMat);
-  g.add(box);
-  // Red cross — vertical bar
-  const crossV = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.050, 0.006), redMat);
-  crossV.position.set(0, 0, -0.028); g.add(crossV);
-  // Red cross — horizontal bar
-  const crossH = new THREE.Mesh(new THREE.BoxGeometry(0.050, 0.014, 0.006), redMat);
-  crossH.position.set(0, 0, -0.028); g.add(crossH);
-  // Handle on top
-  const handle = new THREE.Mesh(new THREE.BoxGeometry(0.040, 0.012, 0.014), new THREE.MeshLambertMaterial({ color: 0xcccccc }));
-  handle.position.set(0, 0.048, 0); g.add(handle);
+  const white = new THREE.MeshLambertMaterial({ color: 0xf1f1f1 }), inner = new THREE.MeshBasicMaterial({ color: 0xc9d3d7 }), red = new THREE.MeshBasicMaterial({ color: 0xcc1111 });   // (the inside is self-lit: the walls and the lid would shade it black)
+  const W = 0.12, H = 0.075, D = 0.05, t = 0.005;
+  const part = (w, h, d, x, y, z, mat, parent) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); m.userData.noSmooth = true; (parent || g).add(m); return m; };
+  part(W, t, D, 0, -H / 2 + t / 2, 0, white);
+  part(W, H - t, t, 0, t / 2, -D / 2 + t / 2, white); part(W, H - t, t, 0, t / 2, D / 2 - t / 2, white);
+  part(t, H - t, D - 2 * t, -W / 2 + t / 2, t / 2, 0, white); part(t, H - t, D - 2 * t, W / 2 - t / 2, t / 2, 0, white);
+  part(W - 0.02, 0.012, D - 0.014, 0, -H / 2 + t + 0.006, 0, inner);                           // gauze packed in the bottom
+  const roll = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.035, 12), new THREE.MeshLambertMaterial({ color: 0xf6f0e0 }));
+  roll.rotation.z = Math.PI / 2; roll.position.set(-0.025, -0.012, 0); roll.userData.noSmooth = true; g.add(roll); g._bandage = roll; roll._y0 = roll.position.y;
+  const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.04, 8), new THREE.MeshBasicMaterial({ color: 0x2fcf6a }));
+  tube.rotation.z = Math.PI / 2; tube.position.set(0.03, -0.018, 0.008); tube.userData.noSmooth = true; g.add(tube);
+  for (const sz of [1, -1]) { part(0.014, 0.05, 0.002, 0, 0, sz * (D / 2 + 0.0008), red); part(0.05, 0.014, 0.002, 0, 0, sz * (D / 2 + 0.0008), red); }   // the cross on both faces
+  const lid = new THREE.Group(); lid.position.set(0, H / 2, -D / 2); g.add(lid); g._lid = lid; lid._axis = 'x'; lid._open = -2.3;
+  part(W + 0.002, t, D + 0.002, 0, t / 2, D / 2, white, lid);
+  part(0.05, 0.0012, 0.014, 0, t + 0.0006, D / 2, red, lid); part(0.014, 0.0012, 0.05, 0, t + 0.0006, D / 2, red, lid);     // the cross on the lid
+  part(0.040, 0.012, 0.014, 0, t + 0.006, D / 2 + 0.017, new THREE.MeshLambertMaterial({ color: 0xcccccc }), lid);          // the handle
+  g._handDetailed = true; g._greebled = true;
   g.position.set(0.10, -0.12, -0.20); return g;
 }
 
@@ -34985,13 +34990,13 @@ function buildStimShot() {
   barrel.rotation.x = Math.PI / 2; barrel.position.set(0, 0, 0); g.add(barrel);
   // Liquid fill (blue)
   const liquid = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.10, 8), new THREE.MeshBasicMaterial({ color: 0x3399ff }));
-  liquid.rotation.x = Math.PI / 2; liquid.position.set(0, 0, 0.020); g.add(liquid);
+  liquid.rotation.x = Math.PI / 2; liquid.position.set(0, 0, 0.020); g.add(liquid); g._liquid = liquid; liquid._z0 = 0.020;
   // Plunger
   const plunger = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.016, 8), darkMat);
-  plunger.rotation.x = Math.PI / 2; plunger.position.set(0, 0, 0.086); g.add(plunger);
+  plunger.rotation.x = Math.PI / 2; plunger.position.set(0, 0, 0.086); g.add(plunger); g._plunger = plunger; plunger._z0 = 0.086;
   // Plunger rod
   const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.040, 6), needleMat);
-  rod.rotation.x = Math.PI / 2; rod.position.set(0, 0, 0.108); g.add(rod);
+  rod.rotation.x = Math.PI / 2; rod.position.set(0, 0, 0.108); g.add(rod); g._rod = rod; rod._z0 = 0.108;
   // Needle tip
   const needle = new THREE.Mesh(new THREE.CylinderGeometry(0, 0.005, 0.022, 6), needleMat);
   needle.rotation.x = Math.PI / 2; needle.position.set(0, 0, -0.091); g.add(needle);
@@ -35016,7 +35021,7 @@ function buildSmokeBomb() {
   ring.position.set(0, 0, 0.055); g.add(ring);
   // Safety pin
   const pin = new THREE.Mesh(new THREE.TorusGeometry(0.010, 0.003, 4, 8, Math.PI), greyMat);
-  pin.position.set(0, 0.032, -0.058); pin.rotation.z = Math.PI / 2; g.add(pin);
+  pin.position.set(0, 0.032, -0.058); pin.rotation.z = Math.PI / 2; g.add(pin); g._pin = pin;
   g.position.set(0.10, -0.12, -0.20); return g;
 }
 
@@ -48102,6 +48107,7 @@ function cancelMedkitHeal(reason) {
   if (!medkitHealChannel) return false;
   clearTimeout(medkitHealChannel.timer);
   medkitHealChannel = null;
+  if (useAnim && useAnim.kind === 'open') cancelUseAnim();
   if (reason) {
     pushFeedLine('MEDKIT CANCELLED', reason, '#ff7777', false);
     flashScreen('rgba(255,80,80,0.14)', 180);
@@ -48115,6 +48121,7 @@ function startMedkitHeal(item) {
   const amount = item.heal || 100;
   const token = Date.now() + Math.random();
   medkitHealChannel = { token, amount, startedAt: performance.now(), duration, timer: null };
+  startUseAnim('support', item, 'open', { ms: duration });
   pushFeedLine('MEDKIT', `Healing +${amount} HP...`, '#66ddaa', false);
   flashScreen('rgba(68,255,136,0.10)', 180);
   medkitHealChannel.timer = setTimeout(() => {
@@ -48329,8 +48336,16 @@ function trySupport() {
   updateAmmoHUD();
   // 🎵 Per-utility sound (mapped above). Some items override this with their own.
   if (SUPPORT_SOUND[item.id]) playSoundEvent(SUPPORT_SOUND[item.id], { volume: 1.0 });
-  if (item.id === 'satchel') { throwSatchel(item); return; }
+  if (item.id === 'satchel') { startUseAnim('support', item, 'toss'); throwSatchel(item); return; }
 
+  // 🎬 The item has its own way of being used (see USE ANIMATIONS). A throw lets go at the animation's release, so it happens that much later;
+  // a medkit runs its own channel; everything else happens the moment you press.
+  const delay = item.id === 'medkit' ? 0 : startUseAnim('support', item, supportUseKind(item));
+  if (delay > 0) { const epoch = matchEpoch; setTimeout(() => { if (epoch !== matchEpoch || isDead) return; _trySupportEffect(item, now); }, delay); }
+  else _trySupportEffect(item, now);
+}
+function _trySupportEffect(item, now) {
+  const unlimited = adminInfiniteAmmoActive();
   // ── Instant-use consumables ────────────────────────────────────────────────
   if (item.id === 'medkit' && item.healTime) {
     startMedkitHeal(item);
@@ -52487,21 +52502,73 @@ function buildTeaKettle() {
   g.position.set(0.10, -0.12, -0.20); return g;
 }
 function buildPizzaBox() {
+  // a tray with the pizza in it and a cardboard lid on a hinge along the far edge (g._lid): closed it is a flat box with a red cross stuck on it
   const g = new THREE.Group();
   const board = new THREE.MeshLambertMaterial({ color: 0xc9a268 });
   const lidMat = new THREE.MeshLambertMaterial({ color: 0xdcbf86 });
   const sauce = new THREE.MeshLambertMaterial({ color: 0xc0342a });
   const cheese = new THREE.MeshLambertMaterial({ color: 0xf2c84a });
   const pep = new THREE.MeshLambertMaterial({ color: 0x8a1e1a });
-  g.add(new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.026, 0.15), board));
-  const lid = new THREE.Mesh(new THREE.BoxGeometry(0.152, 0.004, 0.152), lidMat); lid.position.y = 0.015; g.add(lid);
-  const s = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.052, 0.003, 22), sauce); s.position.y = 0.0185; g.add(s);
-  const c = new THREE.Mesh(new THREE.CylinderGeometry(0.042, 0.042, 0.003, 22), cheese); c.position.y = 0.0205; g.add(c);
+  const box = (w, h, d, x, y, z, mat, parent) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); m.userData.noSmooth = true; (parent || g).add(m); return m; };
+  box(0.15, 0.004, 0.15, 0, -0.011, 0, board);
+  box(0.15, 0.022, 0.004, 0, 0, -0.073, board); box(0.15, 0.022, 0.004, 0, 0, 0.073, board); box(0.004, 0.022, 0.142, -0.073, 0, 0, board); box(0.004, 0.022, 0.142, 0.073, 0, 0, board);
+  const cyl = (r, h, y, mat) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 22), mat); m.position.y = y; m.userData.noSmooth = true; g.add(m); return m; };
+  cyl(0.052, 0.003, -0.0085, sauce); cyl(0.042, 0.003, -0.006, cheese);
   [[0.02, 0.012], [-0.02, 0.018], [0.004, -0.024], [-0.026, -0.01], [0.028, -0.014]].forEach(([x, z]) => {
-    const p = new THREE.Mesh(new THREE.CylinderGeometry(0.0075, 0.0075, 0.003, 10), pep); p.position.set(x, 0.0225, z); g.add(p);
+    const p = new THREE.Mesh(new THREE.CylinderGeometry(0.0075, 0.0075, 0.003, 10), pep); p.position.set(x, -0.0035, z); p.userData.noSmooth = true; g.add(p);
   });
-  const cross = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.0015, 0.006), new THREE.MeshLambertMaterial({ color: 0xffffff })); cross.position.set(0.058, 0.0175, 0.062); g.add(cross);
+  const lid = new THREE.Group(); lid.position.set(0, 0.011, -0.075); g.add(lid); g._lid = lid; lid._axis = 'x'; lid._open = -2.1;
+  box(0.152, 0.004, 0.152, 0, 0.002, 0.076, lidMat, lid);
+  box(0.02, 0.0015, 0.006, 0, 0.0045, 0.076, new THREE.MeshLambertMaterial({ color: 0xffffff }), lid); box(0.006, 0.0015, 0.02, 0, 0.0045, 0.076, new THREE.MeshLambertMaterial({ color: 0xcc1111 }), lid);
+  g._handDetailed = true; g._greebled = true;
   g.rotation.set(0.35, 0.25, 0.0);
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+// 📱 a tablet: a slim slab with a screen on one face and a red smart cover hinged down the left edge (g._lid, swings out like a book)
+function buildMedPad() {
+  const g = new THREE.Group();
+  const alu = new THREE.MeshLambertMaterial({ color: 0xc9ced6 }), bezel = new THREE.MeshLambertMaterial({ color: 0x101216 }), cover = new THREE.MeshLambertMaterial({ color: 0xd6283a });
+  const W = 0.105, H = 0.145, T = 0.008;
+  const box = (w, h, d, x, y, z, mat, parent) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); m.userData.noSmooth = true; (parent || g).add(m); return m; };
+  box(W, H, T, 0, 0, 0, alu); box(W - 0.006, H - 0.006, 0.0008, 0, 0, T / 2 + 0.0004, bezel);
+  const tex = surfTex('medpad-screen', 256, (ctx, s) => {
+    ctx.fillStyle = '#f4f8fb'; ctx.fillRect(0, 0, s, s);
+    ctx.fillStyle = '#d6283a'; ctx.fillRect(s * 0.42, s * 0.16, s * 0.16, s * 0.46); ctx.fillRect(s * 0.27, s * 0.31, s * 0.46, s * 0.16);
+    ctx.strokeStyle = '#2fcf6a'; ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(8, s * 0.82); ctx.lineTo(s * 0.3, s * 0.82); ctx.lineTo(s * 0.38, s * 0.7); ctx.lineTo(s * 0.46, s * 0.92); ctx.lineTo(s * 0.54, s * 0.76); ctx.lineTo(s * 0.62, s * 0.82); ctx.lineTo(s - 8, s * 0.82); ctx.stroke();
+    ctx.fillStyle = '#2a2f36'; ctx.font = 'bold ' + Math.floor(s * 0.075) + 'px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('HEALING...', s / 2, s * 0.08);
+  });
+  const screen = new THREE.Mesh(new THREE.PlaneGeometry(W - 0.012, H - 0.014), new THREE.MeshBasicMaterial({ map: tex }));
+  screen.position.z = T / 2 + 0.0012; g.add(screen);
+  const lid = new THREE.Group(); lid.position.set(-W / 2 - 0.001, 0, T / 2 + 0.0035); g.add(lid); g._lid = lid; lid._axis = 'y'; lid._open = 2.9;
+  box(W + 0.004, H + 0.004, 0.004, (W + 0.004) / 2, 0, 0, cover, lid);
+  box(0.03, 0.006, 0.0014, (W + 0.004) / 2, 0.02, 0.0028, new THREE.MeshBasicMaterial({ color: 0xffffff }), lid); box(0.0094, 0.032, 0.0014, (W + 0.004) / 2, 0.02, 0.0028, new THREE.MeshBasicMaterial({ color: 0xffffff }), lid);   // a white cross on the cover
+  g._handDetailed = true; g._greebled = true;
+  g.rotation.set(0.25, -0.2, 0.1);
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+// 💻 a laptop: a base with keys and a lid on a hinge along the back edge (g._lid): open, the screen shows a red cross and a heartbeat
+function buildLaptopKit() {
+  const g = new THREE.Group();
+  const alu = new THREE.MeshLambertMaterial({ color: 0xaeb4bd }), dark = new THREE.MeshLambertMaterial({ color: 0x20242b }), key = new THREE.MeshLambertMaterial({ color: 0x3a3f48 });
+  const W = 0.15, D = 0.10, T = 0.008;
+  const box = (w, h, d, x, y, z, mat, parent) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); m.userData.noSmooth = true; (parent || g).add(m); return m; };
+  box(W, T, D, 0, -T / 2, 0, alu);
+  for (let r = 0; r < 4; r++) for (let c = 0; c < 10; c++) box(0.0118, 0.0012, 0.0118, -0.0675 + c * 0.0150, 0.0006, -0.036 + r * 0.0138, key);
+  box(0.05, 0.0012, 0.03, 0, 0.0006, 0.034, dark);                                        // the trackpad
+  const lid = new THREE.Group(); lid.position.set(0, 0, -D / 2); g.add(lid); g._lid = lid; lid._axis = 'x'; lid._open = -1.95;
+  box(W, 0.006, D, 0, 0.003, D / 2, alu, lid);
+  const tex = surfTex('laptop-screen', 256, (ctx, s) => {
+    ctx.fillStyle = '#0d1b2a'; ctx.fillRect(0, 0, s, s);
+    ctx.fillStyle = '#e8f1f8'; ctx.fillRect(s * 0.06, s * 0.06, s * 0.88, s * 0.88);
+    ctx.fillStyle = '#d6283a'; ctx.fillRect(s * 0.44, s * 0.18, s * 0.12, s * 0.34); ctx.fillRect(s * 0.33, s * 0.29, s * 0.34, s * 0.12);
+    ctx.strokeStyle = '#2fcf6a'; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(s * 0.1, s * 0.76); ctx.lineTo(s * 0.34, s * 0.76); ctx.lineTo(s * 0.4, s * 0.64); ctx.lineTo(s * 0.46, s * 0.86); ctx.lineTo(s * 0.52, s * 0.7); ctx.lineTo(s * 0.58, s * 0.76); ctx.lineTo(s * 0.9, s * 0.76); ctx.stroke();
+    ctx.fillStyle = '#2a2f36'; ctx.font = 'bold ' + Math.floor(s * 0.06) + 'px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('INSTALLING HEALTH 100%', s / 2, s * 0.15);
+  });
+  const screen = new THREE.Mesh(new THREE.PlaneGeometry(W - 0.012, D - 0.012), new THREE.MeshBasicMaterial({ map: tex }));
+  screen.rotation.x = Math.PI / 2; screen.position.set(0, -0.0006, D / 2); lid.add(screen);       // on the underside of the lid: the side you see once it is open
+  box(0.04, 0.0012, 0.006, 0, 0.0066, D / 2, new THREE.MeshBasicMaterial({ color: 0xffffff }), lid); box(0.006, 0.0012, 0.04, 0, 0.0066, D / 2, new THREE.MeshBasicMaterial({ color: 0xcc1111 }), lid);   // a red cross on the outside
+  g._handDetailed = true; g._greebled = true;
+  g.rotation.set(0.5, 0.25, 0.0);
   g.position.set(0.10, -0.12, -0.20); return g;
 }
 function buildJuiceBox() {
@@ -52552,6 +52619,10 @@ const SUPPORT_MODEL_SKINS = [
     blurb: 'Everybody dances. One of them leaves early.' },
   { id: 'smoke_kettle',    support: 'smoke',       name: 'Tea Kettle',       rarity: 'good', sw: ['#b9c2cc', '#2a2a2e'], build: buildTeaKettle,
     blurb: 'It was always going to be a bit of a cloud.' },
+  { id: 'medkit_tablet',   support: 'medkit',      name: 'MedPad',           rarity: 'good', sw: ['#c9ced6', '#d6283a'], build: buildMedPad,
+    blurb: 'It has an app for this. The app is a red cross and a very long progress bar.' },
+  { id: 'medkit_laptop',   support: 'medkit',      name: 'Laptop',           rarity: 'good', sw: ['#aeb4bd', '#0d1b2a'], build: buildLaptopKit,
+    blurb: 'Open the lid, wait for the spinner, feel better.' },
   { id: 'medkit_pizza',    support: 'medkit',      name: 'Pizza Box',        rarity: 'good', sw: ['#c9a268', '#c0342a'], build: buildPizzaBox,
     blurb: 'Heals the way pizza heals: completely, and with some regret.' },
   { id: 'stim_juice',      support: 'stim',        name: 'Juice Box',        rarity: 'good', sw: ['#ff9a1f', '#ff4a4a'], build: buildJuiceBox,
@@ -61531,7 +61602,7 @@ function startItemInspect() {
   if (!model || !model.visible) return false;
   // not over the top of something that is already moving it
   if (meleeSwingT < 1 || meleeSlam || meleeDash || batCrowdCharge || scytheDash || meleeAbilityBuff
-      || grenadeWindupT < 1 || _equip || spearThrown) return false;
+      || grenadeWindupT < 1 || _equip || spearThrown || useAnim) return false;
   const kind = itemInspectKind(slot, item), spec = ITEM_INSPECT[kind];
   if (model._park) model._park = null;
   itemInspect = { model, slot, idx, kind, t0: performance.now(), ms: spec.ms, keys: spec.keys, beats: spec.beats, beat: 0,
@@ -61553,7 +61624,7 @@ function updateItemInspect() {
   const held = activeSlot === s.slot && m.visible && !isDead && !reloading
     && (s.slot === 'melee' ? meleeModels[selectedMeleeIdx] === m : supportModels[selectedSupportIdx] === m);
   const busy = meleeSwingT < 1 || meleeSlam || meleeDash || batCrowdCharge || scytheDash || meleeAbilityBuff
-    || grenadeWindupT < 1 || _equip;
+    || grenadeWindupT < 1 || _equip || useAnim;
   if (!held || busy) { cancelItemInspect(); return; }
   const t = Math.min(1, (performance.now() - s.t0) / s.ms);
   const P = _reloadPose(s.keys, t);
@@ -61574,6 +61645,137 @@ function updateItemInspect() {
 // Using the item (a click) or its ability (E) puts it down at once.
 document.addEventListener('mousedown', () => { if (itemInspect) cancelItemInspect(); }, true);
 document.addEventListener('keydown', e => { if (itemInspect && (e.code === 'KeyE' || e.code === 'KeyR' || e.code === 'KeyB')) cancelItemInspect(); }, true);
+
+// ═══ 🎬 USE ANIMATIONS ═══════════════════════════════════════════════════════════════════════════════════════════════
+// What an item does in your hand when you USE it (inspecting is the T key, above): the medkit opens its lid, a stim shot is capped, jabbed and
+// pressed, a smoke bomb has its pin pulled before it goes, a mine is set down, a baguette is bitten. A track is keyed like a swing (_MS: right /
+// up / back from the resting pose, pitch / yaw / roll), `parts` move pieces of the model by name (g._lid, _plunger, _pin, _bandage...), `beats` are
+// the little sounds, `hide` is the stretch when the item has left the hand, and `commit` is where the effect happens inside the animation: a
+// throw lets go at its release (the throw is delayed by that long), everything else happens the moment you press.
+// A skin that has a lid (the pizza box, the tablet, the laptop) opens it the same way: give the model `g._lid` with `_axis` and `_open`.
+const _U = (t, p, r) => _MS(t, p, r);
+const _uEase = x => { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); };
+const _uWin = (t, a, b) => _uEase((t - a) / (b - a));                      // 0 before a, 1 after b
+const USE_TRACKS = {
+  // a case that opens: up to the face, tipped to look in, the lid back, something done inside, the lid shut again (as long as the heal takes)
+  open: { ms: 2500, keys: [_U(.07, [-.05, .07, .06], [.5, -.1, .05]), _U(.15, [-.07, .12, .10], [.95, -.2, .10]), _U(.30, [-.07, .12, .10], [1.0, -.45, .15]),
+    _U(.45, [-.07, .12, .10], [.95, -.75, -.10]), _U(.60, [-.07, .12, .10], [1.0, -.6, .12]), _U(.75, [-.07, .12, .10], [.95, -.7, -.10]),
+    _U(.86, [-.06, .10, .09], [.9, -.2, .05]), _U(.94, [-.02, .03, .03], [.25, 0, 0])],
+    beats: [[.10, 'click'], [.90, 'click']],
+    parts(m, t) {
+      const lid = m._lid;
+      if (lid) lid.rotation[lid._axis || 'x'] = lid._open * _uWin(t, .05, .16) * (1 - _uWin(t, .86, .96));
+      const b = m._bandage;
+      if (b) { const k = _uWin(t, .20, .35) * (1 - _uWin(t, .80, .86)); b.position.y = b._y0 + 0.05 * k; b.rotation.x = t * 14 * k; b.visible = k > 0.01; }
+    } },
+  // a syringe: the cap off, turned needle-down, jabbed, the plunger pressed home, drawn back
+  inject: { ms: 950, keys: [_U(.14, [-.05, .06, .05], [-.5, -.25, .2]), _U(.34, [-.09, .10, .03], [-1.15, -.5, .45]), _U(.52, [-.09, -.05, .01], [-1.2, -.5, .45]),
+    _U(.74, [-.09, -.05, .01], [-1.2, -.5, .45]), _U(.88, [-.07, .06, .02], [-.7, -.3, .2])],
+    beats: [[.12, 'click'], [.54, 'hiss']],
+    parts(m, t) {
+      const press = _uWin(t, .54, .72);
+      if (m._plunger) m._plunger.position.z = m._plunger._z0 - 0.045 * press;
+      if (m._rod) m._rod.position.z = m._rod._z0 - 0.045 * press;
+      if (m._liquid) { const L = 0.10 * (1 - 0.65 * press); m._liquid.scale.y = L / 0.10; m._liquid.position.z = -0.03 + L / 2; }
+    } },
+  // a flat pack with the needle at one end: rolled needle-down and jabbed
+  injectX: { ms: 950, keys: [_U(.15, [-.05, .06, .05], [.2, 0, .6]), _U(.34, [-.08, .10, .03], [.25, -.2, 1.35]), _U(.52, [-.08, -.04, 0], [.25, -.2, 1.35]),
+    _U(.74, [-.08, -.04, 0], [.25, -.2, 1.35]), _U(.88, [-.06, .04, .02], [.1, 0, .5])], beats: [[.12, 'click'], [.54, 'hiss']] },
+  // a grenade or a bottle: the pin pulled and flung away, a wind-back, the throw (it leaves the hand at .5), a fresh one coming up
+  pin: { ms: 700, commit: .5, hide: [.54, .74], keys: [_U(.12, [-.04, .04, .05], [.15, 0, .15]), _U(.26, [-.05, .05, .07], [.2, .1, .2]), _U(.40, [.05, .08, .10], [-.55, 0, .45]),
+    _U(.50, [0, -.04, -.18], [.35, 0, .1]), _U(.56, [-.02, -.10, -.34], [.9, 0, -.2]), _U(.80, [0, -.05, -.02], [.35, 0, 0]), _U(.90, [-.01, -.02, 0], [.12, 0, 0])],
+    beats: [[.22, 'click'], [.50, 'whoosh']],
+    parts(m, t) { const p = m._pin; if (p) { const k = _uWin(t, .20, .32); p.position.set(p.position.x, p.position.y, p.position.z); p.visible = t < .34; if (k > 0 && p._p0) p.position.set(p._p0.x + 0.07 * k, p._p0.y + 0.05 * k, p._p0.z + 0.02 * k); } } },
+  // a ball or a jar: wound back, flicked off (it leaves at .34), a new one coming up
+  toss: { ms: 560, commit: .34, hide: [.40, .66], keys: [_U(.20, [.06, .10, .12], [-.6, 0, .3]), _U(.34, [.02, -.04, -.22], [.8, 0, -.2]), _U(.44, [-.02, -.08, -.34], [1.0, 0, -.3]),
+    _U(.70, [0, -.05, -.02], [.4, 0, 0]), _U(.84, [0, -.01, 0], [.1, 0, 0])], beats: [[.34, 'whoosh']],
+    parts(m, t, S) { if (S.item && S.item.id === 'rubber_duck') { const q = Math.max(_uWin(t, .02, .10) * (1 - _uWin(t, .10, .18)), _uWin(t, .18, .24) * (1 - _uWin(t, .24, .30))); m.scale.set(S.baseScale.x * (1 + .25 * q), S.baseScale.y * (1 - .35 * q), S.baseScale.z * (1 + .25 * q)); } } },
+  // set down on the ground: bent over, put down with a tap, up again
+  plant: { ms: 760, keys: [_U(.22, [-.02, -.12, -.06], [.9, 0, 0]), _U(.36, [-.02, -.20, -.08], [1.1, 0, 0]), _U(.50, [-.02, -.20, -.08], [1.1, 0, 0]),
+    _U(.64, [-.02, -.12, -.04], [.7, 0, 0]), _U(.82, [-.01, -.03, 0], [.2, 0, 0])], beats: [[.36, 'thud']] },
+  // a cannon or a blower: it kicks back and settles
+  pop: { ms: 420, keys: [_U(.10, [0, .02, .12], [.55, 0, 0]), _U(.24, [0, 0, .05], [.2, 0, 0]), _U(.40, [0, .01, .08], [.3, 0, 0]), _U(.62, [0, 0, .02], [.1, 0, 0])] },
+  // food: to the mouth, three bites, down again
+  eat: { ms: 1500, keys: [_U(.16, [-.06, .14, .10], [1.0, -.2, .1]), _U(.26, [-.07, .15, .08], [1.0, -.2, .1]), _U(.32, [-.06, .14, .10], [1.0, -.2, .1]), _U(.46, [-.07, .15, .08], [1.0, -.2, .1]),
+    _U(.52, [-.06, .14, .10], [1.0, -.2, .1]), _U(.66, [-.07, .15, .08], [1.0, -.2, .1]), _U(.72, [-.06, .14, .10], [1.0, -.2, .1]), _U(.88, [-.02, .03, .03], [.3, 0, 0])],
+    beats: [[.27, 'crunch'], [.47, 'crunch'], [.67, 'crunch']],
+    parts(m, t, S) { const bites = (t > .26) + (t > .46) + (t > .66), s = 1 - 0.07 * bites * (1 - _uWin(t, .86, .98)); m.scale.set(S.baseScale.x * s, S.baseScale.y * s, S.baseScale.z * s); } },
+  // a gadget: up, a press on its button, away
+  device: { ms: 800, keys: [_U(.20, [-.05, .08, .06], [.8, 0, 0]), _U(.40, [-.05, .07, .06], [.8, 0, 0]), _U(.46, [-.05, .07, .03], [.8, 0, 0]), _U(.54, [-.05, .07, .06], [.8, 0, 0]), _U(.76, [-.02, .02, .02], [.2, 0, 0])],
+    beats: [[.45, 'click']] },
+  // a thrown spear: wound up behind the ear, driven forward
+  throw: { ms: 560, keys: [_U(.26, [.10, .10, .14], [.9, -.35, .30]), _U(.42, [-.03, -.04, -.34], [-.25, .1, -.1]), _U(.55, [-.03, -.05, -.30], [-.25, .1, -.1]), _U(.85, [0, -.02, -.02], [.1, 0, 0])],
+    beats: [[.40, 'whoosh']] },
+  // a knife thrown with the wrist
+  flick: { ms: 320, keys: [_U(.32, [.04, .05, .08], [.5, 0, .5]), _U(.52, [-.02, -.03, -.22], [-.35, .1, -.45]), _U(.80, [0, 0, -.04], [-.1, 0, -.1])], beats: [[.50, 'whoosh']] },
+  // a stab: drawn back, then thrust
+  stab: { ms: 420, keys: [_U(.28, [.05, .04, .14], [.3, -.25, .2]), _U(.42, [-.04, -.02, -.46], [-.45, .05, -.1]), _U(.60, [-.04, -.02, -.44], [-.45, .05, -.1]), _U(.85, [0, 0, -.04], [-.05, 0, 0])],
+    beats: [[.40, 'whoosh']] },
+};
+const SUPPORT_USE_KIND = {
+  medkit: 'open', stim: 'inject', vampire_syringe: 'inject', adrenaline: 'injectX', berserker_serum: 'injectX',
+  smoke: 'pin', molotov: 'pin', acid_grenade: 'pin', emp_grenade: 'pin', flashbang_basic: 'pin', stun_grenade: 'pin', taser_grenade: 'pin', ink_bomb: 'pin', thermite: 'pin', dynamite: 'pin', sticky_charge: 'pin', air_grenade: 'pin',
+  blink_pearl: 'toss', moon_mine: 'toss', black_hole_seed: 'toss', rubber_duck: 'toss', glitch_cube: 'toss', bee_jar: 'toss', satchel: 'toss', teleport_beacon: 'toss', warp_beacon: 'toss',
+  confetti_cannon: 'pop', air_blaster: 'pop', grapple_hook: 'pop',
+  ammo_fountain: 'plant', land_mine: 'plant', mini_turret: 'plant', tripwire: 'plant', magnet_mine: 'plant', bounce_pad: 'plant', proximity_mine: 'plant', stasis_mine: 'plant', caltrops: 'plant', c4: 'plant', claymore: 'plant', tesla_coil: 'plant',
+  hamburger: 'eat',
+};
+function supportUseKind(item) { return (item && SUPPORT_USE_KIND[item.baseId || item.id]) || 'device'; }
+const USE_KINDS_READY = new Set(['open']);       // the kinds that are switched on (the others are written, but still being tuned to show in view)
+const _USE_PARTS = ['_lid', '_plunger', '_rod', '_liquid', '_pin', '_bandage'];
+let useAnim = null;       // { model, slot, item, kind, T, ms, t0, base, baseRot, baseScale, order, beat, hidden, snap, epoch }
+function _useSound(name) {
+  const ctx = getAudioCtx(); if (!ctx) return;
+  try {
+    const g = ctx.createGain(); g.connect(ctx.destination); const t = ctx.currentTime + 0.002;
+    if (name === 'click') metalClack(ctx, t, g, 0.12, 2100, 0.05);
+    else if (name === 'crunch') { playFilteredNoise(ctx, t, 0.07, g, 0.5, 'bandpass', 1700, 0.9, 0.001, 1.6); playTone(ctx, t, 0.05, g, 220, 120, 0.2, 'triangle'); }
+    else if (name === 'hiss') playFilteredNoise(ctx, t, 0.22, g, 0.18, 'highpass', 5200, 0.7, 0.02, 1.2);
+    else if (name === 'thud') { playTone(ctx, t, 0.16, g, 120, 55, 0.5, 'sine'); playFilteredNoise(ctx, t, 0.08, g, 0.2, 'lowpass', 400, 0.7, 0.002, 1.5); }
+    else if (name === 'whoosh') playEquipSound('whoosh');
+  } catch (e) {}
+}
+function _useHide(m, hide) { const o = m._heldItem || m; o.visible = !hide; }
+// Start the item's use animation. Returns after how many ms the effect should happen (0 = now).
+function startUseAnim(slot, item, kind, o = {}) {
+  const T = USE_TRACKS[kind];
+  if (!T || isDead || !USE_KINDS_READY.has(kind)) return 0;
+  const idx = slot === 'melee' ? selectedMeleeIdx : selectedSupportIdx;
+  const model = slot === 'melee' ? meleeModels[idx] : supportModels[idx];
+  if (!model || !model.visible || activeSlot !== slot) return 0;
+  cancelUseAnim();
+  try { cancelItemInspect(); } catch (e) {}
+  const ms = o.ms || T.ms, snap = [];
+  for (const k of _USE_PARTS) { const p = model[k]; if (p) { if (k === '_pin' && !p._p0) p._p0 = p.position.clone(); snap.push({ k, p, pos: p.position.clone(), rot: p.rotation.clone(), sc: p.scale.clone(), vis: p.visible }); } }
+  useAnim = { model, slot, idx, item, kind, T, ms, t0: performance.now(), base: model.position.clone(), baseRot: model.rotation.clone(), baseScale: model.scale.clone(),
+              order: model.rotation.order, beat: 0, hidden: false, snap, epoch: matchEpoch };
+  return T.commit != null ? Math.round(T.commit * ms) : 0;
+}
+function cancelUseAnim() {
+  const S = useAnim; if (!S) return;
+  useAnim = null;
+  const m = S.model;
+  m.position.copy(S.base); m.rotation.copy(S.baseRot); m.rotation.order = S.order; m.scale.copy(S.baseScale);
+  for (const e of S.snap) { e.p.position.copy(e.pos); e.p.rotation.copy(e.rot); e.p.scale.copy(e.sc); e.p.visible = e.vis; }
+  if (S.hidden) _useHide(m, false);
+}
+function updateUseAnim(dt) {
+  const S = useAnim; if (!S) return;
+  const m = S.model;
+  const held = !isDead && S.epoch === matchEpoch && activeSlot === S.slot && !_equip
+    && (S.slot === 'melee' ? meleeModels[selectedMeleeIdx] === m : supportModels[selectedSupportIdx] === m);
+  const busy = S.slot === 'melee' && (meleeSwingT < 1 || meleeSlam || meleeDash || batCrowdCharge || scytheDash);
+  if (!held || busy) { cancelUseAnim(); return; }
+  const t = Math.min(1, (performance.now() - S.t0) / S.ms), P = _reloadPose(S.T.keys, t);
+  m.rotation.order = 'YXZ';
+  m.position.set(S.base.x + P.px, S.base.y + P.py, S.base.z + P.pz);
+  m.rotation.set(S.baseRot.x + P.rx, S.baseRot.y + P.ry, S.baseRot.z + P.rz);
+  if (S.T.parts) S.T.parts(m, t, S);
+  if (S.T.hide) { const h = t >= S.T.hide[0] && t < S.T.hide[1]; if (h !== S.hidden) { S.hidden = h; _useHide(m, h); } }
+  const beats = S.T.beats || [];
+  while (S.beat < beats.length && t >= beats[S.beat][0]) _useSound(beats[S.beat++][1]);
+  if (t >= 1) cancelUseAnim();
+}
 
 function updateMeleeSwing(dt) {
   if (batCrowdCharge) { poseBatCrowdClear(); return; }
@@ -67458,6 +67660,7 @@ function loop() {
   updateSatchels(dt);
   updateDDay(dt);
   updateGrenadeWindup(dt);
+  updateUseAnim(dt);
   updateItemInspect();
   updateAbilityBuff(dt);
   updateBatCrowdClear(dt);

@@ -3623,6 +3623,61 @@ if (ok && process.argv.includes('--music')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+if (ok && process.argv.includes('--useanim')) {
+  // Use animations: every track is well formed (also the kinds not switched on yet), the medkit and its skins have a lid that opens and shuts,
+  // and using a medkit runs the animation for as long as the heal and leaves the model exactly as it was.
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    for (const [k, T] of Object.entries(USE_TRACKS)) {
+      for (const t of [0, 0.1, 0.25, 0.5, 0.75, 0.9, 1]) { const P = _reloadPose(T.keys, t); if (![P.px, P.py, P.pz, P.rx, P.ry, P.rz].every(Number.isFinite)) issues.push(k + ': a pose at ' + t + ' is not a number'); }
+      if (T.commit != null && !(T.commit > 0 && T.commit < 1)) issues.push(k + ': the release has to be inside the animation');
+      if (T.hide && !(T.hide[0] < T.hide[1])) issues.push(k + ': a bad hide window');
+      for (const b of (T.beats || [])) if (!['click', 'crunch', 'hiss', 'thud', 'whoosh'].includes(b[1])) issues.push(k + ': unknown sound ' + b[1]);
+    }
+    for (const it of SUPPORT_ITEMS) if (!it.archived && !it.adminItem && !USE_TRACKS[supportUseKind(it)]) issues.push(it.id + ': no use animation');
+    if (!USE_KINDS_READY.has('open')) issues.push('the medkit animation should be switched on');
+    // the medkit and every skin of it: a lid on a hinge that opens when the track says so
+    const models = [['stock', supportModels[SUPPORT_ITEMS.findIndex(i => i.id === 'medkit')]]].concat(SUPPORT_MODEL_SKINS.filter(s => s.support === 'medkit').map(s => [s.id, s.build()]));
+    if (models.length < 4) issues.push('the medkit should have its stock model and three skins (found ' + models.length + ')');
+    for (const [id, m] of models) {
+      const lid = m._lid;
+      if (!lid || !['x', 'y', 'z'].includes(lid._axis) || !Number.isFinite(lid._open) || Math.abs(lid._open) < 1.5) { issues.push(id + ': no lid that opens'); continue; }
+      const shut = lid.rotation[lid._axis];
+      USE_TRACKS.open.parts(m, 0.5, {}); const opened = lid.rotation[lid._axis];
+      USE_TRACKS.open.parts(m, 1, {}); const closed = lid.rotation[lid._axis];
+      if (Math.abs(opened) < 1.5 || Math.abs(closed) > 1e-6 || Math.abs(shut) > 1e-6) issues.push(id + ': the lid should be shut, open half way through and shut again at the end (' + [shut, opened, closed].map(v => v.toFixed(2)) + ')');
+    }
+    // using it
+    const save = { started: gameStarted, dead: isDead, slot: activeSlot, sup: selectedSupportIdx, uses: supportUses.slice(), last: lastSupport, eq: _equip, cd: countdownActive, snd: playSoundEvent, feed: pushFeedLine, flash: flashScreen };
+    playSoundEvent = () => {}; pushFeedLine = () => {}; flashScreen = () => {};
+    const idx = SUPPORT_ITEMS.findIndex(i => i.id === 'medkit'), m = supportModels[idx];
+    const pos = m.position.clone(), rot = m.rotation.clone(), vis = m.visible;
+    try {
+      gameStarted = true; isDead = false; countdownActive = false; activeSlot = 'support'; selectedSupportIdx = idx; _equip = null; supportUses[idx] = 2; lastSupport = 0; m.visible = true;
+      cancelUseAnim(); try { cancelMedkitHeal(); } catch (e) {}
+      trySupport();
+      if (!useAnim || useAnim.kind !== 'open') issues.push('using a medkit should start the opening animation');
+      else if (useAnim.ms !== SUPPORT_ITEMS[idx].healTime) issues.push('the animation should last as long as the heal (' + useAnim.ms + ' vs ' + SUPPORT_ITEMS[idx].healTime + ')');
+      else {
+        useAnim.t0 = performance.now() - useAnim.ms * 0.5; updateUseAnim(0.016);
+        if (m.position.distanceTo(pos) < 0.03) issues.push('half way through, the medkit should have been lifted to the face');
+        if (Math.abs(m._lid.rotation.x) < 1.5) issues.push('half way through, the lid should be open');
+        cancelMedkitHeal();
+        if (useAnim) issues.push('cancelling the heal should end the animation');
+      }
+      if (m.position.distanceTo(pos) > 1e-6 || m.rotation.x !== rot.x || m.rotation.y !== rot.y || m.rotation.z !== rot.z || Math.abs(m._lid.rotation.x) > 1e-6) issues.push('the medkit was not put back as it was');
+    } finally {
+      cancelUseAnim(); try { cancelMedkitHeal(); } catch (e) {}
+      playSoundEvent = save.snd; pushFeedLine = save.feed; flashScreen = save.flash;
+      gameStarted = save.started; isDead = save.dead; activeSlot = save.slot; selectedSupportIdx = save.sup; for (let i = 0; i < save.uses.length; i++) supportUses[i] = save.uses[i]; lastSupport = save.last; _equip = save.eq; countdownActive = save.cd;
+      m.position.copy(pos); m.rotation.copy(rot); m.visible = vis;
+    }
+    return issues;
+  })()`);
+  console.log('use animation checks: every track is well formed; the medkit and its three skins (tablet, laptop, pizza box) open a lid; using a medkit runs the animation for the heal and puts everything back');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 if (ok && process.argv.includes('--archive')) {
   // Archived: the emote wheel and King of the Hill. Off the screen, refused by the server, a stale pick falls back, code kept.
   const issues = [];
