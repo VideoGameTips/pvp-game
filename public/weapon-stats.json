@@ -6297,31 +6297,12 @@
    "dps": 96.154,
    "speedMult": 1,
    "ability": {
-    "name": "Bat Combo",
-    "desc": "E swing · E backswing · E home run",
-    "cooldownSec": 1.5,
-    "steps": [
-     {
-      "name": "SWING",
-      "damage": 32,
-      "radiusM": 3
-     },
-     {
-      "name": "BACKSWING",
-      "damage": 38,
-      "radiusM": 3
-     },
-     {
-      "name": "HOME RUN",
-      "damage": 70,
-      "radiusM": 3.8
-     }
-    ]
-   },
-   "defaultAbility": {
     "name": "Crowd Clear",
-    "desc": "Forward charge · rising swing · 100 dmg · massive knockback"
-   }
+    "desc": "Forward charge · rising swing · 100 dmg · massive knockback",
+    "cooldownSec": 1.5,
+    "steps": null
+   },
+   "defaultAbility": null
   },
   {
    "id": "sabre",
@@ -6335,31 +6316,12 @@
    "dps": 72.581,
    "speedMult": 1,
    "ability": {
-    "name": "Sabre Combo",
-    "desc": "E lunge · E cross slash · E rising slash",
-    "cooldownSec": 1.5,
-    "steps": [
-     {
-      "name": "LUNGE",
-      "damage": null,
-      "radiusM": null
-     },
-     {
-      "name": "CROSS SLASH",
-      "damage": 40,
-      "radiusM": 3.2
-     },
-     {
-      "name": "RISING SLASH",
-      "damage": 55,
-      "radiusM": 3
-     }
-    ]
-   },
-   "defaultAbility": {
     "name": "Lunge",
-    "desc": "Dash forward · hit all in path"
-   }
+    "desc": "Dash forward · hit all in path",
+    "cooldownSec": 1.5,
+    "steps": null
+   },
+   "defaultAbility": null
   },
   {
    "id": "frying_pan",
@@ -6373,31 +6335,12 @@
    "dps": 76.19,
    "speedMult": 1,
    "ability": {
-    "name": "Pan Combo",
-    "desc": "E clang · E clang · E DONG (the last one pops them up)",
-    "cooldownSec": 1.5,
-    "steps": [
-     {
-      "name": "CLANG",
-      "damage": 18,
-      "radiusM": 2.8
-     },
-     {
-      "name": "CLANG",
-      "damage": 22,
-      "radiusM": 2.8
-     },
-     {
-      "name": "DONG",
-      "damage": 50,
-      "radiusM": 3.4
-     }
-    ]
-   },
-   "defaultAbility": {
     "name": "Pan Clang",
-    "desc": "AOE clang · 3 m · 28 dmg · pop-up"
-   }
+    "desc": "AOE clang · 3 m · 28 dmg · pop-up",
+    "cooldownSec": 1.5,
+    "steps": null
+   },
+   "defaultAbility": null
   },
   {
    "id": "sledge",
@@ -6411,32 +6354,12 @@
    "dps": 77.778,
    "speedMult": 1,
    "ability": {
-    "name": "Sledge Combo",
-    "desc": "E hop · E 360° spin · E backflip slam (110, more from higher up) · already in the air: E slams down",
-    "cooldownSec": 1.5,
-    "steps": [
-     {
-      "name": "HOP",
-      "damage": 20,
-      "radiusM": 2.6
-     },
-     {
-      "name": "360° SPIN",
-      "damage": 40,
-      "radiusM": 3.8
-     },
-     {
-      "name": "BACKFLIP SLAM",
-      "damage": 110,
-      "radiusM": 5,
-      "note": "grows with the height you fall from"
-     }
-    ]
-   },
-   "defaultAbility": {
     "name": "Ground Slam",
-    "desc": "Leap 5 m up · hang · slam down · AOE 4m · 80 dmg (more the higher you fall from)"
-   }
+    "desc": "Leap 5 m up · hang · slam down · AOE 4m · 80 dmg (more the higher you fall from)",
+    "cooldownSec": 1.5,
+    "steps": null
+   },
+   "defaultAbility": null
   },
   {
    "id": "spear",
@@ -6450,31 +6373,12 @@
    "dps": 65.789,
    "speedMult": 1,
    "ability": {
-    "name": "Spear Combo",
-    "desc": "E thrust · E sweep · E skewer",
-    "cooldownSec": 1.5,
-    "steps": [
-     {
-      "name": "THRUST",
-      "damage": 40,
-      "radiusM": 3.8
-     },
-     {
-      "name": "SWEEP",
-      "damage": 38,
-      "radiusM": 3.6
-     },
-     {
-      "name": "SKEWER",
-      "damage": 65,
-      "radiusM": 3.6
-     }
-    ]
-   },
-   "defaultAbility": {
     "name": "Throw Spear",
-    "desc": "Hurl spear · 85 dmg · weapon gone until CD"
-   }
+    "desc": "Hurl spear · 85 dmg · weapon gone until CD",
+    "cooldownSec": 1.5,
+    "steps": null
+   },
+   "defaultAbility": null
   },
   {
    "id": "katana",
@@ -6583,32 +6487,12 @@
    "dps": 25.714,
    "speedMult": 1,
    "ability": {
-    "name": "Shield Combo",
-    "desc": "E bash · E charge · E shield slam",
-    "cooldownSec": 1.5,
-    "steps": [
-     {
-      "name": "BASH",
-      "damage": 25,
-      "radiusM": 2.8
-     },
-     {
-      "name": "CHARGE",
-      "damage": null,
-      "radiusM": null
-     },
-     {
-      "name": "SHIELD SLAM",
-      "damage": 50,
-      "radiusM": 3.4,
-      "note": "grows with the height you fall from"
-     }
-    ]
-   },
-   "defaultAbility": {
     "name": "Shield Charge",
-    "desc": "Charge forward · ram enemies · 60 dmg"
-   }
+    "desc": "Charge forward · ram enemies · 60 dmg",
+    "cooldownSec": 1.5,
+    "steps": null
+   },
+   "defaultAbility": null
   },
   {
    "id": "screwdriver",
@@ -6736,36 +6620,12 @@
    "dps": 95.122,
    "speedMult": 1,
    "ability": {
-    "name": "Axe Combo",
-    "desc": "E whirlwind · E upper cut · E hop & whirl · E final slash",
-    "cooldownSec": 1.5,
-    "steps": [
-     {
-      "name": "WHIRLWIND",
-      "damage": 55,
-      "radiusM": 2.8
-     },
-     {
-      "name": "UPPER CUT",
-      "damage": 45,
-      "radiusM": 3.2
-     },
-     {
-      "name": "HOP & WHIRL",
-      "damage": 50,
-      "radiusM": 3.4
-     },
-     {
-      "name": "FINAL SLASH",
-      "damage": 70,
-      "radiusM": 3.6
-     }
-    ]
-   },
-   "defaultAbility": {
     "name": "Whirlwind",
-    "desc": "Spin 720° and dash 10 m · hits everyone around you · 85 dmg"
-   }
+    "desc": "Spin 720° and dash 10 m · hits everyone around you · 85 dmg",
+    "cooldownSec": 1.5,
+    "steps": null
+   },
+   "defaultAbility": null
   },
   {
    "id": "shock_baton",
@@ -6836,32 +6696,12 @@
    "dps": 109.091,
    "speedMult": 1.6,
    "ability": {
-    "name": "Boxing Combo",
-    "desc": "E uppercut · E rising cross · E ground pound",
-    "cooldownSec": 1.5,
-    "steps": [
-     {
-      "name": "UPPERCUT",
-      "damage": 50,
-      "radiusM": 2.6
-     },
-     {
-      "name": "RISING CROSS",
-      "damage": 35,
-      "radiusM": 3
-     },
-     {
-      "name": "GROUND POUND",
-      "damage": 60,
-      "radiusM": 3.4,
-      "note": "grows with the height you fall from"
-     }
-    ]
-   },
-   "defaultAbility": {
     "name": "Uppercut",
-    "desc": "Rising punch · launches you up · 50 dmg and a pop-up if it lands"
-   }
+    "desc": "Rising punch · launches you up · 50 dmg and a pop-up if it lands",
+    "cooldownSec": 1.5,
+    "steps": null
+   },
+   "defaultAbility": null
   },
   {
    "id": "phase_blade",

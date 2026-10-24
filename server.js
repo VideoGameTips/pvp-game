@@ -2707,7 +2707,8 @@ io.on('connection', (socket) => {
     const shooter = players[socket.id];
     const target = players[String(data?.targetId || '')];
     const crowdClear = data?.weapon === 'bat_crowd_clear';
-    if (!shooter || shooter.dead || !target || target.dead || (target.isBot && !crowdClear)) return;
+    const comboLaunch = data?.weapon === 'combo_launch' && canUseHellfire(shooter);   // a melee combo's launch (the sledge's spin sends you both ~9 m up): far harder than a blast, and the combos are archived for everyone but admin
+    if (!shooter || shooter.dead || !target || target.dead || (target.isBot && !crowdClear && !comboLaunch)) return;
     if (shooter.matchId !== target.matchId) return;
     if (blocksFriendlyFire(shooter, target)) return;
     const dx = Number(data?.x) || 0;
@@ -2721,8 +2722,9 @@ io.on('connection', (socket) => {
       shooterId: shooter.id,
       x: Math.max(-1, Math.min(1, dx / len)),
       z: Math.max(-1, Math.min(1, dz / len)),
-      y: Math.max(0, Math.min(14, Number(data?.y) || 0)),
-      force: Math.max(0, Math.min(34, Number(data?.force) || 0)),
+      y: Math.max(0, Math.min(comboLaunch ? 24 : 14, Number(data?.y) || 0)),
+      force: Math.max(0, Math.min(comboLaunch ? 46 : 34, Number(data?.force) || 0)),
+      ...(comboLaunch ? { big: true } : {}),
     });
   });
 

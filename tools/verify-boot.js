@@ -229,7 +229,7 @@ if (ok && process.argv.includes('--melee-feedback')) {
       if(Math.abs(model.rotation.y-(Math.PI*4-1.05))>.001)issues.push('axe does not complete 720 degrees');
       meleeDash.elapsed+=.05;poseMeleeDash();
       if(Math.abs(model.rotation.y)>Math.PI)issues.push('recovery unwinds extra full turns');
-      const whirl=item.ability.combo&&item.ability.combo[0];
+      const _ku=currentUser;currentUser={isAdmin:true};const whirl=item.ability.combo&&item.ability.combo[0];currentUser=_ku;   // (the combo is only there for an admin)
       if(!whirl||whirl.kind!=='whirl'||whirl.spins!==1)issues.push('the combo should open with a one-spin whirlwind');
       else{const m2=new THREE.Group();meleeDash={item,ab:{type:'melee_spinslash',distance:whirl.distance,dashTime:whirl.dashTime,damage:whirl.damage,reach:whirl.reach,spins:whirl.spins},model:m2,speed:whirl.distance/whirl.dashTime,elapsed:whirl.dashTime};poseMeleeDash();
         if(Math.abs(m2.rotation.y-(Math.PI*2-1.05))>.001)issues.push('the combo whirlwind does not complete one turn');}
@@ -2434,7 +2434,7 @@ if (ok && process.argv.includes('--quickmelee')) {
   // ability (crowd charge, slam, dash, spin, aimed dash) is allowed to finish before the gun comes back.
   const issues = vm.runInThisContext(`(() => {
     const issues = [];
-    const S = { combo: MELEE_COMBO_MODE, started: gameStarted, dead: isDead, slot: activeSlot, mel: selectedMeleeIdx, match, mode: selectedModeConfig,
+    const S = { user: currentUser, combo: MELEE_COMBO_MODE, started: gameStarted, dead: isDead, slot: activeSlot, mel: selectedMeleeIdx, match, mode: selectedModeConfig,
                 sound: playSoundEvent, anim: showAnnouncement, cd: countdownActive, pri: selectedPrimaryIdx, sec: selectedSecondaryIdx, sup: selectedSupportIdx };
     const keepWalls = wallColliders.slice();
     const reset = () => {
@@ -2469,8 +2469,8 @@ if (ok && process.argv.includes('--quickmelee')) {
         try { quickMelee(); } catch (e) { issues.push(m.id + ': cooldown quick melee threw: ' + e.message); continue; }
         if (ab && !(meleeSwingT < 1 || lastMelee !== before)) issues.push(m.id + ': with the ability cooling down, quick melee did nothing');
       }
-      // combo mode: B on the ground is the first step (then the gun returns); B in the AIR is the sledge's slam, and that one is let finish
-      setMeleeComboMode(true);
+      // combo mode (admin accounts only: the combos are archived): B on the ground is the first step (then the gun returns); B in the AIR is the sledge's slam, and that one is let finish
+      currentUser = { isAdmin: true }; setMeleeComboMode(true);
       const sl = MELEE_ITEMS.findIndex(m => m.id === 'sledge');
       reset(); selectedMeleeIdx = sl; camera.position.set(0, 1.65, 0);
       try { quickMelee(); updateQuickMelee(); } catch (e) { issues.push('combo mode: quick melee on the ground threw: ' + e.message); }
@@ -2483,7 +2483,7 @@ if (ok && process.argv.includes('--quickmelee')) {
       if (!cm || !cm.ability || cm.ability.type !== 'melee_meteor') issues.push('the Chain Maul has no ability');
       for (const m of MELEE_ITEMS) if (!m.archived && !m.adminItem && !m.skinOnly && !m.ability) issues.push(m.id + ': a melee in play with no ability');
     } finally {
-      reset(); setMeleeComboMode(S.combo);
+      reset(); setMeleeComboMode(S.combo); currentUser = S.user;
       gameStarted = S.started; isDead = S.dead; activeSlot = S.slot; selectedMeleeIdx = S.mel; match = S.match;
       selectedModeConfig = S.mode; playSoundEvent = S.sound; showAnnouncement = S.anim; countdownActive = S.cd;
       selectedPrimaryIdx = S.pri; selectedSecondaryIdx = S.sec; selectedSupportIdx = S.sup;
@@ -3185,6 +3185,7 @@ if (ok && process.argv.includes('--combo')) {
   // +2 s), the blade meets the shot from one of eight sides, and the block flashes hard.
   const out = vm.runInThisContext(`(() => {
     const issues = [];
+    const keepUser = currentUser; currentUser = { username: 'tester', isAdmin: true };      // (the combos are archived for everyone but admin accounts)
     const saved = { sound: playSoundEvent, fx: spawnAbilityAOEFX, flash: flashScreen, feed: pushFeedLine, hit: emitHit, st: setTimeout, now: performance.now, dnow: Date.now,
                     started: gameStarted, dead: isDead, slot: activeSlot, sel: selectedMeleeIdx, cd: { ...abilityCDs }, cdown: countdownActive, match, cam: camera.position.clone(), q: camera.quaternion.clone(), ey: euler.y, slam: slamState };
     playSoundEvent = () => {}; spawnAbilityAOEFX = () => {}; showAnnouncement = () => {};
@@ -3380,6 +3381,7 @@ if (ok && process.argv.includes('--combo')) {
       delete remoteMeshes.cmbT; delete players.cmbT;
       playSoundEvent = saved.sound; spawnAbilityAOEFX = saved.fx; flashScreen = saved.flash; pushFeedLine = saved.feed; emitHit = saved.hit; setTimeout = saved.st; Date.now = saved.dnow;
       Object.defineProperty(performance, 'now', { value: saved.now, configurable: true, writable: true });
+      currentUser = keepUser;
       gameStarted = saved.started; isDead = saved.dead; activeSlot = saved.slot; selectedMeleeIdx = saved.sel; countdownActive = saved.cdown; match = saved.match; slamState = saved.slam;
       meleeCombo = null; meleeSlam = null; meleeDash = null; meleeAbilityBuff = null; Object.assign(abilityCDs, saved.cd);
       camera.position.copy(saved.cam); camera.quaternion.copy(saved.q); euler.y = saved.ey;
@@ -3485,7 +3487,7 @@ if (ok && (process.argv.includes('--stats') || process.argv.includes('--dump-sta
           damage: m.damage, reachM: m.range, swingMs: m.cooldown, swingsPerSec: m.cooldown ? r3(1000 / m.cooldown) : null,
           dps: m.cooldown ? r3(m.damage * 1000 / m.cooldown) : null, speedMult: m.speedMult || 1,
           ability: ab ? { name: ab.name, desc: ab.desc || '', cooldownSec: r3(abilityCooldownFor(m, ab) / 1000), steps: stepsOf(ab) } : null,
-          defaultAbility: plain ? { name: plain.name, desc: plain.desc || '' } : null,
+          defaultAbility: (plain && ab !== plain) ? { name: plain.name, desc: plain.desc || '' } : null,       // (only while combos are not archived)
         });
       }
     } finally { MELEE_COMBO_MODE = keepMode; }
@@ -3687,7 +3689,25 @@ if (ok && process.argv.includes('--archive')) {
   if (/MODE_TEAM_SIZES = \{[\s\S]*?\n  'koth':/.test(srv)) issues.push('the server should not open a lobby for King of the Hill');
   if (!vm.runInThisContext("ARCHIVED_MODES.has('koth') && EMOTES_ARCHIVED && !!GAME_MODE_CONFIGS.koth")) issues.push('KOTH and the emotes should be archived in the client with their code kept');
   if (vm.runInThisContext("KEY_ACTIONS.some(a => a[0] === 'emotes')")) issues.push('the emote key should not be rebindable while they are archived');
-  console.log('archive checks: King of the Hill and the emote wheel are off the screen, refused by the server, their code kept');
+  {
+    // the combos: archived for everyone but admin accounts (the code and the combos stay; one flag gives them back)
+    const r = vm.runInThisContext(`(() => {
+      const out = [], keep = { u: currentUser, m: MELEE_COMBO_MODE }, sl = MELEE_ITEMS.find(m => m.id === 'sledge');
+      try {
+        if (!COMBOS_ARCHIVED) out.push('the combos should be archived');
+        currentUser = null; if (sl.ability.name !== 'Ground Slam' || sl.ability.combo) out.push('an ordinary player should have the regular Ground Slam, has ' + sl.ability.name);
+        currentUser = { isAdmin: false }; if (sl.ability.combo) out.push('a player who is not an admin should not have the combo');
+        if (setMeleeComboMode(!MELEE_COMBO_MODE) !== false) out.push('only an admin may switch the combo mode');
+        if (toggleMeleeComboMode() !== false) out.push('the H key should refuse for an ordinary player');
+        currentUser = { isAdmin: true }; MELEE_COMBO_MODE = true; if (!sl.ability.combo) out.push('an admin should still have the combo');
+        for (const id of ['fists', 'combat_axe', 'sabre', 'bat', 'frying_pan', 'riot_shield', 'spear']) { const it = MELEE_ITEMS.find(m => m.id === id); currentUser = null; if (it.ability.combo) out.push(id + ': ordinary players should not have its combo'); }
+      } finally { currentUser = keep.u; MELEE_COMBO_MODE = keep.m; }
+      return out;
+    })()`);
+    issues.push(...r);
+    if (!/const comboLaunch = data\?\.weapon === 'combo_launch' && canUseHellfire\(shooter\)/.test(srv)) issues.push('the server should only give a combo launch to an admin');
+  }
+  console.log('archive checks: King of the Hill and the emote wheel are off the screen, refused by the server, their code kept; the combos are archived for everyone but admin accounts');
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 

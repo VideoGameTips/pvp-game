@@ -1005,6 +1005,10 @@ function falloffMultiplier(weaponId, dist) {
 // whichever the mode picks (see the loop under the table), so the HUD, the shop and the cooldowns all follow without knowing.
 let MELEE_COMBO_MODE = true;
 try { MELEE_COMBO_MODE = localStorage.getItem('pvp_melee_combo') !== '0'; } catch (e) {}
+// 🗄️ ARCHIVED (the owner's call, for now): the combos are switched off for everyone but admin accounts, who still have them (and the mode switch);
+// everyone else has each weapon's regular ability, as before. Everything stays in the code: set this to false to give the combos back to everybody.
+const COMBOS_ARCHIVED = true;
+function combosAvailable() { if (!COMBOS_ARCHIVED) return true; try { return !!(currentUser && currentUser.isAdmin); } catch (e) { return false; } }   // (currentUser is declared far below: this can run before it exists)
 
 const MELEE_ITEMS = [
   { id: 'bat',        name: 'Bat',        type: 'Melee',       damage: 50, range: 2.1, cooldown: 520,
@@ -1196,18 +1200,20 @@ const MELEE_ITEMS = [
 for (const _it of MELEE_ITEMS) {
   if (!_it.plainAbility) continue;
   const _chain = _it.ability;
-  Object.defineProperty(_it, 'ability', { enumerable: true, configurable: true, get() { return MELEE_COMBO_MODE ? _chain : this.plainAbility; } });
+  Object.defineProperty(_it, 'ability', { enumerable: true, configurable: true, get() { return (MELEE_COMBO_MODE && combosAvailable()) ? _chain : this.plainAbility; } });
 }
 // Switch the mode. Refused in the middle of a move (a combo chain, a slam, a dash), so it can't be used to dodge a cooldown.
 function setMeleeComboMode(on) {
   on = !!on;
   if (on === MELEE_COMBO_MODE) return true;
+  if (!combosAvailable()) return false;                          // archived: only admin accounts may switch
   if (meleeCombo || meleeSlam || meleeDash || batCrowdCharge) return false;
   MELEE_COMBO_MODE = on;
   try { localStorage.setItem('pvp_melee_combo', on ? '1' : '0'); } catch (e) {}
   return true;
 }
 function toggleMeleeComboMode() {
+  if (!combosAvailable()) { pushFeedLine('Combos are archived', 'for now: every melee has its regular ability', '#ffcc66', false); return false; }
   const to = !MELEE_COMBO_MODE;
   if (!setMeleeComboMode(to)) { pushFeedLine('Finish the move first', 'then switch combo / default mode', '#ffcc66', false); return false; }
   pushFeedLine(to ? 'COMBO MODE' : 'DEFAULT MODE', to ? 'Sledge · Fists · Axe · Sabre · Bat · Pan · Shield · Spear: E chains a combo' : 'E is each melee\'s regular ability', '#ffcc66', false);
@@ -45409,7 +45415,9 @@ function doUppercutAbility(item, ab, now) {
     const hp = mesh.position.clone().setY(1.2);
     if (dummy) handleDummyHit(dummy, mesh, { damage: ab.damage }, hp);
     else emitHit(pid, `uppercut_${myId}_${now}_${pid}`, ab.id || 'fists_uppercut', hp, false, { damageOverride: ab.damage });
-    _nudgeBotFromPoint(pid, mesh, origin, 1.2, ab.popVel || 9);
+    if (ab.shove) comboShove(pid, mesh, ab.shove.mode === 'radial' ? dx : fwd.x, ab.shove.mode === 'radial' ? dz : fwd.z, ab.shove.force || 0, ab.shove.up ?? (ab.popVel || 9));
+    else _nudgeBotFromPoint(pid, mesh, origin, 1.2, ab.popVel || 9);
+    if (meleeCombo) meleeCombo.victim = pid;
     spawnHitParticle(hp);
     landed++;
   }
@@ -45542,7 +45550,7 @@ function startMeleeSlam(item, ab, opts = {}) {
   model._park = null;
   // Already in the air (a jump, a launch pad)? Skip the crouch and the climb: hang, then drive down from here.
   const airborne = !!slamState && !pilotedVehicle && !pilotedMortar;
-  meleeSlam = { item, ab, model, dir: _meleeForwardXZ(), phase: airborne ? 'hang' : 'crouch', t: 0, epoch: matchEpoch, flip: !!opts.flip };
+  meleeSlam = { item, ab, model, dir: _meleeForwardXZ(), phase: airborne ? 'hang' : 'crouch', t: 0, epoch: matchEpoch, flip: !!opts.flip, home: !!opts.home };
   if (airborne) slamState.type = 'slam';
   meleeSwingT = 1;
   lastMelee = Date.now();
@@ -45583,7 +45591,7 @@ function updateMeleeSlam(dt) {
         _fovPunch = Math.max(_fovPunch, 6);
       } else {
         s.phase = 'dive'; s.t = 0;
-        slamState.vel = -DIVE;
+        slamState.vel = -DIVE; if (s.home) comboSpike();
         playSoundEvent('air_launch', { volume: 0.9, pitch: 0.55, minGap: 0 });
         _fovPunch = Math.max(_fovPunch, 5);
       }
@@ -45596,7 +45604,7 @@ function updateMeleeSlam(dt) {
     euler.x = Math.min(Math.PI / 2.2, euler.x + dp); camera.quaternion.setFromEuler(euler); _shakePitch += dp;   // the view tips back and settles
     if (s.t >= 0.36) {
       s.phase = 'dive'; s.t = 0;
-      slamState.vel = -DIVE;
+      slamState.vel = -DIVE; if (s.home) comboSpike();
       playSoundEvent('air_launch', { volume: 0.95, pitch: 0.5, minGap: 0 });
       _fovPunch = Math.max(_fovPunch, 7);
     }
@@ -45605,6 +45613,10 @@ function updateMeleeSlam(dt) {
     if (slamState.type !== 'slam') { finishMeleeSlam(); return; }
     if (slamState.vel > -DIVE * 0.6) slamState.vel = -DIVE * 0.6;
     if (drift(0.3)) return;
+    if (s.home) {                                                 // on the way down you steer at them, so the slam lands where they are
+      const v = comboVictim();
+      if (v) { const dx = v.mesh.position.x - camera.position.x, dz = v.mesh.position.z - camera.position.z, d = Math.hypot(dx, dz); if (d > 0.5) { moveWithWalls(new THREE.Vector3(dx / d, 0, dz / d), Math.min(d, 18 * dt)); resolveWallCollisions(); } }
+    }
   } else if (s.t >= 0.46) {
     finishMeleeSlam();
   }
@@ -45780,14 +45792,14 @@ function finishMeleeDash() {
   meleeDash = null;
 }
 
-function startMeleeDash(item, ab, weaponId, now, skip) {
+function startMeleeDash(item, ab, weaponId, now, skip, dirOverride) {
   cancelInspect();
   const model = meleeModels[selectedMeleeIdx];
   if (!model) return false;
   model._park = null;
   const dist = ab.distance || 6;
-  meleeDash = { item, ab, model, weaponId, dir: _meleeForwardXZ(), left: dist, speed: dist / (ab.dashTime || 0.2),
-    elapsed: 0, hit: new Set(skip || []), stopped: false, epoch: matchEpoch, now };
+  meleeDash = { item, ab, model, weaponId, dir: dirOverride || _meleeForwardXZ(), left: dist, speed: dist / (ab.dashTime || 0.2),
+    elapsed: 0, hit: new Set(skip || []), stopped: false, epoch: matchEpoch, now, carried: [], flung: false };
   meleeSwingT = 1;
   lastMelee = Date.now();
   _fovPunch = Math.max(_fovPunch, 6);
@@ -45808,7 +45820,8 @@ function updateMeleeDash(dt) {
     s.left -= step;
     if (isOutOfBoundsXZ(camera.position.x, camera.position.z)) { killLocalOutOfBounds(); finishMeleeDash(); return; }
     const charge = s.ab.type === 'melee_charge';
-    for (const [pid, mesh] of Object.entries(remoteMeshes)) {
+    for (const pid of s.carried) { const cb = resolveBot(pid); if (cb && !cb.dead) { cb.kbVX = s.dir.x * s.speed; cb.kbVZ = s.dir.z * s.speed; } }       // skewered: they are carried along with you
+    if (!s.ab.noHit) for (const [pid, mesh] of Object.entries(remoteMeshes)) {
       if (pid === myId || s.hit.has(pid) || !mesh.visible || players[pid]?.dead || friendlyFireBlocked(pid, myId)) continue;
       const body = mesh.position.clone(); body.y += 0.95;
       const off = body.clone().sub(camera.position);
@@ -45818,8 +45831,11 @@ function updateMeleeDash(dt) {
       if (dummy) handleDummyHit(dummy, mesh, { damage: s.ab.damage || s.item.damage }, body);
       else {
         // The spin-slash has its own number (the axe's own table value is the plain swing's).
-        const spinOpts = s.ab.type === 'melee_spinslash' ? { damageOverride: s.ab.damage } : {};
+        const spinOpts = (s.ab.type === 'melee_spinslash' || s.ab.override) ? { damageOverride: s.ab.damage } : {};
         emitHit(pid, `lunge_${myId}_${s.now}_${pid}`, s.weaponId, body, false, spinOpts);
+        if (s.ab.shove) comboShove(pid, mesh, s.dir.x, s.dir.z, s.ab.shove.force || 0, s.ab.shove.up || 0);
+        if (s.ab.carry) s.carried.push(pid);
+        if (meleeCombo) meleeCombo.victim = pid;
         if (charge) {                                          // a charge rams: the target is driven ahead of you
           const bot = resolveBot(pid);
           if (bot && !bot.dead) { bot.kbVX = (bot.kbVX || 0) + s.dir.x * 14; bot.kbVZ = (bot.kbVZ || 0) + s.dir.z * 14; }
@@ -45828,6 +45844,12 @@ function updateMeleeDash(dt) {
       spawnHitParticle(body);
       playSoundEvent('melee_impact', { material: charge ? 'heavy' : (MELEE_SWING_SOUND[s.item.baseId || s.item.id] || 'blade'), volume: 0.9, minGap: 40 });
     }
+  }
+  if (s.ab.carry && !s.flung && (s.left <= 0 || s.stopped)) {                  // the end of the run: they are thrown off the spear
+    s.flung = true;
+    const F = s.ab.fling || { force: 30, up: 8 };
+    for (const pid of s.carried) { const fm = remoteMeshes[pid]; if (fm) comboShove(pid, fm, s.dir.x, s.dir.z, F.force, F.up); }
+    if (s.carried.length) { _fovPunch = Math.max(_fovPunch, 9); _slamShakeT = Math.max(_slamShakeT, 0.4); _slamShakeAmp = Math.max(_slamShakeAmp, 0.03); }
   }
   const run = (s.ab.distance || 6) / s.speed;
   if (s.elapsed >= run + 0.2) finishMeleeDash();
@@ -45842,6 +45864,11 @@ function poseMeleeDash() {
   const shield = !!s.item.shield;
   const m = s.model;
   m.rotation.order = 'YXZ';
+  if (s.ab.pose && COMBO_POSES[s.ab.pose]) {                // a dash with a motion of its own (the skewer: the spear driven out and held)
+    const v = _comboPoseAt(COMBO_POSES[s.ab.pose], Math.min(1, s.elapsed / (run + 0.2)));
+    m.position.set(MELEE_REST_POS.x + v[0], MELEE_REST_POS.y + v[1], MELEE_REST_POS.z + v[2]); m.rotation.set(v[3], v[4], v[5]);
+    return;
+  }
   if (s.ab.type === 'melee_spinslash') {
     // 🌀 The axe circles the player (right, across the front, left, behind,
     // and back to the right), blade out, laid flat. It eases into the circle and out to rest.
@@ -45983,6 +46010,11 @@ const _easeK = x => { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x
 let _viewKick = null;
 function viewKick(yaw, pitch, ms) { _viewKick = { t: 0, dur: Math.max(0.1, (ms || 300) / 1000), yaw: yaw || 0, pitch: pitch || 0, py: 0, pp: 0 }; }
 function updateViewKick(dt) {                                   // snaps out fast and eases back, and ends exactly where it began
+  const A = _comboAim;
+  if (A) {                                                       // turning to face the one a combo is going after
+    if (isDead || !gameStarted) _comboAim = null;
+    else { A.t += dt; euler.y = A.from + A.d * _easeK(A.t / A.dur); camera.quaternion.setFromEuler(euler); if (A.t >= A.dur) _comboAim = null; }
+  }
   const K = _viewKick; if (!K) return;
   if (isDead || !gameStarted) { _viewKick = null; return; }
   K.t += dt;
@@ -46031,7 +46063,7 @@ function comboFlair(st) {                                       // the parts of 
 }
 function comboAoe(item, now, o) {
   const origin = camera.position.clone(), fwd = _meleeForwardXZ(), r = o.radius || 3, pw = o.power || 1;
-  let landed = 0;
+  let landed = 0; const hits = [];
   for (const [pid, mesh] of Object.entries(remoteMeshes)) {
     if (pid === myId || !mesh.visible || players[pid]?.dead) continue;
     const dx = mesh.position.x - origin.x, dz = mesh.position.z - origin.z, d = Math.hypot(dx, dz);
@@ -46045,11 +46077,20 @@ function comboAoe(item, now, o) {
     const hp = mesh.position.clone().setY(1.2);
     if (dummy) handleDummyHit(dummy, mesh, { damage: o.damage }, hp);
     else emitHit(pid, `combo_${o.id}_${myId}_${now}_${pid}`, o.id, hp, false, { damageOverride: o.damage });
-    _nudgeBotFromPoint(pid, mesh, origin, o.knock || 0, o.launch || 0);
+    if (o.shove) {
+      const S = o.shove, mode = S.mode || 'radial', og = meleeCombo && meleeCombo.origin;
+      let ux = dx, uz = dz;
+      if (mode === 'fwd') { ux = fwd.x; uz = fwd.z; }
+      else if (mode === 'toward') { ux = origin.x - mesh.position.x; uz = origin.z - mesh.position.z; }
+      else if (mode === 'origin' && og) { ux = og.x - mesh.position.x; uz = og.z - mesh.position.z; }
+      comboShove(pid, mesh, ux, uz, S.force || 0, S.up || 0);
+    } else _nudgeBotFromPoint(pid, mesh, origin, o.knock || 0, o.launch || 0);
     spawnHitParticle(hp);
     if (pw > 1) comboHitSparks(hp, o.color, pw, fwd);
+    hits.push([pid, d]);
     landed++;
   }
+  if (meleeCombo && hits.length) meleeCombo.victim = hits.sort((a, b) => a[1] - b[1])[0][0];     // the next press goes after the nearest one
   spawnAbilityAOEFX(origin.clone().setY(Math.max(0.15, origin.y - 1.5)), Math.min(r, 4.6), o.color || 0xffcc66);
   flashScreen(landed ? 'rgba(255,220,150,' + Math.min(0.5, 0.26 * pw).toFixed(2) + ')' : 'rgba(255,230,190,0.10)', landed ? 220 + 60 * (pw - 1) : 120);
   _fovPunch = Math.max(_fovPunch, (landed ? 7 : 4) + (pw - 1) * 4);
@@ -46063,6 +46104,80 @@ function _comboLift(vel) {
   if (slamState) { slamState.vel = lift; slamState.type = slamState.type === 'slam' ? 'slam' : 'jump'; } else slamState = { vel: lift, type: 'jump' };
   window._slideUntil = 0;
 }
+// 🧭 CHAIN CHOREOGRAPHY. A combo is one move told in several presses, so each press picks up where the last one left them: the first blow SENDS the
+// opponent somewhere and the next takes YOU there (comboChase: a dash at them, the view turned to face them), a launch carries you both up (the
+// sledge's spin), and the last blow lands ON them (the slam homes in on where they are, the skewer runs them through). A step's `shove` is what its
+// blow does to whoever it hits: { mode: 'fwd' (the way you face) | 'radial' (away from you) | 'toward' (at you) | 'origin' (back to where the combo
+// began), force (m/s: a bot goes about force / 6 metres), up (m/s: a rise of up^2 / 48 metres; below zero drives them down) }.
+function comboVictim() {
+  const C = meleeCombo; if (!C || !C.victim) return null;
+  const mesh = remoteMeshes[C.victim], p = players[C.victim];
+  if (!mesh || !mesh.visible || (p && p.dead)) { C.victim = null; return null; }
+  return { pid: C.victim, mesh };
+}
+function comboPickTarget() {                                    // before anyone has been hit: the nearest enemy ahead of you
+  const C = meleeCombo; if (!C) return null;
+  const me = camera.position, f = _meleeForwardXZ(); let best = null, bd = 13;
+  for (const [pid, mesh] of Object.entries(remoteMeshes)) {
+    if (pid === myId || !mesh.visible || players[pid]?.dead) continue;
+    const p = players[pid], dummy = TRAINING_DUMMIES.find(d => d.id === pid);
+    if (!dummy && p && p.team && players[myId]?.team && p.team === players[myId].team) continue;
+    if (!dummy && friendlyFireBlocked(pid, myId)) continue;
+    const dx = mesh.position.x - me.x, dz = mesh.position.z - me.z, d = Math.hypot(dx, dz);
+    if (d > bd || d < 0.5 || (dx * f.x + dz * f.z) / d < 0.35) continue;
+    best = pid; bd = d;
+  }
+  if (best) C.victim = best;
+  return best ? comboVictim() : null;
+}
+let _comboAim = null;
+function comboAim(dx, dz, ms) {                                 // turn the view to face them (not if they are behind you: then just go the way you look)
+  const to = Math.atan2(-dx, -dz); let d = to - euler.y; d = Math.atan2(Math.sin(d), Math.cos(d));
+  if (Math.abs(d) > 1.3) return false;
+  _comboAim = { t: 0, dur: Math.max(0.06, ms / 1000), from: euler.y, d };
+  return true;
+}
+function comboShove(pid, mesh, ux, uz, force, up) {             // a bot takes it as a velocity, a real player through the server
+  const len = Math.hypot(ux, uz) || 1; ux /= len; uz /= len;
+  const bot = resolveBot(pid);
+  if (bot) {
+    if (bot.dead) return;
+    if (force) { bot.kbVX = ux * force; bot.kbVZ = uz * force; }
+    if (up > 0) { bot.y = Math.max(0, bot.y || 0); bot.yVel = Math.max(bot.yVel || 0, up); } else if (up < 0) bot.yVel = Math.min(bot.yVel || 0, up);
+    return;
+  }
+  if (TRAINING_DUMMIES.some(d => d.id === pid)) return;
+  if (players[pid] && !players[pid].dead) socket.emit('airBlast', { targetId: pid, weapon: 'combo_launch', x: ux, z: uz, y: Math.max(0, up), force });
+}
+function comboSpike() { const v = comboVictim(); if (v) comboShove(v.pid, v.mesh, 0, 0, 0, -18); }     // drive them down with you as you dive
+// Go to them: a dash at them (the view turned to face them) that ends within `stop` metres, and up after them if they are in the air. Returns how long it takes.
+function comboChase(item, st, now) {
+  const C = meleeCombo, ch = st.chase; if (!C || !ch) return 0;
+  const v = comboVictim() || comboPickTarget(); if (!v) return 0;
+  const me = camera.position, mp = v.mesh.position, dx = mp.x - me.x, dz = mp.z - me.z, d = Math.hypot(dx, dz);
+  let ms = 0;
+  const gap = d - (ch.stop ?? 1.6);
+  if (gap > 0.35 && d > 0.01) {
+    const dist = Math.min(gap, ch.max ?? 8);
+    ms = Math.round(Math.max(110, Math.min(300, dist / 42 * 1000)));
+    const aimed = comboAim(dx, dz, ms * 0.8);
+    startMeleeDash(item, { type: 'melee_lunge', distance: dist, dashTime: ms / 1000, quiet: true, noHit: true }, item.id, now, null, aimed ? new THREE.Vector3(dx / d, 0, dz / d) : null);
+  }
+  const dy = mp.y - playerFeetY();
+  if (ch.climb !== false && dy > 1.2) _comboLift(Math.max(6, Math.min(21, dy / 0.38 + 4.6)));       // they are up in the air: so are you
+  return ms;
+}
+// A dash step that takes aim: toward them if there is someone ahead (and far enough to reach them, plus a little past)
+function comboAimDash(st) {
+  if (!st.aim) return null;
+  const v = comboVictim() || comboPickTarget(); if (!v) return null;
+  const me = camera.position, mp = v.mesh.position, dx = mp.x - me.x, dz = mp.z - me.z, d = Math.hypot(dx, dz);
+  if (d < 0.4 || !comboAim(dx, dz, 110)) return null;
+  const distance = Math.max(3, Math.min(st.distance * 1.3, d + (st.overshoot ?? 2)));
+  return { dir: new THREE.Vector3(dx / d, 0, dz / d), distance, dashTime: st.dashTime * distance / st.distance };
+}
+// does the next press have to wait for the top of a launch? (the sledge's slam: from the apex, not from half way up)
+function _comboWaits(ab, C) { const nx = ab.combo[C.step + 1]; return !!(nx && nx.waitApex && slamState && slamState.vel > 4); }
 const COMBO_RUN = {
   hop(item, ab, st, now) {                      // a jump up and a little forward, with a small shock at take-off
     _comboLift(st.hop || 10);
@@ -46085,7 +46200,7 @@ const COMBO_RUN = {
   },
   cross(item, ab, st, now) {                    // a lunging blow in the air
     _comboLift(st.lift ?? 4.5);
-    const f = _meleeForwardXZ(); _extVel.x += f.x * (st.fwd || 4); _extVel.z += f.z * (st.fwd || 4);
+    const f = _meleeForwardXZ(); _extVel.x += f.x * (st.fwd ?? 4); _extVel.z += f.z * (st.fwd ?? 4);
     comboAnim('cross', st.ms || 320);
     playSoundEvent('melee_blade', { volume: 0.9, pitch: 1.1, minGap: 0 });
     comboAoe(item, now, st.aoe);
@@ -46098,10 +46213,11 @@ const COMBO_RUN = {
       const f = _meleeForwardXZ();
       meleeSlamImpact(camera.position.clone().addScaledVector(new THREE.Vector3(f.x, 0, f.z), 1.8).setY(0), st.aoe.radius, st.aoe.color || 0xffffff, 30);
       comboFlair(st);
+      if (st.plunge && slamState) slamState.vel = Math.min(slamState.vel, -st.plunge);                  // and you come down with it
       comboAoe(item, Date.now(), st.power ? { ...st.aoe, power: st.power, impact: st.impact } : st.aoe);
     }, st.delay ?? 170);
   },
-  slam(item, ab, st, now) { startMeleeSlam(item, { ...ab, dive: st.dive ?? ab.dive }, { flip: !!st.flip }); },   // the existing leap, hang and slam (a backflip first, if asked)
+  slam(item, ab, st, now) { startMeleeSlam(item, { ...ab, dive: st.dive ?? ab.dive }, { flip: !!st.flip, home: !!st.home }); },   // the existing leap, hang and slam (a backflip first, if asked)
   swing(item, ab, st, now) {                    // a flat blow in front of you, no jump: a shove forward and an arc of damage (a wind-up first, if `delay`)
     const f = _meleeForwardXZ(); _extVel.x += f.x * (st.fwd || 0); _extVel.z += f.z * (st.fwd || 0);
     comboAnim(st.anim || 'sweep', st.ms || 320);
@@ -46111,20 +46227,31 @@ const COMBO_RUN = {
     const epoch = matchEpoch;
     setTimeout(() => { if (epoch !== matchEpoch || isDead) return; strike(Date.now()); }, st.delay);
   },
-  dash(item, ab, st, now) {                     // a rush forward that hits everything on the way (the sabre's lunge, the shield's charge)
-    startMeleeDash(item, { type: st.type || 'melee_lunge', distance: st.distance, dashTime: st.dashTime, reach: st.reach }, st.weaponId || item.id, now);
+  dash(item, ab, st, now) {                     // a rush forward that hits everything on the way (the sabre's lunge, the shield's charge, the spear's skewer)
+    const aim = comboAimDash(st);
+    comboFlair(st);
+    startMeleeDash(item, { type: st.type || 'melee_lunge', distance: aim ? aim.distance : st.distance, dashTime: aim ? aim.dashTime : st.dashTime, reach: st.reach,
+      damage: st.damage, override: !!st.override, shove: st.shove, carry: !!st.carry, fling: st.fling, pose: st.pose }, st.weaponId || item.id, now, null, aim && aim.dir);
   },
   whirl(item, ab, st, now) {                    // the axe's spinning dash
-    startMeleeDash(item, { type: 'melee_spinslash', distance: st.distance, dashTime: st.dashTime, damage: st.damage, reach: st.reach, spins: st.spins }, item.id, now);
+    const aim = comboAimDash(st);
+    startMeleeDash(item, { type: 'melee_spinslash', distance: aim ? aim.distance : st.distance, dashTime: aim ? aim.dashTime : st.dashTime, damage: st.damage, reach: st.reach, spins: st.spins, shove: st.shove },
+      item.id, now, null, aim && aim.dir);
   },
 };
 function comboFire(item, ab, idx, now, stepOverride) {
   if (meleeSlam || meleeDash || batCrowdCharge) { if (meleeCombo && meleeCombo.itemId === item.id) meleeCombo.queued = true; return true; }
   const st = stepOverride || ab.combo[idx], n = ab.combo.length, final = idx === n - 1;
-  const lock = st.lock ?? 380;
-  meleeCombo = { itemId: item.id, step: idx, lockUntil: now + lock, windowUntil: now + lock + (final ? 0 : (ab.comboWindow ?? 1200)), final, queued: false, anim: null, hangUntil: 0, epoch: matchEpoch };
+  const lock = st.lock ?? 380, prev = (meleeCombo && meleeCombo.itemId === item.id) ? meleeCombo : null;
+  meleeCombo = { itemId: item.id, step: idx, lockUntil: now + lock, windowUntil: now + lock + (final ? 0 : (ab.comboWindow ?? 1200)), final, queued: false, anim: null, hangUntil: 0, epoch: matchEpoch,
+                 victim: (idx > 0 && prev) ? prev.victim : null, origin: (idx > 0 && prev && prev.origin) ? prev.origin : { x: camera.position.x, z: camera.position.z } };
   flashAbilityName(stepOverride ? `${ab.name} · ${st.name}` : `${ab.name} ${idx + 1}/${n} · ${st.name}`);
-  COMBO_RUN[st.kind](item, ab, st, now);
+  const lead = st.chase ? comboChase(item, st, now) : 0;                  // first go to them...
+  meleeCombo.lockUntil += lead; meleeCombo.windowUntil += lead;
+  if (lead > 0) {                                                          // ...then the blow
+    const ep = matchEpoch, C = meleeCombo;
+    setTimeout(() => { if (ep !== matchEpoch || isDead || meleeCombo !== C) return; COMBO_RUN[st.kind](item, ab, st, Date.now()); }, lead);
+  } else COMBO_RUN[st.kind](item, ab, st, now);
   if (final) abilityCDs[item.id] = now;               // the full cooldown starts with the finishing blow
   return true;
 }
@@ -46134,7 +46261,7 @@ function activateMeleeCombo(item, ab, now) {
   if (C && C.itemId === item.id) {
     if (C.final) return true;                                   // the finishing blow is still playing
     if (now < C.windowUntil) {
-      if (now < C.lockUntil || meleeSlam || meleeDash) { C.queued = true; return true; }   // too early: remembered
+      if (now < C.lockUntil || meleeSlam || meleeDash || _comboWaits(ab, C)) { C.queued = true; return true; }   // too early (or still on the way up): remembered
       return comboFire(item, ab, C.step + 1, now);
     }
   }
@@ -46160,7 +46287,7 @@ function updateMeleeCombo(dt) {
   if (isDead || !gameStarted || C.epoch !== matchEpoch || activeSlot !== 'melee' || !item || item.id !== C.itemId) { comboAbort(C, true); return; }
   if (C.anim) { C.anim.t += dt; if (C.anim.t >= C.anim.ms) { C.anim = null; comboRestModel(); } }
   if (C.hangUntil && now < C.hangUntil && slamState && slamState.type !== 'slam' && slamState.vel < 0.3) slamState.vel = 0.3;   // gravity is switched off for the beat
-  if (C.queued && !C.final && now >= C.lockUntil && now < C.windowUntil && !meleeSlam && !meleeDash) { C.queued = false; comboFire(item, item.ability, C.step + 1, now); return; }
+  if (C.queued && !C.final && now >= C.lockUntil && now < C.windowUntil && !meleeSlam && !meleeDash && !_comboWaits(item.ability, C)) { C.queued = false; comboFire(item, item.ability, C.step + 1, now); return; }
   if (now >= C.windowUntil && now >= C.lockUntil) { if (C.final) meleeCombo = null; else comboAbort(C, false); }
 }
 // 🎞️ Keyframed poses for the swings, [t, px, py, pz, rx, ry, rz]: offsets from the rest pose, first and last frame ARE the rest pose.
@@ -60233,19 +60360,19 @@ socket.on('airBlasted', data => {
     const bot = resolveBot(data.botId);
     if (!bot || bot.dead) return;
     const direction = new THREE.Vector3(Number(data.x)||0,0,Number(data.z)||0).normalize();
-    const force = Math.max(0,Math.min(34,Number(data.force)||0));
+    const force = Math.max(0,Math.min(data.big ? 46 : 34,Number(data.force)||0));
     bot.kbVX = direction.x * force; bot.kbVZ = direction.z * force;
-    bot.yVel = Math.max(bot.yVel||0,Math.max(0,Math.min(14,Number(data.y)||0)));
+    bot.yVel = Math.max(bot.yVel||0,Math.max(0,Math.min(data.big ? 24 : 14,Number(data.y)||0)));
     return;
   }
   if (isDead || match?.type === 'range') return;
   const dx = Number(data?.x) || 0;
   const dz = Number(data?.z) || 0;
-  const force = Math.max(0, Math.min(34, Number(data?.force) || 0));
+  const force = Math.max(0, Math.min(data?.big ? 46 : 34, Number(data?.force) || 0));
   const len = Math.hypot(dx, dz) || 1;
   _extVel.x += (dx / len) * force;
   _extVel.z += (dz / len) * force;
-  const lift = Math.max(0, Math.min(14, Number(data?.y) || 0));
+  const lift = Math.max(0, Math.min(data?.big ? 24 : 14, Number(data?.y) || 0));
   if (lift > 0) {
     if (slamState) slamState.vel = Math.max(slamState.vel || 0, lift);
     else slamState = { vel: lift, type: 'jump' };
@@ -70188,13 +70315,13 @@ function openSettingsHub() {
       <div style="font-size:12px;letter-spacing:2px;color:#d8fff2;">ADS MODE</div>
       <button id="settings-ads-mode" style="min-width:92px;padding:7px 10px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:bold;letter-spacing:2px;border-radius:4px;background:#132a24;color:#88ffcc;border:2px solid #44cc99;">${String(GAMEPLAY_SETTINGS.adsMode).toUpperCase()}</button>
     </div>
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin:10px 0;padding:10px;background:rgba(255,255,255,0.035);border:1px solid #244c42;border-radius:6px;">
+    ${combosAvailable() ? `<div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin:10px 0;padding:10px;background:rgba(255,255,255,0.035);border:1px solid #244c42;border-radius:6px;">
       <div>
-        <div style="font-size:12px;letter-spacing:2px;color:#d8fff2;">MELEE MODE</div>
+        <div style="font-size:12px;letter-spacing:2px;color:#d8fff2;">MELEE MODE <span style="font-size:9px;color:#ffcc66;">ADMIN · combos are archived for everyone else</span></div>
         <div style="font-size:10px;letter-spacing:1px;color:#89b5a8;margin-top:4px;max-width:285px;line-height:1.35;">COMBO: the Sledge, Fists, Battle Axe, Sabre, Bat, Frying Pan, Riot Shield and Spear chain E presses into a combo. DEFAULT: one regular ability each. Quick switch: H (rebind in Controls).</div>
       </div>
       <button id="settings-melee-mode" style="min-width:92px;padding:7px 10px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:bold;letter-spacing:2px;border-radius:4px;background:${MELEE_COMBO_MODE ? '#2a2410' : '#132a24'};color:${MELEE_COMBO_MODE ? '#ffd866' : '#88ffcc'};border:2px solid ${MELEE_COMBO_MODE ? '#ffcc44' : '#44cc99'};">${MELEE_COMBO_MODE ? 'COMBO' : 'DEFAULT'}</button>
-    </div>
+    </div>` : ''}
     ${rangeRow('lookSens', isTouchUI() ? 'LOOK SENSITIVITY' : 'MOUSE SENSITIVITY', 0.3, 2.5, 0.05)}
     ${rangeRow('cameraShake', 'CAMERA SHAKE')}
     ${rangeRow('screenFx', 'SCREEN EFFECTS')}
@@ -70234,7 +70361,8 @@ function openSettingsHub() {
     saveGameplaySettings();
     openSettingsHub();
   });
-  document.getElementById('settings-melee-mode').addEventListener('click', () => { toggleMeleeComboMode(); openSettingsHub(); });
+  const _mmBtn = document.getElementById('settings-melee-mode');
+  if (_mmBtn) _mmBtn.addEventListener('click', () => { toggleMeleeComboMode(); openSettingsHub(); });
   panel.querySelectorAll('[data-settings-range]').forEach(input => {
     input.addEventListener('input', () => {
       const key = input.dataset.settingsRange;
