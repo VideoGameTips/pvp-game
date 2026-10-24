@@ -3674,9 +3674,58 @@ if (ok && process.argv.includes('--useanim')) {
       gameStarted = save.started; isDead = save.dead; activeSlot = save.slot; selectedSupportIdx = save.sup; for (let i = 0; i < save.uses.length; i++) supportUses[i] = save.uses[i]; lastSupport = save.last; _equip = save.eq; countdownActive = save.cd;
       m.position.copy(pos); m.rotation.copy(rot); m.visible = vis;
     }
+    // every kind that is switched on, on a real model of its own: it moves the item, and when it is over (or cut short) the item is exactly where it was
+    {
+      const kinds = [['support', 'inject', 'stim'], ['support', 'injectX', 'adrenaline'], ['support', 'pin', 'smoke'], ['support', 'toss', 'blink_pearl'], ['support', 'plant', 'land_mine'],
+        ['support', 'pop', 'confetti_cannon'], ['support', 'eat', 'hamburger'], ['melee', 'eat', 'baguette'], ['melee', 'throw', 'spear'], ['melee', 'flick', 'twin_knife'], ['melee', 'stab', 'knife']];
+      const dev = SUPPORT_ITEMS.find(i => !i.archived && !i.adminItem && supportUseKind(i) === 'device');
+      if (dev) kinds.push(['support', 'device', dev.id]);
+      const keep = { started: gameStarted, dead: isDead, slot: activeSlot, sup: selectedSupportIdx, mel: selectedMeleeIdx, eq: _equip, swing: meleeSwingT };
+      try {
+        gameStarted = true; isDead = false; _equip = null; meleeSwingT = 1;
+        for (const [slot, kind, id] of kinds) {
+          const items = slot === 'melee' ? MELEE_ITEMS : SUPPORT_ITEMS, idx = items.findIndex(i => i.id === id);
+          const mdl = idx < 0 ? null : (slot === 'melee' ? meleeModels : supportModels)[idx];
+          if (!mdl) { issues.push(slot + ' ' + id + ': no model to run the ' + kind + ' animation on'); continue; }
+          if (!USE_KINDS_READY.has(kind)) { issues.push(kind + ': should be switched on'); continue; }
+          const v0 = mdl.visible; mdl.visible = true;                    // held in the hand, so shown
+          const p0 = mdl.position.clone(), r0 = mdl.rotation.clone(), s0 = mdl.scale.clone(), o0 = mdl.rotation.order;
+          const kids = []; mdl.traverse(c => kids.push([c, c.position.clone(), c.rotation.clone(), c.scale.clone(), c.visible]));
+          try {
+            activeSlot = slot; if (slot === 'melee') selectedMeleeIdx = idx; else selectedSupportIdx = idx;
+            cancelUseAnim();
+            startUseAnim(slot, items[idx], kind);
+            if (!useAnim || useAnim.kind !== kind) { issues.push(slot + ' ' + id + ': ' + kind + ' did not start'); continue; }
+            let moved = 0;
+            for (const f of [0.15, 0.35, 0.5, 0.7, 0.9]) {
+              useAnim.t0 = performance.now() - useAnim.ms * f; updateUseAnim(0.016);
+              if (!useAnim) { issues.push(slot + ' ' + id + ': ' + kind + ' ended early at ' + f); break; }
+              moved = Math.max(moved, mdl.position.distanceTo(p0) + Math.abs(mdl.rotation.x - r0.x) + Math.abs(mdl.rotation.z - r0.z) + Math.abs(mdl.scale.x - s0.x));
+              if (![mdl.position.x, mdl.position.y, mdl.position.z, mdl.rotation.x, mdl.rotation.y, mdl.rotation.z].every(Number.isFinite)) issues.push(kind + ': the pose went to NaN at ' + f);
+            }
+            if (moved < 0.05) issues.push(slot + ' ' + id + ': the ' + kind + ' animation hardly moves the item (' + moved.toFixed(3) + ')');
+            if (useAnim) { useAnim.t0 = performance.now() - useAnim.ms * 2; updateUseAnim(0.016); }
+            if (useAnim) issues.push(kind + ': should be over after its time');
+          } finally { cancelUseAnim(); }
+          const bad = mdl.position.distanceTo(p0) > 1e-6 || mdl.rotation.x !== r0.x || mdl.rotation.y !== r0.y || mdl.rotation.z !== r0.z || mdl.scale.distanceTo(s0) > 1e-6 || mdl.visible !== true || mdl.rotation.order !== o0
+            || kids.some(([c, p, r, sc, v]) => c.position.distanceTo(p) > 1e-6 || Math.abs(c.rotation.x - r.x) + Math.abs(c.rotation.y - r.y) + Math.abs(c.rotation.z - r.z) > 1e-6 || c.scale.distanceTo(sc) > 1e-6 || c.visible !== v);
+          if (bad) issues.push(slot + ' ' + id + ': the ' + kind + ' animation did not leave the model as it was');
+          mdl.visible = v0;
+        }
+      } finally { gameStarted = keep.started; isDead = keep.dead; activeSlot = keep.slot; selectedSupportIdx = keep.sup; selectedMeleeIdx = keep.mel; _equip = keep.eq; meleeSwingT = keep.swing; }
+    }
     return issues;
   })()`);
-  console.log('use animation checks: every track is well formed; the medkit and its three skins (tablet, laptop, pizza box) open a lid; using a medkit runs the animation for the heal and puts everything back');
+  {
+    // the melee abilities hand over to their animations (instead of the generic swing / a scale pulse)
+    const src = fs.readFileSync(path.join(__dirname, '..', 'public', 'game.js'), 'utf8');
+    const ab = src.slice(src.indexOf('function activateMeleeAbility()'), src.indexOf('function activateMeleeAbility()') + 14000);
+    for (const [type, kind] of [['melee_eat', 'eat'], ['melee_throw', 'throw'], ['melee_multithrow', 'flick'], ['melee_instakill', 'stab']]) {
+      const i = ab.indexOf("ab.type === '" + type + "'"), j = ab.indexOf('else if (ab.type ===', i + 10);
+      if (i < 0 || !ab.slice(i, j < 0 ? undefined : j).includes("startUseAnim('melee', item, '" + kind + "')")) issues.push(type + ' should start the ' + kind + ' animation');
+    }
+  }
+  console.log('use animation checks: every track is well formed; every switched-on kind moves its item and puts it back; the medkit and its three skins (tablet, laptop, pizza box) open a lid; using a medkit runs the animation for the heal and puts everything back; the melee abilities start theirs');
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 

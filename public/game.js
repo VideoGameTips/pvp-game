@@ -46429,11 +46429,11 @@ function activateMeleeAbility() {
     socket.emit('shoot', { x: origin.x, y: origin.y, z: origin.z, dx: dir.x, dy: dir.y, dz: dir.z, weapon: 'spear_throw' });
     spawnLocalBullet(origin, dir, sid, true, 110, 0xccaa66, 0.09, 'spear_throw');
     spearThrown = true;
-    // The throw: the weapon's own swing plays and the model stays in hand through the release, then goes (it is
+    // The throw: the arm draws back and drives forward, the spear stays in hand through the release, then goes (it is
     // "in flight" until the cooldown puts it back). It used to vanish the instant the key was pressed.
-    playAbilitySwing(item);
+    startUseAnim('melee', item, 'throw');
     const thrownModel = meleeModels[selectedMeleeIdx];
-    setTimeout(() => { if (spearThrown && thrownModel) thrownModel.visible = false; }, 170);
+    setTimeout(() => { if (spearThrown && thrownModel) thrownModel.visible = false; }, 240);
     flashAbilityName(ab.name);
   }
   else if (ab.type === 'melee_multithrow') {
@@ -46446,6 +46446,7 @@ function activateMeleeAbility() {
     const tid = `twin_knife_throw_${myId}_${now}`;
     socket.emit('shoot', { x: origin.x, y: origin.y, z: origin.z, dx: dir.x, dy: dir.y, dz: dir.z, weapon: 'twin_knife_throw' });
     spawnLocalBullet(origin, dir, tid, true, 130, 0xd8d8d8, 0.045, 'twin_knife_throw');
+    startUseAnim('melee', item, 'flick');
     flashAbilityName(`${ab.name} \u00b7 ${twinKnifeCharges} left`);
   }
   else if (ab.type === 'melee_deflect') {
@@ -46465,17 +46466,7 @@ function activateMeleeAbility() {
     const me = players[myId];
     if (me) { me.hp = Math.min(300, (me.hp || 0) + (ab.heal || 40)); updateHealthHUD(me.hp); }
     spawnHitParticle(camera.position.clone().setY(1.3));
-    // Briefly scale the baguette model as an "eating" animation
-    const m = meleeModels[selectedMeleeIdx];
-    if (m) {
-      let t = 0;
-      const eat = setInterval(() => {
-        t += 0.06;
-        if (t >= 1) { m.scale.set(1,1,1); clearInterval(eat); return; }
-        const s = 1 - Math.sin(t * Math.PI) * 0.35;
-        m.scale.set(s, s, s);
-      }, 30);
-    }
+    startUseAnim('melee', item, 'eat');             // lifted to the mouth, bitten down
     flashAbilityName(ab.name);
   }
   else if (ab.type === 'melee_instakill') {
@@ -46502,8 +46493,9 @@ function activateMeleeAbility() {
       break;
     }
     if (!hitSomeone) {
-      // Miss — buff the next manual swing instead
+      // Miss — buff the next manual swing instead (and the knife still goes out in a stab at the air)
       meleeAbilityBuff = { type: 'instakill', usesLeft: 1 };
+      startUseAnim('melee', item, 'stab');
     }
     flashAbilityName(ab.name);
   }
@@ -61783,9 +61775,19 @@ document.addEventListener('keydown', e => { if (itemInspect && (e.code === 'KeyE
 const _U = (t, p, r) => _MS(t, p, r);
 const _uEase = x => { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); };
 const _uWin = (t, a, b) => _uEase((t - a) / (b - a));                      // 0 before a, 1 after b
+// Held low and to the right, most utilities are only half in view, so a track is a GESTURE made from a "view pose" (USE_VIEW: where the item is held up
+// to be looked at), and the animation lifts the item to it and puts it away again (lift: [in, out] as fractions of the time). `view: false` = the
+// track does its own lifting (the medkit).
+const USE_VIEW = { p: [-.08, .17, -.10], r: [.3, 0, 0] };
+const USE_VIEW_ITEM = {
+  stim: { r: [.1, .9, .1] }, vampire_syringe: { r: [.1, .9, .1] }, adrenaline: { r: [.2, 0, 0] }, berserker_serum: { r: [.2, 0, 0] },
+  smoke: { r: [.5, 0, 0] }, land_mine: { r: [.6, 0, 0] }, confetti_cannon: { r: [.2, .3, 0] }, air_blaster: { r: [.2, .3, 0] }, grapple_hook: { r: [.2, .3, 0] },
+  blink_pearl: { r: [0, 0, 0] }, rubber_duck: { r: [0, 0, 0] }, moon_mine: { r: [0, 0, 0] }, black_hole_seed: { r: [0, 0, 0] },
+  knife: { r: [.5, 0, 0] }, twin_knife: { r: [.4, 0, 0] }, baguette: { r: [.5, 0, 0] },
+};
 const USE_TRACKS = {
   // a case that opens: up to the face, tipped to look in, the lid back, something done inside, the lid shut again (as long as the heal takes)
-  open: { ms: 2500, keys: [_U(.07, [-.05, .07, .06], [.5, -.1, .05]), _U(.15, [-.07, .12, .10], [.95, -.2, .10]), _U(.30, [-.07, .12, .10], [1.0, -.45, .15]),
+  open: { ms: 2500, view: false, keys: [_U(.07, [-.05, .07, .06], [.5, -.1, .05]), _U(.15, [-.07, .12, .10], [.95, -.2, .10]), _U(.30, [-.07, .12, .10], [1.0, -.45, .15]),
     _U(.45, [-.07, .12, .10], [.95, -.75, -.10]), _U(.60, [-.07, .12, .10], [1.0, -.6, .12]), _U(.75, [-.07, .12, .10], [.95, -.7, -.10]),
     _U(.86, [-.06, .10, .09], [.9, -.2, .05]), _U(.94, [-.02, .03, .03], [.25, 0, 0])],
     beats: [[.10, 'click'], [.90, 'click']],
@@ -61795,48 +61797,44 @@ const USE_TRACKS = {
       const b = m._bandage;
       if (b) { const k = _uWin(t, .20, .35) * (1 - _uWin(t, .80, .86)); b.position.y = b._y0 + 0.05 * k; b.rotation.x = t * 14 * k; b.visible = k > 0.01; }
     } },
-  // a syringe: the cap off, turned needle-down, jabbed, the plunger pressed home, drawn back
-  inject: { ms: 950, keys: [_U(.14, [-.05, .06, .05], [-.5, -.25, .2]), _U(.34, [-.09, .10, .03], [-1.15, -.5, .45]), _U(.52, [-.09, -.05, .01], [-1.2, -.5, .45]),
-    _U(.74, [-.09, -.05, .01], [-1.2, -.5, .45]), _U(.88, [-.07, .06, .02], [-.7, -.3, .2])],
-    beats: [[.12, 'click'], [.54, 'hiss']],
+  // a syringe, held across the view: the cap off, tipped needle-down at the arm, jabbed, the plunger pressed home, drawn back
+  inject: { ms: 1000, lift: [.16, .86], keys: [_U(.30, [0, .03, 0], [0, 0, .7]), _U(.46, [-.06, -.10, .02], [0, 0, 1.15]), _U(.74, [-.06, -.10, .02], [0, 0, 1.15]), _U(.86, [0, .02, 0], [0, 0, .3])],
+    beats: [[.14, 'click'], [.48, 'hiss']],
     parts(m, t) {
-      const press = _uWin(t, .54, .72);
+      const press = _uWin(t, .50, .70);
       if (m._plunger) m._plunger.position.z = m._plunger._z0 - 0.045 * press;
       if (m._rod) m._rod.position.z = m._rod._z0 - 0.045 * press;
       if (m._liquid) { const L = 0.10 * (1 - 0.65 * press); m._liquid.scale.y = L / 0.10; m._liquid.position.z = -0.03 + L / 2; }
     } },
-  // a flat pack with the needle at one end: rolled needle-down and jabbed
-  injectX: { ms: 950, keys: [_U(.15, [-.05, .06, .05], [.2, 0, .6]), _U(.34, [-.08, .10, .03], [.25, -.2, 1.35]), _U(.52, [-.08, -.04, 0], [.25, -.2, 1.35]),
-    _U(.74, [-.08, -.04, 0], [.25, -.2, 1.35]), _U(.88, [-.06, .04, .02], [.1, 0, .5])], beats: [[.12, 'click'], [.54, 'hiss']] },
+  // a flat pack with the needle at one end: tipped needle-down and jabbed
+  injectX: { ms: 1000, lift: [.16, .86], keys: [_U(.30, [0, .03, 0], [0, 0, .6]), _U(.46, [-.06, -.10, 0], [0, 0, 1.1]), _U(.74, [-.06, -.10, 0], [0, 0, 1.1]), _U(.86, [0, .02, 0], [0, 0, .2])], beats: [[.14, 'click'], [.48, 'hiss']] },
   // a grenade or a bottle: the pin pulled and flung away, a wind-back, the throw (it leaves the hand at .5), a fresh one coming up
-  pin: { ms: 700, commit: .5, hide: [.54, .74], keys: [_U(.12, [-.04, .04, .05], [.15, 0, .15]), _U(.26, [-.05, .05, .07], [.2, .1, .2]), _U(.40, [.05, .08, .10], [-.55, 0, .45]),
-    _U(.50, [0, -.04, -.18], [.35, 0, .1]), _U(.56, [-.02, -.10, -.34], [.9, 0, -.2]), _U(.80, [0, -.05, -.02], [.35, 0, 0]), _U(.90, [-.01, -.02, 0], [.12, 0, 0])],
+  pin: { ms: 760, commit: .5, lift: [.14, .94], hide: [.54, .74], keys: [_U(.26, [0, 0, .02], [.1, 0, .1]), _U(.40, [.05, .04, .08], [-.7, 0, .3]), _U(.50, [0, -.02, -.10], [.1, 0, .1]),
+    _U(.56, [-.03, -.06, -.22], [.8, 0, -.2]), _U(.80, [0, -.04, 0], [.2, 0, 0])],
     beats: [[.22, 'click'], [.50, 'whoosh']],
-    parts(m, t) { const p = m._pin; if (p) { const k = _uWin(t, .20, .32); p.position.set(p.position.x, p.position.y, p.position.z); p.visible = t < .34; if (k > 0 && p._p0) p.position.set(p._p0.x + 0.07 * k, p._p0.y + 0.05 * k, p._p0.z + 0.02 * k); } } },
+    parts(m, t) { const p = m._pin; if (p) { const k = _uWin(t, .20, .32); p.visible = t < .34; if (p._p0) p.position.set(p._p0.x + 0.07 * k, p._p0.y + 0.05 * k, p._p0.z + 0.02 * k); } } },
   // a ball or a jar: wound back, flicked off (it leaves at .34), a new one coming up
-  toss: { ms: 560, commit: .34, hide: [.40, .66], keys: [_U(.20, [.06, .10, .12], [-.6, 0, .3]), _U(.34, [.02, -.04, -.22], [.8, 0, -.2]), _U(.44, [-.02, -.08, -.34], [1.0, 0, -.3]),
-    _U(.70, [0, -.05, -.02], [.4, 0, 0]), _U(.84, [0, -.01, 0], [.1, 0, 0])], beats: [[.34, 'whoosh']],
+  toss: { ms: 620, commit: .34, lift: [.12, .94], hide: [.40, .66], keys: [_U(.20, [.05, .06, .10], [-.5, 0, .2]), _U(.34, [-.02, -.04, -.18], [.7, 0, -.2]), _U(.44, [-.04, -.08, -.28], [.9, 0, -.3]), _U(.70, [0, -.05, 0], [.3, 0, 0])],
+    beats: [[.34, 'whoosh']],
     parts(m, t, S) { if (S.item && S.item.id === 'rubber_duck') { const q = Math.max(_uWin(t, .02, .10) * (1 - _uWin(t, .10, .18)), _uWin(t, .18, .24) * (1 - _uWin(t, .24, .30))); m.scale.set(S.baseScale.x * (1 + .25 * q), S.baseScale.y * (1 - .35 * q), S.baseScale.z * (1 + .25 * q)); } } },
-  // set down on the ground: bent over, put down with a tap, up again
-  plant: { ms: 760, keys: [_U(.22, [-.02, -.12, -.06], [.9, 0, 0]), _U(.36, [-.02, -.20, -.08], [1.1, 0, 0]), _U(.50, [-.02, -.20, -.08], [1.1, 0, 0]),
-    _U(.64, [-.02, -.12, -.04], [.7, 0, 0]), _U(.82, [-.01, -.03, 0], [.2, 0, 0])], beats: [[.36, 'thud']] },
+  // set down on the ground: tipped over and lowered out of sight, a tap, up again
+  plant: { ms: 820, lift: [.14, .94], keys: [_U(.24, [0, -.06, .02], [.5, 0, 0]), _U(.40, [0, -.17, -.04], [.9, 0, 0]), _U(.54, [0, -.17, -.04], [.9, 0, 0]), _U(.70, [0, -.08, 0], [.4, 0, 0])], beats: [[.40, 'thud']] },
   // a cannon or a blower: it kicks back and settles
-  pop: { ms: 420, keys: [_U(.10, [0, .02, .12], [.55, 0, 0]), _U(.24, [0, 0, .05], [.2, 0, 0]), _U(.40, [0, .01, .08], [.3, 0, 0]), _U(.62, [0, 0, .02], [.1, 0, 0])] },
+  pop: { ms: 480, lift: [.10, .90], keys: [_U(.14, [0, .06, .18], [.75, 0, 0]), _U(.28, [0, 0, .06], [.25, 0, 0]), _U(.44, [0, .02, .11], [.45, 0, 0]), _U(.64, [0, 0, .03], [.12, 0, 0])] },
   // food: to the mouth, three bites, down again
-  eat: { ms: 1500, keys: [_U(.16, [-.06, .14, .10], [1.0, -.2, .1]), _U(.26, [-.07, .15, .08], [1.0, -.2, .1]), _U(.32, [-.06, .14, .10], [1.0, -.2, .1]), _U(.46, [-.07, .15, .08], [1.0, -.2, .1]),
-    _U(.52, [-.06, .14, .10], [1.0, -.2, .1]), _U(.66, [-.07, .15, .08], [1.0, -.2, .1]), _U(.72, [-.06, .14, .10], [1.0, -.2, .1]), _U(.88, [-.02, .03, .03], [.3, 0, 0])],
+  eat: { ms: 1500, lift: [.14, .88], keys: [_U(.28, [-.01, .03, .03], [.5, -.1, 0]), _U(.34, [0, .02, .01], [.5, -.1, 0]), _U(.48, [-.01, .03, .03], [.5, -.1, 0]), _U(.54, [0, .02, .01], [.5, -.1, 0]),
+    _U(.68, [-.01, .03, .03], [.5, -.1, 0]), _U(.74, [0, .02, .01], [.5, -.1, 0])],
     beats: [[.27, 'crunch'], [.47, 'crunch'], [.67, 'crunch']],
-    parts(m, t, S) { const bites = (t > .26) + (t > .46) + (t > .66), s = 1 - 0.07 * bites * (1 - _uWin(t, .86, .98)); m.scale.set(S.baseScale.x * s, S.baseScale.y * s, S.baseScale.z * s); } },
-  // a gadget: up, a press on its button, away
-  device: { ms: 800, keys: [_U(.20, [-.05, .08, .06], [.8, 0, 0]), _U(.40, [-.05, .07, .06], [.8, 0, 0]), _U(.46, [-.05, .07, .03], [.8, 0, 0]), _U(.54, [-.05, .07, .06], [.8, 0, 0]), _U(.76, [-.02, .02, .02], [.2, 0, 0])],
-    beats: [[.45, 'click']] },
-  // a thrown spear: wound up behind the ear, driven forward
-  throw: { ms: 560, keys: [_U(.26, [.10, .10, .14], [.9, -.35, .30]), _U(.42, [-.03, -.04, -.34], [-.25, .1, -.1]), _U(.55, [-.03, -.05, -.30], [-.25, .1, -.1]), _U(.85, [0, -.02, -.02], [.1, 0, 0])],
+    parts(m, t, S) { const bites = (t > .26) + (t > .46) + (t > .66), s = 1 - 0.11 * bites * (1 - _uWin(t, .86, .98)); m.scale.set(S.baseScale.x * s, S.baseScale.y * s, S.baseScale.z * s); } },
+  // a gadget: turned over to look, a press on its button, away
+  device: { ms: 820, lift: [.16, .90], keys: [_U(.30, [0, 0, .02], [.4, 0, 0]), _U(.46, [0, -.01, -.03], [.4, 0, 0]), _U(.54, [0, 0, .02], [.4, 0, 0])], beats: [[.46, 'click']] },
+  // a thrown spear: wound up behind the ear, driven forward (the melee ones are held in view already: no lift)
+  throw: { ms: 560, view: false, keys: [_U(.26, [.10, .10, .14], [.9, -.35, .30]), _U(.42, [-.03, -.04, -.34], [-.25, .1, -.1]), _U(.55, [-.03, -.05, -.30], [-.25, .1, -.1]), _U(.85, [0, -.02, -.02], [.1, 0, 0])],
     beats: [[.40, 'whoosh']] },
   // a knife thrown with the wrist
-  flick: { ms: 320, keys: [_U(.32, [.04, .05, .08], [.5, 0, .5]), _U(.52, [-.02, -.03, -.22], [-.35, .1, -.45]), _U(.80, [0, 0, -.04], [-.1, 0, -.1])], beats: [[.50, 'whoosh']] },
+  flick: { ms: 380, lift: [.10, .92], keys: [_U(.30, [.03, .06, .08], [.5, 0, .4]), _U(.50, [-.02, -.04, -.20], [-.5, .1, -.4]), _U(.72, [0, 0, -.04], [-.1, 0, -.1])], beats: [[.50, 'whoosh']] },
   // a stab: drawn back, then thrust
-  stab: { ms: 420, keys: [_U(.28, [.05, .04, .14], [.3, -.25, .2]), _U(.42, [-.04, -.02, -.46], [-.45, .05, -.1]), _U(.60, [-.04, -.02, -.44], [-.45, .05, -.1]), _U(.85, [0, 0, -.04], [-.05, 0, 0])],
+  stab: { ms: 460, lift: [.10, .92], keys: [_U(.28, [.03, .03, .12], [.4, -.2, .2]), _U(.42, [-.03, -.03, -.34], [-.5, 0, -.1]), _U(.62, [-.03, -.03, -.32], [-.5, 0, -.1]), _U(.82, [0, 0, -.04], [-.05, 0, 0])],
     beats: [[.40, 'whoosh']] },
 };
 const SUPPORT_USE_KIND = {
@@ -61848,7 +61846,7 @@ const SUPPORT_USE_KIND = {
   hamburger: 'eat',
 };
 function supportUseKind(item) { return (item && SUPPORT_USE_KIND[item.baseId || item.id]) || 'device'; }
-const USE_KINDS_READY = new Set(['open']);       // the kinds that are switched on (the others are written, but still being tuned to show in view)
+const USE_KINDS_READY = new Set(['open', 'inject', 'injectX', 'pin', 'toss', 'plant', 'pop', 'eat', 'device', 'throw', 'flick', 'stab']);       // the kinds that are switched on (the others are written, but still being tuned to show in view)
 const _USE_PARTS = ['_lid', '_plunger', '_rod', '_liquid', '_pin', '_bandage'];
 let useAnim = null;       // { model, slot, item, kind, T, ms, t0, base, baseRot, baseScale, order, beat, hidden, snap, epoch }
 function _useSound(name) {
@@ -61895,8 +61893,14 @@ function updateUseAnim(dt) {
   if (!held || busy) { cancelUseAnim(); return; }
   const t = Math.min(1, (performance.now() - S.t0) / S.ms), P = _reloadPose(S.T.keys, t);
   m.rotation.order = 'YXZ';
-  m.position.set(S.base.x + P.px, S.base.y + P.py, S.base.z + P.pz);
-  m.rotation.set(S.baseRot.x + P.rx, S.baseRot.y + P.ry, S.baseRot.z + P.rz);
+  let vx = 0, vy = 0, vz = 0, vrx = 0, vry = 0, vrz = 0;
+  if (S.T.view !== false) {                                      // up to where it can be seen, and away again
+    const lift = S.T.lift || [.14, .88], k = _uWin(t, 0, lift[0]) * (1 - _uWin(t, lift[1], 1)), id = S.item && (S.item.baseId || S.item.id), V = USE_VIEW_ITEM[id];
+    vx = USE_VIEW.p[0] * k; vy = USE_VIEW.p[1] * k; vz = USE_VIEW.p[2] * k;
+    const r = (V && V.r) || USE_VIEW.r; vrx = r[0] * k; vry = r[1] * k; vrz = r[2] * k;
+  }
+  m.position.set(S.base.x + P.px + vx, S.base.y + P.py + vy, S.base.z + P.pz + vz);
+  m.rotation.set(S.baseRot.x + P.rx + vrx, S.baseRot.y + P.ry + vry, S.baseRot.z + P.rz + vrz);
   if (S.T.parts) S.T.parts(m, t, S);
   if (S.T.hide) { const h = t >= S.T.hide[0] && t < S.T.hide[1]; if (h !== S.hidden) { S.hidden = h; _useHide(m, h); } }
   const beats = S.T.beats || [];
