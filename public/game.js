@@ -1599,7 +1599,7 @@ const GAME_MODE_CONFIGS = {
   // 🎮 ARCADE MODES — fast & gimmicky FFA variants
   'gungame':    { type: 'arcade', subtype: 'gungame',  allies: 0, enemies: 7, timeLimit: 300, arcade: true },
   'oitc':       { type: 'arcade', subtype: 'oitc',     allies: 0, enemies: 5, timeLimit: 240, arcade: true }, // One in the Chamber
-  'juggernaut': { type: 'arcade', subtype: 'jugg',     allies: 0, enemies: 5, timeLimit: 240, arcade: true },
+  'juggernaut': { type: 'arcade', subtype: 'jugg',     allies: 0, enemies: 10, timeLimit: 0, arcade: true, winsNeeded: 4, roundTimeLimit: 150, juggHp: 15000, juggScale: 2 }, // 🛡️ one juggernaut (a bot, or you) against ten hunters, first side to four rounds
   'infection':  { type: 'arcade', subtype: 'infect',   allies: 0, enemies: 5, timeLimit: 180, arcade: true },
   'sniper_only':{ type: 'arcade', subtype: 'sniper',   allies: 0, enemies: 5, timeLimit: 240, arcade: true },
   'speedrun':   { type: 'arcade', subtype: 'speedrun', allies: 0, enemies: 20,timeLimit: 0,   arcade: true }, // solo
@@ -5686,8 +5686,17 @@ function pushMeshColliders(list, mesh) {
   } else list.push(new THREE.Box3().setFromObject(mesh));
 }
 
-const PLAYER_EYE_HEIGHT = 1.65;
-const PLAYER_RADIUS = 0.38;
+let PLAYER_EYE_HEIGHT = 1.65;
+let PLAYER_RADIUS = 0.38;
+// 🛡️ The juggernaut is twice the size: a higher eye, a wider body (not twice: doorways still have to let him through), and hit
+// spheres to match. One place sets all of it, and 1 puts everything back.
+let playerBodyScale = 1;
+function setPlayerBodyScale(sc) {
+  if (sc === playerBodyScale) return;
+  const feetY = camera.position.y - (window._crouchEye || PLAYER_EYE_HEIGHT);
+  playerBodyScale = sc; PLAYER_EYE_HEIGHT = 1.65 * sc; PLAYER_RADIUS = 0.38 * (1 + (sc - 1) * 0.6);
+  window._crouchEye = PLAYER_EYE_HEIGHT; camera.position.y = feetY + PLAYER_EYE_HEIGHT;
+}
 
 // Where the player's feet are. The eye sits lower while crouched or sliding
 // (window._crouchEye), and measuring from the standing height instead put a
@@ -41485,7 +41494,7 @@ function doJump(repeat) {
       // that to climb before it is even level with where a normal jump
       // STARTS. Pay for it in the launch, or the apex lands barely above your
       // own head and the whole thing reads as standing up.
-      const standGap = Math.max(0, 1.65 - (window._crouchEye ?? 1.65));
+      const standGap = Math.max(0, PLAYER_EYE_HEIGHT - (window._crouchEye ?? PLAYER_EYE_HEIGHT));
       const base = JUMP_VEL * SLIDE_JUMP_LIFT;
       slamState = { vel: Math.sqrt(base * base + 2 * GRAVITY * standGap), type: 'jump' };
       // 🚀 Climbing a ramp when you jump out of the slide turns the slide's
@@ -41499,13 +41508,13 @@ function doJump(repeat) {
         spawnAbilityAOEFX(camera.position.clone().setY(camera.position.y - 1.4), 1.6, 0xffcc66);
         playEquipSound('whoosh');
       }
-      window._crouchEye = Math.min(1.65, playerHeadroomEye());          // you stand up as you leave the ground (as far as the ceiling lets you)
+      window._crouchEye = Math.min(PLAYER_EYE_HEIGHT, playerHeadroomEye());          // you stand up as you leave the ground (as far as the ceiling lets you)
       playSoundEvent('footstep', { volume: 0.5, pitch: 1.3, minGap: 60 });
     } else {
       // Same debt for a crouch jump, which had the same problem more quietly.
-      const standGap = Math.max(0, 1.65 - (window._crouchEye ?? 1.65));
+      const standGap = Math.max(0, PLAYER_EYE_HEIGHT - (window._crouchEye ?? PLAYER_EYE_HEIGHT));
       slamState = { vel: Math.sqrt(JUMP_VEL * JUMP_VEL + 2 * GRAVITY * standGap), type: 'jump' };
-      window._crouchEye = Math.min(1.65, playerHeadroomEye());
+      window._crouchEye = Math.min(PLAYER_EYE_HEIGHT, playerHeadroomEye());
     }
     // A light weapon buys one extra jump in the air. Charge it here, on the
     // jump itself, so walking off a ledge doesn't hand you a free one.
@@ -43347,6 +43356,7 @@ function applyObbyKit() {
 }
 
 function matchMaxHp() {
+  if (match && match.jugg && match.jugg.id === myId) return match.cfg.juggHp;   // 🛡️ the juggernaut's health is a boss's
   return match?.cfg?.playerHp || 300;
 }
 
@@ -43376,7 +43386,7 @@ function teamSideSpawn(team = 'ally', spread = 36, depth = 38) {
 
 function placePlayerAtTeamSpawn(team = localPlayerTeam(), spread = 36, depth = 38) {
   const sp = teamSideSpawn(team, spread, depth);
-  camera.position.set(sp.x, 1.65, sp.z);
+  camera.position.set(sp.x, PLAYER_EYE_HEIGHT, sp.z);
   faceToward(0, 0);
   euler.y += (Math.random() - 0.5) * 0.4;   // a little variety, never enough to lose the fight
   camera.quaternion.setFromEuler(euler);
@@ -44881,16 +44891,16 @@ function updateMovement(dt, socialBlocked = false) {
   const minigunBraceMult = minigunBraced() ? 0.04 : 1;
   const speedMult = baseSpeedMult * (adrenalineActive ? 1.6 : 1) * frostMult * rootMult * minigunBraceMult * adminSpeedMult * crouchMult * slideMult * fireBoost * _gimSlowNow();
   // Drop the camera when crouching / sliding (eased)
-  if (!window._crouchEye) window._crouchEye = 1.65;
+  if (!window._crouchEye) window._crouchEye = PLAYER_EYE_HEIGHT;
   // Slide drops the eye to 0.70 m so the view clearly dips below normal
-  const targetEye = Math.min(sliding ? 0.70 : (crouchHeld ? 1.10 : 1.65), playerHeadroomEye());   // (no standing up into a ceiling)
+  const targetEye = Math.min(playerBodyScale * (sliding ? 0.70 : (crouchHeld ? 1.10 : 1.65)), playerHeadroomEye());   // (no standing up into a ceiling)
   // Slide transitions faster (~25/sec rate) so the drop is snappy at start of slide
   const easeRate = sliding ? 25 : 12;
   window._crouchEye += (targetEye - window._crouchEye) * Math.min(1, dt * easeRate);
   // 🦘 Jump physics — Space (or mobile button). Skip in slam/heli/mortar states.
   // ✨ Some weapons grant a mid-air double jump (sci-fi / gravity / jedi).
   if (!aquatic && !slamState && !pilotedVehicle && !pilotedMortar) {
-    const groundEyeY = getGroundEyeY() + (window._crouchEye - 1.65);
+    const groundEyeY = getGroundEyeY() + (window._crouchEye - PLAYER_EYE_HEIGHT);
     const isGrounded = camera.position.y <= groundEyeY + 0.05 && playerYVel <= 0;
     // Edge-detect Space so a held key doesn't auto-trigger the air jump
     const spaceDown = (keys['Space'] || window._mobileJump) && !crouchHeld;
@@ -44935,7 +44945,7 @@ function updateMovement(dt, socialBlocked = false) {
       if (!climbing) playerYVel -= GRAVITY * dt; // gravity (suspended while climbing)
       camera.position.y += playerYVel * dt;
       resolvePlayerCeiling(prevEyeY);
-      const landingEyeY = getLandingEyeY(prevEyeY) + (window._crouchEye - 1.65);
+      const landingEyeY = getLandingEyeY(prevEyeY) + (window._crouchEye - PLAYER_EYE_HEIGHT);
       if (playerYVel <= 0 && camera.position.y <= Math.max(groundEyeY, landingEyeY)) {
         camera.position.y = Math.max(groundEyeY, landingEyeY);
         playerYVel = 0;
@@ -45023,7 +45033,7 @@ function updateMovement(dt, socialBlocked = false) {
     // used to ignore the crouch/slide offset the grounded branch applies, so
     // touching down mid-slide snapped the camera from 0.70 up to 1.65 and then
     // dropped it back the next frame.
-    const airCrouchDelta = (window._crouchEye != null) ? (window._crouchEye - 1.65) : 0;
+    const airCrouchDelta = (window._crouchEye != null) ? (window._crouchEye - PLAYER_EYE_HEIGHT) : 0;
     const groundEyeY = Math.max(getLandingEyeY(prevEyeY) + airCrouchDelta, getGroundEyeY() + airCrouchDelta);
     // ...and only while you are on the way DOWN. Leaving the ground out of a
     // slide starts the eye at 0.70 while this reference races back up to 1.65 at
@@ -45082,7 +45092,7 @@ function updateMovement(dt, socialBlocked = false) {
     // Crouch / slide eye-height delta. window._crouchEye is the *target* eye
     // height (1.65 standing, 1.10 crouched, 0.95 sliding); subtract from
     // 1.65 to get the y offset to apply on top of the ground.
-    const crouchDelta = (window._crouchEye != null) ? (window._crouchEye - 1.65) : 0;
+    const crouchDelta = (window._crouchEye != null) ? (window._crouchEye - PLAYER_EYE_HEIGHT) : 0;
     const groundEyeY = getGroundEyeY() + crouchDelta;
     if (camera.position.y > groundEyeY + 0.04 && (window._playerYVel || playerYVel) === 0) {
       // We're somehow above ground without active jump velocity — drop us
@@ -45120,7 +45130,7 @@ function updateMovement(dt, socialBlocked = false) {
     // The flag clears itself if you somehow stand on the ground for a moment without
     // a landing, so a stuck state can never leave you gliding on the floor.
     if (window._blastCarry) {
-      const gEye = getGroundEyeY() + (window._crouchEye - 1.65);
+      const gEye = getGroundEyeY() + (window._crouchEye - PLAYER_EYE_HEIGHT);
       const onGroundNow = camera.position.y <= gEye + 0.06 && !(slamState && slamState.vel > 0);
       window._blastCarryGround = onGroundNow ? (window._blastCarryGround || 0) + dt : 0;
       if (window._blastCarryGround > 0.25) window._blastCarry = false;
@@ -48092,10 +48102,10 @@ function tryMelee() {
     const toTarget = mesh.position.clone().sub(camera.position);
     toTarget.y = 0;
     const dist = toTarget.length();
-    if (dist > item.range || dist < 0.05) continue;
+    if (dist > item.range + ((mesh._bodyScale || 1) - 1) * 0.7 || dist < 0.05) continue;
     const dir = toTarget.normalize();
     if (forward.dot(dir) < 0.55) continue;
-    hitPos = mesh.position.clone(); hitPos.y += 1.0;
+    hitPos = mesh.position.clone(); hitPos.y += 1.0 * (mesh._bodyScale || 1);
     if (soundId !== 'chainsaw' || sawDry) {
       playSoundEvent('melee_impact', { material: MELEE_SWING_SOUND[soundId], volume: 0.95, minGap: 60 });
     }
@@ -56461,6 +56471,7 @@ function localEntityTeam(id) {
 
 function friendlyFireBlocked(targetId, shooterId = myId) {
   if (!targetId || !shooterId || targetId === shooterId || inLobby) return false;
+  if (match && match.jugg && match.jugg.id) return targetId !== match.jugg.id && shooterId !== match.jugg.id;   // the hunters are one side: only the juggernaut is anyone's target
   const modeType = (match && match.type) || (selectedModeConfig && selectedModeConfig.type) || '';
   if (modeType === 'ffa' || modeType === 'arcade' || modeType === 'br' || modeType === 'range') return false;
   const shooterTeam = localEntityTeam(shooterId);
@@ -57225,9 +57236,11 @@ function updateBullets(dt) {
         // The fallbacks are the old standing numbers, for a mesh that has not
         // been animated yet.
         const _rg = mesh._rig;
-        const headOff = (_rg && _rg.hitHeadOff !== undefined) ? _rg.hitHeadOff : 1.65;
-        const bodyOff = (_rg && _rg.hitBodyOff !== undefined) ? _rg.hitBodyOff : 1.0;
-        const headZ = _rg?.hitHeadZ || 0, bodyZ = _rg?.hitBodyZ || 0;
+        const bsc = mesh._bodyScale || 1;     // 🛡️ the juggernaut's spheres are as big as he is
+        const headR = 0.28 * bsc + bulletR, bodyR = 0.65 * bsc + bulletR;
+        const headOff = ((_rg && _rg.hitHeadOff !== undefined) ? _rg.hitHeadOff : 1.65) * bsc;
+        const bodyOff = ((_rg && _rg.hitBodyOff !== undefined) ? _rg.hitBodyOff : 1.0) * bsc;
+        const headZ = (_rg?.hitHeadZ || 0) * bsc, bodyZ = (_rg?.hitBodyZ || 0) * bsc;
         const hx = mesh.position.x+Math.sin(mesh.rotation.y)*headZ, hz = mesh.position.z+Math.cos(mesh.rotation.y)*headZ;
         const bx = mesh.position.x+Math.sin(mesh.rotation.y)*bodyZ, bz = mesh.position.z+Math.cos(mesh.rotation.y)*bodyZ;
 
@@ -59244,7 +59257,7 @@ function updateDamageDirections(now = performance.now()) {
 }
 function updateHealthHUD(hp) {
   // The bar is a share of THIS mode's health: the Towers are 100 HP, and a full bar there read as a third.
-  const maxHp = (typeof match !== 'undefined' && match && match.cfg && match.cfg.playerHp) || 300;
+  const maxHp = (typeof match !== 'undefined' && match && match.jugg && match.jugg.id === myId) ? match.cfg.juggHp : ((typeof match !== 'undefined' && match && match.cfg && match.cfg.playerHp) || 300);
   document.getElementById('health-fill').style.width = `${Math.min(100, hp / maxHp * 100).toFixed(1)}%`;
   document.getElementById('health-num').textContent = hp;
   // Under 30%: the edges stay red until you heal, respawn or die (#36).
@@ -59263,7 +59276,7 @@ function getLiveAllies() {
   return allies;
 }
 function watchEliminationRound() {
-  if(!isDead||match?.type!=='elim'||match.over)return;
+  if(!isDead||(match?.type!=='elim'&&!match?.jugg)||match.over)return;
   for(const id of ['waiting-screen','death-screen'])document.getElementById(id).style.display='none';
   spectatorDeathAt ??= performance.now();
   if(!match.roundActive || performance.now()-spectatorDeathAt<3000)return;
@@ -59293,7 +59306,7 @@ function spectatorCycle(dir) {
 }
 function updateSpectatorCamera(dt) {
   if (!isDead) { exitSpectator(); return; }
-  if (!spectatorState && match?.type==='elim' && !match.over) watchEliminationRound();
+  if (!spectatorState && (match?.type==='elim' || match?.jugg) && !match.over) watchEliminationRound();
   if (window.PVP_RAGDOLL?.controlling) return;
   if (!spectatorState) return;
   const allies = getLiveAllies();
@@ -59410,17 +59423,18 @@ const CLIENT_WEAPON_DAMAGE = Object.fromEntries([
 // in updateBullets. Result: crouching/sliding (which lowers the spheres) makes
 // the bot's shot sail overhead, so duck-and-slide actually dodges bot fire.
 function botShotHitsPlayer(bot, dist) {
-  const curEye = window._crouchEye || 1.65;
+  const SC = playerBodyScale;                      // 🛡️ the juggernaut is twice the size, and so is everything he can be hit on
+  const curEye = window._crouchEye || PLAYER_EYE_HEIGHT;
   const feetY  = camera.position.y - curEye;
-  const crouch = Math.max(0, Math.min(1, (1.65 - curEye) / (1.65 - 0.70)));
+  const crouch = Math.max(0, Math.min(1, (PLAYER_EYE_HEIGHT - curEye) / (PLAYER_EYE_HEIGHT - 0.70 * SC)));
   // Crouch-adjusted sphere centers (match the remote-mesh hitbox offsets)
-  const headY = feetY + (1.65 - crouch * 0.75); // 1.65 → 0.90 above feet
-  const bodyY = feetY + (1.0  - crouch * 0.45); // 1.00 → 0.55 above feet
-  const headR = 0.28, bodyR = 0.65;
+  const headY = feetY + SC * (1.65 - crouch * 0.75); // 1.65 → 0.90 above feet
+  const bodyY = feetY + SC * (1.0  - crouch * 0.45); // 1.00 → 0.55 above feet
+  const headR = 0.28 * SC, bodyR = 0.65 * SC;
   // Bot aims for STANDING chest height (it doesn't perfectly track your duck),
   // with vertical spread that grows with range and shrinks with aim skill.
   const skill   = bot.aimSkill || 1;
-  const aimBase = feetY + 1.25;
+  const aimBase = feetY + 1.25 * SC;
   const vSpread = (0.30 + dist * 0.018) * (1.6 - Math.min(1.2, skill));
   const aimY    = aimBase + (Math.random() * 2 - 1) * vSpread;
   // ── Horizontal. This did not exist at all ────────────────────────────────
@@ -59446,7 +59460,7 @@ function botShotHitsPlayer(bot, dist) {
   const leadErr = Math.min(0.85, crossSpeed * flight * (1.6 - Math.min(1.2, skill)));
   const aimOffH = (Math.random() * 2 - 1) * hSpread + (Math.random() * 2 - 1) * leadErr;
   // You are a good deal narrower than you are tall.
-  const headRH = 0.24, bodyRH = 0.42;
+  const headRH = 0.24 * SC, bodyRH = 0.42 * SC;
   const offH = Math.abs(aimOffH);
   const inHead = offH < headRH && Math.abs(aimY - headY) < headR;
   const inBody = !inHead && offH < bodyRH && Math.abs(aimY - bodyY) < bodyR;
@@ -59514,6 +59528,7 @@ function tellServerIDied(killerId, meta = {}) {
 function scheduleLocalOutOfBoundsRecovery() {
   const ds = document.getElementById('death-screen');
   const dm = document.getElementById('death-msg');
+  if (match?.jugg) { if (ds) ds.style.display = 'none'; watchEliminationRound(); return; }   // a fall is a death like any other: wait for the round to end
   if (match?.type === 'br') {
     const livesLeft = Math.max(0, (match.lives?.[myId] || 0) - 1);
     if (dm) dm.textContent = livesLeft > 0 ? `Respawning in 4s · ${livesLeft} lives left` : 'You\'re out of lives — spectating';
@@ -59755,7 +59770,7 @@ function applyBotDamageToPlayer(weaponId, botId, damageOverride) {
     onEntityDied(myId, botId || null);
     // The death replay is archived; this compatibility call is a no-op.
     startKillcam(botId, weaponId);
-    if (match && match.type === 'elim' && !match.over) {
+    if (match && (match.type === 'elim' || match.jugg) && !match.over) {
       if (ds) ds.style.display = 'none';
       const dmEl = document.getElementById('death-msg');
       if (dmEl) dmEl.textContent = 'Waiting for round to end...';
@@ -60424,7 +60439,7 @@ socket.on('playerDied', data => {
     startKillcam(data.killerId, data.weapon || resolveBot(data.killerId)?.weaponId);   // no-op if the local death started it (#42)
     const ds = document.getElementById('death-screen');
     if (!KILLCAM.active) ds.style.display='flex';
-    if (match && match.type === 'elim' && !match.over) {
+    if (match && (match.type === 'elim' || match.jugg) && !match.over) {
       // No respawn in elimination — wait for round to end
       document.getElementById('death-msg').textContent = 'Waiting for round to end...';
       ds.style.display = 'none';
@@ -60495,7 +60510,7 @@ socket.on('playerRespawned', p => {
   p = fromWire(p);
   if (p.autoRespawn && match?.type === 'campaign' && resolveBot(p.id)?.campaignActor) return;
   // Elim modes (1v1, 2v2, 3v3): bots stay dead until the round ends. Ignore server auto-respawns.
-  if (p.autoRespawn && p.isBot && match?.type === 'elim') return;
+  if (p.autoRespawn && p.isBot && (match?.type === 'elim' || match?.jugg)) return;
   players[p.id]=p;
   if (p.id===myId) {
     isDead = false;
@@ -60507,7 +60522,7 @@ socket.on('playerRespawned', p => {
     } else {
       // Always teleport to the player's team side — never trust server's center-ish spawn.
       if (p.forcedReset || p.clientSpawn) {
-        camera.position.set(p.x, 1.65, p.z);
+        camera.position.set(p.x, PLAYER_EYE_HEIGHT, p.z);
         faceToward(0, 0);
       } else {
         placePlayerAtTeamSpawn(localPlayerTeam(), 24, 38);
@@ -60544,7 +60559,7 @@ function humanTagKind(p) {
   return null;
 }
 function renderedSkinForPlayer(p, skin = p && p.skin) {
-  if (p && p.isBot && selectedModeConfig?.type !== 'lobby') return ZOMBIE_SKIN_IDS.includes(p.skin) && PIXEL_SKINS[p.skin] ? p.skin : 'default';   // (a zombie has a skin of its own)
+  if (p && p.isBot && selectedModeConfig?.type !== 'lobby') return (ZOMBIE_SKIN_IDS.includes(p.skin) || p.skin === 'jugger') && PIXEL_SKINS[p.skin] ? p.skin : 'default';   // (a zombie has a skin of its own)
   const rc = _remoteCustomSkin(p, skin);
   if (rc) return rc;
   return resolveSkinId(skin);
@@ -62292,20 +62307,7 @@ function setupArcadeStart(subtype) {
       return;
     }
     case 'jugg': {
-      // Juggernaut: 50% chance player starts as juggernaut, else random bot
-      const candidates = [myId, ...gameBots.filter(b => !b.dead).map(b => b.id)];
-      const pick = candidates[Math.floor(Math.random() * candidates.length)];
-      match.juggernautId = pick;
-      if (pick === myId) {
-        // Player becomes the juggernaut: 1000 HP + admin gun
-        const me = players[myId]; if (me) { me.hp = 1000; updateHealthHUD(1000); }
-        forcePlayerWeapon('gau19'); // admin item — works even if not unlocked, for arcade
-        showAnnouncement('🛡️ YOU ARE JUGGERNAUT', '1000 HP · GAU-19 · kill them all', '#ff2222', 3000);
-      } else {
-        const bot = gameBots.find(b => b.id === pick);
-        if (bot) { bot.hp = 1000; bot.maxHp = 1000; bot.weaponId = 'gau19'; }
-        showAnnouncement('🛡️ JUGGERNAUT', `${players[pick]?.name || 'A bot'} is the juggernaut!`, '#ff2222', 3000);
-      }
+      juggStart();                       // (the round, the roles and the boss bar: see JUGGERNAUT below)
       return;
     }
     case 'infect': {
@@ -62386,8 +62388,7 @@ function initArcadeMode(subtype) {
     match.gunTier[myId] = 0;
     // bots will get gun tiers after they spawn
   }
-  // Juggernaut: random player starts as juggernaut (50% chance for player, else a bot — set after bots spawn)
-  // (handled in startMatchRound)
+  // Juggernaut: match.jugg is made with the match; the first round is dealt by setupArcadeStart
   // Infection: 1 random infected (set in startMatchRound after bots spawn)
 }
 
@@ -62910,7 +62911,8 @@ function initMatch() {
     // 🎮 Arcade mode state
     arcade: cfg.subtype || null,           // gungame | oitc | jugg | infect | sniper | speedrun
     gunTier: {},                           // entityId → gun tier index (Gun Game)
-    juggernautId: null,                    // entityId of the juggernaut (Juggernaut)
+    juggernautId: null,                    // (the old crown-passing Juggernaut; now match.jugg)
+    jugg: cfg.subtype === 'jugg' ? { id: null, round: 0, wins: { hunters: 0, jugg: 0 }, bag: [], phase: 'wait', left: 0 } : null,   // 🛡️ the round state
     infectedIds: {},                       // entityId → true (Infection: who's a zombie)
     speedrunStart: 0,                      // timestamp first kill (Speedrun)
     speedrunKills: 0,                      // (Speedrun)
@@ -63080,7 +63082,7 @@ function startMatchRound() {
 // Matched on the English text, which is what callers pass before i18n translates it.
 // NB: plain 'ELIMINATED' is the banner for a kill YOU made — that stays a feed line.
 // '💀 ELIMINATED' is you being knocked out of the match, which is a moment.
-const MOMENT_RE = /^(MATCH START|ROUND |🏁 ROUND|ROUND WIN|ROUND LOST|VICTORY|DEFEAT|YOUR TEAM WINS|ENEMY WINS|YOU DIED|💀 ELIMINATED|⚔️ DUEL|⚔️ TIEBREAKER|WAVE |FINAL WAVE|👑 KING OF THE HILL|GET READY|GO!)/;
+const MOMENT_RE = /^(MATCH START|🛡️ JUGGERNAUT|ROUND |🏁 ROUND|ROUND WIN|ROUND LOST|VICTORY|DEFEAT|YOUR TEAM WINS|ENEMY WINS|YOU DIED|💀 ELIMINATED|⚔️ DUEL|⚔️ TIEBREAKER|WAVE |FINAL WAVE|👑 KING OF THE HILL|GET READY|GO!)/;
 function showAnnouncement(text, sub, color, duration) {
   const big = MOMENT_RE.test(String(text || ''));
   pushFeedLine(text, sub, color, big);
@@ -63215,10 +63217,10 @@ function updateMatchHUD() {
       C.textContent = `⏱️ ${elapsed.toFixed(1)}s`;
       R.textContent = `PB ${localStorage.getItem('pvp_speedrun_pb') || '—'}s`;
     } else if (sub === 'jugg') {
-      const juggName = match.juggernautId === myId ? 'YOU' : (players[match.juggernautId]?.name || '???');
-      L.textContent = `🛡️ JUGG: ${juggName}`;
-      C.textContent = `JUGGERNAUT`;
-      R.textContent = `YOUR KILLS: ${match.ffaKills[myId] || 0}`;
+      const J = match.jugg, w = match.cfg.winsNeeded;
+      L.textContent = `HUNTERS ${J ? J.wins.hunters : 0}/${w}`;
+      C.textContent = J && J.phase === 'fight' ? `🛡️ ROUND ${J.round} · ${formatMatchTime(matchTimeUnlimited() ? Infinity : J.left)}` : `🛡️ JUGGERNAUT`;
+      R.textContent = `${J ? J.wins.jugg : 0}/${w} JUGGERNAUT`;
     } else if (sub === 'infect') {
       const zCount = Object.keys(match.infectedIds).length;
       L.textContent = `🧟 ${zCount} INFECTED`;
@@ -63285,28 +63287,8 @@ function handleArcadeKill(targetId, killerId) {
     updateMatchHUD();
     return;
   }
-  // Juggernaut: if the juggernaut dies, killer becomes the new juggernaut
-  if (sub === 'jugg') {
-    if (targetId === match.juggernautId) {
-      // Transfer juggernaut to killer
-      const oldJugg = match.juggernautId;
-      match.juggernautId = killerId;
-      if (killerId === myId) {
-        const me = players[myId]; if (me) { me.hp = 1000; updateHealthHUD(1000); }
-        forcePlayerWeapon('gau19');
-        showAnnouncement('🛡️ YOU ARE JUGGERNAUT', '1000 HP · GAU-19 · kill them all', '#ff2222', 2500);
-      } else {
-        const bot = gameBots.find(b => b.id === killerId);
-        if (bot) { bot.hp = 1000; bot.maxHp = 1000; bot.weaponId = 'gau19'; }
-        showAnnouncement('🛡️ NEW JUGGERNAUT', `${players[killerId]?.name || 'A bot'} took the crown`, '#ff2222', 2200);
-      }
-    }
-    match.ffaKills[killerId] = (match.ffaKills[killerId] || 0) + 1;
-    if (targetId === myId) scheduleArcadeRespawn();
-    else scheduleBotArcadeRespawn(targetId);
-    updateMatchHUD();
-    return;
-  }
+  // Juggernaut: a death inside a round settles the round, or does not; nobody respawns until the next one
+  if (sub === 'jugg') { juggOnKill(targetId, killerId); return; }
   // Infection: if a zombie kills someone, that someone becomes a zombie
   if (sub === 'infect') {
     const killerIsZombie = match.infectedIds[killerId];
@@ -64414,6 +64396,7 @@ function updateMatchTimer(dt) {
     rouletteShuffle();
   }
   if (match.arcade === 'zombie' && match.roundActive) updateZombieMode(dt);
+  if (match.jugg) { updateJugg(dt); return; }
   if (matchTimeUnlimited()) { updateMatchHUD(); return; }
   // ── Elim mode: per-round 60-second timer ─────────────────────────────────
   if (match.type === 'elim') {
@@ -64563,6 +64546,7 @@ function endMatch(winner, reason) {
   if (match.type === 'wave_dash') stopWaveDash();
   if (match.dice) diceCleanup();
   if (match.arcade === 'zombie') zombieCleanup();
+  if (match.jugg) juggCleanup();
   rngRestore(match.roulette);
   const isWin  = winner === 'ally';
   releasePointer(); // PLAY AGAIN / CHANGE MODE / BACK TO LOBBY need the cursor
@@ -64586,6 +64570,8 @@ function endMatch(winner, reason) {
   } else if (match.type === 'dday') {
     const dd = ddayState;
     scoreText = dd ? `Waves survived: ${dd.wavesSent}/3  ·  Enemies killed: ${dd.totalKills || 0}` : '';
+  } else if (match.jugg) {
+    scoreText = `Rounds  Hunters ${match.jugg.wins.hunters} – ${match.jugg.wins.jugg} Juggernaut`;
   } else if (match.arcade === 'zombie' && match.zombie) {
     scoreText = `Waves survived: ${Math.max(0, match.zombie.wave - 1)}  ·  Zombies killed: ${match.zombie.kills}  ·  Best: wave ${match.zombie.best}`;
   } else if (match.type === 'wave_dash') {
@@ -65155,6 +65141,172 @@ function spawnGameBots() {
   initMatch();
   const spawnedMatch=match;
   setTimeout(() => {if(match===spawnedMatch)startMatchRound();}, 400 + (allies + enemies) * 40);
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// 🛡️ JUGGERNAUT. Eleven fighters, and each round ONE of them is the juggernaut: a bot, or you. He is twice the size, has
+// 15,000 health and his own ordinary weapons; the other ten are the hunters, 300 health each, no respawns inside a round.
+// The hunters win the round when he falls; he wins it when the last hunter does, or when the clock runs out. First side to
+// four rounds takes the match. Everybody's turn comes round (the juggernaut is dealt from a shuffled bag of all eleven), and
+// his health is a boss bar across the top of everyone's screen.
+// You are always the 'ally' team in the code; the hunters are your team when the juggernaut is a bot, and the enemy when it
+// is you. The match type stays 'arcade' so the lobby, the server and the rest of the arcade plumbing are untouched.
+// ══════════════════════════════════════════════════════════════════════════
+let _juggUi = null;
+function juggBossUi() {
+  if (_juggUi) return _juggUi;
+  const root = document.createElement('div');
+  root.id = 'jugg-boss';
+  root.style.cssText = 'position:fixed;left:50%;top:58px;transform:translateX(-50%);width:min(560px,86vw);z-index:60;pointer-events:none;display:none;font-family:"Courier New",monospace;text-align:center';
+  const name = document.createElement('div');
+  name.style.cssText = 'font:700 13px "Courier New",monospace;letter-spacing:4px;color:#ff6a5a;text-shadow:0 0 10px rgba(255,40,20,.7),0 1px 2px #000;margin-bottom:3px';
+  const track = document.createElement('div');
+  track.style.cssText = 'position:relative;height:16px;background:rgba(10,4,4,.82);border:2px solid #7a1f18;border-radius:3px;box-shadow:0 0 14px rgba(255,40,20,.35),inset 0 0 8px #000;overflow:hidden';
+  const fill = document.createElement('div');
+  fill.style.cssText = 'position:absolute;left:0;top:0;bottom:0;width:100%;background:linear-gradient(#ff5a46,#a81a12);transition:width .12s linear';
+  const ghost = document.createElement('div');
+  ghost.style.cssText = 'position:absolute;left:0;top:0;bottom:0;width:100%;background:rgba(255,220,200,.55);transition:width .9s ease-out .25s';
+  const num = document.createElement('div');
+  num.style.cssText = 'position:absolute;inset:0;font:700 11px/16px "Courier New",monospace;color:#fff;letter-spacing:1px;text-shadow:0 1px 2px #000';
+  track.appendChild(ghost); track.appendChild(fill); track.appendChild(num);
+  root.appendChild(name); root.appendChild(track);
+  document.body.appendChild(root);
+  return (_juggUi = { root, name, fill, ghost, num });
+}
+function juggHpOf(id) {
+  if (id === myId) return isDead ? 0 : (players[myId] ? players[myId].hp : 0);
+  const b = gameBots.find(x => x.id === id);
+  return b && !b.dead ? Math.max(0, b.hp) : 0;
+}
+function updateJuggBoss() {
+  const J = match && match.jugg;
+  const U = juggBossUi();
+  if (!J || !J.id || match.over) { U.root.style.display = 'none'; return; }
+  const max = match.cfg.juggHp, hp = Math.min(max, juggHpOf(J.id));
+  U.root.style.display = 'block';
+  const nm = J.id === myId ? 'YOU' : ((players[J.id] && players[J.id].name) || 'JUGGERNAUT');
+  const label = `🛡️ JUGGERNAUT · ${nm}`;
+  if (U.name.textContent !== label) U.name.textContent = label;
+  const pct = (hp / max * 100).toFixed(2) + '%';
+  U.fill.style.width = pct; U.ghost.style.width = pct;
+  U.num.textContent = Math.ceil(hp).toLocaleString('en-US') + ' / ' + max.toLocaleString('en-US');
+  U.num.style.textAlign = 'center';
+}
+function juggDressBot(bot, isJugg) {            // his plate and his size, or an ordinary hunter's body: the mesh is rebuilt each round
+  const p = players[bot.id]; if (!p) return;
+  p.skin = isJugg ? 'jugger' : 'default';
+  const old = remoteMeshes[bot.id];
+  if (old) { scene.remove(old); try { disposeBody(old); } catch (e) {} }
+  spawnRemotePlayer({ ...p, team: bot.team, x: bot.x, z: bot.z });
+  const mesh = remoteMeshes[bot.id];
+  if (!mesh) return;
+  armRemoteMesh(mesh, bot.weaponId);
+  const s = isJugg ? match.cfg.juggScale : 1;
+  mesh.scale.setScalar(s); mesh._bodyScale = s;
+}
+function juggAliveHunters() {
+  const J = match.jugg; let n = (J.id !== myId && !isDead) ? 1 : 0;
+  for (const b of gameBots) if (b.id !== J.id && !b.dead) n++;
+  return n;
+}
+function juggAlive() { const id = match.jugg.id; if (id === myId) return !isDead; const b = gameBots.find(x => x.id === id); return !!b && !b.dead; }
+function juggPick() {
+  const J = match.jugg;
+  if (!J.bag.length) {
+    const ids = [myId, ...gameBots.map(b => b.id)];
+    for (let i = ids.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [ids[i], ids[j]] = [ids[j], ids[i]]; }
+    if (ids.length > 1 && ids[ids.length - 1] === J.id) { [ids[0], ids[ids.length - 1]] = [ids[ids.length - 1], ids[0]]; }   // never the same one twice running (the bag is dealt from its end)
+    J.bag = ids;
+  }
+  return J.bag.pop();
+}
+function juggStart() {                          // the first round: the countdown has run
+  const J = match.jugg; if (!J) return;
+  juggStartRound();
+}
+function juggStartRound() {
+  const J = match.jugg, cfg = match.cfg; if (!J || match.over) return;
+  J.round++; J.id = juggPick(); J.phase = 'fight';
+  const human = J.id === myId;
+  clearPlayerStatusEffects();
+  for (const b of gameBots) clearBotStatusEffects(b);
+  const hunterTeam = human ? 'enemy' : 'ally', juggTeam = human ? 'ally' : 'enemy';
+  const hunters = gameBots.filter(b => b.id !== J.id);
+  let hi = 0;
+  const t0 = Date.now();
+  for (const bot of gameBots) {
+    const isJ = bot.id === J.id, hp = isJ ? cfg.juggHp : 300;
+    bot.team = isJ ? juggTeam : hunterTeam;
+    const p = players[bot.id]; if (p) p.team = bot.team;
+    bot.weaponId = bot.spawnWeaponId || bot.weaponId; bot.activeSlot = 'primary';
+    const w = WEAPONS.find(ww => ww.id === bot.weaponId) || WEAPONS[0];
+    bot.dead = false; bot.hp = hp; bot.maxHp = hp; bot.prevHp = hp; bot.stuckTimer = 0; bot.state = 'chase';
+    bot.botAmmo = w.mag || 30; bot.botMag = w.mag || 30; bot.botReserve = (w.reserve === 0 ? 99999 : w.reserve) || 90; bot.reloadUntil = 0;
+    bot.lastShot = t0 + Math.random() * 1500; bot.currentTargetId = null;
+    const sp = botSideSpawn(isJ ? 0 : hi++, isJ ? 1 : hunters.length, bot.team);
+    bot.x = sp.x; bot.z = sp.z; bot.wanderAngle = Math.random() * Math.PI * 2;
+    if (p) { p.hp = hp; p.maxHp = hp; p.dead = false; p.weaponId = bot.weaponId; }
+    juggDressBot(bot, isJ);
+    syncBotMesh(bot, { visible: true, resetPose: true });
+    socket.emit('forceRespawnBot', { id: bot.id, x: bot.x, z: bot.z, hp, weaponId: bot.weaponId });
+  }
+  setPlayerBodyScale(human ? cfg.juggScale : 1);
+  resetPlayerForRound();                         // health (15,000 if it is you), place, loadout, the server told
+  socket.emit('setBossHp', { hp: human ? cfg.juggHp : 0 });
+  camera.position.y = PLAYER_EYE_HEIGHT; window._crouchEye = PLAYER_EYE_HEIGHT; playerYVel = 0; slamState = null;
+  match.roundActive = true; match.active = true;
+  J.left = cfg.roundTimeLimit;
+  grantSpawnShield(3000);
+  requestPointerLockSafe();
+  const who = human ? 'YOU' : ((players[J.id] && players[J.id].name) || 'A bot');
+  showAnnouncement(`ROUND ${J.round}`, `First to ${cfg.winsNeeded} round wins`, '#ffffff', 2400);
+  showAnnouncement('🛡️ JUGGERNAUT', human ? `YOU are the juggernaut · ${cfg.juggHp.toLocaleString('en-US')} HP, twice the size · ten hunters are coming` : `${who} is the juggernaut · bring him down`, '#ff2222', 3200);
+  updateMatchHUD(); updateJuggBoss();
+}
+function juggCheckRound() {
+  const J = match && match.jugg; if (!J || J.phase !== 'fight' || !match.roundActive || match.over) return;
+  if (!juggAlive()) juggEndRound('hunters', 'The juggernaut is down');
+  else if (juggAliveHunters() === 0) juggEndRound('jugg', 'No hunters left');
+}
+function juggEndRound(winner, why) {
+  const J = match.jugg, cfg = match.cfg;
+  if (J.phase !== 'fight') return;
+  J.phase = 'between'; match.roundActive = false; J.wins[winner]++;
+  const humanIsJ = J.id === myId, humanWon = (winner === 'jugg') === humanIsJ;
+  const score = `HUNTERS ${J.wins.hunters} – ${J.wins.jugg} JUGGERNAUT`;
+  updateMatchHUD();
+  if (J.wins[winner] >= cfg.winsNeeded) {
+    showAnnouncement(humanWon ? 'VICTORY' : 'DEFEAT', `${why} · ${score}`, humanWon ? '#4cff4c' : '#ff5555', 3000);
+    const m = match;
+    setTimeout(() => { if (match === m && !m.over) endMatch(humanWon ? 'ally' : 'enemy', `${winner === 'hunters' ? 'THE HUNTERS' : 'THE JUGGERNAUT'} TAKE IT ${J.wins.hunters} – ${J.wins.jugg}`); }, 3100);
+    return;
+  }
+  showAnnouncement(humanWon ? 'ROUND WIN!' : 'ROUND LOST', `${why} · ${score}`, humanWon ? '#4cff4c' : '#ff5555', 2500);
+  const m = match, ep = matchEpoch;
+  setTimeout(() => { if (match === m && matchEpoch === ep && !m.over) juggNextRound(); }, 4200);
+}
+function juggNextRound() {
+  resetMapStructures(activeMapName);
+  socket.emit('mapStructureSync', { mapName: activeMapName, round: match.jugg.round + 1 });
+  runCountdown(3, () => { if (match && match.jugg && !match.over) juggStartRound(); });
+}
+function juggOnKill(targetId, killerId) {
+  if (killerId && killerId !== targetId) match.ffaKills[killerId] = (match.ffaKills[killerId] || 0) + 1;
+  updateMatchHUD(); juggCheckRound();
+}
+function updateJugg(dt) {
+  const J = match.jugg; if (!J) return;
+  updateJuggBoss();
+  if (J.phase !== 'fight' || !match.roundActive) return;
+  if (!matchTimeUnlimited()) { J.left -= dt; if (J.left <= 0) { J.left = 0; juggEndRound('jugg', 'Time ran out'); return; } }
+  juggCheckRound();
+  const sec = Math.ceil(J.left);
+  if (sec !== J._hudSec) { J._hudSec = sec; updateMatchHUD(); }
+}
+function juggCleanup() {
+  setPlayerBodyScale(1);
+  if (_juggUi) _juggUi.root.style.display = 'none';
+  try { socket.emit('setBossHp', { hp: 0 }); } catch (e) {}
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -65892,6 +66044,28 @@ function getBotTarget(bot) {
   const oppositeTeam = bot.team === 'enemy' ? 'ally' : 'enemy';
   // ── FFA-style modes: bots treat the player as just another entity (no gang-up) ──
   // Picks the nearest valid target by distance — could be the player or another bot.
+  if (match && match.jugg && match.jugg.id) {
+    const J = match.jugg;
+    if (bot.id === J.id) {                                   // the juggernaut: the nearest hunter, you among them
+      let best = null, bestDist = Infinity, bestIsPlayer = false;
+      if (!isDead) { bestDist = Math.hypot(camera.position.x - bot.x, camera.position.z - bot.z); bestIsPlayer = true; }
+      for (const ob of gameBots) {
+        if (ob.dead || ob.id === bot.id) continue;
+        const d = Math.hypot(ob.x - bot.x, ob.z - bot.z);
+        if (d < bestDist) { bestDist = d; bestIsPlayer = false; best = ob; }
+      }
+      if (bestIsPlayer) { bot.currentTargetId = myId; return { x: camera.position.x, z: camera.position.z, isPlayer: true }; }
+      if (best) { bot.currentTargetId = best.id; return { x: best.x, z: best.z, isPlayer: false, botRef: best }; }
+      bot.currentTargetId = null; return null;
+    }
+    if (J.id === myId) {                                     // a hunter: him, and nobody else
+      if (isDead) { bot.currentTargetId = null; return null; }
+      bot.currentTargetId = myId; return { x: camera.position.x, z: camera.position.z, isPlayer: true };
+    }
+    const jb = gameBots.find(b => b.id === J.id);
+    if (jb && !jb.dead) { bot.currentTargetId = jb.id; return { x: jb.x, z: jb.z, isPlayer: false, botRef: jb }; }
+    bot.currentTargetId = null; return null;
+  }
   const isFFAMode = match && (match.type === 'ffa' || match.type === 'arcade' || match.type === 'br');
   if (isFFAMode) {
     let best = null, bestDist = Infinity, bestIsPlayer = false;
@@ -69930,6 +70104,7 @@ function teardownMatchWorld() {
   inLobby = false;
   if (match && match.dice) diceCleanup();
   if (match && match.arcade === 'zombie') zombieCleanup();
+  if (match && match.jugg) juggCleanup();
   if (match && match.roulette) rngRestore(match.roulette);
   match = null;
   pvpMatch = null; // else the next non-lobby mode spawns the previous lobby's bot counts

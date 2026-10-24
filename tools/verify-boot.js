@@ -2875,6 +2875,193 @@ if (ok && process.argv.includes('--uppercut')) {
   if (out.length) { ok = false; console.log(out.join('\n')); }
 }
 
+if (ok && process.argv.includes('--jugg')) {
+  // Juggernaut: eleven fighters, each round ONE is the juggernaut (a bot or you): twice the size, 15,000 health; the other ten
+  // hunt him, 300 each, no respawn inside a round. Hunters win when he falls, he wins when the last hunter does or the clock
+  // runs out; first side to four rounds takes the match. His health is a boss bar for everyone; he is dealt from a shuffled bag.
+  const srv = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  const more = [];
+  if (!/'juggernaut':\s*\{ ally: 1, enemy: 10 \}/.test(srv)) more.push('the server should fill a Juggernaut match to ten hunters');
+  if (!/socket\.on\('setBossHp'/.test(srv) || !/p\.matchMode !== 'juggernaut'/.test(srv)) more.push('the server should take the juggernaut\'s health only inside a Juggernaut match');
+  const out = vm.runInThisContext(`(() => {
+    const issues = [];
+    const saved = { cfg: selectedModeConfig, match, started: gameStarted, dead: isDead, sound: playSoundEvent, anim: showAnnouncement, fx: spawnAbilityAOEFX, audio: getAudioCtx,
+                    bots: gameBots.slice(), me: players[myId], pos: camera.position.clone(), walls: wallColliders.slice(), map: activeMapName, end: endMatch, cd: runCountdown,
+                    emit: socket.emit, rm: resetMapStructures, st: globalThis.setTimeout, hit: emitHit, lobby: inLobby, doc: document.getElementById, id: myId };
+    playSoundEvent = () => {}; showAnnouncement = () => {}; spawnAbilityAOEFX = () => {}; getAudioCtx = () => null; resetMapStructures = () => {}; runCountdown = (s, cb) => cb();
+    const sent = []; socket.emit = (...a) => { sent.push(a); };
+    let ended = null; endMatch = (w, why) => { ended = { w, why }; if (match) match.over = true; };
+    const timers = []; globalThis.setTimeout = (f) => { timers.push(f); return timers.length; };
+    const flush = () => { let n = 0; while (timers.length && n++ < 50) timers.shift()(); };
+    try {
+      const cfg = GAME_MODE_CONFIGS.juggernaut;
+      if (!cfg || cfg.subtype !== 'jugg' || cfg.enemies !== 10 || cfg.winsNeeded !== 4 || cfg.juggHp !== 15000 || cfg.juggScale !== 2) { issues.push('the Juggernaut mode is not ten hunters, first to 4, 15,000 HP, twice the size: ' + JSON.stringify(cfg)); return issues; }
+      myId = 'me_jugg_test';                       // (the harness has none)
+      gameStarted = true; isDead = false; inLobby = false; gameBots.length = 0; activateMap('blank'); wallColliders.length = 0; camera.position.set(0, 1.65, 30);
+      players[myId] = { id: myId, hp: 300, team: 'ally', dead: false };
+      const mk = i => {
+        const id = 'jb' + i;
+        players[id] = { id, name: 'Hunter' + i, isBot: true, team: 'enemy', weaponId: 'ak20', ownerId: myId, skin: 'default', x: 0, y: 1, z: -30, hp: 300, maxHp: 300, dead: false };
+        spawnRemotePlayer(players[id]); armRemoteMesh(remoteMeshes[id], 'ak20');
+        const b = { id, team: 'enemy', weaponId: 'ak20', spawnWeaponId: 'ak20', x: 0, z: -30, rotY: 0, hp: 300, maxHp: 300, prevHp: 300, dead: false, state: 'chase', y: 0, yVel: 0, frostSlow: 100,
+                    kbVX: 0, kbVZ: 0, difficulty: selectedDifficulty, tune: botTuning(selectedDifficulty), aimSkill: 1, activeSlot: 'primary', primaryId: 'ak20', botAmmo: 30, botMag: 30, botReserve: 90 };
+        gameBots.push(b); return b;
+      };
+      for (let i = 0; i < cfg.enemies; i++) mk(i);
+      selectedModeConfig = cfg;
+      initMatch(); match.roundActive = true; match.active = true;
+      const J = match.jugg;
+      if (!J || J.wins.hunters !== 0 || J.wins.jugg !== 0) { issues.push('no juggernaut state on the match'); return issues; }
+      // the bag: every one of the eleven before anybody twice
+      {
+        const seen = new Set(), ids = [myId, ...gameBots.map(b => b.id)]; let last = null, twice = 0;
+        for (let i = 0; i < ids.length * 3; i++) { const id = juggPick(); if (i < ids.length) seen.add(id); if (id === last) twice++; last = id; J.id = id; }
+        if (seen.size !== ids.length) issues.push('the first ' + ids.length + ' juggernauts should be all eleven fighters, got ' + seen.size);
+        if (twice) issues.push('nobody should be the juggernaut twice in a row');
+        J.bag = []; J.id = null;
+      }
+      const hunterOf = () => gameBots.filter(b => b.id !== J.id);
+      const startAs = id => { timers.length = 0; J.bag = [id]; J.round = 0; J.wins.hunters = J.wins.jugg = 0; sent.length = 0; match.over = false; ended = null; isDead = false; juggStartRound(); };
+      // ── a bot is the juggernaut
+      startAs('jb3');
+      {
+        const jb = gameBots.find(b => b.id === 'jb3'), m = remoteMeshes.jb3;
+        if (J.id !== 'jb3' || J.phase !== 'fight' || !match.roundActive) issues.push('the round did not start with the chosen bot as the juggernaut');
+        if (jb.hp !== 15000 || jb.maxHp !== 15000 || players.jb3.hp !== 15000) issues.push('the juggernaut bot should have 15,000 HP: ' + jb.hp);
+        if (!m || m._bodyScale !== 2 || Math.abs(m.scale.y - 2) > 1e-6 || Math.abs(m.scale.x - 2) > 1e-6) issues.push('the juggernaut bot should be twice the size');
+        if (players.jb3.skin !== 'jugger') issues.push('the juggernaut should wear the plate');
+        const hs = hunterOf();
+        if (hs.length !== 10 - 1 || hs.some(b => b.hp !== 300 || b.team !== 'ally' || b.dead || (remoteMeshes[b.id]._bodyScale || 1) !== 1)) issues.push('the other nine bots should be 300-HP hunters on your side');
+        if (jb.team !== 'enemy') issues.push('the juggernaut bot is the enemy when you are a hunter');
+        if (players[myId].hp !== 300 || PLAYER_EYE_HEIGHT !== 1.65 || playerBodyScale !== 1) issues.push('you are an ordinary hunter this round: hp ' + players[myId].hp + ' eye ' + PLAYER_EYE_HEIGHT);
+        if (!sent.some(a => a[0] === 'setBossHp' && a[1].hp === 0)) issues.push('the server should be told you are not the juggernaut');
+        const fr = sent.filter(a => a[0] === 'forceRespawnBot' && a[1].id === 'jb3')[0];
+        if (!fr || fr[1].hp !== 15000) issues.push('the server should be told the juggernaut bot has 15,000');
+        // who goes after whom
+        for (const h of hs) { const t = getBotTarget(h); if (!t || !t.botRef || t.botRef.id !== 'jb3') issues.push('a hunter should go after the juggernaut and nobody else'); }
+        { const t = getBotTarget(jb); if (!t || !(t.isPlayer || (t.botRef && t.botRef.id !== 'jb3'))) issues.push('the juggernaut should go after a hunter'); }
+        // no friendly fire among the hunters; the juggernaut is fair game, and he can hurt anyone
+        if (!friendlyFireBlocked(hs[0].id, myId)) issues.push('you should not be able to shoot a fellow hunter');
+        if (friendlyFireBlocked('jb3', myId)) issues.push('you should be able to shoot the juggernaut');
+        if (friendlyFireBlocked(myId, 'jb3')) issues.push('the juggernaut should be able to hurt you');
+        if (!friendlyFireBlocked(myId, hs[0].id)) issues.push('a hunter should not hurt you');
+        // his bar: a boss's health across the screen
+        updateJuggBoss();
+        const U = juggBossUi();
+        if (U.root.style.display !== 'block' || !/15,000 [/] 15,000/.test(U.num.textContent)) issues.push('the boss bar should show 15,000 / 15,000, shows: ' + U.num.textContent);
+        jb.hp = 7500; updateJuggBoss();
+        if (!/7,500 [/] 15,000/.test(U.num.textContent) || Math.abs(parseFloat(U.fill.style.width) - 50) > 0.1) issues.push('the boss bar should follow his health: ' + U.num.textContent + ' ' + U.fill.style.width);
+        jb.hp = 15000;
+        // the hit spheres are his size: a shot at 3 m above his feet hits him, and does not hit an ordinary body
+        {
+          const hits = [], keepHit = emitHit; emitHit = (pid) => { hits.push(pid); };
+          try {
+            for (const [id, y] of [['jb3', 3.0], ['jb1', 3.0]]) {
+              const b = gameBots.find(x => x.id === id); b.x = 0; b.z = 0; syncBotMesh(b, { visible: true });
+              for (const o of gameBots) if (o.id !== id) { o.x = 40; o.z = 40; syncBotMesh(o, { visible: true }); }
+              spawnLocalBullet(new THREE.Vector3(0, y, -2), new THREE.Vector3(0, 0, 1), 'jt_' + id, true, 200, 0xffffff, 0.01, 'ak20'); updateBullets(0.02);
+              localBullets.length = 0;
+            }
+          } finally { emitHit = keepHit; }
+          if (!hits.includes('jb3')) issues.push('a shot at his head, three metres up, should hit the juggernaut');
+          if (hits.includes('jb1')) issues.push('three metres up is over the head of an ordinary hunter');
+        }
+        // he falls: the hunters take the round
+        jb.dead = true; jb.hp = 0; players.jb3.dead = true;
+        juggOnKill('jb3', myId);
+        if (J.phase !== 'between' || J.wins.hunters !== 1 || J.wins.jugg !== 0) issues.push('the hunters should win the round when he falls: ' + JSON.stringify([J.phase, J.wins]));
+        if (match.roundActive) issues.push('the round should be over');
+        // the next round: somebody else, everyone back with full health
+        J.bag = ['jb5']; flush();
+        if (J.round !== 2 || J.id !== 'jb5' || J.phase !== 'fight') issues.push('the next round should start with a new juggernaut: ' + JSON.stringify([J.round, J.id, J.phase]));
+        if (gameBots.find(b => b.id === 'jb3').dead || gameBots.find(b => b.id === 'jb3').hp !== 300 || (remoteMeshes.jb3._bodyScale || 1) !== 1 || remoteMeshes.jb3.scale.y !== 1 || players.jb3.skin !== 'default') issues.push('the last juggernaut should be an ordinary 300-HP hunter again');
+        if (gameBots.find(b => b.id === 'jb5').hp !== 15000 || remoteMeshes.jb5._bodyScale !== 2) issues.push('the new juggernaut should have the 15,000 and the size');
+      }
+      // ── you are the juggernaut
+      startAs(myId);
+      {
+        if (J.id !== myId) issues.push('you should be the juggernaut when dealt');
+        if (players[myId].hp !== 15000) issues.push('you should have 15,000 HP, have ' + players[myId].hp);
+        if (matchMaxHp() !== 15000) issues.push('your health bar should be a share of 15,000');
+        if (playerBodyScale !== 2 || Math.abs(PLAYER_EYE_HEIGHT - 3.3) > 1e-9 || !(PLAYER_RADIUS > 0.38 && PLAYER_RADIUS < 0.76)) issues.push('you should be twice the size: eye ' + PLAYER_EYE_HEIGHT + ' radius ' + PLAYER_RADIUS);
+        if (Math.abs(camera.position.y - 3.3) > 0.01) issues.push('your eye should stand at 3.3 m, is at ' + camera.position.y);
+        if (gameBots.some(b => b.team !== 'enemy' || b.hp !== 300 || b.dead)) issues.push('all ten bots should be 300-HP hunters against you');
+        if (!sent.some(a => a[0] === 'setBossHp' && a[1].hp === 15000)) issues.push('the server should be told you have the boss health');
+        for (const b of gameBots) { const t = getBotTarget(b); if (!t || !t.isPlayer) issues.push('every hunter should go for you'); }
+        if (friendlyFireBlocked(gameBots[0].id, myId) || friendlyFireBlocked(myId, gameBots[0].id)) issues.push('you and the hunters can hurt each other');
+        if (!friendlyFireBlocked(gameBots[1].id, gameBots[0].id)) issues.push('the hunters should not hurt each other');
+        updateJuggBoss(); if (!/15,000 [/] 15,000/.test(juggBossUi().num.textContent)) issues.push('the bar should show you: ' + juggBossUi().num.textContent);
+        // the bots' shots land on a body twice the size: a shot aimed over an ordinary head can still hit
+        { let hit = 0, N = 400; const r0 = Math.random; try { for (let i = 0; i < N; i++) { if (botShotHitsPlayer({ x: 0, z: 0, aimSkill: 0.4 }, 60).hit) hit++; } } finally { Math.random = r0; }
+          playerBodyScale = 1; PLAYER_EYE_HEIGHT = 1.65; PLAYER_RADIUS = 0.38; camera.position.y = 1.65; window._crouchEye = 1.65;
+          let hit1 = 0; for (let i = 0; i < N; i++) { if (botShotHitsPlayer({ x: 0, z: 0, aimSkill: 0.4 }, 60).hit) hit1++; }
+          playerBodyScale = 2; PLAYER_EYE_HEIGHT = 3.3; PLAYER_RADIUS = 0.38 * 1.6; camera.position.y = 3.3; window._crouchEye = 3.3;
+          if (!(hit > hit1 * 1.15)) issues.push('a body twice the size should be hit more often: ' + hit + ' vs ' + hit1); }
+        // standing, crouching and jumping keep the big eye
+        { window._crouchEye = 3.3; const t0 = Math.min(playerBodyScale * 1.65, playerHeadroomEye()); if (Math.abs(t0 - 3.3) > 1e-6) issues.push('the standing eye of the big body is ' + t0); }
+        // if you fall, the hunters take it
+        isDead = true; players[myId].hp = 0; players[myId].dead = true;
+        juggOnKill(myId, 'jb2');
+        if (J.phase !== 'between' || J.wins.hunters !== 1) issues.push('the hunters should take the round when the juggernaut (you) falls');
+        isDead = false; players[myId].dead = false;
+      }
+      // ── you are a hunter: the last hunter falls, or the clock runs out
+      startAs('jb1');
+      {
+        if (playerBodyScale !== 1 || PLAYER_EYE_HEIGHT !== 1.65 || Math.abs(camera.position.y - 1.65) > 0.01) issues.push('a hunter is an ordinary size: ' + PLAYER_EYE_HEIGHT);
+        if (matchMaxHp() !== 300) issues.push('a hunter has 300');
+        for (const b of hunterOf()) { b.dead = true; b.hp = 0; players[b.id].dead = true; }
+        isDead = true; players[myId].hp = 0;
+        juggOnKill(myId, 'jb1');
+        if (J.phase !== 'between' || J.wins.jugg !== 1) issues.push('the juggernaut should win when the last hunter falls: ' + JSON.stringify([J.phase, J.wins]));
+        isDead = false; players[myId].dead = false;
+        J.bag = ['jb4']; flush();
+        if (J.phase !== 'fight' || J.id !== 'jb4') issues.push('the next round should start after the last: ' + JSON.stringify([J.phase, J.id]));
+        if (hunterOf().some(b => b.dead || b.hp !== 300)) issues.push('every hunter should be back for the next round');
+        // time out: he wins
+        J.left = 0.05; updateJugg(0.1);
+        if (J.phase !== 'between' || J.wins.jugg !== 2) issues.push('when the clock runs out the juggernaut wins the round: ' + JSON.stringify([J.phase, J.wins]));
+        // the dead hunter waits, no respawn
+        J.bag = ['jb4']; flush();
+      }
+      // ── first to four ends it
+      startAs('jb2');
+      {
+        const jb = gameBots.find(b => b.id === 'jb2');
+        for (let k = 0; k < 3; k++) {
+          jb.dead = true; jb.hp = 0; players.jb2.dead = true; juggOnKill('jb2', myId);
+          if (ended) issues.push('the match should not end at ' + J.wins.hunters + ' round wins');
+          J.bag = ['jb2']; flush();
+        }
+        jb.dead = true; jb.hp = 0; players.jb2.dead = true; juggOnKill('jb2', myId);
+        flush();
+        if (J.wins.hunters !== 4) issues.push('four round wins expected, have ' + J.wins.hunters);
+        if (!ended || ended.w !== 'ally' || !/4 – 0/.test(ended.why || '')) issues.push('the hunters (your side) reaching four should end the match with your win: ' + JSON.stringify(ended));
+      }
+      // the scores shown
+      { match.over = false; const cache = {}; document.getElementById = id => cache[id] || (cache[id] = saved.doc(id));
+        try { updateMatchHUD(); const L = cache['match-left'].textContent, R = cache['match-right'].textContent;
+          if (!/HUNTERS 4[/]4/.test(L) || !/0[/]4 JUGGERNAUT/.test(R)) issues.push('the strip should show the round score, shows ' + L + ' | ' + R); } finally { document.getElementById = saved.doc; } }
+      // cleaning up gives you your own size back
+      startAs(myId); juggCleanup();
+      if (playerBodyScale !== 1 || PLAYER_EYE_HEIGHT !== 1.65 || juggBossUi().root.style.display !== 'none') issues.push('the end of the match should give you your size back and hide the bar');
+    } finally {
+      globalThis.setTimeout = saved.st; socket.emit = saved.emit; emitHit = saved.hit; inLobby = saved.lobby; document.getElementById = saved.doc; delete players[myId]; myId = saved.id;
+      playSoundEvent = saved.sound; showAnnouncement = saved.anim; spawnAbilityAOEFX = saved.fx; getAudioCtx = saved.audio; endMatch = saved.end; runCountdown = saved.cd; resetMapStructures = saved.rm;
+      setPlayerBodyScale(1);
+      for (const b of gameBots.slice()) { const m = remoteMeshes[b.id]; if (m) { scene.remove(m); delete remoteMeshes[b.id]; } delete players[b.id]; }
+      gameBots.length = 0; for (const b of saved.bots) gameBots.push(b);
+      match = saved.match; selectedModeConfig = saved.cfg; gameStarted = saved.started; isDead = saved.dead; players[myId] = saved.me; camera.position.copy(saved.pos);
+      wallColliders.length = 0; for (const w of saved.walls) wallColliders.push(w);
+      try { if (_juggUi) _juggUi.root.style.display = 'none'; } catch (e) {}
+    }
+    return issues;
+  })()`);
+  console.log('juggernaut checks: one juggernaut a round (a bot or you; dealt from a shuffled bag): twice the size with matching hit spheres, 15,000 HP, a plate and a boss bar; ten hunters at 300 who all go for him and cannot hurt each other; he wins by clearing them or the clock, they win by felling him; first side to four rounds takes it; everything is put back');
+  const all = [...more, ...out];
+  if (all.length) { ok = false; console.log(all.join('\n')); }
+}
+
 if (ok && process.argv.includes('--zombie')) {
   // Zombie Survival: you begin with fists only, waves come endlessly (bigger, tougher and quicker each time, never more than
   // the cap at once), a zombie walks to you and claws you, the dead drop ammo and weapons (rarely), a weapon goes in your

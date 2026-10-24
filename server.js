@@ -1914,7 +1914,7 @@ const MODE_TEAM_SIZES = {
   // 🎮 Arcade
   'gungame':     { ally: 1, enemy: 7 },
   'oitc':        { ally: 1, enemy: 5 },
-  'juggernaut':  { ally: 1, enemy: 5 },
+  'juggernaut':  { ally: 1, enemy: 10 },   // one of the eleven is the juggernaut each round (a bot or you), the other ten hunt him
   'infection':   { ally: 1, enemy: 5 },
   'sniper_only': { ally: 1, enemy: 5 },
   'speedrun':    { ally: 1, enemy: 20 },
@@ -2216,6 +2216,12 @@ function nextSpawn() {
 const M4_TOWER_MODES = new Set(['m4_tower', 'm4_tower_big', 'm4_tower_super']);
 function maxHpForMode(mode) {
   return M4_TOWER_MODES.has(mode) ? 100 : PLAYER_MAX_HP;
+}
+// 🛡️ The juggernaut round: the one chosen (a bot, or a real player) carries a boss's health. The client says when that is
+// you; it only counts in the Juggernaut mode, and only as exactly this much.
+const JUGG_HP = 15000;
+function maxHpFor(p) {
+  return (p && p.matchMode === 'juggernaut' && p.bossMax) ? p.bossMax : maxHpForMode(p && p.matchMode);
 }
 
 // 🎨 A hand-painted skin, as the client encodes it: { p: [palette of 'rrggbb'], d: base64 of 2816 palette indexes
@@ -2932,7 +2938,16 @@ io.on('connection', (socket) => {
     const p = players[socket.id];
     if (!p || p.dead) return;
     const amount = Math.max(0, Math.min(150, Number(data.amount) || 0));
-    p.hp = Math.min(maxHpForMode(p.matchMode), p.hp + amount);
+    p.hp = Math.min(maxHpFor(p), p.hp + amount);
+    emitToMatch(p.matchId, 'playerHit', { targetId: p.id, hp: p.hp, environmentSeq: p.environmentSeq || 0, healthEvent: 'heal', bulletId: null });
+  });
+
+  // You are the juggernaut this round (hp = 15000), or you are not (0). Only inside a Juggernaut match.
+  socket.on('setBossHp', (data = {}) => {
+    const p = players[socket.id];
+    if (!p || p.matchMode !== 'juggernaut') return;
+    p.bossMax = Number(data.hp) === JUGG_HP ? JUGG_HP : 0;
+    p.hp = maxHpFor(p);
     emitToMatch(p.matchId, 'playerHit', { targetId: p.id, hp: p.hp, environmentSeq: p.environmentSeq || 0, healthEvent: 'heal', bulletId: null });
   });
 
@@ -2945,7 +2960,7 @@ io.on('connection', (socket) => {
     const z = data.z != null ? Number(data.z) : s.z;
     // The same spawn shield the client shows (grantSpawnShield caps it at 1.5 s), kept here so hits
     // during it cost no HP — the server used to take it anyway and kill players showing full health (#22).
-    Object.assign(p, { x, y: s.y, z, hp: maxHpForMode(p.matchMode), dead: false, _hellfireCores:3, shieldUntil: Date.now() + SPAWN_SHIELD_MS });
+    Object.assign(p, { x, y: s.y, z, hp: maxHpFor(p), dead: false, _hellfireCores:3, shieldUntil: Date.now() + SPAWN_SHIELD_MS });
     emitToMatch(p.matchId, 'playerRespawned', { ...p, clientSpawn: data.x != null && data.z != null });
   });
 
@@ -2956,7 +2971,7 @@ io.on('connection', (socket) => {
     const x = data.x != null ? Number(data.x) : p.x;
     const z = data.z != null ? Number(data.z) : p.z;
     // A reset (a new round) is a respawn too, and gets the same protection as readyRespawn.
-    Object.assign(p, { x, y: 1, z, hp: maxHpForMode(p.matchMode), dead: false, _hellfireCores:3, shieldUntil: Date.now() + SPAWN_SHIELD_MS });
+    Object.assign(p, { x, y: 1, z, hp: maxHpFor(p), dead: false, _hellfireCores:3, shieldUntil: Date.now() + SPAWN_SHIELD_MS });
     emitToMatch(p.matchId, 'playerRespawned', { ...p, forcedReset: true });
   });
 
@@ -3075,7 +3090,7 @@ io.on('connection', (socket) => {
     // The mode, for FFA Legend progress. Only known modes; anything else counts as none.
     const mode = String(data?.mode || '');
     p.matchMode = MODE_TEAM_SIZES[mode] ? mode : null;
-    p.matchStart = Date.now(); p.matchKills = 0; p.ffaWinClaimed = false;
+    p.matchStart = Date.now(); p.matchKills = 0; p.ffaWinClaimed = false; p.bossMax = 0;   // (no juggernaut health carried in from the last match)
   });
   socket.on('ffaWin', () => {
     const p = players[socket.id];
