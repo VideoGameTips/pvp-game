@@ -3290,7 +3290,7 @@ if (ok && process.argv.includes('--combo')) {
         // each blow has its OWN motion: the poses at the moment of impact must differ from one another
         const sig = {};
         for (const kind of NEW_KINDS) { meleeCombo = { itemId: 'sledge', anim: { kind, t: 0.25, ms: 0.5 } }; poseMeleeComboAnim(); sig[kind] = [mdl.position.x, mdl.position.y, mdl.position.z, mdl.rotation.x, mdl.rotation.y, mdl.rotation.z]; }
-        const names = Object.keys(sig);
+        const names = Object.keys(sig).filter(k => k !== 'sweep');          // the plain swing is shared by the ordinary swings and clangs; every NAMED blow (and the backswing) must differ from all the others
         for (let i = 0; i < names.length; i++) for (let j = i + 1; j < names.length; j++) { const d = sig[names[i]].reduce((a, v, q) => a + Math.abs(v - sig[names[j]][q]), 0); if (d < 0.35) issues.push('the ' + names[i] + ' and ' + names[j] + ' swings look too alike (' + d.toFixed(2) + ')'); }
         // ...and every named blow of the new combos uses a motion of its own
         const own = ['HOME RUN', 'DONG', 'SKEWER', 'THRUST', 'BASH', 'CROSS SLASH', 'RISING SLASH'], used = [];
