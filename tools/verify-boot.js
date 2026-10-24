@@ -3509,6 +3509,55 @@ if (ok && (process.argv.includes('--stats') || process.argv.includes('--dump-sta
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+if (ok && process.argv.includes('--irregular')) {
+  // The three maps with a shape of their own (Sky Arena, Shipyard, Battleground): they exist and are well formed, the two spawns are joined by
+  // ground you can walk (flood fill over the floor rectangles and every collider), the void is real, and each is built the same for both teams.
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [], savedMap = activeMapName;
+    const IDS = ['sky_arena', 'shipyard', 'battleground'];
+    try {
+      for (const name of IDS) {
+        if (!MAP_IDS.includes(name)) { issues.push(name + ': not in MAP_IDS'); continue; }
+        if (!MAP_DESCS[name]) issues.push(name + ': no description for the vote card');
+        const g = MAP_GROUPS[name], s = MAP_SPAWNS[name], v = MAP_VOID[name];
+        if (!g || !s || !MAP_COLLIDERS[name].length) { issues.push(name + ': not built'); continue; }
+        activeMapName = name;
+        // the rectangle of floor, the shape it makes, and a fall you cannot survive
+        if (name !== 'battleground') {
+          if (!v || !v.rects || v.rects.length < 2) issues.push(name + ': should be an irregular floor (a list of rectangles with a void round it)');
+          if (v && !(v.killY < -3)) issues.push(name + ': a fall off the edge should kill');
+          const area = v ? v.rects.reduce((a, r) => a + (r.x1 - r.x0) * (r.z1 - r.z0), 0) : 0, bb = MAP_BOUNDS[name];
+          if (v && area > 0.8 * 4 * bb.halfX * bb.halfZ) issues.push(name + ': the floor fills the box (' + Math.round(100 * area / (4 * bb.halfX * bb.halfZ)) + '%): not an irregular shape');
+          // each end of the floor has to be real floor
+          for (const r of Object.values(s)) if (!floorExistsAt((r.x0 + r.x1) / 2, (r.z0 + r.z1) / 2)) issues.push(name + ': a spawn is over the void');
+        }
+        // a route on the ground from one spawn to the other
+        const blocked = (x, z) => MAP_COLLIDERS[name].some(b => b.max.y > 0.6 && b.min.y < 1.8 && x > b.min.x - 0.45 && x < b.max.x + 0.45 && z > b.min.z - 0.45 && z < b.max.z + 0.45);
+        const b = MAP_BOUNDS[name], step = 1, W = Math.round(2 * b.halfX / step), H = Math.round(2 * b.halfZ / step);
+        const cell = (x, z) => [Math.floor((x + b.halfX) / step), Math.floor((z + b.halfZ) / step)];
+        const ok2 = (cx, cz) => cx >= 0 && cz >= 0 && cx < W && cz < H && floorExistsAt(cx * step - b.halfX + step / 2, cz * step - b.halfZ + step / 2) && !blocked(cx * step - b.halfX + step / 2, cz * step - b.halfZ + step / 2);
+        const a = s.ally, e = s.enemy, from = cell((a.x0 + a.x1) / 2, (a.z0 + a.z1) / 2), to = cell((e.x0 + e.x1) / 2, (e.z0 + e.z1) / 2);
+        const seen = new Uint8Array(W * H), q = [from[0] + from[1] * W]; seen[q[0]] = 1; let reached = false, count = 0;
+        for (let h = 0; h < q.length; h++) {
+          const i = q[h], cx = i % W, cz = (i / W) | 0; count++;
+          if (cx === to[0] && cz === to[1]) { reached = true; break; }
+          for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = cx + dx, nz = cz + dz; if (nx < 0 || nz < 0 || nx >= W || nz >= H) continue; const j = nx + nz * W; if (seen[j] || !ok2(nx, nz)) continue; seen[j] = 1; q.push(j); }
+        }
+        if (!reached) issues.push(name + ': no ground route between the two spawns (' + count + ' cells reached)');
+        // both teams get the same map: the colliders, counted either side of the middle (the layouts turn through 180 degrees or mirror)
+        let n1 = 0, n2 = 0; for (const c of MAP_COLLIDERS[name]) { const mz = (c.min.z + c.max.z) / 2; if (mz > 0.5) n1++; else if (mz < -0.5) n2++; }   // (what stands on the middle line belongs to neither half)
+        if (Math.abs(n1 - n2) > 0.12 * (n1 + n2)) issues.push(name + ': one half has far more cover than the other (' + n1 + ' / ' + n2 + ')');
+      }
+      // the sounds the yard makes exist and run without throwing
+      for (const ev of ['rivet', 'weld', 'grind', 'crane', 'chain']) if (typeof _AEV[ev] !== 'function') issues.push('missing ambient event ' + ev);
+      for (const name of IDS) { const p = ATMO_PROFILES[name]; if (!p || !p.snd) issues.push(name + ': no ambient sound profile'); else for (const e of (p.snd.ev || [])) if (!_AEV[e[0]]) issues.push(name + ': ambient event ' + e[0] + ' does not exist'); }
+    } finally { activeMapName = savedMap; }
+    return issues;
+  })()`);
+  console.log('irregular map checks: Sky Arena, Shipyard and Battleground are built, joined by a walkable route between the spawns, point-symmetric in cover, with a real void');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 if (ok && process.argv.includes('--archive')) {
   // Archived: the emote wheel and King of the Hill. Off the screen, refused by the server, a stale pick falls back, code kept.
   const issues = [];

@@ -5604,12 +5604,13 @@ scene.add(sun);
 function applyMapLighting(name) {
   const concept = name === 'blank';
   const indoor = ['space','orbital_station','sewer','gravity_lab','lockdown','studio','opera','labyrinth','m4_tower','m4_tower_big','m4_tower_super'].includes(name);
-  const dark = indoor || ['volcano','doomsday','cyber','laser_vault','neon_tokyo'].includes(name);
-  mapAmbient.intensity = concept ? .6 : dark ? .34 : .24;
-  mapSkyFill.intensity = concept ? 0 : dark ? .22 : .58;
-  mapSkyFill.color.setHex(dark ? 0x8495b5 : 0xc5ddf2);
-  mapSkyFill.groundColor.setHex(dark ? 0x39313a : 0x645a43);
-  sun.color.setHex(concept || dark ? 0xffffff : 0xffefd5);
+  const dark = indoor || ['volcano','doomsday','cyber','laser_vault','neon_tokyo','battleground'].includes(name);
+  const bright = name === 'sky_arena';                       // heaven: soft light from everywhere, so the faces away from the sun stay white
+  mapAmbient.intensity = concept ? .6 : bright ? .62 : dark ? .34 : .24;
+  mapSkyFill.intensity = concept ? 0 : bright ? 1.05 : dark ? .22 : .58;
+  mapSkyFill.color.setHex(dark ? 0x8495b5 : bright ? 0xf4f8ff : 0xc5ddf2);
+  mapSkyFill.groundColor.setHex(dark ? 0x39313a : bright ? 0xf2f2fb : 0x645a43);
+  sun.color.setHex(concept || dark || bright ? 0xffffff : 0xffefd5);
   sun.intensity = concept ? 1.2 : dark ? .85 : 1.45;
   const b = MAP_BOUNDS[name], reach = concept ? 60 : Math.min(180, Math.max(b?.halfX || 60, b?.halfZ || 60) + 12);
   if (concept) sun.position.set(30, 50, 20);
@@ -5904,7 +5905,7 @@ var MAP_BOT_BOUNDS = {}, MAP_VOID = {};
 // Every map that can be played, and the subset the random draw skips (#66).
 // Mirrors server.js — MAP_IDS and THIN_MAPS have to stay identical there
 // (CLAUDE.md #4), because the server picks the map and the client honours it.
-const MAP_IDS = ['blank', 'urban', 'warehouse', 'forest', 'vietnam', 'volcano', 'cyber', 'desert', 'tundra', 'space', 'airport', 'trenches', 'chernobyl', 'refinery', 'skydock', 'sewer', 'gravity_lab', 'glassworks', 'carrier', 'overgrowth', 'orbital_station', 'foundry', 'carnival', 'biosphere', 'lockdown', 'studio', 'temple', 'holiday', 'labyrinth', 'arena', 'opera', 'doomsday', 'train', 'dreamscape', 'pearl_harbor', 'titanic', 'supermarket', 'pyongyang', 'traffic_cone_republic', 'flying_moai', 'big_arena', 'super_arena', 'big_harbor', 'storm_pier', 'pinball_arcade', 'laser_vault', 'cargo_belts', 'gale_peaks', 'magma_rise', 'neon_tokyo', 'duel_grid', 'duel_crossroads', 'duel_pillars', 'duel_platform'];
+const MAP_IDS = ['blank', 'urban', 'warehouse', 'forest', 'vietnam', 'volcano', 'cyber', 'desert', 'tundra', 'space', 'airport', 'trenches', 'chernobyl', 'refinery', 'skydock', 'sewer', 'gravity_lab', 'glassworks', 'carrier', 'overgrowth', 'orbital_station', 'foundry', 'carnival', 'biosphere', 'lockdown', 'studio', 'temple', 'holiday', 'labyrinth', 'arena', 'opera', 'doomsday', 'train', 'dreamscape', 'pearl_harbor', 'titanic', 'supermarket', 'pyongyang', 'traffic_cone_republic', 'flying_moai', 'big_arena', 'super_arena', 'big_harbor', 'storm_pier', 'pinball_arcade', 'laser_vault', 'cargo_belts', 'gale_peaks', 'magma_rise', 'neon_tokyo', 'sky_arena', 'shipyard', 'battleground', 'duel_grid', 'duel_crossroads', 'duel_pillars', 'duel_platform'];
 const THIN_MAPS = new Set([]);
 // ⚔️ 1v1 duel maps: plain arenas, 72 x 112 m (about fourteen seconds spawn to spawn), dealt only to 1v1. They are in
 // MAP_IDS so that a server-sent id activates, and kept out of the random pool of every other mode.
@@ -13873,6 +13874,421 @@ function buildNeonTokyoLayout() {
 }
 _BESPOKE.neon_tokyo=buildNeonTokyoLayout;
 
+// ═══ 🗺️ THREE MAPS WITH A SHAPE OF THEIR OWN: SKY ARENA, SHIPYARD, BATTLEGROUND ═════════════════════════════════════
+// Until now every map was a rectangle (or a rectangle with water through it). These three are not:
+//   ☁️  SKY ARENA     a cross of white marble and gold floating in the clouds, tall gate towers on its arms, a glowing hub
+//   🏗️  SHIPYARD      a Z-shaped yard (two yards joined by a causeway), a ship moored in each inlet, a working tower crane
+//   🏟️  BATTLEGROUND  a professional arena in grey and white under red lights: a centre stage, a bunker in every quarter
+// Where there is no floor you fall, and the fall kills you (MAP_VOID: the floor is a list of rectangles). All three are
+// point-symmetric (x, z -> -x, -z), so neither team has the better half. The look is the builder's own (keep + customDetail),
+// and what moves (crystals, the crane, the light beams) is animated from the map's scenery.
+registerMap('sky_arena'); registerMap('shipyard'); registerMap('battleground');
+MAP_THEMES.sky_arena = Object.assign(_T(0xf3f0e8, 0xe4e0d6, 0xf4f2ec, 0xe4e0d6, 0xe4e0d6, 0xf3f0e8, 0xe2b84a, 0x58c8ff, 0xdcecff, 'industrial', []), { keep: true, customDetail: true });
+MAP_THEMES.shipyard = Object.assign(_T(0x8c8f91, 0x7a7e82, 0x8a8d8e, 0x5e6468, 0x6a6f74, 0x8a6a42, 0xe0a82a, 0xc7502d, 0x9fb4c4, 'industrial', []), { keep: true, customDetail: true });
+MAP_THEMES.battleground = Object.assign(_T(0x3b3e44, 0x2c2f34, 0x4a4e55, 0x33363b, 0x4a4e55, 0x3b3e44, 0xff2a2a, 0xff3a3a, 0x0e0f13, 'industrial', []), { keep: true, customDetail: true });
+const _IRR = { crystals: [], beams: [], ship: null };
+
+// The sounds of a yard at work (the ambience engine's own kind of event: see _AEV)
+Object.assign(_AFAR, { crane: 1500, grind: 2600, weld: 3200, rivet: 3600, chain: 3000 });
+Object.assign(_AEV, {
+  rivet(c, t, o) { const n = 6 + ((Math.random() * 6) | 0); let at = t; for (let k = 0; k < n; k++) { playFilteredNoise(c, at, 0.05, o, 0.75, 'bandpass', 1500, 1.2, 0.001, 1.5); playTone(c, at, 0.04, o, 190, 120, 0.25, 'square'); at += 0.055; } },
+  weld(c, t, o) { playFilteredNoise(c, t, 1.4, o, 0.28, 'highpass', 3500, 0.7, 0.05, 1.2); _AEV.crackle(c, t, o); },
+  grind(c, t, o) { playFilteredNoise(c, t, 1.6, o, 0.35, 'bandpass', 2600, 2.2, 0.15, 0.6); _aTone(c, t, 1.6, o, 'sawtooth', 780, 1250, 0.12, 0.2, 0.7); },
+  crane(c, t, o) { _aTone(c, t, 3.2, o, 'sawtooth', 120, 175, 0.22, 0.8, 0.6); _aTone(c, t, 3.2, o, 'square', 60, 88, 0.12, 0.8, 0.6); _AEV.clank(c, t + 3.3, o); _AEV.thump(c, t + 3.4, o); },
+  chain(c, t, o) { for (let k = 0; k < 14; k++) playFilteredNoise(c, t + k * 0.07 + Math.random() * 0.03, 0.04, o, 0.35 * Math.sin(Math.PI * (k + 1) / 15), 'bandpass', 3200 + Math.random() * 1200, 1.5, 0.001, 1.4); },
+});
+_ap('sky_arena', { ground: 'tile', amp: 0, fog: [90, 380], zen: 0x9fd0ff, sun: [1.0, 0.7, 0xfff0c4], cloud: _CL(16, 0xffffff), fx: ['dustgold', 'glints'], gusty: 0.15,
+  snd: { wind: 0.07, windF: 900, ev: [['chime', 7, 16, 0.35], ['bells', 26, 52, 0.28]] } });
+_ap('shipyard', { ground: 'concrete', amp: 0.03, mottle: [0.92, 0.92, 0.9], fog: [70, 280], zen: 0x7fa6c8, sun: _SUN, cloud: _CL(9, 0xdfe6ec), fx: ['spray'], gusty: 0.5,
+  snd: { waves: 0.3, wind: 0.2, windF: 480, rumble: 0.12, hum: [50, 0.03],
+         ev: [['hammer', 2.5, 6, 0.5], ['clank', 3, 8, 0.45], ['rivet', 6, 13, 0.4], ['weld', 7, 15, 0.35], ['grind', 12, 26, 0.3], ['crane', 16, 30, 0.55],
+              ['chain', 10, 22, 0.4], ['beep', 9, 20, 0.3], ['horn', 45, 90, 0.5], ['gull', 9, 18, 0.4]] } });
+_ap('battleground', { ground: 'concrete', amp: 0, fog: [60, 240], zen: 0x14161c, sun: [0.35, 0.5, 0xc8d0ff], cloud: _CL(0, 0x303640), fx: ['dust'], gusty: 0,
+  snd: { crowd: 0.12, hum: [60, 0.04], ev: [['cheer', 18, 40, 0.45], ['applause', 40, 80, 0.3], ['horn', 30, 70, 0.3]] } });
+
+// ── ☁️ SKY ARENA ───────────────────────────────────────────────────────────────────────────────────────────────────
+function buildSkyArenaLayout() {
+  const name = 'sky_arena', K = _bkBegin(name, 140, 200, 0xf3f0e8), G = MAP_GROUPS[name];
+  G.remove(G.children[G.children.length - 1]);                       // the one sheet of ground _bkBegin laid: this floor is a cross
+  const C = { marble: 0xffffff, marble2: 0xf2f5fb, cream: 0xffffff, gold: 0xf0c24a, goldD: 0xc9971f, blue: 0x58c8ff, blueD: 0x2f86d6, shade: 0xe4eaf4 };
+  const floor = [], detail = _thBuf(), glow = _thBuf();
+  const deco = (x0, x1, y0, y1, z0, z1, c, lit = false) => _thBox(lit ? glow : detail, _TH_WORLD, (x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2, x1 - x0, y1 - y0, z1 - z0, c);
+  const tile = surfTex('sky-marble', 256, (ctx, s) => {
+    ctx.fillStyle = '#f5f2ea'; ctx.fillRect(0, 0, s, s);
+    const r = _rng(7);
+    ctx.strokeStyle = 'rgba(190,198,218,0.4)'; ctx.lineWidth = 2;
+    for (let i = 0; i < 8; i++) { ctx.beginPath(); let x = r() * s, y = 0; ctx.moveTo(x, y); for (let k = 0; k < 6; k++) { x += (r() - 0.5) * 60; y += s / 6; ctx.lineTo(x, y); } ctx.stroke(); }
+    ctx.strokeStyle = '#e2b84a'; ctx.lineWidth = 5; ctx.strokeRect(0, 0, s, s);                          // a gold seam round every tile
+    ctx.strokeStyle = 'rgba(88,200,255,0.55)'; ctx.lineWidth = 2; ctx.strokeRect(9, 9, s - 18, s - 18);   // and a thread of blue inside it
+  });
+  const plane = (x0, x1, z0, z1) => {
+    const geo = new THREE.PlaneGeometry(x1 - x0, z1 - z0), uv = geo.attributes.uv;
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * (x1 - x0) / 8, uv.getY(i) * (z1 - z0) / 8);      // one tile every 8 m
+    const m = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ map: tile }));
+    m.rotation.x = -Math.PI / 2; m.position.set((x0 + x1) / 2, 0, (z0 + z1) / 2); G.add(m); floor.push({ x0, x1, z0, z1 });
+  };
+  const ARMS = [[-16, 16, -96, 96], [-64, 64, -16, 16]];                // the long arm (north-south) and the crossbar (east-west)
+  for (const [x0, x1, z0, z1] of ARMS) {
+    plane(x0, x1, z0, z1);
+    deco(x0, x1, -3, 0, z0, z1, C.shade); deco(x0 + 3, x1 - 3, -9, -3, z0 + 6, z1 - 6, 0xc2cbdc); deco(x0 + 7, x1 - 7, -17, -9, z0 + 14, z1 - 14, 0xaab5ca);   // an island, not a table
+  }
+  // the outline of the cross, one run at a time: a gold trim, a low marble rail, and a thread of blue light inside it
+  const EDGES = [[-16, -16, 16, 96], [16, 16, 16, 96], [-16, -16, -96, -16], [16, 16, -96, -16], [-16, 16, 96, 96], [-16, 16, -96, -96],
+                 [16, 64, -16, -16], [-64, -16, -16, -16], [16, 64, 16, 16], [-64, -16, 16, 16], [64, 64, -16, 16], [-64, -64, -16, 16]];
+  for (const [x0, x1, z0, z1] of EDGES) {
+    if (z0 === z1) { K.wx(x0, x1, z0, 0.4, 0, 1.1, C.cream); deco(x0 - 0.2, x1 + 0.2, 1.1, 1.3, z0 - 0.35, z0 + 0.35, C.gold); deco(x0, x1, 0.03, 0.08, z0 + (z0 > 0 ? -1.4 : 1.4) - 0.15, z0 + (z0 > 0 ? -1.4 : 1.4) + 0.15, C.blue, true); }
+    else { K.wz(z0, z1, x0, 0.4, 0, 1.1, C.cream); deco(x0 - 0.35, x0 + 0.35, 1.1, 1.3, z0 - 0.2, z1 + 0.2, C.gold); deco(x0 + (x0 > 0 ? -1.4 : 1.4) - 0.15, x0 + (x0 > 0 ? -1.4 : 1.4) + 0.15, 0.03, 0.08, z0, z1, C.blue, true); }
+  }
+  deco(-0.5, 0.5, 0.02, 0.06, -96, 96, C.gold); deco(-64, 64, 0.02, 0.06, -0.5, 0.5, C.gold);          // the gold lines down the middle of each arm
+  for (const [r0, r1, c, lit] of [[11.4, 12.2, C.gold, false], [12.6, 12.95, C.blue, true]]) {          // two rings round the hub
+    const ring = new THREE.Mesh(new THREE.RingGeometry(r0, r1, 56), new THREE.MeshBasicMaterial({ color: c, side: THREE.DoubleSide }));
+    ring.rotation.x = -Math.PI / 2; ring.position.y = 0.05; G.add(ring);
+  }
+  // the hub: a dais with a stair up every side, four gold pillars on it, a crystal over it, and a ring of columns round it
+  K.mound(-9, 9, -9, 9, 2.4, C.cream, ['n', 's', 'e', 'w'], 0.4, 1.0, 4);
+  deco(-9.3, 9.3, 2.4, 2.43, -9.3, 9.3, C.gold);   // a thin gold plate: trim, not a step
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) { K.box(sx * 7, 2.4, sz * 7, 1.6, 7, 1.6, C.cream); deco(sx * 7 - 1.0, sx * 7 + 1.0, 8.4, 9.0, sz * 7 - 1.0, sz * 7 + 1.0, C.gold); deco(sx * 7 - 0.95, sx * 7 + 0.95, 3.0, 3.5, sz * 7 - 0.95, sz * 7 + 0.95, C.gold); }
+  const crystal = (x, y, z, s) => {
+    const m = new THREE.Mesh(new THREE.OctahedronGeometry(s, 0), new THREE.MeshBasicMaterial({ color: C.blue }));
+    m.scale.y = 1.7; m.position.set(x, y, z); G.add(m); _IRR.crystals.push(m); return m;
+  };
+  _IRR.crystals.length = 0;
+  crystal(0, 7.2, 0, 1.9);
+  for (const [x, z] of [[12.5, 12.5], [-12.5, 12.5], [12.5, -12.5], [-12.5, -12.5], [12.5, 6.5], [-12.5, 6.5], [12.5, -6.5], [-12.5, -6.5], [6.5, 12.5], [-6.5, 12.5], [6.5, -12.5], [-6.5, -12.5]]) {
+    K.box(x, 0, z, 1.6, 8, 1.6, C.cream); deco(x - 1.0, x + 1.0, 8.0, 8.6, z - 1.0, z + 1.0, C.gold); deco(x - 0.95, x + 0.95, 0, 0.5, z - 0.95, z + 0.95, C.gold);
+  }
+  // the gate towers: a room to walk into, a deck on its roof reached by a stair outside, and a spire climbing out of it with a crystal at the top
+  const TOWERS = [[-11, 40, 'e', 'S'], [11, 62, 'w', 'N'], [11, -40, 'w', 'N'], [-11, -62, 'e', 'S'],        // along the long arm
+                  [30, 11, 'n', 'W'], [50, -11, 's', 'E'], [-30, -11, 's', 'E'], [-50, 11, 'n', 'W']];       // along the crossbar
+  for (const [cx, cz, door, stairs] of TOWERS) {
+    const x0 = cx - 5, x1 = cx + 5, z0 = cz - 5, z1 = cz + 5, H = 36, d = {};
+    d[door] = [K.door(door === 'n' || door === 's' ? cx : cz, 3.2, 3.4)];
+    K.room(x0, x1, z0, z1, 0, 4.4, C.cream, d, 0.8);
+    K.slab(x0, x1, z0, z1, 4.8, 0.4, C.marble2);                                                   // the roof deck
+    K.box(cx, 4.8, cz, 3.6, H - 4.8, 3.6, C.marble);                                               // the spire's core
+    deco(x0 - 0.1, x1 + 0.1, 0, 0.5, z0 - 0.1, z1 + 0.1, C.gold); deco(x0 - 0.1, x1 + 0.1, 4.2, 4.8, z0 - 0.1, z1 + 0.1, C.gold);
+    for (const y of [9, 16, 23, 30]) deco(cx - 2.1, cx + 2.1, y, y + 0.5, cz - 2.1, cz + 2.1, C.gold);
+    for (const y of [10, 18, 26]) for (const [ox, oz, wx, wz] of [[0, 1.82, 1.1, 0.08], [0, -1.82, 1.1, 0.08], [1.82, 0, 0.08, 1.1], [-1.82, 0, 0.08, 1.1]]) deco(cx + ox - wx / 2, cx + ox + wx / 2, y, y + 2.6, cz + oz - wz / 2, cz + oz + wz / 2, C.blue, true);
+    deco(cx - 2.4, cx + 2.4, H, H + 0.9, cz - 2.4, cz + 2.4, C.gold); crystal(cx, H + 3.6, cz, 1.3);
+    // a rail round the deck, open where the stair arrives
+    const alongZ = stairs === 'S' || stairs === 'N', lat = -Math.sign(alongZ ? cx : cz) * 2;       // the stair sits 2 m off the tower's middle, towards the middle of the arm
+    const gap = [{ at: (alongZ ? cx : cz) + lat, w: 3.4, sill: 0, top: 9 }];
+    if (stairs !== 'S') K.wx(x0, x1, z1 - 0.2, 0.3, 4.8, 1.1, C.cream); else K.wx(x0, x1, z1 - 0.2, 0.3, 4.8, 1.1, C.cream, gap);
+    if (stairs !== 'N') K.wx(x0, x1, z0 + 0.2, 0.3, 4.8, 1.1, C.cream); else K.wx(x0, x1, z0 + 0.2, 0.3, 4.8, 1.1, C.cream, gap);
+    if (stairs !== 'E') K.wz(z0, z1, x1 - 0.2, 0.3, 4.8, 1.1, C.cream); else K.wz(z0, z1, x1 - 0.2, 0.3, 4.8, 1.1, C.cream, gap);
+    if (stairs !== 'W') K.wz(z0, z1, x0 + 0.2, 0.3, 4.8, 1.1, C.cream); else K.wz(z0, z1, x0 + 0.2, 0.3, 4.8, 1.1, C.cream, gap);
+    const n = 10, depth = 0.8, run = (n - 0.5) * depth;
+    if (stairs === 'S') K.stairs(cx + lat, z1 + run, 'N', 4.8, 3, C.cream, 0, depth, 0.48);
+    else if (stairs === 'N') K.stairs(cx + lat, z0 - run, 'S', 4.8, 3, C.cream, 0, depth, 0.48);
+    else if (stairs === 'E') K.stairs(x1 + run, cz + lat, 'W', 4.8, 3, C.cream, 0, depth, 0.48);
+    else K.stairs(x0 - run, cz + lat, 'E', 4.8, 3, C.cream, 0, depth, 0.48);
+    K.poi('tower deck', cx + 3.4, cz, 4.8);
+  }
+  // columns down the arms, cloud benches to shoot over, and a screen in front of each spawn
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    for (const z of [22, 31, 52, 71, 80]) { const x = sx * 12.5, zz = sz * z; K.box(x, 0, zz, 1.6, 7, 1.6, C.cream); deco(x - 1.0, x + 1.0, 7.0, 7.5, zz - 1.0, zz + 1.0, C.gold); }
+    for (const x of [22, 40, 58]) { const xx = sx * x, z = sz * 12.5; K.box(xx, 0, z, 1.6, 7, 1.6, C.cream); deco(xx - 1.0, xx + 1.0, 7.0, 7.5, z - 1.0, z + 1.0, C.gold); }
+  }
+  for (const [x, z] of [[0, 28], [5, 50], [-6, 70], [0, -28], [-5, -50], [6, -70], [28, 0], [52, 0], [-28, 0], [-52, 0]]) {
+    const wide = Math.abs(z) > Math.abs(x) ? [5.5, 1.4] : [1.4, 5.5];
+    K.box(x, 0, z, wide[0], 1.2, wide[1], C.marble2); deco(x - wide[0] / 2 - 0.1, x + wide[0] / 2 + 0.1, 1.2, 1.25, z - wide[1] / 2 - 0.1, z + wide[1] / 2 + 0.1, C.gold);
+  }
+  for (const sz of [-1, 1]) {
+    K.box(0, 0, sz * 76, 20, 9, 2, C.cream); deco(-10.5, 10.5, 9, 9.6, sz * 76 - 1.3, sz * 76 + 1.3, C.gold);
+    for (const f of [-1.03, 1.03]) deco(-8, 8, 4, 4.5, sz * 76 + f - 0.04, sz * 76 + f + 0.04, C.blue, true);
+    for (const sx of [-1, 1]) K.box(sx * 13, 0, sz * 84, 1.4, 5, 1.4, C.marble2);                  // two pillars to mark the way out of the spawn
+  }
+  // light: cool blue round the hub, warm gold at the ends
+  for (const [x, y, z, c, i, r] of [[8, 5, 8, 0x66ccff, 1.4, 22], [-8, 5, -8, 0x66ccff, 1.4, 22], [8, 5, -8, 0x66ccff, 1.4, 22], [-8, 5, 8, 0x66ccff, 1.4, 22], [0, 7, 88, 0xffd27a, 1.3, 26], [0, 7, -88, 0xffd27a, 1.3, 26]]) {
+    const l = new THREE.PointLight(c, i, r, 1.6); l.position.set(x, y, z); G.add(l);
+  }
+  _thMesh(G, detail, false); _thMesh(G, glow, true);
+  K.spawn({ x0: -9, x1: 9, z0: 86, z1: 94 }, { x0: -9, x1: 9, z0: -94, z1: -86 });
+  K.poi('hub dais', 0, 0, 2.4);
+  MAP_BOT_BOUNDS[name] = { halfX: 64, halfZ: 96 };
+  MAP_VOID[name] = { halfX: 70, halfZ: 100, rects: floor, killY: -36, far: 140 };
+  G.userData.identityRefined = true;
+  G._skyColor = 0xdcecff;
+}
+_BESPOKE.sky_arena = buildSkyArenaLayout;
+_SCN.sky_arena = (K) => {
+  // the sea of cloud below (three layers, each a little further down and a little warmer), the sun, beams of light, and spires far off
+  for (const [y, c, a] of [[-24, 0xffffff, 0.94], [-46, 0xffe9bb, 0.78], [-86, 0xbcd6ff, 0.92]]) K.mesh(new THREE.PlaneGeometry(2600, 2600), K.veil(c, a), 0, y, 0).rotation.x = -Math.PI / 2;
+  K.around(26, 40, (x, z, a, i) => {
+    const g = new THREE.Group(); g.position.set(x, -34 + K.rnd() * 30, z);
+    for (let k = 0; k < 5; k++) { const r = 14 + K.rnd() * 20; K.mesh(new THREE.IcosahedronGeometry(r, 0), K.glow(k % 2 ? 0xffffff : 0xf1f6ff), (k - 2) * 14 + K.rnd() * 8, K.rnd() * 6, (K.rnd() - 0.5) * 20, g).scale.y = 0.55; }
+    K.group.add(g);
+  });
+  K.around(16, 52, (x, z, a, i) => {                                   // spires of white and gold standing in the clouds
+    const h = 70 + K.rnd() * 90, w = 8 + K.rnd() * 6, g = new THREE.Group(); g.position.set(x, -40, z);
+    K.mesh(new THREE.BoxGeometry(w, h, w), K.glow(0xf4f6fb), 0, h / 2, 0, g);
+    for (let k = 1; k < 6; k++) K.mesh(new THREE.BoxGeometry(w + 0.8, 1.4, w + 0.8), K.glow(0xf0c24a), 0, k * h / 6, 0, g);
+    K.mesh(new THREE.ConeGeometry(w * 0.7, w * 1.6, 4), K.glow(0xf0c24a), 0, h + w * 0.8, 0, g).rotation.y = Math.PI / 4;
+    K.mesh(new THREE.OctahedronGeometry(w * 0.28, 0), K.glow(0x58c8ff), 0, h + w * 1.9, 0, g);
+    for (let k = 0; k < 4; k++) { const wn = K.mesh(new THREE.BoxGeometry(w * 0.2, 5, w + 0.2), K.glow(0x7fd4ff), 0, 12 + k * (h - 24) / 4, 0, g); wn.scale.z = 0.98; }
+    K.group.add(g);
+  });
+  const sun = K.mesh(new THREE.CylinderGeometry(34, 34, 2, 28), K.glow(0xfff4c8), -170, 210, -330); sun.rotation.x = Math.PI / 2;
+  K.mesh(new THREE.CylinderGeometry(70, 70, 1, 28), K.veil(0xfff0b0, 0.22), -170, 210, -332).rotation.x = Math.PI / 2;
+  const beams = [];
+  for (const [x, z] of [[-110, -70], [120, 40], [-60, 150], [90, -150], [0, -190], [170, 160]]) {
+    const b = K.mesh(new THREE.CylinderGeometry(5, 14, 340, 18, 1, true), K.veil(0xfff0b0, 0.16), x, 100, z); beams.push(b);
+  }
+  K.anim((dt, t) => {
+    for (const c of _IRR.crystals) { c.rotation.y += dt * 0.7; c.position.y += Math.sin(t * 1.4 + c.position.x) * dt * 0.12; }
+    beams.forEach((b, i) => { b.material.opacity = 0.11 + 0.07 * Math.sin(t * 0.5 + i * 1.7); });
+  });
+};
+
+// ── 🏗️ SHIPYARD ────────────────────────────────────────────────────────────────────────────────────────────────────
+function buildShipyardLayout() {
+  const name = 'shipyard', K = _bkBegin(name, 180, 212, 0x8c8f91), G = MAP_GROUPS[name];
+  G.remove(G.children[G.children.length - 1]);
+  const rnd = _thRng(name + ':layout');
+  const C = { conc: 0x8c8f91, conc2: 0x7a7e82, wet: 0x565c61, steel: 0x4a5560, dark: 0x2a2f35, yellow: 0xe0a82a, hull: 0x3a4650, red: 0x8a2a22, white: 0xe2e0d6, rust: 0x8a5a3a, rail: 0xb8c0c4 };
+  const BOX = [0xb5382a, 0x2a5a9a, 0x3a7a4a, 0xd8a02a, 0x7a7e84, 0xd8d2c0, 0x2a8a8a, 0xc8602a, 0x6a3a7a];
+  const floor = [], detail = _thBuf(), glow = _thBuf();
+  const deco = (x0, x1, y0, y1, z0, z1, c, lit = false) => _thBox(lit ? glow : detail, _TH_WORLD, (x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2, x1 - x0, y1 - y0, z1 - z0, c);
+  const slabTex = surfTex('shipyard-concrete', 256, (ctx, s) => {
+    ctx.fillStyle = '#6f7275'; ctx.fillRect(0, 0, s, s);
+    const r = _rng(11);
+    for (let i = 0; i < 700; i++) { const v = 88 + (r() * 36) | 0; ctx.fillStyle = 'rgba(' + v + ',' + v + ',' + (v + 4) + ',0.35)'; ctx.fillRect(r() * s, r() * s, 2 + r() * 3, 2 + r() * 3); }
+    ctx.strokeStyle = 'rgba(40,44,48,0.55)'; ctx.lineWidth = 3; ctx.strokeRect(0, 0, s, s);                  // the joints between the slabs
+    ctx.strokeStyle = 'rgba(40,44,48,0.25)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(s / 2, 0); ctx.lineTo(s / 2, s); ctx.stroke();
+  });
+  const plane = (x0, x1, z0, z1) => {
+    const geo = new THREE.PlaneGeometry(x1 - x0, z1 - z0), uv = geo.attributes.uv;
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * (x1 - x0) / 10, uv.getY(i) * (z1 - z0) / 10);
+    const m = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ map: slabTex, color: 0x9a9da1 }));
+    m.rotation.x = -Math.PI / 2; m.position.set((x0 + x1) / 2, 0, (z0 + z1) / 2); G.add(m); floor.push({ x0, x1, z0, z1 });
+  };
+  const YARDS = [[-84, 30, -100, -24], [-30, 84, 24, 100], [-30, 30, -24, 24]];            // north yard, south yard, and the causeway between them
+  for (const [x0, x1, z0, z1] of YARDS) { plane(x0, x1, z0, z1); deco(x0, x1, -1.6, -0.02, z0, z1, C.wet); }   // the quay face runs down to the water
+  const sea = new THREE.Mesh(new THREE.PlaneGeometry(1800, 1800), new THREE.MeshPhongMaterial({ color: 0x1f6a94, shininess: 70, specular: 0x7fb0d0 }));
+  sea.rotation.x = -Math.PI / 2; sea.position.y = -1.6; sea.userData.keepOutside = true; G.add(sea);
+  // everything below is made for the south half (z > 0) and then turned through 180 degrees for the north: x, z -> -x, -z
+  const half = (s) => {
+    const X = (x) => s * x, Z = (z) => s * z;
+    const bx = (x, y0, z, w, h, d, c, rot = 0) => K.box(X(x), y0, Z(z), w, h, d, c, rot);
+    const dc = (x0, x1, y0, y1, z0, z1, c, lit = false) => { const a = [X(x0), X(x1)].sort((p, q) => p - q), b = [Z(z0), Z(z1)].sort((p, q) => p - q); deco(a[0], a[1], y0, y1, b[0], b[1], c, lit); };
+    // a container: hollow ones have a door end that is open; open = +1 (the +x end) or -1; they turn with the half
+    const container = (cx, cz, hollow, open, color, y0 = 0) => {
+      const L = 12, W = 2.6, H = 2.6, t = 0.28;
+      if (!hollow) { bx(cx, y0, cz, L, H, W, color); return; }
+      bx(cx, y0, cz - W / 2 + t / 2, L, H, t, color); bx(cx, y0, cz + W / 2 - t / 2, L, H, t, color);
+      bx(cx, y0 + H - t, cz, L, t, W, color); bx(cx - open * (L / 2 - t / 2), y0, cz, t, H, W - 2 * t, color);
+      dc(cx - L / 2 + 0.2, cx + L / 2 - 0.2, y0 + H - 0.02, y0 + H + 0.04, cz - 0.1, cz + 0.1, C.dark);
+    };
+    const ladder = (x, z, nz, y1) => addGridLadder(name, X(x), Z(z), s * nz > 0 ? 0 : Math.PI, 0, y1, 1.15);   // a ladder on a face looking along z
+    const wx = (x0, x1, z, t, y0, h, c, open) => { const a = [X(x0), X(x1)].sort((p, q) => p - q); return K.wx(a[0], a[1], Z(z), t, y0, h, c, (open || []).map(o => ({ ...o, at: X(o.at) }))); };
+    const wz = (z0, z1, x, t, y0, h, c, open) => { const a = [Z(z0), Z(z1)].sort((p, q) => p - q); return K.wz(a[0], a[1], X(x), t, y0, h, c, (open || []).map(o => ({ ...o, at: Z(o.at) }))); };
+    // ── the home yard (south, z > 24): the way in from the causeway, two fields of containers with a lane between, a warehouse, the spawn
+    // the fields are cells of containers in rows, the same in both halves: made once, placed twice
+    for (const f of FIELDS) for (const c of f) {
+      container(c.x, c.z, c.hollow, c.open, c.color);
+      if (c.two) {
+        bx(c.x, 2.6, c.z, 12, 2.6, 2.6, c.color2);
+        ladder(c.x + (c.lx || 3.5), c.z + 1.4, 1, 5.2);
+      }
+    }
+    // the warehouse in the corner: doors north and east, shelves inside, a roof you can see over
+    {
+      const wx0 = -26, wx1 = -2, wz0 = 76, wz1 = 96;
+      const xs = [X(wx0), X(wx1)].sort((p, q) => p - q), zs = [Z(wz0), Z(wz1)].sort((p, q) => p - q), d = {};
+      const nSide = s > 0 ? 'n' : 's', eSide = s > 0 ? 'e' : 'w';
+      d[nSide] = [K.door(X(-14), 5, 5)]; d[eSide] = [K.door(Z(86), 5, 5)];
+      K.room(xs[0], xs[1], zs[0], zs[1], 0, 7, C.conc2, d, 0.9);
+      K.slab(xs[0], xs[1], zs[0], zs[1], 7.4, 0.4, C.steel);
+      for (const z of [80, 86, 92]) for (const x of [-22, -16, -8]) bx(x, 0, z, 2.2, 2.4, 1.6, C.rust);
+      dc(wx0 + 0.2, wx1 - 0.2, 7.4, 7.7, wz0 + 0.2, wz0 + 0.6, C.yellow);
+      K.poi('warehouse', X(-14), Z(86), 0);
+    }
+    // the spawn: a pocket in the corner with a screen across it, hazard stripes on the screen
+    bx(52, 0, 82, 44, 8, 2, C.steel);
+    for (let x = 31; x <= 73; x += 3) { dc(x, x + 1.5, 0, 8, 80.96, 81.0, C.yellow); dc(x, x + 1.5, 0, 8, 83.0, 83.04, C.yellow); }
+    for (const x of [33, 75]) bx(x, 0, 90, 1.2, 3.4, 1.2, C.dark);                      // posts either side of the pocket, clear of the spawn
+    // a pair of cranes' worth of crates against the east end, and some barrels by the warehouse
+    for (const [x, z] of [[78, 60], [80, 48]]) { bx(x, 0, z, 3, 1.4, 3, C.rust); }
+    for (const [x, z] of [[-20, 74], [-1, 72], [26, 78]]) addExplosiveBarrel(name, X(x), Z(z), 0xcc4422);
+    // the ship moored in this half's inlet (south: x < -30): a hull with the bow stepped in, a house at the stern, cargo, rails, two stairs from the quay
+    const hx0 = -52, hx1 = -30;
+    bx(-41, -1.6, 66, 22, 4.8, 54, C.hull); bx(-41, 2.4, 66, 22.4, 0.8, 54.4, C.red);
+    bx(-41, -1.6, 94.5, 18, 4.8, 5, C.hull); bx(-41, -1.6, 98.5, 10, 4.8, 3, C.hull);                 // the stern steps in
+    bx(-41, -1.6, 37.5, 18, 4.8, 5, C.hull); bx(-41, -1.6, 34, 10, 4.8, 3, C.hull);                   // ...and so does the bow
+    dc(-51.7, -30.3, 3.2, 3.24, 38, 98, 0x66737f); dc(-51.7, -50.6, 3.24, 3.27, 38, 98, C.yellow); dc(-31.4, -30.3, 3.24, 3.27, 38, 98, C.yellow);   // a lighter deck, a yellow line along each edge
+    bx(-41, 3.2, 90, 14, 7, 8, C.white); bx(-41, 10.2, 90, 12, 0.5, 7, C.steel); dc(-47, -35, 6, 8, 85.9, 86.0, 0x6fd0ff, true);
+    for (const [x, z, n] of [[-34.5, 52, 1], [-34.5, 64, 2], [-47, 56, 2], [-47, 70, 1]]) for (let i = 0; i < n; i++) bx(x, 3.2 + i * 2.6, z, 2.6, 2.6, 12, BOX[(Math.floor(Math.abs(x + z)) + i) % BOX.length]);
+    wz(36, 100, hx1 - 0.15, 0.3, 3.2, 1.1, C.rail, [{ at: 46, w: 4, sill: 0, top: 9 }, { at: 68, w: 4, sill: 0, top: 9 }]);   // the rail on the quay side, open where a stair arrives
+    wz(36, 100, hx0 + 0.15, 0.3, 3.2, 1.1, C.rail);                                                                              // and on the open-water side
+    for (const z of [46, 68]) { K.stairs(X(-22.5), Z(z), s > 0 ? 'W' : 'E', 3.2, 3, C.steel, 0, 1.0, 0.4); K.poi('ship deck', X(-38), Z(z), 3.2); }
+  };
+  // fields of containers: made once with this map's own random numbers, placed in both halves
+  const FIELDS = [];
+  for (const [x0, x1, z0, z1] of [[-18, 22, 40, 68], [36, 80, 34, 74]]) {
+    const cells = []; let ri = 0;
+    for (let z = z0 + 1.3; z <= z1 - 1.3; z += 4.0, ri++) {
+      if (ri % 3 === 2) continue;                                                                    // a wider aisle across the field every third row
+      for (let x = x0 + 6; x <= x1 - 6 + 0.01; x += 14) {
+        const r = rnd(); if (r < 0.10) continue;
+        cells.push({ x, z, hollow: r < 0.56, open: rnd() < 0.5 ? 1 : -1, two: r > 0.80, color: BOX[Math.floor(rnd() * BOX.length)], color2: BOX[Math.floor(rnd() * BOX.length)], lx: rnd() < 0.5 ? 3.5 : -3.5 });
+      }
+    }
+    FIELDS.push(cells);
+  }
+  half(1); half(-1);
+  // the edge of the water: a rail along every run of quay (not where a ship lies against it), bollards between, a yellow line behind
+  const QUAY = [[-84, 30, -100, -100], [30, 30, -32.5, -24], [30, 30, -24, 24], [30, 84, 24, 24], [84, 84, 24, 100], [-30, 84, 100, 100], [-30, -30, 24, 32.5], [-30, -30, -24, 24], [-84, -30, -24, -24], [-84, -84, -100, -24]];
+  for (const [x0, x1, z0, z1] of QUAY) {
+    if (z0 === z1) {
+      const zi = z0 + (z0 > 0 ? -0.2 : 0.2), zl = z0 + (z0 > 0 ? -1.3 : 1.0), zb = z0 + (z0 > 0 ? -1.6 : 1.6);
+      K.wx(x0, x1, zi, 0.3, 0, 1.1, C.rail); deco(x0, x1, 0.02, 0.05, zl, zl + 0.3, C.yellow);
+      for (let x = x0 + 8; x < x1; x += 14) K.box(x, 0, zb, 0.7, 0.8, 0.7, C.dark);
+    } else {
+      const xi = x0 + (x0 > 0 ? -0.2 : 0.2), xl = x0 + (x0 > 0 ? -1.3 : 1.0), xb = x0 + (x0 > 0 ? -1.6 : 1.6);
+      K.wz(z0, z1, xi, 0.3, 0, 1.1, C.rail); deco(xl, xl + 0.3, 0.02, 0.05, z0, z1, C.yellow);
+      for (let z = z0 + 8; z < z1; z += 14) K.box(xb, 0, z, 0.7, 0.8, 0.7, C.dark);
+    }
+  }
+  // the tower crane at the middle of the causeway: a plinth, a mast, a jib that turns and a hook that carries a container (all moving parts are for the eye: nothing of them is solid)
+  for (let z = -22; z < 22; z += 4) for (const x of [-14, 0, 14]) deco(x - 0.12, x + 0.12, 0.02, 0.05, z, z + 2, C.white);        // a dashed lane line down the causeway
+  for (let i = 0; i < 12; i++) { const a = i * 0.6 - 3.6; deco(-5.4, 5.4, 0.03, 0.06, a - 0.15, a + 0.15, i % 2 ? C.dark : C.yellow); }
+  K.box(0, 0, 0, 9, 1.2, 9, C.conc2); K.box(0, 1.2, 0, 4.4, 33, 4.4, C.yellow);
+  for (const y of [6, 12, 18, 24, 30]) deco(-2.6, 2.6, y, y + 0.5, -2.6, 2.6, C.dark);
+  deco(-3.2, 3.2, 34.2, 38.4, -3.2, 3.2, C.yellow);                                                // the cab
+  deco(-3.25, 3.25, 35.2, 37.4, 2.0, 3.3, 0x6fd0ff, true);
+  const jib = new THREE.Group(); jib.position.set(0, 35, 0); G.add(jib);
+  const part = (w, h, d, x, y, z, c, parent) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshLambertMaterial({ color: c })); m.position.set(x, y, z); (parent || jib).add(m); return m; };
+  part(48, 1.4, 1.8, 10, 3.6, 0, C.yellow); part(48, 0.5, 0.5, 10, 5.4, 0, C.dark); part(7, 3, 3.4, -12, 3.2, 0, C.steel); part(2.2, 2.2, 2.2, -15.5, 3.2, 0, C.red);
+  const trolley = part(2.6, 1.0, 2.2, 14, 2.6, 0, C.dark), cable = part(0.14, 1, 0.14, 14, 2, 0, C.dark), block = part(1.6, 1.2, 1.6, 14, 0, 0, C.red);
+  const load = part(12, 2.6, 2.6, 14, -2, 0, 0xb5382a);
+  _IRR.ship = { jib, trolley, cable, block, load };
+  K.poi('crane plinth', 6, 0, 0);
+  K.spawn({ x0: 38, x1: 70, z0: 88, z1: 96 }, { x0: -70, x1: -38, z0: -96, z1: -88 });
+  MAP_BOT_BOUNDS[name] = { halfX: 84, halfZ: 100 };
+  MAP_VOID[name] = { halfX: 90, halfZ: 106, rects: floor, killY: -8, far: 120 };
+  _thMesh(G, detail, false); _thMesh(G, glow, true);
+  G.userData.identityRefined = true;
+  G._skyColor = 0x9fb4c4;
+}
+_BESPOKE.shipyard = buildShipyardLayout;
+_SCN.shipyard = (K) => {
+  // the sea runs on to the horizon; far off, cranes along a distant quay and a ship's hull on the slip; one working crane's jib turns beyond the yard
+  K.around(8, 90, (x, z, a, i) => {
+    const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = -a;
+    K.mesh(new THREE.BoxGeometry(5, 46, 5), K.flat(0xe0a82a), 0, 23, 0, g); K.mesh(new THREE.BoxGeometry(70, 3, 3), K.flat(0xe0a82a), 18, 48, 0, g);
+    K.mesh(new THREE.BoxGeometry(10, 5, 6), K.flat(0x4a5560), -22, 48, 0, g); K.group.add(g);
+  });
+  K.around(8, 70, (x, z, a, i) => { const L = 90 + K.rnd() * 60; K.mesh(new THREE.BoxGeometry(L, 14, 22), K.flat(i % 2 ? 0x2a3139 : 0x8a2a22), x, 2, z).rotation.y = a; });
+  K.anim((dt, t) => {
+    const S = _IRR.ship; if (!S) return;
+    S.jib.rotation.y = 1.05 * Math.sin(t * 0.09) + 0.45 * Math.sin(t * 0.031 + 1.3);              // the jib swings slowly about the mast
+    const tx = 14 + 10 * Math.sin(t * 0.16 + 1.0), len = 16.5 + 4.5 * Math.sin(t * 0.21);          // the trolley runs along the jib, the hook goes up and down
+    S.trolley.position.x = tx; S.cable.scale.y = len; S.cable.position.set(tx, 2.1 - len / 2, 0);
+    S.block.position.set(tx, 2.1 - len - 0.4, 0); S.load.position.set(tx, 2.1 - len - 2.4, 0);
+    S.load.rotation.y = 0.12 * Math.sin(t * 0.7);                                                  // and the load turns a little on its cable
+  });
+};
+
+// ── 🏟️ BATTLEGROUND ───────────────────────────────────────────────────────────────────────────────────────────────
+function buildBattlegroundLayout() {
+  const name = 'battleground', K = _bkBegin(name, 140, 190, 0x3b3e44), G = MAP_GROUPS[name];
+  const C = { floor: 0x3b3e44, wall: 0x4a4e55, dark: 0x2a2d32, grey: 0x7a7f87, white: 0xe8eaee, red: 0xff2a2a, redD: 0x8a1a1a };
+  const detail = _thBuf(), glow = _thBuf();
+  const deco = (x0, x1, y0, y1, z0, z1, c, lit = false) => _thBox(lit ? glow : detail, _TH_WORLD, (x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2, x1 - x0, y1 - y0, z1 - z0, c);
+  K.perim(16, C.wall, 0.8);
+  // markings: white lines, a centre circle, red light let into the floor
+  deco(-52, 52, 0.02, 0.05, -0.25, 0.25, C.white); deco(-52, 52, 0.02, 0.05, 59.8, 60.2, C.white); deco(-52, 52, 0.02, 0.05, -60.2, -59.8, C.white);
+  deco(-52.2, -51.8, 0.02, 0.05, -80, 80, C.white); deco(51.8, 52.2, 0.02, 0.05, -80, 80, C.white);
+  for (const x of [-20, 20]) deco(x - 0.12, x + 0.12, 0.03, 0.07, -80, 80, C.red, true);
+  for (const z of [-1.2, 1.2]) deco(-52, 52, 0.03, 0.07, z - 0.08, z + 0.08, C.red, true);
+  for (const [r0, r1, c, lit] of [[19.6, 20.2, C.white, false], [21.2, 21.5, C.red, true]]) {
+    const ring = new THREE.Mesh(new THREE.RingGeometry(r0, r1, 64), new THREE.MeshBasicMaterial({ color: c, side: THREE.DoubleSide }));
+    ring.rotation.x = -Math.PI / 2; ring.position.y = 0.04; G.add(ring);
+  }
+  // the stands on the long sides: a solid skirt you cannot climb, rows of seats above it (for the eye), a strip of red light at the foot of every row
+  for (const sx of [-1, 1]) {
+    K.box(sx * 61.6, 0, 0, 15.2, 5.2, 130, 0x33363b);
+    for (let i = 0; i < 6; i++) {
+      const x0 = sx > 0 ? 54 + i * 2.4 : -69.2, x1 = sx > 0 ? 69.2 : -54 - i * 2.4, y0 = 5.2 + i * 1.2;
+      deco(x0, x1, y0, y0 + 1.2, -65, 65, i % 2 ? 0x3c4047 : 0x555a62);
+      const fx = sx > 0 ? x0 : x1;
+      deco(fx - (sx > 0 ? 0.05 : 0.1), fx + (sx > 0 ? 0.1 : 0.05), y0 + 0.1, y0 + 0.3, -65, 65, C.red, true);
+    }
+    for (let z = -64; z < 64; z += 4) deco(sx * 53.85 - 0.15, sx * 53.85 + 0.15, 0.3, 1.4, z, z + 2, z % 8 === 0 ? C.red : C.white, true);   // the LED boards along the foot of the stands
+    deco(sx * 54 - 0.4, sx * 54 + 0.4, 5.2, 6.4, -65, 65, 0xdfe3ea);                                                                          // a white barrier along the first row
+  }
+  // the centre stage: a stair up each side, four pylons with red light, a ring of light overhead and the board hung over it
+  K.mound(-13, 13, -13, 13, 3.0, 0x2a2d32, ['n', 's', 'e', 'w'], 0.4, 1.0, 5);
+  deco(-13.2, 13.2, 3.0, 3.1, -13.2, -12.8, C.red, true); deco(-13.2, 13.2, 3.0, 3.1, 12.8, 13.2, C.red, true); deco(-13.2, -12.8, 3.0, 3.1, -13, 13, C.red, true); deco(12.8, 13.2, 3.0, 3.1, -13, 13, C.red, true);
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) { K.box(sx * 11, 3.0, sz * 11, 2, 9, 2, 0x3a3e44); for (const y of [5, 8]) deco(sx * 11 - 1.05, sx * 11 + 1.05, y, y + 0.3, sz * 11 - 1.05, sz * 11 + 1.05, C.red, true); }
+  const ringLight = new THREE.Mesh(new THREE.TorusGeometry(10, 0.35, 8, 56), new THREE.MeshBasicMaterial({ color: C.red })); ringLight.rotation.x = Math.PI / 2; ringLight.position.y = 14; G.add(ringLight);
+  const board = surfTex('bg-board', 512, (ctx, s) => {
+    ctx.fillStyle = '#101216'; ctx.fillRect(0, 0, s, s);
+    ctx.fillStyle = '#ff2a2a'; ctx.fillRect(0, s * 0.30, s, 6); ctx.fillRect(0, s * 0.70, s, 6);
+    ctx.fillStyle = '#e8eaee'; ctx.font = 'bold ' + Math.floor(s * 0.12) + 'px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('BATTLEGROUND', s / 2, s * 0.5);
+    ctx.fillStyle = '#ff2a2a'; ctx.font = 'bold ' + Math.floor(s * 0.05) + 'px monospace'; ctx.fillText('LIVE', s / 2, s * 0.18); ctx.fillText('FINAL ROUND', s / 2, s * 0.85);
+  });
+  const bm = new THREE.MeshBasicMaterial({ map: board }), dm = new THREE.MeshBasicMaterial({ color: 0x15171b });
+  const cube = new THREE.Mesh(new THREE.BoxGeometry(12, 6, 12), [bm, bm, dm, dm, bm, bm]); cube.position.set(0, 19, 0); G.add(cube);
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) deco(sx * 5.9 - 0.05, sx * 5.9 + 0.05, 20, 30, sz * 5.9 - 0.05, sz * 5.9 + 0.05, 0x20242a);
+  // the roof's trusses, high up, with red spots (light for the eye; nothing here is solid)
+  for (const z of [-60, -30, 0, 30, 60]) { deco(-68, 68, 17.6, 18.2, z - 0.3, z + 0.3, 0x2c3037); for (let x = -60; x <= 60; x += 12) deco(x - 0.6, x + 0.6, 17.0, 17.6, z - 0.6, z + 0.6, C.red, true); }
+  for (const x of [-40, 0, 40]) deco(x - 0.3, x + 0.3, 17.6, 18.2, -90, 90, 0x2c3037);
+  // a bunker in every quarter (a block with a stair up and a rail round its top), pillars to stand behind, low barriers to shoot over
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    const x0 = sx * 34 - 7, x1 = sx * 34 + 7, z0 = sz * 42 - 5, z1 = sz * 42 + 5;
+    K.mound(x0, x1, z0, z1, 4.6, 0x353a41, [sz > 0 ? 'n' : 's'], 0.4, 1.0, 4);
+    K.wx(x0, x1, z0 + 0.2, 0.3, 4.6, 1.1, C.white, sz > 0 ? [{ at: sx * 34, w: 4.4, sill: 0, top: 9 }] : undefined);
+    K.wx(x0, x1, z1 - 0.2, 0.3, 4.6, 1.1, C.white, sz < 0 ? [{ at: sx * 34, w: 4.4, sill: 0, top: 9 }] : undefined);
+    K.wz(z0, z1, x0 + 0.2, 0.3, 4.6, 1.1, C.white); K.wz(z0, z1, x1 - 0.2, 0.3, 4.6, 1.1, C.white);
+    deco(x0, x1, 4.6, 4.75, z0 - 0.05, z0 + 0.1, C.red, true); deco(x0, x1, 4.6, 4.75, z1 - 0.1, z1 + 0.05, C.red, true);
+    K.poi('bunker top', sx * 34, sz * 42, 4.6);
+    for (const [px, pz] of [[26, 16], [44, 26], [12, 44]]) {
+      K.box(sx * px, 0, sz * pz, 3, 8, 3, 0x41454c);
+      for (const y of [2.2, 5.5]) deco(sx * px - 1.55, sx * px + 1.55, y, y + 0.3, sz * pz - 1.55, sz * pz + 1.55, C.red, true);
+    }
+    for (const [bx0, bz0, along] of [[10, 30, 'x'], [24, 52, 'z'], [5, 56, 'x']]) {
+      const w = along === 'x' ? 8 : 1.2, d = along === 'x' ? 1.2 : 8;
+      K.box(sx * bx0, 0, sz * bz0, w, 1.3, d, 0xdfe3ea); deco(sx * bx0 - w / 2, sx * bx0 + w / 2, 1.3, 1.4, sz * bz0 - d / 2, sz * bz0 + d / 2, C.red, true);
+    }
+  }
+  // the two team tunnels: a screen across each, a wall either side, a roof over the spawn and red light inside
+  for (const sz of [-1, 1]) {
+    K.box(0, 0, sz * 70, 28, 9, 2, 0x353a41);
+    for (const f of [-1.03, 1.03]) { deco(-13, 13, 6.2, 6.6, sz * 70 + f - 0.04, sz * 70 + f + 0.04, C.red, true); deco(-13, 13, 1.0, 1.2, sz * 70 + f - 0.04, sz * 70 + f + 0.04, C.red, true); }
+    for (const sx of [-1, 1]) K.wz(sz > 0 ? 72 : -94, sz > 0 ? 94 : -72, sx * 20, 0.8, 0, 7, C.wall);
+    K.slab(-20, 20, sz > 0 ? 72 : -94, sz > 0 ? 94 : -72, 7.4, 0.4, 0x2a2d32);
+    const bs = new THREE.Mesh(new THREE.PlaneGeometry(30, 15), new THREE.MeshBasicMaterial({ map: board }));          // the big screen over the tunnel
+    bs.position.set(0, 12.5, sz * 94.1); bs.rotation.y = sz > 0 ? Math.PI : 0; G.add(bs);
+    deco(-20, 20, 7.5, 7.7, sz * 72 - 0.2, sz * 72 + 0.2, C.red, true);
+    for (const x of [-10, 0, 10]) deco(x - 0.4, x + 0.4, 6.88, 6.98, sz * 83 - 6, sz * 83 + 6, C.red, true);
+  }
+  for (const [x, y, z, i, r] of [[0, 12, 0, 2.2, 40], [-30, 9, -40, 1.8, 34], [30, 9, -40, 1.8, 34], [-30, 9, 40, 1.8, 34], [30, 9, 40, 1.8, 34], [0, 5.5, 84, 1.6, 22], [0, 5.5, -84, 1.6, 22]]) {
+    const l = new THREE.PointLight(0xff2a2a, i, r, 1.5); l.position.set(x, y, z); G.add(l);
+  }
+  _thMesh(G, detail, false); _thMesh(G, glow, true);
+  K.spawn({ x0: -10, x1: 10, z0: 78, z1: 86 }, { x0: -10, x1: 10, z0: -86, z1: -78 });
+  K.poi('centre stage', 0, 0, 3.0);
+  G.userData.identityRefined = true;
+  G._skyColor = 0x0e0f13;
+}
+_BESPOKE.battleground = buildBattlegroundLayout;
+_SCN.battleground = (K) => {
+  // night over the arena: a black ground outside, stars, floodlight towers at the corners, two searchlights sweeping the sky
+  K.ground(0x0d0e11);
+  K.stars(520, 0xffffff, 2.0);
+  const lights = [];
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    const g = new THREE.Group(); g.position.set(sx * 96, 0, sz * 124);
+    K.mesh(new THREE.BoxGeometry(2, 60, 2), K.flat(0x2a2d32), 0, 30, 0, g);
+    K.mesh(new THREE.BoxGeometry(14, 4, 2), K.glow(0xffffff), 0, 60, 0, g).rotation.y = Math.atan2(sx, sz);
+    const beam = K.mesh(new THREE.CylinderGeometry(1.5, 9, 220, 12, 1, true), K.veil(0xff4a4a, 0.14), 0, 150, 0, g); beam.rotation.z = 0.22 * sx; lights.push(beam);
+    K.group.add(g);
+  }
+  K.anim((dt, t) => lights.forEach((b, i) => { b.rotation.x = 0.28 * Math.sin(t * 0.5 + i * 1.6); b.material.opacity = 0.1 + 0.06 * Math.sin(t * 0.9 + i); }));
+};
+
 function buildWarehouseLayout() {
   const name = 'warehouse', K = _bkBegin(name, 100, 120, 0x6d6a64);
   const wallC = 0x6f7d86, rackC = 0x8a5a2a, rackB = 0x3a5a8a, off = 0xb8b2a4, TOP = 4.6;
@@ -16096,7 +16512,7 @@ const EGG_LINES = {
 };
 const EGG_CRANE = ['nice view', "don't look down", 'rope: 4 left', 'ahoy', 'tired of climbing', 'hi', 'shift ends at 5', 'hard hat: lost'];
 const EGG_SKIP = new Set(['blank', 'range', 'obby', 'm4_tower', 'm4_tower_big', 'm4_tower_super', 'big_harbor', 'storm_pier', 'pinball_arcade',
-  'laser_vault', 'cargo_belts', 'gale_peaks', 'magma_rise', 'br_arena', 'base_raid', 'neon_tokyo']);
+  'laser_vault', 'cargo_belts', 'gale_peaks', 'magma_rise', 'br_arena', 'base_raid', 'neon_tokyo', 'sky_arena', 'shipyard', 'battleground']);
 const EGG_FLOATING = new Set(['space', 'orbital_station', 'gravity_lab', 'dreamscape', 'flying_moai', 'cyber', 'super_arena']);
 // Hand-drawn glyphs: a few wobbly strokes in a 256 square.
 function _eggGlyph(g, kind, rnd) {
@@ -19874,7 +20290,7 @@ const WEAR_UNTHEMED = { storm_pier: 'industrial', cargo_belts: 'industrial', las
 // Places that are not meant to look used: the neon and sci-fi maps (Cyber City, the station, the labs), the fairground
 // ones, an opera house and a shop. Rust, soot and grime on a hard-light city read as a different map; they get no wear.
 const WEAR_CLEAN_MOTIFS = new Set(['space', 'neon', 'carnival']);
-const WEAR_CLEAN_MAPS = new Set(['opera', 'supermarket']);
+const WEAR_CLEAN_MAPS = new Set(['opera', 'supermarket', 'sky_arena', 'battleground']);
 function wearIsClean(name) {
   const th = MAP_THEMES[name];
   return WEAR_CLEAN_MAPS.has(name) || WEAR_CLEAN_MOTIFS.has(th ? th.motif : WEAR_UNTHEMED[name]);
@@ -71530,6 +71946,9 @@ document.querySelectorAll('.diff-card').forEach(card => {
 
 // Map selector
 const MAP_DESCS = {
+  sky_arena:   'Sky Arena — a cross of white marble and gold floating in heaven: tall gate towers, a glowing hub and a long fall if you step off',
+  shipyard:    'Shipyard — a Z-shaped yard of shipping containers you can walk into, a ship in each inlet and a crane that never stops, with water on every side',
+  battleground:'Battleground — a pro arena in grey and white under red lights: a raised centre stage, a bunker in every quarter, two team tunnels',
   neon_tokyo: 'Neon Tokyo — Japanese night streets, wet alleys, shop balconies and vending-machine resupplies',
   auto:       'Random — game picks one for you each match',
   blank:      'Classic Arena — wide lanes, wall-walks, ramps · a HOT SEAT ring heals you and moves every 40 s',
