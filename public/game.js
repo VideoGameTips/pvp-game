@@ -1000,6 +1000,12 @@ function falloffMultiplier(weaponId, dist) {
   return 1 - t * (1 - f.min);
 }
 
+// 🥊 COMBO MODE / DEFAULT MODE. In combo mode the Sledge, the Fists and the Battle Axe turn E into a chain (hop → spin → slam, ...).
+// In default mode they keep the one regular ability they always had. Each of the three carries both: `ability` answers with
+// whichever the mode picks (see the loop under the table), so the HUD, the shop and the cooldowns all follow without knowing.
+let MELEE_COMBO_MODE = true;
+try { MELEE_COMBO_MODE = localStorage.getItem('pvp_melee_combo') !== '0'; } catch (e) {}
+
 const MELEE_ITEMS = [
   { id: 'bat',        name: 'Bat',        type: 'Melee',       damage: 50, range: 2.1, cooldown: 520,
     knockbackOnHit: 6, // every swing shoves the target back, not just the ability
@@ -1009,13 +1015,16 @@ const MELEE_ITEMS = [
   { id: 'frying_pan', name: 'Frying Pan', type: 'Melee',       damage: 32, range: 1.8, cooldown: 420,
     ability: { name: 'Pan Clang', cd: 8500,  desc: 'AOE clang · 3 m · 28 dmg · pop-up', type: 'melee_pulse', radius: 3.0, damage: 28, knockback: 2.2, launchVel: 7, color: 0xffffaa } },
   { id: 'sledge',     name: 'Sledge',     type: 'Heavy Melee', damage: 70, range: 1.9, cooldown: 900,
-    ability: { name: 'Sledge Combo', cd: 7000, desc: 'E hop · E 360° spin · E backflip slam (110)', type: 'melee_slam', radius: 5, damage: 110, slamDamage: 110, leap: 16.5, leapForward: 4.5, dive: 32,
+    ability: { name: 'Sledge Combo', cd: 7000, desc: 'E hop · E 360° spin · E backflip slam (110 — more the higher you fall from)', type: 'melee_slam', radius: 5, damage: 110, slamDamage: 110, leap: 16.5, leapForward: 4.5, dive: 32,
+      heightScale: { ref: 2.4, perM: 0.12, min: 0.5, max: 2 },      // the damage grows with the drop: ×1 at a hop's height (the combo's own), up to ×2 from ~11 m
       comboCd: 7000, comboWindow: 1200, comboPartialCd: 1800,
       combo: [
         { name: 'HOP', kind: 'hop', ms: 420, lock: 320, hop: 10.5, fwd: 3, aoe: { id: 'sledge_hop', radius: 2.6, damage: 20, knock: 2, launch: 4, color: 0xffcc88 } },
         { name: '360° SPIN', kind: 'spin', ms: 460, lock: 400, hang: 280, aoe: { id: 'sledge_spin', radius: 3.8, damage: 40, knock: 4, launch: 6, color: 0xffaa55 } },
         { name: 'BACKFLIP SLAM', kind: 'slam', flip: true, dive: 32 },
-      ] } },
+      ] },
+    plainAbility: { name: 'Ground Slam', cd: 12000, desc: 'Leap 5 m up · hang · slam down · AOE 4m · 80 dmg (more the higher you fall from)', type: 'melee_slam', radius: 4, damage: 80, slamDamage: 80, leap: 16.5, leapForward: 4.5, dive: 30,
+      heightScale: { ref: 5.7, perM: 0.12, min: 0.5, max: 2 } } },
   { id: 'spear',      name: 'Spear',      type: 'Reach Melee', damage: 50, range: 3.0, cooldown: 760,
     ability: { name: 'Throw Spear',  cd: 15000, desc: 'Hurl spear · 85 dmg · weapon gone until CD', type: 'melee_throw' } },
   { id: 'katana',     name: 'Katana',     type: 'Melee',       damage: 65, range: 2.8, cooldown: 480,
@@ -1054,7 +1063,8 @@ const MELEE_ITEMS = [
         { name: 'UPPER CUT', kind: 'uppercut', lock: 380, ms: 420, id: 'axe_upper', damage: 45, up: 8, hop: 2.5, reach: 3.2, popVel: 10, color: 0xddeeff },
         { name: 'HOP & WHIRL', kind: 'spin', ms: 520, lock: 460, hop: 7.5, hang: 300, aoe: { id: 'axe_airwhirl', radius: 3.4, damage: 50, knock: 3.5, launch: 5, color: 0xddeeff } },
         { name: 'FINAL SLASH', kind: 'chop', ms: 520, lock: 520, delay: 170, aoe: { id: 'axe_chop', radius: 3.6, arc: 0.1, damage: 70, knock: 5, launch: 4, color: 0xffffff } },
-      ] } },
+      ] },
+    plainAbility: { name: 'Whirlwind', cd: 11000, desc: 'Spin 720° and dash 10 m · hits everyone around you · 85 dmg', type: 'melee_spinslash', distance: 10, dashTime: 0.34, damage: 85, reach: 2.8, spins: 2 } },
   { id: 'shock_baton', archived: true,name: 'Shock Baton',type: 'Melee',         damage: 32, range: 2.0, cooldown: 300,
     ability: { name: 'Static Burst', cd: 9000,  desc: 'AOE zap · 3.4 m · 30 dmg · pop-up', type: 'melee_pulse', radius: 3.4, damage: 30, knockback: 1.8, launchVel: 5, color: 0xffff44 } },
   // ── 😈 P2W melees ────────────────────────────────────────────────────────
@@ -1074,7 +1084,8 @@ const MELEE_ITEMS = [
         { name: 'UPPERCUT', kind: 'uppercut', lock: 300, ms: 400, damage: 50, up: 8.5, hop: 3.5, reach: 2.6, popVel: 9, color: 0xffd9a0 },
         { name: 'RISING CROSS', kind: 'cross', lock: 300, ms: 320, lift: 4.5, fwd: 4, aoe: { id: 'fists_cross', radius: 3, arc: 0.3, damage: 35, knock: 4, launch: 3, color: 0xffe0b0 } },
         { name: 'GROUND POUND', kind: 'slam', dive: 28 },
-      ] } },
+      ] },
+    plainAbility: { name: 'Uppercut', cd: 6000, desc: 'Rising punch · launches you up · 50 dmg and a pop-up if it lands', type: 'melee_uppercut', damage: 50, up: 8.5, hop: 3.5, reach: 2.6, popVel: 9, color: 0xffd9a0 } },
   // ── 🪖 ADMIN MELEES (locked behind unlock codes) ─────────────────────────
   // ── 🆕 More melees — batch 4 ─────────────────────────────────────────────
   { id: 'brass_knuckles', name: 'Brass Knuckles', type: 'Punch',     damage: 28, range: 1.5, cooldown: 200, speedMult: 1.6,
@@ -1145,6 +1156,35 @@ const MELEE_ITEMS = [
   { id: 'chain_hammer', name: 'Chain Maul', type: 'Chain Melee', damage: 85, range: 10, cooldown: 1100, speedMult: 1.1,
     ability: { name: 'Meteor Hammer', cd: 7000, desc: 'Fling the weight 12 m: hit a person and they are reeled in (60 dmg); hit a surface and the chain hauls you there', type: 'melee_meteor', range: 12, damage: 60, pull: 24, root: 900, color: 0xffcc66 } },
 ];
+// The three with a chain: `ability` is the combo while combo mode is on, and `plainAbility` (what they had before) when it is off.
+for (const _it of MELEE_ITEMS) {
+  if (!_it.plainAbility) continue;
+  const _chain = _it.ability;
+  Object.defineProperty(_it, 'ability', { enumerable: true, configurable: true, get() { return MELEE_COMBO_MODE ? _chain : this.plainAbility; } });
+}
+// Switch the mode. Refused in the middle of a move (a combo chain, a slam, a dash), so it can't be used to dodge a cooldown.
+function setMeleeComboMode(on) {
+  on = !!on;
+  if (on === MELEE_COMBO_MODE) return true;
+  if (meleeCombo || meleeSlam || meleeDash || batCrowdCharge) return false;
+  MELEE_COMBO_MODE = on;
+  try { localStorage.setItem('pvp_melee_combo', on ? '1' : '0'); } catch (e) {}
+  return true;
+}
+function toggleMeleeComboMode() {
+  const to = !MELEE_COMBO_MODE;
+  if (!setMeleeComboMode(to)) { pushFeedLine('Finish the move first', 'then switch combo / default mode', '#ffcc66', false); return false; }
+  pushFeedLine(to ? 'COMBO MODE' : 'DEFAULT MODE', to ? 'Sledge · Fists · Battle Axe: E chains the combo' : 'Sledge · Fists · Battle Axe: E is the regular ability', '#ffcc66', false);
+  try { updateAbilityHUD(); } catch (e) {}
+  return true;
+}
+// A slam hits harder the further you fall to it: ×1 at the ability's own reference drop, +12% per metre above it, −12% per metre below,
+// held between `min` and `max` (the server allows a sledge override up to 228, and ×2 of the combo's 110 is 220).
+function slamHeightMult(ab, drop) {
+  const hs = ab && ab.heightScale;
+  if (!hs) return 1;
+  return Math.max(hs.min ?? 0.5, Math.min(hs.max ?? 2, 1 + (drop - hs.ref) * hs.perM));
+}
 
 // ── 📦 Basic Skin Case generation ──────────────────────────────────────────
 // Skins are not purely cosmetic in this game. Basic case skins are modest stat
@@ -40288,7 +40328,7 @@ const KEY_ACTIONS = [
   ...(EMOTES_ARCHIVED ? [] : [['emotes', 'Emotes', 'KeyQ']]), ['freecam', 'Free camera', 'Digit0'], ['slot1', 'Primary weapon', 'Digit1'], ['slot2', 'Secondary weapon', 'Digit2'],
   ['perspective', 'Camera perspective', 'Digit9'],
   ['slot3', 'Melee', 'Digit3'], ['slot4', 'Support item', 'Digit4'],
-  ['inspect', 'Inspect weapon or item', 'KeyT'], ['melee', 'Quick melee', 'KeyB'], ['chat', 'Quick chat', 'KeyV'],
+  ['inspect', 'Inspect weapon or item', 'KeyT'], ['comboMode', 'Melee: combo / default mode', 'KeyH'], ['melee', 'Quick melee', 'KeyB'], ['chat', 'Quick chat', 'KeyV'],
   ['comms1', 'Comms wheel 1', 'KeyZ'], ['comms2', 'Comms wheel 2', 'KeyX'], ['scoreboard', 'Scoreboard', 'Tab'],
 ];
 const KEY_RESERVED = new Set(['Escape', 'F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12', 'Enter', 'MetaLeft', 'MetaRight']);
@@ -40845,6 +40885,8 @@ document.addEventListener('keydown', e => {
   // ...and a melee or a utility gets its own (startItemInspect: one flourish per kind of item)
   if (e.code === 'KeyT' && !e.repeat && !isDead && document.activeElement?.tagName !== 'INPUT'
       && (activeSlot === 'melee' || activeSlot === 'support')) { e.preventDefault(); startItemInspect(); return; }
+  // 🥊 H — combo mode / default mode for the Sledge, Fists and Battle Axe
+  if (e.code === 'KeyH' && !e.repeat && !isDead && document.activeElement?.tagName !== 'INPUT') { toggleMeleeComboMode(); return; }
   // Spacebar — jump (only when on the ground)
   if (e.code === 'Space') {
     e.preventDefault();
@@ -44315,6 +44357,7 @@ function updateMovement(dt, socialBlocked = false) {
       slamState.type = 'jump';
     }
     camera.position.y += slamState.vel * dt;
+    if (slamState.type === 'slam') slamState.peakY = Math.max(slamState.peakY ?? camera.position.y, camera.position.y);   // how far up it started from: the slam hits harder the further it falls
     resolvePlayerCeiling(prevEyeY);
     // Land at the eye height you are actually going to stand at. This branch
     // used to ignore the crouch/slide offset the grounded branch applies, so
@@ -44349,8 +44392,15 @@ function updateMovement(dt, socialBlocked = false) {
         const slamAb = slamItem?.ability;
         const slamOrigin = camera.position.clone();
         const slamRadius = slamAb?.radius || 4, slamColor = slamAb?.color || 0xff6600;
-        const slamDummyDamage = slamAb?.damage ?? slamItem?.damage ?? 80;
-        const slamWeaponId = slamItem?.id || 'sledge';
+        // How far it fell (eye to eye): the highest point of the slam, down to where you stand now.
+        const slamDrop = Math.max(0, (slamState.peakY ?? camera.position.y) - camera.position.y);
+        const slamMult = slamHeightMult(slamAb, slamDrop);
+        const slamDummyDamage = Math.round((slamAb?.damage ?? slamItem?.damage ?? 80) * slamMult);
+        const slamHitDamage = slamAb?.slamDamage != null ? Math.round(slamAb.slamDamage * slamMult) : null;
+        // The base weapon, not a skin: the damage entry the server holds is the weapon's, and a skinned sledge (the Shovel, the Gold Brick)
+        // has an id the server does not know, which would have clipped this hit to the 25-damage default.
+        const slamWeaponId = slamItem?.baseId || slamItem?.id || 'sledge';
+        if (slamAb?.heightScale && Math.abs(slamMult - 1) >= 0.1) flashAbilityName(`${slamMult > 1 ? 'HEIGHT SLAM' : 'LOW SLAM'} ×${slamMult.toFixed(1)} · ${Math.round(slamDrop)} m`);
         spawnAbilityAOEFX(slamOrigin.clone().setY(0.15), slamRadius, slamColor);
         meleeSlamImpact(slamOrigin, slamRadius, slamColor, slamState.vel);
         flashScreen('rgba(255,100,0,0.30)', 350);
@@ -44360,7 +44410,7 @@ function updateMovement(dt, socialBlocked = false) {
             const hp = mesh.position.clone().setY(1.0);
             const dummy = TRAINING_DUMMIES.find(dd => dd.id === pid);
             if (dummy) handleDummyHit(dummy, mesh, { damage: slamDummyDamage }, hp);
-            else emitHit(pid, `slam_${myId}_${Date.now()}_${pid}`, slamWeaponId, hp, false, slamAb?.slamDamage != null ? { damageOverride: slamAb.slamDamage } : {});
+            else emitHit(pid, `slam_${myId}_${Date.now()}_${pid}`, slamWeaponId, hp, false, slamHitDamage != null ? { damageOverride: slamHitDamage } : {});
             _nudgeBotFromPoint(pid, mesh, slamOrigin, slamAb?.knockback || 0, slamAb?.launchVel || 0);
             spawnHitParticle(hp);
           }
@@ -69181,6 +69231,13 @@ function openSettingsHub() {
       <div style="font-size:12px;letter-spacing:2px;color:#d8fff2;">ADS MODE</div>
       <button id="settings-ads-mode" style="min-width:92px;padding:7px 10px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:bold;letter-spacing:2px;border-radius:4px;background:#132a24;color:#88ffcc;border:2px solid #44cc99;">${String(GAMEPLAY_SETTINGS.adsMode).toUpperCase()}</button>
     </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin:10px 0;padding:10px;background:rgba(255,255,255,0.035);border:1px solid #244c42;border-radius:6px;">
+      <div>
+        <div style="font-size:12px;letter-spacing:2px;color:#d8fff2;">MELEE MODE</div>
+        <div style="font-size:10px;letter-spacing:1px;color:#89b5a8;margin-top:4px;max-width:285px;line-height:1.35;">COMBO: the Sledge, Fists and Battle Axe chain E presses into a combo. DEFAULT: one regular ability each. Quick switch: H (rebind in Controls).</div>
+      </div>
+      <button id="settings-melee-mode" style="min-width:92px;padding:7px 10px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:bold;letter-spacing:2px;border-radius:4px;background:${MELEE_COMBO_MODE ? '#2a2410' : '#132a24'};color:${MELEE_COMBO_MODE ? '#ffd866' : '#88ffcc'};border:2px solid ${MELEE_COMBO_MODE ? '#ffcc44' : '#44cc99'};">${MELEE_COMBO_MODE ? 'COMBO' : 'DEFAULT'}</button>
+    </div>
     ${rangeRow('lookSens', isTouchUI() ? 'LOOK SENSITIVITY' : 'MOUSE SENSITIVITY', 0.3, 2.5, 0.05)}
     ${rangeRow('cameraShake', 'CAMERA SHAKE')}
     ${rangeRow('screenFx', 'SCREEN EFFECTS')}
@@ -69219,6 +69276,7 @@ function openSettingsHub() {
     saveGameplaySettings();
     openSettingsHub();
   });
+  document.getElementById('settings-melee-mode').addEventListener('click', () => { toggleMeleeComboMode(); openSettingsHub(); });
   panel.querySelectorAll('[data-settings-range]').forEach(input => {
     input.addEventListener('input', () => {
       const key = input.dataset.settingsRange;

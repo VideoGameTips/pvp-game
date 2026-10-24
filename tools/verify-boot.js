@@ -3256,6 +3256,55 @@ if (ok && process.argv.includes('--combo')) {
         triggerDeflectImpact(new THREE.Vector3(1, 1.65, -3));
         if (flashes.some(f => /0[.]3[0-9]/.test(f))) issues.push('only the katana flashes that hard');
       }
+      // combo mode / default mode, and how the slam grows with the fall
+      {
+        const sl = MELEE_ITEMS.find(m => m.id === 'sledge'), fi = MELEE_ITEMS.find(m => m.id === 'fists'), ax = MELEE_ITEMS.find(m => m.id === 'combat_axe');
+        if (!MELEE_COMBO_MODE) issues.push('combo mode should be the starting mode');
+        if (!sl.ability.combo || !fi.ability.combo || !ax.ability.combo) issues.push('combo mode: the Sledge, Fists and Battle Axe should chain');
+        // not in the middle of a move
+        selectedMeleeIdx = MELEE_ITEMS.indexOf(sl); reset('sledge'); activateMeleeAbility();
+        if (!meleeCombo) issues.push('mode test: the chain should have started');
+        else if (setMeleeComboMode(false) !== false || !MELEE_COMBO_MODE) issues.push('the mode must not switch in the middle of a combo');
+        reset('sledge');
+        if (setMeleeComboMode(false) !== true || MELEE_COMBO_MODE) issues.push('could not switch to default mode');
+        for (const [it, nm] of [[sl, 'Ground Slam'], [fi, 'Uppercut'], [ax, 'Whirlwind']]) if (it.ability.combo || it.ability.name !== nm) issues.push('default mode: ' + it.id + ' should have its regular ' + nm + ', has ' + it.ability.name);
+        if (effectiveMeleeItem(sl).ability.name !== 'Ground Slam') issues.push('default mode: the ability a skinned or plain item reports should follow the mode');
+        // default mode: one E is the old move, no chain
+        selectedMeleeIdx = MELEE_ITEMS.indexOf(fi); reset('fists'); activateMeleeAbility();
+        if (meleeCombo || !(slamState && slamState.vel >= 8)) issues.push('default mode: fists E should be the plain uppercut');
+        selectedMeleeIdx = MELEE_ITEMS.indexOf(ax); reset('combat_axe'); activateMeleeAbility();
+        if (meleeCombo || !meleeDash) issues.push('default mode: the axe E should be the plain whirlwind dash');
+        meleeDash = null; slamState = null;
+        const keepWalls = wallColliders.slice(); wallColliders.length = 0;
+        const land = (y) => { hits.length = 0; meleeSlam = null; meleeCombo = null; slamState = { vel: -8, type: 'slam' }; camera.position.set(0, y, 0); let g = 0; while (slamState && g++ < 900) { clock += 16; updateMovement(1 / 60); } const h = hits.find(x => x.wid === 'sledge'); return h ? h.dmg : null; };
+        try {
+          // default mode, a real ground slam: leap, hang, dive, land
+          selectedMeleeIdx = MELEE_ITEMS.indexOf(sl); reset('sledge'); activateMeleeAbility();
+          if (meleeCombo || !meleeSlam) issues.push('default mode: sledge E should start the ground slam');
+          let g = 0; while (meleeSlam && g++ < 900) { clock += 16; updateMeleeSlam(0.016); updateMovement(1 / 60); }
+          const plainHit = hits.find(h => h.wid === 'sledge');
+          if (!plainHit || plainHit.dmg < 74 || plainHit.dmg > 86) issues.push('default mode: a ground slam from its own leap should do about 80, did ' + (plainHit && plainHit.dmg));
+          if (isDead) issues.push('the slam test killed the player (out of bounds?)');
+          // combo mode: the damage follows the drop
+          if (setMeleeComboMode(true) !== true) issues.push('could not switch back to combo mode');
+          selectedMeleeIdx = MELEE_ITEMS.indexOf(sl); reset('sledge');
+          const low = land(1.9), base = land(1.65 + 2.6), mid = land(1.65 + 8), high = land(1.65 + 60);
+          if (low == null || base == null || mid == null || high == null) issues.push('a slam should hit the target in range: ' + JSON.stringify([low, base, mid, high]));
+          else {
+            if (!(low < base && base < mid && mid < high)) issues.push('the slam should hit harder the further it falls: ' + [low, base, mid, high].join(' < '));
+            if (Math.abs(base - 110) > 8) issues.push('a hop-height slam should do about its 110, did ' + base);
+            if (!(mid >= 165 && mid <= 200)) issues.push('a slam from 8 m should do about 180, did ' + mid);
+            if (high !== 220) issues.push('the slam should top out at x2 (220), did ' + high);
+            if (low < 55) issues.push('even a low slam should keep half its damage, did ' + low);
+          }
+          if (slamHeightMult(sl.ability, 2.4) !== 1 || slamHeightMult(sl.ability, 999) !== 2 || slamHeightMult(sl.ability, 0) < 0.5 || slamHeightMult(fi.ability, 99) !== 1) issues.push('slamHeightMult: x1 at the reference drop, x2 cap, never under x0.5, only for the sledge');
+          // a skin on the sledge changes the look, never the damage entry the server holds
+          const keepSkin = meleeSkinFor;
+          meleeSkinFor = (b) => b === 'sledge' ? BASIC_MELEE_SKINS.find(x => x.id === 'sledge_gold_brick') : null;
+          try { land(1.65 + 8); } finally { meleeSkinFor = keepSkin; }
+          if (!hits.some(h => h.wid === 'sledge')) issues.push('a skinned sledge should hit as the base sledge, hit as: ' + hits.map(h => h.wid).join(','));
+        } finally { wallColliders.push(...keepWalls); setMeleeComboMode(true); MELEE_COMBO_MODE = true; }
+      }
     } finally {
       delete remoteMeshes.cmbT; delete players.cmbT;
       playSoundEvent = saved.sound; spawnAbilityAOEFX = saved.fx; flashScreen = saved.flash; pushFeedLine = saved.feed; emitHit = saved.hit; setTimeout = saved.st; Date.now = saved.dnow;
@@ -3266,7 +3315,7 @@ if (ok && process.argv.includes('--combo')) {
     }
     return issues;
   })()`);
-  console.log('combo checks: sledge 3 steps, fists 3, battle axe 4 (early press queued, cooldown after the last, short one if half thrown, switch ends it); katana: no combo, 1 s deflect / 4 s cooldown, +0.1 s a hit (cap +2 s), eight guards, hard flash');
+  console.log('combo checks: sledge 3 steps, fists 3, battle axe 4 (early press queued, cooldown after the last, short one if half thrown, switch ends it); katana: no combo, 1 s deflect / 4 s cooldown, +0.1 s a hit (cap +2 s), eight guards, hard flash; combo mode / default mode (regular abilities back, no switching mid-move); the slam grows with the fall (x2 cap, skins hit as the base sledge)');
   if (out.length) { ok = false; console.log(out.slice(0, 24).join('\n')); }
 }
 
