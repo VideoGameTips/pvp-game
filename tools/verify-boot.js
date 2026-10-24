@@ -3699,11 +3699,11 @@ if (ok && (process.argv.includes('--stats') || process.argv.includes('--dump-sta
 }
 
 if (ok && process.argv.includes('--irregular')) {
-  // The three maps with a shape of their own (Sky Arena, Shipyard, Battleground): they exist and are well formed, the two spawns are joined by
+  // The four maps with a shape of their own (Sky Arena, Shipyard, Battleground, Atoll): they exist and are well formed, the two spawns are joined by
   // ground you can walk (flood fill over the floor rectangles and every collider), the void is real, and each is built the same for both teams.
   const issues = vm.runInThisContext(`(() => {
     const issues = [], savedMap = activeMapName;
-    const IDS = ['sky_arena', 'shipyard', 'battleground'];
+    const IDS = ['sky_arena', 'shipyard', 'battleground', 'atoll'];
     try {
       for (const name of IDS) {
         if (!MAP_IDS.includes(name)) { issues.push(name + ': not in MAP_IDS'); continue; }
@@ -3737,13 +3737,27 @@ if (ok && process.argv.includes('--irregular')) {
         let n1 = 0, n2 = 0; for (const c of MAP_COLLIDERS[name]) { const mz = (c.min.z + c.max.z) / 2; if (mz > 0.5) n1++; else if (mz < -0.5) n2++; }   // (what stands on the middle line belongs to neither half)
         if (Math.abs(n1 - n2) > 0.12 * (n1 + n2)) issues.push(name + ': one half has far more cover than the other (' + n1 + ' / ' + n2 + ')');
       }
+      // the Atoll in particular: every piece of land has its twin turned through 180 degrees, the lighthouse is the tall thing in the middle, nobody can fall into the water and live
+      {
+        const L = ATOLL_LAND, twin = r => L.some(q => q[0] === -r[1] && q[1] === -r[0] && q[2] === -r[3] && q[3] === -r[2] && q[4] === r[4]);
+        const odd = L.filter(r => !twin(r));
+        if (odd.length) issues.push('atoll: land without a twin: ' + JSON.stringify(odd[0]));
+        const overlap = []; for (let i = 0; i < L.length; i++) for (let j = i + 1; j < L.length; j++) { const a = L[i], b = L[j]; if (a[0] < b[1] - 0.01 && b[0] < a[1] - 0.01 && a[2] < b[3] - 0.01 && b[2] < a[3] - 0.01) overlap.push([i, j]); }
+        if (overlap.length) issues.push('atoll: pieces of land overlap (they would flicker): ' + JSON.stringify(overlap[0]));
+        const tower = MAP_COLLIDERS.atoll.filter(b => b.max.y > 22 && Math.abs((b.min.x + b.max.x) / 2) < 1 && Math.abs((b.min.z + b.max.z) / 2) < 1);
+        if (!tower.length) issues.push('atoll: no lighthouse standing in the middle');
+        if (!(MAP_VOID.atoll.killY > -9 && MAP_VOID.atoll.killY < -3)) issues.push('atoll: the water should end a fall within a few metres, not ' + MAP_VOID.atoll.killY);
+        const walkable = [['east dock', 38, 0], ['west dock', -38, 0], ['the rock', 69, 17], ['lifeguard tower', 59, 37], ['sandbar hut', 28, 33]];
+        for (const [label] of walkable) if (!(MAP_POIS.atoll || []).some(p => p[0] === label)) issues.push('atoll: no point of interest for the ' + label);
+        if (!MUSIC_TRACKS[MUSIC_FOR_MAP.atoll]) issues.push('atoll: no music');
+      }
       // the sounds the yard makes exist and run without throwing
       for (const ev of ['rivet', 'weld', 'grind', 'crane', 'chain']) if (typeof _AEV[ev] !== 'function') issues.push('missing ambient event ' + ev);
       for (const name of IDS) { const p = ATMO_PROFILES[name]; if (!p || !p.snd) issues.push(name + ': no ambient sound profile'); else for (const e of (p.snd.ev || [])) if (!_AEV[e[0]]) issues.push(name + ': ambient event ' + e[0] + ' does not exist'); }
     } finally { activeMapName = savedMap; }
     return issues;
   })()`);
-  console.log('irregular map checks: Sky Arena, Shipyard and Battleground are built, joined by a walkable route between the spawns, point-symmetric in cover, with a real void');
+  console.log('irregular map checks: Sky Arena, Shipyard, Battleground and Atoll are built, joined by a walkable route between the spawns, point-symmetric in cover, with a real void');
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
@@ -3782,7 +3796,7 @@ if (ok && process.argv.includes('--music')) {
       try { for (let b = 0; b < T.bars; b++) _musicBar(ctx, id, b, 10); } catch (e) { issues.push(id + ': playing a bar threw: ' + e.message); }
     }
     for (const [map, id] of Object.entries(MUSIC_FOR_MAP)) if (!MUSIC_TRACKS[id]) issues.push(map + ' asks for a track that does not exist: ' + id);
-    for (const m of ['sky_arena', 'shipyard', 'battleground']) if (!MUSIC_FOR_MAP[m]) issues.push(m + ' should have music of its own');
+    for (const m of ['sky_arena', 'shipyard', 'battleground', 'atoll']) if (!MUSIC_FOR_MAP[m]) issues.push(m + ' should have music of its own');
     // which track
     const save = { started: gameStarted, lobby: inLobby, map: activeMapName, ctx: audioCtx, vol: GAMEPLAY_SETTINGS.music, m: { ...MUSIC } };
     try {

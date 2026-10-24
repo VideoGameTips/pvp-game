@@ -5920,7 +5920,7 @@ var MAP_BOT_BOUNDS = {}, MAP_VOID = {};
 // Every map that can be played, and the subset the random draw skips (#66).
 // Mirrors server.js — MAP_IDS and THIN_MAPS have to stay identical there
 // (CLAUDE.md #4), because the server picks the map and the client honours it.
-const MAP_IDS = ['blank', 'urban', 'warehouse', 'forest', 'vietnam', 'volcano', 'cyber', 'desert', 'tundra', 'space', 'airport', 'trenches', 'chernobyl', 'refinery', 'skydock', 'sewer', 'gravity_lab', 'glassworks', 'carrier', 'overgrowth', 'orbital_station', 'foundry', 'carnival', 'biosphere', 'lockdown', 'studio', 'temple', 'holiday', 'labyrinth', 'arena', 'opera', 'doomsday', 'train', 'dreamscape', 'pearl_harbor', 'titanic', 'supermarket', 'pyongyang', 'traffic_cone_republic', 'flying_moai', 'big_arena', 'super_arena', 'big_harbor', 'storm_pier', 'pinball_arcade', 'laser_vault', 'cargo_belts', 'gale_peaks', 'magma_rise', 'neon_tokyo', 'sky_arena', 'shipyard', 'battleground', 'duel_grid', 'duel_crossroads', 'duel_pillars', 'duel_platform'];
+const MAP_IDS = ['blank', 'urban', 'warehouse', 'forest', 'vietnam', 'volcano', 'cyber', 'desert', 'tundra', 'space', 'airport', 'trenches', 'chernobyl', 'refinery', 'skydock', 'sewer', 'gravity_lab', 'glassworks', 'carrier', 'overgrowth', 'orbital_station', 'foundry', 'carnival', 'biosphere', 'lockdown', 'studio', 'temple', 'holiday', 'labyrinth', 'arena', 'opera', 'doomsday', 'train', 'dreamscape', 'pearl_harbor', 'titanic', 'supermarket', 'pyongyang', 'traffic_cone_republic', 'flying_moai', 'big_arena', 'super_arena', 'big_harbor', 'storm_pier', 'pinball_arcade', 'laser_vault', 'cargo_belts', 'gale_peaks', 'magma_rise', 'neon_tokyo', 'sky_arena', 'shipyard', 'battleground', 'atoll', 'duel_grid', 'duel_crossroads', 'duel_pillars', 'duel_platform'];
 const THIN_MAPS = new Set([]);
 // ⚔️ 1v1 duel maps: plain arenas, 72 x 112 m (about fourteen seconds spawn to spawn), dealt only to 1v1. They are in
 // MAP_IDS so that a server-sent id activates, and kept out of the random pool of every other mode.
@@ -14304,13 +14304,440 @@ _SCN.battleground = (K) => {
   K.anim((dt, t) => lights.forEach((b, i) => { b.rotation.x = 0.28 * Math.sin(t * 0.5 + i * 1.6); b.material.opacity = 0.1 + 0.06 * Math.sin(t * 0.9 + i); }));
 };
 
+// ══════════════════════════════════════════════════════════════════════════
+//   🏝️  ATOLL  a ring of beach round a turquoise lagoon: a notched, spurred, uneven outline with a lighthouse on the islet in the middle
+// The land is a ring (four strips with a corner bitten off, a spit sticking out at two corners), an islet joined to it by two jetties,
+// two docks that stop short, and a sandbar on a causeway in each of two quarters. Everything is point-symmetric (x, z -> -x, -z) except
+// what moves. Where there is no floor you fall into the water, and the water is the end of you (MAP_VOID: the floor is a list of
+// rectangles). The lighthouse in the middle stands on every line between the two spawns.
+// ══════════════════════════════════════════════════════════════════════════
+registerMap('atoll');
+MAP_THEMES.atoll = Object.assign(_T(0xe9d6a2, 0xd9c08a, 0xe9d6a2, 0xc9a86a, 0xd9c08a, 0xe9d6a2, 0xf2c030, 0x20b8b0, 0xbfe6ff, 'industrial', []), { keep: true, customDetail: true });
+_IRR.atoll = { beam: null, waves: [] };
+Object.assign(_AFAR, { parrot: 1400, steeldrum: 1800, coconut: 900 });
+Object.assign(_AEV, {
+  parrot(c, t, o) { for (let k = 0; k < 3; k++) _aTone(c, t + k * 0.17, 0.15, o, 'sawtooth', 1700 + Math.random() * 700, 900 + Math.random() * 400, 0.22, 0.01, 0.05); _aTone(c, t + 0.62, 0.34, o, 'square', 1200, 2100, 0.1, 0.02, 0.12); },
+  steeldrum(c, t, o) { const N = [392, 440, 523, 587, 659, 784]; let at = t; for (let k = 0; k < 5; k++) { const f = N[(Math.random() * N.length) | 0]; playTone(c, at, 0.55, o, f, f * 0.997, 0.34, 'sine'); playTone(c, at, 0.3, o, f * 2, f * 2, 0.14, 'sine'); at += 0.26 + Math.random() * 0.1; } },
+  coconut(c, t, o) { playTone(c, t, 0.12, o, 190, 95, 0.5, 'sine'); playFilteredNoise(c, t, 0.06, o, 0.35, 'lowpass', 900, 0.8, 0.002, 1.4); },
+});
+_ap('atoll', { ground: 'sand', amp: 0.02, mottle: [0.95, 0.9, 0.78], fog: [90, 340], zen: 0x4fb0ee, sun: [0.95, 0.42, 0xffd49c], cloud: _CL(11, 0xffffff), fx: ['spray', 'glints'], gusty: 0.45,
+  snd: { waves: 0.4, wind: 0.14, windF: 520, ev: [['gull', 7, 16, 0.45], ['parrot', 11, 26, 0.4], ['steeldrum', 24, 50, 0.33], ['coconut', 14, 32, 0.3], ['bird', 16, 34, 0.25]] } });
+
+// the land, as rectangles [x0, x1, z0, z1, kind]: sand, or the planks of a pier
+const ATOLL_LAND = (() => {
+  const half = [   // the half that is z < 0; each is turned through 180 degrees for the other half
+    [-70, 84, -84, -70, 'sand'], [-84, 84, -70, -52, 'sand'],                    // the north strip, with the north-west corner bitten off
+    [84, 110, -76, -60, 'sand'],                                                 // the spit out of the north-east corner
+    [-5, 5, -52, -18, 'wood'],                                                   // the jetty to the islet
+    [-34, -28, -52, -40, 'sand'], [-40, -22, -40, -26, 'sand'],                  // the north-west sandbar and the causeway to it
+  ];
+  const out = [];
+  for (const r of half) { out.push(r); out.push([-r[1], -r[0], -r[3], -r[2], r[4]]); }
+  out.push([-84, -52, -52, 52, 'sand'], [52, 84, -52, 52, 'sand']);              // west and east strips
+  out.push([-18, 18, -18, 18, 'sand']);                                          // the islet
+  for (const s of [-1, 1]) { const a = s * 42, b = s * 52, c = s * 34; out.push([Math.min(a, b), Math.max(a, b), -4, 4, 'wood'], [Math.min(c, a), Math.max(c, a), -8, 8, 'wood']); }   // the two docks: the walk out, and the wide end
+  return out;
+})();
+const ATOLL_SPAWN = { ally: { x0: -66, x1: -50, z0: -82, z1: -74 }, enemy: { x0: 50, x1: 66, z0: 74, z1: 82 } };
+function buildAtollLayout() {
+  const name = 'atoll', K = _bkBegin(name, 232, 172, 0xe4d0a0), G = MAP_GROUPS[name];
+  G.remove(G.children[G.children.length - 1]);                       // the one sheet of ground _bkBegin laid: this is a ring
+  const rnd = _thRng(name + ':layout');
+  const C = { sand: 0xe9d6a2, sand2: 0xd9c08a, wet: 0xb89c68, foam: 0xe6faf6, wood: 0x9a6a3c, wood2: 0x7a4e2a, wood3: 0xb98450, thatch: 0xcfa84c, thatch2: 0xa8832e, bamboo: 0xd9c47c, bamboo2: 0xb59a4e,
+              palm: 0x2f9a45, palm2: 0x1f7a38, palm3: 0x48b858, trunk: 0xa07848, rock: 0x6c7076, rock2: 0x585d62, white: 0xf4f0e6, red: 0xd8402e, blue: 0x2a78c8, teal: 0x20b8b0,
+              yellow: 0xf2c030, dark: 0x2a2e33, coral: 0xff7a6a, lantern: 0xffc860, grass: 0x58a848, pink: 0xff6fa8, rope: 0xc8b078, grey: 0xcfd6dc };
+  const floor = [], detail = _thBuf(), glow = _thBuf();
+  const deco = (x0, x1, y0, y1, z0, z1, c, lit = false) => _thBox(lit ? glow : detail, _TH_WORLD, (x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2, x1 - x0, y1 - y0, z1 - z0, c);
+  const dbox = (h, lx, ly, lz, sx, sy, sz, c, lit = false) => _thBox(lit ? glow : detail, h, lx, ly, lz, sx, sy, sz, c);   // a decor box on a host that is turned about the vertical
+  const hostAt = (x, y, z, yaw) => ({ position: { x, y, z }, rotation: { y: yaw || 0 } });
+  const rectAt = (x, z) => ATOLL_LAND.find(r => x >= r[0] && x <= r[1] && z >= r[2] && z <= r[3]);
+  const isLand = (x, z) => !!rectAt(x, z);
+  const landAround = (x, z, m) => ['sand'].every(k => { const a = rectAt(x - m, z), b = rectAt(x + m, z), c = rectAt(x, z - m), d = rectAt(x, z + m); return a && b && c && d && [a, b, c, d].every(r => r[4] === k); });
+  const occupied = [];                                               // [x0, x1, z0, z1] in the half's own terms: where a palm must not grow
+  const occupy = (x0, x1, z0, z1, pad = 1.5) => occupied.push([Math.min(x0, x1) - pad, Math.max(x0, x1) + pad, Math.min(z0, z1) - pad, Math.max(z0, z1) + pad]);
+  const free = (x, z, m = 1) => !occupied.some(o => x >= o[0] - m && x <= o[1] + m && z >= o[2] - m && z <= o[3] + m);
+
+  // ── textures: sand with ripples and shells, planks with grain and nails, water with lines of light
+  const sandTex = surfTex('atoll-sand', 256, (ctx, s) => {
+    ctx.fillStyle = '#dcbb7c'; ctx.fillRect(0, 0, s, s);
+    const r = _rng(5);
+    for (let i = 0; i < 1400; i++) { const v = r() < 0.5 ? 'rgba(160,126,70,' : 'rgba(255,240,200,'; ctx.fillStyle = v + (0.1 + r() * 0.22).toFixed(2) + ')'; ctx.fillRect(r() * s, r() * s, 1 + r() * 2.4, 1 + r() * 2.4); }
+    ctx.strokeStyle = 'rgba(150,114,60,0.26)'; ctx.lineWidth = 2;
+    for (let i = 0; i < 7; i++) { ctx.beginPath(); const y = 20 + i * 34 + r() * 8; ctx.moveTo(0, y); for (let x = 0; x <= s; x += 16) ctx.lineTo(x, y + Math.sin(x * 0.05 + i) * 5); ctx.stroke(); }
+    for (let i = 0; i < 9; i++) { ctx.fillStyle = i % 3 ? '#f6e8d4' : '#f2c4b4'; ctx.beginPath(); ctx.arc(r() * s, r() * s, 1.6 + r() * 1.4, 0, 6.3); ctx.fill(); }
+  });
+  const woodTex = surfTex('atoll-planks', 256, (ctx, s) => {
+    ctx.fillStyle = '#946438'; ctx.fillRect(0, 0, s, s);
+    const r = _rng(9), n = 8, w = s / n;
+    for (let i = 0; i < n; i++) {
+      const sh = (r() * 26 - 13) | 0; ctx.fillStyle = 'rgb(' + (148 + sh) + ',' + (100 + sh) + ',' + (58 + sh) + ')'; ctx.fillRect(i * w + 1, 0, w - 2, s);
+      ctx.strokeStyle = 'rgba(60,34,16,0.35)'; ctx.lineWidth = 1; for (let k = 0; k < 7; k++) { const x = i * w + 3 + r() * (w - 6); ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x + (r() - 0.5) * 6, s); ctx.stroke(); }
+      ctx.fillStyle = 'rgba(40,24,10,0.65)'; for (const y of [10, s / 2, s - 10]) { ctx.fillRect(i * w + 3, y, 2, 2); ctx.fillRect(i * w + w - 5, y, 2, 2); }
+    }
+    ctx.strokeStyle = 'rgba(30,16,6,0.6)'; ctx.lineWidth = 2; for (let i = 0; i <= n; i++) { ctx.beginPath(); ctx.moveTo(i * w, 0); ctx.lineTo(i * w, s); ctx.stroke(); }
+  });
+  const waveTex = surfTex('atoll-waves', 256, (ctx, s) => {
+    ctx.fillStyle = '#3cc9c4'; ctx.fillRect(0, 0, s, s);
+    const r = _rng(21);
+    for (let i = 0; i < 16; i++) { ctx.strokeStyle = 'rgba(255,255,255,' + (0.1 + r() * 0.18).toFixed(2) + ')'; ctx.lineWidth = 1.5 + r() * 2; ctx.beginPath(); const y = r() * s; ctx.moveTo(0, y); for (let x = 0; x <= s; x += 14) ctx.lineTo(x, y + Math.sin(x * 0.07 + i * 2) * 6); ctx.stroke(); }
+    for (let i = 0; i < 60; i++) { ctx.fillStyle = 'rgba(255,255,255,0.14)'; ctx.fillRect(r() * s, r() * s, 3 + r() * 6, 1.5); }
+  });
+  const MATS = { wood: new THREE.MeshLambertMaterial({ map: woodTex }), sand: new THREE.MeshLambertMaterial({ map: sandTex, color: 0xf6e0b0 }) };   // one material each, so the planes can be merged
+  for (const [x0, x1, z0, z1, kind] of ATOLL_LAND) {
+    const tile = kind === 'wood' ? 4 : 8;
+    const geo = new THREE.PlaneGeometry(x1 - x0, z1 - z0), uv = geo.attributes.uv;
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * (x1 - x0) / tile, uv.getY(i) * (z1 - z0) / tile);
+    const m = new THREE.Mesh(geo, MATS[kind]);
+    m.rotation.x = -Math.PI / 2; m.position.set((x0 + x1) / 2, 0, (z0 + z1) / 2); G.add(m); floor.push({ x0, x1, z0, z1 });
+  }
+
+  // ── the water: a deep sea out to the horizon, the pale lagoon over it, both moving (the textures slide: see the scenery)
+  const wmat = (tint, rep) => { const t = waveTex.clone(); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rep, rep); t.needsUpdate = true; _IRR.atoll.waves.push(t); return new THREE.MeshPhongMaterial({ color: tint, map: t, shininess: 90, specular: 0xbfeaff }); };
+  const sea = new THREE.Mesh(new THREE.PlaneGeometry(1800, 1800), wmat(0x2f88cc, 120));
+  sea.rotation.x = -Math.PI / 2; sea.position.y = -1.4; sea.userData.keepOutside = true; G.add(sea);
+  const lagoon = new THREE.Mesh(new THREE.PlaneGeometry(112, 112), wmat(0xaaf4ea, 9));
+  lagoon.rotation.x = -Math.PI / 2; lagoon.position.y = -1.37; G.add(lagoon);
+  // every shore: the face the land drops by, wet sand along the top of it, and foam where the water laps
+  for (const [x0, x1, z0, z1, kind] of ATOLL_LAND) {
+    const wood = kind === 'wood';
+    for (const [ax, bx_, az, bz, nx, nz] of [[x0, x1, z0, z0, 0, -1], [x0, x1, z1, z1, 0, 1], [x0, x0, z0, z1, -1, 0], [x1, x1, z0, z1, 1, 0]]) {
+      const len = Math.hypot(bx_ - ax, bz - az), n = Math.max(1, Math.round(len / 2)), step = len / n, hs = step / 2 + 0.02;
+      for (let i = 0; i < n; i++) {
+        const t = (i + 0.5) / n, px = ax + (bx_ - ax) * t, pz = az + (bz - az) * t;
+        if (isLand(px + nx * 0.8, pz + nz * 0.8)) continue;                             // more land there: not a shore
+        const cx = px + nx * 0.15, cz = pz + nz * 0.15;
+        deco(cx - (nx ? 0.18 : hs), cx + (nx ? 0.18 : hs), -1.45, 0.0, cz - (nz ? 0.18 : hs), cz + (nz ? 0.18 : hs), wood ? C.wood2 : C.sand2);
+        if (!wood) { const wx = px - nx * 1.0, wz = pz - nz * 1.0; deco(wx - (nx ? 0.9 : hs), wx + (nx ? 0.9 : hs), 0.012, 0.03, wz - (nz ? 0.9 : hs), wz + (nz ? 0.9 : hs), C.wet); }
+        const fx = px + nx * 0.7, fz = pz + nz * 0.7;
+        deco(fx - (nx ? 0.35 : hs), fx + (nx ? 0.35 : hs), -1.37, -1.33, fz - (nz ? 0.35 : hs), fz + (nz ? 0.35 : hs), C.foam);
+      }
+    }
+  }
+
+  // ── what stands on it. Everything in half() is made for the half z > 0 and then turned through 180 degrees for the other: x, z -> -x, -z
+  const lights = [];
+  const half = (sx) => {
+    const X = (x) => sx * x, Z = (z) => sx * z, mn = (a, b) => [Math.min(a, b), Math.max(a, b)];
+    const FL = { N: 'S', S: 'N', E: 'W', W: 'E', n: 's', s: 'n', e: 'w', w: 'e' };
+    const bx = (x, y0, z, w, h, d, c, rot = 0) => K.box(X(x), y0, Z(z), w, h, d, c, rot);
+    const dc = (x0, x1, y0, y1, z0, z1, c, lit = false) => { const a = mn(X(x0), X(x1)), b = mn(Z(z0), Z(z1)); deco(a[0], a[1], y0, y1, b[0], b[1], c, lit); };
+    const wxs = (x0, x1, z, t, y0, h, c, open) => { const a = mn(X(x0), X(x1)); return K.wx(a[0], a[1], Z(z), t, y0, h, c, (open || []).map(o => ({ ...o, at: X(o.at) }))); };
+    const wzs = (z0, z1, x, t, y0, h, c, open) => { const a = mn(Z(z0), Z(z1)); return K.wz(a[0], a[1], X(x), t, y0, h, c, (open || []).map(o => ({ ...o, at: Z(o.at) }))); };
+    const slab = (x0, x1, z0, z1, top, th, c) => { const a = mn(X(x0), X(x1)), b = mn(Z(z0), Z(z1)); K.slab(a[0], a[1], b[0], b[1], top, th, c); };
+    const stairs = (x, z, dir, rise, width, c, depth = 0.95, stepH = 0.45) => K.stairs(X(x), Z(z), sx > 0 ? dir : FL[dir], rise, width, c, 0, depth, stepH);
+    const ladder = (x, z, nx, nz, y1) => addGridLadder(name, X(x), Z(z), Math.atan2(sx * nx, sx * nz), 0, y1, 1.15);   // (nx, nz): the way the ladder faces
+    const room = (x0, x1, z0, z1, h, c, doors) => {                    // doors: { n: [..], s: [..], e: [..], w: [..] } in this half's terms (n is -z)
+      const a = mn(X(x0), X(x1)), b = mn(Z(z0), Z(z1)), d = {};
+      for (const k of Object.keys(doors)) d[sx > 0 ? k : FL[k]] = doors[k].map(o => ({ ...o, at: (k === 'n' || k === 's') ? X(o.at) : Z(o.at) }));
+      K.room(a[0], a[1], b[0], b[1], 0, h, c, d);
+    };
+    const palm = (x, z, lean = 0.3) => {                                // a trunk to take cover behind, and a crown of fronds
+      const ox = X(x), oz = Z(z), yaw = rnd() * 6.28, H = 6.4 + rnd() * 2.4;
+      K.box(ox, 0, oz, 0.9, H, 0.9, C.trunk);
+      const h = hostAt(ox, 0, oz, yaw);
+      for (let i = 0; i < 4; i++) dbox(h, lean * 0.08 * i, (i + 0.5) * H / 4, 0, 1.0 - i * 0.08, H / 4 + 0.02, 1.0 - i * 0.08, i % 2 ? 0x7a5230 : C.trunk);
+      dbox(h, lean * 0.4, H - 0.2, 0, 1.3, 0.7, 1.3, C.palm2);
+      for (let k = 0; k < 7; k++) {
+        const a = k * 0.898 + rnd() * 0.3, ch = hostAt(ox + lean * 0.4, H, oz, yaw + a);
+        dbox(ch, 1.7, 0.1, 0, 3.4, 0.12, 1.2, k % 2 ? C.palm : C.palm3); dbox(ch, 4.1, -0.45, 0, 2.6, 0.1, 0.9, C.palm2); dbox(ch, 5.9, -1.1, 0, 1.4, 0.08, 0.5, C.palm);
+      }
+      if (rnd() < 0.7) { const ch = hostAt(ox, H - 0.4, oz, yaw); dbox(ch, 0.5, 0, 0.3, 0.4, 0.4, 0.4, 0x6a4a2a); dbox(ch, -0.4, 0, -0.2, 0.4, 0.4, 0.4, 0x6a4a2a); }
+      occupy(x, x, z, z, 1.4);
+    };
+    const umbrella = (x, z, c1, c2) => {
+      const ox = X(x), oz = Z(z); deco(ox - 0.06, ox + 0.06, 0, 2.6, oz - 0.06, oz + 0.06, C.white);
+      for (let i = 0; i < 4; i++) deco(ox - 1.7 + i * 0.85, ox - 0.85 + i * 0.85, 2.5, 2.7, oz - 1.7, oz + 1.7, i % 2 ? c1 : c2);
+      deco(ox - 1.2, ox + 1.2, 2.7, 2.85, oz - 1.2, oz + 1.2, c2); occupy(x, x, z, z, 1.8);
+    };
+    const lamp = (x, z, h = 3.6) => { deco(X(x) - 0.1, X(x) + 0.1, 0, h, Z(z) - 0.1, Z(z) + 0.1, C.wood2); deco(X(x) - 0.28, X(x) + 0.28, h, h + 0.5, Z(z) - 0.28, Z(z) + 0.28, C.lantern, true); };
+    const crate = (x, z, rot, s = 2.2, c = 0x8a6a3a) => { bx(x, 0, z, s, s * 0.9, s, c, rot); dc(x - s / 2 - 0.02, x + s / 2 + 0.02, s * 0.42, s * 0.5, z - s / 2 - 0.02, z + s / 2 + 0.02, C.wood2); occupy(x, x, z, z, s); };
+    const barrel = (x, z, c = 0xcc4422) => { addExplosiveBarrel(name, X(x), Z(z), c); occupy(x, x, z, z, 1); };
+    const tikiWall = (x0, x1, z, th = 1.2, h = 3.4) => {               // a screen: bamboo posts, a rail along the top, red and yellow bands, a carved face now and then
+      bx((x0 + x1) / 2, 0, z, x1 - x0, h, th, C.wood2);
+      dc(x0 - 0.1, x1 + 0.1, h, h + 0.35, z - th / 2 - 0.1, z + th / 2 + 0.1, C.bamboo);
+      for (const f of [-1, 1]) {
+        for (let x = x0 + 0.8; x < x1; x += 1.6) dc(x - 0.22, x + 0.22, 0, h + 0.9, z + f * (th / 2 + 0.02), z + f * (th / 2 + 0.12), C.bamboo2);
+        dc(x0, x1, h * 0.55, h * 0.62, z + f * (th / 2 + 0.04), z + f * (th / 2 + 0.14), C.red); dc(x0, x1, h * 0.62, h * 0.68, z + f * (th / 2 + 0.04), z + f * (th / 2 + 0.14), C.yellow);
+      }
+      for (let x = x0 + 4; x < x1 - 2; x += 8) { dc(x - 0.7, x + 0.7, 1.2, 2.8, z - th / 2 - 0.2, z - th / 2 - 0.1, C.dark); dc(x - 0.4, x - 0.15, 2.0, 2.3, z - th / 2 - 0.22, z - th / 2 - 0.12, C.yellow, true); dc(x + 0.15, x + 0.4, 2.0, 2.3, z - th / 2 - 0.22, z - th / 2 - 0.12, C.yellow, true); }
+      occupy(x0, x1, z - th / 2, z + th / 2, 1.2);
+    };
+    const thatch = (x0, x1, z0, z1, top) => {                          // a roof you can stand on, with an overhang and a ridge so it reads as thatch
+      slab(x0, x1, z0, z1, top, 0.4, C.thatch);
+      dc(x0 - 0.7, x1 + 0.7, top - 0.5, top - 0.3, z0 - 0.7, z1 + 0.7, C.thatch2); dc(x0 - 0.3, x1 + 0.3, top, top + 0.12, z0 - 0.3, z1 + 0.3, C.thatch2);
+      for (let x = x0 - 0.6; x < x1 + 0.6; x += 1.1) { dc(x, x + 0.5, top - 0.9, top - 0.5, z0 - 0.7, z0 - 0.6, C.thatch2); dc(x, x + 0.5, top - 0.9, top - 0.5, z1 + 0.6, z1 + 0.7, C.thatch2); }
+    };
+    const hut = (x0, x1, z0, z1, doors, c = C.bamboo, h = 3.2) => {
+      room(x0, x1, z0, z1, h, c, doors); thatch(x0, x1, z0, z1, h + 0.6); occupy(x0, x1, z0, z1, 1.5);
+      for (let x = x0 + 0.6; x < x1 - 0.3; x += 1.3) { dc(x, x + 0.16, 0, h, z0 - 0.04, z0 + 0.02, C.bamboo2); dc(x, x + 0.16, 0, h, z1 - 0.02, z1 + 0.04, C.bamboo2); }
+      for (let z = z0 + 0.6; z < z1 - 0.3; z += 1.3) { dc(x0 - 0.04, x0 + 0.02, 0, h, z, z + 0.16, C.bamboo2); dc(x1 - 0.02, x1 + 0.04, 0, h, z, z + 0.16, C.bamboo2); }
+      dc(x0 - 0.06, x1 + 0.06, h - 0.35, h - 0.2, z0 - 0.06, z0 + 0.0, C.thatch2); dc(x0 - 0.06, x1 + 0.06, h - 0.35, h - 0.2, z1, z1 + 0.06, C.thatch2);
+    };
+    const rock = (x, z, w, h, d, rot) => {
+      const c = rnd() < 0.5 ? C.rock : C.rock2;
+      bx(x, 0, z, w, h, d, c, rot);
+      const hh = hostAt(X(x), 0, Z(z), rot * sx + 0.6);                  // rough lumps on and round it, for the eye
+      dbox(hh, w * 0.12, h + 0.25, d * 0.1, w * 0.62, 0.55, d * 0.6, C.rock); dbox(hh, -w * 0.38, h * 0.32, d * 0.25, w * 0.36, h * 0.7, d * 0.5, C.rock2); dbox(hh, w * 0.4, h * 0.25, -d * 0.2, w * 0.4, h * 0.55, d * 0.46, c);
+      dbox(hh, 0, h * 0.5, d * 0.52, w * 0.7, h * 0.35, 0.18, 0x7a7e84);
+      occupy(x, x, z, z, Math.max(w, d) / 2);
+    };
+    const bush = (x, z, sz = 1) => { const h = hostAt(X(x), 0, Z(z), rnd() * 6.28); for (let i = 0; i < 4; i++) dbox(h, (rnd() - 0.5) * sz, 0.35 * sz + i * 0.05, (rnd() - 0.5) * sz, (0.7 + rnd() * 0.6) * sz, (0.55 + rnd() * 0.4) * sz, (0.7 + rnd() * 0.6) * sz, i % 2 ? C.palm2 : C.grass); if (rnd() < 0.5) dbox(h, 0.2, 0.75 * sz, 0.1, 0.18, 0.18, 0.18, C.pink); };
+
+    // ── the south strip (z 52 → 84), from the west: the spit and its wreck, the boat shed, a grove, the fire pit, the tiki bar, the court, the spawn
+    {                                                                   // the wreck on the spit: a keel, ribs, a mast with a torn sail, a chest of gold
+      bx(-99, 0, 68, 18, 0.9, 4.4, C.wood2);
+      for (const z of [65.6, 70.4]) bx(-99, 0.9, z, 17, 1.7, 0.5, C.wood);
+      for (let x = -106; x <= -92; x += 2.6) for (const z of [65.4, 70.6]) bx(x, 0.9, z, 0.5, 3.4, 0.5, C.wood2);
+      bx(-107.4, 0.9, 68, 0.6, 2.4, 4.4, C.wood2);
+      bx(-100, 0.9, 68, 0.9, 7.6, 0.9, C.wood2);
+      dc(-102.4, -97.6, 5.4, 5.7, 67.8, 68.2, C.bamboo2); dc(-102.2, -97.8, 2.6, 5.3, 67.92, 68.08, C.white); dc(-102.2, -99.4, 2.2, 2.6, 67.92, 68.08, C.white);
+      bx(-95, 0, 68, 1.6, 0.9, 1.0, 0x6a4a1c); dc(-95.9, -94.1, 0.9, 1.0, 67.4, 68.6, C.yellow); dc(-95.2, -94.8, 0.5, 0.75, 67.95, 68.05, C.yellow, true);
+      rock(-104, 74, 2.6, 1.6, 2.2, 0.4); rock(-92, 62, 2.6, 1.6, 2.2, 1.2); rock(-86, 72, 2.4, 1.4, 2.0, 2.0);
+      occupy(-108, -90, 63, 73, 2); K.poi('shipwreck', X(-97), Z(68), 0.9);
+    }
+    {                                                                   // the boat shed: a wide front, a thatched roof you reach by a ladder, two rowboats inside
+      hut(-58, -40, 60, 72, { n: [K.door(-49, 14, 3)], e: [K.door(66, 2.8, 2.8)] });
+      for (const [x, z, yaw] of [[-52, 66, 0.1], [-46, 67, -0.12]]) { bx(x, 0, z, 5.2, 0.9, 1.9, C.red, yaw); dc(x - 2.2, x + 2.2, 0.9, 0.96, z - 0.6, z + 0.6, C.wood3); }
+      for (const x of [-56, -52, -48, -44, -41]) dc(x, x + 0.4, 2.0, 2.4, 71.6, 71.64, C.rope);
+      ladder(-58.1, 66, -1, 0, 3.8); K.poi('boat shed', X(-49), Z(66), 0);
+    }
+    {                                                                   // the fire pit and its logs
+      for (let i = 0; i < 9; i++) { const a = i * 0.698, x = Math.cos(a) * 2.3, z = 62 + Math.sin(a) * 2.3; bx(x, 0, z, 1.0, 0.7, 1.0, i % 2 ? C.rock : C.rock2, a); }
+      dc(-1.3, 1.3, 0.05, 0.5, 60.7, 63.3, 0xff7a1a, true); dc(-0.7, 0.7, 0.5, 1.3, 61.3, 62.7, 0xffc040, true);
+      dc(-1.6, 1.6, 0.2, 0.5, 61.8, 62.2, C.wood2); dc(-0.2, 0.2, 0.2, 0.5, 60.4, 63.6, C.wood2);
+      for (const [x, z, w, d] of [[0, 57, 4.4, 0.8], [0, 67, 4.4, 0.8], [-5.4, 62, 0.8, 4.4], [5.4, 62, 0.8, 4.4]]) { bx(x, 0, z, w, 0.55, d, C.wood); dc(x - w / 2, x + w / 2, 0.55, 0.6, z - d / 2, z + d / 2, C.wood3); }
+      lights.push([X(0), 2.6, Z(62), 0xff9a40, 1.5, 22]); occupy(-7, 7, 55, 69, 1); K.poi('fire pit', X(0), Z(65.4), 0);
+    }
+    {                                                                   // the tiki bar: a counter across a wide window, a thatched roof, bottles glowing behind, stools out in front
+      room(14, 30, 58, 70, 3.4, C.bamboo, { n: [K.door(21, 8, 2.4)], e: [K.door(64, 2.6, 2.8)], s: [K.win(22, 5, 1.3, 2.6)] });
+      thatch(14, 30, 58, 70, 4.0);
+      bx(21, 0, 59.6, 8.4, 1.1, 0.9, C.wood); dc(16.6, 25.4, 1.1, 1.18, 59.1, 60.1, C.wood3);
+      for (const x of [17.6, 19.8, 22, 24.2, 26.4]) bx(x, 0, 56.6, 0.7, 0.8, 0.7, C.red);
+      for (const [x, c] of [[16, C.teal], [17.4, C.pink], [18.8, C.yellow], [20.2, C.teal], [21.6, C.pink], [23, C.yellow], [24.4, C.teal], [25.8, C.pink], [27.2, C.yellow]]) dc(x, x + 0.4, 1.5, 2.3, 69.2, 69.5, c, true);
+      dc(15.2, 28.8, 1.3, 1.45, 69.1, 69.5, C.wood2);
+      dc(20, 23, 4.5, 5.3, 57.2, 57.4, C.dark); dc(20.2, 22.8, 4.6, 5.2, 57.16, 57.22, C.yellow, true); dc(20.1, 20.35, 4.0, 4.5, 57.2, 57.4, C.wood2); dc(22.65, 22.9, 4.0, 4.5, 57.2, 57.4, C.wood2);   // the sign
+      lamp(13, 56); lamp(31, 56); lights.push([X(22), 3.4, Z(60), 0xffb050, 1.3, 20]);
+      occupy(12, 32, 55, 71, 1.5); K.poi('tiki bar', X(22), Z(64), 0);
+    }
+    {                                                                   // the volleyball court: lines in the sand, two posts, a net you can see across
+      for (const [x0, x1, z0, z1] of [[36, 52, 56, 56.3], [36, 52, 69.7, 70], [36, 36.3, 56, 70], [51.7, 52, 56, 70], [43.9, 44.1, 56, 70]]) dc(x0, x1, 0.03, 0.06, z0, z1, C.white);
+      for (const z of [55.6, 70.4]) bx(44, 0, z, 0.3, 2.5, 0.3, C.wood);
+      dc(43.96, 44.04, 1.1, 2.4, 56, 70, C.white); dc(43.94, 44.06, 2.3, 2.4, 55.6, 70.4, C.red);
+      umbrella(54, 60, C.red, C.white); umbrella(34, 66, C.teal, C.white);
+      for (const [x, z] of [[33.4, 58.6], [33.4, 61.4]]) { bx(x, 0, z, 0.9, 0.4, 2.2, C.white); dc(x - 0.45, x + 0.45, 0.4, 0.5, z - 1.1, z + 1.1, C.blue); }
+      occupy(34, 54, 54, 72, 0.5);
+    }
+    {                                                                   // the spawn pocket in the corner: a screen across the front, a bamboo wall on the side with a gap to get out by, a fence along the water
+      tikiWall(46, 71, 71, 1.4, 3.6);
+      wzs(72, 84, 48, 1.2, 0, 3.4, C.wood2, [{ at: 78.5, w: 4.4, sill: 0, top: 3.6 }]);
+      for (let z = 73; z < 84; z += 1.6) dc(47.3, 47.7, 0, 4.2, z, z + 0.4, C.bamboo2);
+      wzs(70, 84, 69.8, 0.3, 0, 1.3, C.bamboo);                          // the fence along the notch
+      for (let z = 70.4; z < 84; z += 1.6) dc(69.5, 70.1, 0, 1.7, z, z + 0.3, C.bamboo2);
+      umbrella(53, 80, C.yellow, C.coral); umbrella(63, 80, C.coral, C.yellow);
+      lamp(67, 76, 3.4); lamp(55, 83, 3.4);
+      rock(60, 60, 3.4, 3.2, 3.0, 0.3); rock(65, 64, 3.2, 2.6, 2.8, 1.3); rock(57, 64.5, 3.0, 2.2, 2.6, 2.2); bx(62, 3.2, 62, 2.4, 1.6, 2.2, C.rock2, 0.5);
+      occupy(44, 72, 52, 84, 0);
+    }
+    // ── the east strip, upper half (x 52 → 84, z 0 → 52): the rock, the lifeguard tower, the nets, a stranded boat, cargo
+    {
+      bx(69, 0, 17, 14, 5.4, 14, C.rock);                                // the rock: a stair up its south face, a flag and a palm on top
+      dc(61.7, 76.3, 0, 2.2, 9.7, 24.3, C.rock2); dc(62.4, 75.6, 4.4, 5.5, 10.4, 23.6, C.grass);
+      for (const [x, z] of [[62.5, 17], [76.5, 17], [69, 9.5], [66, 24.5], [72.5, 24.5]]) dc(x - 0.9, x + 0.9, 2.2, 3.6, z - 0.9, z + 0.9, C.rock);
+      stairs(69, 34.925, 'N', 5.4, 3.4, C.rock, 0.95, 0.45);
+      dc(72.9, 73.1, 5.4, 9.4, 12.9, 13.1, C.white); dc(73.1, 75.4, 8.2, 9.3, 12.95, 13.05, C.red);
+      occupy(60, 78, 8, 36, 1); K.poi('the rock', X(69), Z(17), 5.4);
+    }
+    {                                                                   // the lifeguard tower: stilts, a deck, a canopy, a stair up from the south
+      for (const [x, z] of [[56.4, 34.4], [61.6, 34.4], [56.4, 39.6], [61.6, 39.6]]) bx(x, 0, z, 0.5, 4.2, 0.5, C.white);
+      for (let y = 0.6; y < 4; y += 1.2) dc(56.15, 61.85, y, y + 0.3, 34.15, 34.65, C.red);
+      slab(56, 62, 34, 40, 4.5, 0.3, C.white);
+      wxs(56, 62, 34.15, 0.25, 4.5, 1.0, C.red); wxs(56, 62, 39.85, 0.25, 4.5, 1.0, C.white, [{ at: 59, w: 3.4, sill: 0, top: 3 }]); wzs(34, 40, 56.15, 0.25, 4.5, 1.0, C.white);
+      wzs(34, 40, 61.7, 0.3, 4.5, 2.3, C.white, [K.win(37, 3, 0.7, 2.0)]);
+      for (const [x, z] of [[56.2, 34.2], [61.8, 34.2], [56.2, 39.8], [61.8, 39.8]]) dc(x - 0.12, x + 0.12, 4.5, 7.0, z - 0.12, z + 0.12, C.red);
+      for (let i = 0; i < 6; i++) dc(55.4 + i * 1.2, 56.6 + i * 1.2, 7.0, 7.25, 33.4, 40.6, i % 2 ? C.white : C.red);
+      stairs(59, 48.4, 'N', 4.5, 3, C.wood, 0.95, 0.45);
+      occupy(54, 64, 32, 50, 1); K.poi('lifeguard tower', X(59), Z(37), 4.5);
+    }
+    {                                                                   // nets drying on a frame, a stranded boat, cargo
+      for (const x of [72.5, 76, 79.5]) bx(x, 0, 31, 0.35, 2.6, 0.35, C.wood2);
+      dc(72.4, 79.7, 2.4, 2.6, 30.9, 31.1, C.wood2);
+      for (let x = 72.9; x < 79.4; x += 0.7) dc(x, x + 0.5, 0.8, 2.4, 30.97, 31.03, 0x6aa0a0);
+      for (const x of [73.4, 75.2, 77.6]) dc(x, x + 0.5, 1.2, 1.4, 30.9, 31.1, C.coral);
+      bx(80, 0, 42, 6, 0.9, 2.2, C.blue, 0.35); dc(78.2, 81.8, 0.9, 0.96, 41.5, 42.5, C.wood3, false); dc(77.4, 78.1, 0.9, 1.6, 40.6, 40.9, C.wood);
+      crate(57, 6, 0.2); crate(59.6, 5.6, -0.3); crate(57.6, 8.6, 0.1, 1.8, 0x7a5a30); barrel(64, 6.5); barrel(65.8, 7.8, 0x2a7a8a);
+      occupy(70, 84, 28, 46, 1); occupy(54, 68, 3, 10, 0.5);
+    }
+    // ── the west strip, upper half (x -84 → -52, z 0 → 52): a row of cabanas on a boardwalk, picnic tables, a stone arch, a windsock
+    {
+      for (const [z0, z1] of [[6, 16], [21, 31], [36, 46]]) {
+        const zc = (z0 + z1) / 2;
+        hut(-82, -72, z0, z1, { e: [K.door(zc, 2.8, 2.8)], n: [K.win(-77, 2.2, 1.1, 2.4)], s: [K.win(-77, 2.2, 1.1, 2.4)] }, z0 === 21 ? C.bamboo2 : C.bamboo);
+        dc(-72, -69.6, 0, 0.35, z0 + 1, z1 - 1, C.wood3); dc(-71.9, -71.6, 0.35, 2.2, z0 + 1.1, z0 + 1.4, C.wood2); dc(-71.9, -71.6, 0.35, 2.2, z1 - 1.4, z1 - 1.1, C.wood2);
+        dc(-72.4, -69.2, 2.2, 2.45, z0 + 1, z1 - 1, C.red);                                   // an awning over the porch
+        dc(-71.2, -70.4, 1.0, 1.5, zc - 0.2, zc + 0.2, C.dark);                                // a sign by the door
+        lamp(-69.2, z0 + 0.6, 3.0);
+      }
+      dc(-69, -64, 0.03, 0.08, 4, 50, C.wood3); for (let z = 4; z < 50; z += 2) dc(-69, -64, 0.08, 0.1, z, z + 0.06, C.wood2);
+      for (const z of [11, 26, 41]) { bx(-61, 0, z, 3.2, 0.9, 1.3, C.wood); dc(-62.6, -59.4, 0.9, 0.98, z - 0.65, z + 0.65, C.wood3); for (const f of [-1, 1]) dc(-62.4, -59.6, 0, 0.5, z + f * 1.1 - 0.2, z + f * 1.1 + 0.2, C.wood2); occupy(-63, -59, z - 2, z + 2, 0.5); }
+      bx(-56.4, 0, 21.2, 2.4, 4.2, 2.4, C.rock); bx(-56.4, 0, 26.8, 2.4, 4.2, 2.4, C.rock2); bx(-56.4, 4.2, 24, 2.8, 1.4, 8.6, C.rock); dc(-57.4, -55.4, 5.6, 5.9, 20.6, 27.4, C.grass);
+      occupy(-58, -54.5, 19.5, 28.5, 1); K.poi('stone arch', X(-56.4), Z(24), 0);
+      dc(-61.1, -60.9, 0, 5.6, 50.4, 50.6, C.wood2); dc(-60.9, -58.6, 5.0, 5.55, 50.45, 50.55, C.red); dc(-58.6, -57.0, 5.1, 5.5, 50.45, 50.55, C.white);
+      occupy(-84, -69, 4, 48, 0);
+    }
+    // ── the docks and the sandbar: the south one, then the jetty out to the islet
+    {                                                                   // the sandbar and the hut on it, with a beacon
+      hut(26, 34, 29, 37, { s: [K.door(30, 2.8, 2.8)], w: [K.win(33, 2, 1.1, 2.3)] }, C.white, 3.0);
+      bx(30, 3.6, 33, 0.9, 5.2, 0.9, C.white); dc(29.55, 30.45, 5.0, 5.4, 32.55, 33.45, C.red); dc(29.4, 30.6, 8.8, 9.6, 32.4, 33.6, C.lantern, true); dc(29.2, 30.8, 9.6, 9.8, 32.2, 33.8, C.red);
+      bx(37, 0, 28.5, 4.4, 0.8, 1.6, C.coral, 0.6); dc(35.2, 38.8, 0.8, 0.86, 27.9, 29.1, C.wood3);
+      occupy(22, 40, 26, 52, 0.5); K.poi('sandbar hut', X(28), Z(33), 0);
+    }
+    {                                                                   // the south jetty: planks, posts with lamps, a string of lights, cargo to take cover behind
+      for (let z = 19; z < 52; z += 3) for (const x of [-5.15, 5.15]) dc(x - 0.17, x + 0.17, -1.4, 1.5, z, z + 0.34, C.wood2);
+      for (const z of [24, 38, 50]) for (const x of [-4.8, 4.8]) lamp(x, z, 3.0);
+      for (let z = 24; z < 50; z += 1.2) { const sag = Math.sin((z - 24) % 14 / 14 * Math.PI) * 0.5; dc(-4.84, -4.76, 3.0 - sag, 3.04 - sag, z, z + 1.2, C.rope); dc(-0.1, 0.1, 3.3 - sag, 3.5 - sag, z, z + 0.2, z % 2.4 < 1.2 ? C.lantern : C.pink, true); dc(4.76, 4.84, 3.0 - sag, 3.04 - sag, z, z + 1.2, C.rope); }
+      crate(-2.4, 34, 0.1); crate(2.6, 36.8, -0.2); crate(-2.6, 41, 0.3, 1.8, 0x7a5a30); barrel(3.2, 30); barrel(-3.4, 45.4, 0x2a7a8a);
+      dc(-1, 1, 0.02, 0.08, 20, 24, C.rope); K.poi('jetty', X(0), Z(35), 0);
+    }
+    // ── the islet, the half z > 0: palms, benches, lamps, an anchor, a stack of crates
+    {
+      palm(13, 12, 0.4); palm(-13, 12, -0.4);
+      for (const x of [-13, 13]) { bx(x, 0, 4, 0.8, 0.5, 3.4, C.wood); dc(x - 0.4, x + 0.4, 0.5, 0.56, 2.3, 5.7, C.wood3); }
+      lamp(15.6, 15.6, 3.4); lamp(-15.6, 15.6, 3.4);
+      crate(13.4, 15.4, 0.3, 1.8); crate(-14, 15.6, -0.2, 2.0);
+      dc(10.8, 11.6, 0.02, 0.5, 6.6, 7.0, C.dark); dc(10.8, 12.4, 0.02, 0.12, 6.4, 7.2, C.dark);
+      occupy(-18, 18, 0, 18, 0);
+    }
+    // ── the grove: the rest of the palms where there is room for them, never on the piers or the spawn, never in the way
+    {
+      let n = 0;
+      for (let i = 0; i < 600 && n < 16; i++) {
+        const x = (rnd() * 2 - 1) * 82, z = 2 + rnd() * 82;
+        const ax = X(x), az = Z(z);
+        if (!landAround(ax, az, 3.2) || !free(x, z, 2.2)) continue;
+        if (x > 40 && z > 68) continue;
+        palm(x, z, (rnd() - 0.5) * 0.8); n++;
+      }
+      for (let i = 0, k = 0; i < 900 && k < 70; i++) {                     // small things on the sand: shrubs in clumps, driftwood, shells, starfish, coral bits
+        const x = (rnd() * 2 - 1) * 82, z = 2 + rnd() * 82;
+        if (!landAround(X(x), Z(z), 2.0) || !free(x, z, 0.6)) continue;
+        if (x > 40 && z > 68) continue;
+        const r = rnd(); k++;
+        if (r < 0.28) { bush(x, z, 1 + rnd() * 0.8); for (let j = 0; j < 2; j++) bush(x + (rnd() - 0.5) * 2.4, z + (rnd() - 0.5) * 2.4, 0.7); }
+        else if (r < 0.5) { const hh = hostAt(X(x), 0, Z(z), rnd() * 6.28); dbox(hh, 0, 0.22, 0, 2.2 + rnd() * 2.2, 0.38, 0.4, 0x8a7a6a); dbox(hh, 0.4, 0.5, 0.1, 0.9, 0.25, 0.25, 0x7a6a5a); }
+        else if (r < 0.75) { const hh = hostAt(X(x), 0, Z(z), rnd() * 6.28); for (let j = 0; j < 3; j++) dbox(hh, (rnd() - 0.5) * 1.6, 0.05, (rnd() - 0.5) * 1.6, 0.34, 0.1, 0.26, j % 2 ? C.white : C.pink); }
+        else if (r < 0.9) { const hh = hostAt(X(x), 0, Z(z), rnd() * 6.28); dbox(hh, 0, 0.04, 0, 0.9, 0.07, 0.2, C.coral); dbox(hh, 0, 0.045, 0, 0.2, 0.07, 0.9, C.coral); }
+        else { const hh = hostAt(X(x), 0, Z(z), rnd() * 6.28); dbox(hh, 0, 0.3, 0, 0.5, 0.6, 0.5, C.coral); dbox(hh, 0.3, 0.2, 0.2, 0.4, 0.4, 0.4, 0xff9a8a); dbox(hh, -0.3, 0.25, -0.1, 0.4, 0.5, 0.4, C.pink); }
+      }
+      // a hammock slung between two of them by the boat shed
+      dc(-36.4, -30.2, 1.2, 1.3, 60, 61, C.pink); dc(-36.6, -36.3, 0, 3.4, 60.2, 60.5, C.trunk); dc(-30.3, -30.0, 0, 3.4, 60.2, 60.5, C.trunk);
+    }
+  };
+  half(1); half(-1);
+
+  // ── the middle, once: the lighthouse on the islet, in a keeper's house you can walk round the inside of and climb over the roof of
+  K.room(-9, 9, -9, 9, 0, 4.4, C.white, { n: [K.door(0, 3.6, 3.4)], s: [K.door(0, 3.6, 3.4)], e: [K.door(0, 3.6, 3.4)], w: [K.door(0, 3.6, 3.4)] }, 0.8);
+  K.slab(-9, 9, -9, 9, 4.8, 0.4, C.grey);
+  K.box(0, 0, 0, 6.4, 4.8, 6.4, C.white);
+  K.box(0, 4.8, 0, 6.0, 21.2, 6.0, C.white);                          // the tower, standing on every line between the spawns
+  for (let i = 0; i < 5; i++) deco(-3.35, 3.35, 4.8 + i * 4.2, 4.8 + (i + 1) * 4.2 - 0.02, -3.35, 3.35, i % 2 ? C.white : C.red);
+  deco(-3.5, 3.5, 4.8, 5.2, -3.5, 3.5, C.dark);
+  for (const [dx, dz, w, d] of [[0, 3.04, 1.0, 0.1], [0, -3.04, 1.0, 0.1], [3.04, 0, 0.1, 1.0], [-3.04, 0, 0.1, 1.0]]) for (const y of [9, 14, 19]) deco(dx - w / 2, dx + w / 2, y, y + 1.6, dz - d / 2, dz + d / 2, C.dark);
+  deco(-4.6, 4.6, 24.8, 25.3, -4.6, 4.6, C.dark); deco(-4.2, 4.2, 25.3, 25.6, -4.2, 4.2, C.red);              // the gallery of the lantern room
+  deco(-2.6, 2.6, 25.6, 28.4, -2.6, 2.6, 0xfff0b0, true);                                                  // the lantern itself
+  for (const [dx, dz] of [[-2.7, -2.7], [2.7, -2.7], [-2.7, 2.7], [2.7, 2.7]]) deco(dx - 0.14, dx + 0.14, 25.6, 28.4, dz - 0.14, dz + 0.14, C.dark);
+  for (let i = 0; i < 5; i++) deco(-3.0 + i * 0.5, 3.0 - i * 0.5, 28.4 + i * 0.7, 29.1 + i * 0.7, -3.0 + i * 0.5, 3.0 - i * 0.5, C.red);
+  deco(-0.1, 0.1, 31.9, 34.0, -0.1, 0.1, C.dark);
+  K.stairs(0, 17.55, 'N', 4.8, 3.4, C.grey, 0, 0.9, 0.48); K.stairs(0, -17.55, 'S', 4.8, 3.4, C.grey, 0, 0.9, 0.48);
+  K.wx(-9, 9, 8.85, 0.3, 4.8, 1.1, C.white, [{ at: 0, w: 3.6, sill: 0, top: 3 }]); K.wx(-9, 9, -8.85, 0.3, 4.8, 1.1, C.white, [{ at: 0, w: 3.6, sill: 0, top: 3 }]);
+  K.wz(-9, 9, 8.85, 0.3, 4.8, 1.1, C.white); K.wz(-9, 9, -8.85, 0.3, 4.8, 1.1, C.white);
+  deco(-9.2, 9.2, 4.2, 4.8, -9.2, 9.2, C.red);                                                              // a red band round the top of the house
+  for (const [x, z] of [[-9.2, -9.2], [9.2, -9.2], [-9.2, 9.2], [9.2, 9.2]]) deco(x - 0.5, x + 0.5, 0, 4.8, z - 0.5, z + 0.5, C.grey);
+  for (const sx of [-1, 1]) { for (const sz of [-1, 1]) deco(sx * 5 - 0.4, sx * 5 + 0.4, 4.8, 5.3, sz * 5 - 0.4, sz * 5 + 0.4, C.dark); }
+  K.poi('lighthouse deck', 6, 6, 4.8);
+  lights.push([0, 26.5, 0, 0xffe6a0, 1.7, 70]);
+  // the beam: a long soft cone out of the lantern, turned by the scenery
+  {
+    const grp = new THREE.Group(); grp.position.set(0, 27, 0);
+    for (const dir of [1, -1]) for (const L of [150, 115, 85, 58, 36]) {
+      const mat = new THREE.MeshBasicMaterial({ color: 0xfff0b8, transparent: true, opacity: 0.05, side: THREE.DoubleSide, depthWrite: false }); mat.fog = false;
+      const cone = new THREE.Mesh(new THREE.CylinderGeometry(0.4, L * 0.085, L, 16, 1, true), mat); cone.rotation.z = dir * Math.PI / 2; cone.position.x = dir * L / 2; grp.add(cone);
+    }
+    G.add(grp); _IRR.atoll.beam = grp;
+  }
+  // the docks: a walk out into the lagoon, a wide end with a house on it, a ladder to its roof, cargo and a davit; one to the east, one to the west
+  for (const s of [1, -1]) {
+    const hx0 = s > 0 ? 35.2 : -40.8, hx1 = s > 0 ? 40.8 : -35.2;
+    K.room(hx0, hx1, -3, 3, 0, 3.2, C.red, { [s > 0 ? 'e' : 'w']: [K.door(0, 2.6, 2.8)], [s > 0 ? 'w' : 'e']: [K.win(0, 2.4, 1.1, 2.4)], n: [K.win((hx0 + hx1) / 2, 2.2, 1.1, 2.4)] }, 0.7);
+    K.slab(hx0, hx1, -3, 3, 3.8, 0.4, C.white); deco(hx0 - 0.5, hx1 + 0.5, 3.5, 3.7, -3.5, 3.5, C.thatch2);
+    addGridLadder(name, (hx0 + hx1) / 2, -3.1, Math.PI, 0, 3.8, 1.15);
+    for (let x = Math.min(s * 42, s * 52); x < Math.max(s * 42, s * 52) - 1; x += 3) for (const z of [-4.15, 4.15]) deco(x, x + 0.34, -1.4, 1.6, z - 0.17, z + 0.17, C.wood2);
+    for (const z of [-8.15, 8.15]) for (let x = Math.min(s * 34, s * 42); x < Math.max(s * 34, s * 42); x += 2.6) deco(x, x + 0.34, -1.4, 1.5, z - 0.17, z + 0.17, C.wood2);
+    K.box(s * 38, 0, -6.4, 2.2, 2.0, 2.2, 0x8a6a3a, 0.2); K.box(s * 38, 0, 6.4, 2.2, 2.0, 2.2, 0x7a5a30, -0.15); K.box(s * 40.4, 0, 6.8, 1.8, 1.6, 1.8, 0x8a6a3a, 0.4);
+    addExplosiveBarrel(name, s * 36, -6.6, 0xcc4422); addExplosiveBarrel(name, s * 36.2, 6.6, 0x2a7a8a);
+    K.box(s * 44, 0, -3.6, 0.6, 5.2, 0.6, C.wood2); deco(s * 44 - 0.3, s * 44 + 0.3, 5.0, 5.3, -3.6, -1.2, C.wood2); deco(s * 44 - 0.04, s * 44 + 0.04, 2.2, 5.0, -1.3, -1.2, C.rope);
+    for (const x of [s * 46.5, s * 49.5]) for (const z of [-3.8, 3.8]) deco(x - 0.2, x + 0.2, 0, 2.4, z - 0.2, z + 0.2, C.wood2, false);
+    // a dinghy tied up beside the walk (nothing to stand on: it is for the eye)
+    const bt = hostAt(s * 46, -1.2, s > 0 ? 7.2 : -7.2, 0.05 * s);
+    dbox(bt, 0, 0.35, 0, 5.4, 0.7, 2.0, C.blue); dbox(bt, 0, 0.72, 0, 5.0, 0.06, 1.6, C.wood3); dbox(bt, 0, 0.75, -1.0, 5.4, 0.3, 0.1, C.white); dbox(bt, 0, 0.75, 1.0, 5.4, 0.3, 0.1, C.white);
+    deco(s * 42 - 0.2, s * 42 + 0.2, 0, 3.4, 5.4, 5.8, C.wood2); deco(s * 42 - 0.2, s * 42 + 0.2, 3.4, 3.9, 5.2, 6.0, C.lantern, true);
+    lights.push([s * 38, 4.6, 0, 0xffc070, 1.1, 20]);
+    K.poi(s > 0 ? 'east dock' : 'west dock', s * 38, 0, 0);
+  }
+  for (const [bx0, bz0] of [[-30, -10], [-44, 22], [-12, 30], [30, 12], [44, -22], [12, -30], [-24, -44], [24, 44], [-60, -96], [60, 96], [118, -30], [-118, 30]]) {    // buoys, bobbing in place (they are for the eye)
+    deco(bx0 - 0.4, bx0 + 0.4, -1.5, -0.8, bz0 - 0.4, bz0 + 0.4, C.red); deco(bx0 - 0.42, bx0 + 0.42, -1.1, -0.95, bz0 - 0.42, bz0 + 0.42, C.white); deco(bx0 - 0.05, bx0 + 0.05, -0.8, 0.5, bz0 - 0.05, bz0 + 0.05, C.dark); deco(bx0 - 0.15, bx0 + 0.15, 0.5, 0.8, bz0 - 0.15, bz0 + 0.15, C.yellow, true);
+  }
+  for (const [rx, rz] of [[-30, 34], [30, -34]]) {                                                              // a diving raft: planks on barrels, a ladder
+    deco(rx - 3, rx + 3, -1.6, -0.9, rz - 3, rz + 3, C.blue); deco(rx - 3.2, rx + 3.2, -0.9, -0.75, rz - 3.2, rz + 3.2, C.wood3); deco(rx + 3.2, rx + 3.4, -1.6, 0.3, rz - 0.6, rz - 0.4, C.grey); deco(rx + 3.2, rx + 3.4, -1.6, 0.3, rz + 0.4, rz + 0.6, C.grey); deco(rx + 3.2, rx + 3.4, 0.1, 0.3, rz - 0.6, rz + 0.6, C.grey);
+  }
+  for (let i = 0; i < 26; i++) { const a = rnd() * 6.28, rr = 128 + rnd() * 40, x = Math.cos(a) * rr * 1.1, z = Math.sin(a) * rr * 0.8; deco(x - 2, x + 2, -1.6, -1.1 + rnd() * 0.4, z - 2, z + 2, i % 2 ? 0xd8a070 : 0xc8e0e0); }   // a reef round the outside, just under the surface
+  for (const [x, y, z, c, i, r] of lights) { const l = new THREE.PointLight(c, i, r, 1.6); l.position.set(x, y, z); G.add(l); }
+  K.spawn(ATOLL_SPAWN.ally, ATOLL_SPAWN.enemy);
+  MAP_BOT_BOUNDS[name] = { halfX: 110, halfZ: 84 };
+  MAP_VOID[name] = { halfX: 116, halfZ: 90, rects: floor, killY: -6, far: 160 };
+  _thMesh(G, detail, false); _thMesh(G, glow, true);
+  G.userData.identityRefined = true;
+  G._skyColor = 0x7fc4f0;
+}
+_BESPOKE.atoll = buildAtollLayout;
+_SCN.atoll = (K) => {
+  // the sea to the horizon; far off, a ring of islands (one of them with a smoking cone), a sailboat, the sun low and warm, gulls circling the lighthouse
+  const isle = (x, z, r, h, c, cone) => {
+    const g = new THREE.Group(); g.position.set(x, -2, z);
+    const base = K.mesh(new THREE.CylinderGeometry(r, r * 1.5, 8, 9), K.flat(0xd8c288), 0, 3, 0, g); base.scale.y = 0.7;
+    K.mesh(new THREE.ConeGeometry(r * 0.78, h, 8), K.flat(c), 0, 6 + h / 2 - 1, 0, g);
+    if (cone) { K.mesh(new THREE.CylinderGeometry(r * 0.1, r * 0.2, 1.2, 8), K.glow(0xff7a2a), 0, 6 + h - 0.8, 0, g); K.mesh(new THREE.SphereGeometry(r * 0.35, 8, 6), K.veil(0xcfcfd4, 0.5), 0, 6 + h + 2.6, 0, g); }
+    for (let k = 0; k < 4; k++) { const a = k * 1.7 + 0.4; K.mesh(new THREE.BoxGeometry(1.2, 6, 1.2), K.flat(0x3a6a34), Math.cos(a) * r * 0.9, 9, Math.sin(a) * r * 0.9, g); K.mesh(new THREE.BoxGeometry(5, 0.4, 1.4), K.flat(0x2f9a45), Math.cos(a) * r * 0.9, 12.2, Math.sin(a) * r * 0.9, g); }
+    K.group.add(g);
+  };
+  isle(-300, -260, 34, 46, 0x4a7a3a, false); isle(330, -220, 28, 38, 0x3d6e34, false); isle(-380, 150, 40, 70, 0x5a4a44, true);
+  isle(120, 400, 30, 40, 0x4a7a3a, false); isle(-120, -420, 22, 28, 0x3d6e34, false); isle(430, 190, 18, 22, 0x4a7a3a, false);
+  const sunPos = [300, 165, -215];                                      // where the sky's own glow is (azimuth 0.95, 24 degrees up): the disc sits in it
+  K.mesh(new THREE.CircleGeometry(26, 28), K.glow(0xfff2d0), ...sunPos).lookAt(0, 0, 0);
+  const sail = new THREE.Group(); sail.position.set(210, -1.4, 250);
+  K.mesh(new THREE.BoxGeometry(18, 3, 5), K.flat(0xf4f0e6), 0, 1.5, 0, sail); K.mesh(new THREE.BoxGeometry(18.4, 0.8, 5.4), K.flat(0xd8402e), 0, 2.4, 0, sail);
+  K.mesh(new THREE.BoxGeometry(0.5, 22, 0.5), K.flat(0x7a4e2a), 0, 12, 0, sail); K.mesh(new THREE.BoxGeometry(0.2, 18, 9), K.flat(0xfff6e4), 0, 12, 1.0, sail);
+  K.group.add(sail);
+  const birds = [];
+  for (let i = 0; i < 9; i++) {
+    const g = new THREE.Group(); K.mesh(new THREE.BoxGeometry(1.6, 0.1, 0.4), K.flat(0xf2f2f2), -0.7, 0, 0, g).rotation.z = 0.35; K.mesh(new THREE.BoxGeometry(1.6, 0.1, 0.4), K.flat(0xf2f2f2), 0.7, 0, 0, g).rotation.z = -0.35;
+    g.userData = { r: 30 + K.rnd() * 60, y: 34 + K.rnd() * 26, sp: 0.18 + K.rnd() * 0.16, ph: K.rnd() * 6.28 }; K.group.add(g); birds.push(g);
+  }
+  K.anim((dt, t) => {
+    const A = _IRR.atoll;
+    A.waves.forEach((w, i) => { w.offset.x += dt * (0.006 + i * 0.004); w.offset.y += dt * 0.004; });
+    if (A.beam) A.beam.rotation.y += dt * 0.55;
+    sail.position.y = -1.4 + Math.sin(t * 0.5) * 0.25; sail.rotation.z = Math.sin(t * 0.4) * 0.03;
+    birds.forEach((g, i) => { const u = g.userData, a = t * u.sp + u.ph; g.position.set(Math.cos(a) * u.r, u.y + Math.sin(t * 0.7 + i) * 2, Math.sin(a) * u.r); g.rotation.y = -a; g.children[0].rotation.z = 0.35 + Math.sin(t * 6 + i) * 0.35; g.children[1].rotation.z = -0.35 - Math.sin(t * 6 + i) * 0.35; });
+  });
+};
+
 // ═══ 🎵 MUSIC ═══════════════════════════════════════════════════════════════════════════════════════════════════════
 // No audio files: the music is played by the game, on the same Web Audio context as the sounds. Each track is a few chords and a few
 // layers (pads, a choir, bells, plucks, a bass, stabs, drums), written as a function from a bar number to the notes in it, so a loop is
 // always the same loop. The lobby and the menus have a theme; a few maps have their own (see MUSIC_FOR_MAP); the rest stay quiet, as
 // they always were. Settings → MUSIC turns it down or off. It starts with the first click (the browser will not play before one).
 var MUSIC = { ctx: null, track: null, bus: null, out: null, bar: 0, nextT: 0 };
-const MUSIC_FOR_MAP = { sky_arena: 'heaven', dreamscape: 'heaven', shipyard: 'industry', battleground: 'arena', neon_tokyo: 'neon', cyber: 'neon', space: 'drift', orbital_station: 'drift', gravity_lab: 'drift' };
+const MUSIC_FOR_MAP = { atoll: 'tropic', sky_arena: 'heaven', dreamscape: 'heaven', shipyard: 'industry', battleground: 'arena', neon_tokyo: 'neon', cyber: 'neon', space: 'drift', orbital_station: 'drift', gravity_lab: 'drift' };
 const _MSC = { major: [0, 2, 4, 5, 7, 9, 11], minor: [0, 2, 3, 5, 7, 8, 10], lydian: [0, 2, 4, 6, 7, 9, 11], phrygian: [0, 1, 3, 5, 7, 8, 10] };
 const _mHz = (m) => 440 * Math.pow(2, (m - 69) / 12);
 const _mNote = (root, scale, deg, oct = 0) => { const S = _MSC[scale], n = S.length, d = Math.floor(deg / n), i = ((deg % n) + n) % n; return root + S[i] + 12 * (d + oct); };
@@ -14440,6 +14867,19 @@ const MUSIC_TRACKS = {
     for (const s of [0, 8]) ev.push(_mE(s, 1, 'kick', null, 0.85)); ev.push(_mE(10, 1, 'kick', null, 0.55)); for (const s of [4, 12]) ev.push(_mE(s, 1, 'snare', null, 0.7));
     for (let s = 0; s < 16; s += 2) ev.push(_mE(s, 1, 'hat', null, 0.28));
     if (b >= 4) for (const [s, deg, d] of [[0, 7, 3], [4, 9, 2], [8, 8, 3], [12, 6, 4]]) ev.push(_mE(s, d, 'bell', [_mNote(R, 'minor', deg + (c ? 0 : 0), 1)], 0.5));
+    return ev;
+  } },
+  tropic: { bpm: 96, bars: 8, mix: { pad: 0.55, bass: 1.0, pluck: 0.85, bell: 0.95, stab: 0.55, drums: 0.8 }, send: { pad: 0.4, pluck: 0.3, bell: 0.55, stab: 0.2 }, bar(b) {
+    const R = 55, P = [0, 4, 5, 3, 0, 4, 3, 4], c = P[b], ch = _mChord(R, 'major', c, 0), root = _mNote(R, 'major', c, -1), ev = [];
+    ev.push(_mE(0, 16, 'pad', ch, 0.5));
+    for (const [s, k, v] of [[0, 0, 0.9], [3, 0, 0.6], [6, 7, 0.7], [8, 0, 0.85], [11, 0, 0.6], [14, 7, 0.65]]) ev.push(_mE(s, 2.2, 'bass', [root + k], v));      // a calypso bass
+    for (const s of [2, 6, 10, 14]) ev.push(_mE(s, 1.2, 'stab', [ch[0] + 12, ch[1] + 12, ch[2] + 12], 0.42));                                                    // the offbeat skank
+    for (let k = 0; k < 8; k++) ev.push(_mE(k * 2, 1.8, 'pluck', [ch[k % 3] + 12], 0.3));                                                                          // a marimba rolling over the chord
+    const A = [[0, 4], [3, 5], [6, 7], [8, 5], [11, 4]], B = [[0, 5], [2, 7], [4, 9], [8, 7], [12, 5]];                                                           // steel-drum tunes, pentatonic, two phrases
+    for (const [s, deg] of (b % 2 ? B : A)) ev.push(_mE(s, 2.6, 'bell', [_mNote(R, 'major', deg + (c ? 0 : 0), 1)], 0.5));
+    for (const s of [0, 8]) ev.push(_mE(s, 1, 'kick', null, 0.7)); if (b % 2) ev.push(_mE(10, 1, 'kick', null, 0.5));
+    for (const s of [4, 12]) ev.push(_mE(s, 1, 'clap', null, 0.32));
+    for (let s = 0; s < 16; s += 2) ev.push(_mE(s, 1, 'hat', null, 0.18)); for (let s = 1; s < 16; s += 2) ev.push(_mE(s, 1, 'hat', null, 0.1));              // a shaker
     return ev;
   } },
   drift: { bpm: 58, bars: 8, mix: { choir: 1.5, drone: 1.4, bell: 1.2, pad: 1.2 }, send: { choir: 0.9, bell: 0.9, pad: 0.7 }, bar(b) {
@@ -16723,7 +17163,7 @@ const EGG_LINES = {
 };
 const EGG_CRANE = ['nice view', "don't look down", 'rope: 4 left', 'ahoy', 'tired of climbing', 'hi', 'shift ends at 5', 'hard hat: lost'];
 const EGG_SKIP = new Set(['blank', 'range', 'obby', 'm4_tower', 'm4_tower_big', 'm4_tower_super', 'big_harbor', 'storm_pier', 'pinball_arcade',
-  'laser_vault', 'cargo_belts', 'gale_peaks', 'magma_rise', 'br_arena', 'base_raid', 'neon_tokyo', 'sky_arena', 'shipyard', 'battleground']);
+  'laser_vault', 'cargo_belts', 'gale_peaks', 'magma_rise', 'br_arena', 'base_raid', 'neon_tokyo', 'sky_arena', 'shipyard', 'battleground', 'atoll']);
 const EGG_FLOATING = new Set(['space', 'orbital_station', 'gravity_lab', 'dreamscape', 'flying_moai', 'cyber', 'super_arena']);
 // Hand-drawn glyphs: a few wobbly strokes in a 256 square.
 function _eggGlyph(g, kind, rnd) {
@@ -20501,7 +20941,7 @@ const WEAR_UNTHEMED = { storm_pier: 'industrial', cargo_belts: 'industrial', las
 // Places that are not meant to look used: the neon and sci-fi maps (Cyber City, the station, the labs), the fairground
 // ones, an opera house and a shop. Rust, soot and grime on a hard-light city read as a different map; they get no wear.
 const WEAR_CLEAN_MOTIFS = new Set(['space', 'neon', 'carnival']);
-const WEAR_CLEAN_MAPS = new Set(['opera', 'supermarket', 'sky_arena', 'battleground']);
+const WEAR_CLEAN_MAPS = new Set(['opera', 'supermarket', 'sky_arena', 'battleground', 'atoll']);
 function wearIsClean(name) {
   const th = MAP_THEMES[name];
   return WEAR_CLEAN_MAPS.has(name) || WEAR_CLEAN_MOTIFS.has(th ? th.motif : WEAR_UNTHEMED[name]);
@@ -72658,6 +73098,7 @@ const MAP_DESCS = {
   sky_arena:   'Sky Arena — a cross of white marble and gold floating in heaven: tall gate towers, a glowing hub and a long fall if you step off',
   shipyard:    'Shipyard — a Z-shaped yard of shipping containers you can walk into, a ship in each inlet and a crane that never stops, with water on every side',
   battleground:'Battleground — a pro arena in grey and white under red lights: a raised centre stage, a bunker in every quarter, two team tunnels',
+  atoll:       'Atoll — a ring of beach round a turquoise lagoon with a lighthouse on the islet: tiki bars, a wreck, docks, a lifeguard tower, and the sea for anyone who steps off',
   neon_tokyo: 'Neon Tokyo — Japanese night streets, wet alleys, shop balconies and vending-machine resupplies',
   auto:       'Random — game picks one for you each match',
   blank:      'Classic Arena — wide lanes, wall-walks, ramps · a HOT SEAT ring heals you and moves every 40 s',
