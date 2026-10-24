@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>PVP Arena Weapon Stats</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Every number the game uses for every weapon: damage, fire rate, falloff, recoil, spread, bullet speed. Read straight from the game's code.">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: 'Helvetica Neue', Arial, sans-serif; background: #1a1a1a; color: #e4e4e4; line-height: 1.5; }
+  a { color: #58a6ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  header.topbar { background: linear-gradient(90deg, #c91414 0%, #7a0000 100%); color: #fff; padding: 14px 24px; box-shadow: 0 2px 8px rgba(0,0,0,.4); }
+  header.topbar .title { font-size: 24px; font-weight: 800; letter-spacing: 2px; }
+  header.topbar .tagline { font-size: 12px; opacity: .85; margin-top: 2px; }
+  header.topbar .links { float: right; display: flex; gap: 8px; }
+  header.topbar .links a { background: #fff; color: #c91414; padding: 8px 14px; border-radius: 4px; font-weight: bold; font-size: 13px; }
+  main { max-width: 1400px; margin: 0 auto; padding: 24px 20px 40px; }
+  h1 { font-size: 30px; margin: 0 0 6px; color: #ffcc44; border-bottom: 2px solid #444; padding-bottom: 10px; }
+  h2 { font-size: 21px; margin: 34px 0 10px; color: #ffaa44; border-bottom: 1px solid #333; padding-bottom: 6px; }
+  .lead { color: #bbb; font-size: 14px; margin: 14px 0 18px; padding: 12px 14px; background: #1f1f1f; border-left: 4px solid #c91414; border-radius: 3px; }
+  details.how { background: #232323; border: 1px solid #333; border-radius: 6px; padding: 4px 16px 10px; margin: 0 0 18px; }
+  details.how summary { cursor: pointer; padding: 10px 0; font-weight: 700; color: #ffcc44; letter-spacing: .5px; }
+  details.how dl { display: grid; grid-template-columns: minmax(150px, 220px) 1fr; gap: 8px 18px; margin: 6px 0 0; font-size: 13px; }
+  details.how dt { color: #ffcc44; font-weight: 700; }
+  details.how dd { margin: 0; color: #cfcfcf; }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; margin: 12px 0; }
+  .controls input[type=search] { background: #232323; border: 1px solid #444; color: #eee; padding: 9px 12px; border-radius: 5px; min-width: 220px; font-size: 14px; }
+  .chip { background: #262626; border: 1px solid #3a3a3a; color: #ccc; padding: 6px 12px; border-radius: 16px; font-size: 12px; cursor: pointer; user-select: none; }
+  .chip.on { background: #5a1a1a; border-color: #c91414; color: #fff; }
+  .controls label { font-size: 13px; color: #aaa; display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  .count { color: #888; font-size: 13px; margin-left: auto; }
+  .tablewrap { overflow-x: auto; border: 1px solid #2e2e2e; border-radius: 6px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { background: #2a2a2a; color: #ffcc44; text-align: right; padding: 9px 10px; border-bottom: 2px solid #444; font-weight: 600; white-space: nowrap; cursor: pointer; position: sticky; top: 0; user-select: none; }
+  th:first-child, td:first-child { text-align: left; position: sticky; left: 0; z-index: 1; }
+  th:first-child { z-index: 2; }
+  th.sorted::after { content: ' \25BE'; } th.sorted.asc::after { content: ' \25B4'; }
+  th.grp { text-align: center; color: #888; font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; cursor: default; border-bottom: 1px solid #3a3a3a; }
+  td { padding: 7px 10px; border-bottom: 1px solid #262626; text-align: right; white-space: nowrap; background: #1a1a1a; }
+  tr.row:nth-child(4n+1) td, tr.row:nth-child(4n+2) td { background: #1d1d1d; }
+  tr.row { cursor: pointer; }
+  tr.row:hover td { background: #272020; }
+  td .nm { font-weight: 700; color: #fff; }
+  td .sub { display: block; font-size: 11px; color: #888; }
+  .dim { color: #777; }
+  .tag { display: inline-block; font-size: 10px; padding: 1px 7px; border-radius: 9px; background: #44324a; color: #cc99ff; margin-left: 6px; vertical-align: middle; }
+  .hot { color: #ff9966; } .cool { color: #88ddff; } .good { color: #8be29b; }
+  tr.detail td { background: #151515; text-align: left; white-space: normal; padding: 14px 18px 18px; border-bottom: 2px solid #333; }
+  .dgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px 28px; }
+  .dgrid h4 { margin: 0 0 6px; font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; color: #888; }
+  .kv { display: grid; grid-template-columns: 1fr auto; gap: 3px 14px; font-size: 13px; }
+  .kv span:nth-child(odd) { color: #aaa; } .kv span:nth-child(even) { color: #fff; text-align: right; }
+  .rangetable { border-collapse: collapse; font-size: 12px; margin-top: 4px; }
+  .rangetable td, .rangetable th { padding: 3px 8px; text-align: center; background: none; border: 0; position: static; cursor: default; }
+  .rangetable th { color: #888; font-weight: 400; font-size: 11px; border-bottom: 1px solid #333; }
+  .bars { display: flex; align-items: flex-end; gap: 3px; height: 60px; margin-top: 8px; }
+  .bars div { flex: 1; background: linear-gradient(#ffcc44, #c97a14); border-radius: 2px 2px 0 0; min-height: 2px; }
+  ul.traits { margin: 4px 0 0; padding-left: 18px; font-size: 13px; color: #ccc; }
+  footer { color: #777; font-size: 12px; text-align: center; margin-top: 36px; }
+  @media (max-width: 800px) { main { padding: 16px 12px; } header.topbar .links { display: none; } details.how dl { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="links"><a href="wiki.html">Wiki</a><a href="./">Play</a></div>
+  <div class="title">PVP ARENA · WEAPON STATS</div>
+  <div class="tagline">Every number the game uses, for every weapon</div>
+</header>
+<main>
+  <h1>Weapon stats</h1>
+  <div class="lead">
+    These numbers are not typed in by hand. They are read straight out of the game's own code (the same tables and functions the game uses when you fire),
+    and an automatic check fails if this page ever stops matching the game. If a number here disagrees with what you see in a match, that is a bug, and we want to hear about it.
+    <strong>Click a weapon</strong> for its full breakdown.
+  </div>
+
+  <details class="how">
+    <summary>How to read this page (plain language)</summary>
+    <dl>
+      <dt>Damage per hit</dt><dd>What one bullet does up close. Shotguns fire several pellets at once, so you will see <b>×6</b> and so on: that is how many pellets each shot sends out.</dd>
+      <dt>Head</dt><dd>Damage when the bullet hits the head. It is the normal damage times the head multiplier (usually ×2).</dd>
+      <dt>Shots per second</dt><dd>How fast the weapon fires if you keep pulling the trigger. Higher means more bullets in the air, but also more recoil to control.</dd>
+      <dt>DPS</dt><dd>Damage per second if <i>every</i> bullet lands and you never reload. Real fights are lower than this. Use it to compare, not to promise.</dd>
+      <dt>Magazine / Reserve</dt><dd>Bullets in the gun, and the spare bullets you carry.</dd>
+      <dt>Reload</dt><dd>Seconds to refill the magazine.</dd>
+      <dt>Bullet speed</dt><dd>How fast the bullet travels, in metres per second. Slow bullets take time to arrive, so you have to aim a little ahead of a moving target.</dd>
+      <dt>Falloff</dt><dd>Bullets lose power over distance. "Full to 28 m, then down to 55% by 70 m" means: full damage up close, then it shrinks smoothly until 70 m, and never gets weaker than 55% after that.</dd>
+      <dt>Damage at range</dt><dd>What one bullet actually does at that distance, after falloff. The full table (0 to 150 m) is inside each weapon's detail row.</dd>
+      <dt>Shots to kill</dt><dd>How many hits it takes to defeat a full-health player (300 HP) up close: on the body, and on the head. For shotguns this assumes every pellet hits. Some modes use 100 HP.</dd>
+      <dt>Scatter</dt><dd>Random sideways and up/down wobble of each bullet, in degrees. 0° is laser-straight. It is the same no matter how long you shoot, unless the weapon also has <b>bloom</b>.</dd>
+      <dt>Bloom</dt><dd>Extra scatter that builds up the longer you hold the trigger, then resets when you let go.</dd>
+      <dt>Kick per shot</dt><dd>How far each shot pushes your crosshair <b>up</b>, in degrees. (1° is about 17 cm at 10 metres.) Your aim really moves, so the next bullet goes where the muzzle went.</dd>
+      <dt>Sideways kick</dt><dd>A random push left or right on each shot, up to this many degrees.</dd>
+      <dt>Climb</dt><dd>The longer you hold the trigger, the harder it kicks: every shot adds this much to the kick, until it reaches the maximum multiple. A pause of about a quarter of a second lets the gun settle and the climb starts over.</dd>
+      <dt>Recovery</dt><dd>How fast your crosshair drifts back down after you stop shooting (bigger is quicker).</dd>
+      <dt>Aiming (ADS)</dt><dd>Aiming down the sights cuts the upward kick to this percentage of the hip-fire kick.</dd>
+      <dt>Screen kick</dt><dd>How hard the screen and the gun jolt, as an index from about 0.5 (gentle) to 2.4 (violent). It is how the shot <i>feels</i>; the aim kick above is what actually moves your crosshair.</dd>
+    </dl>
+  </details>
+
+  <div class="controls">
+    <input id="q" type="search" placeholder="Search weapons…" autocomplete="off">
+    <span id="types"></span>
+    <label><input id="arch" type="checkbox"> show retired weapons</label>
+    <span class="count" id="count"></span>
+  </div>
+
+  <div class="tablewrap"><table id="guns"></table></div>
+
+  <h2>Melee weapons</h2>
+  <div class="lead">Melee weapons have a swing damage, a reach and a swing speed. Eight of them also have a <b>combo</b> on <b>E</b> (press it again inside 1.2 seconds for the next move); in "default mode" they use one regular ability instead. Both are listed.</div>
+  <div class="tablewrap"><table id="melees"></table></div>
+
+  <footer>Generated from the game's code by <code>node tools/verify-boot.js --dump-stats</code> · <a href="wiki.html">back to the wiki</a></footer>
+</main>
+
+<script>
+(function () {
+  var D = null, state = { q: '', type: 'All', arch: false, sort: 'name', asc: true, open: {} };
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function n(v, d) { if (v == null || v === '') return '<span class="dim">—</span>'; var x = Number(v); return isFinite(x) ? String(+x.toFixed(d == null ? 1 : d)) : esc(v); }
+  function rangeAt(g, m) { var i = D.ranges.indexOf(m); return g.damageByRange[i]; }
+
+  var COLS = [
+    { k: 'name', h: 'Weapon', get: function (g) { return g.name.toLowerCase(); } },
+    { k: 'damage', h: 'Damage / hit', g: 'Damage', get: function (g) { return g.damage; } },
+    { k: 'head', h: 'Head', get: function (g) { return g.headDamage; } },
+    { k: 'sps', h: 'Shots / s', g: 'Speed', get: function (g) { return g.shotsPerSec; } },
+    { k: 'dps', h: 'DPS', get: function (g) { return g.dps; } },
+    { k: 'mag', h: 'Mag', g: 'Ammo', get: function (g) { return g.magazine; } },
+    { k: 'res', h: 'Reserve', get: function (g) { return g.reserve; } },
+    { k: 'rel', h: 'Reload s', get: function (g) { return g.reloadSec; } },
+    { k: 'bs', h: 'Bullet m/s', get: function (g) { return g.bulletSpeed; } },
+    { k: 'fo', h: 'Falloff', g: 'Range', get: function (g) { return g.falloff ? g.falloff.nearM : 9999; } },
+    { k: 'r10', h: '10 m', get: function (g) { return rangeAt(g, 10); } },
+    { k: 'r30', h: '30 m', get: function (g) { return rangeAt(g, 30); } },
+    { k: 'r50', h: '50 m', get: function (g) { return rangeAt(g, 50); } },
+    { k: 'r100', h: '100 m', get: function (g) { return rangeAt(g, 100); } },
+    { k: 'stk', h: 'To kill (body / head)', get: function (g) { return g.shotsToKill.body == null ? 9999 : g.shotsToKill.body; } },
+    { k: 'sc', h: 'Scatter °', g: 'Accuracy', get: function (g) { return g.scatterDeg; } },
+    { k: 'kick', h: 'Kick °', g: 'Recoil', get: function (g) { return g.recoil ? g.recoil.kickPerShotDeg : -1; } },
+    { k: 'climb', h: 'Climb', get: function (g) { return g.recoil ? g.recoil.climbPerShotPct : -1; } },
+    { k: 'scr', h: 'Screen kick', get: function (g) { return g.screenKick; } }
+  ];
+
+  function falloffText(g) {
+    var f = g.falloff;
+    if (!f || f.minPct >= 100) return '<span class="good">none</span>';
+    return 'full to ' + f.nearM + ' m<span class="sub">' + f.minPct + '% by ' + f.farM + ' m</span>';
+  }
+  function rowHtml(g) {
+    var pel = g.pellets > 1 ? ' <span class="dim">×' + g.pellets + '</span>' : '';
+    var stk = g.shotsToKill.body == null ? '<span class="dim">—</span>' : g.shotsToKill.body + ' / ' + g.shotsToKill.head;
+    var rc = g.recoil;
+    return '<tr class="row" data-id="' + esc(g.id) + '">' +
+      '<td><span class="nm">' + esc(g.name) + '</span>' + (g.archived ? '<span class="tag">retired</span>' : '') + '<span class="sub">' + esc(g.type) + ' · ' + esc(g.slot) + '</span></td>' +
+      '<td>' + n(g.damage, 1) + pel + '</td><td>' + n(g.headDamage, 0) + '</td>' +
+      '<td>' + n(g.shotsPerSec, 1) + (g.auto ? '' : ' <span class="sub">semi-auto</span>') + '</td><td>' + n(g.dps, 0) + '</td>' +
+      '<td>' + (g.noReload ? '<span class="dim">—</span>' : n(g.magazine, 0)) + '</td><td>' + (g.noReload ? '<span class="dim">—</span>' : n(g.reserve, 0)) + '</td><td>' + (g.noReload ? '<span class="dim">—</span>' : n(g.reloadSec, 2)) + '</td>' +
+      '<td>' + n(g.bulletSpeed, 0) + '</td><td>' + falloffText(g) + '</td>' +
+      '<td>' + rangeAt(g, 10) + '</td><td>' + rangeAt(g, 30) + '</td><td>' + rangeAt(g, 50) + '</td><td>' + rangeAt(g, 100) + '</td>' +
+      '<td>' + stk + '</td><td>' + n(g.scatterDeg, 1) + '</td>' +
+      '<td>' + (rc ? n(rc.kickPerShotDeg, 2) : '<span class="dim">none</span>') + '</td><td>' + (rc ? '+' + rc.climbPerShotPct + '%' : '<span class="dim">—</span>') + '</td>' +
+      '<td>' + n(g.screenKick, 2) + '</td></tr>';
+  }
+  function detailHtml(g) {
+    var rc = g.recoil, max = Math.max.apply(null, g.damageByRange.concat([1]));
+    var rt = '<table class="rangetable"><tr><th>range</th>' + D.ranges.map(function (r) { return '<th>' + r + ' m</th>'; }).join('') + '</tr><tr><td>damage</td>' +
+      g.damageByRange.map(function (v) { return '<td>' + v + '</td>'; }).join('') + '</tr></table>' +
+      '<div class="bars">' + g.damageByRange.map(function (v) { return '<div style="height:' + Math.max(3, Math.round(100 * v / max)) + '%" title="' + v + '"></div>'; }).join('') + '</div>';
+    var kv = function (a) { return '<div class="kv">' + a.map(function (p) { return '<span>' + p[0] + '</span><span>' + p[1] + '</span>'; }).join('') + '</div>'; };
+    var dmg = kv([
+      ['Damage per hit', n(g.damage, 1) + (g.pellets > 1 ? ' × ' + g.pellets + ' pellets' : '')],
+      ['Damage per shot (all pellets)', n(g.damagePerShot, 1)],
+      ['Head damage', n(g.headDamage, 0) + ' (×' + n(g.headshotMult, 2) + ')'],
+      ['Shots to kill, body / head (' + D.hp + ' HP)', g.shotsToKill.body == null ? '—' : g.shotsToKill.body + ' / ' + g.shotsToKill.head],
+      ['Time to kill on the body (up close)', g.ttkBodySec == null ? '—' : n(g.ttkBodySec, 2) + ' s'],
+      ['Damage per second (if all hit)', n(g.dps, 0)]
+    ]);
+    var spd = kv([
+      ['Fire rate', n(g.shotsPerSec, 2) + ' shots/s (one every ' + g.fireRateMs + ' ms)'],
+      ['Firing', g.auto ? 'full-auto (hold the trigger)' : 'semi-auto (one per click)'],
+      ['Magazine / reserve', g.noReload ? 'no reload' : g.magazine + ' / ' + g.reserve],
+      ['Reload', g.noReload ? '—' : n(g.reloadSec, 2) + ' s (' + esc(g.reloadStyle) + ')'],
+      ['Time to empty a magazine', g.noReload || g.timeToEmptySec == null ? '—' : n(g.timeToEmptySec, 2) + ' s'],
+      ['Bullet speed', n(g.bulletSpeed, 0) + ' m/s'],
+      ['Aim-down-sights zoom', n(g.adsZoom, 0) + '°']
+    ]);
+    var acc = kv([
+      ['Scatter (each bullet)', '±' + n(g.scatterDeg, 2) + '°'],
+      ['Bloom per shot / max', g.bloom ? '+' + n(g.bloom.perShotDeg, 2) + '° / ' + n(g.bloom.maxDeg, 2) + '°' : 'none'],
+      ['Falloff', g.falloff && g.falloff.minPct < 100 ? 'full to ' + g.falloff.nearM + ' m, ' + g.falloff.minPct + '% by ' + g.falloff.farM + ' m' : 'none']
+    ]);
+    var rec = rc ? kv([
+      ['Kick per shot (up)', n(rc.kickPerShotDeg, 3) + '°'],
+      ['Sideways kick (random, up to)', '±' + n(rc.sideKickDeg, 3) + '°'],
+      ['Climb: each shot adds', '+' + rc.climbPerShotPct + '% kick'],
+      ['Climb stops at', '×' + n(rc.climbMaxX, 2) + ' (after ~' + rc.shotsToMaxClimb + ' shots)'],
+      ['Kick once fully climbed', n(rc.steadyKickDeg, 3) + '° per shot'],
+      ['Recovery speed', n(rc.recoverPerSec, 1) + ' per second'],
+      ['Aiming down sights', 'kick cut to ' + rc.adsKickPct + '%'],
+      ['Screen kick index', n(g.screenKick, 2)]
+    ]) : '<div class="dim">No recoil: the aim never moves.</div>';
+    var tr = (g.traits && g.traits.length) ? '<ul class="traits">' + g.traits.map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('') + '</ul>' : '<div class="dim">Nothing special.</div>';
+    var ab = g.ability ? '<div style="margin-top:8px"><b>Ability (E):</b> ' + esc(g.ability.name) + ' <span class="dim">· ' + esc(g.ability.desc) + '</span></div>' : '';
+    return '<tr class="detail"><td colspan="' + COLS.length + '"><div class="dgrid">' +
+      '<div><h4>Damage</h4>' + dmg + '</div><div><h4>Speed &amp; ammo</h4>' + spd + '</div><div><h4>Accuracy</h4>' + acc + '</div><div><h4>Recoil</h4>' + rec + '</div>' +
+      '<div style="grid-column:1/-1"><h4>Damage at every range (one bullet, after falloff)</h4>' + rt + '</div>' +
+      '<div style="grid-column:1/-1"><h4>Special</h4>' + tr + ab + '</div></div></td></tr>';
+  }
+  function renderGuns() {
+    var col = COLS.filter(function (c) { return c.k === state.sort; })[0] || COLS[0];
+    var q = state.q.trim().toLowerCase();
+    var list = D.guns.filter(function (g) {
+      if (!state.arch && g.archived) return false;
+      if (state.type !== 'All' && g.type !== state.type) return false;
+      return !q || (g.name + ' ' + g.type + ' ' + g.id).toLowerCase().indexOf(q) >= 0;
+    });
+    list.sort(function (a, b) { var x = col.get(a), y = col.get(b); var r = x < y ? -1 : x > y ? 1 : 0; return state.asc ? r : -r; });
+    var groups = [], last = null;
+    COLS.forEach(function (c) { if (c.g) { groups.push({ n: c.g, s: 0 }); last = groups[groups.length - 1]; } if (last) last.s++; else groups.push({ n: '', s: 1 }); });
+    var head = '<tr>' + groups.map(function (g, i) { return '<th class="grp" colspan="' + g.s + '"' + (i === 0 ? ' style="left:0"' : '') + '>' + esc(g.n) + '</th>'; }).join('') + '</tr><tr>' +
+      COLS.map(function (c) { return '<th data-k="' + c.k + '" class="' + (c.k === state.sort ? 'sorted' + (state.asc ? ' asc' : '') : '') + '">' + esc(c.h) + '</th>'; }).join('') + '</tr>';
+    var body = list.map(function (g) { return rowHtml(g) + (state.open[g.id] ? detailHtml(g) : ''); }).join('');
+    document.getElementById('guns').innerHTML = '<thead>' + head + '</thead><tbody>' + body + '</tbody>';
+    document.getElementById('count').textContent = list.length + ' weapons';
+  }
+  function renderMelees() {
+    var rows = D.melees.filter(function (m) { return state.arch || !m.archived; }).map(function (m) {
+      var ab = m.ability, steps = ab && ab.steps ? ab.steps.map(function (s) { return esc(s.name) + (s.damage != null ? ' <span class="dim">(' + s.damage + (s.note ? '+' : '') + ')</span>' : ''); }).join(' → ') : '';
+      return '<tr><td><span class="nm">' + esc(m.name) + '</span>' + (m.archived ? '<span class="tag">retired</span>' : '') + '<span class="sub">' + esc(m.type) + '</span></td>' +
+        '<td>' + n(m.damage, 0) + '</td><td>' + n(m.reachM, 1) + ' m</td><td>' + n(m.swingsPerSec, 1) + '</td><td>' + n(m.dps, 0) + '</td><td>' + n(m.speedMult, 2) + '×</td>' +
+        '<td style="text-align:left;white-space:normal;min-width:260px">' + (ab ? '<b>' + esc(ab.name) + '</b> <span class="dim">· ' + n(ab.cooldownSec, 1) + ' s cooldown</span>' + (steps ? '<span class="sub" style="font-size:12px;color:#bbb">' + steps + '</span>' : '<span class="sub" style="font-size:12px">' + esc(ab.desc) + '</span>') : '<span class="dim">no ability</span>') +
+        (m.defaultAbility ? '<span class="sub" style="font-size:12px">Default mode: <b>' + esc(m.defaultAbility.name) + '</b> · ' + esc(m.defaultAbility.desc) + '</span>' : '') + '</td></tr>';
+    }).join('');
+    document.getElementById('melees').innerHTML = '<thead><tr><th>Weapon</th><th>Swing damage</th><th>Reach</th><th>Swings / s</th><th>DPS</th><th>Move speed</th><th style="text-align:left">Ability on E</th></tr></thead><tbody>' + rows + '</tbody>';
+  }
+  function renderTypes() {
+    var types = ['All'].concat(Array.from(new Set(D.guns.filter(function (g) { return state.arch || !g.archived; }).map(function (g) { return g.type; }))).sort());
+    document.getElementById('types').innerHTML = types.map(function (t) { return '<span class="chip' + (t === state.type ? ' on' : '') + '" data-t="' + esc(t) + '">' + esc(t) + '</span> '; }).join('');
+  }
+  function all() { renderTypes(); renderGuns(); renderMelees(); }
+
+  document.addEventListener('click', function (e) {
+    var th = e.target.closest && e.target.closest('th[data-k]');
+    if (th) { var k = th.getAttribute('data-k'); if (state.sort === k) state.asc = !state.asc; else { state.sort = k; state.asc = k === 'name'; } renderGuns(); return; }
+    var chip = e.target.closest && e.target.closest('.chip');
+    if (chip) { state.type = chip.getAttribute('data-t'); all(); return; }
+    var row = e.target.closest && e.target.closest('tr.row');
+    if (row) { var id = row.getAttribute('data-id'); state.open[id] = !state.open[id]; renderGuns(); }
+  });
+  document.getElementById('q').addEventListener('input', function (e) { state.q = e.target.value; renderGuns(); });
+  document.getElementById('arch').addEventListener('change', function (e) { state.arch = e.target.checked; if (!state.arch && state.type !== 'All') state.type = 'All'; all(); });
+
+  fetch('weapon-stats.json').then(function (r) { return r.json(); }).then(function (d) { D = d; all(); })
+    .catch(function () { document.querySelector('main').insertAdjacentHTML('beforeend', '<div class="lead">The stats could not be loaded. Open this page from the game\'s own address, not from a downloaded file.</div>'); });
+})();
+</script>
+</body>
+</html>

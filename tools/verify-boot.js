@@ -3401,6 +3401,114 @@ if (ok && process.argv.includes('--combo')) {
   if (out.length) { ok = false; console.log(out.slice(0, 24).join('\n')); }
 }
 
+if (ok && (process.argv.includes('--stats') || process.argv.includes('--dump-stats'))) {
+  // The published weapon sheet (public/stats.html reads public/weapon-stats.json). Every number is read from the running game's own tables and
+  // functions (falloffMultiplier, realisticRecoilProfile, weaponKickStrength...), so what players read is what the code does. `--dump-stats`
+  // rewrites the JSON; `--stats` fails if the committed JSON no longer matches the game.
+  const hp = Number((fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8').match(/const PLAYER_MAX_HP\s*=\s*(\d+)/) || [])[1]);
+  const dump = vm.runInThisContext('(' + String(function (HP) {
+    const RANGES = [0, 10, 20, 30, 40, 50, 60, 80, 100, 125, 150];
+    const r3 = v => Math.round(v * 1000) / 1000, deg = r => r3(r * 180 / Math.PI);
+    const keepMode = MELEE_COMBO_MODE;
+    const traitsOf = (w) => {
+      const t = [];
+      if (w.hitscan) t.push('Hitscan: hits the instant you fire' + (w.hitscanRange ? ', out to ' + w.hitscanRange + ' m' : ''));
+      if (w.maxRange) t.push('Short range: stops at ' + w.maxRange + ' m');
+      if (w.heatShots) t.push('Overheats after ' + w.heatShots + ' shots, ' + r3((w.heatCooldown || 0) / 1000) + ' s lockout');
+      if (w.burstSize) t.push('Fires in bursts of ' + w.burstSize + (w.burstDelay ? ', ' + w.burstDelay + ' ms apart' : ''));
+      if (w.cycleBurst) t.push('Cycles through a burst, then a finisher shot');
+      if (w.spinUp) t.push('Spins up: starts slow and speeds up while you hold the trigger');
+      if (w.arcShot || w.arcGravity) t.push('Lobbed: the shot arcs and drops');
+      if (w.splashRadius) t.push('Explodes: ' + w.splashRadius + ' m blast' + (w.splashDamage ? ', ' + w.splashDamage + ' damage' : ''));
+      if (w.burnOnHit) t.push('Sets the target on fire');
+      if (w.poisonOnHit) t.push('Poisons the target');
+      if (w.slowOnHit || w.frostSlow) t.push('Slows the target');
+      if (w.blindOnHit) t.push('Blinds the target');
+      if (w.pinOnHit) t.push('Pins the target in place');
+      if (w.disableOnHit) t.push('Disables the target for ' + w.disableOnHit + ' ms');
+      if (w.knockback) t.push('Knocks the target back');
+      if (w.launchOnHit) t.push('Launches the target into the air');
+      if (w.chainLightning) t.push('Lightning chains to nearby enemies');
+      if (w.bounce) t.push('Bounces off surfaces');
+      if (w.tracking) t.push('Homes in on targets');
+      if (w.ammoRegen) t.push('Ammo slowly regenerates');
+      if (w.silentShots) t.push('Silenced');
+      if (w.ignoreDefenses) t.push('Ignores shields and deflects');
+      if (w.activeReload) t.push('Active reload: a well-timed second tap speeds it up');
+      if (w.killReload) t.push('A kill refills the magazine');
+      if (w.lastBulletBonus) t.push('The last round in the magazine hits harder');
+      if (w.doubleJump) t.push('Lets you jump a second time in the air');
+      if (w.perfectAccuracy) t.push('Perfectly accurate, no recoil');
+      if (w.ddayOnly || w.modeOnly || w.prototype) t.push('Only found in a special mode');
+      return t;
+    };
+    const guns = [];
+    for (const w of WEAPONS) {
+      if (w.adminItem || w.skinOnly) continue;
+      const pellets = w.pellets || 1, hs = w.headshotMult || 2, sps = w.fireRate ? 1000 / w.fireRate : 0, f = WEAPON_FALLOFF[w.id] || null;
+      const perShot = (w.damage || 0) * pellets, rc = realisticRecoilProfile(w), bloom = w.spreadBloom || null;
+      const body = perShot > 0 ? Math.ceil(HP / perShot) : null, head = perShot > 0 ? Math.ceil(HP / (perShot * hs)) : null;
+      guns.push({
+        id: w.id, name: w.name, type: w.type, slot: w.slot, archived: !!w.archived,
+        damage: w.damage, pellets, headshotMult: hs, headDamage: Math.round((w.damage || 0) * hs), damagePerShot: perShot,
+        fireRateMs: w.fireRate, shotsPerSec: r3(sps), auto: !!w.auto, dps: r3(perShot * sps),
+        magazine: w.mag, reserve: w.reserve, reloadSec: r3((w.reloadTime || 0) / 1000), reloadStyle: w.reloadStyle || 'magazine', noReload: !!w.noReload,
+        timeToEmptySec: sps ? r3(Math.max(0, w.mag - 1) / sps) : null,
+        bulletSpeed: w.bulletSpeed, adsZoom: w.adsZoom,
+        falloff: f ? { nearM: f.near, farM: f.far, minPct: Math.round(f.min * 100) } : null,
+        damageByRange: RANGES.map(d => Math.round((w.damage || 0) * falloffMultiplier(w.id, d))),
+        shotsToKill: { body, head }, ttkBodySec: body && sps ? r3((body - 1) / sps) : null,
+        scatterDeg: deg(Math.atan(w.spread || 0)),
+        bloom: bloom ? { perShotDeg: deg(Math.atan(bloom.perShot)), maxDeg: deg(Math.atan(bloom.max)) } : null,
+        recoil: rc ? {
+          kickPerShotDeg: deg(rc.up), sideKickDeg: deg(rc.side), climbPerShotPct: Math.round(rc.climb * 100), climbMaxX: r3(rc.max),
+          steadyKickDeg: deg(rc.up * rc.max), shotsToMaxClimb: rc.climb > 0 ? Math.ceil((rc.max - 1) / rc.climb) : 0,
+          recoverPerSec: rc.recover, adsKickPct: Math.round(rc.adsMult * ADS_RECOIL_DAMPING.aimPitch * 100),
+        } : null,
+        screenKick: r3(weaponKickStrength(w, pellets)),
+        ability: w.ability ? { name: w.ability.name, desc: w.ability.desc || '' } : null,
+        traits: traitsOf(w),
+      });
+    }
+    const melees = [];
+    try {
+      MELEE_COMBO_MODE = true;
+      for (const m of MELEE_ITEMS) {
+        if (m.adminItem || m.skinOnly) continue;
+        const ab = m.ability, plain = m.plainAbility || null;
+        const stepsOf = (a) => (a && a.combo) ? a.combo.map(st => {
+          const slam = st.kind === 'slam', dmg = slam ? a.slamDamage : (st.damage != null ? st.damage : (st.aoe ? st.aoe.damage : null));
+          return { name: st.name, damage: dmg == null ? null : dmg, radiusM: slam ? a.radius : (st.aoe ? st.aoe.radius : (st.reach || null)), note: slam ? 'grows with the height you fall from' : undefined };
+        }) : null;
+        melees.push({
+          id: m.id, name: m.name, type: m.type, archived: !!m.archived,
+          damage: m.damage, reachM: m.range, swingMs: m.cooldown, swingsPerSec: m.cooldown ? r3(1000 / m.cooldown) : null,
+          dps: m.cooldown ? r3(m.damage * 1000 / m.cooldown) : null, speedMult: m.speedMult || 1,
+          ability: ab ? { name: ab.name, desc: ab.desc || '', cooldownSec: r3(abilityCooldownFor(m, ab) / 1000), steps: stepsOf(ab) } : null,
+          defaultAbility: plain ? { name: plain.name, desc: plain.desc || '' } : null,
+        });
+      }
+    } finally { MELEE_COMBO_MODE = keepMode; }
+    return { hp: HP, ranges: RANGES, guns, melees };
+  }) + ')(' + hp + ')');
+  const file = path.join(__dirname, '..', 'public', 'weapon-stats.json');
+  const text = JSON.stringify(dump, null, 1) + '\n';
+  const issues = [];
+  if (process.argv.includes('--dump-stats')) { fs.writeFileSync(file, text); console.log('wrote public/weapon-stats.json: ' + dump.guns.length + ' guns, ' + dump.melees.length + ' melees'); }
+  else {
+    let have = ''; try { have = fs.readFileSync(file, 'utf8'); } catch (e) {}
+    if (have !== text) issues.push('public/weapon-stats.json is out of date: run  node tools/verify-boot.js --dump-stats');
+    if (!(hp > 0)) issues.push('could not read PLAYER_MAX_HP from server.js');
+    for (const g of dump.guns) {
+      if (!(g.shotsPerSec > 0) && !g.noReload && g.fireRateMs) issues.push(g.id + ': no shots per second');
+      if (g.damageByRange.length !== dump.ranges.length) issues.push(g.id + ': damage by range is the wrong length');
+      for (let i = 1; i < g.damageByRange.length; i++) if (g.damageByRange[i] > g.damageByRange[i - 1]) issues.push(g.id + ': damage rises with range');
+    }
+    console.log('stats checks: ' + dump.guns.length + ' guns and ' + dump.melees.length + ' melees published, matching the game');
+  }
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 if (ok && process.argv.includes('--archive')) {
   // Archived: the emote wheel and King of the Hill. Off the screen, refused by the server, a stale pick falls back, code kept.
   const issues = [];
