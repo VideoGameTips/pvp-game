@@ -3199,7 +3199,7 @@ if (ok && process.argv.includes('--combo')) {
       gameStarted = true; isDead = false; countdownActive = false; match = null; activeSlot = 'melee';
       camera.position.set(0, 1.65, 0); camera.quaternion.set(0, 0, 0, 1); euler.y = 0; euler.x = 0;
       const tgt = new THREE.Group(); tgt.position.set(0, 0, -2); tgt.visible = true; remoteMeshes.cmbT = tgt; players.cmbT = { id: 'cmbT', isBot: true, team: 'enemy', hp: 300, dead: false };
-      const reset = id => { meleeCombo = null; meleeSlam = null; meleeDash = null; slamState = null; abilityCDs[id] = 0; hits.length = 0; feed.length = 0; timers = []; tgt.position.set(0, 0, -2); camera.position.set(0, 1.65, 0); _extVel.x = _extVel.z = 0; };
+      const reset = id => { _viewKick = null; meleeCombo = null; meleeSlam = null; meleeDash = null; slamState = null; abilityCDs[id] = 0; hits.length = 0; feed.length = 0; timers = []; tgt.position.set(0, 0, -2); camera.position.set(0, 1.65, 0); _extVel.x = _extVel.z = 0; };
       const spec = [['sledge', 3, ['sledge_hop', 'sledge_spin']], ['fists', 3, ['fists_uppercut', 'fists_cross']], ['combat_axe', 4, ['axe_upper', 'axe_airwhirl', 'axe_chop']],
                     ['sabre', 3, ['sabre', 'sabre_slash', 'sabre_rise']], ['bat', 3, ['bat_swing', 'bat_back', 'bat_homerun']], ['frying_pan', 3, ['pan_clang', 'pan_dong']],
                     ['riot_shield', 3, ['shield_bash', 'shield_charge']], ['spear', 3, ['spear_thrust', 'spear_sweep', 'spear_skewer']]];
@@ -3279,13 +3279,33 @@ if (ok && process.argv.includes('--combo')) {
       {
         const sl0 = MELEE_ITEMS.findIndex(m => m.id === 'sledge'); selectedMeleeIdx = sl0; activeSlot = 'melee'; reset('sledge');
         const mdl = meleeModels[sl0];
-        for (const kind of ['raise', 'spin', 'upper', 'chop', 'cross', 'sweep', 'sweepL']) {
+        const NEW_KINDS = ['sweep', 'sweepL', 'homerun', 'dong', 'skewer', 'thrust', 'bash', 'slashX', 'slashUp'];
+        for (const kind of ['raise', 'spin', 'upper', 'chop', 'cross'].concat(NEW_KINDS)) {
           for (const t of [0, 0.1, 0.25, 0.4, 0.6, 0.8, 1]) {
             meleeCombo = { itemId: 'sledge', anim: { kind, t: t * 0.5, ms: 0.5 } }; poseMeleeComboAnim();
             if (![mdl.position.x, mdl.position.y, mdl.position.z, mdl.rotation.x, mdl.rotation.y, mdl.rotation.z].every(Number.isFinite)) issues.push('combo animation ' + kind + ' gave a non-number at ' + t);
           }
-          if (kind === 'sweep' || kind === 'sweepL') for (const t of [0, 1]) { meleeCombo = { itemId: 'sledge', anim: { kind, t: t * 0.5, ms: 0.5 } }; poseMeleeComboAnim(); if (Math.abs(mdl.position.x - MELEE_REST_POS.x) > 1e-6 || Math.abs(mdl.rotation.y) > 1e-6) issues.push('the ' + kind + ' swing should start and end at rest'); }
+          if (NEW_KINDS.includes(kind)) for (const t of [0, 1]) { meleeCombo = { itemId: 'sledge', anim: { kind, t: t * 0.5, ms: 0.5 } }; poseMeleeComboAnim(); if (Math.abs(mdl.position.x - MELEE_REST_POS.x) + Math.abs(mdl.position.y - MELEE_REST_POS.y) + Math.abs(mdl.position.z - MELEE_REST_POS.z) + Math.abs(mdl.rotation.x) + Math.abs(mdl.rotation.y) + Math.abs(mdl.rotation.z) > 1e-6) issues.push('the ' + kind + ' swing should start and end at rest'); }
         }
+        // each blow has its OWN motion: the poses at the moment of impact must differ from one another
+        const sig = {};
+        for (const kind of NEW_KINDS) { meleeCombo = { itemId: 'sledge', anim: { kind, t: 0.25, ms: 0.5 } }; poseMeleeComboAnim(); sig[kind] = [mdl.position.x, mdl.position.y, mdl.position.z, mdl.rotation.x, mdl.rotation.y, mdl.rotation.z]; }
+        const names = Object.keys(sig);
+        for (let i = 0; i < names.length; i++) for (let j = i + 1; j < names.length; j++) { const d = sig[names[i]].reduce((a, v, q) => a + Math.abs(v - sig[names[j]][q]), 0); if (d < 0.35) issues.push('the ' + names[i] + ' and ' + names[j] + ' swings look too alike (' + d.toFixed(2) + ')'); }
+        // ...and every named blow of the new combos uses a motion of its own
+        const own = ['HOME RUN', 'DONG', 'SKEWER', 'THRUST', 'BASH', 'CROSS SLASH', 'RISING SLASH'], used = [];
+        for (const it of MELEE_ITEMS) for (const st of ((it.ability && it.ability.combo) || [])) if (own.includes(st.name)) { used.push(st.anim); if (!st.anim || ['sweep', 'sweepL', 'chop', 'upper', 'cross'].includes(st.anim)) issues.push(st.name + ' should have its own swing animation, has ' + st.anim); }
+        if (new Set(used).size !== used.length) issues.push('the named blows should not share an animation: ' + used.join(','));
+        // the view kick ends exactly where it began, and does nothing when camera shake is off
+        const e0 = [euler.x, euler.y];
+        viewKick(0.2, 0.06, 480); let kg = 0; while (_viewKick && kg++ < 200) updateViewKick(0.016);
+        if (_viewKick || Math.abs(euler.x - e0[0]) > 1e-6 || Math.abs(euler.y - e0[1]) > 1e-6) issues.push('the view kick should end where it began');
+        const keepShake = GAMEPLAY_SETTINGS.cameraShake; GAMEPLAY_SETTINGS.cameraShake = 0;
+        try { viewKick(0.2, 0.06, 480); kg = 0; let moved = 0; while (_viewKick && kg++ < 200) { updateViewKick(0.016); moved += Math.abs(euler.y - e0[1]); } if (moved > 1e-6) issues.push('with camera shake off the view must not be kicked'); } finally { GAMEPLAY_SETTINGS.cameraShake = keepShake; _viewKick = null; }
+        // the crescent builds, sweeps and can be stepped
+        const arc = comboSlashArc(0xffffff, { roll: 0.3, dir: 1, size: 1.2 }, 1.8);
+        for (const k of [0, 0.3, 0.6, 1]) { arc.step(k); if (![arc.mesh.position.x, arc.mesh.position.y, arc.mesh.position.z, arc.mesh.scale.x].every(Number.isFinite)) issues.push('the slash crescent gave a non-number at ' + k); }
+        scene.remove(arc.mesh);
         meleeCombo = null; comboRestModel();
       }
       // combo mode / default mode, and how the slam grows with the fall

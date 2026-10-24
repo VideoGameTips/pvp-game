@@ -1012,9 +1012,9 @@ const MELEE_ITEMS = [
     ability: { name: 'Bat Combo', cd: 1500, desc: 'E swing · E backswing · E home run', type: 'melee_combo',
       comboCd: 1500, comboWindow: 1200, comboPartialCd: 700,
       combo: [
-        { name: 'SWING', kind: 'swing', lock: 300, ms: 300, anim: 'sweep', fwd: 1.5, aoe: { id: 'bat_swing', radius: 3.0, arc: 0.15, damage: 32, knock: 6, launch: 1, color: 0xffe0b0 } },
-        { name: 'BACKSWING', kind: 'swing', lock: 300, ms: 300, anim: 'sweepL', fwd: 1.5, aoe: { id: 'bat_back', radius: 3.0, arc: 0.15, damage: 38, knock: 7, launch: 1, color: 0xffe0b0 } },
-        { name: 'HOME RUN', kind: 'swing', lock: 520, ms: 560, anim: 'sweep', delay: 230, fwd: 2, aoe: { id: 'bat_homerun', radius: 3.8, arc: 0, damage: 70, knock: 26, launch: 9, color: 0xffffff } },
+        { name: 'SWING', kind: 'swing', lock: 300, ms: 300, anim: 'sweep', fwd: 2.5, power: 1.25, whip: 0.07, whoosh: 0.85, slash: { roll: 0.35, dir: 1, size: 1.1 }, aoe: { id: 'bat_swing', radius: 3.0, arc: 0.15, damage: 32, knock: 6, launch: 1, color: 0xffe0b0 } },
+        { name: 'BACKSWING', kind: 'swing', lock: 300, ms: 300, anim: 'sweepL', fwd: 2.5, power: 1.35, whip: -0.08, whoosh: 0.8, slash: { roll: -0.35, dir: -1, size: 1.1 }, aoe: { id: 'bat_back', radius: 3.0, arc: 0.15, damage: 38, knock: 7, launch: 1, color: 0xffe0b0 } },
+        { name: 'HOME RUN', kind: 'swing', lock: 560, ms: 640, anim: 'homerun', delay: 300, fwd: 3, power: 2.2, whip: 0.2, kick: 0.06, kickMs: 480, whoosh: 0.6, impact: 'heavy', slash: { roll: 0.1, dir: 1, size: 1.8, ms: 280 }, aoe: { id: 'bat_homerun', radius: 3.8, arc: 0, damage: 70, knock: 26, launch: 9, color: 0xffffff } },
       ] },
     plainAbility: { name: 'Crowd Clear', cd: 9000, desc: 'Forward charge · rising swing · 100 dmg · massive knockback', type: 'bat_crowd_clear', damage: 100, speed: 22, launchVel: 14, knockback: 34 } },
   { id: 'sabre',      name: 'Sabre',      type: 'Melee',       damage: 45, range: 2.4, cooldown: 620,
@@ -1022,17 +1022,17 @@ const MELEE_ITEMS = [
       comboCd: 1500, comboWindow: 1200, comboPartialCd: 700,
       combo: [
         { name: 'LUNGE', kind: 'dash', lock: 340, distance: 6, dashTime: 0.2 },
-        { name: 'CROSS SLASH', kind: 'swing', lock: 300, ms: 320, anim: 'sweep', fwd: 3, sound: 'melee_blade', aoe: { id: 'sabre_slash', radius: 3.2, arc: 0.2, damage: 40, knock: 3, launch: 2, color: 0xcfe8ff } },
-        { name: 'RISING SLASH', kind: 'uppercut', lock: 340, ms: 400, id: 'sabre_rise', damage: 55, up: 8, hop: 2.5, reach: 3.0, popVel: 9, color: 0xe0f0ff },
+        { name: 'CROSS SLASH', kind: 'swing', lock: 340, ms: 380, anim: 'slashX', delay: 90, fwd: 4, sound: 'melee_blade', power: 1.4, whip: 0.09, whoosh: 1.5, slash: { roll: 0.75, dir: 1, size: 1.3 }, aoe: { id: 'sabre_slash', radius: 3.2, arc: 0.2, damage: 40, knock: 3, launch: 2, color: 0xcfe8ff } },
+        { name: 'RISING SLASH', kind: 'uppercut', anim: 'slashUp', lock: 360, ms: 420, id: 'sabre_rise', damage: 55, up: 8, hop: 2.5, reach: 3.0, popVel: 9, color: 0xe0f0ff, power: 1.5, whip: -0.05, kick: 0.07, kickMs: 360, whoosh: 1.6, slash: { roll: -0.75, dir: -1, size: 1.3 } },
       ] },
     plainAbility: { name: 'Lunge',        cd: 7000,  desc: 'Dash forward · hit all in path', type: 'melee_lunge', distance: 6 } },
   { id: 'frying_pan', name: 'Frying Pan', type: 'Melee',       damage: 32, range: 1.8, cooldown: 420,
     ability: { name: 'Pan Combo', cd: 1500, desc: 'E clang · E clang · E DONG (the last one pops them up)', type: 'melee_combo',
       comboCd: 1500, comboWindow: 1200, comboPartialCd: 700,
       combo: [
-        { name: 'CLANG', kind: 'swing', lock: 280, ms: 280, anim: 'sweep', aoe: { id: 'pan_clang', radius: 2.8, arc: 0.2, damage: 18, knock: 2, launch: 1.5, color: 0xffffaa } },
-        { name: 'CLANG', kind: 'swing', lock: 280, ms: 280, anim: 'sweepL', aoe: { id: 'pan_clang', radius: 2.8, arc: 0.2, damage: 22, knock: 2, launch: 1.5, color: 0xffffaa } },
-        { name: 'DONG', kind: 'chop', ms: 520, lock: 480, delay: 160, aoe: { id: 'pan_dong', radius: 3.4, arc: 0, damage: 50, knock: 5, launch: 9, color: 0xffffaa } },
+        { name: 'CLANG', kind: 'swing', lock: 280, ms: 280, anim: 'sweep', power: 1.2, whip: 0.06, whoosh: 1.25, impact: 'heavy', slash: { roll: 0.3, dir: 1, size: 1.0 }, aoe: { id: 'pan_clang', radius: 2.8, arc: 0.2, damage: 18, knock: 2, launch: 1.5, color: 0xffffaa } },
+        { name: 'CLANG', kind: 'swing', lock: 280, ms: 280, anim: 'sweepL', power: 1.3, whip: -0.07, whoosh: 1.3, impact: 'heavy', slash: { roll: -0.3, dir: -1, size: 1.0 }, aoe: { id: 'pan_clang', radius: 2.8, arc: 0.2, damage: 22, knock: 2, launch: 1.5, color: 0xffffaa } },
+        { name: 'DONG', kind: 'chop', anim: 'dong', ms: 620, lock: 560, delay: 250, power: 1.9, kick: -0.14, kickMs: 420, whoosh: 1.0, impact: 'heavy', slash: { roll: 1.57, dir: 1, size: 1.4 }, aoe: { id: 'pan_dong', radius: 3.4, arc: 0, damage: 50, knock: 5, launch: 9, color: 0xffffaa } },
       ] },
     plainAbility: { name: 'Pan Clang', cd: 8500,  desc: 'AOE clang · 3 m · 28 dmg · pop-up', type: 'melee_pulse', radius: 3.0, damage: 28, knockback: 2.2, launchVel: 7, color: 0xffffaa } },
   { id: 'sledge',     name: 'Sledge',     type: 'Heavy Melee', damage: 70, range: 1.9, cooldown: 900,
@@ -1051,9 +1051,9 @@ const MELEE_ITEMS = [
     ability: { name: 'Spear Combo', cd: 1500, desc: 'E thrust · E sweep · E skewer', type: 'melee_combo',
       comboCd: 1500, comboWindow: 1200, comboPartialCd: 700,
       combo: [
-        { name: 'THRUST', kind: 'swing', lock: 300, ms: 300, anim: 'cross', fwd: 3, sound: 'melee_blade', aoe: { id: 'spear_thrust', radius: 3.8, arc: 0.8, damage: 40, knock: 4, launch: 1, color: 0xdde6ee } },
-        { name: 'SWEEP', kind: 'spin', ms: 460, lock: 400, hang: 0, aoe: { id: 'spear_sweep', radius: 3.6, damage: 38, knock: 4, launch: 3, color: 0xdde6ee } },
-        { name: 'SKEWER', kind: 'chop', ms: 520, lock: 480, delay: 170, aoe: { id: 'spear_skewer', radius: 3.6, arc: 0.3, damage: 65, knock: 5, launch: 5, color: 0xffffff } },
+        { name: 'THRUST', kind: 'swing', lock: 340, ms: 360, anim: 'thrust', delay: 100, fwd: 5, sound: 'melee_blade', power: 1.5, whoosh: 1.4, aoe: { id: 'spear_thrust', radius: 3.8, arc: 0.8, damage: 40, knock: 4, launch: 1, color: 0xdde6ee } },
+        { name: 'SWEEP', kind: 'spin', ms: 460, lock: 400, hang: 0, aoe: { id: 'spear_sweep', radius: 3.6, damage: 38, knock: 4, launch: 3, color: 0xdde6ee, power: 1.4 } },
+        { name: 'SKEWER', kind: 'chop', anim: 'skewer', ms: 620, lock: 560, delay: 260, power: 1.9, kick: -0.12, kickMs: 400, whoosh: 1.3, impact: 'heavy', aoe: { id: 'spear_skewer', radius: 3.6, arc: 0.3, damage: 65, knock: 5, launch: 5, color: 0xffffff } },
       ] },
     plainAbility: { name: 'Throw Spear',  cd: 15000, desc: 'Hurl spear · 85 dmg · weapon gone until CD', type: 'melee_throw' } },
   { id: 'katana',     name: 'Katana',     type: 'Melee',       damage: 65, range: 2.8, cooldown: 480,
@@ -1070,7 +1070,7 @@ const MELEE_ITEMS = [
     ability: { name: 'Shield Combo', cd: 1500, desc: 'E bash · E charge · E shield slam', type: 'melee_combo', radius: 3.4, damage: 50, slamDamage: 50, leap: 11, leapForward: 3, dive: 28,
       comboCd: 1500, comboWindow: 1200, comboPartialCd: 700,
       combo: [
-        { name: 'BASH', kind: 'swing', lock: 300, ms: 300, anim: 'cross', fwd: 2, sound: 'melee_heavy', aoe: { id: 'shield_bash', radius: 2.8, arc: 0.3, damage: 25, knock: 9, launch: 1, color: 0xaaccff } },
+        { name: 'BASH', kind: 'swing', lock: 320, ms: 340, anim: 'bash', delay: 80, fwd: 4, sound: 'melee_heavy', power: 1.6, kick: -0.04, kickMs: 300, whoosh: 0.7, impact: 'heavy', aoe: { id: 'shield_bash', radius: 2.8, arc: 0.3, damage: 25, knock: 9, launch: 1, color: 0xaaccff } },
         { name: 'CHARGE', kind: 'dash', lock: 380, type: 'melee_charge', weaponId: 'shield_charge', distance: 6, dashTime: 0.2 },
         { name: 'SHIELD SLAM', kind: 'slam', dive: 28 },
       ] },
@@ -45359,8 +45359,60 @@ function comboRestModel() {
   if (m && !meleeSlam && !meleeDash) { m.position.copy(MELEE_REST_POS); m.rotation.set(0, 0, 0); m.rotation.order = 'XYZ'; meleeSwingT = 1; }
 }
 // Everything within reach takes a hit and is shoved: o = { id, radius, damage, knock, launch, arc (cos of the half-cone; leave out for all round), color }
+// 💢 How hard a blow FEELS. A step may carry: power (1 = the old feel; the big finishers are ~2), whip (the view turns along the swing, radians, signed),
+// kick (the view pitches, signed), whoosh (pitch of the swish), slash { roll, dir, size, ms } (a bright crescent across the screen), impact (hit-sound material).
+const _easeK = x => { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); };
+let _viewKick = null;
+function viewKick(yaw, pitch, ms) { _viewKick = { t: 0, dur: Math.max(0.1, (ms || 300) / 1000), yaw: yaw || 0, pitch: pitch || 0, py: 0, pp: 0 }; }
+function updateViewKick(dt) {                                   // snaps out fast and eases back, and ends exactly where it began
+  const K = _viewKick; if (!K) return;
+  if (isDead || !gameStarted) { _viewKick = null; return; }
+  K.t += dt;
+  const k = Math.min(1, K.t / K.dur), f = k < 0.2 ? _easeK(k / 0.2) : _easeK(1 - (k - 0.2) / 0.8);
+  const mult = gameplaySettingMult('cameraShake');
+  const ty = K.yaw * f * mult, tp = K.pitch * f * mult, dy = ty - K.py, dp = tp - K.pp;
+  K.py = ty; K.pp = tp;
+  euler.y += dy; euler.x = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, euler.x + dp));
+  camera.quaternion.setFromEuler(euler);
+  if (k >= 1) _viewKick = null;
+}
+function comboSlashArc(color, sl, pw) {                         // a crescent that sweeps across the view in a flash; returns { step(k) } so it can be looked at
+  const mat = new THREE.MeshBasicMaterial({ color: color || 0xffffff, transparent: true, opacity: 0.95, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+  const geo = new THREE.RingGeometry(0.78, 1.0, 40, 1, 0, Math.PI * 0.8);
+  const m = new THREE.Mesh(geo, mat); m.renderOrder = 1002; scene.add(m);
+  const dir = sl.dir || 1, roll = sl.roll || 0, size = (sl.size || 1) * (0.9 + 0.15 * (pw || 1)), life = sl.ms || 210, fwd = new THREE.Vector3();
+  const step = (k) => {
+    fwd.set(0, 0, -1).applyQuaternion(camera.quaternion);
+    m.position.copy(camera.position).addScaledVector(fwd, 1.5);
+    m.quaternion.copy(camera.quaternion); m.rotateZ(roll + dir * (k - 0.5) * 1.7);
+    m.scale.setScalar(size * (0.85 + k * 0.45));
+    mat.opacity = 0.95 * (1 - k) * (1 - k * 0.3);
+  };
+  const born = performance.now(), epoch = matchEpoch;
+  const tick = () => {
+    const k = Math.min(1, (performance.now() - born) / life);
+    step(k);
+    if (k < 1 && epoch === matchEpoch) requestAnimationFrame(tick); else { scene.remove(m); geo.dispose(); mat.dispose(); }
+  };
+  step(0); requestAnimationFrame(tick);
+  return { step, mesh: m };
+}
+function comboHitSparks(pos, color, pw, fwd) {                  // sparks thrown on along the blow
+  const n = Math.round(6 + 5 * pw);
+  for (let i = 0; i < n; i++) {
+    const v = new THREE.Vector3(fwd.x * (3 + Math.random() * 7 * pw) + (Math.random() - 0.5) * 5, 1 + Math.random() * 4, fwd.z * (3 + Math.random() * 7 * pw) + (Math.random() - 0.5) * 5);
+    _spawnFinisherSpark(pos, i % 3 ? 0xffffff : (color || 0xffcc66), { size: 0.03 + Math.random() * 0.03, life: 260 + Math.random() * 300, opacity: 1, vel: v });
+  }
+}
+function comboFlair(st) {                                       // the parts of a blow that are not damage: the crescent, the view kick, the swish
+  if (!st) return;
+  const pw = st.power || 1;
+  if (st.slash) comboSlashArc(st.aoe ? st.aoe.color : st.color, st.slash, pw);
+  if (st.whip || st.kick) viewKick(st.whip || 0, st.kick || 0, st.kickMs || 300);
+  if (st.whoosh) playSoundEvent('melee_whirlwind', { volume: Math.min(1.2, 0.5 + 0.25 * pw), pitch: st.whoosh, minGap: 0 });
+}
 function comboAoe(item, now, o) {
-  const origin = camera.position.clone(), fwd = _meleeForwardXZ(), r = o.radius || 3;
+  const origin = camera.position.clone(), fwd = _meleeForwardXZ(), r = o.radius || 3, pw = o.power || 1;
   let landed = 0;
   for (const [pid, mesh] of Object.entries(remoteMeshes)) {
     if (pid === myId || !mesh.visible || players[pid]?.dead) continue;
@@ -45377,12 +45429,15 @@ function comboAoe(item, now, o) {
     else emitHit(pid, `combo_${o.id}_${myId}_${now}_${pid}`, o.id, hp, false, { damageOverride: o.damage });
     _nudgeBotFromPoint(pid, mesh, origin, o.knock || 0, o.launch || 0);
     spawnHitParticle(hp);
+    if (pw > 1) comboHitSparks(hp, o.color, pw, fwd);
     landed++;
   }
   spawnAbilityAOEFX(origin.clone().setY(Math.max(0.15, origin.y - 1.5)), Math.min(r, 4.6), o.color || 0xffcc66);
-  flashScreen(landed ? 'rgba(255,220,150,0.26)' : 'rgba(255,230,190,0.10)', landed ? 220 : 120);
-  _fovPunch = Math.max(_fovPunch, landed ? 7 : 4);
+  flashScreen(landed ? 'rgba(255,220,150,' + Math.min(0.5, 0.26 * pw).toFixed(2) + ')' : 'rgba(255,230,190,0.10)', landed ? 220 + 60 * (pw - 1) : 120);
+  _fovPunch = Math.max(_fovPunch, (landed ? 7 : 4) + (pw - 1) * 4);
+  if (pw > 1) { _slamShakeT = Math.max(_slamShakeT, 0.22 + 0.1 * pw); _slamShakeAmp = Math.max(_slamShakeAmp, 0.014 * pw * (landed ? 1.5 : 0.7)); }
   playSoundEvent(landed ? 'melee_heavy' : 'footstep', { volume: landed ? 1.0 : 0.6, pitch: landed ? 0.9 : 1.6, minGap: 40 });
+  if (landed && pw > 1) playSoundEvent('melee_impact', { material: o.impact || (pw >= 1.7 ? 'heavy' : (MELEE_SWING_SOUND[item.baseId || item.id] || 'blade')), volume: Math.min(1.2, 0.8 + 0.15 * pw), minGap: 40 });
   return landed;
 }
 function _comboLift(vel) {
@@ -45406,7 +45461,8 @@ const COMBO_RUN = {
     comboAoe(item, now, st.aoe);
   },
   uppercut(item, ab, st, now) {                 // a rising blow in front of you: it throws you up and pops them
-    comboAnim('upper', st.ms || 420);
+    comboAnim(st.anim || 'upper', st.ms || 420);
+    comboFlair(st);
     doUppercutAbility(item, st, now);
   },
   cross(item, ab, st, now) {                    // a lunging blow in the air
@@ -45417,13 +45473,14 @@ const COMBO_RUN = {
     comboAoe(item, now, st.aoe);
   },
   chop(item, ab, st, now) {                     // the big overhead finish: it lands a beat after the wind-up, with a shockwave
-    comboAnim('chop', st.ms || 520);
+    comboAnim(st.anim || 'chop', st.ms || 520);
     const epoch = matchEpoch;
     setTimeout(() => {
       if (epoch !== matchEpoch || isDead) return;
       const f = _meleeForwardXZ();
       meleeSlamImpact(camera.position.clone().addScaledVector(new THREE.Vector3(f.x, 0, f.z), 1.8).setY(0), st.aoe.radius, st.aoe.color || 0xffffff, 30);
-      comboAoe(item, Date.now(), st.aoe);
+      comboFlair(st);
+      comboAoe(item, Date.now(), st.power ? { ...st.aoe, power: st.power, impact: st.impact } : st.aoe);
     }, st.delay ?? 170);
   },
   slam(item, ab, st, now) { startMeleeSlam(item, { ...ab, dive: st.dive ?? ab.dive }, { flip: !!st.flip }); },   // the existing leap, hang and slam (a backflip first, if asked)
@@ -45431,9 +45488,10 @@ const COMBO_RUN = {
     const f = _meleeForwardXZ(); _extVel.x += f.x * (st.fwd || 0); _extVel.z += f.z * (st.fwd || 0);
     comboAnim(st.anim || 'sweep', st.ms || 320);
     playSoundEvent(st.sound || 'melee_heavy', { volume: 1.0, minGap: 0 });
-    if (!st.delay) { comboAoe(item, now, st.aoe); return; }
+    const strike = (t) => { comboFlair(st); comboAoe(item, t, { ...st.aoe, power: st.power, impact: st.impact }); };
+    if (!st.delay) { strike(now); return; }
     const epoch = matchEpoch;
-    setTimeout(() => { if (epoch !== matchEpoch || isDead) return; comboAoe(item, Date.now(), st.aoe); }, st.delay);
+    setTimeout(() => { if (epoch !== matchEpoch || isDead) return; strike(Date.now()); }, st.delay);
   },
   dash(item, ab, st, now) {                     // a rush forward that hits everything on the way (the sabre's lunge, the shield's charge)
     startMeleeDash(item, { type: st.type || 'melee_lunge', distance: st.distance, dashTime: st.dashTime, reach: st.reach }, st.weaponId || item.id, now);
@@ -45487,12 +45545,39 @@ function updateMeleeCombo(dt) {
   if (C.queued && !C.final && now >= C.lockUntil && now < C.windowUntil && !meleeSlam && !meleeDash) { C.queued = false; comboFire(item, item.ability, C.step + 1, now); return; }
   if (now >= C.windowUntil && now >= C.lockUntil) { if (C.final) meleeCombo = null; else comboAbort(C, false); }
 }
+// 🎞️ Keyframed poses for the swings, [t, px, py, pz, rx, ry, rz]: offsets from the rest pose, first and last frame ARE the rest pose.
+// The viewmodel sits ~0.2 m from the eye, so offsets stay small and the weapon is TURNED instead: +rx lifts the tip, -rx drives it
+// forward into the view, ry swings the tip across the screen (about ±0.9 is edge to edge). Eased between frames.
+const COMBO_POSES = {
+  sweep:   [[0, 0,0,0, 0,0,0], [0.2, 0.10,0.10,0, 0.8,-0.9,0], [0.38, 0,0.12,0, 0.75,0,0], [0.55, -0.10,0.10,-0.06, 0.55,0.95,0], [0.75, -0.10,0.10,-0.06, 0.55,0.95,0], [1, 0,0,0, 0,0,0]],
+  sweepL:  [[0, 0,0,0, 0,0,0], [0.2, -0.10,0.10,0, 0.8,0.9,0], [0.38, 0,0.12,0, 0.75,0,0], [0.55, 0.10,0.10,-0.06, 0.55,-0.95,0], [0.75, 0.10,0.10,-0.06, 0.55,-0.95,0], [1, 0,0,0, 0,0,0]],
+  homerun: [[0, 0,0,0, 0,0,0], [0.35, 0.12,0.10,0, 0.9,-0.9,0], [0.46, 0.12,0.10,0, 0.9,-0.9,0], [0.53, 0,0.12,0, 0.85,0,0], [0.62, -0.14,0.20,-0.10, 1.0,1.1,0.3], [0.80, -0.14,0.20,-0.10, 1.0,1.1,0.3], [1, 0,0,0, 0,0,0]],
+  dong:    [[0, 0,0,0, 0,0,0], [0.36, 0,0.20,0.04, 1.5,0,0], [0.5, 0,-0.02,0, 1.1,0,0], [0.58, 0,0,0, 1.25,0,0.1], [0.64, 0,-0.01,0, 1.05,0,-0.1], [0.70, 0,0,0, 1.15,0,0.04], [0.8, 0,0,0, 1.1,0,0], [1, 0,0,0, 0,0,0]],
+  skewer:  [[0, 0,0,0, 0,0,0], [0.36, 0,0.12,0, 1.4,0,0], [0.5, 0,-0.10,-0.20, -0.4,0,0], [0.72, 0,-0.10,-0.20, -0.4,0,0], [1, 0,0,0, 0,0,0]],
+  thrust:  [[0, 0,0,0, 0,0,0], [0.3, 0.03,0,0.14, 0.3,0,0], [0.42, 0,0.02,-0.30, -0.2,0,0], [0.62, 0,0.02,-0.30, -0.2,0,0], [1, 0,0,0, 0,0,0]],
+  bash:    [[0, 0,0,0, 0,0,0], [0.26, 0.02,-0.06,0.08, 0.15,-0.2,0], [0.4, 0,0.10,0.06, 0.2,0.1,0], [0.62, 0,0.10,0.06, 0.2,0.1,0], [1, 0,0,0, 0,0,0]],
+  slashX:  [[0, 0,0,0, 0,0,0], [0.22, 0.08,0.10,0.04, 0.9,-0.7,0], [0.42, -0.10,0.06,-0.04, 0.4,0.8,0], [0.62, -0.10,0.06,-0.04, 0.4,0.8,0], [1, 0,0,0, 0,0,0]],
+  slashUp: [[0, 0,0,0, 0,0,0], [0.22, -0.10,-0.04,0, 0.2,0.7,0], [0.44, 0.10,0.10,0.04, 1.0,-0.6,0], [0.64, 0.10,0.10,0.04, 1.0,-0.6,0], [1, 0,0,0, 0,0,0]],
+};
+function _comboPoseAt(kf, p) {
+  if (p <= 0) return kf[0].slice(1);
+  for (let i = 1; i < kf.length; i++) {
+    if (p <= kf[i][0]) {
+      const a = kf[i - 1], b = kf[i], t = _easeK((p - a[0]) / (b[0] - a[0])), out = [];
+      for (let j = 1; j <= 6; j++) out.push(a[j] + (b[j] - a[j]) * t);
+      return out;
+    }
+  }
+  return kf[kf.length - 1].slice(1);
+}
+
 function poseMeleeComboAnim() {
   const C = meleeCombo, a = C && C.anim;
   const m = (activeSlot === 'melee' && selectedMeleeIdx !== null && selectedMeleeIdx >= 0) ? meleeModels[selectedMeleeIdx] : null;
   if (!a || !m) return;
   const ease = x => { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); };
   const p = Math.min(1, a.t / a.ms), R = MELEE_REST_POS;
+  const seg = (lo, hi) => ease((p - lo) / (hi - lo)), lerp = (u, v, t) => u + (v - u) * t;
   let px = 0, py = 0, pz = 0, rx = 0, ry = 0, rz = 0;
   m.rotation.order = 'YXZ';
   if (a.kind === 'raise') { const k = p < 0.45 ? ease(p / 0.45) : 1 - ease((p - 0.55) / 0.45); py = 0.16 * k; pz = -0.10 * k; rx = 1.3 * k; }
@@ -45512,11 +45597,7 @@ function poseMeleeComboAnim() {
     else if (p < 0.8) { py = -0.22; pz = -0.38; rx = -0.95; }
     else { const k = 1 - ease((p - 0.8) / 0.2); py = -0.22 * k; pz = -0.38 * k; rx = -0.95 * k; }
   }
-  else if (a.kind === 'sweep' || a.kind === 'sweepL') {   // a flat swing across the front: wind up out wide, cut across, follow through, ease home (sweepL runs the other way)
-    const d = a.kind === 'sweep' ? 1 : -1;
-    const k = p < 0.2 ? ease(p / 0.2) : p < 0.6 ? 1 - 2 * ease((p - 0.2) / 0.4) : -1 + ease((p - 0.6) / 0.4);     // 0 → 1 (wind-up) → -1 (follow-through) → 0
-    px = d * 0.28 * k; py = 0.02 * Math.abs(k); pz = -0.22 * Math.abs(k); ry = d * 0.9 * k; rz = d * 0.35 * k;
-  }
+  else if (COMBO_POSES[a.kind]) { [px, py, pz, rx, ry, rz] = _comboPoseAt(COMBO_POSES[a.kind], p); }
   else if (a.kind === 'cross') { const k = p < 0.35 ? ease(p / 0.35) : 1 - ease((p - 0.35) / 0.65); pz = -0.36 * k; py = 0.03 * k; rx = -0.2 * k; }
   m.position.set(R.x + px, R.y + py, R.z + pz); m.rotation.set(rx, ry, rz);
 }
@@ -66636,6 +66717,7 @@ function loop() {
   safeLoopStep('recoil', () => updateRecoil(dt));   // the muzzle settles back between shots
   safeLoopStep('fire-shake', () => updateFireShake(dt)); // camera punch on every shot, snaps back fast
   safeLoopStep('slam-shake', () => updateSlamShake(dt));  // the floor taking a hammer
+  safeLoopStep('view-kick', () => updateViewKick(dt));    // the view turning with a swing
   safeLoopStep('realism-feedback', () => updateRealismFeedback(dt));
   safeLoopStep('status-reset', () => watchStatusReset());
   safeLoopStep('wrap-sync', () => emitMyWrap());   // a changed wrap reaches the other players
