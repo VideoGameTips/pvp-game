@@ -14289,6 +14289,202 @@ _SCN.battleground = (K) => {
   K.anim((dt, t) => lights.forEach((b, i) => { b.rotation.x = 0.28 * Math.sin(t * 0.5 + i * 1.6); b.material.opacity = 0.1 + 0.06 * Math.sin(t * 0.9 + i); }));
 };
 
+// ═══ 🎵 MUSIC ═══════════════════════════════════════════════════════════════════════════════════════════════════════
+// No audio files: the music is played by the game, on the same Web Audio context as the sounds. Each track is a few chords and a few
+// layers (pads, a choir, bells, plucks, a bass, stabs, drums), written as a function from a bar number to the notes in it, so a loop is
+// always the same loop. The lobby and the menus have a theme; a few maps have their own (see MUSIC_FOR_MAP); the rest stay quiet, as
+// they always were. Settings → MUSIC turns it down or off. It starts with the first click (the browser will not play before one).
+var MUSIC = { ctx: null, track: null, bus: null, out: null, bar: 0, nextT: 0 };
+const MUSIC_FOR_MAP = { sky_arena: 'heaven', dreamscape: 'heaven', shipyard: 'industry', battleground: 'arena', neon_tokyo: 'neon', cyber: 'neon', space: 'drift', orbital_station: 'drift', gravity_lab: 'drift' };
+const _MSC = { major: [0, 2, 4, 5, 7, 9, 11], minor: [0, 2, 3, 5, 7, 8, 10], lydian: [0, 2, 4, 6, 7, 9, 11], phrygian: [0, 1, 3, 5, 7, 8, 10] };
+const _mHz = (m) => 440 * Math.pow(2, (m - 69) / 12);
+const _mNote = (root, scale, deg, oct = 0) => { const S = _MSC[scale], n = S.length, d = Math.floor(deg / n), i = ((deg % n) + n) % n; return root + S[i] + 12 * (d + oct); };
+const _mChord = (root, scale, deg, oct = 0) => [_mNote(root, scale, deg, oct), _mNote(root, scale, deg + 2, oct), _mNote(root, scale, deg + 4, oct)];
+const _mE = (s, d, i, n, v) => ({ s, d, i, n, v });
+
+// the voices. c = context, t = when, o = where it goes, n = the note(s) as MIDI numbers, d = seconds, v = how hard (0..1)
+const _MV = {
+  pad(c, t, o, n, d, v) {                                     // warm: two detuned saws a note, the filter opening and closing over the bar
+    const g = c.createGain(), lp = c.createBiquadFilter(), a = Math.min(1.4, d * 0.35); lp.type = 'lowpass'; lp.Q.value = 0.6;
+    lp.frequency.setValueAtTime(500, t); lp.frequency.linearRampToValueAtTime(1500, t + d * 0.5); lp.frequency.linearRampToValueAtTime(700, t + d);
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(v * 0.11, t + a); g.gain.setValueAtTime(v * 0.11, Math.max(t + a, t + d - a)); g.gain.linearRampToValueAtTime(0.0001, t + d + 0.25);
+    lp.connect(g); g.connect(o);
+    for (const m of n) for (const det of [-7, 7]) { const os = c.createOscillator(); os.type = 'sawtooth'; os.frequency.value = _mHz(m); os.detune.value = det; os.connect(lp); os.start(t); os.stop(t + d + 0.3); }
+  },
+  choir(c, t, o, n, d, v) {                                   // voices: a saw through two vowel filters, with a little vibrato
+    const g = c.createGain(), a = Math.min(1.1, d * 0.4);
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(v * 0.09, t + a); g.gain.setValueAtTime(v * 0.09, Math.max(t + a, t + d - a)); g.gain.linearRampToValueAtTime(0.0001, t + d + 0.3);
+    g.connect(o);
+    const f1 = c.createBiquadFilter(), f2 = c.createBiquadFilter(); f1.type = f2.type = 'bandpass'; f1.frequency.value = 720; f2.frequency.value = 1180; f1.Q.value = f2.Q.value = 4;
+    const lfo = c.createOscillator(), lg = c.createGain(); lfo.frequency.value = 5.2; lg.gain.value = 7; lfo.connect(lg);
+    f1.connect(g); f2.connect(g); lfo.start(t); lfo.stop(t + d + 0.4);
+    for (const m of n) { const os = c.createOscillator(); os.type = 'sawtooth'; os.frequency.value = _mHz(m); lg.connect(os.detune); os.connect(f1); os.connect(f2); os.start(t); os.stop(t + d + 0.4); }
+  },
+  drone(c, t, o, n, d, v) {                                   // a low sine under everything
+    const g = c.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(v * 0.2, t + Math.min(1.5, d * 0.4)); g.gain.linearRampToValueAtTime(0.0001, t + d + 0.3); g.connect(o);
+    for (const m of n) { const os = c.createOscillator(); os.type = 'sine'; os.frequency.value = _mHz(m); os.connect(g); os.start(t); os.stop(t + d + 0.4); }
+  },
+  bell(c, t, o, n, d, v) {                                    // a struck bell: a sine and two inharmonic partials, each dying away at its own rate
+    for (const m of n) {
+      const f = _mHz(m);
+      for (const [k, a, dec] of [[1, 0.22, 1], [2.76, 0.09, 0.55], [5.4, 0.04, 0.3]]) {
+        const os = c.createOscillator(), g = c.createGain(); os.type = 'sine'; os.frequency.value = f * k;
+        g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(v * a, t + 0.004); g.gain.exponentialRampToValueAtTime(0.0001, t + Math.max(0.2, d * dec));
+        os.connect(g); g.connect(o); os.start(t); os.stop(t + d + 0.1);
+      }
+    }
+  },
+  pluck(c, t, o, n, d, v, e) {                                // a plucked string: a short filter sweep and a quick decay
+    for (const m of n) {
+      const os = c.createOscillator(), lp = c.createBiquadFilter(), g = c.createGain(); os.type = (e && e.w) || 'triangle'; os.frequency.value = _mHz(m);
+      lp.type = 'lowpass'; lp.Q.value = 1; lp.frequency.setValueAtTime(3600, t); lp.frequency.exponentialRampToValueAtTime(700, t + Math.min(0.4, d));
+      g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(v * 0.2, t + 0.004); g.gain.exponentialRampToValueAtTime(0.0001, t + Math.max(0.12, d));
+      os.connect(lp); lp.connect(g); g.connect(o); os.start(t); os.stop(t + d + 0.15);
+    }
+  },
+  bass(c, t, o, n, d, v, e) {                                 // a low saw (or square) with a filter that closes on each note
+    for (const m of n) {
+      const os = c.createOscillator(), lp = c.createBiquadFilter(), g = c.createGain(); os.type = (e && e.w) || 'sawtooth'; os.frequency.value = _mHz(m);
+      lp.type = 'lowpass'; lp.Q.value = 2; lp.frequency.setValueAtTime((e && e.cut) || 900, t); lp.frequency.exponentialRampToValueAtTime(220, t + Math.max(0.1, d));
+      g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(v * 0.34, t + 0.01); g.gain.setValueAtTime(v * 0.34, t + Math.max(0.02, d * 0.6)); g.gain.linearRampToValueAtTime(0.0001, t + d + 0.04);
+      os.connect(lp); lp.connect(g); g.connect(o); os.start(t); os.stop(t + d + 0.1);
+    }
+  },
+  stab(c, t, o, n, d, v) {                                    // a chord hit: saws through a filter that snaps shut
+    const lp = c.createBiquadFilter(), g = c.createGain(); lp.type = 'lowpass'; lp.Q.value = 1.5; lp.frequency.setValueAtTime(3800, t); lp.frequency.exponentialRampToValueAtTime(500, t + Math.max(0.1, d));
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(v * 0.16, t + 0.005); g.gain.exponentialRampToValueAtTime(0.0001, t + Math.max(0.1, d)); lp.connect(g); g.connect(o);
+    for (const m of n) { const os = c.createOscillator(); os.type = 'sawtooth'; os.frequency.value = _mHz(m); os.detune.value = (m % 2 ? 6 : -6); os.connect(lp); os.start(t); os.stop(t + d + 0.1); }
+  },
+  kick(c, t, o, n, d, v) { playTone(c, t, 0.3, o, 150, 42, 0.95 * v, 'sine'); playFilteredNoise(c, t, 0.02, o, 0.3 * v, 'highpass', 2500, 0.7, 0.0005, 1); },
+  tim(c, t, o, n, d, v) { playTone(c, t, 1.1, o, 96, 40, 0.8 * v, 'sine'); playFilteredNoise(c, t, 0.25, o, 0.15 * v, 'lowpass', 400, 0.7, 0.002, 1.5); },
+  snare(c, t, o, n, d, v) { playFilteredNoise(c, t, 0.17, o, 0.6 * v, 'bandpass', 1900, 0.8, 0.001, 1.6); playTone(c, t, 0.12, o, 210, 130, 0.4 * v, 'triangle'); },
+  clap(c, t, o, n, d, v) { for (let k = 0; k < 3; k++) playFilteredNoise(c, t + k * 0.011, 0.09, o, 0.5 * v, 'bandpass', 1400, 1.0, 0.001, 1.8); playFilteredNoise(c, t + 0.034, 0.22, o, 0.3 * v, 'bandpass', 1300, 0.8, 0.002, 2.2); },
+  hat(c, t, o, n, d, v) { playFilteredNoise(c, t, 0.05, o, 0.55 * v, 'highpass', 6500, 0.7, 0.001, 1.4); },
+  ohat(c, t, o, n, d, v) { playFilteredNoise(c, t, 0.18, o, 0.5 * v, 'highpass', 6000, 0.7, 0.001, 1.8); },
+  clank(c, t, o, n, d, v) { const f = 330 + (n && n[0] ? n[0] : 0) * 9; playFilteredNoise(c, t, 0.05, o, 0.5 * v, 'highpass', 2200, 0.7, 0.0005, 1); playTone(c, t, 0.4, o, f, f * 0.99, 0.2 * v, 'square'); playTone(c, t, 0.3, o, f * 1.47, f * 1.46, 0.12 * v, 'sine'); },
+  hiss(c, t, o, n, d, v) { playFilteredNoise(c, t, 0.22, o, 0.18 * v, 'highpass', 5200, 0.7, 0.02, 1.2); },
+  riser(c, t, o, n, d, v) {                                   // a long rush of noise that climbs
+    playFilteredNoise(c, t, d, o, 0.4 * v, 'bandpass', 600, 0.9, d * 0.9, 0);
+    const os = c.createOscillator(), g = c.createGain(); os.type = 'sawtooth'; os.frequency.setValueAtTime(110, t); os.frequency.exponentialRampToValueAtTime(880, t + d);
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.06 * v, t + d); g.gain.linearRampToValueAtTime(0.0001, t + d + 0.05); os.connect(g); g.connect(o); os.start(t); os.stop(t + d + 0.1);
+  },
+};
+
+// the tracks: bpm, bars in the loop, how loud each part is and how much of it goes to the reverb, and bar(b) = the notes in bar b
+const MUSIC_TRACKS = {
+  lobby: { bpm: 94, bars: 8, mix: { pad: 0.9, bass: 0.9, pluck: 0.8, bell: 0.7, drums: 0.8 }, send: { pad: 0.45, pluck: 0.3, bell: 0.7 }, bar(b) {
+    const R = 57, P = [0, 5, 2, 6], c = P[b % 4], ch = _mChord(R, 'minor', c, 0), root = _mNote(R, 'minor', c, -2), ev = [];
+    ev.push(_mE(0, 16, 'pad', ch, 0.8));
+    for (const [s, d, k] of [[0, 3, 0], [3, 3, 0], [6, 2, 12], [8, 3, 0], [11, 3, 0], [14, 2, 7]]) ev.push(_mE(s, d, 'bass', [root + k], 0.75));
+    [0, 2, 3, 5, 6, 8, 10, 11, 13, 14].forEach((s, k) => ev.push(_mE(s, 1.6, 'pluck', [ch[k % 3] + 12], 0.5)));
+    if (b % 8 >= 4) { const M = [[[0, 7, 3], [4, 6, 2], [8, 4, 4]], [[0, 5, 3], [4, 4, 2], [8, 2, 4]], [[0, 4, 3], [4, 2, 2], [8, 0, 4]], [[0, 1, 3], [4, 2, 2], [8, 4, 4]]][b % 4]; for (const [s, deg, d] of M) ev.push(_mE(s, d, 'bell', [_mNote(R, 'minor', deg, 1)], 0.6)); }
+    for (const s of [0, 8]) ev.push(_mE(s, 1, 'kick', null, 0.7)); if (b % 2) ev.push(_mE(10, 1, 'kick', null, 0.5));
+    if (b >= 2) for (const s of [4, 12]) ev.push(_mE(s, 1, 'clap', null, 0.45));
+    for (const s of [2, 6, 10, 14]) ev.push(_mE(s, 1, 'hat', null, 0.5)); if (b >= 4) for (let s = 1; s < 16; s += 2) ev.push(_mE(s, 1, 'hat', null, 0.22));
+    return ev;
+  } },
+  heaven: { bpm: 66, bars: 8, mix: { choir: 1.9, drone: 1.4, pluck: 1.25, bell: 1.25, drums: 0.9 }, send: { choir: 0.85, pluck: 0.6, bell: 0.9 }, bar(b) {
+    const R = 50, P = [0, 4, 5, 3, 0, 2, 5, 4], c = P[b], ch = _mChord(R, 'lydian', c, 0), top = _mNote(R, 'lydian', c, 1), ev = [];
+    ev.push(_mE(0, 16, 'choir', ch.concat([top]), 0.8)); ev.push(_mE(0, 16, 'drone', [_mNote(R, 'lydian', c, -2)], 0.7));
+    const arp = [ch[0] + 12, ch[1] + 12, ch[2] + 12, top + 12, ch[2] + 12, ch[1] + 12, ch[0] + 12, ch[1] + 12];
+    for (let k = 0; k < 8; k++) ev.push(_mE(k * 2, 2.6, 'pluck', [arp[k]], 0.45));
+    if (b % 2 === 0) { ev.push(_mE(0, 8, 'bell', [_mNote(R, 'lydian', c, 2)], 0.5)); ev.push(_mE(8, 8, 'bell', [_mNote(R, 'lydian', c + 2, 2)], 0.45)); }
+    else ev.push(_mE(4, 8, 'bell', [_mNote(R, 'lydian', c + 4, 2), _mNote(R, 'lydian', c + 6, 2)], 0.35));
+    if (b === 0 || b === 4) ev.push(_mE(0, 1, 'tim', null, 0.55));
+    if (b === 7) ev.push(_mE(6, 10, 'riser', null, 0.4));
+    return ev;
+  } },
+  industry: { bpm: 104, bars: 8, mix: { pad: 0.6, bass: 1, stab: 0.7, drums: 1 }, send: { pad: 0.3, stab: 0.12 }, bar(b) {
+    const R = 40, P = [0, 0, 1, 0, 0, 0, 4, 1], c = P[b], root = _mNote(R, 'phrygian', c, 0), ch = _mChord(R, 'phrygian', c, 1), ev = [];
+    ev.push(_mE(0, 16, 'pad', _mChord(R, 'phrygian', c, 0), 0.5));
+    for (const [s, k] of [[0, 0], [3, 0], [6, 12], [8, 0], [10, 0], [12, 7], [14, 12]]) ev.push(_mE(s, 1.6, 'bass', [root + k], 0.85));
+    for (const s of [0, 6, 8, 14]) ev.push(_mE(s, 1, 'kick', null, 0.85)); for (const s of [4, 12]) { ev.push(_mE(s, 1, 'snare', null, 0.7)); ev.push(_mE(s, 1, 'clank', [root], 0.35)); }
+    for (let s = 0; s < 16; s++) ev.push(_mE(s, 1, 'hat', null, s % 4 === 2 ? 0.45 : 0.18));
+    for (const s of (b % 2 ? [7, 15] : [3, 11])) ev.push(_mE(s, 1, 'clank', [root + 7 * (s % 3)], 0.5));
+    for (const s of [0, 4, 8, 12]) ev.push(_mE(s, 1, 'hiss', null, 0.5));
+    if (b % 2 === 0) for (const s of [0, 7, 10]) ev.push(_mE(s, 2, 'stab', ch, 0.55));
+    return ev;
+  } },
+  arena: { bpm: 124, bars: 8, mix: { bass: 1, stab: 0.9, pluck: 0.7, drums: 1, pad: 0.5 }, send: { stab: 0.2, pluck: 0.25, pad: 0.3 }, bar(b) {
+    const R = 40, P = [0, 5, 2, 6, 0, 5, 2, 4], c = P[b], root = _mNote(R, 'minor', c, 0), ev = [];
+    ev.push(_mE(0, 16, 'pad', _mChord(R, 'minor', c, 1), 0.45));
+    for (const s of [0, 4, 8, 12]) ev.push(_mE(s, 1, 'kick', null, 0.9)); for (const s of [4, 12]) ev.push(_mE(s, 1, 'clap', null, 0.8));
+    for (const s of [2, 6, 10, 14]) ev.push(_mE(s, 1, 'ohat', null, 0.5)); for (let s = 0; s < 16; s += 2) ev.push(_mE(s + 1, 1, 'hat', null, 0.18));
+    for (let s = 0; s < 16; s += 2) ev.push(_mE(s, 1.7, 'bass', [root + (s % 8 === 6 ? 12 : 0)], s % 4 === 0 ? 0.9 : 0.65));
+    for (const s of [0, 3, 6, 10, 12]) ev.push(_mE(s, 2, 'stab', [root + 12, root + 19, root + 24], 0.6));
+    if (b >= 4) { const L = [[0, 4, 2], [3, 3, 1], [6, 2, 2], [10, 4, 1], [12, 6, 4]]; for (const [s, deg, d] of L) ev.push(_mE(s, d, 'pluck', [_mNote(R, 'minor', deg + c, 2)], 0.7, 0)); }
+    if (b === 3 || b === 7) ev.push(_mE(0, 15, 'riser', null, 0.6));
+    return ev;
+  } },
+  neon: { bpm: 100, bars: 8, mix: { pad: 0.8, bass: 0.9, pluck: 0.8, drums: 0.9, bell: 0.6 }, send: { pad: 0.5, pluck: 0.35, bell: 0.5 }, bar(b) {
+    const R = 45, P = [0, 5, 2, 6], c = P[b % 4], ch = _mChord(R, 'minor', c, 1), root = _mNote(R, 'minor', c, 0), ev = [];
+    ev.push(_mE(0, 16, 'pad', _mChord(R, 'minor', c, 0), 0.7));
+    const up = [ch[0], ch[1], ch[2], ch[1] + 12, ch[2], ch[1], ch[0] + 12, ch[1]];
+    for (let s = 0; s < 16; s++) ev.push(_mE(s, 1.4, 'pluck', [up[s % 8] + (s % 4 === 3 ? 12 : 0)], 0.4 + (s % 4 === 0 ? 0.2 : 0)));
+    for (let s = 0; s < 16; s += 2) ev.push(_mE(s, 1.8, 'bass', [root], 0.75));
+    for (const s of [0, 8]) ev.push(_mE(s, 1, 'kick', null, 0.85)); ev.push(_mE(10, 1, 'kick', null, 0.55)); for (const s of [4, 12]) ev.push(_mE(s, 1, 'snare', null, 0.7));
+    for (let s = 0; s < 16; s += 2) ev.push(_mE(s, 1, 'hat', null, 0.28));
+    if (b >= 4) for (const [s, deg, d] of [[0, 7, 3], [4, 9, 2], [8, 8, 3], [12, 6, 4]]) ev.push(_mE(s, d, 'bell', [_mNote(R, 'minor', deg + (c ? 0 : 0), 1)], 0.5));
+    return ev;
+  } },
+  drift: { bpm: 58, bars: 8, mix: { choir: 1.5, drone: 1.4, bell: 1.2, pad: 1.2 }, send: { choir: 0.9, bell: 0.9, pad: 0.7 }, bar(b) {
+    const R = 48, P = [0, 3, 4, 5, 0, 3, 1, 4], c = P[b], ev = [];
+    ev.push(_mE(0, 16, 'pad', _mChord(R, 'lydian', c, 0), 0.7)); ev.push(_mE(0, 16, 'choir', [_mNote(R, 'lydian', c + 4, 1)], 0.5)); ev.push(_mE(0, 16, 'drone', [_mNote(R, 'lydian', c, -2)], 0.8));
+    const S = [[2, 7], [7, 9], [11, 6], [14, 8]]; for (const [s, deg] of S) if ((s + b) % 3 !== 0) ev.push(_mE(s, 6, 'bell', [_mNote(R, 'lydian', c + deg - 7, 2)], 0.4));
+    return ev;
+  } },
+};
+const _mMixDefaults = { pad: 0.9, choir: 0.9, drone: 0.8, bass: 0.9, pluck: 0.8, bell: 0.7, stab: 0.8, drums: 0.9 };
+
+// What should be playing now: the lobby's theme in the lobby and the menus, a map's own track in a match, otherwise nothing.
+function musicWanted() {
+  if (inLobby || !gameStarted) return 'lobby';
+  return MUSIC_FOR_MAP[activeMapName] || null;
+}
+function _musicReverb(ctx) {
+  const len = Math.floor(ctx.sampleRate * 2.6), ir = ctx.createBuffer(2, len, ctx.sampleRate);
+  for (let ch = 0; ch < 2; ch++) { const d = ir.getChannelData(ch); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.4); }
+  const cv = ctx.createConvolver(); cv.buffer = ir; return cv;
+}
+function _musicSwitch(ctx, id) {
+  const M = MUSIC, old = M.bus;
+  if (old) { old.gain.cancelScheduledValues(ctx.currentTime); old.gain.setTargetAtTime(0, ctx.currentTime, 0.35); setTimeout(() => { try { old.disconnect(); } catch (e) {} }, 2600); }
+  M.track = id; M.bus = null; M.out = null; M.bar = 0;
+  if (!id || !MUSIC_TRACKS[id]) { M.track = null; return; }
+  if (!M.master || M.masterCtx !== ctx) { M.master = ctx.createGain(); M.master.gain.value = 0; M.master.connect(ctx.destination); M.masterCtx = ctx; }
+  const T = MUSIC_TRACKS[id], bus = ctx.createGain(), rev = _musicReverb(ctx), revGain = ctx.createGain();
+  bus.gain.value = 0; bus.connect(M.master); rev.connect(revGain); revGain.gain.value = 0.55; revGain.connect(bus);
+  bus.gain.setTargetAtTime(1, ctx.currentTime + 0.6, 0.8);                // fades in as the old one fades out
+  const out = {};
+  for (const k of Object.keys(_mMixDefaults)) {
+    const g = ctx.createGain(); g.gain.value = (T.mix && T.mix[k] != null ? T.mix[k] : _mMixDefaults[k]); g.connect(bus);
+    if (T.send && T.send[k]) { const s = ctx.createGain(); s.gain.value = T.send[k]; g.connect(s); s.connect(rev); }
+    out[k] = g;
+  }
+  M.bus = bus; M.out = out; M.nextT = ctx.currentTime + 0.7;
+}
+const _MPART = { pad: 'pad', choir: 'choir', drone: 'drone', bass: 'bass', pluck: 'pluck', bell: 'bell', stab: 'stab', kick: 'drums', tim: 'drums', snare: 'drums', clap: 'drums', hat: 'drums', ohat: 'drums', clank: 'drums', hiss: 'drums', riser: 'drums' };
+function _musicBar(ctx, id, bar, t0) {
+  const T = MUSIC_TRACKS[id], step = 60 / T.bpm / 4;
+  for (const e of T.bar(bar % T.bars)) {
+    const f = _MV[e.i], o = MUSIC.out && MUSIC.out[_MPART[e.i]]; if (!f || !o) continue;
+    f(ctx, t0 + e.s * step, o, e.n, Math.max(0.05, e.d * step), e.v == null ? 0.6 : e.v, e);
+  }
+}
+function updateMusic(dt) {
+  const ctx = (typeof audioCtx !== 'undefined') ? audioCtx : null, M = MUSIC;
+  if (!ctx || ctx.state !== 'running') return;
+  const vol = (typeof GAMEPLAY_SETTINGS !== 'undefined' && GAMEPLAY_SETTINGS.music != null) ? GAMEPLAY_SETTINGS.music : 0.5;
+  const want = vol > 0.01 ? musicWanted() : null;
+  if (M.ctx !== ctx) { M.ctx = ctx; M.bus = null; M.out = null; M.track = undefined; }
+  if (want !== M.track) _musicSwitch(ctx, want);
+  if (M.master) M.master.gain.setTargetAtTime(0.5 * Math.max(0, Math.min(1.5, vol)), ctx.currentTime, 0.2);
+  if (!M.track || !M.out) return;
+  const T = MUSIC_TRACKS[M.track], barDur = 60 / T.bpm * 4;
+  if (M.nextT < ctx.currentTime - 0.5) M.nextT = ctx.currentTime + 0.1;     // the tab was asleep: do not play the bars it missed
+  while (M.nextT < ctx.currentTime + 1.4) { _musicBar(ctx, M.track, M.bar, M.nextT); M.nextT += barDur; M.bar++; }
+}
+
 function buildWarehouseLayout() {
   const name = 'warehouse', K = _bkBegin(name, 100, 120, 0x6d6a64);
   const wallC = 0x6f7d86, rackC = 0x8a5a2a, rackB = 0x3a5a8a, off = 0xb8b2a4, TOP = 4.6;
@@ -40469,6 +40665,7 @@ let GAMEPLAY_SETTINGS = {
   ambient: 1,      // ⚙ → AMBIENT SOUND: the wind, surf, birds and hum of each map (0 = off)
   weatherFx: true, // ⚙ → WEATHER & PARTICLES: blown sand, snow, ash, rain in the air
   customSkins: false, // ⚙ → PLAYER-MADE SKINS: see the skins other players have painted (OFF unless you turn it on: everyone is in the standard skins)
+  music: 0.5,      // ⚙ → MUSIC: the lobby's theme and a few maps' own (0 = off)
   enemyFootsteps: true, // ⚙ → ENEMY FOOTSTEPS: hear other people's steps, from the side they are on
 };
 try {
@@ -67134,6 +67331,7 @@ function loop() {
   safeLoopStep('fire-shake', () => updateFireShake(dt)); // camera punch on every shot, snaps back fast
   safeLoopStep('slam-shake', () => updateSlamShake(dt));  // the floor taking a hammer
   safeLoopStep('view-kick', () => updateViewKick(dt));    // the view turning with a swing
+  safeLoopStep('music', () => updateMusic(dt));           // the lobby's theme, and the maps that have one
   safeLoopStep('realism-feedback', () => updateRealismFeedback(dt));
   safeLoopStep('status-reset', () => watchStatusReset());
   safeLoopStep('wrap-sync', () => emitMyWrap());   // a changed wrap reaches the other players
@@ -69798,6 +69996,7 @@ function openSettingsHub() {
     ${rangeRow('cameraShake', 'CAMERA SHAKE')}
     ${rangeRow('screenFx', 'SCREEN EFFECTS')}
     ${rangeRow('ambient', 'AMBIENT SOUND', 0, 1, 0.05)}
+    ${rangeRow('music', 'MUSIC', 0, 1, 0.05)}
     ${toggleRow('weatherFx', 'WEATHER & PARTICLES', 'Blown sand, snow, ash and rain in the air. Turn off if the game runs slow.')}
     ${toggleRow('enemyFootsteps', 'ENEMY FOOTSTEPS', 'Hear other people\'s footsteps, from the side they are on: louder when they run, quieter crouched, muffled through walls.')}
     ${toggleRow('customSkins', 'PLAYER-MADE SKINS', 'Off unless you choose: see the skins other players have painted themselves. Off, everyone is in the standard skins.')}

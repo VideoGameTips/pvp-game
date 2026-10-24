@@ -3558,6 +3558,71 @@ if (ok && process.argv.includes('--irregular')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+if (ok && process.argv.includes('--music')) {
+  // The music: every track is well formed (known voices, notes in range, steps inside the bar, the same every time round), the maps that have a
+  // track name one that exists, the right track is chosen for the lobby, a match and a map without music, and the scheduler runs on a context
+  // that remembers what it was asked (no sound is made here).
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const param = () => ({ value: 0, setValueAtTime() {}, linearRampToValueAtTime() {}, exponentialRampToValueAtTime() {}, setTargetAtTime() {}, cancelScheduledValues() {} });
+    const stats = { osc: 0, buf: 0 };
+    const node = () => ({ connect(x) { return x; }, disconnect() {}, start() {}, stop() {}, frequency: param(), gain: param(), detune: param(), Q: param(), type: '' });
+    const ctx = { currentTime: 10, sampleRate: 4000, state: 'running', destination: node(), createOscillator() { stats.osc++; return node(); }, createGain: node, createBiquadFilter: node,
+      createBufferSource: node, createConvolver: node, createBuffer(ch, len) { stats.buf++; return { getChannelData() { return new Float32Array(len); } }; } };
+    const NOTE = new Set(['pad', 'choir', 'drone', 'bass', 'pluck', 'bell', 'stab']);
+    const ids = Object.keys(MUSIC_TRACKS);
+    if (ids.length < 6) issues.push('expected a lobby track and five more, found ' + ids.join(','));
+    for (const id of ids) {
+      const T = MUSIC_TRACKS[id];
+      if (!(T.bpm >= 50 && T.bpm <= 140) || !(T.bars >= 4)) issues.push(id + ': tempo or length is odd');
+      let kinds = new Set(), count = 0;
+      for (let b = 0; b < T.bars; b++) {
+        const ev = T.bar(b), again = T.bar(b);
+        if (JSON.stringify(ev) !== JSON.stringify(again)) issues.push(id + ' bar ' + b + ': not the same each time');
+        for (const e of ev) {
+          count++; kinds.add(e.i);
+          if (!_MV[e.i] || !_MPART[e.i]) issues.push(id + ': unknown voice ' + e.i);
+          if (!(e.s >= 0 && e.s < 16) || !(e.d > 0) || !(e.v == null || (e.v > 0 && e.v <= 1))) issues.push(id + ' bar ' + b + ': ' + e.i + ' has a bad time or strength');
+          if (NOTE.has(e.i)) { if (!e.n || !e.n.length || !e.n.every(n => Number.isFinite(n) && n >= 24 && n <= 112)) issues.push(id + ' bar ' + b + ': ' + e.i + ' note out of range ' + JSON.stringify(e.n)); }
+        }
+      }
+      if (count < 8 * T.bars / 2) issues.push(id + ': hardly any notes');
+      if (!['pad', 'choir', 'drone'].some(k => kinds.has(k))) issues.push(id + ': has no sustained layer');
+      // every bar plays through on a context that records
+      MUSIC.out = {}; for (const k of Object.keys(_mMixDefaults)) MUSIC.out[k] = node();
+      try { for (let b = 0; b < T.bars; b++) _musicBar(ctx, id, b, 10); } catch (e) { issues.push(id + ': playing a bar threw: ' + e.message); }
+    }
+    for (const [map, id] of Object.entries(MUSIC_FOR_MAP)) if (!MUSIC_TRACKS[id]) issues.push(map + ' asks for a track that does not exist: ' + id);
+    for (const m of ['sky_arena', 'shipyard', 'battleground']) if (!MUSIC_FOR_MAP[m]) issues.push(m + ' should have music of its own');
+    // which track
+    const save = { started: gameStarted, lobby: inLobby, map: activeMapName, ctx: audioCtx, vol: GAMEPLAY_SETTINGS.music, m: { ...MUSIC } };
+    try {
+      gameStarted = false; inLobby = false; if (musicWanted() !== 'lobby') issues.push('the menus should have the lobby theme');
+      gameStarted = true; inLobby = true; if (musicWanted() !== 'lobby') issues.push('the lobby should have its theme');
+      inLobby = false; activeMapName = 'shipyard'; if (musicWanted() !== 'industry') issues.push('the shipyard should have the industry track');
+      activeMapName = 'urban'; if (musicWanted() !== null) issues.push('a map with no music should be quiet');
+      // the scheduler
+      MUSIC.ctx = null; MUSIC.bus = null; MUSIC.out = null; MUSIC.track = undefined; MUSIC.master = null; audioCtx = ctx; GAMEPLAY_SETTINGS.music = 0.5;
+      gameStarted = false; updateMusic(0.016);
+      if (MUSIC.track !== 'lobby' || MUSIC.bar < 1) issues.push('the lobby theme should start and schedule ahead (track ' + MUSIC.track + ', bar ' + MUSIC.bar + ')');
+      gameStarted = true; activeMapName = 'sky_arena'; updateMusic(0.016);
+      if (MUSIC.track !== 'heaven') issues.push('going to Sky Arena should change the track to heaven, it is ' + MUSIC.track);
+      GAMEPLAY_SETTINGS.music = 0; updateMusic(0.016); if (MUSIC.track !== null) issues.push('with the music turned to 0 nothing should play');
+      GAMEPLAY_SETTINGS.music = 0.5; ctx.state = 'suspended'; const before = MUSIC.track; activeMapName = 'shipyard'; updateMusic(0.016);
+      if (MUSIC.track !== before) issues.push('before the first click (a suspended context) the music must wait');
+      ctx.state = 'running'; ctx.currentTime += 100; updateMusic(0.016); updateMusic(0.016);
+      if (MUSIC.track !== 'industry') issues.push('the music should follow the map once the context runs');
+      if (!(stats.osc > 100)) issues.push('hardly any sound was made by the scheduler (' + stats.osc + ' oscillators)');
+    } finally {
+      gameStarted = save.started; inLobby = save.lobby; activeMapName = save.map; audioCtx = save.ctx; GAMEPLAY_SETTINGS.music = save.vol;
+      for (const k of Object.keys(MUSIC)) delete MUSIC[k]; Object.assign(MUSIC, save.m);
+    }
+    return issues;
+  })()`);
+  console.log('music checks: ' + vm.runInThisContext('Object.keys(MUSIC_TRACKS).length') + ' tracks (lobby, heaven, industry, arena, neon, drift): every bar valid and repeatable, the right track for the lobby / each map / none, a scheduler that waits for the first click');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 if (ok && process.argv.includes('--archive')) {
   // Archived: the emote wheel and King of the Hill. Off the screen, refused by the server, a stale pick falls back, code kept.
   const issues = [];
