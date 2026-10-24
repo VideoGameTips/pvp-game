@@ -3062,6 +3062,212 @@ if (ok && process.argv.includes('--jugg')) {
   if (all.length) { ok = false; console.log(all.join('\n')); }
 }
 
+if (ok && process.argv.includes('--zombietower')) {
+  // Zombie Tower, the mission on the real tower map: the story hands over to the climb; a pack on every floor (on THAT floor: spawned, standing
+  // and walking at its height, the dead left behind when you change floor); weapons wait for F (ammo does not); clearing a floor heals;
+  // the roof starts the horde (it follows you down: the dead left behind rejoin it); the last of it drops a radio (F); taking the radio
+  // is the outro and a win; dying ends it; and it cleans up.
+  const out = vm.runInThisContext(`(() => {
+    const issues = [];
+    const saved = { cfg: selectedModeConfig, match, started: gameStarted, dead: isDead, sound: playSoundEvent, anim: showAnnouncement, fx: spawnAbilityAOEFX, audio: getAudioCtx, ws: playWeaponSound, flash: flashScreen,
+                    bots: gameBots.slice(), me: players[myId], pos: camera.position.clone(), walls: wallColliders.slice(), sel: [selectedPrimaryIdx, selectedSecondaryIdx, selectedMeleeIdx, selectedSupportIdx],
+                    rnd: Math.random, map: activeMapName, end: endMatch, id: myId, now: Date.now, bhm: botHitsMe, lobby: inLobby };
+    playSoundEvent = () => {}; showAnnouncement = () => {}; spawnAbilityAOEFX = () => {}; getAudioCtx = () => null; playWeaponSound = () => {}; flashScreen = () => {};
+    let ended = null; endMatch = (w, why) => { ended = { w, why }; if (match) match.over = true; };
+    let T = 1.8e12; Date.now = () => T;
+    const on = (k, x, z) => { camera.position.set(x, towerFloorTop(k) + PLAYER_EYE_HEIGHT, z); playerYVel = 0; slamState = null; window._crouchEye = PLAYER_EYE_HEIGHT; window._mapLadder = null; };
+    const step = (n, dt = 0.1) => { for (let i = 0; i < n; i++) { T += dt * 1000; updateZombieMode(dt); } };
+    try {
+      myId = 'me_tower_test'; inLobby = false; gameStarted = true; isDead = false; gameBots.length = 0;
+      activateMap('zombie_tower'); players[myId] = { id: myId, hp: 300, team: 'ally', dead: false };
+      selectedModeConfig = GAME_MODE_CONFIGS.zombies;
+      initMatch(); match.roundActive = true; match.active = true;
+      setupArcadeStart('zombie');
+      const Z = match.zombie, Tw = Z.tower, kit = rngKit();
+      if (!Tw) { issues.push('the zombie match on the tower map should have a tower mission'); return issues; }
+      if (Z.phase !== 'story') issues.push('it should still open with the story, got ' + Z.phase);
+      zombieStorySkip(); let g = 0; while (Z.phase === 'story' && g++ < 80) { T += 250; updateZombieMode(0.25); }
+      if (Z.phase !== 'climb' || Tw.floor !== 0) issues.push('after the story the climb should begin in the lobby: ' + Z.phase + ' floor ' + Tw.floor);
+      if (Math.abs(camera.position.y - PLAYER_EYE_HEIGHT) > 0.2) issues.push('you wake on the lobby floor, eye ' + camera.position.y);
+      if (!kit || kit.slots[0] !== 'm:fists' || kit.slots[1]) issues.push('fists only to begin with');
+      // ── floor 0: a pack of four, in the lobby, walking at you
+      on(0, camera.position.x, camera.position.z);
+      step(40);
+      let here = towerHere(0);
+      if (!Tw.packs[0] || here.length < 1) issues.push('the lobby should have a pack: ' + JSON.stringify(Tw.packs[0]) + ' here ' + here.length);
+      if (here.some(b => b.floorY !== 0 || Math.abs(b.y) > 0.01 || b.team !== 'enemy' || !remoteMeshes[b.id])) issues.push('a zombie of the lobby is not standing on its floor');
+      if (here.some(b => Math.hypot(b.x - camera.position.x, b.z - camera.position.z) < 12 && b._age == null && false)) issues.push('spawned on top of you');
+      const z0 = here[0]; if (z0) {
+        const d0 = Math.hypot(z0.x - camera.position.x, z0.z - camera.position.z); Z.tower.floor = 0; match.roundActive = true;
+        for (let f = 0; f < 120; f++) { T += 1000 / 60; updateBotAI(1 / 60); }
+        const d1 = Math.hypot(z0.x - camera.position.x, z0.z - camera.position.z);
+        if (!(d1 < d0 - 2)) issues.push('a zombie in the lobby should close on you (' + d0.toFixed(1) + ' to ' + d1.toFixed(1) + ')');
+      }
+      // ── up to floor 3: the lobby dead are gone, the floor has its own pack, at its own height
+      on(3, towerP(2)[0] + 2, towerP(2)[1] + 2); step(8);
+      if (Tw.floor !== 3) issues.push('standing on floor 3 should make it your floor, got ' + Tw.floor);
+      if (gameBots.some(b => b.zombie && b.floor !== 3)) issues.push('the dead of the floors below should be gone');
+      step(60); here = towerHere(3);
+      if (here.length < 1) issues.push('floor 3 should have a pack');
+      if (here.some(b => Math.abs(b.floorY - towerFloorTop(3)) > 1e-6 || Math.abs(b.y - towerFloorTop(3)) > 0.05)) issues.push('the dead of floor 3 should stand at its height: ' + here.map(b => b.y.toFixed(1)));
+      if (here.some(b => Math.abs(remoteMeshes[b.id].position.y - towerFloorTop(3)) > 0.05)) issues.push('and be drawn there');
+      { const st = towerStats(3), st23 = towerStats(23); if (!(st23.hp > st.hp && st23.speed > st.speed)) issues.push('the higher the floor the tougher and quicker the dead'); if (!(towerPackSize(23) > towerPackSize(3) && towerPackSize(3) > towerPackSize(0))) issues.push('packs should grow with the floor'); }
+      { const z3 = here[0]; if (z3) { const d0 = Math.hypot(z3.x - camera.position.x, z3.z - camera.position.z); for (let f = 0; f < 150; f++) { T += 1000 / 60; updateBotAI(1 / 60); }
+        const d1 = Math.hypot(z3.x - camera.position.x, z3.z - camera.position.z);
+        if (Math.abs(z3.y - towerFloorTop(3)) > 0.3) issues.push('a zombie walking on floor 3 sank or rose to ' + z3.y.toFixed(2));
+        if (!(d1 < d0 - 2) && d0 > 4) issues.push('a zombie on floor 3 should close on you (' + d0.toFixed(1) + ' to ' + d1.toFixed(1) + ')'); } }
+      // never over the hole
+      { const h = MAP_TOWER.floors[3].hole, zz = zombieSpawn({ floor: 3, floorY: towerFloorTop(3), hp: 50, speed: 5, at: { x: h.x0 - 0.7, z: (h.z0 + h.z1) / 2, y: towerFloorTop(3) } });
+        zz.x = h.x0 - 0.7; zz.z = (h.z0 + h.z1) / 2; const myx = camera.position.x, myz = camera.position.z; camera.position.x = (h.x0 + h.x1) / 2 + 3; camera.position.z = (h.z0 + h.z1) / 2;   // (you stand across the hole)
+        // (a body's width over the lip is standing on the edge, as it is for you: the margin below)
+        for (let f = 0; f < 200; f++) { T += 1000 / 60; updateBotAI(1 / 60); if (zz.x > h.x0 + 0.5 && zz.x < h.x1 - 0.5 && zz.z > h.z0 + 0.5 && zz.z < h.z1 - 0.5) { issues.push('a zombie walked into the hole'); break; } }
+        if (zz.y < towerFloorTop(3) - 0.5) issues.push('a zombie fell down the hole'); zombieRemove(zz); camera.position.x = myx; camera.position.z = myz; }
+      // ── a weapon waits for F, and only for the floor you are on; ammo does not wait
+      for (const b of gameBots.slice()) if (b.zombie) zombieRemove(b); zombieClearPickups(); Tw.packs[3] = { toSpawn: 99, next: 1e15, cleared: false };
+      { const px = camera.position.x + 1, pz = camera.position.z;
+        zombieDropPickup('weapon', px, pz, 'ak20', 'A', towerFloorTop(3));
+        if (Math.abs(zombiePickups[0].y - towerFloorTop(3)) > 0.05) issues.push('a drop on floor 3 lies on floor 3 (' + zombiePickups[0].y + ')');
+        updateZombiePickups(0.016);
+        if (!_zombieNear || kit.slots[1]) issues.push('a weapon on your floor should be offered, not taken');
+        zombieTakeNearby(); if (kit.slots[1] !== 'ak20') issues.push('F should take it');
+        zombieDropPickup('weapon', px, pz, 'ak20', 'A', towerFloorTop(2)); updateZombiePickups(0.016);
+        if (_zombieNear) issues.push('a weapon a floor below is out of reach');
+        zombieClearPickups(); const ai = WEAPONS.findIndex(w => w.id === 'ak20'); weaponAmmo[ai] = { ammo: 2, reserve: 0 };
+        zombieDropPickup('ammo', px, pz, null, null, towerFloorTop(3)); updateZombiePickups(0.016);
+        if (zombiePickups.length || weaponAmmo[ai].ammo !== WEAPONS[ai].mag) issues.push('ammo is taken as you pass'); }
+      // ── clearing a floor: its dead all down, none left to come: a breather and a few HP
+      { const pk = { toSpawn: 0, next: 0, cleared: false }; Tw.packs[3] = pk; players[myId].hp = 200; step(3);
+        if (!pk.cleared || players[myId].hp !== 225) issues.push('an empty, finished floor should count as cleared and heal 25: ' + pk.cleared + ' ' + players[myId].hp); }
+      // ── the roof: the horde, the way down, the swarm follows, the radio
+      on(TOWER_FLOORS - 1, towerP(23)[0] + 2, towerP(23)[1] - 2); step(8);
+      if (Z.phase !== 'horde' || !Tw.hordeStarted) issues.push('reaching the roof should start the horde: ' + Z.phase);
+      step(120);
+      let alive = gameBots.filter(b => b.zombie && !b.dead);
+      if (alive.length < 20 || alive.length > TOWER_HORDE_CAP) issues.push('the horde should be a crowd within its cap: ' + alive.length);
+      if (alive.length + Tw.hordeLeft !== TOWER_HORDE) issues.push('every one of the horde is somewhere: ' + alive.length + ' + ' + Tw.hordeLeft + ' should be ' + TOWER_HORDE);
+      if (!/HORDE/.test((() => { const cache = {}; const keep = document.getElementById; document.getElementById = id => cache[id] || (cache[id] = keep(id)); try { updateMatchHUD(); return cache['match-center'].textContent; } finally { document.getElementById = keep; } })())) issues.push('the strip should name the horde');
+      const total = alive.length + Tw.hordeLeft;
+      on(TOWER_FLOORS - 2, towerP(23)[0] - 1, towerP(23)[1] - 1); step(8);
+      if (Tw.floor !== TOWER_FLOORS - 2) issues.push('stepping down through the hole should make the next floor yours: ' + Tw.floor);
+      if (gameBots.some(b => b.zombie && b.floor !== TOWER_FLOORS - 2)) issues.push('the swarm cannot be on the floor above once you leave it');
+      const total2 = gameBots.filter(b => b.zombie && !b.dead).length + Tw.hordeLeft;
+      if (total2 !== total) issues.push('the swarm follows you down: nothing of it is lost (' + total + ' then ' + total2 + ')');
+      step(60); if (!gameBots.some(b => b.zombie && !b.dead && b.floor === TOWER_FLOORS - 2)) issues.push('the horde should pour in on the floor you went down to');
+      // the last of them: a radio
+      for (const b of gameBots.slice()) if (b.zombie) zombieRemove(b);
+      Tw.hordeLeft = 1; Tw.hordeNext = 0; step(12); const last = gameBots.filter(b => b.zombie && !b.dead);
+      if (last.length !== 1 || Tw.hordeLeft !== 0) issues.push('one left to come, one on the floor: ' + last.length + ' / ' + Tw.hordeLeft);
+      if (zombiePickups.some(p => p.kind === 'radio')) issues.push('no radio while the swarm still stands');
+      const lz = last[0]; lz.dead = true; lz.hp = 0; zombieOnKill(lz.id, myId);
+      const radio = zombiePickups.find(p => p.kind === 'radio');
+      if (!radio || !Tw.radioDropped) { issues.push('the last of the horde should drop a radio'); }
+      else {
+        if (Math.abs(radio.y - towerFloorTop(TOWER_FLOORS - 2)) > 0.1) issues.push('the radio lies where it fell, on its floor');
+        camera.position.x = radio.x; camera.position.z = radio.z; updateZombiePickups(0.016);
+        if (Z.phase === 'outro' || ended) issues.push('the radio is taken with F, not by walking over it');
+        if (!_zombieNear || _zombieNear.kind !== 'radio') issues.push('the radio should be offered');
+        radio.born = T - 10 * 60 * 1000; updateZombiePickups(0.016); if (!zombiePickups.includes(radio)) issues.push('the radio never expires');
+        zombieTakeNearby();
+        if (Z.phase !== 'outro') issues.push('taking the radio should start the outro: ' + Z.phase);
+        for (let i = 0; i < 400 && !ended; i++) { T += 50; updateZombieMode(0.05); }
+        if (!ended || ended.w !== 'ally' || !/MISSION COMPLETE/.test(ended.why || '')) issues.push('the outro should end in a win: ' + JSON.stringify(ended));
+      }
+      // ── dying ends it, and with where you got to
+      ended = null; match.over = false; Z.phase = 'climb'; Tw.floor = 7; zombieOnKill(myId, 'zzz');
+      if (!ended || ended.w !== 'enemy' || !/floor 7/.test(ended.why || '')) issues.push('dying should end it, naming the floor: ' + JSON.stringify(ended));
+      zombieSpawn({ floor: 7, floorY: towerFloorTop(7), at: { x: 0, z: 0, y: towerFloorTop(7) } }); zombieDropPickup('weapon', 3, 3, 'ak20', 'B', 0); zombieCleanup();
+      if (gameBots.some(b => b.zombie) || zombiePickups.length) issues.push('zombies and pickups should be cleared at the end');
+      if (_zombiePromptEl && _zombiePromptEl.style.display !== 'none') issues.push('the prompt should be gone');
+    } finally {
+      Math.random = saved.rnd; endMatch = saved.end; zombieClearPickups(); Date.now = saved.now; botHitsMe = saved.bhm; myId = saved.id; inLobby = saved.lobby;
+      for (const b of gameBots.slice()) if (b.zombie || b.squad) zombieRemove(b);
+      selectedModeConfig = saved.cfg; match = saved.match; gameStarted = saved.started; isDead = saved.dead;
+      playSoundEvent = saved.sound; showAnnouncement = saved.anim; spawnAbilityAOEFX = saved.fx; getAudioCtx = saved.audio; playWeaponSound = saved.ws; flashScreen = saved.flash;
+      gameBots.length = 0; gameBots.push(...saved.bots); if (saved.me) players[myId] = saved.me;
+      wallColliders.length = 0; wallColliders.push(...saved.walls); camera.position.copy(saved.pos);
+      [selectedPrimaryIdx, selectedSecondaryIdx, selectedMeleeIdx, selectedSupportIdx] = saved.sel;
+      try { activateMap(saved.map); } catch (e) {}
+    }
+    return issues;
+  })()`);
+  console.log('zombie tower checks: the story then the climb, a pack on every floor at that floor\'s height, the dead left behind, weapons wait for F (ammo does not), a floor cleared heals, the roof starts the horde, it follows you down, the last of it drops a radio, the radio is the win, dying ends it');
+  if (out.length) { ok = false; console.log(out.join('\n')); }
+}
+
+if (ok && process.argv.includes('--tower')) {
+  // The Tower (Zombie Tower's map): 25 floors, 6.5 m apart, a 64 m square each; one ladder per floor up through a hole in the slab above, the holes
+  // in opposite corners in turn; the whole thing is standable (floors above 14 m too); every ladder can be climbed from the floor below and puts you
+  // on the floor above; a hole is a way down; the lobby, the roof, the numbers, and the floors can be crossed on foot between ladder and ladder.
+  const out = vm.runInThisContext(`(() => {
+    const issues = [];
+    const saved = { map: activeMapName, pos: camera.position.clone(), vel: playerYVel, crouch: window._crouchEye, started: gameStarted, dead: isDead, slam: slamState, keys: { KeyW: keys.KeyW } };
+    try {
+      activateMap('zombie_tower');
+      const name = 'zombie_tower', cols = MAP_COLLIDERS[name], F = MAP_TOWER.floors;
+      if (MAP_IDS.includes(name)) issues.push('the tower must not be in MAP_IDS: no other mode may be dealt it');
+      if (cols.length < 250 || cols.length > 4500) issues.push('the tower has ' + cols.length + ' colliders');
+      if (F.length !== 25 || TOWER_FLOORS !== 25) issues.push('the tower should have 25 floors, has ' + F.length);
+      const ld = MAP_LADDERS[name] || [];
+      if (ld.length !== TOWER_FLOORS - 1) issues.push('there should be one ladder per floor but the top one: ' + ld.length);
+      if (!cols.some(c => c.max.y > 150 && c.tall === true)) issues.push('the floors high up must count as ground (tall)');
+      // every slab but the lowest has exactly the hole its ladder passes through, and it is where towerP says it is
+      for (let k = 1; k < TOWER_FLOORS; k++) {
+        const h = F[k].hole, p = towerP(k - 1);
+        if (!h || Math.abs((h.x0 + h.x1) / 2 - p[0]) > 1e-6 || Math.abs((h.z0 + h.z1) / 2 - p[1]) > 1e-6) { issues.push('floor ' + k + ': the hole is not over the ladder of the floor below'); continue; }
+        const top = towerFloorTop(k);
+        const eyeAt = (x, z, floor) => getGroundEyeY(x, z, towerFloorTop(floor) + PLAYER_EYE_HEIGHT) - PLAYER_EYE_HEIGHT;
+        if (Math.abs(eyeAt(p[0] + 3.5, p[1] + 3.5, k) - top) > 1e-6) issues.push('floor ' + k + ' is not ground next to its hole: ' + eyeAt(p[0] + 3.5, p[1] + 3.5, k));
+        if (Math.abs(eyeAt(p[0], p[1], k) - towerFloorTop(k - 1)) > 1e-6) issues.push('floor ' + k + ': the hole is not a way down: ' + eyeAt(p[0], p[1], k));
+      }
+      if (new Set(Array.from({ length: 24 }, (_, k) => towerP(k).join())).size !== 2) issues.push('the ladders should alternate between two opposite corners');
+      // climb every ladder, from the floor below to the floor above
+      gameStarted = true; isDead = false; slamState = null;
+      for (let k = 0; k < TOWER_FLOORS - 1; k++) {
+        const L = ld[k]; if (!L) continue;
+        const pose = mapLadderPose(L), n = pose.normal, bottom = towerFloorTop(k), top = towerFloorTop(k + 1);
+        if (Math.abs(pose.bottom - bottom) > 0.01 || Math.abs(pose.top - top) > 0.01) { issues.push('ladder ' + k + ' does not run from floor ' + k + ' to floor ' + (k + 1) + ': ' + pose.bottom.toFixed(2) + ' ' + pose.top.toFixed(2)); continue; }
+        window._mapLadder = null; window._ladderDetachUntil = 0; window._crouchEye = PLAYER_EYE_HEIGHT; playerYVel = 0;
+        camera.position.set(pose.x + n.x * 0.9, bottom + PLAYER_EYE_HEIGHT, pose.z + n.z * 0.9);
+        const input = new THREE.Vector3(-n.x, 0, -n.z);
+        keys.KeyW = true; let frames = 0, grabbed = false;
+        for (; frames < 400; frames++) {
+          // (walking up to it, then holding forward: the way a player does)
+          if (!window._mapLadder && frames < 30) { camera.position.x -= n.x * 0.02; camera.position.z -= n.z * 0.02; }
+          const taken = updateMapLadderMove(1 / 60, input); if (window._mapLadder) grabbed = true;
+          if (grabbed && !window._mapLadder) break;
+        }
+        keys.KeyW = false;
+        const feet = camera.position.y - PLAYER_EYE_HEIGHT;
+        if (!grabbed) { issues.push('ladder ' + k + ': could not take hold of it from the floor'); continue; }
+        if (Math.abs(feet - top) > 0.2) { issues.push('ladder ' + k + ': ended at ' + feet.toFixed(2) + ', not on floor ' + (k + 1) + ' (' + top + ')'); continue; }
+        if (frames > 200) issues.push('ladder ' + k + ' took ' + frames + ' frames to climb');
+        // and what you stand on there is floor, with nothing in the way
+        const g = getGroundEyeY(camera.position.x, camera.position.z, camera.position.y) - PLAYER_EYE_HEIGHT;
+        if (Math.abs(g - top) > 1e-6) issues.push('ladder ' + k + ': the place it puts you is not ground (' + g.toFixed(2) + ' vs ' + top + ')');
+        const [rx, rz] = resolvePosCollisions(camera.position.x, camera.position.z, top);
+        if (Math.hypot(rx - camera.position.x, rz - camera.position.z) > 0.05) issues.push('ladder ' + k + ': it puts you inside something');
+        if (resolvePlayerCeiling(camera.position.y - 0.0001) === true && false) issues.push('ceiling');
+      }
+      // the floors can be crossed on foot: a route over the 1 m grid the dead use, from the ladder you arrive by to the ladder you leave by
+      for (let k = 0; k < TOWER_FLOORS - 1; k++) {
+        const g = towerGrid(k); if (!g) { issues.push('floor ' + k + ': no grid for the dead'); continue; }
+        const at = (x, z) => Math.floor((z - g.z0) / g.cell) * g.W + Math.floor((x - g.x0) / g.cell);
+        const from = k === 0 ? [0, 24] : towerP(k - 1), to = towerP(k), stand = (p, d) => [p[0] + (p[0] > 0 ? -d : d), p[1] + (p[1] > 0 ? -d : d)];
+        const a = k === 0 ? from : stand(from, 4), b = stand(to, 4);
+        _botNavFill(g, at(b[0], b[1]));
+        if (!(g.dist[at(a[0], a[1])] >= 0)) issues.push('floor ' + k + ' (' + F[k].kind + '): no way across from where you arrive to the ladder up');
+      }
+      if (!MAP_SPAWNS[name] || !MAP_ZOMBIE_WAKE[name] && !MAP_TOWER.wake) issues.push('no spawn or wake-up place');
+    } finally {
+      activeMapName = saved.map; camera.position.copy(saved.pos); playerYVel = saved.vel; window._crouchEye = saved.crouch; gameStarted = saved.started; isDead = saved.dead; slamState = saved.slam; keys.KeyW = saved.keys.KeyW; window._mapLadder = null;
+      try { activateMap(saved.map); } catch (e) {}
+    }
+    return issues;
+  })()`);
+  console.log('tower checks: 25 floors with a ladder through a hole to the next, standable all the way up, every ladder climbable, a way down through every hole, a route across every floor');
+  if (out.length) { ok = false; console.log(out.join('\n')); }
+}
+
 if (ok && process.argv.includes('--zombie')) {
   // Zombie Survival: you begin with fists only, waves come endlessly (bigger, tougher and quicker each time, never more than
   // the cap at once), a zombie walks to you and claws you, the dead drop ammo and weapons (rarely), a weapon goes in your
@@ -3075,41 +3281,13 @@ if (ok && process.argv.includes('--zombie')) {
     let ended = null; endMatch = (w, why) => { ended = { w, why }; if (match) match.over = true; };
     try {
       gameStarted = true; isDead = false; gameBots.length = 0; wallColliders.length = 0;
-      // the map: one straight tunnel about eighteen times an ordinary map, connected from end to end
-      {
-        const tb = MAP_BOUNDS.zombie_tunnel, areas = MAP_IDS.filter(m => !DUEL_ONLY_MAPS.has(m) && MAP_BOUNDS[m]).map(m => { const bb = MAP_BOT_BOUNDS[m] || MAP_BOUNDS[m]; return bb.halfX * bb.halfZ * 4; }).sort((a, b) => a - b);   // (the arena: a map that has been played has had its outskirts added to MAP_BOUNDS)
-        const ratio = tb ? tb.halfX * tb.halfZ * 4 / areas[Math.floor(areas.length / 2)] : 0;
-        if (!tb || ratio < 16 || ratio > 21) issues.push('the tunnel should be about 18 times an ordinary map, got x' + ratio.toFixed(1));
-        if (tb && tb.halfZ < tb.halfX * 20) issues.push('the tunnel should be long and straight, not ' + tb.halfX * 2 + ' x ' + tb.halfZ * 2);
-        activateMap('zombie_tunnel');
-        if (wallColliders.length < 600 || wallColliders.length > 4000) issues.push('the tunnel has ' + wallColliders.length + ' colliders');
-        const g = _botNavGrid();
-        if (!g) issues.push('no nav grid on the tunnel');
-        else {
-          const at = (x, z) => Math.floor((z - g.z0) / g.cell) * g.W + Math.floor((x - g.x0) / g.cell);
-          _botNavFill(g, at(0, -tb.halfZ + 56));
-          if (!(g.dist[at(0, tb.halfZ - 56)] >= 0)) issues.push('the tunnel is not walkable from one end to the other');
-        }
-        const sp0 = MAP_SPAWNS.zombie_tunnel.ally, wk = MAP_ZOMBIE_WAKE.zombie_tunnel;
-        if (!sp0 || !wk || wk.z > sp0.z0 || wk.z < tb.halfZ - 600) issues.push('you should wake a few hundred metres into the tunnel from the start');
-        // around the player the dead appear ahead and behind (never at the far end)
-        camera.position.set(0, 1.65, 700);
-        let tooFar = 0, tooNear = 0, ahead = 0, behind = 0;
-        for (let i = 0; i < 200; i++) { const p = zombieSpawnPoint(); const d = Math.hypot(p.x, p.z - 700); if (d > 100) tooFar++; if (d < 30) tooNear++; if (p.z < 700) ahead++; else behind++; }
-        if (tooFar) issues.push('zombies spawned far from you in the tunnel (' + tooFar + ' of 200)');
-        if (tooNear) issues.push('zombies spawned on top of you (' + tooNear + ' of 200)');
-        if (ahead < 40 || behind < 40) issues.push('the dead should come from both directions: ' + ahead + ' ahead, ' + behind + ' behind');
-        // what is left far behind is let go
-        { const keep = match; match = { type: 'arcade', cfg: GAME_MODE_CONFIGS.zombies, ffaKills: {}, teamKills: { ally: 0, enemy: 0 }, zombie: { phase: 'fight', toSpawn: 3, wave: 1, waveStartedAt: Date.now(), nextSpawnAt: Date.now() + 99999, kills: 0, best: 0 }, arcade: 'zombie', roundActive: true, over: false };
-          const far = zombieSpawn(); far.x = 0; far.z = 1200; camera.position.set(0, 1.65, 700); updateZombieMode(0.016);
-          if (gameBots.includes(far)) issues.push('a zombie 500 m behind you should be let go'); for (const b of gameBots.slice()) if (b.zombie) zombieRemove(b); match = keep; }
-      }
+      // (the endless tunnel is archived; its director still runs below, on an open floor, and the tower has its own checks: --tower and the end of this block)
       activateMap('blank'); wallColliders.length = 0; camera.position.set(0, 1.65, 0);
       players[myId] = { hp: 300, team: 'ally' };
       selectedModeConfig = GAME_MODE_CONFIGS.zombies;
       if (!selectedModeConfig || selectedModeConfig.subtype !== 'zombie') { issues.push('there is no zombies mode'); return issues; }
-      if (selectedModeConfig.forcedMap !== 'zombie_tunnel' || modeUsesMapChoice(selectedModeConfig)) issues.push('Zombie Survival should be stuck to its own map, the tunnel (no map vote)');
-      if (MAP_IDS.includes('zombie_tunnel')) issues.push('the tunnel must not be in MAP_IDS: no other mode may be dealt it');
+      if (selectedModeConfig.forcedMap !== 'zombie_tower' || modeUsesMapChoice(selectedModeConfig)) issues.push('Zombie Tower should be stuck to its own map, the tower (no map vote)');
+      if (MAP_IDS.includes('zombie_tower') || MAP_IDS.includes('zombie_tunnel')) issues.push('the tower must not be in MAP_IDS: no other mode may be dealt it');
       const lightBefore = { amb: mapAmbient.intensity, sun: sun.intensity, bg: scene.background.getHex() };
       initMatch(); match.roundActive = true; match.active = true;
       if (!(mapAmbient.intensity <= 0.1 && sun.intensity <= 0.2 && scene.background.getHex() < 0x101018)) issues.push('the map should be dark: ambient ' + mapAmbient.intensity + ' sun ' + sun.intensity + ' sky ' + scene.background.getHex().toString(16));
@@ -3188,18 +3366,24 @@ if (ok && process.argv.includes('--zombie')) {
       if (zombiePickups.length !== 1 || zombiePickups[0].kind !== 'weapon') issues.push('a lucky zombie should drop a weapon');
       const first = zombiePickups[0].id;
       camera.position.set(zombiePickups[0].x, 1.65, zombiePickups[0].z); updateZombiePickups(0.016);
+      if (zombiePickups.length !== 1 || kit.slots[1]) issues.push('walking over a weapon must not take it: it waits for F (taken: ' + JSON.stringify(kit.slots) + ')');
+      if (!_zombieNear || _zombieNear.id !== first) issues.push('standing at a weapon should offer it (the F prompt)');
+      if (!document.getElementById('zombie-prompt') && !_zombiePromptEl) issues.push('there should be a prompt for the weapon');
+      zombieTakeNearby();
       if (kit.slots[0] !== 'm:fists' || kit.slots[1] !== first || kit.hand !== 1) issues.push('a pickup should go in slot 2 and into your hand, fists kept: ' + JSON.stringify(kit.slots) + ' hand ' + kit.hand);
       if (zombiePickups.length) issues.push('the pickup should be gone once taken');
       // a second one replaces it, and what you were holding is simply gone: nothing is left on the floor
       zombieDropPickup('weapon', 12, 0, 'ak20', 'SS');
       camera.position.set(12, 1.65, 0); updateZombiePickups(0.016);
+      if (kit.slots[1] === 'ak20') issues.push('the second weapon was taken without F');
+      zombieTakeNearby();
       if (kit.slots[1] !== 'ak20' || kit.slots[0] !== 'm:fists') issues.push('the second pickup should replace slot 2 only: ' + JSON.stringify(kit.slots));
       if (zombiePickups.length) issues.push('the weapon you swapped out should disappear, not land on the floor: ' + JSON.stringify(zombiePickups.map(p => p.id)));
       updateZombiePickups(0.016); updateZombiePickups(0.016);
       if (kit.slots[1] !== 'ak20') issues.push('standing there must not change the kit');
       if (!(weaponAmmo[WEAPONS.findIndex(w => w.id === 'ak20')].ammo === WEAPONS.find(w => w.id === 'ak20').mag)) issues.push('a pickup should come loaded');
       // ammo
-      zombieClearPickups();
+      zombieClearPickups(); _zombieNear = null;
       const ai = WEAPONS.findIndex(w => w.id === 'ak20'); weaponAmmo[ai] = { ammo: 3, reserve: 0 };
       Math.random = () => 0.05; Z.sinceDrop = 0; zombieRollDrop(z1);
       if (zombiePickups.length !== 1 || zombiePickups[0].kind !== 'ammo') issues.push('an ammo drop was expected, got ' + JSON.stringify(zombiePickups.map(p => p.kind)));

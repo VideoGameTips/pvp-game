@@ -176,6 +176,7 @@
     '🎯 ONE IN THE CHAMBER': '🎯 一发入魂', '1 bullet · 1 shot kill · melee fallback': '1 颗子弹 · 一枪毙命 · 没子弹就近战',
     '🛡️ JUGGERNAUT': '🛡️ 重装战士', '1 OP super-soldier vs everyone': '1 个超强战士单挑所有人',
     '1 juggernaut vs 10 hunters · first to 4': '1 个重装战士对 10 名猎手 · 先赢 4 回合',
+    'TAKE': '拾取', '🧟 ZOMBIE TOWER': '🧟 丧尸塔',
     '🧟 INFECTION': '🧟 感染', 'Zombies infect on melee · last human wins': '僵尸近战会传染 · 最后的人类获胜',
     '🔭 SNIPER ONLY': '🔭 狙击专场', 'SR-X only · long-range chess': '只有 SR-X · 远距离斗智',
     '⏱️ SPEEDRUN': '⏱️ 速通', 'Kill 20 bots as fast as possible · solo': '尽快击败 20 个机器人 · 单人',

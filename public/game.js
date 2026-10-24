@@ -1607,7 +1607,7 @@ const GAME_MODE_CONFIGS = {
   'dice_duel':  { type: 'arcade', subtype: 'dice',     allies: 0, enemies: 1, timeLimit: 0,   arcade: true }, // 🎲 roll a weapon, re-roll at a price
   'roulette':   { type: 'arcade', subtype: 'roulette', allies: 0, enemies: 5, timeLimit: 240, arcade: true }, // 🔄 a new random gun every 20 s
   'rocket_rumble': { type: 'arcade', subtype: 'rumble', allies: 0, enemies: 5, timeLimit: 240, arcade: true }, // 💥 rockets only
-  'zombies':    { type: 'arcade', subtype: 'zombie',  allies: 0, enemies: 0, timeLimit: 0,   arcade: true, playerHp: 300, forcedMap: 'zombie_tunnel' }, // 🧟 endless waves down a giant straight tunnel, in the dark; fists only, the dead drop the rest
+  'zombies':    { type: 'arcade', subtype: 'zombie',  allies: 0, enemies: 0, timeLimit: 0,   arcade: true, playerHp: 300, forcedMap: 'zombie_tower' }, // 🧟 ZOMBIE TOWER: climb 24 floors in the dark with your fists, the dead drop the rest; a horde waits on the roof, and a radio at the end
 };
 let selectedModeConfig = null;
 const gameBots = [];       // {id, team, weaponId, x, z, rotY, hp, dead, state, wanderAngle, wanderTimer, lastShot, lastBotMove}
@@ -6771,7 +6771,7 @@ buildDuelMap('duel_platform', {
   ],
 });
 
-// ── 🧟 THE TUNNEL: the map Zombie Survival is played on ──────────────────────────────────────────────────
+// ── 🧟 THE TUNNEL: the map Zombie Survival was played on (ARCHIVED: Zombie Tower plays in THE TOWER now; this is kept, not built) ── ──────────────────────────────────────────────────
 // One straight tunnel, 72 m wide and 4.6 km long: about eighteen times the floor of an ordinary map, all in a line. It is
 // built from 44 m sections drawn from a seeded list (so it is the same for everyone): pillar rows, staggered barricades,
 // fallen rubble, a raised walkway with ramps at both ends, container yards, side alcoves and a wide open stretch, with a
@@ -6883,7 +6883,7 @@ function buildZombieTunnel() {
   MAP_ZOMBIE_WAKE[name] = { x: 0, z: HZ - TUNNEL_MOD * 3 - 140 };
   G._skyColor = 0x020309;
 }
-buildZombieTunnel();
+// (archived: Zombie Tower plays in THE TOWER now; call buildZombieTunnel() and point GAME_MODE_CONFIGS.zombies.forcedMap at 'zombie_tunnel' to bring the endless tunnel back)
 
 // ── 🧵 One draw call per colour, per map (#66) ──────────────────────────────
 // A map is cheap in triangles and ruinous in draw calls: super_arena is 3,080
@@ -14731,6 +14731,166 @@ _SCN.atoll = (K) => {
   });
 };
 
+// ══════════════════════════════════════════════════════════════════════════
+//   🏢  THE TOWER  the map Zombie Tower is played on
+// The tunnel, stood on end: twenty-five floors of the same dark hall, each a 64 m square with its own clutter (pillars, barricades,
+// rubble, containers, a zig-zag of partitions, open floor), one above the other, 6.5 m apart. There is no stair and the lifts are out
+// of order: the way up is one ladder per floor, up through a hole in the slab above it, and the holes alternate between opposite
+// corners, so every floor has to be crossed corner to corner. The ground floor is the lobby you start in, the top one is the open roof.
+// A way down is any hole you step into (there is no damage for a fall; the dead cannot climb after you).
+// It is not in MAP_IDS on purpose: it is only ever the forced map of Zombie Tower, so no other mode is dealt it.
+// ══════════════════════════════════════════════════════════════════════════
+registerMap('zombie_tower');
+MAP_THEMES.zombie_tower = Object.assign(_T(0x2a2e34, 0x262a2f, 0x3a3f46, 0x2f343b, 0x4a3426, 0x64583f, 0xffc46a, 0xffc46a, 0x020309, 'industrial', []), { keep: true, customDetail: true });
+const ZOMBIE_TOWER_MAP = 'zombie_tower';
+const TOWER_FLOORS = 25, TOWER_FH = 6.5, TOWER_TH = 0.6, TOWER_HALF = 32, TOWER_HOLE = 1.5;     // 25 floors, 6.5 m apart, slabs 0.6 m thick, a 64 m square, a hole 3 m across
+const towerP = (k) => (k % 2 === 0 ? [-24, -24] : [24, 24]);        // where the ladder up from floor k stands (the hole is in the slab above): opposite corners
+const MAP_TOWER = { floors: [], lamps: [], wake: { x: 0, z: 2 } };   // per floor: the boxes that stop a body and the hole; every lamp: [x, y, z, floor]
+const towerFloorTop = (k) => k * TOWER_FH;
+const towerFloorOfY = (feetY) => Math.max(0, Math.min(TOWER_FLOORS - 1, Math.floor((feetY + 0.6) / TOWER_FH)));
+function buildZombieTower() {
+  const name = ZOMBIE_TOWER_MAP, K = _bkBegin(name, TOWER_HALF * 2, TOWER_HALF * 2, 0x2a2e34), G = MAP_GROUPS[name];
+  G.remove(G.children[G.children.length - 1]);                        // the one sheet of ground _bkBegin laid: this floor has a texture
+  const rnd = _thRng(name + ':layout'), R = (a, b) => a + rnd() * (b - a), pickOf = (arr) => arr[Math.floor(rnd() * arr.length)];
+  const C = { wall: 0x262a2f, cover: 0x3a3f46, tall: 0x2f343b, rust: 0x4a3426, hi: 0x64583f, dark: 0x101214, slab: 0x1d2025, yellow: 0xe0b020, green: 0x39ff88, red: 0xff3a2a, pale: 0x6a6f78 };
+  const HF = TOWER_FH, TH = TOWER_TH, HALF = TOWER_HALF, CEIL = HF - TH;
+  const glow = _thBuf(), detail = _thBuf();
+  const deco = (x0, x1, y0, y1, z0, z1, c, lit = false) => _thBox(lit ? glow : detail, _TH_WORLD, (x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2, x1 - x0, y1 - y0, z1 - z0, c);
+  MAP_TOWER.floors.length = 0; MAP_TOWER.lamps.length = 0; for (const k of Object.keys(_towerGrids)) delete _towerGrids[k];
+  const tex = _duelGridTexture('#16181b', '#1f2226', '#2c3036'); tex.repeat.set(HALF / 2, HALF / 2);
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(HALF * 2, HALF * 2), new THREE.MeshLambertMaterial({ map: tex })); ground.rotation.x = -Math.PI / 2; G.add(ground);
+  const hall = new THREE.Mesh(new THREE.PlaneGeometry(HALF * 2 - 4, HALF * 2 - 4), new THREE.MeshLambertMaterial({ color: 0x3a3f46 })); hall.rotation.x = -Math.PI / 2; hall.position.y = 0.012; G.add(hall);   // the lobby floor is lighter: it is the part that still holds
+  // the shell: four walls the whole height of the tower (open to the sky above the roof)
+  const SH = HF * (TOWER_FLOORS - 1) + 4, T2 = HALF * 2 + 3.2;
+  K.box(0, 0, -HALF - 0.8, T2, SH, 1.6, C.wall); K.box(0, 0, HALF + 0.8, T2, SH, 1.6, C.wall); K.box(-HALF - 0.8, 0, 0, 1.6, SH, T2, C.wall); K.box(HALF + 0.8, 0, 0, 1.6, SH, T2, C.wall);
+  const numTex = (txt) => surfTex('tower-num-' + txt, 256, (ctx, s) => {
+    ctx.clearRect(0, 0, s, s); ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(0, s * 0.2, s, s * 0.6);
+    ctx.fillStyle = '#ffc828'; ctx.font = 'bold ' + Math.floor(s * (txt.length > 5 ? 0.2 : 0.3)) + 'px Arial Black, Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(txt, s / 2, s * 0.51);
+    ctx.strokeStyle = '#ffc828'; ctx.lineWidth = 5; ctx.strokeRect(5, s * 0.2 + 5, s - 10, s * 0.6 - 10);
+  });
+  const KINDS = ['pillars', 'barricade', 'rubble', 'containers', 'alcoves', 'open'];
+  let prev = '';
+  for (let k = 0; k < TOWER_FLOORS; k++) {
+    const y0 = k * HF, boxes = [], F = { boxes, hole: null, kind: '' }; MAP_TOWER.floors.push(F);
+    const arrive = k > 0 ? towerP(k - 1) : null, depart = k < TOWER_FLOORS - 1 ? towerP(k) : null;
+    const keepClear = (x, z, w, d, pad = 0) => [arrive, depart].some(p => p && Math.abs(x - p[0]) < w / 2 + 6.5 + pad && Math.abs(z - p[1]) < d / 2 + 6.5 + pad);
+    // a thing on this floor: it stops a body (the dead's routes read it from F.boxes); nothing is put on a ladder or on the spot where you arrive
+    const fb = (x, z, w, h, d, c, e = 0, rot = 0) => {
+      if (keepClear(x, z, w, d)) return null;
+      const m = K.box(x, y0 + e, z, w, h, d, c, rot);
+      if (e < 1.5 && h >= 0.4) { const ex = rot ? (Math.abs(Math.cos(rot)) * w + Math.abs(Math.sin(rot)) * d) / 2 : w / 2, ez = rot ? (Math.abs(Math.sin(rot)) * w + Math.abs(Math.cos(rot)) * d) / 2 : d / 2; boxes.push([x - ex, x + ex, z - ez, z + ez]); }
+      return m;
+    };
+    // the slab under this floor, with the hole you arrive by
+    if (k > 0) {
+      const h = { x0: arrive[0] - TOWER_HOLE, x1: arrive[0] + TOWER_HOLE, z0: arrive[1] - TOWER_HOLE, z1: arrive[1] + TOWER_HOLE }; F.hole = h;
+      _bkSlabHole(K, -HALF, HALF, -HALF, HALF, y0, TH, C.slab, h);
+      for (let i = 0; i < 12; i++) {                                    // hazard stripes round the lip of the hole, so it reads in the dark
+        const a = h.x0 - 0.7 + i * 0.5, c = i % 2 ? C.dark : C.yellow;
+        deco(a, a + 0.5, y0, y0 + 0.04, h.z0 - 0.7, h.z0 - 0.2, c); deco(a, a + 0.5, y0, y0 + 0.04, h.z1 + 0.2, h.z1 + 0.7, c);
+        deco(h.x0 - 0.7, h.x0 - 0.2, y0, y0 + 0.04, a, a + 0.5, c); deco(h.x1 + 0.2, h.x1 + 0.7, y0, y0 + 0.04, a, a + 0.5, c);
+      }
+    }
+    // the ladder up from here, through the slab above: on the face of the hole that looks towards the middle of the floor
+    if (depart) {
+      const [px, pz] = depart, north = pz < 0, zf = north ? pz - TOWER_HOLE : pz + TOWER_HOLE;
+      addGridLadder(name, px, zf + (north ? -0.07 : 0.07), north ? 0 : Math.PI, y0, y0 + HF, 1.25);
+      deco(px - 1.9, px + 1.9, y0, y0 + 0.03, pz - 1.9, pz + 1.9, C.yellow);                      // a painted square on the floor under it
+      deco(px - 1.5, px + 1.5, y0 + CEIL - 0.1, y0 + CEIL, pz - 1.5, pz - 1.35, C.green, true); deco(px - 1.5, px + 1.5, y0 + CEIL - 0.1, y0 + CEIL, pz + 1.35, pz + 1.5, C.green, true);   // a green light round the hole in the ceiling
+      deco(px - 1.5, px - 1.35, y0 + CEIL - 0.1, y0 + CEIL, pz - 1.35, pz + 1.35, C.green, true); deco(px + 1.35, px + 1.5, y0 + CEIL - 0.1, y0 + CEIL, pz - 1.35, pz + 1.35, C.green, true);
+    }
+    // the walls of this floor: a baseboard, a stripe at the height of a hand, pilasters between the lamps
+    for (const [x0, x1, z0, z1] of [[-HALF, HALF, -HALF, -HALF + 0.2], [-HALF, HALF, HALF - 0.2, HALF], [-HALF, -HALF + 0.2, -HALF, HALF], [HALF - 0.2, HALF, -HALF, HALF]]) {
+      deco(x0, x1, y0, y0 + 0.4, z0, z1, 0x32373e); deco(x0, x1, y0 + 1.1, y0 + 1.2, z0, z1, k === TOWER_FLOORS - 1 ? 0x3a3f46 : 0x4a3426);
+    }
+    for (let a = -24; a <= 24; a += 12) for (const [x, z, w, d] of [[a, -HALF + 0.35, 1.2, 0.5], [a, HALF - 0.35, 1.2, 0.5], [-HALF + 0.35, a, 0.5, 1.2], [HALF - 0.35, a, 0.5, 1.2]]) deco(x - w / 2, x + w / 2, y0, y0 + CEIL, z - d / 2, z + d / 2, 0x2f343b);
+    // lamps on the ceiling (the only light a floor has of its own: a few real lights follow you from lamp to lamp)
+    if (k < TOWER_FLOORS - 1) for (const [x, z] of [[-16, -16], [16, -16], [-16, 16], [16, 16], [0, 0]]) {
+      deco(x - 0.6, x + 0.6, y0 + CEIL - 0.3, y0 + CEIL, z - 3.5, z + 3.5, 0xffc46a, true); MAP_TOWER.lamps.push([x, y0 + CEIL - 0.9, z, k]);
+    }
+    for (let i = 0; i < 8; i++) { const x = R(-29, 29), z = R(-29, 29), w = R(0.8, 3.2), d = R(0.8, 3.2); deco(x - w / 2, x + w / 2, y0 + 0.02, y0 + 0.028, z - d / 2, z + d / 2, i % 3 === 0 ? 0x2a0c0c : 0x0b0c0e); }     // stains
+    // what is on the floor
+    const kind = k === 0 ? 'hall' : k === TOWER_FLOORS - 1 ? 'roof' : (() => { let q; do { q = pickOf(KINDS); } while (q === prev); return q; })();
+    F.kind = kind; prev = kind;
+    const PIL = CEIL - 0.02;
+    const SECTION = {
+      hall() {                                                         // the lobby: pillars, benches along the walls, a reception desk, the lifts (out of order)
+        for (const x of [-20, -8, 8, 20]) for (const z of [-14, 8]) fb(x, z, 2.4, PIL, 2.4, C.tall);
+        for (const s of [-1, 1]) for (const z of [-12, 4, 18]) fb(s * 29.4, z, 2.4, 0.9, 7, C.cover);
+        fb(0, -17, 12, 1.2, 2.2, C.hi); fb(-8, -17, 1.2, 0.5, 0.5, C.rust, 1.2); fb(4, -9, 3, 0.8, 1.2, C.cover); fb(-12, 4, 2.6, 0.8, 1.2, C.cover);
+        for (const z of [-10, 0, 10]) { deco(HALF - 0.45, HALF - 0.05, y0, y0 + 3.6, z - 1.5, z + 1.5, C.dark); deco(HALF - 0.5, HALF - 0.3, y0 + 3.0, y0 + 3.2, z - 1.1, z + 1.1, C.red, true); }
+        deco(-9, 9, y0 + 4.6, y0 + 5.4, -HALF + 0.02, -HALF + 0.3, 0x101214); deco(-8.6, 8.6, y0 + 4.7, y0 + 5.3, -HALF + 0.3, -HALF + 0.34, C.yellow, true);   // a sign over the desk
+      },
+      pillars() {
+        for (const x of [-21, -7, 7, 21]) for (const z of [-21, -7, 7, 21]) if (rnd() > 0.2) fb(x, z, 2.4, PIL, 2.4, C.tall);
+        for (let i = 0; i < 4; i++) fb(R(-16, 16), R(-16, 16), R(2.4, 5), 1.2, R(1.2, 2.4), C.cover);
+      },
+      barricade() {
+        for (const [z, off] of [[-20, 4], [-7, -6], [7, 6], [20, -4]]) { fb(off - 8, z, 22, 1.3, 1.4, C.cover); fb(off + 14, z + (z < 0 ? 1 : -1) * 2, 8, 1.3, 1.4, C.cover); fb(off - 20, z, 3.4, 2.2, 3.4, rnd() < 0.5 ? C.rust : C.hi); }
+      },
+      rubble() {
+        const n = 16 + Math.floor(rnd() * 6);
+        for (let i = 0; i < n; i++) fb(R(-29, 29), R(-29, 29), R(2, 6), R(0.8, 2.6), R(2, 5.5), pickOf([C.cover, C.rust, C.tall]), 0, rnd() < 0.25 ? R(-0.7, 0.7) : 0);
+      },
+      containers() {
+        for (const z of [-20, -7, 7, 20]) for (const [x0, x1] of [[-29, -8], [8, 29]]) { let x = x0; while (x + 9 < x1 + 1) { if (rnd() > 0.3) fb(x + 4.5, z, 9, 2.6, 3.2, pickOf([C.rust, C.hi, C.cover])); x += 10.5; } }
+      },
+      alcoves() {                                                      // four partitions in turn from the east wall and the west wall: a zig-zag of corridors
+        const wall = (x0, x1, z) => { fb((x0 + x1) / 2, z, x1 - x0, 3.2, 1.2, C.tall); };
+        wall(6, HALF, -18); wall(-HALF, -6, -6); wall(6, HALF, 6); wall(-HALF, -6, 18);
+        for (const [x, z] of [[-12, -12], [14, 0], [-14, 12], [12, 24]]) fb(x, z, 3, 1.4, 3, C.rust);
+      },
+      open() {
+        for (const x of [-12, 12]) for (const z of [-12, 12]) fb(x, z, 3.2, PIL, 3.2, C.tall);
+        for (let i = 0; i < 7; i++) fb(R(-26, 26), R(-26, 26), R(2, 5), 1.3, R(1.2, 2.2), C.cover);
+      },
+      roof() {                                                         // the open roof: a helipad, generators, the radio mast, crates
+        for (const [x, z] of [[-14, 6], [14, -6], [0, 22], [0, -22]]) { fb(x, z, 4.4, 2.2, 2.4, C.cover); deco(x - 1.6, x + 1.6, y0 + 2.2, y0 + 2.35, z - 0.7, z + 0.7, C.green, true); }
+        for (const x of [-26, 26]) for (const z of [-26, 26]) { fb(x, z, 1.2, 9, 1.2, C.tall); deco(x - 0.7, x + 0.7, y0 + 9, y0 + 9.4, z - 0.7, z + 0.7, 0xffe0a0, true); MAP_TOWER.lamps.push([x, y0 + 8.4, z, k]); }       // floodlight poles
+        MAP_TOWER.lamps.push([0, y0 + 15.5, 0, k]);
+        fb(0, 0, 0.9, 16, 0.9, C.cover); for (let a = 2; a < 16; a += 3) deco(-1.2, 1.2, y0 + a, y0 + a + 0.15, -0.1, 0.1, C.pale); deco(-0.3, 0.3, y0 + 16, y0 + 16.5, -0.3, 0.3, C.red, true);
+        const ring = new THREE.Mesh(new THREE.RingGeometry(9, 10, 36), new THREE.MeshBasicMaterial({ color: C.yellow, side: THREE.DoubleSide })); ring.rotation.x = -Math.PI / 2; ring.position.y = y0 + 0.05; G.add(ring);
+        for (let i = 0; i < 6; i++) fb(R(-24, 24), R(-24, 24), R(1.6, 2.4), R(0.9, 1.6), R(1.6, 2.4), pickOf([C.rust, C.hi, C.cover]));
+      },
+    };
+    SECTION[kind]();
+    // a big number on the wall by the hole you arrive at
+    if (arrive || k === 0) {
+      const label = k === 0 ? 'GROUND' : k === TOWER_FLOORS - 1 ? 'ROOF' : 'FLOOR ' + k;
+      const near = arrive ? arrive : [-24, -24], north = near[1] < 0;
+      const sign = new THREE.Mesh(new THREE.PlaneGeometry(5, 5), new THREE.MeshBasicMaterial({ map: numTex(label), transparent: true }));
+      sign.position.set(near[0] + 5, y0 + 3.3, north ? -HALF + 0.12 : HALF - 0.12); sign.rotation.y = north ? 0 : Math.PI; G.add(sign);
+    }
+  }
+  for (const c of MAP_COLLIDERS[name]) if (c.max.y > 14) c.tall = true;     // a floor above 14 m is still a floor
+  MAP_SPAWNS[name] = { ally: { x0: -6, x1: 6, z0: 22, z1: 28 }, enemy: { x0: -6, x1: 6, z0: -28, z1: -22 } };
+  MAP_BOT_BOUNDS[name] = { halfX: HALF - 1, halfZ: HALF - 1 };
+  MAP_TOWER.wake = { x: 0, z: 2 }; MAP_ZOMBIE_WAKE[name] = MAP_TOWER.wake;
+  K.poi('lobby', 0, 0, 0);
+  _thMesh(G, detail, false); _thMesh(G, glow, true);
+  G.userData.identityRefined = true;
+  G._skyColor = 0x020309;
+}
+_BESPOKE.zombie_tower = buildZombieTower;
+// What the dead route over: one grid per floor (1 m cells), made when a floor is first needed. A cell is shut where a thing of that floor
+// stands (and a body's width round it), round the hole, and along the walls.
+const _towerGrids = {};
+function towerGrid(k) {
+  if (_towerGrids[k]) return _towerGrids[k];
+  const F = MAP_TOWER.floors[k]; if (!F) return null;
+  const cell = 1, W = TOWER_HALF * 2, H = W, x0 = -TOWER_HALF, z0 = -TOWER_HALF, R = 0.55, blocked = new Uint8Array(W * H);
+  const mark = (ax0, ax1, az0, az1, r) => {
+    for (let j = Math.max(0, Math.floor((az0 - r - z0) / cell)); j <= Math.min(H - 1, Math.floor((az1 + r - z0) / cell)); j++) {
+      const cz = z0 + (j + 0.5) * cell; if (cz <= az0 - r || cz >= az1 + r) continue;
+      for (let i = Math.max(0, Math.floor((ax0 - r - x0) / cell)); i <= Math.min(W - 1, Math.floor((ax1 + r - x0) / cell)); i++) { const cx = x0 + (i + 0.5) * cell; if (cx > ax0 - r && cx < ax1 + r) blocked[j * W + i] = 1; }
+    }
+  };
+  for (const b of F.boxes) { mark(b[0], b[1], b[2], b[3], R); const i0 = Math.max(0, Math.floor((b[0] - x0) / cell)), i1 = Math.min(W - 1, Math.floor((b[1] - x0) / cell)), j0 = Math.max(0, Math.floor((b[2] - z0) / cell)), j1 = Math.min(H - 1, Math.floor((b[3] - z0) / cell)); for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) blocked[j * W + i] = 1; }
+  if (F.hole) mark(F.hole.x0, F.hole.x1, F.hole.z0, F.hole.z1, 1.1);
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const cx = x0 + (i + 0.5) * cell, cz = z0 + (j + 0.5) * cell; if (Math.abs(cx) > TOWER_HALF - 0.9 || Math.abs(cz) > TOWER_HALF - 0.9) blocked[j * W + i] = 1; }
+  return (_towerGrids[k] = { cell, W, H, x0, z0, blocked, dist: null, goal: -1, goalAt: 0 });
+}
+
 // ═══ 🎵 MUSIC ═══════════════════════════════════════════════════════════════════════════════════════════════════════
 // No audio files: the music is played by the game, on the same Web Audio context as the sounds. Each track is a few chords and a few
 // layers (pads, a choir, bells, plucks, a bass, stabs, drums), written as a function from a bar number to the notes in it, so a loop is
@@ -17163,7 +17323,7 @@ const EGG_LINES = {
 };
 const EGG_CRANE = ['nice view', "don't look down", 'rope: 4 left', 'ahoy', 'tired of climbing', 'hi', 'shift ends at 5', 'hard hat: lost'];
 const EGG_SKIP = new Set(['blank', 'range', 'obby', 'm4_tower', 'm4_tower_big', 'm4_tower_super', 'big_harbor', 'storm_pier', 'pinball_arcade',
-  'laser_vault', 'cargo_belts', 'gale_peaks', 'magma_rise', 'br_arena', 'base_raid', 'neon_tokyo', 'sky_arena', 'shipyard', 'battleground', 'atoll']);
+  'laser_vault', 'cargo_belts', 'gale_peaks', 'magma_rise', 'br_arena', 'base_raid', 'neon_tokyo', 'sky_arena', 'shipyard', 'battleground', 'atoll', 'zombie_tower']);
 const EGG_FLOATING = new Set(['space', 'orbital_station', 'gravity_lab', 'dreamscape', 'flying_moai', 'cyber', 'super_arena']);
 // Hand-drawn glyphs: a few wobbly strokes in a 256 square.
 function _eggGlyph(g, kind, rnd) {
@@ -20941,7 +21101,7 @@ const WEAR_UNTHEMED = { storm_pier: 'industrial', cargo_belts: 'industrial', las
 // Places that are not meant to look used: the neon and sci-fi maps (Cyber City, the station, the labs), the fairground
 // ones, an opera house and a shop. Rust, soot and grime on a hard-light city read as a different map; they get no wear.
 const WEAR_CLEAN_MOTIFS = new Set(['space', 'neon', 'carnival']);
-const WEAR_CLEAN_MAPS = new Set(['opera', 'supermarket', 'sky_arena', 'battleground', 'atoll']);
+const WEAR_CLEAN_MAPS = new Set(['opera', 'supermarket', 'sky_arena', 'battleground', 'atoll', 'zombie_tower']);   // (the tower dresses itself: stains, numbers, hazard stripes)
 function wearIsClean(name) {
   const th = MAP_THEMES[name];
   return WEAR_CLEAN_MAPS.has(name) || WEAR_CLEAN_MOTIFS.has(th ? th.motif : WEAR_UNTHEMED[name]);
@@ -42057,6 +42217,7 @@ document.addEventListener('keydown', e => {
   }
   // 🛋️ F in the lobby: start the duel pad you're on, or challenge the nearest cast
   // member to a 1V1 — BUT the trashcan (weapon swap) always takes priority when near it.
+  if (e.code==='KeyF' && !e.repeat && !isDead && match && match.zombie && zombieTakeNearby()) { e.preventDefault(); return; }   // 🧟 a weapon the dead dropped (or the radio) is yours when you press F
   if (e.code==='KeyF' && inLobby && !nearTrashcan && !e.repeat) { e.preventDefault(); lobbyInteract(); return; }
   if(e.code==='KeyF' && rangeExitNearby() && !e.repeat){e.preventDefault();returnFromRange();return;}
   if (e.code==='KeyF' && nearTrashcan && !isDead && !fixedKitModeActive()) { showLoadoutScreen('swap'); }
@@ -61278,8 +61439,9 @@ function syncInteractButton() {
   const service=inLobby && !nearTrashcan && lobbyServiceHere;
   const duel = !pilot && inLobby && !nearTrashcan && !!lobbyPadHere;
   const rangeExit=rangeExitNearby();
-  const label = I18N.t(pilot === 'exit' || rangeExit ? 'EXIT' : (pilot && !nearTrashcan) ? 'PILOT' : service ? 'OPEN' : duel ? 'START' : 'SWAP');
-  const display = (nearTrashcan || duel || pilot || service || rangeExit) ? 'flex' : 'none';
+  const take = !!(match && match.zombie && _zombieNear);
+  const label = I18N.t(take ? 'TAKE' : pilot === 'exit' || rangeExit ? 'EXIT' : (pilot && !nearTrashcan) ? 'PILOT' : service ? 'OPEN' : duel ? 'START' : 'SWAP');
+  const display = (nearTrashcan || duel || pilot || service || rangeExit || take) ? 'flex' : 'none';
   if (btn.textContent !== label) btn.textContent = label;
   if (btn.style.display !== display) btn.style.display = display;
 }
@@ -63667,11 +63829,18 @@ function updateMatchHUD() {
       C.textContent = `INFECTION`;
       R.textContent = match.infectedIds[myId] ? 'YOU ARE ZOMBIE' : 'YOU ARE HUMAN';
     } else if (sub === 'zombie') {
-      const Z = match.zombie || { wave: 0, kills: 0 };
+      const Z = match.zombie || { wave: 0, kills: 0 }, T = Z.tower;
+      if (T) {
+        const left = gameBots.filter(b => b.zombie && !b.dead).length;
+        L.textContent = Z.phase === 'story' ? 'THE RAID' : T.floor === 0 ? 'LOBBY' : T.floor === TOWER_FLOORS - 1 ? 'ROOF' : `FLOOR ${T.floor}/${TOWER_FLOORS - 2}`;
+        C.textContent = Z.phase === 'story' ? '🧟 ZOMBIE TOWER' : Z.phase === 'outro' ? '📻 CALLING IT IN' : Z.phase === 'horde' ? (T.radioDropped ? '📻 TAKE THE RADIO' : `🧟 HORDE ${T.hordeLeft + left}`) : `🧟 ${left + ((T.packs[T.floor] && T.packs[T.floor].toSpawn) || 0)} LEFT`;
+        R.textContent = Z.phase === 'horde' ? `GET OUT · KILLS ${Z.kills}` : `KILLS ${Z.kills}`;
+      } else {
       L.textContent = Z.phase === 'story' ? 'THE RAID' : Z.wave ? `WAVE ${Z.wave}` : 'GET READY';
       C.textContent = Z.phase === 'story' ? '🧟 ZOMBIE SURVIVAL' : `🧟 ${gameBots.filter(b => b.zombie && !b.dead).length + (Z.toSpawn || 0)} LEFT`;
       const longMap = Math.max(getMapBoundsRect().halfX, getMapBoundsRect().halfZ) > 300;
       R.textContent = `KILLS ${Z.kills}` + (longMap && Z.phase !== 'story' ? ` · ${Math.max(0, Math.round(getMapBoundsRect().halfZ - 62 - camera.position.z))} m` : '');
+      }
     } else if (sub === 'dice') {
       const d = match.dice || { score: { me: 0, bot: 0 }, goal: DICE_GOAL };
       L.textContent = `YOU ${d.score.me} – ${d.score.bot} BOT`;
@@ -65013,7 +65182,9 @@ function endMatch(winner, reason) {
   } else if (match.jugg) {
     scoreText = `Rounds  Hunters ${match.jugg.wins.hunters} – ${match.jugg.wins.jugg} Juggernaut`;
   } else if (match.arcade === 'zombie' && match.zombie) {
-    scoreText = `Waves survived: ${Math.max(0, match.zombie.wave - 1)}  ·  Zombies killed: ${match.zombie.kills}  ·  Best: wave ${match.zombie.best}`;
+    scoreText = match.zombie.tower
+      ? `Highest floor: ${match.zombie.tower.topFloor === 0 ? 'the lobby' : match.zombie.tower.topFloor === TOWER_FLOORS - 1 ? 'the roof' : match.zombie.tower.topFloor}${match.zombie.tower.radioDropped ? '  ·  The radio: found' : ''}  ·  Zombies killed: ${match.zombie.kills}  ·  Best: floor ${Math.max(0, match.zombie.best - 1)}`
+      : `Waves survived: ${Math.max(0, match.zombie.wave - 1)}  ·  Zombies killed: ${match.zombie.kills}  ·  Best: wave ${match.zombie.best}`;
   } else if (match.type === 'wave_dash') {
     scoreText = `Wave Dash score: ${match.waveScore || 0}  ·  Best: ${match.waveBest || waveDash.best || 0}`;
   } else {
@@ -65750,7 +65921,8 @@ function juggCleanup() {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-// 🧟 ZOMBIE SURVIVAL. Endless waves of zombies, solo, and you begin with your fists and nothing else. Every zombie has a
+// 🧟 ZOMBIE TOWER (it began as Zombie Survival's endless waves, and the wave director below is still that: it runs on any open map; the tower's
+// own mission, with a floor of the dead at a time, a horde and a radio, is THE MISSION further down). Solo, and you begin with your fists and nothing else. Every zombie has a
 // small chance to drop ammo or a new weapon, so the kit is whatever the dead give you: slot 1 stays your fists, slot 2 is
 // the latest thing you picked up (walk over it; what you were holding disappears). The kit is the same two-slot kit as Dice Duel and Weapon Roulette, held in match.roulette so every rule
 // of it (keys 1 and 2, the HUD, getting your own loadout back at the end) is already there.
@@ -65772,6 +65944,11 @@ let _zombieLights = null, _zombieLamp = null, _zombiePool = null;
 // A tunnel kilometres long cannot have a real light for every lamp, so four are moved along with you: each frame they hang on
 // the four lamps nearest to where you are (two ahead, two behind), and everything else is the dark.
 function zombieUpdateLamps() {
+  if (_zombiePool && activeMapName === ZOMBIE_TOWER_MAP) {         // a tower: the lamps nearest to you, a floor up or down counting three times as far (a light does not need to leak through a slab)
+    const p = camera.position, near = MAP_TOWER.lamps.map(l => [Math.hypot(l[0] - p.x, (l[1] - p.y) * 3, l[2] - p.z), l]).sort((a, b) => a[0] - b[0]).slice(0, _zombiePool.length);
+    for (let i = 0; i < _zombiePool.length; i++) { const l = _zombiePool[i], n = near[i]; if (n) { l.position.set(n[1][0], n[1][1], n[1][2]); l.intensity = 34; } else l.intensity = 0; }
+    return;
+  }
   const zs = MAP_ZOMBIE_LAMPS[activeMapName];
   if (!_zombiePool || !zs) return;
   const z = camera.position.z, near = zs.map(v => [Math.abs(v - z), v]).sort((a, b) => a[0] - b[0]).slice(0, _zombiePool.length);
@@ -65821,14 +65998,35 @@ function zombieDropRoll(avoidId, gunsOnly) {
 function zombieStart() {
   const holder = { kit: rngNewKit(), id: null };
   match.roulette = holder;                                   // (see above: the shared two-slot kit)
-  const best = parseInt((() => { try { return localStorage.getItem('pvp_zombie_best') || '0'; } catch (e) { return '0'; } })(), 10) || 0;
+  const bestKey = activeMapName === ZOMBIE_TOWER_MAP ? 'pvp_zombie_tower_best' : 'pvp_zombie_best';
+  const best = parseInt((() => { try { return localStorage.getItem(bestKey) || '0'; } catch (e) { return '0'; } })(), 10) || 0;
+  const tower = activeMapName === ZOMBIE_TOWER_MAP ? { floor: 0, cand: 0, candT: 0, packs: {}, hordeStarted: false, hordeLeft: 0, hordeNext: 0, radioDropped: false, topFloor: 0 } : null;
   match.zombie = { wave: 0, kills: 0, toSpawn: 0, nextWaveAt: Infinity, waveStartedAt: 0, nextSpawnAt: 0, phase: 'story',
-                   sinceDrop: 0, best, n: 0, holder, story: null, storyLock: false };
+                   sinceDrop: 0, best, bestKey, n: 0, holder, story: null, storyLock: false, tower, outro: null };
   rngRollIn('m:fists', holder.kit, null, 0);                  // you begin with your fists
   for (const b of gameBots) b.team = 'enemy';
   zombieStoryStart();                                         // the story first; the waves begin when it is over
 }
+// A place on the floor you are on, a long way from you but a short walk by the route the dead take (so never behind a wall they cannot get round).
+function towerSpawnPoint(minFar = 16) {
+  const T = match.zombie.tower, fl = T.floor, g = towerGrid(fl), fy = towerFloorTop(fl);
+  if (!g) return { x: 0, z: 0 };
+  const at = (x, z) => Math.floor((z - g.z0) / g.cell) * g.W + Math.floor((x - g.x0) / g.cell);
+  _botNavFill(g, at(camera.position.x, camera.position.z));
+  let best = null, bestScore = -1;
+  for (let i = 0; i < 80; i++) {
+    const x = g.x0 + (Math.random() * g.W | 0) + 0.5, z = g.z0 + (Math.random() * g.H | 0) + 0.5, k = at(x, z);
+    if (g.blocked[k] || g.dist[k] < 0) continue;
+    const d = Math.hypot(x - camera.position.x, z - camera.position.z);
+    if (d < minFar) continue;
+    const score = 1 / (1 + Math.abs(d - 26)) + Math.random() * 0.15;                 // somewhere around 26 m is about right
+    if (score > bestScore) { bestScore = score; best = { x, z }; }
+  }
+  if (!best) { for (let k = 0; k < g.W * g.H; k++) if (!g.blocked[k] && g.dist[k] > 12) { best = { x: g.x0 + (k % g.W) + 0.5, z: g.z0 + Math.floor(k / g.W) + 0.5 }; break; } }
+  return { ...(best || { x: 0, z: 0 }), y: fy };
+}
 function zombieSpawnPoint() {
+  if (match && match.zombie && match.zombie.tower) return towerSpawnPoint();
   const b = MAP_BOT_BOUNDS[activeMapName] || getMapBoundsRect();
   const hx = Math.max(6, b.halfX - 4), hz = Math.max(6, b.halfZ - 4);
   const long = Math.max(b.halfX, b.halfZ) > 300;         // a tunnel kilometres long: they come out of the dark ahead of you and behind you, never from the far end
@@ -65847,16 +66045,17 @@ function zombieSpawnPoint() {
   const sp = botSideSpawn(0, 1, 'enemy');
   return { x: sp.x, z: sp.z };
 }
-function zombieSpawn() {
-  const Z = match.zombie, sp = zombieSpawnPoint(), id = `zombie_${Date.now()}_${Z.n++}`;
-  const hp = zombieHpFor(Z.wave);
+// o: { floor, floorY, hp, speed, at } for a tower (the dead stand on one floor and cannot leave it); nothing for the open ground
+function zombieSpawn(o = {}) {
+  const Z = match.zombie, sp = o.at || zombieSpawnPoint(), id = `zombie_${Date.now()}_${Z.n++}`, fy = o.floorY != null ? o.floorY : (sp.y || 0);
+  const hp = o.hp || zombieHpFor(Z.wave);
   const pData = { id, name: 'Zombie', isBot: true, team: 'enemy', weaponId: null, ownerId: myId, skin: ZOMBIE_SKIN_IDS[Math.floor(Math.random() * ZOMBIE_SKIN_IDS.length)],
-                  x: sp.x, y: 1, z: sp.z, rotY: 0, rotX: 0, hp, maxHp: hp, dead: false, kills: 0, deaths: 0 };
+                  x: sp.x, y: fy + 1, z: sp.z, rotY: 0, rotX: 0, hp, maxHp: hp, dead: false, kills: 0, deaths: 0 };
   players[id] = pData;
   spawnRemotePlayer(pData);
-  if (remoteMeshes[id]) remoteMeshes[id].position.set(sp.x, 0, sp.z);
-  const bot = { id, team: 'enemy', weaponId: null, x: sp.x, z: sp.z, rotY: 0, hp, maxHp: hp, prevHp: hp, dead: false, state: 'chase',
-                zombie: true, zSpeed: zombieSpeedFor(Z.wave), lastAtk: 0, y: 0, yVel: 0, frostSlow: 100, kbVX: 0, kbVZ: 0,
+  if (remoteMeshes[id]) remoteMeshes[id].position.set(sp.x, fy, sp.z);
+  const bot = { id, team: 'enemy', weaponId: null, x: sp.x, z: sp.z, rotY: 0, hp, maxHp: hp, prevHp: hp, dead: false, state: 'chase', floor: o.floor || 0, floorY: fy,
+                zombie: true, zSpeed: o.speed || zombieSpeedFor(Z.wave), lastAtk: 0, y: fy, yVel: 0, frostSlow: 100, kbVX: 0, kbVZ: 0,
                 wanderAngle: Math.random() * Math.PI * 2, wanderTimer: 0, lastShot: 0, stuckTimer: 0, strafeDir: 1, strafeFlipTimer: 0, tacTimer: 0, coverPt: null,
                 difficulty: selectedDifficulty, tune: botTuning(selectedDifficulty), activeSlot: 'melee' };
   gameBots.push(bot);
@@ -66020,7 +66219,7 @@ function zombieStoryStart() {
   Z.story = { phase: 'approach', t: 0, t0: 0, line: 0, props: [], at: null, subUntil: 0, lineAt: 0, nextCrackle: 0, keyPrev: true, fallV: 0, rumble: false, skipped: false };
   const U = storyUi(); U.root.style.display = 'block'; U.dark.style.opacity = '0'; U.noise.style.opacity = '0'; U.comm.style.opacity = '0'; U.text.textContent = ''; U.shownWho = null;
   U.skip.style.display = '';
-  showAnnouncement('🧟 ZOMBIE SURVIVAL', 'Endless waves · a squad, a raid, and something wrong with the place', '#66dd66', 2600);
+  showAnnouncement('🧟 ZOMBIE TOWER', 'A squad, a raid, and something wrong with the place', '#66dd66', 2600);
 }
 // The nearest spot to (x, z) with nothing solid on it, searched outward.
 function zombieFreeSpot(x, z) {
@@ -66070,10 +66269,11 @@ function zombieStoryEnterBlack() {
 }
 function zombieStoryFinish() {
   const Z = match.zombie, S = Z.story, U = storyUi();
-  Z.storyLock = false; Z.story = null; Z.phase = 'break'; Z.nextWaveAt = Date.now() + 2800;
+  Z.storyLock = false; Z.story = null; Z.phase = Z.tower ? 'climb' : 'break'; Z.nextWaveAt = Date.now() + 2800;
+  if (Z.tower) { Z.tower.floor = 0; Z.tower.packs = {}; }
   U.root.style.display = 'none'; U.dark.style.opacity = '0'; U.noise.style.opacity = '0'; U.comm.style.opacity = '0'; U.text.textContent = '';
   const me = players[myId]; if (me && me.hp > 0 && me.hp < 300) { socket.emit('healSelf', { amount: 300 - me.hp }); me.hp = 300; updateHealthHUD(300); }
-  showAnnouncement('SURVIVE', 'Fists only. The dead drop the rest.', '#ff6666', 2600);
+  showAnnouncement(Z.tower ? 'CLIMB' : 'SURVIVE', Z.tower ? 'Twenty-four floors to the roof · a ladder on each · fists only, the dead drop the rest (F takes a weapon)' : 'Fists only. The dead drop the rest.', '#ff6666', 3200);
 }
 function zombieStorySkip() {
   const Z = match && match.zombie, S = Z && Z.story; if (!S || S.phase === 'wake') return;
@@ -66161,12 +66361,12 @@ function zombieThink(bot, dt, now) {
   if (bot.frostSlow != null) spd *= Math.max(0.15, bot.frostSlow / 100);
   if (now < (bot._chillUntil || 0)) spd *= 0.5;
   if (now < (bot._rootUntil || 0)) spd = 0;
-  const me = camera.position;
+  const me = camera.position, tower = !!(match.zombie && match.zombie.tower), fy = bot.floorY || 0;
   const dx = me.x - bot.x, dz = me.z - bot.z, dist = Math.hypot(dx, dz) || 0.001;
   bot.rotY = Math.atan2(-dx, -dz);
-  if (dist > 1.25 && spd > 0 && (bot.y || 0) < 0.6) {
+  if (dist > 1.25 && spd > 0 && (bot.y || 0) - fy < 0.6) {
     let tx = me.x, tz = me.z;
-    const wp = botNavPoint(bot, { x: me.x, z: me.z, isPlayer: true });
+    const wp = tower ? towerNavPoint(bot, me.x, me.z) : botNavPoint(bot, { x: me.x, z: me.z, isPlayer: true });
     if (wp) { tx = wp.x; tz = wp.z; }
     const ddx = tx - bot.x, ddz = tz - bot.z, dd = Math.hypot(ddx, ddz) || 1;
     let nx = bot.x + ddx / dd * spd * dt, nz = bot.z + ddz / dd * spd * dt;
@@ -66176,6 +66376,7 @@ function zombieThink(bot, dt, now) {
       if (od < 0.7 && od > 0.001) { nx += ox / od * (0.7 - od) * 0.5; nz += oz / od * (0.7 - od) * 0.5; }
     }
     [nx, nz] = resolvePosCollisions(nx, nz, bot.y || 0);
+    if (tower && botGroundYAt(nx, nz, bot.y || 0, 1.05, 2.2) < fy - 0.2) { nx = bot.x; nz = bot.z; }   // not over the hole
     if (!isBotOutOfBoundsXZ(nx, nz)) { bot.x = nx; bot.z = nz; }
   }
   // a claw: it winds up, and lands only if you are still there
@@ -66190,6 +66391,40 @@ function zombieThink(bot, dt, now) {
   }
   syncBotMesh(bot);
 }
+// Where a zombie on this floor should head to reach (tx, tz): null when it can see it (go straight), or a cell a few steps along the route.
+function towerNavPoint(bot, tx, tz) {
+  const g = towerGrid(bot.floor || 0); if (!g) return null;
+  const nowMs = performance.now();
+  if (nowMs >= (bot._losAt || 0)) { bot._losAt = nowMs + 200 + Math.random() * 120; bot._los = hasLineOfSight(bot.x, bot.z, tx, tz, (bot.y || 0) + 0.5); }
+  if (bot._los) return null;
+  const at = (x, z) => { const i = Math.floor((x - g.x0) / g.cell), j = Math.floor((z - g.z0) / g.cell); return (i < 0 || j < 0 || i >= g.W || j >= g.H) ? -1 : j * g.W + i; };
+  const goal = at(tx, tz), here = at(bot.x, bot.z);
+  if (goal < 0 || here < 0) return null;
+  if (g.goal !== goal || !g.dist || nowMs - g.goalAt > 450) _botNavFill(g, goal);
+  const dist = g.dist, W = g.W;
+  const cellXZ = (k) => ({ x: g.x0 + ((k % W) + 0.5) * g.cell, z: g.z0 + (Math.floor(k / W) + 0.5) * g.cell });
+  let cur = here;
+  if (dist[cur] < 0) {                                   // pressed against a wall (the margin shuts the cells beside it): to the nearest open cell
+    let found = -1, fd = 1e9; const i0 = here % W, j0 = Math.floor(here / W);
+    for (let r = 1; r <= 3 && found < 0; r++) for (let dj = -r; dj <= r; dj++) for (let di = -r; di <= r; di++) {
+      const x = i0 + di, y = j0 + dj; if (x < 0 || y < 0 || x >= W || y >= g.H) continue;
+      const m = y * W + x; if (dist[m] < 0) continue; const d = di * di + dj * dj; if (d < fd) { fd = d; found = m; }
+    }
+    return found < 0 ? null : cellXZ(found);
+  }
+  for (let step = 0; step < 3; step++) {                 // down the gradient, a few cells at a time
+    let best = cur, bd = dist[cur]; const i = cur % W, j = Math.floor(cur / W);
+    for (const [di, dj] of _NAV_STEPS) {
+      const x = i + di, y = j + dj; if (x < 0 || y < 0 || x >= W || y >= g.H) continue;
+      const m = y * W + x; if (dist[m] < 0 || dist[m] >= bd) continue;
+      if (di && dj && (g.blocked[j * W + x] || g.blocked[y * W + i])) continue;
+      bd = dist[m]; best = m;
+    }
+    if (best === cur) break; cur = best;
+  }
+  return cur === here ? null : cellXZ(cur);
+}
+
 // The wave director: counts down to a wave, trickles its zombies in (never more than ZOMBIE_CAP at once), and when the last
 // one is down gives you a breather and a little health.
 function updateZombieMode(dt) {
@@ -66198,7 +66433,9 @@ function updateZombieMode(dt) {
   zombieUpdateLamps();
   updateZombiePickups(dt);
   if (Z.phase === 'story') { updateZombieStory(dt); return; }
+  if (Z.phase === 'outro') { updateZombieOutro(dt); return; }
   if (isDead) return;
+  if (Z.tower) { updateZombieTower(dt, now); updateMatchHUD(); return; }
   if (Math.max(getMapBoundsRect().halfX, getMapBoundsRect().halfZ) > 300) {                  // the ones you have left far behind are let go
     for (const b of gameBots.slice()) if (b.zombie && !b.dead && Math.hypot(b.x - camera.position.x, b.z - camera.position.z) > 170) zombieRemove(b);
   }
@@ -66227,6 +66464,99 @@ function updateZombieMode(dt) {
   }
   updateMatchHUD();
 }
+// ══════════════════════════════════════════════════════════════════════════
+// 🏢 THE MISSION. Twenty-four ladders up to the roof, a pack of the dead on every floor (bigger and tougher the higher you go: they come in
+// a trickle, and you may climb at any time, but the dead on a floor cannot climb after you), and on the roof a HORDE: a swarm a hundred and
+// thirty strong that comes for you wherever you are. You have to get out, all the way back down; the swarm follows you floor by floor and
+// the dead you left behind are put back in it. Kill the very last one and a radio drops from it: take it (F) and call for the way out.
+// ══════════════════════════════════════════════════════════════════════════
+const TOWER_HORDE = 130, TOWER_HORDE_CAP = 34;
+function towerPackSize(fl) { return 3 + Math.floor(fl * 0.85); }              // 3 in the lobby, 22 on the 23rd floor
+function towerCap(fl) { return 8 + Math.floor(fl / 3); }                     // alive at once on a floor (8 to 15)
+function towerStats(fl) { const w = 1 + fl * 0.4; return { hp: zombieHpFor(w), speed: zombieSpeedFor(w) }; }
+function towerHere(fl) { return gameBots.filter(b => b.zombie && !b.dead && b.floor === fl); }
+function towerEnterFloor(fl) {
+  const Z = match.zombie, T = Z.tower, before = T.floor;
+  T.floor = fl; T.topFloor = Math.max(T.topFloor, fl);
+  let sent = 0;
+  for (const b of gameBots.slice()) if (b.zombie && b.floor !== fl) { if (!b.dead) sent++; zombieRemove(b); }      // the dead cannot climb after you...
+  if (Z.phase === 'horde') T.hordeLeft += sent;                                                                    // ...but the swarm does: whoever was left behind rejoins it, on your floor
+  if (T.topFloor + 1 > Z.best) { Z.best = T.topFloor + 1; try { localStorage.setItem(Z.bestKey, String(Z.best)); } catch (e) {} }
+  if (fl !== before) {
+    const tag = fl === 0 ? 'THE LOBBY' : fl === TOWER_FLOORS - 1 ? 'THE ROOF' : `FLOOR ${fl}`;
+    showAnnouncement('🏢 ' + tag, Z.phase === 'horde' ? 'Keep going down' : (fl > before ? 'Find the ladder up' : ''), '#aaccff', 1200);
+  }
+}
+function towerFloorCleared() {
+  const T = match.zombie.tower, me = players[myId];
+  if (me && me.hp > 0) { const to = Math.min(matchMaxHp(), me.hp + ZOMBIE_HEAL); socket.emit('healSelf', { amount: to - me.hp }); me.hp = to; updateHealthHUD(to); }
+  showAnnouncement(T.floor === 0 ? 'LOBBY CLEAR' : `FLOOR ${T.floor} CLEAR`, `+${ZOMBIE_HEAL} HP · the ladder is in the ${towerP(T.floor)[0] < 0 ? 'north-west' : 'south-east'} corner`, '#aaffaa', 1800);
+}
+function towerStartHorde() {
+  const Z = match.zombie, T = Z.tower;
+  T.hordeStarted = true; Z.phase = 'horde'; T.hordeLeft = TOWER_HORDE; T.hordeNext = Date.now() + 2600;
+  showAnnouncement('🧟 THE HORDE', `${TOWER_HORDE} of them · GET OUT, all the way back down · kill them all and the last one drops a radio`, '#ff5555', 3600);
+  playSoundEvent('hitmarker', { volume: 1, minGap: 0, tier: 'orange' });
+  flashScreen('rgba(255,40,40,0.25)', 500);
+}
+function updateZombieTower(dt, now) {
+  const Z = match.zombie, T = Z.tower;
+  // which floor are you on? the one you have been standing on for a moment (not one you fall or climb past)
+  if (isPlayerGrounded() && !window._mapLadder) {
+    const c = towerFloorOfY(playerFeetY());
+    if (c !== T.floor) { T.candT = (T.cand === c ? T.candT : 0) + dt; T.cand = c; if (T.candT > 0.25) { towerEnterFloor(c); T.candT = 0; } }
+    else { T.candT = 0; T.cand = c; }
+  }
+  const here = towerHere(T.floor), fy = towerFloorTop(T.floor);
+  if (Z.phase === 'climb') {
+    let pack = T.packs[T.floor];
+    if (!pack) pack = T.packs[T.floor] = { toSpawn: towerPackSize(T.floor), next: now + (T.floor === 0 ? 2400 : 1400), cleared: false };
+    if (!pack.cleared) {
+      if (pack.toSpawn > 0 && here.length < towerCap(T.floor) && now >= pack.next) {
+        const st = towerStats(T.floor);
+        zombieSpawn({ floor: T.floor, floorY: fy, hp: st.hp, speed: st.speed, at: towerSpawnPoint() }); pack.toSpawn--;
+        pack.next = now + Math.max(350, 1100 - T.floor * 28);
+      }
+      if (pack.toSpawn === 0 && here.length === 0) { pack.cleared = true; towerFloorCleared(); }
+    }
+    if (T.floor === TOWER_FLOORS - 1 && !T.hordeStarted) towerStartHorde();
+  } else if (Z.phase === 'horde') {
+    if (T.hordeLeft > 0 && here.length < TOWER_HORDE_CAP && now >= T.hordeNext) {
+      zombieSpawn({ floor: T.floor, floorY: fy, hp: 95 + Math.random() * 40, speed: 3.3 + Math.random() * 1.5, at: towerSpawnPoint() }); T.hordeLeft--;
+      T.hordeNext = now + 420;
+    }
+  }
+}
+// the last of the horde falls: a radio drops from it
+function towerAfterKill(bot) {
+  const Z = match.zombie, T = Z.tower;
+  if (!T || Z.phase !== 'horde' || T.radioDropped || T.hordeLeft > 0) return;
+  if (gameBots.some(b => b.zombie && !b.dead && b !== bot)) return;
+  T.radioDropped = true;
+  zombieDropPickup('radio', bot.x, bot.z, null, null, bot.floorY || 0);
+  showAnnouncement('📻 THE RADIO', 'The last one dropped a radio · take it (F)', '#7affb0', 3200);
+}
+const ZOMBIE_OUTRO = [   // [ms, who, what]
+  [0,    'YOU',     'Command, do you copy? ...Command, this is the last one standing.'],
+  [4200, 'COMMAND', 'We copy you. We have your position. Extraction is on its way. Hold tight.'],
+  [8600, 'YOU',     'Reyes. Okafor. Brandt. Kim. I got out. I will tell them what you did here.'],
+];
+function zombieMissionComplete() {
+  const Z = match.zombie; if (!Z || Z.phase === 'outro') return;
+  Z.phase = 'outro'; Z.outro = { t: 0, line: 0 }; Z.storyLock = true;
+  for (const b of gameBots.slice()) if (b.zombie) zombieRemove(b);
+  const U = storyUi(); U.root.style.display = 'block'; U.dark.style.opacity = '0'; U.noise.style.opacity = '0'; U.skip.style.display = 'none'; U.comm.style.opacity = '0'; U.shownWho = null; U.text.textContent = '';
+  playSoundEvent('hitmarker', { volume: 0.9, minGap: 0, tier: 'blue' });
+}
+function updateZombieOutro(dt) {
+  const Z = match.zombie, O = Z.outro; if (!O) return;
+  O.t += dt * 1000;
+  while (O.line < ZOMBIE_OUTRO.length && O.t >= ZOMBIE_OUTRO[O.line][0]) {
+    const [, who, text] = ZOMBIE_OUTRO[O.line++];
+    storyShowSub(who, text, 3800); storyAudio({ ms: 500, freq: 2300, q: 0.6, gain: 0.2, crackle: 0.5, release: 0.1 });
+  }
+  if (O.t >= 13200 && !match.over) { Z.outro = null; endMatch('ally', `🧟 MISSION COMPLETE · you made it out of the tower · ${Z.kills} zombies killed`); }
+}
 function zombieHoldsAmmoUser() {
   const kit = rngKit(); if (!kit) return false;
   return kit.slots.some(id => { const i = diceInfo(id); return i && (i.kind === 'util' || (i.kind === 'gun' && !i.item.noReload && i.item.mag)); });
@@ -66234,12 +66564,13 @@ function zombieHoldsAmmoUser() {
 function zombieOnKill(targetId, killerId) {
   const Z = match.zombie;
   if (targetId === myId) {                                   // you are the one who fell
-    endMatch('enemy', `🧟 THE DEAD GOT YOU · wave ${Z.wave} · ${Z.kills} zombies killed`);
+    endMatch('enemy', Z.tower ? `🧟 THE DEAD GOT YOU · ${Z.tower.floor === 0 ? 'in the lobby' : Z.tower.floor === TOWER_FLOORS - 1 ? 'on the roof' : 'on floor ' + Z.tower.floor} · ${Z.kills} zombies killed` : `🧟 THE DEAD GOT YOU · wave ${Z.wave} · ${Z.kills} zombies killed`);
     return;
   }
   const bot = gameBots.find(b => b.id === targetId);
   if (!bot || !bot.zombie) return;
   if (killerId === myId) { Z.kills++; match.ffaKills[myId] = Z.kills; zombieRollDrop(bot); }
+  if (Z.tower) towerAfterKill(bot);
   setTimeout(() => zombieRemove(bot), 2600);                  // the body lies there a moment
   updateMatchHUD();
 }
@@ -66253,10 +66584,10 @@ function zombieRollDrop(bot) {
     const kit = rngKit();
     const haveGun = kit && kit.slots.some(id => { const i = diceInfo(id); return i && i.kind === 'gun'; });
     const roll = zombieDropRoll(kit && kit.slots[1], !haveGun);   // (with no gun yet, the first thing you are given is one)
-    zombieDropPickup('weapon', bot.x, bot.z, roll.weaponId, roll.tier);
+    zombieDropPickup('weapon', bot.x, bot.z, roll.weaponId, roll.tier, bot.floorY || 0);
   } else {
     Z.sinceDrop++;
-    if (r < wChance + ZOMBIE_DROP_AMMO && zombieHoldsAmmoUser()) zombieDropPickup('ammo', bot.x, bot.z, null, null);
+    if (r < wChance + ZOMBIE_DROP_AMMO && zombieHoldsAmmoUser()) zombieDropPickup('ammo', bot.x, bot.z, null, null, bot.floorY || 0);
   }
 }
 function zombieLabelSprite(text, color) {
@@ -66267,15 +66598,15 @@ function zombieLabelSprite(text, color) {
   sp.scale.set(2.2, 0.55, 1); sp.position.y = 0.85;
   return sp;
 }
-function zombieDropPickup(kind, x, z, id, tier) {
-  const color = kind === 'ammo' ? '#ffd84a' : (DICE_TIER_COLOR[tier] || '#ffffff');
+function zombieDropPickup(kind, x, z, id, tier, fromY = 0) {
+  const color = kind === 'ammo' ? '#ffd84a' : kind === 'radio' ? '#7affb0' : (DICE_TIER_COLOR[tier] || '#ffffff');
   const g = new THREE.Group();
-  const box = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.42, 0.42), new THREE.MeshBasicMaterial({ color: new THREE.Color(color) }));
+  const box = new THREE.Mesh(new THREE.BoxGeometry(kind === 'radio' ? 0.6 : 0.42, kind === 'radio' ? 0.4 : 0.42, kind === 'radio' ? 0.3 : 0.42), new THREE.MeshBasicMaterial({ color: new THREE.Color(color) }));
   g.add(box);
   const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 6, 6), new THREE.MeshBasicMaterial({ color: new THREE.Color(color), transparent: true, opacity: 0.35, depthWrite: false }));
   beam.position.y = 3; g.add(beam);
-  g.add(zombieLabelSprite(kind === 'ammo' ? 'AMMO' : `${diceName(id)} · ${tier}`, color));
-  const gy = botGroundYAt(x, z, 0, 1.05, 2.2);
+  g.add(zombieLabelSprite(kind === 'ammo' ? 'AMMO' : kind === 'radio' ? 'RADIO' : `${diceName(id)} · ${tier}`, color));
+  const gy = botGroundYAt(x, z, fromY + 0.1, 1.05, 2.2);
   g.position.set(x, gy, z);
   scene.add(g);
   zombiePickups.push({ kind, id, tier, mesh: g, box, born: Date.now(), x, z, y: gy });
@@ -66289,26 +66620,52 @@ function zombieRemovePickup(i) {
 }
 function zombieClearPickups() { while (zombiePickups.length) zombieRemovePickup(zombiePickups.length - 1); }
 function zombieCleanup() {
+  _zombieNear = null; zombiePrompt(null);
   zombieStoryCleanup();
   zombieDarken(false);
   zombieClearPickups();
   for (const b of gameBots.slice()) if (b.zombie) zombieRemove(b);
 }
+// The one you could take right now (F), or null. Set every frame by updateZombiePickups; drawn as a prompt under the crosshair.
+let _zombieNear = null, _zombiePromptEl = null;
+function zombiePrompt(pk) {
+  if (!_zombiePromptEl) {
+    const el = document.createElement('div'); el.id = 'zombie-prompt'; el.setAttribute('data-no-i18n', '');
+    el.style.cssText = 'position:fixed;left:50%;bottom:24%;transform:translateX(-50%);z-index:70;display:none;padding:7px 16px;border-radius:6px;background:rgba(0,0,0,.72);border:2px solid #fff;font:700 15px "Courier New",monospace;letter-spacing:2px;color:#fff;pointer-events:none;text-shadow:0 1px 2px #000';
+    document.body.appendChild(el); _zombiePromptEl = el;
+  }
+  const el = _zombiePromptEl;
+  if (!pk) { if (el.style.display !== 'none') el.style.display = 'none'; return; }
+  const col = pk.kind === 'radio' ? '#7affb0' : (DICE_TIER_COLOR[pk.tier] || '#ffffff'), name = pk.kind === 'radio' ? 'THE RADIO' : `${diceName(pk.id)} · ${pk.tier}`;
+  const txt = (isTouchUI() ? 'TAP TAKE' : '[F] TAKE') + '  ' + name;
+  if (el.textContent !== txt) { el.textContent = txt; el.style.borderColor = col; el.style.color = col; }
+  if (el.style.display !== 'block') el.style.display = 'block';
+}
+function zombieTakeNearby() {
+  const pk = _zombieNear; if (!pk || isDead) return false;
+  const i = zombiePickups.indexOf(pk); if (i < 0) { _zombieNear = null; return false; }
+  zombieRemovePickup(i); _zombieNear = null; zombiePrompt(null);
+  zombieTake(pk);
+  return true;
+}
 function updateZombiePickups(dt) {
   const now = Date.now(), t = now / 1000;
+  let near = null, nd = Infinity;
   for (let i = zombiePickups.length - 1; i >= 0; i--) {
-    const pk = zombiePickups[i], age = now - pk.born;
-    if (age > ZOMBIE_PICKUP_LIFE_MS) { zombieRemovePickup(i); continue; }
+    const pk = zombiePickups[i], age = now - pk.born, forever = pk.kind === 'radio';
+    if (!forever && age > ZOMBIE_PICKUP_LIFE_MS) { zombieRemovePickup(i); continue; }
     pk.box.rotation.y += dt * 2.2; pk.box.position.y = 0.55 + Math.sin(t * 3 + i) * 0.12;
-    pk.mesh.visible = age < ZOMBIE_PICKUP_LIFE_MS - 6000 || Math.floor(age / 220) % 2 === 0;   // blinks out in its last seconds
+    pk.mesh.visible = forever || age < ZOMBIE_PICKUP_LIFE_MS - 6000 || Math.floor(age / 220) % 2 === 0;   // blinks out in its last seconds
     if (isDead) continue;
     const d = Math.hypot(camera.position.x - pk.x, camera.position.z - pk.z);
     if (d > ZOMBIE_PICKUP_RADIUS || Math.abs(camera.position.y - 1.65 - pk.y) > 2.2) continue;
-    zombieRemovePickup(i);
-    zombieTake(pk);
+    if (pk.kind === 'ammo') { zombieRemovePickup(i); zombieTake(pk); continue; }                    // ammo fills you up as you pass
+    if (d < nd) { nd = d; near = pk; }                                                              // a weapon (or the radio) waits for you to press F
   }
+  _zombieNear = near; zombiePrompt(near);
 }
 function zombieTake(pk) {
+  if (pk.kind === 'radio') { zombieMissionComplete(); return; }
   const kit = rngKit(); if (!kit) return;
   if (pk.kind === 'ammo') {
     let any = false;
@@ -73385,6 +73742,7 @@ if (btnInteract) {
   // Same two jobs as the F key: swap loadout at a trashcan, or start / accept a lobby duel.
   const interact = () => {
     if (window.PVP_BACKROOMS?.active) { window.PVP_BACKROOMS.interact(); return; }
+    if (match && match.zombie && zombieTakeNearby()) return;
     const pilot = pilotableHere();
     if (pilot === 'exit') { if (pilotedVehicle) exitVehicle(); else exitMortar(); }
     else if (nearTrashcan && !isDead && gameStarted && !fixedKitModeActive()) showLoadoutScreen('swap');
