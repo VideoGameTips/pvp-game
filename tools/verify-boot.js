@@ -3229,10 +3229,21 @@ if (ok && process.argv.includes('--sample')) {
   for (const [k, u] of Object.entries(tbl.files)) {
     const f = path.join(__dirname, '..', 'public', u);
     if (!fs.existsSync(f) || fs.statSync(f).size < 5000) more.push('public/' + u + ' should be there');
-    if (!filesLine.split(/\s+/).includes(u)) more.push('the itch bundle should carry ' + u + ' (FILES in tools/build-itch.sh)');
     if (/^[/]/.test(u) || /^https?:/.test(u)) more.push(u + ': the sample path has to be relative (the game is not served from a root)');
     if (!LENGTH[k]) more.push('add the length of the "' + k + '" file to LENGTH in this test');
   }
+  // The recordings reach the player as DATA in sound-data.js, not as files to fetch: a page opened as a file (double-click) may not fetch() anything, which is exactly how the
+  // recordings silently never played for Andy. So: the data is what the mp3s say, index.html loads it, the server versions it (Cloudflare caches .js), the itch zip carries it.
+  const SD = path.join(__dirname, '..', 'public', 'sound-data.js'), soundFiles = {};
+  try { require('child_process').execFileSync(process.execPath, [path.join(__dirname, 'embed-sounds.js'), '--check'], { stdio: 'pipe' }); }
+  catch (e) { more.push(String(e.stderr || e.message).trim().split('\n')[0]); }
+  if (!/<script src="sound-data\.js"><\/script>/.test(fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8'))) more.push('index.html should load sound-data.js (<script src="sound-data.js">)');
+  if (!/const VERSIONED = \[[^\]]*'sound-data\.js'/.test(fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8'))) more.push('sound-data.js should be in VERSIONED in server.js (Cloudflare caches .js: a changed sound needs a new URL)');
+  if (!filesLine.split(/\s+/).includes('sound-data.js')) more.push('the itch bundle should carry sound-data.js (FILES in tools/build-itch.sh)');
+  if (!/embed-sounds\.js"? --check/.test(itch)) more.push('tools/build-itch.sh should refuse a stale sound-data.js (embed-sounds.js --check)');
+  const soundWin = {}; try { new Function('window', fs.readFileSync(SD, 'utf8'))(soundWin); } catch (e) { more.push('public/sound-data.js does not run: ' + e.message); }
+  for (const u of Object.keys(tbl.files).map(k => tbl.files[k])) { try { soundFiles[u] = fs.readFileSync(path.join(__dirname, '..', 'public', u)); } catch (e) {} }
+  globalThis.__soundData = soundWin.SOUND_DATA || {}; globalThis.__soundFiles = soundFiles;
   for (const [id, d] of Object.entries(tbl.samples)) {
     if (!tbl.files[d.file]) more.push(id + ' names a file that is not in SAMPLE_FILES: ' + d.file);
     else if (LENGTH[d.file] && d.from + d.len * d.rate[1] > LENGTH[d.file] + 0.01) more.push(id + ' plays past the end of its file (from ' + d.from + ' + ' + d.len + ' x ' + d.rate[1] + ' > ' + LENGTH[d.file] + ')');
@@ -3245,7 +3256,7 @@ if (ok && process.argv.includes('--sample')) {
     let sources = 0, lastSrc = null, sampleHits = 0; const SAMPLE = { duration: 3, numberOfChannels: 2 };
     const ctx = new Proxy({ currentTime: 1, sampleRate: 48000, state: 'running', destination: node(), createBufferSource() { sources++; const n = node(); lastSrc = new Proxy(n, { get: (o, k) => o[k], set: (o, k, v) => { if (k === 'buffer' && v === SAMPLE) sampleHits++; o[k] = v; return true; } }); return lastSrc; }, createBuffer(ch, len) { return { numberOfChannels: ch, length: len, duration: len / 48000, getChannelData: () => new Float32Array(len) }; } },
                           { get: (o, k) => (k in o ? o[k] : (typeof k === 'string' && k.startsWith('create') ? (() => node()) : undefined)) });
-    const saved = { ctx: getAudioCtx, blast: playMuzzleBlast, st: { ..._sampleState }, voices: _sampleVoices, last: { ...weaponSoundLastAt }, fetch: globalThis.fetch };
+    const saved = { ctx: getAudioCtx, blast: playMuzzleBlast, st: { ..._sampleState }, voices: _sampleVoices, last: { ...weaponSoundLastAt }, fetch: globalThis.fetch, data: window.SOUND_DATA };
     let blasts = 0; getAudioCtx = () => ctx; playMuzzleBlast = () => { blasts++; };
     const clear = () => { for (const k of Object.keys(weaponSoundLastAt)) delete weaponSoundLastAt[k]; };
     const setAll = (st) => { for (const k of Object.keys(SAMPLE_FILES)) _sampleState[k] = st(); };
@@ -3285,15 +3296,29 @@ if (ok && process.argv.includes('--sample')) {
         clear(); sampleHits = 0; _sampleVoices = 0; playWeaponSound(who, {}); if (sampleHits !== 1) issues.push('a ' + who + ' skin (' + snd.kind + ') should play the recording too');
       }
       _skinFxFor = keepFx;
-      // one fetch per file, not one per weapon
-      { const urls = []; globalThis.fetch = (u) => { urls.push(u); return new Promise(() => {}); };
+      // the page carries the recordings as data (sound-data.js): decoded from that, byte for byte, and nothing is fetched
+      { const keepData = window.SOUND_DATA, urls = []; globalThis.fetch = (u) => { urls.push(u); return new Promise(() => {}); };
+        window.SOUND_DATA = globalThis.__soundData;
+        for (const [k, u] of Object.entries(SAMPLE_FILES)) {
+          const ab = embeddedSound(u), src = globalThis.__soundFiles[u];
+          if (!ab || !src || ab.byteLength !== src.length) { issues.push('the embedded data for ' + u + ' should be the file (' + (ab && ab.byteLength) + ' bytes against ' + (src && src.length) + ')'); continue; }
+          const got = new Uint8Array(ab); let same = true; for (let i = 0; i < got.length; i++) if (got[i] !== src[i]) { same = false; break; }
+          if (!same) issues.push('the embedded data for ' + u + ' is not byte for byte the file');
+        }
         for (const k of Object.keys(_sampleState)) delete _sampleState[k];
-        weaponSamplesPreload(ctx); const want = new Set(Object.values(SAMPLE_FILES));
-        if (urls.length !== want.size || new Set(urls).size !== want.size) issues.push('each file should be fetched once, however many weapons use it: ' + urls.length + ' fetches for ' + want.size + ' files'); }
-    } finally { getAudioCtx = saved.ctx; playMuzzleBlast = saved.blast; globalThis.fetch = saved.fetch; for (const k of Object.keys(_sampleState)) delete _sampleState[k]; Object.assign(_sampleState, saved.st); _sampleVoices = saved.voices; for (const k of Object.keys(weaponSoundLastAt)) delete weaponSoundLastAt[k]; Object.assign(weaponSoundLastAt, saved.last); }
+        weaponSamplesPreload(ctx); if (urls.length) issues.push('with the data in the page nothing should be fetched, fetched: ' + urls.join(', '));
+        if (embeddedSound('sounds/not-a-sound.mp3') !== null) issues.push('an unknown file is not embedded');
+        // no data (or broken data): the file is fetched instead, one fetch per file however many weapons use it
+        for (const bad of [undefined, { 'sounds/vector-shot.mp3': 'not base64 !!' }]) {
+          window.SOUND_DATA = bad; for (const k of Object.keys(_sampleState)) delete _sampleState[k]; urls.length = 0;
+          weaponSamplesPreload(ctx); const want = new Set(Object.values(SAMPLE_FILES));
+          if (urls.length !== want.size || new Set(urls).size !== want.size) issues.push('without usable data each file should be fetched once, however many weapons use it: ' + urls.length + ' fetches for ' + want.size + ' files (' + (bad ? 'broken data' : 'no data') + ')');
+        }
+        window.SOUND_DATA = keepData; }
+    } finally { getAudioCtx = saved.ctx; playMuzzleBlast = saved.blast; globalThis.fetch = saved.fetch; window.SOUND_DATA = saved.data; for (const k of Object.keys(_sampleState)) delete _sampleState[k]; Object.assign(_sampleState, saved.st); _sampleVoices = saved.voices; for (const k of Object.keys(weaponSoundLastAt)) delete weaponSoundLastAt[k]; Object.assign(weaponSoundLastAt, saved.last); }
     return issues;
   })()`);
-  console.log('sample checks: every recording plays when it is loaded (and for someone far away), the made-up shot before that or if it never comes, guns without one keep theirs, powershots keep their own, no skin changes it, heavier snipers play lower, bursts are capped, each file is fetched once, every file is in the itch bundle and long enough for its cut');
+  console.log('sample checks: every recording plays when it is loaded (and for someone far away), the made-up shot before that or if it never comes, guns without one keep theirs, powershots keep their own, no skin changes it, heavier snipers play lower, bursts are capped, each file is fetched once (never, when the page carries it), the page carries every file as data identical to the mp3, the zip carries that, every cut fits its clip');
   if (out.length || more.length) { ok = false; console.log([...more, ...out].join('\n')); }
 }
 

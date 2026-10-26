@@ -45,7 +45,7 @@ fi
 # Files the game actually needs. Listed explicitly rather than globbing public/,
 # so a stray file (a scratch map, an editor backup) can never ride along into a
 # public upload.
-FILES=(index.html game.js chat.js i18n.js three.min.js socket.io.min.js wiki.html stats.html weapon-stats.json equipment-models.js shop-catalog.js underworld-data.js underworld.js underworld-adapter.js underworld.css backrooms-data.js backrooms.js backrooms.css ragdoll.js sounds/vector-shot.mp3 sounds/thump-shot.mp3 sounds/ring-shot.mp3 sounds/rocket-blast.mp3 sounds/lightning-bolt.mp3 vendor/cannon-es.js vendor/cannon-es.LICENSE)
+FILES=(index.html game.js chat.js i18n.js three.min.js socket.io.min.js wiki.html stats.html weapon-stats.json equipment-models.js shop-catalog.js underworld-data.js underworld.js underworld-adapter.js underworld.css backrooms-data.js backrooms.js backrooms.css ragdoll.js sound-data.js vendor/cannon-es.js vendor/cannon-es.LICENSE)
 
 echo "==> staging"
 rm -rf "$STAGE" "$ZIP"
@@ -110,6 +110,9 @@ while read -r src; do
   fi
 done < <(grep -oE '<script[^>]+src="[^"]+"' "$STAGE/index.html" | sed -E 's/.*src="([^"]+)".*/\1/')
 [ "$missing" = 0 ] || { echo "^^ add it to FILES in this script" >&2; exit 1; }
+
+# The recordings travel inside sound-data.js (a page opened as a file cannot fetch the mp3s): it has to be what the mp3s in public/sounds say.
+node "$(dirname "$0")/embed-sounds.js" --check || exit 1
 
 node --check "$STAGE/game.js"
 node --check "$STAGE/chat.js"

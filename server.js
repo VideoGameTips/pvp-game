@@ -32,7 +32,7 @@ const io = new Server(server, { cors: { origin: '*' } });
 // list), so it is the one place a cache-buster can live: it is served from
 // here with a build token on every script that actually changes. The two
 // vendor bundles are left alone — they never change and they are large.
-const VERSIONED = ['game.js', 'i18n.js', 'chat.js', 'equipment-models.js'];
+const VERSIONED = ['game.js', 'i18n.js', 'chat.js', 'equipment-models.js', 'sound-data.js'];
 // index.html is cached in memory below, so it has to be able to invalidate
 // itself: without it in here, editing only index.html changed nothing until the
 // process restarted.

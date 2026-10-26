@@ -4603,16 +4603,30 @@ const WEAPON_SAMPLES = {
 };
 const _sampleState = {};                                            // by file (so the Vector's is _sampleState.vector), not by weapon
 let _sampleVoices = 0;
+// The bytes of a recording. They ride inside sound-data.js (window.SOUND_DATA, written by tools/embed-sounds.js, loaded by index.html) because a page opened as
+// a file (double-clicking index.html) is not allowed to fetch() anything: there every load failed and the made-up shots played. A script loads from a file, a
+// server and itch alike. null if the data is not there (then the file is fetched, which works from any server).
+function embeddedSound(url) {
+  try {
+    const b64 = typeof window !== 'undefined' && window.SOUND_DATA && window.SOUND_DATA[url]; if (!b64) return null;
+    const bin = atob(b64), u8 = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+    return u8.buffer;
+  } catch (e) { return null; }
+}
 function weaponSampleFor(ctx, id) {
   const def = WEAPON_SAMPLES[id]; if (!def) return null;
   const url = SAMPLE_FILES[def.file], st = _sampleState[def.file] || (_sampleState[def.file] = { buf: null, loading: false, failed: false });
   if (st.buf) return { def, buf: st.buf };
-  if (!st.loading && !st.failed && typeof fetch === 'function') {
-    st.loading = true;
-    fetch(url).then(r => r.ok ? r.arrayBuffer() : Promise.reject(new Error('HTTP ' + r.status)))
-      .then(ab => new Promise((res, rej) => { const p = ctx.decodeAudioData(ab, res, rej); if (p && p.catch) p.catch(rej); }))
-      .then(b => { st.buf = b; st.loading = false; })
-      .catch((e) => { st.failed = true; st.loading = false; try { console.warn('[sample] ' + url + ' did not load, the made-up sound plays instead:', e && e.message); } catch (x) {} });
+  if (!st.loading && !st.failed) {
+    const bytes = embeddedSound(url);
+    if (bytes || typeof fetch === 'function') {
+      st.loading = true;
+      (bytes ? Promise.resolve(bytes) : fetch(url).then(r => r.ok ? r.arrayBuffer() : Promise.reject(new Error('HTTP ' + r.status))))
+        .then(ab => new Promise((res, rej) => { const p = ctx.decodeAudioData(ab, res, rej); if (p && p.catch) p.catch(rej); }))
+        .then(b => { st.buf = b; st.loading = false; })
+        .catch((e) => { st.failed = true; st.loading = false; try { console.warn('[sample] ' + url + ' did not load, the made-up sound plays instead:', e && e.message); } catch (x) {} });
+    }
   }
   return null;
 }
