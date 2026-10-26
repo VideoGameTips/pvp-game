@@ -4571,10 +4571,10 @@ function gunBus(ctx) {
 
 // 🎙️ A shot that is a recording. A weapon listed in WEAPON_SAMPLES plays a real sample instead of the made-up one: the file is fetched and decoded
 // once the audio is running, and until it is there (or if it never comes: the page opened from disk, a browser that cannot decode it) the made-up
-// sound plays exactly as it always did. `from` and `len` cut the useful part out of the file (the Vector's is a 3 s clip and everything after 0.2 s is
-// nearly silence), `fade` rounds the cut off, `rate` varies the pitch a little so a burst is not one sound repeated, `gain` is the level against the others.
+// sound plays exactly as it always did. `from` and `len` cut the useful part out of the file (the Vector's is a 3 s clip and everything after 0.3 s is
+// nearly silence), `fade` rounds the cut off, `rate` is a range of playback speeds (1 to 1 leaves the recording exactly as it is), `gain` is the level against the others.
 const WEAPON_SAMPLES = {
-  vector: { url: 'sounds/vector-shot.mp3', gain: 0.2, from: 0.0, len: 0.17, fade: 0.07, rate: [0.97, 1.04] },
+  vector: { url: 'sounds/vector-shot.mp3', gain: 0.2, from: 0.0, len: 1.2, fade: 0.4, rate: [1, 1] },   // (the clip as it was made: the same sound every shot, at its own pitch; only the last 1.8 s of silence is not played)
 };
 const _sampleState = {};
 let _sampleVoices = 0;
@@ -4587,7 +4587,7 @@ function weaponSampleFor(ctx, id) {
     fetch(def.url).then(r => r.ok ? r.arrayBuffer() : Promise.reject(new Error('HTTP ' + r.status)))
       .then(ab => new Promise((res, rej) => { const p = ctx.decodeAudioData(ab, res, rej); if (p && p.catch) p.catch(rej); }))
       .then(b => { st.buf = b; st.loading = false; })
-      .catch(() => { st.failed = true; st.loading = false; });
+      .catch((e) => { st.failed = true; st.loading = false; try { console.warn('[sample] ' + def.url + ' did not load, the made-up sound plays instead:', e && e.message); } catch (x) {} });
   }
   return null;
 }
@@ -4600,7 +4600,7 @@ function sampleBus(ctx) {                                          // a recordin
   return (ctx._sampleBus = input);
 }
 function playWeaponSample(ctx, start, S, level, distGain, remote) {
-  if (_sampleVoices > 10) return;                                   // a long burst of them piling up helps nobody
+  if (_sampleVoices > 48) return;                                   // (a long clip at the Vector's rate is a couple of dozen at once; anything past that helps nobody)
   const d = S.def, src = ctx.createBufferSource(), g = ctx.createGain(), r = d.rate[0] + Math.random() * (d.rate[1] - d.rate[0]), t1 = start + d.len;
   src.buffer = S.buf; src.playbackRate.value = r;
   g.gain.setValueAtTime(level * d.gain, start); g.gain.setValueAtTime(level * d.gain, Math.max(start, t1 - d.fade)); g.gain.linearRampToValueAtTime(0.0001, t1);
@@ -4633,8 +4633,8 @@ function playWeaponSound(idOrWeapon, opts = {}) {
   const distGain = soundDistanceGain(opts.position, opts.remote);
   const mult = (opts.volume ?? 1) * distGain * (opts.remote ? 0.75 : 1) * SOUND_MIX;
   const start = ctx.currentTime + 0.002;
-  // A recorded shot (the Vector's own, not a skin's): its own path, none of the made-up layers
-  if (!fx && id) { const smp = weaponSampleFor(ctx, id); if (smp) { playWeaponSample(ctx, start, smp, mult, distGain, !!opts.remote); return; } }
+  // A recorded shot (the Vector's own; a skin that is only another real gun keeps it, a skin with a sound of its own does not): its own path, none of the made-up layers
+  if (id && (!fx || (fx.sound && fx.sound.kind === 'auto_blast'))) { const smp = weaponSampleFor(ctx, id); if (smp) { playWeaponSample(ctx, start, smp, mult, distGain, !!opts.remote); return; } }
   const mainGain = ctx.createGain();
   // Real guns go through the shared gun bus (see gunBus): mastered to the level of
   // real game gunfire. Everything else keeps its own compressor and level.

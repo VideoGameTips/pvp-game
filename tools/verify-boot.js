@@ -3238,6 +3238,7 @@ if (ok && process.argv.includes('--sample')) {
     const clear = () => { for (const k of Object.keys(weaponSoundLastAt)) delete weaponSoundLastAt[k]; };
     try {
       if (!WEAPON_SAMPLES.vector || !/vector-shot\\.mp3$/.test(WEAPON_SAMPLES.vector.url)) issues.push('the Vector should have a sample');
+      { const D = WEAPON_SAMPLES.vector; if (D.rate[0] !== 1 || D.rate[1] !== 1) issues.push('the recording should play at its own pitch (rate 1): it is the sound that was sent'); if (D.from !== 0 || D.len < 1) issues.push('the recording should play from its start, and all of its audible length'); }
       if (/^\\//.test(WEAPON_SAMPLES.vector.url) || /^https?:/.test(WEAPON_SAMPLES.vector.url)) issues.push('the sample path has to be relative (the game is not served from a root)');
       // not loaded yet: the made-up shot
       _sampleState.vector = { buf: null, loading: true, failed: false }; clear(); blasts = 0; sampleHits = 0; playWeaponSound('vector', {});
@@ -3251,13 +3252,17 @@ if (ok && process.argv.includes('--sample')) {
       // someone else's gun in the distance is the sample too
       clear(); sampleHits = 0; _sampleVoices = 0; playWeaponSound('vector', { remote: true, position: new THREE.Vector3(30, 1, 0) }); if (sampleHits !== 1) issues.push('a distant Vector is the recording too');
       // a burst does not pile up without end
-      clear(); sampleHits = 0; _sampleVoices = 0; for (let i = 0; i < 40; i++) { clear(); playWeaponSound('vector', {}); } if (sampleHits > 12 || sampleHits < 8) issues.push('a long burst should be capped near ten voices, played ' + sampleHits);
+      clear(); sampleHits = 0; _sampleVoices = 0; for (let i = 0; i < 40; i++) { clear(); playWeaponSound('vector', {}); } if (sampleHits !== 40) issues.push('every shot of a burst should play the recording, played ' + sampleHits + ' of 40');
+      clear(); sampleHits = 0; _sampleVoices = 0; for (let i = 0; i < 90; i++) { clear(); playWeaponSound('vector', {}); } if (sampleHits > 52 || sampleHits < 44) issues.push('a runaway burst should be capped near fifty voices, played ' + sampleHits);
       _sampleVoices = 0;
       // other guns are untouched
       clear(); sampleHits = 0; _sampleVoices = 0; playWeaponSound('ak20', {}); if (sampleHits) issues.push('the AK20 must keep its own sound');
-      // a skin that has its own sound keeps it on your own shots
-      const keepFx = _skinFxFor; _skinFxFor = (i) => i === 'vector' ? { sound: weaponAudioProfile('ak20', null) } : keepFx(i);
-      clear(); sampleHits = 0; _sampleVoices = 0; playWeaponSound('vector', {}); _skinFxFor = keepFx; if (sampleHits) issues.push('a skin with a sound of its own keeps it');
+      // a skin that is only another real gun (the MP5 Vector) sounds like the recording; a skin with a gag sound of its own keeps it
+      const keepFx = _skinFxFor;
+      _skinFxFor = (i) => i === 'vector' ? { sound: { kind: 'auto_blast', vol: 0.18, dur: 0.07, f1: 0, f2: 0, action: 'slide' } } : keepFx(i);
+      clear(); sampleHits = 0; _sampleVoices = 0; playWeaponSound('vector', {}); if (sampleHits !== 1) issues.push('the MP5 Vector skin is a real gun too: it sounds like the recording');
+      _skinFxFor = (i) => i === 'vector' ? { sound: { kind: 'zip', vol: 0.22, dur: 0.06, f1: 1800, f2: 3400 } } : keepFx(i);
+      clear(); sampleHits = 0; _sampleVoices = 0; playWeaponSound('vector', {}); _skinFxFor = keepFx; if (sampleHits) issues.push('a skin with a gag sound of its own keeps it');
     } finally { getAudioCtx = saved.ctx; playMuzzleBlast = saved.blast; _sampleState.vector = saved.st; _sampleVoices = saved.voices; for (const k of Object.keys(weaponSoundLastAt)) delete weaponSoundLastAt[k]; Object.assign(weaponSoundLastAt, saved.last); }
     return issues;
   })()`);
