@@ -6,9 +6,9 @@
 // (It is its own file, not a block inside index.html, because index.html is the one file Cloudflare never caches: the audio in it would be
 // downloaded again on every visit. sound-data.js is in VERSIONED in server.js, so a changed sound gets a new URL like game.js does.)
 //
-// The page carries only the part of each clip that is ever played. The clips are 3-8 s long and a weapon plays 1-3 s of one (WEAPON_SAMPLES: from, len, rate), so the
+// The page carries only the part of each clip that is ever played. The clips are 3-8 s long and a weapon or an event plays 0.4-3 s of one (WEAPON_SAMPLES, EVENT_SAMPLES: from, len, rate), so the
 // rest of each file (silence, a hiss of room) is cut off at a frame boundary: no re-encoding, every sample that is played is the sample that was sent, and the files
-// in public/sounds stay exactly as Andy sent them. How much is kept: the longest cut any weapon makes of that file + MARGIN.
+// in public/sounds stay exactly as Andy sent them. How much is kept: the longest cut anything makes of that file + MARGIN.
 //
 //   node tools/embed-sounds.js           rewrite public/sound-data.js from public/sounds/*.mp3 (run it after changing a sound or WEAPON_SAMPLES)
 //   node tools/embed-sounds.js --check   exit 1 if public/sound-data.js is not exactly what the files and the tables say
@@ -50,13 +50,15 @@ function readTables(gameText) {
     if (!m) throw new Error('no ' + name + ' table in public/game.js');
     return vm.runInNewContext('(' + m[1] + ')', {});
   };
-  return { files: grab('SAMPLE_FILES'), samples: grab('WEAPON_SAMPLES') };
+  return { files: grab('SAMPLE_FILES'), samples: grab('WEAPON_SAMPLES'), events: grab('EVENT_SAMPLES') };
 }
+// every cut of a recording the game can make: one per weapon, and every clip of every event
+function allCuts(tables) { return [...Object.values(tables.samples), ...Object.values(tables.events || {}).flatMap(e => e.clips)]; }
 // seconds of each file (by url) that has to be kept: the furthest into the file any weapon plays, plus MARGIN. null = nobody plays it: keep it whole
 function neededSeconds(tables) {
   const need = {};
   for (const u of Object.values(tables.files)) need[u] = null;
-  for (const d of Object.values(tables.samples)) {
+  for (const d of allCuts(tables)) {
     const u = tables.files[d.file]; if (!u) continue;
     const to = d.from + d.len * d.rate[1] + 0.02 + MARGIN;                                              // (+0.02: the source runs 20 ms past len)
     need[u] = Math.max(need[u] || 0, to);
@@ -79,7 +81,7 @@ function build() {
   return { text, urls, data, kept, need };
 }
 
-module.exports = { mp3Frames, mp3Seconds, cutMp3, readTables, neededSeconds, MARGIN };
+module.exports = { mp3Frames, mp3Seconds, cutMp3, readTables, allCuts, neededSeconds, MARGIN };
 
 if (require.main === module) {
   let b; try { b = build(); } catch (e) { console.error('embed-sounds: ' + e.message); process.exit(2); }

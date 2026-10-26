@@ -3222,10 +3222,10 @@ if (ok && process.argv.includes('--zombietower')) {
 if (ok && process.argv.includes('--sample')) {
   // Recorded shots: a weapon in WEAPON_SAMPLES plays its own recording (real files, shipped in the itch bundle) once it is loaded, through a path of its own; before that, or if the
   // file never comes, the made-up shot plays exactly as before; guns without one are not touched; no skin changes it; weapons sharing a file fetch it once.
-  const tbl = JSON.parse(vm.runInThisContext('JSON.stringify({ files: SAMPLE_FILES, samples: WEAPON_SAMPLES })'));
+  const tbl = JSON.parse(vm.runInThisContext('JSON.stringify({ files: SAMPLE_FILES, samples: WEAPON_SAMPLES, events: EVENT_SAMPLES })'));
   const itch = fs.readFileSync(path.join(__dirname, 'build-itch.sh'), 'utf8'), filesLine = (itch.match(/^FILES=\(([^)]*)\)/m) || [])[1] || '';
-  const LENGTH = { vector: 3.0, thump: 3.0, ring: 3.0, blast: 4.0, lightning: 3.0, isolated: 3.0, heavy: 4.0, rocket: 8.0 };       // seconds in each file as it was made
-  const more = [];
+  const LENGTH = { vector: 3.0, thump: 3.0, ring: 3.0, blast: 4.0, lightning: 3.0, isolated: 3.0, heavy: 4.0, rocket: 8.0, quick1: 0.5, quick2: 0.5, dry1: 3.0, dry4: 3.0, sharp1: 3.0, sharp3: 3.0, single: 3.0, heavy3: 3.0, isolatedB: 3.0, boomRoll: 8.0, boomTwin: 8.0, boomCrack: 8.0 };       // seconds in each file as it was made
+  const more = [], cuts = [...Object.entries(tbl.samples), ...Object.entries(tbl.events).flatMap(([n, E]) => E.clips.map((c, i) => ['event ' + n + ' #' + (i + 1), c]))];
   for (const [k, u] of Object.entries(tbl.files)) {
     const f = path.join(__dirname, '..', 'public', u);
     if (!fs.existsSync(f) || fs.statSync(f).size < 5000) more.push('public/' + u + ' should be there');
@@ -3247,14 +3247,15 @@ if (ok && process.argv.includes('--sample')) {
   // The page carries the START of each clip, as much as any weapon plays of it plus a margin (the rest is silence or room hiss, cut off at a frame without re-encoding):
   // it must be the file's own first bytes, and long enough for the furthest cut. (That the cut decodes to the very same samples is checked with a real decoder: scratchpad mp/cut-equal.js.)
   { const E = require('./embed-sounds.js'), playedTo = {};                                           // (measured from the weapon table itself, with a margin of its own: not through the tool that did the cutting)
-    for (const d of Object.values(tbl.samples)) { const u = tbl.files[d.file]; playedTo[u] = Math.max(playedTo[u] || 0, d.from + d.len * d.rate[1] + 0.02); }
+    for (const d of cuts.map(c => c[1])) { const u = tbl.files[d.file]; playedTo[u] = Math.max(playedTo[u] || 0, d.from + d.len * d.rate[1] + 0.02); }
     for (const u of Object.values(tbl.files)) {
       const emb = Buffer.from((soundWin.SOUND_DATA || {})[u] || '', 'base64'), whole = soundFiles[u];
       if (!whole || !emb.length) { more.push('sound-data.js has nothing for ' + u); continue; }
       if (!whole.subarray(0, emb.length).equals(emb)) more.push('sound-data.js: ' + u + ' is not the start of its file');
-      else if (playedTo[u] ? E.mp3Seconds(emb) + 1e-6 < playedTo[u] + 0.1 : emb.length !== whole.length) more.push('sound-data.js: ' + u + ' is cut too short for the longest cut any weapon makes of it (' + E.mp3Seconds(emb).toFixed(2) + ' s kept, ' + ((playedTo[u] || 0) + 0.1).toFixed(2) + ' s needed)');
+      else { const want = playedTo[u] ? Math.min(playedTo[u] + 0.1, E.mp3Seconds(whole)) : E.mp3Seconds(whole);        // (a clip shorter than the cut plus the margin is carried whole)
+        if (E.mp3Seconds(emb) + 1e-6 < want) more.push('sound-data.js: ' + u + ' is cut too short for the longest cut anything makes of it (' + E.mp3Seconds(emb).toFixed(2) + ' s kept, ' + want.toFixed(2) + ' s needed)'); }
     } }
-  for (const [id, d] of Object.entries(tbl.samples)) {
+  for (const [id, d] of cuts) {
     if (!tbl.files[d.file]) more.push(id + ' names a file that is not in SAMPLE_FILES: ' + d.file);
     else if (LENGTH[d.file] && d.from + d.len * d.rate[1] > LENGTH[d.file] + 0.01) more.push(id + ' plays past the end of its file (from ' + d.from + ' + ' + d.len + ' x ' + d.rate[1] + ' > ' + LENGTH[d.file] + ')');
     if (!(d.gain > 0) || !(d.len > 0.2) || !(d.fade > 0 && d.fade <= d.len) || !(d.rate[0] > 0.5 && d.rate[1] < 2 && d.rate[0] <= d.rate[1])) more.push(id + ' has a setting that makes no sense: ' + JSON.stringify(d));
@@ -3263,8 +3264,8 @@ if (ok && process.argv.includes('--sample')) {
     const issues = [];
     const node = () => { const t = { connect: x => x, disconnect() {}, start() {}, stop() {}, setValueAtTime() {}, linearRampToValueAtTime() {}, exponentialRampToValueAtTime() {}, setTargetAtTime() {}, cancelScheduledValues() {}, value: 0 };
       return new Proxy(t, { get: (o, k) => (k in o ? o[k] : (typeof k === 'string' ? node() : undefined)), set: (o, k, v) => { o[k] = v; return true; } }); };
-    let sources = 0, lastSrc = null, sampleHits = 0; const SAMPLE = { duration: 3, numberOfChannels: 2 };
-    const ctx = new Proxy({ currentTime: 1, sampleRate: 48000, state: 'running', destination: node(), createBufferSource() { sources++; const n = node(); lastSrc = new Proxy(n, { get: (o, k) => o[k], set: (o, k, v) => { if (k === 'buffer' && v === SAMPLE) sampleHits++; o[k] = v; return true; } }); return lastSrc; }, createBuffer(ch, len) { return { numberOfChannels: ch, length: len, duration: len / 48000, getChannelData: () => new Float32Array(len) }; } },
+    let sources = 0, lastSrc = null, sampleHits = 0; const seen = []; const SAMPLE = { duration: 3, numberOfChannels: 2 };
+    const ctx = new Proxy({ currentTime: 1, sampleRate: 48000, state: 'running', destination: node(), createBufferSource() { sources++; const n = node(); lastSrc = new Proxy(n, { get: (o, k) => o[k], set: (o, k, v) => { if (k === 'buffer') { if (v === SAMPLE) sampleHits++; if (v && v.tag) seen.push(v.tag); } o[k] = v; return true; } }); return lastSrc; }, createBuffer(ch, len) { return { numberOfChannels: ch, length: len, duration: len / 48000, getChannelData: () => new Float32Array(len) }; } },
                           { get: (o, k) => (k in o ? o[k] : (typeof k === 'string' && k.startsWith('create') ? (() => node()) : undefined)) });
     const saved = { ctx: getAudioCtx, blast: playMuzzleBlast, st: { ..._sampleState }, voices: _sampleVoices, last: { ...weaponSoundLastAt }, fetch: globalThis.fetch, data: window.SOUND_DATA };
     let blasts = 0; getAudioCtx = () => ctx; playMuzzleBlast = () => { blasts++; };
@@ -3298,7 +3299,34 @@ if (ok && process.argv.includes('--sample')) {
       clear(); sampleHits = 0; _sampleVoices = 0; for (let i = 0; i < 90; i++) { clear(); playWeaponSound('vector', {}); } if (sampleHits > 52 || sampleHits < 44) issues.push('a runaway burst should be capped near fifty voices, played ' + sampleHits);
       _sampleVoices = 0;
       // other guns are untouched
-      for (const id of ['ak20', 'p90', 'mp40', 'pistol', 'rpd', 'railgun']) { clear(); sampleHits = 0; _sampleVoices = 0; playWeaponSound(id, {}); if (sampleHits) issues.push('the ' + id + ' must keep its own sound'); }
+      for (const id of ['flamethrower', 'freeze_gun', 'crossbow', 'railgun', 'taser', 'paintball']) { clear(); sampleHits = 0; _sampleVoices = 0; playWeaponSound(id, {}); if (sampleHits) issues.push('the ' + id + ' must keep its own sound'); }
+      // 💥 events: the big explosions are recordings (one of several, never the same one twice running; one roar per rocket), the little pops of a map keep the made-up boom
+      { const E = EVENT_SAMPLES.explosion;
+        if (!E || E.clips.length < 2) issues.push('the explosion should have several recordings to pick from');
+        else {
+          const tagged = {}; for (const c of E.clips) tagged[c.file] = { duration: 3, numberOfChannels: 2, tag: c.file };
+          const load = (only) => { setAll(() => ({ buf: SAMPLE, loading: false, failed: false })); for (const c of E.clips) _sampleState[c.file] = (!only || only === c.file) ? { buf: tagged[c.file], loading: false, failed: false } : { buf: null, loading: true, failed: false }; };
+          const boom = (vol, o, keepState) => { for (const k of Object.keys(soundEventLastAt)) delete soundEventLastAt[k]; if (!keepState) delete _eventSampleState.explosion; seen.length = 0; _sampleVoices = 0; playSoundEvent('explosion', Object.assign({ volume: vol }, o || {})); return seen.slice(); };
+          load();
+          if (boom(1.1).length !== 1) issues.push('a rocket-sized explosion should play one recording, played ' + seen.length);
+          if (boom(E.min).length !== 1) issues.push('an explosion at exactly the minimum volume (' + E.min + ') should be a recording');
+          if (boom(E.min - 0.01).length) issues.push('an explosion just under the minimum volume is a little pop: it keeps the made-up boom');
+          if (boom(0.5).length) issues.push('the little pops of a map gimmick (volume 0.5) keep the made-up boom');
+          if (boom(1.1, { remote: true, position: new THREE.Vector3(40, 1, 0) }).length !== 1) issues.push('a far explosion is the recording too');
+          // one roar per rocket: spawnExplosion and rocketExplode both announce it
+          boom(1.1); { const again = boom(1.1, null, true); if (again.length) issues.push('the same explosion announced twice (spawnExplosion and rocketExplode) should roar once, played ' + again.length + ' more'); }
+          if (_eventSampleState.explosion) _eventSampleState.explosion.at = -1e9; if (boom(1.1, null, true).length !== 1) issues.push('a second explosion, after the dedupe window, should play');
+          // never the same clip twice running, and every clip gets its turn
+          { delete _eventSampleState.explosion; const order = []; for (let i = 0; i < 60; i++) { if (_eventSampleState.explosion) _eventSampleState.explosion.at = -1e9; const t = boom(1.1, null, true); if (t.length === 1) order.push(t[0]); }
+            let twice = 0; for (let i = 1; i < order.length; i++) if (order[i] === order[i - 1]) twice++;
+            if (order.length !== 60) issues.push('60 explosions should play 60 recordings, played ' + order.length);
+            if (twice) issues.push('the same explosion clip played twice running ' + twice + ' times in 60');
+            for (const c of E.clips) if (!order.includes(c.file)) issues.push('the explosion clip ' + c.file + ' never played in 60 explosions'); }
+          // only one clip decoded so far: that one plays; none decoded (or failed): the made-up boom
+          load(E.clips[1].file); { const t = boom(1.1); if (t.length !== 1 || t[0] !== E.clips[1].file) issues.push('with one clip decoded, that clip should play, got ' + t.join(',')); }
+          setAll(() => ({ buf: null, loading: true, failed: false })); if (boom(1.1).length) issues.push('until a clip is decoded the made-up boom plays');
+          setAll(() => ({ buf: null, loading: false, failed: true })); if (boom(1.1).length) issues.push('if the files never load the made-up boom plays');
+          setAll(() => ({ buf: SAMPLE, loading: false, failed: false })); } }
       // a gun is the gun under any skin: the MP5 one, and the ones with a gag sound of their own, all play the recording (checked on a rifle, a pistol and the Vector)
       const keepFx = _skinFxFor;
       for (const who of ['vector', 'srx', 'hand_cannon']) for (const snd of [{ kind: 'auto_blast', vol: 0.18, dur: 0.07, f1: 0, f2: 0, action: 'slide' }, { kind: 'zip', vol: 0.22, dur: 0.06, f1: 1800, f2: 3400 }, { kind: 'bubblegun', vol: 0.2, dur: 0.07, f1: 420, f2: 980 }]) {
@@ -3325,10 +3353,10 @@ if (ok && process.argv.includes('--sample')) {
           if (urls.length !== want.size || new Set(urls).size !== want.size) issues.push('without usable data each file should be fetched once, however many weapons use it: ' + urls.length + ' fetches for ' + want.size + ' files (' + (bad ? 'broken data' : 'no data') + ')');
         }
         window.SOUND_DATA = keepData; }
-    } finally { getAudioCtx = saved.ctx; playMuzzleBlast = saved.blast; globalThis.fetch = saved.fetch; window.SOUND_DATA = saved.data; for (const k of Object.keys(_sampleState)) delete _sampleState[k]; Object.assign(_sampleState, saved.st); _sampleVoices = saved.voices; for (const k of Object.keys(weaponSoundLastAt)) delete weaponSoundLastAt[k]; Object.assign(weaponSoundLastAt, saved.last); }
+    } finally { getAudioCtx = saved.ctx; playMuzzleBlast = saved.blast; globalThis.fetch = saved.fetch; window.SOUND_DATA = saved.data; for (const k of Object.keys(_eventSampleState)) delete _eventSampleState[k]; for (const k of Object.keys(soundEventLastAt)) delete soundEventLastAt[k]; for (const k of Object.keys(_sampleState)) delete _sampleState[k]; Object.assign(_sampleState, saved.st); _sampleVoices = saved.voices; for (const k of Object.keys(weaponSoundLastAt)) delete weaponSoundLastAt[k]; Object.assign(weaponSoundLastAt, saved.last); }
     return issues;
   })()`);
-  console.log('sample checks: every recording plays when it is loaded (and for someone far away), the made-up shot before that or if it never comes, guns without one keep theirs, powershots keep their own, no skin changes it, heavier snipers play lower, bursts are capped, each file is fetched once (never, when the page carries it), the page carries the played start of every file as data (the file bytes themselves, long enough for every cut), the zip carries that, every cut fits its clip');
+  console.log('sample checks: every recording plays when it is loaded (and for someone far away), the big explosions are recordings (the small ones are not, one roar per rocket, never the same clip twice running), the made-up shot before that or if it never comes, guns without one keep theirs, powershots keep their own, no skin changes it, heavier snipers play lower, bursts are capped, each file is fetched once (never, when the page carries it), the page carries the played start of every file as data (the file bytes themselves, long enough for every cut), the zip carries that, every cut fits its clip');
   if (out.length || more.length) { ok = false; console.log([...more, ...out].join('\n')); }
 }
 

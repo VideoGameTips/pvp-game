@@ -4585,6 +4585,22 @@ const SAMPLE_FILES = {
   isolated:  'sounds/isolated-shot.mp3',    // one thick low boom, loud for 0.4 s and then gone (a faint click at 1 s that is not played). Its file name is cut off ("A single, isolated s..."): judged from the sound to be a shotgun, so it is on the shotguns
   heavy:     'sounds/heavy-shot.mp3',       // a thick mid-heavy bang with its echo behind it, then a hiss of room that is not played. File name "A single heavy shot...": judged to be a big rifle, so it is on the lever and the garand
   rocket:    'sounds/rpg-rocket.mp3',       // a deep roar, 95% of it below 250 Hz, holding for four seconds: a rocket motor
+  // "A singular, ultra-short ..." (half a second, over almost at once): the rapid-fire guns
+  quick1:    'sounds/quick-shot-1.mp3',     // onset at once, 0.12 s to fall 20 dB: the SMGs
+  quick2:    'sounds/quick-shot-2.mp3',     // 90 ms of nothing, then a thud with a little more mid in it: the machine guns
+  // "An ultra-short, dry ..." (they are 3 s long, with a boomy tail: cut short)
+  dry1:      'sounds/dry-shot-1.mp3',
+  dry4:      'sounds/dry-shot-4.mp3',
+  // "A short, sharp single ..."
+  sharp1:    'sounds/sharp-shot-1.mp3',     // a thick thump that falls away quickly: the revolvers
+  sharp3:    'sounds/sharp-shot-3.mp3',     // the sharpest of them all (a very sudden start): the pistols
+  single:    'sounds/single-shot.mp3',      // "One single isolated ...": the most mid-range of the guns (a third of it is above 250 Hz): an assault rifle
+  heavy3:    'sounds/heavy-shot-3.mp3',     // "One singular heavy s...": a big low boom
+  isolatedB: 'sounds/isolated-shot-b.mp3',  // "A single, isolated s..." again, a tighter take than the first
+  // "The exact moment of ..." (8 s each: they start at the bang, so there is no lead-in to skip)
+  boomRoll:  'sounds/boom-roll.mp3',        // holds full level for 3.4 s, a long rolling blast
+  boomTwin:  'sounds/boom-twin.mp3',        // a blast, a lull, and a second blast at 2.7 s (that one is not played)
+  boomCrack: 'sounds/boom-crack.mp3',       // a very sudden start with a real crack in it
 };
 const WEAPON_SAMPLES = {
   vector:           { file: 'vector',    gain: 0.20, from: 0.00, len: 1.2, fade: 0.4, rate: [1, 1] },   // (the clip as it was made: the same sound every shot, at its own pitch; only the last 1.8 s of silence is not played)
@@ -4606,6 +4622,40 @@ const WEAPON_SAMPLES = {
   // big rifles: the heavy shot, cut before the hiss of room that sits under it from 1.8 s
   lever:            { file: 'heavy',     gain: 0.31, from: 0.04, len: 1.7, fade: 0.7, rate: [0.95, 0.95] },
   m1_garand:        { file: 'heavy',     gain: 0.31, from: 0.04, len: 1.7, fade: 0.7, rate: [1, 1] },
+  // the rapid-fire guns get the shortest clips, cut to half a second or less (the heavier the gun, the lower it plays): SMGs
+  p90:              { file: 'quick1', gain: 0.76, from: 0.01, len: 0.38, fade: 0.20, rate: [1.15, 1.15] },
+  mp40:             { file: 'quick1', gain: 0.62, from: 0.01, len: 0.40, fade: 0.20, rate: [1.0, 1.0] },
+  hkmp7:            { file: 'quick1', gain: 0.61, from: 0.01, len: 0.40, fade: 0.20, rate: [0.98, 0.98] },
+  p90_spec:         { file: 'quick1', gain: 0.67, from: 0.01, len: 0.40, fade: 0.20, rate: [1.06, 1.06] },
+  machine_pistol:   { file: 'quick1', gain: 0.69, from: 0.01, len: 0.40, fade: 0.20, rate: [1.08, 1.08] },
+  glock18:          { file: 'quick1', gain: 0.79, from: 0.01, len: 0.40, fade: 0.20, rate: [1.04, 1.04] },
+  burst:            { file: 'quick1', gain: 0.68, from: 0.01, len: 0.40, fade: 0.20, rate: [0.92, 0.92] },
+  // machine guns
+  rpd:              { file: 'quick2', gain: 0.85, from: 0.08, len: 0.38, fade: 0.20, rate: [1.0, 1.0] },
+  mg42:             { file: 'quick2', gain: 0.81, from: 0.08, len: 0.38, fade: 0.20, rate: [0.95, 0.95] },
+  mk44:             { file: 'quick2', gain: 0.75, from: 0.08, len: 0.38, fade: 0.20, rate: [0.9, 0.9] },
+  minigun:          { file: 'quick2', gain: 0.75, from: 0.08, len: 0.38, fade: 0.20, rate: [0.9, 0.9] },
+  m134:             { file: 'quick2', gain: 0.68, from: 0.08, len: 0.38, fade: 0.20, rate: [0.85, 0.85] },
+  gau19:            { file: 'quick2', gain: 0.61, from: 0.08, len: 0.38, fade: 0.20, rate: [0.8, 0.8] },
+  // assault rifles: a take each
+  ak20:             { file: 'single', gain: 0.31, from: 0.00, len: 0.70, fade: 0.35, rate: [1.0, 1.0] },
+  m4a1_arena:       { file: 'dry4', gain: 0.25, from: 0.02, len: 0.70, fade: 0.35, rate: [1.0, 1.0] },
+  xm7:              { file: 'dry1', gain: 0.27, from: 0.01, len: 0.70, fade: 0.35, rate: [1.02, 1.02] },
+  // pistols, then revolvers
+  pistol:           { file: 'sharp3', gain: 0.86, from: 0.00, len: 0.80, fade: 0.40, rate: [1.0, 1.0] },
+  m1911:            { file: 'sharp3', gain: 0.92, from: 0.00, len: 0.70, fade: 0.40, rate: [1.06, 1.06] },
+  mauser:           { file: 'sharp3', gain: 0.83, from: 0.00, len: 0.80, fade: 0.40, rate: [0.96, 0.96] },
+  akimbo:           { file: 'sharp3', gain: 0.90, from: 0.00, len: 0.70, fade: 0.40, rate: [1.04, 1.04] },
+  five_seven:       { file: 'sharp1', gain: 0.34, from: 0.00, len: 0.70, fade: 0.45, rate: [1.1, 1.1] },
+  revolver:         { file: 'sharp1', gain: 0.35, from: 0.00, len: 1.00, fade: 0.45, rate: [0.92, 0.92] },
+  duelist_pistol:   { file: 'sharp1', gain: 0.38, from: 0.00, len: 1.00, fade: 0.45, rate: [1.0, 1.0] },
+  snub_revolver:    { file: 'sharp1', gain: 0.36, from: 0.00, len: 0.90, fade: 0.45, rate: [1.08, 1.08] },
+  auto_revolver:    { file: 'sharp1', gain: 0.35, from: 0.00, len: 0.60, fade: 0.45, rate: [1.12, 1.12] },
+  // the heavy launchers: a big low boom
+  mortar_rifle:     { file: 'heavy3', gain: 0.17, from: 0.00, len: 1.80, fade: 0.70, rate: [0.9, 0.9] },
+  javelin_launcher: { file: 'heavy3', gain: 0.18, from: 0.00, len: 1.60, fade: 0.70, rate: [1.0, 1.0] },
+  // the other shotgun: a tighter take of the isolated boom
+  gunslinger:       { file: 'isolatedB', gain: 0.26, from: 0.00, len: 0.80, fade: 0.35, rate: [1.0, 1.0] },
   // lightning: the bolt, cut to the weapon (a shotgun of it, a rifle that fires it as fast as it can)
   storm_bloom:      { file: 'lightning', gain: 0.40, from: 0.02, len: 2.2, fade: 0.6, rate: [1, 1] },
   arc_rifle:        { file: 'lightning', gain: 0.16, from: 0.02, len: 0.5, fade: 0.25, rate: [1, 1] },
@@ -4624,8 +4674,7 @@ function embeddedSound(url) {
     return u8.buffer;
   } catch (e) { return null; }
 }
-function weaponSampleFor(ctx, id) {
-  const def = WEAPON_SAMPLES[id]; if (!def) return null;
+function sampleFor(ctx, def) {                                      // the decoded file behind a table entry (a weapon's, or one clip of an event's), or null while it is not there yet
   const url = SAMPLE_FILES[def.file], st = _sampleState[def.file] || (_sampleState[def.file] = { buf: null, loading: false, failed: false });
   if (st.buf) return { def, buf: st.buf };
   if (!st.loading && !st.failed) {
@@ -4640,7 +4689,33 @@ function weaponSampleFor(ctx, id) {
   }
   return null;
 }
-function weaponSamplesPreload(ctx) { for (const id of Object.keys(WEAPON_SAMPLES)) weaponSampleFor(ctx, id); }   // (one fetch per file: the rest find it loading)
+function weaponSampleFor(ctx, id) { const def = WEAPON_SAMPLES[id]; return def ? sampleFor(ctx, def) : null; }
+function weaponSamplesPreload(ctx) {                                // (one fetch per file: the rest find it loading)
+  for (const id of Object.keys(WEAPON_SAMPLES)) weaponSampleFor(ctx, id);
+  for (const E of Object.values(EVENT_SAMPLES)) for (const c of E.clips) sampleFor(ctx, c);
+}
+// 💥 Events that are recordings too: the big explosions (rockets, grenades, the heavy blasts of a map). `min` is the loudness a blast has to ask for to get a recording: the little
+// pops of a map gimmick (volume 0.4 to 0.8) keep the made-up boom, a 3 s roll under every one of them would be a lot. One of the clips, never the same one twice running.
+// `dedupe`: spawnExplosion and rocketExplode both announce the same rocket, one roar is enough.
+const EVENT_SAMPLES = {
+  explosion: { min: 0.85, dedupe: 150, clips: [
+    { file: 'boomCrack', gain: 0.124, from: 0.03, len: 2.8, fade: 1.2, rate: [1, 1] },
+    { file: 'boomRoll',  gain: 0.129, from: 0.00, len: 2.6, fade: 1.2, rate: [1, 1] },
+    { file: 'boomTwin',  gain: 0.116, from: 0.00, len: 2.4, fade: 1.0, rate: [1, 1] },
+  ] },
+};
+const _eventSampleState = {};
+function eventSample(ctx, name, volume) {                           // a clip to play (decoded), null (the made-up sound), or false (this one is already covered)
+  const E = EVENT_SAMPLES[name]; if (!E || volume < E.min) return null;
+  const ready = E.clips.map(c => sampleFor(ctx, c)).filter(Boolean);   // (this is also what starts the loading)
+  if (!ready.length) return null;
+  const st = _eventSampleState[name] || (_eventSampleState[name] = { last: null, at: -1e9 }), now = performance.now();
+  if (now - st.at < E.dedupe) return false;
+  let k = Math.floor(Math.random() * ready.length);
+  if (ready.length > 1 && ready[k].def === st.last) k = (k + 1) % ready.length;
+  st.last = ready[k].def; st.at = now;
+  return ready[k];
+}
 function sampleBus(ctx) {                                          // a recording is already as loud as it is: it gets a limiter of its own, not the made-up guns' bus (which squashes everything into one level)
   if (ctx._sampleBus) return ctx._sampleBus;
   const input = ctx.createGain(), lim = ctx.createDynamicsCompressor();
@@ -5320,6 +5395,8 @@ function playSoundEvent(name, opts = {}) {
   const posGain = soundDistanceGain(opts.position, opts.remote);
   const mult = (opts.volume ?? 1) * posGain * (opts.remote ? 0.8 : 1) * SOUND_MIX;
   const start = ctx.currentTime + 0.002;
+  // A recorded event (EVENT_SAMPLES): its own path, none of the made-up layers
+  if (EVENT_SAMPLES[name]) { const smp = eventSample(ctx, name, opts.volume ?? 1); if (smp === false) return; if (smp) { playWeaponSample(ctx, start, smp, mult, posGain, !!opts.remote); return; } }
   const out = ctx.createGain();
   const comp = ctx.createDynamicsCompressor();
   out.connect(comp).connect(ctx.destination);
